@@ -1,0 +1,23 @@
+# Nixpacks build config for Railway.
+# Installs Node + Python, builds the Vite frontend, then runs FastAPI.
+
+[phases.setup]
+nixPkgs = ["python311", "nodejs_22"]
+
+[phases.install]
+cmds = [
+    # Frontend deps
+    "cd frontend && npm ci",
+    # Backend deps (into backend's own venv so there's no PATH confusion)
+    "cd backend && pip install -r requirements.txt",
+]
+
+[phases.build]
+cmds = [
+    # Compile Vite → frontend/dist/ (FastAPI will serve this as static files)
+    "cd frontend && npm run build",
+]
+
+[start]
+# Railway injects $PORT; FastAPI's static mount picks up frontend/dist automatically.
+cmd = "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"

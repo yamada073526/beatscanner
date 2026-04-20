@@ -1,0 +1,70 @@
+name: 決算記事生成
+
+on:
+  # 手動トリガー: Actions タブから銘柄を指定して実行
+  workflow_dispatch:
+    inputs:
+      ticker:
+        description: "銘柄ティッカー (例: AAPL)"
+        required: true
+        type: string
+      company_name:
+        description: "会社名 (例: Apple Inc.)"
+        required: false
+        type: string
+        default: ""
+
+  # 定期実行: 決算シーズン中の平日 9:00 JST (= 0:00 UTC)
+  # schedule:
+  #   - cron: '0 0 * * 1-5'
+
+jobs:
+  generate:
+    name: 記事生成 (${{ github.event.inputs.ticker }})
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install anthropic
+
+      - name: Generate article
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BEATSCANNER_URL:   ${{ secrets.BEATSCANNER_URL || 'https://beatscanner.vercel.app' }}
+        run: |
+          TICKER="${{ github.event.inputs.ticker }}"
+          COMPANY="${{ github.event.inputs.company_name }}"
+          OUTPUT="articles/${TICKER}_$(date +%Y%m%d).md"
+
+          python scripts/generate_article.py \
+            --ticker "$TICKER" \
+            --company-name "$COMPANY" \
+            --output "$OUTPUT"
+
+          echo "OUTPUT_FILE=$OUTPUT" >> $GITHUB_ENV
+
+      - name: Commit and push article
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add articles/
+          git diff --cached --quiet || \
+            git commit -m "docs: 決算記事追加 ${{ github.event.inputs.ticker }} $(date +%Y-%m-%d)"
+          git push
+
+      - name: Summary
+        run: |
+          echo "### 生成完了 ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- **銘柄**: ${{ github.event.inputs.ticker }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **ファイル**: \`${{ env.OUTPUT_FILE }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **アプリURL**: ${{ env.BEATSCANNER_URL }}/?ticker=${{ github.event.inputs.ticker }}" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+.eggs/
+
+# Environment
+.env
+.env.local
+.env.production
+backend/.env
+!backend/.env.example
+
+# Frontend build output
+frontend/dist/
+frontend/node_modules/
+
+# Node
+node_modules/
+.npm/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# pytest / coverage
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Logs
+*.log
+uvicorn*.log
+
+# Railway
+.railway/
