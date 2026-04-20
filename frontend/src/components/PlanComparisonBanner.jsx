@@ -23,11 +23,11 @@ const PLANS = [
   },
   {
     key: 'pro',
-    name: 'Pro',
-    price: '¥980',
-    sub: '/月',
+    name: 'Pro（FMP APIキー）',
+    price: '¥0',
+    sub: '無料',
     highlight: true,
-    cta: 'Proにする',
+    cta: 'APIキーを設定する（無料・1分）',
     rows: [
       '無制限',
       '5条件 自動判定',
@@ -93,7 +93,7 @@ function PlanCard({ plan, onOpenSettings }) {
         </div>
       </div>
 
-      {/* Feature rows */}
+      {/* Feature rows — value shown prominently first */}
       <div className="flex-1 space-y-1.5">
         {plan.rows.map((val, i) => (
           <div key={i} className="flex items-start gap-1.5 text-xs">
@@ -113,8 +113,17 @@ function PlanCard({ plan, onOpenSettings }) {
                   : plan.highlight ? 'text-slate-200' : 'text-slate-600'
               }`}
             >
-              {ROW_LABELS[i]}
-              {val !== '—' && val !== '✓' && <span className="ml-1 text-[10px] opacity-70">({val})</span>}
+              {/* Show value first (e.g. "3銘柄/日") then label as secondary */}
+              {val !== '—' ? (
+                <>
+                  <span className="font-semibold">{val}</span>
+                  <span className={`ml-1 text-[10px] ${plan.highlight ? 'text-slate-400' : 'text-slate-400'}`}>
+                    {ROW_LABELS[i]}
+                  </span>
+                </>
+              ) : (
+                ROW_LABELS[i]
+              )}
             </span>
           </div>
         ))}
@@ -150,10 +159,10 @@ export default function PlanComparisonBanner({ onOpenSettings }) {
     <section className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-6">
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-slate-900">
-          より多くの機能を使うにはプランをアップグレード
+          無料APIキーを設定して全銘柄を分析する
         </h3>
         <p className="mt-0.5 text-xs text-slate-500">
-          💡 現在、FMP APIキー（無料取得）を設定するだけでPro相当の全機能が利用できます
+          FMP（Financial Modeling Prep）に無料登録してAPIキーを取得。3銘柄/日の制限がなくなり、全機能が使えるようになります。
         </p>
       </div>
 
@@ -162,6 +171,11 @@ export default function PlanComparisonBanner({ onOpenSettings }) {
           <PlanCard key={plan.key} plan={plan} onOpenSettings={onOpenSettings} />
         ))}
       </div>
+
+      {/* UX item 6: cost breakdown */}
+      <p className="mt-3 text-center text-xs text-slate-400">
+        💡 FMP APIキー（無料）を取得するだけで3銘柄/日 → <strong className="text-slate-600">無制限</strong> にアップグレード。登録はメールのみ、クレジットカード不要。
+      </p>
     </section>
   );
 }

@@ -64,6 +64,8 @@ export default function App() {
   const [isDemoResult, setIsDemoResult] = useState(false);
   // Track key state so banner re-renders after save
   const [hasKey, setHasKey] = useState(hasFmpKey);
+  // Toast notification state (UX item 7)
+  const [toast, setToast] = useState(null); // { message, id }
   // Upgrade modal (Fix 3a)
   const upgrade = useUpgradeModal();
   // Ref for the ticker search input (used by Watchlist empty-state CTA)
@@ -75,6 +77,18 @@ export default function App() {
 
   function handleKeySaved() {
     setHasKey(hasFmpKey());
+  }
+
+  function showToast(message) {
+    const id = Date.now();
+    setToast({ message, id });
+    setTimeout(() => setToast((t) => (t?.id === id ? null : t)), 2000);
+  }
+
+  function handleKeyDeleted() {
+    setHasKey(hasFmpKey());
+    setShowSettings(false);
+    showToast('APIキーを削除しました');
   }
 
   async function runAnalyze(sym) {
@@ -232,26 +246,26 @@ export default function App() {
       {/* Result */}
       {result && (
         <div className="space-y-6">
-          {/* Demo banner */}
+          {/* Demo banner — UX items 1 & 2: removed separate yellow CTA, CTA integrated into banner */}
           {isDemoResult && (
-            <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+            <button
+              onClick={() => setShowSettings(true)}
+              className="flex w-full items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-left hover:bg-amber-100 transition-colors"
+            >
               <span className="text-sm text-amber-800">
                 デモモード表示中 — AAPL・MSFT・NVDA限定、1日3回まで
               </span>
-              <button
-                onClick={() => setShowSettings(true)}
-                className="rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700"
-              >
-                全機能を使う →
-              </button>
-            </div>
+              <span className="shrink-0 rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white">
+                無料APIキーを設定して全銘柄を使う →
+              </span>
+            </button>
           )}
 
           <div className="space-y-4">
             <ResultBadge result={result} />
 
-            {/* Demo CTA — shown right after PASS/FAIL when intent is highest */}
-            {isDemoResult && (
+            {/* Demo CTA — UX item 3: shown only when PASS (intent is highest at that moment) */}
+            {isDemoResult && result?.overallPass && (
               <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <p className="text-sm text-slate-600">
                   全銘柄を分析するには
@@ -265,6 +279,11 @@ export default function App() {
                   無料で全機能を使う →
                 </button>
               </div>
+            )}
+
+            {/* UX item 4: Plan comparison only in demo mode, placed right after badge */}
+            {isDemoResult && (
+              <PlanComparisonBanner onOpenSettings={() => setShowSettings(true)} />
             )}
 
             <div className="flex justify-end">
@@ -391,8 +410,8 @@ export default function App() {
         />
       </section>
 
-      {/* Plan comparison — shown only for Free (no-key) users */}
-      {!isPro() && (
+      {/* Plan comparison — shown for non-Pro users when no result is displayed (not in demo) */}
+      {!isPro() && !result && (
         <PlanComparisonBanner onOpenSettings={() => setShowSettings(true)} />
       )}
 
@@ -442,11 +461,19 @@ export default function App() {
         </p>
       </footer>
 
+      {/* Toast notification (UX item 7) */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] rounded-lg bg-slate-800 px-5 py-3 text-sm font-medium text-white shadow-lg transition-opacity">
+          {toast.message}
+        </div>
+      )}
+
       {/* Modals */}
       {showSettings && (
         <ApiKeySettings
           onClose={() => setShowSettings(false)}
           onSaved={handleKeySaved}
+          onDeleted={handleKeyDeleted}
         />
       )}
 

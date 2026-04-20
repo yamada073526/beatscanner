@@ -28,7 +28,7 @@ function StepConnector({ done }) {
   );
 }
 
-export default function ApiKeySettings({ onClose, onSaved }) {
+export default function ApiKeySettings({ onClose, onSaved, onDeleted }) {
   const [step, setStep] = useState(0); // 0, 1, 2
   const [inputKey, setInputKey] = useState('');
   const [saving, setSaving] = useState(false);
@@ -68,6 +68,7 @@ export default function ApiKeySettings({ onClose, onSaved }) {
     setSavedSuccess(false);
     setStep(0);
     onSaved?.();
+    onDeleted?.();  // triggers toast + modal close in parent
   }
 
   function handleDeleteWithConfirm() {

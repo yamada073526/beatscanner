@@ -583,12 +583,23 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
     days = period_days.get(period, 365)
     from_date = (today - timedelta(days=days)).isoformat()
 
-    client = FMPClient(api_key=_get_fmp_key(request))
-
+    # Build FMP client — fall back to demo key so chart works even without user key
+    _fmp_key = (
+        _get_fmp_key(request)
+        or os.getenv("FMP_API_KEY")
+        or os.getenv("FMP_DEMO_API_KEY")
+    )
     try:
-        raw = await client.historical_price(ticker, from_date, today.isoformat())
+        client: FMPClient | None = FMPClient(api_key=_fmp_key)
     except FMPError:
-        raw = []
+        client = None
+
+    raw: list[dict] = []
+    if client:
+        try:
+            raw = await client.historical_price(ticker, from_date, today.isoformat())
+        except FMPError:
+            raw = []
 
     prices = [
         {"date": p["date"], "close": p.get("close") or p.get("adjClose")}
@@ -599,10 +610,12 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
     if not prices:
         prices = await yfinance_source.fetch_price_history(ticker, from_date, today.isoformat())
 
-    try:
-        surprises = await client.earnings_surprises(ticker, limit=16)
-    except FMPError:
-        surprises = []
+    surprises: list[dict] = []
+    if client:
+        try:
+            surprises = await client.earnings_surprises(ticker, limit=16)
+        except FMPError:
+            surprises = []
 
     # FMP有料制限の場合はyfinanceにフォールバック
     if not surprises:
