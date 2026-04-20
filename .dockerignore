@@ -1,0 +1,32 @@
+# Never copy secrets into the image
+.env
+**/.env
+.env.*
+**/.env.*
+!**/.env.example
+
+# Python caches
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Virtual envs
+.venv/
+venv/
+
+# Frontend build artifacts (Stage 2 copies from Stage 1, not the host)
+frontend/dist/
+frontend/node_modules/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Railway / git
+.railway/
+.git/
+.gitignore

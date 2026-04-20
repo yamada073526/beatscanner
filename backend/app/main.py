@@ -21,7 +21,9 @@ from .fmp_client import FMPClient, FMPError
 from .judgment import judge
 from . import yfinance_source
 
-load_dotenv(override=True)
+# override=False (default): Railway / Docker env vars take priority over any .env file.
+# override=True would let a stale local .env silently shadow Railway variables.
+load_dotenv(override=False)
 
 app = FastAPI(title="Earnings Judgment API", version="0.1.0")
 
@@ -104,7 +106,16 @@ def _client_ip(request: Request) -> str:
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok"}
+    """Liveness check + env-var presence (values are never exposed)."""
+    return {
+        "status": "ok",
+        "env": {
+            "FMP_API_KEY":       bool(os.getenv("FMP_API_KEY")),
+            "FMP_DEMO_API_KEY":  bool(os.getenv("FMP_DEMO_API_KEY")),
+            "ANTHROPIC_API_KEY": bool(os.getenv("ANTHROPIC_API_KEY")),
+            "ALLOWED_ORIGINS":   os.getenv("ALLOWED_ORIGINS", "(default)"),
+        },
+    }
 
 
 # --- Custom screener endpoint ---
