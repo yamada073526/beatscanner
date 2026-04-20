@@ -66,7 +66,14 @@ export default function ApiKeySettings({ onClose, onSaved }) {
   function handleDelete() {
     setFmpKey('');
     setSavedSuccess(false);
+    setStep(0);
     onSaved?.();
+  }
+
+  function handleDeleteWithConfirm() {
+    if (window.confirm('APIキーを削除するとデモモードに戻ります。よろしいですか？')) {
+      handleDelete();
+    }
   }
 
   return (
@@ -99,6 +106,19 @@ export default function ApiKeySettings({ onClose, onSaved }) {
             </div>
           ))}
         </div>
+
+        {/* Delete link — visible in all steps when a key is already stored */}
+        {masked && !savedSuccess && (
+          <div className="flex items-center justify-between border-t border-slate-100 px-6 py-2">
+            <span className="text-xs text-slate-400">現在のキー: {masked}</span>
+            <button
+              onClick={handleDeleteWithConfirm}
+              className="text-xs text-slate-400 hover:text-red-500 transition-colors"
+            >
+              APIキーを削除してデモモードに戻る
+            </button>
+          </div>
+        )}
 
         {/* Step content */}
         <div className="px-6 pb-6">
@@ -241,13 +261,10 @@ export default function ApiKeySettings({ onClose, onSaved }) {
                 )}
               </div>
 
-              {/* 既存キーの表示 */}
+              {/* 現在のキー表示（削除は下部の共通リンクから） */}
               {(masked && !savedSuccess) && (
-                <div className="flex items-center justify-between rounded-lg bg-green-50 px-4 py-2.5">
+                <div className="rounded-lg bg-green-50 px-4 py-2.5">
                   <span className="text-sm text-green-700">✅ 現在のキー: {masked}</span>
-                  <button onClick={handleDelete} className="text-xs text-slate-400 hover:text-red-500">
-                    削除
-                  </button>
                 </div>
               )}
 
