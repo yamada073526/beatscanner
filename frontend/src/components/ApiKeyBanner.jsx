@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { hasFmpKey } from '../lib/fmpKey.js';
 
-export default function ApiKeyBanner({ onOpenSettings }) {
+// hasKey is driven by App.jsx state (updated immediately on save).
+// Do NOT call hasFmpKey() here — that would require a re-render trigger from parent.
+export default function ApiKeyBanner({ onOpenSettings, hasKey }) {
   const [dismissed, setDismissed] = useState(false);
 
-  if (hasFmpKey() || dismissed) return null;
+  if (hasKey || dismissed) return null;
 
   return (
     <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">

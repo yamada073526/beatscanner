@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useRef, useState } from 'react';
 import { searchTickers } from '../api.js';
 
 const US_EXCHANGES = new Set(['NASDAQ', 'NYSE', 'AMEX', 'NYSE ARCA', 'NYSE MKT']);
@@ -7,7 +7,7 @@ const JP_EXCHANGES = new Set(['TSE', 'JPX', 'TYO']);
 // 日本語文字（ひらがな・カタカナ・漢字）を含むか
 const hasJapanese = (s) => /[\u3040-\u30ff\u3400-\u9faf]/.test(s);
 
-export default function TickerSearch({ value, onChange, onSubmit }) {
+const TickerSearch = forwardRef(function TickerSearch({ value, onChange, onSubmit }, inputRef) {
   const [inputValue, setInputValue] = useState(value);
   const [suggestions, setSuggestions] = useState([]);
   const [open, setOpen] = useState(false);
@@ -80,6 +80,7 @@ export default function TickerSearch({ value, onChange, onSubmit }) {
   return (
     <div ref={containerRef} className="relative flex-1">
       <input
+        ref={inputRef}
         value={inputValue}
         onChange={(e) => {
           const v = e.target.value;
@@ -144,4 +145,6 @@ export default function TickerSearch({ value, onChange, onSubmit }) {
       )}
     </div>
   );
-}
+});
+
+export default TickerSearch;

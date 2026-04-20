@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { analyze, fetchGuidance } from './api.js';
 import { hasFmpKey } from './lib/fmpKey.js';
 import { isPro } from './lib/planGating.js';
@@ -66,6 +66,8 @@ export default function App() {
   const [hasKey, setHasKey] = useState(hasFmpKey);
   // Upgrade modal (Fix 3a)
   const upgrade = useUpgradeModal();
+  // Ref for the ticker search input (used by Watchlist empty-state CTA)
+  const searchInputRef = useRef(null);
 
   useEffect(() => {
     localStorage.setItem(WATCHLIST_KEY, JSON.stringify(watchlist));
@@ -141,8 +143,8 @@ export default function App() {
         </p>
       </header>
 
-      {/* Onboarding banner */}
-      <ApiKeyBanner onOpenSettings={() => setShowSettings(true)} />
+      {/* Onboarding banner — hasKey drives visibility; disappears immediately on save */}
+      <ApiKeyBanner onOpenSettings={() => setShowSettings(true)} hasKey={hasKey} />
 
       {/* Secondary toolbar */}
       <div className="mb-6 flex flex-wrap items-center gap-2">
@@ -196,7 +198,7 @@ export default function App() {
         onSubmit={(e) => { e.preventDefault(); runAnalyze(); }}
         className="mb-4 flex flex-col gap-3 md:flex-row"
       >
-        <TickerSearch value={ticker} onChange={setTicker} onSubmit={runAnalyze} />
+        <TickerSearch ref={searchInputRef} value={ticker} onChange={setTicker} onSubmit={runAnalyze} />
         <button
           type="submit"
           disabled={loading}
@@ -247,6 +249,24 @@ export default function App() {
 
           <div className="space-y-4">
             <ResultBadge result={result} />
+
+            {/* Demo CTA — shown right after PASS/FAIL when intent is highest */}
+            {isDemoResult && (
+              <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-sm text-slate-600">
+                  全銘柄を分析するには
+                  <strong className="mx-1 text-slate-900">FMP APIキーの設定</strong>
+                  が必要です（無料・1分で完了）
+                </p>
+                <button
+                  onClick={() => setShowSettings(true)}
+                  className="shrink-0 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+                >
+                  無料で全機能を使う →
+                </button>
+              </div>
+            )}
+
             <div className="flex justify-end">
               <button
                 onClick={() => addToWatchlist(result.ticker)}
@@ -360,7 +380,15 @@ export default function App() {
       {/* Watchlist */}
       <section className="mt-6 rounded-2xl bg-white p-6 shadow-sm">
         <h3 className="mb-3 text-base font-semibold text-slate-900">ウォッチリスト</h3>
-        <Watchlist items={watchlist} onSelect={runAnalyze} onRemove={removeFromWatchlist} />
+        <Watchlist
+          items={watchlist}
+          onSelect={runAnalyze}
+          onRemove={removeFromWatchlist}
+          onFocusSearch={() => {
+            searchInputRef.current?.focus();
+            searchInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }}
+        />
       </section>
 
       {/* Plan comparison — shown only for Free (no-key) users */}

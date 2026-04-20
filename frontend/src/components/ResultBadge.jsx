@@ -22,17 +22,20 @@ export default function ResultBadge({ result }) {
               対象期間: FY{result.latestPeriod}（{result.latestDate}）
             </div>
             {dots.length > 0 && (
-              <div className="mt-3 flex gap-2">
+              <div className="mt-3 flex flex-wrap gap-1.5">
                 {dots.map((c, i) => (
                   <div
                     key={i}
-                    title={`条件${i + 1}: ${c.name} — ${c.passed ? 'PASS' : 'FAIL'}`}
-                    className={`h-3 w-3 rounded-full border-2 transition ${
+                    title={c.name}
+                    className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold transition ${
                       c.passed
-                        ? 'bg-white border-white'
-                        : 'bg-white/20 border-white/50'
+                        ? 'border-white/40 bg-white/20 text-white'
+                        : 'border-white/20 bg-white/5 text-white/40'
                     }`}
-                  />
+                  >
+                    <span>{c.passed ? '✓' : '✕'}</span>
+                    <span className="hidden sm:inline">条件{i + 1}</span>
+                  </div>
                 ))}
               </div>
             )}

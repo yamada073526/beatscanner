@@ -1,9 +1,19 @@
-export default function Watchlist({ items, onSelect, onRemove }) {
+export default function Watchlist({ items, onSelect, onRemove, onFocusSearch }) {
   if (!items.length) {
     return (
-      <p className="text-sm text-slate-500">
-        まだウォッチリストはありません。分析結果から「★ ウォッチに追加」で登録できます。
-      </p>
+      <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 py-8 text-center">
+        <span className="text-2xl text-slate-300">★</span>
+        <p className="text-sm font-medium text-slate-500">ウォッチリストはまだ空です</p>
+        <p className="text-xs text-slate-400">
+          銘柄を分析した後、「★ ウォッチに追加」で登録できます
+        </p>
+        <button
+          onClick={() => onFocusSearch?.()}
+          className="mt-1 rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+        >
+          銘柄を検索して分析する →
+        </button>
+      </div>
     );
   }
   return (

@@ -1,15 +1,22 @@
 import { useState } from 'react';
 import { fetchCustomScreener } from '../api.js';
 
-function ConditionDots({ conditions = [] }) {
+const CONDITION_SHORT = ['CF率', 'EPS', 'CFPS', '売上', 'CF>EPS'];
+
+function ConditionDots({ conditions = [], showLabels = false }) {
   return (
-    <div className="flex gap-1">
+    <div className="flex flex-wrap gap-1">
       {conditions.map((c, i) => (
         <span
           key={i}
           title={c.name}
-          className={`inline-block h-2 w-2 rounded-full ${c.passed ? 'bg-green-500' : 'bg-red-300'}`}
-        />
+          className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+            c.passed ? 'bg-green-100 text-green-700' : 'bg-red-50 text-red-400'
+          }`}
+        >
+          {c.passed ? '✓' : '✕'}
+          {showLabels && <span className="hidden sm:inline">{CONDITION_SHORT[i]}</span>}
+        </span>
       ))}
     </div>
   );
@@ -17,18 +24,27 @@ function ConditionDots({ conditions = [] }) {
 
 function ResultCard({ item, onSelect }) {
   const passCount = item.passedCount ?? item.conditions?.filter((c) => c.passed).length ?? 0;
+  const [expanded, setExpanded] = useState(false);
+
   return (
-    <button
-      onClick={() => onSelect(item.ticker)}
-      className="flex flex-col items-start rounded-xl border border-slate-200 p-3 text-left transition hover:border-slate-600 hover:shadow-sm w-full"
-    >
-      <div className="mb-1.5 flex w-full items-start justify-between gap-1">
-        <div className="min-w-0">
-          <span className="text-sm font-bold text-slate-900">{item.ticker}</span>
-          {item.companyName && (
-            <p className="truncate text-xs text-slate-400">{item.companyName}</p>
-          )}
-        </div>
+    <div className="rounded-xl border border-slate-200 transition hover:border-slate-400">
+      {/* Main row — always visible */}
+      <div className="flex items-center gap-2 p-3">
+        <button
+          onClick={() => onSelect(item.ticker)}
+          className="min-w-0 flex-1 text-left"
+        >
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-sm font-bold text-slate-900">{item.ticker}</span>
+            {item.companyName && (
+              <span className="truncate text-xs text-slate-400 hidden sm:inline">
+                {item.companyName}
+              </span>
+            )}
+          </div>
+        </button>
+
+        {/* Pass count badge */}
         <span
           className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold ${
             item.overallPass ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
@@ -36,9 +52,22 @@ function ResultCard({ item, onSelect }) {
         >
           {passCount}/5
         </span>
+
+        {/* Expand toggle — mobile only */}
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="shrink-0 rounded p-1 text-xs text-slate-400 hover:text-slate-600 sm:hidden"
+          aria-label="条件詳細を展開"
+        >
+          {expanded ? '▲' : '▼'}
+        </button>
       </div>
-      <ConditionDots conditions={item.conditions} />
-    </button>
+
+      {/* Condition dots — always visible on desktop, toggle on mobile */}
+      <div className={`px-3 pb-3 ${expanded ? 'block' : 'hidden sm:block'}`}>
+        <ConditionDots conditions={item.conditions} showLabels />
+      </div>
+    </div>
   );
 }
 
@@ -124,10 +153,10 @@ export default function CustomScreenerPanel({ onSelect }) {
             <span className="ml-auto text-xs text-slate-300">{data.screenedAt} 実行</span>
           </div>
 
-          {/* Legend */}
-          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+          {/* Legend — desktop only */}
+          <div className="hidden sm:flex flex-wrap items-center gap-3 text-xs text-slate-400">
             <span className="font-medium text-slate-500">条件:</span>
-            {['①CFマージン', '②EPS成長', '③CFPS成長', '④売上成長', '⑤CFPS>EPS'].map((l, i) => (
+            {['①CF率≥15%', '②EPS成長', '③CFPS成長', '④売上成長', '⑤CFPS>EPS'].map((l, i) => (
               <span key={i}>{l}</span>
             ))}
           </div>
@@ -138,7 +167,7 @@ export default function CustomScreenerPanel({ onSelect }) {
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-green-700">
                 PASS 銘柄 — 5条件すべてクリア
               </p>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {data.passing.map((item) => (
                   <ResultCard key={item.ticker} item={item} onSelect={onSelect} />
                 ))}
@@ -154,7 +183,7 @@ export default function CustomScreenerPanel({ onSelect }) {
               <summary className="cursor-pointer list-none text-xs text-slate-400 hover:text-slate-600">
                 FAIL銘柄を表示 ({data.failing.length}件) ▼
               </summary>
-              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {data.failing.map((item) => (
                   <ResultCard key={item.ticker} item={item} onSelect={onSelect} />
                 ))}
