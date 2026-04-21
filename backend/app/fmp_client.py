@@ -73,10 +73,18 @@ class FMPClient:
         )
 
     async def earnings_surprises(self, ticker: str, limit: int = 1) -> list[dict]:
-        return await self._get(
+        data = await self._get(
             "/earnings-surprises",
             {"symbol": ticker.upper(), "limit": limit},
         )
+        # Normalize: FMP stable API sometimes returns a dict wrapper instead of a flat list
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            for key in ("earnings", "data", "results", "surprises", "earningsSurprises"):
+                if isinstance(data.get(key), list):
+                    return data[key]
+        return []
 
     async def analyst_estimates(self, ticker: str, period: str = "quarter", limit: int = 8) -> list[dict]:
         return await self._get(

@@ -576,6 +576,43 @@ async def screener_route(request: Request, category: str = Query("gainers")) -> 
     ]
 
 
+@app.get("/api/debug/earnings/{ticker}")
+async def debug_earnings(ticker: str, request: Request) -> dict:
+    """一時的なデバッグエンドポイント: FMP/yfinanceの生のearnigns応答を返す."""
+    _fmp_key = (
+        _get_fmp_key(request)
+        or os.getenv("FMP_API_KEY")
+        or os.getenv("FMP_DEMO_API_KEY")
+    )
+    result: dict = {"ticker": ticker.upper(), "fmp_key_set": bool(_fmp_key)}
+    try:
+        client: FMPClient | None = FMPClient(api_key=_fmp_key)
+    except FMPError as e:
+        client = None
+        result["fmp_client_error"] = str(e)
+    fmp_raw = None
+    if client:
+        try:
+            from .fmp_client import FMPClient as _FC
+            # _get を直接呼んで生のJSONを取得
+            fmp_raw = await client._get(
+                "/earnings-surprises",
+                {"symbol": ticker.upper(), "limit": 8},
+            )
+            result["fmp_raw_type"] = type(fmp_raw).__name__
+            result["fmp_raw_count"] = len(fmp_raw) if isinstance(fmp_raw, (list, dict)) else None
+            result["fmp_raw_sample"] = fmp_raw[:3] if isinstance(fmp_raw, list) else fmp_raw
+        except Exception as e:
+            result["fmp_error"] = str(e)
+    try:
+        yf_data = await yfinance_source.fetch_earnings_surprises(ticker, limit=8)
+        result["yf_count"] = len(yf_data)
+        result["yf_sample"] = yf_data[:3]
+    except Exception as e:
+        result["yf_error"] = str(e)
+    return result
+
+
 @app.get("/api/price-history/{ticker}")
 async def price_history(ticker: str, request: Request, period: str = Query("1y")) -> dict:
     today = date.today()
@@ -620,8 +657,8 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
         except Exception:
             surprises = []
 
-    # FMP有料制限の場合はyfinanceにフォールバック
-    if not surprises:
+    # FMP有料制限・空リスト・非listの場合はyfinanceにフォールバック
+    if not surprises or not isinstance(surprises, list):
         try:
             surprises = await yfinance_source.fetch_earnings_surprises(ticker, limit=16)
         except Exception:
