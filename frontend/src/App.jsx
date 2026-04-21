@@ -62,6 +62,9 @@ export default function App() {
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [showCustomScreener, setShowCustomScreener] = useState(false);
   const [isDemoResult, setIsDemoResult] = useState(false);
+  const screenerRef = useRef(null);
+  const customScreenerRef = useRef(null);
+  const calendarRef = useRef(null);
   // Track key state so banner re-renders after save
   const [hasKey, setHasKey] = useState(hasFmpKey);
   // Toast notification state (UX item 7)
@@ -153,7 +156,7 @@ export default function App() {
           決算分析ダッシュボード
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          独自プロトコル 第6条（5条件）で米国株決算を自動判定
+          独自プロトコル（5条件）で米国株決算を自動判定
         </p>
       </header>
 
@@ -163,7 +166,21 @@ export default function App() {
       {/* Secondary toolbar */}
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <button
-          onClick={() => { setShowScreener((v) => !v); setShowCalendar(false); setShowCustomScreener(false); }}
+          onClick={() => {
+            const next = !showScreener;
+            setShowScreener(next);
+            setShowCalendar(false);
+            setShowCustomScreener(false);
+            if (next) {
+              setTimeout(() => {
+                const el = screenerRef.current;
+                if (el) {
+                  const top = el.getBoundingClientRect().top + window.scrollY - 80;
+                  window.scrollTo({ top, behavior: 'smooth' });
+                }
+              }, 100);
+            }
+          }}
           className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
             showScreener
               ? 'border-slate-900 bg-slate-900 text-white'
@@ -173,7 +190,21 @@ export default function App() {
           🔍 注目銘柄
         </button>
         <button
-          onClick={() => { setShowCustomScreener((v) => !v); setShowScreener(false); setShowCalendar(false); }}
+          onClick={() => {
+            const next = !showCustomScreener;
+            setShowCustomScreener(next);
+            setShowScreener(false);
+            setShowCalendar(false);
+            if (next) {
+              setTimeout(() => {
+                const el = customScreenerRef.current;
+                if (el) {
+                  const top = el.getBoundingClientRect().top + window.scrollY - 80;
+                  window.scrollTo({ top, behavior: 'smooth' });
+                }
+              }, 100);
+            }
+          }}
           className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
             showCustomScreener
               ? 'border-slate-900 bg-slate-900 text-white'
@@ -183,7 +214,21 @@ export default function App() {
           📈 プロトコルスクリーナー
         </button>
         <button
-          onClick={() => { setShowCalendar((v) => !v); setShowScreener(false); setShowCustomScreener(false); }}
+          onClick={() => {
+            const next = !showCalendar;
+            setShowCalendar(next);
+            setShowScreener(false);
+            setShowCustomScreener(false);
+            if (next) {
+              setTimeout(() => {
+                const el = calendarRef.current;
+                if (el) {
+                  const top = el.getBoundingClientRect().top + window.scrollY - 80;
+                  window.scrollTo({ top, behavior: 'smooth' });
+                }
+              }, 100);
+            }
+          }}
           className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
             showCalendar
               ? 'border-slate-900 bg-slate-900 text-white'
@@ -417,14 +462,14 @@ export default function App() {
 
       {/* Screener */}
       {showScreener && (
-        <div className="mt-6">
+        <div ref={screenerRef} className="mt-6">
           <ScreenerPanel onSelect={(sym) => { runAnalyze(sym); setShowScreener(false); }} />
         </div>
       )}
 
       {/* Custom Screener */}
       {showCustomScreener && (
-        <div className="mt-6">
+        <div ref={customScreenerRef} className="mt-6">
           <CustomScreenerPanel
             onSelect={(sym) => { runAnalyze(sym); setShowCustomScreener(false); }}
           />
@@ -433,7 +478,7 @@ export default function App() {
 
       {/* Calendar */}
       {showCalendar && (
-        <div className="mt-6">
+        <div ref={calendarRef} className="mt-6">
           <CalendarPanel onSelect={runAnalyze} watchlist={watchlist} />
         </div>
       )}

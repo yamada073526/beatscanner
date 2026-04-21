@@ -1,10 +1,35 @@
 ---
 name: stock-chart
-description: 対象銘柄の株価チャートを表示する。
-「チャートを表示して」「株価推移を見たい」などの指示で呼び出す。
+description: |
+  株価チャートの表示・マーカー・期間切替を変更する。
+  「決算日マーカーが表示されない」「チャートに出来高を追加して」
+  「期間ボタンを増やして」などの指示で呼び出す。
 ---
 
-# 株価チャート表示スキル
+# 株価チャートスキル（stock-chart）
+
+## 概要
+FMP APIの historical-price-full エンドポイントから株価データを取得し、
+Recharts の ReferenceLine で決算発表日マーカーを表示する。
+
+## 関連ファイル
+- コンポーネント: StockPriceChart.jsx
+- API関数: fetchPriceHistory() in api.js
+- バックエンド: /api/price/{ticker}?period={1m|3m|1y}
+
+## 決算日マーカー
+ReferenceLine で縦破線マーカーを表示済み。
+data.earnings に決算日配列が入っているか確認する。
+入っていない場合は /api/analyze/{ticker} のレスポンスに
+earnings フィールドを追加する。
+
+## 期間切替
+1M / 3M / 1Y のボタンで期間を切り替え。
+ボタンは ChartControls または StockPriceChart 内に実装済み。
+
+---
+
+# 株価チャート表示スキル（詳細仕様）
 
 ## 依存ファイル
 - docs/references/api_endpoints.md（エンドポイント詳細）

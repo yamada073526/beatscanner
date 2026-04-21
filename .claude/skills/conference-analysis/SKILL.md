@@ -1,16 +1,45 @@
 ---
 name: conference-analysis
-description: 決算カンファレンスコールのトランスクリプトをFMP APIで取得し、Claudeで構造化分析する。
+description: |
+  カンファレンスコール要点・アナリスト視点の分析を生成・更新する。
+  「CCコールの分析を改善して」「ポジ/ネガのタグを調整して」
+  「ストリーミングが止まる」などの指示で呼び出す。
 ---
 
-# カンファレンスコール・アナリスト分析スキル
+# カンファレンスコール分析スキル（conference-analysis）
+
+## 概要
+Claude Sonnet を使い、決算データとCCコール情報から
+詳細分析レポートをストリーミングで生成する。
+決算レポートタブの「カンファレンスコール要点」カードに表示。
+
+## 関連ファイル
+- バックエンド: /api/conference/{ticker}（ストリーミング対応）
+- フロントエンド: 決算レポートタブ内のCCコールカード
+
+## モデル
+claude-sonnet-4-5（詳細分析・長文対応）
+
+## 出力構成
+- ポジティブ要点（緑タグ）
+- ネガティブ要点（赤タグ）
+- ニュートラル要点（グレータグ）
+- アナリスト視点まとめ
+
+## ストリーミング実装
+Server-Sent Events (SSE) でフロントに逐次配信。
+止まる場合は /api/conference/{ticker} のタイムアウト設定を確認する。
+
+---
+
+# カンファレンスコール・アナリスト分析スキル（詳細仕様）
 
 ## 依存ファイル
 - docs/references/jijima_protocol.md
 - docs/references/design_guide.md
 - docs/references/api_endpoints.md
 
-## 概要
+## FMP APIからの取得概要
 FMP APIからearning-call-transcriptを取得し、Claude APIで以下の4項目に構造化分析する。
 取得できない場合はエラーメッセージを表示する（Coming Soonではなく実データを優先）。
 

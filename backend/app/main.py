@@ -11,15 +11,18 @@ from typing import Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from pydantic import BaseModel
+
+from pathlib import Path
 
 from .claude_client import ClaudeClient, ClaudeError
 from .fmp_client import FMPClient, FMPError
 from .judgment import judge
 from . import yfinance_source
+from .visualizer.prompt import SYSTEM_PROMPT, build_user_prompt
 
 # override=False (default): Railway / Docker env vars take priority over any .env file.
 # override=True would let a stale local .env silently shadow Railway variables.
@@ -712,6 +715,12 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
                 verdict = "miss"
             else:
                 verdict = "inline"
+        elif actual is not None:
+            # アナリスト予想なし（yfinance quarterly fallback）— EPS実績は保持
+            act_f = float(actual)
+            est_f = None
+            verdict = "unknown"
+            surprise_pct = None
         else:
             verdict = "unknown"
             surprise_pct = None
@@ -1420,6 +1429,53 @@ async def summary_detail_stream(req: SummaryRequest):
             return
 
     return StreamingResponse(generate(), media_type="text/plain; charset=utf-8")
+
+
+@app.post("/api/visualize/{ticker}")
+async def generate_visualization(ticker: str, request: Request):
+    try:
+        body = await request.json()
+        analysis_data = body.get("analysis_data", {})
+
+        base_html_path = Path(__file__).parent / "visualizer" / "base.html"
+        if not base_html_path.exists():
+            raise HTTPException(status_code=500, detail="テンプレートが見つかりません")
+        base_html = base_html_path.read_text(encoding="utf-8")
+
+        import anthropic
+        client = anthropic.Anthropic()
+        message = client.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=4096,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": build_user_prompt(analysis_data)}]
+        )
+
+        generated_content = message.content[0].text
+        ticker_str = analysis_data.get('ticker', ticker)
+        period_str = analysis_data.get('fiscal_period', '')
+        verdict_str = analysis_data.get('verdict', '')
+        company_str = analysis_data.get('company_name', ticker)
+
+        title = f"{ticker_str} {period_str} 決算図解"
+        description = f"{company_str}の決算をじっちゃまプロトコルで分析。{verdict_str}判定。"
+
+        html = base_html \
+            .replace("<!-- TITLE -->", title) \
+            .replace("<!-- DESCRIPTION -->", description) \
+            .replace(
+                "<!-- CONTENT_START -->\n\n<!-- CONTENT_END -->",
+                f"<!-- CONTENT_START -->\n{generated_content}\n<!-- CONTENT_END -->"
+            )
+
+        return Response(
+            content=html,
+            media_type="text/html; charset=utf-8",
+            headers={"Cache-Control": "no-store"}
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Static file serving (must be LAST — after all /api/* routes) ─────────────

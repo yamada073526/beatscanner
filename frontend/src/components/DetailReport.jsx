@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { streamSummaryDetail } from '../api.js';
+import { streamSummaryDetail, generateVisualization } from '../api.js';
 import ConferenceAnalysis from './ConferenceAnalysis.jsx';
 
 const mdComponents = {
@@ -31,6 +31,29 @@ function ReportCard({ analysis, guidance, onStreamingChange }) {
   const [streaming, setStreaming] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleGenerateViz = async () => {
+    setIsGenerating(true);
+    try {
+      await generateVisualization(analysis.ticker, {
+        ticker: analysis.ticker,
+        company_name: analysis.companyName,
+        fiscal_period: analysis.latestPeriod,
+        verdict: analysis.overallPass ? 'PASS' : 'FAIL',
+        passed_conditions: analysis.passedCount,
+        conditions_detail: JSON.stringify(analysis.conditions, null, 2),
+        metrics_trend: JSON.stringify(analysis.periods, null, 2),
+        guidance: guidance ? JSON.stringify(guidance, null, 2) : 'データなし',
+        conference_call_points: 'データなし',
+        ai_summary: '',
+      });
+    } catch (err) {
+      alert('図解の生成に失敗しました: ' + err.message);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   useEffect(() => {
     if (!analysis) return;
@@ -79,6 +102,23 @@ function ReportCard({ analysis, guidance, onStreamingChange }) {
         {streaming && (
           <span className="text-xs text-slate-400 animate-pulse">生成中...</span>
         )}
+        <button
+          onClick={handleGenerateViz}
+          disabled={isGenerating}
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isGenerating ? (
+            <>
+              <span className="animate-spin w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full inline-block" />
+              <span>生成中...</span>
+            </>
+          ) : (
+            <>
+              <i data-lucide="bar-chart-2" className="w-4 h-4" />
+              <span>図解を生成</span>
+            </>
+          )}
+        </button>
       </div>
       {error && (
         <p className="text-sm text-red-500">詳報を生成できませんでした: {error}</p>

@@ -45,3 +45,8 @@ uvicorn*.log
 
 # Railway
 .railway/
+
+# Claude Code local settings (may contain API keys)
+.claude/settings.local.json
+.claude/launch.json
+.claude/worktrees/

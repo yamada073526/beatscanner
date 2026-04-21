@@ -194,3 +194,20 @@ export async function demoAnalyze(ticker) {
   }
   return r.json();
 }
+
+export async function generateVisualization(ticker, analysisData) {
+  const r = await fetch(`/api/visualize/${encodeURIComponent(ticker)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ analysis_data: analysisData }),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || `HTTP ${r.status}`);
+  }
+  const html = await r.text();
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}

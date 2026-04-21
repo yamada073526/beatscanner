@@ -1,10 +1,35 @@
 ---
 name: earnings-calendar
-description: 今週・来週の決算予定銘柄をカレンダー形式で表示する。
-「決算カレンダーを見たい」「今週の決算は？」などの指示で呼び出す。
+description: |
+  決算カレンダーの表示・フィルター・日付範囲を変更する。
+  「今週の決算を表示して」「カレンダーにセクターフィルターを追加して」
+  などの指示で呼び出す。
 ---
 
-# 決算カレンダースキル
+# 決算カレンダースキル（earnings-calendar）
+
+## 概要
+FMP APIの earnings-calendar エンドポイントから
+今後の決算発表日一覧を取得して表示する。
+
+## 関連ファイル
+- バックエンド: /api/earnings-calendar?from={date}&to={date}
+- フロントエンド: EarningsCalendar.jsx
+- APIエンドポイント: docs/references/api_endpoints.md を参照
+
+## 表示内容
+- 企業名・ティッカー・発表予定日・時間（BMO/AMC）
+- 予想EPS vs 実績EPS（発表後）
+- ウォッチリスト登録ボタン
+
+## 拡張ポイント
+- ウォッチリスト登録銘柄をハイライト表示
+- セクター・市場（NYSE/NASDAQ）フィルター
+- 次の決算まであと何日かのカウントダウン表示
+
+---
+
+# 決算カレンダースキル（詳細仕様）
 
 ## 依存ファイル
 - docs/references/api_endpoints.md（エンドポイント詳細）
