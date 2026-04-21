@@ -630,7 +630,11 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
     earnings = []
     for s in surprises:
         d = _pick(s, "date")
-        if not d or d < from_date:
+        if not d:
+            continue
+        # Normalize to YYYY-MM-DD — FMP sometimes returns "2025-07-30T00:00:00" or with spaces
+        d = str(d)[:10]
+        if d < from_date:
             continue
         actual = _pick(s, "epsActual", "actualEarningResult", "actualEps")
         estimated = _pick(s, "epsEstimated", "estimatedEarning", "estimatedEps")
