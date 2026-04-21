@@ -28,9 +28,21 @@ class FMPClient:
             r = await client.get(url, params=params)
             if r.status_code != 200:
                 raise FMPError(f"FMP {r.status_code}: {r.text[:200]}")
-            data = r.json()
-            if isinstance(data, dict) and data.get("Error Message"):
-                raise FMPError(data["Error Message"])
+            try:
+                data = r.json()
+            except Exception:
+                raise FMPError(f"FMP non-JSON response: {r.text[:200]}")
+            if isinstance(data, dict):
+                # "Error Message" (v3 style) or "message" (stable style) error handling
+                err = data.get("Error Message") or data.get("error") or None
+                if err:
+                    raise FMPError(str(err))
+                msg = data.get("message", "")
+                if msg and any(kw in msg.lower() for kw in (
+                    "upgrade", "not authorized", "invalid api", "limit reach",
+                    "subscription", "premium", "you need to",
+                )):
+                    raise FMPError(msg)
             return data
 
     async def income_statement(self, ticker: str, limit: int = 4, period: str = "annual") -> list[dict]:

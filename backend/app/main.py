@@ -598,7 +598,7 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
     if client:
         try:
             raw = await client.historical_price(ticker, from_date, today.isoformat())
-        except FMPError:
+        except Exception:
             raw = []
 
     prices = [
@@ -608,13 +608,16 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
     ]
 
     if not prices:
-        prices = await yfinance_source.fetch_price_history(ticker, from_date, today.isoformat())
+        try:
+            prices = await yfinance_source.fetch_price_history(ticker, from_date, today.isoformat())
+        except Exception:
+            prices = []
 
     surprises: list[dict] = []
     if client:
         try:
             surprises = await client.earnings_surprises(ticker, limit=16)
-        except FMPError:
+        except Exception:
             surprises = []
 
     # FMP有料制限の場合はyfinanceにフォールバック
@@ -647,7 +650,15 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
         else:
             verdict = "unknown"
             surprise_pct = None
-        earnings.append({"date": d, "verdict": verdict, "surprise_pct": surprise_pct})
+            act_f = None
+            est_f = None
+        earnings.append({
+            "date": d,
+            "verdict": verdict,
+            "surprise_pct": surprise_pct,
+            "epsActual": round(act_f, 2) if act_f is not None else None,
+            "epsEstimated": round(est_f, 2) if est_f is not None else None,
+        })
     return {
         "prices": prices,
         "earnings": sorted(earnings, key=lambda x: x["date"]),
