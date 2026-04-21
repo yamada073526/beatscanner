@@ -150,33 +150,74 @@ async def search(query: str, max_results: int = 8) -> list[dict]:
 
 
 def _fetch_earnings_surprises_sync(ticker: str, limit: int = 16) -> list[dict]:
-    """yfinance から決算Beat/Miss履歴を取得する."""
+    """yfinance から決算Beat/Miss履歴を取得する.
+
+    1st try: earnings_dates (Beat/Miss判定あり) — ローカル環境では確実だが
+             Railway等クラウドIPからはYahoo Financeにブロックされ空になることがある.
+    2nd try: quarterly_income_stmt (EPS実績のみ、推定値なし) — より安定したエンドポイント.
+             アナリスト予想がないためverdict=unknownになるが決算日マーカーは表示できる.
+    """
     import pandas as pd
     t = yf.Ticker(ticker)
+
+    # --- Try 1: earnings_dates (has actual + estimated EPS) ---
     try:
         df = t.earnings_dates
-        if df is None or df.empty:
-            return []
+        if df is not None and not df.empty:
+            results = []
+            for ts, row in df.iterrows():
+                try:
+                    date_str = ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts)[:10]
+                    actual = row.get("Reported EPS")
+                    estimated = row.get("EPS Estimate")
+                    if pd.isna(actual) or pd.isna(estimated):
+                        continue
+                    results.append({
+                        "date": date_str,
+                        "epsActual": float(actual),
+                        "epsEstimated": float(estimated),
+                    })
+                except Exception:
+                    continue
+            if results:
+                return results[:limit]
     except Exception:
-        return []
+        pass
 
-    results = []
-    for ts, row in df.iterrows():
-        try:
-            date_str = ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts)[:10]
-            actual = row.get("Reported EPS")
-            estimated = row.get("EPS Estimate")
-            if pd.isna(actual) or pd.isna(estimated):
-                continue
-            results.append({
-                "date": date_str,
-                "epsActual": float(actual),
-                "epsEstimated": float(estimated),
-            })
-        except Exception:
-            continue
+    # --- Try 2: quarterly income statement (EPS実績のみ) ---
+    # Railway等クラウド環境でearnings_datesが空の場合のフォールバック.
+    # epsEstimated=None → verdict="unknown" (灰色マーカー) として表示される.
+    try:
+        qf = t.quarterly_income_stmt
+        if qf is None or qf.empty:
+            qf = getattr(t, 'quarterly_financials', None)
+        if qf is not None and not qf.empty:
+            eps_row = None
+            for key in ("Diluted EPS", "Basic EPS", "EPS"):
+                if key in qf.index:
+                    eps_row = qf.loc[key]
+                    break
+            if eps_row is not None:
+                results = []
+                for col in qf.columns:
+                    try:
+                        date_str = col.strftime("%Y-%m-%d") if hasattr(col, "strftime") else str(col)[:10]
+                        val = eps_row[col]
+                        if pd.isna(val):
+                            continue
+                        results.append({
+                            "date": date_str,
+                            "epsActual": round(float(val), 4),
+                            "epsEstimated": None,  # 推定値なし → verdict=unknown
+                        })
+                    except Exception:
+                        continue
+                if results:
+                    return results[:limit]
+    except Exception:
+        pass
 
-    return results[:limit]
+    return []
 
 
 async def fetch_earnings_surprises(ticker: str, limit: int = 16) -> list[dict]:

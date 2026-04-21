@@ -610,6 +610,30 @@ async def debug_earnings(ticker: str, request: Request) -> dict:
         result["yf_sample"] = yf_data[:3]
     except Exception as e:
         result["yf_error"] = str(e)
+    # Also check quarterly_income_stmt directly
+    try:
+        import yfinance as _yf, pandas as _pd
+        def _check_qf():
+            t2 = _yf.Ticker(ticker)
+            qf = t2.quarterly_income_stmt
+            if qf is None or qf.empty:
+                return {"empty": True}
+            eps_row = None
+            for key in ("Diluted EPS", "Basic EPS", "EPS"):
+                if key in qf.index:
+                    eps_row = qf.loc[key]
+                    break
+            if eps_row is None:
+                return {"rows": list(qf.index[:5]), "eps_row": None}
+            entries = [
+                {"date": str(c)[:10], "eps": round(float(eps_row[c]), 4)}
+                for c in qf.columns if not _pd.isna(eps_row[c])
+            ]
+            return {"count": len(entries), "sample": entries[:3]}
+        import asyncio as _asyncio
+        result["yf_quarterly"] = await _asyncio.to_thread(_check_qf)
+    except Exception as e2:
+        result["yf_quarterly_error"] = str(e2)
     return result
 
 
