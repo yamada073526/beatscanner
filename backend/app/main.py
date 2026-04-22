@@ -24,6 +24,7 @@ from .claude_client import ClaudeClient, ClaudeError
 from .fmp_client import FMPClient, FMPError
 from .judgment import judge
 from . import yfinance_source
+from . import alpha_vantage_source
 from .visualizer.prompt import SYSTEM_PROMPT, build_user_prompt
 
 # override=False (default): Railway / Docker env vars take priority over any .env file.
@@ -708,6 +709,17 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
         except Exception:
             surprises = []
 
+    # Alpha Vantage で過去8四半期の履歴を取得してマージ（日付重複はFMP/yfinance優先）
+    try:
+        av_data = await alpha_vantage_source.fetch_earnings_history(ticker, limit=8)
+    except Exception:
+        av_data = []
+    if av_data:
+        existing_dates = {str(_pick(s, "date"))[:10] for s in surprises if _pick(s, "date")}
+        for av in av_data:
+            if av.get("date") and av["date"] not in existing_dates:
+                surprises.append(av)
+
     earnings = []
     for s in surprises:
         d = _pick(s, "date")
@@ -722,7 +734,12 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
         act_f = float(actual) if actual is not None else None
         est_f = float(estimated) if estimated is not None else None
         verdict, surprise_pct = _verdict(act_f, est_f)
-        if verdict == "不明":
+        # Alpha Vantageの事前計算surprisePctをフォールバックとして使用
+        if verdict == "不明" and s.get("surprisePct") is not None:
+            pct = float(s["surprisePct"])
+            surprise_pct = round(pct, 1)
+            verdict = "beat" if pct >= 3.0 else "miss" if pct <= -3.0 else "in-line"
+        elif verdict == "不明":
             verdict = "unknown"
         earnings.append({
             "date": d,
