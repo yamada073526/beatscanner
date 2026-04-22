@@ -205,9 +205,39 @@ export async function generateVisualization(ticker, analysisData) {
     const err = await r.json().catch(() => ({}));
     throw new Error(err.detail || `HTTP ${r.status}`);
   }
-  const html = await r.text();
-  const blob = new Blob([html], { type: 'text/html' });
-  const url = URL.createObjectURL(blob);
-  window.open(url, '_blank');
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let html = '';
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6);
+      if (data === '[DONE]') {
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        return;
+      }
+      try {
+        const parsed = JSON.parse(data);
+        if (parsed.chunk) html += parsed.chunk;
+      } catch {}
+    }
+  }
+
+  if (html) {
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
 }
