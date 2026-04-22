@@ -1448,18 +1448,20 @@ async def generate_visualization(ticker: str, request: Request):
     import anthropic
     client = anthropic.AsyncAnthropic()
 
-    async def generate():
-        async with client.messages.stream(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=6000,
-            system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
-            messages=[{"role": "user", "content": user_prompt + "\n\nREMINDER: Start with <!DOCTYPE html> immediately. No markdown, no backticks, no code fences."}]
-        ) as stream:
-            async for text in stream.text_stream:
-                yield f"data: {json.dumps({'chunk': text})}\n\n"
-        yield "data: [DONE]\n\n"
+    message = await client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1000,
+        system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
+        messages=[{"role": "user", "content": user_prompt}]
+    )
 
-    return StreamingResponse(generate(), media_type="text/event-stream")
+    raw = message.content[0].text.strip()
+    raw = re.sub(r'^```[\w]*\n?', '', raw, flags=re.MULTILINE)
+    raw = re.sub(r'\n?```$', '', raw, flags=re.MULTILINE)
+    try:
+        return json.loads(raw.strip())
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"JSON parse error: {e}")
 
 
 # ── Static file serving (must be LAST — after all /api/* routes) ─────────────
