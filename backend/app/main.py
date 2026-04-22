@@ -1449,8 +1449,8 @@ async def generate_visualization(ticker: str, request: Request):
         base_html = base_html_path.read_text(encoding="utf-8")
 
         import anthropic
-        client = anthropic.Anthropic()
-        message = client.messages.create(
+        client = anthropic.AsyncAnthropic()
+        message = await client.messages.create(
             model="claude-sonnet-4-5",
             max_tokens=4096,
             system=SYSTEM_PROMPT,
