@@ -334,9 +334,15 @@ async def analyze(ticker: str, request: Request) -> dict:
 
     # --- FMP で取得を試みる ---
     try:
-        income = await client.income_statement(ticker, limit=4, period="annual")
-        cash = await client.cash_flow(ticker, limit=4, period="annual")
-        profile = await client.profile(ticker)
+        income, cash, profile = await asyncio.gather(
+            client.income_statement(ticker, limit=4, period="annual"),
+            client.cash_flow(ticker, limit=4, period="annual"),
+            client.profile(ticker),
+            return_exceptions=True,
+        )
+        if isinstance(income, Exception): income = []
+        if isinstance(cash, Exception): cash = []
+        if isinstance(profile, Exception): profile = []
         if profile:
             company_name = profile[0].get("companyName")
             is_etf = bool(profile[0].get("isEtf") or profile[0].get("isFund"))
