@@ -196,7 +196,11 @@ export async function demoAnalyze(ticker) {
 }
 
 export async function generateVisualization(ticker, analysisData) {
-  const response = await fetch(`/api/visualize/${encodeURIComponent(ticker)}`, {
+  const newWindow = window.open("", "_blank");
+  if (!newWindow) return;
+  newWindow.document.open();
+
+  const response = await fetch(`/api/visualize/${ticker}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ analysis_data: analysisData }),
@@ -204,7 +208,6 @@ export async function generateVisualization(ticker, analysisData) {
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let htmlContent = "";
   let buffer = "";
 
   while (true) {
@@ -221,13 +224,10 @@ export async function generateVisualization(ticker, analysisData) {
         if (data === "[DONE]") continue;
         try {
           const parsed = JSON.parse(data);
-          if (parsed.chunk) htmlContent += parsed.chunk;
+          if (parsed.chunk) newWindow.document.write(parsed.chunk);
         } catch {}
       }
     }
   }
-
-  const blob = new Blob([htmlContent], { type: "text/html" });
-  const url = URL.createObjectURL(blob);
-  window.open(url, "_blank");
+  newWindow.document.close();
 }

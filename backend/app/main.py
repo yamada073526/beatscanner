@@ -1451,7 +1451,7 @@ async def generate_visualization(ticker: str, request: Request):
     async def generate():
         async with client.messages.stream(
             model="claude-haiku-4-5-20251001",
-            max_tokens=4096,
+            max_tokens=6000,
             system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": user_prompt + "\n\nREMINDER: Start with <!DOCTYPE html> immediately. No markdown, no backticks, no code fences."}]
         ) as stream:
