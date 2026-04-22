@@ -425,18 +425,28 @@ async def search(request: Request, q: str = Query(..., min_length=1)) -> list[di
     return (us + jp + others)[:12]
 
 
-def _verdict(actual: float | None, estimated: float | None) -> tuple[float | None, str | None]:
-    """Return (surprise_pct, verdict). Threshold ±3%."""
+def _verdict(actual: float | None, estimated: float | None) -> tuple[str, float | None]:
+    """Return (verdict, surprise_pct). Threshold ±3%."""
     if actual is None or estimated is None or estimated == 0:
-        return None, None
-    pct = (actual - estimated) / abs(estimated) * 100.0
+        return "不明", None
+    pct = round((actual - estimated) / abs(estimated) * 100.0, 1)
     if pct >= 3.0:
-        label = "Beat"
+        label = "beat"
     elif pct <= -3.0:
-        label = "Miss"
+        label = "miss"
     else:
-        label = "In-line"
-    return round(pct, 1), label
+        label = "in-line"
+    return label, pct
+
+
+def _normalize_earnings_entry(entry: dict) -> dict:
+    """FMP APIのフィールド名の揺れを吸収して統一形式に変換."""
+    return {
+        "actual": entry.get("epsActual") or entry.get("actualEarningResult"),
+        "estimated": entry.get("epsEstimated") or entry.get("estimatedEarning"),
+        "date": entry.get("date"),
+        "symbol": entry.get("symbol"),
+    }
 
 
 def _pick(d: dict, *keys: str):
@@ -527,8 +537,8 @@ async def guidance(ticker: str, request: Request) -> dict:
     if eps_estimated is None:
         eps_estimated = eps_estimated_fallback
 
-    eps_pct, eps_label = _verdict(eps_actual, eps_estimated)
-    rev_pct, rev_label = _verdict(
+    eps_label, eps_pct = _verdict(eps_actual, eps_estimated)
+    rev_label, rev_pct = _verdict(
         float(revenue_actual) if revenue_actual is not None else None,
         float(revenue_estimated) if revenue_estimated is not None else None,
     )
@@ -710,30 +720,11 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
             continue
         actual = _pick(s, "epsActual", "actualEarningResult", "actualEps")
         estimated = _pick(s, "epsEstimated", "estimatedEarning", "estimatedEps")
-        if actual is not None and estimated is not None:
-            est_f = float(estimated)
-            act_f = float(actual)
-            if est_f != 0:
-                surprise_pct = round((act_f - est_f) / abs(est_f) * 100, 1)
-            else:
-                surprise_pct = 0.0
-            if surprise_pct >= 3.0:
-                verdict = "beat"
-            elif surprise_pct <= -3.0:
-                verdict = "miss"
-            else:
-                verdict = "inline"
-        elif actual is not None:
-            # アナリスト予想なし（yfinance quarterly fallback）— EPS実績は保持
-            act_f = float(actual)
-            est_f = None
+        act_f = float(actual) if actual is not None else None
+        est_f = float(estimated) if estimated is not None else None
+        verdict, surprise_pct = _verdict(act_f, est_f)
+        if verdict == "不明":
             verdict = "unknown"
-            surprise_pct = None
-        else:
-            verdict = "unknown"
-            surprise_pct = None
-            act_f = None
-            est_f = None
         earnings.append({
             "date": d,
             "verdict": verdict,
@@ -1032,14 +1023,14 @@ async def conference(ticker: str, request: Request) -> dict:
     if surprises:
         context_lines.append("\n【直近EPS Beat/Miss履歴】")
         for s in surprises[:4]:
-            actual = s.get("epsActual") or s.get("actualEarningResult")
-            est = s.get("epsEstimated") or s.get("estimatedEarning")
-            d = s.get("date", "")
-            if actual is not None and est is not None:
-                _pct = (float(actual) - float(est)) / abs(float(est)) * 100 if float(est) != 0 else 0
-                verdict = "Beat" if _pct >= 3.0 else "Miss" if _pct <= -3.0 else "In-line"
+            n = _normalize_earnings_entry(s)
+            if n["actual"] is not None and n["date"]:
+                v, _pct = _verdict(
+                    float(n["actual"]),
+                    float(n["estimated"]) if n["estimated"] is not None else None,
+                )
                 context_lines.append(
-                    f"{d}: 実績EPS={actual} / 予想={est} → {verdict}"
+                    f"{n['date']}: 実績EPS={n['actual']} / 予想={n['estimated'] or '不明'} → {v}"
                 )
     context = "\n".join(context_lines)
 
@@ -1065,20 +1056,22 @@ async def conference(ticker: str, request: Request) -> dict:
     miss_count = 0
     beat_miss_history: list[dict] = []
     for s in surprises[:8]:
-        actual = s.get("epsActual") or s.get("actualEarningResult")
-        est = s.get("epsEstimated") or s.get("estimatedEarning")
-        d = s.get("date")
-        if actual is not None and est is not None and d:
-            _pct = (float(actual) - float(est)) / abs(float(est)) * 100 if float(est) != 0 else 0
-            v = "beat" if _pct >= 3.0 else "miss" if _pct <= -3.0 else "inline"
-            if v == "beat":
-                beat_count += 1
-            elif v == "miss":
-                miss_count += 1
+        n = _normalize_earnings_entry(s)
+        if not n["date"]:
+            continue
+        v, _pct = _verdict(
+            float(n["actual"]) if n["actual"] is not None else None,
+            float(n["estimated"]) if n["estimated"] is not None else None,
+        )
+        if v == "beat":
+            beat_count += 1
+        elif v == "miss":
+            miss_count += 1
+        if n["actual"] is not None:
             beat_miss_history.append({
-                "date": d,
-                "actual": actual,
-                "estimated": est,
+                "date": n["date"],
+                "actual": n["actual"],
+                "estimated": n["estimated"],
                 "verdict": v,
             })
 
@@ -1172,13 +1165,15 @@ async def conference_text_stream(ticker: str, request: Request):
     if surprises:
         context_lines.append("\n【直近EPS Beat/Miss履歴】")
         for s in surprises[:4]:
-            actual = s.get("epsActual") or s.get("actualEarningResult")
-            est = s.get("epsEstimated") or s.get("estimatedEarning")
-            d = s.get("date", "")
-            if actual is not None and est is not None:
-                _pct = (float(actual) - float(est)) / abs(float(est)) * 100 if float(est) != 0 else 0
-                verdict = "Beat" if _pct >= 3.0 else "Miss" if _pct <= -3.0 else "In-line"
-                context_lines.append(f"{d}: 実績EPS={actual} / 予想={est} → {verdict}")
+            n = _normalize_earnings_entry(s)
+            if n["actual"] is not None and n["date"]:
+                v, _pct = _verdict(
+                    float(n["actual"]),
+                    float(n["estimated"]) if n["estimated"] is not None else None,
+                )
+                context_lines.append(
+                    f"{n['date']}: 実績EPS={n['actual']} / 予想={n['estimated'] or '不明'} → {v}"
+                )
     context = "\n".join(context_lines)
 
     if income:
