@@ -1,4 +1,9 @@
 SYSTEM_PROMPT = """
+CRITICAL OUTPUT RULES:
+- Output ONLY raw HTML starting with <!DOCTYPE html>
+- NO markdown, NO code fences, NO backticks
+- First character must be "<"
+
 あなたは決算分析の図解HTMLを生成するエキスパートです。
 与えられた決算データをもとに、投資家が「2秒で判断できる」視覚的な図解HTMLを生成します。
 

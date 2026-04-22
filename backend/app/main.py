@@ -1451,11 +1451,23 @@ async def generate_visualization(ticker: str, request: Request):
 
         import anthropic
         client = anthropic.AsyncAnthropic()
+        user_prompt = build_user_prompt(analysis_data)
         message = await client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=3000,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": build_user_prompt(analysis_data)}]
+            system=[
+                {
+                    "type": "text",
+                    "text": SYSTEM_PROMPT,
+                    "cache_control": {"type": "ephemeral"}
+                }
+            ],
+            messages=[
+                {
+                    "role": "user",
+                    "content": user_prompt + "\n\nREMINDER: Start your response with <!DOCTYPE html> immediately. No markdown, no backticks, no code fences."
+                }
+            ]
         )
 
         generated_content = message.content[0].text
