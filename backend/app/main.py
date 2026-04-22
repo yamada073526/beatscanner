@@ -711,7 +711,7 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
 
     # Alpha Vantage で過去8四半期の履歴を取得してマージ（日付重複はFMP/yfinance優先）
     try:
-        av_data = await alpha_vantage_source.fetch_earnings_history(ticker, limit=8)
+        av_data = await alpha_vantage_source.fetch_earnings_history(ticker, limit=40)
     except Exception:
         av_data = []
     if av_data:

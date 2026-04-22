@@ -52,7 +52,7 @@ def _fetch_sync(ticker: str, api_key: str) -> list[dict]:
     return results
 
 
-async def fetch_earnings_history(ticker: str, limit: int = 8) -> list[dict]:
+async def fetch_earnings_history(ticker: str, limit: int = 40) -> list[dict]:
     """Fetch historical EPS Beat/Miss from Alpha Vantage. Cached 60 min per ticker."""
     api_key = os.getenv("ALPHA_VANTAGE_API_KEY")
     if not api_key:
