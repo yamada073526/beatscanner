@@ -445,6 +445,30 @@ def _verdict(actual: float | None, estimated: float | None) -> tuple[str, float 
     return label, pct
 
 
+def _year_quarter(date_str: str | None):
+    """'2025-01-30' → (2025, 1) のような (year, quarter) を返す。失敗時は None。"""
+    if not date_str:
+        return None
+    try:
+        from datetime import datetime
+        d = datetime.strptime(str(date_str)[:10], "%Y-%m-%d")
+        return (d.year, (d.month - 1) // 3 + 1)
+    except Exception:
+        return None
+
+
+def _deduplicate_by_quarter(entries: list[dict]) -> list[dict]:
+    """同一 (year, quarter) のエントリを1つに集約。source='fmp' を優先。"""
+    seen: dict = {}
+    for entry in entries:
+        key = _year_quarter(entry.get("date"))
+        if key is None:
+            continue
+        if key not in seen or entry.get("source") == "fmp":
+            seen[key] = entry
+    return sorted(seen.values(), key=lambda x: x.get("date", ""), reverse=True)
+
+
 def _normalize_earnings_entry(entry: dict) -> dict:
     """FMP/Alpha Vantage APIのフィールド名の揺れを吸収して統一形式に変換."""
     return {
@@ -723,7 +747,8 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
     surprises: list[dict] = []
     if client:
         try:
-            surprises = await client.earnings_surprises(ticker, limit=16)
+            fmp_raw = await client.earnings_surprises(ticker, limit=16)
+            surprises = [{**s, "source": "fmp"} for s in fmp_raw]
         except Exception:
             surprises = []
 
@@ -734,16 +759,12 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
         except Exception:
             surprises = []
 
-    # Alpha Vantage で過去8四半期の履歴を取得してマージ（日付重複はFMP/yfinance優先）
+    # Alpha Vantage で過去40四半期の履歴を取得してマージし、四半期単位で重複排除
     try:
         av_data = await alpha_vantage_source.fetch_earnings_history(ticker, limit=40)
     except Exception:
         av_data = []
-    if av_data:
-        existing_dates = {str(_pick(s, "date"))[:10] for s in surprises if _pick(s, "date")}
-        for av in av_data:
-            if av.get("date") and av["date"] not in existing_dates:
-                surprises.append(av)
+    surprises = _deduplicate_by_quarter(surprises + av_data)
 
     earnings = []
     for s in surprises:
