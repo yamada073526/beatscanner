@@ -15,7 +15,7 @@ const PERIODS = [
 const VERDICT_COLOR = {
   beat:    '#22c55e',
   miss:    '#ef4444',
-  inline:  '#eab308',
+  inline:  '#888780',
   unknown: '#94a3b8',
 };
 
