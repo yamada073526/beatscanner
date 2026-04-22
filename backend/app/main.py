@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import pathlib as _pathlib
 import time as _time
 from datetime import date, timedelta
@@ -1457,12 +1458,10 @@ async def generate_visualization(ticker: str, request: Request):
             messages=[{"role": "user", "content": build_user_prompt(analysis_data)}]
         )
 
-        generated_content = message.content[0].text.strip()
-        if generated_content.startswith("```"):
-            generated_content = generated_content.split("```", 2)[-1] if generated_content.count("```") >= 2 else generated_content
-            generated_content = generated_content.removeprefix("html").strip()
-            if generated_content.endswith("```"):
-                generated_content = generated_content[:-3].strip()
+        generated_content = message.content[0].text
+        generated_content = re.sub(r'^```[\w]*\n?', '', generated_content.strip(), flags=re.MULTILINE)
+        generated_content = re.sub(r'\n?```$', '', generated_content.strip(), flags=re.MULTILINE)
+        generated_content = generated_content.strip()
 
         ticker_str = analysis_data.get('ticker', ticker)
         period_str = analysis_data.get('fiscal_period', '')
