@@ -427,7 +427,12 @@ async def search(request: Request, q: str = Query(..., min_length=1)) -> list[di
 
 
 def _verdict(actual: float | None, estimated: float | None) -> tuple[str, float | None]:
-    """Return (verdict, surprise_pct). Threshold ±3%."""
+    """Return (verdict, surprise_pct). Threshold ±3%. Handles string inputs gracefully."""
+    try:
+        actual = float(actual) if actual is not None else None
+        estimated = float(estimated) if estimated is not None else None
+    except (ValueError, TypeError):
+        return "不明", None
     if actual is None or estimated is None or estimated == 0:
         return "不明", None
     pct = round((actual - estimated) / abs(estimated) * 100.0, 1)
@@ -441,11 +446,24 @@ def _verdict(actual: float | None, estimated: float | None) -> tuple[str, float 
 
 
 def _normalize_earnings_entry(entry: dict) -> dict:
-    """FMP APIのフィールド名の揺れを吸収して統一形式に変換."""
+    """FMP/Alpha Vantage APIのフィールド名の揺れを吸収して統一形式に変換."""
     return {
-        "actual": entry.get("eps") or entry.get("epsActual") or entry.get("actualEarningResult"),
-        "estimated": entry.get("epsEstimated") or entry.get("estimatedEarning"),
-        "date": entry.get("date"),
+        "actual": (
+            entry.get("eps")
+            or entry.get("epsActual")
+            or entry.get("actualEarningResult")
+            or entry.get("reportedEPS")
+        ),
+        "estimated": (
+            entry.get("epsEstimated")
+            or entry.get("estimatedEarning")
+            or entry.get("estimatedEPS")
+        ),
+        "date": (
+            entry.get("date")
+            or entry.get("reportedDate")
+            or entry.get("fiscalDateEnding")
+        ),
         "symbol": entry.get("symbol"),
     }
 
@@ -482,6 +500,13 @@ async def guidance(ticker: str, request: Request) -> dict:
         income_q = await income_task
     except FMPError:
         pass
+
+    # earnings-calendar が当該ティッカーを含まない場合はAlpha Vantageにフォールバック
+    if not surprises:
+        try:
+            surprises = await alpha_vantage_source.fetch_earnings_history(ticker, limit=1)
+        except Exception:
+            pass
 
     if not surprises and not income_q:
         raise HTTPException(
