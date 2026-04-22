@@ -1452,12 +1452,18 @@ async def generate_visualization(ticker: str, request: Request):
         client = anthropic.AsyncAnthropic()
         message = await client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=2048,
+            max_tokens=3000,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": build_user_prompt(analysis_data)}]
         )
 
-        generated_content = message.content[0].text
+        generated_content = message.content[0].text.strip()
+        if generated_content.startswith("```"):
+            generated_content = generated_content.split("```", 2)[-1] if generated_content.count("```") >= 2 else generated_content
+            generated_content = generated_content.removeprefix("html").strip()
+            if generated_content.endswith("```"):
+                generated_content = generated_content[:-3].strip()
+
         ticker_str = analysis_data.get('ticker', ticker)
         period_str = analysis_data.get('fiscal_period', '')
         verdict_str = analysis_data.get('verdict', '')
