@@ -1451,8 +1451,8 @@ async def generate_visualization(ticker: str, request: Request):
         import anthropic
         client = anthropic.AsyncAnthropic()
         message = await client.messages.create(
-            model="claude-sonnet-4-5",
-            max_tokens=4096,
+            model="claude-haiku-4-5-20251001",
+            max_tokens=2048,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": build_user_prompt(analysis_data)}]
         )
