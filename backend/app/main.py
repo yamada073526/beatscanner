@@ -442,7 +442,7 @@ def _verdict(actual: float | None, estimated: float | None) -> tuple[str, float 
 def _normalize_earnings_entry(entry: dict) -> dict:
     """FMP APIのフィールド名の揺れを吸収して統一形式に変換."""
     return {
-        "actual": entry.get("epsActual") or entry.get("actualEarningResult"),
+        "actual": entry.get("eps") or entry.get("epsActual") or entry.get("actualEarningResult"),
         "estimated": entry.get("epsEstimated") or entry.get("estimatedEarning"),
         "date": entry.get("date"),
         "symbol": entry.get("symbol"),
@@ -495,7 +495,7 @@ async def guidance(ticker: str, request: Request) -> dict:
     fiscal_period: str | None = None
     if surprises:
         latest = surprises[0]
-        eps_actual = _pick(latest, "epsActual", "actualEarningResult", "actualEps")
+        eps_actual = _pick(latest, "eps", "epsActual", "actualEarningResult", "actualEps")
         eps_estimated = _pick(latest, "epsEstimated", "estimatedEarning", "estimatedEps")
         surprise_date = _pick(latest, "date")
         fiscal_period = _pick(latest, "fiscalPeriod", "period")
@@ -616,10 +616,9 @@ async def debug_earnings(ticker: str, request: Request) -> dict:
         try:
             from .fmp_client import FMPClient as _FC
             # _get を直接呼んで生のJSONを取得
-            fmp_raw = await client._get(
-                "/earnings-surprises",
-                {"symbol": ticker.upper(), "limit": 8},
-            )
+            fmp_raw = await client._get("/earnings-calendar", {})
+            if isinstance(fmp_raw, list):
+                fmp_raw = [d for d in fmp_raw if d.get("symbol") == ticker.upper()][:8]
             result["fmp_raw_type"] = type(fmp_raw).__name__
             result["fmp_raw_count"] = len(fmp_raw) if isinstance(fmp_raw, (list, dict)) else None
             result["fmp_raw_sample"] = fmp_raw[:3] if isinstance(fmp_raw, list) else fmp_raw
