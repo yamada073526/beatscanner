@@ -196,48 +196,38 @@ export async function demoAnalyze(ticker) {
 }
 
 export async function generateVisualization(ticker, analysisData) {
-  const r = await fetch(`/api/visualize/${encodeURIComponent(ticker)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+  const response = await fetch(`/api/visualize/${encodeURIComponent(ticker)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ analysis_data: analysisData }),
   });
-  if (!r.ok) {
-    const err = await r.json().catch(() => ({}));
-    throw new Error(err.detail || `HTTP ${r.status}`);
-  }
 
-  const reader = r.body.getReader();
+  const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let html = '';
-  let buffer = '';
+  let htmlContent = "";
+  let buffer = "";
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
+
     buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
+    const lines = buffer.split("\n");
     buffer = lines.pop();
+
     for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      const data = line.slice(6);
-      if (data === '[DONE]') {
-        const blob = new Blob([html], { type: 'text/html' });
-        const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
-        setTimeout(() => URL.revokeObjectURL(url), 10000);
-        return;
+      if (line.startsWith("data: ")) {
+        const data = line.slice(6).trim();
+        if (data === "[DONE]") continue;
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.chunk) htmlContent += parsed.chunk;
+        } catch {}
       }
-      try {
-        const parsed = JSON.parse(data);
-        if (parsed.chunk) html += parsed.chunk;
-      } catch {}
     }
   }
 
-  if (html) {
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-  }
+  const blob = new Blob([htmlContent], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank");
 }
