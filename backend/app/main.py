@@ -457,8 +457,11 @@ def _safe_float(val) -> float | None:
 
 
 def _deduplicate_by_date_proximity(entries: list[dict], window_days: int = 45) -> list[dict]:
-    """報告日が45日以内のエントリを同一決算とみなしてFMP優先でマージ。"""
-    from datetime import datetime as _dt, timedelta as _td
+    """報告日が45日以内のエントリを同一決算とみなしてFMP優先でマージ。
+
+    FMPエントリが推定EPSを持たない場合、同一四半期のAVエントリから補完する。
+    """
+    from datetime import datetime as _dt
     result = []
     used: set[int] = set()
     # FMPエントリを先に処理（優先）
@@ -468,6 +471,8 @@ def _deduplicate_by_date_proximity(entries: list[dict], window_days: int = 45) -
             continue
         used.add(i)
         date_str = entry.get("date", "")
+        # 勝者のコピーを作成（AVからの補完に備えて）
+        merged = dict(entry)
         try:
             d1 = _dt.strptime(date_str[:10], "%Y-%m-%d")
             for j, other in enumerate(sorted_entries):
@@ -477,11 +482,16 @@ def _deduplicate_by_date_proximity(entries: list[dict], window_days: int = 45) -
                     d2 = _dt.strptime(other.get("date", "")[:10], "%Y-%m-%d")
                     if abs((d1 - d2).days) <= window_days:
                         used.add(j)
+                        # 勝者に推定EPSがなければ敗者から補完（AV→FMP補完）
+                        if merged.get("epsEstimated") is None and other.get("epsEstimated") is not None:
+                            merged["epsEstimated"] = other["epsEstimated"]
+                        if merged.get("surprisePct") is None and other.get("surprisePct") is not None:
+                            merged["surprisePct"] = other["surprisePct"]
                 except Exception:
                     pass
         except Exception:
             pass
-        result.append(entry)
+        result.append(merged)
     return sorted(result, key=lambda x: x.get("date", ""), reverse=True)
 
 
