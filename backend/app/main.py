@@ -516,6 +516,65 @@ def _pick(d: dict, *keys: str):
     return None
 
 
+def _eps_float(raw: object, *, treat_zero_as_missing: bool) -> float | None:
+    """API由来のEPS値をfloat化。コンセンサス予想では 0 を未設定扱いにできる。"""
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        s = raw.strip()
+        if s in ("", "None", "N/A", "null"):
+            return None
+    try:
+        f = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if f != f:  # NaN
+        return None
+    if treat_zero_as_missing and f == 0.0:
+        return None
+    return f
+
+
+def _fmp_consensus_eps_nearest(
+    earnings_date: str,
+    analyst_rows: list[dict],
+    *,
+    window_days: int = 45,
+) -> float | None:
+    """FMP analyst-estimates の estimatedEpsAvg を、決算日±window_days で最も近い四半期から取得。"""
+    from datetime import datetime as _dt
+
+    if not analyst_rows:
+        return None
+    try:
+        target = _dt.strptime(earnings_date[:10], "%Y-%m-%d")
+    except ValueError:
+        return None
+    best_dist: int | None = None
+    best_eps: float | None = None
+    for row in analyst_rows:
+        d_raw = row.get("date")
+        if not d_raw:
+            continue
+        try:
+            row_d = _dt.strptime(str(d_raw)[:10], "%Y-%m-%d")
+        except ValueError:
+            continue
+        dist = int(abs((row_d - target).days))
+        if dist > window_days:
+            continue
+        eps_raw = row.get("estimatedEpsAvg")
+        if eps_raw is None:
+            eps_raw = row.get("epsAvg")
+        eps = _eps_float(eps_raw, treat_zero_as_missing=True)
+        if eps is None:
+            continue
+        if best_dist is None or dist < best_dist:
+            best_dist = dist
+            best_eps = eps
+    return best_eps
+
+
 @app.get("/api/guidance/{ticker}")
 async def guidance(ticker: str, request: Request) -> dict:
     """直近決算のガイダンス（予想 vs 実績）を EPS / 売上高で判定して返す."""
@@ -741,6 +800,13 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
     except FMPError:
         client = None
 
+    av_task = asyncio.create_task(alpha_vantage_source.fetch_earnings_history(ticker, limit=40))
+    fmp_analyst_task: asyncio.Task | None = None
+    if client:
+        fmp_analyst_task = asyncio.create_task(
+            client.analyst_estimates(ticker, period="quarter", limit=24)
+        )
+
     raw: list[dict] = []
     if client:
         try:
@@ -777,10 +843,19 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
 
     # Alpha Vantage で過去40四半期の履歴を取得してマージし、四半期単位で重複排除
     try:
-        av_data = await alpha_vantage_source.fetch_earnings_history(ticker, limit=40)
+        av_data = await av_task
     except Exception:
         av_data = []
     surprises = _deduplicate_by_date_proximity(surprises + av_data)
+
+    fmp_analyst_rows: list[dict] = []
+    if fmp_analyst_task:
+        try:
+            raw_analyst = await fmp_analyst_task
+            if isinstance(raw_analyst, list):
+                fmp_analyst_rows = raw_analyst
+        except Exception:
+            pass
 
     earnings = []
     for s in surprises:
@@ -791,10 +866,12 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
         d = str(d)[:10]
         if d < from_date:
             continue
-        actual = _pick(s, "epsActual", "actualEarningResult", "actualEps")
-        estimated = _pick(s, "epsEstimated", "estimatedEarning", "estimatedEps")
-        act_f = float(actual) if actual is not None else None
-        est_f = float(estimated) if estimated is not None else None
+        raw_actual = _pick(s, "epsActual", "actualEarningResult", "actualEps")
+        raw_est = _pick(s, "epsEstimated", "estimatedEarning", "estimatedEps")
+        act_f = _eps_float(raw_actual, treat_zero_as_missing=False)
+        est_f = _eps_float(raw_est, treat_zero_as_missing=True)
+        if est_f is None and act_f is not None and fmp_analyst_rows:
+            est_f = _fmp_consensus_eps_nearest(d, fmp_analyst_rows)
         verdict, surprise_pct = _verdict(act_f, est_f)
         # Alpha Vantageの事前計算surprisePctをフォールバックとして使用
         if verdict == "不明" and s.get("surprisePct") is not None:

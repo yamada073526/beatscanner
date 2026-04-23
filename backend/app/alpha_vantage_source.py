@@ -40,6 +40,9 @@ def _fetch_sync(ticker: str, api_key: str) -> list[dict]:
 
         actual = _to_float(entry.get("reportedEPS"))
         estimated = _to_float(entry.get("estimatedEPS"))
+        # AV は直近四半期で estimatedEPS が 0 / 欠落することがあり、Beat/Miss 分母に使えない
+        if estimated is not None and estimated == 0.0:
+            estimated = None
         surprise_pct = _to_float(entry.get("surprisePercentage"))
 
         results.append({
