@@ -464,8 +464,13 @@ def _deduplicate_by_date_proximity(entries: list[dict], window_days: int = 45) -
     from datetime import datetime as _dt
     result = []
     used: set[int] = set()
-    # FMPエントリを先に処理（優先）
-    sorted_entries = sorted(entries, key=lambda x: x.get("source") != "fmp")
+    # ソース優先度: fmp(0) > av(1) > yfinance/other(2)
+    def _src_priority(x: dict) -> int:
+        s = x.get("source")
+        if s == "fmp": return 0
+        if s == "av":  return 1
+        return 2
+    sorted_entries = sorted(entries, key=_src_priority)
     for i, entry in enumerate(sorted_entries):
         if i in used:
             continue
@@ -845,15 +850,19 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
             surprises = []
 
     # FMP有料制限・空リスト・非listの場合はyfinanceにフォールバック
+    # source="yfinance" タグを付与してAVより低優先度にする
     if not surprises or not isinstance(surprises, list):
         try:
-            surprises = await yfinance_source.fetch_earnings_surprises(ticker, limit=16)
+            yf_raw = await yfinance_source.fetch_earnings_surprises(ticker, limit=16)
+            surprises = [{**s, "source": "yfinance"} for s in yf_raw]
         except Exception:
             surprises = []
 
     # Alpha Vantage で過去40四半期の履歴を取得してマージし、四半期単位で重複排除
+    # source="av" タグを付与（優先度: fmp > av > yfinance）
     try:
-        av_data = await av_task
+        av_raw = await av_task
+        av_data = [{**e, "source": "av"} for e in av_raw]
     except Exception:
         av_data = []
     surprises = _deduplicate_by_date_proximity(surprises + av_data)
