@@ -1,3 +1,80 @@
+import { useEffect, useState } from 'react';
+
+// ── Guidance explanation modal ────────────────────────────────────────────────
+
+function GuidanceInfoModal({ onClose }) {
+  useEffect(() => {
+    function handleKey(e) { if (e.key === 'Escape') onClose(); }
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(15,23,42,0.5)' }}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl overflow-y-auto max-h-[90vh]">
+        <button
+          onClick={onClose}
+          className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          aria-label="閉じる"
+        >
+          ✕
+        </button>
+
+        <h2 className="pr-8 text-base font-bold text-slate-900">ガイダンス達成状況とは</h2>
+
+        <div className="mt-4">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
+          <p className="text-sm leading-relaxed text-slate-700">
+            「ガイダンス」が事前のコンセンサス予想を上回ること（ガイダンス達成）は、株価の上昇を決定づける極めて重要な要素です。
+          </p>
+        </div>
+
+        <div className="mt-4">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📖 ガイダンスとは何か？</p>
+          <p className="text-sm leading-relaxed text-slate-700">
+            ガイダンスとは、企業側（特に財務部長）が公式に示す、来期や今年度通年の「売上高」および「EPS（一株当たり利益）」の業績見通しのことです。財務部長は誰よりも自社の業績見通しについて精密な予想を立てられる立場にあり、通常、ガイダンスは「これなら達成できるだろう」という控えめな努力目標として提示されます。
+          </p>
+        </div>
+
+        <div className="mt-4">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 なぜガイダンス達成が重要か</p>
+          <div className="space-y-3 text-sm leading-relaxed text-slate-700">
+            <div>
+              <p className="font-semibold text-slate-900">① アナリストの「コンセンサス予想」を動かす決定的な要因だから</p>
+              <p className="mt-1">証券会社のアナリストたちが業績予想を立てる際、最も参考にするのが会社側から示されるガイダンスです。決算発表で新しいガイダンスが示されると、アナリストたちはそれを基に一斉に予想数字を変更します。ガイダンスがコンセンサス予想を上回れば（上方修正）アナリスト予想も引き上げられ、市場全体のコンセンサス予想がジワジワと上昇します。逆に下回れば、予想もすぐに下がり始めます。</p>
+            </div>
+            <div>
+              <p className="font-semibold text-slate-900">② 予想の上方修正が「株価上昇」に直結するから</p>
+              <p className="mt-1">株価はアナリストのコンセンサス予想がスルスルと上昇しているときに上がりやすく、逆に下がっているときには下がる傾向があります。ガイダンスがコンセンサスを上回って予想が上方修正されることは、「おのずと今後株価が上昇する理由を含んでいる」と考えるのが自然です。</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg bg-slate-50 p-3">
+          <p className="text-xs font-semibold text-slate-500">📋 まとめ</p>
+          <p className="mt-1 text-sm leading-relaxed text-slate-700">
+            過去の「実績（直近のEPSと売上高）」がどれだけ良くても、未来の「見通し（ガイダンス）」が弱ければ、投資家は失望し株価は売られてしまいます。企業が強気な未来を示すこと（ガイダンス達成）こそが、アナリストの予想を引き上げ、株価を持続的に押し上げる最大の原動力です。
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-slate-700">
+            だからこそ「EPS」「売上高」「ガイダンス」の3つすべてがコンセンサス予想を上回ることを、「良い決算」の絶対条件としています。
+          </p>
+        </div>
+
+        <button
+          onClick={onClose}
+          className="mt-5 w-full rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+        >
+          閉じる
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const GuidanceSkeleton = () => (
   <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
     <div className="mb-3 h-4 w-40 rounded bg-slate-200" style={{animation:'pulse 1.5s infinite'}} />
@@ -220,19 +297,28 @@ const renderGuidanceText = (text) => {
 };
 
 export default function GuidanceCard({ guidance, isLoading = false, isSecLoading = false }) {
+  const [showModal, setShowModal] = useState(false);
   if (isLoading && !guidance) return <GuidanceSkeleton />;
 
   if (!guidance) {
     return (
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-slate-700">
+          <h3 className="flex items-center gap-1 text-sm font-semibold text-slate-700">
             📊 ガイダンス達成状況
+            <button
+              onClick={() => setShowModal(true)}
+              className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-500 hover:bg-slate-300 hover:text-slate-700"
+              aria-label="ガイダンス達成状況の説明を表示"
+            >
+              ？
+            </button>
           </h3>
           <span className="text-xs text-amber-600">
             ※ データプランの制限により取得できませんでした。
           </span>
         </div>
+        {showModal && <GuidanceInfoModal onClose={() => setShowModal(false)} />}
       </section>
     );
   }
@@ -243,11 +329,19 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-baseline justify-between">
-        <h3 className="text-sm font-semibold text-slate-900">
+        <h3 className="flex items-center gap-1 text-sm font-semibold text-slate-900">
           📊 ガイダンス達成状況（直近決算）
+          <button
+            onClick={() => setShowModal(true)}
+            className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-500 hover:bg-slate-300 hover:text-slate-700"
+            aria-label="ガイダンス達成状況の説明を表示"
+          >
+            ？
+          </button>
         </h3>
         <span className="text-xs text-slate-500">{subtitle}</span>
       </div>
+      {showModal && <GuidanceInfoModal onClose={() => setShowModal(false)} />}
       <p className="mt-1 text-[10px] text-slate-400">
         ※ EPS: GAAP（報告値）基準。リストラ費用・資産売却等の非経常損益を含みます。調整後EPS（Non-GAAP）との乖離にご注意ください。
       </p>
