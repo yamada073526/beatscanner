@@ -59,8 +59,38 @@ function DeltaRow({ index, series, isPro, onUpgradeClick }) {
 const CONDITION_DETAILS = {
   1: {
     title: '条件1：営業CFマージン ≥ 15%',
-    summary: '営業キャッシュフロー・マージンとは、「一株あたり営業キャッシュフロー（CFPS）」を「一株あたり売上高（SPS）」で割り算して求められる割合（または営業キャッシュフロー÷売上高）です。',
-    reason: '15%という基準は非常に達成が難しい厳しい足切り基準であり、これをクリアできる企業は極めて健康的で血色が良く、「高利益体質」であることを意味します。このような企業は、厳しい経営環境下でも稼ぐ力が低下しにくく、毎期現金がガンガン入ってくるため無駄な借金をする必要がなく、バランスシート（貸借対照表）も綺麗になります。このマージンが高い企業は、他を細かく調べる必要がないほど「美しいプロポーション」を持っていると評価できます。',
+    sections: [
+      {
+        label: '📌 概要',
+        text: '「営業キャッシュフロー・マージン ≥ 15%」という基準は、企業の「真の稼ぐ力」や「財務の健全性」を測る上で極めて重要なチェック項目です。',
+      },
+      {
+        label: '📐 計算方法',
+        text: '営業キャッシュフロー・マージンは以下の式で求められます。',
+        bullets: ['一株あたり営業キャッシュフロー（CFPS）÷ 一株あたり売上高（SPS）'],
+        note: 'ここでいう「営業キャッシュフロー」とは、企業が商品やサービスを販売して得た売上高から、原材料費などの実際の支出を引き算して残った「現金収支」のことです。',
+      },
+      {
+        label: '💡 なぜ「利益（EPS）」ではなく「営業キャッシュフロー」なのか',
+        text: '**利益は会計上の操作（減価償却費の調整など）でごまかしや粉飾がしやすいのに対し、営業キャッシュフローは実際の銀行口座の現金残高の動きに基づくため、最もごまかしが効かない客観的なデータです。**帳簿上でいくら利益が出ているように見えても、実際に会社に現金が入ってきていなければ意味がありません。',
+      },
+      {
+        label: '📊 なぜ「15%以上」という基準なのか',
+        text: 'アメリカの平均的な企業の営業キャッシュフロー・マージンは概ね12〜15%程度とされています。「最低でも15%以上（理想的には15〜35%）」という基準は平均を上回る非常に達成が難しい足切り基準であり、この厳しいハードルを設けることで、最初から不健康な企業を投資対象から除外することができます。',
+      },
+      {
+        label: '💪 15%以上をクリアする企業の強み',
+        richBullets: [
+          { title: 'バランスシートが綺麗になる', desc: '毎期現金がガンガン入ってくるため、無駄な借金をして資金調達をする必要がありません。自然とバランスシート（貸借対照表）が強固なものになります。' },
+          { title: '不況に強く、大失敗しにくい', desc: 'このような「高利益体質」の企業は、景気後退などの厳しい経営環境下でも稼ぐ力が低下しにくく、赤字に転落する心配がほぼありません。' },
+          { title: '他の指標を細かく調べなくても済むほど健全', desc: 'このマージンが高い企業は、他の細かい財務指標をいちいち確認しなくても良いほど、健康で血色の良い「美しいプロポーション」を持っていると評価できます。' },
+        ],
+      },
+      {
+        label: '📋 まとめ',
+        text: '「営業CFマージンが15%以上あるか」という条件は、その企業が偽りなく現金を生み出す力を持っているかを見極める最強のリトマス試験紙です。この基準を満たし、さらに過去3年にわたってEPSやCFPSが着実に右肩上がりで成長している銘柄を選べば、個別株投資において大失敗するリスクを劇的に小さくすることができるとされています。',
+      },
+    ],
   },
   2: {
     title: '条件2：EPS（一株あたり利益）連続増加',
@@ -86,6 +116,14 @@ const CONDITION_DETAILS = {
 
 // ── Modal ────────────────────────────────────────────────────────────────────
 
+function renderBold(text) {
+  return text.split(/\*\*(.+?)\*\*/g).map((part, i) =>
+    i % 2 === 1
+      ? <strong key={i} className="font-semibold text-slate-900">{part}</strong>
+      : part
+  );
+}
+
 function ConditionModal({ detail, onClose }) {
   useEffect(() => {
     function handleKey(e) {
@@ -101,8 +139,7 @@ function ConditionModal({ detail, onClose }) {
       style={{ background: 'rgba(15,23,42,0.5)' }}
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
-        {/* × ボタン */}
+      <div className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl overflow-y-auto max-h-[90vh]">
         <button
           onClick={onClose}
           className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
@@ -111,20 +148,47 @@ function ConditionModal({ detail, onClose }) {
           ✕
         </button>
 
-        {/* タイトル */}
         <h2 className="pr-8 text-base font-bold text-slate-900">{detail.title}</h2>
 
-        {/* 概要 */}
-        <div className="mt-4">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
-          <p className="text-sm leading-relaxed text-slate-700">{detail.summary}</p>
-        </div>
-
-        {/* なぜ必要か */}
-        <div className="mt-4">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 なぜ必要か</p>
-          <p className="text-sm leading-relaxed text-slate-700">{detail.reason}</p>
-        </div>
+        {detail.sections ? (
+          detail.sections.map((s, i) => (
+            <div key={i} className="mt-4">
+              <p className="mb-1 text-xs font-semibold tracking-wider text-slate-400">{s.label}</p>
+              {s.text && (
+                <p className="text-sm leading-relaxed text-slate-700">{renderBold(s.text)}</p>
+              )}
+              {s.bullets && (
+                <ul className="mt-1 space-y-0.5 text-sm text-slate-700">
+                  {s.bullets.map((b, j) => <li key={j}>・{b}</li>)}
+                </ul>
+              )}
+              {s.note && (
+                <p className="mt-2 text-sm leading-relaxed text-slate-700">{s.note}</p>
+              )}
+              {s.richBullets && (
+                <ul className="mt-1 space-y-2 text-sm text-slate-700">
+                  {s.richBullets.map((b, j) => (
+                    <li key={j}>
+                      <span className="font-semibold text-slate-900">・{b.title}</span><br />
+                      {b.desc}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))
+        ) : (
+          <>
+            <div className="mt-4">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
+              <p className="text-sm leading-relaxed text-slate-700">{detail.summary}</p>
+            </div>
+            <div className="mt-4">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 なぜ必要か</p>
+              <p className="text-sm leading-relaxed text-slate-700">{detail.reason}</p>
+            </div>
+          </>
+        )}
 
         <button
           onClick={onClose}
