@@ -260,7 +260,7 @@ function ConditionModal({ detail, onClose }) {
                 {s.bullets.map((b, j) => (
                   <li
                     key={j}
-                    className="overflow-x-auto whitespace-nowrap rounded bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-800"
+                    className="block overflow-x-auto whitespace-nowrap rounded border border-slate-300 bg-white p-2 text-sm font-semibold text-slate-800"
                   >
                     {b}
                   </li>
