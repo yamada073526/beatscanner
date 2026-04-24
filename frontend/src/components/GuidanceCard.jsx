@@ -176,7 +176,7 @@ const renderBold = (line) => {
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
       return (
-        <strong key={i} style={{ color: 'var(--color-text-primary)', fontWeight: '600' }}>
+        <strong key={i} className="font-semibold text-slate-900">
           {part.slice(2, -2)}
         </strong>
       );
