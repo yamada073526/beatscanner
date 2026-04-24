@@ -20,7 +20,9 @@ const TickerSearch = forwardRef(function TickerSearch(
   const prefetchRef = useRef(null);
   const containerRef = useRef(null);
   const composingRef = useRef(false);
-  // Sequence number: increment to invalidate any in-flight searchTickers call
+  // Prevents useEffect from re-searching when value changes due to selection
+  const justSelectedRef = useRef(false);
+  // Invalidates any in-flight searchTickers call after selection
   const searchSeqRef = useRef(0);
 
   useEffect(() => {
@@ -43,6 +45,10 @@ const TickerSearch = forwardRef(function TickerSearch(
   useEffect(() => {
     clearTimeout(debounceRef.current);
 
+    if (justSelectedRef.current) {
+      justSelectedRef.current = false;
+      return;
+    }
     if (!value.trim() || showJapaneseHint) {
       searchSeqRef.current++;
       setSuggestions([]);
@@ -74,6 +80,7 @@ const TickerSearch = forwardRef(function TickerSearch(
   function select(sym) {
     clearTimeout(debounceRef.current);
     searchSeqRef.current++; // invalidate any in-flight searchTickers result
+    justSelectedRef.current = true; // prevent useEffect from re-searching when value prop changes
     onChange(sym);
     setOpen(false);
     setSuggestions([]);
