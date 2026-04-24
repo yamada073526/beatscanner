@@ -19,8 +19,9 @@ const TickerSearch = forwardRef(function TickerSearch(
   const debounceRef = useRef(null);
   const prefetchRef = useRef(null);
   const containerRef = useRef(null);
-  const justSelectedRef = useRef(false);
   const composingRef = useRef(false);
+  // Sequence number: increment to invalidate any in-flight searchTickers call
+  const searchSeqRef = useRef(0);
 
   useEffect(() => {
     if (!composingRef.current) setInputValue(value);
@@ -30,6 +31,7 @@ const TickerSearch = forwardRef(function TickerSearch(
   useEffect(() => {
     if (forceClose) {
       clearTimeout(debounceRef.current);
+      searchSeqRef.current++;
       setOpen(false);
       setSuggestions([]);
       inputRef.current?.blur();
@@ -39,20 +41,19 @@ const TickerSearch = forwardRef(function TickerSearch(
   const showJapaneseHint = hasJapanese(value);
 
   useEffect(() => {
-    // Always cancel pending debounce first, regardless of justSelected
     clearTimeout(debounceRef.current);
 
-    if (justSelectedRef.current) {
-      justSelectedRef.current = false;
-      return;
-    }
     if (!value.trim() || showJapaneseHint) {
+      searchSeqRef.current++;
       setSuggestions([]);
       setOpen(false);
       return;
     }
+    const seq = ++searchSeqRef.current;
     debounceRef.current = setTimeout(async () => {
       const results = await searchTickers(value);
+      // Discard result if a newer search or selection has happened
+      if (searchSeqRef.current !== seq) return;
       setSuggestions(results);
       setOpen(results.length > 0);
       setActive(-1);
@@ -71,8 +72,8 @@ const TickerSearch = forwardRef(function TickerSearch(
   }, []);
 
   function select(sym) {
-    clearTimeout(debounceRef.current); // cancel pending search before anything else
-    justSelectedRef.current = true;
+    clearTimeout(debounceRef.current);
+    searchSeqRef.current++; // invalidate any in-flight searchTickers result
     onChange(sym);
     setOpen(false);
     setSuggestions([]);
@@ -93,12 +94,14 @@ const TickerSearch = forwardRef(function TickerSearch(
         select(suggestions[active].symbol);
       } else {
         clearTimeout(debounceRef.current);
+        searchSeqRef.current++;
         setOpen(false);
         setSuggestions([]);
         inputRef.current?.blur();
       }
     } else if (e.key === 'Escape') {
       clearTimeout(debounceRef.current);
+      searchSeqRef.current++;
       setOpen(false);
       setSuggestions([]);
     }
