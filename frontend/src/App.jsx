@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { analyze, fetchGuidance } from './api.js';
+import { analyze, fetchGuidance, fetchGuidanceBasic } from './api.js';
 import { hasFmpKey } from './lib/fmpKey.js';
 import { isPro } from './lib/planGating.js';
 import { useUpgradeModal } from './lib/useUpgradeModal.js';
@@ -50,6 +50,7 @@ export default function App() {
   const [ticker, setTicker] = useState('');
   const [result, setResult] = useState(null);
   const [guidance, setGuidance] = useState(null);
+  const [guidanceSecLoading, setGuidanceSecLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [watchlist, setWatchlist] = useState(loadWatchlist);
@@ -73,6 +74,8 @@ export default function App() {
   const upgrade = useUpgradeModal();
   // Ref for the ticker search input (used by Watchlist empty-state CTA)
   const searchInputRef = useRef(null);
+  // Nonce to ignore stale promise results from previous searches
+  const searchIdRef = useRef(0);
 
   useEffect(() => {
     localStorage.setItem(WATCHLIST_KEY, JSON.stringify(watchlist));
@@ -105,28 +108,63 @@ export default function App() {
       : raw.toUpperCase();
     if (!t) return;
     setTicker(t);
+    const searchId = Date.now();
+    searchIdRef.current = searchId;
+
     setLoading(true);
     setError(null);
     setResult(null);
     setGuidance(null);
+    setGuidanceSecLoading(false);
     setActiveTab('judgment');
     setIsDemoResult(false);
+
+    // Phase 1: analyze + basic guidance in parallel
+    const analyzePromise = analyze(t);
+    const basicPromise = fetchGuidanceBasic(t).catch(() => null);
+    // Phase 2: full guidance (with SEC) fires simultaneously
+    const fullPromise = fetchGuidance(t).catch(() => null);
+
+    // Track whether full has already resolved to avoid race condition:
+    // if full arrives before basic, setGuidanceSecLoading(true) must not fire.
+    let fullResolved = false;
+
+    // Safety timeout: force-clear secLoading after 15s in case something stalls
+    const secTimeoutId = setTimeout(() => {
+      if (searchIdRef.current === searchId) setGuidanceSecLoading(false);
+    }, 15000);
+
+    basicPromise.then((basicGuidance) => {
+      if (searchIdRef.current !== searchId) return;
+      if (basicGuidance) {
+        setGuidance(basicGuidance);
+        // Only show SEC skeleton if full hasn't already arrived
+        if (!fullResolved) setGuidanceSecLoading(true);
+      }
+    });
+
+    fullPromise.then((fullGuidance) => {
+      fullResolved = true;
+      clearTimeout(secTimeoutId);
+      if (searchIdRef.current !== searchId) return;
+      if (fullGuidance) setGuidance(fullGuidance);
+      setGuidanceSecLoading(false);
+    });
+
     try {
-      const [data, guidanceData] = await Promise.all([
-        analyze(t),
-        fetchGuidance(t).catch(() => null),
-      ]);
-      setResult(data);
-      setGuidance(guidanceData);
+      const data = await analyzePromise;
+      if (searchIdRef.current === searchId) setResult(data);
     } catch (e) {
-      const msg = e.message;
-      setError(
-        msg === 'Failed to fetch' || msg.includes('NetworkError')
-          ? 'バックエンド接続エラー（サーバーが応答していません）。start.sh でサーバーが起動しているか確認してください。'
-          : msg
-      );
+      if (searchIdRef.current === searchId) {
+        const msg = e.message;
+        setError(
+          msg === 'Failed to fetch' || msg.includes('NetworkError')
+            ? 'バックエンド接続エラー（サーバーが応答していません）。start.sh でサーバーが起動しているか確認してください。'
+            : msg
+        );
+      }
     } finally {
-      setLoading(false);
+      if (searchIdRef.current === searchId) setLoading(false);
     }
   }
 
@@ -288,6 +326,15 @@ export default function App() {
         </div>
       )}
 
+      {/* Early GuidanceCard — visible before analyze() returns */}
+      {!result && (loading || guidance) && (
+        <GuidanceCard
+          guidance={guidance}
+          isLoading={loading && !guidance}
+          isSecLoading={guidanceSecLoading}
+        />
+      )}
+
       {/* Result */}
       {result && (
         <div className="space-y-6">
@@ -392,7 +439,7 @@ export default function App() {
                 ))}
               </div>
 
-              <GuidanceCard guidance={guidance} />
+              <GuidanceCard guidance={guidance} isSecLoading={guidanceSecLoading} />
               <HistoryChart periods={result.periods} currency={result.currency} />
               <StockPriceChart ticker={result.ticker} />
               <IRLinksPanel ticker={result.ticker} />

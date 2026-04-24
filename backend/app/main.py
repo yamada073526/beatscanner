@@ -8,7 +8,10 @@ import re
 import pathlib as _pathlib
 import time as _time
 from datetime import date, timedelta
+from html.parser import HTMLParser as _HTMLParser
 from typing import Optional
+
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -31,7 +34,28 @@ from .visualizer.prompt import SYSTEM_PROMPT, build_user_prompt
 # override=True would let a stale local .env silently shadow Railway variables.
 load_dotenv(override=False)
 
-app = FastAPI(title="Earnings Judgment API", version="0.1.0")
+WARMUP_TICKERS = ["NVDA", "AAPL", "MSFT", "META", "GOOGL"]
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async def _warmup():
+        await asyncio.sleep(3)
+        for ticker in WARMUP_TICKERS:
+            try:
+                await _fetch_sec_guidance_cached(ticker)
+                print(f"[WARMUP] {ticker} ✓")
+            except Exception as e:
+                print(f"[WARMUP] {ticker} failed: {e}")
+            await asyncio.sleep(1)
+    asyncio.create_task(_warmup())
+    yield
+
+
+app = FastAPI(title="Earnings Judgment API", version="0.1.0", lifespan=lifespan)
+
+_guidance_cache: dict = {}
+GUIDANCE_CACHE_TTL = 3600  # 1時間
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 # Comma-separated list via env var so production origins can be injected without
@@ -362,7 +386,10 @@ async def analyze(ticker: str, request: Request) -> dict:
     # --- FMP でデータが取れなければ yfinance にフォールバック ---
     currency = "USD"
     if not income or not cash:
-        income, cash, company_name, currency = await yfinance_source.fetch(ticker)
+        try:
+            income, cash, company_name, currency = await yfinance_source.fetch(ticker)
+        except Exception:
+            income, cash = [], []
         source = "yfinance"
         # yfinance でもETF判定
         if not income and not cash:
@@ -550,6 +577,305 @@ def _eps_float(raw: object, *, treat_zero_as_missing: bool) -> float | None:
     return f
 
 
+class _HTMLTextExtractor(_HTMLParser):
+    """HTMLからプレーンテキストを抽出するシンプルなパーサー。"""
+    def __init__(self):
+        super().__init__()
+        self._parts: list[str] = []
+        self._skip = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("script", "style"):
+            self._skip = True
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style"):
+            self._skip = False
+
+    def handle_data(self, data):
+        if not self._skip:
+            self._parts.append(data)
+
+    def get_text(self) -> str:
+        return re.sub(r'\s+', ' ', ''.join(self._parts)).strip()
+
+
+async def _fetch_sec_guidance(ticker: str) -> tuple[str, str] | None:
+    """SEC 8-K または Seeking Alpha transcript からガイダンスを抽出して (text, source) を返す。"""
+    # Apple は売上高・利益の数値ガイダンスを公式に開示しない方針
+    if ticker.upper() == "AAPL":
+        return (
+            "Appleは売上高・利益の数値ガイダンスを公式に開示しない方針を採用しています。\n決算説明会では定性的なコメントのみ提供されます。",
+            "Apple社のガイダンス非開示方針による",
+        )
+
+    import httpx as _httpx_sec
+    headers = {"User-Agent": "beatscanner research@example.com", "Accept-Encoding": "gzip, deflate"}
+    try:
+        # 1. company_tickers.json から CIK を取得
+        ct_r = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: _httpx_sec.get(
+                "https://www.sec.gov/files/company_tickers.json",
+                headers=headers, timeout=10,
+            )
+        )
+        ct = ct_r.json()
+        cik_str = None
+        for entry in ct.values():
+            if entry.get("ticker", "").upper() == ticker.upper():
+                cik_str = str(entry["cik_str"]).zfill(10)
+                break
+        if not cik_str:
+            return None
+
+        # 2. submissions.json から items:2.02 を含む 8-K（決算発表）を最大3件取得
+        sub_r = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: _httpx_sec.get(
+                f"https://data.sec.gov/submissions/CIK{cik_str}.json",
+                headers=headers, timeout=10,
+            )
+        )
+        sub = sub_r.json()
+        filings = sub.get("filings", {}).get("recent", {})
+        forms = filings.get("form", [])
+        accessions = filings.get("accessionNumber", [])
+        items_field = filings.get("items", [])
+
+        checked = 0
+        for idx_i, (form, acc) in enumerate(zip(forms, accessions)):
+            if form != "8-K":
+                continue
+            # items フィールドに "2.02"（Results of Operations）が含まれる決算8-Kのみ対象
+            filing_items = items_field[idx_i] if idx_i < len(items_field) else ""
+            if "2.02" not in str(filing_items):
+                continue
+            checked += 1
+            if checked > 3:
+                break
+            acc_clean = acc.replace("-", "")
+
+            # 3. index.html を解析して EX-99.1 のファイル URL を取得
+            # パス: acc_clean（ダッシュなし）、ファイル名: acc（ダッシュあり）
+            idx_r = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda a=acc_clean, orig=acc: _httpx_sec.get(
+                    f"https://www.sec.gov/Archives/edgar/data/{int(cik_str)}/{a}/{orig}-index.html",
+                    headers=headers, timeout=10, follow_redirects=True,
+                )
+            )
+            if idx_r.status_code != 200:
+                continue
+            # EX-99.1 に対応する href を正規表現で抽出
+            ex99_match = re.search(
+                r'EX-99\.1[^<]*</td>\s*<td[^>]*>\s*<a href="(/Archives/edgar/data/[^"]+\.htm)"',
+                idx_r.text, re.IGNORECASE
+            )
+            if not ex99_match:
+                continue
+            exhibit_url = f"https://www.sec.gov{ex99_match.group(1)}"
+
+            # 4. HTML を取得してテキスト抽出
+            htm_r = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda u=exhibit_url: _httpx_sec.get(u, headers=headers, timeout=15, follow_redirects=True)
+            )
+            if htm_r.status_code != 200:
+                continue
+            extractor = _HTMLTextExtractor()
+            extractor.feed(htm_r.text)
+            raw_text = extractor.get_text()
+            if len(raw_text) < 200:
+                continue
+
+            # 全テキストをClaudeに渡してガイダンス抽出（最大10000文字）
+            text_snippet = raw_text[:10000]
+
+            # 5. Claude でガイダンス要約
+            guidance_prompt = f"""以下はSEC 8-Kプレスリリースのテキストです。
+企業が発表した次四半期・通期の見通し（売上高・EPS・利益率・成長率などのガイダンス）があれば、
+日本語で簡潔に抽出してください。
+CEO/CFOのコメントに含まれる見通し発言も含めて抽出してください。
+ガイダンス・見通しの記載が一切ない場合のみ「ガイダンスの記載なし」とのみ回答してください。
+
+出力形式：
+・ 箇条書き（各項目を改行で区切る）
+・ マークダウン記号（** # など）は使わない
+・ 各項目は「・」で始める
+・ セクション見出しは「見出し：」形式（コロンで終わる）
+・ 最大8項目
+
+テキスト:
+{text_snippet}"""
+            try:
+                claude = ClaudeClient()
+                summary = await claude.complete(guidance_prompt, model="claude-haiku-4-5-20251001", max_tokens=500)
+            except Exception:
+                summary = None
+            if summary and "ガイダンスの記載なし" not in summary:
+                return summary, "SEC 8-K（決算プレスリリース）より抽出"
+
+    except Exception as e_sec:
+        print(f"SEC EDGAR guidance fetch failed: {e_sec}")
+
+    # SEC 8-K にガイダンスなし → Motley Fool transcript フォールバック
+    try:
+        import datetime as _datetime
+        now = _datetime.datetime.now()
+        fool_found = False
+        fool_text = ""
+
+        for months_ago in range(0, 6):
+            check_date = now - _datetime.timedelta(days=30 * months_ago)
+            year = check_date.year
+            search_url = (
+                f"https://www.fool.com/search/#q={ticker}%20earnings%20call%20transcript"
+                f"%20{year}&search=1&type=13"
+            )
+            r_search = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda u=search_url: _httpx_sec.get(
+                    u,
+                    headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"},
+                    timeout=10,
+                    follow_redirects=True,
+                )
+            )
+            links = re.findall(
+                r'(https?://www\.fool\.com/earnings/call-transcripts/\d{4}/\d{2}/\d{2}/[^"&\s]+)',
+                r_search.text
+            )
+            ticker_links = [l for l in links if ticker.lower() in l.lower()]
+            target_links = ticker_links if ticker_links else links
+
+            if target_links:
+                r_transcript = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda u=target_links[0]: _httpx_sec.get(
+                        u,
+                        headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"},
+                        timeout=15,
+                        follow_redirects=True,
+                    )
+                )
+                extractor2 = _HTMLTextExtractor()
+                extractor2.feed(r_transcript.text)
+                fool_text = extractor2.get_text()
+                if len(fool_text) > 1000 and ticker.upper() in fool_text.upper():
+                    fool_found = True
+                    break
+
+        if fool_found and len(fool_text) > 1000:
+            lines = fool_text.split("\n")
+            guidance_lines = []
+            capture = False
+            for line in lines:
+                lower = line.lower()
+                if any(kw in lower for kw in [
+                    "guidance", "outlook", "next quarter", "q2", "q3", "q4",
+                    "fiscal 2", "we expect", "we anticipate", "we project",
+                    "looking ahead", "for the quarter", "full year",
+                    "expect revenue", "expect eps", "expect gross margin",
+                ]):
+                    capture = True
+                if capture and line.strip():
+                    guidance_lines.append(line.strip())
+                if capture and len(guidance_lines) > 40:
+                    break
+
+            if len(guidance_lines) > 3:
+                excerpt = "\n".join(guidance_lines[:40])
+                prompt = f"""以下は{ticker}の決算カンファレンスコールのテキストです。
+
+次期（来四半期・来年度）の業績見通し・ガイダンスに関する発言のみを抽出してください。
+数値（売上・EPS・マージン・成長率）があれば必ず含め、会社名・ティッカーは英語のまま、それ以外は日本語で出力してください。
+見通し情報がなければ「次期ガイダンスの記載なし」とだけ返してください。
+
+出力形式：
+・ 箇条書き（各項目を改行で区切る）
+・ マークダウン記号（** # など）は使わない
+・ 各項目は「・」で始める
+・ セクション見出しは「見出し：」形式（コロンで終わる）
+・ 最大8項目
+
+---
+{excerpt}
+"""
+                try:
+                    claude = ClaudeClient()
+                    result = await claude.complete(prompt, max_tokens=400)
+                except Exception:
+                    result = None
+                if result and len(result.strip()) > 10:
+                    return result.strip(), "決算カンファレンスコール（Motley Fool）より抽出"
+    except Exception as e_fool:
+        print(f"Motley Fool transcript fallback failed for {ticker}: {e_fool}")
+
+    return None
+
+
+def _apply_bold_highlights(text: str) -> str:
+    """数値・パーセント・金額を **bold** で囲む（regex処理）。"""
+    import re as _re_bold
+    # 数値+単位: 78.0億ドル, 74.9%, $78B, 17.0〜19.0%, 50ベーシスポイント
+    pattern = r'(\d[\d,\.]*(?:\.\d+)?(?:\s*[〜～\-]\s*\d[\d,\.]*(?:\.\d+)?)?(?:\s*(?:%|ドル|億ドル|兆ドル|百万ドル|ベーシスポイント|B|M|T|bp))?)'
+    highlighted = _re_bold.sub(pattern, r'**\1**', text)
+    # 二重適用防止: すでに ** で囲まれているものを正規化
+    highlighted = _re_bold.sub(r'\*\*\*\*([^*]+)\*\*\*\*', r'**\1**', highlighted)
+    return highlighted
+
+
+async def _extract_revenue_from_guidance(guidance_text: str) -> dict:
+    """Claude APIでガイダンステキストから売上高予想を抽出し、bold強調テキストも返す。
+
+    Claude には数値フィールドのみ返させ（JSON parse 安定化）、
+    bold 強調はバックエンドの regex で処理する。
+    """
+    if not guidance_text:
+        return {"revenue_estimated": None, "highlighted_text": guidance_text}
+
+    # bold 強調はregexで先に処理（Claudeに任せない）
+    highlighted = _apply_bold_highlights(guidance_text)
+
+    prompt = f"""以下の決算ガイダンステキストから売上高予想を抽出してください。
+
+【テキスト】
+{guidance_text}
+
+次のJSONのみを返してください。値はすべて数値またはnull（文字列不可）：
+{{"revenue_estimated": <次期売上高予想をドル換算の整数で。"78億ドル"→7800000000、"78.0 billion"→78000000000。不明ならnull>, "revenue_range_low": <下限。不明ならnull>, "revenue_range_high": <上限。不明ならnull>}}"""
+    try:
+        claude = ClaudeClient()
+        raw = await claude.complete(prompt, model="claude-haiku-4-5-20251001", max_tokens=120)
+        import json as _json_ext, re as _re_ext
+        clean = _re_ext.sub(r'```json|```', '', raw).strip()
+        parsed = _json_ext.loads(clean)
+        return {
+            "revenue_estimated": parsed.get("revenue_estimated"),
+            "revenue_range_low": parsed.get("revenue_range_low"),
+            "revenue_range_high": parsed.get("revenue_range_high"),
+            "highlighted_text": highlighted,
+        }
+    except Exception as _e_ext:
+        print(f"_extract_revenue_from_guidance failed: {_e_ext}")
+        return {"revenue_estimated": None, "highlighted_text": highlighted}
+
+
+async def _fetch_sec_guidance_cached(ticker: str):
+    now = _time.time()
+    cache_key = ticker.upper()
+    if cache_key in _guidance_cache:
+        ts, cached = _guidance_cache[cache_key]
+        if now - ts < GUIDANCE_CACHE_TTL:
+            print(f"[CACHE HIT] {ticker} guidance served from cache")
+            return cached
+    print(f"[CACHE MISS] {ticker} fetching fresh guidance")
+    result = await _fetch_sec_guidance(ticker)
+    _guidance_cache[cache_key] = (now, result)
+    return result
+
+
 def _fmp_consensus_eps_nearest(
     earnings_date: str,
     analyst_rows: list[dict],
@@ -590,10 +916,9 @@ def _fmp_consensus_eps_nearest(
     return best_eps
 
 
-@app.get("/api/guidance/{ticker}")
-async def guidance(ticker: str, request: Request) -> dict:
-    """直近決算のガイダンス（予想 vs 実績）を EPS / 売上高で判定して返す."""
-    client = FMPClient(api_key=_get_fmp_key(request))
+async def _fetch_eps_data(ticker: str, fmp_key: str) -> dict:
+    """FMP→AV→yfinance EPS fallback chain. Returns EPS fields + raw lists for revenue matching."""
+    client = FMPClient(api_key=fmp_key)
 
     surprise_task = asyncio.create_task(client.earnings_surprises(ticker, limit=1))
     est_task = asyncio.create_task(client.analyst_estimates(ticker, period="quarter", limit=12))
@@ -615,20 +940,18 @@ async def guidance(ticker: str, request: Request) -> dict:
     except FMPError:
         pass
 
-    # earnings-calendar が当該ティッカーを含まない場合はAlpha Vantageにフォールバック
     if not surprises:
         try:
             surprises = await alpha_vantage_source.fetch_earnings_history(ticker, limit=1)
         except Exception:
             pass
 
-    if not surprises and not income_q:
-        raise HTTPException(
-            status_code=404,
-            detail=f"{ticker.upper()} のガイダンスデータが見つかりません。",
-        )
+    if not surprises:
+        try:
+            surprises = await yfinance_source.fetch_earnings_surprises(ticker, limit=1)
+        except Exception:
+            pass
 
-    # EPS: earnings-surprises から取得
     eps_actual = None
     eps_estimated = None
     surprise_date: str | None = None
@@ -640,11 +963,10 @@ async def guidance(ticker: str, request: Request) -> dict:
         surprise_date = _pick(latest, "date")
         fiscal_period = _pick(latest, "fiscalPeriod", "period")
 
-    # 売上高 実績: quarterly income-statement の最新
-    revenue_actual = None
+    revenue_actual_fmp = None
     income_date: str | None = None
     if income_q:
-        revenue_actual = _pick(income_q[0], "revenue")
+        revenue_actual_fmp = _pick(income_q[0], "revenue")
         income_date = _pick(income_q[0], "date")
         if not fiscal_period:
             period = _pick(income_q[0], "period")
@@ -652,7 +974,256 @@ async def guidance(ticker: str, request: Request) -> dict:
             if period and year:
                 fiscal_period = f"{period} {year}"
 
-    # 売上高 予想: analyst-estimates の中から income_date または surprise_date に最も近いエントリ
+    return {
+        "surprises": surprises,
+        "estimates": estimates,
+        "income_q": income_q,
+        "eps_actual": eps_actual,
+        "eps_estimated": eps_estimated,
+        "surprise_date": surprise_date,
+        "fiscal_period": fiscal_period,
+        "revenue_actual_fmp": revenue_actual_fmp,
+        "income_date": income_date,
+    }
+
+
+async def _fetch_revenue_data(ticker: str, ref_date: str | None = None) -> dict:
+    """yfinance から売上高実績と予想を取得する（FMP Limit Reach 対策）."""
+    import yfinance as _yf_rev
+    import pandas as _pd_rev
+    from datetime import datetime as _dt_rev
+
+    def _fetch_yf_quarterly_revenue() -> tuple[float | None, str | None]:
+        _t = _yf_rev.Ticker(ticker)
+        qf = _t.quarterly_income_stmt
+        if qf is None or (hasattr(qf, "empty") and qf.empty):
+            qf = getattr(_t, "quarterly_financials", None)
+        if qf is None or (hasattr(qf, "empty") and qf.empty):
+            return None, None
+        _rev_row = None
+        for _key in ("Total Revenue", "Operating Revenue"):
+            if _key in qf.index:
+                _rev_row = qf.loc[_key]
+                break
+        if _rev_row is None:
+            return None, None
+        _best_col = None
+        if ref_date:
+            try:
+                _ref_dt = _dt_rev.fromisoformat(ref_date)
+                for _col in sorted(qf.columns, reverse=True):
+                    _col_str = _col.strftime("%Y-%m-%d") if hasattr(_col, "strftime") else str(_col)[:10]
+                    _col_dt = _dt_rev.fromisoformat(_col_str)
+                    if (_ref_dt - _col_dt).days >= -30:
+                        _best_col = _col
+                        break
+            except Exception:
+                pass
+        if _best_col is None:
+            _best_col = qf.columns[0]
+        _date_str = _best_col.strftime("%Y-%m-%d") if hasattr(_best_col, "strftime") else str(_best_col)[:10]
+        _val = _rev_row[_best_col]
+        if _pd_rev.isna(_val):
+            return None, None
+        return float(_val), _date_str
+
+    def _fetch_yf_rev_est() -> float | None:
+        t_est = _yf_rev.Ticker(ticker)
+        est_df = getattr(t_est, "revenue_estimate", None)
+        if est_df is None or (hasattr(est_df, "empty") and est_df.empty):
+            return None
+        for _row_key in ("Avg Estimate", "avg"):
+            if _row_key in est_df.index:
+                _row = est_df.loc[_row_key]
+                for _col in ["0q", "-1q"]:
+                    if _col in _row.index:
+                        _val = _row[_col]
+                        if _val is not None and not _pd_rev.isna(_val) and float(_val) > 0:
+                            return float(_val)
+        return None
+
+    try:
+        rev_actual, rev_date = await asyncio.to_thread(_fetch_yf_quarterly_revenue)
+    except Exception as e:
+        print(f"yfinance quarterly revenue fallback failed: {e}")
+        rev_actual, rev_date = None, None
+
+    try:
+        rev_est = await asyncio.to_thread(_fetch_yf_rev_est)
+    except Exception as e:
+        print(f"yfinance revenue estimate fallback failed: {e}")
+        rev_est = None
+
+    return {"revenue_actual": rev_actual, "income_date": rev_date, "revenue_estimated_yf": rev_est}
+
+
+@app.get("/api/guidance/{ticker}/basic")
+async def guidance_basic(ticker: str, request: Request) -> dict:
+    """EPS・売上高のみ高速返却（SEC/Claude APIなし）."""
+    fmp_key = _get_fmp_key(request)
+    try:
+        eps_result, rev_result = await asyncio.gather(
+            _fetch_eps_data(ticker, fmp_key),
+            _fetch_revenue_data(ticker),
+            return_exceptions=True,
+        )
+        if isinstance(eps_result, Exception):
+            eps_result = {}
+        if isinstance(rev_result, Exception):
+            rev_result = {}
+
+        surprises: list[dict] = eps_result.get("surprises", [])
+        income_q: list[dict] = eps_result.get("income_q", [])
+        estimates: list[dict] = eps_result.get("estimates", [])
+
+        if not surprises and not income_q:
+            raise HTTPException(
+                status_code=404,
+                detail=f"{ticker.upper()} のガイダンスデータが見つかりません。",
+            )
+
+        eps_actual = eps_result.get("eps_actual")
+        eps_estimated = eps_result.get("eps_estimated")
+        surprise_date: str | None = eps_result.get("surprise_date")
+        fiscal_period: str | None = eps_result.get("fiscal_period")
+        revenue_actual: float | None = eps_result.get("revenue_actual_fmp")
+        income_date: str | None = eps_result.get("income_date")
+
+        if revenue_actual is None and rev_result.get("revenue_actual") is not None:
+            revenue_actual = rev_result["revenue_actual"]
+            if not income_date:
+                income_date = rev_result.get("income_date")
+
+        revenue_estimated = None
+        eps_estimated_fallback = None
+        target_date = income_date or surprise_date
+        if estimates and target_date:
+            from datetime import datetime as _dt
+            try:
+                target = _dt.fromisoformat(target_date)
+                def _dist_b(e: dict) -> float:
+                    d = e.get("date")
+                    if not d:
+                        return 1e12
+                    try:
+                        return abs((_dt.fromisoformat(d) - target).days)
+                    except ValueError:
+                        return 1e12
+                best = min(estimates, key=_dist_b)
+                revenue_estimated = _pick(best, "revenueAvg", "estimatedRevenueAvg")
+                eps_estimated_fallback = _pick(best, "epsAvg", "estimatedEpsAvg")
+            except ValueError:
+                pass
+
+        if revenue_estimated is None and rev_result.get("revenue_estimated_yf") is not None:
+            revenue_estimated = rev_result["revenue_estimated_yf"]
+
+        if eps_estimated is None:
+            eps_estimated = eps_estimated_fallback
+
+        eps_label, eps_pct = _verdict(eps_actual, eps_estimated)
+        rev_label, rev_pct = _verdict(
+            float(revenue_actual) if revenue_actual is not None else None,
+            float(revenue_estimated) if revenue_estimated is not None else None,
+        )
+
+        return {
+            "ticker": ticker.upper(),
+            "fiscal_period": fiscal_period,
+            "date": surprise_date or income_date,
+            "eps": {
+                "estimated": eps_estimated,
+                "actual": eps_actual,
+                "surprise_pct": eps_pct,
+                "verdict": eps_label,
+            },
+            "revenue": {
+                "estimated": revenue_estimated,
+                "actual": revenue_actual,
+                "surprise_pct": rev_pct,
+                "verdict": rev_label,
+            },
+            "revenue_actual": float(revenue_actual) if revenue_actual is not None else None,
+            "revenue_estimated": float(revenue_estimated) if revenue_estimated is not None else None,
+            "revenue_data_note": None if revenue_estimated is not None else "アナリスト予想は現在準備中です",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] /api/guidance/{ticker}/basic: {e}")
+        return {
+            "ticker": ticker.upper(),
+            "error": str(e),
+            "eps": {"estimated": None, "actual": None, "surprise_pct": None, "verdict": None},
+            "revenue_actual": None,
+            "revenue_estimated": None,
+        }
+
+
+@app.get("/api/guidance/{ticker}")
+async def guidance(ticker: str, request: Request) -> dict:
+    """直近決算のガイダンス（予想 vs 実績）を EPS / 売上高で判定して返す."""
+    try:
+        return await _guidance_impl(ticker, request)
+    except HTTPException:
+        raise
+    except Exception as _e_top:
+        print(f"[ERROR] /api/guidance/{ticker}: {_e_top}")
+        return {
+            "ticker": ticker.upper(),
+            "error": str(_e_top),
+            "eps": {"estimated": None, "actual": None, "surprise_pct": None, "verdict": None},
+            "revenue": {"estimated": None, "actual": None, "surprise_pct": None, "verdict": None},
+            "revenue_actual": None,
+            "revenue_estimated": None,
+            "sec_guidance_text": None,
+        }
+
+
+async def _guidance_impl(ticker: str, request: Request) -> dict:
+    fmp_key = _get_fmp_key(request)
+
+    # EPS chain と SEC fetch を並列実行（SEC EDGAR+Claude が ~5s のボトルネック）
+    eps_result, sec_result = await asyncio.gather(
+        _fetch_eps_data(ticker, fmp_key),
+        _fetch_sec_guidance_cached(ticker),
+        return_exceptions=True,
+    )
+
+    if isinstance(eps_result, Exception):
+        eps_result = {}
+    if isinstance(sec_result, Exception):
+        sec_result = None
+
+    surprises: list[dict] = eps_result.get("surprises", [])
+    income_q: list[dict] = eps_result.get("income_q", [])
+    estimates: list[dict] = eps_result.get("estimates", [])
+
+    if not surprises and not income_q:
+        raise HTTPException(
+            status_code=404,
+            detail=f"{ticker.upper()} のガイダンスデータが見つかりません。",
+        )
+
+    eps_actual = eps_result.get("eps_actual")
+    eps_estimated = eps_result.get("eps_estimated")
+    surprise_date: str | None = eps_result.get("surprise_date")
+    fiscal_period: str | None = eps_result.get("fiscal_period")
+    revenue_actual: float | None = eps_result.get("revenue_actual_fmp")
+    income_date: str | None = eps_result.get("income_date")
+
+    # 売上高実績が FMP で取れなかった場合のみ yfinance を呼ぶ
+    # ref_date を渡すことで正しい四半期に絞り込む
+    _rev_data_yf: dict | None = None
+    if revenue_actual is None:
+        ref_date = surprise_date or income_date
+        _rev_data_yf = await _fetch_revenue_data(ticker, ref_date=ref_date)
+        if _rev_data_yf.get("revenue_actual") is not None:
+            revenue_actual = _rev_data_yf["revenue_actual"]
+            if not income_date:
+                income_date = _rev_data_yf.get("income_date")
+
+    # 売上高予想: analyst-estimates の中から最も近いエントリ
     revenue_estimated = None
     eps_estimated_fallback = None
     target_date = income_date or surprise_date
@@ -674,6 +1245,13 @@ async def guidance(ticker: str, request: Request) -> dict:
         except ValueError:
             pass
 
+    # 売上高予想フォールバック: yfinance revenue_estimate（既に取得済みなら再利用）
+    if revenue_estimated is None:
+        if _rev_data_yf is None:
+            _rev_data_yf = await _fetch_revenue_data(ticker, ref_date=target_date)
+        if _rev_data_yf.get("revenue_estimated_yf") is not None:
+            revenue_estimated = _rev_data_yf["revenue_estimated_yf"]
+
     if eps_estimated is None:
         eps_estimated = eps_estimated_fallback
 
@@ -683,7 +1261,7 @@ async def guidance(ticker: str, request: Request) -> dict:
         float(revenue_estimated) if revenue_estimated is not None else None,
     )
 
-    return {
+    result: dict = {
         "ticker": ticker.upper(),
         "fiscal_period": fiscal_period,
         "date": surprise_date or income_date,
@@ -699,6 +1277,36 @@ async def guidance(ticker: str, request: Request) -> dict:
             "surprise_pct": rev_pct,
             "verdict": rev_label,
         },
+        "revenue_actual": float(revenue_actual) if revenue_actual is not None else None,
+        "revenue_estimated": float(revenue_estimated) if revenue_estimated is not None else None,
+        "revenue_data_note": None if revenue_estimated is not None else "アナリスト予想は現在準備中です",
+    }
+
+    if sec_result:
+        sec_text, sec_source = sec_result
+        try:
+            extracted = await _extract_revenue_from_guidance(sec_text)
+            result["sec_guidance_text"] = extracted.get("highlighted_text") or sec_text
+        except Exception as _e_extract:
+            print(f"[WARN] _extract_revenue_from_guidance failed: {_e_extract}")
+            result["sec_guidance_text"] = sec_text
+        result["sec_guidance_source"] = sec_source
+
+    return result
+
+
+@app.get("/api/cache/status")
+async def cache_status():
+    now = _time.time()
+    return {
+        "cached_tickers": [
+            {
+                "ticker": k,
+                "age_seconds": int(now - v[0]),
+                "expires_in_seconds": int(GUIDANCE_CACHE_TTL - (now - v[0])),
+            }
+            for k, v in _guidance_cache.items()
+        ]
     }
 
 
@@ -1388,6 +1996,7 @@ def _build_conference_prompt(context: str, ticker: str, latest_period_label: str
         f"以下は{t}の年次財務データです。"
         f"この財務データに基づき、決算カンファレンスコールで経営陣が語るであろう内容を"
         f"独自プロトコル（営業CF・EPS・売上高の成長性重視）の観点で以下の構造で日本語分析してください。\n\n"
+        f"重要な数値・キーワード・判断根拠は **太字** で強調すること。1段落につき1〜2箇所を目安にすること。太字は必ず半角スペースで囲むこと（例: 売上高は **1,818億ドル** に増加）。▲・▼・(・)などの記号や数字に直接**を隣接させないこと。\n\n"
         f"① 業績ハイライト（経営陣が強調するポイント）\n"
         f"② ガイダンス・見通し（財務トレンドから読み取れる方向性）\n"
         f"③ 投資家・アナリストが注目するであろう論点\n"
@@ -1414,15 +2023,14 @@ def _build_conference_prompt(context: str, ticker: str, latest_period_label: str
         f"11. 「X年連続」という表現は【財務データ】に含まれる期数から計算可能な場合のみ使用すること。\n"
         f"    3期分のデータ（FY2023・FY2024・FY2025）があれば前年比は2回しか計算できないため「直近2期連続」と表記すること。\n"
         f"    N期のデータがある場合、連続成長と言えるのは最大N-1期であることを厳守すること。\n"
-        f"12. 出力テキストにMarkdown記法（**太字**、##見出し、__下線__、*斜体*等）を一切使用しないこと。\n"
-        f"    プレーンテキストのみで出力すること。\n"
+        f"12. Markdown記法（##見出し・__下線__・*斜体*等）は禁止。ただし **太字** は重要箇所の強調として使用可。\n"
         f"13. 数値は必ず読みやすい形式で表記すること（例：「281.7B$」「2,817億ドル（十億ドル単位）」）。\n"
         f"    生の整数（例：281724000000）をそのまま出力することは禁止。\n"
         f"    「億ドル」と「十億ドル（B$）」を混同しないこと。1B$ = 10億ドルであり、100億ドルは10B$と表記する。\n"
         f"14. 【出力前の自己チェック】以下をすべて確認してから出力すること：\n"
         f"    □ 全ての数値が {t} のAPIデータのみに基づいているか\n"
         f"    □ 「業績ハイライト」と「ガイダンス・見通し」で同一指標の方向性が矛盾していないか\n"
-        f"    □ Markdown記法（**や## 等）が含まれていないか\n"
+        f"    □ Markdown記法（##・__・*等）が含まれていないか（**太字**は重要箇所のみ許可）\n"
         f"    □ 生の整数がそのまま出力されていないか\n"
         f"    □ 過去期の数値が推測・補完ではなくAPIから取得された値か\n\n"
         f"15. 各セクションの内容を絶対に重複させないこと。同一の文章・数値・内容を複数の段落で繰り返すことは厳禁。\n"
@@ -1446,19 +2054,20 @@ def _build_summary_detail_prompt(context: str, ticker: str, name: str) -> str:
         f"全体10〜20行。数字は省略せず具体的に記載してください（売上・EPS・営業CF、前年比必須）。\n"
         f"④ガイダンスは必須項目として必ず含めてください（修正があれば必ず明記。なければ「変更なし」と記載）。\n"
         f"レポートのタイトル行（例：〇〇 FY2025決算分析レポート）は出力しないでください。①から直接始めてください。\n\n"
+        f"重要な数値・キーワード・判断根拠は **太字** で強調すること。1段落につき1〜2箇所を目安にすること。太字は必ず半角スペースで囲むこと（例: 売上高は **1,818億ドル** に増加）。▲・▼・(・)などの記号や数字に直接**を隣接させないこと。\n\n"
         f"データ整合性に関する厳守事項\n"
         f"1. 分析対象は必ず {t} の財務データのみを使用すること。他の銘柄の数値をいかなる場合も流用してはならない。\n"
         f"2. 通期データと四半期データを混在させてはならない。提供データは全て年次データです。\n"
         f"3. 財務APIから取得した数値のみを使用し、取得できない値は推測せず「データなし」と表記すること。\n"
         f"4. 数値は必ず読みやすい形式で表記すること（例：「281.7B$」「2,817億ドル」）。\n"
         f"   生の整数（例：281724000000）をそのまま出力することは禁止。\n"
-        f"5. 見出し（## ①〜⑤）以外でMarkdown記法（**太字**、__下線__、*斜体*等）を使用しないこと。\n"
+        f"5. 見出し（## ①〜⑤）以外でMarkdown記法（__下線__、*斜体*等）を使用しないこと。ただし **太字** は重要箇所への強調として使用可。\n"
         f"5b. 「X年連続」という表現はデータから計算可能な期数のみ使用すること。\n"
         f"    N期のデータがある場合、連続成長と言えるのは最大N-1期。3期データなら「直近2期連続」と表記すること。\n"
         f"6. 【出力前の自己チェック】以下をすべて確認してから出力すること：\n"
         f"   □ 全ての数値が {t} のAPIデータのみに基づいているか\n"
         f"   □ 生の整数がそのまま出力されていないか\n"
-        f"   □ 見出し以外で**や__等のMarkdown記法を使っていないか\n\n"
+        f"   □ 見出し以外で__や*等のMarkdown記法を使っていないか（**太字**は重要箇所のみ許可）\n\n"
         f"【決算データ】\n{context}"
     )
 
@@ -1531,6 +2140,7 @@ async def summary_brief(req: SummaryRequest) -> dict:
     prompt = (
         f"{name}({ticker})の決算を、決算分析プロトコルの"
         f"観点で3〜4文・150文字以内で日本語要約してください。\n"
+        f"重要な数値・キーワード・判断根拠は **太字** で強調すること。1項目につき1箇所を目安にすること。\n"
         f"① 判定結果と主な根拠（1文）\n"
         f"② 最も注目すべき数字（1文）\n"
         f"③ ガイダンス修正の有無（1文・なければ省略可）\n"
@@ -1541,7 +2151,7 @@ async def summary_brief(req: SummaryRequest) -> dict:
         f"③ガイダンスの項目は以下の形式で出力してください：修正がある場合は「③ガイダンス：🔴 修正あり」の後に内容を続ける、修正がない場合は「③ガイダンス：変更なし」とだけ記載する。\n"
         f"①②③④の各項目は必ず改行してそれぞれ独立した段落として出力してください。\n"
         f"レポートのタイトル行（例：〇〇 FY2025決算要約）は出力しないでください。①から直接始めてください。\n"
-        f"出力テキストにMarkdown記法（**太字**、##見出し、__下線__、*斜体*等）を一切使用しないこと。プレーンテキストのみで出力すること。\n"
+        f"Markdown記法（##・__・*等）は禁止。ただし **太字** は重要箇所の強調として使用可。太字は必ず半角スペースで囲むこと（例: 売上は **136億ドル** に増加）。▲・▼・(・)などの記号に直接**を隣接させないこと。\n"
         f"条件5（CFPS > EPS）が未達の場合は「CFPSがEPSを下回っており条件5未達」と明記し、"
         f"「ほぼ同水準」「近い水準」等の曖昧な表現を使用しないこと。\n"
         f"【重要な解釈指針】CFPS（1株あたり営業CF）がEPS（1株あたり利益）を上回る場合、"
@@ -1561,6 +2171,53 @@ async def summary_brief(req: SummaryRequest) -> dict:
         raise HTTPException(status_code=502, detail=f"Claude API error: {e}")
 
     return {"text": text}
+
+
+@app.post("/api/summary/brief/stream")
+async def summary_brief_stream(req: SummaryRequest):
+    """AI要約をストリーミングで返す."""
+    context = _format_context(req.analysis, req.guidance)
+    ticker = req.analysis.get("ticker", "")
+    name = req.analysis.get("companyName") or ticker
+
+    prompt = (
+        f"{name}({ticker})の決算を、決算分析プロトコルの"
+        f"観点で3〜4文・150文字以内で日本語要約してください。\n"
+        f"重要な数値・キーワード・判断根拠は **太字** で強調すること。1項目につき1箇所を目安にすること。\n"
+        f"① 判定結果と主な根拠（1文）\n"
+        f"② 最も注目すべき数字（1文）\n"
+        f"③ ガイダンス修正の有無（1文・なければ省略可）\n"
+        f"④ 総評（1文）\n"
+        f"数字は必ず具体的に記載してください。\n"
+        f"「X年連続」という表現は提供データから計算可能な期数のみ使用し、"
+        f"不確かな場合は「直近X期連続」と表記すること。\n"
+        f"③ガイダンスの項目は以下の形式で出力してください：修正がある場合は「③ガイダンス：🔴 修正あり」の後に内容を続ける、修正がない場合は「③ガイダンス：変更なし」とだけ記載する。\n"
+        f"①②③④の各項目は必ず改行してそれぞれ独立した段落として出力してください。\n"
+        f"レポートのタイトル行（例：〇〇 FY2025決算要約）は出力しないでください。①から直接始めてください。\n"
+        f"Markdown記法（##・__・*等）は禁止。ただし **太字** は重要箇所の強調として使用可。太字は必ず半角スペースで囲むこと（例: 売上は **136億ドル** に増加）。▲・▼・(・)などの記号に直接**を隣接させないこと。\n"
+        f"条件5（CFPS > EPS）が未達の場合は「CFPSがEPSを下回っており条件5未達」と明記し、"
+        f"「ほぼ同水準」「近い水準」等の曖昧な表現を使用しないこと。\n"
+        f"【重要な解釈指針】CFPS（1株あたり営業CF）がEPS（1株あたり利益）を上回る場合、"
+        f"これはキャッシュ創出力の高さを示すポジティブな指標です。"
+        f"「異常値」「懸念材料」「乖離が大きい」等の否定的な表現を使用してはなりません。\n\n"
+        f"【決算データ】\n{context}"
+    )
+
+    try:
+        client = ClaudeClient()
+    except ClaudeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    async def generate():
+        try:
+            async for chunk in client.stream_complete(
+                prompt, model="claude-haiku-4-5-20251001", max_tokens=512
+            ):
+                yield chunk
+        except Exception:
+            return
+
+    return StreamingResponse(generate(), media_type="text/plain; charset=utf-8")
 
 
 @app.post("/api/summary/detail")
@@ -1612,6 +2269,37 @@ async def summary_detail_stream(req: SummaryRequest):
 async def generate_visualization(ticker: str, request: Request):
     body = await request.json()
     analysis_data = body.get("analysis_data", {})
+
+    # beat_miss フィールド（フロントから直接渡される）またはguidance JSON文字列からBeat/Miss情報を組み立て
+    beat_miss_detail = "データなし"
+    bm_data = analysis_data.get("beat_miss") or {}
+    if not bm_data:
+        # フォールバック: guidance JSON文字列をパース
+        guidance_raw = analysis_data.get("guidance", "")
+        if guidance_raw and guidance_raw != "データなし":
+            try:
+                g = json.loads(guidance_raw)
+                bm_data = {"eps": g.get("eps") or {}, "revenue": g.get("revenue") or {}}
+            except Exception:
+                pass
+    if bm_data:
+        eps = bm_data.get("eps") or {}
+        rev = bm_data.get("revenue") or {}
+        actual_eps = eps.get("actual")
+        est_eps    = eps.get("estimated")
+        actual_rev = rev.get("actual")
+        est_rev    = rev.get("estimated")
+        lines = []
+        if actual_eps is not None and est_eps is not None:
+            bm = "BEAT" if actual_eps > est_eps else ("MISS" if actual_eps < est_eps else "IN-LINE")
+            lines.append(f"- EPS: 実績 {actual_eps} vs 予想 {est_eps} → {bm}")
+        if actual_rev is not None and est_rev is not None:
+            bm = "BEAT" if actual_rev > est_rev else ("MISS" if actual_rev < est_rev else "IN-LINE")
+            lines.append(f"- 売上高: 実績 {actual_rev}B$ vs 予想 {est_rev}B$ → {bm}")
+        if lines:
+            beat_miss_detail = "\n".join(lines)
+    analysis_data["beat_miss_detail"] = beat_miss_detail
+
     user_prompt = build_user_prompt(analysis_data)
 
     import anthropic
@@ -1631,6 +2319,105 @@ async def generate_visualization(ticker: str, request: Request):
         return json.loads(raw.strip())
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=500, detail=f"JSON parse error: {e}")
+
+
+@app.get("/api/analyst/{ticker}")
+async def get_analyst_data(ticker: str):
+    try:
+        import yfinance as yf
+        t = yf.Ticker(ticker)
+        result = {}
+
+        try:
+            pt = t.analyst_price_targets
+            if pt and isinstance(pt, dict):
+                result["price_targets"] = {
+                    "current": pt.get("current"),
+                    "mean": pt.get("mean"),
+                    "high": pt.get("high"),
+                    "low": pt.get("low"),
+                    "median": pt.get("median"),
+                }
+        except Exception:
+            result["price_targets"] = None
+
+        try:
+            rec = t.recommendations
+            if rec is not None and not rec.empty:
+                latest = rec.tail(1).to_dict(orient="records")[0]
+                result["recommendations"] = {
+                    "strongBuy": latest.get("strongBuy", 0),
+                    "buy": latest.get("buy", 0),
+                    "hold": latest.get("hold", 0),
+                    "sell": latest.get("sell", 0),
+                    "strongSell": latest.get("strongSell", 0),
+                }
+        except Exception:
+            result["recommendations"] = None
+
+        try:
+            ud = t.upgrades_downgrades
+            if ud is not None and not ud.empty:
+                recent = ud.head(3).reset_index()
+                result["upgrades_downgrades"] = recent[["GradeDate", "Firm", "ToGrade", "Action"]].to_dict(orient="records")
+        except Exception:
+            result["upgrades_downgrades"] = None
+
+        # EPS Beat/Miss 履歴 — Alpha Vantage primary, yfinance fallback
+        import pandas as pd
+        import httpx as _httpx_eps
+
+        AV_KEY = os.environ.get("ALPHA_VANTAGE_API_KEY", "")
+        eps_records = []
+
+        try:
+            if AV_KEY:
+                r = _httpx_eps.get(
+                    f"https://www.alphavantage.co/query?function=EARNINGS&symbol={ticker}&apikey={AV_KEY}",
+                    timeout=15,
+                ).json()
+                for q in r.get("quarterlyEarnings", [])[:12]:
+                    actual = q.get("reportedEPS")
+                    estimate = q.get("estimatedEPS")
+                    surprise = q.get("surprisePercentage")
+                    date_str = q.get("reportedDate") or q.get("fiscalDateEnding", "")
+                    if actual and actual not in ("None", ""):
+                        eps_records.append({
+                            "date": date_str[:10],
+                            "epsActual": float(actual),
+                            "epsEstimate": float(estimate) if estimate and estimate != "None" else None,
+                            "surprise_pct": float(surprise) if surprise and surprise != "None" else None,
+                        })
+                print(f"Alpha Vantage eps_history: {len(eps_records)} records")
+        except Exception as e_av:
+            print(f"Alpha Vantage EARNINGS failed: {e_av}")
+
+        # Alpha Vantageが失敗した場合のみyfinanceフォールバック
+        if len(eps_records) == 0:
+            try:
+                eh = t.earnings_history
+                if eh is not None and not eh.empty:
+                    records = eh.tail(8).reset_index()
+                    date_col = records.columns[0]
+                    for _, row in records.iterrows():
+                        actual = row.get("epsActual") or row.get("EPS Actual")
+                        if pd.notna(actual):
+                            eps_records.append({
+                                "date": str(row[date_col])[:10],
+                                "epsActual": float(actual),
+                                "epsEstimate": None,
+                                "surprise_pct": float(row.get("surprisePercent") or 0) or None,
+                            })
+                print(f"yfinance fallback eps_history: {len(eps_records)} records")
+            except Exception as e_yf:
+                print(f"yfinance fallback also failed: {e_yf}")
+
+        result["eps_history"] = eps_records
+
+        return result
+
+    except Exception as e:
+        return {"error": str(e), "price_targets": None, "recommendations": None, "upgrades_downgrades": None}
 
 
 # ── Static file serving (must be LAST — after all /api/* routes) ─────────────

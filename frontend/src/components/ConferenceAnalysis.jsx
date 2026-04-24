@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { fetchConferenceAnalysis, streamConferenceText } from '../api.js';
+import { fetchConferenceAnalysis, streamConferenceText, fetchAnalystData } from '../api.js';
 
 const mdComponents = {
   h2: ({ children }) => (
@@ -101,7 +101,7 @@ function ConferenceCard({ ticker, onStreamingChange }) {
   );
 }
 
-function AnalystCard({ analyst }) {
+function AnalystCard({ analyst, analystData }) {
   const history = analyst?.history || [];
   const beat = analyst?.beat_count ?? 0;
   const miss = analyst?.miss_count ?? 0;
@@ -110,19 +110,15 @@ function AnalystCard({ analyst }) {
 
   return (
     <div
-      className={`rounded-xl bg-white shadow-sm ${total === 0 ? 'px-6 py-3' : 'p-6'}`}
-      style={{ borderLeft: `4px solid ${total === 0 ? '#cbd5e1' : '#8b5cf6'}`, marginBottom: '16px' }}
+      className="rounded-xl bg-white shadow-sm p-6"
+      style={{ borderLeft: '4px solid #8b5cf6', marginBottom: '16px' }}
     >
-      <div className={`flex items-center gap-2 ${total === 0 ? '' : 'mb-4'}`}>
-        <h4 className={`font-semibold text-slate-900 ${total === 0 ? 'text-sm' : 'text-base'}`}>アナリストの視点</h4>
+      <div className="flex items-center gap-2 mb-4">
+        <h4 className="font-semibold text-slate-900 text-base">アナリストの視点</h4>
         <span className="text-xs text-slate-400">EPS Beat/Miss履歴</span>
       </div>
 
-      {total === 0 ? (
-        <p className="text-xs text-slate-400">
-          Beat/Missデータなし（FMPプランの制限またはデータ未取得）
-        </p>
-      ) : (
+      {total > 0 && (
         <>
           <div className="mb-4 flex items-center gap-6">
             <div className="text-center">
@@ -163,6 +159,60 @@ function AnalystCard({ analyst }) {
           </div>
         </>
       )}
+
+      {/* 目標株価・アナリスト推奨・格付け変更 */}
+      {analystData && !analystData.error && (
+        <div className="analyst-section" style={{ marginTop: '16px' }}>
+          {analystData.price_targets && (
+            <div className="analyst-block" style={{ marginBottom: '12px' }}>
+              <h4 className="text-sm font-semibold text-slate-700 mb-1">目標株価</h4>
+              <p className="text-sm">
+                平均: <strong>${analystData.price_targets.mean?.toFixed(2) ?? 'N/A'}</strong>
+                {analystData.price_targets.current && analystData.price_targets.mean && (
+                  <span style={{ marginLeft: '8px', color: analystData.price_targets.mean > analystData.price_targets.current ? '#22c55e' : '#ef4444' }}>
+                    ({((analystData.price_targets.mean / analystData.price_targets.current - 1) * 100).toFixed(1)}%)
+                  </span>
+                )}
+              </p>
+              <p style={{ fontSize: '0.85em', color: '#888' }}>
+                レンジ: ${analystData.price_targets.low?.toFixed(2)} 〜 ${analystData.price_targets.high?.toFixed(2)}
+              </p>
+            </div>
+          )}
+
+          {analystData.recommendations && (
+            <div className="analyst-block" style={{ marginBottom: '12px' }}>
+              <h4 className="text-sm font-semibold text-slate-700 mb-1">アナリスト推奨</h4>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {[
+                  { label: '強買い', key: 'strongBuy',  color: '#166534', bg: '#dcfce7' },
+                  { label: '買い',   key: 'buy',         color: '#15803d', bg: '#f0fdf4' },
+                  { label: '中立',   key: 'hold',        color: '#374151', bg: '#f3f4f6' },
+                  { label: '売り',   key: 'sell',        color: '#c2410c', bg: '#fff7ed' },
+                  { label: '強売り', key: 'strongSell',  color: '#991b1b', bg: '#fef2f2' },
+                ].map(({ label, key, color, bg }) => (
+                  <span key={key} style={{ padding: '4px 10px', borderRadius: '12px', background: bg, color, fontWeight: 'bold', fontSize: '0.85em' }}>
+                    {label}: {analystData.recommendations[key] ?? 0}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {analystData.upgrades_downgrades && analystData.upgrades_downgrades.length > 0 && (
+            <div className="analyst-block">
+              <h4 className="text-sm font-semibold text-slate-700 mb-1">直近の格付け変更</h4>
+              {analystData.upgrades_downgrades.map((item, i) => (
+                <p key={i} style={{ fontSize: '0.9em', margin: '4px 0' }}>
+                  <span style={{ color: '#888' }}>{item.GradeDate?.split('T')[0]}</span>
+                  {' '}<strong>{item.Firm}</strong>
+                  {' → '}<span style={{ color: item.Action === 'up' ? '#22c55e' : item.Action === 'down' ? '#ef4444' : '#888', fontWeight: 'bold' }}>{item.ToGrade}</span>
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -170,12 +220,14 @@ function AnalystCard({ analyst }) {
 export default function ConferenceAnalysis({ ticker, onStreamingChange }) {
   const [analyst, setAnalyst] = useState(null);
   const [analystLoading, setAnalystLoading] = useState(false);
+  const [analystData, setAnalystData] = useState(null);
 
   useEffect(() => {
     if (!ticker) return;
     let alive = true;
     setAnalystLoading(true);
     setAnalyst(null);
+    setAnalystData(null);
     const timeout = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('timeout')), 15000)
     );
@@ -183,6 +235,7 @@ export default function ConferenceAnalysis({ ticker, onStreamingChange }) {
       .then((d) => alive && setAnalyst(d?.analyst))
       .catch(() => alive && setAnalyst(null))
       .finally(() => alive && setAnalystLoading(false));
+    fetchAnalystData(ticker).then((d) => alive && setAnalystData(d));
     return () => { alive = false; };
   }, [ticker]);
 
@@ -194,7 +247,7 @@ export default function ConferenceAnalysis({ ticker, onStreamingChange }) {
           <p className="text-sm text-slate-500">Beat/Miss履歴を取得中...</p>
         </div>
       ) : (
-        <AnalystCard analyst={analyst} />
+        <AnalystCard analyst={analyst} analystData={analystData} />
       )}
     </>
   );

@@ -30,9 +30,18 @@ def _fetch_sync(ticker: str) -> tuple[list[dict], list[dict], str | None, str]:
     """yfinance からデータ取得し (income_list, cashflow_list, company_name, currency) を返す."""
     import pandas as pd
     t = yf.Ticker(ticker)
-    inc_df = t.financials
-    cf_df  = t.cashflow
-    info   = t.info or {}
+    try:
+        inc_df = t.financials
+    except Exception:
+        inc_df = None
+    try:
+        cf_df = t.cashflow
+    except Exception:
+        cf_df = None
+    try:
+        info = t.info or {}
+    except Exception:
+        info = {}
 
     company_name: str | None = info.get("longName") or info.get("shortName")
     currency: str = (info.get("currency") or "USD").upper()

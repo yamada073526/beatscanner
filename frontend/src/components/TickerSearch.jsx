@@ -1,5 +1,7 @@
 import { forwardRef, useEffect, useRef, useState } from 'react';
-import { searchTickers } from '../api.js';
+import { searchTickers, prefetchGuidance } from '../api.js';
+
+const _prefetchCache = new Set();
 
 const US_EXCHANGES = new Set(['NASDAQ', 'NYSE', 'AMEX', 'NYSE ARCA', 'NYSE MKT']);
 const JP_EXCHANGES = new Set(['TSE', 'JPX', 'TYO']);
@@ -13,6 +15,7 @@ const TickerSearch = forwardRef(function TickerSearch({ value, onChange, onSubmi
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const debounceRef = useRef(null);
+  const prefetchRef = useRef(null);
   const containerRef = useRef(null);
   const justSelectedRef = useRef(false);
   const composingRef = useRef(false);
@@ -58,6 +61,7 @@ const TickerSearch = forwardRef(function TickerSearch({ value, onChange, onSubmi
     onChange(sym);
     setOpen(false);
     setSuggestions([]);
+    inputRef.current?.blur();
     onSubmit(sym);
   }
 
@@ -69,11 +73,17 @@ const TickerSearch = forwardRef(function TickerSearch({ value, onChange, onSubmi
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setActive((a) => Math.max(a - 1, -1));
-    } else if (e.key === 'Enter' && active >= 0) {
-      e.preventDefault();
-      select(suggestions[active].symbol);
+    } else if (e.key === 'Enter') {
+      if (active >= 0) {
+        e.preventDefault();
+        select(suggestions[active].symbol);
+      } else {
+        setOpen(false);
+        setSuggestions([]);
+      }
     } else if (e.key === 'Escape') {
       setOpen(false);
+      setSuggestions([]);
     }
   }
 
@@ -85,7 +95,20 @@ const TickerSearch = forwardRef(function TickerSearch({ value, onChange, onSubmi
         onChange={(e) => {
           const v = e.target.value;
           setInputValue(v);
-          if (!composingRef.current) onChange(v.toUpperCase());
+          if (!composingRef.current) {
+            const upper = v.toUpperCase().trim();
+            onChange(upper);
+            // Prefetch guidance into server cache after 800ms idle
+            clearTimeout(prefetchRef.current);
+            if (upper.length >= 3) {
+              prefetchRef.current = setTimeout(() => {
+                if (!_prefetchCache.has(upper)) {
+                  _prefetchCache.add(upper);
+                  prefetchGuidance(upper);
+                }
+              }, 800);
+            }
+          }
         }}
         onCompositionStart={() => { composingRef.current = true; }}
         onCompositionEnd={(e) => {
@@ -95,7 +118,7 @@ const TickerSearch = forwardRef(function TickerSearch({ value, onChange, onSubmi
           onChange(v);
         }}
         onKeyDown={handleKeyDown}
-        onFocus={() => suggestions.length > 0 && setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder="ティッカー or 銘柄名（英語）例: 7203.T、Toyota、AAPL"
         autoComplete="off"
         className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-lg font-semibold tracking-wider focus:border-slate-900 focus:outline-none"

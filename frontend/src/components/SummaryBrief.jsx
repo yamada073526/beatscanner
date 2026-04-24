@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { fetchSummaryBrief } from '../api.js';
+import { streamSummaryBrief } from '../api.js';
 
 const mdComponents = {
   h2: ({ children }) => (
@@ -22,20 +22,32 @@ const mdComponents = {
 
 export default function SummaryBrief({ analysis, guidance }) {
   const [text, setText] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState(null);
+  const controllerRef = useRef(null);
 
   useEffect(() => {
     if (!analysis) return;
-    let alive = true;
-    setLoading(true);
+
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+
+    setStreaming(true);
     setError(null);
     setText('');
-    fetchSummaryBrief(analysis, guidance)
-      .then((d) => alive && setText(d.text || ''))
-      .catch((e) => alive && setError(e.message))
-      .finally(() => alive && setLoading(false));
-    return () => { alive = false; };
+
+    streamSummaryBrief(analysis, guidance, (chunk) => {
+      if (!controller.signal.aborted) setText((prev) => prev + chunk);
+    }, controller.signal)
+      .catch((e) => {
+        if (!controller.signal.aborted) setError(e.message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setStreaming(false);
+      });
+
+    return () => controller.abort();
   }, [analysis?.ticker, analysis?.latestDate]);
 
   return (
@@ -47,13 +59,26 @@ export default function SummaryBrief({ analysis, guidance }) {
         >
           AI要約
         </span>
+        {streaming && (
+          <span className="text-xs text-slate-400">生成中...</span>
+        )}
       </div>
-      {loading && <p className="text-sm text-slate-500">要約を生成中...</p>}
       {error && (
         <p className="text-sm text-red-500">要約を生成できませんでした: {error}</p>
       )}
-      {!loading && !error && text && (
-        <ReactMarkdown components={mdComponents}>{text}</ReactMarkdown>
+      {!error && text && (
+        <>
+          <ReactMarkdown components={mdComponents}>
+            {streaming ? text + '▌' : text}
+          </ReactMarkdown>
+          <style>{`@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}`}</style>
+        </>
+      )}
+      {!error && !text && streaming && (
+        <p className="text-sm text-slate-500">
+          ▌
+          <style>{`@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}`}</style>
+        </p>
       )}
     </section>
   );

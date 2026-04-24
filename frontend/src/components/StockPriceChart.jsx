@@ -3,7 +3,7 @@ import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { fetchPriceHistory } from '../api.js';
+import { fetchPriceHistory, fetchAnalystData } from '../api.js';
 
 const PERIODS = [
   { label: '1ヶ月', value: '1m' },
@@ -28,10 +28,13 @@ const VERDICT_LABEL = {
 
 /** Return nearest price date within ±4 days; null if not found. */
 function nearestDate(target, dateSet) {
+  if (!target) return null;
+  const base = new Date(target + 'T00:00:00Z');
+  if (isNaN(base.getTime())) return null;
   if (dateSet.has(target)) return target;
   for (let i = 1; i <= 4; i++) {
     for (const delta of [i, -i]) {
-      const d = new Date(target + 'T00:00:00Z');
+      const d = new Date(base);
       d.setUTCDate(d.getUTCDate() + delta);
       const s = d.toISOString().slice(0, 10);
       if (dateSet.has(s)) return s;
@@ -115,10 +118,22 @@ function EarningsTooltip({ active, payload, label, earningsMap }) {
 }
 
 // ---------------------------------------------------------------------------
+function calcVerdict(surprisePct, epsActual, epsEstimate) {
+  let pct = surprisePct;
+  if (pct == null && epsActual != null && epsEstimate != null && epsEstimate !== 0) {
+    pct = ((epsActual - epsEstimate) / Math.abs(epsEstimate)) * 100;
+  }
+  if (pct == null) return { verdict: 'unknown', surprise_pct: null };
+  const rounded = Math.round(pct * 10) / 10;
+  const verdict = rounded > 3 ? 'beat' : rounded < -3 ? 'miss' : 'in-line';
+  return { verdict, surprise_pct: rounded };
+}
+
 export default function StockPriceChart({ ticker }) {
   const [period, setPeriod] = useState('1y');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [analystEps, setAnalystEps] = useState(null);
 
   useEffect(() => {
     if (!ticker) return;
@@ -131,19 +146,41 @@ export default function StockPriceChart({ ticker }) {
     return () => { cancelled = true; };
   }, [ticker, period]);
 
+  useEffect(() => {
+    if (!ticker) return;
+    let cancelled = false;
+    setAnalystEps(null);
+    fetchAnalystData(ticker)
+      .then((d) => { if (!cancelled) setAnalystEps(d?.eps_history ?? null); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [ticker]);
+
   const dateSet = useMemo(
     () => new Set((data?.prices ?? []).map((p) => p.date)),
     [data],
   );
 
-  // Map earnings to nearest price date; drop any that don't match within ±4 days
-  const earnings = useMemo(
-    () =>
-      (data?.earnings ?? [])
-        .map((e) => ({ ...e, chartDate: nearestDate(e.date, dateSet) }))
-        .filter((e) => e.chartDate),
-    [data, dateSet],
-  );
+  // eps_history が取れた場合はそちらを優先、なければ price-history の earnings を使用
+  const earnings = useMemo(() => {
+    const source = analystEps && analystEps.length > 0
+      ? analystEps.map((e) => {
+          const rawDate = e.date?.split(' ')[0];
+          if (!rawDate || rawDate === 'NaT' || rawDate.length < 10) return null;
+          const { verdict, surprise_pct } = calcVerdict(e.surprise_pct, e.epsActual, e.epsEstimate);
+          return {
+            date: rawDate,
+            verdict,
+            surprise_pct,
+            epsActual: e.epsActual,
+            epsEstimated: e.epsEstimate,
+          };
+        }).filter(Boolean)
+      : (data?.earnings ?? []);
+    return source
+      .map((e) => ({ ...e, chartDate: nearestDate(e.date, dateSet) }))
+      .filter((e) => e.chartDate);
+  }, [analystEps, data, dateSet]);
 
   // Index by chartDate for O(1) lookup in the tooltip
   const earningsMap = useMemo(() => {

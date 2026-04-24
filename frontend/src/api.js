@@ -33,6 +33,20 @@ export async function fetchGuidance(ticker) {
   return r.json();
 }
 
+export async function fetchGuidanceBasic(ticker) {
+  const r = await fetch(`/api/guidance/${encodeURIComponent(ticker)}/basic`, {
+    headers: fmpHeaders(),
+  });
+  if (!r.ok) return null;
+  return r.json();
+}
+
+export function prefetchGuidance(ticker) {
+  fetch(`/api/guidance/${encodeURIComponent(ticker)}`, {
+    headers: fmpHeaders(),
+  }).catch(() => {});
+}
+
 export async function fetchScreener(category = 'gainers') {
   const r = await fetch(`/api/screener?category=${category}`, {
     headers: fmpHeaders(),
@@ -67,6 +81,30 @@ async function postSummary(path, analysis, guidance) {
 
 export function fetchSummaryBrief(analysis, guidance) {
   return postSummary('/api/summary/brief', analysis, guidance);
+}
+
+export async function streamSummaryBrief(analysis, guidance, onChunk, signal) {
+  const r = await fetch('/api/summary/brief/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ analysis, guidance }),
+    signal,
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || `HTTP ${r.status}`);
+  }
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      onChunk(decoder.decode(value, { stream: true }));
+    }
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 export function fetchSummaryDetail(analysis, guidance) {
@@ -220,16 +258,28 @@ export async function generateVisualization(ticker, analysisData) {
 
   const trendSections = (json.trends || []).map(t => {
     const bars = (t.data || []).map((d, i, arr) => {
-      const max = Math.max(...arr.map(x => Math.abs(x.value)));
-      const pct = max ? Math.round((Math.abs(d.value) / max) * 100) : 50;
+      const values = arr.map(x => x.value);
+      const minVal = Math.min(...values);
+      const maxVal = Math.max(...values);
+      const range = maxVal - minVal || 1;
+      const pct = Math.round(((d.value - minVal) / range) * 70) + 10;
       const isUp = i === 0 || d.value >= arr[i-1]?.value;
+      const estimateLabel = d.estimate != null
+        ? `<div style="font-size:10px;color:#6b7280;margin-top:1px">予想: ${d.estimate}${t.unit}</div>`
+        : '';
+      const beatBadge = d.beat === true
+        ? `${estimateLabel}<div style="font-size:10px;color:#16a34a;font-weight:700;margin-top:1px">▲BEAT</div>`
+        : d.beat === false
+        ? `${estimateLabel}<div style="font-size:10px;color:#dc2626;font-weight:700;margin-top:1px">▼MISS</div>`
+        : '';
       return `
         <div style="flex:1;text-align:center">
           <div style="font-size:11px;color:#9ca3af;margin-bottom:4px">${d.period}</div>
           <div style="height:60px;display:flex;align-items:flex-end;justify-content:center;margin-bottom:4px">
             <div style="width:36px;height:${pct}%;background:${isUp ? "#22c55e" : "#ef4444"};border-radius:4px 4px 0 0;transition:height 0.3s"></div>
           </div>
-          <div style="font-size:13px;font-weight:700;color:#111827">${d.value}${t.unit}</div>
+          <div style="font-size:13px;font-weight:700;color:#111827">${d.value != null ? d.value : 'N/A'}${d.value != null ? t.unit : ''}</div>
+          ${beatBadge}
         </div>`;
     }).join('<div style="display:flex;align-items:center;color:#9ca3af;font-size:18px;padding-bottom:20px">→</div>');
     return `
@@ -283,3 +333,9 @@ export async function generateVisualization(ticker, analysisData) {
     newWin.document.close();
   }
 }
+
+export const fetchAnalystData = async (ticker) => {
+  const res = await fetch(`/api/analyst/${ticker}`);
+  if (!res.ok) return null;
+  return await res.json();
+};
