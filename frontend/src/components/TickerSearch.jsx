@@ -20,53 +20,27 @@ const TickerSearch = forwardRef(function TickerSearch(
   const prefetchRef = useRef(null);
   const containerRef = useRef(null);
   const composingRef = useRef(false);
-  // Prevents useEffect from re-searching when value changes due to selection
-  const justSelectedRef = useRef(false);
-  // Invalidates any in-flight searchTickers call after selection
-  const searchSeqRef = useRef(0);
+  // When true, all search activity is suppressed (set after selection, reset after 2s)
+  const suppressRef = useRef(false);
 
+  // Sync display value when parent updates ticker externally
   useEffect(() => {
     if (!composingRef.current) setInputValue(value);
   }, [value]);
 
-  // Force-close from parent (called on search submit)
+  // Force-close signal from parent (on search submit)
   useEffect(() => {
     if (forceClose) {
+      suppressRef.current = true;
       clearTimeout(debounceRef.current);
-      searchSeqRef.current++;
       setOpen(false);
       setSuggestions([]);
       inputRef.current?.blur();
+      setTimeout(() => { suppressRef.current = false; }, 2000);
     }
   }, [forceClose]);
 
-  const showJapaneseHint = hasJapanese(value);
-
-  useEffect(() => {
-    clearTimeout(debounceRef.current);
-
-    if (justSelectedRef.current) {
-      justSelectedRef.current = false;
-      return;
-    }
-    if (!value.trim() || showJapaneseHint) {
-      searchSeqRef.current++;
-      setSuggestions([]);
-      setOpen(false);
-      return;
-    }
-    const seq = ++searchSeqRef.current;
-    debounceRef.current = setTimeout(async () => {
-      const results = await searchTickers(value);
-      // Discard result if a newer search or selection has happened
-      if (searchSeqRef.current !== seq) return;
-      setSuggestions(results);
-      setOpen(results.length > 0);
-      setActive(-1);
-    }, 250);
-    return () => clearTimeout(debounceRef.current);
-  }, [value, showJapaneseHint]);
-
+  // Click outside to close
   useEffect(() => {
     function handleClickOutside(e) {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
@@ -78,14 +52,53 @@ const TickerSearch = forwardRef(function TickerSearch(
   }, []);
 
   function select(sym) {
+    suppressRef.current = true;
     clearTimeout(debounceRef.current);
-    searchSeqRef.current++; // invalidate any in-flight searchTickers result
-    justSelectedRef.current = true; // prevent useEffect from re-searching when value prop changes
-    onChange(sym);
     setOpen(false);
     setSuggestions([]);
+    setInputValue(sym);
     inputRef.current?.blur();
+    onChange(sym);
     onSubmit(sym);
+    setTimeout(() => { suppressRef.current = false; }, 2000);
+  }
+
+  function handleChange(e) {
+    const v = e.target.value;
+    setInputValue(v);
+    if (composingRef.current) return;
+
+    const upper = v.toUpperCase().trim();
+    onChange(upper);
+
+    if (suppressRef.current) return;
+
+    // Prefetch guidance into server cache
+    clearTimeout(prefetchRef.current);
+    if (upper.length >= 3) {
+      prefetchRef.current = setTimeout(() => {
+        if (!_prefetchCache.has(upper)) {
+          _prefetchCache.add(upper);
+          prefetchGuidance(upper);
+        }
+      }, 800);
+    }
+
+    // Debounced search
+    clearTimeout(debounceRef.current);
+    if (!upper || hasJapanese(upper)) {
+      setSuggestions([]);
+      setOpen(false);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      if (suppressRef.current) return;
+      const results = await searchTickers(upper);
+      if (suppressRef.current) return;
+      setSuggestions(results);
+      setOpen(results.length > 0);
+      setActive(-1);
+    }, 250);
   }
 
   function handleKeyDown(e) {
@@ -101,41 +114,25 @@ const TickerSearch = forwardRef(function TickerSearch(
         select(suggestions[active].symbol);
       } else {
         clearTimeout(debounceRef.current);
-        searchSeqRef.current++;
         setOpen(false);
         setSuggestions([]);
         inputRef.current?.blur();
       }
     } else if (e.key === 'Escape') {
       clearTimeout(debounceRef.current);
-      searchSeqRef.current++;
       setOpen(false);
       setSuggestions([]);
     }
   }
+
+  const showJapaneseHint = hasJapanese(value);
 
   return (
     <div ref={containerRef} className="relative flex-1">
       <input
         ref={inputRef}
         value={inputValue}
-        onChange={(e) => {
-          const v = e.target.value;
-          setInputValue(v);
-          if (!composingRef.current) {
-            const upper = v.toUpperCase().trim();
-            onChange(upper);
-            clearTimeout(prefetchRef.current);
-            if (upper.length >= 3) {
-              prefetchRef.current = setTimeout(() => {
-                if (!_prefetchCache.has(upper)) {
-                  _prefetchCache.add(upper);
-                  prefetchGuidance(upper);
-                }
-              }, 800);
-            }
-          }
-        }}
+        onChange={handleChange}
         onCompositionStart={() => { composingRef.current = true; }}
         onCompositionEnd={(e) => {
           composingRef.current = false;
@@ -144,7 +141,12 @@ const TickerSearch = forwardRef(function TickerSearch(
           onChange(v);
         }}
         onKeyDown={handleKeyDown}
-        onBlur={() => setTimeout(() => { setOpen(false); setSuggestions([]); }, 200)}
+        onBlur={() => setTimeout(() => {
+          if (!suppressRef.current) {
+            setOpen(false);
+            setSuggestions([]);
+          }
+        }, 150)}
         placeholder="ティッカー or 銘柄名（英語）例: 7203.T、Toyota、AAPL"
         autoComplete="off"
         className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-lg font-semibold tracking-wider focus:border-slate-900 focus:outline-none"
