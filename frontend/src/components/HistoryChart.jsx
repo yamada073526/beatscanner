@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import InfoModal from './InfoModal.jsx';
 import {
   LineChart,
   Line,
@@ -22,91 +23,58 @@ function formatShares(v) {
 // ── Shares modal ──────────────────────────────────────────────────────────────
 
 function SharesModal({ onClose }) {
-  useEffect(() => {
-    function handleKey(e) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [onClose]);
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(15,23,42,0.5)' }}
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl overflow-y-auto max-h-[90vh]">
-        <button
-          onClick={onClose}
-          className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-          aria-label="閉じる"
-        >
-          ✕
-        </button>
-
-        <h2 className="pr-8 text-base font-bold text-slate-900">
-          希薄化後発行済株式数（Diluted Shares Outstanding）
-        </h2>
-
-        <div className="mt-4">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
-          <p className="text-sm leading-relaxed text-slate-700">
-            「株主の取り分」が薄められていないかを確認する指標です。ストックオプションや転換社債などがすべて行使されたと仮定した場合の、実質的な発行済株式の総数です。
-          </p>
-        </div>
-
-        <div className="mt-4">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📐 各指標の計算式との関係</p>
-          <p className="text-sm leading-relaxed text-slate-700">
-            この株式数は、1株あたりの業績を計算するための「分母」として使われます。
-          </p>
-          <ul className="mt-2 space-y-1 text-sm text-slate-700">
-            <li>・EPS（一株あたり利益）= 純利益 ÷ 希薄化後発行済株式数</li>
-            <li>・CFPS（一株あたり営業CF）= 営業キャッシュフロー ÷ 希薄化後発行済株式数</li>
-            <li>・SPS（一株あたり売上高）= 売上高 ÷ 希薄化後発行済株式数</li>
-          </ul>
-          <p className="mt-2 text-sm leading-relaxed text-slate-700">
-            これらが年々右肩上がりかどうか、CFマージン（CFPS÷SPS）が15%以上かどうかが、企業評価の基本ルールとされています。
-          </p>
-        </div>
-
-        <div className="mt-4">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 なぜ重要か</p>
-          <p className="text-sm leading-relaxed text-slate-700">
-            たとえ会社の利益が増えていても、この株数がそれ以上に増えていれば、あなたの持ち分（1株あたりの価値）は相対的に小さくなってしまいます。これを「株式の希薄化」と呼びます。
-          </p>
-        </div>
-
-        <div className="mt-4">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📋 チェックポイント</p>
-          <ul className="space-y-2 text-sm text-slate-700">
-            <li>
-              <span className="font-semibold text-slate-900">・理想は「横ばい」または「減少」</span><br />
-              優良企業は自社株買いによってこの数字を減らし、1株あたりの価値を高める努力をします。Appleなどがその典型です。
-            </li>
-            <li>
-              <span className="font-semibold text-slate-900">・「右肩上がり」は要注意</span><br />
-              成長企業が社員への報酬として株を配りすぎている（株式報酬費用：SBC）場合や、資金繰りのために増資を繰り返しているサインです。
-            </li>
-          </ul>
-        </div>
-
-        <div className="mt-4 rounded-lg bg-slate-50 p-3">
-          <p className="text-xs font-semibold text-slate-500">💬 ポイント</p>
-          <p className="mt-1 text-sm leading-relaxed text-slate-700">
-            利益が10%増えても株数が20%増えていれば、1株あたりの価値は目減りします。決算の数字と合わせて、ぜひこのチャートもチェックしてみてください。
-          </p>
-        </div>
-
-        <button
-          onClick={onClose}
-          className="mt-5 w-full rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white hover:bg-slate-700"
-        >
-          閉じる
-        </button>
+    <InfoModal title="希薄化後発行済株式数（Diluted Shares Outstanding）" onClose={onClose}>
+      <div className="mb-3">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          「株主の取り分」が薄められていないかを確認する指標です。ストックオプションや転換社債などがすべて行使されたと仮定した場合の、実質的な発行済株式の総数です。
+        </p>
       </div>
-    </div>
+
+      <div className="mb-3">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📐 各指標の計算式との関係</p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          この株式数は、1株あたりの業績を計算するための「分母」として使われます。
+        </p>
+        <ul className="mt-2 space-y-1">
+          <li className="overflow-x-auto whitespace-nowrap rounded bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-800">EPS（一株あたり利益）= 純利益 ÷ 希薄化後発行済株式数</li>
+          <li className="overflow-x-auto whitespace-nowrap rounded bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-800">CFPS（一株あたり営業CF）= 営業キャッシュフロー ÷ 希薄化後発行済株式数</li>
+          <li className="overflow-x-auto whitespace-nowrap rounded bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-800">SPS（一株あたり売上高）= 売上高 ÷ 希薄化後発行済株式数</li>
+        </ul>
+        <p className="mt-2 text-sm leading-relaxed text-slate-700">
+          これらが年々右肩上がりかどうか、CFマージン（CFPS÷SPS）が15%以上かどうかが、企業評価の基本ルールとされています。
+        </p>
+      </div>
+
+      <div className="mb-3">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 なぜ重要か</p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          たとえ会社の利益が増えていても、この株数がそれ以上に増えていれば、あなたの持ち分（1株あたりの価値）は相対的に小さくなってしまいます。これを「株式の希薄化」と呼びます。
+        </p>
+      </div>
+
+      <div className="mb-3">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📋 チェックポイント</p>
+        <ul className="space-y-2 text-sm text-slate-700">
+          <li>
+            <span className="font-semibold text-slate-900">・理想は「横ばい」または「減少」</span><br />
+            優良企業は自社株買いによってこの数字を減らし、1株あたりの価値を高める努力をします。Appleなどがその典型です。
+          </li>
+          <li>
+            <span className="font-semibold text-slate-900">・「右肩上がり」は要注意</span><br />
+            成長企業が社員への報酬として株を配りすぎている（株式報酬費用：SBC）場合や、資金繰りのために増資を繰り返しているサインです。
+          </li>
+        </ul>
+      </div>
+
+      <div className="mb-3 rounded-lg bg-slate-50 p-3">
+        <p className="text-xs font-semibold text-slate-500">💬 ポイント</p>
+        <p className="mt-1 text-sm leading-relaxed text-slate-700">
+          利益が10%増えても株数が20%増えていれば、1株あたりの価値は目減りします。決算の数字と合わせて、ぜひこのチャートもチェックしてみてください。
+        </p>
+      </div>
+    </InfoModal>
   );
 }
 
