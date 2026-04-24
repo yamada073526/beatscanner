@@ -6,21 +6,21 @@ import InfoModal from './InfoModal.jsx';
 function GuidanceInfoModal({ onClose }) {
   return (
     <InfoModal title="ガイダンス達成状況とは" onClose={onClose}>
-      <div className="mb-3">
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
         <p className="text-sm leading-relaxed text-slate-700">
           「ガイダンス」が事前のコンセンサス予想を上回ること（ガイダンス達成）は、株価の上昇を決定づける極めて重要な要素です。
         </p>
       </div>
 
-      <div className="mb-3">
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📖 ガイダンスとは何か？</p>
         <p className="text-sm leading-relaxed text-slate-700">
           ガイダンスとは、企業側（特に財務部長）が公式に示す、来期や今年度通年の「売上高」および「EPS（一株当たり利益）」の業績見通しのことです。財務部長は誰よりも自社の業績見通しについて精密な予想を立てられる立場にあり、通常、ガイダンスは「これなら達成できるだろう」という控えめな努力目標として提示されます。
         </p>
       </div>
 
-      <div className="mb-3">
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 なぜガイダンス達成が重要か</p>
         <div className="space-y-3 text-sm leading-relaxed text-slate-700">
           <div>
@@ -34,7 +34,7 @@ function GuidanceInfoModal({ onClose }) {
         </div>
       </div>
 
-      <div className="mb-3 rounded-lg bg-slate-50 p-3">
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="text-xs font-semibold text-slate-500">📋 まとめ</p>
         <p className="mt-1 text-sm leading-relaxed text-slate-700">
           過去の「実績（直近のEPSと売上高）」がどれだけ良くても、未来の「見通し（ガイダンス）」が弱ければ、投資家は失望し株価は売られてしまいます。企業が強気な未来を示すこと（ガイダンス達成）こそが、アナリストの予想を引き上げ、株価を持続的に押し上げる最大の原動力です。

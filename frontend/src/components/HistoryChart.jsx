@@ -25,14 +25,14 @@ function formatShares(v) {
 function SharesModal({ onClose }) {
   return (
     <InfoModal title="希薄化後発行済株式数（Diluted Shares Outstanding）" onClose={onClose}>
-      <div className="mb-3">
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
         <p className="text-sm leading-relaxed text-slate-700">
           「株主の取り分」が薄められていないかを確認する指標です。ストックオプションや転換社債などがすべて行使されたと仮定した場合の、実質的な発行済株式の総数です。
         </p>
       </div>
 
-      <div className="mb-3">
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📐 各指標の計算式との関係</p>
         <p className="text-sm leading-relaxed text-slate-700">
           この株式数は、1株あたりの業績を計算するための「分母」として使われます。
@@ -47,14 +47,14 @@ function SharesModal({ onClose }) {
         </p>
       </div>
 
-      <div className="mb-3">
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 なぜ重要か</p>
         <p className="text-sm leading-relaxed text-slate-700">
           たとえ会社の利益が増えていても、この株数がそれ以上に増えていれば、あなたの持ち分（1株あたりの価値）は相対的に小さくなってしまいます。これを「株式の希薄化」と呼びます。
         </p>
       </div>
 
-      <div className="mb-3">
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📋 チェックポイント</p>
         <ul className="space-y-2 text-sm text-slate-700">
           <li>
@@ -68,7 +68,7 @@ function SharesModal({ onClose }) {
         </ul>
       </div>
 
-      <div className="mb-3 rounded-lg bg-slate-50 p-3">
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="text-xs font-semibold text-slate-500">💬 ポイント</p>
         <p className="mt-1 text-sm leading-relaxed text-slate-700">
           利益が10%増えても株数が20%増えていれば、1株あたりの価値は目減りします。決算の数字と合わせて、ぜひこのチャートもチェックしてみてください。

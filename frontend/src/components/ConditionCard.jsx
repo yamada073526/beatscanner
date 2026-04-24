@@ -250,7 +250,7 @@ function ConditionModal({ detail, onClose }) {
     <InfoModal title={detail.title} onClose={onClose}>
       {detail.sections ? (
         detail.sections.map((s, i) => (
-          <div key={i} className="mb-3">
+          <div key={i} className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
             <p className="mb-1 text-xs font-semibold tracking-wider text-slate-400">{s.label}</p>
             {s.text && (
               <p className="text-sm leading-relaxed text-slate-700">{renderBold(s.text)}</p>
