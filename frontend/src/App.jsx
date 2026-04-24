@@ -63,6 +63,7 @@ export default function App() {
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [showCustomScreener, setShowCustomScreener] = useState(false);
   const [isDemoResult, setIsDemoResult] = useState(false);
+  const [forceCloseSuggestions, setForceCloseSuggestions] = useState(false);
   const screenerRef = useRef(null);
   const customScreenerRef = useRef(null);
   const calendarRef = useRef(null);
@@ -118,6 +119,8 @@ export default function App() {
     setGuidanceSecLoading(false);
     setActiveTab('judgment');
     setIsDemoResult(false);
+    setForceCloseSuggestions(true);
+    setTimeout(() => setForceCloseSuggestions(false), 500);
 
     // Phase 1: analyze + basic guidance in parallel
     const analyzePromise = analyze(t);
@@ -295,7 +298,7 @@ export default function App() {
         onSubmit={(e) => { e.preventDefault(); runAnalyze(); }}
         className="mb-4 flex flex-col gap-3 md:flex-row"
       >
-        <TickerSearch ref={searchInputRef} value={ticker} onChange={setTicker} onSubmit={runAnalyze} />
+        <TickerSearch ref={searchInputRef} value={ticker} onChange={setTicker} onSubmit={runAnalyze} forceClose={forceCloseSuggestions} />
         <button
           type="submit"
           disabled={loading}

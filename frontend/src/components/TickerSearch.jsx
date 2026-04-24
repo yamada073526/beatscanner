@@ -6,10 +6,12 @@ const _prefetchCache = new Set();
 const US_EXCHANGES = new Set(['NASDAQ', 'NYSE', 'AMEX', 'NYSE ARCA', 'NYSE MKT']);
 const JP_EXCHANGES = new Set(['TSE', 'JPX', 'TYO']);
 
-// 日本語文字（ひらがな・カタカナ・漢字）を含むか
 const hasJapanese = (s) => /[\u3040-\u30ff\u3400-\u9faf]/.test(s);
 
-const TickerSearch = forwardRef(function TickerSearch({ value, onChange, onSubmit }, inputRef) {
+const TickerSearch = forwardRef(function TickerSearch(
+  { value, onChange, onSubmit, forceClose },
+  inputRef,
+) {
   const [inputValue, setInputValue] = useState(value);
   const [suggestions, setSuggestions] = useState([]);
   const [open, setOpen] = useState(false);
@@ -24,14 +26,26 @@ const TickerSearch = forwardRef(function TickerSearch({ value, onChange, onSubmi
     if (!composingRef.current) setInputValue(value);
   }, [value]);
 
+  // Force-close from parent (called on search submit)
+  useEffect(() => {
+    if (forceClose) {
+      clearTimeout(debounceRef.current);
+      setOpen(false);
+      setSuggestions([]);
+      inputRef.current?.blur();
+    }
+  }, [forceClose]);
+
   const showJapaneseHint = hasJapanese(value);
 
   useEffect(() => {
+    // Always cancel pending debounce first, regardless of justSelected
+    clearTimeout(debounceRef.current);
+
     if (justSelectedRef.current) {
       justSelectedRef.current = false;
       return;
     }
-    clearTimeout(debounceRef.current);
     if (!value.trim() || showJapaneseHint) {
       setSuggestions([]);
       setOpen(false);
@@ -57,6 +71,7 @@ const TickerSearch = forwardRef(function TickerSearch({ value, onChange, onSubmi
   }, []);
 
   function select(sym) {
+    clearTimeout(debounceRef.current); // cancel pending search before anything else
     justSelectedRef.current = true;
     onChange(sym);
     setOpen(false);
@@ -66,22 +81,24 @@ const TickerSearch = forwardRef(function TickerSearch({ value, onChange, onSubmi
   }
 
   function handleKeyDown(e) {
-    if (!open) return;
-    if (e.key === 'ArrowDown') {
+    if (e.key === 'ArrowDown' && open) {
       e.preventDefault();
       setActive((a) => Math.min(a + 1, suggestions.length - 1));
-    } else if (e.key === 'ArrowUp') {
+    } else if (e.key === 'ArrowUp' && open) {
       e.preventDefault();
       setActive((a) => Math.max(a - 1, -1));
     } else if (e.key === 'Enter') {
-      if (active >= 0) {
+      if (open && active >= 0) {
         e.preventDefault();
         select(suggestions[active].symbol);
       } else {
+        clearTimeout(debounceRef.current);
         setOpen(false);
         setSuggestions([]);
+        inputRef.current?.blur();
       }
     } else if (e.key === 'Escape') {
+      clearTimeout(debounceRef.current);
       setOpen(false);
       setSuggestions([]);
     }
@@ -98,7 +115,6 @@ const TickerSearch = forwardRef(function TickerSearch({ value, onChange, onSubmi
           if (!composingRef.current) {
             const upper = v.toUpperCase().trim();
             onChange(upper);
-            // Prefetch guidance into server cache after 800ms idle
             clearTimeout(prefetchRef.current);
             if (upper.length >= 3) {
               prefetchRef.current = setTimeout(() => {
@@ -118,12 +134,11 @@ const TickerSearch = forwardRef(function TickerSearch({ value, onChange, onSubmi
           onChange(v);
         }}
         onKeyDown={handleKeyDown}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onBlur={() => setTimeout(() => { setOpen(false); setSuggestions([]); }, 200)}
         placeholder="ティッカー or 銘柄名（英語）例: 7203.T、Toyota、AAPL"
         autoComplete="off"
         className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-lg font-semibold tracking-wider focus:border-slate-900 focus:outline-none"
       />
-      {/* 日本語入力ヒント */}
       {showJapaneseHint && (
         <div className="absolute z-50 mt-1 w-full rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow-lg">
           <p className="font-semibold">日本株の検索は英語または証券コードで入力してください</p>
