@@ -7,6 +7,7 @@ RUN cd frontend && npm ci
 
 COPY frontend/ ./frontend/
 RUN cd frontend && npm run build
+# cache-bust: 2026-04-24
 # Output: /app/frontend/dist/
 
 
