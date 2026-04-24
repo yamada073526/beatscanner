@@ -9,7 +9,7 @@ function GuidanceInfoModal({ onClose }) {
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
         <p className="text-sm leading-relaxed text-slate-700">
-          「ガイダンス」が事前のコンセンサス予想を上回ること（ガイダンス達成）は、株価の上昇を決定づける極めて重要な要素です。
+          「ガイダンス」が事前のコンセンサス予想を上回ること（ガイダンス達成）は、<strong>株価の上昇を決定づける極めて重要な要素</strong>です。
         </p>
       </div>
 
@@ -25,7 +25,7 @@ function GuidanceInfoModal({ onClose }) {
         <div className="space-y-3 text-sm leading-relaxed text-slate-700">
           <div>
             <p className="font-semibold text-slate-900">① アナリストの「コンセンサス予想」を動かす決定的な要因だから</p>
-            <p className="mt-1">証券会社のアナリストたちが業績予想を立てる際、最も参考にするのが会社側から示されるガイダンスです。決算発表で新しいガイダンスが示されると、アナリストたちはそれを基に一斉に予想数字を変更します。ガイダンスがコンセンサス予想を上回れば（上方修正）アナリスト予想も引き上げられ、市場全体のコンセンサス予想がジワジワと上昇します。逆に下回れば、予想もすぐに下がり始めます。</p>
+            <p className="mt-1">証券会社のアナリストたちが業績予想を立てる際、最も参考にするのが会社側から示されるガイダンスです。決算発表で新しいガイダンスが示されると、アナリストたちはそれを基に一斉に予想数字を変更します。ガイダンスがコンセンサス予想を上回れば（上方修正）アナリスト予想も引き上げられ、<strong>市場全体のコンセンサス予想がジワジワと上昇します。</strong>逆に下回れば、予想もすぐに下がり始めます。</p>
           </div>
           <div>
             <p className="font-semibold text-slate-900">② 予想の上方修正が「株価上昇」に直結するから</p>
@@ -37,10 +37,10 @@ function GuidanceInfoModal({ onClose }) {
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="text-xs font-semibold text-slate-500">📋 まとめ</p>
         <p className="mt-1 text-sm leading-relaxed text-slate-700">
-          過去の「実績（直近のEPSと売上高）」がどれだけ良くても、未来の「見通し（ガイダンス）」が弱ければ、投資家は失望し株価は売られてしまいます。企業が強気な未来を示すこと（ガイダンス達成）こそが、アナリストの予想を引き上げ、株価を持続的に押し上げる最大の原動力です。
+          <strong>過去の「実績（直近のEPSと売上高）」がどれだけ良くても、未来の「見通し（ガイダンス）」が弱ければ、投資家は失望し株価は売られてしまいます。</strong>企業が強気な未来を示すこと（ガイダンス達成）こそが、アナリストの予想を引き上げ、株価を持続的に押し上げる最大の原動力です。
         </p>
         <p className="mt-2 text-sm leading-relaxed text-slate-700">
-          だからこそ「EPS」「売上高」「ガイダンス」の3つすべてがコンセンサス予想を上回ることを、「良い決算」の絶対条件としています。
+          だからこそ<strong>「EPS」「売上高」「ガイダンス」の3つすべてがコンセンサス予想を上回ることを、「良い決算」の絶対条件</strong>としています。
         </p>
       </div>
     </InfoModal>
