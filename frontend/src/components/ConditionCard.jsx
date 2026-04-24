@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Sparkline from './Sparkline.jsx';
 
 // ── Delta helpers ────────────────────────────────────────────────────────────
@@ -125,6 +125,9 @@ function renderBold(text) {
 }
 
 function ConditionModal({ detail, onClose }) {
+  const [atBottom, setAtBottom] = useState(false);
+  const scrollRef = useRef(null);
+
   useEffect(() => {
     function handleKey(e) {
       if (e.key === 'Escape') onClose();
@@ -133,69 +136,104 @@ function ConditionModal({ detail, onClose }) {
     return () => document.removeEventListener('keydown', handleKey);
   }, [onClose]);
 
+  function handleScroll(e) {
+    const el = e.currentTarget;
+    setAtBottom(el.scrollTop + el.clientHeight >= el.scrollHeight - 10);
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(15,23,42,0.5)' }}
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl overflow-y-auto max-h-[90vh]">
-        <button
-          onClick={onClose}
-          className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-          aria-label="閉じる"
+      <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden">
+        {/* fixed header */}
+        <div className="px-5 pt-5 pb-3">
+          <button
+            onClick={onClose}
+            className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            aria-label="閉じる"
+          >
+            ✕
+          </button>
+          <h2 className="pr-8 text-base font-bold text-slate-900">{detail.title}</h2>
+        </div>
+
+        {/* scrollable body */}
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="overflow-y-auto px-5"
+          style={{ maxHeight: '65vh' }}
         >
-          ✕
-        </button>
+          {detail.sections ? (
+            detail.sections.map((s, i) => (
+              <div key={i} className="mb-3">
+                <p className="mb-1 text-xs font-semibold tracking-wider text-slate-400">{s.label}</p>
+                {s.text && (
+                  <p className="text-sm leading-relaxed text-slate-700">{renderBold(s.text)}</p>
+                )}
+                {s.bullets && (
+                  <ul className="mt-1 space-y-0.5">
+                    {s.bullets.map((b, j) => (
+                      <li
+                        key={j}
+                        className="overflow-x-auto whitespace-nowrap rounded bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-800"
+                      >
+                        {b}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {s.note && (
+                  <p className="mt-2 text-sm leading-relaxed text-slate-700">{s.note}</p>
+                )}
+                {s.richBullets && (
+                  <ul className="mt-1 space-y-2 text-sm text-slate-700">
+                    {s.richBullets.map((b, j) => (
+                      <li key={j}>
+                        <span className="font-semibold text-slate-900">・{b.title}</span><br />
+                        {b.desc}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))
+          ) : (
+            <>
+              <div className="mb-3">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
+                <p className="text-sm leading-relaxed text-slate-700">{detail.summary}</p>
+              </div>
+              <div className="mb-3">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 なぜ必要か</p>
+                <p className="text-sm leading-relaxed text-slate-700">{detail.reason}</p>
+              </div>
+            </>
+          )}
+          {/* bottom padding inside scroll area */}
+          <div className="h-4" />
+        </div>
 
-        <h2 className="pr-8 text-base font-bold text-slate-900">{detail.title}</h2>
-
-        {detail.sections ? (
-          detail.sections.map((s, i) => (
-            <div key={i} className="mt-4">
-              <p className="mb-1 text-xs font-semibold tracking-wider text-slate-400">{s.label}</p>
-              {s.text && (
-                <p className="text-sm leading-relaxed text-slate-700">{renderBold(s.text)}</p>
-              )}
-              {s.bullets && (
-                <ul className="mt-1 space-y-0.5 text-sm text-slate-700">
-                  {s.bullets.map((b, j) => <li key={j}>・{b}</li>)}
-                </ul>
-              )}
-              {s.note && (
-                <p className="mt-2 text-sm leading-relaxed text-slate-700">{s.note}</p>
-              )}
-              {s.richBullets && (
-                <ul className="mt-1 space-y-2 text-sm text-slate-700">
-                  {s.richBullets.map((b, j) => (
-                    <li key={j}>
-                      <span className="font-semibold text-slate-900">・{b.title}</span><br />
-                      {b.desc}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))
-        ) : (
-          <>
-            <div className="mt-4">
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
-              <p className="text-sm leading-relaxed text-slate-700">{detail.summary}</p>
-            </div>
-            <div className="mt-4">
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 なぜ必要か</p>
-              <p className="text-sm leading-relaxed text-slate-700">{detail.reason}</p>
-            </div>
-          </>
+        {/* scroll fade */}
+        {!atBottom && (
+          <div
+            className="pointer-events-none absolute bottom-16 left-0 right-0 h-12"
+            style={{ background: 'linear-gradient(transparent, white)' }}
+          />
         )}
 
-        <button
-          onClick={onClose}
-          className="mt-5 w-full rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white hover:bg-slate-700"
-        >
-          閉じる
-        </button>
+        {/* fixed footer */}
+        <div className="px-5 pb-5 pt-3">
+          <button
+            onClick={onClose}
+            className="w-full rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+          >
+            閉じる
+          </button>
+        </div>
       </div>
     </div>
   );
