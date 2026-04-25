@@ -3,6 +3,7 @@ import { analyze, fetchGuidance, fetchGuidanceBasic } from './api.js';
 import { hasFmpKey } from './lib/fmpKey.js';
 import { isPro } from './lib/planGating.js';
 import { useUpgradeModal } from './lib/useUpgradeModal.js';
+import InfoModal from './components/InfoModal.jsx';
 import ResultBadge from './components/ResultBadge.jsx';
 import ConditionCard from './components/ConditionCard.jsx';
 import GuidanceCard from './components/GuidanceCard.jsx';
@@ -64,6 +65,7 @@ export default function App() {
   const [showCustomScreener, setShowCustomScreener] = useState(false);
   const [isDemoResult, setIsDemoResult] = useState(false);
   const [forceCloseSuggestions, setForceCloseSuggestions] = useState(false);
+  const [showFiveCondModal, setShowFiveCondModal] = useState(false);
   const screenerRef = useRef(null);
   const customScreenerRef = useRef(null);
   const calendarRef = useRef(null);
@@ -427,9 +429,44 @@ export default function App() {
           {activeTab === 'judgment' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between mb-1">
-                <h3 className="text-sm font-semibold text-slate-700">5条件 判定詳細</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-slate-700">5条件 判定詳細</h3>
+                  <button
+                    onClick={() => setShowFiveCondModal(true)}
+                    className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-500 hover:bg-slate-300 hover:text-slate-700"
+                    aria-label="5条件判定の説明を表示"
+                  >
+                    ？
+                  </button>
+                </div>
                 <span className="text-xs text-slate-400">年次データ（Annual）に基づく判定</span>
               </div>
+              {showFiveCondModal && (
+                <InfoModal title="5条件判定とは" onClose={() => setShowFiveCondModal(false)}>
+                  <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
+                    <p className="text-sm leading-relaxed text-slate-700">
+                      beatscanner では、企業の財務健全性を以下の5つの条件で判定しています。5つすべてを満たした企業のみが「PASS」となります。
+                    </p>
+                  </div>
+                  <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">📋 5つの条件</p>
+                    <ul className="space-y-1 text-sm text-slate-700">
+                      <li>・条件1：営業CFマージン ≥ 15%（真の稼ぐ力）</li>
+                      <li>・条件2：EPS 連続増加（利益の成長）</li>
+                      <li>・条件3：CFPS 連続増加（現金創出力の成長）</li>
+                      <li>・条件4：売上高 連続増加（本業の拡大）</li>
+                      <li>・条件5：CFPS ＞ EPS（粉飾リスクの排除）</li>
+                    </ul>
+                  </div>
+                  <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 なぜこの5条件なのか</p>
+                    <p className="text-sm leading-relaxed text-slate-700">
+                      これらはすべて「会計上のごまかしが効かない、または利益とのクロスチェックでごまかしを見抜ける」指標で構成されています。5条件をすべてクリアする企業は、本業で実質的に現金を稼ぎ出しており、財務的に極めて健全な状態といえます。各条件の詳細は、それぞれの ? ボタンをご確認ください。
+                    </p>
+                  </div>
+                </InfoModal>
+              )}
               <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
                 {result.conditions.map((c, i) => (
                   <ConditionCard

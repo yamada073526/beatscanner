@@ -118,9 +118,40 @@ function SharesTrend({ periods }) {
   );
 }
 
+// ── HistoryChartModal ─────────────────────────────────────────────────────────
+
+function HistoryChartModal({ onClose }) {
+  return (
+    <InfoModal title="過去推移グラフの見方" onClose={onClose}>
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          過去3期分の「売上高・EPS・CFPS」の推移を1つのグラフで確認できます。
+        </p>
+      </div>
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">📋 3指標をセットで見る理由</p>
+        <p className="mb-2 text-sm leading-relaxed text-slate-700">この3つは単独ではなく、必ずセットで確認することが重要です。</p>
+        <ul className="space-y-1 text-sm text-slate-700">
+          <li>・売上高が増加 → 本業の需要が拡大している証拠</li>
+          <li>・EPSが増加 → 利益が成長している（ただし会計操作の可能性あり）</li>
+          <li>・CFPSが増加 → 実際の現金創出力が伸びている（ごまかしにくい）</li>
+        </ul>
+      </div>
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 チェックポイント</p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          3本の線がすべて右肩上がりであれば理想的です。もしEPSだけ上昇してCFPSが横ばい・下降している場合は、会計上の操作による見せかけの利益成長の可能性があるため注意が必要です。
+        </p>
+      </div>
+    </InfoModal>
+  );
+}
+
 // ── HistoryChart ──────────────────────────────────────────────────────────────
 
 export default function HistoryChart({ periods, currency = 'USD' }) {
+  const [showChartModal, setShowChartModal] = useState(false);
   const [scale, unit] = REVENUE_SCALE[currency] ?? [1e9, 'B$'];
   const data = periods.map((p) => ({
     period: `FY${p.period}`,
@@ -130,9 +161,19 @@ export default function HistoryChart({ periods, currency = 'USD' }) {
   }));
   return (
     <section className="rounded-2xl bg-white p-6 shadow-sm">
-      <h3 className="mb-1 text-base font-semibold text-slate-900">
-        過去推移（売上高 [{unit}] / EPS / CFPS）
-      </h3>
+      <div className="mb-1 flex items-center gap-2">
+        <h3 className="text-base font-semibold text-slate-900">
+          過去推移（売上高 [{unit}] / EPS / CFPS）
+        </h3>
+        <button
+          onClick={() => setShowChartModal(true)}
+          className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-500 hover:bg-slate-300 hover:text-slate-700"
+          aria-label="過去推移グラフの見方を表示"
+        >
+          ？
+        </button>
+      </div>
+      {showChartModal && <HistoryChartModal onClose={() => setShowChartModal(false)} />}
       <p className="mb-1 text-xs text-slate-400">左軸: 売上高 ({unit}) ／ 右軸: EPS・CFPS ($)</p>
       <p className="mb-3 text-[10px] text-slate-400">
         ※ CFPS = 1株あたり営業CF（営業CF ÷ 希薄化後株式数）。資本支出を差し引いたFCF（フリーCF）とは異なります。
