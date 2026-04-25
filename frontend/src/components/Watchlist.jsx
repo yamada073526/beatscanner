@@ -1,4 +1,4 @@
-export default function Watchlist({ items, onSelect, onRemove, onFocusSearch }) {
+export default function Watchlist({ items, onSelect, onRemove, onFocusSearch, onHover }) {
   if (!items.length) {
     return (
       <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 py-8 text-center">
@@ -21,6 +21,7 @@ export default function Watchlist({ items, onSelect, onRemove, onFocusSearch }) 
       {items.map((t) => (
         <li
           key={t}
+          onMouseEnter={() => onHover?.(t)}
           className="flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-800 hover:bg-slate-200"
         >
           <button type="button" onClick={(e) => { e.stopPropagation(); onSelect(t); }} className="font-semibold">

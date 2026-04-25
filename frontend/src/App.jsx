@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { analyze, fetchGuidance, fetchGuidanceBasic } from './api.js';
+import { analyze, fetchGuidance, fetchGuidanceBasic, prefetchAll } from './api.js';
 import { hasFmpKey } from './lib/fmpKey.js';
 import { isPro } from './lib/planGating.js';
 import { useUpgradeModal } from './lib/useUpgradeModal.js';
@@ -80,6 +80,20 @@ export default function App() {
   const searchInputRef = useRef(null);
   // Nonce to ignore stale promise results from previous searches
   const searchIdRef = useRef(0);
+  const prefetchedRef = useRef(new Set());
+
+  const prefetch = (ticker) => {
+    if (!ticker || ticker.length < 2) return;
+    const t = ticker.toUpperCase();
+    if (prefetchedRef.current.has(t)) return;
+    prefetchedRef.current.add(t);
+    prefetchAll(t);
+  };
+
+  // ページロード時にウォッチリスト銘柄をバックグラウンドでウォームアップ
+  useEffect(() => {
+    watchlist.forEach((t) => prefetch(t));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     localStorage.setItem(WATCHLIST_KEY, JSON.stringify(watchlist));
@@ -302,7 +316,13 @@ export default function App() {
         onSubmit={(e) => { e.preventDefault(); runAnalyze(); }}
         className="mb-4 flex flex-col gap-3 md:flex-row"
       >
-        <TickerSearch ref={searchInputRef} value={ticker} onChange={setTicker} onSubmit={runAnalyze} forceClose={forceCloseSuggestions} />
+        <TickerSearch
+          ref={searchInputRef}
+          value={ticker}
+          onChange={(val) => { setTicker(val); if (val.length >= 4) prefetch(val); }}
+          onSubmit={runAnalyze}
+          forceClose={forceCloseSuggestions}
+        />
         <button
           type="submit"
           disabled={loading}
@@ -318,6 +338,7 @@ export default function App() {
         {['AAPL', 'MSFT', 'GOOGL', 'NVDA', 'META'].map((t) => (
           <button
             key={t}
+            onMouseEnter={() => prefetch(t)}
             onClick={() => runAnalyze(t)}
             className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700 hover:bg-slate-200"
           >
@@ -553,6 +574,7 @@ export default function App() {
           items={watchlist}
           onSelect={runAnalyze}
           onRemove={removeFromWatchlist}
+          onHover={prefetch}
           onFocusSearch={() => {
             searchInputRef.current?.focus();
             searchInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });

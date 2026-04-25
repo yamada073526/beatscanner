@@ -47,6 +47,12 @@ export function prefetchGuidance(ticker) {
   }).catch(() => {});
 }
 
+export function prefetchAll(ticker) {
+  const t = encodeURIComponent(ticker);
+  fetch(`/api/guidance/${t}/basic`, { headers: fmpHeaders() }).catch(() => {});
+  fetch(`/api/chart/${t}/summary`).catch(() => {});
+}
+
 export async function fetchScreener(category = 'gainers') {
   const r = await fetch(`/api/screener?category=${category}`, {
     headers: fmpHeaders(),
