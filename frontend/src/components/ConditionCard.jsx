@@ -116,8 +116,11 @@ const CONDITION_DETAILS = {
       },
       {
         label: '⚠️ 最大の注意点：EPS単独で判断してはいけない',
-        text: '**「EPS（利益）は会計上の操作でごまかしや粉飾がしやすい数字である」**という点を絶対に忘れてはなりません。減価償却費の調整などの会計操作で見かけ上の利益を大きく見せることが可能だからです。',
-        note: 'そのため、EPSの連続増加を確認する際は、**必ず「営業キャッシュフロー（CFPS）」とクロスチェックすること**が鉄則です。',
+        warning: {
+          title: 'EPS（利益）は会計操作でごまかしや粉飾がしやすい数字です',
+          desc: '減価償却費の調整などの会計操作で、見かけ上の利益を大きく見せることが可能なためです。',
+        },
+        note: '必ずCFPSとクロスチェックを：',
         richBullets: [
           { title: 'CFPSも連続増加しているか', desc: '実際の銀行残高の動きに基づく「ごまかしのきかない」CFPSも、EPSと歩調を合わせて右肩上がりになっているかを確認します。' },
           { title: 'CFPSがEPSよりも大きいか（CFPS ＞ EPS）', desc: '「利益（EPS）は出ているのに、現金（CFPS）が伴っていない」という逆転現象が起きていれば、粉飾決算の危険なサインとなります。' },
@@ -253,6 +256,12 @@ function ConditionModal({ detail, onClose }) {
         detail.sections.map((s, i) => (
           <div key={i} className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
             <p className="mb-1 text-xs font-semibold tracking-wider text-slate-400">{s.label}</p>
+            {s.warning && (
+              <div className="mb-3 rounded-r-lg border-l-4 border-amber-400 bg-amber-50 p-3">
+                <p className="text-sm font-bold text-amber-800">⚠️ {s.warning.title}</p>
+                <p className="mt-1 text-sm text-amber-700">{s.warning.desc}</p>
+              </div>
+            )}
             {s.text && (
               <p className="text-sm leading-relaxed text-slate-700">{renderBold(s.text)}</p>
             )}
