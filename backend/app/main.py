@@ -2454,8 +2454,16 @@ async def get_chart_summary(ticker: str):
 
     try:
         stock = yf.Ticker(ticker)
-        hist = stock.history(period="1y", interval="1d")
-        if hist.empty:
+        hist = None
+        for attempt in range(3):
+            try:
+                hist = stock.history(period="1y", interval="1d")
+                if not hist.empty:
+                    break
+            except Exception:
+                pass
+            _time.sleep(0.5 * (attempt + 1))
+        if hist is None or hist.empty:
             raise HTTPException(status_code=404, detail="Data not found")
 
         current = float(hist["Close"].iloc[-1])
@@ -2521,8 +2529,16 @@ async def get_chart_candles(ticker: str, period: str = "1mo"):
 
     try:
         stock = yf.Ticker(ticker)
-        hist = stock.history(**params)
-        if hist.empty:
+        hist = None
+        for attempt in range(3):
+            try:
+                hist = stock.history(**params)
+                if not hist.empty:
+                    break
+            except Exception:
+                pass
+            _time.sleep(0.5 * (attempt + 1))
+        if hist is None or hist.empty:
             raise HTTPException(status_code=404, detail="Data not found")
 
         candles = []

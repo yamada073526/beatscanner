@@ -86,9 +86,12 @@ function CandleChart({ ticker, period }) {
       });
 
       fetch(`${API_BASE}/api/chart/${ticker}/candles?period=${period}`)
-        .then((r) => r.json())
+        .then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.json();
+        })
         .then((data) => {
-          if (destroyed) return;
+          if (destroyed || !chartRef.current) return;
           series.setData(data.candles);
           chart.timeScale().fitContent();
           setLoading(false);
@@ -137,7 +140,10 @@ function CandleChart({ ticker, period }) {
           {error}
         </div>
       )}
-      <div ref={containerRef} className={loading || error ? "invisible" : ""} />
+      <div
+        ref={containerRef}
+        style={{ visibility: loading || error ? "hidden" : "visible", height: "260px" }}
+      />
     </div>
   );
 }
