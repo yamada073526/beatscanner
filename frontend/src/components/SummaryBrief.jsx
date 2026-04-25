@@ -42,6 +42,19 @@ function SummaryLine({ line }) {
   return <p className="mb-2 text-sm leading-relaxed text-slate-700">{renderBold(line)}</p>;
 }
 
+function SummarySkeleton() {
+  return (
+    <div className="space-y-2 py-1">
+      {[80, 95, 60, 85].map((w, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <div className="skeleton-shimmer w-4 h-4 rounded-full flex-shrink-0" />
+          <div className="skeleton-shimmer h-4 rounded" style={{ width: `${w}%` }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SummaryInfoModal({ onClose }) {
   return (
     <InfoModal title="AI要約の見方" onClose={onClose}>
@@ -133,9 +146,17 @@ export default function SummaryBrief({ analysis, guidance }) {
       {error && (
         <p className="text-sm text-red-500">要約を生成できませんでした: {error}</p>
       )}
-      {!error && (text || streaming) && (
+      {!error && streaming && !text && <SummarySkeleton />}
+      {!error && (text || streaming) && text && (
         <div>
-          {lines.map((line, i) => <SummaryLine key={i} line={line} />)}
+          {lines.map((line, i) => {
+            if (!line.trim()) return null;
+            return (
+              <div key={i} className="summary-line-enter" style={{ animationDelay: `${i * 80}ms` }}>
+                <SummaryLine line={line} />
+              </div>
+            );
+          })}
           {streaming && <span className="text-slate-400">▌</span>}
         </div>
       )}
