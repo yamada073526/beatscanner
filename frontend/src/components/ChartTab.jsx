@@ -186,6 +186,7 @@ function CandleChart({ ticker, period }) {
 
 // ── 銘柄1行 ──────────────────────────────────────────────────────
 function TickerRow({ ticker }) {
+  const rowRef = useRef(null);
   const [summary,    setSummary]    = useState(null);
   const [summaryErr, setSummaryErr] = useState(false);
   const [expanded,   setExpanded]   = useState(false);
@@ -206,12 +207,18 @@ function TickerRow({ ticker }) {
   };
 
   return (
-    <div className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
+    <div ref={rowRef} className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
       <div
         className="flex items-center gap-2 px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors select-none"
         onClick={() => {
           if (!mounted) setMounted(true);
-          setExpanded((v) => !v);
+          const opening = !expanded;
+          setExpanded(opening);
+          if (opening && rowRef.current) {
+            setTimeout(() => {
+              rowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 50);
+          }
         }}
       >
         <div className="flex flex-col w-20 flex-shrink-0">
