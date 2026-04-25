@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef } from "react";
-import { createChart, ColorType } from "lightweight-charts";
+import { useState, useEffect, useRef, Component } from "react";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -11,27 +10,45 @@ const PERIODS = [
   { key: "1y",  label: "年" },
 ];
 
-// ── パフォーマンス数値バッジ ────────────────────────────────────────
 function PerfBadge({ value }) {
   if (value === null || value === undefined) {
     return <span className="text-slate-300 text-sm font-medium tabular-nums">—</span>;
   }
   const isPos   = value >= 0;
-  const isLarge = Math.abs(value) >= 5; // 5%以上を強調（🔵🔴相当）
+  const isLarge = Math.abs(value) >= 5;
   return (
-    <span
-      className={`text-sm font-semibold tabular-nums ${
-        isPos
-          ? isLarge ? "text-blue-600"  : "text-green-500"
-          : isLarge ? "text-red-600"   : "text-red-400"
-      }`}
-    >
+    <span className={`text-sm font-semibold tabular-nums ${
+      isPos
+        ? isLarge ? "text-blue-600"  : "text-green-500"
+        : isLarge ? "text-red-600"   : "text-red-400"
+    }`}>
       {isPos ? "+" : ""}{value.toFixed(1)}%
     </span>
   );
 }
 
-// ── ローソク足チャート本体 ─────────────────────────────────────────
+// ── Error Boundary（クラッシュしてもページ全体を守る）──────────────
+class ChartErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, message: "" };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, message: error?.message || "不明なエラー" };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex items-center justify-center h-[260px] bg-slate-50 rounded text-red-400 text-sm">
+          チャートの表示に失敗しました：{this.state.message}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ── ローソク足チャート ────────────────────────────────────────────
 function CandleChart({ ticker, period }) {
   const containerRef = useRef(null);
   const chartRef     = useRef(null);
@@ -39,70 +56,75 @@ function CandleChart({ ticker, period }) {
   const [error,   setError]   = useState(null);
 
   useEffect(() => {
-    let chart = null;
     let destroyed = false;
 
-    function buildChart() {
+    async function buildChart() {
       if (destroyed || !containerRef.current) return;
 
-      const width = containerRef.current.clientWidth;
+      // コンテナ幅が確定するまで待つ
+      let width = containerRef.current.clientWidth;
       if (width === 0) {
-        setTimeout(buildChart, 50);
-        return;
+        await new Promise((r) => setTimeout(r, 100));
+        if (destroyed) return;
+        width = containerRef.current.clientWidth;
       }
 
+      // 既存チャートを破棄
       if (chartRef.current) {
-        chartRef.current.remove();
+        try { chartRef.current.remove(); } catch {}
         chartRef.current = null;
       }
 
-      chart = createChart(containerRef.current, {
-        width,
-        height: 260,
-        layout: {
-          background: { type: ColorType.Solid, color: "#f8fafc" },
-          textColor: "#64748b",
-        },
-        grid: {
-          vertLines: { color: "#e2e8f0" },
-          horzLines: { color: "#e2e8f0" },
-        },
-        rightPriceScale: { borderColor: "#e2e8f0" },
-        timeScale: {
-          borderColor: "#e2e8f0",
-          timeVisible: period === "1d",
-        },
-        crosshair: { mode: 1 },
-      });
-      chartRef.current = chart;
+      try {
+        // 動的インポート（v4/v5 両対応）
+        const lc = await import("lightweight-charts");
+        if (destroyed) return;
 
-      const series = chart.addCandlestickSeries({
-        upColor:         "#22c55e",
-        downColor:       "#ef4444",
-        borderUpColor:   "#22c55e",
-        borderDownColor: "#ef4444",
-        wickUpColor:     "#22c55e",
-        wickDownColor:   "#ef4444",
-      });
-
-      fetch(`${API_BASE}/api/chart/${ticker}/candles?period=${period}`)
-        .then((r) => {
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          return r.json();
-        })
-        .then((data) => {
-          if (destroyed || !chartRef.current) return;
-          series.setData(data.candles);
-          chart.timeScale().fitContent();
-          setLoading(false);
-        })
-        .catch((err) => {
-          console.error("Chart fetch error:", err);
-          if (!destroyed) {
-            setError("チャートデータの取得に失敗しました");
-            setLoading(false);
-          }
+        const chart = lc.createChart(containerRef.current, {
+          width,
+          height: 260,
+          layout: {
+            background: { type: lc.ColorType.Solid, color: "#f8fafc" },
+            textColor: "#64748b",
+          },
+          grid: {
+            vertLines: { color: "#e2e8f0" },
+            horzLines: { color: "#e2e8f0" },
+          },
+          rightPriceScale: { borderColor: "#e2e8f0" },
+          timeScale: {
+            borderColor: "#e2e8f0",
+            timeVisible: period === "1d",
+          },
+          crosshair: { mode: 1 },
         });
+        chartRef.current = chart;
+
+        const series = chart.addCandlestickSeries({
+          upColor:         "#22c55e",
+          downColor:       "#ef4444",
+          borderUpColor:   "#22c55e",
+          borderDownColor: "#ef4444",
+          wickUpColor:     "#22c55e",
+          wickDownColor:   "#ef4444",
+        });
+
+        const res = await fetch(`${API_BASE}/api/chart/${ticker}/candles?period=${period}`);
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+        const data = await res.json();
+
+        if (destroyed) return;
+        series.setData(data.candles);
+        chart.timeScale().fitContent();
+        setLoading(false);
+
+      } catch (err) {
+        console.error("[CandleChart] error:", err);
+        if (!destroyed) {
+          setError(err?.message || "チャートの表示に失敗しました");
+          setLoading(false);
+        }
+      }
     }
 
     setLoading(true);
@@ -122,27 +144,41 @@ function CandleChart({ ticker, period }) {
       destroyed = true;
       window.removeEventListener("resize", onResize);
       if (chartRef.current) {
-        chartRef.current.remove();
+        try { chartRef.current.remove(); } catch {}
         chartRef.current = null;
       }
     };
   }, [ticker, period]);
 
   return (
-    <div className="relative" style={{ minHeight: 260 }}>
+    <div style={{ position: "relative", height: "260px" }}>
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-slate-50 rounded text-slate-400 text-sm">
-          <span className="animate-pulse">チャート読み込み中...</span>
+        <div style={{
+          position: "absolute", inset: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: "#f8fafc", borderRadius: "6px",
+          color: "#94a3b8", fontSize: "14px",
+        }}>
+          <span>チャート読み込み中...</span>
         </div>
       )}
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-slate-50 rounded text-red-400 text-sm">
+        <div style={{
+          position: "absolute", inset: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: "#f8fafc", borderRadius: "6px",
+          color: "#ef4444", fontSize: "14px",
+        }}>
           {error}
         </div>
       )}
       <div
         ref={containerRef}
-        style={{ visibility: loading || error ? "hidden" : "visible", height: "260px" }}
+        style={{
+          width: "100%",
+          height: "260px",
+          visibility: loading || error ? "hidden" : "visible",
+        }}
       />
     </div>
   );
@@ -162,7 +198,6 @@ function TickerRow({ ticker }) {
       .catch(() => setSummaryErr(true));
   }, [ticker]);
 
-  // 次回決算日を M/D 形式に
   const fmtDate = (dateStr) => {
     if (!dateStr) return "未定";
     const d = new Date(dateStr);
@@ -171,13 +206,10 @@ function TickerRow({ ticker }) {
 
   return (
     <div className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
-
-      {/* ── クリッカブル行 ─────────────────────────────────── */}
       <div
         className="flex items-center gap-2 px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors select-none"
         onClick={() => setExpanded((v) => !v)}
       >
-        {/* ティッカー + 現在株価 */}
         <div className="flex flex-col w-20 flex-shrink-0">
           <span className="font-bold text-slate-800 text-sm leading-tight">{ticker}</span>
           <span className="text-xs text-slate-400 mt-0.5">
@@ -185,7 +217,6 @@ function TickerRow({ ticker }) {
           </span>
         </div>
 
-        {/* 5期間パフォーマンス */}
         <div className="flex flex-1 gap-1">
           {PERIODS.map(({ key, label }) => (
             <div key={key} className="flex flex-col items-center flex-1 min-w-0">
@@ -195,7 +226,6 @@ function TickerRow({ ticker }) {
           ))}
         </div>
 
-        {/* 次回決算日 */}
         <div className="flex flex-col items-end flex-shrink-0 w-14">
           <span className="text-[10px] text-slate-400">次回決算</span>
           <span className="text-sm font-medium text-slate-600">
@@ -203,24 +233,18 @@ function TickerRow({ ticker }) {
           </span>
         </div>
 
-        {/* 展開矢印 */}
-        <span
-          className={`text-slate-400 text-xs flex-shrink-0 transition-transform duration-200 ${
-            expanded ? "rotate-180" : ""
-          }`}
-        >
-          ▼
-        </span>
+        <span className={`text-slate-400 text-xs flex-shrink-0 transition-transform duration-200 ${
+          expanded ? "rotate-180" : ""
+        }`}>▼</span>
       </div>
 
-      {/* ── チャート展開エリア ────────────────────────────── */}
       {expanded && (
         <div className="border-t border-slate-100 bg-slate-50 px-4 pt-3 pb-4">
-          {/* 期間選択ボタン */}
           <div className="flex gap-2 mb-3">
             {PERIODS.map(({ key, label }) => (
               <button
                 key={key}
+                type="button"
                 onClick={(e) => { e.stopPropagation(); setPeriod(key); }}
                 className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
                   period === key
@@ -233,14 +257,15 @@ function TickerRow({ ticker }) {
             ))}
           </div>
 
-          <CandleChart ticker={ticker} period={period} />
+          <ChartErrorBoundary key={`${ticker}-${period}`}>
+            <CandleChart ticker={ticker} period={period} />
+          </ChartErrorBoundary>
         </div>
       )}
     </div>
   );
 }
 
-// ── メインエクスポート ─────────────────────────────────────────────
 export default function ChartTab({ watchlist = [] }) {
   if (watchlist.length === 0) {
     return (
