@@ -67,7 +67,6 @@ export default function App() {
   const [isDemoResult, setIsDemoResult] = useState(false);
   const [forceCloseSuggestions, setForceCloseSuggestions] = useState(false);
   const [showFiveCondModal, setShowFiveCondModal] = useState(false);
-  const [watchlistView, setWatchlistView] = useState('list');
   const screenerRef = useRef(null);
   const customScreenerRef = useRef(null);
   const calendarRef = useRef(null);
@@ -546,46 +545,18 @@ export default function App() {
 
       {/* Watchlist */}
       <section className="mt-6 rounded-2xl bg-white p-6 shadow-sm">
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3">
           <h3 className="text-base font-semibold text-slate-900">ウォッチリスト</h3>
-          {watchlist.length > 0 && (
-            <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
-              <button
-                onClick={() => setWatchlistView('list')}
-                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                  watchlistView === 'list'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                📋 リスト
-              </button>
-              <button
-                onClick={() => setWatchlistView('chart')}
-                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                  watchlistView === 'chart'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                📈 チャート
-              </button>
-            </div>
-          )}
         </div>
-        {watchlistView === 'list' ? (
-          <Watchlist
-            items={watchlist}
-            onSelect={runAnalyze}
-            onRemove={removeFromWatchlist}
-            onFocusSearch={() => {
-              searchInputRef.current?.focus();
-              searchInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }}
-          />
-        ) : (
-          <ChartTab watchlist={watchlist} />
-        )}
+        <Watchlist
+          items={watchlist}
+          onSelect={runAnalyze}
+          onRemove={removeFromWatchlist}
+          onFocusSearch={() => {
+            searchInputRef.current?.focus();
+            searchInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }}
+        />
       </section>
 
       {/* Plan comparison — shown for non-Pro users when no result is displayed (not in demo) */}
