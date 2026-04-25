@@ -330,7 +330,7 @@ export default function ChartTab({ watchlist = [] }) {
               : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
           }`}
         >
-          {darkMode ? "☀️ ライト" : "🌙 ダーク"}
+          {darkMode ? "☀️ ライトモードに切替" : "🌙 ダークモードに切替"}
         </button>
       </div>
       {watchlist.map((ticker) => (
