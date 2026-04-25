@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { streamSummaryBrief } from '../api.js';
+import InfoModal from './InfoModal.jsx';
 
 function renderBold(text) {
   return text.split(/\*\*(.+?)\*\*/g).map((part, i) =>
@@ -41,10 +42,47 @@ function SummaryLine({ line }) {
   return <p className="mb-2 text-sm leading-relaxed text-slate-700">{renderBold(line)}</p>;
 }
 
+function SummaryInfoModal({ onClose }) {
+  return (
+    <InfoModal title="AI要約の見方" onClose={onClose}>
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          AIがその銘柄の直近決算を分析し、重要ポイントを4項目に要約しています。
+        </p>
+      </div>
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">🎨 色分けの意味</p>
+        <ul className="space-y-1 text-sm text-slate-700">
+          <li>・<strong>緑（✓）</strong>：ポジティブな項目（Beat・連続増加・高マージンなど）</li>
+          <li>・<strong>赤（✗）</strong>：ネガティブな項目（条件未達・減少・課題など）</li>
+          <li>・<strong>グレー（–）</strong>：中立・補足情報（ガイダンス現状維持・背景説明など）</li>
+        </ul>
+        <p className="mt-2 text-sm leading-relaxed text-slate-700">
+          色分けを見るだけで、その企業の決算が良かったか悪かったかを2秒で把握できるよう設計されています。
+        </p>
+      </div>
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 太字の意味</p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          各項目内で特に重要な数値やキーワードが太字で表示されます。太字箇所を中心に読むことで、素早く要点を把握できます。
+        </p>
+      </div>
+      <div className="mb-3 rounded-r-lg border-l-4 border-amber-400 bg-amber-50 p-3">
+        <p className="text-sm font-bold text-amber-800">⚠️ ご注意</p>
+        <p className="mt-1 text-sm text-amber-700">
+          AI要約はデータに基づく自動生成です。投資判断は必ずご自身の責任で行ってください。
+        </p>
+      </div>
+    </InfoModal>
+  );
+}
+
 export default function SummaryBrief({ analysis, guidance }) {
   const [text, setText] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState(null);
+  const [showInfoModal, setShowInfoModal] = useState(false);
   const controllerRef = useRef(null);
 
   useEffect(() => {
@@ -82,8 +120,16 @@ export default function SummaryBrief({ analysis, guidance }) {
         >
           AI要約
         </span>
+        <button
+          onClick={() => setShowInfoModal(true)}
+          className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-300 text-[9px] font-bold text-slate-600 hover:bg-slate-400 hover:text-slate-800"
+          aria-label="AI要約の見方を表示"
+        >
+          ？
+        </button>
         {streaming && <span className="text-xs text-slate-400">生成中...</span>}
       </div>
+      {showInfoModal && <SummaryInfoModal onClose={() => setShowInfoModal(false)} />}
       {error && (
         <p className="text-sm text-red-500">要約を生成できませんでした: {error}</p>
       )}

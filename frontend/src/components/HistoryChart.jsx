@@ -133,15 +133,15 @@ function HistoryChartModal({ onClose }) {
         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">📋 3指標をセットで見る理由</p>
         <p className="mb-2 text-sm leading-relaxed text-slate-700">この3つは単独ではなく、必ずセットで確認することが重要です。</p>
         <ul className="space-y-1 text-sm text-slate-700">
-          <li>・売上高が増加 → 本業の需要が拡大している証拠</li>
-          <li>・EPSが増加 → 利益が成長している（ただし会計操作の可能性あり）</li>
-          <li>・CFPSが増加 → 実際の現金創出力が伸びている（ごまかしにくい）</li>
+          <li>・売上高が増加 → <strong>本業の需要が拡大している証拠</strong></li>
+          <li>・EPSが増加 → 利益が成長している（<strong>ただし会計操作の可能性あり</strong>）</li>
+          <li>・CFPSが増加 → <strong>実際の現金創出力が伸びている</strong>（ごまかしにくい）</li>
         </ul>
       </div>
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 チェックポイント</p>
         <p className="text-sm leading-relaxed text-slate-700">
-          3本の線がすべて右肩上がりであれば理想的です。もしEPSだけ上昇してCFPSが横ばい・下降している場合は、会計上の操作による見せかけの利益成長の可能性があるため注意が必要です。
+          <strong>3本の線がすべて右肩上がりであれば理想的です。</strong>もしEPSだけ上昇してCFPSが横ばい・下降している場合は、<strong>会計上の操作による見せかけの利益成長の可能性があるため注意が必要です。</strong>
         </p>
       </div>
     </InfoModal>

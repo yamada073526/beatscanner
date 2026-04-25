@@ -446,7 +446,7 @@ export default function App() {
                   <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
                     <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
                     <p className="text-sm leading-relaxed text-slate-700">
-                      beatscanner では、企業の財務健全性を以下の5つの条件で判定しています。5つすべてを満たした企業のみが「PASS」となります。
+                      beatscanner では、企業の財務健全性を以下の5つの条件で判定しています。5つすべてを満たした企業のみが<strong>「PASS」</strong>となります。
                     </p>
                   </div>
                   <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -462,7 +462,7 @@ export default function App() {
                   <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
                     <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 なぜこの5条件なのか</p>
                     <p className="text-sm leading-relaxed text-slate-700">
-                      これらはすべて「会計上のごまかしが効かない、または利益とのクロスチェックでごまかしを見抜ける」指標で構成されています。5条件をすべてクリアする企業は、本業で実質的に現金を稼ぎ出しており、財務的に極めて健全な状態といえます。各条件の詳細は、それぞれの ? ボタンをご確認ください。
+                      これらはすべて<strong>「会計上のごまかしが効かない、または利益とのクロスチェックでごまかしを見抜ける」</strong>指標で構成されています。5条件をすべてクリアする企業は、本業で実質的に現金を稼ぎ出しており、財務的に極めて健全な状態といえます。各条件の詳細は、それぞれの ? ボタンをご確認ください。
                     </p>
                   </div>
                 </InfoModal>
