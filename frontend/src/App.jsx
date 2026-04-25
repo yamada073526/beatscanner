@@ -427,9 +427,9 @@ export default function App() {
               {isPro() ? '📝 決算レポート' : '🔒 決算レポート'}
             </button>
             <button
-              onClick={() => setActiveTab('chart')}
+              onClick={() => setActiveTab('チャート')}
               className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-                activeTab === 'chart'
+                activeTab === 'チャート'
                   ? 'bg-white text-slate-900 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
               }`}
@@ -507,8 +507,8 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'chart' && (
-            <ChartTab watchlist={[result.ticker]} />
+          {activeTab === 'チャート' && (
+            <ChartTab watchlist={watchlist} />
           )}
         </div>
       )}
