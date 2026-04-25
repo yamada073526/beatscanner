@@ -189,6 +189,7 @@ function TickerRow({ ticker }) {
   const [summary,    setSummary]    = useState(null);
   const [summaryErr, setSummaryErr] = useState(false);
   const [expanded,   setExpanded]   = useState(false);
+  const [mounted,    setMounted]    = useState(false);
   const [period,     setPeriod]     = useState("1mo");
 
   useEffect(() => {
@@ -208,7 +209,10 @@ function TickerRow({ ticker }) {
     <div className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
       <div
         className="flex items-center gap-2 px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors select-none"
-        onClick={() => setExpanded((v) => !v)}
+        onClick={() => {
+          if (!mounted) setMounted(true);
+          setExpanded((v) => !v);
+        }}
       >
         <div className="flex flex-col w-20 flex-shrink-0">
           <span className="font-bold text-slate-800 text-sm leading-tight">{ticker}</span>
@@ -238,30 +242,40 @@ function TickerRow({ ticker }) {
         }`}>▼</span>
       </div>
 
-      {expanded && (
-        <div className="border-t border-slate-100 bg-slate-50 px-4 pt-3 pb-4">
-          <div className="flex gap-2 mb-3">
-            {PERIODS.map(({ key, label }) => (
-              <button
-                key={key}
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setPeriod(key); }}
-                className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                  period === key
-                    ? "bg-slate-800 text-white"
-                    : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateRows: expanded ? "1fr" : "0fr",
+          transition: "grid-template-rows 0.3s ease",
+        }}
+      >
+        <div style={{ overflow: "hidden" }}>
+          {mounted && (
+            <div className="border-t border-slate-100 bg-slate-50 px-4 pt-3 pb-4">
+              <div className="flex gap-2 mb-3">
+                {PERIODS.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setPeriod(key); }}
+                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                      period === key
+                        ? "bg-slate-800 text-white"
+                        : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
 
-          <ChartErrorBoundary key={`${ticker}-${period}`}>
-            <CandleChart ticker={ticker} period={period} />
-          </ChartErrorBoundary>
+              <ChartErrorBoundary key={`${ticker}-${period}`}>
+                <CandleChart ticker={ticker} period={period} />
+              </ChartErrorBoundary>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
