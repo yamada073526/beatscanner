@@ -102,6 +102,7 @@ export default function App() {
   }
 
   async function runAnalyze(sym) {
+    window.scrollTo({ top: 0, behavior: "smooth" });
     if (!hasFmpKey()) {
       setShowApiKeyModal(true);
       return;

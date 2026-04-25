@@ -80,20 +80,22 @@ function CandleChart({ ticker, period }) {
         const lc = await import("lightweight-charts");
         if (destroyed) return;
 
+        const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+
         const chart = lc.createChart(containerRef.current, {
           width,
           height: 260,
           layout: {
-            background: { type: lc.ColorType.Solid, color: "#f8fafc" },
-            textColor: "#64748b",
+            background: { type: lc.ColorType.Solid, color: isDark ? "#1e2433" : "#f8fafc" },
+            textColor: isDark ? "#94a3b8" : "#64748b",
           },
           grid: {
-            vertLines: { color: "#e2e8f0" },
-            horzLines: { color: "#e2e8f0" },
+            vertLines: { color: isDark ? "#2d3748" : "#e2e8f0" },
+            horzLines: { color: isDark ? "#2d3748" : "#e2e8f0" },
           },
-          rightPriceScale: { borderColor: "#e2e8f0" },
+          rightPriceScale: { borderColor: isDark ? "#2d3748" : "#e2e8f0" },
           timeScale: {
-            borderColor: "#e2e8f0",
+            borderColor: isDark ? "#2d3748" : "#e2e8f0",
             timeVisible: period === "1d",
           },
           crosshair: { mode: 1 },
@@ -258,7 +260,7 @@ function TickerRow({ ticker }) {
       >
         <div style={{ overflow: "hidden" }}>
           {mounted && (
-            <div className="border-t border-slate-100 bg-slate-50 px-4 pt-3 pb-4">
+            <div className="border-t border-slate-100 bg-slate-50 dark:bg-slate-800 dark:border-slate-700 px-4 pt-3 pb-4">
               <div className="flex gap-2 mb-3">
                 {PERIODS.map(({ key, label }) => (
                   <button
@@ -267,8 +269,8 @@ function TickerRow({ ticker }) {
                     onClick={(e) => { e.stopPropagation(); setPeriod(key); }}
                     className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
                       period === key
-                        ? "bg-slate-800 text-white"
-                        : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                        ? "bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900"
+                        : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-600"
                     }`}
                   >
                     {label}
