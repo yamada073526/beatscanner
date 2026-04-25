@@ -152,7 +152,7 @@ export default function SummaryBrief({ analysis, guidance }) {
           {lines.map((line, i) => {
             if (!line.trim()) return null;
             return (
-              <div key={i} className="summary-line-enter" style={{ animationDelay: `${i * 80}ms` }}>
+              <div key={i} className="summary-line-enter" style={{ animationDelay: `${i * 20}ms` }}>
                 <SummaryLine line={line} />
               </div>
             );
