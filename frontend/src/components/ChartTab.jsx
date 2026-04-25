@@ -100,7 +100,7 @@ function CandleChart({ ticker, period }) {
         });
         chartRef.current = chart;
 
-        const series = chart.addCandlestickSeries({
+        const series = chart.addSeries(lc.CandlestickSeries, {
           upColor:         "#22c55e",
           downColor:       "#ef4444",
           borderUpColor:   "#22c55e",
