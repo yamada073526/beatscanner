@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createChart, ColorType } from "lightweight-charts";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -38,26 +39,29 @@ function CandleChart({ ticker, period }) {
   const [error,   setError]   = useState(null);
 
   useEffect(() => {
+    let chart = null;
     let destroyed = false;
 
-    async function init() {
-      setLoading(true);
-      setError(null);
-
-      const { createChart, ColorType } = await import("lightweight-charts");
+    function buildChart() {
       if (destroyed || !containerRef.current) return;
+
+      const width = containerRef.current.clientWidth;
+      if (width === 0) {
+        setTimeout(buildChart, 50);
+        return;
+      }
 
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;
       }
 
-      const chart = createChart(containerRef.current, {
-        width:  containerRef.current.clientWidth,
+      chart = createChart(containerRef.current, {
+        width,
         height: 260,
         layout: {
           background: { type: ColorType.Solid, color: "#f8fafc" },
-          textColor:  "#64748b",
+          textColor: "#64748b",
         },
         grid: {
           vertLines: { color: "#e2e8f0" },
@@ -81,26 +85,32 @@ function CandleChart({ ticker, period }) {
         wickDownColor:   "#ef4444",
       });
 
-      try {
-        const res  = await fetch(`${API_BASE}/api/chart/${ticker}/candles?period=${period}`);
-        const data = await res.json();
-        if (destroyed) return;
-        series.setData(data.candles);
-        chart.timeScale().fitContent();
-        setLoading(false);
-      } catch {
-        if (!destroyed) {
-          setError("チャートデータの取得に失敗しました");
+      fetch(`${API_BASE}/api/chart/${ticker}/candles?period=${period}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (destroyed) return;
+          series.setData(data.candles);
+          chart.timeScale().fitContent();
           setLoading(false);
-        }
-      }
+        })
+        .catch((err) => {
+          console.error("Chart fetch error:", err);
+          if (!destroyed) {
+            setError("チャートデータの取得に失敗しました");
+            setLoading(false);
+          }
+        });
     }
 
-    init();
+    setLoading(true);
+    setError(null);
+    buildChart();
 
     const onResize = () => {
       if (chartRef.current && containerRef.current) {
-        chartRef.current.applyOptions({ width: containerRef.current.clientWidth });
+        chartRef.current.applyOptions({
+          width: containerRef.current.clientWidth,
+        });
       }
     };
     window.addEventListener("resize", onResize);
