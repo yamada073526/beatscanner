@@ -49,7 +49,7 @@ class ChartErrorBoundary extends Component {
 }
 
 // ── ローソク足チャート ────────────────────────────────────────────
-function CandleChart({ ticker, period }) {
+function CandleChart({ ticker, period, darkMode }) {
   const containerRef = useRef(null);
   const chartRef     = useRef(null);
   const [loading, setLoading] = useState(true);
@@ -80,7 +80,7 @@ function CandleChart({ ticker, period }) {
         const lc = await import("lightweight-charts");
         if (destroyed) return;
 
-        const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const isDark = darkMode;
 
         const chart = lc.createChart(containerRef.current, {
           width,
@@ -150,7 +150,7 @@ function CandleChart({ ticker, period }) {
         chartRef.current = null;
       }
     };
-  }, [ticker, period]);
+  }, [ticker, period, darkMode]);
 
   return (
     <div style={{ position: "relative", height: "260px" }}>
@@ -187,7 +187,7 @@ function CandleChart({ ticker, period }) {
 }
 
 // ── 銘柄1行 ──────────────────────────────────────────────────────
-function TickerRow({ ticker }) {
+function TickerRow({ ticker, darkMode }) {
   const rowRef = useRef(null);
   const [summary,    setSummary]    = useState(null);
   const [summaryErr, setSummaryErr] = useState(false);
@@ -260,7 +260,9 @@ function TickerRow({ ticker }) {
       >
         <div style={{ overflow: "hidden" }}>
           {mounted && (
-            <div className="border-t border-slate-100 bg-slate-50 dark:bg-slate-800 dark:border-slate-700 px-4 pt-3 pb-4">
+            <div className={`border-t px-4 pt-3 pb-4 ${
+              darkMode ? "border-slate-700 bg-slate-900" : "border-slate-100 bg-slate-50"
+            }`}>
               <div className="flex gap-2 mb-3">
                 {PERIODS.map(({ key, label }) => (
                   <button
@@ -269,8 +271,12 @@ function TickerRow({ ticker }) {
                     onClick={(e) => { e.stopPropagation(); setPeriod(key); }}
                     className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
                       period === key
-                        ? "bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900"
-                        : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-600"
+                        ? darkMode
+                          ? "bg-slate-200 text-slate-900"
+                          : "bg-slate-800 text-white"
+                        : darkMode
+                          ? "bg-slate-700 border border-slate-600 text-slate-300 hover:bg-slate-600"
+                          : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
                     }`}
                   >
                     {label}
@@ -279,7 +285,7 @@ function TickerRow({ ticker }) {
               </div>
 
               <ChartErrorBoundary key={`${ticker}-${period}`}>
-                <CandleChart ticker={ticker} period={period} />
+                <CandleChart ticker={ticker} period={period} darkMode={darkMode} />
               </ChartErrorBoundary>
             </div>
           )}
@@ -290,6 +296,18 @@ function TickerRow({ ticker }) {
 }
 
 export default function ChartTab({ watchlist = [] }) {
+  const [darkMode, setDarkMode] = useState(() => {
+    return localStorage.getItem("chart_dark_mode") === "true";
+  });
+
+  const toggleDark = () => {
+    setDarkMode((v) => {
+      const next = !v;
+      localStorage.setItem("chart_dark_mode", String(next));
+      return next;
+    });
+  };
+
   if (watchlist.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-slate-400">
@@ -302,8 +320,21 @@ export default function ChartTab({ watchlist = [] }) {
 
   return (
     <div className="space-y-2 pb-8">
+      <div className="flex justify-end mb-1">
+        <button
+          type="button"
+          onClick={toggleDark}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+            darkMode
+              ? "bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700"
+              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          {darkMode ? "☀️ ライト" : "🌙 ダーク"}
+        </button>
+      </div>
       {watchlist.map((ticker) => (
-        <TickerRow key={ticker} ticker={ticker} />
+        <TickerRow key={ticker} ticker={ticker} darkMode={darkMode} />
       ))}
     </div>
   );
