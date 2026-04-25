@@ -125,7 +125,7 @@ function calcVerdict(surprisePct, epsActual, epsEstimate) {
   }
   if (pct == null) return { verdict: 'unknown', surprise_pct: null };
   const rounded = Math.round(pct * 10) / 10;
-  const verdict = rounded > 3 ? 'beat' : rounded < -3 ? 'miss' : 'in-line';
+  const verdict = rounded > 3 ? 'beat' : rounded < -3 ? 'miss' : 'inline';
   return { verdict, surprise_pct: rounded };
 }
 

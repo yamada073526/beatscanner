@@ -2373,7 +2373,7 @@ async def get_analyst_data(ticker: str):
         except Exception:
             result["upgrades_downgrades"] = None
 
-        # EPS Beat/Miss 履歴 — Alpha Vantage primary, yfinance fallback
+        # EPS Beat/Miss 履歴 — Alpha Vantage primary, yfinance supplement
         import pandas as pd
         import httpx as _httpx_eps
 
@@ -2392,35 +2392,55 @@ async def get_analyst_data(ticker: str):
                     surprise = q.get("surprisePercentage")
                     date_str = q.get("reportedDate") or q.get("fiscalDateEnding", "")
                     if actual and actual not in ("None", ""):
+                        act_f = float(actual)
+                        est_f = float(estimate) if estimate and estimate != "None" else None
+                        if est_f is not None and est_f != 0:
+                            surp_f = round((act_f - est_f) / abs(est_f) * 100, 2)
+                        elif surprise and surprise != "None":
+                            raw = float(surprise)
+                            # AV free plan may return ratio (0.08) instead of percent (8.02)
+                            surp_f = round(raw * 100, 2) if abs(raw) < 2 else round(raw, 2)
+                        else:
+                            surp_f = None
                         eps_records.append({
                             "date": date_str[:10],
-                            "epsActual": float(actual),
-                            "epsEstimate": float(estimate) if estimate and estimate != "None" else None,
-                            "surprise_pct": float(surprise) if surprise and surprise != "None" else None,
+                            "epsActual": round(act_f, 2),
+                            "epsEstimate": round(est_f, 2) if est_f is not None else None,
+                            "surprise_pct": surp_f,
                         })
                 print(f"Alpha Vantage eps_history: {len(eps_records)} records")
         except Exception as e_av:
             print(f"Alpha Vantage EARNINGS failed: {e_av}")
 
-        # Alpha Vantageが失敗した場合のみyfinanceフォールバック
-        if len(eps_records) == 0:
-            try:
-                eh = t.earnings_history
-                if eh is not None and not eh.empty:
-                    records = eh.tail(8).reset_index()
-                    date_col = records.columns[0]
-                    for _, row in records.iterrows():
-                        actual = row.get("epsActual") or row.get("EPS Actual")
-                        if pd.notna(actual):
-                            eps_records.append({
-                                "date": str(row[date_col])[:10],
-                                "epsActual": float(actual),
-                                "epsEstimate": None,
-                                "surprise_pct": float(row.get("surprisePercent") or 0) or None,
-                            })
-                print(f"yfinance fallback eps_history: {len(eps_records)} records")
-            except Exception as e_yf:
-                print(f"yfinance fallback also failed: {e_yf}")
+        # yfinance で補完（常時実行；surprisePercent は比率なので ×100 してパーセントに変換）
+        try:
+            eh = t.earnings_history
+            if eh is not None and not eh.empty:
+                records = eh.tail(12).reset_index()
+                date_col = records.columns[0]
+                av_dates = {r["date"] for r in eps_records}
+                for _, row in records.iterrows():
+                    actual = row.get("epsActual") or row.get("EPS Actual")
+                    d = str(row[date_col])[:10]
+                    if not pd.notna(actual) or d in ("NaT", "") or len(d) < 10:
+                        continue
+                    # AV は発表日、yfinance は期末日のためズレがある。±35 日以内は重複とみなす
+                    if any(abs((pd.Timestamp(d) - pd.Timestamp(ed)).days) <= 35
+                           for ed in av_dates if len(ed) == 10):
+                        continue
+                    surp_raw = row.get("surprisePercent")
+                    surp_f = round(float(surp_raw) * 100, 2) if pd.notna(surp_raw) else None
+                    eps_records.append({
+                        "date": d,
+                        "epsActual": round(float(actual), 2),
+                        "epsEstimate": None,
+                        "surprise_pct": surp_f,
+                    })
+            eps_records.sort(key=lambda x: x["date"], reverse=True)
+            eps_records = eps_records[:12]
+            print(f"eps_history final: {len(eps_records)} records")
+        except Exception as e_yf:
+            print(f"yfinance supplement failed: {e_yf}")
 
         result["eps_history"] = eps_records
 
