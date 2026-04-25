@@ -426,6 +426,16 @@ export default function App() {
             >
               {isPro() ? '📝 決算レポート' : '🔒 決算レポート'}
             </button>
+            <button
+              onClick={() => setActiveTab('chart')}
+              className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+                activeTab === 'chart'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              📈 チャート
+            </button>
           </div>
 
           {activeTab === 'judgment' && (
@@ -495,6 +505,10 @@ export default function App() {
               guidance={guidance}
               onStreamingChange={setReportStreaming}
             />
+          )}
+
+          {activeTab === 'chart' && (
+            <ChartTab watchlist={[result.ticker]} />
           )}
         </div>
       )}
