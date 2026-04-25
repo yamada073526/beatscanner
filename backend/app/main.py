@@ -2430,6 +2430,125 @@ async def get_analyst_data(ticker: str):
         return {"error": str(e), "price_targets": None, "recommendations": None, "upgrades_downgrades": None}
 
 
+# ───────────────────────────────────────────────────────────────
+# チャートタブ用エンドポイント
+# ───────────────────────────────────────────────────────────────
+
+chart_summary_cache: dict = {}
+chart_candles_cache: dict = {}
+CHART_SUMMARY_TTL = 3600  # 1時間
+CHART_CANDLES_TTL = 300   # 5分
+
+
+@app.get("/api/chart/{ticker}/summary")
+async def get_chart_summary(ticker: str):
+    """5期間パフォーマンス＋次回決算日を返す"""
+    import yfinance as yf
+    ticker = ticker.upper()
+    now = _time.time()
+
+    if ticker in chart_summary_cache:
+        c = chart_summary_cache[ticker]
+        if now - c["timestamp"] < CHART_SUMMARY_TTL:
+            return c["data"]
+
+    try:
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period="1y", interval="1d")
+        if hist.empty:
+            raise HTTPException(status_code=404, detail="Data not found")
+
+        current = float(hist["Close"].iloc[-1])
+
+        period_days = {"1d": 1, "1wk": 5, "1mo": 21, "6mo": 126, "1y": 252}
+        performance = {}
+        for key, days in period_days.items():
+            idx = min(days, len(hist) - 1)
+            past = float(hist["Close"].iloc[-idx - 1])
+            pct = (current - past) / past * 100
+            performance[key] = round(pct, 2)
+
+        next_earnings = None
+        try:
+            cal = stock.calendar
+            if cal is not None and "Earnings Date" in cal:
+                dates = cal["Earnings Date"]
+                if dates:
+                    next_earnings = str(dates[0])[:10]
+        except Exception:
+            pass
+
+        result = {
+            "ticker": ticker,
+            "current_price": round(current, 2),
+            "performance": performance,
+            "next_earnings": next_earnings,
+        }
+        chart_summary_cache[ticker] = {"data": result, "timestamp": now}
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/chart/{ticker}/candles")
+async def get_chart_candles(ticker: str, period: str = "1mo"):
+    """ローソク足データを返す（period: 1d / 1wk / 1mo / 6mo / 1y）"""
+    import yfinance as yf
+    ticker = ticker.upper()
+    cache_key = f"{ticker}_{period}"
+    now = _time.time()
+
+    if cache_key in chart_candles_cache:
+        c = chart_candles_cache[cache_key]
+        if now - c["timestamp"] < CHART_CANDLES_TTL:
+            return c["data"]
+
+    period_map = {
+        "1d":  {"period": "5d",  "interval": "30m"},
+        "1wk": {"period": "1mo", "interval": "1d"},
+        "1mo": {"period": "3mo", "interval": "1d"},
+        "6mo": {"period": "6mo", "interval": "1wk"},
+        "1y":  {"period": "1y",  "interval": "1wk"},
+    }
+    if period not in period_map:
+        raise HTTPException(status_code=400, detail="Invalid period")
+
+    params = period_map[period]
+    is_intraday = (params["interval"] == "30m")
+
+    try:
+        stock = yf.Ticker(ticker)
+        hist = stock.history(**params)
+        if hist.empty:
+            raise HTTPException(status_code=404, detail="Data not found")
+
+        candles = []
+        for idx, row in hist.iterrows():
+            time_val = (
+                int(idx.timestamp()) if is_intraday
+                else idx.strftime("%Y-%m-%d")
+            )
+            candles.append({
+                "time":  time_val,
+                "open":  round(float(row["Open"]),  2),
+                "high":  round(float(row["High"]),  2),
+                "low":   round(float(row["Low"]),   2),
+                "close": round(float(row["Close"]), 2),
+            })
+
+        result = {"ticker": ticker, "period": period, "candles": candles}
+        chart_candles_cache[cache_key] = {"data": result, "timestamp": now}
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── Static file serving (must be LAST — after all /api/* routes) ─────────────
 # Only mounted when frontend/dist exists (i.e. production build is present).
 # StaticFiles(html=True) serves index.html as SPA fallback for any unknown path,
