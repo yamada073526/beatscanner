@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import InfoModal from './InfoModal.jsx';
+import FormulaDisplay from './FormulaDisplay.jsx';
 import {
   LineChart,
   Line,
@@ -37,11 +38,11 @@ function SharesModal({ onClose }) {
         <p className="text-sm leading-relaxed text-slate-700">
           この株式数は、1株あたりの業績を計算するための「分母」として使われます。
         </p>
-        <ul className="mt-2 space-y-1">
-          <li className="block w-full rounded-md border border-slate-300 bg-white p-3 text-center text-sm font-semibold leading-relaxed text-slate-800">EPS（一株あたり利益）= 純利益 ÷ 希薄化後発行済株式数</li>
-          <li className="block w-full rounded-md border border-slate-300 bg-white p-3 text-center text-sm font-semibold leading-relaxed text-slate-800">CFPS（一株あたり営業CF）= 営業キャッシュフロー ÷ 希薄化後発行済株式数</li>
-          <li className="block w-full rounded-md border border-slate-300 bg-white p-3 text-center text-sm font-semibold leading-relaxed text-slate-800">SPS（一株あたり売上高）= 売上高 ÷ 希薄化後発行済株式数</li>
-        </ul>
+        <div className="mt-2 space-y-2">
+          <FormulaDisplay items={['EPS', '純利益', '希薄化後株式数']} operators={['=', '÷']} />
+          <FormulaDisplay items={['CFPS', '営業CF', '希薄化後株式数']} operators={['=', '÷']} />
+          <FormulaDisplay items={['SPS', '売上高', '希薄化後株式数']} operators={['=', '÷']} />
+        </div>
         <p className="mt-2 text-sm leading-relaxed text-slate-700">
           これらが年々右肩上がりかどうか、CFマージン（CFPS÷SPS）が15%以上かどうかが、企業評価の基本ルールとされています。
         </p>

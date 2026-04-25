@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import InfoModal from './InfoModal.jsx';
+import FormulaDisplay from './FormulaDisplay.jsx';
 import Sparkline from './Sparkline.jsx';
 
 // ── Delta helpers ────────────────────────────────────────────────────────────
@@ -68,7 +69,7 @@ const CONDITION_DETAILS = {
       {
         label: '📐 計算方法',
         text: '営業キャッシュフロー・マージンは以下の式で求められます。',
-        bullets: ['一株あたり営業キャッシュフロー（CFPS）÷ 一株あたり売上高（SPS）'],
+        formula: { items: ['CFPS\n一株あたり営業CF', 'SPS\n一株あたり売上高'], operators: ['÷'] },
         note: 'ここでいう「営業キャッシュフロー」とは、企業が商品やサービスを販売して得た売上高から、原材料費などの実際の支出を引き算して残った「現金収支」のことです。',
       },
       {
@@ -103,7 +104,7 @@ const CONDITION_DETAILS = {
       {
         label: '📐 EPSの計算方法',
         text: 'EPS（Earnings Per Share）は以下の式で求められます。',
-        bullets: ['純利益 ÷ 希薄化後発行済株式数（完全希釈後）'],
+        formula: { items: ['純利益', '希薄化後\n発行済株式数'], operators: ['÷'] },
         note: '売上高から原価・販管費・減価償却費・支払利息・法人税などを差し引いた「純利益」を、希薄化後の株式数で割り算して求めます。このEPSが過去3年にわたり年々右肩上がりで着実に増え続けているかを確認します。',
       },
       {
@@ -142,7 +143,7 @@ const CONDITION_DETAILS = {
       },
       {
         label: '📐 CFPSの計算方法',
-        bullets: ['営業キャッシュフロー ÷ 希薄化後発行済株式数'],
+        formula: { items: ['営業CF', '希薄化後\n発行済株式数'], operators: ['÷'] },
         note: '「営業キャッシュフロー」とは、企業が商品やサービスを販売して得た売上高から、原材料費や人件費などの実際の支出を引き算して手元に残った「現金収支」のことです。これを希薄化後の株式数で割ることで、1株あたりの現金創出力が可視化されます。',
       },
       {
@@ -185,7 +186,7 @@ const CONDITION_DETAILS = {
       },
       {
         label: '📐 チェック手順：SPSで評価する',
-        bullets: ['売上高 ÷ 希薄化後発行済株式数 ＝ SPS（一株あたり売上高）'],
+        formula: { items: ['売上高', '希薄化後\n発行済株式数'], operators: ['÷'] },
         note: '総売上高をそのまま見るのではなく、株式数の変化（増資や自社株買い）の影響をフラットにするため「SPS（一株あたり売上高）」に直して評価します。過去3年分のSPSを並べ、「一昨年 ＜ 去年 ＜ 今年」と年々着実に数字が大きくなっているかを確認してください。',
       },
       {
@@ -255,17 +256,8 @@ function ConditionModal({ detail, onClose }) {
             {s.text && (
               <p className="text-sm leading-relaxed text-slate-700">{renderBold(s.text)}</p>
             )}
-            {s.bullets && (
-              <ul className="mt-1 space-y-0.5">
-                {s.bullets.map((b, j) => (
-                  <li
-                    key={j}
-                    className="block w-full rounded-md border border-slate-300 bg-white p-3 text-center text-sm font-semibold leading-relaxed text-slate-800"
-                  >
-                    {b}
-                  </li>
-                ))}
-              </ul>
+            {s.formula && (
+              <FormulaDisplay items={s.formula.items} operators={s.formula.operators} />
             )}
             {s.note && (
               <p className="mt-2 text-sm leading-relaxed text-slate-700">{renderBold(s.note)}</p>
