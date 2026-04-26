@@ -358,7 +358,7 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
             background: 'var(--color-background-secondary)',
             borderRadius: '6px',
             overflow: 'hidden',
-            marginTop: '8px',
+            marginTop: '8px'
           }}>
             {PERIODS.map(({ key, label }, idx) => {
               if (isMobile && key === '6mo') return null;
@@ -372,9 +372,9 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '8px 0',
-                  gap: '5px',
-                  borderRight: isLastVisible ? 'none' : '0.5px solid var(--color-border-tertiary)',
+                  padding: '10px 0',
+                  gap: '6px',
+                  borderRight: isLastVisible ? 'none' : '0.5px solid var(--color-border-tertiary)'
                 }}>
                   <span style={{
                     fontSize: '10px',
@@ -383,7 +383,7 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
                   }}>{label}</span>
                   {summary
                     ? <span style={{
-                        fontSize: '14px',
+                        fontSize: '16px',
                         fontWeight: 500,
                         lineHeight: 1,
                         color,
