@@ -345,32 +345,39 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
 
           {/* 騰落率グリッド：PC 5列 / モバイル 4列（半年非表示） */}
           <div style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(${isMobile ? 4 : 5}, 1fr)`,
-            flex: 1,
+            display: 'grid',
+            gridTemplateColumns: isMobile ? 'repeat(4,1fr)' : 'repeat(5,1fr)',
+            width: '100%',
           }}>
             {PERIODS.map(({ key, label }, idx) => {
+              if (isMobile && key === '6mo') return null;
               const val = summary?.performance?.[key];
-              const isLast = idx === PERIODS.length - 1;
-              if (isMobile && key === "6mo") return null;
-              const isLastVisible = isMobile ? key === "1y" : isLast;
+              const isLastVisible = isMobile ? key === '1y' : idx === PERIODS.length - 1;
+              const color = val == null ? 'var(--color-text-tertiary)'
+                          : val >= 0 ? '#3B6D11' : '#A32D2D';
               return (
-                <div
-                  key={key}
-                  style={{
-                    display: "flex", flexDirection: "column",
-                    alignItems: "center", justifyContent: "center",
-                    gap: 4, padding: "6px 0",
-                    borderRight: isLastVisible ? "none" : "0.5px solid var(--color-border-tertiary)",
-                    textAlign: "center",
-                  }}
-                >
-                  <span style={{ fontSize: 10, color: "var(--color-text-tertiary)", lineHeight: 1 }}>
-                    {label}
-                  </span>
+                <div key={key} style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '8px 0',
+                  gap: '4px',
+                  borderRight: isLastVisible ? 'none' : '0.5px solid var(--color-border-tertiary)',
+                }}>
+                  <span style={{
+                    fontSize: '10px',
+                    color: 'var(--color-text-tertiary)',
+                    lineHeight: 1,
+                  }}>{label}</span>
                   {summary
-                    ? <span style={{ fontSize: 13, fontWeight: 500, lineHeight: 1, color: perfColor(val) }}>
-                        {val == null ? "—" : `${val >= 0 ? "+" : ""}${val.toFixed(1)}%`}
+                    ? <span style={{
+                        fontSize: '14px',
+                        fontWeight: 500,
+                        lineHeight: 1,
+                        color,
+                      }}>
+                        {val == null ? '—' : `${val >= 0 ? '+' : ''}${val.toFixed(1)}%`}
                       </span>
                     : <span className="skeleton-cell" />
                   }
