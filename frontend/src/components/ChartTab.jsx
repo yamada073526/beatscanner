@@ -363,43 +363,51 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
         </div>
 
         {/* 騰落率グリッド：PC 5列 / モバイル 4列（半年非表示） */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: isMobile ? 'repeat(4,1fr)' : 'repeat(5,1fr)',
-          flex: 1,
-          background: 'var(--bg-subtle)',
-          borderRadius: 6,
-          margin: '8px 0',
-          overflow: 'hidden',
-          alignSelf: 'center',
-        }}>
-          {PERIODS.map(({ key, label }, idx) => {
-            if (isMobile && key === '6mo') return null;
-            const val = summary?.performance?.[key];
-            const isLastVisible = isMobile ? key === '1y' : idx === PERIODS.length - 1;
-            const color = val == null ? 'var(--text-muted)'
-                        : val >= 0 ? '#3B6D11' : '#A32D2D';
-            return (
-              <div key={key} style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '10px 0',
-                gap: '6px',
-                borderRight: isLastVisible ? 'none' : '0.5px solid var(--border)',
-              }}>
-                <span style={{ fontSize: '10px', color: 'var(--text-muted)', lineHeight: 1 }}>{label}</span>
-                {summary
-                  ? <span style={{ fontSize: '16px', fontWeight: 500, lineHeight: 1, color }}>
-                      {val == null ? '—' : `${val >= 0 ? '+' : ''}${val.toFixed(1)}%`}
-                    </span>
-                  : <span className="skeleton-cell" />
-                }
-              </div>
-            );
-          })}
-        </div>
+        {(() => {
+          const cellPadding = isMobile ? '7px 2px' : '10px 0';
+          const cellGap     = isMobile ? 3 : 5;
+          const valSize     = isMobile ? '12px' : '16px';
+          const lblSize     = isMobile ? '9px' : '10px';
+          return (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile ? 'repeat(4,1fr)' : 'repeat(5,1fr)',
+              flex: 1,
+              background: 'var(--bg-subtle)',
+              borderRadius: 6,
+              margin: '8px 0',
+              overflow: 'hidden',
+              alignSelf: 'center',
+            }}>
+              {PERIODS.map(({ key, label }, idx) => {
+                if (isMobile && key === '6mo') return null;
+                const val = summary?.performance?.[key];
+                const isLastVisible = isMobile ? key === '1y' : idx === PERIODS.length - 1;
+                const color = val == null ? 'var(--text-muted)'
+                            : val >= 0 ? '#3B6D11' : '#A32D2D';
+                return (
+                  <div key={key} style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: cellPadding,
+                    gap: cellGap,
+                    borderRight: isLastVisible ? 'none' : '0.5px solid var(--border)',
+                  }}>
+                    <span style={{ fontSize: lblSize, color: 'var(--text-muted)', lineHeight: 1 }}>{label}</span>
+                    {summary
+                      ? <span style={{ fontSize: valSize, fontWeight: 600, lineHeight: 1, color }}>
+                          {val == null ? '—' : `${val >= 0 ? '+' : ''}${val.toFixed(1)}%`}
+                        </span>
+                      : <span className="skeleton-cell" />
+                    }
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
 
         {/* 矢印 */}
         <span style={{
