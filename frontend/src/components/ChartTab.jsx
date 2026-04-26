@@ -347,7 +347,7 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
           <div style={{
             display: 'grid',
             gridTemplateColumns: isMobile ? 'repeat(4,1fr)' : 'repeat(5,1fr)',
-            width: '100%',
+            flex: 1,
           }}>
             {PERIODS.map(({ key, label }, idx) => {
               if (isMobile && key === '6mo') return null;
