@@ -41,6 +41,13 @@ function perfColor(value) {
   return value >= 0 ? "#3B6D11" : "#A32D2D";
 }
 
+function daysColor(daysLeft) {
+  if (daysLeft == null) return 'var(--color-text-tertiary)';
+  if (daysLeft <= 3) return 'var(--color-text-danger)';
+  if (daysLeft <= 7) return 'var(--color-text-warning)';
+  return 'var(--color-text-tertiary)';
+}
+
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(
     typeof window !== "undefined" ? window.innerWidth <= 600 : false
@@ -348,6 +355,10 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
             display: 'grid',
             gridTemplateColumns: isMobile ? 'repeat(4,1fr)' : 'repeat(5,1fr)',
             flex: 1,
+            background: 'var(--color-background-secondary)',
+            borderRadius: '6px',
+            overflow: 'hidden',
+            marginTop: '8px',
           }}>
             {PERIODS.map(({ key, label }, idx) => {
               if (isMobile && key === '6mo') return null;
@@ -362,7 +373,7 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
                   alignItems: 'center',
                   justifyContent: 'center',
                   padding: '8px 0',
-                  gap: '4px',
+                  gap: '5px',
                   borderRight: isLastVisible ? 'none' : '0.5px solid var(--color-border-tertiary)',
                 }}>
                   <span style={{
@@ -401,11 +412,9 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
             }}>
               次回決算 {summaryErr ? "—" : fmtDate(summary?.next_earnings)}
             </span>
-            {urgency && (
-              <span style={{ fontSize: "10px", color: urgencyDateColor.color }}>
-                {urgency === "critical"    ? `🔴 あと${daysToEarnings}日` :
-                 urgency === "urgent"      ? `🟠 あと${daysToEarnings}日` :
-                 `🟡 あと${daysToEarnings}日`}
+            {daysToEarnings != null && daysToEarnings >= 0 && (
+              <span style={{ fontSize: "10px", color: daysColor(daysToEarnings) }}>
+                ● あと{daysToEarnings}日
               </span>
             )}
           </div>
