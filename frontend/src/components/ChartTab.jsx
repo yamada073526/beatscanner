@@ -361,15 +361,15 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
                     display: "flex", flexDirection: "column",
                     alignItems: "center", justifyContent: "center",
                     gap: 4, padding: "6px 0",
-                    borderRight: isLastVisible ? "none" : "0.5px solid var(--border)",
+                    borderRight: isLastVisible ? "none" : "0.5px solid var(--color-border-tertiary)",
                     textAlign: "center",
                   }}
                 >
-                  <span style={{ fontSize: 10, color: "var(--text-muted)", lineHeight: 1 }}>
+                  <span style={{ fontSize: 10, color: "var(--color-text-tertiary)", lineHeight: 1 }}>
                     {label}
                   </span>
                   {summary
-                    ? <span className="tabular-nums" style={{ fontSize: 13, fontWeight: 500, lineHeight: 1, color: perfColor(val) }}>
+                    ? <span style={{ fontSize: 13, fontWeight: 500, lineHeight: 1, color: perfColor(val) }}>
                         {val == null ? "—" : `${val >= 0 ? "+" : ""}${val.toFixed(1)}%`}
                       </span>
                     : <span className="skeleton-cell" />
