@@ -316,7 +316,7 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
       onMouseEnter={handleMouseEnter}
     >
       <div
-        className="flex items-center gap-2 px-4 py-3 cursor-pointer select-none"
+        className="flex flex-col px-4 py-3 cursor-pointer select-none"
         onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
         onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}
         onClick={() => {
@@ -330,46 +330,55 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
           }
         }}
       >
-        <div className="flex flex-col w-20 flex-shrink-0">
-          <span
-            className="font-bold text-sm leading-tight"
-            style={{ color: 'var(--text-primary)' }}
-          >{ticker}</span>
-          <span className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-            {summary ? `$${summary.current_price.toLocaleString()}` : "—"}
-          </span>
-        </div>
-
-        {/* ① 騰落率セル：summary 取得中はスケルトン表示 */}
-        <div className="flex flex-1 gap-1">
-          {PERIODS.map(({ key, label }) => (
-            <div key={key} className="flex flex-col items-center flex-1" style={{ minWidth: "52px" }}>
-              <span className="text-[10px] mb-0.5" style={{ color: 'var(--text-muted)' }}>{label}</span>
-              {summary
-                ? <PerfBadge value={summary.performance?.[key]} />
-                : <span className="skeleton-cell" />
-              }
-            </div>
-          ))}
-        </div>
-
-        <div className="flex flex-col items-end flex-shrink-0 w-20">
-          <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>次回決算</span>
-          <span className="text-sm" style={urgencyDateColor}>
-            {summaryErr ? "—" : summary ? fmtDate(summary.next_earnings) : "—"}
-          </span>
-          {urgency && (
-            <span className="text-[9px] font-bold mt-0.5" style={{ color: urgencyDateColor.color }}>
-              {urgency === "critical"    ? `🔴 あと${daysToEarnings}日` :
-               urgency === "urgent"      ? `🟠 あと${daysToEarnings}日` :
-               `🟡 あと${daysToEarnings}日`}
+        {/* 上段: ティッカー・騰落率・矢印 */}
+        <div className="flex items-center gap-2">
+          <div className="flex flex-col w-20 flex-shrink-0">
+            <span
+              className="font-bold text-sm leading-tight"
+              style={{ color: 'var(--text-primary)' }}
+            >{ticker}</span>
+            <span className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+              {summary ? `$${summary.current_price.toLocaleString()}` : "—"}
             </span>
-          )}
+          </div>
+
+          {/* 騰落率セル：flex-wrap 対応 */}
+          <div className="flex flex-1 flex-wrap" style={{ gap: "6px" }}>
+            {PERIODS.map(({ key, label }) => (
+              <div key={key} className="flex flex-col items-center">
+                <span className="text-[10px] mb-0.5" style={{ color: 'var(--text-muted)' }}>{label}</span>
+                {summary
+                  ? <PerfBadge value={summary.performance?.[key]} />
+                  : <span className="skeleton-cell" />
+                }
+              </div>
+            ))}
+          </div>
+
+          <span className={`text-xs flex-shrink-0 transition-transform duration-200 ${
+            expanded ? "rotate-180" : ""
+          }`} style={{ color: 'var(--text-muted)' }}>▼</span>
         </div>
 
-        <span className={`text-xs flex-shrink-0 transition-transform duration-200 ${
-          expanded ? "rotate-180" : ""
-        }`} style={{ color: 'var(--text-muted)' }}>▼</span>
+        {/* 下段: 次回決算（独立行） */}
+        {(summary || summaryErr) && (
+          <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{
+              fontSize: "10px", fontWeight: 500,
+              background: "var(--bg-subtle)", color: "var(--text-secondary)",
+              padding: "2px 8px", borderRadius: "4px",
+            }}>
+              次回決算 {summaryErr ? "—" : fmtDate(summary?.next_earnings)}
+            </span>
+            {urgency && (
+              <span style={{ fontSize: "10px", color: urgencyDateColor.color }}>
+                {urgency === "critical"    ? `🔴 あと${daysToEarnings}日` :
+                 urgency === "urgent"      ? `🟠 あと${daysToEarnings}日` :
+                 `🟡 あと${daysToEarnings}日`}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       <div

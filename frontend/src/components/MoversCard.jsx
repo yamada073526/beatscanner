@@ -36,48 +36,23 @@ function Card({ m, onSelect }) {
         </span>
       </div>
 
-      {/* 2行目: キーワード */}
+      {/* 2行目: キーワード + ソース（インライン） */}
       {m.keyword && (
         <div style={{
-          fontSize: "14px", fontWeight: 700,
-          color: "var(--text-primary)", marginBottom: "3px",
+          display: "flex", justifyContent: "space-between", alignItems: "flex-end",
+          marginBottom: "6px",
         }}>
-          {m.keyword}
-        </div>
-      )}
-
-      {/* 3行目: detail */}
-      {m.detail && (
-        <div style={{
-          fontSize: "12px",
-          color: "var(--text-secondary)",
-          lineHeight: 1.5,
-          marginBottom: "5px",
-          display: "-webkit-box",
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: "vertical",
-          overflow: "hidden",
-        }}>
-          {m.detail}
-        </div>
-      )}
-
-      {/* 4行目: ソースpill */}
-      {m.source_name && m.source_url && (
-        <div
-          onClick={(e) => { e.stopPropagation(); window.open(m.source_url, "_blank"); }}
-          style={{
-            display: "inline-block",
-            fontSize: "10px",
-            color: "var(--text-secondary)",
-            background: "var(--bg-primary)",
-            border: "0.5px solid var(--border)",
-            borderRadius: "4px",
-            padding: "1px 6px",
-            cursor: "pointer",
-          }}
-        >
-          {m.source_name}
+          <span style={{ fontSize: "15px", fontWeight: 500, color: "var(--text-primary)" }}>
+            {m.keyword}
+          </span>
+          {m.source_name && m.source_url && (
+            <span
+              onClick={(e) => { e.stopPropagation(); window.open(m.source_url, "_blank"); }}
+              style={{ fontSize: "10px", color: "var(--text-secondary)", cursor: "pointer", flexShrink: 0, marginLeft: "6px" }}
+            >
+              {m.source_name}
+            </span>
+          )}
         </div>
       )}
     </div>
