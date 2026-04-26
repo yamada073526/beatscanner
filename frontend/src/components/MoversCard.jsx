@@ -31,7 +31,7 @@ function Card({ m, onSelect }) {
             cursor: "pointer",
           }}
         >
-          {m.ticker}{m.price != null ? ` $${m.price}` : ""} →
+          {m.ticker}{m.price != null ? ` $${m.price}` : ""}
         </span>
         <span style={{ fontWeight: 700, fontSize: "13px",
                        color: isUp ? "#3b82f6" : "#ef4444" }}>
