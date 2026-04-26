@@ -41,7 +41,7 @@ function Card({ m, onSelect }) {
       {/* 2行目: キーワード */}
       {m.keyword && (
         <div style={{
-          fontSize: "13px", fontWeight: 700,
+          fontSize: "14px", fontWeight: 700,
           color: "var(--text-primary)", marginBottom: "3px",
         }}>
           {m.keyword}
@@ -51,10 +51,14 @@ function Card({ m, onSelect }) {
       {/* 3行目: detail */}
       {m.detail && (
         <div style={{
-          fontSize: "11px",
+          fontSize: "12px",
           color: "var(--text-secondary)",
           lineHeight: 1.5,
           marginBottom: "5px",
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
         }}>
           {m.detail}
         </div>
@@ -116,7 +120,7 @@ export default function MoversCard({ onSelect }) {
       <div style={{ padding: "16px", borderBottom: "1px solid var(--border)" }}>
         <div style={{ fontSize: "13px", fontWeight: 700,
                       color: "var(--text-primary)", marginBottom: "12px" }}>
-          ⚡ 本日の注目銘柄
+          ⚡ 本日の急騰・急落銘柄（前日比±5%以上）
         </div>
         <div style={{ fontSize: "12px", color: "var(--text-secondary)",
                       display: "flex", alignItems: "center", gap: "8px" }}>
@@ -139,10 +143,10 @@ export default function MoversCard({ onSelect }) {
   const downs = movers.filter((m) => m.direction === "down");
 
   return (
-    <div style={{ padding: "16px 16px 4px", borderBottom: "1px solid var(--border)" }}>
+    <div style={{ padding: "24px 16px 4px", borderBottom: "1px solid var(--border)", marginBottom: "24px" }}>
       <div style={{ fontSize: "13px", fontWeight: 700,
                     color: "var(--text-primary)", marginBottom: "12px" }}>
-        ⚡ 本日の注目銘柄
+        ⚡ 本日の急騰・急落銘柄（前日比±5%以上）
       </div>
       {ups.length   > 0 && <Section title="🔵 急騰" list={ups}   onSelect={onSelect} />}
       {downs.length > 0 && <Section title="🔴 急落" list={downs} onSelect={onSelect} />}
