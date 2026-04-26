@@ -19,14 +19,21 @@ const TAG_CONFIG = {
     icon: <span className="mt-0.5 shrink-0 font-bold text-red-500">✗</span>,
     textClass: 'text-sm text-red-800',
   },
-  '[NEU]': {
-    wrapper: 'flex items-start gap-2 bg-slate-50 border-l-4 border-slate-300 rounded-r-lg p-2 mb-2',
-    icon: <span className="mt-0.5 shrink-0 font-bold text-slate-400">–</span>,
-    textClass: 'text-sm text-slate-700',
-  },
 };
 
+const NEU_WRAPPER = { background: 'var(--neu-bg)', borderLeft: '4px solid #94a3b8' };
+const NEU_TEXT    = { color: 'var(--neu-text)' };
+
 function SummaryLine({ line }) {
+  if (line.startsWith('[NEU]')) {
+    const content = line.slice('[NEU]'.length).trim();
+    return (
+      <div className="flex items-start gap-2 rounded-r-lg p-2 mb-2" style={NEU_WRAPPER}>
+        <span className="mt-0.5 shrink-0 font-bold" style={{ color: '#94a3b8' }}>–</span>
+        <span className="text-sm" style={NEU_TEXT}>{renderBold(content)}</span>
+      </div>
+    );
+  }
   for (const [tag, cfg] of Object.entries(TAG_CONFIG)) {
     if (line.startsWith(tag)) {
       const content = line.slice(tag.length).trim();
@@ -39,39 +46,43 @@ function SummaryLine({ line }) {
     }
   }
   if (!line.trim()) return null;
-  return <p className="mb-2 text-sm leading-relaxed text-slate-700">{renderBold(line)}</p>;
+  return <p className="mb-2 text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{renderBold(line)}</p>;
 }
 
+
+const CARD_STYLE = { background: 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: '8px', padding: '12px', marginBottom: '12px' };
+const LABEL_STYLE = { color: 'var(--text-muted)', fontSize: '10px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' };
+const BODY_STYLE  = { color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.6' };
 
 function SummaryInfoModal({ onClose }) {
   return (
     <InfoModal title="AI要約の見方" onClose={onClose}>
-      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
-        <p className="text-sm leading-relaxed text-slate-700">
+      <div style={CARD_STYLE}>
+        <p style={LABEL_STYLE}>📌 概要</p>
+        <p style={BODY_STYLE}>
           AIがその銘柄の直近決算を分析し、重要ポイントを4項目に要約しています。
         </p>
       </div>
-      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">🎨 色分けの意味</p>
-        <ul className="space-y-1 text-sm text-slate-700">
+      <div style={CARD_STYLE}>
+        <p style={{ ...LABEL_STYLE, marginBottom: '8px' }}>🎨 色分けの意味</p>
+        <ul className="space-y-1" style={BODY_STYLE}>
           <li>・<strong>緑（✓）</strong>：ポジティブな項目（Beat・連続増加・高マージンなど）</li>
           <li>・<strong>赤（✗）</strong>：ネガティブな項目（条件未達・減少・課題など）</li>
-          <li>・<strong>グレー（–）</strong>：中立・補足情報（ガイダンス現状維持・背景説明など）</li>
+          <li>・<strong>グレー（–）</strong>：中立・補足情報（ガイダンス維持・背景説明など）</li>
         </ul>
-        <p className="mt-2 text-sm leading-relaxed text-slate-700">
+        <p style={{ ...BODY_STYLE, marginTop: '8px' }}>
           色分けを見るだけで、その企業の決算が良かったか悪かったかを2秒で把握できるよう設計されています。
         </p>
       </div>
-      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 太字の意味</p>
-        <p className="text-sm leading-relaxed text-slate-700">
+      <div style={CARD_STYLE}>
+        <p style={LABEL_STYLE}>💡 太字の意味</p>
+        <p style={BODY_STYLE}>
           各項目内で特に重要な数値やキーワードが太字で表示されます。太字箇所を中心に読むことで、素早く要点を把握できます。
         </p>
       </div>
-      <div className="mb-3 rounded-r-lg border-l-4 border-amber-400 bg-amber-50 p-3">
-        <p className="text-sm font-bold text-amber-800">⚠️ ご注意</p>
-        <p className="mt-1 text-sm text-amber-700">
+      <div className="mb-3 rounded-r-lg p-3" style={{ background: 'var(--amber-bg)', borderLeft: '4px solid #f59e0b' }}>
+        <p className="text-sm font-bold" style={{ color: 'var(--amber-title)' }}>⚠️ ご注意</p>
+        <p className="mt-1 text-sm" style={{ color: 'var(--amber-body)' }}>
           AI要約はデータに基づく自動生成です。投資判断は必ずご自身の責任で行ってください。
         </p>
       </div>
@@ -113,7 +124,7 @@ export default function SummaryBrief({ analysis, guidance }) {
   const lines = text.split('\n');
 
   return (
-    <section className="rounded-xl bg-slate-100 p-5">
+    <section className="rounded-xl p-5" style={{ background: 'var(--bg-subtle)' }}>
       <div className="mb-3 flex items-center gap-2">
         <span
           title="Powered by Claude Haiku 4.5"

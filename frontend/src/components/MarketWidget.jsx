@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, memo } from 'react';
 import { fetchMarketIndices } from '../api.js';
 
 // モバイルで常時表示する優先シンボル（4件）
@@ -46,7 +46,7 @@ function Separator({ thick = false }) {
   return <div className={`${thick ? 'mx-2 w-px h-8 bg-slate-300' : 'w-px h-8 bg-slate-200'} flex-shrink-0`} />;
 }
 
-export default function MarketWidget() {
+export default memo(function MarketWidget() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -91,7 +91,7 @@ export default function MarketWidget() {
     <div className="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm">
       {/* メイン行: 指数 + ETF（横スクロール、右フェード） */}
       <div className="relative px-4 py-2.5">
-        <div className="overflow-x-auto scrollbar-hide">
+        <div className="overflow-x-auto scrollbar-hide" style={{ overflowX: 'scroll', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           <div className="flex items-center gap-0 min-w-max">
             {indices.map((item, i) => (
               <div key={item.symbol} className="flex items-center">
@@ -127,14 +127,17 @@ export default function MarketWidget() {
             )}
           </div>
         </div>
-        {/* 右端フェード + スクロール示唆（モバイルのみ） */}
-        <div className="pointer-events-none absolute right-0 top-0 h-full w-16 bg-gradient-to-l from-white via-white/80 to-transparent md:hidden" />
+        {/* 右端フェード + スクロール示唆 */}
+        <div
+          className="pointer-events-none absolute right-0 top-0 h-full w-16"
+          style={{ background: 'linear-gradient(to left, var(--bg-card), transparent)' }}
+        />
       </div>
 
       {/* リスク指標行: VIX / US10Y / USD/JPY */}
       {riskItems.length > 0 && (
         <div className="border-t border-slate-100 px-4 py-2">
-          <div className="flex items-center gap-0 overflow-x-auto scrollbar-hide">
+          <div className="flex items-center gap-0 overflow-x-auto scrollbar-hide" style={{ overflowX: 'scroll', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mr-3 whitespace-nowrap flex-shrink-0">
               市場指標
             </span>
@@ -149,4 +152,4 @@ export default function MarketWidget() {
       )}
     </div>
   );
-}
+});

@@ -193,6 +193,17 @@ export async function fetchNews(ticker, limit = 10) {
   return r.json();
 }
 
+export async function translateTexts(texts) {
+  const r = await fetch('/api/translate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ texts }),
+  });
+  if (!r.ok) throw new Error('translate failed');
+  const data = await r.json();
+  return data.translations;
+}
+
 export async function fetchMarketIndices() {
   const r = await fetch('/api/market-indices', {
     headers: fmpHeaders(),

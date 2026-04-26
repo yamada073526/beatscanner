@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Component } from "react";
+import { useState, useEffect, useRef, Component, memo } from "react";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -9,6 +9,32 @@ const PERIODS = [
   { key: "6mo", label: "半年" },
   { key: "1y",  label: "年" },
 ];
+
+// shimmer アニメーション注入（一度だけ）
+if (typeof document !== "undefined" && !document.getElementById("charttab-shimmer-style")) {
+  const s = document.createElement("style");
+  s.id = "charttab-shimmer-style";
+  s.textContent = `
+    @keyframes shimmer {
+      0%   { background-position: -400px 0; }
+      100% { background-position:  400px 0; }
+    }
+    .skeleton-cell {
+      background: linear-gradient(90deg, #e2e8f0 25%, #cbd5e1 50%, #e2e8f0 75%);
+      background-size: 400px 100%;
+      animation: shimmer 1.2s infinite;
+      border-radius: 4px;
+      height: 14px;
+      width: 40px;
+      display: inline-block;
+    }
+    [data-theme="dark"] .skeleton-cell {
+      background: linear-gradient(90deg, #2d3748 25%, #3d4a5c 50%, #2d3748 75%);
+      background-size: 400px 100%;
+    }
+  `;
+  document.head.appendChild(s);
+}
 
 function PerfBadge({ value }) {
   if (value === null || value === undefined) {
@@ -27,7 +53,7 @@ function PerfBadge({ value }) {
   );
 }
 
-// ── Error Boundary（クラッシュしてもページ全体を守る）──────────────
+// ── Error Boundary ────────────────────────────────────────────────
 class ChartErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -39,7 +65,7 @@ class ChartErrorBoundary extends Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex items-center justify-center h-[260px] bg-slate-50 rounded text-red-400 text-sm">
+        <div className="flex items-center justify-center h-[320px] bg-slate-50 rounded text-red-400 text-sm">
           チャートの表示に失敗しました：{this.state.message}
         </div>
       );
@@ -49,11 +75,18 @@ class ChartErrorBoundary extends Component {
 }
 
 // ── ローソク足チャート ────────────────────────────────────────────
-function CandleChart({ ticker, period, darkMode }) {
+function CandleChart({ ticker, period }) {
   const containerRef = useRef(null);
   const chartRef     = useRef(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(null);
+  const [themeTick, setThemeTick] = useState(0);
+
+  useEffect(() => {
+    const handle = () => setThemeTick((n) => n + 1);
+    window.addEventListener("themechange", handle);
+    return () => window.removeEventListener("themechange", handle);
+  }, []);
 
   useEffect(() => {
     let destroyed = false;
@@ -61,7 +94,6 @@ function CandleChart({ ticker, period, darkMode }) {
     async function buildChart() {
       if (destroyed || !containerRef.current) return;
 
-      // コンテナ幅が確定するまで待つ
       let width = containerRef.current.clientWidth;
       if (width === 0) {
         await new Promise((r) => setTimeout(r, 100));
@@ -69,34 +101,32 @@ function CandleChart({ ticker, period, darkMode }) {
         width = containerRef.current.clientWidth;
       }
 
-      // 既存チャートを破棄
       if (chartRef.current) {
         try { chartRef.current.remove(); } catch {}
         chartRef.current = null;
       }
 
       try {
-        // 動的インポート（v4/v5 両対応）
         const lc = await import("lightweight-charts");
         if (destroyed) return;
 
-        const isDark = darkMode;
+        const chartIsDark = document.documentElement.getAttribute('data-theme') === 'dark';
 
         const chart = lc.createChart(containerRef.current, {
           width,
-          height: 260,
+          height: 320,
           layout: {
-            background: { type: lc.ColorType.Solid, color: isDark ? "#1e2433" : "#f8fafc" },
-            textColor: isDark ? "#94a3b8" : "#64748b",
+            background: { type: lc.ColorType.Solid, color: chartIsDark ? "#1e2433" : "#f8fafc" },
+            textColor: chartIsDark ? "#94a3b8" : "#64748b",
           },
           grid: {
-            vertLines: { color: isDark ? "#2d3748" : "#e2e8f0" },
-            horzLines: { color: isDark ? "#2d3748" : "#e2e8f0" },
+            vertLines: { color: chartIsDark ? "#2d3748" : "#e2e8f0" },
+            horzLines: { color: chartIsDark ? "#2d3748" : "#e2e8f0" },
           },
-          rightPriceScale: { borderColor: isDark ? "#2d3748" : "#e2e8f0" },
+          rightPriceScale: { borderColor: chartIsDark ? "#2d3748" : "#e2e8f0" },
           timeScale: {
-            borderColor: isDark ? "#2d3748" : "#e2e8f0",
-            timeVisible: period === "1d",
+            borderColor: chartIsDark ? "#2d3748" : "#e2e8f0",
+            timeVisible: false,
           },
           crosshair: { mode: 1 },
         });
@@ -111,13 +141,29 @@ function CandleChart({ ticker, period, darkMode }) {
           wickDownColor:   "#ef4444",
         });
 
-        const res = await fetch(`${API_BASE}/api/chart/${ticker}/candles?period=${period}`);
-        if (!res.ok) throw new Error(`API error: ${res.status}`);
-        const data = await res.json();
+        // 常に1年分取得、キャッシュヒット時はスキップ
+        const cacheKey = `${ticker}_1y`;
+        let data;
+        if (window.__chartCache?.[cacheKey]) {
+          data = window.__chartCache[cacheKey];
+        } else {
+          const res = await fetch(`${API_BASE}/api/chart/${ticker}/candles?period=1y`);
+          if (!res.ok) throw new Error(`API error: ${res.status}`);
+          data = await res.json();
+          if (!window.__chartCache) window.__chartCache = {};
+          window.__chartCache[cacheKey] = data;
+        }
 
         if (destroyed) return;
+        if (!Array.isArray(data.candles)) throw new Error("データ形式エラー");
         series.setData(data.candles);
-        chart.timeScale().fitContent();
+
+        // 初期表示範囲を period に合わせて設定
+        const now = Math.floor(Date.now() / 1000);
+        const RANGE_SEC = { '1d': 86400*2, '1wk': 86400*7, '1mo': 86400*30, '6mo': 86400*180, '1y': 86400*365 };
+        const from = now - (RANGE_SEC[period] ?? RANGE_SEC['1mo']);
+        chart.timeScale().setVisibleRange({ from, to: now });
+
         setLoading(false);
 
       } catch (err) {
@@ -135,9 +181,7 @@ function CandleChart({ ticker, period, darkMode }) {
 
     const onResize = () => {
       if (chartRef.current && containerRef.current) {
-        chartRef.current.applyOptions({
-          width: containerRef.current.clientWidth,
-        });
+        chartRef.current.applyOptions({ width: containerRef.current.clientWidth });
       }
     };
     window.addEventListener("resize", onResize);
@@ -150,25 +194,34 @@ function CandleChart({ ticker, period, darkMode }) {
         chartRef.current = null;
       }
     };
-  }, [ticker, period, darkMode]);
+  }, [ticker, themeTick]); // period はデータ取得に使わない
+
+  // period 変更時は表示範囲のみ更新（データ再取得しない）
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const now = Math.floor(Date.now() / 1000);
+    const RANGE_SEC = { '1d': 86400*2, '1wk': 86400*7, '1mo': 86400*30, '6mo': 86400*180, '1y': 86400*365 };
+    const from = now - (RANGE_SEC[period] ?? RANGE_SEC['1mo']);
+    chartRef.current.timeScale().setVisibleRange({ from, to: now });
+  }, [period]);
 
   return (
-    <div style={{ position: "relative", height: "260px" }}>
+    <div style={{ position: "relative", height: "320px" }}>
+      {/* ③ CandleChart スケルトン */}
       {loading && (
         <div style={{
           position: "absolute", inset: 0,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          background: "#f8fafc", borderRadius: "6px",
-          color: "#94a3b8", fontSize: "14px",
-        }}>
-          <span>チャート読み込み中...</span>
-        </div>
+          background: "linear-gradient(90deg, #e2e8f0 25%, #cbd5e1 50%, #e2e8f0 75%)",
+          backgroundSize: "400px 100%",
+          animation: "shimmer 1.2s infinite",
+          borderRadius: "8px",
+        }} className="dark-shimmer" />
       )}
       {error && (
         <div style={{
           position: "absolute", inset: 0,
           display: "flex", alignItems: "center", justifyContent: "center",
-          background: "#f8fafc", borderRadius: "6px",
+          background: "var(--bg-subtle)", borderRadius: "6px",
           color: "#ef4444", fontSize: "14px",
         }}>
           {error}
@@ -178,7 +231,7 @@ function CandleChart({ ticker, period, darkMode }) {
         ref={containerRef}
         style={{
           width: "100%",
-          height: "260px",
+          height: "320px",
           visibility: loading || error ? "hidden" : "visible",
         }}
       />
@@ -187,8 +240,9 @@ function CandleChart({ ticker, period, darkMode }) {
 }
 
 // ── 銘柄1行 ──────────────────────────────────────────────────────
-function TickerRow({ ticker, darkMode }) {
-  const rowRef = useRef(null);
+const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
+  const rowRef       = useRef(null);
+  const prefetchedRef = useRef(false);
   const [summary,    setSummary]    = useState(null);
   const [summaryErr, setSummaryErr] = useState(false);
   const [expanded,   setExpanded]   = useState(false);
@@ -196,11 +250,37 @@ function TickerRow({ ticker, darkMode }) {
   const [period,     setPeriod]     = useState("1mo");
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/chart/${ticker}/summary`)
+    let cancelled = false;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    fetch(`${API_BASE}/api/chart/${ticker}/summary`, { signal: controller.signal })
       .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
-      .then(setSummary)
-      .catch(() => setSummaryErr(true));
+      .then((data) => { if (!cancelled) setSummary(data); })
+      .catch(() => { if (!cancelled) setSummaryErr(true); })
+      .finally(() => clearTimeout(timeoutId));
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearTimeout(timeoutId);
+    };
   }, [ticker]);
+
+  // ② ホバー時に1年分データをプリフェッチしてキャッシュへ格納
+  const handleMouseEnter = () => {
+    if (prefetchedRef.current || expanded) return;
+    prefetchedRef.current = true;
+    const cacheKey = `${ticker}_1y`;
+    if (window.__chartCache?.[cacheKey]) return;
+    fetch(`${API_BASE}/api/chart/${ticker}/candles?period=1y`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!window.__chartCache) window.__chartCache = {};
+        window.__chartCache[cacheKey] = data;
+      })
+      .catch(() => {});
+  };
 
   const fmtDate = (dateStr) => {
     if (!dateStr) return "未定";
@@ -208,10 +288,37 @@ function TickerRow({ ticker, darkMode }) {
     return `${d.getMonth() + 1}/${d.getDate()}`;
   };
 
+  const daysToEarnings = (() => {
+    if (!summary?.next_earnings) return null;
+    const diff = new Date(summary.next_earnings + "T00:00:00Z") - new Date();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  })();
+
+  const urgency =
+    daysToEarnings !== null && daysToEarnings >= 0
+      ? daysToEarnings <= 3  ? "critical"
+      : daysToEarnings <= 7  ? "urgent"
+      : daysToEarnings <= 14 ? "approaching"
+      : null
+      : null;
+
+  const urgencyDateColor = {
+    critical:    { color: '#dc2626', fontWeight: '700' },
+    urgent:      { color: '#ea580c', fontWeight: '600' },
+    approaching: { color: '#d97706', fontWeight: '500' },
+  }[urgency] ?? { color: 'var(--text-muted)' };
+
   return (
-    <div ref={rowRef} className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
+    <div
+      ref={rowRef}
+      className="border rounded-lg overflow-hidden shadow-sm"
+      style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}
+      onMouseEnter={handleMouseEnter}
+    >
       <div
-        className="flex items-center gap-2 px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors select-none"
+        className="flex items-center gap-2 px-4 py-3 cursor-pointer select-none"
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}
         onClick={() => {
           if (!mounted) setMounted(true);
           const opening = !expanded;
@@ -224,31 +331,45 @@ function TickerRow({ ticker, darkMode }) {
         }}
       >
         <div className="flex flex-col w-20 flex-shrink-0">
-          <span className="font-bold text-slate-800 text-sm leading-tight">{ticker}</span>
-          <span className="text-xs text-slate-400 mt-0.5">
+          <span
+            className="font-bold text-sm leading-tight"
+            style={{ color: 'var(--text-primary)' }}
+          >{ticker}</span>
+          <span className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
             {summary ? `$${summary.current_price.toLocaleString()}` : "—"}
           </span>
         </div>
 
+        {/* ① 騰落率セル：summary 取得中はスケルトン表示 */}
         <div className="flex flex-1 gap-1">
           {PERIODS.map(({ key, label }) => (
             <div key={key} className="flex flex-col items-center flex-1 min-w-0">
-              <span className="text-[10px] text-slate-400 mb-0.5">{label}</span>
-              <PerfBadge value={summary?.performance?.[key]} />
+              <span className="text-[10px] mb-0.5" style={{ color: 'var(--text-muted)' }}>{label}</span>
+              {summary
+                ? <PerfBadge value={summary.performance?.[key]} />
+                : <span className="skeleton-cell" />
+              }
             </div>
           ))}
         </div>
 
-        <div className="flex flex-col items-end flex-shrink-0 w-14">
-          <span className="text-[10px] text-slate-400">次回決算</span>
-          <span className="text-sm font-medium text-slate-600">
+        <div className="flex flex-col items-end flex-shrink-0 w-20">
+          <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>次回決算</span>
+          <span className="text-sm" style={urgencyDateColor}>
             {summaryErr ? "—" : summary ? fmtDate(summary.next_earnings) : "—"}
           </span>
+          {urgency && (
+            <span className="text-[9px] font-bold mt-0.5" style={{ color: urgencyDateColor.color }}>
+              {urgency === "critical"    ? `🔴 あと${daysToEarnings}日` :
+               urgency === "urgent"      ? `🟠 あと${daysToEarnings}日` :
+               `🟡 あと${daysToEarnings}日`}
+            </span>
+          )}
         </div>
 
-        <span className={`text-slate-400 text-xs flex-shrink-0 transition-transform duration-200 ${
+        <span className={`text-xs flex-shrink-0 transition-transform duration-200 ${
           expanded ? "rotate-180" : ""
-        }`}>▼</span>
+        }`} style={{ color: 'var(--text-muted)' }}>▼</span>
       </div>
 
       <div
@@ -260,57 +381,64 @@ function TickerRow({ ticker, darkMode }) {
       >
         <div style={{ overflow: "hidden" }}>
           {mounted && (
-            <div className={`border-t px-4 pt-3 pb-4 ${
-              darkMode ? "border-slate-700 bg-slate-900" : "border-slate-100 bg-slate-50"
-            }`}>
+            <div className="border-t px-4 pt-3 pb-4" style={{ borderColor: 'var(--border)', background: 'var(--bg-subtle)' }}>
               <div className="flex gap-2 mb-3">
                 {PERIODS.map(({ key, label }) => (
                   <button
                     key={key}
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setPeriod(key); }}
-                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                      period === key
-                        ? darkMode
-                          ? "bg-slate-200 text-slate-900"
-                          : "bg-slate-800 text-white"
-                        : darkMode
-                          ? "bg-slate-700 border border-slate-600 text-slate-300 hover:bg-slate-600"
-                          : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
-                    }`}
+                    className="px-3 py-1 rounded text-sm font-medium transition-colors"
+                    style={period === key
+                      ? { background: 'var(--text-primary)', color: 'var(--bg-primary)' }
+                      : { background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }
+                    }
                   >
                     {label}
                   </button>
                 ))}
               </div>
 
-              <ChartErrorBoundary key={`${ticker}-${period}`}>
-                <CandleChart ticker={ticker} period={period} darkMode={darkMode} />
+              <ChartErrorBoundary key={ticker}>
+                <CandleChart ticker={ticker} period={period} />
               </ChartErrorBoundary>
+
+              {onSelect && (
+                <div style={{ borderTop: '1px solid var(--border)', marginTop: '12px', paddingTop: '12px' }}>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onSelect(ticker); }}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      background: 'var(--text-primary)',
+                      color: 'var(--bg-primary)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '12px 24px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      letterSpacing: '0.02em',
+                      textAlign: 'center',
+                    }}
+                  >
+                    📊 {ticker} の決算を分析する →
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
     </div>
   );
-}
+});
 
-export default function ChartTab({ watchlist = [] }) {
-  const [darkMode, setDarkMode] = useState(() => {
-    return localStorage.getItem("chart_dark_mode") === "true";
-  });
-
-  const toggleDark = () => {
-    setDarkMode((v) => {
-      const next = !v;
-      localStorage.setItem("chart_dark_mode", String(next));
-      return next;
-    });
-  };
-
+export default memo(function ChartTab({ watchlist = [], onSelect }) {
   if (watchlist.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-slate-400">
+      <div className="flex flex-col items-center justify-center py-24" style={{ color: 'var(--text-muted)' }}>
         <div className="text-4xl mb-4">📋</div>
         <p className="text-sm">ウォッチリストに銘柄を追加すると</p>
         <p className="text-sm">チャートが表示されます</p>
@@ -320,22 +448,9 @@ export default function ChartTab({ watchlist = [] }) {
 
   return (
     <div className="space-y-2 pb-8">
-      <div className="flex justify-end mb-1">
-        <button
-          type="button"
-          onClick={toggleDark}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-            darkMode
-              ? "bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700"
-              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-          }`}
-        >
-          {darkMode ? "☀️ ライトモードに切替" : "🌙 ダークモードに切替"}
-        </button>
-      </div>
       {watchlist.map((ticker) => (
-        <TickerRow key={ticker} ticker={ticker} darkMode={darkMode} />
+        <TickerRow key={ticker} ticker={ticker} onSelect={onSelect} />
       ))}
     </div>
   );
-}
+});

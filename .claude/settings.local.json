@@ -182,7 +182,18 @@
       "Bash(python -c \"import ast; ast.parse\\(open\\('app/main.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
       "Bash(gh auth *)",
       "Bash(md5)",
-      "Bash(md5 /Users/yamadadaiki/Projects/beatscanner/frontend/dist/assets/index-CSDs-ZmD.js)"
+      "Bash(md5 /Users/yamadadaiki/Projects/beatscanner/frontend/dist/assets/index-CSDs-ZmD.js)",
+      "Bash(python -c \"import ast, pathlib; ast.parse\\(pathlib.Path\\('app/main.py'\\).read_text\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(git -C /Users/yamadadaiki/Projects/beatscanner status --short)",
+      "Bash(git -C /Users/yamadadaiki/Projects/beatscanner add frontend/src/components/ChartTab.jsx)",
+      "Bash(git -C /Users/yamadadaiki/Projects/beatscanner commit -m ' *)",
+      "Bash(git -C /Users/yamadadaiki/Projects/beatscanner add frontend/src/components/Watchlist.jsx frontend/src/components/ChartTab.jsx backend/app/main.py)",
+      "Bash(git -C /Users/yamadadaiki/Projects/beatscanner status)",
+      "Bash(git -C /Users/yamadadaiki/Projects/beatscanner add frontend/src/App.jsx)",
+      "Bash(git -C /Users/yamadadaiki/Projects/beatscanner add frontend/tailwind.config.js frontend/src/App.jsx frontend/src/components/ChartTab.jsx)",
+      "Bash(git -C /Users/yamadadaiki/Projects/beatscanner add backend/app/main.py frontend/src/components/StockPriceChart.jsx)",
+      "Bash(git -C /Users/yamadadaiki/Projects/beatscanner add frontend/src/index.css frontend/src/components/SummaryBrief.jsx)",
+      "Bash(git -C /Users/yamadadaiki/Projects/beatscanner add frontend/src/api.js frontend/src/App.jsx frontend/src/components/Watchlist.jsx)"
     ]
   }
 }

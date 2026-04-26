@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { analyze, fetchGuidance, fetchGuidanceBasic, prefetchAll } from './api.js';
+import { initDarkMode, toggleDarkMode, isDark } from './utils/darkMode.js';
 import { hasFmpKey } from './lib/fmpKey.js';
 import { isPro } from './lib/planGating.js';
 import { useUpgradeModal } from './lib/useUpgradeModal.js';
@@ -8,8 +9,8 @@ import ResultBadge from './components/ResultBadge.jsx';
 import ConditionCard from './components/ConditionCard.jsx';
 import GuidanceCard from './components/GuidanceCard.jsx';
 import HistoryChart from './components/HistoryChart.jsx';
-import Watchlist from './components/Watchlist.jsx';
 import ChartTab from './components/ChartTab.jsx';
+import HomeTab from './components/HomeTab.jsx';
 import CalendarPanel from './components/CalendarPanel.jsx';
 import TickerSearch from './components/TickerSearch.jsx';
 import StockPriceChart from './components/StockPriceChart.jsx';
@@ -29,17 +30,6 @@ import CustomScreenerPanel from './components/CustomScreenerPanel.jsx';
 
 const WATCHLIST_KEY = 'earnings-watchlist-v1';
 
-const FEATURED_TICKERS = [
-  { sym: 'AAPL',  name: 'Apple',     sector: 'テクノロジー' },
-  { sym: 'MSFT',  name: 'Microsoft', sector: 'テクノロジー' },
-  { sym: 'GOOGL', name: 'Alphabet',  sector: 'テクノロジー' },
-  { sym: 'NVDA',  name: 'NVIDIA',    sector: '半導体' },
-  { sym: 'META',  name: 'Meta',      sector: 'SNS' },
-  { sym: 'AMZN',  name: 'Amazon',    sector: 'EC/クラウド' },
-  { sym: 'TSLA',  name: 'Tesla',     sector: 'EV' },
-  { sym: 'JPM',   name: 'JPMorgan',  sector: '金融' },
-];
-
 function loadWatchlist() {
   try {
     return JSON.parse(localStorage.getItem(WATCHLIST_KEY) || '[]');
@@ -58,7 +48,7 @@ export default function App() {
   const [watchlist, setWatchlist] = useState(loadWatchlist);
   const [showCalendar, setShowCalendar] = useState(false);
   const [showScreener, setShowScreener] = useState(false);
-  const [activeTab, setActiveTab] = useState('judgment');
+  const [activeTab, setActiveTab] = useState('home');
   const [reportStreaming, setReportStreaming] = useState(false);
   const [footerOpen, setFooterOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -67,18 +57,16 @@ export default function App() {
   const [isDemoResult, setIsDemoResult] = useState(false);
   const [forceCloseSuggestions, setForceCloseSuggestions] = useState(false);
   const [showFiveCondModal, setShowFiveCondModal] = useState(false);
+
+  useEffect(() => { initDarkMode(); }, []);
+
   const screenerRef = useRef(null);
   const customScreenerRef = useRef(null);
   const calendarRef = useRef(null);
-  // Track key state so banner re-renders after save
   const [hasKey, setHasKey] = useState(hasFmpKey);
-  // Toast notification state (UX item 7)
-  const [toast, setToast] = useState(null); // { message, id }
-  // Upgrade modal (Fix 3a)
+  const [toast, setToast] = useState(null);
   const upgrade = useUpgradeModal();
-  // Ref for the ticker search input (used by Watchlist empty-state CTA)
   const searchInputRef = useRef(null);
-  // Nonce to ignore stale promise results from previous searches
   const searchIdRef = useRef(0);
   const prefetchedRef = useRef(new Set());
 
@@ -89,11 +77,6 @@ export default function App() {
     prefetchedRef.current.add(t);
     prefetchAll(t);
   };
-
-  // ページロード時にウォッチリスト銘柄をバックグラウンドでウォームアップ
-  useEffect(() => {
-    watchlist.forEach((t) => prefetch(t));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     localStorage.setItem(WATCHLIST_KEY, JSON.stringify(watchlist));
@@ -140,53 +123,41 @@ export default function App() {
     setForceCloseSuggestions(true);
     setTimeout(() => setForceCloseSuggestions(false), 500);
 
-    // Phase 1: analyze + basic guidance in parallel
-    const analyzePromise = analyze(t);
-    const basicPromise = fetchGuidanceBasic(t).catch(() => null);
-    // Phase 2: full guidance (with SEC) fires simultaneously
-    const fullPromise = fetchGuidance(t).catch(() => null);
+    analyze(t)
+      .then(data => {
+        if (searchIdRef.current === searchId) setResult(data);
+      })
+      .catch(e => {
+        if (searchIdRef.current === searchId) {
+          const msg = e.message;
+          setError(
+            msg === 'Failed to fetch' || msg.includes('NetworkError')
+              ? 'バックエンド接続エラー（サーバーが応答していません）。start.sh でサーバーが起動しているか確認してください。'
+              : msg
+          );
+        }
+      });
 
-    // Track whether full has already resolved to avoid race condition:
-    // if full arrives before basic, setGuidanceSecLoading(true) must not fire.
-    let fullResolved = false;
+    const basicData = await fetchGuidanceBasic(t).catch(() => null);
+    if (searchIdRef.current !== searchId) return;
+    if (basicData) setGuidance(basicData);
+    setLoading(false);
 
-    // Safety timeout: force-clear secLoading after 15s in case something stalls
     const secTimeoutId = setTimeout(() => {
       if (searchIdRef.current === searchId) setGuidanceSecLoading(false);
     }, 15000);
-
-    basicPromise.then((basicGuidance) => {
-      if (searchIdRef.current !== searchId) return;
-      if (basicGuidance) {
-        setGuidance(basicGuidance);
-        // Only show SEC skeleton if full hasn't already arrived
-        if (!fullResolved) setGuidanceSecLoading(true);
-      }
-    });
-
-    fullPromise.then((fullGuidance) => {
-      fullResolved = true;
-      clearTimeout(secTimeoutId);
-      if (searchIdRef.current !== searchId) return;
-      if (fullGuidance) setGuidance(fullGuidance);
-      setGuidanceSecLoading(false);
-    });
-
-    try {
-      const data = await analyzePromise;
-      if (searchIdRef.current === searchId) setResult(data);
-    } catch (e) {
-      if (searchIdRef.current === searchId) {
-        const msg = e.message;
-        setError(
-          msg === 'Failed to fetch' || msg.includes('NetworkError')
-            ? 'バックエンド接続エラー（サーバーが応答していません）。start.sh でサーバーが起動しているか確認してください。'
-            : msg
-        );
-      }
-    } finally {
-      if (searchIdRef.current === searchId) setLoading(false);
-    }
+    if (basicData) setGuidanceSecLoading(true);
+    fetchGuidance(t)
+      .then(full => {
+        clearTimeout(secTimeoutId);
+        if (searchIdRef.current !== searchId) return;
+        if (full) setGuidance(full);
+        setGuidanceSecLoading(false);
+      })
+      .catch(() => {
+        clearTimeout(secTimeoutId);
+        if (searchIdRef.current === searchId) setGuidanceSecLoading(false);
+      });
   }
 
   function handleDemoResult(data, sym) {
@@ -210,16 +181,27 @@ export default function App() {
     <div className="mx-auto max-w-6xl px-4 py-8 md:py-12">
 
       {/* Header */}
-      <header className="mb-4">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
-          決算分析ダッシュボード
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          独自プロトコル（5条件）で米国株決算を自動判定
-        </p>
+      <header className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
+            決算分析ダッシュボード
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            独自プロトコル（5条件）で米国株決算を自動判定
+          </p>
+        </div>
+        <button
+          id="dark-toggle-btn"
+          type="button"
+          onClick={toggleDarkMode}
+          className="mt-1 shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium transition-colors hover:bg-slate-50"
+          style={{ fontSize: '18px', lineHeight: 1, background: 'var(--bg-card)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+        >
+          {isDark() ? '☀️' : '🌙'}
+        </button>
       </header>
 
-      {/* Onboarding banner — hasKey drives visibility; disappears immediately on save */}
+      {/* Onboarding banner */}
       <ApiKeyBanner onOpenSettings={() => setShowSettings(true)} hasKey={hasKey} />
 
       {/* Secondary toolbar */}
@@ -311,41 +293,45 @@ export default function App() {
       {/* Market Widget */}
       <MarketWidget />
 
-      {/* Input */}
-      <form
-        onSubmit={(e) => { e.preventDefault(); runAnalyze(); }}
-        className="mb-4 flex flex-col gap-3 md:flex-row"
-      >
-        <TickerSearch
-          ref={searchInputRef}
-          value={ticker}
-          onChange={(val) => { setTicker(val); if (val.length >= 4) prefetch(val); }}
-          onSubmit={runAnalyze}
-          forceClose={forceCloseSuggestions}
-        />
-        <button
-          type="submit"
-          disabled={loading}
-          className="rounded-lg bg-slate-900 px-6 py-3 text-base font-semibold text-white hover:bg-slate-700 disabled:opacity-50"
+      {/* Search — ホームタブ時は非表示 */}
+      {activeTab !== 'home' && (
+        <form
+          onSubmit={(e) => { e.preventDefault(); runAnalyze(); }}
+          className="mb-4 flex flex-col gap-3 md:flex-row"
         >
-          {loading ? '分析中...' : '分析する'}
-        </button>
-      </form>
-
-      {/* Sample shortcuts */}
-      <div className="mb-6 flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-slate-500">サンプル:</span>
-        {['AAPL', 'MSFT', 'GOOGL', 'NVDA', 'META'].map((t) => (
+          <TickerSearch
+            ref={searchInputRef}
+            value={ticker}
+            onChange={(val) => { setTicker(val); if (val.length >= 4) prefetch(val); }}
+            onSubmit={runAnalyze}
+            forceClose={forceCloseSuggestions}
+          />
           <button
-            key={t}
-            onMouseEnter={() => prefetch(t)}
-            onClick={() => runAnalyze(t)}
-            className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700 hover:bg-slate-200"
+            type="submit"
+            disabled={loading}
+            className="rounded-lg bg-slate-900 px-6 py-3 text-base font-semibold text-white hover:bg-slate-700 disabled:opacity-50"
           >
-            {t}
+            {loading ? '分析中...' : '分析する'}
           </button>
-        ))}
-      </div>
+        </form>
+      )}
+
+      {/* Sample shortcuts — ホームタブ時は非表示 */}
+      {activeTab !== 'home' && (
+        <div className="mb-6 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-slate-500">サンプル:</span>
+          {['AAPL', 'MSFT', 'GOOGL', 'NVDA', 'META'].map((t) => (
+            <button
+              key={t}
+              onMouseEnter={() => prefetch(t)}
+              onClick={() => runAnalyze(t)}
+              className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700 hover:bg-slate-200"
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Error */}
       {error && (
@@ -354,7 +340,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Early GuidanceCard — visible before analyze() returns */}
+      {/* GuidanceCard — visible while loading before result arrives */}
       {!result && (loading || guidance) && (
         <GuidanceCard
           guidance={guidance}
@@ -363,10 +349,9 @@ export default function App() {
         />
       )}
 
-      {/* Result */}
+      {/* Result metadata — visible only when analysis result exists */}
       {result && (
-        <div className="space-y-6">
-          {/* Demo banner — UX items 1 & 2: removed separate yellow CTA, CTA integrated into banner */}
+        <div className="space-y-4 mb-2">
           {isDemoResult && (
             <button
               onClick={() => setShowSettings(true)}
@@ -384,7 +369,6 @@ export default function App() {
           <div className="space-y-4">
             <ResultBadge result={result} />
 
-            {/* Demo CTA — UX item 3: shown only when PASS (intent is highest at that moment) */}
             {isDemoResult && result?.overallPass && (
               <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <p className="text-sm text-slate-600">
@@ -401,7 +385,6 @@ export default function App() {
               </div>
             )}
 
-            {/* UX item 4: Plan comparison only in demo mode, placed right after badge */}
             {isDemoResult && (
               <PlanComparisonBanner onOpenSettings={() => setShowSettings(true)} />
             )}
@@ -418,160 +401,63 @@ export default function App() {
           </div>
 
           <SummaryBrief analysis={result} guidance={guidance} />
-
-          {/* Tabs */}
-          <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
-            <button
-              onClick={() => setActiveTab('judgment')}
-              className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-                activeTab === 'judgment'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              📊 判定詳細
-            </button>
-            <button
-              onClick={() => {
-                if (!isPro()) {
-                  upgrade.open('AI詳細レポート');
-                } else {
-                  setActiveTab('report');
-                }
-              }}
-              className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-                activeTab === 'report'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {isPro() ? '📝 決算レポート' : '🔒 決算レポート'}
-            </button>
-            <button
-              onClick={() => setActiveTab('チャート')}
-              className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-                activeTab === 'チャート'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              📈 チャート
-            </button>
-          </div>
-
-          {activeTab === 'judgment' && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-slate-700">5条件 判定詳細</h3>
-                  <button
-                    onClick={() => setShowFiveCondModal(true)}
-                    className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-500 hover:bg-slate-300 hover:text-slate-700"
-                    aria-label="5条件判定の説明を表示"
-                  >
-                    ？
-                  </button>
-                </div>
-                <span className="text-xs text-slate-400">年次データ（Annual）に基づく判定</span>
-              </div>
-              {showFiveCondModal && (
-                <InfoModal title="5条件判定とは" onClose={() => setShowFiveCondModal(false)}>
-                  <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                    <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
-                    <p className="text-sm leading-relaxed text-slate-700">
-                      beatscanner では、企業の財務健全性を以下の5つの条件で判定しています。5つすべてを満たした企業のみが<strong>「PASS」</strong>となります。
-                    </p>
-                  </div>
-                  <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">📋 5つの条件</p>
-                    <ul className="space-y-1 text-sm text-slate-700">
-                      <li>・条件1：営業CFマージン ≥ 15%（真の稼ぐ力）</li>
-                      <li>・条件2：EPS 連続増加（利益の成長）</li>
-                      <li>・条件3：CFPS 連続増加（現金創出力の成長）</li>
-                      <li>・条件4：売上高 連続増加（本業の拡大）</li>
-                      <li>・条件5：CFPS ＞ EPS（粉飾リスクの排除）</li>
-                    </ul>
-                  </div>
-                  <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                    <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 なぜこの5条件なのか</p>
-                    <p className="text-sm leading-relaxed text-slate-700">
-                      これらはすべて<strong>「会計上のごまかしが効かない、または利益とのクロスチェックでごまかしを見抜ける」</strong>指標で構成されています。5条件をすべてクリアする企業は、本業で実質的に現金を稼ぎ出しており、財務的に極めて健全な状態といえます。各条件の詳細は、それぞれの ? ボタンをご確認ください。
-                    </p>
-                  </div>
-                </InfoModal>
-              )}
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-                {result.conditions.map((c, i) => (
-                  <ConditionCard
-                    key={i}
-                    index={i + 1}
-                    condition={c}
-                    isPro={isPro()}
-                    onUpgradeClick={() => upgrade.open('前回比デルタ値')}
-                  />
-                ))}
-              </div>
-
-              <GuidanceCard guidance={guidance} isSecLoading={guidanceSecLoading} />
-              <HistoryChart periods={result.periods} currency={result.currency} />
-              <StockPriceChart ticker={result.ticker} />
-              <IRLinksPanel ticker={result.ticker} />
-              <NewsPanel ticker={result.ticker} />
-            </div>
-          )}
-
-          {activeTab === 'report' && (
-            <DetailReport
-              analysis={result}
-              guidance={guidance}
-              onStreamingChange={setReportStreaming}
-            />
-          )}
-
-          {activeTab === 'チャート' && (
-            <ChartTab watchlist={watchlist} />
-          )}
         </div>
       )}
 
-      {/* Empty state */}
-      {!result && !loading && (
-        <>
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="mb-4 text-sm font-medium text-slate-600">
-              注目銘柄から選ぶ
-            </p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {FEATURED_TICKERS.map((item) => (
-                <button
-                  key={item.sym}
-                  onClick={() => runAnalyze(item.sym)}
-                  className="flex flex-col items-start rounded-xl border border-slate-200 p-3 text-left transition hover:border-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2"
-                >
-                  <span className="text-sm font-bold text-slate-900">{item.sym}</span>
-                  <span className="text-xs text-slate-500">{item.name}</span>
-                  <span className="mt-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-400">
-                    {item.sector}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
+      {/* Tabs — always visible */}
+      <div className="flex gap-1 rounded-lg bg-slate-100 p-1 mt-4">
+        <button
+          onClick={() => setActiveTab('home')}
+          className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+            activeTab === 'home'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          🏠 ホーム
+        </button>
+        <button
+          onClick={() => setActiveTab('judgment')}
+          className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+            activeTab === 'judgment'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          📊 判定詳細
+        </button>
+        <button
+          onClick={() => {
+            if (!isPro()) {
+              upgrade.open('AI詳細レポート');
+            } else {
+              setActiveTab('report');
+            }
+          }}
+          className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+            activeTab === 'report'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          {isPro() ? '📝 決算レポート' : '🔒 決算レポート'}
+        </button>
+        <button
+          onClick={() => setActiveTab('チャート')}
+          className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+            activeTab === 'チャート'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          📈 チャート
+        </button>
+      </div>
 
-          {/* Demo mode — only shown when no API key set */}
-          {!hasKey && (
-            <DemoTicker onResult={handleDemoResult} />
-          )}
-        </>
-      )}
-
-      {/* Watchlist */}
-      <section className="mt-6 rounded-2xl bg-white p-6 shadow-sm">
-        <div className="mb-3">
-          <h3 className="text-base font-semibold text-slate-900">ウォッチリスト</h3>
-        </div>
-        <Watchlist
-          items={watchlist}
+      {/* Tab: ホーム */}
+      {activeTab === 'home' && (
+        <HomeTab
+          watchlist={watchlist}
           onSelect={runAnalyze}
           onRemove={removeFromWatchlist}
           onHover={prefetch}
@@ -579,12 +465,120 @@ export default function App() {
             searchInputRef.current?.focus();
             searchInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }}
+          darkMode={isDark()}
+          toggleDark={toggleDarkMode}
         />
-      </section>
+      )}
 
-      {/* Plan comparison — shown for non-Pro users when no result is displayed (not in demo) */}
-      {!isPro() && !result && (
-        <PlanComparisonBanner onOpenSettings={() => setShowSettings(true)} />
+      {/* Tab: 判定詳細 */}
+      {activeTab === 'judgment' && (
+        result ? (
+          <div className="space-y-6 mt-4">
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-slate-700">5条件 判定詳細</h3>
+                <button
+                  onClick={() => setShowFiveCondModal(true)}
+                  className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-500 hover:bg-slate-300 hover:text-slate-700"
+                  aria-label="5条件判定の説明を表示"
+                >
+                  ？
+                </button>
+              </div>
+              <span className="text-xs text-slate-400">年次データ（Annual）に基づく判定</span>
+            </div>
+            {showFiveCondModal && (
+              <InfoModal title="5条件判定とは" onClose={() => setShowFiveCondModal(false)}>
+                <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>📌 概要</p>
+                  <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                    beatscanner では、企業の財務健全性を以下の5つの条件で判定しています。5つすべてを満たした企業のみが<strong>「PASS」</strong>となります。
+                  </p>
+                </div>
+                <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>📋 5つの条件</p>
+                  <ul className="space-y-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                    <li>・条件1：営業CFマージン ≥ 15%（真の稼ぐ力）</li>
+                    <li>・条件2：EPS 連続増加（利益の成長）</li>
+                    <li>・条件3：CFPS 連続増加（現金創出力の成長）</li>
+                    <li>・条件4：売上高 連続増加（本業の拡大）</li>
+                    <li>・条件5：CFPS ＞ EPS（粉飾リスクの排除）</li>
+                  </ul>
+                </div>
+                <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>💡 なぜこの5条件なのか</p>
+                  <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                    これらはすべて<strong>「会計上のごまかしが効かない、または利益とのクロスチェックでごまかしを見抜ける」</strong>指標で構成されています。5条件をすべてクリアする企業は、本業で実質的に現金を稼ぎ出しており、財務的に極めて健全な状態といえます。各条件の詳細は、それぞれの ? ボタンをご確認ください。
+                  </p>
+                </div>
+              </InfoModal>
+            )}
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+              {result.conditions.map((c, i) => (
+                <ConditionCard
+                  key={i}
+                  index={i + 1}
+                  condition={c}
+                  isPro={isPro()}
+                  onUpgradeClick={() => upgrade.open('前回比デルタ値')}
+                />
+              ))}
+            </div>
+            <button
+              onClick={() => {
+                if (!isPro()) { upgrade.open('AI詳細レポート'); }
+                else { setActiveTab('report'); }
+              }}
+              style={{
+                display: 'block', width: '100%',
+                padding: '14px',
+                background: 'var(--text-primary)',
+                color: 'var(--bg-primary)',
+                border: 'none', borderRadius: '10px',
+                fontSize: '15px', fontWeight: 700,
+                cursor: 'pointer', letterSpacing: '0.02em',
+              }}
+            >
+              📋 決算レポートを見る →
+            </button>
+            <GuidanceCard guidance={guidance} isSecLoading={guidanceSecLoading} />
+            <HistoryChart periods={result.periods} currency={result.currency} />
+            <StockPriceChart ticker={result.ticker} />
+            <IRLinksPanel ticker={result.ticker} />
+            <NewsPanel ticker={result.ticker} />
+          </div>
+        ) : (
+          <div className="flex items-center justify-center py-16 text-slate-400 text-sm">
+            上の検索ボックスで銘柄を分析してください
+          </div>
+        )
+      )}
+
+      {/* Tab: 決算レポート */}
+      {activeTab === 'report' && (
+        result ? (
+          <DetailReport
+            analysis={result}
+            guidance={guidance}
+            onStreamingChange={setReportStreaming}
+          />
+        ) : (
+          <div className="flex items-center justify-center py-16 text-slate-400 text-sm">
+            銘柄を分析してからご利用ください
+          </div>
+        )
+      )}
+
+      {/* Tab: チャート */}
+      {activeTab === 'チャート' && (
+        <ChartTab watchlist={watchlist} onSelect={runAnalyze} />
+      )}
+
+      {/* Demo mode — shown in ホーム tab when no API key */}
+      {activeTab === 'home' && !hasKey && (
+        <div className="mt-4">
+          <DemoTicker onResult={handleDemoResult} />
+        </div>
       )}
 
       {/* Screener */}
@@ -625,7 +619,6 @@ export default function App() {
             <p>EPSはGAAP（報告値）基準です。Non-GAAP（調整後）予想との比較で乖離が生じる場合があります</p>
           </div>
         )}
-        {/* 免責表示 */}
         <p className="mt-4 text-xs leading-relaxed text-slate-300">
           本サービスは投資助言を行うものではありません。表示される情報は投資判断の参考情報であり、
           実際の投資は必ずご自身の判断と責任で行ってください。
@@ -633,7 +626,7 @@ export default function App() {
         </p>
       </footer>
 
-      {/* Toast notification (UX item 7) */}
+      {/* Toast */}
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] rounded-lg bg-slate-800 px-5 py-3 text-sm font-medium text-white shadow-lg transition-opacity">
           {toast.message}

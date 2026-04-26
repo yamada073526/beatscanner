@@ -10,9 +10,7 @@ const mdComponents = {
     </h2>
   ),
   h3: ({ children }) => (
-    <h3 className="text-sm font-bold text-slate-800 mt-4 mb-1">
-      {children}
-    </h3>
+    <h3 className="text-sm font-bold text-slate-800 mt-4 mb-1">{children}</h3>
   ),
   p: ({ children }) => (
     <p className="text-sm text-slate-700 mb-3 leading-relaxed">{children}</p>
@@ -28,9 +26,9 @@ const mdComponents = {
 
 const LOADING_STEPS = [
   { text: '財務データを読み込み中...', pct: 15 },
-  { text: 'データを解析中...', pct: 40 },
-  { text: '図解を構成中...', pct: 65 },
-  { text: 'レイアウトを最適化中...', pct: 85 },
+  { text: 'データを解析中...',         pct: 40 },
+  { text: '図解を構成中...',           pct: 65 },
+  { text: 'レイアウトを最適化中...',   pct: 85 },
 ];
 
 function BarChartIcon() {
@@ -38,23 +36,90 @@ function BarChartIcon() {
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
       <line x1="18" y1="20" x2="18" y2="10" />
       <line x1="12" y1="20" x2="12" y2="4" />
-      <line x1="6" y1="20" x2="6" y2="14" />
-      <line x1="2" y1="20" x2="22" y2="20" />
+      <line x1="6"  y1="20" x2="6"  y2="14" />
+      <line x1="2"  y1="20" x2="22" y2="20" />
     </svg>
   );
 }
 
+/* ─── アコーディオン共通コンポーネント ─── */
+function AccordionSection({ title, badge, badgeColor = '#1e293b', children, streaming = false }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div style={{
+      borderRadius: '12px',
+      border: '1px solid var(--border)',
+      background: 'var(--bg-primary)',
+      marginBottom: '12px',
+      overflow: 'hidden',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+    }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '14px 16px',
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          textAlign: 'left',
+        }}
+      >
+        <span style={{
+          fontSize: '13px',
+          color: 'var(--text-secondary)',
+          transition: 'transform 0.2s',
+          transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+          display: 'inline-block',
+          lineHeight: 1,
+        }}>▶</span>
+        <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)', flex: 1 }}>
+          {title}
+        </span>
+        {badge && (
+          <span style={{ fontSize: '11px', fontWeight: '600', color: 'white', background: badgeColor, borderRadius: '4px', padding: '2px 7px' }}>
+            {badge}
+          </span>
+        )}
+        {streaming && (
+          <span style={{ fontSize: '11px', color: '#94a3b8' }} className="animate-pulse">生成中...</span>
+        )}
+      </button>
+
+      <div style={{ display: 'grid', gridTemplateRows: open ? '1fr' : '0fr', transition: 'grid-template-rows 0.25s ease' }}>
+        <div style={{ overflow: 'hidden' }}>
+          <div style={{ padding: '0 16px 16px' }}>
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── ReportCard（内部コンテンツのみ） ─── */
 function ReportCard({ analysis, guidance, onStreamingChange }) {
   const [text, setText] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState(null);
 
-  // viz状態: 'idle' | 'loading' | 'done'
   const [vizState, setVizState] = useState('idle');
   const [loadingStep, setLoadingStep] = useState(LOADING_STEPS[0].text);
   const [loadingPct, setLoadingPct] = useState(0);
   const stepTimerRef = useRef(null);
+
+  const [themeTick, setThemeTick] = useState(0);
+  useEffect(() => {
+    const h = () => setThemeTick((n) => n + 1);
+    window.addEventListener('themechange', h);
+    return () => window.removeEventListener('themechange', h);
+  }, []);
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
 
   const startProgressSimulation = () => {
     let idx = 0;
@@ -145,15 +210,10 @@ function ReportCard({ analysis, guidance, onStreamingChange }) {
     };
   }, [analysis?.ticker, analysis?.latestDate]);
 
-  const borderColor = analysis?.overallPass ? '#22c55e' : '#ef4444';
-
   return (
-    <div
-      className="rounded-xl bg-white p-6 shadow-sm"
-      style={{ borderLeft: `4px solid ${borderColor}`, marginBottom: '16px' }}
-    >
-      {/* ── 図解生成CTA（セクション冒頭・全幅） ── */}
-      <div style={{ marginBottom: '20px' }}>
+    <>
+      {/* 図解生成CTA */}
+      <div style={{ marginBottom: '16px' }}>
         {vizState === 'idle' && (
           <div style={{ textAlign: 'center' }}>
             <button
@@ -164,132 +224,97 @@ function ReportCard({ analysis, guidance, onStreamingChange }) {
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '8px',
-                padding: '11px 20px',
-                background: '#1a1a2e',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '14px',
+                padding: '14px 20px',
+                background: 'transparent',
+                color: isDark ? '#e2e8f0' : '#0f172a',
+                border: isDark ? '1.5px solid #e2e8f0' : '1.5px solid #0f172a',
+                borderRadius: '10px',
+                fontSize: '15px',
                 fontWeight: '600',
                 cursor: 'pointer',
-                letterSpacing: '0.01em',
+                letterSpacing: '0.02em',
               }}
             >
               <BarChartIcon />
               キャッシュフロー図を生成する
             </button>
-            <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '6px', textAlign: 'center' }}>
+            <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '6px' }}>
               売上・営業CF・EPSの関係を自動でフロー図に変換します
             </p>
           </div>
         )}
 
         {vizState === 'loading' && (
-          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '14px 16px' }}>
+          <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '8px', padding: '14px 16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-              <span
-                className="animate-spin"
-                style={{ width: '16px', height: '16px', border: '2px solid #cbd5e1', borderTop: '2px solid #1a1a2e', borderRadius: '50%', display: 'inline-block', flexShrink: 0 }}
-              />
-              <span style={{ fontSize: '13px', color: '#475569', flex: 1 }}>{loadingStep}</span>
+              <span className="animate-spin" style={{ width: '16px', height: '16px', border: '2px solid #cbd5e1', borderTop: '2px solid #1a1a2e', borderRadius: '50%', display: 'inline-block', flexShrink: 0 }} />
+              <span style={{ fontSize: '13px', color: 'var(--text-secondary)', flex: 1 }}>{loadingStep}</span>
               <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '600' }}>{loadingPct}%</span>
             </div>
-            <div style={{ height: '4px', background: '#e2e8f0', borderRadius: '2px', overflow: 'hidden' }}>
-              <div
-                style={{
-                  height: '100%',
-                  width: `${loadingPct}%`,
-                  background: '#1a1a2e',
-                  borderRadius: '2px',
-                  transition: 'width 0.6s ease',
-                }}
-              />
+            <div style={{ height: '6px', background: isDark ? '#2d3748' : '#e2e8f0', borderRadius: '4px', overflow: 'hidden', margin: '10px 0' }}>
+              <div style={{ height: '100%', width: `${loadingPct}%`, background: isDark ? '#e2e8f0' : '#0f172a', borderRadius: '4px', transition: 'width 0.3s ease' }} />
             </div>
           </div>
         )}
 
         {vizState === 'done' && (
-          <div style={{
-            background: '#f0fdf4',
-            border: '1px solid #bbf7d0',
-            borderRadius: '8px',
-            padding: '12px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}>
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '18px' }}>✅</span>
-            <span style={{ fontSize: '14px', color: '#16a34a', fontWeight: '600' }}>
-              生成完了 — 新しいタブで確認できます
-            </span>
-            <button
-              onClick={handleGenerateViz}
-              style={{
-                marginLeft: 'auto',
-                fontSize: '12px',
-                color: '#6b7280',
-                background: 'white',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                padding: '4px 10px',
-                cursor: 'pointer',
-              }}
-            >
+            <span style={{ fontSize: '14px', color: '#16a34a', fontWeight: '600' }}>生成完了 — 新しいタブで確認できます</span>
+            <button onClick={handleGenerateViz} style={{ marginLeft: 'auto', fontSize: '12px', color: '#6b7280', background: 'white', border: '1px solid #d1d5db', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer' }}>
               再生成
             </button>
           </div>
         )}
       </div>
 
-      {/* ── ヘッダー ── */}
-      <div className="mb-3 flex items-center gap-2">
-        <h4 className="text-base font-semibold text-slate-900">AIによる決算詳報</h4>
-        <span
-          title="Powered by Claude Sonnet 4.5"
-          className="cursor-help rounded bg-slate-900 px-2 py-0.5 text-xs font-semibold text-white"
-        >
-          AI詳報
-        </span>
-        {streaming && (
-          <span className="text-xs text-slate-400 animate-pulse">生成中...</span>
-        )}
-      </div>
-
-      {error && (
-        <p className="text-sm text-red-500">詳報を生成できませんでした: {error}</p>
-      )}
+      {/* AI詳報テキスト */}
+      {error && <p className="text-sm text-red-500">詳報を生成できませんでした: {error}</p>}
+      {streaming && !text && <p className="text-sm text-slate-500 animate-pulse">AIが決算を分析中...</p>}
       {streaming && text && (
         <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{text}</p>
       )}
       {done && text && (
         <ReactMarkdown components={mdComponents}>{text}</ReactMarkdown>
       )}
-    </div>
+    </>
   );
 }
 
-
+/* ─── DetailReport（アコーディオン統合） ─── */
 export default function DetailReport({ analysis, guidance, onStreamingChange }) {
   const [conferenceStreaming, setConferenceStreaming] = useState(false);
   const [reportStreaming, setReportStreaming] = useState(false);
+
   useEffect(() => {
     onStreamingChange?.(reportStreaming || conferenceStreaming);
   }, [reportStreaming, conferenceStreaming]);
 
+  const borderColor = analysis?.overallPass ? '#22c55e' : '#ef4444';
+
   return (
     <div>
-      <ReportCard
-        analysis={analysis}
-        guidance={guidance}
-        onStreamingChange={setReportStreaming}
-      />
+      <AccordionSection
+        title="AIによる決算詳報"
+        badge="AI詳報"
+        badgeColor="#1e293b"
+        streaming={reportStreaming}
+      >
+        <div style={{ borderLeft: `3px solid ${borderColor}`, paddingLeft: '12px' }}>
+          <ReportCard
+            analysis={analysis}
+            guidance={guidance}
+            onStreamingChange={setReportStreaming}
+          />
+        </div>
+      </AccordionSection>
+
       {analysis?.ticker && (
         <ConferenceAnalysis
           ticker={analysis.ticker}
           onStreamingChange={setConferenceStreaming}
         />
       )}
-
     </div>
   );
 }

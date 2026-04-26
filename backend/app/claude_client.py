@@ -23,12 +23,18 @@ class ClaudeClient:
         *,
         model: str = "claude-haiku-4-5-20251001",
         max_tokens: int = 1024,
+        temperature: float = 0.0,
+        system: str | None = None,
     ) -> str:
-        msg = await self.client.messages.create(
+        kwargs: dict = dict(
             model=model,
             max_tokens=max_tokens,
+            temperature=temperature,
             messages=[{"role": "user", "content": prompt}],
         )
+        if system:
+            kwargs["system"] = system
+        msg = await self.client.messages.create(**kwargs)
         return "".join(b.text for b in msg.content if b.type == "text").strip()
 
     async def stream_complete(
@@ -37,12 +43,18 @@ class ClaudeClient:
         *,
         model: str = "claude-haiku-4-5-20251001",
         max_tokens: int = 1024,
+        temperature: float = 0.0,
+        system: str | None = None,
     ):
         """Yield text chunks as they arrive from Claude."""
-        async with self.client.messages.stream(
+        kwargs: dict = dict(
             model=model,
             max_tokens=max_tokens,
+            temperature=temperature,
             messages=[{"role": "user", "content": prompt}],
-        ) as stream:
+        )
+        if system:
+            kwargs["system"] = system
+        async with self.client.messages.stream(**kwargs) as stream:
             async for text in stream.text_stream:
                 yield text

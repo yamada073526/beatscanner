@@ -65,10 +65,10 @@ const GuidanceSkeleton = () => (
       </div>
     </div>
     {/* SEC section placeholder */}
-    <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 p-4">
-      <div className="mb-3 h-3 w-20 rounded bg-blue-200" style={{animation:'pulse 1.5s infinite'}} />
+    <div className="mt-4 rounded-lg p-4" style={{ background: 'var(--bg-subtle)', border: '0.5px solid var(--border)' }}>
+      <div className="mb-3 h-3 w-20 rounded bg-slate-200" style={{animation:'pulse 1.5s infinite'}} />
       {[140, 200, 170, 190, 155].map((w, i) => (
-        <div key={i} className="mb-2.5 h-3 rounded bg-blue-100"
+        <div key={i} className="mb-2.5 h-3 rounded bg-slate-200"
           style={{width:`${w}px`, animation:'pulse 1.5s infinite', animationDelay:`${i * 0.1}s`}} />
       ))}
     </div>
@@ -77,10 +77,10 @@ const GuidanceSkeleton = () => (
 );
 
 const SecSkeleton = () => (
-  <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 p-4">
-    <div className="mb-3 h-3 w-20 rounded bg-blue-200" style={{animation:'pulse 1.5s infinite'}} />
+  <div className="mt-4 rounded-lg p-4" style={{ background: 'var(--bg-subtle)', border: '0.5px solid var(--border)' }}>
+    <div className="mb-3 h-3 w-20 rounded bg-slate-200" style={{animation:'pulse 1.5s infinite'}} />
     {[140, 200, 170, 190, 155].map((w, i) => (
-      <div key={i} className="mb-2.5 h-3 rounded bg-blue-100"
+      <div key={i} className="mb-2.5 h-3 rounded bg-slate-200"
         style={{width:`${w}px`, animation:'pulse 1.5s infinite', animationDelay:`${i * 0.1}s`}} />
     ))}
     <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
@@ -225,7 +225,7 @@ const renderBold = (line) => {
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
       return (
-        <strong key={i} className="font-semibold text-slate-900">
+        <strong key={i} className="font-semibold" style={{ color: 'var(--text-primary)' }}>
           {part.slice(2, -2)}
         </strong>
       );
@@ -337,14 +337,14 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
       {isSecLoading && !sec_guidance_text ? (
         <SecSkeleton />
       ) : sec_guidance_text ? (
-        <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 p-4">
+        <div className="mt-4 rounded-lg p-4" style={{ background: 'var(--bg-subtle)', border: '0.5px solid var(--border)', borderRadius: '8px' }}>
           <div className="mb-2 flex items-center gap-2">
-            <span className="text-xs font-semibold text-blue-700">📄 次期見通し</span>
+            <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>📄 次期見通し</span>
             {sec_guidance_source && (
-              <span className="text-[10px] text-blue-400">{sec_guidance_source}</span>
+              <span className="text-[10px]" style={{ color: '#60a5fa' }}>{sec_guidance_source}</span>
             )}
           </div>
-          <div className="text-sm text-slate-700 leading-relaxed">
+          <div className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
             <div>
               <ul style={{paddingLeft:'0', margin:'0'}}>
                 {renderGuidanceText(sec_guidance_text)}

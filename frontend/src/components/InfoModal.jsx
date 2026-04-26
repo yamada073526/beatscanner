@@ -22,16 +22,20 @@ export default function InfoModal({ title, onClose, children }) {
       style={{ background: 'rgba(15,23,42,0.5)' }}
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden">
+      <div
+        className="relative w-full max-w-lg rounded-2xl shadow-xl overflow-hidden"
+        style={{ background: 'var(--bg-card)' }}
+      >
         <div className="px-5 pt-5 pb-3">
           <button
             onClick={onClose}
-            className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-full hover:bg-slate-100 hover:text-slate-700"
+            style={{ color: 'var(--text-muted)' }}
             aria-label="閉じる"
           >
             ✕
           </button>
-          <h2 className="pr-8 text-base font-bold text-slate-900">{title}</h2>
+          <h2 className="pr-8 text-base font-bold" style={{ color: 'var(--text-primary)' }}>{title}</h2>
         </div>
 
         <div
@@ -46,7 +50,7 @@ export default function InfoModal({ title, onClose, children }) {
         {!atBottom && (
           <div
             className="pointer-events-none absolute bottom-16 left-0 right-0 h-12"
-            style={{ background: 'linear-gradient(transparent, white)' }}
+            style={{ background: 'linear-gradient(transparent, var(--bg-card))' }}
           />
         )}
 

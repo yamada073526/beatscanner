@@ -1514,6 +1514,15 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
             "epsActual": round(act_f, 2) if act_f is not None else None,
             "epsEstimated": round(est_f, 2) if est_f is not None else None,
         })
+    # 同一四半期の重複排除（最新報告日を優先）
+    _seen_eq: dict = {}
+    for _e in sorted(earnings, key=lambda x: x["date"], reverse=True):
+        _ed = _e.get("date", "")
+        if len(_ed) >= 10:
+            _em = int(_ed[5:7])
+            _eqk = f"{_ed[:4]}Q{1 if _em <= 3 else 2 if _em <= 6 else 3 if _em <= 9 else 4}"
+            _seen_eq.setdefault(_eqk, _e)
+    earnings = list(_seen_eq.values())
     return {
         "prices": prices,
         "earnings": sorted(earnings, key=lambda x: x["date"]),
@@ -1550,6 +1559,63 @@ async def news(ticker: str, request: Request, limit: int = Query(10, ge=1, le=20
         for d in data
         if d.get("title") and d.get("url")
     ]
+
+_translate_cache: dict[str, str] = {}
+
+
+@app.post("/api/translate")
+async def translate_texts(body: dict) -> dict:
+    """英語テキストを日本語に翻訳する. 結果はサーバーメモリにキャッシュ."""
+    texts: list[str] = body.get("texts", [])
+    if not texts:
+        return {"translations": []}
+
+    results: list[str] = []
+    uncached_indices: list[int] = []
+    uncached_texts: list[str] = []
+
+    for i, t in enumerate(texts):
+        if t in _translate_cache:
+            results.append(_translate_cache[t])
+        else:
+            results.append("")
+            uncached_indices.append(i)
+            uncached_texts.append(t)
+
+    if uncached_texts:
+        numbered = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(uncached_texts))
+        prompt = (
+            f"以下のニュースタイトルを自然な日本語に翻訳してください。\n"
+            f"番号付きリストの形式で、翻訳結果だけを返してください。\n"
+            f"余分な説明・前置き・後書きは一切不要です。\n\n"
+            f"【必須ルール】\n"
+            f"- 企業名・ブランド名・製品名はそのままアルファベットで残す（例: Apple Inc.、Tesla、Microsoft）\n"
+            f"- 人名は読み仮名（カタカナ）表記でよい（例: Elon Musk → イーロン・マスク）\n"
+            f"- ティッカーシンボル（AAPL、MSFT等）はそのまま残す\n"
+            f"- 数値・金額・パーセントはそのまま残す\n"
+            f"- 「Inc.」「Corp.」「Ltd.」「Co.」はそのまま残す\n\n"
+            f"{numbered}"
+        )
+        try:
+            client = ClaudeClient()
+            raw = await client.complete(prompt, max_tokens=1024)
+        except ClaudeError as e:
+            raise HTTPException(status_code=503, detail=str(e))
+
+        lines = [ln.strip() for ln in raw.split("\n") if ln.strip()]
+        translated: list[str] = []
+        for ln in lines:
+            # "1. テキスト" or "1) テキスト" → remove prefix
+            import re as _re
+            m = _re.match(r"^\d+[\.\)]\s*(.+)$", ln)
+            translated.append(m.group(1) if m else ln)
+
+        for idx, orig, tr in zip(uncached_indices, uncached_texts, translated):
+            _translate_cache[orig] = tr
+            results[idx] = tr
+
+    return {"translations": results}
+
 
 @app.get("/api/ir-links/{ticker}")
 async def ir_links(ticker: str, request: Request) -> dict:
@@ -2131,44 +2197,82 @@ def _format_context(analysis: dict, guidance: dict | None) -> str:
     return "\n".join(lines)
 
 
+_SUMMARY_SYSTEM_PROMPT = (
+    "Label each output line with [POS], [NEG], or [NEU] before the ① ② ③ ④ marker.\n"
+    "\n"
+    "## Tag definitions\n"
+    "[POS] positive for business/financials\n"
+    "[NEG] negative for business/financials\n"
+    "[NEU] neutral or supplementary\n"
+    "\n"
+    "## Rules (priority order — higher number overrides lower)\n"
+    "1. up/increase/improve/Beat/above-consensus → [POS]\n"
+    "2. down/decrease/worsen/Miss/below-consensus → [NEG]\n"
+    "3. unchanged/maintained/N/A/one-time-cost/FX/amortization → [NEU]\n"
+    "4. direction unclear → [NEU]\n"
+    "5. RULE 3 OVERRIDES 1&2: 「変更なし」「据え置き」「維持」「非開示」は絶対に [NEG] にしない\n"
+    "\n"
+    "## Quick-reference examples\n"
+    "ガイダンス変更なし → [NEU]\n"
+    "次期見通し非開示 → [NEU]\n"
+    "EPS予想を上回る → [POS]\n"
+    "売上高が前年比減少 → [NEG]\n"
+    "\n"
+    "## ③ Guidance line — exact format required\n"
+    "上方修正 → [POS]③ ガイダンス：🔴 修正あり。（内容）\n"
+    "下方修正 → [NEG]③ ガイダンス：🔴 修正あり。（内容）\n"
+    "変更なし・据え置き・維持 → [NEU]③ ガイダンス：変更なし\n"
+    "非開示・情報なし → [NEU]③ ガイダンス：非開示\n"
+    "\n"
+    "## Format rules\n"
+    "- 日本語で出力すること\n"
+    "- 重要な数値・キーワードは **太字**（半角スペースで囲む）\n"
+    "- ①②③④は必ず改行して独立した段落\n"
+    "- タイトル行不要。①から直接始めること\n"
+    "- CFPS > EPS → キャッシュ創出力が高い [POS]。「異常値」「懸念」等の否定表現禁止\n"
+    "- CFPS < EPS → 「CFPSがEPSを下回っており条件5未達」と明記。曖昧表現禁止\n"
+    "- Markdown記法（##・__・*等）禁止。**太字** のみ使用可\n"
+    "\n"
+    "## Boundary examples\n"
+    "▼ Ex1: guidance unchanged → [NEU]\n"
+    "[POS]① 判定：全5条件達成。営業CFマージン **23%**、全指標Beat。\n"
+    "[POS]② **EPS $1.65**（予想$1.61を+2.5%上回るBeat）、売上前年比+7%。\n"
+    "[NEU]③ ガイダンス：変更なし\n"
+    "[POS]④ 全指標が過去最高水準を更新し財務面は盤石。\n"
+    "▼ Ex2: guidance upward → [POS]\n"
+    "[POS]① 判定：全5条件達成。各指標でBeat。\n"
+    "[POS]② **EPS $2.30**（予想$2.15を+7.0%上回るBeat）。\n"
+    "[POS]③ ガイダンス：🔴 修正あり。次期EPS **$2.50〜$2.60** に上方修正。\n"
+    "[POS]④ Beat+上方修正の理想的な決算。\n"
+    "▼ Ex3: Miss + guidance downward → [NEG]\n"
+    "[NEG]① 判定：条件2・3未達。EPS Miss、CFPSがEPSを下回り条件5未達。\n"
+    "[NEG]② **EPS $0.98**（予想$1.05を下回りMiss）、売上前年比−3%。\n"
+    "[NEG]③ ガイダンス：🔴 修正あり。次期EPS **$1.05〜$1.15** に下方修正。\n"
+    "[NEG]④ Miss+下方修正でモメンタム悪化。\n"
+)
+
+
+def _build_summary_brief_prompt(context: str, ticker: str, name: str) -> str:
+    return (
+        f"{name}({ticker})の直近決算を①②③④の4項目で要約せよ。\n"
+        f"【決算データ】\n{context}"
+    )
+
+
 @app.post("/api/summary/brief")
 async def summary_brief(req: SummaryRequest) -> dict:
     context = _format_context(req.analysis, req.guidance)
     ticker = req.analysis.get("ticker", "")
     name = req.analysis.get("companyName") or ticker
-
-    prompt = (
-        f"{name}({ticker})の決算を、決算分析プロトコルの"
-        f"観点で3〜4文・150文字以内で日本語要約してください。\n"
-        f"重要な数値・キーワード・判断根拠は **太字** で強調すること。1項目につき1箇所を目安にすること。\n"
-        f"① 判定結果と主な根拠（1文）\n"
-        f"② 最も注目すべき数字（1文）\n"
-        f"③ ガイダンス修正の有無（1文・なければ省略可）\n"
-        f"④ 総評（1文）\n"
-        f"各①②③④行の先頭に必ず以下のいずれかのタグを付けて出力してください：\n"
-        f"[POS] ポジティブな項目（Beat・増収・高マージン・条件達成など）\n"
-        f"[NEG] ネガティブな項目（Miss・条件未達・減収・課題など）\n"
-        f"[NEU] 中立・補足情報（ガイダンス変更なし・背景説明など）\n"
-        f"出力例：[POS]① 判定：全5条件達成... / [NEG]② CFPSがEPSを下回り... / [NEU]③ ガイダンス：変更なし\n"
-        f"数字は必ず具体的に記載してください。\n"
-        f"「X年連続」という表現は提供データから計算可能な期数のみ使用し、"
-        f"不確かな場合は「直近X期連続」と表記すること。\n"
-        f"③ガイダンスの項目は以下の形式で出力してください：修正がある場合は「③ガイダンス：🔴 修正あり」の後に内容を続ける、修正がない場合は「③ガイダンス：変更なし」とだけ記載する。\n"
-        f"①②③④の各項目は必ず改行してそれぞれ独立した段落として出力してください。\n"
-        f"レポートのタイトル行（例：〇〇 FY2025決算要約）は出力しないでください。①から直接始めてください。\n"
-        f"Markdown記法（##・__・*等）は禁止。ただし **太字** は重要箇所の強調として使用可。太字は必ず半角スペースで囲むこと（例: 売上は **136億ドル** に増加）。▲・▼・(・)などの記号に直接**を隣接させないこと。\n"
-        f"条件5（CFPS > EPS）が未達の場合は「CFPSがEPSを下回っており条件5未達」と明記し、"
-        f"「ほぼ同水準」「近い水準」等の曖昧な表現を使用しないこと。\n"
-        f"【重要な解釈指針】CFPS（1株あたり営業CF）がEPS（1株あたり利益）を上回る場合、"
-        f"これはキャッシュ創出力の高さを示すポジティブな指標です。"
-        f"「異常値」「懸念材料」「乖離が大きい」等の否定的な表現を使用してはなりません。\n\n"
-        f"【決算データ】\n{context}"
-    )
+    prompt = _build_summary_brief_prompt(context, ticker, name)
 
     try:
         client = ClaudeClient()
         text = await client.complete(
-            prompt, model="claude-haiku-4-5-20251001", max_tokens=512
+            prompt,
+            model="claude-haiku-4-5-20251001",
+            max_tokens=512,
+            system=_SUMMARY_SYSTEM_PROMPT,
         )
     except ClaudeError as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -2184,34 +2288,7 @@ async def summary_brief_stream(req: SummaryRequest):
     context = _format_context(req.analysis, req.guidance)
     ticker = req.analysis.get("ticker", "")
     name = req.analysis.get("companyName") or ticker
-
-    prompt = (
-        f"{name}({ticker})の決算を、決算分析プロトコルの"
-        f"観点で3〜4文・150文字以内で日本語要約してください。\n"
-        f"重要な数値・キーワード・判断根拠は **太字** で強調すること。1項目につき1箇所を目安にすること。\n"
-        f"① 判定結果と主な根拠（1文）\n"
-        f"② 最も注目すべき数字（1文）\n"
-        f"③ ガイダンス修正の有無（1文・なければ省略可）\n"
-        f"④ 総評（1文）\n"
-        f"各①②③④行の先頭に必ず以下のいずれかのタグを付けて出力してください：\n"
-        f"[POS] ポジティブな項目（Beat・増収・高マージン・条件達成など）\n"
-        f"[NEG] ネガティブな項目（Miss・条件未達・減収・課題など）\n"
-        f"[NEU] 中立・補足情報（ガイダンス変更なし・背景説明など）\n"
-        f"出力例：[POS]① 判定：全5条件達成... / [NEG]② CFPSがEPSを下回り... / [NEU]③ ガイダンス：変更なし\n"
-        f"数字は必ず具体的に記載してください。\n"
-        f"「X年連続」という表現は提供データから計算可能な期数のみ使用し、"
-        f"不確かな場合は「直近X期連続」と表記すること。\n"
-        f"③ガイダンスの項目は以下の形式で出力してください：修正がある場合は「③ガイダンス：🔴 修正あり」の後に内容を続ける、修正がない場合は「③ガイダンス：変更なし」とだけ記載する。\n"
-        f"①②③④の各項目は必ず改行してそれぞれ独立した段落として出力してください。\n"
-        f"レポートのタイトル行（例：〇〇 FY2025決算要約）は出力しないでください。①から直接始めてください。\n"
-        f"Markdown記法（##・__・*等）は禁止。ただし **太字** は重要箇所の強調として使用可。太字は必ず半角スペースで囲むこと（例: 売上は **136億ドル** に増加）。▲・▼・(・)などの記号に直接**を隣接させないこと。\n"
-        f"条件5（CFPS > EPS）が未達の場合は「CFPSがEPSを下回っており条件5未達」と明記し、"
-        f"「ほぼ同水準」「近い水準」等の曖昧な表現を使用しないこと。\n"
-        f"【重要な解釈指針】CFPS（1株あたり営業CF）がEPS（1株あたり利益）を上回る場合、"
-        f"これはキャッシュ創出力の高さを示すポジティブな指標です。"
-        f"「異常値」「懸念材料」「乖離が大きい」等の否定的な表現を使用してはなりません。\n\n"
-        f"【決算データ】\n{context}"
-    )
+    prompt = _build_summary_brief_prompt(context, ticker, name)
 
     try:
         client = ClaudeClient()
@@ -2221,7 +2298,10 @@ async def summary_brief_stream(req: SummaryRequest):
     async def generate():
         try:
             async for chunk in client.stream_complete(
-                prompt, model="claude-haiku-4-5-20251001", max_tokens=512
+                prompt,
+                model="claude-haiku-4-5-20251001",
+                max_tokens=512,
+                system=_SUMMARY_SYSTEM_PROMPT,
             ):
                 yield chunk
         except Exception:
@@ -2442,6 +2522,17 @@ async def get_analyst_data(ticker: str):
         except Exception as e_yf:
             print(f"yfinance supplement failed: {e_yf}")
 
+        # 同一四半期（報告月ベース）の重複排除 — AV と yfinance が同じ四半期で
+        # 45日超離れた日付を返すと _deduplicate が通過してしまうためここで除去
+        eps_records.sort(key=lambda x: x.get("date", ""), reverse=True)
+        _seen_fq: dict = {}
+        for _r in eps_records:
+            _d = _r.get("date", "")
+            if len(_d) >= 10:
+                _m = int(_d[5:7])
+                _qk = f"{_d[:4]}Q{1 if _m <= 3 else 2 if _m <= 6 else 3 if _m <= 9 else 4}"
+                _seen_fq.setdefault(_qk, _r)  # newest-first: first wins
+        eps_records = sorted(_seen_fq.values(), key=lambda x: x.get("date", ""), reverse=True)[:12]
         result["eps_history"] = eps_records
 
         return result
@@ -2457,7 +2548,7 @@ async def get_analyst_data(ticker: str):
 chart_summary_cache: dict = {}
 chart_candles_cache: dict = {}
 CHART_SUMMARY_TTL = 3600  # 1時間
-CHART_CANDLES_TTL = 300   # 5分
+CHART_CANDLES_TTL = 3600  # 1時間（1y日足は日中変化しない）
 
 
 @app.get("/api/chart/{ticker}/summary")
@@ -2522,11 +2613,11 @@ async def get_chart_summary(ticker: str):
 
 
 @app.get("/api/chart/{ticker}/candles")
-async def get_chart_candles(ticker: str, period: str = "1mo"):
-    """ローソク足データを返す（period: 1d / 1wk / 1mo / 6mo / 1y）"""
+async def get_chart_candles(ticker: str, period: str = "1y"):
+    """ローソク足データを返す（常に1y/1dで取得、表示範囲はフロントで制御）"""
     import yfinance as yf
     ticker = ticker.upper()
-    cache_key = f"{ticker}_{period}"
+    cache_key = f"{ticker}_1y"
     now = _time.time()
 
     if cache_key in chart_candles_cache:
@@ -2534,25 +2625,12 @@ async def get_chart_candles(ticker: str, period: str = "1mo"):
         if now - c["timestamp"] < CHART_CANDLES_TTL:
             return c["data"]
 
-    period_map = {
-        "1d":  {"period": "5d",  "interval": "30m"},
-        "1wk": {"period": "1mo", "interval": "1d"},
-        "1mo": {"period": "3mo", "interval": "1d"},
-        "6mo": {"period": "6mo", "interval": "1wk"},
-        "1y":  {"period": "1y",  "interval": "1wk"},
-    }
-    if period not in period_map:
-        raise HTTPException(status_code=400, detail="Invalid period")
-
-    params = period_map[period]
-    is_intraday = (params["interval"] == "30m")
-
     try:
         stock = yf.Ticker(ticker)
         hist = None
         for attempt in range(3):
             try:
-                hist = stock.history(**params)
+                hist = stock.history(period="1y", interval="1d")
                 if not hist.empty:
                     break
             except Exception:
@@ -2563,19 +2641,15 @@ async def get_chart_candles(ticker: str, period: str = "1mo"):
 
         candles = []
         for idx, row in hist.iterrows():
-            time_val = (
-                int(idx.timestamp()) if is_intraday
-                else idx.strftime("%Y-%m-%d")
-            )
             candles.append({
-                "time":  time_val,
+                "time":  idx.strftime("%Y-%m-%d"),
                 "open":  round(float(row["Open"]),  2),
                 "high":  round(float(row["High"]),  2),
                 "low":   round(float(row["Low"]),   2),
                 "close": round(float(row["Close"]), 2),
             })
 
-        result = {"ticker": ticker, "period": period, "candles": candles}
+        result = {"ticker": ticker, "period": "1y", "candles": candles}
         chart_candles_cache[cache_key] = {"data": result, "timestamp": now}
         return result
 
@@ -2583,6 +2657,288 @@ async def get_chart_candles(ticker: str, period: str = "1mo"):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── 急騰・急落銘柄 (Movers) ──────────────────────────────────────────────────
+
+_movers_cache: dict = {"data": None, "ts": 0.0}
+MOVERS_TTL = 1200  # 20分
+
+
+def _fetch_movers_sync() -> list[dict]:
+    import yfinance as yf
+    from .tickers_master import MASTER_TICKERS
+
+    raw = yf.download(
+        MASTER_TICKERS,
+        period="2d",
+        interval="1d",
+        progress=False,
+        auto_adjust=True,
+    )
+    # yfinance 0.2.x: MultiIndex columns (field, ticker)
+    close = raw["Close"] if "Close" in raw.columns.get_level_values(0) else raw.xs("Close", axis=1, level=0)
+
+    movers = []
+    for ticker in MASTER_TICKERS:
+        try:
+            series = close[ticker].dropna()
+            if len(series) < 2:
+                continue
+            prev, last = float(series.iloc[-2]), float(series.iloc[-1])
+            pct = (last - prev) / prev * 100
+            if abs(pct) >= 5.0:
+                movers.append({
+                    "ticker": ticker,
+                    "pct": round(pct, 2),
+                    "price": round(last, 2),
+                    "direction": "up" if pct > 0 else "down",
+                })
+        except Exception:
+            continue
+
+    ups   = sorted([m for m in movers if m["direction"] == "up"],   key=lambda x: x["pct"], reverse=True)[:5]
+    downs = sorted([m for m in movers if m["direction"] == "down"], key=lambda x: x["pct"])[:5]
+    return ups + downs
+
+
+def _is_relevant(headline: str, ticker: str, company_name: str = "") -> bool:
+    hl = headline.lower()
+    ticker_l = ticker.lower()
+
+    # ① ティッカーが単語として含まれる（word-boundary風）
+    if f" {ticker_l} " in f" {hl} ":
+        return True
+
+    # ② 企業名の先頭単語（4文字以上）が含まれる
+    if company_name:
+        first_word = company_name.split()[0].lower()
+        if len(first_word) >= 4 and first_word in hl:
+            return True
+
+    # ③ 汎用ワードのみの記事は除外
+    generic = {"ai", "stock", "market", "nasdaq", "s&p", "wall", "street", "index"}
+    words = set(hl.split()[:8])
+    if words and words.issubset(generic):
+        return False
+
+    return False
+
+
+def _fetch_headlines_sync(ticker: str, company_name: str = "") -> dict:
+    """Finnhub → yfinance の順でニュース取得。関連性チェック付き。"""
+    import urllib.request, json as _json, datetime
+
+    # ① Finnhub（最優先）
+    try:
+        import os
+        key = os.environ.get("FINNHUB_API_KEY", "")
+        if key:
+            to_date = datetime.date.today().isoformat()
+            fr_date = (datetime.date.today() - datetime.timedelta(days=7)).isoformat()
+            url = (f"https://finnhub.io/api/v1/company-news"
+                   f"?symbol={ticker}&from={fr_date}&to={to_date}&token={key}")
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=5) as r:
+                articles = _json.loads(r.read().decode())
+            for article in articles[:10]:
+                headline = article.get("headline", "")
+                if _is_relevant(headline, ticker, company_name):
+                    return {
+                        "headline": headline,
+                        "url":      article.get("url", ""),
+                        "source":   article.get("source", "Finnhub"),
+                    }
+    except Exception:
+        pass
+
+    # ② yfinance
+    try:
+        import yfinance as yf
+        news = yf.Ticker(ticker).news or []
+        for n in news[:5]:
+            headline = n.get("title", "")
+            if _is_relevant(headline, ticker, company_name):
+                return {
+                    "headline": headline,
+                    "url":      n.get("link", ""),
+                    "source":   n.get("publisher", "Yahoo Finance"),
+                }
+    except Exception:
+        pass
+
+    return {"headline": "", "url": "", "source": ""}
+
+
+def _fetch_sector_sync(ticker: str) -> dict:
+    import yfinance as yf
+    try:
+        info = yf.Ticker(ticker).info
+        return {
+            "sector":       info.get("sector", ""),
+            "industry":     info.get("industry", ""),
+            "company_name": info.get("shortName", ticker),
+        }
+    except Exception:
+        return {"sector": "", "industry": "", "company_name": ticker}
+
+
+async def _add_reason(m: dict) -> dict:
+    import json as _json
+
+    sector_data = await asyncio.to_thread(_fetch_sector_sync, m["ticker"])
+    company_name = sector_data.get("company_name", "")
+    news_data = await asyncio.to_thread(_fetch_headlines_sync, m["ticker"], company_name)
+
+    headline = news_data["headline"]
+    has_news = bool(headline)
+    sector   = sector_data.get("sector", "")
+    industry = sector_data.get("industry", "")
+    price    = m.get("price", "")
+
+    if has_news:
+        prompt = f"""以下の銘柄の急騰・急落理由をJSONで出力せよ。
+
+銘柄: {m['ticker']} ({company_name})
+セクター: {sector} / 業種: {industry}
+変動: {m['pct']:+.1f}% | 株価: ${price}
+関連ニュース: {headline}
+
+{{"keyword": "20字以内・最重要ポイント", "detail": "50字以内・具体的な背景や数値"}}
+JSONのみ出力。キーは keyword と detail の2つのみ。マークダウン禁止。"""
+    else:
+        prompt = f"""以下の銘柄の急騰・急落理由を、セクター・マクロ環境から推測してJSONで出力せよ。
+
+銘柄: {m['ticker']} ({company_name})
+セクター: {sector} / 業種: {industry}
+変動: {m['pct']:+.1f}% | 株価: ${price}
+※ニュース情報なし。セクタートレンドと値動きから推測すること。
+
+{{"keyword": "20字以内・推測されるキーワード", "detail": "50字以内・〜とみられる の語尾で"}}
+JSONのみ出力。キーは keyword と detail の2つのみ。マークダウン禁止。空欄・「情報なし」は絶対に禁止。"""
+
+    import re as _re
+    m["keyword"] = ""
+    m["detail"]  = ""
+    raw = ""
+    try:
+        client = ClaudeClient()
+        text = await client.complete(prompt, model="claude-haiku-4-5-20251001",
+                                     max_tokens=150, temperature=0.1)
+        raw = text.strip()
+
+        cleaned = _re.sub(r'```(?:json)?', '', raw).replace('`', '').strip()
+        start = cleaned.find('{')
+        end   = cleaned.rfind('}')
+
+        if start != -1 and end > start:
+            parsed = _json.loads(cleaned[start:end + 1])
+            # フラット形式 {"keyword":..,"detail":..} または
+            # ネスト形式 {"reason":{"keyword":..,"detail":..}} に両対応
+            inner = parsed.get("reason") or parsed
+            m["keyword"] = str(inner.get("keyword") or "").strip()
+            m["detail"]  = str(inner.get("detail")  or "").strip()
+    except Exception as _e:
+        print(f"[DEBUG-ERR] {m['ticker']} exception={type(_e).__name__}: {_e}")
+        m["_debug_err"] = f"{type(_e).__name__}: {_e}"
+
+    m["_debug_raw"] = raw[:120] if raw else ""
+    print(f"[DEBUG] {m['ticker']} raw={repr(raw[:80])} keyword={m['keyword']}")
+
+    if not news_data.get("url"):
+        news_data["url"]    = f"https://finance.yahoo.com/quote/{m['ticker']}/news/"
+        news_data["source"] = "Yahoo Finance"
+
+    m["source_url"]  = news_data["url"]
+    m["source_name"] = news_data["source"]
+    m["has_news"]    = has_news
+    return m
+
+
+@app.get("/api/movers/debug")
+async def debug_movers():
+    """Finnhub疎通・JSON解析の診断用エンドポイント"""
+    import os, json as _json, datetime, urllib.request, re as _re
+    results: dict = {}
+
+    # ① Finnhub 疎通確認
+    finnhub_key = os.environ.get("FINNHUB_API_KEY", "")
+    results["finnhub_key_exists"] = bool(finnhub_key)
+    results["finnhub_key_prefix"] = (finnhub_key[:6] + "...") if finnhub_key else "未設定"
+    try:
+        to_date = datetime.date.today().isoformat()
+        fr_date = (datetime.date.today() - datetime.timedelta(days=3)).isoformat()
+        url = (f"https://finnhub.io/api/v1/company-news"
+               f"?symbol=AAPL&from={fr_date}&to={to_date}&token={finnhub_key}")
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = _json.loads(r.read().decode())
+        results["finnhub_status"] = "OK"
+        results["finnhub_articles_count"] = len(data)
+        results["finnhub_sample"] = data[0]["headline"] if data else "記事なし"
+    except Exception as e:
+        results["finnhub_status"] = f"ERROR: {e}"
+
+    # ② Haiku JSON出力確認（_add_reason と同じプロンプト形式）
+    try:
+        client = ClaudeClient()
+        test_prompt = """以下の銘柄の価格変動理由をJSON形式で出力せよ。
+
+銘柄: INTC (Intel Corporation) | セクター: Technology
+変動: -4.2% | 株価: $21.5
+ニュースなし。セクター・マクロ環境から推測。
+
+出力例:
+{"keyword": "AI需要・決算Beat", "detail": "データセンター向け需要が急拡大とみられる"}
+
+JSONのみ出力。マークダウン・前置き禁止。"""
+        raw = await client.complete(test_prompt, model="claude-haiku-4-5-20251001",
+                                    max_tokens=150, temperature=0.1)
+        raw = raw.strip()
+        results["haiku_raw"] = raw
+        cleaned = _re.sub(r'```(?:json)?', '', raw).replace('`', '').strip()
+        start = cleaned.find('{')
+        end   = cleaned.rfind('}')
+        if start != -1 and end > start:
+            parsed = _json.loads(cleaned[start:end + 1])
+            results["haiku_parse"] = "OK"
+            results["haiku_keyword"] = parsed.get("keyword")
+            results["haiku_detail"]  = parsed.get("detail")
+        else:
+            results["haiku_parse"] = f"JSON not found — cleaned={repr(cleaned[:80])}"
+    except Exception as e:
+        results["haiku_status"] = f"ERROR: {type(e).__name__}: {e}"
+
+    # ③ キャッシュクリア
+    _movers_cache["data"] = None
+    _movers_cache["ts"]   = 0.0
+    results["cache"] = "クリア済み"
+
+    return results
+
+
+@app.get("/api/movers")
+async def get_movers():
+    now = _time.time()
+    if _movers_cache["data"] and now - _movers_cache["ts"] < MOVERS_TTL:
+        return _movers_cache["data"]
+
+    top_movers = await asyncio.to_thread(_fetch_movers_sync)
+
+    results: list = []
+    batch_size = 4
+    for i in range(0, len(top_movers), batch_size):
+        batch = top_movers[i:i + batch_size]
+        batch_results = await asyncio.gather(*[_add_reason(m) for m in batch])
+        results.extend(batch_results)
+        if i + batch_size < len(top_movers):
+            await asyncio.sleep(1)
+    top_movers = results
+
+    result = {"movers": list(top_movers), "updated_at": int(now)}
+    _movers_cache["data"] = result
+    _movers_cache["ts"] = now
+    return result
 
 
 # ── Static file serving (must be LAST — after all /api/* routes) ─────────────
