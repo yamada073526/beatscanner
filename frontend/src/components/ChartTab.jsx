@@ -42,10 +42,10 @@ function perfColor(value) {
 }
 
 function daysColor(daysLeft) {
-  if (daysLeft == null) return 'var(--color-text-tertiary)';
-  if (daysLeft <= 3) return 'var(--color-text-danger)';
-  if (daysLeft <= 7) return 'var(--color-text-warning)';
-  return 'var(--color-text-tertiary)';
+  if (daysLeft == null) return 'var(--text-muted)';
+  if (daysLeft <= 3) return '#dc2626';
+  if (daysLeft <= 7) return '#ea580c';
+  return 'var(--text-muted)';
 }
 
 function useIsMobile() {
@@ -291,7 +291,7 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
   };
 
   const fmtDate = (dateStr) => {
-    if (!dateStr) return "未定";
+    if (!dateStr) return "——";
     const d = new Date(dateStr);
     return `${d.getMonth() + 1}/${d.getDate()}`;
   };
@@ -324,7 +324,7 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
       onMouseEnter={handleMouseEnter}
     >
       <div
-        className="flex flex-col px-4 py-3 cursor-pointer select-none"
+        style={{ display: 'flex', alignItems: 'stretch', gap: 0, cursor: 'pointer', userSelect: 'none' }}
         onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
         onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}
         onClick={() => {
@@ -338,87 +338,77 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
           }
         }}
       >
-        {/* 上段: ティッカー・騰落率・矢印 */}
-        <div className="flex items-center gap-2">
-          <div className="flex flex-col w-20 flex-shrink-0">
-            <span
-              className="font-bold text-sm leading-tight"
-              style={{ color: 'var(--text-primary)' }}
-            >{ticker}</span>
-            <span className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-              {summary ? `$${summary.current_price.toLocaleString()}` : "—"}
-            </span>
-          </div>
-
-          {/* 騰落率グリッド：PC 5列 / モバイル 4列（半年非表示） */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile ? 'repeat(4,1fr)' : 'repeat(5,1fr)',
-            flex: 1,
-            background: 'var(--color-background-secondary)',
-            borderRadius: '6px',
-            overflow: 'hidden',
-            marginTop: '8px'
-          }}>
-            {PERIODS.map(({ key, label }, idx) => {
-              if (isMobile && key === '6mo') return null;
-              const val = summary?.performance?.[key];
-              const isLastVisible = isMobile ? key === '1y' : idx === PERIODS.length - 1;
-              const color = val == null ? 'var(--color-text-tertiary)'
-                          : val >= 0 ? '#3B6D11' : '#A32D2D';
-              return (
-                <div key={key} style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '10px 0',
-                  gap: '6px',
-                  borderRight: isLastVisible ? 'none' : '0.5px solid var(--color-border-tertiary)'
-                }}>
-                  <span style={{
-                    fontSize: '10px',
-                    color: 'var(--color-text-tertiary)',
-                    lineHeight: 1,
-                  }}>{label}</span>
-                  {summary
-                    ? <span style={{
-                        fontSize: '16px',
-                        fontWeight: 500,
-                        lineHeight: 1,
-                        color,
-                      }}>
-                        {val == null ? '—' : `${val >= 0 ? '+' : ''}${val.toFixed(1)}%`}
-                      </span>
-                    : <span className="skeleton-cell" />
-                  }
-                </div>
-              );
-            })}
-          </div>
-
-          <span className={`text-xs flex-shrink-0 transition-transform duration-200 ${
-            expanded ? "rotate-180" : ""
-          }`} style={{ color: 'var(--text-muted)' }}>▼</span>
+        {/* 左: 銘柄名・株価・次回決算 */}
+        <div style={{ width: 140, flexShrink: 0, padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3 }}>
+          <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.2 }}>{ticker}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            {summary ? `$${summary.current_price.toLocaleString()}` : "—"}
+          </span>
+          {(summary || summaryErr) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 3 }}>
+              <span style={{
+                fontSize: 10, fontWeight: 500,
+                background: 'var(--bg-subtle)', color: 'var(--text-secondary)',
+                padding: '2px 6px', borderRadius: 4,
+              }}>
+                次回決算 {summaryErr ? '—' : fmtDate(summary?.next_earnings)}
+              </span>
+              {daysToEarnings != null && daysToEarnings >= 0 && (
+                <span style={{ fontSize: 10, color: daysColor(daysToEarnings) }}>
+                  ● あと{daysToEarnings}日
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* 下段: 次回決算（独立行） */}
-        {(summary || summaryErr) && (
-          <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "8px" }}>
-            <span style={{
-              fontSize: "10px", fontWeight: 500,
-              background: "var(--bg-subtle)", color: "var(--text-secondary)",
-              padding: "2px 8px", borderRadius: "4px",
-            }}>
-              次回決算 {summaryErr ? "—" : fmtDate(summary?.next_earnings)}
-            </span>
-            {daysToEarnings != null && daysToEarnings >= 0 && (
-              <span style={{ fontSize: "10px", color: daysColor(daysToEarnings) }}>
-                ● あと{daysToEarnings}日
-              </span>
-            )}
-          </div>
-        )}
+        {/* 騰落率グリッド：PC 5列 / モバイル 4列（半年非表示） */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? 'repeat(4,1fr)' : 'repeat(5,1fr)',
+          flex: 1,
+          background: 'var(--bg-subtle)',
+          borderRadius: 6,
+          margin: '8px 0',
+          overflow: 'hidden',
+          alignSelf: 'center',
+        }}>
+          {PERIODS.map(({ key, label }, idx) => {
+            if (isMobile && key === '6mo') return null;
+            const val = summary?.performance?.[key];
+            const isLastVisible = isMobile ? key === '1y' : idx === PERIODS.length - 1;
+            const color = val == null ? 'var(--text-muted)'
+                        : val >= 0 ? '#3B6D11' : '#A32D2D';
+            return (
+              <div key={key} style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '10px 0',
+                gap: '6px',
+                borderRight: isLastVisible ? 'none' : '0.5px solid var(--border)',
+              }}>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)', lineHeight: 1 }}>{label}</span>
+                {summary
+                  ? <span style={{ fontSize: '16px', fontWeight: 500, lineHeight: 1, color }}>
+                      {val == null ? '—' : `${val >= 0 ? '+' : ''}${val.toFixed(1)}%`}
+                    </span>
+                  : <span className="skeleton-cell" />
+                }
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 矢印 */}
+        <span style={{
+          display: 'flex', alignItems: 'center',
+          padding: '0 14px', flexShrink: 0,
+          fontSize: 12, color: 'var(--text-muted)',
+          transition: 'transform 0.2s',
+          transform: expanded ? 'rotate(180deg)' : 'none',
+        }}>▼</span>
       </div>
 
       <div
