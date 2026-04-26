@@ -44,20 +44,13 @@ if (typeof document !== "undefined" && !document.getElementById("charttab-shimme
   document.head.appendChild(s);
 }
 
-function PerfBadge({ value }) {
-  if (value === null || value === undefined) {
-    return <span className="tabular-nums" style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)" }}>—</span>;
-  }
+function perfColor(value) {
+  if (value == null) return "var(--text-muted)";
   const isPos   = value >= 0;
   const isLarge = Math.abs(value) >= 5;
-  const color = isPos
+  return isPos
     ? isLarge ? "#2563eb" : "#22c55e"
     : isLarge ? "#dc2626" : "#f87171";
-  return (
-    <span className="tabular-nums" style={{ fontSize: "10px", fontWeight: 700, color }}>
-      {isPos ? "+" : ""}{value.toFixed(1)}%
-    </span>
-  );
 }
 
 // ── Error Boundary ────────────────────────────────────────────────
@@ -351,15 +344,31 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
 
           {/* 騰落率グリッド：PC 5列 / モバイル 4列（半年非表示） */}
           <div className="perf-grid flex-1">
-            {PERIODS.map(({ key, label }) => (
-              <div key={key} className={`flex flex-col items-center${key === "6mo" ? " hide-mobile" : ""}`}>
-                <span style={{ fontSize: "9px", color: 'var(--text-muted)', marginBottom: "2px" }}>{label}</span>
-                {summary
-                  ? <PerfBadge value={summary.performance?.[key]} />
-                  : <span className="skeleton-cell" />
-                }
-              </div>
-            ))}
+            {PERIODS.map(({ key, label }, idx) => {
+              const val = summary?.performance?.[key];
+              const isLast = idx === PERIODS.length - 1;
+              return (
+                <div
+                  key={key}
+                  className={key === "6mo" ? "hide-mobile" : ""}
+                  style={{
+                    textAlign: "center",
+                    padding: "4px 0",
+                    borderRight: isLast ? "none" : "0.5px solid var(--border)",
+                  }}
+                >
+                  <span style={{ fontSize: "10px", color: "var(--text-muted)", display: "block", marginBottom: "3px" }}>
+                    {label}
+                  </span>
+                  {summary
+                    ? <span className="tabular-nums" style={{ fontSize: "13px", fontWeight: 500, display: "block", color: perfColor(val) }}>
+                        {val == null ? "—" : `${val >= 0 ? "+" : ""}${val.toFixed(1)}%`}
+                      </span>
+                    : <span className="skeleton-cell" />
+                  }
+                </div>
+              );
+            })}
           </div>
 
           <span className={`text-xs flex-shrink-0 transition-transform duration-200 ${

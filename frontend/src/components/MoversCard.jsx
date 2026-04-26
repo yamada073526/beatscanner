@@ -7,27 +7,31 @@ function Card({ m, onSelect }) {
 
   return (
     <div
-      onClick={() => onSelect && onSelect(m.ticker)}
       style={{
         background: "var(--bg-secondary)",
         borderLeft: `3px solid ${isUp ? "#3b82f6" : "#ef4444"}`,
         borderRadius: "0 8px 8px 0",
         padding: "10px 12px",
-        cursor: "pointer",
         marginBottom: "8px",
       }}
     >
-      {/* 1行目: ティッカー・株価・騰落率 */}
+      {/* 1行目: ティッカー（クリックで詳細）・株価・騰落率 */}
       <div style={{
         display: "flex", justifyContent: "space-between",
-        alignItems: "baseline", marginBottom: "4px",
+        alignItems: "baseline", marginBottom: "6px",
       }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
-          <span style={{ fontWeight: 700, fontSize: "14px",
-                         color: "var(--text-primary)" }}>{m.ticker}</span>
+        <div
+          onClick={() => onSelect && onSelect(m.ticker)}
+          style={{ display: "flex", alignItems: "baseline", gap: "6px", cursor: "pointer" }}
+        >
+          <span style={{
+            fontWeight: 500, fontSize: "14px",
+            color: "#2563eb",
+            textDecoration: "underline",
+            textUnderlineOffset: "2px",
+          }}>{m.ticker}</span>
           {m.price != null && (
-            <span style={{ fontSize: "11px",
-                           color: "var(--text-secondary)" }}>${m.price}</span>
+            <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>${m.price}</span>
           )}
         </div>
         <span style={{ fontWeight: 700, fontSize: "13px",
@@ -36,39 +40,29 @@ function Card({ m, onSelect }) {
         </span>
       </div>
 
-      {/* 2行目: キーワード + ソース（インライン） */}
+      {/* 2行目: keyword → 記事リンク */}
       {m.keyword && (
-        <div style={{
-          display: "flex", justifyContent: "space-between", alignItems: "flex-end",
-          marginBottom: "6px",
-        }}>
-          <span style={{ fontSize: "15px", fontWeight: 500, color: "var(--text-primary)" }}>
-            {m.keyword}
-          </span>
-          {m.source_name && m.source_url && (
-            <a
+        m.source_url
+          ? <a
               href={m.source_url}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
               style={{
-                fontSize: "10px",
-                color: "var(--text-secondary)",
-                background: "var(--bg-subtle)",
-                padding: "2px 8px",
-                borderRadius: "4px",
-                textDecoration: "none",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "4px",
-                flexShrink: 0,
-                marginLeft: "6px",
+                display: "block",
+                fontSize: "14px",
+                fontWeight: 500,
+                color: "var(--text-primary)",
+                textDecoration: "underline",
+                textUnderlineOffset: "2px",
+                textDecorationColor: "var(--border)",
               }}
             >
-              {m.source_name} ↗
+              {m.keyword}
             </a>
-          )}
-        </div>
+          : <span style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "var(--text-primary)" }}>
+              {m.keyword}
+            </span>
       )}
     </div>
   );
