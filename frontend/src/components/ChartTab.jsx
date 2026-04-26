@@ -352,16 +352,17 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
                   key={key}
                   className={key === "6mo" ? "hide-mobile" : ""}
                   style={{
-                    textAlign: "center",
-                    padding: "4px 0",
+                    display: "flex", flexDirection: "column",
+                    alignItems: "center", justifyContent: "center",
+                    gap: "4px", padding: "6px 0",
                     borderRight: isLast ? "none" : "0.5px solid var(--border)",
                   }}
                 >
-                  <span style={{ fontSize: "10px", color: "var(--text-muted)", display: "block", marginBottom: "3px" }}>
+                  <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>
                     {label}
                   </span>
                   {summary
-                    ? <span className="tabular-nums" style={{ fontSize: "13px", fontWeight: 500, display: "block", color: perfColor(val) }}>
+                    ? <span className="tabular-nums" style={{ fontSize: "14px", fontWeight: 500, color: perfColor(val) }}>
                         {val == null ? "—" : `${val >= 0 ? "+" : ""}${val.toFixed(1)}%`}
                       </span>
                     : <span className="skeleton-cell" />

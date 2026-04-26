@@ -424,7 +424,8 @@ export default function App() {
               : 'text-slate-500 hover:text-slate-700'
           }`}
         >
-          📊 判定詳細
+          <span className="sm:hidden">📊 判定</span>
+          <span className="hidden sm:inline">📊 判定詳細</span>
         </button>
         <button
           onClick={() => {
@@ -440,7 +441,8 @@ export default function App() {
               : 'text-slate-500 hover:text-slate-700'
           }`}
         >
-          {isPro() ? '📝 決算レポート' : '🔒 決算レポート'}
+          <span className="sm:hidden">{isPro() ? '📝 決算' : '🔒 決算'}</span>
+          <span className="hidden sm:inline">{isPro() ? '📝 決算レポート' : '🔒 決算レポート'}</span>
         </button>
         <button
           onClick={() => setActiveTab('チャート')}

@@ -15,25 +15,24 @@ function Card({ m, onSelect }) {
         marginBottom: "8px",
       }}
     >
-      {/* 1行目: ティッカー（クリックで詳細）・株価・騰落率 */}
+      {/* 1行目: ティッカーピル・騰落率 */}
       <div style={{
         display: "flex", justifyContent: "space-between",
-        alignItems: "baseline", marginBottom: "6px",
+        alignItems: "center", marginBottom: "6px",
       }}>
-        <div
+        <span
           onClick={() => onSelect && onSelect(m.ticker)}
-          style={{ display: "flex", alignItems: "baseline", gap: "6px", cursor: "pointer" }}
-        >
-          <span style={{
-            fontWeight: 500, fontSize: "14px",
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 3,
+            fontSize: 13, fontWeight: 500,
             color: "#2563eb",
-            textDecoration: "underline",
-            textUnderlineOffset: "2px",
-          }}>{m.ticker}</span>
-          {m.price != null && (
-            <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>${m.price}</span>
-          )}
-        </div>
+            background: "#dbeafe",
+            padding: "2px 7px", borderRadius: 4,
+            cursor: "pointer",
+          }}
+        >
+          {m.ticker}{m.price != null ? ` $${m.price}` : ""} →
+        </span>
         <span style={{ fontWeight: 700, fontSize: "13px",
                        color: isUp ? "#3b82f6" : "#ef4444" }}>
           {m.pct > 0 ? "+" : ""}{m.pct}%
@@ -50,17 +49,16 @@ function Card({ m, onSelect }) {
               onClick={(e) => e.stopPropagation()}
               style={{
                 display: "block",
-                fontSize: "14px",
-                fontWeight: 500,
+                fontSize: 14, fontWeight: 500,
                 color: "var(--text-primary)",
-                textDecoration: "underline",
-                textUnderlineOffset: "2px",
-                textDecorationColor: "var(--border)",
+                textDecoration: "none",
+                borderBottom: "1.5px solid #378ADD",
+                paddingBottom: "1px",
               }}
             >
               {m.keyword}
             </a>
-          : <span style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "var(--text-primary)" }}>
+          : <span style={{ display: "block", fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>
               {m.keyword}
             </span>
       )}
