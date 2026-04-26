@@ -343,7 +343,7 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
         {/* ① 騰落率セル：summary 取得中はスケルトン表示 */}
         <div className="flex flex-1 gap-1">
           {PERIODS.map(({ key, label }) => (
-            <div key={key} className="flex flex-col items-center flex-1 min-w-0">
+            <div key={key} className="flex flex-col items-center flex-1" style={{ minWidth: "52px" }}>
               <span className="text-[10px] mb-0.5" style={{ color: 'var(--text-muted)' }}>{label}</span>
               {summary
                 ? <PerfBadge value={summary.performance?.[key]} />

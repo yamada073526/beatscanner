@@ -11,12 +11,10 @@ function Card({ m, onSelect }) {
       style={{
         background: "var(--bg-secondary)",
         borderLeft: `3px solid ${isUp ? "#3b82f6" : "#ef4444"}`,
-        borderRight: "none",
-        borderTop: "none",
-        borderBottom: "none",
         borderRadius: "0 8px 8px 0",
         padding: "10px 12px",
         cursor: "pointer",
+        marginBottom: "8px",
       }}
     >
       {/* 1行目: ティッカー・株価・騰落率 */}
@@ -86,30 +84,20 @@ function Card({ m, onSelect }) {
   );
 }
 
-function Section({ title, list, onSelect }) {
-  return (
-    <div style={{ marginBottom: "12px" }}>
-      <div style={{ fontSize: "11px", fontWeight: 600,
-                    color: "var(--text-secondary)",
-                    marginBottom: "8px", paddingLeft: "2px" }}>{title}</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "10px" }}>
-        {list.map((m) => <Card key={m.ticker} m={m} onSelect={onSelect} />)}
-      </div>
-    </div>
-  );
-}
-
 export default function MoversCard({ onSelect }) {
-  const [movers, setMovers] = useState(null);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [elapsed, setElapsed] = useState(0);
+
+  const today = new Date();
+  const dateLabel = `${today.getMonth() + 1}月${today.getDate()}日`;
 
   useEffect(() => {
     const timer = setInterval(() => setElapsed((e) => e + 1), 1000);
 
     fetch(`${API_BASE}/api/movers`)
       .then((r) => r.json())
-      .then((d) => { setMovers(d.movers); setLoading(false); clearInterval(timer); })
+      .then((d) => { setData(d); setLoading(false); clearInterval(timer); })
       .catch(() => { setLoading(false); clearInterval(timer); });
 
     return () => clearInterval(timer);
@@ -120,7 +108,7 @@ export default function MoversCard({ onSelect }) {
       <div style={{ padding: "16px", borderBottom: "1px solid var(--border)" }}>
         <div style={{ fontSize: "13px", fontWeight: 700,
                       color: "var(--text-primary)", marginBottom: "12px" }}>
-          ⚡ 本日の急騰・急落銘柄（前日比±5%以上）
+          ⚡ {dateLabel}の急騰・急落銘柄 Top 5
         </div>
         <div style={{ fontSize: "12px", color: "var(--text-secondary)",
                       display: "flex", alignItems: "center", gap: "8px" }}>
@@ -137,19 +125,46 @@ export default function MoversCard({ onSelect }) {
       </div>
     );
   }
-  if (!movers || movers.length === 0) return null;
 
-  const ups   = movers.filter((m) => m.direction === "up");
-  const downs = movers.filter((m) => m.direction === "down");
+  const gainers = data?.gainers ?? [];
+  const losers  = data?.losers  ?? [];
+  if (!gainers.length && !losers.length) return null;
 
   return (
     <div style={{ padding: "24px 16px 4px", borderBottom: "1px solid var(--border)", marginBottom: "24px" }}>
       <div style={{ fontSize: "13px", fontWeight: 700,
                     color: "var(--text-primary)", marginBottom: "12px" }}>
-        ⚡ 本日の急騰・急落銘柄（前日比±5%以上）
+        ⚡ {dateLabel}の急騰・急落銘柄 Top 5
       </div>
-      {ups.length   > 0 && <Section title="🔵 急騰" list={ups}   onSelect={onSelect} />}
-      {downs.length > 0 && <Section title="🔴 急落" list={downs} onSelect={onSelect} />}
+      <style>{`
+        @media (max-width: 600px) {
+          .movers-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+      <div
+        className="movers-grid"
+        style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", alignItems: "start" }}
+      >
+        {/* 左列: gainers */}
+        <div>
+          <div style={{
+            display: "inline-block", fontSize: "11px", fontWeight: 700,
+            background: "#EAF3DE", color: "#3B6D11",
+            borderRadius: "4px", padding: "2px 8px", marginBottom: "8px",
+          }}>▲ 急騰 Top 5</div>
+          {gainers.map((m) => <Card key={m.ticker} m={m} onSelect={onSelect} />)}
+        </div>
+
+        {/* 右列: losers */}
+        <div>
+          <div style={{
+            display: "inline-block", fontSize: "11px", fontWeight: 700,
+            background: "#FCEBEB", color: "#A32D2D",
+            borderRadius: "4px", padding: "2px 8px", marginBottom: "8px",
+          }}>▼ 急落 Top 5</div>
+          {losers.map((m) => <Card key={m.ticker} m={m} onSelect={onSelect} />)}
+        </div>
+      </div>
     </div>
   );
 }

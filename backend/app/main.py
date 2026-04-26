@@ -2687,13 +2687,12 @@ def _fetch_movers_sync() -> list[dict]:
                 continue
             prev, last = float(series.iloc[-2]), float(series.iloc[-1])
             pct = (last - prev) / prev * 100
-            if abs(pct) >= 5.0:
-                movers.append({
-                    "ticker": ticker,
-                    "pct": round(pct, 2),
-                    "price": round(last, 2),
-                    "direction": "up" if pct > 0 else "down",
-                })
+            movers.append({
+                "ticker": ticker,
+                "pct": round(pct, 2),
+                "price": round(last, 2),
+                "direction": "up" if pct > 0 else "down",
+            })
         except Exception:
             continue
 
@@ -2935,7 +2934,9 @@ async def get_movers():
             await asyncio.sleep(1)
     top_movers = results
 
-    result = {"movers": list(top_movers), "updated_at": int(now)}
+    gainers = [m for m in top_movers if m["direction"] == "up"]
+    losers  = [m for m in top_movers if m["direction"] == "down"]
+    result = {"gainers": gainers, "losers": losers, "updated_at": int(now)}
     _movers_cache["data"] = result
     _movers_cache["ts"] = now
     return result
