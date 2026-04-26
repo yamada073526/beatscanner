@@ -32,25 +32,25 @@ if (typeof document !== "undefined" && !document.getElementById("charttab-shimme
       background: linear-gradient(90deg, #2d3748 25%, #3d4a5c 50%, #2d3748 75%);
       background-size: 400px 100%;
     }
-    .perf-grid {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-    }
-    @media (max-width: 600px) {
-      .perf-grid { grid-template-columns: repeat(4, 1fr); }
-      .hide-mobile { display: none !important; }
-    }
   `;
   document.head.appendChild(s);
 }
 
 function perfColor(value) {
   if (value == null) return "var(--text-muted)";
-  const isPos   = value >= 0;
-  const isLarge = Math.abs(value) >= 5;
-  return isPos
-    ? isLarge ? "#2563eb" : "#22c55e"
-    : isLarge ? "#dc2626" : "#f87171";
+  return value >= 0 ? "#3B6D11" : "#A32D2D";
+}
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth <= 600 : false
+  );
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 600);
+    window.addEventListener("resize", handler, { passive: true });
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return isMobile;
 }
 
 // ── Error Boundary ────────────────────────────────────────────────
@@ -248,6 +248,7 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
   const [expanded,   setExpanded]   = useState(false);
   const [mounted,    setMounted]    = useState(false);
   const [period,     setPeriod]     = useState("1mo");
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     let cancelled = false;
@@ -343,26 +344,32 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
           </div>
 
           {/* 騰落率グリッド：PC 5列 / モバイル 4列（半年非表示） */}
-          <div className="perf-grid flex-1">
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: `repeat(${isMobile ? 4 : 5}, 1fr)`,
+            flex: 1,
+          }}>
             {PERIODS.map(({ key, label }, idx) => {
               const val = summary?.performance?.[key];
               const isLast = idx === PERIODS.length - 1;
+              if (isMobile && key === "6mo") return null;
+              const isLastVisible = isMobile ? key === "1y" : isLast;
               return (
                 <div
                   key={key}
-                  className={key === "6mo" ? "hide-mobile" : ""}
                   style={{
                     display: "flex", flexDirection: "column",
                     alignItems: "center", justifyContent: "center",
-                    gap: "4px", padding: "6px 0",
-                    borderRight: isLast ? "none" : "0.5px solid var(--border)",
+                    gap: 4, padding: "6px 0",
+                    borderRight: isLastVisible ? "none" : "0.5px solid var(--border)",
+                    textAlign: "center",
                   }}
                 >
-                  <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>
+                  <span style={{ fontSize: 10, color: "var(--text-muted)", lineHeight: 1 }}>
                     {label}
                   </span>
                   {summary
-                    ? <span className="tabular-nums" style={{ fontSize: "14px", fontWeight: 500, color: perfColor(val) }}>
+                    ? <span className="tabular-nums" style={{ fontSize: 13, fontWeight: 500, lineHeight: 1, color: perfColor(val) }}>
                         {val == null ? "—" : `${val >= 0 ? "+" : ""}${val.toFixed(1)}%`}
                       </span>
                     : <span className="skeleton-cell" />

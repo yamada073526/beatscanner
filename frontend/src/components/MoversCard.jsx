@@ -15,24 +15,30 @@ function Card({ m, onSelect }) {
         marginBottom: "8px",
       }}
     >
-      {/* 1行目: ティッカーピル・騰落率 */}
+      {/* 1行目: ティッカーピル・株価・騰落率 */}
       <div style={{
         display: "flex", justifyContent: "space-between",
         alignItems: "center", marginBottom: "6px",
       }}>
-        <span
-          onClick={() => onSelect && onSelect(m.ticker)}
-          style={{
-            display: "inline-flex", alignItems: "center", gap: 3,
-            fontSize: 13, fontWeight: 500,
-            color: "#2563eb",
-            background: "#dbeafe",
-            padding: "2px 7px", borderRadius: 4,
-            cursor: "pointer",
-          }}
-        >
-          {m.ticker}{m.price != null ? ` $${m.price}` : ""}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span
+            onClick={() => onSelect && onSelect(m.ticker)}
+            style={{
+              fontSize: 12, fontWeight: 500,
+              color: "#2563eb",
+              background: "#dbeafe",
+              padding: "2px 8px", borderRadius: 4,
+              cursor: "pointer",
+            }}
+          >
+            {m.ticker}
+          </span>
+          {m.price != null && (
+            <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+              ${m.price}
+            </span>
+          )}
+        </div>
         <span style={{ fontWeight: 700, fontSize: "13px",
                        color: isUp ? "#3b82f6" : "#ef4444" }}>
           {m.pct > 0 ? "+" : ""}{m.pct}%
