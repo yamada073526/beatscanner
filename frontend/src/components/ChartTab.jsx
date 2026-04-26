@@ -32,22 +32,29 @@ if (typeof document !== "undefined" && !document.getElementById("charttab-shimme
       background: linear-gradient(90deg, #2d3748 25%, #3d4a5c 50%, #2d3748 75%);
       background-size: 400px 100%;
     }
+    .perf-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+    }
+    @media (max-width: 600px) {
+      .perf-grid { grid-template-columns: repeat(4, 1fr); }
+      .hide-mobile { display: none !important; }
+    }
   `;
   document.head.appendChild(s);
 }
 
 function PerfBadge({ value }) {
   if (value === null || value === undefined) {
-    return <span className="text-slate-300 text-sm font-medium tabular-nums">—</span>;
+    return <span className="tabular-nums" style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)" }}>—</span>;
   }
   const isPos   = value >= 0;
   const isLarge = Math.abs(value) >= 5;
+  const color = isPos
+    ? isLarge ? "#2563eb" : "#22c55e"
+    : isLarge ? "#dc2626" : "#f87171";
   return (
-    <span className={`text-sm font-semibold tabular-nums ${
-      isPos
-        ? isLarge ? "text-blue-600"  : "text-green-500"
-        : isLarge ? "text-red-600"   : "text-red-400"
-    }`}>
+    <span className="tabular-nums" style={{ fontSize: "10px", fontWeight: 700, color }}>
       {isPos ? "+" : ""}{value.toFixed(1)}%
     </span>
   );
@@ -342,11 +349,11 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
             </span>
           </div>
 
-          {/* 騰落率セル：flex-wrap 対応 */}
-          <div className="flex flex-1 flex-wrap" style={{ gap: "6px" }}>
+          {/* 騰落率グリッド：PC 5列 / モバイル 4列（半年非表示） */}
+          <div className="perf-grid flex-1">
             {PERIODS.map(({ key, label }) => (
-              <div key={key} className="flex flex-col items-center">
-                <span className="text-[10px] mb-0.5" style={{ color: 'var(--text-muted)' }}>{label}</span>
+              <div key={key} className={`flex flex-col items-center${key === "6mo" ? " hide-mobile" : ""}`}>
+                <span style={{ fontSize: "9px", color: 'var(--text-muted)', marginBottom: "2px" }}>{label}</span>
                 {summary
                   ? <PerfBadge value={summary.performance?.[key]} />
                   : <span className="skeleton-cell" />

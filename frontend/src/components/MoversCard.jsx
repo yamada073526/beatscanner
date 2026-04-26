@@ -46,12 +46,27 @@ function Card({ m, onSelect }) {
             {m.keyword}
           </span>
           {m.source_name && m.source_url && (
-            <span
-              onClick={(e) => { e.stopPropagation(); window.open(m.source_url, "_blank"); }}
-              style={{ fontSize: "10px", color: "var(--text-secondary)", cursor: "pointer", flexShrink: 0, marginLeft: "6px" }}
+            <a
+              href={m.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                fontSize: "10px",
+                color: "var(--text-secondary)",
+                background: "var(--bg-subtle)",
+                padding: "2px 8px",
+                borderRadius: "4px",
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                flexShrink: 0,
+                marginLeft: "6px",
+              }}
             >
-              {m.source_name}
-            </span>
+              {m.source_name} ↗
+            </a>
           )}
         </div>
       )}
