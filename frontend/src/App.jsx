@@ -177,6 +177,20 @@ export default function App() {
     setWatchlist(watchlist.filter((x) => x !== t));
   }
 
+  function moveWatchlistItem(ticker, direction) {
+    setWatchlist(prev => {
+      const idx = prev.indexOf(ticker);
+      if (idx === -1) return prev;
+      const newList = [...prev];
+      if (direction === 'up' && idx > 0) {
+        [newList[idx - 1], newList[idx]] = [newList[idx], newList[idx - 1]];
+      } else if (direction === 'down' && idx < newList.length - 1) {
+        [newList[idx], newList[idx + 1]] = [newList[idx + 1], newList[idx]];
+      }
+      return newList;
+    });
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 md:py-12">
 
@@ -424,8 +438,7 @@ export default function App() {
               : 'text-slate-500 hover:text-slate-700'
           }`}
         >
-          <span className="sm:hidden">📊 判定</span>
-          <span className="hidden sm:inline">📊 判定詳細</span>
+          📊 判定
         </button>
         <button
           onClick={() => {
@@ -462,6 +475,7 @@ export default function App() {
           onSelect={runAnalyze}
           onRemove={removeFromWatchlist}
           onHover={prefetch}
+          onMove={moveWatchlistItem}
           onFocusSearch={() => {
             searchInputRef.current?.focus();
             searchInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -572,7 +586,7 @@ export default function App() {
 
       {/* Tab: チャート */}
       {activeTab === 'チャート' && (
-        <ChartTab watchlist={watchlist} onSelect={runAnalyze} />
+        <ChartTab watchlist={watchlist} onSelect={runAnalyze} onMove={moveWatchlistItem} />
       )}
 
       {/* Demo mode — shown in ホーム tab when no API key */}

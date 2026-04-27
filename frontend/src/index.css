@@ -19,6 +19,9 @@
   --amber-bg:     #fffbeb;
   --amber-title:  #92400e;
   --amber-body:   #b45309;
+  /* Calendar watchlist highlight */
+  --color-background-warning: #fefce8;
+  --color-border-warning:     #fcd34d;
 }
 
 [data-theme="dark"] {
@@ -38,6 +41,9 @@
   --amber-bg:     rgba(120,80,0,0.25);
   --amber-title:  #fbbf24;
   --amber-body:   #fcd34d;
+  /* Calendar watchlist highlight */
+  --color-background-warning: rgba(120, 80, 0, 0.18);
+  --color-border-warning:     #78350f;
 }
 
 html, body, #root {

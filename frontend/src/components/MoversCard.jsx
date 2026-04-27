@@ -72,9 +72,28 @@ function Card({ m, onSelect }) {
   );
 }
 
+function SkeletonCard() {
+  return (
+    <div style={{
+      background: "var(--bg-secondary)",
+      borderLeft: "3px solid var(--border)",
+      borderRadius: "0 8px 8px 0",
+      padding: "10px 12px",
+      marginBottom: "8px",
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+        <div style={{ width: 48, height: 18, borderRadius: 4, background: "var(--border)", animation: "pulse 1.5s ease-in-out infinite" }} />
+        <div style={{ width: 36, height: 16, borderRadius: 4, background: "var(--border)", animation: "pulse 1.5s ease-in-out infinite" }} />
+      </div>
+      <div style={{ width: "70%", height: 14, borderRadius: 4, background: "var(--border)", animation: "pulse 1.5s ease-in-out infinite" }} />
+    </div>
+  );
+}
+
 export default function MoversCard({ onSelect }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [gainers, setGainers] = useState([]);
+  const [losers,  setLosers]  = useState([]);
+  const [done,    setDone]    = useState(false);
   const [elapsed, setElapsed] = useState(0);
 
   const today = new Date();
@@ -83,15 +102,45 @@ export default function MoversCard({ onSelect }) {
   useEffect(() => {
     const timer = setInterval(() => setElapsed((e) => e + 1), 1000);
 
-    fetch(`${API_BASE}/api/movers`)
-      .then((r) => r.json())
-      .then((d) => { setData(d); setLoading(false); clearInterval(timer); })
-      .catch(() => { setLoading(false); clearInterval(timer); });
+    const es = new EventSource(`${API_BASE}/api/movers/stream`);
 
-    return () => clearInterval(timer);
+    es.onmessage = (e) => {
+      if (e.data === "[DONE]") {
+        setDone(true);
+        es.close();
+        clearInterval(timer);
+        return;
+      }
+      try {
+        const stock = JSON.parse(e.data);
+        if (stock.direction === "up") {
+          setGainers((prev) =>
+            [...prev, stock].sort((a, b) => b.pct - a.pct)
+          );
+        } else {
+          setLosers((prev) =>
+            [...prev, stock].sort((a, b) => a.pct - b.pct)
+          );
+        }
+      } catch {}
+    };
+
+    es.onerror = () => {
+      es.close();
+      setDone(true);
+      clearInterval(timer);
+    };
+
+    return () => {
+      es.close();
+      clearInterval(timer);
+    };
   }, []);
 
-  if (loading) {
+  const isEmpty = gainers.length === 0 && losers.length === 0;
+
+  // 初回ロード中（1件も届いていない）
+  if (isEmpty && !done) {
     return (
       <div style={{ padding: "16px", borderBottom: "1px solid var(--border)" }}>
         <div style={{ fontSize: "13px", fontWeight: 700,
@@ -99,7 +148,7 @@ export default function MoversCard({ onSelect }) {
           ⚡ {dateLabel}の急騰・急落銘柄 Top 5
         </div>
         <div style={{ fontSize: "12px", color: "var(--text-secondary)",
-                      display: "flex", alignItems: "center", gap: "8px" }}>
+                      display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
           <span style={{
             display: "inline-block", width: "12px", height: "12px",
             borderRadius: "50%",
@@ -109,14 +158,19 @@ export default function MoversCard({ onSelect }) {
           }} />
           市場データを取得中... ({elapsed}秒)
         </div>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <style>{`
+          @keyframes spin { to { transform: rotate(360deg); } }
+          @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        `}</style>
       </div>
     );
   }
 
-  const gainers = data?.gainers ?? [];
-  const losers  = data?.losers  ?? [];
-  if (!gainers.length && !losers.length) return null;
+  if (isEmpty) return null;
+
+  // 残りスロット数（最大5枚、まだ届いていない分をスケルトンで埋める）
+  const gainerSlots = done ? 0 : Math.max(0, 5 - gainers.length);
+  const loserSlots  = done ? 0 : Math.max(0, 5 - losers.length);
 
   return (
     <div style={{ padding: "24px 16px 4px", borderBottom: "1px solid var(--border)", marginBottom: "24px" }}>
@@ -125,6 +179,7 @@ export default function MoversCard({ onSelect }) {
         ⚡ {dateLabel}の急騰・急落銘柄 Top 5
       </div>
       <style>{`
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
         @media (max-width: 600px) {
           .movers-grid { grid-template-columns: 1fr !important; }
         }
@@ -141,6 +196,7 @@ export default function MoversCard({ onSelect }) {
             borderRadius: "4px", padding: "2px 8px", marginBottom: "8px",
           }}>▲ 急騰 Top 5</div>
           {gainers.map((m) => <Card key={m.ticker} m={m} onSelect={onSelect} />)}
+          {Array.from({ length: gainerSlots }).map((_, i) => <SkeletonCard key={`gs-${i}`} />)}
         </div>
 
         {/* 右列: losers */}
@@ -151,6 +207,7 @@ export default function MoversCard({ onSelect }) {
             borderRadius: "4px", padding: "2px 8px", marginBottom: "8px",
           }}>▼ 急落 Top 5</div>
           {losers.map((m) => <Card key={m.ticker} m={m} onSelect={onSelect} />)}
+          {Array.from({ length: loserSlots }).map((_, i) => <SkeletonCard key={`ls-${i}`} />)}
         </div>
       </div>
     </div>

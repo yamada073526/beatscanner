@@ -44,6 +44,13 @@ def _fetch_sync(ticker: str, api_key: str) -> list[dict]:
         if estimated is not None and estimated == 0.0:
             estimated = None
         surprise_pct = _to_float(entry.get("surprisePercentage"))
+        # estimatedEPS が欠落していても surprisePercentage から逆算できる
+        # actual = estimated * (1 + pct/100)  →  estimated = actual / (1 + pct/100)
+        if estimated is None and actual is not None and surprise_pct is not None and surprise_pct != -100.0:
+            try:
+                estimated = round(actual / (1 + surprise_pct / 100.0), 4)
+            except (ZeroDivisionError, OverflowError):
+                pass
 
         results.append({
             "date": str(date)[:10],

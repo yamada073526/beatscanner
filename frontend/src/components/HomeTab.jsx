@@ -2,7 +2,7 @@ import ChartTab from './ChartTab.jsx';
 import Watchlist from './Watchlist.jsx';
 import MoversCard from './MoversCard.jsx';
 
-export default function HomeTab({ watchlist, onSelect, onRemove, onHover, onFocusSearch }) {
+export default function HomeTab({ watchlist, onSelect, onRemove, onHover, onFocusSearch, onMove }) {
   return (
     <div className="space-y-6">
       {/* ── 急騰・急落 注目銘柄 ── */}
@@ -12,7 +12,7 @@ export default function HomeTab({ watchlist, onSelect, onRemove, onHover, onFocu
       </div>
 
       {/* ── ウォッチリスト チャート ── */}
-      <ChartTab watchlist={watchlist} onSelect={onSelect} />
+      <ChartTab watchlist={watchlist} onSelect={onSelect} onMove={onMove} />
 
       {/* ── ウォッチリスト ── */}
       <section className="rounded-2xl p-6 shadow-sm"

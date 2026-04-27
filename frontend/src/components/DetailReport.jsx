@@ -43,8 +43,14 @@ function BarChartIcon() {
 }
 
 /* ─── アコーディオン共通コンポーネント ─── */
-function AccordionSection({ title, badge, badgeColor = '#1e293b', children, streaming = false }) {
-  const [open, setOpen] = useState(false);
+function AccordionSection({ title, badge, badgeColor = '#1e293b', children, streaming = false, defaultOpen = false, onOpenChange }) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  const handleToggle = () => {
+    const next = !open;
+    setOpen(next);
+    onOpenChange?.(next);
+  };
 
   return (
     <div style={{
@@ -56,7 +62,7 @@ function AccordionSection({ title, badge, badgeColor = '#1e293b', children, stre
       boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
     }}>
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={handleToggle}
         style={{
           width: '100%',
           display: 'flex',
@@ -102,8 +108,9 @@ function AccordionSection({ title, badge, badgeColor = '#1e293b', children, stre
 }
 
 /* ─── ReportCard（内部コンテンツのみ） ─── */
-function ReportCard({ analysis, guidance, onStreamingChange }) {
+function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
   const [text, setText] = useState('');
+  const [preparing, setPreparing] = useState(isOpen); // accordion 開放直後からスピナー表示
   const [streaming, setStreaming] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState(null);
@@ -112,6 +119,9 @@ function ReportCard({ analysis, guidance, onStreamingChange }) {
   const [loadingStep, setLoadingStep] = useState(LOADING_STEPS[0].text);
   const [loadingPct, setLoadingPct] = useState(0);
   const stepTimerRef = useRef(null);
+
+  // フェッチ済みの ticker|date キー。同一銘柄で accordion を閉じて開いても再フェッチしない
+  const fetchedForRef = useRef(null);
 
   const [themeTick, setThemeTick] = useState(0);
   useEffect(() => {
@@ -181,19 +191,37 @@ function ReportCard({ analysis, guidance, onStreamingChange }) {
   };
 
   useEffect(() => {
-    if (!analysis) return;
+    // isOpen が false、または analysis 未到着なら何もしない
+    if (!isOpen || !analysis) return;
+
+    const key = `${analysis.ticker}|${analysis.latestDate}`;
+    // 同一銘柄・期間はスキップ（accordion 開閉での再フェッチ防止）
+    if (fetchedForRef.current === key) return;
+    fetchedForRef.current = key;
+
     const controller = new AbortController();
-    setStreaming(true);
+    setPreparing(true);
+    setStreaming(false);
     setDone(false);
     setError(null);
     setText('');
     onStreamingChange?.(true);
 
+    let firstChunk = true;
     streamSummaryDetail(analysis, guidance, (chunk) => {
+      if (firstChunk) {
+        firstChunk = false;
+        // 最初のチャンク到着でスピナーを非表示にしストリーミング表示へ切り替え
+        setPreparing(false);
+        setStreaming(true);
+      }
       setText((prev) => prev + chunk);
     }, controller.signal)
       .catch((e) => {
-        if (!controller.signal.aborted) setError(e.message);
+        if (!controller.signal.aborted) {
+          setError(e.message);
+          setPreparing(false);
+        }
       })
       .finally(() => {
         if (!controller.signal.aborted) {
@@ -208,7 +236,7 @@ function ReportCard({ analysis, guidance, onStreamingChange }) {
       onStreamingChange?.(false);
       stopProgressSimulation();
     };
-  }, [analysis?.ticker, analysis?.latestDate]);
+  }, [analysis?.ticker, analysis?.latestDate, isOpen]);
 
   return (
     <>
@@ -270,7 +298,27 @@ function ReportCard({ analysis, guidance, onStreamingChange }) {
 
       {/* AI詳報テキスト */}
       {error && <p className="text-sm text-red-500">詳報を生成できませんでした: {error}</p>}
-      {streaming && !text && <p className="text-sm text-slate-500 animate-pulse">AIが決算を分析中...</p>}
+
+      {/* 準備中スピナー: accordion 開放直後〜最初のチャンク到着まで */}
+      {preparing && !error && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '10px',
+          padding: '12px 0',
+          color: 'var(--text-secondary)',
+        }}>
+          <span style={{
+            width: 16, height: 16, borderRadius: '50%',
+            border: '2px solid var(--border)',
+            borderTopColor: '#64748b',
+            display: 'inline-block',
+            animation: 'spin 0.8s linear infinite',
+            flexShrink: 0,
+          }} />
+          <span style={{ fontSize: 13 }}>AI分析を準備中...</span>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
+
       {streaming && text && (
         <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{text}</p>
       )}
@@ -285,6 +333,8 @@ function ReportCard({ analysis, guidance, onStreamingChange }) {
 export default function DetailReport({ analysis, guidance, onStreamingChange }) {
   const [conferenceStreaming, setConferenceStreaming] = useState(false);
   const [reportStreaming, setReportStreaming] = useState(false);
+  // accordion の open 状態を親で管理し ReportCard へ渡す
+  const [reportOpen, setReportOpen] = useState(true);
 
   useEffect(() => {
     onStreamingChange?.(reportStreaming || conferenceStreaming);
@@ -299,12 +349,15 @@ export default function DetailReport({ analysis, guidance, onStreamingChange }) 
         badge="AI詳報"
         badgeColor="#1e293b"
         streaming={reportStreaming}
+        defaultOpen={true}
+        onOpenChange={setReportOpen}
       >
         <div style={{ borderLeft: `3px solid ${borderColor}`, paddingLeft: '12px' }}>
           <ReportCard
             analysis={analysis}
             guidance={guidance}
             onStreamingChange={setReportStreaming}
+            isOpen={reportOpen}
           />
         </div>
       </AccordionSection>

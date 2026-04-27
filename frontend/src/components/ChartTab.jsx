@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Component, memo } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, Component, memo } from "react";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -246,8 +246,34 @@ function CandleChart({ ticker, period }) {
   );
 }
 
+// ── 並び替えボタン ────────────────────────────────────────────────
+function MoveButton({ label, onClick, disabled }) {
+  if (disabled) return <div style={{ width: 32, height: 32 }} />;
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      style={{
+        width: 32, height: 32,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'transparent',
+        border: 'none',
+        borderRadius: 4,
+        cursor: 'pointer',
+        color: 'var(--text-muted)',
+        fontSize: 12,
+        flexShrink: 0,
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--bg-hover)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)';   e.currentTarget.style.background = 'transparent'; }}
+    >
+      {label}
+    </button>
+  );
+}
+
 // ── 銘柄1行 ──────────────────────────────────────────────────────
-const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
+const TickerRow = memo(function TickerRow({ ticker, onSelect, isFirst, isLast, onMove, registerRef }) {
   const rowRef       = useRef(null);
   const prefetchedRef = useRef(false);
   const [summary,    setSummary]    = useState(null);
@@ -256,6 +282,12 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
   const [mounted,    setMounted]    = useState(false);
   const [period,     setPeriod]     = useState("1mo");
   const isMobile = useIsMobile();
+
+  // ChartTab の rowRefs に DOM 要素を登録
+  useEffect(() => {
+    registerRef?.(ticker, rowRef.current);
+    return () => registerRef?.(ticker, null);
+  }, [ticker]); // registerRef は安定した参照なので deps 省略
 
   useEffect(() => {
     let cancelled = false;
@@ -409,10 +441,19 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
           );
         })()}
 
+        {/* 並び替えボタン */}
+        <div
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 2px', flexShrink: 0, gap: 0 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <MoveButton label="↑" disabled={isFirst} onClick={() => onMove(ticker, 'up')} />
+          <MoveButton label="↓" disabled={isLast}  onClick={() => onMove(ticker, 'down')} />
+        </div>
+
         {/* 矢印 */}
         <span style={{
           display: 'flex', alignItems: 'center',
-          padding: '0 14px', flexShrink: 0,
+          padding: '0 10px 0 0', flexShrink: 0,
           fontSize: 12, color: 'var(--text-muted)',
           transition: 'transform 0.2s',
           transform: expanded ? 'rotate(180deg)' : 'none',
@@ -482,7 +523,59 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect }) {
   );
 });
 
-export default memo(function ChartTab({ watchlist = [], onSelect }) {
+export default memo(function ChartTab({ watchlist = [], onSelect, onMove }) {
+  const rowRefs = useRef({});
+  const prevPositions = useRef({});
+
+  // 最新の props を ref に保持（handleMove を stable にするため）
+  const onMoveRef = useRef(onMove);
+  const watchlistRef = useRef(watchlist);
+  onMoveRef.current = onMove;
+  watchlistRef.current = watchlist;
+
+  // TickerRow から呼ばれる DOM 登録コールバック（安定した参照）
+  const registerRef = useCallback((ticker, el) => {
+    if (el) rowRefs.current[ticker] = el;
+    else delete rowRefs.current[ticker];
+  }, []);
+
+  // FLIP - Step 1 & 2: First → Trigger
+  const handleMove = useCallback((ticker, direction) => {
+    const positions = {};
+    watchlistRef.current.forEach((t) => {
+      const el = rowRefs.current[t];
+      if (el) positions[t] = el.getBoundingClientRect().top;
+    });
+    prevPositions.current = positions;
+    onMoveRef.current(ticker, direction);
+  }, []);
+
+  // FLIP - Step 3〜5: Last → Invert → Play（DOM 更新後、ペイント前に実行）
+  useLayoutEffect(() => {
+    const prev = prevPositions.current;
+    if (!Object.keys(prev).length) return;
+
+    Object.keys(prev).forEach((t) => {
+      const el = rowRefs.current[t];
+      if (!el) return;
+      const newY = el.getBoundingClientRect().top;
+      const dy = prev[t] - newY;
+      if (Math.abs(dy) < 1) return;
+
+      // Invert: まだ動いていない状態に見せる
+      el.style.transition = 'none';
+      el.style.transform = `translateY(${dy}px)`;
+
+      // Play: 次フレームで元の位置へ戻すアニメーション
+      requestAnimationFrame(() => {
+        el.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+        el.style.transform = 'translateY(0)';
+      });
+    });
+
+    prevPositions.current = {};
+  }, [watchlist]);
+
   if (watchlist.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-24" style={{ color: 'var(--text-muted)' }}>
@@ -495,8 +588,16 @@ export default memo(function ChartTab({ watchlist = [], onSelect }) {
 
   return (
     <div className="space-y-2 pb-8">
-      {watchlist.map((ticker) => (
-        <TickerRow key={ticker} ticker={ticker} onSelect={onSelect} />
+      {watchlist.map((ticker, idx) => (
+        <TickerRow
+          key={ticker}
+          ticker={ticker}
+          onSelect={onSelect}
+          isFirst={idx === 0}
+          isLast={idx === watchlist.length - 1}
+          onMove={handleMove}
+          registerRef={registerRef}
+        />
       ))}
     </div>
   );

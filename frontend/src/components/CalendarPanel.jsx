@@ -1,6 +1,13 @@
 import { useEffect, useState, useMemo } from 'react';
 import { fetchCalendar } from '../api.js';
 
+const localDateStr = (date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 function getWeekRange(offset = 0) {
   const today = new Date();
   const dow = today.getDay();
@@ -11,9 +18,23 @@ function getWeekRange(offset = 0) {
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
   return {
-    start: monday.toISOString().slice(0, 10),
-    end: sunday.toISOString().slice(0, 10),
+    start: localDateStr(monday),
+    end: localDateStr(sunday),
   };
+}
+
+function getMonthRange() {
+  const today = new Date();
+  const start = localDateStr(new Date(today.getFullYear(), today.getMonth(), 1));
+  const end = localDateStr(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+  return { start, end };
+}
+
+function getThreeMonthRange() {
+  const today = new Date();
+  const future = new Date(today);
+  future.setMonth(future.getMonth() + 3);
+  return { start: localDateStr(today), end: localDateStr(future) };
 }
 
 const TIME_LABELS = {
@@ -36,24 +57,36 @@ export default function CalendarPanel({ onSelect, watchlist = [] }) {
   const [error, setError] = useState(null);
   const [tab, setTab] = useState('this');
 
+  const watchlistKey = watchlist.join(',');
+
   useEffect(() => {
     let alive = true;
     setLoading(true);
     setError(null);
-    fetchCalendar(14)
+    fetchCalendar(90, watchlistKey)
       .then((d) => alive && setItems(d))
       .catch((e) => alive && setError(e.message))
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
+  }, [watchlistKey]);
+
+  const TABS = useMemo(() => {
+    const thisWeek    = getWeekRange(0);
+    const nextWeek    = getWeekRange(1);
+    const thisMonth   = getMonthRange();
+    const threeMonths = getThreeMonthRange();
+    return [
+      { key: 'this',    label: '今週',  sub: `${thisWeek.start.slice(5).replace('-', '/')}〜${thisWeek.end.slice(5).replace('-', '/')}`,    range: thisWeek },
+      { key: 'next',    label: '来週',  sub: `${nextWeek.start.slice(5).replace('-', '/')}〜${nextWeek.end.slice(5).replace('-', '/')}`,     range: nextWeek },
+      { key: 'month',   label: '今月',  sub: `〜${thisMonth.end.slice(5).replace('-', '/')}`,   range: thisMonth },
+      { key: 'quarter', label: '3ヶ月', sub: `〜${threeMonths.end.slice(5).replace('-', '/')}`, range: threeMonths },
+    ];
   }, []);
 
-  const thisWeek = useMemo(() => getWeekRange(0), []);
-  const nextWeek = useMemo(() => getWeekRange(1), []);
-
   const filtered = useMemo(() => {
-    const range = tab === 'this' ? thisWeek : nextWeek;
+    const range = TABS.find((t) => t.key === tab)?.range ?? TABS[0].range;
     return items.filter((it) => it.date >= range.start && it.date <= range.end);
-  }, [items, tab, thisWeek, nextWeek]);
+  }, [items, tab, TABS]);
 
   const byDate = useMemo(
     () => filtered.reduce((acc, it) => { (acc[it.date] = acc[it.date] || []).push(it); return acc; }, {}),
@@ -61,19 +94,13 @@ export default function CalendarPanel({ onSelect, watchlist = [] }) {
   );
   const sortedDates = Object.keys(byDate).sort();
 
-  const weekLabel = (r) =>
-    `${r.start.slice(5).replace('-', '/')}〜${r.end.slice(5).replace('-', '/')}`;
-
   return (
     <section className="rounded-2xl bg-white p-6 shadow-sm">
       <h3 className="mb-4 text-base font-semibold text-slate-900">決算カレンダー</h3>
 
-      {/* Week tabs */}
+      {/* タブ */}
       <div className="mb-4 flex gap-1 rounded-lg bg-slate-100 p-1">
-        {[
-          { key: 'this', label: '今週', range: thisWeek },
-          { key: 'next', label: '来週', range: nextWeek },
-        ].map(({ key, label, range }) => (
+        {TABS.map(({ key, label, sub }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -84,7 +111,7 @@ export default function CalendarPanel({ onSelect, watchlist = [] }) {
             }`}
           >
             {label}
-            <span className="text-xs font-normal text-slate-400">{weekLabel(range)}</span>
+            <span className="text-xs font-normal text-slate-400">{sub}</span>
           </button>
         ))}
       </div>
@@ -126,15 +153,22 @@ export default function CalendarPanel({ onSelect, watchlist = [] }) {
                   <button
                     key={`${it.symbol}-${i}`}
                     onClick={() => onSelect(it.symbol)}
-                    className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors hover:bg-slate-50 ${
-                      inWatchlist
-                        ? 'border border-amber-300 bg-amber-50'
-                        : 'border border-slate-100 bg-white'
-                    }`}
+                    className="flex w-full items-center justify-between text-left transition-colors hover:bg-slate-50"
+                    style={inWatchlist ? {
+                      background: 'var(--color-background-warning)',
+                      border: '1px solid var(--color-border-warning)',
+                      borderRadius: '6px',
+                      padding: '8px 12px',
+                    } : {
+                      background: 'var(--bg-card)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '6px',
+                      padding: '8px 12px',
+                    }}
                   >
                     <div className="flex min-w-0 items-center gap-2">
                       {inWatchlist && <span className="text-xs text-amber-500">★</span>}
-                      <span className="text-sm font-bold text-slate-900">{it.symbol}</span>
+                      <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)' }}>{it.symbol}</span>
                       {it.name && (
                         <span className="max-w-[8rem] truncate text-xs text-slate-500">
                           {it.name}

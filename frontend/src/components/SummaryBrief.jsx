@@ -57,35 +57,45 @@ const BODY_STYLE  = { color: 'var(--text-secondary)', fontSize: '14px', lineHeig
 function SummaryInfoModal({ onClose }) {
   return (
     <InfoModal title="AI要約の見方" onClose={onClose}>
-      <div style={CARD_STYLE}>
-        <p style={LABEL_STYLE}>📌 概要</p>
-        <p style={BODY_STYLE}>
-          AIがその銘柄の直近決算を分析し、重要ポイントを4項目に要約しています。
-        </p>
-      </div>
+
+      {/* 色分けの意味 — 実際のバッジで表示 */}
       <div style={CARD_STYLE}>
         <p style={{ ...LABEL_STYLE, marginBottom: '8px' }}>🎨 色分けの意味</p>
-        <ul className="space-y-1" style={BODY_STYLE}>
-          <li>・<strong>緑（✓）</strong>：ポジティブな項目（Beat・連続増加・高マージンなど）</li>
-          <li>・<strong>赤（✗）</strong>：ネガティブな項目（条件未達・減少・課題など）</li>
-          <li>・<strong>グレー（–）</strong>：中立・補足情報（ガイダンス維持・背景説明など）</li>
-        </ul>
-        <p style={{ ...BODY_STYLE, marginTop: '8px' }}>
-          色分けを見るだけで、その企業の決算が良かったか悪かったかを2秒で把握できるよう設計されています。
+        <div className="space-y-2">
+          <div className="flex items-start gap-2 bg-green-50 border-l-4 border-green-400 rounded-r-lg p-2">
+            <span className="mt-0.5 shrink-0 font-bold text-green-500">✓</span>
+            <span className="text-sm text-green-800">ポジティブ：Beat・連続増加・高マージンなど</span>
+          </div>
+          <div className="flex items-start gap-2 bg-red-50 border-l-4 border-red-400 rounded-r-lg p-2">
+            <span className="mt-0.5 shrink-0 font-bold text-red-500">✗</span>
+            <span className="text-sm text-red-800">ネガティブ：条件未達・減少・課題など</span>
+          </div>
+          <div className="flex items-start gap-2 rounded-r-lg p-2" style={NEU_WRAPPER}>
+            <span className="mt-0.5 shrink-0 font-bold" style={{ color: '#94a3b8' }}>–</span>
+            <span className="text-sm" style={NEU_TEXT}>中立・補足：ガイダンス維持・背景説明など</span>
+          </div>
+        </div>
+        <p style={{ ...BODY_STYLE, marginTop: '8px', fontSize: '12px' }}>
+          色分けを見るだけで、決算の良し悪しを2秒で把握できるよう設計されています。
         </p>
       </div>
+
+      {/* 太字の意味 */}
       <div style={CARD_STYLE}>
         <p style={LABEL_STYLE}>💡 太字の意味</p>
         <p style={BODY_STYLE}>
           各項目内で特に重要な数値やキーワードが太字で表示されます。太字箇所を中心に読むことで、素早く要点を把握できます。
         </p>
       </div>
+
+      {/* ご注意 */}
       <div className="mb-3 rounded-r-lg p-3" style={{ background: 'var(--amber-bg)', borderLeft: '4px solid #f59e0b' }}>
         <p className="text-sm font-bold" style={{ color: 'var(--amber-title)' }}>⚠️ ご注意</p>
         <p className="mt-1 text-sm" style={{ color: 'var(--amber-body)' }}>
           AI要約はデータに基づく自動生成です。投資判断は必ずご自身の責任で行ってください。
         </p>
       </div>
+
     </InfoModal>
   );
 }

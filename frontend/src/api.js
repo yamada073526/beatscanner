@@ -174,13 +174,17 @@ export async function fetchConferenceAnalysis(ticker) {
   return r.json();
 }
 
-export async function fetchCalendar(days = 14) {
-  const r = await fetch(`/api/calendar?days=${days}`, {
+export async function fetchCalendar(days = 90, watchlist = '') {
+  const wl = watchlist ? `&watchlist=${encodeURIComponent(watchlist)}` : '';
+  const r = await fetch(`/api/calendar?days=${days}${wl}`, {
     headers: fmpHeaders(),
   });
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
-    throw new Error(err.detail || `HTTP ${r.status}`);
+    const detail = Array.isArray(err.detail)
+      ? (err.detail[0]?.msg ?? JSON.stringify(err.detail))
+      : err.detail;
+    throw new Error(detail || `HTTP ${r.status}`);
   }
   return r.json();
 }
