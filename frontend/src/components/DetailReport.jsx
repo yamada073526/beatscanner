@@ -122,6 +122,7 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
 
   // フェッチ済みの ticker|date キー。同一銘柄で accordion を閉じて開いても再フェッチしない
   const fetchedForRef = useRef(null);
+  const doneRef = useRef(false);
 
   const [themeTick, setThemeTick] = useState(0);
   useEffect(() => {
@@ -198,6 +199,7 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
     // 同一銘柄・期間はスキップ（accordion 開閉での再フェッチ防止）
     if (fetchedForRef.current === key) return;
     fetchedForRef.current = key;
+    doneRef.current = false;
 
     const controller = new AbortController();
     setPreparing(true);
@@ -224,6 +226,7 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
         }
       })
       .finally(() => {
+        doneRef.current = true;
         if (!controller.signal.aborted) {
           setStreaming(false);
           setDone(true);
@@ -235,6 +238,9 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
       controller.abort();
       onStreamingChange?.(false);
       stopProgressSimulation();
+      if (!doneRef.current) {
+        fetchedForRef.current = null; // 未完了中断時のみリセット → 再開時に再フェッチ可能にする
+      }
     };
   }, [analysis?.ticker, analysis?.latestDate, isOpen]);
 

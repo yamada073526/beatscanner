@@ -81,12 +81,23 @@ def _is_strictly_increasing(values: list[float | None]) -> bool:
 
 def _is_strictly_increasing_and_positive(values: list[float | None]) -> bool:
     """全値が正値(>0) かつ 単調増加の場合のみ True。
-    EPS・CFPS・売上高の連続増加判定に使用。
-    負値や0が1期でもあれば False を返す（赤字転落・CF赤字をFAILにする）。
+    CFPS・売上高の連続増加判定に使用。
+    負値や0が1期でもあれば False を返す（CF赤字をFAILにする）。
     """
     if any(v is None for v in values):
         return False
     if any(v <= 0 for v in values):  # type: ignore[operator]
+        return False
+    return all(b > a for a, b in zip(values, values[1:]))  # type: ignore[operator]
+
+
+def _is_strictly_increasing_and_last_positive(values: list[float | None]) -> bool:
+    """最新期(最後の値)のみ正値(>0) かつ 単調増加の場合のみ True。
+    EPS連続増加判定（条件②）専用。過去期の赤字は許容し、最新期が黒字かつ増加傾向であればPASS。
+    """
+    if any(v is None for v in values):
+        return False
+    if values[-1] <= 0:  # type: ignore[operator]
         return False
     return all(b > a for a, b in zip(values, values[1:]))  # type: ignore[operator]
 
@@ -159,12 +170,12 @@ def judge(
         series=[(p.operating_cf / p.revenue) if (p.revenue and p.revenue > 0) else 0.0 for p in periods],
     )
 
-    # 条件②: EPS 3期連続増加（全期間正値チェック含む）
-    # 赤字期間（EPS ≤ 0）が1期でもあれば FAIL
+    # 条件②: EPS 3期連続増加（最新期のみ正値チェック）
+    # 過去期の赤字は許容。最新期が黒字かつ全期間増加傾向であればPASS
     eps_series = [p.eps for p in periods]
     cond2 = ConditionResult(
         name="EPS 連続増加",
-        passed=_is_strictly_increasing_and_positive(eps_series),
+        passed=_is_strictly_increasing_and_last_positive(eps_series),
         value=p_t.eps,
         detail=f"{p_t2.eps:.2f} → {p_t1.eps:.2f} → {p_t.eps:.2f}",
         series=eps_series,
