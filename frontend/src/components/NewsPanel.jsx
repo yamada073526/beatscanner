@@ -3,6 +3,19 @@ import { fetchNews, translateTexts } from '../api.js';
 
 const LS_KEY = 'translateNews';
 
+function buildNewsUrl(url, mode) {
+  if (mode === 'translate') {
+    return `https://translate.google.com/translate?sl=en&tl=ja&u=${encodeURIComponent(url)}`;
+  }
+  if (mode === 'reader') {
+    return `https://outline.com/${url}`;
+  }
+  if (mode === 'both') {
+    return `https://translate.google.com/translate?sl=en&tl=ja&u=${encodeURIComponent(`https://outline.com/${url}`)}`;
+  }
+  return url; // 'normal'
+}
+
 function timeAgo(dateStr) {
   if (!dateStr) return '';
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -20,6 +33,7 @@ export default function NewsPanel({ ticker }) {
   const [error, setError] = useState(null);
   const [translated, setTranslated] = useState(null);
   const [translating, setTranslating] = useState(false);
+  const [openMode, setOpenMode] = useState('translate');
   const [translateNews, setTranslateNews] = useState(() => {
     const saved = localStorage.getItem(LS_KEY);
     return saved !== null ? saved === 'true' : true;
@@ -81,38 +95,58 @@ export default function NewsPanel({ ticker }) {
           <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>{ticker}</span>
         </h3>
         {news.length > 0 && (
-          <label style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            cursor: 'pointer', fontSize: '13px',
-            color: 'var(--text-secondary)',
-            userSelect: 'none',
-          }}>
-            <span style={{ whiteSpace: 'nowrap' }}>
-              {translating ? '翻訳中...' : '🌐 日本語表示'}
-            </span>
-            <div
-              onClick={handleToggle}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <select
+              value={openMode}
+              onChange={e => setOpenMode(e.target.value)}
               style={{
-                width: '40px', height: '22px',
-                borderRadius: '11px',
-                background: translateNews ? '#3b82f6' : 'var(--border)',
-                position: 'relative',
-                transition: 'background 0.2s',
+                fontSize: '11px',
+                padding: '2px 6px',
+                borderRadius: '6px',
+                border: '1px solid var(--border)',
+                background: 'var(--bg-subtle)',
+                color: 'var(--text-secondary)',
                 cursor: 'pointer',
-                flexShrink: 0,
               }}
             >
-              <div style={{
-                position: 'absolute',
-                top: '3px',
-                left: translateNews ? '21px' : '3px',
-                width: '16px', height: '16px',
-                borderRadius: '50%',
-                background: '#ffffff',
-                transition: 'left 0.2s',
-              }} />
-            </div>
-          </label>
+              <option value="normal">通常</option>
+              <option value="translate">🌐 翻訳</option>
+              <option value="reader">📖 リーダー</option>
+              <option value="both">🌐📖 翻訳＋リーダー</option>
+            </select>
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              cursor: 'pointer', fontSize: '13px',
+              color: 'var(--text-secondary)',
+              userSelect: 'none',
+            }}>
+              <span style={{ whiteSpace: 'nowrap' }}>
+                {translating ? '翻訳中...' : '🌐 日本語表示'}
+              </span>
+              <div
+                onClick={handleToggle}
+                style={{
+                  width: '40px', height: '22px',
+                  borderRadius: '11px',
+                  background: translateNews ? '#3b82f6' : 'var(--border)',
+                  position: 'relative',
+                  transition: 'background 0.2s',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                <div style={{
+                  position: 'absolute',
+                  top: '3px',
+                  left: translateNews ? '21px' : '3px',
+                  width: '16px', height: '16px',
+                  borderRadius: '50%',
+                  background: '#ffffff',
+                  transition: 'left 0.2s',
+                }} />
+              </div>
+            </label>
+          </div>
         )}
       </div>
 
@@ -144,7 +178,7 @@ export default function NewsPanel({ ticker }) {
           {news.map((item, i) => (
             <li key={i} className="py-3" style={{ borderBottom: '1px solid var(--border)' }}>
               <a
-                href={item.url}
+                href={buildNewsUrl(item.url, openMode)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="group block"
