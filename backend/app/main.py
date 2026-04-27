@@ -9,6 +9,7 @@ import pathlib as _pathlib
 import time as _time
 from datetime import date, timedelta
 from html.parser import HTMLParser as _HTMLParser
+from bs4 import BeautifulSoup
 from typing import Optional
 
 from contextlib import asynccontextmanager
@@ -1578,6 +1579,7 @@ async def news(ticker: str, request: Request, limit: int = Query(10, ge=1, le=20
     ]
 
 _translate_cache: dict[str, str] = {}
+_article_cache: dict[str, dict] = {}
 
 
 @app.post("/api/translate")
@@ -1632,6 +1634,67 @@ async def translate_texts(body: dict) -> dict:
             results[idx] = tr
 
     return {"translations": results}
+
+
+@app.post("/api/news/article")
+async def fetch_news_article(body: dict) -> dict:
+    """ニュース記事URLの本文を取得・日本語翻訳して返す。24時間キャッシュ付き。"""
+    import time
+    url: str = body.get("url", "")
+    if not url:
+        raise HTTPException(status_code=400, detail="url is required")
+
+    # キャッシュチェック（24時間）
+    cached = _article_cache.get(url)
+    if cached and time.time() - cached["ts"] < 86400:
+        return cached["data"]
+
+    # 記事本文を取得
+    try:
+        import httpx
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+        }
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as hc:
+            resp = await hc.get(url, headers=headers)
+        resp.raise_for_status()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"記事の取得に失敗しました: {str(e)}")
+
+    # 本文テキスト抽出
+    try:
+        soup = BeautifulSoup(resp.text, "html.parser")
+        for tag in soup(["script", "style", "nav", "header", "footer", "aside", "iframe", "noscript"]):
+            tag.decompose()
+        body_el = soup.find("article") or soup.find("main") or soup.find("body")
+        raw_text = body_el.get_text(separator="\n", strip=True) if body_el else soup.get_text(separator="\n", strip=True)
+        lines = [ln.strip() for ln in raw_text.splitlines() if len(ln.strip()) > 30]
+        text = "\n".join(lines[:60])
+        if not text:
+            raise ValueError("本文テキストが抽出できませんでした")
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"本文の抽出に失敗しました: {str(e)}")
+
+    # Claude Haiku で翻訳
+    try:
+        prompt = (
+            "以下の英語ニュース記事を自然な日本語に翻訳してください。\n"
+            "・企業名・人名・製品名・ティッカーはそのまま残す\n"
+            "・数値・金額・%はそのまま残す\n"
+            "・見出しと本文の構造を保つ\n"
+            "・翻訳結果だけを返す（前置き・後書き不要）\n\n"
+            f"{text}"
+        )
+        claude = ClaudeClient()
+        translated = await claude.complete(prompt, max_tokens=2048)
+    except ClaudeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    result = {"translated": translated, "original_url": url}
+    _article_cache[url] = {"data": result, "ts": time.time()}
+    return result
 
 
 @app.get("/api/ir-links/{ticker}")
