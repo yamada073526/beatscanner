@@ -1637,64 +1637,92 @@ async def translate_texts(body: dict) -> dict:
 
 
 @app.post("/api/news/article")
-async def fetch_news_article(body: dict) -> dict:
-    """ニュース記事URLの本文を取得・日本語翻訳して返す。24時間キャッシュ付き。"""
+async def fetch_news_article(body: dict) -> StreamingResponse:
+    """
+    ニュース記事URLの本文を取得し、Claude Haikuでストリーミング翻訳して返す。
+    SSE形式: data: {"chunk": "..."} または data: {"error": "..."}
+    24時間キャッシュ付き（キャッシュヒット時は分割して返却）
+    """
     import time
+
     url: str = body.get("url", "")
     if not url:
         raise HTTPException(status_code=400, detail="url is required")
 
-    # キャッシュチェック（24時間）
+    # キャッシュヒット時は200文字ずつ分割してSSE返却
     cached = _article_cache.get(url)
     if cached and time.time() - cached["ts"] < 86400:
-        return cached["data"]
+        async def cached_stream():
+            text = cached["data"]["translated"]
+            chunk_size = 200
+            for i in range(0, len(text), chunk_size):
+                yield f"data: {json.dumps({'chunk': text[i:i+chunk_size]})}\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(cached_stream(), media_type="text/event-stream")
 
-    # 記事本文を取得
-    try:
-        import httpx
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.5",
-        }
-        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as hc:
-            resp = await hc.get(url, headers=headers)
-        resp.raise_for_status()
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"記事の取得に失敗しました: {str(e)}")
+    async def generate():
+        # 記事本文を取得
+        try:
+            req_headers = {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
+            }
+            import httpx as _httpx_art
+            async with _httpx_art.AsyncClient(timeout=10, follow_redirects=True) as hc:
+                resp = await hc.get(url, headers=req_headers)
+            resp.raise_for_status()
+        except Exception as e:
+            yield f"data: {json.dumps({'error': f'記事の取得に失敗しました: {str(e)}'})}\n\n"
+            return
 
-    # 本文テキスト抽出
-    try:
-        soup = BeautifulSoup(resp.text, "html.parser")
-        for tag in soup(["script", "style", "nav", "header", "footer", "aside", "iframe", "noscript"]):
-            tag.decompose()
-        body_el = soup.find("article") or soup.find("main") or soup.find("body")
-        raw_text = body_el.get_text(separator="\n", strip=True) if body_el else soup.get_text(separator="\n", strip=True)
-        lines = [ln.strip() for ln in raw_text.splitlines() if len(ln.strip()) > 30]
-        text = "\n".join(lines[:60])
-        if not text:
-            raise ValueError("本文テキストが抽出できませんでした")
-    except Exception as e:
-        raise HTTPException(status_code=422, detail=f"本文の抽出に失敗しました: {str(e)}")
+        # 本文テキスト抽出（30行・各行200文字上限）
+        try:
+            soup = BeautifulSoup(resp.text, "html.parser")
+            for tag in soup(["script", "style", "nav", "header", "footer", "aside", "iframe", "noscript"]):
+                tag.decompose()
+            body_el = soup.find("article") or soup.find("main") or soup.find("body")
+            raw_text = body_el.get_text(separator="\n", strip=True) if body_el else soup.get_text(separator="\n", strip=True)
+            lines = [ln.strip()[:200] for ln in raw_text.splitlines() if len(ln.strip()) > 30]
+            text = "\n".join(lines[:30])
+            if not text:
+                raise ValueError("本文テキストが抽出できませんでした")
+        except Exception as e:
+            yield f"data: {json.dumps({'error': f'本文の抽出に失敗しました: {str(e)}'})}\n\n"
+            return
 
-    # Claude Haiku で翻訳
-    try:
+        # Claude Haiku でストリーミング翻訳
         prompt = (
             "以下の英語ニュース記事を自然な日本語に翻訳してください。\n"
-            "・企業名・人名・製品名・ティッカーはそのまま残す\n"
+            "【必須ルール】\n"
+            "・企業名・ブランド名・製品名はそのままアルファベットで残す\n"
+            "・括弧内のティッカーシンボルは必ず原文のまま残す（例：Apple（AAPL）→ Apple（AAPL））\n"
+            "・ティッカーシンボル単体（AAPL、NVDA等）もそのまま残す\n"
             "・数値・金額・%はそのまま残す\n"
-            "・見出しと本文の構造を保つ\n"
+            "・段落の区切りは空行で表現する\n"
             "・翻訳結果だけを返す（前置き・後書き不要）\n\n"
             f"{text}"
         )
-        claude = ClaudeClient()
-        translated = await claude.complete(prompt, max_tokens=2048)
-    except ClaudeError as e:
-        raise HTTPException(status_code=503, detail=str(e))
 
-    result = {"translated": translated, "original_url": url}
-    _article_cache[url] = {"data": result, "ts": time.time()}
-    return result
+        full_text = ""
+        try:
+            claude = ClaudeClient()
+            async for chunk in claude.stream_complete(prompt, max_tokens=2048):
+                full_text += chunk
+                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            return
+
+        # 完了後キャッシュ保存
+        import time as _time_art
+        _article_cache[url] = {
+            "data": {"translated": full_text, "original_url": url},
+            "ts": _time_art.time(),
+        }
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 @app.get("/api/ir-links/{ticker}")

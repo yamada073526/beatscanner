@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { fetchNews, translateTexts } from '../api.js';
+import ReactMarkdown from 'react-markdown';
 
 const LS_KEY = 'translateNews';
 
@@ -56,8 +57,9 @@ export default function NewsPanel({ ticker }) {
   }
 
   const openArticle = async (item) => {
-    const idx = news.indexOf(item);
-    setArticleModal({ url: item.url, title: displayTitles?.[idx] || item.title, content: null, loading: true, error: null });
+    const title = displayTitles?.[news.indexOf(item)] || item.title;
+    setArticleModal({ url: item.url, title, source: item.source, published: item.published, content: '', loading: true, error: null });
+
     try {
       const res = await fetch('/api/news/article', {
         method: 'POST',
@@ -65,8 +67,42 @@ export default function NewsPanel({ ticker }) {
         body: JSON.stringify({ url: item.url }),
       });
       if (!res.ok) throw new Error('記事の取得に失敗しました');
-      const data = await res.json();
-      setArticleModal(prev => ({ ...prev, content: data.translated, loading: false }));
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const payload = line.slice(6);
+          if (payload === '[DONE]') {
+            setArticleModal(prev => ({ ...prev, loading: false }));
+            break;
+          }
+          try {
+            const { chunk, error } = JSON.parse(payload);
+            if (error) {
+              setArticleModal(prev => ({ ...prev, error, loading: false }));
+              return;
+            }
+            if (chunk) {
+              setArticleModal(prev => ({
+                ...prev,
+                loading: false,
+                content: (prev.content || '') + chunk,
+              }));
+            }
+          } catch {}
+        }
+      }
     } catch (e) {
       setArticleModal(prev => ({ ...prev, error: e.message, loading: false }));
     }
@@ -227,7 +263,7 @@ export default function NewsPanel({ ticker }) {
             padding: '24px',
             position: 'relative',
           }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '8px' }}>
               <p style={{ flex: 1, fontSize: '16px', fontWeight: '600', color: 'var(--text-primary)', margin: 0, lineHeight: 1.5 }}>
                 {articleModal.title}
               </p>
@@ -238,6 +274,14 @@ export default function NewsPanel({ ticker }) {
                 ×
               </button>
             </div>
+
+            {(articleModal.source || articleModal.published) && (
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 12px' }}>
+                {articleModal.source}
+                {articleModal.source && articleModal.published ? ' · ' : ''}
+                {articleModal.published ? new Date(articleModal.published).toLocaleDateString('ja-JP') : ''}
+              </p>
+            )}
 
             <a
               href={articleModal.url}
@@ -253,7 +297,7 @@ export default function NewsPanel({ ticker }) {
                 <span style={{
                   width: 16, height: 16, borderRadius: '50%',
                   border: '2px solid var(--border)', borderTopColor: '#64748b',
-                  display: 'inline-block', animation: 'spin 0.8s linear infinite',
+                  display: 'inline-block', animation: 'spin 0.8s linear infinite', flexShrink: 0,
                 }} />
                 <span style={{ fontSize: 14 }}>記事を翻訳中...</span>
                 <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -269,8 +313,29 @@ export default function NewsPanel({ ticker }) {
               </div>
             )}
             {articleModal.content && (
-              <div style={{ fontSize: '14px', color: 'var(--text-primary)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
-                {articleModal.content}
+              <div style={{ fontSize: '15px', lineHeight: '1.9', color: 'var(--text-primary)', maxWidth: '640px' }}>
+                <ReactMarkdown
+                  components={{
+                    p: ({ children }) => (
+                      <p style={{ marginBottom: '1.2em', color: 'var(--text-primary)', fontSize: '15px', lineHeight: '1.9' }}>
+                        {children}
+                      </p>
+                    ),
+                    h2: ({ children }) => (
+                      <h2 style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)', margin: '1.5em 0 0.5em', borderBottom: '1px solid var(--border)', paddingBottom: '4px' }}>
+                        {children}
+                      </h2>
+                    ),
+                    strong: ({ children }) => (
+                      <strong style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{children}</strong>
+                    ),
+                  }}
+                >
+                  {articleModal.content}
+                </ReactMarkdown>
+                {articleModal.loading === false ? null : (
+                  <span style={{ color: '#94a3b8' }}>▌</span>
+                )}
               </div>
             )}
           </div>
