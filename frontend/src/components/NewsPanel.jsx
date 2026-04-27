@@ -64,7 +64,7 @@ export default function NewsPanel({ ticker }) {
       const res = await fetch('/api/news/article', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: item.url }),
+        body: JSON.stringify({ url: item.url, max_lines: 30 }),
       });
       if (!res.ok) throw new Error('記事の取得に失敗しました');
 

@@ -1683,8 +1683,9 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
                 tag.decompose()
             body_el = soup.find("article") or soup.find("main") or soup.find("body")
             raw_text = body_el.get_text(separator="\n", strip=True) if body_el else soup.get_text(separator="\n", strip=True)
+            max_lines: int = body.get("max_lines", 30)
             lines = [ln.strip()[:200] for ln in raw_text.splitlines() if len(ln.strip()) > 30]
-            text = "\n".join(lines[:30])
+            text = "\n".join(lines[:max_lines])
             if not text:
                 raise ValueError("本文テキストが抽出できませんでした")
         except Exception as e:
@@ -1711,7 +1712,8 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
         full_text = ""
         try:
             claude = ClaudeClient()
-            async for chunk in claude.stream_complete(prompt, max_tokens=2048):
+            max_tokens = min(512 + max_lines * 60, 4096)
+            async for chunk in claude.stream_complete(prompt, max_tokens=max_tokens):
                 full_text += chunk
                 yield f"data: {json.dumps({'chunk': chunk})}\n\n"
         except Exception as e:

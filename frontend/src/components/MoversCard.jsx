@@ -105,7 +105,7 @@ export default function MoversCard({ onSelect }) {
       const res = await fetch('/api/news/article', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, max_lines: 60 }),
       });
       if (!res.ok) throw new Error('記事の取得に失敗しました');
 
