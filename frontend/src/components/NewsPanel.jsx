@@ -4,16 +4,11 @@ import { fetchNews, translateTexts } from '../api.js';
 const LS_KEY = 'translateNews';
 
 function buildNewsUrl(url, mode) {
-  if (mode === 'translate') {
-    return `https://translate.google.com/translate?sl=en&tl=ja&u=${encodeURIComponent(url)}`;
+  if (mode === 'reader' || mode === 'both') {
+    return `https://12ft.io/proxy?q=${encodeURIComponent(url)}`;
   }
-  if (mode === 'reader') {
-    return `https://outline.com/${url}`;
-  }
-  if (mode === 'both') {
-    return `https://translate.google.com/translate?sl=en&tl=ja&u=${encodeURIComponent(`https://outline.com/${url}`)}`;
-  }
-  return url; // 'normal'
+  // 'normal' / 'translate' はそのまま開く（ブラウザの翻訳機能に任せる）
+  return url;
 }
 
 function timeAgo(dateStr) {
@@ -33,7 +28,7 @@ export default function NewsPanel({ ticker }) {
   const [error, setError] = useState(null);
   const [translated, setTranslated] = useState(null);
   const [translating, setTranslating] = useState(false);
-  const [openMode, setOpenMode] = useState('translate');
+  const [openMode, setOpenMode] = useState('normal');
   const [translateNews, setTranslateNews] = useState(() => {
     const saved = localStorage.getItem(LS_KEY);
     return saved !== null ? saved === 'true' : true;
@@ -110,9 +105,9 @@ export default function NewsPanel({ ticker }) {
               }}
             >
               <option value="normal">通常</option>
-              <option value="translate">🌐 翻訳</option>
+              <option value="translate">🌐 翻訳（ブラウザ任せ）</option>
               <option value="reader">📖 リーダー</option>
-              <option value="both">🌐📖 翻訳＋リーダー</option>
+              <option value="both">📖 リーダー＋翻訳</option>
             </select>
             <label style={{
               display: 'flex', alignItems: 'center', gap: '8px',
