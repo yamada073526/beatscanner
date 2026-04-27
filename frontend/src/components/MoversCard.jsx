@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import ReactMarkdown from 'react-markdown';
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
-function Card({ m, onSelect }) {
+function Card({ m, onSelect, onArticleClick }) {
   const isUp = m.direction === "up";
 
   return (
@@ -48,11 +49,11 @@ function Card({ m, onSelect }) {
       {/* 2行目: keyword → 記事リンク */}
       {m.keyword && (
         m.source_url
-          ? <a
-              href={m.source_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
+          ? <span
+              onClick={(e) => {
+                e.stopPropagation();
+                onArticleClick?.({ url: m.source_url, title: m.keyword });
+              }}
               style={{
                 display: "block",
                 fontSize: 14, fontWeight: 500,
@@ -60,10 +61,11 @@ function Card({ m, onSelect }) {
                 textDecoration: "none",
                 borderBottom: "1.5px solid #378ADD",
                 paddingBottom: "1px",
+                cursor: "pointer",
               }}
             >
               {m.keyword}
-            </a>
+            </span>
           : <span style={{ display: "block", fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>
               {m.keyword}
             </span>
@@ -95,6 +97,55 @@ export default function MoversCard({ onSelect }) {
   const [losers,  setLosers]  = useState([]);
   const [done,    setDone]    = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [articleModal, setArticleModal] = useState(null);
+
+  const openArticle = useCallback(async ({ url, title }) => {
+    setArticleModal({ url, title, content: '', loading: true, error: null });
+    try {
+      const res = await fetch('/api/news/article', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      if (!res.ok) throw new Error('記事の取得に失敗しました');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const payload = line.slice(6);
+          if (payload === '[DONE]') {
+            setArticleModal(prev => ({ ...prev, loading: false }));
+            break;
+          }
+          try {
+            const { chunk, error } = JSON.parse(payload);
+            if (error) {
+              setArticleModal(prev => ({ ...prev, error, loading: false }));
+              return;
+            }
+            if (chunk) {
+              setArticleModal(prev => ({
+                ...prev,
+                loading: false,
+                content: (prev.content || '') + chunk,
+              }));
+            }
+          } catch {}
+        }
+      }
+    } catch (e) {
+      setArticleModal(prev => ({ ...prev, error: e.message, loading: false }));
+    }
+  }, []);
 
   const today = new Date();
   const dateLabel = `${today.getMonth() + 1}月${today.getDate()}日`;
@@ -195,7 +246,7 @@ export default function MoversCard({ onSelect }) {
             background: "#EAF3DE", color: "#3B6D11",
             borderRadius: "4px", padding: "2px 8px", marginBottom: "8px",
           }}>▲ 急騰 Top 5</div>
-          {gainers.map((m) => <Card key={m.ticker} m={m} onSelect={onSelect} />)}
+          {gainers.map((m) => <Card key={m.ticker} m={m} onSelect={onSelect} onArticleClick={openArticle} />)}
           {Array.from({ length: gainerSlots }).map((_, i) => <SkeletonCard key={`gs-${i}`} />)}
         </div>
 
@@ -206,10 +257,88 @@ export default function MoversCard({ onSelect }) {
             background: "#FCEBEB", color: "#A32D2D",
             borderRadius: "4px", padding: "2px 8px", marginBottom: "8px",
           }}>▼ 急落 Top 5</div>
-          {losers.map((m) => <Card key={m.ticker} m={m} onSelect={onSelect} />)}
+          {losers.map((m) => <Card key={m.ticker} m={m} onSelect={onSelect} onArticleClick={openArticle} />)}
           {Array.from({ length: loserSlots }).map((_, i) => <SkeletonCard key={`ls-${i}`} />)}
         </div>
       </div>
+
+      {articleModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+            padding: '40px 16px', overflowY: 'auto',
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setArticleModal(null); }}
+        >
+          <div style={{
+            width: '100%', maxWidth: '680px',
+            background: 'var(--bg-primary)',
+            border: '1px solid var(--border)',
+            borderRadius: '16px', padding: '24px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '8px' }}>
+              <p style={{ flex: 1, fontSize: '16px', fontWeight: '600', color: 'var(--text-primary)', margin: 0, lineHeight: 1.5 }}>
+                {articleModal.title}
+              </p>
+              <button
+                onClick={() => setArticleModal(null)}
+                style={{ flexShrink: 0, background: 'transparent', border: 'none', fontSize: '20px', cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1 }}
+              >×</button>
+            </div>
+            <a
+              href={articleModal.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '16px' }}
+            >
+              元記事を開く →
+            </a>
+            {articleModal.loading && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '24px 0', color: 'var(--text-secondary)' }}>
+                <span style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid var(--border)', borderTopColor: '#64748b', display: 'inline-block', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+                <span style={{ fontSize: 14 }}>記事を翻訳中...</span>
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+              </div>
+            )}
+            {articleModal.error && (
+              <div style={{ fontSize: '14px', color: 'var(--text-secondary)', padding: '16px 0' }}>
+                <p style={{ marginBottom: '8px' }}>⚠️ {articleModal.error}</p>
+                <a href={articleModal.url} target="_blank" rel="noopener noreferrer"
+                  style={{ color: 'var(--text-muted)', fontSize: '13px' }}>元記事を直接開く →</a>
+              </div>
+            )}
+            {articleModal.content && (
+              <div style={{ fontSize: '15px', lineHeight: '1.9', color: 'var(--text-primary)', maxWidth: '640px' }}>
+                <ReactMarkdown
+                  components={{
+                    p: ({ children }) => (
+                      <p style={{ marginBottom: '1.2em', color: 'var(--text-primary)', fontSize: '15px', lineHeight: '1.9' }}>{children}</p>
+                    ),
+                    h2: ({ children }) => (
+                      <h2 style={{ fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', margin: '2em 0 0.6em', padding: 0, border: 'none' }}>{children}</h2>
+                    ),
+                    strong: ({ children }) => (
+                      <strong style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{children}</strong>
+                    ),
+                  }}
+                >
+                  {articleModal.content}
+                </ReactMarkdown>
+                {!articleModal.loading && (
+                  <div style={{ marginTop: '2rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+                    <a href={articleModal.url} target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                      続きは元記事で読む →
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
