@@ -4,11 +4,10 @@ import { fetchNews, translateTexts } from '../api.js';
 const LS_KEY = 'translateNews';
 
 function buildNewsUrl(url, mode) {
-  if (mode === 'reader' || mode === 'both') {
-    return `https://12ft.io/proxy?q=${encodeURIComponent(url)}`;
+  if (mode === 'reader') {
+    return `https://r.jina.ai/${url}`;
   }
-  // 'normal' / 'translate' はそのまま開く（ブラウザの翻訳機能に任せる）
-  return url;
+  return url; // 'normal'
 }
 
 function timeAgo(dateStr) {
@@ -105,9 +104,7 @@ export default function NewsPanel({ ticker }) {
               }}
             >
               <option value="normal">通常</option>
-              <option value="translate">🌐 翻訳（ブラウザ任せ）</option>
               <option value="reader">📖 リーダー</option>
-              <option value="both">📖 リーダー＋翻訳</option>
             </select>
             <label style={{
               display: 'flex', alignItems: 'center', gap: '8px',
