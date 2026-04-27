@@ -123,7 +123,26 @@ export default function MoversCard({ onSelect }) {
           if (!line.startsWith('data: ')) continue;
           const payload = line.slice(6);
           if (payload === '[DONE]') {
-            setArticleModal(prev => ({ ...prev, loading: false }));
+            setArticleModal(prev => {
+              const cleaned = (prev.content || '')
+                .split('\n')
+                .filter(line => {
+                  const t = line.trim();
+                  if (!t) return true;
+                  const removePatterns = [
+                    /^元記事(で|を)(続き|全文)/,
+                    /^続きは?元記事/,
+                    /^全文を読む/,
+                    /^この記事の続き/,
+                    /^Read (more|the full)/i,
+                    /^Click here to/i,
+                  ];
+                  return !removePatterns.some(p => p.test(t));
+                })
+                .join('\n')
+                .trimEnd();
+              return { ...prev, content: cleaned, loading: false };
+            });
             break;
           }
           try {
