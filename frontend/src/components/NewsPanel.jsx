@@ -322,9 +322,28 @@ export default function NewsPanel({ ticker }) {
                       </p>
                     ),
                     h2: ({ children }) => (
-                      <h2 style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)', margin: '1.5em 0 0.5em', borderBottom: '1px solid var(--border)', paddingBottom: '4px' }}>
+                      <h2 style={{
+                        fontSize: '16px',
+                        fontWeight: '700',
+                        color: 'var(--text-primary)',
+                        margin: '2.5em 0 0.6em',
+                        paddingLeft: '10px',
+                        borderLeft: '3px solid var(--border)',
+                        lineHeight: 1.4,
+                      }}>
                         {children}
                       </h2>
+                    ),
+                    h3: ({ children }) => (
+                      <h3 style={{
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: 'var(--text-primary)',
+                        margin: '2em 0 0.4em',
+                        lineHeight: 1.4,
+                      }}>
+                        {children}
+                      </h3>
                     ),
                     strong: ({ children }) => (
                       <strong style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{children}</strong>

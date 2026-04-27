@@ -317,7 +317,28 @@ export default function MoversCard({ onSelect }) {
                       <p style={{ marginBottom: '1.2em', color: 'var(--text-primary)', fontSize: '15px', lineHeight: '1.9' }}>{children}</p>
                     ),
                     h2: ({ children }) => (
-                      <h2 style={{ fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', margin: '2em 0 0.6em', padding: 0, border: 'none' }}>{children}</h2>
+                      <h2 style={{
+                        fontSize: '16px',
+                        fontWeight: '700',
+                        color: 'var(--text-primary)',
+                        margin: '2.5em 0 0.6em',
+                        paddingLeft: '10px',
+                        borderLeft: '3px solid var(--border)',
+                        lineHeight: 1.4,
+                      }}>
+                        {children}
+                      </h2>
+                    ),
+                    h3: ({ children }) => (
+                      <h3 style={{
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: 'var(--text-primary)',
+                        margin: '2em 0 0.4em',
+                        lineHeight: 1.4,
+                      }}>
+                        {children}
+                      </h3>
                     ),
                     strong: ({ children }) => (
                       <strong style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{children}</strong>
