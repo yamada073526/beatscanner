@@ -1672,8 +1672,20 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
             async with _httpx_art.AsyncClient(timeout=10, follow_redirects=True) as hc:
                 resp = await hc.get(url, headers=req_headers)
             resp.raise_for_status()
+        except _httpx_art.HTTPStatusError as e:
+            status = e.response.status_code
+            if status == 403:
+                msg = "この記事は有料コンテンツのため取得できません。元記事リンクからご確認ください。"
+            elif status == 404:
+                msg = "記事が見つかりませんでした（削除または移動された可能性があります）。"
+            elif status == 429:
+                msg = "アクセス制限により取得できませんでした。しばらく時間をおいて再試行してください。"
+            else:
+                msg = f"記事の取得に失敗しました（HTTP {status}）。元記事リンクからご確認ください。"
+            yield f"data: {json.dumps({'error': msg})}\n\n"
+            return
         except Exception as e:
-            yield f"data: {json.dumps({'error': f'記事の取得に失敗しました: {str(e)}'})}\n\n"
+            yield f"data: {json.dumps({'error': '記事の取得に失敗しました。元記事リンクからご確認ください。'})}\n\n"
             return
 
         # 本文テキスト抽出（30行・各行200文字上限）
