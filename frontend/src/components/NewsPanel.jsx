@@ -147,7 +147,7 @@ export default function NewsPanel({ ticker }) {
   const displayTitles = translateNews && translated ? translated : null;
 
   return (
-    <section className="rounded-2xl bg-white p-6 shadow-sm">
+    <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
       <div className="mb-4 flex items-center justify-between gap-2">
         <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
           📰 最新ニュース
@@ -214,8 +214,32 @@ export default function NewsPanel({ ticker }) {
 
       {!loading && news.length > 0 && (
         <ul style={{ borderTop: '1px solid var(--border)' }}>
-          {news.map((item, i) => (
-            <li key={i} className="py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+          {news.map((item, i) => {
+            const canHover = window.matchMedia('(hover: hover)').matches;
+            return (
+            <li
+              key={i}
+              className="py-3"
+              onMouseEnter={(e) => {
+                if (canHover) {
+                  e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.06)';
+                  e.currentTarget.style.paddingLeft = '8px';
+                  e.currentTarget.style.borderRadius = '8px';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (canHover) {
+                  e.currentTarget.style.backgroundColor = '';
+                  e.currentTarget.style.paddingLeft = '';
+                  e.currentTarget.style.borderRadius = '';
+                }
+              }}
+              style={{
+                borderBottom: '1px solid var(--border)',
+                transition: 'background-color 0.15s, padding-left 0.15s',
+                cursor: 'pointer',
+              }}
+            >
               <div
                 onClick={() => openArticle(item)}
                 className="group block"
@@ -260,7 +284,8 @@ export default function NewsPanel({ ticker }) {
                 </div>
               </div>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
 
