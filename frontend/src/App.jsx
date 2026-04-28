@@ -776,7 +776,64 @@ export default function App() {
 
       {/* Tab: 決算レポート */}
       {activeTab === 'report' && (
-        result ? (
+        <>
+        {/* ── ウォッチリスト銘柄ナビ（pill型） ── */}
+        {watchlist.length > 0 && (
+          <div
+            className="watchlist-nav"
+            style={{
+              overflowX: 'auto',
+              whiteSpace: 'nowrap',
+              padding: '10px 0 6px',
+              marginBottom: '4px',
+            }}
+          >
+            {watchlist.map((sym) => {
+              const isActive = (result?.ticker === sym) || (loading && ticker === sym);
+              return (
+                <button
+                  key={sym}
+                  onClick={() => runAnalyze(sym)}
+                  disabled={loading}
+                  onMouseEnter={e => {
+                    if (!isActive) {
+                      e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.10)';
+                      e.currentTarget.style.borderColor = 'rgba(56,189,248,0.50)';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (!isActive) {
+                      e.currentTarget.style.backgroundColor = 'var(--bg-card)';
+                      e.currentTarget.style.borderColor = 'var(--border)';
+                    }
+                  }}
+                  style={{
+                    display: 'inline-block',
+                    marginRight: '8px',
+                    padding: '5px 14px',
+                    borderRadius: '999px',
+                    border: isActive
+                      ? '1.5px solid rgba(56,189,248,0.80)'
+                      : '1.5px solid var(--border)',
+                    background: isActive
+                      ? 'rgba(56,189,248,0.15)'
+                      : 'var(--bg-card)',
+                    color: isActive ? 'rgb(14,165,233)' : 'var(--text-secondary)',
+                    fontSize: '13px',
+                    fontWeight: isActive ? 700 : 400,
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    opacity: loading && !isActive ? 0.5 : 1,
+                    transition: 'background-color 0.15s, border-color 0.15s, color 0.15s',
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  {sym}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {result ? (
           <DetailReport
             analysis={result}
             guidance={guidance}
@@ -784,34 +841,12 @@ export default function App() {
           />
         ) : (
           <div style={{ padding: '3rem 1rem', textAlign: 'center' }}>
-            <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '1rem' }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
               ウォッチリストから銘柄を選択して分析してください
             </p>
-            {watchlist.length > 0 ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
-                {watchlist.map(t => (
-                  <button
-                    key={t}
-                    onClick={() => runAnalyze(t)}
-                    style={{
-                      padding: '6px 16px', borderRadius: '8px',
-                      border: '1px solid var(--border)',
-                      background: 'transparent', color: 'var(--text-primary)',
-                      cursor: 'pointer', fontSize: '14px', fontWeight: '600',
-                      transition: 'background 0.15s',
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                  >{t}</button>
-                ))}
-              </div>
-            ) : (
-              <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
-                ホームタブのウォッチリストに銘柄を追加してください
-              </p>
-            )}
           </div>
-        )
+        )}
+        </>
       )}
 
       {/* Tab: チャート */}

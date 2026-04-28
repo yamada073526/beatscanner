@@ -254,7 +254,16 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
           <div style={{ textAlign: 'center' }}>
             <button
               onClick={handleGenerateViz}
-              className="cf-generate-btn"
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = 'rgba(56,189,248,0.70)';
+                e.currentTarget.style.color = 'rgb(56,189,248)';
+                e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.07)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = 'var(--border)';
+                e.currentTarget.style.color = 'var(--text-secondary)';
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
               style={{
                 width: '100%',
                 display: 'flex',
@@ -263,13 +272,14 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
                 gap: '8px',
                 padding: '14px 20px',
                 background: 'transparent',
-                color: isDark ? '#e2e8f0' : '#0f172a',
-                border: isDark ? '1.5px solid #e2e8f0' : '1.5px solid #0f172a',
+                color: 'var(--text-secondary)',
+                border: '1.5px solid var(--border)',
                 borderRadius: '10px',
                 fontSize: '15px',
                 fontWeight: '600',
                 cursor: 'pointer',
                 letterSpacing: '0.02em',
+                transition: 'border-color 0.15s, color 0.15s, background-color 0.15s',
               }}
             >
               <BarChartIcon />
