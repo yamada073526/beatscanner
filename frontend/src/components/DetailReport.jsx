@@ -53,14 +53,16 @@ function AccordionSection({ title, badge, badgeColor = '#1e293b', children, stre
   };
 
   return (
-    <div style={{
-      borderRadius: '12px',
-      border: '1px solid var(--border)',
-      background: 'var(--bg-primary)',
-      marginBottom: '12px',
-      overflow: 'hidden',
-      boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-    }}>
+    <div
+      className="panel-card"
+      style={{
+        borderRadius: '12px',
+        border: '1px solid var(--border)',
+        background: 'var(--bg-primary)',
+        marginBottom: '12px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+      }}
+    >
       <button
         onClick={handleToggle}
         style={{
@@ -247,11 +249,12 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
   return (
     <>
       {/* 図解生成CTA */}
-      <div style={{ marginBottom: '16px' }}>
+      <div style={{ marginBottom: '16px', paddingTop: '4px' }}>
         {vizState === 'idle' && (
           <div style={{ textAlign: 'center' }}>
             <button
               onClick={handleGenerateViz}
+              className="cf-generate-btn"
               style={{
                 width: '100%',
                 display: 'flex',
@@ -325,10 +328,7 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
         </div>
       )}
 
-      {streaming && text && (
-        <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{text}</p>
-      )}
-      {done && text && (
+      {(streaming || done) && text && (
         <ReactMarkdown components={mdComponents}>{text}</ReactMarkdown>
       )}
     </>
@@ -339,7 +339,6 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
 export default function DetailReport({ analysis, guidance, onStreamingChange }) {
   const [conferenceStreaming, setConferenceStreaming] = useState(false);
   const [reportStreaming, setReportStreaming] = useState(false);
-  // accordion の open 状態を親で管理し ReportCard へ渡す
   const [reportOpen, setReportOpen] = useState(true);
 
   useEffect(() => {

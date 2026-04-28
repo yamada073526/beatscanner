@@ -63,6 +63,68 @@ export default function App() {
   const screenerRef = useRef(null);
   const customScreenerRef = useRef(null);
   const calendarRef = useRef(null);
+  // ── グローバル スクロールフロート（全タブ .panel-card を一括処理） ──
+  const handleScrollRef = useRef(null);
+
+  // ① リスナー登録（マウント時1回）
+  useEffect(() => {
+    const handleScroll = () => {
+      const vh = document.documentElement.clientHeight || window.innerHeight;
+      if (!vh) return; // preview sandbox guard（実機では 0 にならない）
+      document.querySelectorAll('.panel-card').forEach(el => {
+        const rect = el.getBoundingClientRect();
+        // 部分表示でも発火（縦長カード対応）
+        const inView = rect.bottom > vh * 0.25 && rect.top < vh * 0.75;
+        if (inView) {
+          el.style.transform = 'translateY(-6px)';
+          el.style.filter    = 'drop-shadow(0 0 8px rgba(56,189,248,0.60))';
+          el.style.boxShadow = '0 0 16px rgba(56,189,248,0.20)';
+          el.style.setProperty('border-color', 'rgba(56,189,248,0.60)', 'important');
+        } else {
+          el.style.transform = '';
+          el.style.filter    = '';
+          el.style.boxShadow = '';
+          el.style.removeProperty('border-color');
+        }
+      });
+    };
+
+    handleScrollRef.current = handleScroll;
+
+    // window に登録（全コンテナ共通）
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    // overflow:scroll/auto の内部コンテナにも全て登録
+    const scrollContainers = new Set();
+    document.querySelectorAll('.panel-card').forEach(el => {
+      let parent = el.parentElement;
+      while (parent && parent !== document.body) {
+        const overflow = window.getComputedStyle(parent).overflowY;
+        if (overflow === 'auto' || overflow === 'scroll') {
+          scrollContainers.add(parent);
+        }
+        parent = parent.parentElement;
+      }
+    });
+    scrollContainers.forEach(c => c.addEventListener('scroll', handleScroll, { passive: true }));
+
+    handleScroll();
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      scrollContainers.forEach(c => c.removeEventListener('scroll', handleScroll));
+    };
+  }, []);
+
+  // ② タブ切替時に再実行（描画完了後に確実に実行）
+  useEffect(() => {
+    if (!handleScrollRef.current) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (handleScrollRef.current) handleScrollRef.current();
+      });
+    });
+  }, [activeTab]);
   const [hasKey, setHasKey] = useState(hasFmpKey);
   const [toast, setToast] = useState(null);
   const upgrade = useUpgradeModal();
@@ -236,11 +298,26 @@ export default function App() {
               }, 100);
             }
           }}
-          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium ${
             showScreener
               ? 'border-slate-900 bg-slate-900 text-white'
-              : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400'
+              : 'border-slate-300 text-slate-600'
           }`}
+          style={{
+            backgroundColor: showScreener ? undefined : 'var(--bg-card)',
+            transition: 'background-color 0.15s, border-color 0.15s',
+            cursor: 'pointer',
+          }}
+          onMouseEnter={e => {
+            if (!showScreener) {
+              e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.25)';
+              e.currentTarget.style.borderColor = 'rgba(56,189,248,0.80)';
+            }
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.backgroundColor = showScreener ? '' : 'var(--bg-card)';
+            e.currentTarget.style.borderColor = '';
+          }}
         >
           🔍 注目銘柄
         </button>
@@ -260,11 +337,26 @@ export default function App() {
               }, 100);
             }
           }}
-          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium ${
             showCustomScreener
               ? 'border-slate-900 bg-slate-900 text-white'
-              : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400'
+              : 'border-slate-300 text-slate-600'
           }`}
+          style={{
+            backgroundColor: showCustomScreener ? undefined : 'var(--bg-card)',
+            transition: 'background-color 0.15s, border-color 0.15s',
+            cursor: 'pointer',
+          }}
+          onMouseEnter={e => {
+            if (!showCustomScreener) {
+              e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.25)';
+              e.currentTarget.style.borderColor = 'rgba(56,189,248,0.80)';
+            }
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.backgroundColor = showCustomScreener ? '' : 'var(--bg-card)';
+            e.currentTarget.style.borderColor = '';
+          }}
         >
           📈 プロトコルスクリーナー
         </button>
@@ -284,11 +376,26 @@ export default function App() {
               }, 100);
             }
           }}
-          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium ${
             showCalendar
               ? 'border-slate-900 bg-slate-900 text-white'
-              : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400'
+              : 'border-slate-300 text-slate-600'
           }`}
+          style={{
+            backgroundColor: showCalendar ? undefined : 'var(--bg-card)',
+            transition: 'background-color 0.15s, border-color 0.15s',
+            cursor: 'pointer',
+          }}
+          onMouseEnter={e => {
+            if (!showCalendar) {
+              e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.25)';
+              e.currentTarget.style.borderColor = 'rgba(56,189,248,0.80)';
+            }
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.backgroundColor = showCalendar ? '' : 'var(--bg-card)';
+            e.currentTarget.style.borderColor = '';
+          }}
         >
           📅 決算カレンダー
         </button>
@@ -323,7 +430,20 @@ export default function App() {
           <button
             type="submit"
             disabled={loading}
-            className="rounded-lg bg-slate-900 px-6 py-3 text-base font-semibold text-white hover:bg-slate-700 disabled:opacity-50"
+            className="rounded-lg px-6 py-3 text-base font-semibold disabled:opacity-50"
+            style={{
+              backgroundColor: 'rgba(56,189,248,1)',
+              color: '#fff',
+              transition: 'background-color 0.15s, transform 0.1s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.80)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(56,189,248,1)';
+              e.currentTarget.style.transform = '';
+            }}
           >
             {loading ? '分析中...' : '分析する'}
           </button>
@@ -425,7 +545,7 @@ export default function App() {
           className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
             activeTab === 'home'
               ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200'
           }`}
         >
           🏠 ホーム
@@ -435,7 +555,7 @@ export default function App() {
           className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
             activeTab === 'judgment'
               ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200'
           }`}
         >
           📊 判定
@@ -451,7 +571,7 @@ export default function App() {
           className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
             activeTab === 'report'
               ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200'
           }`}
         >
           {isPro() ? '📝 決算' : '🔒 決算'}
@@ -461,7 +581,7 @@ export default function App() {
           className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
             activeTab === 'チャート'
               ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200'
           }`}
         >
           📈 チャート
@@ -487,7 +607,64 @@ export default function App() {
 
       {/* Tab: 判定詳細 */}
       {activeTab === 'judgment' && (
-        result ? (
+        <>
+        {/* ── ウォッチリスト銘柄ナビ（pill型） ── */}
+        {watchlist.length > 0 && (
+          <div
+            className="watchlist-nav"
+            style={{
+              overflowX: 'auto',
+              whiteSpace: 'nowrap',
+              padding: '10px 0 6px',
+              marginBottom: '4px',
+            }}
+          >
+            {watchlist.map((sym) => {
+              const isActive = (result?.ticker === sym) || (loading && ticker === sym);
+              return (
+                <button
+                  key={sym}
+                  onClick={() => runAnalyze(sym)}
+                  disabled={loading}
+                  onMouseEnter={e => {
+                    if (!isActive) {
+                      e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.10)';
+                      e.currentTarget.style.borderColor = 'rgba(56,189,248,0.50)';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (!isActive) {
+                      e.currentTarget.style.backgroundColor = 'var(--bg-card)';
+                      e.currentTarget.style.borderColor = 'var(--border)';
+                    }
+                  }}
+                  style={{
+                    display: 'inline-block',
+                    marginRight: '8px',
+                    padding: '5px 14px',
+                    borderRadius: '999px',
+                    border: isActive
+                      ? '1.5px solid rgba(56,189,248,0.80)'
+                      : '1.5px solid var(--border)',
+                    background: isActive
+                      ? 'rgba(56,189,248,0.15)'
+                      : 'var(--bg-card)',
+                    color: isActive ? 'rgb(14,165,233)' : 'var(--text-secondary)',
+                    fontSize: '13px',
+                    fontWeight: isActive ? 700 : 400,
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    opacity: loading && !isActive ? 0.5 : 1,
+                    transition: 'background-color 0.15s, border-color 0.15s, color 0.15s',
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  {sym}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {result ? (
           <div className="space-y-6 mt-4">
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
@@ -540,6 +717,7 @@ export default function App() {
               ))}
             </div>
             <button
+              className="cta-btn"
               onClick={() => {
                 if (!isPro()) { upgrade.open('AI詳細レポート'); }
                 else { setActiveTab('report'); }
@@ -563,10 +741,37 @@ export default function App() {
             <NewsPanel ticker={result.ticker} />
           </div>
         ) : (
-          <div className="flex items-center justify-center py-16 text-slate-400 text-sm">
-            上の検索ボックスで銘柄を分析してください
+          <div style={{ padding: '3rem 1rem', textAlign: 'center' }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '1rem' }}>
+              ウォッチリストから銘柄を選択して分析してください
+            </p>
+            {watchlist.length > 0 ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
+                {watchlist.map(t => (
+                  <button
+                    key={t}
+                    onClick={() => runAnalyze(t)}
+                    style={{
+                      padding: '6px 16px', borderRadius: '8px',
+                      border: '1px solid var(--border)',
+                      background: 'transparent', color: 'var(--text-primary)',
+                      cursor: 'pointer', fontSize: '14px', fontWeight: '600',
+                      transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >{t}</button>
+                ))}
+              </div>
+            ) : (
+              <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+                ホームタブのウォッチリストに銘柄を追加してください
+              </p>
+            )}
           </div>
         )
+        }
+        </>
       )}
 
       {/* Tab: 決算レポート */}
@@ -578,8 +783,33 @@ export default function App() {
             onStreamingChange={setReportStreaming}
           />
         ) : (
-          <div className="flex items-center justify-center py-16 text-slate-400 text-sm">
-            銘柄を分析してからご利用ください
+          <div style={{ padding: '3rem 1rem', textAlign: 'center' }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '1rem' }}>
+              ウォッチリストから銘柄を選択して分析してください
+            </p>
+            {watchlist.length > 0 ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
+                {watchlist.map(t => (
+                  <button
+                    key={t}
+                    onClick={() => runAnalyze(t)}
+                    style={{
+                      padding: '6px 16px', borderRadius: '8px',
+                      border: '1px solid var(--border)',
+                      background: 'transparent', color: 'var(--text-primary)',
+                      cursor: 'pointer', fontSize: '14px', fontWeight: '600',
+                      transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >{t}</button>
+                ))}
+              </div>
+            ) : (
+              <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+                ホームタブのウォッチリストに銘柄を追加してください
+              </p>
+            )}
           </div>
         )
       )}
