@@ -222,22 +222,26 @@ export default function NewsPanel({ ticker }) {
               className="py-3"
               onMouseEnter={(e) => {
                 if (canHover) {
-                  e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.06)';
-                  e.currentTarget.style.paddingLeft = '8px';
+                  e.currentTarget.style.backgroundColor = 'var(--bg-subtle)';
                   e.currentTarget.style.borderRadius = '8px';
+                  e.currentTarget.style.paddingLeft = '6px';
+                  e.currentTarget.style.paddingRight = '6px';
                 }
               }}
               onMouseLeave={(e) => {
                 if (canHover) {
                   e.currentTarget.style.backgroundColor = '';
-                  e.currentTarget.style.paddingLeft = '';
                   e.currentTarget.style.borderRadius = '';
+                  e.currentTarget.style.paddingLeft = '';
+                  e.currentTarget.style.paddingRight = '';
                 }
               }}
               style={{
                 borderBottom: '1px solid var(--border)',
-                transition: 'background-color 0.15s, padding-left 0.15s',
+                transition: 'background-color 0.15s, border-radius 0.15s, padding 0.15s',
                 cursor: 'pointer',
+                marginLeft: '-6px',
+                marginRight: '-6px',
               }}
             >
               <div

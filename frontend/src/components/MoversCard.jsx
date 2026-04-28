@@ -41,13 +41,30 @@ function Card({ m, onSelect, onArticleClick }) {
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span
-            onClick={() => onSelect && onSelect(m.ticker)}
+            onClick={(e) => { e.stopPropagation(); onSelect && onSelect(m.ticker); }}
+            onMouseEnter={(e) => {
+              if (window.matchMedia('(hover: hover)').matches) {
+                e.currentTarget.style.background = '#2563eb';
+                e.currentTarget.style.color = '#ffffff';
+                e.currentTarget.style.transform = 'scale(1.08)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (window.matchMedia('(hover: hover)').matches) {
+                e.currentTarget.style.background = '#dbeafe';
+                e.currentTarget.style.color = '#2563eb';
+                e.currentTarget.style.transform = 'scale(1)';
+              }
+            }}
+            title="クリックで銘柄分析"
             style={{
-              fontSize: 12, fontWeight: 500,
+              fontSize: 12, fontWeight: 700,
               color: "#2563eb",
               background: "#dbeafe",
               padding: "2px 8px", borderRadius: 4,
               cursor: "pointer",
+              transition: "background 0.15s, color 0.15s, transform 0.15s",
+              display: "inline-block",
             }}
           >
             {m.ticker}
