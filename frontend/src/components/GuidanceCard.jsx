@@ -47,8 +47,14 @@ function GuidanceInfoModal({ onClose }) {
   );
 }
 
+const GUIDANCE_SECTION_STYLE = {
+  border: '1px solid var(--border)',
+  background: 'var(--bg-card)',
+  transition: 'transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease',
+};
+
 const GuidanceSkeleton = () => (
-  <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+  <section className="panel-card rounded-2xl p-5 shadow-sm" style={GUIDANCE_SECTION_STYLE}>
     <div className="mb-3 h-4 w-40 rounded bg-slate-200" style={{animation:'pulse 1.5s infinite'}} />
     <div className="mt-2 space-y-4">
       {/* EPS row */}
@@ -113,6 +119,15 @@ function formatPct(v) {
   return `${sign}${v.toFixed(1)}%`;
 }
 
+/** EPS absolute diff: used when estimate is near-zero and % would be misleading */
+function formatAbsDiff(actual, estimated) {
+  if (actual == null || estimated == null) return '';
+  const diff = actual - estimated;
+  const sign = diff >= 0 ? '+' : '';
+  // reuse formatEps which already formats as $X.XX with negative sign
+  return `${sign}${formatEps(diff)}`;
+}
+
 function Row({ label, estimated, actual, surprisePct, verdict, formatter }) {
   const style = verdict ? VERDICT_STYLE[verdict] : null;
   return (
@@ -138,7 +153,9 @@ function Row({ label, estimated, actual, surprisePct, verdict, formatter }) {
               <span>{style.label}</span>
             </span>
             <span className="text-sm font-semibold text-slate-700">
-              {formatPct(surprisePct)}
+              {surprisePct != null
+                ? formatPct(surprisePct)
+                : formatAbsDiff(actual, estimated)}
             </span>
           </>
         ) : (
@@ -191,8 +208,12 @@ function RevenueRow({ revenueActual, revenueEstimated }) {
     );
   }
 
-  const surprisePct = ((revenueActual - revenueEstimated) / Math.abs(revenueEstimated)) * 100;
-  const verdict = surprisePct >= 3 ? 'beat' : surprisePct <= -3 ? 'miss' : 'in-line';
+  const rawPct = (Math.abs(revenueEstimated) > 0)
+    ? ((revenueActual - revenueEstimated) / Math.abs(revenueEstimated)) * 100
+    : null;
+  const surprisePct = rawPct != null ? Math.max(-500, Math.min(500, rawPct)) : null;
+  const verdict = surprisePct == null ? 'in-line'
+    : surprisePct >= 3 ? 'beat' : surprisePct <= -3 ? 'miss' : 'in-line';
   const style = VERDICT_STYLE[verdict];
   return (
     <div className="grid grid-cols-1 gap-2 border-t border-slate-100 py-3 md:grid-cols-[80px_1fr_auto] md:items-center md:gap-4">
@@ -213,7 +234,7 @@ function RevenueRow({ revenueActual, revenueEstimated }) {
           <span>{style.label}</span>
         </span>
         <span className="text-sm font-semibold text-slate-700">
-          {(surprisePct > 0 ? '+' : '') + surprisePct.toFixed(1)}%
+          {surprisePct != null ? (surprisePct > 0 ? '+' : '') + surprisePct.toFixed(1) + '%' : ''}
         </span>
       </div>
     </div>
@@ -274,7 +295,7 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
 
   if (!guidance) {
     return (
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="panel-card rounded-2xl p-5 shadow-sm" style={GUIDANCE_SECTION_STYLE}>
         <div className="flex items-center justify-between">
           <h3 className="flex items-center gap-1 text-sm font-semibold text-slate-700">
             📊 ガイダンス達成状況
@@ -299,7 +320,7 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
   const subtitle = fiscal_period || date || '直近決算';
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="panel-card rounded-2xl p-5 shadow-sm" style={GUIDANCE_SECTION_STYLE}>
       <div className="flex items-baseline justify-between">
         <h3 className="flex items-center gap-1 text-sm font-semibold text-slate-900">
           📊 ガイダンス達成状況（直近決算）

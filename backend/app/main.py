@@ -463,7 +463,15 @@ def _verdict(actual: float | None, estimated: float | None) -> tuple[str, float 
         return "不明", None
     if actual is None or estimated is None or estimated == 0:
         return "不明", None
+    # Near-zero estimate (|est| < 0.05) → % is meaningless (e.g. INTC +2800%)
+    # Return verdict only; caller shows absolute diff instead
+    if abs(estimated) < 0.05:
+        diff = actual - estimated
+        label = "beat" if diff >= 0.01 else "miss" if diff <= -0.01 else "in-line"
+        return label, None
     pct = round((actual - estimated) / abs(estimated) * 100.0, 1)
+    # Cap at ±500% to prevent display anomalies from very small denominators
+    pct = max(-500.0, min(500.0, pct))
     if pct >= 3.0:
         label = "beat"
     elif pct <= -3.0:
@@ -1915,6 +1923,44 @@ _MAJOR_TICKERS = [
     "AMT", "ISRG", "ADP", "MDLZ", "CCI",
 ]
 
+# 主要銘柄の企業名静的マッピング（API不要・即時返却）
+_TICKER_NAMES: dict[str, str] = {
+    "AAPL": "Apple Inc.", "MSFT": "Microsoft Corp.", "GOOGL": "Alphabet Inc.",
+    "AMZN": "Amazon.com Inc.", "META": "Meta Platforms Inc.", "NVDA": "NVIDIA Corp.",
+    "TSLA": "Tesla Inc.", "BRK-B": "Berkshire Hathaway", "JPM": "JPMorgan Chase",
+    "V": "Visa Inc.", "UNH": "UnitedHealth Group", "JNJ": "Johnson & Johnson",
+    "XOM": "Exxon Mobil Corp.", "PG": "Procter & Gamble", "MA": "Mastercard Inc.",
+    "HD": "Home Depot Inc.", "CVX": "Chevron Corp.", "MRK": "Merck & Co.",
+    "ABBV": "AbbVie Inc.", "PEP": "PepsiCo Inc.", "KO": "The Coca-Cola Co.",
+    "AVGO": "Broadcom Inc.", "COST": "Costco Wholesale", "WMT": "Walmart Inc.",
+    "MCD": "McDonald's Corp.", "TMO": "Thermo Fisher Scientific", "ACN": "Accenture plc",
+    "LLY": "Eli Lilly and Co.", "DHR": "Danaher Corp.", "TXN": "Texas Instruments",
+    "NEE": "NextEra Energy Inc.", "BMY": "Bristol-Myers Squibb", "PM": "Philip Morris Int.",
+    "RTX": "RTX Corp.", "QCOM": "Qualcomm Inc.", "HON": "Honeywell Int.",
+    "AMGN": "Amgen Inc.", "IBM": "IBM Corp.", "GE": "GE Aerospace",
+    "CAT": "Caterpillar Inc.", "BA": "Boeing Co.", "GS": "Goldman Sachs",
+    "MS": "Morgan Stanley", "BLK": "BlackRock Inc.", "SPGI": "S&P Global Inc.",
+    "AMT": "American Tower Corp.", "ISRG": "Intuitive Surgical", "ADP": "ADP Inc.",
+    "MDLZ": "Mondelez Int.", "CCI": "Crown Castle Inc.",
+    # その他よく使われる銘柄
+    "NFLX": "Netflix Inc.", "INTC": "Intel Corp.", "AMD": "AMD Inc.",
+    "CRM": "Salesforce Inc.", "ORCL": "Oracle Corp.", "ADBE": "Adobe Inc.",
+    "PYPL": "PayPal Holdings", "SQ": "Block Inc.", "SHOP": "Shopify Inc.",
+    "SNAP": "Snap Inc.", "UBER": "Uber Technologies", "LYFT": "Lyft Inc.",
+    "ABNB": "Airbnb Inc.", "COIN": "Coinbase Global", "HOOD": "Robinhood Markets",
+    "DIS": "Walt Disney Co.", "CMCSA": "Comcast Corp.", "T": "AT&T Inc.",
+    "VZ": "Verizon Communications", "WBD": "Warner Bros. Discovery",
+    "NKE": "Nike Inc.", "SBUX": "Starbucks Corp.", "TGT": "Target Corp.",
+    "LOW": "Lowe's Companies", "BABA": "Alibaba Group", "JD": "JD.com Inc.",
+    "PDD": "PDD Holdings", "TSM": "Taiwan Semiconductor", "ASML": "ASML Holding",
+    "SAP": "SAP SE", "TM": "Toyota Motor", "SONY": "Sony Group",
+    "F": "Ford Motor Co.", "GM": "General Motors", "RIVN": "Rivian Automotive",
+    "LCID": "Lucid Group", "NIO": "NIO Inc.", "LI": "Li Auto Inc.",
+    "C": "Citigroup Inc.", "BAC": "Bank of America", "WFC": "Wells Fargo",
+    "USB": "U.S. Bancorp", "PNC": "PNC Financial Services",
+    "AMZN": "Amazon.com Inc.", "GOOG": "Alphabet Inc.",
+}
+
 
 @app.get("/api/calendar")
 async def calendar(
@@ -1959,9 +2005,20 @@ async def calendar(
 
     def _yf_fetch(sym: str) -> "dict | None":
         try:
-            cal = yfinance_source.yf.Ticker(sym).calendar
+            t = yfinance_source.yf.Ticker(sym)
+            cal = t.calendar
             if not isinstance(cal, dict):
                 return None
+
+            # 企業名: 静的マッピング優先 → yfinance info fallback（watchlist等の未知銘柄用）
+            name = _TICKER_NAMES.get(sym, "")
+            if not name:
+                try:
+                    info = t.info
+                    name = (info.get("longName") or info.get("shortName") or "").strip()
+                except Exception:
+                    pass
+
             dates = cal.get("Earnings Date") or []
             if not isinstance(dates, list):
                 dates = [dates]
@@ -1975,6 +2032,7 @@ async def calendar(
                         "symbol": sym,
                         "date": d_str,
                         "time": "",
+                        "name": name,
                         "epsEstimated": cal.get("Earnings Average") or cal.get("EPS Estimate"),
                         "revenueEstimated": cal.get("Revenue Average") or cal.get("Revenue Estimate"),
                     }
@@ -1991,7 +2049,13 @@ async def calendar(
 
     # --- Merge: yfinanceを優先、Finnhubで補完 ---
     yf_symbols = {e["symbol"] for e in yf_entries}
-    merged = yf_entries + [e for e in finnhub_entries if e["symbol"] not in yf_symbols]
+    # Finnhubエントリーにも静的マッピングから企業名を付与
+    finnhub_enriched = [
+        {**e, "name": _TICKER_NAMES.get(e["symbol"], "")}
+        for e in finnhub_entries
+        if e["symbol"] not in yf_symbols
+    ]
+    merged = yf_entries + finnhub_enriched
     merged.sort(key=lambda x: x.get("date", ""))
     return merged
 
@@ -2456,6 +2520,13 @@ _SUMMARY_SYSTEM_PROMPT = (
     "[NEG]② **EPS $0.98**（予想$1.05を下回りMiss）、売上前年比−3%。\n"
     "[NEG]③ ガイダンス：🔴 修正あり。次期EPS **$1.05〜$1.15** に下方修正。\n"
     "[NEG]④ Miss+下方修正でモメンタム悪化。\n"
+    "\n"
+    "## 日本語文体ルール\n"
+    "- 同一文中に格助詞「が」を2回以上使わないこと\n"
+    "- 例（NG）：「営業CFマージンが基準未達が唯一の課題」\n"
+    "- 例（OK）：「営業CFマージンは基準未達であり、唯一の課題となっている」\n"
+    "- 例（OK）：「唯一の課題は、営業CFマージンが基準に届いていない点」\n"
+    "- 主語には「が」より「は」を優先し、読点で文を区切ること\n"
 )
 
 
