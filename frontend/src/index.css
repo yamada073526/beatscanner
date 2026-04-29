@@ -200,6 +200,7 @@ body {
 /* ─── スマホ向け スクロール入場アニメーション ─── */
 /* スマホ: 初期状態を非表示に */
 @media (hover: none) {
+  /* ニュース行（NewsPanel） */
   .scroll-reveal {
     opacity: 0;
     transform: translateX(-10px);
@@ -207,6 +208,41 @@ body {
   .scroll-reveal.entered {
     opacity: 1;
     transform: translateX(0);
+  }
+
+  /* ── Movers: ティッカーpill の入場 ── */
+  .mover-row .mover-ticker-pill {
+    opacity: 0;
+    transform: translateX(-10px) scale(0.9);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+  .mover-row.entered .mover-ticker-pill {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+
+  /* ── Movers: ニュース行の入場（0.12s 遅れ） ── */
+  .mover-row .mover-keyword {
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.30s ease 0.12s, transform 0.30s ease 0.12s;
+  }
+  .mover-row.entered .mover-keyword {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ── Movers: → 矢印を入場後に常時薄表示（クリック示唆） ── */
+  .mover-row .mover-arrow {
+    transition: opacity 0.35s ease 0.25s !important;
+  }
+  .mover-row.entered .mover-arrow {
+    opacity: 0.45 !important;
+  }
+
+  /* ── IRリンク行タップフィードバック ── */
+  .ir-link-item:active {
+    background-color: var(--bg-subtle) !important;
   }
 }
 /* PC: 常に表示 */

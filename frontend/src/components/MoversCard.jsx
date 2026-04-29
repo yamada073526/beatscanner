@@ -10,7 +10,7 @@ function Card({ m, onSelect, onArticleClick, index = 0 }) {
 
   return (
     <div
-      className="mover-card scroll-reveal"
+      className="mover-card mover-row"
       onMouseEnter={(e) => {
         if (canHover) {
           e.currentTarget.style.backgroundColor = 'var(--bg-subtle)';
@@ -31,8 +31,7 @@ function Card({ m, onSelect, onArticleClick, index = 0 }) {
         borderRadius: "0 8px 8px 0",
         padding: "10px 12px",
         marginBottom: "8px",
-        transition: "background-color 0.15s, opacity 0.35s ease, transform 0.35s ease",
-        transitionDelay: `${index * 0.07}s`,
+        transition: "background-color 0.15s",
         cursor: "pointer",
       }}
     >
@@ -43,6 +42,7 @@ function Card({ m, onSelect, onArticleClick, index = 0 }) {
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span
+            className="mover-ticker-pill"
             onClick={(e) => { e.stopPropagation(); onSelect && onSelect(m.ticker); }}
             onMouseEnter={(e) => {
               if (window.matchMedia('(hover: hover)').matches) {
@@ -87,6 +87,7 @@ function Card({ m, onSelect, onArticleClick, index = 0 }) {
       {m.keyword && (
         m.source_url
           ? <span
+              className="mover-keyword"
               onClick={(e) => {
                 e.stopPropagation();
                 onArticleClick?.({ url: m.source_url, title: m.keyword });
@@ -110,7 +111,7 @@ function Card({ m, onSelect, onArticleClick, index = 0 }) {
                 →
               </span>
             </span>
-          : <span style={{ display: "block", fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>
+          : <span className="mover-keyword" style={{ display: "block", fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>
               {m.keyword}
             </span>
       )}
@@ -153,11 +154,12 @@ export default function MoversCard({ onSelect }) {
     let observer;
     const raf = requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        const allItems = [
-          ...(gainersRef.current?.querySelectorAll('.scroll-reveal') || []),
-          ...(losersRef.current?.querySelectorAll('.scroll-reveal')  || []),
+        // .mover-row（カード行）を直接監視し、entered を付与
+        const allRows = [
+          ...(gainersRef.current?.querySelectorAll('.mover-row') || []),
+          ...(losersRef.current?.querySelectorAll('.mover-row')  || []),
         ];
-        if (!allItems.length) return;
+        if (!allRows.length) return;
 
         observer = new IntersectionObserver(
           (entries) => {
@@ -168,10 +170,10 @@ export default function MoversCard({ onSelect }) {
               }
             });
           },
-          { threshold: 0.15 }
+          { threshold: 0.2 }
         );
 
-        allItems.forEach((item) => observer.observe(item));
+        allRows.forEach((row) => observer.observe(row));
       });
     });
 
