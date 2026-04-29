@@ -1,16 +1,16 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
-function Card({ m, onSelect, onArticleClick }) {
+function Card({ m, onSelect, onArticleClick, index = 0 }) {
   const isUp = m.direction === "up";
   const canHover = window.matchMedia('(hover: hover)').matches;
 
   return (
     <div
-      className="mover-card"
+      className="mover-card scroll-reveal"
       onMouseEnter={(e) => {
         if (canHover) {
           e.currentTarget.style.backgroundColor = 'var(--bg-subtle)';
@@ -32,6 +32,7 @@ function Card({ m, onSelect, onArticleClick }) {
         padding: "10px 12px",
         marginBottom: "8px",
         transition: "background-color 0.15s",
+        transitionDelay: `${index * 0.07}s`,
         cursor: "pointer",
       }}
     >
@@ -140,6 +141,36 @@ export default function MoversCard({ onSelect }) {
   const [losers,  setLosers]  = useState([]);
   const [done,    setDone]    = useState(false);
   const [articleModal, setArticleModal] = useState(null);
+
+  const gainersRef = useRef(null);
+  const losersRef  = useRef(null);
+
+  // スマホ向けスクロール入場アニメーション
+  useEffect(() => {
+    const isMobile = !window.matchMedia('(hover: hover)').matches;
+    if (!isMobile) return;
+
+    const allItems = [
+      ...(gainersRef.current?.querySelectorAll('.scroll-reveal') || []),
+      ...(losersRef.current?.querySelectorAll('.scroll-reveal')  || []),
+    ];
+    if (!allItems.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('entered');
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.2 }
+    );
+
+    allItems.forEach((item) => observer.observe(item));
+    return () => observer.disconnect();
+  }, [gainers, losers]);
 
   const openArticle = useCallback(async ({ url, title }) => {
     setArticleModal({ url, title, content: '', loading: true, error: null });
@@ -274,21 +305,21 @@ export default function MoversCard({ onSelect }) {
         style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", alignItems: "start" }}
       >
         {/* 左列: gainers */}
-        <div>
+        <div ref={gainersRef}>
           <div style={{ ...labelBase, background: "#EAF3DE", color: "#3B6D11" }}>▲ 急騰 Top 5</div>
           {isLoading
             ? Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={`gs-${i}`} />)
-            : gainers.map((m) => <Card key={m.ticker} m={m} onSelect={onSelect} onArticleClick={openArticle} />)
+            : gainers.map((m, i) => <Card key={m.ticker} m={m} onSelect={onSelect} onArticleClick={openArticle} index={i} />)
           }
           {!isLoading && Array.from({ length: gainerSlots }).map((_, i) => <SkeletonCard key={`gs-${i}`} />)}
         </div>
 
         {/* 右列: losers */}
-        <div>
+        <div ref={losersRef}>
           <div style={{ ...labelBase, background: "#FCEBEB", color: "#A32D2D" }}>▼ 急落 Top 5</div>
           {isLoading
             ? Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={`ls-${i}`} />)
-            : losers.map((m) => <Card key={m.ticker} m={m} onSelect={onSelect} onArticleClick={openArticle} />)
+            : losers.map((m, i) => <Card key={m.ticker} m={m} onSelect={onSelect} onArticleClick={openArticle} index={i} />)
           }
           {!isLoading && Array.from({ length: loserSlots }).map((_, i) => <SkeletonCard key={`ls-${i}`} />)}
         </div>

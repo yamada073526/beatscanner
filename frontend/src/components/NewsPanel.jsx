@@ -29,6 +29,31 @@ export default function NewsPanel({ ticker }) {
   });
   const translatingRef = useRef(false);
 
+  // スマホ向けスクロール入場アニメーション
+  const listRef = useRef(null);
+  useEffect(() => {
+    const isMobile = !window.matchMedia('(hover: hover)').matches;
+    if (!isMobile || !listRef.current) return;
+
+    const items = listRef.current.querySelectorAll('.scroll-reveal');
+    if (!items.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('entered');
+            observer.unobserve(entry.target); // one-shot
+          }
+        });
+      },
+      { threshold: 0.25, rootMargin: '0px 0px -20px 0px' }
+    );
+
+    items.forEach((item) => observer.observe(item));
+    return () => observer.disconnect();
+  }, [news]); // news更新のたびに再セット
+
   function load() {
     if (!ticker) return;
     setLoading(true);
@@ -214,13 +239,13 @@ export default function NewsPanel({ ticker }) {
       )}
 
       {!loading && news.length > 0 && (
-        <ul style={{ borderTop: '1px solid var(--border)' }}>
+        <ul ref={listRef} style={{ borderTop: '1px solid var(--border)' }}>
           {news.map((item, i) => {
             const canHover = window.matchMedia('(hover: hover)').matches;
             return (
             <li
               key={i}
-              className="py-3"
+              className="py-3 scroll-reveal"
               onMouseEnter={(e) => {
                 if (canHover) {
                   e.currentTarget.style.backgroundColor = 'var(--bg-subtle)';
@@ -240,6 +265,7 @@ export default function NewsPanel({ ticker }) {
               style={{
                 borderBottom: '1px solid var(--border)',
                 transition: 'background-color 0.15s, border-radius 0.15s, padding 0.15s',
+                transitionDelay: `${i * 0.06}s`,
                 cursor: 'pointer',
                 marginLeft: '-6px',
                 marginRight: '-6px',
