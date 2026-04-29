@@ -7,6 +7,7 @@ const API_BASE = import.meta.env.VITE_API_URL || "";
 function Card({ m, onSelect, onArticleClick, index = 0 }) {
   const isUp = m.direction === "up";
   const canHover = window.matchMedia('(hover: hover)').matches;
+  const isMobile = !canHover;
 
   return (
     <div
@@ -70,6 +71,9 @@ function Card({ m, onSelect, onArticleClick, index = 0 }) {
             }}
           >
             {m.ticker}
+            {isMobile && (
+              <span style={{ fontSize: 9, marginLeft: 3, opacity: 0.7 }}>🔍</span>
+            )}
           </span>
           {m.price != null && (
             <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
@@ -142,6 +146,8 @@ export default function MoversCard({ onSelect }) {
   const [losers,  setLosers]  = useState([]);
   const [done,    setDone]    = useState(false);
   const [articleModal, setArticleModal] = useState(null);
+  const [moversTab, setMoversTab] = useState('gainers');
+  const isMobile = !window.matchMedia('(hover: hover)').matches;
 
   const gainersRef = useRef(null);
   const losersRef  = useRef(null);
@@ -181,7 +187,7 @@ export default function MoversCard({ onSelect }) {
       cancelAnimationFrame(raf);
       observer?.disconnect();
     };
-  }, [gainers, losers]);
+  }, [gainers, losers, moversTab]);
 
   const openArticle = useCallback(async ({ url, title }) => {
     setArticleModal({ url, title, content: '', loading: true, error: null });
@@ -305,36 +311,84 @@ export default function MoversCard({ onSelect }) {
                     color: "var(--text-primary)", marginBottom: "12px" }}>
         ⚡ {dateLabel}の急騰・急落銘柄 Top 5
       </div>
-      <style>{`
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-        @media (max-width: 600px) {
-          .movers-grid { grid-template-columns: 1fr !important; }
-        }
-      `}</style>
-      <div
-        className="movers-grid"
-        style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", alignItems: "start" }}
-      >
-        {/* 左列: gainers */}
-        <div ref={gainersRef}>
-          <div style={{ ...labelBase, background: "#EAF3DE", color: "#3B6D11" }}>▲ 急騰 Top 5</div>
-          {isLoading
-            ? Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={`gs-${i}`} />)
-            : gainers.map((m, i) => <Card key={m.ticker} m={m} onSelect={onSelect} onArticleClick={openArticle} index={i} />)
-          }
-          {!isLoading && Array.from({ length: gainerSlots }).map((_, i) => <SkeletonCard key={`gs-${i}`} />)}
-        </div>
+      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
 
-        {/* 右列: losers */}
-        <div ref={losersRef}>
-          <div style={{ ...labelBase, background: "#FCEBEB", color: "#A32D2D" }}>▼ 急落 Top 5</div>
-          {isLoading
-            ? Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={`ls-${i}`} />)
-            : losers.map((m, i) => <Card key={m.ticker} m={m} onSelect={onSelect} onArticleClick={openArticle} index={i} />)
-          }
-          {!isLoading && Array.from({ length: loserSlots }).map((_, i) => <SkeletonCard key={`ls-${i}`} />)}
+      {/* ── スマホ: タブ切り替え ── */}
+      {isMobile ? (
+        <div>
+          {/* タブボタン */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            <button
+              onClick={() => setMoversTab('gainers')}
+              style={{
+                flex: 1, padding: '7px 0', borderRadius: '8px', border: 'none',
+                fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                transition: 'background 0.15s, color 0.15s',
+                background: moversTab === 'gainers' ? '#EAF3DE' : 'var(--bg-secondary)',
+                color: moversTab === 'gainers' ? '#3B6D11' : 'var(--text-muted)',
+              }}
+            >▲ 急騰 Top 5</button>
+            <button
+              onClick={() => setMoversTab('losers')}
+              style={{
+                flex: 1, padding: '7px 0', borderRadius: '8px', border: 'none',
+                fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                transition: 'background 0.15s, color 0.15s',
+                background: moversTab === 'losers' ? '#FCEBEB' : 'var(--bg-secondary)',
+                color: moversTab === 'losers' ? '#A32D2D' : 'var(--text-muted)',
+              }}
+            >▼ 急落 Top 5</button>
+          </div>
+
+          {/* 選択中タブのリスト */}
+          <div ref={moversTab === 'gainers' ? gainersRef : losersRef}>
+            {moversTab === 'gainers' && (
+              <>
+                {isLoading
+                  ? Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={`gs-${i}`} />)
+                  : gainers.map((m, i) => <Card key={m.ticker} m={m} onSelect={onSelect} onArticleClick={openArticle} index={i} />)
+                }
+                {!isLoading && Array.from({ length: gainerSlots }).map((_, i) => <SkeletonCard key={`gs-${i}`} />)}
+              </>
+            )}
+            {moversTab === 'losers' && (
+              <>
+                {isLoading
+                  ? Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={`ls-${i}`} />)
+                  : losers.map((m, i) => <Card key={m.ticker} m={m} onSelect={onSelect} onArticleClick={openArticle} index={i} />)
+                }
+                {!isLoading && Array.from({ length: loserSlots }).map((_, i) => <SkeletonCard key={`ls-${i}`} />)}
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      ) : (
+        /* ── PC: 既存の左右2列グリッド ── */
+        <div
+          className="movers-grid"
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", alignItems: "start" }}
+        >
+          {/* 左列: gainers */}
+          <div ref={gainersRef}>
+            <div style={{ ...labelBase, background: "#EAF3DE", color: "#3B6D11" }}>▲ 急騰 Top 5</div>
+            {isLoading
+              ? Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={`gs-${i}`} />)
+              : gainers.map((m, i) => <Card key={m.ticker} m={m} onSelect={onSelect} onArticleClick={openArticle} index={i} />)
+            }
+            {!isLoading && Array.from({ length: gainerSlots }).map((_, i) => <SkeletonCard key={`gs-${i}`} />)}
+          </div>
+
+          {/* 右列: losers */}
+          <div ref={losersRef}>
+            <div style={{ ...labelBase, background: "#FCEBEB", color: "#A32D2D" }}>▼ 急落 Top 5</div>
+            {isLoading
+              ? Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={`ls-${i}`} />)
+              : losers.map((m, i) => <Card key={m.ticker} m={m} onSelect={onSelect} onArticleClick={openArticle} index={i} />)
+            }
+            {!isLoading && Array.from({ length: loserSlots }).map((_, i) => <SkeletonCard key={`ls-${i}`} />)}
+          </div>
+        </div>
+      )}
 
       {articleModal && createPortal(
         <div
