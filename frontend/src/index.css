@@ -198,22 +198,21 @@ body {
 }
 
 /* ─── スマホ向け スクロール入場アニメーション ─── */
-/* hover非対応デバイス（スマホ）のみ初期状態をセット */
+/* スマホ: 初期状態を非表示に */
 @media (hover: none) {
   .scroll-reveal {
     opacity: 0;
     transform: translateX(-10px);
-    transition: opacity 0.35s ease, transform 0.35s ease;
   }
   .scroll-reveal.entered {
     opacity: 1;
     transform: translateX(0);
   }
 }
-/* hover対応デバイス（PC）では何もしない（= 常に表示） */
+/* PC: 常に表示 */
 @media (hover: hover) {
   .scroll-reveal {
-    opacity: 1;
-    transform: none;
+    opacity: 1 !important;
+    transform: none !important;
   }
 }

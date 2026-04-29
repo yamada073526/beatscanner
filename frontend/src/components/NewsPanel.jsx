@@ -35,23 +35,34 @@ export default function NewsPanel({ ticker }) {
     const isMobile = !window.matchMedia('(hover: hover)').matches;
     if (!isMobile || !listRef.current) return;
 
-    const items = listRef.current.querySelectorAll('.scroll-reveal');
-    if (!items.length) return;
+    let observer;
+    // raf × 2: ブラウザが opacity:0 の初期状態を描画してから observe 開始
+    const raf = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!listRef.current) return;
+        const items = listRef.current.querySelectorAll('.scroll-reveal');
+        if (!items.length) return;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('entered');
-            observer.unobserve(entry.target); // one-shot
-          }
-        });
-      },
-      { threshold: 0.25, rootMargin: '0px 0px -20px 0px' }
-    );
+        observer = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('entered');
+                observer.unobserve(entry.target);
+              }
+            });
+          },
+          { threshold: 0.15, rootMargin: '0px 0px -10px 0px' }
+        );
 
-    items.forEach((item) => observer.observe(item));
-    return () => observer.disconnect();
+        items.forEach((item) => observer.observe(item));
+      });
+    });
+
+    return () => {
+      cancelAnimationFrame(raf);
+      observer?.disconnect();
+    };
   }, [news]); // news更新のたびに再セット
 
   function load() {
@@ -264,7 +275,7 @@ export default function NewsPanel({ ticker }) {
               }}
               style={{
                 borderBottom: '1px solid var(--border)',
-                transition: 'background-color 0.15s, border-radius 0.15s, padding 0.15s',
+                transition: 'background-color 0.15s, border-radius 0.15s, padding 0.15s, opacity 0.35s ease, transform 0.35s ease',
                 transitionDelay: `${i * 0.06}s`,
                 cursor: 'pointer',
                 marginLeft: '-6px',
