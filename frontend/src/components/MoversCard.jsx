@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -293,7 +294,7 @@ export default function MoversCard({ onSelect }) {
         </div>
       </div>
 
-      {articleModal && (
+      {articleModal && createPortal(
         <div
           style={{
             position: 'fixed', inset: 0, zIndex: 1000,
@@ -389,7 +390,8 @@ export default function MoversCard({ onSelect }) {
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

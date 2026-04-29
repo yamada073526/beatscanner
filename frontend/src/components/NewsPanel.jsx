@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { fetchNews, translateTexts } from '../api.js';
 import ReactMarkdown from 'react-markdown';
 
@@ -293,7 +294,7 @@ export default function NewsPanel({ ticker }) {
         </ul>
       )}
 
-      {articleModal && (
+      {articleModal && createPortal(
         <div
           style={{
             position: 'fixed', inset: 0, zIndex: 1000,
@@ -406,7 +407,8 @@ export default function NewsPanel({ ticker }) {
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </section>
   );
