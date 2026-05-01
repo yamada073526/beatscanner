@@ -51,7 +51,7 @@ function formatRevenue(val) {
   return `$${n.toLocaleString()}`;
 }
 
-export default function CalendarPanel({ onSelect, watchlist = [] }) {
+export default function CalendarPanel({ onSelect, watchlist = [], onToggleWatchlist }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -61,12 +61,17 @@ export default function CalendarPanel({ onSelect, watchlist = [] }) {
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
+    // 既存データがない初回のみローディング表示
+    // 既存データがある場合（watchlist変更による再取得）はバックグラウンド更新
+    const isFirstLoad = items.length === 0;
+    if (isFirstLoad) {
+      setLoading(true);
+    }
     setError(null);
     fetchCalendar(90, watchlistKey)
-      .then((d) => alive && setItems(d))
-      .catch((e) => alive && setError(e.message))
-      .finally(() => alive && setLoading(false));
+      .then((d) => { if (alive) setItems(d); })
+      .catch((e) => { if (alive) setError(e.message); })
+      .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [watchlistKey]);
 
@@ -78,7 +83,7 @@ export default function CalendarPanel({ onSelect, watchlist = [] }) {
     return [
       { key: 'this',    label: '今週',  sub: `${thisWeek.start.slice(5).replace('-', '/')}〜${thisWeek.end.slice(5).replace('-', '/')}`,    range: thisWeek },
       { key: 'next',    label: '来週',  sub: `${nextWeek.start.slice(5).replace('-', '/')}〜${nextWeek.end.slice(5).replace('-', '/')}`,     range: nextWeek },
-      { key: 'month',   label: '今月',  sub: `〜${thisMonth.end.slice(5).replace('-', '/')}`,   range: thisMonth },
+      { key: 'month',   label: '今月',  sub: `${thisMonth.start.slice(5).replace('-', '/')}〜${thisMonth.end.slice(5).replace('-', '/')}`,   range: thisMonth },
       { key: 'quarter', label: '3ヶ月', sub: `〜${threeMonths.end.slice(5).replace('-', '/')}`, range: threeMonths },
     ];
   }, []);
@@ -95,28 +100,68 @@ export default function CalendarPanel({ onSelect, watchlist = [] }) {
   const sortedDates = Object.keys(byDate).sort();
 
   return (
-    <section className="rounded-2xl bg-white p-6 shadow-sm">
+    <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
       <h3 className="mb-4 text-base font-semibold text-slate-900">決算カレンダー</h3>
 
       {/* タブ */}
-      <div className="mb-4 flex gap-1 rounded-lg bg-slate-100 p-1">
-        {TABS.map(({ key, label, sub }) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`flex flex-1 flex-col items-center rounded-md py-1.5 text-sm font-medium transition-colors ${
-              tab === key
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {label}
-            <span className="text-xs font-normal text-slate-400">{sub}</span>
-          </button>
-        ))}
+      <div className="mb-4 flex gap-1 rounded-lg p-1" style={{ background: 'var(--bg-subtle)' }}>
+        {TABS.map(({ key, label, sub }) => {
+          const isActive = tab === key;
+          return (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              onMouseEnter={e => {
+                if (!isActive) {
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)';
+                  e.currentTarget.style.color = 'var(--text-primary)';
+                }
+              }}
+              onMouseLeave={e => {
+                if (!isActive) {
+                  e.currentTarget.style.backgroundColor = '';
+                  e.currentTarget.style.color = '';
+                }
+              }}
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                padding: '6px 4px',
+                borderRadius: '6px',
+                border: 'none',
+                fontSize: '14px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'background-color 0.15s, color 0.15s',
+                background: isActive ? 'var(--bg-card)' : 'transparent',
+                color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
+                boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
+              }}
+            >
+              {label}
+              <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-muted)', marginTop: '1px' }}>
+                {sub}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
-      {loading && <p className="text-sm text-slate-500">読み込み中...</p>}
+      {loading && (
+        <div className="space-y-1.5">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex items-center justify-between rounded-xl px-3 py-2.5" style={{ background: 'var(--bg-subtle)' }}>
+              <div className="flex items-center gap-2" style={{ flex: 1, minWidth: 0 }}>
+                <span className="skel" style={{ width: 48, height: 18, flexShrink: 0 }} />
+                <span className="skel" style={{ height: 14, flex: 1 }} />
+              </div>
+              <span className="skel" style={{ width: 40, height: 14, flexShrink: 0, marginLeft: 8 }} />
+            </div>
+          ))}
+        </div>
+      )}
       {error && (
         <div className="rounded-lg border border-amber-100 bg-amber-50 p-4 text-sm">
           <p className="font-medium text-amber-700">決算カレンダーを表示できません</p>
@@ -142,53 +187,135 @@ export default function CalendarPanel({ onSelect, watchlist = [] }) {
             <div className="space-y-1.5">
               {byDate[d].map((it, i) => {
                 const inWatchlist = watchlist.includes(it.symbol);
-                const timeLabel = TIME_LABELS[it.time?.toLowerCase()] ?? '未定';
+                // 発表時間: bmo/amc のみ有効、それ以外は null（非表示）
+                const timeLabel = TIME_LABELS[it.time?.toLowerCase()] ?? null;
                 const epsEst = it.epsEstimated != null
                   ? `EPS ${Number(it.epsEstimated).toFixed(2)}`
                   : null;
-                const revEst = it.revenueEstimated != null
-                  ? formatRevenue(it.revenueEstimated)
+                // 売上予想: $100K 未満は異常値として非表示
+                const revEstRaw = Number(it.revenueEstimated);
+                const revEst = it.revenueEstimated != null && revEstRaw >= 100_000
+                  ? formatRevenue(revEstRaw)
                   : null;
+                // 企業名・EPS・売上すべてなし → データ薄い行としてグレーアウト
+                const hasData = it.name || it.epsEstimated != null || revEst;
                 return (
-                  <button
+                  <div
                     key={`${it.symbol}-${i}`}
-                    onClick={() => onSelect(it.symbol)}
-                    className="flex w-full items-center justify-between text-left transition-colors hover:bg-slate-50"
-                    style={inWatchlist ? {
-                      background: 'var(--color-background-warning)',
-                      border: '1px solid var(--color-border-warning)',
+                    style={{
+                      display: 'flex',
+                      alignItems: 'stretch',
+                      ...(inWatchlist ? {
+                        background: 'var(--color-background-warning)',
+                        border: '1px solid var(--color-border-warning)',
+                      } : {
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--border)',
+                      }),
                       borderRadius: '6px',
-                      padding: '8px 12px',
-                    } : {
-                      background: 'var(--bg-card)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '6px',
-                      padding: '8px 12px',
+                      overflow: 'hidden',
+                      transition: 'border-color 0.15s, opacity 0.15s',
+                      opacity: hasData ? 1 : 0.5,
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = 'rgba(56,189,248,0.40)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = inWatchlist
+                        ? 'var(--color-border-warning)'
+                        : 'var(--border)';
                     }}
                   >
-                    <div className="flex min-w-0 items-center gap-2">
-                      {inWatchlist && <span className="text-xs text-amber-500">★</span>}
-                      <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)' }}>{it.symbol}</span>
-                      {it.name && (
-                        <span className="max-w-[8rem] truncate text-xs text-slate-500">
-                          {it.name}
+                    {/* 左: 銘柄情報 → クリックで分析 */}
+                    <button
+                      onClick={() => onSelect(it.symbol)}
+                      style={{
+                        flex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '8px 10px',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        minWidth: 0,
+                      }}
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          {it.symbol}
                         </span>
-                      )}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2 text-xs text-slate-500">
-                      {epsEst && <span>{epsEst}</span>}
-                      {revEst && <span>{revEst}</span>}
-                      <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${
-                        timeLabel === '市場前'
-                          ? 'bg-blue-50 text-blue-600'
-                          : timeLabel === '市場後'
-                          ? 'bg-purple-50 text-purple-600'
-                          : 'bg-slate-100 text-slate-400'
-                      }`}>
-                        {timeLabel}
-                      </span>
-                    </div>
-                  </button>
+                        {it.name && (
+                          <span className="max-w-[8rem] truncate text-xs text-slate-500">
+                            {it.name}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2 text-xs">
+                        {epsEst && (
+                          <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.2 }}>
+                            <span style={{ fontSize: '9px', color: 'var(--text-muted)', fontWeight: 500 }}>予想EPS</span>
+                            <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+                              {Number(it.epsEstimated).toFixed(2)}
+                            </span>
+                          </span>
+                        )}
+                        {revEst && (
+                          <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.2 }}>
+                            <span style={{ fontSize: '9px', color: 'var(--text-muted)', fontWeight: 500 }}>予想売上</span>
+                            <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{revEst}</span>
+                          </span>
+                        )}
+                        {timeLabel && (
+                          <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.2 }}>
+                            <span style={{ fontSize: '9px', color: 'var(--text-muted)', fontWeight: 500 }}>発表</span>
+                            <span style={{
+                              fontSize: '11px', fontWeight: 600, padding: '1px 6px', borderRadius: '4px',
+                              ...(timeLabel === '市場前'
+                                ? { background: '#eff6ff', color: '#2563eb' }
+                                : { background: '#f5f3ff', color: '#7c3aed' }),
+                            }}>
+                              {timeLabel}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                    </button>
+
+                    {/* 右: ☆/★ ウォッチリスト登録ボタン */}
+                    {onToggleWatchlist && (
+                    <button
+                      onClick={e => { e.stopPropagation(); onToggleWatchlist(it.symbol); }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.backgroundColor = inWatchlist
+                          ? 'rgba(245,158,11,0.15)'
+                          : 'rgba(56,189,248,0.12)';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                      title={inWatchlist ? 'ウォッチリストから削除' : 'ウォッチリストに追加'}
+                      style={{
+                        flexShrink: 0,
+                        width: '36px',
+                        alignSelf: 'stretch',
+                        background: 'transparent',
+                        border: 'none',
+                        borderLeft: '1px solid var(--border)',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        color: inWatchlist ? '#f59e0b' : 'var(--text-muted)',
+                        transition: 'background-color 0.15s, color 0.15s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {inWatchlist ? '★' : '☆'}
+                    </button>
+                    )}
+                  </div>
                 );
               })}
             </div>

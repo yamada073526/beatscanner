@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+    <linearGradient id="bar1" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.95)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.6)"/>
+    </linearGradient>
+    <linearGradient id="bar2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.7)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.3)"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1.2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- 背景: シアン→インディゴグラデーション（ライト/ダーク両対応） -->
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+
+  <!-- 内側に微細なハイライト（立体感） -->
+  <rect x="2" y="2" width="60" height="30" rx="13"
+    fill="rgba(255,255,255,0.06)"/>
+
+  <!-- バーグラフ（成長トレンド）: シンプルかつ力強く -->
+  <rect x="9"  y="42" width="10" height="13" rx="2.5" fill="url(#bar2)"/>
+  <rect x="23" y="33" width="10" height="22" rx="2.5" fill="url(#bar1)" opacity="0.85"/>
+  <rect x="37" y="22" width="10" height="33" rx="2.5" fill="url(#bar1)" filter="url(#glow)"/>
+  <rect x="51" y="30" width="6"  height="25" rx="2"   fill="rgba(255,255,255,0.5)"/>
+
+  <!-- ハートビートライン（beatを表現）: クリスプなホワイト -->
+  <polyline
+    points="2,38 9,38 13,26 17,46 21,32 25,38 39,38 43,30 47,38 62,38"
+    stroke="white"
+    stroke-width="2.2"
+    fill="none"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    opacity="0.95"
+    filter="url(#glow)"
+  />
+
+  <!-- 右上の光点（データポイント・精度感） -->
+  <circle cx="54" cy="18" r="3" fill="white" opacity="0.9" filter="url(#glow)"/>
+  <circle cx="54" cy="18" r="1.2" fill="white"/>
+</svg>

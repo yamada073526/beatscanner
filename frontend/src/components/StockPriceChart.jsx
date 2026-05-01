@@ -155,7 +155,7 @@ export default function StockPriceChart({ ticker }) {
   if (!ticker) return null;
 
   return (
-    <section className="rounded-2xl bg-white p-6 shadow-sm">
+    <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-base font-semibold text-slate-900">株価チャート</h3>

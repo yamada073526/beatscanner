@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useRef, useState } from 'react';
 import { searchTickers, prefetchGuidance } from '../api.js';
+import { useIsMobile } from '../hooks/useIsMobile.js';
 
 const _prefetchCache = new Set();
 
@@ -9,10 +10,11 @@ const JP_EXCHANGES = new Set(['TSE', 'JPX', 'TYO']);
 const hasJapanese = (s) => /[\u3040-\u30ff\u3400-\u9faf]/.test(s);
 
 const TickerSearch = forwardRef(function TickerSearch(
-  { value, onChange, onSubmit, forceClose },
+  { value, onChange, onSubmit, forceClose, watchlist = [], onToggleWatchlist },
   inputRef,
 ) {
   const [inputValue, setInputValue] = useState(value);
+  const isMobile = useIsMobile();
   const [suggestions, setSuggestions] = useState([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -147,7 +149,9 @@ const TickerSearch = forwardRef(function TickerSearch(
             setSuggestions([]);
           }
         }, 150)}
-        placeholder="ティッカー or 銘柄名（英語）例: 7203.T、Toyota、AAPL"
+        placeholder={isMobile
+          ? 'AAPL, MSFT, Toyota…'
+          : 'ティッカー or 銘柄名（英語）例: AAPL, 7203.T, Toyota'}
         autoComplete="off"
         className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-lg font-semibold tracking-wider focus:border-slate-900 focus:outline-none"
       />
@@ -170,24 +174,50 @@ const TickerSearch = forwardRef(function TickerSearch(
             return (
               <li
                 key={`${s.symbol}-${i}`}
-                onMouseDown={() => select(s.symbol)}
-                className={`flex cursor-pointer items-center justify-between px-4 py-2.5 text-sm hover:bg-slate-50 ${
+                className={`flex items-center text-sm ${
                   i === active ? 'bg-slate-100' : ''
                 } ${i > 0 ? 'border-t border-slate-100' : ''}`}
               >
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-slate-900">{s.symbol}</span>
-                  <span className="text-slate-500 truncate max-w-48">{s.name}</span>
-                </div>
-                <span
-                  className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${
+                {/* 左: 銘柄情報 → クリックで分析 */}
+                <div
+                  onMouseDown={() => select(s.symbol)}
+                  className="flex flex-1 cursor-pointer items-center justify-between px-4 py-2.5 hover:bg-slate-50"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900">{s.symbol}</span>
+                    <span className="text-slate-500 truncate max-w-40">{s.name}</span>
+                  </div>
+                  <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${
                     isUS ? 'bg-blue-50 text-blue-700'
                     : isJP ? 'bg-red-50 text-red-700'
                     : 'bg-slate-100 text-slate-500'
-                  }`}
+                  }`}>
+                    {s.exchange}
+                  </span>
+                </div>
+                {/* 右: ☆/★ ウォッチリストボタン */}
+                <button
+                  onMouseDown={e => {
+                    e.preventDefault(); // blur防止
+                    e.stopPropagation();
+                    onToggleWatchlist?.(s.symbol);
+                  }}
+                  title={watchlist.includes(s.symbol) ? 'ウォッチリストから削除' : 'ウォッチリストに追加'}
+                  style={{
+                    flexShrink: 0,
+                    width: '36px',
+                    alignSelf: 'stretch',
+                    background: 'transparent',
+                    border: 'none',
+                    borderLeft: '1px solid #e2e8f0',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    color: watchlist.includes(s.symbol) ? '#f59e0b' : '#94a3b8',
+                    transition: 'color 0.15s',
+                  }}
                 >
-                  {s.exchange}
-                </span>
+                  {watchlist.includes(s.symbol) ? '★' : '☆'}
+                </button>
               </li>
             );
           })}

@@ -29,7 +29,7 @@ from .fmp_client import FMPClient, FMPError
 from .judgment import judge
 from . import yfinance_source
 from . import alpha_vantage_source
-from .visualizer.prompt import SYSTEM_PROMPT, build_user_prompt
+from .visualizer.prompt import get_system_prompt, build_user_prompt
 
 # override=False (default): Railway / Docker env vars take priority over any .env file.
 # override=True would let a stale local .env silently shadow Railway variables.
@@ -41,14 +41,172 @@ WARMUP_TICKERS = ["NVDA", "AAPL", "MSFT", "META", "GOOGL"]
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async def _warmup():
-        await asyncio.sleep(3)
+        await asyncio.sleep(5)
         for ticker in WARMUP_TICKERS:
             try:
                 await _fetch_sec_guidance_cached(ticker)
-                print(f"[WARMUP] {ticker} ✓")
+                print(f"[WARMUP] {ticker} guidance ✓")
             except Exception as e:
-                print(f"[WARMUP] {ticker} failed: {e}")
+                print(f"[WARMUP] {ticker} guidance failed: {e}")
             await asyncio.sleep(1)
+
+        # ── 図解の事前生成 ──
+        await asyncio.sleep(3)
+        print("[WARMUP] Starting viz pre-generation...")
+        _fmp_key_wu = os.getenv("FMP_API_KEY", "")
+
+        for ticker in WARMUP_TICKERS:
+            try:
+                _cache_key_wu = f"{ticker}::3"
+                if _cache_key_wu in _viz_cache:
+                    print(f"[WARMUP_VIZ] {ticker} already cached, skip")
+                    continue
+
+                _inc_wu, _cf_wu = await asyncio.gather(
+                    safe_fmp_get(
+                        "https://financialmodelingprep.com/stable/income-statement"
+                        f"?symbol={ticker}&limit=4&period=annual&apikey={_fmp_key_wu}",
+                        f"viz-income-3::{ticker}",
+                        ttl=CACHE_TTL_EARNINGS,
+                    ),
+                    safe_fmp_get(
+                        "https://financialmodelingprep.com/stable/cash-flow-statement"
+                        f"?symbol={ticker}&limit=4&period=annual&apikey={_fmp_key_wu}",
+                        f"viz-cf-3::{ticker}",
+                        ttl=CACHE_TTL_EARNINGS,
+                    ),
+                    return_exceptions=True,
+                )
+                _periods_wu = []
+                if isinstance(_inc_wu, list) and _inc_wu:
+                    # ── FMP 成功時 ──
+                    _inc_sorted_wu = list(reversed(_inc_wu))[-3:]
+                    _cf_map_wu = {}
+                    if isinstance(_cf_wu, list):
+                        for _r in _cf_wu:
+                            _yr_k = str(_r.get("calendarYear") or _r.get("fiscalYear") or str(_r.get("date", ""))[:4])
+                            _cf_map_wu[_yr_k] = _r
+
+                    for _inc in _inc_sorted_wu:
+                        _yr = str(_inc.get("calendarYear") or _inc.get("fiscalYear") or str(_inc.get("date", ""))[:4])
+                        _cf_r = _cf_map_wu.get(_yr, {})
+                        _ocf = _cf_r.get("operatingCashFlow")
+                        _shr = _inc.get("weightedAverageShsOutDil") or _inc.get("weightedAverageShsOut")
+                        _cfps = None
+                        if _ocf and _shr:
+                            try:
+                                _cfps = round(float(_ocf) / float(_shr), 2)
+                            except Exception:
+                                pass
+                        _eps_w = _inc.get("eps") or _inc.get("epsDiluted")
+                        _periods_wu.append({
+                            "period": _yr,
+                            "date": str(_inc.get("date", ""))[:10],
+                            "revenue": _inc.get("revenue"),
+                            "operating_cf": _ocf,
+                            "eps": round(float(_eps_w), 2) if _eps_w is not None else None,
+                            "cfps": _cfps,
+                        })
+                else:
+                    # ── FMP 失敗 → yfinance フォールバック ──
+                    print(f"[WARMUP_VIZ] {ticker} FMP unavailable, trying yfinance...")
+                    try:
+                        import yfinance as _yf_wu
+                        import pandas as _pd_wu
+
+                        def _fetch_wu_yf():
+                            t = _yf_wu.Ticker(ticker)
+                            inc = t.income_stmt
+                            cf  = t.cash_flow
+                            if inc is None or (hasattr(inc, 'empty') and inc.empty):
+                                return []
+                            cols = list(inc.columns)[:4]
+                            cf_map_yf = {}
+                            if cf is not None and not (hasattr(cf, 'empty') and cf.empty):
+                                for col in cf.columns:
+                                    cf_map_yf[str(col)[:4]] = cf[col]
+
+                            def _g(stmt, col, *keys):
+                                for k in keys:
+                                    if k in stmt.index:
+                                        v = stmt.loc[k, col]
+                                        if not _pd_wu.isna(v):
+                                            return float(v)
+                                return None
+
+                            rows = []
+                            for col in cols:
+                                yr = str(col)[:4]
+                                rev    = _g(inc, col, 'Total Revenue', 'Revenue')
+                                shares = _g(inc, col, 'Diluted Average Shares', 'Basic Average Shares')
+                                eps    = _g(inc, col, 'Diluted EPS', 'Basic EPS')
+                                ocf = None
+                                cf_col = cf_map_yf.get(yr)
+                                if cf_col is not None:
+                                    for k in ('Operating Cash Flow', 'Cash From Operations'):
+                                        if k in cf_col.index:
+                                            v = cf_col[k]
+                                            if not _pd_wu.isna(v):
+                                                ocf = float(v)
+                                                break
+                                cfps = round(ocf / shares, 2) if (ocf and shares) else None
+                                rows.append({
+                                    "period": yr,
+                                    "date": str(col)[:10],
+                                    "revenue": rev,
+                                    "operating_cf": ocf,
+                                    "eps": round(eps, 2) if eps is not None else None,
+                                    "cfps": cfps,
+                                })
+                            return list(reversed(rows))[-3:]
+
+                        _periods_wu = await asyncio.to_thread(_fetch_wu_yf)
+                        if _periods_wu:
+                            print(f"[WARMUP_VIZ] {ticker} yfinance fallback: {len(_periods_wu)} periods")
+                        else:
+                            print(f"[WARMUP_VIZ] {ticker} both FMP and yfinance failed, skip")
+                            continue
+                    except Exception as _e_yf_wu:
+                        print(f"[WARMUP_VIZ] {ticker} yfinance failed: {_e_yf_wu}, skip")
+                        continue
+
+                _wu_data = {
+                    "ticker": ticker,
+                    "company_name": ticker,
+                    "fiscal_period": f"FY{_periods_wu[-1]['period']}" if _periods_wu else "",
+                    "verdict": "PASS",
+                    "passed_conditions": 3,
+                    "conditions_detail": "[]",
+                    "metrics_trend": formatMetricsTrend_py(_periods_wu),
+                    "guidance": "データなし",
+                    "conference_call_points": "データなし",
+                    "ai_summary": "",
+                    "beat_miss_detail": "データなし",
+                    "years": 3,
+                }
+                _sys_wu = get_system_prompt(3)
+                _usr_wu = build_user_prompt(_wu_data)
+
+                import anthropic as _anth_wu
+                _cli_wu = _anth_wu.AsyncAnthropic()
+                _msg_wu = await _cli_wu.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=5120,
+                    system=[{"type": "text", "text": _sys_wu, "cache_control": {"type": "ephemeral"}}],
+                    messages=[{"role": "user", "content": _usr_wu}],
+                )
+                _raw_wu = _msg_wu.content[0].text.strip()
+                _raw_wu = re.sub(r'^```[\w]*\n?', '', _raw_wu, flags=re.MULTILINE)
+                _raw_wu = re.sub(r'\n?```$', '', _raw_wu, flags=re.MULTILINE)
+                _parsed_wu = json.loads(_raw_wu.strip())
+
+                _viz_cache[_cache_key_wu] = (_time.time(), _parsed_wu)
+                print(f"[WARMUP_VIZ] {ticker} ✓ cached (years=3)")
+
+            except Exception as e:
+                print(f"[WARMUP_VIZ] {ticker} failed: {e}")
+            await asyncio.sleep(2)
+
     asyncio.create_task(_warmup())
     yield
 
@@ -56,7 +214,373 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Earnings Judgment API", version="0.1.0", lifespan=lifespan)
 
 _guidance_cache: dict = {}
-GUIDANCE_CACHE_TTL = 3600  # 1時間
+# 決算ガイダンスはSEC 8-K発表後ほぼ変わらない → 6時間に延長（FMPレート上限緩和）
+GUIDANCE_CACHE_TTL = 60 * 60 * 6  # 6時間
+
+# ── FMP API キャッシュTTL（用途別に細分化） ────────────────────────────────
+# 株価系（リアルタイム性重視）
+CACHE_TTL_QUOTE    = 60 * 15            # 15分
+# 決算データ（四半期単位で変わらないため長め）
+CACHE_TTL_EARNINGS = 60 * 60 * 6        # 6時間
+# 会社プロフィール・セグメント（ほぼ変わらない）
+CACHE_TTL_PROFILE  = 60 * 60 * 24       # 24時間
+CACHE_TTL_SEGMENT  = 60 * 60 * 24       # 24時間（セグメント別売上は四半期決算で更新）
+
+# 汎用 FMP レスポンスキャッシュ（key → (timestamp, data)）
+_fmp_response_cache: dict[str, tuple[float, object]] = {}
+
+# /api/visualize 用キャッシュ（key="TICKER::YEARS" → (timestamp, parsed)）
+_viz_cache: dict[str, tuple[float, dict]] = {}
+_VIZ_CACHE_TTL = 60 * 60 * 6  # 6時間
+
+
+async def safe_fmp_get(url: str, cache_key: str, ttl: int = CACHE_TTL_EARNINGS):
+    """
+    FMP APIをキャッシュ付きで安全に呼び出す。
+    - キャッシュHIT → 即返却
+    - "Limit Reach" / "Error Message" → None（graceful degradation）
+    - ネットワーク例外 → None（500を返さない）
+    成功時のみキャッシュに保存。
+    """
+    import json as _json
+    now = _time.time()
+
+    # 1. キャッシュ確認
+    cached = _fmp_response_cache.get(cache_key)
+    if cached and now - cached[0] < ttl:
+        return cached[1]
+
+    # 2. API呼び出し
+    try:
+        import httpx as _httpx
+        async with _httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(url)
+            try:
+                data = r.json()
+            except Exception:
+                print(f"[FMP] Non-JSON response for {cache_key}")
+                return None
+
+        # 3. レート上限/エラーチェック
+        if isinstance(data, dict):
+            err_str = str(data)
+            if "Limit Reach" in err_str:
+                print(f"[FMP] Rate limit hit for {cache_key}")
+                # 期限切れキャッシュがあればそれを stale として返す（graceful degradation）
+                if cached:
+                    print(f"[FMP] Returning stale cache for {cache_key}")
+                    return cached[1]
+                return None
+            if "Error Message" in data or "error" in data:
+                print(f"[FMP] Error for {cache_key}: {data.get('Error Message') or data.get('error')}")
+                return None
+
+        # 4. 正常データをキャッシュ保存
+        _fmp_response_cache[cache_key] = (now, data)
+        return data
+
+    except Exception as e:
+        print(f"[FMP] Exception for {cache_key}: {e}")
+        # 例外時もstaleキャッシュがあれば返す
+        if cached:
+            return cached[1]
+        return None
+
+
+def _judge_valuation(metric: str, value: float | None) -> str | None:
+    """各バリュエーション指標の judge（割安/適正/割高）をフロントの基準値と一致させる。
+
+    閾値はフロント `VALUATION_CRITERIA` と完全一致：
+      PER:      ≤15 割安 / ≥30 割高
+      PBR:      ≤1  割安 / ≥4  割高
+      PSR:      ≤2  割安 / ≥8  割高
+      EV/EBITDA: ≤8  割安 / ≥18 割高（業界標準ベンチマーク）
+      PEG:      ≤1  割安 / ≥2  割高（成長株評価の通説）
+    """
+    if value is None:
+        return None
+    thresholds = {
+        "per":       (15.0, 30.0),
+        "pbr":       (1.0,  4.0),
+        "psr":       (2.0,  8.0),
+        "evEbitda":  (8.0, 18.0),
+        "peg":       (1.0,  2.0),
+    }
+    if metric not in thresholds:
+        return None
+    low, high = thresholds[metric]
+    if value <= low:
+        return "割安"
+    if value >= high:
+        return "割高"
+    return "適正"
+
+
+async def get_valuation_ratios(ticker: str, fmp_key: str | None) -> dict | None:
+    """FMP /stable/ratios-ttm と /stable/key-metrics-ttm から実データを取得。
+
+    返値:
+      {
+        "per": 26.45,    "perJudge": "適正",
+        "pbr": 8.07,     "pbrJudge": "割高",
+        "psr": 10.32,    "psrJudge": "割高",
+        "evEbitda": 16.99, "evEbitdaJudge": "適正",
+        "peg": 0.92,     "pegJudge": "割安",
+        "dataSource": "FMP TTM",
+      }
+    レート上限・例外時は None（フロントで LLM推定値にフォールバック）。
+    """
+    if not fmp_key:
+        fmp_key = os.getenv("FMP_API_KEY", "")
+    if not fmp_key:
+        return None
+
+    ratios_url = (
+        f"https://financialmodelingprep.com/stable/ratios-ttm"
+        f"?symbol={ticker.upper()}&apikey={fmp_key}"
+    )
+    metrics_url = (
+        f"https://financialmodelingprep.com/stable/key-metrics-ttm"
+        f"?symbol={ticker.upper()}&apikey={fmp_key}"
+    )
+    ratios_key  = f"ratios-ttm::{ticker.upper()}"
+    metrics_key = f"key-metrics-ttm::{ticker.upper()}"
+
+    # 並列フェッチ（24時間キャッシュ：TTM値は日次更新で十分）
+    ratios_data, metrics_data = await asyncio.gather(
+        safe_fmp_get(ratios_url, ratios_key, ttl=CACHE_TTL_PROFILE),
+        safe_fmp_get(metrics_url, metrics_key, ttl=CACHE_TTL_PROFILE),
+        return_exceptions=True,
+    )
+
+    def _first(data) -> dict:
+        if isinstance(data, list) and data:
+            return data[0] if isinstance(data[0], dict) else {}
+        if isinstance(data, dict):
+            return data
+        return {}
+
+    r = _first(ratios_data)
+    m = _first(metrics_data)
+    if not r and not m:
+        return None
+
+    def _pick_num(*keys) -> float | None:
+        """指定キー列のうち最初に見つかった数値（finite）を返す。"""
+        for k in keys:
+            for src in (r, m):
+                v = src.get(k) if isinstance(src, dict) else None
+                if isinstance(v, (int, float)) and v == v and v not in (float("inf"), float("-inf")):
+                    return round(float(v), 2)
+        return None
+
+    per       = _pick_num("priceToEarningsRatioTTM", "peRatioTTM", "priceEarningsRatioTTM")
+    pbr       = _pick_num("priceToBookRatioTTM", "pbRatioTTM", "priceToBookValueRatioTTM")
+    psr       = _pick_num("priceToSalesRatioTTM", "psRatioTTM")
+    ev_ebitda = _pick_num("evToEBITDATTM", "enterpriseValueOverEBITDATTM", "evToEbitdaTTM")
+    peg       = _pick_num("priceToEarningsGrowthRatioTTM", "pegRatioTTM")
+
+    if per is None and pbr is None and psr is None and ev_ebitda is None:
+        return None
+
+    return {
+        "per":          per,
+        "perJudge":     _judge_valuation("per", per),
+        "pbr":          pbr,
+        "pbrJudge":     _judge_valuation("pbr", pbr),
+        "psr":          psr,
+        "psrJudge":     _judge_valuation("psr", psr),
+        "evEbitda":     ev_ebitda,
+        "evEbitdaJudge": _judge_valuation("evEbitda", ev_ebitda),
+        "peg":          peg,
+        "pegJudge":     _judge_valuation("peg", peg),
+        "dataSource":   "FMP TTM",
+    }
+
+
+async def get_market_cap(ticker: str, fmp_key: str | None) -> float | None:
+    """FMP /stable/profile から時価総額（USD絶対値）を取得。レート上限時は None。"""
+    if not fmp_key:
+        fmp_key = os.getenv("FMP_API_KEY", "")
+    if not fmp_key:
+        return None
+    url = (
+        f"https://financialmodelingprep.com/stable/profile"
+        f"?symbol={ticker.upper()}&apikey={fmp_key}"
+    )
+    cache_key = f"profile::{ticker.upper()}"
+    data = await safe_fmp_get(url, cache_key, ttl=CACHE_TTL_PROFILE)
+    rec = (data[0] if isinstance(data, list) and data else
+           data if isinstance(data, dict) else None)
+    if not rec:
+        return None
+    for k in ("mktCap", "marketCap", "marketCapTTM"):
+        v = rec.get(k)
+        if isinstance(v, (int, float)) and v > 0:
+            return float(v)
+    return None
+
+
+async def get_fcf_capex_trends(ticker: str, fmp_key: str | None) -> tuple[list[dict], list[dict]]:
+    """FMP のキャッシュフロー計算書から直近3期の FCF と CapEx を返す。
+
+    返値: (fcf_trend, capex_trend)
+      fcf_trend   = [{"period": "FY2025", "value": 74.1}, ...]   ← $B
+      capex_trend = [{"period": "FY2025", "value": 64.5}, ...]   ← $B 絶対値
+    レート上限・例外時は空タプル ([], [])。
+    """
+    if not fmp_key:
+        fmp_key = os.getenv("FMP_API_KEY", "")
+    if not fmp_key:
+        return [], []
+
+    cache_key = f"cashflow::{ticker.upper()}::annual::5"
+    url = (
+        f"https://financialmodelingprep.com/stable/cash-flow-statement"
+        f"?symbol={ticker.upper()}&limit=5&period=annual&apikey={fmp_key}"
+    )
+    data = await safe_fmp_get(url, cache_key, ttl=CACHE_TTL_EARNINGS)
+    if not isinstance(data, list) or not data:
+        return [], []
+
+    fcf_trend: list[dict] = []
+    capex_trend: list[dict] = []
+    # 古い→新しい順に並び替えて返す（FMPは新→古で来る）
+    for cf in reversed(data[:5]):
+        period_label = cf.get("calendarYear") or cf.get("fiscalYear") or (str(cf.get("date", ""))[:4])
+        if not period_label:
+            continue
+        fcf_val   = cf.get("freeCashFlow")
+        capex_val = cf.get("capitalExpenditure")
+        if isinstance(fcf_val, (int, float)):
+            fcf_trend.append({
+                "period": f"FY{period_label}",
+                "value": round(float(fcf_val) / 1e9, 1),
+            })
+        if isinstance(capex_val, (int, float)):
+            capex_trend.append({
+                "period": f"FY{period_label}",
+                "value": round(abs(float(capex_val)) / 1e9, 1),
+            })
+    if fcf_trend or capex_trend:
+        return fcf_trend, capex_trend
+
+    # ── yfinance フォールバック（FMPレート上限時） ──
+    try:
+        import yfinance as _yf_fcf
+        def _fetch_yf_fcf():
+            t = _yf_fcf.Ticker(ticker)
+            cf = t.cashflow
+            if cf is None or (hasattr(cf, 'empty') and cf.empty):
+                cf = getattr(t, 'cash_flow', None)
+            if cf is None or (hasattr(cf, 'empty') and cf.empty):
+                return [], []
+            fcf_rows, capex_rows = [], []
+            for key in ('Free Cash Flow', 'FreeCashFlow'):
+                if key in cf.index:
+                    fcf_rows = [(str(c)[:4], float(cf.loc[key][c]))
+                                for c in cf.columns if not __import__('pandas').isna(cf.loc[key][c])]
+                    break
+            for key in ('Capital Expenditure', 'CapitalExpenditure'):
+                if key in cf.index:
+                    capex_rows = [(str(c)[:4], float(cf.loc[key][c]))
+                                  for c in cf.columns if not __import__('pandas').isna(cf.loc[key][c])]
+                    break
+            fcf_out = [{"period": f"FY{y}", "value": round(v / 1e9, 1)}
+                       for y, v in sorted(fcf_rows)[-5:]]
+            capex_out = [{"period": f"FY{y}", "value": round(abs(v) / 1e9, 1)}
+                         for y, v in sorted(capex_rows)[-5:]]
+            return fcf_out, capex_out
+
+        yf_fcf, yf_capex = await asyncio.to_thread(_fetch_yf_fcf)
+        if yf_fcf:
+            print(f"[FCF] yfinance fallback succeeded for {ticker}")
+            return yf_fcf, yf_capex
+    except Exception as _e_yf_fcf:
+        print(f"[FCF] yfinance fallback failed: {_e_yf_fcf}")
+
+    return [], []
+
+
+async def get_segment_data(ticker: str, fmp_key: str | None) -> list[dict]:
+    """FMP からセグメント別売上を取得する（24h キャッシュ + Limit Reach フォールバック）。
+
+    /api/v4/revenue-product-segmentation を叩く。MSFT の場合：
+      Intelligent Cloud / Productivity and Business Processes / More Personal Computing
+    の3セグメントが返る。プラン制限/レート上限時は None ではなく [] を返し、
+    呼び出し側でセグメントセクションを非表示にする graceful degradation を実現。
+    """
+    if not fmp_key:
+        fmp_key = os.getenv("FMP_API_KEY", "")
+    if not fmp_key:
+        return []
+
+    url = (
+        f"https://financialmodelingprep.com/api/v4/revenue-product-segmentation"
+        f"?symbol={ticker.upper()}&structure=flat&period=quarter&apikey={fmp_key}"
+    )
+    cache_key = f"segment::{ticker.upper()}"
+    data = await safe_fmp_get(url, cache_key, ttl=CACHE_TTL_SEGMENT)
+    if not isinstance(data, list):
+        return []
+    # 最新5四半期分（前年同期比に4Q前を使うため）
+    return data[:5]
+
+
+def build_segment_summary(segment_data: list[dict]) -> dict | None:
+    """
+    セグメント別の最新四半期データと前年同期比成長率(YoY)を返す。
+
+    返値:
+      {
+        "date": "2025-03-31",
+        "segments": [
+          {"name": "Intelligent Cloud", "value_b": 26.8, "yoy_pct": 21.0},
+          ...
+        ]
+      }
+    データ不足や全セグメント値ゼロの場合は None。
+    """
+    if not segment_data or len(segment_data) < 1:
+        return None
+
+    # FMPの revenue-product-segmentation はネスト構造 {"date": "...", "data": {...}} の場合と
+    # フラット構造 {"date": "...", "Intelligent Cloud": 12345, ...} の場合の両方ありえる。
+    # structure=flat 指定時はフラット構造で返るが、両対応にする。
+    def _flatten(entry: dict) -> tuple[str, dict]:
+        date = entry.get("date") or entry.get("period") or ""
+        if "data" in entry and isinstance(entry["data"], dict):
+            return date, entry["data"]
+        skip = {"date", "period", "reportedCurrency", "calendarYear", "fiscalYear", "symbol", "cik"}
+        return date, {k: v for k, v in entry.items() if k not in skip}
+
+    latest_date, latest = _flatten(segment_data[0])
+    prev_yoy: dict = {}
+    if len(segment_data) >= 5:
+        _, prev_yoy = _flatten(segment_data[4])
+
+    segments = []
+    for seg_name, latest_val in latest.items():
+        if not isinstance(latest_val, (int, float)) or not latest_val:
+            continue
+        item: dict = {
+            "name": seg_name,
+            "value_b": round(float(latest_val) / 1e9, 1),
+        }
+        prev_val = prev_yoy.get(seg_name) if prev_yoy else None
+        if isinstance(prev_val, (int, float)) and prev_val:
+            yoy = (float(latest_val) - float(prev_val)) / abs(float(prev_val)) * 100
+            item["yoy_pct"] = round(yoy, 1)
+        segments.append(item)
+
+    if not segments:
+        return None
+
+    return {
+        "date": latest_date,
+        "segments": sorted(segments, key=lambda x: x["value_b"], reverse=True),
+    }
+
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 # Comma-separated list via env var so production origins can be injected without
@@ -677,10 +1201,23 @@ async def _fetch_sec_guidance(ticker: str) -> tuple[str, str] | None:
             if idx_r.status_code != 200:
                 continue
             # EX-99.1 に対応する href を正規表現で抽出
+            # パターン1: テーブル行内の <a href="..."> (.htm / .html 両対応)
             ex99_match = re.search(
-                r'EX-99\.1[^<]*</td>\s*<td[^>]*>\s*<a href="(/Archives/edgar/data/[^"]+\.htm)"',
+                r'EX-99\.1[^<]*</td>\s*<td[^>]*>\s*<a href="(/Archives/edgar/data/[^"]+\.html?)"',
                 idx_r.text, re.IGNORECASE
             )
+            # パターン2: 行の順序が異なる場合（href が先に来るケース）
+            if not ex99_match:
+                ex99_match = re.search(
+                    r'<a href="(/Archives/edgar/data/[^"]+\.html?)"[^>]*>[^<]*EX-99',
+                    idx_r.text, re.IGNORECASE
+                )
+            # パターン3: テーブル構造を問わず EX-99.1 付近の最初の .html? リンク
+            if not ex99_match:
+                ex99_match = re.search(
+                    r'href="(/Archives/edgar/data/[^"]+ex[-_]?99[^"]*\.html?)"',
+                    idx_r.text, re.IGNORECASE
+                )
             if not ex99_match:
                 continue
             exhibit_url = f"https://www.sec.gov{ex99_match.group(1)}"
@@ -820,6 +1357,58 @@ CEO/CFOのコメントに含まれる見通し発言も含めて抽出してく�
                     return result.strip(), "決算カンファレンスコール（Motley Fool）より抽出"
     except Exception as e_fool:
         print(f"Motley Fool transcript fallback failed for {ticker}: {e_fool}")
+
+    # ── FMP analyst-estimates フォールバック ──────────────────────────────────
+    # SEC/Motley Fool からガイダンスが取得できなかった場合、FMP のアナリスト予想から
+    # 次期見通しを生成する（主要企業のガイダンス「未開示」誤表示を防ぐ）
+    try:
+        from .fmp_client import FMPClient as _FMPClient, FMPError as _FMPError
+        import os as _os
+        _fmp_key = _os.environ.get("FMP_API_KEY", "")
+        if _fmp_key:
+            _fmp = _FMPClient(api_key=_fmp_key)
+            _est_list = await _fmp.analyst_estimates(ticker, period="quarter", limit=4)
+            if _est_list:
+                from datetime import datetime as _dt2
+                _now = _dt2.now()
+                # 直近の将来エントリ（date >= today）を優先、なければ最新エントリ
+                _future = [e for e in _est_list if e.get("date", "") >= _now.strftime("%Y-%m-%d")]
+                _best_est = _future[0] if _future else _est_list[0]
+
+                def _fmt_num(v, unit=""):
+                    if v is None:
+                        return "不明"
+                    try:
+                        f = float(v)
+                        if abs(f) >= 1e9:
+                            return f"{f/1e9:.1f}B{unit}"
+                        return f"{f:.2f}{unit}"
+                    except (TypeError, ValueError):
+                        return "不明"
+
+                _rev_avg   = _fmt_num(_best_est.get("estimatedRevenueAvg") or _best_est.get("revenueAvg"), "$")
+                _rev_low   = _fmt_num(_best_est.get("estimatedRevenueLow")  or _best_est.get("revenueLow"), "$")
+                _rev_high  = _fmt_num(_best_est.get("estimatedRevenueHigh") or _best_est.get("revenueHigh"), "$")
+                _eps_avg   = _fmt_num(_best_est.get("estimatedEpsAvg")      or _best_est.get("epsAvg"), "$")
+                _ebitda    = _fmt_num(_best_est.get("estimatedEbitdaAvg")   or _best_est.get("ebitdaAvg"), "$")
+                _period    = _best_est.get("date", "次期")
+                _num_analysts = _best_est.get("numberAnalystEstimatedRevenue") or _best_est.get("numberAnalystEstimatedEps") or ""
+                _analyst_note = f"（{_num_analysts}名のアナリスト予想）" if _num_analysts else ""
+
+                _lines = [f"・ 次期（{_period}）アナリストコンセンサス予想{_analyst_note}："]
+                if _rev_avg != "不明":
+                    _lines.append(f"・ 売上高予想：{_rev_avg}（レンジ：{_rev_low} ～ {_rev_high}）")
+                if _eps_avg != "不明":
+                    _lines.append(f"・ EPS予想：{_eps_avg}")
+                if _ebitda != "不明":
+                    _lines.append(f"・ EBITDA予想：{_ebitda}")
+
+                if len(_lines) > 1:
+                    _text = "\n".join(_lines)
+                    print(f"[GUIDANCE] {ticker} using FMP analyst-estimates fallback")
+                    return _text, "FMPアナリスト予想コンセンサスより"
+    except Exception as e_fmp_est:
+        print(f"FMP analyst-estimates guidance fallback failed for {ticker}: {e_fmp_est}")
 
     return None
 
@@ -1325,14 +1914,35 @@ async def _guidance_impl(ticker: str, request: Request) -> dict:
 async def cache_status():
     now = _time.time()
     return {
-        "cached_tickers": [
-            {
-                "ticker": k,
-                "age_seconds": int(now - v[0]),
-                "expires_in_seconds": int(GUIDANCE_CACHE_TTL - (now - v[0])),
-            }
-            for k, v in _guidance_cache.items()
-        ]
+        "status": "ok",
+        "ttl_config": {
+            "guidance":  GUIDANCE_CACHE_TTL,
+            "quote":     CACHE_TTL_QUOTE,
+            "earnings":  CACHE_TTL_EARNINGS,
+            "profile":   CACHE_TTL_PROFILE,
+            "segment":   CACHE_TTL_SEGMENT,
+        },
+        "guidance_cache": {
+            "size": len(_guidance_cache),
+            "entries": [
+                {
+                    "ticker": k,
+                    "age_seconds": int(now - v[0]),
+                    "expires_in_seconds": int(GUIDANCE_CACHE_TTL - (now - v[0])),
+                }
+                for k, v in _guidance_cache.items()
+            ],
+        },
+        "fmp_cache": {
+            "size": len(_fmp_response_cache),
+            "entries": [
+                {
+                    "key": k,
+                    "age_seconds": int(now - v[0]),
+                }
+                for k, v in _fmp_response_cache.items()
+            ][:50],  # 多すぎる場合があるので先頭50件
+        },
     }
 
 
@@ -1915,13 +2525,14 @@ async def market_indices(request: Request) -> list[dict]:
 
 
 _MAJOR_TICKERS = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA", "BRK-B",
-    "JPM", "V", "UNH", "JNJ", "XOM", "PG", "MA", "HD", "CVX", "MRK",
-    "ABBV", "PEP", "KO", "AVGO", "COST", "WMT", "MCD", "TMO", "ACN",
-    "LLY", "DHR", "TXN", "NEE", "BMY", "PM", "RTX", "QCOM", "HON",
-    "AMGN", "IBM", "GE", "CAT", "BA", "GS", "MS", "BLK", "SPGI",
-    "AMT", "ISRG", "ADP", "MDLZ", "CCI",
+    "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA",
+    "JPM", "V", "MA", "UNH", "XOM", "LLY", "AVGO",
+    "COST", "WMT", "JNJ", "PG", "MRK", "ABBV",
 ]
+
+# ── カレンダーキャッシュ ──────────────────────────────────
+_calendar_cache: dict = {}          # key → (timestamp, data)
+_CALENDAR_TTL = 1800                # 30分
 
 # 主要銘柄の企業名静的マッピング（API不要・即時返却）
 _TICKER_NAMES: dict[str, str] = {
@@ -1970,6 +2581,15 @@ async def calendar(
     """今日から N 日先までの決算発表予定を返す（yfinance + Finnhub）."""
     import httpx as _httpx_cal
 
+    # ── キャッシュチェック ──
+    cache_key = f"{days}:{watchlist}"
+    now_ts = _time.time()
+    if cache_key in _calendar_cache:
+        cached_ts, cached_data = _calendar_cache[cache_key]
+        if now_ts - cached_ts < _CALENDAR_TTL:
+            return cached_data
+    # ────────────────────────
+
     today = date.today()
     until = today + timedelta(days=days)
     today_str = today.isoformat()
@@ -1989,10 +2609,13 @@ async def calendar(
                 for item in (r.json().get("earningsCalendar") or []):
                     d = item.get("date", "")
                     if isinstance(d, str) and today_str <= d <= until_str:
+                        raw_time = (item.get("hour") or "").lower()
+                        # bmo/amc のみ有効、dmh や空は除外
+                        valid_time = raw_time if raw_time in ("bmo", "amc") else ""
                         finnhub_entries.append({
                             "symbol": item.get("symbol", ""),
                             "date": d,
-                            "time": item.get("hour") or "",
+                            "time": valid_time,
                             "epsEstimated": item.get("epsEstimate"),
                             "revenueEstimated": item.get("revenueEstimate"),
                         })
@@ -2041,8 +2664,18 @@ async def calendar(
             return None
 
     loop = asyncio.get_event_loop()
+
+    async def _yf_fetch_with_timeout(sym: str):
+        try:
+            return await asyncio.wait_for(
+                loop.run_in_executor(None, _yf_fetch, sym),
+                timeout=5.0,
+            )
+        except asyncio.TimeoutError:
+            return None
+
     results = await asyncio.gather(
-        *[loop.run_in_executor(None, _yf_fetch, sym) for sym in yf_targets],
+        *[_yf_fetch_with_timeout(sym) for sym in yf_targets],
         return_exceptions=True,
     )
     yf_entries: list[dict] = [r for r in results if isinstance(r, dict)]
@@ -2057,6 +2690,10 @@ async def calendar(
     ]
     merged = yf_entries + finnhub_enriched
     merged.sort(key=lambda x: x.get("date", ""))
+
+    # ── キャッシュ保存 ──
+    _calendar_cache[cache_key] = (_time.time(), merged)
+    # ───────────────────
     return merged
 
 
@@ -2468,6 +3105,43 @@ def _format_context(analysis: dict, guidance: dict | None) -> str:
     return "\n".join(lines)
 
 
+def _determine_guidance_tag(guidance: dict | None) -> str:
+    """Return the correct [POS/NEG/NEU] tag for the ③ guidance line."""
+    if not guidance:
+        return "NEU"
+    sec_text = (guidance.get("sec_guidance_text") or "").strip()
+    if not sec_text or any(kw in sec_text for kw in [
+        "非開示", "開示しない", "ガイダンスの記載なし", "次期ガイダンスの記載なし",
+        "No guidance", "does not provide",
+    ]):
+        return "NEU"
+    if any(kw in sec_text for kw in ["上方修正", "増額", "引き上げ", "raise", "raised", "increased", "lifted", "upped"]):
+        return "POS"
+    if any(kw in sec_text for kw in ["下方修正", "減額", "引き下げ", "lower", "lowered", "cut", "reduced", "downgraded"]):
+        return "NEG"
+    return "NEU"
+
+
+def apply_deterministic_rules(text: str, guidance: dict | None) -> str:
+    """
+    Post-process LLM summary output.
+    Deterministically overrides the [POS/NEG/NEU] tag on the ③ guidance line
+    so RULE 7 is enforced even when the LLM ignores the prompt instruction.
+    """
+    if not text:
+        return text
+    correct_tag = _determine_guidance_tag(guidance)
+    lines = text.split("\n")
+    result = []
+    for line in lines:
+        if "③" in line:
+            line = re.sub(r"^\[(?:POS|NEG|NEU)\]", f"[{correct_tag}]", line)
+            if not re.match(r"^\[(?:POS|NEG|NEU)\]", line):
+                line = f"[{correct_tag}]{line}"
+        result.append(line)
+    return "\n".join(result)
+
+
 _SUMMARY_SYSTEM_PROMPT = (
     "Label each output line with [POS], [NEG], or [NEU] before the ① ② ③ ④ marker.\n"
     "\n"
@@ -2575,12 +3249,13 @@ async def summary_brief(req: SummaryRequest) -> dict:
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Claude API error: {e}")
 
+    text = apply_deterministic_rules(text, req.guidance)
     return {"text": text}
 
 
 @app.post("/api/summary/brief/stream")
 async def summary_brief_stream(req: SummaryRequest):
-    """AI要約をストリーミングで返す."""
+    """AI要約をストリーミングで返す（全チャンク結合後に後処理適用）."""
     context = _format_context(req.analysis, req.guidance)
     ticker = req.analysis.get("ticker", "")
     name = req.analysis.get("companyName") or ticker
@@ -2592,6 +3267,7 @@ async def summary_brief_stream(req: SummaryRequest):
         raise HTTPException(status_code=503, detail=str(e))
 
     async def generate():
+        chunks: list[str] = []
         try:
             async for chunk in client.stream_complete(
                 prompt,
@@ -2599,9 +3275,14 @@ async def summary_brief_stream(req: SummaryRequest):
                 max_tokens=512,
                 system=_SUMMARY_SYSTEM_PROMPT,
             ):
-                yield chunk
+                chunks.append(chunk)
         except Exception:
-            return
+            pass
+        full = "".join(chunks)
+        corrected = apply_deterministic_rules(full, req.guidance)
+        # 行ごとに分割して逐次 yield（UIのストリーミング表示を維持）
+        for line in corrected.splitlines(keepends=True):
+            yield line
 
     return StreamingResponse(generate(), media_type="text/plain; charset=utf-8")
 
@@ -2651,10 +3332,261 @@ async def summary_detail_stream(req: SummaryRequest):
     return StreamingResponse(generate(), media_type="text/plain; charset=utf-8")
 
 
-@app.post("/api/visualize/{ticker}")
-async def generate_visualization(ticker: str, request: Request):
+def formatMetricsTrend_py(periods: list[dict]) -> str:
+    """Python版 formatMetricsTrend（フロントの JS 版と同等）。"""
+    def yoy(curr, prev):
+        try:
+            c, p = float(curr), float(prev)
+            if p == 0:
+                return "-"
+            pct = (c - p) / abs(p) * 100
+            return f"{'+'if pct>=0 else ''}{pct:.1f}%"
+        except Exception:
+            return "-"
+
+    def toB(v):
+        return round(float(v) / 1e9, 1) if v is not None else None
+
+    lines = []
+    for i, p in enumerate(periods):
+        prev = periods[i - 1] if i > 0 else None
+        rev_b = toB(p.get("revenue"))
+        ocf_b = toB(p.get("operating_cf"))
+        prev_rev_b = toB(prev.get("revenue")) if prev else None
+        prev_ocf_b = toB(prev.get("operating_cf")) if prev else None
+        eps_val = p.get("eps")
+        cfps_val = p.get("cfps")
+        eps_str  = (str(eps_val) + " $/株") if eps_val is not None else "-"
+        cfps_str = (f"{cfps_val:.2f}" + " $/株") if cfps_val is not None else "-"
+        prev_eps  = prev.get("eps")  if prev else None
+        prev_cfps = prev.get("cfps") if prev else None
+        lines.append(
+            f"FY{p['period']} ({p.get('date', '')}):\n"
+            f"  売上高: {str(rev_b) + ' B$' if rev_b is not None else '-'}  (YoY: {yoy(rev_b, prev_rev_b) if prev else '-'})\n"
+            f"  EPS: {eps_str}  (YoY: {yoy(eps_val, prev_eps) if prev else '-'})\n"
+            f"  CFPS: {cfps_str}  (YoY: {yoy(cfps_val, prev_cfps) if prev else '-'})\n"
+            f"  営業CF: {str(ocf_b) + ' B$' if ocf_b is not None else '-'}  (YoY: {yoy(ocf_b, prev_ocf_b) if prev else '-'})"
+        )
+    return "\n\n".join(lines)
+
+
+@app.post("/api/visualize-instant/{ticker}")
+async def generate_visualization_instant(
+    ticker: str,
+    request: Request,
+    years: int = Query(3, ge=1, le=5),
+):
+    """Phase1: LLMなしで数値データのみ即返却（0.3〜1秒）"""
     body = await request.json()
     analysis_data = body.get("analysis_data", {})
+    analysis_data["years"] = years
+
+    _fmp_key_viz = _get_fmp_key(request) or os.getenv("FMP_API_KEY", "")
+    _limit = max(years + 1, 2)
+
+    _income_raw, _cf_raw, _real_val, _fcf_capex, _mcap = await asyncio.gather(
+        safe_fmp_get(
+            f"https://financialmodelingprep.com/stable/income-statement?symbol={ticker.upper()}&limit={_limit}&period=annual&apikey={_fmp_key_viz}",
+            f"viz-income-{years}::{ticker.upper()}", ttl=CACHE_TTL_EARNINGS,
+        ),
+        safe_fmp_get(
+            f"https://financialmodelingprep.com/stable/cash-flow-statement?symbol={ticker.upper()}&limit={_limit}&period=annual&apikey={_fmp_key_viz}",
+            f"viz-cf-{years}::{ticker.upper()}", ttl=CACHE_TTL_EARNINGS,
+        ),
+        get_valuation_ratios(ticker, _fmp_key_viz),
+        get_fcf_capex_trends(ticker, _fmp_key_viz),
+        get_market_cap(ticker, _fmp_key_viz),
+        return_exceptions=True,
+    )
+
+    _periods_built = []
+    if isinstance(_income_raw, list) and _income_raw:
+        _cf_map_i = {}
+        if isinstance(_cf_raw, list):
+            for _r in _cf_raw:
+                _yr_k = str(_r.get("calendarYear") or _r.get("fiscalYear") or str(_r.get("date",""))[:4])
+                _cf_map_i[_yr_k] = _r
+        for _inc in list(reversed(_income_raw)):
+            _yr = str(_inc.get("calendarYear") or _inc.get("fiscalYear") or str(_inc.get("date",""))[:4])
+            _cf_r = _cf_map_i.get(_yr, {})
+            _ocf = _cf_r.get("operatingCashFlow")
+            _shr = _inc.get("weightedAverageShsOutDil") or _inc.get("weightedAverageShsOut")
+            _cfps = round(float(_ocf)/float(_shr), 2) if (_ocf and _shr) else None
+            _eps_i = _inc.get("eps") or _inc.get("epsDiluted")
+            _op_r = _inc.get("operatingIncomeRatio")
+            _periods_built.append({
+                "period": _yr,
+                "date": str(_inc.get("date",""))[:10],
+                "revenue": _inc.get("revenue"),
+                "operating_cf": _ocf,
+                "eps": round(float(_eps_i), 2) if _eps_i is not None else None,
+                "cfps": _cfps,
+                "op_ratio": round(float(_op_r)*100, 1) if _op_r is not None else None,
+            })
+    else:
+        try:
+            import yfinance as _yf_i
+            import pandas as _pd_i
+            def _fetch_yf_i():
+                t = _yf_i.Ticker(ticker)
+                inc = t.income_stmt
+                cf  = t.cash_flow
+                if inc is None or (hasattr(inc, 'empty') and inc.empty):
+                    return []
+                cols = list(inc.columns)[:_limit]
+                cf_map_yi = {}
+                if cf is not None and not (hasattr(cf, 'empty') and cf.empty):
+                    for col in cf.columns:
+                        cf_map_yi[str(col)[:4]] = cf[col]
+                def _g(stmt, col, *keys):
+                    for k in keys:
+                        if k in stmt.index:
+                            v = stmt.loc[k, col]
+                            if not _pd_i.isna(v):
+                                return float(v)
+                    return None
+                rows = []
+                for col in cols:
+                    yr = str(col)[:4]
+                    rev    = _g(inc, col, 'Total Revenue', 'Revenue')
+                    opinc  = _g(inc, col, 'Operating Income', 'EBIT')
+                    shares = _g(inc, col, 'Diluted Average Shares', 'Basic Average Shares')
+                    eps    = _g(inc, col, 'Diluted EPS', 'Basic EPS')
+                    ocf = None
+                    cf_col = cf_map_yi.get(yr)
+                    if cf_col is not None:
+                        for k in ('Operating Cash Flow', 'Cash From Operations'):
+                            if k in cf_col.index:
+                                v = cf_col[k]
+                                if not _pd_i.isna(v):
+                                    ocf = float(v)
+                                    break
+                    cfps = round(ocf/shares, 2) if (ocf and shares) else None
+                    op_r = round(opinc/rev*100, 1) if (opinc and rev) else None
+                    rows.append({
+                        "period": yr, "date": str(col)[:10],
+                        "revenue": rev, "operating_cf": ocf,
+                        "eps": round(eps, 2) if eps is not None else None,
+                        "cfps": cfps, "op_ratio": op_r,
+                    })
+                return list(reversed(rows))
+            _periods_built = await asyncio.to_thread(_fetch_yf_i)
+        except Exception as _e_yf_i:
+            print(f"[INSTANT] yfinance failed: {_e_yf_i}")
+
+    # 部分年度除外
+    import datetime as _dt_i
+    _today_i = _dt_i.date.today()
+    _filtered_i = []
+    for _p in _periods_built:
+        try:
+            _yr_p = int(str(_p.get("period","0"))[:4])
+        except Exception:
+            _yr_p = 0
+        _is_partial = (_yr_p >= _today_i.year)
+        try:
+            _pdate = _dt_i.date.fromisoformat(_p.get("date","")[:10])
+            if _pdate > _today_i:
+                _is_partial = True
+        except Exception:
+            pass
+        if _is_partial:
+            try:
+                _pm = int(_p.get("date","01-01")[5:7])
+                if (_today_i.month - _pm) >= 6:
+                    _is_partial = False
+            except Exception:
+                pass
+        if not _is_partial:
+            _filtered_i.append(_p)
+    _periods_built = _filtered_i[-years:]
+
+    def _build_pts_i(key, div=1.0):
+        out = []
+        for p in _periods_built:
+            v = p.get(key)
+            if v is not None:
+                try:
+                    v = round(float(v)/div, 2)
+                except Exception:
+                    v = None
+            out.append({
+                "period": f"FY{p['period']}", "value": v,
+                "estimate": None, "beat": None, "beatMargin": None, "beatAbsolute": None,
+            })
+        return out
+
+    op_margins_i = [{"period": f"FY{p['period']}", "value": p.get("op_ratio")} for p in _periods_built]
+
+    if isinstance(_real_val, Exception):  _real_val  = None
+    if isinstance(_fcf_capex, Exception): _fcf_capex = ([], [])
+    if isinstance(_mcap, Exception):      _mcap      = None
+    _fcf, _capex = _fcf_capex if isinstance(_fcf_capex, tuple) else ([], [])
+
+    instant_result = {
+        "ticker": ticker.upper(),
+        "companyName": analysis_data.get("company_name", ticker.upper()),
+        "period": analysis_data.get("fiscal_period", ""),
+        "overallPass": analysis_data.get("verdict") == "PASS",
+        "passCount": int(analysis_data.get("passed_conditions", 0) or 0),
+        "totalCount": 5,
+        "headline": "AI分析を生成中...",
+        "summary": "詳細を生成中です...",
+        "conditions": [],
+        "businessFlowSteps": [],
+        "strengths": [], "risks": [], "bullCase": [], "bearCase": [],
+        "investorQuestion": "",
+        "consensusSource": "FMP financial statements",
+        "trends": [
+            {"metric": "売上高", "unit": "B$", "epsType": None,       "data": _build_pts_i("revenue", 1e9)},
+            {"metric": "EPS",   "unit": "$",  "epsType": "Non-GAAP", "data": _build_pts_i("eps")},
+            {"metric": "CFPS",  "unit": "$",  "epsType": None,       "data": _build_pts_i("cfps")},
+            {"metric": "営業CF", "unit": "B$", "epsType": None,       "data": _build_pts_i("operating_cf", 1e9)},
+        ],
+        "operatingMargins": op_margins_i if any(m["value"] is not None for m in op_margins_i) else None,
+        "valuation": _real_val if _real_val else {"per": None, "pbr": None, "psr": None, "evEbitda": None, "peg": None, "dataSource": "LLM推定"},
+        "dividend": None,
+        "fcfTrend": _fcf,
+        "capexTrend": _capex,
+        "fcfDataAvailable": bool(_fcf),
+        "_phase": "instant",
+    }
+
+    if _mcap and _fcf:
+        try:
+            _fcf_abs = float(_fcf[-1]["value"]) * 1e9
+            if _fcf_abs > 0:
+                instant_result["fcfYield"] = round(_fcf_abs / float(_mcap) * 100, 2)
+        except Exception:
+            pass
+
+    print(f"[INSTANT] {ticker} built (years={years}, periods={len(_periods_built)})")
+    return instant_result
+
+
+@app.post("/api/visualize/{ticker}")
+async def generate_visualization(
+    ticker: str,
+    request: Request,
+    years: int = Query(3, ge=1, le=5),
+):
+    _t0 = _time.time()
+
+    body = await request.json()
+    analysis_data = body.get("analysis_data", {})
+    analysis_data["years"] = years
+
+    # ── キャッシュ確認（2回目以降は即返却） ──
+    _viz_cache_key = f"{ticker.upper()}::{years}"
+    _now_ts = _time.time()
+    _cached_viz = _viz_cache.get(_viz_cache_key)
+    if _cached_viz and _now_ts - _cached_viz[0] < _VIZ_CACHE_TTL:
+        print(f"[TIMING] {ticker} VIZ_CACHE HIT → {_time.time()-_t0:.2f}s")
+        return _cached_viz[1]
+    # ─────────────────────────────────────────
+
+    _periods_built: list = []        # スコープ保証（FMP失敗時にも参照可能にする）
+    _income_sorted: list = []        # スコープ保証
 
     # beat_miss フィールド（フロントから直接渡される）またはguidance JSON文字列からBeat/Miss情報を組み立て
     beat_miss_detail = "データなし"
@@ -2685,26 +3617,680 @@ async def generate_visualization(ticker: str, request: Request):
         if lines:
             beat_miss_detail = "\n".join(lines)
     analysis_data["beat_miss_detail"] = beat_miss_detail
+    print(f"[TIMING] {ticker} beat_miss done → {_time.time()-_t0:.2f}s")
+
+    # ════════════════════════════════════════════════════════
+    # years 期分のデータを FMP から直接取得して metrics_trend を再構築
+    # ════════════════════════════════════════════════════════
+    _fmp_key_viz = _get_fmp_key(request) or os.getenv("FMP_API_KEY", "")
+    _limit = max(years + 1, 2)  # 最低2期取得（1Y時もYoY計算のため）
+
+    try:
+        _income_url = (
+            "https://financialmodelingprep.com/stable/income-statement"
+            "?symbol=" + ticker.upper() + "&limit=" + str(_limit) + "&period=annual&apikey=" + _fmp_key_viz
+        )
+        _cf_url = (
+            "https://financialmodelingprep.com/stable/cash-flow-statement"
+            "?symbol=" + ticker.upper() + "&limit=" + str(_limit) + "&period=annual&apikey=" + _fmp_key_viz
+        )
+        _i_cache = "viz-income-" + str(years) + "::" + ticker.upper()
+        _c_cache = "viz-cf-"     + str(years) + "::" + ticker.upper()
+
+        _income_raw, _cf_raw = await asyncio.gather(
+            safe_fmp_get(_income_url, _i_cache, ttl=CACHE_TTL_EARNINGS),
+            safe_fmp_get(_cf_url,    _c_cache, ttl=CACHE_TTL_EARNINGS),
+        )
+
+        # ── FMP 失敗時は yfinance にフォールバック ──
+        if not isinstance(_income_raw, list) or len(_income_raw) < 1:
+            print(f"[VISUALIZE] FMP income failed, trying yfinance fallback for {ticker} (years={years})")
+            try:
+                import yfinance as _yf_viz
+                import pandas as _pd_viz
+
+                def _fetch_yf_income_cf():
+                    t = _yf_viz.Ticker(ticker)
+                    inc_stmt = t.income_stmt
+                    cf_stmt  = t.cash_flow
+                    if inc_stmt is None or (hasattr(inc_stmt, 'empty') and inc_stmt.empty):
+                        return []
+                    cols = list(inc_stmt.columns)[:max(years + 1, 2)]
+                    cf_map_yf = {}
+                    if cf_stmt is not None and not (hasattr(cf_stmt, 'empty') and cf_stmt.empty):
+                        for col in cf_stmt.columns:
+                            yr_k = str(col)[:4]
+                            cf_map_yf[yr_k] = cf_stmt[col]
+
+                    def _get(stmt, col, *keys):
+                        for k in keys:
+                            if k in stmt.index:
+                                v = stmt.loc[k, col]
+                                if not _pd_viz.isna(v):
+                                    return float(v)
+                        return None
+
+                    rows = []
+                    for col in cols:
+                        yr = str(col)[:4]
+                        rev    = _get(inc_stmt, col, 'Total Revenue', 'Revenue')
+                        opinc  = _get(inc_stmt, col, 'Operating Income', 'EBIT')
+                        shares = _get(inc_stmt, col, 'Diluted Average Shares', 'Basic Average Shares')
+                        eps_row = _get(inc_stmt, col, 'Diluted EPS', 'Basic EPS')
+                        ocf = None
+                        cf_col = cf_map_yf.get(yr)
+                        if cf_col is not None:
+                            for k in ('Operating Cash Flow', 'Cash From Operations'):
+                                if k in cf_col.index:
+                                    v = cf_col[k]
+                                    if not _pd_viz.isna(v):
+                                        ocf = float(v)
+                                        break
+                        op_ratio = round(opinc / rev * 100, 1) if (opinc and rev) else None
+                        cfps     = round(ocf / shares, 2) if (ocf and shares) else None
+                        rows.append({
+                            "period": yr,
+                            "date": str(col)[:10],
+                            "revenue": rev,
+                            "operating_cf": ocf,
+                            "eps": round(eps_row, 2) if eps_row is not None else None,
+                            "cfps": cfps,
+                            "op_ratio": op_ratio,
+                        })
+                    # 古→新順に並び替えて years 期分
+                    # years=1 でも YoY 計算用に最低2期送る
+                    _keep = 2 if years == 1 else years
+                    return list(reversed(rows))[-_keep:]
+
+                _yf_rows = await asyncio.to_thread(_fetch_yf_income_cf)
+                if _yf_rows:
+                    _periods_built = _yf_rows
+                    analysis_data["_eps_source"] = "yfinance_gaap"
+                    _income_sorted = []  # yfinance は op_ratio を直接持つ
+                    print(f"[VISUALIZE] yfinance fallback succeeded: {len(_periods_built)} periods for {ticker}")
+                else:
+                    raise ValueError("yfinance also returned empty data")
+            except Exception as _e_yf_viz:
+                print(f"[VISUALIZE] yfinance fallback also failed: {_e_yf_viz}")
+                raise ValueError(f"Both FMP and yfinance failed for {ticker}")
+        else:
+            # ── FMP 成功時の既存処理 ──
+            _cf_map: dict = {}
+            if isinstance(_cf_raw, list):
+                for _row in _cf_raw:
+                    _yr_key = str(
+                        _row.get("calendarYear")
+                        or _row.get("fiscalYear")
+                        or str(_row.get("date", ""))[:4]
+                    )
+                    _cf_map[_yr_key] = _row
+
+            # years=1 でも YoY 計算用に最低2期保持（フロントで prev を使えるように）
+            _keep = 2 if years == 1 else years
+            _income_sorted = list(reversed(_income_raw))[-_keep:]
+            print("[VISUALIZE] FMP returned " + str(len(_income_raw)) + " records, using last " + str(len(_income_sorted)) + " for years=" + str(years))
+
+            _periods_built = []
+            for _inc in _income_sorted:
+                _yr = str(
+                    _inc.get("calendarYear")
+                    or _inc.get("fiscalYear")
+                    or str(_inc.get("date", ""))[:4]
+                )
+                _rev  = _inc.get("revenue")
+                _eps  = _inc.get("eps") or _inc.get("epsDiluted")
+                _cf_r = _cf_map.get(_yr, {})
+                _ocf  = _cf_r.get("operatingCashFlow")
+                _shr  = _inc.get("weightedAverageShsOutDil") or _inc.get("weightedAverageShsOut")
+                _cfps = None
+                if _ocf and _shr:
+                    try:
+                        _cfps = round(float(_ocf) / float(_shr), 2)
+                    except Exception:
+                        pass
+                _eps_rounded = round(float(_eps), 2) if _eps is not None else None
+                _periods_built.append({
+                    "period": _yr,
+                    "date": str(_inc.get("date", ""))[:10],
+                    "revenue": _rev,
+                    "operating_cf": _ocf,
+                    "eps": _eps_rounded,
+                    "cfps": _cfps,
+                })
+
+        # ── 部分年度チェック：シンプルな年度ベース判定 ──
+        import datetime as _dt_check
+        _today = _dt_check.date.today()
+        _current_year = _today.year
+
+        _filtered_periods = []
+        _partial_period = None
+
+        for _p in _periods_built:
+            try:
+                _p_yr = int(str(_p.get("period", "0"))[:4])
+            except Exception:
+                _p_yr = 0
+            _p_date_str = _p.get("date", "")
+
+            # 判定1: fiscal_year が現在年以上 → 部分年度
+            _is_partial = (_p_yr >= _current_year)
+
+            # 判定2: date が今日より未来 → 部分年度（将来の締め日）
+            try:
+                _p_date = _dt_check.date.fromisoformat(_p_date_str[:10])
+                if _p_date > _today:
+                    _is_partial = True
+            except Exception:
+                pass
+
+            # 例外：fiscal_year が現在年だが 6月以上前に期末を迎えた場合は通期完了
+            # （例：3月決算の日本株、6月決算の米国株など）
+            if _is_partial and _p_date_str:
+                try:
+                    _p_month = int(_p_date_str[5:7])
+                    if (_today.month - _p_month) >= 6:
+                        _is_partial = False
+                except Exception:
+                    pass
+
+            if _is_partial:
+                _partial_period = _p
+                print(f"[VISUALIZE] Partial year excluded: FY{_p_yr} (date={_p_date_str}, today={_today})")
+            else:
+                _filtered_periods.append(_p)
+
+        if _filtered_periods:
+            _periods_built = _filtered_periods
+
+        if _partial_period:
+            analysis_data["partial_period"] = _partial_period
+
+        # ── 共通：metrics_trend 文字列を組み立て（FMP/yfinance どちらでも） ──
+        def _yoy_str(curr, prev) -> str:
+            try:
+                c, p = float(curr), float(prev)
+                if p == 0:
+                    return "-"
+                pct = (c - p) / abs(p) * 100
+                sign = "+" if pct >= 0 else ""
+                return sign + str(round(pct, 1)) + "%"
+            except Exception:
+                return "-"
+
+        def _to_b(v):
+            if v is None:
+                return None
+            return round(float(v) / 1e9, 1)
+
+        # metrics_trend 文字列を組み立て（f-string ネストを回避）
+        _trend_lines = []
+        for _i, _p in enumerate(_periods_built):
+            _prev = _periods_built[_i - 1] if _i > 0 else None
+
+            _rev_b      = _to_b(_p.get("revenue"))
+            _ocf_b      = _to_b(_p.get("operating_cf"))
+            _prev_rev_b = _to_b(_prev.get("revenue"))        if _prev else None
+            _prev_ocf_b = _to_b(_prev.get("operating_cf"))   if _prev else None
+
+            _rev_str  = (str(_rev_b)  + " B$")    if _rev_b  is not None else "-"
+            _ocf_str  = (str(_ocf_b)  + " B$")    if _ocf_b  is not None else "-"
+            _eps_str  = (str(_p["eps"]) + " $/株") if _p.get("eps")  is not None else "-"
+            _cfps_val = _p.get("cfps")
+            _cfps_str = (str(round(_cfps_val, 2)) + " $/株") if _cfps_val is not None else "-"
+
+            _rev_yoy  = _yoy_str(_rev_b,           _prev_rev_b)         if _prev else "-"
+            _ocf_yoy  = _yoy_str(_ocf_b,           _prev_ocf_b)         if _prev else "-"
+            _eps_yoy  = _yoy_str(_p.get("eps"),    _prev.get("eps"))    if _prev else "-"
+            _cfps_yoy = _yoy_str(_p.get("cfps"),   _prev.get("cfps"))   if _prev else "-"
+
+            _block = (
+                "FY" + _p["period"] + " (" + _p.get("date", "") + "):\n"
+                "  売上高: " + _rev_str  + "  (YoY: " + _rev_yoy  + ")\n"
+                "  EPS: "    + _eps_str  + "  (YoY: " + _eps_yoy  + ")\n"
+                "  CFPS: "   + _cfps_str + "  (YoY: " + _cfps_yoy + ")\n"
+                "  営業CF: " + _ocf_str  + "  (YoY: " + _ocf_yoy  + ")"
+            )
+            _trend_lines.append(_block)
+
+        analysis_data["metrics_trend"] = "\n\n".join(_trend_lines)
+        print("[VISUALIZE] Rebuilt metrics_trend: " + str(len(_periods_built)) + " periods for " + ticker + " (years=" + str(years) + ")")
+
+    except Exception as _e_rebuild:
+        print("[VISUALIZE] metrics_trend rebuild FAILED: " + str(_e_rebuild) + ". Using frontend data.")
+    # ════════════════════════════════════════════════════════
+    print(f"[TIMING] {ticker} metrics_trend built → {_time.time()-_t0:.2f}s")
 
     user_prompt = build_user_prompt(analysis_data)
 
-    import anthropic
-    client = anthropic.AsyncAnthropic()
+    # years=5 の場合、trend_display_limit を付加してフロント表示を制御
+    if years >= 5:
+        analysis_data["years"] = 5
+        analysis_data["trend_display_limit"] = 5
 
-    message = await client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=2000,
-        system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
-        messages=[{"role": "user", "content": user_prompt}]
+    # ── LLM + FMP補助データを並列取得 ──────────────────────────────────
+    _fmp_key_post = _get_fmp_key(request) or os.getenv("FMP_API_KEY", "")
+    _system_prompt = get_system_prompt(years)
+
+    import anthropic as _anthropic
+    _client_llm = _anthropic.AsyncAnthropic()
+
+    _llm_task = asyncio.create_task(
+        _client_llm.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=8192,
+            system=[{"type": "text", "text": _system_prompt, "cache_control": {"type": "ephemeral"}}],
+            messages=[{"role": "user", "content": user_prompt}]
+        )
     )
+    _val_task  = asyncio.create_task(get_valuation_ratios(ticker, _fmp_key_post))
+    _seg_task  = asyncio.create_task(get_segment_data(ticker, _fmp_key_post))
+    _fcf_task  = asyncio.create_task(get_fcf_capex_trends(ticker, _fmp_key_post))
+    _mcap_task = asyncio.create_task(get_market_cap(ticker, _fmp_key_post))
+
+    message, _real_val_pre, _seg_raw_pre, _fcf_capex_pre, _mcap_pre = await asyncio.gather(
+        _llm_task, _val_task, _seg_task, _fcf_task, _mcap_task,
+        return_exceptions=True,
+    )
+
+    if isinstance(message, Exception):
+        raise HTTPException(status_code=500, detail=f"LLM error: {message}")
+    if isinstance(_real_val_pre,  Exception): _real_val_pre  = None
+    if isinstance(_seg_raw_pre,   Exception): _seg_raw_pre   = []
+    if isinstance(_fcf_capex_pre, Exception): _fcf_capex_pre = ([], [])
+    if isinstance(_mcap_pre,      Exception): _mcap_pre      = None
+
+    _fcf_pre, _capex_pre = _fcf_capex_pre if isinstance(_fcf_capex_pre, tuple) else ([], [])
+    # ─────────────────────────────────────────────────────────────────────
+    print(f"[TIMING] {ticker} LLM+FMP parallel done → {_time.time()-_t0:.2f}s")
 
     raw = message.content[0].text.strip()
     raw = re.sub(r'^```[\w]*\n?', '', raw, flags=re.MULTILINE)
     raw = re.sub(r'\n?```$', '', raw, flags=re.MULTILINE)
+    raw_clean = raw.strip()
+
+    stop_reason = message.stop_reason
+    if stop_reason == "max_tokens":
+        print(f"[VISUALIZE] WARNING: max_tokens reached for {ticker}. Output may be truncated.")
+
     try:
-        return json.loads(raw.strip())
+        parsed = json.loads(raw_clean)
     except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"JSON parse error: {e}")
+        print(f"[VISUALIZE] JSON parse error for {ticker}: {e}")
+        print(f"[VISUALIZE] stop_reason={stop_reason}, raw length={len(raw_clean)}")
+        print(f"[VISUALIZE] raw tail (last 200 chars): {raw_clean[-200:]}")
+
+        repaired = raw_clean
+        open_braces   = raw_clean.count('{') - raw_clean.count('}')
+        open_brackets = raw_clean.count('[') - raw_clean.count(']')
+        if open_brackets > 0:
+            repaired += ']' * open_brackets
+        if open_braces > 0:
+            repaired += '}' * open_braces
+        try:
+            parsed = json.loads(repaired)
+            print(f"[VISUALIZE] JSON repair succeeded for {ticker}")
+        except json.JSONDecodeError as e2:
+            raise HTTPException(
+                status_code=500,
+                detail=f"JSON parse error (repair also failed): {e2}. stop_reason={stop_reason}"
+            )
+
+    # ══════════════════════════════════════════════════════════════
+    # ★ バックエンドで数値データを直接構築（LLMに任せない）
+    # ══════════════════════════════════════════════════════════════
+    if _periods_built:
+        def _mk_beat(metric, i, pts):
+            """最新期のみ beat/beatMargin を計算。旧期は null。"""
+            is_latest = (i == len(pts) - 1)
+            if not is_latest:
+                return {"beat": None, "beatMargin": None, "beatAbsolute": None, "estimate": None}
+            beat_val = bm_val = beat_abs = None
+            if "EPS" in metric and bm_data.get("eps", {}).get("actual") is not None and bm_data.get("eps", {}).get("estimated") is not None:
+                try:
+                    act = float(bm_data["eps"]["actual"]); est = float(bm_data["eps"]["estimated"])
+                    if est != 0:
+                        bm_val = round((act - est) / abs(est) * 100, 1)
+                        beat_val = act >= est
+                        beat_abs = round(act - est, 2)
+                except Exception:
+                    pass
+            elif "売上" in metric and bm_data.get("revenue", {}).get("actual") is not None and bm_data.get("revenue", {}).get("estimated") is not None:
+                try:
+                    act = float(bm_data["revenue"]["actual"]); est = float(bm_data["revenue"]["estimated"])
+                    if est != 0:
+                        bm_val = round((act - est) / abs(est) * 100, 1)
+                        beat_val = act >= est
+                        beat_abs = round((act - est) / 1e9, 2)
+                except Exception:
+                    pass
+            elif metric in ("CFPS", "営業CF"):
+                try:
+                    prev = pts[i-1] if i > 0 else None
+                    if prev and pts[i].get("value") is not None and prev.get("value") is not None:
+                        beat_val = pts[i]["value"] > prev["value"]
+                except Exception:
+                    pass
+            return {"beat": beat_val, "beatMargin": bm_val, "beatAbsolute": beat_abs, "estimate": None}
+
+        def _build_trend_data(key, divisor=1.0):
+            pts = []
+            for p in _periods_built:
+                val = p.get(key)
+                if val is not None:
+                    try:
+                        val = round(float(val) / divisor, 2)
+                    except Exception:
+                        val = None
+                pts.append({
+                    "period": f"FY{p['period']}", "value": val,
+                    "estimate": None, "beat": None, "beatMargin": None, "beatAbsolute": None,
+                })
+            return pts
+
+        rev_pts  = _build_trend_data("revenue",      1e9)
+        eps_pts  = _build_trend_data("eps",           1.0)
+        cfps_pts = _build_trend_data("cfps",          1.0)
+        ocf_pts  = _build_trend_data("operating_cf",  1e9)
+
+        # 最新期だけ beat 情報を計算してマージ
+        if rev_pts:  rev_pts[-1].update(_mk_beat("売上高", len(rev_pts)-1, rev_pts))
+        if eps_pts:  eps_pts[-1].update(_mk_beat("EPS",  len(eps_pts)-1, eps_pts))
+        if cfps_pts: cfps_pts[-1].update(_mk_beat("CFPS", len(cfps_pts)-1, cfps_pts))
+        if ocf_pts:  ocf_pts[-1].update(_mk_beat("営業CF", len(ocf_pts)-1, ocf_pts))
+
+        parsed["trends"] = [
+            {"metric": "売上高", "unit": "B$", "epsType": None,       "data": rev_pts},
+            {"metric": "EPS",   "unit": "$",  "epsType": "Non-GAAP", "data": eps_pts},
+            {"metric": "CFPS",  "unit": "$",  "epsType": None,       "data": cfps_pts},
+            {"metric": "営業CF", "unit": "B$", "epsType": None,       "data": ocf_pts},
+        ]
+
+        # operatingMargins を _periods_built (yfinance) or _income_sorted (FMP) から構築
+        op_margins = []
+        for p in _periods_built:
+            yr = str(p["period"])
+            ratio = p.get("op_ratio")  # yfinance の場合
+            if ratio is None and _income_sorted:
+                for inc in _income_sorted:
+                    inc_yr = str(inc.get("calendarYear") or inc.get("fiscalYear") or str(inc.get("date",""))[:4])
+                    if inc_yr == yr:
+                        r = inc.get("operatingIncomeRatio")
+                        if r is not None:
+                            ratio = round(float(r) * 100, 1)
+                        break
+            op_margins.append({"period": f"FY{yr}", "value": ratio})
+        if any(m["value"] is not None for m in op_margins):
+            parsed["operatingMargins"] = op_margins
+
+        print(f"[BUILD] trends built from backend data: {len(_periods_built)} periods for {ticker}")
+    # ══════════════════════════════════════════════════════════════
+
+    # ── LLM 補完データのフィルタリング ──────────────────────────────
+    # LLM が学習データから未来期（部分年度）を補完した場合に除去する。
+    # _periods_built に含まれる period のみを許可する。
+    if _periods_built:
+        _allowed_periods = {f"FY{p['period']}" for p in _periods_built}
+        _allowed_periods |= {str(p['period']) for p in _periods_built}  # "2025" 形式も許容
+
+        for _t in parsed.get("trends", []):
+            _original_data = _t.get("data", [])
+            _filtered_data = [
+                d for d in _original_data
+                if str(d.get("period", "")) in _allowed_periods
+            ]
+            if len(_filtered_data) < len(_original_data):
+                _removed = set(str(d.get("period", "")) for d in _original_data) - _allowed_periods
+                print(f"[PERIOD_FILTER] {_t.get('metric')}: {len(_original_data)} → {len(_filtered_data)} pts (removed: {_removed})")
+            _t["data"] = _filtered_data
+
+        # operatingMargins も同様にフィルタ
+        if parsed.get("operatingMargins"):
+            parsed["operatingMargins"] = [
+                m for m in parsed["operatingMargins"]
+                if str(m.get("period", "")) in _allowed_periods
+            ]
+    # ─────────────────────────────────────────────────────────────────
+
+    # ══════════════════════════════════════════════════════════════
+    # ★ 強制注入：LLM が years 期分を出力しなかった場合に上書き
+    # _periods_built はこの関数スコープ内で定義済みのはず。
+    # 定義されていない場合（FMP失敗等）はスキップ。
+    # ══════════════════════════════════════════════════════════════
+    if _periods_built and len(_periods_built) > 0:
+        llm_trends = parsed.get("trends", [])
+        max_llm_pts = max((len(t.get("data", [])) for t in llm_trends), default=0)
+        print(f"[FORCE_INJECT] _periods_built={len(_periods_built)}, llm_pts={max_llm_pts}, years={years}")
+
+        if max_llm_pts != len(_periods_built):
+            print(f"[FORCE_INJECT] LLM output {max_llm_pts} pts, expected {len(_periods_built)}. Injecting.")
+
+            def _build_data_points(metric_key: str, unit_divisor: float = 1.0) -> list:
+                pts = []
+                for idx, p in enumerate(_periods_built):
+                    val = p.get(metric_key)
+                    if val is not None:
+                        try:
+                            val = round(float(val) / unit_divisor, 2)
+                        except Exception:
+                            val = None
+                    pts.append({
+                        "period": f"FY{p['period']}",
+                        "value": val,
+                        "estimate": None,
+                        "beat": None,
+                        "beatMargin": None,
+                    })
+                return pts
+
+            revenue_pts = _build_data_points("revenue", 1e9)         # → B$
+            eps_pts     = _build_data_points("eps",     1.0)          # → $/株
+            cfps_pts    = _build_data_points("cfps",    1.0)          # → $/株
+            ocf_pts     = _build_data_points("operating_cf", 1e9)     # → B$
+
+            # beat/beatMargin/estimate は最新期のみ LLM 出力から引き継ぐ
+            for llm_t in llm_trends:
+                metric = llm_t.get("metric", "")
+                llm_data = llm_t.get("data", [])
+                if not llm_data:
+                    continue
+                llm_latest = llm_data[-1]
+                if "売上" in metric and revenue_pts:
+                    revenue_pts[-1]["beat"]       = llm_latest.get("beat")
+                    revenue_pts[-1]["beatMargin"] = llm_latest.get("beatMargin")
+                    revenue_pts[-1]["estimate"]   = llm_latest.get("estimate")
+                elif "EPS" in metric and eps_pts:
+                    eps_pts[-1]["beat"]           = llm_latest.get("beat")
+                    eps_pts[-1]["beatMargin"]     = llm_latest.get("beatMargin")
+                    eps_pts[-1]["estimate"]       = llm_latest.get("estimate")
+                elif "CFPS" in metric and cfps_pts:
+                    if len(cfps_pts) >= 2:
+                        cfps_pts[-1]["beat"] = (
+                            cfps_pts[-1]["value"] is not None
+                            and cfps_pts[-2]["value"] is not None
+                            and cfps_pts[-1]["value"] > cfps_pts[-2]["value"]
+                        )
+                elif "営業CF" in metric and ocf_pts:
+                    if len(ocf_pts) >= 2:
+                        ocf_pts[-1]["beat"] = (
+                            ocf_pts[-1]["value"] is not None
+                            and ocf_pts[-2]["value"] is not None
+                            and ocf_pts[-1]["value"] > ocf_pts[-2]["value"]
+                        )
+
+            # operatingMargins：yfinance の場合は op_ratio を直接使う
+            op_margins_injected = []
+            for p in _periods_built:
+                ratio = p.get("op_ratio")  # yfinance fallback の場合
+                if ratio is None and _income_sorted:
+                    for inc in _income_sorted:
+                        yr = str(inc.get("calendarYear") or inc.get("fiscalYear") or str(inc.get("date",""))[:4])
+                        if yr == str(p["period"]):
+                            r = inc.get("operatingIncomeRatio")
+                            if r is not None:
+                                ratio = round(float(r) * 100, 1)
+                            break
+                op_margins_injected.append({
+                    "period": f"FY{p['period']}",
+                    "value": ratio,
+                })
+
+            # parsed に上書き
+            for t in parsed.get("trends", []):
+                metric = t.get("metric", "")
+                if "売上" in metric:
+                    t["data"] = revenue_pts
+                elif "EPS" in metric:
+                    t["data"] = eps_pts
+                elif "CFPS" in metric:
+                    t["data"] = cfps_pts
+                elif "営業CF" in metric:
+                    t["data"] = ocf_pts
+
+            if any(m["value"] is not None for m in op_margins_injected):
+                parsed["operatingMargins"] = op_margins_injected
+
+            print(f"[FORCE_INJECT] Done. Injected {len(_periods_built)} periods for {ticker}.")
+    # ══════════════════════════════════════════════════════════════
+
+    # ── beatAbsolute（予想との絶対額差）をトレンドデータに後付け ──
+    # LLMはbeatMargin(%）は生成するがbeatAbsolute（絶対額）は常にnullのため
+    # bm_dataから実績・予想を取得して計算し、最新期のデータポイントに注入する。
+    try:
+        eps_act  = bm_data.get("eps", {}).get("actual")
+        eps_est  = bm_data.get("eps", {}).get("estimated")
+        rev_act  = bm_data.get("revenue", {}).get("actual")
+        rev_est  = bm_data.get("revenue", {}).get("estimated")
+
+        for trend in parsed.get("trends", []):
+            metric = trend.get("metric", "")
+            pts = trend.get("data", [])
+            if not pts:
+                continue
+            last = pts[-1]  # 最新期のみ絶対額を計算
+            if last.get("beat") is None:
+                continue
+
+            if "EPS" in metric and eps_act is not None and eps_est is not None:
+                try:
+                    last["beatAbsolute"] = round(float(eps_act) - float(eps_est), 2)
+                except (TypeError, ValueError):
+                    pass
+
+            elif "売上" in metric and rev_act is not None and rev_est is not None:
+                try:
+                    # 売上高は$B単位に変換
+                    last["beatAbsolute"] = round(
+                        (float(rev_act) - float(rev_est)) / 1e9, 2
+                    )
+                except (TypeError, ValueError):
+                    pass
+    except Exception as _e_beat_abs:
+        print(f"[BEAT_ABS] post-process failed: {_e_beat_abs}")
+
+    # ── バリュエーション実データを上書き（pre-fetched 並列結果を使用） ──
+    try:
+        if _real_val_pre:
+            existing = parsed.get("valuation") or {}
+            merged = {**existing}
+            for k, v in _real_val_pre.items():
+                if v is not None:
+                    merged[k] = v
+            parsed["valuation"] = merged
+    except Exception as _e_val:
+        print(f"[VALUATION] failed for {ticker}: {_e_val}")
+
+    # ── セグメント別売上を付加（FMP /api/v4/revenue-product-segmentation） ──
+    # FMP プラン制限/レート上限時は空リストが返り segmentSummary = None になる。
+    # 取得成否を segmentDataAvailable フラグで明示し、フロントで N/A 表示を可能にする。
+    parsed["segmentDataAvailable"] = False
+    try:
+        _seg_summary = build_segment_summary(_seg_raw_pre)
+        if _seg_summary:
+            parsed["segmentSummary"] = _seg_summary
+            parsed["segmentDataAvailable"] = True
+    except Exception as _e_seg:
+        print(f"[SEGMENT] failed for {ticker}: {_e_seg}")
+
+    # ── FCF / CapEx を付加（直近3期の年次データ） ──
+    # 取得成否を fcfDataAvailable フラグで明示。フロントで N/A 表示を可能にする。
+    parsed["fcfDataAvailable"] = False
+    try:
+        if _fcf_pre:
+            parsed["fcfTrend"] = _fcf_pre
+            parsed["fcfDataAvailable"] = True
+        if _capex_pre:
+            parsed["capexTrend"] = _capex_pre
+
+        # ── FCF yield = 直近FCF ÷ 時価総額 ──
+        if _fcf_pre and _mcap_pre:
+            try:
+                _latest_fcf_abs = float(_fcf_pre[-1].get("value", 0)) * 1e9
+                if _latest_fcf_abs > 0:
+                    parsed["fcfYield"] = round((_latest_fcf_abs / _mcap_pre) * 100, 2)
+            except Exception as _e_yield:
+                print(f"[FCF YIELD] failed for {ticker}: {_e_yield}")
+    except Exception as _e_fcf:
+        print(f"[FCF/CAPEX] failed for {ticker}: {_e_fcf}")
+
+    # ── GAAP/Non-GAAP調整データを付加 ──
+    try:
+        _eps_trends = [t for t in parsed.get("trends", []) if "EPS" in t.get("metric", "")]
+        if _eps_trends and bm_data:
+            _non_gaap_eps = bm_data.get("eps", {}).get("actual")
+            if _non_gaap_eps is not None:
+                _non_gaap_val = float(_non_gaap_eps)
+                _gaap_eps_val = None
+                try:
+                    _income_url = (
+                        f"https://financialmodelingprep.com/stable/income-statement"
+                        f"?symbol={ticker.upper()}&limit=1&period=quarter&apikey={_get_fmp_key(request) or os.getenv('FMP_API_KEY', '')}"
+                    )
+                    _income_cache_key = f"income-q1::{ticker.upper()}"
+                    _income_data = await safe_fmp_get(_income_url, _income_cache_key, ttl=CACHE_TTL_EARNINGS)
+                    if isinstance(_income_data, list) and _income_data:
+                        _gaap_raw = _income_data[0].get("eps") or _income_data[0].get("epsDiluted")
+                        if _gaap_raw is not None:
+                            _gaap_eps_val = round(float(_gaap_raw), 2)
+                except Exception as _e_gaap_fetch:
+                    print(f"[GAAP] FMP fetch failed: {_e_gaap_fetch}")
+
+                _sbc_adj = None
+                if _gaap_eps_val is not None:
+                    _sbc_adj = round(_non_gaap_val - _gaap_eps_val, 2)
+
+                parsed["gaapAdjustment"] = {
+                    "nonGaapEps": round(_non_gaap_val, 2),
+                    "sbcAdjustment": -abs(_sbc_adj) if _sbc_adj is not None else None,
+                    "otherAdjustment": None,
+                    "gaapEps": _gaap_eps_val,
+                }
+                print(f"[GAAP_ADJ] {ticker}: Non-GAAP={_non_gaap_val}, GAAP={_gaap_eps_val}, SBC={_sbc_adj}")
+    except Exception as _e_gaap:
+        print(f"[GAAP_ADJ] failed: {_e_gaap}")
+
+    # 部分年度情報をフロントに渡す
+    if analysis_data.get("partial_period"):
+        _pp = analysis_data["partial_period"]
+        parsed["partialPeriod"] = {
+            "period": f"FY{_pp.get('period')}",
+            "note": "通期未完了（直近四半期値）",
+        }
+
+    # yfinance fallback 時は EPS が GAAP（FMP は Non-GAAP がメイン）
+    if analysis_data.get("_eps_source") == "yfinance_gaap":
+        parsed["epsSourceNote"] = "GAAP"
+
+    # デバッグ：実際に返すデータの期数を確認
+    _return_pts = [len(t.get("data", [])) for t in parsed.get("trends", [])]
+    print(f"[RETURN] trends data lengths: {_return_pts} for {ticker} (years={years})")
+
+    # キャッシュ保存（次回同一銘柄・years で即返却される）
+    _viz_cache[_viz_cache_key] = (_time.time(), parsed)
+    print(f"[VIZ_CACHE] STORED for {ticker} years={years}")
+    print(f"[TIMING] {ticker} post-process done → {_time.time()-_t0:.2f}s total")
+
+    return parsed
 
 
 @app.get("/api/analyst/{ticker}")

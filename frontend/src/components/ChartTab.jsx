@@ -247,21 +247,21 @@ function CandleChart({ ticker, period }) {
 }
 
 // ── 並び替えボタン ────────────────────────────────────────────────
-function MoveButton({ label, onClick, disabled }) {
-  if (disabled) return <div style={{ width: 32, height: 32 }} />;
+function MoveButton({ label, onClick, disabled, size = 32 }) {
+  if (disabled) return <div style={{ width: size, height: size }} />;
   return (
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       style={{
-        width: 32, height: 32,
+        width: size, height: size,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: 'transparent',
         border: 'none',
         borderRadius: 4,
         cursor: 'pointer',
         color: 'var(--text-muted)',
-        fontSize: 12,
+        fontSize: size <= 24 ? 10 : 12,
         flexShrink: 0,
       }}
       onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--bg-hover)'; }}
@@ -273,15 +273,21 @@ function MoveButton({ label, onClick, disabled }) {
 }
 
 // ── 銘柄1行 ──────────────────────────────────────────────────────
-const TickerRow = memo(function TickerRow({ ticker, onSelect, isFirst, isLast, onMove, registerRef }) {
+const TickerRow = memo(function TickerRow({ ticker, onSelect, isFirst, isLast, onMove, registerRef, globalPeriodsExpanded }) {
   const rowRef       = useRef(null);
   const prefetchedRef = useRef(false);
   const [summary,    setSummary]    = useState(null);
   const [summaryErr, setSummaryErr] = useState(false);
-  const [expanded,   setExpanded]   = useState(false);
-  const [mounted,    setMounted]    = useState(false);
-  const [period,     setPeriod]     = useState("1mo");
+  const [expanded,        setExpanded]        = useState(false);
+  const [mounted,         setMounted]         = useState(false);
+  const [period,          setPeriod]          = useState("1mo");
+  const [periodsExpanded, setPeriodsExpanded] = useState(false);
   const isMobile = useIsMobile();
+
+  // 全銘柄一括期間切替に追従
+  useEffect(() => {
+    if (globalPeriodsExpanded !== undefined) setPeriodsExpanded(globalPeriodsExpanded);
+  }, [globalPeriodsExpanded]);
 
   // ChartTab の rowRefs に DOM 要素を登録
   useEffect(() => {
@@ -351,12 +357,12 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect, isFirst, isLast, o
   return (
     <div
       ref={rowRef}
-      className="border rounded-lg overflow-hidden shadow-sm"
-      style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}
+      className="panel-card border rounded-lg shadow-sm"
+      style={{ background: 'var(--bg-card)', borderColor: 'var(--border)', transition: 'transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease' }}
       onMouseEnter={handleMouseEnter}
     >
       <div
-        style={{ display: 'flex', alignItems: 'stretch', gap: 0, cursor: 'pointer', userSelect: 'none' }}
+        style={{ display: 'flex', alignItems: 'stretch', gap: 0, cursor: 'pointer', userSelect: 'none', overflow: 'hidden', borderRadius: 'inherit' }}
         onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
         onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}
         onClick={() => {
@@ -400,10 +406,13 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect, isFirst, isLast, o
           const cellGap     = isMobile ? 3 : 5;
           const valSize     = isMobile ? '12px' : '16px';
           const lblSize     = isMobile ? '9px' : '10px';
+          const cols = periodsExpanded
+            ? (isMobile ? 'repeat(4,1fr)' : 'repeat(5,1fr)')
+            : 'repeat(3,1fr)';
           return (
             <div style={{
               display: 'grid',
-              gridTemplateColumns: isMobile ? 'repeat(4,1fr)' : 'repeat(5,1fr)',
+              gridTemplateColumns: cols,
               flex: 1,
               background: 'var(--bg-subtle)',
               borderRadius: 6,
@@ -412,9 +421,12 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect, isFirst, isLast, o
               alignSelf: 'center',
             }}>
               {PERIODS.map(({ key, label }, idx) => {
-                if (isMobile && key === '6mo') return null;
+                if (!periodsExpanded && (key === '6mo' || key === '1y')) return null;
+                if (periodsExpanded && isMobile && key === '6mo') return null;
                 const val = summary?.performance?.[key];
-                const isLastVisible = isMobile ? key === '1y' : idx === PERIODS.length - 1;
+                const isLastVisible = periodsExpanded
+                  ? (isMobile ? key === '1y' : idx === PERIODS.length - 1)
+                  : key === '1mo';
                 const color = val == null ? 'var(--text-muted)'
                             : val >= 0 ? '#3B6D11' : '#A32D2D';
                 return (
@@ -441,20 +453,37 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect, isFirst, isLast, o
           );
         })()}
 
+        {/* 期間展開／折りたたみボタン */}
+        <button
+          onClick={(e) => { e.stopPropagation(); setPeriodsExpanded(v => !v); }}
+          title={periodsExpanded ? '折りたたむ' : '半年・年を表示'}
+          style={{
+            background: 'transparent', border: 'none',
+            borderLeft: '1px solid var(--border)',
+            cursor: 'pointer', flexShrink: 0,
+            padding: isMobile ? '0 4px' : '0 8px', alignSelf: 'stretch',
+            display: 'flex', alignItems: 'center',
+            fontSize: isMobile ? 9 : 11, fontWeight: 700,
+            color: 'var(--text-muted)',
+          }}
+        >
+          {periodsExpanded ? '«' : '»'}
+        </button>
+
         {/* 並び替えボタン */}
         <div
           style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 2px', flexShrink: 0, gap: 0 }}
           onClick={(e) => e.stopPropagation()}
         >
-          <MoveButton label="↑" disabled={isFirst} onClick={() => onMove(ticker, 'up')} />
-          <MoveButton label="↓" disabled={isLast}  onClick={() => onMove(ticker, 'down')} />
+          <MoveButton label="↑" disabled={isFirst} onClick={() => onMove(ticker, 'up')} size={isMobile ? 20 : 32} />
+          <MoveButton label="↓" disabled={isLast}  onClick={() => onMove(ticker, 'down')} size={isMobile ? 20 : 32} />
         </div>
 
         {/* 矢印 */}
         <span style={{
           display: 'flex', alignItems: 'center',
-          padding: '0 10px 0 0', flexShrink: 0,
-          fontSize: 12, color: 'var(--text-muted)',
+          padding: isMobile ? '0 4px 0 0' : '0 10px 0 0', flexShrink: 0,
+          fontSize: isMobile ? 10 : 12, color: 'var(--text-muted)',
           transition: 'transform 0.2s',
           transform: expanded ? 'rotate(180deg)' : 'none',
         }}>▼</span>
@@ -501,7 +530,7 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect, isFirst, isLast, o
                       width: '100%',
                       background: 'var(--text-primary)',
                       color: 'var(--bg-primary)',
-                      border: 'none',
+                      border: '1.5px solid transparent',
                       borderRadius: '8px',
                       padding: '12px 24px',
                       fontSize: '13px',
@@ -509,6 +538,19 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect, isFirst, isLast, o
                       cursor: 'pointer',
                       letterSpacing: '0.02em',
                       textAlign: 'center',
+                      transition: 'background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.15s ease',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.backgroundColor = 'rgba(99,179,237,0.12)';
+                      e.currentTarget.style.borderColor = 'rgba(99,179,237,0.65)';
+                      e.currentTarget.style.color = 'var(--text-primary)';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.backgroundColor = '';
+                      e.currentTarget.style.borderColor = '';
+                      e.currentTarget.style.color = '';
+                      e.currentTarget.style.transform = '';
                     }}
                   >
                     📊 {ticker} の決算を分析する →
@@ -526,6 +568,7 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect, isFirst, isLast, o
 export default memo(function ChartTab({ watchlist = [], onSelect, onMove }) {
   const rowRefs = useRef({});
   const prevPositions = useRef({});
+  const [globalPeriodsExpanded, setGlobalPeriodsExpanded] = useState(false);
 
   // 最新の props を ref に保持（handleMove を stable にするため）
   const onMoveRef = useRef(onMove);
@@ -550,6 +593,7 @@ export default memo(function ChartTab({ watchlist = [], onSelect, onMove }) {
     onMoveRef.current(ticker, direction);
   }, []);
 
+
   // FLIP - Step 3〜5: Last → Invert → Play（DOM 更新後、ペイント前に実行）
   useLayoutEffect(() => {
     const prev = prevPositions.current;
@@ -570,6 +614,12 @@ export default memo(function ChartTab({ watchlist = [], onSelect, onMove }) {
       requestAnimationFrame(() => {
         el.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
         el.style.transform = 'translateY(0)';
+        const cleanup = () => {
+          el.style.transform = '';
+          el.style.transition = '';
+          el.removeEventListener('transitionend', cleanup);
+        };
+        el.addEventListener('transitionend', cleanup);
       });
     });
 
@@ -588,6 +638,32 @@ export default memo(function ChartTab({ watchlist = [], onSelect, onMove }) {
 
   return (
     <div className="space-y-2 pb-8">
+      {/* 全銘柄一括期間切替 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingBottom: 4 }}>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>全銘柄:</span>
+        {[
+          { label: '日・週・月', expanded: false },
+          { label: '+半年・年', expanded: true },
+        ].map(({ label, expanded }) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => setGlobalPeriodsExpanded(expanded)}
+            style={{
+              fontSize: 11, padding: '3px 8px', borderRadius: 4,
+              border: '1px solid var(--border)',
+              cursor: 'pointer',
+              background: globalPeriodsExpanded === expanded ? 'var(--text-primary)' : 'var(--bg-card)',
+              color:      globalPeriodsExpanded === expanded ? 'var(--bg-primary)'  : 'var(--text-secondary)',
+              fontWeight: globalPeriodsExpanded === expanded ? 600 : 400,
+              transition: 'background 0.15s, color 0.15s',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {watchlist.map((ticker, idx) => (
         <TickerRow
           key={ticker}
@@ -597,6 +673,7 @@ export default memo(function ChartTab({ watchlist = [], onSelect, onMove }) {
           isLast={idx === watchlist.length - 1}
           onMove={handleMove}
           registerRef={registerRef}
+          globalPeriodsExpanded={globalPeriodsExpanded}
         />
       ))}
     </div>

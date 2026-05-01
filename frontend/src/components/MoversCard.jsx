@@ -5,75 +5,60 @@ import ReactMarkdown from 'react-markdown';
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
 function Card({ m, onSelect, onArticleClick, index = 0 }) {
+  const isMobile = !window.matchMedia('(hover: hover)').matches;
   const isUp = m.direction === "up";
-  const canHover = window.matchMedia('(hover: hover)').matches;
-  const isMobile = !canHover;
 
   return (
     <div
-      className="mover-card mover-row"
-      onMouseEnter={(e) => {
-        if (canHover) {
-          e.currentTarget.style.backgroundColor = 'var(--bg-subtle)';
-          const arrow = e.currentTarget.querySelector('.mover-arrow');
-          if (arrow) arrow.style.opacity = '1';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (canHover) {
-          e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
-          const arrow = e.currentTarget.querySelector('.mover-arrow');
-          if (arrow) arrow.style.opacity = '0';
-        }
-      }}
+      className="scroll-reveal mover-row"
       style={{
         background: "var(--bg-secondary)",
         borderLeft: `3px solid ${isUp ? "#3b82f6" : "#ef4444"}`,
         borderRadius: "0 8px 8px 0",
-        padding: "10px 12px",
         marginBottom: "8px",
-        transition: "background-color 0.15s",
-        cursor: "pointer",
+        overflow: "hidden",
+        transition: "opacity 0.35s ease, transform 0.35s ease",
+        transitionDelay: `${index * 0.07}s`,
       }}
     >
-      {/* 1行目: ティッカーピル・株価・騰落率 */}
-      <div style={{
-        display: "flex", justifyContent: "space-between",
-        alignItems: "center", marginBottom: "6px",
-      }}>
+      {/* 上段: ティッカー・株価・騰落率 → タップ/クリックで銘柄分析 */}
+      <div
+        onClick={() => onSelect && onSelect(m.ticker)}
+        onMouseEnter={(e) => {
+          if (!isMobile) {
+            e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.10)';
+            const hint = e.currentTarget.querySelector('.mover-analyze-hint');
+            if (hint) hint.style.opacity = '0.6';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!isMobile) {
+            e.currentTarget.style.backgroundColor = '';
+            const hint = e.currentTarget.querySelector('.mover-analyze-hint');
+            if (hint) hint.style.opacity = '0';
+          }
+        }}
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "10px 12px 6px",
+          cursor: "pointer",
+          transition: "background-color 0.15s",
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span
             className="mover-ticker-pill"
-            onClick={(e) => { e.stopPropagation(); onSelect && onSelect(m.ticker); }}
-            onMouseEnter={(e) => {
-              if (window.matchMedia('(hover: hover)').matches) {
-                e.currentTarget.style.background = '#2563eb';
-                e.currentTarget.style.color = '#ffffff';
-                e.currentTarget.style.transform = 'scale(1.08)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (window.matchMedia('(hover: hover)').matches) {
-                e.currentTarget.style.background = '#dbeafe';
-                e.currentTarget.style.color = '#2563eb';
-                e.currentTarget.style.transform = 'scale(1)';
-              }
-            }}
-            title="クリックで銘柄分析"
             style={{
               fontSize: 12, fontWeight: 700,
               color: "#2563eb",
               background: "#dbeafe",
               padding: "2px 8px", borderRadius: 4,
-              cursor: "pointer",
-              transition: "background 0.15s, color 0.15s, transform 0.15s",
               display: "inline-block",
             }}
           >
             {m.ticker}
-            {isMobile && (
-              <span style={{ fontSize: 9, marginLeft: 3, opacity: 0.7 }}>🔍</span>
-            )}
           </span>
           {m.price != null && (
             <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
@@ -81,43 +66,81 @@ function Card({ m, onSelect, onArticleClick, index = 0 }) {
             </span>
           )}
         </div>
-        <span style={{ fontWeight: 700, fontSize: "13px",
-                       color: isUp ? "#3b82f6" : "#ef4444" }}>
-          {m.pct > 0 ? "+" : ""}{m.pct}%
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span
+            className="mover-analyze-hint"
+            style={{
+              fontSize: 10,
+              color: "var(--text-muted)",
+              opacity: 0,
+              transition: "opacity 0.15s",
+            }}
+          >
+            分析する
+          </span>
+          <span style={{ fontWeight: 700, fontSize: "13px", color: isUp ? "#3b82f6" : "#ef4444" }}>
+            {m.pct > 0 ? "+" : ""}{m.pct}%
+          </span>
+        </div>
       </div>
 
-      {/* 2行目: keyword → 記事リンク */}
+      {/* 下段: キーワード → タップ/クリックで記事モーダル */}
       {m.keyword && (
-        m.source_url
-          ? <span
-              className="mover-keyword"
-              onClick={(e) => {
-                e.stopPropagation();
-                onArticleClick?.({ url: m.source_url, title: m.keyword });
-              }}
+        <div
+          onClick={() => m.source_url && onArticleClick?.({ url: m.source_url, title: m.keyword })}
+          onMouseEnter={(e) => {
+            if (!isMobile) {
+              e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.06)';
+              const arrow = e.currentTarget.querySelector('.mover-arrow');
+              if (arrow) arrow.style.opacity = '1';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isMobile) {
+              e.currentTarget.style.backgroundColor = '';
+              const arrow = e.currentTarget.querySelector('.mover-arrow');
+              if (arrow) arrow.style.opacity = '0';
+            }
+          }}
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "6px 12px 10px",
+            cursor: m.source_url ? "pointer" : "default",
+            borderTop: "1px solid rgba(128,128,128,0.12)",
+            transition: "background-color 0.15s",
+          }}
+        >
+          <span
+            className="mover-keyword"
+            style={{
+              fontSize: 13, fontWeight: 500,
+              color: "var(--text-primary)",
+              flex: 1,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {m.keyword}
+          </span>
+          {m.source_url && (
+            <span
+              className="mover-arrow"
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                fontSize: 14, fontWeight: 500,
-                color: "var(--text-primary)",
-                borderBottom: "1.5px solid #378ADD",
-                paddingBottom: "1px",
-                cursor: "pointer",
+                fontSize: 12,
+                color: '#378ADD',
+                opacity: 0,
+                transition: 'opacity 0.15s',
+                marginLeft: 4,
+                flexShrink: 0,
               }}
             >
-              <span>{m.keyword}</span>
-              <span
-                className="mover-arrow"
-                style={{ fontSize: 12, color: '#378ADD', opacity: 0, transition: 'opacity 0.15s', marginLeft: 4, flexShrink: 0 }}
-              >
-                →
-              </span>
+              →
             </span>
-          : <span className="mover-keyword" style={{ display: "block", fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>
-              {m.keyword}
-            </span>
+          )}
+        </div>
       )}
     </div>
   );

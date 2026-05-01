@@ -30,7 +30,7 @@ function SummaryLine({ line }) {
     return (
       <div className="flex items-start gap-2 rounded-r-lg p-2 mb-2" style={NEU_WRAPPER}>
         <span className="mt-0.5 shrink-0 font-bold" style={{ color: '#94a3b8' }}>–</span>
-        <span className="text-sm" style={NEU_TEXT}>{renderBold(content)}</span>
+        <span className="text-sm" style={{ ...NEU_TEXT, flex: 1, lineHeight: '1.5' }}>{renderBold(content)}</span>
       </div>
     );
   }
@@ -40,13 +40,17 @@ function SummaryLine({ line }) {
       return (
         <div className={cfg.wrapper}>
           {cfg.icon}
-          <span className={cfg.textClass}>{renderBold(content)}</span>
+          <span className={cfg.textClass} style={{ flex: 1, lineHeight: '1.5' }}>{renderBold(content)}</span>
         </div>
       );
     }
   }
   if (!line.trim()) return null;
-  return <p className="mb-2 text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{renderBold(line)}</p>;
+  return (
+    <p className="mb-2 text-sm" style={{ color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+      {renderBold(line)}
+    </p>
+  );
 }
 
 
@@ -134,7 +138,7 @@ export default function SummaryBrief({ analysis, guidance }) {
   const lines = text.split('\n');
 
   return (
-    <section className="rounded-xl p-5" style={{ background: 'var(--bg-subtle)' }}>
+    <section className="panel-card rounded-xl p-5" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
       <div className="mb-3 flex items-center gap-2">
         <span
           title="Powered by Claude Haiku 4.5"
@@ -152,22 +156,33 @@ export default function SummaryBrief({ analysis, guidance }) {
         {streaming && <span className="text-xs text-slate-400">生成中...</span>}
       </div>
       {showInfoModal && <SummaryInfoModal onClose={() => setShowInfoModal(false)} />}
-      {error && (
-        <p className="text-sm text-red-500">要約を生成できませんでした: {error}</p>
-      )}
-      {!error && (text || streaming) && (
-        <div>
-          {lines.map((line, i) => {
-            if (!line.trim()) return null;
-            return (
-              <div key={i} className="summary-line-enter">
-                <SummaryLine line={line} />
-              </div>
-            );
-          })}
-          {streaming && <span className="text-slate-400">▌</span>}
-        </div>
-      )}
+
+      {/* コンテンツ領域：高さを固定してレイアウトシフトを防ぐ */}
+      <div style={{ minHeight: '180px' }}>
+        {error && (
+          <p className="text-sm text-red-500">要約を生成できませんでした: {error}</p>
+        )}
+        {!error && !text && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minHeight: '180px', justifyContent: 'center' }}>
+            {[70, 90, 55, 80].map((w, i) => (
+              <span key={i} className="skel skel-line" style={{ width: `${w}%` }} />
+            ))}
+          </div>
+        )}
+        {!error && (text || streaming) && (
+          <div>
+            {lines.map((line, i) => {
+              if (!line.trim()) return null;
+              return (
+                <div key={i} className="summary-line-enter">
+                  <SummaryLine line={line} />
+                </div>
+              );
+            })}
+            {streaming && <span className="text-slate-400">▌</span>}
+          </div>
+        )}
+      </div>
     </section>
   );
 }

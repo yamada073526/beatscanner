@@ -1,72 +1,84 @@
-SYSTEM_PROMPT = """You are a financial data analyzer. Return ONLY a valid JSON object with NO markdown, no explanation.
+SYSTEM_PROMPT_TEMPLATE = """Return ONLY a valid JSON. No markdown, no explanation.
 
-Output this exact structure:
+Output ONLY these fields (DO NOT output trends/valuation/operatingMargins/fcfTrend/capexTrend):
+
 {
   "ticker": "...",
-  "companyName": "...",
-  "period": "...",
-  "overallPass": true/false,
-  "passCount": 0,
+  "companyName": "Official English name",
+  "period": "FY2025",
+  "overallPass": true,
+  "passCount": 5,
   "totalCount": 5,
-  "summary": "one sentence reason for pass/fail",
+  "headline": "15字以内の日本語キャッチコピー",
+  "summary": "判定理由1文（日本語）",
   "conditions": [
-    {"name": "...", "pass": true/false, "value": "...", "detail": "..."},
-    ...
+    {"name": "条件名", "pass": true, "value": "値", "detail": "詳細"}
   ],
-  "trends": [
-    {"metric": "売上高", "unit": "B$", "data": [{"period": "FY2023", "value": 383.3, "estimate": null, "beat": null}, ...]},
-    {"metric": "EPS",   "unit": "$",  "data": [{"period": "FY2023", "value": 6.13, "estimate": null, "beat": null}, ...]},
-    {"metric": "CFPS",  "unit": "$",  "data": [...]},
-    {"metric": "営業CF", "unit": "B$", "data": [...]}
-  ]
-  ※ data配列の各要素は必ず "estimate" と "beat" フィールドを含めること。
-  ※ 最新期のみ estimate（アナリスト予想値、数値またはnull）と beat（true/false/null）を設定。過去期はどちらもnull。
+  "businessFlowSteps": [
+    {"label": "6字以内", "detail": "8字以内・純日本語のみ"}
+  ],
+  "strengths": ["強み1（25字・具体的）", "強み2", "強み3"],
+  "risks": ["リスク名:EPS-$X.XX / 売上-$XB の定量インパクト", "リスク2", "リスク3"],
+  "bullCase": ["ブル根拠1（20字）", "ブル根拠2", "ブル根拠3"],
+  "bearCase": ["ベア根拠1（20字）", "ベア根拠2", "ベア根拠3"],
+  "investorQuestion": "なぜ今この銘柄を保有（または回避）すべきか2〜3文",
+  "consensusSource": "FactSet via FMP analyst-estimates",
+  "dividend": {"yield": 0.8, "payoutRatio": 28.0, "buyback": true}
 }
 
-REQUIRED: trends array must always contain exactly these 4 metrics in this order:
-1. 売上高 (unit: B$)
-2. EPS (unit: $)
-3. CFPS (unit: $)
-4. 営業CF (unit: B$)
-Never omit any of these 4 metrics even if data is unavailable (use empty array for data in that case).
+RULES:
+- businessFlowSteps: 3〜5ステップ。detail は純日本語8字以内（英数字・製品名・略語禁止）
+- strengths/risks/bullCase/bearCase: 各3件固定
+- risks: 定量インパクト必須（例:Azure成長5pp下振れ→EPS-$0.40、売上-$2B）
+- 全フィールド日本語（ticker/companyName/consensusSource除く）
+- dividend.yield が不明なら null
+- DO NOT output: trends, valuation, operatingMargins, fcfTrend, capexTrend, segmentSummary"""
 
-LANGUAGE RULE: All string values except "ticker" and "companyName" must be written in Japanese only.
-"companyName" must use the official English company name as-is (e.g. "Apple Inc.", "Microsoft Corporation").
-No Japanese translation of company names. All other fields including "summary", "conditions[].name", "conditions[].detail" must be in Japanese."""  # ← ここに追記
+
+# SYSTEM_PROMPT_TEMPLATE 内の {years} プレースホルダーを実際の値で置換
+def get_system_prompt(years: int = 3) -> str:
+    return SYSTEM_PROMPT_TEMPLATE.replace("{years}", str(years))
+
+
+# 後方互換性のため SYSTEM_PROMPT はデフォルト3年で維持
+SYSTEM_PROMPT = get_system_prompt(3)
 
 
 def build_user_prompt(data: dict) -> str:
+    years = data.get("years", 3)
     beat_miss_detail = data.get('beat_miss_detail') or ''
-    guidance_section = (
-        f"\n=== ガイダンス達成状況 ===\n{beat_miss_detail}"
-        if beat_miss_detail.strip() and beat_miss_detail.strip() != 'データなし'
-        else ''
-    )
+
+    # conditions_detail を圧縮（JSON全体 → 1行サマリー）
+    conditions_raw = data.get("conditions_detail", "")
+    try:
+        import json as _json_cond
+        conds = _json_cond.loads(conditions_raw) if conditions_raw else []
+        conditions_compact = " | ".join(
+            f"{'✓' if c.get('passed') else '✗'} {c.get('name','')}: {c.get('value','')}"
+            for c in (conds if isinstance(conds, list) else [])
+        )
+    except Exception:
+        conditions_compact = conditions_raw[:200]
+
+    # guidance も圧縮
+    guidance_raw = data.get("guidance", "データなし") or "データなし"
+    guidance_compact = guidance_raw[:300] + "..." if len(guidance_raw) > 300 else guidance_raw
     return f"""
-以下の決算分析データをもとに、JSON objectを生成してください。
+以下の決算分析データをもとに、上記スキーマに従い narrative フィールドのみを JSON 出力してください。
 
-## 企業情報
-- 企業名: {data.get('company_name', '')}
-- ティッカー: {data.get('ticker', '')}
-- 会計期間: {data.get('fiscal_period', '')}
-- 判定: {data.get('verdict', '')}（PASSまたはFAIL）
-- クリア条件数: {data.get('passed_conditions', 0)} / 5
+## 企業
+{data.get('ticker','')} / {data.get('company_name','')} / {data.get('fiscal_period','')}
+判定: {data.get('verdict','')} / クリア: {data.get('passed_conditions',0)}/5
 
-## 5条件の詳細
-{data.get('conditions_detail', 'データなし')}
+## 5条件
+{conditions_compact}
 
-## 主要指標（3期分、FY年度ラベル付きで表示すること）
+## 主要指標【参考・{years}期分】
 {data.get('metrics_trend', 'データなし')}
 
-## EPS・売上 Beat/Miss情報（直近期）
+## EPS・売上 Beat/Miss【直近四半期】
 {beat_miss_detail or 'データなし'}
 
 ## ガイダンス
-{data.get('guidance', 'データなし')}
-
-## カンファレンスコール要点
-{data.get('conference_call_points', 'データなし')}
-
-## AI要約（参考）
-{data.get('ai_summary', '')}
-{guidance_section}"""
+{guidance_compact}
+"""

@@ -321,7 +321,7 @@ export default function ConditionCard({ index, condition, isPro = true, onUpgrad
   return (
     <>
       <div
-        className={`flex flex-col gap-3 rounded-2xl border-2 bg-white p-5 shadow-sm transition ${
+        className={`panel-card flex flex-col gap-3 rounded-2xl border-2 bg-white p-5 shadow-sm transition ${
           passed ? 'border-pass/40' : 'border-fail/40'
         }`}
       >

@@ -28,6 +28,11 @@
   /* Calendar watchlist highlight */
   --color-background-warning: #fefce8;
   --color-border-warning:     #fcd34d;
+  /* Hero gradient backdrop (light) */
+  --hero-bg-start: rgba(56,189,248,0.10);
+  /* ページ背景色（hex + RGB の両形式）— sticky bar / page bg 共通参照 */
+  --page-bg:     #f8fafc;
+  --page-bg-rgb: 248, 250, 252;
 }
 
 [data-theme="dark"] {
@@ -50,13 +55,115 @@
   /* Calendar watchlist highlight */
   --color-background-warning: rgba(120, 80, 0, 0.18);
   --color-border-warning:     #78350f;
+  /* Hero gradient backdrop (dark) */
+  --hero-bg-start: rgba(56,189,248,0.06);
+  /* ダークページ背景（hex + RGB）— ページ実背景 #0f172a (slate-900) と完全一致 */
+  --page-bg:     #0f172a;
+  --page-bg-rgb: 15, 23, 42;
+}
+
+/* ── Sticky search band (gradient fade — backdrop-filter 廃止)
+   - blur は HTML 要素境界で必ず切断されるため、その問題を回避するため
+     ページ背景色のグラデーションで「塗りつぶしながらフェードアウト」
+   - 帯自体は pointer-events: none、子要素のみ pointer-events: auto を回復
+     することで、フェード領域でのクリックを下のコンテンツに通す
+   - 動的な linear-gradient(top→bottom: bgColor → bgColor 55% → transparent)
+     を inline style で適用（useScrollBlur フック） */
+/* ── Sticky search band (Apple 方式 — 72%透過 + saturate 180% blur 20px)
+   - 半透明背景でスクロール時に下のコンテンツが透けて見える本物のガラス
+   - ライトは border 不要（半透明背景で自然に区切れる）、ダークは極薄 1px */
+.sticky-search-band {
+  background: rgba(var(--page-bg-rgb), 0.72);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: none;
+}
+[data-theme="dark"] .sticky-search-band {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* placeholder スタイル（hero と同じ細字感） */
+.sticky-search-band input::placeholder {
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  opacity: 0.5;
+}
+
+/* ── フローティングボトムナビ（テーマ別ガラス背景）
+   表示/非表示アニメは inline transition (App.jsx) で制御するため、
+   ここでは CSS animation を使わない（衝突防止）。 */
+.bottom-nav-floating {
+  /* ライト = デフォルト — 検索バーと同じ透過感 */
+  background: rgba(240, 245, 255, 0.62);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  backdrop-filter: saturate(160%) blur(20px);
+  -webkit-backdrop-filter: saturate(160%) blur(20px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10);
+}
+[data-theme="dark"] .bottom-nav-floating {
+  background: rgba(11, 17, 32, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+/* 非アクティブ文字色のテーマ別変数 */
+.bottom-nav-floating { --bottom-nav-inactive: rgba(0, 0, 0, 0.55); }
+[data-theme="dark"] .bottom-nav-floating { --bottom-nav-inactive: rgba(255, 255, 255, 0.60); }
+
+/* ── 検索 input の質感（Apple 風） ── */
+.sticky-search-band input {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 1.00);
+}
+[data-theme="dark"] .sticky-search-band input {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 14px;
+  /* 上端 inset をシアン 12% で微光 — Apple の input 風アクセント
+     （0.18 を超えると発光に見えるので上限注意） */
+  box-shadow:
+    inset 0 1px 0 rgba(56, 189, 248, 0.12),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.10);
+}
+
+/* ── Hero (light = default) ──────────────────────────────────── */
+.hero-title {
+  background: linear-gradient(135deg, #0f172a 0%, #0369a1 60%, #4f46e5 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hero-badge {
+  background: rgba(56,189,248,0.15);
+  border: 1px solid rgba(56,189,248,0.5);
+  color: #0369a1;
+}
+
+/* ── Hero (dark) ─────────────────────────────────────────────── */
+[data-theme="dark"] .hero-title {
+  background: linear-gradient(135deg, #f1f5f9 0%, #38BDF8 60%, #818cf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+[data-theme="dark"] .hero-badge {
+  background: rgba(56,189,248,0.12);
+  border: 1px solid rgba(56,189,248,0.3);
+  color: #38BDF8;
 }
 
 html, body, #root {
   height: 100%;
 }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Hiragino Sans', 'Yu Gothic', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', 'Yu Gothic', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background: var(--bg-primary);
   color: var(--text-primary);
   transition: background-color 0.2s ease, color 0.2s ease;
@@ -240,6 +347,10 @@ body {
     opacity: 0.45 !important;
   }
 
+  /* ── Movers: ゾーン別タップフィードバック ── */
+  .mover-row > div:first-child:active { background-color: rgba(56,189,248,0.10) !important; }
+  .mover-row > div:last-child:active  { background-color: rgba(255,255,255,0.04) !important; }
+
   /* ── IRリンク行タップフィードバック ── */
   .ir-link-item:active {
     background-color: var(--bg-subtle) !important;
@@ -251,4 +362,12 @@ body {
     opacity: 1 !important;
     transform: none !important;
   }
+}
+
+/* ─── スマホ専用スクロールヒント ─── */
+.scroll-hint-mobile {
+  display: flex;
+}
+@media (hover: hover) {
+  .scroll-hint-mobile { display: none !important; }
 }

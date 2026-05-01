@@ -94,7 +94,7 @@ export default function CustomScreenerPanel({ onSelect }) {
       <div className="mb-4">
         <h3 className="text-base font-semibold text-slate-900">カスタムスクリーナー</h3>
         <p className="mt-0.5 text-xs text-slate-400">
-          じっちゃまプロトコル5条件 × S&amp;P500主要銘柄を自動判定
+          ファンダメンタル5条件 × S&amp;P500主要銘柄を自動判定
         </p>
       </div>
 

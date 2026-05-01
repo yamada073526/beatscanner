@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { analyze, fetchGuidance, fetchGuidanceBasic, prefetchAll } from './api.js';
+import { supabase, isSupabaseConfigured } from './lib/supabase.js';
+import { useAuth } from './hooks/useAuth.js';
+import { useIsMobile } from './hooks/useIsMobile.js';
 import { initDarkMode, toggleDarkMode, isDark } from './utils/darkMode.js';
 import { hasFmpKey } from './lib/fmpKey.js';
 import { isPro } from './lib/planGating.js';
@@ -46,9 +50,20 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [watchlist, setWatchlist] = useState(loadWatchlist);
-  const [showCalendar, setShowCalendar] = useState(false);
+  // showCalendar は localStorage に永続化（ユーザー嗜好を記憶）
+  const [showCalendar, setShowCalendar] = useState(() => {
+    try { return localStorage.getItem('bs_showCalendar') === 'true'; }
+    catch { return false; }
+  });
+  // 外部から呼ぶ際に setState + localStorage を一括更新するヘルパー
+  const setShowCalendarPersist = (next) => {
+    setShowCalendar(next);
+    try { localStorage.setItem('bs_showCalendar', String(next)); }
+    catch { /* private mode 等はスキップ */ }
+  };
   const [showScreener, setShowScreener] = useState(false);
   const [activeTab, setActiveTab] = useState('home');
+  const [hoveredTab, setHoveredTab] = useState(null);
   const [reportStreaming, setReportStreaming] = useState(false);
   const [footerOpen, setFooterOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -132,6 +147,40 @@ export default function App() {
   const searchIdRef = useRef(0);
   const prefetchedRef = useRef(new Set());
 
+  // ── Supabase Auth ─────────────────────────────────────────────
+  const { user, ready: authReady, signInWithGoogle, signOut } = useAuth();
+  const syncedRef = useRef(false);
+
+  // ── Header drawer (右からスライドイン) ─────────────────────────
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // モバイル判定（フローティングナビ + 検索 placeholder で共有）
+  const isMobile = useIsMobile();
+
+  // ── フローティングボトムナビ — 上スクロール時のみ表示（YouTube/Instagram方式）──
+  // - scrollY < 100 → 常に非表示（ページトップ近辺）
+  // - 上スクロール中 → 表示
+  // - 下スクロール中 → 非表示
+  const [showBottomNav, setShowBottomNav] = useState(false);
+  const lastScrollYRef = useRef(0);
+  useEffect(() => {
+    const onScroll = () => {
+      const current = window.scrollY;
+      const goingUp = current < lastScrollYRef.current;
+      if (current < 100) {
+        setShowBottomNav(false);
+      } else if (goingUp) {
+        setShowBottomNav(true);
+      } else {
+        setShowBottomNav(false);
+      }
+      lastScrollYRef.current = current;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+
   const prefetch = (ticker) => {
     if (!ticker || ticker.length < 2) return;
     const t = ticker.toUpperCase();
@@ -140,9 +189,57 @@ export default function App() {
     prefetchAll(t);
   };
 
+  // 未ログイン時のみ localStorage に永続化（ログイン時は Supabase が source of truth）
   useEffect(() => {
+    if (user) return;
     localStorage.setItem(WATCHLIST_KEY, JSON.stringify(watchlist));
-  }, [watchlist]);
+  }, [watchlist, user]);
+
+  // ログイン時：localStorage の内容を Supabase にマージし、DB から再読み込み
+  useEffect(() => {
+    if (!authReady || !supabase) return;
+
+    if (!user) {
+      syncedRef.current = false;
+      return;
+    }
+    if (syncedRef.current) return;
+    syncedRef.current = true;
+
+    (async () => {
+      try {
+        const local = (() => {
+          try {
+            return JSON.parse(localStorage.getItem(WATCHLIST_KEY) || '[]');
+          } catch { return []; }
+        })();
+
+        if (Array.isArray(local) && local.length > 0) {
+          const rows = local
+            .filter(t => typeof t === 'string' && t.trim().length > 0)
+            .map(t => ({ user_id: user.id, ticker: t }));
+          if (rows.length > 0) {
+            await supabase
+              .from('watchlist')
+              .upsert(rows, { onConflict: 'user_id,ticker', ignoreDuplicates: true });
+          }
+        }
+
+        const { data, error: dbError } = await supabase
+          .from('watchlist')
+          .select('ticker, created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: true });
+
+        if (!dbError && Array.isArray(data)) {
+          setWatchlist(data.map(r => r.ticker));
+          localStorage.removeItem(WATCHLIST_KEY);
+        }
+      } catch (e) {
+        console.error('[watchlist sync] failed', e);
+      }
+    })();
+  }, [authReady, user]);
 
   function handleKeySaved() {
     setHasKey(hasFmpKey());
@@ -152,6 +249,20 @@ export default function App() {
     const id = Date.now();
     setToast({ message, id });
     setTimeout(() => setToast((t) => (t?.id === id ? null : t)), 2000);
+  }
+
+  function showSyncToast() {
+    const id = Date.now();
+    setToast({
+      id,
+      message: '💡 Googleでログインするとデバイス間で同期できます',
+      onClick: () => {
+        setToast(null);
+        signInWithGoogle();
+      },
+      durationMs: 3000,
+    });
+    setTimeout(() => setToast((t) => (t?.id === id ? null : t)), 3000);
   }
 
   function handleKeyDeleted() {
@@ -232,11 +343,30 @@ export default function App() {
   }
 
   function addToWatchlist(t) {
-    if (!watchlist.includes(t)) setWatchlist([...watchlist, t]);
+    if (watchlist.includes(t)) return;
+    setWatchlist([...watchlist, t]);
+    if (user && supabase) {
+      supabase
+        .from('watchlist')
+        .upsert({ user_id: user.id, ticker: t }, { onConflict: 'user_id,ticker', ignoreDuplicates: true })
+        .then(({ error }) => { if (error) console.error('[watchlist add]', error); });
+    } else if (isSupabaseConfigured) {
+      showSyncToast();
+    }
   }
 
   function removeFromWatchlist(t) {
     setWatchlist(watchlist.filter((x) => x !== t));
+    if (user && supabase) {
+      supabase
+        .from('watchlist')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('ticker', t)
+        .then(({ error }) => { if (error) console.error('[watchlist remove]', error); });
+    } else if (isSupabaseConfigured) {
+      showSyncToast();
+    }
   }
 
   function moveWatchlistItem(ticker, direction) {
@@ -256,214 +386,364 @@ export default function App() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 md:py-12">
 
-      {/* Header */}
-      <header className="mb-4 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
-            決算分析ダッシュボード
+      {/* Header — Apple 式 1段ヘッダー。
+          モバイル: 2 カラム (auto 1fr) でロゴ左 + ハンバーガー右。中央タブは hidden
+          md+    : 3 カラム (1fr auto 1fr) で中央タブが厳密に水平センター */}
+      <header
+        className="mb-4 grid items-center grid-cols-[auto_1fr] md:grid-cols-[1fr_auto_1fr] gap-2"
+      >
+        <div className="flex items-center gap-2.5" style={{ justifyContent: 'flex-start', minWidth: 0 }}>
+          <svg
+            width="24" height="24" viewBox="0 0 64 64"
+            style={{ flexShrink: 0 }}
+            aria-hidden="true"
+          >
+            <defs>
+              <linearGradient id="headerLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#0284c7"/>
+                <stop offset="100%" stopColor="#4f46e5"/>
+              </linearGradient>
+            </defs>
+            {/* 背景: 常にシアン→インディゴグラデ（ライト/ダーク両対応）*/}
+            <rect width="64" height="64" rx="14" fill="url(#headerLogoGrad)"/>
+            <rect x="2" y="2" width="60" height="30" rx="13" fill="rgba(255,255,255,0.08)"/>
+            <rect x="9"  y="42" width="10" height="13" rx="2.5" fill="rgba(255,255,255,0.5)"/>
+            <rect x="23" y="33" width="10" height="22" rx="2.5" fill="rgba(255,255,255,0.8)"/>
+            <rect x="37" y="22" width="10" height="33" rx="2.5" fill="white"/>
+            <rect x="51" y="30" width="6"  height="25" rx="2"   fill="rgba(255,255,255,0.55)"/>
+            <polyline
+              points="2,38 9,38 13,26 17,46 21,32 25,38 39,38 43,30 47,38 62,38"
+              stroke="white" strokeWidth="2.2" fill="none"
+              strokeLinecap="round" strokeLinejoin="round" opacity="0.95"
+            />
+            <circle cx="54" cy="18" r="3" fill="white" opacity="0.9"/>
+            <circle cx="54" cy="18" r="1.2" fill="white"/>
+          </svg>
+          <h1 className="text-base font-light tracking-tight md:text-lg"
+              style={{ color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
+            beatscanner
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            独自プロトコル（5条件）で米国株決算を自動判定
-          </p>
         </div>
-        <button
-          id="dark-toggle-btn"
-          type="button"
-          onClick={toggleDarkMode}
-          className="mt-1 shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium transition-colors hover:bg-slate-50"
-          style={{ fontSize: '18px', lineHeight: 1, background: 'var(--bg-card)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+
+        {/* 中央タブ — md+ のみ。モバイルは drawer 内の Tabs 使用。
+            grid 中央セルに配置されるため自動的に水平中央に揃う */}
+        <nav
+          aria-label="メインナビ"
+          className="hidden items-center md:flex"
+          style={{ gap: '4px', justifyContent: 'center' }}
         >
-          {isDark() ? '☀️' : '🌙'}
-        </button>
+          {[
+            { key: 'home',     label: 'ホーム' },
+            { key: 'judgment', label: '判定' },
+            { key: 'report',   label: '決算' },
+            { key: 'チャート', label: 'チャート' },
+          ].map(t => {
+            const active = activeTab === t.key;
+            const onClick = () => {
+              if (t.key === 'report' && !isPro()) {
+                upgrade.open('AI詳細レポート');
+              } else {
+                setActiveTab(t.key);
+              }
+            };
+            return (
+              <button
+                key={t.key}
+                onClick={onClick}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: active ? 500 : 400,
+                  background: active ? 'rgba(127,127,127,0.10)' : 'transparent',
+                  color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'background 0.12s, color 0.12s',
+                }}
+                onMouseEnter={e => {
+                  if (!active) e.currentTarget.style.background = 'rgba(127,127,127,0.06)';
+                }}
+                onMouseLeave={e => {
+                  if (!active) e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </nav>
+        {/* 右: ハンバーガーのみ — grid 右カラムで右寄せ、flexShrink:0 で縮小防止 */}
+        <div className="flex items-center" style={{ gap: '4px', justifyContent: 'flex-end', flexShrink: 0 }}>
+          <button
+            id="dark-toggle-btn"
+            type="button"
+            onClick={() => setDrawerOpen(true)}
+            aria-label="メニューを開く"
+            style={{
+              width: 36, height: 36, borderRadius: 8,
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--text-secondary)',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(127,127,127,0.10)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <line x1="3" y1="6" x2="21" y2="6"/>
+              <line x1="3" y1="12" x2="21" y2="12"/>
+              <line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+          </button>
+        </div>
       </header>
 
       {/* Onboarding banner */}
       <ApiKeyBanner onOpenSettings={() => setShowSettings(true)} hasKey={hasKey} />
 
-      {/* Secondary toolbar */}
-      <div className="mb-6 flex flex-wrap items-center gap-2">
-        <button
-          onClick={() => {
-            const next = !showScreener;
-            setShowScreener(next);
-            setShowCalendar(false);
-            setShowCustomScreener(false);
-            if (next) {
-              setTimeout(() => {
-                const el = screenerRef.current;
-                if (el) {
-                  const top = el.getBoundingClientRect().top + window.scrollY - 80;
-                  window.scrollTo({ top, behavior: 'smooth' });
-                }
-              }, 100);
-            }
-          }}
-          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium ${
-            showScreener
-              ? 'border-slate-900 bg-slate-900 text-white'
-              : 'border-slate-300 text-slate-600'
-          }`}
-          style={{
-            backgroundColor: showScreener ? undefined : 'var(--bg-card)',
-            transition: 'background-color 0.15s, border-color 0.15s',
-            cursor: 'pointer',
-          }}
-          onMouseEnter={e => {
-            if (!showScreener) {
-              e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.25)';
-              e.currentTarget.style.borderColor = 'rgba(56,189,248,0.80)';
-            }
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.backgroundColor = showScreener ? '' : 'var(--bg-card)';
-            e.currentTarget.style.borderColor = '';
-          }}
-        >
-          🔍 注目銘柄
-        </button>
-        <button
-          onClick={() => {
-            const next = !showCustomScreener;
-            setShowCustomScreener(next);
-            setShowScreener(false);
-            setShowCalendar(false);
-            if (next) {
-              setTimeout(() => {
-                const el = customScreenerRef.current;
-                if (el) {
-                  const top = el.getBoundingClientRect().top + window.scrollY - 80;
-                  window.scrollTo({ top, behavior: 'smooth' });
-                }
-              }, 100);
-            }
-          }}
-          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium ${
-            showCustomScreener
-              ? 'border-slate-900 bg-slate-900 text-white'
-              : 'border-slate-300 text-slate-600'
-          }`}
-          style={{
-            backgroundColor: showCustomScreener ? undefined : 'var(--bg-card)',
-            transition: 'background-color 0.15s, border-color 0.15s',
-            cursor: 'pointer',
-          }}
-          onMouseEnter={e => {
-            if (!showCustomScreener) {
-              e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.25)';
-              e.currentTarget.style.borderColor = 'rgba(56,189,248,0.80)';
-            }
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.backgroundColor = showCustomScreener ? '' : 'var(--bg-card)';
-            e.currentTarget.style.borderColor = '';
-          }}
-        >
-          📈 プロトコルスクリーナー
-        </button>
-        <button
-          onClick={() => {
-            const next = !showCalendar;
-            setShowCalendar(next);
-            setShowScreener(false);
-            setShowCustomScreener(false);
-            if (next) {
-              setTimeout(() => {
-                const el = calendarRef.current;
-                if (el) {
-                  const top = el.getBoundingClientRect().top + window.scrollY - 80;
-                  window.scrollTo({ top, behavior: 'smooth' });
-                }
-              }, 100);
-            }
-          }}
-          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium ${
-            showCalendar
-              ? 'border-slate-900 bg-slate-900 text-white'
-              : 'border-slate-300 text-slate-600'
-          }`}
-          style={{
-            backgroundColor: showCalendar ? undefined : 'var(--bg-card)',
-            transition: 'background-color 0.15s, border-color 0.15s',
-            cursor: 'pointer',
-          }}
-          onMouseEnter={e => {
-            if (!showCalendar) {
-              e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.25)';
-              e.currentTarget.style.borderColor = 'rgba(56,189,248,0.80)';
-            }
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.backgroundColor = showCalendar ? '' : 'var(--bg-card)';
-            e.currentTarget.style.borderColor = '';
-          }}
-        >
-          📅 決算カレンダー
-        </button>
-        <button
-          onClick={() => setShowSettings(true)}
-          className={`ml-auto flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-            hasKey
-              ? 'border-green-300 bg-green-50 text-green-700'
-              : 'border-amber-300 bg-amber-50 text-amber-700'
-          }`}
-        >
-          {hasKey ? '✅ APIキー設定済み' : '⚙️ APIキーを設定'}
-        </button>
-      </div>
+      {/* Secondary toolbar — プロトコル / カレンダー / APIキー設定はハンバーガードロワーに集約済み。
+          注目銘柄は MoversCard（ホームの「急騰落」）に統合済みのため削除。 */}
 
       {/* Market Widget */}
       <MarketWidget />
 
-      {/* Search — ホームタブ時は非表示 */}
-      {activeTab !== 'home' && (
-        <form
-          onSubmit={(e) => { e.preventDefault(); runAnalyze(); }}
-          className="mb-4 flex flex-col gap-3 md:flex-row"
-        >
-          <TickerSearch
-            ref={searchInputRef}
-            value={ticker}
-            onChange={(val) => { setTicker(val); if (val.length >= 4) prefetch(val); }}
-            onSubmit={runAnalyze}
-            forceClose={forceCloseSuggestions}
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-lg px-6 py-3 text-base font-semibold disabled:opacity-50"
+      {/* Hero — !result 時のみ表示 */}
+      {!result && (
+        <div style={{
+          textAlign: 'center',
+          padding: '48px 24px 36px',
+          position: 'relative',
+          overflow: 'hidden',
+          marginBottom: '8px',
+        }}>
+          {/* 背景の装飾（放射状グロー） */}
+          <div
+            aria-hidden="true"
             style={{
-              backgroundColor: 'rgba(56,189,248,1)',
-              color: '#fff',
-              transition: 'background-color 0.15s, transform 0.1s',
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -60%)',
+              width: '600px',
+              height: '300px',
+              background: 'radial-gradient(ellipse, rgba(56,189,248,0.08) 0%, transparent 70%)',
+              pointerEvents: 'none',
+              zIndex: 0,
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.80)';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(56,189,248,1)';
-              e.currentTarget.style.transform = '';
+          />
+
+          {/* バッジ */}
+          <div
+            className="hero-badge"
+            style={{
+              position: 'relative', zIndex: 1,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              borderRadius: '999px',
+              padding: '5px 16px',
+              fontSize: '11px',
+              marginBottom: '24px',
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
             }}
           >
-            {loading ? '分析中...' : '分析する'}
-          </button>
-        </form>
+            <span style={{ fontSize: '8px' }}>●</span>
+            AI 決算分析
+            <span style={{ fontSize: '8px' }}>●</span>
+          </div>
+
+          {/* メインコピー：2行構成でリズムを作る */}
+          <h1
+            className="hero-title"
+            style={{
+              position: 'relative', zIndex: 1,
+              textAlign: 'center',
+              fontSize: 'clamp(32px, 6vw, 56px)',
+              fontWeight: 600,
+              lineHeight: 1.15,
+              margin: '0 0 16px',
+              letterSpacing: '-0.02em',
+            }}
+          >
+            {/* 4文字 vs 9文字 のアンバランスを「、瞬時に」「読み解く。」で
+                6文字 vs 5文字 に均す。textIndent は使わない（逆にずれる原因）*/}
+            <span style={{ display: 'block' }}>決算を、瞬時に</span>
+            <span style={{ display: 'block' }}>読み解く。</span>
+          </h1>
+
+          {/* サブコピー */}
+          <p style={{
+            position: 'relative', zIndex: 1,
+            fontSize: 'clamp(13px, 1.8vw, 16px)',
+            color: '#64748b',
+            margin: '0 auto 24px',
+            lineHeight: 1.7,
+            maxWidth: '400px',
+          }}>
+            売上・EPS・バリュエーションをAIが図解。
+            <br />
+            Beat/Miss・ブル/ベアを即判定。
+          </p>
+
+          {/* プルーフチップ */}
+          <div style={{
+            position: 'relative', zIndex: 1,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+          }}>
+            {['✓ 無料でお試し', '✓ 登録不要', '✓ 即時分析'].map(text => (
+              <span
+                key={text}
+                style={{
+                  fontSize: '11px',
+                  color: '#38BDF8',
+                  background: 'rgba(56,189,248,0.08)',
+                  border: '1px solid rgba(56,189,248,0.2)',
+                  borderRadius: '999px',
+                  padding: '3px 10px',
+                  fontWeight: 600,
+                }}
+              >
+                {text}
+              </span>
+            ))}
+          </div>
+        </div>
       )}
 
-      {/* Sample shortcuts — ホームタブ時は非表示 */}
-      {activeTab !== 'home' && (
-        <div className="mb-6 flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-slate-500">サンプル:</span>
-          {['AAPL', 'MSFT', 'GOOGL', 'NVDA', 'META'].map((t) => (
+      {/* Search — ホームタブでは常時表示、それ以外のタブは未検索時のみ。sticky で常時アクセス可能。
+          R5 最終 (Apple 方式): 72%透過 + saturate(180%) blur(20px)。
+          viewport 端まで拡張するため calc(-50vw + 50%) の負マージンで親の max-w-6xl を脱出 */}
+      {(activeTab === 'home' || !result) && (
+        <div
+          className="sticky-search-band"
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 50,
+            width: '100vw',
+            marginLeft: 'calc(-50vw + 50%)',
+            marginRight: 'calc(-50vw + 50%)',
+            padding: '12px 20px',
+            boxSizing: 'border-box',
+          }}
+        >
+          <form
+            onSubmit={(e) => { e.preventDefault(); runAnalyze(); }}
+            className="flex flex-row items-center gap-2"
+          >
+            <TickerSearch
+              ref={searchInputRef}
+              value={ticker}
+              onChange={(val) => { setTicker(val); if (val.length >= 4) prefetch(val); }}
+              onSubmit={runAnalyze}
+              forceClose={forceCloseSuggestions}
+              watchlist={watchlist}
+              onToggleWatchlist={(sym) => {
+                if (watchlist.includes(sym)) removeFromWatchlist(sym);
+                else addToWatchlist(sym);
+              }}
+            />
             <button
-              key={t}
-              onMouseEnter={() => prefetch(t)}
-              onClick={() => runAnalyze(t)}
-              className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700 hover:bg-slate-200"
+              type="submit"
+              disabled={loading}
+              aria-label={loading ? '分析中' : '図解する'}
+              onClick={(e) => {
+                if (loading) return;
+                if (!ticker || !ticker.trim()) {
+                  e.preventDefault();
+                  setTicker('AAPL');
+                  searchInputRef.current?.focus();
+                }
+              }}
+              className="disabled:opacity-50"
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '12px',
+                background: '#38BDF8',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                transition: 'background-color 0.15s, transform 0.1s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(56,189,248,0.80)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = '#38BDF8';
+                e.currentTarget.style.transform = '';
+              }}
             >
-              {t}
+              {loading ? (
+                <span style={{ color: '#0a0f1e', fontSize: '12px', fontWeight: 700 }}>…</span>
+              ) : (
+                <svg
+                  width="20" height="20" viewBox="0 0 24 24"
+                  fill="none" stroke="#0a0f1e"
+                  strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="11" cy="11" r="7" />
+                  <line x1="16.5" y1="16.5" x2="22" y2="22" />
+                </svg>
+              )}
             </button>
-          ))}
+          </form>
+        </div>
+      )}
+
+      {/* Sample shortcuts — ホームタブ時は「未検索」のみ表示。
+          ログイン済+WLあり時は HomeTab 内の Watchlist セクションが優先のため
+          チップ行ごと非表示（重複表示の解消）。
+          それ以外（未ログイン or WL空）→ サンプル 5 銘柄 + 「お試し:」 */}
+      {(activeTab === 'home' || !result) && !(user && watchlist.length > 0) && (
+        <div className="mb-6" style={{ marginTop: '12px' }}>
+          <div style={{
+            fontSize: '11px', color: '#64748b',
+            marginBottom: '4px', fontWeight: 500,
+          }}>
+            お試し:
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            {['AAPL', 'MSFT', 'GOOGL', 'NVDA', 'META'].map((t) => (
+              <button
+                key={t}
+                onMouseEnter={(e) => {
+                  prefetch(t);
+                  e.currentTarget.style.background = 'rgba(56,189,248,0.15)';
+                  e.currentTarget.style.borderColor = '#38BDF8';
+                  e.currentTarget.style.color = '#38BDF8';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'var(--bg-muted)';
+                  e.currentTarget.style.borderColor = 'transparent';
+                  e.currentTarget.style.color = 'var(--text-secondary)';
+                }}
+                onClick={() => runAnalyze(t)}
+                className="rounded-full px-3 py-1 font-medium"
+                style={{
+                  background: 'var(--bg-muted)',
+                  border: '1px solid transparent',
+                  color: 'var(--text-secondary)',
+                  transition: 'all 0.15s ease',
+                  cursor: 'pointer',
+                }}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -538,60 +818,14 @@ export default function App() {
         </div>
       )}
 
-      {/* Tabs — always visible */}
-      <div className="flex gap-1 rounded-lg bg-slate-100 p-1 mt-4">
-        <button
-          onClick={() => setActiveTab('home')}
-          className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-            activeTab === 'home'
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200'
-          }`}
-        >
-          🏠 ホーム
-        </button>
-        <button
-          onClick={() => setActiveTab('judgment')}
-          className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-            activeTab === 'judgment'
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200'
-          }`}
-        >
-          📊 判定
-        </button>
-        <button
-          onClick={() => {
-            if (!isPro()) {
-              upgrade.open('AI詳細レポート');
-            } else {
-              setActiveTab('report');
-            }
-          }}
-          className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-            activeTab === 'report'
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200'
-          }`}
-        >
-          {isPro() ? '📝 決算' : '🔒 決算'}
-        </button>
-        <button
-          onClick={() => setActiveTab('チャート')}
-          className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-            activeTab === 'チャート'
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200'
-          }`}
-        >
-          📈 チャート
-        </button>
-      </div>
+      {/* Tabs はヘッダー中央(md+) または ハンバーガードロワー内(mobile) に移動済み */}
 
       {/* Tab: ホーム */}
       {activeTab === 'home' && (
         <HomeTab
           watchlist={watchlist}
+          analysis={result}
+          user={user}
           onSelect={runAnalyze}
           onRemove={removeFromWatchlist}
           onHover={prefetch}
@@ -880,7 +1114,57 @@ export default function App() {
       {/* Calendar */}
       {showCalendar && (
         <div ref={calendarRef} className="mt-6">
-          <CalendarPanel onSelect={runAnalyze} watchlist={watchlist} />
+          <CalendarPanel
+            onSelect={runAnalyze}
+            watchlist={watchlist}
+            onToggleWatchlist={(sym) => {
+              const isRemoving = watchlist.includes(sym);
+              const calendarEl = calendarRef.current;
+
+              // 1. 変更前のカレンダー位置を記録
+              const topBefore = calendarEl?.getBoundingClientRect().top ?? null;
+
+              // 2. flushSync で同期更新
+              flushSync(() => {
+                if (isRemoving) removeFromWatchlist(sym);
+                else addToWatchlist(sym);
+              });
+
+              // 3. 同期更新分を即補正
+              if (calendarEl && topBefore !== null) {
+                const topAfterSync = calendarEl.getBoundingClientRect().top;
+                const syncDiff = topAfterSync - topBefore;
+                if (Math.abs(syncDiff) > 0.5) {
+                  window.scrollBy({ top: syncDiff, behavior: 'instant' });
+                }
+              }
+
+              // 4. 追加時のみ: ChartTab の非同期展開を ResizeObserver で追跡
+              //    （ポーリングを廃止 → 振動しない）
+              if (!isRemoving && calendarEl) {
+                // カレンダー直上の要素（ChartTab コンテナ）を監視
+                const aboveEl = calendarEl.previousElementSibling;
+                if (!aboveEl) return;
+
+                let anchoredTop = calendarEl.getBoundingClientRect().top;
+
+                const ro = new ResizeObserver(() => {
+                  const newTop = calendarEl.getBoundingClientRect().top;
+                  const drift = newTop - anchoredTop;
+                  if (Math.abs(drift) > 0.5) {
+                    window.scrollBy({ top: drift, behavior: 'instant' });
+                    // 補正後の位置を基準として更新
+                    anchoredTop = calendarEl.getBoundingClientRect().top;
+                  }
+                });
+
+                ro.observe(aboveEl);
+
+                // ChartTab のデータ取得完了を想定して 3秒後に解除
+                setTimeout(() => ro.disconnect(), 3000);
+              }
+            }}
+          />
         </div>
       )}
 
@@ -906,9 +1190,363 @@ export default function App() {
         </p>
       </footer>
 
+      {/* Drawer overlay */}
+      {drawerOpen && (
+        <div
+          onClick={() => setDrawerOpen(false)}
+          aria-hidden="true"
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(0,0,0,0.40)',
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
+            zIndex: 100,
+          }}
+        />
+      )}
+
+      {/* Drawer */}
+      <aside
+        aria-label="メニュー"
+        aria-hidden={!drawerOpen}
+        style={{
+          position: 'fixed',
+          top: 0, right: 0, bottom: 0,
+          width: 280, maxWidth: '85vw',
+          background: 'var(--page-bg)',
+          backdropFilter: 'saturate(180%) blur(20px)',
+          WebkitBackdropFilter: 'saturate(180%) blur(20px)',
+          borderLeft: '1px solid var(--border)',
+          zIndex: 101,
+          padding: '60px 20px 24px',
+          transform: drawerOpen ? 'translateX(0)' : 'translateX(100%)',
+          transition: 'transform 0.30s cubic-bezier(0.4, 0, 0.2, 1)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px',
+          overflowY: 'auto',
+        }}
+      >
+        {/* 閉じるボタン */}
+        <button
+          type="button"
+          onClick={() => setDrawerOpen(false)}
+          aria-label="メニューを閉じる"
+          style={{
+            position: 'absolute', top: 14, right: 14,
+            width: 32, height: 32, borderRadius: '50%',
+            background: 'rgba(127,127,127,0.20)',
+            border: 'none', cursor: 'pointer',
+            fontSize: 14, lineHeight: 1,
+            color: 'var(--text-primary)',
+          }}
+        >✕</button>
+
+        {/* モバイル用タブ（md 未満で表示） */}
+        <div className="md:hidden" style={{
+          display: 'flex', flexDirection: 'column', gap: 2,
+          paddingBottom: 8, marginBottom: 4,
+          borderBottom: '1px solid var(--border)',
+        }}>
+          {[
+            { key: 'home',     label: 'ホーム' },
+            { key: 'judgment', label: '判定' },
+            { key: 'report',   label: '決算' },
+            { key: 'チャート', label: 'チャート' },
+          ].map(t => {
+            const active = activeTab === t.key;
+            return (
+              <button
+                key={t.key}
+                onClick={() => {
+                  if (t.key === 'report' && !isPro()) {
+                    upgrade.open('AI詳細レポート');
+                  } else {
+                    setActiveTab(t.key);
+                  }
+                  setDrawerOpen(false);
+                }}
+                style={{
+                  textAlign: 'left',
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  border: 'none', cursor: 'pointer',
+                  fontSize: 14,
+                  fontWeight: active ? 500 : 400,
+                  background: active ? 'rgba(127,127,127,0.10)' : 'transparent',
+                  color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                }}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Google ログイン / アバター + ログアウト */}
+        {isSupabaseConfigured && authReady && (
+          <div style={{
+            paddingBottom: 8, marginBottom: 4,
+            borderBottom: '1px solid var(--border)',
+          }}>
+            {user ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 4px 8px' }}>
+                {user.user_metadata?.avatar_url ? (
+                  <img
+                    src={user.user_metadata.avatar_url}
+                    alt={user.email || 'user'}
+                    referrerPolicy="no-referrer"
+                    style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid var(--border)' }}
+                  />
+                ) : (
+                  <div style={{
+                    width: 32, height: 32, borderRadius: '50%',
+                    background: '#38BDF8', color: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 13, fontWeight: 700,
+                    border: '1px solid var(--border)',
+                  }}>
+                    {(user.email?.[0] || 'U').toUpperCase()}
+                  </div>
+                )}
+                <span style={{
+                  flex: 1, minWidth: 0,
+                  fontSize: 12, color: 'var(--text-secondary)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {user.email || 'ログイン中'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => { signOut(); setDrawerOpen(false); }}
+                  style={{
+                    padding: '6px 10px', borderRadius: 8,
+                    background: 'rgba(127,127,127,0.10)', border: 'none',
+                    cursor: 'pointer', fontSize: 12,
+                    color: 'var(--text-secondary)',
+                  }}
+                >
+                  ログアウト
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { signInWithGoogle(); }}
+                style={{
+                  width: '100%', padding: '10px 12px',
+                  borderRadius: 10,
+                  background: 'rgba(127,127,127,0.08)',
+                  border: '1px solid var(--border)',
+                  cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                  color: 'var(--text-primary)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 18 18" aria-hidden="true">
+                  <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
+                  <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
+                  <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>
+                  <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
+                </svg>
+                Googleでログイン
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* ダーク / ライトモード切替 */}
+        <button
+          type="button"
+          onClick={() => { toggleDarkMode(); }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '12px', width: '100%',
+            borderRadius: 10, background: 'transparent',
+            border: 'none', cursor: 'pointer',
+            fontSize: 14, textAlign: 'left',
+            color: 'var(--text-primary)',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(127,127,127,0.10)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          <span style={{ fontSize: 18, lineHeight: 1 }}>{isDark() ? '☀️' : '🌙'}</span>
+          {isDark() ? 'ライトモードに切替' : 'ダークモードに切替'}
+        </button>
+
+        {/* プロトコルスクリーナー */}
+        <button
+          type="button"
+          onClick={() => {
+            setShowCustomScreener(true);
+            setShowScreener(false);
+            setShowCalendarPersist(false);
+            setDrawerOpen(false);
+            setTimeout(() => {
+              const el = customScreenerRef.current;
+              if (el) {
+                const top = el.getBoundingClientRect().top + window.scrollY - 80;
+                window.scrollTo({ top, behavior: 'smooth' });
+              }
+            }, 320);
+          }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '12px', width: '100%',
+            borderRadius: 10, background: 'transparent',
+            border: 'none', cursor: 'pointer',
+            fontSize: 14, textAlign: 'left',
+            color: 'var(--text-primary)',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(127,127,127,0.10)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          <span style={{ fontSize: 18, lineHeight: 1 }}>📊</span>
+          プロトコルスクリーナー
+        </button>
+
+        {/* 決算カレンダー — トグル + localStorage 永続化 */}
+        <button
+          type="button"
+          onClick={() => {
+            const next = !showCalendar;
+            setShowCalendarPersist(next);
+            setShowScreener(false);
+            setShowCustomScreener(false);
+            setDrawerOpen(false);
+            if (next) {
+              setTimeout(() => {
+                const el = calendarRef.current;
+                if (el) {
+                  const top = el.getBoundingClientRect().top + window.scrollY - 80;
+                  window.scrollTo({ top, behavior: 'smooth' });
+                }
+              }, 320);
+            }
+          }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '12px', width: '100%',
+            borderRadius: 10, background: 'transparent',
+            border: 'none', cursor: 'pointer',
+            fontSize: 14, textAlign: 'left',
+            color: 'var(--text-primary)',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(127,127,127,0.10)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          <span style={{ fontSize: 18, lineHeight: 1 }}>📅</span>
+          決算カレンダー
+        </button>
+
+        {/* APIキー設定 */}
+        <button
+          type="button"
+          onClick={() => { setShowSettings(true); setDrawerOpen(false); }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '12px', width: '100%',
+            borderRadius: 10, background: 'transparent',
+            border: 'none', cursor: 'pointer',
+            fontSize: 14, textAlign: 'left',
+            color: 'var(--text-primary)',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(127,127,127,0.10)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          <span style={{ fontSize: 18, lineHeight: 1 }}>🔑</span>
+          {hasKey ? 'APIキー設定済み' : 'APIキー設定'}
+        </button>
+      </aside>
+
+      {/* フローティングボトムナビ — 常時 DOM 配置 + CSS transition で
+          下からスッと立ち上がり（spring 風 cubic-bezier）。隠れ時は素直に ease。
+          スマホはアイコンのみ正方形、PC はアイコン+テキスト縦2段。 */}
+      {(
+        <nav
+          aria-label="ボトムナビ"
+          className="bottom-nav-floating"
+          style={{
+            position: 'fixed',
+            bottom: 20,
+            left: '50%',
+            transform: showBottomNav
+              ? 'translateX(-50%) translateY(0)'
+              : 'translateX(-50%) translateY(20px)',
+            opacity: showBottomNav ? 1 : 0,
+            pointerEvents: showBottomNav ? 'auto' : 'none',
+            transition: showBottomNav
+              ? 'opacity 0.25s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)'
+              : 'opacity 0.2s ease, transform 0.2s ease',
+            zIndex: 60,
+            display: 'flex',
+            gap: isMobile ? 0 : 4,
+            padding: isMobile ? '4px' : '6px 8px',
+            borderRadius: 999,
+          }}
+        >
+          {[
+            { key: 'home',     label: 'ホーム',  icon: '🏠' },
+            { key: 'judgment', label: '判定',    icon: '📊' },
+            { key: 'report',   label: '決算',    icon: '📋' },
+            { key: 'チャート', label: 'チャート', icon: '📈' },
+          ].map(tab => {
+            const active = activeTab === tab.key;
+            const onClick = () => {
+              if (tab.key === 'report' && !isPro()) {
+                upgrade.open('AI詳細レポート');
+                return;
+              }
+              setActiveTab(tab.key);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            };
+            return (
+              <button
+                key={tab.key}
+                onClick={onClick}
+                title={tab.label}
+                aria-label={tab.label}
+                style={{
+                  display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'center', gap: '2px',
+                  width: isMobile ? '52px' : 'auto',
+                  height: isMobile ? '44px' : 'auto',
+                  padding: isMobile ? '0' : '6px 14px',
+                  borderRadius: 999,
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: 10,
+                  fontWeight: active ? 500 : 400,
+                  background: active
+                    ? 'rgba(56, 189, 248, 0.15)'
+                    : 'transparent',
+                  color: active
+                    ? '#38BDF8'
+                    : 'var(--bottom-nav-inactive, rgba(255,255,255,0.6))',
+                  transition: 'background 0.15s, color 0.15s',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <span style={{ fontSize: isMobile ? 22 : 16, lineHeight: 1 }}>{tab.icon}</span>
+                {!isMobile && <span>{tab.label}</span>}
+              </button>
+            );
+          })}
+        </nav>
+      )}{/* end always-rendered nav (showBottomNav は CSS transition で制御) */}
+
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] rounded-lg bg-slate-800 px-5 py-3 text-sm font-medium text-white shadow-lg transition-opacity">
+        <div
+          onClick={toast.onClick}
+          role={toast.onClick ? 'button' : undefined}
+          tabIndex={toast.onClick ? 0 : undefined}
+          onKeyDown={toast.onClick
+            ? (e) => { if (e.key === 'Enter' || e.key === ' ') toast.onClick?.(); }
+            : undefined}
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] rounded-lg bg-slate-800 px-5 py-3 text-sm font-medium text-white shadow-lg transition-opacity"
+          style={{ cursor: toast.onClick ? 'pointer' : 'default' }}
+        >
           {toast.message}
         </div>
       )}

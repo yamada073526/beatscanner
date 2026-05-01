@@ -82,7 +82,7 @@ export default function IRLinksPanel({ ticker }) {
   const website = data?.website;
 
   return (
-    <section className="rounded-2xl bg-white p-6 shadow-sm">
+    <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
       <h3 className="mb-4 text-base font-semibold text-slate-900">
         📎 IRリソース
         <span className="ml-2 text-xs font-normal text-slate-400">{ticker}</span>

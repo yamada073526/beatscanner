@@ -37,14 +37,16 @@ function AccordionSection({ title, badge, badgeColor = '#1e293b', children, stre
   const [open, setOpen] = useState(false);
 
   return (
-    <div style={{
-      borderRadius: '12px',
-      border: '1px solid var(--border)',
-      background: 'var(--bg-primary)',
-      marginBottom: '12px',
-      overflow: 'hidden',
-      boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-    }}>
+    <div
+      className="panel-card"
+      style={{
+        borderRadius: '12px',
+        border: '1px solid var(--border)',
+        background: 'var(--bg-primary)',
+        marginBottom: '12px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+      }}
+    >
       <button
         onClick={() => setOpen((v) => !v)}
         style={{

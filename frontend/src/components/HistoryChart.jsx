@@ -160,7 +160,7 @@ export default function HistoryChart({ periods, currency = 'USD' }) {
     cfps: p.cfps != null ? +p.cfps.toFixed(2) : null,
   }));
   return (
-    <section className="rounded-2xl bg-white p-6 shadow-sm">
+    <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
       <div className="mb-1 flex items-center gap-2">
         <h3 className="text-base font-semibold text-slate-900">
           過去推移（売上高 [{unit}] / EPS / CFPS）
