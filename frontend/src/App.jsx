@@ -744,8 +744,12 @@ export default function App() {
       {/* Market Widget — LP 表示中は隠す */}
       {!showLP && <MarketWidget />}
 
-      {/* Hero — !result 時のみ表示 (LP 表示中は二重ヒーローになるため隠す) */}
-      {!result && !showLP && (
+      {/* Hero — v40+: ログイン済ユーザーには表示しない (Apple/Notion/Linear 流ダッシュボード化)。
+          理由:
+          - 未ログイン: LP の HeroSection が表示されるため重複回避
+          - ログイン済: 「✓ 登録不要」等の旧 LP 由来訴求がノイズ。検索バー/ウォッチリストを上に
+          条件: !result && !user (ログイン済みは Hero ブロック全体非表示) */}
+      {!result && !user && (
         <div style={{
           textAlign: 'center',
           padding: '48px 24px 36px',
