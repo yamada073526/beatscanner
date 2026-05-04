@@ -157,7 +157,7 @@ function HeroSection({ onFreeStart }) {
         }}
       >
         <span style={{ display: 'block' }}>決算を見ても</span>
-        <span style={{ display: 'block' }}>買うべきか分からない。</span>
+        <span style={{ display: 'block' }}>買うべきか分からない</span>
       </h1>
 
       {/* サブコピー — 解決策の提示 (権威性 + 具体性) */}
