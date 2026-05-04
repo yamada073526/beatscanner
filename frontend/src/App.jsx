@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { flushSync } from 'react-dom';
 import { analyze, demoAnalyze, fetchGuidance, fetchGuidanceBasic, prefetchAll } from './api.js';
 import { supabase, isSupabaseConfigured } from './lib/supabase.js';
@@ -14,14 +14,19 @@ import ResultBadge from './components/ResultBadge.jsx';
 import ConditionCard from './components/ConditionCard.jsx';
 import GuidanceCard from './components/GuidanceCard.jsx';
 import HistoryChart from './components/HistoryChart.jsx';
-import ChartTab from './components/ChartTab.jsx';
+// v40+: 重い infrequent コンポーネントを React.lazy で遅延読み込み。
+// 初期バンドルサイズを削減して first paint を高速化。
+// ChartTab (669行) / DetailReport (960行 + DiagramCard 2027行 が依存) /
+// CalendarPanel (328行) / ScreenerPanel (128行) / CustomScreenerPanel (215行) /
+// LandingPage (1403行) を lazy 化することで合計 ~5000 行を初期チャンクから除外。
+const ChartTab = lazy(() => import('./components/ChartTab.jsx'));
 import HomeTab from './components/HomeTab.jsx';
-import CalendarPanel from './components/CalendarPanel.jsx';
+const CalendarPanel = lazy(() => import('./components/CalendarPanel.jsx'));
 import TickerSearch from './components/TickerSearch.jsx';
 import StockPriceChart from './components/StockPriceChart.jsx';
-import ScreenerPanel from './components/ScreenerPanel.jsx';
+const ScreenerPanel = lazy(() => import('./components/ScreenerPanel.jsx'));
 import SummaryBrief from './components/SummaryBrief.jsx';
-import DetailReport from './components/DetailReport.jsx';
+const DetailReport = lazy(() => import('./components/DetailReport.jsx'));
 import NewsPanel from './components/NewsPanel.jsx';
 import MarketWidget from './components/MarketWidget.jsx';
 import IRLinksPanel from './components/IRLinksPanel.jsx';
@@ -32,8 +37,8 @@ import ApiKeyModal from './components/ApiKeyModal.jsx';
 import UpgradeModal from './components/UpgradeModal.jsx';
 import PlanComparisonBanner from './components/PlanComparisonBanner.jsx';
 import DemoTicker from './components/DemoTicker.jsx';
-import CustomScreenerPanel from './components/CustomScreenerPanel.jsx';
-import LandingPage from './components/LandingPage.jsx';
+const CustomScreenerPanel = lazy(() => import('./components/CustomScreenerPanel.jsx'));
+const LandingPage = lazy(() => import('./components/LandingPage.jsx'));
 
 const WATCHLIST_KEY = 'earnings-watchlist-v1';
 
@@ -1128,13 +1133,16 @@ export default function App() {
 
       {/* Tab: ホーム */}
       {/* 未ログイン LP — Google ログイン誘導 + Pro チェックアウト誘導 +
-          銘柄クリックで demo モード分析を実行 (v40+: APIキー無でも動くよう demoAnalyze 経路へ) */}
+          銘柄クリックで demo モード分析を実行 (v40+: APIキー無でも動くよう demoAnalyze 経路へ)
+          v40+: lazy 化 — ログイン済みユーザーには初期バンドルから除外 */}
       {showLP && (
-        <LandingPage
-          onSignIn={signInWithGoogle}
-          onProCheckout={() => startCheckout('monthly')}
-          onTickerClick={handleLPTickerClick}
-        />
+        <Suspense fallback={null}>
+          <LandingPage
+            onSignIn={signInWithGoogle}
+            onProCheckout={() => startCheckout('monthly')}
+            onTickerClick={handleLPTickerClick}
+          />
+        </Suspense>
       )}
 
       {activeTab === 'home' && !showLP && (
@@ -1489,11 +1497,13 @@ export default function App() {
           </div>
         )}
         {result ? (
-          <DetailReport
-            analysis={result}
-            guidance={guidance}
-            onStreamingChange={setReportStreaming}
-          />
+          <Suspense fallback={<div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>読込中...</div>}>
+            <DetailReport
+              analysis={result}
+              guidance={guidance}
+              onStreamingChange={setReportStreaming}
+            />
+          </Suspense>
         ) : (
           <div style={{ padding: '3rem 1rem', textAlign: 'center' }}>
             <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
@@ -1506,7 +1516,9 @@ export default function App() {
 
       {/* Tab: チャート */}
       {activeTab === 'チャート' && (
-        <ChartTab watchlist={watchlist} onSelect={runAnalyze} onMove={moveWatchlistItem} />
+        <Suspense fallback={<div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>読込中...</div>}>
+          <ChartTab watchlist={watchlist} onSelect={runAnalyze} onMove={moveWatchlistItem} />
+        </Suspense>
       )}
 
       {/* Demo mode — shown in ホーム tab when no API key (LP 表示中は隠す) */}
@@ -1519,22 +1531,27 @@ export default function App() {
       {/* Screener */}
       {showScreener && (
         <div ref={screenerRef} className="mt-6">
-          <ScreenerPanel onSelect={(sym) => { runAnalyze(sym); setShowScreener(false); }} />
+          <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>読込中...</div>}>
+            <ScreenerPanel onSelect={(sym) => { runAnalyze(sym); setShowScreener(false); }} />
+          </Suspense>
         </div>
       )}
 
       {/* Custom Screener */}
       {showCustomScreener && (
         <div ref={customScreenerRef} className="mt-6">
-          <CustomScreenerPanel
-            onSelect={(sym) => { runAnalyze(sym); setShowCustomScreener(false); }}
-          />
+          <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>読込中...</div>}>
+            <CustomScreenerPanel
+              onSelect={(sym) => { runAnalyze(sym); setShowCustomScreener(false); }}
+            />
+          </Suspense>
         </div>
       )}
 
       {/* Calendar (LP 表示中は隠す — 未ログイン LP の認知ノイズ削減) */}
       {showCalendar && !showLP && (
         <div ref={calendarRef} className="mt-6">
+          <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>読込中...</div>}>
           <CalendarPanel
             onSelect={runAnalyze}
             watchlist={watchlist}
@@ -1586,6 +1603,7 @@ export default function App() {
               }
             }}
           />
+          </Suspense>
         </div>
       )}
 

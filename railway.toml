@@ -20,3 +20,10 @@ command = "curl -s -X POST -H \"X-Cron-Secret: $CRON_SECRET\" https://beatscanne
 [[crons]]
 schedule = "*/15 * * * *"
 command = "curl -s https://beatscanner-production.up.railway.app/api/movers > /dev/null 2>&1"
+
+# v40+ 体感速度改善: Railway インスタンスの cold start (~5-10s) を防止する keepalive。
+# 毎 10 分 /health を叩いてインスタンスを起動状態に保つ。
+# 効果: ユーザーの初回アクセス時に backend が常に warm → 体感ロード -3〜5s。
+[[crons]]
+schedule = "*/10 * * * *"
+command = "curl -s https://beatscanner-production.up.railway.app/health > /dev/null 2>&1"

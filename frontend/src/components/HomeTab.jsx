@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
-import ChartTab from './ChartTab.jsx';
+import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import Watchlist from './Watchlist.jsx';
 import MoversCard from './MoversCard.jsx';
-import DiagramCard from './DiagramCard.jsx';
+// v40+: ChartTab (669行) と DiagramCard (2027行) は表示される時のみ読み込む lazy 化
+const ChartTab = lazy(() => import('./ChartTab.jsx'));
+const DiagramCard = lazy(() => import('./DiagramCard.jsx'));
 import {
   DEMO_VIZ_DATA_1Y, DEMO_VIZ_DATA_3Y, DEMO_VIZ_DATA_5Y, DEMO_TICKER,
 } from '../data/demoVizData.js';
@@ -125,14 +126,16 @@ export default function HomeTab({
             className="panel-card"
             style={{ borderRadius: '12px', border: 'none' }}
           >
-            <DiagramCard
-              data={currentDemoData}
-              ticker={DEMO_TICKER}
-              selectedYears={demoYears}
-              onYearsChange={handleDemoYearsChange}
-              showCoach={showCoach}
-              onSelectorVisible={handleSelectorVisible}
-            />
+            <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>読込中...</div>}>
+              <DiagramCard
+                data={currentDemoData}
+                ticker={DEMO_TICKER}
+                selectedYears={demoYears}
+                onYearsChange={handleDemoYearsChange}
+                showCoach={showCoach}
+                onSelectorVisible={handleSelectorVisible}
+              />
+            </Suspense>
           </div>
         </section>
       )}
@@ -201,7 +204,9 @@ export default function HomeTab({
       </div>
 
       {/* ── ウォッチリスト チャート ── */}
-      <ChartTab watchlist={watchlist} onSelect={onSelect} onMove={onMove} />
+      <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>読込中...</div>}>
+        <ChartTab watchlist={watchlist} onSelect={onSelect} onMove={onMove} />
+      </Suspense>
     </div>
   );
 }
