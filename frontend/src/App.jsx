@@ -669,17 +669,19 @@ export default function App() {
         </div>
       </header>
 
-      {/* Onboarding banner */}
-      <ApiKeyBanner onOpenSettings={() => setShowSettings(true)} hasKey={hasKey} />
+      {/* Onboarding banner — LP 表示中は隠す */}
+      {!showLP && (
+        <ApiKeyBanner onOpenSettings={() => setShowSettings(true)} hasKey={hasKey} />
+      )}
 
       {/* Secondary toolbar — プロトコル / カレンダー / APIキー設定はハンバーガードロワーに集約済み。
           注目銘柄は MoversCard（ホームの「急騰落」）に統合済みのため削除。 */}
 
-      {/* Market Widget */}
-      <MarketWidget />
+      {/* Market Widget — LP 表示中は隠す */}
+      {!showLP && <MarketWidget />}
 
-      {/* Hero — !result 時のみ表示 */}
-      {!result && (
+      {/* Hero — !result 時のみ表示 (LP 表示中は二重ヒーローになるため隠す) */}
+      {!result && !showLP && (
         <div style={{
           textAlign: 'center',
           padding: '48px 24px 36px',
@@ -925,8 +927,8 @@ export default function App() {
         </div>
       )}
 
-      {/* GuidanceCard — visible while loading before result arrives */}
-      {!result && (loading || guidance) && (
+      {/* GuidanceCard — visible while loading before result arrives (LP 表示中は隠す) */}
+      {!result && (loading || guidance) && !showLP && (
         <GuidanceCard
           guidance={guidance}
           isLoading={loading && !guidance}
