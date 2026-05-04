@@ -158,7 +158,7 @@ function HeroSection({ onFreeStart }) {
         }}
       >
         <span style={{ fontSize: '8px' }}>●</span>
-        β版・先着ユーザー募集中
+        β版・招待制プレビュー公開中
         <span style={{ fontSize: '8px' }}>●</span>
       </div>
 
@@ -175,8 +175,8 @@ function HeroSection({ onFreeStart }) {
           letterSpacing: '-0.02em',
         }}
       >
-        <span style={{ display: 'block' }}>決算を、瞬時に</span>
-        <span style={{ display: 'block' }}>読み解く。</span>
+        <span style={{ display: 'block' }}>決算 Beat/Miss を、</span>
+        <span style={{ display: 'block' }}>5秒で判定。</span>
       </h1>
 
       {/* サブコピー — 既存 Hero と同じスタイル */}
@@ -184,26 +184,51 @@ function HeroSection({ onFreeStart }) {
         position: 'relative', zIndex: 1,
         fontSize: 'clamp(13px, 1.8vw, 16px)',
         color: 'var(--text-muted)',
-        margin: '0 auto 28px',
+        margin: '0 auto 20px',
         lineHeight: 1.7,
-        maxWidth: '440px',
+        maxWidth: '480px',
       }}>
-        売上・EPS・バリュエーションをAIが図解。
+        もう夜中に決算資料を読まなくていい。
         <br />
-        Beat/Miss・ブル/ベアを即判定。
+        5条件を自動チェックして、買い継続か撤退かをデータで判断。
       </p>
 
-      {/* メインCTA */}
+      {/* 社会的証明バー — Fix 1: CTA 上に配置して説得力強化 */}
+      <div style={{
+        position: 'relative', zIndex: 1,
+        display: 'flex',
+        gap: 24,
+        justifyContent: 'center',
+        flexWrap: 'wrap',
+        margin: '16px auto 20px',
+        fontSize: 13,
+        color: 'var(--text-secondary)',
+        maxWidth: 600,
+      }}>
+        <span>📊 対応銘柄数: 10,000銘柄+</span>
+        <span>⚡ 5条件を自動判定</span>
+        <span>🔄 毎朝4時に自動更新</span>
+      </div>
+
+      {/* メインCTA + Fix 2: ボタン直下に 3 バッジで安心感を演出 */}
       <div style={{ position: 'relative', zIndex: 1 }}>
         <PrimaryCTA onClick={onFreeStart}>
           <GoogleIcon /> 無料で試す（登録30秒）
         </PrimaryCTA>
-        <p
-          className="section-subtext"
-          style={{ marginTop: 12, marginBottom: 20, textAlign: 'center' }}
-        >
-          クレカ不要・3銘柄/日まで無料分析
-        </p>
+        <div style={{
+          display: 'flex',
+          gap: 12,
+          justifyContent: 'center',
+          flexWrap: 'wrap',
+          marginTop: 12,
+          marginBottom: 20,
+          fontSize: 12,
+          color: 'var(--text-muted)',
+        }}>
+          <span>✓ クレカ不要</span>
+          <span>✓ 3銘柄/日まで永久無料</span>
+          <span>✓ 30秒で登録完了</span>
+        </div>
       </div>
 
       {/* プルーフチップ — 既存 Hero と同じスタイル */}
@@ -461,12 +486,21 @@ function PricingSection({ onFreeStart, onProCheckout }) {
           <PrimaryCTA onClick={onProCheckout} fullWidth>
             7日間無料で試す →
           </PrimaryCTA>
-          <p
-            className="section-subtext"
-            style={{ marginTop: 10, marginBottom: 0, textAlign: 'center' }}
-          >
-            年払いなら ¥9,800（2ヶ月分お得）
-          </p>
+          {/* Fix 3: 年払いバッジを目立つシアン pill に強化 */}
+          <div style={{ textAlign: 'center', marginTop: 10 }}>
+            <span style={{
+              display: 'inline-block',
+              background: 'rgba(34,211,238,0.12)',
+              border: '1px solid rgba(34,211,238,0.35)',
+              borderRadius: 6,
+              padding: '4px 10px',
+              fontSize: 12,
+              color: '#22d3ee',
+              fontWeight: 600,
+            }}>
+              🏷️ 年払いで2ヶ月分お得（¥1,960節約）
+            </span>
+          </div>
         </div>
       </div>
     </section>
@@ -474,8 +508,8 @@ function PricingSection({ onFreeStart, onProCheckout }) {
 }
 
 // ── セクション 5: FAQ ─────────────────────────────────────────────────────
-function FAQItem({ q, a }) {
-  const [open, setOpen] = useState(false);
+function FAQItem({ q, a, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div style={{
       borderBottom: '1px solid var(--border)',
@@ -538,6 +572,7 @@ function FAQSection() {
       </div>
 
       <FAQItem
+        defaultOpen
         q="Q. 無料プランと Pro プランの違いは？"
         a="無料プランは1日3銘柄まで分析でき、5条件判定や株価チャートが使えます。Pro プランは分析数が無制限になり、市場の声のフル表示・AI 詳細レポート・ウォッチリスト無制限など全機能が使えます。"
       />
@@ -548,6 +583,18 @@ function FAQSection() {
       <FAQItem
         q="Q. データはどこから取得していますか？"
         a="財務データは Financial Modeling Prep（公式 API）、ニュースは Yahoo Finance および Seeking Alpha の RSS フィード、市場分析は Anthropic Claude AI を使用しています。すべて信頼性の高い一次ソースです。"
+      />
+      <FAQItem
+        q="Q. 投資初心者でも使えますか？"
+        a="はい。専門知識は不要です。5条件の判定結果と AI 解説で、決算の良し悪しをシンプルに確認できます。まずは気になる銘柄を1つ検索してみてください。"
+      />
+      <FAQItem
+        q="Q. 日本語で使えますか？"
+        a="はい、完全日本語対応です。ニュースの自動翻訳機能も搭載しており、英語の決算資料を読む必要はありません。"
+      />
+      <FAQItem
+        q="Q. 決算結果はいつ反映されますか？"
+        a="決算発表後、数時間以内に自動で更新されます。市場の声は毎朝4時に最新ニュースを自動収集・AI 分析します。"
       />
     </section>
   );
