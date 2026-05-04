@@ -120,9 +120,10 @@ function HeroSection({ onFreeStart }) {
   return (
     <section style={{
       textAlign: 'center',
-      padding: '48px 24px 36px',
+      padding: '48px 24px 48px',  // v40: 下 padding を 36 → 48 に増やして呼吸を確保
       position: 'relative',
       overflow: 'hidden',
+      borderBottom: '1px solid var(--border)',  // v40: Hero 終端を視覚的に明示
     }}>
       {/* 背景の装飾（既存 Hero と同じ放射状グロー） */}
       <div
@@ -170,10 +171,11 @@ function HeroSection({ onFreeStart }) {
         プロが使う5条件で、3秒で判定。
       </p>
 
-      {/* メインCTA + 安心バッジ (v37: 制限訴求を消して登録不要を強調) */}
+      {/* メインCTA + 1行補助テキスト (v40: 「登録不要で試せる」と「登録30秒」の
+          矛盾を解消。CTA は「無料で始める」、補助は「クレカ不要・Googleで30秒」に統一) */}
       <div style={{ position: 'relative', zIndex: 1 }}>
         <PrimaryCTA onClick={onFreeStart}>
-          <GoogleIcon /> 無料で試す（登録30秒）
+          <GoogleIcon /> 無料で始める
         </PrimaryCTA>
         <div style={{
           marginTop: 12,
@@ -181,15 +183,10 @@ function HeroSection({ onFreeStart }) {
           fontSize: 12,
           color: 'var(--text-muted)',
           textAlign: 'center',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
         }}>
-          ✓ 登録不要で試せる　✓ 30秒で完了
+          クレカ不要・Googleで30秒
         </div>
       </div>
-
-      {/* v37: プルーフチップ 3 個を削除 (機能セクションで詳述するため重複) */}
     </section>
   );
 }
@@ -230,15 +227,24 @@ function TodayHotSection({ onTickerClick }) {
         textTransform: 'uppercase',
         letterSpacing: '0.1em',
         textAlign: 'center',
-        marginBottom: 16,
+        marginBottom: 4,
       }}>
         🔥 今日の注目
+      </div>
+      {/* v40: クリック可能シグナル — モバイルで hover が効かないため明示 */}
+      <div style={{
+        textAlign: 'center',
+        fontSize: 11,
+        color: 'var(--text-muted)',
+        marginBottom: 12,
+      }}>
+        ↓ タップで即分析（登録不要）
       </div>
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(3, 1fr)',
         gap: 12,
-        maxWidth: 600,
+        maxWidth: 720,  // v40: 機能カード等と幅を揃える
         margin: '0 auto',
       }}>
         {loading
@@ -265,6 +271,7 @@ function TodayHotSection({ onTickerClick }) {
                   className="panel-card"
                   onClick={() => onTickerClick?.(m.ticker)}
                   style={{
+                    position: 'relative',  // v40: 矢印 absolute 配置のため
                     textAlign: 'center',
                     padding: '16px 12px',
                     cursor: 'pointer',
@@ -274,14 +281,14 @@ function TodayHotSection({ onTickerClick }) {
                   }}
                 >
                   <div style={{
-                    fontSize: 16,
+                    fontSize: 20,  // v40: 16 → 20 でティッカーを主役化
                     fontWeight: 700,
                     color: 'var(--text-primary)',
                     marginBottom: 4,
                   }}>{m.ticker}</div>
                   <div style={{
                     fontSize: 12,
-                    color: '#22d3ee',
+                    color: '#34ef81',  // v40: シアン → 緑 (上昇=緑の業界ルール)
                     fontWeight: 600,
                     marginBottom: 4,
                   }}>{pctStr}</div>
@@ -289,13 +296,158 @@ function TodayHotSection({ onTickerClick }) {
                     fontSize: 11,
                     color: 'var(--text-muted)',
                     lineHeight: 1.4,
-                  }}>{desc || '急騰注目銘柄'}</div>
+                  }}>{desc || 'クリックで分析'}</div>
+                  {/* v40: クリック可能を示す矢印 */}
+                  <span style={{
+                    position: 'absolute',
+                    bottom: 8,
+                    right: 10,
+                    fontSize: 12,
+                    color: '#22d3ee',
+                    opacity: 0.6,
+                  }} aria-hidden="true">→</span>
                 </div>
               );
             })
         }
       </div>
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.45}}`}</style>
+    </section>
+  );
+}
+
+// ── セクション 2.5 (v40 新設): 今週の注目決算 ────────────────────────────
+// /api/calendar から今後 30 日以内の決算予定を取得し、最も近い 3 件を表示。
+// FOMO + 「未来の判断材料」訴求で「毎日見たい」体験を強化。
+function UpcomingEarningsSection({ onTickerClick }) {
+  const [items, setItems] = useState(null);  // null: loading / array: loaded / 'error': error
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/calendar')
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
+      .then(d => {
+        if (cancelled) return;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const enriched = (Array.isArray(d) ? d : [])
+          .map(item => {
+            try {
+              const dt = new Date(`${item.date}T00:00:00`);
+              const daysUntil = Math.floor((dt - today) / 86400000);
+              return { ...item, daysUntil };
+            } catch { return null; }
+          })
+          .filter(it => it && it.daysUntil >= 0 && it.daysUntil <= 30)
+          .sort((a, b) => a.daysUntil - b.daysUntil)
+          .slice(0, 3);
+        setItems(enriched);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setItems('error');
+        setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // エラー or 0件は非表示
+  if (items === 'error') return null;
+  if (!loading && (!items || items.length === 0)) return null;
+
+  return (
+    <section style={{ padding: '32px 20px' }}>
+      <div style={{ textAlign: 'center', marginBottom: 16 }}>
+        <div style={{
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.1em',
+          marginBottom: 4,
+        }}>
+          ⚠️ 今週の注目決算
+        </div>
+        <div style={{
+          fontSize: 11,
+          color: 'var(--text-muted)',
+        }}>
+          ↓ タップで事前分析
+        </div>
+      </div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: 12,
+        maxWidth: 720,
+        margin: '0 auto',
+      }}>
+        {loading
+          ? [0, 1, 2].map(i => (
+              <div
+                key={i}
+                style={{
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 12,
+                  padding: '24px 12px',
+                  textAlign: 'center',
+                  animation: 'pulse 1.5s ease-in-out infinite',
+                  minHeight: 84,
+                }}
+              />
+            ))
+          : items.map(item => {
+              const dayLabel = item.daysUntil === 0
+                ? '本日決算'
+                : item.daysUntil === 1
+                ? '明日決算'
+                : `あと${item.daysUntil}日`;
+              return (
+                <div
+                  key={item.symbol}
+                  className="panel-card"
+                  onClick={() => onTickerClick?.(item.symbol)}
+                  style={{
+                    position: 'relative',
+                    textAlign: 'center',
+                    padding: '16px 12px',
+                    cursor: 'pointer',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 12,
+                  }}
+                >
+                  <div style={{
+                    fontSize: 20,
+                    fontWeight: 700,
+                    color: 'var(--text-primary)',
+                    marginBottom: 4,
+                  }}>{item.symbol}</div>
+                  <div style={{
+                    fontSize: 12,
+                    color: '#f59e0b',  // amber: FOMO/緊急性
+                    fontWeight: 600,
+                    marginBottom: 4,
+                  }}>{dayLabel}</div>
+                  <div style={{
+                    fontSize: 10,
+                    color: 'var(--text-muted)',
+                  }}>{item.date}</div>
+                  <span style={{
+                    position: 'absolute',
+                    bottom: 8,
+                    right: 10,
+                    fontSize: 12,
+                    color: '#22d3ee',
+                    opacity: 0.6,
+                  }} aria-hidden="true">→</span>
+                </div>
+              );
+            })
+        }
+      </div>
     </section>
   );
 }
@@ -526,11 +678,7 @@ function ChartLinkMockup() {
 function FeaturesSection() {
   return (
     <section style={{ padding: '56px 20px' }}>
-      <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        <SectionLabel>FEATURES</SectionLabel>
-        <SectionTitle>投資判断を、データで武装する。</SectionTitle>
-      </div>
-
+      {/* v40: Hero と訴求重複のため見出し削除 — カードを直接見せる Apple/Stripe 流 */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
@@ -570,11 +718,7 @@ function PricingSection({ onFreeStart, onProCheckout }) {
       borderTop: '1px solid var(--border)',
       borderBottom: '1px solid var(--border)',
     }}>
-      <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        <SectionLabel>PRICING</SectionLabel>
-        <SectionTitle>シンプルな料金体系</SectionTitle>
-      </div>
-
+      {/* v40: 見出し削除 — 「シンプルな料金体系」は当たり前すぎて情報価値ゼロ */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
@@ -598,8 +742,9 @@ function PricingSection({ onFreeStart, onProCheckout }) {
           }}
         >
           {/* 上部エリア: アイコン + プラン名 + 価格。
-              minHeight で Pro カードの上部 (アイコン+名+価格+¥33+pill) と高さ揃え */}
-          <div style={{ minHeight: 152 }}>
+              minHeight で Pro カードの上部 (アイコン+名+価格+¥33+pill+ベネフィット) と高さ揃え。
+              v40: ベネフィットコピー追加に伴い 152 → 188 に増量 */}
+          <div style={{ minHeight: 188 }}>
             <div style={{ fontSize: 22, marginBottom: 4 }}>🆓</div>
             <h3 className="section-heading" style={{ fontSize: 16, marginBottom: 4 }}>
               無料
@@ -692,9 +837,19 @@ function PricingSection({ onFreeStart, onProCheckout }) {
               color: '#22d3ee',
               fontSize: 11,
               fontWeight: 600,
-              marginBottom: 18,
+              marginBottom: 12,
             }}>
               🎁 7日間 完全無料
+            </div>
+            {/* v40: ベネフィット1行コピー — 機能リストの前にPro価値を要約 */}
+            <div style={{
+              fontSize: 12,
+              color: 'var(--text-secondary)',
+              marginBottom: 0,
+              lineHeight: 1.5,
+            }}>
+              市場の声 + AI レポートで、<br />
+              「買いか撤退か」の根拠が手に入る。
             </div>
           </div>
           {/* 中部: ✓ リスト — 上部直後に通常フローで Free と水平揃え */}
@@ -794,11 +949,7 @@ function FAQSection() {
       maxWidth: 720,
       margin: '0 auto',
     }}>
-      <div style={{ textAlign: 'center', marginBottom: 24 }}>
-        <SectionLabel>FAQ</SectionLabel>
-        <SectionTitle>よくあるご質問</SectionTitle>
-      </div>
-
+      {/* v40: 見出し削除 — 「Q.」が並んでいれば自明 */}
       <FAQItem
         defaultOpen
         q="Q. 無料プランと Pro プランの違いは？"
@@ -868,6 +1019,7 @@ export default function LandingPage({ onSignIn, onProCheckout, onTickerClick }) 
     }}>
       <HeroSection onFreeStart={onSignIn} />
       <TodayHotSection onTickerClick={onTickerClick} />
+      <UpcomingEarningsSection onTickerClick={onTickerClick} />
       <FeaturesSection />
       <PricingSection onFreeStart={onSignIn} onProCheckout={handleProClick} />
       {/* v37 Fix 6: データソース表記を控えめに復活 (信頼シグナル) */}
