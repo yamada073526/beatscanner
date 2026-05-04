@@ -363,6 +363,17 @@ export default function App() {
       : raw.toUpperCase();
     if (!t) return;
     setTicker(t);
+    // v40+: 分析済みティッカーを localStorage に記録 (LP の「あなたが見た銘柄」用)
+    // 直近 50 件まで保持。決算カレンダーと突合してリテンション CTA を生成する。
+    try {
+      const key = 'bs_analyzed';
+      const data = JSON.parse(localStorage.getItem(key) || '{}');
+      data[t] = Date.now();
+      const sorted = Object.entries(data)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 50);
+      localStorage.setItem(key, JSON.stringify(Object.fromEntries(sorted)));
+    } catch { /* private mode 等は無視 */ }
     const searchId = Date.now();
     searchIdRef.current = searchId;
 

@@ -191,12 +191,29 @@ function HeroSection({ onFreeStart }) {
   );
 }
 
+// 相対時刻フォーマッタ — 「たった今 / X分前 / X時間前 / X日前」
+function formatRelativeTime(iso) {
+  if (!iso) return '';
+  const then = new Date(iso);
+  if (isNaN(then.getTime())) return '';
+  const diffMin = Math.floor((Date.now() - then.getTime()) / 60000);
+  if (diffMin < 1) return 'たった今';
+  if (diffMin < 60) return `${diffMin}分前`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}時間前`;
+  return `${Math.floor(diffHr / 24)}日前`;
+}
+
 // ── セクション 2 (v37 新設): 今日の注目銘柄 ──────────────────────────────
 // 急騰 Top3 を /api/movers から取得して表示。クリックでデモ分析へ直結。
 // 「毎日見たい」体験を作り、未ログインでもブックマーク価値を生む。
+// v40+: updated_at で「最終更新 X 分前」を表示してリアルタイム感を演出。
 function TodayHotSection({ onTickerClick }) {
   const [movers, setMovers] = useState(null);  // null: loading / [] or array: loaded / 'error': error
+  const [updatedAt, setUpdatedAt] = useState(null);
   const [loading, setLoading] = useState(true);
+  // 1 分ごとに「X 分前」表示を再計算するため強制再レンダー用 tick state
+  const [, setTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -206,6 +223,7 @@ function TodayHotSection({ onTickerClick }) {
         if (cancelled) return;
         const top3 = (d?.gainers || []).slice(0, 3);
         setMovers(top3);
+        setUpdatedAt(d?.updated_at || null);
         setLoading(false);
       })
       .catch(() => {
@@ -215,6 +233,13 @@ function TodayHotSection({ onTickerClick }) {
       });
     return () => { cancelled = true; };
   }, []);
+
+  // 1 分ごとに再レンダー (formatRelativeTime の表示更新)
+  useEffect(() => {
+    if (!updatedAt) return;
+    const t = setInterval(() => setTick(n => n + 1), 60_000);
+    return () => clearInterval(t);
+  }, [updatedAt]);
 
   // エラー時はセクションごと隠す
   if (movers === 'error') return null;
@@ -239,6 +264,11 @@ function TodayHotSection({ onTickerClick }) {
         marginBottom: 12,
       }}>
         ↓ タップで即分析（登録不要）
+        {updatedAt && (
+          <span style={{ marginLeft: 8, opacity: 0.7 }}>
+            · 最終更新 {formatRelativeTime(updatedAt)}
+          </span>
+        )}
       </div>
       <div style={{
         display: 'grid',
@@ -447,6 +477,138 @@ function UpcomingEarningsSection({ onTickerClick }) {
               );
             })
         }
+      </div>
+    </section>
+  );
+}
+
+// ── セクション 2.6 (v40+ 新設): あなたが見た銘柄 ────────────────────────
+// localStorage の bs_analyzed (App.jsx runAnalyze で記録) と /api/calendar を突合し、
+// 「過去に分析した銘柄で、決算が 30 日以内に近づいているもの」を最大 3 件表示。
+// リピート訪問者にだけ表示される動的セクション (初回訪問者には非表示)。
+function MissedSection({ onTickerClick }) {
+  const [items, setItems] = useState(null);  // null: loading / [] or array: loaded
+
+  useEffect(() => {
+    let cancelled = false;
+    let analyzed = {};
+    try {
+      analyzed = JSON.parse(localStorage.getItem('bs_analyzed') || '{}');
+    } catch { /* private mode 等 */ }
+    const tickers = Object.keys(analyzed);
+    if (tickers.length === 0) {
+      setItems([]);  // 空配列 → 非表示
+      return;
+    }
+    fetch('/api/calendar')
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
+      .then(d => {
+        if (cancelled) return;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const matches = (Array.isArray(d) ? d : [])
+          .filter(c => analyzed[c.symbol])
+          .map(c => {
+            try {
+              const dt = new Date(`${c.date}T00:00:00`);
+              const daysUntil = Math.floor((dt - today) / 86400000);
+              const daysAgo = Math.floor((Date.now() - analyzed[c.symbol]) / 86400000);
+              return { ...c, daysUntil, daysAgo };
+            } catch { return null; }
+          })
+          .filter(c => c && c.daysUntil >= 0 && c.daysUntil <= 30)
+          .sort((a, b) => a.daysUntil - b.daysUntil)
+          .slice(0, 3);
+        setItems(matches);
+      })
+      .catch(() => {
+        if (!cancelled) setItems([]);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // 0件 (初回訪問者 or 該当なし) はセクション全体を非表示
+  if (!items || items.length === 0) return null;
+
+  return (
+    <section style={{ padding: '32px 20px' }}>
+      <div style={{ textAlign: 'center', marginBottom: 16 }}>
+        <div style={{
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.1em',
+          marginBottom: 4,
+        }}>
+          👀 あなたが見た銘柄、決算が近づいています
+        </div>
+        <div style={{
+          fontSize: 11,
+          color: 'var(--text-muted)',
+        }}>
+          ↓ 再分析で最新データをチェック
+        </div>
+      </div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: 12,
+        maxWidth: 720,
+        margin: '0 auto',
+      }}>
+        {items.map(item => {
+          const dayLabel = item.daysUntil === 0
+            ? '本日決算'
+            : item.daysUntil === 1
+            ? '明日決算'
+            : `あと${item.daysUntil}日`;
+          const agoLabel = item.daysAgo === 0
+            ? '今日見た'
+            : item.daysAgo === 1
+            ? '昨日見た'
+            : `${item.daysAgo}日前に見た`;
+          return (
+            <div
+              key={item.symbol}
+              className="panel-card"
+              onClick={() => onTickerClick?.(item.symbol)}
+              style={{
+                position: 'relative',
+                textAlign: 'center',
+                padding: '16px 12px',
+                cursor: 'pointer',
+                background: 'var(--bg-card)',
+                border: '1px solid rgba(245,158,11,0.30)',
+                borderRadius: 12,
+              }}
+            >
+              <div style={{
+                fontSize: 20,
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                marginBottom: 4,
+              }}>{item.symbol}</div>
+              <div style={{
+                fontSize: 12,
+                color: '#f59e0b',
+                fontWeight: 600,
+                marginBottom: 4,
+              }}>{dayLabel}</div>
+              <div style={{
+                fontSize: 10,
+                color: 'var(--text-muted)',
+              }}>{agoLabel}</div>
+              <span style={{
+                position: 'absolute',
+                bottom: 8,
+                right: 10,
+                fontSize: 12,
+                color: '#22d3ee',
+                opacity: 0.6,
+              }} aria-hidden="true">→</span>
+            </div>
+          );
+        })}
       </div>
     </section>
   );
@@ -1202,20 +1364,28 @@ export default function LandingPage({ onSignIn, onProCheckout, onTickerClick }) 
     }}>
       <HeroSection onFreeStart={onSignIn} />
       <TodayHotSection onTickerClick={onTickerClick} />
+      {/* リピート訪問者用 — 過去分析した銘柄で決算が近いものがあれば表示 */}
+      <MissedSection onTickerClick={onTickerClick} />
       <UpcomingEarningsSection onTickerClick={onTickerClick} />
       <SampleAnalysisSection onTickerClick={onTickerClick} />
       <FeaturesSection />
       <PricingSection onFreeStart={onSignIn} onProCheckout={handleProClick} />
       <FAQSection />
-      {/* v40+: データソース表記を FAQ 後 フッター直前に移動 (孤立を解消) */}
+      {/* v40+: データソース表記 + 開発ロードマップ (透明性で「進化し続ける製品感」を訴求) */}
       <div style={{
         textAlign: 'center',
         fontSize: 11,
         color: 'var(--text-muted)',
         padding: '16px 20px',
         borderTop: '1px solid var(--border)',
+        lineHeight: 1.8,
       }}>
-        Powered by Financial Modeling Prep · Yahoo Finance · Anthropic Claude
+        <div>
+          Powered by Financial Modeling Prep · Yahoo Finance · Anthropic Claude
+        </div>
+        <div style={{ marginTop: 4, opacity: 0.85 }}>
+          🛠 今後の予定: 決算前メール通知 · アラート · ポートフォリオ管理
+        </div>
       </div>
       <FooterCTASection onFreeStart={onSignIn} />
     </div>
