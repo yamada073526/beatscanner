@@ -1,180 +1,229 @@
 /**
- * PlanComparisonBanner — shown on the dashboard for Free (no-API-key) users.
- * Renders a 3-column plan table with upgrade CTAs.
- * Hidden for Pro users (hasFmpKey() === true).
+ * PlanComparisonBanner — デモ分析後に表示されるプラン比較バナー。
+ *
+ * v40+: LP の PricingSection と同じ 2 段構造 (Free / Pro ¥980) に統一。
+ *   - 旧: Free / Pro (FMP APIキー ¥0) / Premium ¥1,980 の 3 段 (Tailwind 白カード)
+ *   - 新: Free / Pro ¥980 (Stripe / 7日間無料) の 2 段 (CSS 変数・ダーク対応)
+ *   - BYOK (FMP APIキー無料) は脚注で控えめに案内
+ *
+ * Props:
+ *   onOpenSettings  () => void   — APIキー設定モーダルを開く (BYOK 用)
+ *   onStartCheckout () => void   — Stripe Checkout を開始 (Pro 用)
+ *   user            object | null — ログイン状態 (Pro CTA の挙動制御)
  */
 
-const PLANS = [
-  {
-    key: 'free',
-    name: 'Free',
-    price: '¥0',
-    sub: '現在のプラン',
-    highlight: false,
-    cta: null,
-    rows: [
-      '3銘柄/日',
-      '5条件 自動判定',
-      '—',
-      '—',
-      '—',
-      '—',
-    ],
-  },
-  {
-    key: 'pro',
-    name: 'Pro（FMP APIキー）',
-    price: '¥0',
-    sub: '無料',
-    highlight: true,
-    cta: 'APIキーを設定する（無料・1分）',
-    rows: [
-      '無制限',
-      '5条件 自動判定',
-      'AI詳細レポート',
-      'カンファレンス要点',
-      'ウォッチリスト',
-      'スクリーナー',
-    ],
-  },
-  {
-    key: 'premium',
-    name: 'Premium',
-    price: '¥1,980',
-    sub: '/月',
-    highlight: false,
-    cta: 'Premiumにする',
-    rows: [
-      '無制限',
-      '5条件 自動判定',
-      'AI詳細レポート',
-      'カンファレンス要点',
-      '決算速報通知',
-      '週次AIレポート',
-    ],
-  },
-];
-
-const ROW_LABELS = ['分析銘柄数', '判定機能', 'AIレポート', 'カンファレンス', '通知 / リスト', '追加機能'];
-
-function PlanCard({ plan, onOpenSettings }) {
+export default function PlanComparisonBanner({ onOpenSettings, onStartCheckout }) {
+  // user チェックは親 (App.jsx) 側で処理するため、ここでは単に呼ぶだけ
   return (
-    <div
-      className={`flex flex-col rounded-xl border p-4 ${
-        plan.highlight
-          ? 'border-slate-900 bg-slate-900 text-white'
-          : 'border-slate-200 bg-white'
-      }`}
-    >
-      {/* Heading */}
-      <div className="mb-3">
-        <p
-          className={`text-xs font-semibold uppercase tracking-wider ${
-            plan.highlight ? 'text-slate-300' : 'text-slate-500'
-          }`}
-        >
-          {plan.name}
+    <section style={{
+      marginTop: 32,
+      padding: '24px 20px',
+      borderRadius: 14,
+      background: 'var(--bg-subtle)',
+      border: '1px solid var(--border)',
+    }}>
+      <div style={{ marginBottom: 16, textAlign: 'center' }}>
+        <h3 style={{
+          fontSize: 16,
+          fontWeight: 600,
+          color: 'var(--text-primary)',
+          marginBottom: 6,
+        }}>
+          全銘柄を無制限に分析する
+        </h3>
+        <p style={{
+          fontSize: 12,
+          color: 'var(--text-muted)',
+          margin: 0,
+          lineHeight: 1.6,
+        }}>
+          無料お試しはここまで。Pro なら無制限分析・AI レポート・市場の声フル表示。
         </p>
-        <div className="mt-0.5 flex items-baseline gap-0.5">
-          <span
-            className={`text-xl font-bold ${
-              plan.highlight ? 'text-white' : 'text-slate-900'
-            }`}
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+        gap: 12,
+        maxWidth: 640,
+        margin: '0 auto',
+      }}>
+        {/* Free プラン */}
+        <div style={{
+          padding: '20px 18px',
+          borderRadius: 12,
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          display: 'flex',
+          flexDirection: 'column',
+        }}>
+          <div style={{ minHeight: 70 }}>
+            <div style={{
+              fontSize: 11,
+              color: 'var(--text-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              marginBottom: 4,
+            }}>
+              FREE
+            </div>
+            <div style={{
+              fontSize: 24, fontWeight: 700,
+              color: 'var(--text-primary)',
+            }}>
+              ¥0<span style={{
+                fontSize: 12, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4,
+              }}>現在のプラン</span>
+            </div>
+          </div>
+          <ul style={{
+            listStyle: 'none', padding: 0, margin: '12px 0 16px',
+            fontSize: 12, lineHeight: 2, color: 'var(--text-secondary)',
+          }}>
+            <li>✓ 3銘柄/日まで無料分析</li>
+            <li>✓ 5条件 即時判定</li>
+            <li>✓ 株価チャート閲覧</li>
+          </ul>
+          <div style={{
+            marginTop: 'auto',
+            padding: '8px 12px',
+            borderRadius: 8,
+            border: '1px solid var(--border)',
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            textAlign: 'center',
+          }}>
+            現在のプラン
+          </div>
+        </div>
+
+        {/* Pro プラン (おすすめ) */}
+        <div style={{
+          position: 'relative',
+          padding: '20px 18px',
+          borderRadius: 12,
+          background: 'var(--bg-card)',
+          border: '1px solid rgba(34,211,238,0.55)',
+          boxShadow: '0 0 18px rgba(34,211,238,0.12)',
+          display: 'flex',
+          flexDirection: 'column',
+        }}>
+          <div style={{
+            position: 'absolute',
+            top: -10,
+            right: 16,
+            padding: '2px 10px',
+            borderRadius: 9999,
+            background: '#22d3ee',
+            color: '#0f172a',
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: '0.05em',
+          }}>
+            おすすめ
+          </div>
+          <div style={{ minHeight: 70 }}>
+            <div style={{
+              fontSize: 11,
+              color: '#22d3ee',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              marginBottom: 4,
+            }}>
+              PRO
+            </div>
+            <div style={{
+              fontSize: 24, fontWeight: 700,
+              color: '#22d3ee',
+            }}>
+              ¥980<span style={{
+                fontSize: 12, fontWeight: 400, color: 'var(--text-muted)',
+              }}>/月</span>
+            </div>
+            <div style={{
+              fontSize: 11,
+              color: 'var(--text-muted)',
+              marginTop: 2,
+            }}>
+              1日約¥33・コーヒー1杯より安く
+            </div>
+            <div style={{
+              display: 'inline-block',
+              padding: '2px 10px',
+              borderRadius: 9999,
+              background: 'rgba(34,211,238,0.12)',
+              border: '1px solid rgba(34,211,238,0.40)',
+              color: '#22d3ee',
+              fontSize: 11,
+              fontWeight: 600,
+              marginTop: 8,
+            }}>
+              🎁 7日間 完全無料
+            </div>
+          </div>
+          <ul style={{
+            listStyle: 'none', padding: 0, margin: '12px 0 16px',
+            fontSize: 12, lineHeight: 2, color: 'var(--text-secondary)',
+          }}>
+            <li>✓ 分析数 <strong style={{ color: '#22d3ee' }}>無制限</strong></li>
+            <li>✓ 市場の声 フル表示</li>
+            <li>✓ AI 詳細レポート</li>
+            <li>✓ ウォッチリスト無制限</li>
+            <li>✓ 決算前自動分析</li>
+          </ul>
+          <div style={{
+            marginTop: 'auto',
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            textAlign: 'center',
+            marginBottom: 8,
+          }}>
+            🔒 Stripe で安全に決済 / いつでも解約可
+          </div>
+          <button
+            onClick={onStartCheckout}
+            style={{
+              width: '100%',
+              padding: '11px',
+              borderRadius: 10,
+              background: '#22d3ee',
+              color: '#0f172a',
+              border: 'none',
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: '0 0 12px rgba(34,211,238,0.30)',
+              transition: 'background 0.2s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#06b6d4'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = '#22d3ee'; }}
           >
-            {plan.price}
-          </span>
-          <span
-            className={`text-xs ${
-              plan.highlight ? 'text-slate-300' : 'text-slate-500'
-            }`}
-          >
-            {plan.sub}
-          </span>
+            7日間無料で試す →
+          </button>
         </div>
       </div>
 
-      {/* Feature rows — value shown prominently first */}
-      <div className="flex-1 space-y-1.5">
-        {plan.rows.map((val, i) => (
-          <div key={i} className="flex items-start gap-1.5 text-xs">
-            <span
-              className={`mt-0.5 shrink-0 ${
-                val === '—'
-                  ? plan.highlight ? 'text-slate-600' : 'text-slate-300'
-                  : 'text-green-400'
-              }`}
-            >
-              {val === '—' ? '—' : '✓'}
-            </span>
-            <span
-              className={`leading-snug ${
-                val === '—'
-                  ? plan.highlight ? 'text-slate-500' : 'text-slate-300'
-                  : plan.highlight ? 'text-slate-200' : 'text-slate-600'
-              }`}
-            >
-              {/* Show value first (e.g. "3銘柄/日") then label as secondary */}
-              {val !== '—' ? (
-                <>
-                  <span className="font-semibold">{val}</span>
-                  <span className={`ml-1 text-[10px] ${plan.highlight ? 'text-slate-400' : 'text-slate-400'}`}>
-                    {ROW_LABELS[i]}
-                  </span>
-                </>
-              ) : (
-                ROW_LABELS[i]
-              )}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* CTA */}
-      <div className="mt-4">
-        {plan.cta ? (
-          <button
-            onClick={() => onOpenSettings?.()}
-            className={`w-full rounded-lg py-2 text-sm font-semibold transition ${
-              plan.highlight
-                ? 'bg-white text-slate-900 hover:bg-slate-100'
-                : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            {plan.cta}
-          </button>
-        ) : (
-          <div
-            className="w-full rounded-lg border border-slate-200 py-2 text-center text-xs font-medium text-slate-400"
-          >
-            現在のプラン
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-export default function PlanComparisonBanner({ onOpenSettings }) {
-  return (
-    <section className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-6">
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold text-slate-900">
-          無料APIキーを設定して全銘柄を分析する
-        </h3>
-        <p className="mt-0.5 text-xs text-slate-500">
-          FMP（Financial Modeling Prep）に無料登録してAPIキーを取得。3銘柄/日の制限がなくなり、全機能が使えるようになります。
-        </p>
-      </div>
-
-      <div className="grid grid-cols-3 gap-3">
-        {PLANS.map((plan) => (
-          <PlanCard key={plan.key} plan={plan} onOpenSettings={onOpenSettings} />
-        ))}
-      </div>
-
-      {/* UX item 6: cost breakdown */}
-      <p className="mt-3 text-center text-xs text-slate-400">
-        💡 FMP APIキー（無料）を取得するだけで3銘柄/日 → <strong className="text-slate-600">無制限</strong> にアップグレード。登録はメールのみ、クレジットカード不要。
+      {/* BYOK 脚注 (FMP APIキーで無料利用可) — 上級者向けに控えめに案内 */}
+      <p style={{
+        marginTop: 16,
+        textAlign: 'center',
+        fontSize: 11,
+        color: 'var(--text-muted)',
+        lineHeight: 1.6,
+      }}>
+        💡 上級者向け: <button
+          type="button"
+          onClick={onOpenSettings}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#22d3ee',
+            textDecoration: 'underline',
+            cursor: 'pointer',
+            fontSize: 11,
+            padding: 0,
+          }}
+        >FMP API キー (無料)</button>を設定すれば全機能を無料で利用できます
       </p>
     </section>
   );

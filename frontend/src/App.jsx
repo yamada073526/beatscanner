@@ -1071,7 +1071,19 @@ export default function App() {
             )}
 
             {isDemoResult && (
-              <PlanComparisonBanner onOpenSettings={() => setShowSettings(true)} />
+              <PlanComparisonBanner
+                onOpenSettings={() => setShowSettings(true)}
+                onStartCheckout={() => {
+                  if (user) {
+                    startCheckout('monthly');
+                  } else {
+                    // 未ログイン: 意図フラグをセット → Google ログイン → ログイン後 checkout 自動遷移
+                    try { localStorage.setItem('bs_post_login_intent', 'checkout_monthly'); } catch {}
+                    signInWithGoogle();
+                  }
+                }}
+                user={user}
+              />
             )}
           </div>
 
