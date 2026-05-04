@@ -385,12 +385,13 @@ function FiveConditionsMockup() {
   );
 }
 
-// v38: 市場の声カード用 UI モックアップ — センチメントバッジ + 強気/弱気/注目指標
+// v39: 市場の声カード用 UI モックアップ (拡充版)
+// — センチメントバッジ + 要約引用 + 強気/弱気材料 + キー指標フッター
 function MarketVoiceMockup() {
   const items = [
-    { icon: '🟢', text: 'AI半導体需要が継続拡大', color: '#34ef81' },
-    { icon: '🔴', text: '競合のAMDが猛追中', color: '#f87171' },
-    { icon: '📌', text: '次回決算: EPS $0.89 予想', color: '#94a3b8' },
+    { icon: '🟢', text: 'AI需要が継続拡大' },
+    { icon: '🔴', text: '競合AMDが猛追中' },
+    { icon: '🔴', text: 'バリュエーション割高懸念' },
   ];
   return (
     <div style={{
@@ -400,10 +401,12 @@ function MarketVoiceMockup() {
       marginTop: 8,
       fontSize: 11,
     }}>
+      {/* ヘッダー */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
-        marginBottom: 6,
+        alignItems: 'center',
+        marginBottom: 8,
       }}>
         <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>NVDA</span>
         <span style={{
@@ -415,25 +418,48 @@ function MarketVoiceMockup() {
           fontWeight: 700,
         }}>⚡ 強弱混在</span>
       </div>
-      {items.map((it) => (
-        <div key={it.text} style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          marginBottom: 3,
-          color: 'var(--text-muted)',
+      {/* 要約引用 (cyan 縦線で引用感を出す) */}
+      <div style={{
+        fontSize: 10,
+        color: 'var(--text-secondary)',
+        marginBottom: 8,
+        lineHeight: 1.5,
+        borderLeft: '2px solid rgba(34,211,238,0.3)',
+        paddingLeft: 8,
+      }}>
+        AI半導体需要は堅調。ただし競合台頭と<br />
+        バリュエーション面での割高感が懸念材料。
+      </div>
+      {/* 強気・弱気材料 */}
+      {items.map((it, i) => (
+        <div key={i} style={{
           fontSize: 10,
+          color: 'var(--text-muted)',
+          marginBottom: 3,
         }}>
-          <span>{it.icon}</span>
-          <span>{it.text}</span>
+          {it.icon} {it.text}
         </div>
       ))}
+      {/* キー指標フッター */}
+      <div style={{
+        marginTop: 8,
+        padding: '4px 8px',
+        background: 'rgba(34,211,238,0.06)',
+        borderRadius: 4,
+        fontSize: 10,
+        color: 'var(--text-muted)',
+      }}>
+        📌 次回決算: EPS $0.89予想 / 毎朝4時更新
+      </div>
     </div>
   );
 }
 
-// v38: チャート連動カード用 UI モックアップ — 株価線 + Beat/Miss マーカー
+// v39: チャート連動カード用 UI モックアップ (拡充版)
+// — 期間切替タブ + 株価線 + Beat/Miss マーカー + 遡及訴求
 function ChartLinkMockup() {
+  const periods = ['1Q', '1Y', '3Y', '5Y'];
+  const activeIdx = 2;  // 3Y を選択中
   return (
     <div style={{
       background: 'rgba(34,211,238,0.06)',
@@ -442,8 +468,25 @@ function ChartLinkMockup() {
       marginTop: 8,
       fontSize: 11,
     }}>
+      {/* 期間切替タブ */}
+      <div style={{
+        display: 'flex',
+        gap: 4,
+        marginBottom: 8,
+      }}>
+        {periods.map((label, i) => (
+          <span key={label} style={{
+            fontSize: 9,
+            padding: '1px 6px',
+            borderRadius: 3,
+            background: i === activeIdx ? 'rgba(34,211,238,0.2)' : 'rgba(255,255,255,0.05)',
+            color: i === activeIdx ? '#22d3ee' : 'var(--text-muted)',
+            fontWeight: i === activeIdx ? 700 : 400,
+          }}>{label}</span>
+        ))}
+      </div>
+      {/* 株価ラインチャート */}
       <svg width="100%" height="48" viewBox="0 0 200 48" preserveAspectRatio="none" aria-hidden="true">
-        {/* 株価線 (シアン) */}
         <polyline
           points="0,40 40,35 80,20 120,28 160,12 200,8"
           fill="none"
@@ -459,12 +502,22 @@ function ChartLinkMockup() {
         <circle cx="120" cy="28" r="4" fill="#f87171" />
         <text x="120" y="44" fontSize="8" fill="#f87171" textAnchor="middle" fontWeight="700">Miss</text>
       </svg>
+      {/* キャプション */}
       <div style={{
         marginTop: 4,
         fontSize: 10,
         color: 'var(--text-muted)',
       }}>
         ▲ Beat / ▼ Miss を株価に重ねて表示
+      </div>
+      {/* 遡及訴求 */}
+      <div style={{
+        marginTop: 6,
+        fontSize: 10,
+        color: 'var(--text-muted)',
+        textAlign: 'center',
+      }}>
+        過去5年・20決算まで遡及可能
       </div>
     </div>
   );
@@ -529,8 +582,9 @@ function PricingSection({ onFreeStart, onProCheckout }) {
         maxWidth: 720,
         margin: '0 auto',
       }}>
-        {/* Free プラン — panel-card / v38: flex col + ul marginTop:auto で
-            ✓ リスト + CTA を下部に押し出して Pro カードと底揃え */}
+        {/* Free プラン — panel-card / v39: 上部エリアを div ラップ + minHeight で
+            Pro カードと ✓ 項目の開始位置を水平揃え。
+            CTA は marginTop:auto で底固定。 */}
         <div
           className="panel-card"
           style={{
@@ -543,30 +597,37 @@ function PricingSection({ onFreeStart, onProCheckout }) {
             height: '100%',
           }}
         >
-          <div style={{ fontSize: 22, marginBottom: 4 }}>🆓</div>
-          <h3 className="section-heading" style={{ fontSize: 16, marginBottom: 4 }}>
-            無料
-          </h3>
-          <div style={{
-            fontSize: 26, fontWeight: 700,
-            color: 'var(--text-primary)', marginBottom: 18,
-          }}>
-            ¥0<span style={{
-              fontSize: 13, fontWeight: 400, color: 'var(--text-muted)',
-            }}>/月</span>
+          {/* 上部エリア: アイコン + プラン名 + 価格。
+              minHeight で Pro カードの上部 (アイコン+名+価格+¥33+pill) と高さ揃え */}
+          <div style={{ minHeight: 152 }}>
+            <div style={{ fontSize: 22, marginBottom: 4 }}>🆓</div>
+            <h3 className="section-heading" style={{ fontSize: 16, marginBottom: 4 }}>
+              無料
+            </h3>
+            <div style={{
+              fontSize: 26, fontWeight: 700,
+              color: 'var(--text-primary)',
+            }}>
+              ¥0<span style={{
+                fontSize: 13, fontWeight: 400, color: 'var(--text-muted)',
+              }}>/月</span>
+            </div>
           </div>
+          {/* 中部: ✓ リスト (上部直後に通常フロー — Pro と水平揃え) */}
           <ul style={{
             listStyle: 'none', padding: 0, margin: '0 0 22px',
             fontSize: 13, lineHeight: 2, color: 'var(--text-secondary)',
-            marginTop: 'auto',  // v38: 下部に押し出して ✓ リスト位置を Pro と揃える
           }}>
             <li>✓ 3銘柄/日まで無料分析</li>
             <li>✓ 5条件 即時判定</li>
             <li>✓ 株価チャート閲覧</li>
           </ul>
-          <OutlinedCTA onClick={onFreeStart} fullWidth>
-            今すぐ無料で始める
-          </OutlinedCTA>
+          {/* 下部: CTA を marginTop:auto で底固定 */}
+          <div style={{ marginTop: 'auto' }}>
+            <OutlinedCTA onClick={onFreeStart} fullWidth>
+              今すぐ無料で始める
+            </OutlinedCTA>
+          </div>
         </div>
 
         {/* Pro プラン — panel-card + シアン強調 / v38: flex col で Free と底揃え */}
@@ -599,44 +660,47 @@ function PricingSection({ onFreeStart, onProCheckout }) {
           }}>
             おすすめ
           </div>
-          <div style={{ fontSize: 22, marginBottom: 4 }}>✨</div>
-          <h3 className="section-heading" style={{ fontSize: 16, marginBottom: 4 }}>
-            Pro
-          </h3>
-          <div style={{
-            fontSize: 26, fontWeight: 700,
-            color: '#22d3ee', marginBottom: 4,
-          }}>
-            ¥980<span style={{
-              fontSize: 13, fontWeight: 400, color: 'var(--text-muted)',
-            }}>/月</span>
+          {/* v39: 上部エリアを div ラップ — Free カードと minHeight 揃え */}
+          <div>
+            <div style={{ fontSize: 22, marginBottom: 4 }}>✨</div>
+            <h3 className="section-heading" style={{ fontSize: 16, marginBottom: 4 }}>
+              Pro
+            </h3>
+            <div style={{
+              fontSize: 26, fontWeight: 700,
+              color: '#22d3ee', marginBottom: 4,
+            }}>
+              ¥980<span style={{
+                fontSize: 13, fontWeight: 400, color: 'var(--text-muted)',
+              }}>/月</span>
+            </div>
+            {/* v37 Fix 7: コーヒー1杯アンカリングで体感価格を下げる */}
+            <div style={{
+              fontSize: 11,
+              color: 'var(--text-muted)',
+              marginTop: 4,
+              marginBottom: 12,
+            }}>
+              1日あたり約¥33 — コーヒー1杯より安く
+            </div>
+            <div style={{
+              display: 'inline-block',
+              padding: '2px 10px',
+              borderRadius: 9999,
+              background: 'rgba(34,211,238,0.12)',
+              border: '1px solid rgba(34,211,238,0.40)',
+              color: '#22d3ee',
+              fontSize: 11,
+              fontWeight: 600,
+              marginBottom: 18,
+            }}>
+              🎁 7日間 完全無料
+            </div>
           </div>
-          {/* v37 Fix 7: コーヒー1杯アンカリングで体感価格を下げる */}
-          <div style={{
-            fontSize: 11,
-            color: 'var(--text-muted)',
-            marginTop: 4,
-            marginBottom: 12,
-          }}>
-            1日あたり約¥33 — コーヒー1杯より安く
-          </div>
-          <div style={{
-            display: 'inline-block',
-            padding: '2px 10px',
-            borderRadius: 9999,
-            background: 'rgba(34,211,238,0.12)',
-            border: '1px solid rgba(34,211,238,0.40)',
-            color: '#22d3ee',
-            fontSize: 11,
-            fontWeight: 600,
-            marginBottom: 18,
-          }}>
-            🎁 7日間 完全無料
-          </div>
+          {/* 中部: ✓ リスト — 上部直後に通常フローで Free と水平揃え */}
           <ul style={{
             listStyle: 'none', padding: 0, margin: '0 0 22px',
             fontSize: 13, lineHeight: 2, color: 'var(--text-secondary)',
-            marginTop: 'auto',  // v38: 下部に押し出して Free と底揃え
           }}>
             <li>✓ 分析数 <strong style={{ color: '#22d3ee' }}>無制限</strong></li>
             <li>✓ 市場の声 フル表示</li>
@@ -644,23 +708,26 @@ function PricingSection({ onFreeStart, onProCheckout }) {
             <li>✓ ウォッチリスト無制限</li>
             <li>✓ 決算前自動分析</li>
           </ul>
-          <PrimaryCTA onClick={onProCheckout} fullWidth>
-            7日間無料で試す →
-          </PrimaryCTA>
-          {/* Fix 3: 年払いバッジを目立つシアン pill に強化 */}
-          <div style={{ textAlign: 'center', marginTop: 10 }}>
-            <span style={{
-              display: 'inline-block',
-              background: 'rgba(34,211,238,0.12)',
-              border: '1px solid rgba(34,211,238,0.35)',
-              borderRadius: 6,
-              padding: '4px 10px',
-              fontSize: 12,
-              color: '#22d3ee',
-              fontWeight: 600,
-            }}>
-              🏷️ 年払いで2ヶ月分お得（¥1,960節約）
-            </span>
+          {/* 下部: CTA + 年払いバッジを marginTop:auto で底固定 */}
+          <div style={{ marginTop: 'auto' }}>
+            <PrimaryCTA onClick={onProCheckout} fullWidth>
+              7日間無料で試す →
+            </PrimaryCTA>
+            {/* Fix 3: 年払いバッジを目立つシアン pill に強化 */}
+            <div style={{ textAlign: 'center', marginTop: 10 }}>
+              <span style={{
+                display: 'inline-block',
+                background: 'rgba(34,211,238,0.12)',
+                border: '1px solid rgba(34,211,238,0.35)',
+                borderRadius: 6,
+                padding: '4px 10px',
+                fontSize: 12,
+                color: '#22d3ee',
+                fontWeight: 600,
+              }}>
+                🏷️ 年払いで2ヶ月分お得（¥1,960節約）
+              </span>
+            </div>
           </div>
         </div>
       </div>
