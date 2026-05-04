@@ -1,11 +1,14 @@
 /**
- * UpgradeModal — shown when a Free (no-API-key) user touches a locked feature.
+ * UpgradeModal — shown when a Free user touches a locked feature.
  *
  * Props:
- *   isOpen        boolean
- *   onClose       () => void
- *   featureName   string  e.g. "AI詳細レポート"
- *   onOpenSettings () => void  — opens the API key / onboarding wizard
+ *   isOpen           boolean
+ *   onClose          () => void
+ *   featureName      string  e.g. "AI詳細レポート"
+ *   onOpenSettings   () => void  — opens API key settings
+ *   onCheckout       (plan: string) => void  — starts Stripe Checkout
+ *   checkoutLoading  boolean
+ *   user             Supabase user object | null
  */
 
 const PLAN_ROWS = [
@@ -56,7 +59,7 @@ function FeatureRow({ label, val, active }) {
   );
 }
 
-export default function UpgradeModal({ isOpen, onClose, featureName, onOpenSettings }) {
+export default function UpgradeModal({ isOpen, onClose, featureName, onOpenSettings, onCheckout, checkoutLoading, user }) {
   if (!isOpen) return null;
 
   return (
@@ -83,7 +86,7 @@ export default function UpgradeModal({ isOpen, onClose, featureName, onOpenSetti
         <div className="px-6 pt-4 pb-2">
           <p className="text-sm text-slate-600">
             <span className="font-semibold text-slate-900">「{featureName}」</span>
-            はFMP APIキーを設定するだけで無料でご利用いただけます。
+            はProプランでご利用いただけます。
           </p>
         </div>
 
@@ -111,18 +114,49 @@ export default function UpgradeModal({ isOpen, onClose, featureName, onOpenSetti
           </PlanCol>
         </div>
 
-        {/* Notice: BYOK = Pro for now */}
-        <div className="mx-6 mb-4 rounded-lg bg-blue-50 border border-blue-100 px-4 py-2.5 text-xs text-blue-700">
-          💡 現在、<strong>FMP APIキー（無料取得）</strong>を設定するだけでPro相当の全機能が利用できます。
-        </div>
+        {/* Stripe CTAs — ログイン済みなら決済ボタン、未ログインなら誘導 */}
+        {user ? (
+          <div className="px-6 pb-4 space-y-2">
+            <button
+              onClick={() => { onClose(); onCheckout?.('monthly'); }}
+              disabled={checkoutLoading}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '10px',
+                background: 'rgba(34,211,238,0.12)',
+                color: '#22d3ee',
+                border: '1px solid rgba(34,211,238,0.40)',
+                fontSize: '14px',
+                fontWeight: 600,
+                cursor: checkoutLoading ? 'not-allowed' : 'pointer',
+                opacity: checkoutLoading ? 0.6 : 1,
+                transition: 'all 0.2s',
+              }}
+            >
+              {checkoutLoading ? '処理中...' : '✨ Pro月払い ¥980/月（7日間無料）'}
+            </button>
+            <button
+              onClick={() => { onClose(); onCheckout?.('yearly'); }}
+              disabled={checkoutLoading}
+              className="w-full rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              年払い ¥9,800/年（¥817/月）
+            </button>
+          </div>
+        ) : (
+          <div className="mx-6 mb-4 rounded-lg bg-cyan-50 border border-cyan-100 px-4 py-2.5 text-xs text-cyan-700">
+            💡 Googleアカウントでログインすると決済に進めます。または<strong>FMP APIキー（無料）</strong>を設定してもPro機能を利用できます。
+          </div>
+        )}
 
-        {/* CTAs */}
+        {/* Secondary CTAs */}
         <div className="flex items-center gap-3 border-t border-slate-100 px-6 py-4">
           <button
             onClick={() => { onClose(); onOpenSettings?.(); }}
-            className="flex-1 rounded-lg bg-slate-900 py-2.5 text-sm font-semibold text-white hover:bg-slate-700"
+            className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
           >
-            APIキーを設定してProを開始 →
+            APIキーで無料利用 →
           </button>
           <button
             onClick={onClose}

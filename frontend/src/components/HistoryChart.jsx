@@ -8,7 +8,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
 } from 'recharts';
 
@@ -51,7 +50,7 @@ function SharesModal({ onClose }) {
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 なぜ重要か</p>
         <p className="text-sm leading-relaxed text-slate-700">
-          たとえ会社の利益が増えていても、この株数がそれ以上に増えていれば、あなたの持ち分（1株あたりの価値）は相対的に小さくなってしまいます。これを「株式の希薄化」と呼びます。
+          たとえ会社の利益が増えていても、この株数がそれ以上に増えていれば、あなたの持ち分（<span style={{ color: '#22d3ee', fontWeight: 500 }}>1株あたりの価値</span>）は相対的に小さくなってしまいます。これを「<span style={{ color: '#22d3ee', fontWeight: 500 }}>株式の希薄化</span>」と呼びます。
         </p>
       </div>
 
@@ -60,7 +59,7 @@ function SharesModal({ onClose }) {
         <ul className="space-y-2 text-sm text-slate-700">
           <li>
             <span className="font-semibold text-slate-900">・理想は「横ばい」または「減少」</span><br />
-            優良企業は自社株買いによってこの数字を減らし、1株あたりの価値を高める努力をします。Appleなどがその典型です。
+            優良企業は<span style={{ color: '#22d3ee', fontWeight: 500 }}>自社株買い</span>によってこの数字を減らし、1株あたりの価値を高める努力をします。Appleなどがその典型です。
           </li>
           <li>
             <span className="font-semibold text-slate-900">・「右肩上がり」は要注意</span><br />
@@ -94,7 +93,14 @@ function SharesTrend({ periods }) {
           <span className="text-xs font-semibold text-slate-600">希薄化後発行済株式数の推移</span>
           <button
             onClick={() => setShowModal(true)}
-            className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-500 hover:bg-slate-300 hover:text-slate-700"
+            className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
+            style={{
+              background: 'rgba(34,211,238,0.15)',
+              color: '#22d3ee',
+              border: '1px solid rgba(34,211,238,0.4)',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.30)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.15)'; }}
             aria-label="希薄化後発行済株式数の説明を表示"
           >
             ？
@@ -133,7 +139,7 @@ function HistoryChartModal({ onClose }) {
         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">📋 3指標をセットで見る理由</p>
         <p className="mb-2 text-sm leading-relaxed text-slate-700">この3つは単独ではなく、必ずセットで確認することが重要です。</p>
         <ul className="space-y-1 text-sm text-slate-700">
-          <li>・売上高が増加 → <strong>本業の需要が拡大している証拠</strong></li>
+          <li>・売上高が増加 → <strong style={{ color: '#22d3ee' }}>本業の需要が拡大している証拠</strong>（成長の質）</li>
           <li>・EPSが増加 → 利益が成長している（<strong>ただし会計操作の可能性あり</strong>）</li>
           <li>・CFPSが増加 → <strong>実際の現金創出力が伸びている</strong>（ごまかしにくい）</li>
         </ul>
@@ -141,7 +147,7 @@ function HistoryChartModal({ onClose }) {
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 チェックポイント</p>
         <p className="text-sm leading-relaxed text-slate-700">
-          <strong>3本の線がすべて右肩上がりであれば理想的です。</strong>もしEPSだけ上昇してCFPSが横ばい・下降している場合は、<strong>会計上の操作による見せかけの利益成長の可能性があるため注意が必要です。</strong>
+          <strong style={{ color: '#22d3ee' }}>3本の線がすべて右肩上がり</strong>であれば理想的です（トレンドの継続性）。もしEPSだけ上昇してCFPSが横ばい・下降している場合は、<strong>会計上の操作による見せかけの利益成長の可能性があるため注意が必要です。</strong>
         </p>
       </div>
     </InfoModal>
@@ -162,12 +168,19 @@ export default function HistoryChart({ periods, currency = 'USD' }) {
   return (
     <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
       <div className="mb-1 flex items-center gap-2">
-        <h3 className="text-base font-semibold text-slate-900">
+        <h3 className="section-heading" style={{ marginBottom: 0 }}>
           過去推移（売上高 [{unit}] / EPS / CFPS）
         </h3>
         <button
           onClick={() => setShowChartModal(true)}
-          className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-500 hover:bg-slate-300 hover:text-slate-700"
+          className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
+          style={{
+            background: 'rgba(34,211,238,0.15)',
+            color: '#22d3ee',
+            border: '1px solid rgba(34,211,238,0.4)',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.30)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.15)'; }}
           aria-label="過去推移グラフの見方を表示"
         >
           ？
@@ -178,6 +191,44 @@ export default function HistoryChart({ periods, currency = 'USD' }) {
       <p className="mb-3 text-[10px] text-slate-400">
         ※ CFPS = 1株あたり営業CF（営業CF ÷ 希薄化後株式数）。資本支出を差し引いたFCF（フリーCF）とは異なります。
       </p>
+      {/* ── カスタム凡例（チャート上部・大型化） ── */}
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: '20px',
+          marginBottom: '12px',
+        }}
+      >
+        {[
+          { color: '#3b82f6', label: `売上高 (${unit})` },
+          { color: '#22c55e', label: 'EPS ($)' },
+          { color: '#f59e0b', label: 'CFPS ($)' },
+        ].map((it) => (
+          <span key={it.label} style={{ display: 'inline-flex', alignItems: 'center' }}>
+            <span
+              aria-hidden
+              style={{
+                width: '10px',
+                height: '10px',
+                borderRadius: '50%',
+                background: it.color,
+                display: 'inline-block',
+              }}
+            />
+            <span
+              style={{
+                fontSize: '13px',
+                marginLeft: '6px',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              {it.label}
+            </span>
+          </span>
+        ))}
+      </div>
       <div className="h-72 w-full">
         <ResponsiveContainer>
           <LineChart data={data} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
@@ -186,7 +237,6 @@ export default function HistoryChart({ periods, currency = 'USD' }) {
             <YAxis yAxisId="left" stroke="#64748b" />
             <YAxis yAxisId="right" orientation="right" stroke="#64748b" />
             <Tooltip />
-            <Legend />
             <Line yAxisId="left" type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={2} name={`売上高 (${unit})`} />
             <Line yAxisId="right" type="monotone" dataKey="eps" stroke="#22c55e" strokeWidth={2} name="EPS ($)" />
             <Line yAxisId="right" type="monotone" dataKey="cfps" stroke="#f59e0b" strokeWidth={2} name="CFPS ($)" />

@@ -29,6 +29,36 @@ export default function NewsPanel({ ticker }) {
   });
   const translatingRef = useRef(false);
 
+  // 下端フェードの表示制御
+  const newsScrollRef = useRef(null);
+  const [showFade, setShowFade] = useState(false);
+  const updateFadeState = () => {
+    const el = newsScrollRef.current;
+    if (!el) return;
+    const hasOverflow = el.scrollHeight > el.clientHeight + 4;
+    const atBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 8;
+    setShowFade(hasOverflow && !atBottom);
+  };
+
+  // PC ホバー演出 — JS クラス制御
+  const gridRef = useRef(null);
+  const handleCardEnter = (index) => {
+    if (!gridRef.current) return;
+    if (window.matchMedia('(hover: none)').matches) return;
+    const cards = gridRef.current.querySelectorAll('.news-card');
+    cards.forEach((c, i) => {
+      c.style.transitionDelay = '0s'; // scroll-reveal の stagger 遅延をリセット
+      c.classList.toggle('news-active', i === index);
+      c.classList.toggle('news-dimmed', i !== index);
+    });
+  };
+  const handleCardLeave = () => {
+    if (!gridRef.current) return;
+    gridRef.current.querySelectorAll('.news-card').forEach((c) => {
+      c.classList.remove('news-active', 'news-dimmed');
+    });
+  };
+
   // スマホ向けスクロール入場アニメーション
   const listRef = useRef(null);
   useEffect(() => {
@@ -65,13 +95,22 @@ export default function NewsPanel({ ticker }) {
     };
   }, [news]); // news更新のたびに再セット
 
+  // ニュース更新・リサイズ時にフェード状態を更新
+  useEffect(() => {
+    updateFadeState();
+    const handle = () => updateFadeState();
+    window.addEventListener('resize', handle);
+    return () => window.removeEventListener('resize', handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [news]);
+
   function load() {
     if (!ticker) return;
     setLoading(true);
     setError(null);
     setNews([]);
     setTranslated(null);
-    fetchNews(ticker, 8)
+    fetchNews(ticker, 20)
       .then(setNews)
       .catch(() => setError('ニュースの取得に失敗しました'))
       .finally(() => setLoading(false));
@@ -186,7 +225,7 @@ export default function NewsPanel({ ticker }) {
   return (
     <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
       <div className="mb-4 flex items-center justify-between gap-2">
-        <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+        <h3 className="section-heading" style={{ marginBottom: 0 }}>
           📰 最新ニュース
           <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>{ticker}</span>
         </h3>
@@ -250,85 +289,44 @@ export default function NewsPanel({ ticker }) {
       )}
 
       {!loading && news.length > 0 && (
-        <ul ref={listRef} style={{ borderTop: '1px solid var(--border)' }}>
-          {news.map((item, i) => {
-            const canHover = window.matchMedia('(hover: hover)').matches;
-            return (
-            <li
-              key={i}
-              className="py-3 scroll-reveal"
-              onMouseEnter={(e) => {
-                if (canHover) {
-                  e.currentTarget.style.backgroundColor = 'var(--bg-subtle)';
-                  e.currentTarget.style.borderRadius = '8px';
-                  e.currentTarget.style.paddingLeft = '6px';
-                  e.currentTarget.style.paddingRight = '6px';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (canHover) {
-                  e.currentTarget.style.backgroundColor = '';
-                  e.currentTarget.style.borderRadius = '';
-                  e.currentTarget.style.paddingLeft = '';
-                  e.currentTarget.style.paddingRight = '';
-                }
-              }}
-              style={{
-                borderBottom: '1px solid var(--border)',
-                transition: 'background-color 0.15s, border-radius 0.15s, padding 0.15s, opacity 0.35s ease, transform 0.35s ease',
-                transitionDelay: `${i * 0.06}s`,
-                cursor: 'pointer',
-                marginLeft: '-6px',
-                marginRight: '-6px',
-              }}
-            >
+        <div
+          className={`news-scroll-wrapper${showFade ? ' show-fade' : ''}`}
+          ref={newsScrollRef}
+          onScroll={updateFadeState}
+        >
+          <div ref={(el) => { listRef.current = el; gridRef.current = el; }} className="news-grid">
+            {news.map((item, i) => (
               <div
+                key={i}
                 onClick={() => openArticle(item)}
-                className="group block"
-                style={{ cursor: 'pointer' }}
+                onMouseEnter={() => handleCardEnter(i)}
+                onMouseLeave={handleCardLeave}
+                className="news-card scroll-reveal"
+                style={{ transitionDelay: `${i * 0.06}s` }}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium leading-snug line-clamp-2"
-                      style={{ color: 'var(--text-primary)' }}>
-                      {displayTitles?.[i] || item.title}
-                    </p>
-                    {displayTitles?.[i] && item.title !== displayTitles[i] && (
-                      <p className="mt-0.5 text-[11px] line-clamp-1 leading-relaxed"
-                        style={{ color: 'var(--text-muted)' }}>
-                        {item.title}
-                      </p>
-                    )}
-                    {!displayTitles && item.summary && (
-                      <p className="mt-1 text-xs line-clamp-2 leading-relaxed"
-                        style={{ color: 'var(--text-secondary)' }}>
-                        {item.summary}
-                      </p>
-                    )}
-                    <div className="mt-1.5 flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
-                      {item.source && (
-                        <span className="rounded px-1.5 py-0.5 font-medium"
-                          style={{ background: 'var(--bg-muted)' }}>
-                          {item.source}
-                        </span>
-                      )}
-                      <span>{timeAgo(item.published)}</span>
-                    </div>
+                {item.image && (
+                  <img
+                    src={item.image}
+                    alt=""
+                    className="news-card-thumb"
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                )}
+                <div className="news-card-body">
+                  <div className="news-card-title">
+                    {displayTitles?.[i] || item.title}
                   </div>
-                  {item.image && (
-                    <img
-                      src={item.image}
-                      alt=""
-                      className="h-16 w-16 shrink-0 rounded-lg object-cover"
-                      onError={(e) => { e.target.style.display = 'none'; }}
-                    />
-                  )}
+                  <div className="news-card-meta">
+                    {item.source && (
+                      <span className="news-card-source">{item.source}</span>
+                    )}
+                    <span>{timeAgo(item.published)}</span>
+                  </div>
                 </div>
               </div>
-            </li>
-            );
-          })}
-        </ul>
+            ))}
+          </div>
+        </div>
       )}
 
       {articleModal && createPortal(
@@ -346,38 +344,50 @@ export default function NewsPanel({ ticker }) {
             background: 'var(--bg-primary)',
             border: '1px solid var(--border)',
             borderRadius: '16px',
-            padding: '24px',
+            maxHeight: '80vh',
+            overflowY: 'auto',
             position: 'relative',
           }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '8px' }}>
-              <p style={{ flex: 1, fontSize: '16px', fontWeight: '600', color: 'var(--text-primary)', margin: 0, lineHeight: 1.5 }}>
-                {articleModal.title}
-              </p>
+            {/* ── ヘッダー: ソースバッジ + 日付 + タイトル + 元記事リンク ── */}
+            <div className="news-modal-header">
               <button
                 onClick={() => setArticleModal(null)}
-                style={{ flexShrink: 0, background: 'transparent', border: 'none', fontSize: '20px', cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1 }}
+                aria-label="閉じる"
+                style={{
+                  position: 'absolute', top: '12px', right: '12px',
+                  background: 'transparent', border: 'none', fontSize: '20px',
+                  cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1, padding: '4px 8px',
+                }}
               >
                 ×
               </button>
+              {(articleModal.source || articleModal.published) && (
+                <div className="news-modal-meta-row">
+                  {articleModal.source && (
+                    <span className="news-modal-source-badge">{articleModal.source}</span>
+                  )}
+                  {articleModal.published && (
+                    <span className="news-modal-date">
+                      {new Date(articleModal.published).toLocaleDateString('ja-JP')}
+                    </span>
+                  )}
+                </div>
+              )}
+              <p className="news-modal-title">
+                {articleModal.title}
+              </p>
+              <a
+                href={articleModal.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="news-modal-original-link"
+              >
+                元記事を開く →
+              </a>
             </div>
 
-            {(articleModal.source || articleModal.published) && (
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 12px' }}>
-                {articleModal.source}
-                {articleModal.source && articleModal.published ? ' · ' : ''}
-                {articleModal.published ? new Date(articleModal.published).toLocaleDateString('ja-JP') : ''}
-              </p>
-            )}
-
-            <a
-              href={articleModal.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '16px' }}
-            >
-              元記事を開く →
-            </a>
-
+            {/* ── 本文エリア ── */}
+            <div className="news-modal-body-wrap">
             {articleModal.loading && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '24px 0', color: 'var(--text-secondary)' }}>
                 <span style={{
@@ -399,37 +409,17 @@ export default function NewsPanel({ ticker }) {
               </div>
             )}
             {articleModal.content && (
-              <div style={{ fontSize: '15px', lineHeight: '1.9', color: 'var(--text-primary)', maxWidth: '640px' }}>
+              <div style={{ maxWidth: '640px' }}>
                 <ReactMarkdown
                   components={{
                     p: ({ children }) => (
-                      <p style={{ marginBottom: '1.2em', color: 'var(--text-primary)', fontSize: '15px', lineHeight: '1.9' }}>
-                        {children}
-                      </p>
+                      <p className="news-modal-body">{children}</p>
                     ),
                     h2: ({ children }) => (
-                      <h2 style={{
-                        fontSize: '16px',
-                        fontWeight: '700',
-                        color: 'var(--text-primary)',
-                        margin: '2.5em 0 0.6em',
-                        paddingLeft: '10px',
-                        borderLeft: '3px solid var(--border)',
-                        lineHeight: 1.4,
-                      }}>
-                        {children}
-                      </h2>
+                      <h2 className="news-modal-heading">{children}</h2>
                     ),
                     h3: ({ children }) => (
-                      <h3 style={{
-                        fontSize: '14px',
-                        fontWeight: '600',
-                        color: 'var(--text-primary)',
-                        margin: '2em 0 0.4em',
-                        lineHeight: 1.4,
-                      }}>
-                        {children}
-                      </h3>
+                      <h3 className="news-modal-subheading">{children}</h3>
                     ),
                     strong: ({ children }) => (
                       <strong style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{children}</strong>
@@ -443,6 +433,7 @@ export default function NewsPanel({ ticker }) {
                 )}
               </div>
             )}
+            </div>
           </div>
         </div>,
         document.body

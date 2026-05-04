@@ -74,7 +74,7 @@ const CONDITION_DETAILS = {
       },
       {
         label: '💡 なぜ「利益（EPS）」ではなく「営業キャッシュフロー」なのか',
-        text: '**利益は会計上の操作（減価償却費の調整など）でごまかしや粉飾がしやすいのに対し、営業キャッシュフローは実際の銀行口座の現金残高の動きに基づくため、最もごまかしが効かない客観的なデータです。**帳簿上でいくら利益が出ているように見えても、実際に会社に現金が入ってきていなければ意味がありません。',
+        text: '利益は会計上の操作（減価償却費の調整など）でごまかしや粉飾がしやすいのに対し、営業キャッシュフローは実際の銀行口座の現金残高の動きに基づくため、**最もごまかしが効かない客観的なデータ**です。帳簿上でいくら利益が出ているように見えても、実際に会社に現金が入ってきていなければ意味がありません。',
       },
       {
         label: '📊 なぜ「15%以上」という基準なのか',
@@ -129,7 +129,7 @@ const CONDITION_DETAILS = {
       {
         label: '📋 修正EPS（オペレーティングEPS）を見ること',
         text: '企業の決算には事業構造改革費用・訴訟関連費用・子会社売却益など「一時的・特殊な損益」が含まれることがあります。これらは本業の持続的な収益力とは無関係なノイズです。',
-        note: '**過去のEPS推移やアナリスト予想をチェックする際は、こうした一時的要因を除外した「修正EPS（オペレーティングEPS）」をベースに判断することが重要です。**',
+        note: '過去のEPS推移やアナリスト予想をチェックする際は、こうした一時的要因を除外した**「修正EPS（オペレーティングEPS）」**をベースに判断することが重要です。',
       },
       {
         label: '📝 まとめ',
@@ -172,7 +172,7 @@ const CONDITION_DETAILS = {
       },
       {
         label: '📝 まとめ',
-        text: '「CFPSの連続増加」を確認するプロセスは、見せかけの利益成長に騙されることなく、**「本物の現金を稼ぎ出す力」が着実に成長している健康な企業だけを選別するための、極めて強力なフィルター**です。',
+        text: '「CFPSの連続増加」を確認するプロセスは、見せかけの利益成長に騙されることなく、**「本物の現金を稼ぎ出す力」**が着実に成長している健康な企業だけを選別するための、極めて強力なフィルターです。',
       },
     ],
   },
@@ -186,9 +186,9 @@ const CONDITION_DETAILS = {
       {
         label: '💡 なぜ「売上高の連続増加」が重要なのか',
         richBullets: [
-          { title: 'トップラインの成長はごまかせないから', desc: '売上高は企業の「トップライン」であり、製品やサービスへの需要そのものを示します。利益（EPS）はリストラや自社株買いといった「お化粧」である程度良く見せることが可能ですが、**売上高は顧客が実際にお金を払った総額であるため、ごまかしがききません。**売上が右肩上がりで伸びていることは、ビジネスそのものが順調に拡大していることを示す最も基本的な証拠となります。' },
+          { title: 'トップラインの成長はごまかせないから', desc: '売上高は企業の「トップライン」であり、製品やサービスへの需要そのものを示します。利益（EPS）はリストラや自社株買いといった「お化粧」である程度良く見せることが可能ですが、売上高は顧客が実際にお金を払った総額であるため、**ごまかしがききません**。売上が右肩上がりで伸びていることは、ビジネスそのものが順調に拡大していることを示す最も基本的な証拠となります。' },
           { title: '成長の頭打ちを見抜くため', desc: '過去に急成長していた企業でも、市場が飽和すると売上高の成長は止まります。売上高が連続で着実に増えていない企業は、将来の大きな株価上昇（PERの拡大）が期待しにくくなります。' },
-          { title: 'グロース投資における「加速度」の確認', desc: '成長株投資においては、単に売上高が増えているだけでなく、**「売上高成長率が期を追うごとに上昇しているか（加速度があるか）」**が極めて重要視されます。成長率に頭打ちの兆しが見られる場合、成長株としての評価は難しくなります。' },
+          { title: 'グロース投資における「加速度」の確認', desc: '成長株投資においては、単に売上高が増えているだけでなく、「売上高成長率が期を追うごとに上昇しているか（**加速度**があるか）」が極めて重要視されます。成長率に頭打ちの兆しが見られる場合、成長株としての評価は難しくなります。' },
         ],
       },
       {
@@ -218,7 +218,7 @@ const CONDITION_DETAILS = {
     sections: [
       {
         label: '📌 概要',
-        text: '「一株あたり営業キャッシュフロー（CFPS）は、その年の一株あたり利益（EPS）より必ず大きくなければいけない」とされる最大の理由は、**「粉飾決算」や会計上のごまかしを見抜くため**です。',
+        text: '「一株あたり営業キャッシュフロー（CFPS）は、その年の一株あたり利益（EPS）より必ず大きくなければいけない」とされる最大の理由は、**「粉飾決算」**や会計上のごまかしを見抜くためです。',
       },
       {
         label: '💡 利益（EPS）とCFPSの決定的な違い',
@@ -229,7 +229,7 @@ const CONDITION_DETAILS = {
           },
           {
             title: '営業キャッシュフロー（CFPS）は「客観的な事実」',
-            desc: '一方で、営業キャッシュフローは企業が事業を通じて実際に得た「現金の動き（入出金）」そのものを示します。現金の出入りは銀行口座の記録といった第三者による明確な裏付けが存在するため、改ざんや操作をしようとするとすぐに矛盾が露呈します。**架空の売上で利益を水増しすることはできても、実際に存在しない現金の流出入を帳簿上でごまかし続けることは極めて困難です。**',
+            desc: '一方で、営業キャッシュフローは企業が事業を通じて実際に得た「現金の動き（入出金）」そのものを示します。現金の出入りは銀行口座の記録といった第三者による明確な裏付けが存在するため、改ざんや操作をしようとするとすぐに矛盾が露呈します。架空の売上で利益を水増しすることはできても、実際に存在しない現金の流出入を帳簿上で**ごまかし続けることは極めて困難**です。',
           },
         ],
       },
@@ -240,7 +240,7 @@ const CONDITION_DETAILS = {
           desc: '帳簿上は利益が出ているのに、それに見合う現金が入ってきていない状態は極めて不自然です。架空売上による利益水増しの可能性があります。',
         },
         text: '「EPS（利益）のほうがCFPS（現金）よりも大きい」という逆転現象が起きている場合、「帳簿上は利益が出ているように見えるのに、実際にはそれに見合うだけの現金が会社に入ってきていない」という不自然な状態を意味します。',
-        note: 'このような場合、架空売上の計上や不適切な会計操作によって利益を水増ししている、すなわち**粉飾決算を行っている恐れが強く疑われます。**',
+        note: 'このような場合、架空売上の計上や不適切な会計操作によって利益を水増ししている、すなわち**粉飾決算**を行っている恐れが強く疑われます。',
       },
       {
         label: '📝 まとめ',
@@ -252,10 +252,11 @@ const CONDITION_DETAILS = {
 
 // ── Modal ────────────────────────────────────────────────────────────────────
 
+// `**xxx**` 区切りのキーワードをシアン強調する（段落全体を太字にせず重要部分だけ目立たせる）
 function renderBold(text) {
   return text.split(/\*\*(.+?)\*\*/g).map((part, i) =>
     i % 2 === 1
-      ? <strong key={i} className="font-semibold text-slate-900">{part}</strong>
+      ? <span key={i} style={{ color: '#22d3ee', fontWeight: 500 }}>{part}</span>
       : part
   );
 }
@@ -310,6 +311,35 @@ function ConditionModal({ detail, onClose }) {
   );
 }
 
+// ── Value text compaction ─────────────────────────────────────────────────────
+
+function compactDetail(detail) {
+  if (!detail) return detail;
+  const s = String(detail);
+
+  // "CFPS X.XX vs EPS Y.YY" → "CFPS X.X / EPS Y.Y"
+  const vsMatch = s.match(/CFPS\s+([\d.]+)\s+vs\s+EPS\s+([\d.]+)/i);
+  if (vsMatch) {
+    return `CFPS ${parseFloat(vsMatch[1]).toFixed(1)} / EPS ${parseFloat(vsMatch[2]).toFixed(1)}`;
+  }
+
+  // Arrow-separated: keep first and last only
+  const parts = s.split(/\s*→\s*/);
+  if (parts.length >= 2) {
+    const fmt = (v) => {
+      const bMatch = v.match(/([\d.]+)B\$/);
+      if (bMatch) return `${Math.round(parseFloat(bMatch[1]))}B`;
+      const pctMatch = v.match(/([\d.]+)%/);
+      if (pctMatch) return `${String(parseFloat(parseFloat(pctMatch[1]).toFixed(1)))}%`;
+      if (/^[\d.]+$/.test(v.trim())) return String(parseFloat(parseFloat(v).toFixed(1)));
+      return v.trim();
+    };
+    return parts.map(fmt).join(' → ');
+  }
+
+  return s;
+}
+
 // ── ConditionCard ─────────────────────────────────────────────────────────────
 
 export default function ConditionCard({ index, condition, isPro = true, onUpgradeClick }) {
@@ -321,9 +351,13 @@ export default function ConditionCard({ index, condition, isPro = true, onUpgrad
   return (
     <>
       <div
-        className={`panel-card flex flex-col gap-3 rounded-2xl border-2 bg-white p-5 shadow-sm transition ${
+        className={`panel-card rounded-2xl border-2 bg-white p-5 shadow-sm transition ${
           passed ? 'border-pass/40' : 'border-fail/40'
         }`}
+        style={{
+          display: 'grid',
+          gridTemplateRows: 'auto auto 80px auto',
+        }}
       >
         <div className="flex items-start justify-between">
           <div className="min-w-0 pr-2">
@@ -333,7 +367,14 @@ export default function ConditionCard({ index, condition, isPro = true, onUpgrad
               {detail && (
                 <button
                   onClick={() => setShowModal(true)}
-                  className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-500 hover:bg-slate-300 hover:text-slate-700"
+                  className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
+                  style={{
+                    background: 'rgba(34,211,238,0.15)',
+                    color: '#22d3ee',
+                    border: '1px solid rgba(34,211,238,0.4)',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.30)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.15)'; }}
                   aria-label={`${condition.name}の説明を表示`}
                 >
                   ？
@@ -360,8 +401,18 @@ export default function ConditionCard({ index, condition, isPro = true, onUpgrad
             </span>
           </div>
         </div>
-        <div className="text-2xl font-bold tracking-tight text-slate-900">
-          {condition.detail}
+        <div
+          className="tracking-tight text-slate-900"
+          style={{
+            fontSize: '0.95rem',
+            fontWeight: 600,
+            opacity: 0.85,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {compactDetail(condition.detail)}
         </div>
         <Sparkline data={condition.series} color={color} />
         <DeltaRow

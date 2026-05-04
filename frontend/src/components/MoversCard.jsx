@@ -330,10 +330,17 @@ export default function MoversCard({ onSelect }) {
 
   return (
     <div style={{ padding: "24px 16px 4px", borderBottom: "1px solid var(--border)", marginBottom: "24px" }}>
-      <div style={{ fontSize: "13px", fontWeight: 700,
-                    color: "var(--text-primary)", marginBottom: "12px" }}>
-        ⚡ {dateLabel}の急騰・急落銘柄 Top 5
+      <div className="subsection-label">
+        <span style={{
+          width: '6px', height: '6px',
+          borderRadius: '50%',
+          background: '#22d3ee',
+          display: 'inline-block',
+          flexShrink: 0,
+        }} />
+        {dateLabel}　急騰・急落
       </div>
+      <h2 className="subsection-heading">⚡ 今日の注目銘柄 Top 5</h2>
       <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
 
       {/* ── スマホ: タブ切り替え ── */}

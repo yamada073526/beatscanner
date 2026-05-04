@@ -1,0 +1,496 @@
+import { useState, useEffect } from "react";
+import InfoModal from "./InfoModal.jsx";
+
+const SENTIMENT = {
+  positive: { label: "強気",     color: "#22d3ee" },
+  negative: { label: "弱気",     color: "#f87171" },
+  neutral:  { label: "中立",     color: "#94a3b8" },
+  mixed:    { label: "強弱混在", color: "#fbbf24" },
+};
+
+// 「市場の声」見出し横の ? — ConditionCard と統一スタイル + クリックでモーダル表示
+function InfoButton({ onOpen }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
+      style={{
+        background: "rgba(34,211,238,0.15)",
+        color: "#22d3ee",
+        border: "1px solid rgba(34,211,238,0.4)",
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(34,211,238,0.30)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(34,211,238,0.15)"; }}
+      aria-label="市場の声についての説明を表示"
+    >
+      ?
+    </button>
+  );
+}
+
+// 「市場の声とは」モーダル — 5セクション構成
+function InsightsInfoModal({ onClose }) {
+  return (
+    <InfoModal title="市場の声とは" onClose={onClose}>
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          本アプリの「市場の声」は、複数の投資家・アナリストの見解を
+          AIが統合した独自分析です。大衆の推奨銘柄を真似するためではなく、
+          市場参加者の心理（センチメント）を客観的に観察し、
+          <span style={{ color: '#22d3ee', fontWeight: 500 }}>大衆の逆を突く</span>ための判断材料として活用してください。
+        </p>
+      </div>
+
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">🔥 大衆の熱狂は最大の売りシグナル</p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          SNSで投資家が熱狂し「ガチホだ！」と力んでいる銘柄は、
+          買いたい人が全員買ってしまっており、
+          将来の潜在的な売り圧力が溜まっている危険な状態です。
+        </p>
+        <p className="mt-2 text-sm italic leading-relaxed text-slate-600">
+          「強気相場は総悲観の中で生まれ、多幸感に包まれた時頓死する」
+        </p>
+      </div>
+
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">🏚 誰も注目しない場所にこそ機会がある</p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          みんなが同じテーマに群がっている「満員の映画館」では
+          大きな利益を得るのは困難です。
+          誰も見向きもしない銘柄・セクターにこそ
+          真の投資機会が転がっています。
+        </p>
+      </div>
+
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">😰 葛藤なきポジションに大勝ちはない</p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          相場が暴落して誰もが悲観している時、
+          「この株を買うのは怖いな…」と手が震えるような
+          <span style={{ color: '#22d3ee', fontWeight: 500 }}>葛藤を抱えながら建てたポジション</span>こそが、
+          後にお宝銘柄へと育つケースが多いです。
+        </p>
+      </div>
+
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📈 株価が語りかける声に耳を澄ます</p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          株式市場には「先見性」があり、実体経済のデータよりも
+          何ヶ月も先を読んで動きます。
+          「良いニュースが出たのに株価が下がる」場合は、
+          好材料が既に織り込まれ尽くしたサインです。
+          <span style={{ color: '#22d3ee', fontWeight: 500 }}>「相場は相場に聞け」</span>の精神で、
+          株価が発する違和感を素直に受け止める柔軟性が重要です。
+        </p>
+      </div>
+    </InfoModal>
+  );
+}
+
+function SentimentBadge({ sentiment }) {
+  const sc = SENTIMENT[sentiment] || SENTIMENT.neutral;
+  return (
+    <span style={{
+      display: "inline-flex",
+      alignItems: "center",
+      fontSize: 11,
+      fontWeight: 500,
+      letterSpacing: "0.02em",
+      color: sc.color,
+      background: `${sc.color}1f`,           // ≈ 0.12 alpha
+      border: `1px solid ${sc.color}66`,     // ≈ 0.40 alpha
+      borderRadius: 9999,
+      padding: "3px 10px",
+    }}>
+      {sc.label}
+    </span>
+  );
+}
+
+// Pro 会員向けフル表示（統合見解 + 強気/弱気 2カラム + 注目指標）
+function FullView({ data }) {
+  return (
+    <>
+      {/* 統合見解（400字） */}
+      {data.summary && (
+        <div style={{
+          padding: "14px 16px",
+          borderRadius: 10,
+          background: "rgba(34,211,238,0.07)",
+          border: "1px solid rgba(34,211,238,0.25)",
+          fontSize: 13,
+          lineHeight: 1.75,
+          marginBottom: 16,
+          color: "var(--text-primary)",
+        }}>
+          {data.summary}
+        </div>
+      )}
+
+      {/* 強気 / 弱気 2カラム */}
+      {(data.bull_points?.length > 0 || data.bear_points?.length > 0) && (
+        <div
+          className="md:grid-cols-2"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr",
+            gap: 12,
+            marginBottom: 16,
+          }}
+        >
+          {data.bull_points?.length > 0 && (
+            <div style={{
+              padding: "12px 14px",
+              borderRadius: 10,
+              background: "rgba(34,211,238,0.07)",
+              border: "1px solid rgba(34,211,238,0.25)",
+            }}>
+              <div style={{
+                fontSize: 11, fontWeight: 500, color: "#22d3ee",
+                letterSpacing: "0.06em", marginBottom: 8,
+              }}>
+                🟢 強気材料
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none" }}>
+                {data.bull_points.map((p, i) => (
+                  <li key={i} style={{
+                    display: "flex", gap: 6, fontSize: 12.5,
+                    lineHeight: 1.65, color: "var(--text-primary)",
+                    marginBottom: 4,
+                  }}>
+                    <span style={{ color: "#22d3ee", flexShrink: 0 }}>・</span>
+                    <span>{p}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {data.bear_points?.length > 0 && (
+            <div style={{
+              padding: "12px 14px",
+              borderRadius: 10,
+              background: "rgba(248,113,113,0.07)",
+              border: "1px solid rgba(248,113,113,0.25)",
+            }}>
+              <div style={{
+                fontSize: 11, fontWeight: 500, color: "#f87171",
+                letterSpacing: "0.06em", marginBottom: 8,
+              }}>
+                🔴 弱気材料
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none" }}>
+                {data.bear_points.map((p, i) => (
+                  <li key={i} style={{
+                    display: "flex", gap: 6, fontSize: 12.5,
+                    lineHeight: 1.65, color: "var(--text-primary)",
+                    marginBottom: 4,
+                  }}>
+                    <span style={{ color: "#f87171", flexShrink: 0 }}>・</span>
+                    <span>{p}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 注目指標 pill */}
+      {data.key_metrics?.length > 0 && (
+        <div>
+          <div style={{
+            fontSize: 11, fontWeight: 500, color: "var(--text-muted)",
+            letterSpacing: "0.06em", marginBottom: 6,
+          }}>
+            📌 注目指標
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {data.key_metrics.map((m, i) => (
+              <span key={i} style={{
+                display: "inline-block", fontSize: 11.5,
+                color: "var(--text-secondary)",
+                background: "var(--bg-subtle)",
+                border: "1px solid var(--border)",
+                borderRadius: 9999, padding: "3px 10px",
+              }}>
+                {m}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// Free 会員向けチラ見せ表示（summary 100字 + ぼかし + Pro CTA）
+function TeaserView({ data, onUpgrade }) {
+  const preview = (data.summary || "この銘柄の市場の声を分析しました。").slice(0, 100) + "…";
+  return (
+    <div style={{ position: "relative" }}>
+      {/* summary プレビュー */}
+      <div style={{
+        padding: "14px 16px",
+        borderRadius: "10px 10px 0 0",
+        background: "rgba(34,211,238,0.07)",
+        border: "1px solid rgba(34,211,238,0.25)",
+        borderBottom: "none",
+        fontSize: 13,
+        lineHeight: 1.75,
+        color: "var(--text-primary)",
+      }}>
+        {preview}
+      </div>
+      {/* ぼかしオーバーレイ（フェードアウト） */}
+      <div style={{
+        height: 80,
+        background: "linear-gradient(to bottom, rgba(34,211,238,0.07), var(--bg-card))",
+        borderLeft: "1px solid rgba(34,211,238,0.25)",
+        borderRight: "1px solid rgba(34,211,238,0.25)",
+        marginBottom: 16,
+      }} />
+      {/* アップグレード CTA */}
+      <div style={{
+        padding: 20,
+        borderRadius: 12,
+        border: "1px solid rgba(34,211,238,0.35)",
+        background: "rgba(34,211,238,0.07)",
+        textAlign: "center",
+      }}>
+        <div style={{
+          fontSize: 15, fontWeight: 600, color: "#22d3ee",
+          marginBottom: 12,
+        }}>
+          🔓 続きを読むには Pro プランへ
+        </div>
+        <div style={{
+          fontSize: 12, color: "var(--text-muted)",
+          marginBottom: 16, lineHeight: 1.8, textAlign: "left",
+          display: "inline-block",
+        }}>
+          ✓ 全銘柄の市場の声（リアルタイム更新）<br />
+          ✓ 強気・弱気の詳細分析<br />
+          ✓ 注目指標・キーメトリクス<br />
+          ✓ 決算 Beat/Miss 判定
+        </div>
+        <div>
+          <button
+            type="button"
+            onClick={onUpgrade}
+            style={{
+              padding: "10px 24px",
+              borderRadius: 8,
+              border: "none",
+              background: "#22d3ee",
+              color: "#0f172a",
+              fontWeight: 700,
+              fontSize: 14,
+              cursor: "pointer",
+            }}
+          >
+            Pro プランを見る →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function InsightsPanel({ ticker, user, isPro }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  // 「もう一度分析する」ボタン用: refetchKey が変わると useEffect が再実行され、
+  // ?refresh=1 を付けて全キャッシュ層をバイパスして再取得する。
+  const [refetchKey, setRefetchKey] = useState(0);
+  // ? ボタンクリックで「市場の声とは」モーダルを開く
+  const [isInfoOpen, setIsInfoOpen] = useState(false);
+
+  useEffect(() => {
+    if (!ticker || !user) return;
+    let cancelled = false;
+    setLoading(true);
+    setData(null);
+    setError(null);
+    // AbortController で 75 秒タイムアウト（BE は 60 秒で found:false 返却するが念のため）
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 75000);
+    const url = refetchKey > 0
+      ? `/api/insights/${ticker}?refresh=1`
+      : `/api/insights/${ticker}`;
+    fetch(url, { signal: controller.signal })
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch((err) => {
+        if (cancelled) return;
+        if (err && err.name === "AbortError") {
+          setError("分析に時間がかかっています。しばらくしてから再度お試しください");
+        } else {
+          setError("取得に失敗しました");
+        }
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearTimeout(timeoutId);
+    };
+  }, [ticker, user, refetchKey]);
+
+  // 暫定: Pro CTA は仮のアラート（TODO: Stripe 実装後に決済 LP へ遷移）
+  const handleUpgrade = () => {
+    alert("Pro プランは近日公開予定です！");
+  };
+
+  // 未ログイン
+  if (!user) {
+    return (
+      <div style={{
+        margin: "24px 0",
+        padding: "24px",
+        borderRadius: "12px",
+        border: "1px solid rgba(34,211,238,0.35)",
+        background: "rgba(34,211,238,0.07)",
+        textAlign: "center",
+      }}>
+        <div style={{ fontSize: 28, marginBottom: 8 }}>🔒</div>
+        <div style={{ color: "#22d3ee", fontWeight: 500, marginBottom: 4 }}>
+          会員限定コンテンツ
+        </div>
+        <div className="section-subtext" style={{ marginBottom: 16 }}>
+          この銘柄に関する市場の声はログイン後にご覧いただけます
+        </div>
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          style={{
+            padding: "8px 20px",
+            borderRadius: 8,
+            border: "1px solid rgba(34,211,238,0.5)",
+            background: "rgba(34,211,238,0.12)",
+            color: "#22d3ee",
+            cursor: "pointer",
+            fontSize: 13,
+          }}
+        >
+          サインインして見る
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ margin: "24px 0" }}>
+      {/* ヘッダー: タイトル + ? + センチメントバッジ */}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 8,
+        marginBottom: 16,
+        flexWrap: "wrap",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span className="section-heading" style={{ marginBottom: 0 }}>
+            📊 市場の声
+          </span>
+          <InfoButton onOpen={() => setIsInfoOpen(true)} />
+        </div>
+        {data && data.found && !loading && (
+          <SentimentBadge sentiment={data.overall_sentiment} />
+        )}
+      </div>
+
+      {/* ローディング */}
+      {loading && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {[1, 2].map((i) => (
+            <div
+              key={i}
+              style={{
+                height: 80,
+                borderRadius: 10,
+                background: "var(--bg-subtle)",
+                animation: "pulse 1.5s ease-in-out infinite",
+              }}
+            />
+          ))}
+          <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
+        </div>
+      )}
+
+      {/* エラー */}
+      {error && (
+        <div style={{ color: "#f87171", fontSize: 13 }}>{error}</div>
+      )}
+
+      {/* データなし - Pro なら準備中表示+再分析ボタン / Free なら Teaser CTA */}
+      {data && !data.found && !loading && (
+        isPro ? (
+          <div style={{
+            padding: "20px 16px",
+            borderRadius: 10,
+            background: "var(--bg-subtle)",
+            border: "1px solid var(--border)",
+            fontSize: 13,
+            color: "var(--text-secondary)",
+            textAlign: "center",
+            lineHeight: 1.75,
+          }}>
+            <div style={{ fontSize: 24, marginBottom: 8 }}>🔍</div>
+            <div style={{ fontWeight: 600, color: "var(--text-primary)", marginBottom: 8 }}>
+              {ticker} の市場データを準備しています
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>
+              現在この銘柄の情報を収集中です。<br />
+              しばらく経ってから再度ご確認いただくか、<br />
+              ウォッチリストに追加すると次回から優先的に分析されます。
+            </div>
+            <button
+              type="button"
+              onClick={() => setRefetchKey((k) => k + 1)}
+              style={{
+                background: "rgba(34,211,238,0.12)",
+                color: "#22d3ee",
+                border: "1px solid rgba(34,211,238,0.4)",
+                borderRadius: 8,
+                padding: "8px 20px",
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: "pointer",
+                transition: "background 0.15s ease",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(34,211,238,0.20)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(34,211,238,0.12)"; }}
+            >
+              🔄 もう一度分析する
+            </button>
+          </div>
+        ) : (
+          <TeaserView
+            data={{ summary: `${ticker} の市場の声を分析しています。` }}
+            onUpgrade={handleUpgrade}
+          />
+        )
+      )}
+
+      {/* データあり: Pro→FullView / Free→TeaserView */}
+      {data && data.found && !loading && (
+        isPro
+          ? <FullView data={data} />
+          : <TeaserView data={data} onUpgrade={handleUpgrade} />
+      )}
+
+      {/* 「市場の声とは」モーダル */}
+      {isInfoOpen && <InsightsInfoModal onClose={() => setIsInfoOpen(false)} />}
+    </div>
+  );
+}

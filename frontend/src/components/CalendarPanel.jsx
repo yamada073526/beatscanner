@@ -101,7 +101,8 @@ export default function CalendarPanel({ onSelect, watchlist = [], onToggleWatchl
 
   return (
     <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-      <h3 className="mb-4 text-base font-semibold text-slate-900">決算カレンダー</h3>
+      <h3 className="section-heading" style={{ marginBottom: '2px' }}>決算カレンダー</h3>
+      <p className="section-subtext">今後の決算予定を確認</p>
 
       {/* タブ */}
       <div className="mb-4 flex gap-1 rounded-lg p-1" style={{ background: 'var(--bg-subtle)' }}>

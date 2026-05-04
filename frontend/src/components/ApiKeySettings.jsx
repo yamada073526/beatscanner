@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { getFmpKey, setFmpKey, getMaskedKey } from '../lib/fmpKey.js';
+import { useEffect, useState } from 'react';
+import { getMaskedKey, saveFmpKey, clearFmpKey } from '../lib/fmpKey.js';
 import { validateFmpKey } from '../api.js';
+import { supabase } from '../lib/supabase.js';
 
 function StepDot({ index, current }) {
   const done = index < current;
@@ -34,7 +35,16 @@ export default function ApiKeySettings({ onClose, onSaved, onDeleted }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  // クラウド同期バッジ: 保存成功時に true → 3秒後に false（フェードアウトは CSS）
+  const [showSyncBadge, setShowSyncBadge] = useState(false);
   const masked = getMaskedKey();
+
+  // バッジ自動消去
+  useEffect(() => {
+    if (!showSyncBadge) return;
+    const timer = setTimeout(() => setShowSyncBadge(false), 3000);
+    return () => clearTimeout(timer);
+  }, [showSyncBadge]);
 
   const STEPS = ['FMP登録', 'キーをコピー', '貼り付けて完了'];
 
@@ -49,9 +59,10 @@ export default function ApiKeySettings({ onClose, onSaved, onDeleted }) {
     try {
       const result = await validateFmpKey(key);
       if (result.valid) {
-        setFmpKey(key);
+        const { synced } = await saveFmpKey(key, supabase);
         setSavedSuccess(true);
         setInputKey('');
+        if (synced) setShowSyncBadge(true);
         onSaved?.();
       } else {
         setError(result.error || '無効なAPIキーです');
@@ -63,8 +74,8 @@ export default function ApiKeySettings({ onClose, onSaved, onDeleted }) {
     }
   }
 
-  function handleDelete() {
-    setFmpKey('');
+  async function handleDelete() {
+    await clearFmpKey(supabase);
     setSavedSuccess(false);
     setStep(0);
     onSaved?.();
@@ -233,6 +244,34 @@ export default function ApiKeySettings({ onClose, onSaved, onDeleted }) {
                     <p className="mt-1 text-sm text-green-600">
                       接続済み ({getMaskedKey()})
                     </p>
+                    {/* クラウド同期バッジ — 3秒間表示 → フェードアウト */}
+                    <div
+                      style={{
+                        marginTop: '10px',
+                        opacity: showSyncBadge ? 1 : 0,
+                        transition: 'opacity 0.5s ease',
+                        pointerEvents: showSyncBadge ? 'auto' : 'none',
+                      }}
+                      aria-live="polite"
+                    >
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '11px',
+                          fontWeight: 500,
+                          background: 'rgba(34,211,238,0.12)',
+                          color: '#22d3ee',
+                          border: '1px solid rgba(34,211,238,0.4)',
+                          borderRadius: '9999px',
+                          padding: '3px 10px',
+                          letterSpacing: '0.02em',
+                        }}
+                      >
+                        ☁ クラウドに同期済み
+                      </span>
+                    </div>
                   </div>
                 ) : (
                   <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
@@ -256,7 +295,7 @@ export default function ApiKeySettings({ onClose, onSaved, onDeleted }) {
                     </div>
                     {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
                     <p className="mt-2 flex items-center gap-1 text-xs text-slate-400">
-                      🔒 キーはお使いのブラウザにのみ保存されます。外部に共有されることはありません。
+                      🔒 キーはブラウザに保存されます。ログイン中はアカウントと同期し、複数デバイスで共有できます。
                     </p>
                   </div>
                 )}

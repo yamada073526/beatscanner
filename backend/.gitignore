@@ -4,3 +4,7 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+
+# Phase 1: 投資家ナレッジベース data/insights/ は意図的に .gitignore から外している
+# 理由: railway up が .gitignore を尊重して本番にアップロードしないため、
+#       Phase 2 の Supabase Storage 移行までは本番に含める必要がある

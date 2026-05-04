@@ -6,8 +6,10 @@ WORKDIR /app
 # Railway の Service Variables を ARG/ENV 経由でビルドステージに注入する。
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
+ARG VITE_STRIPE_PUBLISHABLE_KEY
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
-    VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+    VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY \
+    VITE_STRIPE_PUBLISHABLE_KEY=$VITE_STRIPE_PUBLISHABLE_KEY
 
 COPY frontend/package*.json ./frontend/
 RUN cd frontend && npm ci
@@ -23,17 +25,22 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# System deps for yfinance / httpx
+# System deps for yfinance / httpx + 日本語フォント (OGP画像生成 Pillow 用)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 # Backend Python deps
 COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
+# cache-bust: 2026-05-04-stripe
 # Backend source
 COPY backend/ ./backend/
+
+# Phase 1 ナレッジベース用空ディレクトリ（.gitignore で insights/ を除外しているため明示作成）
+RUN mkdir -p /app/backend/data/insights
 
 # Compiled frontend (FastAPI's StaticFiles will serve this)
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist

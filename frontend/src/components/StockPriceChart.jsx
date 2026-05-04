@@ -111,6 +111,13 @@ function EarningsTooltip({ active, payload, label, earningsMap }) {
               )}
             </p>
           )}
+
+          {/* verdict_reason — unknown 時のみ理由テキストを追記 */}
+          {e.verdict === 'unknown' && e.verdict_reason && (
+            <p className="mt-1 text-[11px] italic text-slate-500">
+              {e.verdict_reason}
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -158,17 +165,13 @@ export default function StockPriceChart({ ticker }) {
     <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-base font-semibold text-slate-900">株価チャート</h3>
+        <h3 className="section-heading" style={{ marginBottom: 0 }}>株価チャート</h3>
         <div className="flex gap-1">
           {PERIODS.map((p) => (
             <button
               key={p.value}
               onClick={() => setPeriod(p.value)}
-              className={`rounded px-3 py-1 text-sm font-medium transition-colors ${
-                period === p.value
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
+              className={`chart-period-btn${period === p.value ? ' active' : ''}`}
             >
               {p.label}
             </button>

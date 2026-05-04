@@ -210,15 +210,14 @@ function BarChartPanel({ trend, operatingMargins }) {
 
         return (
           <g key={`label-${i}`}>
-            {/* YoY（2行） */}
+            {/* YoY（1行） */}
             {yoyY !== null && (
-              <text x={cx} y={yoyY} textAnchor="middle" fontWeight="700" fill={yoyFill}>
-                <tspan x={cx} dy="0" fontSize={n >= 5 ? 9 : 11}>
-                  {yoy >= 0 ? '+' : ''}{yoy.toFixed(1)}%
-                </tspan>
-                <tspan x={cx} dy="12" fontSize="9" fontWeight="500" opacity="0.8">
-                  YoY
-                </tspan>
+              <text
+                x={cx} y={yoyY} textAnchor="middle"
+                fontSize={n >= 5 ? 9 : 11}
+                fontWeight="700" fill={yoyFill}
+              >
+                {yoy >= 0 ? '+' : ''}{yoy.toFixed(1)}% YoY
               </text>
             )}
             {/* 絶対値 */}
@@ -445,7 +444,8 @@ function BarChartWithMargin({ trend, operatingMargins }) {
         const beatFill  = d.beat === true ? '#10B981' : '#ef4444';
 
         // ── YoY label placement (mobile-safe) ──
-        const insideBar = barH >= 36;
+        // 仕様: bar高 >= 60 → バー内表示（現状維持）/ < 60 → バー外側上部に1行表示
+        const insideBar = barH >= 60;
         const yoyFill   = insideBar ? 'rgba(255,255,255,0.9)' : '#38BDF8';
         const yoyBaseY  = yoy !== null
           ? (insideBar ? by + 16 : Math.max(BAR_AREA_TOP - 4, by - 18))
@@ -460,15 +460,14 @@ function BarChartWithMargin({ trend, operatingMargins }) {
 
         return (
           <g key={`label-${i}`}>
-            {/* YoY（2行） */}
+            {/* YoY（1行） */}
             {yoyBaseY !== null && (
-              <text x={cx} y={yoyBaseY} textAnchor="middle" fontWeight="700" fill={yoyFill}>
-                <tspan x={cx} dy="0" fontSize={n >= 5 ? 9 : 11}>
-                  {yoy >= 0 ? '+' : ''}{yoy.toFixed(1)}%
-                </tspan>
-                <tspan x={cx} dy="12" fontSize="9" fontWeight="500" opacity="0.8">
-                  YoY
-                </tspan>
+              <text
+                x={cx} y={yoyBaseY} textAnchor="middle"
+                fontSize={n >= 5 ? 9 : 11}
+                fontWeight="700" fill={yoyFill}
+              >
+                {yoy >= 0 ? '+' : ''}{yoy.toFixed(1)}% YoY
               </text>
             )}
             {/* 絶対値 */}

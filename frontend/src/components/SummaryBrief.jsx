@@ -148,7 +148,14 @@ export default function SummaryBrief({ analysis, guidance }) {
         </span>
         <button
           onClick={() => setShowInfoModal(true)}
-          className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-300 text-[9px] font-bold text-slate-600 hover:bg-slate-400 hover:text-slate-800"
+          className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
+          style={{
+            background: 'rgba(34,211,238,0.15)',
+            color: '#22d3ee',
+            border: '1px solid rgba(34,211,238,0.4)',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.30)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.15)'; }}
           aria-label="AI要約の見方を表示"
         >
           ？

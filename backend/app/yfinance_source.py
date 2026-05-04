@@ -218,6 +218,8 @@ def _fetch_earnings_surprises_sync(ticker: str, limit: int = 16) -> list[dict]:
                             "date": date_str,
                             "epsActual": round(float(val), 4),
                             "epsEstimated": None,  # 推定値なし → verdict=unknown
+                            # caller (chart endpoint) がこのヒントを verdict_reason に上書きする
+                            "verdict_reason_hint": "yfinance経由のデータにはアナリスト予想が含まれません",
                         })
                     except Exception:
                         continue

@@ -203,13 +203,14 @@ body {
   animation: fadeIn 0.2s ease forwards;
 }
 
-/* ── CTA ボタン（決算レポートを見る → 等） ── */
+/* ── CTA ボタン（決算レポートを見る → 等） — 全幅ダーク + シアン縁 ── */
 .cta-btn {
-  transition: filter 0.15s ease, transform 0.15s ease;
+  transition: all 0.2s ease;
 }
 .cta-btn:hover {
-  filter: brightness(1.12);
-  transform: translateY(-2px);
+  background: rgba(34,211,238,0.10) !important;
+  box-shadow: 0 0 18px rgba(34,211,238,0.35) !important;
+  border-color: rgba(34,211,238,0.6) !important;
 }
 
 /* ── ナビ上部ピルボタン（注目銘柄・スクリーナー・カレンダー） ──
@@ -356,11 +357,11 @@ body {
     background-color: var(--bg-subtle) !important;
   }
 }
-/* PC: 常に表示 */
+/* PC: 常に表示（!important を付けない — news-active/news-dimmed が無効化されるため） */
 @media (hover: hover) {
   .scroll-reveal {
-    opacity: 1 !important;
-    transform: none !important;
+    opacity: 1;
+    transform: none;
   }
 }
 
@@ -370,4 +371,344 @@ body {
 }
 @media (hover: hover) {
   .scroll-hint-mobile { display: none !important; }
+}
+
+/* ─── 株価チャート期間ボタン（1ヶ月/3ヶ月/1年/3年） ─── */
+.chart-period-btn {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  background: rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.10);
+  color: rgba(0,0,0,0.55);
+  transition: all 0.15s ease;
+}
+[data-theme="dark"] .chart-period-btn {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.6);
+}
+@media (hover: hover) {
+  .chart-period-btn:not(.active):hover {
+    background: rgba(0,0,0,0.08);
+    color: rgba(0,0,0,0.85);
+  }
+  [data-theme="dark"] .chart-period-btn:not(.active):hover {
+    background: rgba(255,255,255,0.10);
+    color: rgba(255,255,255,0.9);
+  }
+}
+/* アクティブ：シアン強調 + glow */
+.chart-period-btn.active {
+  background: rgba(34,211,238,0.15);
+  border-color: rgba(34,211,238,0.6);
+  color: #22d3ee;
+  font-weight: 700;
+  box-shadow: 0 0 8px rgba(34,211,238,0.25);
+}
+
+/* ─── 見出しタイポグラフィ（Apple inspired・3階層） ───
+   設計: 太さを抜いて、サイズと字間で格を出す。
+   font-weight 500 を保つ理由: 日本語フォントは 300 だと細すぎて読めなくなるため。 */
+
+/* 階層1: セクション見出し（ウォッチリスト・決算カレンダー・ニュース・IR・チャート等） */
+.section-heading {
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: var(--text-primary);
+  line-height: 1.2;
+  margin: 0 0 12px;
+}
+
+/* 階層2: サブセクション ─ 上段: 小さい薄いラベル（ライブ感・日付バッジ用） */
+.subsection-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+/* 階層2: サブセクション ─ 下段: section-heading より少し小さい */
+.subsection-heading {
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: var(--text-primary);
+  line-height: 1.2;
+  margin: 0 0 12px;
+}
+
+/* セクション見出しの下に補足テキスト用 */
+.section-subtext {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+  letter-spacing: 0.01em;
+  opacity: 0.85;
+}
+
+/* ─── ニュース記事モーダル（リデザイン版） ─── */
+.news-modal-header {
+  position: relative;
+  padding: 16px 16px 12px;
+  border-bottom: 0.5px solid var(--border);
+}
+.news-modal-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.news-modal-source-badge {
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(0,0,0,0.05);
+  color: var(--text-secondary);
+  padding: 2px 8px;
+  border-radius: 99px;
+  border: 0.5px solid var(--border);
+}
+[data-theme="dark"] .news-modal-source-badge {
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.65);
+  border-color: rgba(255,255,255,0.12);
+}
+.news-modal-date {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.news-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text-primary);
+  margin: 0 0 10px;
+  padding-right: 32px; /* ✕ ボタン分の余白 */
+}
+.news-modal-original-link {
+  display: inline-block;
+  font-size: 12px;
+  color: #22d3ee;
+  text-decoration: none;
+}
+.news-modal-original-link:hover {
+  text-decoration: underline;
+}
+.news-modal-body-wrap {
+  padding: 16px;
+}
+.news-modal-body {
+  font-size: 13px;
+  line-height: 1.85;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+}
+[data-theme="dark"] .news-modal-body {
+  color: rgba(255,255,255,0.85);
+}
+/* h2 = 主見出し（シアン下線） */
+.news-modal-heading {
+  font-size: 13px;
+  font-weight: 700;
+  color: #22d3ee;
+  letter-spacing: 0.02em;
+  margin: 20px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(34,211,238,0.30);
+}
+.news-modal-heading:first-child {
+  margin-top: 0;
+}
+/* h3 = サブ見出し */
+.news-modal-subheading {
+  font-size: 12px;
+  font-weight: 600;
+  color: #22d3ee;
+  letter-spacing: 0.02em;
+  margin: 16px 0 8px;
+  opacity: 0.85;
+}
+
+/* ─── X(Twitter) シェアボタン（SVGロゴのみ） ─── */
+.x-share-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  border-radius: 9999px;
+  background: rgba(0,0,0,0.8);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: white;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+@media (hover: hover) {
+  .x-share-btn:hover {
+    background: rgba(255,255,255,0.10);
+    border-color: rgba(255,255,255,0.35);
+    color: white;
+    transform: translateY(-2px);
+  }
+}
+
+/* ─── ウォッチリスト追加ボタン（Apple風 pill / ☆→★ pop） ─── */
+@keyframes star-pop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+.watchlist-btn {
+  padding: 8px 18px;
+  border-radius: 9999px;
+  border: 1.5px solid rgba(0,0,0,0.18);
+  background: rgba(0,0,0,0.04);
+  color: rgba(0,0,0,0.55);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: none;
+}
+[data-theme="dark"] .watchlist-btn {
+  border-color: rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.7);
+}
+@media (hover: hover) {
+  .watchlist-btn:hover:not(:disabled) {
+    background: rgba(0,0,0,0.08);
+    border-color: rgba(0,0,0,0.35);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+  [data-theme="dark"] .watchlist-btn:hover:not(:disabled) {
+    background: rgba(255,255,255,0.12);
+    border-color: rgba(255,255,255,0.5);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+}
+.watchlist-btn.registered {
+  border-color: rgba(34,211,238,0.6);
+  background: rgba(34,211,238,0.12);
+  color: #22d3ee;
+  box-shadow: 0 0 12px rgba(34,211,238,0.4);
+  animation: star-pop 0.3s ease;
+}
+@media (hover: hover) {
+  /* 登録済ホバー: 赤系に変化 → 「押すと解除」を直感的に示唆 */
+  .watchlist-btn.registered:hover {
+    background: rgba(248,113,113,0.12);
+    border-color: rgba(248,113,113,0.6);
+    box-shadow: 0 0 16px rgba(248,113,113,0.4);
+    color: #f87171;
+    transform: translateY(-2px);
+  }
+}
+/* 未登録時の disabled（reportStreaming 中など）は薄く */
+.watchlist-btn:disabled:not(.registered) {
+  opacity: 0.5;
+  cursor: default;
+}
+/* 登録済 disabled はそのまま発光を維持（不透明・カーソルのみ default） */
+.watchlist-btn.registered:disabled {
+  cursor: default;
+}
+
+/* ─── NewsPanel グリッド（PC4列・スマホ1列） ─── */
+.news-scroll-wrapper {
+  position: relative;
+  max-height: 540px;
+  overflow-y: auto;
+}
+.news-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 768px) {
+  .news-grid { grid-template-columns: repeat(4, 1fr); }
+}
+.news-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-card);
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, opacity 0.2s ease, background-color 0.2s ease;
+}
+@media (hover: hover) {
+  /* perspective は active 側の transform に直接埋め込む
+     （親に置くと .panel-card の isolation:isolate でフラット化される） */
+  .news-card.news-active {
+    transform: perspective(900px) translateZ(50px) scale(1.07);
+    border-color: rgba(56,189,248,0.7);
+    background-color: var(--bg-hover);
+    z-index: 2;
+  }
+  .news-card.news-dimmed { opacity: 0.18; }
+}
+.news-card-thumb {
+  width: 100%;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.news-card-body { display: flex; flex-direction: column; gap: 6px; }
+.news-card-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-primary);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.news-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+.news-card-source { font-weight: 500; }
+
+/* ─── ウォッチリストチップ（A+C案: 浮く＋色づく） ─── */
+.wl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  background: var(--bg-muted);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+  transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .wl-chip:hover {
+    transform: translateY(-2px) scale(1.03);
+    background-color: rgba(56,189,248,0.18);
+    border-color: rgba(56,189,248,0.7);
+    color: rgb(14,165,233);
+  }
+}
+[data-theme="dark"] .wl-chip:hover {
+  background-color: rgba(56,189,248,0.22);
+  color: rgb(56,189,248);
 }

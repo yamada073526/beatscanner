@@ -8,7 +8,8 @@ import time
 import httpx
 
 _CACHE: dict[str, tuple[float, list[dict]]] = {}
-_CACHE_TTL = 3600.0  # 60 minutes
+# 25 calls/day の AV 無料制限を考慮し、キャッシュは長め（6時間）に設定
+_CACHE_TTL = 3600.0 * 6  # 6 hours
 
 _AV_BASE = "https://www.alphavantage.co/query"
 
@@ -23,6 +24,12 @@ def _fetch_sync(ticker: str, api_key: str) -> list[dict]:
         r = client.get(_AV_BASE, params=params)
         r.raise_for_status()
         data = r.json()
+
+    # レート制限・APIキー無効を検出（200で返るが本文に "Note" / "Information" が入る）
+    if "Note" in data or "Information" in data:
+        msg = data.get("Note") or data.get("Information") or ""
+        print(f"[AV] rate limit / api notice for {ticker}: {msg[:120]}")
+        return []
 
     quarterly = data.get("quarterlyEarnings", [])
     results = []
@@ -57,6 +64,7 @@ def _fetch_sync(ticker: str, api_key: str) -> list[dict]:
             "epsActual": actual,
             "epsEstimated": estimated,
             "surprisePct": surprise_pct,  # pre-computed by AV; used as fallback
+            "source": "alphavantage",     # データソース追跡用
         })
 
     return results

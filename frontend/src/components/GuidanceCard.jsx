@@ -1,5 +1,44 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import InfoModal from './InfoModal.jsx';
+
+// ── Tooltip (PC: hover, スマホ: tap) ──────────────────────────────────────────
+function Tooltip({ text, children }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [open]);
+  return (
+    <span
+      ref={ref}
+      className="relative inline-flex"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+    >
+      {children}
+      {open && (
+        <span
+          role="tooltip"
+          className="absolute bottom-full left-1/2 z-50 mb-2 max-w-[260px] -translate-x-1/2 whitespace-normal rounded-md px-3 py-1.5 text-xs font-normal leading-snug text-white shadow-lg"
+          style={{ background: '#1e293b' }}
+        >
+          {text}
+          <span
+            aria-hidden
+            className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent"
+            style={{ borderTopColor: '#1e293b' }}
+          />
+        </span>
+      )}
+    </span>
+  );
+}
 
 // ── Guidance explanation modal ────────────────────────────────────────────────
 
@@ -9,7 +48,7 @@ function GuidanceInfoModal({ onClose }) {
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
         <p className="text-sm leading-relaxed text-slate-700">
-          「ガイダンス」が事前のコンセンサス予想を上回ること（ガイダンス達成）は、<strong>株価の上昇を決定づける極めて重要な要素</strong>です。
+          「ガイダンス」が事前のコンセンサス予想を上回ること（ガイダンス達成）は、<strong style={{ color: '#22d3ee' }}>株価の上昇を決定づける極めて重要な要素</strong>です。
         </p>
       </div>
 
@@ -25,7 +64,7 @@ function GuidanceInfoModal({ onClose }) {
         <div className="space-y-3 text-sm leading-relaxed text-slate-700">
           <div>
             <p className="font-semibold text-slate-900">・アナリストの「コンセンサス予想」を動かす決定的な要因だから</p>
-            <p className="mt-1">証券会社のアナリストたちが業績予想を立てる際、最も参考にするのが会社側から示されるガイダンスです。決算発表で新しいガイダンスが示されると、アナリストたちはそれを基に一斉に予想数字を変更します。ガイダンスがコンセンサス予想を上回れば（上方修正）アナリスト予想も引き上げられ、<strong>市場全体のコンセンサス予想がジワジワと上昇します。</strong>逆に下回れば、予想もすぐに下がり始めます。</p>
+            <p className="mt-1">証券会社のアナリストたちが業績予想を立てる際、最も参考にするのが会社側から示されるガイダンスです。決算発表で新しいガイダンスが示されると、アナリストたちはそれを基に一斉に予想数字を変更します。ガイダンスがコンセンサス予想を上回れば（上方修正）アナリスト予想も引き上げられ、<strong style={{ color: '#22d3ee' }}>市場全体のコンセンサス予想がジワジワと上昇します。</strong>逆に下回れば、予想もすぐに下がり始めます。</p>
           </div>
           <div>
             <p className="font-semibold text-slate-900">・予想の上方修正が「株価上昇」に直結するから</p>
@@ -97,6 +136,9 @@ const VERDICT_STYLE = {
   beat:     { bg: 'bg-[#22c55e]', icon: '✅', label: '上振れ（Beat）' },
   'in-line':{ bg: 'bg-[#eab308]', icon: '🟡', label: '概ね一致（In-line）' },
   miss:     { bg: 'bg-[#ef4444]', icon: '❌', label: '下振れ（Miss）' },
+  // unknown は inline style（color/bg はインライン適用、Row 側で分岐）
+  unknown:  { color: '#9ca3af', bg: 'rgba(156,163,175,0.15)', icon: '❓', label: '不明' },
+  '不明':   { color: '#9ca3af', bg: 'rgba(156,163,175,0.15)', icon: '❓', label: '不明' },
 };
 
 function formatEps(v) {
@@ -128,11 +170,26 @@ function formatAbsDiff(actual, estimated) {
   return `${sign}${formatEps(diff)}`;
 }
 
-function Row({ label, estimated, actual, surprisePct, verdict, formatter }) {
+function Row({ label, estimated, actual, surprisePct, verdict, verdictReason, formatter, source }) {
   const style = verdict ? VERDICT_STYLE[verdict] : null;
+  const isUnknown = verdict === 'unknown' || verdict === '不明';
+  const reasonText = verdictReason || 'データを取得できませんでした';
+  // FMP 以外（alphavantage / yfinance）のときだけ補完ソースを控えめに表示
+  const showSource = source && source !== 'fmp' && source !== 'none';
   return (
     <div className="grid grid-cols-1 gap-2 border-t border-slate-100 py-3 md:grid-cols-[80px_1fr_auto] md:items-center md:gap-4">
-      <div className="text-sm font-semibold text-slate-700">{label}</div>
+      <div className="text-sm font-semibold text-slate-700">
+        {label}
+        {showSource && (
+          <span
+            className="ml-1.5 italic"
+            style={{ fontSize: '10px', color: 'var(--text-muted)', opacity: 0.7, fontWeight: 400 }}
+            title={`データソース: ${source}（FMP で取得できなかったため補完）`}
+          >
+            via {source}
+          </span>
+        )}
+      </div>
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
         <div>
           <span className="text-slate-500">予想: </span>
@@ -145,19 +202,31 @@ function Row({ label, estimated, actual, surprisePct, verdict, formatter }) {
       </div>
       <div className="flex items-center gap-2">
         {style ? (
-          <>
-            <span
-              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold text-white ${style.bg}`}
-            >
-              <span>{style.icon}</span>
-              <span>{style.label}</span>
-            </span>
-            <span className="text-sm font-semibold text-slate-700">
-              {surprisePct != null
-                ? formatPct(surprisePct)
-                : formatAbsDiff(actual, estimated)}
-            </span>
-          </>
+          isUnknown ? (
+            <Tooltip text={reasonText}>
+              <span
+                className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold cursor-help"
+                style={{ background: style.bg, color: style.color }}
+              >
+                <span>{style.icon}</span>
+                <span>{style.label}</span>
+              </span>
+            </Tooltip>
+          ) : (
+            <>
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold text-white ${style.bg}`}
+              >
+                <span>{style.icon}</span>
+                <span>{style.label}</span>
+              </span>
+              <span className="text-sm font-semibold text-slate-700">
+                {surprisePct != null
+                  ? formatPct(surprisePct)
+                  : formatAbsDiff(actual, estimated)}
+              </span>
+            </>
+          )
         ) : (
           <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-medium text-slate-600">
             データなし
@@ -192,7 +261,7 @@ function RevenueRow({ revenueActual, revenueEstimated }) {
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
           <div>
             <span className="text-slate-500">予想: </span>
-            <span className="text-xs text-slate-400 italic">準備中</span>
+            <span className="text-sm italic" style={{ color: 'var(--text-muted)', opacity: 0.7 }}>—</span>
           </div>
           <div>
             <span className="text-slate-500">実績: </span>
@@ -200,9 +269,7 @@ function RevenueRow({ revenueActual, revenueEstimated }) {
           </div>
         </div>
         <div>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">
-            予想比較は準備中
-          </span>
+          <span className="text-sm italic" style={{ color: 'var(--text-muted)', opacity: 0.7 }}>—</span>
         </div>
       </div>
     );
@@ -297,11 +364,18 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
     return (
       <section className="panel-card rounded-2xl p-5 shadow-sm" style={GUIDANCE_SECTION_STYLE}>
         <div className="flex items-center justify-between">
-          <h3 className="flex items-center gap-1 text-sm font-semibold text-slate-700">
+          <h3 className="section-label flex items-center gap-1" style={{ marginBottom: 0 }}>
             📊 ガイダンス達成状況
             <button
               onClick={() => setShowModal(true)}
-              className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-500 hover:bg-slate-300 hover:text-slate-700"
+              className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
+              style={{
+                background: 'rgba(34,211,238,0.15)',
+                color: '#22d3ee',
+                border: '1px solid rgba(34,211,238,0.4)',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.30)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.15)'; }}
               aria-label="ガイダンス達成状況の説明を表示"
             >
               ？
@@ -322,11 +396,18 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
   return (
     <section className="panel-card rounded-2xl p-5 shadow-sm" style={GUIDANCE_SECTION_STYLE}>
       <div className="flex items-baseline justify-between">
-        <h3 className="flex items-center gap-1 text-sm font-semibold text-slate-900">
+        <h3 className="section-label flex items-center gap-1" style={{ marginBottom: 0 }}>
           📊 ガイダンス達成状況（直近決算）
           <button
             onClick={() => setShowModal(true)}
-            className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-500 hover:bg-slate-300 hover:text-slate-700"
+            className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
+            style={{
+              background: 'rgba(34,211,238,0.15)',
+              color: '#22d3ee',
+              border: '1px solid rgba(34,211,238,0.4)',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.30)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.15)'; }}
             aria-label="ガイダンス達成状況の説明を表示"
           >
             ？
@@ -348,6 +429,8 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
           actual={eps?.actual}
           surprisePct={eps?.surprise_pct}
           verdict={eps?.verdict}
+          verdictReason={eps?.verdict_reason}
+          source={eps?.source}
           formatter={formatEps}
         />
         <RevenueRow

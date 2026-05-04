@@ -83,9 +83,9 @@ export default function IRLinksPanel({ ticker }) {
 
   return (
     <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-      <h3 className="mb-4 text-base font-semibold text-slate-900">
+      <h3 className="section-heading">
         📎 IRリソース
-        <span className="ml-2 text-xs font-normal text-slate-400">{ticker}</span>
+        <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>{ticker}</span>
       </h3>
 
       {loading && (
@@ -97,7 +97,7 @@ export default function IRLinksPanel({ ticker }) {
       {!loading && (
         <div className="grid gap-5 md:grid-cols-2">
           {/* 左列: 決算発表 */}
-          <div className="space-y-4">
+          <div className="space-y-4 md:pr-6">
             {/* 最新プレスリリース (FMP動的データ) */}
             {pressReleases.length > 0 && (
               <Section title="最新プレスリリース" icon="📋">
@@ -133,8 +133,8 @@ export default function IRLinksPanel({ ticker }) {
             </Section>
           </div>
 
-          {/* 右列: カンファレンスコール */}
-          <div className="space-y-4">
+          {/* 右列: カンファレンスコール（md+ のみ仕切り線） */}
+          <div className="space-y-4 md:border-l md:border-slate-200 md:pl-6">
             <Section title="カンファレンスコール" icon="🎙️">
               {static_links.conference.map((l, i) => (
                 <LinkItem key={i} label={l.label} url={l.url} desc={l.desc} />

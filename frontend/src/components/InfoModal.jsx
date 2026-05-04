@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 export default function InfoModal({ title, onClose, children }) {
   const [atBottom, setAtBottom] = useState(false);
@@ -16,15 +17,20 @@ export default function InfoModal({ title, onClose, children }) {
     setAtBottom(el.scrollTop + el.clientHeight >= el.scrollHeight - 10);
   }
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(15,23,42,0.5)' }}
+      className="flex items-center justify-center p-4"
+      style={{
+        position: 'fixed',
+        top: 0, left: 0, right: 0, bottom: 0,
+        background: 'rgba(15,23,42,0.5)',
+        zIndex: 99999,
+      }}
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className="relative w-full max-w-lg rounded-2xl shadow-xl overflow-hidden"
-        style={{ background: 'var(--bg-card)' }}
+        className="w-full max-w-lg rounded-2xl shadow-xl overflow-hidden"
+        style={{ background: 'var(--bg-card)', position: 'relative', zIndex: 100000 }}
       >
         <div className="px-5 pt-5 pb-3">
           <button
@@ -63,6 +69,7 @@ export default function InfoModal({ title, onClose, children }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

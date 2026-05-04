@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import glob
 import json
 import os
 import re
@@ -15,10 +16,12 @@ from typing import Optional
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from .ogp_generator import generate_ogp_image
+from .rss_collector import collect_ticker_news
 
 from pydantic import BaseModel
 
@@ -946,10 +949,43 @@ US_EXCHANGES = {"NASDAQ", "NYSE", "AMEX", "NYSE ARCA", "NYSE MKT"}
 
 @app.get("/api/search")
 async def search(request: Request, q: str = Query(..., min_length=1)) -> list[dict]:
-    """銘柄名またはティッカーで検索（FMP + yfinance 並行）し、米国・日本株を優先して返す."""
+    """銘柄名またはティッカーで検索（マスタリスト → FMP → yfinance）し、米国・日本株を優先して返す.
+
+    ⚠️ FMP の検索 API は "TSLA" のようなティッカー文字列で検索しても本体（Tesla Inc.）はヒットせず、
+        説明文に TSLA を含む ETF（YieldMax TSLA Option Income Strategy ETF 等）が返ってしまう。
+        この問題に対処するため、まず MASTER_TICKERS（主要 US 株リスト）の prefix マッチを優先する。"""
     client = FMPClient(api_key=_get_fmp_key(request))
     fmp_task = asyncio.create_task(client.search(q, limit=20))
     yf_task  = asyncio.create_task(yfinance_source.search(q, max_results=8))
+
+    # ── マスタ銘柄優先マッチング（FMP/yfinance より前に追加） ──
+    from .tickers_master import MASTER_TICKERS
+    q_upper = q.strip().upper()
+    master_hits: list[dict] = []
+    if q_upper:
+        # 完全一致 → 必ず先頭
+        for t in MASTER_TICKERS:
+            if t.upper() == q_upper:
+                master_hits.append({
+                    "symbol": t,
+                    "name": _TICKER_NAMES.get(t, t),
+                    "exchange": "NASDAQ",  # マスタ由来は概ね US 主要市場。具体的な exchange は FMP/yf で上書き可
+                    "currency": "USD",
+                    "source": "master",
+                })
+                break
+        # prefix 一致（完全一致以外）→ 最大 5 件まで
+        for t in MASTER_TICKERS:
+            if t.upper() != q_upper and t.upper().startswith(q_upper):
+                master_hits.append({
+                    "symbol": t,
+                    "name": _TICKER_NAMES.get(t, t),
+                    "exchange": "NASDAQ",
+                    "currency": "USD",
+                    "source": "master",
+                })
+                if len(master_hits) >= 5:
+                    break
 
     fmp_data: list[dict] = []
     yf_data:  list[dict] = []
@@ -962,10 +998,10 @@ async def search(request: Request, q: str = Query(..., min_length=1)) -> list[di
     except Exception:
         pass
 
-    # シンボルで重複排除（FMP 優先）
+    # シンボルで重複排除（master → FMP → yfinance の優先順）
     seen: set[str] = set()
     merged: list[dict] = []
-    for item in fmp_data + yf_data:
+    for item in master_hits + fmp_data + yf_data:
         sym = item.get("symbol", "")
         if sym and sym not in seen:
             seen.add(sym)
@@ -978,21 +1014,29 @@ async def search(request: Request, q: str = Query(..., min_length=1)) -> list[di
     return (us + jp + others)[:12]
 
 
-def _verdict(actual: float | None, estimated: float | None) -> tuple[str, float | None]:
-    """Return (verdict, surprise_pct). Threshold ±3%. Handles string inputs gracefully."""
+def _verdict(actual: float | None, estimated: float | None) -> tuple[str, float | None, str | None]:
+    """Return (verdict, surprise_pct, reason). Threshold ±3%.
+
+    verdict は "beat" / "miss" / "in-line" / "unknown" のいずれか。
+    "unknown" のときのみ reason に理由テキストが入る（それ以外は None）。
+    """
     try:
         actual = float(actual) if actual is not None else None
         estimated = float(estimated) if estimated is not None else None
     except (ValueError, TypeError):
-        return "不明", None
-    if actual is None or estimated is None or estimated == 0:
-        return "不明", None
+        return "unknown", None, "データの形式が不正なため判定できません"
+    if actual is None:
+        return "unknown", None, "直近の実績値データを取得できませんでした"
+    if estimated is None:
+        return "unknown", None, "アナリスト予想データを取得できませんでした"
+    if estimated == 0:
+        return "unknown", None, "アナリスト予想が 0 のため判定できません"
     # Near-zero estimate (|est| < 0.05) → % is meaningless (e.g. INTC +2800%)
     # Return verdict only; caller shows absolute diff instead
     if abs(estimated) < 0.05:
         diff = actual - estimated
         label = "beat" if diff >= 0.01 else "miss" if diff <= -0.01 else "in-line"
-        return label, None
+        return label, None, None
     pct = round((actual - estimated) / abs(estimated) * 100.0, 1)
     # Cap at ±500% to prevent display anomalies from very small denominators
     pct = max(-500.0, min(500.0, pct))
@@ -1002,7 +1046,7 @@ def _verdict(actual: float | None, estimated: float | None) -> tuple[str, float 
         label = "miss"
     else:
         label = "in-line"
-    return label, pct
+    return label, pct, None
 
 
 def _safe_float(val) -> float | None:
@@ -1538,15 +1582,22 @@ async def _fetch_eps_data(ticker: str, fmp_key: str) -> dict:
     except FMPError:
         pass
 
+    # FMP で取れた場合のソース判定（surprise_task 由来）
+    source: str = "fmp" if surprises else "none"
+
     if not surprises:
         try:
             surprises = await alpha_vantage_source.fetch_earnings_history(ticker, limit=1)
+            if surprises:
+                source = "alphavantage"
         except Exception:
             pass
 
     if not surprises:
         try:
             surprises = await yfinance_source.fetch_earnings_surprises(ticker, limit=1)
+            if surprises:
+                source = "yfinance"
         except Exception:
             pass
 
@@ -1599,6 +1650,7 @@ async def _fetch_eps_data(ticker: str, fmp_key: str) -> dict:
         "fiscal_period": fiscal_period,
         "revenue_actual_fmp": revenue_actual_fmp,
         "income_date": income_date,
+        "source": source,  # "fmp" / "alphavantage" / "yfinance" / "none"
     }
 
 
@@ -1736,8 +1788,8 @@ async def guidance_basic(ticker: str, request: Request) -> dict:
         if eps_estimated is None:
             eps_estimated = eps_estimated_fallback
 
-        eps_label, eps_pct = _verdict(eps_actual, eps_estimated)
-        rev_label, rev_pct = _verdict(
+        eps_label, eps_pct, eps_reason = _verdict(eps_actual, eps_estimated)
+        rev_label, rev_pct, rev_reason = _verdict(
             float(revenue_actual) if revenue_actual is not None else None,
             float(revenue_estimated) if revenue_estimated is not None else None,
         )
@@ -1751,12 +1803,15 @@ async def guidance_basic(ticker: str, request: Request) -> dict:
                 "actual": eps_actual,
                 "surprise_pct": eps_pct,
                 "verdict": eps_label,
+                "verdict_reason": eps_reason,
+                "source": eps_result.get("source", "fmp"),
             },
             "revenue": {
                 "estimated": revenue_estimated,
                 "actual": revenue_actual,
                 "surprise_pct": rev_pct,
                 "verdict": rev_label,
+                "verdict_reason": rev_reason,
             },
             "revenue_actual": float(revenue_actual) if revenue_actual is not None else None,
             "revenue_estimated": float(revenue_estimated) if revenue_estimated is not None else None,
@@ -1769,7 +1824,7 @@ async def guidance_basic(ticker: str, request: Request) -> dict:
         return {
             "ticker": ticker.upper(),
             "error": str(e),
-            "eps": {"estimated": None, "actual": None, "surprise_pct": None, "verdict": None},
+            "eps": {"estimated": None, "actual": None, "surprise_pct": None, "verdict": None, "verdict_reason": None},
             "revenue_actual": None,
             "revenue_estimated": None,
         }
@@ -1787,8 +1842,8 @@ async def guidance(ticker: str, request: Request) -> dict:
         return {
             "ticker": ticker.upper(),
             "error": str(_e_top),
-            "eps": {"estimated": None, "actual": None, "surprise_pct": None, "verdict": None},
-            "revenue": {"estimated": None, "actual": None, "surprise_pct": None, "verdict": None},
+            "eps": {"estimated": None, "actual": None, "surprise_pct": None, "verdict": None, "verdict_reason": None},
+            "revenue": {"estimated": None, "actual": None, "surprise_pct": None, "verdict": None, "verdict_reason": None},
             "revenue_actual": None,
             "revenue_estimated": None,
             "sec_guidance_text": None,
@@ -1870,8 +1925,8 @@ async def _guidance_impl(ticker: str, request: Request) -> dict:
     if eps_estimated is None:
         eps_estimated = eps_estimated_fallback
 
-    eps_label, eps_pct = _verdict(eps_actual, eps_estimated)
-    rev_label, rev_pct = _verdict(
+    eps_label, eps_pct, eps_reason = _verdict(eps_actual, eps_estimated)
+    rev_label, rev_pct, rev_reason = _verdict(
         float(revenue_actual) if revenue_actual is not None else None,
         float(revenue_estimated) if revenue_estimated is not None else None,
     )
@@ -1885,12 +1940,15 @@ async def _guidance_impl(ticker: str, request: Request) -> dict:
             "actual": eps_actual,
             "surprise_pct": eps_pct,
             "verdict": eps_label,
+            "verdict_reason": eps_reason,
+            "source": eps_result.get("source", "fmp"),
         },
         "revenue": {
             "estimated": revenue_estimated,
             "actual": revenue_actual,
             "surprise_pct": rev_pct,
             "verdict": rev_label,
+            "verdict_reason": rev_reason,
         },
         "revenue_actual": float(revenue_actual) if revenue_actual is not None else None,
         "revenue_estimated": float(revenue_estimated) if revenue_estimated is not None else None,
@@ -2135,17 +2193,20 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
         est_f = _eps_float(raw_est, treat_zero_as_missing=True)
         if est_f is None and act_f is not None and fmp_analyst_rows:
             est_f = _fmp_consensus_eps_nearest(d, fmp_analyst_rows)
-        verdict, surprise_pct = _verdict(act_f, est_f)
+        verdict, surprise_pct, verdict_reason = _verdict(act_f, est_f)
         # Alpha Vantageの事前計算surprisePctをフォールバックとして使用
-        if verdict == "不明" and s.get("surprisePct") is not None:
+        if verdict == "unknown" and s.get("surprisePct") is not None:
             pct = float(s["surprisePct"])
             surprise_pct = round(pct, 1)
             verdict = "beat" if pct >= 3.0 else "miss" if pct <= -3.0 else "in-line"
-        elif verdict == "不明":
-            verdict = "unknown"
+            verdict_reason = None
+        # yfinance フォールバック由来エントリは固有の理由テキストで上書き
+        elif verdict == "unknown" and s.get("verdict_reason_hint"):
+            verdict_reason = s["verdict_reason_hint"]
         earnings.append({
             "date": d,
             "verdict": verdict,
+            "verdict_reason": verdict_reason,
             "surprise_pct": surprise_pct,
             "epsActual": round(act_f, 2) if act_f is not None else None,
             "epsEstimated": round(est_f, 2) if est_f is not None else None,
@@ -2166,7 +2227,7 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
 
 
 @app.get("/api/news/{ticker}")
-async def news(ticker: str, request: Request, limit: int = Query(10, ge=1, le=20)) -> list[dict]:
+async def news(ticker: str, request: Request, limit: int = Query(20, ge=1, le=20)) -> list[dict]:
     """銘柄の最新ニュースを返す. FMP制限時はyfinanceにフォールバック."""
     client = FMPClient(api_key=_get_fmp_key(request))
     data = []
@@ -2781,7 +2842,7 @@ async def conference(ticker: str, request: Request) -> dict:
         for s in surprises[:4]:
             n = _normalize_earnings_entry(s)
             if n["actual"] is not None and n["date"]:
-                v, _pct = _verdict(
+                v, _pct, _r = _verdict(
                     float(n["actual"]),
                     float(n["estimated"]) if n["estimated"] is not None else None,
                 )
@@ -2815,7 +2876,7 @@ async def conference(ticker: str, request: Request) -> dict:
         n = _normalize_earnings_entry(s)
         if not n["date"]:
             continue
-        v, _pct = _verdict(
+        v, _pct, _r = _verdict(
             float(n["actual"]) if n["actual"] is not None else None,
             float(n["estimated"]) if n["estimated"] is not None else None,
         )
@@ -2923,7 +2984,7 @@ async def conference_text_stream(ticker: str, request: Request):
         for s in surprises[:4]:
             n = _normalize_earnings_entry(s)
             if n["actual"] is not None and n["date"]:
-                v, _pct = _verdict(
+                v, _pct, _r = _verdict(
                     float(n["actual"]),
                     float(n["estimated"]) if n["estimated"] is not None else None,
                 )
@@ -4881,10 +4942,1100 @@ async def get_movers():
     return result
 
 
+# ── OGP: 動的 HTML（GET /） + 動的画像（/api/ogp/{ticker}） ───────────────────
+# X(Twitter)等のクローラーは ?ticker=XXX 付きURLを fetch して OGPメタを読む。
+# クエリ無しは通常の SPA index.html を返す。Static mount より前に定義する必要あり。
+
+OGP_CACHE: dict = {}   # {ticker: (png_bytes, ts)}
+OGP_TTL = 3600         # 1h
+
+
+def _ogp_html(ticker: str) -> str:
+    base = "https://beatscanner-production.up.railway.app"
+    img = f"{base}/api/ogp/{ticker}"
+    page = f"{base}/?ticker={ticker}"
+    title = f"${ticker} | beatscanner 決算分析"
+    desc = f"${ticker} の5条件判定結果を beatscanner で確認"
+    return (
+        '<!DOCTYPE html><html lang="ja"><head>'
+        '<meta charset="utf-8">'
+        f'<title>{title}</title>'
+        f'<meta property="og:title" content="{title}">'
+        f'<meta property="og:description" content="{desc}">'
+        f'<meta property="og:image" content="{img}">'
+        f'<meta property="og:url" content="{page}">'
+        '<meta property="og:type" content="website">'
+        '<meta name="twitter:card" content="summary_large_image">'
+        f'<meta name="twitter:title" content="{title}">'
+        f'<meta name="twitter:description" content="{desc}">'
+        f'<meta name="twitter:image" content="{img}">'
+        # クローラーは <script> を実行しないが、ブラウザ訪問時にはSPA本体へリダイレクト
+        f'<script>location.replace("/?ticker={ticker}&__r=1")</script>'
+        '</head><body></body></html>'
+    )
+
+
+@app.get("/", response_class=HTMLResponse)
+async def root(
+    ticker: str | None = Query(None),
+    t: str | None = Query(None),
+    __r: str | None = Query(None),  # SPA リダイレクト後の再呼び出しを区別
+):
+    """`/?ticker=XXX` （または `?t=XXX`）で動的 OGP HTML を返す。
+    それ以外（クエリ無し or リダイレクト後）は SPA index.html を返す。"""
+    eff = (ticker or t or "").upper().strip()
+    # __r=1 は SPA 側にすでにリダイレクト済み → 通常の SPA を返す（無限ループ防止）
+    if not eff or __r:
+        index = _STATIC_DIR / "index.html"
+        if index.exists():
+            return FileResponse(index)
+        return HTMLResponse("<h1>beatscanner</h1>", status_code=200)
+    # bot 用の OGP 専用 HTML（ブラウザはJSでSPA本体に遷移）
+    return HTMLResponse(_ogp_html(eff))
+
+
+def _format_money_short(v: float | None, currency: str = "USD") -> str | None:
+    """100B / 12.3B / 412M 形式に短縮。None なら None。"""
+    if v is None:
+        return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    sign = "-" if f < 0 else ""
+    a = abs(f)
+    sym = "$" if currency.upper() == "USD" else ""
+    if a >= 1e12:
+        return f"{sign}{sym}{a/1e12:.1f}T"
+    if a >= 1e9:
+        return f"{sign}{sym}{a/1e9:.1f}B"
+    if a >= 1e6:
+        return f"{sign}{sym}{a/1e6:.1f}M"
+    return f"{sign}{sym}{a:,.0f}"
+
+
+def _yoy_pct(latest: float | None, prev: float | None) -> float | None:
+    """前年比 % を返す。算出不可なら None。"""
+    try:
+        if latest is None or prev is None or float(prev) == 0.0:
+            return None
+        return round((float(latest) - float(prev)) / abs(float(prev)) * 100.0, 1)
+    except (TypeError, ValueError):
+        return None
+
+
+def _draw_ogp_image(ticker: str, analysis: dict | None, guidance: dict | None = None) -> bytes:
+    """1200×630 PNG を Pillow で生成する。analysis が None なら汎用画像。
+    guidance があれば EPS Beat 表示を強化（無くても analysis のみで描画可能）。"""
+    from PIL import Image, ImageDraw, ImageFont
+    import io as _io
+
+    BG = "#0f172a"
+    CYAN = "#22d3ee"
+    WHITE = "white"
+    SLATE = "#e2e8f0"
+    MUTED = "#94a3b8"
+    GREEN = "#22c55e"
+    RED = "#ef4444"
+    AMBER = "#f59e0b"
+
+    img = Image.new("RGB", (1200, 630), color=BG)
+    draw = ImageDraw.Draw(img)
+
+    # フォント解決
+    font_xl = font_lg = font_md = font_sm = font_xs = None
+    for path in (
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    ):
+        try:
+            font_xl = ImageFont.truetype(path, 100)
+            font_lg = ImageFont.truetype(path, 70)
+            font_md = ImageFont.truetype(path, 36)
+            font_sm = ImageFont.truetype(path, 28)
+            font_xs = ImageFont.truetype(path, 22)
+            break
+        except Exception:
+            continue
+    if font_lg is None:
+        font_xl = font_lg = font_md = font_sm = font_xs = ImageFont.load_default()
+
+    # ロゴ（左上）
+    draw.text((60, 30), "beatscanner", fill=CYAN, font=font_md)
+
+    if not analysis or analysis.get("overallPass") is None:
+        # 汎用画像
+        draw.text((600, 315), "beatscanner", fill=CYAN, font=font_lg, anchor="mm")
+        draw.text((600, 400), "米国株 決算分析", fill=SLATE, font=font_md, anchor="mm")
+        buf = _io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+
+    overall_pass = bool(analysis.get("overallPass"))
+    passed_count = int(analysis.get("passedCount", 0) or 0)
+    total_count = int(analysis.get("totalCount", 5) or 5)
+    conditions = analysis.get("conditions") or []
+    periods = analysis.get("periods") or []
+    company = analysis.get("companyName") or ""
+    currency = analysis.get("currency") or "USD"
+
+    verdict_color = GREEN if overall_pass else RED
+    verdict_text = "PASS" if overall_pass else "FAIL"
+
+    # 左上ブロック: ticker + company（インライン横並び）
+    draw.text((60, 110), f"${ticker}", fill=WHITE, font=font_lg)
+    # ticker の幅を測って隣に company name
+    try:
+        bbox = draw.textbbox((60, 110), f"${ticker}", font=font_lg)
+        ticker_w = bbox[2] - bbox[0]
+    except Exception:
+        ticker_w = len(ticker) * 36
+    if company:
+        short = company if len(company) <= 28 else company[:26] + "…"
+        draw.text((60 + ticker_w + 24, 145), short, fill=SLATE, font=font_sm)
+
+    # 右ブロック: PASS/FAIL（垂直中央寄せ気味）
+    draw.text((1000, 145), verdict_text, fill=verdict_color, font=font_xl, anchor="mm")
+    draw.text((1000, 230), f"{passed_count} / {total_count} 条件クリア",
+              fill=verdict_color, font=font_md, anchor="mm")
+
+    # ── 中央: 主要数値ブロック（EPS / 売上高 / 営業CF） ──
+    # periods は古い→新しい順なので最新は末尾
+    p_latest = periods[-1] if periods else {}
+    p_prev = periods[-2] if len(periods) >= 2 else {}
+
+    # 各指標の (label, val_str, yoy/surprise%, kind, color, badge)
+    # kind: "yoy" | "surprise"  badge: "BEAT!" など
+    rows: list[tuple] = []
+
+    # EPS: guidance.eps.surprise_pct があれば「予想比」、無ければ前年比
+    eps_actual = p_latest.get("eps")
+    eps_str = f"${eps_actual:.2f}" if eps_actual is not None else None
+    g_eps = (guidance or {}).get("eps") or {}
+    surprise = g_eps.get("surprise_pct")
+    g_verdict = (g_eps.get("verdict") or "").lower()
+    if eps_str:
+        if surprise is not None:
+            color = GREEN if g_verdict == "beat" else RED if g_verdict == "miss" else MUTED
+            badge = "BEAT!" if g_verdict == "beat" else "MISS" if g_verdict == "miss" else None
+            sign = "+" if surprise > 0 else ""
+            rows.append(("EPS", eps_str, f"予想比 {sign}{surprise:.1f}%", color, badge))
+        else:
+            yoy = _yoy_pct(eps_actual, p_prev.get("eps"))
+            if yoy is not None:
+                color = GREEN if yoy >= 0 else RED
+                arrow = "↑" if yoy >= 0 else "↓"
+                sign = "+" if yoy >= 0 else ""
+                rows.append(("EPS", eps_str, f"前年比 {sign}{yoy:.1f}%{arrow}", color, None))
+            else:
+                rows.append(("EPS", eps_str, None, SLATE, None))
+
+    # 売上高: 前年比
+    rev = p_latest.get("revenue")
+    rev_str = _format_money_short(rev, currency)
+    if rev_str:
+        yoy = _yoy_pct(rev, p_prev.get("revenue"))
+        if yoy is not None:
+            color = GREEN if yoy >= 0 else RED
+            arrow = "↑" if yoy >= 0 else "↓"
+            sign = "+" if yoy >= 0 else ""
+            rows.append(("売上高", rev_str, f"前年比 {sign}{yoy:.1f}%{arrow}", color, None))
+        else:
+            rows.append(("売上高", rev_str, None, SLATE, None))
+
+    # 営業CF: 前年比
+    ocf = p_latest.get("operating_cf")
+    ocf_str = _format_money_short(ocf, currency)
+    if ocf_str:
+        yoy = _yoy_pct(ocf, p_prev.get("operating_cf"))
+        if yoy is not None:
+            color = GREEN if yoy >= 0 else RED
+            arrow = "↑" if yoy >= 0 else "↓"
+            sign = "+" if yoy >= 0 else ""
+            rows.append(("営業CF", ocf_str, f"前年比 {sign}{yoy:.1f}%{arrow}", color, None))
+        else:
+            rows.append(("営業CF", ocf_str, None, SLATE, None))
+
+    # 描画（縦に並べる、左 60-720px）
+    y = 290
+    LBL_X = 60
+    VAL_X = 240
+    SUB_X = 470
+    BADGE_X = 700
+    for label, val_str, sub, color, badge in rows:
+        draw.text((LBL_X, y), label, fill=MUTED, font=font_sm)
+        draw.text((VAL_X, y - 4), val_str, fill=WHITE, font=font_md)
+        if sub:
+            draw.text((SUB_X, y), sub, fill=color, font=font_sm)
+        if badge:
+            # badge を pill 風に描画
+            try:
+                tb = draw.textbbox((BADGE_X, y), badge, font=font_xs)
+                pad_x, pad_y = 10, 4
+                rect = (tb[0] - pad_x, tb[1] - pad_y, tb[2] + pad_x, tb[3] + pad_y)
+                draw.rounded_rectangle(rect, radius=10, fill=color)
+                draw.text((BADGE_X, y), badge, fill=BG, font=font_xs)
+            except Exception:
+                draw.text((BADGE_X, y), badge, fill=color, font=font_xs)
+        y += 56
+
+    # ── 左下: 連続増加サマリ（条件②④⑤の passed をフィルタ） ──
+    # periods は3期分固定 → 連続増加は「3期連続」固定表記
+    streak_lines: list[str] = []
+    for c in conditions:
+        cname = c.get("name", "")
+        passed = bool(c.get("passed"))
+        if not passed:
+            continue
+        if cname in ("EPS 連続増加", "CFPS 連続増加", "売上高 連続増加"):
+            short = cname.replace(" 連続増加", "")
+            streak_lines.append(f"✓ {short} 3期連続増加")
+
+    sy = max(y + 16, 510)
+    for line in streak_lines[:2]:
+        draw.text((60, sy), line, fill=GREEN, font=font_sm)
+        sy += 38
+
+    buf = _io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+@app.get("/api/ogp/{ticker}")
+async def ogp_image(ticker: str, request: Request):
+    """OGP 画像（1200×630 PNG）を返す。1h インメモリキャッシュ。"""
+    import time as _time
+    tkr = ticker.upper().strip()
+
+    # キャッシュ確認
+    hit = OGP_CACHE.get(tkr)
+    if hit:
+        png, ts = hit
+        if _time.time() - ts < OGP_TTL:
+            return Response(png, media_type="image/png", headers={
+                "Cache-Control": "public, max-age=3600",
+            })
+
+    # 判定データ + ガイダンス（EPS Beat/Miss）を並列取得
+    # guidance/basic は失敗してもOK（EPS実績は periods から導出可能）
+    async def _safe_analyze() -> dict | None:
+        try:
+            return await analyze(tkr, request)
+        except Exception as e:
+            print(f"[OGP] analyze failed for {tkr}: {e}")
+            return None
+
+    async def _safe_guidance() -> dict | None:
+        try:
+            return await guidance_basic(tkr, request)
+        except Exception as e:
+            print(f"[OGP] guidance/basic failed for {tkr}: {e}")
+            return None
+
+    analysis, guidance_data = await asyncio.gather(_safe_analyze(), _safe_guidance())
+
+    # ── アダプタ層: 既存スキーマ → ogp_generator が期待するスキーマへ変換 ──
+    adapted_analyze, adapted_guidance = _adapt_for_ogp_generator(analysis, guidance_data)
+    png = await asyncio.to_thread(generate_ogp_image, tkr, adapted_analyze, adapted_guidance)
+    OGP_CACHE[tkr] = (png, _time.time())
+    return Response(png, media_type="image/png", headers={
+        "Cache-Control": "public, max-age=3600",
+    })
+
+
+def _adapt_for_ogp_generator(analysis: dict | None, guidance: dict | None) -> tuple[dict, dict]:
+    """既存 analyze (judgment.JudgmentResult.to_dict) と guidance_basic の戻り値を、
+    新 ogp_generator.generate_ogp_image が期待するフラットスキーマに変換する。
+
+    既存:
+      analysis = {companyName, latestPeriod, overallPass, conditions:[{name,passed,value,detail,series}], periods:[{eps,revenue,operating_cf,...}]}
+      guidance = {eps:{actual,estimated,surprise_pct,verdict},revenue:{...}}
+
+    期待:
+      analyze_result = {company_name, quarter, conditions:{eps_beat,rev_beat,eps_growth,rev_growth,cf_positive}}
+      guidance_result = {verdict: pass|fail|unknown, consecutive_beats: int}
+    """
+    if not analysis:
+        return ({"company_name": "", "quarter": "", "conditions": {}},
+                {"verdict": "unknown", "consecutive_beats": 0})
+
+    periods = analysis.get("periods") or []
+    p_latest = periods[-1] if periods else {}
+    p_prev = periods[-2] if len(periods) >= 2 else {}
+
+    def _yoy(latest, prev):
+        try:
+            if latest is None or prev is None or float(prev) == 0.0:
+                return None
+            return round((float(latest) - float(prev)) / abs(float(prev)) * 100.0, 1)
+        except (TypeError, ValueError):
+            return None
+
+    # 既存 conditions list を name → entry の dict に変換しておく
+    cond_by_name: dict = {}
+    for c in (analysis.get("conditions") or []):
+        cond_by_name[c.get("name", "")] = c
+    eps_growth_pass = bool(cond_by_name.get("EPS 連続増加", {}).get("passed"))
+    cfps_growth_pass = bool(cond_by_name.get("CFPS 連続増加", {}).get("passed"))
+    rev_growth_pass = bool(cond_by_name.get("売上高 連続増加", {}).get("passed"))
+
+    g = guidance or {}
+    g_eps = g.get("eps") or {}
+    g_rev = g.get("revenue") or {}
+
+    eps_actual_g = g_eps.get("actual")
+    eps_actual = eps_actual_g if eps_actual_g is not None else p_latest.get("eps")
+    eps_surprise = g_eps.get("surprise_pct")
+    eps_verdict = (g_eps.get("verdict") or "").lower()
+    eps_beat_pass = eps_verdict == "beat"  # guidance verdict が無ければ False（unknown扱い）
+
+    rev_actual_g = g_rev.get("actual")
+    rev_actual = rev_actual_g if rev_actual_g is not None else p_latest.get("revenue")
+    rev_surprise = g_rev.get("surprise_pct")
+    rev_verdict = (g_rev.get("verdict") or "").lower()
+    rev_beat_pass = rev_verdict == "beat"
+
+    eps_yoy = _yoy(p_latest.get("eps"), p_prev.get("eps"))
+    rev_yoy = _yoy(p_latest.get("revenue"), p_prev.get("revenue"))
+    cf_yoy = _yoy(p_latest.get("operating_cf"), p_prev.get("operating_cf"))
+    cf_value = p_latest.get("operating_cf")
+    # 「CF+」= CFPS 連続増加かつ最新営業CFが正値 と解釈
+    cf_pass = cfps_growth_pass and (cf_value is not None and cf_value > 0)
+
+    adapted_analyze = {
+        "company_name": analysis.get("companyName") or "",
+        "quarter": analysis.get("latestPeriod") or "",
+        "conditions": {
+            "eps_beat":    {"pass": eps_beat_pass, "actual": eps_actual,
+                            "beat_pct": eps_surprise, "yoy_pct": eps_yoy},
+            "rev_beat":    {"pass": rev_beat_pass, "actual": rev_actual,
+                            "beat_pct": rev_surprise, "yoy_pct": rev_yoy},
+            "eps_growth":  {"pass": eps_growth_pass, "yoy_pct": eps_yoy},
+            "rev_growth":  {"pass": rev_growth_pass, "yoy_pct": rev_yoy},
+            "cf_positive": {"pass": cf_pass, "value": cf_value, "yoy_pct": cf_yoy},
+        },
+    }
+
+    # 総合 verdict: 「BEAT/MISS EARNINGS」バッジは EPS Beat/Miss を意味する。
+    # guidance の eps.verdict (beat/miss/in-line) を pass/fail/unknown に変換。
+    # in-line は「概ね一致」のため unknown（中立）に分類。
+    if eps_verdict == "beat":
+        verdict = "pass"
+    elif eps_verdict == "miss":
+        verdict = "fail"
+    else:
+        verdict = "unknown"
+
+    adapted_guidance = {
+        "verdict": verdict,
+        # consecutive_beats の集計ロジックは現状未実装のため 0 で非表示
+        "consecutive_beats": 0,
+    }
+    return adapted_analyze, adapted_guidance
+
+
+@app.api_route("/api/ogp/cache/clear", methods=["GET", "POST"])
+async def ogp_cache_clear(ticker: str | None = Query(None)):
+    """OGP インメモリキャッシュをクリアする管理用エンドポイント。
+    `?ticker=XXX` 指定で1銘柄のみクリア、未指定なら全クリア。
+    GET / POST 両対応（ブラウザから手動叩きやすくするため）。"""
+    if ticker:
+        tkr = ticker.upper().strip()
+        existed = OGP_CACHE.pop(tkr, None) is not None
+        return {"cleared": [tkr] if existed else [], "remaining": len(OGP_CACHE)}
+    n = len(OGP_CACHE)
+    OGP_CACHE.clear()
+    return {"cleared_count": n, "remaining": 0}
+
+
+# ── Phase 2a: Supabase service role クライアント（market_insights テーブル書き込み用） ──
+# RLS をバイパスして書き込むため SUPABASE_SERVICE_ROLE_KEY を使う（漏洩注意）
+_SB_SERVICE_CLIENT = None  # 遅延初期化（インポート失敗を許容）
+
+
+def _get_supabase_service():
+    """market_insights 読み書き用の Supabase service-role クライアントを返す。
+    必要な環境変数が未設定 or supabase パッケージ未インストールなら None を返す（呼び出し側でフォールバック）。"""
+    global _SB_SERVICE_CLIENT
+    if _SB_SERVICE_CLIENT is not None:
+        return _SB_SERVICE_CLIENT
+    url = os.environ.get("SUPABASE_URL") or os.environ.get("VITE_SUPABASE_URL")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    if not url or not key:
+        return None
+    try:
+        from supabase import create_client
+        _SB_SERVICE_CLIENT = create_client(url, key)
+        return _SB_SERVICE_CLIENT
+    except Exception as e:
+        print(f"[supabase] service client init failed: {e}")
+        return None
+
+
+# ── Phase 1: 投資家ナレッジベースから銘柄言及を抽出 ──
+# backend/data/insights/*.md を結合して Claude Sonnet 4.5 に投げ、
+# 指定 ticker への言及を JSON 構造で抽出する。24h インメモリキャッシュ。
+_INSIGHTS_CACHE: dict = {}
+_INSIGHTS_TTL = 86400  # 24h
+# Claude の 200K context 制約のため、直近 N ファイルに制限。
+# 14 ファイル全部だと 223K tokens で上限超え。直近6で約135K tokens に収まる。
+_INSIGHTS_MAX_FILES = 6
+
+
+def _load_knowledge_base() -> str:
+    """backend/data/insights/ 配下の .md ファイルから直近 N 件を結合して返す。
+    各ファイル先頭に `=== YYYY-MM-DD ===` のヘッダを付ける（ファイル名先頭の日付ラベル）。
+    日付ソート末尾（=新しい順）の上位 _INSIGHTS_MAX_FILES 件のみ採用。"""
+    base_dir = os.path.join(os.path.dirname(__file__), "..", "data", "insights")
+    files = sorted(glob.glob(os.path.join(base_dir, "*.md")))
+    if not files:
+        return ""
+    files = files[-_INSIGHTS_MAX_FILES:]  # 直近 N 件のみ
+    texts: list[str] = []
+    for f in files:
+        date_label = os.path.basename(f).split("_")[0]
+        try:
+            with open(f, encoding="utf-8") as fp:
+                texts.append(f"=== {date_label} ===\n{fp.read()}")
+        except Exception as _e:
+            print(f"[insights] failed to read {f}: {_e}")
+    return "\n\n".join(texts)
+
+
+_INSIGHTS_SYSTEM_PROMPT = """あなたは投資リサーチアシスタントです。
+【重要】必ず有効なJSONのみを返してください。
+マークダウン・コードブロック・前置き文・説明文は一切含めないでください。
+最初の文字は必ず「{」にしてください。
+
+複数の投資家・アナリストの解説テキストから、
+指定された銘柄に関する見解を統合・要約してください。
+
+出力形式（JSONのみ・マークダウン不要）:
+{
+  "overall_sentiment": "positive" | "neutral" | "negative" | "mixed",
+  "summary": "この銘柄に対する統合的な市場見解（400字以内）",
+  "bull_points": ["強気理由1", "強気理由2"],
+  "bear_points": ["弱気理由1", "弱気理由2"],
+  "key_metrics": ["注目指標1（例: GPU成長率14%）", "注目指標2"],
+  "found": true | false
+}
+
+重要なルール:
+- 特定の人物名・情報源・日付は一切含めない
+- 「〇〇氏によると」等の表現は使わない
+- 複数の視点を統合した独自見解として記述する
+- 言及が見つからない場合は found: false、他は空にする
+- JSONのみ返し、```json などは絶対に付けない
+- 入力テキストの内容をそのまま返してはいけない（必ず分析結果のJSONのみ返す）
+
+【絶対禁止ルール（特定/不特定個人の主語化を完全排除）】
+以下の単語は文中のどこにも（主語・目的語・所有格・修飾語のいずれでも）絶対に使ってはならない:
+  「氏」「〇〇氏」「アナリスト」「投資家」「市場参加者」「専門家」「ストラテジスト」
+  「彼」「彼女」「自身」
+
+これらは『主語として禁止』だけでなく『所有格・目的語としても禁止』である:
+❌「投資家の信頼感が高まる」     ❌「アナリストの期待が高い」
+❌「投資家への影響」             ❌「専門家の間では」
+
+その他の禁止表現:
+- 「〜と明言している」「〜と述べている」「〜と語っている」等、誰かの発言を引用する形式
+- 「確信度は〜程度」等、情報源の信頼性を直接評価する表現
+
+すべての文章は「市場では〜」「〜との見方がある」「〜が指摘されている」
+「〜と評価されている」「〜への期待が高まっている」等、
+主語のない『市場全体の見解』として記述すること。
+
+例:
+❌「氏は〜と明言している」              → ✅「市場では〜との見方がある」
+❌「アナリストによると〜」              → ✅「〜との指摘がある」
+❌「投資家は〜を懸念している」          → ✅「〜への懸念が指摘されている」
+❌「投資家の信頼感が高まっている」      → ✅「信頼感が市場で高まっている」
+❌「アナリストの期待が高い」            → ✅「市場の期待が高い」
+❌「投資家への影響が懸念される」        → ✅「市場への影響が懸念される」
+❌「確信度は低水準」                    → ✅「情報が限られており、慎重な見極めが必要」
+❌「〇〇氏自身が〜と発言」              → ✅「市場での言及は限定的」
+
+【最終チェック】出力前に summary, bull_points, bear_points, key_metrics の全テキストに
+上記の禁止単語が含まれていないか確認すること。1つでも含まれていれば書き直すこと。"""
+
+
+def _sanitize_insights_text(text: str) -> str:
+    """個人主語・所有格を市場視点に機械的に置換する後処理サニタイザ。
+    Claude が時々プロンプトを破って『投資家の懸念』『アナリストによると』等を
+    出力するため、出力後に念のためここで吸収する。"""
+    if not text or not isinstance(text, str):
+        return text
+    # 順序重要: 長いパターンから先に置換しないと誤マッチする
+    replacements = [
+        # ── 投資家 ──（複合語が先）
+        ("機関投資家", "機関"),
+        ("個人投資家", "個人"),
+        ("投資家の信頼感", "市場での信頼感"),
+        ("投資家の信頼", "市場での信頼"),
+        ("投資家の期待", "市場の期待"),
+        ("投資家の懸念", "市場での懸念"),
+        ("投資家の注目点", "市場での注目点"),
+        ("投資家の注目", "市場の注目"),
+        ("投資家の関心", "市場の関心"),
+        ("投資家の主要な", "市場の主要な"),
+        ("投資家の不安", "市場での不安"),
+        ("投資家の評価", "市場の評価"),
+        ("投資家の", "市場の"),
+        ("投資家へ", "市場へ"),
+        ("投資家に", "市場に"),
+        ("投資家から", "市場から"),
+        ("投資家は", "市場では"),
+        ("投資家が", "市場が"),
+        ("投資家", "市場"),
+        # ── アナリスト ──
+        ("アナリストによると", "市場では"),
+        ("アナリストによれば", "市場では"),
+        ("アナリストの", "市場の"),
+        ("アナリストは", "市場では"),
+        ("アナリストが", "市場が"),
+        ("アナリストから", "市場から"),
+        ("アナリスト", "市場"),
+        # ── 専門家 / 市場参加者 / ストラテジスト ──
+        ("専門家の", "市場の"),
+        ("専門家は", "市場では"),
+        ("専門家が", "市場が"),
+        ("専門家", "市場"),
+        ("市場参加者の", "市場の"),
+        ("市場参加者は", "市場では"),
+        ("市場参加者が", "市場が"),
+        ("市場参加者", "市場"),
+        ("ストラテジストの", "市場の"),
+        ("ストラテジストは", "市場では"),
+        ("ストラテジスト", "市場"),
+        # ── 〇〇氏 / 氏 / 彼 / 自身 ──
+        ("氏自身", ""),
+        ("氏による", "市場での"),
+        ("氏によると", "市場では"),
+        ("氏の", "市場の"),
+        ("氏は", "市場では"),
+        ("氏が", "市場で"),
+        ("氏も", "市場でも"),
+        ("彼女の", "その"),
+        ("彼女は", "市場では"),
+        ("彼の", "その"),
+        ("彼は", "市場では"),
+        ("彼が", "市場で"),
+    ]
+    out = text
+    for src, dst in replacements:
+        out = out.replace(src, dst)
+    return out
+
+
+def _sanitize_insights_data(data: dict) -> dict:
+    """summary / bull_points / bear_points / key_metrics の全てに sanitize を適用。"""
+    if not isinstance(data, dict):
+        return data
+    if "summary" in data:
+        data["summary"] = _sanitize_insights_text(data.get("summary", ""))
+    for key in ("bull_points", "bear_points", "key_metrics"):
+        items = data.get(key) or []
+        data[key] = [_sanitize_insights_text(s) for s in items if s]
+    return data
+
+
+async def _analyze_text_to_insights(tkr: str, combined_text: str) -> dict:
+    """与えられた combined_text を Claude Sonnet 4.5 で JSON 構造に分析する内部ヘルパー。
+    /api/insights/{ticker}（ナレッジベース版）と /api/insights/refresh/{ticker}（RSS版）の両方で使う。"""
+    try:
+        client = ClaudeClient()
+    except ClaudeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    user_prompt = (
+        f"以下の <knowledge_base> 内のテキストは参考資料です。"
+        f"このテキストの内容をそのまま返してはいけません。\n\n"
+        f"<knowledge_base>\n{combined_text}\n</knowledge_base>\n\n"
+        f"上記の参考資料を読み、{tkr}（または同社の社名・通称・事業内容）に関する"
+        f"複数の見解を統合し、システム指示の JSON 形式で結果のみを返してください。\n\n"
+        f"再確認: 出力は必ず `{{` で始まる JSON オブジェクトのみとし、"
+        f"マークダウン・前置き・コードフェンス・参考資料の echo back を一切含めないこと。"
+    )
+
+    try:
+        raw = await client.complete(
+            user_prompt,
+            model="claude-sonnet-4-5",
+            max_tokens=4000,
+            system=_INSIGHTS_SYSTEM_PROMPT,
+            prefill="{",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {e}")
+
+    cleaned = raw.strip().replace("```json", "").replace("```", "").strip()
+    json_match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+    candidate = json_match.group(0) if json_match else cleaned
+    try:
+        return _sanitize_insights_data(json.loads(candidate))
+    except json.JSONDecodeError as e:
+        head = raw[:600].replace("\n", "\\n")
+        print(f"[insights] JSON parse failed for {tkr}: {e} | raw head={head}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Analysis parse error: {e}; raw_head={head[:300]}",
+        )
+
+
+@app.get("/api/insights/{ticker}")
+async def get_insights(ticker: str, refresh: int = Query(0)):
+    tkr = ticker.upper().strip()
+
+    # ?refresh=1 が来たらキャッシュ全層 (インメモリ + Supabase + KB) をスキップして
+    # 直接オンデマンド RSS 収集経路へ。「もう一度分析する」ボタン用。
+    force_refresh = bool(refresh)
+
+    # 1. インメモリキャッシュ確認（refresh 時はスキップ）
+    if not force_refresh:
+        cached = _INSIGHTS_CACHE.get(tkr)
+        if cached and _time.time() - cached["ts"] < _INSIGHTS_TTL:
+            return cached["data"]
+
+    # 2. Supabase market_insights から最新データ取得（24h 以内なら採用、refresh 時はスキップ）
+    sb = _get_supabase_service()
+    if not force_refresh and sb is not None:
+        try:
+            sb_result = sb.table("market_insights") \
+                .select("*") \
+                .eq("ticker", tkr) \
+                .order("updated_at", desc=True) \
+                .limit(1) \
+                .execute()
+            rows = sb_result.data or []
+            if rows:
+                row = rows[0]
+                from datetime import datetime as _dt, timezone as _tz
+                try:
+                    updated = _dt.fromisoformat(str(row["updated_at"]).replace("Z", "+00:00"))
+                    age_hours = (_dt.now(_tz.utc) - updated).total_seconds() / 3600
+                except Exception:
+                    age_hours = 1e9
+                if age_hours < 24:
+                    # Supabase の旧データ（個人主語含む可能性）も配信時にサニタイズ
+                    response = _sanitize_insights_data({
+                        "ticker": tkr,
+                        "overall_sentiment": row.get("overall_sentiment") or "neutral",
+                        "summary": row.get("summary") or "",
+                        "bull_points": row.get("bull_points") or [],
+                        "bear_points": row.get("bear_points") or [],
+                        "key_metrics": row.get("key_metrics") or [],
+                        "found": True,
+                        "cached_at": row["updated_at"],
+                        "source": "supabase",
+                    })
+                    _INSIGHTS_CACHE[tkr] = {"ts": _time.time(), "data": response}
+                    return response
+        except Exception as e:
+            print(f"[insights] Supabase fetch error for {tkr}: {e}")
+
+    # 3. ナレッジベース（backend/data/insights/*.md）で生成。found なら採用。refresh 時はスキップ。
+    combined_text = None if force_refresh else await asyncio.to_thread(_load_knowledge_base)
+    if combined_text:
+        try:
+            kb_result = await _analyze_text_to_insights(tkr, combined_text)
+        except HTTPException:
+            kb_result = None
+        if kb_result and kb_result.get("found"):
+            response = {
+                "ticker": tkr,
+                "overall_sentiment": kb_result.get("overall_sentiment", "neutral"),
+                "summary": kb_result.get("summary", ""),
+                "bull_points": kb_result.get("bull_points", []) or [],
+                "bear_points": kb_result.get("bear_points", []) or [],
+                "key_metrics": kb_result.get("key_metrics", []) or [],
+                "found": True,
+                "cached_at": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
+                "source": "knowledge_base",
+            }
+            _INSIGHTS_CACHE[tkr] = {"ts": _time.time(), "data": response}
+            return response
+
+    # 4. オンデマンド RSS 収集 → Claude 分析 → Supabase upsert（60s タイムアウト）
+    # ウォッチリスト未登録の銘柄でも市場の声を返せるようにする。
+    # タイムアウト・エラー時は永久ローディングを防ぐため即 found:false で返す。
+    try:
+        refresh_result = await asyncio.wait_for(_refresh_one(tkr), timeout=60.0)
+        if refresh_result.get("status") == "ok":
+            cached = _INSIGHTS_CACHE.get(tkr)
+            if cached:
+                return cached["data"]
+    except asyncio.TimeoutError:
+        print(f"[insights] on-demand timeout (>60s) for {tkr}")
+    except HTTPException as he:
+        print(f"[insights] on-demand refresh HTTPException for {tkr}: {he.detail}")
+    except Exception as e:
+        print(f"[insights] on-demand refresh error for {tkr}: {e}")
+
+    # 5. 完全にデータなし（RSS も 0 件 / タイムアウト / エラー）
+    response = {
+        "ticker": tkr,
+        "overall_sentiment": "neutral",
+        "summary": "",
+        "bull_points": [],
+        "bear_points": [],
+        "key_metrics": [],
+        "found": False,
+        "cached_at": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
+        "source": "none",
+    }
+    # found:false もキャッシュ（短時間の連打で何度も Claude を叩かないため）
+    _INSIGHTS_CACHE[tkr] = {"ts": _time.time(), "data": response}
+    return response
+
+
+# ── Phase 2a: Yahoo/SeekingAlpha RSS → Claude → Supabase upsert ──
+def _check_cron_secret(provided: str | None) -> None:
+    """X-Cron-Secret ヘッダーで cron 認証する。CRON_SECRET 未設定環境では認証スキップ（手動呼び出し許容）。"""
+    cron_secret = os.environ.get("CRON_SECRET")
+    if cron_secret and provided != cron_secret:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+async def _refresh_one(tkr: str) -> dict:
+    """1 銘柄分の RSS 収集 → Claude 分析 → Supabase upsert を行う。Cron 認証はしない（呼び出し側で実施）。"""
+    tkr = tkr.upper().strip()
+
+    news_items = await collect_ticker_news(tkr)
+    if not news_items:
+        return {"ticker": tkr, "status": "no_news", "items": 0}
+
+    news_text = "\n\n".join([
+        f"[{item.get('source','')}] {item.get('title','')}\n{item.get('description','')}"
+        for item in news_items[:15]
+    ])
+
+    result_data = await _analyze_text_to_insights(tkr, news_text)
+
+    sources_uniq = sorted({item.get("source", "") for item in news_items if item.get("source")})
+
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    from datetime import datetime as _dt, timezone as _tz
+    now_iso = _dt.now(_tz.utc).isoformat()
+    payload = {
+        "ticker": tkr,
+        "overall_sentiment": result_data.get("overall_sentiment", "neutral"),
+        "summary": result_data.get("summary", ""),
+        "bull_points": result_data.get("bull_points", []) or [],
+        "bear_points": result_data.get("bear_points", []) or [],
+        "key_metrics": result_data.get("key_metrics", []) or [],
+        "sources": sources_uniq,
+        "updated_at": now_iso,
+    }
+    try:
+        sb.table("market_insights").upsert(payload, on_conflict="ticker").execute()
+    except Exception as e:
+        print(f"[insights refresh] supabase upsert failed for {tkr}: {e}")
+        raise HTTPException(status_code=500, detail=f"Supabase upsert failed: {e}")
+
+    # インメモリキャッシュも即時更新（次の GET で Supabase fetch しなくて済む）
+    _INSIGHTS_CACHE[tkr] = {
+        "ts": _time.time(),
+        "data": {
+            "ticker": tkr,
+            "overall_sentiment": payload["overall_sentiment"],
+            "summary": payload["summary"],
+            "bull_points": payload["bull_points"],
+            "bear_points": payload["bear_points"],
+            "key_metrics": payload["key_metrics"],
+            "found": True,
+            "cached_at": now_iso,
+            "source": "supabase",
+        },
+    }
+
+    return {
+        "ticker": tkr,
+        "status": "ok",
+        "items_collected": len(news_items),
+        "sentiment": payload["overall_sentiment"],
+        "sources": sources_uniq,
+    }
+
+
+# ⚠️ 重要: /api/insights/refresh/batch を /api/insights/refresh/{ticker} より
+# **先に** 定義する。FastAPI は登録順にルートを評価するため、ワイルドカード {ticker}
+# が先だと「batch」が ticker="BATCH" として吸い込まれる。
+@app.post("/api/insights/refresh/batch")
+async def refresh_insights_batch(
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """全ウォッチリスト銘柄の market_insights を一括更新する（Railway Cron から呼ぶ）。"""
+    _check_cron_secret(x_cron_secret)
+
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    try:
+        wl_result = sb.table("watchlist").select("ticker").execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"watchlist fetch failed: {e}")
+
+    tickers = sorted({row.get("ticker") for row in (wl_result.data or []) if row.get("ticker")})[:20]
+
+    results: list[dict] = []
+    for t in tickers:
+        try:
+            results.append(await _refresh_one(t))
+        except HTTPException as he:
+            results.append({"ticker": t, "status": "error", "error": he.detail})
+        except Exception as e:
+            results.append({"ticker": t, "status": "error", "error": str(e)})
+
+    return {"processed": len(results), "results": results}
+
+
+@app.post("/api/insights/refresh/{ticker}")
+async def refresh_insights(
+    ticker: str,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """指定 ticker の market_insights を最新化する（RSS → Claude → Supabase upsert）。"""
+    _check_cron_secret(x_cron_secret)
+    return await _refresh_one(ticker)
+
+
+@app.api_route("/api/insights/cache/clear", methods=["GET", "POST"])
+async def insights_cache_clear(ticker: str | None = Query(None)):
+    """投資家レポート キャッシュをクリアする管理用エンドポイント。"""
+    if ticker:
+        tkr = ticker.upper().strip()
+        existed = _INSIGHTS_CACHE.pop(tkr, None) is not None
+        return {"cleared": [tkr] if existed else [], "remaining": len(_INSIGHTS_CACHE)}
+    n = len(_INSIGHTS_CACHE)
+    _INSIGHTS_CACHE.clear()
+    return {"cleared_count": n, "remaining": 0}
+
+
+@app.api_route("/api/av/cache/clear", methods=["GET", "POST"])
+async def av_cache_clear(ticker: str | None = Query(None)):
+    """Alpha Vantage キャッシュをクリアする管理用エンドポイント。
+    `?ticker=XXX` 指定で1銘柄のみクリア、未指定なら全クリア。
+    25calls/day 制限のため通常は触らない（6時間 TTL の自動切れに任せる）。"""
+    av_cache = alpha_vantage_source._CACHE
+    if ticker:
+        tkr = ticker.upper().strip()
+        existed = av_cache.pop(tkr, None) is not None
+        return {"cleared": [tkr] if existed else [], "remaining": len(av_cache)}
+    n = len(av_cache)
+    av_cache.clear()
+    return {"cleared_count": n, "remaining": 0}
+
+
+# ── Stripe 決済 ──────────────────────────────────────────────────────────────
+# checkout: フロントから呼ばれ Stripe Checkout Session URL を返す
+# webhook: Stripe からの非同期イベントを受信してサブスク状態を更新する
+
+def _get_stripe():
+    """stripe モジュールを返す。未インストールなら None。"""
+    try:
+        import stripe as _stripe
+        _stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
+        return _stripe
+    except ImportError:
+        return None
+
+
+_SB_ANON_CLIENT = None
+
+
+def _get_supabase_anon():
+    """JWT検証用の anon key Supabase クライアント（遅延初期化・キャッシュ）。"""
+    global _SB_ANON_CLIENT
+    if _SB_ANON_CLIENT is not None:
+        return _SB_ANON_CLIENT
+    url = os.environ.get("SUPABASE_URL") or os.environ.get("VITE_SUPABASE_URL")
+    key = os.environ.get("SUPABASE_ANON_KEY") or os.environ.get("VITE_SUPABASE_ANON_KEY")
+    if not url or not key:
+        return None
+    try:
+        from supabase import create_client
+        _SB_ANON_CLIENT = create_client(url, key)
+        return _SB_ANON_CLIENT
+    except Exception:
+        return None
+
+
+async def _verify_supabase_jwt(authorization: str) -> dict:
+    """Authorization: Bearer <token> からユーザー情報を取得。失敗時は HTTPException(401)。"""
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Bearer token")
+    token = authorization[7:]
+    # anon client の get_user(jwt) で JWT を検証（admin API は別メソッド体系）
+    client = _get_supabase_anon()
+    if not client:
+        raise HTTPException(status_code=503, detail="Auth service unavailable")
+    try:
+        resp = client.auth.get_user(token)
+        u = resp.user
+        return {"id": u.id, "email": u.email}
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
+
+
+class _CheckoutBody(BaseModel):
+    plan: str = "monthly"  # 'monthly' | 'yearly'
+
+
+@app.post("/api/stripe/checkout")
+async def stripe_checkout(body: _CheckoutBody, authorization: str = Header(default="")):
+    """Stripe Checkout Session を作成して URL を返す。Supabase JWT 認証必須。"""
+    stripe = _get_stripe()
+    if not stripe:
+        raise HTTPException(status_code=503, detail="Stripe not configured")
+
+    user = await _verify_supabase_jwt(authorization)
+    user_id = user["id"]
+    user_email = user["email"]
+
+    price_env = "STRIPE_MONTHLY_PRICE_ID" if body.plan == "monthly" else "STRIPE_YEARLY_PRICE_ID"
+    price_id = os.environ.get(price_env)
+    if not price_id:
+        raise HTTPException(status_code=503, detail=f"{price_env} not set")
+
+    sb = _get_supabase_service()
+
+    # 既存 Stripe customer ID を取得（なければ作成）
+    customer_id = None
+    try:
+        existing = sb.table("subscriptions").select("stripe_customer_id").eq("user_id", user_id).execute()
+        if existing.data and existing.data[0].get("stripe_customer_id"):
+            customer_id = existing.data[0]["stripe_customer_id"]
+    except Exception:
+        pass
+
+    if not customer_id:
+        customer = stripe.Customer.create(
+            email=user_email,
+            metadata={"supabase_user_id": user_id},
+        )
+        customer_id = customer.id
+
+    app_url = os.environ.get("APP_URL", "https://beatscanner-production.up.railway.app")
+
+    trial_days = 7 if body.plan == "monthly" else 0  # 年払いはトライアルなし
+
+    session = stripe.checkout.Session.create(
+        customer=customer_id,
+        payment_method_types=["card"],
+        line_items=[{"price": price_id, "quantity": 1}],
+        mode="subscription",
+        subscription_data={"trial_period_days": trial_days} if trial_days > 0 else {},
+        allow_promotion_codes=True,
+        success_url=f"{app_url}/?checkout=success",
+        cancel_url=f"{app_url}/?checkout=cancel",
+        metadata={"supabase_user_id": user_id},
+    )
+    return {"url": session.url}
+
+
+@app.post("/api/stripe/webhook")
+async def stripe_webhook(request: Request):
+    """Stripe Webhook を受信。署名検証後にサブスク状態を Supabase に反映。"""
+    stripe = _get_stripe()
+    if not stripe:
+        raise HTTPException(status_code=503, detail="Stripe not configured")
+
+    webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+    payload = await request.body()
+    sig = request.headers.get("stripe-signature", "")
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig, webhook_secret)
+    except stripe.error.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid Stripe signature")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Webhook parse error: {e}")
+
+    sb = _get_supabase_service()
+    if not sb:
+        return {"received": True, "note": "supabase unavailable"}
+
+    from datetime import datetime as _dt
+
+    def _ts(epoch):
+        if not epoch:
+            return None
+        return _dt.utcfromtimestamp(epoch).isoformat() + "Z"
+
+    etype = event["type"]
+
+    if etype == "checkout.session.completed":
+        session_obj = event["data"]["object"]
+        user_id = (session_obj.get("metadata") or {}).get("supabase_user_id")
+        customer_id = session_obj.get("customer")
+        subscription_id = session_obj.get("subscription")
+        if user_id and subscription_id:
+            try:
+                sub = stripe.Subscription.retrieve(subscription_id)
+                # Detect plan from Stripe price ID
+                items = sub.get("items", {}).get("data", [])
+                yearly_id = os.environ.get("STRIPE_YEARLY_PRICE_ID", "")
+                plan_key = "yearly" if items and items[0]["price"]["id"] == yearly_id else "monthly"
+
+                sb.table("subscriptions").upsert({
+                    "user_id": user_id,
+                    "stripe_customer_id": customer_id,
+                    "stripe_subscription_id": subscription_id,
+                    "status": sub.status,
+                    "plan": plan_key,
+                    "trial_end": _ts(sub.trial_end),
+                    "current_period_end": _ts(sub.current_period_end),
+                    "updated_at": _dt.utcnow().isoformat() + "Z",
+                }, on_conflict="user_id").execute()
+            except Exception as e:
+                print(f"[stripe webhook] checkout.session.completed error: {e}")
+
+    elif etype == "customer.subscription.updated":
+        sub = event["data"]["object"]
+        customer_id = sub.get("customer")
+        try:
+            result = sb.table("subscriptions").select("user_id").eq("stripe_customer_id", customer_id).execute()
+            if result.data:
+                uid = result.data[0]["user_id"]
+                yearly_id = os.environ.get("STRIPE_YEARLY_PRICE_ID", "")
+                items = sub.get("items", {}).get("data", [])
+                plan_key = "yearly" if items and items[0]["price"]["id"] == yearly_id else "monthly"
+                sb.table("subscriptions").update({
+                    "status": sub.get("status"),
+                    "plan": plan_key,
+                    "trial_end": _ts(sub.get("trial_end")),
+                    "current_period_end": _ts(sub.get("current_period_end")),
+                    "updated_at": _dt.utcnow().isoformat() + "Z",
+                }).eq("user_id", uid).execute()
+        except Exception as e:
+            print(f"[stripe webhook] subscription.updated error: {e}")
+
+    elif etype == "customer.subscription.deleted":
+        sub = event["data"]["object"]
+        customer_id = sub.get("customer")
+        try:
+            result = sb.table("subscriptions").select("user_id").eq("stripe_customer_id", customer_id).execute()
+            if result.data:
+                uid = result.data[0]["user_id"]
+                sb.table("subscriptions").update({
+                    "status": "canceled",
+                    "updated_at": _dt.utcnow().isoformat() + "Z",
+                }).eq("user_id", uid).execute()
+        except Exception as e:
+            print(f"[stripe webhook] subscription.deleted error: {e}")
+
+    return {"received": True}
+
+
 # ── Static file serving (must be LAST — after all /api/* routes) ─────────────
 # Only mounted when frontend/dist exists (i.e. production build is present).
 # StaticFiles(html=True) serves index.html as SPA fallback for any unknown path,
 # which keeps client-side navigation working without a separate reverse proxy.
+# 注: `/` は上の @app.get("/") で OGP 専用ハンドリング。/assets/* 等のみここでヒット。
 if _STATIC_DIR.exists():
     app.mount(
         "/",

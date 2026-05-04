@@ -50,3 +50,8 @@ uvicorn*.log
 .claude/settings.local.json
 .claude/launch.json
 .claude/worktrees/
+.claude/hooks/
+.claude/scheduled_tasks.lock
+
+# Backup files (created during editing — never commit)
+*.bak

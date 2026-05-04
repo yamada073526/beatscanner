@@ -138,11 +138,9 @@ export default function HomeTab({
       )}
 
       {/* ── ウォッチリスト ── */}
-      <section className="panel-card rounded-2xl p-6 shadow-sm"
+      <section className="panel-card rounded-2xl px-6 pt-4 pb-6 shadow-sm"
                style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-        <h3 className="mb-3 text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-          ウォッチリスト
-        </h3>
+        <h3 className="section-heading">ウォッチリスト</h3>
         {watchlist.length === 0 ? (
           <div style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center',

@@ -4,6 +4,21 @@ import { useIsMobile } from '../hooks/useIsMobile.js';
 
 const _prefetchCache = new Set();
 
+// 4秒ごとに循環するプレースホルダー（ユーザーに「何を入れればいいか」を例示）
+const PLACEHOLDER_PC = [
+  'ティッカー or 銘柄名（英語）例: AAPL',
+  'ティッカー or 銘柄名（英語）例: NVDA',
+  'ティッカー or 銘柄名（英語）例: TSLA',
+  'ティッカー or 銘柄名（英語）例: MSFT',
+  'ティッカー or 銘柄名（英語）例: GOOGL',
+];
+const PLACEHOLDER_MOBILE = [
+  'AAPL, MSFT, Toyota…',
+  'NVDA, GOOGL, Toyota…',
+  'TSLA, AMZN, Toyota…',
+  'MSFT, META, Toyota…',
+];
+
 const US_EXCHANGES = new Set(['NASDAQ', 'NYSE', 'AMEX', 'NYSE ARCA', 'NYSE MKT']);
 const JP_EXCHANGES = new Set(['TSE', 'JPX', 'TYO']);
 
@@ -24,6 +39,15 @@ const TickerSearch = forwardRef(function TickerSearch(
   const composingRef = useRef(false);
   // When true, all search activity is suppressed (set after selection, reset after 2s)
   const suppressRef = useRef(false);
+
+  // プレースホルダー循環（4秒ごと）
+  const [placeholderIdx, setPlaceholderIdx] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setPlaceholderIdx((i) => i + 1), 4000);
+    return () => clearInterval(timer);
+  }, []);
+  const placeholderArr = isMobile ? PLACEHOLDER_MOBILE : PLACEHOLDER_PC;
+  const currentPlaceholder = placeholderArr[placeholderIdx % placeholderArr.length];
 
   // Sync display value when parent updates ticker externally
   useEffect(() => {
@@ -93,17 +117,39 @@ const TickerSearch = forwardRef(function TickerSearch(
       setOpen(false);
       return;
     }
-    debounceRef.current = setTimeout(async () => {
-      if (suppressRef.current) return;
+    debounceRef.current = setTimeout(() => fetchAndOpen(upper), 250);
+  }
+
+  // onFocus / ArrowDown から即時呼び出し可能な共通フェッチ関数
+  // （onBlur で suggestions=[] にされた後でも、再 fetch で候補を復元できるようにする）
+  async function fetchAndOpen(upper) {
+    if (!upper || hasJapanese(upper) || suppressRef.current) return;
+    try {
       const results = await searchTickers(upper);
       if (suppressRef.current) return;
       setSuggestions(results);
       setOpen(results.length > 0);
       setActive(-1);
-    }, 250);
+    } catch {
+      /* ignore network errors silently */
+    }
   }
 
   function handleKeyDown(e) {
+    // ↓キーで候補が閉じている場合、入力値があれば再フェッチして開く
+    if (e.key === 'ArrowDown' && !open) {
+      const upper = inputValue.toUpperCase().trim();
+      if (upper.length > 0) {
+        e.preventDefault();
+        // 既存 suggestions があれば即時 open、なければ再 fetch
+        if (suggestions.length > 0) {
+          setOpen(true);
+        } else {
+          fetchAndOpen(upper);
+        }
+        return;
+      }
+    }
     if (e.key === 'ArrowDown' && open) {
       e.preventDefault();
       setActive((a) => Math.min(a + 1, suggestions.length - 1));
@@ -133,6 +179,7 @@ const TickerSearch = forwardRef(function TickerSearch(
     <div ref={containerRef} className="relative flex-1">
       <input
         ref={inputRef}
+        type="search"
         value={inputValue}
         onChange={handleChange}
         onCompositionStart={() => { composingRef.current = true; }}
@@ -143,16 +190,28 @@ const TickerSearch = forwardRef(function TickerSearch(
           onChange(v);
         }}
         onKeyDown={handleKeyDown}
+        onFocus={() => {
+          // フォーカス時、入力値があれば候補を復元（既存 suggestions が空でも再 fetch）
+          const upper = inputValue.toUpperCase().trim();
+          if (upper.length > 0) {
+            if (suggestions.length > 0) {
+              setOpen(true);
+            } else {
+              fetchAndOpen(upper);
+            }
+          }
+        }}
         onBlur={() => setTimeout(() => {
           if (!suppressRef.current) {
             setOpen(false);
             setSuggestions([]);
           }
         }, 150)}
-        placeholder={isMobile
-          ? 'AAPL, MSFT, Toyota…'
-          : 'ティッカー or 銘柄名（英語）例: AAPL, 7203.T, Toyota'}
+        placeholder={currentPlaceholder}
         autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
         className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-lg font-semibold tracking-wider focus:border-slate-900 focus:outline-none"
       />
       {showJapaneseHint && (

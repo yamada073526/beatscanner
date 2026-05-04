@@ -1,3 +1,14 @@
+// judgment.py の条件順序に追従:
+// 0: 営業CFマージン ≥ 15%, 1: EPS 連続増加, 2: CFPS 連続増加,
+// 3: 売上高 連続増加, 4: CFPS > EPS（直近期）
+const CONDITION_LABELS = {
+  0: 'CF≥15%',
+  1: 'EPS↑',
+  2: 'CFPS↑',
+  3: 'Rev↑',
+  4: 'CF>EPS',
+};
+
 export default function ResultBadge({ result }) {
   const pass = result.overallPass;
   const dots = result.conditions ?? [];
@@ -34,7 +45,7 @@ export default function ResultBadge({ result }) {
                     }`}
                   >
                     <span>{c.passed ? '✓' : '✕'}</span>
-                    <span className="hidden sm:inline">条件{i + 1}</span>
+                    <span className="hidden sm:inline">{CONDITION_LABELS[i] ?? `条件${i + 1}`}</span>
                   </div>
                 ))}
               </div>

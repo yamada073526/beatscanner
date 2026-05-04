@@ -5,9 +5,10 @@ import { supabase, isSupabaseConfigured } from './lib/supabase.js';
 import { useAuth } from './hooks/useAuth.js';
 import { useIsMobile } from './hooks/useIsMobile.js';
 import { initDarkMode, toggleDarkMode, isDark } from './utils/darkMode.js';
-import { hasFmpKey } from './lib/fmpKey.js';
+import { hasFmpKey, loadFmpKey } from './lib/fmpKey.js';
 import { isPro } from './lib/planGating.js';
 import { useUpgradeModal } from './lib/useUpgradeModal.js';
+import { useSubscription } from './hooks/useSubscription.js';
 import InfoModal from './components/InfoModal.jsx';
 import ResultBadge from './components/ResultBadge.jsx';
 import ConditionCard from './components/ConditionCard.jsx';
@@ -24,6 +25,7 @@ import DetailReport from './components/DetailReport.jsx';
 import NewsPanel from './components/NewsPanel.jsx';
 import MarketWidget from './components/MarketWidget.jsx';
 import IRLinksPanel from './components/IRLinksPanel.jsx';
+import InsightsPanel from './components/InsightsPanel.jsx';
 import ApiKeySettings from './components/ApiKeySettings.jsx';
 import ApiKeyBanner from './components/ApiKeyBanner.jsx';
 import ApiKeyModal from './components/ApiKeyModal.jsx';
@@ -74,6 +76,21 @@ export default function App() {
   const [showFiveCondModal, setShowFiveCondModal] = useState(false);
 
   useEffect(() => { initDarkMode(); }, []);
+
+  // ── ディープリンク: ?ticker=NVDA / ?t=AAPL でアクセス時に自動分析 ──
+  // OGP HTML 経由（__r=1 付き）でも、検索バーから貼り付けでも動作する
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tickerParam = params.get('ticker') || params.get('t');
+    if (tickerParam) {
+      const sym = tickerParam.toUpperCase().trim();
+      if (sym) {
+        // runAnalyze は内部で setActiveTab('judgment') と scrollTo を実行
+        runAnalyze(sym);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const screenerRef = useRef(null);
   const customScreenerRef = useRef(null);
@@ -149,6 +166,9 @@ export default function App() {
 
   // ── Supabase Auth ─────────────────────────────────────────────
   const { user, ready: authReady, signInWithGoogle, signOut } = useAuth();
+  const { isSubscribed, startCheckout, checkoutLoading } = useSubscription(user);
+  // FMPキー保有者(BYOK)またはStripeサブスク有効者をProとして扱う
+  const isProUser = isPro() || isSubscribed;
   const syncedRef = useRef(false);
 
   // ── Header drawer (右からスライドイン) ─────────────────────────
@@ -239,6 +259,21 @@ export default function App() {
         console.error('[watchlist sync] failed', e);
       }
     })();
+  }, [authReady, user]);
+
+  // ── FMP APIキー: Supabase クラウド同期（マウント時 + ログイン状態変化時） ──
+  useEffect(() => {
+    if (!authReady) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await loadFmpKey(supabase);  // 内部で localStorage にミラー
+      } catch (e) {
+        console.error('[fmpKey sync] failed', e);
+      }
+      if (!cancelled) setHasKey(hasFmpKey());
+    })();
+    return () => { cancelled = true; };
   }, [authReady, user]);
 
   function handleKeySaved() {
@@ -383,6 +418,93 @@ export default function App() {
     });
   }
 
+  // ── X(Twitter) シェアテキスト生成 + 共有ハンドラ ──
+  function fmtMoneyShort(v) {
+    if (v == null || isNaN(v)) return null;
+    const a = Math.abs(v);
+    const sign = v < 0 ? '-' : '';
+    if (a >= 1e12) return `${sign}$${(a / 1e12).toFixed(1)}T`;
+    if (a >= 1e9)  return `${sign}$${(a / 1e9).toFixed(1)}B`;
+    if (a >= 1e6)  return `${sign}$${(a / 1e6).toFixed(1)}M`;
+    return `${sign}$${a.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  }
+  function yoyPct(latest, prev) {
+    if (latest == null || prev == null || prev === 0) return null;
+    return Math.round(((latest - prev) / Math.abs(prev)) * 1000) / 10;
+  }
+
+  function buildShareText(r, g = null) {
+    if (!r) return '';
+    const url = `https://beatscanner-production.up.railway.app/?ticker=${r.ticker}`;
+    const tag = `#${r.ticker} #決算 #米国株 #beatscanner`;
+    const head = `$${r.ticker} 📊 決算分析`;
+    const periods = r.periods || [];
+    const latest = periods[periods.length - 1] || {};
+    const prev = periods[periods.length - 2] || {};
+
+    if (r.overallPass) {
+      const lines = [];
+      // EPS（guidance があれば予想比、無ければ前年比）
+      const eps = latest.eps;
+      if (eps != null) {
+        const epsStr = `$${Number(eps).toFixed(2)}`;
+        const surprise = g?.eps?.surprise_pct;
+        const verdict = (g?.eps?.verdict || '').toLowerCase();
+        if (surprise != null) {
+          const sign = surprise > 0 ? '+' : '';
+          const beatTag = verdict === 'beat' ? ' Beat🔥' : verdict === 'miss' ? ' Miss' : '';
+          lines.push(`✅ EPS ${epsStr}（予想比${sign}${surprise.toFixed(1)}%${beatTag}）`);
+        } else {
+          const yoy = yoyPct(eps, prev.eps);
+          if (yoy != null) {
+            const sign = yoy >= 0 ? '+' : '';
+            const arrow = yoy >= 0 ? '↑' : '↓';
+            lines.push(`✅ EPS ${epsStr}（前年比${sign}${yoy}%${arrow}）`);
+          } else {
+            lines.push(`✅ EPS ${epsStr}`);
+          }
+        }
+      }
+      // 売上高（前年比）
+      const revStr = fmtMoneyShort(latest.revenue);
+      if (revStr) {
+        const yoy = yoyPct(latest.revenue, prev.revenue);
+        if (yoy != null) {
+          const sign = yoy >= 0 ? '+' : '';
+          const arrow = yoy >= 0 ? '↑' : '↓';
+          lines.push(`✅ 売上高 ${revStr}（前年比${sign}${yoy}%${arrow}）`);
+        } else {
+          lines.push(`✅ 売上高 ${revStr}`);
+        }
+      }
+      // 総合判定
+      lines.push(`✅ ${r.passedCount}/${r.totalCount}条件クリア PASS`);
+      return `${head}\n\n${lines.join('\n')}\n\n${tag}\n${url}`;
+    }
+
+    // FAIL
+    const lines = [`❌ ${r.totalCount}条件中${r.passedCount}クリア FAIL`];
+    // 失敗条件のサマリ
+    const failed = (r.conditions || []).filter(c => !c.passed).map(c => c.name);
+    if (failed.length > 0) {
+      const summary = failed.length <= 2
+        ? failed.join('・')
+        : `${failed.slice(0, 2).join('・')} ほか${failed.length - 2}項目`;
+      lines.push(`⚠️ ${summary} で減少傾向`);
+    }
+    return `${head}\n\n${lines.join('\n')}\n\n${tag}\n${url}`;
+  }
+
+  async function handleShare(r, g = null) {
+    const text = buildShareText(r, g);
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try { await navigator.share({ text }); return; }
+      catch { /* user cancelled or share failed → fall through to intent */ }
+    }
+    const intent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
+    window.open(intent, '_blank', 'noopener,noreferrer');
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 md:py-12">
 
@@ -392,7 +514,32 @@ export default function App() {
       <header
         className="mb-4 grid items-center grid-cols-[auto_1fr] md:grid-cols-[1fr_auto_1fr] gap-2"
       >
-        <div className="flex items-center gap-2.5" style={{ justifyContent: 'flex-start', minWidth: 0 }}>
+        <div
+          className="flex items-center gap-2.5"
+          style={{ justifyContent: 'flex-start', minWidth: 0, cursor: 'pointer' }}
+          role="button"
+          tabIndex={0}
+          aria-label="ホームに戻る"
+          onClick={() => {
+            setActiveTab('home');
+            setTicker('');
+            setResult(null);
+            setGuidance(null);
+            setIsDemoResult(false);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setActiveTab('home');
+              setTicker('');
+              setResult(null);
+              setGuidance(null);
+              setIsDemoResult(false);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }}
+        >
           <svg
             width="24" height="24" viewBox="0 0 64 64"
             style={{ flexShrink: 0 }}
@@ -440,7 +587,7 @@ export default function App() {
           ].map(t => {
             const active = activeTab === t.key;
             const onClick = () => {
-              if (t.key === 'report' && !isPro()) {
+              if (t.key === 'report' && !isProUser) {
                 upgrade.open('AI詳細レポート');
               } else {
                 setActiveTab(t.key);
@@ -783,6 +930,40 @@ export default function App() {
           <div className="space-y-4">
             <ResultBadge result={result} />
 
+            {/* シェア & ウォッチリスト — 判定結果カード右下に横並び */}
+            <div className="flex justify-end items-center gap-2 -mt-2">
+              <button
+                type="button"
+                onClick={() => handleShare(result, guidance)}
+                className="x-share-btn"
+                aria-label="Xでシェア"
+                title="Xでシェア"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  style={{ display: 'block' }}
+                  aria-hidden="true"
+                >
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+              </button>
+              <button
+                onClick={() => {
+                  if (watchlist.includes(result.ticker)) removeFromWatchlist(result.ticker);
+                  else addToWatchlist(result.ticker);
+                }}
+                disabled={reportStreaming}
+                className={`watchlist-btn${watchlist.includes(result.ticker) ? ' registered' : ''}`}
+                aria-label={watchlist.includes(result.ticker) ? 'ウォッチリストから解除' : 'ウォッチリストに追加'}
+                title={watchlist.includes(result.ticker) ? 'ウォッチリストから解除' : 'ウォッチリストに追加'}
+              >
+                {watchlist.includes(result.ticker) ? '★' : '☆'}
+              </button>
+            </div>
+
             {isDemoResult && result?.overallPass && (
               <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <p className="text-sm text-slate-600">
@@ -802,16 +983,6 @@ export default function App() {
             {isDemoResult && (
               <PlanComparisonBanner onOpenSettings={() => setShowSettings(true)} />
             )}
-
-            <div className="flex justify-end">
-              <button
-                onClick={() => addToWatchlist(result.ticker)}
-                disabled={watchlist.includes(result.ticker) || reportStreaming}
-                className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                {watchlist.includes(result.ticker) ? '★ 登録済' : '★ ウォッチに追加'}
-              </button>
-            </div>
           </div>
 
           <SummaryBrief analysis={result} guidance={guidance} />
@@ -861,15 +1032,19 @@ export default function App() {
                   onClick={() => runAnalyze(sym)}
                   disabled={loading}
                   onMouseEnter={e => {
-                    if (!isActive) {
-                      e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.10)';
-                      e.currentTarget.style.borderColor = 'rgba(56,189,248,0.50)';
+                    if (!isActive && !loading) {
+                      e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.18)';
+                      e.currentTarget.style.borderColor = 'rgba(56,189,248,0.70)';
+                      e.currentTarget.style.color = 'rgb(14,165,233)';
+                      e.currentTarget.style.transform = 'translateY(-2px) scale(1.03)';
                     }
                   }}
                   onMouseLeave={e => {
                     if (!isActive) {
                       e.currentTarget.style.backgroundColor = 'var(--bg-card)';
                       e.currentTarget.style.borderColor = 'var(--border)';
+                      e.currentTarget.style.color = 'var(--text-secondary)';
+                      e.currentTarget.style.transform = 'translateY(0) scale(1)';
                     }
                   }}
                   style={{
@@ -888,7 +1063,7 @@ export default function App() {
                     fontWeight: isActive ? 700 : 400,
                     cursor: loading ? 'not-allowed' : 'pointer',
                     opacity: loading && !isActive ? 0.5 : 1,
-                    transition: 'background-color 0.15s, border-color 0.15s, color 0.15s',
+                    transition: 'background-color 0.18s, border-color 0.18s, color 0.18s, transform 0.18s',
                     letterSpacing: '0.02em',
                   }}
                 >
@@ -905,7 +1080,14 @@ export default function App() {
                 <h3 className="text-sm font-semibold text-slate-700">5条件 判定詳細</h3>
                 <button
                   onClick={() => setShowFiveCondModal(true)}
-                  className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-500 hover:bg-slate-300 hover:text-slate-700"
+                  className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
+                  style={{
+                    background: 'rgba(34,211,238,0.15)',
+                    color: '#22d3ee',
+                    border: '1px solid rgba(34,211,238,0.4)',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.30)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.15)'; }}
                   aria-label="5条件判定の説明を表示"
                 >
                   ？
@@ -918,7 +1100,7 @@ export default function App() {
                 <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
                   <p className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>📌 概要</p>
                   <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                    beatscanner では、企業の財務健全性を以下の5つの条件で判定しています。5つすべてを満たした企業のみが<strong>「PASS」</strong>となります。
+                    beatscanner では、企業の財務健全性を以下の5つの条件で判定しています。5つすべてを満たした企業のみが<strong style={{ color: '#22d3ee' }}>「PASS」</strong>となります。
                   </p>
                 </div>
                 <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
@@ -934,45 +1116,100 @@ export default function App() {
                 <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
                   <p className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>💡 なぜこの5条件なのか</p>
                   <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                    これらはすべて<strong>「会計上のごまかしが効かない、または利益とのクロスチェックでごまかしを見抜ける」</strong>指標で構成されています。5条件をすべてクリアする企業は、本業で実質的に現金を稼ぎ出しており、財務的に極めて健全な状態といえます。各条件の詳細は、それぞれの ? ボタンをご確認ください。
+                    これらはすべて「<strong style={{ color: '#22d3ee' }}>会計上のごまかしが効かない</strong>、または利益とのクロスチェックでごまかしを見抜ける」指標で構成されています。5条件をすべてクリアする企業は、本業で実質的に現金を稼ぎ出しており、財務的に極めて健全な状態といえます。各条件の詳細は、それぞれの ? ボタンをご確認ください。
                   </p>
                 </div>
               </InfoModal>
             )}
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+            {/* モバイル (<md): 2列で5枚を 2/2/1 配置（現状維持） */}
+            <div className="grid grid-cols-2 gap-4 md:hidden">
               {result.conditions.map((c, i) => (
                 <ConditionCard
                   key={i}
                   index={i + 1}
                   condition={c}
-                  isPro={isPro()}
+                  isPro={isProUser}
                   onUpgradeClick={() => upgrade.open('前回比デルタ値')}
                 />
               ))}
             </div>
-            <button
-              className="cta-btn"
-              onClick={() => {
-                if (!isPro()) { upgrade.open('AI詳細レポート'); }
-                else { setActiveTab('report'); }
-              }}
-              style={{
-                display: 'block', width: '100%',
-                padding: '14px',
-                background: 'var(--text-primary)',
-                color: 'var(--bg-primary)',
-                border: 'none', borderRadius: '10px',
-                fontSize: '15px', fontWeight: 700,
-                cursor: 'pointer', letterSpacing: '0.02em',
-              }}
-            >
-              📋 決算レポートを見る →
-            </button>
+            {/* PC (md+) 上段: 3枚を均等3列 */}
+            <div className="hidden md:grid md:grid-cols-3 md:gap-4">
+              {result.conditions.slice(0, 3).map((c, i) => (
+                <ConditionCard
+                  key={i}
+                  index={i + 1}
+                  condition={c}
+                  isPro={isProUser}
+                  onUpgradeClick={() => upgrade.open('前回比デルタ値')}
+                />
+              ))}
+            </div>
+            {/* PC (md+) 下段: 上段と同じ3列グリッドの左2セルに配置（カード幅統一・左寄せ） */}
+            {result.conditions.length > 3 && (
+              <div className="hidden md:grid md:grid-cols-3 md:gap-4">
+                {result.conditions.slice(3).map((c, i) => (
+                  <ConditionCard
+                    key={i + 3}
+                    index={i + 4}
+                    condition={c}
+                    isPro={isProUser}
+                    onUpgradeClick={() => upgrade.open('前回比デルタ値')}
+                  />
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button
+                className="cta-btn"
+                onClick={() => {
+                  if (!isProUser) { upgrade.open('AI詳細レポート'); }
+                  else { setActiveTab('report'); }
+                }}
+                style={{
+                  flex: 1,
+                  display: 'block',
+                  padding: '14px',
+                  background: 'rgba(255,255,255,0.05)',
+                  color: '#22d3ee',
+                  border: '1px solid rgba(34,211,238,0.35)',
+                  borderRadius: '10px',
+                  fontSize: '15px',
+                  fontWeight: 600,
+                  textAlign: 'center',
+                  boxShadow: '0 0 10px rgba(34,211,238,0.15)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                📊 AI詳細レポート・財務分析を見る →
+              </button>
+              <button
+                type="button"
+                onClick={() => handleShare(result, guidance)}
+                className="x-share-btn"
+                aria-label="Xでシェア"
+                title="Xでシェア"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  style={{ display: 'block' }}
+                  aria-hidden="true"
+                >
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+              </button>
+            </div>
             <GuidanceCard guidance={guidance} isSecLoading={guidanceSecLoading} />
             <HistoryChart periods={result.periods} currency={result.currency} />
             <StockPriceChart ticker={result.ticker} />
             <IRLinksPanel ticker={result.ticker} />
             <NewsPanel ticker={result.ticker} />
+            {/* 市場の声: ログイン済み or Stripeサブスク有効でフル表示 */}
+            <InsightsPanel ticker={result.ticker} user={user} isPro={!!user || isSubscribed} />
           </div>
         ) : (
           <div style={{ padding: '3rem 1rem', textAlign: 'center' }}>
@@ -1030,15 +1267,19 @@ export default function App() {
                   onClick={() => runAnalyze(sym)}
                   disabled={loading}
                   onMouseEnter={e => {
-                    if (!isActive) {
-                      e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.10)';
-                      e.currentTarget.style.borderColor = 'rgba(56,189,248,0.50)';
+                    if (!isActive && !loading) {
+                      e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.18)';
+                      e.currentTarget.style.borderColor = 'rgba(56,189,248,0.70)';
+                      e.currentTarget.style.color = 'rgb(14,165,233)';
+                      e.currentTarget.style.transform = 'translateY(-2px) scale(1.03)';
                     }
                   }}
                   onMouseLeave={e => {
                     if (!isActive) {
                       e.currentTarget.style.backgroundColor = 'var(--bg-card)';
                       e.currentTarget.style.borderColor = 'var(--border)';
+                      e.currentTarget.style.color = 'var(--text-secondary)';
+                      e.currentTarget.style.transform = 'translateY(0) scale(1)';
                     }
                   }}
                   style={{
@@ -1057,7 +1298,7 @@ export default function App() {
                     fontWeight: isActive ? 700 : 400,
                     cursor: loading ? 'not-allowed' : 'pointer',
                     opacity: loading && !isActive ? 0.5 : 1,
-                    transition: 'background-color 0.15s, border-color 0.15s, color 0.15s',
+                    transition: 'background-color 0.18s, border-color 0.18s, color 0.18s, transform 0.18s',
                     letterSpacing: '0.02em',
                   }}
                 >
@@ -1259,7 +1500,7 @@ export default function App() {
               <button
                 key={t.key}
                 onClick={() => {
-                  if (t.key === 'report' && !isPro()) {
+                  if (t.key === 'report' && !isProUser) {
                     upgrade.open('AI詳細レポート');
                   } else {
                     setActiveTab(t.key);
@@ -1326,7 +1567,7 @@ export default function App() {
                     color: 'var(--text-secondary)',
                   }}
                 >
-                  ログアウト
+                  サインアウト
                 </button>
               </div>
             ) : (
@@ -1439,7 +1680,26 @@ export default function App() {
           決算カレンダー
         </button>
 
-        {/* APIキー設定 */}
+        {/* ── 設定セクション ── */}
+        <hr style={{
+          border: 'none',
+          borderTop: '1px solid var(--border)',
+          margin: '8px 0 4px',
+        }} />
+        <p style={{
+          fontSize: 10,
+          fontWeight: 600,
+          color: 'var(--text-muted)',
+          letterSpacing: '0.08em',
+          padding: '4px 12px 2px',
+          margin: 0,
+          textTransform: 'uppercase',
+          opacity: 0.6,
+        }}>
+          設定
+        </p>
+
+        {/* FMP APIキー設定 */}
         <button
           type="button"
           onClick={() => { setShowSettings(true); setDrawerOpen(false); }}
@@ -1455,7 +1715,7 @@ export default function App() {
           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
         >
           <span style={{ fontSize: 18, lineHeight: 1 }}>🔑</span>
-          {hasKey ? 'APIキー設定済み' : 'APIキー設定'}
+          {hasKey ? 'FMP APIキー設定済み' : 'FMP APIキー設定'}
         </button>
       </aside>
 
@@ -1493,7 +1753,7 @@ export default function App() {
           ].map(tab => {
             const active = activeTab === tab.key;
             const onClick = () => {
-              if (tab.key === 'report' && !isPro()) {
+              if (tab.key === 'report' && !isProUser) {
                 upgrade.open('AI詳細レポート');
                 return;
               }
@@ -1569,6 +1829,9 @@ export default function App() {
       <UpgradeModal
         {...upgrade.props}
         onOpenSettings={() => { upgrade.close(); setShowSettings(true); }}
+        onCheckout={startCheckout}
+        checkoutLoading={checkoutLoading}
+        user={user}
       />
     </div>
   );

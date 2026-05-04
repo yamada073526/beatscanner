@@ -525,33 +525,7 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect, isFirst, isLast, o
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); onSelect(ticker); }}
-                    style={{
-                      display: 'block',
-                      width: '100%',
-                      background: 'var(--text-primary)',
-                      color: 'var(--bg-primary)',
-                      border: '1.5px solid transparent',
-                      borderRadius: '8px',
-                      padding: '12px 24px',
-                      fontSize: '13px',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      letterSpacing: '0.02em',
-                      textAlign: 'center',
-                      transition: 'background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.15s ease',
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.backgroundColor = 'rgba(99,179,237,0.12)';
-                      e.currentTarget.style.borderColor = 'rgba(99,179,237,0.65)';
-                      e.currentTarget.style.color = 'var(--text-primary)';
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.backgroundColor = '';
-                      e.currentTarget.style.borderColor = '';
-                      e.currentTarget.style.color = '';
-                      e.currentTarget.style.transform = '';
-                    }}
+                    className="cta-button-primary"
                   >
                     📊 {ticker} の決算を分析する →
                   </button>
@@ -565,10 +539,24 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect, isFirst, isLast, o
   );
 });
 
+const GLOBAL_PERIODS_EXPANDED_KEY = 'wl-global-periods-expanded-v1';
+
 export default memo(function ChartTab({ watchlist = [], onSelect, onMove }) {
   const rowRefs = useRef({});
   const prevPositions = useRef({});
-  const [globalPeriodsExpanded, setGlobalPeriodsExpanded] = useState(false);
+  const [globalPeriodsExpanded, setGlobalPeriodsExpandedState] = useState(() => {
+    try {
+      return localStorage.getItem(GLOBAL_PERIODS_EXPANDED_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const setGlobalPeriodsExpanded = (value) => {
+    setGlobalPeriodsExpandedState(value);
+    try {
+      localStorage.setItem(GLOBAL_PERIODS_EXPANDED_KEY, String(value));
+    } catch {}
+  };
 
   // 最新の props を ref に保持（handleMove を stable にするため）
   const onMoveRef = useRef(onMove);
