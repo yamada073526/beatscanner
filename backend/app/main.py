@@ -827,19 +827,20 @@ async def validate_fmp_key(req: ValidateFmpKeyRequest) -> dict:
 
 @app.get("/api/demo/analyze/{ticker}")
 async def demo_analyze(ticker: str, request: Request) -> dict:
-    """デモ用分析エンドポイント（認証不要・AAPL/MSFT/NVDA限定・1日3回まで）."""
+    """デモ用分析エンドポイント（認証不要・任意銘柄・1日3回まで）.
+
+    v40+: ホワイトリスト (AAPL/MSFT/NVDA 限定) を撤廃。
+    LP の「3銘柄/日まで無料分析」表記との整合を取り、任意銘柄を分析可能に。
+    悪用防止は IP ベース rate limit (3 req/IP/day) のみで担保。
+    内部処理は FMP API のみ (Claude 等の高コスト API 未使用) のためコスト安全。
+    """
     t = ticker.upper()
-    if t not in DEMO_TICKERS:
-        raise HTTPException(
-            status_code=400,
-            detail="デモモードではAAPL・MSFT・NVDAの3銘柄のみ利用できます。",
-        )
 
     ip = _client_ip(request)
     if not _check_demo_rate_limit(ip):
         raise HTTPException(
             status_code=429,
-            detail="デモ利用は1日3回までです。FMP APIキーを設定すると無制限に利用できます。",
+            detail="本日のお試し回数 (3銘柄) を超えました。Googleログインで無制限になります。",
         )
 
     demo_key = os.getenv("FMP_DEMO_API_KEY") or os.getenv("FMP_API_KEY")
@@ -4937,14 +4938,17 @@ async def get_movers():
 
     top_movers = await asyncio.to_thread(_fetch_movers_sync)
 
+    # v40+: cold cache 時の応答短縮 — batch_size 4→8, 間隔 1s→0.3s
+    # 旧: 5 batches × 2s + 4 × 1s = ~14s
+    # 新: 3 batches × 2s + 2 × 0.3s = ~6.6s (約 2x 高速化)
     results: list = []
-    batch_size = 4
+    batch_size = 8
     for i in range(0, len(top_movers), batch_size):
         batch = top_movers[i:i + batch_size]
         batch_results = await asyncio.gather(*[_add_reason(m) for m in batch])
         results.extend(batch_results)
         if i + batch_size < len(top_movers):
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.3)
     top_movers = results
 
     gainers = [m for m in top_movers if m["direction"] == "up"]

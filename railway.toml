@@ -12,3 +12,11 @@ restartPolicyMaxRetries = 3
 [[crons]]
 schedule = "0 19 * * *"
 command = "curl -s -X POST -H \"X-Cron-Secret: $CRON_SECRET\" https://beatscanner-production.up.railway.app/api/insights/refresh/batch"
+
+# v40+: 「今日の注目」の cold cache 問題対策。
+# /api/movers の在メモリキャッシュ TTL は 20 分・cold 時 10-15 秒かかるため、
+# 15 分毎に curl で叩いてキャッシュを常時温める。
+# 効果: ユーザーが LP を開いた時に常にキャッシュヒット (300-500ms 応答)。
+[[crons]]
+schedule = "*/15 * * * *"
+command = "curl -s https://beatscanner-production.up.railway.app/api/movers > /dev/null 2>&1"
