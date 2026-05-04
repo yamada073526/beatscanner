@@ -33,6 +33,7 @@ import UpgradeModal from './components/UpgradeModal.jsx';
 import PlanComparisonBanner from './components/PlanComparisonBanner.jsx';
 import DemoTicker from './components/DemoTicker.jsx';
 import CustomScreenerPanel from './components/CustomScreenerPanel.jsx';
+import LandingPage from './components/LandingPage.jsx';
 
 const WATCHLIST_KEY = 'earnings-watchlist-v1';
 
@@ -170,6 +171,25 @@ export default function App() {
   // FMPキー保有者(BYOK)またはStripeサブスク有効者をProとして扱う
   const isProUser = isPro() || isSubscribed;
   const syncedRef = useRef(false);
+
+  // ── 未ログイン LP 表示判定 ─────────────────────────────────────
+  // ホームタブ かつ 分析結果なし かつ 未ログイン → ランディングページを表示
+  // (analyze 中も result が null のため LP が出ないよう loading は対象外)
+  const showLP = activeTab === 'home' && !result && !user && !loading;
+
+  // ── 「7日間無料で試す」ログイン後の自動チェックアウト遷移 ─────
+  // LandingPage で意図フラグを localStorage にセット → ログイン完了 (user 確定) で
+  // 自動的に Stripe Checkout にリダイレクトする
+  useEffect(() => {
+    if (!user) return;
+    let intent = null;
+    try { intent = localStorage.getItem('bs_post_login_intent'); } catch {}
+    if (intent === 'checkout_monthly') {
+      try { localStorage.removeItem('bs_post_login_intent'); } catch {}
+      // 認証完了直後に startCheckout を呼ぶ (sub fetch は非同期だが checkout は user さえあれば動く)
+      setTimeout(() => startCheckout('monthly'), 100);
+    }
+  }, [user, startCheckout]);
 
   // ── Header drawer (右からスライドイン) ─────────────────────────
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -769,8 +789,9 @@ export default function App() {
 
       {/* Search — ホームタブでは常時表示、それ以外のタブは未検索時のみ。sticky で常時アクセス可能。
           R5 最終 (Apple 方式): 72%透過 + saturate(180%) blur(20px)。
-          viewport 端まで拡張するため calc(-50vw + 50%) の負マージンで親の max-w-6xl を脱出 */}
-      {(activeTab === 'home' || !result) && (
+          viewport 端まで拡張するため calc(-50vw + 50%) の負マージンで親の max-w-6xl を脱出。
+          LP 表示中は検索バーを隠す (LP の CTA に集中させるため) */}
+      {(activeTab === 'home' || !result) && !showLP && (
         <div
           className="sticky-search-band"
           style={{
@@ -857,7 +878,7 @@ export default function App() {
           ログイン済+WLあり時は HomeTab 内の Watchlist セクションが優先のため
           チップ行ごと非表示（重複表示の解消）。
           それ以外（未ログイン or WL空）→ サンプル 5 銘柄 + 「お試し:」 */}
-      {(activeTab === 'home' || !result) && !(user && watchlist.length > 0) && (
+      {(activeTab === 'home' || !result) && !(user && watchlist.length > 0) && !showLP && (
         <div className="mb-6" style={{ marginTop: '12px' }}>
           <div style={{
             fontSize: '11px', color: '#64748b',
@@ -995,7 +1016,15 @@ export default function App() {
       {/* Tabs はヘッダー中央(md+) または ハンバーガードロワー内(mobile) に移動済み */}
 
       {/* Tab: ホーム */}
-      {activeTab === 'home' && (
+      {/* 未ログイン LP — Google ログイン誘導 + Pro チェックアウト誘導 */}
+      {showLP && (
+        <LandingPage
+          onSignIn={signInWithGoogle}
+          onProCheckout={() => startCheckout('monthly')}
+        />
+      )}
+
+      {activeTab === 'home' && !showLP && (
         <HomeTab
           watchlist={watchlist}
           analysis={result}
@@ -1367,8 +1396,8 @@ export default function App() {
         <ChartTab watchlist={watchlist} onSelect={runAnalyze} onMove={moveWatchlistItem} />
       )}
 
-      {/* Demo mode — shown in ホーム tab when no API key */}
-      {activeTab === 'home' && !hasKey && (
+      {/* Demo mode — shown in ホーム tab when no API key (LP 表示中は隠す) */}
+      {activeTab === 'home' && !hasKey && !showLP && (
         <div className="mt-4">
           <DemoTicker onResult={handleDemoResult} />
         </div>
