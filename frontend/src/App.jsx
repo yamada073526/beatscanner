@@ -1306,7 +1306,7 @@ export default function App() {
             )}
             <div className="flex gap-2">
               <button
-                className="cta-btn"
+                className="cta-btn panel-card"
                 onClick={() => {
                   if (!isProUser) { upgrade.open('AI詳細レポート'); }
                   else { setActiveTab('report'); }

@@ -217,9 +217,9 @@ function SentimentBadge({ sentiment }) {
 function FullView({ data }) {
   return (
     <>
-      {/* 統合見解（400字） */}
+      {/* 統合見解（400字） — v40+: panel-card で LP と同じ発光・ホバー演出 */}
       {data.summary && (
-        <div style={{
+        <div className="panel-card" style={{
           padding: "14px 16px",
           borderRadius: 10,
           background: "rgba(34,211,238,0.07)",
@@ -233,7 +233,7 @@ function FullView({ data }) {
         </div>
       )}
 
-      {/* 強気 / 弱気 2カラム */}
+      {/* 強気 / 弱気 2カラム — v40+: panel-card で発光・ホバー演出 */}
       {(data.bull_points?.length > 0 || data.bear_points?.length > 0) && (
         <div
           className="md:grid-cols-2"
@@ -245,7 +245,7 @@ function FullView({ data }) {
           }}
         >
           {data.bull_points?.length > 0 && (
-            <div style={{
+            <div className="panel-card" style={{
               padding: "12px 14px",
               borderRadius: 10,
               background: "rgba(34,211,238,0.07)",
@@ -272,7 +272,7 @@ function FullView({ data }) {
             </div>
           )}
           {data.bear_points?.length > 0 && (
-            <div style={{
+            <div className="panel-card" style={{
               padding: "12px 14px",
               borderRadius: 10,
               background: "rgba(248,113,113,0.07)",
