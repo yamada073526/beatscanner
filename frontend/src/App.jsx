@@ -563,32 +563,14 @@ export default function App() {
             }
           }}
         >
-          <svg
-            width="24" height="24" viewBox="0 0 64 64"
-            style={{ flexShrink: 0 }}
-            aria-hidden="true"
-          >
-            <defs>
-              <linearGradient id="headerLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#0284c7"/>
-                <stop offset="100%" stopColor="#4f46e5"/>
-              </linearGradient>
-            </defs>
-            {/* 背景: 常にシアン→インディゴグラデ（ライト/ダーク両対応）*/}
-            <rect width="64" height="64" rx="14" fill="url(#headerLogoGrad)"/>
-            <rect x="2" y="2" width="60" height="30" rx="13" fill="rgba(255,255,255,0.08)"/>
-            <rect x="9"  y="42" width="10" height="13" rx="2.5" fill="rgba(255,255,255,0.5)"/>
-            <rect x="23" y="33" width="10" height="22" rx="2.5" fill="rgba(255,255,255,0.8)"/>
-            <rect x="37" y="22" width="10" height="33" rx="2.5" fill="white"/>
-            <rect x="51" y="30" width="6"  height="25" rx="2"   fill="rgba(255,255,255,0.55)"/>
-            <polyline
-              points="2,38 9,38 13,26 17,46 21,32 25,38 39,38 43,30 47,38 62,38"
-              stroke="white" strokeWidth="2.2" fill="none"
-              strokeLinecap="round" strokeLinejoin="round" opacity="0.95"
-            />
-            <circle cx="54" cy="18" r="3" fill="white" opacity="0.9"/>
-            <circle cx="54" cy="18" r="1.2" fill="white"/>
-          </svg>
+          {/* Favicon と同じ EKG ロゴを共通利用 (public/favicon.svg) */}
+          <img
+            src="/favicon.svg"
+            alt="beatscanner"
+            width="24"
+            height="24"
+            style={{ flexShrink: 0, display: 'block' }}
+          />
           <h1 className="text-base font-light tracking-tight md:text-lg"
               style={{ color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
             beatscanner
@@ -1421,8 +1403,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Calendar */}
-      {showCalendar && (
+      {/* Calendar (LP 表示中は隠す — 未ログイン LP の認知ノイズ削減) */}
+      {showCalendar && !showLP && (
         <div ref={calendarRef} className="mt-6">
           <CalendarPanel
             onSelect={runAnalyze}

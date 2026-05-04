@@ -162,70 +162,50 @@ function HeroSection({ onFreeStart }) {
         <span style={{ fontSize: '8px' }}>●</span>
       </div>
 
-      {/* メインコピー — 既存 .hero-title (グラデーションテキスト)。
-          パンチライン 1 行で「即判定」を打ち出す Apple 流ミニマル */}
+      {/* メインコピー — ログイン後ホーム Hero と完全統一 */}
       <h1
         className="hero-title"
         style={{
           position: 'relative', zIndex: 1,
           textAlign: 'center',
-          fontSize: 'clamp(36px, 7vw, 64px)',
+          fontSize: 'clamp(32px, 6vw, 56px)',
           fontWeight: 600,
-          lineHeight: 1.1,
+          lineHeight: 1.15,
           margin: '0 0 16px',
           letterSpacing: '-0.02em',
         }}
       >
-        決算を、即判定。
+        <span style={{ display: 'block' }}>決算を、瞬時に</span>
+        <span style={{ display: 'block' }}>読み解く。</span>
       </h1>
 
-      {/* サブコピー — 1 行に集約してパンチを最大化 */}
+      {/* サブコピー — 1 行・体言止め */}
       <p style={{
         position: 'relative', zIndex: 1,
         fontSize: 'clamp(13px, 1.8vw, 16px)',
         color: 'var(--text-muted)',
-        margin: '0 auto 20px',
-        lineHeight: 1.7,
-        maxWidth: '560px',
+        margin: '0 auto 24px',
+        lineHeight: 1.6,
       }}>
-        売上・EPS・CFをAIが自動分析。買い継続か撤退か、データで即決。
+        売上・EPS・CF、AIが自動分析。
       </p>
 
-      {/* 社会的証明バー — Fix 1: CTA 上に配置して説得力強化 */}
-      <div style={{
-        position: 'relative', zIndex: 1,
-        display: 'flex',
-        gap: 24,
-        justifyContent: 'center',
-        flexWrap: 'wrap',
-        margin: '16px auto 20px',
-        fontSize: 13,
-        color: 'var(--text-secondary)',
-        maxWidth: 600,
-      }}>
-        <span>📊 対応銘柄数: 10,000銘柄+</span>
-        <span>⚡ 5条件を自動判定</span>
-        <span>🔄 毎朝4時に自動更新</span>
-      </div>
-
-      {/* メインCTA + Fix 2: ボタン直下に 3 バッジで安心感を演出 */}
+      {/* メインCTA + 安心バッジ 1 行（改行なし） */}
       <div style={{ position: 'relative', zIndex: 1 }}>
         <PrimaryCTA onClick={onFreeStart}>
           <GoogleIcon /> 無料で試す（登録30秒）
         </PrimaryCTA>
         <div style={{
-          display: 'flex',
-          gap: 12,
-          justifyContent: 'center',
-          flexWrap: 'wrap',
           marginTop: 12,
           marginBottom: 20,
           fontSize: 12,
           color: 'var(--text-muted)',
+          textAlign: 'center',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
         }}>
-          <span>✓ クレカ不要</span>
-          <span>✓ 3銘柄/日まで永久無料</span>
-          <span>✓ 30秒で登録完了</span>
+          ✓ クレカ不要　✓ 30秒で完了　✓ 3銘柄まで永久無料
         </div>
       </div>
 
@@ -254,40 +234,6 @@ function HeroSection({ onFreeStart }) {
             {text}
           </span>
         ))}
-      </div>
-    </section>
-  );
-}
-
-// ── セクション 2: 信頼シグナル ────────────────────────────────────────────
-function TrustSection() {
-  return (
-    <section style={{
-      padding: '32px 20px',
-      textAlign: 'center',
-      borderTop: '1px solid var(--border)',
-      borderBottom: '1px solid var(--border)',
-    }}>
-      <SectionLabel>DATA SOURCES</SectionLabel>
-      <div
-        className="section-subtext"
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          justifyContent: 'center',
-          gap: 16,
-          marginTop: 12,
-          color: 'var(--text-secondary)',
-          opacity: 1,
-        }}
-      >
-        <span>📊 Financial Modeling Prep</span>
-        <span style={{ color: 'var(--text-muted)' }}>·</span>
-        <span>📰 Yahoo Finance</span>
-        <span style={{ color: 'var(--text-muted)' }}>·</span>
-        <span>📋 Seeking Alpha</span>
-        <span style={{ color: 'var(--text-muted)' }}>·</span>
-        <span>🤖 Claude AI</span>
       </div>
     </section>
   );
@@ -344,18 +290,18 @@ function FeaturesSection() {
       }}>
         <FeatureCard
           icon="⚡"
-          title="5条件 即時判定"
-          description="5つの財務指標を自動チェック。PASS/FAILで即判定。"
+          title="5条件、即判定"
+          description="財務5指標を自動チェック。PASS/FAILで即答。"
         />
         <FeatureCard
           icon="📊"
-          title="市場の声（AI統合分析）"
-          description="毎朝4時にAIが分析。強気・弱気材料を一目で確認。"
+          title="市場の声"
+          description="毎朝4時、AIが自動更新。"
         />
         <FeatureCard
           icon="📈"
-          title="株価チャート連動"
-          description="決算タイミングを株価チャートに重ねて表示。影響を一目で把握。"
+          title="チャート連動"
+          description="決算×株価を重ねて表示。"
         />
       </div>
     </section>
@@ -408,11 +354,9 @@ function PricingSection({ onFreeStart, onProCheckout }) {
             listStyle: 'none', padding: 0, margin: '0 0 22px',
             fontSize: 13, lineHeight: 2, color: 'var(--text-secondary)',
           }}>
-            <li>✓ 基本分析（3銘柄/日）</li>
+            <li>✓ 3銘柄/日まで無料分析</li>
             <li>✓ 5条件 即時判定</li>
             <li>✓ 株価チャート閲覧</li>
-            <li style={{ color: 'var(--text-muted)' }}>— 市場の声（プレビューのみ）</li>
-            <li style={{ color: 'var(--text-muted)' }}>— AI 詳細レポート</li>
           </ul>
           <OutlinedCTA onClick={onFreeStart} fullWidth>
             今すぐ無料で始める
@@ -579,20 +523,8 @@ function FAQSection() {
         a="はい。トライアル期間中（7日間）であれば、Stripe 経由でいつでも解約でき、料金は一切発生しません。トライアル終了前に解約のリマインドメールもお送りします。"
       />
       <FAQItem
-        q="Q. データはどこから取得していますか？"
-        a="財務データは Financial Modeling Prep（公式 API）、ニュースは Yahoo Finance および Seeking Alpha の RSS フィード、市場分析は Anthropic Claude AI を使用しています。すべて信頼性の高い一次ソースです。"
-      />
-      <FAQItem
         q="Q. 投資初心者でも使えますか？"
         a="はい。専門知識は不要です。5条件の判定結果と AI 解説で、決算の良し悪しをシンプルに確認できます。まずは気になる銘柄を1つ検索してみてください。"
-      />
-      <FAQItem
-        q="Q. 日本語で使えますか？"
-        a="はい、完全日本語対応です。ニュースの自動翻訳機能も搭載しており、英語の決算資料を読む必要はありません。"
-      />
-      <FAQItem
-        q="Q. 決算結果はいつ反映されますか？"
-        a="決算発表後、数時間以内に自動で更新されます。市場の声は毎朝4時に最新ニュースを自動収集・AI 分析します。"
       />
     </section>
   );
@@ -611,13 +543,13 @@ function FooterCTASection({ onFreeStart }) {
         className="section-heading"
         style={{ fontSize: 22, marginBottom: 12 }}
       >
-        まず1銘柄、試してみる。
+        まず、1銘柄。
       </h2>
       <p
         className="section-subtext"
         style={{ marginBottom: 24 }}
       >
-        30秒・クレカ不要。
+        30秒・クレカ不要
       </p>
       <PrimaryCTA onClick={onFreeStart}>
         <GoogleIcon /> 今すぐ無料で始める
@@ -648,7 +580,6 @@ export default function LandingPage({ onSignIn, onProCheckout }) {
       color: 'var(--text-primary)',
     }}>
       <HeroSection onFreeStart={onSignIn} />
-      <TrustSection />
       <FeaturesSection />
       <PricingSection onFreeStart={onSignIn} onProCheckout={handleProClick} />
       <FAQSection />
