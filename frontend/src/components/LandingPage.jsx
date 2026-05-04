@@ -3,23 +3,21 @@ import { useState } from 'react';
 /**
  * LandingPage — 未ログインユーザー向けランディングページ
  *
- * 表示条件: activeTab === 'home' && !result && !user
+ * 表示条件: activeTab === 'home' && !result && !user && !loading
+ *
+ * デザイン方針: 既存ホーム画面のデザインシステムに完全統一
+ *  - Hero は既存 .hero-badge / .hero-title (グラデーションテキスト) を流用
+ *  - カードは .panel-card クラス (ホバー演出付き)
+ *  - ボタンは .cta-btn クラス (シアン outlined)
+ *  - 見出しは .section-heading (18px / weight 500)
+ *  - 補助テキストは .section-subtext (12px / muted)
+ *  - カラーは CSS 変数 (--text-primary / --text-secondary / --text-muted / --bg-card / --bg-subtle / --border)
+ *  - フォントサイズは固定値ではなくセマンティッククラスに任せる
  *
  * Props:
  *   onSignIn      () => void   — Googleログイン (無料CTA)
  *   onProCheckout () => void   — Pro チェックアウト (ログイン → 自動的に Stripe へ遷移)
  */
-
-// シアン・ダークテーマ統一の共通スタイルトークン
-const C = {
-  cyan: '#22d3ee',
-  cyanHover: '#06b6d4',
-  cyanGlow: '0 0 12px rgba(34,211,238,0.30)',
-  cyanBg: 'rgba(34,211,238,0.07)',
-  cyanBgHover: 'rgba(34,211,238,0.12)',
-  cyanBorder: 'rgba(34,211,238,0.35)',
-  cyanBorderStrong: 'rgba(34,211,238,0.60)',
-};
 
 function GoogleIcon({ size = 16, fill = '#0f172a' }) {
   return (
@@ -32,7 +30,9 @@ function GoogleIcon({ size = 16, fill = '#0f172a' }) {
   );
 }
 
-function PrimaryCTA({ children, onClick, icon, glow = true, fullWidth = false }) {
+// ── 共通: ソリッドシアンの主要 CTA (Google ログイン用) ─────────────────────
+// 既存の cta-btn (outlined) と差別化するため、こちらは塗り。Hero/Footer の主役 CTA。
+function PrimaryCTA({ children, onClick, fullWidth = false }) {
   const [hover, setHover] = useState(false);
   return (
     <button
@@ -45,47 +45,43 @@ function PrimaryCTA({ children, onClick, icon, glow = true, fullWidth = false })
         justifyContent: 'center',
         gap: 10,
         padding: '14px 28px',
-        borderRadius: 12,
-        background: hover ? C.cyanHover : C.cyan,
+        borderRadius: 10,
+        background: hover ? '#06b6d4' : '#22d3ee',
         color: '#0f172a',
         border: 'none',
-        fontSize: 15,
         fontWeight: 700,
         cursor: 'pointer',
-        boxShadow: glow ? C.cyanGlow : 'none',
-        transition: 'all 0.2s',
+        boxShadow: '0 0 12px rgba(34,211,238,0.30)',
+        transition: 'all 0.2s ease',
         width: fullWidth ? '100%' : 'auto',
         whiteSpace: 'nowrap',
       }}
     >
-      {icon}
       {children}
     </button>
   );
 }
 
-function SecondaryCTA({ children, onClick, fullWidth = false }) {
-  const [hover, setHover] = useState(false);
+// ── 共通: outlined シアン CTA (既存 .cta-btn 相当のインライン版) ────────────
+// 既存 .cta-btn は :hover が !important で定義されているため、共通スタイルとして再利用。
+function OutlinedCTA({ children, onClick, fullWidth = false }) {
   return (
     <button
+      type="button"
+      className="cta-btn"
       onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
       style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        padding: '12px 24px',
-        borderRadius: 12,
-        background: hover ? C.cyanBgHover : C.cyanBg,
-        color: C.cyan,
-        border: `1px solid ${hover ? C.cyanBorderStrong : C.cyanBorder}`,
-        fontSize: 14,
-        fontWeight: 600,
-        cursor: 'pointer',
-        transition: 'all 0.2s',
+        display: 'block',
         width: fullWidth ? '100%' : 'auto',
+        padding: '14px',
+        background: 'rgba(255,255,255,0.05)',
+        color: '#22d3ee',
+        border: '1px solid rgba(34,211,238,0.35)',
+        borderRadius: 10,
+        fontWeight: 600,
+        textAlign: 'center',
+        boxShadow: '0 0 10px rgba(34,211,238,0.15)',
+        cursor: 'pointer',
       }}
     >
       {children}
@@ -93,121 +89,148 @@ function SecondaryCTA({ children, onClick, fullWidth = false }) {
   );
 }
 
+// ── セクション見出しヘルパー ──────────────────────────────────────────────
+function SectionLabel({ children }) {
+  return (
+    <p
+      className="section-subtext"
+      style={{
+        textTransform: 'uppercase',
+        letterSpacing: '0.15em',
+        color: '#22d3ee',
+        marginBottom: 8,
+      }}
+    >
+      {children}
+    </p>
+  );
+}
+
+function SectionTitle({ children }) {
+  return (
+    <h2 className="section-heading" style={{ fontSize: 24, marginBottom: 12 }}>
+      {children}
+    </h2>
+  );
+}
+
 // ── セクション 1: ヒーロー ────────────────────────────────────────────────
+// 既存 App.jsx の Hero (line 681-) と同じ hero-badge / hero-title クラスを使用
 function HeroSection({ onFreeStart }) {
   return (
     <section style={{
-      padding: '64px 20px 56px',
       textAlign: 'center',
-      borderBottom: '1px solid rgba(34,211,238,0.10)',
+      padding: '48px 24px 36px',
+      position: 'relative',
+      overflow: 'hidden',
     }}>
-      {/* β バッジ */}
-      <div style={{
-        display: 'inline-block',
-        padding: '6px 14px',
-        borderRadius: 9999,
-        background: C.cyanBg,
-        border: `1px solid ${C.cyanBorder}`,
-        color: C.cyan,
-        fontSize: 12,
-        fontWeight: 600,
-        letterSpacing: '0.02em',
-        marginBottom: 24,
-      }}>
-        🚀 β版・先着ユーザー募集中
+      {/* 背景の装飾（既存 Hero と同じ放射状グロー） */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -60%)',
+          width: '600px',
+          height: '300px',
+          background: 'radial-gradient(ellipse, rgba(56,189,248,0.08) 0%, transparent 70%)',
+          pointerEvents: 'none',
+          zIndex: 0,
+        }}
+      />
+
+      {/* バッジ — 既存 .hero-badge */}
+      <div
+        className="hero-badge"
+        style={{
+          position: 'relative', zIndex: 1,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          borderRadius: '999px',
+          padding: '5px 16px',
+          fontSize: '11px',
+          marginBottom: '24px',
+          fontWeight: 700,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+        }}
+      >
+        <span style={{ fontSize: '8px' }}>●</span>
+        β版・先着ユーザー募集中
+        <span style={{ fontSize: '8px' }}>●</span>
       </div>
 
-      {/* キャッチコピー */}
-      <h1 style={{
-        fontSize: 'clamp(32px, 6vw, 52px)',
-        fontWeight: 800,
-        letterSpacing: '-0.02em',
-        lineHeight: 1.15,
-        marginBottom: 20,
-        color: 'var(--text-primary)',
-      }}>
-        決算を、瞬時に<br className="md:hidden" />読み解く。
+      {/* メインコピー — 既存 .hero-title (グラデーションテキスト) */}
+      <h1
+        className="hero-title"
+        style={{
+          position: 'relative', zIndex: 1,
+          textAlign: 'center',
+          fontSize: 'clamp(32px, 6vw, 56px)',
+          fontWeight: 600,
+          lineHeight: 1.15,
+          margin: '0 0 16px',
+          letterSpacing: '-0.02em',
+        }}
+      >
+        <span style={{ display: 'block' }}>決算を、瞬時に</span>
+        <span style={{ display: 'block' }}>読み解く。</span>
       </h1>
 
-      {/* サブコピー */}
+      {/* サブコピー — 既存 Hero と同じスタイル */}
       <p style={{
-        fontSize: 'clamp(15px, 2.2vw, 18px)',
+        position: 'relative', zIndex: 1,
+        fontSize: 'clamp(13px, 1.8vw, 16px)',
+        color: 'var(--text-muted)',
+        margin: '0 auto 28px',
         lineHeight: 1.7,
-        color: 'var(--text-secondary)',
-        maxWidth: 620,
-        margin: '0 auto 40px',
+        maxWidth: '440px',
       }}>
-        売上・EPS・バリュエーションを <span style={{ color: C.cyan, fontWeight: 600 }}>AI が図解</span>。<br />
-        Beat / Miss・ブル / ベアを即判定。
+        売上・EPS・バリュエーションをAIが図解。
+        <br />
+        Beat/Miss・ブル/ベアを即判定。
       </p>
 
       {/* メインCTA */}
-      <PrimaryCTA
-        onClick={onFreeStart}
-        icon={<GoogleIcon />}
-      >
-        無料で試す（登録30秒）
-      </PrimaryCTA>
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        <PrimaryCTA onClick={onFreeStart}>
+          <GoogleIcon /> 無料で試す（登録30秒）
+        </PrimaryCTA>
+        <p
+          className="section-subtext"
+          style={{ marginTop: 12, marginBottom: 20, textAlign: 'center' }}
+        >
+          クレカ不要・3銘柄/日まで無料分析
+        </p>
+      </div>
 
-      {/* 補助テキスト */}
-      <p style={{
-        marginTop: 16,
-        fontSize: 12,
-        color: 'var(--text-muted)',
-      }}>
-        クレカ不要・3銘柄/日まで無料分析
-      </p>
-
-      {/* モックアップ（軽量CSS で「画面の枠」を表現） */}
+      {/* プルーフチップ — 既存 Hero と同じスタイル */}
       <div style={{
-        marginTop: 56,
-        maxWidth: 720,
-        marginLeft: 'auto',
-        marginRight: 'auto',
-        padding: 16,
-        borderRadius: 16,
-        background: 'rgba(34,211,238,0.04)',
-        border: `1px solid ${C.cyanBorder}`,
-        boxShadow: '0 0 24px rgba(34,211,238,0.10)',
+        position: 'relative', zIndex: 1,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '8px',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
       }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '8px 12px',
-          marginBottom: 12,
-          borderBottom: `1px solid ${C.cyanBorder}`,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>NVDA</span>
-            <span style={{
-              fontSize: 11, fontWeight: 600, color: C.cyan,
-              background: C.cyanBg, padding: '2px 10px', borderRadius: 9999,
-              border: `1px solid ${C.cyanBorder}`,
-            }}>
-              ✓ PASS
-            </span>
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>5/5 条件達成</div>
-        </div>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(5, 1fr)',
-          gap: 8,
-        }}>
-          {['営業CF', 'EPS', 'CFPS', '売上', 'CFPS≧EPS'].map((label, i) => (
-            <div key={i} style={{
-              padding: '10px 6px',
-              borderRadius: 8,
-              background: C.cyanBg,
-              border: `1px solid ${C.cyanBorder}`,
-              textAlign: 'center',
-            }}>
-              <div style={{ fontSize: 16, color: C.cyan, marginBottom: 4 }}>✓</div>
-              <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>{label}</div>
-            </div>
-          ))}
-        </div>
+        {['✓ 5条件 即時判定', '✓ AI市場分析', '✓ 株価チャート連動'].map(text => (
+          <span
+            key={text}
+            style={{
+              fontSize: '11px',
+              color: '#38BDF8',
+              background: 'rgba(56,189,248,0.08)',
+              border: '1px solid rgba(56,189,248,0.2)',
+              borderRadius: '999px',
+              padding: '3px 10px',
+              fontWeight: 600,
+            }}
+          >
+            {text}
+          </span>
+        ))}
       </div>
     </section>
   );
@@ -219,25 +242,22 @@ function TrustSection() {
     <section style={{
       padding: '32px 20px',
       textAlign: 'center',
-      borderBottom: '1px solid rgba(34,211,238,0.10)',
+      borderTop: '1px solid var(--border)',
+      borderBottom: '1px solid var(--border)',
     }}>
-      <div style={{
-        fontSize: 11,
-        color: 'var(--text-muted)',
-        textTransform: 'uppercase',
-        letterSpacing: '0.15em',
-        marginBottom: 16,
-      }}>
-        DATA SOURCES
-      </div>
-      <div style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        justifyContent: 'center',
-        gap: 16,
-        fontSize: 13,
-        color: 'var(--text-secondary)',
-      }}>
+      <SectionLabel>DATA SOURCES</SectionLabel>
+      <div
+        className="section-subtext"
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          justifyContent: 'center',
+          gap: 16,
+          marginTop: 12,
+          color: 'var(--text-secondary)',
+          opacity: 1,
+        }}
+      >
         <span>📊 Financial Modeling Prep</span>
         <span style={{ color: 'var(--text-muted)' }}>·</span>
         <span>📰 Yahoo Finance</span>
@@ -251,29 +271,33 @@ function TrustSection() {
 }
 
 // ── セクション 3: 機能紹介 ────────────────────────────────────────────────
+// 既存 .panel-card クラスを使用 (ホバー演出付き)
 function FeatureCard({ icon, title, description }) {
   return (
-    <div style={{
-      padding: '28px 24px',
-      borderRadius: 16,
-      background: 'rgba(34,211,238,0.04)',
-      border: `1px solid ${C.cyanBorder}`,
-      transition: 'all 0.2s',
-    }}>
-      <div style={{ fontSize: 36, marginBottom: 16 }}>{icon}</div>
-      <h3 style={{
-        fontSize: 17,
-        fontWeight: 700,
-        marginBottom: 10,
-        color: 'var(--text-primary)',
-      }}>
+    <div
+      className="panel-card"
+      style={{
+        padding: '24px 20px',
+        borderRadius: 12,
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+      }}
+    >
+      <div style={{ fontSize: 32, marginBottom: 12 }}>{icon}</div>
+      <h3
+        className="section-heading"
+        style={{ fontSize: 16, marginBottom: 8 }}
+      >
         {title}
       </h3>
-      <p style={{
-        fontSize: 13,
-        lineHeight: 1.7,
-        color: 'var(--text-secondary)',
-      }}>
+      <p
+        style={{
+          fontSize: 13,
+          lineHeight: 1.7,
+          color: 'var(--text-secondary)',
+          margin: 0,
+        }}
+      >
         {description}
       </p>
     </div>
@@ -282,33 +306,16 @@ function FeatureCard({ icon, title, description }) {
 
 function FeaturesSection() {
   return (
-    <section style={{
-      padding: '64px 20px',
-    }}>
-      <div style={{ textAlign: 'center', marginBottom: 40 }}>
-        <div style={{
-          fontSize: 11,
-          color: C.cyan,
-          textTransform: 'uppercase',
-          letterSpacing: '0.15em',
-          marginBottom: 12,
-        }}>
-          FEATURES
-        </div>
-        <h2 style={{
-          fontSize: 'clamp(24px, 4vw, 32px)',
-          fontWeight: 700,
-          color: 'var(--text-primary)',
-          marginBottom: 12,
-        }}>
-          投資判断を、データで武装する。
-        </h2>
+    <section style={{ padding: '56px 20px' }}>
+      <div style={{ textAlign: 'center', marginBottom: 32 }}>
+        <SectionLabel>FEATURES</SectionLabel>
+        <SectionTitle>投資判断を、データで武装する。</SectionTitle>
       </div>
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-        gap: 20,
+        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+        gap: 16,
         maxWidth: 1080,
         margin: '0 auto',
       }}>
@@ -336,123 +343,128 @@ function FeaturesSection() {
 function PricingSection({ onFreeStart, onProCheckout }) {
   return (
     <section style={{
-      padding: '64px 20px',
-      borderTop: '1px solid rgba(34,211,238,0.10)',
-      borderBottom: '1px solid rgba(34,211,238,0.10)',
+      padding: '56px 20px',
+      borderTop: '1px solid var(--border)',
+      borderBottom: '1px solid var(--border)',
     }}>
-      <div style={{ textAlign: 'center', marginBottom: 40 }}>
-        <div style={{
-          fontSize: 11,
-          color: C.cyan,
-          textTransform: 'uppercase',
-          letterSpacing: '0.15em',
-          marginBottom: 12,
-        }}>
-          PRICING
-        </div>
-        <h2 style={{
-          fontSize: 'clamp(24px, 4vw, 32px)',
-          fontWeight: 700,
-          color: 'var(--text-primary)',
-          marginBottom: 12,
-        }}>
-          シンプルな料金体系
-        </h2>
+      <div style={{ textAlign: 'center', marginBottom: 32 }}>
+        <SectionLabel>PRICING</SectionLabel>
+        <SectionTitle>シンプルな料金体系</SectionTitle>
       </div>
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-        gap: 20,
-        maxWidth: 760,
+        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+        gap: 16,
+        maxWidth: 720,
         margin: '0 auto',
       }}>
-        {/* Free プラン */}
-        <div style={{
-          padding: '32px 24px',
-          borderRadius: 16,
-          background: 'rgba(148,163,184,0.04)',
-          border: '1px solid rgba(148,163,184,0.30)',
-        }}>
-          <div style={{ fontSize: 24, marginBottom: 8 }}>🆓</div>
-          <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+        {/* Free プラン — panel-card */}
+        <div
+          className="panel-card"
+          style={{
+            padding: '28px 22px',
+            borderRadius: 12,
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border)',
+          }}
+        >
+          <div style={{ fontSize: 22, marginBottom: 4 }}>🆓</div>
+          <h3 className="section-heading" style={{ fontSize: 16, marginBottom: 4 }}>
             無料
           </h3>
-          <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 20 }}>
-            ¥0<span style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-muted)' }}>/月</span>
+          <div style={{
+            fontSize: 26, fontWeight: 700,
+            color: 'var(--text-primary)', marginBottom: 18,
+          }}>
+            ¥0<span style={{
+              fontSize: 13, fontWeight: 400, color: 'var(--text-muted)',
+            }}>/月</span>
           </div>
-          <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', fontSize: 13, lineHeight: 2 }}>
-            <li style={{ color: 'var(--text-secondary)' }}>✓ 基本分析（3銘柄/日）</li>
-            <li style={{ color: 'var(--text-secondary)' }}>✓ 5条件 即時判定</li>
-            <li style={{ color: 'var(--text-secondary)' }}>✓ 株価チャート閲覧</li>
+          <ul style={{
+            listStyle: 'none', padding: 0, margin: '0 0 22px',
+            fontSize: 13, lineHeight: 2, color: 'var(--text-secondary)',
+          }}>
+            <li>✓ 基本分析（3銘柄/日）</li>
+            <li>✓ 5条件 即時判定</li>
+            <li>✓ 株価チャート閲覧</li>
             <li style={{ color: 'var(--text-muted)' }}>— 市場の声（プレビューのみ）</li>
             <li style={{ color: 'var(--text-muted)' }}>— AI 詳細レポート</li>
           </ul>
-          <SecondaryCTA onClick={onFreeStart} fullWidth>
+          <OutlinedCTA onClick={onFreeStart} fullWidth>
             今すぐ無料で始める
-          </SecondaryCTA>
+          </OutlinedCTA>
         </div>
 
-        {/* Pro プラン (おすすめ表示) */}
-        <div style={{
-          position: 'relative',
-          padding: '32px 24px',
-          borderRadius: 16,
-          background: 'linear-gradient(135deg, rgba(34,211,238,0.10), rgba(34,211,238,0.04))',
-          border: `1px solid ${C.cyanBorderStrong}`,
-          boxShadow: '0 0 24px rgba(34,211,238,0.15)',
-        }}>
+        {/* Pro プラン — panel-card + シアン強調 */}
+        <div
+          className="panel-card"
+          style={{
+            position: 'relative',
+            padding: '28px 22px',
+            borderRadius: 12,
+            background: 'var(--bg-card)',
+            border: '1px solid rgba(34,211,238,0.55)',
+            boxShadow: '0 0 18px rgba(34,211,238,0.12)',
+          }}
+        >
           {/* おすすめバッジ */}
           <div style={{
             position: 'absolute',
-            top: -12,
-            right: 20,
-            padding: '4px 12px',
+            top: -10,
+            right: 18,
+            padding: '3px 10px',
             borderRadius: 9999,
-            background: C.cyan,
+            background: '#22d3ee',
             color: '#0f172a',
-            fontSize: 11,
+            fontSize: 10,
             fontWeight: 700,
-            letterSpacing: '0.02em',
+            letterSpacing: '0.05em',
           }}>
             おすすめ
           </div>
-          <div style={{ fontSize: 24, marginBottom: 8 }}>✨</div>
-          <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+          <div style={{ fontSize: 22, marginBottom: 4 }}>✨</div>
+          <h3 className="section-heading" style={{ fontSize: 16, marginBottom: 4 }}>
             Pro
           </h3>
-          <div style={{ fontSize: 28, fontWeight: 800, color: C.cyan, marginBottom: 4 }}>
-            ¥980<span style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-muted)' }}>/月</span>
+          <div style={{
+            fontSize: 26, fontWeight: 700,
+            color: '#22d3ee', marginBottom: 6,
+          }}>
+            ¥980<span style={{
+              fontSize: 13, fontWeight: 400, color: 'var(--text-muted)',
+            }}>/月</span>
           </div>
           <div style={{
             display: 'inline-block',
-            padding: '3px 10px',
+            padding: '2px 10px',
             borderRadius: 9999,
-            background: C.cyanBg,
-            border: `1px solid ${C.cyanBorder}`,
-            color: C.cyan,
+            background: 'rgba(34,211,238,0.12)',
+            border: '1px solid rgba(34,211,238,0.40)',
+            color: '#22d3ee',
             fontSize: 11,
             fontWeight: 600,
-            marginBottom: 20,
+            marginBottom: 18,
           }}>
             🎁 7日間 完全無料
           </div>
-          <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', fontSize: 13, lineHeight: 2 }}>
-            <li style={{ color: 'var(--text-secondary)' }}>✓ 分析数 <strong style={{ color: C.cyan }}>無制限</strong></li>
-            <li style={{ color: 'var(--text-secondary)' }}>✓ 市場の声 フル表示</li>
-            <li style={{ color: 'var(--text-secondary)' }}>✓ AI 詳細レポート</li>
-            <li style={{ color: 'var(--text-secondary)' }}>✓ ウォッチリスト無制限</li>
-            <li style={{ color: 'var(--text-secondary)' }}>✓ 決算前自動分析</li>
+          <ul style={{
+            listStyle: 'none', padding: 0, margin: '0 0 22px',
+            fontSize: 13, lineHeight: 2, color: 'var(--text-secondary)',
+          }}>
+            <li>✓ 分析数 <strong style={{ color: '#22d3ee' }}>無制限</strong></li>
+            <li>✓ 市場の声 フル表示</li>
+            <li>✓ AI 詳細レポート</li>
+            <li>✓ ウォッチリスト無制限</li>
+            <li>✓ 決算前自動分析</li>
           </ul>
           <PrimaryCTA onClick={onProCheckout} fullWidth>
             7日間無料で試す →
           </PrimaryCTA>
-          <p style={{
-            marginTop: 12,
-            fontSize: 11,
-            color: 'var(--text-muted)',
-            textAlign: 'center',
-          }}>
+          <p
+            className="section-subtext"
+            style={{ marginTop: 10, marginBottom: 0, textAlign: 'center' }}
+          >
             年払いなら ¥9,800（2ヶ月分お得）
           </p>
         </div>
@@ -466,8 +478,8 @@ function FAQItem({ q, a }) {
   const [open, setOpen] = useState(false);
   return (
     <div style={{
-      borderBottom: '1px solid rgba(148,163,184,0.20)',
-      padding: '20px 0',
+      borderBottom: '1px solid var(--border)',
+      padding: '18px 0',
     }}>
       <button
         onClick={() => setOpen(!open)}
@@ -482,25 +494,27 @@ function FAQItem({ q, a }) {
           textAlign: 'left',
           cursor: 'pointer',
           color: 'var(--text-primary)',
-          fontSize: 15,
-          fontWeight: 600,
+          fontSize: 14,
+          fontWeight: 500,
+          letterSpacing: '-0.01em',
         }}
       >
         <span>{q}</span>
         <span style={{
-          color: C.cyan,
-          fontSize: 20,
+          color: '#22d3ee',
+          fontSize: 18,
           transform: open ? 'rotate(45deg)' : 'rotate(0deg)',
           transition: 'transform 0.2s',
           marginLeft: 12,
+          flexShrink: 0,
         }}>
           +
         </span>
       </button>
       {open && (
         <p style={{
-          marginTop: 12,
-          fontSize: 14,
+          marginTop: 10,
+          fontSize: 13,
           lineHeight: 1.8,
           color: 'var(--text-secondary)',
         }}>
@@ -514,27 +528,13 @@ function FAQItem({ q, a }) {
 function FAQSection() {
   return (
     <section style={{
-      padding: '64px 20px',
+      padding: '56px 20px',
       maxWidth: 720,
       margin: '0 auto',
     }}>
-      <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        <div style={{
-          fontSize: 11,
-          color: C.cyan,
-          textTransform: 'uppercase',
-          letterSpacing: '0.15em',
-          marginBottom: 12,
-        }}>
-          FAQ
-        </div>
-        <h2 style={{
-          fontSize: 'clamp(24px, 4vw, 28px)',
-          fontWeight: 700,
-          color: 'var(--text-primary)',
-        }}>
-          よくあるご質問
-        </h2>
+      <div style={{ textAlign: 'center', marginBottom: 24 }}>
+        <SectionLabel>FAQ</SectionLabel>
+        <SectionTitle>よくあるご質問</SectionTitle>
       </div>
 
       <FAQItem
@@ -557,31 +557,25 @@ function FAQSection() {
 function FooterCTASection({ onFreeStart }) {
   return (
     <section style={{
-      padding: '64px 20px 80px',
+      padding: '56px 20px 72px',
       textAlign: 'center',
-      background: 'linear-gradient(180deg, transparent, rgba(34,211,238,0.06))',
-      borderTop: '1px solid rgba(34,211,238,0.10)',
+      borderTop: '1px solid var(--border)',
+      background: 'linear-gradient(180deg, transparent, rgba(34,211,238,0.04))',
     }}>
-      <h2 style={{
-        fontSize: 'clamp(22px, 4vw, 30px)',
-        fontWeight: 700,
-        color: 'var(--text-primary)',
-        marginBottom: 16,
-      }}>
+      <h2
+        className="section-heading"
+        style={{ fontSize: 22, marginBottom: 12 }}
+      >
         さあ、決算を読み解こう。
       </h2>
-      <p style={{
-        fontSize: 14,
-        color: 'var(--text-secondary)',
-        marginBottom: 32,
-      }}>
+      <p
+        className="section-subtext"
+        style={{ marginBottom: 24 }}
+      >
         登録は Google アカウントで30秒。クレカ不要。
       </p>
-      <PrimaryCTA
-        onClick={onFreeStart}
-        icon={<GoogleIcon />}
-      >
-        今すぐ無料で始める
+      <PrimaryCTA onClick={onFreeStart}>
+        <GoogleIcon /> 今すぐ無料で始める
       </PrimaryCTA>
     </section>
   );
@@ -600,12 +594,13 @@ export default function LandingPage({ onSignIn, onProCheckout }) {
 
   return (
     <div style={{
-      // 全幅ヒーロー対応のため親のパディングを脱出
+      // 全幅セクション化のため親のパディングを脱出 (sticky 検索バーと同じテクニック)
       width: '100vw',
       marginLeft: 'calc(-50vw + 50%)',
       marginRight: 'calc(-50vw + 50%)',
-      // ダークテーマの基本背景
+      // ダーク/ライト両対応のため CSS 変数の背景を継承
       background: 'var(--bg-primary)',
+      color: 'var(--text-primary)',
     }}>
       <HeroSection onFreeStart={onSignIn} />
       <TrustSection />
