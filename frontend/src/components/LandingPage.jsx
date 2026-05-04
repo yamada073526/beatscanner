@@ -155,7 +155,7 @@ function HeroSection({ onFreeStart }) {
           letterSpacing: '-0.02em',
         }}
       >
-        <span style={{ display: 'block' }}>決算を見ても、</span>
+        <span style={{ display: 'block' }}>決算を見ても</span>
         <span style={{ display: 'block' }}>買うべきか分からない。</span>
       </h1>
 
@@ -303,6 +303,7 @@ function TodayHotSection({ onTickerClick }) {
 // ── セクション 3: 機能紹介 ────────────────────────────────────────────────
 // 既存 .panel-card クラスを使用 (ホバー演出付き)
 // v37: mockup prop で実 UI 表現を差し込み可能に
+// v38: flex column + height:100% で 3 カードを同高揃え
 function FeatureCard({ icon, title, description, mockup }) {
   return (
     <div
@@ -312,6 +313,9 @@ function FeatureCard({ icon, title, description, mockup }) {
         borderRadius: 12,
         background: 'var(--bg-card)',
         border: '1px solid var(--border)',
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
       }}
     >
       <div style={{ fontSize: 32, marginBottom: 12 }}>{icon}</div>
@@ -333,12 +337,13 @@ function FeatureCard({ icon, title, description, mockup }) {
           {description}
         </p>
       )}
-      {mockup}
+      {/* mockup を下部に押し出して上部の余白を均等化 */}
+      {mockup && <div style={{ marginTop: 'auto' }}>{mockup}</div>}
     </div>
   );
 }
 
-// 5条件カード用の実 UI モックアップ (NVDA PASS 5/5 を CSS だけで描画)
+// v37: 5条件カード用の実 UI モックアップ (NVDA PASS 5/5 を CSS だけで描画)
 function FiveConditionsMockup() {
   return (
     <div style={{
@@ -380,6 +385,91 @@ function FiveConditionsMockup() {
   );
 }
 
+// v38: 市場の声カード用 UI モックアップ — センチメントバッジ + 強気/弱気/注目指標
+function MarketVoiceMockup() {
+  const items = [
+    { icon: '🟢', text: 'AI半導体需要が継続拡大', color: '#34ef81' },
+    { icon: '🔴', text: '競合のAMDが猛追中', color: '#f87171' },
+    { icon: '📌', text: '次回決算: EPS $0.89 予想', color: '#94a3b8' },
+  ];
+  return (
+    <div style={{
+      background: 'rgba(34,211,238,0.06)',
+      borderRadius: 8,
+      padding: '10px 12px',
+      marginTop: 8,
+      fontSize: 11,
+    }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        marginBottom: 6,
+      }}>
+        <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>NVDA</span>
+        <span style={{
+          background: 'rgba(245,158,11,0.15)',
+          color: '#f59e0b',
+          padding: '1px 8px',
+          borderRadius: 4,
+          fontSize: 10,
+          fontWeight: 700,
+        }}>⚡ 強弱混在</span>
+      </div>
+      {items.map((it) => (
+        <div key={it.text} style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          marginBottom: 3,
+          color: 'var(--text-muted)',
+          fontSize: 10,
+        }}>
+          <span>{it.icon}</span>
+          <span>{it.text}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// v38: チャート連動カード用 UI モックアップ — 株価線 + Beat/Miss マーカー
+function ChartLinkMockup() {
+  return (
+    <div style={{
+      background: 'rgba(34,211,238,0.06)',
+      borderRadius: 8,
+      padding: '10px 12px',
+      marginTop: 8,
+      fontSize: 11,
+    }}>
+      <svg width="100%" height="48" viewBox="0 0 200 48" preserveAspectRatio="none" aria-hidden="true">
+        {/* 株価線 (シアン) */}
+        <polyline
+          points="0,40 40,35 80,20 120,28 160,12 200,8"
+          fill="none"
+          stroke="#22d3ee"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {/* Beat マーカー (緑) */}
+        <circle cx="80" cy="20" r="4" fill="#34ef81" />
+        <text x="80" y="14" fontSize="8" fill="#34ef81" textAnchor="middle" fontWeight="700">Beat</text>
+        {/* Miss マーカー (赤) */}
+        <circle cx="120" cy="28" r="4" fill="#f87171" />
+        <text x="120" y="44" fontSize="8" fill="#f87171" textAnchor="middle" fontWeight="700">Miss</text>
+      </svg>
+      <div style={{
+        marginTop: 4,
+        fontSize: 10,
+        color: 'var(--text-muted)',
+      }}>
+        ▲ Beat / ▼ Miss を株価に重ねて表示
+      </div>
+    </div>
+  );
+}
+
 function FeaturesSection() {
   return (
     <section style={{ padding: '56px 20px' }}>
@@ -394,7 +484,11 @@ function FeaturesSection() {
         gap: 16,
         maxWidth: 1080,
         margin: '0 auto',
+        alignItems: 'stretch',  // v38: 3 カード同高
       }}>
+        {/* v38: 案A 採用 — 3 カードすべてに UI モックアップを追加。
+            理由: 訴求力 / 情報均等性 / 認知コスト削減のいずれも案B (高さ統一のみ) より優れる。
+            設計思想 ⑥「図解で認知コストを下げろ」を 3 カードすべてに適用。 */}
         <FeatureCard
           icon="⚡"
           title="5条件、即判定"
@@ -403,12 +497,12 @@ function FeaturesSection() {
         <FeatureCard
           icon="📊"
           title="市場の声"
-          description="毎朝4時、AIが自動更新。"
+          mockup={<MarketVoiceMockup />}
         />
         <FeatureCard
           icon="📈"
           title="チャート連動"
-          description="決算×株価を重ねて表示。"
+          mockup={<ChartLinkMockup />}
         />
       </div>
     </section>
@@ -435,7 +529,8 @@ function PricingSection({ onFreeStart, onProCheckout }) {
         maxWidth: 720,
         margin: '0 auto',
       }}>
-        {/* Free プラン — panel-card */}
+        {/* Free プラン — panel-card / v38: flex col + ul marginTop:auto で
+            ✓ リスト + CTA を下部に押し出して Pro カードと底揃え */}
         <div
           className="panel-card"
           style={{
@@ -443,6 +538,9 @@ function PricingSection({ onFreeStart, onProCheckout }) {
             borderRadius: 12,
             background: 'var(--bg-card)',
             border: '1px solid var(--border)',
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
           }}
         >
           <div style={{ fontSize: 22, marginBottom: 4 }}>🆓</div>
@@ -460,6 +558,7 @@ function PricingSection({ onFreeStart, onProCheckout }) {
           <ul style={{
             listStyle: 'none', padding: 0, margin: '0 0 22px',
             fontSize: 13, lineHeight: 2, color: 'var(--text-secondary)',
+            marginTop: 'auto',  // v38: 下部に押し出して ✓ リスト位置を Pro と揃える
           }}>
             <li>✓ 3銘柄/日まで無料分析</li>
             <li>✓ 5条件 即時判定</li>
@@ -470,7 +569,7 @@ function PricingSection({ onFreeStart, onProCheckout }) {
           </OutlinedCTA>
         </div>
 
-        {/* Pro プラン — panel-card + シアン強調 */}
+        {/* Pro プラン — panel-card + シアン強調 / v38: flex col で Free と底揃え */}
         <div
           className="panel-card"
           style={{
@@ -480,6 +579,9 @@ function PricingSection({ onFreeStart, onProCheckout }) {
             background: 'var(--bg-card)',
             border: '1px solid rgba(34,211,238,0.55)',
             boxShadow: '0 0 18px rgba(34,211,238,0.12)',
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
           }}
         >
           {/* おすすめバッジ */}
@@ -534,6 +636,7 @@ function PricingSection({ onFreeStart, onProCheckout }) {
           <ul style={{
             listStyle: 'none', padding: 0, margin: '0 0 22px',
             fontSize: 13, lineHeight: 2, color: 'var(--text-secondary)',
+            marginTop: 'auto',  // v38: 下部に押し出して Free と底揃え
           }}>
             <li>✓ 分析数 <strong style={{ color: '#22d3ee' }}>無制限</strong></li>
             <li>✓ 市場の声 フル表示</li>
