@@ -188,6 +188,31 @@ export default function App() {
       try { localStorage.removeItem('bs_post_login_intent'); } catch {}
       // 認証完了直後に startCheckout を呼ぶ (sub fetch は非同期だが checkout は user さえあれば動く)
       setTimeout(() => startCheckout('monthly'), 100);
+      return;  // チェックアウト経路に進む場合は welcome toast を出さない
+    }
+    // ── 初回ログイン用 welcome toast ─────────────────────────────
+    // localStorage に bs_welcomed_at が無ければ「✅ ようこそ！NVDAを試す」 toast を表示。
+    // 1 度表示したらフラグを立てて以後表示しない。runAnalyze は後段で定義されているが
+    // 関数宣言は hoist されるため useEffect 実行時点では参照可能。
+    let welcomedAt = null;
+    try { welcomedAt = localStorage.getItem('bs_welcomed_at'); } catch {}
+    if (!welcomedAt) {
+      try { localStorage.setItem('bs_welcomed_at', String(Date.now())); } catch {}
+      setTimeout(() => {
+        const id = Date.now();
+        setToast({
+          id,
+          message: '✅ ようこそ！まずは NVDA を試してみる →',
+          onClick: () => {
+            setToast(null);
+            setTicker('NVDA');
+            runAnalyze('NVDA');
+            setActiveTab('judgment');
+          },
+          durationMs: 8000,
+        });
+        setTimeout(() => setToast((t) => (t?.id === id ? null : t)), 8000);
+      }, 600);
     }
   }, [user, startCheckout]);
 

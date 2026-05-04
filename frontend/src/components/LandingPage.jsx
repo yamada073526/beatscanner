@@ -452,6 +452,179 @@ function UpcomingEarningsSection({ onTickerClick }) {
   );
 }
 
+// ── セクション 2.7 (v40+ 新設): サンプル分析結果 ──────────────────────────
+// 「契約後にどんな画面が見られるか」を 1 枚で示す Show-don't-tell 戦略。
+// 静的データで NVDA の 5 条件 PASS + 市場の声 + CTA を実 UI 風に再現。
+// クリックで NVDA 分析を実行 → ログインなしで価値体験 → 登録動機を最大化。
+function SampleAnalysisSection({ onTickerClick }) {
+  const conditions = [
+    { label: '営業CFマージン', value: '38.2%' },
+    { label: 'EPS 連続増加', value: '4Q' },
+    { label: 'CFPS 連続増加', value: '4Q' },
+    { label: '売上 連続増加', value: '4Q' },
+    { label: 'CFPS > EPS (粉飾リスク低)', value: '✓' },
+  ];
+  return (
+    <section style={{ padding: '32px 20px' }}>
+      <div style={{ textAlign: 'center', marginBottom: 16 }}>
+        <div style={{
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.1em',
+          marginBottom: 4,
+        }}>
+          📊 サンプル分析結果
+        </div>
+        <div style={{
+          fontSize: 11,
+          color: 'var(--text-muted)',
+        }}>
+          ↓ 実際にこういう画面が見られます
+        </div>
+      </div>
+
+      {/* 単一の panel-card で実 UI を再現 */}
+      <div
+        className="panel-card"
+        onClick={() => onTickerClick?.('NVDA')}
+        style={{
+          maxWidth: 720,
+          margin: '0 auto',
+          padding: '20px 22px',
+          borderRadius: 14,
+          background: 'var(--bg-card)',
+          border: '1px solid rgba(34,211,238,0.40)',
+          boxShadow: '0 0 18px rgba(34,211,238,0.10)',
+          cursor: 'pointer',
+        }}
+      >
+        {/* ヘッダー: ティッカー + PASS バッジ */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 14,
+        }}>
+          <div>
+            <div style={{
+              fontSize: 22,
+              fontWeight: 700,
+              color: 'var(--text-primary)',
+              lineHeight: 1.2,
+            }}>NVDA</div>
+            <div style={{
+              fontSize: 11,
+              color: 'var(--text-muted)',
+              marginTop: 2,
+            }}>NVIDIA Corp.</div>
+          </div>
+          <span style={{
+            background: 'rgba(34,239,129,0.15)',
+            color: '#34ef81',
+            padding: '4px 12px',
+            borderRadius: 6,
+            fontSize: 13,
+            fontWeight: 700,
+            border: '1px solid rgba(34,239,129,0.35)',
+          }}>✓ PASS 5/5</span>
+        </div>
+
+        {/* 5 条件リスト */}
+        <div style={{
+          background: 'rgba(34,211,238,0.04)',
+          borderRadius: 8,
+          padding: '12px 14px',
+          marginBottom: 14,
+        }}>
+          {conditions.map(c => (
+            <div key={c.label} style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontSize: 12,
+              padding: '4px 0',
+              color: 'var(--text-secondary)',
+            }}>
+              <span>
+                <span style={{ color: '#34ef81', marginRight: 8 }}>✓</span>
+                {c.label}
+              </span>
+              <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+                {c.value}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* 市場の声プレビュー */}
+        <div style={{
+          background: 'rgba(245,158,11,0.04)',
+          borderRadius: 8,
+          padding: '12px 14px',
+          marginBottom: 14,
+          border: '1px solid rgba(245,158,11,0.15)',
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 6,
+          }}>
+            <span style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: 'var(--text-secondary)',
+            }}>
+              📊 市場の声
+            </span>
+            <span style={{
+              background: 'rgba(245,158,11,0.15)',
+              color: '#f59e0b',
+              padding: '2px 10px',
+              borderRadius: 4,
+              fontSize: 10,
+              fontWeight: 700,
+            }}>⚡ 強弱混在</span>
+          </div>
+          <div style={{
+            fontSize: 12,
+            color: 'var(--text-secondary)',
+            lineHeight: 1.6,
+            borderLeft: '2px solid rgba(34,211,238,0.3)',
+            paddingLeft: 10,
+          }}>
+            AI半導体需要は堅調。ただし競合台頭とバリュエーション面での割高感が懸念材料。
+          </div>
+        </div>
+
+        {/* CTA — クリックで NVDA 分析を実行 (デモ) */}
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onTickerClick?.('NVDA'); }}
+          style={{
+            width: '100%',
+            padding: '12px',
+            borderRadius: 10,
+            background: '#22d3ee',
+            color: '#0f172a',
+            border: 'none',
+            fontSize: 14,
+            fontWeight: 700,
+            cursor: 'pointer',
+            boxShadow: '0 0 12px rgba(34,211,238,0.30)',
+            transition: 'background 0.2s',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = '#06b6d4'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = '#22d3ee'; }}
+        >
+          📄 NVDA の完全な分析を見る →
+        </button>
+      </div>
+    </section>
+  );
+}
+
 // ── セクション 3: 機能紹介 ────────────────────────────────────────────────
 // 既存 .panel-card クラスを使用 (ホバー演出付き)
 // v37: mockup prop で実 UI 表現を差し込み可能に
@@ -470,7 +643,7 @@ function FeatureCard({ icon, title, description, mockup }) {
         height: '100%',
       }}
     >
-      <div style={{ fontSize: 32, marginBottom: 12 }}>{icon}</div>
+      <div style={{ fontSize: 24, marginBottom: 10 }}>{icon}</div>
       <h3
         className="section-heading"
         style={{ fontSize: 16, marginBottom: 8 }}
@@ -863,8 +1036,18 @@ function PricingSection({ onFreeStart, onProCheckout }) {
             <li>✓ ウォッチリスト無制限</li>
             <li>✓ 決算前自動分析</li>
           </ul>
-          {/* 下部: CTA + 年払いバッジを marginTop:auto で底固定 */}
+          {/* 下部: 信頼バッジ + CTA + 年払いバッジを marginTop:auto で底固定 */}
           <div style={{ marginTop: 'auto' }}>
+            {/* v40+: Stripe 信頼バッジ — クレカ登録の心理障壁を低減 */}
+            <div style={{
+              fontSize: 11,
+              color: 'var(--text-muted)',
+              textAlign: 'center',
+              marginBottom: 10,
+              lineHeight: 1.6,
+            }}>
+              🔒 Stripe で安全に決済 / いつでも解約可
+            </div>
             <PrimaryCTA onClick={onProCheckout} fullWidth>
               7日間無料で試す →
             </PrimaryCTA>
@@ -971,7 +1154,7 @@ function FAQSection() {
 function FooterCTASection({ onFreeStart }) {
   return (
     <section style={{
-      padding: '56px 20px 72px',
+      padding: '40px 20px 56px',  // v40+: 56/72 → 40/56 で過剰余白を縮小
       textAlign: 'center',
       borderTop: '1px solid var(--border)',
       background: 'linear-gradient(180deg, transparent, rgba(34,211,238,0.04))',
@@ -1020,9 +1203,11 @@ export default function LandingPage({ onSignIn, onProCheckout, onTickerClick }) 
       <HeroSection onFreeStart={onSignIn} />
       <TodayHotSection onTickerClick={onTickerClick} />
       <UpcomingEarningsSection onTickerClick={onTickerClick} />
+      <SampleAnalysisSection onTickerClick={onTickerClick} />
       <FeaturesSection />
       <PricingSection onFreeStart={onSignIn} onProCheckout={handleProClick} />
-      {/* v37 Fix 6: データソース表記を控えめに復活 (信頼シグナル) */}
+      <FAQSection />
+      {/* v40+: データソース表記を FAQ 後 フッター直前に移動 (孤立を解消) */}
       <div style={{
         textAlign: 'center',
         fontSize: 11,
@@ -1032,7 +1217,6 @@ export default function LandingPage({ onSignIn, onProCheckout, onTickerClick }) 
       }}>
         Powered by Financial Modeling Prep · Yahoo Finance · Anthropic Claude
       </div>
-      <FAQSection />
       <FooterCTASection onFreeStart={onSignIn} />
     </div>
   );
