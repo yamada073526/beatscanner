@@ -48,8 +48,8 @@ export default function PlanComparisonBanner({ onOpenSettings, onStartCheckout }
         maxWidth: 640,
         margin: '0 auto',
       }}>
-        {/* Free プラン */}
-        <div style={{
+        {/* Free プラン — v40+: panel-card で LP と同じ発光・ホバー演出 */}
+        <div className="panel-card" style={{
           padding: '20px 18px',
           borderRadius: 12,
           background: 'var(--bg-card)',
@@ -97,8 +97,8 @@ export default function PlanComparisonBanner({ onOpenSettings, onStartCheckout }
           </div>
         </div>
 
-        {/* Pro プラン (おすすめ) */}
-        <div style={{
+        {/* Pro プラン (おすすめ) — v40+: panel-card で LP と同じ発光・ホバー演出 */}
+        <div className="panel-card" style={{
           position: 'relative',
           padding: '20px 18px',
           borderRadius: 12,
