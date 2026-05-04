@@ -51,6 +51,9 @@ export function prefetchAll(ticker) {
   const t = encodeURIComponent(ticker);
   fetch(`/api/guidance/${t}/basic`, { headers: fmpHeaders() }).catch(() => {});
   fetch(`/api/chart/${t}/summary`).catch(() => {});
+  // 市場の声は分析画面の最下層付近にあり、analyze API と並列で先に発火させて
+  // ユーザーが到達するまでに準備完了させる（コールド時 60秒 → 体感ゼロへ）
+  fetch(`/api/insights/${t}`).catch(() => {});
 }
 
 export async function fetchScreener(category = 'gainers') {

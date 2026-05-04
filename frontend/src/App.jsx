@@ -388,6 +388,9 @@ export default function App() {
     } else if (isSupabaseConfigured) {
       showSyncToast();
     }
+    // 🆕 バックグラウンドで insights を事前生成（fire-and-forget）
+    // 翌朝 04:00 cron まで待たず、追加直後の閲覧で即表示できるようにする
+    fetch(`/api/insights/${encodeURIComponent(t)}`).catch(() => {});
   }
 
   function removeFromWatchlist(t) {
@@ -1204,12 +1207,22 @@ export default function App() {
               </button>
             </div>
             <GuidanceCard guidance={guidance} isSecLoading={guidanceSecLoading} />
-            <HistoryChart periods={result.periods} currency={result.currency} />
-            <StockPriceChart ticker={result.ticker} />
-            <IRLinksPanel ticker={result.ticker} />
-            <NewsPanel ticker={result.ticker} />
-            {/* 市場の声: ログイン済み or Stripeサブスク有効でフル表示。
-                未ログインはチラ見せ + Google ログイン CTA、Free ログイン済みは Stripe チェックアウト誘導 */}
+
+            {/* ── 市場コンテキスト セクション ──
+                Insights → News の順で「市場の声」関連を集約。
+                最も engaging な InsightsPanel を上半分に持ってくることで
+                エンゲージメントと Pro 転換率を改善（v33 で並び替え） */}
+            <div style={{
+              margin: "32px 0 16px 0",
+              borderTop: "1px solid rgba(34,211,238,0.20)",
+              paddingTop: 16,
+              fontSize: 11,
+              color: "var(--text-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.1em",
+            }}>
+              市場コンテキスト
+            </div>
             <InsightsPanel
               ticker={result.ticker}
               user={user}
@@ -1217,6 +1230,24 @@ export default function App() {
               onUpgradeClick={() => upgrade.open('市場の声')}
               onSignIn={signInWithGoogle}
             />
+            <NewsPanel ticker={result.ticker} />
+
+            {/* ── 詳細・参照 セクション ──
+                チャート系と外部 IR リンクを後半に配置（離脱誘発を最後に） */}
+            <div style={{
+              margin: "32px 0 16px 0",
+              borderTop: "1px solid rgba(148,163,184,0.20)",
+              paddingTop: 16,
+              fontSize: 11,
+              color: "var(--text-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.1em",
+            }}>
+              詳細・参照
+            </div>
+            <HistoryChart periods={result.periods} currency={result.currency} />
+            <StockPriceChart ticker={result.ticker} />
+            <IRLinksPanel ticker={result.ticker} />
           </div>
         ) : (
           <div style={{ padding: '3rem 1rem', textAlign: 'center' }}>
@@ -1776,9 +1807,9 @@ export default function App() {
                 style={{
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center', gap: '2px',
-                  width: isMobile ? '52px' : 'auto',
-                  height: isMobile ? '44px' : 'auto',
-                  padding: isMobile ? '0' : '6px 14px',
+                  width: isMobile ? '60px' : 'auto',
+                  height: isMobile ? '48px' : 'auto',
+                  padding: isMobile ? '4px 0' : '6px 14px',
                   borderRadius: 999,
                   border: 'none',
                   cursor: 'pointer',
@@ -1794,8 +1825,8 @@ export default function App() {
                   whiteSpace: 'nowrap',
                 }}
               >
-                <span style={{ fontSize: isMobile ? 22 : 16, lineHeight: 1 }}>{tab.icon}</span>
-                {!isMobile && <span>{tab.label}</span>}
+                <span style={{ fontSize: isMobile ? 18 : 16, lineHeight: 1 }}>{tab.icon}</span>
+                <span style={{ fontSize: isMobile ? 10 : 12, lineHeight: 1 }}>{tab.label}</span>
               </button>
             );
           })}

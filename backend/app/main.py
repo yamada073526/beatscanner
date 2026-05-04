@@ -602,6 +602,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ── Security headers ──────────────────────────────────────────────────────────
+# 軽量な防御策: MIME sniffing 抑止 / クリックジャッキング防止 / リファラ漏洩低減
+# CSP は Stripe + Google OAuth + Supabase の通信があるため将来的に検討（現状未設定）
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
 # ── Static frontend (production / Railway single-deploy) ──────────────────────
 # When the Vite build artefact exists next to this repo, FastAPI serves it so
 # the whole app runs from one URL with no CORS issues.

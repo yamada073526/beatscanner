@@ -90,6 +90,109 @@ function InsightsInfoModal({ onClose }) {
   );
 }
 
+// 進捗ステップ表示（楽観的タイマー）
+// elapsed >= 3 で表示開始 → 「ちゃんと動いている感」を演出
+// elapsed >= 15 で「初回分析は最大60秒かかる」案内を追加
+function ProgressSteps({ loading }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!loading) {
+      setElapsed(0);
+      return;
+    }
+    const t = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(t);
+  }, [loading]);
+
+  if (elapsed < 3) return null;
+
+  const steps = [
+    { label: "ニュースを収集", done: elapsed >= 3 },
+    { label: "AI で統合分析中", done: elapsed >= 8 },
+    { label: "強気・弱気材料を抽出", done: elapsed >= 15 },
+  ];
+
+  return (
+    <div style={{
+      marginTop: 16,
+      padding: 12,
+      background: "rgba(34,211,238,0.06)",
+      border: "1px solid rgba(34,211,238,0.20)",
+      borderRadius: 8,
+      fontSize: 12,
+      color: "var(--text-muted)",
+    }}>
+      {steps.map((s, i) => (
+        <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+          <span style={{ width: 14, color: s.done ? "#22d3ee" : "var(--text-muted)" }}>
+            {s.done ? "✓" : "⟳"}
+          </span>
+          <span style={{ color: s.done ? "var(--text-secondary)" : "var(--text-muted)" }}>
+            {s.label}
+          </span>
+        </div>
+      ))}
+      {elapsed >= 15 && (
+        <div style={{ marginTop: 8, color: "var(--text-muted)", fontSize: 11, lineHeight: 1.6 }}>
+          ℹ️ 初めて分析する銘柄のため、通常より時間がかかっています（最大60秒）
+          <br />📌 次回からは即座に表示されます
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 実コンテンツ形状のスケルトン: ヘッダー + summary 3行 + 強気/弱気 2カラム
+function InsightsSkeleton() {
+  const skel = {
+    background: "var(--bg-subtle)",
+    borderRadius: 4,
+    animation: "pulse 1.5s ease-in-out infinite",
+  };
+  const subSkel = {
+    background: "rgba(255,255,255,0.08)",
+    borderRadius: 4,
+  };
+  return (
+    <div>
+      {/* サマリー行 3 本 */}
+      <div style={{
+        padding: "14px 16px",
+        borderRadius: 10,
+        background: "rgba(34,211,238,0.04)",
+        border: "1px solid rgba(34,211,238,0.15)",
+        marginBottom: 16,
+      }}>
+        {[100, 92, 70].map((w, i) => (
+          <div key={i} style={{ ...skel, width: `${w}%`, height: 12, marginBottom: i < 2 ? 10 : 0 }} />
+        ))}
+      </div>
+      {/* 強気 / 弱気 2 カラム */}
+      <div className="md:grid-cols-2" style={{
+        display: "grid",
+        gridTemplateColumns: "1fr",
+        gap: 12,
+      }}>
+        {[0, 1].map((i) => (
+          <div key={i} style={{
+            padding: "12px 14px",
+            borderRadius: 10,
+            background: i === 0 ? "rgba(34,211,238,0.04)" : "rgba(248,113,113,0.04)",
+            border: `1px solid ${i === 0 ? "rgba(34,211,238,0.15)" : "rgba(248,113,113,0.15)"}`,
+          }}>
+            <div style={{ ...skel, width: 70, height: 12, marginBottom: 10 }} />
+            {[80, 65, 75].map((w, j) => (
+              <div key={j} style={{ ...subSkel, width: `${w}%`, height: 10, marginBottom: 6 }} />
+            ))}
+          </div>
+        ))}
+      </div>
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.45}}`}</style>
+    </div>
+  );
+}
+
 function SentimentBadge({ sentiment }) {
   const sc = SENTIMENT[sentiment] || SENTIMENT.neutral;
   return (
@@ -489,22 +592,12 @@ export default function InsightsPanel({ ticker, user, isPro, onUpgradeClick, onS
           )}
         </div>
 
-        {/* ローディング中はスケルトン */}
+        {/* ローディング中: 実コンテンツ形状スケルトン + 進捗ステップ */}
         {loading && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {[1, 2].map((i) => (
-              <div
-                key={i}
-                style={{
-                  height: 60,
-                  borderRadius: 10,
-                  background: "var(--bg-subtle)",
-                  animation: "pulse 1.5s ease-in-out infinite",
-                }}
-              />
-            ))}
-            <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
-          </div>
+          <>
+            <InsightsSkeleton />
+            <ProgressSteps loading={loading} />
+          </>
         )}
 
         {/* データ取得後: チラ見せビュー */}
@@ -544,22 +637,12 @@ export default function InsightsPanel({ ticker, user, isPro, onUpgradeClick, onS
         )}
       </div>
 
-      {/* ローディング */}
+      {/* ローディング: 実コンテンツ形状スケルトン + 進捗ステップ */}
       {loading && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {[1, 2].map((i) => (
-            <div
-              key={i}
-              style={{
-                height: 80,
-                borderRadius: 10,
-                background: "var(--bg-subtle)",
-                animation: "pulse 1.5s ease-in-out infinite",
-              }}
-            />
-          ))}
-          <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
-        </div>
+        <>
+          <InsightsSkeleton />
+          <ProgressSteps loading={loading} />
+        </>
       )}
 
       {/* エラー */}
