@@ -628,6 +628,14 @@ body {
   position: relative;
   max-height: 540px;
   overflow-y: auto;
+  /* v40+: hover 時 .news-active が scale(1.07) で拡大するため、端のカードが
+     overflow-y:auto (CSS 仕様上 overflow-x も clip 化) で切り取られないよう
+     上下左右に padding を確保。padding がそのまま「飛び出し可能領域」になる。
+     scale 1.07 → 4 列カード幅 ~225px → 各方向 ~8px 拡大 → 12px buffer で安全。 */
+  padding: 12px;
+  /* 親 section (panel-card) の p-6 (24px) と相殺してビジュアル位置をほぼ維持 */
+  margin: -12px;
+  /* min-height ではなく max-height のまま (スクロール挙動を維持) */
 }
 .news-grid {
   display: grid;
