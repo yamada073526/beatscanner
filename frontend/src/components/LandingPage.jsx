@@ -162,35 +162,33 @@ function HeroSection({ onFreeStart }) {
         <span style={{ fontSize: '8px' }}>●</span>
       </div>
 
-      {/* メインコピー — 既存 .hero-title (グラデーションテキスト) */}
+      {/* メインコピー — 既存 .hero-title (グラデーションテキスト)。
+          パンチライン 1 行で「即判定」を打ち出す Apple 流ミニマル */}
       <h1
         className="hero-title"
         style={{
           position: 'relative', zIndex: 1,
           textAlign: 'center',
-          fontSize: 'clamp(32px, 6vw, 56px)',
+          fontSize: 'clamp(36px, 7vw, 64px)',
           fontWeight: 600,
-          lineHeight: 1.15,
+          lineHeight: 1.1,
           margin: '0 0 16px',
           letterSpacing: '-0.02em',
         }}
       >
-        <span style={{ display: 'block' }}>決算 Beat/Miss を、</span>
-        <span style={{ display: 'block' }}>5秒で判定。</span>
+        決算を、即判定。
       </h1>
 
-      {/* サブコピー — 既存 Hero と同じスタイル */}
+      {/* サブコピー — 1 行に集約してパンチを最大化 */}
       <p style={{
         position: 'relative', zIndex: 1,
         fontSize: 'clamp(13px, 1.8vw, 16px)',
         color: 'var(--text-muted)',
         margin: '0 auto 20px',
         lineHeight: 1.7,
-        maxWidth: '480px',
+        maxWidth: '560px',
       }}>
-        もう夜中に決算資料を読まなくていい。
-        <br />
-        5条件を自動チェックして、買い継続か撤退かをデータで判断。
+        売上・EPS・CFをAIが自動分析。買い継続か撤退か、データで即決。
       </p>
 
       {/* 社会的証明バー — Fix 1: CTA 上に配置して説得力強化 */}
@@ -347,17 +345,17 @@ function FeaturesSection() {
         <FeatureCard
           icon="⚡"
           title="5条件 即時判定"
-          description="営業CFマージン・EPS・CFPS・売上・ガイダンスを自動チェック。会計上のごまかしが効かない指標で銘柄を瞬時に評価します。"
+          description="5つの財務指標を自動チェック。PASS/FAILで即判定。"
         />
         <FeatureCard
           icon="📊"
           title="市場の声（AI統合分析）"
-          description="毎朝4時に最新ニュースをAIが分析。強気・弱気材料を構造化表示し、市場参加者のセンチメントを可視化します。"
+          description="毎朝4時にAIが分析。強気・弱気材料を一目で確認。"
         />
         <FeatureCard
           icon="📈"
           title="株価チャート連動"
-          description="決算発表タイミングを株価チャートに重ねて表示。Beat/Miss が株価にどう影響したかを一目で把握できます。"
+          description="決算タイミングを株価チャートに重ねて表示。影響を一目で把握。"
         />
       </div>
     </section>
@@ -613,13 +611,13 @@ function FooterCTASection({ onFreeStart }) {
         className="section-heading"
         style={{ fontSize: 22, marginBottom: 12 }}
       >
-        さあ、決算を読み解こう。
+        まず1銘柄、試してみる。
       </h2>
       <p
         className="section-subtext"
         style={{ marginBottom: 24 }}
       >
-        登録は Google アカウントで30秒。クレカ不要。
+        30秒・クレカ不要。
       </p>
       <PrimaryCTA onClick={onFreeStart}>
         <GoogleIcon /> 今すぐ無料で始める
