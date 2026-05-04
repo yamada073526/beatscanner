@@ -12,14 +12,13 @@
  */
 
 const PLAN_ROWS = [
-  { label: '分析銘柄数',  free: '3銘柄/日',   pro: '無制限',       premium: '無制限'     },
-  { label: 'AI詳細レポート', free: '—',        pro: '✓',           premium: '✓'          },
-  { label: 'カンファレンス要点', free: '—',    pro: '✓',           premium: '✓'          },
-  { label: 'ウォッチリスト',  free: '—',       pro: '✓',           premium: '✓'          },
-  { label: 'プロトコルスクリーナー', free: '—', pro: '✓',          premium: '✓'          },
-  { label: '決算速報通知', free: '—',          pro: '—',           premium: '✓'          },
-  { label: '週次AIレポート', free: '—',        pro: '—',           premium: '✓'          },
-  { label: '優先サポート',  free: '—',         pro: '—',           premium: '✓'          },
+  { label: '銘柄分析（5条件）',          free: '無制限', pro: '無制限' },
+  { label: '市場の声（センチメント+要約）', free: '✓',    pro: '✓'     },
+  { label: '詳細分析（強気/弱気）',       free: '—',     pro: '✓'     },
+  { label: 'AI詳細レポート',              free: '—',     pro: '✓'     },
+  { label: 'カンファレンス要点',          free: '—',     pro: '✓'     },
+  { label: 'ウォッチリスト',              free: '3銘柄', pro: '無制限' },
+  { label: 'スクリーナー',               free: '—',     pro: '✓'     },
 ];
 
 function PlanCol({ heading, price, active, children }) {
@@ -64,7 +63,7 @@ export default function UpgradeModal({ isOpen, onClose, featureName, onOpenSetti
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-      <div className="w-full max-w-xl rounded-2xl bg-white shadow-xl">
+      <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
 
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
@@ -91,7 +90,7 @@ export default function UpgradeModal({ isOpen, onClose, featureName, onOpenSetti
         </div>
 
         {/* Plan comparison */}
-        <div className="grid grid-cols-3 gap-3 px-6 py-4">
+        <div className="grid grid-cols-2 gap-3 px-6 py-4">
           {/* Free */}
           <PlanCol heading="Free" price="¥0" active={false}>
             {PLAN_ROWS.map((r) => (
@@ -103,13 +102,6 @@ export default function UpgradeModal({ isOpen, onClose, featureName, onOpenSetti
           <PlanCol heading="Pro" price="¥980/月" active={true}>
             {PLAN_ROWS.map((r) => (
               <FeatureRow key={r.label} label={r.label} val={r.pro} active={true} />
-            ))}
-          </PlanCol>
-
-          {/* Premium */}
-          <PlanCol heading="Premium" price="¥1,980/月" active={false}>
-            {PLAN_ROWS.map((r) => (
-              <FeatureRow key={r.label} label={r.label} val={r.premium} active={false} />
             ))}
           </PlanCol>
         </div>
@@ -182,18 +174,12 @@ export default function UpgradeModal({ isOpen, onClose, featureName, onOpenSetti
           </div>
         ) : (
           <div className="mx-6 mb-4 rounded-lg bg-cyan-50 border border-cyan-100 px-4 py-2.5 text-xs text-cyan-700">
-            💡 Googleアカウントでログインすると7日間無料で全機能を試せます。または<strong>FMP APIキー（無料）</strong>を設定してもPro機能を利用できます。
+            💡 Googleアカウントでログインすると7日間無料で全機能を試せます。
           </div>
         )}
 
         {/* Secondary CTAs */}
-        <div className="flex items-center gap-3 border-t border-slate-100 px-6 py-4">
-          <button
-            onClick={() => { onClose(); onOpenSettings?.(); }}
-            className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
-          >
-            APIキーで無料利用 →
-          </button>
+        <div className="flex items-center justify-end border-t border-slate-100 px-6 py-4">
           <button
             onClick={onClose}
             className="rounded-lg border border-slate-200 px-5 py-2.5 text-sm font-medium text-slate-500 hover:bg-slate-50"

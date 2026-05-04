@@ -176,7 +176,7 @@ export default function App() {
 
   // ── Supabase Auth ─────────────────────────────────────────────
   const { user, ready: authReady, signInWithGoogle, signOut } = useAuth();
-  const { isSubscribed, startCheckout, checkoutLoading } = useSubscription(user);
+  const { isSubscribed, startCheckout, checkoutLoading, openPortal } = useSubscription(user);
   // FMPキー保有者(BYOK)またはStripeサブスク有効者をProとして扱う
   const isProUser = isPro() || isSubscribed;
   const syncedRef = useRef(false);
@@ -515,6 +515,10 @@ export default function App() {
 
   function addToWatchlist(t) {
     if (watchlist.includes(t)) return;
+    if (!isProUser && watchlist.length >= 3) {
+      upgrade.open('ウォッチリスト');
+      return;
+    }
     setWatchlist([...watchlist, t]);
     if (user && supabase) {
       supabase
@@ -778,118 +782,6 @@ export default function App() {
       {/* Market Widget — LP 表示中は隠す */}
       {!showLP && <MarketWidget />}
 
-      {/* Hero — v40+: ログイン済ユーザーには表示しない (Apple/Notion/Linear 流ダッシュボード化)。
-          理由:
-          - 未ログイン: LP の HeroSection が表示されるため重複回避
-          - ログイン済: 「✓ 登録不要」等の旧 LP 由来訴求がノイズ。検索バー/ウォッチリストを上に
-          条件: !result && !user (ログイン済みは Hero ブロック全体非表示) */}
-      {!result && !user && (
-        <div style={{
-          textAlign: 'center',
-          padding: '48px 24px 36px',
-          position: 'relative',
-          overflow: 'hidden',
-          marginBottom: '8px',
-        }}>
-          {/* 背景の装飾（放射状グロー） */}
-          <div
-            aria-hidden="true"
-            style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -60%)',
-              width: '600px',
-              height: '300px',
-              background: 'radial-gradient(ellipse, rgba(56,189,248,0.08) 0%, transparent 70%)',
-              pointerEvents: 'none',
-              zIndex: 0,
-            }}
-          />
-
-          {/* バッジ */}
-          <div
-            className="hero-badge"
-            style={{
-              position: 'relative', zIndex: 1,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              borderRadius: '999px',
-              padding: '5px 16px',
-              fontSize: '11px',
-              marginBottom: '24px',
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-            }}
-          >
-            <span style={{ fontSize: '8px' }}>●</span>
-            AI 決算分析
-            <span style={{ fontSize: '8px' }}>●</span>
-          </div>
-
-          {/* メインコピー：2行構成でリズムを作る */}
-          <h1
-            className="hero-title"
-            style={{
-              position: 'relative', zIndex: 1,
-              textAlign: 'center',
-              fontSize: 'clamp(32px, 6vw, 56px)',
-              fontWeight: 600,
-              lineHeight: 1.15,
-              margin: '0 0 16px',
-              letterSpacing: '-0.02em',
-            }}
-          >
-            {/* 4文字 vs 9文字 のアンバランスを「、瞬時に」「読み解く。」で
-                6文字 vs 5文字 に均す。textIndent は使わない（逆にずれる原因）*/}
-            <span style={{ display: 'block' }}>決算を、瞬時に</span>
-            <span style={{ display: 'block' }}>読み解く。</span>
-          </h1>
-
-          {/* サブコピー */}
-          <p style={{
-            position: 'relative', zIndex: 1,
-            fontSize: 'clamp(13px, 1.8vw, 16px)',
-            color: '#64748b',
-            margin: '0 auto 24px',
-            lineHeight: 1.7,
-            maxWidth: '400px',
-          }}>
-            売上・EPS・バリュエーションをAIが図解。
-            <br />
-            Beat/Miss・ブル/ベアを即判定。
-          </p>
-
-          {/* プルーフチップ */}
-          <div style={{
-            position: 'relative', zIndex: 1,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-          }}>
-            {['✓ 無料でお試し', '✓ 登録不要', '✓ 即時分析'].map(text => (
-              <span
-                key={text}
-                style={{
-                  fontSize: '11px',
-                  color: '#38BDF8',
-                  background: 'rgba(56,189,248,0.08)',
-                  border: '1px solid rgba(56,189,248,0.2)',
-                  borderRadius: '999px',
-                  padding: '3px 10px',
-                  fontWeight: 600,
-                }}
-              >
-                {text}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Search — ホームタブでは常時表示、それ以外のタブは未検索時のみ。sticky で常時アクセス可能。
           R5 最終 (Apple 方式): 72%透過 + saturate(180%) blur(20px)。
@@ -1139,7 +1031,14 @@ export default function App() {
         <Suspense fallback={null}>
           <LandingPage
             onSignIn={signInWithGoogle}
-            onProCheckout={() => startCheckout('monthly')}
+            onProCheckout={() => {
+              if (user) {
+                startCheckout('monthly');
+              } else {
+                try { localStorage.setItem('bs_post_login_intent', 'checkout_monthly'); } catch {}
+                signInWithGoogle();
+              }
+            }}
             onTickerClick={handleLPTickerClick}
           />
         </Suspense>
@@ -1281,7 +1180,7 @@ export default function App() {
                   key={i}
                   index={i + 1}
                   condition={c}
-                  isPro={isProUser}
+                  isPro={isSubscribed}
                   onUpgradeClick={() => upgrade.open('前回比デルタ値')}
                 />
               ))}
@@ -1293,7 +1192,7 @@ export default function App() {
                   key={i}
                   index={i + 1}
                   condition={c}
-                  isPro={isProUser}
+                  isPro={isSubscribed}
                   onUpgradeClick={() => upgrade.open('前回比デルタ値')}
                 />
               ))}
@@ -1306,7 +1205,7 @@ export default function App() {
                     key={i + 3}
                     index={i + 4}
                     condition={c}
-                    isPro={isProUser}
+                    isPro={isSubscribed}
                     onUpgradeClick={() => upgrade.open('前回比デルタ値')}
                   />
                 ))}
@@ -1376,8 +1275,8 @@ export default function App() {
             <InsightsPanel
               ticker={result.ticker}
               user={user}
-              isPro={!!user || isSubscribed}
-              onUpgradeClick={() => upgrade.open('市場の声')}
+              isPro={isSubscribed}
+              onUpgradeClick={() => upgrade.open('詳細分析（強気/弱気）')}
               onSignIn={signInWithGoogle}
             />
             <NewsPanel ticker={result.ticker} />
@@ -1502,6 +1401,8 @@ export default function App() {
               analysis={result}
               guidance={guidance}
               onStreamingChange={setReportStreaming}
+              isPro={isSubscribed}
+              onUpgrade={() => upgrade.open('AI詳細レポート')}
             />
           </Suspense>
         ) : (
@@ -1794,6 +1695,40 @@ export default function App() {
           </div>
         )}
 
+        {/* サブスクリプション管理 — Pro 契約者のみ表示 (v40+ 特商法対応・自己解約フロー) */}
+        {user && isSubscribed && (
+          <button
+            type="button"
+            disabled={checkoutLoading}
+            onClick={() => { setDrawerOpen(false); openPortal(); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '12px', width: '100%',
+              borderRadius: 10, background: 'transparent',
+              border: 'none',
+              cursor: checkoutLoading ? 'not-allowed' : 'pointer',
+              opacity: checkoutLoading ? 0.6 : 1,
+              fontSize: 14, textAlign: 'left',
+              color: 'var(--text-primary)',
+            }}
+            onMouseEnter={e => { if (!checkoutLoading) e.currentTarget.style.background = 'rgba(127,127,127,0.10)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <span style={{ fontSize: 18, lineHeight: 1 }}>💳</span>
+            <span style={{ flex: 1 }}>サブスクリプションを管理</span>
+            <span style={{
+              fontSize: 9.5, fontWeight: 700,
+              padding: '2px 7px', borderRadius: 4,
+              color: '#22d3ee',
+              background: 'rgba(34,211,238,0.10)',
+              border: '1px solid rgba(34,211,238,0.30)',
+              letterSpacing: '0.04em',
+            }}>
+              PRO
+            </span>
+          </button>
+        )}
+
         {/* ダーク / ライトモード切替 */}
         <button
           type="button"
@@ -1817,6 +1752,7 @@ export default function App() {
         <button
           type="button"
           onClick={() => {
+            if (!isProUser) { setDrawerOpen(false); upgrade.open('スクリーナー'); return; }
             setShowCustomScreener(true);
             setShowScreener(false);
             setShowCalendarPersist(false);

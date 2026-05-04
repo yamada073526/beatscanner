@@ -720,3 +720,202 @@ body {
   background-color: rgba(56,189,248,0.22);
   color: rgb(56,189,248);
 }
+
+/* ============================================================
+   Locked section — Free会員向けロック演出 (v40+)
+   設計: Ghost Content + Aurora Veil + Inline CTA
+   - 実コンテンツ形状のスケルトンを表示しつつ下部に向かってフェード
+   - シアンの aurora を背景にゆっくり明滅させ「もうすぐ」感を演出
+   - CTA は 1 セクション 1 個、ピル型で sticky search と同じ Apple ガラス質感
+   ============================================================ */
+
+.locked-section {
+  position: relative;
+  overflow: hidden;
+}
+
+.locked-content {
+  pointer-events: none;
+  user-select: none;
+}
+
+/* veil: 下に向かって背景色に溶ける勾配 */
+.locked-veil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(15, 23, 42, 0)    0%,
+    rgba(15, 23, 42, 0)    18%,
+    rgba(15, 23, 42, 0.55) 55%,
+    rgba(15, 23, 42, 0.92) 88%,
+    var(--bg-card)         100%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ライトモード: 白系グラデに切替 */
+:root:not([data-theme="dark"]) .locked-veil {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0)    0%,
+    rgba(255, 255, 255, 0)    18%,
+    rgba(255, 255, 255, 0.65) 55%,
+    rgba(255, 255, 255, 0.95) 88%,
+    var(--bg-card)            100%
+  );
+}
+
+/* aurora: シアンの放射状発光 (CTA chip 後ろで揺らぐ) */
+.locked-aurora {
+  position: absolute;
+  left: 50%;
+  bottom: -40%;
+  width: 140%;
+  height: 80%;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    ellipse at center,
+    rgba(34, 211, 238, 0.18) 0%,
+    rgba(34, 211, 238, 0.06) 40%,
+    transparent 70%
+  );
+  filter: blur(40px);
+  animation: aurora-shift 6s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes aurora-shift {
+  0%, 100% { transform: translateX(-50%) translateY(0)    scale(1);    opacity: 0.85; }
+  50%      { transform: translateX(-50%) translateY(-8px) scale(1.05); opacity: 1;    }
+}
+
+/* ghost-bar: 実コンテンツ形状のスケルトン (既存 pulse より遅く・淡く) */
+.ghost-bar {
+  background: linear-gradient(
+    90deg,
+    rgba(34, 211, 238, 0.05) 0%,
+    rgba(34, 211, 238, 0.14) 50%,
+    rgba(34, 211, 238, 0.05) 100%
+  );
+  background-size: 200% 100%;
+  animation: ghost-shimmer 2.4s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+@keyframes ghost-shimmer {
+  0%   { background-position: 200% 0;  }
+  100% { background-position: -200% 0; }
+}
+
+/* CTA chip — sticky search と同じ Apple ガラス方式 */
+.locked-cta {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px 10px 14px;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid rgba(34, 211, 238, 0.40);
+  border-radius: 999px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.40),
+              0 0 0 0 rgba(34, 211, 238, 0);
+  z-index: 2;
+  white-space: nowrap;
+}
+
+.locked-cta:hover {
+  border-color: rgba(34, 211, 238, 0.70);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.50),
+              0 0 24px rgba(34, 211, 238, 0.30);
+  transform: translateX(-50%) translateY(-1px);
+}
+
+/* ライトモード: chip 背景を白系に */
+:root:not([data-theme="dark"]) .locked-cta {
+  background: rgba(255, 255, 255, 0.85);
+  color: #0f172a;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+/* PRO バッジ — AccordionSection ヘッダー右に控えめに */
+.pro-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  color: #22d3ee;
+  background: rgba(34, 211, 238, 0.10);
+  border: 1px solid rgba(34, 211, 238, 0.30);
+}
+
+/* 5条件カード内のデルタ blur — ConditionCard.DeltaRow 用 */
+.delta-locked {
+  position: relative;
+  cursor: pointer;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: opacity 0.18s ease;
+}
+
+.delta-locked-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.delta-locked-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  filter: blur(5px);
+  user-select: none;
+  transition: filter 0.18s ease;
+}
+
+.delta-locked:hover .delta-locked-value {
+  filter: blur(4px);
+}
+
+.delta-locked-lock {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-15%);
+  font-size: 10px;
+  font-weight: 600;
+  color: #22d3ee;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+
+:root:not([data-theme="dark"]) .delta-locked-lock {
+  background: rgba(255, 255, 255, 0.92);
+  color: #0e7490;
+}

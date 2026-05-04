@@ -2241,7 +2241,7 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
 
 
 @app.get("/api/news/{ticker}")
-async def news(ticker: str, request: Request, limit: int = Query(20, ge=1, le=20)) -> list[dict]:
+async def news(ticker: str, request: Request, limit: int = Query(50, ge=1, le=50)) -> list[dict]:
     """銘柄の最新ニュースを返す. FMP制限時はyfinanceにフォールバック."""
     client = FMPClient(api_key=_get_fmp_key(request))
     data = []
@@ -2774,113 +2774,23 @@ async def calendar(
 
 @app.get("/api/conference/{ticker}")
 async def conference(ticker: str, request: Request) -> dict:
-    """財務データを元にカンファレンスコール的AI分析と決算Beat/Miss履歴を返す."""
-    client = FMPClient(api_key=_get_fmp_key(request))
+    """財務データを元に決算ハイライト分析と Beat/Miss 履歴を返す.
 
-    income_task = asyncio.create_task(client.income_statement(ticker, limit=4, period="annual"))
-    cash_task = asyncio.create_task(client.cash_flow(ticker, limit=4, period="annual"))
-    surprises_task = asyncio.create_task(client.earnings_surprises(ticker, limit=8))
+    v40+: 四半期データ + コンセンサス乖離を統合した機関投資家品質のコンテキストを使用。
+    """
+    context, latest_period_label, surprises = await _build_conference_context(ticker, request)
 
-    income: list[dict] = []
-    cash: list[dict] = []
-    surprises: list[dict] = []
-    try:
-        income = await income_task
-    except FMPError:
-        pass
-    try:
-        cash = await cash_task
-    except FMPError:
-        pass
-    try:
-        surprises = await surprises_task
-    except FMPError:
-        pass
-
-    # FMPがFY最新期を取得できない場合は yfinance にフォールバック
-    if not income or not cash:
-        try:
-            yf_income, yf_cash, _, _ = await yfinance_source.fetch(ticker)
-            if yf_income:
-                income = yf_income
-            if yf_cash:
-                cash = yf_cash
-        except Exception:
-            pass
-
-    def _growth(curr, prev) -> str:
-        """前期比成長率を文字列で返す。計算不能な場合は '-'。"""
-        try:
-            c, p = float(curr), float(prev)
-            if p == 0:
-                return "-"
-            pct = (c - p) / abs(p) * 100
-            sign = "+" if pct >= 0 else ""
-            return f"{sign}{pct:.1f}%"
-        except (TypeError, ValueError):
-            return "-"
-
-    # 財務データからコンテキスト文字列を構築（成長率はバックエンドで計算し明示）
-    context_lines = [f"ティッカー: {ticker.upper()}"]
-    if income:
-        context_lines.append("\n【売上高・EPS推移（年次）】")
-        for i, s in enumerate(income[:4]):
-            eps_val = s.get("eps") if s.get("eps") is not None else s.get("epsDiluted", "N/A")
-            rev = s.get("revenue", "N/A")
-            if i + 1 < len(income):
-                prev = income[i + 1]
-                prev_eps = prev.get("eps") if prev.get("eps") is not None else prev.get("epsDiluted")
-                rev_yoy = _growth(rev, prev.get("revenue"))
-                eps_yoy = _growth(eps_val, prev_eps)
-            else:
-                rev_yoy = eps_yoy = "-"
-            context_lines.append(
-                f"{s.get('date','')}: 売上={rev}（前年比{rev_yoy}）, "
-                f"EPS（年次）={eps_val}（前年比{eps_yoy}）, "
-                f"粗利率={s.get('grossProfitRatio','N/A')}"
-            )
-    if cash:
-        context_lines.append("\n【営業CF推移（年次）】")
-        for i, s in enumerate(cash[:4]):
-            ocf = s.get("operatingCashFlow", "N/A")
-            if i + 1 < len(cash):
-                ocf_yoy = _growth(ocf, cash[i + 1].get("operatingCashFlow"))
-            else:
-                ocf_yoy = "-"
-            context_lines.append(
-                f"{s.get('date','')}: 営業CF={ocf}（前年比{ocf_yoy}）, "
-                f"CAPEX={s.get('capitalExpenditure','N/A')}"
-            )
-    if surprises:
-        context_lines.append("\n【直近EPS Beat/Miss履歴】")
-        for s in surprises[:4]:
-            n = _normalize_earnings_entry(s)
-            if n["actual"] is not None and n["date"]:
-                v, _pct, _r = _verdict(
-                    float(n["actual"]),
-                    float(n["estimated"]) if n["estimated"] is not None else None,
-                )
-                context_lines.append(
-                    f"{n['date']}: 実績EPS={n['actual']} / 予想={n['estimated'] or '不明'} → {v}"
-                )
-    context = "\n".join(context_lines)
-
-    # Claude で財務データに基づくカンファレンスコール的分析を生成
+    # Claude で決算ハイライト分析を生成
     conference_text: str | None = None
-    if income:
-        fy = income[0].get("calendarYear") or income[0].get("fiscalYear") or ""
-        latest_date = income[0].get("date", "")
-        latest_period_label = f"FY{fy} ({latest_date})" if fy else f"年次 ({latest_date})"
-    else:
-        latest_period_label = "直近年次"
-    prompt = _build_conference_prompt(context, ticker, latest_period_label)
-    try:
-        claude = ClaudeClient()
-        conference_text = await claude.complete(
-            prompt, model="claude-sonnet-4-5", max_tokens=1200
-        )
-    except (ClaudeError, Exception):
-        conference_text = None
+    if context and "ティッカー:" in context:
+        prompt = _build_conference_prompt(context, ticker, latest_period_label)
+        try:
+            claude = ClaudeClient()
+            conference_text = await claude.complete(
+                prompt, model="claude-sonnet-4-5", max_tokens=2000, temperature=0.0
+            )
+        except (ClaudeError, Exception):
+            conference_text = None
 
     # Beat/Miss集計
     beat_count = 0
@@ -2919,107 +2829,20 @@ async def conference(ticker: str, request: Request) -> dict:
 
 @app.get("/api/conference/text/stream/{ticker}")
 async def conference_text_stream(ticker: str, request: Request):
-    """カンファレンスコール分析テキストをストリーミングで返す."""
-    client = FMPClient(api_key=_get_fmp_key(request))
+    """決算ハイライト分析テキストをストリーミングで返す.
 
-    income_task = asyncio.create_task(client.income_statement(ticker, limit=4, period="annual"))
-    cash_task = asyncio.create_task(client.cash_flow(ticker, limit=4, period="annual"))
-    surprises_task = asyncio.create_task(client.earnings_surprises(ticker, limit=4))
+    v40+: 共通ヘルパー _build_conference_context を使用し、
+    四半期データ + コンセンサス乖離を統合した投資家品質のコンテキストを生成。
+    """
+    context, latest_period_label, _ = await _build_conference_context(ticker, request)
 
-    income: list[dict] = []
-    cash: list[dict] = []
-    surprises: list[dict] = []
-    try:
-        income = await income_task
-    except FMPError:
-        pass
-    try:
-        cash = await cash_task
-    except FMPError:
-        pass
-    try:
-        surprises = await surprises_task
-    except FMPError:
-        pass
-
-    if not income or not cash:
-        try:
-            yf_income, yf_cash, _, _ = await yfinance_source.fetch(ticker)
-            if yf_income:
-                income = yf_income
-            if yf_cash:
-                cash = yf_cash
-        except Exception:
-            pass
-
-    def _growth(curr, prev) -> str:
-        try:
-            c, p = float(curr), float(prev)
-            if p == 0:
-                return "-"
-            pct = (c - p) / abs(p) * 100
-            sign = "+" if pct >= 0 else ""
-            return f"{sign}{pct:.1f}%"
-        except (TypeError, ValueError):
-            return "-"
-
-    context_lines = [f"ティッカー: {ticker.upper()}"]
-    if income:
-        context_lines.append("\n【売上高・EPS推移（年次）】")
-        for i, s in enumerate(income[:4]):
-            eps_val = s.get("eps") if s.get("eps") is not None else s.get("epsDiluted", "N/A")
-            rev = s.get("revenue", "N/A")
-            if i + 1 < len(income):
-                prev = income[i + 1]
-                prev_eps = prev.get("eps") if prev.get("eps") is not None else prev.get("epsDiluted")
-                rev_yoy = _growth(rev, prev.get("revenue"))
-                eps_yoy = _growth(eps_val, prev_eps)
-            else:
-                rev_yoy = eps_yoy = "-"
-            context_lines.append(
-                f"{s.get('date','')}: 売上={rev}（前年比{rev_yoy}）, "
-                f"EPS（年次）={eps_val}（前年比{eps_yoy}）, "
-                f"粗利率={s.get('grossProfitRatio','N/A')}"
-            )
-    if cash:
-        context_lines.append("\n【営業CF推移（年次）】")
-        for i, s in enumerate(cash[:4]):
-            ocf = s.get("operatingCashFlow", "N/A")
-            if i + 1 < len(cash):
-                ocf_yoy = _growth(ocf, cash[i + 1].get("operatingCashFlow"))
-            else:
-                ocf_yoy = "-"
-            context_lines.append(
-                f"{s.get('date','')}: 営業CF={ocf}（前年比{ocf_yoy}）, "
-                f"CAPEX={s.get('capitalExpenditure','N/A')}"
-            )
-    if surprises:
-        context_lines.append("\n【直近EPS Beat/Miss履歴】")
-        for s in surprises[:4]:
-            n = _normalize_earnings_entry(s)
-            if n["actual"] is not None and n["date"]:
-                v, _pct, _r = _verdict(
-                    float(n["actual"]),
-                    float(n["estimated"]) if n["estimated"] is not None else None,
-                )
-                context_lines.append(
-                    f"{n['date']}: 実績EPS={n['actual']} / 予想={n['estimated'] or '不明'} → {v}"
-                )
-    context = "\n".join(context_lines)
-
-    if income:
-        fy = income[0].get("calendarYear") or income[0].get("fiscalYear") or ""
-        latest_date = income[0].get("date", "")
-        latest_period_label = f"FY{fy} ({latest_date})" if fy else f"年次 ({latest_date})"
-    else:
-        latest_period_label = "直近年次"
-
-    prompt = _build_conference_prompt(context, ticker, latest_period_label)
-
-    if not income:
+    # データが空の場合は早期リターン
+    if "ティッカー:" not in context:
         async def empty_gen():
             yield "財務データを取得できませんでした。"
         return StreamingResponse(empty_gen(), media_type="text/plain; charset=utf-8")
+
+    prompt = _build_conference_prompt(context, ticker, latest_period_label)
 
     try:
         claude = ClaudeClient()
@@ -3029,7 +2852,7 @@ async def conference_text_stream(ticker: str, request: Request):
     async def generate():
         try:
             async for chunk in claude.stream_complete(
-                prompt, model="claude-sonnet-4-5", max_tokens=1200
+                prompt, model="claude-sonnet-4-5", max_tokens=2000, temperature=0.0
             ):
                 yield chunk
         except Exception:
@@ -3038,52 +2861,230 @@ async def conference_text_stream(ticker: str, request: Request):
     return StreamingResponse(generate(), media_type="text/plain; charset=utf-8")
 
 
+def _growth_pct(curr, prev) -> str:
+    """前期比成長率を文字列で返す。計算不能な場合は '-'。共通ヘルパー。"""
+    try:
+        c, p = float(curr), float(prev)
+        if p == 0:
+            return "-"
+        pct = (c - p) / abs(p) * 100
+        sign = "+" if pct >= 0 else ""
+        return f"{sign}{pct:.1f}%"
+    except (TypeError, ValueError):
+        return "-"
+
+
+def _surprise_pct(actual, estimated) -> str:
+    """コンセンサスとの乖離率（サプライズ%）を文字列で返す。"""
+    try:
+        a, e = float(actual), float(estimated)
+        if e == 0:
+            return "-"
+        pct = (a - e) / abs(e) * 100
+        sign = "+" if pct >= 0 else ""
+        return f"{sign}{pct:.1f}%"
+    except (TypeError, ValueError):
+        return "-"
+
+
+async def _build_conference_context(ticker: str, request: Request) -> tuple[str, str, list[dict]]:
+    """カンファレンス分析用のコンテキスト文字列を構築する共通ヘルパー。
+
+    年次データ + 四半期データ + コンセンサス乖離 を統合した
+    アナリスト品質のコンテキストを返す。
+
+    Returns: (context_str, latest_period_label, surprises_list)
+    """
+    client = FMPClient(api_key=_get_fmp_key(request))
+
+    # 年次4期 + 四半期8期 + サプライズ8期 を並列取得
+    income_a_task = asyncio.create_task(client.income_statement(ticker, limit=4, period="annual"))
+    cash_a_task = asyncio.create_task(client.cash_flow(ticker, limit=4, period="annual"))
+    income_q_task = asyncio.create_task(client.income_statement(ticker, limit=8, period="quarter"))
+    cash_q_task = asyncio.create_task(client.cash_flow(ticker, limit=8, period="quarter"))
+    surprises_task = asyncio.create_task(client.earnings_surprises(ticker, limit=8))
+
+    income_a: list[dict] = []
+    cash_a: list[dict] = []
+    income_q: list[dict] = []
+    cash_q: list[dict] = []
+    surprises: list[dict] = []
+    try: income_a = await income_a_task
+    except FMPError: pass
+    try: cash_a = await cash_a_task
+    except FMPError: pass
+    try: income_q = await income_q_task
+    except FMPError: pass
+    try: cash_q = await cash_q_task
+    except FMPError: pass
+    try: surprises = await surprises_task
+    except FMPError: pass
+
+    # 年次データが取れない場合 yfinance fallback
+    if not income_a or not cash_a:
+        try:
+            yf_income, yf_cash, _, _ = await yfinance_source.fetch(ticker)
+            if yf_income and not income_a:
+                income_a = yf_income
+            if yf_cash and not cash_a:
+                cash_a = yf_cash
+        except Exception:
+            pass
+
+    # コンテキスト構築
+    lines = [f"ティッカー: {ticker.upper()}"]
+
+    # ── 直近四半期スコアカード（経営陣が決算発表で強調する数字） ──
+    if income_q and len(income_q) >= 2:
+        latest_q = income_q[0]
+        prev_yoy_q = income_q[4] if len(income_q) >= 5 else None
+        prev_qoq_q = income_q[1]
+
+        rev_now = latest_q.get("revenue")
+        eps_now = latest_q.get("eps") or latest_q.get("epsDiluted")
+        gp_margin = latest_q.get("grossProfitRatio")
+        op_margin = latest_q.get("operatingIncomeRatio")
+
+        rev_yoy = _growth_pct(rev_now, prev_yoy_q.get("revenue")) if prev_yoy_q else "-"
+        eps_yoy = _growth_pct(eps_now, (prev_yoy_q.get("eps") or prev_yoy_q.get("epsDiluted"))) if prev_yoy_q else "-"
+        rev_qoq = _growth_pct(rev_now, prev_qoq_q.get("revenue"))
+        eps_qoq = _growth_pct(eps_now, (prev_qoq_q.get("eps") or prev_qoq_q.get("epsDiluted")))
+
+        # コンセンサス乖離
+        rev_surp = "-"
+        eps_surp = "-"
+        if surprises:
+            for s in surprises:
+                n = _normalize_earnings_entry(s)
+                if n.get("date") and n.get("date") == latest_q.get("date"):
+                    eps_surp = _surprise_pct(n.get("actual"), n.get("estimated"))
+                    break
+            # 日付が一致しない場合は直近1件を仮使用
+            if eps_surp == "-" and surprises:
+                n = _normalize_earnings_entry(surprises[0])
+                eps_surp = _surprise_pct(n.get("actual"), n.get("estimated"))
+
+        lines.append(f"\n【直近四半期スコアカード（{latest_q.get('date','')}）】")
+        lines.append(f"売上: {rev_now}（YoY {rev_yoy}, QoQ {rev_qoq}）")
+        lines.append(f"EPS: {eps_now}（YoY {eps_yoy}, QoQ {eps_qoq}, コンセンサス乖離 {eps_surp}）")
+        lines.append(f"粗利率: {gp_margin}, 営業利益率: {op_margin}")
+
+    # ── 四半期売上トレンド（直近8Q）──
+    if income_q:
+        lines.append("\n【四半期売上トレンド（直近8期、新しい順）】")
+        for s in income_q[:8]:
+            rev = s.get("revenue", "N/A")
+            eps = s.get("eps") or s.get("epsDiluted", "N/A")
+            lines.append(f"{s.get('date','')}: 売上={rev}, EPS={eps}, 粗利率={s.get('grossProfitRatio','N/A')}")
+
+    # ── 四半期営業CFトレンド ──
+    if cash_q:
+        lines.append("\n【四半期営業CFトレンド（直近8期、新しい順）】")
+        for s in cash_q[:8]:
+            lines.append(f"{s.get('date','')}: 営業CF={s.get('operatingCashFlow','N/A')}, CAPEX={s.get('capitalExpenditure','N/A')}")
+
+    # ── 年次トレンド（YoY計算済み）──
+    if income_a:
+        lines.append("\n【年次売上・EPS推移】")
+        for i, s in enumerate(income_a[:4]):
+            eps_val = s.get("eps") if s.get("eps") is not None else s.get("epsDiluted", "N/A")
+            rev = s.get("revenue", "N/A")
+            if i + 1 < len(income_a):
+                prev = income_a[i + 1]
+                prev_eps = prev.get("eps") if prev.get("eps") is not None else prev.get("epsDiluted")
+                rev_yoy = _growth_pct(rev, prev.get("revenue"))
+                eps_yoy = _growth_pct(eps_val, prev_eps)
+            else:
+                rev_yoy = eps_yoy = "-"
+            lines.append(
+                f"{s.get('date','')}: 売上={rev}（YoY {rev_yoy}）, "
+                f"EPS（年次）={eps_val}（YoY {eps_yoy}）, "
+                f"粗利率={s.get('grossProfitRatio','N/A')}"
+            )
+
+    if cash_a:
+        lines.append("\n【年次営業CF推移】")
+        for i, s in enumerate(cash_a[:4]):
+            ocf = s.get("operatingCashFlow", "N/A")
+            ocf_yoy = _growth_pct(ocf, cash_a[i + 1].get("operatingCashFlow")) if i + 1 < len(cash_a) else "-"
+            lines.append(f"{s.get('date','')}: 営業CF={ocf}（YoY {ocf_yoy}）, CAPEX={s.get('capitalExpenditure','N/A')}")
+
+    # ── EPS Beat/Miss履歴（コンセンサス乖離率付き）──
+    if surprises:
+        lines.append("\n【EPS Beat/Miss履歴（直近8期、コンセンサス乖離率付き）】")
+        for s in surprises[:8]:
+            n = _normalize_earnings_entry(s)
+            if n["actual"] is not None and n["date"]:
+                v, _pct, _r = _verdict(
+                    float(n["actual"]),
+                    float(n["estimated"]) if n["estimated"] is not None else None,
+                )
+                surp = _surprise_pct(n.get("actual"), n.get("estimated"))
+                lines.append(
+                    f"{n['date']}: 実績={n['actual']} / 予想={n['estimated'] or '不明'} → {v}（サプライズ {surp}）"
+                )
+
+    # 期間ラベル決定（最新四半期 → 年次の順で fallback）
+    if income_q:
+        latest_period_label = f"四半期 ({income_q[0].get('date','')})"
+    elif income_a:
+        fy = income_a[0].get("calendarYear") or income_a[0].get("fiscalYear") or ""
+        latest_period_label = f"FY{fy} ({income_a[0].get('date','')})" if fy else f"年次 ({income_a[0].get('date','')})"
+    else:
+        latest_period_label = "直近期"
+
+    return ("\n".join(lines), latest_period_label, surprises)
+
+
 def _build_conference_prompt(context: str, ticker: str, latest_period_label: str) -> str:
-    """カンファレンスコール分析用プロンプトを構築する（ストリーミング・非ストリーミング共通）."""
+    """決算ハイライト分析プロンプト（v40+ 改修版）
+
+    機関投資家・セルサイドアナリストの視点で、財務データから読み取れる
+    事実のみに基づいて分析を生成する。経営陣の「推測発言」は禁止。
+    """
     t = ticker.upper()
     return (
-        f"以下は{t}の年次財務データです。"
-        f"この財務データに基づき、決算カンファレンスコールで経営陣が語るであろう内容を"
-        f"独自プロトコル（営業CF・EPS・売上高の成長性重視）の観点で以下の構造で日本語分析してください。\n\n"
-        f"重要な数値・キーワード・判断根拠は **太字** で強調すること。1段落につき1〜2箇所を目安にすること。太字は必ず半角スペースで囲むこと（例: 売上高は **1,818億ドル** に増加）。▲・▼・(・)などの記号や数字に直接**を隣接させないこと。\n\n"
-        f"① 業績ハイライト（経営陣が強調するポイント）\n"
-        f"② ガイダンス・見通し（財務トレンドから読み取れる方向性）\n"
-        f"③ 投資家・アナリストが注目するであろう論点\n"
-        f"④ 独自プロトコル観点の総評\n\n"
-        f"各セクションは「① 業績ハイライト」のように番号付き見出しで出力。全体12〜20行。数字は省略せず具体的に記載。\n"
-        f"レポートのタイトル行は出力しないでください。①から直接始めてください。\n\n"
-        f"データ整合性に関する厳守事項\n"
-        f"1. 表示対象の決算期（年次 or 四半期）を冒頭で明示し、全ての数値をその期に統一すること\n"
-        f"   - 今回の分析対象は『{latest_period_label}』を基準とした年次データです。\n"
-        f"2. 通期データと四半期データを混在させてはならない\n"
-        f"3. EPSは必ず年次EPSまたは四半期EPSのいずれかを明記し、両者を混同しないこと\n"
-        f"   - 本プロンプトで提供されるEPSは全て『年次EPS』です。\n"
-        f"4. 財務APIから取得した数値のみを使用し、数値を推測・補完してはならない\n"
-        f"5. 取得できなかった数値は「-」または「データなし」と表示すること\n"
-        f"6. 「業績ハイライト」と「ガイダンス・見通し」で同一指標の方向性が矛盾してはならない\n"
-        f"   （例：同じ会計年度のOCFを「減少」と「拡大」と同時に表現することは禁止）\n"
-        f"7. 過去期のデータをAPIから参照できなかった場合、その値を推測・生成してはならない。「過去データなし」と表記すること\n"
-        f"8. 文章内の専門用語は標準的な財務用語を使用すること\n"
-        f"   （「粗利率」「売上総利益率」など。「相利率」等の誤字を避ける）\n"
-        f"ティッカー固有データの厳守事項\n"
-        f"9. 分析対象は必ず {t} の財務データのみを使用すること。他の銘柄の数値をいかなる場合も流用してはならない。\n"
-        f"10. 過去期のデータは必ず下記【財務データ】に含まれる値のみ使用すること。\n"
-        f"    【財務データ】に含まれていない過去期の数値（売上高・EPS等）を推測・補完してはならない。\n"
-        f"11. 「X年連続」という表現は【財務データ】に含まれる期数から計算可能な場合のみ使用すること。\n"
-        f"    3期分のデータ（FY2023・FY2024・FY2025）があれば前年比は2回しか計算できないため「直近2期連続」と表記すること。\n"
-        f"    N期のデータがある場合、連続成長と言えるのは最大N-1期であることを厳守すること。\n"
-        f"12. Markdown記法（##見出し・__下線__・*斜体*等）は禁止。ただし **太字** は重要箇所の強調として使用可。\n"
-        f"13. 数値は必ず読みやすい形式で表記すること（例：「281.7B$」「2,817億ドル（十億ドル単位）」）。\n"
-        f"    生の整数（例：281724000000）をそのまま出力することは禁止。\n"
-        f"    「億ドル」と「十億ドル（B$）」を混同しないこと。1B$ = 10億ドルであり、100億ドルは10B$と表記する。\n"
-        f"14. 【出力前の自己チェック】以下をすべて確認してから出力すること：\n"
-        f"    □ 全ての数値が {t} のAPIデータのみに基づいているか\n"
-        f"    □ 「業績ハイライト」と「ガイダンス・見通し」で同一指標の方向性が矛盾していないか\n"
-        f"    □ Markdown記法（##・__・*等）が含まれていないか（**太字**は重要箇所のみ許可）\n"
-        f"    □ 生の整数がそのまま出力されていないか\n"
-        f"    □ 過去期の数値が推測・補完ではなくAPIから取得された値か\n\n"
-        f"15. 各セクションの内容を絶対に重複させないこと。同一の文章・数値・内容を複数の段落で繰り返すことは厳禁。\n"
-        f"16. 全体の出力は最大18行・500文字以内に収めること。\n\n"
+        f"あなたは20年の経験を持つ米国株セルサイドアナリストです。\n"
+        f"{t} の最新決算をクライアント機関投資家向けに分析します。\n\n"
+        f"絶対遵守ルール:\n"
+        f"1. 提供データに含まれない数値・固有名詞・経営陣の発言は一切記述しないこと\n"
+        f"2. 「であろう」「と思われる」「推測される」「見込まれる」等の推測表現は使用禁止。事実のみ断定的に記述すること\n"
+        f"3. 数値を引用する際は必ず通貨単位と期間を明記する（例: 「直近Q売上 281.7億ドル」「FY2024 営業CF 12.5億ドル」）\n"
+        f"4. コンセンサス乖離（サプライズ%）はデータから取得可能な場合のみ言及すること\n"
+        f"5. 比較は YoY / QoQ どちらかを必ず明示すること\n"
+        f"6. 経営陣の発言・ガイダンスは提供データに含まれていない。「経営陣が語った」のような表現は厳禁\n"
+        f"7. ガイダンス・見通しに関する記述は「データから読み取れるトレンド」として記述し、経営陣のコメント風に書かない\n\n"
+        f"分析対象期: 『{latest_period_label}』\n\n"
+        f"以下の構造で出力してください:\n\n"
+        f"【決算スコアカード】\n"
+        f"  - 直近四半期の売上・EPS・営業CFをコンセンサス比較とYoY/QoQ成長率で1ブロックに集約\n"
+        f"  - Beat/In-line/Miss の判定を最後に明記\n\n"
+        f"【業績ハイライト】（データから読み取れる強調点）\n"
+        f"  - YoY/QoQ で加速・減速している指標と、その変化幅\n"
+        f"  - 粗利率・営業利益率の軌道\n\n"
+        f"【マージン・キャッシュフロー軌道】\n"
+        f"  - 営業CFマージン (営業CF / 売上) の直近4Q推移\n"
+        f"  - CAPEX/売上比の異常値があれば指摘\n\n"
+        f"【投資家チェックポイント】（具体的・アクショナブル）\n"
+        f"  - QoQ成長率の方向性\n"
+        f"  - 過去のEPSサプライズ実績（経営陣がガイダンスを保守的に出す傾向か）\n\n"
+        f"【独自プロトコル判定】\n"
+        f"  - 営業CFマージン ≥ 15% / EPS連続増加 / 売上連続増加 の3条件を判定\n"
+        f"  - Pass / Watch / Fail を明記\n\n"
+        f"出力フォーマット:\n"
+        f"- 各セクション見出しは【】で囲む（例: 【決算スコアカード】）\n"
+        f"- 全体最大1500文字\n"
+        f"- 重要数値・判断根拠は **太字** で強調（半角スペースで囲む。例: 売上は **2,817億ドル**）\n"
+        f"- Markdown記法（##見出し・__下線__・*斜体*）は禁止。**太字**は許可\n"
+        f"- レポートのタイトル行は出力せず、【決算スコアカード】から直接開始\n\n"
+        f"データ整合性チェック（出力前に必ず確認）:\n"
+        f"□ 全ての数値が {t} のAPIデータのみに基づいているか\n"
+        f"□ 推測表現（「であろう」等）が含まれていないか\n"
+        f"□ 経営陣の発言として記述している箇所がないか\n"
+        f"□ 生の整数（例：281724000000）がそのまま出力されていないか → 「281.7億ドル」等に整形すること\n"
+        f"□ 「X期連続」という表現がデータの期数から計算可能な範囲か\n"
+        f"  （N期のデータがある場合、連続成長と言えるのは最大N-1期）\n"
+        f"□ 同一指標の方向性が複数セクションで矛盾していないか\n\n"
         f"【財務データ】\n{context}"
     )
 
@@ -5952,6 +5953,49 @@ async def stripe_checkout(body: _CheckoutBody, authorization: str = Header(defau
         metadata={"supabase_user_id": user_id},
     )
     return {"url": session.url}
+
+
+@app.post("/api/stripe/portal")
+async def stripe_portal(authorization: str = Header(default="")):
+    """Stripe Customer Portal の Session URL を返す（特商法対応・自己解約フロー）。
+
+    v40+: アプリ内からサブスクリプションの解約・支払い方法変更・請求履歴閲覧を可能にする。
+    JWT 認証必須。subscriptions テーブルに stripe_customer_id がない場合 404。
+    """
+    stripe = _get_stripe()
+    if not stripe:
+        raise HTTPException(status_code=503, detail="Stripe not configured")
+
+    user = await _verify_supabase_jwt(authorization)
+    user_id = user["id"]
+
+    # subscriptions テーブルから stripe_customer_id を取得
+    sb = _get_supabase_service()
+    customer_id = None
+    try:
+        existing = sb.table("subscriptions").select("stripe_customer_id").eq("user_id", user_id).execute()
+        if existing.data and existing.data[0].get("stripe_customer_id"):
+            customer_id = existing.data[0]["stripe_customer_id"]
+    except Exception:
+        pass
+
+    if not customer_id:
+        # サブスクなしのユーザーが誤って叩いた場合
+        raise HTTPException(
+            status_code=404,
+            detail="No subscription found. Please start a subscription first."
+        )
+
+    app_url = os.environ.get("APP_URL", "https://beatscanner-production.up.railway.app")
+
+    try:
+        session = stripe.billing_portal.Session.create(
+            customer=customer_id,
+            return_url=f"{app_url}/",
+        )
+        return {"url": session.url}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Stripe portal error: {e}")
 
 
 @app.post("/api/stripe/webhook")

@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import { streamSummaryDetail, generateVisualization, generateVisualizationInstant } from '../api.js';
 import ConferenceAnalysis from './ConferenceAnalysis.jsx';
 import DiagramCard from './DiagramCard.jsx';
+import LockedSection, { AiReportGhost } from './LockedSection.jsx';
 
 const mdComponents = {
   h2: ({ children }) => (
@@ -918,7 +919,7 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
 
 // ── DetailReport ──────────────────────────────────────────────────────────────
 
-export default function DetailReport({ analysis, guidance, onStreamingChange }) {
+export default function DetailReport({ analysis, guidance, onStreamingChange, isPro = true, onUpgrade }) {
   const [conferenceStreaming, setConferenceStreaming] = useState(false);
   const [reportStreaming, setReportStreaming] = useState(false);
   const [reportOpen, setReportOpen] = useState(true);
@@ -933,26 +934,39 @@ export default function DetailReport({ analysis, guidance, onStreamingChange }) 
     <div>
       <AccordionSection
         title="AIによる決算詳報"
-        badge="AI詳報"
-        badgeColor="#1e293b"
-        streaming={reportStreaming}
+        badge={isPro ? "AI詳報" : "PRO"}
+        badgeColor={isPro ? "#1e293b" : "#0e7490"}
+        streaming={isPro && reportStreaming}
         defaultOpen={true}
         onOpenChange={setReportOpen}
       >
-        <div style={{ borderLeft: `3px solid ${borderColor}`, paddingLeft: '12px' }}>
-          <ReportCard
-            analysis={analysis}
-            guidance={guidance}
-            onStreamingChange={setReportStreaming}
-            isOpen={reportOpen}
-          />
-        </div>
+        {isPro ? (
+          <div style={{ borderLeft: `3px solid ${borderColor}`, paddingLeft: '12px' }}>
+            <ReportCard
+              analysis={analysis}
+              guidance={guidance}
+              onStreamingChange={setReportStreaming}
+              isOpen={reportOpen}
+            />
+          </div>
+        ) : (
+          <LockedSection
+            ctaLabel="詳細レポートを見る"
+            onUpgrade={onUpgrade}
+            minHeight={360}
+            hint="AI が決算ハイライトを図解 + 文章で解説します"
+          >
+            <AiReportGhost />
+          </LockedSection>
+        )}
       </AccordionSection>
 
       {analysis?.ticker && (
         <ConferenceAnalysis
           ticker={analysis.ticker}
           onStreamingChange={setConferenceStreaming}
+          isPro={isPro}
+          onUpgrade={onUpgrade}
         />
       )}
     </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import InfoModal from "./InfoModal.jsx";
+import LockedSection, { InsightsGhost } from "./LockedSection.jsx";
 
 const SENTIMENT = {
   positive: { label: "強気",     color: "#22d3ee" },
@@ -441,76 +442,26 @@ function NonLoggedTeaserView({ data, ticker, onSignIn }) {
   );
 }
 
-// Free 会員向けチラ見せ表示（summary 100字 + ぼかし + Pro CTA）
+// Free 会員向けチラ見せ表示
+//   v40+: 統合見解の冒頭 1 文を実データで表示し、その下に Pro 時の構造
+//   (強気/弱気 2カラム + 注目指標 pill) を ghost skeleton で再現。
+//   下部に向かって veil でフェード、aurora 発光 + CTA chip 1個。
 function TeaserView({ data, onUpgrade }) {
-  const preview = (data.summary || "この銘柄の市場の声を分析しました。").slice(0, 100) + "…";
+  // 「。」「.」で区切って冒頭 1 文だけを抽出 (最大 70 文字でクリップ)
+  const summary = data.summary || "";
+  const firstSentenceRaw = summary.split(/[。\.]/)[0] || "";
+  const previewSentence = firstSentenceRaw
+    ? firstSentenceRaw.slice(0, 70) + (firstSentenceRaw.length > 70 ? "…" : "。")
+    : `${data.ticker || "この銘柄"} の市場の声を分析しました。`;
+
   return (
-    <div style={{ position: "relative" }}>
-      {/* summary プレビュー */}
-      <div style={{
-        padding: "14px 16px",
-        borderRadius: "10px 10px 0 0",
-        background: "rgba(34,211,238,0.07)",
-        border: "1px solid rgba(34,211,238,0.25)",
-        borderBottom: "none",
-        fontSize: 13,
-        lineHeight: 1.75,
-        color: "var(--text-primary)",
-      }}>
-        {preview}
-      </div>
-      {/* ぼかしオーバーレイ（フェードアウト） */}
-      <div style={{
-        height: 80,
-        background: "linear-gradient(to bottom, rgba(34,211,238,0.07), var(--bg-card))",
-        borderLeft: "1px solid rgba(34,211,238,0.25)",
-        borderRight: "1px solid rgba(34,211,238,0.25)",
-        marginBottom: 16,
-      }} />
-      {/* アップグレード CTA */}
-      <div style={{
-        padding: 20,
-        borderRadius: 12,
-        border: "1px solid rgba(34,211,238,0.35)",
-        background: "rgba(34,211,238,0.07)",
-        textAlign: "center",
-      }}>
-        <div style={{
-          fontSize: 15, fontWeight: 600, color: "#22d3ee",
-          marginBottom: 12,
-        }}>
-          🔓 続きを読むには Pro プランへ
-        </div>
-        <div style={{
-          fontSize: 12, color: "var(--text-muted)",
-          marginBottom: 16, lineHeight: 1.8, textAlign: "left",
-          display: "inline-block",
-        }}>
-          ✓ 全銘柄の市場の声（リアルタイム更新）<br />
-          ✓ 強気・弱気の詳細分析<br />
-          ✓ 注目指標・キーメトリクス<br />
-          ✓ 決算 Beat/Miss 判定
-        </div>
-        <div>
-          <button
-            type="button"
-            onClick={onUpgrade}
-            style={{
-              padding: "10px 24px",
-              borderRadius: 8,
-              border: "none",
-              background: "#22d3ee",
-              color: "#0f172a",
-              fontWeight: 700,
-              fontSize: 14,
-              cursor: "pointer",
-            }}
-          >
-            Pro プランを見る →
-          </button>
-        </div>
-      </div>
-    </div>
+    <LockedSection
+      ctaLabel="続きを読む"
+      onUpgrade={onUpgrade}
+      minHeight={380}
+    >
+      <InsightsGhost previewSentence={previewSentence} />
+    </LockedSection>
   );
 }
 

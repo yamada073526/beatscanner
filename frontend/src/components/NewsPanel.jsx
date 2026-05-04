@@ -16,6 +16,12 @@ function timeAgo(dateStr) {
   return new Date(dateStr).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' });
 }
 
+// v40+: 取得は最大 50 件、初期表示は 12 件 (4×3)。
+// 「もっと見る」で +20 件ずつ段階的に表示 (12 → 32 → 50)。
+const INITIAL_VISIBLE = 12;
+const VISIBLE_INCREMENT = 20;
+const MAX_FETCH = 50;
+
 export default function NewsPanel({ ticker }) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -23,6 +29,7 @@ export default function NewsPanel({ ticker }) {
   const [translated, setTranslated] = useState(null);
   const [translating, setTranslating] = useState(false);
   const [articleModal, setArticleModal] = useState(null);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
   const [translateNews, setTranslateNews] = useState(() => {
     const saved = localStorage.getItem(LS_KEY);
     return saved !== null ? saved === 'true' : true;
@@ -110,7 +117,8 @@ export default function NewsPanel({ ticker }) {
     setError(null);
     setNews([]);
     setTranslated(null);
-    fetchNews(ticker, 20)
+    setVisibleCount(INITIAL_VISIBLE);
+    fetchNews(ticker, MAX_FETCH)
       .then(setNews)
       .catch(() => setError('ニュースの取得に失敗しました'))
       .finally(() => setLoading(false));
@@ -289,44 +297,87 @@ export default function NewsPanel({ ticker }) {
       )}
 
       {!loading && news.length > 0 && (
-        <div
-          className={`news-scroll-wrapper${showFade ? ' show-fade' : ''}`}
-          ref={newsScrollRef}
-          onScroll={updateFadeState}
-        >
-          <div ref={(el) => { listRef.current = el; gridRef.current = el; }} className="news-grid">
-            {news.map((item, i) => (
-              <div
-                key={i}
-                onClick={() => openArticle(item)}
-                onMouseEnter={() => handleCardEnter(i)}
-                onMouseLeave={handleCardLeave}
-                className="news-card scroll-reveal"
-                style={{ transitionDelay: `${i * 0.06}s` }}
-              >
-                {item.image && (
-                  <img
-                    src={item.image}
-                    alt=""
-                    className="news-card-thumb"
-                    onError={(e) => { e.target.style.display = 'none'; }}
-                  />
-                )}
-                <div className="news-card-body">
-                  <div className="news-card-title">
-                    {displayTitles?.[i] || item.title}
-                  </div>
-                  <div className="news-card-meta">
-                    {item.source && (
-                      <span className="news-card-source">{item.source}</span>
-                    )}
-                    <span>{timeAgo(item.published)}</span>
+        <>
+          <div
+            className={`news-scroll-wrapper${showFade ? ' show-fade' : ''}`}
+            ref={newsScrollRef}
+            onScroll={updateFadeState}
+          >
+            <div ref={(el) => { listRef.current = el; gridRef.current = el; }} className="news-grid">
+              {news.slice(0, visibleCount).map((item, i) => (
+                <div
+                  key={i}
+                  onClick={() => openArticle(item)}
+                  onMouseEnter={() => handleCardEnter(i)}
+                  onMouseLeave={handleCardLeave}
+                  className="news-card scroll-reveal"
+                  style={{ transitionDelay: `${i * 0.06}s` }}
+                >
+                  {item.image && (
+                    <img
+                      src={item.image}
+                      alt=""
+                      className="news-card-thumb"
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
+                  )}
+                  <div className="news-card-body">
+                    <div className="news-card-title">
+                      {displayTitles?.[i] || item.title}
+                    </div>
+                    <div className="news-card-meta">
+                      {item.source && (
+                        <span className="news-card-source">{item.source}</span>
+                      )}
+                      <span>{timeAgo(item.published)}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+          {visibleCount < news.length && (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              marginTop: 16,
+            }}>
+              <button
+                type="button"
+                onClick={() => setVisibleCount((c) => Math.min(c + VISIBLE_INCREMENT, news.length))}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 22px',
+                  borderRadius: 999,
+                  background: 'rgba(34,211,238,0.10)',
+                  border: '1px solid rgba(34,211,238,0.35)',
+                  color: '#22d3ee',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.18s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(34,211,238,0.18)';
+                  e.currentTarget.style.borderColor = 'rgba(34,211,238,0.60)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(34,211,238,0.10)';
+                  e.currentTarget.style.borderColor = 'rgba(34,211,238,0.35)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                <span>もっと見る</span>
+                <span style={{ opacity: 0.7, fontSize: 12 }}>
+                  あと {Math.min(news.length - visibleCount, VISIBLE_INCREMENT)} 件
+                </span>
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {articleModal && createPortal(

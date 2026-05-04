@@ -74,5 +74,36 @@ export function useSubscription(user) {
     }
   }, [user]);
 
-  return { subscription, isSubscribed, subLoading, checkoutLoading, startCheckout };
+  /**
+   * Stripe Customer Portal を開く（v40+ 特商法対応）。
+   * 解約・支払い方法変更・請求履歴閲覧をユーザー自身で完結できる。
+   */
+  const openPortal = useCallback(async () => {
+    if (!supabase || !user) return;
+    setCheckoutLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Not authenticated');
+
+      const resp = await fetch('/api/stripe/portal', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${resp.status}`);
+      }
+      const { url } = await resp.json();
+      if (url) window.location.href = url;
+    } catch (e) {
+      console.error('[useSubscription] portal error:', e);
+      alert('管理ポータルを開けませんでした。しばらく後にお試しください。');
+    } finally {
+      setCheckoutLoading(false);
+    }
+  }, [user]);
+
+  return { subscription, isSubscribed, subLoading, checkoutLoading, startCheckout, openPortal };
 }

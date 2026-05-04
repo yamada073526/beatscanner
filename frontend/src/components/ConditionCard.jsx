@@ -22,20 +22,32 @@ const DELTA_LABELS = {
 
 function DeltaRow({ index, series, isPro, onUpgradeClick }) {
   const label = DELTA_LABELS[index];
+  const delta = calcDeltaPct(series);
 
+  // Free: 数値を blur で隠して "PRO" chip を右肩に表示
+  // (実際の数値があるかどうかに関わらず、見た目を統一するため固定値を表示)
   if (!isPro) {
+    const placeholder = delta !== null
+      ? `${delta > 0 ? '+' : ''}${delta.toFixed(1)}%`
+      : '+12.3%';
     return (
-      <button
+      <div
+        className="delta-locked"
         onClick={onUpgradeClick}
-        className="mt-2 flex w-full items-center gap-1.5 border-t border-slate-100 pt-2 text-left text-xs text-slate-400 opacity-60 transition hover:opacity-100"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onUpgradeClick?.(); }}
       >
-        <span>🔒</span>
-        <span>{label}（Pro限定）</span>
-      </button>
+        <span className="delta-locked-label">{label}</span>
+        <span className="delta-locked-value">
+          {placeholder}
+          <span style={{ opacity: 0.7 }}>▲</span>
+        </span>
+        <span className="delta-locked-lock">PRO</span>
+      </div>
     );
   }
 
-  const delta = calcDeltaPct(series);
   if (delta === null) return null;
 
   const positive = delta > 0;
