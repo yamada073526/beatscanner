@@ -164,6 +164,10 @@ export default function App() {
   const searchInputRef = useRef(null);
   const searchIdRef = useRef(0);
   const prefetchedRef = useRef(new Set());
+  // v40+: 同銘柄の再分析を瞬時化する result キャッシュ (10 分 TTL)
+  // ユーザーがタブ切替や戻るで同じ銘柄に戻ってきた際、再 fetch せず即表示
+  const resultCacheRef = useRef(new Map());
+  const RESULT_CACHE_TTL = 10 * 60 * 1000;  // 10 分
 
   // ── Supabase Auth ─────────────────────────────────────────────
   const { user, ready: authReady, signInWithGoogle, signOut } = useAuth();
@@ -363,6 +367,19 @@ export default function App() {
       : raw.toUpperCase();
     if (!t) return;
     setTicker(t);
+    // v40+: 全 panel データを analyze と並列で先取り (体感速度 5-10s → 2-3s)
+    prefetch(t);
+    // v40+: result キャッシュチェック — 10分以内に同銘柄を分析済なら瞬時に表示
+    const cached = resultCacheRef.current.get(t);
+    if (cached && Date.now() - cached.ts < RESULT_CACHE_TTL) {
+      setActiveTab('judgment');
+      setError(null);
+      setIsDemoResult(false);
+      setResult(cached.result);
+      if (cached.guidance) setGuidance(cached.guidance);
+      setLoading(false);
+      return;
+    }
     // v40+: 分析済みティッカーを localStorage に記録 (LP の「あなたが見た銘柄」用)
     // 直近 50 件まで保持。決算カレンダーと突合してリテンション CTA を生成する。
     try {
@@ -389,7 +406,12 @@ export default function App() {
 
     analyze(t)
       .then(data => {
-        if (searchIdRef.current === searchId) setResult(data);
+        if (searchIdRef.current === searchId) {
+          setResult(data);
+          // v40+: キャッシュ保存 (guidance はまだ取得中なので後で更新)
+          const prev = resultCacheRef.current.get(t) || {};
+          resultCacheRef.current.set(t, { ...prev, result: data, ts: Date.now() });
+        }
       })
       .catch(e => {
         if (searchIdRef.current === searchId) {
@@ -415,7 +437,12 @@ export default function App() {
       .then(full => {
         clearTimeout(secTimeoutId);
         if (searchIdRef.current !== searchId) return;
-        if (full) setGuidance(full);
+        if (full) {
+          setGuidance(full);
+          // v40+: キャッシュに guidance も保存 (result は既に保存済み or 同時に)
+          const prev = resultCacheRef.current.get(t) || {};
+          resultCacheRef.current.set(t, { ...prev, guidance: full, ts: Date.now() });
+        }
         setGuidanceSecLoading(false);
       })
       .catch(() => {
@@ -443,6 +470,8 @@ export default function App() {
     setTicker(sym);
     setActiveTab('judgment');
     setLoading(true);
+    // v40+: panel データを analyze と並列で先取り
+    prefetch(sym);
     setError(null);
     setResult(null);
     setGuidance(null);

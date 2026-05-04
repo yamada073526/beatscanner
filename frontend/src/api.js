@@ -49,11 +49,19 @@ export function prefetchGuidance(ticker) {
 
 export function prefetchAll(ticker) {
   const t = encodeURIComponent(ticker);
+  // Judgment タブ上部 (analyze + ガイダンス用)
   fetch(`/api/guidance/${t}/basic`, { headers: fmpHeaders() }).catch(() => {});
+  // チャート系
   fetch(`/api/chart/${t}/summary`).catch(() => {});
-  // 市場の声は分析画面の最下層付近にあり、analyze API と並列で先に発火させて
-  // ユーザーが到達するまでに準備完了させる（コールド時 60秒 → 体感ゼロへ）
+  fetch(`/api/price-history/${t}?period=1y`, { headers: fmpHeaders() }).catch(() => {});
+  // 市場の声 (cold 時 60 秒かかるため最優先)
   fetch(`/api/insights/${t}`).catch(() => {});
+  // v40+: Judgment タブの残りパネル用 (news / ir-links / analyst) を先取り。
+  //   各 panel が mount 後に個別 fetch していたものを並列化。
+  //   合計プリフェッチ 7 endpoints — fire-and-forget なので帯域以外のコストなし。
+  fetch(`/api/news/${t}?limit=10`, { headers: fmpHeaders() }).catch(() => {});
+  fetch(`/api/ir-links/${t}`, { headers: fmpHeaders() }).catch(() => {});
+  fetch(`/api/analyst/${t}`).catch(() => {});
 }
 
 export async function fetchScreener(category = 'gainers') {
