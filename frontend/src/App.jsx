@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { analyze, fetchGuidance, fetchGuidanceBasic, prefetchAll } from './api.js';
+import { analyze, demoAnalyze, fetchGuidance, fetchGuidanceBasic, prefetchAll } from './api.js';
 import { supabase, isSupabaseConfigured } from './lib/supabase.js';
 import { useAuth } from './hooks/useAuth.js';
 import { useIsMobile } from './hooks/useIsMobile.js';
@@ -431,6 +431,52 @@ export default function App() {
     setIsDemoResult(true);
     setActiveTab('judgment');
     setError(null);
+  }
+
+  // ── LP からのクリック専用 (今日の注目 / 今週の決算 / サンプル分析 / あなたが見た銘柄) ──
+  // 「登録不要で試せる」と LP で約束しているため、未ログイン+APIキー無の場合も
+  // demo エンドポイント (3銘柄/日制限) で必ず分析を実行する。
+  // hasFmpKey() がある場合は通常の analyze を使う (デモ制限なし)。
+  async function handleLPTickerClick(t) {
+    const sym = (t || '').toUpperCase();
+    if (!sym) return;
+    setTicker(sym);
+    setActiveTab('judgment');
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    setGuidance(null);
+    setGuidanceSecLoading(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // 「あなたが見た銘柄」用に localStorage 記録
+    try {
+      const key = 'bs_analyzed';
+      const data = JSON.parse(localStorage.getItem(key) || '{}');
+      data[sym] = Date.now();
+      const sorted = Object.entries(data).sort(([, a], [, b]) => b - a).slice(0, 50);
+      localStorage.setItem(key, JSON.stringify(Object.fromEntries(sorted)));
+    } catch { /* private mode 等は無視 */ }
+    try {
+      if (hasFmpKey()) {
+        const data = await analyze(sym);
+        setResult(data);
+        setIsDemoResult(false);
+      } else {
+        const data = await demoAnalyze(sym);
+        setResult(data);
+        setIsDemoResult(true);
+      }
+    } catch (e) {
+      const msg = e?.message || 'エラー';
+      // demo 上限 (3銘柄/日) を超えた場合は分かりやすいメッセージ
+      if (msg.includes('429') || msg.includes('limit') || msg.includes('Rate')) {
+        setError('本日のお試し回数 (3銘柄) を超えました。Googleログインで無制限になります。');
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   function addToWatchlist(t) {
@@ -1037,16 +1083,12 @@ export default function App() {
 
       {/* Tab: ホーム */}
       {/* 未ログイン LP — Google ログイン誘導 + Pro チェックアウト誘導 +
-          「今日の注目」銘柄クリックでデモ分析実行 (v37) */}
+          銘柄クリックで demo モード分析を実行 (v40+: APIキー無でも動くよう demoAnalyze 経路へ) */}
       {showLP && (
         <LandingPage
           onSignIn={signInWithGoogle}
           onProCheckout={() => startCheckout('monthly')}
-          onTickerClick={(t) => {
-            setTicker(t);
-            runAnalyze(t);
-            setActiveTab('judgment');
-          }}
+          onTickerClick={handleLPTickerClick}
         />
       )}
 

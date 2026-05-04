@@ -192,11 +192,21 @@ function HeroSection({ onFreeStart }) {
 }
 
 // 相対時刻フォーマッタ — 「たった今 / X分前 / X時間前 / X日前」
-function formatRelativeTime(iso) {
-  if (!iso) return '';
-  const then = new Date(iso);
+// 引数: ISO 文字列 OR Unix エポック (秒 or ミリ秒どちらにも対応)
+// /api/movers の updated_at は epoch 秒 (例: 1777880534) のため検出して ms 化する
+function formatRelativeTime(input) {
+  if (input == null) return '';
+  let then;
+  if (typeof input === 'number') {
+    // 10 桁 (≒ 2001-2286年範囲) なら秒、13 桁ならミリ秒として扱う
+    const ms = input < 1e12 ? input * 1000 : input;
+    then = new Date(ms);
+  } else {
+    then = new Date(input);
+  }
   if (isNaN(then.getTime())) return '';
   const diffMin = Math.floor((Date.now() - then.getTime()) / 60000);
+  if (diffMin < 0) return 'たった今';  // 時計ずれの保険
   if (diffMin < 1) return 'たった今';
   if (diffMin < 60) return `${diffMin}分前`;
   const diffHr = Math.floor(diffMin / 60);
