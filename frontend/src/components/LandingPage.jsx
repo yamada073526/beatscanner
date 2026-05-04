@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 /**
  * LandingPage — 未ログインユーザー向けランディングページ
@@ -140,29 +140,9 @@ function HeroSection({ onFreeStart }) {
         }}
       />
 
-      {/* バッジ — 既存 .hero-badge */}
-      <div
-        className="hero-badge"
-        style={{
-          position: 'relative', zIndex: 1,
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '6px',
-          borderRadius: '999px',
-          padding: '5px 16px',
-          fontSize: '11px',
-          marginBottom: '24px',
-          fontWeight: 700,
-          letterSpacing: '0.08em',
-          textTransform: 'uppercase',
-        }}
-      >
-        <span style={{ fontSize: '8px' }}>●</span>
-        β版・招待制プレビュー公開中
-        <span style={{ fontSize: '8px' }}>●</span>
-      </div>
+      {/* β バッジ削除 (v37): 招待制という虚偽訴求を回避 + Hero ノイズ削減 */}
 
-      {/* メインコピー — ログイン後ホーム Hero と完全統一 */}
+      {/* メインコピー — 痛み→解決型（v37 で「機能説明」から転換） */}
       <h1
         className="hero-title"
         style={{
@@ -175,11 +155,11 @@ function HeroSection({ onFreeStart }) {
           letterSpacing: '-0.02em',
         }}
       >
-        <span style={{ display: 'block' }}>決算を、瞬時に</span>
-        <span style={{ display: 'block' }}>読み解く。</span>
+        <span style={{ display: 'block' }}>決算を見ても、</span>
+        <span style={{ display: 'block' }}>買うべきか分からない。</span>
       </h1>
 
-      {/* サブコピー — 1 行・体言止め */}
+      {/* サブコピー — 解決策の提示 (権威性 + 具体性) */}
       <p style={{
         position: 'relative', zIndex: 1,
         fontSize: 'clamp(13px, 1.8vw, 16px)',
@@ -187,17 +167,17 @@ function HeroSection({ onFreeStart }) {
         margin: '0 auto 24px',
         lineHeight: 1.6,
       }}>
-        売上・EPS・CF、AIが自動分析。
+        プロが使う5条件で、3秒で判定。
       </p>
 
-      {/* メインCTA + 安心バッジ 1 行（改行なし） */}
+      {/* メインCTA + 安心バッジ (v37: 制限訴求を消して登録不要を強調) */}
       <div style={{ position: 'relative', zIndex: 1 }}>
         <PrimaryCTA onClick={onFreeStart}>
           <GoogleIcon /> 無料で試す（登録30秒）
         </PrimaryCTA>
         <div style={{
           marginTop: 12,
-          marginBottom: 20,
+          marginBottom: 0,
           fontSize: 12,
           color: 'var(--text-muted)',
           textAlign: 'center',
@@ -205,43 +185,125 @@ function HeroSection({ onFreeStart }) {
           overflow: 'hidden',
           textOverflow: 'ellipsis',
         }}>
-          ✓ クレカ不要　✓ 30秒で完了　✓ 3銘柄まで永久無料
+          ✓ 登録不要で試せる　✓ 30秒で完了
         </div>
       </div>
 
-      {/* プルーフチップ — 既存 Hero と同じスタイル */}
+      {/* v37: プルーフチップ 3 個を削除 (機能セクションで詳述するため重複) */}
+    </section>
+  );
+}
+
+// ── セクション 2 (v37 新設): 今日の注目銘柄 ──────────────────────────────
+// 急騰 Top3 を /api/movers から取得して表示。クリックでデモ分析へ直結。
+// 「毎日見たい」体験を作り、未ログインでもブックマーク価値を生む。
+function TodayHotSection({ onTickerClick }) {
+  const [movers, setMovers] = useState(null);  // null: loading / [] or array: loaded / 'error': error
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/movers')
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
+      .then(d => {
+        if (cancelled) return;
+        const top3 = (d?.gainers || []).slice(0, 3);
+        setMovers(top3);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setMovers('error');
+        setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // エラー時はセクションごと隠す
+  if (movers === 'error') return null;
+
+  return (
+    <section style={{ padding: '32px 20px' }}>
       <div style={{
-        position: 'relative', zIndex: 1,
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '8px',
-        flexWrap: 'wrap',
-        justifyContent: 'center',
+        fontSize: 11,
+        color: 'var(--text-muted)',
+        textTransform: 'uppercase',
+        letterSpacing: '0.1em',
+        textAlign: 'center',
+        marginBottom: 16,
       }}>
-        {['✓ 5条件 即時判定', '✓ AI市場分析', '✓ 株価チャート連動'].map(text => (
-          <span
-            key={text}
-            style={{
-              fontSize: '11px',
-              color: '#38BDF8',
-              background: 'rgba(56,189,248,0.08)',
-              border: '1px solid rgba(56,189,248,0.2)',
-              borderRadius: '999px',
-              padding: '3px 10px',
-              fontWeight: 600,
-            }}
-          >
-            {text}
-          </span>
-        ))}
+        🔥 今日の注目
       </div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: 12,
+        maxWidth: 600,
+        margin: '0 auto',
+      }}>
+        {loading
+          ? [0, 1, 2].map(i => (
+              <div
+                key={i}
+                style={{
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 12,
+                  padding: '24px 12px',
+                  textAlign: 'center',
+                  animation: 'pulse 1.5s ease-in-out infinite',
+                  minHeight: 84,
+                }}
+              />
+            ))
+          : (movers || []).map(m => {
+              const pctStr = m.pct != null ? `${m.pct > 0 ? '+' : ''}${m.pct.toFixed(2)}%` : '';
+              const desc = (m.keyword || '').slice(0, 20);
+              return (
+                <div
+                  key={m.ticker}
+                  className="panel-card"
+                  onClick={() => onTickerClick?.(m.ticker)}
+                  style={{
+                    textAlign: 'center',
+                    padding: '16px 12px',
+                    cursor: 'pointer',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 12,
+                  }}
+                >
+                  <div style={{
+                    fontSize: 16,
+                    fontWeight: 700,
+                    color: 'var(--text-primary)',
+                    marginBottom: 4,
+                  }}>{m.ticker}</div>
+                  <div style={{
+                    fontSize: 12,
+                    color: '#22d3ee',
+                    fontWeight: 600,
+                    marginBottom: 4,
+                  }}>{pctStr}</div>
+                  <div style={{
+                    fontSize: 11,
+                    color: 'var(--text-muted)',
+                    lineHeight: 1.4,
+                  }}>{desc || '急騰注目銘柄'}</div>
+                </div>
+              );
+            })
+        }
+      </div>
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.45}}`}</style>
     </section>
   );
 }
 
 // ── セクション 3: 機能紹介 ────────────────────────────────────────────────
 // 既存 .panel-card クラスを使用 (ホバー演出付き)
-function FeatureCard({ icon, title, description }) {
+// v37: mockup prop で実 UI 表現を差し込み可能に
+function FeatureCard({ icon, title, description, mockup }) {
   return (
     <div
       className="panel-card"
@@ -259,16 +321,61 @@ function FeatureCard({ icon, title, description }) {
       >
         {title}
       </h3>
-      <p
-        style={{
-          fontSize: 13,
-          lineHeight: 1.7,
-          color: 'var(--text-secondary)',
-          margin: 0,
-        }}
-      >
-        {description}
-      </p>
+      {description && (
+        <p
+          style={{
+            fontSize: 13,
+            lineHeight: 1.7,
+            color: 'var(--text-secondary)',
+            margin: 0,
+          }}
+        >
+          {description}
+        </p>
+      )}
+      {mockup}
+    </div>
+  );
+}
+
+// 5条件カード用の実 UI モックアップ (NVDA PASS 5/5 を CSS だけで描画)
+function FiveConditionsMockup() {
+  return (
+    <div style={{
+      background: 'rgba(34,211,238,0.06)',
+      borderRadius: 8,
+      padding: '10px 12px',
+      marginTop: 8,
+      fontSize: 11,
+    }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        marginBottom: 6,
+      }}>
+        <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>NVDA</span>
+        <span style={{
+          background: 'rgba(34,239,129,0.15)',
+          color: '#34ef81',
+          padding: '1px 8px',
+          borderRadius: 4,
+          fontSize: 10,
+          fontWeight: 700,
+        }}>✓ PASS 5/5</span>
+      </div>
+      {['営業CFマージン', 'EPS連続増加', 'CFPS連続増加', '売上連続増加', 'CFPS≧EPS'].map(label => (
+        <div key={label} style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          marginBottom: 3,
+          color: 'var(--text-muted)',
+          fontSize: 10,
+        }}>
+          <span style={{ color: '#34ef81' }}>✓</span>
+          <span>{label}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -291,7 +398,7 @@ function FeaturesSection() {
         <FeatureCard
           icon="⚡"
           title="5条件、即判定"
-          description="財務5指標を自動チェック。PASS/FAILで即答。"
+          mockup={<FiveConditionsMockup />}
         />
         <FeatureCard
           icon="📊"
@@ -396,11 +503,20 @@ function PricingSection({ onFreeStart, onProCheckout }) {
           </h3>
           <div style={{
             fontSize: 26, fontWeight: 700,
-            color: '#22d3ee', marginBottom: 6,
+            color: '#22d3ee', marginBottom: 4,
           }}>
             ¥980<span style={{
               fontSize: 13, fontWeight: 400, color: 'var(--text-muted)',
             }}>/月</span>
+          </div>
+          {/* v37 Fix 7: コーヒー1杯アンカリングで体感価格を下げる */}
+          <div style={{
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            marginTop: 4,
+            marginBottom: 12,
+          }}>
+            1日あたり約¥33 — コーヒー1杯より安く
           </div>
           <div style={{
             display: 'inline-block',
@@ -559,7 +675,8 @@ function FooterCTASection({ onFreeStart }) {
 }
 
 // ── メインエクスポート ────────────────────────────────────────────────────
-export default function LandingPage({ onSignIn, onProCheckout }) {
+// onTickerClick(ticker): 「今日の注目」銘柄クリック時に親で runAnalyze + setActiveTab を実行
+export default function LandingPage({ onSignIn, onProCheckout, onTickerClick }) {
   // 「7日間無料で試す」: ログイン後に自動的にチェックアウトへ遷移するため、
   // localStorage に意図フラグをセットしてからログイン画面へ
   const handleProClick = () => {
@@ -580,8 +697,19 @@ export default function LandingPage({ onSignIn, onProCheckout }) {
       color: 'var(--text-primary)',
     }}>
       <HeroSection onFreeStart={onSignIn} />
+      <TodayHotSection onTickerClick={onTickerClick} />
       <FeaturesSection />
       <PricingSection onFreeStart={onSignIn} onProCheckout={handleProClick} />
+      {/* v37 Fix 6: データソース表記を控えめに復活 (信頼シグナル) */}
+      <div style={{
+        textAlign: 'center',
+        fontSize: 11,
+        color: 'var(--text-muted)',
+        padding: '16px 20px',
+        borderTop: '1px solid var(--border)',
+      }}>
+        Powered by Financial Modeling Prep · Yahoo Finance · Anthropic Claude
+      </div>
       <FAQSection />
       <FooterCTASection onFreeStart={onSignIn} />
     </div>

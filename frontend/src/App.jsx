@@ -1000,11 +1000,17 @@ export default function App() {
       {/* Tabs はヘッダー中央(md+) または ハンバーガードロワー内(mobile) に移動済み */}
 
       {/* Tab: ホーム */}
-      {/* 未ログイン LP — Google ログイン誘導 + Pro チェックアウト誘導 */}
+      {/* 未ログイン LP — Google ログイン誘導 + Pro チェックアウト誘導 +
+          「今日の注目」銘柄クリックでデモ分析実行 (v37) */}
       {showLP && (
         <LandingPage
           onSignIn={signInWithGoogle}
           onProCheckout={() => startCheckout('monthly')}
+          onTickerClick={(t) => {
+            setTicker(t);
+            runAnalyze(t);
+            setActiveTab('judgment');
+          }}
         />
       )}
 
