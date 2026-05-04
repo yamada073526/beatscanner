@@ -1208,8 +1208,15 @@ export default function App() {
             <StockPriceChart ticker={result.ticker} />
             <IRLinksPanel ticker={result.ticker} />
             <NewsPanel ticker={result.ticker} />
-            {/* 市場の声: ログイン済み or Stripeサブスク有効でフル表示 */}
-            <InsightsPanel ticker={result.ticker} user={user} isPro={!!user || isSubscribed} />
+            {/* 市場の声: ログイン済み or Stripeサブスク有効でフル表示。
+                未ログインはチラ見せ + Google ログイン CTA、Free ログイン済みは Stripe チェックアウト誘導 */}
+            <InsightsPanel
+              ticker={result.ticker}
+              user={user}
+              isPro={!!user || isSubscribed}
+              onUpgradeClick={() => upgrade.open('市場の声')}
+              onSignIn={signInWithGoogle}
+            />
           </div>
         ) : (
           <div style={{ padding: '3rem 1rem', textAlign: 'center' }}>

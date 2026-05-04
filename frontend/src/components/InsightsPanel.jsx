@@ -226,6 +226,118 @@ function FullView({ data }) {
   );
 }
 
+// 未ログイン向けチラ見せ表示
+// - センチメントバッジ（結論だけ公開）
+// - summary 冒頭 80 文字を平文 + 続きを blur(4px) でぼかし表示
+// - 「Googleで続ける（30秒・無料）」CTA で signInWithGoogle を直接トリガー
+function NonLoggedTeaserView({ data, ticker, onSignIn }) {
+  const hasData = data && data.found && data.summary;
+  const fullSummary = hasData ? data.summary : "";
+  const previewClear = fullSummary.slice(0, 80);
+  const previewBlurred = fullSummary.slice(80, 220) || "次の段落の分析がここに続きます。強気・弱気の理由、注目すべきキー指標などをログイン後にご覧いただけます。";
+
+  return (
+    <div>
+      {/* データあり: チラ見せ。データなし: 価値訴求のみ */}
+      {hasData && (
+        <div style={{ position: "relative", marginBottom: 16 }}>
+          {/* 平文プレビュー（最初の80文字） */}
+          <div style={{
+            padding: "14px 16px 8px 16px",
+            borderRadius: "10px 10px 0 0",
+            background: "rgba(34,211,238,0.07)",
+            border: "1px solid rgba(34,211,238,0.25)",
+            borderBottom: "none",
+            fontSize: 13,
+            lineHeight: 1.75,
+            color: "var(--text-primary)",
+          }}>
+            {previewClear}…
+          </div>
+          {/* ぼかし続き（blur(4px) + マスクで自然にフェードアウト） */}
+          <div style={{
+            position: "relative",
+            padding: "0 16px 14px 16px",
+            borderRadius: "0 0 10px 10px",
+            background: "rgba(34,211,238,0.07)",
+            borderLeft: "1px solid rgba(34,211,238,0.25)",
+            borderRight: "1px solid rgba(34,211,238,0.25)",
+            borderBottom: "1px solid rgba(34,211,238,0.25)",
+            fontSize: 13,
+            lineHeight: 1.75,
+            color: "var(--text-primary)",
+            filter: "blur(4px)",
+            userSelect: "none",
+            pointerEvents: "none",
+            maxHeight: 60,
+            overflow: "hidden",
+            WebkitMaskImage: "linear-gradient(to bottom, black 0%, transparent 95%)",
+            maskImage: "linear-gradient(to bottom, black 0%, transparent 95%)",
+          }}>
+            {previewBlurred}
+          </div>
+        </div>
+      )}
+
+      {/* 価値訴求 + Google ログイン CTA */}
+      <div style={{
+        padding: 20,
+        borderRadius: 12,
+        border: "1px solid rgba(34,211,238,0.35)",
+        background: "rgba(34,211,238,0.07)",
+        textAlign: "center",
+      }}>
+        <div style={{
+          fontSize: 14, fontWeight: 600, color: "#22d3ee",
+          marginBottom: 12,
+        }}>
+          ✅ ログインすると見られる内容
+        </div>
+        <div style={{
+          fontSize: 12, color: "var(--text-muted)",
+          marginBottom: 16, lineHeight: 1.9, textAlign: "left",
+          display: "inline-block",
+        }}>
+          ・全銘柄の市場分析を毎朝更新<br />
+          ・強気/弱気の理由を構造化表示<br />
+          ・注目すべきキー指標を抽出
+        </div>
+        <div>
+          <button
+            type="button"
+            onClick={onSignIn}
+            style={{
+              padding: "12px 28px",
+              borderRadius: 10,
+              border: "none",
+              background: "#22d3ee",
+              color: "#0f172a",
+              fontWeight: 700,
+              fontSize: 14,
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              boxShadow: "0 0 12px rgba(34,211,238,0.30)",
+              transition: "all 0.2s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "#06b6d4"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "#22d3ee"; }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="#0f172a" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#0f172a" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#0f172a" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+              <path fill="#0f172a" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+            Googleで続ける（30秒・無料）
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Free 会員向けチラ見せ表示（summary 100字 + ぼかし + Pro CTA）
 function TeaserView({ data, onUpgrade }) {
   const preview = (data.summary || "この銘柄の市場の声を分析しました。").slice(0, 100) + "…";
@@ -299,7 +411,7 @@ function TeaserView({ data, onUpgrade }) {
   );
 }
 
-export default function InsightsPanel({ ticker, user, isPro }) {
+export default function InsightsPanel({ ticker, user, isPro, onUpgradeClick, onSignIn }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -309,8 +421,11 @@ export default function InsightsPanel({ ticker, user, isPro }) {
   // ? ボタンクリックで「市場の声とは」モーダルを開く
   const [isInfoOpen, setIsInfoOpen] = useState(false);
 
+  // 未ログインでもキャッシュ済みデータがあればチラ見せできるよう fetch する。
+  // BE 側 /api/insights/{ticker} は認証不要（5層フォールバック内で Supabase の
+  // キャッシュデータがあれば即返、なければオンデマンド RSS）。
   useEffect(() => {
-    if (!ticker || !user) return;
+    if (!ticker) return;
     let cancelled = false;
     setLoading(true);
     setData(null);
@@ -346,43 +461,63 @@ export default function InsightsPanel({ ticker, user, isPro }) {
     };
   }, [ticker, user, refetchKey]);
 
-  // 暫定: Pro CTA は仮のアラート（TODO: Stripe 実装後に決済 LP へ遷移）
-  const handleUpgrade = () => {
-    alert("Pro プランは近日公開予定です！");
-  };
+  // Pro CTA: App.jsx から渡された UpgradeModal オープナーを呼ぶ
+  // （Stripe チェックアウトボタンへの導線）
+  const handleUpgrade = onUpgradeClick || (() => {});
 
-  // 未ログイン
+  // 未ログイン: チラ見せ + センチメントバッジ + Google ログイン CTA
   if (!user) {
     return (
-      <div style={{
-        margin: "24px 0",
-        padding: "24px",
-        borderRadius: "12px",
-        border: "1px solid rgba(34,211,238,0.35)",
-        background: "rgba(34,211,238,0.07)",
-        textAlign: "center",
-      }}>
-        <div style={{ fontSize: 28, marginBottom: 8 }}>🔒</div>
-        <div style={{ color: "#22d3ee", fontWeight: 500, marginBottom: 4 }}>
-          会員限定コンテンツ
+      <div style={{ margin: "24px 0" }}>
+        {/* ヘッダー: タイトル + ? + センチメントバッジ（結論だけ公開） */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+          marginBottom: 16,
+          flexWrap: "wrap",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span className="section-heading" style={{ marginBottom: 0 }}>
+              📊 市場の声
+            </span>
+            <InfoButton onOpen={() => setIsInfoOpen(true)} />
+          </div>
+          {data && data.found && !loading && (
+            <SentimentBadge sentiment={data.overall_sentiment} />
+          )}
         </div>
-        <div className="section-subtext" style={{ marginBottom: 16 }}>
-          この銘柄に関する市場の声はログイン後にご覧いただけます
-        </div>
-        <button
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          style={{
-            padding: "8px 20px",
-            borderRadius: 8,
-            border: "1px solid rgba(34,211,238,0.5)",
-            background: "rgba(34,211,238,0.12)",
-            color: "#22d3ee",
-            cursor: "pointer",
-            fontSize: 13,
-          }}
-        >
-          サインインして見る
-        </button>
+
+        {/* ローディング中はスケルトン */}
+        {loading && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {[1, 2].map((i) => (
+              <div
+                key={i}
+                style={{
+                  height: 60,
+                  borderRadius: 10,
+                  background: "var(--bg-subtle)",
+                  animation: "pulse 1.5s ease-in-out infinite",
+                }}
+              />
+            ))}
+            <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
+          </div>
+        )}
+
+        {/* データ取得後: チラ見せビュー */}
+        {!loading && (
+          <NonLoggedTeaserView
+            data={data && data.found ? data : null}
+            ticker={ticker}
+            onSignIn={onSignIn}
+          />
+        )}
+
+        {/* 「市場の声とは」モーダル */}
+        {isInfoOpen && <InsightsInfoModal onClose={() => setIsInfoOpen(false)} />}
       </div>
     );
   }

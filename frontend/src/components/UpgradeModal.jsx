@@ -114,39 +114,75 @@ export default function UpgradeModal({ isOpen, onClose, featureName, onOpenSetti
           </PlanCol>
         </div>
 
-        {/* Stripe CTAs — ログイン済みなら決済ボタン、未ログインなら誘導 */}
+        {/* Stripe CTAs — トライアルを最大化したデザイン */}
         {user ? (
-          <div className="px-6 pb-4 space-y-2">
-            <button
-              onClick={() => { onClose(); onCheckout?.('monthly'); }}
-              disabled={checkoutLoading}
+          <div className="px-6 pb-4">
+            {/* トライアル訴求バッジ + CTA */}
+            <div
               style={{
-                width: '100%',
-                padding: '12px',
-                borderRadius: '10px',
-                background: 'rgba(34,211,238,0.12)',
-                color: '#22d3ee',
-                border: '1px solid rgba(34,211,238,0.40)',
-                fontSize: '14px',
-                fontWeight: 600,
-                cursor: checkoutLoading ? 'not-allowed' : 'pointer',
-                opacity: checkoutLoading ? 0.6 : 1,
-                transition: 'all 0.2s',
+                padding: '20px 18px',
+                borderRadius: 14,
+                background: 'linear-gradient(135deg, rgba(34,211,238,0.12), rgba(34,211,238,0.04))',
+                border: '1px solid rgba(34,211,238,0.45)',
+                boxShadow: '0 0 16px rgba(34,211,238,0.15)',
+                textAlign: 'center',
               }}
             >
-              {checkoutLoading ? '処理中...' : '✨ Pro月払い ¥980/月（7日間無料）'}
-            </button>
+              <div style={{
+                fontSize: 22, fontWeight: 800, color: '#22d3ee',
+                lineHeight: 1.2, marginBottom: 4,
+                letterSpacing: '0.02em',
+              }}>
+                🎁 7日間 完全無料
+              </div>
+              <div style={{
+                fontSize: 12, color: 'var(--text-muted, #64748b)',
+                marginBottom: 14,
+              }}>
+                クレカ登録のみ・いつでも解約可
+              </div>
+              <button
+                onClick={() => { onClose(); onCheckout?.('monthly'); }}
+                disabled={checkoutLoading}
+                style={{
+                  width: '100%',
+                  padding: '13px',
+                  borderRadius: 10,
+                  background: '#22d3ee',
+                  color: '#0f172a',
+                  border: 'none',
+                  fontSize: 15,
+                  fontWeight: 700,
+                  cursor: checkoutLoading ? 'not-allowed' : 'pointer',
+                  opacity: checkoutLoading ? 0.6 : 1,
+                  transition: 'all 0.2s',
+                  boxShadow: '0 0 12px rgba(34,211,238,0.30)',
+                }}
+                onMouseEnter={(e) => { if (!checkoutLoading) e.currentTarget.style.background = '#06b6d4'; }}
+                onMouseLeave={(e) => { if (!checkoutLoading) e.currentTarget.style.background = '#22d3ee'; }}
+              >
+                {checkoutLoading ? '処理中...' : '今すぐ無料で試す →'}
+              </button>
+              <div style={{
+                fontSize: 11, color: 'var(--text-muted, #94a3b8)',
+                marginTop: 8,
+              }}>
+                その後 ¥980/月
+              </div>
+            </div>
+
+            {/* 年払いオプション（控えめ表示） */}
             <button
               onClick={() => { onClose(); onCheckout?.('yearly'); }}
               disabled={checkoutLoading}
-              className="w-full rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              className="mt-3 w-full rounded-lg border border-slate-200 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50"
             >
-              年払い ¥9,800/年（¥817/月）
+              年払いなら ¥9,800/年（¥817/月相当・約17%お得）
             </button>
           </div>
         ) : (
           <div className="mx-6 mb-4 rounded-lg bg-cyan-50 border border-cyan-100 px-4 py-2.5 text-xs text-cyan-700">
-            💡 Googleアカウントでログインすると決済に進めます。または<strong>FMP APIキー（無料）</strong>を設定してもPro機能を利用できます。
+            💡 Googleアカウントでログインすると7日間無料で全機能を試せます。または<strong>FMP APIキー（無料）</strong>を設定してもPro機能を利用できます。
           </div>
         )}
 
