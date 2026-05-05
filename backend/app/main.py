@@ -6057,20 +6057,30 @@ async def stripe_webhook(request: Request):
                 try:
                     items_data = sub.items.data
                 except Exception:
-                    items_data = sub.get("items", {}).get("data", [])
+                    items_data = _obj_get(_obj_get(sub, "items") or {}, "data") or []
                 yearly_id = os.environ.get("STRIPE_YEARLY_PRICE_ID", "")
-                plan_key = "yearly" if items_data and items_data[0]["price"]["id"] == yearly_id else "monthly"
+                first_item = items_data[0] if items_data else None
+                first_price_id = _obj_get(_obj_get(first_item, "price") or {}, "id") if first_item else None
+                plan_key = "yearly" if first_price_id == yearly_id else "monthly"
+
+                # API 2025-03-31+ では current_period_end が item レベルに移動
+                cpe = _obj_get(sub, "current_period_end")
+                if cpe is None and first_item is not None:
+                    cpe = _obj_get(first_item, "current_period_end")
+                status_val = _obj_get(sub, "status")
+                trial_end_val = _obj_get(sub, "trial_end")
+
                 sb.table("subscriptions").upsert({
                     "user_id": user_id,
                     "stripe_customer_id": customer_id,
                     "stripe_subscription_id": subscription_id,
-                    "status": sub.status,
+                    "status": status_val,
                     "plan": plan_key,
-                    "trial_end": _ts(sub.trial_end),
-                    "current_period_end": _ts(sub.current_period_end),
+                    "trial_end": _ts(trial_end_val),
+                    "current_period_end": _ts(cpe),
                     "updated_at": _dt.utcnow().isoformat() + "Z",
                 }, on_conflict="user_id").execute()
-                print(f"[stripe webhook] subscriptions upserted for user_id={user_id} status={sub.status}")
+                print(f"[stripe webhook] subscriptions upserted for user_id={user_id} status={status_val}")
 
         elif etype == "customer.subscription.updated":
             sub = getattr(getattr(event, "data", None), "object", None) or event["data"]["object"]
@@ -6082,13 +6092,18 @@ async def stripe_webhook(request: Request):
                 try:
                     items_data = sub.items.data
                 except Exception:
-                    items_data = sub.get("items", {}).get("data", [])
-                plan_key = "yearly" if items_data and items_data[0]["price"]["id"] == yearly_id else "monthly"
+                    items_data = _obj_get(_obj_get(sub, "items") or {}, "data") or []
+                first_item = items_data[0] if items_data else None
+                first_price_id = _obj_get(_obj_get(first_item, "price") or {}, "id") if first_item else None
+                plan_key = "yearly" if first_price_id == yearly_id else "monthly"
+                cpe = _obj_get(sub, "current_period_end")
+                if cpe is None and first_item is not None:
+                    cpe = _obj_get(first_item, "current_period_end")
                 sb.table("subscriptions").update({
                     "status": _obj_get(sub, "status"),
                     "plan": plan_key,
                     "trial_end": _ts(_obj_get(sub, "trial_end")),
-                    "current_period_end": _ts(_obj_get(sub, "current_period_end")),
+                    "current_period_end": _ts(cpe),
                     "updated_at": _dt.utcnow().isoformat() + "Z",
                 }).eq("user_id", uid).execute()
                 print(f"[stripe webhook] subscription updated for user_id={uid}")
