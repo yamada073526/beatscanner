@@ -3,7 +3,33 @@
     "allow": [
       "Bash(curl:*)",
       "Bash(python3:*)",
-      "Bash(railway:*)"
+      "Bash(railway:*)",
+      "Bash(npm:*)",
+      "Bash(git:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(rm:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/post_edit_build_check.sh",
+            "timeout": 120,
+            "asyncRewake": true,
+            "rewakeMessage": "ビルドエラーが検出されました。以下のエラーを修正してください:",
+            "statusMessage": "フロントエンドビルドチェック中..."
+          }
+        ]
+      }
     ]
   }
 }

@@ -43,8 +43,16 @@
 
 ### コミット運用
 - ユーザーから明示的に依頼されない限り `git commit` しない
-- `.claude/settings.local.json` は `.gitignore` 済みだが過去 tracked のため `M` 表示が残る → ステージしない
 - 本番（Railway）はローカルファイル直送デプロイなので、git 履歴と本番の乖離が発生しうる。定期的にコミット推奨
+
+### `.claude/` の Git 追跡ポリシー
+- **チーム共有（Git 追跡）**: `.claude/settings.json`, `.claude/hooks/`, `.claude/skills/`, `.claude/agents/` などチーム共通の設定・スクリプト
+- **個人ローカル（gitignore + 追跡しない）**: 以下は `.gitignore` 済み。過去 tracked だったものは `git rm --cached` で追跡解除済 → ステージしない
+  - `.claude/settings.local.json`（個人設定・API キー含む可能性）
+  - `.claude/launch.json`（人間用、AI 使用禁止）
+  - `.claude/worktrees/`
+  - `.claude/scheduled_tasks.lock`
+- hook 本体（`.claude/hooks/*.sh`）は **必ず Git 追跡**。除外すると PC 紛失時に GitHub から復旧できず hook が動かなくなる
 
 ### Trust Cliff（信頼の崖）は最重要バグカテゴリ
 - 「登録不要」と書きながら登録要求モーダルを出す → CVR 30-40% 落ちる可能性
