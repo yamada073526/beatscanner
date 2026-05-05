@@ -3038,15 +3038,32 @@ async def economic_calendar(
         return {"events": [], "updated_at": int(_time.time())}
 
     raw: list[dict] = []
+    fmp_error: str | None = None
     try:
         result_raw = await client.economic_calendar(from_date, to_date)
         if isinstance(result_raw, list):
             raw = result_raw
-    except FMPError:
-        pass
+        elif isinstance(result_raw, dict):
+            # API エラーレスポンスが dict の場合
+            fmp_error = str(result_raw)[:200]
+    except FMPError as e:
+        fmp_error = str(e)[:200]
 
-    # フィルタ・整形
-    target_countries = {"US", "JP", "EU"}
+    # FMP の country フィールドは表記揺れがあるため、複数表記をすべて受容
+    # 例: "US" / "United States" / "USA"、"JP" / "Japan"、"EU" / "Eurozone" / "Euro Area"
+    _COUNTRY_ALIASES = {
+        "US": ("US", "USA", "United States"),
+        "JP": ("JP", "JPN", "Japan"),
+        "EU": ("EU", "EUR", "Eurozone", "Euro Area", "European Union"),
+    }
+    _ALIAS_TO_CODE: dict[str, str] = {}
+    for code, aliases in _COUNTRY_ALIASES.items():
+        for a in aliases:
+            _ALIAS_TO_CODE[a.lower()] = code
+
+    # 国別件数の集計 (デバッグ用)
+    country_counts: dict[str, int] = {}
+
     events: list[dict] = []
     for r in raw:
         if not isinstance(r, dict):
@@ -3054,8 +3071,11 @@ async def economic_calendar(
         event_name = (r.get("event") or "").strip()
         if not event_name:
             continue
-        country = (r.get("country") or "").strip()
-        if country not in target_countries:
+        country_raw = (r.get("country") or "").strip()
+        country_counts[country_raw] = country_counts.get(country_raw, 0) + 1
+        # alias で正規化、未知の国は除外
+        country_code = _ALIAS_TO_CODE.get(country_raw.lower())
+        if not country_code:
             continue
 
         normalized_impact = _classify_event_impact(event_name, r.get("impact"))
@@ -3067,7 +3087,7 @@ async def economic_calendar(
         events.append({
             "event": event_name,
             "date": r.get("date"),
-            "country": country,
+            "country": country_code,
             "currency": r.get("currency"),
             "previous": r.get("previous"),
             "estimate": r.get("estimate"),
@@ -3080,7 +3100,15 @@ async def economic_calendar(
     # 日付昇順でソート
     events.sort(key=lambda x: x.get("date") or "")
 
-    result = {"events": events, "updated_at": int(_time.time())}
+    result = {
+        "events": events,
+        "updated_at": int(_time.time()),
+        "_meta": {
+            "raw_count": len(raw),
+            "country_breakdown": country_counts,
+            "fmp_error": fmp_error,
+        },
+    }
     _ECO_CALENDAR_CACHE["data"] = result
     _ECO_CALENDAR_CACHE["ts"] = now
     _ECO_CALENDAR_CACHE["key"] = cache_key
