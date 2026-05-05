@@ -2655,9 +2655,12 @@ _MACRO_NEWS_CACHE: dict = {"data": None, "ts": 0.0}
 _MACRO_NEWS_CACHE_TTL = 900.0  # 15 分
 
 
-@app.get("/api/news/macro")
+@app.get("/api/macro-news")
 async def macro_news(request: Request) -> dict:
-    """マクロ・地政学的なマーケット全体ニュース (Today's Brief)。15 分キャッシュ。"""
+    """マクロ・地政学的なマーケット全体ニュース (Today's Brief)。15 分キャッシュ。
+    パス命名: /api/news/{ticker} (個別銘柄ニュース) との衝突を避けるため
+    /api/news/macro ではなく /api/macro-news を採用。
+    """
     now = _time.monotonic()
     if _MACRO_NEWS_CACHE["data"] and now - _MACRO_NEWS_CACHE["ts"] < _MACRO_NEWS_CACHE_TTL:
         return _MACRO_NEWS_CACHE["data"]

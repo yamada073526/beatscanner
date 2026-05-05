@@ -209,8 +209,9 @@ export async function fetchNews(ticker, limit = 10) {
 }
 
 // v41 Phase 3: マクロ・地政学的なマーケット全体ニュース (Today's Brief)
+// /api/news/{ticker} との衝突を避けて /api/macro-news を使用
 export async function fetchMacroNews() {
-  const r = await fetch('/api/news/macro', { headers: fmpHeaders() });
+  const r = await fetch('/api/macro-news', { headers: fmpHeaders() });
   if (!r.ok) return { items: [], updated_at: null };
   return r.json();
 }
