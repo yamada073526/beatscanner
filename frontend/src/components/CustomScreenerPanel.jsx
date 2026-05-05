@@ -92,15 +92,15 @@ export default function CustomScreenerPanel({ onSelect }) {
   return (
     <section className="rounded-2xl bg-white p-6 shadow-sm">
       <div className="mb-4">
-        <h3 className="section-label">カスタムスクリーナー</h3>
+        <h3 className="section-label">ファンダメンタル5条件スクリーナー</h3>
         <p className="mt-0.5 text-xs text-slate-400">
-          ファンダメンタル5条件 × S&amp;P500主要銘柄を自動判定
+          ファンダメンタル5条件で自動判定
         </p>
       </div>
 
-      {/* Survivorship bias notice */}
+      {/* 検索対象範囲の注記（Phase A 完了時に削除予定） */}
       <div className="mb-3 rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
-        ⚠️ このスクリーナーはS&amp;P500主要銘柄（約15銘柄）を対象としています。S&amp;P500外・新規上場銘柄は対象外です。投資判断の補助ツールとしてご活用ください。
+        ⚠️ 現在は S&amp;P500 主要銘柄を対象（順次拡大予定）
       </div>
 
       {/* Cache notice (BYOK 残骸テキストは削除済) */}

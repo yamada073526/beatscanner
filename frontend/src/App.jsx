@@ -1830,7 +1830,7 @@ export default function App() {
           {isDark() ? 'ライトモードに切替' : 'ダークモードに切替'}
         </button>
 
-        {/* プロトコルスクリーナー */}
+        {/* ファンダメンタル5条件スクリーナー */}
         <button
           type="button"
           onClick={() => {
@@ -1859,7 +1859,7 @@ export default function App() {
           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
         >
           <span style={{ fontSize: 18, lineHeight: 1 }}>📊</span>
-          プロトコルスクリーナー
+          ファンダメンタル5条件スクリーナー
         </button>
 
         {/* 決算カレンダー — トグル + localStorage 永続化 */}
