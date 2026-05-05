@@ -240,6 +240,49 @@ export async function translateTexts(texts) {
   return data.translations;
 }
 
+// SSE 翻訳: 各 (index, translation) を onItem コールバックで逐次受け取る。
+// onItem(index, translation) は texts 配列における 0-indexed の位置に対応。
+// 完了で resolve、エラーで reject。
+export async function translateTextsStream(texts, onItem, signal) {
+  const r = await fetch('/api/translate/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ texts }),
+    signal,
+  });
+  if (!r.ok || !r.body) throw new Error('translate stream failed');
+
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let sepIdx;
+    while ((sepIdx = buf.indexOf('\n\n')) !== -1) {
+      const event = buf.slice(0, sepIdx);
+      buf = buf.slice(sepIdx + 2);
+      const line = event.split('\n').find((l) => l.startsWith('data: '));
+      if (!line) continue;
+      const payload = line.slice(6);
+      if (payload === '[DONE]') return;
+      try {
+        const obj = JSON.parse(payload);
+        if (obj && typeof obj.error === 'string') {
+          throw new Error(obj.error);
+        }
+        if (obj && typeof obj.index === 'number' && typeof obj.translation === 'string') {
+          onItem(obj.index, obj.translation);
+        }
+      } catch (e) {
+        if (e instanceof SyntaxError) continue;
+        throw e;
+      }
+    }
+  }
+}
+
 export async function fetchMarketIndices() {
   const r = await fetch('/api/market-indices', {
     headers: fmpHeaders(),

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { translateTexts } from '../api.js';
+import { translateTextsStream } from '../api.js';
 
 // ニュースタイトルの英→日翻訳トグルを共通化したフック
 // (NewsPanel / TodaysBriefSection 両方で再利用)
@@ -108,34 +108,35 @@ export default function useTranslation(items, getTitle = (i) => i.title) {
     translatingRef.current = true;
     setTranslating(true);
 
-    translateTexts(uncachedTexts)
-      .then((translations) => {
-        if (!Array.isArray(translations)) {
-          throw new Error('Invalid translation response');
-        }
-        // キャッシュとマージ
-        const merged = [...cachedResults];
-        const now = Date.now();
-        const updatedCache = { ...cache };
-        uncachedIndices.forEach((idx, k) => {
-          const tr = translations[k];
-          if (typeof tr === 'string' && tr.length > 0) {
-            merged[idx] = tr;
-            updatedCache[cacheKey(uncachedTexts[k])] = { v: tr, t: now };
-          } else {
-            merged[idx] = uncachedTexts[k];  // 失敗時は原文を返す
-          }
-        });
+    // Progressive: cached + 原文の混在配列を即時 set し、SSE で逐次差し替え。
+    // displayTitles 側の `translated[i] || item.title` fallback を活かすため
+    // 未確定枠は原文 (uncachedTexts) で埋めておく。
+    const merged = [...cachedResults];
+    uncachedIndices.forEach((idx, k) => {
+      if (typeof merged[idx] !== 'string') merged[idx] = uncachedTexts[k];
+    });
+    setTranslated(merged);
+
+    const updatedCache = { ...cache };
+    let pending = uncachedIndices.length;
+
+    const onItem = (index, translation) => {
+      if (typeof translation !== 'string' || translation.length === 0) return;
+      // index は texts (= uncachedTexts) の 0-indexed なので元 titles 配列に変換
+      const originalIdx = uncachedIndices[index];
+      if (typeof originalIdx !== 'number') return;
+      merged[originalIdx] = translation;
+      updatedCache[cacheKey(uncachedTexts[index])] = { v: translation, t: Date.now() };
+      setTranslated([...merged]);
+      pending -= 1;
+    };
+
+    translateTextsStream(uncachedTexts, onItem)
+      .then(() => {
         saveCache(updatedCache);
-        setTranslated(merged);
       })
       .catch(() => {
-        // silent fail — 原文表示にフォールバック (cached は活用)
-        const fallback = [...cachedResults];
-        uncachedIndices.forEach((idx, k) => {
-          fallback[idx] = uncachedTexts[k];
-        });
-        // translated は設定しない (リトライ可能性を残す)
+        // silent fail — 既に merged は原文 fallback で初期化済
       })
       .finally(() => {
         translatingRef.current = false;

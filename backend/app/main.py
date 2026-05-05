@@ -2339,6 +2339,109 @@ async def translate_texts(body: dict) -> dict:
     return {"translations": results}
 
 
+@app.post("/api/translate/stream")
+async def translate_texts_stream(body: dict) -> StreamingResponse:
+    """SSE 版翻訳: 件数 N の入力に対し index/translation を逐次 push.
+
+    キャッシュヒット分は最初に即時 emit (TTFT 〜0.1s).
+    未キャッシュ分は Claude Haiku ストリーミングで番号行を解析し,
+    1 行確定するごとに emit (体感 0.5s で最初の項目が表示される).
+    """
+    texts: list[str] = body.get("texts", [])
+
+    async def gen():
+        if not texts:
+            yield "data: [DONE]\n\n"
+            return
+
+        uncached_indices: list[int] = []
+        uncached_texts: list[str] = []
+
+        # 1) キャッシュヒット分を即時 emit
+        for i, t in enumerate(texts):
+            if t in _translate_cache:
+                yield f"data: {json.dumps({'index': i, 'translation': _translate_cache[t]})}\n\n"
+            else:
+                uncached_indices.append(i)
+                uncached_texts.append(t)
+
+        # 2) 未キャッシュ分を Claude にストリーミング依頼
+        if uncached_texts:
+            numbered = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(uncached_texts))
+            prompt = (
+                "以下のニュースタイトルを自然な日本語に翻訳してください。\n"
+                "番号付きリストの形式で、翻訳結果だけを返してください。\n"
+                "余分な説明・前置き・後書きは一切不要です。\n\n"
+                "【必須ルール】\n"
+                "- 企業名・ブランド名・製品名はそのままアルファベットで残す（例: Apple Inc.、Tesla、Microsoft）\n"
+                "- 人名は読み仮名（カタカナ）表記でよい（例: Elon Musk → イーロン・マスク）\n"
+                "- ティッカーシンボル（AAPL、MSFT等）はそのまま残す\n"
+                "- 数値・金額・パーセントはそのまま残す\n"
+                "- 「Inc.」「Corp.」「Ltd.」「Co.」はそのまま残す\n\n"
+                f"{numbered}"
+            )
+            max_tokens = min(max(1024, 80 * len(uncached_texts) + 200), 4096)
+
+            import re as _re
+            line_re = _re.compile(r"^(\d+)[\.\)]\s*(.+)$")
+            buf = ""
+            seen: set[int] = set()
+
+            try:
+                claude = ClaudeClient()
+                async for chunk in claude.stream_complete(prompt, max_tokens=max_tokens):
+                    buf += chunk
+                    while "\n" in buf:
+                        line, buf = buf.split("\n", 1)
+                        m = line_re.match(line.strip())
+                        if not m:
+                            continue
+                        n = int(m.group(1))
+                        if n in seen:
+                            continue
+                        k = n - 1
+                        if not (0 <= k < len(uncached_texts)):
+                            continue
+                        tr = m.group(2).strip()
+                        orig = uncached_texts[k]
+                        _translate_cache[orig] = tr
+                        seen.add(n)
+                        yield f"data: {json.dumps({'index': uncached_indices[k], 'translation': tr})}\n\n"
+
+                # ストリーム終了後の残りバッファを処理
+                tail = buf.strip()
+                if tail:
+                    m = line_re.match(tail)
+                    if m:
+                        n = int(m.group(1))
+                        k = n - 1
+                        if n not in seen and 0 <= k < len(uncached_texts):
+                            tr = m.group(2).strip()
+                            orig = uncached_texts[k]
+                            _translate_cache[orig] = tr
+                            yield f"data: {json.dumps({'index': uncached_indices[k], 'translation': tr})}\n\n"
+                            seen.add(n)
+
+                # 取得できなかった項目は原文 fallback で emit (フロント側欠損を防ぐ)
+                for k, orig in enumerate(uncached_texts):
+                    if (k + 1) not in seen:
+                        yield f"data: {json.dumps({'index': uncached_indices[k], 'translation': orig})}\n\n"
+            except ClaudeError as e:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                return
+            except Exception as e:
+                yield f"data: {json.dumps({'error': f'translate stream failed: {e}'})}\n\n"
+                return
+
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.post("/api/news/article")
 async def fetch_news_article(body: dict) -> StreamingResponse:
     """
