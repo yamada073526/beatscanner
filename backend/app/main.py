@@ -2696,6 +2696,13 @@ _IB_TARGET_VERBS = (
     "raises forecast", "lifts forecast", "raises outlook", "boosts outlook",
     "upgrades", "upgrade rating", "raises estimate", "boosts estimate",
 )
+# 市場全体スコープを示すワード。BIG_BANK + VERB のみだと「JPM が個別銘柄を upgrades」で
+# 誤発火するため、market-wide の文脈を 3 つ目の AND 条件として要求する設計。
+_MARKET_SCOPE = (
+    "s&p", "nasdaq", "dow ", "russell", "year-end", "year end",
+    "outlook", "forecast", "stocks", "equities", "market", "wall street",
+    "stock market",
+)
 _STATE_ACTORS = (
     "iran", "israel", "russia", "ukraine", "china", "north korea", "syria",
     "houthi", "hezbollah", "hamas", "taliban",
@@ -2710,13 +2717,17 @@ _MILITARY_VERBS = (
 def _force_high_classification(title: str, summary: str) -> str | None:
     """主要 IB target 改定 / 国家アクターの軍事行動を HIGH 強制。
     Returns category ("マクロ" or "地政学") if matched, None otherwise.
-    AND 結合で false-positive を抑える設計。
+    BIG_BANK 系は 3-way AND (BANK + VERB + MARKET_SCOPE) で個別銘柄ターゲット
+    改定の誤発火を防ぐ。
     """
     text = f"{title or ''} {summary or ''}".lower()
-    # 主要 IB ストラテジストのターゲット改定 → HIGH マクロ
+    # 主要 IB ストラテジストの**市場全体**ターゲット改定 → HIGH マクロ
+    # 例: "JPMorgan raises S&P 500 year-end target" → 全条件マッチで HIGH
+    # 例: "JPMorgan upgrades Federated Hermes" → MARKET_SCOPE なしで通常分類へ
     if any(b in text for b in _BIG_BANKS):
         if any(v in text for v in _IB_TARGET_VERBS):
-            return "マクロ"
+            if any(s in text for s in _MARKET_SCOPE):
+                return "マクロ"
     # 国家アクターの軍事行動 → HIGH 地政学
     if any(s in text for s in _STATE_ACTORS):
         if any(v in text for v in _MILITARY_VERBS):

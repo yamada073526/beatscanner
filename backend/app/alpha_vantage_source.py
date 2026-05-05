@@ -114,8 +114,11 @@ def _fetch_news_sync(api_key: str) -> list[dict]:
     """同期的に AV NEWS_SENTIMENT を呼び出し、FMP 互換 dict のリストを返す."""
     params = {
         "function": "NEWS_SENTIMENT",
-        # マクロ・金融市場・経済全般のトピックに絞る (個別銘柄ノイズを減らす)
-        "topics": "financial_markets,economy_macro,finance",
+        # マクロ・金融市場・経済関連のトピックに絞る。
+        # "finance" は除外: 個別銘柄保有変動 (13F filings, MarketBeat 系) が
+        # 大量混入する問題があったため。
+        # economy_fiscal / economy_monetary を追加: Fed 政策・財政速報を強化。
+        "topics": "financial_markets,economy_macro,economy_monetary,economy_fiscal",
         "limit": "50",
         "apikey": api_key,
         "sort": "LATEST",
