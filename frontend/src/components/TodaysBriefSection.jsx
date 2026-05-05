@@ -62,6 +62,32 @@ function getNewsColors(importance, category) {
   return { badge: '#0891b2', bg: 'rgba(8,145,178,0.10)', bar: '#06b6d4' };
 }
 
+// アテンション視覚化: cluster_size (同一トピックの報道数) を 3 段階ドットで表現
+// 設計思想「図解で認知コストを下げろ」に従い、テキストではなくドットで一目把握
+// cluster=1: 非表示 / 2: ・○○ / 3-4: ●●○ / 5+: ●●●
+function AttentionDots({ clusterSize }) {
+  if (!clusterSize || clusterSize < 2) return null;
+  const lit = clusterSize >= 5 ? 3 : clusterSize >= 3 ? 2 : 1;
+  return (
+    <span
+      className="inline-flex items-center gap-[2px]"
+      title={`${clusterSize} 媒体が同じトピックを報道中`}
+      aria-label={`注目度: ${clusterSize} 媒体が報道`}
+    >
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          aria-hidden
+          className="inline-block w-1 h-1 rounded-full"
+          style={{
+            background: i < lit ? '#06b6d4' : 'rgba(100,116,139,0.30)',
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
 function NewsRow({ item, displayTitle, onCardClick }) {
   const colors = getNewsColors(item.importance, item.category);
   const minAgo = getMinutesAgo(item.published);
@@ -121,6 +147,7 @@ function NewsRow({ item, displayTitle, onCardClick }) {
                 · {item.source}
               </span>
             )}
+            <AttentionDots clusterSize={item.cluster_size} />
           </div>
           <p className="text-sm font-medium text-slate-900 leading-relaxed mb-1" style={{ letterSpacing: '0.01em' }}>
             {displayTitle || item.title}
@@ -239,6 +266,11 @@ function NewsCardGrid({ item, displayTitle, onCardClick, onMouseEnter, onMouseLe
               {item.source && <span>·</span>}
               <span>{formatRelativeTime(item.published)}</span>
             </>
+          )}
+          {item.cluster_size && item.cluster_size >= 2 && (
+            <span className="ml-auto">
+              <AttentionDots clusterSize={item.cluster_size} />
+            </span>
           )}
         </div>
       </div>

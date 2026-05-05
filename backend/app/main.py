@@ -2694,6 +2694,68 @@ def _classify_macro_news(title: str, summary: str) -> tuple[str | None, str]:
     return (None, "")
 
 
+# v41 Phase 3.5d: アテンション視覚化
+# 同一トピックを何媒体が報じているか (cluster_size) を計算して、
+# 「みんなが注目しているニュース」を 3 段階ドットで視覚化する仕組み。
+_CLUSTER_STOPWORDS = frozenset({
+    "the", "a", "an", "of", "in", "to", "for", "on", "at", "by", "is", "are",
+    "as", "and", "or", "but", "with", "from", "into", "after", "before",
+    "this", "that", "these", "those", "it", "its", "has", "have", "had",
+    "be", "was", "were", "will", "would", "could", "should", "may", "might",
+    "who", "what", "when", "where", "how", "why", "amid", "over", "under",
+    "new", "now", "still", "more", "less", "than", "then", "out",
+})
+
+
+def _normalize_title_tokens(title: str) -> set[str]:
+    """タイトルからトークン集合を作る (Jaccard 類似度計算用)."""
+    if not title:
+        return set()
+    tokens = re.findall(r"[A-Za-z0-9]+", title.lower())
+    return {t for t in tokens if t not in _CLUSTER_STOPWORDS and len(t) >= 3}
+
+
+def _compute_cluster_sizes(items: list[dict], threshold: float = 0.4) -> list[int]:
+    """同一トピックを報じる記事をクラスタリングし、各記事のクラスタサイズを返す.
+    Jaccard 類似度 >= threshold で同一クラスタに統合 (Union-Find).
+    複雑度 O(n^2) — items <= 50 なら 1 ms 未満。
+    """
+    n = len(items)
+    if n == 0:
+        return []
+    token_sets = [_normalize_title_tokens(it.get("title", "")) for it in items]
+    parent = list(range(n))
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            ti, tj = token_sets[i], token_sets[j]
+            if not ti or not tj:
+                continue
+            inter = len(ti & tj)
+            union_sz = len(ti | tj)
+            if union_sz == 0:
+                continue
+            if (inter / union_sz) >= threshold:
+                union(i, j)
+
+    counts: dict[int, int] = {}
+    for i in range(n):
+        r = find(i)
+        counts[r] = counts.get(r, 0) + 1
+    return [counts[find(i)] for i in range(n)]
+
+
 _MACRO_NEWS_CACHE: dict = {"data": None, "ts": 0.0}
 _MACRO_NEWS_CACHE_TTL = 900.0  # 15 分
 
@@ -2768,6 +2830,12 @@ async def macro_news(request: Request) -> dict:
     importance_rank = {"HIGH": 0, "MED": 1}
     filtered.sort(key=lambda x: importance_rank.get(x["importance"], 99))
     filtered = filtered[:50]
+
+    # v41 Phase 3.5d: 同一トピック報道数 (cluster_size) を計算してアテンション視覚化
+    # 「複数媒体が同じテーマを報じている」= 注目度が高い、という設計思想
+    cluster_sizes = _compute_cluster_sizes(filtered, threshold=0.4)
+    for item, size in zip(filtered, cluster_sizes):
+        item["cluster_size"] = int(size)
 
     result = {"items": filtered, "updated_at": int(_time.time())}
     _MACRO_NEWS_CACHE["data"] = result
