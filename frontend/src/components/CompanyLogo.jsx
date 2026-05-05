@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { getTickerTvSlug } from '../lib/tickerSlugs.js';
 
 // 頭文字フォールバック用の固定パレット
 // hash は ticker 文字列ベースで安定（同じティッカーは常に同じ色）
@@ -19,24 +20,52 @@ function hashTicker(t) {
   return Math.abs(h);
 }
 
-// FMP image-stock は "BRK.B" 形式をそのまま受ける（ドット保持）
-function normalizeForFmp(ticker) {
-  return (ticker || '').toUpperCase().trim();
-}
-
 /**
- * 企業ロゴ（円形）
- * FMP image-stock API → 取得失敗時は頭文字グラデ円
+ * 企業ロゴ（円形）— 3 段フォールバック
+ * 1) TradingView SVG（高品質、主要 200 銘柄をマップ）
+ * 2) FMP image-stock PNG（マップ外銘柄のカバー）
+ * 3) 頭文字グラデ円（両方失敗時）
  *
  * @param {string} ticker - ティッカー（例: "AAPL"）
  * @param {number} size - 直径 px（デフォルト 24）
  * @param {string} className - 追加クラス
  */
 export default function CompanyLogo({ ticker, size = 24, className = '' }) {
-  const [errored, setErrored] = useState(false);
-  const t = normalizeForFmp(ticker);
+  const [stage, setStage] = useState(0); // 0: TV, 1: FMP, 2: fallback
+  const t = (ticker || '').toUpperCase().trim();
+  const tvSlug = getTickerTvSlug(t);
 
-  if (t && !errored) {
+  const commonImgStyle = {
+    width: size,
+    height: size,
+    borderRadius: '50%',
+    flexShrink: 0,
+  };
+
+  // Stage 0: TradingView SVG（マップに登録された主要銘柄のみ）
+  if (stage === 0 && tvSlug) {
+    return (
+      <img
+        src={`https://s3-symbol-logo.tradingview.com/${tvSlug}--big.svg`}
+        alt={`${t} logo`}
+        width={size}
+        height={size}
+        loading="lazy"
+        decoding="async"
+        onError={() => setStage(1)}
+        className={`company-logo ${className}`}
+        style={{
+          ...commonImgStyle,
+          objectFit: 'contain',
+          backgroundColor: '#fff',
+          padding: 1,
+        }}
+      />
+    );
+  }
+
+  // Stage 1: FMP image-stock PNG（マップ外銘柄や TV 失敗時）
+  if (stage <= 1 && t) {
     return (
       <img
         src={`https://financialmodelingprep.com/image-stock/${t}.png`}
@@ -45,22 +74,19 @@ export default function CompanyLogo({ ticker, size = 24, className = '' }) {
         height={size}
         loading="lazy"
         decoding="async"
-        onError={() => setErrored(true)}
+        onError={() => setStage(2)}
         className={`company-logo ${className}`}
         style={{
-          width: size,
-          height: size,
-          borderRadius: '50%',
+          ...commonImgStyle,
           objectFit: 'contain',
           backgroundColor: '#fff',
           padding: 1,
-          flexShrink: 0,
         }}
       />
     );
   }
 
-  // フォールバック: 頭文字グラデ円
+  // Stage 2: 頭文字グラデ円（最終フォールバック）
   const initial = t.charAt(0) || '?';
   const idx = hashTicker(t) % FALLBACK_GRADIENTS.length;
   const [from, to] = FALLBACK_GRADIENTS[idx];
@@ -71,9 +97,7 @@ export default function CompanyLogo({ ticker, size = 24, className = '' }) {
       aria-label={`${t} logo`}
       className={`company-logo company-logo-fallback ${className}`}
       style={{
-        width: size,
-        height: size,
-        borderRadius: '50%',
+        ...commonImgStyle,
         background: `linear-gradient(135deg, ${from}, ${to})`,
         color: '#fff',
         display: 'inline-flex',
@@ -81,7 +105,6 @@ export default function CompanyLogo({ ticker, size = 24, className = '' }) {
         justifyContent: 'center',
         fontSize,
         fontWeight: 700,
-        flexShrink: 0,
         letterSpacing: '-0.02em',
         userSelect: 'none',
       }}
