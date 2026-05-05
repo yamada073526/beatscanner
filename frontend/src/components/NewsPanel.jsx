@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchNews, translateTexts } from '../api.js';
 import ReactMarkdown from 'react-markdown';
+import NewsViewToggle from './NewsViewToggle.jsx';
 
 const LS_KEY = 'translateNews';
+const VIEW_STORAGE_KEY = 'bs_newsView.panel';
+const VIEW_AUTO_THRESHOLD = 12;  // 件数 ≤12 → grid、>12 → list デフォルト
 
 function timeAgo(dateStr) {
   if (!dateStr) return '';
@@ -35,6 +38,30 @@ export default function NewsPanel({ ticker }) {
     return saved !== null ? saved === 'true' : true;
   });
   const translatingRef = useRef(false);
+
+  // 表示方式 (list / grid). データロード後、件数ベースで自動初期化 + ユーザー上書きで永続化。
+  const [view, setView] = useState(() => {
+    try {
+      const saved = localStorage.getItem(VIEW_STORAGE_KEY);
+      if (saved === 'list' || saved === 'grid') return saved;
+    } catch { /* ignore */ }
+    return null;
+  });
+  const viewDefaultAppliedRef = useRef(false);
+
+  const handleViewChange = (v) => {
+    setView(v);
+    try { localStorage.setItem(VIEW_STORAGE_KEY, v); } catch { /* ignore */ }
+  };
+
+  // データロード後、保存 view がなければ件数ベースでデフォルト決定
+  useEffect(() => {
+    if (viewDefaultAppliedRef.current || news.length === 0) return;
+    if (view === null) {
+      setView(news.length <= VIEW_AUTO_THRESHOLD ? 'grid' : 'list');
+    }
+    viewDefaultAppliedRef.current = true;
+  }, [news, view]);
 
   // 下端フェードの表示制御
   const newsScrollRef = useRef(null);
@@ -232,44 +259,49 @@ export default function NewsPanel({ ticker }) {
 
   return (
     <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-      <div className="mb-4 flex items-center justify-between gap-2">
+      <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
         <h3 className="section-heading" style={{ marginBottom: 0 }}>
           📰 最新ニュース
           <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>{ticker}</span>
         </h3>
         {news.length > 0 && (
-          <label style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            cursor: 'pointer', fontSize: '13px',
-            color: 'var(--text-secondary)',
-            userSelect: 'none',
-          }}>
-            <span style={{ whiteSpace: 'nowrap' }}>
-              {translating ? '翻訳中...' : '🌐 日本語表示'}
-            </span>
-            <div
-              onClick={handleToggle}
-              style={{
-                width: '40px', height: '22px',
-                borderRadius: '11px',
-                background: translateNews ? '#3b82f6' : 'var(--border)',
-                position: 'relative',
-                transition: 'background 0.2s',
-                cursor: 'pointer',
-                flexShrink: 0,
-              }}
-            >
-              <div style={{
-                position: 'absolute',
-                top: '3px',
-                left: translateNews ? '21px' : '3px',
-                width: '16px', height: '16px',
-                borderRadius: '50%',
-                background: '#ffffff',
-                transition: 'left 0.2s',
-              }} />
-            </div>
-          </label>
+          <div className="flex items-center gap-3">
+            {view !== null && (
+              <NewsViewToggle view={view} onChange={handleViewChange} />
+            )}
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              cursor: 'pointer', fontSize: '13px',
+              color: 'var(--text-secondary)',
+              userSelect: 'none',
+            }}>
+              <span style={{ whiteSpace: 'nowrap' }}>
+                {translating ? '翻訳中...' : '🌐 日本語表示'}
+              </span>
+              <div
+                onClick={handleToggle}
+                style={{
+                  width: '40px', height: '22px',
+                  borderRadius: '11px',
+                  background: translateNews ? '#3b82f6' : 'var(--border)',
+                  position: 'relative',
+                  transition: 'background 0.2s',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                <div style={{
+                  position: 'absolute',
+                  top: '3px',
+                  left: translateNews ? '21px' : '3px',
+                  width: '16px', height: '16px',
+                  borderRadius: '50%',
+                  background: '#ffffff',
+                  transition: 'left 0.2s',
+                }} />
+              </div>
+            </label>
+          </div>
         )}
       </div>
 
@@ -298,45 +330,104 @@ export default function NewsPanel({ ticker }) {
 
       {!loading && news.length > 0 && (
         <>
-          <div
-            className={`news-scroll-wrapper${showFade ? ' show-fade' : ''}`}
-            ref={newsScrollRef}
-            onScroll={updateFadeState}
-          >
-            <div ref={(el) => { listRef.current = el; gridRef.current = el; }} className="news-grid">
-              {news.slice(0, visibleCount).map((item, i) => (
-                <div
-                  key={i}
-                  onClick={() => openArticle(item)}
-                  onMouseEnter={() => handleCardEnter(i)}
-                  onMouseLeave={handleCardLeave}
-                  className="news-card scroll-reveal"
-                  style={{ transitionDelay: `${i * 0.06}s` }}
-                >
-                  {item.image && (
-                    <img
-                      src={item.image}
-                      alt=""
-                      className="news-card-thumb"
-                      onError={(e) => { e.target.style.display = 'none'; }}
-                    />
-                  )}
-                  <div className="news-card-body">
-                    <div className="news-card-title">
-                      {displayTitles?.[i] || item.title}
-                    </div>
-                    <div className="news-card-meta">
-                      {item.source && (
-                        <span className="news-card-source">{item.source}</span>
-                      )}
-                      <span>{timeAgo(item.published)}</span>
+          {view === 'list' ? (
+            // 縦列表示: 大量件数のスキャン効率優先 (50件/30件などに最適)
+            <div className="news-list-scroll-wrapper">
+              <div className="news-list-container">
+                {news.slice(0, visibleCount).map((item, i) => (
+                  <div
+                    key={i}
+                    className="news-list-card"
+                    onClick={() => openArticle(item)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openArticle(item);
+                      }
+                    }}
+                  >
+                    {item.image ? (
+                      <img
+                        src={item.image}
+                        alt=""
+                        className="news-list-thumb"
+                        loading="lazy"
+                        decoding="async"
+                        onError={(e) => {
+                          const wrap = e.currentTarget.parentElement;
+                          e.currentTarget.style.display = 'none';
+                          if (wrap && !wrap.querySelector('.news-list-thumb-fallback')) {
+                            const fb = document.createElement('div');
+                            fb.className = 'news-list-thumb-fallback';
+                            fb.textContent = '📰';
+                            wrap.insertBefore(fb, wrap.firstChild);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="news-list-thumb-fallback" aria-hidden>📰</div>
+                    )}
+                    <div className="news-list-body">
+                      <p className="news-list-title">
+                        {displayTitles?.[i] || item.title}
+                      </p>
+                      <div className="news-list-meta">
+                        {item.source && (
+                          <span className="news-list-source">{item.source}</span>
+                        )}
+                        {item.source && <span>·</span>}
+                        <span>{timeAgo(item.published)}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            // グリッド表示: 視覚インパクト + hover scale 演出 (現状維持)
+            <div
+              className={`news-scroll-wrapper${showFade ? ' show-fade' : ''}`}
+              ref={newsScrollRef}
+              onScroll={updateFadeState}
+            >
+              <div ref={(el) => { listRef.current = el; gridRef.current = el; }} className="news-grid">
+                {news.slice(0, visibleCount).map((item, i) => (
+                  <div
+                    key={i}
+                    onClick={() => openArticle(item)}
+                    onMouseEnter={() => handleCardEnter(i)}
+                    onMouseLeave={handleCardLeave}
+                    className="news-card scroll-reveal"
+                    style={{ transitionDelay: `${i * 0.06}s` }}
+                  >
+                    {item.image && (
+                      <img
+                        src={item.image}
+                        alt=""
+                        className="news-card-thumb"
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    )}
+                    <div className="news-card-body">
+                      <div className="news-card-title">
+                        {displayTitles?.[i] || item.title}
+                      </div>
+                      <div className="news-card-meta">
+                        {item.source && (
+                          <span className="news-card-source">{item.source}</span>
+                        )}
+                        <span>{timeAgo(item.published)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {visibleCount < news.length && (
+            // 「もっと見る」ボタンは grid / list 共通で表示
             <div style={{
               display: 'flex',
               justifyContent: 'center',

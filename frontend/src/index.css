@@ -422,6 +422,83 @@ body {
   text-overflow: ellipsis;
 }
 
+/* ── News List View (NewsPanel の縦列表示用) ── */
+.news-list-scroll-wrapper {
+  position: relative;
+  max-height: 540px;
+  overflow-y: auto;
+}
+.news-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.news-list-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.news-list-card:hover {
+  background-color: rgba(6, 182, 212, 0.06);
+}
+[data-theme="dark"] .news-list-card:hover {
+  background-color: rgba(6, 182, 212, 0.10);
+}
+.news-list-thumb {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--bg-subtle, #f8fafc);
+}
+.news-list-thumb-fallback {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: rgba(100, 116, 139, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 22px;
+  font-weight: 700;
+}
+[data-theme="dark"] .news-list-thumb-fallback {
+  background: rgba(255, 255, 255, 0.06);
+}
+.news-list-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.news-list-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-primary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+}
+.news-list-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.news-list-source { font-weight: 500; }
+
 /* ── CTA ボタン（決算レポートを見る → 等） — 全幅ダーク + シアン縁 ── */
 .cta-btn {
   transition: all 0.2s ease;
