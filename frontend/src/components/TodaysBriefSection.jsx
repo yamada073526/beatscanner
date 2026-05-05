@@ -218,7 +218,8 @@ function NewsCardGrid({ item, displayTitle, onCardClick, onMouseEnter, onMouseLe
               if (wrap && !wrap.querySelector('.news-grid-thumb-fallback')) {
                 const div = document.createElement('div');
                 div.className = 'news-grid-thumb-fallback';
-                div.style.background = `linear-gradient(135deg, ${colors.bar}33, ${colors.bar}14)`;
+                // 輝度を上げて section 全体が dim に見える問題を解消
+                div.style.background = `linear-gradient(135deg, ${colors.bar}66, ${colors.bar}33)`;
                 div.style.color = colors.bar;
                 div.textContent = fallbackChar;
                 wrap.insertBefore(div, wrap.firstChild);
@@ -229,7 +230,8 @@ function NewsCardGrid({ item, displayTitle, onCardClick, onMouseEnter, onMouseLe
           <div
             className="news-grid-thumb-fallback"
             style={{
-              background: `linear-gradient(135deg, ${colors.bar}33, ${colors.bar}14)`,
+              // 輝度向上: 33/14 → 66/33 で fallback ブロックを十分視認可能に
+              background: `linear-gradient(135deg, ${colors.bar}66, ${colors.bar}33)`,
               color: colors.bar,
             }}
             aria-hidden
@@ -466,16 +468,14 @@ export default function TodaysBriefSection() {
       aria-labelledby="todays-brief-heading"
     >
       {/* ヘッダー: タイトル + view toggle + Segmented Tabs */}
-      <div className="px-4 pt-3 pb-3 border-b border-slate-100">
-        <div className="flex items-center justify-between mb-2.5 gap-3">
-          <div className="flex items-baseline gap-2 min-w-0">
-            <h3 id="todays-brief-heading" className="text-sm font-bold text-slate-900" style={{ margin: 0 }}>
-              Today's Brief
-            </h3>
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider whitespace-nowrap">
+      <div className="px-6 pt-4 pb-3 border-b border-slate-100">
+        <div className="flex items-center justify-between mb-2.5 gap-3 flex-wrap">
+          <h3 id="todays-brief-heading" className="section-heading" style={{ margin: 0 }}>
+            今日のマクロ
+            <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
               マクロ・地政学
             </span>
-          </div>
+          </h3>
           <div className="flex items-center gap-3">
             {view !== null && (
               <NewsViewToggle view={view} onChange={handleViewChange} />
