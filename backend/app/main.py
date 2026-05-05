@@ -2843,9 +2843,19 @@ async def macro_news(request: Request) -> dict:
         except FMPError:
             raw = []
 
-    # 2) FMP が空なら yfinance fallback (指数・地域多様化 ETF を集約)
+    # 2) AlphaVantage NEWS_SENTIMENT を**常に追加** (FMP 成功時も補完として)
+    # FMP/yfinance ETF feed には Reuters/Bloomberg 系の IB ストラテジスト発言・
+    # 地政学速報が構造的に届かない問題を解決するためのプライマリ補完。
+    # 1h キャッシュ + 25 req/日制約で安全運用。
+    try:
+        av_news = await alpha_vantage_source.fetch_macro_news()
+        if av_news:
+            raw.extend(av_news)
+    except Exception as e:
+        print(f"[macro-news] AV fetch error: {e}")
+
+    # 3) FMP も AV も空なら yfinance fallback (指数・地域多様化 ETF を集約)
     # 金融アナリストレビュー (af09b50b) 推奨で ITA (国防) / XLF (金融) / XLE (エネ) を追加。
-    # ITA は Iran/Israel など地政学速報を、XLF は IB 系ニュースを拾える。
     if not raw:
         for proxy in ("SPY", "QQQ", "DIA", "IWM", "EEM", "GLD", "USO", "ITA", "XLF", "XLE"):
             try:
@@ -2855,14 +2865,22 @@ async def macro_news(request: Request) -> dict:
             except Exception:
                 continue
 
-    # 重複除外 + キーワードフィルタ + 整形 (FMP / yfinance 両フォーマット対応)
+    # 重複除外 + キーワードフィルタ + 整形 (FMP / yfinance / AV 全フォーマット対応)
+    # title-based + URL-based の二重 dedup で複数ソース統合時の重複を抑える
+    # (金融アナリストレビュー推奨: 同一記事を別媒体が転載するケースを除外)
     seen_titles: set[str] = set()
+    seen_urls: set[str] = set()
     filtered: list[dict] = []
     for n in raw:
         title = (n.get("title") or "").strip()
         if not title or title in seen_titles:
             continue
+        url_norm = ((n.get("url") or n.get("link") or "")).strip().rstrip("/").lower()
+        if url_norm and url_norm in seen_urls:
+            continue
         seen_titles.add(title)
+        if url_norm:
+            seen_urls.add(url_norm)
 
         # FMP: text / publishedDate / site
         # yfinance: summary / published / source
