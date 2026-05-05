@@ -2621,11 +2621,18 @@ async def market_indices(request: Request) -> list[dict]:
 
 # HIGH (importance=5/4): 金融政策・インフレ・雇用統計・地政学衝撃
 _MACRO_KEYWORDS_HIGH = (
-    "fomc", "fed ", "federal reserve", "powell", "rate cut", "rate hike",
-    "rate decision", "monetary policy",
-    "cpi", "ppi", "inflation", "deflation",
+    # Fed / 金融政策
+    "fomc", "fed ", "federal reserve", "powell", "fed chair", "fed minutes",
+    "rate cut", "rate hike", "rate decision", "monetary policy",
+    "interest rate", "neutral rate", "dot plot",
+    # インフレ
+    "cpi", "ppi", "inflation", "deflation", "core cpi", "consumer price",
+    "producer price",
+    # 雇用
     "nonfarm", "non-farm", "payroll", "jobless", "unemployment", "jobs report",
-    "gdp", "recession",
+    # 経済全般
+    "gdp", "recession", "soft landing", "hard landing",
+    # 海外中銀
     "ecb", "boj", "bank of japan", "people's bank of china",
     # 地政学 (Iran/Ukraine/Russia/Middle East 等)
     "iran", "ukraine", "russia", "middle east", "geopolit", "war ",
@@ -2633,13 +2640,21 @@ _MACRO_KEYWORDS_HIGH = (
 )
 # MED (importance=3): セクター・大型 IPO・主要 IB 目標・市場全体
 _MACRO_KEYWORDS_MED = (
+    # 債券・金利
     "treasury yield", "10-year", "10-yr", "yield curve", "bond ",
-    # コモディティ (緩めた - "oil " で general oil mentions も拾う)
+    # コモディティ
     "oil ", "crude", "opec", "natural gas", "gold ", "silver ", "copper",
     # インデックス
     "s&p 500", "s&p500", "nasdaq", "dow ", "russell", "stock market",
+    "wall street",
+    # 経済指標 (中位重要度)
+    "ism", "retail sales", "consumer confidence", "manufacturing index",
+    "housing starts", "industrial production",
     # IPO / 大手企業
     "ipo", "spacex", "openai", "anthropic",
+    # 主要時価総額銘柄 (S&P500 への影響大なので市場全体扱い)
+    "nvidia", "microsoft", "apple inc", "tesla", "alphabet", "amazon",
+    "meta platforms",
     # 主要 IB
     "goldman sachs", "morgan stanley", "jpmorgan", "bank of america",
     "target price", "price target", "year-end target",
@@ -2648,8 +2663,11 @@ _MACRO_KEYWORDS_MED = (
     # 暗号資産
     "bitcoin", "crypto", "ethereum",
     # ボラ・センチメント
-    "vix", "volatility", "market sentiment", "market move", "market greed", "market fear",
-    "futures lower", "futures higher",
+    "vix", "volatility", "market sentiment", "market move", "market greed",
+    "market fear", "futures lower", "futures higher",
+    # 市場動向 (リスクオン/オフ)
+    "sell-off", "rally", "stocks gain", "stocks fall", "market jitters",
+    "stocks rise", "stocks slide",
 )
 
 
@@ -2694,11 +2712,13 @@ async def macro_news(request: Request) -> dict:
         except FMPError:
             raw = []
 
-    # 2) FMP が空なら yfinance fallback (主要 ETF のニュースを集約)
+    # 2) FMP が空なら yfinance fallback (指数・地域多様化 ETF を集約)
+    # SPY/QQQ/DIA だけでは S&P500 系で重複が多いため、IWM/EEM/GLD/USO で
+    # 小型株・新興国・コモディティをカバー (金融アナリストレビュー推奨)
     if not raw:
-        for proxy in ("SPY", "QQQ", "DIA"):
+        for proxy in ("SPY", "QQQ", "DIA", "IWM", "EEM", "GLD", "USO"):
             try:
-                yf_items = await yfinance_source.fetch_news(proxy, limit=30)
+                yf_items = await yfinance_source.fetch_news(proxy, limit=20)
                 if isinstance(yf_items, list):
                     raw.extend(yf_items)
             except Exception:

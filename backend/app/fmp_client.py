@@ -120,7 +120,11 @@ class FMPClient:
         )
 
     async def general_news(self, limit: int = 50) -> list[dict]:
-        """マクロ・マーケット全体ニュース。dedicated endpoint → 主要 ETF (SPY/QQQ/DIA) news の集約に fallback。"""
+        """マクロ・マーケット全体ニュース。
+        dedicated endpoint → 多様化された ETF news の集約 に fallback。
+        指数・地域・コモディティを散らすことで重複を抑え、日本人個人投資家が
+        見るべき「ドル円・原油・中国・小型株」も拾える設計。
+        """
         # 1) FMP の dedicated general news endpoint を試す
         try:
             data = await self._get("/news/general-latest", {"limit": limit})
@@ -128,11 +132,15 @@ class FMPClient:
                 return data
         except FMPError:
             pass
-        # 2) Fallback: 主要 ETF の stock-news を集約 (マクロニュースの代理)
+        # 2) Fallback: 指数・地域多様化 ETF の stock-news を集約
+        # 同一指数 proxy (IVV/VOO) は SPY と 80-95% 重複するため不採用。
+        # SPY (S&P500) / QQQ (Nasdaq) / DIA (Dow) / IWM (Russell 2000)
+        # / EEM (新興国) / GLD (金) / USO (原油)
+        per_proxy = max(15, min(20, limit // 7 if limit > 0 else 20))
         pool: list[dict] = []
-        for proxy in ("SPY", "QQQ", "DIA"):
+        for proxy in ("SPY", "QQQ", "DIA", "IWM", "EEM", "GLD", "USO"):
             try:
-                items = await self.stock_news(proxy, limit=min(20, limit))
+                items = await self.stock_news(proxy, limit=per_proxy)
                 if isinstance(items, list):
                     pool.extend(items)
             except FMPError:
