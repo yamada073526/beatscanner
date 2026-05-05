@@ -3008,6 +3008,117 @@ _ECO_CALENDAR_CACHE: dict = {"data": None, "ts": 0.0, "key": ""}
 _ECO_CALENDAR_TTL = 3600.0  # 1h (経済指標は事前確定で大きく変動しないため)
 
 
+# 経済指標の英→日翻訳マップ (FMP 実データ / 静的イベント 共通)
+# 日本人投資家には FOMC / CPI 程度しか馴染みがないため、すべての指標に
+# 日本語訳を併記する (設計思想 ① 「読み手に負担をかけない」)。
+# キーは小文字・記号正規化、subset マッチで揺れに強い。
+_EVENT_NAME_JP_MAP: list[tuple[str, str]] = [
+    # 金融政策 (Fed)
+    ("fomc economic projections", "FOMC 経済見通し"),
+    ("fomc press conference", "FOMC 議長記者会見"),
+    ("fomc statement", "FOMC 声明"),
+    ("fomc minutes", "FOMC 議事要旨"),
+    ("fomc meeting", "FOMC 政策金利会合"),
+    ("fomc policy decision", "政策金利発表"),
+    ("fed funds rate", "FF 金利"),
+    ("federal funds rate", "FF 金利"),
+    ("fed chair", "Fed 議長講演"),
+    ("fed interest rate decision", "Fed 金利決定"),
+    ("powell speech", "パウエル議長講演"),
+    # インフレ
+    ("core consumer price index", "コア消費者物価指数 (Core CPI)"),
+    ("consumer price index", "消費者物価指数 (CPI)"),
+    ("core producer price index", "コア生産者物価指数 (Core PPI)"),
+    ("producer price index", "生産者物価指数 (PPI)"),
+    ("core pce price index", "コア PCE デフレーター"),
+    ("pce price index", "PCE デフレーター"),
+    ("personal consumption expenditure", "個人消費支出 (PCE)"),
+    ("import price index", "輸入物価指数"),
+    ("export price index", "輸出物価指数"),
+    # 雇用
+    ("non-farm payrolls", "非農業部門雇用者数 (雇用統計)"),
+    ("non farm payrolls", "非農業部門雇用者数 (雇用統計)"),
+    ("nonfarm payrolls", "非農業部門雇用者数 (雇用統計)"),
+    ("nfp", "非農業部門雇用者数 (雇用統計)"),
+    ("unemployment rate", "失業率"),
+    ("average hourly earnings", "平均時給"),
+    ("initial jobless claims", "新規失業保険申請件数"),
+    ("continuing jobless claims", "失業保険継続申請件数"),
+    ("adp employment", "ADP 雇用統計"),
+    ("jolts job openings", "JOLTS 求人数"),
+    ("job openings", "求人数"),
+    # 経済成長
+    ("gross domestic product", "GDP (国内総生産)"),
+    ("gdp price index", "GDP デフレーター"),
+    ("gdp", "GDP (国内総生産)"),
+    # 製造業・サービス業 PMI
+    ("ism manufacturing pmi", "米製造業景況指数 (ISM)"),
+    ("ism manufacturing", "米製造業景況指数 (ISM)"),
+    ("ism non-manufacturing pmi", "米サービス業景況指数 (ISM)"),
+    ("ism services pmi", "米サービス業景況指数 (ISM)"),
+    ("ism services", "米サービス業景況指数 (ISM)"),
+    ("markit manufacturing pmi", "マークイット製造業 PMI"),
+    ("markit services pmi", "マークイットサービス業 PMI"),
+    ("empire state manufacturing", "ニューヨーク連銀製造業景況指数"),
+    ("philadelphia fed manufacturing", "フィラデルフィア連銀製造業景況指数"),
+    ("philly fed", "フィラデルフィア連銀製造業景況指数"),
+    ("chicago pmi", "シカゴ購買部協会景気指数"),
+    ("dallas fed manufacturing", "ダラス連銀製造業景況指数"),
+    # 消費・小売
+    ("retail sales", "小売売上高"),
+    ("core retail sales", "コア小売売上高 (除自動車)"),
+    ("consumer confidence", "消費者信頼感指数"),
+    ("michigan consumer sentiment", "ミシガン大消費者信頼感"),
+    ("conference board", "CB 消費者信頼感"),
+    # 住宅
+    ("housing starts", "住宅着工件数"),
+    ("building permits", "建設許可件数"),
+    ("existing home sales", "中古住宅販売件数"),
+    ("new home sales", "新築住宅販売件数"),
+    ("pending home sales", "中古住宅販売保留指数"),
+    ("case-shiller", "ケース・シラー住宅価格指数"),
+    # その他
+    ("industrial production", "鉱工業生産"),
+    ("capacity utilization", "設備稼働率"),
+    ("durable goods", "耐久財受注"),
+    ("factory orders", "製造業受注"),
+    ("trade balance", "貿易収支"),
+    ("current account", "経常収支"),
+    ("leading index", "景気先行指数"),
+    ("beige book", "ベージュブック (米地区連銀経済報告)"),
+    # 海外
+    ("ecb monetary policy decision", "ECB 金融政策決定"),
+    ("ecb interest rate", "ECB 政策金利"),
+    ("ecb press conference", "ECB 総裁記者会見"),
+    ("boj monetary policy meeting", "日銀金融政策決定会合"),
+    ("boj interest rate", "日銀政策金利"),
+    ("boj press conference", "日銀総裁会見"),
+    ("boj outlook report", "日銀展望レポート"),
+    ("china manufacturing pmi", "中国 製造業 PMI"),
+    ("china services pmi", "中国 サービス業 PMI"),
+    ("china cpi", "中国 消費者物価指数"),
+    ("china gdp", "中国 GDP"),
+]
+
+
+def _annotate_event_name(name: str) -> str:
+    """イベント名に日本語訳を併記する。
+    既に日本語が含まれていればそのまま返す。subset マッチで表記揺れに対応。
+    """
+    if not name:
+        return name
+    # 既にカナ or 漢字を含むなら翻訳済とみなす
+    if any('぀' <= c <= 'ゟ' or '゠' <= c <= 'ヿ' or '一' <= c <= '鿿' for c in name):
+        return name
+    # 正規化キーで lookup (lowercase + 記号除去なしの subset マッチ)
+    name_lower = name.lower()
+    for key, jp in _EVENT_NAME_JP_MAP:
+        if key in name_lower:
+            return f"{name} ({jp})"
+    # 未知のイベントはそのまま返す
+    return name
+
+
 def _generate_static_economic_events(from_dt, to_dt) -> list[dict]:
     """FMP /economic-calendar が free 枠で利用不可 (429) のため、
     米国の標準的な月次・週次経済指標スケジュールに基づき推定イベントを生成。
@@ -3112,7 +3223,7 @@ def _generate_static_economic_events(from_dt, to_dt) -> list[dict]:
             # ただし 1 日目だけ
             if day == 1 or (day == 2 and weekday == 0) or (day == 3 and weekday == 0):
                 events.append({
-                    "event": "ISM Manufacturing PMI",
+                    "event": "ISM Manufacturing PMI (米製造業景況指数)",
                     "date": _iso_at(current, 15, 0),
                     "country": "US",
                     "impact": "HIGH",
@@ -3122,7 +3233,7 @@ def _generate_static_economic_events(from_dt, to_dt) -> list[dict]:
         # 月初第 3 営業日付近 → ISM Services PMI
         if 3 <= day <= 5 and weekday < 5:
             events.append({
-                "event": "ISM Services PMI",
+                "event": "ISM Services PMI (米サービス業景況指数)",
                 "date": _iso_at(current, 15, 0),
                 "country": "US",
                 "impact": "HIGH",
@@ -3258,7 +3369,7 @@ async def economic_calendar(
             continue
 
         events.append({
-            "event": event_name,
+            "event": _annotate_event_name(event_name),
             "date": r.get("date"),
             "country": country_code,
             "currency": r.get("currency"),
