@@ -2526,17 +2526,25 @@ async def ir_links(ticker: str, request: Request) -> dict:
 
 
 MARKET_SYMBOLS = [
-    {"symbol": "^GSPC",  "label": "S&P 500",  "type": "index"},
-    {"symbol": "^IXIC",  "label": "NASDAQ",   "type": "index"},
-    {"symbol": "^DJI",   "label": "DOW",      "type": "index"},
-    {"symbol": "QQQ",    "label": "QQQ",      "type": "etf"},
-    {"symbol": "SPY",    "label": "SPY",      "type": "etf"},
-    {"symbol": "VTI",    "label": "VTI",      "type": "etf"},
-    {"symbol": "IWM",    "label": "IWM",      "type": "etf"},
-    {"symbol": "GLD",    "label": "GLD",      "type": "etf"},
-    {"symbol": "^VIX",   "label": "VIX",      "type": "risk"},
-    {"symbol": "^TNX",   "label": "US10Y",    "type": "rate"},
-    {"symbol": "JPY=X",  "label": "USD/JPY",  "type": "fx"},
+    # 株価指数（メイン行・主指標）
+    {"symbol": "^GSPC",    "label": "S&P 500",  "type": "index"},
+    {"symbol": "^IXIC",    "label": "NASDAQ",   "type": "index"},
+    {"symbol": "^DJI",     "label": "DOW",      "type": "index"},
+    # 株式 ETF（メイン行）— VTI は SPY と重複のため削除（v41 アナリストレビュー）
+    {"symbol": "QQQ",      "label": "QQQ",      "type": "etf"},
+    {"symbol": "SPY",      "label": "SPY",      "type": "etf"},
+    {"symbol": "IWM",      "label": "IWM",      "type": "etf"},
+    {"symbol": "GLD",      "label": "GLD",      "type": "etf"},
+    # マクロ指標（リスク行）
+    {"symbol": "^VIX",     "label": "VIX",      "type": "risk"},
+    {"symbol": "^TNX",     "label": "US10Y",    "type": "rate"},
+    # v41: DXY（ドル全体強弱）— yfinance のみ。USD/JPY より上位概念
+    {"symbol": "DX-Y.NYB", "label": "DXY",      "type": "fx"},
+    {"symbol": "JPY=X",    "label": "USD/JPY",  "type": "fx"},
+    # v41: TLT（長期米国債）/ HYG（ハイイールド債）/ WTI 原油 を追加
+    {"symbol": "TLT",      "label": "TLT",      "type": "bond"},
+    {"symbol": "HYG",      "label": "HYG",      "type": "credit"},
+    {"symbol": "CL=F",     "label": "WTI",      "type": "commodity"},
 ]
 
 _MARKET_CACHE: dict = {"data": None, "ts": 0.0}
@@ -2562,12 +2570,16 @@ async def market_indices(request: Request) -> list[dict]:
     except FMPError:
         pass
 
-    # yfinanceフォールバック
-    if not raw:
+    # v41: per-symbol fallback — FMP が一部しか返さない場合、欠落分のみ yfinance で補完。
+    # FMP は ^prefix 指数や DX-Y.NYB / CL=F などを返さないことが多い。
+    fmp_returned: set[str] = {q.get("symbol", "") for q in raw if q.get("price") is not None}
+    missing = [s for s in fmp_symbols if s not in fmp_returned]
+    if missing:
         try:
-            raw = await yfinance_source.fetch_batch_quotes(fmp_symbols)
+            yf_raw = await yfinance_source.fetch_batch_quotes(missing)
+            raw.extend(yf_raw)
         except Exception:
-            raw = []
+            pass
 
     result: list[dict] = []
     found: set[str] = set()

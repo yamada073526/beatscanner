@@ -5,8 +5,8 @@ import { fetchMarketIndices } from '../api.js';
 const MOBILE_PRIMARY = new Set(['^GSPC', '^IXIC', '^DJI', 'QQQ']);
 // 階層化: 主指標（S&P / NASDAQ / DOW）— 視覚ウェイトを上げる
 const PRIMARY_SYMBOLS = new Set(['^GSPC', '^IXIC', '^DJI']);
-// リスク指標セクション
-const RISK_TYPES = new Set(['risk', 'rate', 'fx']);
+// リスク指標セクション（マクロ / 為替 / 債券 / 信用 / コモディティ）
+const RISK_TYPES = new Set(['risk', 'rate', 'fx', 'bond', 'credit', 'commodity']);
 
 function formatPrice(item) {
   if (item.type === 'rate') return `${item.price.toFixed(2)}%`;
