@@ -322,9 +322,10 @@ body {
   display: grid;
   grid-template-columns: 1fr;
   gap: 12px;
-  padding: 12px;
-  /* 選択カードが scale で拡大した際、端のカードが overflow で
-     切り取られないよう padding でビジュアル余裕を確保 (NewsPanel と同思想) */
+  padding: 16px;
+  /* 選択カードが scale 1.07 で拡大した際、端のカードが切り取られないよう
+     padding でビジュアル余裕を確保 (NewsPanel と同思想)。
+     section の overflow-hidden は外したので、padding 16px で十分な buffer。 */
 }
 @media (min-width: 640px)  { .news-grid-container { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 768px)  { .news-grid-container { grid-template-columns: repeat(4, 1fr); } }
@@ -340,8 +341,9 @@ body {
   transition: transform 0.2s ease, border-color 0.2s ease, opacity 0.2s ease, background-color 0.2s ease;
 }
 @media (hover: hover) {
-  /* グループ hover: コンテナ内のいずれかのカードが hover されている時、非 hover カードは dim */
-  .news-grid-container:hover .news-grid-card:not(:hover) {
+  /* グループ hover: 「いずれかのカードが hover されている」状態を :has() で検出。
+     :hover 単体だと container の padding 領域でも発火し、全カードが dim される問題があったため修正 */
+  .news-grid-container:has(.news-grid-card:hover) .news-grid-card:not(:hover) {
     opacity: 0.18;
   }
   .news-grid-card:hover {
@@ -354,9 +356,13 @@ body {
 .news-grid-thumb-wrap {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  height: 110px;
+  /* 固定 height で thumb をコンパクトに (NewsPanel と同じ思想)。
+     16:9 aspect-ratio では 4 列レイアウト時に縦長すぎ、
+     2 行配置で画面下端を超える問題があったため変更。 */
   background: var(--bg-subtle, #f8fafc);
   flex-shrink: 0;
+  overflow: hidden;
 }
 .news-grid-thumb {
   width: 100%;

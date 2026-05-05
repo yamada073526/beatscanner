@@ -387,7 +387,7 @@ export default function TodaysBriefSection() {
 
   return (
     <section
-      className="panel-card rounded-2xl shadow-sm overflow-hidden"
+      className="panel-card rounded-2xl shadow-sm"
       style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
       aria-labelledby="todays-brief-heading"
     >
