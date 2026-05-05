@@ -70,15 +70,24 @@ function NewsRow({ item }) {
     window.open(item.url, '_blank', 'noopener,noreferrer');
   };
 
+  // IR リソース と同じ「border-slate-100 → hover で border-slate-300 + bg-slate-50」パターン
   return (
-    <li
-      className="relative px-4 py-3 hover:bg-slate-50 cursor-pointer transition-colors"
+    <div
+      className="brief-row relative cursor-pointer rounded-lg border border-slate-100 px-4 py-2.5 transition-colors hover:border-slate-300 hover:bg-slate-50"
       onClick={handleClick}
+      role="link"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleClick(e);
+        }
+      }}
       style={{ opacity: dimmed ? 0.55 : 1 }}
     >
       <span
         aria-hidden
-        className="absolute left-0 top-3 bottom-3 w-[2px] rounded-sm"
+        className="absolute left-0 top-2 bottom-2 w-[2px] rounded-sm"
         style={{ background: colors.bar }}
       />
       <div className="flex items-start gap-3">
@@ -131,7 +140,7 @@ function NewsRow({ item }) {
           →
         </span>
       </div>
-    </li>
+    </div>
   );
 }
 
@@ -236,16 +245,13 @@ function NewsCardGrid({ item }) {
 
 function DaySeparator({ label }) {
   return (
-    <li
-      className="px-4 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider"
-      style={{
-        background: 'var(--bg-subtle, #f8fafc)',
-        borderTop: '1px solid var(--border, #e2e8f0)',
-        borderBottom: '1px solid var(--border, #e2e8f0)',
-      }}
+    <div
+      className="px-1 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2"
     >
-      {label}
-    </li>
+      <span className="flex-1 h-px bg-slate-200" aria-hidden />
+      <span>{label}</span>
+      <span className="flex-1 h-px bg-slate-200" aria-hidden />
+    </div>
   );
 }
 
@@ -453,11 +459,8 @@ export default function TodaysBriefSection() {
             ))}
           </div>
         ) : (
-          // 縦列表示: 24h 区切りあり (スキャン効率優先)
-          <ul
-            className="divide-y divide-slate-100"
-            style={{ margin: 0, padding: 0, listStyle: 'none' }}
-          >
+          // 縦列表示: カード形式 (IR リソース流の border + hover 演出) + 24h 区切り
+          <div className="px-3 py-3 flex flex-col gap-1.5">
             {fresh.map((item, i) => (
               <NewsRow key={`f-${item.title}-${i}`} item={item} />
             ))}
@@ -469,7 +472,7 @@ export default function TodaysBriefSection() {
                 ))}
               </>
             )}
-          </ul>
+          </div>
         )}
       </div>
     </section>

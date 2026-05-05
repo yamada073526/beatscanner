@@ -314,16 +314,22 @@ body {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
-/* ── News Grid Card (Today's Brief / NewsPanel の grid view 共通) ── */
+/* ── News Grid Card (Today's Brief の grid view) ── */
+/* レイアウト: モバイル 1 → タブレット 2 → デスクトップ 4 列 (NewsPanel と統一)。
+   ホバー演出: 選択カード scale + perspective、非選択は opacity dim (NewsPanel 流)。 */
 .news-grid-container {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr;
   gap: 12px;
   padding: 12px;
+  /* 選択カードが scale で拡大した際、端のカードが overflow で
+     切り取られないよう padding でビジュアル余裕を確保 (NewsPanel と同思想) */
 }
 @media (min-width: 640px)  { .news-grid-container { grid-template-columns: repeat(2, 1fr); } }
-@media (min-width: 1024px) { .news-grid-container { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 768px)  { .news-grid-container { grid-template-columns: repeat(4, 1fr); } }
 .news-grid-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
@@ -331,13 +337,18 @@ body {
   background: var(--bg-card);
   cursor: pointer;
   overflow: hidden;
-  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease, opacity 0.2s ease, background-color 0.2s ease;
 }
 @media (hover: hover) {
+  /* グループ hover: コンテナ内のいずれかのカードが hover されている時、非 hover カードは dim */
+  .news-grid-container:hover .news-grid-card:not(:hover) {
+    opacity: 0.18;
+  }
   .news-grid-card:hover {
-    transform: translateY(-2px);
-    border-color: rgba(6, 182, 212, 0.45);
-    box-shadow: 0 6px 18px rgba(6, 182, 212, 0.12);
+    transform: perspective(900px) translateZ(50px) scale(1.07);
+    border-color: rgba(56, 189, 248, 0.7);
+    background-color: var(--bg-hover, var(--bg-card));
+    z-index: 2;
   }
 }
 .news-grid-thumb-wrap {
@@ -422,7 +433,9 @@ body {
   text-overflow: ellipsis;
 }
 
-/* ── News List View (NewsPanel の縦列表示用) ── */
+/* ── News List View (Today's Brief / NewsPanel 共通の縦列表示) ──
+   IRLinksPanel と同じ「border + hover で border 濃く + bg 変化」パターンで
+   選択中の項目が一目で分かるようにする。 */
 .news-list-scroll-wrapper {
   position: relative;
   max-height: 540px;
@@ -431,22 +444,31 @@ body {
 .news-list-container {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
+  padding: 4px 0;
 }
 .news-list-card {
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 10px;
+  padding: 10px 12px;
   border-radius: 10px;
+  border: 1px solid rgb(241, 245, 249);  /* slate-100 */
+  background: transparent;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 .news-list-card:hover {
-  background-color: rgba(6, 182, 212, 0.06);
+  border-color: rgb(203, 213, 225);  /* slate-300 — IR と同色 */
+  background-color: rgb(248, 250, 252);  /* slate-50 — IR と同色 */
+}
+[data-theme="dark"] .news-list-card {
+  border-color: #253347;
 }
 [data-theme="dark"] .news-list-card:hover {
-  background-color: rgba(6, 182, 212, 0.10);
+  border-color: rgb(203, 213, 225);  /* slate-300 のままで明るく目立たせる (IR と同挙動) */
+  background-color: var(--bg-subtle);
 }
 .news-list-thumb {
   width: 64px;
