@@ -112,7 +112,7 @@ function NewsRow({ item, displayTitle, onCardClick }) {
           handleClick(e);
         }
       }}
-      style={{ opacity: dimmed ? 0.55 : 1 }}
+      style={{ opacity: dimmed ? 0.92 : 1 }}
     >
       <span
         aria-hidden

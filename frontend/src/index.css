@@ -426,9 +426,10 @@ body {
   overflow: hidden;
   transition: transform 0.2s ease, border-color 0.2s ease, opacity 0.2s ease, background-color 0.2s ease;
 }
-/* news-old: 24h 超の古い記事は常時 dim 表示 (CSS class で実装、
-   inline style だと hover dim を上書きしてしまうため) */
-.news-grid-card.news-old { opacity: 0.6; }
+/* news-old: 24h 超の古い記事の dim は極めて控えめ (0.92)。
+   旧 0.6 では「マクロタブのみ全体的に暗い」とユーザー報告 (item 数少 + 古い記事多)。
+   X日前 のテキスト表示で recency は既に伝わるため、視覚 dim は最小限で十分。 */
+.news-grid-card.news-old { opacity: 0.92; }
 
 @media (hover: hover) {
   /* JS で .news-active / .news-dimmed を付与する方式 (NewsPanel と同じ実装) */
