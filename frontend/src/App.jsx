@@ -38,6 +38,7 @@ import ApiKeyModal from './components/ApiKeyModal.jsx';
 import UpgradeModal from './components/UpgradeModal.jsx';
 import PlanComparisonBanner from './components/PlanComparisonBanner.jsx';
 import DemoTicker from './components/DemoTicker.jsx';
+import CompanyLogo from './components/CompanyLogo.jsx';
 const TagManagerModal = lazy(() => import('./components/TagManagerModal.jsx'));
 const TagAssignSheet = lazy(() => import('./components/TagAssignSheet.jsx'));
 const CustomScreenerPanel = lazy(() => import('./components/CustomScreenerPanel.jsx'));
@@ -1171,9 +1172,11 @@ export default function App() {
                     }
                   }}
                   style={{
-                    display: 'inline-block',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
                     marginRight: '8px',
-                    padding: '5px 14px',
+                    padding: '4px 12px 4px 6px',
                     borderRadius: '999px',
                     border: isActive
                       ? '1.5px solid rgba(56,189,248,0.80)'
@@ -1190,6 +1193,7 @@ export default function App() {
                     letterSpacing: '0.02em',
                   }}
                 >
+                  <CompanyLogo ticker={sym} size={16} />
                   {sym}
                 </button>
               );
@@ -1381,7 +1385,8 @@ export default function App() {
                     key={t}
                     onClick={() => runAnalyze(t)}
                     style={{
-                      padding: '6px 16px', borderRadius: '8px',
+                      display: 'inline-flex', alignItems: 'center', gap: '8px',
+                      padding: '6px 14px 6px 8px', borderRadius: '8px',
                       border: '1px solid var(--border)',
                       background: 'transparent', color: 'var(--text-primary)',
                       cursor: 'pointer', fontSize: '14px', fontWeight: '600',
@@ -1389,7 +1394,10 @@ export default function App() {
                     }}
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                  >{t}</button>
+                  >
+                    <CompanyLogo ticker={t} size={18} />
+                    {t}
+                  </button>
                 ))}
               </div>
             ) : (
@@ -1441,9 +1449,11 @@ export default function App() {
                     }
                   }}
                   style={{
-                    display: 'inline-block',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
                     marginRight: '8px',
-                    padding: '5px 14px',
+                    padding: '4px 12px 4px 6px',
                     borderRadius: '999px',
                     border: isActive
                       ? '1.5px solid rgba(56,189,248,0.80)'
@@ -1460,6 +1470,7 @@ export default function App() {
                     letterSpacing: '0.02em',
                   }}
                 >
+                  <CompanyLogo ticker={sym} size={16} />
                   {sym}
                 </button>
               );
