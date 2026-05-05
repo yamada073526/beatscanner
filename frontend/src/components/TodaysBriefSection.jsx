@@ -122,7 +122,7 @@ function NewsRow({ item, displayTitle, onCardClick }) {
               </span>
             )}
           </div>
-          <p className="text-sm font-bold text-slate-900 leading-snug mb-1">
+          <p className="text-sm font-medium text-slate-900 leading-relaxed mb-1" style={{ letterSpacing: '0.01em' }}>
             {displayTitle || item.title}
           </p>
           {item.summary && (

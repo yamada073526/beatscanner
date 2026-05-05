@@ -1,16 +1,13 @@
-import { useEffect, useState, useCallback, memo, useRef } from 'react';
+import { useEffect, useState, useCallback, memo } from 'react';
 import { fetchMarketIndices } from '../api.js';
 
 // 階層化: 主指標（S&P / NASDAQ / DOW）— 視覚ウェイトを上げる
 const PRIMARY_SYMBOLS = new Set(['^GSPC', '^IXIC', '^DJI']);
 
-// タブ定義: 主要（指数 + 株式 ETF）/ マクロ（リスク・為替・債券・信用・コモディティ）
-const TAB_GROUPS = {
-  main:  { label: '主要',   types: new Set(['index', 'etf']) },
-  macro: { label: 'マクロ', types: new Set(['risk', 'rate', 'fx', 'bond', 'credit', 'commodity']) },
-};
-const TAB_ORDER = ['main', 'macro'];
-const TAB_STORAGE_KEY = 'bs_marketTab';
+// グループ定義: 主要 (指数+ETF) / マクロ (リスク・為替・債券・信用・コモディティ)
+// v41: タブ切替を廃止して 2 行一括表示に変更 (1クリック減の設計思想に従う)
+const MAIN_TYPES  = new Set(['index', 'etf']);
+const MACRO_TYPES = new Set(['risk', 'rate', 'fx', 'bond', 'credit', 'commodity']);
 
 function formatPrice(item) {
   if (item.type === 'rate') return `${item.price.toFixed(2)}%`;
@@ -23,7 +20,7 @@ function Arrow({ pct }) {
   return pct >= 0 ? <span aria-hidden>▲</span> : <span aria-hidden>▼</span>;
 }
 
-function Item({ item, primary = false }) {
+function Item({ item, primary = false, compact = false }) {
   const pct = item.change_pct ?? 0;
   const up = pct >= 0;
   const hasPct = item.change_pct !== null && item.change_pct !== undefined;
@@ -40,9 +37,9 @@ function Item({ item, primary = false }) {
   const pctLabel = hasPct ? `${up ? '+' : ''}${pct.toFixed(2)}%` : '—';
 
   // 階層化サイズ
-  const minWidth = primary ? 'min-w-[112px]' : 'min-w-[96px]';
+  const minWidth = primary ? 'min-w-[112px]' : (compact ? 'min-w-[80px]' : 'min-w-[96px]');
   const labelSize = primary ? 'text-[11px]' : 'text-[10px]';
-  const priceSize = primary ? 'text-base' : 'text-sm';
+  const priceSize = primary ? 'text-base' : (compact ? 'text-xs' : 'text-sm');
   const pctSize = primary ? 'text-[12px]' : 'text-[11px]';
 
   // ARIA
@@ -84,41 +81,53 @@ function Separator() {
   return <div className="w-px h-9 bg-slate-200 flex-shrink-0" aria-hidden />;
 }
 
+// 1 行分の指標群をレンダリング (ラベル + 横スクロール + フェード + シェブロン)
+function IndicatorRow({ label, items, compact = false, useGroupHover = false }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="relative px-4 py-2.5">
+      <div
+        className="overflow-x-auto scrollbar-hide"
+        style={{ overflowX: 'scroll', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      >
+        <div className="flex items-center gap-0 min-w-max">
+          {label && (
+            <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mr-3 whitespace-nowrap flex-shrink-0">
+              {label}
+            </span>
+          )}
+          {items.map((item, i) => {
+            const isPrimary = !compact && PRIMARY_SYMBOLS.has(item.symbol);
+            return (
+              <div key={item.symbol} className="flex items-center">
+                {i > 0 && <Separator />}
+                <Item item={item} primary={isPrimary} compact={compact} />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {/* 右端フェード + シェブロン (横スクロール示唆) */}
+      <div
+        className="pointer-events-none absolute right-0 top-0 h-full w-16"
+        style={{ background: 'linear-gradient(to left, var(--bg-card), transparent)' }}
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 select-none hidden md:block"
+        style={{ fontSize: '18px', lineHeight: 1, fontWeight: 300 }}
+        aria-hidden
+      >
+        ›
+      </div>
+    </div>
+  );
+}
+
 export default memo(function MarketWidget() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [activeTab, setActiveTab] = useState(() => {
-    try {
-      const saved = localStorage.getItem(TAB_STORAGE_KEY);
-      return TAB_ORDER.includes(saved) ? saved : 'main';
-    } catch {
-      return 'main';
-    }
-  });
-  const tabRefs = useRef({});
-
-  const handleTabChange = useCallback((tab) => {
-    setActiveTab(tab);
-    try { localStorage.setItem(TAB_STORAGE_KEY, tab); } catch { /* ignore */ }
-  }, []);
-
-  // ARIA: ←/→ キーでタブ切替
-  const handleTabKeyDown = useCallback((e, currentKey) => {
-    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
-    e.preventDefault();
-    const idx = TAB_ORDER.indexOf(currentKey);
-    const nextIdx = e.key === 'ArrowRight'
-      ? (idx + 1) % TAB_ORDER.length
-      : (idx - 1 + TAB_ORDER.length) % TAB_ORDER.length;
-    const nextKey = TAB_ORDER[nextIdx];
-    handleTabChange(nextKey);
-    // フォーカスも次のタブへ
-    requestAnimationFrame(() => {
-      const el = tabRefs.current[nextKey];
-      if (el && el.focus) el.focus();
-    });
-  }, [handleTabChange]);
 
   const load = useCallback(async () => {
     try {
@@ -141,7 +150,7 @@ export default memo(function MarketWidget() {
   }, [load]);
 
   if (loading) {
-    return <div className="h-14 rounded-xl bg-slate-100 animate-pulse mb-6" />;
+    return <div className="h-32 rounded-xl bg-slate-100 animate-pulse mb-6" />;
   }
   if (data.length === 0) {
     return (
@@ -151,14 +160,14 @@ export default memo(function MarketWidget() {
     );
   }
 
-  const visibleItems = data.filter((d) => TAB_GROUPS[activeTab].types.has(d.type));
+  const mainItems  = data.filter((d) => MAIN_TYPES.has(d.type));
+  const macroItems = data.filter((d) => MACRO_TYPES.has(d.type));
 
   return (
     <div className="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm" role="region" aria-label="マーケット指標">
-      {/* ヘッダー: LIVE インジケーター + タブ切替 */}
-      <div className="flex items-center justify-between px-4 pt-2 border-b border-slate-100">
-        {/* 左: LIVE ドット + 最終更新 */}
-        <div className="flex items-center gap-2 pb-2">
+      {/* ヘッダー: LIVE インジケーター + 最終更新 */}
+      <div className="flex items-center justify-between px-4 pt-2 pb-1.5 border-b border-slate-100">
+        <div className="flex items-center gap-2">
           <span className="relative inline-flex h-2 w-2" aria-hidden>
             <span className="absolute inline-flex h-full w-full rounded-full bg-cyan-400 live-dot-pulse" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-500" />
@@ -170,71 +179,17 @@ export default memo(function MarketWidget() {
             </span>
           )}
         </div>
-
-        {/* 右: タブチップ（主要 / マクロ） */}
-        <div role="tablist" aria-label="指標カテゴリ" className="flex items-center">
-          {TAB_ORDER.map((key) => {
-            const isActive = activeTab === key;
-            return (
-              <button
-                key={key}
-                ref={(el) => { tabRefs.current[key] = el; }}
-                role="tab"
-                aria-selected={isActive}
-                aria-controls={`market-tabpanel-${key}`}
-                tabIndex={isActive ? 0 : -1}
-                onClick={() => handleTabChange(key)}
-                onKeyDown={(e) => handleTabKeyDown(e, key)}
-                className={`relative px-3 py-2 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded-t ${
-                  isActive ? 'text-cyan-600' : 'text-slate-400 hover:text-slate-700'
-                }`}
-                style={{
-                  borderBottom: isActive ? '2px solid #06b6d4' : '2px solid transparent',
-                  marginBottom: '-1px',
-                }}
-              >
-                {TAB_GROUPS[key].label}
-              </button>
-            );
-          })}
-        </div>
       </div>
 
-      {/* 選択タブのコンテンツ（横スクロール、右フェード + シェブロン） */}
-      <div
-        id={`market-tabpanel-${activeTab}`}
-        role="tabpanel"
-        aria-labelledby={`market-tab-${activeTab}`}
-        className="relative px-4 py-2.5"
-        style={{ minHeight: '76px' }}
-      >
-        <div className="overflow-x-auto scrollbar-hide" style={{ overflowX: 'scroll', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          <div className="flex items-center gap-0 min-w-max">
-            {visibleItems.map((item, i) => {
-              const isPrimary = PRIMARY_SYMBOLS.has(item.symbol);
-              return (
-                <div key={item.symbol} className="flex items-center">
-                  {i > 0 && <Separator />}
-                  <Item item={item} primary={isPrimary} />
-                </div>
-              );
-            })}
-          </div>
+      {/* 主要グループ (指数 + 株式 ETF) */}
+      <IndicatorRow items={mainItems} />
+
+      {/* マクログループ (リスク・為替・債券・信用・コモディティ) */}
+      {macroItems.length > 0 && (
+        <div className="border-t border-slate-100">
+          <IndicatorRow label="市場指標" items={macroItems} compact />
         </div>
-        {/* 右端フェード + シェブロン（横スクロール示唆） */}
-        <div
-          className="pointer-events-none absolute right-0 top-0 h-full w-16"
-          style={{ background: 'linear-gradient(to left, var(--bg-card), transparent)' }}
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 select-none hidden md:block"
-          style={{ fontSize: '18px', lineHeight: 1, fontWeight: 300 }}
-          aria-hidden
-        >
-          ›
-        </div>
-      </div>
+      )}
     </div>
   );
 });

@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- v41: 日本語フォント可読性向上 (UI/UX エキスパートレビュー推奨)
+         Inter (英数) + Noto Sans JP (日本語) のハイブリッド配信。
+         weight は 400/500 のみで subset し、初回ロード負荷を最小化。 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
     <title>beatscanner — 決算分析ダッシュボード</title>
   </head>
   <body>
