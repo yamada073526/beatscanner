@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { fetchNews, translateTexts } from '../api.js';
-import ReactMarkdown from 'react-markdown';
+import { fetchNews } from '../api.js';
 import NewsViewToggle from './NewsViewToggle.jsx';
+import NewsArticleModal from './NewsArticleModal.jsx';
+import TranslationToggle from './TranslationToggle.jsx';
+import useArticleModal from '../hooks/useArticleModal.js';
+import useTranslation from '../hooks/useTranslation.js';
 
-const LS_KEY = 'translateNews';
 const VIEW_STORAGE_KEY = 'bs_newsView.panel';
 const VIEW_AUTO_THRESHOLD = 12;  // 件数 ≤12 → grid、>12 → list デフォルト
 
@@ -29,15 +30,11 @@ export default function NewsPanel({ ticker }) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [translated, setTranslated] = useState(null);
-  const [translating, setTranslating] = useState(false);
-  const [articleModal, setArticleModal] = useState(null);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
-  const [translateNews, setTranslateNews] = useState(() => {
-    const saved = localStorage.getItem(LS_KEY);
-    return saved !== null ? saved === 'true' : true;
-  });
-  const translatingRef = useRef(false);
+
+  // 共通フック: 翻訳トグル + 記事モーダル
+  const { enabled: translateNews, toggle: handleToggle, displayTitles, translating } = useTranslation(news);
+  const { articleModal, openArticle, closeArticle } = useArticleModal();
 
   // 表示方式 (list / grid). データロード後、件数ベースで自動初期化 + ユーザー上書きで永続化。
   const [view, setView] = useState(() => {
@@ -143,7 +140,6 @@ export default function NewsPanel({ ticker }) {
     setLoading(true);
     setError(null);
     setNews([]);
-    setTranslated(null);
     setVisibleCount(INITIAL_VISIBLE);
     fetchNews(ticker, MAX_FETCH)
       .then(setNews)
@@ -151,111 +147,16 @@ export default function NewsPanel({ ticker }) {
       .finally(() => setLoading(false));
   }
 
-  async function doTranslate(items) {
-    if (translatingRef.current || !items.length) return;
-    translatingRef.current = true;
-    setTranslating(true);
-    try {
-      const titles = items.map((item) => item.title || '');
-      const result = await translateTexts(titles);
-      setTranslated(result);
-    } catch {
-      // silently fail — original titles remain visible
-    } finally {
-      translatingRef.current = false;
-      setTranslating(false);
-    }
-  }
-
-  const openArticle = async (item) => {
-    const title = displayTitles?.[news.indexOf(item)] || item.title;
-    setArticleModal({ url: item.url, title, source: item.source, published: item.published, content: '', loading: true, error: null });
-
-    try {
-      const res = await fetch('/api/news/article', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: item.url, max_lines: 30 }),
-      });
-      if (!res.ok) throw new Error('記事の取得に失敗しました');
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const payload = line.slice(6);
-          if (payload === '[DONE]') {
-            setArticleModal(prev => {
-              const cleaned = (prev.content || '')
-                .split('\n')
-                .filter(line => {
-                  const t = line.trim();
-                  if (!t) return true;
-                  const removePatterns = [
-                    /^元記事(で|を)(続き|全文)/,
-                    /^続きは?元記事/,
-                    /^全文を読む/,
-                    /^この記事の続き/,
-                    /^Read (more|the full)/i,
-                    /^Click here to/i,
-                  ];
-                  return !removePatterns.some(p => p.test(t));
-                })
-                .join('\n')
-                .trimEnd();
-              return { ...prev, content: cleaned, loading: false };
-            });
-            break;
-          }
-          try {
-            const { chunk, error } = JSON.parse(payload);
-            if (error) {
-              setArticleModal(prev => ({ ...prev, error, loading: false }));
-              return;
-            }
-            if (chunk) {
-              setArticleModal(prev => ({
-                ...prev,
-                loading: false,
-                content: (prev.content || '') + chunk,
-              }));
-            }
-          } catch {}
-        }
-      }
-    } catch (e) {
-      setArticleModal(prev => ({ ...prev, error: e.message, loading: false }));
-    }
+  // 記事クリック時: 共通 hook の openArticle に displayTitle を渡す
+  const handleArticleClick = (item) => {
+    const idx = news.indexOf(item);
+    const title = displayTitles?.[idx] || item.title;
+    openArticle(item, title);
   };
-
-  function handleToggle() {
-    const next = !translateNews;
-    setTranslateNews(next);
-    localStorage.setItem(LS_KEY, String(next));
-  }
 
   useEffect(() => { load(); }, [ticker]);
 
-  // Auto-translate when enabled and news is loaded but not yet translated
-  useEffect(() => {
-    if (translateNews && news.length > 0 && !translated) {
-      doTranslate(news);
-    }
-  }, [translateNews, news]);
-
   if (!ticker) return null;
-
-  const displayTitles = translateNews && translated ? translated : null;
 
   return (
     <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
@@ -269,38 +170,11 @@ export default function NewsPanel({ ticker }) {
             {view !== null && (
               <NewsViewToggle view={view} onChange={handleViewChange} />
             )}
-            <label style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              cursor: 'pointer', fontSize: '13px',
-              color: 'var(--text-secondary)',
-              userSelect: 'none',
-            }}>
-              <span style={{ whiteSpace: 'nowrap' }}>
-                {translating ? '翻訳中...' : '🌐 日本語表示'}
-              </span>
-              <div
-                onClick={handleToggle}
-                style={{
-                  width: '40px', height: '22px',
-                  borderRadius: '11px',
-                  background: translateNews ? '#3b82f6' : 'var(--border)',
-                  position: 'relative',
-                  transition: 'background 0.2s',
-                  cursor: 'pointer',
-                  flexShrink: 0,
-                }}
-              >
-                <div style={{
-                  position: 'absolute',
-                  top: '3px',
-                  left: translateNews ? '21px' : '3px',
-                  width: '16px', height: '16px',
-                  borderRadius: '50%',
-                  background: '#ffffff',
-                  transition: 'left 0.2s',
-                }} />
-              </div>
-            </label>
+            <TranslationToggle
+              enabled={translateNews}
+              onToggle={handleToggle}
+              translating={translating}
+            />
           </div>
         )}
       </div>
@@ -338,13 +212,13 @@ export default function NewsPanel({ ticker }) {
                   <div
                     key={i}
                     className="news-list-card"
-                    onClick={() => openArticle(item)}
+                    onClick={() => handleArticleClick(item)}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
-                        openArticle(item);
+                        handleArticleClick(item);
                       }
                     }}
                   >
@@ -396,7 +270,7 @@ export default function NewsPanel({ ticker }) {
                 {news.slice(0, visibleCount).map((item, i) => (
                   <div
                     key={i}
-                    onClick={() => openArticle(item)}
+                    onClick={() => handleArticleClick(item)}
                     onMouseEnter={() => handleCardEnter(i)}
                     onMouseLeave={handleCardLeave}
                     className="news-card scroll-reveal"
@@ -471,115 +345,7 @@ export default function NewsPanel({ ticker }) {
         </>
       )}
 
-      {articleModal && createPortal(
-        <div
-          style={{
-            position: 'fixed', inset: 0, zIndex: 1000,
-            background: 'rgba(0,0,0,0.6)',
-            display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-            padding: '40px 16px', overflowY: 'auto',
-          }}
-          onClick={(e) => { if (e.target === e.currentTarget) setArticleModal(null); }}
-        >
-          <div style={{
-            width: '100%', maxWidth: '680px',
-            background: 'var(--bg-primary)',
-            border: '1px solid var(--border)',
-            borderRadius: '16px',
-            maxHeight: '80vh',
-            overflowY: 'auto',
-            position: 'relative',
-          }}>
-            {/* ── ヘッダー: ソースバッジ + 日付 + タイトル + 元記事リンク ── */}
-            <div className="news-modal-header">
-              <button
-                onClick={() => setArticleModal(null)}
-                aria-label="閉じる"
-                style={{
-                  position: 'absolute', top: '12px', right: '12px',
-                  background: 'transparent', border: 'none', fontSize: '20px',
-                  cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1, padding: '4px 8px',
-                }}
-              >
-                ×
-              </button>
-              {(articleModal.source || articleModal.published) && (
-                <div className="news-modal-meta-row">
-                  {articleModal.source && (
-                    <span className="news-modal-source-badge">{articleModal.source}</span>
-                  )}
-                  {articleModal.published && (
-                    <span className="news-modal-date">
-                      {new Date(articleModal.published).toLocaleDateString('ja-JP')}
-                    </span>
-                  )}
-                </div>
-              )}
-              <p className="news-modal-title">
-                {articleModal.title}
-              </p>
-              <a
-                href={articleModal.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="news-modal-original-link"
-              >
-                元記事を開く →
-              </a>
-            </div>
-
-            {/* ── 本文エリア ── */}
-            <div className="news-modal-body-wrap">
-            {articleModal.loading && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '24px 0', color: 'var(--text-secondary)' }}>
-                <span style={{
-                  width: 16, height: 16, borderRadius: '50%',
-                  border: '2px solid var(--border)', borderTopColor: '#64748b',
-                  display: 'inline-block', animation: 'spin 0.8s linear infinite', flexShrink: 0,
-                }} />
-                <span style={{ fontSize: 14 }}>記事を翻訳中...</span>
-                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-              </div>
-            )}
-            {articleModal.error && (
-              <div style={{ fontSize: '14px', color: 'var(--text-secondary)', padding: '16px 0' }}>
-                <p style={{ marginBottom: '8px' }}>⚠️ {articleModal.error}</p>
-                <a href={articleModal.url} target="_blank" rel="noopener noreferrer"
-                  style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
-                  元記事を直接開く →
-                </a>
-              </div>
-            )}
-            {articleModal.content && (
-              <div style={{ maxWidth: '640px' }}>
-                <ReactMarkdown
-                  components={{
-                    p: ({ children }) => (
-                      <p className="news-modal-body">{children}</p>
-                    ),
-                    h2: ({ children }) => (
-                      <h2 className="news-modal-heading">{children}</h2>
-                    ),
-                    h3: ({ children }) => (
-                      <h3 className="news-modal-subheading">{children}</h3>
-                    ),
-                    strong: ({ children }) => (
-                      <strong style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{children}</strong>
-                    ),
-                  }}
-                >
-                  {articleModal.content}
-                </ReactMarkdown>
-                {articleModal.loading === false ? null : (
-                  <span style={{ color: '#94a3b8' }}>▌</span>
-                )}
-              </div>
-            )}
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      <NewsArticleModal article={articleModal} onClose={closeArticle} />
     </section>
   );
 }

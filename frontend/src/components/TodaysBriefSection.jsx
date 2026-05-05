@@ -1,6 +1,10 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { fetchMacroNews } from '../api.js';
 import NewsViewToggle from './NewsViewToggle.jsx';
+import NewsArticleModal from './NewsArticleModal.jsx';
+import TranslationToggle from './TranslationToggle.jsx';
+import useArticleModal from '../hooks/useArticleModal.js';
+import useTranslation from '../hooks/useTranslation.js';
 
 // 重要度バッジ 3 種でタブ切替 (v41 Phase 3.5a)
 const TAB_DEFS = [
@@ -58,16 +62,15 @@ function getNewsColors(importance, category) {
   return { badge: '#0891b2', bg: 'rgba(8,145,178,0.10)', bar: '#06b6d4' };
 }
 
-function NewsRow({ item }) {
+function NewsRow({ item, displayTitle, onCardClick }) {
   const colors = getNewsColors(item.importance, item.category);
   const minAgo = getMinutesAgo(item.published);
   const isLive = minAgo <= LIVE_THRESHOLD_MIN && minAgo >= 0;
   const dimmed = minAgo > DAY_BORDER_HRS * 60;
 
   const handleClick = (e) => {
-    if (!item.url) return;
     e.preventDefault();
-    window.open(item.url, '_blank', 'noopener,noreferrer');
+    if (onCardClick) onCardClick();
   };
 
   // IR リソース と同じ「border-slate-100 → hover で border-slate-300 + bg-slate-50」パターン
@@ -120,7 +123,7 @@ function NewsRow({ item }) {
             )}
           </div>
           <p className="text-sm font-bold text-slate-900 leading-snug mb-1">
-            {item.title}
+            {displayTitle || item.title}
           </p>
           {item.summary && (
             <p
@@ -144,7 +147,7 @@ function NewsRow({ item }) {
   );
 }
 
-function NewsCardGrid({ item, onMouseEnter, onMouseLeave }) {
+function NewsCardGrid({ item, displayTitle, onCardClick, onMouseEnter, onMouseLeave }) {
   const colors = getNewsColors(item.importance, item.category);
   const minAgo = getMinutesAgo(item.published);
   const isLive = minAgo <= LIVE_THRESHOLD_MIN && minAgo >= 0;
@@ -153,9 +156,8 @@ function NewsCardGrid({ item, onMouseEnter, onMouseLeave }) {
   const fallbackChar = (item.category && item.category.charAt(0)) || '•';
 
   const handleClick = (e) => {
-    if (!item.url) return;
     e.preventDefault();
-    window.open(item.url, '_blank', 'noopener,noreferrer');
+    if (onCardClick) onCardClick();
   };
 
   return (
@@ -229,7 +231,7 @@ function NewsCardGrid({ item, onMouseEnter, onMouseLeave }) {
         )}
       </div>
       <div className="news-grid-body">
-        <p className="news-grid-title">{item.title}</p>
+        <p className="news-grid-title">{displayTitle || item.title}</p>
         <div className="news-grid-meta">
           {item.source && <span className="news-grid-source">{item.source}</span>}
           {item.published && (
@@ -270,6 +272,25 @@ export default function TodaysBriefSection() {
   const tabRefs = useRef({});
   const gridRef = useRef(null);
   const [, setTick] = useState(0);
+
+  // 共通 hooks: 翻訳トグル + 記事モーダル (NewsPanel と同実装)
+  const { enabled: translateEnabled, toggle: toggleTranslate, displayTitles, translating } =
+    useTranslation(data.items);
+  const { articleModal, openArticle, closeArticle } = useArticleModal();
+
+  // 記事クリック: モーダルを開く (外部リンク直開きではない)
+  // displayTitle を渡してモーダルでも翻訳済みタイトルを表示
+  const handleArticleClick = (item) => {
+    const idx = data.items.indexOf(item);
+    const title = displayTitles?.[idx] || item.title;
+    openArticle(item, title);
+  };
+
+  // 各 item の翻訳済みタイトルを取得するヘルパー
+  const getDisplayTitle = (item) => {
+    const idx = data.items.indexOf(item);
+    return displayTitles?.[idx];
+  };
 
   // grid view: NewsPanel と同じ JS 制御で「選択カード飛び出し + 周囲ブラー」を実装。
   // CSS-only (:has) は環境依存で未発火だったため、確実に動く JS 方式に統一。
@@ -423,9 +444,18 @@ export default function TodaysBriefSection() {
               マクロ・地政学
             </span>
           </div>
-          {view !== null && (
-            <NewsViewToggle view={view} onChange={handleViewChange} />
-          )}
+          <div className="flex items-center gap-3">
+            {view !== null && (
+              <NewsViewToggle view={view} onChange={handleViewChange} />
+            )}
+            {data.items.length > 0 && (
+              <TranslationToggle
+                enabled={translateEnabled}
+                onToggle={toggleTranslate}
+                translating={translating}
+              />
+            )}
+          </div>
         </div>
         {/* タブ Segmented Control (Pill 形状で affordance 強化) */}
         <div role="tablist" aria-label="ニュースカテゴリ" className="flex items-center gap-1.5">
@@ -482,6 +512,8 @@ export default function TodaysBriefSection() {
                   <NewsCardGrid
                     key={`g-${item.title}-${i}`}
                     item={item}
+                    displayTitle={getDisplayTitle(item)}
+                    onCardClick={() => handleArticleClick(item)}
                     onMouseEnter={() => handleCardEnter(i)}
                     onMouseLeave={handleCardLeave}
                   />
@@ -493,19 +525,30 @@ export default function TodaysBriefSection() {
           // 縦列表示: カード形式 (IR リソース流の border + hover 演出) + 24h 区切り
           <div className="px-3 py-3 flex flex-col gap-1.5">
             {fresh.map((item, i) => (
-              <NewsRow key={`f-${item.title}-${i}`} item={item} />
+              <NewsRow
+                key={`f-${item.title}-${i}`}
+                item={item}
+                displayTitle={getDisplayTitle(item)}
+                onCardClick={() => handleArticleClick(item)}
+              />
             ))}
             {stale.length > 0 && (
               <>
                 <DaySeparator label="24時間以前" />
                 {stale.map((item, i) => (
-                  <NewsRow key={`s-${item.title}-${i}`} item={item} />
+                  <NewsRow
+                    key={`s-${item.title}-${i}`}
+                    item={item}
+                    displayTitle={getDisplayTitle(item)}
+                    onCardClick={() => handleArticleClick(item)}
+                  />
                 ))}
               </>
             )}
           </div>
         )}
       </div>
+      <NewsArticleModal article={articleModal} onClose={closeArticle} />
     </section>
   );
 }
