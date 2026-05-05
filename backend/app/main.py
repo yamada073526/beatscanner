@@ -2611,6 +2611,104 @@ async def market_indices(request: Request) -> list[dict]:
     return result
 
 
+# ── v41 Phase 3: Today's Brief — マクロ・地政学的なマーケット全体ニュース ──
+# L1 キーワードフィルタ: 個別銘柄ニュースを除外し、マクロ/政策/地政学の記事のみ通過
+
+# HIGH (importance=5/4): 金融政策・インフレ・雇用統計・地政学衝撃
+_MACRO_KEYWORDS_HIGH = (
+    "fomc", "fed ", "federal reserve", "powell", "rate cut", "rate hike",
+    "rate decision", "monetary policy",
+    "cpi", "ppi", "inflation", "deflation",
+    "nonfarm", "non-farm", "payroll", "jobless", "unemployment",
+    "gdp", "recession",
+    "ecb", "boj", "bank of japan", "people's bank of china",
+    "iran", "ukraine", "russia", "middle east", "geopolitic", "war ",
+)
+# MED (importance=3): セクター・大型 IPO・主要 IB 目標・市場全体
+_MACRO_KEYWORDS_MED = (
+    "treasury yield", "10-year", "10-yr", "yield curve", "bond ",
+    "oil price", "crude", "opec", "natural gas", "gold price",
+    "s&p 500", "s&p500", "nasdaq", "dow ", "russell",
+    "ipo", "spacex", "openai", "anthropic", "nvidia",
+    "goldman sachs", "morgan stanley", "jpmorgan", "bank of america",
+    "target price", "price target", "year-end target",
+    "tariff", "china trade", "trade deal",
+    "bitcoin", "crypto",
+    "vix", "volatility", "market sentiment",
+)
+
+
+def _classify_macro_news(title: str, summary: str) -> tuple[str | None, str]:
+    """ニュースの重要度とカテゴリを判定。
+    Returns: (importance, category) — マクロ判定不可なら (None, '')
+    """
+    text = f"{title or ''} {summary or ''}".lower()
+    if any(kw in text for kw in _MACRO_KEYWORDS_HIGH):
+        cat = "地政学" if any(kw in text for kw in ("iran", "ukraine", "russia", "middle east", "geopolitic", "war ")) else "マクロ"
+        return ("HIGH", cat)
+    if any(kw in text for kw in _MACRO_KEYWORDS_MED):
+        return ("MED", "市場全体")
+    return (None, "")
+
+
+_MACRO_NEWS_CACHE: dict = {"data": None, "ts": 0.0}
+_MACRO_NEWS_CACHE_TTL = 900.0  # 15 分
+
+
+@app.get("/api/news/macro")
+async def macro_news(request: Request) -> dict:
+    """マクロ・地政学的なマーケット全体ニュース (Today's Brief)。15 分キャッシュ。"""
+    now = _time.monotonic()
+    if _MACRO_NEWS_CACHE["data"] and now - _MACRO_NEWS_CACHE["ts"] < _MACRO_NEWS_CACHE_TTL:
+        return _MACRO_NEWS_CACHE["data"]
+
+    try:
+        client = FMPClient(api_key=_get_fmp_key(request))
+    except FMPError:
+        return {"items": [], "updated_at": int(_time.time())}
+
+    raw: list[dict] = []
+    try:
+        raw = await client.general_news(limit=80)
+    except FMPError:
+        raw = []
+
+    # 重複除外 + キーワードフィルタ + 整形
+    seen_titles: set[str] = set()
+    filtered: list[dict] = []
+    for n in raw:
+        title = (n.get("title") or "").strip()
+        if not title or title in seen_titles:
+            continue
+        seen_titles.add(title)
+
+        summary = (n.get("text") or "")[:300]
+        importance, category = _classify_macro_news(title, summary)
+        if not importance:
+            continue
+
+        filtered.append({
+            "title": title,
+            "url": n.get("url"),
+            "published": n.get("publishedDate"),
+            "source": n.get("site") or n.get("publisher"),
+            "summary": summary,
+            "image": n.get("image"),
+            "importance": importance,
+            "category": category,
+        })
+
+    # HIGH を優先、次に MED の順でソート (FMP 側で時系列順を維持しつつ)
+    importance_rank = {"HIGH": 0, "MED": 1}
+    filtered.sort(key=lambda x: importance_rank.get(x["importance"], 99))
+    filtered = filtered[:15]
+
+    result = {"items": filtered, "updated_at": int(_time.time())}
+    _MACRO_NEWS_CACHE["data"] = result
+    _MACRO_NEWS_CACHE["ts"] = now
+    return result
+
+
 _MAJOR_TICKERS = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA",
     "JPM", "V", "MA", "UNH", "XOM", "LLY", "AVGO",

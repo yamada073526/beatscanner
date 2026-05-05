@@ -119,6 +119,26 @@ class FMPClient:
             {"symbol": ticker.upper(), "limit": limit},
         )
 
+    async def general_news(self, limit: int = 50) -> list[dict]:
+        """マクロ・マーケット全体ニュース。dedicated endpoint → 主要 ETF (SPY/QQQ/DIA) news の集約に fallback。"""
+        # 1) FMP の dedicated general news endpoint を試す
+        try:
+            data = await self._get("/news/general-latest", {"limit": limit})
+            if isinstance(data, list) and data:
+                return data
+        except FMPError:
+            pass
+        # 2) Fallback: 主要 ETF の stock-news を集約 (マクロニュースの代理)
+        pool: list[dict] = []
+        for proxy in ("SPY", "QQQ", "DIA"):
+            try:
+                items = await self.stock_news(proxy, limit=min(20, limit))
+                if isinstance(items, list):
+                    pool.extend(items)
+            except FMPError:
+                continue
+        return pool
+
     async def batch_quotes(self, symbols: list[str]) -> list[dict]:
         joined = ",".join(s.upper() for s in symbols)
         return await self._get("/quote", {"symbol": joined})

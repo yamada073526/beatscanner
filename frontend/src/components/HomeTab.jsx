@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import Watchlist from './Watchlist.jsx';
 import MoversCard from './MoversCard.jsx';
+import TodaysBriefSection from './TodaysBriefSection.jsx';
 // v40+: ChartTab (669行) と DiagramCard (2027行) は表示される時のみ読み込む lazy 化
 const ChartTab = lazy(() => import('./ChartTab.jsx'));
 const DiagramCard = lazy(() => import('./DiagramCard.jsx'));
@@ -139,6 +140,9 @@ export default function HomeTab({
           </div>
         </section>
       )}
+
+      {/* ── Today's Brief — マクロ・地政学ニュース（v41 Phase 3）── */}
+      <TodaysBriefSection />
 
       {/* ── ウォッチリスト ── */}
       <section className="panel-card rounded-2xl px-6 pt-4 pb-6 shadow-sm"
