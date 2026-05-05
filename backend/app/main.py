@@ -2681,10 +2681,59 @@ _MACRO_KEYWORDS_MED = (
 )
 
 
+# 主要 IB の target 改定や国家アクターの軍事行動は構造的に HIGH。
+# 単純キーワードマッチだと "JPMorgan + year-end target" が MED 止まりになる
+# 設計バグを修正するための AND 結合ルール (金融アナリストレビュー推奨)。
+_BIG_BANKS = (
+    "goldman sachs", "morgan stanley", "jpmorgan", "j.p. morgan", "jp morgan",
+    "bank of america", "bofa", "wells fargo", "citigroup", "citi research",
+    "barclays", "deutsche bank", "ubs", "hsbc", "wedbush", "evercore", "raymond james",
+)
+_IB_TARGET_VERBS = (
+    "raises target", "lifts target", "boosts target", "ups target",
+    "raises s&p", "lifts s&p", "boosts s&p",
+    "year-end target", "year end target", "price target",
+    "raises forecast", "lifts forecast", "raises outlook", "boosts outlook",
+    "upgrades", "upgrade rating", "raises estimate", "boosts estimate",
+)
+_STATE_ACTORS = (
+    "iran", "israel", "russia", "ukraine", "china", "north korea", "syria",
+    "houthi", "hezbollah", "hamas", "taliban",
+)
+_MILITARY_VERBS = (
+    "attack", "strike", "missile", "drone", "ballistic", "casualties",
+    "embassy", "consulate", "rocket", "hostage", "killed", "wounded",
+    "airstrike", "shelling", "bombed", "bombing", "raid",
+)
+
+
+def _force_high_classification(title: str, summary: str) -> str | None:
+    """主要 IB target 改定 / 国家アクターの軍事行動を HIGH 強制。
+    Returns category ("マクロ" or "地政学") if matched, None otherwise.
+    AND 結合で false-positive を抑える設計。
+    """
+    text = f"{title or ''} {summary or ''}".lower()
+    # 主要 IB ストラテジストのターゲット改定 → HIGH マクロ
+    if any(b in text for b in _BIG_BANKS):
+        if any(v in text for v in _IB_TARGET_VERBS):
+            return "マクロ"
+    # 国家アクターの軍事行動 → HIGH 地政学
+    if any(s in text for s in _STATE_ACTORS):
+        if any(v in text for v in _MILITARY_VERBS):
+            return "地政学"
+    return None
+
+
 def _classify_macro_news(title: str, summary: str) -> tuple[str | None, str]:
     """ニュースの重要度とカテゴリを判定。
     Returns: (importance, category) — マクロ判定不可なら (None, '')
     """
+    # 1) 主要 IB target 改定 / 軍事行動は HIGH 強制 (キーワード単体マッチより優先)
+    forced = _force_high_classification(title, summary)
+    if forced is not None:
+        return ("HIGH", forced)
+
+    # 2) 通常のキーワードベース判定
     text = f"{title or ''} {summary or ''}".lower()
     if any(kw in text for kw in _MACRO_KEYWORDS_HIGH):
         cat = "地政学" if any(kw in text for kw in ("iran", "ukraine", "russia", "middle east", "geopolitic", "war ")) else "マクロ"
@@ -2795,10 +2844,10 @@ async def macro_news(request: Request) -> dict:
             raw = []
 
     # 2) FMP が空なら yfinance fallback (指数・地域多様化 ETF を集約)
-    # SPY/QQQ/DIA だけでは S&P500 系で重複が多いため、IWM/EEM/GLD/USO で
-    # 小型株・新興国・コモディティをカバー (金融アナリストレビュー推奨)
+    # 金融アナリストレビュー (af09b50b) 推奨で ITA (国防) / XLF (金融) / XLE (エネ) を追加。
+    # ITA は Iran/Israel など地政学速報を、XLF は IB 系ニュースを拾える。
     if not raw:
-        for proxy in ("SPY", "QQQ", "DIA", "IWM", "EEM", "GLD", "USO"):
+        for proxy in ("SPY", "QQQ", "DIA", "IWM", "EEM", "GLD", "USO", "ITA", "XLF", "XLE"):
             try:
                 yf_items = await yfinance_source.fetch_news(proxy, limit=20)
                 if isinstance(yf_items, list):
@@ -2817,7 +2866,9 @@ async def macro_news(request: Request) -> dict:
 
         # FMP: text / publishedDate / site
         # yfinance: summary / published / source
-        summary = (n.get("text") or n.get("summary") or "")[:300]
+        # summary truncation 300 → 800 文字に拡大 (本文後半に IB target / 軍事キーワードが
+        # 出るケースを取り逃がさないため、金融アナリストレビュー推奨)
+        summary = (n.get("text") or n.get("summary") or "")[:800]
         published = n.get("publishedDate") or n.get("published")
         source = n.get("site") or n.get("source") or n.get("publisher")
 
@@ -2837,9 +2888,12 @@ async def macro_news(request: Request) -> dict:
         })
 
     # HIGH を優先、次に MED の順でソート (FMP 側で時系列順を維持しつつ)
+    # cap 50 → 80 に拡大: 金融アナリストレビュー推奨で
+    # HIGH 強制ニュース (主要 IB target / 軍事行動) が押し出されないように。
+    # フロント側のタブフィルタ後の各タブ件数を増やす効果も。
     importance_rank = {"HIGH": 0, "MED": 1}
     filtered.sort(key=lambda x: importance_rank.get(x["importance"], 99))
-    filtered = filtered[:50]
+    filtered = filtered[:80]
 
     # v41 Phase 3.5d: 同一トピック報道数 (cluster_size) を計算してアテンション視覚化
     # 「複数媒体が同じテーマを報じている」= 注目度が高い、という設計思想

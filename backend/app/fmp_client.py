@@ -136,9 +136,12 @@ class FMPClient:
         # 同一指数 proxy (IVV/VOO) は SPY と 80-95% 重複するため不採用。
         # SPY (S&P500) / QQQ (Nasdaq) / DIA (Dow) / IWM (Russell 2000)
         # / EEM (新興国) / GLD (金) / USO (原油)
-        per_proxy = max(15, min(20, limit // 7 if limit > 0 else 20))
+        # ITA (国防) / XLF (金融) / XLE (エネ) を追加で
+        # 地政学速報・主要 IB ニュース・原油/中東ニュースを拾える構成に。
+        proxies = ("SPY", "QQQ", "DIA", "IWM", "EEM", "GLD", "USO", "ITA", "XLF", "XLE")
+        per_proxy = max(12, min(20, limit // len(proxies) if limit > 0 else 15))
         pool: list[dict] = []
-        for proxy in ("SPY", "QQQ", "DIA", "IWM", "EEM", "GLD", "USO"):
+        for proxy in proxies:
             try:
                 items = await self.stock_news(proxy, limit=per_proxy)
                 if isinstance(items, list):
