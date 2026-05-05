@@ -2308,21 +2308,31 @@ async def translate_texts(body: dict) -> dict:
             f"- 「Inc.」「Corp.」「Ltd.」「Co.」はそのまま残す\n\n"
             f"{numbered}"
         )
+        # 件数に応じて max_tokens を動的計算 (1 タイトルあたり ~80 token 想定)
+        # 40 件なら ~3200 + 余裕で 4096 上限。1024 固定では truncation して
+        # 後半が翻訳されない問題があったため修正。
+        max_tokens = min(max(1024, 80 * len(uncached_texts) + 200), 4096)
         try:
             client = ClaudeClient()
-            raw = await client.complete(prompt, max_tokens=1024)
+            raw = await client.complete(prompt, max_tokens=max_tokens)
         except ClaudeError as e:
             raise HTTPException(status_code=503, detail=str(e))
 
-        lines = [ln.strip() for ln in raw.split("\n") if ln.strip()]
-        translated: list[str] = []
-        for ln in lines:
-            # "1. テキスト" or "1) テキスト" → remove prefix
-            import re as _re
-            m = _re.match(r"^\d+[\.\)]\s*(.+)$", ln)
-            translated.append(m.group(1) if m else ln)
+        # 番号ベースで翻訳結果を抽出 (Claude が truncate / 改行揺れしても安全)
+        import re as _re
+        parsed: dict[int, str] = {}
+        for line in raw.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            m = _re.match(r"^(\d+)[\.\)]\s*(.+)$", line)
+            if m:
+                parsed[int(m.group(1))] = m.group(2)
 
-        for idx, orig, tr in zip(uncached_indices, uncached_texts, translated):
+        # 翻訳が無い項目は原文 (英語) を保持。空文字を入れると frontend の
+        # `displayTitles?.[i] || item.title` で fallback される動作に依存できる。
+        for i, (idx, orig) in enumerate(zip(uncached_indices, uncached_texts)):
+            tr = parsed.get(i + 1, orig)  # 1-indexed (numbered と一致)
             _translate_cache[orig] = tr
             results[idx] = tr
 
