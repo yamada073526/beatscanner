@@ -84,9 +84,9 @@ export default function HoldingModal({
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal holding-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-panel holding-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>{ticker} の保有を{current ? '編集' : '入力'}</h3>
+          <h2>{ticker} の保有を{current ? '編集' : '入力'}</h2>
           <button onClick={onClose} className="modal-close" aria-label="閉じる">×</button>
         </div>
 
