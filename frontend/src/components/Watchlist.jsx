@@ -1,4 +1,16 @@
-export default function Watchlist({ items, onSelect, onRemove, onFocusSearch, onHover }) {
+import CompanyLogo from './CompanyLogo.jsx';
+import TagPill from './TagPill.jsx';
+
+export default function Watchlist({
+  items,
+  tagsById = {},
+  assignments = {},
+  onSelect,
+  onRemove,
+  onFocusSearch,
+  onHover,
+  onTagClick,
+}) {
   if (!items.length) {
     return (
       <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 py-8 text-center">
@@ -16,27 +28,52 @@ export default function Watchlist({ items, onSelect, onRemove, onFocusSearch, on
       </div>
     );
   }
+
   return (
     <ul className="flex flex-wrap gap-2">
-      {items.map((t) => (
-        <li
-          key={t}
-          onMouseEnter={() => onHover?.(t)}
-          className="wl-chip"
-        >
-          <button type="button" onClick={(e) => { e.stopPropagation(); onSelect(t); }} className="font-semibold">
-            {t}
-          </button>
-          <button
-            type="button"
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(t); }}
-            className="ml-1 text-slate-400"
-            aria-label={`${t} を削除`}
+      {items.map((t) => {
+        const tagId = assignments[t];
+        const tag = tagId ? tagsById[tagId] : null;
+        return (
+          <li
+            key={t}
+            onMouseEnter={() => onHover?.(t)}
+            className="wl-chip"
           >
-            ×
-          </button>
-        </li>
-      ))}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onSelect(t); }}
+              className="wl-chip-main"
+              aria-label={`${t} を分析`}
+            >
+              <CompanyLogo ticker={t} size={20} />
+              <span className="wl-chip-ticker">{t}</span>
+              {tag && (
+                <TagPill tag={tag} size="sm" />
+              )}
+            </button>
+            {onTagClick && (
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onTagClick(t); }}
+                className="wl-chip-tag-btn"
+                aria-label={`${t} のタグを編集`}
+                title="タグを編集"
+              >
+                ⋯
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(t); }}
+              className="wl-chip-remove"
+              aria-label={`${t} を削除`}
+            >
+              ×
+            </button>
+          </li>
+        );
+      })}
     </ul>
   );
 }

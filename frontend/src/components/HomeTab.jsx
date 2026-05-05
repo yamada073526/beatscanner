@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, lazy, Suspense } from 'react';
+import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import Watchlist from './Watchlist.jsx';
+import TagFilterBar from './TagFilterBar.jsx';
 import MoversCard from './MoversCard.jsx';
 import TodaysBriefSection from './TodaysBriefSection.jsx';
 import EconomicCalendarSection from './EconomicCalendarSection.jsx';
@@ -19,7 +20,23 @@ const DEMO_DATA_BY_YEARS = {
 export default function HomeTab({
   watchlist, onSelect, onRemove, onHover, onFocusSearch, onMove,
   analysis, user,
+  // タグ機能 (X-1)
+  tags = [],
+  tagsById = {},
+  assignments = {},
+  tagFilterId = 'all',
+  onChangeTagFilter,
+  onOpenTagManager,
+  onOpenTagAssign,
+  onSignInForTags,
+  darkMode, toggleDark,
 }) {
+  // タグフィルタ適用後の watchlist
+  const filteredWatchlist = useMemo(() => {
+    if (!tagFilterId || tagFilterId === 'all') return watchlist;
+    if (tagFilterId === 'untagged') return watchlist.filter((t) => !assignments[t]);
+    return watchlist.filter((t) => assignments[t] === tagFilterId);
+  }, [watchlist, tagFilterId, assignments]);
   // 未ログイン かつ 検索結果なし のときのみデモ図解を表示
   // ログイン済みユーザーには Watchlist が先頭に来る（既存の順序がそのまま該当）
   const showDemo = !analysis && !user;
@@ -193,13 +210,37 @@ export default function HomeTab({
             </button>
           </div>
         ) : (
-          <Watchlist
-            items={watchlist}
-            onSelect={onSelect}
-            onRemove={onRemove}
-            onHover={onHover}
-            onFocusSearch={onFocusSearch}
-          />
+          <>
+            {user ? (
+              <TagFilterBar
+                tags={tags}
+                assignments={assignments}
+                totalCount={watchlist.length}
+                selectedFilter={tagFilterId}
+                onSelectFilter={onChangeTagFilter}
+                onOpenManager={onOpenTagManager}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={onSignInForTags}
+                className="tag-login-cta"
+                aria-label="ログインしてタグで整理"
+              >
+                💡 ログインするとタグで銘柄を整理できます
+              </button>
+            )}
+            <Watchlist
+              items={filteredWatchlist}
+              tagsById={tagsById}
+              assignments={assignments}
+              onSelect={onSelect}
+              onRemove={onRemove}
+              onHover={onHover}
+              onFocusSearch={onFocusSearch}
+              onTagClick={user ? onOpenTagAssign : undefined}
+            />
+          </>
         )}
       </section>
 

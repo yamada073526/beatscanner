@@ -1146,12 +1146,12 @@ body {
 }
 .news-card-source { font-weight: 500; }
 
-/* ─── ウォッチリストチップ（A+C案: 浮く＋色づく） ─── */
+/* ─── ウォッチリストチップ（ロゴ + タグ pill 対応版） ─── */
 .wl-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 12px;
+  gap: 2px;
+  padding: 3px 6px 3px 4px;
   border-radius: 9999px;
   background: var(--bg-muted);
   color: var(--text-primary);
@@ -1159,18 +1159,60 @@ body {
   font-weight: 500;
   border: 1px solid transparent;
   transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+.wl-chip-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 4px 2px 2px;
+  background: transparent;
+  border: 0;
   cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.wl-chip-ticker {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.wl-chip-tag-btn,
+.wl-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 9999px;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted, rgb(148,163,184));
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.wl-chip-tag-btn { font-size: 16px; }
+.wl-chip-remove { font-size: 18px; }
+.wl-chip-tag-btn:hover,
+.wl-chip-remove:hover {
+  background-color: rgba(148,163,184,0.18);
+  color: var(--text-primary);
 }
 @media (hover: hover) {
   .wl-chip:hover {
     transform: translateY(-2px) scale(1.03);
     background-color: rgba(56,189,248,0.18);
     border-color: rgba(56,189,248,0.7);
+  }
+  .wl-chip:hover .wl-chip-ticker {
     color: rgb(14,165,233);
   }
 }
 [data-theme="dark"] .wl-chip:hover {
   background-color: rgba(56,189,248,0.22);
+}
+[data-theme="dark"] .wl-chip:hover .wl-chip-ticker {
   color: rgb(56,189,248);
 }
 
@@ -1372,3 +1414,442 @@ body {
   background: rgba(255, 255, 255, 0.92);
   color: #0e7490;
 }
+
+/* ============================================================
+   タグ機能 (X-1) — ウォッチリスト整理用タグ
+   - TagFilterBar: 横スクロール 1 行の pill bar
+   - TagManagerModal: 既存タグ管理 + 新規作成
+   - TagAssignSheet: 銘柄→タグ割当 bottom sheet
+   ============================================================ */
+
+/* ─── 共通: 汎用モーダル ─── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  padding: 16px;
+  animation: modal-backdrop-in 0.18s ease;
+}
+@keyframes modal-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.modal-panel {
+  width: 100%;
+  max-width: 480px;
+  max-height: 86vh;
+  overflow-y: auto;
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border, rgba(148,163,184,0.2));
+  border-radius: 16px;
+  box-shadow: 0 24px 48px rgba(0,0,0,0.3);
+  animation: modal-panel-in 0.22s ease;
+}
+@keyframes modal-panel-in {
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 0.5px solid var(--border);
+}
+.modal-header h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+}
+.modal-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-close:hover {
+  background: rgba(148,163,184,0.18);
+  color: var(--text-primary);
+}
+.modal-body {
+  padding: 16px 20px 20px;
+}
+
+/* ─── ボタン ─── */
+.btn-primary,
+.btn-ghost,
+.btn-danger,
+.btn-icon,
+.btn-icon-danger {
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  letter-spacing: 0.01em;
+}
+.btn-primary {
+  padding: 7px 16px;
+  background: rgb(8, 145, 178);
+  color: #fff;
+  border: 1px solid transparent;
+}
+.btn-primary:hover { background: rgb(14, 116, 144); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-ghost {
+  padding: 7px 14px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.btn-ghost:hover { background: rgba(148,163,184,0.12); color: var(--text-primary); }
+.btn-danger {
+  padding: 7px 16px;
+  background: rgb(220, 38, 38);
+  color: #fff;
+  border: 1px solid transparent;
+}
+.btn-danger:hover { background: rgb(185, 28, 28); }
+.btn-icon {
+  padding: 4px 10px;
+  font-size: 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.btn-icon:hover { background: rgba(148,163,184,0.12); color: var(--text-primary); }
+.btn-icon-danger { color: rgb(239, 68, 68); border-color: rgba(239,68,68,0.3); }
+.btn-icon-danger:hover { background: rgba(239,68,68,0.1); }
+
+/* ─── タグ管理モーダル ─── */
+.tag-manager-empty {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 12px 0;
+  line-height: 1.7;
+}
+.tag-list { list-style: none; padding: 0; margin: 0 0 12px; }
+.tag-list-item {
+  padding: 10px 0;
+  border-bottom: 0.5px solid var(--border);
+}
+.tag-list-item:last-child { border-bottom: 0; }
+.tag-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tag-row-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.tag-row-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.tag-edit-form,
+.tag-create-form,
+.tag-delete-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 0;
+}
+.tag-edit-form input,
+.tag-create-form input {
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-muted);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+}
+.tag-edit-form input:focus,
+.tag-create-form input:focus {
+  border-color: rgb(56, 189, 248);
+  background: var(--bg-card);
+}
+.tag-edit-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.tag-delete-confirm p {
+  font-size: 13px;
+  margin: 0;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+.tag-delete-confirm .muted { color: var(--text-muted); font-size: 12px; }
+.tag-create-trigger {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.tag-create-trigger:hover:not(:disabled) {
+  background: rgba(56,189,248,0.08);
+  border-color: rgb(56, 189, 248);
+  color: rgb(14, 165, 233);
+}
+.tag-create-trigger:disabled { opacity: 0.5; cursor: not-allowed; }
+.tag-error {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: rgb(239, 68, 68);
+  text-align: right;
+}
+
+/* ─── 色ピッカー ─── */
+.color-picker {
+  display: flex;
+  gap: 8px;
+}
+.color-swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.color-swatch:hover { transform: scale(1.08); }
+.color-swatch.selected {
+  border-color: var(--text-primary);
+  transform: scale(1.08);
+}
+
+/* ─── タグフィルタバー ─── */
+.tag-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 4px 0 8px;
+  margin-bottom: 8px;
+  scrollbar-width: thin;
+  -ms-overflow-style: none;
+}
+.tag-filter-bar::-webkit-scrollbar { height: 4px; }
+.tag-filter-bar::-webkit-scrollbar-thumb {
+  background: rgba(148,163,184,0.3);
+  border-radius: 2px;
+}
+.tag-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  flex-shrink: 0;
+}
+.tag-filter-pill:hover {
+  background: rgba(56,189,248,0.1);
+  border-color: rgba(56,189,248,0.4);
+  color: rgb(14, 165, 233);
+}
+.tag-filter-pill.selected {
+  background: rgba(56,189,248,0.18);
+  border-color: rgb(56, 189, 248);
+  color: rgb(14, 165, 233);
+}
+[data-theme="dark"] .tag-filter-pill.selected {
+  color: rgb(56, 189, 248);
+}
+.tag-filter-count {
+  opacity: 0.7;
+  font-weight: 500;
+}
+.tag-filter-manage {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px dashed rgba(56,189,248,0.5);
+  border-radius: 9999px;
+  background: transparent;
+  color: rgb(14, 165, 233);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease;
+}
+.tag-filter-manage:hover { background: rgba(56,189,248,0.1); }
+[data-theme="dark"] .tag-filter-manage { color: rgb(56, 189, 248); }
+
+/* ─── タグ割当 bottom sheet ─── */
+.bottom-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 60;
+  animation: modal-backdrop-in 0.18s ease;
+}
+.bottom-sheet {
+  width: 100%;
+  max-width: 480px;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--bg-card, #fff);
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  box-shadow: 0 -16px 32px rgba(0,0,0,0.25);
+  animation: bottom-sheet-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (min-width: 640px) {
+  .bottom-sheet-backdrop { align-items: center; padding: 16px; }
+  .bottom-sheet {
+    border-radius: 16px;
+    max-height: 86vh;
+  }
+}
+@keyframes bottom-sheet-in {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.bottom-sheet-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(148,163,184,0.4);
+  margin: 8px auto 0;
+}
+.bottom-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px 10px;
+}
+.bottom-sheet-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.bottom-sheet-body {
+  padding: 4px 12px 20px;
+}
+.tag-assign-list { list-style: none; padding: 0; margin: 0; }
+.tag-assign-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--text-primary);
+  transition: background-color 0.15s ease;
+}
+.tag-assign-row:hover { background: rgba(148,163,184,0.1); }
+.tag-assign-row.selected { background: rgba(56,189,248,0.12); }
+.tag-assign-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.tag-assign-dot-empty {
+  background: transparent;
+  border: 1.5px dashed var(--text-muted);
+}
+.tag-assign-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+}
+.tag-assign-check {
+  color: rgb(14, 165, 233);
+  font-weight: 700;
+}
+[data-theme="dark"] .tag-assign-check { color: rgb(56, 189, 248); }
+.tag-assign-empty {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 16px 0;
+  margin: 0;
+}
+.tag-assign-manage {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px dashed rgba(56,189,248,0.5);
+  border-radius: 10px;
+  background: transparent;
+  color: rgb(14, 165, 233);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.tag-assign-manage:hover { background: rgba(56,189,248,0.08); }
+[data-theme="dark"] .tag-assign-manage { color: rgb(56, 189, 248); }
+
+/* ─── 非ログイン時 CTA ─── */
+.tag-login-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  margin-bottom: 8px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.tag-login-cta:hover {
+  background: rgba(56,189,248,0.08);
+  border-color: rgb(56, 189, 248);
+  color: rgb(14, 165, 233);
+}
+[data-theme="dark"] .tag-login-cta:hover { color: rgb(56, 189, 248); }
+

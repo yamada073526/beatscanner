@@ -4,6 +4,7 @@ import { analyze, demoAnalyze, fetchGuidance, fetchGuidanceBasic, prefetchAll } 
 import { supabase, isSupabaseConfigured } from './lib/supabase.js';
 import { useAuth } from './hooks/useAuth.js';
 import { useIsMobile } from './hooks/useIsMobile.js';
+import { useTags } from './hooks/useTags.js';
 import { initDarkMode, toggleDarkMode, isDark } from './utils/darkMode.js';
 import { hasFmpKey, loadFmpKey } from './lib/fmpKey.js';
 import { isPro } from './lib/planGating.js';
@@ -37,6 +38,8 @@ import ApiKeyModal from './components/ApiKeyModal.jsx';
 import UpgradeModal from './components/UpgradeModal.jsx';
 import PlanComparisonBanner from './components/PlanComparisonBanner.jsx';
 import DemoTicker from './components/DemoTicker.jsx';
+const TagManagerModal = lazy(() => import('./components/TagManagerModal.jsx'));
+const TagAssignSheet = lazy(() => import('./components/TagAssignSheet.jsx'));
 const CustomScreenerPanel = lazy(() => import('./components/CustomScreenerPanel.jsx'));
 const LandingPage = lazy(() => import('./components/LandingPage.jsx'));
 
@@ -80,6 +83,11 @@ export default function App() {
   const [isDemoResult, setIsDemoResult] = useState(false);
   const [forceCloseSuggestions, setForceCloseSuggestions] = useState(false);
   const [showFiveCondModal, setShowFiveCondModal] = useState(false);
+
+  // ── タグ機能 (X-1) ──────────────────────────────────────────
+  const [tagFilterId, setTagFilterId] = useState('all'); // 'all' | 'untagged' | tagId
+  const [tagManagerOpen, setTagManagerOpen] = useState(false);
+  const [tagAssignTicker, setTagAssignTicker] = useState(null); // null or ticker string
 
   useEffect(() => { initDarkMode(); }, []);
 
@@ -180,6 +188,9 @@ export default function App() {
   // FMPキー保有者(BYOK)またはStripeサブスク有効者をProとして扱う
   const isProUser = isPro() || isSubscribed;
   const syncedRef = useRef(false);
+
+  // ── タグ機能 (X-1): Supabase 同期 + 楽観的更新 ─────────────────
+  const tagStore = useTags({ supabase, user });
 
   // ── 未ログイン LP 表示判定 ─────────────────────────────────────
   // ホームタブ かつ 分析結果なし かつ 未ログイン → ランディングページを表示
@@ -592,6 +603,8 @@ export default function App() {
         .eq('user_id', user.id)
         .eq('ticker', t)
         .then(({ error }) => { if (error) console.error('[watchlist remove]', error); });
+      // タグ割当も整合性のため削除（local state + remote）
+      tagStore.unassignTag(t).catch(() => {});
     } else if (isSupabaseConfigured) {
       showSyncToast();
     }
@@ -1109,6 +1122,14 @@ export default function App() {
           }}
           darkMode={isDark()}
           toggleDark={toggleDarkMode}
+          tags={tagStore.tags}
+          tagsById={tagStore.tagsById}
+          assignments={tagStore.assignments}
+          tagFilterId={tagFilterId}
+          onChangeTagFilter={setTagFilterId}
+          onOpenTagManager={() => setTagManagerOpen(true)}
+          onOpenTagAssign={(t) => setTagAssignTicker(t)}
+          onSignInForTags={signInWithGoogle}
         />
       )}
 
@@ -2017,6 +2038,44 @@ export default function App() {
         checkoutLoading={checkoutLoading}
         user={user}
       />
+
+      {/* タグ機能 (X-1) のモーダル群 */}
+      <Suspense fallback={null}>
+        {tagManagerOpen && (
+          <TagManagerModal
+            isOpen={tagManagerOpen}
+            onClose={() => setTagManagerOpen(false)}
+            tags={tagStore.tags}
+            onCreate={tagStore.createTag}
+            onUpdate={tagStore.updateTag}
+            onDelete={tagStore.deleteTag}
+          />
+        )}
+        {tagAssignTicker && (
+          <TagAssignSheet
+            isOpen={!!tagAssignTicker}
+            ticker={tagAssignTicker}
+            tags={tagStore.tags}
+            currentTagId={tagStore.assignments[tagAssignTicker]}
+            onClose={() => setTagAssignTicker(null)}
+            onAssign={async (tagId) => {
+              try {
+                await tagStore.assignTag(tagAssignTicker, tagId);
+              } catch (e) {
+                showToast(e?.message || 'タグの設定に失敗しました');
+              }
+            }}
+            onUnassign={async () => {
+              try {
+                await tagStore.unassignTag(tagAssignTicker);
+              } catch (e) {
+                showToast(e?.message || 'タグ解除に失敗しました');
+              }
+            }}
+            onOpenManager={() => setTagManagerOpen(true)}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }
