@@ -347,6 +347,10 @@ body {
   overflow: hidden;
   transition: transform 0.2s ease, border-color 0.2s ease, opacity 0.2s ease, background-color 0.2s ease;
 }
+/* news-old: 24h 超の古い記事は常時 dim 表示 (CSS class で実装、
+   inline style だと hover dim を上書きしてしまうため) */
+.news-grid-card.news-old { opacity: 0.6; }
+
 @media (hover: hover) {
   /* JS で .news-active / .news-dimmed を付与する方式 (NewsPanel と同じ実装) */
   .news-grid-card.news-active {
@@ -354,7 +358,10 @@ body {
     border-color: rgba(56, 189, 248, 0.7);
     background-color: var(--bg-hover, var(--bg-card));
     z-index: 2;
+    opacity: 1;  /* news-old を上書き (選択カードは確実に通常輝度) */
   }
+  /* news-dimmed は news-old より後に定義し、確実に上書きさせる
+     (hover 中の周囲カードは記事の年齢に関わらず一律 0.18 で blur) */
   .news-grid-card.news-dimmed { opacity: 0.18; }
 }
 .news-grid-thumb-wrap {

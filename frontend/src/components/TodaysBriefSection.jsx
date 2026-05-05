@@ -160,11 +160,10 @@ function NewsCardGrid({ item, onMouseEnter, onMouseLeave }) {
 
   return (
     <article
-      className="news-grid-card"
+      className={`news-grid-card${dimmed ? ' news-old' : ''}`}
       onClick={handleClick}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      style={{ opacity: dimmed ? 0.6 : 1 }}
       role="link"
       tabIndex={0}
       onKeyDown={(e) => {
