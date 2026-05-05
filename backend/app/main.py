@@ -2685,7 +2685,7 @@ async def macro_news(request: Request) -> dict:
     # 1) FMP general news / proxy ETFs を試す
     if client is not None:
         try:
-            raw = await client.general_news(limit=80)
+            raw = await client.general_news(limit=120)
         except FMPError:
             raw = []
 
@@ -2693,7 +2693,7 @@ async def macro_news(request: Request) -> dict:
     if not raw:
         for proxy in ("SPY", "QQQ", "DIA"):
             try:
-                yf_items = await yfinance_source.fetch_news(proxy, limit=20)
+                yf_items = await yfinance_source.fetch_news(proxy, limit=30)
                 if isinstance(yf_items, list):
                     raw.extend(yf_items)
             except Exception:
@@ -2732,7 +2732,7 @@ async def macro_news(request: Request) -> dict:
     # HIGH を優先、次に MED の順でソート (FMP 側で時系列順を維持しつつ)
     importance_rank = {"HIGH": 0, "MED": 1}
     filtered.sort(key=lambda x: importance_rank.get(x["importance"], 99))
-    filtered = filtered[:15]
+    filtered = filtered[:50]
 
     result = {"items": filtered, "updated_at": int(_time.time())}
     _MACRO_NEWS_CACHE["data"] = result
