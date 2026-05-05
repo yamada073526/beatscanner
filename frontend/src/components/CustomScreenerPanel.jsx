@@ -103,11 +103,12 @@ export default function CustomScreenerPanel({ onSelect }) {
         ⚠️ このスクリーナーはS&amp;P500主要銘柄（約15銘柄）を対象としています。S&amp;P500外・新規上場銘柄は対象外です。投資判断の補助ツールとしてご活用ください。
       </div>
 
-      {/* API usage info */}
-      <div className="mb-4 rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs text-slate-500">
-        1回のスクリーン実行: 約34リクエスト消費 ／ FMP無料プラン（250/日）で最大7回実行可能
-        {data && <span className="ml-1 text-slate-400">— 結果は15分間キャッシュされます</span>}
-      </div>
+      {/* Cache notice (BYOK 残骸テキストは削除済) */}
+      {data && (
+        <div className="mb-4 rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs text-slate-500">
+          結果は15分間キャッシュされます
+        </div>
+      )}
 
       {/* Idle */}
       {phase === 'idle' && (

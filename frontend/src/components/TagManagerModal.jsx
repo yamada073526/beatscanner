@@ -132,7 +132,7 @@ export default function TagManagerModal({ isOpen, onClose, tags, onCreate, onUpd
             <div className="tag-create-form">
               <input
                 type="text"
-                placeholder="タグ名（例: 決算待ち）"
+                placeholder="タグ名（例: 検討中）"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 maxLength={MAX_TAG_NAME_LENGTH}
