@@ -11,8 +11,11 @@ export default function TranslationToggle({ enabled, onToggle, translating }) {
         userSelect: 'none',
       }}
     >
-      <span style={{ whiteSpace: 'nowrap' }}>
-        {translating ? '翻訳中...' : '🌐 日本語表示'}
+      <span
+        className={translating ? 'translating-shimmer' : ''}
+        style={{ whiteSpace: 'nowrap' }}
+      >
+        {translating ? '日本語に翻訳しています…' : '🌐 日本語表示'}
       </span>
       <div
         role="switch"

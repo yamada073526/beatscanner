@@ -225,6 +225,36 @@ body {
   .live-dot-pulse { animation: none; opacity: 0.7; }
 }
 
+/* 翻訳中インジケーター: 文字に「動いている感」を与える微弱パルス
+   (UI/UX: 体感時間圧縮、設計思想 ① 「読み手に負担をかけない」) */
+@keyframes translating-shimmer {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+.translating-shimmer {
+  animation: translating-shimmer 1.4s ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    rgb(8, 145, 178) 0%,
+    rgb(34, 211, 238) 50%,
+    rgb(8, 145, 178) 100%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation:
+    translating-shimmer 1.4s ease-in-out infinite,
+    translating-bg-flow 2.4s linear infinite;
+}
+@keyframes translating-bg-flow {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .translating-shimmer { animation: none; opacity: 0.85; }
+}
+
 /* ── Indicator Bar (v41 P1 即時改善) ──
    UI/UX + Web 設計エキスパート両者収束: 左固定カテゴリラベル + flex-1 等間隔配置。
    「ダサい」の根本原因 (左右非対称・区切り不均等・主指標サイズ階層差) を解消。 */
