@@ -96,8 +96,11 @@ async def fetch_earnings_history(ticker: str, limit: int = 40) -> list[dict]:
 # 統合。FMP/yfinance ETF feed には IB ストラテジスト発言や地政学速報が
 # 構造的に届かない問題を解決。
 _NEWS_CACHE: dict = {"data": [], "ts": 0.0}
-# 25 req/日 制約のため 1h キャッシュ (24/day で余裕、サーバー再起動でも上限内)
-_NEWS_CACHE_TTL = 3600.0
+# 25 req/日 制約のため 3h キャッシュ。
+# 1h だと 24/day ぴったりで余裕なし、デプロイ/再起動が複数回あると上限到達。
+# 3h なら 8/day で 17 リクエスト分余裕、1 日複数回デプロイしても安全。
+# マクロ・地政学速報の 3h 鮮度は実用上十分 (UI に「X時間前」併記済)。
+_NEWS_CACHE_TTL = 3 * 3600.0
 
 
 def _parse_av_time(s: str | None) -> str | None:
