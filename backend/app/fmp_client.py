@@ -66,6 +66,16 @@ class FMPClient:
             {"from": date_from, "to": date_to},
         )
 
+    async def economic_calendar(self, date_from: str, date_to: str) -> list[dict]:
+        """米国・日本・ユーロ圏など主要国の経済指標発表予定。
+        Returns: [{event, date, country, currency, previous, estimate, actual, change, impact, ...}]
+        impact は "Low"/"Medium"/"High"/"None" (FMP free 枠では空のことあり、キーワード補完で対応)。
+        """
+        return await self._get(
+            "/economic-calendar",
+            {"from": date_from, "to": date_to},
+        )
+
     async def search(self, query: str, limit: int = 10) -> list[dict]:
         return await self._get(
             "/search-name",

@@ -216,6 +216,19 @@ export async function fetchMacroNews() {
   return r.json();
 }
 
+// v41 Y-1: 経済指標カレンダー (FOMC / CPI / NFP 等)
+// days=7 で 7 日先まで、impact='high' で重要指標のみフィルタ
+export async function fetchEconomicCalendar(days = 7, impact = null) {
+  const params = new URLSearchParams();
+  if (days) params.set('days', String(days));
+  if (impact) params.set('impact', impact);
+  const r = await fetch(`/api/economic-calendar?${params.toString()}`, {
+    headers: fmpHeaders(),
+  });
+  if (!r.ok) return { events: [], updated_at: null };
+  return r.json();
+}
+
 export async function translateTexts(texts) {
   const r = await fetch('/api/translate', {
     method: 'POST',

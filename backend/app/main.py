@@ -2950,6 +2950,143 @@ async def macro_news(request: Request) -> dict:
     return result
 
 
+# ── 経済指標カレンダー (v41 Y-1) ─────────────────────────────────
+# 3 専門家サブエージェント完全合意の最優先機能。
+# 設計思想 ②「毎日開きたくなる」の核 — FOMC/CPI/雇用統計など週次イベントが
+# 日次リテンションを生む。
+
+# 重要度を HIGH に強制マップする主要指標キーワード
+# FMP の impact フィールドは free 枠で欠損が多いため、event 名でも分類。
+_HIGH_IMPACT_EVENT_KEYWORDS = (
+    # 金融政策
+    "fomc", "fed funds", "interest rate decision", "rate decision",
+    "powell", "jerome powell",
+    # インフレ
+    "cpi", "core cpi", "consumer price",
+    "ppi", "producer price",
+    "core pce", "personal consumption",
+    # 雇用
+    "non-farm payroll", "nfp", "nonfarm payroll", "non farm payroll",
+    "unemployment rate", "jobs report",
+    # 経済成長
+    "gdp", "gross domestic product",
+    "ism manufacturing", "ism non-manufacturing", "ism services",
+    "retail sales",
+    "consumer confidence",
+    # 海外中銀
+    "boj", "bank of japan", "ecb", "people's bank of china",
+)
+_MED_IMPACT_EVENT_KEYWORDS = (
+    "jolts", "job openings",
+    "housing starts", "building permits", "new home sales", "existing home sales",
+    "industrial production",
+    "trade balance",
+    "michigan",  # ミシガン大消費者信頼感
+    "philadelphia fed", "empire state",
+    "durable goods",
+    "factory orders",
+)
+
+
+def _classify_event_impact(event_name: str, fmp_impact: str | None) -> str:
+    """イベント名 + FMP impact から HIGH/MED/LOW を決定。"""
+    text = (event_name or "").lower()
+    # キーワードベースで HIGH 優先判定
+    if any(kw in text for kw in _HIGH_IMPACT_EVENT_KEYWORDS):
+        return "HIGH"
+    fmp_norm = (fmp_impact or "").strip()
+    if fmp_norm == "High":
+        return "HIGH"
+    if any(kw in text for kw in _MED_IMPACT_EVENT_KEYWORDS):
+        return "MED"
+    if fmp_norm == "Medium":
+        return "MED"
+    return "LOW"
+
+
+_ECO_CALENDAR_CACHE: dict = {"data": None, "ts": 0.0, "key": ""}
+_ECO_CALENDAR_TTL = 3600.0  # 1h (経済指標は事前確定で大きく変動しないため)
+
+
+@app.get("/api/economic-calendar")
+async def economic_calendar(
+    request: Request,
+    days: int = Query(7, ge=1, le=30),
+    impact: str | None = Query(None),
+) -> dict:
+    """経済指標カレンダー (FOMC / CPI / NFP 等)。
+    デフォルト 7 日先まで、impact=high で重要指標のみフィルタ可。
+    対象国: 米国 (US) / 日本 (JP) / ユーロ圏 (EU) のみ。
+    """
+    import datetime as _dt_eco
+    today = _dt_eco.date.today()
+    from_date = today.isoformat()
+    to_date = (today + _dt_eco.timedelta(days=days)).isoformat()
+    cache_key = f"{from_date}_{to_date}_{impact or 'all'}"
+
+    now = _time.monotonic()
+    if (
+        _ECO_CALENDAR_CACHE["data"]
+        and _ECO_CALENDAR_CACHE.get("key") == cache_key
+        and now - _ECO_CALENDAR_CACHE["ts"] < _ECO_CALENDAR_TTL
+    ):
+        return _ECO_CALENDAR_CACHE["data"]
+
+    try:
+        client = FMPClient(api_key=_get_fmp_key(request))
+    except FMPError:
+        return {"events": [], "updated_at": int(_time.time())}
+
+    raw: list[dict] = []
+    try:
+        result_raw = await client.economic_calendar(from_date, to_date)
+        if isinstance(result_raw, list):
+            raw = result_raw
+    except FMPError:
+        pass
+
+    # フィルタ・整形
+    target_countries = {"US", "JP", "EU"}
+    events: list[dict] = []
+    for r in raw:
+        if not isinstance(r, dict):
+            continue
+        event_name = (r.get("event") or "").strip()
+        if not event_name:
+            continue
+        country = (r.get("country") or "").strip()
+        if country not in target_countries:
+            continue
+
+        normalized_impact = _classify_event_impact(event_name, r.get("impact"))
+
+        # impact パラメータでフィルタ
+        if impact == "high" and normalized_impact != "HIGH":
+            continue
+
+        events.append({
+            "event": event_name,
+            "date": r.get("date"),
+            "country": country,
+            "currency": r.get("currency"),
+            "previous": r.get("previous"),
+            "estimate": r.get("estimate"),
+            "actual": r.get("actual"),
+            "change": r.get("change"),
+            "change_pct": r.get("changePercentage"),
+            "impact": normalized_impact,
+        })
+
+    # 日付昇順でソート
+    events.sort(key=lambda x: x.get("date") or "")
+
+    result = {"events": events, "updated_at": int(_time.time())}
+    _ECO_CALENDAR_CACHE["data"] = result
+    _ECO_CALENDAR_CACHE["ts"] = now
+    _ECO_CALENDAR_CACHE["key"] = cache_key
+    return result
+
+
 _MAJOR_TICKERS = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA",
     "JPM", "V", "MA", "UNH", "XOM", "LLY", "AVGO",
