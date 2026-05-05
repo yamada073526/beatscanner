@@ -57,13 +57,22 @@ export default function Watchlist({
               {tag && (
                 <TagPill tag={tag} size="sm" />
               )}
-              {pnl && pnl.status && (
-                <span
-                  className={`wl-pnl-badge wl-pnl-${pnl.status}`}
-                  title={`含み損益: ${pnl.pnlAbs >= 0 ? '+' : ''}$${pnl.pnlAbs.toFixed(2)}`}
-                >
-                  {formatPnLPct(pnl.pnlPct)}
-                </span>
+              {holding && (
+                pnl && pnl.status ? (
+                  <span
+                    className={`wl-pnl-badge wl-pnl-${pnl.status}`}
+                    title={`含み損益: ${pnl.pnlAbs >= 0 ? '+' : ''}$${pnl.pnlAbs.toFixed(2)} (現在値 $${Number(priceRow.price).toFixed(2)})`}
+                  >
+                    {formatPnLPct(pnl.pnlPct)}
+                  </span>
+                ) : (
+                  <span
+                    className="wl-pnl-badge wl-pnl-neutral"
+                    title="現在価格を取得中..."
+                  >
+                    …
+                  </span>
+                )
               )}
             </button>
             {onTagClick && (
