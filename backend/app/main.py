@@ -6021,27 +6021,43 @@ async def stripe_webhook(request: Request):
         return {"received": True, "note": "supabase unavailable"}
 
     from datetime import datetime as _dt
+    import traceback as _tb
 
     def _ts(epoch):
         if not epoch:
             return None
         return _dt.utcfromtimestamp(epoch).isoformat() + "Z"
 
-    etype = event["type"]
-
-    if etype == "checkout.session.completed":
-        session_obj = event["data"]["object"]
-        user_id = (session_obj.get("metadata") or {}).get("supabase_user_id")
-        customer_id = session_obj.get("customer")
-        subscription_id = session_obj.get("subscription")
-        if user_id and subscription_id:
+    def _obj_get(obj, key, default=None):
+        """Stripe SDK v10 対応: 属性アクセスと dict アクセス両方を試みる。"""
+        try:
+            return getattr(obj, key, None) or obj.get(key, default)
+        except Exception:
             try:
-                sub = stripe.Subscription.retrieve(subscription_id)
-                # Detect plan from Stripe price ID
-                items = sub.get("items", {}).get("data", [])
-                yearly_id = os.environ.get("STRIPE_YEARLY_PRICE_ID", "")
-                plan_key = "yearly" if items and items[0]["price"]["id"] == yearly_id else "monthly"
+                return obj[key]
+            except Exception:
+                return default
 
+    try:
+        # Stripe SDK v10: event.type / event.data.object が推奨だが、
+        # 旧来の dict スタイル (event["type"]) も互換性のため試みる
+        etype = getattr(event, "type", None) or event.get("type", "")
+
+        if etype == "checkout.session.completed":
+            session_obj = getattr(getattr(event, "data", None), "object", None) or event["data"]["object"]
+            user_id = (_obj_get(session_obj, "metadata") or {}).get("supabase_user_id")
+            customer_id = _obj_get(session_obj, "customer")
+            subscription_id = _obj_get(session_obj, "subscription")
+            print(f"[stripe webhook] checkout.session.completed user_id={user_id} sub_id={subscription_id}")
+            if user_id and subscription_id:
+                sub = stripe.Subscription.retrieve(subscription_id)
+                # items: SDK v10 は sub.items.data、旧来は sub["items"]["data"]
+                try:
+                    items_data = sub.items.data
+                except Exception:
+                    items_data = sub.get("items", {}).get("data", [])
+                yearly_id = os.environ.get("STRIPE_YEARLY_PRICE_ID", "")
+                plan_key = "yearly" if items_data and items_data[0]["price"]["id"] == yearly_id else "monthly"
                 sb.table("subscriptions").upsert({
                     "user_id": user_id,
                     "stripe_customer_id": customer_id,
@@ -6052,33 +6068,32 @@ async def stripe_webhook(request: Request):
                     "current_period_end": _ts(sub.current_period_end),
                     "updated_at": _dt.utcnow().isoformat() + "Z",
                 }, on_conflict="user_id").execute()
-            except Exception as e:
-                print(f"[stripe webhook] checkout.session.completed error: {e}")
+                print(f"[stripe webhook] subscriptions upserted for user_id={user_id} status={sub.status}")
 
-    elif etype == "customer.subscription.updated":
-        sub = event["data"]["object"]
-        customer_id = sub.get("customer")
-        try:
+        elif etype == "customer.subscription.updated":
+            sub = getattr(getattr(event, "data", None), "object", None) or event["data"]["object"]
+            customer_id = _obj_get(sub, "customer")
             result = sb.table("subscriptions").select("user_id").eq("stripe_customer_id", customer_id).execute()
             if result.data:
                 uid = result.data[0]["user_id"]
                 yearly_id = os.environ.get("STRIPE_YEARLY_PRICE_ID", "")
-                items = sub.get("items", {}).get("data", [])
-                plan_key = "yearly" if items and items[0]["price"]["id"] == yearly_id else "monthly"
+                try:
+                    items_data = sub.items.data
+                except Exception:
+                    items_data = sub.get("items", {}).get("data", [])
+                plan_key = "yearly" if items_data and items_data[0]["price"]["id"] == yearly_id else "monthly"
                 sb.table("subscriptions").update({
-                    "status": sub.get("status"),
+                    "status": _obj_get(sub, "status"),
                     "plan": plan_key,
-                    "trial_end": _ts(sub.get("trial_end")),
-                    "current_period_end": _ts(sub.get("current_period_end")),
+                    "trial_end": _ts(_obj_get(sub, "trial_end")),
+                    "current_period_end": _ts(_obj_get(sub, "current_period_end")),
                     "updated_at": _dt.utcnow().isoformat() + "Z",
                 }).eq("user_id", uid).execute()
-        except Exception as e:
-            print(f"[stripe webhook] subscription.updated error: {e}")
+                print(f"[stripe webhook] subscription updated for user_id={uid}")
 
-    elif etype == "customer.subscription.deleted":
-        sub = event["data"]["object"]
-        customer_id = sub.get("customer")
-        try:
+        elif etype == "customer.subscription.deleted":
+            sub = getattr(getattr(event, "data", None), "object", None) or event["data"]["object"]
+            customer_id = _obj_get(sub, "customer")
             result = sb.table("subscriptions").select("user_id").eq("stripe_customer_id", customer_id).execute()
             if result.data:
                 uid = result.data[0]["user_id"]
@@ -6086,8 +6101,12 @@ async def stripe_webhook(request: Request):
                     "status": "canceled",
                     "updated_at": _dt.utcnow().isoformat() + "Z",
                 }).eq("user_id", uid).execute()
-        except Exception as e:
-            print(f"[stripe webhook] subscription.deleted error: {e}")
+                print(f"[stripe webhook] subscription canceled for user_id={uid}")
+
+    except Exception as _e:
+        # 500 でリトライループが起きないよう 200 を返しつつ、エラー全文をログに出す
+        print(f"[stripe webhook] UNHANDLED ERROR: {_e}")
+        _tb.print_exc()
 
     return {"received": True}
 
