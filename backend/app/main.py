@@ -2619,22 +2619,32 @@ _MACRO_KEYWORDS_HIGH = (
     "fomc", "fed ", "federal reserve", "powell", "rate cut", "rate hike",
     "rate decision", "monetary policy",
     "cpi", "ppi", "inflation", "deflation",
-    "nonfarm", "non-farm", "payroll", "jobless", "unemployment",
+    "nonfarm", "non-farm", "payroll", "jobless", "unemployment", "jobs report",
     "gdp", "recession",
     "ecb", "boj", "bank of japan", "people's bank of china",
-    "iran", "ukraine", "russia", "middle east", "geopolitic", "war ",
+    # 地政学 (Iran/Ukraine/Russia/Middle East 等)
+    "iran", "ukraine", "russia", "middle east", "geopolit", "war ",
+    "hormuz", "missile", "tensions escalate", "us-iran",
 )
 # MED (importance=3): セクター・大型 IPO・主要 IB 目標・市場全体
 _MACRO_KEYWORDS_MED = (
     "treasury yield", "10-year", "10-yr", "yield curve", "bond ",
-    "oil price", "crude", "opec", "natural gas", "gold price",
-    "s&p 500", "s&p500", "nasdaq", "dow ", "russell",
-    "ipo", "spacex", "openai", "anthropic", "nvidia",
+    # コモディティ (緩めた - "oil " で general oil mentions も拾う)
+    "oil ", "crude", "opec", "natural gas", "gold ", "silver ", "copper",
+    # インデックス
+    "s&p 500", "s&p500", "nasdaq", "dow ", "russell", "stock market",
+    # IPO / 大手企業
+    "ipo", "spacex", "openai", "anthropic",
+    # 主要 IB
     "goldman sachs", "morgan stanley", "jpmorgan", "bank of america",
     "target price", "price target", "year-end target",
-    "tariff", "china trade", "trade deal",
-    "bitcoin", "crypto",
-    "vix", "volatility", "market sentiment",
+    # 貿易・関税
+    "tariff", "china trade", "trade deal", "trade war",
+    # 暗号資産
+    "bitcoin", "crypto", "ethereum",
+    # ボラ・センチメント
+    "vix", "volatility", "market sentiment", "market move", "market greed", "market fear",
+    "futures lower", "futures higher",
 )
 
 
@@ -2668,15 +2678,28 @@ async def macro_news(request: Request) -> dict:
     try:
         client = FMPClient(api_key=_get_fmp_key(request))
     except FMPError:
-        return {"items": [], "updated_at": int(_time.time())}
+        client = None
 
     raw: list[dict] = []
-    try:
-        raw = await client.general_news(limit=80)
-    except FMPError:
-        raw = []
 
-    # 重複除外 + キーワードフィルタ + 整形
+    # 1) FMP general news / proxy ETFs を試す
+    if client is not None:
+        try:
+            raw = await client.general_news(limit=80)
+        except FMPError:
+            raw = []
+
+    # 2) FMP が空なら yfinance fallback (主要 ETF のニュースを集約)
+    if not raw:
+        for proxy in ("SPY", "QQQ", "DIA"):
+            try:
+                yf_items = await yfinance_source.fetch_news(proxy, limit=20)
+                if isinstance(yf_items, list):
+                    raw.extend(yf_items)
+            except Exception:
+                continue
+
+    # 重複除外 + キーワードフィルタ + 整形 (FMP / yfinance 両フォーマット対応)
     seen_titles: set[str] = set()
     filtered: list[dict] = []
     for n in raw:
@@ -2685,16 +2708,21 @@ async def macro_news(request: Request) -> dict:
             continue
         seen_titles.add(title)
 
-        summary = (n.get("text") or "")[:300]
+        # FMP: text / publishedDate / site
+        # yfinance: summary / published / source
+        summary = (n.get("text") or n.get("summary") or "")[:300]
+        published = n.get("publishedDate") or n.get("published")
+        source = n.get("site") or n.get("source") or n.get("publisher")
+
         importance, category = _classify_macro_news(title, summary)
         if not importance:
             continue
 
         filtered.append({
             "title": title,
-            "url": n.get("url"),
-            "published": n.get("publishedDate"),
-            "source": n.get("site") or n.get("publisher"),
+            "url": n.get("url") or n.get("link"),
+            "published": published,
+            "source": source,
             "summary": summary,
             "image": n.get("image"),
             "importance": importance,
