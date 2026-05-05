@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { fetchMacroNews } from '../api.js';
+import NewsViewToggle from './NewsViewToggle.jsx';
 
 // 重要度バッジ 3 種でタブ切替 (v41 Phase 3.5a)
 const TAB_DEFS = [
@@ -23,6 +24,8 @@ const TAB_DEFS = [
   },
 ];
 const TAB_STORAGE_KEY = 'bs_briefTab';
+const VIEW_STORAGE_KEY = 'bs_newsView.brief';
+const VIEW_AUTO_THRESHOLD = 12;  // 件数 ≤12 → grid デフォルト、>12 → list デフォルト
 const LIVE_THRESHOLD_MIN = 30;
 const DAY_BORDER_HRS = 24;
 
@@ -132,6 +135,105 @@ function NewsRow({ item }) {
   );
 }
 
+function NewsCardGrid({ item }) {
+  const colors = getNewsColors(item.importance, item.category);
+  const minAgo = getMinutesAgo(item.published);
+  const isLive = minAgo <= LIVE_THRESHOLD_MIN && minAgo >= 0;
+  const dimmed = minAgo > DAY_BORDER_HRS * 60;
+  const hasImage = !!(item.image && String(item.image).trim());
+  const fallbackChar = (item.category && item.category.charAt(0)) || '•';
+
+  const handleClick = (e) => {
+    if (!item.url) return;
+    e.preventDefault();
+    window.open(item.url, '_blank', 'noopener,noreferrer');
+  };
+
+  return (
+    <article
+      className="news-grid-card"
+      onClick={handleClick}
+      style={{ opacity: dimmed ? 0.6 : 1 }}
+      role="link"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleClick(e);
+        }
+      }}
+      aria-label={`${item.title} (${item.importance === 'HIGH' ? 'HIGH ' : ''}${item.category}, ${formatRelativeTime(item.published)})`}
+    >
+      <div className="news-grid-thumb-wrap">
+        {hasImage ? (
+          <img
+            src={item.image}
+            alt=""
+            className="news-grid-thumb"
+            loading="lazy"
+            decoding="async"
+            onError={(e) => {
+              // 画像取得失敗時は親要素を fallback ブロックに切替
+              const wrap = e.currentTarget.parentElement;
+              e.currentTarget.style.display = 'none';
+              if (wrap && !wrap.querySelector('.news-grid-thumb-fallback')) {
+                const div = document.createElement('div');
+                div.className = 'news-grid-thumb-fallback';
+                div.style.background = `linear-gradient(135deg, ${colors.bar}33, ${colors.bar}14)`;
+                div.style.color = colors.bar;
+                div.textContent = fallbackChar;
+                wrap.insertBefore(div, wrap.firstChild);
+              }
+            }}
+          />
+        ) : (
+          <div
+            className="news-grid-thumb-fallback"
+            style={{
+              background: `linear-gradient(135deg, ${colors.bar}33, ${colors.bar}14)`,
+              color: colors.bar,
+            }}
+            aria-hidden
+          >
+            {fallbackChar}
+          </div>
+        )}
+        <span
+          className="news-grid-badge-tl"
+          style={{
+            backgroundColor: colors.bg,
+            color: colors.badge,
+            border: `1px solid ${colors.bar}55`,
+          }}
+        >
+          {item.importance === 'HIGH' ? `HIGH · ${item.category}` : item.category}
+        </span>
+        {isLive && (
+          <span className="news-grid-badge-tr">
+            <span className="relative inline-flex h-1.5 w-1.5" aria-hidden>
+              <span className="absolute inline-flex h-full w-full rounded-full bg-cyan-400 live-dot-pulse" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-cyan-500" />
+            </span>
+            LIVE
+          </span>
+        )}
+      </div>
+      <div className="news-grid-body">
+        <p className="news-grid-title">{item.title}</p>
+        <div className="news-grid-meta">
+          {item.source && <span className="news-grid-source">{item.source}</span>}
+          {item.published && (
+            <>
+              {item.source && <span>·</span>}
+              <span>{formatRelativeTime(item.published)}</span>
+            </>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function DaySeparator({ label }) {
   return (
     <li
@@ -161,6 +263,21 @@ export default function TodaysBriefSection() {
   const tabRefs = useRef({});
   const [, setTick] = useState(0);
 
+  // 表示方式 (list / grid). 件数ベース自動初期化 + ユーザー上書きで永続化
+  const [view, setView] = useState(() => {
+    try {
+      const saved = localStorage.getItem(VIEW_STORAGE_KEY);
+      if (saved === 'list' || saved === 'grid') return saved;
+    } catch { /* ignore */ }
+    return null;  // データロード後に件数ベースで決定
+  });
+  const viewDefaultAppliedRef = useRef(false);
+
+  const handleViewChange = (v) => {
+    setView(v);
+    try { localStorage.setItem(VIEW_STORAGE_KEY, v); } catch { /* ignore */ }
+  };
+
   useEffect(() => {
     let cancelled = false;
     fetchMacroNews()
@@ -169,6 +286,15 @@ export default function TodaysBriefSection() {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
+
+  // データロード後、保存 view がなければ件数ベースでデフォルト決定
+  useEffect(() => {
+    if (viewDefaultAppliedRef.current || data.items.length === 0) return;
+    if (view === null) {
+      setView(data.items.length <= VIEW_AUTO_THRESHOLD ? 'grid' : 'list');
+    }
+    viewDefaultAppliedRef.current = true;
+  }, [data.items, view]);
 
   // データロード後、保存タブがなければ最も件数の多いタブをデフォルトに
   useEffect(() => {
@@ -259,15 +385,20 @@ export default function TodaysBriefSection() {
       style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
       aria-labelledby="todays-brief-heading"
     >
-      {/* ヘッダー: タイトル + Segmented Tabs */}
+      {/* ヘッダー: タイトル + view toggle + Segmented Tabs */}
       <div className="px-4 pt-3 pb-3 border-b border-slate-100">
-        <div className="flex items-center justify-between mb-2.5">
-          <h3 id="todays-brief-heading" className="text-sm font-bold text-slate-900" style={{ margin: 0 }}>
-            Today's Brief
-          </h3>
-          <span className="text-[10px] text-slate-400 uppercase tracking-wider">
-            マクロ・地政学
-          </span>
+        <div className="flex items-center justify-between mb-2.5 gap-3">
+          <div className="flex items-baseline gap-2 min-w-0">
+            <h3 id="todays-brief-heading" className="text-sm font-bold text-slate-900" style={{ margin: 0 }}>
+              Today's Brief
+            </h3>
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider whitespace-nowrap">
+              マクロ・地政学
+            </span>
+          </div>
+          {view !== null && (
+            <NewsViewToggle view={view} onChange={handleViewChange} />
+          )}
         </div>
         {/* タブ Segmented Control (Pill 形状で affordance 強化) */}
         <div role="tablist" aria-label="ニュースカテゴリ" className="flex items-center gap-1.5">
@@ -314,7 +445,15 @@ export default function TodaysBriefSection() {
           <div className="px-4 py-6 text-xs text-slate-400 text-center">
             このカテゴリには現在ニュースがありません
           </div>
+        ) : view === 'grid' ? (
+          // グリッド表示: 24h 区切りなし、視覚インパクト優先で時系列のみ
+          <div className="news-grid-container">
+            {sortedItems.map((item, i) => (
+              <NewsCardGrid key={`g-${item.title}-${i}`} item={item} />
+            ))}
+          </div>
         ) : (
+          // 縦列表示: 24h 区切りあり (スキャン効率優先)
           <ul
             className="divide-y divide-slate-100"
             style={{ margin: 0, padding: 0, listStyle: 'none' }}
