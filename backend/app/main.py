@@ -733,27 +733,58 @@ async def get_quotes(symbols: str, request: Request) -> dict:
 
     api_key = _get_fmp_key(request)
     client = FMPClient(api_key=api_key)
+    rows: list[dict] = []
     try:
-        rows = await client.batch_quotes(syms)
-    except FMPError as e:
-        raise HTTPException(status_code=502, detail=f"FMP quote failed: {e}")
+        rows = await client.batch_quotes(syms) or []
+    except FMPError:
+        # FMP 失敗時 (free plan limit / endpoint 制限等) は空のまま yfinance fallback へ
+        rows = []
 
     # 整形: FMP /quote のレスポンスから必要項目だけ抽出
-    quotes = []
-    for r in rows or []:
+    quotes_by_sym: dict[str, dict] = {}
+    for r in rows:
         if not isinstance(r, dict):
             continue
         sym = r.get("symbol")
-        price = r.get("price")
+        price = r.get("price") or r.get("regularMarketPrice")
         if not sym or not isinstance(price, (int, float)):
             continue
-        quotes.append({
+        quotes_by_sym[sym] = {
             "symbol": sym,
             "price": float(price),
             "change_pct": float(r["changesPercentage"]) if isinstance(r.get("changesPercentage"), (int, float)) else None,
             "change": float(r["change"]) if isinstance(r.get("change"), (int, float)) else None,
             "previous_close": float(r["previousClose"]) if isinstance(r.get("previousClose"), (int, float)) else None,
-        })
+        }
+
+    # 欠落分は yfinance フォールバック (market-indices と同パターン)
+    missing = [s for s in syms if s not in quotes_by_sym]
+    if missing:
+        try:
+            yf_rows = await yfinance_source.fetch_batch_quotes(missing)
+            for r in yf_rows or []:
+                if not isinstance(r, dict):
+                    continue
+                sym = r.get("symbol")
+                price = r.get("price") or r.get("regularMarketPrice")
+                if not sym or not isinstance(price, (int, float)):
+                    continue
+                quotes_by_sym[sym] = {
+                    "symbol": sym,
+                    "price": float(price),
+                    "change_pct": float(r["changesPercentage"]) if isinstance(r.get("changesPercentage"), (int, float)) else (
+                        float(r["regularMarketChangePercent"]) if isinstance(r.get("regularMarketChangePercent"), (int, float)) else None
+                    ),
+                    "change": float(r["change"]) if isinstance(r.get("change"), (int, float)) else (
+                        float(r["regularMarketChange"]) if isinstance(r.get("regularMarketChange"), (int, float)) else None
+                    ),
+                    "previous_close": float(r["previousClose"]) if isinstance(r.get("previousClose"), (int, float)) else None,
+                }
+        except Exception:
+            pass
+
+    # syms 順を保持
+    quotes = [quotes_by_sym[s] for s in syms if s in quotes_by_sym]
 
     _QUOTES_CACHE[cache_key] = {"data": quotes, "ts": now}
     return {"quotes": quotes, "market_open": market_open}
