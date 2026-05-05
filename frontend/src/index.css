@@ -203,6 +203,17 @@ body {
   animation: fadeIn 0.2s ease forwards;
 }
 
+@keyframes live-dot-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50%      { opacity: 1;    transform: scale(1.4); }
+}
+.live-dot-pulse {
+  animation: live-dot-pulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-dot-pulse { animation: none; opacity: 0.7; }
+}
+
 /* ── CTA ボタン（決算レポートを見る → 等） — 全幅ダーク + シアン縁 ── */
 .cta-btn {
   transition: all 0.2s ease;
