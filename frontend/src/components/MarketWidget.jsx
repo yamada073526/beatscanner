@@ -1,11 +1,10 @@
 import { useEffect, useState, useCallback, memo } from 'react';
 import { fetchMarketIndices } from '../api.js';
 
-// 階層化: 主指標（S&P / NASDAQ / DOW）— 視覚ウェイトを上げる
+// 主指標 (S&P / NASDAQ / DOW) — 左にシアン 2px アクセントバーで階層化
 const PRIMARY_SYMBOLS = new Set(['^GSPC', '^IXIC', '^DJI']);
 
 // グループ定義: 主要 (指数+ETF) / マクロ (リスク・為替・債券・信用・コモディティ)
-// v41: タブ切替を廃止して 2 行一括表示に変更 (1クリック減の設計思想に従う)
 const MAIN_TYPES  = new Set(['index', 'etf']);
 const MACRO_TYPES = new Set(['risk', 'rate', 'fx', 'bond', 'credit', 'commodity']);
 
@@ -20,11 +19,11 @@ function Arrow({ pct }) {
   return pct >= 0 ? <span aria-hidden>▲</span> : <span aria-hidden>▼</span>;
 }
 
-function Item({ item, primary = false, compact = false }) {
+// セル: ラベル / 価格 / 変動率を縦中央寄せで均等配置
+function IndicatorCell({ item }) {
   const pct = item.change_pct ?? 0;
   const up = pct >= 0;
   const hasPct = item.change_pct !== null && item.change_pct !== undefined;
-  const big = Math.abs(pct) >= 5;     // ±5% 超で左に色バー
   const medium = Math.abs(pct) >= 2;  // ±2% 超で太字強調
   const colorClass = up ? 'text-pass' : 'text-fail';
   const pctBgStyle = hasPct
@@ -35,39 +34,26 @@ function Item({ item, primary = false, compact = false }) {
       }
     : null;
   const pctLabel = hasPct ? `${up ? '+' : ''}${pct.toFixed(2)}%` : '—';
+  const isPrimary = PRIMARY_SYMBOLS.has(item.symbol);
 
-  // 階層化サイズ
-  const minWidth = primary ? 'min-w-[112px]' : (compact ? 'min-w-[80px]' : 'min-w-[96px]');
-  const labelSize = primary ? 'text-[11px]' : 'text-[10px]';
-  const priceSize = primary ? 'text-base' : (compact ? 'text-xs' : 'text-sm');
-  const pctSize = primary ? 'text-[12px]' : 'text-[11px]';
-
-  // ARIA
   const aria = hasPct
     ? `${item.label} ${formatPrice(item)} 前日比 ${up ? 'プラス' : 'マイナス'}${Math.abs(pct).toFixed(2)}パーセント`
     : `${item.label} ${formatPrice(item)}`;
 
   return (
     <div
-      className={`relative flex flex-col items-center gap-0.5 ${minWidth} px-3`}
+      className={`indicator-cell${isPrimary ? ' indicator-cell--primary' : ''}`}
       role="group"
       aria-label={aria}
     >
-      {big && (
-        <span
-          aria-hidden
-          className="absolute left-0 top-1 bottom-1 w-[2px] rounded-sm"
-          style={{ background: up ? '#22c55e' : '#ef4444' }}
-        />
-      )}
-      <span className={`${labelSize} font-semibold text-slate-400 uppercase tracking-wide leading-none whitespace-nowrap`}>
+      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide leading-none whitespace-nowrap">
         {item.label}
       </span>
-      <span className={`${priceSize} font-bold text-slate-900 leading-tight tabular-nums whitespace-nowrap`}>
+      <span className="text-sm font-bold text-slate-900 leading-tight tabular-nums whitespace-nowrap">
         {formatPrice(item)}
       </span>
       <span
-        className={`${pctSize} ${medium ? 'font-bold' : 'font-medium'} ${colorClass} leading-none flex items-center gap-0.5 whitespace-nowrap rounded px-1 py-[1px] tabular-nums`}
+        className={`text-[11px] ${medium ? 'font-bold' : 'font-medium'} ${colorClass} leading-none flex items-center gap-0.5 whitespace-nowrap rounded px-1 py-[1px] tabular-nums`}
         style={pctBgStyle}
       >
         <Arrow pct={item.change_pct} />
@@ -77,48 +63,17 @@ function Item({ item, primary = false, compact = false }) {
   );
 }
 
-function Separator() {
-  return <div className="w-px h-9 bg-slate-200 flex-shrink-0" aria-hidden />;
-}
-
-// 1 行分の指標群をレンダリング (ラベル + 横スクロール + フェード + シェブロン)
-function IndicatorRow({ label, items, compact = false, useGroupHover = false }) {
+// 1 行分のセクション: 左固定ラベル + flex 等間隔セル
+// (ダサさ解消のため左ラベル統一・主指標サイズ階層差廃止)
+function IndicatorRow({ label, items }) {
   if (items.length === 0) return null;
   return (
-    <div className="relative px-4 py-2.5">
-      <div
-        className="overflow-x-auto scrollbar-hide"
-        style={{ overflowX: 'scroll', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-      >
-        <div className="flex items-center gap-0 min-w-max">
-          {label && (
-            <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mr-3 whitespace-nowrap flex-shrink-0">
-              {label}
-            </span>
-          )}
-          {items.map((item, i) => {
-            const isPrimary = !compact && PRIMARY_SYMBOLS.has(item.symbol);
-            return (
-              <div key={item.symbol} className="flex items-center">
-                {i > 0 && <Separator />}
-                <Item item={item} primary={isPrimary} compact={compact} />
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      {/* 右端フェード + シェブロン (横スクロール示唆) */}
-      <div
-        className="pointer-events-none absolute right-0 top-0 h-full w-16"
-        style={{ background: 'linear-gradient(to left, var(--bg-card), transparent)' }}
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 select-none hidden md:block"
-        style={{ fontSize: '18px', lineHeight: 1, fontWeight: 300 }}
-        aria-hidden
-      >
-        ›
+    <div className="indicator-row" role="group" aria-label={label}>
+      <div className="indicator-row-label" aria-hidden>{label}</div>
+      <div className="indicator-row-items">
+        {items.map((item) => (
+          <IndicatorCell key={item.symbol} item={item} />
+        ))}
       </div>
     </div>
   );
@@ -164,7 +119,7 @@ export default memo(function MarketWidget() {
   const macroItems = data.filter((d) => MACRO_TYPES.has(d.type));
 
   return (
-    <div className="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm" role="region" aria-label="マーケット指標">
+    <div className="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden" role="region" aria-label="マーケット指標">
       {/* ヘッダー: LIVE インジケーター + 最終更新 */}
       <div className="flex items-center justify-between px-4 pt-2 pb-1.5 border-b border-slate-100">
         <div className="flex items-center gap-2">
@@ -181,15 +136,9 @@ export default memo(function MarketWidget() {
         </div>
       </div>
 
-      {/* 主要グループ (指数 + 株式 ETF) */}
-      <IndicatorRow items={mainItems} />
-
-      {/* マクログループ (リスク・為替・債券・信用・コモディティ) */}
-      {macroItems.length > 0 && (
-        <div className="border-t border-slate-100">
-          <IndicatorRow label="市場指標" items={macroItems} compact />
-        </div>
-      )}
+      {/* 上下行ともに左固定ラベル + 等間隔セルで対称化 */}
+      <IndicatorRow label="指数" items={mainItems} />
+      <IndicatorRow label="マクロ" items={macroItems} />
     </div>
   );
 });
