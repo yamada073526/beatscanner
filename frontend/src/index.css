@@ -1194,6 +1194,59 @@ body {
 }
 .wl-chip-tag-btn { font-size: 16px; }
 .wl-chip-remove { font-size: 18px; }
+/* ─── Holdings X-2 Phase 4: 表示モード切替 (全て / 保有 / 観察) ─── */
+.wl-mode-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.wl-mode-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  margin-right: 2px;
+}
+.wl-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.wl-mode-pill:hover {
+  background: rgba(148,163,184,0.10);
+  color: var(--text-primary);
+}
+.wl-mode-pill.is-active {
+  background: rgba(56,189,248,0.12);
+  color: rgb(14,165,233);
+  border-color: rgba(56,189,248,0.5);
+}
+[data-theme="dark"] .wl-mode-pill.is-active {
+  background: rgba(56,189,248,0.18);
+  color: rgb(56, 189, 248);
+}
+.wl-mode-count {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.wl-mode-pill.is-active .wl-mode-count {
+  color: inherit;
+  opacity: 0.85;
+}
+
 /* ─── Holdings X-2 Phase 3: 損益バッジ ─── */
 .wl-pnl-badge {
   display: inline-flex;

@@ -29,17 +29,26 @@ export default function HomeTab({
   onOpenTagManager,
   onOpenTagAssign,
   onSignInForTags,
-  // 保有 (Holdings X-2 Phase 3)
+  // 保有 (Holdings X-2 Phase 3 + Phase 4)
   holdings = {},
   prices = {},
+  holdingMode = 'all',
+  onChangeHoldingMode,
   darkMode, toggleDark,
 }) {
-  // タグフィルタ適用後の watchlist
+  // タグフィルタ + 保有モードフィルタを AND で適用
   const filteredWatchlist = useMemo(() => {
-    if (!tagFilterId || tagFilterId === 'all') return watchlist;
-    if (tagFilterId === 'untagged') return watchlist.filter((t) => !assignments[t]);
-    return watchlist.filter((t) => assignments[t] === tagFilterId);
-  }, [watchlist, tagFilterId, assignments]);
+    let list = watchlist;
+    if (tagFilterId === 'untagged') list = list.filter((t) => !assignments[t]);
+    else if (tagFilterId && tagFilterId !== 'all') list = list.filter((t) => assignments[t] === tagFilterId);
+    if (holdingMode === 'hold') list = list.filter((t) => !!holdings[t]);
+    else if (holdingMode === 'observe') list = list.filter((t) => !holdings[t]);
+    return list;
+  }, [watchlist, tagFilterId, assignments, holdingMode, holdings]);
+
+  // 保有 / 観察の件数 (mode pill バッジ用)
+  const holdCount = useMemo(() => watchlist.filter((t) => !!holdings[t]).length, [watchlist, holdings]);
+  const observeCount = watchlist.length - holdCount;
   // 未ログイン かつ 検索結果なし のときのみデモ図解を表示
   // ログイン済みユーザーには Watchlist が先頭に来る（既存の順序がそのまま該当）
   const showDemo = !analysis && !user;
@@ -214,6 +223,35 @@ export default function HomeTab({
           </div>
         ) : (
           <>
+            {user && (
+              <div className="wl-mode-bar">
+                <span className="wl-mode-label">表示</span>
+                <button
+                  type="button"
+                  onClick={() => onChangeHoldingMode?.('all')}
+                  className={`wl-mode-pill ${holdingMode === 'all' ? 'is-active' : ''}`}
+                  aria-pressed={holdingMode === 'all'}
+                >
+                  全て <span className="wl-mode-count">{watchlist.length}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onChangeHoldingMode?.('hold')}
+                  className={`wl-mode-pill ${holdingMode === 'hold' ? 'is-active' : ''}`}
+                  aria-pressed={holdingMode === 'hold'}
+                >
+                  保有 <span className="wl-mode-count">{holdCount}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onChangeHoldingMode?.('observe')}
+                  className={`wl-mode-pill ${holdingMode === 'observe' ? 'is-active' : ''}`}
+                  aria-pressed={holdingMode === 'observe'}
+                >
+                  観察 <span className="wl-mode-count">{observeCount}</span>
+                </button>
+              </div>
+            )}
             {user ? (
               <TagFilterBar
                 tags={tags}

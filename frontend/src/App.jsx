@@ -93,6 +93,20 @@ export default function App() {
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [tagAssignTicker, setTagAssignTicker] = useState(null); // null or ticker string
 
+  // ── 保有モードフィルタ (Holdings X-2 Phase 4) ─────────────────
+  // 'all' | 'observe' (watchlist - holdings) | 'hold' (watchlist ∩ holdings)
+  const [holdingMode, setHoldingModeRaw] = useState(() => {
+    try {
+      const saved = localStorage.getItem('bs_holding_mode_v1');
+      if (saved === 'all' || saved === 'observe' || saved === 'hold') return saved;
+    } catch { /* ignore */ }
+    return 'all';
+  });
+  const setHoldingMode = (m) => {
+    setHoldingModeRaw(m);
+    try { localStorage.setItem('bs_holding_mode_v1', m); } catch { /* ignore */ }
+  };
+
   useEffect(() => { initDarkMode(); }, []);
 
   // ── ディープリンク: ?ticker=NVDA / ?t=AAPL でアクセス時に自動分析 ──
@@ -1143,6 +1157,8 @@ export default function App() {
           onSignInForTags={signInWithGoogle}
           holdings={holdingStore.holdings}
           prices={portfolioPrices.prices}
+          holdingMode={holdingMode}
+          onChangeHoldingMode={setHoldingMode}
         />
       )}
 
