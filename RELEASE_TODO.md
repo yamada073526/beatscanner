@@ -112,6 +112,66 @@ curl -s "https://beatscanner-production.up.railway.app/api/macro-news" | python3
 
 ---
 
+## 4. Claude Code 活用度向上ロードマップ
+
+2026-05-05 Anthropic エンジニア視点レビュー結果（claude-code-guide subagent）に基づく改善計画。  
+本プロジェクトの Claude Code 活用度評価は **5 観点平均 ⭐⭐⭐ (5 段階)** で、特に **`.claude/agents/` 未活用** と **`.claude/commands/` 未活用** が最大の機会損失と指摘された。
+
+### 4-A. 即実装すべき改善 5 件（リリース直後 1 週目）
+
+| # | 改善項目 | 工数 | 効果 |
+|---|---|---|---|
+| 1 | **`.claude/commands/` スラッシュコマンド 5 個** — `/deploy`(railway up + 本番ハッシュ検証) / `/health` (endpoints + DB チェック) / `/release-check` (バンドル + ログ検証) / `/morning` (経済指標 + 注目銘柄) / `/fetch-handover` (最新 handover 取得) | 2h | 反復タスク 5-10 分短縮、開発速度 +30% |
+| 2 | **PreEdit hook + 5 原則 / Trust Cliff 自動チェック** — 「じっちゃま」検出 / UI text ∩ LP copy 不一致検知 / 5 原則貢献度自動プロンプト | 1.5h | Trust Cliff バグ 0 化、離脱率改善 +5-10% |
+| 3 | **Backend skill 2 個** — `conference-stream-analysis` / `fmp-api-retry` （現状 backend は skill 化 0） | 1.5h | backend bug 対応 -50% |
+| 4 | **EarningsAlertAgent (subagent)** — `scheduled-tasks` MCP で FMP ポーリング → 決算リリース自動検出 → `/api/analyze` + 図解 → Slack/Discord 投稿 | 2.5h | DAU +15% 見込み |
+| 5 | **GitHub Actions cron** — `/health` + `npm run build` 毎朝実施、結果を `.claude/reports/` に保存し morning context 化 | 1.5h | 障害検出 1 分化、SLA 改善 |
+
+**合計工数**: 9h（リリース直後 1 週目に分散）
+
+### 4-B. 夢ある新機能 5 件（DAU 取れ始めたら 1 ヶ月後〜）
+
+| # | 機能 | 5 原則貢献 | 想定効果 |
+|---|---|---|---|
+| 1 | **決算リリース直後の自動分析 → Discord/Slack 図解配信** | ②毎日開きたくなる + ④1 クリック減 | リテンション +20% |
+| 2 | **朝のインテリジェンスブリーフ（subagent 並列化）** — economic-events / market-movers / watchlist-urgency を 3 subagent 並列実行、結果を 1 スレッドに集約 | ②毎日開きたくなる | 朝開く習慣化 |
+| 3 | **デプロイ→本番検証 CI/CD 完全自動化** — railway up → ハッシュ検証 → endpoint sanity check → Slack 報告 | （開発者向け） | 本番バグ 99% 防止 |
+| 4 | **決算 48h 前の図解プリフェッチ** — ProductionReadinessAgent が事前に SVG テンプレート生成 → 決算直後 0.5s 表示 | ⑤図解で認知コスト下げる | 即時表示で印象強化 |
+| 5 | **`/release-checklist` 開発者用 gate** — CLAUDE.md ルール違反 / Trust Cliff / 5 原則貢献 / 環境変数同期を一括 self-check、pass のみ `/deploy` 可能 | （品質保証） | リリース品質保証 |
+
+### 4-C. Anthropic 2026 ベストプラクティスで未採用の要素
+
+| 要素 | 現状 | 採用後の効果 | 工数 |
+|---|---|---|---|
+| **PreEdit / PreWrite Hook** | PostEdit のみ | domain linter 機能、編集 前 検証 | 1h |
+| **スラッシュコマンド階層化** | 0 個 | permission prompt -70% | 1.5h |
+| **Agent SDK 統合 (Python)** | 未利用 | backend テスト自動化 | 2h |
+| **MCP Connector (Remote MCP)** | 未利用 | Claude が backend に直接 query | 2.5h |
+| **Structured Outputs (JSON Schema)** | 未利用 | `/api/visualize` の streaming UI 化 | 1.5h |
+| **Prompt Caching** | 未利用 | じっちゃまプロトコル判定 cache → cost -15-20% / latency -200-500ms | 1h |
+
+### 4-D. 実装優先順位（時系列）
+
+```
+リリース前 (今):
+  └ タグ機能 X-1 ✅ / Holdings X-2 / バックログ消化
+
+リリース直後 (1-2 週目):
+  ├ 4-A の #1, #2, #5 (合計 5h) — 開発フロー安定化
+  └ Prompt Caching (1h) — コスト最適化
+
+リリース 1 ヶ月後 (DAU 計測開始):
+  ├ 4-A の #3, #4 (合計 4h) — backend / subagent 強化
+  └ 4-B の #1, #2 (subagent 駆使) — リテンション主役
+
+リリース 3 ヶ月後 (機能拡張期):
+  └ 4-B の #3, #4, #5 + Agent SDK / MCP Connector
+```
+
+**トータル工数見積**: 約 25-30h（リリース後 3 ヶ月に分散）
+
+---
+
 ## 進捗管理
 
 各タスク完了時はこのファイル冒頭に `✅ 完了: YYYY-MM-DD` を追記。  
