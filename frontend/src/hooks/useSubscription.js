@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase.js';
 
 const ACTIVE_STATUSES = ['active', 'trialing'];
@@ -7,12 +7,28 @@ const ACTIVE_STATUSES = ['active', 'trialing'];
  * ユーザーの Stripe サブスクリプション状態を Supabase から取得する。
  * isSubscribed: status が 'active' または 'trialing' なら true。
  * startCheckout: /api/stripe/checkout を呼び出して Stripe Checkout にリダイレクト。
+ * refetch: サブスク状態を手動で再取得する（checkout 完了後のポーリングに使用）。
  */
 export function useSubscription(user) {
   const [subscription, setSubscription] = useState(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [subLoading, setSubLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const cancelledRef = useRef(false);
+
+  const fetchSub = useCallback(async () => {
+    if (!supabase || !user?.id) return null;
+    const { data, error } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (error) {
+      console.warn('[useSubscription] fetch error:', error.message);
+      return null;
+    }
+    return data;
+  }, [user?.id]);
 
   useEffect(() => {
     if (!supabase || !user?.id) {
@@ -21,27 +37,26 @@ export function useSubscription(user) {
       return;
     }
 
-    let cancelled = false;
+    cancelledRef.current = false;
     setSubLoading(true);
 
-    supabase
-      .from('subscriptions')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        setSubLoading(false);
-        if (error) {
-          console.warn('[useSubscription] fetch error:', error.message);
-          return;
-        }
-        setSubscription(data);
-        setIsSubscribed(data ? ACTIVE_STATUSES.includes(data.status) : false);
-      });
+    fetchSub().then((data) => {
+      if (cancelledRef.current) return;
+      setSubLoading(false);
+      setSubscription(data);
+      setIsSubscribed(data ? ACTIVE_STATUSES.includes(data.status) : false);
+    });
 
-    return () => { cancelled = true; };
-  }, [user?.id]);
+    return () => { cancelledRef.current = true; };
+  }, [user?.id, fetchSub]);
+
+  // checkout 完了後などに外部から呼び出せる再取得関数
+  const refetch = useCallback(async () => {
+    const data = await fetchSub();
+    setSubscription(data);
+    setIsSubscribed(data ? ACTIVE_STATUSES.includes(data.status) : false);
+    return data;
+  }, [fetchSub]);
 
   const startCheckout = useCallback(async (plan = 'monthly') => {
     if (!supabase || !user) return;
@@ -105,5 +120,5 @@ export function useSubscription(user) {
     }
   }, [user]);
 
-  return { subscription, isSubscribed, subLoading, checkoutLoading, startCheckout, openPortal };
+  return { subscription, isSubscribed, subLoading, checkoutLoading, startCheckout, openPortal, refetch };
 }

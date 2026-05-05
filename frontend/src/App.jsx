@@ -176,7 +176,7 @@ export default function App() {
 
   // ── Supabase Auth ─────────────────────────────────────────────
   const { user, ready: authReady, signInWithGoogle, signOut } = useAuth();
-  const { isSubscribed, startCheckout, checkoutLoading, openPortal } = useSubscription(user);
+  const { isSubscribed, startCheckout, checkoutLoading, openPortal, refetch: refetchSub } = useSubscription(user);
   // FMPキー保有者(BYOK)またはStripeサブスク有効者をProとして扱う
   const isProUser = isPro() || isSubscribed;
   const syncedRef = useRef(false);
@@ -224,6 +224,56 @@ export default function App() {
       }, 600);
     }
   }, [user, startCheckout]);
+
+  // ── Stripe checkout 完了後のサブスク状態ポーリング ────────────────
+  // Stripe が /?checkout=success にリダイレクトしてきたとき、webhook が Supabase を
+  // 更新するまでのタイムラグ（最大数秒）を吸収するために 2 秒間隔で最大 30 秒ポーリングする。
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('checkout') !== 'success') return;
+    if (!user) return;
+
+    // URL から ?checkout=success を除去（履歴を汚さないよう replaceState）
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState(null, '', cleanUrl);
+
+    // 既にサブスク有効な場合はポーリング不要
+    if (isSubscribed) {
+      const id = Date.now();
+      setToast({ id, message: '✅ Pro 会員として決済が完了しています' });
+      setTimeout(() => setToast((t) => (t?.id === id ? null : t)), 4000);
+      return;
+    }
+
+    // 「確認中」トースト表示（クリックで消せる）
+    const confirmingId = Date.now();
+    setToast({ id: confirmingId, message: '🔄 決済を確認中...' });
+
+    let attempts = 0;
+    const MAX_ATTEMPTS = 15; // 2s × 15 = 30 秒
+    const timer = setInterval(async () => {
+      attempts++;
+      const data = await refetchSub();
+      const activated = data ? ['active', 'trialing'].includes(data.status) : false;
+      if (activated || attempts >= MAX_ATTEMPTS) {
+        clearInterval(timer);
+        if (activated) {
+          const id = Date.now();
+          setToast({ id, message: '🎉 Pro 会員になりました！全機能が解放されました' });
+          setTimeout(() => setToast((t) => (t?.id === id ? null : t)), 6000);
+        } else {
+          // Webhook 遅延で確認できなかった場合（ページリロードで解決）
+          const id = Date.now();
+          setToast({ id, message: '⚠️ 確認に時間がかかっています。しばらく後にページを再読み込みしてください。' });
+          setTimeout(() => setToast((t) => (t?.id === id ? null : t)), 8000);
+        }
+      }
+    }, 2000);
+
+    return () => clearInterval(timer);
+  // isSubscribed は依存に含めない（ポーリング開始時点の snapshot で判断する）
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, refetchSub]);
 
   // ── Header drawer (右からスライドイン) ─────────────────────────
   const [drawerOpen, setDrawerOpen] = useState(false);
