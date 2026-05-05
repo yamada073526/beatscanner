@@ -48,7 +48,7 @@ function Item({ item, compact = false, primary = false }) {
 
   return (
     <div
-      className={`relative flex flex-col items-start gap-0.5 ${minWidth} px-3 first:pl-0`}
+      className={`relative flex flex-col items-center gap-0.5 ${minWidth} px-3`}
       role="group"
       aria-label={aria}
     >
