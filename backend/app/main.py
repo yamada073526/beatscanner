@@ -2861,6 +2861,8 @@ async def macro_news(request: Request) -> dict:
             try:
                 yf_items = await yfinance_source.fetch_news(proxy, limit=20)
                 if isinstance(yf_items, list):
+                    for it in yf_items:
+                        it["_kind"] = "yf"  # データソース可視化用
                     raw.extend(yf_items)
             except Exception:
                 continue
@@ -2903,6 +2905,7 @@ async def macro_news(request: Request) -> dict:
             "image": n.get("image"),
             "importance": importance,
             "category": category,
+            "_kind": n.get("_kind", "fmp"),  # データソース可視化用
         })
 
     # HIGH を優先、次に MED の順でソート (FMP 側で時系列順を維持しつつ)
@@ -2920,7 +2923,17 @@ async def macro_news(request: Request) -> dict:
     for item, size in zip(filtered, cluster_sizes):
         item["cluster_size"] = int(size)
 
-    result = {"items": filtered, "updated_at": int(_time.time())}
+    # データソース別件数 (debug 可視化用)
+    source_breakdown: dict[str, int] = {}
+    for it in filtered:
+        k = it.get("_kind", "fmp")
+        source_breakdown[k] = source_breakdown.get(k, 0) + 1
+
+    result = {
+        "items": filtered,
+        "updated_at": int(_time.time()),
+        "_meta": {"sources": source_breakdown, "raw_count": len(raw)},
+    }
     _MACRO_NEWS_CACHE["data"] = result
     _MACRO_NEWS_CACHE["ts"] = now
     return result

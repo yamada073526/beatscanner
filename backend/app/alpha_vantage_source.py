@@ -153,6 +153,7 @@ def _fetch_news_sync(api_key: str) -> list[dict]:
             "site": item.get("source"),
             "text": item.get("summary") or "",
             "image": item.get("banner_image"),
+            "_kind": "av",  # データソース可視化用
             "_av_sentiment_score": item.get("overall_sentiment_score"),
             "_av_sentiment_label": item.get("overall_sentiment_label"),
         })
