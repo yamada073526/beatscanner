@@ -260,8 +260,8 @@ export default function TodaysBriefSection() {
       aria-labelledby="todays-brief-heading"
     >
       {/* ヘッダー: タイトル + Segmented Tabs */}
-      <div className="px-4 pt-3 pb-0 border-b border-slate-100">
-        <div className="flex items-center justify-between mb-2">
+      <div className="px-4 pt-3 pb-3 border-b border-slate-100">
+        <div className="flex items-center justify-between mb-2.5">
           <h3 id="todays-brief-heading" className="text-sm font-bold text-slate-900" style={{ margin: 0 }}>
             Today's Brief
           </h3>
@@ -269,8 +269,8 @@ export default function TodaysBriefSection() {
             マクロ・地政学
           </span>
         </div>
-        {/* タブ Segmented Control */}
-        <div role="tablist" aria-label="ニュースカテゴリ" className="flex items-center gap-0 -mb-px">
+        {/* タブ Segmented Control (Pill 形状で affordance 強化) */}
+        <div role="tablist" aria-label="ニュースカテゴリ" className="flex items-center gap-1.5">
           {TAB_DEFS.map((tab) => {
             const isActive = activeTab === tab.key;
             const count = tabCounts[tab.key] || 0;
@@ -286,16 +286,7 @@ export default function TodaysBriefSection() {
                 disabled={disabled}
                 onClick={() => !disabled && handleTabChange(tab.key)}
                 onKeyDown={(e) => handleTabKeyDown(e, tab.key)}
-                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded-t ${
-                  isActive
-                    ? 'text-cyan-600'
-                    : disabled
-                    ? 'text-slate-300 cursor-not-allowed'
-                    : 'text-slate-400 hover:text-slate-700'
-                }`}
-                style={{
-                  borderBottom: isActive ? '2px solid #06b6d4' : '2px solid transparent',
-                }}
+                className="tab-pill"
               >
                 <span
                   aria-hidden
@@ -306,7 +297,7 @@ export default function TodaysBriefSection() {
                   }}
                 />
                 <span>{tab.label}</span>
-                <span className="text-[10px] text-slate-400 font-normal">{count}</span>
+                <span className="text-[10px] opacity-60 font-normal">{count}</span>
               </button>
             );
           })}
