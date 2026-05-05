@@ -316,16 +316,23 @@ body {
 
 /* ── News Grid Card (Today's Brief の grid view) ── */
 /* レイアウト: モバイル 1 → タブレット 2 → デスクトップ 4 列 (NewsPanel と統一)。
-   ホバー演出: 選択カード scale + perspective、非選択は opacity dim (NewsPanel 流)。 */
+   ホバー演出: NewsPanel と完全に同じ JS 制御 (news-active / news-dimmed クラス)。
+   :hover 系の CSS-only 方式は環境依存で発火しないケースがあったため変更。 */
+.news-grid-scroll-wrapper {
+  /* NewsPanel の news-scroll-wrapper と同じパターン。
+     max-height で 3 行目をチラ見せ、scroll 可能性を視覚化。
+     padding/margin は scale 1.07 で拡大したカードが端で切れないよう buffer。 */
+  position: relative;
+  max-height: 540px;
+  overflow-y: auto;
+  padding: 12px;
+  margin: -12px;
+}
 .news-grid-container {
   position: relative;
   display: grid;
   grid-template-columns: 1fr;
   gap: 12px;
-  padding: 16px;
-  /* 選択カードが scale 1.07 で拡大した際、端のカードが切り取られないよう
-     padding でビジュアル余裕を確保 (NewsPanel と同思想)。
-     section の overflow-hidden は外したので、padding 16px で十分な buffer。 */
 }
 @media (min-width: 640px)  { .news-grid-container { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 768px)  { .news-grid-container { grid-template-columns: repeat(4, 1fr); } }
@@ -341,17 +348,14 @@ body {
   transition: transform 0.2s ease, border-color 0.2s ease, opacity 0.2s ease, background-color 0.2s ease;
 }
 @media (hover: hover) {
-  /* グループ hover: 「いずれかのカードが hover されている」状態を :has() で検出。
-     :hover 単体だと container の padding 領域でも発火し、全カードが dim される問題があったため修正 */
-  .news-grid-container:has(.news-grid-card:hover) .news-grid-card:not(:hover) {
-    opacity: 0.18;
-  }
-  .news-grid-card:hover {
+  /* JS で .news-active / .news-dimmed を付与する方式 (NewsPanel と同じ実装) */
+  .news-grid-card.news-active {
     transform: perspective(900px) translateZ(50px) scale(1.07);
     border-color: rgba(56, 189, 248, 0.7);
     background-color: var(--bg-hover, var(--bg-card));
     z-index: 2;
   }
+  .news-grid-card.news-dimmed { opacity: 0.18; }
 }
 .news-grid-thumb-wrap {
   position: relative;

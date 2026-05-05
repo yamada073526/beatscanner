@@ -144,7 +144,7 @@ function NewsRow({ item }) {
   );
 }
 
-function NewsCardGrid({ item }) {
+function NewsCardGrid({ item, onMouseEnter, onMouseLeave }) {
   const colors = getNewsColors(item.importance, item.category);
   const minAgo = getMinutesAgo(item.published);
   const isLive = minAgo <= LIVE_THRESHOLD_MIN && minAgo >= 0;
@@ -162,6 +162,8 @@ function NewsCardGrid({ item }) {
     <article
       className="news-grid-card"
       onClick={handleClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       style={{ opacity: dimmed ? 0.6 : 1 }}
       role="link"
       tabIndex={0}
@@ -267,7 +269,27 @@ export default function TodaysBriefSection() {
   });
   const defaultAppliedRef = useRef(false);
   const tabRefs = useRef({});
+  const gridRef = useRef(null);
   const [, setTick] = useState(0);
+
+  // grid view: NewsPanel と同じ JS 制御で「選択カード飛び出し + 周囲ブラー」を実装。
+  // CSS-only (:has) は環境依存で未発火だったため、確実に動く JS 方式に統一。
+  const handleCardEnter = (index) => {
+    if (!gridRef.current) return;
+    if (window.matchMedia('(hover: none)').matches) return;
+    const cards = gridRef.current.querySelectorAll('.news-grid-card');
+    cards.forEach((c, i) => {
+      c.style.transitionDelay = '0s';
+      c.classList.toggle('news-active', i === index);
+      c.classList.toggle('news-dimmed', i !== index);
+    });
+  };
+  const handleCardLeave = () => {
+    if (!gridRef.current) return;
+    gridRef.current.querySelectorAll('.news-grid-card').forEach((c) => {
+      c.classList.remove('news-active', 'news-dimmed');
+    });
+  };
 
   // 表示方式 (list / grid). 件数ベース自動初期化 + ユーザー上書きで永続化
   const [view, setView] = useState(() => {
@@ -452,11 +474,21 @@ export default function TodaysBriefSection() {
             このカテゴリには現在ニュースがありません
           </div>
         ) : view === 'grid' ? (
-          // グリッド表示: 24h 区切りなし、視覚インパクト優先で時系列のみ
-          <div className="news-grid-container">
-            {sortedItems.map((item, i) => (
-              <NewsCardGrid key={`g-${item.title}-${i}`} item={item} />
-            ))}
+          // グリッド表示: NewsPanel と同じ news-scroll-wrapper パターンで
+          // 高さ統一 + 3 行目チラ見せでスクロール可能性を視覚化
+          <div className="px-4 pt-3 pb-4">
+            <div className="news-grid-scroll-wrapper">
+              <div className="news-grid-container" ref={gridRef}>
+                {sortedItems.map((item, i) => (
+                  <NewsCardGrid
+                    key={`g-${item.title}-${i}`}
+                    item={item}
+                    onMouseEnter={() => handleCardEnter(i)}
+                    onMouseLeave={handleCardLeave}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
         ) : (
           // 縦列表示: カード形式 (IR リソース流の border + hover 演出) + 24h 区切り
