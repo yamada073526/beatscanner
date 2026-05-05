@@ -3008,6 +3008,173 @@ _ECO_CALENDAR_CACHE: dict = {"data": None, "ts": 0.0, "key": ""}
 _ECO_CALENDAR_TTL = 3600.0  # 1h (経済指標は事前確定で大きく変動しないため)
 
 
+def _generate_static_economic_events(from_dt, to_dt) -> list[dict]:
+    """FMP /economic-calendar が free 枠で利用不可 (429) のため、
+    米国の標準的な月次・週次経済指標スケジュールに基づき推定イベントを生成。
+
+    各イベントは `_source: 'estimated'` でマークされ、実発表日と異なる可能性を明示。
+    将来 Trading Economics 統合時に実データで置換予定。
+    """
+    import datetime as _dt
+    events: list[dict] = []
+
+    def _iso_at(date_obj, hh: int, mm: int) -> str:
+        # 米国指標は ET 8:30 が多い → ET ≒ UTC-5/-4。簡易的に UTC として記録、
+        # フロントで JST 表示 (+9h で 21:30 / 22:30 JST 相当)
+        return _dt.datetime(date_obj.year, date_obj.month, date_obj.day, hh, mm).isoformat()
+
+    current = from_dt
+    while current <= to_dt:
+        weekday = current.weekday()  # 0=Mon, 6=Sun
+        day = current.day
+        month = current.month
+
+        # 第 1 金曜 → NFP (雇用統計)
+        if weekday == 4 and day <= 7:
+            events.append({
+                "event": "Non-Farm Payrolls (雇用統計)",
+                "date": _iso_at(current, 13, 30),  # ET 8:30 → UTC 13:30
+                "country": "US",
+                "impact": "HIGH",
+                "_source": "estimated",
+            })
+            events.append({
+                "event": "Unemployment Rate (失業率)",
+                "date": _iso_at(current, 13, 30),
+                "country": "US",
+                "impact": "HIGH",
+                "_source": "estimated",
+            })
+
+        # 第 2 火 or 水 → CPI (消費者物価指数)
+        if weekday in (1, 2) and 9 <= day <= 14:
+            events.append({
+                "event": "Consumer Price Index (CPI 消費者物価指数)",
+                "date": _iso_at(current, 13, 30),
+                "country": "US",
+                "impact": "HIGH",
+                "_source": "estimated",
+            })
+
+        # 第 2 or 3 木 → PPI
+        if weekday == 3 and 9 <= day <= 17:
+            events.append({
+                "event": "Producer Price Index (PPI 生産者物価指数)",
+                "date": _iso_at(current, 13, 30),
+                "country": "US",
+                "impact": "MED",
+                "_source": "estimated",
+            })
+
+        # 毎週木曜 → 新規失業保険申請件数
+        if weekday == 3:
+            events.append({
+                "event": "Initial Jobless Claims (新規失業保険申請)",
+                "date": _iso_at(current, 13, 30),
+                "country": "US",
+                "impact": "MED",
+                "_source": "estimated",
+            })
+
+        # 第 3 木 (15-21 日) → Retail Sales / Industrial Production
+        if weekday == 3 and 15 <= day <= 21:
+            events.append({
+                "event": "Retail Sales (小売売上高)",
+                "date": _iso_at(current, 13, 30),
+                "country": "US",
+                "impact": "HIGH",
+                "_source": "estimated",
+            })
+
+        # 第 3 金 (15-21 日) → Michigan Consumer Sentiment 速報
+        if weekday == 4 and 15 <= day <= 21:
+            events.append({
+                "event": "Michigan Consumer Sentiment (ミシガン大消費者信頼感)",
+                "date": _iso_at(current, 15, 0),  # ET 10:00 → UTC 15:00
+                "country": "US",
+                "impact": "MED",
+                "_source": "estimated",
+            })
+
+        # 月末最終金曜 → Core PCE (PCE デフレーター)
+        # 簡易判定: 24-31 日の金曜
+        if weekday == 4 and 24 <= day <= 31:
+            events.append({
+                "event": "Core PCE Price Index (コア PCE デフレーター)",
+                "date": _iso_at(current, 13, 30),
+                "country": "US",
+                "impact": "HIGH",
+                "_source": "estimated",
+            })
+
+        # 月初第 1 営業日 → ISM Manufacturing PMI
+        if 1 <= day <= 3 and weekday < 5:  # Mon-Fri
+            # ただし 1 日目だけ
+            if day == 1 or (day == 2 and weekday == 0) or (day == 3 and weekday == 0):
+                events.append({
+                    "event": "ISM Manufacturing PMI",
+                    "date": _iso_at(current, 15, 0),
+                    "country": "US",
+                    "impact": "HIGH",
+                    "_source": "estimated",
+                })
+
+        # 月初第 3 営業日付近 → ISM Services PMI
+        if 3 <= day <= 5 and weekday < 5:
+            events.append({
+                "event": "ISM Services PMI",
+                "date": _iso_at(current, 15, 0),
+                "country": "US",
+                "impact": "HIGH",
+                "_source": "estimated",
+            })
+
+        # FOMC Meeting (年 8 回、3-7 週間隔の火-水 2 日間)
+        # 2026 推定スケジュール (Fed 公表ベース、実日と異なる場合あり)
+        # Jan 27-28, Mar 17-18, Apr 28-29, Jun 16-17, Jul 28-29, Sep 15-16, Oct 27-28, Dec 8-9
+        fomc_2026 = [
+            (1, 28), (3, 18), (4, 29), (6, 17), (7, 29), (9, 16), (10, 28), (12, 9),
+        ]
+        if (month, day) in fomc_2026 and current.year == 2026:
+            events.append({
+                "event": "FOMC Policy Decision (政策金利発表)",
+                "date": _iso_at(current, 18, 0),  # ET 14:00 → UTC 18:00 (JST 翌日 03:00)
+                "country": "US",
+                "impact": "HIGH",
+                "_source": "estimated",
+            })
+
+        # BOJ 金融政策決定会合 (年 8 回、概ね 1 月末 / 3 月中旬 / 4 月末 / 6 月中旬 等)
+        boj_2026 = [
+            (1, 23), (3, 19), (4, 30), (6, 17), (7, 31), (9, 19), (10, 30), (12, 19),
+        ]
+        if (month, day) in boj_2026 and current.year == 2026:
+            events.append({
+                "event": "BOJ Monetary Policy Meeting (日銀金融政策決定会合)",
+                "date": _iso_at(current, 3, 0),  # JST 12:00 → UTC 3:00
+                "country": "JP",
+                "impact": "HIGH",
+                "_source": "estimated",
+            })
+
+        # ECB 金融政策決定 (年 8 回)
+        ecb_2026 = [
+            (1, 22), (3, 12), (4, 16), (6, 4), (7, 23), (9, 10), (10, 29), (12, 17),
+        ]
+        if (month, day) in ecb_2026 and current.year == 2026:
+            events.append({
+                "event": "ECB Monetary Policy Decision (ECB 金融政策決定)",
+                "date": _iso_at(current, 12, 45),  # ET 8:15 → UTC 12:45
+                "country": "EU",
+                "impact": "HIGH",
+                "_source": "estimated",
+            })
+
+        current += _dt.timedelta(days=1)
+
+    return events
+
+
 @app.get("/api/economic-calendar")
 async def economic_calendar(
     request: Request,
@@ -3048,6 +3215,12 @@ async def economic_calendar(
             fmp_error = str(result_raw)[:200]
     except FMPError as e:
         fmp_error = str(e)[:200]
+
+    # FMP が 0 件 or エラー (free 枠で /economic-calendar 非対応 = 429) の場合、
+    # 静的な recurring schedule から推定イベントを生成して fallback。
+    # 透明性のため各イベントに _source: 'estimated' を付与。
+    if not raw:
+        raw = _generate_static_economic_events(today, today + _dt_eco.timedelta(days=days))
 
     # FMP の country フィールドは表記揺れがあるため、複数表記をすべて受容
     # 例: "US" / "United States" / "USA"、"JP" / "Japan"、"EU" / "Eurozone" / "Euro Area"
@@ -3095,6 +3268,7 @@ async def economic_calendar(
             "change": r.get("change"),
             "change_pct": r.get("changePercentage"),
             "impact": normalized_impact,
+            "_source": r.get("_source", "fmp"),  # fmp / estimated
         })
 
     # 日付昇順でソート

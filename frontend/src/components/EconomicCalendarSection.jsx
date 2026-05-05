@@ -87,6 +87,7 @@ function EventRow({ event }) {
   const countdown = getCountdown(event.date);
   const country = COUNTRY_LABEL[event.country] || event.country;
   const isPast = countdown && countdown.includes('発表済');
+  const isEstimated = event._source === 'estimated';
 
   return (
     <div
@@ -120,6 +121,19 @@ function EventRow({ event }) {
         <span className="text-[10px] text-slate-400 leading-none">
           · {dateStr}
         </span>
+        {isEstimated && (
+          <span
+            className="text-[10px] font-medium leading-none px-1.5 py-0.5 rounded"
+            style={{
+              color: 'rgb(100, 116, 139)',
+              backgroundColor: 'rgba(100, 116, 139, 0.10)',
+              border: '1px solid rgba(100, 116, 139, 0.20)',
+            }}
+            title="標準的なリリーススケジュールに基づく推定日。実際の発表日と異なる場合があります"
+          >
+            予定
+          </span>
+        )}
         {countdown && (
           <span
             className="ml-auto text-[10px] font-semibold leading-none"
