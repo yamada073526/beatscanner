@@ -6,6 +6,7 @@ import { useAuth } from './hooks/useAuth.js';
 import { useIsMobile } from './hooks/useIsMobile.js';
 import { useTags } from './hooks/useTags.js';
 import { useHoldings } from './hooks/useHoldings.js';
+import { usePortfolioPrices } from './hooks/usePortfolioPrices.js';
 import { initDarkMode, toggleDarkMode, isDark } from './utils/darkMode.js';
 import { hasFmpKey, loadFmpKey } from './lib/fmpKey.js';
 import { isPro } from './lib/planGating.js';
@@ -198,6 +199,9 @@ export default function App() {
   // ── 保有 (Holdings X-2): Supabase 同期 + 楽観的更新 ─────────────
   const holdingStore = useHoldings({ supabase, user });
   const [holdingModalTicker, setHoldingModalTicker] = useState(null);
+
+  // ── 保有銘柄の現在価格を 60s/900s 毎に再取得 (Phase 3 損益バッジ) ──
+  const portfolioPrices = usePortfolioPrices(holdingStore.tickers);
 
   // ── 未ログイン LP 表示判定 ─────────────────────────────────────
   // ホームタブ かつ 分析結果なし かつ 未ログイン → ランディングページを表示
@@ -1137,6 +1141,8 @@ export default function App() {
           onOpenTagManager={() => setTagManagerOpen(true)}
           onOpenTagAssign={(t) => setTagAssignTicker(t)}
           onSignInForTags={signInWithGoogle}
+          holdings={holdingStore.holdings}
+          prices={portfolioPrices.prices}
         />
       )}
 

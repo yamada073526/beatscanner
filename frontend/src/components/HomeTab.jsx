@@ -29,6 +29,9 @@ export default function HomeTab({
   onOpenTagManager,
   onOpenTagAssign,
   onSignInForTags,
+  // 保有 (Holdings X-2 Phase 3)
+  holdings = {},
+  prices = {},
   darkMode, toggleDark,
 }) {
   // タグフィルタ適用後の watchlist
@@ -234,6 +237,8 @@ export default function HomeTab({
               items={filteredWatchlist}
               tagsById={tagsById}
               assignments={assignments}
+              holdings={holdings}
+              prices={prices}
               onSelect={onSelect}
               onRemove={onRemove}
               onHover={onHover}

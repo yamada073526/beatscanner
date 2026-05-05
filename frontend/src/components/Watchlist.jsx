@@ -1,10 +1,13 @@
 import CompanyLogo from './CompanyLogo.jsx';
 import TagPill from './TagPill.jsx';
+import { computePnL, formatPnLPct } from '../lib/holdings.js';
 
 export default function Watchlist({
   items,
   tagsById = {},
   assignments = {},
+  holdings = {},   // { [TICKER]: { shares, avg_cost } }   — Holdings X-2 Phase 3
+  prices = {},     // { [TICKER]: { price, change_pct } } — usePortfolioPrices
   onSelect,
   onRemove,
   onFocusSearch,
@@ -34,6 +37,9 @@ export default function Watchlist({
       {items.map((t) => {
         const tagId = assignments[t];
         const tag = tagId ? tagsById[tagId] : null;
+        const holding = holdings[t];
+        const priceRow = prices[t];
+        const pnl = holding && priceRow ? computePnL(holding, priceRow.price) : null;
         return (
           <li
             key={t}
@@ -51,14 +57,22 @@ export default function Watchlist({
               {tag && (
                 <TagPill tag={tag} size="sm" />
               )}
+              {pnl && pnl.status && (
+                <span
+                  className={`wl-pnl-badge wl-pnl-${pnl.status}`}
+                  title={`含み損益: ${pnl.pnlAbs >= 0 ? '+' : ''}$${pnl.pnlAbs.toFixed(2)}`}
+                >
+                  {formatPnLPct(pnl.pnlPct)}
+                </span>
+              )}
             </button>
             {onTagClick && (
               <button
                 type="button"
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); onTagClick(t); }}
                 className="wl-chip-tag-btn"
-                aria-label={`${t} のタグを編集`}
-                title="タグを編集"
+                aria-label={`${t} のタグ・保有を編集`}
+                title="タグ・保有を編集"
               >
                 ⋯
               </button>

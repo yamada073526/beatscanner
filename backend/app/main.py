@@ -689,6 +689,76 @@ async def health() -> dict:
     }
 
 
+# --- Bulk quotes endpoint (Holdings X-2 Phase 3 + future Portfolio Dashboard) ---
+
+# 米国市場時間判定: pytz の依存を避け、UTC ベースで簡易判定。
+# 厳密な祝日対応はせず、平日 13:30-20:00 UTC (= 9:30-16:00 ET) を market open と扱う。
+def _us_market_open(now_utc: float | None = None) -> bool:
+    import datetime as _dt
+    t = _dt.datetime.utcfromtimestamp(now_utc) if now_utc else _dt.datetime.utcnow()
+    if t.weekday() >= 5:  # Sat/Sun
+        return False
+    minutes = t.hour * 60 + t.minute
+    return 13 * 60 + 30 <= minutes < 20 * 60
+
+_QUOTES_CACHE: dict[str, dict] = {}  # key: csv-symbols, value: {"data": [...], "ts": float}
+_QUOTES_TTL_OPEN = 60.0
+_QUOTES_TTL_CLOSED = 900.0
+
+
+@app.get("/api/quotes")
+async def get_quotes(symbols: str, request: Request) -> dict:
+    """複数銘柄の現在価格を一括取得 (Holdings 損益バッジ + ポートフォリオ評価額用)."""
+    raw_list = [s.strip().upper() for s in (symbols or "").split(",") if s.strip()]
+    # 重複排除しつつ順序保持
+    seen: set[str] = set()
+    syms: list[str] = []
+    for s in raw_list:
+        if s not in seen:
+            seen.add(s)
+            syms.append(s)
+    if not syms:
+        return {"quotes": [], "market_open": _us_market_open()}
+    # 暴走防止: 最大 50 銘柄
+    if len(syms) > 50:
+        syms = syms[:50]
+
+    cache_key = ",".join(syms)
+    market_open = _us_market_open()
+    ttl = _QUOTES_TTL_OPEN if market_open else _QUOTES_TTL_CLOSED
+    now = _time.monotonic()
+    cached = _QUOTES_CACHE.get(cache_key)
+    if cached and now - cached["ts"] < ttl:
+        return {"quotes": cached["data"], "market_open": market_open, "_cached": True}
+
+    api_key = _get_fmp_key(request)
+    client = FMPClient(api_key=api_key)
+    try:
+        rows = await client.batch_quotes(syms)
+    except FMPError as e:
+        raise HTTPException(status_code=502, detail=f"FMP quote failed: {e}")
+
+    # 整形: FMP /quote のレスポンスから必要項目だけ抽出
+    quotes = []
+    for r in rows or []:
+        if not isinstance(r, dict):
+            continue
+        sym = r.get("symbol")
+        price = r.get("price")
+        if not sym or not isinstance(price, (int, float)):
+            continue
+        quotes.append({
+            "symbol": sym,
+            "price": float(price),
+            "change_pct": float(r["changesPercentage"]) if isinstance(r.get("changesPercentage"), (int, float)) else None,
+            "change": float(r["change"]) if isinstance(r.get("change"), (int, float)) else None,
+            "previous_close": float(r["previousClose"]) if isinstance(r.get("previousClose"), (int, float)) else None,
+        })
+
+    _QUOTES_CACHE[cache_key] = {"data": quotes, "ts": now}
+    return {"quotes": quotes, "market_open": market_open}
+
+
 # --- Custom screener endpoint ---
 
 @app.get("/api/custom-screener")

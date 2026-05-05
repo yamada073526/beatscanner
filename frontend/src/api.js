@@ -283,6 +283,19 @@ export async function translateTextsStream(texts, onItem, signal) {
   }
 }
 
+// 複数銘柄の現在価格を一括取得 (Holdings 損益バッジ + ポートフォリオ用)
+// 戻り値: { quotes: [{ symbol, price, change_pct, change, previous_close }, ...], market_open: bool }
+export async function fetchQuotes(symbols) {
+  const list = Array.isArray(symbols) ? symbols : [];
+  if (list.length === 0) return { quotes: [], market_open: false };
+  const params = new URLSearchParams({ symbols: list.join(',') });
+  const r = await fetch(`/api/quotes?${params.toString()}`, {
+    headers: fmpHeaders(),
+  });
+  if (!r.ok) return { quotes: [], market_open: false };
+  return r.json();
+}
+
 export async function fetchMarketIndices() {
   const r = await fetch('/api/market-indices', {
     headers: fmpHeaders(),
