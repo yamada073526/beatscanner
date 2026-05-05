@@ -2698,12 +2698,22 @@ def _classify_macro_news(title: str, summary: str) -> tuple[str | None, str]:
 # 同一トピックを何媒体が報じているか (cluster_size) を計算して、
 # 「みんなが注目しているニュース」を 3 段階ドットで視覚化する仕組み。
 _CLUSTER_STOPWORDS = frozenset({
+    # 一般語
     "the", "a", "an", "of", "in", "to", "for", "on", "at", "by", "is", "are",
     "as", "and", "or", "but", "with", "from", "into", "after", "before",
     "this", "that", "these", "those", "it", "its", "has", "have", "had",
     "be", "was", "were", "will", "would", "could", "should", "may", "might",
     "who", "what", "when", "where", "how", "why", "amid", "over", "under",
     "new", "now", "still", "more", "less", "than", "then", "out",
+    # マーケット定型表現の boilerplate
+    # ("Exchange-Traded Funds, Equity Futures Mixed Pre-Bell..." 系の routine
+    # 市況記事が同一クラスタに偽結合される false-positive 防止)
+    "exchange", "traded", "funds", "fund", "equity", "futures", "future",
+    "pre", "bell", "mixed", "lower", "higher", "ahead", "near", "during",
+    "stocks", "stock", "shares", "share", "market", "markets", "trading",
+    "etf", "etfs", "index", "indices", "indexes",
+    "monday", "tuesday", "wednesday", "thursday", "friday",
+    "weekly", "daily", "monthly", "today", "yesterday", "tomorrow",
 })
 
 
@@ -2833,7 +2843,8 @@ async def macro_news(request: Request) -> dict:
 
     # v41 Phase 3.5d: 同一トピック報道数 (cluster_size) を計算してアテンション視覚化
     # 「複数媒体が同じテーマを報じている」= 注目度が高い、という設計思想
-    cluster_sizes = _compute_cluster_sizes(filtered, threshold=0.4)
+    # threshold 0.4 → 0.5: routine 市況記事が偽結合する false-positive を抑制
+    cluster_sizes = _compute_cluster_sizes(filtered, threshold=0.5)
     for item, size in zip(filtered, cluster_sizes):
         item["cluster_size"] = int(size)
 
