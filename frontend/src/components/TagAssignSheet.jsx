@@ -12,10 +12,12 @@ export default function TagAssignSheet({
   ticker,
   tags,
   currentTagId,
+  currentHolding,      // { shares, avg_cost } | null  (Holdings X-2)
   onClose,
   onAssign,
   onUnassign,
   onOpenManager,
+  onOpenHolding,       // () => void  (Holdings X-2)
 }) {
   useEffect(() => {
     if (!isOpen) return;
@@ -78,6 +80,29 @@ export default function TagAssignSheet({
           >
             + 新規タグを作成・管理
           </button>
+
+          {onOpenHolding && (
+            <button
+              onClick={() => { onClose(); onOpenHolding(); }}
+              className="tag-assign-holding"
+            >
+              {currentHolding ? (
+                <>
+                  <span className="tag-assign-holding-icon">💰</span>
+                  <span className="tag-assign-holding-text">
+                    保有: {Number(currentHolding.shares).toLocaleString()} 株 @ ${Number(currentHolding.avg_cost).toFixed(2)}
+                  </span>
+                  <span className="tag-assign-holding-edit">編集</span>
+                </>
+              ) : (
+                <>
+                  <span className="tag-assign-holding-icon">💰</span>
+                  <span className="tag-assign-holding-text">保有を入力</span>
+                  <span className="tag-assign-holding-edit">→</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>

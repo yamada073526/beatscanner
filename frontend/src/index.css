@@ -1829,6 +1829,112 @@ body {
 .tag-assign-manage:hover { background: rgba(56,189,248,0.08); }
 [data-theme="dark"] .tag-assign-manage { color: rgb(56, 189, 248); }
 
+/* ─── Holdings X-2: TagAssignSheet 内の保有エントリ ─── */
+.tag-assign-holding {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+.tag-assign-holding:hover { background: rgba(148,163,184,0.08); border-color: rgba(148,163,184,0.4); }
+.tag-assign-holding-icon { font-size: 16px; }
+.tag-assign-holding-text { flex: 1; }
+.tag-assign-holding-edit {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* ─── Holdings X-2: HoldingModal ─── */
+.holding-modal { max-width: 420px; }
+.modal-footer {
+  padding: 12px 20px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+}
+.holding-footer-spacer { flex: 1; }
+.holding-form { display: flex; flex-direction: column; gap: 12px; }
+.holding-field { display: flex; flex-direction: column; gap: 6px; }
+.holding-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.holding-input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-input, transparent);
+  color: var(--text-primary);
+  transition: border-color 0.15s ease;
+}
+.holding-input:focus {
+  outline: none;
+  border-color: rgb(56, 189, 248);
+}
+.holding-input:disabled { opacity: 0.6; cursor: not-allowed; }
+.holding-input-prefixed { position: relative; }
+.holding-input-prefix {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 14px;
+  pointer-events: none;
+}
+.holding-input-with-prefix { padding-left: 24px; }
+.holding-error {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: rgb(220, 38, 38);
+  background: rgba(220, 38, 38, 0.08);
+  border-radius: 6px;
+}
+[data-theme="dark"] .holding-error { color: rgb(248, 113, 113); background: rgba(248, 113, 113, 0.08); }
+.holding-current-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.btn-danger-ghost {
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 9999px;
+  cursor: pointer;
+  background: transparent;
+  color: rgb(220, 38, 38);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  transition: background-color 0.15s ease;
+}
+.btn-danger-ghost:hover { background: rgba(220, 38, 38, 0.08); }
+.btn-danger-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+[data-theme="dark"] .btn-danger-ghost { color: rgb(248, 113, 113); border-color: rgba(248, 113, 113, 0.3); }
+.holding-delete-confirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 /* ─── 非ログイン時 CTA ─── */
 .tag-login-cta {
   display: flex;

@@ -5,6 +5,7 @@ import { supabase, isSupabaseConfigured } from './lib/supabase.js';
 import { useAuth } from './hooks/useAuth.js';
 import { useIsMobile } from './hooks/useIsMobile.js';
 import { useTags } from './hooks/useTags.js';
+import { useHoldings } from './hooks/useHoldings.js';
 import { initDarkMode, toggleDarkMode, isDark } from './utils/darkMode.js';
 import { hasFmpKey, loadFmpKey } from './lib/fmpKey.js';
 import { isPro } from './lib/planGating.js';
@@ -41,6 +42,7 @@ import DemoTicker from './components/DemoTicker.jsx';
 import CompanyLogo from './components/CompanyLogo.jsx';
 const TagManagerModal = lazy(() => import('./components/TagManagerModal.jsx'));
 const TagAssignSheet = lazy(() => import('./components/TagAssignSheet.jsx'));
+const HoldingModal = lazy(() => import('./components/HoldingModal.jsx'));
 const CustomScreenerPanel = lazy(() => import('./components/CustomScreenerPanel.jsx'));
 const LandingPage = lazy(() => import('./components/LandingPage.jsx'));
 
@@ -192,6 +194,10 @@ export default function App() {
 
   // ── タグ機能 (X-1): Supabase 同期 + 楽観的更新 ─────────────────
   const tagStore = useTags({ supabase, user });
+
+  // ── 保有 (Holdings X-2): Supabase 同期 + 楽観的更新 ─────────────
+  const holdingStore = useHoldings({ supabase, user });
+  const [holdingModalTicker, setHoldingModalTicker] = useState(null);
 
   // ── 未ログイン LP 表示判定 ─────────────────────────────────────
   // ホームタブ かつ 分析結果なし かつ 未ログイン → ランディングページを表示
@@ -2068,6 +2074,7 @@ export default function App() {
             ticker={tagAssignTicker}
             tags={tagStore.tags}
             currentTagId={tagStore.assignments[tagAssignTicker]}
+            currentHolding={holdingStore.getHolding(tagAssignTicker)}
             onClose={() => setTagAssignTicker(null)}
             onAssign={async (tagId) => {
               try {
@@ -2084,6 +2091,31 @@ export default function App() {
               }
             }}
             onOpenManager={() => setTagManagerOpen(true)}
+            onOpenHolding={user ? () => setHoldingModalTicker(tagAssignTicker) : undefined}
+          />
+        )}
+        {holdingModalTicker && (
+          <HoldingModal
+            isOpen={!!holdingModalTicker}
+            ticker={holdingModalTicker}
+            current={holdingStore.getHolding(holdingModalTicker)}
+            onClose={() => setHoldingModalTicker(null)}
+            onSave={async ({ shares, avgCost }) => {
+              try {
+                await holdingStore.setHolding(holdingModalTicker, { shares, avgCost });
+              } catch (e) {
+                showToast(e?.message || '保有の保存に失敗しました');
+                throw e;
+              }
+            }}
+            onDelete={async () => {
+              try {
+                await holdingStore.removeHolding(holdingModalTicker);
+              } catch (e) {
+                showToast(e?.message || '保有の削除に失敗しました');
+                throw e;
+              }
+            }}
           />
         )}
       </Suspense>
