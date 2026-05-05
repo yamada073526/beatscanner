@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { getTickerDomain } from '../lib/tickerDomains.js';
 
 // 頭文字フォールバック用の固定パレット
 // hash は ticker 文字列ベースで安定（同じティッカーは常に同じ色）
@@ -20,9 +19,14 @@ function hashTicker(t) {
   return Math.abs(h);
 }
 
+// FMP image-stock は "BRK.B" 形式をそのまま受ける（ドット保持）
+function normalizeForFmp(ticker) {
+  return (ticker || '').toUpperCase().trim();
+}
+
 /**
  * 企業ロゴ（円形）
- * Clearbit Logo API → 取得失敗時は頭文字グラデ円
+ * FMP image-stock API → 取得失敗時は頭文字グラデ円
  *
  * @param {string} ticker - ティッカー（例: "AAPL"）
  * @param {number} size - 直径 px（デフォルト 24）
@@ -30,17 +34,12 @@ function hashTicker(t) {
  */
 export default function CompanyLogo({ ticker, size = 24, className = '' }) {
   const [errored, setErrored] = useState(false);
-  const t = (ticker || '').toUpperCase();
-  const domain = getTickerDomain(t);
+  const t = normalizeForFmp(ticker);
 
-  // 静的マップになければ即フォールバック
-  // （未知ドメインに Clearbit リクエストして 404 ログを増やさない）
-  const showImage = domain && !errored;
-
-  if (showImage) {
+  if (t && !errored) {
     return (
       <img
-        src={`https://logo.clearbit.com/${domain}`}
+        src={`https://financialmodelingprep.com/image-stock/${t}.png`}
         alt={`${t} logo`}
         width={size}
         height={size}
@@ -48,7 +47,15 @@ export default function CompanyLogo({ ticker, size = 24, className = '' }) {
         decoding="async"
         onError={() => setErrored(true)}
         className={`company-logo ${className}`}
-        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: '50%',
+          objectFit: 'contain',
+          backgroundColor: '#fff',
+          padding: 1,
+          flexShrink: 0,
+        }}
       />
     );
   }
