@@ -6045,7 +6045,9 @@ async def stripe_webhook(request: Request):
 
         if etype == "checkout.session.completed":
             session_obj = getattr(getattr(event, "data", None), "object", None) or event["data"]["object"]
-            user_id = (_obj_get(session_obj, "metadata") or {}).get("supabase_user_id")
+            # SDK v10: metadata は StripeObject の場合もあるため _obj_get で再帰アクセス
+            metadata = _obj_get(session_obj, "metadata") or {}
+            user_id = _obj_get(metadata, "supabase_user_id")
             customer_id = _obj_get(session_obj, "customer")
             subscription_id = _obj_get(session_obj, "subscription")
             print(f"[stripe webhook] checkout.session.completed user_id={user_id} sub_id={subscription_id}")
