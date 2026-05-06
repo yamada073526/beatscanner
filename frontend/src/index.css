@@ -2004,21 +2004,29 @@ body {
 }
 
 /* ─── 案 D: ActionSheet 内セクション (タグ + 保有) ─── */
+/* UI/UX レビュー反映: section 間の余白 + 見出し格上げで chunking 強化、
+   divider は alpha 値で dark/light どちらでも視認性確保 */
 .action-sheet-section {
-  padding: 12px 0;
-  border-top: 1px solid var(--border);
+  padding: 20px 0 14px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);  /* ライトモード */
+}
+[data-theme="dark"] .action-sheet-section {
+  border-top-color: rgba(255, 255, 255, 0.08);  /* ダークモード: 暗背景に淡い光 */
 }
 .action-sheet-section:first-child {
   border-top: 0;
   padding-top: 4px;
 }
 .action-sheet-section-label {
-  margin: 0 0 10px;
-  font-size: 11px;
+  margin: 0 0 12px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   color: var(--text-muted);
   text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* ─── Holdings X-2: HoldingSection (案 D inline 配置版) ─── */
