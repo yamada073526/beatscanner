@@ -166,11 +166,14 @@ export default function PortfolioDashboard({
       </h3>
 
       {/* ── サマリー KPI 4 枚 ─────────────────────────────── */}
+      {/* レビュー指摘 (UI/UX #1): % を一次情報、$ 金額を二次に降格。
+          ポートフォリオサイズに依存しない % のほうが「儲かっている／いない」
+          が一目で判断できる (設計原則 ① 2 秒でわかる)。 */}
       <div className="pd-summary-grid">
         <SummaryCard
           label="当日変動"
-          value={fmtSignedUSD(totals.dayChangeAbs)}
-          sub={Number.isFinite(totals.dayChangePct) ? fmtSignedPct(totals.dayChangePct) : '—'}
+          value={Number.isFinite(totals.dayChangePct) ? fmtSignedPct(totals.dayChangePct) : '—'}
+          sub={fmtSignedUSD(totals.dayChangeAbs)}
           status={dayStatus}
           primary
         />
@@ -182,8 +185,8 @@ export default function PortfolioDashboard({
         />
         <SummaryCard
           label="含み損益"
-          value={fmtSignedUSD(totals.totalPnlAbs)}
-          sub={Number.isFinite(totals.totalPnlPct) ? fmtSignedPct(totals.totalPnlPct) : '—'}
+          value={Number.isFinite(totals.totalPnlPct) ? fmtSignedPct(totals.totalPnlPct) : '—'}
+          sub={fmtSignedUSD(totals.totalPnlAbs)}
           status={pnlStatus}
         />
         <SummaryCard
@@ -300,8 +303,8 @@ export default function PortfolioDashboard({
                   <td className={`pd-num pd-${pnlCls}`} data-label="損益">
                     {r.pnlPct != null ? (
                       <>
-                        <div>{fmtSignedUSD(r.pnlAbs)}</div>
-                        <div className="pd-sub">{formatPnLPct(r.pnlPct)}</div>
+                        <div>{formatPnLPct(r.pnlPct)}</div>
+                        <div className="pd-sub">{fmtSignedUSD(r.pnlAbs)}</div>
                       </>
                     ) : '…'}
                   </td>

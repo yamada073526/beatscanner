@@ -304,19 +304,39 @@ export default function HomeTab({
                 💡 ログインするとタグで銘柄を整理できます
               </button>
             )}
-            <Watchlist
-              items={filteredWatchlist}
-              tagsById={tagsById}
-              assignments={assignments}
-              hideTagPill={tagFilterId !== 'all' && tagFilterId !== 'untagged'}
-              holdings={holdings}
-              prices={prices}
-              onSelect={onSelect}
-              onRemove={onRemove}
-              onHover={onHover}
-              onFocusSearch={onFocusSearch}
-              onTagClick={user ? onOpenTagAssign : undefined}
-            />
+            {/* レビュー指摘 (UI/UX #2): 保有モードかつダッシュボード展開中は
+                同じ銘柄が dashboard table と watchlist chip で二重表示される。
+                chip 列を抑制し、タグ編集が必要な場合の導線だけ残す。 */}
+            {user && holdingMode === 'hold' && Object.keys(holdings).length > 0 ? (
+              <div className="wl-dedup-note" role="note">
+                <span className="wl-dedup-icon" aria-hidden="true">📊</span>
+                <span className="wl-dedup-text">
+                  保有銘柄は<strong>上のダッシュボード</strong>で一覧表示中
+                </span>
+                <button
+                  type="button"
+                  className="wl-dedup-switch"
+                  onClick={() => onChangeHoldingMode?.('all')}
+                  aria-label="全銘柄モードに切替してウォッチリストを表示"
+                >
+                  全銘柄を表示 →
+                </button>
+              </div>
+            ) : (
+              <Watchlist
+                items={filteredWatchlist}
+                tagsById={tagsById}
+                assignments={assignments}
+                hideTagPill={tagFilterId !== 'all' && tagFilterId !== 'untagged'}
+                holdings={holdings}
+                prices={prices}
+                onSelect={onSelect}
+                onRemove={onRemove}
+                onHover={onHover}
+                onFocusSearch={onFocusSearch}
+                onTagClick={user ? onOpenTagAssign : undefined}
+              />
+            )}
           </>
         )}
       </section>

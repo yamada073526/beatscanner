@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import {
   fetchPreferences,
@@ -26,6 +26,10 @@ export default function NotificationSettingsModal({ isOpen, user, onClose }) {
   const [toast, setToast] = useState(null);
   const [recentLog, setRecentLog] = useState([]);
   const [testingChannel, setTestingChannel] = useState(null);
+  // レビュー指摘 (Web 設計 #4): focus trap. パネル DOM と open 直前の
+  // activeElement を保持し、Tab/Shift+Tab で外に出ないよう循環。
+  const panelRef = useRef(null);
+  const previouslyFocusedRef = useRef(null);
 
   // 初回ロード
   useEffect(() => {
@@ -59,12 +63,65 @@ export default function NotificationSettingsModal({ isOpen, user, onClose }) {
     return () => { cancelled = true; };
   }, [isOpen, user?.id, user?.email]);
 
-  // ESC で閉じる
+  // ESC で閉じる + Tab/Shift+Tab で focus trap + open/close で focus 復元
   useEffect(() => {
     if (!isOpen) return;
-    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+
+    // open 直前の activeElement を保持し、close 時に戻す
+    previouslyFocusedRef.current = (typeof document !== 'undefined') ? document.activeElement : null;
+
+    // panel 内の最初の focusable に初期フォーカス
+    const focusFirst = () => {
+      const panel = panelRef.current;
+      if (!panel) return;
+      const els = panel.querySelectorAll(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      const first = els[0];
+      if (first) first.focus();
+    };
+    // DOM が確定してから focus (lazy chunk + 初回ロードに耐える)
+    const focusTimer = setTimeout(focusFirst, 0);
+
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        onClose?.();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const focusables = Array.from(
+        panel.querySelectorAll(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey) {
+        if (active === first || !panel.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      clearTimeout(focusTimer);
+      window.removeEventListener('keydown', onKey);
+      // close 時、open 前の要素にフォーカスを戻す
+      const prev = previouslyFocusedRef.current;
+      if (prev && typeof prev.focus === 'function') {
+        try { prev.focus(); } catch { /* noop */ }
+      }
+    };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
@@ -109,9 +166,16 @@ export default function NotificationSettingsModal({ isOpen, user, onClose }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-panel notif-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal-panel notif-modal"
+        onClick={(e) => e.stopPropagation()}
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="notif-modal-title"
+      >
         <div className="modal-header">
-          <h2>🔔 通知設定</h2>
+          <h2 id="notif-modal-title">🔔 通知設定</h2>
           <button onClick={onClose} className="modal-close" aria-label="閉じる">×</button>
         </div>
 

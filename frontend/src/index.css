@@ -1298,6 +1298,51 @@ body {
   opacity: 0.85;
 }
 
+/* ─── 保有モード時の二重表示抑制 (UI/UX レビュー #2) ─── */
+.wl-dedup-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-top: 8px;
+  border-radius: 10px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px dashed rgba(56, 189, 248, 0.35);
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.wl-dedup-icon { font-size: 16px; flex-shrink: 0; }
+.wl-dedup-text { flex: 1; }
+.wl-dedup-text strong { color: var(--text-primary); font-weight: 700; }
+.wl-dedup-switch {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(56, 189, 248, 0.40);
+  background: transparent;
+  color: rgb(14, 165, 233);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.wl-dedup-switch:hover {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.60);
+}
+[data-theme="dark"] .wl-dedup-note {
+  background: rgba(56, 189, 248, 0.10);
+  border-color: rgba(56, 189, 248, 0.35);
+}
+[data-theme="dark"] .wl-dedup-switch {
+  color: rgb(125, 211, 252);
+}
+@media (max-width: 540px) {
+  .wl-dedup-note { flex-wrap: wrap; }
+  .wl-dedup-switch { width: 100%; text-align: center; }
+}
+
 /* ─── Holdings X-2 Phase 3: 損益バッジ ─── */
 .wl-pnl-badge {
   display: inline-flex;
