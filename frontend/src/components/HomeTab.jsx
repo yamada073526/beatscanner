@@ -39,14 +39,21 @@ export default function HomeTab({
   darkMode, toggleDark,
 }) {
   // タグフィルタ + 保有モードフィルタを AND で適用
+  // 案 B (バグ修正): 「保有」モード時は watchlist ∪ holdings をベースに、
+  // ウォッチリストから外した保有銘柄も「保有」に表示する (Robinhood/Yahoo/SBI 流)。
+  // PortfolioDashboard と整合性を保つ。
   const filteredWatchlist = useMemo(() => {
-    let list = watchlist;
+    let list = holdingMode === 'hold'
+      ? Array.from(new Set([...watchlist, ...Object.keys(holdings)]))
+      : watchlist;
     if (tagFilterId === 'untagged') list = list.filter((t) => !assignments[t]);
     else if (tagFilterId && tagFilterId !== 'all') list = list.filter((t) => assignments[t] === tagFilterId);
     if (holdingMode === 'hold') list = list.filter((t) => !!holdings[t]);
     else if (holdingMode === 'observe') list = list.filter((t) => !holdings[t]);
     return list;
   }, [watchlist, tagFilterId, assignments, holdingMode, holdings]);
+
+  const watchlistSet = useMemo(() => new Set(watchlist), [watchlist]);
 
   // 保有 / 観察の件数 (mode pill バッジ用)
   const holdCount = useMemo(() => watchlist.filter((t) => !!holdings[t]).length, [watchlist, holdings]);
@@ -332,6 +339,7 @@ export default function HomeTab({
           hideTagPill={tagFilterId !== 'all' && tagFilterId !== 'untagged'}
           onTagClick={user ? onOpenTagAssign : undefined}
           onRemove={onRemove}
+          watchlistSet={watchlistSet}
         />
       </Suspense>
     </div>

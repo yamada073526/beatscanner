@@ -41,7 +41,7 @@ if (typeof document !== "undefined" && !document.getElementById("charttab-shimme
 
 function perfColor(value) {
   if (value == null) return "var(--text-muted)";
-  return value >= 0 ? "#3B6D11" : "#A32D2D";
+  return value >= 0 ? "var(--color-gain)" : "var(--color-loss)";
 }
 
 function daysColor(daysLeft) {
@@ -285,6 +285,8 @@ const TickerRow = memo(function TickerRow({
   hideTagPill = false,
   onTagClick,
   onRemove,
+  // バグ修正 案 B: watchlist 外で holdings ありの銘柄を識別 (⊘ ウォッチ外 バッジ表示用)
+  inWatchlist = true,
 }) {
   const rowRef       = useRef(null);
   const prefetchedRef = useRef(false);
@@ -399,6 +401,21 @@ const TickerRow = memo(function TickerRow({
             {tag && !hideTagPill && (
               <TagPill tag={tag} size="sm" />
             )}
+            {!inWatchlist && holding && (
+              <span
+                title="この銘柄はウォッチリストには登録されていませんが、保有記録があります"
+                style={{
+                  fontSize: 9, fontWeight: 600,
+                  padding: '1px 5px', borderRadius: 3,
+                  background: 'var(--bg-subtle)',
+                  color: 'var(--text-muted)',
+                  border: '1px solid var(--border)',
+                  letterSpacing: '0.02em',
+                }}
+              >
+                ⊘ ウォッチ外
+              </span>
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
@@ -463,7 +480,7 @@ const TickerRow = memo(function TickerRow({
                   ? (isMobile ? key === '1y' : idx === PERIODS.length - 1)
                   : key === '1mo';
                 const color = val == null ? 'var(--text-muted)'
-                            : val >= 0 ? '#3B6D11' : '#A32D2D';
+                            : val >= 0 ? 'var(--color-gain)' : 'var(--color-loss)';
                 return (
                   <div key={key} style={{
                     display: 'flex',
@@ -488,22 +505,8 @@ const TickerRow = memo(function TickerRow({
           );
         })()}
 
-        {/* 期間展開／折りたたみボタン */}
-        <button
-          onClick={(e) => { e.stopPropagation(); setPeriodsExpanded(v => !v); }}
-          title={periodsExpanded ? '折りたたむ' : '半年・年を表示'}
-          style={{
-            background: 'transparent', border: 'none',
-            borderLeft: '1px solid var(--border)',
-            cursor: 'pointer', flexShrink: 0,
-            padding: isMobile ? '0 4px' : '0 8px', alignSelf: 'stretch',
-            display: 'flex', alignItems: 'center',
-            fontSize: isMobile ? 9 : 11, fontWeight: 700,
-            color: 'var(--text-muted)',
-          }}
-        >
-          {periodsExpanded ? '«' : '»'}
-        </button>
+        {/* 期間展開／折りたたみボタン: P1-1 補正で削除済 (リスト上部の
+            「日・週・月」「+半年・年」セグメントに集約、行内ボタン詰まり感解消) */}
 
         {/* 並び替え + chip 編集・削除 (4 ボタン縦積み) */}
         <div
@@ -515,7 +518,10 @@ const TickerRow = memo(function TickerRow({
           {onTagClick && (
             <MoveButton label="⋯" onClick={() => onTagClick(ticker)} size={isMobile ? 20 : 28} />
           )}
-          {onRemove && (
+          {/* watchlist 内の銘柄のみ × 削除可。watchlist 外の保有銘柄は
+              「ウォッチリストから削除」が成立しないため × ボタン非表示
+              (PortfolioDashboard 側で保有解除する設計) */}
+          {onRemove && inWatchlist && (
             <MoveButton label="×" onClick={() => onRemove(ticker)} size={isMobile ? 20 : 28} />
           )}
         </div>
@@ -592,6 +598,8 @@ export default memo(function ChartTab({
   hideTagPill = false,
   onTagClick,
   onRemove,
+  // バグ修正 案 B: 「ウォッチリスト外で holdings ありの銘柄」識別用
+  watchlistSet = null,
 }) {
   const rowRefs = useRef({});
   const prevPositions = useRef({});
@@ -707,6 +715,8 @@ export default memo(function ChartTab({
 
       {watchlist.map((ticker, idx) => {
         const tagId = assignments[ticker];
+        // watchlistSet が渡されていればその有無、未指定 (判定タブ等) なら true 扱い
+        const inWatchlist = watchlistSet ? watchlistSet.has(ticker) : true;
         return (
           <TickerRow
             key={ticker}
@@ -723,6 +733,7 @@ export default memo(function ChartTab({
             hideTagPill={hideTagPill}
             onTagClick={onTagClick}
             onRemove={onRemove}
+            inWatchlist={inWatchlist}
           />
         );
       })}
