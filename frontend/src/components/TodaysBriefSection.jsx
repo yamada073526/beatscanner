@@ -183,19 +183,10 @@ function NewsRow({ item, displayTitle, onCardClick }) {
           <p className="text-sm font-medium text-slate-900 leading-relaxed mb-1" style={{ letterSpacing: '0.01em' }}>
             {displayTitle || item.title}
           </p>
-          {item.summary && (
-            <p
-              className="text-xs text-slate-600 leading-relaxed"
-              style={{
-                display: '-webkit-box',
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-              }}
-            >
-              {item.summary}
-            </p>
-          )}
+          {/* F10: 英文 summary は日本人個人投資家にとって心理障壁 + 個別銘柄
+              ニュース (NewsPanel) と統一感を取るため非表示。Apple News (日本版)
+              / SmartNews / Yahoo!ニュース 流の「一覧 = 見出し + メタのみ、本文は
+              詳細ページ」の 2 階建て設計。 */}
         </div>
         <span aria-hidden className="text-slate-300 text-base flex-shrink-0 mt-1 select-none">
           →

@@ -397,8 +397,11 @@ const TickerRow = memo(function TickerRow({
           }
         }}
       >
-        {/* 左: ロゴ + 銘柄名・(タグ) + 株価・(PnL) + 次回決算 */}
-        <div style={{ width: 160, flexShrink: 0, padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3 }}>
+        {/* 左: ロゴ + 銘柄名・(タグ) + 株価・(PnL) + 次回決算
+            F9: モバイル時は 120px に縮小 (Apple Stocks 標準幅、UI/UX エージェント推奨)。
+            これで騰落率 grid に 30-40px の幅を譲り、5 期間 (日/週/月/半年/年) が
+            すべて見えるようになる。 */}
+        <div style={{ width: isMobile ? 120 : 160, flexShrink: 0, padding: isMobile ? '12px 10px' : '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <CompanyLogo ticker={ticker} size={18} />
             <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.2 }}>{ticker}</span>
@@ -464,12 +467,14 @@ const TickerRow = memo(function TickerRow({
 
         {/* 騰落率グリッド：PC 5列 / モバイル 4列（半年非表示） */}
         {(() => {
-          const cellPadding = isMobile ? '7px 2px' : '10px 0';
-          const cellGap     = isMobile ? 3 : 5;
-          const valSize     = isMobile ? '12px' : '16px';
+          // F9 (UI/UX 推奨): 左カラム縮小 + フォント 11px + cellPadding 微調整で
+          // 全 5 期間 (日/週/月/半年/年) を表示。Apple Stocks / Robinhood と同等密度。
+          const cellPadding = isMobile ? '7px 1px' : '10px 0';
+          const cellGap     = isMobile ? 2 : 5;
+          const valSize     = isMobile ? '11px' : '16px';
           const lblSize     = isMobile ? '9px' : '10px';
           const cols = periodsExpanded
-            ? (isMobile ? 'repeat(4,1fr)' : 'repeat(5,1fr)')
+            ? 'repeat(5,1fr)'
             : 'repeat(3,1fr)';
           return (
             <div style={{
@@ -484,10 +489,9 @@ const TickerRow = memo(function TickerRow({
             }}>
               {PERIODS.map(({ key, label }, idx) => {
                 if (!periodsExpanded && (key === '6mo' || key === '1y')) return null;
-                if (periodsExpanded && isMobile && key === '6mo') return null;
                 const val = summary?.performance?.[key];
                 const isLastVisible = periodsExpanded
-                  ? (isMobile ? key === '1y' : idx === PERIODS.length - 1)
+                  ? idx === PERIODS.length - 1
                   : key === '1mo';
                 const color = val == null ? 'var(--text-muted)'
                             : val >= 0 ? 'var(--color-gain)' : 'var(--color-loss)';
