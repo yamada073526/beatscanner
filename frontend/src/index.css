@@ -3354,6 +3354,16 @@ body {
   border-color: rgba(255,255,255,0.06);
 }
 
+/* F8: モバイル ChartTab ⋯ 集約 + bottom sheet アニメーション (Apple HIG 準拠) */
+@keyframes sheetSlideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* P0-2: マクロニュース 縦列モードの枠固定 (経済指標と統一)。
    scrollbar スタイルは bs-scroll-thin utility に集約 (F7 統一)。 */
 .brief-list-scroll {

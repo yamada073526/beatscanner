@@ -1,4 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, Component, memo } from "react";
+import { createPortal } from "react-dom";
+import { MoreHorizontal, ArrowUp, ArrowDown, Tag, Trash2, X } from "lucide-react";
 import CompanyLogo from "./CompanyLogo.jsx";
 import TagPill from "./TagPill.jsx";
 import { computePnL, formatPnLPct } from "../lib/holdings.js";
@@ -287,6 +289,8 @@ const TickerRow = memo(function TickerRow({
   onRemove,
   // バグ修正 案 B: watchlist 外で holdings ありの銘柄を識別 (⊘ ウォッチ外 バッジ表示用)
   inWatchlist = true,
+  // F8: モバイル時の ⋯ 集約 (Apple HIG 44pt 準拠) — bottom sheet を開く callback
+  onOpenActions,
 }) {
   const rowRef       = useRef(null);
   const prefetchedRef = useRef(false);
@@ -514,23 +518,51 @@ const TickerRow = memo(function TickerRow({
         {/* 期間展開／折りたたみボタン: P1-1 補正で削除済 (リスト上部の
             「日・週・月」「+半年・年」セグメントに集約、行内ボタン詰まり感解消) */}
 
-        {/* 並び替え + chip 編集・削除 (4 ボタン縦積み) */}
-        <div
-          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 2px', flexShrink: 0, gap: 0 }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <MoveButton label="↑" disabled={isFirst} onClick={() => onMove(ticker, 'up')} size={isMobile ? 20 : 28} />
-          <MoveButton label="↓" disabled={isLast}  onClick={() => onMove(ticker, 'down')} size={isMobile ? 20 : 28} />
-          {onTagClick && (
-            <MoveButton label="⋯" onClick={() => onTagClick(ticker)} size={isMobile ? 20 : 28} />
-          )}
-          {/* watchlist 内の銘柄のみ × 削除可。watchlist 外の保有銘柄は
-              「ウォッチリストから削除」が成立しないため × ボタン非表示
-              (PortfolioDashboard 側で保有解除する設計) */}
-          {onRemove && inWatchlist && (
-            <MoveButton label="×" onClick={() => onRemove(ticker)} size={isMobile ? 20 : 28} />
-          )}
-        </div>
+        {/* F8: モバイルは ⋯ 1 ボタン (44×44, Apple HIG 準拠) で bottom sheet 起動。
+            デスクトップは現状の 4 ボタン縦積みを維持 (mouse 精度十分) */}
+        {isMobile ? (
+          <div
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', flexShrink: 0 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => onOpenActions?.(ticker)}
+              aria-label={`${ticker} のアクションを開く`}
+              style={{
+                width: 44,
+                height: 44,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'transparent',
+                border: 'none',
+                borderRadius: 8,
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                transition: 'background 0.15s, color 0.15s',
+              }}
+              onTouchStart={(e) => { e.currentTarget.style.background = 'rgba(127,127,127,0.18)'; }}
+              onTouchEnd={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              <MoreHorizontal size={20} strokeWidth={2} aria-hidden />
+            </button>
+          </div>
+        ) : (
+          <div
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 2px', flexShrink: 0, gap: 0 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MoveButton label="↑" disabled={isFirst} onClick={() => onMove(ticker, 'up')} size={28} />
+            <MoveButton label="↓" disabled={isLast}  onClick={() => onMove(ticker, 'down')} size={28} />
+            {onTagClick && (
+              <MoveButton label="⋯" onClick={() => onTagClick(ticker)} size={28} />
+            )}
+            {onRemove && inWatchlist && (
+              <MoveButton label="×" onClick={() => onRemove(ticker)} size={28} />
+            )}
+          </div>
+        )}
 
         {/* P0-1 (5 体レビュー): ▼ 矢印は右端から下端独立行へ移動 (詰まり感解消、視覚アフォーダンス維持) */}
       </div>
@@ -606,6 +638,122 @@ const TickerRow = memo(function TickerRow({
 
 const GLOBAL_PERIODS_EXPANDED_KEY = 'wl-global-periods-expanded-v1';
 
+// F8: モバイル用 Action Sheet (bottom sheet)。⋯ ボタンから起動し、
+// 並び替え / タグ・保有編集 / 削除 を 44px 高ボタンで提示。Apple HIG 44pt 準拠。
+function ActionSheet({ ticker, isFirst, isLast, canRemove, onMove, onTagClick, onRemove, onClose }) {
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  // ESC で閉じる + body scroll lock
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onCloseRef.current?.(); };
+    window.addEventListener('keydown', handler);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handler);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, []);
+
+  if (!ticker) return null;
+
+  const sheet = (
+    <>
+      <div
+        onClick={onClose}
+        style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,0.45)',
+          zIndex: 70,
+          animation: 'fadeIn 0.2s ease',
+        }}
+        aria-hidden
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${ticker} のアクション`}
+        style={{
+          position: 'fixed', left: 0, right: 0, bottom: 0,
+          zIndex: 71,
+          background: 'var(--bg-card)',
+          borderTopLeftRadius: 16, borderTopRightRadius: 16,
+          boxShadow: '0 -8px 32px rgba(0,0,0,0.18)',
+          padding: '8px 0 max(12px, env(safe-area-inset-bottom)) 0',
+          animation: 'sheetSlideUp 0.25s cubic-bezier(0.32, 0.72, 0, 1)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px 12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CompanyLogo ticker={ticker} size={20} />
+            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{ticker}</span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="閉じる"
+            style={{
+              width: 36, height: 36,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: 'var(--text-muted)', borderRadius: 8,
+            }}
+          >
+            <X size={18} strokeWidth={2} aria-hidden />
+          </button>
+        </div>
+        <div style={{ borderTop: '1px solid var(--border)' }} />
+        <SheetButton disabled={isFirst} onClick={() => { onMove(ticker, 'up'); onClose(); }} icon={<ArrowUp size={18} />}>上へ移動</SheetButton>
+        <SheetButton disabled={isLast} onClick={() => { onMove(ticker, 'down'); onClose(); }} icon={<ArrowDown size={18} />}>下へ移動</SheetButton>
+        {onTagClick && (
+          <SheetButton onClick={() => { onTagClick(ticker); onClose(); }} icon={<Tag size={18} />}>タグ・保有を編集</SheetButton>
+        )}
+        {onRemove && canRemove && (
+          <SheetButton onClick={() => { onRemove(ticker); onClose(); }} icon={<Trash2 size={18} />} destructive>
+            ウォッチリストから削除
+          </SheetButton>
+        )}
+      </div>
+    </>
+  );
+  return createPortal(sheet, document.body);
+}
+
+function SheetButton({ children, onClick, icon, disabled, destructive }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        width: '100%',
+        minHeight: 52,
+        display: 'flex', alignItems: 'center', gap: 14,
+        padding: '12px 20px',
+        background: 'transparent',
+        border: 'none',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        color: disabled
+          ? 'var(--text-muted)'
+          : destructive
+            ? 'var(--color-loss)'
+            : 'var(--text-primary)',
+        fontSize: 15,
+        fontWeight: 500,
+        textAlign: 'left',
+        opacity: disabled ? 0.5 : 1,
+        transition: 'background 0.15s',
+      }}
+      onTouchStart={(e) => { if (!disabled) e.currentTarget.style.background = 'rgba(127,127,127,0.10)'; }}
+      onTouchEnd={(e) => { e.currentTarget.style.background = 'transparent'; }}
+    >
+      <span style={{ flexShrink: 0, display: 'inline-flex' }}>{icon}</span>
+      <span>{children}</span>
+    </button>
+  );
+}
+
 export default memo(function ChartTab({
   watchlist = [], onSelect, onMove,
   // chip 統合 (P1-1): タグ / 含み損益 / 編集・削除を行内に表示
@@ -619,6 +767,8 @@ export default memo(function ChartTab({
   // バグ修正 案 B: 「ウォッチリスト外で holdings ありの銘柄」識別用
   watchlistSet = null,
 }) {
+  // F8: モバイル ⋯ から開く Action Sheet
+  const [actionSheetTicker, setActionSheetTicker] = useState(null);
   const rowRefs = useRef({});
   const prevPositions = useRef({});
   const [globalPeriodsExpanded, setGlobalPeriodsExpandedState] = useState(() => {
@@ -752,9 +902,26 @@ export default memo(function ChartTab({
             onTagClick={onTagClick}
             onRemove={onRemove}
             inWatchlist={inWatchlist}
+            onOpenActions={setActionSheetTicker}
           />
         );
       })}
+      {actionSheetTicker && (() => {
+        const idx = watchlist.indexOf(actionSheetTicker);
+        const inWl = watchlistSet ? watchlistSet.has(actionSheetTicker) : true;
+        return (
+          <ActionSheet
+            ticker={actionSheetTicker}
+            isFirst={idx === 0}
+            isLast={idx === watchlist.length - 1}
+            canRemove={inWl}
+            onMove={handleMove}
+            onTagClick={onTagClick}
+            onRemove={onRemove}
+            onClose={() => setActionSheetTicker(null)}
+          />
+        );
+      })()}
     </div>
   );
 });
