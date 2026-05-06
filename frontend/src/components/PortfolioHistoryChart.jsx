@@ -31,9 +31,29 @@ function fmtSignedPct(n) {
  * - 既存 lightweight-charts を流用 (追加バンドルなし)
  * - period 切替: 1M / 3M / 1Y
  * - 始端 → 終端の差分を「期間収益」として表示 (KPI 補強)
+ * - レビュー指摘 (UI/UX #3): 期間収益符号で line / area の色を切替
+ *   (gain → 緑、loss → 赤、neutral → シアン)。設計原則 ① 2 秒で「儲け／損」が分かる。
  *
  * 設計思想: ⑤ 図解で認知コスト削減 + ② 毎日開きたくなる
  */
+
+// ── chart 系の配色パレット (CSS 変数と同色だが lightweight-charts が
+//    hex 文字列を要求するため JS にも保持。CLAUDE.md「投資業界の色ルール」厳守) ──
+const CHART_PALETTE = {
+  gain:    { light: { line: '#16a34a', top: 'rgba(22,163,74,0.30)',  bottom: 'rgba(22,163,74,0.02)'  },
+             dark:  { line: '#34ef81', top: 'rgba(52,239,129,0.40)', bottom: 'rgba(52,239,129,0.02)' } },
+  loss:    { light: { line: '#dc2626', top: 'rgba(220,38,38,0.30)',  bottom: 'rgba(220,38,38,0.02)'  },
+             dark:  { line: '#f87171', top: 'rgba(248,113,113,0.40)', bottom: 'rgba(248,113,113,0.02)' } },
+  // neutral は従来のシアン (ブランド色) を維持
+  neutral: { light: { line: '#0ea5e9', top: 'rgba(14,165,233,0.30)', bottom: 'rgba(14,165,233,0.02)' },
+             dark:  { line: '#38bdf8', top: 'rgba(56,189,248,0.40)', bottom: 'rgba(56,189,248,0.02)' } },
+};
+
+function pickPalette(status, isDark) {
+  const p = CHART_PALETTE[status] || CHART_PALETTE.neutral;
+  return isDark ? p.dark : p.light;
+}
+
 export default function PortfolioHistoryChart({ lots = [] }) {
   const [period, setPeriod] = useState('3m');
   const { series, loading } = usePortfolioHistory(lots, period);
@@ -43,7 +63,23 @@ export default function PortfolioHistoryChart({ lots = [] }) {
   const seriesRef = useRef(null);
   const [chartReady, setChartReady] = useState(false);
 
-  // ── chart 初期化 (期間 / シリーズ変更で再構築) ──
+  // ── 期間収益 (始端 → 終端) を chart 構築前に算出して line/area 色に反映 ──
+  const periodReturn = (() => {
+    if (!Array.isArray(series) || series.length < 2) return null;
+    const first = Number(series[0]?.value);
+    const last = Number(series[series.length - 1]?.value);
+    if (!Number.isFinite(first) || !Number.isFinite(last) || first <= 0) return null;
+    return {
+      absDelta: last - first,
+      pctDelta: ((last - first) / first) * 100,
+    };
+  })();
+
+  const status = periodReturn
+    ? (periodReturn.pctDelta > 0.05 ? 'gain' : (periodReturn.pctDelta < -0.05 ? 'loss' : 'neutral'))
+    : 'neutral';
+
+  // ── chart 初期化 (期間 / シリーズ / status 変更で再構築) ──
   useEffect(() => {
     if (!containerRef.current) return;
     let destroyed = false;
@@ -60,6 +96,7 @@ export default function PortfolioHistoryChart({ lots = [] }) {
 
       const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
       const w = containerRef.current.clientWidth || 600;
+      const palette = pickPalette(status, isDark);
 
       const chart = lc.createChart(containerRef.current, {
         width: w,
@@ -90,9 +127,9 @@ export default function PortfolioHistoryChart({ lots = [] }) {
       chartRef.current = chart;
 
       const areaSeries = chart.addSeries(lc.AreaSeries, {
-        topColor: isDark ? 'rgba(56,189,248,0.40)' : 'rgba(14,165,233,0.30)',
-        bottomColor: isDark ? 'rgba(56,189,248,0.02)' : 'rgba(14,165,233,0.02)',
-        lineColor: isDark ? '#38bdf8' : '#0ea5e9',
+        topColor:    palette.top,
+        bottomColor: palette.bottom,
+        lineColor:   palette.line,
         lineWidth: 2,
         priceLineVisible: false,
         lastValueVisible: false,
@@ -118,7 +155,7 @@ export default function PortfolioHistoryChart({ lots = [] }) {
       }
       seriesRef.current = null;
     };
-  }, [series]);
+  }, [series, status]);
 
   // ── リサイズ追従 ──
   useEffect(() => {
@@ -130,22 +167,6 @@ export default function PortfolioHistoryChart({ lots = [] }) {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
-
-  // ── 期間収益 (始端 → 終端) ──
-  const periodReturn = (() => {
-    if (!Array.isArray(series) || series.length < 2) return null;
-    const first = Number(series[0]?.value);
-    const last = Number(series[series.length - 1]?.value);
-    if (!Number.isFinite(first) || !Number.isFinite(last) || first <= 0) return null;
-    return {
-      absDelta: last - first,
-      pctDelta: ((last - first) / first) * 100,
-    };
-  })();
-
-  const status = periodReturn
-    ? (periodReturn.pctDelta > 0.05 ? 'gain' : (periodReturn.pctDelta < -0.05 ? 'loss' : 'neutral'))
-    : 'neutral';
 
   return (
     <section className="pd-history">

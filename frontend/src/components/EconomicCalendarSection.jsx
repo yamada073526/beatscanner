@@ -177,11 +177,14 @@ function EventRow({ event, isHighest }) {
   })();
 
   // Y-2: actual vs estimate の方向 (発表済のみ)
+  // レビュー指摘 (UI/UX #5): amber (#f59e0b) は CLAUDE.md で「緊急・警告」専用色のため、
+  // ここでは使わない。経済指標は「上振れ = 良い」とは限らない (CPI 上振れ = インフレ加速等)
+  // ため、価値中立な slate/grey で「方向だけ」を表現する。
   const cmp = isPast ? compareActualVsEstimate(event) : null;
   const actualHl = (() => {
-    if (cmp === 'above') return { color: '#f59e0b', label: '↑' };  // amber: 上振れ
-    if (cmp === 'below') return { color: '#06b6d4', label: '↓' };  // cyan: 下振れ
-    if (cmp === 'neutral') return { color: 'var(--text-muted)', label: '≈' };
+    if (cmp === 'above')   return { color: 'var(--text-secondary)', label: '↑' };
+    if (cmp === 'below')   return { color: 'var(--text-muted)',     label: '↓' };
+    if (cmp === 'neutral') return { color: 'var(--text-muted)',     label: '≈' };
     return null;
   })();
 

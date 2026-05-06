@@ -353,15 +353,20 @@ export default function HoldingSection({
             className={`holding-mode-tab ${mode === 'history' ? 'is-active' : ''}`}
             disabled={saving}
           >
-            履歴 <span className="holding-tab-badge">{lots.length}</span>
-            {splitSuggestionCount > 0 && (
-              <span
-                className="holding-tab-badge holding-tab-badge-attention"
-                title={`株式分割の補正候補 ${splitSuggestionCount} 件`}
-              >
-                ⚠ {splitSuggestionCount}
-              </span>
-            )}
+            {/* レビュー指摘 (UI/UX #7): 件数バッジと警告バッジを 1 つに統合。
+                警告がある時は同じバッジを amber スタイルに切替＋⚠ 前置で
+                「件数 + 警告件数」を兼ねる。バッジ数が減って情報が圧縮される。 */}
+            履歴{' '}
+            <span
+              className={`holding-tab-badge${splitSuggestionCount > 0 ? ' holding-tab-badge-attention' : ''}`}
+              title={
+                splitSuggestionCount > 0
+                  ? `履歴 ${lots.length} 件中、株式分割の補正候補 ${splitSuggestionCount} 件`
+                  : `履歴 ${lots.length} 件`
+              }
+            >
+              {splitSuggestionCount > 0 ? `⚠ ${lots.length}` : lots.length}
+            </span>
           </button>
         </div>
 

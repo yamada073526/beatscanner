@@ -33,6 +33,13 @@
   /* ページ背景色（hex + RGB の両形式）— sticky bar / page bg 共通参照 */
   --page-bg:     #f8fafc;
   --page-bg-rgb: 248, 250, 252;
+  /* ─── 投資業界カラートークン (Web 設計レビュー #7) ─────────────
+     light/dark の差異を 1 箇所に集約。CLAUDE.md「投資業界の色ルール」厳守:
+       上昇/ポジ = 緑、下落/ネガ = 赤、警告 = amber、シアンは「ブランド色」(上昇ではない)
+     コンポーネント側は `var(--color-gain)` 等を参照し hex を直書きしない。 */
+  --color-gain:    #16a34a;  /* 緑 (light) — 白背景でコントラスト確保 */
+  --color-loss:    #dc2626;  /* 赤 (light) */
+  --color-warning: #f59e0b;  /* amber (light/dark 共通) — 警告・緊急のみ */
 }
 
 [data-theme="dark"] {
@@ -63,6 +70,10 @@
   /* ダークページ背景（hex + RGB）— ページ実背景 #0f172a (slate-900) と完全一致 */
   --page-bg:     #0f172a;
   --page-bg-rgb: 15, 23, 42;
+  /* 投資業界カラー (dark) — 黒背景で視認できる明度寄り */
+  --color-gain:    #34ef81;
+  --color-loss:    #f87171;
+  /* --color-warning は light と同値で OK (amber は両モード共通) */
 }
 
 /* ── Sticky search band (gradient fade — backdrop-filter 廃止)
@@ -2337,7 +2348,7 @@ body {
   padding: 4px 12px;
   font-size: 11px;
   font-weight: 700;
-  background: #f59e0b;
+  background: var(--color-warning);
   border: 0;
   border-radius: 6px;
   color: white;
@@ -2567,13 +2578,10 @@ body {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
-.pd-card-gain .pd-card-value, .pd-card-gain .pd-card-sub { color: #16a34a; }
-.pd-card-loss .pd-card-value, .pd-card-loss .pd-card-sub { color: #dc2626; }
-.pd-card-amber .pd-card-value, .pd-card-amber .pd-card-sub { color: #f59e0b; }
-[data-theme="dark"] .pd-card-gain .pd-card-value,
-[data-theme="dark"] .pd-card-gain .pd-card-sub { color: #34ef81; }
-[data-theme="dark"] .pd-card-loss .pd-card-value,
-[data-theme="dark"] .pd-card-loss .pd-card-sub { color: #f87171; }
+/* 投資業界カラートークン使用 — light/dark の hex 重複定義は不要。 */
+.pd-card-gain .pd-card-value, .pd-card-gain .pd-card-sub { color: var(--color-gain); }
+.pd-card-loss .pd-card-value, .pd-card-loss .pd-card-sub { color: var(--color-loss); }
+.pd-card-amber .pd-card-value, .pd-card-amber .pd-card-sub { color: var(--color-warning); }
 
 /* 銘柄絞り込みブレッドクラム (per-stock filter applied) */
 .pd-filter-breadcrumb {
@@ -2693,11 +2701,9 @@ body {
 .pd-tk-logo { display: inline-flex; flex: 0 0 auto; }
 .pd-tk-text { font-weight: 600; color: var(--text-primary); letter-spacing: 0.01em; }
 
-.pd-gain { color: #16a34a; font-weight: 600; }
-.pd-loss { color: #dc2626; font-weight: 600; }
+.pd-gain { color: var(--color-gain); font-weight: 600; }
+.pd-loss { color: var(--color-loss); font-weight: 600; }
 .pd-neutral { color: var(--text-muted); }
-[data-theme="dark"] .pd-gain { color: #34ef81; }
-[data-theme="dark"] .pd-loss { color: #f87171; }
 
 .pd-sub { font-size: 11px; opacity: 0.85; font-weight: 500; margin-top: 2px; }
 
@@ -2843,11 +2849,9 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .pd-history-delta-pct { font-weight: 500; opacity: 0.85; }
-.pd-history-delta-gain { color: #16a34a; }
-.pd-history-delta-loss { color: #dc2626; }
+.pd-history-delta-gain { color: var(--color-gain); }
+.pd-history-delta-loss { color: var(--color-loss); }
 .pd-history-delta-neutral { color: var(--text-muted); }
-[data-theme="dark"] .pd-history-delta-gain { color: #34ef81; }
-[data-theme="dark"] .pd-history-delta-loss { color: #f87171; }
 
 .pd-history-period-tabs {
   display: inline-flex;
@@ -2967,10 +2971,8 @@ body {
   font-weight: 700;
   color: var(--text-primary);
 }
-.qhistory-stat-gain { color: #16a34a; }
-.qhistory-stat-loss { color: #dc2626; }
-[data-theme="dark"] .qhistory-stat-gain { color: #34ef81; }
-[data-theme="dark"] .qhistory-stat-loss { color: #f87171; }
+.qhistory-stat-gain { color: var(--color-gain); }
+.qhistory-stat-loss { color: var(--color-loss); }
 .qhistory-stat-streak .qhistory-stat-value {
   font-size: 16px;
 }
@@ -3031,22 +3033,19 @@ body {
   font-weight: 700;
   letter-spacing: 0.02em;
 }
-.qh-verdict-badge.qh-gain { background: rgba(34,197,94,0.16); color: #16a34a; }
-.qh-verdict-badge.qh-loss { background: rgba(239,68,68,0.16); color: #dc2626; }
+/* バッジ背景は意図的な rgba 半透明 (色トークンと別系統)、文字色のみトークン化 */
+.qh-verdict-badge.qh-gain { background: rgba(34,197,94,0.16); color: var(--color-gain); }
+.qh-verdict-badge.qh-loss { background: rgba(239,68,68,0.16); color: var(--color-loss); }
 .qh-verdict-badge.qh-neutral { background: rgba(148,163,184,0.16); color: var(--text-secondary); }
 .qh-verdict-badge.qh-unknown { background: rgba(148,163,184,0.10); color: var(--text-muted); }
-[data-theme="dark"] .qh-verdict-badge.qh-gain { color: #34ef81; }
-[data-theme="dark"] .qh-verdict-badge.qh-loss { color: #f87171; }
 
 .qh-surprise {
   font-size: 11px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.qh-gain .qh-surprise { color: #16a34a; }
-.qh-loss .qh-surprise { color: #dc2626; }
-[data-theme="dark"] .qh-gain .qh-surprise { color: #34ef81; }
-[data-theme="dark"] .qh-loss .qh-surprise { color: #f87171; }
+.qh-gain .qh-surprise { color: var(--color-gain); }
+.qh-loss .qh-surprise { color: var(--color-loss); }
 
 .qhistory-empty {
   margin: 0;
@@ -3305,10 +3304,7 @@ body {
 .notif-err {
   margin: 0;
   font-size: 11px;
-  color: #dc2626;
-}
-[data-theme="dark"] .notif-err {
-  color: #f87171;
+  color: var(--color-loss);
 }
 .notif-toast {
   padding: 10px 12px;
@@ -3318,16 +3314,14 @@ body {
 }
 .notif-toast-success {
   background: rgba(34,197,94,0.10);
-  color: #16a34a;
+  color: var(--color-gain);
   border: 1px solid rgba(34,197,94,0.35);
 }
 .notif-toast-error {
   background: rgba(239,68,68,0.10);
-  color: #dc2626;
+  color: var(--color-loss);
   border: 1px solid rgba(239,68,68,0.35);
 }
-[data-theme="dark"] .notif-toast-success { color: #34ef81; }
-[data-theme="dark"] .notif-toast-error { color: #f87171; }
 
 /* 直近ログリスト */
 .notif-log-list {
