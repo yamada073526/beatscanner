@@ -223,43 +223,47 @@ export default function HomeTab({
           </div>
         ) : (
           <>
-            {user && (
-              <div className="wl-mode-bar">
-                <button
-                  type="button"
-                  onClick={() => onChangeHoldingMode?.('all')}
-                  className={`wl-mode-pill ${holdingMode === 'all' ? 'is-active' : ''}`}
-                  aria-pressed={holdingMode === 'all'}
-                >
-                  全銘柄 <span className="wl-mode-count">{watchlist.length}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onChangeHoldingMode?.('hold')}
-                  className={`wl-mode-pill ${holdingMode === 'hold' ? 'is-active' : ''}`}
-                  aria-pressed={holdingMode === 'hold'}
-                >
-                  保有 <span className="wl-mode-count">{holdCount}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onChangeHoldingMode?.('observe')}
-                  className={`wl-mode-pill ${holdingMode === 'observe' ? 'is-active' : ''}`}
-                  aria-pressed={holdingMode === 'observe'}
-                >
-                  観察 <span className="wl-mode-count">{observeCount}</span>
-                </button>
-              </div>
-            )}
             {user ? (
-              <TagFilterBar
-                tags={tags}
-                assignments={assignments}
-                totalCount={watchlist.length}
-                selectedFilter={tagFilterId}
-                onSelectFilter={onChangeTagFilter}
-                onOpenManager={onOpenTagManager}
-              />
+              <div className="wl-filters-row" role="group" aria-label="ウォッチリストフィルタ">
+                <div className="wl-mode-segment" role="radiogroup" aria-label="表示モード">
+                  <button
+                    type="button"
+                    role="radio"
+                    onClick={() => onChangeHoldingMode?.('all')}
+                    className={`wl-mode-seg-btn ${holdingMode === 'all' ? 'is-active' : ''}`}
+                    aria-checked={holdingMode === 'all'}
+                  >
+                    全銘柄 <span className="wl-mode-count">{watchlist.length}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    onClick={() => onChangeHoldingMode?.('hold')}
+                    className={`wl-mode-seg-btn ${holdingMode === 'hold' ? 'is-active' : ''}`}
+                    aria-checked={holdingMode === 'hold'}
+                  >
+                    保有 <span className="wl-mode-count">{holdCount}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    onClick={() => onChangeHoldingMode?.('observe')}
+                    className={`wl-mode-seg-btn ${holdingMode === 'observe' ? 'is-active' : ''}`}
+                    aria-checked={holdingMode === 'observe'}
+                  >
+                    観察 <span className="wl-mode-count">{observeCount}</span>
+                  </button>
+                </div>
+                <span className="wl-filters-sep" aria-hidden="true" />
+                <TagFilterBar
+                  tags={tags}
+                  assignments={assignments}
+                  totalCount={watchlist.length}
+                  selectedFilter={tagFilterId}
+                  onSelectFilter={onChangeTagFilter}
+                  onOpenManager={onOpenTagManager}
+                />
+              </div>
             ) : (
               <button
                 type="button"

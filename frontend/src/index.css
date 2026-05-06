@@ -1194,47 +1194,73 @@ body {
 }
 .wl-chip-tag-btn { font-size: 16px; }
 .wl-chip-remove { font-size: 18px; }
-/* ─── Holdings X-2 Phase 4: 表示モード切替 (全て / 保有 / 観察) ─── */
-.wl-mode-bar {
+/* ─── Holdings X-2 Phase 4 (案 B): 1 行統合フィルタバー + segmented control ─── */
+.wl-filters-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
   margin-bottom: 8px;
   flex-wrap: wrap;
+  /* タグ列の overflow が overall row を破綻させないように min-width 許容 */
 }
-.wl-mode-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-  letter-spacing: 0.04em;
-  margin-right: 2px;
+.wl-filters-row > .tag-filter-bar {
+  margin-bottom: 0;          /* row 内では下マージン無効化 */
+  flex: 1 1 220px;           /* 残り幅を埋め、最小 220px で折返し */
+  min-width: 0;
 }
-.wl-mode-pill {
+.wl-filters-sep {
+  display: inline-block;
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+@media (max-width: 480px) {
+  /* モバイルでは separator を隠して 2 行に折返し */
+  .wl-filters-sep { display: none; }
+}
+
+/* Segmented control: 連結 3 ボタンの単一コンテナ */
+.wl-mode-segment {
+  display: inline-flex;
+  align-items: stretch;
+  padding: 3px;
+  gap: 2px;
+  background: rgba(148,163,184,0.10);
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+[data-theme="dark"] .wl-mode-segment {
+  background: rgba(148,163,184,0.14);
+}
+.wl-mode-seg-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
+  gap: 5px;
+  padding: 5px 14px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
   background: transparent;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: 9999px;
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+  white-space: nowrap;
 }
-.wl-mode-pill:hover {
-  background: rgba(148,163,184,0.10);
+.wl-mode-seg-btn:hover:not(.is-active) {
   color: var(--text-primary);
 }
-.wl-mode-pill.is-active {
-  background: rgba(56,189,248,0.12);
+.wl-mode-seg-btn.is-active {
+  background: var(--bg-card, #fff);
   color: rgb(14,165,233);
-  border-color: rgba(56,189,248,0.5);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.04);
 }
-[data-theme="dark"] .wl-mode-pill.is-active {
+[data-theme="dark"] .wl-mode-seg-btn.is-active {
   background: rgba(56,189,248,0.18);
   color: rgb(56, 189, 248);
+  box-shadow: none;
 }
 .wl-mode-count {
   font-size: 11px;
@@ -1242,7 +1268,7 @@ body {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
-.wl-mode-pill.is-active .wl-mode-count {
+.wl-mode-seg-btn.is-active .wl-mode-count {
   color: inherit;
   opacity: 0.85;
 }
