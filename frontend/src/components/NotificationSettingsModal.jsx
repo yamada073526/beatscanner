@@ -26,10 +26,13 @@ export default function NotificationSettingsModal({ isOpen, user, onClose }) {
   const [toast, setToast] = useState(null);
   const [recentLog, setRecentLog] = useState([]);
   const [testingChannel, setTestingChannel] = useState(null);
-  // レビュー指摘 (Web 設計 #4): focus trap. パネル DOM と open 直前の
-  // activeElement を保持し、Tab/Shift+Tab で外に出ないよう循環。
+  // レビュー指摘 (Web 設計 #4): focus trap.
+  // 親 (App) が onClose をインライン生成するため、dep に入れると毎レンダで
+  // effect cleanup が走り「focus 復元 → モーダル外」が暴発する。
+  // → onClose は ref 経由で参照、focus 管理 effect は isOpen のみに依存させる。
   const panelRef = useRef(null);
-  const previouslyFocusedRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   // 初回ロード
   useEffect(() => {
@@ -63,29 +66,43 @@ export default function NotificationSettingsModal({ isOpen, user, onClose }) {
     return () => { cancelled = true; };
   }, [isOpen, user?.id, user?.email]);
 
-  // ESC で閉じる + Tab/Shift+Tab で focus trap + open/close で focus 復元
+  // ── Focus 管理: open 時に最初の focusable へ移動、close 時に開く前の要素へ復帰
+  //    `onClose` を dep に入れると親再レンダ毎に cleanup→focus 復元が暴発するため、
+  //    isOpen のみを dep にして真の open/close 遷移時だけ走らせる。
   useEffect(() => {
     if (!isOpen) return;
 
-    // open 直前の activeElement を保持し、close 時に戻す
-    previouslyFocusedRef.current = (typeof document !== 'undefined') ? document.activeElement : null;
+    // クロージャで保持 → 再レンダで上書きされない
+    const previouslyFocused = (typeof document !== 'undefined') ? document.activeElement : null;
 
-    // panel 内の最初の focusable に初期フォーカス
-    const focusFirst = () => {
+    // lazy chunk + Suspense で DOM 確定が遅れることがあるので 50ms 後に focus
+    const focusTimer = setTimeout(() => {
       const panel = panelRef.current;
       if (!panel) return;
       const els = panel.querySelectorAll(
         'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
       );
-      const first = els[0];
-      if (first) first.focus();
-    };
-    // DOM が確定してから focus (lazy chunk + 初回ロードに耐える)
-    const focusTimer = setTimeout(focusFirst, 0);
+      if (els[0]) {
+        try { els[0].focus({ preventScroll: true }); } catch { /* noop */ }
+      }
+    }, 50);
 
+    return () => {
+      clearTimeout(focusTimer);
+      if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+        try { previouslyFocused.focus({ preventScroll: true }); } catch { /* noop */ }
+      }
+    };
+  }, [isOpen]);
+
+  // ── キー操作: ESC で閉じる + Tab/Shift+Tab で focus trap
+  //    onClose は ref 経由で参照するので dep から外せる。
+  //    keydown リスナーは isOpen=true の間だけ登録し、親再レンダで剥がれない。
+  useEffect(() => {
+    if (!isOpen) return;
     const onKey = (e) => {
       if (e.key === 'Escape') {
-        onClose?.();
+        onCloseRef.current?.();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -113,16 +130,8 @@ export default function NotificationSettingsModal({ isOpen, user, onClose }) {
       }
     };
     window.addEventListener('keydown', onKey);
-    return () => {
-      clearTimeout(focusTimer);
-      window.removeEventListener('keydown', onKey);
-      // close 時、open 前の要素にフォーカスを戻す
-      const prev = previouslyFocusedRef.current;
-      if (prev && typeof prev.focus === 'function') {
-        try { prev.focus(); } catch { /* noop */ }
-      }
-    };
-  }, [isOpen, onClose]);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
