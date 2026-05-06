@@ -460,6 +460,25 @@ export default function App() {
     setTimeout(() => setToast((t) => (t?.id === id ? null : t)), 3000);
   }
 
+  // Undo Snackbar (Gmail/Material 方式): 削除系操作で 5 秒間「元に戻す」
+  // アクションを提示。ボタンクリックで onUndo を実行。
+  function showUndoToast(message, onUndo) {
+    const id = Date.now();
+    setToast({
+      id,
+      message,
+      action: {
+        label: '元に戻す',
+        onClick: () => {
+          setToast(null);
+          try { onUndo?.(); } catch (e) { console.error('[undo]', e); }
+        },
+      },
+      durationMs: 5000,
+    });
+    setTimeout(() => setToast((t) => (t?.id === id ? null : t)), 5000);
+  }
+
   function handleKeyDeleted() {
     setHasKey(hasFmpKey());
     setShowSettings(false);
@@ -640,6 +659,9 @@ export default function App() {
   }
 
   function removeFromWatchlist(t) {
+    // Undo 用スナップショット (削除前のタグ割当を保持)
+    const tagSnapshot = tagStore.assignments?.[t] || null;
+    const wasInWatchlist = watchlist.includes(t);
     setWatchlist(watchlist.filter((x) => x !== t));
     if (user && supabase) {
       supabase
@@ -652,6 +674,16 @@ export default function App() {
       tagStore.unassignTag(t).catch(() => {});
     } else if (isSupabaseConfigured) {
       showSyncToast();
+      return;  // 未ログイン同期案内が出る場合は Undo toast を出さない (UI 重複回避)
+    }
+    // 誤削除リカバリ用 Undo Snackbar (5 秒)
+    if (wasInWatchlist) {
+      showUndoToast(`${t} をウォッチリストから削除しました`, () => {
+        addToWatchlist(t);
+        if (tagSnapshot && tagStore.assignTag) {
+          tagStore.assignTag(t, tagSnapshot).catch(() => {});
+        }
+      });
     }
   }
 
@@ -2064,19 +2096,36 @@ export default function App() {
         </nav>
       )}{/* end always-rendered nav (showBottomNav は CSS transition で制御) */}
 
-      {/* Toast */}
+      {/* Toast — action 付き (Material Snackbar 形式) と onClick 全体クリックの両対応 */}
       {toast && (
         <div
-          onClick={toast.onClick}
-          role={toast.onClick ? 'button' : undefined}
-          tabIndex={toast.onClick ? 0 : undefined}
-          onKeyDown={toast.onClick
+          onClick={toast.onClick && !toast.action ? toast.onClick : undefined}
+          role={toast.onClick && !toast.action ? 'button' : undefined}
+          tabIndex={toast.onClick && !toast.action ? 0 : undefined}
+          onKeyDown={toast.onClick && !toast.action
             ? (e) => { if (e.key === 'Enter' || e.key === ' ') toast.onClick?.(); }
             : undefined}
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] rounded-lg bg-slate-800 px-5 py-3 text-sm font-medium text-white shadow-lg transition-opacity"
-          style={{ cursor: toast.onClick ? 'pointer' : 'default' }}
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 rounded-lg bg-slate-800 px-5 py-3 text-sm font-medium text-white shadow-lg transition-opacity"
+          style={{ cursor: toast.onClick && !toast.action ? 'pointer' : 'default' }}
         >
-          {toast.message}
+          <span>{toast.message}</span>
+          {toast.action && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); toast.action.onClick?.(); }}
+              className="rounded px-2.5 py-1 text-xs font-bold uppercase tracking-wider transition-colors"
+              style={{
+                color: '#22d3ee',
+                background: 'rgba(34,211,238,0.15)',
+                border: '1px solid rgba(34,211,238,0.4)',
+                cursor: 'pointer',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.30)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.15)'; }}
+            >
+              {toast.action.label}
+            </button>
+          )}
         </div>
       )}
 

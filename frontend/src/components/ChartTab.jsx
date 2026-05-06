@@ -435,7 +435,7 @@ const TickerRow = memo(function TickerRow({
             )}
           </div>
           {(summary || summaryErr) && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 3 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
               <span style={{
                 fontSize: 10, fontWeight: 500,
                 background: 'var(--bg-subtle)', color: 'var(--text-secondary)',
@@ -443,9 +443,15 @@ const TickerRow = memo(function TickerRow({
               }}>
                 次回決算 {summaryErr ? '—' : fmtDate(summary?.next_earnings)}
               </span>
+              {/* リクエスト 1: 「あと N 日」を pill 外で並列に降格 (Stripe-style sub)。
+                  pill 自体は中立色維持、緊急色は (...) 文字色のみで表現。 */}
               {daysToEarnings != null && daysToEarnings >= 0 && (
-                <span style={{ fontSize: 10, color: daysColor(daysToEarnings) }}>
-                  ● あと{daysToEarnings}日
+                <span style={{
+                  fontSize: 10,
+                  color: daysColor(daysToEarnings),
+                  fontWeight: urgency ? 600 : 400,
+                }}>
+                  (あと{daysToEarnings}日)
                 </span>
               )}
             </div>
