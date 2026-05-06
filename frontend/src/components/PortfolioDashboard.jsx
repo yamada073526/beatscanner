@@ -1,4 +1,4 @@
-import { useMemo, lazy, Suspense } from 'react';
+import { useMemo, useState, lazy, Suspense } from 'react';
 import CompanyLogo from './CompanyLogo.jsx';
 import { useHoldingsMeta } from '../hooks/useHoldingsMeta.js';
 import { computePnL, formatPnLPct } from '../lib/holdings.js';
@@ -55,6 +55,14 @@ export default function PortfolioDashboard({
 }) {
   const tickers = useMemo(() => Object.keys(holdings), [holdings]);
   const { meta } = useHoldingsMeta(tickers);
+
+  // 「銘柄クリックでチャートを絞り込む」モード (マネーフォワード方式)。
+  // 同じ銘柄を再クリック or 「全銘柄」クリックで解除。
+  const [selectedTicker, setSelectedTicker] = useState(null);
+  const filteredLotsForChart = useMemo(() => {
+    if (!selectedTicker) return lots;
+    return lots.filter((l) => (l.ticker || '').toUpperCase() === selectedTicker);
+  }, [lots, selectedTicker]);
 
   // ── 集計: 各 holding の派生値 + ポートフォリオ全体合計 ───
   const { rows, totals } = useMemo(() => {
@@ -198,11 +206,30 @@ export default function PortfolioDashboard({
         />
       </div>
 
-      {/* ── 評価額推移チャート (X-2-5-C) ────────────────── */}
+      {/* ── 評価額推移チャート (X-2-5-C) ── 銘柄クリックで絞り込み */}
       {lots.length > 0 && (
-        <Suspense fallback={<div className="pd-history-fallback" />}>
-          <PortfolioHistoryChart lots={lots} />
-        </Suspense>
+        <>
+          {selectedTicker && (
+            <div className="pd-filter-breadcrumb" role="status">
+              <span className="pd-filter-label">フィルタ:</span>
+              <span className="pd-filter-chip">
+                <CompanyLogo ticker={selectedTicker} size={16} />
+                {selectedTicker} のみ
+              </span>
+              <button
+                type="button"
+                className="pd-filter-clear"
+                onClick={() => setSelectedTicker(null)}
+                aria-label="フィルタ解除"
+              >
+                全銘柄に戻す ×
+              </button>
+            </div>
+          )}
+          <Suspense fallback={<div className="pd-history-fallback" />}>
+            <PortfolioHistoryChart lots={filteredLotsForChart} />
+          </Suspense>
+        </>
       )}
 
       {/* ── 集中リスクチップ (top1 ≥ 30%) ─────────────────── */}
@@ -237,34 +264,40 @@ export default function PortfolioDashboard({
               const pnlCls = statusFromPct(r.pnlPct);
               const eDays = r.daysToEarnings;
               const earnUrgent = Number.isFinite(eDays) && eDays >= 0 && eDays <= 7;
+              const isSelected = selectedTicker === r.ticker;
+              const onRowClick = () => {
+                // 同じ銘柄を再クリック → 解除、別銘柄 → その銘柄に絞り込み
+                setSelectedTicker(isSelected ? null : r.ticker);
+              };
               return (
                 <tr
                   key={r.ticker}
-                  className="pd-row"
-                  onClick={() => onSelect?.(r.ticker)}
-                  role="button"
+                  className={`pd-row${isSelected ? ' is-selected' : ''}`}
+                  onClick={onRowClick}
                   tabIndex={0}
+                  aria-pressed={isSelected}
+                  title={isSelected ? 'クリックで解除' : `${r.ticker} のみで推移を見る`}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      onSelect?.(r.ticker);
+                      onRowClick();
                     }
                   }}
                 >
-                  <td className="pd-tk-cell">
+                  <td className="pd-tk-cell" data-label="銘柄">
                     <span className="pd-tk-logo">
                       <CompanyLogo ticker={r.ticker} size={20} />
                     </span>
                     <span className="pd-tk-text">{r.ticker}</span>
                   </td>
-                  <td className="pd-num">{r.shares.toLocaleString('en-US', { maximumFractionDigits: 4 })}</td>
-                  <td className="pd-num">${fmtUSD(r.avgCost)}</td>
-                  <td className="pd-num pd-hide-mobile">{r.price != null ? `$${fmtUSD(r.price)}` : '…'}</td>
-                  <td className={`pd-num pd-${dayCls}`}>
+                  <td className="pd-num" data-label="株数">{r.shares.toLocaleString('en-US', { maximumFractionDigits: 4 })}</td>
+                  <td className="pd-num" data-label="取得">${fmtUSD(r.avgCost)}</td>
+                  <td className="pd-num pd-hide-mobile" data-label="現在値">{r.price != null ? `$${fmtUSD(r.price)}` : '…'}</td>
+                  <td className={`pd-num pd-${dayCls}`} data-label="当日">
                     {r.dayChangePct != null ? fmtSignedPct(r.dayChangePct) : '…'}
                   </td>
-                  <td className="pd-num">{r.value != null ? `$${fmtUSD(r.value)}` : '…'}</td>
-                  <td className={`pd-num pd-${pnlCls}`}>
+                  <td className="pd-num" data-label="評価額">{r.value != null ? `$${fmtUSD(r.value)}` : '…'}</td>
+                  <td className={`pd-num pd-${pnlCls}`} data-label="損益">
                     {r.pnlPct != null ? (
                       <>
                         <div>{fmtSignedUSD(r.pnlAbs)}</div>
@@ -272,8 +305,8 @@ export default function PortfolioDashboard({
                       </>
                     ) : '…'}
                   </td>
-                  <td className="pd-num pd-hide-mobile">{r.weightPct != null ? `${r.weightPct.toFixed(1)}%` : '—'}</td>
-                  <td className="pd-earn">
+                  <td className="pd-num pd-hide-mobile" data-label="構成比">{r.weightPct != null ? `${r.weightPct.toFixed(1)}%` : '—'}</td>
+                  <td className="pd-earn" data-label="次回決算">
                     {Number.isFinite(eDays) && eDays >= 0 ? (
                       <span className={`pd-earn-badge${earnUrgent ? ' pd-earn-urgent' : ''}`}
                             title={r.nextEarnings || ''}>

@@ -36,6 +36,9 @@
 }
 
 [data-theme="dark"] {
+  /* color-scheme: dark でブラウザネイティブのフォームコントロール
+     (date picker / select / scrollbar 等) を一括ダークモード化 */
+  color-scheme: dark;
   --bg-primary:   #0f172a;
   --bg-card:      #1e2433;
   --bg-subtle:    #1e2a3a;
@@ -291,6 +294,13 @@ body {
   scrollbar-width: none;
   -ms-overflow-style: none;
   min-width: 0;
+  /* モバイルで横スクロール時に右端フェード hint
+     (Apple HIG / Linear の inbox と同じ手法、Web設計#8 対応) */
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+          mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+}
+@media (min-width: 800px) {
+  .indicator-row-items { -webkit-mask-image: none; mask-image: none; }
 }
 .indicator-row-items::-webkit-scrollbar {
   display: none;
@@ -2518,6 +2528,51 @@ body {
 [data-theme="dark"] .pd-card-loss .pd-card-value,
 [data-theme="dark"] .pd-card-loss .pd-card-sub { color: #f87171; }
 
+/* 銘柄絞り込みブレッドクラム (per-stock filter applied) */
+.pd-filter-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.pd-filter-label {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.pd-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(56,189,248,0.16);
+  border: 1px solid rgba(56,189,248,0.40);
+  border-radius: 999px;
+  color: rgb(8, 145, 178);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+[data-theme="dark"] .pd-filter-chip {
+  background: rgba(56,189,248,0.20);
+  color: rgb(56, 189, 248);
+}
+.pd-filter-clear {
+  background: transparent;
+  border: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.pd-filter-clear:hover {
+  background: rgba(148,163,184,0.10);
+  color: var(--text-primary);
+}
+
 /* 集中リスクチップ */
 .pd-risk-chip {
   display: inline-flex; align-items: center; gap: 8px;
@@ -2563,8 +2618,25 @@ body {
 }
 [data-theme="dark"] .pd-table tbody td { border-bottom-color: rgba(255,255,255,0.04); }
 .pd-table tbody tr:last-child td { border-bottom: none; }
-.pd-row { cursor: pointer; transition: background-color 0.12s ease; }
-.pd-row:hover { background: rgba(56, 189, 248, 0.06); }
+.pd-row {
+  cursor: pointer;
+  transition: background-color 0.12s ease, transform 0.12s ease;
+}
+.pd-row:hover {
+  background: rgba(56, 189, 248, 0.10);
+}
+[data-theme="dark"] .pd-row:hover {
+  background: rgba(56, 189, 248, 0.14);
+}
+/* 選択中の銘柄 (per-stock filter applied) は左ボーダーで強調 */
+.pd-row.is-selected {
+  background: rgba(56, 189, 248, 0.18);
+  box-shadow: inset 3px 0 0 rgb(8, 145, 178);
+}
+[data-theme="dark"] .pd-row.is-selected {
+  background: rgba(56, 189, 248, 0.22);
+  box-shadow: inset 3px 0 0 rgb(56, 189, 248);
+}
 .pd-row:focus-visible {
   outline: 2px solid rgba(56, 189, 248, 0.50);
   outline-offset: -2px;
@@ -2600,12 +2672,97 @@ body {
 [data-theme="dark"] .pd-earn-badge.pd-earn-urgent { color: #fbbf24; background: rgba(245,158,11,0.18); }
 .pd-earn-empty { color: var(--text-muted); font-size: 12px; }
 
-/* モバイル: カラム省略 (現在値 / 構成比) */
+/* デスクトップ: 横スクロール時に右端フェード ヒント (Web設計#8 対応) */
+.pd-table-wrap {
+  position: relative;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+          mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+}
+@media (min-width: 800px) {
+  /* 十分広い画面ではフェード不要 */
+  .pd-table-wrap { -webkit-mask-image: none; mask-image: none; }
+}
+
+/* モバイル: テーブルをカード型 2 行レイアウトに切替
+   (Schwab / Money Forward 方式 — オーバーラップ完全解消、視認性向上) */
 @media (max-width: 540px) {
-  .pd-hide-mobile { display: none; }
-  .pd-table thead th, .pd-table tbody td { padding: 8px 6px; font-size: 12px; }
   .pd-card-primary .pd-card-value { font-size: 24px; }
   .pd-card-value { font-size: 18px; }
+  /* デスクトップ用フェードを mobile では無効化 (カード化するためスクロール不要) */
+  .pd-table-wrap {
+    -webkit-mask-image: none; mask-image: none;
+    overflow-x: visible;
+  }
+  /* card レイアウト */
+  .pd-table { width: 100%; }
+  .pd-table thead { display: none; }
+  .pd-table tbody { display: block; }
+  .pd-table tbody tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-gap: 4px 12px;
+    padding: 12px 12px;
+    margin-bottom: 6px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: rgba(148,163,184,0.04);
+  }
+  [data-theme="dark"] .pd-table tbody tr {
+    background: rgba(255,255,255,0.03);
+  }
+  .pd-table tbody tr.is-selected {
+    background: rgba(56, 189, 248, 0.10);
+    border-color: rgba(56, 189, 248, 0.50);
+    box-shadow: none;
+  }
+  [data-theme="dark"] .pd-table tbody tr.is-selected {
+    background: rgba(56, 189, 248, 0.14);
+  }
+  .pd-table tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2px 0;
+    border: 0;
+    text-align: left !important;
+    white-space: normal;
+    font-size: 12px;
+    min-height: 24px;
+  }
+  /* 銘柄セルだけは左寄せ + 全幅 (1 行目フル) */
+  .pd-table tbody td.pd-tk-cell {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    padding-bottom: 6px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .pd-table tbody td.pd-tk-cell::before { display: none; }
+  /* 各 td の data-label をラベルとして表示 */
+  .pd-table tbody td::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-right: 8px;
+  }
+  /* 損益セルは 2 行 (絶対額 + %) のため、レイアウト調整 */
+  .pd-table tbody td.pd-num.pd-gain,
+  .pd-table tbody td.pd-num.pd-loss,
+  .pd-table tbody td.pd-num.pd-neutral {
+    flex-direction: row;
+    align-items: baseline;
+  }
+  .pd-table tbody td .pd-sub {
+    margin-top: 0;
+    margin-left: 6px;
+    font-size: 10px;
+  }
+  /* テーブル右端のスクロールヒントは不要 (カード化したため) */
 }
 
 /* ── X-2-5-C HistoryChart ───────────────────────────────────────── */
@@ -2664,14 +2821,22 @@ body {
   transition: background-color 0.12s ease, color 0.12s ease;
   letter-spacing: 0.04em;
 }
+/* hover affordance — 非アクティブタブにマウス hover 時に明るくする */
+.pd-history-period-tab:hover:not(.is-active) {
+  background: rgba(148,163,184,0.10);
+  color: var(--text-primary);
+}
+[data-theme="dark"] .pd-history-period-tab:hover:not(.is-active) {
+  background: rgba(255,255,255,0.05);
+}
 .pd-history-period-tab.is-active {
   background: var(--bg-card, #fff);
   color: var(--text-primary);
   box-shadow: 0 1px 2px rgba(0,0,0,0.06);
 }
 [data-theme="dark"] .pd-history-period-tab.is-active {
-  background: rgba(255,255,255,0.10);
-  box-shadow: none;
+  background: rgba(255,255,255,0.14);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.06);
 }
 
 .pd-history-body {

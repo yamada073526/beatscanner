@@ -84,6 +84,8 @@ export default function NotificationSettingsModal({ isOpen, user, onClose }) {
     try {
       await savePreferences(supabase, user.id, prefs);
       setToast({ type: 'success', text: '通知設定を保存しました' });
+      // 保存成功 → 0.8 秒後に自動クローズ (toast を読む時間を確保)
+      setTimeout(() => onClose?.(), 800);
     } catch (e) {
       setToast({ type: 'error', text: e?.message || '保存に失敗しました' });
     } finally {
