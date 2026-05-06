@@ -16,6 +16,18 @@
     ]
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/session_start_worktree_cleanup.sh",
+            "timeout": 5,
+            "statusMessage": "古い worktree を確認中..."
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Edit|Write",
