@@ -31,6 +31,22 @@ function fmtShares(n) {
   return x.toLocaleString('en-US', { maximumFractionDigits: 4 });
 }
 
+// レビュー指摘 (Web 設計 #5): saving 中の視覚フィードバック強化用スピナー。
+// インライン SVG (12x12) を回転アニメで表示。CSS .spinner-rotate を使用。
+function Spinner({ size = 12 }) {
+  return (
+    <svg
+      className="spinner-rotate"
+      aria-hidden="true"
+      width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="3" strokeLinecap="round"
+      style={{ display: 'inline-block', verticalAlign: '-2px', marginRight: '6px' }}
+    >
+      <path d="M12 2 A10 10 0 0 1 22 12" />
+    </svg>
+  );
+}
+
 // ── 個別ロット表示行 (履歴タブ) ───────────────────────────────
 function LotRow({ lot, suggestion, onUpdate, onDelete }) {
   const [editing, setEditing] = useState(false);
@@ -39,12 +55,15 @@ function LotRow({ lot, suggestion, onUpdate, onDelete }) {
   const [tradeDate, setTradeDate] = useState(lot.trade_date || todayISO());
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [errorField, setErrorField] = useState(null); // 'shares' | 'price' | null
+  const errorId = `lot-error-${lot.id}`;
 
   useEffect(() => {
     if (!editing) {
       setShares(String(lot.shares ?? ''));
       setPrice(String(lot.price ?? ''));
       setTradeDate(lot.trade_date || todayISO());
+      setErrorField(null);
     }
   }, [editing, lot]);
 
@@ -128,11 +147,19 @@ function LotRow({ lot, suggestion, onUpdate, onDelete }) {
 
   // ── 編集モード ──
   const handleSave = async () => {
-    setErrorMsg('');
+    setErrorMsg(''); setErrorField(null);
     const s = Number(shares);
     const p = Number(price);
-    if (!Number.isFinite(s) || s <= 0) { setErrorMsg('株数は 0 より大きい数値を入力してください'); return; }
-    if (!Number.isFinite(p) || p <= 0) { setErrorMsg('購入価格は 0 より大きい数値を入力してください'); return; }
+    if (!Number.isFinite(s) || s <= 0) {
+      setErrorMsg('株数は 0 より大きい数値を入力してください');
+      setErrorField('shares');
+      return;
+    }
+    if (!Number.isFinite(p) || p <= 0) {
+      setErrorMsg('購入価格は 0 より大きい数値を入力してください');
+      setErrorField('price');
+      return;
+    }
     setBusy(true);
     try {
       await onUpdate(lot.id, { shares: s, price: p, tradeDate });
@@ -151,9 +178,11 @@ function LotRow({ lot, suggestion, onUpdate, onDelete }) {
           <span className="holding-label">株数</span>
           <input
             type="number" inputMode="decimal" step="any" min="0"
-            value={shares} onChange={(e) => setShares(e.target.value)}
+            value={shares} onChange={(e) => { setShares(e.target.value); if (errorField === 'shares') setErrorField(null); }}
             className="holding-input"
             disabled={busy}
+            aria-invalid={errorField === 'shares' ? 'true' : undefined}
+            aria-describedby={errorField === 'shares' ? errorId : undefined}
           />
         </label>
         <label className="holding-field lot-edit-field">
@@ -162,9 +191,11 @@ function LotRow({ lot, suggestion, onUpdate, onDelete }) {
             <span className="holding-input-prefix">$</span>
             <input
               type="number" inputMode="decimal" step="any" min="0"
-              value={price} onChange={(e) => setPrice(e.target.value)}
+              value={price} onChange={(e) => { setPrice(e.target.value); if (errorField === 'price') setErrorField(null); }}
               className="holding-input holding-input-with-prefix"
               disabled={busy}
+              aria-invalid={errorField === 'price' ? 'true' : undefined}
+              aria-describedby={errorField === 'price' ? errorId : undefined}
             />
           </div>
         </label>
@@ -180,11 +211,11 @@ function LotRow({ lot, suggestion, onUpdate, onDelete }) {
           />
         </label>
       </div>
-      {errorMsg && <p className="holding-error">{errorMsg}</p>}
+      {errorMsg && <p className="holding-error" role="alert" id={errorId}>{errorMsg}</p>}
       <div className="lot-edit-actions">
         <button type="button" className="btn-ghost" onClick={() => setEditing(false)} disabled={busy}>キャンセル</button>
-        <button type="button" className="btn-primary" onClick={handleSave} disabled={busy}>
-          {busy ? '保存中...' : '保存'}
+        <button type="button" className="btn-primary" onClick={handleSave} disabled={busy} aria-busy={busy}>
+          {busy ? <><Spinner /> 保存中...</> : '保存'}
         </button>
       </div>
     </li>
@@ -208,6 +239,10 @@ export default function HoldingSection({
   const [addPrice, setAddPrice] = useState('');
   const [addDate, setAddDate] = useState(todayISO());
   const [errorMsg, setErrorMsg] = useState('');
+  // レビュー指摘 (Web 設計 #5): どのフィールドが invalid かを記録し、
+  // 該当 input に aria-invalid="true" + aria-describedby=errorId を付与する。
+  const [errorField, setErrorField] = useState(null); // 'shares' | 'price' | null
+  const errorId = 'holding-section-error';
   const [saving, setSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(false);
 
@@ -231,11 +266,19 @@ export default function HoldingSection({
 
   const handleAdd = async (e) => {
     if (e && typeof e.preventDefault === 'function') e.preventDefault();
-    setErrorMsg('');
+    setErrorMsg(''); setErrorField(null);
     const s = Number(addShares);
     const p = Number(addPrice);
-    if (!Number.isFinite(s) || s <= 0) { setErrorMsg('株数は 0 より大きい数値を入力してください'); return; }
-    if (!Number.isFinite(p) || p <= 0) { setErrorMsg('購入価格は 0 より大きい数値を入力してください'); return; }
+    if (!Number.isFinite(s) || s <= 0) {
+      setErrorMsg('株数は 0 より大きい数値を入力してください');
+      setErrorField('shares');
+      return;
+    }
+    if (!Number.isFinite(p) || p <= 0) {
+      setErrorMsg('購入価格は 0 より大きい数値を入力してください');
+      setErrorField('price');
+      return;
+    }
     setSaving(true);
     try {
       await onAddLot({ shares: s, price: p, tradeDate: addDate || undefined });
@@ -243,6 +286,7 @@ export default function HoldingSection({
       setAddPrice('');
       setAddDate(todayISO());
       setErrorMsg('');
+      setErrorField(null);
     } catch (e) {
       setErrorMsg(e?.message || '保存に失敗しました');
     } finally {
@@ -251,7 +295,7 @@ export default function HoldingSection({
   };
 
   const handleDeleteAll = async () => {
-    setErrorMsg('');
+    setErrorMsg(''); setErrorField(null);
     setSaving(true);
     try {
       await onDeleteAll();
@@ -272,10 +316,13 @@ export default function HoldingSection({
             <span className="holding-label">株数</span>
             <input
               type="number" inputMode="decimal" step="any" min="0"
-              value={addShares} onChange={(e) => setAddShares(e.target.value)}
+              value={addShares}
+              onChange={(e) => { setAddShares(e.target.value); if (errorField === 'shares') setErrorField(null); }}
               placeholder="例: 100"
               className="holding-input"
               disabled={saving}
+              aria-invalid={errorField === 'shares' ? 'true' : undefined}
+              aria-describedby={errorField === 'shares' ? errorId : undefined}
             />
           </label>
 
@@ -285,10 +332,13 @@ export default function HoldingSection({
               <span className="holding-input-prefix">$</span>
               <input
                 type="number" inputMode="decimal" step="any" min="0"
-                value={addPrice} onChange={(e) => setAddPrice(e.target.value)}
+                value={addPrice}
+                onChange={(e) => { setAddPrice(e.target.value); if (errorField === 'price') setErrorField(null); }}
                 placeholder="例: 189.50"
                 className="holding-input holding-input-with-prefix"
                 disabled={saving}
+                aria-invalid={errorField === 'price' ? 'true' : undefined}
+                aria-describedby={errorField === 'price' ? errorId : undefined}
               />
             </div>
           </label>
@@ -305,11 +355,11 @@ export default function HoldingSection({
             />
           </label>
 
-          {errorMsg && <p className="holding-error">{errorMsg}</p>}
+          {errorMsg && <p className="holding-error" role="alert" id={errorId}>{errorMsg}</p>}
 
           <div className="holding-section-actions">
-            <button type="submit" className="btn-primary" disabled={saving}>
-              {saving ? '保存中...' : '保存'}
+            <button type="submit" className="btn-primary" disabled={saving} aria-busy={saving}>
+              {saving ? <><Spinner /> 保存中...</> : '保存'}
             </button>
           </div>
         </div>
@@ -383,10 +433,13 @@ export default function HoldingSection({
                 <span className="holding-label">追加株数</span>
                 <input
                   type="number" inputMode="decimal" step="any" min="0"
-                  value={addShares} onChange={(e) => setAddShares(e.target.value)}
+                  value={addShares}
+                  onChange={(e) => { setAddShares(e.target.value); if (errorField === 'shares') setErrorField(null); }}
                   placeholder="例: 50"
                   className="holding-input"
                   disabled={saving}
+                  aria-invalid={errorField === 'shares' ? 'true' : undefined}
+                  aria-describedby={errorField === 'shares' ? errorId : undefined}
                 />
               </label>
 
@@ -396,10 +449,13 @@ export default function HoldingSection({
                   <span className="holding-input-prefix">$</span>
                   <input
                     type="number" inputMode="decimal" step="any" min="0"
-                    value={addPrice} onChange={(e) => setAddPrice(e.target.value)}
+                    value={addPrice}
+                    onChange={(e) => { setAddPrice(e.target.value); if (errorField === 'price') setErrorField(null); }}
                     placeholder="例: 210.00"
                     className="holding-input holding-input-with-prefix"
                     disabled={saving}
+                    aria-invalid={errorField === 'price' ? 'true' : undefined}
+                    aria-describedby={errorField === 'price' ? errorId : undefined}
                   />
                 </div>
               </label>
@@ -457,14 +513,14 @@ export default function HoldingSection({
         </div>
       </div>
 
-      {errorMsg && <p className="holding-error">{errorMsg}</p>}
+      {errorMsg && <p className="holding-error" role="alert" id={errorId}>{errorMsg}</p>}
 
       <div className="holding-section-actions">
         {pendingDelete ? (
           <div className="holding-delete-confirm">
             <span>すべての履歴を削除しますか？</span>
-            <button type="button" onClick={handleDeleteAll} className="btn-danger" disabled={saving}>
-              削除する
+            <button type="button" onClick={handleDeleteAll} className="btn-danger" disabled={saving} aria-busy={saving}>
+              {saving ? <><Spinner /> 削除中...</> : '削除する'}
             </button>
             <button type="button" onClick={() => setPendingDelete(false)} className="btn-ghost" disabled={saving}>
               キャンセル
@@ -482,8 +538,8 @@ export default function HoldingSection({
             </button>
             <div className="holding-section-spacer" />
             {mode === 'add' && (
-              <button type="submit" className="btn-primary" disabled={saving}>
-                {saving ? '保存中...' : '追加して保存'}
+              <button type="submit" className="btn-primary" disabled={saving} aria-busy={saving}>
+                {saving ? <><Spinner /> 保存中...</> : '追加して保存'}
               </button>
             )}
           </>

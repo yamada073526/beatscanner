@@ -2432,6 +2432,28 @@ body {
   border-color: rgb(56, 189, 248);
 }
 .holding-input:disabled { opacity: 0.6; cursor: not-allowed; }
+/* レビュー指摘 (Web 設計 #5): aria-invalid="true" の input を視覚的にハイライト。
+   赤いボーダー + 微妙な背景で valid との差を明示。focus 時はさらに ring を出す。 */
+.holding-input[aria-invalid="true"] {
+  border-color: var(--color-loss);
+  background: rgba(220, 38, 38, 0.04);
+}
+.holding-input[aria-invalid="true"]:focus {
+  border-color: var(--color-loss);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+}
+[data-theme="dark"] .holding-input[aria-invalid="true"] {
+  background: rgba(248, 113, 113, 0.08);
+}
+
+/* 共通 spinner アニメーション (button[aria-busy] の中で回す) */
+@keyframes spinner-rotate {
+  to { transform: rotate(360deg); }
+}
+.spinner-rotate {
+  animation: spinner-rotate 0.8s linear infinite;
+  transform-origin: center;
+}
 /* Date input のカレンダーアイコン: iOS Safari / Android Chrome での
    ::-webkit-calendar-picker-indicator スタイリングは制約が多いため、
    ネイティブアイコンは透明化 → 自前 SVG を background-image で配置。
