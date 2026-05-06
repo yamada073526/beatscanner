@@ -270,24 +270,29 @@ function EventRow({ event, isHighest }) {
           </span>
         )}
       </div>
-      {/* P0-4+5: 和訳メイン + 英語 sub + カテゴリアイコン (楽天マーケットスピード II 流) */}
+      {/* P0-4+5: 和訳メイン + 英語 sub + カテゴリ SVG アイコン (F6: lucide-react、楽天 MS II 流) */}
       {(() => {
         const t = translateEvent(event.event);
+        const CatIcon = t.category.Icon;
         return (
           <>
             <p
               className="text-sm font-medium text-slate-900 leading-snug"
-              style={{ letterSpacing: '0.01em', display: 'flex', alignItems: 'baseline', gap: 6 }}
+              style={{ letterSpacing: '0.01em', display: 'flex', alignItems: 'center', gap: 6 }}
             >
-              <span aria-hidden style={{ fontSize: 13, lineHeight: 1, flexShrink: 0 }} title={t.category.label}>
-                {t.category.icon}
-              </span>
+              <CatIcon
+                size={14}
+                strokeWidth={1.75}
+                color={t.category.color}
+                style={{ flexShrink: 0 }}
+                aria-label={t.category.label}
+              />
               <span>{t.ja || t.en}</span>
             </p>
             {t.ja && t.ja !== t.en && (
               <p
                 className="text-[10px] leading-tight"
-                style={{ color: 'var(--text-muted)', marginTop: 1, marginLeft: 19 }}
+                style={{ color: 'var(--text-muted)', marginTop: 1, marginLeft: 20 }}
               >
                 {t.en}
               </p>
@@ -497,14 +502,20 @@ export default function EconomicCalendarSection() {
           {spotlightEvent && (
             <div className="econo-cal-spotlight" role="region" aria-label="最注目イベント">
               <div className="econo-cal-spotlight-row">
-                {/* F5 バグ修正: spotlightInfo.icon (undefined) → spotlightInfo.category.icon */}
-                <span
-                  className="econo-cal-spotlight-icon"
-                  aria-hidden
-                  title={spotlightInfo.category.label}
-                >
-                  {spotlightInfo.category.icon}
-                </span>
+                {/* F5 → F6: SVG 化済 lucide-react コンポーネントを 28px で表示 */}
+                {(() => {
+                  const SpotIcon = spotlightInfo.category.Icon;
+                  return (
+                    <span className="econo-cal-spotlight-icon" title={spotlightInfo.category.label}>
+                      <SpotIcon
+                        size={28}
+                        strokeWidth={1.75}
+                        color={spotlightInfo.category.color}
+                        aria-label={spotlightInfo.category.label}
+                      />
+                    </span>
+                  );
+                })()}
                 <div className="econo-cal-spotlight-body">
                   <div className="econo-cal-spotlight-meta">
                     <span className="econo-cal-spotlight-badge">⭐ 最注目</span>

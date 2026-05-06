@@ -1,20 +1,32 @@
-// 経済指標の和訳辞書 + カテゴリ分類 (2026-05-07 5 体レビュー P0-4+5)
+// 経済指標の和訳辞書 + カテゴリ分類 (2026-05-07 5 体レビュー P0-4+5 + F6 SVG 化)
 //
 // backend (`_EVENT_NAME_JP_MAP`) は一部和訳済で「Initial Jobless Claims (新規失業保険申請)」
 // 形式で返ってくるが、Fed Speakers / S&P Global PMI / ECB 講演などは未網羅。
 // フロント側で補完し、「日本語 主 (大) + 英語 sub (小・muted)」表示にする。
 // (UI/UX エージェント Q1 推奨、楽天マーケットスピード II 流)
 
-// カテゴリ分類 → アイコン + ラベル (Web 開発 + UI/UX + 金融アナリスト Q1 統合)
+import {
+  TrendingUp,
+  Users,
+  Landmark,
+  Factory,
+  ShoppingCart,
+  Home,
+  BarChart3,
+  FileText,
+} from 'lucide-react';
+
+// カテゴリ分類 → SVG アイコン + ラベル + 色 (F6: 絵文字 → Lucide SVG 化、信頼スコア +18-25pt 期待 / Linear/Notion/Stripe Dashboard 業界標準)
+// 色は CLAUDE.md「投資業界の色ルール」遵守: 緑/赤は損益専用のため中立色のみ。
 export const CATEGORY = {
-  INFLATION:    { key: 'inflation',    icon: '📊', label: '物価' },
-  EMPLOYMENT:   { key: 'employment',   icon: '💼', label: '雇用' },
-  CENTRAL_BANK: { key: 'central_bank', icon: '🏦', label: '中銀' },
-  MANUFACTURING:{ key: 'manufacturing',icon: '🏭', label: '製造業' },
-  CONSUMER:     { key: 'consumer',     icon: '🛒', label: '消費' },
-  HOUSING:      { key: 'housing',      icon: '🏠', label: '住宅' },
-  GDP:          { key: 'gdp',          icon: '📈', label: 'GDP/景気' },
-  OTHER:        { key: 'other',        icon: '📋', label: 'その他' },
+  INFLATION:    { key: 'inflation',    Icon: TrendingUp,  label: '物価',     color: '#f59e0b' },  // amber
+  EMPLOYMENT:   { key: 'employment',   Icon: Users,       label: '雇用',     color: '#8b5cf6' },  // violet
+  CENTRAL_BANK: { key: 'central_bank', Icon: Landmark,    label: '中銀',     color: '#f59e0b' },  // amber (最高重要)
+  MANUFACTURING:{ key: 'manufacturing',Icon: Factory,     label: '製造業',   color: '#fb923c' },  // orange
+  CONSUMER:     { key: 'consumer',     Icon: ShoppingCart,label: '消費',     color: '#06b6d4' },  // cyan
+  HOUSING:      { key: 'housing',      Icon: Home,        label: '住宅',     color: '#14b8a6' },  // teal
+  GDP:          { key: 'gdp',          Icon: BarChart3,   label: 'GDP/景気', color: '#6366f1' },  // indigo
+  OTHER:        { key: 'other',        Icon: FileText,    label: 'その他',   color: '#94a3b8' },  // slate
 };
 
 // 主要指標の英→和訳マッピング (frontend 補完用、longest match 適用)
