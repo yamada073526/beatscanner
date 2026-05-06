@@ -296,6 +296,100 @@ export async function fetchQuotes(symbols) {
   return r.json();
 }
 
+// Y-3 Phase A: 通知のテスト送信 (実送信なし、log のみ)。
+// channel: 'email' | 'line' | 'webhook'
+// 戻り値: { ok, channel, status, message } | { error }
+export async function sendNotificationTest(supabase, channel) {
+  if (!supabase) throw new Error('Supabase client missing');
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error('ログインが必要です');
+  const r = await fetch('/api/notifications/test', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...fmpHeaders(),
+    },
+    body: JSON.stringify({ channel }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data?.detail || `HTTP ${r.status}`);
+  return data;
+}
+
+// Y-3 Phase A: 直近の通知ログを取得 (テスト送信履歴の確認用)
+export async function fetchRecentNotificationLog(supabase, limit = 10) {
+  if (!supabase) return { logs: [] };
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) return { logs: [] };
+  const params = new URLSearchParams({ limit: String(limit) });
+  const r = await fetch(`/api/notifications/recent-log?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${token}`, ...fmpHeaders() },
+  });
+  if (!r.ok) return { logs: [] };
+  return r.json();
+}
+
+// 四半期決算履歴を取得 (Pro 同梱機能)。
+// 戻り値: { ticker, history: [{ date, fiscal_period, eps_actual, eps_estimated,
+//   eps_surprise_pct, eps_verdict, revenue_actual, revenue_estimated,
+//   revenue_surprise_pct, revenue_verdict }, ...] }
+export async function fetchQuarterlyHistory(ticker, limit = 8) {
+  const t = (ticker || '').toUpperCase();
+  if (!t) return null;
+  const params = new URLSearchParams({ limit: String(limit) });
+  const r = await fetch(`/api/guidance/${encodeURIComponent(t)}/quarterly-history?${params.toString()}`, {
+    headers: fmpHeaders(),
+  });
+  if (!r.ok) return null;
+  return r.json();
+}
+
+// ロット履歴から日次ポートフォリオ評価額の時系列を取得 (X-2-5-C HistoryChart)。
+// body: { lots: [{ ticker, shares, trade_date }, ...], period: "1m"|"3m"|"6m"|"1y"|"3y" }
+// 戻り値: { series: [{ date, value }, ...], from, to, period }
+export async function fetchPortfolioHistory(lots, period = '1y') {
+  const list = Array.isArray(lots) ? lots : [];
+  if (list.length === 0) return { series: [], period };
+  const r = await fetch('/api/portfolio-history', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...fmpHeaders() },
+    body: JSON.stringify({ lots: list, period }),
+  });
+  if (!r.ok) return { series: [], period };
+  return r.json();
+}
+
+// 株式分割検出: 指定銘柄の指定日近辺における close vs adjClose の比を取得。
+// 戻り値: { ticker, results: [{ date, matched_date, close, adjClose, ratio }] }
+// ratio < 0.99 = 当該日以降に分割あり → lot price を ratio 倍に補正すべき。
+export async function fetchSplitCheck(ticker, dates) {
+  const t = (ticker || '').toUpperCase();
+  const list = Array.isArray(dates) ? dates.filter(Boolean) : [];
+  if (!t || list.length === 0) return { ticker: t, results: [] };
+  const params = new URLSearchParams({ dates: list.join(',') });
+  const r = await fetch(`/api/split-check/${encodeURIComponent(t)}?${params.toString()}`, {
+    headers: fmpHeaders(),
+  });
+  if (!r.ok) return { ticker: t, results: [] };
+  return r.json();
+}
+
+// 保有銘柄の付加メタ (次回決算日 / days_to_earnings)
+// 戻り値: { meta: { [SYMBOL]: { next_earnings_date, days_to_earnings } } }
+export async function fetchHoldingsMeta(symbols) {
+  const list = Array.isArray(symbols) ? symbols : [];
+  if (list.length === 0) return { meta: {} };
+  const params = new URLSearchParams({ symbols: list.join(',') });
+  const r = await fetch(`/api/holdings-meta?${params.toString()}`, {
+    headers: fmpHeaders(),
+  });
+  if (!r.ok) return { meta: {} };
+  return r.json();
+}
+
 export async function fetchMarketIndices() {
   const r = await fetch('/api/market-indices', {
     headers: fmpHeaders(),

@@ -14,13 +14,17 @@ export default function TagAssignSheet({
   ticker,
   tags,
   currentTagId,
-  currentHolding,        // { shares, avg_cost } | null
+  currentHolding,        // { shares, avg_cost, lotCount } | null
+  currentLots = [],      // lots for this ticker (trade_date 降順)
   onClose,
   onAssign,
   onUnassign,
   onOpenManager,
-  onSaveHolding,         // ({ shares, avgCost }) => Promise<void>
-  onDeleteHolding,       // () => Promise<void>
+  // X-2-B: ロット CRUD
+  onAddLot,              // ({ shares, price, tradeDate }) => Promise<void>
+  onUpdateLot,           // (lotId, patch) => Promise<void>
+  onDeleteLot,           // (lotId) => Promise<void>
+  onDeleteAllHolding,    // () => Promise<void>  (旧 onDeleteHolding)
 }) {
   useEffect(() => {
     if (!isOpen) return;
@@ -89,15 +93,18 @@ export default function TagAssignSheet({
             </button>
           </div>
 
-          {/* ── 保有セクション (案 D) ── */}
-          {onSaveHolding && (
+          {/* ── 保有セクション (X-2-B: ロット履歴) ── */}
+          {onAddLot && (
             <div className="action-sheet-section">
               <p className="action-sheet-section-label">💰 保有</p>
               <HoldingSection
                 ticker={ticker}
                 current={currentHolding}
-                onSave={onSaveHolding}
-                onDelete={onDeleteHolding}
+                lots={currentLots}
+                onAddLot={onAddLot}
+                onUpdateLot={onUpdateLot}
+                onDeleteLot={onDeleteLot}
+                onDeleteAll={onDeleteAllHolding}
               />
             </div>
           )}

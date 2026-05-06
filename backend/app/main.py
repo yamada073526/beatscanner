@@ -790,6 +790,356 @@ async def get_quotes(symbols: str, request: Request) -> dict:
     return {"quotes": quotes, "market_open": market_open}
 
 
+# --- Holdings meta (next earnings dates) for Portfolio Dashboard Phase X-2-5-A ---
+
+# 単一の date range キャッシュ。FMP earning_calendar は range 1 回呼べばユニバース全体の
+# 結果が返るので、symbols を変えても同じ source データから filter するだけで済む。
+_EARNINGS_RANGE_CACHE: dict[str, dict] = {}  # key: "YYYY-MM-DD~YYYY-MM-DD"
+_EARNINGS_RANGE_TTL = 3600.0  # 1 hour
+
+
+@app.get("/api/holdings-meta")
+async def get_holdings_meta(symbols: str, request: Request) -> dict:
+    """保有銘柄の付加メタ情報 (現状: 次回決算日のみ)。
+
+    将来的に最新ニュース時刻等を追加する場合もこの 1 endpoint に集約する。
+    FMP /earnings-calendar (range) を 1 リクエストで呼んで symbols でフィルタする。
+    """
+    import datetime as _dt
+    raw_list = [s.strip().upper() for s in (symbols or "").split(",") if s.strip()]
+    seen: set[str] = set()
+    syms: list[str] = []
+    for s in raw_list:
+        if s not in seen:
+            seen.add(s)
+            syms.append(s)
+    if not syms:
+        return {"meta": {}}
+    if len(syms) > 50:
+        syms = syms[:50]
+
+    # 今日 〜 +120 日。決算カレンダーは通常 60-90 日先まで埋まるため余裕を持たせる。
+    today = _dt.date.today()
+    date_from = today.isoformat()
+    date_to = (today + _dt.timedelta(days=120)).isoformat()
+    range_key = f"{date_from}~{date_to}"
+
+    now = _time.monotonic()
+    cached = _EARNINGS_RANGE_CACHE.get(range_key)
+    rows: list[dict] = []
+    if cached and now - cached["ts"] < _EARNINGS_RANGE_TTL:
+        rows = cached["data"]
+    else:
+        api_key = _get_fmp_key(request)
+        try:
+            client = FMPClient(api_key=api_key)
+            rows = await client.earning_calendar(date_from, date_to) or []
+        except Exception:
+            rows = []
+        _EARNINGS_RANGE_CACHE[range_key] = {"data": rows, "ts": now}
+
+    # symbol → 直近 (最も今日に近い未来) の決算日を抽出
+    by_sym: dict[str, str] = {}
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        sym = r.get("symbol")
+        d = r.get("date")
+        if not sym or not d or sym not in seen:
+            continue
+        try:
+            d_iso = str(d)[:10]
+            # today より過去はスキップ
+            if d_iso < date_from:
+                continue
+            cur = by_sym.get(sym)
+            if cur is None or d_iso < cur:
+                by_sym[sym] = d_iso
+        except Exception:
+            continue
+
+    meta: dict[str, dict] = {}
+    for s in syms:
+        d = by_sym.get(s)
+        days_to = None
+        if d:
+            try:
+                days_to = (_dt.date.fromisoformat(d) - today).days
+            except Exception:
+                days_to = None
+        meta[s] = {
+            "next_earnings_date": d,
+            "days_to_earnings": days_to,
+        }
+    return {"meta": meta}
+
+
+# --- Split detection endpoint (X-2-5-D 株式分割自動補正) ---
+
+# (ticker, year-bucket) → list[dict] (close + adjClose 全期間)
+# ticker 単位 24h キャッシュ。複数ロットが同 ticker でも upstream 1 回呼出に集約。
+_SPLIT_HISTORY_CACHE: dict[str, dict] = {}
+_SPLIT_HISTORY_TTL = 24 * 3600.0
+
+
+@app.get("/api/split-check/{ticker}")
+async def split_check(ticker: str, dates: str, request: Request) -> dict:
+    """指定銘柄の指定日近辺における close vs adjClose の比から
+    株式分割の影響を検出。各日付について `ratio = adjClose / close` を返す。
+
+    ratio < 0.99 = 当該日以降に分割あり → ロット price を ratio 倍に補正すべき。
+    ratio ≈ 1.0 = 補正不要。
+
+    複数日付を 1 リクエストで返すバッチ仕様 (?dates=2020-08-01,2021-07-19)。
+    """
+    import datetime as _dt
+    sym = (ticker or "").strip().upper()
+    if not sym:
+        return {"ticker": "", "results": []}
+
+    date_list = [d.strip() for d in (dates or "").split(",") if d.strip()]
+    if not date_list:
+        return {"ticker": sym, "results": []}
+    if len(date_list) > 30:
+        date_list = date_list[:30]
+
+    # 全期間の historical を 24h キャッシュ。まずは最古日付から今日までを取得。
+    try:
+        oldest = min(date_list)
+        # 入力日付が無効でも fail-safe に今日を使う
+        _dt.date.fromisoformat(oldest)
+    except Exception:
+        oldest = (_dt.date.today() - _dt.timedelta(days=365 * 5)).isoformat()
+    today_iso = _dt.date.today().isoformat()
+
+    cache_key = f"{sym}:{oldest}"
+    now = _time.monotonic()
+    cached = _SPLIT_HISTORY_CACHE.get(cache_key)
+    rows: list[dict] = []
+    if cached and now - cached["ts"] < _SPLIT_HISTORY_TTL:
+        rows = cached["data"]
+    else:
+        api_key = _get_fmp_key(request)
+        try:
+            client = FMPClient(api_key=api_key)
+            rows = await client.historical_price(sym, oldest, today_iso) or []
+        except Exception:
+            rows = []
+        _SPLIT_HISTORY_CACHE[cache_key] = {"data": rows, "ts": now}
+
+    # date → row の lookup を構築
+    by_date: dict[str, dict] = {}
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        d = r.get("date")
+        if not d:
+            continue
+        d_iso = str(d)[:10]
+        by_date[d_iso] = r
+
+    # 各リクエスト日について「同日以降の最初の取引日」を採用
+    sorted_dates_in_data = sorted(by_date.keys())
+
+    def find_row_on_or_after(target: str) -> dict | None:
+        # 線形探索で十分 (取引日 ≤ 1300/年 × 5 年 = 6500 程度)
+        for d in sorted_dates_in_data:
+            if d >= target:
+                return by_date[d]
+        return None
+
+    results = []
+    for req_date in date_list:
+        row = by_date.get(req_date) or find_row_on_or_after(req_date)
+        if not row:
+            results.append({"date": req_date, "close": None, "adjClose": None, "ratio": None})
+            continue
+        close = row.get("close")
+        adj = row.get("adjClose")
+        try:
+            close_f = float(close) if close is not None else None
+            adj_f = float(adj) if adj is not None else None
+        except Exception:
+            close_f = None
+            adj_f = None
+        ratio = None
+        if close_f and close_f > 0 and adj_f and adj_f > 0:
+            ratio = adj_f / close_f
+        results.append({
+            "date": req_date,
+            "matched_date": str(row.get("date"))[:10] if row.get("date") else None,
+            "close": close_f,
+            "adjClose": adj_f,
+            "ratio": ratio,
+        })
+
+    return {"ticker": sym, "results": results}
+
+
+# --- Portfolio History endpoint (X-2-5-C HistoryChart) ---
+
+# (ticker, period) → historical close+adjClose
+_PORTFOLIO_HISTORY_CACHE: dict[str, dict] = {}
+_PORTFOLIO_HISTORY_TTL = 3600.0  # 1 hour (intraday 反映に重要 / 24h は流石に冗長)
+
+_PORTFOLIO_PERIODS = {
+    "1m": 30,
+    "3m": 90,
+    "6m": 180,
+    "1y": 365,
+    "3y": 365 * 3,
+}
+
+
+@app.post("/api/portfolio-history")
+async def portfolio_history(payload: dict, request: Request) -> dict:
+    """ロット履歴から日次ポートフォリオ評価額の時系列を返す。
+
+    body: { lots: [{ ticker, shares, trade_date }, ...], period: "1m"|"3m"|"6m"|"1y"|"3y" }
+    response: { series: [{ date, value }, ...], from, to }
+
+    日 d の評価額 = Σ (lot.shares × adjClose(ticker, d)) for lots where trade_date <= d
+    取引のない日 (土日祝) は前営業日の close を引きずる (close_by_date が空にならない)。
+    """
+    import datetime as _dt
+
+    lots_in = payload.get("lots") or []
+    period = (payload.get("period") or "1y").lower()
+    if period not in _PORTFOLIO_PERIODS:
+        period = "1y"
+    days = _PORTFOLIO_PERIODS[period]
+
+    today = _dt.date.today()
+    period_from = today - _dt.timedelta(days=days)
+
+    # lots を正規化
+    lots: list[dict] = []
+    for raw in lots_in:
+        if not isinstance(raw, dict):
+            continue
+        t = (raw.get("ticker") or "").strip().upper()
+        s = raw.get("shares")
+        d = raw.get("trade_date")
+        if not t or not d:
+            continue
+        try:
+            shares = float(s)
+            if shares <= 0:
+                continue
+            d_iso = str(d)[:10]
+            _ = _dt.date.fromisoformat(d_iso)
+        except Exception:
+            continue
+        lots.append({"ticker": t, "shares": shares, "trade_date": d_iso})
+
+    if not lots:
+        return {
+            "series": [],
+            "from": period_from.isoformat(),
+            "to": today.isoformat(),
+            "period": period,
+        }
+
+    if len(lots) > 100:
+        lots = lots[:100]
+
+    # ticker 単位に集約 + 各 ticker の最古 trade_date を確認 (period_from と比較)
+    tickers: set[str] = {l["ticker"] for l in lots}
+
+    # 各 ticker × period に対応する from は (period_from と 各 ticker の最古 trade_date の早い方) で
+    # 「その期間の前から保有していたら期間頭から計算可能」にする
+    # ただし常に period_from から表示する (lot がそれ以降ならその日からゼロ → 階段状)
+    fetch_from = min(period_from.isoformat(), min(l["trade_date"] for l in lots))
+
+    api_key = _get_fmp_key(request)
+    client: FMPClient | None = None
+    try:
+        client = FMPClient(api_key=api_key)
+    except Exception:
+        client = None
+
+    # ticker 別 close マップ取得 (キャッシュ込み)
+    async def fetch_close_map(tk: str) -> dict[str, float]:
+        cache_key = f"{tk}:{fetch_from}:{today.isoformat()}"
+        now_m = _time.monotonic()
+        cached = _PORTFOLIO_HISTORY_CACHE.get(cache_key)
+        if cached and now_m - cached["ts"] < _PORTFOLIO_HISTORY_TTL:
+            return cached["data"]
+        rows: list[dict] = []
+        if client:
+            try:
+                rows = await client.historical_price(tk, fetch_from, today.isoformat()) or []
+            except Exception:
+                rows = []
+        # adjClose を優先 (split-adjusted)。なければ close。
+        cmap: dict[str, float] = {}
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            d = r.get("date")
+            if not d:
+                continue
+            d_iso = str(d)[:10]
+            v = r.get("adjClose") if r.get("adjClose") is not None else r.get("close")
+            try:
+                if v is not None:
+                    cmap[d_iso] = float(v)
+            except Exception:
+                continue
+        _PORTFOLIO_HISTORY_CACHE[cache_key] = {"data": cmap, "ts": now_m}
+        return cmap
+
+    # 並行取得
+    closes_by_ticker: dict[str, dict[str, float]] = {}
+    fetched = await asyncio.gather(*[fetch_close_map(t) for t in tickers], return_exceptions=True)
+    for t, res in zip(tickers, fetched):
+        closes_by_ticker[t] = res if isinstance(res, dict) else {}
+
+    # period_from から today までの全日付について評価額を計算
+    # 取引日のみを採用 (close マップに存在する日)
+    all_trading_days: set[str] = set()
+    for cmap in closes_by_ticker.values():
+        for d in cmap.keys():
+            if d >= period_from.isoformat():
+                all_trading_days.add(d)
+    sorted_days = sorted(all_trading_days)
+
+    # 前営業日の close を保持しておく (休場日 fallback)
+    last_close: dict[str, float] = {}
+
+    series = []
+    # ticker → list[lot] for fast filter
+    lots_by_ticker: dict[str, list[dict]] = {}
+    for l in lots:
+        lots_by_ticker.setdefault(l["ticker"], []).append(l)
+
+    for d_iso in sorted_days:
+        # last_close を更新 (この日の close があれば)
+        for t, cmap in closes_by_ticker.items():
+            v = cmap.get(d_iso)
+            if v is not None:
+                last_close[t] = v
+        total = 0.0
+        for t, ts_lots in lots_by_ticker.items():
+            close = last_close.get(t)
+            if close is None:
+                continue
+            shares = 0.0
+            for l in ts_lots:
+                if l["trade_date"] <= d_iso:
+                    shares += l["shares"]
+            if shares > 0:
+                total += shares * close
+        series.append({"date": d_iso, "value": round(total, 2)})
+
+    return {
+        "series": series,
+        "from": period_from.isoformat(),
+        "to": today.isoformat(),
+        "period": period,
+    }
+
+
 # --- Custom screener endpoint ---
 
 @app.get("/api/custom-screener")
@@ -1837,6 +2187,147 @@ async def _fetch_revenue_data(ticker: str, ref_date: str | None = None) -> dict:
         rev_est = None
 
     return {"revenue_actual": rev_actual, "income_date": rev_date, "revenue_estimated_yf": rev_est}
+
+
+# 四半期決算履歴 (Pro 同梱機能)。ticker 単位 1h キャッシュで FMP 呼出を抑制。
+_QUARTERLY_HISTORY_CACHE: dict[str, dict] = {}
+_QUARTERLY_HISTORY_TTL = 3600.0
+
+
+@app.get("/api/guidance/{ticker}/quarterly-history")
+async def guidance_quarterly_history(ticker: str, request: Request, limit: int = 8) -> dict:
+    """過去 N 四半期 (デフォルト 8) の EPS / Revenue 実績 + 予想 + サプライズ% + 判定を返す。
+
+    Pro 同梱機能 (フロント側でゲーティング)。
+    バックエンドは認可不要だが、有料データを露出するため body も最小限。
+    """
+    sym = (ticker or "").strip().upper()
+    if not sym:
+        raise HTTPException(status_code=400, detail="ticker required")
+    n = max(1, min(int(limit or 8), 16))
+
+    cache_key = f"{sym}:{n}"
+    now = _time.monotonic()
+    cached = _QUARTERLY_HISTORY_CACHE.get(cache_key)
+    if cached and now - cached["ts"] < _QUARTERLY_HISTORY_TTL:
+        return cached["data"]
+
+    fmp_key = _get_fmp_key(request)
+    client = FMPClient(api_key=fmp_key)
+
+    # 並行 fetch (各 12-24 件取得して history 構築用の余裕を持たせる)
+    fetch_n = max(n + 4, 12)
+    surprises_task = asyncio.create_task(client.earnings_surprises(sym, limit=fetch_n))
+    income_task = asyncio.create_task(client.income_statement(sym, limit=fetch_n, period="quarter"))
+    estimates_task = asyncio.create_task(client.analyst_estimates(sym, period="quarter", limit=24))
+
+    surprises: list[dict] = []
+    income_q: list[dict] = []
+    estimates: list[dict] = []
+    try:
+        surprises = await surprises_task or []
+    except Exception:
+        surprises = []
+    try:
+        income_q = await income_task or []
+    except Exception:
+        income_q = []
+    try:
+        estimates = await estimates_task or []
+    except Exception:
+        estimates = []
+
+    # surprises を date 降順にソート (FMP は通常降順だが念のため)
+    def _date_of(d: dict) -> str:
+        return _pick(d, "date") or ""
+    surprises_sorted = sorted(surprises, key=_date_of, reverse=True)
+
+    # 日付に最も近い income_q / estimate を選ぶヘルパ
+    from datetime import datetime as _dt2
+    def _parse_date(s: str | None):
+        if not s:
+            return None
+        try:
+            return _dt2.fromisoformat(str(s)[:10])
+        except Exception:
+            return None
+
+    def _nearest(target: str, items: list[dict]) -> dict | None:
+        td = _parse_date(target)
+        if td is None or not items:
+            return None
+        best = None
+        best_diff = None
+        for it in items:
+            d = _parse_date(_pick(it, "date"))
+            if d is None:
+                continue
+            diff = abs((d - td).days)
+            if best_diff is None or diff < best_diff:
+                best = it
+                best_diff = diff
+        # 60 日以上離れた match は別四半期の可能性 → 棄却
+        if best_diff is not None and best_diff > 60:
+            return None
+        return best
+
+    history: list[dict] = []
+    for entry in surprises_sorted[:n]:
+        date_str = _date_of(entry) or None
+        eps_actual = _safe_float(_pick(entry, "eps", "epsActual", "actualEarningResult", "actualEps"))
+        eps_estimated = _safe_float(_pick(entry, "epsEstimated", "estimatedEarning", "estimatedEps"))
+        # surprise が estimated を欠落 → estimates から最近接補完
+        if eps_estimated is None and date_str:
+            est_match = _nearest(date_str, estimates)
+            if est_match:
+                eps_estimated = _safe_float(_pick(est_match, "epsAvg", "estimatedEpsAvg"))
+
+        # income_q から fiscal_period / revenue
+        inc = _nearest(date_str, income_q) if date_str else None
+        revenue_actual = None
+        fiscal_period = _pick(entry, "fiscalPeriod", "period")
+        if inc:
+            revenue_actual = _safe_float(_pick(inc, "revenue"))
+            if not fiscal_period:
+                period = _pick(inc, "period")
+                year = _pick(inc, "calendarYear", "fiscalYear")
+                if period and year:
+                    fiscal_period = f"{period} {year}"
+
+        # estimates から revenue_estimated を補完
+        revenue_estimated = None
+        if date_str:
+            est_match = _nearest(date_str, estimates)
+            if est_match:
+                revenue_estimated = _safe_float(_pick(est_match, "revenueAvg", "estimatedRevenueAvg"))
+
+        eps_label, eps_pct, _ = _verdict(eps_actual, eps_estimated)
+        rev_label, rev_pct, _ = _verdict(revenue_actual, revenue_estimated)
+
+        history.append({
+            "date": date_str,
+            "fiscal_period": fiscal_period,
+            "eps_actual": eps_actual,
+            "eps_estimated": eps_estimated,
+            "eps_surprise_pct": eps_pct,
+            "eps_verdict": eps_label,
+            "revenue_actual": revenue_actual,
+            "revenue_estimated": revenue_estimated,
+            "revenue_surprise_pct": rev_pct,
+            "revenue_verdict": rev_label,
+        })
+
+    # 全件 EPS 取得失敗の場合 404
+    if not history or all(h.get("eps_actual") is None and h.get("revenue_actual") is None for h in history):
+        raise HTTPException(status_code=404, detail=f"{sym} の四半期履歴が見つかりません")
+
+    result = {
+        "ticker": sym,
+        "history": history,
+        "limit": n,
+    }
+    _QUARTERLY_HISTORY_CACHE[cache_key] = {"data": result, "ts": now}
+    return result
 
 
 @app.get("/api/guidance/{ticker}/basic")
@@ -7001,6 +7492,112 @@ async def stripe_portal(authorization: str = Header(default="")):
         return {"url": session.url}
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Stripe portal error: {e}")
+
+
+# ── Y-3 Phase A: 通知機能 (テスト送信 stub) ────────────────────────────
+# preferences CRUD は frontend Supabase クライアント (RLS 保護) で行う。
+# 本セクションは backend service-role 必要な test 送信 + 将来 cron 用の土台。
+
+class _NotifyTestBody(BaseModel):
+    channel: str = "email"  # 'email' | 'line' | 'webhook'
+    payload: dict | None = None  # 任意の追加情報 (デバッグ用)
+
+
+@app.post("/api/notifications/test")
+async def notifications_test(body: _NotifyTestBody, authorization: str = Header(default="")):
+    """通知のテスト送信。Phase A 段階では実送信せず、notification_log に
+    status='logged' として記録するのみ。フロント側で「テスト送信」ボタンを押した
+    結果が DB に残ることで、設定が正しく保存されているか検証できる。
+
+    Phase B (Email/Resend), C (LINE), D (Webhook) で本メソッドに実送信ロジックを
+    継ぎ足していく前提。
+    """
+    user = await _verify_supabase_jwt(authorization)
+    user_id = user["id"]
+
+    channel = (body.channel or "email").lower()
+    if channel not in ("email", "line", "webhook"):
+        raise HTTPException(status_code=400, detail="invalid channel")
+
+    sb = _get_supabase_service()
+    if not sb:
+        raise HTTPException(status_code=503, detail="Supabase service client unavailable")
+
+    # 設定を取得して、選択されたチャネルが enabled / アドレス入力済か確認
+    try:
+        prefs_q = sb.table("user_notification_preferences").select("*").eq("user_id", user_id).execute()
+        prefs = (prefs_q.data or [None])[0]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"prefs fetch failed: {e}")
+
+    if not prefs:
+        raise HTTPException(status_code=400, detail="通知設定がまだ保存されていません")
+
+    enabled_key = f"{channel}_enabled"
+    if not prefs.get(enabled_key):
+        raise HTTPException(status_code=400, detail=f"{channel} 通知が ON になっていません")
+
+    # チャネル別のアドレス検証
+    target_field = {
+        "email": "email_address",
+        "line": "line_user_id",
+        "webhook": "webhook_url",
+    }[channel]
+    target = prefs.get(target_field)
+    if not target:
+        raise HTTPException(status_code=400, detail=f"{channel} の宛先が未入力です")
+
+    log_payload = {
+        "ticker": "TEST",
+        "subject": "beatscanner 通知テスト",
+        "body": f"これは {channel} チャネルのテスト送信ログです。実送信は Phase B/C/D で実装予定。",
+        "channel": channel,
+        "target_field_value_present": True,
+        **(body.payload or {}),
+    }
+
+    try:
+        sb.table("notification_log").insert({
+            "user_id": user_id,
+            "channel": channel,
+            "trigger": "test",
+            "dedup_key": None,  # test は重複制限なし
+            "status": "logged",  # Phase A は実送信しないため 'logged'
+            "payload": log_payload,
+        }).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"log insert failed: {e}")
+
+    return {
+        "ok": True,
+        "channel": channel,
+        "status": "logged",
+        "message": "Phase A: 設定が正しく保存されています。実送信は Phase B/C/D 実装後に有効化されます。",
+    }
+
+
+@app.get("/api/notifications/recent-log")
+async def notifications_recent_log(authorization: str = Header(default=""), limit: int = 10):
+    """直近 N 件の自分宛て通知ログを返す。設定画面で「最近のテスト履歴」確認に利用。"""
+    user = await _verify_supabase_jwt(authorization)
+    user_id = user["id"]
+    n = max(1, min(int(limit or 10), 50))
+
+    sb = _get_supabase_service()
+    if not sb:
+        return {"logs": []}
+    try:
+        q = (
+            sb.table("notification_log")
+            .select("id, channel, trigger, sent_at, status, error, payload")
+            .eq("user_id", user_id)
+            .order("sent_at", desc=True)
+            .limit(n)
+            .execute()
+        )
+        return {"logs": q.data or []}
+    except Exception:
+        return {"logs": []}
 
 
 @app.post("/api/stripe/webhook")

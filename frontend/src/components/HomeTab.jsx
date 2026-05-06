@@ -4,6 +4,7 @@ import TagFilterBar from './TagFilterBar.jsx';
 import MoversCard from './MoversCard.jsx';
 import TodaysBriefSection from './TodaysBriefSection.jsx';
 import EconomicCalendarSection from './EconomicCalendarSection.jsx';
+const PortfolioDashboard = lazy(() => import('./PortfolioDashboard.jsx'));
 // v40+: ChartTab (669行) と DiagramCard (2027行) は表示される時のみ読み込む lazy 化
 const ChartTab = lazy(() => import('./ChartTab.jsx'));
 const DiagramCard = lazy(() => import('./DiagramCard.jsx'));
@@ -32,6 +33,7 @@ export default function HomeTab({
   // 保有 (Holdings X-2 Phase 3 + Phase 4)
   holdings = {},
   prices = {},
+  lots = [],
   holdingMode = 'all',
   onChangeHoldingMode,
   darkMode, toggleDark,
@@ -169,6 +171,20 @@ export default function HomeTab({
             </Suspense>
           </div>
         </section>
+      )}
+
+      {/* ── ポートフォリオダッシュボード Phase X-2-5-A
+            「保有」モード時かつ holdings 1 件以上で展開。Watchlist 上部に出すことで
+            「毎日開きたくなる」原則 ② に直結する KPI を最初に視認させる。 ── */}
+      {user && holdingMode === 'hold' && Object.keys(holdings).length > 0 && (
+        <Suspense fallback={null}>
+          <PortfolioDashboard
+            holdings={holdings}
+            prices={prices}
+            lots={lots}
+            onSelect={onSelect}
+          />
+        </Suspense>
       )}
 
       {/* ── Today's Brief — マクロ・地政学ニュース（v41 Phase 3）── */}

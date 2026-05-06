@@ -4,6 +4,7 @@ import { streamSummaryDetail, generateVisualization, generateVisualizationInstan
 import ConferenceAnalysis from './ConferenceAnalysis.jsx';
 import DiagramCard from './DiagramCard.jsx';
 import LockedSection, { AiReportGhost } from './LockedSection.jsx';
+import QuarterlyHistoryTable, { QuarterlyHistoryGhost } from './QuarterlyHistoryTable.jsx';
 
 const mdComponents = {
   h2: ({ children }) => (
@@ -968,6 +969,31 @@ export default function DetailReport({ analysis, guidance, onStreamingChange, is
           isPro={isPro}
           onUpgrade={onUpgrade}
         />
+      )}
+
+      {/* ── 四半期決算履歴 (Pro 同梱) ─────────────────────
+            過去 8 四半期の EPS / Revenue 実績 + 予想 + サプライズ% を表示。
+            連続 Beat / Miss 比率を一目で把握できる差別化セクション。 */}
+      {analysis?.ticker && (
+        <AccordionSection
+          title="四半期決算履歴"
+          badge={isPro ? "履歴" : "PRO"}
+          badgeColor={isPro ? "#1e293b" : "#0e7490"}
+          defaultOpen={false}
+        >
+          {isPro ? (
+            <QuarterlyHistoryTable ticker={analysis.ticker} limit={8} />
+          ) : (
+            <LockedSection
+              ctaLabel="履歴を見る"
+              onUpgrade={onUpgrade}
+              minHeight={300}
+              hint="過去 8 四半期の Beat/Miss 履歴と連続 Beat 期数を一覧表示"
+            >
+              <QuarterlyHistoryGhost />
+            </LockedSection>
+          )}
+        </AccordionSection>
       )}
     </div>
   );

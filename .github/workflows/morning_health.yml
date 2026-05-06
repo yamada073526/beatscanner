@@ -1,0 +1,85 @@
+name: Morning Health Check
+
+# 毎朝 04:00 JST (19:00 UTC 前日) に本番の健全性を確認し、結果を artifact として保存。
+# 開発開始時刻 (4:00) に間に合わせるため early-morning 実行。
+# また手動トリガでもいつでも実行可。
+#
+# 設計:
+# - 公開 endpoint のみ叩くので secrets は不要
+# - artifact として 1 ファイル保存 → Actions タブから過去 90 日 (default) 遡れる
+# - main / repo の状態は変更しない (auto-commit リスクなし)
+# - 失敗しても workflow は緑にする (continue-on-error) → 早朝アラート疲れ防止
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 19 * * *'   # 19:00 UTC = 04:00 JST (翌日)
+
+jobs:
+  health-check:
+    name: Production health snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Setup tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq jq curl
+
+      - name: Run health checks
+        id: hc
+        continue-on-error: true
+        env:
+          BASE: https://beatscanner-production.up.railway.app
+        run: |
+          mkdir -p reports
+          REPORT="reports/morning_$(date -u +%Y-%m-%d).md"
+
+          {
+            echo "# Morning Health Check — $(date -u +'%Y-%m-%d %H:%M UTC')"
+            echo
+            echo "## Endpoint Probe"
+            echo
+            echo "| Endpoint | HTTP | Time (s) | Sample |"
+            echo "|---|---|---|---|"
+
+            for path in \
+              "/health::-" \
+              "/api/movers::gainers" \
+              "/api/economic-calendar?days=7::events" \
+              "/api/quotes?symbols=AAPL,NVDA,MSFT::quotes" \
+              "/api/guidance/AAPL/basic::eps_actual"
+            do
+              ep="${path%%::*}"
+              key="${path##*::}"
+              tmp=$(mktemp)
+              status_time=$(curl -s -o "$tmp" -w '%{http_code} %{time_total}' "$BASE$ep" || echo "000 -")
+              status="${status_time%% *}"
+              ttime="${status_time##* }"
+              if [ "$key" = "-" ]; then
+                sample="ok"
+              else
+                sample=$(jq -r --arg k "$key" '.[$k] | (if type == "array" then "len=\(length)" elif . == null then "null" else (. | tostring | .[0:40]) end)' "$tmp" 2>/dev/null || echo "parse-err")
+              fi
+              echo "| \`$ep\` | $status | $ttime | $sample |"
+              rm -f "$tmp"
+            done
+
+            echo
+            echo "## Bundle Hash"
+            HASHES=$(curl -s "$BASE/" | grep -oE 'index-[A-Za-z0-9_-]+\.(js|css)' | sort -u)
+            echo '```'
+            echo "$HASHES"
+            echo '```'
+          } > "$REPORT"
+
+          echo "report=$REPORT" >> "$GITHUB_OUTPUT"
+          cat "$REPORT"
+
+      - name: Upload health report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: morning-health-${{ github.run_id }}
+          path: reports/
+          retention-days: 30

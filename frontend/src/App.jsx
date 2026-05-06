@@ -43,6 +43,7 @@ import DemoTicker from './components/DemoTicker.jsx';
 import CompanyLogo from './components/CompanyLogo.jsx';
 const TagManagerModal = lazy(() => import('./components/TagManagerModal.jsx'));
 const TagAssignSheet = lazy(() => import('./components/TagAssignSheet.jsx'));
+const NotificationSettingsModal = lazy(() => import('./components/NotificationSettingsModal.jsx'));
 // HoldingModal は廃止 (案 D で TagAssignSheet 内に統合)
 const CustomScreenerPanel = lazy(() => import('./components/CustomScreenerPanel.jsx'));
 const LandingPage = lazy(() => import('./components/LandingPage.jsx'));
@@ -82,6 +83,8 @@ export default function App() {
   const [reportStreaming, setReportStreaming] = useState(false);
   const [footerOpen, setFooterOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  // Y-3 Phase A: 通知設定モーダル
+  const [showNotifModal, setShowNotifModal] = useState(false);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [showCustomScreener, setShowCustomScreener] = useState(false);
   const [isDemoResult, setIsDemoResult] = useState(false);
@@ -1158,6 +1161,7 @@ export default function App() {
           onSignInForTags={signInWithGoogle}
           holdings={holdingStore.holdings}
           prices={portfolioPrices.prices}
+          lots={holdingStore.lots}
           holdingMode={holdingMode}
           onChangeHoldingMode={setHoldingMode}
         />
@@ -1962,6 +1966,27 @@ export default function App() {
           <span style={{ fontSize: 18, lineHeight: 1 }}>🔑</span>
           {hasKey ? 'FMP APIキー設定済み' : 'FMP APIキー設定'}
         </button>
+
+        {/* Y-3 Phase A: 通知設定 (ログイン済ユーザーのみ表示) */}
+        {user && (
+          <button
+            type="button"
+            onClick={() => { setShowNotifModal(true); setDrawerOpen(false); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '12px', width: '100%',
+              borderRadius: 10, background: 'transparent',
+              border: 'none', cursor: 'pointer',
+              fontSize: 14, textAlign: 'left',
+              color: 'var(--text-primary)',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(127,127,127,0.10)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <span style={{ fontSize: 18, lineHeight: 1 }}>🔔</span>
+            通知設定
+          </button>
+        )}
       </aside>
 
       {/* フローティングボトムナビ — 常時 DOM 配置 + CSS transition で
@@ -2098,6 +2123,7 @@ export default function App() {
             tags={tagStore.tags}
             currentTagId={tagStore.assignments[tagAssignTicker]}
             currentHolding={holdingStore.getHolding(tagAssignTicker)}
+            currentLots={holdingStore.getLots(tagAssignTicker)}
             onClose={() => setTagAssignTicker(null)}
             onAssign={async (tagId) => {
               try {
@@ -2114,15 +2140,31 @@ export default function App() {
               }
             }}
             onOpenManager={() => setTagManagerOpen(true)}
-            onSaveHolding={user ? async ({ shares, avgCost }) => {
+            onAddLot={user ? async ({ shares, price, tradeDate }) => {
               try {
-                await holdingStore.setHolding(tagAssignTicker, { shares, avgCost });
+                await holdingStore.addLot(tagAssignTicker, { shares, price, tradeDate });
               } catch (e) {
-                showToast(e?.message || '保有の保存に失敗しました');
+                showToast(e?.message || 'ロットの保存に失敗しました');
                 throw e;
               }
             } : undefined}
-            onDeleteHolding={user ? async () => {
+            onUpdateLot={user ? async (lotId, patch) => {
+              try {
+                await holdingStore.updateLot(lotId, patch);
+              } catch (e) {
+                showToast(e?.message || 'ロットの更新に失敗しました');
+                throw e;
+              }
+            } : undefined}
+            onDeleteLot={user ? async (lotId) => {
+              try {
+                await holdingStore.removeLot(lotId);
+              } catch (e) {
+                showToast(e?.message || 'ロットの削除に失敗しました');
+                throw e;
+              }
+            } : undefined}
+            onDeleteAllHolding={user ? async () => {
               try {
                 await holdingStore.removeHolding(tagAssignTicker);
               } catch (e) {
@@ -2130,6 +2172,14 @@ export default function App() {
                 throw e;
               }
             } : undefined}
+          />
+        )}
+        {/* Y-3 Phase A: 通知設定モーダル */}
+        {showNotifModal && user && (
+          <NotificationSettingsModal
+            isOpen={showNotifModal}
+            user={user}
+            onClose={() => setShowNotifModal(false)}
           />
         )}
       </Suspense>

@@ -2108,6 +2108,202 @@ body {
   box-shadow: none;
 }
 .holding-mode-tab:disabled { opacity: 0.5; cursor: not-allowed; }
+/* X-2-B: タブ右肩のロット件数バッジ */
+.holding-tab-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(148,163,184,0.20);
+  color: var(--text-muted);
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  vertical-align: 1px;
+}
+.holding-mode-tab.is-active .holding-tab-badge {
+  background: rgba(56,189,248,0.18);
+  color: rgb(8, 145, 178);
+}
+[data-theme="dark"] .holding-mode-tab.is-active .holding-tab-badge {
+  color: rgb(56, 189, 248);
+  background: rgba(56,189,248,0.20);
+}
+/* X-2-B: 集計サマリーの「N ロット」表記 */
+.holding-lot-count {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+/* X-2-B: 履歴タブ空状態 */
+.holding-history-empty {
+  margin: 0;
+  padding: 16px 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+/* X-2-B: ロット履歴リスト */
+.lot-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lot-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+  flex-wrap: wrap;
+}
+[data-theme="dark"] .lot-row {
+  background: rgba(255,255,255,0.04);
+}
+.lot-row-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.lot-row-date {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  flex: 0 0 auto;
+}
+.lot-row-shares {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.lot-row-price {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.lot-row-actions {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.lot-row-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.lot-row-btn:hover {
+  background: rgba(56, 189, 248, 0.08);
+  border-color: rgb(56, 189, 248);
+  color: rgb(14, 165, 233);
+}
+[data-theme="dark"] .lot-row-btn:hover { color: rgb(56, 189, 248); }
+.lot-row-btn-danger:hover {
+  background: rgba(248, 113, 113, 0.10);
+  border-color: rgb(248, 113, 113);
+  color: rgb(220, 38, 38);
+}
+[data-theme="dark"] .lot-row-btn-danger:hover { color: rgb(248, 113, 113); }
+.lot-row-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.lot-row-editing {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 12px;
+  border-color: rgba(56, 189, 248, 0.40);
+}
+[data-theme="dark"] .lot-row-editing { border-color: rgba(56, 189, 248, 0.45); }
+.lot-edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+@media (max-width: 480px) {
+  .lot-edit-grid { grid-template-columns: 1fr; }
+}
+.lot-edit-field { gap: 4px; }
+.lot-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+/* X-2-5-D: 株式分割補正チップ (lot-row 内 inline 表示) */
+.lot-split-chip {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: rgba(245, 158, 11, 0.10);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 8px;
+  font-size: 12px;
+  color: #92400e;
+  font-variant-numeric: tabular-nums;
+  flex-wrap: wrap;
+}
+[data-theme="dark"] .lot-split-chip {
+  background: rgba(245, 158, 11, 0.10);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.40);
+}
+.lot-split-chip-icon { font-size: 13px; flex: 0 0 auto; }
+.lot-split-chip-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.lot-split-chip-old {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  font-size: 11px;
+}
+.lot-split-chip-factor {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.lot-split-chip-btn {
+  flex: 0 0 auto;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #f59e0b;
+  border: 0;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+.lot-split-chip-btn:hover { background: #d97706; }
+.lot-split-chip-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+/* タブ右肩の警告バッジ (補正候補件数) */
+.holding-tab-badge-attention {
+  margin-left: 4px;
+  background: rgba(245, 158, 11, 0.18);
+  color: #b45309;
+}
+[data-theme="dark"] .holding-tab-badge-attention {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fbbf24;
+}
+.holding-mode-tab.is-active .holding-tab-badge-attention {
+  background: rgba(245, 158, 11, 0.30);
+}
 .holding-add-preview {
   display: flex;
   flex-direction: column;
@@ -2240,4 +2436,615 @@ body {
   color: rgb(14, 165, 233);
 }
 [data-theme="dark"] .tag-login-cta:hover { color: rgb(56, 189, 248); }
+
+/* ── Portfolio Dashboard (Phase X-2-5-A) ─────────────────────────────
+   「保有」モード時にホーム上部に展開する KPI + 銘柄一覧テーブル。
+   設計思想 ① パッと見 2 秒 / ② 毎日開きたくなる / ⑤ 図解で認知コスト削減 直撃。 */
+
+.portfolio-dashboard { /* panel-card 上に追加属性なし — 既存 lift / glow を継承 */ }
+
+/* サマリー KPI 4 枚 */
+.pd-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 8px 0 16px;
+}
+@media (max-width: 720px) {
+  .pd-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.pd-card {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--bg-elev, rgba(0,0,0,0.025));
+  border: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 4px;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+[data-theme="dark"] .pd-card { background: rgba(255,255,255,0.03); }
+.pd-card-primary {
+  /* 当日変動 — ヒーロー扱い (RELEASE_TODO §6-B 「最大字、緑/赤」) */
+  padding: 16px 18px;
+}
+.pd-card-label {
+  font-size: 11px; font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.pd-card-value {
+  font-size: 22px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  line-height: 1.15;
+}
+.pd-card-primary .pd-card-value {
+  font-size: 28px;
+  letter-spacing: -0.01em;
+}
+.pd-card-sub {
+  font-size: 12px; font-weight: 500;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.pd-card-gain .pd-card-value, .pd-card-gain .pd-card-sub { color: #16a34a; }
+.pd-card-loss .pd-card-value, .pd-card-loss .pd-card-sub { color: #dc2626; }
+.pd-card-amber .pd-card-value, .pd-card-amber .pd-card-sub { color: #f59e0b; }
+[data-theme="dark"] .pd-card-gain .pd-card-value,
+[data-theme="dark"] .pd-card-gain .pd-card-sub { color: #34ef81; }
+[data-theme="dark"] .pd-card-loss .pd-card-value,
+[data-theme="dark"] .pd-card-loss .pd-card-sub { color: #f87171; }
+
+/* 集中リスクチップ */
+.pd-risk-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.40);
+  color: #b45309;
+  font-size: 13px; font-weight: 600;
+  margin-bottom: 12px;
+}
+[data-theme="dark"] .pd-risk-chip { color: #fbbf24; background: rgba(245,158,11,0.10); }
+.pd-risk-icon { font-size: 14px; }
+
+/* 銘柄一覧テーブル */
+.pd-table-wrap {
+  overflow-x: auto;
+  margin: 4px -6px 0; /* 左右にスクロール余白 */
+}
+.pd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.pd-table thead th {
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  white-space: nowrap;
+}
+.pd-table th.pd-num, .pd-table td.pd-num { text-align: right; font-variant-numeric: tabular-nums; }
+.pd-table th.pd-earn, .pd-table td.pd-earn { text-align: center; }
+.pd-table tbody td {
+  padding: 10px;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+  white-space: nowrap;
+}
+[data-theme="dark"] .pd-table tbody td { border-bottom-color: rgba(255,255,255,0.04); }
+.pd-table tbody tr:last-child td { border-bottom: none; }
+.pd-row { cursor: pointer; transition: background-color 0.12s ease; }
+.pd-row:hover { background: rgba(56, 189, 248, 0.06); }
+.pd-row:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.50);
+  outline-offset: -2px;
+}
+
+.pd-tk-cell { display: flex; align-items: center; gap: 8px; }
+.pd-tk-logo { display: inline-flex; flex: 0 0 auto; }
+.pd-tk-text { font-weight: 600; color: var(--text-primary); letter-spacing: 0.01em; }
+
+.pd-gain { color: #16a34a; font-weight: 600; }
+.pd-loss { color: #dc2626; font-weight: 600; }
+.pd-neutral { color: var(--text-muted); }
+[data-theme="dark"] .pd-gain { color: #34ef81; }
+[data-theme="dark"] .pd-loss { color: #f87171; }
+
+.pd-sub { font-size: 11px; opacity: 0.85; font-weight: 500; margin-top: 2px; }
+
+/* 次回決算バッジ */
+.pd-earn-badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px; font-weight: 700;
+  background: rgba(0,0,0,0.05);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+[data-theme="dark"] .pd-earn-badge { background: rgba(255,255,255,0.06); }
+.pd-earn-badge.pd-earn-urgent {
+  background: rgba(245, 158, 11, 0.15);
+  color: #b45309;
+}
+[data-theme="dark"] .pd-earn-badge.pd-earn-urgent { color: #fbbf24; background: rgba(245,158,11,0.18); }
+.pd-earn-empty { color: var(--text-muted); font-size: 12px; }
+
+/* モバイル: カラム省略 (現在値 / 構成比) */
+@media (max-width: 540px) {
+  .pd-hide-mobile { display: none; }
+  .pd-table thead th, .pd-table tbody td { padding: 8px 6px; font-size: 12px; }
+  .pd-card-primary .pd-card-value { font-size: 24px; }
+  .pd-card-value { font-size: 18px; }
+}
+
+/* ── X-2-5-C HistoryChart ───────────────────────────────────────── */
+.pd-history {
+  margin: 4px 0 16px;
+  padding: 12px 14px 10px;
+  border-radius: 12px;
+  background: var(--bg-elev, rgba(0,0,0,0.025));
+  border: 1px solid var(--border);
+}
+[data-theme="dark"] .pd-history { background: rgba(255,255,255,0.03); }
+.pd-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.pd-history-titlebox { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.pd-history-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.pd-history-delta {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.pd-history-delta-pct { font-weight: 500; opacity: 0.85; }
+.pd-history-delta-gain { color: #16a34a; }
+.pd-history-delta-loss { color: #dc2626; }
+.pd-history-delta-neutral { color: var(--text-muted); }
+[data-theme="dark"] .pd-history-delta-gain { color: #34ef81; }
+[data-theme="dark"] .pd-history-delta-loss { color: #f87171; }
+
+.pd-history-period-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: rgba(148,163,184,0.10);
+  border-radius: 8px;
+}
+.pd-history-period-tab {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+  letter-spacing: 0.04em;
+}
+.pd-history-period-tab.is-active {
+  background: var(--bg-card, #fff);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+}
+[data-theme="dark"] .pd-history-period-tab.is-active {
+  background: rgba(255,255,255,0.10);
+  box-shadow: none;
+}
+
+.pd-history-body {
+  position: relative;
+  min-height: 200px;
+}
+.pd-history-chart {
+  width: 100%;
+  height: 200px;
+}
+.pd-history-skeleton {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  pointer-events: none;
+}
+.pd-history-skeleton-bar {
+  width: 100%;
+  height: 60%;
+  border-radius: 8px;
+  background: linear-gradient(90deg,
+    rgba(148,163,184,0.06) 0%,
+    rgba(148,163,184,0.16) 50%,
+    rgba(148,163,184,0.06) 100%);
+  background-size: 200% 100%;
+  animation: pd-history-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes pd-history-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.pd-history-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.pd-history-fallback {
+  height: 230px;
+  border-radius: 12px;
+  background: rgba(148,163,184,0.06);
+  margin: 4px 0 16px;
+}
+
+/* ── 四半期決算履歴テーブル (Pro 同梱) ───────────────────────────── */
+.qhistory-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 8px 8px;
+}
+.qhistory-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 10px 14px;
+  background: rgba(148,163,184,0.08);
+  border-radius: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.qhistory-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 88px;
+}
+.qhistory-stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.qhistory-stat-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.qhistory-stat-gain { color: #16a34a; }
+.qhistory-stat-loss { color: #dc2626; }
+[data-theme="dark"] .qhistory-stat-gain { color: #34ef81; }
+[data-theme="dark"] .qhistory-stat-loss { color: #f87171; }
+.qhistory-stat-streak .qhistory-stat-value {
+  font-size: 16px;
+}
+
+.qhistory-table-wrap {
+  overflow-x: auto;
+  margin: 0 -4px;
+}
+.qhistory-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.qhistory-table thead th {
+  padding: 7px 8px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.qhistory-table th.qh-num, .qhistory-table td.qh-num { text-align: right; font-variant-numeric: tabular-nums; }
+.qhistory-table tbody td {
+  padding: 8px;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+[data-theme="dark"] .qhistory-table tbody td { border-bottom-color: rgba(255,255,255,0.04); }
+.qhistory-table tbody tr:last-child td { border-bottom: none; }
+
+.qh-period-name {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.qh-period-date {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.qh-verdict-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.qh-verdict-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.qh-verdict-badge.qh-gain { background: rgba(34,197,94,0.16); color: #16a34a; }
+.qh-verdict-badge.qh-loss { background: rgba(239,68,68,0.16); color: #dc2626; }
+.qh-verdict-badge.qh-neutral { background: rgba(148,163,184,0.16); color: var(--text-secondary); }
+.qh-verdict-badge.qh-unknown { background: rgba(148,163,184,0.10); color: var(--text-muted); }
+[data-theme="dark"] .qh-verdict-badge.qh-gain { color: #34ef81; }
+[data-theme="dark"] .qh-verdict-badge.qh-loss { color: #f87171; }
+
+.qh-surprise {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.qh-gain .qh-surprise { color: #16a34a; }
+.qh-loss .qh-surprise { color: #dc2626; }
+[data-theme="dark"] .qh-gain .qh-surprise { color: #34ef81; }
+[data-theme="dark"] .qh-loss .qh-surprise { color: #f87171; }
+
+.qhistory-empty {
+  margin: 0;
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* 非 Pro 用 ghost プレビュー */
+.qhistory-ghost {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 4px 0;
+}
+.qhistory-ghost-row {
+  display: flex;
+  align-items: center;
+  height: 18px;
+}
+
+/* モバイル: 細い列を省略 */
+@media (max-width: 600px) {
+  .qhistory-table th.qh-hide-mobile, .qhistory-table td.qh-hide-mobile { display: none; }
+  .qhistory-table thead th, .qhistory-table tbody td { padding: 7px 6px; font-size: 11px; }
+  .qh-period-name { font-size: 12px; }
+}
+
+/* ── Y-2: 経済カレンダー高度化 ───────────────────────────────────── */
+/* tab-pill のサイズ違い (国フィルタ用) */
+.tab-pill.tab-pill-sm {
+  padding: 4px 10px;
+  font-size: 11px;
+  gap: 4px;
+}
+
+/* 日付グルーピングヘッダ */
+.econo-cal-list {
+  display: flex;
+  flex-direction: column;
+}
+.econo-cal-day-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 16px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: linear-gradient(
+    to bottom,
+    var(--bg-card, #fff) 0%,
+    var(--bg-card, #fff) 80%,
+    rgba(255,255,255,0) 100%
+  );
+  text-transform: none;
+  border-top: 1px solid var(--border);
+}
+.econo-cal-day-header:first-child { border-top: 0; }
+[data-theme="dark"] .econo-cal-day-header {
+  background: linear-gradient(
+    to bottom,
+    var(--bg-card) 0%,
+    var(--bg-card) 80%,
+    rgba(0,0,0,0) 100%
+  );
+}
+
+/* TODAY バッジの subtle pulse */
+@keyframes pulse-subtle {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.45); }
+  50%      { box-shadow: 0 0 0 4px rgba(245,158,11,0.0); }
+}
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+/* ── Y-3 Phase A: 通知設定モーダル ──────────────────────────────── */
+.notif-modal {
+  max-width: 520px;
+  width: calc(100vw - 32px);
+}
+.notif-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.notif-loading {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+}
+.notif-phase-banner {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(56,189,248,0.10);
+  border: 1px solid rgba(56,189,248,0.30);
+  font-size: 12px;
+  line-height: 1.6;
+  color: rgb(8, 145, 178);
+}
+[data-theme="dark"] .notif-phase-banner {
+  color: rgb(56, 189, 248);
+}
+.notif-fieldset {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px 14px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.notif-fieldset legend {
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+.notif-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.notif-toggle input[type="checkbox"] {
+  margin-top: 3px;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: rgb(8, 145, 178);
+  cursor: pointer;
+}
+.notif-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.notif-toggle-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.notif-toggle-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.notif-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-card, #fff);
+  color: var(--text-primary);
+  font-family: inherit;
+}
+[data-theme="dark"] .notif-input {
+  background: rgba(255,255,255,0.04);
+}
+.notif-input:focus {
+  outline: 2px solid rgba(56,189,248,0.50);
+  outline-offset: -1px;
+}
+.notif-test-btn {
+  align-self: flex-start;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.notif-err {
+  margin: 0;
+  font-size: 11px;
+  color: #dc2626;
+}
+[data-theme="dark"] .notif-err {
+  color: #f87171;
+}
+.notif-toast {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.notif-toast-success {
+  background: rgba(34,197,94,0.10);
+  color: #16a34a;
+  border: 1px solid rgba(34,197,94,0.35);
+}
+.notif-toast-error {
+  background: rgba(239,68,68,0.10);
+  color: #dc2626;
+  border: 1px solid rgba(239,68,68,0.35);
+}
+[data-theme="dark"] .notif-toast-success { color: #34ef81; }
+[data-theme="dark"] .notif-toast-error { color: #f87171; }
+
+/* 直近ログリスト */
+.notif-log-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.notif-log-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 6px 8px;
+  background: rgba(148,163,184,0.06);
+  border-radius: 6px;
+}
+.notif-log-time { color: var(--text-muted); flex-shrink: 0; }
+.notif-log-channel { font-weight: 700; color: rgb(8, 145, 178); }
+.notif-log-status {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(148,163,184,0.16);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.notif-log-trigger { color: var(--text-muted); margin-left: auto; }
+[data-theme="dark"] .notif-log-channel { color: rgb(56, 189, 248); }
 

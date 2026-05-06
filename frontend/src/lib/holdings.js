@@ -78,3 +78,140 @@ export function formatPnLPct(pnlPct) {
   const sign = pnlPct > 0 ? '+' : '';
   return `${sign}${pnlPct.toFixed(1)}%`;
 }
+
+// ─── holding_lots テーブル CRUD (X-2-B) ────────────────────────────
+// ロット (lot) = 1 回の買付。各ロットは ticker + shares + price + trade_date を持ち、
+// 1 ユーザー × 1 銘柄に対して N ロット。サマリー (shares / avg_cost) は
+// aggregateLots() でクライアントサイドで計算する。
+
+export async function fetchLots(supabase, userId) {
+  if (!supabase || !userId) return [];
+  const { data, error } = await supabase
+    .from('holding_lots')
+    .select('id, ticker, shares, price, trade_date, note, created_at, updated_at')
+    .eq('user_id', userId)
+    .order('trade_date', { ascending: true })
+    .order('created_at', { ascending: true });
+  if (error) {
+    console.error('[holding_lots] fetch failed', error);
+    return [];
+  }
+  return data || [];
+}
+
+export async function addLot(supabase, userId, { ticker, shares, price, tradeDate, note }) {
+  if (!supabase || !userId) throw new Error('Supabase or userId missing');
+  const t = (ticker || '').trim().toUpperCase();
+  if (!t) throw new Error('銘柄コードが必要です');
+  const sharesNum = Number(shares);
+  const priceNum = Number(price);
+  if (!Number.isFinite(sharesNum) || sharesNum <= 0) throw new Error('株数は 0 より大きい数値で入力してください');
+  if (!Number.isFinite(priceNum) || priceNum <= 0) throw new Error('購入価格は 0 より大きい数値で入力してください');
+
+  const row = {
+    user_id: userId,
+    ticker: t,
+    shares: sharesNum,
+    price: priceNum,
+  };
+  if (tradeDate) row.trade_date = tradeDate; // YYYY-MM-DD
+  if (note != null && String(note).trim()) row.note = String(note).trim();
+
+  const { data, error } = await supabase
+    .from('holding_lots')
+    .insert(row)
+    .select('id, ticker, shares, price, trade_date, note, created_at, updated_at')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateLot(supabase, userId, lotId, patch) {
+  if (!supabase || !userId || !lotId) throw new Error('required args missing');
+  const updates = {};
+  if (patch.shares != null) {
+    const n = Number(patch.shares);
+    if (!Number.isFinite(n) || n <= 0) throw new Error('株数は 0 より大きい数値で入力してください');
+    updates.shares = n;
+  }
+  if (patch.price != null) {
+    const n = Number(patch.price);
+    if (!Number.isFinite(n) || n <= 0) throw new Error('購入価格は 0 より大きい数値で入力してください');
+    updates.price = n;
+  }
+  if (patch.tradeDate) updates.trade_date = patch.tradeDate;
+  if (patch.note !== undefined) updates.note = patch.note ? String(patch.note).trim() : null;
+
+  const { data, error } = await supabase
+    .from('holding_lots')
+    .update(updates)
+    .eq('user_id', userId)
+    .eq('id', lotId)
+    .select('id, ticker, shares, price, trade_date, note, created_at, updated_at')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteLot(supabase, userId, lotId) {
+  if (!supabase || !userId || !lotId) throw new Error('required args missing');
+  const { error } = await supabase
+    .from('holding_lots')
+    .delete()
+    .eq('user_id', userId)
+    .eq('id', lotId);
+  if (error) throw error;
+}
+
+// 同一銘柄の全ロットから { shares, avg_cost } を計算
+// 加重平均: avg_cost = Σ(shares_i × price_i) / Σ(shares_i)
+// 売却 (shares < 0) は MVP 非対応のため考慮しない。
+export function aggregateLotsForTicker(lots) {
+  if (!Array.isArray(lots) || lots.length === 0) {
+    return { shares: 0, avg_cost: 0, lotCount: 0 };
+  }
+  let totalShares = 0;
+  let totalCost = 0;
+  for (const l of lots) {
+    const s = Number(l.shares);
+    const p = Number(l.price);
+    if (!Number.isFinite(s) || s <= 0 || !Number.isFinite(p) || p <= 0) continue;
+    totalShares += s;
+    totalCost += s * p;
+  }
+  return {
+    shares: totalShares,
+    avg_cost: totalShares > 0 ? totalCost / totalShares : 0,
+    lotCount: lots.length,
+  };
+}
+
+// 全ロットを ticker でグルーピングして集計マップを返す
+// 戻り値: { [TICKER]: { ticker, shares, avg_cost, lotCount, updated_at } }
+export function aggregateAllLots(lots) {
+  const byTicker = {};
+  for (const l of (lots || [])) {
+    const t = (l.ticker || '').toUpperCase();
+    if (!t) continue;
+    if (!byTicker[t]) byTicker[t] = [];
+    byTicker[t].push(l);
+  }
+  const out = {};
+  for (const [t, arr] of Object.entries(byTicker)) {
+    const agg = aggregateLotsForTicker(arr);
+    if (agg.shares > 0) {
+      // updated_at は最新ロットの更新時刻 (UI の「最終更新」表示用)
+      const latest = arr.reduce((a, b) => (
+        (a.updated_at || a.created_at) > (b.updated_at || b.created_at) ? a : b
+      ));
+      out[t] = {
+        ticker: t,
+        shares: agg.shares,
+        avg_cost: agg.avg_cost,
+        lotCount: agg.lotCount,
+        updated_at: latest.updated_at || latest.created_at,
+      };
+    }
+  }
+  return out;
+}
