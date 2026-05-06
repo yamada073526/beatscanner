@@ -176,166 +176,181 @@ export default function HoldingSection({
         現在: <strong>{Number(current.shares).toLocaleString()} 株</strong> @ ${Number(current.avg_cost).toFixed(2)}
       </p>
 
-      <div className="holding-mode-tabs" role="tablist" aria-label="入力モード">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'add'}
-          onClick={() => { setMode('add'); setErrorMsg(''); }}
-          className={`holding-mode-tab ${mode === 'add' ? 'is-active' : ''}`}
-          disabled={saving}
+      {/* タブ + tabpanel を 1 つのカードに包んで親子関係を視覚化 (案 H) */}
+      <div className="holding-tab-card">
+        <div className="holding-mode-tabs" role="tablist" aria-label="入力モード">
+          <button
+            type="button"
+            role="tab"
+            id="holding-tab-add"
+            aria-controls="holding-panel-add"
+            aria-selected={mode === 'add'}
+            tabIndex={mode === 'add' ? 0 : -1}
+            onClick={() => { setMode('add'); setErrorMsg(''); }}
+            className={`holding-mode-tab ${mode === 'add' ? 'is-active' : ''}`}
+            disabled={saving}
+          >
+            追加買付
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="holding-tab-ovr"
+            aria-controls="holding-panel-ovr"
+            aria-selected={mode === 'overwrite'}
+            tabIndex={mode === 'overwrite' ? 0 : -1}
+            onClick={() => { setMode('overwrite'); setErrorMsg(''); }}
+            className={`holding-mode-tab ${mode === 'overwrite' ? 'is-active' : ''}`}
+            disabled={saving}
+          >
+            直接編集
+          </button>
+        </div>
+
+        <div
+          role="tabpanel"
+          id={mode === 'add' ? 'holding-panel-add' : 'holding-panel-ovr'}
+          aria-labelledby={mode === 'add' ? 'holding-tab-add' : 'holding-tab-ovr'}
+          className="holding-tabpanel"
+          key={mode}
         >
-          追加買付
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'overwrite'}
-          onClick={() => { setMode('overwrite'); setErrorMsg(''); }}
-          className={`holding-mode-tab ${mode === 'overwrite' ? 'is-active' : ''}`}
-          disabled={saving}
-        >
-          直接編集
-        </button>
-      </div>
-
-      <div className="holding-form">
-        {mode === 'add' && (
-          <>
-            <label className="holding-field">
-              <span className="holding-label">追加株数</span>
-              <input
-                type="number"
-                inputMode="decimal"
-                step="any"
-                min="0"
-                value={addShares}
-                onChange={(e) => setAddShares(e.target.value)}
-                placeholder="例: 50"
-                className="holding-input"
-                disabled={saving}
-              />
-            </label>
-
-            <label className="holding-field">
-              <span className="holding-label">購入価格 (USD)</span>
-              <div className="holding-input-prefixed">
-                <span className="holding-input-prefix">$</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="any"
-                  min="0"
-                  value={addPrice}
-                  onChange={(e) => setAddPrice(e.target.value)}
-                  placeholder="例: 210.00"
-                  className="holding-input holding-input-with-prefix"
-                  disabled={saving}
-                />
-              </div>
-            </label>
-
-            {addPreview && (
-              <div className="holding-add-preview">
-                <div className="holding-add-row">
-                  <span className="holding-add-row-label">新保有数</span>
-                  <span className="holding-add-row-value">
-                    {addPreview.newShares.toLocaleString()} 株
-                  </span>
-                </div>
-                <div className="holding-add-row">
-                  <span className="holding-add-row-label">新取得単価</span>
-                  <span className="holding-add-row-value">
-                    <strong>${addPreview.newAvg.toFixed(2)}</strong>
-                  </span>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-
-        {mode === 'overwrite' && (
-          <>
-            <label className="holding-field">
-              <span className="holding-label">保有数</span>
-              <input
-                type="number"
-                inputMode="decimal"
-                step="any"
-                min="0"
-                value={shares}
-                onChange={(e) => setShares(e.target.value)}
-                placeholder="例: 100"
-                className="holding-input"
-                disabled={saving}
-              />
-            </label>
-
-            <label className="holding-field">
-              <span className="holding-label">取得単価 (USD)</span>
-              <div className="holding-input-prefixed">
-                <span className="holding-input-prefix">$</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="any"
-                  min="0"
-                  value={avgCost}
-                  onChange={(e) => setAvgCost(e.target.value)}
-                  placeholder="例: 189.50"
-                  className="holding-input holding-input-with-prefix"
-                  disabled={saving}
-                />
-              </div>
-            </label>
-          </>
-        )}
-
-        {errorMsg && <p className="holding-error">{errorMsg}</p>}
-
-        <div className="holding-section-actions">
-          {pendingDelete ? (
-            <div className="holding-delete-confirm">
-              <span>削除しますか？</span>
-              <button
-                type="button"
-                onClick={handleDelete}
-                className="btn-danger"
-                disabled={saving}
-              >
-                削除する
-              </button>
-              <button
-                type="button"
-                onClick={() => setPendingDelete(false)}
-                className="btn-ghost"
-                disabled={saving}
-              >
-                キャンセル
-              </button>
-            </div>
-          ) : (
+          {mode === 'add' && (
             <>
-              <button
-                type="button"
-                onClick={() => setPendingDelete(true)}
-                className="btn-danger-ghost"
-                disabled={saving}
-              >
-                削除
-              </button>
-              <div className="holding-section-spacer" />
-              <button
-                type="button"
-                onClick={handleSave}
-                className="btn-primary"
-                disabled={saving}
-              >
-                {saving ? '保存中...' : (mode === 'add' ? '追加して保存' : '保存')}
-              </button>
+              <label className="holding-field">
+                <span className="holding-label">追加株数</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  min="0"
+                  value={addShares}
+                  onChange={(e) => setAddShares(e.target.value)}
+                  placeholder="例: 50"
+                  className="holding-input"
+                  disabled={saving}
+                />
+              </label>
+
+              <label className="holding-field">
+                <span className="holding-label">購入価格 (USD)</span>
+                <div className="holding-input-prefixed">
+                  <span className="holding-input-prefix">$</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
+                    min="0"
+                    value={addPrice}
+                    onChange={(e) => setAddPrice(e.target.value)}
+                    placeholder="例: 210.00"
+                    className="holding-input holding-input-with-prefix"
+                    disabled={saving}
+                  />
+                </div>
+              </label>
+
+              {addPreview && (
+                <div className="holding-add-preview">
+                  <div className="holding-add-row">
+                    <span className="holding-add-row-label">新保有数</span>
+                    <span className="holding-add-row-value">
+                      {addPreview.newShares.toLocaleString()} 株
+                    </span>
+                  </div>
+                  <div className="holding-add-row">
+                    <span className="holding-add-row-label">新取得単価</span>
+                    <span className="holding-add-row-value">
+                      <strong>${addPreview.newAvg.toFixed(2)}</strong>
+                    </span>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {mode === 'overwrite' && (
+            <>
+              <label className="holding-field">
+                <span className="holding-label">保有数</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  min="0"
+                  value={shares}
+                  onChange={(e) => setShares(e.target.value)}
+                  placeholder="例: 100"
+                  className="holding-input"
+                  disabled={saving}
+                />
+              </label>
+
+              <label className="holding-field">
+                <span className="holding-label">取得単価 (USD)</span>
+                <div className="holding-input-prefixed">
+                  <span className="holding-input-prefix">$</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
+                    min="0"
+                    value={avgCost}
+                    onChange={(e) => setAvgCost(e.target.value)}
+                    placeholder="例: 189.50"
+                    className="holding-input holding-input-with-prefix"
+                    disabled={saving}
+                  />
+                </div>
+              </label>
             </>
           )}
         </div>
+      </div>
+
+      {errorMsg && <p className="holding-error">{errorMsg}</p>}
+
+      <div className="holding-section-actions">
+        {pendingDelete ? (
+          <div className="holding-delete-confirm">
+            <span>削除しますか？</span>
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="btn-danger"
+              disabled={saving}
+            >
+              削除する
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingDelete(false)}
+              className="btn-ghost"
+              disabled={saving}
+            >
+              キャンセル
+            </button>
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => setPendingDelete(true)}
+              className="btn-danger-ghost"
+              disabled={saving}
+            >
+              削除
+            </button>
+            <div className="holding-section-spacer" />
+            <button
+              type="button"
+              onClick={handleSave}
+              className="btn-primary"
+              disabled={saving}
+            >
+              {saving ? '保存中...' : (mode === 'add' ? '追加して保存' : '上書き保存')}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
