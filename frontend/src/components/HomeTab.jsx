@@ -4,6 +4,7 @@ import TagFilterBar from './TagFilterBar.jsx';
 import MoversCard from './MoversCard.jsx';
 import TodaysBriefSection from './TodaysBriefSection.jsx';
 import EconomicCalendarSection from './EconomicCalendarSection.jsx';
+import { prefetchAll } from '../api.js';
 const PortfolioDashboard = lazy(() => import('./PortfolioDashboard.jsx'));
 // v40+: ChartTab (669行) と DiagramCard (2027行) は表示される時のみ読み込む lazy 化
 const ChartTab = lazy(() => import('./ChartTab.jsx'));
@@ -121,6 +122,174 @@ export default function HomeTab({
     };
   }, []);
 
+  // §11-B-8 セクション順序最適化: ログイン済 + watchlist >= 1 銘柄のときのみ
+  // 「Your portfolio first」案 A 順序 (ChartTab → Movers → マクロ → 経済指標) を適用。
+  // 未ログイン or watchlist 0 件のときは旧順序 (マクロ → 経済指標 → 空 CTA → Movers → ChartTab)。
+  // 全員一致レビューの「空 watchlist 時 DAU 低下リスク」を回避。
+  const useNewOrder = !!user && watchlist.length > 0;
+
+  // §11-B-8: 上位 3 watchlist 銘柄の analyze flow 事前ウォーム。
+  // ChartTab が上位配置になることでクリック CTR 上昇が期待できるため、
+  // 銘柄詳細画面 (DiagramCard) への遷移を瞬時化する。
+  // fire-and-forget なので帯域以外コストなし。
+  const prefetchedRef = useRef(false);
+  useEffect(() => {
+    if (!useNewOrder) return;
+    if (prefetchedRef.current) return;
+    prefetchedRef.current = true;
+    watchlist.slice(0, 3).forEach((t) => prefetchAll(t));
+  }, [useNewOrder, watchlist]);
+
+  // §11-B-8: 各セクションを変数化して useNewOrder で順序切替する。
+  // ChartTab は Suspense fallback に min-height: 480px を指定 (CLS 0 維持)。
+  // 上位配置時は lazy chunk ロード待ちで下のセクションが押し下げられないようにする。
+  const macroSection = (
+    <TodaysBriefSection key="macro" />
+  );
+
+  const economicCalendarSection = (
+    <EconomicCalendarSection key="econocal" />
+  );
+
+  const moversSection = (
+    <div key="movers" className="panel-card rounded-2xl shadow-sm"
+         style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+      <div className="rounded-2xl overflow-hidden">
+        <MoversCard onSelect={onSelect} />
+      </div>
+    </div>
+  );
+
+  const chartTabSection = (
+    <Suspense
+      key="charttab"
+      fallback={
+        <div style={{
+          minHeight: '480px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'var(--text-muted)',
+        }}>
+          読込中...
+        </div>
+      }
+    >
+      <ChartTab
+        watchlist={filteredWatchlist}
+        onSelect={onSelect}
+        onMove={onMove}
+        tagsById={tagsById}
+        assignments={assignments}
+        holdings={holdings}
+        prices={prices}
+        hideTagPill={tagFilterId !== 'all' && tagFilterId !== 'untagged'}
+        onTagClick={user ? onOpenTagAssign : undefined}
+        onRemove={onRemove}
+        watchlistSet={watchlistSet}
+      />
+    </Suspense>
+  );
+
+  const watchlistSection = (
+    <section key="watchlist" className="panel-card rounded-2xl px-6 pt-4 pb-6 shadow-sm"
+             style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+      <h3 className="section-heading">
+        ウォッチリスト
+        {watchlist.length > 0 && (
+          <span className="section-heading-count">{watchlist.length} 銘柄</span>
+        )}
+      </h3>
+      {watchlist.length === 0 ? (
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          gap: '8px', padding: '16px 0', textAlign: 'center',
+        }}>
+          <span style={{ fontSize: '28px' }}>★</span>
+          <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>
+            ウォッチリストはまだ空です
+          </p>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+            銘柄を分析して「★ ウォッチに追加」で登録できます
+          </p>
+          <button
+            onClick={() => onSelect?.('AAPL')}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(56,189,248,0.15)';
+              e.currentTarget.style.borderColor = 'rgba(56,189,248,0.70)';
+              e.currentTarget.style.color = 'rgb(14,165,233)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.borderColor = 'var(--border)';
+              e.currentTarget.style.color = 'var(--text-secondary)';
+            }}
+            style={{
+              marginTop: '4px',
+              padding: '8px 20px',
+              borderRadius: '999px',
+              border: '1.5px solid var(--border)',
+              background: 'transparent',
+              color: 'var(--text-secondary)',
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'background 0.15s, border-color 0.15s, color 0.15s',
+            }}
+          >
+            まず AAPL で試してみましょう →
+          </button>
+        </div>
+      ) : (
+        <>
+          {user ? (
+            <div className="wl-filters-row" role="group" aria-label="ウォッチリストフィルタ">
+              <div className="wl-mode-segment" role="group" aria-label="表示モード">
+                <button
+                  type="button"
+                  onClick={() => onChangeHoldingMode?.(holdingMode === 'hold' ? 'all' : 'hold')}
+                  className={`wl-mode-seg-btn ${holdingMode === 'hold' ? 'is-active' : ''}`}
+                  aria-pressed={holdingMode === 'hold'}
+                  title={holdingMode === 'hold' ? 'クリックして解除（全銘柄表示）' : '保有銘柄のみ表示'}
+                >
+                  保有 <span className="wl-mode-count">{holdCount}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onChangeHoldingMode?.(holdingMode === 'observe' ? 'all' : 'observe')}
+                  className={`wl-mode-seg-btn ${holdingMode === 'observe' ? 'is-active' : ''}`}
+                  aria-pressed={holdingMode === 'observe'}
+                  title={holdingMode === 'observe' ? 'クリックして解除（全銘柄表示）' : '未保有銘柄のみ表示'}
+                >
+                  観察 <span className="wl-mode-count">{observeCount}</span>
+                </button>
+              </div>
+              <span className="wl-filters-sep" aria-hidden="true" />
+              <TagFilterBar
+                tags={tags}
+                assignments={assignments}
+                totalCount={watchlist.length}
+                selectedFilter={tagFilterId}
+                onSelectFilter={onChangeTagFilter}
+                onOpenManager={onOpenTagManager}
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onSignInForTags}
+              className="tag-login-cta"
+              aria-label="ログインしてタグで整理"
+            >
+              💡 ログインするとタグで銘柄を整理できます
+            </button>
+          )}
+          {/* P1-1 chip × ChartTab 統合: chip セクション削除済。
+              以前の dedup-note も chip 自体が消えたため不要。
+              ChartTab (下段) が tag pill / PnL バッジ / ⋯ / × を行内に内蔵。 */}
+        </>
+      )}
+    </section>
+  );
+
   return (
     <div className="space-y-8" style={{ marginTop: '16px' }}>
       {/* ── トップページデモ図解（初訪問時のみ）── */}
@@ -212,136 +381,30 @@ export default function HomeTab({
         </button>
       )}
 
-      {/* ── Today's Brief — マクロ・地政学ニュース（v41 Phase 3）── */}
-      <TodaysBriefSection />
-
-      {/* ── 経済指標カレンダー (v41 Y-1, 3 専門家最優先合意) ── */}
-      <EconomicCalendarSection />
-
-      {/* ── ウォッチリスト ── */}
-      <section className="panel-card rounded-2xl px-6 pt-4 pb-6 shadow-sm"
-               style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-        <h3 className="section-heading">
-          ウォッチリスト
-          {watchlist.length > 0 && (
-            <span className="section-heading-count">{watchlist.length} 銘柄</span>
-          )}
-        </h3>
-        {watchlist.length === 0 ? (
-          <div style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            gap: '8px', padding: '16px 0', textAlign: 'center',
-          }}>
-            <span style={{ fontSize: '28px' }}>★</span>
-            <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>
-              ウォッチリストはまだ空です
-            </p>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
-              銘柄を分析して「★ ウォッチに追加」で登録できます
-            </p>
-            <button
-              onClick={() => onSelect?.('AAPL')}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = 'rgba(56,189,248,0.15)';
-                e.currentTarget.style.borderColor = 'rgba(56,189,248,0.70)';
-                e.currentTarget.style.color = 'rgb(14,165,233)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.borderColor = 'var(--border)';
-                e.currentTarget.style.color = 'var(--text-secondary)';
-              }}
-              style={{
-                marginTop: '4px',
-                padding: '8px 20px',
-                borderRadius: '999px',
-                border: '1.5px solid var(--border)',
-                background: 'transparent',
-                color: 'var(--text-secondary)',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'background 0.15s, border-color 0.15s, color 0.15s',
-              }}
-            >
-              まず AAPL で試してみましょう →
-            </button>
-          </div>
-        ) : (
-          <>
-            {user ? (
-              <div className="wl-filters-row" role="group" aria-label="ウォッチリストフィルタ">
-                <div className="wl-mode-segment" role="group" aria-label="表示モード">
-                  <button
-                    type="button"
-                    onClick={() => onChangeHoldingMode?.(holdingMode === 'hold' ? 'all' : 'hold')}
-                    className={`wl-mode-seg-btn ${holdingMode === 'hold' ? 'is-active' : ''}`}
-                    aria-pressed={holdingMode === 'hold'}
-                    title={holdingMode === 'hold' ? 'クリックして解除（全銘柄表示）' : '保有銘柄のみ表示'}
-                  >
-                    保有 <span className="wl-mode-count">{holdCount}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onChangeHoldingMode?.(holdingMode === 'observe' ? 'all' : 'observe')}
-                    className={`wl-mode-seg-btn ${holdingMode === 'observe' ? 'is-active' : ''}`}
-                    aria-pressed={holdingMode === 'observe'}
-                    title={holdingMode === 'observe' ? 'クリックして解除（全銘柄表示）' : '未保有銘柄のみ表示'}
-                  >
-                    観察 <span className="wl-mode-count">{observeCount}</span>
-                  </button>
-                </div>
-                <span className="wl-filters-sep" aria-hidden="true" />
-                <TagFilterBar
-                  tags={tags}
-                  assignments={assignments}
-                  totalCount={watchlist.length}
-                  selectedFilter={tagFilterId}
-                  onSelectFilter={onChangeTagFilter}
-                  onOpenManager={onOpenTagManager}
-                />
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={onSignInForTags}
-                className="tag-login-cta"
-                aria-label="ログインしてタグで整理"
-              >
-                💡 ログインするとタグで銘柄を整理できます
-              </button>
-            )}
-            {/* P1-1 chip × ChartTab 統合: chip セクション削除済。
-                以前の dedup-note も chip 自体が消えたため不要。
-                ChartTab (下段) が tag pill / PnL バッジ / ⋯ / × を行内に内蔵。 */}
-          </>
-        )}
-      </section>
-
-      {/* ── 急騰・急落 注目銘柄 ── */}
-      <div className="panel-card rounded-2xl shadow-sm"
-           style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-        <div className="rounded-2xl overflow-hidden">
-          <MoversCard onSelect={onSelect} />
-        </div>
-      </div>
-
-      {/* ── ウォッチリスト チャート (chip 機能を行内に内蔵、P1-1) ── */}
-      <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>読込中...</div>}>
-        <ChartTab
-          watchlist={filteredWatchlist}
-          onSelect={onSelect}
-          onMove={onMove}
-          tagsById={tagsById}
-          assignments={assignments}
-          holdings={holdings}
-          prices={prices}
-          hideTagPill={tagFilterId !== 'all' && tagFilterId !== 'untagged'}
-          onTagClick={user ? onOpenTagAssign : undefined}
-          onRemove={onRemove}
-          watchlistSet={watchlistSet}
-        />
-      </Suspense>
+      {/* ── §11-B-8 セクション順序最適化 ──
+            useNewOrder (ログイン済 + watchlist >= 1):
+              ウォッチリスト → ChartTab → Movers → マクロ → 経済指標
+              (Robinhood "Your portfolio first" 流)
+            それ以外 (未ログイン or watchlist 0 件):
+              マクロ → 経済指標 → ウォッチリスト空 CTA → Movers → ChartTab
+              (旧順序、新規ユーザーに「毎日変わる情報」を最初に見せる) */}
+      {useNewOrder ? (
+        <>
+          {watchlistSection}
+          {chartTabSection}
+          {moversSection}
+          {macroSection}
+          {economicCalendarSection}
+        </>
+      ) : (
+        <>
+          {macroSection}
+          {economicCalendarSection}
+          {watchlistSection}
+          {moversSection}
+          {chartTabSection}
+        </>
+      )}
     </div>
   );
 }
