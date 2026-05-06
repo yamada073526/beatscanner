@@ -152,123 +152,63 @@ export default function NotificationSettingsModal({ isOpen, user, onClose }) {
                 {errors._global && <p className="notif-err">{errors._global}</p>}
               </fieldset>
 
-              {/* ── Email チャネル ── */}
-              <fieldset className="notif-fieldset">
-                <legend>📧 Email</legend>
+              {/* ── Email チャネル (Trust Cliff 対策で disabled) ── */}
+              <fieldset className="notif-fieldset notif-fieldset-disabled">
+                <legend>
+                  📧 Email
+                  <span className="notif-coming-soon" aria-label="準備中">準備中</span>
+                </legend>
                 <label className="notif-toggle">
                   <input
                     type="checkbox"
-                    checked={prefs.email_enabled}
-                    onChange={(e) => setField('email_enabled', e.target.checked)}
+                    checked={false}
+                    disabled
                   />
                   <span className="notif-toggle-text">
-                    <span className="notif-toggle-title">Email 通知を有効にする</span>
-                    <span className="notif-toggle-desc">Phase B で Resend 経由の実送信を有効化予定</span>
+                    <span className="notif-toggle-title">Email 通知</span>
+                    <span className="notif-toggle-desc">Resend 経由の実送信を準備中。リリース後に有効化されます。</span>
                   </span>
                 </label>
-                {prefs.email_enabled && (
-                  <>
-                    <input
-                      type="email"
-                      className="notif-input"
-                      value={prefs.email_address}
-                      onChange={(e) => setField('email_address', e.target.value)}
-                      placeholder="例: you@example.com"
-                    />
-                    {errors.email_address && <p className="notif-err">{errors.email_address}</p>}
-                    <button
-                      type="button"
-                      className="btn-ghost notif-test-btn"
-                      onClick={() => handleTest('email')}
-                      disabled={testingChannel === 'email'}
-                    >
-                      {testingChannel === 'email' ? '送信中...' : 'テスト送信 (ログのみ)'}
-                    </button>
-                  </>
-                )}
               </fieldset>
 
-              {/* ── Webhook チャネル ── */}
-              <fieldset className="notif-fieldset">
-                <legend>🔗 Webhook (Slack / Discord)</legend>
+              {/* ── Webhook チャネル (Trust Cliff 対策で disabled) ── */}
+              <fieldset className="notif-fieldset notif-fieldset-disabled">
+                <legend>
+                  🔗 Webhook (Slack / Discord)
+                  <span className="notif-coming-soon" aria-label="準備中">準備中</span>
+                </legend>
                 <label className="notif-toggle">
                   <input
                     type="checkbox"
-                    checked={prefs.webhook_enabled}
-                    onChange={(e) => setField('webhook_enabled', e.target.checked)}
+                    checked={false}
+                    disabled
                   />
                   <span className="notif-toggle-text">
-                    <span className="notif-toggle-title">Webhook 通知を有効にする</span>
-                    <span className="notif-toggle-desc">Slack / Discord の incoming webhook URL に POST。Phase D で実送信</span>
+                    <span className="notif-toggle-title">Webhook 通知</span>
+                    <span className="notif-toggle-desc">Slack / Discord の incoming webhook に POST。リリース後に有効化されます。</span>
                   </span>
                 </label>
-                {prefs.webhook_enabled && (
-                  <>
-                    <select
-                      className="notif-input"
-                      value={prefs.webhook_type}
-                      onChange={(e) => setField('webhook_type', e.target.value)}
-                    >
-                      <option value="slack">Slack</option>
-                      <option value="discord">Discord</option>
-                      <option value="generic">汎用 (JSON POST)</option>
-                    </select>
-                    <input
-                      type="url"
-                      className="notif-input"
-                      value={prefs.webhook_url}
-                      onChange={(e) => setField('webhook_url', e.target.value)}
-                      placeholder="https://hooks.slack.com/services/..."
-                    />
-                    {errors.webhook_url && <p className="notif-err">{errors.webhook_url}</p>}
-                    <button
-                      type="button"
-                      className="btn-ghost notif-test-btn"
-                      onClick={() => handleTest('webhook')}
-                      disabled={testingChannel === 'webhook'}
-                    >
-                      {testingChannel === 'webhook' ? '送信中...' : 'テスト送信 (ログのみ)'}
-                    </button>
-                  </>
-                )}
               </fieldset>
 
-              {/* ── LINE チャネル ── */}
-              <fieldset className="notif-fieldset">
-                <legend>💚 LINE</legend>
+              {/* ── LINE チャネル (Trust Cliff 対策で disabled) ── */}
+              <fieldset className="notif-fieldset notif-fieldset-disabled">
+                <legend>
+                  💚 LINE
+                  <span className="notif-coming-soon" aria-label="準備中">準備中</span>
+                </legend>
                 <label className="notif-toggle">
                   <input
                     type="checkbox"
-                    checked={prefs.line_enabled}
-                    onChange={(e) => setField('line_enabled', e.target.checked)}
+                    checked={false}
+                    disabled
                   />
                   <span className="notif-toggle-text">
-                    <span className="notif-toggle-title">LINE 通知を有効にする</span>
+                    <span className="notif-toggle-title">LINE 通知</span>
                     <span className="notif-toggle-desc">
-                      Phase C で LINE Bot 経由 (LINE Notify は 2025-03 終了済) で実送信予定
+                      LINE Bot 経由で実送信を準備中。LINE Notify は 2025-03 終了済のため Bot 連携が必要です。
                     </span>
                   </span>
                 </label>
-                {prefs.line_enabled && (
-                  <>
-                    <input
-                      type="text"
-                      className="notif-input"
-                      value={prefs.line_user_id}
-                      onChange={(e) => setField('line_user_id', e.target.value)}
-                      placeholder="LINE userId (Phase C で連携手順を提供)"
-                    />
-                    {errors.line_user_id && <p className="notif-err">{errors.line_user_id}</p>}
-                    <button
-                      type="button"
-                      className="btn-ghost notif-test-btn"
-                      onClick={() => handleTest('line')}
-                      disabled={testingChannel === 'line'}
-                    >
-                      {testingChannel === 'line' ? '送信中...' : 'テスト送信 (ログのみ)'}
-                    </button>
-                  </>
-                )}
               </fieldset>
 
               {/* ── 直近のテスト履歴 ── */}

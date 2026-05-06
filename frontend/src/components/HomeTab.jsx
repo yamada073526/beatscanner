@@ -187,6 +187,24 @@ export default function HomeTab({
         </Suspense>
       )}
 
+      {/* ── ダッシュボード未展開時のヒントバナー (X-2-5-A 補強)
+            holdings あり & 「保有」モードでない時、ダッシュボードが隠れていることを
+            気づかせる。1 クリック (バナー押下) で hold モードに切替 → 展開。 ── */}
+      {user && holdingMode !== 'hold' && Object.keys(holdings).length > 0 && (
+        <button
+          type="button"
+          onClick={() => onChangeHoldingMode?.('hold')}
+          className="dashboard-hint-banner"
+          aria-label="保有モードに切替してポートフォリオダッシュボードを表示"
+        >
+          <span className="dashboard-hint-icon" aria-hidden="true">📊</span>
+          <span className="dashboard-hint-text">
+            <strong>「保有」モードに切替</strong> で、{Object.keys(holdings).length} 銘柄のポートフォリオダッシュボード（評価額・推移・集中リスク）が表示されます
+          </span>
+          <span className="dashboard-hint-arrow" aria-hidden="true">→</span>
+        </button>
+      )}
+
       {/* ── Today's Brief — マクロ・地政学ニュース（v41 Phase 3）── */}
       <TodaysBriefSection />
 

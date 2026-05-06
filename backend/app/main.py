@@ -1086,6 +1086,23 @@ async def portfolio_history(payload: dict, request: Request) -> dict:
                     cmap[d_iso] = float(v)
             except Exception:
                 continue
+        # FMP が 0 件なら yfinance フォールバック (free plan / Limit Reach 対策、fmp-api-retry skill 準拠)
+        # yfinance の auto_adjust=True は split-adjusted close を返すため adjClose 相当
+        if not cmap:
+            try:
+                yf_rows = await yfinance_source.fetch_price_history(tk, fetch_from, today.isoformat()) or []
+                for r in yf_rows:
+                    if not isinstance(r, dict):
+                        continue
+                    d = r.get("date")
+                    v = r.get("close")
+                    if d and v is not None:
+                        try:
+                            cmap[str(d)[:10]] = float(v)
+                        except Exception:
+                            continue
+            except Exception:
+                pass
         _PORTFOLIO_HISTORY_CACHE[cache_key] = {"data": cmap, "ts": now_m}
         return cmap
 

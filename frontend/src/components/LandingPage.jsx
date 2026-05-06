@@ -1335,7 +1335,7 @@ function FooterCTASection({ onFreeStart }) {
         className="section-heading"
         style={{ fontSize: 22, marginBottom: 12 }}
       >
-        まず、1銘柄。
+        まず、１銘柄。
       </h2>
       <p
         className="section-subtext"
