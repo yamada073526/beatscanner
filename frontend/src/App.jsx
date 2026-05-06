@@ -43,7 +43,7 @@ import DemoTicker from './components/DemoTicker.jsx';
 import CompanyLogo from './components/CompanyLogo.jsx';
 const TagManagerModal = lazy(() => import('./components/TagManagerModal.jsx'));
 const TagAssignSheet = lazy(() => import('./components/TagAssignSheet.jsx'));
-const HoldingModal = lazy(() => import('./components/HoldingModal.jsx'));
+// HoldingModal は廃止 (案 D で TagAssignSheet 内に統合)
 const CustomScreenerPanel = lazy(() => import('./components/CustomScreenerPanel.jsx'));
 const LandingPage = lazy(() => import('./components/LandingPage.jsx'));
 
@@ -212,7 +212,8 @@ export default function App() {
 
   // ── 保有 (Holdings X-2): Supabase 同期 + 楽観的更新 ─────────────
   const holdingStore = useHoldings({ supabase, user });
-  const [holdingModalTicker, setHoldingModalTicker] = useState(null);
+  // 案 D: HoldingModal は廃止。TagAssignSheet 内で完結するため
+  // holdingModalTicker state は不要 (tagAssignTicker に統合)。
 
   // ── 保有銘柄の現在価格を 60s/900s 毎に再取得 (Phase 3 損益バッジ) ──
   const portfolioPrices = usePortfolioPrices(holdingStore.tickers);
@@ -2113,31 +2114,22 @@ export default function App() {
               }
             }}
             onOpenManager={() => setTagManagerOpen(true)}
-            onOpenHolding={user ? () => setHoldingModalTicker(tagAssignTicker) : undefined}
-          />
-        )}
-        {holdingModalTicker && (
-          <HoldingModal
-            isOpen={!!holdingModalTicker}
-            ticker={holdingModalTicker}
-            current={holdingStore.getHolding(holdingModalTicker)}
-            onClose={() => setHoldingModalTicker(null)}
-            onSave={async ({ shares, avgCost }) => {
+            onSaveHolding={user ? async ({ shares, avgCost }) => {
               try {
-                await holdingStore.setHolding(holdingModalTicker, { shares, avgCost });
+                await holdingStore.setHolding(tagAssignTicker, { shares, avgCost });
               } catch (e) {
                 showToast(e?.message || '保有の保存に失敗しました');
                 throw e;
               }
-            }}
-            onDelete={async () => {
+            } : undefined}
+            onDeleteHolding={user ? async () => {
               try {
-                await holdingStore.removeHolding(holdingModalTicker);
+                await holdingStore.removeHolding(tagAssignTicker);
               } catch (e) {
                 showToast(e?.message || '保有の削除に失敗しました');
                 throw e;
               }
-            }}
+            } : undefined}
           />
         )}
       </Suspense>

@@ -2003,7 +2003,51 @@ body {
   font-weight: 400;
 }
 
-/* ─── Holdings X-2: HoldingModal ─── */
+/* ─── 案 D: ActionSheet 内セクション (タグ + 保有) ─── */
+.action-sheet-section {
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.action-sheet-section:first-child {
+  border-top: 0;
+  padding-top: 4px;
+}
+.action-sheet-section-label {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+/* ─── Holdings X-2: HoldingSection (案 D inline 配置版) ─── */
+.holding-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.holding-current-snapshot {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: rgba(148,163,184,0.08);
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.holding-current-snapshot strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.holding-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.holding-section-spacer { flex: 1; }
+/* 旧 HoldingModal 専用 wrap 残留対策 (削除済) */
 .holding-modal { max-width: 420px; }
 .holding-mode-tabs {
   display: inline-flex;
