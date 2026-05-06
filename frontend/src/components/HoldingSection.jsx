@@ -54,7 +54,8 @@ export default function HoldingSection({
     return { newShares, newAvg };
   }, [mode, current, addShares, addPrice]);
 
-  async function handleSave() {
+  async function handleSave(e) {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
     setErrorMsg('');
     let sharesNum;
     let avgCostNum;
@@ -117,7 +118,7 @@ export default function HoldingSection({
   // ──────── 初回登録 (holdings なし) ────────
   if (!hasCurrent) {
     return (
-      <div className="holding-section">
+      <form className="holding-section" onSubmit={handleSave}>
         <div className="holding-form">
           <label className="holding-field">
             <span className="holding-label">保有数</span>
@@ -156,8 +157,7 @@ export default function HoldingSection({
 
           <div className="holding-section-actions">
             <button
-              type="button"
-              onClick={handleSave}
+              type="submit"
               className="btn-primary"
               disabled={saving}
             >
@@ -165,13 +165,13 @@ export default function HoldingSection({
             </button>
           </div>
         </div>
-      </div>
+      </form>
     );
   }
 
   // ──────── 既存あり (holdings あり) ────────
   return (
-    <div className="holding-section">
+    <form className="holding-section" onSubmit={handleSave}>
       <p className="holding-current-snapshot">
         現在: <strong>{Number(current.shares).toLocaleString()} 株</strong> @ ${Number(current.avg_cost).toFixed(2)}
       </p>
@@ -342,8 +342,7 @@ export default function HoldingSection({
             </button>
             <div className="holding-section-spacer" />
             <button
-              type="button"
-              onClick={handleSave}
+              type="submit"
               className="btn-primary"
               disabled={saving}
             >
@@ -352,6 +351,6 @@ export default function HoldingSection({
           </>
         )}
       </div>
-    </div>
+    </form>
   );
 }

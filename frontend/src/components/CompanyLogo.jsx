@@ -28,18 +28,25 @@ function hashTicker(t) {
  *
  * @param {string} ticker - ティッカー（例: "AAPL"）
  * @param {number} size - 直径 px（デフォルト 24）
+ * @param {string} variant - 'default' | 'badge'
+ *   - 'badge': カラフルな bg (PASS/FAIL バナー等) で使う想定。padding 拡大 + 外周リング
  * @param {string} className - 追加クラス
  */
-export default function CompanyLogo({ ticker, size = 24, className = '' }) {
+export default function CompanyLogo({ ticker, size = 24, variant = 'default', className = '' }) {
   const [stage, setStage] = useState(0); // 0: TV, 1: FMP, 2: fallback
   const t = (ticker || '').toUpperCase().trim();
   const tvSlug = getTickerTvSlug(t);
+
+  const isBadge = variant === 'badge';
+  const innerPadding = isBadge ? Math.max(4, Math.round(size * 0.10)) : 1;
+  const boxShadow = isBadge ? '0 0 0 1px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.10)' : undefined;
 
   const commonImgStyle = {
     width: size,
     height: size,
     borderRadius: '50%',
     flexShrink: 0,
+    boxShadow,
   };
 
   // Stage 0: TradingView SVG（マップに登録された主要銘柄のみ）
@@ -58,7 +65,7 @@ export default function CompanyLogo({ ticker, size = 24, className = '' }) {
           ...commonImgStyle,
           objectFit: 'contain',
           backgroundColor: '#fff',
-          padding: 1,
+          padding: innerPadding,
         }}
       />
     );
@@ -80,7 +87,7 @@ export default function CompanyLogo({ ticker, size = 24, className = '' }) {
           ...commonImgStyle,
           objectFit: 'contain',
           backgroundColor: '#fff',
-          padding: 1,
+          padding: innerPadding,
         }}
       />
     );

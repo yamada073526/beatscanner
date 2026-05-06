@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, Component, memo } from "react";
+import CompanyLogo from "./CompanyLogo.jsx";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -376,9 +377,12 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect, isFirst, isLast, o
           }
         }}
       >
-        {/* 左: 銘柄名・株価・次回決算 */}
+        {/* 左: ロゴ + 銘柄名・株価・次回決算 */}
         <div style={{ width: 140, flexShrink: 0, padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3 }}>
-          <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.2 }}>{ticker}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <CompanyLogo ticker={ticker} size={18} />
+            <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.2 }}>{ticker}</span>
+          </div>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             {summary ? `$${summary.current_price.toLocaleString()}` : "—"}
           </span>

@@ -1,3 +1,5 @@
+import CompanyLogo from './CompanyLogo.jsx';
+
 // judgment.py の条件順序に追従:
 // 0: 営業CFマージン ≥ 15%, 1: EPS 連続増加, 2: CFPS 連続増加,
 // 3: 売上高 連続増加, 4: CFPS > EPS（直近期）
@@ -21,14 +23,17 @@ export default function ResultBadge({ result }) {
         } text-white`}
       >
         <div className="flex items-center justify-between gap-6">
-          {/* 左: 会社名 → ティッカー（最大） → 期間 → 条件ドット */}
+          {/* 左: 会社名 → ロゴ + ティッカー（最大） → 期間 → 条件ドット */}
           <div className="min-w-0">
             <div className="text-sm opacity-80 truncate">
               {result.companyName ?? ''}
             </div>
-            <h2 className="text-5xl font-black tracking-tight leading-none mt-0.5 md:text-6xl">
-              {result.ticker}
-            </h2>
+            <div className="flex items-center gap-3 mt-0.5">
+              <CompanyLogo ticker={result.ticker} size={48} variant="badge" />
+              <h2 className="text-5xl font-black tracking-tight leading-none md:text-6xl">
+                {result.ticker}
+              </h2>
+            </div>
             <div className="mt-2 text-sm opacity-80">
               対象期間: FY{result.latestPeriod}（{result.latestDate}）
             </div>
