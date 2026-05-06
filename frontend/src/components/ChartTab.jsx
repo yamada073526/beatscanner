@@ -1,5 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, Component, memo } from "react";
 import CompanyLogo from "./CompanyLogo.jsx";
+import TagPill from "./TagPill.jsx";
+import { computePnL, formatPnLPct } from "../lib/holdings.js";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -274,7 +276,16 @@ function MoveButton({ label, onClick, disabled, size = 32 }) {
 }
 
 // ── 銘柄1行 ──────────────────────────────────────────────────────
-const TickerRow = memo(function TickerRow({ ticker, onSelect, isFirst, isLast, onMove, registerRef, globalPeriodsExpanded }) {
+const TickerRow = memo(function TickerRow({
+  ticker, onSelect, isFirst, isLast, onMove, registerRef, globalPeriodsExpanded,
+  // chip 統合 (P1-1): タグ / 含み損益 / 編集・削除を 1 行内に吸収
+  tag = null,
+  holding = null,
+  priceRow = null,
+  hideTagPill = false,
+  onTagClick,
+  onRemove,
+}) {
   const rowRef       = useRef(null);
   const prefetchedRef = useRef(false);
   const [summary,    setSummary]    = useState(null);
@@ -335,6 +346,9 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect, isFirst, isLast, o
     return `${d.getMonth() + 1}/${d.getDate()}`;
   };
 
+  // chip 統合: 含み損益 (holdings + 現在価格)
+  const pnl = holding && priceRow?.price != null ? computePnL(holding, priceRow.price) : null;
+
   const daysToEarnings = (() => {
     if (!summary?.next_earnings) return null;
     const diff = new Date(summary.next_earnings + "T00:00:00Z") - new Date();
@@ -377,15 +391,32 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect, isFirst, isLast, o
           }
         }}
       >
-        {/* 左: ロゴ + 銘柄名・株価・次回決算 */}
-        <div style={{ width: 140, flexShrink: 0, padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {/* 左: ロゴ + 銘柄名・(タグ) + 株価・(PnL) + 次回決算 */}
+        <div style={{ width: 160, flexShrink: 0, padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <CompanyLogo ticker={ticker} size={18} />
             <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.2 }}>{ticker}</span>
+            {tag && !hideTagPill && (
+              <TagPill tag={tag} size="sm" />
+            )}
           </div>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            {summary ? `$${summary.current_price.toLocaleString()}` : "—"}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              {summary ? `$${summary.current_price.toLocaleString()}` : "—"}
+            </span>
+            {holding && (
+              pnl && pnl.status ? (
+                <span
+                  className={`wl-pnl-badge wl-pnl-${pnl.status}`}
+                  title={`含み損益: ${pnl.pnlAbs >= 0 ? '+' : ''}$${pnl.pnlAbs.toFixed(2)}${priceRow?.price ? ` (現在値 $${Number(priceRow.price).toFixed(2)})` : ''}`}
+                >
+                  {formatPnLPct(pnl.pnlPct)}
+                </span>
+              ) : (
+                <span className="wl-pnl-badge wl-pnl-neutral" title="現在価格を取得中...">…</span>
+              )
+            )}
+          </div>
           {(summary || summaryErr) && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 3 }}>
               <span style={{
@@ -474,13 +505,19 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect, isFirst, isLast, o
           {periodsExpanded ? '«' : '»'}
         </button>
 
-        {/* 並び替えボタン */}
+        {/* 並び替え + chip 編集・削除 (4 ボタン縦積み) */}
         <div
           style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 2px', flexShrink: 0, gap: 0 }}
           onClick={(e) => e.stopPropagation()}
         >
-          <MoveButton label="↑" disabled={isFirst} onClick={() => onMove(ticker, 'up')} size={isMobile ? 20 : 32} />
-          <MoveButton label="↓" disabled={isLast}  onClick={() => onMove(ticker, 'down')} size={isMobile ? 20 : 32} />
+          <MoveButton label="↑" disabled={isFirst} onClick={() => onMove(ticker, 'up')} size={isMobile ? 20 : 28} />
+          <MoveButton label="↓" disabled={isLast}  onClick={() => onMove(ticker, 'down')} size={isMobile ? 20 : 28} />
+          {onTagClick && (
+            <MoveButton label="⋯" onClick={() => onTagClick(ticker)} size={isMobile ? 20 : 28} />
+          )}
+          {onRemove && (
+            <MoveButton label="×" onClick={() => onRemove(ticker)} size={isMobile ? 20 : 28} />
+          )}
         </div>
 
         {/* 矢印 */}
@@ -545,7 +582,17 @@ const TickerRow = memo(function TickerRow({ ticker, onSelect, isFirst, isLast, o
 
 const GLOBAL_PERIODS_EXPANDED_KEY = 'wl-global-periods-expanded-v1';
 
-export default memo(function ChartTab({ watchlist = [], onSelect, onMove }) {
+export default memo(function ChartTab({
+  watchlist = [], onSelect, onMove,
+  // chip 統合 (P1-1): タグ / 含み損益 / 編集・削除を行内に表示
+  tagsById = {},
+  assignments = {},
+  holdings = {},
+  prices = {},
+  hideTagPill = false,
+  onTagClick,
+  onRemove,
+}) {
   const rowRefs = useRef({});
   const prevPositions = useRef({});
   const [globalPeriodsExpanded, setGlobalPeriodsExpandedState] = useState(() => {
@@ -619,11 +666,13 @@ export default memo(function ChartTab({ watchlist = [], onSelect, onMove }) {
   }, [watchlist]);
 
   if (watchlist.length === 0) {
+    // P1-1: HomeTab 側で watchlist.length===0 の empty state を吸収済のため、
+    // ここに来るのは「フィルタ結果が 0 件」のケース。文言を汎用化。
     return (
-      <div className="flex flex-col items-center justify-center py-24" style={{ color: 'var(--text-muted)' }}>
-        <div className="text-4xl mb-4">📋</div>
-        <p className="text-sm">ウォッチリストに銘柄を追加すると</p>
-        <p className="text-sm">チャートが表示されます</p>
+      <div className="flex flex-col items-center justify-center py-16" style={{ color: 'var(--text-muted)' }}>
+        <div className="text-4xl mb-3">🔍</div>
+        <p className="text-sm">該当する銘柄がありません</p>
+        <p className="text-xs mt-1" style={{ opacity: 0.7 }}>フィルタ条件を変えてみてください</p>
       </div>
     );
   }
@@ -656,18 +705,27 @@ export default memo(function ChartTab({ watchlist = [], onSelect, onMove }) {
         ))}
       </div>
 
-      {watchlist.map((ticker, idx) => (
-        <TickerRow
-          key={ticker}
-          ticker={ticker}
-          onSelect={onSelect}
-          isFirst={idx === 0}
-          isLast={idx === watchlist.length - 1}
-          onMove={handleMove}
-          registerRef={registerRef}
-          globalPeriodsExpanded={globalPeriodsExpanded}
-        />
-      ))}
+      {watchlist.map((ticker, idx) => {
+        const tagId = assignments[ticker];
+        return (
+          <TickerRow
+            key={ticker}
+            ticker={ticker}
+            onSelect={onSelect}
+            isFirst={idx === 0}
+            isLast={idx === watchlist.length - 1}
+            onMove={handleMove}
+            registerRef={registerRef}
+            globalPeriodsExpanded={globalPeriodsExpanded}
+            tag={tagId ? tagsById[tagId] : null}
+            holding={holdings[ticker]}
+            priceRow={prices[ticker]}
+            hideTagPill={hideTagPill}
+            onTagClick={onTagClick}
+            onRemove={onRemove}
+          />
+        );
+      })}
     </div>
   );
 });

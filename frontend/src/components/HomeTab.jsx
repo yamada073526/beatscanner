@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
-import Watchlist from './Watchlist.jsx';
+// Watchlist (chip 一覧) は P1-1 で ChartTab 内に統合済 → import 不要
 import TagFilterBar from './TagFilterBar.jsx';
 import MoversCard from './MoversCard.jsx';
 import TodaysBriefSection from './TodaysBriefSection.jsx';
@@ -304,39 +304,9 @@ export default function HomeTab({
                 💡 ログインするとタグで銘柄を整理できます
               </button>
             )}
-            {/* レビュー指摘 (UI/UX #2): 保有モードかつダッシュボード展開中は
-                同じ銘柄が dashboard table と watchlist chip で二重表示される。
-                chip 列を抑制し、タグ編集が必要な場合の導線だけ残す。 */}
-            {user && holdingMode === 'hold' && Object.keys(holdings).length > 0 ? (
-              <div className="wl-dedup-note" role="note">
-                <span className="wl-dedup-icon" aria-hidden="true">📊</span>
-                <span className="wl-dedup-text">
-                  保有銘柄は<strong>上のダッシュボード</strong>で一覧表示中
-                </span>
-                <button
-                  type="button"
-                  className="wl-dedup-switch"
-                  onClick={() => onChangeHoldingMode?.('all')}
-                  aria-label="全銘柄モードに切替してウォッチリストを表示"
-                >
-                  全銘柄を表示 →
-                </button>
-              </div>
-            ) : (
-              <Watchlist
-                items={filteredWatchlist}
-                tagsById={tagsById}
-                assignments={assignments}
-                hideTagPill={tagFilterId !== 'all' && tagFilterId !== 'untagged'}
-                holdings={holdings}
-                prices={prices}
-                onSelect={onSelect}
-                onRemove={onRemove}
-                onHover={onHover}
-                onFocusSearch={onFocusSearch}
-                onTagClick={user ? onOpenTagAssign : undefined}
-              />
-            )}
+            {/* P1-1 chip × ChartTab 統合: chip セクション削除済。
+                以前の dedup-note も chip 自体が消えたため不要。
+                ChartTab (下段) が tag pill / PnL バッジ / ⋯ / × を行内に内蔵。 */}
           </>
         )}
       </section>
@@ -349,9 +319,20 @@ export default function HomeTab({
         </div>
       </div>
 
-      {/* ── ウォッチリスト チャート ── */}
+      {/* ── ウォッチリスト チャート (chip 機能を行内に内蔵、P1-1) ── */}
       <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>読込中...</div>}>
-        <ChartTab watchlist={watchlist} onSelect={onSelect} onMove={onMove} />
+        <ChartTab
+          watchlist={filteredWatchlist}
+          onSelect={onSelect}
+          onMove={onMove}
+          tagsById={tagsById}
+          assignments={assignments}
+          holdings={holdings}
+          prices={prices}
+          hideTagPill={tagFilterId !== 'all' && tagFilterId !== 'untagged'}
+          onTagClick={user ? onOpenTagAssign : undefined}
+          onRemove={onRemove}
+        />
       </Suspense>
     </div>
   );
