@@ -1,8 +1,11 @@
 import TagPill from './TagPill.jsx';
 
 /**
- * ウォッチリスト上部のフィルタ pill bar
- * 「すべて | タグなし | [タグ1] [タグ2] ... | + 管理」を横スクロール 1 行で表示
+ * ウォッチリスト上部のフィルタ pill bar (案 C)
+ * 並び: 「タグ | [タグ1] [タグ2] ... | + 管理 | タグなし(末尾・低明度)」
+ * - 「すべて」pill 廃止 (Notion 暗黙化): 未選択 = 全件
+ * - active pill 再クリックで解除 (toggle off → 'all')
+ * - 「タグなし」は末尾 + 低明度で「メンテ用フィルタ」と暗黙伝達
  */
 export default function TagFilterBar({
   tags,
@@ -20,26 +23,16 @@ export default function TagFilterBar({
     tagCounts[tagId] = (tagCounts[tagId] || 0) + 1;
   }
 
+  // active pill 再クリックで 'all' に戻す toggle ヘルパ
+  const handleClick = (id) => {
+    onSelectFilter(selectedFilter === id ? 'all' : id);
+  };
+
+  const showUntagged = untaggedCount > 0 || tags.length > 0;
+
   return (
     <div className="tag-filter-bar" role="toolbar" aria-label="タグフィルタ">
       <span className="tag-filter-prefix" aria-hidden="true">タグ</span>
-      <button
-        type="button"
-        onClick={() => onSelectFilter('all')}
-        className={`tag-filter-pill ${selectedFilter === 'all' ? 'selected' : ''}`}
-      >
-        すべて <span className="tag-filter-count">{totalCount}</span>
-      </button>
-
-      {(untaggedCount > 0 || tags.length > 0) && (
-        <button
-          type="button"
-          onClick={() => onSelectFilter('untagged')}
-          className={`tag-filter-pill ${selectedFilter === 'untagged' ? 'selected' : ''}`}
-        >
-          タグなし <span className="tag-filter-count">{untaggedCount}</span>
-        </button>
-      )}
 
       {tags.map((tag) => (
         <TagPill
@@ -47,7 +40,7 @@ export default function TagFilterBar({
           tag={tag}
           selected={selectedFilter === tag.id}
           count={tagCounts[tag.id] || 0}
-          onClick={() => onSelectFilter(tag.id)}
+          onClick={() => handleClick(tag.id)}
         />
       ))}
 
@@ -59,6 +52,18 @@ export default function TagFilterBar({
       >
         {tags.length === 0 ? '+ タグを作成' : '+ 管理'}
       </button>
+
+      {showUntagged && (
+        <button
+          type="button"
+          onClick={() => handleClick('untagged')}
+          className={`tag-filter-pill tag-filter-untagged ${selectedFilter === 'untagged' ? 'selected' : ''}`}
+          aria-pressed={selectedFilter === 'untagged'}
+          title={selectedFilter === 'untagged' ? 'クリックして解除' : '未分類銘柄のみ表示'}
+        >
+          タグなし <span className="tag-filter-count">{untaggedCount}</span>
+        </button>
+      )}
     </div>
   );
 }

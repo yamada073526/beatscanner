@@ -180,7 +180,12 @@ export default function HomeTab({
       {/* ── ウォッチリスト ── */}
       <section className="panel-card rounded-2xl px-6 pt-4 pb-6 shadow-sm"
                style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-        <h3 className="section-heading">ウォッチリスト</h3>
+        <h3 className="section-heading">
+          ウォッチリスト
+          {watchlist.length > 0 && (
+            <span className="section-heading-count">{watchlist.length} 銘柄</span>
+          )}
+        </h3>
         {watchlist.length === 0 ? (
           <div style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -225,31 +230,22 @@ export default function HomeTab({
           <>
             {user ? (
               <div className="wl-filters-row" role="group" aria-label="ウォッチリストフィルタ">
-                <div className="wl-mode-segment" role="radiogroup" aria-label="表示モード">
+                <div className="wl-mode-segment" role="group" aria-label="表示モード">
                   <button
                     type="button"
-                    role="radio"
-                    onClick={() => onChangeHoldingMode?.('all')}
-                    className={`wl-mode-seg-btn ${holdingMode === 'all' ? 'is-active' : ''}`}
-                    aria-checked={holdingMode === 'all'}
-                  >
-                    全銘柄 <span className="wl-mode-count">{watchlist.length}</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    onClick={() => onChangeHoldingMode?.('hold')}
+                    onClick={() => onChangeHoldingMode?.(holdingMode === 'hold' ? 'all' : 'hold')}
                     className={`wl-mode-seg-btn ${holdingMode === 'hold' ? 'is-active' : ''}`}
-                    aria-checked={holdingMode === 'hold'}
+                    aria-pressed={holdingMode === 'hold'}
+                    title={holdingMode === 'hold' ? 'クリックして解除（全銘柄表示）' : '保有銘柄のみ表示'}
                   >
                     保有 <span className="wl-mode-count">{holdCount}</span>
                   </button>
                   <button
                     type="button"
-                    role="radio"
-                    onClick={() => onChangeHoldingMode?.('observe')}
+                    onClick={() => onChangeHoldingMode?.(holdingMode === 'observe' ? 'all' : 'observe')}
                     className={`wl-mode-seg-btn ${holdingMode === 'observe' ? 'is-active' : ''}`}
-                    aria-checked={holdingMode === 'observe'}
+                    aria-pressed={holdingMode === 'observe'}
+                    title={holdingMode === 'observe' ? 'クリックして解除（全銘柄表示）' : '未保有銘柄のみ表示'}
                   >
                     観察 <span className="wl-mode-count">{observeCount}</span>
                   </button>

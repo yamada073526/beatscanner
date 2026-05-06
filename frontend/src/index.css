@@ -871,6 +871,21 @@ body {
   line-height: 1.2;
   margin: 0 0 12px;
 }
+.section-heading-count {
+  margin-left: 10px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  background: rgba(148,163,184,0.10);
+  border-radius: 9999px;
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+}
+[data-theme="dark"] .section-heading-count {
+  background: rgba(148,163,184,0.14);
+}
 
 /* 階層2: サブセクション ─ 上段: 小さい薄いラベル（ライブ感・日付バッジ用） */
 .subsection-label {
@@ -1776,6 +1791,18 @@ body {
   color: var(--text-muted);
   letter-spacing: 0.04em;
   margin-right: 2px;
+}
+
+/* タグなし pill: 末尾配置 + 70% 不透明度で「メンテ用フィルタ」を暗黙伝達 */
+.tag-filter-untagged {
+  margin-left: auto;            /* flex 末尾にプッシュ */
+  opacity: 0.7;
+}
+.tag-filter-untagged.selected {
+  opacity: 1;
+}
+.tag-filter-untagged:hover {
+  opacity: 1;
 }
 .tag-filter-bar::-webkit-scrollbar { height: 4px; }
 .tag-filter-bar::-webkit-scrollbar-thumb {
