@@ -952,6 +952,25 @@ body {
   opacity: 0.85;
 }
 
+/* §11-B-15: HomeTab 2 グループ化境界 (Linear/Apple Stocks 流)
+   「あなたの銘柄」群と「マーケット」群を視覚的に分離。
+   4 体エージェントレビュー全員一致採用。
+   設計原則 ①「2 秒で分かる」+ ③「シンプルかつリッチ」を両立する弱境界。
+   親 .space-y-8 (32px gap) の中に置かれるため、追加 margin は不要。 */
+.home-group-divider {
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.home-group-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin: 0;
+  text-transform: none; /* 日本語ラベルなので uppercase は適用しない */
+}
+
 /* ─── ニュース記事モーダル（リデザイン版） ─── */
 .news-modal-header {
   position: relative;

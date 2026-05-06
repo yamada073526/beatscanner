@@ -390,9 +390,14 @@ export default function HomeTab({
               (旧順序、新規ユーザーに「毎日変わる情報」を最初に見せる) */}
       {useNewOrder ? (
         <>
+          {/* グループ A: あなたの銘柄 (アテンション無限大、Robinhood/Apple Stocks 流) */}
           {watchlistSection}
           {chartTabSection}
           {moversSection}
+          {/* §11-B-15 グループ境界: マーケット (読み流しゾーン) へ視覚的に切替 */}
+          <div className="home-group-divider" aria-hidden="true">
+            <span className="home-group-label">マーケット</span>
+          </div>
           {macroSection}
           {economicCalendarSection}
         </>
