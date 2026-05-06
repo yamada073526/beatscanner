@@ -532,14 +532,26 @@ const TickerRow = memo(function TickerRow({
           )}
         </div>
 
-        {/* 矢印 */}
-        <span style={{
-          display: 'flex', alignItems: 'center',
-          padding: isMobile ? '0 4px 0 0' : '0 10px 0 0', flexShrink: 0,
-          fontSize: isMobile ? 10 : 12, color: 'var(--text-muted)',
+        {/* P0-1 (5 体レビュー): ▼ 矢印は右端から下端独立行へ移動 (詰まり感解消、視覚アフォーダンス維持) */}
+      </div>
+
+      {/* ▼ 展開チェブロン: グリッド直下、横全幅で独立行配置 */}
+      <div
+        aria-hidden
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '4px 0 6px',
+          fontSize: 12,
+          color: 'var(--text-muted)',
+          borderTop: '1px solid var(--border-subtle, transparent)',
           transition: 'transform 0.2s',
           transform: expanded ? 'rotate(180deg)' : 'none',
-        }}>▼</span>
+          pointerEvents: 'none',
+        }}
+      >
+        ▼
       </div>
 
       <div

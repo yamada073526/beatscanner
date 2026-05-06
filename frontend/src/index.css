@@ -3180,6 +3180,141 @@ body {
   border-top: 1px solid var(--border);
 }
 .econo-cal-day-header:first-child { border-top: 0; }
+
+/* P0-2: 経済指標 リストの枠固定 + 内部スクロール (5 体レビュー、スクロール疲れ解消) */
+.econo-cal-list-scroll {
+  max-height: clamp(360px, 60vh, 620px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  position: relative;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.econo-cal-list-scroll::-webkit-scrollbar { width: 6px; }
+.econo-cal-list-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.econo-cal-list-scroll:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.45);
+  outline-offset: -2px;
+}
+/* 下端 fade: スクロール余地があるとき表示 */
+.econo-cal-list-scroll.show-fade {
+  mask-image: linear-gradient(to bottom, black calc(100% - 32px), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 32px), transparent);
+}
+
+/* P0-6: ⭐ 最注目イベント大ピル (HIGH 中で最も近い未来 1 件、リテール層向けに「結局どれが今日効くか」明示) */
+.econo-cal-spotlight {
+  margin: 12px 16px 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(245,158,11,0.10), rgba(245,158,11,0.04));
+  border: 1px solid rgba(245,158,11,0.35);
+}
+.econo-cal-spotlight-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.econo-cal-spotlight-icon {
+  font-size: 28px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.econo-cal-spotlight-body {
+  flex: 1;
+  min-width: 0;
+}
+.econo-cal-spotlight-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+.econo-cal-spotlight-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f59e0b;
+  background: rgba(245,158,11,0.15);
+  border: 1px solid rgba(245,158,11,0.40);
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+.econo-cal-spotlight-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.econo-cal-spotlight-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+  line-height: 1.3;
+  margin: 0;
+}
+.econo-cal-spotlight-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin: 2px 0 0;
+}
+[data-theme="dark"] .econo-cal-spotlight {
+  background: linear-gradient(135deg, rgba(245,158,11,0.14), rgba(245,158,11,0.06));
+  border-color: rgba(245,158,11,0.45);
+}
+
+/* P0-3: マクロニュース 縦列モードの左サムネ (NewsPanel 流用、64px PC / 48px mobile) */
+.brief-list-thumb {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--bg-subtle, #f8fafc);
+  border: 1px solid rgba(0,0,0,0.06);
+}
+.brief-list-thumb-fallback {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.92);
+  border: 1px solid rgba(0,0,0,0.06);
+}
+@media (max-width: 600px) {
+  .brief-list-thumb,
+  .brief-list-thumb-fallback {
+    width: 48px;
+    height: 48px;
+    font-size: 18px;
+  }
+}
+[data-theme="dark"] .brief-list-thumb,
+[data-theme="dark"] .brief-list-thumb-fallback {
+  border-color: rgba(255,255,255,0.06);
+}
+
+/* P0-2: マクロニュース 縦列モードの枠固定 (経済指標と統一) */
+.brief-list-scroll {
+  max-height: clamp(360px, 60vh, 620px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.brief-list-scroll::-webkit-scrollbar { width: 6px; }
+.brief-list-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.brief-list-scroll:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.45);
+  outline-offset: -2px;
+}
 [data-theme="dark"] .econo-cal-day-header {
   background: linear-gradient(
     to bottom,

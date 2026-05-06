@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { fetchEconomicCalendar } from '../api.js';
+import { translateEvent } from '../lib/i18n/economicEvents.js';
 
 // 経済指標カレンダー (v41 Y-1 + Y-2 高度化)
 // 設計思想 ②「毎日開きたくなる」の核 — FOMC/CPI/雇用統計など週次イベントが
@@ -269,9 +270,31 @@ function EventRow({ event, isHighest }) {
           </span>
         )}
       </div>
-      <p className="text-sm font-medium text-slate-900 leading-snug" style={{ letterSpacing: '0.01em' }}>
-        {event.event}
-      </p>
+      {/* P0-4+5: 和訳メイン + 英語 sub + カテゴリアイコン (楽天マーケットスピード II 流) */}
+      {(() => {
+        const t = translateEvent(event.event);
+        return (
+          <>
+            <p
+              className="text-sm font-medium text-slate-900 leading-snug"
+              style={{ letterSpacing: '0.01em', display: 'flex', alignItems: 'baseline', gap: 6 }}
+            >
+              <span aria-hidden style={{ fontSize: 13, lineHeight: 1, flexShrink: 0 }} title={t.category.label}>
+                {t.category.icon}
+              </span>
+              <span>{t.ja || t.en}</span>
+            </p>
+            {t.ja && t.ja !== t.en && (
+              <p
+                className="text-[10px] leading-tight"
+                style={{ color: 'var(--text-muted)', marginTop: 1, marginLeft: 19 }}
+              >
+                {t.en}
+              </p>
+            )}
+          </>
+        );
+      })()}
       {(event.estimate || event.previous || event.actual) && (
         <p className="text-xs text-slate-500 mt-1 tabular-nums">
           {event.estimate != null && event.estimate !== '' && (
@@ -365,8 +388,8 @@ export default function EconomicCalendarSection() {
     return out;
   }, [visibleEvents]);
 
-  // 最も近い未来の HIGH イベントを「最注目」マークに
-  const highestEventKey = useMemo(() => {
+  // 最も近い未来の HIGH イベントを「最注目」マークに (オブジェクトと key を別々に保持)
+  const spotlightEvent = useMemo(() => {
     const now = Date.now();
     let best = null;
     let bestDiff = Infinity;
@@ -380,8 +403,32 @@ export default function EconomicCalendarSection() {
         bestDiff = diff;
       }
     }
-    if (!best) return null;
-    return `${best.event}-${best.date}`;
+    return best;
+  }, [visibleEvents]);
+  const highestEventKey = spotlightEvent ? `${spotlightEvent.event}-${spotlightEvent.date}` : null;
+  const spotlightInfo = useMemo(
+    () => (spotlightEvent ? translateEvent(spotlightEvent.event) : null),
+    [spotlightEvent]
+  );
+  const spotlightTimeLabel = useMemo(() => {
+    if (!spotlightEvent) return '';
+    return formatJST(spotlightEvent.date);
+  }, [spotlightEvent]);
+
+  // P0-2: スクロール枠固定 + showFade パターン (NewsPanel 流用)
+  const listScrollRef = useRef(null);
+  const [showFade, setShowFade] = useState(false);
+  const updateFadeState = () => {
+    const el = listScrollRef.current;
+    if (!el) { setShowFade(false); return; }
+    const canScroll = el.scrollHeight > el.clientHeight + 1;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
+    setShowFade(canScroll && !atBottom);
+  };
+  useEffect(() => {
+    // visibleEvents 変化後の再計算 (1 frame 遅延で DOM 反映待ち)
+    const id = requestAnimationFrame(updateFadeState);
+    return () => cancelAnimationFrame(id);
   }, [visibleEvents]);
 
   if (loading) {
@@ -445,21 +492,48 @@ export default function EconomicCalendarSection() {
           選択した条件のイベントはありません
         </p>
       ) : (
-        <div className="econo-cal-list">
-          {grouped.map((row, i) => {
-            if (row.type === 'header') {
-              return (
-                <div key={`h-${row.key}`} className="econo-cal-day-header">
-                  {groupHeader(row.key)}
+        <>
+          {/* P0-6: ⭐ 最注目イベント大ピル (HIGH 中で最も近い未来 1 件、リテール層向けに「結局どれが今日効くか」明示) */}
+          {spotlightEvent && (
+            <div className="econo-cal-spotlight" role="region" aria-label="最注目イベント">
+              <div className="econo-cal-spotlight-row">
+                <span className="econo-cal-spotlight-icon" aria-hidden>{spotlightInfo.icon}</span>
+                <div className="econo-cal-spotlight-body">
+                  <div className="econo-cal-spotlight-meta">
+                    <span className="econo-cal-spotlight-badge">⭐ 最注目</span>
+                    <span className="econo-cal-spotlight-time">{spotlightTimeLabel}</span>
+                  </div>
+                  <p className="econo-cal-spotlight-title">{spotlightInfo.ja || spotlightInfo.en}</p>
+                  {spotlightInfo.ja && spotlightInfo.ja !== spotlightInfo.en && (
+                    <p className="econo-cal-spotlight-sub">{spotlightInfo.en}</p>
+                  )}
                 </div>
-              );
-            }
-            const ev = row.event;
-            const evKey = `${ev.event}-${ev.date}-${i}`;
-            const isHighest = highestEventKey && `${ev.event}-${ev.date}` === highestEventKey;
-            return <EventRow key={evKey} event={ev} isHighest={isHighest} />;
-          })}
-        </div>
+              </div>
+            </div>
+          )}
+          <div
+            ref={listScrollRef}
+            className={`econo-cal-list econo-cal-list-scroll${showFade ? ' show-fade' : ''}`}
+            role="region"
+            aria-label="経済指標一覧"
+            tabIndex={0}
+            onScroll={updateFadeState}
+          >
+            {grouped.map((row, i) => {
+              if (row.type === 'header') {
+                return (
+                  <div key={`h-${row.key}`} className="econo-cal-day-header">
+                    {groupHeader(row.key)}
+                  </div>
+                );
+              }
+              const ev = row.event;
+              const evKey = `${ev.event}-${ev.date}-${i}`;
+              const isHighest = highestEventKey && `${ev.event}-${ev.date}` === highestEventKey;
+              return <EventRow key={evKey} event={ev} isHighest={isHighest} />;
+            })}
+          </div>
+        </>
       )}
     </section>
   );

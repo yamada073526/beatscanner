@@ -725,6 +725,68 @@ KRE / HG=F / ^VVIX / BZ=F / ^N225 / NG=F / USDCNH=X 等。FMP `/quote` レート
 
 ---
 
+## 11. ホームタブ動的充実 (5 体エージェントレビュー統合・2026-05-07)
+
+UI/UX デザイナー / モダンプロダクトデザイン / Web 開発エキスパート / Web マーケター / 金融アナリストの **5 体並列レビュー**で合意した方向性を整理。ユーザーフィードバック 3 件 (F1: 経済指標 / F2: マクロニュース縦列サムネ / F3: ChartTab ▼ 位置) と、レビュー過程で発見した**隠れ施策**を統合。
+
+### 11-A. P0 即時実装 (2026-05-07 着手予定 ✅)
+
+| # | 内容 | 5 原則 | 工数 | 状態 |
+|---|---|---|---|---|
+| P0-1 | **F3 ▼ ボタン移動** — ChartTab TickerRow の ▼ を右端から「日/週/月セル直下、横全幅で独立行」に配置。詰まり感解消 + 視覚アフォーダンス維持 (UI/UX + Web 開発推奨) | ①④ | 1h | 着手 |
+| P0-2 | **F1 経済指標 枠固定** — `max-height: clamp(360px, 60vh, 620px)` + `overflow-y: auto` + sticky day header + 既存 NewsPanel `news-scroll-wrapper showFade` パターン流用。スクロール疲れ解消、D1 +5-8pt 見込み (マーケター) | ①② | 1h | 着手 |
+| P0-3 | **F2 縦列サムネ** — TodaysBriefSection NewsRow に image 列追加。backend は既に `image` フィールド返却済 ([main.py:3628](backend/app/main.py#L3628))、grid view fallback も完成 → list view 移植のみ。CTR +15-30% (マーケター) | ①⑤ | 1h | 着手 |
+| P0-4+5 | **F1 和訳活用 + カテゴリアイコン** — `frontend/src/lib/i18n/economicEvents.js` 新設で `{en, ja, category, icon}` を統合管理。backend `_EVENT_NAME_JP_MAP` (70+ 件) + frontend dict 補完 (Fed Speakers / S&P Global PMI / ECB Lane/Buch/Cipollone 等)。UI は楽天マーケットスピード II 流「日本語 主 (大) + 英語 sub (小・muted)」+ カテゴリアイコン (📊 物価 / 💼 雇用 / 🏦 中銀 / 🏭 製造業 / 🛒 消費 / 🏠 住宅 / 📈 GDP / 📋 その他) | ①⑤ | 2h | 着手 |
+| P0-6 | **⭐ 最注目大ピル化** — 既存 `highestEventKey` (HIGH 中で最も近い未来) を**通常行と同サイズ表示から大ピル展示に格上げ**。一文和訳 (例「**今日の最注目: CPI (消費者物価指数)** — インフレ加速観測で市場注視」) を併記。マーケター発見: リテール層 60-70% は CPI/FOMC/NFP しか知らないため、「結局どれが今日効くか」明示が CVR 直結 | ②⑤ | 30 分 | 着手 |
+
+**P0 合計工数**: 5-6h (本セッションで一気に完成予定)
+
+### 11-B. P1 中期 (中期改善、合計 4-5h)
+
+| # | 内容 | 工数 | 出典 |
+|---|---|---|---|
+| 11-B-1 | **Fed Speaker 拡充** — backend `_EVENT_NAME_JP_MAP` に Williams / Waller / Bowman / Jefferson / Goolsbee 等の地区連銀総裁を追加。「Fed [姓] Speech」形式が FMP 標準 | 15 分 | 金融アナリスト |
+| 11-B-2 | **`_LOW_NOISE_EVENT_KEYWORDS` 新設** — MBA Mortgage Applications / Chicago Fed National Activity Index 等のノイズ指標を「重要のみ」フィルタ時に完全非表示。素人離脱防止 | 30 分 | 金融アナリスト |
+| 11-B-3 | **★3/★2/★1 切替** — HIGH/MED/LOW pill を Investing.com 流 star icon (`aria-label="重要度 3"` 併記) に。国際標準と一致、機関投資家リテラシー対応 | 30 分 | 金融アナリスト |
+| 11-B-4 | **「注目順 / 新着順」トグル** — TodaysBriefSection に追加。`importance === 'HIGH' && cluster_size >= 3` を最上位ソート。既存 cluster_size 活用、データ追加なし | 1h | 金融アナリスト (高 ROI 低コスト) |
+| 11-B-5 | **セクション最終更新時刻表示** — `EconomicCalendarSection.updated_at` (state にあるが未表示) を section header 右下に `text-[10px] text-slate-400` で。CLAUDE.md「動的データには最終更新を併記」原則違反解消。TodaysBrief 含む全セクション統一 | 30 分 | モダン |
+| 11-B-6 | **過去発表アコーディオン化** — 「昨日 (発表済)」グループを default 折り畳み + 「[+ 3 件の過去発表を見る]」展開ボタン | 1h | 金融アナリスト |
+| 11-B-7 | **9-B-1 残: DnD 並び替え** (§9-B-1 既登録、`@dnd-kit/core+sortable+modifiers`、4-6h) | 4-6h | 既存 |
+
+### 11-C. P2 戦略 (FMP 有料化と同期、ROI 最高、合計 1-2 週)
+
+| # | 内容 | コスト | ROI | 出典 |
+|---|---|---|---|---|
+| **🔴 11-C-1** | **構造化データ JSON-LD** (`schema.org/Event` (経済指標) + `schema.org/NewsArticle` (マクロニュース)) — `<head>` 直書き。「FOMC 結果」「今週の経済指標 米国」月間 1-3 万 KW、SEO 流入 +20-40% (Search Console データ) | 1 日 | 🔴 最高 | マーケター |
+| **🔴 11-C-2** | **OGP 動的生成 (Vercel OG / CF Worker)** — 「今週の HIGH 指標 3 つ + ⭐ 最注目」を動的に PNG 生成。SNS シェア (X / Threads) CTR 0.5-1.0% → 2-3 倍、月 100-300 流入増 | 1-2 日 | 🔴 最高 | マーケター |
+| **🔴 11-C-3** | **`/news/[id]` 個別ランディング + canonical + Twitter Card `summary_large_image`** — 自社ドメインに canonical を立てて AI 検索 (Perplexity / ChatGPT search) で beatscanner が引用される機会↑ | 1-2 日 | 🔴 高 | マーケター |
+| 11-C-4 | **サプライズ Sparkline** — 経済指標の直近 6 回 `(actual - estimate) / |estimate| * 100` を 60×16 SVG polyline で。色は中立シアン/グレー (CPI 上振れ=株価ネガなので緑赤は使わない)。FMP 有料化 ($14/月) 前提、暫定は FRED API 無料利用 | 1 日 | 高 | 金融アナリスト |
+| 11-C-5 | **ハト派/タカ派タグ** — Powell / Williams / ECB 講演ニュースに Claude Haiku で `["dovish","hawkish","neutral"]` 自動分類。月コスト $2-5。「AI 推定」明記必須 | 1 日 | 中 | 金融アナリスト |
+| **⭐ 11-C-6** | **保有銘柄 × ニュース連携** — holdings sector → SPDR ETF tag (XLK/XLF/XLE 等) → macro news の sector tag を交差。「あなたの NVDA に関連: 半導体補助金法案進展」のような表示。**差別化最強候補** (Robinhood / Bloomberg にも無い領域) | 2-3 日 | 🔴 最強差別化 | 金融アナリスト |
+
+### 11-D. 着手タイミング推奨
+
+- **11-A (P0)**: 本セッションで一気に完成 (5-6h、6 件まとめてコミット & デプロイ)
+- **11-B-1〜6**: P0 後の別セッション 1-2 個ずつ消化
+- **11-B-7 (DnD)**: §9-B-1 残として既登録、4-6h 単独セッション
+- **11-C-1〜3 (SEO 三本柱)**: ⚠️ **本アプリは銘柄分析に個別ページがなく SEO 対策が課題** とユーザー指摘。リリース直前の集中投資が ROI 最高
+- **11-C-4 (サプライズ Sparkline)**: §1 FMP 有料契約と同時実装、決算 Sparkline 化と並行
+- **11-C-6 (保有銘柄 × ニュース連携)**: リリース後 1 ヶ月、リテンションデータを見て差別化機能投入の判断
+
+### 11-E. リテンション期待効果サマリ (マーケター集計)
+
+| 施策 | D1 | D7 | 滞在時間 | CTR | SEO 流入 |
+|---|---|---|---|---|---|
+| F1 枠固定 (P0-2) | +5-8pt | +3-5pt | -10〜15% (健全) | — | — |
+| F2 サムネ化 (P0-3) | — | +3-5pt | — | +15-30% | — |
+| F1 和訳併記 (P0-4) | — | — | +20-30% | — | — |
+| F1 ⭐ 大ピル化 (P0-6) | — | — | — | +5-10% | — |
+| 構造化データ (11-C-1) | — | — | — | — | +20-40% |
+| OGP 動的生成 (11-C-2) | — | — | — | SNS CTR 2-3 倍 | 月 100-300 流入 |
+| 保有 × ニュース (11-C-6) | リテール SaaS で MAU/WAU +10-15% (差別化機能の典型) | | | | |
+
+---
+
 ## 進捗管理
 
 各タスク完了時はこのファイル冒頭に `✅ 完了: YYYY-MM-DD` を追記。  

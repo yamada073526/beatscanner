@@ -93,6 +93,8 @@ function NewsRow({ item, displayTitle, onCardClick }) {
   const minAgo = getMinutesAgo(item.published);
   const isLive = minAgo <= LIVE_THRESHOLD_MIN && minAgo >= 0;
   const dimmed = minAgo > DAY_BORDER_HRS * 60;
+  const hasImage = !!(item.image && String(item.image).trim());
+  const fallbackChar = (item.category && item.category.charAt(0)) || '•';
 
   const handleClick = (e) => {
     e.preventDefault();
@@ -120,6 +122,35 @@ function NewsRow({ item, displayTitle, onCardClick }) {
         style={{ background: colors.bar }}
       />
       <div className="flex items-start gap-3">
+        {/* P0-3: 縦列にサムネ追加 (NewsPanel grid view 同パターン)。fallback は category 頭文字 + 既存 colors.bar グラデ */}
+        {hasImage ? (
+          <img
+            src={item.image}
+            alt=""
+            className="brief-list-thumb"
+            loading="lazy"
+            decoding="async"
+            onError={(e) => {
+              const wrap = e.currentTarget.parentElement;
+              e.currentTarget.style.display = 'none';
+              if (wrap && !wrap.querySelector('.brief-list-thumb-fallback')) {
+                const fb = document.createElement('div');
+                fb.className = 'brief-list-thumb-fallback';
+                fb.style.background = `linear-gradient(135deg, ${colors.bar}, ${colors.bar}80)`;
+                fb.textContent = fallbackChar;
+                wrap.insertBefore(fb, wrap.firstChild);
+              }
+            }}
+          />
+        ) : (
+          <div
+            className="brief-list-thumb-fallback"
+            style={{ background: `linear-gradient(135deg, ${colors.bar}, ${colors.bar}80)` }}
+            aria-hidden
+          >
+            {fallbackChar}
+          </div>
+        )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
             {isLive && (
@@ -555,28 +586,31 @@ export default function TodaysBriefSection() {
           </div>
         ) : (
           // 縦列表示: カード形式 (IR リソース流の border + hover 演出) + 24h 区切り
-          <div className="px-3 py-3 flex flex-col gap-1.5">
-            {fresh.map((item, i) => (
-              <NewsRow
-                key={`f-${item.title}-${i}`}
-                item={item}
-                displayTitle={getDisplayTitle(item)}
-                onCardClick={() => handleArticleClick(item)}
-              />
-            ))}
-            {stale.length > 0 && (
-              <>
-                <DaySeparator label="24時間以前" />
-                {stale.map((item, i) => (
-                  <NewsRow
-                    key={`s-${item.title}-${i}`}
-                    item={item}
-                    displayTitle={getDisplayTitle(item)}
-                    onCardClick={() => handleArticleClick(item)}
-                  />
-                ))}
-              </>
-            )}
+          // P0-2 (5 体レビュー): 枠固定 + 内部スクロール (経済指標と統一)
+          <div className="px-3 py-3 brief-list-scroll">
+            <div className="flex flex-col gap-1.5">
+              {fresh.map((item, i) => (
+                <NewsRow
+                  key={`f-${item.title}-${i}`}
+                  item={item}
+                  displayTitle={getDisplayTitle(item)}
+                  onCardClick={() => handleArticleClick(item)}
+                />
+              ))}
+              {stale.length > 0 && (
+                <>
+                  <DaySeparator label="24時間以前" />
+                  {stale.map((item, i) => (
+                    <NewsRow
+                      key={`s-${item.title}-${i}`}
+                      item={item}
+                      displayTitle={getDisplayTitle(item)}
+                      onCardClick={() => handleArticleClick(item)}
+                    />
+                  ))}
+                </>
+              )}
+            </div>
           </div>
         )}
       </div>
