@@ -13,7 +13,7 @@ function Card({ m, onSelect, onArticleClick, index = 0 }) {
       className="scroll-reveal mover-row"
       style={{
         background: "var(--bg-secondary)",
-        borderLeft: `3px solid ${isUp ? "#3b82f6" : "#ef4444"}`,
+        borderLeft: `3px solid ${isUp ? "var(--color-gain)" : "var(--color-loss)"}`,
         borderRadius: "0 8px 8px 0",
         marginBottom: "8px",
         overflow: "hidden",
@@ -78,7 +78,7 @@ function Card({ m, onSelect, onArticleClick, index = 0 }) {
           >
             分析する
           </span>
-          <span style={{ fontWeight: 700, fontSize: "13px", color: isUp ? "#3b82f6" : "#ef4444" }}>
+          <span style={{ fontWeight: 700, fontSize: "13px", color: isUp ? "var(--color-gain)" : "var(--color-loss)" }}>
             {m.pct > 0 ? "+" : ""}{m.pct}%
           </span>
         </div>

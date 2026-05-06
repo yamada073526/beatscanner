@@ -221,6 +221,22 @@ export default function App() {
   // ── 保有銘柄の現在価格を 60s/900s 毎に再取得 (Phase 3 損益バッジ) ──
   const portfolioPrices = usePortfolioPrices(holdingStore.tickers);
 
+  // ── holdings 検知時の自動 hold モード起動 (Trust Cliff 解消)
+  // 一度も明示選択していない (localStorage 空) かつ holdings>0 なら自動で 'hold' に切替
+  // → ポートフォリオダッシュボードが即展開。明示 'all'/'observe' を選んだ人には触らない。
+  // setHoldingModeRaw 直接呼び = localStorage に書き込まない (「自動切替であって明示選択ではない」を保持)
+  const autoHoldAppliedRef = useRef(false);
+  useEffect(() => {
+    if (autoHoldAppliedRef.current) return;
+    try {
+      if (localStorage.getItem('bs_holding_mode_v1')) { autoHoldAppliedRef.current = true; return; }
+    } catch { /* ignore */ }
+    if (Object.keys(holdingStore.holdings || {}).length > 0) {
+      setHoldingModeRaw('hold');
+      autoHoldAppliedRef.current = true;
+    }
+  }, [holdingStore.holdings]);
+
   // ── 未ログイン LP 表示判定 ─────────────────────────────────────
   // ホームタブ かつ 分析結果なし かつ 未ログイン → ランディングページを表示
   // (analyze 中も result が null のため LP が出ないよう loading は対象外)
@@ -1948,24 +1964,7 @@ export default function App() {
           設定
         </p>
 
-        {/* FMP APIキー設定 */}
-        <button
-          type="button"
-          onClick={() => { setShowSettings(true); setDrawerOpen(false); }}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '12px', width: '100%',
-            borderRadius: 10, background: 'transparent',
-            border: 'none', cursor: 'pointer',
-            fontSize: 14, textAlign: 'left',
-            color: 'var(--text-primary)',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(127,127,127,0.10)'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-        >
-          <span style={{ fontSize: 18, lineHeight: 1 }}>🔑</span>
-          {hasKey ? 'FMP APIキー設定済み' : 'FMP APIキー設定'}
-        </button>
+        {/* FMP APIキー設定: BYOK 廃止につき drawer から削除済 (RELEASE_TODO §2 で完全削除予定) */}
 
         {/* Y-3 Phase A: 通知設定 (ログイン済ユーザーのみ表示) */}
         {user && (
