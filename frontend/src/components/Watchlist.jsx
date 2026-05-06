@@ -6,6 +6,7 @@ export default function Watchlist({
   items,
   tagsById = {},
   assignments = {},
+  hideTagPill = false,  // true ならチップ内 TagPill を非表示 (タグフィルタ選択中の重複回避)
   holdings = {},   // { [TICKER]: { shares, avg_cost } }   — Holdings X-2 Phase 3
   prices = {},     // { [TICKER]: { price, change_pct } } — usePortfolioPrices
   onSelect,
@@ -54,7 +55,7 @@ export default function Watchlist({
             >
               <CompanyLogo ticker={t} size={20} />
               <span className="wl-chip-ticker">{t}</span>
-              {tag && (
+              {tag && !hideTagPill && (
                 <TagPill tag={tag} size="sm" />
               )}
               {holding && (

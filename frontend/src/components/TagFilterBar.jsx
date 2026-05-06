@@ -22,6 +22,7 @@ export default function TagFilterBar({
 
   return (
     <div className="tag-filter-bar" role="toolbar" aria-label="タグフィルタ">
+      <span className="tag-filter-prefix" aria-hidden="true">タグ</span>
       <button
         type="button"
         onClick={() => onSelectFilter('all')}

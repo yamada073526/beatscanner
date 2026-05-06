@@ -225,14 +225,13 @@ export default function HomeTab({
           <>
             {user && (
               <div className="wl-mode-bar">
-                <span className="wl-mode-label">表示</span>
                 <button
                   type="button"
                   onClick={() => onChangeHoldingMode?.('all')}
                   className={`wl-mode-pill ${holdingMode === 'all' ? 'is-active' : ''}`}
                   aria-pressed={holdingMode === 'all'}
                 >
-                  全て <span className="wl-mode-count">{watchlist.length}</span>
+                  全銘柄 <span className="wl-mode-count">{watchlist.length}</span>
                 </button>
                 <button
                   type="button"
@@ -275,6 +274,7 @@ export default function HomeTab({
               items={filteredWatchlist}
               tagsById={tagsById}
               assignments={assignments}
+              hideTagPill={tagFilterId !== 'all' && tagFilterId !== 'untagged'}
               holdings={holdings}
               prices={prices}
               onSelect={onSelect}

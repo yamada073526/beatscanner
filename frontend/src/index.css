@@ -1743,6 +1743,14 @@ body {
   scrollbar-width: thin;
   -ms-overflow-style: none;
 }
+.tag-filter-prefix {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  margin-right: 2px;
+}
 .tag-filter-bar::-webkit-scrollbar { height: 4px; }
 .tag-filter-bar::-webkit-scrollbar-thumb {
   background: rgba(148,163,184,0.3);
