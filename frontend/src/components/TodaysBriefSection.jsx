@@ -587,7 +587,7 @@ export default function TodaysBriefSection() {
         ) : (
           // 縦列表示: カード形式 (IR リソース流の border + hover 演出) + 24h 区切り
           // P0-2 (5 体レビュー): 枠固定 + 内部スクロール (経済指標と統一)
-          <div className="px-3 py-3 brief-list-scroll">
+          <div className="px-3 py-3 brief-list-scroll bs-scroll-thin">
             <div className="flex flex-col gap-1.5">
               {fresh.map((item, i) => (
                 <NewsRow

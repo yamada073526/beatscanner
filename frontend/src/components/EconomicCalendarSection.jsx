@@ -497,7 +497,14 @@ export default function EconomicCalendarSection() {
           {spotlightEvent && (
             <div className="econo-cal-spotlight" role="region" aria-label="最注目イベント">
               <div className="econo-cal-spotlight-row">
-                <span className="econo-cal-spotlight-icon" aria-hidden>{spotlightInfo.icon}</span>
+                {/* F5 バグ修正: spotlightInfo.icon (undefined) → spotlightInfo.category.icon */}
+                <span
+                  className="econo-cal-spotlight-icon"
+                  aria-hidden
+                  title={spotlightInfo.category.label}
+                >
+                  {spotlightInfo.category.icon}
+                </span>
                 <div className="econo-cal-spotlight-body">
                   <div className="econo-cal-spotlight-meta">
                     <span className="econo-cal-spotlight-badge">⭐ 最注目</span>
@@ -511,9 +518,15 @@ export default function EconomicCalendarSection() {
               </div>
             </div>
           )}
+          {/* F4: 「最注目」と「日付別」の視覚的区切り (Web 開発推奨の最小実装) */}
+          {spotlightEvent && (
+            <div className="econo-cal-list-heading" aria-hidden>
+              📅 今週の予定
+            </div>
+          )}
           <div
             ref={listScrollRef}
-            className={`econo-cal-list econo-cal-list-scroll${showFade ? ' show-fade' : ''}`}
+            className={`econo-cal-list econo-cal-list-scroll bs-scroll-thin${showFade ? ' show-fade' : ''}`}
             role="region"
             aria-label="経済指標一覧"
             tabIndex={0}

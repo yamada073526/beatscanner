@@ -458,6 +458,19 @@ body {
   padding: 12px;
   margin: -12px;
 }
+/* F7: news-grid にも bs-scroll-thin が当たるよう同セレクタへ統一 */
+.news-grid-scroll-wrapper {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
+}
+.news-grid-scroll-wrapper::-webkit-scrollbar { width: 8px; }
+.news-grid-scroll-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.42);
+  border-radius: 4px;
+}
+.news-grid-scroll-wrapper::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.65);
+}
 .news-grid-container {
   position: relative;
   display: grid;
@@ -3181,17 +3194,52 @@ body {
 }
 .econo-cal-day-header:first-child { border-top: 0; }
 
+/* F7: 共通 thin scrollbar utility (5 体レビュー — マーケター指摘
+   「scrollbar が見えない = 全件誤認 → 離脱」のリテンション殺し対策)。
+   thumb は --text-muted ベースの 42% alpha で「薄いが必ず見える」ライン。
+   ホバー時は 65%。NewsPicks/SmartNews/Yahoo Finance と同基準。 */
+.bs-scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
+}
+.bs-scroll-thin::-webkit-scrollbar { width: 8px; }
+.bs-scroll-thin::-webkit-scrollbar-track { background: transparent; }
+.bs-scroll-thin::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.42);
+  border-radius: 4px;
+}
+.bs-scroll-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.65);
+}
+[data-theme="dark"] .bs-scroll-thin {
+  scrollbar-color: rgba(148, 163, 184, 0.42) transparent;
+}
+[data-theme="dark"] .bs-scroll-thin::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.42);
+}
+[data-theme="dark"] .bs-scroll-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.65);
+}
+
+/* F4: 「最注目」と「日付別」の視覚的区切り (Web 開発推奨の最小実装) */
+.econo-cal-list-heading {
+  padding: 14px 16px 6px;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  text-transform: none;
+}
+
 /* P0-2: 経済指標 リストの枠固定 + 内部スクロール (5 体レビュー、スクロール疲れ解消) */
 .econo-cal-list-scroll {
   max-height: clamp(360px, 60vh, 620px);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   position: relative;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
 }
-.econo-cal-list-scroll::-webkit-scrollbar { width: 6px; }
-.econo-cal-list-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 .econo-cal-list-scroll:focus-visible {
   outline: 2px solid rgba(56, 189, 248, 0.45);
   outline-offset: -2px;
@@ -3301,16 +3349,13 @@ body {
   border-color: rgba(255,255,255,0.06);
 }
 
-/* P0-2: マクロニュース 縦列モードの枠固定 (経済指標と統一) */
+/* P0-2: マクロニュース 縦列モードの枠固定 (経済指標と統一)。
+   scrollbar スタイルは bs-scroll-thin utility に集約 (F7 統一)。 */
 .brief-list-scroll {
   max-height: clamp(360px, 60vh, 620px);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
 }
-.brief-list-scroll::-webkit-scrollbar { width: 6px; }
-.brief-list-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 .brief-list-scroll:focus-visible {
   outline: 2px solid rgba(56, 189, 248, 0.45);
   outline-offset: -2px;

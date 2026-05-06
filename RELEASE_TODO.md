@@ -729,17 +729,27 @@ KRE / HG=F / ^VVIX / BZ=F / ^N225 / NG=F / USDCNH=X 等。FMP `/quote` レート
 
 UI/UX デザイナー / モダンプロダクトデザイン / Web 開発エキスパート / Web マーケター / 金融アナリストの **5 体並列レビュー**で合意した方向性を整理。ユーザーフィードバック 3 件 (F1: 経済指標 / F2: マクロニュース縦列サムネ / F3: ChartTab ▼ 位置) と、レビュー過程で発見した**隠れ施策**を統合。
 
-### 11-A. P0 即時実装 (2026-05-07 着手予定 ✅)
+### 11-A. P0 即時実装 (2026-05-07 完了 ✅ + 補正 3 件 完了 ✅)
 
 | # | 内容 | 5 原則 | 工数 | 状態 |
 |---|---|---|---|---|
-| P0-1 | **F3 ▼ ボタン移動** — ChartTab TickerRow の ▼ を右端から「日/週/月セル直下、横全幅で独立行」に配置。詰まり感解消 + 視覚アフォーダンス維持 (UI/UX + Web 開発推奨) | ①④ | 1h | 着手 |
-| P0-2 | **F1 経済指標 枠固定** — `max-height: clamp(360px, 60vh, 620px)` + `overflow-y: auto` + sticky day header + 既存 NewsPanel `news-scroll-wrapper showFade` パターン流用。スクロール疲れ解消、D1 +5-8pt 見込み (マーケター) | ①② | 1h | 着手 |
-| P0-3 | **F2 縦列サムネ** — TodaysBriefSection NewsRow に image 列追加。backend は既に `image` フィールド返却済 ([main.py:3628](backend/app/main.py#L3628))、grid view fallback も完成 → list view 移植のみ。CTR +15-30% (マーケター) | ①⑤ | 1h | 着手 |
-| P0-4+5 | **F1 和訳活用 + カテゴリアイコン** — `frontend/src/lib/i18n/economicEvents.js` 新設で `{en, ja, category, icon}` を統合管理。backend `_EVENT_NAME_JP_MAP` (70+ 件) + frontend dict 補完 (Fed Speakers / S&P Global PMI / ECB Lane/Buch/Cipollone 等)。UI は楽天マーケットスピード II 流「日本語 主 (大) + 英語 sub (小・muted)」+ カテゴリアイコン (📊 物価 / 💼 雇用 / 🏦 中銀 / 🏭 製造業 / 🛒 消費 / 🏠 住宅 / 📈 GDP / 📋 その他) | ①⑤ | 2h | 着手 |
-| P0-6 | **⭐ 最注目大ピル化** — 既存 `highestEventKey` (HIGH 中で最も近い未来) を**通常行と同サイズ表示から大ピル展示に格上げ**。一文和訳 (例「**今日の最注目: CPI (消費者物価指数)** — インフレ加速観測で市場注視」) を併記。マーケター発見: リテール層 60-70% は CPI/FOMC/NFP しか知らないため、「結局どれが今日効くか」明示が CVR 直結 | ②⑤ | 30 分 | 着手 |
+| P0-1 | **F3 ▼ ボタン移動** — ChartTab TickerRow の ▼ を右端から「日/週/月セル直下、横全幅で独立行」に配置 | ①④ | 1h | ✅ |
+| P0-2 | **F1 経済指標 枠固定** — `max-height: clamp(360px, 60vh, 620px)` + sticky day header + showFade パターン | ①② | 1h | ✅ |
+| P0-3 | **F2 縦列サムネ** — TodaysBriefSection NewsRow に image 列追加 (backend は既に image 返却済) | ①⑤ | 1h | ✅ |
+| P0-4+5 | **F1 和訳活用 + カテゴリアイコン** — `frontend/src/lib/i18n/economicEvents.js` 新設、楽天 MS II 流「日本語 主 + 英語 sub」+ アイコン | ①⑤ | 2h | ✅ |
+| P0-6 | **⭐ 最注目大ピル化** — `highestEventKey` を amber グラデ大ピル展示 + 一文和訳 + 発表時刻 | ②⑤ | 30 分 | ✅ |
 
-**P0 合計工数**: 5-6h (本セッションで一気に完成予定)
+**P0 合計工数**: 5-6h (本セッション完了)
+
+#### P0 補正 3 件 (2026-05-07 第 2 ラウンド 4 体レビュー後 ✅)
+
+ユーザー視覚確認 → 4 体レビュー (UI/UX / モダン / Web 開発 / マーケター) で発見された問題を補正:
+
+| # | 内容 |
+|---|---|
+| ✅ F4 | 「最注目」と日付グループの視覚的区切り — spotlight と list 間に「📅 今週の予定」見出し + 1px hairline divider 追加。両者並列誤認の解消 |
+| ✅ F5 | **🚨 バグ修正**: `EconomicCalendarSection.jsx:500` `spotlightInfo.icon` (undefined) → `spotlightInfo.category.icon`。最注目カードのカテゴリアイコン復活 (Web 開発エージェント発見) |
+| ✅ F7 | スクロールバー視認性統一 — 共通 `.bs-scroll-thin` ユーティリティ新設 (thumb 42% alpha + hover 65%、Webkit 8px、ダーク両対応)。3 箇所統一適用。**重大発見**: `news-grid-scroll-wrapper` は scrollbar 設定が**欠落**しており OS デフォルト太バー = ユーザー認識と実装が逆転していた |
 
 ### 11-B. P1 中期 (中期改善、合計 4-5h)
 
