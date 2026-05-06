@@ -3836,32 +3836,48 @@ def _generate_static_economic_events(from_dt, to_dt) -> list[dict]:
     米国の標準的な月次・週次経済指標スケジュールに基づき推定イベントを生成。
 
     各イベントは `_source: 'estimated'` でマークされ、実発表日と異なる可能性を明示。
-    将来 Trading Economics 統合時に実データで置換予定。
+    将来 FMP 有料プラン (`raw` に実データ入る) で本関数は呼ばれなくなる前提。
+
+    --- 重複防止 ---
+    月次指標 (CPI / PPI / Core PCE / ISM Services 等) は曜日 × 日数範囲で
+    複数日にマッチしうるため、`(year, month, event_key)` を `_emitted` で
+    記録し最初の 1 日だけ emit する。週次指標 (Initial Jobless Claims) は
+    ガードしない。
     """
     import datetime as _dt
     events: list[dict] = []
+    _emitted: set[tuple[int, int, str]] = set()
 
     def _iso_at(date_obj, hh: int, mm: int) -> str:
-        # 米国指標は ET 8:30 が多い → ET ≒ UTC-5/-4。簡易的に UTC として記録、
-        # フロントで JST 表示 (+9h で 21:30 / 22:30 JST 相当)
-        return _dt.datetime(date_obj.year, date_obj.month, date_obj.day, hh, mm).isoformat()
+        # 米国指標は ET 8:30 が多い (≒ UTC 12:30 EDT / 13:30 EST、簡易的に UTC 13:30)。
+        # 末尾に "Z" を付けて UTC として明示し、フロント側 `new Date()` で
+        # ローカル TZ (JST) に正しく変換させる (+9h で JST 22:30 表示)。
+        return _dt.datetime(date_obj.year, date_obj.month, date_obj.day, hh, mm).isoformat() + "Z"
+
+    def _emit_once(key: str, ym: tuple[int, int], event_dict: dict) -> None:
+        k = (ym[0], ym[1], key)
+        if k in _emitted:
+            return
+        _emitted.add(k)
+        events.append(event_dict)
 
     current = from_dt
     while current <= to_dt:
         weekday = current.weekday()  # 0=Mon, 6=Sun
         day = current.day
         month = current.month
+        ym = (current.year, current.month)
 
-        # 第 1 金曜 → NFP (雇用統計)
+        # 第 1 金曜 → NFP + Unemployment Rate (同日発表)
         if weekday == 4 and day <= 7:
-            events.append({
+            _emit_once("nfp", ym, {
                 "event": "Non-Farm Payrolls (雇用統計)",
                 "date": _iso_at(current, 13, 30),  # ET 8:30 → UTC 13:30
                 "country": "US",
                 "impact": "HIGH",
                 "_source": "estimated",
             })
-            events.append({
+            _emit_once("unemployment", ym, {
                 "event": "Unemployment Rate (失業率)",
                 "date": _iso_at(current, 13, 30),
                 "country": "US",
@@ -3869,9 +3885,9 @@ def _generate_static_economic_events(from_dt, to_dt) -> list[dict]:
                 "_source": "estimated",
             })
 
-        # 第 2 火 or 水 → CPI (消費者物価指数)
+        # 第 2 火 or 水 → CPI (実際は月により異なる、最初にマッチした 1 日だけ emit)
         if weekday in (1, 2) and 9 <= day <= 14:
-            events.append({
+            _emit_once("cpi", ym, {
                 "event": "Consumer Price Index (CPI 消費者物価指数)",
                 "date": _iso_at(current, 13, 30),
                 "country": "US",
@@ -3879,9 +3895,9 @@ def _generate_static_economic_events(from_dt, to_dt) -> list[dict]:
                 "_source": "estimated",
             })
 
-        # 第 2 or 3 木 → PPI
+        # 第 2 木 → PPI (CPI 翌日が典型、9-17 範囲で最初の木曜 1 日だけ)
         if weekday == 3 and 9 <= day <= 17:
-            events.append({
+            _emit_once("ppi", ym, {
                 "event": "Producer Price Index (PPI 生産者物価指数)",
                 "date": _iso_at(current, 13, 30),
                 "country": "US",
@@ -3889,7 +3905,7 @@ def _generate_static_economic_events(from_dt, to_dt) -> list[dict]:
                 "_source": "estimated",
             })
 
-        # 毎週木曜 → 新規失業保険申請件数
+        # 毎週木曜 → 新規失業保険申請件数 (週次のためガードしない)
         if weekday == 3:
             events.append({
                 "event": "Initial Jobless Claims (新規失業保険申請)",
@@ -3899,9 +3915,9 @@ def _generate_static_economic_events(from_dt, to_dt) -> list[dict]:
                 "_source": "estimated",
             })
 
-        # 第 3 木 (15-21 日) → Retail Sales / Industrial Production
+        # 第 3 木 (15-21 日) → Retail Sales (15-21 範囲で木曜は max 1 だが念のためガード)
         if weekday == 3 and 15 <= day <= 21:
-            events.append({
+            _emit_once("retail_sales", ym, {
                 "event": "Retail Sales (小売売上高)",
                 "date": _iso_at(current, 13, 30),
                 "country": "US",
@@ -3911,7 +3927,7 @@ def _generate_static_economic_events(from_dt, to_dt) -> list[dict]:
 
         # 第 3 金 (15-21 日) → Michigan Consumer Sentiment 速報
         if weekday == 4 and 15 <= day <= 21:
-            events.append({
+            _emit_once("michigan", ym, {
                 "event": "Michigan Consumer Sentiment (ミシガン大消費者信頼感)",
                 "date": _iso_at(current, 15, 0),  # ET 10:00 → UTC 15:00
                 "country": "US",
@@ -3919,10 +3935,9 @@ def _generate_static_economic_events(from_dt, to_dt) -> list[dict]:
                 "_source": "estimated",
             })
 
-        # 月末最終金曜 → Core PCE (PCE デフレーター)
-        # 簡易判定: 24-31 日の金曜
+        # 月末最終金曜 → Core PCE (24-31 範囲は金曜が 2 個入りうるためガード必須)
         if weekday == 4 and 24 <= day <= 31:
-            events.append({
+            _emit_once("core_pce", ym, {
                 "event": "Core PCE Price Index (コア PCE デフレーター)",
                 "date": _iso_at(current, 13, 30),
                 "country": "US",
@@ -3930,11 +3945,10 @@ def _generate_static_economic_events(from_dt, to_dt) -> list[dict]:
                 "_source": "estimated",
             })
 
-        # 月初第 1 営業日 → ISM Manufacturing PMI
+        # 月初第 1 営業日 → ISM Manufacturing PMI (条件式自体が月 1 回しか真にならない)
         if 1 <= day <= 3 and weekday < 5:  # Mon-Fri
-            # ただし 1 日目だけ
             if day == 1 or (day == 2 and weekday == 0) or (day == 3 and weekday == 0):
-                events.append({
+                _emit_once("ism_mfg", ym, {
                     "event": "ISM Manufacturing PMI (米製造業景況指数)",
                     "date": _iso_at(current, 15, 0),
                     "country": "US",
@@ -3942,9 +3956,9 @@ def _generate_static_economic_events(from_dt, to_dt) -> list[dict]:
                     "_source": "estimated",
                 })
 
-        # 月初第 3 営業日付近 → ISM Services PMI
+        # 月初第 3 営業日付近 → ISM Services PMI (3-5 範囲で複数日マッチするためガード必須)
         if 3 <= day <= 5 and weekday < 5:
-            events.append({
+            _emit_once("ism_svc", ym, {
                 "event": "ISM Services PMI (米サービス業景況指数)",
                 "date": _iso_at(current, 15, 0),
                 "country": "US",
