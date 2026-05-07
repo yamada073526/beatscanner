@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { Flame } from 'lucide-react';
+import { Flame, TrendingUp, Globe, BarChart3 } from 'lucide-react';
 import { fetchMacroNews } from '../api.js';
 import NewsViewToggle from './NewsViewToggle.jsx';
 import NewsArticleModal from './NewsArticleModal.jsx';
@@ -8,26 +8,37 @@ import useArticleModal from '../hooks/useArticleModal.js';
 import useTranslation from '../hooks/useTranslation.js';
 
 // 重要度バッジ 3 種でタブ切替 (v41 Phase 3.5a)
+// §11-B-4 Phase 1: Lucide icon 追加で WCAG 2.2 三重符号化 (色 + アイコン + 文字)。
+// 6 体エージェントレビュー全員一致採用 (TrendingUp / Globe / BarChart3)。
 const TAB_DEFS = [
   {
     key: 'macro',
     label: 'マクロ',
     dotColor: '#f59e0b',
+    Icon: TrendingUp,
     filter: (i) => i.importance === 'HIGH' && i.category === 'マクロ',
   },
   {
     key: 'geo',
     label: '地政学',
     dotColor: '#a855f7',
+    Icon: Globe,
     filter: (i) => i.category === '地政学',
   },
   {
     key: 'market',
     label: '市場全体',
     dotColor: '#06b6d4',
+    Icon: BarChart3,
     filter: (i) => i.category === '市場全体',
   },
 ];
+// §11-B-4 Phase 1: ニュース category → Icon マップ (NewsRow / NewsCardGrid フォールバックで使用)
+const CATEGORY_ICON = {
+  'マクロ': TrendingUp,
+  '地政学': Globe,
+  '市場全体': BarChart3,
+};
 const TAB_STORAGE_KEY = 'bs_briefTab';
 const VIEW_STORAGE_KEY = 'bs_newsView.brief';
 // §11-B-4 並び順 永続化キー (6 体エージェントレビュー一致採用、CLAUDE.md bs_* 命名規則)
@@ -100,7 +111,8 @@ function NewsRow({ item, displayTitle, onCardClick }) {
   const isLive = minAgo <= LIVE_THRESHOLD_MIN && minAgo >= 0;
   const dimmed = minAgo > DAY_BORDER_HRS * 60;
   const hasImage = !!(item.image && String(item.image).trim());
-  const fallbackChar = (item.category && item.category.charAt(0)) || '•';
+  // §11-B-4 Phase 1: 画像取得失敗を React state で管理 (Web 開発エージェント指摘の DOM 直操作問題解消)
+  const [imgError, setImgError] = useState(false);
 
   const handleClick = (e) => {
     e.preventDefault();
@@ -128,34 +140,19 @@ function NewsRow({ item, displayTitle, onCardClick }) {
         style={{ background: colors.bar }}
       />
       <div className="flex items-start gap-3">
-        {/* P0-3: 縦列にサムネ追加 (NewsPanel grid view 同パターン)。fallback は category 頭文字 + 既存 colors.bar グラデ */}
-        {hasImage ? (
+        {/* §11-B-4 Phase 1: 画像なし時は完全省略 (Yahoo/NYT 流、6 体エージェント Web 設計+マーケ+2026 BP 一致)。
+            旧設計の category 頭文字 (「市」「マ」「地」) + グラデは「品格が落ちる、パチモン感」とユーザー指摘で撤廃。
+            React state (imgError) で onError 後の再 render に対応 (Web 開発指摘の DOM 直操作問題解消)。
+            画像枠を消すことでテキスト幅 100% 取得 → スキャナビリティ向上、設計原則 ① にも貢献。 */}
+        {hasImage && !imgError && (
           <img
             src={item.image}
             alt=""
             className="brief-list-thumb"
             loading="lazy"
             decoding="async"
-            onError={(e) => {
-              const wrap = e.currentTarget.parentElement;
-              e.currentTarget.style.display = 'none';
-              if (wrap && !wrap.querySelector('.brief-list-thumb-fallback')) {
-                const fb = document.createElement('div');
-                fb.className = 'brief-list-thumb-fallback';
-                fb.style.background = `linear-gradient(135deg, ${colors.bar}, ${colors.bar}80)`;
-                fb.textContent = fallbackChar;
-                wrap.insertBefore(fb, wrap.firstChild);
-              }
-            }}
+            onError={() => setImgError(true)}
           />
-        ) : (
-          <div
-            className="brief-list-thumb-fallback"
-            style={{ background: `linear-gradient(135deg, ${colors.bar}, ${colors.bar}80)` }}
-            aria-hidden
-          >
-            {fallbackChar}
-          </div>
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -169,10 +166,14 @@ function NewsRow({ item, displayTitle, onCardClick }) {
               </span>
             )}
             <span
-              className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
               style={{ backgroundColor: colors.bg, color: colors.badge }}
             >
-              {item.importance === 'HIGH' ? `HIGH · ${item.category}` : item.category}
+              {(() => {
+                const Icon = CATEGORY_ICON[item.category];
+                return Icon ? <Icon size={10} strokeWidth={2.25} aria-hidden /> : null;
+              })()}
+              <span>{item.importance === 'HIGH' ? `HIGH · ${item.category}` : item.category}</span>
             </span>
             {item.published && (
               <span className="text-[10px] text-slate-400 leading-none">
@@ -208,7 +209,9 @@ function NewsCardGrid({ item, displayTitle, onCardClick, onMouseEnter, onMouseLe
   const isLive = minAgo <= LIVE_THRESHOLD_MIN && minAgo >= 0;
   const dimmed = minAgo > DAY_BORDER_HRS * 60;
   const hasImage = !!(item.image && String(item.image).trim());
-  const fallbackChar = (item.category && item.category.charAt(0)) || '•';
+  const FallbackIcon = CATEGORY_ICON[item.category] || BarChart3;
+  // §11-B-4 Phase 1: 画像取得失敗を React state で管理
+  const [imgError, setImgError] = useState(false);
 
   const handleClick = (e) => {
     e.preventDefault();
@@ -232,39 +235,31 @@ function NewsCardGrid({ item, displayTitle, onCardClick, onMouseEnter, onMouseLe
       aria-label={`${item.title} (${item.importance === 'HIGH' ? 'HIGH ' : ''}${item.category}, ${formatRelativeTime(item.published)})`}
     >
       <div className="news-grid-thumb-wrap">
-        {hasImage ? (
+        {/* §11-B-4 Phase 1: グリッド view は画像枠を維持 (高さ揃え必要)、
+            画像なし/取得失敗時は category 頭文字 → Lucide icon に置換 (Bloomberg 流)。
+            6 体エージェントレビュー全員一致採用、頭文字「市」「マ」「地」の品格問題を解消。 */}
+        {hasImage && !imgError ? (
           <img
             src={item.image}
             alt=""
             className="news-grid-thumb"
             loading="lazy"
             decoding="async"
-            onError={(e) => {
-              // 画像取得失敗時は親要素を fallback ブロックに切替
-              const wrap = e.currentTarget.parentElement;
-              e.currentTarget.style.display = 'none';
-              if (wrap && !wrap.querySelector('.news-grid-thumb-fallback')) {
-                const div = document.createElement('div');
-                div.className = 'news-grid-thumb-fallback';
-                // 輝度を上げて section 全体が dim に見える問題を解消
-                div.style.background = `linear-gradient(135deg, ${colors.bar}66, ${colors.bar}33)`;
-                div.style.color = colors.bar;
-                div.textContent = fallbackChar;
-                wrap.insertBefore(div, wrap.firstChild);
-              }
-            }}
+            onError={() => setImgError(true)}
           />
         ) : (
           <div
             className="news-grid-thumb-fallback"
             style={{
-              // 輝度向上: 33/14 → 66/33 で fallback ブロックを十分視認可能に
               background: `linear-gradient(135deg, ${colors.bar}66, ${colors.bar}33)`,
               color: colors.bar,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
             aria-hidden
           >
-            {fallbackChar}
+            <FallbackIcon size={36} strokeWidth={1.5} />
           </div>
         )}
         <span
@@ -273,9 +268,16 @@ function NewsCardGrid({ item, displayTitle, onCardClick, onMouseEnter, onMouseLe
             backgroundColor: colors.bg,
             color: colors.badge,
             border: `1px solid ${colors.bar}55`,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
           }}
         >
-          {item.importance === 'HIGH' ? `HIGH · ${item.category}` : item.category}
+          {(() => {
+            const Icon = CATEGORY_ICON[item.category];
+            return Icon ? <Icon size={10} strokeWidth={2.25} aria-hidden /> : null;
+          })()}
+          <span>{item.importance === 'HIGH' ? `HIGH · ${item.category}` : item.category}</span>
         </span>
         {isLive && (
           <span className="news-grid-badge-tr">
@@ -554,18 +556,14 @@ export default function TodaysBriefSection() {
           <div
             role="group"
             aria-label="並び順"
-            className="inline-flex items-center rounded-md overflow-hidden text-[10px] font-medium"
+            className="inline-flex items-center rounded-md overflow-hidden"
             style={{ border: '1px solid var(--border)' }}
           >
             <button
               type="button"
               onClick={() => handleSortChange(SORT_MODES.ATTENTION)}
               aria-pressed={sortMode === SORT_MODES.ATTENTION}
-              className="px-2 py-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
-              style={{
-                background: sortMode === SORT_MODES.ATTENTION ? 'var(--text-primary)' : 'transparent',
-                color: sortMode === SORT_MODES.ATTENTION ? 'var(--bg-card)' : 'var(--text-secondary)',
-              }}
+              className={`bs-sort-btn ${sortMode === SORT_MODES.ATTENTION ? 'is-active' : ''}`}
             >
               話題順
             </button>
@@ -573,11 +571,7 @@ export default function TodaysBriefSection() {
               type="button"
               onClick={() => handleSortChange(SORT_MODES.RECENT)}
               aria-pressed={sortMode === SORT_MODES.RECENT}
-              className="px-2 py-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
-              style={{
-                background: sortMode === SORT_MODES.RECENT ? 'var(--text-primary)' : 'transparent',
-                color: sortMode === SORT_MODES.RECENT ? 'var(--bg-card)' : 'var(--text-secondary)',
-              }}
+              className={`bs-sort-btn ${sortMode === SORT_MODES.RECENT ? 'is-active' : ''}`}
             >
               新着順
             </button>
@@ -602,12 +596,17 @@ export default function TodaysBriefSection() {
                 onKeyDown={(e) => handleTabKeyDown(e, tab.key)}
                 className="tab-pill"
               >
-                <span
+                {/* §11-B-4 Phase 1: ドット → Lucide icon 置換 (Web 開発エージェント指摘の
+                    タブ pill 内ドットと NewsRow 内 icon の二重表現解消、原則 ① 読み手負担↓)。
+                    色は dotColor を currentColor 経由で適用、disabled で opacity 落とす。 */}
+                <tab.Icon
+                  size={12}
+                  strokeWidth={2.25}
                   aria-hidden
-                  className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0"
                   style={{
-                    background: tab.dotColor,
+                    color: tab.dotColor,
                     opacity: disabled ? 0.4 : 1,
+                    flexShrink: 0,
                   }}
                 />
                 <span>{tab.label}</span>
