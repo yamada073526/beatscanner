@@ -551,7 +551,10 @@ export default function TodaysBriefSection() {
               </span>
             )}
           </h3>
-          <div className="flex items-center gap-3">
+          {/* §11-B-5-A: モバイルで wrap 時にコントロールが左寄せになる問題を解消。
+              ml-auto で wrap 後も右寄せ維持 (Apple HIG / Yahoo Finance 流、UI/UX 推奨)。
+              「コンテンツ左 / コントロール右」業界標準に整合。 */}
+          <div className="flex items-center gap-3 ml-auto">
             {view !== null && (
               <NewsViewToggle view={view} onChange={handleViewChange} />
             )}
