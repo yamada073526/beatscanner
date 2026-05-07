@@ -46,7 +46,7 @@ export function buildOrganizationSchema() {
     url: SITE_URL,
     logo: {
       '@type': 'ImageObject',
-      url: `${SITE_URL}/og-image.svg`,
+      url: `${SITE_URL}/api/og-image-today.png`,
       width: 1200,
       height: 630,
     },

@@ -21,6 +21,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from .ogp_generator import generate_ogp_image
+from .og_image_generator import (
+    generate_og_image as generate_today_og_image,
+    prepare_image_data as prepare_today_og_data,
+    render_static_fallback as render_today_og_fallback,
+)
 from .rss_collector import collect_ticker_news
 
 from pydantic import BaseModel
@@ -6969,6 +6974,90 @@ async def ogp_cache_clear(ticker: str | None = Query(None)):
     n = len(OGP_CACHE)
     OGP_CACHE.clear()
     return {"cleared_count": n, "remaining": 0}
+
+
+# ── §11-C-2 動的 OGP (ホーム用、今日の経済指標 + マクロ) ────────
+# Pillow ベース、Railway 標準 cron (railway.toml) で 1 日 1 回再生成。
+# 6 体エージェントレビュー全員一致採用。
+TODAY_OG_CACHE: dict = {"png": None, "ts": 0.0}
+TODAY_OG_TTL = 24 * 3600  # 24 時間 (cron 1 日 1 回更新と整合)
+
+
+async def _build_today_og_image() -> bytes:
+    """今日の OGP 画像 bytes を生成。
+    /api/economic-calendar 内部 fetch → spotlight + high_events 抽出 → Pillow で PNG 化。
+    失敗時は static fallback (ブランドのみの画像) を返す。
+    """
+    import datetime as _dt
+    try:
+        # 既存キャッシュから経済指標 events を取得 (起動直後はキャッシュ未生成の場合あり)
+        eco_data = _ECO_CALENDAR_CACHE.get("data")
+        events: list[dict] = []
+        if isinstance(eco_data, dict):
+            events = eco_data.get("events") or []
+        # キャッシュに無ければ FMP に直接 fetch (起動直後 or cron 初回)
+        if not events:
+            try:
+                client = FMPClient(api_key=os.getenv("FMP_API_KEY"))
+                today = _dt.date.today()
+                from_date = today.isoformat()
+                to_date = (today + _dt.timedelta(days=7)).isoformat()
+                result_raw = await client.economic_calendar(from_date, to_date)
+                if isinstance(result_raw, list):
+                    events = [e for e in result_raw if isinstance(e, dict)]
+            except Exception as e:
+                print(f"[OG] economic_calendar fetch failed: {e}")
+        # 静的 fallback events も最後に試行
+        if not events:
+            try:
+                today = _dt.date.today()
+                events = _generate_static_economic_events(today, today + _dt.timedelta(days=7))
+            except Exception:
+                pass
+
+        spotlight, high_events = prepare_today_og_data(events)
+        png = await asyncio.to_thread(generate_today_og_image, spotlight, high_events)
+        return png
+    except Exception as e:
+        print(f"[OG] generate failed, fallback to static: {e}")
+        try:
+            return await asyncio.to_thread(render_today_og_fallback)
+        except Exception:
+            # 最終 fallback: 1x1 PNG (絶対失敗しないため)
+            from io import BytesIO
+            from PIL import Image as _Image
+            buf = BytesIO()
+            _Image.new("RGB", (1, 1), (11, 17, 32)).save(buf, format="PNG")
+            return buf.getvalue()
+
+
+@app.get("/api/og-image-today.png")
+async def og_image_today():
+    """ホーム用 OGP 画像 (今日の経済指標)。
+    24h memory cache、cron で 1 日 1 回更新。"""
+    cached_png = TODAY_OG_CACHE.get("png")
+    cached_ts = TODAY_OG_CACHE.get("ts", 0.0)
+    if cached_png and (_time.time() - cached_ts) < TODAY_OG_TTL:
+        return Response(cached_png, media_type="image/png", headers={
+            "Cache-Control": "public, max-age=3600",
+        })
+    # キャッシュミス → 即時再生成
+    png = await _build_today_og_image()
+    TODAY_OG_CACHE["png"] = png
+    TODAY_OG_CACHE["ts"] = _time.time()
+    return Response(png, media_type="image/png", headers={
+        "Cache-Control": "public, max-age=3600",
+    })
+
+
+@app.api_route("/api/og-image-today/regenerate", methods=["GET", "POST"])
+async def og_image_today_regenerate():
+    """OGP 画像を強制再生成 (cron + 管理用)。
+    Railway cron で 1 日 1 回 6am ET (= 11:00 UTC) に呼ばれる想定。"""
+    png = await _build_today_og_image()
+    TODAY_OG_CACHE["png"] = png
+    TODAY_OG_CACHE["ts"] = _time.time()
+    return {"regenerated": True, "size_bytes": len(png), "ts": int(TODAY_OG_CACHE["ts"])}
 
 
 # ── Phase 2a: Supabase service role クライアント（market_insights テーブル書き込み用） ──

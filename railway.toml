@@ -27,3 +27,10 @@ command = "curl -s https://beatscanner-production.up.railway.app/api/movers > /d
 [[crons]]
 schedule = "*/10 * * * *"
 command = "curl -s https://beatscanner-production.up.railway.app/health > /dev/null 2>&1"
+
+# §11-C-2 動的 OGP: 毎日 ET 6:00 (= UTC 11:00) に再生成。
+# 米国投資家の朝の SNS チェックタイミング (寄付き前) に合わせて画像を最新化。
+# 6 体エージェントレビュー全員一致採用。
+[[crons]]
+schedule = "0 11 * * *"
+command = "curl -s -X POST https://beatscanner-production.up.railway.app/api/og-image-today/regenerate > /dev/null 2>&1"
