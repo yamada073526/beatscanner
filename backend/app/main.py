@@ -3357,7 +3357,9 @@ _MACRO_KEYWORDS_HIGH = (
     # 海外中銀
     "ecb", "boj", "bank of japan", "people's bank of china",
     # 地政学 (Iran/Ukraine/Russia/Middle East 等)
-    "iran", "ukraine", "russia", "middle east", "geopolit", "war ",
+    # §11-B-20-A: "war " 単独は "fee war" / "price war" 比喩で false positive 多発のため特異化
+    "iran", "ukraine", "russia", "middle east", "geopolit",
+    "trade war", "warfare", "world war", "civil war", "war crime",
     "hormuz", "missile", "tensions escalate", "us-iran",
 )
 # MED (importance=3): セクター・大型 IPO・主要 IB 目標・市場全体
@@ -3450,7 +3452,13 @@ def _force_high_classification(title: str, summary: str) -> str | None:
 # §11-B-20: マルチタグ化の許容値 ENUM (typo 防止、6 体エージェントレビュー一致採用)。
 # Web 設計エージェント指摘: 文字列自由化は filter 崩壊リスクあり、許容リスト集約必須。
 _VALID_NEWS_TAGS = ("マクロ", "地政学", "市場全体")
-_GEO_KEYWORDS = ("iran", "ukraine", "russia", "middle east", "geopolitic", "war ")
+# §11-B-20-A: "war " 単独ヒットは "fee war" / "price war" / "culture war" 等の比喩で
+# 大量 false positive を生むため特異な複合語に置換 (ユーザー報告 ETF fee war 誤分類対応)。
+# trade war は米中対立等で実際に地政学イベントなので維持。
+_GEO_KEYWORDS = (
+    "iran", "ukraine", "russia", "middle east", "geopolitic",
+    "trade war", "warfare", "world war", "civil war", "war crime",
+)
 
 
 def _classify_macro_news(title: str, summary: str) -> tuple[str | None, list[str]]:
