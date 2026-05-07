@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
+import { Flame } from 'lucide-react';
 import { fetchMacroNews } from '../api.js';
 import NewsViewToggle from './NewsViewToggle.jsx';
 import NewsArticleModal from './NewsArticleModal.jsx';
@@ -29,6 +30,12 @@ const TAB_DEFS = [
 ];
 const TAB_STORAGE_KEY = 'bs_briefTab';
 const VIEW_STORAGE_KEY = 'bs_newsView.brief';
+// §11-B-4 並び順 永続化キー (6 体エージェントレビュー一致採用、CLAUDE.md bs_* 命名規則)
+const SORT_STORAGE_KEY = 'bs_news_sort_pref';
+const SORT_MODES = {
+  ATTENTION: 'attention', // 話題順 (default)
+  RECENT: 'recent',       // 新着順
+};
 const VIEW_AUTO_THRESHOLD = 12;  // 件数 ≤12 → grid デフォルト、>12 → list デフォルト
 const LIVE_THRESHOLD_MIN = 30;
 const DAY_BORDER_HRS = 24;
@@ -62,28 +69,27 @@ function getNewsColors(importance, category) {
   return { badge: '#0891b2', bg: 'rgba(8,145,178,0.10)', bar: '#06b6d4' };
 }
 
-// アテンション視覚化: cluster_size (同一トピックの報道数) を 3 段階ドットで表現
-// 設計思想「図解で認知コストを下げろ」に従い、テキストではなくドットで一目把握
-// cluster=1: 非表示 / 2: ・○○ / 3-4: ●●○ / 5+: ●●●
+// §11-B-4: アテンション視覚化を Flame + 数字 + 媒体 pill 化
+// 6 体エージェントレビュー全員一致採用 (cluster<3 は非表示、Lucide SVG、amber tint、a11y 対応)。
+// 旧設計 (cluster=2 で 1 ドット表示) は撤廃 — 「読み手に負担をかけない」原則 + ノイズ削減。
+// CLAUDE.md 投資業界色ルール「amber=注目・警告」に整合。
 function AttentionDots({ clusterSize }) {
-  if (!clusterSize || clusterSize < 2) return null;
-  const lit = clusterSize >= 5 ? 3 : clusterSize >= 3 ? 2 : 1;
+  if (!clusterSize || clusterSize < 3) return null;
   return (
     <span
-      className="inline-flex items-center gap-[2px]"
+      role="status"
       title={`${clusterSize} 媒体が同じトピックを報道中`}
       aria-label={`注目度: ${clusterSize} 媒体が報道`}
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold leading-none"
+      style={{
+        background: 'rgba(245,158,11,0.10)',
+        color: '#f59e0b',
+        border: '1px solid rgba(245,158,11,0.20)',
+      }}
     >
-      {[0, 1, 2].map((i) => (
-        <span
-          key={i}
-          aria-hidden
-          className="inline-block w-1 h-1 rounded-full"
-          style={{
-            background: i < lit ? '#06b6d4' : 'rgba(100,116,139,0.30)',
-          }}
-        />
-      ))}
+      <Flame size={10} strokeWidth={2.25} aria-hidden />
+      <span style={{ fontVariantNumeric: 'tabular-nums' }}>{clusterSize}</span>
+      <span style={{ opacity: 0.85 }}>媒体</span>
     </span>
   );
 }
@@ -382,6 +388,20 @@ export default function TodaysBriefSection() {
     try { localStorage.setItem(VIEW_STORAGE_KEY, v); } catch { /* ignore */ }
   };
 
+  // §11-B-4: 並び順 (話題順 / 新着順) — default は話題順 (HIGH ∩ cluster≥3 を最上位)。
+  // 6 体エージェントレビュー一致: シンプルソート、24h 境界は既存 fresh/stale 分割で吸収。
+  const [sortMode, setSortMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem(SORT_STORAGE_KEY);
+      if (saved === SORT_MODES.RECENT || saved === SORT_MODES.ATTENTION) return saved;
+    } catch { /* ignore */ }
+    return SORT_MODES.ATTENTION;
+  });
+  const handleSortChange = (m) => {
+    setSortMode(m);
+    try { localStorage.setItem(SORT_STORAGE_KEY, m); } catch { /* ignore */ }
+  };
+
   useEffect(() => {
     let cancelled = false;
     fetchMacroNews()
@@ -453,14 +473,27 @@ export default function TodaysBriefSection() {
     return m;
   }, [data.items]);
 
-  // アクティブタブの記事を時系列順 (新しい順) にソート
+  // §11-B-4: アクティブタブの記事を sortMode に応じてソート。
+  // - 新着順 (recent): 既存挙動 (published 降順)
+  // - 話題順 (attention): HIGH ∩ cluster_size≥3 を最上位 → cluster_size 降順 → published 降順
+  // 24h cutoff は既存 fresh/stale 分割で吸収 (両モードで適用、stale は下に出る)。
   const sortedItems = useMemo(() => {
     if (!activeTab) return [];
     const tabDef = TAB_DEFS.find((t) => t.key === activeTab);
     if (!tabDef) return [];
     const filtered = data.items.filter(tabDef.filter);
-    return [...filtered].sort((a, b) => getMinutesAgo(a.published) - getMinutesAgo(b.published));
-  }, [data.items, activeTab]);
+    if (sortMode === SORT_MODES.RECENT) {
+      return [...filtered].sort((a, b) => getMinutesAgo(a.published) - getMinutesAgo(b.published));
+    }
+    return [...filtered].sort((a, b) => {
+      const aHot = (a.importance === 'HIGH' && (a.cluster_size ?? 0) >= 3) ? 1 : 0;
+      const bHot = (b.importance === 'HIGH' && (b.cluster_size ?? 0) >= 3) ? 1 : 0;
+      if (aHot !== bHot) return bHot - aHot;
+      const dc = (b.cluster_size ?? 0) - (a.cluster_size ?? 0);
+      if (dc !== 0) return dc;
+      return getMinutesAgo(a.published) - getMinutesAgo(b.published);
+    });
+  }, [data.items, activeTab, sortMode]);
 
   // 24h 境界で 2 グループに分割
   const { fresh, stale } = useMemo(() => {
@@ -509,6 +542,45 @@ export default function TodaysBriefSection() {
                 translating={translating}
               />
             )}
+          </div>
+        </div>
+        {/* §11-B-4: 並び順 segment (category タブの上、ヘッダ右上)
+            6 体レビューで Web 開発エージェントが「category 二段化はモバイル 375px 破綻」を
+            指摘 → 別レイヤー配置。a11y: role="group" + aria-pressed。 */}
+        <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+          <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+            ニュースカテゴリ
+          </span>
+          <div
+            role="group"
+            aria-label="並び順"
+            className="inline-flex items-center rounded-md overflow-hidden text-[10px] font-medium"
+            style={{ border: '1px solid var(--border)' }}
+          >
+            <button
+              type="button"
+              onClick={() => handleSortChange(SORT_MODES.ATTENTION)}
+              aria-pressed={sortMode === SORT_MODES.ATTENTION}
+              className="px-2 py-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+              style={{
+                background: sortMode === SORT_MODES.ATTENTION ? 'var(--text-primary)' : 'transparent',
+                color: sortMode === SORT_MODES.ATTENTION ? 'var(--bg-card)' : 'var(--text-secondary)',
+              }}
+            >
+              話題順
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSortChange(SORT_MODES.RECENT)}
+              aria-pressed={sortMode === SORT_MODES.RECENT}
+              className="px-2 py-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+              style={{
+                background: sortMode === SORT_MODES.RECENT ? 'var(--text-primary)' : 'transparent',
+                color: sortMode === SORT_MODES.RECENT ? 'var(--bg-card)' : 'var(--text-secondary)',
+              }}
+            >
+              新着順
+            </button>
           </div>
         </div>
         {/* タブ Segmented Control (Pill 形状で affordance 強化) */}
