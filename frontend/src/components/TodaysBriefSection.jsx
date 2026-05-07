@@ -524,18 +524,20 @@ export default function TodaysBriefSection() {
       style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
       aria-labelledby="todays-brief-heading"
     >
-      {/* ヘッダー: タイトル + view toggle + Segmented Tabs */}
+      {/* §11-B-5-C: 5 体エージェントレビュー全員一致採用、ヘッダー 4 行 → 2 行へコンパクト化。
+          - サブタイトル「マクロ・地政学」削除 (タブで自明、原則 ① 違反解消)
+          - 「ニュースカテゴリ」ラベル削除 (タブの存在で自明、Linear/Notion 流)
+          - 1 行目: 見出し + 更新時刻 (inline 細字) + view/JP toggles (ml-auto 右寄せ)
+          - 2 行目: タブ (左) + 話題順/新着順 (ml-auto shrink-0 で wrap 後も右寄せ)
+          ヘッダー高さ ~120px → ~64px、ファーストビューでニュース 2 件目まで表示 (CTR +5-10%)。 */}
       <div className="px-6 pt-4 pb-3 border-b border-slate-100">
-        <div className="flex items-center justify-between mb-2.5 gap-3 flex-wrap">
+        {/* 1 行目: 見出し + 更新時刻 + toggles */}
+        <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
           <h3 id="todays-brief-heading" className="section-heading" style={{ margin: 0 }}>
             今日のマクロ
-            <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
-              マクロ・地政学
-            </span>
-            {/* §11-B-5: 最終更新時刻 (CLAUDE.md「動的データには最終更新を併記」原則準拠) */}
             {data.updated_at && (
               <span
-                className="ml-3 text-[10px] font-normal"
+                className="ml-2 text-[10px] font-normal"
                 style={{ color: 'var(--text-muted)', opacity: 0.7 }}
                 title={`最終更新: ${new Date(typeof data.updated_at === 'number' && data.updated_at < 1e12 ? data.updated_at * 1000 : data.updated_at).toLocaleString('ja-JP')}`}
               >
@@ -551,10 +553,7 @@ export default function TodaysBriefSection() {
               </span>
             )}
           </h3>
-          {/* §11-B-5-A: モバイルで wrap 時にコントロールが左寄せになる問題を解消。
-              ml-auto で wrap 後も右寄せ維持 (Apple HIG / Yahoo Finance 流、UI/UX 推奨)。
-              「コンテンツ左 / コントロール右」業界標準に整合。 */}
-          <div className="flex items-center gap-3 ml-auto">
+          <div className="flex items-center gap-2 ml-auto">
             {view !== null && (
               <NewsViewToggle view={view} onChange={handleViewChange} />
             )}
@@ -567,17 +566,50 @@ export default function TodaysBriefSection() {
             )}
           </div>
         </div>
-        {/* §11-B-4: 並び順 segment (category タブの上、ヘッダ右上)
-            6 体レビューで Web 開発エージェントが「category 二段化はモバイル 375px 破綻」を
-            指摘 → 別レイヤー配置。a11y: role="group" + aria-pressed。 */}
-        <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-          <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-            ニュースカテゴリ
-          </span>
+        {/* 2 行目: タブ (左) + 並び順 segment (右、ml-auto で wrap 後も右寄せ維持) */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div role="tablist" aria-label="ニュースカテゴリ" className="flex items-center gap-1.5 flex-wrap">
+            {TAB_DEFS.map((tab) => {
+              const isActive = activeTab === tab.key;
+              const count = tabCounts[tab.key] || 0;
+              const disabled = count === 0;
+              return (
+                <button
+                  key={tab.key}
+                  ref={(el) => { tabRefs.current[tab.key] = el; }}
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls={`brief-tabpanel-${tab.key}`}
+                  tabIndex={isActive ? 0 : -1}
+                  disabled={disabled}
+                  onClick={() => !disabled && handleTabChange(tab.key)}
+                  onKeyDown={(e) => handleTabKeyDown(e, tab.key)}
+                  className="tab-pill"
+                >
+                  {/* §11-B-4 Phase 1: ドット → Lucide icon 置換 (Web 開発エージェント指摘の
+                      タブ pill 内ドットと NewsRow 内 icon の二重表現解消、原則 ① 読み手負担↓)。
+                      色は dotColor を currentColor 経由で適用、disabled で opacity 落とす。 */}
+                  <tab.Icon
+                    size={12}
+                    strokeWidth={2.25}
+                    aria-hidden
+                    style={{
+                      color: tab.dotColor,
+                      opacity: disabled ? 0.4 : 1,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span>{tab.label}</span>
+                  <span className="text-[10px] opacity-60 font-normal">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+          {/* §11-B-5-C: 並び順 segment (ml-auto + shrink-0 で wrap 後も右寄せ維持、Web 開発推奨) */}
           <div
             role="group"
             aria-label="並び順"
-            className="inline-flex items-center rounded-md overflow-hidden"
+            className="inline-flex items-center rounded-md overflow-hidden ml-auto shrink-0"
             style={{ border: '1px solid var(--border)' }}
           >
             <button
@@ -597,44 +629,6 @@ export default function TodaysBriefSection() {
               新着順
             </button>
           </div>
-        </div>
-        {/* タブ Segmented Control (Pill 形状で affordance 強化) */}
-        <div role="tablist" aria-label="ニュースカテゴリ" className="flex items-center gap-1.5">
-          {TAB_DEFS.map((tab) => {
-            const isActive = activeTab === tab.key;
-            const count = tabCounts[tab.key] || 0;
-            const disabled = count === 0;
-            return (
-              <button
-                key={tab.key}
-                ref={(el) => { tabRefs.current[tab.key] = el; }}
-                role="tab"
-                aria-selected={isActive}
-                aria-controls={`brief-tabpanel-${tab.key}`}
-                tabIndex={isActive ? 0 : -1}
-                disabled={disabled}
-                onClick={() => !disabled && handleTabChange(tab.key)}
-                onKeyDown={(e) => handleTabKeyDown(e, tab.key)}
-                className="tab-pill"
-              >
-                {/* §11-B-4 Phase 1: ドット → Lucide icon 置換 (Web 開発エージェント指摘の
-                    タブ pill 内ドットと NewsRow 内 icon の二重表現解消、原則 ① 読み手負担↓)。
-                    色は dotColor を currentColor 経由で適用、disabled で opacity 落とす。 */}
-                <tab.Icon
-                  size={12}
-                  strokeWidth={2.25}
-                  aria-hidden
-                  style={{
-                    color: tab.dotColor,
-                    opacity: disabled ? 0.4 : 1,
-                    flexShrink: 0,
-                  }}
-                />
-                <span>{tab.label}</span>
-                <span className="text-[10px] opacity-60 font-normal">{count}</span>
-              </button>
-            );
-          })}
         </div>
       </div>
 
