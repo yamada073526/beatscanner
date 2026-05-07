@@ -9,28 +9,31 @@ import useTranslation from '../hooks/useTranslation.js';
 
 // 重要度バッジ 3 種でタブ切替 (v41 Phase 3.5a)
 // §11-B-4 Phase 1: Lucide icon 追加で WCAG 2.2 三重符号化 (色 + アイコン + 文字)。
-// 6 体エージェントレビュー全員一致採用 (TrendingUp / Globe / BarChart3)。
+// §11-B-20: マルチタグ化対応 — backend が tags: list[str] を返すので、tags?.includes() で
+// OR フィルタ。後方互換のため category もチェック (旧 bundle / 旧 cache 対応)。
+// 「Fed + S&P」のような複合ニュースが「市場全体」タブからも見える (旧バグ解消)。
+const hasTag = (item, tag) => (Array.isArray(item.tags) && item.tags.includes(tag)) || item.category === tag;
 const TAB_DEFS = [
   {
     key: 'macro',
     label: 'マクロ',
     dotColor: '#f59e0b',
     Icon: TrendingUp,
-    filter: (i) => i.importance === 'HIGH' && i.category === 'マクロ',
+    filter: (i) => i.importance === 'HIGH' && hasTag(i, 'マクロ'),
   },
   {
     key: 'geo',
     label: '地政学',
     dotColor: '#a855f7',
     Icon: Globe,
-    filter: (i) => i.category === '地政学',
+    filter: (i) => hasTag(i, '地政学'),
   },
   {
     key: 'market',
     label: '市場全体',
     dotColor: '#06b6d4',
     Icon: BarChart3,
-    filter: (i) => i.category === '市場全体',
+    filter: (i) => hasTag(i, '市場全体'),
   },
 ];
 // §11-B-4 Phase 1: ニュース category → Icon マップ (NewsRow / NewsCardGrid フォールバックで使用)

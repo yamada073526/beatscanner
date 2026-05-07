@@ -3447,23 +3447,56 @@ def _force_high_classification(title: str, summary: str) -> str | None:
     return None
 
 
-def _classify_macro_news(title: str, summary: str) -> tuple[str | None, str]:
-    """ニュースの重要度とカテゴリを判定。
-    Returns: (importance, category) — マクロ判定不可なら (None, '')
+# §11-B-20: マルチタグ化の許容値 ENUM (typo 防止、6 体エージェントレビュー一致採用)。
+# Web 設計エージェント指摘: 文字列自由化は filter 崩壊リスクあり、許容リスト集約必須。
+_VALID_NEWS_TAGS = ("マクロ", "地政学", "市場全体")
+_GEO_KEYWORDS = ("iran", "ukraine", "russia", "middle east", "geopolitic", "war ")
+
+
+def _classify_macro_news(title: str, summary: str) -> tuple[str | None, list[str]]:
+    """ニュースの重要度と複数タグを判定 (§11-B-20 マルチタグ化)。
+    Returns: (importance, tags) — マクロ判定不可なら (None, [])
+
+    マルチタグ仕様:
+    - tags[0] = 主タグ (primary)、frontend の category 表示で使用
+    - tags は最大 3 要素、重複なし
+    - 例: "Fed pivot triggers Nasdaq rally" → tags=['マクロ', '市場全体']
+      (旧バグ: HIGH match 後 MED 候補を捨てるため「市場全体」タブから消失)
     """
-    # 1) 主要 IB target 改定 / 軍事行動は HIGH 強制 (キーワード単体マッチより優先)
+    tags: list[str] = []
+    text = f"{title or ''} {summary or ''}".lower()
+
+    # 1) 主要 IB target 改定 / 軍事行動は HIGH 強制 + 主タグ確定
     forced = _force_high_classification(title, summary)
     if forced is not None:
-        return ("HIGH", forced)
+        tags.append(forced)
 
-    # 2) 通常のキーワードベース判定
-    text = f"{title or ''} {summary or ''}".lower()
-    if any(kw in text for kw in _MACRO_KEYWORDS_HIGH):
-        cat = "地政学" if any(kw in text for kw in ("iran", "ukraine", "russia", "middle east", "geopolitic", "war ")) else "マクロ"
-        return ("HIGH", cat)
-    if any(kw in text for kw in _MACRO_KEYWORDS_MED):
-        return ("MED", "市場全体")
-    return (None, "")
+    # 2) HIGH キーワードベース判定 (forced と独立、地政学優先で主タグ決定)
+    has_high = any(kw in text for kw in _MACRO_KEYWORDS_HIGH)
+    has_geo = any(kw in text for kw in _GEO_KEYWORDS)
+    has_med = any(kw in text for kw in _MACRO_KEYWORDS_MED)
+
+    if has_high:
+        # 地政学キーワードあり → 地政学を優先 (forced とコンフリクトしないよう dedupe)
+        if has_geo:
+            if "地政学" not in tags:
+                tags.append("地政学")
+        else:
+            if "マクロ" not in tags:
+                tags.append("マクロ")
+
+    # 3) MED 「市場全体」は HIGH と排他しない (旧バグ修正の核心)
+    if has_med and "市場全体" not in tags:
+        tags.append("市場全体")
+
+    # 4) 重要度判定: forced or has_high → HIGH、それ以外 has_med → MED
+    if not tags:
+        return (None, [])
+    importance = "HIGH" if (forced is not None or has_high) else "MED"
+
+    # 5) 許容値以外を除外 (typo 防御)、最大 3 タグでカット
+    tags = [t for t in tags if t in _VALID_NEWS_TAGS][:3]
+    return (importance, tags)
 
 
 # v41 Phase 3.5d: アテンション視覚化
@@ -3615,8 +3648,8 @@ async def macro_news(request: Request) -> dict:
         published = n.get("publishedDate") or n.get("published")
         source = n.get("site") or n.get("source") or n.get("publisher")
 
-        importance, category = _classify_macro_news(title, summary)
-        if not importance:
+        importance, tags = _classify_macro_news(title, summary)
+        if not importance or not tags:
             continue
 
         filtered.append({
@@ -3627,8 +3660,11 @@ async def macro_news(request: Request) -> dict:
             "summary": summary,
             "image": n.get("image"),
             "importance": importance,
-            "category": category,
-            "_kind": n.get("_kind", "fmp"),  # データソース可視化用
+            # §11-B-20: マルチタグ化。tags[0] = 主タグ、後方互換のため category も残す。
+            # frontend は `tags?.includes() || category ===` で OR フィルタ。
+            "category": tags[0],
+            "tags": tags,
+            "_kind": n.get("_kind", "fmp"),
         })
 
     # HIGH を優先、次に MED の順でソート (FMP 側で時系列順を維持しつつ)
