@@ -3398,6 +3398,16 @@ body {
     font-size: 18px;
   }
 }
+/* §11-B-9: iPhone SE クラス (≤375px) はさらに 40px に縮小、
+   タイトル領域確保で 3 行折り返しを抑制 (Yahoo!ニュース app 同パターン)。 */
+@media (max-width: 375px) {
+  .brief-list-thumb,
+  .brief-list-thumb-fallback {
+    width: 40px;
+    height: 40px;
+    font-size: 15px;
+  }
+}
 [data-theme="dark"] .brief-list-thumb,
 [data-theme="dark"] .brief-list-thumb-fallback {
   border-color: rgba(255,255,255,0.06);

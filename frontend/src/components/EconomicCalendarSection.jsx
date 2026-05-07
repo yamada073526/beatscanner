@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { Star } from 'lucide-react';
 import { fetchEconomicCalendar } from '../api.js';
 import { translateEvent } from '../lib/i18n/economicEvents.js';
 import { useJsonLd } from '../hooks/useJsonLd.js';
@@ -14,7 +15,8 @@ import { buildEventListSchema } from '../utils/jsonLdBuilders.js';
 // - Beat/Miss カラーリング (発表済の actual vs estimate)
 // - "TODAY" バッジで当日イベントを強調
 
-// impact レベル別の色設計
+// impact レベル別の色設計 + ★ 数 (§11-B-3 Investing.com 流)
+// HIGH = ★★★, MED = ★★, LOW = ★ で国際標準と一致 (機関投資家リテラシー対応)
 function getImpactColors(impact) {
   if (impact === 'HIGH') {
     return {
@@ -22,6 +24,7 @@ function getImpactColors(impact) {
       bg: 'rgba(245,158,11,0.10)',
       border: 'rgba(245,158,11,0.35)',
       label: 'HIGH',
+      stars: 3,
     };
   }
   if (impact === 'MED') {
@@ -30,6 +33,7 @@ function getImpactColors(impact) {
       bg: 'rgba(6,182,212,0.10)',
       border: 'rgba(6,182,212,0.35)',
       label: 'MED',
+      stars: 2,
     };
   }
   return {
@@ -37,7 +41,33 @@ function getImpactColors(impact) {
     bg: 'rgba(148,163,184,0.10)',
     border: 'rgba(148,163,184,0.30)',
     label: 'LOW',
+    stars: 1,
   };
+}
+
+// §11-B-3 重要度を ★ で視覚化 (Investing.com 流)。
+// 国際標準と一致、機関投資家リテラシー対応 (金融アナリスト推奨)。
+// CLAUDE.md「中学生でも分かるシンプルさ」に合致 (HIGH/MED/LOW 英字より直感的)。
+function ImpactStars({ stars, color, label }) {
+  return (
+    <span
+      role="img"
+      aria-label={`重要度 ${label} (${stars} つ星)`}
+      className="inline-flex items-center gap-[1px]"
+    >
+      {[0, 1, 2].map((i) => (
+        <Star
+          key={i}
+          size={11}
+          strokeWidth={1.5}
+          fill={i < stars ? color : 'transparent'}
+          color={color}
+          style={{ opacity: i < stars ? 1 : 0.30 }}
+          aria-hidden
+        />
+      ))}
+    </span>
+  );
 }
 
 // 国コード → 表示用ラベル + 旗
@@ -113,6 +143,7 @@ function groupHeader(key) {
 }
 
 // カウントダウン表示: "あと N 時間" or "あと N 日"
+// §11-B-10: 戻り値に「緊急度」を含めて呼び出し側で amber pill 化判定 (D-3 = 3 日以内が critical)。
 function getCountdown(input) {
   if (!input) return null;
   let target;
@@ -132,6 +163,19 @@ function getCountdown(input) {
   }
   if (diffHours < 24) return `あと ${diffHours} 時間`;
   return `あと ${Math.floor(diffHours / 24)} 日`;
+}
+
+// §11-B-10: D-3 (発表まで 72 時間以内) かどうか判定。critical 表示用。
+// CLAUDE.md 投資業界色ルール「緊急・警告 = amber」に整合。
+function isCriticalCountdown(input) {
+  if (!input) return false;
+  let target;
+  if (typeof input === 'number') target = new Date(input < 1e12 ? input * 1000 : input);
+  else target = new Date(input);
+  if (isNaN(target.getTime())) return false;
+  const diffMs = target.getTime() - Date.now();
+  if (diffMs < 0) return false; // 発表済は対象外
+  return diffMs <= 72 * 60 * 60 * 1000; // 72 時間以内
 }
 
 // 数値抽出: "3.2%" → 3.2 / "210K" → 210000 / 比較不可なら null
@@ -170,6 +214,8 @@ function EventRow({ event, isHighest }) {
   const country = COUNTRY_LABEL[event.country] || event.country;
   const isPast = countdown && countdown.includes('発表済');
   const isEstimated = event._source === 'estimated';
+  // §11-B-10: D-3 (72 時間以内) のとき amber pill 化、それ以外は通常テキスト
+  const isCritical = isCriticalCountdown(event.date);
 
   // Y-2: 当日イベントは "TODAY" バッジ
   const isToday = (() => {
@@ -203,19 +249,15 @@ function EventRow({ event, isHighest }) {
       />
       <div className="flex items-center gap-2 mb-1.5 flex-wrap">
         <span
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded leading-none"
           style={{
             backgroundColor: colors.bg,
             color: colors.dot,
             border: `1px solid ${colors.border}`,
           }}
+          title={`重要度: ${colors.label}`}
         >
-          <span
-            aria-hidden
-            className="inline-block w-1.5 h-1.5 rounded-full"
-            style={{ background: colors.dot }}
-          />
-          {colors.label}
+          <ImpactStars stars={colors.stars} color={colors.dot} label={colors.label} />
         </span>
         <span className="text-[10px] text-slate-400 leading-none">
           {country}
@@ -264,12 +306,27 @@ function EventRow({ event, isHighest }) {
           </span>
         )}
         {countdown && (
-          <span
-            className="ml-auto text-[10px] font-semibold leading-none"
-            style={{ color: isPast ? 'var(--text-muted)' : colors.dot }}
-          >
-            {countdown}
-          </span>
+          isCritical ? (
+            // §11-B-10: D-3 amber pill (CLAUDE.md「緊急 = amber」整合)
+            <span
+              className="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold leading-none"
+              style={{
+                color: '#b45309',
+                backgroundColor: 'rgba(245,158,11,0.15)',
+                border: '1px solid rgba(245,158,11,0.30)',
+              }}
+              aria-label="まもなく発表 (3 日以内)"
+            >
+              {countdown}
+            </span>
+          ) : (
+            <span
+              className="ml-auto text-[10px] font-semibold leading-none"
+              style={{ color: isPast ? 'var(--text-muted)' : colors.dot }}
+            >
+              {countdown}
+            </span>
+          )
         )}
       </div>
       {/* P0-4+5: 和訳メイン + 英語 sub + カテゴリ SVG アイコン (F6: lucide-react、楽天 MS II 流) */}
@@ -471,6 +528,24 @@ export default function EconomicCalendarSection() {
             <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
               FOMC・CPI・雇用統計など
             </span>
+            {/* §11-B-5: 最終更新時刻 (CLAUDE.md「動的データには最終更新を併記」原則準拠) */}
+            {data.updated_at && (
+              <span
+                className="ml-3 text-[10px] font-normal"
+                style={{ color: 'var(--text-muted)', opacity: 0.7 }}
+                title={`最終更新: ${new Date(typeof data.updated_at === 'number' && data.updated_at < 1e12 ? data.updated_at * 1000 : data.updated_at).toLocaleString('ja-JP')}`}
+              >
+                {(() => {
+                  const ts = typeof data.updated_at === 'number' && data.updated_at < 1e12 ? data.updated_at * 1000 : data.updated_at;
+                  const min = Math.max(0, Math.floor((Date.now() - new Date(ts).getTime()) / 60000));
+                  if (min < 1) return '更新: たった今';
+                  if (min < 60) return `更新: ${min} 分前`;
+                  const hr = Math.floor(min / 60);
+                  if (hr < 24) return `更新: ${hr} 時間前`;
+                  return `更新: ${Math.floor(hr / 24)} 日前`;
+                })()}
+              </span>
+            )}
           </h3>
           <div role="tablist" aria-label="重要度フィルタ" className="flex items-center gap-1.5">
             <button

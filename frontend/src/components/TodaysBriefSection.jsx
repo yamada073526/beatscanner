@@ -532,6 +532,24 @@ export default function TodaysBriefSection() {
             <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
               マクロ・地政学
             </span>
+            {/* §11-B-5: 最終更新時刻 (CLAUDE.md「動的データには最終更新を併記」原則準拠) */}
+            {data.updated_at && (
+              <span
+                className="ml-3 text-[10px] font-normal"
+                style={{ color: 'var(--text-muted)', opacity: 0.7 }}
+                title={`最終更新: ${new Date(typeof data.updated_at === 'number' && data.updated_at < 1e12 ? data.updated_at * 1000 : data.updated_at).toLocaleString('ja-JP')}`}
+              >
+                {(() => {
+                  const ts = typeof data.updated_at === 'number' && data.updated_at < 1e12 ? data.updated_at * 1000 : data.updated_at;
+                  const min = Math.max(0, Math.floor((Date.now() - new Date(ts).getTime()) / 60000));
+                  if (min < 1) return '更新: たった今';
+                  if (min < 60) return `更新: ${min} 分前`;
+                  const hr = Math.floor(min / 60);
+                  if (hr < 24) return `更新: ${hr} 時間前`;
+                  return `更新: ${Math.floor(hr / 24)} 日前`;
+                })()}
+              </span>
+            )}
           </h3>
           <div className="flex items-center gap-3">
             {view !== null && (

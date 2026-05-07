@@ -379,7 +379,14 @@ const TickerRow = memo(function TickerRow({
     <div
       ref={rowRef}
       className="panel-card border rounded-lg shadow-sm"
-      style={{ background: 'var(--bg-card)', borderColor: 'var(--border)', transition: 'transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease' }}
+      style={{
+        background: 'var(--bg-card)',
+        borderColor: 'var(--border)',
+        transition: 'transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease',
+        // §11-B-11: scrollIntoView block:'start' 使用時に sticky 検索バー (~64px) の裏に
+        // 隠れないよう margin で予約。Apple Stocks / Linear 標準パターン。
+        scrollMarginTop: '80px',
+      }}
       onMouseEnter={handleMouseEnter}
     >
       <div
@@ -391,8 +398,11 @@ const TickerRow = memo(function TickerRow({
           const opening = !expanded;
           setExpanded(opening);
           if (opening && rowRef.current) {
+            // §11-B-11: block:'center' だと sticky 検索バーの裏に隠れる現象 (UI/UX Q5-3)。
+            // block:'start' + scroll-margin-top で sticky 高さ分オフセット。
+            // CSS の scroll-margin-top は別途 .ticker-row に 80px 適用済 (index.css)。
             setTimeout(() => {
-              rowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+              rowRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
             }, 50);
           }
         }}
