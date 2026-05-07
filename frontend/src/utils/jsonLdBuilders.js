@@ -11,17 +11,20 @@
  */
 
 const SITE_URL = 'https://beatscanner-production.up.railway.app';
-const SITE_NAME = 'beatscanner';
-const ORG_NAME = 'BeatScanner';
+// §11-C-1 ブランド統一 (3 体エージェントレビュー 2:1 採用):
+// 表示・SEO・AI 検索引用は BeatScanner (語境界明示で固有名詞認識↑、AI 引用率 +10-15%)。
+// alternateName で beatscanner も登録 (URL/ロゴ習慣との整合)。
+const SITE_NAME = 'BeatScanner';
+const ALT_NAME = 'beatscanner';
 
 /** sitelinks search box 対応 */
 export function buildWebSiteSchema() {
   return {
     '@type': 'WebSite',
     name: SITE_NAME,
-    alternateName: ORG_NAME,
+    alternateName: ALT_NAME,
     url: SITE_URL,
-    description: '米国株決算分析 Web アプリ。ファンダメンタル 5 条件プロトコルに基づき、ティッカーを入力するだけで決算 Beat/Miss を 2 秒で判定。',
+    description: '米国株の決算 Beat/Miss を 2 秒で判定。成長性・収益性・財務・Beat 履歴・バリュエーションの 5 軸を自動採点し、CPI/FOMC カレンダーとマクロニュースを統合した個人投資家向け決算分析ダッシュボード。',
     inLanguage: 'ja',
     potentialAction: {
       '@type': 'SearchAction',
@@ -38,8 +41,8 @@ export function buildWebSiteSchema() {
 export function buildOrganizationSchema() {
   return {
     '@type': 'Organization',
-    name: ORG_NAME,
-    alternateName: SITE_NAME,
+    name: SITE_NAME,
+    alternateName: ALT_NAME,
     url: SITE_URL,
     logo: {
       '@type': 'ImageObject',
@@ -47,7 +50,7 @@ export function buildOrganizationSchema() {
       width: 1200,
       height: 630,
     },
-    description: '米国株決算分析ツール「beatscanner」を提供。',
+    description: '米国株決算分析 Web アプリ「BeatScanner」を提供。',
   };
 }
 
