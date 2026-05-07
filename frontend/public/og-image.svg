@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <!-- §11-C-1 OGP placeholder (SVG, 1200x630). 本番運用前に PNG 化推奨 (Figma export 5 分)。
+       現状 SVG でも Google / Twitter (modern) / Perplexity は問題なく扱う。
+       配色: ダークネイビー + ブランドブルー (favicon と同じトーン) -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0B1120"/>
+      <stop offset="100%" stop-color="#1E293B"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#4B9EFF"/>
+      <stop offset="100%" stop-color="#34EF81"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 背景 -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- 装飾: グリッドライン (チャート風) -->
+  <g stroke="#4B9EFF" stroke-width="0.5" opacity="0.08">
+    <line x1="0" y1="158" x2="1200" y2="158"/>
+    <line x1="0" y1="315" x2="1200" y2="315"/>
+    <line x1="0" y1="473" x2="1200" y2="473"/>
+    <line x1="300" y1="0" x2="300" y2="630"/>
+    <line x1="600" y1="0" x2="600" y2="630"/>
+    <line x1="900" y1="0" x2="900" y2="630"/>
+  </g>
+
+  <!-- 装飾: ローソク足風 -->
+  <g opacity="0.18">
+    <rect x="930" y="380" width="20" height="80" fill="#34EF81" rx="2"/>
+    <line x1="940" y1="350" x2="940" y2="490" stroke="#34EF81" stroke-width="2"/>
+    <rect x="980" y="320" width="20" height="100" fill="#F87171" rx="2"/>
+    <line x1="990" y1="290" x2="990" y2="450" stroke="#F87171" stroke-width="2"/>
+    <rect x="1030" y="340" width="20" height="120" fill="#34EF81" rx="2"/>
+    <line x1="1040" y1="310" x2="1040" y2="490" stroke="#34EF81" stroke-width="2"/>
+    <rect x="1080" y="280" width="20" height="140" fill="#34EF81" rx="2"/>
+    <line x1="1090" y1="250" x2="1090" y2="450" stroke="#34EF81" stroke-width="2"/>
+  </g>
+
+  <!-- ロゴ円 -->
+  <circle cx="120" cy="120" r="56" fill="#0B1120" stroke="#4B9EFF" stroke-width="2"/>
+  <path d="M70,120 L90,120 L98,150 L112,70 L126,150 L138,120" stroke="#4B9EFF" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="138" cy="120" r="6" fill="#4B9EFF"/>
+
+  <!-- ブランド名 -->
+  <text x="200" y="135" font-family="Inter, system-ui, sans-serif" font-size="56" font-weight="700" fill="#FFFFFF" letter-spacing="-1">beatscanner</text>
+
+  <!-- メインキャッチコピー -->
+  <text x="80" y="320" font-family="'Noto Sans JP', sans-serif" font-size="78" font-weight="700" fill="#FFFFFF" letter-spacing="-2">米国株決算を</text>
+  <text x="80" y="410" font-family="'Noto Sans JP', sans-serif" font-size="78" font-weight="700" fill="url(#accent)" letter-spacing="-2">2 秒で判定</text>
+
+  <!-- サブコピー -->
+  <text x="80" y="490" font-family="'Noto Sans JP', sans-serif" font-size="28" font-weight="500" fill="#94A3B8" letter-spacing="0.5">ファンダメンタル 5 条件 × チャート × 経済指標</text>
+
+  <!-- フッター URL -->
+  <text x="80" y="580" font-family="Inter, system-ui, sans-serif" font-size="22" font-weight="500" fill="#4B9EFF" letter-spacing="0.5">beatscanner-production.up.railway.app</text>
+</svg>

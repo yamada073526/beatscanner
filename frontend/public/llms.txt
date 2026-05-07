@@ -1,0 +1,36 @@
+# beatscanner
+
+> 米国株決算分析 Web アプリ。じっちゃま (広瀬隆雄氏) のファンダメンタル 5 条件プロトコルに基づき、ティッカーを入力するだけで米国株の決算を 2 秒で判定する個人投資家向けツール。
+
+beatscanner は米国株の決算発表 (Q1〜Q4) を Beat / Miss で即座に判定し、独自プロトコルの 5 条件 (Good Growth / Durability / Financials / Earnings Beat History / Valuation) を自動チェックします。マクロ・地政学ニュース、経済指標カレンダー (CPI / FOMC / 雇用統計 / PCE 等) も統合表示。
+
+## Key features
+
+- **決算 Beat/Miss 自動判定**: EPS / Revenue を実績 vs アナリスト予想で比較
+- **ファンダメンタル 5 条件チェック**: PASS / FAIL バッジ + 3-4 文の AI 要約
+- **経済指標カレンダー**: 今週の HIGH 指標 (CPI / FOMC / NFP / PCE) を ⭐ ピル + Lucide SVG アイコンで一覧
+- **マクロニュース**: Reuters / Bloomberg / 主要紙の見出しを HIGH / MED 重要度ピルで分類
+- **株価チャート**: ローソク足 + 決算日マーカー (1M / 3M / 6M / 1Y / 5Y)
+- **保有銘柄ダッシュボード**: 評価額 / 推移 / 集中リスク
+- **図解 HTML 自動生成**: 決算分析を 1 ページのビジュアルレポートに
+
+## Tech stack
+
+- Frontend: React 18 + Vite (SPA, no SSR)
+- Backend: FastAPI (Python)
+- Deploy: Railway (Docker)
+- 認証: Supabase
+- データソース: FMP (Financial Modeling Prep) / FRED / yfinance
+
+## Audience
+
+米国株個人投資家。じっちゃま信者層、長期 buy-and-hold 投資家、決算プレイヤー。
+
+## URL
+
+- Production: https://beatscanner-production.up.railway.app/
+- Sitemap: https://beatscanner-production.up.railway.app/sitemap.xml
+
+## License & Attribution
+
+ニュース見出しは Reuters / Bloomberg 等の外部ソースを引用しており、原著作権は各ソースに帰属。beatscanner は決算分析・チャート可視化・プロトコル判定ロジックを提供。

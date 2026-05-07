@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState, lazy, Suspense } from 'react';
+import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { flushSync } from 'react-dom';
 import { analyze, demoAnalyze, fetchGuidance, fetchGuidanceBasic, prefetchAll } from './api.js';
+import { useJsonLd } from './hooks/useJsonLd.js';
+import { buildWebSiteSchema, buildOrganizationSchema } from './utils/jsonLdBuilders.js';
 import { supabase, isSupabaseConfigured } from './lib/supabase.js';
 import { useAuth } from './hooks/useAuth.js';
 import { useIsMobile } from './hooks/useIsMobile.js';
@@ -59,6 +61,14 @@ function loadWatchlist() {
 }
 
 export default function App() {
+  // §11-C-1: サイト全体の JSON-LD 注入 (WebSite + Organization)。
+  // 6 体エージェントレビュー + 2026 BP 全員一致採用の半日最小セット。
+  // useMemo で参照同一性を保ち、useJsonLd の deps 変化を防ぐ (StrictMode 対応)。
+  const websiteSchema = useMemo(() => buildWebSiteSchema(), []);
+  const organizationSchema = useMemo(() => buildOrganizationSchema(), []);
+  useJsonLd('jsonld-website', websiteSchema);
+  useJsonLd('jsonld-organization', organizationSchema);
+
   const [ticker, setTicker] = useState('');
   const [result, setResult] = useState(null);
   const [guidance, setGuidance] = useState(null);

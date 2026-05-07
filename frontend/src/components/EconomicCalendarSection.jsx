@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { fetchEconomicCalendar } from '../api.js';
 import { translateEvent } from '../lib/i18n/economicEvents.js';
+import { useJsonLd } from '../hooks/useJsonLd.js';
+import { buildEventListSchema } from '../utils/jsonLdBuilders.js';
 
 // 経済指標カレンダー (v41 Y-1 + Y-2 高度化)
 // 設計思想 ②「毎日開きたくなる」の核 — FOMC/CPI/雇用統計など週次イベントが
@@ -377,6 +379,19 @@ export default function EconomicCalendarSection() {
     const filtered = (data.events || []).filter((e) => country === 'all' || e.country === country);
     return filtered.slice(0, filter === 'high' ? 16 : 30);
   }, [data.events, filter, country]);
+
+  // §11-C-1: 経済指標 ItemList の JSON-LD を <head> に注入。
+  // 「FOMC 結果」「今週の経済指標 米国」等の Google / AI 検索で beatscanner が
+  // 引用される機会を最大化。schema.org/Event の additionalProperty で
+  // actual / forecast / previous / impact を埋め込み。
+  const eventListJsonLd = useMemo(() => {
+    if (!visibleEvents || visibleEvents.length === 0) return null;
+    // US のみ JSON-LD 対象 (海外指標は SEO ターゲット KW から外れる)
+    const usEvents = visibleEvents.filter((e) => e.country === 'US' || e.country === 'USA');
+    if (usEvents.length === 0) return null;
+    return buildEventListSchema(usEvents.slice(0, 10)); // 上位 10 件で SEO 重要度集中
+  }, [visibleEvents]);
+  useJsonLd('jsonld-economic-calendar', eventListJsonLd);
 
   // 日付グルーピング (YYYY-MM-DD 単位)
   const grouped = useMemo(() => {
