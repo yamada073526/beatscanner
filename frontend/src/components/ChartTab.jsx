@@ -1,6 +1,24 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, Component, memo } from "react";
 import { createPortal } from "react-dom";
-import { MoreHorizontal, ArrowUp, ArrowDown, Tag, Trash2, X } from "lucide-react";
+import { MoreHorizontal, ArrowUp, ArrowDown, Tag, Trash2, X, GripVertical } from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  KeyboardSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  DragOverlay,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import CompanyLogo from "./CompanyLogo.jsx";
 import TagPill from "./TagPill.jsx";
 import { computePnL, formatPnLPct } from "../lib/holdings.js";
@@ -400,13 +418,29 @@ const TickerRow = memo(function TickerRow({
   const selectedVal = summary?.performance?.[selectedPeriod];
   const tagDotColor = tag?.color || tag?.bg_color || '#06b6d4';
 
+  // §11-B-7-A Phase 2: @dnd-kit/sortable 対応
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: ticker });
+
+  const sortableStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
   return (
-    <div>
+    <div ref={setNodeRef} style={sortableStyle}>
       <div
         ref={rowRef}
-        className={`ticker-row-v2 ${expanded ? 'is-expanded' : ''} ${holding && inWatchlist ? 'is-holding' : ''}`}
+        className={`ticker-row-v2 ${expanded ? 'is-expanded' : ''} ${holding && inWatchlist ? 'is-holding' : ''} ${isDragging ? 'is-dragging' : ''}`}
         onMouseEnter={handleMouseEnter}
         onClick={() => {
+          if (isDragging) return;  // ドラッグ中は expand 抑制
           if (!mounted) setMounted(true);
           const opening = !expanded;
           setExpanded(opening);
@@ -418,6 +452,18 @@ const TickerRow = memo(function TickerRow({
           }
         }}
       >
+        {/* Col 0: drag handle (≡ GripVertical、PC hover/モバイル常時 small) */}
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          className="row-drag-handle"
+          aria-label={`${ticker} を並び替え`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <GripVertical size={14} strokeWidth={2} aria-hidden />
+        </button>
+
         {/* Col 1: ロゴ + ティッカー + tag dot + メタ行 (次回決算) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
           <div className="row-logo-wrap">
@@ -733,6 +779,9 @@ function SheetButton({ children, onClick, icon, disabled, destructive }) {
 
 export default memo(function ChartTab({
   watchlist = [], onSelect, onMove,
+  // §11-B-7-A Phase 2: DnD 並び替え用 (newOrder array を受ける)、
+  // 未指定なら DnD 無効化 (判定タブでも安全に呼べる)
+  onReorder,
   // chip 統合 (P1-1): タグ / 含み損益 / 編集・削除を行内に表示
   tagsById = {},
   assignments = {},
@@ -775,11 +824,38 @@ export default memo(function ChartTab({
     try { localStorage.setItem(SELECTED_PERIOD_KEY, v); } catch {}
   };
 
+
   // 最新の props を ref に保持（handleMove を stable にするため）
   const onMoveRef = useRef(onMove);
   const watchlistRef = useRef(watchlist);
   onMoveRef.current = onMove;
   watchlistRef.current = watchlist;
+
+  // §11-B-7-A Phase 2: @dnd-kit DnD 並び替え用 sensors + state
+  // - PointerSensor: PC マウス、距離 5px で起動 (誤発火防止)
+  // - TouchSensor: モバイル、長押し 200ms + 移動 5px で起動
+  // - KeyboardSensor: Space で pickup → 矢印で移動 → Space で drop (アクセシビリティ)
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const [activeDragId, setActiveDragId] = useState(null);
+
+  const handleDragStart = useCallback((event) => {
+    setActiveDragId(event.active?.id ?? null);
+  }, []);
+
+  const handleDragEnd = useCallback((event) => {
+    setActiveDragId(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = watchlistRef.current.indexOf(active.id);
+    const newIndex = watchlistRef.current.indexOf(over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const newOrder = arrayMove(watchlistRef.current, oldIndex, newIndex);
+    onReorder?.(newOrder);
+  }, [onReorder]);
 
   // TickerRow から呼ばれる DOM 登録コールバック（安定した参照）
   const registerRef = useCallback((ticker, el) => {
@@ -874,42 +950,81 @@ export default memo(function ChartTab({
         </div>
       </div>
 
-      {/* §11-B-7-A: 行コンテナ (Apple Mail/Linear Issues 流の hairline 区切り、card 化なし) */}
-      <div
-        style={{
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border)',
-          borderRadius: 12,
-          overflow: 'hidden',
-        }}
+      {/* §11-B-7-A Phase 2: DnD 並び替え対応 (DndContext + SortableContext)。
+          DragOverlay は document.body にポータルされ、sticky 検索バー裏に潜らない (Web 設計指摘)。
+          onReorder が未指定の場合 (判定タブ等) でも TickerRow.useSortable は動作するが
+          arrayMove の結果が破棄されるだけで害なし (後方互換)。 */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
       >
-      {watchlist.map((ticker, idx) => {
-        const tagId = assignments[ticker];
-        // watchlistSet が渡されていればその有無、未指定 (判定タブ等) なら true 扱い
-        const inWatchlist = watchlistSet ? watchlistSet.has(ticker) : true;
-        return (
-          <TickerRow
-            key={ticker}
-            ticker={ticker}
-            onSelect={onSelect}
-            isFirst={idx === 0}
-            isLast={idx === watchlist.length - 1}
-            onMove={handleMove}
-            registerRef={registerRef}
-            globalPeriodsExpanded={globalPeriodsExpanded}
-            selectedPeriod={selectedPeriod}
-            tag={tagId ? tagsById[tagId] : null}
-            holding={holdings[ticker]}
-            priceRow={prices[ticker]}
-            hideTagPill={hideTagPill}
-            onTagClick={onTagClick}
-            onRemove={onRemove}
-            inWatchlist={inWatchlist}
-            onOpenActions={setActionSheetTicker}
-          />
-        );
-      })}
-      </div>
+        <SortableContext
+          items={watchlist}
+          strategy={verticalListSortingStrategy}
+        >
+          <div
+            style={{
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              overflow: 'hidden',
+            }}
+          >
+            {watchlist.map((ticker, idx) => {
+              const tagId = assignments[ticker];
+              const inWatchlist = watchlistSet ? watchlistSet.has(ticker) : true;
+              return (
+                <TickerRow
+                  key={ticker}
+                  ticker={ticker}
+                  onSelect={onSelect}
+                  isFirst={idx === 0}
+                  isLast={idx === watchlist.length - 1}
+                  onMove={handleMove}
+                  registerRef={registerRef}
+                  globalPeriodsExpanded={globalPeriodsExpanded}
+                  selectedPeriod={selectedPeriod}
+                  tag={tagId ? tagsById[tagId] : null}
+                  holding={holdings[ticker]}
+                  priceRow={prices[ticker]}
+                  hideTagPill={hideTagPill}
+                  onTagClick={onTagClick}
+                  onRemove={onRemove}
+                  inWatchlist={inWatchlist}
+                  onOpenActions={setActionSheetTicker}
+                />
+              );
+            })}
+          </div>
+        </SortableContext>
+        {/* DragOverlay: document.body 直下にポータル。drag 中の行を浮き上がらせる (scale + shadow)。
+            sticky 検索バー裏問題は z-index で回避。 */}
+        {createPortal(
+          <DragOverlay dropAnimation={{ duration: 250, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
+            {activeDragId ? (
+              <div className="ticker-row-v2 is-drag-overlay">
+                <span className="row-drag-handle" style={{ opacity: 1 }}>
+                  <GripVertical size={14} strokeWidth={2} aria-hidden />
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                  <div className="row-logo-wrap">
+                    <CompanyLogo ticker={activeDragId} size={36} />
+                  </div>
+                  <div>
+                    <div className="row-ticker">{activeDragId}</div>
+                  </div>
+                </div>
+                <div></div>
+                <div></div>
+                <div></div>
+              </div>
+            ) : null}
+          </DragOverlay>,
+          document.body,
+        )}
+      </DndContext>
       {actionSheetTicker && (() => {
         const idx = watchlist.indexOf(actionSheetTicker);
         const inWl = watchlistSet ? watchlistSet.has(actionSheetTicker) : true;

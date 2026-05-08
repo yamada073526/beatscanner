@@ -711,6 +711,13 @@ export default function App() {
     });
   }
 
+  // §11-B-7-A Phase 2: DnD 並び替え用。@dnd-kit の onDragEnd で arrayMove した結果を
+  // 受け取り、watchlist 全体を上書き。`moveWatchlistItem` (up/down) と並存。
+  function reorderWatchlist(newOrder) {
+    if (!Array.isArray(newOrder) || newOrder.length === 0) return;
+    setWatchlist(newOrder);
+  }
+
   // ── X(Twitter) シェアテキスト生成 + 共有ハンドラ ──
   function fmtMoneyShort(v) {
     if (v == null || isNaN(v)) return null;
@@ -1208,6 +1215,7 @@ export default function App() {
           onRemove={removeFromWatchlist}
           onHover={prefetch}
           onMove={moveWatchlistItem}
+          onReorder={reorderWatchlist}
           onFocusSearch={() => {
             searchInputRef.current?.focus();
             searchInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });

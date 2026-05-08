@@ -20,7 +20,7 @@ const DEMO_DATA_BY_YEARS = {
 };
 
 export default function HomeTab({
-  watchlist, onSelect, onRemove, onHover, onFocusSearch, onMove,
+  watchlist, onSelect, onRemove, onHover, onFocusSearch, onMove, onReorder,
   analysis, user,
   // タグ機能 (X-1)
   tags = [],
@@ -177,6 +177,7 @@ export default function HomeTab({
         watchlist={filteredWatchlist}
         onSelect={onSelect}
         onMove={onMove}
+        onReorder={onReorder}
         tagsById={tagsById}
         assignments={assignments}
         holdings={holdings}

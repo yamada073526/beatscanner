@@ -1008,11 +1008,11 @@ body {
 .ticker-row-v2 {
   position: relative;
   display: grid;
-  /* PC: ロゴ+情報 / 期間騰落 / 価格+change / アクション */
-  grid-template-columns: minmax(160px, 1fr) auto minmax(120px, auto) auto;
+  /* PC: drag-handle / ロゴ+情報 / 価格+change / アクション / chevron */
+  grid-template-columns: auto minmax(160px, 1fr) minmax(100px, auto) auto auto;
   align-items: center;
-  gap: 16px;
-  padding: 12px 20px 12px 24px;
+  gap: 12px;
+  padding: 12px 20px 12px 8px;
   min-height: 64px;
   border-bottom: 1px solid var(--border-subtle, rgba(148,163,184,0.18));
   background: transparent;
@@ -1155,16 +1155,70 @@ body {
   cursor: not-allowed;
 }
 
+/* §11-B-7-A Phase 2: drag handle (Lucide GripVertical 流、@dnd-kit DnD)。
+   PC: hover で fade-in (0→0.5)、touch grab で 1.0。
+   モバイル: 常時 small (0.4) 表示で長押し DnD 起動可能。 */
+.ticker-row-v2 .row-drag-handle {
+  width: 24px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.18s ease, color 0.15s ease;
+  touch-action: none;  /* DnD のための touch 制御 */
+  flex-shrink: 0;
+}
+.ticker-row-v2 .row-drag-handle:active {
+  cursor: grabbing;
+}
+.ticker-row-v2:hover .row-drag-handle,
+.ticker-row-v2:focus-within .row-drag-handle {
+  opacity: 0.55;
+}
+.ticker-row-v2:hover .row-drag-handle:hover {
+  opacity: 1;
+  color: var(--text-secondary);
+}
+.ticker-row-v2 .row-drag-handle:focus-visible {
+  outline: 2px solid rgba(75,158,255,0.5);
+  outline-offset: 1px;
+  opacity: 1;
+  border-radius: 4px;
+}
+/* drag 中の行: 浮遊 effect */
+.ticker-row-v2.is-dragging {
+  opacity: 0.4;
+  background: rgba(75,158,255,0.06);
+}
+/* DragOverlay 内の行: scale + shadow で持ち上げ感 */
+.ticker-row-v2.is-drag-overlay {
+  cursor: grabbing;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(75,158,255,0.2);
+  transform: scale(1.015);
+}
+
 /* ── モバイル: hover 不可なのでアクション常時 small 表示 (UI/UX dual mode) ── */
 @media (max-width: 600px) {
   .ticker-row-v2 {
-    grid-template-columns: minmax(100px, 1fr) auto auto;
-    gap: 10px;
-    padding: 10px 14px 10px 18px;
+    grid-template-columns: auto minmax(100px, 1fr) auto auto;
+    gap: 6px;
+    padding: 10px 12px 10px 4px;
     min-height: 56px;
   }
   .ticker-row-v2 .row-actions {
     opacity: 1;  /* 常時表示 */
+  }
+  .ticker-row-v2 .row-drag-handle {
+    opacity: 0.4;
+    width: 20px;
   }
   .ticker-row-v2 .row-logo-wrap {
     width: 32px;
@@ -1182,6 +1236,10 @@ body {
   .ticker-row-v2 .row-action-btn {
     width: 36px;
     height: 36px;
+  }
+  /* モバイルは grid 列数を 4 に絞ったため chevron 非表示 (clickable area 全体で expand 動作) */
+  .ticker-row-v2 .row-expand-chevron {
+    display: none;
   }
 }
 
