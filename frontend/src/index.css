@@ -1001,6 +1001,240 @@ body {
   text-transform: none; /* 日本語ラベルなので uppercase は適用しない */
 }
 
+/* ─── §11-B-7-A: ウォッチリスト リスト UI 刷新 (TickerRow v2) ─── */
+/* 6 体エージェントレビュー全員一致採用、Apple ミニマル + Linear タイポ + Stripe 微グラデのハイブリッド */
+
+/* ── 行 (card は廃止、hairline 区切りのみ。Apple Mail / Linear Issues 流) ── */
+.ticker-row-v2 {
+  position: relative;
+  display: grid;
+  /* PC: ロゴ+情報 / 期間騰落 / 価格+change / アクション */
+  grid-template-columns: minmax(160px, 1fr) auto minmax(120px, auto) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px 12px 24px;
+  min-height: 64px;
+  border-bottom: 1px solid var(--border-subtle, rgba(148,163,184,0.18));
+  background: transparent;
+  transition: background 0.18s ease;
+  cursor: pointer;
+  scroll-margin-top: 80px;
+}
+.ticker-row-v2:hover {
+  background: var(--bg-hover-subtle, rgba(75,158,255,0.04));
+}
+.ticker-row-v2:last-child {
+  border-bottom: none;
+}
+
+/* ── 保有銘柄: 左端 2px ゴールドアクセントバー (金融推奨、ホテルロビー感の核) ── */
+.ticker-row-v2.is-holding::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, #d4af37 0%, #f4cd5d 50%, #d4af37 100%);
+  border-radius: 0 1px 1px 0;
+}
+
+/* ── 銘柄ロゴ: 36px 円形 + 極薄シアンリング + drop shadow (Apple Wallet 風浮遊感) ── */
+.ticker-row-v2 .row-logo-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow:
+    0 0 0 1px rgba(75,158,255,0.12),
+    0 4px 10px rgba(0,0,0,0.25);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+}
+[data-theme="light"] .ticker-row-v2 .row-logo-wrap {
+  box-shadow:
+    0 0 0 1px rgba(75,158,255,0.18),
+    0 2px 6px rgba(0,0,0,0.06);
+}
+
+/* ── ティッカー (大): 22px Bold tracking -0.02em ── */
+.ticker-row-v2 .row-ticker {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── タグ dot (pill 廃止、色のみで識別) ── */
+.ticker-row-v2 .row-tag-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── メタ行 (決算日 + あと N 日): 11px Light ── */
+.ticker-row-v2 .row-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.ticker-row-v2 .row-meta .row-meta-urgent {
+  color: #f59e0b;
+  font-weight: 600;
+}
+.ticker-row-v2 .row-meta .row-meta-critical {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+/* ── 株価 + change% ── */
+.ticker-row-v2 .row-price {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  text-align: right;
+  line-height: 1.1;
+}
+.ticker-row-v2 .row-change {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  margin-top: 3px;
+  letter-spacing: 0.01em;
+}
+.ticker-row-v2 .row-change.up   { color: var(--color-gain); }
+.ticker-row-v2 .row-change.down { color: var(--color-loss); }
+.ticker-row-v2 .row-change.flat { color: var(--text-muted); }
+
+/* ── アクション (⋯ / × など): hover で fade-in ── */
+.ticker-row-v2 .row-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+.ticker-row-v2:hover .row-actions,
+.ticker-row-v2:focus-within .row-actions {
+  opacity: 1;
+}
+.ticker-row-v2 .row-action-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.ticker-row-v2 .row-action-btn:hover:not(:disabled) {
+  background: rgba(127,127,127,0.10);
+  color: var(--text-secondary);
+}
+.ticker-row-v2 .row-action-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ── モバイル: hover 不可なのでアクション常時 small 表示 (UI/UX dual mode) ── */
+@media (max-width: 600px) {
+  .ticker-row-v2 {
+    grid-template-columns: minmax(100px, 1fr) auto auto;
+    gap: 10px;
+    padding: 10px 14px 10px 18px;
+    min-height: 56px;
+  }
+  .ticker-row-v2 .row-actions {
+    opacity: 1;  /* 常時表示 */
+  }
+  .ticker-row-v2 .row-logo-wrap {
+    width: 32px;
+    height: 32px;
+  }
+  .ticker-row-v2 .row-ticker {
+    font-size: 18px;
+  }
+  .ticker-row-v2 .row-price {
+    font-size: 15px;
+  }
+  .ticker-row-v2 .row-change {
+    font-size: 12px;
+  }
+  .ticker-row-v2 .row-action-btn {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* ── 期間タブ (ChartTab 上部、1D/1W/1M/6M/1Y) ── */
+.period-tab-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--bg-subtle, rgba(148,163,184,0.08));
+  border: 1px solid var(--border);
+}
+.period-tab {
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+  font-variant-numeric: tabular-nums;
+}
+.period-tab:hover:not(.is-active) {
+  color: var(--text-secondary);
+  background: rgba(75,158,255,0.06);
+}
+.period-tab.is-active {
+  background: var(--text-primary);
+  color: var(--bg-card);
+}
+
+/* ── 行内の expand ▼ chevron (Lucide 風、控えめに) ── */
+.ticker-row-v2 .row-expand-chevron {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  border-radius: 6px;
+  transition: transform 0.2s ease;
+  pointer-events: none;
+  opacity: 0.5;
+}
+.ticker-row-v2.is-expanded .row-expand-chevron {
+  transform: rotate(180deg);
+  opacity: 0.9;
+}
+
 /* ─── ニュース記事モーダル（リデザイン版） ─── */
 .news-modal-header {
   position: relative;

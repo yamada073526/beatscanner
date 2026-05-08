@@ -15,6 +15,17 @@ const PERIODS = [
   { key: "1y",  label: "年" },
 ];
 
+// §11-B-7-A: 業界標準の英略 (1D/1W/1M/6M/1Y)、Apple Stocks/Robinhood 同様
+const PERIODS_V2 = [
+  { key: "1d",  label: "1D" },
+  { key: "1wk", label: "1W" },
+  { key: "1mo", label: "1M" },
+  { key: "6mo", label: "6M" },
+  { key: "1y",  label: "1Y" },
+];
+
+const SELECTED_PERIOD_KEY = 'wl-selected-period-v2';
+
 // shimmer アニメーション注入（一度だけ）
 if (typeof document !== "undefined" && !document.getElementById("charttab-shimmer-style")) {
   const s = document.createElement("style");
@@ -277,9 +288,19 @@ function MoveButton({ label, onClick, disabled, size = 32 }) {
   );
 }
 
-// ── 銘柄1行 ──────────────────────────────────────────────────────
+// ── 銘柄1行 (§11-B-7-A 全面刷新) ──────────────────────────────────────────────
+// 6 体エージェントレビュー全員一致採用: Apple ミニマル + Linear タイポ + Stripe 微グラデ
+// 「最高級ホテルロビー入場時の驚き・洗練」を目指したリスト UI。
+// 主な変更:
+// - 行高さ 110→64px (PC) / 70→56px (モバイル)
+// - 5 期間横並び廃止 → ChartTab 上部の期間タブで選択中の 1 期間のみ表示 (API 負荷 1/5)
+// - card 化廃止、Apple Mail / Linear Issues 流の hairline 区切り
+// - 保有銘柄に左端 2px ゴールドアクセント (.is-holding)
+// - ロゴ 36px 円形 + 極薄シアンリング + drop shadow (Apple Wallet 風浮遊感)
+// - タイポ階層: 22/18/13/11px、tabular-nums
 const TickerRow = memo(function TickerRow({
   ticker, onSelect, isFirst, isLast, onMove, registerRef, globalPeriodsExpanded,
+  selectedPeriod = '1mo',  // §11-B-7-A: 上部タブで選択された期間 (1d/1wk/1mo/6mo/1y)
   // chip 統合 (P1-1): タグ / 含み損益 / 編集・削除を 1 行内に吸収
   tag = null,
   holding = null,
@@ -375,229 +396,171 @@ const TickerRow = memo(function TickerRow({
     approaching: { color: '#d97706', fontWeight: '500' },
   }[urgency] ?? { color: 'var(--text-muted)' };
 
+  // §11-B-7-A: 選択中の期間の change% を取得 (5 期間横並び廃止)
+  const selectedVal = summary?.performance?.[selectedPeriod];
+  const tagDotColor = tag?.color || tag?.bg_color || '#06b6d4';
+
   return (
-    <div
-      ref={rowRef}
-      className="panel-card border rounded-lg shadow-sm"
-      style={{
-        background: 'var(--bg-card)',
-        borderColor: 'var(--border)',
-        transition: 'transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease',
-        // §11-B-11: scrollIntoView block:'start' 使用時に sticky 検索バー (~64px) の裏に
-        // 隠れないよう margin で予約。Apple Stocks / Linear 標準パターン。
-        scrollMarginTop: '80px',
-      }}
-      onMouseEnter={handleMouseEnter}
-    >
+    <div>
       <div
-        style={{ display: 'flex', alignItems: 'stretch', gap: 0, cursor: 'pointer', userSelect: 'none', overflow: 'hidden', borderRadius: 'inherit' }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}
+        ref={rowRef}
+        className={`ticker-row-v2 ${expanded ? 'is-expanded' : ''} ${holding && inWatchlist ? 'is-holding' : ''}`}
+        onMouseEnter={handleMouseEnter}
         onClick={() => {
           if (!mounted) setMounted(true);
           const opening = !expanded;
           setExpanded(opening);
           if (opening && rowRef.current) {
-            // §11-B-11: block:'center' だと sticky 検索バーの裏に隠れる現象 (UI/UX Q5-3)。
-            // block:'start' + scroll-margin-top で sticky 高さ分オフセット。
-            // CSS の scroll-margin-top は別途 .ticker-row に 80px 適用済 (index.css)。
+            // §11-B-11: block:'start' + scroll-margin-top で sticky 検索バー裏問題回避
             setTimeout(() => {
               rowRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
             }, 50);
           }
         }}
       >
-        {/* 左: ロゴ + 銘柄名・(タグ) + 株価・(PnL) + 次回決算
-            F9: モバイル時は 120px に縮小 (Apple Stocks 標準幅、UI/UX エージェント推奨)。
-            これで騰落率 grid に 30-40px の幅を譲り、5 期間 (日/週/月/半年/年) が
-            すべて見えるようになる。 */}
-        <div style={{ width: isMobile ? 120 : 160, flexShrink: 0, padding: isMobile ? '12px 10px' : '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <CompanyLogo ticker={ticker} size={18} />
-            <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.2 }}>{ticker}</span>
-            {tag && !hideTagPill && (
-              <TagPill tag={tag} size="sm" />
-            )}
-            {!inWatchlist && holding && (
-              <span
-                title="この銘柄はウォッチリストには登録されていませんが、保有記録があります"
-                style={{
-                  fontSize: 9, fontWeight: 600,
-                  padding: '1px 5px', borderRadius: 3,
-                  background: 'var(--bg-subtle)',
-                  color: 'var(--text-muted)',
-                  border: '1px solid var(--border)',
-                  letterSpacing: '0.02em',
-                }}
-              >
-                ⊘ ウォッチ外
-              </span>
-            )}
+        {/* Col 1: ロゴ + ティッカー + tag dot + メタ行 (次回決算) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+          <div className="row-logo-wrap">
+            <CompanyLogo ticker={ticker} size={isMobile ? 28 : 36} />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              {summary ? `$${summary.current_price.toLocaleString()}` : "—"}
-            </span>
-            {holding && (
-              pnl && pnl.status ? (
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span className="row-ticker">{ticker}</span>
+              {tag && !hideTagPill && (
                 <span
-                  className={`wl-pnl-badge wl-pnl-${pnl.status}`}
-                  title={`含み損益: ${pnl.pnlAbs >= 0 ? '+' : ''}$${pnl.pnlAbs.toFixed(2)}${priceRow?.price ? ` (現在値 $${Number(priceRow.price).toFixed(2)})` : ''}`}
+                  className="row-tag-dot"
+                  style={{ background: tagDotColor }}
+                  title={tag.name || ''}
+                  aria-label={`タグ: ${tag.name || ''}`}
+                />
+              )}
+              {!inWatchlist && holding && (
+                <span
+                  title="この銘柄はウォッチリストには登録されていませんが、保有記録があります"
+                  style={{
+                    fontSize: 9, fontWeight: 600,
+                    padding: '1px 5px', borderRadius: 3,
+                    background: 'var(--bg-subtle)',
+                    color: 'var(--text-muted)',
+                    border: '1px solid var(--border)',
+                    letterSpacing: '0.02em',
+                  }}
                 >
-                  {formatPnLPct(pnl.pnlPct)}
-                </span>
-              ) : (
-                <span className="wl-pnl-badge wl-pnl-neutral" title="現在価格を取得中...">…</span>
-              )
-            )}
-          </div>
-          {(summary || summaryErr) && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
-              <span style={{
-                fontSize: 10, fontWeight: 500,
-                background: 'var(--bg-subtle)', color: 'var(--text-secondary)',
-                padding: '2px 6px', borderRadius: 4,
-              }}>
-                次回決算 {summaryErr ? '—' : fmtDate(summary?.next_earnings)}
-              </span>
-              {/* リクエスト 1: 「あと N 日」を pill 外で並列に降格 (Stripe-style sub)。
-                  pill 自体は中立色維持、緊急色は (...) 文字色のみで表現。 */}
-              {daysToEarnings != null && daysToEarnings >= 0 && (
-                <span style={{
-                  fontSize: 10,
-                  color: daysColor(daysToEarnings),
-                  fontWeight: urgency ? 600 : 400,
-                }}>
-                  (あと{daysToEarnings}日)
+                  ⊘ ウォッチ外
                 </span>
               )}
+              {holding && (
+                pnl && pnl.status ? (
+                  <span
+                    className={`wl-pnl-badge wl-pnl-${pnl.status}`}
+                    title={`含み損益: ${pnl.pnlAbs >= 0 ? '+' : ''}$${pnl.pnlAbs.toFixed(2)}${priceRow?.price ? ` (現在値 $${Number(priceRow.price).toFixed(2)})` : ''}`}
+                  >
+                    {formatPnLPct(pnl.pnlPct)}
+                  </span>
+                ) : (
+                  <span className="wl-pnl-badge wl-pnl-neutral" title="現在価格を取得中...">…</span>
+                )
+              )}
             </div>
+            {(summary || summaryErr) && (
+              <div className="row-meta">
+                <span>次回決算 {summaryErr ? '—' : fmtDate(summary?.next_earnings)}</span>
+                {daysToEarnings != null && daysToEarnings >= 0 && (
+                  <span
+                    className={
+                      urgency === 'critical' ? 'row-meta-critical' :
+                      urgency === 'urgent'   ? 'row-meta-urgent'   : ''
+                    }
+                  >
+                    (あと{daysToEarnings}日)
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Col 2: 株価 + change% (選択中の期間) */}
+        <div style={{ minWidth: isMobile ? 70 : 100 }}>
+          <div className="row-price">
+            {summary ? `$${summary.current_price.toLocaleString()}` : '—'}
+          </div>
+          <div
+            className={`row-change ${
+              selectedVal == null ? 'flat' :
+              selectedVal >= 0    ? 'up'   : 'down'
+            }`}
+          >
+            {summary
+              ? selectedVal == null
+                ? '—'
+                : `${selectedVal >= 0 ? '+' : ''}${selectedVal.toFixed(1)}%`
+              : <span className="skeleton-cell" />
+            }
+          </div>
+        </div>
+
+        {/* Col 3: アクション (PC: hover 出現 / モバイル: 常時 small dual mode) */}
+        <div className="row-actions" onClick={(e) => e.stopPropagation()}>
+          {isMobile ? (
+            <button
+              type="button"
+              className="row-action-btn"
+              onClick={() => onOpenActions?.(ticker)}
+              aria-label={`${ticker} のアクションを開く`}
+            >
+              <MoreHorizontal size={18} strokeWidth={2} aria-hidden />
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="row-action-btn"
+                disabled={isFirst}
+                onClick={() => onMove(ticker, 'up')}
+                aria-label="上に移動"
+              >
+                <ArrowUp size={16} strokeWidth={2} aria-hidden />
+              </button>
+              <button
+                type="button"
+                className="row-action-btn"
+                disabled={isLast}
+                onClick={() => onMove(ticker, 'down')}
+                aria-label="下に移動"
+              >
+                <ArrowDown size={16} strokeWidth={2} aria-hidden />
+              </button>
+              {onTagClick && (
+                <button
+                  type="button"
+                  className="row-action-btn"
+                  onClick={() => onTagClick(ticker)}
+                  aria-label="タグ・保有編集"
+                >
+                  <Tag size={15} strokeWidth={2} aria-hidden />
+                </button>
+              )}
+              {onRemove && inWatchlist && (
+                <button
+                  type="button"
+                  className="row-action-btn"
+                  onClick={() => onRemove(ticker)}
+                  aria-label="削除"
+                >
+                  <X size={16} strokeWidth={2} aria-hidden />
+                </button>
+              )}
+            </>
           )}
         </div>
 
-        {/* 騰落率グリッド：PC 5列 / モバイル 4列（半年非表示） */}
-        {(() => {
-          // F9 (UI/UX 推奨): 左カラム縮小 + フォント 11px + cellPadding 微調整で
-          // 全 5 期間 (日/週/月/半年/年) を表示。Apple Stocks / Robinhood と同等密度。
-          const cellPadding = isMobile ? '7px 1px' : '10px 0';
-          const cellGap     = isMobile ? 2 : 5;
-          const valSize     = isMobile ? '11px' : '16px';
-          const lblSize     = isMobile ? '9px' : '10px';
-          const cols = periodsExpanded
-            ? 'repeat(5,1fr)'
-            : 'repeat(3,1fr)';
-          return (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: cols,
-              flex: 1,
-              background: 'var(--bg-subtle)',
-              borderRadius: 6,
-              margin: '8px 0',
-              overflow: 'hidden',
-              alignSelf: 'center',
-            }}>
-              {PERIODS.map(({ key, label }, idx) => {
-                if (!periodsExpanded && (key === '6mo' || key === '1y')) return null;
-                const val = summary?.performance?.[key];
-                const isLastVisible = periodsExpanded
-                  ? idx === PERIODS.length - 1
-                  : key === '1mo';
-                const color = val == null ? 'var(--text-muted)'
-                            : val >= 0 ? 'var(--color-gain)' : 'var(--color-loss)';
-                return (
-                  <div key={key} style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: cellPadding,
-                    gap: cellGap,
-                    borderRight: isLastVisible ? 'none' : '0.5px solid var(--border)',
-                  }}>
-                    <span style={{ fontSize: lblSize, color: 'var(--text-muted)', lineHeight: 1 }}>{label}</span>
-                    {summary
-                      ? <span style={{ fontSize: valSize, fontWeight: 600, lineHeight: 1, color }}>
-                          {val == null ? '—' : `${val >= 0 ? '+' : ''}${val.toFixed(1)}%`}
-                        </span>
-                      : <span className="skeleton-cell" />
-                    }
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })()}
-
-        {/* 期間展開／折りたたみボタン: P1-1 補正で削除済 (リスト上部の
-            「日・週・月」「+半年・年」セグメントに集約、行内ボタン詰まり感解消) */}
-
-        {/* F8: モバイルは ⋯ 1 ボタン (44×44, Apple HIG 準拠) で bottom sheet 起動。
-            デスクトップは現状の 4 ボタン縦積みを維持 (mouse 精度十分) */}
-        {isMobile ? (
-          <div
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', flexShrink: 0 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={() => onOpenActions?.(ticker)}
-              aria-label={`${ticker} のアクションを開く`}
-              style={{
-                width: 44,
-                height: 44,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'transparent',
-                border: 'none',
-                borderRadius: 8,
-                color: 'var(--text-muted)',
-                cursor: 'pointer',
-                transition: 'background 0.15s, color 0.15s',
-              }}
-              onTouchStart={(e) => { e.currentTarget.style.background = 'rgba(127,127,127,0.18)'; }}
-              onTouchEnd={(e) => { e.currentTarget.style.background = 'transparent'; }}
-            >
-              <MoreHorizontal size={20} strokeWidth={2} aria-hidden />
-            </button>
-          </div>
-        ) : (
-          <div
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 2px', flexShrink: 0, gap: 0 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <MoveButton label="↑" disabled={isFirst} onClick={() => onMove(ticker, 'up')} size={28} />
-            <MoveButton label="↓" disabled={isLast}  onClick={() => onMove(ticker, 'down')} size={28} />
-            {onTagClick && (
-              <MoveButton label="⋯" onClick={() => onTagClick(ticker)} size={28} />
-            )}
-            {onRemove && inWatchlist && (
-              <MoveButton label="×" onClick={() => onRemove(ticker)} size={28} />
-            )}
-          </div>
-        )}
-
-        {/* P0-1 (5 体レビュー): ▼ 矢印は右端から下端独立行へ移動 (詰まり感解消、視覚アフォーダンス維持) */}
-      </div>
-
-      {/* ▼ 展開チェブロン: グリッド直下、横全幅で独立行配置 */}
-      <div
-        aria-hidden
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '4px 0 6px',
-          fontSize: 12,
-          color: 'var(--text-muted)',
-          borderTop: '1px solid var(--border-subtle, transparent)',
-          transition: 'transform 0.2s',
-          transform: expanded ? 'rotate(180deg)' : 'none',
-          pointerEvents: 'none',
-        }}
-      >
-        ▼
+        {/* Col 4: 展開 chevron (グリッド最右、控えめに) */}
+        <div className="row-expand-chevron" aria-hidden>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </div>
       </div>
 
       <div
@@ -799,6 +762,19 @@ export default memo(function ChartTab({
     } catch {}
   };
 
+  // §11-B-7-A: 選択中の期間 (1D/1W/1M/6M/1Y、default 1M)
+  const [selectedPeriod, setSelectedPeriodState] = useState(() => {
+    try {
+      const v = localStorage.getItem(SELECTED_PERIOD_KEY);
+      if (v && PERIODS_V2.find((p) => p.key === v)) return v;
+    } catch {}
+    return '1mo';
+  });
+  const setSelectedPeriod = (v) => {
+    setSelectedPeriodState(v);
+    try { localStorage.setItem(SELECTED_PERIOD_KEY, v); } catch {}
+  };
+
   // 最新の props を ref に保持（handleMove を stable にするため）
   const onMoveRef = useRef(onMove);
   const watchlistRef = useRef(watchlist);
@@ -868,33 +844,45 @@ export default memo(function ChartTab({
   }
 
   return (
-    <div className="space-y-2 pb-8">
-      {/* 全銘柄一括期間切替 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingBottom: 4 }}>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>全銘柄:</span>
-        {[
-          { label: '日・週・月', expanded: false },
-          { label: '+半年・年', expanded: true },
-        ].map(({ label, expanded }) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => setGlobalPeriodsExpanded(expanded)}
-            style={{
-              fontSize: 11, padding: '3px 8px', borderRadius: 4,
-              border: '1px solid var(--border)',
-              cursor: 'pointer',
-              background: globalPeriodsExpanded === expanded ? 'var(--text-primary)' : 'var(--bg-card)',
-              color:      globalPeriodsExpanded === expanded ? 'var(--bg-primary)'  : 'var(--text-secondary)',
-              fontWeight: globalPeriodsExpanded === expanded ? 600 : 400,
-              transition: 'background 0.15s, color 0.15s',
-            }}
-          >
-            {label}
-          </button>
-        ))}
+    <div className="pb-8" style={{ background: 'transparent' }}>
+      {/* §11-B-7-A: 期間タブ (1D/1W/1M/6M/1Y、Apple Stocks 流) を上部に集約。
+          各行は選択中の 1 期間のみ表示 → 行高さ削減 + API 負荷 1/5 (金融推奨)。
+          ChartTab はこれまで card list だったが、Apple Mail / Linear Issues 流の
+          hairline 区切りに刷新 (背景なし)。 */}
+      <div
+        role="group"
+        aria-label="期間"
+        style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          paddingBottom: 12,
+        }}
+      >
+        <div className="period-tab-bar" role="tablist">
+          {PERIODS_V2.map(({ key, label }) => (
+            <button
+              key={key}
+              role="tab"
+              type="button"
+              aria-selected={selectedPeriod === key}
+              onClick={() => setSelectedPeriod(key)}
+              className={`period-tab ${selectedPeriod === key ? 'is-active' : ''}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
+      {/* §11-B-7-A: 行コンテナ (Apple Mail/Linear Issues 流の hairline 区切り、card 化なし) */}
+      <div
+        style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderRadius: 12,
+          overflow: 'hidden',
+        }}
+      >
       {watchlist.map((ticker, idx) => {
         const tagId = assignments[ticker];
         // watchlistSet が渡されていればその有無、未指定 (判定タブ等) なら true 扱い
@@ -909,6 +897,7 @@ export default memo(function ChartTab({
             onMove={handleMove}
             registerRef={registerRef}
             globalPeriodsExpanded={globalPeriodsExpanded}
+            selectedPeriod={selectedPeriod}
             tag={tagId ? tagsById[tagId] : null}
             holding={holdings[ticker]}
             priceRow={prices[ticker]}
@@ -920,6 +909,7 @@ export default memo(function ChartTab({
           />
         );
       })}
+      </div>
       {actionSheetTicker && (() => {
         const idx = watchlist.indexOf(actionSheetTicker);
         const inWl = watchlistSet ? watchlistSet.has(actionSheetTicker) : true;
