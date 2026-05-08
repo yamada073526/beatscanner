@@ -297,19 +297,35 @@ def generate_og_image(
 
     # === ヘッダー: ロゴ + ブランド名 + 日付 ===
     # §11-C-2-A: favicon.svg と完全統一 (4x supersampling + LANCZOS で anti-aliasing)
-    _draw_logo_favicon(img, x=70, y=60, size=72)
-    draw.text((160, 76), "BeatScanner", font=font_brand, fill=_TEXT_PRIMARY)
-    draw.text((_CANVAS_W - 70 - 280, 92), date_str, font=font_date, fill=_TEXT_MUTED, anchor=None)
+    # §11-C-2-A v2: ロゴと「BeatScanner」テキストを共通の縦中央 Y で揃える。
+    # anchor="lm" (left, middle) を使って Pillow text の描画位置を明示的に縦中央化。
+    LOGO_SIZE = 88
+    HEADER_CENTER_Y = 100
+    _draw_logo_favicon(img, x=70, y=HEADER_CENTER_Y - LOGO_SIZE // 2, size=LOGO_SIZE)
+    draw.text(
+        (70 + LOGO_SIZE + 18, HEADER_CENTER_Y),
+        "BeatScanner",
+        font=font_brand,
+        fill=_TEXT_PRIMARY,
+        anchor="lm",
+    )
+    draw.text(
+        (_CANVAS_W - 70, HEADER_CENTER_Y),
+        date_str,
+        font=font_date,
+        fill=_TEXT_MUTED,
+        anchor="rm",  # right, middle
+    )
 
-    # 区切り線
+    # 区切り線 (ロゴ下端 y=144 から余白 36px)
     draw.line(
-        ((70, 170), (_CANVAS_W - 70, 170)),
+        ((70, 180), (_CANVAS_W - 70, 180)),
         fill=(75, 158, 255, 80),
         width=1,
     )
 
     # === ⭐ 最注目イベント (中央大表示) ===
-    y_offset = 210
+    y_offset = 220
     if spotlight_event:
         _draw_star(draw, cx=98, cy=y_offset + 18, size=22, color=_AMBER)
         draw.text((130, y_offset), "今日の最注目", font=font_section, fill=_AMBER)
