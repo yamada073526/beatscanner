@@ -191,8 +191,7 @@ export default function HomeTab({
   );
 
   const watchlistSection = (
-    <section key="watchlist" className="panel-card rounded-2xl px-6 pt-4 pb-6 shadow-sm"
-             style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+    <section key="watchlist" className="bs-panel">
       <h3 className="section-heading">
         ウォッチリスト
         {watchlist.length > 0 && (
@@ -242,7 +241,10 @@ export default function HomeTab({
       ) : (
         <>
           {user ? (
-            <div className="wl-filters-row" role="group" aria-label="ウォッチリストフィルタ">
+            // §11-B-7-B Phase A: 統合 filter bar (Linear 流、UI/UX 推奨)
+            // 左: 保有/観察 segment + タグ chip
+            // 右: 連動ヒント (フィルタが ChartTab・ポートフォリオに同時反映される旨)
+            <div className="wl-filters-row bs-filter-bar" role="group" aria-label="ウォッチリストフィルタ">
               <div className="wl-mode-segment" role="group" aria-label="表示モード">
                 <button
                   type="button"
@@ -272,6 +274,15 @@ export default function HomeTab({
                 onSelectFilter={onChangeTagFilter}
                 onOpenManager={onOpenTagManager}
               />
+              <div className="bs-filter-bar-spacer" />
+              {/* 右側: 連携ヒント (UI/UX エージェント指摘の右空白問題解消) */}
+              <span className="bs-filter-bar-hint" title="フィルタは下のチャートと連動します">
+                <svg className="bs-filter-bar-hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M7 17l5-5 5 5"/>
+                  <path d="M7 12l5-5 5 5"/>
+                </svg>
+                チャートに連動
+              </span>
             </div>
           ) : (
             <button

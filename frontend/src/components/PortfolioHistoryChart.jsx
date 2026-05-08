@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePortfolioHistory } from '../hooks/usePortfolioHistory.js';
+import { useSpyHistory, computeSpyAlpha } from '../hooks/useSpyHistory.js';
 
 const PERIODS = [
   { key: '1m', label: '1M' },
@@ -54,13 +55,24 @@ function pickPalette(status, isDark) {
   return isDark ? p.dark : p.light;
 }
 
+// §11-B-7-B Phase A: portfolio period に対応する SPY history の period mapping
+// usePortfolioHistory の period (1m/3m/1y) と price-history endpoint の period (1mo/3mo/1y) は別命名
+const PERIOD_TO_SPY = {
+  '1m': '1mo',
+  '3m': '3mo',
+  '1y': '1y',
+};
+
 export default function PortfolioHistoryChart({ lots = [] }) {
   const [period, setPeriod] = useState('3m');
+  const [showSpy, setShowSpy] = useState(true);  // §11-B-7-B: SPY overlay default ON
   const { series, loading } = usePortfolioHistory(lots, period);
+  const { points: spyPoints } = useSpyHistory(PERIOD_TO_SPY[period] || '3mo');
 
   const containerRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
+  const spySeriesRef = useRef(null);
   const [chartReady, setChartReady] = useState(false);
 
   // ── 期間収益 (始端 → 終端) を chart 構築前に算出して line/area 色に反映 ──
@@ -74,6 +86,9 @@ export default function PortfolioHistoryChart({ lots = [] }) {
       pctDelta: ((last - first) / first) * 100,
     };
   })();
+
+  // §11-B-7-B: SPY 比較 alpha (portfolio % − SPY %)
+  const spyAlpha = computeSpyAlpha(series, spyPoints);
 
   const status = periodReturn
     ? (periodReturn.pctDelta > 0.05 ? 'gain' : (periodReturn.pctDelta < -0.05 ? 'loss' : 'neutral'))
@@ -141,6 +156,39 @@ export default function PortfolioHistoryChart({ lots = [] }) {
           .filter((p) => p && p.date && Number.isFinite(Number(p.value)))
           .map((p) => ({ time: p.date, value: Number(p.value) }));
         areaSeries.setData(data);
+
+        // §11-B-7-B Phase A: SPY overlay (Personal Capital 流の指数比較)
+        // SPY を portfolio start value にスケール normalize して同一 axis で比較
+        if (showSpy && Array.isArray(spyPoints) && spyPoints.length >= 2 && data.length >= 2) {
+          const portfolioStart = data[0].value;
+          const portfolioStartDate = data[0].time;
+          // SPY: portfolio 開始日以降の最初のポイント以降を採用
+          const spyStartIdx = spyPoints.findIndex((p) => p.date >= portfolioStartDate);
+          const spyStart = spyPoints[Math.max(0, spyStartIdx)]?.close;
+          if (Number.isFinite(spyStart) && spyStart > 0) {
+            const spyData = spyPoints
+              .slice(Math.max(0, spyStartIdx))
+              .filter((p) => p && p.date && Number.isFinite(Number(p.close)))
+              .map((p) => ({
+                time: p.date,
+                value: portfolioStart * (Number(p.close) / spyStart),
+              }));
+
+            if (spyData.length >= 2) {
+              const spySeries = chart.addSeries(lc.LineSeries, {
+                color: isDark ? '#94a3b8' : '#64748b',  // slate-400 / slate-500 (subtle)
+                lineWidth: 1.5,
+                lineStyle: 2,  // dashed
+                priceLineVisible: false,
+                lastValueVisible: false,
+                crosshairMarkerVisible: false,
+              });
+              spySeries.setData(spyData);
+              spySeriesRef.current = spySeries;
+            }
+          }
+        }
+
         chart.timeScale().fitContent();
       }
 
@@ -154,8 +202,9 @@ export default function PortfolioHistoryChart({ lots = [] }) {
         chartRef.current = null;
       }
       seriesRef.current = null;
+      spySeriesRef.current = null;
     };
-  }, [series, status]);
+  }, [series, status, spyPoints, showSpy]);
 
   // ── リサイズ追従 ──
   useEffect(() => {
@@ -181,6 +230,22 @@ export default function PortfolioHistoryChart({ lots = [] }) {
               </span>
             </span>
           )}
+          {/* §11-B-7-B Phase A: SPY 比較 alpha バッジ (Robinhood 流の主見出し右) */}
+          {showSpy && Number.isFinite(spyAlpha.alphaPct) && (
+            <span
+              className={`bs-spy-badge ${
+                spyAlpha.alphaPct > 0.5 ? 'win'
+                : spyAlpha.alphaPct < -0.5 ? 'lose'
+                : 'neutral'
+              }`}
+              title={`あなた: ${fmtSignedPct(spyAlpha.portfolioPct)} / SPY: ${fmtSignedPct(spyAlpha.spyPct)}`}
+            >
+              <span className="bs-spy-badge-arrow">
+                {spyAlpha.alphaPct > 0.5 ? '▲' : spyAlpha.alphaPct < -0.5 ? '▼' : '＝'}
+              </span>
+              vs SPY {fmtSignedPct(spyAlpha.alphaPct)}
+            </span>
+          )}
         </div>
         <div className="pd-history-period-tabs" role="tablist" aria-label="表示期間">
           {PERIODS.map((p) => (
@@ -195,6 +260,16 @@ export default function PortfolioHistoryChart({ lots = [] }) {
               {p.label}
             </button>
           ))}
+          {/* §11-B-7-B: SPY overlay toggle */}
+          <button
+            type="button"
+            className={`pd-history-period-tab ${showSpy ? 'is-active' : ''}`}
+            onClick={() => setShowSpy(!showSpy)}
+            aria-pressed={showSpy}
+            title={showSpy ? 'SPY 比較を非表示' : 'SPY 比較を表示'}
+          >
+            SPY
+          </button>
         </div>
       </div>
       <div className="pd-history-body">

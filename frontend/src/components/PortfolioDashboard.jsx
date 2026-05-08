@@ -157,56 +157,64 @@ export default function PortfolioDashboard({
   const dayStatus = statusFromPct(totals.dayChangePct);
   const pnlStatus = statusFromPct(totals.totalPnlPct);
 
+  // §11-B-7-B Phase A: ヒーロー部用の次回決算情報を一度だけ算出
+  const upcomingEarnings = (() => {
+    const candidates = rows
+      .filter((r) => Number.isFinite(r.daysToEarnings) && r.daysToEarnings >= 0)
+      .sort((a, b) => a.daysToEarnings - b.daysToEarnings);
+    return candidates[0] || null;
+  })();
+  const earnLabel = upcomingEarnings
+    ? (upcomingEarnings.daysToEarnings === 0 ? '今日' : `${upcomingEarnings.ticker} D-${upcomingEarnings.daysToEarnings}`)
+    : '—';
+  const earnIsUrgent = upcomingEarnings && upcomingEarnings.daysToEarnings <= 7;
+
   return (
-    <section className="portfolio-dashboard panel-card rounded-2xl px-6 pt-4 pb-6 shadow-sm"
-             style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-      <h3 className="section-heading">
+    <section className="portfolio-dashboard bs-panel bs-panel-hero">
+      <h3 className="section-heading" style={{ marginBottom: 18 }}>
         ポートフォリオ
         <span className="section-heading-count">{tickers.length} 銘柄</span>
       </h3>
 
-      {/* ── サマリー KPI 4 枚 ─────────────────────────────── */}
-      {/* レビュー指摘 (UI/UX #1): % を一次情報、$ 金額を二次に降格。
-          ポートフォリオサイズに依存しない % のほうが「儲かっている／いない」
-          が一目で判断できる (設計原則 ① 2 秒でわかる)。 */}
-      <div className="pd-summary-grid">
-        <SummaryCard
-          label="当日変動"
-          value={Number.isFinite(totals.dayChangePct) ? fmtSignedPct(totals.dayChangePct) : '—'}
-          sub={fmtSignedUSD(totals.dayChangeAbs)}
-          status={dayStatus}
-          primary
-        />
-        <SummaryCard
-          label="評価額"
-          value={`$${fmtUSD(totals.totalValue)}`}
-          sub={`取得 $${fmtUSD(totals.totalCost)}`}
-          status="neutral"
-        />
-        <SummaryCard
-          label="含み損益"
-          value={Number.isFinite(totals.totalPnlPct) ? fmtSignedPct(totals.totalPnlPct) : '—'}
-          sub={fmtSignedUSD(totals.totalPnlAbs)}
-          status={pnlStatus}
-        />
-        <SummaryCard
-          label="次回決算"
-          value={(() => {
-            const upcoming = rows
-              .filter((r) => Number.isFinite(r.daysToEarnings) && r.daysToEarnings >= 0)
-              .sort((a, b) => a.daysToEarnings - b.daysToEarnings)[0];
-            if (!upcoming) return '—';
-            return upcoming.daysToEarnings === 0 ? '今日' : `${upcoming.ticker} D-${upcoming.daysToEarnings}`;
-          })()}
-          sub="保有銘柄で最も近い"
-          status={(() => {
-            const upcoming = rows
-              .filter((r) => Number.isFinite(r.daysToEarnings) && r.daysToEarnings >= 0)
-              .sort((a, b) => a.daysToEarnings - b.daysToEarnings)[0];
-            if (!upcoming) return 'neutral';
-            return upcoming.daysToEarnings <= 7 ? 'amber' : 'neutral';
-          })()}
-        />
+      {/* §11-B-7-B Phase A: ヒーロー部 (Stripe Dashboard 流)
+          評価額を主役に大数字 + 当日変動・含み損益・次回決算は副 stat として横並び。
+          視線誘導: 大数字 → 当日 → 含み損益 → 次回決算 (左→右、F-pattern)。 */}
+      <div className="pd-hero">
+        <div className="pd-hero-main">
+          <div className="bs-stat-hero-label">評価額</div>
+          <div className="bs-stat-hero">${fmtUSD(totals.totalValue)}</div>
+          <div className="bs-stat-hero-sub">
+            取得 ${fmtUSD(totals.totalCost)}
+            {Number.isFinite(totals.totalPnlPct) && (
+              <span style={{ marginLeft: 12, color: pnlStatus === 'gain' ? 'var(--color-gain)' : pnlStatus === 'loss' ? 'var(--color-loss)' : 'var(--text-muted)' }}>
+                {fmtSignedPct(totals.totalPnlPct)} ({fmtSignedUSD(totals.totalPnlAbs)})
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="pd-hero-secondary">
+          <div className="bs-stat-secondary">
+            <div className="bs-stat-secondary-label">当日変動</div>
+            <div className={`bs-stat-secondary-value ${dayStatus === 'gain' ? 'up' : dayStatus === 'loss' ? 'down' : ''}`}>
+              {Number.isFinite(totals.dayChangePct) ? fmtSignedPct(totals.dayChangePct) : '—'}
+            </div>
+            <div className="bs-stat-secondary-sub">{fmtSignedUSD(totals.dayChangeAbs)}</div>
+          </div>
+          <div className="bs-stat-secondary">
+            <div className="bs-stat-secondary-label">含み損益</div>
+            <div className={`bs-stat-secondary-value ${pnlStatus === 'gain' ? 'up' : pnlStatus === 'loss' ? 'down' : ''}`}>
+              {Number.isFinite(totals.totalPnlPct) ? fmtSignedPct(totals.totalPnlPct) : '—'}
+            </div>
+            <div className="bs-stat-secondary-sub">{fmtSignedUSD(totals.totalPnlAbs)}</div>
+          </div>
+          <div className="bs-stat-secondary">
+            <div className="bs-stat-secondary-label">次回決算</div>
+            <div className="bs-stat-secondary-value" style={earnIsUrgent ? { color: '#f59e0b' } : undefined}>
+              {earnLabel}
+            </div>
+            <div className="bs-stat-secondary-sub">保有銘柄で最も近い</div>
+          </div>
+        </div>
       </div>
 
       {/* ── 評価額推移チャート (X-2-5-C) ── 銘柄クリックで絞り込み */}
