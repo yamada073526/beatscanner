@@ -158,33 +158,39 @@ export default function PortfolioHistoryChart({ lots = [] }) {
         areaSeries.setData(data);
 
         // §11-B-7-B Phase A: SPY overlay (Personal Capital 流の指数比較)
-        // SPY を portfolio start value にスケール normalize して同一 axis で比較
+        // SPY を portfolio の最初の非ゼロ値にスケール normalize して同一 axis で比較。
+        // ※ portfolio が 0 開始 (保有開始前) だと旧版は SPY 線が 0 軸に張り付く問題発生 →
+        //    最初の非ゼロ値起点に修正 (ユーザー指摘対応)。
         if (showSpy && Array.isArray(spyPoints) && spyPoints.length >= 2 && data.length >= 2) {
-          const portfolioStart = data[0].value;
-          const portfolioStartDate = data[0].time;
-          // SPY: portfolio 開始日以降の最初のポイント以降を採用
-          const spyStartIdx = spyPoints.findIndex((p) => p.date >= portfolioStartDate);
-          const spyStart = spyPoints[Math.max(0, spyStartIdx)]?.close;
-          if (Number.isFinite(spyStart) && spyStart > 0) {
-            const spyData = spyPoints
-              .slice(Math.max(0, spyStartIdx))
-              .filter((p) => p && p.date && Number.isFinite(Number(p.close)))
-              .map((p) => ({
-                time: p.date,
-                value: portfolioStart * (Number(p.close) / spyStart),
-              }));
+          // 最初の非ゼロ portfolio data point を探す
+          const firstNonZeroIdx = data.findIndex((d) => d.value > 0);
+          if (firstNonZeroIdx >= 0 && firstNonZeroIdx < data.length - 1) {
+            const portfolioStart = data[firstNonZeroIdx].value;
+            const portfolioStartDate = data[firstNonZeroIdx].time;
+            // SPY: portfolio 開始日以降の最初のポイント以降を採用
+            const spyStartIdx = spyPoints.findIndex((p) => p.date >= portfolioStartDate);
+            const spyStart = spyPoints[Math.max(0, spyStartIdx)]?.close;
+            if (Number.isFinite(spyStart) && spyStart > 0) {
+              const spyData = spyPoints
+                .slice(Math.max(0, spyStartIdx))
+                .filter((p) => p && p.date && Number.isFinite(Number(p.close)))
+                .map((p) => ({
+                  time: p.date,
+                  value: portfolioStart * (Number(p.close) / spyStart),
+                }));
 
-            if (spyData.length >= 2) {
-              const spySeries = chart.addSeries(lc.LineSeries, {
-                color: isDark ? '#94a3b8' : '#64748b',  // slate-400 / slate-500 (subtle)
-                lineWidth: 1.5,
-                lineStyle: 2,  // dashed
-                priceLineVisible: false,
-                lastValueVisible: false,
-                crosshairMarkerVisible: false,
-              });
-              spySeries.setData(spyData);
-              spySeriesRef.current = spySeries;
+              if (spyData.length >= 2) {
+                const spySeries = chart.addSeries(lc.LineSeries, {
+                  color: isDark ? '#94a3b8' : '#64748b',
+                  lineWidth: 2,        // 1.5 → 2 で視認性 up
+                  lineStyle: 2,        // dashed
+                  priceLineVisible: false,
+                  lastValueVisible: false,
+                  crosshairMarkerVisible: false,
+                });
+                spySeries.setData(spyData);
+                spySeriesRef.current = spySeries;
+              }
             }
           }
         }

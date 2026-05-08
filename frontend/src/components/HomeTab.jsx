@@ -364,7 +364,12 @@ export default function HomeTab({
       {/* ── ポートフォリオダッシュボード Phase X-2-5-A
             「保有」モード時かつ holdings 1 件以上で展開。Watchlist 上部に出すことで
             「毎日開きたくなる」原則 ② に直結する KPI を最初に視認させる。 ── */}
-      {user && holdingMode === 'hold' && Object.keys(holdings).length > 0 && (
+      {/* §11-B-7-B Phase A: PortfolioDashboard を holdings 1 件以上で常時表示。
+          ユーザー指摘 (2026-05-09): 「保有」トグルで Portfolio が出現/消失すると
+          watchlist の上に挿入され画面がガクガクする (UX 破壊) → 常時表示で安定化。
+          UI/UX エージェントの「保有モード時のみ表示を廃止」推奨にも整合。
+          「保有/観察」segment は ChartTab/WatchlistList のフィルタにのみ作用する。 */}
+      {user && Object.keys(holdings).length > 0 && (
         <Suspense fallback={null}>
           <PortfolioDashboard
             holdings={holdings}
@@ -373,24 +378,6 @@ export default function HomeTab({
             onSelect={onSelect}
           />
         </Suspense>
-      )}
-
-      {/* ── ダッシュボード未展開時のヒントバナー (X-2-5-A 補強)
-            holdings あり & 「保有」モードでない時、ダッシュボードが隠れていることを
-            気づかせる。1 クリック (バナー押下) で hold モードに切替 → 展開。 ── */}
-      {user && holdingMode !== 'hold' && Object.keys(holdings).length > 0 && (
-        <button
-          type="button"
-          onClick={() => onChangeHoldingMode?.('hold')}
-          className="dashboard-hint-banner"
-          aria-label="保有モードに切替してポートフォリオダッシュボードを表示"
-        >
-          <span className="dashboard-hint-icon" aria-hidden="true">📊</span>
-          <span className="dashboard-hint-text">
-            <strong>「保有」モードに切替</strong> で、{Object.keys(holdings).length} 銘柄のポートフォリオダッシュボード（評価額・推移・集中リスク）が表示されます
-          </span>
-          <span className="dashboard-hint-arrow" aria-hidden="true">→</span>
-        </button>
       )}
 
       {/* ── §11-B-8 セクション順序最適化 ──
