@@ -6165,11 +6165,21 @@ async def get_chart_summary(ticker: str):
         except Exception:
             pass
 
+        # §11-B-7-A Phase 1B: スパークライン用に直近 30 日の close を抽出。
+        # frontend で 60×24px の inline SVG として描画 (Apple Stocks 流の「動き」感)。
+        # 既存の 1y daily history を再利用するため追加 fetch なし、コストゼロ。
+        sparkline_window = min(30, len(hist))
+        try:
+            sparkline = [round(float(p), 2) for p in hist["Close"].iloc[-sparkline_window:].tolist()]
+        except Exception:
+            sparkline = []
+
         result = {
             "ticker": ticker,
             "current_price": round(current, 2),
             "performance": performance,
             "next_earnings": next_earnings,
+            "sparkline": sparkline,  # number[] 直近 30 日 daily close
         }
         chart_summary_cache[ticker] = {"data": result, "timestamp": now}
         return result

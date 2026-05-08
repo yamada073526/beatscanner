@@ -1008,8 +1008,8 @@ body {
 .ticker-row-v2 {
   position: relative;
   display: grid;
-  /* PC: drag-handle / ロゴ+情報 / 価格+change / アクション / chevron */
-  grid-template-columns: auto minmax(160px, 1fr) minmax(100px, auto) auto auto;
+  /* PC: drag-handle / ロゴ+情報 / sparkline / 価格+change / アクション / chevron */
+  grid-template-columns: auto minmax(160px, 1fr) auto minmax(100px, auto) auto auto;
   align-items: center;
   gap: 12px;
   padding: 12px 20px 12px 8px;
@@ -1206,6 +1206,7 @@ body {
 }
 
 /* ── モバイル: hover 不可なのでアクション常時 small 表示 (UI/UX dual mode) ── */
+/* ユーザー幅確保のためスパークラインは非表示 (375px では場所が無い) */
 @media (max-width: 600px) {
   .ticker-row-v2 {
     grid-template-columns: auto minmax(100px, 1fr) auto auto;
@@ -1219,6 +1220,10 @@ body {
   .ticker-row-v2 .row-drag-handle {
     opacity: 0.4;
     width: 20px;
+  }
+  /* モバイルではスパークライン非表示 (画面幅優先、price/change を残す) */
+  .ticker-row-v2 .row-sparkline-wrap {
+    display: none;
   }
   .ticker-row-v2 .row-logo-wrap {
     width: 32px;

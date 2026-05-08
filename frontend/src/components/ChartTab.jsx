@@ -21,6 +21,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import CompanyLogo from "./CompanyLogo.jsx";
 import TagPill from "./TagPill.jsx";
+import WatchlistSparkline from "./WatchlistSparkline.jsx";
 import { computePnL, formatPnLPct } from "../lib/holdings.js";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -526,7 +527,14 @@ const TickerRow = memo(function TickerRow({
           </div>
         </div>
 
-        {/* Col 2: 株価 + change% (選択中の期間) */}
+        {/* Col 2: スパークライン (60×24、直近 30 日 daily close、PC のみ表示) */}
+        <div className="row-sparkline-wrap" style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+          {summary?.sparkline?.length >= 2 && (
+            <WatchlistSparkline data={summary.sparkline} width={60} height={24} />
+          )}
+        </div>
+
+        {/* Col 3: 株価 + change% (選択中の期間) */}
         <div style={{ minWidth: isMobile ? 70 : 100 }}>
           <div className="row-price">
             {summary ? `$${summary.current_price.toLocaleString()}` : '—'}
