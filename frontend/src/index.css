@@ -1281,8 +1281,13 @@ body {
 }
 
 /* ── 行内の expand ▼ chevron (Lucide 風、控えめに) ── */
-.ticker-row-v2 .row-expand-chevron {
-  display: inline-flex;
+/* §11-B-7-A 修正: モバイル mobile media query の display:none を上書きしないよう
+   `:not(:where())` 等の higher specificity ではなく、モバイル rule を後に置く設計に変更。
+   ここでは PC default のみ宣言 (mobile @media が後で display:none をかぶせる)。
+   ⚠️ 重要: この rule は mobile @media (max-width: 600px) より前にあるべき。
+   今は CSS ファイル末尾なので、より高い specificity で対応。 */
+.ticker-row-v2 .row-expand-chevron,
+.ticker-row-v2 div.row-expand-chevron {
   width: 28px;
   height: 28px;
   align-items: center;
@@ -1292,6 +1297,18 @@ body {
   transition: transform 0.2s ease;
   pointer-events: none;
   opacity: 0.5;
+}
+/* PC のみ表示、モバイルは非表示 (specificity を上げて確実にモバイル媒体で隠す) */
+@media (min-width: 601px) {
+  .ticker-row-v2 .row-expand-chevron {
+    display: inline-flex;
+  }
+}
+@media (max-width: 600px) {
+  .ticker-row-v2 .row-expand-chevron,
+  .ticker-row-v2 div.row-expand-chevron {
+    display: none !important;
+  }
 }
 .ticker-row-v2.is-expanded .row-expand-chevron {
   transform: rotate(180deg);
