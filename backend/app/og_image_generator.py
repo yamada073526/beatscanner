@@ -74,21 +74,95 @@ def _draw_star(draw: ImageDraw.ImageDraw, cx: int, cy: int, size: int, color: tu
     draw.polygon(points, fill=color)
 
 
-def _draw_logo_circle(draw: ImageDraw.ImageDraw, x: int, y: int, size: int) -> None:
-    """BeatScanner ブランドロゴ風の円 + 心拍波 (favicon 流用)。"""
-    # 円の背景
-    draw.ellipse((x, y, x + size, y + size), fill=_BG, outline=_BRAND_CYAN, width=2)
-    # 心拍波 (簡略化、5 ポイント polyline)
-    cx, cy = x + size // 2, y + size // 2
-    points = [
-        (x + 8, cy),
-        (x + size * 0.3, cy),
-        (x + size * 0.42, cy - size * 0.35),
-        (x + size * 0.58, cy + size * 0.35),
-        (x + size * 0.7, cy),
-        (x + size - 8, cy),
+def _draw_logo_favicon(target: Image.Image, x: int, y: int, size: int) -> None:
+    """BeatScanner ロゴを favicon.svg と完全一致するように描画 (supersampling 込み)。
+
+    favicon.svg 仕様 (viewBox 96x96):
+    - 背景: ダークネイビー円 (cx=48 r=46)
+    - EKG QRS: M10,52 L22,52 L27,67 L35,17 L43,67 L49,52 (stroke #4B9EFF, width 4)
+    - 終端ドット: cx=49 cy=52 r=5
+    - 信号波 内側弧: M56,46 A7 7 0 0 1 56,58 (width 4)
+    - 信号波 外側弧: M64,40 A13 13 0 0 1 64,64 (width 3.5, opacity 0.5)
+
+    supersampling: Pillow Arc anti-aliasing 対策で 4x で描画 → LANCZOS resize で滑らかに。
+    """
+    SS = 4  # supersampling factor
+    s = size * SS
+    layer = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+
+    def scale(v: float) -> int:
+        # viewBox 96 を s に変換
+        return int(round(v / 96.0 * s))
+
+    # 1. 背景円 (cx=48 cy=48 r=46) — ダークネイビー塗り
+    cx_px = scale(48)
+    cy_px = scale(48)
+    r_bg = scale(46)
+    d.ellipse(
+        (cx_px - r_bg, cy_px - r_bg, cx_px + r_bg, cy_px + r_bg),
+        fill=_BG,
+        outline=None,
+    )
+
+    # 2. EKG QRS 波形 (polyline)
+    qrs_points = [
+        (scale(10), scale(52)),
+        (scale(22), scale(52)),
+        (scale(27), scale(67)),
+        (scale(35), scale(17)),
+        (scale(43), scale(67)),
+        (scale(49), scale(52)),
     ]
-    draw.line(points, fill=_BRAND_CYAN, width=3)
+    d.line(qrs_points, fill=_BRAND_CYAN, width=scale(4), joint="curve")
+
+    # 3. 終端ドット (cx=49 cy=52 r=5)
+    dot_x, dot_y = scale(49), scale(52)
+    dot_r = scale(5)
+    d.ellipse(
+        (dot_x - dot_r, dot_y - dot_r, dot_x + dot_r, dot_y + dot_r),
+        fill=_BRAND_CYAN,
+    )
+
+    # 4. 信号波 内側弧: M56,46 A7 7 0 0 1 56,58
+    # SVG の Arc は (56,46) → (56,58) で半径 7 の右開きカーブ。
+    # 中心は (63, 52)、開始 -90° (上)、終了 90° (下)、左半円 → -180° to 180°? 違う
+    # SVG arc (rx=7 ry=7, large-arc-flag=0, sweep-flag=1): 中心は両端点の中点から半径方向
+    # 簡略化: PIL.arc で中心 (63, 52) bbox (56-7=49 ... これでは開始終了が反対)
+    # 実は: 中心は (63, 52)。半径 7。bbox = (56, 45, 70, 59). 開始 270°, 終了 90° (右半円)
+    arc_inner_cx, arc_inner_cy = scale(63), scale(52)
+    arc_inner_r = scale(7)
+    d.arc(
+        (arc_inner_cx - arc_inner_r, arc_inner_cy - arc_inner_r,
+         arc_inner_cx + arc_inner_r, arc_inner_cy + arc_inner_r),
+        start=270, end=90,
+        fill=_BRAND_CYAN,
+        width=scale(4),
+    )
+
+    # 5. 信号波 外側弧: M64,40 A13 13 0 0 1 64,64 (opacity 0.5)
+    # 中心は (64, 52), 半径 13, 右開き
+    # opacity 0.5 → 別 layer で描画して合成
+    outer_layer = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    od = ImageDraw.Draw(outer_layer)
+    arc_outer_cx, arc_outer_cy = scale(64), scale(52)
+    arc_outer_r = scale(13)
+    od.arc(
+        (arc_outer_cx - arc_outer_r, arc_outer_cy - arc_outer_r,
+         arc_outer_cx + arc_outer_r, arc_outer_cy + arc_outer_r),
+        start=270, end=90,
+        fill=_BRAND_CYAN,
+        width=int(scale(3.5)),
+    )
+    # 50% opacity 適用
+    outer_layer.putalpha(outer_layer.split()[3].point(lambda a: a // 2))
+    layer = Image.alpha_composite(layer, outer_layer)
+
+    # supersampling から目標サイズに resize (LANCZOS、滑らか)
+    layer = layer.resize((size, size), Image.LANCZOS)
+
+    # target にペースト
+    target.paste(layer, (x, y), layer)
 
 
 def _truncate_text(text: str, max_len: int) -> str:
@@ -105,6 +179,70 @@ def _truncate_text(text: str, max_len: int) -> str:
         width += cw
         out.append(ch)
     return text
+
+
+# §11-C-2 略称化マップ (5 体エージェントレビュー全員一致採用、金融提案):
+# 米国株投資家層 (じっちゃま信者層) はリテラシー高く、CPI/FOMC/NFP は完全に常識。
+# 略称ない指標は日本語短縮 ("失業保険申請" / "小売売上高")。
+# backend `_EVENT_NAME_JP_MAP` 出力形式 "Consumer Price Index (CPI 消費者物価指数)" から
+# regex で英大文字略称を抽出 → なければハードコード短縮 dict を lookup → 最後に元名先頭。
+import re as _re
+
+# 略称ない指標の日本語短縮 dict (英→日)
+_EVENT_SHORT_JA_MAP: dict[str, str] = {
+    "initial jobless claims": "失業保険申請",
+    "continuing jobless claims": "失業継続",
+    "retail sales": "小売売上高",
+    "core retail sales": "コア小売売上",
+    "industrial production": "鉱工業生産",
+    "capacity utilization": "設備稼働率",
+    "durable goods": "耐久財受注",
+    "factory orders": "製造業受注",
+    "trade balance": "貿易収支",
+    "current account": "経常収支",
+    "leading index": "景気先行指数",
+    "beige book": "ベージュブック",
+    "housing starts": "住宅着工",
+    "building permits": "建設許可",
+    "existing home sales": "中古住宅販売",
+    "new home sales": "新築住宅販売",
+    "pending home sales": "中古住宅販売保留",
+    "case-shiller": "ケース・シラー住宅",
+    "consumer confidence": "消費者信頼感",
+    "michigan consumer sentiment": "ミシガン消費者信頼感",
+    "conference board": "CB 消費者信頼感",
+    "empire state manufacturing": "NY 連銀製造業",
+    "philadelphia fed manufacturing": "フィラ連銀製造業",
+    "philly fed": "フィラ連銀製造業",
+    "chicago pmi": "シカゴ PMI",
+    "dallas fed manufacturing": "ダラス連銀製造業",
+    "import price index": "輸入物価",
+    "export price index": "輸出物価",
+}
+
+_ABBR_RE = _re.compile(r"\(([A-Z][A-Z0-9 \-]{1,9})[ 　][^)]+\)")
+
+
+def _shorten_event_name(name: str) -> str:
+    """イベント名を OGP 用に短縮。
+    優先順位:
+    1. backend 和訳併記 "Foo Bar (CPI 消費者物価指数)" の括弧内英略称 → "CPI"
+    2. 略称ない指標 → 日本語短縮 dict lookup
+    3. fallback: 先頭の英単語数語 (40 文字以内)
+    """
+    if not name:
+        return ""
+    # 1. 括弧内英略称抽出 (例: "(CPI 消費者物価指数)" → "CPI")
+    m = _ABBR_RE.search(name)
+    if m:
+        return m.group(1).strip()
+    # 2. 略称ない指標の日本語短縮
+    name_lower = name.lower()
+    for key, short_ja in _EVENT_SHORT_JA_MAP.items():
+        if key in name_lower:
+            return short_ja
+    # 3. fallback: 元名 (truncate は呼出側責任)
+    return name
 
 
 def generate_og_image(
@@ -154,7 +292,8 @@ def generate_og_image(
     font_url = _load_font(_FONT_REGULAR, 22)
 
     # === ヘッダー: ロゴ + ブランド名 + 日付 ===
-    _draw_logo_circle(draw, x=70, y=60, size=72)
+    # §11-C-2-A: favicon.svg と完全統一 (4x supersampling + LANCZOS で anti-aliasing)
+    _draw_logo_favicon(img, x=70, y=60, size=72)
     draw.text((160, 76), "BeatScanner", font=font_brand, fill=_TEXT_PRIMARY)
     draw.text((_CANVAS_W - 70 - 280, 92), date_str, font=font_date, fill=_TEXT_MUTED, anchor=None)
 
@@ -283,8 +422,9 @@ def prepare_image_data(events: list[dict]) -> tuple[dict | None, list[dict]]:
     us_high.sort(key=lambda x: x.get("date") or "")
 
     spotlight = us_high[0]
+    raw_name = spotlight.get("event") or spotlight.get("event_name") or ""
     spotlight_data = {
-        "name": spotlight.get("event") or spotlight.get("event_name") or "",
+        "name": _shorten_event_name(raw_name),  # 略称化 (CPI / FOMC / NFP 等)
         "date_label": _format_date_label(spotlight.get("date", "")),
         "forecast": spotlight.get("estimate") or spotlight.get("forecast"),
         "previous": spotlight.get("previous"),
@@ -292,7 +432,7 @@ def prepare_image_data(events: list[dict]) -> tuple[dict | None, list[dict]]:
 
     high_list = [
         {
-            "name": e.get("event") or e.get("event_name") or "",
+            "name": _shorten_event_name(e.get("event") or e.get("event_name") or ""),
             "date_label": _format_date_label(e.get("date", "")),
         }
         for e in us_high[:3]

@@ -833,17 +833,22 @@ export default function App() {
             }
           }}
         >
-          {/* Favicon と同じ EKG ロゴを共通利用 (public/favicon.svg) */}
+          {/* Favicon と同じ EKG ロゴを共通利用 (public/favicon.svg)
+              §11-C-2-A: 5 体エージェントレビューで「アプリの顔」改善:
+              - ロゴ 24px → 28px (Notion/Linear 信頼ドメイン水準)
+              - テキスト font-light(300) → font-medium(500) (投資情報サイトのしっかり感)
+              - 16-18px → 18-20px (text-lg md:text-xl)
+              - 命名 "beatscanner" → "BeatScanner" (キャメル統一、3:1 でマーケ/UI/UX/金融が支持) */}
           <img
             src="/favicon.svg"
-            alt="beatscanner"
-            width="24"
-            height="24"
+            alt="BeatScanner"
+            width="28"
+            height="28"
             style={{ flexShrink: 0, display: 'block' }}
           />
-          <h1 className="text-base font-light tracking-tight md:text-lg"
-              style={{ color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
-            beatscanner
+          <h1 className="text-lg font-medium tracking-tight md:text-xl"
+              style={{ color: 'var(--text-primary)', letterSpacing: '-0.012em' }}>
+            BeatScanner
           </h1>
         </div>
 
@@ -1318,7 +1323,7 @@ export default function App() {
                 <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
                   <p className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>📌 概要</p>
                   <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                    beatscanner では、企業の財務健全性を以下の5つの条件で判定しています。5つすべてを満たした企業のみが<strong style={{ color: '#22d3ee' }}>「PASS」</strong>となります。
+                    BeatScanner では、企業の財務健全性を以下の5つの条件で判定しています。5つすべてを満たした企業のみが<strong style={{ color: '#22d3ee' }}>「PASS」</strong>となります。
                   </p>
                 </div>
                 <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
