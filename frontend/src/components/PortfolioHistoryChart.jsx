@@ -141,6 +141,25 @@ export default function PortfolioHistoryChart({ lots = [] }) {
       });
       chartRef.current = chart;
 
+      // §11-B-7-B Phase A v2: SPY 表示時は Indexed (= 100) 方式、非表示時は $ 絶対値方式
+      // 4 体エージェントレビュー全員一致採用 (案 B):
+      // - 両系列を「期間開始日 = 100」で indexed plot → % 成長で比較
+      // - dual-axis の誤読リスク回避、Robinhood 流のリテール訴求
+      // - $0 期間は両系列 plot しない (案 B+C ハイブリッド、Web 開発推奨)
+      const useIndexedMode = showSpy && Array.isArray(spyPoints) && spyPoints.length >= 2;
+
+      // y 軸 fmt: indexed 時は「+X%」、絶対値時は「$X」
+      const priceFormat = useIndexedMode
+        ? {
+            type: 'custom',
+            formatter: (v) => {
+              const pct = v - 100;
+              return `${pct >= 0 ? '+' : ''}${pct.toFixed(0)}%`;
+            },
+            minMove: 0.01,
+          }
+        : undefined;
+
       const areaSeries = chart.addSeries(lc.AreaSeries, {
         topColor:    palette.top,
         bottomColor: palette.bottom,
@@ -148,51 +167,64 @@ export default function PortfolioHistoryChart({ lots = [] }) {
         lineWidth: 2,
         priceLineVisible: false,
         lastValueVisible: false,
+        ...(priceFormat ? { priceFormat } : {}),
       });
       seriesRef.current = areaSeries;
 
       if (Array.isArray(series) && series.length > 0) {
-        const data = series
+        const rawData = series
           .filter((p) => p && p.date && Number.isFinite(Number(p.value)))
           .map((p) => ({ time: p.date, value: Number(p.value) }));
-        areaSeries.setData(data);
 
-        // §11-B-7-B Phase A: SPY overlay (Personal Capital 流の指数比較)
-        // SPY を portfolio の最初の非ゼロ値にスケール normalize して同一 axis で比較。
-        // ※ portfolio が 0 開始 (保有開始前) だと旧版は SPY 線が 0 軸に張り付く問題発生 →
-        //    最初の非ゼロ値起点に修正 (ユーザー指摘対応)。
-        if (showSpy && Array.isArray(spyPoints) && spyPoints.length >= 2 && data.length >= 2) {
-          // 最初の非ゼロ portfolio data point を探す
-          const firstNonZeroIdx = data.findIndex((d) => d.value > 0);
-          if (firstNonZeroIdx >= 0 && firstNonZeroIdx < data.length - 1) {
-            const portfolioStart = data[firstNonZeroIdx].value;
-            const portfolioStartDate = data[firstNonZeroIdx].time;
-            // SPY: portfolio 開始日以降の最初のポイント以降を採用
-            const spyStartIdx = spyPoints.findIndex((p) => p.date >= portfolioStartDate);
-            const spyStart = spyPoints[Math.max(0, spyStartIdx)]?.close;
-            if (Number.isFinite(spyStart) && spyStart > 0) {
-              const spyData = spyPoints
+        if (useIndexedMode) {
+          // 最初の有意な portfolio value (= 初回入金日) を起点 anchor
+          const firstSigIdx = rawData.findIndex((d) => d.value > 0);
+          if (firstSigIdx >= 0 && firstSigIdx < rawData.length - 1) {
+            const portfolioBase = rawData[firstSigIdx].value;
+            const startDate = rawData[firstSigIdx].time;
+
+            // Portfolio: indexed = (value / portfolioBase) * 100
+            const portfolioIndexed = rawData
+              .slice(firstSigIdx)
+              .map((d) => ({
+                time: d.time,
+                value: (d.value / portfolioBase) * 100,
+              }));
+            areaSeries.setData(portfolioIndexed);
+
+            // SPY: anchor 日付以降を indexed = (close / spyBase) * 100
+            const spyStartIdx = spyPoints.findIndex((p) => p.date >= startDate);
+            const spyBase = spyPoints[Math.max(0, spyStartIdx)]?.close;
+            if (Number.isFinite(spyBase) && spyBase > 0) {
+              const spyIndexed = spyPoints
                 .slice(Math.max(0, spyStartIdx))
                 .filter((p) => p && p.date && Number.isFinite(Number(p.close)))
                 .map((p) => ({
                   time: p.date,
-                  value: portfolioStart * (Number(p.close) / spyStart),
+                  value: (Number(p.close) / spyBase) * 100,
                 }));
 
-              if (spyData.length >= 2) {
+              if (spyIndexed.length >= 2) {
                 const spySeries = chart.addSeries(lc.LineSeries, {
                   color: isDark ? '#94a3b8' : '#64748b',
-                  lineWidth: 2,        // 1.5 → 2 で視認性 up
-                  lineStyle: 2,        // dashed
+                  lineWidth: 2,
+                  lineStyle: 2,  // dashed
                   priceLineVisible: false,
                   lastValueVisible: false,
                   crosshairMarkerVisible: false,
+                  priceFormat,
                 });
-                spySeries.setData(spyData);
+                spySeries.setData(spyIndexed);
                 spySeriesRef.current = spySeries;
               }
             }
+          } else {
+            // 有意 portfolio value がない (全期間 $0)、絶対値モードに fallback
+            areaSeries.setData(rawData);
           }
+        } else {
+          // SPY 非表示モード: 絶対値プロット (旧挙動)
+          areaSeries.setData(rawData);
         }
 
         chart.timeScale().fitContent();

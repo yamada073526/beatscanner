@@ -3312,21 +3312,26 @@ body {
 .pd-table tbody tr:last-child td { border-bottom: none; }
 .pd-row {
   cursor: pointer;
-  transition: background-color 0.12s ease, transform 0.12s ease;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
+/* §11-B-7-B Phase A v2: hover 効果を強化 (UI/UX エージェント Linear 流推奨)。
+   rgba(56,189,248,0.10) は微弱でユーザー指摘あり → 0.18 + inset 左ボーダー追加。
+   ChartTab TickerRow と統一の hover 言語、テーブル行で transform は重なりリスク回避。 */
 .pd-row:hover {
-  background: rgba(56, 189, 248, 0.10);
+  background: rgba(56, 189, 248, 0.16);
+  box-shadow: inset 3px 0 0 rgba(56, 189, 248, 0.45);
 }
 [data-theme="dark"] .pd-row:hover {
-  background: rgba(56, 189, 248, 0.14);
-}
-/* 選択中の銘柄 (per-stock filter applied) は左ボーダーで強調 */
-.pd-row.is-selected {
   background: rgba(56, 189, 248, 0.18);
+  box-shadow: inset 3px 0 0 rgba(56, 189, 248, 0.55);
+}
+/* 選択中の銘柄 (per-stock filter applied) は更に強調 */
+.pd-row.is-selected {
+  background: rgba(56, 189, 248, 0.22);
   box-shadow: inset 3px 0 0 rgb(8, 145, 178);
 }
 [data-theme="dark"] .pd-row.is-selected {
-  background: rgba(56, 189, 248, 0.22);
+  background: rgba(56, 189, 248, 0.26);
   box-shadow: inset 3px 0 0 rgb(56, 189, 248);
 }
 .pd-row:focus-visible {
