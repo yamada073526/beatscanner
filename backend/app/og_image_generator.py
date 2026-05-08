@@ -95,14 +95,18 @@ def _draw_logo_favicon(target: Image.Image, x: int, y: int, size: int) -> None:
         # viewBox 96 を s に変換
         return int(round(v / 96.0 * s))
 
-    # 1. 背景円 (cx=48 cy=48 r=46) — ダークネイビー塗り
+    # 1. 背景円 (cx=48 cy=48 r=46) — slate elevated 塗り + cyan 縁取り
+    # ユーザー指摘: 背景 #0B1120 が OGP 背景と同色で円が見えず、cyan EKG だけが
+    # 浮いて「上に偏ってる」印象になる。
+    # 解決: 背景を slightly 明るい slate (#1E293B) に + 明確な cyan 縁取り。
     cx_px = scale(48)
     cy_px = scale(48)
     r_bg = scale(46)
     d.ellipse(
         (cx_px - r_bg, cy_px - r_bg, cx_px + r_bg, cy_px + r_bg),
-        fill=_BG,
-        outline=None,
+        fill=(30, 41, 59),  # slate-800 (#1E293B) — OGP 背景より明るく円が見える
+        outline=(75, 158, 255, 200),  # cyan @ 78% opacity (明確な frame)
+        width=scale(2),
     )
 
     # 2. EKG QRS 波形 (polyline)
