@@ -527,8 +527,10 @@ const TickerRow = memo(function TickerRow({
           </div>
         </div>
 
-        {/* Col 2: スパークライン (60×24、直近 30 日 daily close、PC のみ表示) */}
-        <div className="row-sparkline-wrap" style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+        {/* Col 2: スパークライン (60×24、直近 30 日 daily close、PC のみ表示)
+            display は CSS class 側で制御 (inline style は specificity 最高で
+            モバイルの display:none を上書きしてしまうため) */}
+        <div className="row-sparkline-wrap">
           {summary?.sparkline?.length >= 2 && (
             <WatchlistSparkline data={summary.sparkline} width={60} height={24} />
           )}

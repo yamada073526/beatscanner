@@ -1122,6 +1122,14 @@ body {
 .ticker-row-v2 .row-change.flat { color: var(--text-muted); }
 
 /* ── アクション (⋯ / × など): hover で fade-in ── */
+/* §11-B-7-A Phase 1B: スパークライン wrap (PC は flex 表示、モバイルは @media で非表示)。
+   inline style だと specificity 最高でモバイル媒体上書きできないため CSS class で制御。 */
+.ticker-row-v2 .row-sparkline-wrap {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
 .ticker-row-v2 .row-actions {
   display: flex;
   align-items: center;
@@ -1222,8 +1230,9 @@ body {
     width: 20px;
   }
   /* モバイルではスパークライン非表示 (画面幅優先、price/change を残す) */
+  /* !important で具体的 spec の他 rule に勝つ (Phase 1B 追加した base rule との衝突回避) */
   .ticker-row-v2 .row-sparkline-wrap {
-    display: none;
+    display: none !important;
   }
   .ticker-row-v2 .row-logo-wrap {
     width: 32px;
