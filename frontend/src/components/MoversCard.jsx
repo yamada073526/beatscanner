@@ -52,8 +52,8 @@ function Card({ m, onSelect, onArticleClick, index = 0 }) {
             className="mover-ticker-pill"
             style={{
               fontSize: 12, fontWeight: 700,
-              color: "#2563eb",
-              background: "#dbeafe",
+              color: "rgb(2, 132, 199)",
+              background: "rgba(56, 189, 248, 0.15)",
               padding: "2px 8px", borderRadius: 4,
               display: "inline-block",
             }}
@@ -130,7 +130,7 @@ function Card({ m, onSelect, onArticleClick, index = 0 }) {
               className="mover-arrow"
               style={{
                 fontSize: 12,
-                color: '#378ADD',
+                color: 'rgb(56, 189, 248)',
                 opacity: 0,
                 transition: 'opacity 0.15s',
                 marginLeft: 4,
@@ -334,7 +334,7 @@ export default function MoversCard({ onSelect }) {
         <span style={{
           width: '6px', height: '6px',
           borderRadius: '50%',
-          background: '#22d3ee',
+          background: 'rgb(56, 189, 248)',
           display: 'inline-block',
           flexShrink: 0,
         }} />
@@ -354,8 +354,8 @@ export default function MoversCard({ onSelect }) {
                 flex: 1, padding: '7px 0', borderRadius: '8px', border: 'none',
                 fontSize: '12px', fontWeight: 700, cursor: 'pointer',
                 transition: 'background 0.15s, color 0.15s',
-                background: moversTab === 'gainers' ? '#EAF3DE' : 'var(--bg-secondary)',
-                color: moversTab === 'gainers' ? '#3B6D11' : 'var(--text-muted)',
+                background: moversTab === 'gainers' ? 'rgba(34, 197, 94, 0.14)' : 'var(--bg-secondary)',
+                color: moversTab === 'gainers' ? 'var(--color-gain)' : 'var(--text-muted)',
               }}
             >▲ 急騰 Top 5</button>
             <button
@@ -364,8 +364,8 @@ export default function MoversCard({ onSelect }) {
                 flex: 1, padding: '7px 0', borderRadius: '8px', border: 'none',
                 fontSize: '12px', fontWeight: 700, cursor: 'pointer',
                 transition: 'background 0.15s, color 0.15s',
-                background: moversTab === 'losers' ? '#FCEBEB' : 'var(--bg-secondary)',
-                color: moversTab === 'losers' ? '#A32D2D' : 'var(--text-muted)',
+                background: moversTab === 'losers' ? 'rgba(248, 113, 113, 0.14)' : 'var(--bg-secondary)',
+                color: moversTab === 'losers' ? 'var(--color-loss)' : 'var(--text-muted)',
               }}
             >▼ 急落 Top 5</button>
           </div>
@@ -400,7 +400,7 @@ export default function MoversCard({ onSelect }) {
         >
           {/* 左列: gainers */}
           <div ref={gainersRef}>
-            <div style={{ ...labelBase, background: "#EAF3DE", color: "#3B6D11" }}>▲ 急騰 Top 5</div>
+            <div style={{ ...labelBase, background: "rgba(34, 197, 94, 0.14)", color: "var(--color-gain)" }}>▲ 急騰 Top 5</div>
             {isLoading
               ? Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={`gs-${i}`} />)
               : gainers.map((m, i) => <Card key={m.ticker} m={m} onSelect={onSelect} onArticleClick={openArticle} index={i} />)
@@ -410,7 +410,7 @@ export default function MoversCard({ onSelect }) {
 
           {/* 右列: losers */}
           <div ref={losersRef}>
-            <div style={{ ...labelBase, background: "#FCEBEB", color: "#A32D2D" }}>▼ 急落 Top 5</div>
+            <div style={{ ...labelBase, background: "rgba(248, 113, 113, 0.14)", color: "var(--color-loss)" }}>▼ 急落 Top 5</div>
             {isLoading
               ? Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={`ls-${i}`} />)
               : losers.map((m, i) => <Card key={m.ticker} m={m} onSelect={onSelect} onArticleClick={openArticle} index={i} />)
@@ -455,7 +455,7 @@ export default function MoversCard({ onSelect }) {
             </a>
             {articleModal.loading && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '24px 0', color: 'var(--text-secondary)' }}>
-                <span style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid var(--border)', borderTopColor: '#64748b', display: 'inline-block', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+                <span style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid var(--border)', borderTopColor: 'rgba(148, 163, 184, 0.7)', display: 'inline-block', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
                 <span style={{ fontSize: 14 }}>記事を翻訳中...</span>
                 <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
               </div>
