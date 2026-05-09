@@ -5,6 +5,8 @@ import KpiStrip from './KpiStrip.jsx';
 import VerdictDetail from './VerdictDetail.jsx';
 import SimpleSection from './SimpleSection.jsx';
 import SectionDivider from './SectionDivider.jsx';
+import ProfileCard from './ProfileCard.jsx';
+import EarningsBars from './EarningsBars.jsx';
 import Card from '../../primitives/Card.jsx';
 import SectionHeader from '../../primitives/SectionHeader.jsx';
 import PremiumLock from '../shared/PremiumLock.jsx';
@@ -150,23 +152,14 @@ export default function JudgmentDetail({
 
       {/* === 階層 2: Fundamentals === */}
       <SectionDivider tier={2} />
-      <SimpleSection
-        id="sec-profile"
-        title="Profile"
-        label="COMPANY"
-        empty={result?.companyName ? null : '会社情報を取得中'}
-      >
-        {result?.companyName && (
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            {result.companyName}
-            {result?.dataSource && (
-              <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>
-                · {result.dataSource}
-              </span>
-            )}
-          </div>
-        )}
-      </SimpleSection>
+      <ProfileCard
+        ticker={selectedTicker}
+        companyName={result?.companyName}
+        dataSource={result?.dataSource}
+        latestPeriod={result?.latestPeriod}
+        latestDate={result?.latestDate}
+      />
+      <EarningsBars periods={result?.periods} currency={result?.currency} />
 
       {/* Insights (アナリスト強弱) — 既存 InsightsPanel を Card に内包 */}
       {selectedTicker && (
