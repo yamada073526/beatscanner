@@ -12,12 +12,19 @@ const PERIODS = [
   { label: '3年',   value: '3y' },
 ];
 
+// Recharts は CSS var を直接受けないため固定 RGB. 両モードで視認できる中庸値.
 const VERDICT_COLOR = {
-  beat:    '#22c55e',
-  miss:    '#ef4444',
-  inline:  '#888780',
-  unknown: '#94a3b8',
+  beat:    'rgb(34, 197, 94)',     // green-500 — 両モードでバランス
+  miss:    'rgb(248, 113, 113)',   // red-400 — 両モードでバランス
+  inline:  'rgba(148, 163, 184, 0.85)', // slate-400 alpha
+  unknown: 'rgba(148, 163, 184, 0.6)',
 };
+
+// チャート軸・グリッド・ツールチップ共通色 (両モード対応の neutral)
+const CHART_GRID   = 'rgba(148, 163, 184, 0.25)';
+const CHART_AXIS   = 'rgba(148, 163, 184, 0.7)';
+const CHART_CURSOR = 'rgba(148, 163, 184, 0.5)';
+const CHART_PRICE  = 'rgb(56, 189, 248)'; // brand cyan (sky-400)
 
 const VERDICT_LABEL = {
   beat:    '▲ Beat',
@@ -73,8 +80,11 @@ function EarningsTooltip({ active, payload, label, earningsMap }) {
       <p className="mb-1 font-medium text-slate-500">{label}</p>
 
       {price != null && (
-        <p className="text-slate-700">
-          終値: <span className="font-semibold text-slate-900">${Number(price).toFixed(2)}</span>
+        <p style={{ color: 'var(--text-secondary)' }}>
+          終値:{' '}
+          <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+            ${Number(price).toFixed(2)}
+          </span>
         </p>
       )}
 
@@ -83,9 +93,9 @@ function EarningsTooltip({ active, payload, label, earningsMap }) {
           className="mt-2 border-t pt-2"
           style={{
             borderColor:
-              e.verdict === 'beat' ? '#bbf7d0'
-              : e.verdict === 'miss' ? '#fecaca'
-              : '#fef9c3',
+              e.verdict === 'beat' ? 'rgba(34, 197, 94, 0.35)'
+              : e.verdict === 'miss' ? 'rgba(248, 113, 113, 0.35)'
+              : 'rgba(245, 158, 11, 0.35)',
           }}
         >
           {/* Verdict badge */}
@@ -103,18 +113,20 @@ function EarningsTooltip({ active, payload, label, earningsMap }) {
 
           {/* EPS line */}
           {e.epsActual != null && (
-            <p className="mt-0.5 text-slate-500">
+            <p className="mt-0.5" style={{ color: 'var(--text-muted)' }}>
               {quarterLabel(e.date)} EPS:{' '}
-              <strong className="text-slate-800">${e.epsActual.toFixed(2)}</strong>
+              <strong style={{ color: 'var(--text-primary)' }}>
+                ${e.epsActual.toFixed(2)}
+              </strong>
               {e.epsEstimated != null && (
-                <span className="text-slate-400">（予想: ${e.epsEstimated.toFixed(2)}）</span>
+                <span style={{ color: 'var(--text-muted)' }}>（予想: ${e.epsEstimated.toFixed(2)}）</span>
               )}
             </p>
           )}
 
           {/* verdict_reason — unknown 時のみ理由テキストを追記 */}
           {e.verdict === 'unknown' && e.verdict_reason && (
-            <p className="mt-1 text-[11px] italic text-slate-500">
+            <p className="mt-1 text-[11px] italic" style={{ color: 'var(--text-muted)' }}>
               {e.verdict_reason}
             </p>
           )}
@@ -181,7 +193,10 @@ export default function StockPriceChart({ ticker }) {
 
       {/* Loading */}
       {loading && (
-        <div className="flex h-64 items-center justify-center text-sm text-slate-400">
+        <div
+          className="flex h-64 items-center justify-center text-sm"
+          style={{ color: 'var(--text-muted)' }}
+        >
           読み込み中...
         </div>
       )}
@@ -195,17 +210,17 @@ export default function StockPriceChart({ ticker }) {
                 data={data.prices}
                 margin={{ top: 36, right: 16, left: 0, bottom: 8 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
                 <XAxis
                   dataKey="date"
                   tickFormatter={(d) => d.slice(0, 7)}
                   interval="preserveStartEnd"
-                  stroke="#64748b"
+                  stroke={CHART_AXIS}
                   tick={{ fontSize: 11 }}
                 />
                 <YAxis
                   domain={['auto', 'auto']}
-                  stroke="#64748b"
+                  stroke={CHART_AXIS}
                   tick={{ fontSize: 11 }}
                   tickFormatter={(v) => `$${v}`}
                   width={58}
@@ -214,17 +229,17 @@ export default function StockPriceChart({ ticker }) {
                 {/* Custom tooltip with earnings hover info */}
                 <Tooltip
                   content={<EarningsTooltip earningsMap={earningsMap} />}
-                  cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '4 2' }}
+                  cursor={{ stroke: CHART_CURSOR, strokeWidth: 1, strokeDasharray: '4 2' }}
                 />
 
                 {/* Price line */}
                 <Line
                   type="monotone"
                   dataKey="close"
-                  stroke="#3b82f6"
+                  stroke={CHART_PRICE}
                   strokeWidth={2}
                   dot={false}
-                  activeDot={{ r: 4, fill: '#3b82f6' }}
+                  activeDot={{ r: 4, fill: CHART_PRICE }}
                   name="終値"
                 />
 
@@ -255,7 +270,10 @@ export default function StockPriceChart({ ticker }) {
 
           {/* Legend */}
           {earnings.length > 0 && (
-            <div className="mt-3 flex flex-wrap items-center gap-5 text-xs text-slate-500">
+            <div
+              className="mt-3 flex flex-wrap items-center gap-5 text-xs"
+              style={{ color: 'var(--text-muted)' }}
+            >
               <span className="flex items-center gap-1.5">
                 <span className="font-bold" style={{ color: VERDICT_COLOR.beat }}>▲</span>
                 上振れ Beat（+3%超）
@@ -268,7 +286,7 @@ export default function StockPriceChart({ ticker }) {
                 <span className="font-bold" style={{ color: VERDICT_COLOR.miss }}>▼</span>
                 下振れ Miss（−3%超）
               </span>
-              <span className="ml-auto text-slate-400">
+              <span className="ml-auto" style={{ color: 'var(--text-muted)', opacity: 0.7 }}>
                 ※ 四半期GAAP EPS vs アナリスト予想比較 / 決算日にホバーで詳細表示
               </span>
             </div>
@@ -278,7 +296,10 @@ export default function StockPriceChart({ ticker }) {
 
       {/* Empty state */}
       {!loading && data && data.prices.length === 0 && (
-        <div className="flex h-64 items-center justify-center text-sm text-slate-400">
+        <div
+          className="flex h-64 items-center justify-center text-sm"
+          style={{ color: 'var(--text-muted)' }}
+        >
           株価データが見つかりません
         </div>
       )}
