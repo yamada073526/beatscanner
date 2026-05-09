@@ -7,6 +7,52 @@
 
 ---
 
+## −1. ブランド世界観 (Brand Aspiration) — 不変の北極星
+
+> **重要度**: ★★★★★ (最重要、不変)
+> **由来**: ユーザー直伝。AI-Driven School のアドバイス「色使いなどはアプリの世界観を決める重要な要素なので、デザインシステムとして必ず参照できる場所に記録しておく」に基づいて永続化。
+> **修正禁止**: このセクションの言葉は変更しない。新しい修飾語を追加するときは末尾に追記のみ。
+
+### 目標とする体験 (ユーザー原文)
+
+> **「まるで最高級ホテルの入口からロビーへ入場したときのような、驚き・豪華さ・興奮・洗練さを感じられて、画面を見ているだけで楽しい」**
+
+### 由来 / 苦労の足跡
+
+- **v54-v59 の 6 セッション**を「発光バグ」修正に費やしたが、その過程で「単に動く」ではなく「**Aman Resorts / Ritz-Carlton のロビー級**の体験」を実装目標として磨き上げた
+- 発光は CSS の box-shadow ring + arrival 中強度 + hover 強強度の 2 段階階層で実現
+- 「シアン (= ブランドの記憶色) 」を方向性 (上昇/下落) には絶対使わず、ブランド emphasis 専用に限定する厳密な色運用が世界観の柱
+- v61 dogfood で再確認: この体験を脅かすバグ (LP 3 chip 1個ランダム発光、ApiKeyBanner 残置) は Trust Cliff として最優先で潰す
+
+### 体験を構成する 5 つの感情語彙
+
+ユーザー原文の **「驚き・豪華さ・興奮・洗練さ・楽しい」** をデザイン判断の評価軸とする:
+
+| 感情語彙 | 視覚的に対応する表現 | 違反例 |
+|---|---|---|
+| **驚き (surprise)** | 入場時の cyan ring arrival glow / Hero ticker の display tier (32px / fw600 / -0.02em) | 平坦な panel-card がただ並ぶだけ |
+| **豪華さ (luxury)** | Aman 4 階層 elevation (天井/壁/床/glow) + 適切な空白 (var(--space-6) 以上) | 詰め込み (gap-2 以下) / 影なしの平面 |
+| **興奮 (excitement)** | hover 時の translateY(-5px) + ring 強化 + 4 KPI が「動いている感」 (60s setInterval re-render) | 静的画像のような死んだ画面 |
+| **洗練さ (sophistication)** | typography 階層 (Stat fw700 lh1.05 vs Label fw500 lh1.4) / Linear-style focus-visible gold ring | フォント混在 / 中途半端な太字 / カラーの方向性逸脱 |
+| **楽しい (joy)** | View Transitions cross-fade / Cmd Palette ⌘K / Skeleton 寸法一致 / Pane の整理感 | 突然の re-flow / CLS / loading spinner 単純表示 |
+
+### この世界観を守る理由
+
+1. **launch 後の差別化要素**: 米国株情報サイトは無数にある (Yahoo Finance / Seeking Alpha / Bloomberg)。BeatScanner の差別化は「**毎日開きたくなる体験**」。世界観なしの clone は launch 即埋没
+2. **苦労して辿り着いた価値**: v54-v59 の 6 セッションで具体化したものを、再評価で gradually 失わない anchor が必要
+3. **AI-Driven School の教え**: 色使い = 世界観の anchor。記録なしの世界観は次セッションで簡単に diluted される
+
+### 適用範囲
+
+このセクションは **すべての BeatScanner 画面 / 機能 / コンポーネント** に適用。
+- LP / 判定タブ / 決算タブ / チャートタブ
+- 道A 移行後の Next.js 16 + Tailwind v4 `@theme` 環境でも継承 (oklch 値で再現)
+- Future: 記事タブ / モバイルアプリ / E-mail デザインまで
+
+新規 UI を追加する時は、§0 の 5 測定可能基準で **数値的に**、本セクションの 5 感情語彙で **質的に** 自己レビュー必須。
+
+---
+
 ## 0. アンカー目標 (測れる定義)
 
 「Aman / Ritz-Carlton ロビー級」を**主観排除**するため 5 基準を定める。新規 PR は満たしているか自己レビュー必須。
