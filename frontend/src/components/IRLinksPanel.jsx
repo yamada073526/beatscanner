@@ -7,13 +7,39 @@ function LinkItem({ label, url, desc }) {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-3 rounded-lg border border-slate-100 px-3 py-2.5 text-left transition-colors hover:border-slate-300 hover:bg-slate-50"
+      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors"
+      style={{
+        border: '1px solid var(--border)',
+        color: 'var(--text-primary)',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = 'rgb(56, 189, 248)';
+        e.currentTarget.style.background = 'var(--bg-hover)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = 'var(--border)';
+        e.currentTarget.style.background = 'transparent';
+      }}
     >
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-slate-800">{label}</div>
-        {desc && <div className="text-xs text-slate-400">{desc}</div>}
+        <div
+          className="truncate text-sm font-medium"
+          style={{ color: 'var(--text-primary)' }}
+        >
+          {label}
+        </div>
+        {desc && (
+          <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            {desc}
+          </div>
+        )}
       </div>
-      <span className="shrink-0 text-xs text-slate-300">↗</span>
+      <span
+        className="shrink-0 text-xs"
+        style={{ color: 'var(--text-muted)' }}
+      >
+        ↗
+      </span>
     </a>
   );
 }
@@ -21,7 +47,10 @@ function LinkItem({ label, url, desc }) {
 function Section({ title, icon, children }) {
   return (
     <div>
-      <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
+      <div
+        className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider"
+        style={{ color: 'var(--text-muted)' }}
+      >
         <span>{icon}</span>
         <span>{title}</span>
       </div>
@@ -82,14 +111,22 @@ export default function IRLinksPanel({ ticker }) {
   const website = data?.website;
 
   return (
-    <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+    <section
+      className="panel-card rounded-2xl p-6 shadow-sm"
+      style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
+    >
       <h3 className="section-heading">
         📎 IRリソース
-        <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>{ticker}</span>
+        <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
+          {ticker}
+        </span>
       </h3>
 
       {loading && (
-        <div className="flex h-16 items-center justify-center text-sm text-slate-400 animate-pulse">
+        <div
+          className="flex h-16 items-center justify-center text-sm animate-pulse"
+          style={{ color: 'var(--text-muted)' }}
+        >
           リンクを取得中...
         </div>
       )}
@@ -133,8 +170,11 @@ export default function IRLinksPanel({ ticker }) {
             </Section>
           </div>
 
-          {/* 右列: カンファレンスコール（md+ のみ仕切り線） */}
-          <div className="space-y-4 md:border-l md:border-slate-200 md:pl-6">
+          {/* 右列: カンファレンスコール (md+ のみ仕切り線、token 化) */}
+          <div
+            className="space-y-4 md:pl-6"
+            style={{ borderLeft: '1px solid var(--border)' }}
+          >
             <Section title="カンファレンスコール" icon="🎙️">
               {static_links.conference.map((l, i) => (
                 <LinkItem key={i} label={l.label} url={l.url} desc={l.desc} />
