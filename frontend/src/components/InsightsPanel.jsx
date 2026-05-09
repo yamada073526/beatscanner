@@ -2,11 +2,14 @@ import { useState, useEffect } from "react";
 import InfoModal from "./InfoModal.jsx";
 import LockedSection, { InsightsGhost } from "./LockedSection.jsx";
 
+// CLAUDE.md「投資業界の色ルール」準拠:
+// 強気(Bullish)=緑 / 弱気(Bearish)=赤 / 中立=グレー / 強弱混在=amber
+// シアンはブランド色のため方向性 (positive/negative) には使わない.
 const SENTIMENT = {
-  positive: { label: "強気",     color: "rgb(56, 189, 248)" },
-  negative: { label: "弱気",     color: "#f87171" },
-  neutral:  { label: "中立",     color: "#94a3b8" },
-  mixed:    { label: "強弱混在", color: "#fbbf24" },
+  positive: { label: "強気",     color: "var(--color-gain)" },
+  negative: { label: "弱気",     color: "var(--color-loss)" },
+  neutral:  { label: "中立",     color: "var(--text-muted)" },
+  mixed:    { label: "強弱混在", color: "var(--color-warning)" },
 };
 
 // 「市場の声」見出し横の ? — ConditionCard と統一スタイル + クリックでモーダル表示
