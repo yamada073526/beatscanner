@@ -1107,7 +1107,11 @@ export default function App() {
           return (
             <Suspense
               fallback={
-                <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <div
+                  role="status"
+                  aria-live="polite"
+                  style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}
+                >
                   v2 タブを読み込み中...
                 </div>
               }

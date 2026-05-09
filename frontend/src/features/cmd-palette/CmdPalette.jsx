@@ -48,14 +48,20 @@ export default function CmdPalette({ open, close, items = [] }) {
     return base;
   }, [items, query]);
 
-  // open 時に reset + auto focus
+  // open 時に reset + auto focus + 閉じた時に元の focus へ復帰
   useEffect(() => {
-    if (open) {
-      setQuery('');
-      setHighlight(0);
-      // RAF で render 後にフォーカス (CSS transition と競合しないため)
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
+    if (!open) return;
+    const prevFocus = document.activeElement;
+    setQuery('');
+    setHighlight(0);
+    // RAF で render 後にフォーカス (CSS transition と競合しないため)
+    requestAnimationFrame(() => inputRef.current?.focus());
+    return () => {
+      // 閉じた時に元のフォーカス先へ復帰 (a11y 推奨パターン)
+      if (prevFocus instanceof HTMLElement) {
+        try { prevFocus.focus(); } catch { /* ignore */ }
+      }
+    };
   }, [open]);
 
   // highlight が view 範囲外なら 0 に巻き戻す
@@ -92,6 +98,9 @@ export default function CmdPalette({ open, close, items = [] }) {
         }
         close();
       }
+    } else if (e.key === 'Tab') {
+      // focus trap: palette 外への escape を防ぐ. Linear/Raycast 流に Tab 自体を消費.
+      e.preventDefault();
     }
   };
 
@@ -102,6 +111,9 @@ export default function CmdPalette({ open, close, items = [] }) {
       <li
         key={it.id}
         data-idx={idx}
+        id={`cmd-palette-opt-${idx}`}
+        role="option"
+        aria-selected={selected}
         onMouseEnter={() => setHighlight(idx)}
         onClick={() => {
           it.action?.();
@@ -249,6 +261,11 @@ export default function CmdPalette({ open, close, items = [] }) {
             }}
             placeholder="銘柄を分析、タブ切替、設定変更..."
             aria-label="コマンド検索"
+            role="combobox"
+            aria-controls="cmd-palette-listbox"
+            aria-expanded="true"
+            aria-autocomplete="list"
+            aria-activedescendant={view[highlight] ? `cmd-palette-opt-${highlight}` : undefined}
             style={{
               flex: 1,
               border: 'none',
@@ -275,6 +292,9 @@ export default function CmdPalette({ open, close, items = [] }) {
         </div>
         <ul
           ref={listRef}
+          id="cmd-palette-listbox"
+          role="listbox"
+          aria-label="検索候補"
           style={{
             flex: 1,
             overflowY: 'auto',

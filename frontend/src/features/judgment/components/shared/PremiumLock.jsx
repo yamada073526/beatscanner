@@ -51,9 +51,11 @@ export default function PremiumLock({
         minHeight: 200,
       }}
     >
-      {/* 背景: blur した children */}
+      {/* 背景: blur した children. inert で内部要素を tab order からも除外 (a11y) */}
       <div
-        aria-hidden
+        aria-hidden="true"
+        // @ts-ignore: HTML inert は React 19+ で標準対応、それ以前は属性として有効
+        inert=""
         style={{
           filter: 'blur(8px)',
           opacity: 0.35,
