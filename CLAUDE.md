@@ -30,8 +30,9 @@
 - 代替表記の例: 「ファンダメンタル5条件」「独自プロトコル」
 
 ### 触ると危険な箇所
-- **sticky 検索バー**（`.sticky-search-band` / App.jsx の sticky 検索 div）は 8 回の試行錯誤の末に Apple 方式（72%透過 + `saturate(180%) blur(20px)` + 1px border-bottom）で安定済み。原則として触らない
+- **sticky 検索バー**（`.sticky-search-band` / App.jsx の sticky 検索 div）は 8 回の試行錯誤の末に Apple 方式で安定済み。原則として触らない (詳細仕様は [`docs/references/design_recipes.md §C-6`](docs/references/design_recipes.md))
 - backdrop-filter のフェード境界を CSS で消そうとしてはいけない（必ず切断ラインが出る）。Apple/Linear 方式は **1px border で意図的に区切る** 設計
+- **発光系 (`.panel-card / .bs-panel / .surface-card`)** は v54-v59 で 6 セッション溶けた高リスク領域。新規 card 系を追加 / CSS を触る前に必ず [`design_recipes.md §C-1〜C-4`](docs/references/design_recipes.md) を読む。compound `.X.is-arriving:hover` 4 セット必須・`contain: paint` 禁止・入れ子 `surface-card` 禁止
 
 ### 内部値の混在
 - タブの内部 key は `'home' / 'judgment' / 'report' / 'チャート'`（最後だけ日本語）。文字化け回避のため変えない
@@ -61,11 +62,11 @@
 - LP → 銘柄クリックの経路は必ず `handleLPTickerClick`（demo モード対応）を通す。`runAnalyze` を直接呼ばない
 
 ### 投資業界の色ルール（厳守）
-- 上昇・ポジティブ = **緑 (`#34ef81`)**
-- 下落・ネガティブ = **赤 (`#f87171`)**
-- 中立 = シアン or グレー
-- 緊急・警告（決算が X 日後 等）= **amber (`#f59e0b`)**
-- シアンは「ブランド色」として使うが「上昇」を意味しない
+- 上昇・ポジティブ = **緑** (`var(--color-gain)`)
+- 下落・ネガティブ = **赤** (`var(--color-loss)`)
+- 緊急・警告 = **amber** (`var(--color-warning)`)
+- シアン (`--color-accent`) は「ブランド色」。**「上昇」の意味では絶対に使わない**
+- トークン値の正本は [`docs/references/design_system.md §1`](docs/references/design_system.md) を参照。CSS / JSX で hex 直書き禁止。新規追加は [`docs/references/elevation_scale.md`](docs/references/elevation_scale.md) の whitelist 必須
 
 ### 動的データには「最終更新 X 分前」を併記
 - epoch 秒 / ms の自動判定: `input < 1e12 ? input * 1000 : input`
@@ -105,8 +106,12 @@
 ## 判定ロジック
 docs/references/jijima_protocol.md を参照
 
-## デザインルール  
-docs/references/design_guide.md を参照
+## デザインルール
+- **トークン (色 / spacing / radius / elevation / motion)**: [`docs/references/design_system.md`](docs/references/design_system.md) が Single Source of Truth
+- **適用パターン (card layering / glow host / shadcn 統合 / staleness UI / 数値表示)**: [`docs/references/design_recipes.md`](docs/references/design_recipes.md)
+- **機械的 enforcement (raw hex / shadow / !important whitelist)**: [`docs/references/elevation_scale.md`](docs/references/elevation_scale.md)
+- **検査 skill**: 「デザインチェック」で `design-system-check` 起動
+- 旧 `design_guide.md` は historical reference、新規参照は `design_system.md` を優先
 
 ## APIエンドポイント
 docs/references/api_endpoints.md を参照
@@ -120,6 +125,12 @@ docs/references/api_endpoints.md を参照
 - 永続ルールは本ファイル（CLAUDE.md）に移すこと
 
 ## 既知の制限・将来の改善候補
+
+### Next.js + Vercel 移行 (将来計画)
+- **判断**: Vite + Railway で当面継続。移行トリガーは「記事タブ (`§11-D-1` AI 記事配信) の実装着手 3-4 週間前」
+- **理由**: 移行の主要ベネフィット (SSG/ISR / `next/og` / Vercel Analytics) は記事タブ launch の前提技術。記事自体がまだ無い段階で前倒しすると 5-8 日のロス
+- **移行コストが膨らまない設計済**: design_system.md / design_recipes.md / elevation_scale.md は framework 非依存。判定タブも React + Tailwind + token CSS のみで Vite 固有 API 不使用なので 1-2 日でポート可能
+- **backend (FastAPI on Railway)** はそのまま維持。frontend だけ Vercel に移す前提
 
 ### 株価チャートの決算マーカー（Beat/Miss 判定）
 - 現状：EPS 実績値は表示されるが、アナリスト予想が取得できないため verdict = "unknown"（グレー）

@@ -5,6 +5,7 @@ import { useJsonLd } from './hooks/useJsonLd.js';
 import { buildWebSiteSchema, buildOrganizationSchema } from './utils/jsonLdBuilders.js';
 import { supabase, isSupabaseConfigured } from './lib/supabase.js';
 import { useAuth } from './hooks/useAuth.js';
+import { useArrivalSpotlight } from './hooks/useArrivalSpotlight.js';
 import { useIsMobile } from './hooks/useIsMobile.js';
 import { useTags } from './hooks/useTags.js';
 import { useHoldings } from './hooks/useHoldings.js';
@@ -12,6 +13,8 @@ import { usePortfolioPrices } from './hooks/usePortfolioPrices.js';
 import { initDarkMode, toggleDarkMode, isDark } from './utils/darkMode.js';
 import { hasFmpKey, loadFmpKey } from './lib/fmpKey.js';
 import { isPro } from './lib/planGating.js';
+import { useJudgmentResult } from './features/judgment/state/useJudgmentResult.js';
+import { JudgmentTab as JudgmentTabV2 } from './features/judgment/index.js';
 import { useUpgradeModal } from './lib/useUpgradeModal.js';
 import { useSubscription } from './hooks/useSubscription.js';
 import InfoModal from './components/InfoModal.jsx';
@@ -69,12 +72,8 @@ export default function App() {
   useJsonLd('jsonld-website', websiteSchema);
   useJsonLd('jsonld-organization', organizationSchema);
 
-  const [ticker, setTicker] = useState('');
-  const [result, setResult] = useState(null);
-  const [guidance, setGuidance] = useState(null);
-  const [guidanceSecLoading, setGuidanceSecLoading] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  // Step 4: ticker / result / guidance / loading / error / isDemoResult は
+  // useJudgmentResult hook が所有 (この block の後で hook 呼び出し).
   const [watchlist, setWatchlist] = useState(loadWatchlist);
   // showCalendar は localStorage に永続化（ユーザー嗜好を記憶）
   const [showCalendar, setShowCalendar] = useState(() => {
@@ -97,9 +96,38 @@ export default function App() {
   const [showNotifModal, setShowNotifModal] = useState(false);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [showCustomScreener, setShowCustomScreener] = useState(false);
-  const [isDemoResult, setIsDemoResult] = useState(false);
   const [forceCloseSuggestions, setForceCloseSuggestions] = useState(false);
   const [showFiveCondModal, setShowFiveCondModal] = useState(false);
+
+  // ── Judgment result (Step 4 で hook 抽出) ───────────────────────
+  // prefetchedRef / prefetch を hook より先に定義 (hook が prefetch コールバックを必要とするため).
+  const prefetchedRef = useRef(new Set());
+  const prefetch = (ticker) => {
+    if (!ticker || ticker.length < 2) return;
+    const t = ticker.toUpperCase();
+    if (prefetchedRef.current.has(t)) return;
+    prefetchedRef.current.add(t);
+    prefetchAll(t);
+  };
+  const {
+    ticker, setTicker,
+    result, setResult,
+    guidance, setGuidance,
+    guidanceSecLoading,
+    loading, setLoading,
+    error, setError,
+    isDemoResult, setIsDemoResult,
+    searchIdRef,
+    resultCacheRef,
+    runAnalyze,
+    handleDemoResult,
+    handleLPTickerClick,
+  } = useJudgmentResult({
+    setActiveTab,
+    setShowApiKeyModal,
+    setForceCloseSuggestions,
+    prefetch,
+  });
 
   // ── タグ機能 (X-1) ──────────────────────────────────────────
   const [tagFilterId, setTagFilterId] = useState('all'); // 'all' | 'untagged' | tagId
@@ -140,78 +168,20 @@ export default function App() {
   const screenerRef = useRef(null);
   const customScreenerRef = useRef(null);
   const calendarRef = useRef(null);
-  // ── グローバル スクロールフロート（全タブ .panel-card を一括処理） ──
-  const handleScrollRef = useRef(null);
-
-  // ① リスナー登録（マウント時1回）
-  useEffect(() => {
-    const handleScroll = () => {
-      const vh = document.documentElement.clientHeight || window.innerHeight;
-      if (!vh) return; // preview sandbox guard（実機では 0 にならない）
-      document.querySelectorAll('.panel-card').forEach(el => {
-        const rect = el.getBoundingClientRect();
-        // 部分表示でも発火（縦長カード対応）
-        const inView = rect.bottom > vh * 0.25 && rect.top < vh * 0.75;
-        if (inView) {
-          el.style.transform = 'translateY(-6px)';
-          el.style.filter    = 'drop-shadow(0 0 8px rgba(56,189,248,0.60))';
-          el.style.boxShadow = '0 0 16px rgba(56,189,248,0.20)';
-          el.style.setProperty('border-color', 'rgba(56,189,248,0.60)', 'important');
-        } else {
-          el.style.transform = '';
-          el.style.filter    = '';
-          el.style.boxShadow = '';
-          el.style.removeProperty('border-color');
-        }
-      });
-    };
-
-    handleScrollRef.current = handleScroll;
-
-    // window に登録（全コンテナ共通）
-    window.addEventListener('scroll', handleScroll, { passive: true });
-
-    // overflow:scroll/auto の内部コンテナにも全て登録
-    const scrollContainers = new Set();
-    document.querySelectorAll('.panel-card').forEach(el => {
-      let parent = el.parentElement;
-      while (parent && parent !== document.body) {
-        const overflow = window.getComputedStyle(parent).overflowY;
-        if (overflow === 'auto' || overflow === 'scroll') {
-          scrollContainers.add(parent);
-        }
-        parent = parent.parentElement;
-      }
-    });
-    scrollContainers.forEach(c => c.addEventListener('scroll', handleScroll, { passive: true }));
-
-    handleScroll();
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-      scrollContainers.forEach(c => c.removeEventListener('scroll', handleScroll));
-    };
-  }, []);
-
-  // ② タブ切替時に再実行（描画完了後に確実に実行）
-  useEffect(() => {
-    if (!handleScrollRef.current) return;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (handleScrollRef.current) handleScrollRef.current();
-      });
-    });
-  }, [activeTab]);
+  // §11-E v51 Phase 1: 旧 querySelectorAll forEach + scroll listener (毎 frame layout thrash) を
+  // IntersectionObserver ベースの useArrivalSpotlight() に置換。
+  // 利点:
+  // - 1 枚だけ active で視線を集約 (Aman Resorts の単一スポットライト原則)
+  // - Portfolio/Watchlist (.bs-panel) も発光対象に統合 (旧は .panel-card のみ)
+  // - inline style 直書き廃止、CSS class .is-arriving + token (--shadow-arrival) で制御
+  // - prefers-reduced-motion 完全対応
+  // - tab 切替時の自動再観測 (MutationObserver で動的追加カードに追従)
+  useArrivalSpotlight([activeTab]);
   const [hasKey, setHasKey] = useState(hasFmpKey);
   const [toast, setToast] = useState(null);
   const upgrade = useUpgradeModal();
   const searchInputRef = useRef(null);
-  const searchIdRef = useRef(0);
-  const prefetchedRef = useRef(new Set());
-  // v40+: 同銘柄の再分析を瞬時化する result キャッシュ (10 分 TTL)
-  // ユーザーがタブ切替や戻るで同じ銘柄に戻ってきた際、再 fetch せず即表示
-  const resultCacheRef = useRef(new Map());
-  const RESULT_CACHE_TTL = 10 * 60 * 1000;  // 10 分
+  // searchIdRef / prefetchedRef / resultCacheRef は useJudgmentResult hook 側 + 上記 prefetch 用 ref で管理 (Step 4)
 
   // ── Supabase Auth ─────────────────────────────────────────────
   const { user, ready: authReady, signInWithGoogle, signOut } = useAuth();
@@ -371,14 +341,6 @@ export default function App() {
   }, []);
 
 
-  const prefetch = (ticker) => {
-    if (!ticker || ticker.length < 2) return;
-    const t = ticker.toUpperCase();
-    if (prefetchedRef.current.has(t)) return;
-    prefetchedRef.current.add(t);
-    prefetchAll(t);
-  };
-
   // 未ログイン時のみ localStorage に永続化（ログイン時は Supabase が source of truth）
   useEffect(() => {
     if (user) return;
@@ -495,158 +457,9 @@ export default function App() {
     showToast('APIキーを削除しました');
   }
 
-  async function runAnalyze(sym) {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    if (!hasFmpKey()) {
-      setShowApiKeyModal(true);
-      return;
-    }
-    const raw = (sym || ticker).trim();
-    const t = raw.includes('.')
-      ? raw.split('.').map((p) => p.toUpperCase()).join('.')
-      : raw.toUpperCase();
-    if (!t) return;
-    setTicker(t);
-    // v40+: 全 panel データを analyze と並列で先取り (体感速度 5-10s → 2-3s)
-    prefetch(t);
-    // v40+: result キャッシュチェック — 10分以内に同銘柄を分析済なら瞬時に表示
-    const cached = resultCacheRef.current.get(t);
-    if (cached && Date.now() - cached.ts < RESULT_CACHE_TTL) {
-      setActiveTab('judgment');
-      setError(null);
-      setIsDemoResult(false);
-      setResult(cached.result);
-      if (cached.guidance) setGuidance(cached.guidance);
-      setLoading(false);
-      return;
-    }
-    // v40+: 分析済みティッカーを localStorage に記録 (LP の「あなたが見た銘柄」用)
-    // 直近 50 件まで保持。決算カレンダーと突合してリテンション CTA を生成する。
-    try {
-      const key = 'bs_analyzed';
-      const data = JSON.parse(localStorage.getItem(key) || '{}');
-      data[t] = Date.now();
-      const sorted = Object.entries(data)
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 50);
-      localStorage.setItem(key, JSON.stringify(Object.fromEntries(sorted)));
-    } catch { /* private mode 等は無視 */ }
-    const searchId = Date.now();
-    searchIdRef.current = searchId;
-
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    setGuidance(null);
-    setGuidanceSecLoading(false);
-    setActiveTab('judgment');
-    setIsDemoResult(false);
-    setForceCloseSuggestions(true);
-    setTimeout(() => setForceCloseSuggestions(false), 500);
-
-    analyze(t)
-      .then(data => {
-        if (searchIdRef.current === searchId) {
-          setResult(data);
-          // v40+: キャッシュ保存 (guidance はまだ取得中なので後で更新)
-          const prev = resultCacheRef.current.get(t) || {};
-          resultCacheRef.current.set(t, { ...prev, result: data, ts: Date.now() });
-        }
-      })
-      .catch(e => {
-        if (searchIdRef.current === searchId) {
-          const msg = e.message;
-          setError(
-            msg === 'Failed to fetch' || msg.includes('NetworkError')
-              ? 'バックエンド接続エラー（サーバーが応答していません）。start.sh でサーバーが起動しているか確認してください。'
-              : msg
-          );
-        }
-      });
-
-    const basicData = await fetchGuidanceBasic(t).catch(() => null);
-    if (searchIdRef.current !== searchId) return;
-    if (basicData) setGuidance(basicData);
-    setLoading(false);
-
-    const secTimeoutId = setTimeout(() => {
-      if (searchIdRef.current === searchId) setGuidanceSecLoading(false);
-    }, 15000);
-    if (basicData) setGuidanceSecLoading(true);
-    fetchGuidance(t)
-      .then(full => {
-        clearTimeout(secTimeoutId);
-        if (searchIdRef.current !== searchId) return;
-        if (full) {
-          setGuidance(full);
-          // v40+: キャッシュに guidance も保存 (result は既に保存済み or 同時に)
-          const prev = resultCacheRef.current.get(t) || {};
-          resultCacheRef.current.set(t, { ...prev, guidance: full, ts: Date.now() });
-        }
-        setGuidanceSecLoading(false);
-      })
-      .catch(() => {
-        clearTimeout(secTimeoutId);
-        if (searchIdRef.current === searchId) setGuidanceSecLoading(false);
-      });
-  }
-
-  function handleDemoResult(data, sym) {
-    setTicker(sym);
-    setResult(data);
-    setGuidance(null);
-    setIsDemoResult(true);
-    setActiveTab('judgment');
-    setError(null);
-  }
-
-  // ── LP からのクリック専用 (今日の注目 / 今週の決算 / サンプル分析 / あなたが見た銘柄) ──
-  // 「登録不要で試せる」と LP で約束しているため、未ログイン+APIキー無の場合も
-  // demo エンドポイント (3銘柄/日制限) で必ず分析を実行する。
-  // hasFmpKey() がある場合は通常の analyze を使う (デモ制限なし)。
-  async function handleLPTickerClick(t) {
-    const sym = (t || '').toUpperCase();
-    if (!sym) return;
-    setTicker(sym);
-    setActiveTab('judgment');
-    setLoading(true);
-    // v40+: panel データを analyze と並列で先取り
-    prefetch(sym);
-    setError(null);
-    setResult(null);
-    setGuidance(null);
-    setGuidanceSecLoading(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    // 「あなたが見た銘柄」用に localStorage 記録
-    try {
-      const key = 'bs_analyzed';
-      const data = JSON.parse(localStorage.getItem(key) || '{}');
-      data[sym] = Date.now();
-      const sorted = Object.entries(data).sort(([, a], [, b]) => b - a).slice(0, 50);
-      localStorage.setItem(key, JSON.stringify(Object.fromEntries(sorted)));
-    } catch { /* private mode 等は無視 */ }
-    try {
-      if (hasFmpKey()) {
-        const data = await analyze(sym);
-        setResult(data);
-        setIsDemoResult(false);
-      } else {
-        const data = await demoAnalyze(sym);
-        setResult(data);
-        setIsDemoResult(true);
-      }
-    } catch (e) {
-      const msg = e?.message || 'エラー';
-      // demo 上限 (3銘柄/日) を超えた場合は分かりやすいメッセージ
-      if (msg.includes('429') || msg.includes('limit') || msg.includes('Rate')) {
-        setError('本日のお試し回数 (3銘柄) を超えました。Googleログインで無制限になります。');
-      } else {
-        setError(msg);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
+  // runAnalyze / handleDemoResult / handleLPTickerClick は
+  // features/judgment/state/useJudgmentResult.js に抽出済 (Step 4).
+  // signature は完全 BC 維持。
 
   function addToWatchlist(t) {
     if (watchlist.includes(t)) return;
@@ -1238,8 +1051,56 @@ export default function App() {
         />
       )}
 
-      {/* Tab: 判定詳細 */}
-      {activeTab === 'judgment' && (
+      {/* Tab: 判定詳細 — `?j2=1` で v2 (features/judgment) 切替 */}
+      {activeTab === 'judgment' && (() => {
+        const useJ2 = (() => {
+          try {
+            return new URLSearchParams(window.location.search).get('j2') === '1';
+          } catch { return false; }
+        })();
+        if (useJ2) {
+          // v2 用 list items を holdings + watchlist + 過去分析 (resultCache) から構築
+          const holdingTickers = Array.isArray(holdingStore?.tickers) ? holdingStore.tickers : [];
+          const tickerSet = new Set([...holdingTickers, ...watchlist]);
+          // 過去分析した ticker (resultCache) も候補に加える
+          for (const t of resultCacheRef.current.keys()) tickerSet.add(t);
+          const itemsV2 = Array.from(tickerSet).map((t) => {
+            const cache = resultCacheRef.current.get(t);
+            const r = cache?.result || null;
+            const px = portfolioPrices?.[t] || null;
+            return {
+              ticker: t,
+              companyName: r?.companyName,
+              price: px?.price ?? null,
+              changePct: px?.changePct ?? null,
+              judgment: r,
+              isHolding: holdingTickers.includes(t),
+              isWatchlist: watchlist.includes(t),
+              lastAnalyzedAt: cache?.ts ?? 0,
+            };
+          });
+          const planV2 = isProUser ? 'pro' : 'free';
+          const detailFor = (t) => {
+            const cache = resultCacheRef.current.get(t);
+            const px = portfolioPrices?.[t] || null;
+            return {
+              result: cache?.result || null,
+              guidance: cache?.guidance || null,
+              price: px?.price ?? null,
+              changePct: px?.changePct ?? null,
+              lastAnalyzedAt: cache?.ts ?? 0,
+            };
+          };
+          return (
+            <JudgmentTabV2
+              plan={planV2}
+              items={itemsV2}
+              detailFor={detailFor}
+              onAnalyze={runAnalyze}
+            />
+          );
+        }
+        return (
         <>
         {/* ── ウォッチリスト銘柄ナビ（pill型） ── */}
         {watchlist.length > 0 && (
@@ -1513,7 +1374,8 @@ export default function App() {
         )
         }
         </>
-      )}
+        );
+      })()}
 
       {/* Tab: 決算レポート */}
       {activeTab === 'report' && (
