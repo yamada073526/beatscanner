@@ -1097,6 +1097,12 @@ export default function App() {
               items={itemsV2}
               detailFor={detailFor}
               onAnalyze={runAnalyze}
+              detailContext={{
+                user,
+                isPro: isSubscribed,
+                onUpgrade: () => upgrade.open('詳細分析（強気/弱気）'),
+                onSignIn: signInWithGoogle,
+              }}
             />
           );
         }

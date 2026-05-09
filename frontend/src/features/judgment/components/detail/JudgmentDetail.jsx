@@ -5,24 +5,35 @@ import KpiStrip from './KpiStrip.jsx';
 import VerdictDetail from './VerdictDetail.jsx';
 import SimpleSection from './SimpleSection.jsx';
 import SectionDivider from './SectionDivider.jsx';
+import Card from '../../primitives/Card.jsx';
+import SectionHeader from '../../primitives/SectionHeader.jsx';
 import PremiumLock from '../shared/PremiumLock.jsx';
+import NewsPanel from '../../../../components/NewsPanel.jsx';
+import IRLinksPanel from '../../../../components/IRLinksPanel.jsx';
+import InsightsPanel from '../../../../components/InsightsPanel.jsx';
+import StockPriceChart from '../../../../components/StockPriceChart.jsx';
 
 /**
- * Pane 3: 判定タブ詳細ペイン (Step 6).
+ * Pane 3: 判定タブ詳細ペイン (Step 6 + 既存 component 配線).
  *
  * セクション順 (handover §3 Step 6 + design_recipes.md §C-10):
  *   階層 1 Verdict:   Hero, KpiStrip, VerdictDetail
- *   階層 2 Fundamentals: BeatMiss, Profile, KeyStats
- *   階層 3 Context:   Analyst (Pro lock), IR, News
+ *   階層 2 Fundamentals: Profile, Insights (analyst 強弱), StockPriceChart
+ *   階層 3 Context:   News, IR
  *
  * @param {object} props
  * @param {string} [props.plan='free']
- * @param {(ticker: string) => object|null} [props.detailFor] - selected ticker の詳細データ取得
- *   返値: { result, guidance, price, changePct, lastAnalyzedAt? }
- *   result は判定結果 (overallPass, conditions, latestPeriod, companyName 等を含む).
- * @param {(ticker: string) => void} [props.onAnalyze] - 未分析時のリトリガー
+ * @param {(ticker: string) => object|null} [props.detailFor]
+ * @param {(ticker: string) => void} [props.onAnalyze]
+ * @param {object} [props.detailContext] - 既存 panel 用 props bundle
+ *   { user, isPro, onUpgrade, onSignIn }
  */
-export default function JudgmentDetail({ plan = 'free', detailFor, onAnalyze }) {
+export default function JudgmentDetail({
+  plan = 'free',
+  detailFor,
+  onAnalyze,
+  detailContext = {},
+}) {
   const { selectedTicker } = useJudgment();
 
   if (!selectedTicker) {
@@ -140,22 +151,6 @@ export default function JudgmentDetail({ plan = 'free', detailFor, onAnalyze }) 
       {/* === 階層 2: Fundamentals === */}
       <SectionDivider tier={2} />
       <SimpleSection
-        id="sec-beat-miss"
-        title="Beat / Miss"
-        label="EPS"
-        empty={
-          result?.epsBeatPct == null
-            ? '予想を取得中 (FMP Free 制限により遅延あり)'
-            : null
-        }
-      >
-        {result?.epsBeatPct != null && (
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            EPS は予想を {result.epsBeatPct > 0 ? '上回り' : '下回り'} ました
-          </div>
-        )}
-      </SimpleSection>
-      <SimpleSection
         id="sec-profile"
         title="Profile"
         label="COMPANY"
@@ -164,42 +159,79 @@ export default function JudgmentDetail({ plan = 'free', detailFor, onAnalyze }) 
         {result?.companyName && (
           <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
             {result.companyName}
+            {result?.dataSource && (
+              <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>
+                · {result.dataSource}
+              </span>
+            )}
           </div>
         )}
       </SimpleSection>
-      <SimpleSection
-        id="sec-key-stats"
-        title="Key Stats"
-        label="FUNDAMENTALS"
-        empty="拡充予定 (Phase 2)"
-      />
+
+      {/* Insights (アナリスト強弱) — 既存 InsightsPanel を Card に内包 */}
+      {selectedTicker && (
+        <Card>
+          <div style={{ padding: 'var(--space-6, 24px)' }}>
+            <SectionHeader
+              id="sec-insights"
+              title="市場の声"
+              label="ANALYST INSIGHTS"
+            />
+            <InsightsPanel
+              ticker={selectedTicker}
+              user={detailContext.user}
+              isPro={detailContext.isPro}
+              onUpgradeClick={detailContext.onUpgrade}
+              onSignIn={detailContext.onSignIn}
+            />
+          </div>
+        </Card>
+      )}
+
+      {/* 株価チャート — 既存 StockPriceChart 流用 */}
+      {selectedTicker && (
+        <Card>
+          <div style={{ padding: 'var(--space-6, 24px)' }}>
+            <SectionHeader
+              id="sec-chart"
+              title="株価チャート"
+              label="PRICE"
+            />
+            <StockPriceChart ticker={selectedTicker} />
+          </div>
+        </Card>
+      )}
 
       {/* === 階層 3: Context === */}
       <SectionDivider tier={3} />
-      <PremiumLock
-        feature="analyst_estimates"
-        plan={plan}
-        label="アナリスト予想 (Pro 解放)"
-      >
-        <SimpleSection
-          id="sec-analyst"
-          title="アナリスト予想"
-          label="ESTIMATES"
-          empty="Pro 有効化時にここに表示"
-        />
-      </PremiumLock>
-      <SimpleSection
-        id="sec-ir"
-        title="IR Links"
-        label="REFERENCES"
-        empty="拡充予定"
-      />
-      <SimpleSection
-        id="sec-news"
-        title="News"
-        label="RECENT"
-        empty="拡充予定"
-      />
+
+      {/* News — 既存 NewsPanel 流用 */}
+      {selectedTicker && (
+        <Card>
+          <div style={{ padding: 'var(--space-6, 24px)' }}>
+            <SectionHeader
+              id="sec-news"
+              title="ニュース"
+              label="RECENT"
+            />
+            <NewsPanel ticker={selectedTicker} />
+          </div>
+        </Card>
+      )}
+
+      {/* IR Links — 既存 IRLinksPanel 流用 */}
+      {selectedTicker && (
+        <Card>
+          <div style={{ padding: 'var(--space-6, 24px)' }}>
+            <SectionHeader
+              id="sec-ir"
+              title="IR Links"
+              label="REFERENCES"
+            />
+            <IRLinksPanel ticker={selectedTicker} />
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
