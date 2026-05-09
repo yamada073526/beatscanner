@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useMemo, useState, useCallback } from 'react';
+import { withViewTransition } from '../../../utils/viewTransition.js';
 
 /**
  * JudgmentContext — pane 2 (List) と pane 3 (Detail) を繋ぐ薄い state.
@@ -24,7 +25,8 @@ export function JudgmentProvider({ children }) {
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
 
   const selectTicker = useCallback((ticker) => {
-    setSelectedTicker(ticker ? String(ticker).toUpperCase() : null);
+    const next = ticker ? String(ticker).toUpperCase() : null;
+    withViewTransition(() => setSelectedTicker(next));
   }, []);
 
   const value = useMemo(

@@ -111,6 +111,22 @@
   }
 }
 
+/* ── View Transitions API (design_recipes.md §C-7) ──
+   Chrome 111+ / Edge 111+ で滑らかな cross-fade。
+   utils/viewTransition.js の withViewTransition() でラップした state 更新時に発火。
+   prefers-reduced-motion は JS 側でも skip するが CSS でも二重防御。 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--motion-base, 200ms);
+  animation-timing-function: var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.01ms !important;
+  }
+}
+
 [data-theme="dark"] {
   /* color-scheme: dark でブラウザネイティブのフォームコントロール
      (date picker / select / scrollbar 等) を一括ダークモード化 */

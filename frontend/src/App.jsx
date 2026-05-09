@@ -15,6 +15,7 @@ import { hasFmpKey, loadFmpKey } from './lib/fmpKey.js';
 import { isPro } from './lib/planGating.js';
 import { useJudgmentResult } from './features/judgment/state/useJudgmentResult.js';
 import { JudgmentTab as JudgmentTabV2 } from './features/judgment/index.js';
+import { withViewTransition } from './utils/viewTransition.js';
 import { useUpgradeModal } from './lib/useUpgradeModal.js';
 import { useSubscription } from './hooks/useSubscription.js';
 import InfoModal from './components/InfoModal.jsx';
@@ -634,21 +635,25 @@ export default function App() {
           tabIndex={0}
           aria-label="ホームに戻る"
           onClick={() => {
-            setActiveTab('home');
-            setTicker('');
-            setResult(null);
-            setGuidance(null);
-            setIsDemoResult(false);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
+            withViewTransition(() => {
               setActiveTab('home');
               setTicker('');
               setResult(null);
               setGuidance(null);
               setIsDemoResult(false);
+            });
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              withViewTransition(() => {
+                setActiveTab('home');
+                setTicker('');
+                setResult(null);
+                setGuidance(null);
+                setIsDemoResult(false);
+              });
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }
           }}
@@ -690,7 +695,7 @@ export default function App() {
               if (t.key === 'report' && !isProUser) {
                 upgrade.open('AI詳細レポート');
               } else {
-                setActiveTab(t.key);
+                withViewTransition(() => setActiveTab(t.key));
               }
             };
             return (
@@ -1262,7 +1267,7 @@ export default function App() {
                 className="cta-btn panel-card"
                 onClick={() => {
                   if (!isProUser) { upgrade.open('AI詳細レポート'); }
-                  else { setActiveTab('report'); }
+                  else { withViewTransition(() => setActiveTab('report')); }
                 }}
                 style={{
                   flex: 1,
@@ -1656,7 +1661,7 @@ export default function App() {
                   if (t.key === 'report' && !isProUser) {
                     upgrade.open('AI詳細レポート');
                   } else {
-                    setActiveTab(t.key);
+                    withViewTransition(() => setActiveTab(t.key));
                   }
                   setDrawerOpen(false);
                 }}
@@ -1949,7 +1954,7 @@ export default function App() {
                 upgrade.open('AI詳細レポート');
                 return;
               }
-              setActiveTab(tab.key);
+              withViewTransition(() => setActiveTab(tab.key));
               window.scrollTo({ top: 0, behavior: 'smooth' });
             };
             return (
