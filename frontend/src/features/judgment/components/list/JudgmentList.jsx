@@ -9,11 +9,11 @@ import JudgmentRow from './JudgmentRow.jsx';
  * Pane 2: 銘柄リスト本実装 (Step 5).
  *
  * @param {object} props
- * @param {Array} props.items  各銘柄の表示用データ. 形:
- *   { ticker, companyName?, price?, changePct?, judgment?, isHolding, isWatchlist, lastAnalyzedAt? }
- *   judgment は { overallPass, passedCount, totalCount, conditions: [{passed}] } か null.
+ * @param {Array} props.items
+ * @param {boolean} [props.showFilters=true] - フィルタ chip 表示。
+ *   3-pane (Pane 1 nav 有り) の desktop では false にして重複回避.
  */
-export default function JudgmentList({ items = [] }) {
+export default function JudgmentList({ items = [], showFilters = true }) {
   const { selectedTicker, selectTicker, filters } = useJudgment();
 
   // ── filter + sort + group ────────────────────────────────────
@@ -90,7 +90,7 @@ export default function JudgmentList({ items = [] }) {
       }}
     >
       <JudgmentSearchBar />
-      <JudgmentFilters />
+      {showFilters && <JudgmentFilters />}
       <div
         style={{
           flex: 1,
