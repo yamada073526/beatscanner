@@ -14,7 +14,9 @@ import { initDarkMode, toggleDarkMode, isDark } from './utils/darkMode.js';
 import { hasFmpKey, loadFmpKey } from './lib/fmpKey.js';
 import { isPro } from './lib/planGating.js';
 import { useJudgmentResult } from './features/judgment/state/useJudgmentResult.js';
-import { JudgmentTab as JudgmentTabV2 } from './features/judgment/index.js';
+// JudgmentTabV2 は ?j2=1 のときだけ評価されるため lazy load
+// (CLAUDE.md「行数 200+ → lazy で初期バンドル軽量化」基準)
+const JudgmentTabV2 = lazy(() => import('./features/judgment/index.js').then((m) => ({ default: m.JudgmentTab })));
 import { withViewTransition } from './utils/viewTransition.js';
 import { CmdPalette, useCmdPalette } from './features/cmd-palette/index.js';
 import { useUpgradeModal } from './lib/useUpgradeModal.js';
@@ -1101,18 +1103,26 @@ export default function App() {
             };
           };
           return (
-            <JudgmentTabV2
-              plan={planV2}
-              items={itemsV2}
-              detailFor={detailFor}
-              onAnalyze={runAnalyze}
-              detailContext={{
-                user,
-                isPro: isSubscribed,
-                onUpgrade: () => upgrade.open('詳細分析（強気/弱気）'),
-                onSignIn: signInWithGoogle,
-              }}
-            />
+            <Suspense
+              fallback={
+                <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  v2 タブを読み込み中...
+                </div>
+              }
+            >
+              <JudgmentTabV2
+                plan={planV2}
+                items={itemsV2}
+                detailFor={detailFor}
+                onAnalyze={runAnalyze}
+                detailContext={{
+                  user,
+                  isPro: isSubscribed,
+                  onUpgrade: () => upgrade.open('詳細分析（強気/弱気）'),
+                  onSignIn: signInWithGoogle,
+                }}
+              />
+            </Suspense>
           );
         }
         return (
