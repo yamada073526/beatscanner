@@ -996,17 +996,53 @@ _PORTFOLIO_PERIODS = {
 }
 
 
+# §11-D: portfolio-history endpoint 用の per-user rate limit (Web 開発 agent #4)
+# 簡易 in-memory bucket: user_id (or IP) → list[timestamp]
+# 30 req/min/user。Railway 再デプロイで消えるが MVP として十分 (後日 Redis/Supabase へ)
+_PORTFOLIO_HISTORY_RATE_LIMIT: dict[str, list[float]] = {}
+_PORTFOLIO_HISTORY_RATE_WINDOW = 60.0   # 秒
+_PORTFOLIO_HISTORY_RATE_MAX = 30        # 件/window
+
+
+def _check_portfolio_history_rate(key: str) -> bool:
+    """key (user_id or ip) ベースのレート制限チェック。許可なら True。"""
+    now_m = _time.monotonic()
+    bucket = _PORTFOLIO_HISTORY_RATE_LIMIT.setdefault(key, [])
+    # window 内のタイムスタンプのみ残す
+    cutoff = now_m - _PORTFOLIO_HISTORY_RATE_WINDOW
+    bucket[:] = [t for t in bucket if t > cutoff]
+    if len(bucket) >= _PORTFOLIO_HISTORY_RATE_MAX:
+        return False
+    bucket.append(now_m)
+    return True
+
+
 @app.post("/api/portfolio-history")
-async def portfolio_history(payload: dict, request: Request) -> dict:
+async def portfolio_history(
+    payload: dict,
+    request: Request,
+    authorization: str = Header(default=""),
+) -> dict:
     """ロット履歴から日次ポートフォリオ評価額の時系列を返す。
 
+    §11-D Fix (Web 開発 agent #4): Supabase JWT 認証必須化、tickers 上限 50、
+    レート制限 30req/min/user で DoS / 認証なし悪用を防止。
+
     body: { lots: [{ ticker, shares, trade_date }, ...], period: "1m"|"3m"|"6m"|"1y"|"3y" }
-    response: { series: [{ date, value }, ...], from, to }
+    response: { series: [{ date, value, cashflow }, ...], from, to }
 
     日 d の評価額 = Σ (lot.shares × adjClose(ticker, d)) for lots where trade_date <= d
-    取引のない日 (土日祝) は前営業日の close を引きずる (close_by_date が空にならない)。
+    cashflow = Σ (lot.shares × close) where lot.trade_date == d (TWR 計算用、§11-B-7-B Fix-A)
     """
     import datetime as _dt
+
+    # §11-D: 認証必須化 (lots を payload で受け取る関係上、user 紐付けは将来対応)
+    user = await _verify_supabase_jwt(authorization)
+    user_id = user["id"]
+
+    # §11-D: rate limit (user_id ベース)
+    if not _check_portfolio_history_rate(user_id):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded (30 req/min)")
 
     lots_in = payload.get("lots") or []
     period = (payload.get("period") or "1y").lower()
@@ -1017,8 +1053,14 @@ async def portfolio_history(payload: dict, request: Request) -> dict:
     today = _dt.date.today()
     period_from = today - _dt.timedelta(days=days)
 
-    # lots を正規化
+    # lots を正規化 + §11-D-Fix: trade_date バリデーション (金融 agent #H)
+    # §11-D 統合 Fix (2026-05-09): price (= avg_cost) と cost_basis_method を受領。
+    # - 未来日付禁止 (累積リターン計算が破綻、入金影響の符号が反転)
+    # - 30 年以上古い日付は明らかに誤入力
+    # - cost_basis_method: 'user_input' (default、shares×price で cashflow) /
+    #   'market_close' (strict TWR、shares×close(trade_date)) / 'unknown' (購入日不明)
     lots: list[dict] = []
+    min_valid_date = _dt.date(today.year - 30, 1, 1)
     for raw in lots_in:
         if not isinstance(raw, dict):
             continue
@@ -1032,10 +1074,37 @@ async def portfolio_history(payload: dict, request: Request) -> dict:
             if shares <= 0:
                 continue
             d_iso = str(d)[:10]
-            _ = _dt.date.fromisoformat(d_iso)
+            d_parsed = _dt.date.fromisoformat(d_iso)
+            if d_parsed > today:
+                continue
+            if d_parsed < min_valid_date:
+                continue
         except Exception:
             continue
-        lots.append({"ticker": t, "shares": shares, "trade_date": d_iso})
+        # price (= avg_cost): user_input mode の cashflow 計算に使用
+        price_val = raw.get("price")
+        price_num: float | None = None
+        try:
+            if price_val is not None:
+                pv = float(price_val)
+                if pv > 0:
+                    price_num = pv
+        except Exception:
+            price_num = None
+        method = (raw.get("cost_basis_method") or "user_input").strip().lower()
+        if method not in ("user_input", "market_close", "unknown"):
+            method = "user_input"
+        # price 欠落時は market_close に自動降格 (frontend 旧版互換)
+        if method == "user_input" and price_num is None:
+            method = "market_close"
+        lots.append({
+            "ticker": t,
+            "shares": shares,
+            "trade_date": d_iso,
+            "price": price_num,
+            "cost_basis_method": method,
+            "lot_id": raw.get("lot_id"),
+        })
 
     if not lots:
         return {
@@ -1045,8 +1114,14 @@ async def portfolio_history(payload: dict, request: Request) -> dict:
             "period": period,
         }
 
-    if len(lots) > 100:
-        lots = lots[:100]
+    # §11-D: lots 上限 100 → 50 (Web 開発 agent #4 推奨)
+    if len(lots) > 50:
+        lots = lots[:50]
+    # tickers 数も上限 20 (FMP / yfinance クォータ保護)
+    distinct_tickers = list({l["ticker"] for l in lots})
+    if len(distinct_tickers) > 20:
+        allowed = set(distinct_tickers[:20])
+        lots = [l for l in lots if l["ticker"] in allowed]
 
     # ticker 単位に集約 + 各 ticker の最古 trade_date を確認 (period_from と比較)
     tickers: set[str] = {l["ticker"] for l in lots}
@@ -1135,6 +1210,48 @@ async def portfolio_history(payload: dict, request: Request) -> dict:
     for l in lots:
         lots_by_ticker.setdefault(l["ticker"], []).append(l)
 
+    # §11-D Fix: drift 警告 (Web 開発 agent #2)
+    # ユーザー入力 avg_cost と trade_date 当日終値の乖離 > 5% で warnings に追加。
+    # UI で「取得単価が当日終値と乖離しています」amber chip を出すため。
+    warnings: list[dict] = []
+    for l in lots:
+        if l["cost_basis_method"] != "user_input" or l["price"] is None:
+            continue
+        cmap = closes_by_ticker.get(l["ticker"]) or {}
+        # trade_date 当日 close が無ければ ±3 営業日内の最近接 close を試す
+        cls_market: float | None = None
+        try:
+            d_iso = l["trade_date"]
+            if d_iso in cmap:
+                cls_market = cmap[d_iso]
+            else:
+                # 最近接日 (±3 日) を線形検索
+                base = _dt.date.fromisoformat(d_iso)
+                for delta in (1, -1, 2, -2, 3, -3):
+                    try:
+                        nd = (base + _dt.timedelta(days=delta)).isoformat()
+                        if nd in cmap:
+                            cls_market = cmap[nd]
+                            break
+                    except Exception:
+                        continue
+        except Exception:
+            cls_market = None
+        if cls_market is None or cls_market <= 0:
+            continue
+        drift = abs(cls_market - l["price"]) / l["price"]
+        if drift > 0.05:
+            warnings.append({
+                "lot_id": l.get("lot_id"),
+                "ticker": l["ticker"],
+                "trade_date": l["trade_date"],
+                "user_price": round(l["price"], 4),
+                "market_close": round(cls_market, 4),
+                "drift_pct": round(drift * 100, 2),
+                "kind": "trade_date_price_mismatch",
+            })
+
+    cumulative_invested = 0.0  # 累積投下資本 (cost basis 合計)
     for d_iso in sorted_days:
         # last_close を更新 (この日の close があれば)
         for t, cmap in closes_by_ticker.items():
@@ -1142,6 +1259,11 @@ async def portfolio_history(payload: dict, request: Request) -> dict:
             if v is not None:
                 last_close[t] = v
         total = 0.0
+        # §11-D Fix: cashflow ロジックを cost_basis_method で分岐 (4 体エージェント合意)
+        # - user_input (default): shares × user_avg_cost (Robinhood / 楽天 / SBI 流の累積リターン)
+        # - market_close: shares × close(trade_date) (strict TWR、上級者用)
+        # - unknown: shares × close (フォールバック、購入日不明 lot)
+        cashflow_today = 0.0
         for t, ts_lots in lots_by_ticker.items():
             close = last_close.get(t)
             if close is None:
@@ -1150,12 +1272,32 @@ async def portfolio_history(payload: dict, request: Request) -> dict:
             for l in ts_lots:
                 if l["trade_date"] <= d_iso:
                     shares += l["shares"]
+                    if l["trade_date"] == d_iso:
+                        method = l["cost_basis_method"]
+                        if method == "user_input" and l["price"] is not None:
+                            cashflow_today += l["shares"] * l["price"]
+                        else:
+                            cashflow_today += l["shares"] * close
             if shares > 0:
                 total += shares * close
-        series.append({"date": d_iso, "value": round(total, 2)})
+        cumulative_invested += cashflow_today
+        # 累積リターン % = (現在評価額 − 累積投下資本) / 累積投下資本 × 100
+        # = リスト部の含み損益 % と一致 (Robinhood / 楽天 / SBI 流)
+        total_return_pct = (
+            ((total - cumulative_invested) / cumulative_invested * 100)
+            if cumulative_invested > 0 else 0.0
+        )
+        series.append({
+            "date": d_iso,
+            "value": round(total, 2),
+            "cashflow": round(cashflow_today, 2),
+            "invested": round(cumulative_invested, 2),
+            "total_return_pct": round(total_return_pct, 4),
+        })
 
     return {
         "series": series,
+        "warnings": warnings,
         "from": period_from.isoformat(),
         "to": today.isoformat(),
         "period": period,
@@ -7604,12 +7746,55 @@ async def _verify_supabase_jwt(authorization: str) -> dict:
 
 
 class _CheckoutBody(BaseModel):
-    plan: str = "monthly"  # 'monthly' | 'yearly'
+    """v60: 2 段階課金対応 (pro / premium × monthly / yearly = 4 SKU)。
+    後方互換: tier 未指定 + plan のみ → tier='pro' とみなす (旧 BYOK 早期支援者向け)。
+    """
+    plan: str = "monthly"          # 'monthly' | 'yearly'
+    tier: str | None = None        # 'pro' | 'premium' (None なら旧仕様の pro 互換)
+
+
+# v60: 4 SKU を環境変数の table で管理。Railway の Service Variables に登録:
+#   STRIPE_MONTHLY_PRICE_ID         (旧 = pro_monthly、互換用)
+#   STRIPE_YEARLY_PRICE_ID          (旧 = pro_yearly、互換用)
+#   STRIPE_PRO_MONTHLY_PRICE_ID     (新、上記と同値で OK)
+#   STRIPE_PRO_YEARLY_PRICE_ID      (新)
+#   STRIPE_PREMIUM_MONTHLY_PRICE_ID (新、¥1,800/月)
+#   STRIPE_PREMIUM_YEARLY_PRICE_ID  (新、¥18,000/年 = 2 ヶ月 free)
+_STRIPE_PRICE_ENV = {
+    ("pro", "monthly"): ("STRIPE_PRO_MONTHLY_PRICE_ID", "STRIPE_MONTHLY_PRICE_ID"),
+    ("pro", "yearly"): ("STRIPE_PRO_YEARLY_PRICE_ID", "STRIPE_YEARLY_PRICE_ID"),
+    ("premium", "monthly"): ("STRIPE_PREMIUM_MONTHLY_PRICE_ID",),
+    ("premium", "yearly"): ("STRIPE_PREMIUM_YEARLY_PRICE_ID",),
+}
+
+
+def _resolve_stripe_price_id(tier: str, plan: str) -> str | None:
+    """tier × plan から price_id を解決。env var の fallback chain で旧仕様も拾う。"""
+    candidates = _STRIPE_PRICE_ENV.get((tier, plan), ())
+    for env_name in candidates:
+        v = os.environ.get(env_name)
+        if v:
+            return v
+    return None
+
+
+def _resolve_tier_plan_from_price_id(price_id: str) -> tuple[str, str]:
+    """price_id から (tier, plan) を逆引き。webhook で sub.items[0].price.id から tier 判定に使用。
+    一致しない場合は ('pro', 'monthly') にフォールバック (旧 BYOK 互換)。"""
+    if not price_id:
+        return ("pro", "monthly")
+    for (tier, plan), env_names in _STRIPE_PRICE_ENV.items():
+        for env_name in env_names:
+            if os.environ.get(env_name) == price_id:
+                return (tier, plan)
+    return ("pro", "monthly")
 
 
 @app.post("/api/stripe/checkout")
 async def stripe_checkout(body: _CheckoutBody, authorization: str = Header(default="")):
-    """Stripe Checkout Session を作成して URL を返す。Supabase JWT 認証必須。"""
+    """Stripe Checkout Session を作成して URL を返す。Supabase JWT 認証必須。
+    v60: tier (pro/premium) × plan (monthly/yearly) の 4 SKU 対応。
+    """
     stripe = _get_stripe()
     if not stripe:
         raise HTTPException(status_code=503, detail="Stripe not configured")
@@ -7618,10 +7803,22 @@ async def stripe_checkout(body: _CheckoutBody, authorization: str = Header(defau
     user_id = user["id"]
     user_email = user["email"]
 
-    price_env = "STRIPE_MONTHLY_PRICE_ID" if body.plan == "monthly" else "STRIPE_YEARLY_PRICE_ID"
-    price_id = os.environ.get(price_env)
+    # tier validation (None は旧 pro 互換)
+    tier = (body.tier or "pro").strip().lower()
+    if tier not in ("pro", "premium"):
+        raise HTTPException(status_code=400, detail=f"Invalid tier: {tier} (must be 'pro' or 'premium')")
+    plan = (body.plan or "monthly").strip().lower()
+    if plan not in ("monthly", "yearly"):
+        raise HTTPException(status_code=400, detail=f"Invalid plan: {plan} (must be 'monthly' or 'yearly')")
+
+    price_id = _resolve_stripe_price_id(tier, plan)
     if not price_id:
-        raise HTTPException(status_code=503, detail=f"{price_env} not set")
+        # どの env var が見つからなかったかをログに出す (Railway デプロイ忘れ検出用)
+        candidates = _STRIPE_PRICE_ENV.get((tier, plan), ())
+        raise HTTPException(
+            status_code=503,
+            detail=f"No Stripe price ID for tier={tier}, plan={plan}. Set one of: {', '.join(candidates)}",
+        )
 
     sb = _get_supabase_service()
 
@@ -7643,7 +7840,8 @@ async def stripe_checkout(body: _CheckoutBody, authorization: str = Header(defau
 
     app_url = os.environ.get("APP_URL", "https://beatscanner-production.up.railway.app")
 
-    trial_days = 7 if body.plan == "monthly" else 0  # 年払いはトライアルなし
+    # トライアル: 月額のみ 7 日間 (年払いはトライアルなし)。Premium は Pro と同じ条件。
+    trial_days = 7 if plan == "monthly" else 0
 
     session = stripe.checkout.Session.create(
         customer=customer_id,
@@ -7652,9 +7850,10 @@ async def stripe_checkout(body: _CheckoutBody, authorization: str = Header(defau
         mode="subscription",
         subscription_data={"trial_period_days": trial_days} if trial_days > 0 else {},
         allow_promotion_codes=True,
-        success_url=f"{app_url}/?checkout=success",
+        success_url=f"{app_url}/?checkout=success&tier={tier}",
         cancel_url=f"{app_url}/?checkout=cancel",
-        metadata={"supabase_user_id": user_id},
+        # v60: webhook で subscriptions.tier を更新するため metadata に tier を含める
+        metadata={"supabase_user_id": user_id, "tier": tier, "plan": plan},
     )
     return {"url": session.url}
 
@@ -7868,10 +8067,10 @@ async def stripe_webhook(request: Request):
                     items_data = sub.items.data
                 except Exception:
                     items_data = _obj_get(_obj_get(sub, "items") or {}, "data") or []
-                yearly_id = os.environ.get("STRIPE_YEARLY_PRICE_ID", "")
                 first_item = items_data[0] if items_data else None
                 first_price_id = _obj_get(_obj_get(first_item, "price") or {}, "id") if first_item else None
-                plan_key = "yearly" if first_price_id == yearly_id else "monthly"
+                # v60: price_id から (tier, plan) を逆引き。webhook で metadata なしでも判定可能。
+                tier_key, plan_key = _resolve_tier_plan_from_price_id(first_price_id or "")
 
                 # API 2025-03-31+ では current_period_end が item レベルに移動
                 cpe = _obj_get(sub, "current_period_end")
@@ -7886,11 +8085,12 @@ async def stripe_webhook(request: Request):
                     "stripe_subscription_id": subscription_id,
                     "status": status_val,
                     "plan": plan_key,
+                    "tier": tier_key,
                     "trial_end": _ts(trial_end_val),
                     "current_period_end": _ts(cpe),
                     "updated_at": _dt.utcnow().isoformat() + "Z",
                 }, on_conflict="user_id").execute()
-                print(f"[stripe webhook] subscriptions upserted for user_id={user_id} status={status_val}")
+                print(f"[stripe webhook] subscriptions upserted for user_id={user_id} tier={tier_key} status={status_val}")
 
         elif etype == "customer.subscription.updated":
             sub = getattr(getattr(event, "data", None), "object", None) or event["data"]["object"]
@@ -7898,25 +8098,26 @@ async def stripe_webhook(request: Request):
             result = sb.table("subscriptions").select("user_id").eq("stripe_customer_id", customer_id).execute()
             if result.data:
                 uid = result.data[0]["user_id"]
-                yearly_id = os.environ.get("STRIPE_YEARLY_PRICE_ID", "")
                 try:
                     items_data = sub.items.data
                 except Exception:
                     items_data = _obj_get(_obj_get(sub, "items") or {}, "data") or []
                 first_item = items_data[0] if items_data else None
                 first_price_id = _obj_get(_obj_get(first_item, "price") or {}, "id") if first_item else None
-                plan_key = "yearly" if first_price_id == yearly_id else "monthly"
+                # v60: tier も price_id から逆引き (Pro→Premium のアップグレード対応)
+                tier_key, plan_key = _resolve_tier_plan_from_price_id(first_price_id or "")
                 cpe = _obj_get(sub, "current_period_end")
                 if cpe is None and first_item is not None:
                     cpe = _obj_get(first_item, "current_period_end")
                 sb.table("subscriptions").update({
                     "status": _obj_get(sub, "status"),
                     "plan": plan_key,
+                    "tier": tier_key,
                     "trial_end": _ts(_obj_get(sub, "trial_end")),
                     "current_period_end": _ts(cpe),
                     "updated_at": _dt.utcnow().isoformat() + "Z",
                 }).eq("user_id", uid).execute()
-                print(f"[stripe webhook] subscription updated for user_id={uid}")
+                print(f"[stripe webhook] subscription updated for user_id={uid} tier={tier_key}")
 
         elif etype == "customer.subscription.deleted":
             sub = getattr(getattr(event, "data", None), "object", None) or event["data"]["object"]

@@ -376,6 +376,7 @@ export default function HomeTab({
             prices={prices}
             lots={lots}
             onSelect={onSelect}
+            user={user}
           />
         </Suspense>
       )}

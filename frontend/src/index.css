@@ -40,6 +40,75 @@
   --color-gain:    #16a34a;  /* 緑 (light) — 白背景でコントラスト確保 */
   --color-loss:    #dc2626;  /* 赤 (light) */
   --color-warning: #f59e0b;  /* amber (light/dark 共通) — 警告・緊急のみ */
+
+  /* ─── §11-E v51 Phase 1 Week 1: デザイントークン体系 ─────────────
+     Stripe Dashboard の --space-* + Linear の --motion-* + Vercel Geist の --radius-* ハイブリッド命名。
+     Aman Resorts の照明モデル (天井/壁/床) に倣った 4 階層 shadow + cyan glow。
+     全 component は hex / px 直書きを避け、これらのトークンを参照する。 */
+
+  /* Spacing — 4-base scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Radius — Vercel Geist tier */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-pill: 9999px;
+
+  /* Elevation — Aman 3 階層 (天井/壁/床) + cyan glow */
+  --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.06), 0 4px 8px rgba(0, 0, 0, 0.04);
+  --shadow-3: 0 4px 12px rgba(0, 0, 0, 0.08), 0 12px 24px rgba(0, 0, 0, 0.06);
+  --shadow-4: 0 12px 32px rgba(0, 0, 0, 0.12), 0 24px 48px rgba(0, 0, 0, 0.08);
+  --shadow-glow-cyan: 0 0 0 1px rgba(56, 189, 248, 0.20), 0 8px 32px rgba(56, 189, 248, 0.12);
+
+  /* Motion — Linear cubic-bezier 標準 */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-quad: cubic-bezier(0.45, 0, 0.55, 1);
+  --ease-out-cubic: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-slow: 360ms;
+  --motion-stage: 600ms;
+
+  /* Z-index 階層 */
+  --z-base: 1;
+  --z-sticky: 10;
+  --z-overlay: 20;
+  --z-modal: 100;
+  --z-toast: 1000;
+}
+
+[data-theme="dark"] {
+  /* dark mode 用 shadow を上書き (より深い影) */
+  --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.30), 0 1px 2px rgba(0, 0, 0, 0.20);
+  --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.40), 0 4px 8px rgba(0, 0, 0, 0.24);
+  --shadow-3: 0 4px 12px rgba(0, 0, 0, 0.50), 0 12px 24px rgba(0, 0, 0, 0.30);
+  --shadow-4: 0 12px 32px rgba(0, 0, 0, 0.60), 0 24px 48px rgba(0, 0, 0, 0.40);
+  --shadow-glow-cyan: 0 0 0 1px rgba(56, 189, 248, 0.30), 0 8px 32px rgba(56, 189, 248, 0.20);
+}
+
+/* §11-E v51 Phase 1: prefers-reduced-motion グローバル一括対応 (a11y AAA)
+   ユーザーが OS でモーション減を設定した場合、全アニメーション/トランジションを
+   実質無効化。Vercel Geist / Linear / Stripe で標準の宣言。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 [data-theme="dark"] {
@@ -818,6 +887,185 @@ body {
   background-color: rgba(255, 255, 255, 0.10) !important;
 }
 
+/* §11-E v51 Phase 1: Arrival Spotlight (IntersectionObserver で 1 枚 active 時)
+   旧 querySelectorAll forEach + scroll listener 方式は Portfolio/Watchlist (.bs-panel) を
+   スキップしていた。新 .is-arriving は .panel-card / .bs-panel / .surface-card を統合適用。
+   useArrivalSpotlight() hook が中央 ±25% にある「最も画面中央に近い 1 枚」だけに付与。 */
+.panel-card,
+.bs-panel,
+.surface-card {
+  /* base 状態を transition 共通化 (hover と arriving の挙動を揃える) */
+  transition: transform var(--motion-slow, 360ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+              filter var(--motion-slow, 360ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+              box-shadow var(--motion-slow, 360ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+              border-color var(--motion-slow, 360ms) ease;
+}
+
+/* §11-E v56: 発光トリガーの責務分離 (Stripe Dashboard / Linear / Apple HIG 流の階層)
+   - arrival (scroll IO) = 中強度: translateY -3px、ring 1px、shadow 16-22px
+   - hover (mouse)        = 強強度: translateY -5px、ring 2px、shadow 22-28px
+   - focus-visible        = a11y gold ring (kbd 専用)
+   全カードで同じ 2 段階階層を実現し、視線誘導を統一。
+   inline border に勝つため border-color は !important。 */
+.panel-card.is-arriving,
+.bs-panel.is-arriving,
+.surface-card.is-arriving {
+  transform: translateY(-3px) translateZ(0);
+  box-shadow:
+    0 0 16px rgba(56, 189, 248, 0.18),
+    0 6px 20px rgba(56, 189, 248, 0.12),
+    0 0 0 1px rgba(56, 189, 248, 0.36);
+  border-color: rgba(56, 189, 248, 0.36) !important;
+}
+
+/* §11-E v57: dark .panel-card は #1e2433 と明るめのため ring を 1.5px / shadow 強化で
+   .bs-panel (linear-gradient 0.92→0.96) との視覚均衡を確保 */
+[data-theme="dark"] .panel-card.is-arriving {
+  box-shadow:
+    0 0 24px rgba(56, 189, 248, 0.32),
+    0 10px 28px rgba(56, 189, 248, 0.20),
+    0 0 0 1.5px rgba(56, 189, 248, 0.62);
+  border-color: rgba(56, 189, 248, 0.62) !important;
+}
+[data-theme="dark"] .bs-panel.is-arriving,
+[data-theme="dark"] .surface-card.is-arriving {
+  box-shadow:
+    0 0 22px rgba(56, 189, 248, 0.26),
+    0 10px 28px rgba(56, 189, 248, 0.16),
+    0 0 0 1px rgba(56, 189, 248, 0.50);
+  border-color: rgba(56, 189, 248, 0.50) !important;
+}
+
+/* §11-E v57: arrival 中でも hover が必ず勝つ (specificity 0,3,1 で .is-arriving 0,2,0 を超える)
+   責務分離: hover (能動) > arrival (受動)。これで全カードがスクロール中央でも
+   「マウスを乗せたら強発光に切替」が機能する。 */
+.panel-card.is-arriving:hover,
+.bs-panel.is-arriving:hover,
+.surface-card.is-arriving:hover {
+  transform: translateY(-5px) translateZ(0);
+  box-shadow:
+    0 0 26px rgba(56, 189, 248, 0.30),
+    0 12px 30px rgba(56, 189, 248, 0.20),
+    0 0 0 2px rgba(56, 189, 248, 0.60);
+  border-color: rgba(56, 189, 248, 0.60) !important;
+}
+[data-theme="dark"] .panel-card.is-arriving:hover,
+[data-theme="dark"] .bs-panel.is-arriving:hover,
+[data-theme="dark"] .surface-card.is-arriving:hover {
+  box-shadow:
+    0 0 32px rgba(56, 189, 248, 0.38),
+    0 14px 36px rgba(56, 189, 248, 0.24),
+    0 0 0 2px rgba(99, 179, 237, 0.80) !important;
+  border-color: rgba(99, 179, 237, 0.80) !important;
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* hover はより強く (能動アクション)
+   §11-E v57: light に border-color 追加 + dark 専用ルール新設で
+   ユーザー dark mode でも hover が確実に発火するように。 */
+.bs-panel:hover,
+.surface-card:hover {
+  transform: translateY(-5px) translateZ(0);
+  box-shadow: 0 0 22px rgba(56, 189, 248, 0.26),
+              0 10px 28px rgba(56, 189, 248, 0.18),
+              0 0 0 2px rgba(56, 189, 248, 0.55);
+  border-color: rgba(99, 179, 237, 0.70);
+}
+
+[data-theme="dark"] .bs-panel:hover,
+[data-theme="dark"] .surface-card:hover {
+  transform: translateY(-5px) translateZ(0);
+  box-shadow: 0 0 28px rgba(56, 189, 248, 0.34),
+              0 12px 32px rgba(56, 189, 248, 0.22),
+              0 0 0 2px rgba(99, 179, 237, 0.75) !important;
+  border-color: rgba(99, 179, 237, 0.75) !important;
+  background-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+/* prefers-reduced-motion で transform 完全停止 (グローバル @media は transition だけ短縮するため、
+   transform 自体の発動を別途抑制)
+   §11-E v57: .panel-card:hover と .is-arriving:hover 複合も明示追加 (a11y AAA 漏れ防止) */
+@media (prefers-reduced-motion: reduce) {
+  .panel-card.is-arriving,
+  .bs-panel.is-arriving,
+  .surface-card.is-arriving,
+  .panel-card.is-arriving:hover,
+  .bs-panel.is-arriving:hover,
+  .surface-card.is-arriving:hover,
+  .panel-card:hover,
+  .bs-panel:hover,
+  .surface-card:hover {
+    transform: none;
+  }
+}
+
+/* §11-E v55: focus-visible で gold ring を全 panel 系に適用 (kbd nav 専用、a11y AAA)
+   hover/scroll-arrival はシアン、focus は gold で視覚的に分離 (Vercel Geist / Stripe Dashboard 流)。
+   focus-visible はマウスクリックでは発火せず、キーボード Tab 操作でのみ発火する。 */
+.panel-card:focus-visible,
+.bs-panel:focus-visible,
+.surface-card:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--bg-primary, #0f172a),
+    0 0 0 4px rgba(245, 158, 11, 0.85);
+  transition: box-shadow var(--motion-fast, 120ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+}
+
+/* §11-E v54: 旧 v53 の `:has(.surface-card.is-arriving)` 親抑制 CSS は削除。
+   leaf 優先ロジックは useArrivalSpotlight 側で JS により集約 (DOM tree contains 判定で
+   visible 集合内の祖先を除外)。CSS と JS の責務重複を解消し、predictable に。
+
+   contain: paint は box-shadow を要素境界で clip する副作用 (= 「他セクションが発光しない」
+   主犯) のため layout style だけに後退。 */
+.surface-card {
+  contain: layout style;
+  isolation: isolate;
+}
+
+/* §11-E v55: content-visibility: auto で画面外カードの paint/layout を skip
+   contain-intrinsic-size で初期高さを reserve し CLS=0 を維持 (LCP 100-200ms 改善見込み)。
+   Web 開発 agent #7 推奨。
+   注: contain と異なり content-visibility は box-shadow を切らない (paint range は要素の外側に拡張可)。 */
+.panel-card,
+.bs-panel,
+.surface-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 360px;
+}
+
+/* §11-E v54: WatchlistRow 展開時の発光強化 (specificity を上げて既存スタイルに勝つ)
+   transform は付けない (展開中の chart レイアウト揺れ + scrollIntoView との競合を回避) */
+.ticker-row-v2.is-expanded.is-arriving {
+  background: rgba(56, 189, 248, 0.06);
+  border-bottom-color: rgba(56, 189, 248, 0.32);
+  box-shadow:
+    inset 0 0 0 1px rgba(56, 189, 248, 0.28),
+    0 0 22px rgba(56, 189, 248, 0.18),
+    0 10px 28px rgba(56, 189, 248, 0.14);
+  transform: none;
+  z-index: 2;
+}
+[data-theme="dark"] .ticker-row-v2.is-expanded.is-arriving {
+  background: rgba(56, 189, 248, 0.10);
+  box-shadow:
+    inset 0 0 0 1px rgba(56, 189, 248, 0.42),
+    0 0 28px rgba(56, 189, 248, 0.30);
+  z-index: 2;
+}
+
+/* §11-E v54 dev-only: spotlight デバッグ可視化
+   useArrivalSpotlight が import.meta.env.DEV のときだけ data-spotlight-* 属性を付ける。
+   本番ビルドでは tree-shake されてこの CSS は適用されない要素にのみ向けたものになる。 */
+[data-spotlight-active="1"] {
+  outline: 2px dashed magenta;
+  outline-offset: 4px;
+}
+[data-spotlight-debug="1"] {
+  outline: 1px dashed rgba(255, 0, 255, 0.4);
+  outline-offset: 2px;
+}
+
 /* ─── スマホ向け スクロール入場アニメーション ─── */
 /* スマホ: 初期状態を非表示に */
 @media (hover: none) {
@@ -1047,7 +1295,213 @@ body {
   z-index: 1;
 }
 
-/* ── ヒーロー大数字 (高級時計の文字盤感) ── */
+/* §11-E v54: 分析 CTA の中央寄せ wrapper (ユーザー指摘で v54 追加)。
+   業界慣習 (Stripe / Linear / Notion) では行内展開部の単独 CTA は左寄せが多いが、
+   beatscanner ではユーザー希望優先 + ホテルロビー的中央配置で「主役感」を強調。 */
+.analyze-cta-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 14px;
+}
+/* モバイル (≤ 640px) は拇指リーチ最大化のため CTA を全幅化 (Apple iOS Sheet 流) */
+@media (max-width: 640px) {
+  .analyze-cta-wrap .analyze-cta {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* §11-E v52 Phase 1: 「{ticker} の決算を分析」CTA (Stripe Continue / Linear Open issue 流)
+   gradient base + sheen sweep on hover + arrow translateX + amber pulse for D-7 (緊急時)。
+   ChartTab WatchlistRow 展開時の分析誘導ボタン。 */
+.analyze-cta {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 18px 11px 20px;
+  border-radius: var(--radius-md, 12px);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #0b1220;
+  background: linear-gradient(180deg, #7dd3fc 0%, #38bdf8 100%);
+  border: 1px solid rgba(56, 189, 248, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 1px 2px rgba(15, 23, 42, 0.20),
+    0 6px 18px rgba(56, 189, 248, 0.22);
+  cursor: pointer;
+  overflow: hidden;
+  isolation: isolate;
+  transition:
+    transform var(--motion-base, 220ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    box-shadow var(--motion-base, 220ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    filter var(--motion-base, 220ms) ease;
+}
+.analyze-cta::before {
+  /* sheen sweep (Apple Pay / Stripe Continue 流) */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+  transition: transform var(--motion-stage, 600ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+  z-index: 1;
+  pointer-events: none;
+}
+.analyze-cta > * {
+  position: relative;
+  z-index: 2;
+}
+.analyze-cta__ticker {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  font-weight: 700;
+  margin-right: 0;
+}
+.analyze-cta__verb {
+  font-weight: 600;
+}
+.analyze-cta__arrow {
+  transition: transform var(--motion-base, 220ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+  flex-shrink: 0;
+}
+.analyze-cta:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 2px 4px rgba(15, 23, 42, 0.22),
+    0 12px 30px rgba(56, 189, 248, 0.36);
+}
+.analyze-cta:hover::before {
+  transform: translateX(120%);
+}
+.analyze-cta:hover .analyze-cta__arrow {
+  transform: translateX(3px);
+}
+.analyze-cta:active {
+  transform: translateY(0);
+  filter: brightness(0.98);
+}
+.analyze-cta:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--bg-primary, #0b1220),
+    0 0 0 4px rgba(56, 189, 248, 0.85),
+    0 12px 30px rgba(56, 189, 248, 0.36);
+}
+/* 決算 7 日前以内 = amber pulse (CLAUDE.md 投資業界色ルール: 緊急 = amber) */
+.analyze-cta[data-urgent="true"] {
+  background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%);
+  border-color: rgba(245, 158, 11, 0.6);
+  animation: analyze-pulse 2.4s var(--ease-in-out-quad, cubic-bezier(0.4, 0, 0.6, 1)) infinite;
+}
+@keyframes analyze-pulse {
+  0%, 100% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.45),
+      0 1px 2px rgba(15, 23, 42, 0.20),
+      0 6px 18px rgba(245, 158, 11, 0.30);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.55),
+      0 2px 4px rgba(15, 23, 42, 0.22),
+      0 10px 28px rgba(245, 158, 11, 0.55);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .analyze-cta,
+  .analyze-cta__arrow,
+  .analyze-cta::before {
+    transition: none;
+    animation: none;
+  }
+  .analyze-cta:hover {
+    transform: none;
+  }
+}
+
+/* §11-E v51 Phase 1: Concierge Greeting (Stripe Dashboard / Aman Doorman 流)
+   Hero 大数字の上に、時間帯挨拶 + NYSE 市場状態を 1 行で配置。
+   毎朝同じトーンで迎える安心感 (Aman Resorts の Concierge は毎日同じ言葉で迎える)。
+   font-size 13px / muted color / letter-spacing 0.04em でフロントマンの胸ポケット文字感。 */
+.pd-greeting {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  margin-bottom: 12px;
+  line-height: 1.4;
+  flex-wrap: wrap;
+}
+.pd-greeting-hello {
+  color: var(--text-secondary);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.pd-greeting-sep {
+  opacity: 0.45;
+  font-weight: 400;
+  user-select: none;
+}
+.pd-greeting-market {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pd-greeting-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--text-muted);
+  flex-shrink: 0;
+}
+.pd-greeting-market-regular .pd-greeting-dot {
+  background: var(--color-gain);
+  box-shadow: 0 0 0 0 rgba(52, 239, 129, 0.65);
+  animation: pd-greeting-pulse 2.4s var(--ease-in-out-quad, ease-in-out) infinite;
+}
+.pd-greeting-market-pre .pd-greeting-dot,
+.pd-greeting-market-post .pd-greeting-dot {
+  background: var(--color-warning);
+}
+.pd-greeting-market-closed .pd-greeting-dot {
+  background: var(--text-muted);
+  opacity: 0.6;
+}
+.pd-greeting-until {
+  opacity: 0.78;
+  font-weight: 400;
+}
+@keyframes pd-greeting-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(52, 239, 129, 0.65); }
+  50% { box-shadow: 0 0 0 6px rgba(52, 239, 129, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pd-greeting-market-regular .pd-greeting-dot {
+    animation: none;
+    box-shadow: none;
+  }
+}
+
+/* ── ヒーロー大数字 (高級時計の文字盤感 + 銀行証書感) ──
+   §11-E v51 Phase 1: Inter Variable の OpenType 機能 (tnum / cv11 / ss01) を全開、
+   font-optical-sizing で 56px 専用字形に切替。Bloomberg Terminal のような重みを獲得。
+   - tnum: 数字幅固定 (桁ズレ防止 = CLS=0 の貢献)
+   - cv11: Inter の数字 Display 字形 (縦長、証書感)
+   - ss01: 記号 ($) のスタイル変換 */
 .bs-stat-hero {
   font-size: 56px;
   font-weight: 700;
@@ -1055,6 +1509,9 @@ body {
   color: var(--text-primary);
   line-height: 1.05;
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "cv11" 1, "ss01" 1;
+  font-optical-sizing: auto;
+  font-variation-settings: "opsz" 56;
 }
 @media (max-width: 600px) {
   .bs-stat-hero {
@@ -1113,10 +1570,45 @@ body {
   letter-spacing: -0.015em;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "cv11" 1;
   line-height: 1.1;
 }
 .bs-stat-secondary-value.up { color: var(--color-gain); }
 .bs-stat-secondary-value.down { color: var(--color-loss); }
+
+/* §11-E v55: state-change flash (株価 tick / 含み損益更新時に 600ms の cyan/gain/loss flash)
+   data-flash="up" / "down" / "tick" を React 側で次回更新時に付与 → CSS animation 終了で removeAttribute。
+   Bloomberg Terminal の数字点滅と同等機能を「数字本体の text-shadow + bg pulse」で表現。 */
+.bs-stat-secondary-value[data-flash="up"],
+.bs-stat-hero[data-flash="up"] {
+  animation: bs-flash-gain 600ms var(--ease-out-cubic, cubic-bezier(0.22, 1, 0.36, 1));
+}
+.bs-stat-secondary-value[data-flash="down"],
+.bs-stat-hero[data-flash="down"] {
+  animation: bs-flash-loss 600ms var(--ease-out-cubic, cubic-bezier(0.22, 1, 0.36, 1));
+}
+.bs-stat-secondary-value[data-flash="tick"],
+.bs-stat-hero[data-flash="tick"] {
+  animation: bs-flash-tick 600ms var(--ease-out-cubic, cubic-bezier(0.22, 1, 0.36, 1));
+}
+@keyframes bs-flash-gain {
+  0%   { background-color: rgba(52, 239, 129, 0.22); text-shadow: 0 0 12px rgba(52, 239, 129, 0.55); border-radius: 4px; }
+  100% { background-color: transparent;             text-shadow: none;                                 border-radius: 4px; }
+}
+@keyframes bs-flash-loss {
+  0%   { background-color: rgba(248, 113, 113, 0.22); text-shadow: 0 0 12px rgba(248, 113, 113, 0.55); border-radius: 4px; }
+  100% { background-color: transparent;               text-shadow: none;                                  border-radius: 4px; }
+}
+@keyframes bs-flash-tick {
+  0%   { background-color: rgba(56, 189, 248, 0.22); text-shadow: 0 0 12px rgba(56, 189, 248, 0.55); border-radius: 4px; }
+  100% { background-color: transparent;              text-shadow: none;                                 border-radius: 4px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bs-stat-secondary-value[data-flash],
+  .bs-stat-hero[data-flash] {
+    animation: none;
+  }
+}
 .bs-stat-secondary-sub {
   font-size: 12px;
   color: var(--text-muted);
@@ -1234,6 +1726,27 @@ body {
 /* ─── §11-B-7-A: ウォッチリスト リスト UI 刷新 (TickerRow v2) ─── */
 /* 6 体エージェントレビュー全員一致採用、Apple ミニマル + Linear タイポ + Stripe 微グラデのハイブリッド */
 
+/* §11-E v56: ウォッチリスト外枠 (overflow: hidden を撤去したため、border + 角丸を
+   ここで CSS 制御。:first-child / :last-child で角丸が継承される)。
+   発光が外に漏れるのを許容するため、子 .ticker-row-v2 の box-shadow が wrapper の
+   border-radius を貫通しても OK。 */
+.wl-list-frame {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  position: relative;
+}
+/* 子 row に親の角丸を継承 (overflow:hidden の代替) */
+.wl-list-frame > div > .ticker-row-v2:first-of-type,
+.wl-list-frame .ticker-row-v2:first-of-type {
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+}
+.wl-list-frame > div > .ticker-row-v2:last-of-type,
+.wl-list-frame .ticker-row-v2:last-of-type {
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
 /* ── 行 (card は廃止、hairline 区切りのみ。Apple Mail / Linear Issues 流) ── */
 .ticker-row-v2 {
   position: relative;
@@ -1246,12 +1759,76 @@ body {
   min-height: 64px;
   border-bottom: 1px solid var(--border-subtle, rgba(148,163,184,0.18));
   background: transparent;
-  transition: background 0.18s ease;
+  transition:
+    background var(--motion-base, 200ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    transform var(--motion-base, 200ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    box-shadow var(--motion-base, 200ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    border-color var(--motion-base, 200ms) ease;
   cursor: pointer;
   scroll-margin-top: 80px;
+  z-index: 0;
 }
+/* §11-E v54: ウォッチリスト row hover を pd-row 並みに強化
+   (UI/UX agent: pd-row と統一の hover 言語、ただし sparkline 発光は固有 magic) */
 .ticker-row-v2:hover {
-  background: var(--bg-hover-subtle, rgba(75,158,255,0.04));
+  background: rgba(56, 189, 248, 0.08);
+  transform: translateY(-1px);
+  border-color: rgba(56, 189, 248, 0.32);
+  box-shadow:
+    inset 3px 0 0 rgba(56, 189, 248, 0.45),
+    0 4px 14px -2px rgba(15, 23, 42, 0.18),
+    0 2px 4px -1px rgba(15, 23, 42, 0.10);
+  z-index: 2;
+}
+[data-theme="dark"] .ticker-row-v2:hover {
+  background: rgba(56, 189, 248, 0.10);
+  border-color: rgba(56, 189, 248, 0.40);
+  box-shadow:
+    inset 3px 0 0 rgba(56, 189, 248, 0.55),
+    0 6px 18px -4px rgba(0, 0, 0, 0.55),
+    0 2px 6px -1px rgba(0, 0, 0, 0.35);
+}
+/* sparkline を hover 時に微発光させる (ウォッチリスト固有の magic moment) */
+.ticker-row-v2:hover .row-sparkline-wrap svg path {
+  filter: drop-shadow(0 0 4px rgba(56, 189, 248, 0.45));
+  transition: filter var(--motion-base, 200ms) ease;
+}
+/* §11-E v54: 保有銘柄行 (.is-holding) はゴールドバーと cyan inset shadow が衝突するため、
+   hover 時の cyan inset shadow を抑制し、外側 shadow + gold アクセントだけ残す
+   (Web 設計 + Web 開発 agent 合意) */
+.ticker-row-v2.is-holding:hover {
+  background: rgba(212, 175, 55, 0.08);
+  box-shadow:
+    0 4px 14px -2px rgba(15, 23, 42, 0.18),
+    0 2px 4px -1px rgba(15, 23, 42, 0.10);
+}
+[data-theme="dark"] .ticker-row-v2.is-holding:hover {
+  background: rgba(212, 175, 55, 0.10);
+  box-shadow:
+    0 6px 18px -4px rgba(0, 0, 0, 0.55),
+    0 2px 6px -1px rgba(0, 0, 0, 0.35);
+}
+.ticker-row-v2:focus-visible {
+  outline: none;
+  transform: translateY(-1px);
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow:
+    inset 3px 0 0 rgba(56, 189, 248, 0.45),
+    0 0 0 2px var(--bg-primary, #0f172a),
+    0 0 0 4px rgba(56, 189, 248, 0.65);
+  z-index: 2;
+}
+.ticker-row-v2:active {
+  transform: translateY(0);
+  transition-duration: 80ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ticker-row-v2,
+  .ticker-row-v2:hover,
+  .ticker-row-v2:focus-visible {
+    transition: none;
+    transform: none;
+  }
 }
 .ticker-row-v2:last-child {
   border-bottom: none;
@@ -3220,49 +3797,115 @@ body {
 .pd-card-loss .pd-card-value, .pd-card-loss .pd-card-sub { color: var(--color-loss); }
 .pd-card-amber .pd-card-value, .pd-card-amber .pd-card-sub { color: var(--color-warning); }
 
-/* 銘柄絞り込みブレッドクラム (per-stock filter applied) */
-.pd-filter-breadcrumb {
+/* §11-D Fix: 銘柄絞り込みフィルタ chip を title row に吸収 (Linear / Stripe 流)
+   旧 .pd-filter-breadcrumb は新規行を挿入してレイアウトシフト発生 → 廃止。
+   title row 内の slot に inline 表示することで、フィルタ ON/OFF で高さ変動ゼロを実現。 */
+
+/* タイトル行 (h3) を flex 化して main label + filter slot を横並び */
+.pd-title-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 0 8px;
-  font-size: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
-.pd-filter-label {
-  color: var(--text-muted);
-  font-weight: 600;
+.pd-title-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
+
+/* slot は常に存在 (高さは inline-flex 由来の自然高で固定) */
+.pd-title-filter-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  /* 非アクティブ時は完全透明だが空間は確保しない (next sibling 影響なし)。
+     アクティブ時はコンテンツが入って自然に幅が伸びる。
+     重要: 高さは title row の line-height で決まるため、chip 出現で
+     row 高さは変動しない (= レイアウトシフトゼロ)。 */
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1),
+              transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+.pd-title-filter-slot.is-active {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+.pd-title-sep {
+  color: var(--text-muted);
+  font-weight: 400;
+  opacity: 0.55;
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  user-select: none;
+}
+
+/* filter chip 本体 (title row inline 用、コンパクト) */
 .pd-filter-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
-  background: rgba(56,189,248,0.16);
-  border: 1px solid rgba(56,189,248,0.40);
+  padding: 3px 4px 3px 10px;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.40);
   border-radius: 999px;
   color: rgb(8, 145, 178);
   font-weight: 700;
+  font-size: 12px;
   letter-spacing: 0.02em;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 [data-theme="dark"] .pd-filter-chip {
-  background: rgba(56,189,248,0.20);
+  background: rgba(56, 189, 248, 0.18);
   color: rgb(56, 189, 248);
 }
-.pd-filter-clear {
-  background: transparent;
-  border: 0;
-  font-size: 11px;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-weight: 600;
-  transition: background-color 0.12s ease, color 0.12s ease;
+.pd-filter-chip-inline {
+  /* title row inline 専用の微調整 (今は default 同一、将来差別化用) */
 }
-.pd-filter-clear:hover {
-  background: rgba(148,163,184,0.10);
-  color: var(--text-primary);
+.pd-filter-chip-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.18);
+  color: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 140ms cubic-bezier(0.16, 1, 0.3, 1),
+              transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.pd-filter-chip-clear:hover {
+  background: rgba(56, 189, 248, 0.34);
+  transform: rotate(90deg);
+}
+[data-theme="dark"] .pd-filter-chip-clear {
+  background: rgba(56, 189, 248, 0.24);
+}
+[data-theme="dark"] .pd-filter-chip-clear:hover {
+  background: rgba(56, 189, 248, 0.42);
+}
+
+/* prefers-reduced-motion: 全モーション無効化 */
+@media (prefers-reduced-motion: reduce) {
+  .pd-title-filter-slot,
+  .pd-filter-chip-clear {
+    transition: none;
+    transform: none;
+  }
+  .pd-filter-chip-clear:hover {
+    transform: none;
+  }
 }
 
 /* 集中リスクチップ */
@@ -3312,18 +3955,29 @@ body {
 .pd-table tbody tr:last-child td { border-bottom: none; }
 .pd-row {
   cursor: pointer;
-  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  position: relative;
+  z-index: 0;
+  transition: background-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-/* §11-B-7-B Phase A v2: hover 効果を強化 (UI/UX エージェント Linear 流推奨)。
-   rgba(56,189,248,0.10) は微弱でユーザー指摘あり → 0.18 + inset 左ボーダー追加。
-   ChartTab TickerRow と統一の hover 言語、テーブル行で transform は重なりリスク回避。 */
+/* §11-B-7-B Fix-B: cyan inset + 外側 shadow + 軽い浮き上がりで「触れる行」の質感を復活。
+   transform translateY(-1px) は z-index:2 で隣行との重なり崩れを回避。 */
 .pd-row:hover {
   background: rgba(56, 189, 248, 0.16);
-  box-shadow: inset 3px 0 0 rgba(56, 189, 248, 0.45);
+  box-shadow:
+    inset 3px 0 0 rgba(56, 189, 248, 0.45),
+    0 4px 14px -2px rgba(15, 23, 42, 0.18),
+    0 2px 4px -1px rgba(15, 23, 42, 0.10);
+  transform: translateY(-1px);
+  z-index: 2;
 }
 [data-theme="dark"] .pd-row:hover {
   background: rgba(56, 189, 248, 0.18);
-  box-shadow: inset 3px 0 0 rgba(56, 189, 248, 0.55);
+  box-shadow:
+    inset 3px 0 0 rgba(56, 189, 248, 0.55),
+    0 6px 18px -4px rgba(0, 0, 0, 0.55),
+    0 2px 6px -1px rgba(0, 0, 0, 0.35);
 }
 /* 選択中の銘柄 (per-stock filter applied) は更に強調 */
 .pd-row.is-selected {
@@ -3494,6 +4148,44 @@ body {
 .pd-history-delta-gain { color: var(--color-gain); }
 .pd-history-delta-loss { color: var(--color-loss); }
 .pd-history-delta-neutral { color: var(--text-muted); }
+
+/* §11-D Fix: 法務免責文 (ポートフォリオ画面末尾) */
+.pd-disclaimer {
+  margin-top: 14px;
+  padding: 10px 14px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  background: rgba(148, 163, 184, 0.06);
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.10);
+  letter-spacing: 0.01em;
+}
+[data-theme="dark"] .pd-disclaimer {
+  background: rgba(148, 163, 184, 0.04);
+  border-color: rgba(148, 163, 184, 0.08);
+}
+
+/* §11-D Fix: drift 警告 chip (取得単価 × 購入日 当日終値の乖離 > 5%) */
+.pd-history-warning-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(245, 158, 11, 0.14);
+  color: var(--color-warning);
+  border: 1px solid rgba(245, 158, 11, 0.40);
+  cursor: help;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+[data-theme="dark"] .pd-history-warning-chip {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.55);
+}
 
 .pd-history-period-tabs {
   display: inline-flex;

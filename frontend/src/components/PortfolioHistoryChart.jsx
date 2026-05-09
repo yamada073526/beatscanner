@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { usePortfolioHistory } from '../hooks/usePortfolioHistory.js';
-import { useSpyHistory, computeSpyAlpha } from '../hooks/useSpyHistory.js';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { usePortfolioHistory, computeTWR, indexBenchmark } from '../hooks/usePortfolioHistory.js';
+import { useSpyHistory } from '../hooks/useSpyHistory.js';
 
 const PERIODS = [
   { key: '1m', label: '1M' },
@@ -66,7 +66,7 @@ const PERIOD_TO_SPY = {
 export default function PortfolioHistoryChart({ lots = [] }) {
   const [period, setPeriod] = useState('3m');
   const [showSpy, setShowSpy] = useState(true);  // §11-B-7-B: SPY overlay default ON
-  const { series, loading } = usePortfolioHistory(lots, period);
+  const { series, warnings, loading } = usePortfolioHistory(lots, period);
   const { points: spyPoints } = useSpyHistory(PERIOD_TO_SPY[period] || '3mo');
 
   const containerRef = useRef(null);
@@ -75,20 +75,35 @@ export default function PortfolioHistoryChart({ lots = [] }) {
   const spySeriesRef = useRef(null);
   const [chartReady, setChartReady] = useState(false);
 
-  // ── 期間収益 (始端 → 終端) を chart 構築前に算出して line/area 色に反映 ──
+  // §11-B-7-B Fix-A: TWR (Time-Weighted Return) 系列を計算 (入金影響除外、純投資成果のみ)
+  const twrSeries = useMemo(() => computeTWR(series), [series]);
+
+  // ── 期間収益: TWR 末尾の累積 % を期間収益として表示 (始端 → 終端の純投資成果) ──
   const periodReturn = (() => {
-    if (!Array.isArray(series) || series.length < 2) return null;
-    const first = Number(series[0]?.value);
-    const last = Number(series[series.length - 1]?.value);
-    if (!Number.isFinite(first) || !Number.isFinite(last) || first <= 0) return null;
-    return {
-      absDelta: last - first,
-      pctDelta: ((last - first) / first) * 100,
-    };
+    if (!Array.isArray(twrSeries) || twrSeries.length < 2) return null;
+    const lastTwr = twrSeries[twrSeries.length - 1];
+    const pctDelta = Number(lastTwr?.twrPct);
+    if (!Number.isFinite(pctDelta)) return null;
+    return { pctDelta };
   })();
 
-  // §11-B-7-B: SPY 比較 alpha (portfolio % − SPY %)
-  const spyAlpha = computeSpyAlpha(series, spyPoints);
+  // §11-B-7-B Fix-A: SPY 比較 alpha
+  // portfolioPct = TWR 累積 % (旧: 単純 (last - first) / first → 入金で歪む)
+  // spyPct       = SPY anchor → 末尾の単純価格変化率
+  // alphaPct     = portfolioPct - spyPct
+  const spyAlpha = useMemo(() => {
+    const empty = { portfolioPct: null, spyPct: null, alphaPct: null };
+    if (!Array.isArray(twrSeries) || twrSeries.length < 2) return empty;
+    if (!Array.isArray(spyPoints) || spyPoints.length < 2) {
+      return { ...empty, portfolioPct: twrSeries[twrSeries.length - 1].twrPct };
+    }
+    const portfolioPct = twrSeries[twrSeries.length - 1].twrPct;
+    const anchorDate = twrSeries[0].date;
+    const spyIndexed = indexBenchmark(spyPoints, anchorDate);
+    if (spyIndexed.length < 2) return { ...empty, portfolioPct };
+    const spyPct = spyIndexed[spyIndexed.length - 1].indexValue - 100;
+    return { portfolioPct, spyPct, alphaPct: portfolioPct - spyPct };
+  }, [twrSeries, spyPoints]);
 
   const status = periodReturn
     ? (periodReturn.pctDelta > 0.05 ? 'gain' : (periodReturn.pctDelta < -0.05 ? 'loss' : 'neutral'))
@@ -172,58 +187,46 @@ export default function PortfolioHistoryChart({ lots = [] }) {
       seriesRef.current = areaSeries;
 
       if (Array.isArray(series) && series.length > 0) {
-        const rawData = series
-          .filter((p) => p && p.date && Number.isFinite(Number(p.value)))
-          .map((p) => ({ time: p.date, value: Number(p.value) }));
-
         if (useIndexedMode) {
-          // 最初の有意な portfolio value (= 初回入金日) を起点 anchor
-          const firstSigIdx = rawData.findIndex((d) => d.value > 0);
-          if (firstSigIdx >= 0 && firstSigIdx < rawData.length - 1) {
-            const portfolioBase = rawData[firstSigIdx].value;
-            const startDate = rawData[firstSigIdx].time;
-
-            // Portfolio: indexed = (value / portfolioBase) * 100
-            const portfolioIndexed = rawData
-              .slice(firstSigIdx)
-              .map((d) => ({
-                time: d.time,
-                value: (d.value / portfolioBase) * 100,
-              }));
+          // §11-B-7-B Fix-A: TWR (Time-Weighted Return) で indexed plot
+          // portfolio: 各 sub-period のリターンを cashflow 除外で連鎖乗算 → 純投資成果
+          // SPY: anchor 日以降を単純 indexed (cashflow なし)
+          if (Array.isArray(twrSeries) && twrSeries.length >= 2) {
+            const portfolioIndexed = twrSeries.map((p) => ({
+              time: p.date,
+              value: p.twrIndex,
+            }));
             areaSeries.setData(portfolioIndexed);
 
-            // SPY: anchor 日付以降を indexed = (close / spyBase) * 100
-            const spyStartIdx = spyPoints.findIndex((p) => p.date >= startDate);
-            const spyBase = spyPoints[Math.max(0, spyStartIdx)]?.close;
-            if (Number.isFinite(spyBase) && spyBase > 0) {
-              const spyIndexed = spyPoints
-                .slice(Math.max(0, spyStartIdx))
-                .filter((p) => p && p.date && Number.isFinite(Number(p.close)))
-                .map((p) => ({
-                  time: p.date,
-                  value: (Number(p.close) / spyBase) * 100,
-                }));
+            const anchorDate = twrSeries[0].date;
+            const spyIndexed = indexBenchmark(spyPoints, anchorDate)
+              .map((p) => ({ time: p.date, value: p.indexValue }));
 
-              if (spyIndexed.length >= 2) {
-                const spySeries = chart.addSeries(lc.LineSeries, {
-                  color: isDark ? '#94a3b8' : '#64748b',
-                  lineWidth: 2,
-                  lineStyle: 2,  // dashed
-                  priceLineVisible: false,
-                  lastValueVisible: false,
-                  crosshairMarkerVisible: false,
-                  priceFormat,
-                });
-                spySeries.setData(spyIndexed);
-                spySeriesRef.current = spySeries;
-              }
+            if (spyIndexed.length >= 2) {
+              const spySeries = chart.addSeries(lc.LineSeries, {
+                color: isDark ? '#94a3b8' : '#64748b',
+                lineWidth: 2,
+                lineStyle: 2,  // dashed
+                priceLineVisible: false,
+                lastValueVisible: false,
+                crosshairMarkerVisible: false,
+                priceFormat,
+              });
+              spySeries.setData(spyIndexed);
+              spySeriesRef.current = spySeries;
             }
           } else {
-            // 有意 portfolio value がない (全期間 $0)、絶対値モードに fallback
+            // TWR 構築不能 (保有なし等) → 絶対値モードに fallback
+            const rawData = series
+              .filter((p) => p && p.date && Number.isFinite(Number(p.value)))
+              .map((p) => ({ time: p.date, value: Number(p.value) }));
             areaSeries.setData(rawData);
           }
         } else {
-          // SPY 非表示モード: 絶対値プロット (旧挙動)
+          // SPY 非表示モード: 絶対値プロット ($) — 評価額の絶対推移を見たい場合
+          const rawData = series
+            .filter((p) => p && p.date && Number.isFinite(Number(p.value)))
+            .map((p) => ({ time: p.date, value: Number(p.value) }));
           areaSeries.setData(rawData);
         }
 
@@ -242,7 +245,7 @@ export default function PortfolioHistoryChart({ lots = [] }) {
       seriesRef.current = null;
       spySeriesRef.current = null;
     };
-  }, [series, status, spyPoints, showSpy]);
+  }, [series, twrSeries, status, spyPoints, showSpy]);
 
   // ── リサイズ追従 ──
   useEffect(() => {
@@ -256,16 +259,29 @@ export default function PortfolioHistoryChart({ lots = [] }) {
   }, []);
 
   return (
-    <section className="pd-history">
+    <section className="pd-history surface-card">
       <div className="pd-history-head">
         <div className="pd-history-titlebox">
           <h4 className="pd-history-title">推移</h4>
           {periodReturn && (
-            <span className={`pd-history-delta pd-history-delta-${status}`}>
-              {fmtSignedUSD(periodReturn.absDelta)}
-              <span className="pd-history-delta-pct">
-                {' '}({fmtSignedPct(periodReturn.pctDelta)})
-              </span>
+            <span
+              className={`pd-history-delta pd-history-delta-${status}`}
+              title="期間中の累積リターン (取得単価 × 株数 を投下資本としたリターン、Robinhood / 楽天 / SBI 流。リスト部の含み損益と一致します)"
+            >
+              {fmtSignedPct(periodReturn.pctDelta)}
+              <span className="pd-history-delta-pct"> 累積リターン</span>
+            </span>
+          )}
+          {/* §11-D Fix: drift 警告 chip (Web 開発 agent #2 + UI/UX agent #3) */}
+          {Array.isArray(warnings) && warnings.length > 0 && (
+            <span
+              className="pd-history-warning-chip"
+              title={warnings
+                .slice(0, 5)
+                .map((w) => `${w.ticker}: 取得単価 $${w.user_price} は ${w.trade_date} 終値 $${w.market_close} と ${w.drift_pct}% 乖離`)
+                .join('\n')}
+            >
+              ⚠ 取得単価と購入日が乖離 ({warnings.length} 件)
             </span>
           )}
           {/* §11-B-7-B Phase A: SPY 比較 alpha バッジ (Robinhood 流の主見出し右) */}

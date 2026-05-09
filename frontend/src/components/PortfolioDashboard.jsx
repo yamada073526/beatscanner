@@ -1,6 +1,7 @@
 import { useMemo, useState, lazy, Suspense } from 'react';
 import CompanyLogo from './CompanyLogo.jsx';
 import { useHoldingsMeta } from '../hooks/useHoldingsMeta.js';
+import { useMarketStatus, greetingFor } from '../hooks/useMarketStatus.js';
 import { computePnL, formatPnLPct } from '../lib/holdings.js';
 
 // X-2-5-C: lightweight-charts を読み込むため lazy chunk 化
@@ -52,9 +53,20 @@ export default function PortfolioDashboard({
   prices = {},
   lots = [],
   onSelect,
+  user = null,
 }) {
   const tickers = useMemo(() => Object.keys(holdings), [holdings]);
   const { meta } = useHoldingsMeta(tickers);
+
+  // §11-E v51 Phase 1: Concierge Greeting (Stripe Dashboard 流)
+  // 時間帯挨拶 + NYSE 市場状態を 1 行で表示。毎日同じトーンで迎える (Aman Doorman 流)。
+  const market = useMarketStatus();
+  const userName = (() => {
+    const meta = user?.user_metadata || {};
+    const name = meta.full_name || meta.name || (user?.email || '').split('@')[0];
+    return name ? name.split(' ')[0].slice(0, 24) : null;  // first name 24 文字まで
+  })();
+  const greeting = greetingFor();
 
   // 「銘柄クリックでチャートを絞り込む」モード (マネーフォワード方式)。
   // 同じ銘柄を再クリック or 「全銘柄」クリックで解除。
@@ -171,9 +183,37 @@ export default function PortfolioDashboard({
 
   return (
     <section className="portfolio-dashboard bs-panel bs-panel-hero">
-      <h3 className="section-heading" style={{ marginBottom: 18 }}>
-        ポートフォリオ
-        <span className="section-heading-count">{tickers.length} 銘柄</span>
+      <h3 className="section-heading pd-title-row" style={{ marginBottom: 18 }}>
+        <span className="pd-title-main">
+          ポートフォリオ
+          <span className="section-heading-count">{tickers.length} 銘柄</span>
+        </span>
+        {/* §11-D Fix: filter chip を title row に吸収 (Linear/Stripe 流の「動かないが状態が変わる」)。
+            旧実装は filter 適用時に新規行を挿入してレイアウトシフト発生 → ヒーロー全体が
+            ガクッと下にずれる問題があった。title row 内なら高さ変動ゼロで CLS=0 を維持。 */}
+        <span
+          className={`pd-title-filter-slot${selectedTicker ? ' is-active' : ''}`}
+          aria-hidden={!selectedTicker}
+        >
+          {selectedTicker && (
+            <>
+              <span className="pd-title-sep" aria-hidden="true">·</span>
+              <span className="pd-filter-chip pd-filter-chip-inline">
+                <CompanyLogo ticker={selectedTicker} size={14} />
+                {selectedTicker} のみ
+                <button
+                  type="button"
+                  className="pd-filter-chip-clear"
+                  onClick={() => setSelectedTicker(null)}
+                  aria-label="フィルタ解除"
+                  title="全銘柄に戻す"
+                >
+                  ×
+                </button>
+              </span>
+            </>
+          )}
+        </span>
       </h3>
 
       {/* §11-B-7-B Phase A: ヒーロー部 (Stripe Dashboard 流)
@@ -181,6 +221,19 @@ export default function PortfolioDashboard({
           視線誘導: 大数字 → 当日 → 含み損益 → 次回決算 (左→右、F-pattern)。 */}
       <div className="pd-hero">
         <div className="pd-hero-main">
+          {/* §11-E v51 Phase 1: Concierge Greeting (Stripe Dashboard / Aman Doorman 流)
+              時間帯挨拶 + NYSE 市場状態を 1 行で表示。毎日同じトーンで迎える安心感を演出。 */}
+          <div className="pd-greeting" aria-hidden="true">
+            <span className="pd-greeting-hello">
+              {greeting}{userName ? `, ${userName}` : ''}
+            </span>
+            <span className="pd-greeting-sep">·</span>
+            <span className={`pd-greeting-market pd-greeting-market-${(market.state || 'closed').toLowerCase()}`}>
+              <span className="pd-greeting-dot" aria-hidden="true" />
+              {market.label}
+              {market.untilNext && <span className="pd-greeting-until"> · {market.untilNext}</span>}
+            </span>
+          </div>
           <div className="bs-stat-hero-label">評価額</div>
           <div className="bs-stat-hero">${fmtUSD(totals.totalValue)}</div>
           <div className="bs-stat-hero-sub">
@@ -217,30 +270,12 @@ export default function PortfolioDashboard({
         </div>
       </div>
 
-      {/* ── 評価額推移チャート (X-2-5-C) ── 銘柄クリックで絞り込み */}
+      {/* ── 評価額推移チャート (X-2-5-C) ── 銘柄クリックで絞り込み
+          §11-D Fix: filter breadcrumb 行を削除 (title row へ吸収済、レイアウトシフト解消) */}
       {lots.length > 0 && (
-        <>
-          {selectedTicker && (
-            <div className="pd-filter-breadcrumb" role="status">
-              <span className="pd-filter-label">フィルタ:</span>
-              <span className="pd-filter-chip">
-                <CompanyLogo ticker={selectedTicker} size={16} />
-                {selectedTicker} のみ
-              </span>
-              <button
-                type="button"
-                className="pd-filter-clear"
-                onClick={() => setSelectedTicker(null)}
-                aria-label="フィルタ解除"
-              >
-                全銘柄に戻す ×
-              </button>
-            </div>
-          )}
-          <Suspense fallback={<div className="pd-history-fallback" />}>
-            <PortfolioHistoryChart lots={filteredLotsForChart} />
-          </Suspense>
-        </>
+        <Suspense fallback={<div className="pd-history-fallback" />}>
+          <PortfolioHistoryChart lots={filteredLotsForChart} />
+        </Suspense>
       )}
 
       {/* ── 集中リスクチップ (top1 ≥ 30%) ─────────────────── */}
@@ -260,11 +295,11 @@ export default function PortfolioDashboard({
             <tr>
               <th>銘柄</th>
               <th className="pd-num">株数</th>
-              <th className="pd-num">取得</th>
+              <th className="pd-num" title="取得単価 (Cost Basis)。あなたが入力した 1 株あたりの購入価格">取得単価</th>
               <th className="pd-num pd-hide-mobile">現在値</th>
-              <th className="pd-num">当日</th>
+              <th className="pd-num" title="前日終値からの当日変動 (%)">当日</th>
               <th className="pd-num">評価額</th>
-              <th className="pd-num">損益</th>
+              <th className="pd-num" title="含み損益 (Total Return) = (現在値 − 取得単価) / 取得単価。今売ったらいくら儲かるか">含み損益</th>
               <th className="pd-num pd-hide-mobile">構成比</th>
               <th className="pd-earn">次回決算</th>
             </tr>
@@ -308,7 +343,7 @@ export default function PortfolioDashboard({
                     {r.dayChangePct != null ? fmtSignedPct(r.dayChangePct) : '…'}
                   </td>
                   <td className="pd-num" data-label="評価額">{r.value != null ? `$${fmtUSD(r.value)}` : '…'}</td>
-                  <td className={`pd-num pd-${pnlCls}`} data-label="損益">
+                  <td className={`pd-num pd-${pnlCls}`} data-label="含み損益">
                     {r.pnlPct != null ? (
                       <>
                         <div>{formatPnLPct(r.pnlPct)}</div>
@@ -333,6 +368,12 @@ export default function PortfolioDashboard({
           </tbody>
         </table>
       </div>
+      {/* §11-D Fix: 法務免責文 (マーケ agent #9 / 投資助言該当回避) */}
+      <p className="pd-disclaimer">
+        ※ 表示の数値は参考値です。配当・税金・売買手数料は含まれません。
+        実際の損益は証券会社の取引履歴をご確認ください。
+        本サービスは投資助言ではなく情報提供を目的としています。
+      </p>
     </section>
   );
 }

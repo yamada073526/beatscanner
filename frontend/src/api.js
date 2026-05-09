@@ -349,13 +349,23 @@ export async function fetchQuarterlyHistory(ticker, limit = 8) {
 
 // ロット履歴から日次ポートフォリオ評価額の時系列を取得 (X-2-5-C HistoryChart)。
 // body: { lots: [{ ticker, shares, trade_date }, ...], period: "1m"|"3m"|"6m"|"1y"|"3y" }
-// 戻り値: { series: [{ date, value }, ...], from, to, period }
+// 戻り値: { series: [{ date, value, cashflow }, ...], from, to, period }
+// §11-D Fix: Supabase JWT を Authorization で送信 (backend で認証必須化、Web 開発 agent #4)
 export async function fetchPortfolioHistory(lots, period = '1y') {
   const list = Array.isArray(lots) ? lots : [];
   if (list.length === 0) return { series: [], period };
+  const headers = { 'Content-Type': 'application/json', ...fmpHeaders() };
+  // 動的 import で循環依存回避 (supabase.js は ESM top-level で読み込み済み)
+  try {
+    const { supabase } = await import('./lib/supabase.js');
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
+    }
+  } catch { /* noop: 未ログイン or supabase 未初期化時はそのまま投げる (backend で 401) */ }
   const r = await fetch('/api/portfolio-history', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...fmpHeaders() },
+    headers,
     body: JSON.stringify({ lots: list, period }),
   });
   if (!r.ok) return { series: [], period };

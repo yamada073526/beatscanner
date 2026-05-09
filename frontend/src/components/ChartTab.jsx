@@ -651,13 +651,42 @@ const TickerRow = memo(function TickerRow({
               </ChartErrorBoundary>
 
               {onSelect && (
-                <div style={{ borderTop: '1px solid var(--border)', marginTop: '12px', paddingTop: '12px' }}>
+                <div className="analyze-cta-wrap">
+                  {/* §11-E v52 Phase 1: ホテルロビー級 CTA (Stripe Continue / Linear Open issue 流)。
+                      gradient base + sheen sweep on hover + arrow translateX + amber pulse for D-7。
+                      投資業界色ルール: 通常 = cyan、決算 7 日前以内 = amber pulse (緊急のみ)。
+                      §11-E v54: 中央寄せ wrapper (analyze-cta-wrap で flex justify-content: center)。 */}
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); onSelect(ticker); }}
-                    className="cta-button-primary"
+                    className="analyze-cta"
+                    data-urgent={
+                      daysToEarnings != null && daysToEarnings >= 0 && daysToEarnings <= 7
+                        ? 'true'
+                        : undefined
+                    }
+                    aria-label={`${ticker} の決算を分析する`}
                   >
-                    📊 {ticker} の決算を分析する →
+                    <span className="analyze-cta__label">
+                      <span className="analyze-cta__ticker">{ticker}</span>
+                      <span className="analyze-cta__verb"> の決算を分析</span>
+                    </span>
+                    <svg
+                      className="analyze-cta__arrow"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 16 16"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M3 8h9M8 4l4 4-4 4"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        fill="none"
+                      />
+                    </svg>
                   </button>
                 </div>
               )}
@@ -930,6 +959,9 @@ export default memo(function ChartTab({
   }
 
   return (
+    /* §11-E v59: ChartTab root の surface-card は撤去 (発光リングが透過 root の境界に出て、
+       内部 wl-list-frame の border と二重枠 = フチが見える問題が発生)。
+       wl-list-frame に surface-card を移すことで発光リングと border-radius が一致する。 */
     <div className="pb-8" style={{ background: 'transparent' }}>
       {/* §11-B-7-A: 期間タブ (1D/1W/1M/6M/1Y、Apple Stocks 流) を上部に集約。
           各行は選択中の 1 期間のみ表示 → 行高さ削減 + API 負荷 1/5 (金融推奨)。
@@ -974,12 +1006,15 @@ export default memo(function ChartTab({
           items={watchlist}
           strategy={verticalListSortingStrategy}
         >
+          {/* §11-E v59: ChartTab root から移設した surface-card をここ (wl-list-frame) に付与。
+              発光リング (box-shadow ring 1px / 2px) が wl-list-frame の border-radius と一致 →
+              フチが見える問題を解消。これで「ウォッチリストチャート」=「個別 row 一覧の枠」が
+              スクロール中央/hover で発光する。 */}
           <div
+            className="wl-list-frame surface-card"
             style={{
               background: 'var(--bg-card)',
-              border: '1px solid var(--border)',
               borderRadius: 12,
-              overflow: 'hidden',
             }}
           >
             {watchlist.map((ticker, idx) => {
