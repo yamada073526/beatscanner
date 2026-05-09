@@ -7,6 +7,7 @@ import SimpleSection from './SimpleSection.jsx';
 import SectionDivider from './SectionDivider.jsx';
 import ProfileCard from './ProfileCard.jsx';
 import EarningsBars from './EarningsBars.jsx';
+import ConditionGrid from './ConditionGrid.jsx';
 import Card from '../../primitives/Card.jsx';
 import SectionHeader from '../../primitives/SectionHeader.jsx';
 import PremiumLock from '../shared/PremiumLock.jsx';
@@ -122,6 +123,15 @@ export default function JudgmentDetail({
         passedCount={result?.passedCount}
         totalCount={result?.totalCount}
       />
+
+      {/* 条件別 詳細 (v1 ConditionCard 流用、折り畳み式) */}
+      {conditions.length > 0 && (
+        <ConditionGrid
+          conditions={conditions}
+          isPro={detailContext.isPro}
+          onUpgrade={detailContext.onUpgrade}
+        />
+      )}
 
       {/* ガイダンス (今期/来期 EPS) — v1 GuidanceCard 流用 */}
       {guidance && (
