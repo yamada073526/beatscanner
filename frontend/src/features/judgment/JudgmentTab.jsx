@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { JudgmentProvider, useJudgment } from './state/JudgmentContext.jsx';
 import { JudgmentList } from './components/list/index.js';
 import { JudgmentDetail } from './components/detail/index.js';
@@ -16,9 +16,21 @@ import { useIsMobile } from '../../hooks/useIsMobile.js';
  * @param {(ticker: string) => void} [props.onAnalyze]
  * @param {object} [props.detailContext] - { user, isPro, onUpgrade, onSignIn } を Detail に伝搬
  */
-function JudgmentTabInner({ plan, items, detailFor, onAnalyze, detailContext }) {
+function JudgmentTabInner({ plan, items, detailFor, onAnalyze, detailContext, currentTicker }) {
   const isMobile = useIsMobile(1024); // 3-pane が破綻する手前
   const { selectedTicker, selectTicker } = useJudgment();
+
+  // App.jsx の現 ticker (runAnalyze で設定された銘柄) を v2 の selectedTicker に同期.
+  // movers / watchlist / 検索などからの flow で、判定タブに着地した瞬間に
+  // 該当銘柄の Detail が表示される (1 click 削減).
+  useEffect(() => {
+    if (currentTicker && currentTicker !== selectedTicker) {
+      selectTicker(currentTicker);
+    }
+    // 意図的に selectedTicker を deps に入れない: ユーザーが手動で別銘柄に
+    // 切替えた後に currentTicker が同じだと巻き戻ってしまうため.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTicker]);
 
   // group 別 count を計算 (Nav に渡して右肩バッジを出す)
   const counts = useMemo(() => {
@@ -98,6 +110,7 @@ export default function JudgmentTab({
   detailFor,
   onAnalyze,
   detailContext,
+  currentTicker,
 }) {
   return (
     <JudgmentProvider>
@@ -107,6 +120,7 @@ export default function JudgmentTab({
         detailFor={detailFor}
         onAnalyze={onAnalyze}
         detailContext={detailContext}
+        currentTicker={currentTicker}
       />
     </JudgmentProvider>
   );

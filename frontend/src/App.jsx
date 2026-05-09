@@ -1062,14 +1062,14 @@ export default function App() {
         />
       )}
 
-      {/* Tab: 判定詳細 — `?j2=1` で v2 (features/judgment) 切替 */}
+      {/* Tab: 判定詳細 — default v2 (features/judgment), `?j1=1` で legacy v1 へ fallback */}
       {activeTab === 'judgment' && (() => {
-        const useJ2 = (() => {
+        const useV2 = (() => {
           try {
-            return new URLSearchParams(window.location.search).get('j2') === '1';
-          } catch { return false; }
+            return new URLSearchParams(window.location.search).get('j1') !== '1';
+          } catch { return true; }
         })();
-        if (useJ2) {
+        if (useV2) {
           // v2 用 list items を holdings + watchlist + 過去分析 (resultCache) から構築
           const holdingTickers = Array.isArray(holdingStore?.tickers) ? holdingStore.tickers : [];
           const tickerSet = new Set([...holdingTickers, ...watchlist]);
@@ -1115,6 +1115,7 @@ export default function App() {
                 items={itemsV2}
                 detailFor={detailFor}
                 onAnalyze={runAnalyze}
+                currentTicker={ticker || null}
                 detailContext={{
                   user,
                   isPro: isSubscribed,
