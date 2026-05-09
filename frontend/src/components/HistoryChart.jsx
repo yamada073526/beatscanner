@@ -50,7 +50,7 @@ function SharesModal({ onClose }) {
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 なぜ重要か</p>
         <p className="text-sm leading-relaxed text-slate-700">
-          たとえ会社の利益が増えていても、この株数がそれ以上に増えていれば、あなたの持ち分（<span style={{ color: '#22d3ee', fontWeight: 500 }}>1株あたりの価値</span>）は相対的に小さくなってしまいます。これを「<span style={{ color: '#22d3ee', fontWeight: 500 }}>株式の希薄化</span>」と呼びます。
+          たとえ会社の利益が増えていても、この株数がそれ以上に増えていれば、あなたの持ち分（<span style={{ color: 'rgb(56, 189, 248)', fontWeight: 500 }}>1株あたりの価値</span>）は相対的に小さくなってしまいます。これを「<span style={{ color: 'rgb(56, 189, 248)', fontWeight: 500 }}>株式の希薄化</span>」と呼びます。
         </p>
       </div>
 
@@ -59,7 +59,7 @@ function SharesModal({ onClose }) {
         <ul className="space-y-2 text-sm text-slate-700">
           <li>
             <span className="font-semibold text-slate-900">・理想は「横ばい」または「減少」</span><br />
-            優良企業は<span style={{ color: '#22d3ee', fontWeight: 500 }}>自社株買い</span>によってこの数字を減らし、1株あたりの価値を高める努力をします。Appleなどがその典型です。
+            優良企業は<span style={{ color: 'rgb(56, 189, 248)', fontWeight: 500 }}>自社株買い</span>によってこの数字を減らし、1株あたりの価値を高める努力をします。Appleなどがその典型です。
           </li>
           <li>
             <span className="font-semibold text-slate-900">・「右肩上がり」は要注意</span><br />
@@ -96,7 +96,7 @@ function SharesTrend({ periods }) {
             className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
             style={{
               background: 'rgba(34,211,238,0.15)',
-              color: '#22d3ee',
+              color: 'rgb(56, 189, 248)',
               border: '1px solid rgba(34,211,238,0.4)',
             }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.30)'; }}
@@ -139,7 +139,7 @@ function HistoryChartModal({ onClose }) {
         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">📋 3指標をセットで見る理由</p>
         <p className="mb-2 text-sm leading-relaxed text-slate-700">この3つは単独ではなく、必ずセットで確認することが重要です。</p>
         <ul className="space-y-1 text-sm text-slate-700">
-          <li>・売上高が増加 → <strong style={{ color: '#22d3ee' }}>本業の需要が拡大している証拠</strong>（成長の質）</li>
+          <li>・売上高が増加 → <strong style={{ color: 'rgb(56, 189, 248)' }}>本業の需要が拡大している証拠</strong>（成長の質）</li>
           <li>・EPSが増加 → 利益が成長している（<strong>ただし会計操作の可能性あり</strong>）</li>
           <li>・CFPSが増加 → <strong>実際の現金創出力が伸びている</strong>（ごまかしにくい）</li>
         </ul>
@@ -147,7 +147,7 @@ function HistoryChartModal({ onClose }) {
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 チェックポイント</p>
         <p className="text-sm leading-relaxed text-slate-700">
-          <strong style={{ color: '#22d3ee' }}>3本の線がすべて右肩上がり</strong>であれば理想的です（トレンドの継続性）。もしEPSだけ上昇してCFPSが横ばい・下降している場合は、<strong>会計上の操作による見せかけの利益成長の可能性があるため注意が必要です。</strong>
+          <strong style={{ color: 'rgb(56, 189, 248)' }}>3本の線がすべて右肩上がり</strong>であれば理想的です（トレンドの継続性）。もしEPSだけ上昇してCFPSが横ばい・下降している場合は、<strong>会計上の操作による見せかけの利益成長の可能性があるため注意が必要です。</strong>
         </p>
       </div>
     </InfoModal>
@@ -176,7 +176,7 @@ export default function HistoryChart({ periods, currency = 'USD' }) {
           className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
           style={{
             background: 'rgba(34,211,238,0.15)',
-            color: '#22d3ee',
+            color: 'rgb(56, 189, 248)',
             border: '1px solid rgba(34,211,238,0.4)',
           }}
           onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.30)'; }}
@@ -202,9 +202,9 @@ export default function HistoryChart({ periods, currency = 'USD' }) {
         }}
       >
         {[
-          { color: '#3b82f6', label: `売上高 (${unit})` },
-          { color: '#22c55e', label: 'EPS ($)' },
-          { color: '#f59e0b', label: 'CFPS ($)' },
+          { color: 'rgb(56, 189, 248)', label: `売上高 (${unit})` },
+          { color: 'rgb(34, 197, 94)',  label: 'EPS ($)' },
+          { color: 'rgb(245, 158, 11)', label: 'CFPS ($)' },
         ].map((it) => (
           <span key={it.label} style={{ display: 'inline-flex', alignItems: 'center' }}>
             <span
@@ -232,14 +232,14 @@ export default function HistoryChart({ periods, currency = 'USD' }) {
       <div className="h-72 w-full">
         <ResponsiveContainer>
           <LineChart data={data} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="period" stroke="#64748b" />
-            <YAxis yAxisId="left" stroke="#64748b" />
-            <YAxis yAxisId="right" orientation="right" stroke="#64748b" />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.25)" />
+            <XAxis dataKey="period" stroke="rgba(148, 163, 184, 0.7)" />
+            <YAxis yAxisId="left" stroke="rgba(148, 163, 184, 0.7)" />
+            <YAxis yAxisId="right" orientation="right" stroke="rgba(148, 163, 184, 0.7)" />
             <Tooltip />
-            <Line yAxisId="left" type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={2} name={`売上高 (${unit})`} />
-            <Line yAxisId="right" type="monotone" dataKey="eps" stroke="#22c55e" strokeWidth={2} name="EPS ($)" />
-            <Line yAxisId="right" type="monotone" dataKey="cfps" stroke="#f59e0b" strokeWidth={2} name="CFPS ($)" />
+            <Line yAxisId="left" type="monotone" dataKey="revenue" stroke="rgb(56, 189, 248)" strokeWidth={2} name={`売上高 (${unit})`} />
+            <Line yAxisId="right" type="monotone" dataKey="eps" stroke="rgb(34, 197, 94)" strokeWidth={2} name="EPS ($)" />
+            <Line yAxisId="right" type="monotone" dataKey="cfps" stroke="rgb(245, 158, 11)" strokeWidth={2} name="CFPS ($)" />
           </LineChart>
         </ResponsiveContainer>
       </div>

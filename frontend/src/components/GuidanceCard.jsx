@@ -26,13 +26,13 @@ function Tooltip({ text, children }) {
         <span
           role="tooltip"
           className="absolute bottom-full left-1/2 z-50 mb-2 max-w-[260px] -translate-x-1/2 whitespace-normal rounded-md px-3 py-1.5 text-xs font-normal leading-snug text-white shadow-lg"
-          style={{ background: '#1e293b' }}
+          style={{ background: 'rgb(30, 41, 59)' }}
         >
           {text}
           <span
             aria-hidden
             className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent"
-            style={{ borderTopColor: '#1e293b' }}
+            style={{ borderTopColor: 'rgb(30, 41, 59)' }}
           />
         </span>
       )}
@@ -48,7 +48,7 @@ function GuidanceInfoModal({ onClose }) {
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
         <p className="text-sm leading-relaxed text-slate-700">
-          「ガイダンス」が事前のコンセンサス予想を上回ること（ガイダンス達成）は、<strong style={{ color: '#22d3ee' }}>株価の上昇を決定づける極めて重要な要素</strong>です。
+          「ガイダンス」が事前のコンセンサス予想を上回ること（ガイダンス達成）は、<strong style={{ color: 'rgb(56, 189, 248)' }}>株価の上昇を決定づける極めて重要な要素</strong>です。
         </p>
       </div>
 
@@ -64,7 +64,7 @@ function GuidanceInfoModal({ onClose }) {
         <div className="space-y-3 text-sm leading-relaxed text-slate-700">
           <div>
             <p className="font-semibold text-slate-900">・アナリストの「コンセンサス予想」を動かす決定的な要因だから</p>
-            <p className="mt-1">証券会社のアナリストたちが業績予想を立てる際、最も参考にするのが会社側から示されるガイダンスです。決算発表で新しいガイダンスが示されると、アナリストたちはそれを基に一斉に予想数字を変更します。ガイダンスがコンセンサス予想を上回れば（上方修正）アナリスト予想も引き上げられ、<strong style={{ color: '#22d3ee' }}>市場全体のコンセンサス予想がジワジワと上昇します。</strong>逆に下回れば、予想もすぐに下がり始めます。</p>
+            <p className="mt-1">証券会社のアナリストたちが業績予想を立てる際、最も参考にするのが会社側から示されるガイダンスです。決算発表で新しいガイダンスが示されると、アナリストたちはそれを基に一斉に予想数字を変更します。ガイダンスがコンセンサス予想を上回れば（上方修正）アナリスト予想も引き上げられ、<strong style={{ color: 'rgb(56, 189, 248)' }}>市場全体のコンセンサス予想がジワジワと上昇します。</strong>逆に下回れば、予想もすぐに下がり始めます。</p>
           </div>
           <div>
             <p className="font-semibold text-slate-900">・予想の上方修正が「株価上昇」に直結するから</p>
@@ -371,7 +371,7 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
               className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
               style={{
                 background: 'rgba(34,211,238,0.15)',
-                color: '#22d3ee',
+                color: 'rgb(56, 189, 248)',
                 border: '1px solid rgba(34,211,238,0.4)',
               }}
               onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.30)'; }}
@@ -403,7 +403,7 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
             className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
             style={{
               background: 'rgba(34,211,238,0.15)',
-              color: '#22d3ee',
+              color: 'rgb(56, 189, 248)',
               border: '1px solid rgba(34,211,238,0.4)',
             }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.30)'; }}
@@ -445,7 +445,7 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
           <div className="mb-2 flex items-center gap-2">
             <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>📄 次期見通し</span>
             {sec_guidance_source && (
-              <span className="text-[10px]" style={{ color: '#60a5fa' }}>{sec_guidance_source}</span>
+              <span className="text-[10px]" style={{ color: 'rgb(96, 165, 250)' }}>{sec_guidance_source}</span>
             )}
           </div>
           <div className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
