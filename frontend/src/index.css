@@ -111,6 +111,12 @@
   }
 }
 
+/* ── Cmd Palette 入場アニメ (CmdPalette.jsx) ── */
+@keyframes cmdPaletteIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ── View Transitions API (design_recipes.md §C-7) ──
    Chrome 111+ / Edge 111+ で滑らかな cross-fade。
    utils/viewTransition.js の withViewTransition() でラップした state 更新時に発火。

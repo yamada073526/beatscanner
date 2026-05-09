@@ -16,6 +16,7 @@ import { isPro } from './lib/planGating.js';
 import { useJudgmentResult } from './features/judgment/state/useJudgmentResult.js';
 import { JudgmentTab as JudgmentTabV2 } from './features/judgment/index.js';
 import { withViewTransition } from './utils/viewTransition.js';
+import { CmdPalette, useCmdPalette } from './features/cmd-palette/index.js';
 import { useUpgradeModal } from './lib/useUpgradeModal.js';
 import { useSubscription } from './hooks/useSubscription.js';
 import InfoModal from './components/InfoModal.jsx';
@@ -129,6 +130,9 @@ export default function App() {
     setForceCloseSuggestions,
     prefetch,
   });
+
+  // ── Cmd Palette (Linear/Raycast 流 ⌘K) ──
+  const cmdPalette = useCmdPalette();
 
   // ── タグ機能 (X-1) ──────────────────────────────────────────
   const [tagFilterId, setTagFilterId] = useState('all'); // 'all' | 'untagged' | tagId
@@ -2127,6 +2131,84 @@ export default function App() {
           />
         )}
       </Suspense>
+
+      {/* ── Cmd Palette (⌘K で開閉) ── */}
+      <CmdPalette
+        open={cmdPalette.open}
+        close={cmdPalette.close}
+        items={(() => {
+          const items = [];
+          // クイックアクション
+          items.push({
+            id: 'tab:home',
+            group: 'action',
+            label: 'ホームへ',
+            hint: 'G H',
+            action: () => withViewTransition(() => setActiveTab('home')),
+          });
+          items.push({
+            id: 'tab:judgment',
+            group: 'action',
+            label: '判定タブへ',
+            hint: 'G J',
+            action: () => withViewTransition(() => setActiveTab('judgment')),
+          });
+          items.push({
+            id: 'tab:chart',
+            group: 'action',
+            label: 'チャートタブへ',
+            hint: 'G C',
+            action: () => withViewTransition(() => setActiveTab('チャート')),
+          });
+          items.push({
+            id: 'theme:toggle',
+            group: 'action',
+            label: 'ダークモード切替',
+            action: () => toggleDarkMode(),
+          });
+          // 直近分析 (bs_analyzed localStorage)
+          try {
+            const data = JSON.parse(localStorage.getItem('bs_analyzed') || '{}');
+            const sorted = Object.entries(data)
+              .sort(([, a], [, b]) => b - a)
+              .slice(0, 8);
+            for (const [t] of sorted) {
+              items.push({
+                id: `recent:${t}`,
+                group: 'recent',
+                label: `${t} を分析`,
+                ticker: t,
+                action: () => runAnalyze(t),
+              });
+            }
+          } catch { /* ignore */ }
+          // 保有
+          const holdingTickers = Array.isArray(holdingStore?.tickers) ? holdingStore.tickers : [];
+          for (const t of holdingTickers) {
+            items.push({
+              id: `holding:${t}`,
+              group: 'holdings',
+              label: `${t} を分析`,
+              ticker: t,
+              description: '保有銘柄',
+              action: () => runAnalyze(t),
+            });
+          }
+          // ウォッチリスト
+          for (const t of watchlist) {
+            if (holdingTickers.includes(t)) continue; // 保有と重複させない
+            items.push({
+              id: `watch:${t}`,
+              group: 'watchlist',
+              label: `${t} を分析`,
+              ticker: t,
+              description: 'ウォッチリスト',
+              action: () => runAnalyze(t),
+            });
+          }
+          return items;
+        })()}
+      />
     </div>
   );
 }
