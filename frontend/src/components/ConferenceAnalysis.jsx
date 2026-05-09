@@ -328,11 +328,12 @@ function AnalystCard({ analyst, analystData }) {
               <h4 className="text-sm font-semibold text-slate-700 mb-1">アナリスト推奨</h4>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 {[
-                  { label: '強買い', key: 'strongBuy',  color: '#166534', bg: '#dcfce7' },
-                  { label: '買い',   key: 'buy',         color: '#15803d', bg: '#f0fdf4' },
-                  { label: '中立',   key: 'hold',        color: '#374151', bg: '#f3f4f6' },
-                  { label: '売り',   key: 'sell',        color: '#c2410c', bg: '#fff7ed' },
-                  { label: '強売り', key: 'strongSell',  color: '#991b1b', bg: '#fef2f2' },
+                  // 両モード対応: light pastel bg → rgba alpha + theme-aware text token
+                  { label: '強買い', key: 'strongBuy',  color: 'var(--color-gain)',    bg: 'rgba(34, 197, 94, 0.18)' },
+                  { label: '買い',   key: 'buy',         color: 'var(--color-gain)',    bg: 'rgba(34, 197, 94, 0.10)' },
+                  { label: '中立',   key: 'hold',        color: 'var(--text-secondary)', bg: 'rgba(148, 163, 184, 0.14)' },
+                  { label: '売り',   key: 'sell',        color: 'var(--color-loss)',    bg: 'rgba(248, 113, 113, 0.12)' },
+                  { label: '強売り', key: 'strongSell',  color: 'var(--color-loss)',    bg: 'rgba(248, 113, 113, 0.20)' },
                 ].map(({ label, key, color, bg }) => (
                   <span key={key} style={{ padding: '4px 10px', borderRadius: '12px', background: bg, color, fontWeight: 'bold', fontSize: '0.85em' }}>
                     {label}: {analystData.recommendations[key] ?? 0}
