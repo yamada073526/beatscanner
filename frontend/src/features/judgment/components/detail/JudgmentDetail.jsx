@@ -195,6 +195,31 @@ export default function JudgmentDetail({
         </Card>
       )}
 
+      {/* Insider 取引 (Premium lock) */}
+      {selectedTicker && (
+        <PremiumLock
+          feature="insider_trades"
+          plan={plan}
+          label="Insider 取引で先行情報を掴む"
+          bullets={[
+            'Form 4 (役員株式取引) 直近 90 日',
+            '13F 機関投資家保有の Q/Q 変動',
+            '大口購入時の自動アラート',
+          ]}
+          onUpgrade={detailContext.onUpgrade}
+        >
+          <SimpleSection
+            id="sec-insider"
+            title="Insider 取引"
+            label="FORM 4 / 13F"
+          >
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              (preview placeholder)
+            </div>
+          </SimpleSection>
+        </PremiumLock>
+      )}
+
       {/* === 階層 3: Context === */}
       <SectionDivider tier={3} />
 
