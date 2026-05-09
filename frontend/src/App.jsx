@@ -1100,6 +1100,8 @@ export default function App() {
               price: px?.price ?? null,
               changePct: px?.changePct ?? null,
               lastAnalyzedAt: cache?.ts ?? 0,
+              // 現在分析中の銘柄なら loading 状態を伝える (Detail 側 Skeleton 表示)
+              isLoading: loading && ticker === t,
             };
           };
           return (

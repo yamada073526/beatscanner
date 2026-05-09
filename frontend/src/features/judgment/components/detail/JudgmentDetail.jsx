@@ -8,6 +8,7 @@ import SectionDivider from './SectionDivider.jsx';
 import ProfileCard from './ProfileCard.jsx';
 import EarningsBars from './EarningsBars.jsx';
 import ConditionGrid from './ConditionGrid.jsx';
+import SkeletonDetail from './SkeletonDetail.jsx';
 import Card from '../../primitives/Card.jsx';
 import SectionHeader from '../../primitives/SectionHeader.jsx';
 import PremiumLock from '../shared/PremiumLock.jsx';
@@ -67,6 +68,11 @@ export default function JudgmentDetail({
   const result = detail?.result || null;
   const guidance = detail?.guidance || null;
   const conditions = result?.conditions || [];
+
+  // ticker は選択されたが結果まだ無 → skeleton 表示 (loading 中の体感改善)
+  if (selectedTicker && !result && detail?.isLoading) {
+    return <SkeletonDetail />;
+  }
   const verdict = result
     ? result.overallPass
       ? 'beat'

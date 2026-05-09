@@ -117,6 +117,53 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Skeleton hierarchy (design_recipes.md §C-7) ──
+   汎用 placeholder ではなく型ごとに定義。Stat / Badge / Card / Text-line で
+   実 component の形状を模倣 (LCP 知覚改善 + ガタつき防止)。 */
+@keyframes skelShimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skel-base {
+  background: linear-gradient(90deg,
+    var(--bg-subtle) 0%,
+    var(--bg-muted) 50%,
+    var(--bg-subtle) 100%);
+  background-size: 200% 100%;
+  animation: skelShimmer 1.6s linear infinite;
+  border-radius: var(--radius-sm);
+  display: inline-block;
+  pointer-events: none;
+}
+.skel-stat-lg {
+  height: 32px;
+  width: 120px;
+  border-radius: var(--radius-sm);
+}
+.skel-stat {
+  height: 18px;
+  width: 80px;
+  border-radius: var(--radius-xs);
+}
+.skel-badge {
+  height: 18px;
+  width: 56px;
+  border-radius: var(--radius-pill);
+}
+.skel-text-line {
+  height: 12px;
+  width: 100%;
+  border-radius: var(--radius-xs);
+}
+.skel-card {
+  height: 200px;
+  width: 100%;
+  border-radius: var(--radius-md);
+}
+@media (prefers-reduced-motion: reduce) {
+  .skel-base { animation-duration: 0.01ms; }
+}
+
 /* ── View Transitions API (design_recipes.md §C-7) ──
    Chrome 111+ / Edge 111+ で滑らかな cross-fade。
    utils/viewTransition.js の withViewTransition() でラップした state 更新時に発火。
