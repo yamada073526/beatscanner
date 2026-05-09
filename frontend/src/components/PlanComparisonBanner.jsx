@@ -114,7 +114,7 @@ export default function PlanComparisonBanner({ onOpenSettings, onStartCheckout }
             right: 16,
             padding: '2px 10px',
             borderRadius: 9999,
-            background: '#22d3ee',
+            background: 'rgb(56, 189, 248)',
             color: '#0f172a',
             fontSize: 10,
             fontWeight: 700,
@@ -125,7 +125,7 @@ export default function PlanComparisonBanner({ onOpenSettings, onStartCheckout }
           <div style={{ minHeight: 70 }}>
             <div style={{
               fontSize: 11,
-              color: '#22d3ee',
+              color: 'rgb(56, 189, 248)',
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
               marginBottom: 4,
@@ -134,7 +134,7 @@ export default function PlanComparisonBanner({ onOpenSettings, onStartCheckout }
             </div>
             <div style={{
               fontSize: 24, fontWeight: 700,
-              color: '#22d3ee',
+              color: 'rgb(56, 189, 248)',
             }}>
               ¥980<span style={{
                 fontSize: 12, fontWeight: 400, color: 'var(--text-muted)',
@@ -153,7 +153,7 @@ export default function PlanComparisonBanner({ onOpenSettings, onStartCheckout }
               borderRadius: 9999,
               background: 'rgba(34,211,238,0.12)',
               border: '1px solid rgba(34,211,238,0.40)',
-              color: '#22d3ee',
+              color: 'rgb(56, 189, 248)',
               fontSize: 11,
               fontWeight: 600,
               marginTop: 8,
@@ -165,7 +165,7 @@ export default function PlanComparisonBanner({ onOpenSettings, onStartCheckout }
             listStyle: 'none', padding: 0, margin: '12px 0 16px',
             fontSize: 12, lineHeight: 2, color: 'var(--text-secondary)',
           }}>
-            <li>✓ 分析数 <strong style={{ color: '#22d3ee' }}>無制限</strong></li>
+            <li>✓ 分析数 <strong style={{ color: 'rgb(56, 189, 248)' }}>無制限</strong></li>
             <li>✓ 市場の声 フル表示</li>
             <li>✓ AI 詳細レポート</li>
             <li>✓ ウォッチリスト無制限</li>
@@ -186,7 +186,7 @@ export default function PlanComparisonBanner({ onOpenSettings, onStartCheckout }
               width: '100%',
               padding: '11px',
               borderRadius: 10,
-              background: '#22d3ee',
+              background: 'rgb(56, 189, 248)',
               color: '#0f172a',
               border: 'none',
               fontSize: 13,
@@ -195,8 +195,8 @@ export default function PlanComparisonBanner({ onOpenSettings, onStartCheckout }
               boxShadow: '0 0 12px rgba(34,211,238,0.30)',
               transition: 'background 0.2s',
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = '#06b6d4'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = '#22d3ee'; }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgb(14, 165, 233)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgb(56, 189, 248)'; }}
           >
             7日間無料で試す →
           </button>
@@ -217,7 +217,7 @@ export default function PlanComparisonBanner({ onOpenSettings, onStartCheckout }
           style={{
             background: 'none',
             border: 'none',
-            color: '#22d3ee',
+            color: 'rgb(56, 189, 248)',
             textDecoration: 'underline',
             cursor: 'pointer',
             fontSize: 11,
