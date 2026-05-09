@@ -37,6 +37,12 @@
             "command": "bash .claude/hooks/pre_edit_trust_cliff.sh",
             "timeout": 5,
             "statusMessage": "Trust Cliff チェック中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/pre_edit_design_tokens.sh",
+            "timeout": 5,
+            "statusMessage": "Design Token チェック中..."
           }
         ]
       }

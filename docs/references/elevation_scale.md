@@ -146,20 +146,24 @@ ALLOWED-IMPORTANT: frontend/src/index.css:110  # scroll-behavior
 
 ---
 
-## hook 仕様 (Phase 1-H で実装する 3 本)
+## hook / skill 実装
 
-### `pre_edit_design_tokens.sh` (PreToolUse: Edit/Write)
-- 変更後ファイルから **新規追加された** raw hex (`#[0-9a-f]{6}`) と raw shadow (`box-shadow:\s*[0-9]`) を抽出
-- ALLOWED-HEX / ALLOWED-SHADOW にマッチしないものがあれば exit 2
-- exit message: 「raw hex `#34ef81` は token `--color-gain` を使ってください (design_system.md §1)」
+### `pre_edit_design_tokens.sh` (PreToolUse: Edit/Write) ✅ 実装済
+- `frontend/src/**/*.{css,jsx,tsx,js,ts}` の Edit/Write を対象
+- new_string にあって old_string にない raw hex (`#[0-9a-f]{6}`) を検出
+- `ALLOWED-HEX` 未登録なら exit 2 で block
+- 3 文字 hex (`#fff` 等) や docs ファイルは対象外
+- 設定: `.claude/settings.json` の PreToolUse に登録
 
-### `post_edit_design_check.sh` (PostToolUse: Edit/Write、CSS のみ)
-- `!important` の使用箇所を grep し、ALLOWED-IMPORTANT にない行があれば warn
-- exit 0 (block しない) — レビュー段階で止める
+### `design-system-check` skill ✅ 実装済
+- raw hex / raw box-shadow / 未許可 `!important` / 発光バグ兆候を on-demand 検査
+- リリース前手動実行 (`Skill design-system-check`)
+- 詳細: `.claude/skills/design-system-check/SKILL.md`
 
-### `pre_deploy_design_visual.sh` (release-check skill 内、deploy 前)
-- 本番 `/assets/index-*.css` を curl
-- ALLOWED-* と照合、違反があれば exit 2 で release-check を落とす
+### 設計判断 (実装範囲)
+- **box-shadow** の hook 化は値文字列の formatting 揺れで false positive 多発のため見送り (skill による on-demand 検査で代替)
+- **`!important` 増殖警告** も skill で代替 (PostToolUse 毎の警告は noise)
+- Hook で block するのは **最も drift しやすい raw hex のみ**。残りは skill による定期検査でカバー
 
 ---
 
