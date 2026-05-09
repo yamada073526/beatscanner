@@ -17,6 +17,14 @@ NEW=$(echo "$INPUT" | jq -r '.tool_input.new_string // .tool_input.content // ""
 case "$FILE" in
     */frontend/src/*.jsx|*/frontend/src/*.tsx|*/frontend/src/*.js|*/frontend/src/*.ts|*/frontend/src/*.css)
         ;;
+    */frontend-next/app/*.tsx|*/frontend-next/app/*.ts|*/frontend-next/app/*.css)
+        ;;
+    */frontend-next/components/*.tsx|*/frontend-next/components/*.ts)
+        ;;
+    */frontend-next/lib/*.tsx|*/frontend-next/lib/*.ts)
+        ;;
+    */frontend-next/hooks/*.tsx|*/frontend-next/hooks/*.ts)
+        ;;
     *)
         exit 0
         ;;

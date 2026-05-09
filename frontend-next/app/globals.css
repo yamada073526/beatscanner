@@ -12,11 +12,50 @@
   --color-loss: var(--loss);
   --color-warning: var(--warning);
   --color-accent: var(--accent-brand);
-  /* Motion (design_system.md §1) */
-  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --motion-fast: 120ms;
-  --motion-base: 200ms;
-  --motion-slow: 360ms;
+
+  /* Spacing (design_system.md §2) — base 4px */
+  --space-1: 0.25rem;   /* 4px */
+  --space-2: 0.5rem;    /* 8px */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-6: 1.5rem;    /* 24px */
+  --space-8: 2rem;      /* 32px */
+  --space-12: 3rem;     /* 48px */
+  --space-16: 4rem;     /* 64px */
+  --space-20: 5rem;     /* 80px (planned: hero gutter) */
+
+  /* Radius (design_system.md §3) — surface-card 系は必ず --radius-md */
+  --radius-xs: 0.25rem;  /* 4px */
+  --radius-sm: 0.5rem;   /* 8px */
+  --radius-md: 0.75rem;  /* 12px — default */
+  --radius-lg: 1rem;     /* 16px */
+  --radius-xl: 1.5rem;   /* 24px */
+  --radius-pill: 9999px;
+
+  /* Elevation / Shadow (design_system.md §4) — :root と .dark で値差替 */
+  --shadow-1: var(--shadow-1-base);
+  --shadow-2: var(--shadow-2-base);
+  --shadow-3: var(--shadow-3-base);
+  --shadow-4: var(--shadow-4-base);
+  --shadow-glow-cyan: var(--shadow-glow-cyan-base);
+
+  /* Motion (design_system.md §5) */
+  --motion-fast: 120ms;     /* button ripple, focus ring */
+  --motion-base: 200ms;     /* hover scale, color shift */
+  --motion-slow: 360ms;     /* arrival glow, card lift, tab switch */
+  --motion-stage: 600ms;    /* hero 入場, modal sheet, view transition */
+  --motion-stagger: 40ms;   /* リスト入場 per-item delay (planned) */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);  /* hover, arrival (Linear 標準) */
+  --ease-out-cubic: cubic-bezier(0.22, 1, 0.36, 1); /* tab, page transition */
+  --ease-in-out-quad: cubic-bezier(0.45, 0, 0.55, 1); /* reversible state */
+
+  /* Z-Index (design_system.md §6) */
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-overlay: 50;
+  --z-modal: 100;
+  --z-popover: 200;
+  --z-toast: 300;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -68,6 +107,13 @@
   --warning: oklch(0.75 0.18 75);  /* #f59e0b 相当 */
   --accent-brand: oklch(0.72 0.18 220);  /* cyan / brand sky */
 
+  /* Shadow (light) — design_system.md §4 値そのまま、生値直書き禁止のため token のみ参照 */
+  --shadow-1-base: 0 1px 0 rgba(0,0,0,.04), 0 1px 2px rgba(0,0,0,.04);
+  --shadow-2-base: 0 2px 4px rgba(0,0,0,.06), 0 4px 8px rgba(0,0,0,.04);
+  --shadow-3-base: 0 4px 12px rgba(0,0,0,.08), 0 12px 24px rgba(0,0,0,.06);
+  --shadow-4-base: 0 12px 32px rgba(0,0,0,.12), 0 24px 48px rgba(0,0,0,.08);
+  --shadow-glow-cyan-base: 0 0 0 1px rgba(56,189,248,.20), 0 8px 32px rgba(56,189,248,.12);
+
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -108,6 +154,13 @@
   --loss: oklch(0.75 0.20 25);     /* #f87171 相当 */
   --warning: oklch(0.78 0.18 75);  /* amber 両モード共通寄り */
   --accent-brand: oklch(0.78 0.18 220);
+
+  /* Shadow (dark) — 暗背景で視認可能なよう alpha を強める */
+  --shadow-1-base: 0 1px 0 rgba(0,0,0,.30), 0 1px 2px rgba(0,0,0,.20);
+  --shadow-2-base: 0 2px 4px rgba(0,0,0,.40), 0 4px 8px rgba(0,0,0,.24);
+  --shadow-3-base: 0 4px 12px rgba(0,0,0,.50), 0 12px 24px rgba(0,0,0,.30);
+  --shadow-4-base: 0 12px 32px rgba(0,0,0,.60), 0 24px 48px rgba(0,0,0,.40);
+  --shadow-glow-cyan-base: 0 0 0 1px rgba(56,189,248,.30), 0 8px 32px rgba(56,189,248,.20);
 
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
