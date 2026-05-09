@@ -80,7 +80,7 @@ function JudgmentTabInner({ plan, items, detailFor, onAnalyze, detailContext, cu
             />
           </div>
         ) : (
-          <JudgmentList items={items} />
+          <JudgmentList items={items} onAnalyze={onAnalyze} />
         )}
       </div>
     );
@@ -90,7 +90,7 @@ function JudgmentTabInner({ plan, items, detailFor, onAnalyze, detailContext, cu
     <div className="ds-judgment-tab" style={{ padding: 'var(--space-4, 16px)' }}>
       <PaneSplitter
         nav={<JudgmentNav counts={counts} />}
-        list={<JudgmentList items={items} showFilters={false} />}
+        list={<JudgmentList items={items} showFilters={false} onAnalyze={onAnalyze} />}
         detail={
           <JudgmentDetail
             plan={plan}

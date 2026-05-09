@@ -5,15 +5,17 @@ import JudgmentFilters from './JudgmentFilters.jsx';
 import JudgmentGroupHeader from './JudgmentGroupHeader.jsx';
 import JudgmentRow from './JudgmentRow.jsx';
 
+const QUICK_PICKS = ['AAPL', 'NVDA', 'TSLA', 'MSFT'];
+
 /**
  * Pane 2: 銘柄リスト本実装 (Step 5).
  *
  * @param {object} props
  * @param {Array} props.items
- * @param {boolean} [props.showFilters=true] - フィルタ chip 表示。
- *   3-pane (Pane 1 nav 有り) の desktop では false にして重複回避.
+ * @param {boolean} [props.showFilters=true]
+ * @param {(ticker: string) => void} [props.onAnalyze] - 空状態の Quick Pick から analyze を発火
  */
-export default function JudgmentList({ items = [], showFilters = true }) {
+export default function JudgmentList({ items = [], showFilters = true, onAnalyze }) {
   const { selectedTicker, selectTicker, filters } = useJudgment();
 
   // ── filter + sort + group ────────────────────────────────────
@@ -99,18 +101,98 @@ export default function JudgmentList({ items = [], showFilters = true }) {
         }}
       >
         {view.total === 0 ? (
-          <div
-            style={{
-              padding: '48px 16px',
-              textAlign: 'center',
-              color: 'var(--text-muted)',
-              fontSize: 13,
-            }}
-          >
-            {filters.query
-              ? `「${filters.query}」に該当する銘柄はありません`
-              : '銘柄をウォッチリストに追加してください'}
-          </div>
+          filters.query ? (
+            <div
+              style={{
+                padding: '48px 16px',
+                textAlign: 'center',
+                color: 'var(--text-muted)',
+                fontSize: 13,
+              }}
+            >
+              「{filters.query}」に該当する銘柄はありません
+            </div>
+          ) : (
+            <div
+              style={{
+                padding: '32px 20px',
+                textAlign: 'center',
+                display: 'grid',
+                gap: 16,
+              }}
+            >
+              <div
+                aria-hidden
+                style={{
+                  fontSize: 36,
+                  lineHeight: 1,
+                  opacity: 0.6,
+                }}
+              >
+                ◯
+              </div>
+              <div>
+                <div
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
+                    lineHeight: 1.3,
+                  }}
+                >
+                  最初の 1 銘柄から始めましょう
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: 'var(--text-muted)',
+                    marginTop: 4,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  ファンダメンタル 5 条件を瞬時に判定
+                </div>
+              </div>
+              {onAnalyze && (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 6,
+                    justifyContent: 'center',
+                  }}
+                >
+                  {QUICK_PICKS.map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => onAnalyze(t)}
+                      style={{
+                        padding: '6px 14px',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: 'rgb(56, 189, 248)',
+                        background: 'rgba(56, 189, 248, 0.10)',
+                        border: '1px solid rgba(56, 189, 248, 0.30)',
+                        borderRadius: 'var(--radius-pill)',
+                        cursor: 'pointer',
+                        transition: 'background var(--motion-fast, 120ms) var(--ease-out-expo)',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(56, 189, 248, 0.18)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(56, 189, 248, 0.10)';
+                      }}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
         ) : view.grouped ? (
           view.groups.map((g) => (
             <section key={g.title}>
