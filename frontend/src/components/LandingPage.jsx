@@ -46,7 +46,7 @@ function PrimaryCTA({ children, onClick, fullWidth = false }) {
         gap: 10,
         padding: '14px 28px',
         borderRadius: 10,
-        background: hover ? '#06b6d4' : '#22d3ee',
+        background: hover ? 'rgb(14, 165, 233)' : 'rgb(56, 189, 248)',
         color: '#0f172a',
         border: 'none',
         fontWeight: 700,
@@ -75,7 +75,7 @@ function OutlinedCTA({ children, onClick, fullWidth = false }) {
         width: fullWidth ? '100%' : 'auto',
         padding: '14px',
         background: 'rgba(255,255,255,0.05)',
-        color: '#22d3ee',
+        color: 'rgb(56, 189, 248)',
         border: '1px solid rgba(34,211,238,0.35)',
         borderRadius: 10,
         fontWeight: 600,
@@ -97,7 +97,7 @@ function SectionLabel({ children }) {
       style={{
         textTransform: 'uppercase',
         letterSpacing: '0.15em',
-        color: '#22d3ee',
+        color: 'rgb(56, 189, 248)',
         marginBottom: 8,
       }}
     >
@@ -328,7 +328,7 @@ function TodayHotSection({ onTickerClick }) {
                   }}>{m.ticker}</div>
                   <div style={{
                     fontSize: 12,
-                    color: '#34ef81',  // v40: シアン → 緑 (上昇=緑の業界ルール)
+                    color: 'var(--color-gain)',  // v40: シアン → 緑 (上昇=緑の業界ルール)
                     fontWeight: 600,
                     marginBottom: 4,
                   }}>{pctStr}</div>
@@ -343,7 +343,7 @@ function TodayHotSection({ onTickerClick }) {
                     bottom: 8,
                     right: 10,
                     fontSize: 12,
-                    color: '#22d3ee',
+                    color: 'rgb(56, 189, 248)',
                     opacity: 0.6,
                   }} aria-hidden="true">→</span>
                 </div>
@@ -467,7 +467,7 @@ function UpcomingEarningsSection({ onTickerClick }) {
                   }}>{item.symbol}</div>
                   <div style={{
                     fontSize: 12,
-                    color: '#f59e0b',  // amber: FOMO/緊急性
+                    color: 'var(--color-warning)',  // amber: FOMO/緊急性
                     fontWeight: 600,
                     marginBottom: 4,
                   }}>{dayLabel}</div>
@@ -480,7 +480,7 @@ function UpcomingEarningsSection({ onTickerClick }) {
                     bottom: 8,
                     right: 10,
                     fontSize: 12,
-                    color: '#22d3ee',
+                    color: 'rgb(56, 189, 248)',
                     opacity: 0.6,
                   }} aria-hidden="true">→</span>
                 </div>
@@ -600,7 +600,7 @@ function MissedSection({ onTickerClick }) {
               }}>{item.symbol}</div>
               <div style={{
                 fontSize: 12,
-                color: '#f59e0b',
+                color: 'var(--color-warning)',
                 fontWeight: 600,
                 marginBottom: 4,
               }}>{dayLabel}</div>
@@ -613,7 +613,7 @@ function MissedSection({ onTickerClick }) {
                 bottom: 8,
                 right: 10,
                 fontSize: 12,
-                color: '#22d3ee',
+                color: 'rgb(56, 189, 248)',
                 opacity: 0.6,
               }} aria-hidden="true">→</span>
             </div>
@@ -693,7 +693,7 @@ function SampleAnalysisSection({ onTickerClick }) {
           </div>
           <span style={{
             background: 'rgba(34,239,129,0.15)',
-            color: '#34ef81',
+            color: 'var(--color-gain)',
             padding: '4px 12px',
             borderRadius: 6,
             fontSize: 13,
@@ -719,7 +719,7 @@ function SampleAnalysisSection({ onTickerClick }) {
               color: 'var(--text-secondary)',
             }}>
               <span>
-                <span style={{ color: '#34ef81', marginRight: 8 }}>✓</span>
+                <span style={{ color: 'var(--color-gain)', marginRight: 8 }}>✓</span>
                 {c.label}
               </span>
               <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
@@ -752,7 +752,7 @@ function SampleAnalysisSection({ onTickerClick }) {
             </span>
             <span style={{
               background: 'rgba(245,158,11,0.15)',
-              color: '#f59e0b',
+              color: 'var(--color-warning)',
               padding: '2px 10px',
               borderRadius: 4,
               fontSize: 10,
@@ -778,7 +778,7 @@ function SampleAnalysisSection({ onTickerClick }) {
             width: '100%',
             padding: '12px',
             borderRadius: 10,
-            background: '#22d3ee',
+            background: 'rgb(56, 189, 248)',
             color: '#0f172a',
             border: 'none',
             fontSize: 14,
@@ -787,8 +787,8 @@ function SampleAnalysisSection({ onTickerClick }) {
             boxShadow: '0 0 12px rgba(34,211,238,0.30)',
             transition: 'background 0.2s',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = '#06b6d4'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = '#22d3ee'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgb(14, 165, 233)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgb(56, 189, 248)'; }}
         >
           📄 NVDA の完全な分析を見る →
         </button>
@@ -858,7 +858,7 @@ function FiveConditionsMockup() {
         <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>NVDA</span>
         <span style={{
           background: 'rgba(34,239,129,0.15)',
-          color: '#34ef81',
+          color: 'var(--color-gain)',
           padding: '1px 8px',
           borderRadius: 4,
           fontSize: 10,
@@ -874,7 +874,7 @@ function FiveConditionsMockup() {
           color: 'var(--text-muted)',
           fontSize: 10,
         }}>
-          <span style={{ color: '#34ef81' }}>✓</span>
+          <span style={{ color: 'var(--color-gain)' }}>✓</span>
           <span>{label}</span>
         </div>
       ))}
@@ -908,7 +908,7 @@ function MarketVoiceMockup() {
         <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>NVDA</span>
         <span style={{
           background: 'rgba(245,158,11,0.15)',
-          color: '#f59e0b',
+          color: 'var(--color-warning)',
           padding: '1px 8px',
           borderRadius: 4,
           fontSize: 10,
@@ -977,7 +977,7 @@ function ChartLinkMockup() {
             padding: '1px 6px',
             borderRadius: 3,
             background: i === activeIdx ? 'rgba(34,211,238,0.2)' : 'rgba(255,255,255,0.05)',
-            color: i === activeIdx ? '#22d3ee' : 'var(--text-muted)',
+            color: i === activeIdx ? 'rgb(56, 189, 248)' : 'var(--text-muted)',
             fontWeight: i === activeIdx ? 700 : 400,
           }}>{label}</span>
         ))}
@@ -987,7 +987,7 @@ function ChartLinkMockup() {
         <polyline
           points="0,40 40,35 80,20 120,28 160,12 200,8"
           fill="none"
-          stroke="#22d3ee"
+          stroke="rgb(56, 189, 248)"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -1142,7 +1142,7 @@ function PricingSection({ onFreeStart, onProCheckout }) {
             right: 18,
             padding: '3px 10px',
             borderRadius: 9999,
-            background: '#22d3ee',
+            background: 'rgb(56, 189, 248)',
             color: '#0f172a',
             fontSize: 10,
             fontWeight: 700,
@@ -1158,7 +1158,7 @@ function PricingSection({ onFreeStart, onProCheckout }) {
             </h3>
             <div style={{
               fontSize: 26, fontWeight: 700,
-              color: '#22d3ee', marginBottom: 4,
+              color: 'rgb(56, 189, 248)', marginBottom: 4,
             }}>
               ¥980<span style={{
                 fontSize: 13, fontWeight: 400, color: 'var(--text-muted)',
@@ -1179,7 +1179,7 @@ function PricingSection({ onFreeStart, onProCheckout }) {
               borderRadius: 9999,
               background: 'rgba(34,211,238,0.12)',
               border: '1px solid rgba(34,211,238,0.40)',
-              color: '#22d3ee',
+              color: 'rgb(56, 189, 248)',
               fontSize: 11,
               fontWeight: 600,
               marginBottom: 12,
@@ -1202,7 +1202,7 @@ function PricingSection({ onFreeStart, onProCheckout }) {
             listStyle: 'none', padding: 0, margin: '0 0 22px',
             fontSize: 13, lineHeight: 2, color: 'var(--text-secondary)',
           }}>
-            <li>✓ 分析数 <strong style={{ color: '#22d3ee' }}>無制限</strong></li>
+            <li>✓ 分析数 <strong style={{ color: 'rgb(56, 189, 248)' }}>無制限</strong></li>
             <li>✓ 市場の声 フル表示</li>
             <li>✓ AI 詳細レポート</li>
             <li>✓ ウォッチリスト無制限</li>
@@ -1232,7 +1232,7 @@ function PricingSection({ onFreeStart, onProCheckout }) {
                 borderRadius: 6,
                 padding: '4px 10px',
                 fontSize: 12,
-                color: '#22d3ee',
+                color: 'rgb(56, 189, 248)',
                 fontWeight: 600,
               }}>
                 🏷️ 年払いで2ヶ月分お得（¥1,960節約）
@@ -1273,7 +1273,7 @@ function FAQItem({ q, a, defaultOpen = false }) {
       >
         <span>{q}</span>
         <span style={{
-          color: '#22d3ee',
+          color: 'rgb(56, 189, 248)',
           fontSize: 18,
           transform: open ? 'rotate(45deg)' : 'rotate(0deg)',
           transition: 'transform 0.2s',
