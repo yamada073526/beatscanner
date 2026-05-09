@@ -111,6 +111,29 @@
   }
 }
 
+/* ── Skip link (a11y、キーボード ユーザー向け nav skip) ──
+   通常時は viewport 外、Tab キーで focus が当たった瞬間だけ表示. */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 8px;
+  z-index: var(--z-modal, 100);
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  border: 2px solid rgb(56, 189, 248);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  transition: top var(--motion-fast, 120ms) var(--ease-out-expo);
+}
+.skip-link:focus,
+.skip-link:focus-visible {
+  top: 8px;
+  outline: none;
+}
+
 /* ── Cmd Palette 入場アニメ (CmdPalette.jsx) ── */
 @keyframes cmdPaletteIn {
   from { opacity: 0; transform: translateY(-8px); }

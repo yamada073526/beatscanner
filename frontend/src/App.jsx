@@ -628,6 +628,11 @@ export default function App() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 md:py-12">
 
+      {/* Skip link (a11y): キーボードユーザーが nav をスキップして本文へジャンプ */}
+      <a href="#main-content" className="skip-link">
+        メインコンテンツへスキップ
+      </a>
+
       {/* Header — Apple 式 1段ヘッダー。
           モバイル: 2 カラム (auto 1fr) でロゴ左 + ハンバーガー右。中央タブは hidden
           md+    : 3 カラム (1fr auto 1fr) で中央タブが厳密に水平センター */}
@@ -1008,6 +1013,9 @@ export default function App() {
       )}
 
       {/* Tabs はヘッダー中央(md+) または ハンバーガードロワー内(mobile) に移動済み */}
+
+      {/* a11y: skip-link 着地点 + main landmark */}
+      <main id="main-content" tabIndex={-1} style={{ outline: 'none' }}>
 
       {/* Tab: ホーム */}
       {/* 未ログイン LP — Google ログイン誘導 + Pro チェックアウト誘導 +
@@ -2148,6 +2156,9 @@ export default function App() {
           />
         )}
       </Suspense>
+
+      </main>
+      {/* /main landmark (skip-link 着地点) */}
 
       {/* ── Cmd Palette (⌘K で開閉) ── */}
       <CmdPalette
