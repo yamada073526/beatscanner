@@ -1,4 +1,4 @@
-# beatscanner Design Recipes (適用パターン集)
+# BeatScanner Design Recipes (適用パターン集)
 
 > **目的**: `design_system.md` のトークンを「どう組み合わせて何を作るか」のレシピ集。
 > v54-v59 の 6 セッションを溶かした「発光バグ」を再発させないための運用ルールが核。

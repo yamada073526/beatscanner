@@ -1,4 +1,4 @@
-# beatscanner
+# BeatScanner
 
 じっちゃまプロトコル（広瀬隆雄氏）に基づく米国株決算分析Webアプリ。
 本番URL: https://beatscanner-production.up.railway.app/

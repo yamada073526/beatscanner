@@ -1,4 +1,4 @@
-# beatscanner Design System (Canonical Reference)
+# BeatScanner Design System (Canonical Reference)
 
 > **Status**: 不変の真理 (Single Source of Truth) / トークン値はこのファイルから外に書かない
 > **このファイルの目的**: 「Aman / Ritz-Carlton ロビー級の驚き・豪華さ」+「Stripe Sigma / Linear Insights 級のデータ体験」を測定可能・再現可能なトークン群として定義する。
