@@ -78,8 +78,9 @@ function perfColor(value) {
 
 function daysColor(daysLeft) {
   if (daysLeft == null) return 'var(--text-muted)';
-  if (daysLeft <= 3) return '#dc2626';
-  if (daysLeft <= 7) return '#ea580c';
+  // 決算 D-day urgency 色 (両モードで視認、固定 RGB)
+  if (daysLeft <= 3) return 'rgb(220, 38, 38)';   // red-600 (D-3 critical)
+  if (daysLeft <= 7) return 'rgb(234, 88, 12)';   // orange-600 (D-7 urgent)
   return 'var(--text-muted)';
 }
 
@@ -264,7 +265,7 @@ function CandleChart({ ticker, period }) {
           position: "absolute", inset: 0,
           display: "flex", alignItems: "center", justifyContent: "center",
           background: "var(--bg-subtle)", borderRadius: "6px",
-          color: "#ef4444", fontSize: "14px",
+          color: "var(--color-loss)", fontSize: "14px",
         }}>
           {error}
         </div>
@@ -410,14 +411,14 @@ const TickerRow = memo(function TickerRow({
       : null;
 
   const urgencyDateColor = {
-    critical:    { color: '#dc2626', fontWeight: '700' },
-    urgent:      { color: '#ea580c', fontWeight: '600' },
-    approaching: { color: '#d97706', fontWeight: '500' },
+    critical:    { color: 'rgb(220, 38, 38)', fontWeight: '700' },
+    urgent:      { color: 'rgb(234, 88, 12)', fontWeight: '600' },
+    approaching: { color: 'var(--color-warning)', fontWeight: '500' },
   }[urgency] ?? { color: 'var(--text-muted)' };
 
   // §11-B-7-A: 選択中の期間の change% を取得 (5 期間横並び廃止)
   const selectedVal = summary?.performance?.[selectedPeriod];
-  const tagDotColor = tag?.color || tag?.bg_color || '#06b6d4';
+  const tagDotColor = tag?.color || tag?.bg_color || 'rgb(56, 189, 248)';
 
   // §11-B-7-A Phase 2: @dnd-kit/sortable 対応
   const {
