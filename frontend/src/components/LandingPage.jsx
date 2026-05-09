@@ -251,6 +251,7 @@ function TodayHotSection({ onTickerClick }) {
     return () => clearInterval(t);
   }, [updatedAt]);
 
+
   // エラー時はセクションごと隠す
   if (movers === 'error') return null;
 
@@ -379,7 +380,9 @@ function UpcomingEarningsSection({ onTickerClick }) {
               return { ...item, daysUntil };
             } catch { return null; }
           })
-          .filter(it => it && it.daysUntil >= 0 && it.daysUntil <= 30)
+          // v62: 上限 30 日を撤去 — 直近決算が遠い時期 (例: 決算シーズン直後) でも
+          // 常に「次に来る 3 件」を表示する。「決算の近い銘柄」訴求を維持。
+          .filter(it => it && it.daysUntil >= 0)
           .sort((a, b) => a.daysUntil - b.daysUntil)
           .slice(0, 3);
         setItems(enriched);
@@ -407,7 +410,7 @@ function UpcomingEarningsSection({ onTickerClick }) {
           letterSpacing: '0.1em',
           marginBottom: 4,
         }}>
-          ⚠️ 今週の注目決算
+          ⚠️ 決算の近い銘柄
         </div>
         <div style={{
           fontSize: 11,
@@ -624,6 +627,106 @@ function MissedSection({ onTickerClick }) {
   );
 }
 
+// ── セクション 2.65 (v62 復活): 以前に調べた銘柄 ────────────────────────
+// localStorage の bs_analyzed (App.jsx runAnalyze で記録) から最近 3 件を表示。
+// MissedSection は「決算近接 ∩ 過去分析」のため空になりやすかったので、
+// より広く「以前に調べた銘柄」として常時表示するセクションを別建て。
+// 初回訪問者 (bs_analyzed 空) には自動で非表示。
+function RecentlyAnalyzedSection({ onTickerClick }) {
+  const [items, setItems] = useState(null);
+
+  useEffect(() => {
+    let analyzed = {};
+    try {
+      analyzed = JSON.parse(localStorage.getItem('bs_analyzed') || '{}');
+    } catch { /* private mode 等 */ }
+    const top = Object.entries(analyzed)
+      .map(([symbol, ts]) => ({ symbol, ts: Number(ts) || 0 }))
+      .filter(x => x.symbol)
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, 3);
+    setItems(top);
+  }, []);
+
+  if (!items || items.length === 0) return null;
+
+  return (
+    <section style={{ padding: '32px 20px' }}>
+      <div style={{ textAlign: 'center', marginBottom: 16 }}>
+        <div style={{
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.1em',
+          marginBottom: 4,
+        }}>
+          🕘 以前に調べた銘柄
+        </div>
+        <div style={{
+          fontSize: 11,
+          color: 'var(--text-muted)',
+        }}>
+          ↓ クリックで再分析
+        </div>
+      </div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: 12,
+        maxWidth: 720,
+        margin: '0 auto',
+      }}>
+        {items.map(item => {
+          const ago = item.ts ? Math.floor((Date.now() - item.ts) / 86400000) : null;
+          const agoLabel = ago == null
+            ? ''
+            : ago === 0
+            ? '今日'
+            : ago === 1
+            ? '昨日'
+            : `${ago}日前`;
+          return (
+            <div
+              key={item.symbol}
+              className="panel-card"
+              onClick={() => onTickerClick?.(item.symbol)}
+              style={{
+                position: 'relative',
+                textAlign: 'center',
+                padding: '16px 12px',
+                cursor: 'pointer',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+              }}
+            >
+              <div style={{
+                fontSize: 20,
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                marginBottom: 4,
+              }}>{item.symbol}</div>
+              <div style={{
+                fontSize: 12,
+                color: 'var(--text-muted)',
+                fontWeight: 600,
+              }}>{agoLabel}</div>
+              <span style={{
+                position: 'absolute',
+                bottom: 8,
+                right: 10,
+                fontSize: 12,
+                color: 'rgb(56, 189, 248)',
+                opacity: 0.6,
+              }} aria-hidden="true">→</span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 // ── セクション 2.7 (v40+ 新設): サンプル分析結果 ──────────────────────────
 // 「契約後にどんな画面が見られるか」を 1 枚で示す Show-don't-tell 戦略。
 // 静的データで NVDA の 5 条件 PASS + 市場の声 + CTA を実 UI 風に再現。
@@ -656,7 +759,9 @@ function SampleAnalysisSection({ onTickerClick }) {
         </div>
       </div>
 
-      {/* 単一の panel-card で実 UI を再現 */}
+      {/* 単一の panel-card で実 UI を再現。
+          v62: baseline cyan border / boxShadow を撤去し他カードと揃える。
+          PASS バッジ (緑) と「✓ PASS 5/5」がサンプルらしさを十分担保する。 */}
       <div
         className="panel-card"
         onClick={() => onTickerClick?.('NVDA')}
@@ -666,8 +771,7 @@ function SampleAnalysisSection({ onTickerClick }) {
           padding: '20px 22px',
           borderRadius: 14,
           background: 'var(--bg-card)',
-          border: '1px solid rgba(34,211,238,0.40)',
-          boxShadow: '0 0 18px rgba(34,211,238,0.10)',
+          border: '1px solid var(--border)',
           cursor: 'pointer',
         }}
       >
@@ -1120,7 +1224,9 @@ function PricingSection({ onFreeStart, onProCheckout }) {
           </div>
         </div>
 
-        {/* Pro プラン — panel-card + シアン強調 / v38: flex col で Free と底揃え */}
+        {/* Pro プラン — panel-card + シアン強調 / v38: flex col で Free と底揃え。
+            v62: baseline cyan border / boxShadow を撤去。シアン強調は「おすすめ」バッジと
+            価格 (¥980 + ¥33 アンカー) で担保し、weak→strong 発光階層を他カードと揃える。 */}
         <div
           className="panel-card"
           style={{
@@ -1128,8 +1234,7 @@ function PricingSection({ onFreeStart, onProCheckout }) {
             padding: '28px 22px',
             borderRadius: 12,
             background: 'var(--bg-card)',
-            border: '1px solid rgba(34,211,238,0.55)',
-            boxShadow: '0 0 18px rgba(34,211,238,0.12)',
+            border: '1px solid var(--border)',
             display: 'flex',
             flexDirection: 'column',
             height: '100%',
@@ -1374,9 +1479,12 @@ export default function LandingPage({ onSignIn, onProCheckout, onTickerClick }) 
     }}>
       <HeroSection onFreeStart={onSignIn} />
       <TodayHotSection onTickerClick={onTickerClick} />
-      {/* リピート訪問者用 — 過去分析した銘柄で決算が近いものがあれば表示 */}
-      <MissedSection onTickerClick={onTickerClick} />
+      {/* v62: 「決算の近い銘柄」を「今日の注目」直下へ繰り上げ */}
       <UpcomingEarningsSection onTickerClick={onTickerClick} />
+      {/* v62: 以前に調べた銘柄 (localStorage bs_analyzed 上位 3 件、無ければ自動非表示) */}
+      <RecentlyAnalyzedSection onTickerClick={onTickerClick} />
+      {/* リピート訪問者用 — 過去分析した銘柄で決算が近いもの (緊急 amber 強調) */}
+      <MissedSection onTickerClick={onTickerClick} />
       <SampleAnalysisSection onTickerClick={onTickerClick} />
       <FeaturesSection />
       <PricingSection onFreeStart={onSignIn} onProCheckout={handleProClick} />

@@ -762,8 +762,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* Onboarding banner — LP 表示中は隠す */}
-      {!showLP && (
+      {/* Onboarding banner — LP 表示中・pro ユーザー・ホーム以外のタブでは隠す */}
+      {!showLP && !isProUser && activeTab === 'home' && (
         <ApiKeyBanner onOpenSettings={() => setShowSettings(true)} hasKey={hasKey} />
       )}
 
