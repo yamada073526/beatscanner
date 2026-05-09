@@ -316,22 +316,22 @@ export default function NewsPanel({ ticker }) {
                   gap: 8,
                   padding: '10px 22px',
                   borderRadius: 999,
-                  background: 'rgba(34,211,238,0.10)',
-                  border: '1px solid rgba(34,211,238,0.35)',
-                  color: '#22d3ee',
+                  background: 'rgba(56, 189, 248,0.10)',
+                  border: '1px solid rgba(56, 189, 248,0.35)',
+                  color: 'rgb(56, 189, 248)',
                   fontSize: 13,
                   fontWeight: 600,
                   cursor: 'pointer',
                   transition: 'all 0.18s ease',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(34,211,238,0.18)';
-                  e.currentTarget.style.borderColor = 'rgba(34,211,238,0.60)';
+                  e.currentTarget.style.background = 'rgba(56, 189, 248,0.18)';
+                  e.currentTarget.style.borderColor = 'rgba(56, 189, 248,0.60)';
                   e.currentTarget.style.transform = 'translateY(-1px)';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(34,211,238,0.10)';
-                  e.currentTarget.style.borderColor = 'rgba(34,211,238,0.35)';
+                  e.currentTarget.style.background = 'rgba(56, 189, 248,0.10)';
+                  e.currentTarget.style.borderColor = 'rgba(56, 189, 248,0.35)';
                   e.currentTarget.style.transform = 'translateY(0)';
                 }}
               >

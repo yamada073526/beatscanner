@@ -3,7 +3,7 @@ import InfoModal from "./InfoModal.jsx";
 import LockedSection, { InsightsGhost } from "./LockedSection.jsx";
 
 const SENTIMENT = {
-  positive: { label: "強気",     color: "#22d3ee" },
+  positive: { label: "強気",     color: "rgb(56, 189, 248)" },
   negative: { label: "弱気",     color: "#f87171" },
   neutral:  { label: "中立",     color: "#94a3b8" },
   mixed:    { label: "強弱混在", color: "#fbbf24" },
@@ -17,12 +17,12 @@ function InfoButton({ onOpen }) {
       onClick={onOpen}
       className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
       style={{
-        background: "rgba(34,211,238,0.15)",
-        color: "#22d3ee",
-        border: "1px solid rgba(34,211,238,0.4)",
+        background: "rgba(56, 189, 248,0.15)",
+        color: "rgb(56, 189, 248)",
+        border: "1px solid rgba(56, 189, 248,0.4)",
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(34,211,238,0.30)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(34,211,238,0.15)"; }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(56, 189, 248,0.30)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(56, 189, 248,0.15)"; }}
       aria-label="市場の声についての説明を表示"
     >
       ?
@@ -40,7 +40,7 @@ function InsightsInfoModal({ onClose }) {
           本アプリの「市場の声」は、複数の投資家・アナリストの見解を
           AIが統合した独自分析です。大衆の推奨銘柄を真似するためではなく、
           市場参加者の心理（センチメント）を客観的に観察し、
-          <span style={{ color: '#22d3ee', fontWeight: 500 }}>大衆の逆を突く</span>ための判断材料として活用してください。
+          <span style={{ color: 'rgb(56, 189, 248)', fontWeight: 500 }}>大衆の逆を突く</span>ための判断材料として活用してください。
         </p>
       </div>
 
@@ -71,7 +71,7 @@ function InsightsInfoModal({ onClose }) {
         <p className="text-sm leading-relaxed text-slate-700">
           相場が暴落して誰もが悲観している時、
           「この株を買うのは怖いな…」と手が震えるような
-          <span style={{ color: '#22d3ee', fontWeight: 500 }}>葛藤を抱えながら建てたポジション</span>こそが、
+          <span style={{ color: 'rgb(56, 189, 248)', fontWeight: 500 }}>葛藤を抱えながら建てたポジション</span>こそが、
           後にお宝銘柄へと育つケースが多いです。
         </p>
       </div>
@@ -83,7 +83,7 @@ function InsightsInfoModal({ onClose }) {
           何ヶ月も先を読んで動きます。
           「良いニュースが出たのに株価が下がる」場合は、
           好材料が既に織り込まれ尽くしたサインです。
-          <span style={{ color: '#22d3ee', fontWeight: 500 }}>「相場は相場に聞け」</span>の精神で、
+          <span style={{ color: 'rgb(56, 189, 248)', fontWeight: 500 }}>「相場は相場に聞け」</span>の精神で、
           株価が発する違和感を素直に受け止める柔軟性が重要です。
         </p>
       </div>
@@ -118,15 +118,15 @@ function ProgressSteps({ loading }) {
     <div style={{
       marginTop: 16,
       padding: 12,
-      background: "rgba(34,211,238,0.06)",
-      border: "1px solid rgba(34,211,238,0.20)",
+      background: "rgba(56, 189, 248,0.06)",
+      border: "1px solid rgba(56, 189, 248,0.20)",
       borderRadius: 8,
       fontSize: 12,
       color: "var(--text-muted)",
     }}>
       {steps.map((s, i) => (
         <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
-          <span style={{ width: 14, color: s.done ? "#22d3ee" : "var(--text-muted)" }}>
+          <span style={{ width: 14, color: s.done ? "rgb(56, 189, 248)" : "var(--text-muted)" }}>
             {s.done ? "✓" : "⟳"}
           </span>
           <span style={{ color: s.done ? "var(--text-secondary)" : "var(--text-muted)" }}>
@@ -161,8 +161,8 @@ function InsightsSkeleton() {
       <div style={{
         padding: "14px 16px",
         borderRadius: 10,
-        background: "rgba(34,211,238,0.04)",
-        border: "1px solid rgba(34,211,238,0.15)",
+        background: "rgba(56, 189, 248,0.04)",
+        border: "1px solid rgba(56, 189, 248,0.15)",
         marginBottom: 16,
       }}>
         {[100, 92, 70].map((w, i) => (
@@ -179,8 +179,8 @@ function InsightsSkeleton() {
           <div key={i} style={{
             padding: "12px 14px",
             borderRadius: 10,
-            background: i === 0 ? "rgba(34,211,238,0.04)" : "rgba(248,113,113,0.04)",
-            border: `1px solid ${i === 0 ? "rgba(34,211,238,0.15)" : "rgba(248,113,113,0.15)"}`,
+            background: i === 0 ? "rgba(56, 189, 248,0.04)" : "rgba(248,113,113,0.04)",
+            border: `1px solid ${i === 0 ? "rgba(56, 189, 248,0.15)" : "rgba(248,113,113,0.15)"}`,
           }}>
             <div style={{ ...skel, width: 70, height: 12, marginBottom: 10 }} />
             {[80, 65, 75].map((w, j) => (
@@ -223,8 +223,8 @@ function FullView({ data }) {
         <div className="panel-card" style={{
           padding: "14px 16px",
           borderRadius: 10,
-          background: "rgba(34,211,238,0.07)",
-          border: "1px solid rgba(34,211,238,0.25)",
+          background: "rgba(56, 189, 248,0.07)",
+          border: "1px solid rgba(56, 189, 248,0.25)",
           fontSize: 13,
           lineHeight: 1.75,
           marginBottom: 16,
@@ -249,11 +249,11 @@ function FullView({ data }) {
             <div className="panel-card" style={{
               padding: "12px 14px",
               borderRadius: 10,
-              background: "rgba(34,211,238,0.07)",
-              border: "1px solid rgba(34,211,238,0.25)",
+              background: "rgba(56, 189, 248,0.07)",
+              border: "1px solid rgba(56, 189, 248,0.25)",
             }}>
               <div style={{
-                fontSize: 11, fontWeight: 500, color: "#22d3ee",
+                fontSize: 11, fontWeight: 500, color: "rgb(56, 189, 248)",
                 letterSpacing: "0.06em", marginBottom: 8,
               }}>
                 🟢 強気材料
@@ -265,7 +265,7 @@ function FullView({ data }) {
                     lineHeight: 1.65, color: "var(--text-primary)",
                     marginBottom: 4,
                   }}>
-                    <span style={{ color: "#22d3ee", flexShrink: 0 }}>・</span>
+                    <span style={{ color: "rgb(56, 189, 248)", flexShrink: 0 }}>・</span>
                     <span>{p}</span>
                   </li>
                 ))}
@@ -349,8 +349,8 @@ function NonLoggedTeaserView({ data, ticker, onSignIn }) {
           <div style={{
             padding: "14px 16px 8px 16px",
             borderRadius: "10px 10px 0 0",
-            background: "rgba(34,211,238,0.07)",
-            border: "1px solid rgba(34,211,238,0.25)",
+            background: "rgba(56, 189, 248,0.07)",
+            border: "1px solid rgba(56, 189, 248,0.25)",
             borderBottom: "none",
             fontSize: 13,
             lineHeight: 1.75,
@@ -363,10 +363,10 @@ function NonLoggedTeaserView({ data, ticker, onSignIn }) {
             position: "relative",
             padding: "0 16px 14px 16px",
             borderRadius: "0 0 10px 10px",
-            background: "rgba(34,211,238,0.07)",
-            borderLeft: "1px solid rgba(34,211,238,0.25)",
-            borderRight: "1px solid rgba(34,211,238,0.25)",
-            borderBottom: "1px solid rgba(34,211,238,0.25)",
+            background: "rgba(56, 189, 248,0.07)",
+            borderLeft: "1px solid rgba(56, 189, 248,0.25)",
+            borderRight: "1px solid rgba(56, 189, 248,0.25)",
+            borderBottom: "1px solid rgba(56, 189, 248,0.25)",
             fontSize: 13,
             lineHeight: 1.75,
             color: "var(--text-primary)",
@@ -387,12 +387,12 @@ function NonLoggedTeaserView({ data, ticker, onSignIn }) {
       <div style={{
         padding: 20,
         borderRadius: 12,
-        border: "1px solid rgba(34,211,238,0.35)",
-        background: "rgba(34,211,238,0.07)",
+        border: "1px solid rgba(56, 189, 248,0.35)",
+        background: "rgba(56, 189, 248,0.07)",
         textAlign: "center",
       }}>
         <div style={{
-          fontSize: 14, fontWeight: 600, color: "#22d3ee",
+          fontSize: 14, fontWeight: 600, color: "rgb(56, 189, 248)",
           marginBottom: 12,
         }}>
           ✅ ログインすると見られる内容
@@ -414,7 +414,7 @@ function NonLoggedTeaserView({ data, ticker, onSignIn }) {
               padding: "12px 28px",
               borderRadius: 10,
               border: "none",
-              background: "#22d3ee",
+              background: "rgb(56, 189, 248)",
               color: "#0f172a",
               fontWeight: 700,
               fontSize: 14,
@@ -422,11 +422,11 @@ function NonLoggedTeaserView({ data, ticker, onSignIn }) {
               display: "inline-flex",
               alignItems: "center",
               gap: 8,
-              boxShadow: "0 0 12px rgba(34,211,238,0.30)",
+              boxShadow: "0 0 12px rgba(56, 189, 248,0.30)",
               transition: "all 0.2s",
             }}
             onMouseEnter={(e) => { e.currentTarget.style.background = "#06b6d4"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "#22d3ee"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "rgb(56, 189, 248)"; }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
               <path fill="#0f172a" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -627,9 +627,9 @@ export default function InsightsPanel({ ticker, user, isPro, onUpgradeClick, onS
               type="button"
               onClick={() => setRefetchKey((k) => k + 1)}
               style={{
-                background: "rgba(34,211,238,0.12)",
-                color: "#22d3ee",
-                border: "1px solid rgba(34,211,238,0.4)",
+                background: "rgba(56, 189, 248,0.12)",
+                color: "rgb(56, 189, 248)",
+                border: "1px solid rgba(56, 189, 248,0.4)",
                 borderRadius: 8,
                 padding: "8px 20px",
                 fontSize: 13,
@@ -637,8 +637,8 @@ export default function InsightsPanel({ ticker, user, isPro, onUpgradeClick, onS
                 cursor: "pointer",
                 transition: "background 0.15s ease",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(34,211,238,0.20)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(34,211,238,0.12)"; }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(56, 189, 248,0.20)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(56, 189, 248,0.12)"; }}
             >
               🔄 もう一度分析する
             </button>
