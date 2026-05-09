@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { useJudgment } from '../../state/JudgmentContext.jsx';
 import Hero from './Hero.jsx';
 import KpiStrip from './KpiStrip.jsx';
@@ -14,6 +14,11 @@ import NewsPanel from '../../../../components/NewsPanel.jsx';
 import IRLinksPanel from '../../../../components/IRLinksPanel.jsx';
 import InsightsPanel from '../../../../components/InsightsPanel.jsx';
 import StockPriceChart from '../../../../components/StockPriceChart.jsx';
+import GuidanceCard from '../../../../components/GuidanceCard.jsx';
+import HistoryChart from '../../../../components/HistoryChart.jsx';
+
+// DetailReport は重量級 (36 KB gzip) のため lazy load
+const DetailReport = lazy(() => import('../../../../components/DetailReport.jsx'));
 
 /**
  * Pane 3: 判定タブ詳細ペイン (Step 6 + 既存 component 配線).
@@ -59,6 +64,7 @@ export default function JudgmentDetail({
 
   const detail = detailFor ? detailFor(selectedTicker) : null;
   const result = detail?.result || null;
+  const guidance = detail?.guidance || null;
   const conditions = result?.conditions || [];
   const verdict = result
     ? result.overallPass
@@ -116,6 +122,20 @@ export default function JudgmentDetail({
         passedCount={result?.passedCount}
         totalCount={result?.totalCount}
       />
+
+      {/* ガイダンス (今期/来期 EPS) — v1 GuidanceCard 流用 */}
+      {guidance && (
+        <Card>
+          <div style={{ padding: 'var(--space-6, 24px)' }}>
+            <SectionHeader
+              id="sec-guidance"
+              title="ガイダンス"
+              label="GUIDANCE"
+            />
+            <GuidanceCard guidance={guidance} isSecLoading={false} />
+          </div>
+        </Card>
+      )}
       {!result && onAnalyze && (
         <div
           style={{
@@ -160,6 +180,20 @@ export default function JudgmentDetail({
         latestDate={result?.latestDate}
       />
       <EarningsBars periods={result?.periods} currency={result?.currency} />
+
+      {/* 過去推移 (売上 / EPS / CFPS) — v1 HistoryChart 流用 */}
+      {result?.periods?.length > 0 && (
+        <Card>
+          <div style={{ padding: 'var(--space-6, 24px)' }}>
+            <SectionHeader
+              id="sec-history-chart"
+              title="過去推移"
+              label="REVENUE / EPS / CFPS"
+            />
+            <HistoryChart periods={result.periods} currency={result.currency} />
+          </div>
+        </Card>
+      )}
 
       {/* Insights (アナリスト強弱) — 既存 InsightsPanel を Card に内包 */}
       {selectedTicker && (
@@ -249,6 +283,46 @@ export default function JudgmentDetail({
             <IRLinksPanel ticker={selectedTicker} />
           </div>
         </Card>
+      )}
+
+      {/* AI 詳細レポート (Pro lock、lazy load) */}
+      {result && (
+        <PremiumLock
+          feature="claude_opus_report"
+          plan={plan}
+          label="AI 詳細レポートで意思決定を加速"
+          bullets={[
+            '5 条件 + ガイダンスをまとめた決算サマリー',
+            '直近ニュース/業績との相関分析',
+            'Premium は Claude Opus 多面分析 (月 20 銘柄)',
+          ]}
+          onUpgrade={detailContext.onUpgrade}
+        >
+          <Card>
+            <div style={{ padding: 'var(--space-6, 24px)' }}>
+              <SectionHeader
+                id="sec-report"
+                title="AI 詳細レポート"
+                label="DETAIL REPORT"
+              />
+              <Suspense
+                fallback={
+                  <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+                    レポートを読み込み中...
+                  </div>
+                }
+              >
+                <DetailReport
+                  analysis={result}
+                  guidance={guidance}
+                  onStreamingChange={() => {}}
+                  isPro={detailContext.isPro}
+                  onUpgrade={detailContext.onUpgrade}
+                />
+              </Suspense>
+            </div>
+          </Card>
+        </PremiumLock>
       )}
     </div>
   );
