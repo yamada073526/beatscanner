@@ -1,18 +1,23 @@
 /**
  * Workspace — App.jsx から呼ばれる workspace mode の top-level エントリ.
  *
- * v62 WS-3:
- *   - `useUrlSync()` を mount で起動 (URL ↔ Zustand store の双方向同期)
- *   - WorkspaceShell に slot prop (header / pane1 / pane2 / pane3) を流す
- *   - Pane 1 placeholder には WS-3 限定ダミー tab toggle を配置 (E2E 確認用)
- *   - Pane 2 / Pane 3 は WS-2 scaffold 通り placeholder のまま (WS-4-5 で実装)
+ * v62 WS-3 + WS-4:
+ *   - WS-3: useUrlSync mount + WorkspaceShell に slot を流す
+ *   - WS-4: Pane 2 / Pane 3 に既存 JudgmentList / JudgmentDetail を再利用
+ *     (5 条件 PASS/FAIL ヒートマップは features/judgment/components/list/ 内に既存)
+ *   - JudgmentProvider で wrap し、activeTicker (workspaceStore) ↔ selectedTicker
+ *     (JudgmentContext) を TickerBridge で双方向同期
  *
- * App.jsx 側は `<Workspace />` 1 個を render するだけ.
+ * Pane 1 nav は WS-5 で実装。WS-4 では暫定 dummy tab toggle を維持.
  */
+import { useEffect } from 'react';
 import WorkspaceShell from './WorkspaceShell.jsx';
 import WorkspaceHeader from './WorkspaceHeader.jsx';
 import { useUrlSync } from './useUrlSync.js';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
+import { JudgmentProvider, useJudgment } from '../judgment/state/JudgmentContext.jsx';
+import { JudgmentList } from '../judgment/components/list/index.js';
+import { JudgmentDetail } from '../judgment/components/detail/index.js';
 
 const TABS = [
   { key: 'home', label: 'ホーム' },
@@ -21,7 +26,7 @@ const TABS = [
   { key: 'チャート', label: 'チャート' },
 ];
 
-/** WS-3 暫定: Pane 1 nav は WS-5 で実装、現状はダミー tab toggle のみ */
+/** Pane 1 nav (WS-5 で実装、現状ダミー tab toggle のみ) */
 function Pane1DummyNav() {
   const activeTab = useWorkspaceStore((s) => s.activeTab);
   const setActiveTab = useWorkspaceStore((s) => s.setActiveTab);
@@ -38,7 +43,7 @@ function Pane1DummyNav() {
           padding: '0 6px',
         }}
       >
-        Pane 1 nav (WS-3 ダミー)
+        Pane 1 nav (WS-5 で本実装)
       </div>
       {TABS.map((t) => {
         const active = activeTab === t.key;
@@ -74,96 +79,91 @@ function Pane1DummyNav() {
           </button>
         );
       })}
-      <div
-        style={{
-          marginTop: 12,
-          padding: '8px 10px',
-          fontSize: 10,
-          color: 'var(--text-muted)',
-          background: 'var(--bg-subtle, rgba(0,0,0,0.03))',
-          borderRadius: 'var(--radius-sm, 8px)',
-          lineHeight: 1.4,
-        }}
-      >
-        WS-3 dogfood: tab を切替えると URL の <code>?tab=X</code> に同期します。リロードでも復元。
-      </div>
     </div>
   );
 }
 
-/** WS-3 暫定: Pane 2 placeholder (WS-4 で 5 条件ヒートマップ実装) */
-function Pane2Placeholder() {
-  const activeTab = useWorkspaceStore((s) => s.activeTab);
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100%',
-        gap: 8,
-        padding: 16,
-        textAlign: 'center',
-        color: 'var(--text-muted)',
-        fontSize: 12,
-      }}
-    >
-      <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Pane 2: list</div>
-      <div>active tab: <code>{activeTab}</code></div>
-      <div style={{ opacity: 0.7, fontSize: 11 }}>
-        WS-4 で 5 条件ヒートマップ + watchlist sparkline 実装予定
-      </div>
-    </div>
-  );
-}
-
-/** WS-3 暫定: Pane 3 placeholder (WS-4-5 で既存タブ component を流す) */
-function Pane3Placeholder() {
-  const activeTab = useWorkspaceStore((s) => s.activeTab);
+/**
+ * activeTicker (workspaceStore) ↔ selectedTicker (JudgmentContext) の双方向同期.
+ * - workspace → judgment: URL or palette からの ticker 変更を Pane 3 detail に反映
+ * - judgment → workspace: Pane 2 list クリックの ticker 変更を URL に反映
+ */
+function TickerBridge() {
   const activeTicker = useWorkspaceStore((s) => s.activeTicker);
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100%',
-        gap: 8,
-        padding: 16,
-        textAlign: 'center',
-        color: 'var(--text-muted)',
-        fontSize: 12,
-      }}
-    >
-      <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Pane 3: detail</div>
-      <div>active tab: <code>{activeTab}</code></div>
-      <div>active ticker: <code>{activeTicker || '(なし)'}</code></div>
-      <div style={{ opacity: 0.7, fontSize: 11 }}>
-        WS-5 で既存タブ component (HomeTab / JudgmentTab / 決算 / チャート) を slot 流し
-      </div>
-    </div>
-  );
+  const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
+  const { selectedTicker, selectTicker } = useJudgment();
+
+  // workspace → judgment
+  useEffect(() => {
+    if (activeTicker !== selectedTicker) {
+      selectTicker(activeTicker || null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTicker]);
+
+  // judgment → workspace
+  useEffect(() => {
+    if (selectedTicker !== activeTicker) {
+      setActiveTicker(selectedTicker || null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTicker]);
+
+  return null;
 }
 
-export default function Workspace() {
+/**
+ * @param {object} props
+ * @param {Array}  props.items          - Pane 2 の銘柄リスト (App.jsx で構築)
+ * @param {Function} props.detailFor    - Pane 3 で銘柄詳細データを引く関数
+ * @param {Function} props.onAnalyze    - 分析実行 (= App.jsx の runAnalyze)
+ * @param {string} [props.plan='free']  - Pro 判定 (PremiumLock 用)
+ * @param {object} [props.detailContext] - JudgmentDetail に渡す { user, isPro, onUpgrade, onSignIn }
+ * @param {string} [props.currentTicker] - 現在 SPA で分析中の銘柄 (初期 sync 用)
+ */
+export default function Workspace({
+  items = [],
+  detailFor,
+  onAnalyze,
+  plan = 'free',
+  detailContext,
+  currentTicker,
+}) {
   // URL ↔ Zustand 同期 (Linear 流 SSOT)
   useUrlSync();
 
   // 改善希望①: Tier 1 折りたたみで shell の header height も縮小し、下ペインを広げる
   const headerCollapsed = useWorkspaceStore((s) => s.headerCollapsed);
-  // 32 = WorkspaceHeader 上段のみ (Logo + Cmd+K + Chevron)
-  // 56 = 上段 32 + 下段 24 (Tier 1 strip)
+  const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
   const headerHeight = headerCollapsed ? 32 : 56;
 
+  // App.jsx が currentTicker を持っている場合、初回 mount で URL or store に伝搬
+  useEffect(() => {
+    if (currentTicker) {
+      setActiveTicker(currentTicker);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
-    <WorkspaceShell
-      header={<WorkspaceHeader />}
-      headerHeight={headerHeight}
-      pane1={<Pane1DummyNav />}
-      pane2={<Pane2Placeholder />}
-      pane3={<Pane3Placeholder />}
-    />
+    <JudgmentProvider>
+      <TickerBridge />
+      <WorkspaceShell
+        header={<WorkspaceHeader />}
+        headerHeight={headerHeight}
+        pane1={<Pane1DummyNav />}
+        pane2={
+          <JudgmentList items={items} onAnalyze={onAnalyze} showFilters={true} />
+        }
+        pane3={
+          <JudgmentDetail
+            plan={plan}
+            detailFor={detailFor}
+            onAnalyze={onAnalyze}
+            detailContext={detailContext}
+          />
+        }
+      />
+    </JudgmentProvider>
   );
 }

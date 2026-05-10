@@ -661,6 +661,39 @@ export default function App() {
   }, [urlWantsWorkspace, isMobileForWorkspace]);
 
   if (useWorkspaceLayout) {
+    // v62 WS-4: workspace の Pane 2 / Pane 3 で既存 JudgmentList / JudgmentDetail を再利用するため
+    // SPA v2 path と同じ items / detailFor を構築 (App.jsx:1172 と同形)
+    const _holdingTickers = Array.isArray(holdingStore?.tickers) ? holdingStore.tickers : [];
+    const _tickerSet = new Set([..._holdingTickers, ...watchlist]);
+    for (const t of resultCacheRef.current.keys()) _tickerSet.add(t);
+    const _itemsWS = Array.from(_tickerSet).map((t) => {
+      const cache = resultCacheRef.current.get(t);
+      const r = cache?.result || null;
+      const px = portfolioPrices?.prices?.[t] || null;
+      return {
+        ticker: t,
+        companyName: r?.companyName,
+        price: px?.price ?? null,
+        changePct: px?.changePct ?? null,
+        judgment: r,
+        isHolding: _holdingTickers.includes(t),
+        isWatchlist: watchlist.includes(t),
+        lastAnalyzedAt: cache?.ts ?? 0,
+      };
+    });
+    const _planWS = isProUser ? 'pro' : 'free';
+    const _detailForWS = (t) => {
+      const cache = resultCacheRef.current.get(t);
+      const px = portfolioPrices?.prices?.[t] || null;
+      return {
+        result: cache?.result || null,
+        guidance: cache?.guidance || null,
+        price: px?.price ?? null,
+        changePct: px?.changePct ?? null,
+        lastAnalyzedAt: cache?.ts ?? 0,
+        isLoading: loading && ticker === t,
+      };
+    };
     return (
       <>
         <Suspense
@@ -670,7 +703,19 @@ export default function App() {
             </div>
           }
         >
-          <Workspace />
+          <Workspace
+            items={_itemsWS}
+            detailFor={_detailForWS}
+            onAnalyze={runAnalyze}
+            plan={_planWS}
+            currentTicker={ticker || null}
+            detailContext={{
+              user,
+              isPro: isSubscribed,
+              onUpgrade: () => upgrade.open('詳細分析（強気/弱気）'),
+              onSignIn: signInWithGoogle,
+            }}
+          />
         </Suspense>
         {/* v62 WS-3 fix: workspace mode でも Cmd+K palette を render する.
             旧 SPA path 内のみだと Cmd+K listener はあっても palette が DOM に存在しない */}
