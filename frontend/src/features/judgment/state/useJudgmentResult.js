@@ -75,10 +75,11 @@ export function useJudgmentResult({
   const runAnalyze = useCallback(
     async (sym) => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      if (!hasFmpKey()) {
-        setShowApiKeyModal?.(true);
-        return;
-      }
+      // v62: BYOK 廃止に伴い、API キー無くても demoAnalyze で動かす
+      // (CLAUDE.md「無料お試しは IP ベース rate limit」「ホワイトリスト方式採用しない」)
+      // 旧来の setShowApiKeyModal gate は Trust Cliff (LP「登録不要」訴求と矛盾) のため撤去。
+      // demoAnalyze は backend で 3 req/IP/day の制限あり、任意銘柄対応。
+      const useDemo = !hasFmpKey();
       const t = normalizeTicker(sym || ticker);
       if (!t) return;
       setTicker(t);
@@ -107,13 +108,15 @@ export function useJudgmentResult({
       setGuidance(null);
       setGuidanceSecLoading(false);
       setActiveTab?.('judgment');
-      setIsDemoResult(false);
+      setIsDemoResult(useDemo);
       if (setForceCloseSuggestions) {
         setForceCloseSuggestions(true);
         setTimeout(() => setForceCloseSuggestions(false), 500);
       }
 
-      analyze(t)
+      // v62: API キー有 → analyze (任意銘柄)、無 → demoAnalyze (3 req/IP/day 制限)
+      const analyzeFn = useDemo ? demoAnalyze : analyze;
+      analyzeFn(t)
         .then((data) => {
           if (searchIdRef.current === searchId) {
             setResult(data);
@@ -123,12 +126,15 @@ export function useJudgmentResult({
         })
         .catch((e) => {
           if (searchIdRef.current === searchId) {
-            const msg = e.message;
-            setError(
-              msg === 'Failed to fetch' || msg.includes('NetworkError')
-                ? 'バックエンド接続エラー（サーバーが応答していません）。start.sh でサーバーが起動しているか確認してください。'
-                : msg
-            );
+            const msg = e.message || '';
+            // demo の rate limit (429) 専用メッセージ (handleLPTickerClick と挙動を揃える)
+            if (useDemo && (msg.includes('429') || msg.includes('limit') || msg.includes('Rate'))) {
+              setError('本日のお試し回数 (3銘柄) を超えました。Googleログインで無制限になります。');
+            } else if (msg === 'Failed to fetch' || msg.includes('NetworkError')) {
+              setError('バックエンド接続エラー（サーバーが応答していません）。start.sh でサーバーが起動しているか確認してください。');
+            } else {
+              setError(msg);
+            }
           }
         });
 
@@ -157,7 +163,7 @@ export function useJudgmentResult({
           if (searchIdRef.current === searchId) setGuidanceSecLoading(false);
         });
     },
-    [ticker, prefetch, setActiveTab, setShowApiKeyModal, setForceCloseSuggestions]
+    [ticker, prefetch, setActiveTab, setForceCloseSuggestions]
   );
 
   /**

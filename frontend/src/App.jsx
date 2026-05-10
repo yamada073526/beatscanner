@@ -924,19 +924,9 @@ export default function App() {
       {/* Result metadata — visible only when analysis result exists */}
       {result && (
         <div className="space-y-4 mb-2">
-          {isDemoResult && (
-            <button
-              onClick={() => setShowSettings(true)}
-              className="flex w-full items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-left hover:bg-amber-100 transition-colors"
-            >
-              <span className="text-sm text-amber-800">
-                デモモード表示中 — AAPL・MSFT・NVDA限定、1日3回まで
-              </span>
-              <span className="shrink-0 rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white">
-                無料APIキーを設定して全銘柄を使う →
-              </span>
-            </button>
-          )}
+          {/* v62: BYOK 廃止に伴いデモモードバナー削除。
+              旧文言「AAPL/MSFT/NVDA 限定」は実装と矛盾 (demo は任意銘柄 + 3 req/IP/day) の Trust Cliff だった。
+              レート上限超過時は runAnalyze の 429 catch でユーザー向けエラー表示する。 */}
 
           <div className="space-y-4">
             <ResultBadge result={result} />
@@ -975,21 +965,9 @@ export default function App() {
               </button>
             </div>
 
-            {isDemoResult && result?.overallPass && (
-              <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-sm text-slate-600">
-                  全銘柄を分析するには
-                  <strong className="mx-1 text-slate-900">FMP APIキーの設定</strong>
-                  が必要です（無料・1分で完了）
-                </p>
-                <button
-                  onClick={() => setShowSettings(true)}
-                  className="shrink-0 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
-                >
-                  無料で全機能を使う →
-                </button>
-              </div>
-            )}
+            {/* v62: BYOK 廃止に伴い「FMP APIキー設定で全銘柄」CTA 削除。
+                demo モードでも実際は任意銘柄が動くため文言と乖離していた。
+                課金訴求は下の PlanComparisonBanner (Pro / Premium) に集約。 */}
 
             {isDemoResult && (
               <PlanComparisonBanner
@@ -1070,12 +1048,14 @@ export default function App() {
         />
       )}
 
-      {/* Tab: 判定詳細 — default v2 (features/judgment), `?j1=1` で legacy v1 へ fallback */}
+      {/* Tab: 判定詳細 — v62: default を v1 に復旧 (3 ペイン v2 はユーザー dogfood で
+          満足度に届かず、grill-me で擬似 2 ペイン検証へ方針変更)。
+          `?j2=1` で v2 (3 ペイン構成) にアクセス可能、コードは保全して擬似プロト改造に再利用 */}
       {activeTab === 'judgment' && (() => {
         const useV2 = (() => {
           try {
-            return new URLSearchParams(window.location.search).get('j1') !== '1';
-          } catch { return true; }
+            return new URLSearchParams(window.location.search).get('j2') === '1';
+          } catch { return false; }
         })();
         if (useV2) {
           // v2 用 list items を holdings + watchlist + 過去分析 (resultCache) から構築
