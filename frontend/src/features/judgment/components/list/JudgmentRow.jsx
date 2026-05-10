@@ -181,9 +181,9 @@ export default function JudgmentRow({ item, selected, onClick }) {
         </div>
       </div>
 
-      {/* Col 2: sparkline (改善希望⑤、競合に無い差別化) — 期間は workspace store
-          §dogfood-pane2: ws-row-sparkline class で狭幅時に container query で非表示 */}
-      <span className="ws-row-sparkline" style={{ display: 'inline-flex' }}>
+      {/* Col 2: sparkline — §dogfood-pane2 round 7: インライン style display を撤去
+          (CSS class .ws-row-sparkline の display:none を inline:inline-flex が上書きしていたバグ) */}
+      <span className="ws-row-sparkline">
         <RowSparkline ticker={ticker} period={sparklinePeriod} />
       </span>
 

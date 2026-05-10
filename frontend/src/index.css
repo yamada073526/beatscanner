@@ -5017,12 +5017,17 @@ button.ds-chip {
     background-color var(--motion-fast, 120ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
   will-change: transform;
 }
+/* §dogfood-round7: 浮き上がりに加え cyan bg + text へ色変化 (灰色 chip では識別不能だったため) */
 button.ds-chip:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 10px -2px rgba(15, 23, 42, 0.18);
+  background: rgba(56, 189, 248, 0.18) !important;
+  color: rgb(14, 165, 233) !important;
 }
 [data-theme="dark"] button.ds-chip:hover {
   box-shadow: 0 4px 10px -2px rgba(0, 0, 0, 0.55);
+  background: rgba(56, 189, 248, 0.24) !important;
+  color: rgb(56, 189, 248) !important;
 }
 button.ds-chip:active {
   transform: translateY(0);
@@ -5050,15 +5055,19 @@ button.ds-chip:active {
 .ws-pane1-watchlist-row {
   transition: background var(--motion-fast, 120ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
 }
+/* §dogfood-round7: hover の cyan tint を強化 (Pane 2 観察銘柄 chip と同等の視認性).
+   light/dark 両モードで「マウスオーバーしている」が 2 秒で識別できる強度に */
 .ws-pane1-tab:hover,
 .ws-pane1-section-header:hover,
 .ws-pane1-watchlist-row:hover:not(.is-active) {
-  background: rgba(56, 189, 248, 0.08);
+  background: rgba(56, 189, 248, 0.18);
+  color: rgb(14, 165, 233);
 }
 [data-theme="dark"] .ws-pane1-tab:hover,
 [data-theme="dark"] .ws-pane1-section-header:hover,
 [data-theme="dark"] .ws-pane1-watchlist-row:hover:not(.is-active) {
-  background: rgba(56, 189, 248, 0.12);
+  background: rgba(56, 189, 248, 0.24);
+  color: rgb(56, 189, 248);
 }
 .ws-pane1-tab.is-active,
 .ws-pane1-watchlist-row.is-active {
