@@ -39,9 +39,11 @@ const PANE_DEFAULTS_3 = {
 };
 const PANE_DEFAULTS_4 = {
   pane1: { defaultSize: 19, minSize: 16, maxSize: 28, collapsibleSize: 4 },
-  pane2: { defaultSize: 22, minSize: 16, maxSize: 35 },
-  pane3: { defaultSize: 41, minSize: 25 },
-  pane4: { defaultSize: 18, minSize: 14, maxSize: 30 },
+  // §round17 (UI/UX レビュー): Pane 4 を半画面まで広げられるよう maxSize 拡大 (30→50).
+  // pane2 minSize は 16→14、pane3 minSize は 25→20 まで譲歩し Pane 4 を 50% まで許容.
+  pane2: { defaultSize: 22, minSize: 14, maxSize: 35 },
+  pane3: { defaultSize: 41, minSize: 20 },
+  pane4: { defaultSize: 18, minSize: 14, maxSize: 50 },
 };
 
 function ResizeHandle({ ariaLabel }) {

@@ -5204,16 +5204,19 @@ button.ds-chip:active {
   padding-left: 20px;
 }
 
-/* SSE ストリーミング中の点滅カーソル */
+/* §round17: SSE ストリーミング中の点滅カーソル
+   smooth fade + animation-fill-mode both で re-render での位相 reset を抑制 */
 .ws-pane4-cursor {
   display: inline-block;
   margin-left: 2px;
   color: rgb(56, 189, 248);
-  animation: ws-pane4-blink 1.1s steps(1) infinite;
+  animation: ws-pane4-blink 1.0s ease-in-out infinite both;
 }
 @keyframes ws-pane4-blink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0; }
+  0%   { opacity: 1; }
+  40%  { opacity: 1; }
+  60%  { opacity: 0; }
+  100% { opacity: 0; }
 }
 
 /* reduce motion 配慮 */

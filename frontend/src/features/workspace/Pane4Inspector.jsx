@@ -11,8 +11,46 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import { TrendingUp, Globe, BarChart3, Bookmark, Flame, ExternalLink, X, Languages } from 'lucide-react';
+import { TrendingUp, Globe, BarChart3, Bookmark, ExternalLink, X, Languages } from 'lucide-react';
 import { fetchMacroNews, fetchNews, translateTexts, translateTextsStream } from '../../api.js';
+
+// ── §round17 Markdown 見出し補強 (UI/UX レビュー反映) ──────────
+//   backend SSE が一部見出しを `**bold**` 単独段落で出す。
+//   ReactMarkdown の p renderer で「strong 単一子 + 句点なし + 短文」を h3 に昇格.
+const HEADING_SENTINEL_RE = /[。.!?…!?]/;
+function isHeadingLike(children) {
+  // children は React node 配列 (ReactMarkdown が渡す)
+  if (!Array.isArray(children)) {
+    children = [children];
+  }
+  // 余分な空白/改行を除いた node 配列を取得
+  const meaningful = children.filter((c) => {
+    if (c == null) return false;
+    if (typeof c === 'string') return c.trim().length > 0;
+    return true;
+  });
+  if (meaningful.length !== 1) return false;
+  const only = meaningful[0];
+  if (typeof only !== 'object' || only?.type !== 'strong') return false;
+  // strong の中の text を抽出
+  const inner = Array.isArray(only.props?.children)
+    ? only.props.children.join('')
+    : (only.props?.children ?? '');
+  const text = String(inner).trim();
+  if (!text) return false;
+  if (text.length > 40) return false;
+  if (HEADING_SENTINEL_RE.test(text)) return false;
+  return text;
+}
+const MD_COMPONENTS = {
+  p: ({ children, node, ...rest }) => {
+    const heading = isHeadingLike(children);
+    if (heading) {
+      return <h3 {...rest}>{heading}</h3>;
+    }
+    return <p {...rest}>{children}</p>;
+  },
+};
 
 // ── タグ system (旧 TodaysBriefSection と統一) ──────────────────
 const CATEGORY_ICON = {
@@ -75,32 +113,14 @@ function matchTickersWithAlias(text, items, predicate) {
   return hits;
 }
 
-// ── attention dots (cluster_size 視覚化、旧 TodaysBriefSection から) ─
-function AttentionDots({ clusterSize }) {
-  if (!clusterSize || clusterSize < 3) return null;
-  return (
-    <span
-      role="status"
-      title={`${clusterSize} 媒体が同じトピックを報道中`}
-      aria-label={`注目度: ${clusterSize} 媒体`}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 3,
-        padding: '1px 5px',
-        borderRadius: 'var(--radius-pill, 9999px)',
-        background: 'rgba(245,158,11,0.10)',
-        color: 'rgb(245,158,11)',
-        border: '1px solid rgba(245,158,11,0.20)',
-        fontSize: 9,
-        fontWeight: 700,
-        letterSpacing: '0.02em',
-      }}
-    >
-      <Flame size={9} strokeWidth={2.25} aria-hidden />
-      <span style={{ fontVariantNumeric: 'tabular-nums' }}>{clusterSize}</span>
-    </span>
-  );
+/** §round17 attention 量子化: cluster_size を 0..1 連続量に変換し、
+ *  縦バー高さ (24/48/72/100%) として render する. */
+function attentionLevel(clusterSize) {
+  const cs = Number(clusterSize) || 1;
+  if (cs >= 6) return 1.0;
+  if (cs >= 4) return 0.75;
+  if (cs >= 2) return 0.5;
+  return 0.25;
 }
 
 // ── 記事行 ──────────────────────────────────────────────────────────
@@ -135,20 +155,29 @@ function NewsItem({ item, displayTitle, onSelect, isOpen, index }) {
         cursor: 'pointer',
       }}
     >
-      {/* 左端 accent bar (タグ色) */}
-      <span
-        aria-hidden
-        className="ws-pane4-accent-bar"
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: 8,
-          bottom: 8,
-          width: 3,
-          borderRadius: '0 2px 2px 0',
-          background: colors.bar,
-        }}
-      />
+      {/* §round17: 左端 accent bar は attention level で高さ可変
+          中心 50% を level (25/50/75/100%) で拡縮、色はタグ色 + opacity 連動. */}
+      {(() => {
+        const lvl = attentionLevel(item.cluster_size);
+        const inset = `${(1 - lvl) * 50}%`;
+        return (
+          <span
+            aria-hidden
+            className="ws-pane4-accent-bar"
+            title={`注目度: ${item.cluster_size || 1} 媒体`}
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: inset,
+              bottom: inset,
+              width: 3,
+              borderRadius: '0 2px 2px 0',
+              background: colors.bar,
+              opacity: 0.55 + 0.45 * lvl,
+            }}
+          />
+        );
+      })()}
       {hasImage && !imgError ? (
         <img
           src={item.image}
@@ -185,7 +214,9 @@ function NewsItem({ item, displayTitle, onSelect, isOpen, index }) {
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
-          {cat && (
+          {/* §round17 (設計レビュー): 「登録銘柄」テキストバッジは撤去 (ticker typography で affinity を表現).
+              他 (マクロ/地政学/市場全体) はカテゴリバッジ維持. */}
+          {cat && cat !== '登録銘柄' && (
             <span
               style={{
                 display: 'inline-flex',
@@ -205,37 +236,43 @@ function NewsItem({ item, displayTitle, onSelect, isOpen, index }) {
               <span>{item.importance === 'HIGH' ? `HIGH · ${cat}` : cat}</span>
             </span>
           )}
+          {/* §round17 affinity: ticker 文字列自体で「保有/観察」を表現 (Bookmark icon + ticker、無言ラベル) */}
           {isHolding && (
             <span
-              title={`保有銘柄に関連: ${item._holdingHits.join(', ')}`}
+              title={`保有銘柄: ${item._holdingHits.join(', ')}`}
               style={{
-                fontSize: 9,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 3,
+                fontSize: 10,
                 fontWeight: 700,
-                padding: '1px 5px',
-                borderRadius: 'var(--radius-pill, 9999px)',
-                background: 'rgba(212,175,55,0.18)',
                 color: 'rgb(180,142,30)',
+                fontVariantNumeric: 'tabular-nums',
+                letterSpacing: '0.02em',
               }}
             >
-              保有 {item._holdingHits.join(' ')}
+              <Bookmark size={10} strokeWidth={2.25} aria-hidden style={{ fill: 'currentColor' }} />
+              {item._holdingHits.join(' ')}
             </span>
           )}
           {isWatch && (
             <span
-              title={`ウォッチに関連: ${item._watchHits.join(', ')}`}
+              title={`ウォッチ: ${item._watchHits.join(', ')}`}
               style={{
-                fontSize: 9,
-                fontWeight: 700,
-                padding: '1px 5px',
-                borderRadius: 'var(--radius-pill, 9999px)',
-                background: 'rgba(56,189,248,0.16)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 3,
+                fontSize: 10,
+                fontWeight: 600,
                 color: 'rgb(14,165,233)',
+                fontVariantNumeric: 'tabular-nums',
+                letterSpacing: '0.02em',
               }}
             >
-              観察 {item._watchHits.join(' ')}
+              <Bookmark size={10} strokeWidth={2.25} aria-hidden />
+              {item._watchHits.join(' ')}
             </span>
           )}
-          <AttentionDots clusterSize={item.cluster_size} />
           {item.published && (
             <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
               {fmtRelative(item.published)}
@@ -529,14 +566,14 @@ function ReadingMode({ item, onClose, jpEnabled }) {
         {!enError && (
           <div className="ws-pane4-article-body" style={{ marginTop: 12 }}>
             {displayContent ? (
-              <ReactMarkdown>{displayContent}</ReactMarkdown>
+              <ReactMarkdown components={MD_COMPONENTS}>{displayContent}</ReactMarkdown>
             ) : (
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 記事を読込中...
               </div>
             )}
             {isStreamingTranslation && (
-              <span className="ws-pane4-cursor" aria-hidden>▌</span>
+              <span key="ws-pane4-cursor" className="ws-pane4-cursor" aria-hidden>▌</span>
             )}
           </div>
         )}
