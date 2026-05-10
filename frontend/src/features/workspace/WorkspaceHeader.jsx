@@ -56,11 +56,11 @@ export default function WorkspaceHeader() {
           }}
         >
           <img
-            src="/logo.svg"
-            alt=""
+            src="/favicon.svg"
+            alt="BeatScanner ロゴ"
             width={20}
             height={20}
-            style={{ display: 'block' }}
+            style={{ display: 'block', flexShrink: 0 }}
             onError={(e) => { e.currentTarget.style.display = 'none'; }}
           />
           <span

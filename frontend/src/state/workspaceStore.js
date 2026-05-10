@@ -41,6 +41,12 @@ export const useWorkspaceStore = create(
       sparklinePeriod: '1y', // '1w' | '1m' | '6m' | '1y' (1d は trade hour データ無く除外)
       // v62 WS-Phase2: Pane 4 inspector 表示切替 (default false、3 ペインで dogfood)
       pane4Expanded: false,
+      // v63 §12-B-4: Pane 1 各セクション折り畳み (default 全 open)
+      navCollapsed: false,
+      watchlistCollapsed: false,
+      // v63 §12-B-5: ウォッチリスト 2 階層化 (default 両 open)
+      holdingsCollapsed: false,
+      observingCollapsed: false,
       activeTab: 'home',
       activeTicker: null,
 
@@ -51,6 +57,10 @@ export const useWorkspaceStore = create(
       setMacroOrder: (order) => set(() => ({ macroOrder: order })),
       setSparklinePeriod: (p) => set(() => ({ sparklinePeriod: p })),
       togglePane4: () => set((s) => ({ pane4Expanded: !s.pane4Expanded })),
+      toggleNav: () => set((s) => ({ navCollapsed: !s.navCollapsed })),
+      toggleWatchlist: () => set((s) => ({ watchlistCollapsed: !s.watchlistCollapsed })),
+      toggleHoldings: () => set((s) => ({ holdingsCollapsed: !s.holdingsCollapsed })),
+      toggleObserving: () => set((s) => ({ observingCollapsed: !s.observingCollapsed })),
       setActiveTab: (t) => set(() => ({ activeTab: t })),
       setActiveTicker: (s) => set(() => ({ activeTicker: s })),
     }),
@@ -65,8 +75,26 @@ export const useWorkspaceStore = create(
         macroOrder: state.macroOrder,
         sparklinePeriod: state.sparklinePeriod,
         pane4Expanded: state.pane4Expanded,
+        navCollapsed: state.navCollapsed,
+        watchlistCollapsed: state.watchlistCollapsed,
+        holdingsCollapsed: state.holdingsCollapsed,
+        observingCollapsed: state.observingCollapsed,
       }),
-      version: 1,
+      version: 2,
+      // v1 → v2: 新 collapse keys (nav/watchlist/holdings/observing) 追加。
+      // 旧 v1 state は default 値 (false) で吸収される。
+      migrate: (persistedState, version) => {
+        if (version < 2) {
+          return {
+            ...persistedState,
+            navCollapsed: false,
+            watchlistCollapsed: false,
+            holdingsCollapsed: false,
+            observingCollapsed: false,
+          };
+        }
+        return persistedState;
+      },
     }
   )
 );

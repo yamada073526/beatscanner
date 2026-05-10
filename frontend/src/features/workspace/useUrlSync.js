@@ -21,7 +21,8 @@
 import { useEffect } from 'react';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 
-const VALID_TABS = new Set(['home', 'judgment', 'report', 'チャート']);
+// §12-A-1: 'indices' を 5 番目として追加 ('チャート' は CLAUDE.md ルールで維持)
+const VALID_TABS = new Set(['home', 'judgment', 'report', 'チャート', 'indices']);
 
 function readUrl() {
   if (typeof window === 'undefined') return { tab: null, ticker: null };

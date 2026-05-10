@@ -150,7 +150,7 @@ export default function WorkspaceShell({ header, headerHeight = 56, pane1, pane2
             minSize={PANE_DEFAULTS.pane3.minSize}
             style={{ minWidth: 0, overflow: 'hidden' }}
           >
-            <PaneContainer ariaLabel="Pane 3 詳細">
+            <PaneContainer ariaLabel="Pane 3 詳細" allowOverflowX>
               {pane3 || <PanePlaceholder label="Pane 3: detail" hint="既存タブの中身が入る" />}
             </PaneContainer>
           </Panel>
@@ -185,7 +185,7 @@ export default function WorkspaceShell({ header, headerHeight = 56, pane1, pane2
  *   - role="region" + aria-label で a11y
  *   - contain: layout のみ (paint は box-shadow 切れの原因なので禁止)
  */
-function PaneContainer({ ariaLabel, children }) {
+function PaneContainer({ ariaLabel, children, allowOverflowX = false }) {
   return (
     <div
       role="region"
@@ -193,7 +193,7 @@ function PaneContainer({ ariaLabel, children }) {
       style={{
         height: '100%',
         overflowY: 'auto',
-        overflowX: 'hidden',
+        overflowX: allowOverflowX ? 'auto' : 'hidden',
         padding: 'var(--space-3, 12px)',
         contain: 'layout',
       }}

@@ -17,7 +17,7 @@ const JudgmentContext = createContext(null);
 const DEFAULT_FILTERS = Object.freeze({
   query: '',
   group: 'all', // 'holdings' | 'watchlist' | 'all-pass' | 'all'
-  sort: 'recent', // 'recent' | 'pass-count' | 'ticker'
+  sort: 'pass-count', // §12-C-8: 'pass-count' default | 'tag-order' | 'earnings-near' | 'change-pct' | 'recent'
 });
 
 export function JudgmentProvider({ children }) {

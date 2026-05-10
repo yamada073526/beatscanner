@@ -5033,6 +5033,24 @@ body {
   background: rgba(212, 175, 55, 0.05);
 }
 
+/* §12-C-7: クリック時の沈み演出 (旧 SPA 再現)
+   旧 SPA にあった「触れた感」を pane 構成にも持ち込む */
+.ws-judgment-row:active {
+  transform: translateY(0);
+  transition:
+    background 80ms ease-out,
+    transform 80ms ease-out,
+    box-shadow 80ms ease-out;
+  box-shadow:
+    inset 3px 0 0 rgba(56, 189, 248, 0.55),
+    0 1px 4px -1px rgba(15, 23, 42, 0.20);
+}
+.ws-judgment-row.is-holding:active {
+  box-shadow:
+    inset 3px 0 0 rgba(212, 175, 55, 0.55),
+    0 1px 4px -1px rgba(15, 23, 42, 0.20);
+}
+
 /* 保有銘柄: 左端 2px ゴールドアクセントバー (常時表示、ホテルロビー感) */
 .ws-judgment-row.is-holding::before {
   content: '';
@@ -5107,7 +5125,8 @@ body {
 /* reduce motion 配慮 */
 @media (prefers-reduced-motion: reduce) {
   .ws-judgment-row,
-  .ws-judgment-row:hover {
+  .ws-judgment-row:hover,
+  .ws-judgment-row:active {
     transition: none;
     transform: none;
   }

@@ -11,6 +11,7 @@
  * Pane 1 nav は WS-5 で実装。WS-4 では暫定 dummy tab toggle を維持.
  */
 import { useEffect } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import WorkspaceShell from './WorkspaceShell.jsx';
 import WorkspaceHeader from './WorkspaceHeader.jsx';
 import { useUrlSync } from './useUrlSync.js';
@@ -19,12 +20,17 @@ import { JudgmentProvider, useJudgment } from '../judgment/state/JudgmentContext
 import { JudgmentList } from '../judgment/components/list/index.js';
 import { JudgmentDetail } from '../judgment/components/detail/index.js';
 import Pane1MacroSection from './Pane1MacroSection.jsx';
+import { IndicesList, IndicesDetailView } from './IndicesView.jsx';
 
+// §12-A-1: 「指数」tab を 5 番目として追加。
+// 'チャート' key は CLAUDE.md「タブの内部 key は変えない」に従い維持
+// (App.jsx の SPA mode が同 key で switch しているため変更すると SPA mode が壊れる)。
 const TABS = [
   { key: 'home', label: 'ホーム', icon: '🏠' },
   { key: 'judgment', label: '判定', icon: '⚖️' },
   { key: 'report', label: '決算', icon: '📅' },
   { key: 'チャート', label: 'チャート', icon: '📈' },
+  { key: 'indices', label: '指数', icon: '📊' },
 ];
 
 /** v62 WS-4 + Phase2: Pane 2 上部の表示メタ切替 (改善希望④ 拡張) */
@@ -207,145 +213,177 @@ function Pane4Placeholder() {
   );
 }
 
-/** v62 WS-5 Step 1: Pane 1 nav 本実装.
- * - 上段: 4 tabs (workspaceStore.activeTab に同期、URL ?tab=X 反映)
- * - 中段: Watchlist mini (activeTicker と双方向 sync、click で Pane 3 に詳細表示)
- * - 下段 (Step 2 で追加予定): MACRO 詳細 collapsible 22 指標 + DnD②
+/** v63 §12-B-4: Pane 1 各セクションの折り畳み header (chevron + label + count). */
+function SectionHeader({ collapsed, onToggle, label, count, accent }) {
+  // accent: undefined (neutral) | 'gold' | 'cyan'
+  const color =
+    accent === 'gold'
+      ? 'rgba(212,175,55,0.85)'
+      : accent === 'cyan'
+        ? 'rgba(120,200,220,0.95)'
+        : 'var(--text-muted)';
+  const borderLeft =
+    accent === 'gold'
+      ? '2px solid rgba(212,175,55,0.85)'
+      : accent === 'cyan'
+        ? '2px solid rgba(120,200,220,0.75)'
+        : '2px solid transparent';
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={!collapsed}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '4px 6px',
+        width: '100%',
+        background: 'transparent',
+        border: 'none',
+        borderLeft,
+        fontSize: 10,
+        fontWeight: 600,
+        color,
+        textTransform: 'uppercase',
+        letterSpacing: '0.08em',
+        cursor: 'pointer',
+        textAlign: 'left',
+      }}
+    >
+      {collapsed ? (
+        <ChevronRight size={12} aria-hidden />
+      ) : (
+        <ChevronDown size={12} aria-hidden />
+      )}
+      <span>{label}</span>
+      {count != null && (
+        <span style={{ marginLeft: 'auto', fontWeight: 400, color: 'var(--text-muted)' }}>
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+/** v63 §12-B-5 用 watchlist row (DRY). */
+function WatchlistRow({ it, active, onClick }) {
+  const pct = it.changePct;
+  const trendColor =
+    pct == null
+      ? 'var(--text-muted)'
+      : pct > 0
+        ? 'var(--color-gain)'
+        : pct < 0
+          ? 'var(--color-loss)'
+          : 'var(--text-muted)';
+  return (
+    <button
+      key={it.ticker}
+      type="button"
+      onClick={() => onClick(it.ticker)}
+      aria-pressed={active}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 6,
+        padding: '4px 10px',
+        fontSize: 12,
+        fontWeight: active ? 600 : 400,
+        borderRadius: 'var(--radius-sm, 8px)',
+        background: active ? 'rgba(56,189,248,0.10)' : 'transparent',
+        color: active ? 'rgb(14,165,233)' : 'var(--text-primary)',
+        borderLeft: active ? '2px solid rgb(56,189,248)' : '2px solid transparent',
+        border: '1px solid transparent',
+        cursor: 'pointer',
+        textAlign: 'left',
+        transition: 'background 0.12s',
+      }}
+      onMouseEnter={(e) => {
+        if (!active) e.currentTarget.style.background = 'rgba(0,0,0,0.04)';
+      }}
+      onMouseLeave={(e) => {
+        if (!active) e.currentTarget.style.background = 'transparent';
+      }}
+    >
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {it.ticker}
+      </span>
+      <span
+        style={{
+          fontSize: 10,
+          fontWeight: 500,
+          color: trendColor,
+          fontVariantNumeric: 'tabular-nums',
+          flexShrink: 0,
+        }}
+      >
+        {pct == null ? '—' : `${pct > 0 ? '+' : ''}${(pct * 100).toFixed(1)}%`}
+      </span>
+    </button>
+  );
+}
+
+/** v62 WS-5 Step 1 + v63 §12-B-2/4/5: Pane 1 nav.
+ * - ナビゲーション (collapsible)
+ * - ウォッチリスト (collapsible) → 保有 / 観察 の 2 サブセクション (各 collapsible)
+ * - 世界市場 (= 旧 MACRO 詳細、Pane1MacroSection で実装)
+ * 上から自然な flow で並べる (§12-B-2)。
  */
 function Pane1Nav({ items = [] }) {
   const activeTab = useWorkspaceStore((s) => s.activeTab);
   const setActiveTab = useWorkspaceStore((s) => s.setActiveTab);
   const activeTicker = useWorkspaceStore((s) => s.activeTicker);
   const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
+  const navCollapsed = useWorkspaceStore((s) => s.navCollapsed);
+  const toggleNav = useWorkspaceStore((s) => s.toggleNav);
+  const watchlistCollapsed = useWorkspaceStore((s) => s.watchlistCollapsed);
+  const toggleWatchlist = useWorkspaceStore((s) => s.toggleWatchlist);
+  const holdingsCollapsed = useWorkspaceStore((s) => s.holdingsCollapsed);
+  const toggleHoldings = useWorkspaceStore((s) => s.toggleHoldings);
+  const observingCollapsed = useWorkspaceStore((s) => s.observingCollapsed);
+  const toggleObserving = useWorkspaceStore((s) => s.toggleObserving);
+
+  // §12-B-5: ウォッチリスト全体から isHolding / 観察 (= !isHolding) に分割
+  const holdings = items.filter((it) => it.isHolding);
+  const observing = items.filter((it) => !it.isHolding);
+  // 両方とも分類対象なし (= ウォッチリスト全体が空) かつ items 0 のときは fallback hint
+  const hasNoItems = items.length === 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: 8 }}>
-      {/* ── Tabs (4 項目) ────────────────────────────────────────── */}
-      <div
-        style={{
-          fontSize: 10,
-          fontWeight: 600,
-          color: 'var(--text-muted)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-          padding: '4px 6px',
-        }}
-      >
-        ナビゲーション
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {TABS.map((t) => {
-          const active = activeTab === t.key;
-          return (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setActiveTab(t.key)}
-              aria-pressed={active}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '6px 10px',
-                fontSize: 13,
-                fontWeight: active ? 600 : 400,
-                borderRadius: 'var(--radius-sm, 8px)',
-                border: '1px solid transparent',
-                background: active ? 'rgba(56,189,248,0.10)' : 'transparent',
-                color: active ? 'rgb(14,165,233)' : 'var(--text-secondary)',
-                borderLeft: active ? '2px solid rgb(56,189,248)' : '2px solid transparent',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'background 0.15s',
-              }}
-              onMouseEnter={(e) => {
-                if (!active) e.currentTarget.style.background = 'rgba(0,0,0,0.04)';
-              }}
-              onMouseLeave={(e) => {
-                if (!active) e.currentTarget.style.background = 'transparent';
-              }}
-            >
-              <span aria-hidden style={{ fontSize: 14 }}>{t.icon}</span>
-              <span>{t.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ── Watchlist mini (clickable、activeTicker 双方向 sync) ─ */}
-      <div
-        style={{
-          marginTop: 12,
-          fontSize: 10,
-          fontWeight: 600,
-          color: 'var(--text-muted)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-          padding: '4px 6px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <span>ウォッチリスト</span>
-        <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
-          {items.length}
-        </span>
-      </div>
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 1,
-          flex: '1 1 auto',
-          minHeight: 0,
-          overflowY: 'auto',
-        }}
-      >
-        {items.length === 0 ? (
-          <div
-            style={{
-              padding: '8px 10px',
-              fontSize: 11,
-              color: 'var(--text-muted)',
-            }}
-          >
-            (空) 銘柄を分析して ☆ で追加
-          </div>
-        ) : (
-          items.map((it) => {
-            const active = activeTicker === it.ticker;
-            const pct = it.changePct;
-            const trendColor =
-              pct == null
-                ? 'var(--text-muted)'
-                : pct > 0
-                  ? 'var(--color-gain)'
-                  : pct < 0
-                    ? 'var(--color-loss)'
-                    : 'var(--text-muted)';
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: 8, overflowY: 'auto', minHeight: 0 }}>
+      {/* ── ナビゲーション (collapsible) ──────────────────────────── */}
+      <SectionHeader
+        collapsed={navCollapsed}
+        onToggle={toggleNav}
+        label="ナビゲーション"
+      />
+      {!navCollapsed && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {TABS.map((t) => {
+            const active = activeTab === t.key;
             return (
               <button
-                key={it.ticker}
+                key={t.key}
                 type="button"
-                onClick={() => setActiveTicker(it.ticker)}
+                onClick={() => setActiveTab(t.key)}
                 aria-pressed={active}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 6,
-                  padding: '4px 10px',
-                  fontSize: 12,
+                  gap: 8,
+                  padding: '6px 10px',
+                  fontSize: 13,
                   fontWeight: active ? 600 : 400,
                   borderRadius: 'var(--radius-sm, 8px)',
-                  background: active ? 'rgba(56,189,248,0.10)' : 'transparent',
-                  color: active ? 'rgb(14,165,233)' : 'var(--text-primary)',
-                  borderLeft: active ? '2px solid rgb(56,189,248)' : '2px solid transparent',
                   border: '1px solid transparent',
+                  background: active ? 'rgba(56,189,248,0.10)' : 'transparent',
+                  color: active ? 'rgb(14,165,233)' : 'var(--text-secondary)',
+                  borderLeft: active ? '2px solid rgb(56,189,248)' : '2px solid transparent',
                   cursor: 'pointer',
                   textAlign: 'left',
-                  transition: 'background 0.12s',
+                  transition: 'background 0.15s',
                 }}
                 onMouseEnter={(e) => {
                   if (!active) e.currentTarget.style.background = 'rgba(0,0,0,0.04)';
@@ -354,27 +392,85 @@ function Pane1Nav({ items = [] }) {
                   if (!active) e.currentTarget.style.background = 'transparent';
                 }}
               >
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {it.ticker}
-                </span>
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 500,
-                    color: trendColor,
-                    fontVariantNumeric: 'tabular-nums',
-                    flexShrink: 0,
-                  }}
-                >
-                  {pct == null ? '—' : `${pct > 0 ? '+' : ''}${(pct * 100).toFixed(1)}%`}
-                </span>
+                <span aria-hidden style={{ fontSize: 14 }}>{t.icon}</span>
+                <span>{t.label}</span>
               </button>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
 
-      {/* ── MACRO 詳細 collapsible (改善希望②: DnD 並び替え対応) ── */}
+      {/* ── ウォッチリスト (collapsible、§12-B-4) — 中身は §12-B-5 で 2 階層化 ── */}
+      <div style={{ marginTop: 12 }}>
+        <SectionHeader
+          collapsed={watchlistCollapsed}
+          onToggle={toggleWatchlist}
+          label="ウォッチリスト"
+          count={items.length}
+        />
+      </div>
+      {!watchlistCollapsed && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flex: '0 1 auto' }}>
+          {hasNoItems ? (
+            <div style={{ padding: '8px 10px', fontSize: 11, color: 'var(--text-muted)' }}>
+              (空) 銘柄を分析して ☆ で追加
+            </div>
+          ) : (
+            <>
+              {/* §12-B-5: 保有 sub-section (空ならセクションごと隠す = レビュー結論) */}
+              {holdings.length > 0 && (
+                <>
+                  {/* 観察も同時にあるときだけ階層 header を出す。
+                      保有のみのときは初心者に 2 階層概念を強制しないためフラット表示。 */}
+                  {observing.length > 0 && (
+                    <SectionHeader
+                      collapsed={holdingsCollapsed}
+                      onToggle={toggleHoldings}
+                      label="保有"
+                      count={holdings.length}
+                      accent="gold"
+                    />
+                  )}
+                  {(observing.length === 0 || !holdingsCollapsed) &&
+                    holdings.map((it) => (
+                      <WatchlistRow
+                        key={it.ticker}
+                        it={it}
+                        active={activeTicker === it.ticker}
+                        onClick={setActiveTicker}
+                      />
+                    ))}
+                </>
+              )}
+              {/* §12-B-5: 観察 sub-section (空ならセクションごと隠す) */}
+              {observing.length > 0 && (
+                <>
+                  {holdings.length > 0 && (
+                    <SectionHeader
+                      collapsed={observingCollapsed}
+                      onToggle={toggleObserving}
+                      label="観察"
+                      count={observing.length}
+                      accent="cyan"
+                    />
+                  )}
+                  {(holdings.length === 0 || !observingCollapsed) &&
+                    observing.map((it) => (
+                      <WatchlistRow
+                        key={it.ticker}
+                        it={it}
+                        active={activeTicker === it.ticker}
+                        onClick={setActiveTicker}
+                      />
+                    ))}
+                </>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── 世界市場 (= 旧 MACRO 詳細、§12-B-3 で和文化、§12-B-2 で上詰め) ── */}
       <Pane1MacroSection />
     </div>
   );
@@ -433,6 +529,9 @@ export default function Workspace({
   const headerCollapsed = useWorkspaceStore((s) => s.headerCollapsed);
   const pane4Expanded = useWorkspaceStore((s) => s.pane4Expanded);
   const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
+  // §12-A-1: 指数 tab のとき Pane 2 / Pane 3 の中身を IndicesView に切替
+  const activeTab = useWorkspaceStore((s) => s.activeTab);
+  const isIndices = activeTab === 'indices';
   const headerHeight = headerCollapsed ? 32 : 56;
 
   // App.jsx が currentTicker を持っている場合、初回 mount で URL or store に伝搬
@@ -451,20 +550,28 @@ export default function Workspace({
         headerHeight={headerHeight}
         pane1={<Pane1Nav items={items} />}
         pane2={
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <Pane2MetaToggle />
-            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              <JudgmentList items={items} onAnalyze={onAnalyze} showFilters={true} />
+          isIndices ? (
+            <IndicesList />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <Pane2MetaToggle />
+              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                <JudgmentList items={items} onAnalyze={onAnalyze} showFilters={true} />
+              </div>
             </div>
-          </div>
+          )
         }
         pane3={
-          <JudgmentDetail
-            plan={plan}
-            detailFor={detailFor}
-            onAnalyze={onAnalyze}
-            detailContext={detailContext}
-          />
+          isIndices ? (
+            <IndicesDetailView />
+          ) : (
+            <JudgmentDetail
+              plan={plan}
+              detailFor={detailFor}
+              onAnalyze={onAnalyze}
+              detailContext={detailContext}
+            />
+          )
         }
         pane4={<Pane4Placeholder />}
         pane4Visible={pane4Expanded}

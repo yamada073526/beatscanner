@@ -747,6 +747,8 @@ export default function App() {
         tagId,
         tagName: tagObj?.name ?? null,
         tagColor: tagObj?.color || tagObj?.bg_color || null,
+        // §12-C-8: タグ順ソート用 position (ユーザー定義順、未タグは末尾)
+        tagPosition: tagObj?.position ?? Number.POSITIVE_INFINITY,
       };
     });
     const _planWS = isProUser ? 'pro' : 'free';

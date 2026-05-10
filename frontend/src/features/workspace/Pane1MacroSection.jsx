@@ -226,7 +226,7 @@ export default function Pane1MacroSection() {
         }}
       >
         {macroExpanded ? <ChevronDown size={12} aria-hidden /> : <ChevronRight size={12} aria-hidden />}
-        <span>MACRO 詳細</span>
+        <span>世界市場</span>
         <span style={{ marginLeft: 'auto', fontWeight: 400 }}>{ordered.length}</span>
       </button>
       {macroExpanded && (

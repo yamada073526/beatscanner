@@ -39,13 +39,33 @@ export default function JudgmentList({ items = [], showFilters = true, onAnalyze
 
     const sorted = [...filtered].sort((a, b) => {
       switch (filters.sort) {
-        case 'pass-count':
-          return (b.judgment?.passedCount ?? -1) - (a.judgment?.passedCount ?? -1);
+        case 'tag-order':
+          // §12-C-8: ユーザー定義タグ順 (position asc)、未タグは末尾、同 position は ticker asc で安定
+          return (
+            (a.tagPosition ?? Number.POSITIVE_INFINITY) -
+              (b.tagPosition ?? Number.POSITIVE_INFINITY) ||
+            (a.ticker || '').localeCompare(b.ticker || '')
+          );
+        case 'earnings-near':
+          // §12-C-8: 決算近い順 asc、null は末尾固定
+          return (
+            (a.nextEarningsDays ?? Number.POSITIVE_INFINITY) -
+              (b.nextEarningsDays ?? Number.POSITIVE_INFINITY)
+          );
+        case 'change-pct':
+          // §12-C-8: 騰落順 desc (上昇大が先頭)、null は末尾
+          return (
+            (b.changePct ?? Number.NEGATIVE_INFINITY) -
+              (a.changePct ?? Number.NEGATIVE_INFINITY)
+          );
         case 'ticker':
           return (a.ticker || '').localeCompare(b.ticker || '');
         case 'recent':
-        default:
           return (b.lastAnalyzedAt ?? 0) - (a.lastAnalyzedAt ?? 0);
+        case 'pass-count':
+        default:
+          // §12-C-8: デフォルト = 条件合致数 desc (朝の意思決定動線)
+          return (b.judgment?.passedCount ?? -1) - (a.judgment?.passedCount ?? -1);
       }
     });
 
@@ -54,7 +74,7 @@ export default function JudgmentList({ items = [], showFilters = true, onAnalyze
       const buckets = {
         holdings:  { title: '保有銘柄',    items: [] },
         allPass:   { title: '5 条件合致',  items: [] },
-        watchlist: { title: 'ウォッチリスト', items: [] },
+        watchlist: { title: '観察銘柄', items: [] },
         other:     { title: 'その他',      items: [] },
       };
       const seen = new Set();
@@ -81,7 +101,7 @@ export default function JudgmentList({ items = [], showFilters = true, onAnalyze
 
   return (
     <div
-      className="bs-panel ds-judgment-list"
+      className="ds-judgment-list"
       style={{
         display: 'flex',
         flexDirection: 'column',
