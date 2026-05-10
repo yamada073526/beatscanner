@@ -161,15 +161,16 @@ export default memo(function MarketStripCompact() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const sparklinePeriod = useWorkspaceStore((s) => s.sparklinePeriod);
-  // §12-A-1: cell click → 指数 tab + ticker (URL = SSOT)
+  // §dogfood-2: cell click → 指数 tab + activeIndexSymbol (activeTicker とは分離、
+  // home tab Pane 3 = JudgmentDetail の表示内容を汚染しない)
   const setActiveTab = useWorkspaceStore((s) => s.setActiveTab);
-  const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
+  const setActiveIndexSymbol = useWorkspaceStore((s) => s.setActiveIndexSymbol);
   const handleSelect = useCallback(
     (sym) => {
       setActiveTab('indices');
-      setActiveTicker(sym);
+      setActiveIndexSymbol(sym);
     },
-    [setActiveTab, setActiveTicker]
+    [setActiveTab, setActiveIndexSymbol]
   );
 
   const load = useCallback(async () => {

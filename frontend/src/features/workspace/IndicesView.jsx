@@ -15,6 +15,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import StockPriceChart from '../../components/StockPriceChart.jsx';
+import NewsPanel from '../../components/NewsPanel.jsx';
 import { fetchMarketIndices } from '../../api.js';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { useRowSparkline } from '../judgment/components/list/RowSparkline.jsx';
@@ -31,6 +32,8 @@ const TIER1 = [
   { sym: 'JPY=X', label: 'USD/JPY' },
 ];
 const TIER1_SYMS = new Set(TIER1.map((t) => t.sym));
+// §dogfood-世界市場: Tier 1 以外の 22 指標 (= 旧「世界市場」) も同 endpoint から取得し
+// この tab で Tier 1 + 世界市場 の 2 group 表示.
 
 // 期間別変化率テーブル用 (RowSparkline と同じ営業日数)
 const PERIOD_TABLE = [
@@ -51,10 +54,85 @@ function formatPrice(item) {
   });
 }
 
-/** Pane 2: Tier 1 8 指標リスト. ws-judgment-row 風だが scope 限定で別 class. */
+function GroupHeader({ children }) {
+  return (
+    <div
+      style={{
+        padding: '10px 14px 8px',
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--bg-card)',
+        fontSize: 11,
+        fontWeight: 600,
+        textTransform: 'uppercase',
+        letterSpacing: '0.08em',
+        color: 'var(--text-muted)',
+        position: 'sticky',
+        top: 0,
+        zIndex: 1,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function IndicesRow({ item, label, sym, active, onClick }) {
+  const pct = item?.change_pct;
+  const up = pct != null && pct >= 0;
+  const trendColor =
+    pct == null
+      ? 'var(--text-muted)'
+      : up
+        ? 'var(--color-gain)'
+        : 'var(--color-loss)';
+  return (
+    <button
+      type="button"
+      className={`ws-judgment-row${active ? ' is-active' : ''}`}
+      style={{ gridTemplateColumns: 'minmax(0, 1fr) auto auto', minHeight: 44 }}
+      onClick={() => onClick(sym)}
+      aria-pressed={active}
+    >
+      <span
+        style={{
+          fontWeight: 600,
+          color: 'var(--text-primary)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {label}
+      </span>
+      <span
+        style={{
+          fontWeight: 600,
+          color: 'var(--text-primary)',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {formatPrice(item)}
+      </span>
+      <span
+        style={{
+          minWidth: 56,
+          textAlign: 'right',
+          color: trendColor,
+          fontVariantNumeric: 'tabular-nums',
+          fontSize: 12,
+          fontWeight: 500,
+        }}
+      >
+        {pct == null ? '—' : `${up ? '+' : ''}${Number(pct).toFixed(2)}%`}
+      </span>
+    </button>
+  );
+}
+
+/** Pane 2: Tier 1 (主要指数) + Tier 2 (世界市場) の 2 group リスト. */
 export function IndicesList() {
-  const activeTicker = useWorkspaceStore((s) => s.activeTicker);
-  const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
+  const activeIndexSymbol = useWorkspaceStore((s) => s.activeIndexSymbol);
+  const setActiveIndexSymbol = useWorkspaceStore((s) => s.setActiveIndexSymbol);
   const [data, setData] = useState([]);
 
   useEffect(() => {
@@ -76,74 +154,41 @@ export function IndicesList() {
     return m;
   }, [data]);
 
+  // §dogfood-世界市場: Tier 2 は Tier 1 を除いた残り全て
+  const tier2 = useMemo(
+    () => data.filter((it) => !TIER1_SYMS.has(it.symbol)),
+    [data]
+  );
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div
-        style={{
-          padding: '10px 14px 8px',
-          borderBottom: '1px solid var(--border)',
-          fontSize: 11,
-          fontWeight: 600,
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-          color: 'var(--text-muted)',
-        }}
-      >
-        主要指数 (Tier 1)
-      </div>
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {TIER1.map((t) => {
-          const item = bySym.get(t.sym);
-          const pct = item?.change_pct;
-          const up = pct != null && pct >= 0;
-          const trendColor =
-            pct == null
-              ? 'var(--text-muted)'
-              : up
-                ? 'var(--color-gain)'
-                : 'var(--color-loss)';
-          const active = activeTicker === t.sym;
-          return (
-            <button
-              key={t.sym}
-              type="button"
-              className={`ws-judgment-row${active ? ' is-active' : ''}`}
-              style={{
-                gridTemplateColumns: 'minmax(0, 1fr) auto auto',
-                minHeight: 44,
-              }}
-              onClick={() => setActiveTicker(t.sym)}
-              aria-pressed={active}
-            >
-              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                {t.label}
-              </span>
-              <span
-                style={{
-                  fontWeight: 600,
-                  color: 'var(--text-primary)',
-                  fontVariantNumeric: 'tabular-nums',
-                }}
-              >
-                {formatPrice(item)}
-              </span>
-              <span
-                style={{
-                  minWidth: 56,
-                  textAlign: 'right',
-                  color: trendColor,
-                  fontVariantNumeric: 'tabular-nums',
-                  fontSize: 12,
-                  fontWeight: 500,
-                }}
-              >
-                {pct == null
-                  ? '—'
-                  : `${up ? '+' : ''}${Number(pct).toFixed(2)}%`}
-              </span>
-            </button>
-          );
-        })}
+        <GroupHeader>主要指数</GroupHeader>
+        {TIER1.map((t) => (
+          <IndicesRow
+            key={t.sym}
+            item={bySym.get(t.sym)}
+            label={t.label}
+            sym={t.sym}
+            active={activeIndexSymbol === t.sym}
+            onClick={setActiveIndexSymbol}
+          />
+        ))}
+        {tier2.length > 0 && (
+          <>
+            <GroupHeader>世界市場</GroupHeader>
+            {tier2.map((it) => (
+              <IndicesRow
+                key={it.symbol}
+                item={it}
+                label={it.label || it.symbol}
+                sym={it.symbol}
+                active={activeIndexSymbol === it.symbol}
+                onClick={setActiveIndexSymbol}
+              />
+            ))}
+          </>
+        )}
       </div>
     </div>
   );
@@ -226,13 +271,15 @@ function PeriodTable({ ticker }) {
   );
 }
 
-/** Pane 3: 大チャート + 期間別変化率テーブル. */
+/** Pane 3: 大チャート + 期間別変化率テーブル. activeIndexSymbol が null なら S&P 500. */
 export function IndicesDetailView() {
-  const activeTicker = useWorkspaceStore((s) => s.activeTicker);
-  // activeTicker が Tier 1 でなければ最初の S&P 500 にフォールバック
-  const ticker =
-    activeTicker && TIER1_SYMS.has(activeTicker) ? activeTicker : TIER1[0].sym;
-  const meta = TIER1.find((t) => t.sym === ticker);
+  const activeIndexSymbol = useWorkspaceStore((s) => s.activeIndexSymbol);
+  // §dogfood-世界市場: Tier 1 / Tier 2 どちらでも accept、null は S&P 500 fallback
+  const ticker = activeIndexSymbol || TIER1[0].sym;
+  const tier1Meta = TIER1.find((t) => t.sym === ticker);
+  // Tier 1 ラベルは固定、Tier 2 は fetchMarketIndices 取得時の label を後で表示するが、
+  // フォールバックとして symbol そのものを表示
+  const displayLabel = tier1Meta?.label ?? ticker;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 4 }}>
@@ -256,13 +303,16 @@ export function IndicesDetailView() {
             color: 'var(--text-primary)',
           }}
         >
-          {meta?.label ?? ticker}
+          {displayLabel}
         </div>
       </div>
 
       <PeriodTable ticker={ticker} />
 
       <StockPriceChart ticker={ticker} />
+
+      {/* §dogfood-1: 指数 detail にニュースセクションを追加 (個別銘柄分析と同じ NewsPanel) */}
+      <NewsPanel ticker={ticker} />
     </div>
   );
 }

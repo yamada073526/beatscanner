@@ -49,6 +49,9 @@ export const useWorkspaceStore = create(
       observingCollapsed: false,
       activeTab: 'home',
       activeTicker: null,
+      // §dogfood-2: 指数 tab 用 symbol。activeTicker と分離することで Header click が
+      // home tab の Pane 3 (= JudgmentDetail) を汚染しないようにする
+      activeIndexSymbol: null,
 
       toggleHeader: () => set((s) => ({ headerCollapsed: !s.headerCollapsed })),
       togglePane1: () => set((s) => ({ pane1Collapsed: !s.pane1Collapsed })),
@@ -63,6 +66,7 @@ export const useWorkspaceStore = create(
       toggleObserving: () => set((s) => ({ observingCollapsed: !s.observingCollapsed })),
       setActiveTab: (t) => set(() => ({ activeTab: t })),
       setActiveTicker: (s) => set(() => ({ activeTicker: s })),
+      setActiveIndexSymbol: (s) => set(() => ({ activeIndexSymbol: s })),
     }),
     {
       name: STORAGE_KEY,

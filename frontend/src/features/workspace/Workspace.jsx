@@ -11,7 +11,15 @@
  * Pane 1 nav は WS-5 で実装。WS-4 では暫定 dummy tab toggle を維持.
  */
 import { useEffect } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Home,
+  Gavel,
+  CalendarDays,
+  CandlestickChart,
+  Activity,
+} from 'lucide-react';
 import WorkspaceShell from './WorkspaceShell.jsx';
 import WorkspaceHeader from './WorkspaceHeader.jsx';
 import { useUrlSync } from './useUrlSync.js';
@@ -19,18 +27,18 @@ import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { JudgmentProvider, useJudgment } from '../judgment/state/JudgmentContext.jsx';
 import { JudgmentList } from '../judgment/components/list/index.js';
 import { JudgmentDetail } from '../judgment/components/detail/index.js';
-import Pane1MacroSection from './Pane1MacroSection.jsx';
 import { IndicesList, IndicesDetailView } from './IndicesView.jsx';
 
-// §12-A-1: 「指数」tab を 5 番目として追加。
+// §12-A-1 + §dogfood-icon: 「指数」tab + lucide-react 細線アイコン
+// (emoji の玩具感を排除、stroke 1.5 で Aman 級の控えめな高級感、active 時のみ 1.75 補強)
 // 'チャート' key は CLAUDE.md「タブの内部 key は変えない」に従い維持
 // (App.jsx の SPA mode が同 key で switch しているため変更すると SPA mode が壊れる)。
 const TABS = [
-  { key: 'home', label: 'ホーム', icon: '🏠' },
-  { key: 'judgment', label: '判定', icon: '⚖️' },
-  { key: 'report', label: '決算', icon: '📅' },
-  { key: 'チャート', label: 'チャート', icon: '📈' },
-  { key: 'indices', label: '指数', icon: '📊' },
+  { key: 'home', label: 'ホーム', Icon: Home },
+  { key: 'judgment', label: '判定', Icon: Gavel },
+  { key: 'report', label: '決算', Icon: CalendarDays },
+  { key: 'チャート', label: 'チャート', Icon: CandlestickChart },
+  { key: 'indices', label: '指数', Icon: Activity },
 ];
 
 /** v62 WS-4 + Phase2: Pane 2 上部の表示メタ切替 (改善希望④ 拡張) */
@@ -213,8 +221,10 @@ function Pane4Placeholder() {
   );
 }
 
-/** v63 §12-B-4: Pane 1 各セクションの折り畳み header (chevron + label + count). */
-function SectionHeader({ collapsed, onToggle, label, count, accent }) {
+/** v63 §12-B-4: Pane 1 各セクションの折り畳み header.
+ * dogfood feedback 反映: chevron は右端、accent は左 inset border、hover 背景あり。
+ * indent prop で 2 階層目をインデント (§dogfood-pane1)。 */
+function SectionHeader({ collapsed, onToggle, label, count, accent, indent = false }) {
   // accent: undefined (neutral) | 'gold' | 'cyan'
   const color =
     accent === 'gold'
@@ -236,12 +246,17 @@ function SectionHeader({ collapsed, onToggle, label, count, accent }) {
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 4,
-        padding: '4px 6px',
+        gap: 6,
+        // 2 階層目は左 padding を増やしてインデント感を出す (12px)
+        paddingLeft: indent ? 16 : 6,
+        paddingRight: 8,
+        paddingTop: 4,
+        paddingBottom: 4,
         width: '100%',
         background: 'transparent',
         border: 'none',
         borderLeft,
+        borderRadius: 'var(--radius-sm, 8px)',
         fontSize: 10,
         fontWeight: 600,
         color,
@@ -249,25 +264,29 @@ function SectionHeader({ collapsed, onToggle, label, count, accent }) {
         letterSpacing: '0.08em',
         cursor: 'pointer',
         textAlign: 'left',
+        transition: 'background 0.12s',
       }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.04)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
     >
-      {collapsed ? (
-        <ChevronRight size={12} aria-hidden />
-      ) : (
-        <ChevronDown size={12} aria-hidden />
-      )}
       <span>{label}</span>
       {count != null && (
         <span style={{ marginLeft: 'auto', fontWeight: 400, color: 'var(--text-muted)' }}>
           {count}
         </span>
       )}
+      {/* chevron は右端 (視覚的重み: 一番左の同記号反復を避けるため、§dogfood-pane1) */}
+      {collapsed ? (
+        <ChevronRight size={12} aria-hidden style={{ marginLeft: count != null ? 4 : 'auto', flexShrink: 0 }} />
+      ) : (
+        <ChevronDown size={12} aria-hidden style={{ marginLeft: count != null ? 4 : 'auto', flexShrink: 0 }} />
+      )}
     </button>
   );
 }
 
-/** v63 §12-B-5 用 watchlist row (DRY). */
-function WatchlistRow({ it, active, onClick }) {
+/** v63 §12-B-5 用 watchlist row (DRY). indent prop で 2 階層目用の左余白. */
+function WatchlistRow({ it, active, onClick, indent = false }) {
   const pct = it.changePct;
   const trendColor =
     pct == null
@@ -288,7 +307,7 @@ function WatchlistRow({ it, active, onClick }) {
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: 6,
-        padding: '4px 10px',
+        padding: indent ? '4px 10px 4px 22px' : '4px 10px',
         fontSize: 12,
         fontWeight: active ? 600 : 400,
         borderRadius: 'var(--radius-sm, 8px)',
@@ -392,7 +411,12 @@ function Pane1Nav({ items = [] }) {
                   if (!active) e.currentTarget.style.background = 'transparent';
                 }}
               >
-                <span aria-hidden style={{ fontSize: 14 }}>{t.icon}</span>
+                <t.Icon
+                  size={14}
+                  strokeWidth={active ? 1.75 : 1.5}
+                  aria-hidden
+                  style={{ flexShrink: 0 }}
+                />
                 <span>{t.label}</span>
               </button>
             );
@@ -429,6 +453,7 @@ function Pane1Nav({ items = [] }) {
                       label="保有"
                       count={holdings.length}
                       accent="gold"
+                      indent
                     />
                   )}
                   {(observing.length === 0 || !holdingsCollapsed) &&
@@ -438,6 +463,7 @@ function Pane1Nav({ items = [] }) {
                         it={it}
                         active={activeTicker === it.ticker}
                         onClick={setActiveTicker}
+                        indent={observing.length > 0}
                       />
                     ))}
                 </>
@@ -452,6 +478,7 @@ function Pane1Nav({ items = [] }) {
                       label="観察"
                       count={observing.length}
                       accent="cyan"
+                      indent
                     />
                   )}
                   {(holdings.length === 0 || !observingCollapsed) &&
@@ -461,6 +488,7 @@ function Pane1Nav({ items = [] }) {
                         it={it}
                         active={activeTicker === it.ticker}
                         onClick={setActiveTicker}
+                        indent={holdings.length > 0}
                       />
                     ))}
                 </>
@@ -470,8 +498,10 @@ function Pane1Nav({ items = [] }) {
         </div>
       )}
 
-      {/* ── 世界市場 (= 旧 MACRO 詳細、§12-B-3 で和文化、§12-B-2 で上詰め) ── */}
-      <Pane1MacroSection />
+      {/* §dogfood-世界市場: 案 1 採用で Pane 1 左下から撤去。
+          全 22 指標は「指数」tab に統合 (Tier 1 + 世界市場 の 2 group)、
+          row click で Pane 3 の過去値動きを確認可。Phase 2 で Header カスタマイズ実装時に
+          選択肢のソースとして再利用予定。 */}
     </div>
   );
 }

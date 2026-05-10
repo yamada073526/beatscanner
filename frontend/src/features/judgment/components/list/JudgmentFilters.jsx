@@ -9,14 +9,14 @@ const GROUP_OPTIONS = [
   { key: 'all-pass',  label: '5 条件合致' },
 ];
 
-// §12-C-8: select 廃止 → chip group。固定順、5 個。
-// 「ティッカー順」は dogfood 利用なしで廃止 (シンプル原則)。
+// §12-C-8 + §dogfood-pane2: chip group 4 個 (5 → 4)。
+// 「直近分析」は dogfood 検証で利用想定が薄い (= ウォッチリスト未登録の銘柄を再訪する用途のみ) ため削除。
+// 「ティッカー順」は同様に dogfood 未利用で削除済。
 const SORT_OPTIONS = [
   { key: 'pass-count',    label: 'デフォルト' }, // = 条件合致数 desc
   { key: 'tag-order',     label: 'タグ順' },
   { key: 'earnings-near', label: '決算近' },
   { key: 'change-pct',    label: '騰落順' },
-  { key: 'recent',        label: '直近分析' },
 ];
 
 export default function JudgmentFilters() {

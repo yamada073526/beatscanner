@@ -25,25 +25,27 @@ import { useWorkspaceStore } from '../../state/workspaceStore.js';
 const VALID_TABS = new Set(['home', 'judgment', 'report', 'チャート', 'indices']);
 
 function readUrl() {
-  if (typeof window === 'undefined') return { tab: null, ticker: null };
+  if (typeof window === 'undefined') return { tab: null, ticker: null, idx: null };
   try {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
     const ticker = params.get('ticker');
+    const idx = params.get('idx');
     return {
       tab: tab && VALID_TABS.has(tab) ? tab : null,
       ticker: ticker || null,
+      idx: idx || null,
     };
   } catch {
-    return { tab: null, ticker: null };
+    return { tab: null, ticker: null, idx: null };
   }
 }
 
-function writeUrl(tab, ticker) {
+function writeUrl(tab, ticker, idx) {
   if (typeof window === 'undefined') return;
   try {
     const url = new URL(window.location.href);
-    // 既存の URL 構造 (e.g. ?layout=workspace) は保持し、tab/ticker のみ操作
+    // 既存の URL 構造 (e.g. ?layout=workspace) は保持し、tab/ticker/idx のみ操作
     if (tab && VALID_TABS.has(tab) && tab !== 'home') {
       url.searchParams.set('tab', tab);
     } else {
@@ -53,6 +55,11 @@ function writeUrl(tab, ticker) {
       url.searchParams.set('ticker', ticker);
     } else {
       url.searchParams.delete('ticker');
+    }
+    if (idx) {
+      url.searchParams.set('idx', idx);
+    } else {
+      url.searchParams.delete('idx');
     }
     // pushState ではなく replaceState で履歴汚染回避
     if (url.toString() !== window.location.href) {
@@ -64,22 +71,27 @@ function writeUrl(tab, ticker) {
 export function useUrlSync() {
   const setActiveTab = useWorkspaceStore((s) => s.setActiveTab);
   const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
+  const setActiveIndexSymbol = useWorkspaceStore((s) => s.setActiveIndexSymbol);
 
   // 1. マウント時 URL → store (初期化)
   useEffect(() => {
-    const { tab, ticker } = readUrl();
+    const { tab, ticker, idx } = readUrl();
     if (tab) setActiveTab(tab);
     if (ticker) setActiveTicker(ticker);
-  }, [setActiveTab, setActiveTicker]);
+    if (idx) setActiveIndexSymbol(idx);
+  }, [setActiveTab, setActiveTicker, setActiveIndexSymbol]);
 
   // 2. store → URL (subscribe)
   useEffect(() => {
-    // selector で activeTab/activeTicker のみを監視 (他の state 変化では発火しない)
     const unsubscribe = useWorkspaceStore.subscribe((state, prev) => {
-      if (state.activeTab === prev.activeTab && state.activeTicker === prev.activeTicker) {
+      if (
+        state.activeTab === prev.activeTab &&
+        state.activeTicker === prev.activeTicker &&
+        state.activeIndexSymbol === prev.activeIndexSymbol
+      ) {
         return;
       }
-      writeUrl(state.activeTab, state.activeTicker);
+      writeUrl(state.activeTab, state.activeTicker, state.activeIndexSymbol);
     });
     return unsubscribe;
   }, []);
@@ -87,11 +99,12 @@ export function useUrlSync() {
   // 3. popstate listener (ブラウザ戻る)
   useEffect(() => {
     const handler = () => {
-      const { tab, ticker } = readUrl();
+      const { tab, ticker, idx } = readUrl();
       setActiveTab(tab || 'home');
       setActiveTicker(ticker);
+      setActiveIndexSymbol(idx);
     };
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);
-  }, [setActiveTab, setActiveTicker]);
+  }, [setActiveTab, setActiveTicker, setActiveIndexSymbol]);
 }

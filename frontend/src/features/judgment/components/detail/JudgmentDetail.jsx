@@ -139,18 +139,11 @@ export default function JudgmentDetail({
         />
       )}
 
-      {/* ガイダンス (今期/来期 EPS) — v1 GuidanceCard 流用 */}
+      {/* ガイダンス (今期/来期 EPS) — GuidanceCard 自身が panel-card を持つので outer Card 不要 (二重枠回避) */}
       {guidance && (
-        <Card>
-          <div style={{ padding: 'var(--space-6, 24px)' }}>
-            <SectionHeader
-              id="sec-guidance"
-              title="ガイダンス"
-              label="GUIDANCE"
-            />
-            <GuidanceCard guidance={guidance} isSecLoading={false} />
-          </div>
-        </Card>
+        <div id="sec-guidance">
+          <GuidanceCard guidance={guidance} isSecLoading={false} />
+        </div>
       )}
       {!result && onAnalyze && (
         <div
@@ -197,52 +190,31 @@ export default function JudgmentDetail({
       />
       <EarningsBars periods={result?.periods} currency={result?.currency} />
 
-      {/* 過去推移 (売上 / EPS / CFPS) — v1 HistoryChart 流用 */}
+      {/* 過去推移 — HistoryChart 自身が panel-card を持つので outer Card 不要 */}
       {result?.periods?.length > 0 && (
-        <Card>
-          <div style={{ padding: 'var(--space-6, 24px)' }}>
-            <SectionHeader
-              id="sec-history-chart"
-              title="過去推移"
-              label="REVENUE / EPS / CFPS"
-            />
-            <HistoryChart periods={result.periods} currency={result.currency} />
-          </div>
-        </Card>
+        <div id="sec-history-chart">
+          <HistoryChart periods={result.periods} currency={result.currency} />
+        </div>
       )}
 
-      {/* Insights (アナリスト強弱) — 既存 InsightsPanel を Card に内包 */}
+      {/* 市場の声 — InsightsPanel 自身が panel-card を持つので outer Card 不要 */}
       {selectedTicker && (
-        <Card>
-          <div style={{ padding: 'var(--space-6, 24px)' }}>
-            <SectionHeader
-              id="sec-insights"
-              title="市場の声"
-              label="ANALYST INSIGHTS"
-            />
-            <InsightsPanel
-              ticker={selectedTicker}
-              user={detailContext.user}
-              isPro={detailContext.isPro}
-              onUpgradeClick={detailContext.onUpgrade}
-              onSignIn={detailContext.onSignIn}
-            />
-          </div>
-        </Card>
+        <div id="sec-insights">
+          <InsightsPanel
+            ticker={selectedTicker}
+            user={detailContext.user}
+            isPro={detailContext.isPro}
+            onUpgradeClick={detailContext.onUpgrade}
+            onSignIn={detailContext.onSignIn}
+          />
+        </div>
       )}
 
-      {/* 株価チャート — 既存 StockPriceChart 流用 */}
+      {/* 株価チャート — StockPriceChart 自身が panel-card を持つので outer Card 不要 */}
       {selectedTicker && (
-        <Card>
-          <div style={{ padding: 'var(--space-6, 24px)' }}>
-            <SectionHeader
-              id="sec-chart"
-              title="株価チャート"
-              label="PRICE"
-            />
-            <StockPriceChart ticker={selectedTicker} />
-          </div>
-        </Card>
+        <div id="sec-chart">
+          <StockPriceChart ticker={selectedTicker} />
+        </div>
       )}
 
       {/* Insider 取引 (Premium lock) */}
@@ -273,32 +245,18 @@ export default function JudgmentDetail({
       {/* === 階層 3: Context === */}
       <SectionDivider tier={3} />
 
-      {/* News — 既存 NewsPanel 流用 */}
+      {/* ニュース — NewsPanel 自身が panel-card を持つので outer Card 不要 */}
       {selectedTicker && (
-        <Card>
-          <div style={{ padding: 'var(--space-6, 24px)' }}>
-            <SectionHeader
-              id="sec-news"
-              title="ニュース"
-              label="RECENT"
-            />
-            <NewsPanel ticker={selectedTicker} />
-          </div>
-        </Card>
+        <div id="sec-news">
+          <NewsPanel ticker={selectedTicker} />
+        </div>
       )}
 
-      {/* IR Links — 既存 IRLinksPanel 流用 */}
+      {/* IR Links — IRLinksPanel 自身が panel-card を持つので outer Card 不要 */}
       {selectedTicker && (
-        <Card>
-          <div style={{ padding: 'var(--space-6, 24px)' }}>
-            <SectionHeader
-              id="sec-ir"
-              title="IR Links"
-              label="REFERENCES"
-            />
-            <IRLinksPanel ticker={selectedTicker} />
-          </div>
-        </Card>
+        <div id="sec-ir">
+          <IRLinksPanel ticker={selectedTicker} />
+        </div>
       )}
 
       {/* AI 詳細レポート (Pro lock、lazy load) */}
