@@ -48,6 +48,18 @@ ALLOWED-SHADOW: 0 0 24px rgba(56, 189, 248, 0.32), 0 10px 28px rgba(56, 189, 248
 # Arrival (dark, bs-panel/surface-card)
 ALLOWED-SHADOW: 0 0 22px rgba(56, 189, 248, 0.26), 0 10px 28px rgba(56, 189, 248, 0.16), 0 0 0 1px rgba(56, 189, 248, 0.50)
 
+# §round18 ws-shadow-row-hover (light) — Pane 4 row hover の 4 層 shadow (近 + 遠 + ring + inset top highlight)
+ALLOWED-SHADOW: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 28px -8px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(56, 189, 248, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.04)
+
+# §round18 ws-shadow-row-hover (dark)
+ALLOWED-SHADOW: 0 1px 2px rgba(0, 0, 0, 0.40), 0 14px 32px -8px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(56, 189, 248, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.04)
+
+# §round18 ws-shadow-row-active (light)
+ALLOWED-SHADOW: 0 1px 3px -1px rgba(15, 23, 42, 0.20), 0 0 0 1px rgba(56, 189, 248, 0.30)
+
+# §round18 ws-shadow-row-active (dark)
+ALLOWED-SHADOW: 0 1px 3px -1px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(56, 189, 248, 0.32)
+
 # Arrival hover (light)
 ALLOWED-SHADOW: 0 0 26px rgba(56, 189, 248, 0.30), 0 12px 30px rgba(56, 189, 248, 0.20), 0 0 0 2px rgba(56, 189, 248, 0.60)
 

@@ -280,6 +280,7 @@ function NewsItem({ item, displayTitle, onSelect, isOpen, index }) {
           )}
         </div>
         <div
+          className="ws-pane4-news-title"
           style={{
             fontSize: 12,
             fontWeight: 600,
