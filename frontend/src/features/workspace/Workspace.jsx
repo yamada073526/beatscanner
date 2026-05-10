@@ -27,6 +27,7 @@ import { JudgmentProvider, useJudgment } from '../judgment/state/JudgmentContext
 import { JudgmentList } from '../judgment/components/list/index.js';
 import { JudgmentDetail } from '../judgment/components/detail/index.js';
 import { IndicesList, IndicesDetailView } from './IndicesView.jsx';
+import Pane4Inspector from './Pane4Inspector.jsx';
 
 // §12-A-1 + §dogfood-icon: 「指数」tab + lucide-react 細線アイコン
 // (emoji の玩具感を排除、stroke 1.5 で Aman 級の控えめな高級感、active 時のみ 1.75 補強)
@@ -726,7 +727,7 @@ export default function Workspace({
             />
           )
         }
-        pane4={<Pane4Placeholder />}
+        pane4={<Pane4Inspector items={items} />}
         pane4Visible={pane4Expanded}
       />
     </JudgmentProvider>

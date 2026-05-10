@@ -5046,6 +5046,16 @@ button.ds-chip:active {
   }
 }
 
+/* §pane4-v1: Pane 4 (Inspector) のマクロニュース項目 hover 演出.
+   IR リソースと同じシアン縁取りで視覚言語を統一. */
+.ws-pane4-news-item {
+  transition: border-color var(--motion-fast, 120ms) ease, background var(--motion-fast, 120ms) ease;
+}
+.ws-pane4-news-item:hover {
+  border-color: rgb(56, 189, 248) !important;
+  background: var(--bg-hover, rgba(56,189,248,0.06)) !important;
+}
+
 /* §dogfood-round9: Pane 1 rail mode (collapsed=4%) 用 tile hover / active 演出.
    ロゴ取得失敗時の monogram ticker 表示も兼ねる円形 button. */
 .ws-pane1-rail-tile {

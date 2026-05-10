@@ -38,6 +38,10 @@ const TIER1 = [
 const TIER1_SYMS = new Set(TIER1.map((t) => t.sym));
 // §dogfood-世界市場: Tier 1 以外の 22 指標 (= 旧「世界市場」) も同 endpoint から取得し
 // この tab で Tier 1 + 世界市場 の 2 group 表示.
+// §dogfood-round12: Tier 2 順序は frontend で明示制御 (backend 順は QQQ→SPY だが、
+// S&P 500 が NASDAQ より上の Tier 1 順序と整合させ SPY を先頭に).
+// 未定義 symbol は配列末尾へ。
+const TIER2_ORDER = ['SPY', 'QQQ', 'IWM', 'GLD', 'TLT', 'HYG'];
 
 // 期間別変化率テーブル用 (RowSparkline と同じ営業日数)
 const PERIOD_TABLE = [
@@ -217,11 +221,22 @@ export function IndicesList() {
     return m;
   }, [data]);
 
-  // §dogfood-世界市場: Tier 2 は Tier 1 を除いた残り全て
-  const tier2 = useMemo(
-    () => data.filter((it) => !TIER1_SYMS.has(it.symbol)),
-    [data]
-  );
+  // §dogfood-世界市場 + round12: Tier 2 は Tier 1 を除いた残り。
+  // 順序は TIER2_ORDER に従い、定義外 symbol は末尾に backend 順で残す.
+  const tier2 = useMemo(() => {
+    const remaining = data.filter((it) => !TIER1_SYMS.has(it.symbol));
+    const byKey = new Map(remaining.map((it) => [it.symbol, it]));
+    const ordered = [];
+    for (const sym of TIER2_ORDER) {
+      const it = byKey.get(sym);
+      if (it) {
+        ordered.push(it);
+        byKey.delete(sym);
+      }
+    }
+    for (const it of byKey.values()) ordered.push(it);
+    return ordered;
+  }, [data]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
