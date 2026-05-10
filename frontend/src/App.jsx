@@ -17,9 +17,9 @@ import { useJudgmentResult } from './features/judgment/state/useJudgmentResult.j
 // JudgmentTabV2 は ?j2=1 のときだけ評価されるため lazy load
 // (CLAUDE.md「行数 200+ → lazy で初期バンドル軽量化」基準)
 const JudgmentTabV2 = lazy(() => import('./features/judgment/index.js').then((m) => ({ default: m.JudgmentTab })));
-// v62 WS-2: 画面全体 workspace shell (5 体並列レビュー反映、`?layout=workspace` で起動)
-const WorkspaceShell = lazy(() =>
-  import('./features/workspace/index.js').then((m) => ({ default: m.WorkspaceShell }))
+// v62 WS-3: 画面全体 workspace top-level (useUrlSync + Tier 1 + Pane 1-3、`?layout=workspace` で起動)
+const Workspace = lazy(() =>
+  import('./features/workspace/index.js').then((m) => ({ default: m.Workspace }))
 );
 import { withViewTransition } from './utils/viewTransition.js';
 import { CmdPalette, useCmdPalette } from './features/cmd-palette/index.js';
@@ -648,11 +648,11 @@ export default function App() {
       <Suspense
         fallback={
           <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-            Workspace shell を読み込み中...
+            Workspace を読み込み中...
           </div>
         }
       >
-        <WorkspaceShell />
+        <Workspace />
       </Suspense>
     );
   }

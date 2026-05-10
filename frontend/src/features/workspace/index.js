@@ -10,3 +10,5 @@
  * 詳細は memory `migration_v61_to_v62.md` 参照.
  */
 export { default as WorkspaceShell } from './WorkspaceShell.jsx';
+// v62 WS-3: top-level エントリ (useUrlSync mount + slot 流し済)
+export { default as Workspace } from './Workspace.jsx';
