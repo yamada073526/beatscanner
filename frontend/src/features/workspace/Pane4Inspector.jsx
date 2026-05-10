@@ -1,24 +1,20 @@
 /**
- * Pane4Inspector — Workspace Pane 4 inspector v2.
+ * Pane4Inspector — Workspace Pane 4 inspector v3 (dogfood round 15).
  *
- * handover §8-B 推奨 #1「マクロニュース × watchlist 連動」
- *
- * v2 (dogfood round 13) で旧 UI 設計を移植:
- *   - タグ色 (地政学=紫 / マクロ=黄 / 市場全体=青) + lucide アイコン
- *   - 各記事の左端 accent bar をタグ色と一致
- *   - サムネイル (記事 image) を左に表示
- *   - 「最終更新」は items 最新の published を使用 (backend updated_at バグ回避)
- *   - 右上に「日本語翻訳」トグル (旧 UI 同様)
- *   - 記事クリックで Pane 5 (= 下半分) に reading mode を表示
- *   - 翻訳 ON 時、reading mode の本文も翻訳
+ * 5 体並列レビュー結論を反映:
+ *   - 金融 CRITICAL: 2 文字以下の ticker は company name alias 必須 (false positive 回避)
+ *   - 開発 CRITICAL: SSE / 翻訳の race condition を AbortController + seqId でガード
+ *   - UX: セクション名 The Macro Lens / The Reading Room、JP segmented、hover lift+shadow、slide-in
+ *   - 出典 pill 化 (rounded-full)
+ *   - 本文 SSE ストリーミング (旧 useArticleModal パターン)、ストリーミング翻訳 (/api/translate/stream)
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { TrendingUp, Globe, BarChart3, ExternalLink, X, Languages } from 'lucide-react';
-import { fetchMacroNews, translateTexts } from '../../api.js';
+import { fetchMacroNews, translateTexts, translateTextsStream } from '../../api.js';
 
-// ── タグ system (旧 TodaysBriefSection.jsx から移植).
-//    raw hex は design-system-check で禁止のため rgb() リテラルで記述. ──
+// ── タグ system (旧 TodaysBriefSection と統一) ──────────────────
 const CATEGORY_ICON = {
   'マクロ': TrendingUp,
   '地政学': Globe,
@@ -26,27 +22,14 @@ const CATEGORY_ICON = {
 };
 function getNewsColors(importance, category) {
   if (category === '地政学') {
-    return {
-      fg: 'rgb(168, 85, 247)',
-      bg: 'rgba(168, 85, 247, 0.14)',
-      bar: 'rgb(168, 85, 247)',
-    };
+    return { fg: 'rgb(168, 85, 247)', bg: 'rgba(168, 85, 247, 0.14)', bar: 'rgb(168, 85, 247)' };
   }
   if (importance === 'HIGH') {
-    return {
-      fg: 'rgb(245, 158, 11)',
-      bg: 'rgba(245, 158, 11, 0.14)',
-      bar: 'rgb(245, 158, 11)',
-    };
+    return { fg: 'rgb(245, 158, 11)', bg: 'rgba(245, 158, 11, 0.14)', bar: 'rgb(245, 158, 11)' };
   }
-  return {
-    fg: 'rgb(6, 182, 212)',
-    bg: 'rgba(6, 182, 212, 0.14)',
-    bar: 'rgb(6, 182, 212)',
-  };
+  return { fg: 'rgb(6, 182, 212)', bg: 'rgba(6, 182, 212, 0.14)', bar: 'rgb(6, 182, 212)' };
 }
 function pickPrimaryCategory(item) {
-  // tags[0] が主タグ (backend §11-B-20)。fallback で category。
   return (Array.isArray(item.tags) && item.tags[0]) || item.category || null;
 }
 function fmtRelative(iso) {
@@ -65,20 +48,35 @@ function fmtRelative(iso) {
   } catch { return ''; }
 }
 
-function matchTickers(text, tickerSet) {
-  if (!text || !tickerSet || tickerSet.size === 0) return [];
+/** §round15 (金融 CRITICAL): ticker false positive 抑制
+ *  - 3 文字以上 ticker: word-boundary scan
+ *  - 1-2 文字 ticker: companyName エイリアスでのみマッチ (短銘柄誤爆回避)
+ *  - text は upper-case 化済前提
+ */
+function matchTickersWithAlias(text, items, predicate) {
+  if (!text) return [];
   const upper = text.toUpperCase();
   const hits = [];
-  for (const t of tickerSet) {
-    if (!t) continue;
-    const re = new RegExp(`(^|[^A-Z0-9])${t.replace(/[\^]/g, '\\^')}(?![A-Z0-9])`);
-    if (re.test(upper)) hits.push(t);
+  for (const it of items) {
+    if (!predicate(it)) continue;
+    const ticker = it.ticker;
+    const name = (it.companyName || '').toUpperCase();
+    if (!ticker) continue;
+    let matched = false;
+    if (ticker.length >= 3) {
+      const re = new RegExp(`(^|[^A-Z0-9])${ticker.replace(/[\^]/g, '\\^')}(?![A-Z0-9])`);
+      if (re.test(upper)) matched = true;
+    }
+    if (!matched && name && name.length >= 4 && upper.includes(name)) {
+      matched = true;
+    }
+    if (matched) hits.push(ticker);
   }
   return hits;
 }
 
 // ── 記事行 ──────────────────────────────────────────────────────────
-function NewsItem({ item, displayTitle, onSelect, isOpen }) {
+function NewsItem({ item, displayTitle, onSelect, isOpen, index }) {
   const cat = pickPrimaryCategory(item);
   const colors = getNewsColors(item.importance, cat);
   const Icon = cat ? CATEGORY_ICON[cat] : null;
@@ -92,16 +90,17 @@ function NewsItem({ item, displayTitle, onSelect, isOpen }) {
       type="button"
       onClick={() => onSelect(item)}
       aria-pressed={isOpen}
-      className={`ws-pane4-news-item${isOpen ? ' is-open' : ''}`}
+      className={`ws-pane4-news-item${isOpen ? ' is-open' : ''}${isHolding ? ' is-holding' : ''}${isWatch ? ' is-watch' : ''}`}
       style={{
+        '--row-delay': `${Math.min(index, 8) * 40}ms`,
         position: 'relative',
         display: 'flex',
         gap: 10,
-        width: '100%',
+        width: 'calc(100% - 8px)',
         textAlign: 'left',
         padding: '10px 12px 10px 14px',
         margin: '4px 4px',
-        borderRadius: 'var(--radius-sm, 8px)',
+        borderRadius: 'var(--radius-md, 10px)',
         border: '1px solid var(--border)',
         background: 'transparent',
         color: 'var(--text-primary)',
@@ -111,6 +110,7 @@ function NewsItem({ item, displayTitle, onSelect, isOpen }) {
       {/* 左端 accent bar (タグ色) */}
       <span
         aria-hidden
+        className="ws-pane4-accent-bar"
         style={{
           position: 'absolute',
           left: 0,
@@ -121,7 +121,6 @@ function NewsItem({ item, displayTitle, onSelect, isOpen }) {
           background: colors.bar,
         }}
       />
-      {/* サムネイル */}
       {hasImage && !imgError ? (
         <img
           src={item.image}
@@ -139,7 +138,6 @@ function NewsItem({ item, displayTitle, onSelect, isOpen }) {
           }}
         />
       ) : (
-        // サムネイルなしのフォールバック (タグ色の薄背景 + アイコン)
         <div
           aria-hidden
           style={{
@@ -159,7 +157,6 @@ function NewsItem({ item, displayTitle, onSelect, isOpen }) {
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
-          {/* HIGH·カテゴリバッジ (旧 UI 同様) */}
           {cat && (
             <span
               style={{
@@ -177,12 +174,9 @@ function NewsItem({ item, displayTitle, onSelect, isOpen }) {
               }}
             >
               {Icon && <Icon size={10} strokeWidth={2.25} aria-hidden />}
-              <span>
-                {item.importance === 'HIGH' ? `HIGH · ${cat}` : cat}
-              </span>
+              <span>{item.importance === 'HIGH' ? `HIGH · ${cat}` : cat}</span>
             </span>
           )}
-          {/* 保有 / 観察 マッチバッジ */}
           {isHolding && (
             <span
               title={`保有銘柄に関連: ${item._holdingHits.join(', ')}`}
@@ -234,27 +228,158 @@ function NewsItem({ item, displayTitle, onSelect, isOpen }) {
           {displayTitle || item.title}
         </div>
         {item.source && (
-          <div style={{ marginTop: 4, fontSize: 10, color: 'var(--text-muted)' }}>
+          <span className="ws-pane4-source-pill" style={{ marginTop: 6 }}>
             {item.source}
-          </div>
+          </span>
         )}
       </div>
     </button>
   );
 }
 
-// ── Pane 5: Reading mode ─────────────────────────────────────────────
-function ReadingMode({ item, onClose, jpEnabled, translatedTitle, translatedSummary }) {
+// ── Pane 5: Reading mode (SSE 構造化記事 + ストリーミング翻訳) ─────
+function ReadingMode({ item, onClose, jpEnabled }) {
+  // 英文 markdown
+  const [enContent, setEnContent] = useState('');
+  const [enLoading, setEnLoading] = useState(false);
+  const [enError, setEnError] = useState(null);
+  const articleAbortRef = useRef(null);
+
+  // 日本語翻訳 (記事 chunk 単位)
+  const [jaContent, setJaContent] = useState('');
+  const [jaLoading, setJaLoading] = useState(false);
+  const translateAbortRef = useRef(null);
+
+  // 翻訳済タイトル
+  const [translatedTitle, setTranslatedTitle] = useState('');
+
+  // ── 記事 SSE 取得 ──────────────────────────────
+  useEffect(() => {
+    if (!item?.url) return;
+    setEnContent('');
+    setJaContent('');
+    setTranslatedTitle('');
+    setEnError(null);
+    setEnLoading(true);
+
+    // 既存 fetch を abort
+    articleAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    articleAbortRef.current = ctrl;
+
+    (async () => {
+      try {
+        const res = await fetch('/api/news/article', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: item.url, max_lines: 30 }),
+          signal: ctrl.signal,
+        });
+        if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop();
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const payload = line.slice(6);
+            if (payload === '[DONE]') {
+              setEnLoading(false);
+              return;
+            }
+            try {
+              const obj = JSON.parse(payload);
+              if (obj.error) {
+                setEnError(obj.error);
+                setEnLoading(false);
+                return;
+              }
+              if (obj.chunk) {
+                setEnContent((prev) => prev + obj.chunk);
+                setEnLoading(false);
+              }
+            } catch { /* ignore */ }
+          }
+        }
+      } catch (e) {
+        if (e.name !== 'AbortError') {
+          setEnError(e.message || '記事取得失敗');
+          setEnLoading(false);
+        }
+      }
+    })();
+
+    return () => { ctrl.abort(); };
+  }, [item?.url]);
+
+  // ── タイトル翻訳 (jpEnabled ON のみ) ─────────────
+  useEffect(() => {
+    if (!jpEnabled || !item?.title) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const out = await translateTexts([item.title]);
+        if (!cancelled && Array.isArray(out) && out[0]) {
+          setTranslatedTitle(out[0]);
+        }
+      } catch { /* noop */ }
+    })();
+    return () => { cancelled = true; };
+  }, [jpEnabled, item?.title]);
+
+  // ── 本文翻訳 (SSE ストリーミング、enContent 完了後) ──
+  useEffect(() => {
+    if (!jpEnabled || !enContent || enLoading) return;
+    // 既存 翻訳を abort
+    translateAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    translateAbortRef.current = ctrl;
+
+    setJaContent('');
+    setJaLoading(true);
+
+    // 段落単位で分割し SSE 翻訳
+    const paragraphs = enContent.split(/\n\n+/).filter((p) => p.trim());
+    const buffer = new Array(paragraphs.length).fill('');
+    (async () => {
+      try {
+        await translateTextsStream(
+          paragraphs,
+          (idx, translation) => {
+            buffer[idx] = translation || paragraphs[idx];
+            setJaContent(buffer.join('\n\n'));
+          },
+          ctrl.signal
+        );
+      } catch (e) {
+        if (e.name !== 'AbortError') {
+          // 失敗時は英文をそのまま表示
+          setJaContent(enContent);
+        }
+      } finally {
+        setJaLoading(false);
+      }
+    })();
+
+    return () => { ctrl.abort(); };
+  }, [jpEnabled, enContent, enLoading]);
+
   if (!item) return null;
   const cat = pickPrimaryCategory(item);
   const colors = getNewsColors(item.importance, cat);
   const Icon = cat ? CATEGORY_ICON[cat] : null;
-  const titleDisplay = jpEnabled && translatedTitle ? translatedTitle : item.title;
-  const summaryDisplay = jpEnabled && translatedSummary ? translatedSummary : item.summary;
+  const displayTitle = jpEnabled && translatedTitle ? translatedTitle : item.title;
+  const displayContent = jpEnabled ? jaContent : enContent;
+  const isStreamingTranslation = jpEnabled && (enLoading || jaLoading);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* ヘッダー: 閉じるボタン + 元記事リンク */}
+      {/* ヘッダー */}
       <div
         style={{
           display: 'flex',
@@ -268,7 +393,7 @@ function ReadingMode({ item, onClose, jpEnabled, translatedTitle, translatedSumm
         <button
           type="button"
           onClick={onClose}
-          aria-label="リーディングモードを閉じる"
+          aria-label="閉じる"
           title="閉じる"
           style={{
             display: 'inline-flex',
@@ -286,7 +411,7 @@ function ReadingMode({ item, onClose, jpEnabled, translatedTitle, translatedSumm
           <X size={14} aria-hidden />
         </button>
         <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-          リーディング
+          The Reading Room
         </span>
         <div style={{ flex: 1 }} />
         {item.url && (
@@ -310,7 +435,7 @@ function ReadingMode({ item, onClose, jpEnabled, translatedTitle, translatedSumm
       </div>
       {/* 本文 */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px' }}>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
           {cat && (
             <span
               style={{
@@ -328,19 +453,15 @@ function ReadingMode({ item, onClose, jpEnabled, translatedTitle, translatedSumm
               }}
             >
               {Icon && <Icon size={11} strokeWidth={2.25} aria-hidden />}
-              <span>
-                {item.importance === 'HIGH' ? `HIGH · ${cat}` : cat}
-              </span>
+              <span>{item.importance === 'HIGH' ? `HIGH · ${cat}` : cat}</span>
             </span>
           )}
           {item.source && (
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              {item.source}
-            </span>
+            <span className="ws-pane4-source-pill">{item.source}</span>
           )}
           {item.published && (
             <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              · {fmtRelative(item.published)}
+              {fmtRelative(item.published)}
             </span>
           )}
         </div>
@@ -353,7 +474,7 @@ function ReadingMode({ item, onClose, jpEnabled, translatedTitle, translatedSumm
             color: 'var(--text-primary)',
           }}
         >
-          {titleDisplay}
+          {displayTitle}
         </h3>
         {item.image && (
           <img
@@ -371,22 +492,28 @@ function ReadingMode({ item, onClose, jpEnabled, translatedTitle, translatedSumm
             onError={(e) => { e.currentTarget.style.display = 'none'; }}
           />
         )}
-        {summaryDisplay && (
-          <p
-            style={{
-              marginTop: 12,
-              fontSize: 13,
-              lineHeight: 1.7,
-              color: 'var(--text-secondary)',
-              whiteSpace: 'pre-wrap',
-            }}
-          >
-            {summaryDisplay}
-          </p>
+        {enError && (
+          <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+            ⚠️ 記事の取得に失敗しました: {enError}
+          </div>
         )}
-        {jpEnabled && (!translatedTitle || !translatedSummary) && (
+        {!enError && (
+          <div className="ws-pane4-article-body" style={{ marginTop: 12 }}>
+            {displayContent ? (
+              <ReactMarkdown>{displayContent}</ReactMarkdown>
+            ) : (
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                記事を読込中...
+              </div>
+            )}
+            {isStreamingTranslation && (
+              <span className="ws-pane4-cursor" aria-hidden>▌</span>
+            )}
+          </div>
+        )}
+        {jpEnabled && enContent && !jaContent && !jaLoading && (
           <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-            翻訳中...
+            翻訳を準備中...
           </div>
         )}
       </div>
@@ -398,12 +525,11 @@ function ReadingMode({ item, onClose, jpEnabled, translatedTitle, translatedSumm
 export default function Pane4Inspector({ items = [] }) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState(null); // 開いている記事 (Reading mode)
-  const [jpEnabled, setJpEnabled] = useState(true); // 翻訳トグル (default ON、旧 UI 同様)
-  const [titleTranslations, setTitleTranslations] = useState({}); // url → 訳タイトル
-  const [readingTrans, setReadingTrans] = useState({}); // url → { title, summary }
+  const [selected, setSelected] = useState(null);
+  const [jpEnabled, setJpEnabled] = useState(true);
+  const [titleTranslations, setTitleTranslations] = useState({});
+  const translateSeqRef = useRef(0);
 
-  // ── ニュース取得 ───────────────────────────
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -419,24 +545,19 @@ export default function Pane4Inspector({ items = [] }) {
     return () => { cancelled = true; clearInterval(t); };
   }, []);
 
-  // ── watchlist / holdings tickers
-  const holdingSet = useMemo(
-    () => new Set(items.filter((it) => it.isHolding).map((it) => it.ticker)),
-    [items]
-  );
-  const watchSet = useMemo(
-    () => new Set(items.filter((it) => !it.isHolding && it.isWatchlist).map((it) => it.ticker)),
+  const holdingItems = useMemo(() => items.filter((it) => it.isHolding), [items]);
+  const watchItems = useMemo(
+    () => items.filter((it) => !it.isHolding && it.isWatchlist),
     [items]
   );
 
-  // ── annotate + sort
   const sorted = useMemo(() => {
     const annotated = news.map((n) => {
       const text = `${n.title || ''} ${n.summary || ''}`;
       return {
         ...n,
-        _holdingHits: matchTickers(text, holdingSet),
-        _watchHits: matchTickers(text, watchSet),
+        _holdingHits: matchTickersWithAlias(text, holdingItems, () => true),
+        _watchHits: matchTickersWithAlias(text, watchItems, () => true),
       };
     });
     annotated.sort((a, b) => {
@@ -447,9 +568,8 @@ export default function Pane4Inspector({ items = [] }) {
       return (impRank[a.importance] ?? 2) - (impRank[b.importance] ?? 2);
     });
     return annotated;
-  }, [news, holdingSet, watchSet]);
+  }, [news, holdingItems, watchItems]);
 
-  // ── 「最終更新」: items から最新 published を採用 (backend updated_at が壊れているケースに対応)
   const latestPublished = useMemo(() => {
     let max = 0;
     for (const n of news) {
@@ -459,74 +579,33 @@ export default function Pane4Inspector({ items = [] }) {
     return max > 0 ? new Date(max).toISOString() : null;
   }, [news]);
 
-  // ── 翻訳: タイトル一括翻訳 (jpEnabled ON 時、表示中の上位 N 件)
+  // ── タイトル翻訳: AbortController + seqId で race guard ──
   const visibleTitles = useMemo(
-    () => sorted.slice(0, 30).map((n) => n.title || ''),
+    () => sorted.slice(0, 30).map((n) => ({ url: n.url, title: n.title || '' })),
     [sorted]
   );
-  const visibleUrls = useMemo(
-    () => sorted.slice(0, 30).map((n) => n.url || ''),
-    [sorted]
-  );
-  const lastTranslateKey = useRef('');
-
   useEffect(() => {
     if (!jpEnabled) return;
-    if (visibleTitles.length === 0) return;
-    const pending = [];
-    const pendingUrls = [];
-    visibleUrls.forEach((u, i) => {
-      if (!u) return;
-      if (titleTranslations[u]) return;
-      const t = visibleTitles[i];
-      if (!t) return;
-      pending.push(t);
-      pendingUrls.push(u);
-    });
+    const pending = visibleTitles.filter((v) => v.url && v.title && !titleTranslations[v.url]);
     if (pending.length === 0) return;
-    const key = pendingUrls.join('|');
-    if (key === lastTranslateKey.current) return;
-    lastTranslateKey.current = key;
-
-    let cancelled = false;
+    const seq = ++translateSeqRef.current;
+    const ctrl = new AbortController();
     (async () => {
       try {
-        const out = await translateTexts(pending);
-        if (cancelled || !Array.isArray(out)) return;
+        const out = await translateTexts(pending.map((v) => v.title));
+        if (seq !== translateSeqRef.current) return; // race guard
+        if (!Array.isArray(out)) return;
         const update = {};
-        pendingUrls.forEach((u, i) => {
-          if (out[i]) update[u] = out[i];
-        });
+        pending.forEach((v, i) => { if (out[i]) update[v.url] = out[i]; });
         setTitleTranslations((prev) => ({ ...prev, ...update }));
       } catch { /* noop */ }
     })();
-    return () => { cancelled = true; };
-  }, [jpEnabled, visibleTitles, visibleUrls, titleTranslations]);
-
-  // ── 選択記事の詳細 (title + summary) を翻訳
-  useEffect(() => {
-    if (!jpEnabled || !selected) return;
-    const url = selected.url;
-    if (!url) return;
-    if (readingTrans[url]) return;
-    const inputs = [selected.title || '', selected.summary || ''];
-    let cancelled = false;
-    (async () => {
-      try {
-        const out = await translateTexts(inputs);
-        if (cancelled || !Array.isArray(out)) return;
-        setReadingTrans((prev) => ({
-          ...prev,
-          [url]: { title: out[0] || '', summary: out[1] || '' },
-        }));
-      } catch { /* noop */ }
-    })();
-    return () => { cancelled = true; };
-  }, [jpEnabled, selected, readingTrans]);
+    return () => { ctrl.abort(); };
+  }, [jpEnabled, visibleTitles, titleTranslations]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 0 }}>
-      {/* Header: タイトル + 最終更新 + 翻訳トグル */}
+      {/* Header */}
       <div
         style={{
           padding: '10px 14px 8px',
@@ -547,7 +626,7 @@ export default function Pane4Inspector({ items = [] }) {
               letterSpacing: '0.08em',
             }}
           >
-            マクロ × ウォッチ
+            The Macro Lens
           </div>
           <div style={{ marginTop: 2, fontSize: 11, color: 'var(--text-muted)' }}>
             {latestPublished
@@ -555,36 +634,33 @@ export default function Pane4Inspector({ items = [] }) {
               : (loading ? '読込中...' : '更新情報なし')}
           </div>
         </div>
-        {/* 翻訳トグル */}
-        <button
-          type="button"
-          onClick={() => setJpEnabled((v) => !v)}
-          aria-pressed={jpEnabled}
-          title={jpEnabled ? '日本語翻訳: ON' : '日本語翻訳: OFF'}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-            padding: '4px 8px',
-            fontSize: 11,
-            fontWeight: 600,
-            borderRadius: 'var(--radius-pill, 9999px)',
-            border: jpEnabled
-              ? '1px solid rgba(56,189,248,0.70)'
-              : '1px solid var(--border)',
-            background: jpEnabled ? 'rgba(56,189,248,0.14)' : 'transparent',
-            color: jpEnabled ? 'rgb(14,165,233)' : 'var(--text-muted)',
-            cursor: 'pointer',
-            flexShrink: 0,
-          }}
+        {/* JP segmented toggle */}
+        <div
+          role="group"
+          aria-label="表示言語"
+          className="ws-pane4-jp-segmented"
         >
-          <Languages size={12} aria-hidden />
-          JP
-        </button>
+          <button
+            type="button"
+            onClick={() => setJpEnabled(false)}
+            aria-pressed={!jpEnabled}
+            className={!jpEnabled ? 'is-active' : ''}
+          >
+            EN
+          </button>
+          <button
+            type="button"
+            onClick={() => setJpEnabled(true)}
+            aria-pressed={jpEnabled}
+            className={jpEnabled ? 'is-active' : ''}
+            title="日本語に翻訳"
+          >
+            <Languages size={11} aria-hidden style={{ marginRight: 2 }} />
+            日
+          </button>
+        </div>
       </div>
 
-      {/* Pane 4 (上半分: news list) + Pane 5 (下半分: reading mode) を vertical split.
-          selected が無いときは Pane 5 を非表示 → Pane 4 がフル高さ. */}
       <div style={{ flex: 1, minHeight: 0 }}>
         {selected ? (
           <PanelGroup direction="vertical" autoSaveId="bs:ws:pane4-vertical">
@@ -600,15 +676,13 @@ export default function Pane4Inspector({ items = [] }) {
             </Panel>
             <PanelResizeHandle
               style={{ height: 1, background: 'var(--border)', cursor: 'row-resize' }}
-              aria-label="Pane 4 と Pane 5 の高さを調整"
+              aria-label="高さを調整"
             />
             <Panel defaultSize={45} minSize={20}>
               <ReadingMode
                 item={selected}
                 onClose={() => setSelected(null)}
                 jpEnabled={jpEnabled}
-                translatedTitle={readingTrans[selected.url]?.title}
-                translatedSummary={readingTrans[selected.url]?.summary}
               />
             </Panel>
           </PanelGroup>
@@ -629,7 +703,7 @@ export default function Pane4Inspector({ items = [] }) {
 
 function NewsList({ sorted, loading, jpEnabled, titleTranslations, onSelect, selected }) {
   return (
-    <div style={{ height: '100%', overflowY: 'auto', padding: '8px 8px 16px' }}>
+    <div style={{ height: '100%', overflowY: 'auto', padding: '8px 0 16px' }}>
       {loading && sorted.length === 0 ? (
         <div style={{ padding: 16, fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
           ニュースを読込中...
@@ -646,6 +720,7 @@ function NewsList({ sorted, loading, jpEnabled, titleTranslations, onSelect, sel
             displayTitle={jpEnabled ? titleTranslations[n.url] : null}
             onSelect={onSelect}
             isOpen={selected?.url === n.url}
+            index={i}
           />
         ))
       )}
