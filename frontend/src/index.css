@@ -5008,11 +5008,121 @@ body {
     box-shadow var(--motion-base, 200ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
 }
 
-/* §dogfood-pane2 round 5: ticker の優先順位 > sparkline。
-   sparkline は workspace Pane 2 では実質常時非表示で良い (Header / Pane 1 世界市場では別). */
-@container ws-judgment-list (max-width: 800px) {
-  .ws-judgment-row .ws-row-sparkline { display: none; }
+/* §dogfood-pane2 round 6: Chip (Pane 2 上部 group / sort 等) の hover 浮き上がり
+   + click 沈みアニメ。旧 SPA の watchlist ボタン演出を統一するための SSOT. */
+button.ds-chip {
+  transition:
+    transform var(--motion-fast, 120ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    box-shadow var(--motion-fast, 120ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    background-color var(--motion-fast, 120ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+  will-change: transform;
 }
+button.ds-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px -2px rgba(15, 23, 42, 0.18);
+}
+[data-theme="dark"] button.ds-chip:hover {
+  box-shadow: 0 4px 10px -2px rgba(0, 0, 0, 0.55);
+}
+button.ds-chip:active {
+  transform: translateY(0);
+  transition:
+    transform 80ms ease-out,
+    box-shadow 80ms ease-out,
+    background-color 80ms ease-out;
+  box-shadow: 0 1px 3px -1px rgba(15, 23, 42, 0.20);
+}
+@media (prefers-reduced-motion: reduce) {
+  button.ds-chip,
+  button.ds-chip:hover,
+  button.ds-chip:active {
+    transform: none;
+    transition: none;
+  }
+}
+
+/* §dogfood-pane1 round 6: Pane 1 nav の hover / active 演出を SSOT 化.
+   - dark mode で見える hover 背景 (cyan tint)
+   - active accent は ::before 擬似要素「|」で Pane 2 row と同じ視覚言語
+   - active 位置はテキストすぐ左 (= 1 階層目より左に飛び出さない) */
+.ws-pane1-tab,
+.ws-pane1-section-header,
+.ws-pane1-watchlist-row {
+  transition: background var(--motion-fast, 120ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+}
+.ws-pane1-tab:hover,
+.ws-pane1-section-header:hover,
+.ws-pane1-watchlist-row:hover:not(.is-active) {
+  background: rgba(56, 189, 248, 0.08);
+}
+[data-theme="dark"] .ws-pane1-tab:hover,
+[data-theme="dark"] .ws-pane1-section-header:hover,
+[data-theme="dark"] .ws-pane1-watchlist-row:hover:not(.is-active) {
+  background: rgba(56, 189, 248, 0.12);
+}
+.ws-pane1-tab.is-active,
+.ws-pane1-watchlist-row.is-active {
+  background: rgba(56, 189, 248, 0.10);
+}
+[data-theme="dark"] .ws-pane1-tab.is-active,
+[data-theme="dark"] .ws-pane1-watchlist-row.is-active {
+  background: rgba(56, 189, 248, 0.14);
+}
+
+/* active accent bar 「|」: Pane 2 row の ::before と同じグラデーション。
+   配置はテキストすぐ左 (左端 padding 内): icon ありタブは left=8, watchlist row は left=14 (indent), section accent は indent=true で left=10 */
+.ws-pane1-tab.is-active::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: linear-gradient(to bottom, rgba(56,189,248,0) 0%, rgba(56,189,248,0.85) 50%, rgba(56,189,248,0) 100%);
+  border-radius: 1px;
+  pointer-events: none;
+}
+.ws-pane1-watchlist-row.is-active::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: linear-gradient(to bottom, rgba(56,189,248,0) 0%, rgba(56,189,248,0.85) 50%, rgba(56,189,248,0) 100%);
+  border-radius: 1px;
+  pointer-events: none;
+}
+.ws-pane1-watchlist-row.is-active.is-indent::before,
+.ws-pane1-watchlist-row[style*="padding: 4px 10px 4px 24px"].is-active::before {
+  left: 18px;
+}
+/* SectionHeader の accent (gold/cyan) を ::before で同じ視覚言語に */
+.ws-pane1-section-header.is-accent-gold::before,
+.ws-pane1-section-header.is-accent-cyan::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  pointer-events: none;
+}
+.ws-pane1-section-header.is-accent-gold::before {
+  background: linear-gradient(to bottom, rgba(212,175,55,0) 0%, rgba(212,175,55,0.95) 50%, rgba(212,175,55,0) 100%);
+}
+.ws-pane1-section-header.is-accent-cyan::before {
+  background: linear-gradient(to bottom, rgba(120,200,220,0) 0%, rgba(120,200,220,0.95) 50%, rgba(120,200,220,0) 100%);
+}
+
+/* §dogfood-pane2 round 6: container query が想定通り発火しないケースが
+   観測されたため unconditional hide に変更。Pane 2 の sparkline は最低
+   優先度 (ロゴ > ticker > 価格 > 表示 > sparkline) で常に非表示。
+   Header の Tier 1 mini sparkline と Pane 1「指数」tab は別 component
+   (RowSparkline 直接 / Pane1MacroSection 撤去済) なので影響なし。 */
+.ws-judgment-row .ws-row-sparkline { display: none; }
+
 @container ws-judgment-list (max-width: 460px) {
   .ws-judgment-row .ws-row-meta { display: none; }
 }

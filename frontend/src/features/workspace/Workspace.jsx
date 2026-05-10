@@ -222,40 +222,37 @@ function Pane4Placeholder() {
 }
 
 /** v63 §12-B-4: Pane 1 各セクションの折り畳み header.
- * dogfood feedback 反映: chevron は右端、accent は左 inset border、hover 背景あり。
- * indent prop で 2 階層目をインデント (§dogfood-pane1)。 */
+ * dogfood round 6 反映:
+ *   - hover 背景は CSS class (.ws-pane1-section-header) で dark 対応
+ *   - accent (gold/cyan) は ::before 擬似要素で「|」風グラデーション (Pane 2 row と統一)
+ *   - 配置はインデント位置 (= テキストすぐ左)、1 階層目より左に飛び出さない
+ *   - indent prop で 2 階層目用の左余白
+ */
 function SectionHeader({ collapsed, onToggle, label, count, accent, indent = false }) {
-  // accent: undefined (neutral) | 'gold' | 'cyan'
   const color =
     accent === 'gold'
       ? 'rgba(212,175,55,0.85)'
       : accent === 'cyan'
         ? 'rgba(120,200,220,0.95)'
         : 'var(--text-muted)';
-  const borderLeft =
-    accent === 'gold'
-      ? '2px solid rgba(212,175,55,0.85)'
-      : accent === 'cyan'
-        ? '2px solid rgba(120,200,220,0.75)'
-        : '2px solid transparent';
+  const accentClass = accent ? ` is-accent-${accent}` : '';
   return (
     <button
       type="button"
       onClick={onToggle}
       aria-expanded={!collapsed}
+      className={`ws-pane1-section-header${indent ? ' is-indent' : ''}${accentClass}`}
       style={{
         display: 'flex',
         alignItems: 'center',
         gap: 6,
-        // 2 階層目は左 padding を増やしてインデント感を出す (12px)
-        paddingLeft: indent ? 16 : 6,
+        paddingLeft: indent ? 18 : 6,
         paddingRight: 8,
         paddingTop: 4,
         paddingBottom: 4,
         width: '100%',
         background: 'transparent',
         border: 'none',
-        borderLeft,
         borderRadius: 'var(--radius-sm, 8px)',
         fontSize: 10,
         fontWeight: 600,
@@ -264,10 +261,8 @@ function SectionHeader({ collapsed, onToggle, label, count, accent, indent = fal
         letterSpacing: '0.08em',
         cursor: 'pointer',
         textAlign: 'left',
-        transition: 'background 0.12s',
+        position: 'relative',
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.04)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
     >
       <span>{label}</span>
       {count != null && (
@@ -275,8 +270,6 @@ function SectionHeader({ collapsed, onToggle, label, count, accent, indent = fal
           {count}
         </span>
       )}
-      {/* chevron は右端 (視覚的重み: 一番左の同記号反復を避けるため)。
-          単一 ChevronRight を rotate アニメで「>」↔「∨」に変形 (§dogfood-round3) */}
       <ChevronRight
         size={12}
         aria-hidden
@@ -308,28 +301,22 @@ function WatchlistRow({ it, active, onClick, indent = false }) {
       type="button"
       onClick={() => onClick(it.ticker)}
       aria-pressed={active}
+      className={`ws-pane1-watchlist-row${active ? ' is-active' : ''}`}
       style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: 6,
-        padding: indent ? '4px 10px 4px 22px' : '4px 10px',
+        padding: indent ? '4px 10px 4px 24px' : '4px 10px',
         fontSize: 12,
         fontWeight: active ? 600 : 400,
         borderRadius: 'var(--radius-sm, 8px)',
-        background: active ? 'rgba(56,189,248,0.10)' : 'transparent',
+        background: 'transparent',
         color: active ? 'rgb(14,165,233)' : 'var(--text-primary)',
-        borderLeft: active ? '2px solid rgb(56,189,248)' : '2px solid transparent',
-        border: '1px solid transparent',
+        border: 'none',
         cursor: 'pointer',
         textAlign: 'left',
-        transition: 'background 0.12s',
-      }}
-      onMouseEnter={(e) => {
-        if (!active) e.currentTarget.style.background = 'rgba(0,0,0,0.04)';
-      }}
-      onMouseLeave={(e) => {
-        if (!active) e.currentTarget.style.background = 'transparent';
+        position: 'relative',
       }}
     >
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -394,6 +381,7 @@ function Pane1Nav({ items = [] }) {
                 type="button"
                 onClick={() => setActiveTab(t.key)}
                 aria-pressed={active}
+                className={`ws-pane1-tab${active ? ' is-active' : ''}`}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -402,19 +390,12 @@ function Pane1Nav({ items = [] }) {
                   fontSize: 13,
                   fontWeight: active ? 600 : 400,
                   borderRadius: 'var(--radius-sm, 8px)',
-                  border: '1px solid transparent',
-                  background: active ? 'rgba(56,189,248,0.10)' : 'transparent',
+                  border: 'none',
+                  background: 'transparent',
                   color: active ? 'rgb(14,165,233)' : 'var(--text-secondary)',
-                  borderLeft: active ? '2px solid rgb(56,189,248)' : '2px solid transparent',
                   cursor: 'pointer',
                   textAlign: 'left',
-                  transition: 'background 0.15s',
-                }}
-                onMouseEnter={(e) => {
-                  if (!active) e.currentTarget.style.background = 'rgba(0,0,0,0.04)';
-                }}
-                onMouseLeave={(e) => {
-                  if (!active) e.currentTarget.style.background = 'transparent';
+                  position: 'relative',
                 }}
               >
                 <t.Icon
