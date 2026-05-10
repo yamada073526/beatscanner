@@ -34,6 +34,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { fetchMarketIndices } from '../../api.js';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
+import RowSparkline from '../judgment/components/list/RowSparkline.jsx';
 
 // header MarketStripCompact と同じ Tier 1 8 指標 (重複表示を避けるため除外)
 const TIER1_SET = new Set(['^GSPC', '^IXIC', '^DJI', '^VIX', 'DX-Y.NYB', '^TNX', 'CL=F', 'JPY=X']);
@@ -47,7 +48,7 @@ function formatPrice(item) {
   });
 }
 
-function MacroRow({ item }) {
+function MacroRow({ item, sparklinePeriod }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.symbol,
   });
@@ -68,7 +69,8 @@ function MacroRow({ item }) {
         transform: CSS.Transform.toString(transform),
         transition,
         display: 'grid',
-        gridTemplateColumns: '14px 1fr auto auto',
+        // handle / label / mini-sparkline / price / change%
+        gridTemplateColumns: '14px 1fr auto auto auto',
         alignItems: 'center',
         gap: 6,
         padding: '4px 8px 4px 4px',
@@ -111,6 +113,9 @@ function MacroRow({ item }) {
       >
         {item.label}
       </span>
+      {/* v62 WS-Phase2: mini sparkline (32×12、1Y デフォルト)
+          Pane 2 / Header と同じ sparklinePeriod state を共有 */}
+      <RowSparkline ticker={item.symbol} period={sparklinePeriod} width={32} height={12} />
       <span
         style={{
           fontWeight: 600,
@@ -140,6 +145,7 @@ export default function Pane1MacroSection() {
   const toggleMacro = useWorkspaceStore((s) => s.toggleMacro);
   const macroOrder = useWorkspaceStore((s) => s.macroOrder);
   const setMacroOrder = useWorkspaceStore((s) => s.setMacroOrder);
+  const sparklinePeriod = useWorkspaceStore((s) => s.sparklinePeriod);
 
   const [data, setData] = useState([]);
 
@@ -244,7 +250,7 @@ export default function Pane1MacroSection() {
                 strategy={verticalListSortingStrategy}
               >
                 {ordered.map((item) => (
-                  <MacroRow key={item.symbol} item={item} />
+                  <MacroRow key={item.symbol} item={item} sparklinePeriod={sparklinePeriod} />
                 ))}
               </SortableContext>
             </DndContext>
