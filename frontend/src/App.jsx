@@ -17,6 +17,10 @@ import { useJudgmentResult } from './features/judgment/state/useJudgmentResult.j
 // JudgmentTabV2 は ?j2=1 のときだけ評価されるため lazy load
 // (CLAUDE.md「行数 200+ → lazy で初期バンドル軽量化」基準)
 const JudgmentTabV2 = lazy(() => import('./features/judgment/index.js').then((m) => ({ default: m.JudgmentTab })));
+// v62 WS-2: 画面全体 workspace shell (5 体並列レビュー反映、`?layout=workspace` で起動)
+const WorkspaceShell = lazy(() =>
+  import('./features/workspace/index.js').then((m) => ({ default: m.WorkspaceShell }))
+);
 import { withViewTransition } from './utils/viewTransition.js';
 import { CmdPalette, useCmdPalette } from './features/cmd-palette/index.js';
 import { useUpgradeModal } from './lib/useUpgradeModal.js';
@@ -623,6 +627,30 @@ export default function App() {
     }
     const intent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
     window.open(intent, '_blank', 'noopener,noreferrer');
+  }
+
+  // v62 WS-2: `?layout=workspace` URL flag で画面全体 workspace shell に切替.
+  // scaffold 段階 (WS-2): 3 ペイン構造 + placeholder のみ. 実 component は Phase 4-5 で.
+  // 旧 SPA は flag 無し時 default として完全保全 (段階公開).
+  const useWorkspaceLayout = (() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return new URLSearchParams(window.location.search).get('layout') === 'workspace';
+    } catch { return false; }
+  })();
+
+  if (useWorkspaceLayout) {
+    return (
+      <Suspense
+        fallback={
+          <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+            Workspace shell を読み込み中...
+          </div>
+        }
+      >
+        <WorkspaceShell />
+      </Suspense>
+    );
   }
 
   return (
