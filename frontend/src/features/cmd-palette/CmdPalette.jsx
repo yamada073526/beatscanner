@@ -10,8 +10,9 @@ import { createPortal } from 'react-dom';
  * @param {Array} props.items - パレット候補. 形:
  *   { id, group, label, description?, ticker?, action: () => void, hint? }
  *   group は 'recent' | 'watchlist' | 'holdings' | 'action' | 'analyze'
+ * @param {(ticker: string) => void} [props.onAnalyze] - 未登録 ticker を typed したときに呼ばれる
  */
-export default function CmdPalette({ open, close, items = [] }) {
+export default function CmdPalette({ open, close, items = [], onAnalyze }) {
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
   const inputRef = useRef(null);
@@ -39,6 +40,9 @@ export default function CmdPalette({ open, close, items = [] }) {
               label: `${upper} を分析`,
               ticker: upper,
               hint: 'Enter',
+              // §dogfood-round14: ウォッチリスト未登録 ticker を分析する action を注入.
+              //  従来は action 未定義のため Enter / click が no-op だった (検索バグ).
+              action: onAnalyze ? () => onAnalyze(upper) : undefined,
             },
             ...base,
           ];
@@ -46,7 +50,7 @@ export default function CmdPalette({ open, close, items = [] }) {
       }
     }
     return base;
-  }, [items, query]);
+  }, [items, query, onAnalyze]);
 
   // open 時に reset + auto focus + 閉じた時に元の focus へ復帰
   useEffect(() => {

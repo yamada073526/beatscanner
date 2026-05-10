@@ -794,6 +794,7 @@ export default function App() {
           open={cmdPalette.open}
           close={cmdPalette.close}
           items={cmdPaletteItems}
+          onAnalyze={runAnalyze}
         />
       </>
     );
@@ -2368,11 +2369,13 @@ export default function App() {
       {/* /main landmark (skip-link 着地点) */}
 
       {/* ── Cmd Palette (⌘K で開閉) ──
-          v62 WS-Phase2: items は cmdPaletteItems useMemo で SSOT 化、workspace mode と共有 */}
+          v62 WS-Phase2: items は cmdPaletteItems useMemo で SSOT 化、workspace mode と共有
+          §dogfood-round14: onAnalyze で未登録 ticker を typed したときの分析実行を注入 */}
       <CmdPalette
         open={cmdPalette.open}
         close={cmdPalette.close}
         items={cmdPaletteItems}
+        onAnalyze={runAnalyze}
       />
     </div>
   );
