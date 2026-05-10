@@ -21,6 +21,8 @@
  */
 import { useEffect, useState, useCallback, memo } from 'react';
 import { fetchMarketIndices } from '../../api.js';
+import RowSparkline from '../judgment/components/list/RowSparkline.jsx';
+import { useWorkspaceStore } from '../../state/workspaceStore.js';
 
 // Tier 1 銘柄 (順序固定、handover §15-1 と整合)
 // データの type/symbol は backend `_INDICES_SOURCE` の定義と整合
@@ -46,7 +48,7 @@ function formatPrice(item) {
   });
 }
 
-function IndicatorCellCompact({ item }) {
+function IndicatorCellCompact({ item, sparklinePeriod }) {
   const pct = item.change_pct ?? 0;
   const up = pct >= 0;
   const hasPct = item.change_pct !== null && item.change_pct !== undefined;
@@ -71,7 +73,7 @@ function IndicatorCellCompact({ item }) {
       aria-label={aria}
       style={{
         display: 'inline-flex',
-        alignItems: 'baseline',
+        alignItems: 'center',
         gap: 6,
         padding: '0 12px',
         whiteSpace: 'nowrap',
@@ -105,6 +107,9 @@ function IndicatorCellCompact({ item }) {
         {hasPct && (up ? <span aria-hidden>▲</span> : <span aria-hidden>▼</span>)}
         {pctLabel}
       </span>
+      {/* v62 WS-Phase2: 各 Tier 1 cell に mini sparkline (40×14、1Y デフォルト)
+          Pane 2 と同じ sparklinePeriod state を共有、期間切替で全画面同期 */}
+      <RowSparkline ticker={item.symbol} period={sparklinePeriod} width={40} height={14} />
     </div>
   );
 }
@@ -112,6 +117,7 @@ function IndicatorCellCompact({ item }) {
 export default memo(function MarketStripCompact() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const sparklinePeriod = useWorkspaceStore((s) => s.sparklinePeriod);
 
   const load = useCallback(async () => {
     try {
@@ -157,7 +163,7 @@ export default memo(function MarketStripCompact() {
         </span>
       ) : (
         tier1.map((item) => (
-          <IndicatorCellCompact key={item.symbol} item={item} />
+          <IndicatorCellCompact key={item.symbol} item={item} sparklinePeriod={sparklinePeriod} />
         ))
       )}
     </div>
