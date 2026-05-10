@@ -331,6 +331,9 @@ export default function App() {
 
   // モバイル判定（フローティングナビ + 検索 placeholder で共有）
   const isMobile = useIsMobile();
+  // v62 WS-3.5: workspace mode の breakpoint は 768px (Tailwind md)
+  // 3 ペインは 640-768px のタブレット縦でも破綻するため、より広い閾値で判定
+  const isMobileForWorkspace = useIsMobile(768);
 
   // ── フローティングボトムナビ — 上スクロール時のみ表示（YouTube/Instagram方式）──
   // - scrollY < 100 → 常に非表示（ページトップ近辺）
@@ -633,15 +636,29 @@ export default function App() {
     window.open(intent, '_blank', 'noopener,noreferrer');
   }
 
-  // v62 WS-2: `?layout=workspace` URL flag で画面全体 workspace shell に切替.
-  // scaffold 段階 (WS-2): 3 ペイン構造 + placeholder のみ. 実 component は Phase 4-5 で.
+  // v62 WS-2/3.5: `?layout=workspace` URL flag で画面全体 workspace shell に切替.
   // 旧 SPA は flag 無し時 default として完全保全 (段階公開).
-  const useWorkspaceLayout = (() => {
+  // WS-3.5: mobile (< 768px) では 3 ペインが破綻するため強制的に SPA に fallback
+  // (マーケター指摘「mobile は /classic 強制、launch は PC 推奨機能と訴求」).
+  const urlWantsWorkspace = (() => {
     if (typeof window === 'undefined') return false;
     try {
       return new URLSearchParams(window.location.search).get('layout') === 'workspace';
     } catch { return false; }
   })();
+  const useWorkspaceLayout = urlWantsWorkspace && !isMobileForWorkspace;
+
+  // mobile + ?layout=workspace の場合は URL から flag を削除して SPA を表示
+  // (リロードや bookmark 共有でも mobile では SPA 強制になる)
+  useEffect(() => {
+    if (urlWantsWorkspace && isMobileForWorkspace && typeof window !== 'undefined') {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('layout');
+        window.history.replaceState({}, '', url.toString());
+      } catch { /* noop */ }
+    }
+  }, [urlWantsWorkspace, isMobileForWorkspace]);
 
   if (useWorkspaceLayout) {
     return (
