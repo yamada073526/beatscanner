@@ -181,11 +181,15 @@ export default function JudgmentRow({ item, selected, onClick }) {
         </div>
       </div>
 
-      {/* Col 2: sparkline (改善希望⑤、競合に無い差別化) — 期間は workspace store */}
-      <RowSparkline ticker={ticker} period={sparklinePeriod} />
+      {/* Col 2: sparkline (改善希望⑤、競合に無い差別化) — 期間は workspace store
+          §dogfood-pane2: ws-row-sparkline class で狭幅時に container query で非表示 */}
+      <span className="ws-row-sparkline" style={{ display: 'inline-flex' }}>
+        <RowSparkline ticker={ticker} period={sparklinePeriod} />
+      </span>
 
       {/* Col 3: $price (大) + change% (小) — 改善希望「現在株価の下に前日比 +X.X%」 */}
       <div
+        className="ws-row-price"
         style={{
           display: 'flex',
           flexDirection: 'column',
@@ -218,8 +222,11 @@ export default function JudgmentRow({ item, selected, onClick }) {
         </span>
       </div>
 
-      {/* Col 4: meta (5条件 dot / 1日% / 決算まで) */}
-      {metaCell}
+      {/* Col 4: meta (5条件 dot / 1日% / 決算まで)
+          §dogfood-pane2: ws-row-meta class で狭幅時に container query で非表示 */}
+      <span className="ws-row-meta" style={{ display: 'inline-flex', alignItems: 'center' }}>
+        {metaCell}
+      </span>
 
       {/* Col 5: chevron */}
       <span

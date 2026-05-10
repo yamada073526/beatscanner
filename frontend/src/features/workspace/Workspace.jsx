@@ -12,7 +12,6 @@
  */
 import { useEffect } from 'react';
 import {
-  ChevronDown,
   ChevronRight,
   Home,
   Gavel,
@@ -41,10 +40,11 @@ const TABS = [
   { key: 'indices', label: '指数', Icon: Activity },
 ];
 
-/** v62 WS-4 + Phase2: Pane 2 上部の表示メタ切替 (改善希望④ 拡張) */
+/** v62 WS-4 + Phase2: Pane 2 上部の表示メタ切替 (改善希望④ 拡張)
+ *  §dogfood-round3: 1日騰落率 が最頻使用想定なので先頭に */
 const META_OPTIONS = [
-  { key: 'condition', label: '5条件', hint: 'ファンダメンタル5条件 PASS/FAIL' },
   { key: 'change1d', label: '1日騰落率', hint: '前日比 ±%' },
+  { key: 'condition', label: '5条件', hint: 'ファンダメンタル5条件 PASS/FAIL' },
   { key: 'earnings', label: '決算まで', hint: '次の決算発表まで' },
   { key: 'tag', label: 'タグ', hint: 'ユーザー設定タグ (色 + 名前)' },
 ];
@@ -275,12 +275,18 @@ function SectionHeader({ collapsed, onToggle, label, count, accent, indent = fal
           {count}
         </span>
       )}
-      {/* chevron は右端 (視覚的重み: 一番左の同記号反復を避けるため、§dogfood-pane1) */}
-      {collapsed ? (
-        <ChevronRight size={12} aria-hidden style={{ marginLeft: count != null ? 4 : 'auto', flexShrink: 0 }} />
-      ) : (
-        <ChevronDown size={12} aria-hidden style={{ marginLeft: count != null ? 4 : 'auto', flexShrink: 0 }} />
-      )}
+      {/* chevron は右端 (視覚的重み: 一番左の同記号反復を避けるため)。
+          単一 ChevronRight を rotate アニメで「>」↔「∨」に変形 (§dogfood-round3) */}
+      <ChevronRight
+        size={12}
+        aria-hidden
+        style={{
+          marginLeft: count != null ? 4 : 'auto',
+          flexShrink: 0,
+          transform: collapsed ? 'rotate(0deg)' : 'rotate(90deg)',
+          transition: 'transform var(--motion-base, 200ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1))',
+        }}
+      />
     </button>
   );
 }

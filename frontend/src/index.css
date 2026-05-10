@@ -813,16 +813,17 @@ body {
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
+/* §dogfood-round3: IRリソース と同じシアン縁取りに統一 (rgb(56,189,248)) */
 .news-list-card:hover {
-  border-color: rgb(203, 213, 225);  /* slate-300 — IR と同色 */
-  background-color: rgb(248, 250, 252);  /* slate-50 — IR と同色 */
+  border-color: rgb(56, 189, 248);
+  background-color: var(--bg-hover);
 }
 [data-theme="dark"] .news-list-card {
   border-color: #253347;
 }
 [data-theme="dark"] .news-list-card:hover {
-  border-color: rgb(203, 213, 225);  /* slate-300 のままで明るく目立たせる (IR と同挙動) */
-  background-color: var(--bg-subtle);
+  border-color: rgb(56, 189, 248);
+  background-color: var(--bg-hover);
 }
 .news-list-thumb {
   width: 64px;
@@ -4979,6 +4980,13 @@ body {
  * 5 体並列レビュー金融エージェント案 + ユーザー希望 (logo / hover gold/cyan
  * accent / drag handle on hover / price+change vertical) を反映.
  * ────────────────────────────────────────────────────────────────── */
+/* §dogfood-pane2: 親 (JudgmentList) を container query 対象に。
+   Pane 2 の幅縮小時に row 内要素を優先順位順 (低い → 高い) に非表示化する用. */
+.ds-judgment-list {
+  container-type: inline-size;
+  container-name: ws-judgment-list;
+}
+
 .ws-judgment-row {
   position: relative;
   display: grid;
@@ -4998,6 +5006,18 @@ body {
     background var(--motion-base, 200ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
     transform var(--motion-base, 200ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
     box-shadow var(--motion-base, 200ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+}
+
+/* §dogfood-pane2: 狭幅レスポンシブ。優先順位 (高 → 低): ロゴ > ticker > price+%>表示 > sparkline.
+   sparkline → 表示 (meta) → price+% の順に hide。 */
+@container ws-judgment-list (max-width: 360px) {
+  .ws-judgment-row .ws-row-sparkline { display: none; }
+}
+@container ws-judgment-list (max-width: 300px) {
+  .ws-judgment-row .ws-row-meta { display: none; }
+}
+@container ws-judgment-list (max-width: 260px) {
+  .ws-judgment-row .ws-row-price { display: none; }
 }
 .ws-judgment-row:last-child { border-bottom: none; }
 

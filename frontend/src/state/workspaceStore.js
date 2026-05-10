@@ -33,7 +33,7 @@ export const useWorkspaceStore = create(
     (set) => ({
       headerCollapsed: false,
       pane1Collapsed: false,
-      pane2Meta: 'condition', // default: ファンダメンタル5条件 dot (独自プロトコル focus)
+      pane2Meta: 'change1d', // §dogfood-round3: 1日騰落率 が最頻使用想定でデフォルト変更
       // v62 WS-5 Step 2: MACRO 詳細 collapse + 並び替え (改善希望②)
       macroExpanded: false, // default 折り畳み (5 原則 #1: 読み手に負担をかけない)
       macroOrder: [], // ユーザー DnD 並び替え結果 (空なら API 順を使用)
