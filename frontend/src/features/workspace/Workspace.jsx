@@ -27,11 +27,12 @@ const TABS = [
   { key: 'チャート', label: 'チャート', icon: '📈' },
 ];
 
-/** v62 WS-4: Pane 2 上部の表示メタ切替 (改善希望④ 3 種) */
+/** v62 WS-4 + Phase2: Pane 2 上部の表示メタ切替 (改善希望④ 拡張) */
 const META_OPTIONS = [
   { key: 'condition', label: '5条件', hint: 'ファンダメンタル5条件 PASS/FAIL' },
   { key: 'change1d', label: '1日騰落率', hint: '前日比 ±%' },
   { key: 'earnings', label: '決算まで', hint: '次の決算発表まで' },
+  { key: 'tag', label: 'タグ', hint: 'ユーザー設定タグ (色 + 名前)' },
 ];
 
 /** v62 WS-Phase2: 改善希望③ sparkline 期間切替 (frontend slice) */

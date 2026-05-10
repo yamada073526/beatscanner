@@ -76,6 +76,51 @@ export default function JudgmentRow({ item, selected, onClick }) {
         {daysUntil == null ? '—' : daysUntil === 0 ? '本日' : `あと${daysUntil}日`}
       </span>
     );
+  } else if (pane2Meta === 'tag') {
+    // v62 WS-Phase2: ユーザー設定タグ (パーソナライズ)
+    const { tagName, tagColor } = item;
+    if (!tagName) {
+      metaCell = (
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 56, textAlign: 'right' }}>
+          (未タグ)
+        </span>
+      );
+    } else {
+      const dotColor = tagColor || 'rgb(56, 189, 248)';
+      metaCell = (
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--text-secondary)',
+            padding: '2px 8px',
+            borderRadius: 'var(--radius-pill, 9999px)',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border)',
+            maxWidth: 100,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+          title={`タグ: ${tagName}`}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: dotColor,
+              flexShrink: 0,
+            }}
+          />
+          {tagName}
+        </span>
+      );
+    }
   } else {
     // default: ファンダメンタル5条件 dot
     metaCell = <ConditionDots conditions={conditions} size={7} gap={3} />;

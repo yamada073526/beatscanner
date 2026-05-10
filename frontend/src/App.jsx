@@ -688,6 +688,9 @@ export default function App() {
       const r = cache?.result || null;
       const px = portfolioPrices?.prices?.[t] || null;
       const earn = earningsBySymbol?.get?.(t) || null;
+      // v62 WS-Phase2: 改善希望④ "タグ" meta (既存 useTags 流用)
+      const tagId = tagStore?.assignments?.[t] ?? null;
+      const tagObj = tagId ? tagStore?.tagsById?.[tagId] || null : null;
       return {
         ticker: t,
         companyName: r?.companyName,
@@ -700,6 +703,10 @@ export default function App() {
         // v62 WS-Phase2: 改善希望④ "決算まで N 日" meta
         nextEarningsDate: earn?.date ?? null,
         nextEarningsDays: earn?.daysUntil ?? null,
+        // v62 WS-Phase2: 改善希望④ "タグ" meta
+        tagId,
+        tagName: tagObj?.name ?? null,
+        tagColor: tagObj?.color || tagObj?.bg_color || null,
       };
     });
     const _planWS = isProUser ? 'pro' : 'free';
