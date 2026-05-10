@@ -5125,12 +5125,22 @@ button.ds-chip:active {
   box-shadow: var(--ws-shadow-row-active);
 }
 
-/* 保有 / 観察 行は accent ring を常時強調 (hover で shadow に上書きされる) */
+/* §round19 fix: 保有 / 観察 行の static ring shadow が specificity 同点で
+   :hover の shadow を上書きしてしまう (glow_elevation_postmortem v57 と同パターン)。
+   compound `.is-holding:hover` / `.is-watch:hover` で hover shadow を強制適用. */
 .ws-pane4-news-item.is-holding {
   box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.40);
 }
 .ws-pane4-news-item.is-watch {
   box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.32);
+}
+.ws-pane4-news-item.is-holding:hover,
+.ws-pane4-news-item.is-watch:hover {
+  box-shadow: var(--ws-shadow-row-hover);
+}
+.ws-pane4-news-item.is-holding:active,
+.ws-pane4-news-item.is-watch:active {
+  box-shadow: var(--ws-shadow-row-active);
 }
 
 @keyframes ws-pane4-slide-in {
@@ -5248,8 +5258,9 @@ button.ds-chip:active {
   padding-left: 20px;
 }
 
-/* §round17: SSE ストリーミング中の点滅カーソル
-   smooth fade + animation-fill-mode both で re-render での位相 reset を抑制 */
+/* §round19 fix: SSE ストリーミング中の点滅カーソル.
+   旧 keyframes (0/40/60/100) は終端で opacity 0→1 にジャンプし「最初ゆっくり後で激しい」
+   感を生んだ。symmetric `0/50/100` で smooth sine-like 点滅に変更. */
 .ws-pane4-cursor {
   display: inline-block;
   margin-left: 2px;
@@ -5257,10 +5268,8 @@ button.ds-chip:active {
   animation: ws-pane4-blink 1.0s ease-in-out infinite both;
 }
 @keyframes ws-pane4-blink {
-  0%   { opacity: 1; }
-  40%  { opacity: 1; }
-  60%  { opacity: 0; }
-  100% { opacity: 0; }
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0; }
 }
 
 /* §round18: prefers-reduced-motion 配慮 (Apple HIG 準拠).
