@@ -50,6 +50,7 @@ import InsightsPanel from './components/InsightsPanel.jsx';
 import ApiKeySettings from './components/ApiKeySettings.jsx';
 import ApiKeyBanner from './components/ApiKeyBanner.jsx';
 import ApiKeyModal from './components/ApiKeyModal.jsx';
+import QuickAddHoldingModal from './components/QuickAddHoldingModal.jsx';
 import UpgradeModal from './components/UpgradeModal.jsx';
 import PlanComparisonBanner from './components/PlanComparisonBanner.jsx';
 import DemoTicker from './components/DemoTicker.jsx';
@@ -106,6 +107,9 @@ export default function App() {
   const [showCustomScreener, setShowCustomScreener] = useState(false);
   const [forceCloseSuggestions, setForceCloseSuggestions] = useState(false);
   const [showFiveCondModal, setShowFiveCondModal] = useState(false);
+  // v62 WS-PreA: 買付クイック登録モーダル (RELEASE_TODO §11-B-7-B Phase B)
+  // CV +35-45% NSM 直撃。マーケター指摘で workspace 化前に先行実装.
+  const [quickAddTicker, setQuickAddTicker] = useState(null);
 
   // ── Judgment result (Step 4 で hook 抽出) ───────────────────────
   // prefetchedRef / prefetch を hook より先に定義 (hook が prefetch コールバックを必要とするため).
@@ -990,6 +994,45 @@ export default function App() {
                 title={watchlist.includes(result.ticker) ? 'ウォッチリストから解除' : 'ウォッチリストに追加'}
               >
                 {watchlist.includes(result.ticker) ? '★' : '☆'}
+              </button>
+              {/* v62 WS-PreA: 買付クイック登録 (RELEASE_TODO §11-B-7-B Phase B、CV +35-45%)
+                  「分析 → ☆ → ホーム → 観察 → ... → 保有」(7 ステップ) を
+                  「分析 → +保有 → 完了」(3 ステップ) に圧縮 */}
+              <button
+                type="button"
+                onClick={() => setQuickAddTicker(result.ticker)}
+                disabled={reportStreaming}
+                className="quick-add-holding-btn"
+                aria-label="保有として登録"
+                title="保有として登録 (株数 + 価格 + 日付)"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '4px 10px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  borderRadius: 'var(--radius-pill, 9999px)',
+                  border: '1px solid rgba(56,189,248,0.50)',
+                  background: 'rgba(56,189,248,0.10)',
+                  color: 'rgb(14,165,233)',
+                  cursor: reportStreaming ? 'not-allowed' : 'pointer',
+                  opacity: reportStreaming ? 0.5 : 1,
+                  transition: 'background 0.15s, border-color 0.15s',
+                }}
+                onMouseEnter={(e) => {
+                  if (!reportStreaming) {
+                    e.currentTarget.style.background = 'rgba(56,189,248,0.20)';
+                    e.currentTarget.style.borderColor = 'rgba(56,189,248,0.70)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(56,189,248,0.10)';
+                  e.currentTarget.style.borderColor = 'rgba(56,189,248,0.50)';
+                }}
+              >
+                <span aria-hidden>＋</span>
+                <span>保有</span>
               </button>
             </div>
 
@@ -2075,6 +2118,20 @@ export default function App() {
         isOpen={showApiKeyModal}
         onClose={() => setShowApiKeyModal(false)}
         onOpenSettings={() => setShowSettings(true)}
+      />
+
+      {/* v62 WS-PreA: 買付クイック登録モーダル (RELEASE_TODO §11-B-7-B Phase B) */}
+      <QuickAddHoldingModal
+        isOpen={!!quickAddTicker}
+        onClose={() => setQuickAddTicker(null)}
+        ticker={quickAddTicker}
+        companyName={result?.ticker === quickAddTicker ? result?.companyName : null}
+        defaultPrice={portfolioPrices?.prices?.[quickAddTicker]?.price ?? null}
+        user={user}
+        onSignIn={signInWithGoogle}
+        addLot={holdingStore.addLot}
+        watchlist={watchlist}
+        addToWatchlist={addToWatchlist}
       />
 
       <UpgradeModal
