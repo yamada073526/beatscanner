@@ -9,6 +9,7 @@ import { useArrivalSpotlight } from './hooks/useArrivalSpotlight.js';
 import { useIsMobile } from './hooks/useIsMobile.js';
 import { useTags } from './hooks/useTags.js';
 import { useHoldings } from './hooks/useHoldings.js';
+import { useEarningsCalendar } from './hooks/useEarningsCalendar.js';
 import { usePortfolioPrices } from './hooks/usePortfolioPrices.js';
 import { initDarkMode, toggleDarkMode, isDark } from './utils/darkMode.js';
 import { hasFmpKey, loadFmpKey } from './lib/fmpKey.js';
@@ -222,6 +223,8 @@ export default function App() {
 
   // ── 保有 (Holdings X-2): Supabase 同期 + 楽観的更新 ─────────────
   const holdingStore = useHoldings({ supabase, user });
+  // v62 WS-Phase2: Pane 2 「決算まで N 日」meta 用 earnings calendar (30 分 cache)
+  const { earningsBySymbol } = useEarningsCalendar();
   // 案 D: HoldingModal は廃止。TagAssignSheet 内で完結するため
   // holdingModalTicker state は不要 (tagAssignTicker に統合)。
 
@@ -684,6 +687,7 @@ export default function App() {
       const cache = resultCacheRef.current.get(t);
       const r = cache?.result || null;
       const px = portfolioPrices?.prices?.[t] || null;
+      const earn = earningsBySymbol?.get?.(t) || null;
       return {
         ticker: t,
         companyName: r?.companyName,
@@ -693,6 +697,9 @@ export default function App() {
         isHolding: _holdingTickers.includes(t),
         isWatchlist: watchlist.includes(t),
         lastAnalyzedAt: cache?.ts ?? 0,
+        // v62 WS-Phase2: 改善希望④ "決算まで N 日" meta
+        nextEarningsDate: earn?.date ?? null,
+        nextEarningsDays: earn?.daysUntil ?? null,
       };
     });
     const _planWS = isProUser ? 'pro' : 'free';
