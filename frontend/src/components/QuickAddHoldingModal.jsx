@@ -22,6 +22,7 @@
  *   - onSuccess?: (lot) => void   - 成功時コールバック (toast 等)
  */
 import { useEffect, useMemo, useState } from 'react';
+import { fetchQuotes } from '../api.js';
 
 const SHARE_CHIPS = [1, 5, 10, 25, 50, 100];
 
@@ -56,6 +57,12 @@ export default function QuickAddHoldingModal({
   const [tradeDatePreset, setTradeDatePreset] = useState('today');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  // v62 fix: defaultPrice が無い場合は ad-hoc に /api/quotes で取得
+  // (portfolioPrices は holdings のみ pre-fetch のため、新規 ticker は別経路で取る必要あり)
+  const [fetchedPrice, setFetchedPrice] = useState(null);
+  const [fetchingPrice, setFetchingPrice] = useState(false);
+
+  const effectiveDefaultPrice = defaultPrice ?? fetchedPrice;
 
   // モーダル open 時に price を defaultPrice で初期化 (ticker 切替時にも追従)
   useEffect(() => {
@@ -67,8 +74,30 @@ export default function QuickAddHoldingModal({
       setShares(10);
       setSharesCustom(false);
       setError('');
+      setFetchedPrice(null);
     }
   }, [isOpen, defaultPrice, ticker]);
+
+  // open 時に defaultPrice 不在なら /api/quotes で fetch
+  useEffect(() => {
+    if (!isOpen || !ticker) return;
+    if (defaultPrice) return; // 既に上位から price あり
+    let cancelled = false;
+    setFetchingPrice(true);
+    fetchQuotes([ticker])
+      .then((data) => {
+        if (cancelled) return;
+        const px = Array.isArray(data?.quotes) ? data.quotes[0]?.price : null;
+        if (typeof px === 'number' && px > 0) {
+          setFetchedPrice(px);
+          // ユーザーが手入力していなければ自動セット
+          setPrice((curr) => (curr === '' ? px : curr));
+        }
+      })
+      .catch(() => { /* 失敗時は手入力で OK */ })
+      .finally(() => { if (!cancelled) setFetchingPrice(false); });
+    return () => { cancelled = true; };
+  }, [isOpen, ticker, defaultPrice]);
 
   const isWatchlisted = useMemo(
     () => Array.isArray(watchlist) && watchlist.includes(ticker),
@@ -227,23 +256,34 @@ export default function QuickAddHoldingModal({
               inputMode="decimal"
               value={price}
               onChange={(e) => { setPrice(e.target.value); setPriceEdited(true); }}
-              placeholder={defaultPrice ? String(defaultPrice) : '例: 195.50'}
+              placeholder={
+                fetchingPrice
+                  ? '現在値を取得中...'
+                  : effectiveDefaultPrice
+                    ? String(effectiveDefaultPrice)
+                    : '例: 195.50'
+              }
               className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm tabular-nums dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
             />
-            {defaultPrice && (
+            {effectiveDefaultPrice && (
               <button
                 type="button"
-                onClick={() => { setPrice(defaultPrice); setPriceEdited(false); }}
+                onClick={() => { setPrice(effectiveDefaultPrice); setPriceEdited(false); }}
                 className="shrink-0 rounded-full border border-slate-300 px-3 py-1 text-[11px] text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300"
                 title="現在値を入力"
               >
-                現在値 ${defaultPrice}
+                現在値 ${effectiveDefaultPrice}
               </button>
             )}
           </div>
-          {!priceEdited && defaultPrice && (
+          {!priceEdited && effectiveDefaultPrice && (
             <p className="mt-1 text-[11px] text-slate-400">
               現在値を入力済 (実際の取得単価に編集可)
+            </p>
+          )}
+          {fetchingPrice && !priceEdited && (
+            <p className="mt-1 text-[11px] text-slate-400">
+              現在値を取得中...
             </p>
           )}
         </div>
