@@ -51,8 +51,10 @@ ALLOWED-SHADOW: 0 0 22px rgba(56, 189, 248, 0.26), 0 10px 28px rgba(56, 189, 248
 # §round18 ws-shadow-row-hover (light) — Pane 4 row hover の 4 層 shadow (近 + 遠 + ring + inset top highlight)
 ALLOWED-SHADOW: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 28px -8px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(56, 189, 248, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.04)
 
-# §round18 ws-shadow-row-hover (dark)
+# §round18 ws-shadow-row-hover (dark) — round 20 で cyan glow 強化
 ALLOWED-SHADOW: 0 1px 2px rgba(0, 0, 0, 0.40), 0 14px 32px -8px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(56, 189, 248, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.04)
+ALLOWED-SHADOW: 0 0 0 1px rgba(56, 189, 248, 0.50), 0 0 18px rgba(56, 189, 248, 0.18), 0 12px 28px -8px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.05)
+ALLOWED-SHADOW: 0 0 0 1px rgba(56, 189, 248, 0.55), 0 0 12px rgba(56, 189, 248, 0.20), 0 1px 3px -1px rgba(0, 0, 0, 0.55)
 
 # §round18 ws-shadow-row-active (light)
 ALLOWED-SHADOW: 0 1px 3px -1px rgba(15, 23, 42, 0.20), 0 0 0 1px rgba(56, 189, 248, 0.30)

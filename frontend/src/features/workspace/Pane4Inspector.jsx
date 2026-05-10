@@ -11,8 +11,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import { TrendingUp, Globe, BarChart3, Bookmark, ExternalLink, X, Languages } from 'lucide-react';
+import { TrendingUp, Globe, BarChart3, ExternalLink, X, Languages } from 'lucide-react';
 import { fetchMacroNews, fetchNews, translateTexts, translateTextsStream } from '../../api.js';
+import CompanyLogo from '../../components/CompanyLogo.jsx';
 
 // ── §round17 Markdown 見出し補強 (UI/UX レビュー反映) ──────────
 //   backend SSE が一部見出しを `**bold**` 単独段落で出す。
@@ -84,6 +85,32 @@ function fmtRelative(iso) {
     const d = Math.floor(h / 24);
     return `${d} 日前`;
   } catch { return ''; }
+}
+
+/** §round20 (金融 CRITICAL): 鮮度段階表示
+ *   <5分   = LIVE (緑 dot, 金融的「リアルタイム」)
+ *   <30分  = X 分前 (cyan)
+ *   <3時間 = X 時間前 (neutral)
+ *   >3時間 = STALE 警告 (amber)
+ */
+function freshnessStatus(iso) {
+  if (!iso) return { label: '', tone: 'muted' };
+  try {
+    const t = new Date(iso).getTime();
+    if (!Number.isFinite(t) || t <= 0) return { label: '', tone: 'muted' };
+    const diff = Math.max(0, Date.now() - t);
+    const m = Math.floor(diff / 60_000);
+    if (m < 5) return { label: 'LIVE', tone: 'live' };
+    if (m < 30) return { label: `${m} 分前`, tone: 'fresh' };
+    if (m < 180) {
+      const h = Math.floor(m / 60);
+      return { label: h >= 1 ? `${h} 時間前` : `${m} 分前`, tone: 'normal' };
+    }
+    const h = Math.floor(m / 60);
+    if (h < 24) return { label: `${h} 時間前`, tone: 'stale' };
+    const d = Math.floor(h / 24);
+    return { label: `${d} 日前`, tone: 'stale' };
+  } catch { return { label: '', tone: 'muted' }; }
 }
 
 /** §round15 (金融 CRITICAL): ticker false positive 抑制
@@ -236,48 +263,77 @@ function NewsItem({ item, displayTitle, onSelect, isOpen, index }) {
               <span>{item.importance === 'HIGH' ? `HIGH · ${cat}` : cat}</span>
             </span>
           )}
-          {/* §round17 affinity: ticker 文字列自体で「保有/観察」を表現 (Bookmark icon + ticker、無言ラベル) */}
-          {isHolding && (
-            <span
-              title={`保有銘柄: ${item._holdingHits.join(', ')}`}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 3,
-                fontSize: 10,
-                fontWeight: 700,
-                color: 'rgb(180,142,30)',
-                fontVariantNumeric: 'tabular-nums',
-                letterSpacing: '0.02em',
-              }}
-            >
-              <Bookmark size={10} strokeWidth={2.25} aria-hidden style={{ fill: 'currentColor' }} />
-              {item._holdingHits.join(' ')}
-            </span>
-          )}
-          {isWatch && (
-            <span
-              title={`ウォッチ: ${item._watchHits.join(', ')}`}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 3,
-                fontSize: 10,
-                fontWeight: 600,
-                color: 'rgb(14,165,233)',
-                fontVariantNumeric: 'tabular-nums',
-                letterSpacing: '0.02em',
-              }}
-            >
-              <Bookmark size={10} strokeWidth={2.25} aria-hidden />
-              {item._watchHits.join(' ')}
-            </span>
-          )}
-          {item.published && (
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-              {fmtRelative(item.published)}
-            </span>
-          )}
+          {/* §round20 affinity: 企業ロゴ + monospace ticker + companyName で「自分の銘柄」を 0.5 秒識別.
+              4 体レビュー収束 (UI/UX hybrid + 設計 token + マーケ logo+ticker+変動 dot + 金融 3 階層識別). */}
+          {(isHolding || isWatch) && (() => {
+            const hits = isHolding ? item._holdingHits : item._watchHits;
+            const main = hits[0];
+            const companyName = item._kind === 'ticker' ? item.companyName : undefined;
+            return (
+              <span
+                title={`${isHolding ? '保有' : 'ウォッチ'}銘柄: ${hits.join(', ')}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                }}
+              >
+                <CompanyLogo ticker={main} size={16} />
+                <span
+                  className="ws-pane4-ticker"
+                  style={{
+                    color: isHolding ? 'rgb(212,175,55)' : 'rgb(56,189,248)',
+                  }}
+                >
+                  {main}
+                </span>
+                {hits.length > 1 && (
+                  <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>
+                    +{hits.length - 1}
+                  </span>
+                )}
+              </span>
+            );
+          })()}
+          {/* §round20: 鮮度段階表示 (LIVE / X 分前 / STALE) */}
+          {(() => {
+            const f = freshnessStatus(item.published);
+            if (!f.label) return null;
+            const isLive = f.tone === 'live';
+            const isStale = f.tone === 'stale';
+            const color =
+              isLive ? 'rgb(34,197,94)'
+              : f.tone === 'fresh' ? 'rgb(56,189,248)'
+              : isStale ? 'rgb(245,158,11)'
+              : 'var(--text-muted)';
+            return (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  fontSize: 10,
+                  fontWeight: isLive || isStale ? 700 : 500,
+                  color,
+                  letterSpacing: isLive ? '0.04em' : 0,
+                }}
+              >
+                {isLive && (
+                  <span
+                    aria-hidden
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: 'rgb(34,197,94)',
+                      animation: 'ws-pane4-live-pulse 1.4s ease-in-out infinite',
+                    }}
+                  />
+                )}
+                {f.label}
+              </span>
+            );
+          })()}
         </div>
         <div
           className="ws-pane4-news-title"
@@ -446,15 +502,16 @@ function ReadingMode({ item, onClose, jpEnabled }) {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* ヘッダー */}
+      {/* §round20: Reading Room も Pane 4 header と同じスリム帯 */}
       <div
+        className="ws-pane4-header"
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 8,
-          padding: '8px 12px',
+          padding: '6px 12px',
           borderBottom: '1px solid var(--border)',
-          background: 'var(--bg-card)',
+          background: 'transparent',
         }}
       >
         <button
@@ -466,8 +523,8 @@ function ReadingMode({ item, onClose, jpEnabled }) {
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: 24,
-            height: 24,
+            width: 22,
+            height: 22,
             border: 'none',
             background: 'transparent',
             color: 'var(--text-muted)',
@@ -475,9 +532,9 @@ function ReadingMode({ item, onClose, jpEnabled }) {
             borderRadius: 'var(--radius-sm, 6px)',
           }}
         >
-          <X size={14} aria-hidden />
+          <X size={13} aria-hidden />
         </button>
-        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+        <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.18em' }}>
           The Reading Room
         </span>
         <div style={{ flex: 1 }} />
@@ -801,12 +858,14 @@ export default function Pane4Inspector({ items = [] }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 0 }}>
-      {/* Header */}
+      {/* §round20: Aman 級スリム帯。タイトル + 更新時刻を 1 行統合、
+          左 2px cyan accent line + hairline bottom border、背景透明、全体 32px 高さ. */}
       <div
+        className="ws-pane4-header"
         style={{
-          padding: '10px 14px 8px',
+          padding: '8px 14px',
           borderBottom: '1px solid var(--border)',
-          background: 'var(--bg-card)',
+          background: 'transparent',
           display: 'flex',
           flexDirection: 'column',
           gap: 8,
@@ -816,23 +875,26 @@ export default function Pane4Inspector({ items = [] }) {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span
               style={{
-                fontSize: 10,
-                fontWeight: 600,
-                color: 'var(--text-muted)',
+                fontSize: 11,
+                fontWeight: 500,
+                color: 'var(--text-secondary)',
                 textTransform: 'uppercase',
-                letterSpacing: '0.08em',
+                letterSpacing: '0.18em',
               }}
             >
               The Macro Lens
-            </div>
-            <div style={{ marginTop: 2, fontSize: 11, color: 'var(--text-muted)' }}>
-              {latestPublished
-                ? `最終更新 ${fmtRelative(latestPublished)}`
-                : (loading ? '読込中...' : '更新情報なし')}
-            </div>
+            </span>
+            {latestPublished && (
+              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                · {fmtRelative(latestPublished)}
+              </span>
+            )}
+            {!latestPublished && loading && (
+              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>· 読込中</span>
+            )}
           </div>
           {/* §round16: 話題 / 新着 segmented + JP segmented を 1 行同居 */}
           <div role="group" aria-label="並び替え" className="ws-pane4-jp-segmented">

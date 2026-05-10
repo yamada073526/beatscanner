@@ -109,15 +109,17 @@
 }
 
 [data-theme="dark"] {
-  /* §round18 dark mode shadow tokens (Pane 4 等の row hover) */
+  /* §round20 dark mode shadow tokens: 黒背景で同化する深い shadow を弱め、
+     代わりに cyan glow を強化して「触れる手前から呼吸している」感を出す */
   --ws-shadow-row-hover:
-    0 1px 2px rgba(0, 0, 0, 0.40),
-    0 14px 32px -8px rgba(0, 0, 0, 0.55),
-    0 0 0 1px rgba(56, 189, 248, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    0 0 0 1px rgba(56, 189, 248, 0.50),
+    0 0 18px rgba(56, 189, 248, 0.18),
+    0 12px 28px -8px rgba(0, 0, 0, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --ws-shadow-row-active:
-    0 1px 3px -1px rgba(0, 0, 0, 0.55),
-    0 0 0 1px rgba(56, 189, 248, 0.32);
+    0 0 0 1px rgba(56, 189, 248, 0.55),
+    0 0 12px rgba(56, 189, 248, 0.20),
+    0 1px 3px -1px rgba(0, 0, 0, 0.55);
   /* dark mode 用 shadow を上書き (より深い影) */
   --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.30), 0 1px 2px rgba(0, 0, 0, 0.20);
   --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.40), 0 4px 8px rgba(0, 0, 0, 0.24);
@@ -5075,6 +5077,51 @@ button.ds-chip:active {
   }
 }
 
+/* §round20 Pane 4/5 ヘッダー帯 (Aman 級スリム): 左 2px cyan accent line.
+   背景透明、bottom border は 1px hairline、タイトル + 更新時刻 1 行統合 (JSX 側). */
+.ws-pane4-header {
+  position: relative;
+}
+.ws-pane4-header::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(56, 189, 248, 0) 0%,
+    rgba(56, 189, 248, 0.85) 50%,
+    rgba(56, 189, 248, 0) 100%
+  );
+  pointer-events: none;
+}
+
+/* §round20 ticker token: monospace + tracking + tabular-nums で第一級識別子 */
+.ws-pane4-ticker {
+  font-family: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* §round20 LIVE dot pulse */
+@keyframes ws-pane4-live-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55);
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.7;
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0);
+  }
+}
+
 /* §pane4 round 18 (UI/UX + 設計レビュー反映):
    token 化された hover/active の 4 層 shadow + accent bar 拡幅 + title color shift.
    intensity = prominent (news row)、quiet/base は将来 Pane 1/chip で使い回す予定. */
@@ -5091,13 +5138,15 @@ button.ds-chip:active {
     background var(--ws-hover-duration) var(--ws-ease-standard);
 }
 .ws-pane4-news-item:hover {
-  transform: translateY(var(--ws-hover-lift));
+  transform: translateY(var(--ws-hover-lift)) scale(1.008);
   border-color: rgba(56, 189, 248, 0.45) !important;
   background: rgba(56, 189, 248, 0.04) !important;
   box-shadow: var(--ws-shadow-row-hover);
 }
+/* §round20: dark mode は shadow が同化するため cyan glow を強化 + scale で z 軸感 */
 [data-theme="dark"] .ws-pane4-news-item:hover {
-  background: rgba(56, 189, 248, 0.06) !important;
+  background: rgba(56, 189, 248, 0.08) !important;
+  border-color: rgba(56, 189, 248, 0.65) !important;
 }
 /* §round18: hover で accent bar 拡幅 (3→4px) + opacity 0.85→1.0 */
 .ws-pane4-news-item:hover .ws-pane4-accent-bar {
