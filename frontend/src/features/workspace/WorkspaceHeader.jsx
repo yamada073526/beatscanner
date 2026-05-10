@@ -13,7 +13,7 @@
  *   - a11y: aria-expanded + aria-controls
  *   - 折りたたみ状態は Zustand workspaceStore で persist
  */
-import { ChevronUp, ChevronDown, PanelRightOpen, PanelRightClose, PanelLeftOpen, PanelLeftClose } from 'lucide-react';
+import { ChevronUp, ChevronDown, PanelRightOpen, PanelRightClose } from 'lucide-react';
 import MarketStripCompact from './MarketStripCompact.jsx';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 
@@ -22,9 +22,6 @@ export default function WorkspaceHeader() {
   const toggleHeader = useWorkspaceStore((s) => s.toggleHeader);
   const pane4Expanded = useWorkspaceStore((s) => s.pane4Expanded);
   const togglePane4 = useWorkspaceStore((s) => s.togglePane4);
-  // §dogfood-round8: Pane 1 折りたたみ toggle (左ハンバーガー)
-  const pane1Collapsed = useWorkspaceStore((s) => s.pane1Collapsed);
-  const togglePane1 = useWorkspaceStore((s) => s.togglePane1);
 
   return (
     <div
@@ -49,34 +46,6 @@ export default function WorkspaceHeader() {
           flexShrink: 0,
         }}
       >
-        {/* §dogfood-round8: Pane 1 折りたたみ toggle (ハンバーガー) */}
-        <button
-          type="button"
-          onClick={togglePane1}
-          aria-label={pane1Collapsed ? 'Pane 1 を展開' : 'Pane 1 を折りたたむ'}
-          aria-pressed={pane1Collapsed}
-          title={pane1Collapsed ? 'Pane 1 を展開' : 'Pane 1 を折りたたむ'}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 28,
-            height: 24,
-            padding: 0,
-            border: 'none',
-            background: 'transparent',
-            color: 'var(--text-muted)',
-            cursor: 'pointer',
-            borderRadius: 'var(--radius-sm, 6px)',
-            flexShrink: 0,
-            transition: 'background 0.12s, color 0.12s',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(56,189,248,0.18)'; e.currentTarget.style.color = 'rgb(14,165,233)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
-        >
-          {pane1Collapsed ? <PanelLeftOpen size={16} aria-hidden /> : <PanelLeftClose size={16} aria-hidden />}
-        </button>
-
         {/* Logo */}
         <div
           style={{

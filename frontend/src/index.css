@@ -5046,6 +5046,43 @@ button.ds-chip:active {
   }
 }
 
+/* §dogfood-round9: Pane 1 rail mode (collapsed=4%) 用 tile hover / active 演出.
+   ロゴ取得失敗時の monogram ticker 表示も兼ねる円形 button. */
+.ws-pane1-rail-tile {
+  transition: background var(--motion-fast, 120ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+              color var(--motion-fast, 120ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+}
+.ws-pane1-rail-tile:hover {
+  background: rgba(56, 189, 248, 0.18);
+  color: rgb(14, 165, 233);
+}
+[data-theme="dark"] .ws-pane1-rail-tile:hover {
+  background: rgba(56, 189, 248, 0.24);
+  color: rgb(56, 189, 248);
+}
+.ws-pane1-rail-tile.is-holding {
+  /* 保有銘柄: 1px 細い gold ring (常時) */
+  box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.55);
+}
+.ws-pane1-rail-tile.is-holding:hover {
+  background: rgba(212, 175, 55, 0.18);
+  color: rgb(180, 142, 30);
+  box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.85);
+}
+[data-theme="dark"] .ws-pane1-rail-tile.is-holding:hover {
+  background: rgba(212, 175, 55, 0.22);
+  color: rgb(244, 205, 93);
+}
+.ws-pane1-rail-tile.is-active {
+  background: rgba(56, 189, 248, 0.14);
+  color: rgb(14, 165, 233);
+  box-shadow: inset 0 0 0 1.5px rgba(56, 189, 248, 0.65);
+}
+[data-theme="dark"] .ws-pane1-rail-tile.is-active {
+  background: rgba(56, 189, 248, 0.20);
+  color: rgb(56, 189, 248);
+}
+
 /* §dogfood-pane1 round 6: Pane 1 nav の hover / active 演出を SSOT 化.
    - dark mode で見える hover 背景 (cyan tint)
    - active accent は ::before 擬似要素「|」で Pane 2 row と同じ視覚言語

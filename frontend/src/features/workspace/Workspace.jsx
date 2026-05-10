@@ -336,11 +336,141 @@ function WatchlistRow({ it, active, onClick, indent = false }) {
   );
 }
 
-/** v62 WS-5 Step 1 + v63 §12-B-2/4/5: Pane 1 nav.
+/** §dogfood-round9: Pane 1 が collapsed (= 4% width) のときの rail variant.
+ *  サブエージェントレビュー案 1 採用: アイコンのみ縦並び、ラベルは tooltip。
+ *  watchlist セクションは銘柄 logo の縦 stack に簡略化、保有/観察 区切りなし。
+ *  縦書き崩壊を完全に防ぐため、文字列要素は DOM から除外 (display:none ではなく conditional render). */
+function Pane1NavRail({ items = [] }) {
+  const activeTab = useWorkspaceStore((s) => s.activeTab);
+  const setActiveTab = useWorkspaceStore((s) => s.setActiveTab);
+  const activeTicker = useWorkspaceStore((s) => s.activeTicker);
+  const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
+
+  // watchlist は最大 8 件表示、超過は「+N」chip
+  const MAX_VISIBLE = 8;
+  const visibleItems = items.slice(0, MAX_VISIBLE);
+  const overflow = Math.max(0, items.length - MAX_VISIBLE);
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        height: '100%',
+        padding: '8px 4px',
+        gap: 4,
+        overflowY: 'auto',
+        overflowX: 'hidden',
+      }}
+    >
+      {/* nav tabs (アイコンのみ) */}
+      {TABS.map((t) => {
+        const active = activeTab === t.key;
+        return (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setActiveTab(t.key)}
+            aria-pressed={active}
+            aria-label={t.label}
+            title={t.label}
+            className={`ws-pane1-tab${active ? ' is-active' : ''}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 36,
+              height: 36,
+              padding: 0,
+              border: 'none',
+              background: 'transparent',
+              color: active ? 'rgb(14,165,233)' : 'var(--text-secondary)',
+              cursor: 'pointer',
+              borderRadius: 'var(--radius-sm, 8px)',
+              position: 'relative',
+              flexShrink: 0,
+            }}
+          >
+            <t.Icon size={16} strokeWidth={active ? 1.75 : 1.5} aria-hidden />
+          </button>
+        );
+      })}
+
+      {/* divider */}
+      {items.length > 0 && (
+        <div
+          aria-hidden
+          style={{
+            width: 24,
+            height: 1,
+            background: 'var(--border)',
+            margin: '8px 0',
+            flexShrink: 0,
+          }}
+        />
+      )}
+
+      {/* watchlist: 銘柄 logo の縦 stack */}
+      {visibleItems.map((it) => {
+        const active = activeTicker === it.ticker;
+        return (
+          <button
+            key={it.ticker}
+            type="button"
+            onClick={() => setActiveTicker(it.ticker)}
+            aria-pressed={active}
+            aria-label={it.ticker}
+            title={`${it.ticker}${it.companyName ? ` — ${it.companyName}` : ''}`}
+            className={`ws-pane1-rail-tile${active ? ' is-active' : ''}${it.isHolding ? ' is-holding' : ''}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 32,
+              height: 32,
+              padding: 0,
+              border: 'none',
+              background: 'transparent',
+              cursor: 'pointer',
+              borderRadius: '50%',
+              position: 'relative',
+              flexShrink: 0,
+              fontSize: 10,
+              fontWeight: 700,
+              color: 'var(--text-secondary)',
+            }}
+          >
+            {/* 簡易: ticker 先頭 2 文字 monogram (logo 取得失敗 fallback と同じ) */}
+            {it.ticker.slice(0, 2)}
+          </button>
+        );
+      })}
+      {overflow > 0 && (
+        <div
+          aria-label={`他 ${overflow} 件`}
+          title={`他 ${overflow} 件`}
+          style={{
+            fontSize: 10,
+            fontWeight: 600,
+            color: 'var(--text-muted)',
+            padding: '2px 6px',
+            borderRadius: 'var(--radius-pill, 9999px)',
+            background: 'rgba(0,0,0,0.04)',
+            flexShrink: 0,
+          }}
+        >
+          +{overflow}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** v62 WS-5 Step 1 + v63 §12-B-2/4/5: Pane 1 nav (full mode).
  * - ナビゲーション (collapsible)
  * - ウォッチリスト (collapsible) → 保有 / 観察 の 2 サブセクション (各 collapsible)
- * - 世界市場 (= 旧 MACRO 詳細、Pane1MacroSection で実装)
- * 上から自然な flow で並べる (§12-B-2)。
+ * collapsed (4% width) のときは Pane1NavRail に切替 (Workspace.jsx で分岐)
  */
 function Pane1Nav({ items = [] }) {
   const activeTab = useWorkspaceStore((s) => s.activeTab);
@@ -548,6 +678,8 @@ export default function Workspace({
   // §12-A-1: 指数 tab のとき Pane 2 / Pane 3 の中身を IndicesView に切替
   const activeTab = useWorkspaceStore((s) => s.activeTab);
   const isIndices = activeTab === 'indices';
+  // §dogfood-round9: Pane 1 collapsed のとき rail variant (アイコンのみ) に切替
+  const pane1Collapsed = useWorkspaceStore((s) => s.pane1Collapsed);
   const headerHeight = headerCollapsed ? 32 : 56;
 
   // App.jsx が currentTicker を持っている場合、初回 mount で URL or store に伝搬
@@ -564,7 +696,7 @@ export default function Workspace({
       <WorkspaceShell
         header={<WorkspaceHeader />}
         headerHeight={headerHeight}
-        pane1={<Pane1Nav items={items} />}
+        pane1={pane1Collapsed ? <Pane1NavRail items={items} /> : <Pane1Nav items={items} />}
         pane2={
           isIndices ? (
             <IndicesList />
