@@ -20,10 +20,10 @@ import { JudgmentList } from '../judgment/components/list/index.js';
 import { JudgmentDetail } from '../judgment/components/detail/index.js';
 
 const TABS = [
-  { key: 'home', label: 'ホーム' },
-  { key: 'judgment', label: '判定' },
-  { key: 'report', label: '決算' },
-  { key: 'チャート', label: 'チャート' },
+  { key: 'home', label: 'ホーム', icon: '🏠' },
+  { key: 'judgment', label: '判定', icon: '⚖️' },
+  { key: 'report', label: '決算', icon: '📅' },
+  { key: 'チャート', label: 'チャート', icon: '📈' },
 ];
 
 /** v62 WS-4: Pane 2 上部の表示メタ切替 (改善希望④ 3 種) */
@@ -84,12 +84,20 @@ function Pane2MetaToggle() {
   );
 }
 
-/** Pane 1 nav (WS-5 で実装、現状ダミー tab toggle のみ) */
-function Pane1DummyNav() {
+/** v62 WS-5 Step 1: Pane 1 nav 本実装.
+ * - 上段: 4 tabs (workspaceStore.activeTab に同期、URL ?tab=X 反映)
+ * - 中段: Watchlist mini (activeTicker と双方向 sync、click で Pane 3 に詳細表示)
+ * - 下段 (Step 2 で追加予定): MACRO 詳細 collapsible 22 指標 + DnD②
+ */
+function Pane1Nav({ items = [] }) {
   const activeTab = useWorkspaceStore((s) => s.activeTab);
   const setActiveTab = useWorkspaceStore((s) => s.setActiveTab);
+  const activeTicker = useWorkspaceStore((s) => s.activeTicker);
+  const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: 8 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: 8 }}>
+      {/* ── Tabs (4 項目) ────────────────────────────────────────── */}
       <div
         style={{
           fontSize: 10,
@@ -97,46 +105,151 @@ function Pane1DummyNav() {
           color: 'var(--text-muted)',
           textTransform: 'uppercase',
           letterSpacing: '0.08em',
-          marginBottom: 4,
-          padding: '0 6px',
+          padding: '4px 6px',
         }}
       >
-        Pane 1 nav (WS-5 で本実装)
+        ナビゲーション
       </div>
-      {TABS.map((t) => {
-        const active = activeTab === t.key;
-        return (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setActiveTab(t.key)}
-            aria-pressed={active}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {TABS.map((t) => {
+          const active = activeTab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setActiveTab(t.key)}
+              aria-pressed={active}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '6px 10px',
+                fontSize: 13,
+                fontWeight: active ? 600 : 400,
+                borderRadius: 'var(--radius-sm, 8px)',
+                border: '1px solid transparent',
+                background: active ? 'rgba(56,189,248,0.10)' : 'transparent',
+                color: active ? 'rgb(14,165,233)' : 'var(--text-secondary)',
+                borderLeft: active ? '2px solid rgb(56,189,248)' : '2px solid transparent',
+                cursor: 'pointer',
+                textAlign: 'left',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                if (!active) e.currentTarget.style.background = 'rgba(0,0,0,0.04)';
+              }}
+              onMouseLeave={(e) => {
+                if (!active) e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              <span aria-hidden style={{ fontSize: 14 }}>{t.icon}</span>
+              <span>{t.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── Watchlist mini (clickable、activeTicker 双方向 sync) ─ */}
+      <div
+        style={{
+          marginTop: 12,
+          fontSize: 10,
+          fontWeight: 600,
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+          padding: '4px 6px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <span>ウォッチリスト</span>
+        <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
+          {items.length}
+        </span>
+      </div>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1,
+          flex: '1 1 auto',
+          minHeight: 0,
+          overflowY: 'auto',
+        }}
+      >
+        {items.length === 0 ? (
+          <div
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              padding: '6px 10px',
-              fontSize: 13,
-              fontWeight: active ? 600 : 400,
-              borderRadius: 'var(--radius-sm, 8px)',
-              border: '1px solid transparent',
-              background: active ? 'rgba(56,189,248,0.10)' : 'transparent',
-              color: active ? 'rgb(14,165,233)' : 'var(--text-secondary)',
-              borderLeft: active ? '2px solid rgb(56,189,248)' : '2px solid transparent',
-              cursor: 'pointer',
-              textAlign: 'left',
-              transition: 'background 0.15s',
-            }}
-            onMouseEnter={(e) => {
-              if (!active) e.currentTarget.style.background = 'rgba(0,0,0,0.04)';
-            }}
-            onMouseLeave={(e) => {
-              if (!active) e.currentTarget.style.background = 'transparent';
+              padding: '8px 10px',
+              fontSize: 11,
+              color: 'var(--text-muted)',
             }}
           >
-            {t.label}
-          </button>
-        );
-      })}
+            (空) 銘柄を分析して ☆ で追加
+          </div>
+        ) : (
+          items.map((it) => {
+            const active = activeTicker === it.ticker;
+            const pct = it.changePct;
+            const trendColor =
+              pct == null
+                ? 'var(--text-muted)'
+                : pct > 0
+                  ? 'var(--color-gain)'
+                  : pct < 0
+                    ? 'var(--color-loss)'
+                    : 'var(--text-muted)';
+            return (
+              <button
+                key={it.ticker}
+                type="button"
+                onClick={() => setActiveTicker(it.ticker)}
+                aria-pressed={active}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 6,
+                  padding: '4px 10px',
+                  fontSize: 12,
+                  fontWeight: active ? 600 : 400,
+                  borderRadius: 'var(--radius-sm, 8px)',
+                  background: active ? 'rgba(56,189,248,0.10)' : 'transparent',
+                  color: active ? 'rgb(14,165,233)' : 'var(--text-primary)',
+                  borderLeft: active ? '2px solid rgb(56,189,248)' : '2px solid transparent',
+                  border: '1px solid transparent',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'background 0.12s',
+                }}
+                onMouseEnter={(e) => {
+                  if (!active) e.currentTarget.style.background = 'rgba(0,0,0,0.04)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!active) e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {it.ticker}
+                </span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 500,
+                    color: trendColor,
+                    fontVariantNumeric: 'tabular-nums',
+                    flexShrink: 0,
+                  }}
+                >
+                  {pct == null ? '—' : `${pct > 0 ? '+' : ''}${(pct * 100).toFixed(1)}%`}
+                </span>
+              </button>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
@@ -209,7 +322,7 @@ export default function Workspace({
       <WorkspaceShell
         header={<WorkspaceHeader />}
         headerHeight={headerHeight}
-        pane1={<Pane1DummyNav />}
+        pane1={<Pane1Nav items={items} />}
         pane2={
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <Pane2MetaToggle />
