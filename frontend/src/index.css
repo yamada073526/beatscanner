@@ -5125,32 +5125,37 @@ button.ds-chip:active {
   background: linear-gradient(to bottom, rgba(120,200,220,0) 0%, rgba(120,200,220,0.95) 50%, rgba(120,200,220,0) 100%);
 }
 
-/* §dogfood-pane2 round 8: 優先順位 = ロゴ > ticker > 価格 > 表示 > sparkline.
-   sparkline 常時非表示。表示 (meta) と 価格 を window.innerWidth ベースで
-   メディアクエリで非表示化 (Pane 2 は 25-30% 幅 = ~360-560px 想定なので
-   親 viewport 幅で十分判別できる)。これで container query 不発の問題を回避. */
-.ws-judgment-row .ws-row-sparkline { display: none; }
+/* §dogfood-pane2 round 9: 優先順位 = ロゴ > ticker > 価格 > 表示 > sparkline.
+   round 8 まで price/meta wrapper のインライン display が CSS の display:none を
+   specificity で常時上書きしていた (= hide ルールが機能せず ticker と物理 overlap)。
+   wrapper のインライン display を撤去し、ここで class に default を集約。
+   container query で Pane 2 幅に応じて優先順位順に hide. */
+.ws-row-sparkline {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.ws-row-meta {
+  display: inline-flex;
+  align-items: center;
+}
+.ws-row-price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  min-width: 60px;
+}
 
-/* viewport <= 1280px の判定 = pane 2 (~25%) は ~320px 以下 → meta hide */
-@media (max-width: 1280px) {
+/* 優先順位順 hide (低い順): sparkline → meta → price.
+   閾値は Pane 2 が手動 resize されたときの実効幅 (= .ds-judgment-list inline-size). */
+@container ws-judgment-list (max-width: 280px) {
+  .ws-judgment-row .ws-row-sparkline { display: none; }
+}
+@container ws-judgment-list (max-width: 360px) {
   .ws-judgment-row .ws-row-meta { display: none; }
 }
-/* viewport <= 1024px → meta + price 両方 hide */
-@media (max-width: 1024px) {
-  .ws-judgment-row .ws-row-price { display: none; }
-}
-
-/* container query も併存させ、Pane 2 を手動で広げたときに meta/price を再表示 */
-@container ws-judgment-list (min-width: 380px) {
-  .ws-judgment-row .ws-row-meta { display: inline-flex; }
-}
-@container ws-judgment-list (min-width: 300px) {
-  .ws-judgment-row .ws-row-price { display: flex; }
-}
-@container ws-judgment-list (max-width: 380px) {
-  .ws-judgment-row .ws-row-meta { display: none; }
-}
-@container ws-judgment-list (max-width: 300px) {
+@container ws-judgment-list (max-width: 260px) {
   .ws-judgment-row .ws-row-price { display: none; }
 }
 .ws-judgment-row:last-child { border-bottom: none; }

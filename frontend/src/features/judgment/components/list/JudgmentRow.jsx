@@ -161,6 +161,11 @@ export default function JudgmentRow({ item, selected, onClick }) {
               lineHeight: 1.05,
               letterSpacing: '-0.01em',
               color: 'var(--text-primary)',
+              // §dogfood-round9: col 1 が squeeze されたとき ticker が col 3 へ overflow しないよう保険
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              minWidth: 0,
             }}
           >
             {ticker}
@@ -187,17 +192,9 @@ export default function JudgmentRow({ item, selected, onClick }) {
         <RowSparkline ticker={ticker} period={sparklinePeriod} />
       </span>
 
-      {/* Col 3: $price (大) + change% (小) — 改善希望「現在株価の下に前日比 +X.X%」 */}
-      <div
-        className="ws-row-price"
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'flex-end',
-          gap: 1,
-          minWidth: 60,
-        }}
-      >
+      {/* Col 3: $price (大) + change% (小)
+          §dogfood-round9: display 系は CSS class に集約 (インラインだと container query が specificity 負けする) */}
+      <div className="ws-row-price">
         <span
           style={{
             fontSize: 13,
@@ -223,8 +220,8 @@ export default function JudgmentRow({ item, selected, onClick }) {
       </div>
 
       {/* Col 4: meta (5条件 dot / 1日% / 決算まで)
-          §dogfood-pane2: ws-row-meta class で狭幅時に container query で非表示 */}
-      <span className="ws-row-meta" style={{ display: 'inline-flex', alignItems: 'center' }}>
+          §dogfood-round9: display 系は CSS class (.ws-row-meta) に集約 */}
+      <span className="ws-row-meta">
         {metaCell}
       </span>
 
