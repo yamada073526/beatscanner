@@ -14,7 +14,7 @@
  *   - SVG 1-path polyline (パフォーマンス、外部ライブラリなし)
  *   - Pane 2 watchlist は通常 5-20 ticker 想定 → IntersectionObserver lazy fetch は不要
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { fetchPriceHistory } from '../../../../api.js';
 
 // ticker:period → { promise, prices } の module-level cache
@@ -72,15 +72,32 @@ export function useRowSparkline(ticker, period = '1y') {
   return prices;
 }
 
+/** v62 WS-Phase2: 期間 → 直近営業日数 (handover §15-3 推奨計算).
+ *  backend は常に 1Y (250 営業日) 返すため frontend で slice する設計. */
+const PERIOD_DAYS = {
+  '1w': 5,
+  '1m': 21,
+  '6m': 126,
+  '1y': 252,
+};
+
 /**
  * @param {object} props
  * @param {string} props.ticker
- * @param {string} [props.period='1y']
+ * @param {string} [props.period='1y']  - '1w' | '1m' | '6m' | '1y'
  * @param {number} [props.width=60]
  * @param {number} [props.height=16]
  */
 export default function RowSparkline({ ticker, period = '1y', width = 60, height = 16 }) {
-  const prices = useRowSparkline(ticker, period);
+  // backend は period 無視で 1Y 返すため、常に '1y' で fetch + frontend で slice
+  const fullPrices = useRowSparkline(ticker, '1y');
+
+  // 末尾から period 分だけ slice (= 直近 N 営業日)
+  const prices = useMemo(() => {
+    if (!Array.isArray(fullPrices) || fullPrices.length === 0) return [];
+    const days = PERIOD_DAYS[period] ?? PERIOD_DAYS['1y'];
+    return days >= fullPrices.length ? fullPrices : fullPrices.slice(-days);
+  }, [fullPrices, period]);
 
   if (!Array.isArray(prices) || prices.length < 2) {
     return (

@@ -34,31 +34,36 @@ const META_OPTIONS = [
   { key: 'earnings', label: '決算まで', hint: '次の決算発表まで' },
 ];
 
-function Pane2MetaToggle() {
-  const pane2Meta = useWorkspaceStore((s) => s.pane2Meta);
-  const setPane2Meta = useWorkspaceStore((s) => s.setPane2Meta);
+/** v62 WS-Phase2: 改善希望③ sparkline 期間切替 (frontend slice) */
+const SPARKLINE_PERIOD_OPTIONS = [
+  { key: '1w', label: '1W' },
+  { key: '1m', label: '1M' },
+  { key: '6m', label: '6M' },
+  { key: '1y', label: '1Y' },
+];
+
+function ChipGroup({ ariaLabel, prefix, options, value, onChange }) {
   return (
     <div
       role="group"
-      aria-label="リスト右端の表示内容を切替"
+      aria-label={ariaLabel}
       style={{
         display: 'flex',
         alignItems: 'center',
         gap: 4,
-        padding: '6px 10px',
-        borderBottom: '1px solid var(--border)',
         fontSize: 11,
         color: 'var(--text-muted)',
+        flexWrap: 'wrap',
       }}
     >
-      <span style={{ marginRight: 4 }}>表示:</span>
-      {META_OPTIONS.map((opt) => {
-        const active = pane2Meta === opt.key;
+      {prefix && <span style={{ marginRight: 4 }}>{prefix}</span>}
+      {options.map((opt) => {
+        const active = value === opt.key;
         return (
           <button
             key={opt.key}
             type="button"
-            onClick={() => setPane2Meta(opt.key)}
+            onClick={() => onChange(opt.key)}
             aria-pressed={active}
             title={opt.hint}
             style={{
@@ -81,6 +86,40 @@ function Pane2MetaToggle() {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function Pane2MetaToggle() {
+  const pane2Meta = useWorkspaceStore((s) => s.pane2Meta);
+  const setPane2Meta = useWorkspaceStore((s) => s.setPane2Meta);
+  const sparklinePeriod = useWorkspaceStore((s) => s.sparklinePeriod);
+  const setSparklinePeriod = useWorkspaceStore((s) => s.setSparklinePeriod);
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+        padding: '6px 10px',
+        borderBottom: '1px solid var(--border)',
+      }}
+    >
+      <ChipGroup
+        ariaLabel="リスト右端の表示内容を切替"
+        prefix="表示:"
+        options={META_OPTIONS}
+        value={pane2Meta}
+        onChange={setPane2Meta}
+      />
+      <ChipGroup
+        ariaLabel="sparkline の期間を切替"
+        prefix="期間:"
+        options={SPARKLINE_PERIOD_OPTIONS}
+        value={sparklinePeriod}
+        onChange={setSparklinePeriod}
+      />
     </div>
   );
 }

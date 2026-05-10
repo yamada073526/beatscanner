@@ -30,6 +30,7 @@ export default function JudgmentRow({ item, selected, onClick }) {
   while (conditions.length < 5) conditions.push(false);
 
   const pane2Meta = useWorkspaceStore((s) => s.pane2Meta);
+  const sparklinePeriod = useWorkspaceStore((s) => s.sparklinePeriod);
 
   const trendColor =
     changePct == null
@@ -135,8 +136,8 @@ export default function JudgmentRow({ item, selected, onClick }) {
         </div>
       </div>
 
-      {/* Col 2: 1Y sparkline (改善希望⑤、競合に無い差別化) */}
-      <RowSparkline ticker={ticker} period="1y" />
+      {/* Col 2: sparkline (改善希望⑤、競合に無い差別化) — 期間は workspace store */}
+      <RowSparkline ticker={ticker} period={sparklinePeriod} />
 
       {/* Col 3: $price (大) + change% (小) — 改善希望「現在株価の下に前日比 +X.X%」 */}
       <div
