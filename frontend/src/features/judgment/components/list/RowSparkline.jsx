@@ -73,8 +73,10 @@ export function useRowSparkline(ticker, period = '1y') {
 }
 
 /** v62 WS-Phase2: 期間 → 直近営業日数 (handover §15-3 推奨計算).
- *  backend は常に 1Y (250 営業日) 返すため frontend で slice する設計. */
+ *  backend は常に 1Y (250 営業日) 返すため frontend で slice する設計.
+ *  §dogfood-round11: '1d' を追加 (= 末尾 2 日で簡易表示、視覚的にはほぼ点) */
 const PERIOD_DAYS = {
+  '1d': 2,
   '1w': 5,
   '1m': 21,
   '6m': 126,

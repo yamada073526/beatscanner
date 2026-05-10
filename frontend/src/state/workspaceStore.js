@@ -38,7 +38,7 @@ export const useWorkspaceStore = create(
       macroExpanded: false, // default 折り畳み (5 原則 #1: 読み手に負担をかけない)
       macroOrder: [], // ユーザー DnD 並び替え結果 (空なら API 順を使用)
       // v62 WS-Phase2: sparkline 期間切替 (改善希望③) — frontend slice (handover §15-3)
-      sparklinePeriod: '1y', // '1w' | '1m' | '6m' | '1y' (1d は trade hour データ無く除外)
+      sparklinePeriod: '1y', // §dogfood-round11: '1d' | '1w' | '1m' | '6m' | '1y' (1d は live change_pct を直読)
       // v62 WS-Phase2: Pane 4 inspector 表示切替 (default false、3 ペインで dogfood)
       pane4Expanded: false,
       // v63 §12-B-4: Pane 1 各セクション折り畳み (default 全 open)

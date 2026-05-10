@@ -25,8 +25,9 @@ import RowSparkline, { useRowSparkline } from '../judgment/components/list/RowSp
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 
 // RowSparkline と同じ slice 長 (frontend slice で backend 1Y データから期間を切り出す)
-const PERIOD_DAYS = { '1w': 5, '1m': 21, '6m': 126, '1y': 252 };
-const PERIOD_LABEL = { '1w': '1W', '1m': '1M', '6m': '6M', '1y': '1Y' };
+// §dogfood-round11: '1d' を追加 (live change_pct を直読するので slice 不要だが完全性のため)
+const PERIOD_DAYS = { '1d': 2, '1w': 5, '1m': 21, '6m': 126, '1y': 252 };
+const PERIOD_LABEL = { '1d': '1D', '1w': '1W', '1m': '1M', '6m': '6M', '1y': '1Y' };
 
 // Tier 1 銘柄 (順序固定、handover §15-1 と整合)
 // データの type/symbol は backend `_INDICES_SOURCE` の定義と整合
@@ -53,10 +54,12 @@ function formatPrice(item) {
 }
 
 function IndicatorCellCompact({ item, sparklinePeriod, onSelect }) {
-  // §12-A-9: 期間 chip 変更で % も期間 % に切替.
-  // 1d % は backend の change_pct (前日比)。それ以外は frontend slice で計算。
+  // §12-A-9 + §dogfood-round11:
+  //   '1d' → backend live change_pct (前日比)
+  //   '1w'/'1m'/'6m'/'1y' → frontend slice で計算
   const fullPrices = useRowSparkline(item.symbol, '1y');
   const periodPct = useMemo(() => {
+    if (sparklinePeriod === '1d') return null; // '1d' は live を使う
     if (!Array.isArray(fullPrices) || fullPrices.length < 2) return null;
     const days = PERIOD_DAYS[sparklinePeriod] ?? PERIOD_DAYS['1y'];
     const sliced = days >= fullPrices.length ? fullPrices : fullPrices.slice(-days);
@@ -64,7 +67,7 @@ function IndicatorCellCompact({ item, sparklinePeriod, onSelect }) {
     return ((sliced[sliced.length - 1] - sliced[0]) / sliced[0]) * 100;
   }, [fullPrices, sparklinePeriod]);
 
-  // periodPct が取得できればそれを表示、まだなら item.change_pct (前日比) を fallback
+  // 1d または periodPct 未取得なら item.change_pct (live 前日比) を使う
   const displayPct = periodPct != null ? periodPct : (item.change_pct ?? null);
   const isPeriod = periodPct != null;
   const up = (displayPct ?? 0) >= 0;

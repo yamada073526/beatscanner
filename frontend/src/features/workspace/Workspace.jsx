@@ -49,13 +49,18 @@ const META_OPTIONS = [
   { key: 'tag', label: 'タグ', hint: 'ユーザー設定タグ (色 + 名前)' },
 ];
 
-/** v62 WS-Phase2: 改善希望③ sparkline 期間切替 (frontend slice) */
+/** v62 WS-Phase2: 改善希望③ sparkline 期間切替 (frontend slice)
+ *  §dogfood-round11: '1d' を追加 (= 全画面で前日比 / 期間別 % を一括切替) */
 const SPARKLINE_PERIOD_OPTIONS = [
+  { key: '1d', label: '1D' },
   { key: '1w', label: '1W' },
   { key: '1m', label: '1M' },
   { key: '6m', label: '6M' },
   { key: '1y', label: '1Y' },
 ];
+
+// IndicesView などから再利用するため export
+export { SPARKLINE_PERIOD_OPTIONS };
 
 function ChipGroup({ ariaLabel, prefix, options, value, onChange }) {
   return (

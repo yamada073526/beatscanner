@@ -19,6 +19,10 @@ import NewsPanel from '../../components/NewsPanel.jsx';
 import { fetchMarketIndices } from '../../api.js';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { useRowSparkline } from '../judgment/components/list/RowSparkline.jsx';
+import { SPARKLINE_PERIOD_OPTIONS } from './Workspace.jsx';
+
+// §dogfood-round11: IndicesRow / Header 共通の期間 → 営業日数マッピング
+const PERIOD_DAYS = { '1d': 2, '1w': 5, '1m': 21, '6m': 126, '1y': 252 };
 
 // MarketStripCompact と同じ Tier 1 8 指標 (順序固定)
 const TIER1 = [
@@ -76,8 +80,17 @@ function GroupHeader({ children }) {
   );
 }
 
-function IndicesRow({ item, label, sym, active, onClick }) {
-  const pct = item?.change_pct;
+function IndicesRow({ item, label, sym, active, onClick, period = '1d' }) {
+  // §dogfood-round11: 1D は live change_pct、それ以外は frontend slice で算出
+  const fullPrices = useRowSparkline(sym, '1y');
+  const pct = useMemo(() => {
+    if (period === '1d') return item?.change_pct ?? null;
+    if (!Array.isArray(fullPrices) || fullPrices.length < 2) return null;
+    const days = PERIOD_DAYS[period] ?? PERIOD_DAYS['1y'];
+    const sliced = days >= fullPrices.length ? fullPrices : fullPrices.slice(-days);
+    if (sliced.length < 2) return null;
+    return ((sliced[sliced.length - 1] - sliced[0]) / sliced[0]) * 100;
+  }, [period, fullPrices, item]);
   const up = pct != null && pct >= 0;
   const trendColor =
     pct == null
@@ -129,10 +142,60 @@ function IndicesRow({ item, label, sym, active, onClick }) {
   );
 }
 
+/** §dogfood-round11: 期間 chip group toolbar (1D/1W/1M/6M/1Y).
+ *  sparklinePeriod store を Header と共有、画面全体で期間統一. */
+function PeriodChipBar() {
+  const sparklinePeriod = useWorkspaceStore((s) => s.sparklinePeriod);
+  const setSparklinePeriod = useWorkspaceStore((s) => s.setSparklinePeriod);
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '8px 12px',
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--bg-card)',
+      }}
+    >
+      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>期間:</span>
+      <div role="group" aria-label="期間切替" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        {SPARKLINE_PERIOD_OPTIONS.map((opt) => {
+          const active = sparklinePeriod === opt.key;
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => setSparklinePeriod(opt.key)}
+              aria-pressed={active}
+              className={`ds-chip${active ? ' is-active' : ''}`}
+              style={{
+                padding: '2px 10px',
+                fontSize: 11,
+                fontWeight: active ? 600 : 400,
+                borderRadius: 'var(--radius-pill, 9999px)',
+                border: active
+                  ? '1px solid rgba(56,189,248,0.70)'
+                  : '1px solid var(--border)',
+                background: active ? 'rgba(56,189,248,0.12)' : 'transparent',
+                color: active ? 'rgb(14,165,233)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+              }}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /** Pane 2: Tier 1 (主要指数) + Tier 2 (世界市場) の 2 group リスト. */
 export function IndicesList() {
   const activeIndexSymbol = useWorkspaceStore((s) => s.activeIndexSymbol);
   const setActiveIndexSymbol = useWorkspaceStore((s) => s.setActiveIndexSymbol);
+  const sparklinePeriod = useWorkspaceStore((s) => s.sparklinePeriod);
   const [data, setData] = useState([]);
 
   useEffect(() => {
@@ -162,6 +225,7 @@ export function IndicesList() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <PeriodChipBar />
       <div style={{ flex: 1, overflowY: 'auto' }}>
         <GroupHeader>主要指数</GroupHeader>
         {TIER1.map((t) => (
@@ -172,6 +236,7 @@ export function IndicesList() {
             sym={t.sym}
             active={activeIndexSymbol === t.sym}
             onClick={setActiveIndexSymbol}
+            period={sparklinePeriod}
           />
         ))}
         {tier2.length > 0 && (
@@ -185,6 +250,7 @@ export function IndicesList() {
                 sym={it.symbol}
                 active={activeIndexSymbol === it.symbol}
                 onClick={setActiveIndexSymbol}
+                period={sparklinePeriod}
               />
             ))}
           </>
@@ -194,9 +260,11 @@ export function IndicesList() {
   );
 }
 
-/** 期間別変化率テーブル (1W/1M/3M/6M/1Y、frontend slice). */
+/** 期間別変化率テーブル (1W/1M/3M/6M/1Y、frontend slice).
+ *  §dogfood-round11: 選択中の sparklinePeriod に該当する列を薄くハイライト. */
 function PeriodTable({ ticker }) {
   const fullPrices = useRowSparkline(ticker, '1y');
+  const sparklinePeriod = useWorkspaceStore((s) => s.sparklinePeriod);
 
   const rows = useMemo(() => {
     if (!Array.isArray(fullPrices) || fullPrices.length < 2) {
@@ -231,13 +299,15 @@ function PeriodTable({ ticker }) {
             : up
               ? 'var(--color-gain)'
               : 'var(--color-loss)';
+        const isSelected = r.key === sparklinePeriod;
         return (
           <div
             key={r.key}
             style={{
               padding: '12px 8px',
-              background: 'var(--bg-card)',
+              background: isSelected ? 'rgba(56,189,248,0.08)' : 'var(--bg-card)',
               textAlign: 'center',
+              boxShadow: isSelected ? 'inset 0 0 0 1px rgba(56,189,248,0.45)' : 'none',
             }}
           >
             <div
