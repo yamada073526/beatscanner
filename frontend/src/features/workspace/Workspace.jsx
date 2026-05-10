@@ -18,6 +18,7 @@ import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { JudgmentProvider, useJudgment } from '../judgment/state/JudgmentContext.jsx';
 import { JudgmentList } from '../judgment/components/list/index.js';
 import { JudgmentDetail } from '../judgment/components/detail/index.js';
+import Pane1MacroSection from './Pane1MacroSection.jsx';
 
 const TABS = [
   { key: 'home', label: 'ホーム', icon: '🏠' },
@@ -250,6 +251,9 @@ function Pane1Nav({ items = [] }) {
           })
         )}
       </div>
+
+      {/* ── MACRO 詳細 collapsible (改善希望②: DnD 並び替え対応) ── */}
+      <Pane1MacroSection />
     </div>
   );
 }

@@ -34,12 +34,17 @@ export const useWorkspaceStore = create(
       headerCollapsed: false,
       pane1Collapsed: false,
       pane2Meta: 'condition', // default: ファンダメンタル5条件 dot (独自プロトコル focus)
+      // v62 WS-5 Step 2: MACRO 詳細 collapse + 並び替え (改善希望②)
+      macroExpanded: false, // default 折り畳み (5 原則 #1: 読み手に負担をかけない)
+      macroOrder: [], // ユーザー DnD 並び替え結果 (空なら API 順を使用)
       activeTab: 'home',
       activeTicker: null,
 
       toggleHeader: () => set((s) => ({ headerCollapsed: !s.headerCollapsed })),
       togglePane1: () => set((s) => ({ pane1Collapsed: !s.pane1Collapsed })),
       setPane2Meta: (m) => set(() => ({ pane2Meta: m })),
+      toggleMacro: () => set((s) => ({ macroExpanded: !s.macroExpanded })),
+      setMacroOrder: (order) => set(() => ({ macroOrder: order })),
       setActiveTab: (t) => set(() => ({ activeTab: t })),
       setActiveTicker: (s) => set(() => ({ activeTicker: s })),
     }),
@@ -50,6 +55,8 @@ export const useWorkspaceStore = create(
         headerCollapsed: state.headerCollapsed,
         pane1Collapsed: state.pane1Collapsed,
         pane2Meta: state.pane2Meta,
+        macroExpanded: state.macroExpanded,
+        macroOrder: state.macroOrder,
       }),
       version: 1,
     }
