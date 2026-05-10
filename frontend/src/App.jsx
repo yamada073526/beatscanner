@@ -645,15 +645,38 @@ export default function App() {
 
   if (useWorkspaceLayout) {
     return (
-      <Suspense
-        fallback={
-          <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-            Workspace を読み込み中...
-          </div>
-        }
-      >
-        <Workspace />
-      </Suspense>
+      <>
+        <Suspense
+          fallback={
+            <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+              Workspace を読み込み中...
+            </div>
+          }
+        >
+          <Workspace />
+        </Suspense>
+        {/* v62 WS-3 fix: workspace mode でも Cmd+K palette を render する.
+            旧 SPA path 内のみだと Cmd+K listener はあっても palette が DOM に存在しない */}
+        <CmdPalette
+          open={cmdPalette.open}
+          close={cmdPalette.close}
+          items={[
+            { id: 'tab:home', group: 'action', label: 'ホームへ', hint: 'G H',
+              action: () => withViewTransition(() => setActiveTab('home')) },
+            { id: 'tab:judgment', group: 'action', label: '判定タブへ', hint: 'G J',
+              action: () => withViewTransition(() => setActiveTab('judgment')) },
+            { id: 'tab:chart', group: 'action', label: 'チャートタブへ', hint: 'G C',
+              action: () => withViewTransition(() => setActiveTab('チャート')) },
+            { id: 'theme:toggle', group: 'action', label: 'ダークモード切替',
+              action: () => toggleDarkMode() },
+            // ウォッチリスト: 銘柄を選択して analyze
+            ...watchlist.map((t) => ({
+              id: `wl:${t}`, group: 'watchlist', label: `${t} を分析`, ticker: t,
+              description: 'ウォッチリスト', action: () => runAnalyze(t),
+            })),
+          ]}
+        />
+      </>
     );
   }
 

@@ -151,9 +151,16 @@ export default function Workspace() {
   // URL ↔ Zustand 同期 (Linear 流 SSOT)
   useUrlSync();
 
+  // 改善希望①: Tier 1 折りたたみで shell の header height も縮小し、下ペインを広げる
+  const headerCollapsed = useWorkspaceStore((s) => s.headerCollapsed);
+  // 32 = WorkspaceHeader 上段のみ (Logo + Cmd+K + Chevron)
+  // 56 = 上段 32 + 下段 24 (Tier 1 strip)
+  const headerHeight = headerCollapsed ? 32 : 56;
+
   return (
     <WorkspaceShell
       header={<WorkspaceHeader />}
+      headerHeight={headerHeight}
       pane1={<Pane1DummyNav />}
       pane2={<Pane2Placeholder />}
       pane3={<Pane3Placeholder />}

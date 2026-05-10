@@ -51,12 +51,13 @@ function ResizeHandle({ ariaLabel }) {
 
 /**
  * @param {object} props
- * @param {React.ReactNode} props.header        - ヘッダー (Tier 1 指標 / Cmd+K / ハンバーガー). 56px 固定高
+ * @param {React.ReactNode} props.header        - ヘッダー (Tier 1 指標 / Cmd+K / ハンバーガー)
+ * @param {number}          [props.headerHeight=56] - header の高さ. WS-3: 折りたたみ時 32, 展開時 56 を動的に渡す
  * @param {React.ReactNode} props.pane1         - Pane 1 nav (tabs + watchlist + macro)
  * @param {React.ReactNode} props.pane2         - Pane 2 list (5 条件ヒートマップ等)
  * @param {React.ReactNode} props.pane3         - Pane 3 detail (既存タブの中身を slot で受け取る)
  */
-export default function WorkspaceShell({ header, pane1, pane2, pane3 }) {
+export default function WorkspaceShell({ header, headerHeight = 56, pane1, pane2, pane3 }) {
   return (
     <div
       className="ds-workspace-shell"
@@ -69,17 +70,20 @@ export default function WorkspaceShell({ header, pane1, pane2, pane3 }) {
         overflow: 'hidden', // 各 Pane 内でのみスクロール (workspace 全体は固定)
       }}
     >
-      {/* ── Header (56px 固定) ─────────────────────────────────────── */}
+      {/* ── Header (動的高さ: 折りたたみ時 32, 展開時 56) ─────────── */}
       <header
         className="ds-ws-header"
         style={{
           flex: '0 0 auto',
-          height: 56,
-          minHeight: 56,
+          height: headerHeight,
+          minHeight: headerHeight,
           borderBottom: '1px solid var(--border)',
           background: 'var(--bg-card)',
           display: 'flex',
           alignItems: 'center',
+          // folded ↔ expanded のスムーズな遷移 (改善希望①: 下ペインを広げる)
+          transition: 'height var(--motion-base, 200ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)), min-height var(--motion-base, 200ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1))',
+          overflow: 'hidden',
         }}
       >
         {header || <div style={{ padding: '0 16px', color: 'var(--text-muted)' }}>Header placeholder</div>}
