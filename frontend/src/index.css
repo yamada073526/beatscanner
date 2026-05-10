@@ -5010,15 +5010,23 @@ body {
 
 /* §dogfood-pane2: 狭幅レスポンシブ。優先順位 (高 → 低): ロゴ > ticker > price+%>表示 > sparkline.
    sparkline → 表示 (meta) → price+% の順に hide。
-   閾値は dogfood 計測 (Pane 2 wrapper 含む実効幅) に基づき調整: 480/380/320 */
-@container ws-judgment-list (max-width: 480px) {
+   閾値は dogfood round 4 計測 (~500px でも overlap 発生) で再調整: 600/460/360 */
+@container ws-judgment-list (max-width: 600px) {
   .ws-judgment-row .ws-row-sparkline { display: none; }
 }
-@container ws-judgment-list (max-width: 380px) {
+@container ws-judgment-list (max-width: 460px) {
   .ws-judgment-row .ws-row-meta { display: none; }
 }
-@container ws-judgment-list (max-width: 320px) {
+@container ws-judgment-list (max-width: 360px) {
   .ws-judgment-row .ws-row-price { display: none; }
+}
+
+/* §dogfood-pane2: ticker text も truncate しないと col 1 が広がりすぎて
+   隣の sparkline / price と物理的に overlap する。両方を nowrap + ellipsis 化 */
+.ws-judgment-row .ws-row-ticker {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .ws-judgment-row:last-child { border-bottom: none; }
 

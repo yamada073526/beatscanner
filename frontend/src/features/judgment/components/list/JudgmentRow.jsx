@@ -155,6 +155,7 @@ export default function JudgmentRow({ item, selected, onClick }) {
         </span>
         <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
           <span
+            className="ws-row-ticker"
             style={{
               fontSize: 14,
               fontWeight: 700,
