@@ -124,6 +124,88 @@ function Pane2MetaToggle() {
   );
 }
 
+/** v62 WS-Phase2: Pane 4 inspector placeholder.
+ *  6 体並列レビューで「Pane 4 = AI chat → 11-B-22 マクロニュース連動 に変更」が確定.
+ *  現状は skeleton (default 折り畳み)、Phase 2 で 11-B-22 (マクロニュース × watchlist 連動) を実装. */
+function Pane4Placeholder() {
+  const activeTicker = useWorkspaceStore((s) => s.activeTicker);
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+        padding: '12px 14px',
+        height: '100%',
+        color: 'var(--text-secondary)',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 600,
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+          padding: '4px 0',
+        }}
+      >
+        Inspector (Phase 2)
+      </div>
+
+      <div
+        style={{
+          padding: '12px',
+          borderRadius: 'var(--radius-md, 12px)',
+          border: '1px dashed var(--border)',
+          background: 'var(--bg-subtle, rgba(0,0,0,0.03))',
+          fontSize: 12,
+          lineHeight: 1.6,
+        }}
+      >
+        <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>
+          🔮 マクロニュース × watchlist 連動
+        </div>
+        <div style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>
+          (RELEASE_TODO §11-B-22、6 体並列レビュー一致の差別化最強機能)
+        </div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+          マクロニュース → 影響セクター ETF 推定 → 保有銘柄セクターと一致する記事を優先表示。
+          Bloomberg / Reuters にも無い領域。
+        </div>
+      </div>
+
+      <div
+        style={{
+          padding: '10px 12px',
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          background: 'var(--bg-subtle, rgba(0,0,0,0.03))',
+          borderRadius: 'var(--radius-sm, 8px)',
+          lineHeight: 1.5,
+        }}
+      >
+        現在選択中: <code>{activeTicker || '(なし)'}</code>
+        <br />
+        Phase 2 ではこの銘柄の関連 AI 解析がここに出ます。
+      </div>
+
+      <div
+        style={{
+          marginTop: 'auto',
+          fontSize: 10,
+          color: 'var(--text-muted)',
+          fontStyle: 'italic',
+          textAlign: 'center',
+          padding: '8px 0',
+        }}
+      >
+        Coming soon — dogfood A 判定後に実装
+      </div>
+    </div>
+  );
+}
+
 /** v62 WS-5 Step 1: Pane 1 nav 本実装.
  * - 上段: 4 tabs (workspaceStore.activeTab に同期、URL ?tab=X 反映)
  * - 中段: Watchlist mini (activeTicker と双方向 sync、click で Pane 3 に詳細表示)
@@ -348,6 +430,7 @@ export default function Workspace({
 
   // 改善希望①: Tier 1 折りたたみで shell の header height も縮小し、下ペインを広げる
   const headerCollapsed = useWorkspaceStore((s) => s.headerCollapsed);
+  const pane4Expanded = useWorkspaceStore((s) => s.pane4Expanded);
   const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
   const headerHeight = headerCollapsed ? 32 : 56;
 
@@ -382,6 +465,8 @@ export default function Workspace({
             detailContext={detailContext}
           />
         }
+        pane4={<Pane4Placeholder />}
+        pane4Visible={pane4Expanded}
       />
     </JudgmentProvider>
   );

@@ -13,13 +13,15 @@
  *   - a11y: aria-expanded + aria-controls
  *   - 折りたたみ状態は Zustand workspaceStore で persist
  */
-import { ChevronUp, ChevronDown } from 'lucide-react';
+import { ChevronUp, ChevronDown, PanelRightOpen, PanelRightClose } from 'lucide-react';
 import MarketStripCompact from './MarketStripCompact.jsx';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 
 export default function WorkspaceHeader() {
   const headerCollapsed = useWorkspaceStore((s) => s.headerCollapsed);
   const toggleHeader = useWorkspaceStore((s) => s.toggleHeader);
+  const pane4Expanded = useWorkspaceStore((s) => s.pane4Expanded);
+  const togglePane4 = useWorkspaceStore((s) => s.togglePane4);
 
   return (
     <div
@@ -117,6 +119,43 @@ export default function WorkspaceHeader() {
 
         {/* spacer */}
         <div style={{ flex: '1 1 auto', minWidth: 0 }} />
+
+        {/* v62 WS-Phase2: Pane 4 inspector toggle (Phase 2 placeholder、default 折り畳み) */}
+        <button
+          type="button"
+          onClick={togglePane4}
+          aria-pressed={pane4Expanded}
+          aria-label={pane4Expanded ? 'インスペクタを閉じる' : 'インスペクタを開く'}
+          title={pane4Expanded ? 'Pane 4 (インスペクタ) を閉じる' : 'Pane 4 (インスペクタ) を開く ※ Phase 2 placeholder'}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 24,
+            height: 24,
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm, 8px)',
+            background: pane4Expanded ? 'rgba(56,189,248,0.10)' : 'var(--bg-card)',
+            color: pane4Expanded ? 'rgb(14,165,233)' : 'var(--text-secondary)',
+            cursor: 'pointer',
+            flexShrink: 0,
+            transition: 'background 0.15s, border-color 0.15s, color 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            if (!pane4Expanded) {
+              e.currentTarget.style.background = 'rgba(56,189,248,0.06)';
+              e.currentTarget.style.borderColor = 'rgba(56,189,248,0.30)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!pane4Expanded) {
+              e.currentTarget.style.background = 'var(--bg-card)';
+              e.currentTarget.style.borderColor = 'var(--border)';
+            }
+          }}
+        >
+          {pane4Expanded ? <PanelRightClose size={14} aria-hidden /> : <PanelRightOpen size={14} aria-hidden />}
+        </button>
 
         {/* v62 WS-5 Step 3: 段階公開. workspace BETA 中、旧 UI に切替できる導線. */}
         <a

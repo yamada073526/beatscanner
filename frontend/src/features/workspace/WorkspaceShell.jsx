@@ -25,12 +25,19 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 // react-resizable-panels の defaultSize は % 単位。1280px viewport で
 //   Pane 1: 240px ≈ 19%
 //   Pane 2: 320px ≈ 25%
-//   Pane 3: 残り 56%
+//   Pane 3: 残り 56% (4 pane 時 38%)
+//   Pane 4: 280px ≈ 18% (default collapsed)
 // minSize / maxSize で極端な縮小・拡大を防ぐ。
-const PANE_DEFAULTS = {
+const PANE_DEFAULTS_3 = {
   pane1: { defaultSize: 19, minSize: 12, maxSize: 30, collapsibleSize: 4 },
   pane2: { defaultSize: 25, minSize: 18, maxSize: 40 },
   pane3: { defaultSize: 56, minSize: 30 },
+};
+const PANE_DEFAULTS_4 = {
+  pane1: { defaultSize: 19, minSize: 12, maxSize: 28, collapsibleSize: 4 },
+  pane2: { defaultSize: 22, minSize: 16, maxSize: 35 },
+  pane3: { defaultSize: 41, minSize: 25 },
+  pane4: { defaultSize: 18, minSize: 14, maxSize: 30 },
 };
 
 function ResizeHandle({ ariaLabel }) {
@@ -56,8 +63,11 @@ function ResizeHandle({ ariaLabel }) {
  * @param {React.ReactNode} props.pane1         - Pane 1 nav (tabs + watchlist + macro)
  * @param {React.ReactNode} props.pane2         - Pane 2 list (5 条件ヒートマップ等)
  * @param {React.ReactNode} props.pane3         - Pane 3 detail (既存タブの中身を slot で受け取る)
+ * @param {React.ReactNode} [props.pane4]       - Pane 4 inspector (Phase 2 placeholder、現状 11-B-22 連動予定)
+ * @param {boolean}         [props.pane4Visible=false] - Pane 4 表示切替. default false (3 ペインで動く)
  */
-export default function WorkspaceShell({ header, headerHeight = 56, pane1, pane2, pane3 }) {
+export default function WorkspaceShell({ header, headerHeight = 56, pane1, pane2, pane3, pane4, pane4Visible = false }) {
+  const PANE_DEFAULTS = pane4Visible ? PANE_DEFAULTS_4 : PANE_DEFAULTS_3;
   return (
     <div
       className="ds-workspace-shell"
@@ -89,11 +99,13 @@ export default function WorkspaceShell({ header, headerHeight = 56, pane1, pane2
         {header || <div style={{ padding: '0 16px', color: 'var(--text-muted)' }}>Header placeholder</div>}
       </header>
 
-      {/* ── Body: 3 ペイン (1=nav / 2=list / 3=detail) ─────────────── */}
+      {/* ── Body: 3 or 4 ペイン (pane4Visible で切替) ──────────────
+       * autoSaveId は pane 数で分離 (Panel 数が変わると react-resizable-panels が
+       * stored layout を解釈できないため). 3 ペイン時 / 4 ペイン時で別 layout を保持. */}
       <div style={{ flex: '1 1 auto', minHeight: 0 }}>
         <PanelGroup
           direction="horizontal"
-          autoSaveId="bs:ws:panels:v1"
+          autoSaveId={pane4Visible ? 'bs:ws:panels:v1-4' : 'bs:ws:panels:v1-3'}
           style={{ height: '100%' }}
         >
           {/* Pane 1: nav (collapsible) */}
@@ -142,6 +154,25 @@ export default function WorkspaceShell({ header, headerHeight = 56, pane1, pane2
               {pane3 || <PanePlaceholder label="Pane 3: detail" hint="既存タブの中身が入る" />}
             </PaneContainer>
           </Panel>
+
+          {pane4Visible && (
+            <>
+              <ResizeHandle ariaLabel="Pane 3 と Pane 4 の境界をドラッグして幅を変更" />
+              {/* Pane 4: inspector (Phase 2 placeholder、11-B-22 マクロニュース連動 予定) */}
+              <Panel
+                id="pane4"
+                order={4}
+                defaultSize={PANE_DEFAULTS.pane4.defaultSize}
+                minSize={PANE_DEFAULTS.pane4.minSize}
+                maxSize={PANE_DEFAULTS.pane4.maxSize}
+                style={{ minWidth: 0, overflow: 'hidden' }}
+              >
+                <PaneContainer ariaLabel="Pane 4 インスペクタ">
+                  {pane4 || <PanePlaceholder label="Pane 4: inspector" hint="11-B-22 連動 (Phase 2)" />}
+                </PaneContainer>
+              </Panel>
+            </>
+          )}
         </PanelGroup>
       </div>
     </div>

@@ -39,6 +39,8 @@ export const useWorkspaceStore = create(
       macroOrder: [], // ユーザー DnD 並び替え結果 (空なら API 順を使用)
       // v62 WS-Phase2: sparkline 期間切替 (改善希望③) — frontend slice (handover §15-3)
       sparklinePeriod: '1y', // '1w' | '1m' | '6m' | '1y' (1d は trade hour データ無く除外)
+      // v62 WS-Phase2: Pane 4 inspector 表示切替 (default false、3 ペインで dogfood)
+      pane4Expanded: false,
       activeTab: 'home',
       activeTicker: null,
 
@@ -48,6 +50,7 @@ export const useWorkspaceStore = create(
       toggleMacro: () => set((s) => ({ macroExpanded: !s.macroExpanded })),
       setMacroOrder: (order) => set(() => ({ macroOrder: order })),
       setSparklinePeriod: (p) => set(() => ({ sparklinePeriod: p })),
+      togglePane4: () => set((s) => ({ pane4Expanded: !s.pane4Expanded })),
       setActiveTab: (t) => set(() => ({ activeTab: t })),
       setActiveTicker: (s) => set(() => ({ activeTicker: s })),
     }),
@@ -61,6 +64,7 @@ export const useWorkspaceStore = create(
         macroExpanded: state.macroExpanded,
         macroOrder: state.macroOrder,
         sparklinePeriod: state.sparklinePeriod,
+        pane4Expanded: state.pane4Expanded,
       }),
       version: 1,
     }
