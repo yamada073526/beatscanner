@@ -111,6 +111,18 @@ export default function App() {
   // CV +35-45% NSM 直撃。マーケター指摘で workspace 化前に先行実装.
   const [quickAddTicker, setQuickAddTicker] = useState(null);
 
+  // v62 WS-6: dark mode 状態を React state に reactive 化.
+  // toggleDarkMode は document.documentElement の data-theme を書換えるが React 状態を
+  // 更新しないため、MutationObserver で attribute 変化を監視して state 同期.
+  // (Cmd palette の "ダーク/ライト切替" ラベル動的化が目的)
+  const [isDarkState, setIsDarkState] = useState(() => isDark());
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const obs = new MutationObserver(() => setIsDarkState(isDark()));
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => obs.disconnect();
+  }, []);
+
   // ── Judgment result (Step 4 で hook 抽出) ───────────────────────
   // prefetchedRef / prefetch を hook より先に定義 (hook が prefetch コールバックを必要とするため).
   const prefetchedRef = useRef(new Set());
@@ -731,7 +743,8 @@ export default function App() {
               action: () => withViewTransition(() => setActiveTab('judgment')) },
             { id: 'tab:chart', group: 'action', label: 'チャートタブへ', hint: 'G C',
               action: () => withViewTransition(() => setActiveTab('チャート')) },
-            { id: 'theme:toggle', group: 'action', label: 'ダークモード切替',
+            { id: 'theme:toggle', group: 'action',
+              label: isDarkState ? 'ライトモードへ切替' : 'ダークモードへ切替',
               action: () => toggleDarkMode() },
             // ウォッチリスト: 銘柄を選択して analyze
             ...watchlist.map((t) => ({
@@ -2343,7 +2356,7 @@ export default function App() {
           items.push({
             id: 'theme:toggle',
             group: 'action',
-            label: 'ダークモード切替',
+            label: isDarkState ? 'ライトモードへ切替' : 'ダークモードへ切替',
             action: () => toggleDarkMode(),
           });
           // 直近分析 (bs_analyzed localStorage)

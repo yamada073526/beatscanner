@@ -77,6 +77,8 @@ ALLOWED-HEX: #dc2626   # --color-loss (light)
 ALLOWED-HEX: #f59e0b   # --color-warning
 ALLOWED-HEX: #34ef81   # --color-gain (dark)
 ALLOWED-HEX: #f87171   # --color-loss (dark)
+ALLOWED-HEX: #d4af37   # 保有銘柄ゴールドアクセント (ticker-row-v2 / ws-judgment-row)
+ALLOWED-HEX: #f4cd5d   # 保有銘柄ゴールドアクセント highlight (gradient mid)
 
 # Surface tokens (light/dark)
 ALLOWED-HEX: #f8fafc   # bg-primary (light)

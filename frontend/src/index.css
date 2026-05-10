@@ -4973,3 +4973,142 @@ body {
 .notif-log-trigger { color: var(--text-muted); margin-left: auto; }
 [data-theme="dark"] .notif-log-channel { color: rgb(56, 189, 248); }
 
+/* ─────────────────────────────────────────────────────────────────
+ * v62 WS-6 dogfood feedback: ws-judgment-row
+ * Pane 2 の銘柄行を旧 SPA の ticker-row-v2 風 (磨き込み済) で render.
+ * 5 体並列レビュー金融エージェント案 + ユーザー希望 (logo / hover gold/cyan
+ * accent / drag handle on hover / price+change vertical) を反映.
+ * ────────────────────────────────────────────────────────────────── */
+.ws-judgment-row {
+  position: relative;
+  display: grid;
+  /* handle / [logo+ticker+name] / sparkline / [price+change] / meta / chevron */
+  grid-template-columns: 18px minmax(0, 1fr) auto auto auto auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px 10px 6px;
+  min-height: 64px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle, rgba(148,163,184,0.18));
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background var(--motion-base, 200ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    transform var(--motion-base, 200ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    box-shadow var(--motion-base, 200ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+}
+.ws-judgment-row:last-child { border-bottom: none; }
+
+/* hover: 非保有 = シアン accent / 保有 = ゴールド accent */
+.ws-judgment-row:hover {
+  background: rgba(56, 189, 248, 0.08);
+  transform: translateY(-1px);
+  box-shadow:
+    inset 3px 0 0 rgba(56, 189, 248, 0.45),
+    0 4px 14px -2px rgba(15, 23, 42, 0.18);
+  z-index: 1;
+}
+[data-theme="dark"] .ws-judgment-row:hover {
+  background: rgba(56, 189, 248, 0.10);
+  box-shadow:
+    inset 3px 0 0 rgba(56, 189, 248, 0.55),
+    0 6px 18px -4px rgba(0, 0, 0, 0.55);
+}
+.ws-judgment-row.is-holding:hover {
+  background: rgba(212, 175, 55, 0.08);
+  box-shadow: 0 4px 14px -2px rgba(15, 23, 42, 0.18);
+}
+[data-theme="dark"] .ws-judgment-row.is-holding:hover {
+  background: rgba(212, 175, 55, 0.10);
+  box-shadow: 0 6px 18px -4px rgba(0, 0, 0, 0.55);
+}
+
+/* selected (active ticker) — 微背景 */
+.ws-judgment-row.is-active {
+  background: rgba(56, 189, 248, 0.05);
+}
+.ws-judgment-row.is-active.is-holding {
+  background: rgba(212, 175, 55, 0.05);
+}
+
+/* 保有銘柄: 左端 2px ゴールドアクセントバー (常時表示、ホテルロビー感) */
+.ws-judgment-row.is-holding::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, #d4af37 0%, #f4cd5d 50%, #d4af37 100%);
+  border-radius: 0 1px 1px 0;
+  pointer-events: none;
+}
+
+/* 非保有銘柄: 左端 2px シアンアクセントバー (hover 時のみ) */
+.ws-judgment-row:not(.is-holding)::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, rgba(56,189,248,0) 0%, rgba(56,189,248,0.7) 50%, rgba(56,189,248,0) 100%);
+  border-radius: 0 1px 1px 0;
+  opacity: 0;
+  transition: opacity var(--motion-base, 200ms) ease;
+  pointer-events: none;
+}
+.ws-judgment-row:not(.is-holding):hover::before { opacity: 1; }
+
+/* drag handle: hover で出現 (DnD 並び替え可能を示唆) */
+.ws-judgment-row .ws-row-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity var(--motion-fast, 120ms) ease;
+}
+.ws-judgment-row:hover .ws-row-handle { opacity: 0.55; }
+
+/* logo wrap: 32px 円形 + 極薄シアンリング (Apple Wallet 風) */
+.ws-judgment-row .ws-row-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--bg-card);
+  box-shadow:
+    0 0 0 1px rgba(75,158,255,0.12),
+    0 2px 6px rgba(0,0,0,0.20);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+[data-theme="light"] .ws-judgment-row .ws-row-logo {
+  box-shadow:
+    0 0 0 1px rgba(75,158,255,0.18),
+    0 2px 6px rgba(0,0,0,0.06);
+}
+
+/* sparkline hover で微発光 (ウォッチリスト固有 magic moment) */
+.ws-judgment-row:hover svg polyline {
+  filter: drop-shadow(0 0 4px rgba(56, 189, 248, 0.45));
+}
+.ws-judgment-row.is-holding:hover svg polyline {
+  filter: drop-shadow(0 0 4px rgba(212, 175, 55, 0.45));
+}
+
+/* reduce motion 配慮 */
+@media (prefers-reduced-motion: reduce) {
+  .ws-judgment-row,
+  .ws-judgment-row:hover {
+    transition: none;
+    transform: none;
+  }
+}

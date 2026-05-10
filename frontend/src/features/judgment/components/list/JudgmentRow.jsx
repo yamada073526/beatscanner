@@ -1,34 +1,34 @@
 import React from 'react';
+import { GripVertical } from 'lucide-react';
 import ConditionDots from '../../primitives/ConditionDots.jsx';
 import RowSparkline from './RowSparkline.jsx';
+import CompanyLogo from '../../../../components/CompanyLogo.jsx';
 import { useWorkspaceStore } from '../../../../state/workspaceStore.js';
 
 /**
- * 64px row.
- * design_system.md §B-2 (Stat fw700/lh1.05) を ticker / price に適用.
+ * JudgmentRow — Pane 2 / Pane 1 watchlist で使用する銘柄行.
  *
- * v62 WS-4:
- *   - RowSparkline (1Y、60×16) 常時表示 (改善希望⑤、競合に無い差別化)
- *   - 右側メタは workspaceStore.pane2Meta で切替 (改善希望④)
- *     - 'condition' (default): ファンダメンタル5条件 dot
- *     - 'change1d': 1日騰落率 large
- *     - 'earnings': 次決算まで N 日 (現状 placeholder、WS-Phase2 で API 統合)
+ * v62 WS-6 dogfood feedback (2026-05-10):
+ *   - 企業ロゴを ticker 横に配置 (CompanyLogo: TV → FMP → 頭文字円 fallback)
+ *   - 現在株価の下に前日比 +X.X% 縦並び併記
+ *   - 旧 SPA ticker-row-v2 風の hover 演出を取り入れ:
+ *     - 若干浮上 (translateY -1px)
+ *     - 背景 tint: 保有 = ゴールド (#d4af37) / 非保有 = シアン
+ *     - 左端 accent bar: 保有 = 常時ゴールド / 非保有 = hover 時のみシアン
+ *     - drag handle (GripVertical) が hover で出現 (DnD 並び替え可能を示唆)
+ *     - sparkline hover で微発光 (磨き込み済 magic moment)
+ *   - 全 hover 演出は CSS class `.ws-judgment-row` で SSOT 化 (index.css)
  *
  * @param {object} props
- * @param {object} props.item - { ticker, companyName?, price?, changePct?, judgment?, isHolding, isWatchlist, nextEarningsAt? }
+ * @param {object} props.item - { ticker, companyName?, price?, changePct?, judgment?, isHolding, isWatchlist, nextEarningsDays? }
  * @param {boolean} props.selected
  * @param {(ticker: string) => void} props.onClick
  */
 export default function JudgmentRow({ item, selected, onClick }) {
-  const { ticker, price, changePct, judgment } = item;
+  const { ticker, companyName, price, changePct, judgment, isHolding } = item;
   const conditions = (judgment?.conditions || []).map((c) => Boolean(c?.passed));
-  // 5 条件未満なら不足分を false で埋める (UI 上は 5 ドット固定)
   while (conditions.length < 5) conditions.push(false);
-  const passCount = judgment?.passedCount ?? conditions.filter(Boolean).length;
-  const total = judgment?.totalCount ?? 5;
 
-  // workspaceStore の pane2Meta は workspace mode 専用. SPA mode では default 'condition'.
-  // (workspaceStore は persist で初期化されるため、SPA mode でも safe にアクセス可能)
   const pane2Meta = useWorkspaceStore((s) => s.pane2Meta);
 
   const trendColor =
@@ -40,10 +40,9 @@ export default function JudgmentRow({ item, selected, onClick }) {
           ? 'var(--color-loss)'
           : 'var(--text-muted)';
 
-  // メタ表示: pane2Meta に応じて右側 column を切替
+  // メタ表示 (右端 column): pane2Meta に応じて切替
   let metaCell;
   if (pane2Meta === 'change1d') {
-    // 1D 騰落率を大きく強調
     metaCell = (
       <span
         style={{
@@ -52,14 +51,13 @@ export default function JudgmentRow({ item, selected, onClick }) {
           color: trendColor,
           minWidth: 56,
           textAlign: 'right',
-          tabularNums: 1,
+          fontVariantNumeric: 'tabular-nums',
         }}
       >
         {changePct == null ? '—' : `${changePct > 0 ? '+' : ''}${(changePct * 100).toFixed(2)}%`}
       </span>
     );
   } else if (pane2Meta === 'earnings') {
-    // 次決算まで N 日 (現状 placeholder、WS-Phase2 で API 統合)
     const daysUntil = item.nextEarningsDays;
     metaCell = (
       <span
@@ -82,101 +80,111 @@ export default function JudgmentRow({ item, selected, onClick }) {
     metaCell = <ConditionDots conditions={conditions} size={7} gap={3} />;
   }
 
+  const className = [
+    'ws-judgment-row',
+    isHolding ? 'is-holding' : '',
+    selected ? 'is-active' : '',
+  ].filter(Boolean).join(' ');
+
   return (
     <button
       type="button"
       onClick={() => onClick(ticker)}
       aria-current={selected ? 'true' : undefined}
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) auto',
-        alignItems: 'center',
-        gap: 12,
-        width: '100%',
-        height: 64,
-        padding: '0 14px',
-        textAlign: 'left',
-        background: selected ? 'var(--bg-hover)' : 'transparent',
-        border: 'none',
-        borderBottom: '1px solid var(--border)',
-        cursor: 'pointer',
-        transition: 'background var(--motion-fast, 120ms) var(--ease-out-expo)',
-      }}
+      className={className}
     >
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 14,
-            fontWeight: 700,
-            lineHeight: 1.05,
-            letterSpacing: '-0.01em',
-            color: 'var(--text-primary)',
-            display: 'flex',
-            alignItems: 'baseline',
-            gap: 6,
-          }}
-        >
-          <span>{ticker}</span>
-          {price != null && (
-            <span
-              style={{
-                fontSize: 12,
-                fontWeight: 500,
-                color: 'var(--text-secondary)',
-              }}
-            >
-              ${Number(price).toFixed(2)}
-            </span>
-          )}
-          {changePct != null && (
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 500,
-                color: trendColor,
-              }}
-            >
-              {changePct > 0 ? '+' : ''}
-              {(changePct * 100).toFixed(1)}%
-            </span>
-          )}
-        </div>
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 500,
-            lineHeight: 1.4,
-            color: 'var(--text-muted)',
-            marginTop: 2,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {item.companyName || (judgment ? `${passCount}/${total} 条件合致` : '未分析')}
+      {/* Col 0: drag handle (hover で出現、DnD 示唆。実 DnD は WS-Phase2) */}
+      <span
+        className="ws-row-handle"
+        aria-hidden
+        title="ドラッグで並び替え"
+      >
+        <GripVertical size={12} />
+      </span>
+
+      {/* Col 1: Logo + Ticker + Co.Name */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <span className="ws-row-logo">
+          <CompanyLogo ticker={ticker} size={28} />
+        </span>
+        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <span
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              lineHeight: 1.05,
+              letterSpacing: '-0.01em',
+              color: 'var(--text-primary)',
+            }}
+          >
+            {ticker}
+          </span>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 500,
+              lineHeight: 1.3,
+              color: 'var(--text-muted)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {companyName || (judgment ? `${conditions.filter(Boolean).length}/5 条件合致` : '未分析')}
+          </span>
         </div>
       </div>
+
+      {/* Col 2: 1Y sparkline (改善希望⑤、競合に無い差別化) */}
+      <RowSparkline ticker={ticker} period="1y" />
+
+      {/* Col 3: $price (大) + change% (小) — 改善希望「現在株価の下に前日比 +X.X%」 */}
       <div
         style={{
           display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          flexShrink: 0,
+          flexDirection: 'column',
+          alignItems: 'flex-end',
+          gap: 1,
+          minWidth: 60,
         }}
       >
-        {/* v62 WS-4 改善希望⑤: 1Y sparkline 常時表示 (差別化、競合に無い) */}
-        <RowSparkline ticker={ticker} period="1y" />
-        {metaCell}
         <span
-          aria-hidden
           style={{
-            fontSize: 14,
-            color: selected ? 'rgb(56, 189, 248)' : 'var(--text-muted)',
+            fontSize: 13,
+            fontWeight: 700,
+            color: 'var(--text-primary)',
+            lineHeight: 1.05,
+            fontVariantNumeric: 'tabular-nums',
           }}
         >
-          ›
+          {price == null ? '—' : `$${Number(price).toFixed(2)}`}
+        </span>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 500,
+            color: trendColor,
+            lineHeight: 1.05,
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {changePct == null ? '—' : `${changePct > 0 ? '+' : ''}${(changePct * 100).toFixed(1)}%`}
         </span>
       </div>
+
+      {/* Col 4: meta (5条件 dot / 1日% / 決算まで) */}
+      {metaCell}
+
+      {/* Col 5: chevron */}
+      <span
+        aria-hidden
+        style={{
+          fontSize: 14,
+          color: selected ? 'rgb(56, 189, 248)' : 'var(--text-muted)',
+        }}
+      >
+        ›
+      </span>
     </button>
   );
 }
