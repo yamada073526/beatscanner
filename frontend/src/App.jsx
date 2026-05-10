@@ -636,9 +636,11 @@ export default function App() {
     window.open(intent, '_blank', 'noopener,noreferrer');
   }
 
-  // v62 WS-2/3.5: `?layout=workspace` URL flag で画面全体 workspace shell に切替.
-  // 旧 SPA は flag 無し時 default として完全保全 (段階公開).
-  // WS-3.5: mobile (< 768px) では 3 ペインが破綻するため強制的に SPA に fallback
+  // v62 WS-2/3.5/5: URL `?layout` flag で workspace ↔ SPA を切替.
+  //   - `?layout=workspace`  → workspace mode
+  //   - `?layout=classic`    → SPA mode (明示的、cutover 後に default 反転する想定)
+  //   - flag 無し            → SPA mode (現状の default)
+  // WS-3.5: mobile (< 768px) では 3 ペインが破綻するため強制 SPA fallback
   // (マーケター指摘「mobile は /classic 強制、launch は PC 推奨機能と訴求」).
   const urlWantsWorkspace = (() => {
     if (typeof window === 'undefined') return false;

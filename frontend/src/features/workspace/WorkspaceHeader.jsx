@@ -118,6 +118,33 @@ export default function WorkspaceHeader() {
         {/* spacer */}
         <div style={{ flex: '1 1 auto', minWidth: 0 }} />
 
+        {/* v62 WS-5 Step 3: 段階公開. workspace BETA 中、旧 UI に切替できる導線. */}
+        <a
+          href="?layout=classic"
+          style={{
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            textDecoration: 'none',
+            padding: '3px 8px',
+            borderRadius: 'var(--radius-pill, 9999px)',
+            border: '1px solid transparent',
+            transition: 'background 0.15s, border-color 0.15s, color 0.15s',
+            flexShrink: 0,
+          }}
+          aria-label="旧 UI (Classic SPA) に戻す"
+          title="旧 UI (Classic SPA) に戻す"
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(0,0,0,0.04)';
+            e.currentTarget.style.color = 'var(--text-secondary)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.color = 'var(--text-muted)';
+          }}
+        >
+          旧 UI
+        </a>
+
         {/* Tier 1 折りたたみ toggle (改善希望①) */}
         <button
           type="button"
