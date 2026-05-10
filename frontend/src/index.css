@@ -5160,6 +5160,13 @@ button.ds-chip:active {
   line-height: 1.7;
   color: var(--text-secondary);
 }
+.ws-pane4-article-body h1 {
+  margin: 20px 0 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: rgb(14, 165, 233);
+  letter-spacing: 0.01em;
+}
 .ws-pane4-article-body h2 {
   margin: 18px 0 8px;
   font-size: 14px;
@@ -5172,6 +5179,17 @@ button.ds-chip:active {
   font-size: 13px;
   font-weight: 700;
   color: var(--text-primary);
+}
+/* §round16: backend が h4-h6 / リスト項目の見出し風 / "**bold paragraph**" を出すケースに対応 */
+.ws-pane4-article-body h4,
+.ws-pane4-article-body h5,
+.ws-pane4-article-body h6 {
+  margin: 12px 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: none;
+  letter-spacing: 0;
 }
 .ws-pane4-article-body p {
   margin: 8px 0;

@@ -11,8 +11,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import { TrendingUp, Globe, BarChart3, ExternalLink, X, Languages } from 'lucide-react';
-import { fetchMacroNews, translateTexts, translateTextsStream } from '../../api.js';
+import { TrendingUp, Globe, BarChart3, Bookmark, Flame, ExternalLink, X, Languages } from 'lucide-react';
+import { fetchMacroNews, fetchNews, translateTexts, translateTextsStream } from '../../api.js';
 
 // ── タグ system (旧 TodaysBriefSection と統一) ──────────────────
 const CATEGORY_ICON = {
@@ -73,6 +73,34 @@ function matchTickersWithAlias(text, items, predicate) {
     if (matched) hits.push(ticker);
   }
   return hits;
+}
+
+// ── attention dots (cluster_size 視覚化、旧 TodaysBriefSection から) ─
+function AttentionDots({ clusterSize }) {
+  if (!clusterSize || clusterSize < 3) return null;
+  return (
+    <span
+      role="status"
+      title={`${clusterSize} 媒体が同じトピックを報道中`}
+      aria-label={`注目度: ${clusterSize} 媒体`}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 3,
+        padding: '1px 5px',
+        borderRadius: 'var(--radius-pill, 9999px)',
+        background: 'rgba(245,158,11,0.10)',
+        color: 'rgb(245,158,11)',
+        border: '1px solid rgba(245,158,11,0.20)',
+        fontSize: 9,
+        fontWeight: 700,
+        letterSpacing: '0.02em',
+      }}
+    >
+      <Flame size={9} strokeWidth={2.25} aria-hidden />
+      <span style={{ fontVariantNumeric: 'tabular-nums' }}>{clusterSize}</span>
+    </span>
+  );
 }
 
 // ── 記事行 ──────────────────────────────────────────────────────────
@@ -207,6 +235,7 @@ function NewsItem({ item, displayTitle, onSelect, isOpen, index }) {
               観察 {item._watchHits.join(' ')}
             </span>
           )}
+          <AttentionDots clusterSize={item.cluster_size} />
           {item.published && (
             <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
               {fmtRelative(item.published)}
@@ -511,25 +540,35 @@ function ReadingMode({ item, onClose, jpEnabled }) {
             )}
           </div>
         )}
-        {jpEnabled && enContent && !jaContent && !jaLoading && (
-          <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-            翻訳を準備中...
-          </div>
-        )}
+        {/* §round16: 「翻訳を準備中」テキスト撤去 (▌ カーソルで進捗表示済) */}
       </div>
     </div>
   );
 }
 
+// ── フィルタ chip / sort toggle ───────────────────────────────────
+const FILTER_CHIPS = [
+  { key: 'all',     label: '全部',    Icon: null },
+  { key: 'mine',    label: '登録銘柄', Icon: Bookmark },
+  { key: 'マクロ',     label: 'マクロ',   Icon: TrendingUp },
+  { key: '地政学',    label: '地政学',  Icon: Globe },
+  { key: '市場全体',  label: '市場全体', Icon: BarChart3 },
+];
+
 // ── メイン: Pane 4 Inspector ─────────────────────────────────────────
 export default function Pane4Inspector({ items = [] }) {
   const [news, setNews] = useState([]);
+  const [tickerNews, setTickerNews] = useState([]); // 個別銘柄ニュース
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [jpEnabled, setJpEnabled] = useState(true);
   const [titleTranslations, setTitleTranslations] = useState({});
+  // §round16: タグフィルタ + 話題/新着 toggle
+  const [filter, setFilter] = useState('all'); // 'all' | 'mine' | 'マクロ' | '地政学' | '市場全体'
+  const [sortMode, setSortMode] = useState('attention'); // 'attention' | 'recent'
   const translateSeqRef = useRef(0);
 
+  // ── マクロニュース取得 ───────────────────────────
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -551,24 +590,143 @@ export default function Pane4Inspector({ items = [] }) {
     [items]
   );
 
-  const sorted = useMemo(() => {
-    const annotated = news.map((n) => {
+  // ── §round16 個別銘柄ニュース集約 (Promise.allSettled、5 分 polling) ──
+  const myTickers = useMemo(
+    () => [...holdingItems, ...watchItems].map((it) => it.ticker).filter(Boolean).slice(0, 30),
+    [holdingItems, watchItems]
+  );
+  const myTickersKey = myTickers.join(',');
+
+  useEffect(() => {
+    if (!myTickersKey) { setTickerNews([]); return; }
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const arr = myTickersKey.split(',');
+        const results = await Promise.allSettled(
+          arr.map((t) => fetchNews(t, 5).then((news) => ({ ticker: t, news })))
+        );
+        if (cancelled) return;
+        const flat = [];
+        for (const r of results) {
+          if (r.status !== 'fulfilled') continue;
+          const { ticker, news } = r.value;
+          if (!Array.isArray(news)) continue;
+          for (const n of news) {
+            // 個別 endpoint の shape を macro と揃える
+            flat.push({
+              ...n,
+              _kind: 'ticker',
+              _sourceTicker: ticker,
+              tags: ['登録銘柄'],
+              category: '登録銘柄',
+              importance: 'MED',
+            });
+          }
+        }
+        setTickerNews(flat);
+      } catch { /* noop */ }
+    };
+    load();
+    const t = setInterval(load, 5 * 60_000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [myTickersKey]);
+
+  // ── annotate + filter + sort ──────────────────────
+  const annotated = useMemo(() => {
+    // マクロ: title + summary を holdingItems / watchItems と alias マッチ
+    const macroAnnotated = news.map((n) => {
       const text = `${n.title || ''} ${n.summary || ''}`;
       return {
         ...n,
+        _kind: 'macro',
         _holdingHits: matchTickersWithAlias(text, holdingItems, () => true),
         _watchHits: matchTickersWithAlias(text, watchItems, () => true),
       };
     });
-    annotated.sort((a, b) => {
-      const grp = (x) => x._holdingHits.length > 0 ? 0 : x._watchHits.length > 0 ? 1 : 2;
-      const g = grp(a) - grp(b);
-      if (g !== 0) return g;
-      const impRank = { HIGH: 0, MED: 1 };
-      return (impRank[a.importance] ?? 2) - (impRank[b.importance] ?? 2);
+    // 個別銘柄ニュース: source ticker が holding か watchlist かで分類
+    const holdingTickerSet = new Set(holdingItems.map((it) => it.ticker));
+    const watchTickerSet = new Set(watchItems.map((it) => it.ticker));
+    const tickerAnnotated = tickerNews.map((n) => {
+      const isHolding = holdingTickerSet.has(n._sourceTicker);
+      const isWatch = !isHolding && watchTickerSet.has(n._sourceTicker);
+      return {
+        ...n,
+        _holdingHits: isHolding ? [n._sourceTicker] : [],
+        _watchHits: isWatch ? [n._sourceTicker] : [],
+      };
     });
-    return annotated;
-  }, [news, holdingItems, watchItems]);
+    // 重複除外 (URL 一致)
+    const seen = new Set();
+    const merged = [];
+    for (const n of [...macroAnnotated, ...tickerAnnotated]) {
+      const key = n.url || `${n.title}-${n.published}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(n);
+    }
+    return merged;
+  }, [news, tickerNews, holdingItems, watchItems]);
+
+  // ── score 計算 (5 体レビュー金融 + UI 反映) ──────
+  const scored = useMemo(() => {
+    return annotated.map((n) => {
+      // base 重み: 保有マッチ 3.0 / ウォッチ 1.5 / マクロ一般 0.8 / 個別ニュース ticker は対応保有/観察
+      let weight = 0.8;
+      if (n._kind === 'ticker' && n._holdingHits.length > 0) weight = 3.0;
+      else if (n._kind === 'ticker' && n._watchHits.length > 0) weight = 1.5;
+      else if (n._holdingHits.length > 0) weight = 2.0;
+      else if (n._watchHits.length > 0) weight = 1.2;
+      // importance HIGH → ×1.5
+      if (n.importance === 'HIGH') weight *= 1.5;
+      // cluster_size: 個別はないので max(1, cs || 1)
+      const cs = Number(n.cluster_size) || 1;
+      const csBoost = n._kind === 'macro' ? Math.min(cs, 8) : Math.max(cs, 2);
+      const attention = weight * csBoost;
+      const ts = n.published ? Date.parse(n.published) : 0;
+      return { ...n, _score: attention, _ts: Number.isFinite(ts) ? ts : 0 };
+    });
+  }, [annotated]);
+
+  // ── filter ────────────────────────────────────────
+  const filtered = useMemo(() => {
+    let list = scored;
+    if (filter === 'mine') {
+      list = list.filter((n) => n._holdingHits.length > 0 || n._watchHits.length > 0);
+    } else if (filter !== 'all') {
+      list = list.filter((n) => {
+        if (filter === '登録銘柄') return n._kind === 'ticker';
+        if (Array.isArray(n.tags) && n.tags.includes(filter)) return true;
+        return n.category === filter;
+      });
+    }
+    return list;
+  }, [scored, filter]);
+
+  // ── sort ──────────────────────────────────────────
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    if (sortMode === 'recent') {
+      arr.sort((a, b) => b._ts - a._ts);
+    } else {
+      // attention: score desc
+      arr.sort((a, b) => b._score - a._score);
+    }
+    // §round16 上限 cap: 個別ニュース由来は最大 8 件 (UI/UX 「重心が日替わり不安定」リスク回避)
+    if (filter === 'all' && sortMode === 'attention') {
+      const tickerCount = { count: 0 };
+      const capped = [];
+      for (const n of arr) {
+        if (n._kind === 'ticker') {
+          if (tickerCount.count >= 8) continue;
+          tickerCount.count += 1;
+        }
+        capped.push(n);
+      }
+      return capped;
+    }
+    return arr;
+  }, [filtered, sortMode, filter]);
 
   const latestPublished = useMemo(() => {
     let max = 0;
@@ -612,52 +770,107 @@ export default function Pane4Inspector({ items = [] }) {
           borderBottom: '1px solid var(--border)',
           background: 'var(--bg-card)',
           display: 'flex',
-          alignItems: 'center',
+          flexDirection: 'column',
           gap: 8,
+          position: 'sticky',
+          top: 0,
+          zIndex: 2,
         }}
       >
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 10,
-              fontWeight: 600,
-              color: 'var(--text-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-            }}
-          >
-            The Macro Lens
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                color: 'var(--text-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+              }}
+            >
+              The Macro Lens
+            </div>
+            <div style={{ marginTop: 2, fontSize: 11, color: 'var(--text-muted)' }}>
+              {latestPublished
+                ? `最終更新 ${fmtRelative(latestPublished)}`
+                : (loading ? '読込中...' : '更新情報なし')}
+            </div>
           </div>
-          <div style={{ marginTop: 2, fontSize: 11, color: 'var(--text-muted)' }}>
-            {latestPublished
-              ? `最終更新 ${fmtRelative(latestPublished)}`
-              : (loading ? '読込中...' : '更新情報なし')}
+          {/* §round16: 話題 / 新着 segmented + JP segmented を 1 行同居 */}
+          <div role="group" aria-label="並び替え" className="ws-pane4-jp-segmented">
+            <button
+              type="button"
+              onClick={() => setSortMode('attention')}
+              aria-pressed={sortMode === 'attention'}
+              className={sortMode === 'attention' ? 'is-active' : ''}
+              title="話題順 (アテンション)"
+            >
+              話題
+            </button>
+            <button
+              type="button"
+              onClick={() => setSortMode('recent')}
+              aria-pressed={sortMode === 'recent'}
+              className={sortMode === 'recent' ? 'is-active' : ''}
+              title="新着順"
+            >
+              新着
+            </button>
+          </div>
+          <div role="group" aria-label="表示言語" className="ws-pane4-jp-segmented">
+            <button
+              type="button"
+              onClick={() => setJpEnabled(false)}
+              aria-pressed={!jpEnabled}
+              className={!jpEnabled ? 'is-active' : ''}
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              onClick={() => setJpEnabled(true)}
+              aria-pressed={jpEnabled}
+              className={jpEnabled ? 'is-active' : ''}
+              title="日本語に翻訳"
+            >
+              <Languages size={11} aria-hidden style={{ marginRight: 2 }} />
+              日
+            </button>
           </div>
         </div>
-        {/* JP segmented toggle */}
-        <div
-          role="group"
-          aria-label="表示言語"
-          className="ws-pane4-jp-segmented"
-        >
-          <button
-            type="button"
-            onClick={() => setJpEnabled(false)}
-            aria-pressed={!jpEnabled}
-            className={!jpEnabled ? 'is-active' : ''}
-          >
-            EN
-          </button>
-          <button
-            type="button"
-            onClick={() => setJpEnabled(true)}
-            aria-pressed={jpEnabled}
-            className={jpEnabled ? 'is-active' : ''}
-            title="日本語に翻訳"
-          >
-            <Languages size={11} aria-hidden style={{ marginRight: 2 }} />
-            日
-          </button>
+        {/* §round16: フィルタ chip (5 個 + 件数 badge) */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {FILTER_CHIPS.map((c) => {
+            const isActive = filter === c.key;
+            const Icon = c.Icon;
+            return (
+              <button
+                key={c.key}
+                type="button"
+                onClick={() => setFilter(c.key)}
+                aria-pressed={isActive}
+                className={`ds-chip${isActive ? ' is-active' : ''}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '3px 10px',
+                  fontSize: 11,
+                  fontWeight: isActive ? 600 : 500,
+                  borderRadius: 'var(--radius-pill, 9999px)',
+                  border: isActive
+                    ? '1px solid rgba(56,189,248,0.70)'
+                    : '1px solid var(--border)',
+                  background: isActive ? 'rgba(56,189,248,0.12)' : 'transparent',
+                  color: isActive ? 'rgb(14,165,233)' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                }}
+              >
+                {Icon && <Icon size={11} strokeWidth={2} aria-hidden />}
+                <span>{c.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
