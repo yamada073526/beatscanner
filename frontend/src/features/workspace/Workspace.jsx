@@ -74,6 +74,7 @@ function ChipGroup({ ariaLabel, prefix, options, value, onChange }) {
       {prefix && <span style={{ marginRight: 4 }}>{prefix}</span>}
       {options.map((opt) => {
         const active = value === opt.key;
+        // §dogfood-round8: ds-chip class で hover 浮き上がり + click 沈み + cyan hover を共有
         return (
           <button
             key={opt.key}
@@ -81,6 +82,7 @@ function ChipGroup({ ariaLabel, prefix, options, value, onChange }) {
             onClick={() => onChange(opt.key)}
             aria-pressed={active}
             title={opt.hint}
+            className={`ds-chip${active ? ' is-active' : ''}`}
             style={{
               padding: '2px 8px',
               fontSize: 11,
@@ -89,12 +91,9 @@ function ChipGroup({ ariaLabel, prefix, options, value, onChange }) {
               border: active
                 ? '1px solid rgba(56,189,248,0.70)'
                 : '1px solid var(--border)',
-              background: active
-                ? 'rgba(56,189,248,0.12)'
-                : 'transparent',
+              background: active ? 'rgba(56,189,248,0.12)' : 'transparent',
               color: active ? 'rgb(14,165,233)' : 'var(--text-secondary)',
               cursor: 'pointer',
-              transition: 'background 0.12s, border-color 0.12s, color 0.12s',
             }}
           >
             {opt.label}

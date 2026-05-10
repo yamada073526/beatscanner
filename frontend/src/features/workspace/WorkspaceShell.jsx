@@ -20,7 +20,9 @@
  *   - sticky 検索バーは Pane 内に置かない (backdrop-filter 凍結領域)、Cmd+K に集約
  *   - Pane 境界は 1px solid border で区切る (Apple 方式)
  */
+import { useEffect, useRef } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import { useWorkspaceStore } from '../../state/workspaceStore.js';
 
 // react-resizable-panels の defaultSize は % 単位。1280px viewport で
 //   Pane 1: 240px ≈ 19%
@@ -28,13 +30,15 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 //   Pane 3: 残り 56% (4 pane 時 38%)
 //   Pane 4: 280px ≈ 18% (default collapsed)
 // minSize / maxSize で極端な縮小・拡大を防ぐ。
+// §dogfood-round8: pane1 minSize を 12→16 に引き上げ (極端に狭く dragh して
+// 縦書きになるのを防止)。collapsibleSize=4 は維持、minSize 未満は collapse 発火.
 const PANE_DEFAULTS_3 = {
-  pane1: { defaultSize: 19, minSize: 12, maxSize: 30, collapsibleSize: 4 },
+  pane1: { defaultSize: 19, minSize: 16, maxSize: 30, collapsibleSize: 4 },
   pane2: { defaultSize: 25, minSize: 18, maxSize: 40 },
   pane3: { defaultSize: 56, minSize: 30 },
 };
 const PANE_DEFAULTS_4 = {
-  pane1: { defaultSize: 19, minSize: 12, maxSize: 28, collapsibleSize: 4 },
+  pane1: { defaultSize: 19, minSize: 16, maxSize: 28, collapsibleSize: 4 },
   pane2: { defaultSize: 22, minSize: 16, maxSize: 35 },
   pane3: { defaultSize: 41, minSize: 25 },
   pane4: { defaultSize: 18, minSize: 14, maxSize: 30 },
@@ -68,6 +72,17 @@ function ResizeHandle({ ariaLabel }) {
  */
 export default function WorkspaceShell({ header, headerHeight = 56, pane1, pane2, pane3, pane4, pane4Visible = false }) {
   const PANE_DEFAULTS = pane4Visible ? PANE_DEFAULTS_4 : PANE_DEFAULTS_3;
+
+  // §dogfood-round8: store.pane1Collapsed と Panel imperative API を双方向同期
+  const pane1Ref = useRef(null);
+  const pane1Collapsed = useWorkspaceStore((s) => s.pane1Collapsed);
+  useEffect(() => {
+    const p = pane1Ref.current;
+    if (!p) return;
+    if (pane1Collapsed && !p.isCollapsed?.()) p.collapse?.();
+    else if (!pane1Collapsed && p.isCollapsed?.()) p.expand?.();
+  }, [pane1Collapsed]);
+
   return (
     <div
       className="ds-workspace-shell"
@@ -110,6 +125,7 @@ export default function WorkspaceShell({ header, headerHeight = 56, pane1, pane2
         >
           {/* Pane 1: nav (collapsible) */}
           <Panel
+            ref={pane1Ref}
             id="pane1"
             order={1}
             defaultSize={PANE_DEFAULTS.pane1.defaultSize}
@@ -117,6 +133,8 @@ export default function WorkspaceShell({ header, headerHeight = 56, pane1, pane2
             maxSize={PANE_DEFAULTS.pane1.maxSize}
             collapsible
             collapsedSize={PANE_DEFAULTS.pane1.collapsibleSize}
+            onCollapse={() => useWorkspaceStore.getState().setPane1Collapsed?.(true)}
+            onExpand={() => useWorkspaceStore.getState().setPane1Collapsed?.(false)}
             style={{ minWidth: 0, overflow: 'hidden' }}
           >
             <PaneContainer ariaLabel="Pane 1 ナビゲーション">

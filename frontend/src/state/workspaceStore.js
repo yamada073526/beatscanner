@@ -55,6 +55,7 @@ export const useWorkspaceStore = create(
 
       toggleHeader: () => set((s) => ({ headerCollapsed: !s.headerCollapsed })),
       togglePane1: () => set((s) => ({ pane1Collapsed: !s.pane1Collapsed })),
+      setPane1Collapsed: (v) => set(() => ({ pane1Collapsed: !!v })),
       setPane2Meta: (m) => set(() => ({ pane2Meta: m })),
       toggleMacro: () => set((s) => ({ macroExpanded: !s.macroExpanded })),
       setMacroOrder: (order) => set(() => ({ macroOrder: order })),
