@@ -1,12 +1,21 @@
 import React from 'react';
 import ConditionDots from '../../primitives/ConditionDots.jsx';
+import RowSparkline from './RowSparkline.jsx';
+import { useWorkspaceStore } from '../../../../state/workspaceStore.js';
 
 /**
  * 64px row.
  * design_system.md §B-2 (Stat fw700/lh1.05) を ticker / price に適用.
  *
+ * v62 WS-4:
+ *   - RowSparkline (1Y、60×16) 常時表示 (改善希望⑤、競合に無い差別化)
+ *   - 右側メタは workspaceStore.pane2Meta で切替 (改善希望④)
+ *     - 'condition' (default): ファンダメンタル5条件 dot
+ *     - 'change1d': 1日騰落率 large
+ *     - 'earnings': 次決算まで N 日 (現状 placeholder、WS-Phase2 で API 統合)
+ *
  * @param {object} props
- * @param {object} props.item - { ticker, companyName?, price?, changePct?, judgment?, isHolding, isWatchlist }
+ * @param {object} props.item - { ticker, companyName?, price?, changePct?, judgment?, isHolding, isWatchlist, nextEarningsAt? }
  * @param {boolean} props.selected
  * @param {(ticker: string) => void} props.onClick
  */
@@ -18,6 +27,10 @@ export default function JudgmentRow({ item, selected, onClick }) {
   const passCount = judgment?.passedCount ?? conditions.filter(Boolean).length;
   const total = judgment?.totalCount ?? 5;
 
+  // workspaceStore の pane2Meta は workspace mode 専用. SPA mode では default 'condition'.
+  // (workspaceStore は persist で初期化されるため、SPA mode でも safe にアクセス可能)
+  const pane2Meta = useWorkspaceStore((s) => s.pane2Meta);
+
   const trendColor =
     changePct == null
       ? 'var(--text-muted)'
@@ -26,6 +39,48 @@ export default function JudgmentRow({ item, selected, onClick }) {
         : changePct < 0
           ? 'var(--color-loss)'
           : 'var(--text-muted)';
+
+  // メタ表示: pane2Meta に応じて右側 column を切替
+  let metaCell;
+  if (pane2Meta === 'change1d') {
+    // 1D 騰落率を大きく強調
+    metaCell = (
+      <span
+        style={{
+          fontSize: 13,
+          fontWeight: 700,
+          color: trendColor,
+          minWidth: 56,
+          textAlign: 'right',
+          tabularNums: 1,
+        }}
+      >
+        {changePct == null ? '—' : `${changePct > 0 ? '+' : ''}${(changePct * 100).toFixed(2)}%`}
+      </span>
+    );
+  } else if (pane2Meta === 'earnings') {
+    // 次決算まで N 日 (現状 placeholder、WS-Phase2 で API 統合)
+    const daysUntil = item.nextEarningsDays;
+    metaCell = (
+      <span
+        style={{
+          fontSize: 12,
+          fontWeight: 600,
+          color: daysUntil != null && daysUntil <= 7 ? 'var(--color-warning)' : 'var(--text-muted)',
+          padding: '2px 8px',
+          borderRadius: 'var(--radius-pill, 9999px)',
+          background: daysUntil != null && daysUntil <= 7 ? 'rgba(245,158,11,0.10)' : 'transparent',
+          minWidth: 56,
+          textAlign: 'center',
+        }}
+      >
+        {daysUntil == null ? '—' : daysUntil === 0 ? '本日' : `あと${daysUntil}日`}
+      </span>
+    );
+  } else {
+    // default: ファンダメンタル5条件 dot
+    metaCell = <ConditionDots conditions={conditions} size={7} gap={3} />;
+  }
 
   return (
     <button
@@ -109,7 +164,9 @@ export default function JudgmentRow({ item, selected, onClick }) {
           flexShrink: 0,
         }}
       >
-        <ConditionDots conditions={conditions} size={7} gap={3} />
+        {/* v62 WS-4 改善希望⑤: 1Y sparkline 常時表示 (差別化、競合に無い) */}
+        <RowSparkline ticker={ticker} period="1y" />
+        {metaCell}
         <span
           aria-hidden
           style={{

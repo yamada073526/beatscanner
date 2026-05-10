@@ -22,7 +22,8 @@ const STORAGE_KEY = 'bs:ws:store:v1';
 /**
  * @typedef {Object} WorkspaceState
  * @property {boolean} headerCollapsed   - Tier 1 指標バーの折りたたみ状態 (改善希望①)
- * @property {boolean} pane1Collapsed    - Pane 1 nav の折りたたみ状態 (WS-4 で UI 実装、現状 placeholder)
+ * @property {boolean} pane1Collapsed    - Pane 1 nav の折りたたみ状態 (WS-5 で UI 実装、現状 placeholder)
+ * @property {string}  pane2Meta         - 'condition' | 'change1d' | 'earnings' (改善希望④ 表示メタ切替 3 種)
  * @property {string}  activeTab         - 'home' | 'judgment' | 'report' | 'チャート' (URL 同期、CLAUDE.md「内部値の混在」遵守)
  * @property {string|null} activeTicker  - 現在選択中の銘柄コード (URL 同期)
  */
@@ -32,11 +33,13 @@ export const useWorkspaceStore = create(
     (set) => ({
       headerCollapsed: false,
       pane1Collapsed: false,
+      pane2Meta: 'condition', // default: ファンダメンタル5条件 dot (独自プロトコル focus)
       activeTab: 'home',
       activeTicker: null,
 
       toggleHeader: () => set((s) => ({ headerCollapsed: !s.headerCollapsed })),
       togglePane1: () => set((s) => ({ pane1Collapsed: !s.pane1Collapsed })),
+      setPane2Meta: (m) => set(() => ({ pane2Meta: m })),
       setActiveTab: (t) => set(() => ({ activeTab: t })),
       setActiveTicker: (s) => set(() => ({ activeTicker: s })),
     }),
@@ -46,6 +49,7 @@ export const useWorkspaceStore = create(
       partialize: (state) => ({
         headerCollapsed: state.headerCollapsed,
         pane1Collapsed: state.pane1Collapsed,
+        pane2Meta: state.pane2Meta,
       }),
       version: 1,
     }

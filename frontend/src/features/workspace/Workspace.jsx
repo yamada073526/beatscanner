@@ -26,6 +26,64 @@ const TABS = [
   { key: 'チャート', label: 'チャート' },
 ];
 
+/** v62 WS-4: Pane 2 上部の表示メタ切替 (改善希望④ 3 種) */
+const META_OPTIONS = [
+  { key: 'condition', label: '5条件', hint: 'ファンダメンタル5条件 PASS/FAIL' },
+  { key: 'change1d', label: '1日騰落率', hint: '前日比 ±%' },
+  { key: 'earnings', label: '決算まで', hint: '次の決算発表まで' },
+];
+
+function Pane2MetaToggle() {
+  const pane2Meta = useWorkspaceStore((s) => s.pane2Meta);
+  const setPane2Meta = useWorkspaceStore((s) => s.setPane2Meta);
+  return (
+    <div
+      role="group"
+      aria-label="リスト右端の表示内容を切替"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '6px 10px',
+        borderBottom: '1px solid var(--border)',
+        fontSize: 11,
+        color: 'var(--text-muted)',
+      }}
+    >
+      <span style={{ marginRight: 4 }}>表示:</span>
+      {META_OPTIONS.map((opt) => {
+        const active = pane2Meta === opt.key;
+        return (
+          <button
+            key={opt.key}
+            type="button"
+            onClick={() => setPane2Meta(opt.key)}
+            aria-pressed={active}
+            title={opt.hint}
+            style={{
+              padding: '2px 8px',
+              fontSize: 11,
+              fontWeight: active ? 600 : 400,
+              borderRadius: 'var(--radius-pill, 9999px)',
+              border: active
+                ? '1px solid rgba(56,189,248,0.70)'
+                : '1px solid var(--border)',
+              background: active
+                ? 'rgba(56,189,248,0.12)'
+                : 'transparent',
+              color: active ? 'rgb(14,165,233)' : 'var(--text-secondary)',
+              cursor: 'pointer',
+              transition: 'background 0.12s, border-color 0.12s, color 0.12s',
+            }}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** Pane 1 nav (WS-5 で実装、現状ダミー tab toggle のみ) */
 function Pane1DummyNav() {
   const activeTab = useWorkspaceStore((s) => s.activeTab);
@@ -153,7 +211,12 @@ export default function Workspace({
         headerHeight={headerHeight}
         pane1={<Pane1DummyNav />}
         pane2={
-          <JudgmentList items={items} onAnalyze={onAnalyze} showFilters={true} />
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <Pane2MetaToggle />
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <JudgmentList items={items} onAnalyze={onAnalyze} showFilters={true} />
+            </div>
+          </div>
         }
         pane3={
           <JudgmentDetail
