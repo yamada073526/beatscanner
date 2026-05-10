@@ -651,6 +651,46 @@ export default function App() {
     window.open(intent, '_blank', 'noopener,noreferrer');
   }
 
+  // v62 WS-Phase2: Cmd+K palette items を SPA / workspace mode 共通化.
+  // 旧 workspace return では minimum 5-6 items のみだったが、SPA path と同じ
+  // rich items (action 4 + recent + holdings + watchlist) を共有.
+  const cmdPaletteItems = useMemo(() => {
+    const items = [];
+    items.push({ id: 'tab:home', group: 'action', label: 'ホームへ', hint: 'G H',
+      action: () => withViewTransition(() => setActiveTab('home')) });
+    items.push({ id: 'tab:judgment', group: 'action', label: '判定タブへ', hint: 'G J',
+      action: () => withViewTransition(() => setActiveTab('judgment')) });
+    items.push({ id: 'tab:chart', group: 'action', label: 'チャートタブへ', hint: 'G C',
+      action: () => withViewTransition(() => setActiveTab('チャート')) });
+    items.push({ id: 'theme:toggle', group: 'action',
+      label: isDarkState ? 'ライトモードへ切替' : 'ダークモードへ切替',
+      action: () => toggleDarkMode() });
+    // 直近分析 (bs_analyzed localStorage)
+    try {
+      const data = JSON.parse(localStorage.getItem('bs_analyzed') || '{}');
+      const sorted = Object.entries(data).sort(([, a], [, b]) => b - a).slice(0, 8);
+      for (const [t] of sorted) {
+        items.push({ id: `recent:${t}`, group: 'recent', label: `${t} を分析`,
+          ticker: t, action: () => runAnalyze(t) });
+      }
+    } catch { /* ignore */ }
+    // 保有
+    const holdingTickers = Array.isArray(holdingStore?.tickers) ? holdingStore.tickers : [];
+    for (const t of holdingTickers) {
+      items.push({ id: `holding:${t}`, group: 'holdings', label: `${t} を分析`,
+        ticker: t, description: '保有銘柄', action: () => runAnalyze(t) });
+    }
+    // ウォッチリスト
+    for (const t of watchlist) {
+      if (holdingTickers.includes(t)) continue; // 保有と重複させない
+      items.push({ id: `watch:${t}`, group: 'watchlist', label: `${t} を分析`,
+        ticker: t, description: 'ウォッチリスト', action: () => runAnalyze(t) });
+    }
+    return items;
+    // setActiveTab / runAnalyze は安定参照、watchlist / holdings / isDarkState の変化で再計算
+  }, [isDarkState, watchlist, holdingStore?.tickers, runAnalyze, setActiveTab]);
+
+
   // v62 WS-2/3.5/5: URL `?layout` flag で workspace ↔ SPA を切替.
   //   - `?layout=workspace`  → workspace mode
   //   - `?layout=classic`    → SPA mode (明示的、cutover 後に default 反転する想定)
@@ -745,27 +785,13 @@ export default function App() {
             }}
           />
         </Suspense>
-        {/* v62 WS-3 fix: workspace mode でも Cmd+K palette を render する.
-            旧 SPA path 内のみだと Cmd+K listener はあっても palette が DOM に存在しない */}
+        {/* v62 WS-3 fix + Phase2: workspace mode でも Cmd+K palette を render.
+            cmdPaletteItems useMemo 経由で SPA path と完全な同 items を共有
+            (action 4 + recent 8 + holdings + watchlist) */}
         <CmdPalette
           open={cmdPalette.open}
           close={cmdPalette.close}
-          items={[
-            { id: 'tab:home', group: 'action', label: 'ホームへ', hint: 'G H',
-              action: () => withViewTransition(() => setActiveTab('home')) },
-            { id: 'tab:judgment', group: 'action', label: '判定タブへ', hint: 'G J',
-              action: () => withViewTransition(() => setActiveTab('judgment')) },
-            { id: 'tab:chart', group: 'action', label: 'チャートタブへ', hint: 'G C',
-              action: () => withViewTransition(() => setActiveTab('チャート')) },
-            { id: 'theme:toggle', group: 'action',
-              label: isDarkState ? 'ライトモードへ切替' : 'ダークモードへ切替',
-              action: () => toggleDarkMode() },
-            // ウォッチリスト: 銘柄を選択して analyze
-            ...watchlist.map((t) => ({
-              id: `wl:${t}`, group: 'watchlist', label: `${t} を分析`, ticker: t,
-              description: 'ウォッチリスト', action: () => runAnalyze(t),
-            })),
-          ]}
+          items={cmdPaletteItems}
         />
       </>
     );
@@ -2339,82 +2365,12 @@ export default function App() {
       </main>
       {/* /main landmark (skip-link 着地点) */}
 
-      {/* ── Cmd Palette (⌘K で開閉) ── */}
+      {/* ── Cmd Palette (⌘K で開閉) ──
+          v62 WS-Phase2: items は cmdPaletteItems useMemo で SSOT 化、workspace mode と共有 */}
       <CmdPalette
         open={cmdPalette.open}
         close={cmdPalette.close}
-        items={(() => {
-          const items = [];
-          // クイックアクション
-          items.push({
-            id: 'tab:home',
-            group: 'action',
-            label: 'ホームへ',
-            hint: 'G H',
-            action: () => withViewTransition(() => setActiveTab('home')),
-          });
-          items.push({
-            id: 'tab:judgment',
-            group: 'action',
-            label: '判定タブへ',
-            hint: 'G J',
-            action: () => withViewTransition(() => setActiveTab('judgment')),
-          });
-          items.push({
-            id: 'tab:chart',
-            group: 'action',
-            label: 'チャートタブへ',
-            hint: 'G C',
-            action: () => withViewTransition(() => setActiveTab('チャート')),
-          });
-          items.push({
-            id: 'theme:toggle',
-            group: 'action',
-            label: isDarkState ? 'ライトモードへ切替' : 'ダークモードへ切替',
-            action: () => toggleDarkMode(),
-          });
-          // 直近分析 (bs_analyzed localStorage)
-          try {
-            const data = JSON.parse(localStorage.getItem('bs_analyzed') || '{}');
-            const sorted = Object.entries(data)
-              .sort(([, a], [, b]) => b - a)
-              .slice(0, 8);
-            for (const [t] of sorted) {
-              items.push({
-                id: `recent:${t}`,
-                group: 'recent',
-                label: `${t} を分析`,
-                ticker: t,
-                action: () => runAnalyze(t),
-              });
-            }
-          } catch { /* ignore */ }
-          // 保有
-          const holdingTickers = Array.isArray(holdingStore?.tickers) ? holdingStore.tickers : [];
-          for (const t of holdingTickers) {
-            items.push({
-              id: `holding:${t}`,
-              group: 'holdings',
-              label: `${t} を分析`,
-              ticker: t,
-              description: '保有銘柄',
-              action: () => runAnalyze(t),
-            });
-          }
-          // ウォッチリスト
-          for (const t of watchlist) {
-            if (holdingTickers.includes(t)) continue; // 保有と重複させない
-            items.push({
-              id: `watch:${t}`,
-              group: 'watchlist',
-              label: `${t} を分析`,
-              ticker: t,
-              description: 'ウォッチリスト',
-              action: () => runAnalyze(t),
-            });
-          }
-          return items;
-        })()}
+        items={cmdPaletteItems}
       />
     </div>
   );
