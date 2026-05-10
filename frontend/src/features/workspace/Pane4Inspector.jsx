@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import { TrendingUp, Globe, BarChart3, ExternalLink, X, Languages } from 'lucide-react';
+import { TrendingUp, Globe, BarChart3, Bookmark, ExternalLink, X, Languages } from 'lucide-react';
 import { fetchMacroNews, fetchNews, translateTexts, translateTextsStream } from '../../api.js';
 import CompanyLogo from '../../components/CompanyLogo.jsx';
 
