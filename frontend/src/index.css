@@ -5009,14 +5009,15 @@ body {
 }
 
 /* §dogfood-pane2: 狭幅レスポンシブ。優先順位 (高 → 低): ロゴ > ticker > price+%>表示 > sparkline.
-   sparkline → 表示 (meta) → price+% の順に hide。 */
-@container ws-judgment-list (max-width: 360px) {
+   sparkline → 表示 (meta) → price+% の順に hide。
+   閾値は dogfood 計測 (Pane 2 wrapper 含む実効幅) に基づき調整: 480/380/320 */
+@container ws-judgment-list (max-width: 480px) {
   .ws-judgment-row .ws-row-sparkline { display: none; }
 }
-@container ws-judgment-list (max-width: 300px) {
+@container ws-judgment-list (max-width: 380px) {
   .ws-judgment-row .ws-row-meta { display: none; }
 }
-@container ws-judgment-list (max-width: 260px) {
+@container ws-judgment-list (max-width: 320px) {
   .ws-judgment-row .ws-row-price { display: none; }
 }
 .ws-judgment-row:last-child { border-bottom: none; }
