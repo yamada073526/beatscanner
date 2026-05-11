@@ -3491,13 +3491,12 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
             yield f"data: {json.dumps({'error': f'本文の抽出に失敗しました: {str(e)}'})}\n\n"
             return
 
-        # §v66 dogfood-9 (3 体合議): 8 ラウンドの prompt engineering 積み上げが
-        # Sonnet 4.5 の「英→英 paraphrase」regression を生んだため drastic simplification.
-        # - system prompt 完全廃止 (cache 無効化、cache_creation overhead 撲滅)
-        # - user 1 行 instruction のみ
-        # - prefill "## " のみ (見出し化保証)
-        # - Sonnet 4.5 単一
-        prompt = f"次の英語記事を、自然な日本語に翻訳してください。\n\n{text}"
+        # §v66 dogfood-9 (Anthropic engineer 真犯人特定): prefill "## " が
+        # **英語 Markdown 見出しの強い prior** で paraphrase mode を誘発していた
+        # (学習データ上 "## " 直後は英語 H2 が圧倒的多数)。
+        # 対策: prefill 削除 + system を 1 文に短縮 (role priming のみ).
+        # 詳細ルールは捨て Sonnet 4.5 の素直な instruction-following に任せる.
+        prompt = text  # ラッパー無し、--- 区切り無し (ambiguity ゼロ)
 
         def _jp_ratio(s: str) -> float:
             jc = sum(
@@ -3528,7 +3527,10 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
                 prompt,
                 model='claude-sonnet-4-5',
                 max_tokens=max_tokens,
-                prefill="## ",
+                system="あなたは英日翻訳者です。入力された英文を自然な日本語に翻訳して出力します。見出しは ## マークダウンを使用してください。",
+                system_cache=False,  # 1 文 system は cache 不要、stale 化リスク回避
+                # §v66 dogfood-9 真犯人: prefill "## " が英語 markdown prior で
+                # 英→英 paraphrase を誘発していたため完全削除.
             ):
                 full_text += chunk
                 yield f"data: {json.dumps({'chunk': chunk})}\n\n"
