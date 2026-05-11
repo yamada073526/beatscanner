@@ -181,6 +181,24 @@ function getNewsColors(importance, category) {
 function pickPrimaryCategory(item) {
   return (Array.isArray(item.tags) && item.tags[0]) || item.category || null;
 }
+
+// 二重防御: backend が SDK 生エラーを取りこぼした場合に friendly 文言へ置換.
+function sanitizeArticleError(raw) {
+  const s = String(raw || '');
+  if (!s) return '記事の表示に失敗しました。元記事リンクからご確認ください。';
+  const lower = s.toLowerCase();
+  if (s.includes('credit_balance') || s.includes('invalid_request_error') || s.includes('Error code:')) {
+    return '翻訳サービスが一時的に利用できません。元記事リンクからご確認ください。';
+  }
+  if (lower.includes('rate_limit') || lower.includes('overloaded') || lower.includes('429')) {
+    return 'アクセスが集中しています。少し時間をおいて再試行してください。';
+  }
+  // 既に friendly な日本語ならそのまま使う (backend が整形済の case)
+  if (/^[　-鿿＀-￯\s]/.test(s) || s.startsWith('記事') || s.startsWith('本文') || s.startsWith('翻訳') || s.startsWith('アクセス') || s.startsWith('この記事')) {
+    return s;
+  }
+  return '記事の表示に失敗しました。元記事リンクからご確認ください。';
+}
 function fmtRelative(iso) {
   if (!iso) return '';
   try {
@@ -737,7 +755,7 @@ function ReadingMode({ item, onClose, jpEnabled }) {
         )}
         {enError && (
           <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
-            ⚠️ 記事の取得に失敗しました: {enError}
+            ⚠️ {sanitizeArticleError(enError)}
           </div>
         )}
         {!enError && (
@@ -813,6 +831,7 @@ export default function Pane4Inspector({ items = [] }) {
   const [selected, setSelected] = useState(null);
   const [jpEnabled, setJpEnabled] = useState(true);
   const [titleTranslations, setTitleTranslations] = useState({});
+  const [translateUnavailable, setTranslateUnavailable] = useState(false);
   // §round16: タグフィルタ + 話題/新着 toggle
   const [filter, setFilter] = useState('all'); // 'all' | 'mine' | 'マクロ' | '地政学' | '市場全体'
   const [sortMode, setSortMode] = useState('attention'); // 'attention' | 'recent'
@@ -1011,11 +1030,22 @@ export default function Pane4Inspector({ items = [] }) {
       try {
         const out = await translateTexts(pending.map((v) => v.title));
         if (seq !== translateSeqRef.current) return; // race guard
-        if (!Array.isArray(out)) return;
+        if (!Array.isArray(out)) {
+          setTranslateUnavailable(true);
+          return;
+        }
         const update = {};
-        pending.forEach((v, i) => { if (out[i]) update[v.url] = out[i]; });
-        setTitleTranslations((prev) => ({ ...prev, ...update }));
-      } catch { /* noop */ }
+        let any = false;
+        pending.forEach((v, i) => { if (out[i]) { update[v.url] = out[i]; any = true; } });
+        if (any) {
+          setTitleTranslations((prev) => ({ ...prev, ...update }));
+          setTranslateUnavailable(false);
+        } else {
+          setTranslateUnavailable(true);
+        }
+      } catch {
+        setTranslateUnavailable(true);
+      }
     })();
     return () => { ctrl.abort(); };
   }, [jpEnabled, visibleTitles, titleTranslations]);
@@ -1081,6 +1111,22 @@ export default function Pane4Inspector({ items = [] }) {
               新着
             </button>
           </div>
+          {translateUnavailable && jpEnabled && (
+            <span
+              title="翻訳サービスが一時的に利用できません。英文を表示しています。"
+              style={{
+                fontSize: 10,
+                color: 'var(--text-muted)',
+                padding: '2px 8px',
+                borderRadius: 999,
+                border: '1px solid var(--border)',
+                background: 'transparent',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              翻訳一時停止中
+            </span>
+          )}
           <div role="group" aria-label="表示言語" className="ws-pane4-jp-segmented">
             <button
               type="button"

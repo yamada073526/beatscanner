@@ -3336,7 +3336,16 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
                 full_text += chunk
                 yield f"data: {json.dumps({'chunk': chunk})}\n\n"
         except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            es = str(e)
+            esl = es.lower()
+            if 'credit_balance' in es or 'invalid_request_error' in es:
+                msg = '翻訳サービスが一時的に利用できません。元記事リンクからご確認ください。'
+            elif 'rate_limit' in esl or 'overloaded' in esl or '429' in esl:
+                msg = 'アクセスが集中しています。少し時間をおいて再試行してください。'
+            else:
+                msg = '記事の表示に失敗しました。元記事リンクからご確認ください。'
+            print(f'[article translate] failed: {es}')
+            yield f"data: {json.dumps({'error': msg})}\n\n"
             return
 
         # 完了後キャッシュ保存
