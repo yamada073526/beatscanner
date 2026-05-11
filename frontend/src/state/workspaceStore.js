@@ -52,6 +52,10 @@ export const useWorkspaceStore = create(
       // §dogfood-2: 指数 tab 用 symbol。activeTicker と分離することで Header click が
       // home tab の Pane 3 (= JudgmentDetail) を汚染しないようにする
       activeIndexSymbol: null,
+      // §v66 §2: Pane 3 ↔ Pane 5 統合 (6 体合議: Pane 5 統一推奨).
+      // Pane 4 の selected を hoist し、Pane 3 NewsPanel からも setActiveReadingItem で
+      // 同じ Reading Room を開けるようにする。null = 閉じている.
+      activeReadingItem: null,
 
       toggleHeader: () => set((s) => ({ headerCollapsed: !s.headerCollapsed })),
       togglePane1: () => set((s) => ({ pane1Collapsed: !s.pane1Collapsed })),
@@ -68,6 +72,13 @@ export const useWorkspaceStore = create(
       setActiveTab: (t) => set(() => ({ activeTab: t })),
       setActiveTicker: (s) => set(() => ({ activeTicker: s })),
       setActiveIndexSymbol: (s) => set(() => ({ activeIndexSymbol: s })),
+      // §v66 §2: Reading Room を任意ペインから開く。Pane 4 が折り畳まれていれば自動展開.
+      setActiveReadingItem: (item) =>
+        set((s) => ({
+          activeReadingItem: item,
+          pane4Expanded: item ? true : s.pane4Expanded,
+        })),
+      closeReadingRoom: () => set(() => ({ activeReadingItem: null })),
     }),
     {
       name: STORAGE_KEY,

@@ -5,6 +5,7 @@ import NewsArticleModal from './NewsArticleModal.jsx';
 import TranslationToggle from './TranslationToggle.jsx';
 import useArticleModal from '../hooks/useArticleModal.js';
 import useTranslation from '../hooks/useTranslation.js';
+import { useWorkspaceStore } from '../state/workspaceStore.js';
 
 const VIEW_STORAGE_KEY = 'bs_newsView.panel';
 const VIEW_AUTO_THRESHOLD = 12;  // 件数 ≤12 → grid、>12 → list デフォルト
@@ -26,7 +27,7 @@ const INITIAL_VISIBLE = 12;
 const VISIBLE_INCREMENT = 20;
 const MAX_FETCH = 50;
 
-export default function NewsPanel({ ticker }) {
+export default function NewsPanel({ ticker, useWorkspaceReader = false }) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -35,6 +36,8 @@ export default function NewsPanel({ ticker }) {
   // 共通フック: 翻訳トグル + 記事モーダル
   const { enabled: translateNews, toggle: handleToggle, displayTitles, translating } = useTranslation(news);
   const { articleModal, openArticle, closeArticle } = useArticleModal();
+  // §v66 §2: workspace mode では Pane 5 (Reading Room) を開く. それ以外は modal.
+  const setActiveReadingItem = useWorkspaceStore((s) => s.setActiveReadingItem);
 
   // 表示方式 (list / grid). データロード後、件数ベースで自動初期化 + ユーザー上書きで永続化。
   const [view, setView] = useState(() => {
@@ -147,10 +150,15 @@ export default function NewsPanel({ ticker }) {
       .finally(() => setLoading(false));
   }
 
-  // 記事クリック時: 共通 hook の openArticle に displayTitle を渡す
+  // 記事クリック時: workspace mode は Pane 5 へ、それ以外はモーダルを開く
   const handleArticleClick = (item) => {
     const idx = news.indexOf(item);
     const title = displayTitles?.[idx] || item.title;
+    if (useWorkspaceReader) {
+      // Pane 5 ReadingMode が読み取る shape を維持 (title/url/source/published/image/summary)
+      setActiveReadingItem({ ...item, _wsTitle: title });
+      return;
+    }
     openArticle(item, title);
   };
 

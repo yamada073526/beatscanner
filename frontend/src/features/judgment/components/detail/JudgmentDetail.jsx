@@ -42,6 +42,7 @@ export default function JudgmentDetail({
   detailFor,
   onAnalyze,
   detailContext = {},
+  useWorkspaceReader = false,
 }) {
   const { selectedTicker } = useJudgment();
 
@@ -246,9 +247,10 @@ export default function JudgmentDetail({
       <SectionDivider tier={3} />
 
       {/* ニュース — NewsPanel 自身が panel-card を持つので outer Card 不要 */}
+      {/* §v66 §2: workspace mode (Pane 3) では Pane 5 Reading Room を開く */}
       {selectedTicker && (
         <div id="sec-news">
-          <NewsPanel ticker={selectedTicker} />
+          <NewsPanel ticker={selectedTicker} useWorkspaceReader={useWorkspaceReader} />
         </div>
       )}
 

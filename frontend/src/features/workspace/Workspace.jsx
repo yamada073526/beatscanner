@@ -724,6 +724,7 @@ export default function Workspace({
               detailFor={detailFor}
               onAnalyze={onAnalyze}
               detailContext={detailContext}
+              useWorkspaceReader
             />
           )
         }

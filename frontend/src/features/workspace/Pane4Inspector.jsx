@@ -16,6 +16,7 @@ import { buildSignals } from './pane4/signal.js';
 import { fmtRelative } from './pane4/format.js';
 import NewsItem from './pane4/NewsItem.jsx';
 import ReadingMode from './pane4/ReadingMode.jsx';
+import { useWorkspaceStore } from '../../state/workspaceStore.js';
 
 // ── pane4/markdown.jsx + pane4/format.js に分離済 (v65 §C-3) ────────────
 
@@ -34,7 +35,10 @@ export default function Pane4Inspector({ items = [] }) {
   const [news, setNews] = useState([]);
   const [tickerNews, setTickerNews] = useState([]); // 個別銘柄ニュース
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState(null);
+  // §v66 §2: Reading Room は store で hoist 済 (Pane 3 NewsPanel からも開けるよう統合).
+  const selected = useWorkspaceStore((s) => s.activeReadingItem);
+  const setSelected = useWorkspaceStore((s) => s.setActiveReadingItem);
+  const closeReadingRoom = useWorkspaceStore((s) => s.closeReadingRoom);
   const [jpEnabled, setJpEnabled] = useState(true);
   const [titleTranslations, setTitleTranslations] = useState({});
   const [translateUnavailable, setTranslateUnavailable] = useState(false);
@@ -342,7 +346,7 @@ export default function Pane4Inspector({ items = [] }) {
             <Panel defaultSize={45} minSize={20}>
               <ReadingMode
                 item={selected}
-                onClose={() => setSelected(null)}
+                onClose={closeReadingRoom}
                 jpEnabled={jpEnabled}
               />
             </Panel>
