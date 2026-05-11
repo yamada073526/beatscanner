@@ -3491,20 +3491,13 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
             yield f"data: {json.dumps({'error': f'本文の抽出に失敗しました: {str(e)}'})}\n\n"
             return
 
-        # §v66 dogfood-8 (3 体合議: Marketer + Web app dev + Anthropic engineer):
-        # 8 ラウンド連続で Alcoa AA 記事が passthrough する問題は Haiku の本質的
-        # 限界 (短文 + 数値密度 + 整形済み風 text で 3-8% passthrough)。
-        # 解決策: Haiku 削除 → Sonnet 4.5 単一化.
-        # - retry 廃止で平均 TTFT は 10% × 5-7s = 0.5-0.7s 改善
-        # - reliability ~99.8% (社内 benchmark)
-        # - コスト 3x だが Pane 5 は 1 銘柄数記事で月数十ドル
-        prompt = (
-            "次の英文記事を上記ルールに従い日本語に翻訳してください。\n"
-            "出力には英文 sentence (主語+動詞) を一切残してはいけません。\n\n"
-            "---\n"
-            f"{text}\n"
-            "---"
-        )
+        # §v66 dogfood-9 (3 体合議): 8 ラウンドの prompt engineering 積み上げが
+        # Sonnet 4.5 の「英→英 paraphrase」regression を生んだため drastic simplification.
+        # - system prompt 完全廃止 (cache 無効化、cache_creation overhead 撲滅)
+        # - user 1 行 instruction のみ
+        # - prefill "## " のみ (見出し化保証)
+        # - Sonnet 4.5 単一
+        prompt = f"次の英語記事を、自然な日本語に翻訳してください。\n\n{text}"
 
         def _jp_ratio(s: str) -> float:
             jc = sum(
@@ -3515,7 +3508,6 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
             return jc / ac if ac > 0 else 0
 
         def _max_ascii_run(s: str) -> int:
-            """連続 ASCII alpha の最大長。40+ なら英文段落が残存している強いシグナル."""
             m = c = 0
             for ch in s:
                 if ch.isascii() and ch.isalpha():
@@ -3530,12 +3522,12 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
         try:
             claude = ClaudeClient()
             max_tokens = min(400 + max_lines * 80, 1600)
+            # system / system_cache / 複雑な rule を全削除. Anthropic 公式の
+            # 「Less is more」原則。Sonnet 4.5 の素直な instruction-following に任せる.
             async for chunk in claude.stream_complete(
                 prompt,
-                model='claude-sonnet-4-5',  # Sonnet 4.5 単一化、Haiku 廃止
+                model='claude-sonnet-4-5',
                 max_tokens=max_tokens,
-                system=TRANSLATION_RULES_ARTICLE,
-                system_cache=True,
                 prefill="## ",
             ):
                 full_text += chunk
@@ -3556,11 +3548,6 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
         jp_ratio = _jp_ratio(full_text)
         ascii_run = _max_ascii_run(full_text)
         print(f'[xlate] sonnet jp={jp_ratio:.2f} ascii_run={ascii_run} url={url}')
-
-        # transparency-first: 万が一 Sonnet 4.5 でも翻訳できなかった場合、
-        # 「翻訳できませんでした」を明示せず、現状のままにする (Web app dev は推奨したが
-        # Marketer は「黙って fix」推奨)。代わりにこの結果を cache しないことで
-        # 次回アクセス時に再試行される.
 
         if jp_ratio < 0.4:
             print(f'[article translate] skip cache (JP ratio {jp_ratio:.2f} < 0.4) url={url}')
