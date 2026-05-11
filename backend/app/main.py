@@ -3101,24 +3101,19 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
     }
 
 
-@app.get("/api/news/{ticker}")
-async def news(ticker: str, request: Request, limit: int = Query(50, ge=1, le=50)) -> list[dict]:
-    """銘柄の最新ニュースを返す. FMP制限時はyfinanceにフォールバック."""
-    client = FMPClient(api_key=_get_fmp_key(request))
+async def _fetch_news_for_ticker(ticker: str, api_key: str | None, limit: int) -> list[dict]:
+    """単一銘柄ニュース取得 (FMP → yfinance fallback)。/api/news と /api/news/bulk が共用."""
+    client = FMPClient(api_key=api_key)
     data = []
     try:
         data = await client.stock_news(ticker, limit=limit)
     except FMPError:
         pass
-
-    # FMP有料制限の場合はyfinanceにフォールバック
     if not data:
         try:
-            data = await yfinance_source.fetch_news(ticker, limit=limit)
-            return data  # yfinanceは既に整形済み
+            return await yfinance_source.fetch_news(ticker, limit=limit)
         except Exception:
             return []
-
     return [
         {
             "title": d.get("title"),
@@ -3131,6 +3126,52 @@ async def news(ticker: str, request: Request, limit: int = Query(50, ge=1, le=50
         for d in data
         if d.get("title") and d.get("url")
     ]
+
+
+@app.get("/api/news/{ticker}")
+async def news(ticker: str, request: Request, limit: int = Query(50, ge=1, le=50)) -> list[dict]:
+    """銘柄の最新ニュースを返す. FMP制限時はyfinanceにフォールバック."""
+    return await _fetch_news_for_ticker(ticker, _get_fmp_key(request), limit)
+
+
+@app.post("/api/news/bulk")
+async def news_bulk(body: dict, request: Request) -> dict:
+    """複数銘柄ニュースを 1 リクエストで取得 (Pane 4 個別銘柄集約用、N+1 fetch 解消).
+
+    Body: { tickers: [...], limit_per_ticker: 5 }
+    Returns: { items: [{ ticker, status, articles | error }] }
+    """
+    raw = body.get("tickers", []) or []
+    tickers: list[str] = []
+    seen: set[str] = set()
+    for t in raw:
+        s = str(t).strip().upper()
+        if s and s not in seen:
+            seen.add(s)
+            tickers.append(s)
+    if len(tickers) > 30:
+        tickers = tickers[:30]
+    limit_raw = body.get("limit_per_ticker", 5)
+    try:
+        limit = max(1, min(int(limit_raw), 20))
+    except (TypeError, ValueError):
+        limit = 5
+
+    if not tickers:
+        return {"items": []}
+
+    api_key = _get_fmp_key(request)
+    results = await asyncio.gather(
+        *[_fetch_news_for_ticker(t, api_key, limit) for t in tickers],
+        return_exceptions=True,
+    )
+    items: list[dict] = []
+    for t, r in zip(tickers, results):
+        if isinstance(r, Exception):
+            items.append({"ticker": t, "status": "error", "error": str(r)[:120], "articles": []})
+        else:
+            items.append({"ticker": t, "status": "ok", "articles": r})
+    return {"items": items}
 
 _translate_cache: dict[str, str] = {}
 _article_cache: dict[str, dict] = {}

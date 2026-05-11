@@ -422,6 +422,17 @@ export async function fetchMarketStatus() {
   return r.json();
 }
 
+export async function fetchNewsBulk(tickers, limitPerTicker = 5) {
+  if (!Array.isArray(tickers) || tickers.length === 0) return { items: [] };
+  const r = await fetch('/api/news/bulk', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...fmpHeaders() },
+    body: JSON.stringify({ tickers, limit_per_ticker: limitPerTicker }),
+  });
+  if (!r.ok) return { items: [] };
+  return r.json();
+}
+
 export async function fetchIRLinks(ticker) {
   const r = await fetch(`/api/ir-links/${encodeURIComponent(ticker)}`, {
     headers: fmpHeaders(),

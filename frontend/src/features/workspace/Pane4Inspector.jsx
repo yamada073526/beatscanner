@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { TrendingUp, Globe, BarChart3, Bookmark, ExternalLink, X, Languages } from 'lucide-react';
-import { fetchMacroNews, fetchNews, translateTexts, translateTextsStream } from '../../api.js';
+import { fetchMacroNews, fetchNewsBulk, translateTexts, translateTextsStream } from '../../api.js';
 import { buildSignals } from './pane4/signal.js';
 import CompanyLogo from '../../components/CompanyLogo.jsx';
 
@@ -846,25 +846,14 @@ export default function Pane4Inspector({ items = [] }) {
     const load = async () => {
       try {
         const arr = myTickersKey.split(',');
-        const results = await Promise.allSettled(
-          arr.map((t) => fetchNews(t, 5).then((news) => ({ ticker: t, news })))
-        );
+        // v65 §C-2: N+1 fetch を bulk endpoint に置換 (memory pane4_roadmap_round16 #2)
+        const res = await fetchNewsBulk(arr, 5);
         if (cancelled) return;
         const flat = [];
-        for (const r of results) {
-          if (r.status !== 'fulfilled') continue;
-          const { ticker, news } = r.value;
-          if (!Array.isArray(news)) continue;
-          for (const n of news) {
-            // 個別 endpoint の shape を macro と揃える
-            flat.push({
-              ...n,
-              _kind: 'ticker',
-              _sourceTicker: ticker,
-              tags: ['登録銘柄'],
-              category: '登録銘柄',
-              importance: 'MED',
-            });
+        for (const r of res?.items || []) {
+          if (r.status !== 'ok' || !Array.isArray(r.articles)) continue;
+          for (const n of r.articles) {
+            flat.push({ ...n, _sourceTicker: r.ticker });
           }
         }
         setTickerNews(flat);
