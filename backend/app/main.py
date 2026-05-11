@@ -3459,8 +3459,10 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
 
         # Claude Haiku でストリーミング翻訳
         # rules は system prompt (cache 化済、TRANSLATION_RULES_ARTICLE) に分離.
-        # user メッセージは記事本文のみ → cache hit で input cost 90% 削減.
-        prompt = text
+        # user メッセージは「翻訳指示 + 本文」。raw 英文のみだと一部記事で Claude が
+        # 翻訳をスキップする (英文を構造化だけして返す) 事象を観測したため、明示的に
+        # 指示を冒頭に置く。指示は短いので cache 効果はほぼ維持される.
+        prompt = f"以下の英語記事を日本語に翻訳してください。\n\n{text}"
 
         full_text = ""
         try:

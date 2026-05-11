@@ -439,7 +439,8 @@ export function IndicesDetailView() {
       <StockPriceChart ticker={ticker} />
 
       {/* §dogfood-1: 指数 detail にニュースセクションを追加 (個別銘柄分析と同じ NewsPanel) */}
-      <NewsPanel ticker={ticker} />
+      {/* §v66 §2: workspace 経由なので必ず Pane 5 Reading Room を開く */}
+      <NewsPanel ticker={ticker} useWorkspaceReader />
     </div>
   );
 }

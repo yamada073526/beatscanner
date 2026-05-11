@@ -5,6 +5,7 @@ import NewsViewToggle from './NewsViewToggle.jsx';
 import NewsArticleModal from './NewsArticleModal.jsx';
 import TranslationToggle from './TranslationToggle.jsx';
 import useArticleModal from '../hooks/useArticleModal.js';
+import { useWorkspaceStore } from '../state/workspaceStore.js';
 import useTranslation from '../hooks/useTranslation.js';
 
 // 重要度バッジ 3 種でタブ切替 (v41 Phase 3.5a)
@@ -325,7 +326,7 @@ function DaySeparator({ label }) {
   );
 }
 
-export default function TodaysBriefSection() {
+export default function TodaysBriefSection({ useWorkspaceReader = false }) {
   const [data, setData] = useState({ items: [], updated_at: null });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(() => {
@@ -344,12 +345,17 @@ export default function TodaysBriefSection() {
   const { enabled: translateEnabled, toggle: toggleTranslate, displayTitles, translating } =
     useTranslation(data.items);
   const { articleModal, openArticle, closeArticle } = useArticleModal();
+  // §v66 §2: workspace mode では Pane 5 (Reading Room) を開く
+  const setActiveReadingItem = useWorkspaceStore((s) => s.setActiveReadingItem);
 
-  // 記事クリック: モーダルを開く (外部リンク直開きではない)
-  // displayTitle を渡してモーダルでも翻訳済みタイトルを表示
+  // 記事クリック: workspace mode は Pane 5、それ以外はモーダル
   const handleArticleClick = (item) => {
     const idx = data.items.indexOf(item);
     const title = displayTitles?.[idx] || item.title;
+    if (useWorkspaceReader) {
+      setActiveReadingItem({ ...item, _wsTitle: title });
+      return;
+    }
     openArticle(item, title);
   };
 
