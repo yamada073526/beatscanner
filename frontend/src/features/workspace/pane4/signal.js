@@ -107,8 +107,27 @@ export function tickerNewsToSignal(item, sourceTicker, holdingTickerSet, watchTi
   };
 }
 
+/**
+ * イベント近接 boost (memory pane4_roadmap_round16 #4 — 差別化最強軸):
+ *   - 決算 T-7 日以内 (related ticker のいずれか): ×2.0
+ *   - 決算 T-3 日以内: ×2.5 (T-7 と排他、より近いものを採用)
+ *   - SEC 8-K 24h 以内: TODO (filing type を news side で取得できないので別タスク)
+ */
+function eventProximityBoost(sig, tickerToDaysToEarnings) {
+  if (!tickerToDaysToEarnings || tickerToDaysToEarnings.size === 0) return 1.0;
+  let minDays = Infinity;
+  for (const t of sig.relatedTickers || []) {
+    const d = tickerToDaysToEarnings.get(t);
+    if (Number.isFinite(d) && d >= 0 && d < minDays) minDays = d;
+  }
+  if (!Number.isFinite(minDays)) return 1.0;
+  if (minDays <= 3) return 2.5;
+  if (minDays <= 7) return 2.0;
+  return 1.0;
+}
+
 /** weight / attentionScore を付与 (5 体レビュー金融 + UI 反映の score logic) */
-export function scoreSignal(sig) {
+export function scoreSignal(sig, tickerToDaysToEarnings = null) {
   let weight = 0.8;
   if (sig.type === 'ticker_news' && sig.holdingHits.length > 0) weight = 3.0;
   else if (sig.type === 'ticker_news' && sig.watchHits.length > 0) weight = 1.5;
@@ -117,11 +136,13 @@ export function scoreSignal(sig) {
   if (sig.importance === 'HIGH') weight *= 1.5;
   const cs = Number(sig.cluster_size) || 1;
   const csBoost = sig.type === 'macro_news' ? Math.min(cs, 8) : Math.max(cs, 2);
-  const attentionScore = weight * csBoost;
+  const proximityBoost = eventProximityBoost(sig, tickerToDaysToEarnings);
+  const attentionScore = weight * csBoost * proximityBoost;
   return {
     ...sig,
     weight,
     attentionScore,
+    eventProximityBoost: proximityBoost,
     // legacy 互換
     _score: attentionScore,
     _ts: sig.occurredAtMs,
@@ -160,10 +181,16 @@ export function dedupSignals(signals) {
 export function buildSignals(macroNews, tickerNews, holdingItems, watchItems) {
   const holdingTickerSet = new Set(holdingItems.map((it) => it.ticker));
   const watchTickerSet = new Set(watchItems.map((it) => it.ticker));
+  // ticker → 決算までの日数 (nextEarningsDays は App.jsx で計算済)
+  const tickerToDaysToEarnings = new Map();
+  for (const it of [...holdingItems, ...watchItems]) {
+    const d = Number(it.nextEarningsDays);
+    if (Number.isFinite(d) && d >= 0) tickerToDaysToEarnings.set(it.ticker, d);
+  }
   const macroSig = macroNews.map((n) => macroNewsToSignal(n, holdingItems, watchItems));
   const tickerSig = tickerNews.map((n) =>
     tickerNewsToSignal(n, n._sourceTicker, holdingTickerSet, watchTickerSet)
   );
   const merged = dedupSignals([...macroSig, ...tickerSig]);
-  return merged.map(scoreSignal);
+  return merged.map((s) => scoreSignal(s, tickerToDaysToEarnings));
 }
