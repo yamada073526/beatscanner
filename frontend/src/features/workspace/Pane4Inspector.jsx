@@ -13,6 +13,7 @@ import ReactMarkdown from 'react-markdown';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { TrendingUp, Globe, BarChart3, Bookmark, ExternalLink, X, Languages } from 'lucide-react';
 import { fetchMacroNews, fetchNews, translateTexts, translateTextsStream } from '../../api.js';
+import { buildSignals } from './pane4/signal.js';
 import CompanyLogo from '../../components/CompanyLogo.jsx';
 
 // ── §round17/21 Markdown 見出し補強 (UI/UX レビュー反映) ──────────
@@ -239,33 +240,6 @@ function freshnessStatus(iso) {
     const d = Math.floor(h / 24);
     return { label: `${d} 日前`, tone: 'stale' };
   } catch { return { label: '', tone: 'muted' }; }
-}
-
-/** §round15 (金融 CRITICAL): ticker false positive 抑制
- *  - 3 文字以上 ticker: word-boundary scan
- *  - 1-2 文字 ticker: companyName エイリアスでのみマッチ (短銘柄誤爆回避)
- *  - text は upper-case 化済前提
- */
-function matchTickersWithAlias(text, items, predicate) {
-  if (!text) return [];
-  const upper = text.toUpperCase();
-  const hits = [];
-  for (const it of items) {
-    if (!predicate(it)) continue;
-    const ticker = it.ticker;
-    const name = (it.companyName || '').toUpperCase();
-    if (!ticker) continue;
-    let matched = false;
-    if (ticker.length >= 3) {
-      const re = new RegExp(`(^|[^A-Z0-9])${ticker.replace(/[\^]/g, '\\^')}(?![A-Z0-9])`);
-      if (re.test(upper)) matched = true;
-    }
-    if (!matched && name && name.length >= 4 && upper.includes(name)) {
-      matched = true;
-    }
-    if (matched) hits.push(ticker);
-  }
-  return hits;
 }
 
 /** §round17 attention 量子化: cluster_size を 0..1 連続量に変換し、
@@ -901,70 +875,13 @@ export default function Pane4Inspector({ items = [] }) {
     return () => { cancelled = true; clearInterval(t); };
   }, [myTickersKey]);
 
-  // ── annotate + filter + sort ──────────────────────
-  const annotated = useMemo(() => {
-    // マクロ: title + summary を holdingItems / watchItems と alias マッチ
-    const macroAnnotated = news.map((n) => {
-      const text = `${n.title || ''} ${n.summary || ''}`;
-      return {
-        ...n,
-        _kind: 'macro',
-        _holdingHits: matchTickersWithAlias(text, holdingItems, () => true),
-        _watchHits: matchTickersWithAlias(text, watchItems, () => true),
-      };
-    });
-    // 個別銘柄ニュース: source ticker が holding か watchlist かで分類
-    const holdingTickerSet = new Set(holdingItems.map((it) => it.ticker));
-    const watchTickerSet = new Set(watchItems.map((it) => it.ticker));
-    const tickerAnnotated = tickerNews.map((n) => {
-      const isHolding = holdingTickerSet.has(n._sourceTicker);
-      const isWatch = !isHolding && watchTickerSet.has(n._sourceTicker);
-      return {
-        ...n,
-        _holdingHits: isHolding ? [n._sourceTicker] : [],
-        _watchHits: isWatch ? [n._sourceTicker] : [],
-      };
-    });
-    // §round23 dedup 強化: URL 一致 + 正規化 title 一致 (異なるタグで同記事が
-    // 複数 macro-news に出る + ticker-news と被るケースをまとめて除去)
-    const seenUrl = new Set();
-    const seenTitle = new Set();
-    const normTitle = (s) =>
-      String(s || '')
-        .toLowerCase()
-        .replace(/[\s　、,。.!?:;:;\(\)\[\]【】「」『』"'’\-—–_/\\]/g, '')
-        .slice(0, 60);
-    const merged = [];
-    for (const n of [...macroAnnotated, ...tickerAnnotated]) {
-      if (n.url && seenUrl.has(n.url)) continue;
-      const tk = normTitle(n.title);
-      if (tk && seenTitle.has(tk)) continue;
-      if (n.url) seenUrl.add(n.url);
-      if (tk) seenTitle.add(tk);
-      merged.push(n);
-    }
-    return merged;
-  }, [news, tickerNews, holdingItems, watchItems]);
-
-  // ── score 計算 (5 体レビュー金融 + UI 反映) ──────
-  const scored = useMemo(() => {
-    return annotated.map((n) => {
-      // base 重み: 保有マッチ 3.0 / ウォッチ 1.5 / マクロ一般 0.8 / 個別ニュース ticker は対応保有/観察
-      let weight = 0.8;
-      if (n._kind === 'ticker' && n._holdingHits.length > 0) weight = 3.0;
-      else if (n._kind === 'ticker' && n._watchHits.length > 0) weight = 1.5;
-      else if (n._holdingHits.length > 0) weight = 2.0;
-      else if (n._watchHits.length > 0) weight = 1.2;
-      // importance HIGH → ×1.5
-      if (n.importance === 'HIGH') weight *= 1.5;
-      // cluster_size: 個別はないので max(1, cs || 1)
-      const cs = Number(n.cluster_size) || 1;
-      const csBoost = n._kind === 'macro' ? Math.min(cs, 8) : Math.max(cs, 2);
-      const attention = weight * csBoost;
-      const ts = n.published ? Date.parse(n.published) : 0;
-      return { ...n, _score: attention, _ts: Number.isFinite(ts) ? ts : 0 };
-    });
-  }, [annotated]);
+  // ── annotate + score + dedup を Signal pipeline に委譲 (v65 §C-1) ──
+  // 旧 annotated / scored は signal.js の buildSignals に統合。
+  // 返り値は Signal[] だが payload spread + legacy field 併存により NewsItem 互換.
+  const scored = useMemo(
+    () => buildSignals(news, tickerNews, holdingItems, watchItems),
+    [news, tickerNews, holdingItems, watchItems]
+  );
 
   // ── filter ────────────────────────────────────────
   const filtered = useMemo(() => {
