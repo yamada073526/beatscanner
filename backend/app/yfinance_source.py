@@ -125,6 +125,43 @@ async def fetch_price_history(ticker: str, from_date: str, to_date: str) -> list
     return await asyncio.to_thread(_fetch_price_history_sync, ticker, from_date, to_date)
 
 
+# v65 §4-B-3: 1D sparkline 用の intraday (5 分足) fetch.
+# yfinance は period='1d', interval='5m' で当日 NYSE セッションの 5 分バー (~78 点) を返す.
+# 週末 / 休場日は前営業日の data に fallback (period='5d' で広く取得し最新営業日を抽出).
+def _fetch_price_intraday_sync(ticker: str) -> list[dict]:
+    import pandas as pd
+    t = yf.Ticker(ticker)
+    # 当日 + 直近営業日を含めるため period='5d' に拡張、frontend で最新日のみ抽出可能
+    try:
+        hist = t.history(period='5d', interval='5m', auto_adjust=True, prepost=False)
+    except Exception:
+        return []
+    if hist is None or hist.empty:
+        return []
+    out = []
+    for ts, row in hist.iterrows():
+        # ts は tz-aware. ISO 8601 で返す (frontend で Date.parse 可能)
+        try:
+            iso = ts.isoformat()
+        except Exception:
+            iso = str(ts)
+        close = row.get("Close")
+        if close is None:
+            continue
+        try:
+            cval = float(close)
+        except Exception:
+            continue
+        if cval != cval:  # NaN check
+            continue
+        out.append({"time": iso, "close": cval})
+    return out
+
+
+async def fetch_price_intraday(ticker: str) -> list[dict]:
+    return await asyncio.to_thread(_fetch_price_intraday_sync, ticker)
+
+
 async def search(query: str, max_results: int = 8) -> list[dict]:
     """yfinance でティッカー検索し、フロントエンド互換の dict リストを返す."""
     def _search_sync() -> list[dict]:

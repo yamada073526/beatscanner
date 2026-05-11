@@ -121,6 +121,11 @@ export default function WorkspaceShell({ header, headerHeight = 56, pane1, pane2
        * stored layout を解釈できないため). 3 ペイン時 / 4 ペイン時で別 layout を保持. */}
       <div style={{ flex: '1 1 auto', minHeight: 0 }}>
         <PanelGroup
+          /* v65 §4-B-2 fix: Panel 数が動的に変わると react-resizable-panels が
+             内部 index 同期に失敗し "Panel data not found for index 3" で
+             React tree が unmount → 白画面。`key` で pane4Visible 切替時に
+             PanelGroup 全体を明示 remount し index 整合を保つ. */
+          key={pane4Visible ? 'wsg-4' : 'wsg-3'}
           direction="horizontal"
           autoSaveId={pane4Visible ? 'bs:ws:panels:v1-4' : 'bs:ws:panels:v1-3'}
           style={{ height: '100%' }}

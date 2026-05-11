@@ -15,17 +15,21 @@
  *   - Pane 2 watchlist は通常 5-20 ticker 想定 → IntersectionObserver lazy fetch は不要
  */
 import { useEffect, useMemo, useState } from 'react';
-import { fetchPriceHistory } from '../../../../api.js';
+import { fetchPriceHistory, fetchPriceIntraday } from '../../../../api.js';
 
 // ticker:period → { promise, prices } の module-level cache
 const cache = new Map();
 
+// v65 §4-B-3: '1d' は intraday 5 分足 endpoint、それ以外は通常の日次 endpoint
 function getOrFetch(ticker, period) {
   const key = `${ticker}:${period}`;
   if (cache.has(key)) return cache.get(key);
+  const fetcher = period === '1d'
+    ? () => fetchPriceIntraday(ticker)
+    : () => fetchPriceHistory(ticker, period);
   const entry = {
     prices: null,
-    promise: fetchPriceHistory(ticker, period)
+    promise: fetcher()
       .then((d) => {
         const prices = Array.isArray(d?.prices)
           ? d.prices
@@ -91,12 +95,15 @@ const PERIOD_DAYS = {
  * @param {number} [props.height=16]
  */
 export default function RowSparkline({ ticker, period = '1y', width = 60, height = 16 }) {
-  // backend は period 無視で 1Y 返すため、常に '1y' で fetch + frontend で slice
-  const fullPrices = useRowSparkline(ticker, '1y');
+  // v65 §4-B-3: '1d' は intraday 5 分足 endpoint (~78 点)、それ以外は日次 1Y を slice.
+  // 旧実装は period 無視で常に '1y' fetch → '1d' は末尾 2 日 slice で直線化していた.
+  const fetchPeriod = period === '1d' ? '1d' : '1y';
+  const fullPrices = useRowSparkline(ticker, fetchPeriod);
 
-  // 末尾から period 分だけ slice (= 直近 N 営業日)
+  // 末尾から period 分だけ slice (intraday は slice しない)
   const prices = useMemo(() => {
     if (!Array.isArray(fullPrices) || fullPrices.length === 0) return [];
+    if (period === '1d') return fullPrices; // intraday: 当日 5 分足を全て描画
     const days = PERIOD_DAYS[period] ?? PERIOD_DAYS['1y'];
     return days >= fullPrices.length ? fullPrices : fullPrices.slice(-days);
   }, [fullPrices, period]);

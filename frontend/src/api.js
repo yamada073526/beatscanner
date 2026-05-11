@@ -83,6 +83,14 @@ export async function fetchPriceHistory(ticker, period = '1y') {
   return r.json();
 }
 
+// v65 §4-B-3: 1D sparkline 用の intraday (5 分足) 取得.
+// 当日 NYSE セッションの ~78 点を返し、Pane 2/Header sparkline が直線化するのを回避.
+export async function fetchPriceIntraday(ticker) {
+  const r = await fetch(`/api/price-intraday/${encodeURIComponent(ticker)}`);
+  if (!r.ok) return { prices: [] };
+  return r.json();
+}
+
 async function postSummary(path, analysis, guidance) {
   const r = await fetch(path, {
     method: 'POST',

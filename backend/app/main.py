@@ -2869,6 +2869,33 @@ async def debug_earnings(ticker: str, request: Request) -> dict:
     return result
 
 
+# v65 §4-B-3: 1D sparkline 用の intraday endpoint.
+# Pane 2 / Header の sparklinePeriod='1d' 選択時、5 分足 ~78 点でジグザグ表示する.
+# yfinance のみ (FMP intraday は有料)、60 秒 cache.
+_INTRADAY_CACHE: dict = {}
+_INTRADAY_CACHE_TTL = 60.0
+
+
+@app.get("/api/price-intraday/{ticker}")
+async def price_intraday(ticker: str) -> dict:
+    """1 日 intraday の 5 分足 close を返す。yfinance、60 秒 cache."""
+    now = _time.monotonic()
+    cached = _INTRADAY_CACHE.get(ticker)
+    if cached and now - cached["ts"] < _INTRADAY_CACHE_TTL:
+        return cached["data"]
+    try:
+        bars = await yfinance_source.fetch_price_intraday(ticker)
+    except Exception:
+        bars = []
+    # 最新営業日のみに絞り込み: 末尾の date 部分が同じものだけ採用
+    if bars:
+        last_date = bars[-1]["time"][:10]
+        bars = [b for b in bars if b["time"][:10] == last_date]
+    data = {"ticker": ticker, "prices": bars}
+    _INTRADAY_CACHE[ticker] = {"data": data, "ts": now}
+    return data
+
+
 @app.get("/api/price-history/{ticker}")
 async def price_history(ticker: str, request: Request, period: str = Query("1y")) -> dict:
     today = date.today()
