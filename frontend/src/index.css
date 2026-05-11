@@ -1395,6 +1395,14 @@ body {
     rgba(11,17,32,0.96) 100%);
 }
 
+/* v64 §4-A: Pane 3 詳細レポート内の bs-panel に rest shadow を追加。
+   panel-card (HistoryChart 等) は .shadow-sm により dark で 0 1px 3px shadow を持つが、
+   bs-panel (Hero / KpiStrip / Profile 等) は rest shadow なしで視覚言語が分断していた。
+   :not(:hover):not(.is-arriving) で arrival/hover cyan glow と衝突しない設計。 */
+.ds-judgment-detail .bs-panel:not(:hover):not(.is-arriving) {
+  box-shadow: var(--shadow-1);
+}
+
 /* ── ヒーロー (一目惚れ) パネル: ポートフォリオ評価額の主役配置 ── */
 .bs-panel-hero {
   position: relative;

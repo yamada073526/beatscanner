@@ -25,15 +25,16 @@ import { SPARKLINE_PERIOD_OPTIONS } from './Workspace.jsx';
 const PERIOD_DAYS = { '1d': 2, '1w': 5, '1m': 21, '6m': 126, '1y': 252 };
 
 // MarketStripCompact と同じ Tier 1 8 指標 (順序固定)
+// v65 §4-B-1: 日本語の内容解説 (desc) を併記。row 2 行表示の secondary line に使用。
 const TIER1 = [
-  { sym: '^GSPC', label: 'S&P 500' },
-  { sym: '^IXIC', label: 'NASDAQ' },
-  { sym: '^DJI', label: 'DOW' },
-  { sym: '^VIX', label: 'VIX' },
-  { sym: 'DX-Y.NYB', label: 'DXY' },
-  { sym: '^TNX', label: '10Y' },
-  { sym: 'CL=F', label: 'WTI' },
-  { sym: 'JPY=X', label: 'USD/JPY' },
+  { sym: '^GSPC', label: 'S&P 500', desc: '米大型株 500 銘柄の代表指数' },
+  { sym: '^IXIC', label: 'NASDAQ', desc: 'ハイテク中心のナスダック総合' },
+  { sym: '^DJI', label: 'DOW', desc: 'ダウ平均（米大型 30 銘柄）' },
+  { sym: '^VIX', label: 'VIX', desc: 'S&P 500 オプション恐怖指数' },
+  { sym: 'DX-Y.NYB', label: 'DXY', desc: 'ドル全体の強弱（主要 6 通貨）' },
+  { sym: '^TNX', label: '10Y', desc: '米 10 年国債利回り' },
+  { sym: 'CL=F', label: 'WTI', desc: 'WTI 原油先物（エネルギー基準）' },
+  { sym: 'JPY=X', label: 'USD/JPY', desc: 'ドル円為替レート' },
 ];
 const TIER1_SYMS = new Set(TIER1.map((t) => t.sym));
 // §dogfood-世界市場: Tier 1 以外の 22 指標 (= 旧「世界市場」) も同 endpoint から取得し
@@ -41,7 +42,14 @@ const TIER1_SYMS = new Set(TIER1.map((t) => t.sym));
 // §dogfood-round12: Tier 2 順序は frontend で明示制御 (backend 順は QQQ→SPY だが、
 // S&P 500 が NASDAQ より上の Tier 1 順序と整合させ SPY を先頭に).
 // 未定義 symbol は配列末尾へ。
-const TIER2_ORDER = ['SPY', 'QQQ', 'IWM', 'GLD', 'TLT', 'HYG'];
+// v65 §4-B-1 Phase 1: 6 → 12 拡張 (米セクター 4 + 半導体 + 新興国)。Phase 2 は 24h spot 後判定。
+const TIER2_ORDER = [
+  'SPY', 'QQQ', 'IWM',          // 米コア (大型 / ハイテク / 小型)
+  'XLK', 'XLF', 'XLE', 'XLV',   // 米セクター 4
+  'SOXX',                        // 半導体テーマ
+  'EEM',                         // 海外代表
+  'GLD', 'TLT', 'HYG',          // 安全資産 + 金利 + クレジット
+];
 
 // 期間別変化率テーブル用 (RowSparkline と同じ営業日数)
 const PERIOD_TABLE = [
@@ -84,7 +92,7 @@ function GroupHeader({ children }) {
   );
 }
 
-function IndicesRow({ item, label, sym, active, onClick, period = '1d' }) {
+function IndicesRow({ item, label, sym, desc, active, onClick, period = '1d' }) {
   // §dogfood-round11: 1D は live change_pct、それ以外は frontend slice で算出
   const fullPrices = useRowSparkline(sym, '1y');
   const pct = useMemo(() => {
@@ -102,24 +110,52 @@ function IndicesRow({ item, label, sym, active, onClick, period = '1d' }) {
       : up
         ? 'var(--color-gain)'
         : 'var(--color-loss)';
+  // v65 §4-B-1: 日本語解説併記 (secondary line)。row 高は 44 → 52 に拡張。
   return (
     <button
       type="button"
       className={`ws-judgment-row${active ? ' is-active' : ''}`}
-      style={{ gridTemplateColumns: 'minmax(0, 1fr) auto auto', minHeight: 44 }}
+      style={{
+        gridTemplateColumns: 'minmax(0, 1fr) auto auto',
+        minHeight: desc ? 52 : 44,
+        alignItems: 'center',
+      }}
       onClick={() => onClick(sym)}
       aria-pressed={active}
     >
       <span
         style={{
-          fontWeight: 600,
-          color: 'var(--text-primary)',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
+          display: 'flex',
+          flexDirection: 'column',
+          minWidth: 0,
+          gap: 1,
         }}
       >
-        {label}
+        <span
+          style={{
+            fontWeight: 600,
+            color: 'var(--text-primary)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {label}
+        </span>
+        {desc && (
+          <span
+            style={{
+              fontSize: 11,
+              color: 'var(--text-muted)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              letterSpacing: '0.01em',
+            }}
+          >
+            {desc}
+          </span>
+        )}
       </span>
       <span
         style={{
@@ -249,6 +285,7 @@ export function IndicesList() {
             item={bySym.get(t.sym)}
             label={t.label}
             sym={t.sym}
+            desc={t.desc}
             active={activeIndexSymbol === t.sym}
             onClick={setActiveIndexSymbol}
             period={sparklinePeriod}
@@ -263,6 +300,7 @@ export function IndicesList() {
                 item={it}
                 label={it.label || it.symbol}
                 sym={it.symbol}
+                desc={it.desc_ja}
                 active={activeIndexSymbol === it.symbol}
                 onClick={setActiveIndexSymbol}
                 period={sparklinePeriod}

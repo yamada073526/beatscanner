@@ -3401,24 +3401,31 @@ async def ir_links(ticker: str, request: Request) -> dict:
 
 MARKET_SYMBOLS = [
     # 株価指数（メイン行・主指標）
-    {"symbol": "^GSPC",    "label": "S&P 500",  "type": "index"},
-    {"symbol": "^IXIC",    "label": "NASDAQ",   "type": "index"},
-    {"symbol": "^DJI",     "label": "DOW",      "type": "index"},
+    {"symbol": "^GSPC",    "label": "S&P 500",  "type": "index",     "desc_ja": "米大型株 500 銘柄の代表指数"},
+    {"symbol": "^IXIC",    "label": "NASDAQ",   "type": "index",     "desc_ja": "ハイテク中心のナスダック総合"},
+    {"symbol": "^DJI",     "label": "DOW",      "type": "index",     "desc_ja": "ダウ平均（米大型 30 銘柄）"},
     # 株式 ETF（メイン行）— VTI は SPY と重複のため削除（v41 アナリストレビュー）
-    {"symbol": "QQQ",      "label": "QQQ",      "type": "etf"},
-    {"symbol": "SPY",      "label": "SPY",      "type": "etf"},
-    {"symbol": "IWM",      "label": "IWM",      "type": "etf"},
-    {"symbol": "GLD",      "label": "GLD",      "type": "etf"},
+    {"symbol": "QQQ",      "label": "QQQ",      "type": "etf",       "desc_ja": "ナスダック 100 連動（ハイテク株）"},
+    {"symbol": "SPY",      "label": "SPY",      "type": "etf",       "desc_ja": "S&P 500 連動 ETF（米大型株）"},
+    {"symbol": "IWM",      "label": "IWM",      "type": "etf",       "desc_ja": "ラッセル 2000 連動（米小型株）"},
+    {"symbol": "GLD",      "label": "GLD",      "type": "etf",       "desc_ja": "金現物 ETF（安全資産）"},
     # マクロ指標（リスク行）
-    {"symbol": "^VIX",     "label": "VIX",      "type": "risk"},
-    {"symbol": "^TNX",     "label": "US10Y",    "type": "rate"},
+    {"symbol": "^VIX",     "label": "VIX",      "type": "risk",      "desc_ja": "S&P 500 オプション恐怖指数"},
+    {"symbol": "^TNX",     "label": "US10Y",    "type": "rate",      "desc_ja": "米 10 年国債利回り"},
     # v41: DXY（ドル全体強弱）— yfinance のみ。USD/JPY より上位概念
-    {"symbol": "DX-Y.NYB", "label": "DXY",      "type": "fx"},
-    {"symbol": "JPY=X",    "label": "USD/JPY",  "type": "fx"},
+    {"symbol": "DX-Y.NYB", "label": "DXY",      "type": "fx",        "desc_ja": "ドル全体の強弱（主要 6 通貨バスケット）"},
+    {"symbol": "JPY=X",    "label": "USD/JPY",  "type": "fx",        "desc_ja": "ドル円為替レート"},
     # v41: TLT（長期米国債）/ HYG（ハイイールド債）/ WTI 原油 を追加
-    {"symbol": "TLT",      "label": "TLT",      "type": "bond"},
-    {"symbol": "HYG",      "label": "HYG",      "type": "credit"},
-    {"symbol": "CL=F",     "label": "WTI",      "type": "commodity"},
+    {"symbol": "TLT",      "label": "TLT",      "type": "bond",      "desc_ja": "米国 20 年超長期国債 ETF"},
+    {"symbol": "HYG",      "label": "HYG",      "type": "credit",    "desc_ja": "米ハイイールド社債 ETF（リスク選好）"},
+    {"symbol": "CL=F",     "label": "WTI",      "type": "commodity", "desc_ja": "WTI 原油先物（エネルギー基準）"},
+    # v65 §4-B-1 Phase 1: Tier 2 を 6 → 12 へ拡張（米セクター 4 + 半導体 + 新興国）
+    {"symbol": "XLK",      "label": "XLK",      "type": "sector",    "desc_ja": "テクノロジー・セクター（Apple / Microsoft / NVIDIA 中心）"},
+    {"symbol": "XLF",      "label": "XLF",      "type": "sector",    "desc_ja": "金融セクター（JPMorgan / BAC / Goldman など）"},
+    {"symbol": "XLE",      "label": "XLE",      "type": "sector",    "desc_ja": "エネルギー・セクター（ExxonMobil / Chevron など）"},
+    {"symbol": "XLV",      "label": "XLV",      "type": "sector",    "desc_ja": "ヘルスケア・セクター（UnitedHealth / J&J / Eli Lilly）"},
+    {"symbol": "SOXX",     "label": "SOXX",     "type": "etf",       "desc_ja": "半導体株 ETF（NVIDIA / TSM / AMD 中心）"},
+    {"symbol": "EEM",      "label": "EEM",      "type": "etf",       "desc_ja": "新興国株 ETF（中国・台湾・インド・ブラジル）"},
 ]
 
 _MARKET_CACHE: dict = {"data": None, "ts": 0.0}
@@ -3436,6 +3443,7 @@ async def market_indices(request: Request) -> list[dict]:
     fmp_symbols = [s["symbol"] for s in MARKET_SYMBOLS]
     label_map = {s["symbol"]: s["label"] for s in MARKET_SYMBOLS}
     type_map = {s["symbol"]: s["type"] for s in MARKET_SYMBOLS}
+    desc_ja_map = {s["symbol"]: s.get("desc_ja") for s in MARKET_SYMBOLS}
 
     client = FMPClient(api_key=_get_fmp_key(request))
     raw: list[dict] = []
@@ -3471,6 +3479,7 @@ async def market_indices(request: Request) -> list[dict]:
             "symbol": sym,
             "label": label,
             "type": type_map.get(sym, "etf"),
+            "desc_ja": desc_ja_map.get(sym),
             "price": round(float(price), 2),
             "change": round(float(change), 2) if change is not None else None,
             "change_pct": round(float(change_pct), 2) if change_pct is not None else None,
