@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { X, ExternalLink } from 'lucide-react';
-import { translateTexts, translateTextsStream } from '../../../api.js';
+import { translateTexts } from '../../../api.js';
 import { MD_COMPONENTS, stripArticleTrailer } from './markdown.jsx';
 import {
   CATEGORY_ICON,
@@ -25,14 +25,10 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
   const [enError, setEnError] = useState(null);
   const articleAbortRef = useRef(null);
 
-  const [jaContent, setJaContent] = useState('');
-  const [jaLoading, setJaLoading] = useState(false);
-  const translateAbortRef = useRef(null);
-
   const [translatedTitle, setTranslatedTitle] = useState('');
 
   // §v66 dogfood-5 (Marketer #1 — Weber-Fechner: 体感 -60%): narrative cycling.
-  // Pane 5 で 5-15s の翻訳待ち中、無音 skeleton より 3 段階 narrative の方が
+  // 5-15s の翻訳待ち中、無音 skeleton より 3 段階 narrative の方が
   // 「動いている感」が強く離脱率が下がる. Linear / Notion / Perplexity 同戦略.
   const NARRATIVES = [
     '原文を取得中…',
@@ -42,21 +38,21 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
   const [narrativeIdx, setNarrativeIdx] = useState(0);
 
   // narrative cycler: 翻訳待ち中だけ 2.5s 毎に進める
+  // §v66 dogfood-10: 二重翻訳廃止後は enContent を直接 watch.
   useEffect(() => {
-    if (jaContent || enError) return;
+    if (enContent || enError) return;
     setNarrativeIdx(0);
     const t = setInterval(() => {
       setNarrativeIdx((i) => Math.min(i + 1, NARRATIVES.length - 1));
     }, 2500);
     return () => clearInterval(t);
-  }, [item?.url, jaContent, enError]);
+  }, [item?.url, enContent, enError]);
 
   // ── 記事 SSE 取得 ──────────────────────────────
   useEffect(() => {
     if (!item?.url) return;
     setEnContent('');
     setEnComplete(false);
-    setJaContent('');
     setTranslatedTitle('');
     setEnError(null);
     setEnLoading(true);
@@ -139,66 +135,25 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
     return () => { cancelled = true; };
   }, [jpEnabled, item?.title]);
 
-  // ── 本文翻訳 (SSE ストリーミング、enContent 完了後) ──
-  // §user-feedback-2026-05-12: 旧 dep [jpEnabled, enContent, enLoading] は
-  // SSE chunk 毎に enContent が変わるたび effect が再発火 → 翻訳を abort/restart
-  // 連打し、partial JP の描画が h2↔h3 flicker を起こしていた。
-  // enComplete (SSE 完了で 1 回だけ true) を trigger にし、翻訳を 1 回だけ start.
-  useEffect(() => {
-    if (!jpEnabled || !enComplete || !enContent) return;
-    translateAbortRef.current?.abort();
-    const ctrl = new AbortController();
-    translateAbortRef.current = ctrl;
-
-    setJaContent('');
-    setJaLoading(true);
-
-    const paragraphs = enContent.split(/\n\n+/).filter((p) => p.trim());
-    const buffer = new Array(paragraphs.length).fill('');
-    (async () => {
-      try {
-        await translateTextsStream(
-          paragraphs,
-          (idx, translation) => {
-            // §user-feedback-2026-05-12: fallback で英文 (paragraphs[idx]) を入れると
-            // (a) 見出しレベルが h2 → h3 に flicker (英文 `## heading` → 翻訳後 plain text へ
-            //    変わり isHeadingLike が h3 に promote)、(b) 和訳前に一瞬英文が見える、
-            // という 2 件のバグになる。空文字を入れ、連続翻訳済の prefix だけ表示する.
-            buffer[idx] = translation || '';
-            let cut = 0;
-            while (cut < buffer.length && buffer[cut]) cut += 1;
-            setJaContent(buffer.slice(0, cut).join('\n\n'));
-          },
-          ctrl.signal
-        );
-      } catch (e) {
-        if (e.name !== 'AbortError') {
-          // 失敗時は英文を最後の手段として表示 (user は英語が読める前提)
-          setJaContent(enContent);
-        }
-      } finally {
-        setJaLoading(false);
-      }
-    })();
-
-    return () => { ctrl.abort(); };
-  }, [jpEnabled, enComplete]);
+  // §v66 dogfood-10 (3 体合議): 旧 useArticleModal は /api/news/article SSE
+  // 1 回だけで速かった。Pane 5 は backend で Sonnet 4.5 翻訳済 (enContent) を
+  // 受けた後、frontend で paragraph 毎に /api/translate/stream を再呼び出しする
+  // **二重翻訳**を行っており、TTFT が +5-10s 倍化していた。
+  // 旧 UI に倣い、frontend 再翻訳を完全廃止し enContent を直接表示する.
 
   if (!item) return null;
   const cat = pickPrimaryCategory(item);
   const colors = getNewsColors(item.importance, cat);
   const Icon = cat ? CATEGORY_ICON[cat] : null;
   const displayTitle = jpEnabled && translatedTitle ? translatedTitle : item.title;
-  // §user-feedback-2026-05-12: jpEnabled 時は jaContent のみ表示 (英文 fallback 撤去).
-  // 「和訳前に一瞬英文が出る」体験を削り、進行中バナーで代替する.
-  const aiContent = jpEnabled ? jaContent : enContent;
+  // §v66 dogfood-10: backend が日本語化済 → enContent をそのまま表示
+  const aiContent = enContent;
   const fallbackContent = item.summary || '';
-  const displayContent = aiContent || (jpEnabled ? '' : fallbackContent);
-  const isUsingFallback = !jpEnabled && !aiContent && !!fallbackContent;
-  const isStreamingTranslation = jpEnabled ? jaLoading : enLoading;
-  // JP モードで jaContent が空の間は banner を必ず表示し、灰色「記事を読込中...」を出さない.
-  // EN を取得中 (enLoading) or 翻訳着手前 (!enComplete) or 翻訳中 (jaLoading) を 1 つの状態にまとめる.
-  const isWaitingForJa = jpEnabled && !jaContent && !enError;
+  const displayContent = aiContent || fallbackContent;
+  const isUsingFallback = !aiContent && !!fallbackContent;
+  const isStreamingTranslation = enLoading;
+  // first chunk 到着まで banner を表示
+  const isWaitingForJa = !enContent && !enError;
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
