@@ -18,6 +18,10 @@ import {
 export default function ReadingMode({ item, onClose, jpEnabled }) {
   const [enContent, setEnContent] = useState('');
   const [enLoading, setEnLoading] = useState(false);
+  // §user-feedback-2026-05-12: enLoading は first chunk 到着で false になるため
+  // 翻訳 effect の trigger には使えない。SSE 完了 ([DONE]) で初めて true になる
+  // 専用フラグを持ち、翻訳は完了後 1 回だけ start させる (chunk 毎の abort/restart 防止).
+  const [enComplete, setEnComplete] = useState(false);
   const [enError, setEnError] = useState(null);
   const articleAbortRef = useRef(null);
 
@@ -31,6 +35,7 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
   useEffect(() => {
     if (!item?.url) return;
     setEnContent('');
+    setEnComplete(false);
     setJaContent('');
     setTranslatedTitle('');
     setEnError(null);
@@ -64,6 +69,7 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
             if (payload === '[DONE]') {
               setEnContent((prev) => stripArticleTrailer(prev));
               setEnLoading(false);
+              setEnComplete(true);
               return;
             }
             try {
@@ -107,8 +113,12 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
   }, [jpEnabled, item?.title]);
 
   // ── 本文翻訳 (SSE ストリーミング、enContent 完了後) ──
+  // §user-feedback-2026-05-12: 旧 dep [jpEnabled, enContent, enLoading] は
+  // SSE chunk 毎に enContent が変わるたび effect が再発火 → 翻訳を abort/restart
+  // 連打し、partial JP の描画が h2↔h3 flicker を起こしていた。
+  // enComplete (SSE 完了で 1 回だけ true) を trigger にし、翻訳を 1 回だけ start.
   useEffect(() => {
-    if (!jpEnabled || !enContent || enLoading) return;
+    if (!jpEnabled || !enComplete || !enContent) return;
     translateAbortRef.current?.abort();
     const ctrl = new AbortController();
     translateAbortRef.current = ctrl;
@@ -145,7 +155,7 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
     })();
 
     return () => { ctrl.abort(); };
-  }, [jpEnabled, enContent, enLoading]);
+  }, [jpEnabled, enComplete]);
 
   if (!item) return null;
   const cat = pickPrimaryCategory(item);
@@ -159,9 +169,9 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
   const displayContent = aiContent || (jpEnabled ? '' : fallbackContent);
   const isUsingFallback = !jpEnabled && !aiContent && !!fallbackContent;
   const isStreamingTranslation = jpEnabled ? jaLoading : enLoading;
-  const isLoadingFirstChunk = enLoading && !enContent;
-  // 和訳着手済だが最初の段落がまだ到着していない (= 完全な無表示状態)
-  const isAwaitingFirstJa = jpEnabled && !enLoading && jaLoading && !jaContent;
+  // JP モードで jaContent が空の間は banner を必ず表示し、灰色「記事を読込中...」を出さない.
+  // EN を取得中 (enLoading) or 翻訳着手前 (!enComplete) or 翻訳中 (jaLoading) を 1 つの状態にまとめる.
+  const isWaitingForJa = jpEnabled && !jaContent && !enError;
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -285,7 +295,7 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
         {!enError && (
           <div className="ws-pane4-article-body" style={{ marginTop: 12 }}>
             {/* EN モードで summary fallback 中: AI 構造化 banner */}
-            {isLoadingFirstChunk && isUsingFallback && (
+            {!jpEnabled && isUsingFallback && (
               <div
                 style={{
                   display: 'flex',
@@ -313,8 +323,9 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
                 <span>AI が記事を構造化中… (元記事の要約を先に表示)</span>
               </div>
             )}
-            {/* JP モードで本文翻訳着手済 + 最初の段落到着前: 翻訳中 banner */}
-            {(isAwaitingFirstJa || (jpEnabled && enLoading && !enContent)) && (
+            {/* JP モード: jaContent が空の間は常に翻訳中 banner を表示
+                (EN 取得中 / 翻訳着手前 / 翻訳着手後の最初の段落到着前、すべて 1 状態に統合) */}
+            {isWaitingForJa && (
               <div
                 style={{
                   display: 'flex',
@@ -342,18 +353,20 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
                 <span>AI が翻訳中…</span>
               </div>
             )}
+            {/* 本文 / fallback summary: JP 待ち中は何も出さない (banner のみ) */}
             {displayContent ? (
               <ReactMarkdown components={MD_COMPONENTS}>{displayContent}</ReactMarkdown>
             ) : (
-              !isAwaitingFirstJa && !(jpEnabled && enLoading) && (
+              !jpEnabled && !enContent && (
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                   記事を読込中...
                 </div>
               )
             )}
             {/* §user-feedback-2026-05-12: cursor は CSS keyframes が opacity を上書きする
-                ため、inline opacity:0 では消えない。条件 render で確実に消す. */}
-            {isStreamingTranslation && (
+                ため、inline opacity:0 では消えない。条件 render で確実に消す.
+                JP 待ち中 (jaContent が空) も banner で代替するため cursor 不要. */}
+            {isStreamingTranslation && displayContent && (
               <span
                 key="ws-pane4-cursor"
                 className="ws-pane4-cursor"
