@@ -123,13 +123,20 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
         await translateTextsStream(
           paragraphs,
           (idx, translation) => {
-            buffer[idx] = translation || paragraphs[idx];
-            setJaContent(buffer.join('\n\n'));
+            // §user-feedback-2026-05-12: fallback で英文 (paragraphs[idx]) を入れると
+            // (a) 見出しレベルが h2 → h3 に flicker (英文 `## heading` → 翻訳後 plain text へ
+            //    変わり isHeadingLike が h3 に promote)、(b) 和訳前に一瞬英文が見える、
+            // という 2 件のバグになる。空文字を入れ、連続翻訳済の prefix だけ表示する.
+            buffer[idx] = translation || '';
+            let cut = 0;
+            while (cut < buffer.length && buffer[cut]) cut += 1;
+            setJaContent(buffer.slice(0, cut).join('\n\n'));
           },
           ctrl.signal
         );
       } catch (e) {
         if (e.name !== 'AbortError') {
+          // 失敗時は英文を最後の手段として表示 (user は英語が読める前提)
           setJaContent(enContent);
         }
       } finally {
@@ -145,12 +152,16 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
   const colors = getNewsColors(item.importance, cat);
   const Icon = cat ? CATEGORY_ICON[cat] : null;
   const displayTitle = jpEnabled && translatedTitle ? translatedTitle : item.title;
-  const aiContent = jpEnabled ? (jaContent || enContent) : enContent;
+  // §user-feedback-2026-05-12: jpEnabled 時は jaContent のみ表示 (英文 fallback 撤去).
+  // 「和訳前に一瞬英文が出る」体験を削り、進行中バナーで代替する.
+  const aiContent = jpEnabled ? jaContent : enContent;
   const fallbackContent = item.summary || '';
-  const displayContent = aiContent || fallbackContent;
-  const isUsingFallback = !aiContent && !!fallbackContent;
-  const isStreamingTranslation = jpEnabled && (enLoading || jaLoading);
+  const displayContent = aiContent || (jpEnabled ? '' : fallbackContent);
+  const isUsingFallback = !jpEnabled && !aiContent && !!fallbackContent;
+  const isStreamingTranslation = jpEnabled ? jaLoading : enLoading;
   const isLoadingFirstChunk = enLoading && !enContent;
+  // 和訳着手済だが最初の段落がまだ到着していない (= 完全な無表示状態)
+  const isAwaitingFirstJa = jpEnabled && !enLoading && jaLoading && !jaContent;
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -273,6 +284,7 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
         )}
         {!enError && (
           <div className="ws-pane4-article-body" style={{ marginTop: 12 }}>
+            {/* EN モードで summary fallback 中: AI 構造化 banner */}
             {isLoadingFirstChunk && isUsingFallback && (
               <div
                 style={{
@@ -301,21 +313,55 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
                 <span>AI が記事を構造化中… (元記事の要約を先に表示)</span>
               </div>
             )}
+            {/* JP モードで本文翻訳着手済 + 最初の段落到着前: 翻訳中 banner */}
+            {(isAwaitingFirstJa || (jpEnabled && enLoading && !enContent)) && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  marginBottom: 10,
+                  padding: '6px 10px',
+                  borderRadius: 'var(--radius-sm, 8px)',
+                  background: 'rgba(56,189,248,0.08)',
+                  border: '1px solid rgba(56,189,248,0.22)',
+                  fontSize: 11,
+                  color: 'rgb(14,165,233)',
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    background: 'rgb(56,189,248)',
+                    animation: 'ws-pane4-live-pulse 1.4s ease-in-out infinite',
+                  }}
+                />
+                <span>AI が翻訳中…</span>
+              </div>
+            )}
             {displayContent ? (
               <ReactMarkdown components={MD_COMPONENTS}>{displayContent}</ReactMarkdown>
             ) : (
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                記事を読込中...
-              </div>
+              !isAwaitingFirstJa && !(jpEnabled && enLoading) && (
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  記事を読込中...
+                </div>
+              )
             )}
-            <span
-              key="ws-pane4-cursor"
-              className="ws-pane4-cursor"
-              aria-hidden
-              style={{ opacity: isStreamingTranslation ? undefined : 0 }}
-            >
-              ▌
-            </span>
+            {/* §user-feedback-2026-05-12: cursor は CSS keyframes が opacity を上書きする
+                ため、inline opacity:0 では消えない。条件 render で確実に消す. */}
+            {isStreamingTranslation && (
+              <span
+                key="ws-pane4-cursor"
+                className="ws-pane4-cursor"
+                aria-hidden
+              >
+                ▌
+              </span>
+            )}
           </div>
         )}
       </div>
