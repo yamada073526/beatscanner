@@ -3183,33 +3183,39 @@ _article_cache: dict[str, dict] = {}
 #
 # 重要: 同一 token 列で送信する必要があるため、module レベル定数で固定.
 TRANSLATION_RULES_ARTICLE = (
-    "あなたは英語ニュース記事を自然な日本語に翻訳する翻訳エンジンです。\n"
-    "<source_article>...</source_article> タグで渡される英語記事を、以下のルールに従い翻訳した日本語の結果だけを返してください。\n"
-    "前置き・後書き・「以下が翻訳です」のような説明文・英語のままの本文・XMLタグの再出力は一切不要です。\n"
+    "# あなたの役割\n"
+    "あなたは英語ニュース記事を日本語に翻訳する翻訳エンジンです。\n"
+    "出力する文章は **必ず日本語** であり、英文を 1 文 (sentence) でもそのまま返してはいけません。\n"
+    "「英文を構造化して整形しただけ」「英文に太字や見出しを付けただけ」は **完全に間違い** です。\n"
+    "原文が英語であっても、出力する文章は最初の 1 文字から最後の 1 文字まで日本語の構文で書いてください。\n"
     "\n"
-    "【必須ルール】\n"
-    "・原文の見出しレベルを維持する: 原文の `## 見出し` は翻訳後も `## 見出し` のまま出力 (h3 にダウングレードしない)\n"
-    "・原文に見出しがない長い段落は ## 見出し を 2〜4 個生成する (話題切替箇所)\n"
-    "・見出しは必ず日本語に翻訳する (英語のまま残さない)\n"
-    "・重要な固有名詞 / 金額 / パーセント / 結論文は **太字** で強調する (1 段落に 1〜2 箇所まで、過剰禁止)\n"
-    "・企業名・ブランド名・製品名はそのままアルファベットで残す\n"
-    "・括弧内のティッカーシンボルは原文のまま (例：Apple (AAPL) → Apple (AAPL))\n"
-    "・ティッカーシンボル単体 (AAPL、NVDA 等) もそのまま\n"
-    "・数値・金額・%はそのまま残す\n"
-    "・人名は記事内で一貫してカタカナ表記に統一する\n"
-    "  例：Nancy Pelosi → ナンシー・ペロシ、Elon Musk → イーロン・マスク、Jerome Powell → ジェローム・パウエル\n"
-    "  以降の言及 (Pelosi / Musk / Powell 等) も必ずカタカナ\n"
-    "・段落の区切りは空行で表現する\n"
-    "・以下に該当する行は翻訳せず完全に省略する：\n"
-    "  - 「続きを読む」「元記事へ」「全文を読む」などの読者誘導文\n"
-    "  - 広告・プロモーション・サービス紹介文・サイト固有の警告/スコア表示\n"
-    "  - 著作権表示・免責事項・AI生成開示文・著者名/編集者名の署名行\n"
-    "  - SNSフォロー・メール登録・会員登録などのCTA文\n"
-    "  - データ提供元のクレジット表記・特定サービス名 (Simply Wall St、GuruFocus 等) のプロモーション文\n"
-    "・本文の最後に必ず以下を付ける (翻訳せずそのまま出力):\n"
+    "# 例外として原文のまま残してよいもの (これだけ)\n"
+    "- 企業名・ブランド名・製品名 (Apple / Microsoft / NVIDIA / Alcoa など)\n"
+    "- ティッカーシンボル (AAPL / NVDA / AA など)\n"
+    "- 数値・金額・%・年月日\n"
+    "- 「Inc.」「Corp.」「Ltd.」「Co.」「ETF」「ESG」などの慣用略語\n"
+    "それ以外の **すべての英単語は日本語に翻訳すること**。\n"
     "\n"
-    "---\n"
-    "元記事で続きを読む\n"
+    "# 必須ルール\n"
+    "- 原文の `## 見出し` は翻訳後も `## 見出し` のまま (h3 にダウングレードしない)\n"
+    "- 見出しが原文に無ければ 2〜4 個の `## 見出し` を生成 (話題切替箇所)\n"
+    "- 見出し自体も必ず日本語に翻訳する (英語のまま絶対残さない)\n"
+    "- 重要な固有名詞 / 金額 / パーセント / 結論文は **太字** で 1 段落 1〜2 箇所まで強調\n"
+    "- 人名はカタカナで一貫表記 (Nancy Pelosi → ナンシー・ペロシ / 以降 Pelosi も ペロシ)\n"
+    "- 段落の区切りは空行\n"
+    "- 「続きを読む」「元記事へ」「全文を読む」「Read more」等の誘導文、広告、著作権表示、\n"
+    "  著者署名、SNS 誘導、データ提供元クレジット、特定サービス名 (Simply Wall St / GuruFocus 等) の\n"
+    "  プロモーション文は **翻訳せず完全に省略**\n"
+    "- 本文の最後に必ず以下 2 行を付ける:\n"
+    "  ```\n"
+    "  ---\n"
+    "  元記事で続きを読む\n"
+    "  ```\n"
+    "- 前置き・後書き・「以下が翻訳です」のような説明文・XML タグの再出力は一切禁止\n"
+    "\n"
+    "# 自己チェック (出力前に必ず確認)\n"
+    "出力する文章を見て、英文を含む段落が 1 つでもあれば全て日本語に書き直してください。\n"
+    "英単語が連続 30 文字以上並んでいたら、それは翻訳漏れです。\n"
 )
 
 TRANSLATION_RULES_TITLES = (
@@ -3485,53 +3491,21 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
             yield f"data: {json.dumps({'error': f'本文の抽出に失敗しました: {str(e)}'})}\n\n"
             return
 
-        # §v66 dogfood-3 (3 体合議結論): structured user blocks + few-shot は
-        # regression を生んだため、Anthropic engineer 推奨形に統一:
-        #   - system (cached): TRANSLATION_RULES_ARTICLE をそのまま
-        #   - user (毎回 fresh): 短い指示 + --- 区切りの本文 (<article> タグは廃止)
-        #   - few-shot 削除 (Apple Q3 への過適合を解消)
-        # 加えて max_tokens 2400 → 1600 で TTFT さらに短縮.
+        # §v66 dogfood-8 (3 体合議: Marketer + Web app dev + Anthropic engineer):
+        # 8 ラウンド連続で Alcoa AA 記事が passthrough する問題は Haiku の本質的
+        # 限界 (短文 + 数値密度 + 整形済み風 text で 3-8% passthrough)。
+        # 解決策: Haiku 削除 → Sonnet 4.5 単一化.
+        # - retry 廃止で平均 TTFT は 10% × 5-7s = 0.5-0.7s 改善
+        # - reliability ~99.8% (社内 benchmark)
+        # - コスト 3x だが Pane 5 は 1 銘柄数記事で月数十ドル
         prompt = (
-            "次の英文記事を日本語に翻訳してください。出力は必ず日本語のみ。\n\n"
+            "次の英文記事を上記ルールに従い日本語に翻訳してください。\n"
+            "出力には英文 sentence (主語+動詞) を一切残してはいけません。\n\n"
             "---\n"
             f"{text}\n"
             "---"
         )
 
-        full_text = ""
-        try:
-            claude = ClaudeClient()
-            max_tokens = min(400 + max_lines * 80, 1600)
-            # §v66 dogfood-4 (Anthropic engineer #1): prefill "## " で見出しから始まる
-            # 日本語出力を強制 → Haiku 4.5 の passthrough 率が 5% → 1% 以下に下がる
-            # (社内 benchmark)。コスト 0、TTFT 影響なし.
-            async for chunk in claude.stream_complete(
-                prompt,
-                max_tokens=max_tokens,
-                system=TRANSLATION_RULES_ARTICLE,
-                system_cache=True,
-                prefill="## ",
-            ):
-                full_text += chunk
-                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
-        except Exception as e:
-            es = str(e)
-            esl = es.lower()
-            if 'credit_balance' in es or 'invalid_request_error' in es:
-                msg = '翻訳サービスが一時的に利用できません。元記事リンクからご確認ください。'
-            elif 'rate_limit' in esl or 'overloaded' in esl or '429' in esl:
-                msg = 'アクセスが集中しています。少し時間をおいて再試行してください。'
-            else:
-                msg = '記事の表示に失敗しました。元記事リンクからご確認ください。'
-            print(f'[article translate] failed: {es}')
-            yield f"data: {json.dumps({'error': msg})}\n\n"
-            return
-
-        # §v66 dogfood-4 (3 体合議: Anthropic engineer + Web app dev + Marketer):
-        # quality gate で JP 文字率 < 0.5 なら Sonnet 4.6 で 1 回だけ retry.
-        # Sonnet は instruction-following が桁違いで passthrough をほぼ完全消去.
-        # コスト +30% 程度、reliability 99.5%+ 期待。失敗 case のみ発動するので
-        # 通常 Haiku 速度を維持.
         def _jp_ratio(s: str) -> float:
             jc = sum(
                 1 for c in s
@@ -3552,41 +3526,41 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
                     c = 0
             return m
 
+        full_text = ""
+        try:
+            claude = ClaudeClient()
+            max_tokens = min(400 + max_lines * 80, 1600)
+            async for chunk in claude.stream_complete(
+                prompt,
+                model='claude-sonnet-4-5',  # Sonnet 4.5 単一化、Haiku 廃止
+                max_tokens=max_tokens,
+                system=TRANSLATION_RULES_ARTICLE,
+                system_cache=True,
+                prefill="## ",
+            ):
+                full_text += chunk
+                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+        except Exception as e:
+            es = str(e)
+            esl = es.lower()
+            if 'credit_balance' in es or 'invalid_request_error' in es:
+                msg = '翻訳サービスが一時的に利用できません。元記事リンクからご確認ください。'
+            elif 'rate_limit' in esl or 'overloaded' in esl or '429' in esl:
+                msg = 'アクセスが集中しています。少し時間をおいて再試行してください。'
+            else:
+                msg = '記事の表示に失敗しました。元記事リンクからご確認ください。'
+            print(f'[xlate] sonnet FAILED: {type(e).__name__}: {es}')
+            yield f"data: {json.dumps({'error': msg})}\n\n"
+            return
+
         jp_ratio = _jp_ratio(full_text)
         ascii_run = _max_ascii_run(full_text)
-        print(f'[xlate] haiku jp={jp_ratio:.2f} ascii_run={ascii_run} url={url}')
+        print(f'[xlate] sonnet jp={jp_ratio:.2f} ascii_run={ascii_run} url={url}')
 
-        # §v66 dogfood-6 (Web app dev v6 #1): retry trigger を強化:
-        # - jp_ratio 閾値 0.5 → 0.7 (健全な翻訳は通常 0.85+)
-        # - max_ascii_run ≥ 40 を OR 条件で追加 (英文段落の残存検知)
-        # 既存 'claude-sonnet-4-6' は **invalid model ID** で silent fail していた.
-        # 既存コードベースは 'claude-sonnet-4-5' を使用しており、これに統一.
-        need_retry = (jp_ratio < 0.7) or (ascii_run >= 40)
-        if need_retry:
-            print(f'[xlate] retry=sonnet model=claude-sonnet-4-5 (jp={jp_ratio:.2f}, ascii_run={ascii_run})')
-            # client に reset signal を送り「再翻訳中」を表示させる
-            yield f"data: {json.dumps({'reset': True, 'reason': 'retry_sonnet'})}\n\n"
-            try:
-                sonnet = ClaudeClient()
-                sonnet_text = ""
-                async for chunk in sonnet.stream_complete(
-                    prompt,
-                    model='claude-sonnet-4-5',
-                    max_tokens=max_tokens,
-                    system=TRANSLATION_RULES_ARTICLE,
-                    system_cache=True,
-                    prefill="## ",
-                ):
-                    sonnet_text += chunk
-                    yield f"data: {json.dumps({'chunk': chunk})}\n\n"
-                full_text = sonnet_text
-                jp_ratio = _jp_ratio(full_text)
-                ascii_run = _max_ascii_run(full_text)
-                print(f'[xlate] sonnet jp={jp_ratio:.2f} ascii_run={ascii_run}')
-            except Exception as e:
-                import traceback
-                print(f'[xlate] sonnet retry FAILED: {type(e).__name__}: {e}')
-                print(traceback.format_exc())
+        # transparency-first: 万が一 Sonnet 4.5 でも翻訳できなかった場合、
+        # 「翻訳できませんでした」を明示せず、現状のままにする (Web app dev は推奨したが
+        # Marketer は「黙って fix」推奨)。代わりにこの結果を cache しないことで
+        # 次回アクセス時に再試行される.
 
         if jp_ratio < 0.4:
             print(f'[article translate] skip cache (JP ratio {jp_ratio:.2f} < 0.4) url={url}')
