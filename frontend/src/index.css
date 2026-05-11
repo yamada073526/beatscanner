@@ -5282,28 +5282,49 @@ button.ds-chip:active {
   line-height: var(--longform-p-leading);
   color: var(--longform-p-color);
 }
+/* §round23: h2/h3 のデザインを入れ替え (ユーザー指示)。
+   h2 = 大サイズ + 左 accent bar (no underline)、h3 = 下線 + 控えめサイズ.
+   light mode で h3 色が背景に溶ける問題も解消 (cyan を濃く). */
 .ws-pane4-article-body h1,
 .ws-pane4-article-body h2 {
-  margin: 28px 0 12px;
-  padding-bottom: 6px;
-  font-size: var(--longform-h2-size);
-  font-weight: 600;
+  position: relative;
+  margin: 30px 0 12px;
+  padding-left: 12px;
+  font-size: 17px;
+  font-weight: 700;
   letter-spacing: -0.01em;
   line-height: 1.35;
   color: var(--longform-heading-color-primary);
-  border-bottom: 1px solid var(--longform-heading-rule);
+}
+.ws-pane4-article-body h1::before,
+.ws-pane4-article-body h2::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(56, 189, 248, 0) 0%,
+    rgba(56, 189, 248, 0.95) 50%,
+    rgba(56, 189, 248, 0) 100%
+  );
 }
 .ws-pane4-article-body h2:first-child,
 .ws-pane4-article-body h1:first-child {
   margin-top: 0;
 }
 .ws-pane4-article-body h3 {
-  margin: 22px 0 10px;
+  margin: 24px 0 10px;
+  padding-bottom: 6px;
   font-size: var(--longform-h3-size);
   font-weight: 600;
   letter-spacing: -0.005em;
   line-height: 1.4;
-  color: var(--longform-heading-color-dim);
+  color: var(--longform-heading-color-primary);  /* light/dark で十分な濃度 */
+  border-bottom: 1px solid var(--longform-heading-rule);
 }
 .ws-pane4-article-body h4,
 .ws-pane4-article-body h5,
@@ -5325,6 +5346,21 @@ button.ds-chip:active {
 .ws-pane4-article-body strong {
   color: var(--text-primary);
   font-weight: 600;
+}
+/* §round23: 数値 / % / $ / ticker のインライン強調 */
+.ws-pane4-article-body .longform-num {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+.ws-pane4-article-body .longform-num.pos { color: var(--color-gain); }
+.ws-pane4-article-body .longform-num.neg { color: var(--color-loss); }
+.ws-pane4-article-body .longform-ticker {
+  font-family: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+  font-weight: 600;
+  font-size: 0.95em;
+  letter-spacing: 0.02em;
+  color: rgb(56, 189, 248);
 }
 .ws-pane4-article-body ul,
 .ws-pane4-article-body ol {

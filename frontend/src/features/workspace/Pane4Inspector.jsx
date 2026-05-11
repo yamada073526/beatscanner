@@ -23,8 +23,8 @@ import CompanyLogo from '../../components/CompanyLogo.jsx';
 //   判定基準:
 //     strong 単一子: ≤40 文字 + 句点 (。.!?) なし → 見出し
 //     plain text: ≤32 文字 + 句読点 (、,。.!?・) なし → 見出し
-const HEADING_STRONG_RE = /[。.!?…!?]/;            // strong は読点 OK
-const HEADING_PLAIN_RE = /[。.!?…!?、,，・]/;       // plain は読点も NG (誤検出抑制)
+const HEADING_STRONG_RE = /[。.!?…!?]/;            // 句点系のみ NG (見出しは読点 OK)
+const HEADING_PLAIN_RE = /[。.!?…!?]/;            // §round23: plain でも読点 OK に緩和 (見出しに 1-2 読点は通常)
 function _extractText(node) {
   if (node == null) return '';
   if (typeof node === 'string') return node;
@@ -79,23 +79,88 @@ function isHeadingLike(children) {
     return text;
   }
   // Case 2: plain text 単一 (formatting 無し)
+  //  §round23: 上限を 32 → 45 字に緩和 (記事 inner heading は 35-40 字を含む)
   if (typeof only === 'string') {
     const text = only.trim();
     if (text.length < 4) return null;
-    if (text.length > 32) return null;
+    if (text.length > 45) return null;
     if (HEADING_PLAIN_RE.test(text)) return null;
     return text;
   }
   return null;
 }
+/** §round23: 本文中の数値 / % / $ / ticker を inline 強調.
+ *   - $123.45 / +12.3% / -5.6% / 38兆ドル / 100億ドル → 太字 + 符号で色分け
+ *   - 大文字 1-5 字 ticker (AAPL/NVDA/^GSPC 等) → cyan 太字 monospace
+ *   ReactMarkdown は children = string | node[] で渡してくるので、string のみ patch.
+ */
+const NUMBER_RE = /([+\-]?\$?\d[\d,]*\.?\d*\s?(?:%|兆ドル|億ドル|兆円|億円|円|ドル))/g;
+const TICKER_RE = /\b(?:\^|\$)?[A-Z]{2,5}(?:\.[A-Z]+)?\b/g;
+const TICKER_SKIP = new Set(['AI', 'CEO', 'IPO', 'ETF', 'GDP', 'CPI', 'PPI', 'FRB', 'ECB', 'BOJ', 'FOMC', 'NYSE', 'NASDAQ', 'SEC', 'M&A', 'GPU', 'CPU', 'FY', 'YoY', 'QoQ', 'EPS']);
+
+function enhanceInlineText(text) {
+  if (typeof text !== 'string') return text;
+  // 数値 + 単位を先に置換、その後 ticker
+  const parts = [];
+  let lastEnd = 0;
+  // 単一 regex で全 match を順序付き処理: 数値優先 / ticker 後
+  // 簡便のため二段階で 1 文字列ずつ scan
+  const numMatches = [];
+  for (const m of text.matchAll(NUMBER_RE)) {
+    numMatches.push({ start: m.index, end: m.index + m[0].length, text: m[0], kind: 'num' });
+  }
+  const tickerMatches = [];
+  for (const m of text.matchAll(TICKER_RE)) {
+    if (TICKER_SKIP.has(m[0].replace(/[\^$]/, ''))) continue;
+    if (m[0].length < 2) continue;
+    tickerMatches.push({ start: m.index, end: m.index + m[0].length, text: m[0], kind: 'ticker' });
+  }
+  const all = [...numMatches, ...tickerMatches]
+    .sort((a, b) => a.start - b.start)
+    // 重複範囲を除去 (先勝ち)
+    .reduce((acc, cur) => {
+      if (acc.length && acc[acc.length - 1].end > cur.start) return acc;
+      acc.push(cur);
+      return acc;
+    }, []);
+  if (all.length === 0) return text;
+  for (const m of all) {
+    if (m.start > lastEnd) parts.push(text.slice(lastEnd, m.start));
+    if (m.kind === 'num') {
+      const isPos = /^\+/.test(m.text);
+      const isNeg = /^-/.test(m.text);
+      const cls = isPos ? 'longform-num pos' : isNeg ? 'longform-num neg' : 'longform-num';
+      parts.push(<span key={`${m.start}-${m.kind}`} className={cls}>{m.text}</span>);
+    } else {
+      parts.push(<span key={`${m.start}-${m.kind}`} className="longform-ticker">{m.text}</span>);
+    }
+    lastEnd = m.end;
+  }
+  if (lastEnd < text.length) parts.push(text.slice(lastEnd));
+  return parts;
+}
+
+function patchChildren(children) {
+  if (typeof children === 'string') return enhanceInlineText(children);
+  if (!Array.isArray(children)) return children;
+  return children.flatMap((c, i) => {
+    if (typeof c === 'string') {
+      const out = enhanceInlineText(c);
+      return Array.isArray(out) ? out : [out];
+    }
+    return [c];
+  });
+}
+
 const MD_COMPONENTS = {
   p: ({ children, node, ...rest }) => {
     const heading = isHeadingLike(children);
     if (heading) {
       return <h3 {...rest}>{heading}</h3>;
     }
-    return <p {...rest}>{children}</p>;
+    return <p {...rest}>{patchChildren(children)}</p>;
   },
+  li: ({ children, node, ...rest }) => <li {...rest}>{patchChildren(children)}</li>,
 };
 
 // ── タグ system (旧 TodaysBriefSection と統一) ──────────────────
@@ -215,11 +280,11 @@ function NewsItem({ item, displayTitle, onSelect, isOpen, index }) {
         '--row-delay': `${Math.min(index, 8) * 40}ms`,
         position: 'relative',
         display: 'flex',
-        gap: 10,
+        gap: 8,
         width: 'calc(100% - 8px)',
         textAlign: 'left',
-        padding: '10px 12px 10px 14px',
-        margin: '4px 4px',
+        padding: '6px 10px 6px 12px',
+        margin: '3px 4px',
         borderRadius: 'var(--radius-md, 10px)',
         border: '1px solid var(--border)',
         background: 'transparent',
@@ -227,11 +292,10 @@ function NewsItem({ item, displayTitle, onSelect, isOpen, index }) {
         cursor: 'pointer',
       }}
     >
-      {/* §round17: 左端 accent bar は attention level で高さ可変
-          中心 50% を level (25/50/75/100%) で拡縮、色はタグ色 + opacity 連動. */}
+      {/* §round17/23: 左端 accent bar (attention level で高さ可変、row 縮小に合わせ inset 圧縮) */}
       {(() => {
         const lvl = attentionLevel(item.cluster_size);
-        const inset = `${(1 - lvl) * 50}%`;
+        const inset = `${(1 - lvl) * 40}%`;
         return (
           <span
             aria-hidden
@@ -242,10 +306,10 @@ function NewsItem({ item, displayTitle, onSelect, isOpen, index }) {
               left: 0,
               top: inset,
               bottom: inset,
-              width: 3,
+              width: 2.5,
               borderRadius: '0 2px 2px 0',
               background: colors.bar,
-              opacity: 0.55 + 0.45 * lvl,
+              opacity: 0.6 + 0.4 * lvl,
             }}
           />
         );
@@ -258,8 +322,8 @@ function NewsItem({ item, displayTitle, onSelect, isOpen, index }) {
           decoding="async"
           onError={() => setImgError(true)}
           style={{
-            width: 56,
-            height: 56,
+            width: 40,
+            height: 40,
             flexShrink: 0,
             borderRadius: 6,
             objectFit: 'cover',
@@ -270,8 +334,8 @@ function NewsItem({ item, displayTitle, onSelect, isOpen, index }) {
         <div
           aria-hidden
           style={{
-            width: 56,
-            height: 56,
+            width: 40,
+            height: 40,
             flexShrink: 0,
             borderRadius: 6,
             display: 'flex',
@@ -281,7 +345,7 @@ function NewsItem({ item, displayTitle, onSelect, isOpen, index }) {
             color: colors.fg,
           }}
         >
-          {Icon && <Icon size={22} strokeWidth={1.75} aria-hidden />}
+          {Icon && <Icon size={16} strokeWidth={1.75} aria-hidden />}
         </div>
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -340,6 +404,11 @@ function NewsItem({ item, displayTitle, onSelect, isOpen, index }) {
               </span>
             );
           })()}
+          {item.source && (
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+              · {item.source}
+            </span>
+          )}
           {/* §round20: 鮮度段階表示 (LIVE / X 分前 / STALE) */}
           {(() => {
             const f = freshnessStatus(item.published);
@@ -388,18 +457,14 @@ function NewsItem({ item, displayTitle, onSelect, isOpen, index }) {
             lineHeight: 1.35,
             color: 'var(--text-primary)',
             display: '-webkit-box',
-            WebkitLineClamp: 3,
+            WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical',
             overflow: 'hidden',
           }}
         >
           {displayTitle || item.title}
         </div>
-        {item.source && (
-          <span className="ws-pane4-source-pill" style={{ marginTop: 6 }}>
-            {item.source}
-          </span>
-        )}
+        {/* §round23: source を別行から meta 行に移動 (row スリム化、~20px 節約) */}
       </div>
     </button>
   );
@@ -677,9 +742,17 @@ function ReadingMode({ item, onClose, jpEnabled }) {
                 記事を読込中...
               </div>
             )}
-            {isStreamingTranslation && (
-              <span key="ws-pane4-cursor" className="ws-pane4-cursor" aria-hidden>▌</span>
-            )}
+            {/* §round23: カーソルを常時 mount し opacity で表示切替.
+                条件 render だと unmount/remount で animation がリセットされ
+                「最初ゆるやか・後半激しい」感を生む. */}
+            <span
+              key="ws-pane4-cursor"
+              className="ws-pane4-cursor"
+              aria-hidden
+              style={{ opacity: isStreamingTranslation ? undefined : 0 }}
+            >
+              ▌
+            </span>
           </div>
         )}
         {/* §round16: 「翻訳を準備中」テキスト撤去 (▌ カーソルで進捗表示済) */}
@@ -798,13 +871,22 @@ export default function Pane4Inspector({ items = [] }) {
         _watchHits: isWatch ? [n._sourceTicker] : [],
       };
     });
-    // 重複除外 (URL 一致)
-    const seen = new Set();
+    // §round23 dedup 強化: URL 一致 + 正規化 title 一致 (異なるタグで同記事が
+    // 複数 macro-news に出る + ticker-news と被るケースをまとめて除去)
+    const seenUrl = new Set();
+    const seenTitle = new Set();
+    const normTitle = (s) =>
+      String(s || '')
+        .toLowerCase()
+        .replace(/[\s　、,。.!?:;:;\(\)\[\]【】「」『』"'’\-—–_/\\]/g, '')
+        .slice(0, 60);
     const merged = [];
     for (const n of [...macroAnnotated, ...tickerAnnotated]) {
-      const key = n.url || `${n.title}-${n.published}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
+      if (n.url && seenUrl.has(n.url)) continue;
+      const tk = normTitle(n.title);
+      if (tk && seenTitle.has(tk)) continue;
+      if (n.url) seenUrl.add(n.url);
+      if (tk) seenTitle.add(tk);
       merged.push(n);
     }
     return merged;
