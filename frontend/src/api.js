@@ -416,6 +416,12 @@ export async function fetchMarketIndices() {
   return r.json();
 }
 
+export async function fetchMarketStatus() {
+  const r = await fetch('/api/market-status');
+  if (!r.ok) return null;
+  return r.json();
+}
+
 export async function fetchIRLinks(ticker) {
   const r = await fetch(`/api/ir-links/${encodeURIComponent(ticker)}`, {
     headers: fmpHeaders(),

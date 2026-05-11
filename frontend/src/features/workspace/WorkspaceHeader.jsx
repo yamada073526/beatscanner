@@ -19,6 +19,7 @@ import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronUp, ChevronDown, PanelRightOpen, PanelRightClose, MoreHorizontal, Search } from 'lucide-react';
 import MarketStripCompact from './MarketStripCompact.jsx';
+import MarketStatusPill from './MarketStatusPill.jsx';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 
 export default function WorkspaceHeader() {
@@ -192,6 +193,8 @@ export default function WorkspaceHeader() {
             flexShrink: 0,
           }}
         >
+        {/* v65 §B Step 2: MarketStatusPill (NYSE 開閉状態 + 次イベントまでの時間) */}
+        <MarketStatusPill />
         {/* v62 WS-Phase2: Pane 4 inspector toggle (Phase 2 placeholder、default 折り畳み) */}
         <button
           type="button"

@@ -2869,6 +2869,84 @@ async def debug_earnings(ticker: str, request: Request) -> dict:
     return result
 
 
+# v65 §B Step 2: NYSE market status endpoint (MarketStatusPill 用).
+# zoneinfo で DST 正確、祝日は 2025-2028 ハードコード。
+_NYSE_HOLIDAYS = {
+    # 2025
+    "2025-01-01", "2025-01-09",  # 1/9 は Carter mourning (NYSE 全休)
+    "2025-01-20", "2025-02-17", "2025-04-18", "2025-05-26",
+    "2025-06-19", "2025-07-04", "2025-09-01", "2025-11-27", "2025-12-25",
+    # 2026
+    "2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25",
+    "2026-06-19", "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25",
+    # 2027
+    "2027-01-01", "2027-01-18", "2027-02-15", "2027-03-26", "2027-05-31",
+    "2027-06-18", "2027-07-05", "2027-09-06", "2027-11-25", "2027-12-24",
+    # 2028
+    "2028-01-17", "2028-02-21", "2028-04-14", "2028-05-29",
+    "2028-06-19", "2028-07-04", "2028-09-04", "2028-11-23", "2028-12-25",
+}
+
+_MARKET_STATUS_CACHE: dict = {"data": None, "ts": 0.0}
+
+
+@app.get("/api/market-status")
+async def market_status() -> dict:
+    """NYSE 開閉状態を返す。phase ∈ {pre, open, after, closed}、ET tz / 祝日対応."""
+    import datetime as _dt
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:  # Python < 3.9 — Railway は 3.11+ なので通常通らない
+        return {"phase": "unknown"}
+    ny_tz = ZoneInfo("America/New_York")
+    now = _dt.datetime.now(tz=ny_tz)
+
+    def is_trading_day(d: _dt.date) -> bool:
+        if d.weekday() >= 5:
+            return False
+        return d.isoformat() not in _NYSE_HOLIDAYS
+
+    def next_trading_open(from_date: _dt.date) -> _dt.datetime:
+        d = from_date
+        for _ in range(14):
+            if is_trading_day(d):
+                return _dt.datetime.combine(d, _dt.time(9, 30), tzinfo=ny_tz)
+            d += _dt.timedelta(days=1)
+        # fallback (祝日テーブル外): 14 日先以降は素朴に
+        return _dt.datetime.combine(d, _dt.time(9, 30), tzinfo=ny_tz)
+
+    today = now.date()
+    today_is_trading = is_trading_day(today)
+
+    open_t = now.replace(hour=9, minute=30, second=0, microsecond=0)
+    close_t = now.replace(hour=16, minute=0, second=0, microsecond=0)
+    pre_open = now.replace(hour=4, minute=0, second=0, microsecond=0)
+    after_close = now.replace(hour=20, minute=0, second=0, microsecond=0)
+
+    if today_is_trading and pre_open <= now < open_t:
+        phase, next_event, next_label = "pre", open_t, "Opens"
+    elif today_is_trading and open_t <= now < close_t:
+        phase, next_event, next_label = "open", close_t, "Closes"
+    elif today_is_trading and close_t <= now < after_close:
+        phase, next_event, next_label = "after", next_trading_open(today + _dt.timedelta(days=1)), "Opens"
+    else:
+        # 祝日 / 週末 / 早朝 / 深夜
+        start = today if (today_is_trading and now < pre_open) else (today + _dt.timedelta(days=1))
+        if today_is_trading and now < pre_open:
+            phase, next_event, next_label = "closed", open_t, "Opens"
+        else:
+            phase, next_event, next_label = "closed", next_trading_open(start), "Opens"
+
+    seconds = int((next_event - now).total_seconds())
+    return {
+        "phase": phase,
+        "now": now.isoformat(),
+        "next_event": next_event.isoformat(),
+        "next_label": next_label,
+        "seconds_to_next": max(0, seconds),
+    }
+
+
 # v65 §4-B-3: 1D sparkline 用の intraday endpoint.
 # Pane 2 / Header の sparklinePeriod='1d' 選択時、5 分足 ~78 点でジグザグ表示する.
 # yfinance のみ (FMP intraday は有料)、60 秒 cache.
