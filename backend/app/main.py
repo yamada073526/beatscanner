@@ -3509,21 +3509,38 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
             ac = sum(1 for c in s if c.isalpha())
             return jc / ac if ac > 0 else 0
 
+        def _max_ascii_run(s: str) -> int:
+            """連続 ASCII alpha の最大長。40+ なら英文段落が残存している強いシグナル."""
+            m = c = 0
+            for ch in s:
+                if ch.isascii() and ch.isalpha():
+                    c += 1
+                    if c > m:
+                        m = c
+                else:
+                    c = 0
+            return m
+
         jp_ratio = _jp_ratio(full_text)
-        if jp_ratio < 0.5:
-            print(f'[article translate] JP ratio {jp_ratio:.2f} < 0.5 — retrying with Sonnet 4.6 url={url}')
+        ascii_run = _max_ascii_run(full_text)
+        print(f'[xlate] haiku jp={jp_ratio:.2f} ascii_run={ascii_run} url={url}')
+
+        # §v66 dogfood-6 (Web app dev v6 #1): retry trigger を強化:
+        # - jp_ratio 閾値 0.5 → 0.7 (健全な翻訳は通常 0.85+)
+        # - max_ascii_run ≥ 40 を OR 条件で追加 (英文段落の残存検知)
+        # 既存 'claude-sonnet-4-6' は **invalid model ID** で silent fail していた.
+        # 既存コードベースは 'claude-sonnet-4-5' を使用しており、これに統一.
+        need_retry = (jp_ratio < 0.7) or (ascii_run >= 40)
+        if need_retry:
+            print(f'[xlate] retry=sonnet model=claude-sonnet-4-5 (jp={jp_ratio:.2f}, ascii_run={ascii_run})')
             # client に reset signal を送り「再翻訳中」を表示させる
             yield f"data: {json.dumps({'reset': True, 'reason': 'retry_sonnet'})}\n\n"
             try:
-                # §v66 dogfood-5 (Web app dev #1): Sonnet retry を非 streaming →
-                # streaming に変更し retry 時 TTFT を -4-5s 短縮 (15-17s → 10-12s).
-                # Sonnet 4.6 は Haiku より instruction-following が強く、prefill 不要級だが
-                # 念のため "## " prefill を維持し見出し化を保証.
                 sonnet = ClaudeClient()
                 sonnet_text = ""
                 async for chunk in sonnet.stream_complete(
                     prompt,
-                    model='claude-sonnet-4-6',
+                    model='claude-sonnet-4-5',
                     max_tokens=max_tokens,
                     system=TRANSLATION_RULES_ARTICLE,
                     system_cache=True,
@@ -3533,9 +3550,12 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
                     yield f"data: {json.dumps({'chunk': chunk})}\n\n"
                 full_text = sonnet_text
                 jp_ratio = _jp_ratio(full_text)
-                print(f'[article translate] Sonnet retry done, JP ratio {jp_ratio:.2f}')
+                ascii_run = _max_ascii_run(full_text)
+                print(f'[xlate] sonnet jp={jp_ratio:.2f} ascii_run={ascii_run}')
             except Exception as e:
-                print(f'[article translate] Sonnet retry failed: {e}')
+                import traceback
+                print(f'[xlate] sonnet retry FAILED: {type(e).__name__}: {e}')
+                print(traceback.format_exc())
 
         if jp_ratio < 0.4:
             print(f'[article translate] skip cache (JP ratio {jp_ratio:.2f} < 0.4) url={url}')
