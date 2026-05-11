@@ -3184,35 +3184,29 @@ _article_cache: dict[str, dict] = {}
 # 重要: 同一 token 列で送信する必要があるため、module レベル定数で固定.
 TRANSLATION_RULES_ARTICLE = (
     "あなたは英語ニュース記事を自然な日本語に翻訳する翻訳エンジンです。\n"
-    "user メッセージで渡される英語記事を、以下のルールに従い翻訳した結果だけを返してください。\n"
-    "前置き・後書き・「以下が翻訳です」のような説明文は一切不要です。\n"
+    "<source_article>...</source_article> タグで渡される英語記事を、以下のルールに従い翻訳した日本語の結果だけを返してください。\n"
+    "前置き・後書き・「以下が翻訳です」のような説明文・英語のままの本文・XMLタグの再出力は一切不要です。\n"
     "\n"
     "【必須ルール】\n"
+    "・原文の見出しレベルを維持する: 原文の `## 見出し` は翻訳後も `## 見出し` のまま出力 (h3 にダウングレードしない)\n"
+    "・原文に見出しがない長い段落は ## 見出し を 2〜4 個生成する (話題切替箇所)\n"
+    "・見出しは必ず日本語に翻訳する (英語のまま残さない)\n"
+    "・重要な固有名詞 / 金額 / パーセント / 結論文は **太字** で強調する (1 段落に 1〜2 箇所まで、過剰禁止)\n"
     "・企業名・ブランド名・製品名はそのままアルファベットで残す\n"
-    "・括弧内のティッカーシンボルは必ず原文のまま残す（例：Apple（AAPL）→ Apple（AAPL））\n"
-    "・ティッカーシンボル単体（AAPL、NVDA等）もそのまま残す\n"
+    "・括弧内のティッカーシンボルは原文のまま (例：Apple (AAPL) → Apple (AAPL))\n"
+    "・ティッカーシンボル単体 (AAPL、NVDA 等) もそのまま\n"
     "・数値・金額・%はそのまま残す\n"
-    "・人名は記事内で一貫してカタカナ表記に統一する（タイトルと本文を揃える）\n"
-    "  例：Nancy Pelosi → ナンシー・ペロシ、以降の Pelosi → ペロシ\n"
-    "  例：Elon Musk → イーロン・マスク、以降の Musk → マスク\n"
-    "  例：Jerome Powell → ジェローム・パウエル、以降の Powell → パウエル\n"
-    "  原文の英語表記（Pelosi、Musk 等）は本文に残してはいけない\n"
+    "・人名は記事内で一貫してカタカナ表記に統一する\n"
+    "  例：Nancy Pelosi → ナンシー・ペロシ、Elon Musk → イーロン・マスク、Jerome Powell → ジェローム・パウエル\n"
+    "  以降の言及 (Pelosi / Musk / Powell 等) も必ずカタカナ\n"
     "・段落の区切りは空行で表現する\n"
-    "・原文に見出しや小見出しがあれば ## 見出し の形式で出力する\n"
-    "・話題が大きく切り替わる箇所には ## 見出し を付ける（2〜4個程度）\n"
-    "・見出しは必ず日本語に翻訳する（英語のまま残さない）\n"
     "・以下に該当する行は翻訳せず完全に省略する：\n"
     "  - 「続きを読む」「元記事へ」「全文を読む」などの読者誘導文\n"
-    "  - 広告・プロモーション・サービス紹介文（例：「〜計算機で試してください」「〜のナラティブは〜を提供します」）\n"
-    "  - サイト固有の警告・スコア表示（例：「〜は〜の警告サインを検出」「評価チェックで〜スコアを獲得」）\n"
-    "  - 著作権表示・免責事項（例：「© 2026 〜」「投資アドバイスを提供しません」「すべての権利を保有」）\n"
-    "  - AI生成開示文（例：「このコンテンツはAIツールの助けを借りて〜」）\n"
-    "  - 著者名・編集者名の署名行\n"
+    "  - 広告・プロモーション・サービス紹介文・サイト固有の警告/スコア表示\n"
+    "  - 著作権表示・免責事項・AI生成開示文・著者名/編集者名の署名行\n"
     "  - SNSフォロー・メール登録・会員登録などのCTA文\n"
-    "  - データ提供元のクレジット表記（例：「〜APIによって提供されています」）\n"
-    "  - 「〜のストーリーにはもっと多くのことがありますか？」などのサービス誘導・エンゲージメント促進文\n"
-    "  - 「Simply Wall St」「GuruFocus」など特定サービス名を主語とするプロモーション文\n"
-    "・本文の最後に必ず以下を付ける（翻訳せずそのまま出力）:\n"
+    "  - データ提供元のクレジット表記・特定サービス名 (Simply Wall St、GuruFocus 等) のプロモーション文\n"
+    "・本文の最後に必ず以下を付ける (翻訳せずそのまま出力):\n"
     "\n"
     "---\n"
     "元記事で続きを読む\n"
@@ -3402,9 +3396,9 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
     if not url:
         raise HTTPException(status_code=400, detail="url is required")
 
-    # キャッシュヒット時は200文字ずつ分割してSSE返却
+    # キャッシュ TTL を 24h → 6h に短縮 (v66: bad-translation の長期残留を防ぐ).
     cached = _article_cache.get(url)
-    if cached and time.time() - cached["ts"] < 86400:
+    if cached and time.time() - cached["ts"] < 21600:
         async def cached_stream():
             text = cached["data"]["translated"]
             chunk_size = 200
@@ -3441,14 +3435,15 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
             yield f"data: {json.dumps({'error': '記事の取得に失敗しました。元記事リンクからご確認ください。'})}\n\n"
             return
 
-        # 本文テキスト抽出（30行・各行200文字上限）
+        # 本文テキスト抽出. §v66 user feedback: max_lines を 30→15 に削減し
+        # Claude の input/output token を半減 → TTFT を 2-3s 短縮.
         try:
             soup = BeautifulSoup(resp.text, "html.parser")
             for tag in soup(["script", "style", "nav", "header", "footer", "aside", "iframe", "noscript"]):
                 tag.decompose()
             body_el = soup.find("article") or soup.find("main") or soup.find("body")
             raw_text = body_el.get_text(separator="\n", strip=True) if body_el else soup.get_text(separator="\n", strip=True)
-            max_lines: int = body.get("max_lines", 30)
+            max_lines: int = body.get("max_lines", 15)
             lines = [ln.strip()[:200] for ln in raw_text.splitlines() if len(ln.strip()) > 30]
             text = "\n".join(lines[:max_lines])
             if not text:
@@ -3457,22 +3452,33 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
             yield f"data: {json.dumps({'error': f'本文の抽出に失敗しました: {str(e)}'})}\n\n"
             return
 
-        # Claude Haiku でストリーミング翻訳
-        # rules は system prompt (cache 化済、TRANSLATION_RULES_ARTICLE) に分離.
-        # user メッセージは「翻訳指示 + 本文」。raw 英文のみだと一部記事で Claude が
-        # 翻訳をスキップする (英文を構造化だけして返す) 事象を観測したため、明示的に
-        # 指示を冒頭に置く。指示は短いので cache 効果はほぼ維持される.
-        prompt = f"以下の英語記事を日本語に翻訳してください。\n\n{text}"
+        # §v66 §3 (Anthropic engineer 推奨): structured user content blocks で
+        # rules を user 側 cache_control に持たせ、Claude の指示忠実度を高める.
+        # system は短い人格定義のみ。few-shot で「英 h2 → ## 日本語見出し」を 1 例示し
+        # heading 維持と翻訳実施を保証.
+        rules_block_text = (
+            TRANSLATION_RULES_ARTICLE
+            + "\n【出力例】\n"
+            + "入力:\n<article>\n## Q3 Results Beat Estimates\nApple (AAPL) reported strong Q3 earnings...\n</article>\n\n"
+            + "出力:\n## 第3四半期決算は予想を上回る\nApple (AAPL) は好調な第3四半期決算を発表し、**売上高は前年比 +12%** ...\n"
+        )
+        article_block_text = (
+            f"<article>\n{text}\n</article>\n\n"
+            f"上記の英語記事を日本語に翻訳してください。"
+            f"最初の行は必ず `## ` で始まる日本語見出しにしてください。"
+        )
 
         full_text = ""
         try:
             claude = ClaudeClient()
-            max_tokens = min(512 + max_lines * 60, 4096)
+            max_tokens = min(400 + max_lines * 80, 2400)  # 短文記事向け削減 (TTFT さらに -0.5s)
             async for chunk in claude.stream_complete(
-                prompt,
+                user_content=[
+                    {"type": "text", "text": rules_block_text, "cache_control": {"type": "ephemeral"}},
+                    {"type": "text", "text": article_block_text},
+                ],
                 max_tokens=max_tokens,
-                system=TRANSLATION_RULES_ARTICLE,
-                system_cache=True,
+                system="あなたは英→日のプロ翻訳者です。出力は必ず日本語のみ。英文をそのまま返してはいけません。",
             ):
                 full_text += chunk
                 yield f"data: {json.dumps({'chunk': chunk})}\n\n"
@@ -3489,12 +3495,19 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
             yield f"data: {json.dumps({'error': msg})}\n\n"
             return
 
-        # 完了後キャッシュ保存
-        import time as _time_art
-        _article_cache[url] = {
-            "data": {"translated": full_text, "original_url": url},
-            "ts": _time_art.time(),
-        }
+        # §v66 quality gate: ASCII 文字比率が 60%+ なら翻訳失敗とみなしキャッシュしない.
+        # bad-translation を 6h 残し続けるのを防ぐ.
+        ascii_count = sum(1 for c in full_text if ord(c) < 128 and c.isalpha())
+        total_alpha = sum(1 for c in full_text if c.isalpha())
+        ascii_ratio = ascii_count / total_alpha if total_alpha > 0 else 0
+        if ascii_ratio > 0.6:
+            print(f'[article translate] skip cache (ASCII ratio {ascii_ratio:.2f} > 0.6) url={url}')
+        else:
+            import time as _time_art
+            _article_cache[url] = {
+                "data": {"translated": full_text, "original_url": url},
+                "ts": _time_art.time(),
+            }
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")

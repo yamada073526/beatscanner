@@ -157,6 +157,23 @@ export default function Pane4Inspector({ items = [] }) {
     return max > 0 ? new Date(max).toISOString() : null;
   }, [news]);
 
+  // §v66 §3 (マーケター + 設計エキスパート推奨): 上位 3 件を fire-and-forget で
+  // prefetch し Pane 5 クリック時 TTFT 0s (cache hit). コストは 3x だがクリック率
+  // 60-70% が上位 3 件に集中する想定で ROI 良し.
+  const prefetchedRef = useRef(new Set());
+  useEffect(() => {
+    const top3 = sorted.slice(0, 3).filter((n) => n.url);
+    for (const item of top3) {
+      if (prefetchedRef.current.has(item.url)) continue;
+      prefetchedRef.current.add(item.url);
+      fetch('/api/news/article', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: item.url, max_lines: 15 }),
+      }).catch(() => { /* fire-and-forget */ });
+    }
+  }, [sorted]);
+
   // ── タイトル翻訳: AbortController + seqId で race guard ──
   const visibleTitles = useMemo(
     () => sorted.slice(0, 30).map((n) => ({ url: n.url, title: n.title || '' })),

@@ -70,8 +70,9 @@ class ClaudeClient:
 
     async def stream_complete(
         self,
-        prompt: str,
+        prompt: str | None = None,
         *,
+        user_content: list | None = None,
         model: str = "claude-haiku-4-5-20251001",
         max_tokens: int = 1024,
         temperature: float = 0.0,
@@ -79,13 +80,20 @@ class ClaudeClient:
         system_cache: bool = False,
     ):
         """Yield text chunks as they arrive from Claude.
+        - prompt: str を渡すと従来の単一テキスト user message として送信
+        - user_content: list[dict] を渡すと structured content blocks (cache_control 可)
+          として送信。記事翻訳のように rules + 本文を user 側で cache 化したい場合に使用.
         system_cache=True で system prompt を ephemeral cache 化する.
         """
+        if user_content is not None:
+            messages = [{"role": "user", "content": user_content}]
+        else:
+            messages = [{"role": "user", "content": prompt}]
         kwargs: dict = dict(
             model=model,
             max_tokens=max_tokens,
             temperature=temperature,
-            messages=[{"role": "user", "content": prompt}],
+            messages=messages,
         )
         sys_param = self._system_param(system, system_cache)
         if sys_param is not None:

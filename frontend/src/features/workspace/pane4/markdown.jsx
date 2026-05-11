@@ -135,7 +135,9 @@ export const MD_COMPONENTS = {
   p: ({ children, node, ...rest }) => {
     const heading = isHeadingLike(children);
     if (heading) {
-      return <h3 {...rest}>{heading}</h3>;
+      // §v66 user feedback: 原文 h2 → 翻訳 h3 ダウングレード問題の対策で h2 に揃える.
+      // backend prompt も「## 見出しは ## のまま」と明示済 (二重防御).
+      return <h2 {...rest}>{heading}</h2>;
     }
     return <p {...rest}>{patchChildren(children)}</p>;
   },
