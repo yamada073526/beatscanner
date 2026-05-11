@@ -5257,45 +5257,70 @@ button.ds-chip:active {
   color: rgb(56, 189, 248);
 }
 
+/* §round22 (3 体レビュー収束) long-form タイポグラフィ token + 旧 UI 同等の品位
+   将来 Pane 3 詳細レポートでも使い回す前提で --longform-* 名前空間 */
+:root {
+  --longform-h2-size: 15px;
+  --longform-h3-size: 14px;
+  --longform-h4-size: 13px;
+  --longform-p-size: 14px;
+  --longform-p-leading: 1.78;
+  --longform-heading-color-primary: rgb(56, 189, 248);   /* cyan-400 (h2) */
+  --longform-heading-color-dim: rgb(125, 211, 252);      /* cyan-300 (h3) */
+  --longform-heading-color-muted: rgba(15, 23, 42, 0.62);
+  --longform-heading-rule: rgba(56, 189, 248, 0.22);
+  --longform-p-color: rgba(15, 23, 42, 0.86);
+}
+[data-theme="dark"] {
+  --longform-heading-color-muted: rgba(255, 255, 255, 0.62);
+  --longform-p-color: rgba(229, 231, 235, 0.92);
+}
+
 /* ── 記事本文 (markdown) のタイポグラフィ ───────────────────────── */
 .ws-pane4-article-body {
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--text-secondary);
+  font-size: var(--longform-p-size);
+  line-height: var(--longform-p-leading);
+  color: var(--longform-p-color);
 }
-.ws-pane4-article-body h1 {
-  margin: 20px 0 10px;
-  font-size: 15px;
-  font-weight: 700;
-  color: rgb(14, 165, 233);
-  letter-spacing: 0.01em;
-}
+.ws-pane4-article-body h1,
 .ws-pane4-article-body h2 {
-  margin: 18px 0 8px;
-  font-size: 14px;
-  font-weight: 700;
-  color: rgb(14, 165, 233);
-  letter-spacing: 0.01em;
+  margin: 28px 0 12px;
+  padding-bottom: 6px;
+  font-size: var(--longform-h2-size);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  color: var(--longform-heading-color-primary);
+  border-bottom: 1px solid var(--longform-heading-rule);
+}
+.ws-pane4-article-body h2:first-child,
+.ws-pane4-article-body h1:first-child {
+  margin-top: 0;
 }
 .ws-pane4-article-body h3 {
-  margin: 14px 0 6px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-primary);
+  margin: 22px 0 10px;
+  font-size: var(--longform-h3-size);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.4;
+  color: var(--longform-heading-color-dim);
 }
-/* §round16: backend が h4-h6 / リスト項目の見出し風 / "**bold paragraph**" を出すケースに対応 */
 .ws-pane4-article-body h4,
 .ws-pane4-article-body h5,
 .ws-pane4-article-body h6 {
-  margin: 12px 0 4px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-primary);
-  text-transform: none;
-  letter-spacing: 0;
+  margin: 18px 0 8px;
+  font-size: var(--longform-h4-size);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--longform-heading-color-muted);
 }
 .ws-pane4-article-body p {
-  margin: 8px 0;
+  margin: 0 0 14px;
+  letter-spacing: 0.01em;
+}
+.ws-pane4-article-body p + p {
+  margin-top: 2px;
 }
 .ws-pane4-article-body strong {
   color: var(--text-primary);
@@ -5303,8 +5328,16 @@ button.ds-chip:active {
 }
 .ws-pane4-article-body ul,
 .ws-pane4-article-body ol {
-  margin: 8px 0;
-  padding-left: 20px;
+  margin: 10px 0 14px;
+  padding-left: 22px;
+}
+.ws-pane4-article-body li {
+  margin: 4px 0;
+}
+.ws-pane4-article-body hr {
+  margin: 24px 0;
+  border: none;
+  border-top: 1px solid var(--border);
 }
 
 /* §round19 fix: SSE ストリーミング中の点滅カーソル.

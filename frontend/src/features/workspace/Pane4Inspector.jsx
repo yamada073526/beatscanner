@@ -35,6 +35,32 @@ function _extractText(node) {
   }
   return '';
 }
+/** §round22 (UI/UX C 反映): 記事末尾の trailer 行 (元記事誘導) を除去.
+ *  旧 useArticleModal の REMOVE_PATTERNS と同思想、Pane 5 流入文字列に適用. */
+const TRAILER_PATTERNS = [
+  /^---\s*元記事で続きを読む\s*$/i,
+  /^---+\s*$/,
+  /^={3,}\s*$/,
+  /^元記事(で|を)(続き|全文).*/,
+  /^続きは?元記事/,
+  /^全文を読む/,
+  /^Read (more|the full).*/i,
+  /^Click here to.*/i,
+];
+function stripArticleTrailer(text) {
+  if (!text) return text;
+  const lines = text.split('\n');
+  // 末尾から空行をスキップしつつ trailer ライン群を捨てる
+  let end = lines.length;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const t = lines[i].trim();
+    if (!t) { end = i; continue; }
+    if (TRAILER_PATTERNS.some((re) => re.test(t))) { end = i; continue; }
+    break;
+  }
+  return lines.slice(0, end).join('\n').trimEnd();
+}
+
 function isHeadingLike(children) {
   const arr = Array.isArray(children) ? children : [children];
   const meaningful = arr.filter((c) => {
@@ -431,6 +457,8 @@ function ReadingMode({ item, onClose, jpEnabled }) {
             if (!line.startsWith('data: ')) continue;
             const payload = line.slice(6);
             if (payload === '[DONE]') {
+              // §round22: trailer 行 (「---元記事で続きを読む」「Read more →」等) を除去
+              setEnContent((prev) => stripArticleTrailer(prev));
               setEnLoading(false);
               return;
             }
