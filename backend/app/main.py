@@ -3397,15 +3397,46 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
         raise HTTPException(status_code=400, detail="url is required")
 
     # キャッシュ TTL を 24h → 6h に短縮 (v66: bad-translation の長期残留を防ぐ).
+    # §v66 dogfood-7: cache hit 時も quality 検証を実施。bad translation (英文 pass-through)
+    # を serve し続ける regression を防ぐ。validation 不合格なら delete + fresh translation.
+    def _validate_cached_translation(text: str) -> bool:
+        """キャッシュ済翻訳が日本語として健全か判定. False なら invalidate."""
+        if not text or len(text) < 50:
+            return False
+        jc = sum(
+            1 for c in text
+            if ('぀' <= c <= 'ゟ') or ('゠' <= c <= 'ヿ') or ('一' <= c <= '鿿')
+        )
+        ac = sum(1 for c in text if c.isalpha())
+        jp_ratio = jc / ac if ac > 0 else 0
+        # 連続 ASCII alpha の最大長
+        m = c = 0
+        for ch in text:
+            if ch.isascii() and ch.isalpha():
+                c += 1
+                if c > m:
+                    m = c
+            else:
+                c = 0
+        ascii_run = m
+        ok = jp_ratio >= 0.7 and ascii_run < 40
+        if not ok:
+            print(f'[xlate] cache invalidate (jp={jp_ratio:.2f}, ascii_run={ascii_run}) url={url}')
+        return ok
+
     cached = _article_cache.get(url)
     if cached and time.time() - cached["ts"] < 21600:
-        async def cached_stream():
-            text = cached["data"]["translated"]
-            chunk_size = 200
-            for i in range(0, len(text), chunk_size):
-                yield f"data: {json.dumps({'chunk': text[i:i+chunk_size]})}\n\n"
-            yield "data: [DONE]\n\n"
-        return StreamingResponse(cached_stream(), media_type="text/event-stream")
+        if _validate_cached_translation(cached["data"]["translated"]):
+            async def cached_stream():
+                text = cached["data"]["translated"]
+                chunk_size = 200
+                for i in range(0, len(text), chunk_size):
+                    yield f"data: {json.dumps({'chunk': text[i:i+chunk_size]})}\n\n"
+                yield "data: [DONE]\n\n"
+            return StreamingResponse(cached_stream(), media_type="text/event-stream")
+        else:
+            # bad cache を削除して fresh translation に fallthrough
+            del _article_cache[url]
 
     async def generate():
         # 記事本文を取得
