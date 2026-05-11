@@ -42,13 +42,17 @@ const TIER1_SYMS = new Set(TIER1.map((t) => t.sym));
 // §dogfood-round12: Tier 2 順序は frontend で明示制御 (backend 順は QQQ→SPY だが、
 // S&P 500 が NASDAQ より上の Tier 1 順序と整合させ SPY を先頭に).
 // 未定義 symbol は配列末尾へ。
-// v65 §4-B-1 Phase 1: 6 → 12 拡張 (米セクター 4 + 半導体 + 新興国)。Phase 2 は 24h spot 後判定。
+// v65 §4-B-1 Phase 1: 6 → 12 拡張 (米セクター 4 + 半導体 + 新興国)。
+// v65 §4-B-1 Phase 2: 12 → 18 拡張 (yield curve / break-even / credit 3 層 / DM-EM / 金鉱 / spot BTC)。
 const TIER2_ORDER = [
   'SPY', 'QQQ', 'IWM',          // 米コア (大型 / ハイテク / 小型)
   'XLK', 'XLF', 'XLE', 'XLV',   // 米セクター 4
   'SOXX',                        // 半導体テーマ
-  'EEM',                         // 海外代表
-  'GLD', 'TLT', 'HYG',          // 安全資産 + 金利 + クレジット
+  'EEM', 'EFA',                  // 海外 (新興国 + 先進国除く米)
+  'GLD', 'GDX',                  // 金 (現物 + 鉱株)
+  'TLT', 'IEF', 'TIP',          // 米国債 (長期 + 中期 + インフレ連動)
+  'HYG', 'LQD',                  // クレジット (HY + IG)
+  'IBIT',                        // 仮想通貨 (現物 BTC ETF)
 ];
 
 // 期間別変化率テーブル用 (RowSparkline と同じ営業日数)

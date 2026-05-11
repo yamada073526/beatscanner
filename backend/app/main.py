@@ -3462,6 +3462,13 @@ MARKET_SYMBOLS = [
     {"symbol": "XLV",      "label": "XLV",      "type": "sector",    "desc_ja": "ヘルスケア・セクター（UnitedHealth / J&J / Eli Lilly）"},
     {"symbol": "SOXX",     "label": "SOXX",     "type": "etf",       "desc_ja": "半導体株 ETF（NVIDIA / TSM / AMD 中心）"},
     {"symbol": "EEM",      "label": "EEM",      "type": "etf",       "desc_ja": "新興国株 ETF（中国・台湾・インド・ブラジル）"},
+    # v65 §4-B-1 Phase 2: 12 → 18 拡張（yield curve / break-even / credit 3 層 / DM-EM / 金鉱 / spot BTC）
+    {"symbol": "EFA",      "label": "EFA",      "type": "etf",       "desc_ja": "先進国株 ETF（米除く・欧州/日本中心）"},
+    {"symbol": "GDX",      "label": "GDX",      "type": "etf",       "desc_ja": "金鉱株 ETF（GLD のボラ増幅版）"},
+    {"symbol": "IEF",      "label": "IEF",      "type": "bond",      "desc_ja": "米 7-10 年中期国債 ETF（TLT と組合せでイールドカーブ）"},
+    {"symbol": "TIP",      "label": "TIP",      "type": "bond",      "desc_ja": "米インフレ連動債 ETF（ブレークイーブン把握）"},
+    {"symbol": "LQD",      "label": "LQD",      "type": "credit",    "desc_ja": "米投資適格社債 ETF（HYG と組合せでクレジット 2 層）"},
+    {"symbol": "IBIT",     "label": "IBIT",     "type": "crypto",    "desc_ja": "現物ビットコイン ETF（BlackRock）"},
 ]
 
 _MARKET_CACHE: dict = {"data": None, "ts": 0.0}
