@@ -15,33 +15,52 @@ import { TrendingUp, Globe, BarChart3, Bookmark, ExternalLink, X, Languages } fr
 import { fetchMacroNews, fetchNews, translateTexts, translateTextsStream } from '../../api.js';
 import CompanyLogo from '../../components/CompanyLogo.jsx';
 
-// ── §round17 Markdown 見出し補強 (UI/UX レビュー反映) ──────────
-//   backend SSE が一部見出しを `**bold**` 単独段落で出す。
-//   ReactMarkdown の p renderer で「strong 単一子 + 句点なし + 短文」を h3 に昇格.
-const HEADING_SENTINEL_RE = /[。.!?…!?]/;
-function isHeadingLike(children) {
-  // children は React node 配列 (ReactMarkdown が渡す)
-  if (!Array.isArray(children)) {
-    children = [children];
+// ── §round17/21 Markdown 見出し補強 (UI/UX レビュー反映) ──────────
+//   backend SSE が一部見出しを `## ...` ではなく `**...**` (bold) または
+//   句読点なしの短いプレーン段落として生成する。両ケースを ReactMarkdown の
+//   p renderer で h3 に昇格させる.
+//
+//   判定基準:
+//     strong 単一子: ≤40 文字 + 句点 (。.!?) なし → 見出し
+//     plain text: ≤32 文字 + 句読点 (、,。.!?・) なし → 見出し
+const HEADING_STRONG_RE = /[。.!?…!?]/;            // strong は読点 OK
+const HEADING_PLAIN_RE = /[。.!?…!?、,，・]/;       // plain は読点も NG (誤検出抑制)
+function _extractText(node) {
+  if (node == null) return '';
+  if (typeof node === 'string') return node;
+  if (typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(_extractText).join('');
+  if (typeof node === 'object' && node?.props?.children != null) {
+    return _extractText(node.props.children);
   }
-  // 余分な空白/改行を除いた node 配列を取得
-  const meaningful = children.filter((c) => {
+  return '';
+}
+function isHeadingLike(children) {
+  const arr = Array.isArray(children) ? children : [children];
+  const meaningful = arr.filter((c) => {
     if (c == null) return false;
     if (typeof c === 'string') return c.trim().length > 0;
     return true;
   });
-  if (meaningful.length !== 1) return false;
+  if (meaningful.length !== 1) return null;
   const only = meaningful[0];
-  if (typeof only !== 'object' || only?.type !== 'strong') return false;
-  // strong の中の text を抽出
-  const inner = Array.isArray(only.props?.children)
-    ? only.props.children.join('')
-    : (only.props?.children ?? '');
-  const text = String(inner).trim();
-  if (!text) return false;
-  if (text.length > 40) return false;
-  if (HEADING_SENTINEL_RE.test(text)) return false;
-  return text;
+  // Case 1: <strong> 単一子 (bold 見出し)
+  if (typeof only === 'object' && only?.type === 'strong') {
+    const text = _extractText(only).trim();
+    if (!text) return null;
+    if (text.length > 40) return null;
+    if (HEADING_STRONG_RE.test(text)) return null;
+    return text;
+  }
+  // Case 2: plain text 単一 (formatting 無し)
+  if (typeof only === 'string') {
+    const text = only.trim();
+    if (text.length < 4) return null;
+    if (text.length > 32) return null;
+    if (HEADING_PLAIN_RE.test(text)) return null;
+    return text;
+  }
+  return null;
 }
 const MD_COMPONENTS = {
   p: ({ children, node, ...rest }) => {
