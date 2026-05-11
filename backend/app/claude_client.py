@@ -17,6 +17,22 @@ class ClaudeClient:
             raise ClaudeError("ANTHROPIC_API_KEY is not set")
         self.client = AsyncAnthropic(api_key=key)
 
+    @staticmethod
+    def _system_param(system: str | None, system_cache: bool):
+        """system を Anthropic API の system param 形式に変換する.
+        system_cache=True なら structured array + ephemeral cache_control を付与し、
+        prompt caching を有効化する (Haiku 4.5 で 5 分 TTL、最低 2048 token 必要).
+        """
+        if not system:
+            return None
+        if system_cache:
+            return [{
+                "type": "text",
+                "text": system,
+                "cache_control": {"type": "ephemeral"},
+            }]
+        return system
+
     async def complete(
         self,
         prompt: str,
@@ -25,11 +41,15 @@ class ClaudeClient:
         max_tokens: int = 1024,
         temperature: float = 0.0,
         system: str | None = None,
+        system_cache: bool = False,
         prefill: str | None = None,
     ) -> str:
         """prefill を指定すると assistant の出力を強制的にその文字列で開始させる。
         例: prefill="{" を渡すと、Claude の出力は必ず `{` から続く（戻り値には prefill 自身が prepend される）。
-        JSON-only 出力を確実にしたい場合に有効。"""
+        JSON-only 出力を確実にしたい場合に有効。
+
+        system_cache=True で system prompt を ephemeral cache 化する.
+        """
         messages: list[dict] = [{"role": "user", "content": prompt}]
         if prefill:
             messages.append({"role": "assistant", "content": prefill})
@@ -39,8 +59,9 @@ class ClaudeClient:
             temperature=temperature,
             messages=messages,
         )
-        if system:
-            kwargs["system"] = system
+        sys_param = self._system_param(system, system_cache)
+        if sys_param is not None:
+            kwargs["system"] = sys_param
         msg = await self.client.messages.create(**kwargs)
         body = "".join(b.text for b in msg.content if b.type == "text")
         if prefill:
@@ -55,16 +76,20 @@ class ClaudeClient:
         max_tokens: int = 1024,
         temperature: float = 0.0,
         system: str | None = None,
+        system_cache: bool = False,
     ):
-        """Yield text chunks as they arrive from Claude."""
+        """Yield text chunks as they arrive from Claude.
+        system_cache=True で system prompt を ephemeral cache 化する.
+        """
         kwargs: dict = dict(
             model=model,
             max_tokens=max_tokens,
             temperature=temperature,
             messages=[{"role": "user", "content": prompt}],
         )
-        if system:
-            kwargs["system"] = system
+        sys_param = self._system_param(system, system_cache)
+        if sys_param is not None:
+            kwargs["system"] = sys_param
         async with self.client.messages.stream(**kwargs) as stream:
             async for text in stream.text_stream:
                 yield text

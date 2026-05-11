@@ -3176,6 +3176,63 @@ async def news_bulk(body: dict, request: Request) -> dict:
 _translate_cache: dict[str, str] = {}
 _article_cache: dict[str, dict] = {}
 
+# §v66 prompt caching (Anthropic engineer #1 — 月 $15-30 → $2-3 期待):
+# 記事翻訳 / タイトル翻訳の static rules を system prompt に分離し
+# ephemeral cache (5 分 TTL) を有効化。同 session 内の連続翻訳で
+# 90% コスト削減 + credit 枯渇 pill 発生頻度を低下させる.
+#
+# 重要: 同一 token 列で送信する必要があるため、module レベル定数で固定.
+TRANSLATION_RULES_ARTICLE = (
+    "あなたは英語ニュース記事を自然な日本語に翻訳する翻訳エンジンです。\n"
+    "user メッセージで渡される英語記事を、以下のルールに従い翻訳した結果だけを返してください。\n"
+    "前置き・後書き・「以下が翻訳です」のような説明文は一切不要です。\n"
+    "\n"
+    "【必須ルール】\n"
+    "・企業名・ブランド名・製品名はそのままアルファベットで残す\n"
+    "・括弧内のティッカーシンボルは必ず原文のまま残す（例：Apple（AAPL）→ Apple（AAPL））\n"
+    "・ティッカーシンボル単体（AAPL、NVDA等）もそのまま残す\n"
+    "・数値・金額・%はそのまま残す\n"
+    "・人名は記事内で一貫してカタカナ表記に統一する（タイトルと本文を揃える）\n"
+    "  例：Nancy Pelosi → ナンシー・ペロシ、以降の Pelosi → ペロシ\n"
+    "  例：Elon Musk → イーロン・マスク、以降の Musk → マスク\n"
+    "  例：Jerome Powell → ジェローム・パウエル、以降の Powell → パウエル\n"
+    "  原文の英語表記（Pelosi、Musk 等）は本文に残してはいけない\n"
+    "・段落の区切りは空行で表現する\n"
+    "・原文に見出しや小見出しがあれば ## 見出し の形式で出力する\n"
+    "・話題が大きく切り替わる箇所には ## 見出し を付ける（2〜4個程度）\n"
+    "・見出しは必ず日本語に翻訳する（英語のまま残さない）\n"
+    "・以下に該当する行は翻訳せず完全に省略する：\n"
+    "  - 「続きを読む」「元記事へ」「全文を読む」などの読者誘導文\n"
+    "  - 広告・プロモーション・サービス紹介文（例：「〜計算機で試してください」「〜のナラティブは〜を提供します」）\n"
+    "  - サイト固有の警告・スコア表示（例：「〜は〜の警告サインを検出」「評価チェックで〜スコアを獲得」）\n"
+    "  - 著作権表示・免責事項（例：「© 2026 〜」「投資アドバイスを提供しません」「すべての権利を保有」）\n"
+    "  - AI生成開示文（例：「このコンテンツはAIツールの助けを借りて〜」）\n"
+    "  - 著者名・編集者名の署名行\n"
+    "  - SNSフォロー・メール登録・会員登録などのCTA文\n"
+    "  - データ提供元のクレジット表記（例：「〜APIによって提供されています」）\n"
+    "  - 「〜のストーリーにはもっと多くのことがありますか？」などのサービス誘導・エンゲージメント促進文\n"
+    "  - 「Simply Wall St」「GuruFocus」など特定サービス名を主語とするプロモーション文\n"
+    "・本文の最後に必ず以下を付ける（翻訳せずそのまま出力）:\n"
+    "\n"
+    "---\n"
+    "元記事で続きを読む\n"
+)
+
+TRANSLATION_RULES_TITLES = (
+    "あなたは英語のニュースタイトル一覧を自然な日本語に翻訳する翻訳エンジンです。\n"
+    "user メッセージで渡される番号付きリストを、同じ番号付きリスト形式で翻訳して返してください。\n"
+    "翻訳結果だけを返してください。前置き・後書き・説明は一切不要です。\n"
+    "\n"
+    "【必須ルール】\n"
+    "- 企業名・ブランド名・製品名はそのままアルファベットで残す（例: Apple Inc.、Tesla、Microsoft）\n"
+    "- 人名は読み仮名（カタカナ）表記でよい（例: Elon Musk → イーロン・マスク）\n"
+    "- ティッカーシンボル（AAPL、MSFT等）はそのまま残す\n"
+    "- 数値・金額・パーセントはそのまま残す\n"
+    "- 「Inc.」「Corp.」「Ltd.」「Co.」はそのまま残す\n"
+    "- 翻訳が困難な短いタイトルでも、できるだけ自然な日本語に置き換える\n"
+    "- 出力は必ず `N. 翻訳結果` の形式 (N は入力と同じ番号)\n"
+)
+
 
 @app.post("/api/translate")
 async def translate_texts(body: dict) -> dict:
@@ -3198,25 +3255,19 @@ async def translate_texts(body: dict) -> dict:
 
     if uncached_texts:
         numbered = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(uncached_texts))
-        prompt = (
-            f"以下のニュースタイトルを自然な日本語に翻訳してください。\n"
-            f"番号付きリストの形式で、翻訳結果だけを返してください。\n"
-            f"余分な説明・前置き・後書きは一切不要です。\n\n"
-            f"【必須ルール】\n"
-            f"- 企業名・ブランド名・製品名はそのままアルファベットで残す（例: Apple Inc.、Tesla、Microsoft）\n"
-            f"- 人名は読み仮名（カタカナ）表記でよい（例: Elon Musk → イーロン・マスク）\n"
-            f"- ティッカーシンボル（AAPL、MSFT等）はそのまま残す\n"
-            f"- 数値・金額・パーセントはそのまま残す\n"
-            f"- 「Inc.」「Corp.」「Ltd.」「Co.」はそのまま残す\n\n"
-            f"{numbered}"
-        )
+        prompt = numbered  # rules は system にキャッシュ済、user は本文のみ
         # 件数に応じて max_tokens を動的計算 (1 タイトルあたり ~80 token 想定)
         # 40 件なら ~3200 + 余裕で 4096 上限。1024 固定では truncation して
         # 後半が翻訳されない問題があったため修正。
         max_tokens = min(max(1024, 80 * len(uncached_texts) + 200), 4096)
         try:
             client = ClaudeClient()
-            raw = await client.complete(prompt, max_tokens=max_tokens)
+            raw = await client.complete(
+                prompt,
+                max_tokens=max_tokens,
+                system=TRANSLATION_RULES_TITLES,
+                system_cache=True,
+            )
         except ClaudeError as e:
             raise HTTPException(status_code=503, detail=str(e))
 
@@ -3270,18 +3321,7 @@ async def translate_texts_stream(body: dict) -> StreamingResponse:
         # 2) 未キャッシュ分を Claude にストリーミング依頼
         if uncached_texts:
             numbered = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(uncached_texts))
-            prompt = (
-                "以下のニュースタイトルを自然な日本語に翻訳してください。\n"
-                "番号付きリストの形式で、翻訳結果だけを返してください。\n"
-                "余分な説明・前置き・後書きは一切不要です。\n\n"
-                "【必須ルール】\n"
-                "- 企業名・ブランド名・製品名はそのままアルファベットで残す（例: Apple Inc.、Tesla、Microsoft）\n"
-                "- 人名は読み仮名（カタカナ）表記でよい（例: Elon Musk → イーロン・マスク）\n"
-                "- ティッカーシンボル（AAPL、MSFT等）はそのまま残す\n"
-                "- 数値・金額・パーセントはそのまま残す\n"
-                "- 「Inc.」「Corp.」「Ltd.」「Co.」はそのまま残す\n\n"
-                f"{numbered}"
-            )
+            prompt = numbered  # rules は system にキャッシュ済
             max_tokens = min(max(1024, 80 * len(uncached_texts) + 200), 4096)
 
             import re as _re
@@ -3291,7 +3331,12 @@ async def translate_texts_stream(body: dict) -> StreamingResponse:
 
             try:
                 claude = ClaudeClient()
-                async for chunk in claude.stream_complete(prompt, max_tokens=max_tokens):
+                async for chunk in claude.stream_complete(
+                    prompt,
+                    max_tokens=max_tokens,
+                    system=TRANSLATION_RULES_TITLES,
+                    system_cache=True,
+                ):
                     buf += chunk
                     while "\n" in buf:
                         line, buf = buf.split("\n", 1)
@@ -3413,45 +3458,20 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
             return
 
         # Claude Haiku でストリーミング翻訳
-        prompt = (
-            "以下の英語ニュース記事を自然な日本語に翻訳してください。\n"
-            "【必須ルール】\n"
-            "・企業名・ブランド名・製品名はそのままアルファベットで残す\n"
-            "・括弧内のティッカーシンボルは必ず原文のまま残す（例：Apple（AAPL）→ Apple（AAPL））\n"
-            "・ティッカーシンボル単体（AAPL、NVDA等）もそのまま残す\n"
-            "・数値・金額・%はそのまま残す\n"
-            "・人名は記事内で一貫してカタカナ表記に統一する（タイトルと本文を揃える）\n"
-            "  例：Nancy Pelosi → ナンシー・ペロシ、以降の Pelosi → ペロシ\n"
-            "  例：Elon Musk → イーロン・マスク、以降の Musk → マスク\n"
-            "  例：Jerome Powell → ジェローム・パウエル、以降の Powell → パウエル\n"
-            "  原文の英語表記（Pelosi、Musk 等）は本文に残してはいけない\n"
-            "・段落の区切りは空行で表現する\n"
-            "・原文に見出しや小見出しがあれば ## 見出し の形式で出力する\n"
-            "・話題が大きく切り替わる箇所には ## 見出し を付ける（2〜4個程度）\n"
-            "・見出しは必ず日本語に翻訳する（英語のまま残さない）\n"
-            "・以下に該当する行は翻訳せず完全に省略する：\n"
-            "  - 「続きを読む」「元記事へ」「全文を読む」などの読者誘導文\n"
-            "  - 広告・プロモーション・サービス紹介文（例：「〜計算機で試してください」「〜のナラティブは〜を提供します」）\n"
-            "  - サイト固有の警告・スコア表示（例：「〜は〜の警告サインを検出」「評価チェックで〜スコアを獲得」）\n"
-            "  - 著作権表示・免責事項（例：「© 2026 〜」「投資アドバイスを提供しません」「すべての権利を保有」）\n"
-            "  - AI生成開示文（例：「このコンテンツはAIツールの助けを借りて〜」）\n"
-            "  - 著者名・編集者名の署名行\n"
-            "  - SNSフォロー・メール登録・会員登録などのCTA文\n"
-            "  - データ提供元のクレジット表記（例：「〜APIによって提供されています」）\n"
-            "  - 「〜のストーリーにはもっと多くのことがありますか？」などのサービス誘導・エンゲージメント促進文\n"
-            "  - 「Simply Wall St」「GuruFocus」など特定サービス名を主語とするプロモーション文\n"
-            "・翻訳結果だけを返す（前置き・後書き不要）\n"
-            "・本文の最後に必ず以下を付ける（翻訳せずそのまま出力）:\n"
-            "\n---\n元記事で続きを読む\n"
-            "\n\n"
-            f"{text}"
-        )
+        # rules は system prompt (cache 化済、TRANSLATION_RULES_ARTICLE) に分離.
+        # user メッセージは記事本文のみ → cache hit で input cost 90% 削減.
+        prompt = text
 
         full_text = ""
         try:
             claude = ClaudeClient()
             max_tokens = min(512 + max_lines * 60, 4096)
-            async for chunk in claude.stream_complete(prompt, max_tokens=max_tokens):
+            async for chunk in claude.stream_complete(
+                prompt,
+                max_tokens=max_tokens,
+                system=TRANSLATION_RULES_ARTICLE,
+                system_cache=True,
+            ):
                 full_text += chunk
                 yield f"data: {json.dumps({'chunk': chunk})}\n\n"
         except Exception as e:
