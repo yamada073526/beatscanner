@@ -78,17 +78,22 @@ class ClaudeClient:
         temperature: float = 0.0,
         system: str | None = None,
         system_cache: bool = False,
+        prefill: str | None = None,
     ):
         """Yield text chunks as they arrive from Claude.
         - prompt: str を渡すと従来の単一テキスト user message として送信
         - user_content: list[dict] を渡すと structured content blocks (cache_control 可)
-          として送信。記事翻訳のように rules + 本文を user 側で cache 化したい場合に使用.
+          として送信
+        - prefill: assistant の出力を強制的にその文字列で開始させる
+          (例: "## " で見出しから始まる出力を強制)。yield 結果には prefill 自身も含まれる
         system_cache=True で system prompt を ephemeral cache 化する.
         """
         if user_content is not None:
             messages = [{"role": "user", "content": user_content}]
         else:
             messages = [{"role": "user", "content": prompt}]
+        if prefill:
+            messages.append({"role": "assistant", "content": prefill})
         kwargs: dict = dict(
             model=model,
             max_tokens=max_tokens,
@@ -98,6 +103,10 @@ class ClaudeClient:
         sys_param = self._system_param(system, system_cache)
         if sys_param is not None:
             kwargs["system"] = sys_param
+        # prefill を先に yield することで client は prefill 込みの完全な出力を受け取る.
+        # (Anthropic SDK は prefill 後の生成 token のみ stream するため)
+        if prefill:
+            yield prefill
         async with self.client.messages.stream(**kwargs) as stream:
             async for text in stream.text_stream:
                 yield text

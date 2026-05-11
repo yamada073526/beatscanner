@@ -79,6 +79,13 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
                 setEnLoading(false);
                 return;
               }
+              // §v66 dogfood-4: backend が Sonnet retry を発動した時の reset signal.
+              // それまでに表示した英文 (Haiku passthrough) を消し「再翻訳中」状態に戻す.
+              if (obj.reset) {
+                setEnContent('');
+                setEnLoading(true);
+                continue;
+              }
               if (obj.chunk) {
                 setEnContent((prev) => prev + obj.chunk);
                 setEnLoading(false);
