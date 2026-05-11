@@ -609,8 +609,15 @@ function ReadingMode({ item, onClose, jpEnabled }) {
   const colors = getNewsColors(item.importance, cat);
   const Icon = cat ? CATEGORY_ICON[cat] : null;
   const displayTitle = jpEnabled && translatedTitle ? translatedTitle : item.title;
-  const displayContent = jpEnabled ? jaContent : enContent;
+  // §round24: AI 記事到着前は item.summary を即表示し体感待ち時間 0 秒化.
+  //   Claude TTFT (~3-5 秒) の間にユーザーが summary を読み始められるようにする.
+  //   jpEnabled かつ翻訳完了前は英文 (enContent) を即表示 → 翻訳到着次第シームレスに置換.
+  const aiContent = jpEnabled ? (jaContent || enContent) : enContent;
+  const fallbackContent = item.summary || '';
+  const displayContent = aiContent || fallbackContent;
+  const isUsingFallback = !aiContent && !!fallbackContent;
   const isStreamingTranslation = jpEnabled && (enLoading || jaLoading);
+  const isLoadingFirstChunk = enLoading && !enContent;
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -735,6 +742,36 @@ function ReadingMode({ item, onClose, jpEnabled }) {
         )}
         {!enError && (
           <div className="ws-pane4-article-body" style={{ marginTop: 12 }}>
+            {/* §round24: AI 要約生成中バナー (summary を fallback 表示中の case)
+                Claude TTFT ~3-5 秒の間も「動いている」ことを明示し体感待ち時間を縮める */}
+            {isLoadingFirstChunk && isUsingFallback && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  marginBottom: 10,
+                  padding: '6px 10px',
+                  borderRadius: 'var(--radius-sm, 8px)',
+                  background: 'rgba(56,189,248,0.08)',
+                  border: '1px solid rgba(56,189,248,0.22)',
+                  fontSize: 11,
+                  color: 'rgb(14,165,233)',
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    background: 'rgb(56,189,248)',
+                    animation: 'ws-pane4-live-pulse 1.4s ease-in-out infinite',
+                  }}
+                />
+                <span>AI が記事を構造化中… (元記事の要約を先に表示)</span>
+              </div>
+            )}
             {displayContent ? (
               <ReactMarkdown components={MD_COMPONENTS}>{displayContent}</ReactMarkdown>
             ) : (
@@ -742,9 +779,7 @@ function ReadingMode({ item, onClose, jpEnabled }) {
                 記事を読込中...
               </div>
             )}
-            {/* §round23: カーソルを常時 mount し opacity で表示切替.
-                条件 render だと unmount/remount で animation がリセットされ
-                「最初ゆるやか・後半激しい」感を生む. */}
+            {/* §round23: カーソルを常時 mount し opacity で表示切替. */}
             <span
               key="ws-pane4-cursor"
               className="ws-pane4-cursor"
