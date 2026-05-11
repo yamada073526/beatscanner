@@ -51,8 +51,11 @@ class ClaudeClient:
         system_cache=True で system prompt を ephemeral cache 化する.
         """
         messages: list[dict] = [{"role": "user", "content": prompt}]
-        if prefill:
-            messages.append({"role": "assistant", "content": prefill})
+        # Anthropic API は prefill 末尾空白を拒否するため rstrip して送信、
+        # 戻り値には original prefill (空白付き) を prepend.
+        api_prefill = prefill.rstrip() if prefill else None
+        if api_prefill:
+            messages.append({"role": "assistant", "content": api_prefill})
         kwargs: dict = dict(
             model=model,
             max_tokens=max_tokens,
@@ -92,8 +95,12 @@ class ClaudeClient:
             messages = [{"role": "user", "content": user_content}]
         else:
             messages = [{"role": "user", "content": prompt}]
-        if prefill:
-            messages.append({"role": "assistant", "content": prefill})
+        # Anthropic API は assistant prefill の末尾空白を許さない (invalid_request_error).
+        # 「## 」のような trailing space を含む prefill は API 用に rstrip し、
+        # client 向け yield のみ original (空白付き) を保持する.
+        api_prefill = prefill.rstrip() if prefill else None
+        if api_prefill:
+            messages.append({"role": "assistant", "content": api_prefill})
         kwargs: dict = dict(
             model=model,
             max_tokens=max_tokens,
