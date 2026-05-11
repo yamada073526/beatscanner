@@ -3515,19 +3515,22 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
             # client に reset signal を送り「再翻訳中」を表示させる
             yield f"data: {json.dumps({'reset': True, 'reason': 'retry_sonnet'})}\n\n"
             try:
+                # §v66 dogfood-5 (Web app dev #1): Sonnet retry を非 streaming →
+                # streaming に変更し retry 時 TTFT を -4-5s 短縮 (15-17s → 10-12s).
+                # Sonnet 4.6 は Haiku より instruction-following が強く、prefill 不要級だが
+                # 念のため "## " prefill を維持し見出し化を保証.
                 sonnet = ClaudeClient()
-                sonnet_text = await sonnet.complete(
+                sonnet_text = ""
+                async for chunk in sonnet.stream_complete(
                     prompt,
                     model='claude-sonnet-4-6',
                     max_tokens=max_tokens,
                     system=TRANSLATION_RULES_ARTICLE,
                     system_cache=True,
                     prefill="## ",
-                )
-                # Sonnet 結果を chunk として stream
-                chunk_size = 200
-                for i in range(0, len(sonnet_text), chunk_size):
-                    yield f"data: {json.dumps({'chunk': sonnet_text[i:i+chunk_size]})}\n\n"
+                ):
+                    sonnet_text += chunk
+                    yield f"data: {json.dumps({'chunk': chunk})}\n\n"
                 full_text = sonnet_text
                 jp_ratio = _jp_ratio(full_text)
                 print(f'[article translate] Sonnet retry done, JP ratio {jp_ratio:.2f}')

@@ -5398,6 +5398,12 @@ button.ds-chip:active {
   50%      { opacity: 0; }
 }
 
+/* §v66 dogfood-5: Pane 5 翻訳待ち中の shimmer skeleton (Marketer #1 Weber-Fechner) */
+@keyframes ws-pane5-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 /* §round18: prefers-reduced-motion 配慮 (Apple HIG 準拠).
    transform/shadow は無効化、color/opacity/background は 120ms で残す → affordance 維持. */
 @media (prefers-reduced-motion: reduce) {

@@ -149,22 +149,40 @@ export function scoreSignal(sig, tickerToDaysToEarnings = null) {
   };
 }
 
-/** URL + 正規化 title で dedup (§round23 既存ロジック) */
+/** URL + 正規化 title + hero image URL で dedup.
+ *  §v66 dogfood-5: 同一記事の多言語配信 (Reuters EN / Reuters DA / Reuters JP 等)
+ *  が title 違い・URL 違いで escape していたため、hero image URL を 3 つ目の
+ *  dedup key として追加 (同じ配信元画像 = 同じイベント) */
 export function dedupSignals(signals) {
   const seenUrl = new Set();
   const seenTitle = new Set();
+  const seenImage = new Set();
   const normTitle = (s) =>
     String(s || '')
       .toLowerCase()
       .replace(/[\s　、,。.!?:;:;\(\)\[\]【】「」『』"'’\-—–_/\\]/g, '')
       .slice(0, 60);
+  const normImage = (s) => {
+    if (!s) return '';
+    // クエリ文字列を捨て、host+path のみで一致判定
+    try {
+      const u = new URL(String(s));
+      return `${u.host}${u.pathname}`;
+    } catch {
+      return String(s).split('?')[0];
+    }
+  };
   const out = [];
   for (const s of signals) {
     if (s.url && seenUrl.has(s.url)) continue;
     const tk = normTitle(s.title);
     if (tk && seenTitle.has(tk)) continue;
+    const ik = normImage(s.image);
+    // 4 byte 未満の image key (CDN placeholder 等) は dedup 対象外
+    if (ik && ik.length >= 12 && seenImage.has(ik)) continue;
     if (s.url) seenUrl.add(s.url);
     if (tk) seenTitle.add(tk);
+    if (ik && ik.length >= 12) seenImage.add(ik);
     out.push(s);
   }
   return out;

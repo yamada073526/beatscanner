@@ -31,6 +31,26 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
 
   const [translatedTitle, setTranslatedTitle] = useState('');
 
+  // §v66 dogfood-5 (Marketer #1 — Weber-Fechner: 体感 -60%): narrative cycling.
+  // Pane 5 で 5-15s の翻訳待ち中、無音 skeleton より 3 段階 narrative の方が
+  // 「動いている感」が強く離脱率が下がる. Linear / Notion / Perplexity 同戦略.
+  const NARRATIVES = [
+    '原文を取得中…',
+    'AI が日本語に翻訳中…',
+    '仕上げ中…',
+  ];
+  const [narrativeIdx, setNarrativeIdx] = useState(0);
+
+  // narrative cycler: 翻訳待ち中だけ 2.5s 毎に進める
+  useEffect(() => {
+    if (jaContent || enError) return;
+    setNarrativeIdx(0);
+    const t = setInterval(() => {
+      setNarrativeIdx((i) => Math.min(i + 1, NARRATIVES.length - 1));
+    }, 2500);
+    return () => clearInterval(t);
+  }, [item?.url, jaContent, enError]);
+
   // ── 記事 SSE 取得 ──────────────────────────────
   useEffect(() => {
     if (!item?.url) return;
@@ -333,32 +353,52 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
             {/* JP モード: jaContent が空の間は常に翻訳中 banner を表示
                 (EN 取得中 / 翻訳着手前 / 翻訳着手後の最初の段落到着前、すべて 1 状態に統合) */}
             {isWaitingForJa && (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  marginBottom: 10,
-                  padding: '6px 10px',
-                  borderRadius: 'var(--radius-sm, 8px)',
-                  background: 'rgba(56,189,248,0.08)',
-                  border: '1px solid rgba(56,189,248,0.22)',
-                  fontSize: 11,
-                  color: 'rgb(14,165,233)',
-                }}
-              >
-                <span
-                  aria-hidden
+              <>
+                <div
                   style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    background: 'rgb(56,189,248)',
-                    animation: 'ws-pane4-live-pulse 1.4s ease-in-out infinite',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    marginBottom: 10,
+                    padding: '6px 10px',
+                    borderRadius: 'var(--radius-sm, 8px)',
+                    background: 'rgba(56,189,248,0.08)',
+                    border: '1px solid rgba(56,189,248,0.22)',
+                    fontSize: 11,
+                    color: 'rgb(14,165,233)',
                   }}
-                />
-                <span>AI が翻訳中…</span>
-              </div>
+                >
+                  <span
+                    aria-hidden
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: 'rgb(56,189,248)',
+                      animation: 'ws-pane4-live-pulse 1.4s ease-in-out infinite',
+                    }}
+                  />
+                  <span>{NARRATIVES[narrativeIdx]}</span>
+                </div>
+                {/* skeleton shimmer 5 行 (Marketer #1) — 「動いている感」で TTFT 体感を縮める */}
+                <div aria-hidden style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                  {[100, 92, 96, 88, 70].map((w, i) => (
+                    <div
+                      key={i}
+                      className="ws-pane5-skeleton"
+                      style={{
+                        height: 12,
+                        width: `${w}%`,
+                        borderRadius: 4,
+                        background:
+                          'linear-gradient(90deg, rgba(148,163,184,0.10) 0%, rgba(148,163,184,0.22) 50%, rgba(148,163,184,0.10) 100%)',
+                        backgroundSize: '200% 100%',
+                        animation: 'ws-pane5-shimmer 1.6s ease-in-out infinite',
+                      }}
+                    />
+                  ))}
+                </div>
+              </>
             )}
             {/* 本文 / fallback summary: JP 待ち中は何も出さない (banner のみ) */}
             {displayContent ? (
