@@ -169,7 +169,7 @@ export default function Pane4Inspector({ items = [] }) {
       fetch('/api/news/article', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: item.url, max_lines: 15 }),
+        body: JSON.stringify({ url: item.url, max_lines: 25 }),
       }).catch(() => { /* fire-and-forget */ });
     }
   }, [sorted]);

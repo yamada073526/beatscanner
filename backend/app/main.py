@@ -3443,7 +3443,9 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
                 tag.decompose()
             body_el = soup.find("article") or soup.find("main") or soup.find("body")
             raw_text = body_el.get_text(separator="\n", strip=True) if body_el else soup.get_text(separator="\n", strip=True)
-            max_lines: int = body.get("max_lines", 15)
+            # §v66 dogfood-3: 15 行は文脈不足で passthrough を誘発、25 行に戻す
+            # (元 30 行から控えめに削減し TTFT との balance を取る)
+            max_lines: int = body.get("max_lines", 25)
             lines = [ln.strip()[:200] for ln in raw_text.splitlines() if len(ln.strip()) > 30]
             text = "\n".join(lines[:max_lines])
             if not text:
@@ -3452,33 +3454,28 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
             yield f"data: {json.dumps({'error': f'本文の抽出に失敗しました: {str(e)}'})}\n\n"
             return
 
-        # §v66 §3 (Anthropic engineer 推奨): structured user content blocks で
-        # rules を user 側 cache_control に持たせ、Claude の指示忠実度を高める.
-        # system は短い人格定義のみ。few-shot で「英 h2 → ## 日本語見出し」を 1 例示し
-        # heading 維持と翻訳実施を保証.
-        rules_block_text = (
-            TRANSLATION_RULES_ARTICLE
-            + "\n【出力例】\n"
-            + "入力:\n<article>\n## Q3 Results Beat Estimates\nApple (AAPL) reported strong Q3 earnings...\n</article>\n\n"
-            + "出力:\n## 第3四半期決算は予想を上回る\nApple (AAPL) は好調な第3四半期決算を発表し、**売上高は前年比 +12%** ...\n"
-        )
-        article_block_text = (
-            f"<article>\n{text}\n</article>\n\n"
-            f"上記の英語記事を日本語に翻訳してください。"
-            f"最初の行は必ず `## ` で始まる日本語見出しにしてください。"
+        # §v66 dogfood-3 (3 体合議結論): structured user blocks + few-shot は
+        # regression を生んだため、Anthropic engineer 推奨形に統一:
+        #   - system (cached): TRANSLATION_RULES_ARTICLE をそのまま
+        #   - user (毎回 fresh): 短い指示 + --- 区切りの本文 (<article> タグは廃止)
+        #   - few-shot 削除 (Apple Q3 への過適合を解消)
+        # 加えて max_tokens 2400 → 1600 で TTFT さらに短縮.
+        prompt = (
+            "次の英文記事を日本語に翻訳してください。出力は必ず日本語のみ。\n\n"
+            "---\n"
+            f"{text}\n"
+            "---"
         )
 
         full_text = ""
         try:
             claude = ClaudeClient()
-            max_tokens = min(400 + max_lines * 80, 2400)  # 短文記事向け削減 (TTFT さらに -0.5s)
+            max_tokens = min(400 + max_lines * 80, 1600)  # 2400 → 1600 (Haiku の予算先取り抑制)
             async for chunk in claude.stream_complete(
-                user_content=[
-                    {"type": "text", "text": rules_block_text, "cache_control": {"type": "ephemeral"}},
-                    {"type": "text", "text": article_block_text},
-                ],
+                prompt,
                 max_tokens=max_tokens,
-                system="あなたは英→日のプロ翻訳者です。出力は必ず日本語のみ。英文をそのまま返してはいけません。",
+                system=TRANSLATION_RULES_ARTICLE,
+                system_cache=True,
             ):
                 full_text += chunk
                 yield f"data: {json.dumps({'chunk': chunk})}\n\n"
@@ -3495,13 +3492,19 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
             yield f"data: {json.dumps({'error': msg})}\n\n"
             return
 
-        # §v66 quality gate: ASCII 文字比率が 60%+ なら翻訳失敗とみなしキャッシュしない.
-        # bad-translation を 6h 残し続けるのを防ぐ.
-        ascii_count = sum(1 for c in full_text if ord(c) < 128 and c.isalpha())
-        total_alpha = sum(1 for c in full_text if c.isalpha())
-        ascii_ratio = ascii_count / total_alpha if total_alpha > 0 else 0
-        if ascii_ratio > 0.6:
-            print(f'[article translate] skip cache (ASCII ratio {ascii_ratio:.2f} > 0.6) url={url}')
+        # §v66 quality gate (Anthropic engineer 推奨): 日本語文字率 < 40% なら
+        # 翻訳失敗とみなしキャッシュしない. bad-translation を 6h 残すのを防ぐ.
+        # 日本語 = ひらがな (぀-ゟ) / カタカナ (゠-ヿ) / 漢字 (一-鿿).
+        jp_count = sum(
+            1 for c in full_text
+            if ('぀' <= c <= 'ゟ')
+            or ('゠' <= c <= 'ヿ')
+            or ('一' <= c <= '鿿')
+        )
+        alpha_count = sum(1 for c in full_text if c.isalpha())
+        jp_ratio = jp_count / alpha_count if alpha_count > 0 else 0
+        if jp_ratio < 0.4:
+            print(f'[article translate] skip cache (JP ratio {jp_ratio:.2f} < 0.4, likely passthrough) url={url}')
         else:
             import time as _time_art
             _article_cache[url] = {
