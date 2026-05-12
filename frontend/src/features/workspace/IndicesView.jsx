@@ -359,7 +359,9 @@ function GroupHeader({ children, collapsible = false, collapsed = false, onToggl
         color: 'var(--text-muted)',
         position: 'sticky',
         top: 0,
-        zIndex: 1,
+        // 2026-05-13 fix: z-index 1 だと .ws-judgment-row の hover stacking context が上に来て
+        // sticky header を row text が貫通して見える bug が発生。z-index 10 で row 上書き。
+        zIndex: 10,
         border: collapsible ? 'none' : undefined,
         borderBottomColor: 'var(--border)',
         borderBottomStyle: 'solid',
