@@ -125,6 +125,93 @@
 
 ---
 
+## −1-B. 精読画面の世界観 (ベッドの間接照明) — シーン分離アンカー
+
+> **重要度**: ★★★★★ (最重要、不変、§-1 / §-1-A と同格)
+> **由来**: ユーザー直伝 (2026-05-12)。「項目を選択し詳細を読む瞬間」の体験 anchor が §-1 / §-1-A に存在しなかったため、6 体並列レビュー (UI/UX / 金融 / Web 設計 / Web 開発 / マーケター / Anthropic engineer) を経て新設。
+> **修正禁止**: §-1 / §-1-A と同じく言葉は変更しない、追記のみ。
+
+### 目標とする体験 (ユーザー原文)
+
+> **「開放感のある豪華な部屋のなかで、ベッドに脱力しながら読書をするとき、手元を見るための間接照明に照らされているような演出」**
+
+§-1 ロビー世界観の「驚き・興奮」とは方向性が逆 (脱力・静寂)。これは **矛盾ではなくシーン分離**である:
+
+- **入場時 (LP / Home / Workspace 初期 / Pane 1 世界市場 / Pane 2 ウォッチリスト一覧)** = §-1 ロビーの興奮
+- **朝の dashboard (Home)** = §-1-A 一目惚れの心地よさ
+- **項目を選択し詳細を精読する瞬間 (Pane 3 判定詳細 / Pane 4 Inspector / 図解 / News 全文)** = §-1-B ベッドの間接照明
+
+Aman Resorts 自身がロビー (公共・興奮) と villa (個室・脱力) で空間を分けている。BeatScanner も「**俯瞰モード = ロビー / 精読モード = villa**」で分離する。
+
+### 由来 / 苦労の足跡
+
+- 2026-05-12 ユーザーから「項目を選択したとき、開放感のある豪華な部屋でベッドに脱力しながら読書をする間接照明のような演出」という質的目標が提示
+- §-1 の「興奮」と方向が逆だが、Aman / Ritz-Carlton のロビー⇔villa 設計と同じ「**シーン分離**」で整理することでユーザー合意
+- 6 体並列レビューで converge した Must-fix (周囲 dim は背景のみ / 数値は overlay 上 / cyan 減衰は新 token 経由 / light mode 無効化 / .is-arriving compound 不触) は §C-7 (recipes) で運用化
+
+### 体験を構成する 5 つの感情語彙
+
+ユーザー原文の **「開放感・豪華さ・脱力・読書・間接照明」** をデザイン判断の評価軸とする:
+
+| 感情語彙 | 視覚的に対応する表現 | 違反例 |
+|---|---|---|
+| **脱力 (relaxation)** | 周囲 Pane の背景 `filter: brightness(0.85)`、対象 surface の spacing +1 step、motion を §-1 の 600ms → 700ms 上限で緩慢化 | 周囲も同じ明るさ / 詰め込み grid / 入場と同じ速度感 |
+| **没頭 (immersion)** | 上端から落ちる radial warm spotlight、対象 surface 単独に視線が集中する z-index 設計、非関連 UI の subtle fade | 平坦に並んだ複数 card / 視線誘導なし / chrome が冷たいまま |
+| **心地よさ (cozy comfort)** | warm cream tone (`--reading-warmth`) の極低 α overlay、Body line-height 拡張 (≥1.65)、max-width 64ch で目幅を整える | 冷たい cyan のみで埋まる / 行長無制限 / 詰めた lh1.5 |
+| **温かさ (warmth)** | dark mode の `rgba(255,218,165,α≤0.06)` (実装時に hue 25°/45° で AB)、amber 警告 (38°) とは色相 10°+ 離して分離 | warm overlay が amber 警告に誤読される / α が saturated すぎる / light mode で「紙の黄ばみ」化 |
+| **滋味 (subtle richness)** | cyan glow は新 token `--shadow-glow-cyan-reading` で減衰 (arrival ring 静寂、hover 操作時のみ控えめに反応)、LIVE indicator / 数値 / Miss 赤 / amber 警告は overlay の上 z-index で輝度保持 | cyan を §-1 と同強度で残す / warm に数値が飲まれて桁読み違い / Trust Cliff (重要情報が薄まる) |
+
+### この世界観を守る理由
+
+1. **「2 秒判定」(§-1 ロビー) と「精読没頭」(§-1-B ベッド) のシーン両立**: 米国株情報サイトでこの 2 モード切替を持つ競合 (Yahoo / Seeking Alpha / Bloomberg / Koyfin) はゼロ。差別化レバー
+2. **retention の lever**: 精読 surface の心地よさは滞在時間と return rate に直接寄与。handover §8 KPI (7d retention 45→55%) を底上げ
+3. **記録なしで diluted されるリスク**: §-1 / §-1-A 同様、anchor なしの世界観は次セッションで簡単に薄まる。同形式で永続化必須
+
+### 適用範囲
+
+**適用 (Reading Mode が発動する surface)**:
+- Pane 3 判定詳細 (Hero / KpiStrip / VerdictDetail / ConditionGrid / EPS 推移 / Profile)
+- Pane 4 Inspector (News / Insights / IR Links) — **ただし Phase 2 で Pane 4 round 16 改修完了後に適用**
+- 図解 HTML モーダル (Visualizer 出力)
+- News 全文展開 (要約 / 全文)
+
+**適用外 (§-1 ロビー世界観のまま維持)**:
+- LP / Home / Pane 1 (世界市場) / Pane 2 (ウォッチリスト一覧) / チャートタブ / Pane 5
+
+### Pro 深化レイヤー (Pro Reading Lounge)
+
+baseline は全ユーザーに提供 (Pro ロックしない)。Pro はその上に "**深化レイヤー**" を積む 3 機能で差別化:
+
+1. **集中シールド (LIVE tick pause)** — §-1-B surface 滞在中は 60s 自動 re-render 停止、手動 refresh ボタン提示
+2. **typography 強化** — Body 14→16px / lh 1.5→1.75 / max-width 64ch / 段落間 +1 step
+3. **Reading bookmarks** — News / Pane 3 / 図解 を「あとで読む」「ハイライト」「メモ」(Supabase スキーマ追加)
+
+baseline 自体が完成体験であり、Pro 未加入者に「劣化版を見せられている」感は出さない (Trust Cliff 回避)。
+
+### 適用パターン (実装規律)
+
+実装の具体は `design_recipes.md §C-7` を参照。要点:
+
+- 適用 surface に `.bs-mode-reading` wrapper + children root に `data-reading-target`
+- radial spotlight は `.ds-workspace-shell::before` で実装 (card 本体 ::before / `.bs-panel-hero::before` は不触)
+- 周囲 Pane は **背景 `filter: brightness(0.85)` のみ** (テキスト opacity は触らない、WCAG 維持)
+- cyan glow は新 token `--shadow-glow-cyan-reading` 経由 (既存 `.is-arriving:hover` compound 4 セットは v54-v62 教訓により不触)
+- light mode は warm overlay を `transparent` 化 (紙の黄ばみ化を回避)
+- `prefers-reduced-motion` で warm opacity transition / spotlight fade も短縮
+
+### 着手タイミング (段階展開)
+
+発光バグ被害履歴 (v54-v62 で 6 セッション) を踏まえ、Phase 0 (本ドキュメント) → Phase 1 (Pane 3 POC) → Phase 2 (Pane 4 横展開) → Phase 3 (skill 検査) の 4 段階で展開:
+
+- **Phase 0** (このセッション): 本セクション + recipes §C-7 + memory `feedback_reading_lamp.md` ドラフト
+- **Phase 1**: Pane 3 判定詳細のみ POC。handover v65 §5 A (Pane 2 Phase 2 銘柄) 完了後
+- **Phase 2**: Pane 4 Inspector / 図解 / News 全文。**Pane 4 round 16 完了後** (Inspector 大改修と衝突回避)
+- **Phase 3**: `.claude/skills/design-system-check` に検査ルール追加 (対象外 surface への warm 流出 block 等)
+
+新規 UI を §-1-B surface に追加するときは、§-1 / §-1-A と同じ二段評価 (§0 の 5 測定基準 + 本セクションの 5 感情語彙) に加え、**§C-7 の Must-fix 6 項目**を必ず満たすこと。
+
+---
+
 ## 0. アンカー目標 (測れる定義)
 
 「Aman / Ritz-Carlton ロビー級」を**主観排除**するため 5 基準を定める。新規 PR は満たしているか自己レビュー必須。
@@ -182,6 +269,21 @@
 | `--amber-bg` | `#fffbeb` | `rgba(120,80,0,0.25)` |
 | `--amber-title` | `#92400e` | `#fbbf24` |
 | `--amber-body` | `#b45309` | `#fcd34d` |
+
+### 1-D. Reading Mode (§-1-B) tokens *(planned, Phase 1 で確定)*
+
+§-1-B「ベッドの間接照明」専用トークン。**`.bs-mode-reading` scope 内でのみ参照可**、対象外 surface への流出は `design-system-check` skill で block 予定 (Phase 3)。
+
+| Token | Light | Dark | 用途 |
+|---|---|---|---|
+| `--reading-warmth` | `transparent` (warm overlay は light mode 無効化) | `rgba(255,218,165, 0.04〜0.06)` *(α / hue は Phase 1 で AB 確定。hue は amber 38° から 10°+ 離す: 25° 赤寄り or 45° 黄寄り)* | §-1-B surface の上端 radial spotlight overlay (`.ds-workspace-shell::before` 経由) |
+| `--shadow-glow-cyan-reading` | `0 0 0 1px rgba(56,189,248,.10), 0 6px 24px rgba(56,189,248,.06)` | `0 0 0 1px rgba(56,189,248,.18), 0 6px 24px rgba(56,189,248,.12)` *(§-1 比 ≈70% 減衰)* | §-1-B 内の cyan accent (既存 `.is-arriving:hover` compound 4 セットは不触、reading scope 内でのみ参照) |
+| `--reading-dim-bg-filter` | `brightness(0.92)` | `brightness(0.85)` | 周囲 Pane の **背景のみ** dim (テキスト opacity は触らない、WCAG 維持) |
+
+**運用ルール**:
+- `--reading-warmth` を `.bs-mode-reading` scope 外で参照すると design-system-check が block (Phase 3)
+- amber 警告 (`--color-warning`) と `--reading-warmth` の同時表示が必要な場合、amber は **overlay の上 z-index に逃す**
+- light mode で warm overlay が「紙の黄ばみ」化する問題を回避するため、light は `transparent` 固定
 
 ---
 

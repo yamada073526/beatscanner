@@ -258,6 +258,129 @@ const ms = epoch < 1e12 ? epoch * 1000 : epoch;
 
 ---
 
+---
+
+## §C-7. Reading Mode (§-1-B「ベッドの間接照明」) 適用パターン
+
+§-1-B 世界観 (`design_system.md §-1-B`) を「精読 surface」(Pane 3 判定詳細 / Pane 4 Inspector / 図解 / News 全文) に適用するときの実装規約。
+
+### C-7-1. Scope (wrapper 必須)
+
+```jsx
+<div className="bs-mode-reading">
+  <article data-reading-target>
+    {/* 精読対象 (Pane 3 詳細 / Inspector / 図解 / News 全文) */}
+  </article>
+</div>
+```
+
+- `.bs-mode-reading` は wrapper、React 側 state `readingMode: boolean` 単一で発動 (state 二重化禁止)
+- `data-reading-target` は children root に付与 (react-resizable-panels の DOM に直接 class を当てない、library upgrade 耐性)
+- scope 外への warm token 流出は `design-system-check` (Phase 3) で block
+
+### C-7-2. Radial spotlight (上端から落ちる間接照明)
+
+実装は **`.ds-workspace-shell::before`** に限定。card 本体 `::before` / `.bs-panel-hero::before` は不触 (`design_system.md §1` で実装済の hero glow と衝突回避)。
+
+```css
+.bs-mode-reading .ds-workspace-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 80% 40% at 50% 0%,
+    var(--reading-warmth),
+    transparent 70%
+  );
+  z-index: 1; /* card 本体 (z-index 2+) より下 */
+  transition: opacity var(--motion-slow) var(--ease-out-expo);
+}
+```
+
+- **`contain: paint` 禁止** (CLAUDE.md 規律、§-1-B でも継続)
+- 親に `position: relative` のみ追加、入れ子 surface-card 禁止
+
+### C-7-3. 周囲 Pane の dim (背景のみ)
+
+```css
+.bs-mode-reading [data-pane-position="adjacent"] {
+  filter: var(--reading-dim-bg-filter); /* brightness(0.85) dark / 0.92 light */
+  transition: filter var(--motion-slow) var(--ease-out-expo);
+}
+```
+
+- **テキスト opacity を変えない** (Pane 2 watchlist の銘柄色 gain/loss が視認不能になる → 投資判断阻害 + WCAG AA 割れ)
+- 6 体合議で「opacity 0.5 dim は撤回」が converge、`filter: brightness` のみで「奥に下がった」体感を出す
+
+### C-7-4. cyan glow 減衰 (compound 4 セット不触)
+
+§-1-B 内で cyan を弱める必要があるとき、**既存 `.is-arriving:hover` compound 4 セット** (`§C-1〜§C-4`) は触らない。新 token `--shadow-glow-cyan-reading` を scope 内でのみ参照:
+
+```css
+.bs-mode-reading [data-reading-target] .panel-card.is-arriving,
+.bs-mode-reading [data-reading-target] .bs-panel.is-arriving,
+.bs-mode-reading [data-reading-target] .surface-card.is-arriving {
+  box-shadow: var(--shadow-glow-cyan-reading);
+}
+```
+
+- 既存 4 セット compound (`.X.is-arriving` / `.X.is-arriving:hover` / `.X:hover` / dark) と specificity 同等以上を確保 (`.bs-mode-reading [data-reading-target]` の prefix で 0,4,0 を稼ぐ)
+- **v54-v62 で 6 セッション溶けた発光バグの再演を防ぐため**、reading scope 外には 1 行も漏らさない
+
+### C-7-5. light mode 分岐
+
+```css
+@media (prefers-color-scheme: light) {
+  :root { --reading-warmth: transparent; }
+}
+```
+
+dark mode の warm cream overlay は light mode で「紙の黄ばみ」化し quality を毀損する (Web 設計 agent 指摘)。light は `transparent` 固定、代わりに `--reading-dim-bg-filter: brightness(0.92)` の軽 dim だけで「奥に下がった」感を出す。
+
+### C-7-6. prefers-reduced-motion
+
+既存グローバル `@media (prefers-reduced-motion: reduce)` ブロックに以下プロパティを追加列挙:
+
+- `.bs-mode-reading .ds-workspace-shell::before { transition: none; }`
+- `.bs-mode-reading [data-pane-position="adjacent"] { transition: none; }`
+- warm overlay opacity / spotlight fade は **発動はする** (静的に表示) が transition は省略
+
+### C-7-7. 数値・判定色は overlay の上に逃す
+
+```css
+.bs-mode-reading [data-reading-target] .ds-stat-value,
+.bs-mode-reading [data-reading-target] .verdict-badge,
+.bs-mode-reading [data-reading-target] .live-indicator,
+.bs-mode-reading [data-reading-target] [data-warning="amber"] {
+  position: relative;
+  z-index: 2; /* radial spotlight (z-index 1) の上 */
+  isolation: isolate;
+}
+```
+
+金融アナリスト合議: **EPS / 売上 / % 変動 / Beat-Miss verdict / 決算近接 amber / LIVE indicator** が warm overlay に「飲まれる」と桁読み違い・楽観バイアス・Trust Cliff を誘発。必ず overlay の上 z-index で輝度保持。
+
+### C-7-Must-fix (採用前に必ず潰す 6 項目)
+
+1. **overlay 上 z-index**: 数値・Miss 赤・amber 警告・LIVE indicator は warm に飲ませない
+2. **hue 分離**: warm cream は amber (38°) から hue 10°+ 離す (25° or 45° で Phase 1 AB)
+3. **light mode 無効化**: `--reading-warmth: transparent`
+4. **scope wrapper**: `.bs-mode-reading` + `data-reading-target` 経由のみ、グローバル汚染禁止
+5. **compound 4 セット不触**: `.is-arriving:hover` 既存実装には 1 行も触らない、新 token で隔離
+6. **contain 禁止 / 入れ子 surface-card 禁止**: CLAUDE.md 規律を §-1-B でも継続
+
+### 関連メモリ・doc
+
+- `feedback_reading_lamp.md` — §-1-B 不変アンカー (修正禁止) と Must-fix 圧縮版
+- `feedback_brand_aspiration.md` — §-1 / §-1-A の双子 anchor、§-1-B 補完関係
+- `glow_elevation_postmortem.md` — Phase 1 着手前に**必読** (v54-v62 発光バグ生情報)
+- `css_specificity_gotchas.md` — compound 4 セット規律
+- `design_system.md §-1-B` / §1-D — 世界観 + token 定義
+- `pane4_roadmap_round16.md` — Phase 2 Inspector 着手タイミング判定
+
+---
+
 ## 関連ファイル
 
 - `design_system.md` — トークン値の Single Source of Truth
