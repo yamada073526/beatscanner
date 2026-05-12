@@ -22,7 +22,7 @@ import {
   fetchMovers,
   fetchEconomicCalendar,
 } from '../../api.js';
-import { translateEvent } from '../../lib/i18n/economicEvents.js';
+import { translateEvent, CATEGORY } from '../../lib/i18n/economicEvents.js';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { useRowSparkline } from '../judgment/components/list/RowSparkline.jsx';
 import { SPARKLINE_PERIOD_OPTIONS } from './Workspace.jsx';
@@ -799,12 +799,14 @@ function formatEventDate(iso) {
 }
 
 function EconomicEventRow({ event }) {
-  // CRITICAL fix: translateEvent() は { ja, en, category } object を返す。
-  // 直接 JSX に渡すと「Objects are not valid as a React child」で render tree 全 unmount。
-  // v1 (26cdec5) で白画面 regression を起こした原因 — v2 で string を確実に抽出。
+  // CRITICAL fix (v2): translateEvent() は { ja, en, category } object を返す。
+  // .ja/.en を string で抽出、category は CATEGORY constant の object を参照する。
+  // v1 (26cdec5) で object render → 白画面 regression を起こした教訓。
   const flag = COUNTRY_FLAG[event?.country] || '🌐';
   const t = translateEvent(event?.event);
   const name = (t && (t.ja || t.en)) || event?.event || '—';
+  const category = (t && t.category) || CATEGORY.OTHER;
+  const CategoryIcon = category.Icon;
   const dateStr = formatEventDate(event?.date);
   const isPast = event?.actual != null && event?.actual !== '';
   const valueDisplay = isPast
@@ -846,10 +848,22 @@ function EconomicEventRow({ event }) {
           style={{
             fontSize: 11,
             color: 'var(--text-muted)',
-            fontVariantNumeric: 'tabular-nums',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
           }}
         >
-          {dateStr}
+          {CategoryIcon && (
+            <CategoryIcon size={11} strokeWidth={1.75} color={category.color} />
+          )}
+          <span style={{ color: category.color, fontWeight: 500 }}>
+            {String(category.label)}
+          </span>
+          <span style={{ color: 'var(--text-muted)' }}>·</span>
+          <span style={{ fontVariantNumeric: 'tabular-nums' }}>{dateStr}</span>
         </span>
       </span>
       <span
