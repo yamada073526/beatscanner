@@ -208,11 +208,20 @@ def judge(
     )
 
     # 条件⑤: CFPS > EPS
+    # 2026-05-12: detail を他 4 条件と同じ「前々 → 前 → 当期」3 期形式に統一。
+    # 6 体合議 (UI/UX / 金融 / Web 設計 / Web 開発 / マーケター / Anthropic engineer) で
+    # 「条件 5 だけ直近期スナップショット形式」が Trust Cliff (バグでは? と疑われる)と判明。
+    # CFPS/EPS のペア表示で 3 期分の関係性 (= 粉飾耐性が継続しているか) を視覚化。
     cond5 = ConditionResult(
         name="CFPS > EPS（直近期）",
         passed=p_t.cfps is not None and p_t.cfps > p_t.eps,
         value=(p_t.cfps - p_t.eps) if p_t.cfps is not None else None,
-        detail=f"CFPS {_fmt(p_t.cfps)} vs EPS {p_t.eps:.2f}",
+        detail=(
+            f"CFPS/EPS: "
+            f"{_fmt(p_t2.cfps)}/{p_t2.eps:.2f} → "
+            f"{_fmt(p_t1.cfps)}/{p_t1.eps:.2f} → "
+            f"{_fmt(p_t.cfps)}/{p_t.eps:.2f}"
+        ),
         series=[(p.cfps - p.eps) if p.cfps is not None else None for p in periods],
     )
 
