@@ -16,6 +16,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import StockPriceChart from '../../components/StockPriceChart.jsx';
 import NewsPanel from '../../components/NewsPanel.jsx';
+import CompanyLogo from '../../components/CompanyLogo.jsx';
 import {
   fetchMarketIndices,
   fetchMovers,
@@ -653,7 +654,9 @@ function MoversRow({ m, rank }) {
       type="button"
       className="ws-judgment-row"
       style={{
-        gridTemplateColumns: 'auto minmax(0, 1fr) auto auto',
+        // 3 体合議 (2026-05-13) PR-A: rank → logo → ticker → price → pct の 5 column。
+        // logo は CompanyLogo の 3 段 fallback (TV → FMP → 頭文字円) で layout shift 防止。
+        gridTemplateColumns: 'auto auto minmax(0, 1fr) auto auto',
         minHeight: 44,
         alignItems: 'center',
       }}
@@ -671,6 +674,7 @@ function MoversRow({ m, rank }) {
       >
         {rank}
       </span>
+      <CompanyLogo ticker={m.ticker} size={20} />
       <span
         style={{
           fontWeight: 600,
