@@ -134,10 +134,11 @@
   --shadow-3: 0 4px 12px rgba(0, 0, 0, 0.50), 0 12px 24px rgba(0, 0, 0, 0.30);
   --shadow-4: 0 12px 32px rgba(0, 0, 0, 0.60), 0 24px 48px rgba(0, 0, 0, 0.40);
   --shadow-glow-cyan: 0 0 0 1px rgba(56, 189, 248, 0.30), 0 8px 32px rgba(56, 189, 248, 0.20);
-  /* §-1-B dark mode: warm cream (candlelight 2700K 相当、hue ~25°、α 0.05)
+  /* §-1-B dark mode: warm cream (candlelight 2700K 相当、hue ~25°)
      amber (#f59e0b ≒ hue 38°) と HSL 上 13° 離して分離。
+     α 0.12 = Phase 1 dogfood で「気づかない」フィードバックを受け 0.05 → 0.12 にバンプ (2026-05-12)。
      `.bs-mode-reading` scope 内の `::before` で radial spotlight として参照される。 */
-  --reading-warmth: rgba(255, 205, 175, 0.05);
+  --reading-warmth: rgba(255, 205, 175, 0.12);
   --reading-dim-bg-filter: brightness(0.85);
   --shadow-glow-cyan-reading: 0 0 0 1px rgba(56, 189, 248, 0.18), 0 6px 24px rgba(56, 189, 248, 0.12);
 }
@@ -1446,11 +1447,22 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(
-    ellipse 80% 40% at 50% 0%,
-    var(--reading-warmth),
-    transparent 70%
-  );
+  /* 2 層構成:
+     - 上端から落ちる radial spotlight (間接照明本体)
+     - 全面に薄く広がる warm ambient (室内の "温度感")
+     dogfood 後 (2026-05-12): 単層 ellipse 80%×40% では Pane 3 のスクロール先で消失するため
+     ellipse を 110%×80% に拡大 + ambient 層を追加して「部屋全体が温い」感を演出。 */
+  background:
+    radial-gradient(
+      ellipse 110% 80% at 50% 0%,
+      var(--reading-warmth),
+      transparent 65%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--reading-warmth) 35%, transparent) 0%,
+      transparent 100%
+    );
   z-index: 1; /* card 本体 (z-index 2+) より下、reading-target は上に逃がす */
   transition: opacity var(--motion-slow) var(--ease-out-expo);
   /* contain: paint 禁止 (CLAUDE.md 規律) */

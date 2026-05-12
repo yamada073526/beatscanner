@@ -18,6 +18,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { analyze, demoAnalyze, fetchGuidance, fetchGuidanceBasic } from '../../../api.js';
 import { hasFmpKey } from '../../../lib/fmpKey.js';
+import { useWorkspaceStore } from '../../../state/workspaceStore.js';
 
 /** 同銘柄の再訪を 0 秒化する result キャッシュ TTL (10 分)。F5 で消えるメモリキャッシュ。 */
 const RESULT_CACHE_TTL = 10 * 60 * 1000;
@@ -83,6 +84,12 @@ export function useJudgmentResult({
       const t = normalizeTicker(sym || ticker);
       if (!t) return;
       setTicker(t);
+      // 2026-05-12 fix: Cmd+K → Enter で Pane 3 詳細が開かない問題の修正。
+      // workspace mode では Pane 3 detail は workspaceStore.activeTicker (→ JudgmentContext.selectedTicker
+      // via TickerBridge) で駆動される。runAnalyze は legacy ticker state しか更新していなかったため、
+      // Cmd+K typed → Enter で Pane 2 watchlist「その他」には追加されるが Pane 3 が空のままだった。
+      // workspaceStore は zustand なので hook 外から getState() で更新可能 (SPA モードでも no-op で安全)。
+      useWorkspaceStore.getState().setActiveTicker(t);
       // v40+: 全 panel データを analyze と並列で先取り (体感速度 5-10s → 2-3s)
       prefetch?.(t);
       // v40+: result キャッシュチェック — 10 分以内の同銘柄は瞬時表示
