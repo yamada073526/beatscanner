@@ -13,18 +13,20 @@
  *   - 関連ニュース / 構成銘柄 top movers (8 指標分の provider 設計が別案件)
  *   - sparklinePeriod 双方向同期 (StockPriceChart は内部 period state)
  */
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import StockPriceChart from '../../components/StockPriceChart.jsx';
 import NewsPanel from '../../components/NewsPanel.jsx';
-import {
-  fetchMarketIndices,
-  fetchMovers,
-  fetchEconomicCalendar,
-} from '../../api.js';
-import { translateEvent } from '../../lib/i18n/economicEvents.js';
+import { fetchMarketIndices, fetchMovers } from '../../api.js';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { useRowSparkline } from '../judgment/components/list/RowSparkline.jsx';
 import { SPARKLINE_PERIOD_OPTIONS } from './Workspace.jsx';
+
+// 2026-05-13 Workspace Home Phase 1: 経済指標セクションを Pane 2 (IndicesList) 末尾に追加。
+// lazy load = collapsed 時は mount/fetch しない、開いた時のみ初回 fetch。
+// bundle 影響最小化 (EconomicCalendarSection は 12 KB 超、SPA Home でも lazy 済)。
+const EconomicCalendarSection = lazy(() =>
+  import('../../components/EconomicCalendarSection.jsx')
+);
 
 // §dogfood-round11: IndicesRow / Header 共通の期間 → 営業日数マッピング
 const PERIOD_DAYS = { '1d': 2, '1w': 5, '1m': 21, '6m': 126, '1y': 252 };
@@ -537,11 +539,9 @@ function MoversRow({ m, rank }) {
   );
 }
 
-// Workspace Home Phase 1 (design unification 改修版):
-// 経済指標カレンダー (FOMC / CPI / NFP など) を Pane 2-native row 表示に統一。
-// 旧 SPA EconomicCalendarSection の lazy embed は user 指摘 (design inconsistency) で廃止。
-// 主要指数 / 世界市場 / 注目銘柄 と同じ `ws-judgment-row` class で visual unity。
-// 「毎日開きたくなる」5 原則 #2 + マクロ → セクター → 個別の起点。
+// Workspace Home Phase 1: 経済指標カレンダー (FOMC / CPI / NFP など)
+// 「毎日開きたくなる」5 原則 #2 + マクロ → セクター → 個別の流れの起点。
+// default collapsed = true (Pane 2 縦長すぎ回避 + lazy fetch)
 function EconomicCalendarPaneSection() {
   const collapsed = useWorkspaceStore((s) => s.economicCalendarCollapsed);
   const toggle = useWorkspaceStore((s) => s.toggleEconomicCalendar);
@@ -550,145 +550,26 @@ function EconomicCalendarPaneSection() {
       <GroupHeader collapsible collapsed={collapsed} onToggle={toggle}>
         経済指標
       </GroupHeader>
-      {!collapsed && <EconomicEventsList />}
-    </>
-  );
-}
-
-function EconomicEventsList() {
-  const [data, setData] = useState({ events: [] });
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    // 重要度 high のみ取得 (合議: 重要 3-5 件 + マクロ起点)
-    fetchEconomicCalendar(7, 'high')
-      .then((d) => { if (!cancelled) setData(d); })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, []);
-
-  const events = useMemo(() => {
-    const raw = (data?.events || []).filter((e) => e?.date);
-    // 直近順、Top 10 まで
-    raw.sort((a, b) => new Date(a.date) - new Date(b.date));
-    return raw.slice(0, 10);
-  }, [data]);
-
-  if (loading) {
-    return (
-      <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text-muted)' }}>
-        読み込み中…
-      </div>
-    );
-  }
-
-  if (events.length === 0) {
-    return (
-      <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text-muted)' }}>
-        今週の主要イベントはありません
-      </div>
-    );
-  }
-
-  return (
-    <>
-      {events.map((ev, i) => (
-        <EconomicEventRow key={`${ev.date}-${ev.event}-${i}`} event={ev} />
-      ))}
-      <div
-        style={{
-          padding: '6px 14px 10px',
-          fontSize: 10,
-          color: 'var(--text-muted)',
-          letterSpacing: '0.02em',
-        }}
-      >
-        FOMC / CPI / 雇用統計など (HIGH 重要度のみ、直近 7 日)
-      </div>
-    </>
-  );
-}
-
-const COUNTRY_FLAG = { US: '🇺🇸', JP: '🇯🇵', EU: '🇪🇺' };
-
-function formatEventDate(iso) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '—';
-  const M = d.getMonth() + 1;
-  const D = d.getDate();
-  const dow = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  return `${M}/${D}(${dow}) ${hh}:${mm}`;
-}
-
-function EconomicEventRow({ event }) {
-  const flag = COUNTRY_FLAG[event.country] || '🌐';
-  const name = translateEvent(event.event) || event.event || '—';
-  const dateStr = formatEventDate(event.date);
-  const isPast = event.actual != null && event.actual !== '';
-  const trendColor = isPast ? 'var(--color-gain)' : 'var(--text-muted)';
-  const valueDisplay = isPast
-    ? `実 ${event.actual}`
-    : event.estimate != null && event.estimate !== ''
-      ? `予想 ${event.estimate}`
-      : '—';
-
-  return (
-    <div
-      className="ws-judgment-row"
-      style={{
-        gridTemplateColumns: 'auto minmax(0, 1fr) auto',
-        minHeight: 44,
-        alignItems: 'center',
-        cursor: 'default',
-      }}
-    >
-      <span
-        aria-hidden="true"
-        style={{ fontSize: 14, lineHeight: 1, minWidth: 18, textAlign: 'center' }}
-      >
-        {flag}
-      </span>
-      <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, gap: 1 }}>
-        <span
-          style={{
-            fontWeight: 600,
-            color: 'var(--text-primary)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
+      {!collapsed && (
+        <Suspense
+          fallback={
+            <div
+              style={{
+                padding: '16px 14px',
+                fontSize: 12,
+                color: 'var(--text-muted)',
+              }}
+            >
+              読み込み中…
+            </div>
+          }
         >
-          {name}
-        </span>
-        <span
-          style={{
-            fontSize: 11,
-            color: 'var(--text-muted)',
-            fontVariantNumeric: 'tabular-nums',
-          }}
-        >
-          {dateStr}
-        </span>
-      </span>
-      <span
-        style={{
-          minWidth: 70,
-          textAlign: 'right',
-          color: trendColor,
-          fontVariantNumeric: 'tabular-nums',
-          fontSize: 12,
-          fontWeight: 500,
-        }}
-      >
-        {valueDisplay}
-      </span>
-    </div>
+          <div style={{ padding: '8px 0' }}>
+            <EconomicCalendarSection />
+          </div>
+        </Suspense>
+      )}
+    </>
   );
 }
 
