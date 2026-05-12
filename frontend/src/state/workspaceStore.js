@@ -47,6 +47,10 @@ export const useWorkspaceStore = create(
       // v63 §12-B-5: ウォッチリスト 2 階層化 (default 両 open)
       holdingsCollapsed: false,
       observingCollapsed: false,
+      // 2026-05-13: IndicesView (指数 tab) の Tier 2「世界市場」18 銘柄折り畳み。
+      // Workspace Home 復活 Phase 0 (5 体合議): Pane 1 縦スクロール統合の前提準備。
+      // default false (expanded) で既存挙動と互換、Phase 1 で Home content 追加時に true へ変更検討。
+      tier2Collapsed: false,
       activeTab: 'home',
       activeTicker: null,
       // §dogfood-2: 指数 tab 用 symbol。activeTicker と分離することで Header click が
@@ -69,6 +73,7 @@ export const useWorkspaceStore = create(
       toggleWatchlist: () => set((s) => ({ watchlistCollapsed: !s.watchlistCollapsed })),
       toggleHoldings: () => set((s) => ({ holdingsCollapsed: !s.holdingsCollapsed })),
       toggleObserving: () => set((s) => ({ observingCollapsed: !s.observingCollapsed })),
+      toggleTier2: () => set((s) => ({ tier2Collapsed: !s.tier2Collapsed })),
       setActiveTab: (t) => set(() => ({ activeTab: t })),
       setActiveTicker: (s) => set(() => ({ activeTicker: s })),
       setActiveIndexSymbol: (s) => set(() => ({ activeIndexSymbol: s })),
@@ -95,18 +100,26 @@ export const useWorkspaceStore = create(
         watchlistCollapsed: state.watchlistCollapsed,
         holdingsCollapsed: state.holdingsCollapsed,
         observingCollapsed: state.observingCollapsed,
+        tier2Collapsed: state.tier2Collapsed,
       }),
-      version: 2,
+      version: 3,
       // v1 → v2: 新 collapse keys (nav/watchlist/holdings/observing) 追加。
-      // 旧 v1 state は default 値 (false) で吸収される。
+      // v2 → v3: tier2Collapsed 追加 (Workspace Home Phase 0)。
+      // 旧バージョン state は default 値 (false) で吸収される。
       migrate: (persistedState, version) => {
         if (version < 2) {
-          return {
+          persistedState = {
             ...persistedState,
             navCollapsed: false,
             watchlistCollapsed: false,
             holdingsCollapsed: false,
             observingCollapsed: false,
+          };
+        }
+        if (version < 3) {
+          persistedState = {
+            ...persistedState,
+            tier2Collapsed: false,
           };
         }
         return persistedState;

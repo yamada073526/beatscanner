@@ -74,10 +74,51 @@ function formatPrice(item) {
   });
 }
 
-function GroupHeader({ children }) {
+// Tier 2「世界市場」セクション。Workspace Home Phase 0 (5 体合議) の前提準備:
+// Pane 1 縦スクロール統合のために 18 銘柄を任意に折り畳めるようにする。
+// 折り畳み状態は workspaceStore に persist。
+function Tier2Section({ tier2, activeIndexSymbol, setActiveIndexSymbol, sparklinePeriod }) {
+  const tier2Collapsed = useWorkspaceStore((s) => s.tier2Collapsed);
+  const toggleTier2 = useWorkspaceStore((s) => s.toggleTier2);
   return (
-    <div
+    <>
+      <GroupHeader
+        collapsible
+        collapsed={tier2Collapsed}
+        onToggle={toggleTier2}
+        count={tier2.length}
+      >
+        世界市場
+      </GroupHeader>
+      {!tier2Collapsed &&
+        tier2.map((it) => (
+          <IndicesRow
+            key={it.symbol}
+            item={it}
+            label={it.label || it.symbol}
+            sym={it.symbol}
+            desc={it.desc_ja}
+            active={activeIndexSymbol === it.symbol}
+            onClick={setActiveIndexSymbol}
+            period={sparklinePeriod}
+          />
+        ))}
+    </>
+  );
+}
+
+function GroupHeader({ children, collapsible = false, collapsed = false, onToggle, count }) {
+  const Comp = collapsible ? 'button' : 'div';
+  return (
+    <Comp
+      type={collapsible ? 'button' : undefined}
+      onClick={collapsible ? onToggle : undefined}
+      aria-expanded={collapsible ? !collapsed : undefined}
       style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        width: '100%',
         padding: '10px 14px 8px',
         borderBottom: '1px solid var(--border)',
         background: 'var(--bg-card)',
@@ -89,10 +130,35 @@ function GroupHeader({ children }) {
         position: 'sticky',
         top: 0,
         zIndex: 1,
+        border: collapsible ? 'none' : undefined,
+        borderBottomColor: 'var(--border)',
+        borderBottomStyle: 'solid',
+        borderBottomWidth: '1px',
+        cursor: collapsible ? 'pointer' : 'default',
+        textAlign: 'left',
       }}
     >
-      {children}
-    </div>
+      {collapsible && (
+        <span
+          aria-hidden="true"
+          style={{
+            display: 'inline-block',
+            fontSize: 9,
+            lineHeight: 1,
+            transition: 'transform var(--motion-fast) var(--ease-out-cubic)',
+            transform: collapsed ? 'rotate(0deg)' : 'rotate(90deg)',
+          }}
+        >
+          ▸
+        </span>
+      )}
+      <span style={{ flex: 1 }}>{children}</span>
+      {count != null && (
+        <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-muted)', opacity: 0.7 }}>
+          {count}
+        </span>
+      )}
+    </Comp>
   );
 }
 
@@ -296,21 +362,12 @@ export function IndicesList() {
           />
         ))}
         {tier2.length > 0 && (
-          <>
-            <GroupHeader>世界市場</GroupHeader>
-            {tier2.map((it) => (
-              <IndicesRow
-                key={it.symbol}
-                item={it}
-                label={it.label || it.symbol}
-                sym={it.symbol}
-                desc={it.desc_ja}
-                active={activeIndexSymbol === it.symbol}
-                onClick={setActiveIndexSymbol}
-                period={sparklinePeriod}
-              />
-            ))}
-          </>
+          <Tier2Section
+            tier2={tier2}
+            activeIndexSymbol={activeIndexSymbol}
+            setActiveIndexSymbol={setActiveIndexSymbol}
+            sparklinePeriod={sparklinePeriod}
+          />
         )}
       </div>
     </div>
