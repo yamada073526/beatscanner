@@ -20,7 +20,7 @@ const DELTA_LABELS = {
   5: 'CFPS-EPS差前回比',
 };
 
-function DeltaRow({ index, series, isPro, onUpgradeClick }) {
+export function DeltaRow({ index, series, isPro, onUpgradeClick }) {
   const label = DELTA_LABELS[index];
   const delta = calcDeltaPct(series);
 
@@ -70,7 +70,7 @@ function DeltaRow({ index, series, isPro, onUpgradeClick }) {
 
 // ── Condition detail content ─────────────────────────────────────────────────
 
-const CONDITION_DETAILS = {
+export const CONDITION_DETAILS = {
   1: {
     title: '条件1：営業CFマージン ≥ 15%',
     sections: [
@@ -273,7 +273,7 @@ function renderBold(text) {
   );
 }
 
-function ConditionModal({ detail, onClose }) {
+export function ConditionModal({ detail, onClose }) {
   return (
     <InfoModal title={detail.title} onClose={onClose}>
       {detail.sections ? (
@@ -325,7 +325,7 @@ function ConditionModal({ detail, onClose }) {
 
 // ── Value text compaction ─────────────────────────────────────────────────────
 
-function compactDetail(detail) {
+export function compactDetail(detail) {
   if (!detail) return detail;
   const s = String(detail);
 

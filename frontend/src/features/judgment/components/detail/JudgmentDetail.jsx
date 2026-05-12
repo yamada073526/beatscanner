@@ -3,6 +3,7 @@ import { useJudgment } from '../../state/JudgmentContext.jsx';
 import Hero from './Hero.jsx';
 import KpiStrip from './KpiStrip.jsx';
 import VerdictDetail from './VerdictDetail.jsx';
+import FiveConditionsCard from './FiveConditionsCard.jsx';
 import SimpleSection from './SimpleSection.jsx';
 import SectionDivider from './SectionDivider.jsx';
 import ProfileCard from './ProfileCard.jsx';
@@ -21,6 +22,18 @@ import HistoryChart from '../../../../components/HistoryChart.jsx';
 
 // DetailReport は重量級 (36 KB gzip) のため lazy load
 const DetailReport = lazy(() => import('../../../../components/DetailReport.jsx'));
+
+// PR-2 feature flag: localStorage.pane3_v1='1' で旧 UI (VerdictDetail + ConditionGrid 二重) に切替可。
+// 6 体合議 + §-1-B postmortem「撤回コスト最小化設計」の学び適用。
+// デフォルト = 新 UI (FiveConditionsCard 統合)。dogfood で問題があれば DevTools で
+// localStorage.setItem('pane3_v1', '1') → リロードで即旧 UI に戻る。
+function isPane3V1() {
+  try {
+    return typeof window !== 'undefined' && window.localStorage?.getItem('pane3_v1') === '1';
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Pane 3: 判定タブ詳細ペイン (Step 6 + 既存 component 配線).
@@ -125,19 +138,34 @@ export default function JudgmentDetail({
         period={result?.latestPeriod ? `FY${result.latestPeriod}` : null}
       />
       <KpiStrip stats={kpis} />
-      <VerdictDetail
-        conditions={conditions}
-        passedCount={result?.passedCount}
-        totalCount={result?.totalCount}
-      />
-
-      {/* 条件別 詳細 (v1 ConditionCard 流用、折り畳み式) */}
-      {conditions.length > 0 && (
-        <ConditionGrid
-          conditions={conditions}
-          isPro={detailContext.isPro}
-          onUpgrade={detailContext.onUpgrade}
-        />
+      {/* 2026-05-12 PR-2: VerdictDetail + ConditionGrid を FiveConditionsCard に統合。
+          feature flag `localStorage.pane3_v1='1'` で旧 UI に切替可 (撤回コスト最小化、§-1-B postmortem 学び適用)。
+          6 体合議 (UI/UX / 金融 / Web 設計 / Web 開発 / マーケター / Anthropic engineer) 推奨。 */}
+      {isPane3V1() ? (
+        <>
+          <VerdictDetail
+            conditions={conditions}
+            passedCount={result?.passedCount}
+            totalCount={result?.totalCount}
+          />
+          {conditions.length > 0 && (
+            <ConditionGrid
+              conditions={conditions}
+              isPro={detailContext.isPro}
+              onUpgrade={detailContext.onUpgrade}
+            />
+          )}
+        </>
+      ) : (
+        conditions.length > 0 && (
+          <FiveConditionsCard
+            conditions={conditions}
+            passedCount={result?.passedCount}
+            totalCount={result?.totalCount}
+            isPro={detailContext.isPro}
+            onUpgrade={detailContext.onUpgrade}
+          />
+        )
       )}
 
       {/* ガイダンス (今期/来期 EPS) — GuidanceCard 自身が panel-card を持つので outer Card 不要 (二重枠回避) */}
