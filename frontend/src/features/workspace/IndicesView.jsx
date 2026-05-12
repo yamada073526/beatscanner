@@ -105,12 +105,14 @@ function PortfolioSummaryRow({ holdings, prices, tickers }) {
   const collapsed = useWorkspaceStore((s) => s.portfolioCollapsed);
   const toggle = useWorkspaceStore((s) => s.togglePortfolio);
 
-  // 集計: 評価額 / 当日変動 / 含み損益 / 銘柄数
+  // 集計: 評価額 / 当日変動 / 含み損益 / 銘柄数 + 集中リスク
   const totals = useMemo(() => {
     let totalValue = 0;
     let totalCost = 0;
     let totalDayChange = 0;
     let pricedCount = 0;
+    let maxTicker = null;
+    let maxTickerValue = 0;
 
     for (const t of tickers) {
       const h = holdings?.[t];
@@ -120,22 +122,32 @@ function PortfolioSummaryRow({ holdings, prices, tickers }) {
       const price = Number(q?.price);
       const change = Number(q?.change);
       if (Number.isFinite(price) && price > 0) {
-        totalValue += shares * price;
+        const tickerValue = shares * price;
+        totalValue += tickerValue;
         totalCost += shares * avgCost;
         pricedCount += 1;
         if (Number.isFinite(change)) {
           totalDayChange += shares * change;
         }
+        // 集中リスク: 評価額 max の銘柄を追跡
+        if (tickerValue > maxTickerValue) {
+          maxTickerValue = tickerValue;
+          maxTicker = t;
+        }
       }
     }
     const pnlAbs = pricedCount > 0 ? totalValue - totalCost : null;
     const pnlPct = totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : null;
+    // 集中リスク %: 最大銘柄が portfolio 全体の何 %
+    const maxPct = totalValue > 0 ? (maxTickerValue / totalValue) * 100 : 0;
     return {
       totalValue: pricedCount > 0 ? totalValue : null,
       totalDayChange: pricedCount > 0 ? totalDayChange : null,
       pnlAbs,
       pnlPct,
       count: tickers.length,
+      maxTicker,
+      maxPct,
     };
   }, [holdings, prices, tickers]);
 
@@ -176,7 +188,54 @@ function PortfolioSummaryRow({ holdings, prices, tickers }) {
           />
         </div>
       )}
+      {!collapsed && totals.maxTicker && totals.maxPct >= 40 && (
+        <ConcentrationRiskBanner ticker={totals.maxTicker} pct={totals.maxPct} />
+      )}
     </>
+  );
+}
+
+// 集中リスク warning (Linear Banner / Stripe Alert style)
+// 3 体合議 Must-fix: modal/toast NG、amber 色、border-left subtle、red 不可。
+// 閾値 40% で表示 (金融合議: 30%+ 注意、50%+ で強警告)。
+function ConcentrationRiskBanner({ ticker, pct }) {
+  return (
+    <div
+      role="alert"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '8px 14px',
+        margin: '4px 12px 8px',
+        background: 'rgba(245, 158, 11, 0.08)',
+        borderLeft: '2px solid var(--color-warning)',
+        borderRadius: 'var(--radius-sm)',
+        fontSize: 12,
+        color: 'var(--text-secondary)',
+        lineHeight: 1.4,
+      }}
+    >
+      <span aria-hidden="true" style={{ color: 'var(--color-warning)', fontSize: 14 }}>
+        ⚠
+      </span>
+      <span>
+        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+          {String(ticker)}
+        </span>
+        <span> が </span>
+        <span
+          style={{
+            fontWeight: 600,
+            color: 'var(--color-warning)',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {pct.toFixed(0)}%
+        </span>
+        <span> を占めています</span>
+      </span>
+    </div>
   );
 }
 
