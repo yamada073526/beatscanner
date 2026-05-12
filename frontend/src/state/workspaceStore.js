@@ -68,6 +68,10 @@ export const useWorkspaceStore = create(
       // §dogfood-2: 指数 tab 用 symbol。activeTicker と分離することで Header click が
       // home tab の Pane 3 (= JudgmentDetail) を汚染しないようにする
       activeIndexSymbol: null,
+      // 2026-05-13: 指数タブ滞在中に Pane 3 を Judgment Detail に強制切替するフラグ。
+      // user 要望: Pane 2 注目銘柄/ポートフォリオから ticker クリック → Pane 2 はそのまま、Pane 3 のみ判定詳細表示。
+      // 連続分析時の「タブ往復」を撲滅。指数 row click でリセット (chart に戻る)、tab 切替でも自動リセット。
+      pane3JudgmentOverride: false,
       // §v66 §2: Pane 3 ↔ Pane 5 統合 (6 体合議: Pane 5 統一推奨).
       // Pane 4 の selected を hoist し、Pane 3 NewsPanel からも setActiveReadingItem で
       // 同じ Reading Room を開けるようにする。null = 閉じている.
@@ -89,9 +93,12 @@ export const useWorkspaceStore = create(
       toggleEconomicCalendar: () => set((s) => ({ economicCalendarCollapsed: !s.economicCalendarCollapsed })),
       toggleMovers: () => set((s) => ({ moversCollapsed: !s.moversCollapsed })),
       togglePortfolio: () => set((s) => ({ portfolioCollapsed: !s.portfolioCollapsed })),
-      setActiveTab: (t) => set(() => ({ activeTab: t })),
+      // tab 切替時は pane3JudgmentOverride を自動リセット (連続分析モードを解除)
+      setActiveTab: (t) => set(() => ({ activeTab: t, pane3JudgmentOverride: false })),
       setActiveTicker: (s) => set(() => ({ activeTicker: s })),
-      setActiveIndexSymbol: (s) => set(() => ({ activeIndexSymbol: s })),
+      // 指数 row click は chart 表示モードに戻る (override 解除)
+      setActiveIndexSymbol: (s) => set(() => ({ activeIndexSymbol: s, pane3JudgmentOverride: false })),
+      setPane3JudgmentOverride: (v) => set(() => ({ pane3JudgmentOverride: !!v })),
       // §v66 §2: Reading Room を任意ペインから開く。Pane 4 が折り畳まれていれば自動展開.
       setActiveReadingItem: (item) =>
         set((s) => ({

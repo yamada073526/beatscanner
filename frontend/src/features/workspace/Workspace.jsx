@@ -706,6 +706,9 @@ export default function Workspace({
   // §12-A-1: 指数 tab のとき Pane 2 / Pane 3 の中身を IndicesView に切替
   const activeTab = useWorkspaceStore((s) => s.activeTab);
   const isIndices = activeTab === 'indices';
+  // 2026-05-13: 指数タブで Pane 2 の注目銘柄/ポートフォリオから ticker click したとき、
+  // Pane 2 はそのまま (注目銘柄リスト表示維持) + Pane 3 のみ判定詳細に切替えるフラグ。
+  const pane3JudgmentOverride = useWorkspaceStore((s) => s.pane3JudgmentOverride);
   // §dogfood-round9: Pane 1 collapsed のとき rail variant (アイコンのみ) に切替
   const pane1Collapsed = useWorkspaceStore((s) => s.pane1Collapsed);
   const headerHeight = headerCollapsed ? 32 : 56;
@@ -751,7 +754,7 @@ export default function Workspace({
           )
         }
         pane3={
-          isIndices ? (
+          isIndices && !pane3JudgmentOverride ? (
             <IndicesDetailView />
           ) : (
             <JudgmentDetail

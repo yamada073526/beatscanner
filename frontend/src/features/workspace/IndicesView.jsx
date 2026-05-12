@@ -633,8 +633,8 @@ function MoversSubHeader({ label }) {
 }
 
 function MoversRow({ m, rank }) {
-  const setActiveTab = useWorkspaceStore((s) => s.setActiveTab);
   const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
+  const setPane3JudgmentOverride = useWorkspaceStore((s) => s.setPane3JudgmentOverride);
   const pct = m?.pct ?? null;
   const up = pct != null && pct >= 0;
   const trendColor =
@@ -642,9 +642,10 @@ function MoversRow({ m, rank }) {
 
   const handleClick = () => {
     if (!m?.ticker) return;
-    // click → judgment 5 条件詳細へ (chase でなくファンダ確認へ誘導、金融合議反映)
-    setActiveTab('home');
+    // 2026-05-13 UX 改善: Pane 2 はそのまま (注目銘柄リスト維持) + Pane 3 のみ判定詳細表示。
+    // 連続分析「注目銘柄 → 各銘柄判定」のタブ往復を撲滅 (user 要望)。
     setActiveTicker(m.ticker);
+    setPane3JudgmentOverride(true);
   };
 
   return (
