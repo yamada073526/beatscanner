@@ -71,6 +71,14 @@
   --shadow-4: 0 12px 32px rgba(0, 0, 0, 0.12), 0 24px 48px rgba(0, 0, 0, 0.08);
   --shadow-glow-cyan: 0 0 0 1px rgba(56, 189, 248, 0.20), 0 8px 32px rgba(56, 189, 248, 0.12);
 
+  /* §-1-B Reading Mode (ベッドの間接照明) — design_system.md §1-D / design_recipes.md §C-7
+     `.bs-mode-reading` scope 内でのみ参照可。Phase 1 POC では Pane 3 判定詳細のみに適用。
+     hue は amber (38°) から 10°+ 離す: 25° (赤寄り) を採用、α は dark 0.05 で実装 (Phase 1 で AB)。
+     light mode は warm overlay を transparent に倒し、「紙の黄ばみ」化を回避。 */
+  --reading-warmth: transparent; /* light mode default、dark で上書き */
+  --reading-dim-bg-filter: brightness(0.92); /* 周囲 Pane 背景のみ dim (Phase 2 で本格運用) */
+  --shadow-glow-cyan-reading: 0 0 0 1px rgba(56, 189, 248, 0.10), 0 6px 24px rgba(56, 189, 248, 0.06);
+
   /* Motion — Linear cubic-bezier 標準 */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out-quad: cubic-bezier(0.45, 0, 0.55, 1);
@@ -126,6 +134,12 @@
   --shadow-3: 0 4px 12px rgba(0, 0, 0, 0.50), 0 12px 24px rgba(0, 0, 0, 0.30);
   --shadow-4: 0 12px 32px rgba(0, 0, 0, 0.60), 0 24px 48px rgba(0, 0, 0, 0.40);
   --shadow-glow-cyan: 0 0 0 1px rgba(56, 189, 248, 0.30), 0 8px 32px rgba(56, 189, 248, 0.20);
+  /* §-1-B dark mode: warm cream (candlelight 2700K 相当、hue ~25°、α 0.05)
+     amber (#f59e0b ≒ hue 38°) と HSL 上 13° 離して分離。
+     `.bs-mode-reading` scope 内の `::before` で radial spotlight として参照される。 */
+  --reading-warmth: rgba(255, 205, 175, 0.05);
+  --reading-dim-bg-filter: brightness(0.85);
+  --shadow-glow-cyan-reading: 0 0 0 1px rgba(56, 189, 248, 0.18), 0 6px 24px rgba(56, 189, 248, 0.12);
 }
 
 /* §11-E v51 Phase 1: prefers-reduced-motion グローバル一括対応 (a11y AAA)
@@ -1401,6 +1415,80 @@ body {
    :not(:hover):not(.is-arriving) で arrival/hover cyan glow と衝突しない設計。 */
 .ds-judgment-detail .bs-panel:not(:hover):not(.is-arriving) {
   box-shadow: var(--shadow-1);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   §-1-B Reading Mode (ベッドの間接照明) — Phase 1 POC: Pane 3 のみ
+   ────────────────────────────────────────────────────────────────────────────
+   詳細: docs/references/design_system.md §-1-B / §1-D
+         docs/references/design_recipes.md §C-7
+         memory/feedback_reading_lamp.md
+
+   設計規律 (Must-fix 6 項目):
+   1. 数値 / Miss 赤 / amber 警告 / LIVE は overlay の上 z-index に逃す
+   2. warm hue は amber (38°) から 10°+ 離す (実装: 25° 採用)
+   3. light mode は warm overlay を transparent (紙の黄ばみ回避)
+   4. scope は .bs-mode-reading wrapper のみ、グローバル汚染禁止
+   5. .is-arriving:hover compound 4 セットは不触 (v54-v62 発光バグ再演防止)
+   6. contain: paint 禁止 / 入れ子 surface-card 禁止 を継続
+
+   Phase 1 = Pane 3 (.ds-judgment-detail) のみ。Phase 2 で Pane 4 / 図解 / News 拡張。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* C-7-2: Radial spotlight (上端から落ちる間接照明)
+   Phase 1 POC は .bs-mode-reading::before で実装 (Pane 3 local scope)。
+   Phase 2 で .ds-workspace-shell::before に移動して 4 surface 共有。 */
+.bs-mode-reading {
+  position: relative;
+}
+.bs-mode-reading::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 80% 40% at 50% 0%,
+    var(--reading-warmth),
+    transparent 70%
+  );
+  z-index: 1; /* card 本体 (z-index 2+) より下、reading-target は上に逃がす */
+  transition: opacity var(--motion-slow) var(--ease-out-expo);
+  /* contain: paint 禁止 (CLAUDE.md 規律) */
+}
+
+/* C-7-4: cyan glow 減衰 — 新 token で隔離、既存 .is-arriving:hover compound 不触
+   reading scope 内でのみ cyan を弱め、滞在時の興奮を抑制する。
+   specificity 0,4,0 = .bs-mode-reading [data-reading-target] .X.is-arriving で
+   既存 compound 4 セット (0,2,0) より高優先度で勝つ。 */
+.bs-mode-reading [data-reading-target] .panel-card.is-arriving:not(:hover),
+.bs-mode-reading [data-reading-target] .bs-panel.is-arriving:not(:hover),
+.bs-mode-reading [data-reading-target] .surface-card.is-arriving:not(:hover) {
+  box-shadow: var(--shadow-glow-cyan-reading);
+}
+
+/* C-7-7: 数値・判定色は overlay の上 z-index に逃す
+   warm に飲ませると桁読み違い / 楽観バイアス / Trust Cliff 誘発 (金融合議)。 */
+.bs-mode-reading [data-reading-target] .ds-stat-value,
+.bs-mode-reading [data-reading-target] .verdict-badge,
+.bs-mode-reading [data-reading-target] .live-indicator,
+.bs-mode-reading [data-reading-target] [data-warning="amber"] {
+  position: relative;
+  z-index: 2; /* radial spotlight (z-index 1) の上 */
+}
+
+/* C-7-5: light mode 分岐 — warm overlay 無効化 (紙の黄ばみ回避)
+   :root の --reading-warmth: transparent が default なので
+   light mode (data-theme 未指定) ではすでに warm overlay は発動しない。
+   念のため明示: */
+@media (prefers-color-scheme: light) {
+  :root { --reading-warmth: transparent; }
+}
+
+/* C-7-6: prefers-reduced-motion — warm overlay の transition / fade を無効化 */
+@media (prefers-reduced-motion: reduce) {
+  .bs-mode-reading::before {
+    transition: none;
+  }
 }
 
 /* ── ヒーロー (一目惚れ) パネル: ポートフォリオ評価額の主役配置 ── */
