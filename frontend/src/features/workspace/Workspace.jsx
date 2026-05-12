@@ -683,6 +683,8 @@ function TickerBridge() {
  * @param {string} [props.plan='free']  - Pro 判定 (PremiumLock 用)
  * @param {object} [props.detailContext] - JudgmentDetail に渡す { user, isPro, onUpgrade, onSignIn }
  * @param {string} [props.currentTicker] - 現在 SPA で分析中の銘柄 (初期 sync 用)
+ * @param {object} [props.holdings]      - Workspace Home Phase 3: 保有銘柄 { ticker: { shares, avg_cost } }
+ * @param {object} [props.portfolioPrices] - Workspace Home Phase 3: 価格 { ticker: { price, change, change_pct, previous_close } }
  */
 export default function Workspace({
   items = [],
@@ -691,6 +693,8 @@ export default function Workspace({
   plan = 'free',
   detailContext,
   currentTicker,
+  holdings = {},
+  portfolioPrices = {},
 }) {
   // URL ↔ Zustand 同期 (Linear 流 SSOT)
   useUrlSync();
@@ -732,7 +736,11 @@ export default function Workspace({
         pane1={pane1Collapsed ? <Pane1NavRail items={items} /> : <Pane1Nav items={items} />}
         pane2={
           isIndices ? (
-            <IndicesList />
+            <IndicesList
+              holdings={holdings}
+              portfolioPrices={portfolioPrices}
+              user={detailContext?.user}
+            />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
               <Pane2MetaToggle />

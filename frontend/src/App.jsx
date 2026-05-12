@@ -779,6 +779,8 @@ export default function App() {
             onAnalyze={runAnalyze}
             plan={_planWS}
             currentTicker={ticker || null}
+            holdings={holdingStore?.holdings || {}}
+            portfolioPrices={portfolioPrices?.prices || {}}
             detailContext={{
               user,
               isPro: isSubscribed,

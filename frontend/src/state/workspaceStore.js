@@ -59,6 +59,10 @@ export const useWorkspaceStore = create(
       // default true (collapsed) で lazy fetch。click 時に home tab + judgment detail へ遷移。
       // 金融合議の chase 誘発リスクは disclaimer + judgment 5 条件への接続で軽減。
       moversCollapsed: true,
+      // 2026-05-13: Workspace Home Phase 3 = Portfolio (保有銘柄サマリ、IndicesList 最上部)。
+      // default false (expanded) = ログイン user の「自分の儲け」を first-fold に。
+      // 未ログイン or 0 holdings なら component 自体が null return (空 state 罠回避)。
+      portfolioCollapsed: false,
       activeTab: 'home',
       activeTicker: null,
       // §dogfood-2: 指数 tab 用 symbol。activeTicker と分離することで Header click が
@@ -84,6 +88,7 @@ export const useWorkspaceStore = create(
       toggleTier2: () => set((s) => ({ tier2Collapsed: !s.tier2Collapsed })),
       toggleEconomicCalendar: () => set((s) => ({ economicCalendarCollapsed: !s.economicCalendarCollapsed })),
       toggleMovers: () => set((s) => ({ moversCollapsed: !s.moversCollapsed })),
+      togglePortfolio: () => set((s) => ({ portfolioCollapsed: !s.portfolioCollapsed })),
       setActiveTab: (t) => set(() => ({ activeTab: t })),
       setActiveTicker: (s) => set(() => ({ activeTicker: s })),
       setActiveIndexSymbol: (s) => set(() => ({ activeIndexSymbol: s })),
@@ -113,12 +118,14 @@ export const useWorkspaceStore = create(
         tier2Collapsed: state.tier2Collapsed,
         economicCalendarCollapsed: state.economicCalendarCollapsed,
         moversCollapsed: state.moversCollapsed,
+        portfolioCollapsed: state.portfolioCollapsed,
       }),
-      version: 5,
+      version: 6,
       // v1 → v2: 新 collapse keys (nav/watchlist/holdings/observing) 追加。
       // v2 → v3: tier2Collapsed 追加 (Workspace Home Phase 0)。
       // v3 → v4: economicCalendarCollapsed 追加 (Workspace Home Phase 1)。
       // v4 → v5: moversCollapsed 追加 (Workspace Home Phase 2)。
+      // v5 → v6: portfolioCollapsed 追加 (Workspace Home Phase 3)。
       migrate: (persistedState, version) => {
         if (version < 2) {
           persistedState = {
@@ -137,6 +144,9 @@ export const useWorkspaceStore = create(
         }
         if (version < 5) {
           persistedState = { ...persistedState, moversCollapsed: true };
+        }
+        if (version < 6) {
+          persistedState = { ...persistedState, portfolioCollapsed: false };
         }
         return persistedState;
       },

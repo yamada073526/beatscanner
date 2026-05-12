@@ -79,6 +79,171 @@ function formatPrice(item) {
   });
 }
 
+// Workspace Home Phase 3: Portfolio (保有銘柄サマリ)
+// 5 体合議「未ログイン時は非表示、空 state 罠回避」を厳守:
+//  - !user → null return (component を mount せず、Trust Cliff 回避)
+//  - 0 holdings → null return (空 state 見せず、新規 user に「初見の沈黙」)
+//  - holdings あり → 評価額 / 当日変動 / 含み損益 の 1 行 summary
+// translateEvent object bug (v1) の教訓: String(value) defensive wrap で render 安全性確保。
+function PortfolioPaneSection({ holdings, portfolioPrices, user }) {
+  // 早期 return で「ログインしてください」モーダル等の Trust Cliff 完全回避
+  if (!user) return null;
+  const tickers = Object.keys(holdings || {});
+  if (tickers.length === 0) return null;
+
+  return (
+    <PortfolioSummaryRow
+      holdings={holdings}
+      prices={portfolioPrices}
+      tickers={tickers}
+    />
+  );
+}
+
+function PortfolioSummaryRow({ holdings, prices, tickers }) {
+  const collapsed = useWorkspaceStore((s) => s.portfolioCollapsed);
+  const toggle = useWorkspaceStore((s) => s.togglePortfolio);
+
+  // 集計: 評価額 / 当日変動 / 含み損益 / 銘柄数
+  const totals = useMemo(() => {
+    let totalValue = 0;
+    let totalCost = 0;
+    let totalDayChange = 0;
+    let pricedCount = 0;
+
+    for (const t of tickers) {
+      const h = holdings?.[t];
+      const q = prices?.[t];
+      const shares = Number(h?.shares) || 0;
+      const avgCost = Number(h?.avg_cost) || 0;
+      const price = Number(q?.price);
+      const change = Number(q?.change);
+      if (Number.isFinite(price) && price > 0) {
+        totalValue += shares * price;
+        totalCost += shares * avgCost;
+        pricedCount += 1;
+        if (Number.isFinite(change)) {
+          totalDayChange += shares * change;
+        }
+      }
+    }
+    const pnlAbs = pricedCount > 0 ? totalValue - totalCost : null;
+    const pnlPct = totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : null;
+    return {
+      totalValue: pricedCount > 0 ? totalValue : null,
+      totalDayChange: pricedCount > 0 ? totalDayChange : null,
+      pnlAbs,
+      pnlPct,
+      count: tickers.length,
+    };
+  }, [holdings, prices, tickers]);
+
+  return (
+    <>
+      <GroupHeader
+        collapsible
+        collapsed={collapsed}
+        onToggle={toggle}
+        count={totals.count}
+      >
+        ポートフォリオ
+      </GroupHeader>
+      {!collapsed && (
+        <div
+          style={{
+            padding: '10px 14px 12px',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+            gap: 12,
+            borderBottom: '1px solid var(--border)',
+          }}
+        >
+          <PortfolioStat
+            label="評価額"
+            value={formatUSDCompact(totals.totalValue)}
+          />
+          <PortfolioStat
+            label="当日変動"
+            value={formatSignedUSDCompact(totals.totalDayChange)}
+            color={getTrendColor(totals.totalDayChange)}
+          />
+          <PortfolioStat
+            label="含み損益"
+            value={formatSignedUSDCompact(totals.pnlAbs)}
+            sub={totals.pnlPct != null ? formatSignedPct(totals.pnlPct) : null}
+            color={getTrendColor(totals.pnlAbs)}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
+function PortfolioStat({ label, value, sub, color }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+      <span
+        style={{
+          fontSize: 10,
+          fontWeight: 500,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          color: 'var(--text-muted)',
+        }}
+      >
+        {String(label)}
+      </span>
+      <span
+        style={{
+          fontSize: 14,
+          fontWeight: 700,
+          color: color || 'var(--text-primary)',
+          fontVariantNumeric: 'tabular-nums',
+          lineHeight: 1.1,
+        }}
+      >
+        {String(value)}
+      </span>
+      {sub && (
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 500,
+            color: color || 'var(--text-muted)',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {String(sub)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function formatUSDCompact(n) {
+  if (!Number.isFinite(n)) return '—';
+  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+  if (Math.abs(n) >= 10_000) return `$${(n / 1_000).toFixed(1)}K`;
+  return `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+}
+
+function formatSignedUSDCompact(n) {
+  if (!Number.isFinite(n)) return '—';
+  const sign = n > 0 ? '+' : n < 0 ? '-' : '';
+  return `${sign}${formatUSDCompact(Math.abs(n))}`;
+}
+
+function formatSignedPct(n) {
+  if (!Number.isFinite(n)) return '—';
+  const sign = n > 0 ? '+' : '';
+  return `${sign}${n.toFixed(2)}%`;
+}
+
+function getTrendColor(n) {
+  if (!Number.isFinite(n) || n === 0) return 'var(--text-muted)';
+  return n > 0 ? 'var(--color-gain)' : 'var(--color-loss)';
+}
+
 // Tier 2「世界市場」セクション。Workspace Home Phase 0 (5 体合議) の前提準備:
 // Pane 1 縦スクロール統合のために 18 銘柄を任意に折り畳めるようにする。
 // 折り畳み状態は workspaceStore に persist。
@@ -307,7 +472,7 @@ function PeriodChipBar() {
 }
 
 /** Pane 2: Tier 1 (主要指数) + Tier 2 (世界市場) の 2 group リスト. */
-export function IndicesList() {
+export function IndicesList({ holdings = {}, portfolioPrices = {}, user = null } = {}) {
   const activeIndexSymbol = useWorkspaceStore((s) => s.activeIndexSymbol);
   const setActiveIndexSymbol = useWorkspaceStore((s) => s.setActiveIndexSymbol);
   const sparklinePeriod = useWorkspaceStore((s) => s.sparklinePeriod);
@@ -353,6 +518,11 @@ export function IndicesList() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <PeriodChipBar />
       <div style={{ flex: 1, overflowY: 'auto' }}>
+        <PortfolioPaneSection
+          holdings={holdings}
+          portfolioPrices={portfolioPrices}
+          user={user}
+        />
         <GroupHeader>主要指数</GroupHeader>
         {TIER1.map((t) => (
           <IndicesRow
