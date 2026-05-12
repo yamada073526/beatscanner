@@ -1419,89 +1419,26 @@ body {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   §-1-B Reading Mode (ベッドの間接照明) — Phase 1 POC: Pane 3 のみ
+   §-1-B Reading Mode (ベッドの間接照明) — Phase 1 POC 撤回 (2026-05-12)
    ────────────────────────────────────────────────────────────────────────────
-   詳細: docs/references/design_system.md §-1-B / §1-D
-         docs/references/design_recipes.md §C-7
-         memory/feedback_reading_lamp.md
+   Phase 1 POC を Pane 3 判定詳細に適用したが、4 体合議 dogfood で撤回判断:
 
-   設計規律 (Must-fix 6 項目):
-   1. 数値 / Miss 赤 / amber 警告 / LIVE は overlay の上 z-index に逃す
-   2. warm hue は amber (38°) から 10°+ 離す (実装: 25° 採用)
-   3. light mode は warm overlay を transparent (紙の黄ばみ回避)
-   4. scope は .bs-mode-reading wrapper のみ、グローバル汚染禁止
-   5. .is-arriving:hover compound 4 セットは不触 (v54-v62 発光バグ再演防止)
-   6. contain: paint 禁止 / 入れ子 surface-card 禁止 を継続
+   - Stripe / Linear / Notion / Anthropic Console / Vercel / Arc の dark mode
+     機能 UI 8 例で warm tint **0 件**。warm 採用例 (Bear / iA Writer /
+     Things 3 / Stratechery) はテキスト 70%+ の読み物アプリ専用。
+   - Pane 3 は verdict + 数値 + 5 条件 = 機能 UI 寄り。「ベッドで読書」
+     メタファが surface 特性と噛み合わず、user dogfood で「体験変わらない」
+     「カード外側まで warm が漏れて Pane 2 との境目が悪目立ち」「amber wash 化」
+   - Phase 1 POC は撤回、token (--reading-warmth / --shadow-glow-cyan-reading /
+     --reading-dim-bg-filter) は :root に保持 = Phase 2 で Pane 5 ニュース /
+     図解 (読み物 surface) で再検討する際の埋め込み配線
 
-   Phase 1 = Pane 3 (.ds-judgment-detail) のみ。Phase 2 で Pane 4 / 図解 / News 拡張。
+   詳細 postmortem: docs/references/design_system.md §-1-B (historical note)
+                    memory/feedback_reading_lamp.md (撤回経緯)
+
+   ※ Pane 3 の体感強化は warm tint でなく typography / spacing / elevation で
+     別途実施 (機能 UI 業界標準、Linear / Anthropic Console 流)。
    ════════════════════════════════════════════════════════════════════════════ */
-
-/* C-7-2: Radial spotlight (上端から落ちる間接照明)
-   Phase 1 POC は .bs-mode-reading::before で実装 (Pane 3 local scope)。
-   Phase 2 で .ds-workspace-shell::before に移動して 4 surface 共有。 */
-.bs-mode-reading {
-  position: relative;
-}
-.bs-mode-reading::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  /* 2 層構成:
-     - 上端から落ちる radial spotlight (間接照明本体)
-     - 全面に薄く広がる warm ambient (室内の "温度感")
-     dogfood 後 (2026-05-12): 単層 ellipse 80%×40% では Pane 3 のスクロール先で消失するため
-     ellipse を 110%×80% に拡大 + ambient 層を追加して「部屋全体が温い」感を演出。 */
-  background:
-    radial-gradient(
-      ellipse 110% 80% at 50% 0%,
-      var(--reading-warmth),
-      transparent 65%
-    ),
-    linear-gradient(
-      180deg,
-      color-mix(in oklab, var(--reading-warmth) 35%, transparent) 0%,
-      transparent 100%
-    );
-  z-index: 1; /* card 本体 (z-index 2+) より下、reading-target は上に逃がす */
-  transition: opacity var(--motion-slow) var(--ease-out-expo);
-  /* contain: paint 禁止 (CLAUDE.md 規律) */
-}
-
-/* C-7-4: cyan glow 減衰 — 新 token で隔離、既存 .is-arriving:hover compound 不触
-   reading scope 内でのみ cyan を弱め、滞在時の興奮を抑制する。
-   specificity 0,4,0 = .bs-mode-reading [data-reading-target] .X.is-arriving で
-   既存 compound 4 セット (0,2,0) より高優先度で勝つ。 */
-.bs-mode-reading [data-reading-target] .panel-card.is-arriving:not(:hover),
-.bs-mode-reading [data-reading-target] .bs-panel.is-arriving:not(:hover),
-.bs-mode-reading [data-reading-target] .surface-card.is-arriving:not(:hover) {
-  box-shadow: var(--shadow-glow-cyan-reading);
-}
-
-/* C-7-7: 数値・判定色は overlay の上 z-index に逃す
-   warm に飲ませると桁読み違い / 楽観バイアス / Trust Cliff 誘発 (金融合議)。 */
-.bs-mode-reading [data-reading-target] .ds-stat-value,
-.bs-mode-reading [data-reading-target] .verdict-badge,
-.bs-mode-reading [data-reading-target] .live-indicator,
-.bs-mode-reading [data-reading-target] [data-warning="amber"] {
-  position: relative;
-  z-index: 2; /* radial spotlight (z-index 1) の上 */
-}
-
-/* C-7-5: light mode 分岐 — warm overlay 無効化 (紙の黄ばみ回避)
-   :root の --reading-warmth: transparent が default なので
-   light mode (data-theme 未指定) ではすでに warm overlay は発動しない。
-   念のため明示: */
-@media (prefers-color-scheme: light) {
-  :root { --reading-warmth: transparent; }
-}
-
-/* C-7-6: prefers-reduced-motion — warm overlay の transition / fade を無効化 */
-@media (prefers-reduced-motion: reduce) {
-  .bs-mode-reading::before {
-    transition: none;
-  }
-}
 
 /* ── ヒーロー (一目惚れ) パネル: ポートフォリオ評価額の主役配置 ── */
 .bs-panel-hero {

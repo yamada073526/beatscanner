@@ -125,11 +125,45 @@
 
 ---
 
-## −1-B. 精読画面の世界観 (ベッドの間接照明) — シーン分離アンカー
+## −1-B. 精読画面の世界観 (ベッドの間接照明) — **historical note: v66 で POC、Pane 3 で撤回**
 
-> **重要度**: ★★★★★ (最重要、不変、§-1 / §-1-A と同格)
-> **由来**: ユーザー直伝 (2026-05-12)。「項目を選択し詳細を読む瞬間」の体験 anchor が §-1 / §-1-A に存在しなかったため、6 体並列レビュー (UI/UX / 金融 / Web 設計 / Web 開発 / マーケター / Anthropic engineer) を経て新設。
-> **修正禁止**: §-1 / §-1-A と同じく言葉は変更しない、追記のみ。
+> **status (2026-05-12 更新)**: **Pane 3 適用は撤回**。warm tint は機能 UI 不適合と判明。Pane 5 ニュース全文 / 図解 (読み物 surface) で再検討候補。
+> **由来**: ユーザー直伝 (2026-05-12 初版)。「項目を選択し詳細を読む瞬間」の体験 anchor が §-1 / §-1-A に存在しなかったため、6 体並列レビュー (UI/UX / 金融 / Web 設計 / Web 開発 / マーケター / Anthropic engineer) を経て新設。Phase 1 POC を Pane 3 判定詳細に適用後、dogfood + 再 4 体合議で**撤回判断**。
+
+### Phase 1 POC 撤回 postmortem (2026-05-12)
+
+**実装**: `.bs-mode-reading::before` で radial spotlight + linear ambient の warm gradient overlay を Pane 3 (`.ds-judgment-detail`) に適用 (α 0.05 → 0.12 にバンプ)。
+
+**failure mode** (user dogfood):
+1. 背景 (カード外側余白 gutter) まで warm overlay が漏れ、Pane 2 との境目が悪目立ち
+2. hue 25° / α 0.12 が dark navy 背景 (`#0f172a`) と補色彩度増幅で「amber wash 化」(warm cream に見えない)
+3. **「ユーザー体験が上がったとは思えない」**(user 評価) — cyan 抑制以外の体感差なし
+
+**4 体合議 (UI/UX / マーケター / Web 開発 / Web 設計) の converge**:
+- 機能 UI 業界 8 例 (Stripe / Linear / Notion / Anthropic Console / Vercel / Arc / Stripe Dashboard / Linear Issue Detail) で **warm tint 0 件**
+- warm 採用例 (Bear / iA Writer / Things 3 / Stratechery) は**読み物アプリ専用** (テキスト 70%+ surface)
+- Pane 3 は verdict + 数値 + 5 条件 = 機能 UI 寄り → ベッド読書メタファ不適合
+- Trust Cliff リスク (orange wash 化、Pane 2 境目悪目立ち) も発生
+
+**撤回方針**:
+- `.bs-mode-reading` wrapper class を JSX から削除
+- `.bs-mode-reading::before` 系 CSS rules を削除
+- token (`--reading-warmth` / `--shadow-glow-cyan-reading` / `--reading-dim-bg-filter`) は **:root に保持** (Pane 5 等読み物 surface で再検討する際の配線として)
+- design_system.md §-1-B は本 historical note として残置 (postmortem、将来の Claude セッションが同じ罠を踏まない anchor)
+- 代わりに Pane 3 は **typography + spacing + elevation 強化** (機能 UI 業界標準、Linear / Anthropic Console 流) で読みやすさを演出
+
+**学びの記録**:
+- 「世界観メタファ」と「surface 特性」の整合性チェックを設計時に必須化
+- dogfood 前に業界事例調査 (機能 UI vs 読み物アプリ) を実施
+- POC は完全自動公開せず、最低 1 回 user dogfood レビューを通す
+- 撤回コストを最小化する設計 (wrapper class 単体、token は再利用可能) は機能した
+
+---
+
+### 以下、元の §-1-B 構想記録 (historical reference として保持)
+
+> **重要度** (元): ★★★★★ — Pane 3 適用は撤回されたが、**読み物 surface (Pane 5 ニュース / 図解)** で再検討時の anchor として記録継続。
+> **修正禁止** (元): §-1 / §-1-A と同じく言葉は変更しない、追記のみ。
 
 ### 目標とする体験 (ユーザー原文)
 
