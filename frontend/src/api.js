@@ -416,6 +416,15 @@ export async function fetchMarketIndices() {
   return r.json();
 }
 
+// Workspace Home Phase 2: 注目銘柄 Top 5 (急騰/急落).
+// /api/movers は { gainers: [], losers: [], updated_at } を返す。
+// 各 mover: { ticker, price, pct, direction, keyword?, source_url? }
+export async function fetchMovers() {
+  const r = await fetch('/api/movers');
+  if (!r.ok) return { gainers: [], losers: [], updated_at: null };
+  return r.json();
+}
+
 export async function fetchMarketStatus() {
   const r = await fetch('/api/market-status');
   if (!r.ok) return null;

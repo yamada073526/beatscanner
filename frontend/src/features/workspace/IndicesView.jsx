@@ -16,7 +16,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import StockPriceChart from '../../components/StockPriceChart.jsx';
 import NewsPanel from '../../components/NewsPanel.jsx';
-import { fetchMarketIndices } from '../../api.js';
+import { fetchMarketIndices, fetchMovers } from '../../api.js';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { useRowSparkline } from '../judgment/components/list/RowSparkline.jsx';
 import { SPARKLINE_PERIOD_OPTIONS } from './Workspace.jsx';
@@ -376,9 +376,166 @@ export function IndicesList() {
             sparklinePeriod={sparklinePeriod}
           />
         )}
+        <MoversPaneSection />
         <EconomicCalendarPaneSection />
       </div>
     </div>
+  );
+}
+
+// Workspace Home Phase 2: 今日の注目銘柄 Top 5 (急騰/急落)
+// 金融合議の chase 誘発リスクは disclaimer + judgment 5 条件への接続 (click → home tab) で軽減。
+// MoversCard (SPA Home) を直接埋め込まず、Pane 2-native な row 表示で design unity 維持。
+function MoversPaneSection() {
+  const collapsed = useWorkspaceStore((s) => s.moversCollapsed);
+  const toggle = useWorkspaceStore((s) => s.toggleMovers);
+  return (
+    <>
+      <GroupHeader collapsible collapsed={collapsed} onToggle={toggle}>
+        今日の注目銘柄
+      </GroupHeader>
+      {!collapsed && <MoversBody />}
+    </>
+  );
+}
+
+function MoversBody() {
+  const [data, setData] = useState({ gainers: [], losers: [] });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetchMovers()
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text-muted)' }}>
+        読み込み中…
+      </div>
+    );
+  }
+
+  const top5 = (arr) => (arr || []).slice(0, 5);
+
+  return (
+    <>
+      <MoversSubHeader label="急騰 ↑" />
+      {top5(data.gainers).map((m, i) => (
+        <MoversRow key={`g-${m.ticker}`} m={m} rank={i + 1} />
+      ))}
+      <MoversSubHeader label="急落 ↓" />
+      {top5(data.losers).map((m, i) => (
+        <MoversRow key={`l-${m.ticker}`} m={m} rank={i + 1} />
+      ))}
+      <div
+        style={{
+          padding: '6px 14px 10px',
+          fontSize: 10,
+          color: 'var(--text-muted)',
+          letterSpacing: '0.02em',
+        }}
+      >
+        市場で動いている銘柄 (情報提供のみ、投資推奨ではありません)
+      </div>
+    </>
+  );
+}
+
+function MoversSubHeader({ label }) {
+  return (
+    <div
+      style={{
+        padding: '8px 14px 4px',
+        fontSize: 10,
+        fontWeight: 500,
+        letterSpacing: '0.08em',
+        color: 'var(--text-muted)',
+        textTransform: 'uppercase',
+      }}
+    >
+      {label}
+    </div>
+  );
+}
+
+function MoversRow({ m, rank }) {
+  const setActiveTab = useWorkspaceStore((s) => s.setActiveTab);
+  const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
+  const pct = m?.pct ?? null;
+  const up = pct != null && pct >= 0;
+  const trendColor =
+    pct == null ? 'var(--text-muted)' : up ? 'var(--color-gain)' : 'var(--color-loss)';
+
+  const handleClick = () => {
+    if (!m?.ticker) return;
+    // click → judgment 5 条件詳細へ (chase でなくファンダ確認へ誘導、金融合議反映)
+    setActiveTab('home');
+    setActiveTicker(m.ticker);
+  };
+
+  return (
+    <button
+      type="button"
+      className="ws-judgment-row"
+      style={{
+        gridTemplateColumns: 'auto minmax(0, 1fr) auto auto',
+        minHeight: 44,
+        alignItems: 'center',
+      }}
+      onClick={handleClick}
+    >
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 500,
+          color: 'var(--text-muted)',
+          fontVariantNumeric: 'tabular-nums',
+          minWidth: 14,
+          textAlign: 'right',
+        }}
+      >
+        {rank}
+      </span>
+      <span
+        style={{
+          fontWeight: 600,
+          color: 'var(--text-primary)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {m.ticker}
+      </span>
+      <span
+        style={{
+          fontWeight: 600,
+          color: 'var(--text-primary)',
+          fontVariantNumeric: 'tabular-nums',
+          fontSize: 12,
+        }}
+      >
+        {m.price != null ? `$${Number(m.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+      </span>
+      <span
+        style={{
+          minWidth: 56,
+          textAlign: 'right',
+          color: trendColor,
+          fontVariantNumeric: 'tabular-nums',
+          fontSize: 12,
+          fontWeight: 500,
+        }}
+      >
+        {pct == null ? '—' : `${up ? '+' : ''}${Number(pct).toFixed(2)}%`}
+      </span>
+    </button>
   );
 }
 

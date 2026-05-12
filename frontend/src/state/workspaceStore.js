@@ -55,6 +55,10 @@ export const useWorkspaceStore = create(
       // default true (collapsed) で lazy mount (開いた時のみ fetchEconomicCalendar)。
       // 6 体合議の「重要 3-5 件 + 保有 × マクロ AI コメント」差別化は将来 Phase で追加。
       economicCalendarCollapsed: true,
+      // 2026-05-13: Workspace Home Phase 2 = 注目銘柄 Top 5 (急騰/急落、IndicesList 内)。
+      // default true (collapsed) で lazy fetch。click 時に home tab + judgment detail へ遷移。
+      // 金融合議の chase 誘発リスクは disclaimer + judgment 5 条件への接続で軽減。
+      moversCollapsed: true,
       activeTab: 'home',
       activeTicker: null,
       // §dogfood-2: 指数 tab 用 symbol。activeTicker と分離することで Header click が
@@ -79,6 +83,7 @@ export const useWorkspaceStore = create(
       toggleObserving: () => set((s) => ({ observingCollapsed: !s.observingCollapsed })),
       toggleTier2: () => set((s) => ({ tier2Collapsed: !s.tier2Collapsed })),
       toggleEconomicCalendar: () => set((s) => ({ economicCalendarCollapsed: !s.economicCalendarCollapsed })),
+      toggleMovers: () => set((s) => ({ moversCollapsed: !s.moversCollapsed })),
       setActiveTab: (t) => set(() => ({ activeTab: t })),
       setActiveTicker: (s) => set(() => ({ activeTicker: s })),
       setActiveIndexSymbol: (s) => set(() => ({ activeIndexSymbol: s })),
@@ -107,12 +112,13 @@ export const useWorkspaceStore = create(
         observingCollapsed: state.observingCollapsed,
         tier2Collapsed: state.tier2Collapsed,
         economicCalendarCollapsed: state.economicCalendarCollapsed,
+        moversCollapsed: state.moversCollapsed,
       }),
-      version: 4,
+      version: 5,
       // v1 → v2: 新 collapse keys (nav/watchlist/holdings/observing) 追加。
       // v2 → v3: tier2Collapsed 追加 (Workspace Home Phase 0)。
       // v3 → v4: economicCalendarCollapsed 追加 (Workspace Home Phase 1)。
-      // 旧バージョン state は default 値で吸収される。
+      // v4 → v5: moversCollapsed 追加 (Workspace Home Phase 2)。
       migrate: (persistedState, version) => {
         if (version < 2) {
           persistedState = {
@@ -124,16 +130,13 @@ export const useWorkspaceStore = create(
           };
         }
         if (version < 3) {
-          persistedState = {
-            ...persistedState,
-            tier2Collapsed: false,
-          };
+          persistedState = { ...persistedState, tier2Collapsed: false };
         }
         if (version < 4) {
-          persistedState = {
-            ...persistedState,
-            economicCalendarCollapsed: true,
-          };
+          persistedState = { ...persistedState, economicCalendarCollapsed: true };
+        }
+        if (version < 5) {
+          persistedState = { ...persistedState, moversCollapsed: true };
         }
         return persistedState;
       },
