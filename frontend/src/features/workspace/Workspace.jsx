@@ -41,6 +41,23 @@ const TABS = [
   { key: 'indices', label: '指数', Icon: Activity },
 ];
 
+// 2026-05-13: workspace の 3 タブ (判定/決算/チャート) は Pane 3/4/5 に機能統合済で
+// workspace mode では no-op (active 状態以外コンテンツ不変)。
+// 6 体合議 (UI/UX / 金融 / Web 設計 / Web 開発 / マーケター / Anthropic engineer) で削除推奨。
+// SPA mode は App.jsx の独立 TABS 定義で全 5 タブ維持 (legacy 互換)。
+// 内部 key (`judgment` / `report` / `チャート`) は予約のため TABS から削除せず、
+// nav 表示にだけ含めない (CLAUDE.md「内部値の混在」「'チャート' key 維持」ルール準拠)。
+const WORKSPACE_NAV_TABS = TABS.filter((t) =>
+  ['home', 'indices'].includes(t.key)
+);
+
+// activeTab が legacy 値 (judgment/report/チャート) のとき workspace では home に正規化。
+// URL `?tab=judgment` 等の deep link が来ても home へ自動 redirect、bookmark 救済。
+const WORKSPACE_LEGACY_TAB_KEYS = ['judgment', 'report', 'チャート'];
+function normalizeWorkspaceTab(tab) {
+  return WORKSPACE_LEGACY_TAB_KEYS.includes(tab) ? 'home' : tab;
+}
+
 /** v62 WS-4 + Phase2: Pane 2 上部の表示メタ切替 (改善希望④ 拡張)
  *  §dogfood-round3: 1日騰落率 が最頻使用想定なので先頭に */
 const META_OPTIONS = [
@@ -370,8 +387,8 @@ function Pane1NavRail({ items = [] }) {
         overflowX: 'hidden',
       }}
     >
-      {/* nav tabs (アイコンのみ) */}
-      {TABS.map((t) => {
+      {/* nav tabs (アイコンのみ) — workspace は 2 タブのみ (3 タブ削除済、6 体合議) */}
+      {WORKSPACE_NAV_TABS.map((t) => {
         const active = activeTab === t.key;
         return (
           <button
@@ -508,7 +525,8 @@ function Pane1Nav({ items = [] }) {
       />
       {!navCollapsed && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {TABS.map((t) => {
+          {/* workspace は 2 タブのみ (3 タブ削除済、6 体合議) */}
+          {WORKSPACE_NAV_TABS.map((t) => {
             const active = activeTab === t.key;
             return (
               <button
@@ -695,6 +713,15 @@ export default function Workspace({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 2026-05-13: 3 タブ削除に伴う legacy activeTab 正規化。
+  // URL `?tab=judgment` 等の deep link や localStorage に残った legacy value を home に redirect。
+  const setActiveTab = useWorkspaceStore((s) => s.setActiveTab);
+  useEffect(() => {
+    if (WORKSPACE_LEGACY_TAB_KEYS.includes(activeTab)) {
+      setActiveTab(normalizeWorkspaceTab(activeTab));
+    }
+  }, [activeTab, setActiveTab]);
 
   return (
     <JudgmentProvider>
