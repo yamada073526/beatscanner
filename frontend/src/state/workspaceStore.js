@@ -51,6 +51,10 @@ export const useWorkspaceStore = create(
       // Workspace Home 復活 Phase 0 (5 体合議): Pane 1 縦スクロール統合の前提準備。
       // default false (expanded) で既存挙動と互換、Phase 1 で Home content 追加時に true へ変更検討。
       tier2Collapsed: false,
+      // 2026-05-13: Workspace Home Phase 1 = 経済指標セクション (IndicesList 内)。
+      // default true (collapsed) で lazy mount (開いた時のみ fetchEconomicCalendar)。
+      // 6 体合議の「重要 3-5 件 + 保有 × マクロ AI コメント」差別化は将来 Phase で追加。
+      economicCalendarCollapsed: true,
       activeTab: 'home',
       activeTicker: null,
       // §dogfood-2: 指数 tab 用 symbol。activeTicker と分離することで Header click が
@@ -74,6 +78,7 @@ export const useWorkspaceStore = create(
       toggleHoldings: () => set((s) => ({ holdingsCollapsed: !s.holdingsCollapsed })),
       toggleObserving: () => set((s) => ({ observingCollapsed: !s.observingCollapsed })),
       toggleTier2: () => set((s) => ({ tier2Collapsed: !s.tier2Collapsed })),
+      toggleEconomicCalendar: () => set((s) => ({ economicCalendarCollapsed: !s.economicCalendarCollapsed })),
       setActiveTab: (t) => set(() => ({ activeTab: t })),
       setActiveTicker: (s) => set(() => ({ activeTicker: s })),
       setActiveIndexSymbol: (s) => set(() => ({ activeIndexSymbol: s })),
@@ -101,11 +106,13 @@ export const useWorkspaceStore = create(
         holdingsCollapsed: state.holdingsCollapsed,
         observingCollapsed: state.observingCollapsed,
         tier2Collapsed: state.tier2Collapsed,
+        economicCalendarCollapsed: state.economicCalendarCollapsed,
       }),
-      version: 3,
+      version: 4,
       // v1 → v2: 新 collapse keys (nav/watchlist/holdings/observing) 追加。
       // v2 → v3: tier2Collapsed 追加 (Workspace Home Phase 0)。
-      // 旧バージョン state は default 値 (false) で吸収される。
+      // v3 → v4: economicCalendarCollapsed 追加 (Workspace Home Phase 1)。
+      // 旧バージョン state は default 値で吸収される。
       migrate: (persistedState, version) => {
         if (version < 2) {
           persistedState = {
@@ -120,6 +127,12 @@ export const useWorkspaceStore = create(
           persistedState = {
             ...persistedState,
             tier2Collapsed: false,
+          };
+        }
+        if (version < 4) {
+          persistedState = {
+            ...persistedState,
+            economicCalendarCollapsed: true,
           };
         }
         return persistedState;

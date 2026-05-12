@@ -13,13 +13,20 @@
  *   - 関連ニュース / 構成銘柄 top movers (8 指標分の provider 設計が別案件)
  *   - sparklinePeriod 双方向同期 (StockPriceChart は内部 period state)
  */
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import StockPriceChart from '../../components/StockPriceChart.jsx';
 import NewsPanel from '../../components/NewsPanel.jsx';
 import { fetchMarketIndices } from '../../api.js';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { useRowSparkline } from '../judgment/components/list/RowSparkline.jsx';
 import { SPARKLINE_PERIOD_OPTIONS } from './Workspace.jsx';
+
+// 2026-05-13 Workspace Home Phase 1: 経済指標セクションを Pane 2 (IndicesList) 末尾に追加。
+// lazy load = collapsed 時は mount/fetch しない、開いた時のみ初回 fetch。
+// bundle 影響最小化 (EconomicCalendarSection は 12 KB 超、SPA Home でも lazy 済)。
+const EconomicCalendarSection = lazy(() =>
+  import('../../components/EconomicCalendarSection.jsx')
+);
 
 // §dogfood-round11: IndicesRow / Header 共通の期間 → 営業日数マッピング
 const PERIOD_DAYS = { '1d': 2, '1w': 5, '1m': 21, '6m': 126, '1y': 252 };
@@ -369,8 +376,43 @@ export function IndicesList() {
             sparklinePeriod={sparklinePeriod}
           />
         )}
+        <EconomicCalendarPaneSection />
       </div>
     </div>
+  );
+}
+
+// Workspace Home Phase 1: 経済指標カレンダー (FOMC / CPI / NFP など)
+// 「毎日開きたくなる」5 原則 #2 + マクロ → セクター → 個別の流れの起点。
+// default collapsed = true (Pane 2 縦長すぎ回避 + lazy fetch)
+function EconomicCalendarPaneSection() {
+  const collapsed = useWorkspaceStore((s) => s.economicCalendarCollapsed);
+  const toggle = useWorkspaceStore((s) => s.toggleEconomicCalendar);
+  return (
+    <>
+      <GroupHeader collapsible collapsed={collapsed} onToggle={toggle}>
+        経済指標
+      </GroupHeader>
+      {!collapsed && (
+        <Suspense
+          fallback={
+            <div
+              style={{
+                padding: '16px 14px',
+                fontSize: 12,
+                color: 'var(--text-muted)',
+              }}
+            >
+              読み込み中…
+            </div>
+          }
+        >
+          <div style={{ padding: '8px 0' }}>
+            <EconomicCalendarSection />
+          </div>
+        </Suspense>
+      )}
+    </>
   );
 }
 
