@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Card from '../../primitives/Card.jsx';
 import SectionHeader from '../../primitives/SectionHeader.jsx';
 import ConditionRow from './ConditionRow.jsx';
+import FiveConditionsOverviewModal from './FiveConditionsOverviewModal.jsx';
 
 /**
  * FiveConditionsCard — VerdictDetail と ConditionGrid を統合した unified card (PR-2)
@@ -30,13 +31,46 @@ export default function FiveConditionsCard({
   // null = どれも展開されていない (default)
   // index = その index のみ展開 (Linear 流「同時に 1 つだけ」)
   const [expandedIndex, setExpandedIndex] = useState(null);
+  const [showOverview, setShowOverview] = useState(false);
+
+  // 他セクション (GuidanceCard 等) と統一: タイトル横の cyan ? chip (3 体合議 2026-05-12)
+  // user 元提案 + UI/UX 推奨案 1 で converge、整合性最優先
+  const titleWithHelp = (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      ファンダメンタル 5 条件
+      <button
+        type="button"
+        onClick={() => setShowOverview(true)}
+        style={{
+          display: 'inline-flex',
+          width: 16,
+          height: 16,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: '50%',
+          fontSize: 9,
+          fontWeight: 700,
+          background: 'rgba(34, 211, 238, 0.15)',
+          color: 'rgb(56, 189, 248)',
+          border: '1px solid rgba(34, 211, 238, 0.4)',
+          cursor: 'pointer',
+          transition: 'background var(--motion-fast) ease',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34, 211, 238, 0.30)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(34, 211, 238, 0.15)'; }}
+        aria-label="ファンダメンタル 5 条件の評価ロジックを表示"
+      >
+        ？
+      </button>
+    </span>
+  );
 
   return (
     <Card>
       <div style={{ padding: 'var(--space-6, 24px)' }}>
         <SectionHeader
           id="judgment-conditions"
-          title="ファンダメンタル 5 条件"
+          title={titleWithHelp}
           label={
             passedCount != null && totalCount != null
               ? `${passedCount}/${totalCount} 合致`
@@ -73,6 +107,9 @@ export default function FiveConditionsCard({
           </ul>
         )}
       </div>
+      {showOverview && (
+        <FiveConditionsOverviewModal onClose={() => setShowOverview(false)} />
+      )}
     </Card>
   );
 }
