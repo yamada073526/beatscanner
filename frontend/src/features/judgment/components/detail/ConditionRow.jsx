@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Info } from 'lucide-react';
 import Sparkline from '../../../../components/Sparkline.jsx';
 import {
   DeltaRow,
@@ -190,7 +191,8 @@ export default function ConditionRow({
             onUpgradeClick={onUpgrade}
           />
 
-          {/* 説明モーダル trigger */}
+          {/* 説明モーダル trigger — Stripe / Linear / Notion 流の subtle text link.
+              旧 pill button は user dogfood で「ダサい」評価のため modern style に修正 (2026-05-12)。 */}
           {detailContent && (
             <button
               type="button"
@@ -198,20 +200,31 @@ export default function ConditionRow({
                 e.stopPropagation();
                 setShowModal(true);
               }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = 'rgb(56, 189, 248)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = 'var(--text-muted)';
+              }}
               style={{
                 justifySelf: 'start',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
                 fontSize: 11,
                 fontWeight: 500,
-                color: 'rgb(56, 189, 248)',
+                color: 'var(--text-muted)',
                 background: 'transparent',
-                border: '1px solid rgba(56, 189, 248, 0.30)',
-                borderRadius: 'var(--radius-pill)',
-                padding: '3px 10px',
+                border: 'none',
+                padding: '2px 0',
                 cursor: 'pointer',
+                transition: 'color var(--motion-fast) ease',
+                marginTop: 2,
               }}
               aria-label={`${condition.name}の詳しい解説を表示`}
             >
-              ? なぜこの条件か
+              <Info size={12} strokeWidth={2} />
+              <span>この条件の解説</span>
             </button>
           )}
         </div>
