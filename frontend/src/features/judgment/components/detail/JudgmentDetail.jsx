@@ -115,7 +115,7 @@ export default function JudgmentDetail({
   });
 
   return (
-    <div className="ds-judgment-detail" style={{ display: 'grid', gap: 12 }}>
+    <div className="ds-judgment-detail" style={{ display: 'grid', gap: 20 }}>
       {/* === 階層 1: Verdict === */}
       <SectionDivider tier={1} />
       <Hero

@@ -1418,6 +1418,26 @@ body {
   box-shadow: var(--shadow-1);
 }
 
+/* 2026-05-12 (post §-1-B 撤回): Pane 3 体感強化を typography + elevation で実施。
+   4 体合議 (UI/UX / マーケター / Web 開発 / Web 設計) 推奨、機能 UI 業界標準 (Linear / Stripe / Anthropic Console)。
+   warm tint なしで「機能 UI らしく読みやすい」を演出。 */
+
+/* Hero (verdict) は主役カードなので elevation +1 段 (--shadow-1 → --shadow-2)
+   :not(:hover):not(.is-arriving) で発光バグ系の compound 4 セットと衝突回避 */
+.ds-judgment-detail .bs-panel-hero:not(:hover):not(.is-arriving) {
+  box-shadow: var(--shadow-2);
+}
+
+/* 本文の line-height を読み物寄りに調整 (1.5 → 1.65)。
+   ds-section-body / ds-section-header h2 などは既存の typography token を維持、
+   本文 paragraph と説明文のみ対象 (1 行で完結する label / stat は影響なし)。 */
+.ds-judgment-detail .ds-section-body p,
+.ds-judgment-detail .ds-section-body .ds-body-text,
+.ds-judgment-detail .ds-explanation,
+.ds-judgment-detail p.ds-body {
+  line-height: 1.65;
+}
+
 /* ════════════════════════════════════════════════════════════════════════════
    §-1-B Reading Mode (ベッドの間接照明) — Phase 1 POC 撤回 (2026-05-12)
    ────────────────────────────────────────────────────────────────────────────

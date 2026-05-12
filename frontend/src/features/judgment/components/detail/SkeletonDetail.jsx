@@ -12,7 +12,7 @@ import Card from '../../primitives/Card.jsx';
  */
 export default function SkeletonDetail() {
   return (
-    <div className="ds-judgment-detail" aria-busy="true" aria-label="読み込み中" style={{ display: 'grid', gap: 12 }}>
+    <div className="ds-judgment-detail" aria-busy="true" aria-label="読み込み中" style={{ display: 'grid', gap: 20 }}>
       {/* Hero skeleton */}
       <Card>
         <div style={{ padding: 'var(--space-6, 24px)', display: 'flex', justifyContent: 'space-between', gap: 16 }}>
