@@ -18,6 +18,7 @@ import StockPriceChart from '../../components/StockPriceChart.jsx';
 import NewsPanel from '../../components/NewsPanel.jsx';
 import CompanyLogo from '../../components/CompanyLogo.jsx';
 import { useSpyHistory } from '../../hooks/useSpyHistory.js';
+import { useHoldingsMeta } from '../../hooks/useHoldingsMeta.js';
 import {
   fetchMarketIndices,
   fetchMovers,
@@ -278,8 +279,161 @@ function PortfolioSummaryRow({ holdings, prices, tickers }) {
           maxPct={totals.maxPct}
         />
       )}
+      {!collapsed && <PortfolioVerdictRollup tickers={tickers} />}
       {!collapsed && <PortfolioDetailCta />}
     </>
+  );
+}
+
+// Phase 1 v68 差別化機能: 「保有 × じっちゃまプロトコル」
+// 6 体合議 (金融視点) で「これが無いと Sharesight で十分という話になる」と最強推奨された
+// BeatScanner 唯一の差別化軸。Phase 1 はまず EPS beat/miss verdict 集計 + 次決算カウントダウン。
+// じっちゃま 5 条件 PASS/FAIL は Phase 1.5 で /api/analyze の caching infra 同時実装予定。
+function PortfolioVerdictRollup({ tickers }) {
+  const { meta } = useHoldingsMeta(tickers);
+
+  const stats = useMemo(() => {
+    let beat = 0, miss = 0, inLine = 0, unknown = 0;
+    const upcoming = [];
+    for (const t of tickers || []) {
+      const m = meta?.[t];
+      const v = m?.last_verdict;
+      if (v === 'beat') beat += 1;
+      else if (v === 'miss') miss += 1;
+      else if (v === 'in-line') inLine += 1;
+      else unknown += 1;
+      const days = m?.days_to_earnings;
+      if (Number.isFinite(days) && days >= 0 && days <= 30) {
+        upcoming.push({ ticker: t, days });
+      }
+    }
+    upcoming.sort((a, b) => a.days - b.days);
+    return { beat, miss, inLine, unknown, total: (tickers || []).length, upcoming };
+  }, [tickers, meta]);
+
+  if (stats.total === 0) return null;
+  const hasVerdict = stats.beat + stats.miss + stats.inLine > 0;
+  const hasUpcoming = stats.upcoming.length > 0;
+  if (!hasVerdict && !hasUpcoming) return null;
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        padding: '0 12px 10px',
+      }}
+    >
+      {hasVerdict && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontSize: 11,
+            color: 'var(--text-secondary)',
+            flexWrap: 'wrap',
+          }}
+        >
+          <span style={{ color: 'var(--text-muted)' }}>直近決算</span>
+          <VerdictChip count={stats.beat} label="Beat" color="var(--color-gain)" />
+          <VerdictChip count={stats.miss} label="Miss" color="var(--color-loss)" />
+          <VerdictChip count={stats.inLine} label="In-line" color="var(--text-muted)" />
+          {stats.unknown > 0 && (
+            <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>
+              · 未判定 {stats.unknown}
+            </span>
+          )}
+        </div>
+      )}
+      {hasUpcoming && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontSize: 11,
+            color: 'var(--text-secondary)',
+            flexWrap: 'wrap',
+          }}
+        >
+          <span style={{ color: 'var(--text-muted)' }}>次決算</span>
+          {stats.upcoming.slice(0, 4).map((u) => (
+            <EarningsCountdownChip key={u.ticker} ticker={u.ticker} days={u.days} />
+          ))}
+          {stats.upcoming.length > 4 && (
+            <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>
+              +{stats.upcoming.length - 4}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VerdictChip({ count, label, color }) {
+  if (!count) return null;
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '2px 8px',
+        borderRadius: 'var(--radius-pill)',
+        background: 'rgba(255, 255, 255, 0.04)',
+        border: '1px solid var(--border)',
+        fontSize: 11,
+        fontWeight: 600,
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      <span style={{ color, fontSize: 10 }}>●</span>
+      <span style={{ color: 'var(--text-primary)' }}>{count}</span>
+      <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>{label}</span>
+    </span>
+  );
+}
+
+function EarningsCountdownChip({ ticker, days }) {
+  // 3 日以内 = amber 警告、7 日以内 = neutral 強調、それ以上 = subtle
+  const isUrgent = days <= 3;
+  const isSoon = days <= 7;
+  const color = isUrgent
+    ? 'var(--color-warning)'
+    : isSoon
+    ? 'var(--text-primary)'
+    : 'var(--text-secondary)';
+  const bg = isUrgent
+    ? 'rgba(245, 158, 11, 0.10)'
+    : 'rgba(255, 255, 255, 0.04)';
+  const border = isUrgent
+    ? 'rgba(245, 158, 11, 0.30)'
+    : 'var(--border)';
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '2px 8px',
+        borderRadius: 'var(--radius-pill)',
+        background: bg,
+        border: '1px solid',
+        borderColor: border,
+        fontSize: 11,
+        fontWeight: 600,
+        fontVariantNumeric: 'tabular-nums',
+        color,
+      }}
+    >
+      <span>{String(ticker)}</span>
+      <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>
+        {days === 0 ? '今日' : `${days}日`}
+      </span>
+    </span>
   );
 }
 

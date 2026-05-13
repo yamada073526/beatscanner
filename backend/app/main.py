@@ -943,11 +943,15 @@ async def get_holdings_meta(symbols: str, request: Request) -> dict:
     if len(syms) > 50:
         syms = syms[:50]
 
-    # 今日 〜 +120 日。決算カレンダーは通常 60-90 日先まで埋まるため余裕を持たせる。
+    # Phase 1 v68 拡張: 過去 90 日 + 未来 120 日を 1 range で取得し、
+    # next earnings (未来) + last verdict (過去最新) の両方を同時に算出。
+    # 「保有 × じっちゃまプロトコル」差別化機能の Phase 1 cheap path
+    # (じっちゃま 5 条件は Phase 1.5、本 endpoint は EPS beat/miss verdict のみ提供)。
     today = _dt.date.today()
+    date_from_past = (today - _dt.timedelta(days=90)).isoformat()
     date_from = today.isoformat()
     date_to = (today + _dt.timedelta(days=120)).isoformat()
-    range_key = f"{date_from}~{date_to}"
+    range_key = f"{date_from_past}~{date_to}"
 
     now = _time.monotonic()
     cached = _EARNINGS_RANGE_CACHE.get(range_key)
@@ -958,13 +962,14 @@ async def get_holdings_meta(symbols: str, request: Request) -> dict:
         api_key = _get_fmp_key(request)
         try:
             client = FMPClient(api_key=api_key)
-            rows = await client.earning_calendar(date_from, date_to) or []
+            rows = await client.earning_calendar(date_from_past, date_to) or []
         except Exception:
             rows = []
         _EARNINGS_RANGE_CACHE[range_key] = {"data": rows, "ts": now}
 
-    # symbol → 直近 (最も今日に近い未来) の決算日を抽出
-    by_sym: dict[str, str] = {}
+    # symbol → 直近未来 (next_earnings) + 直近過去 (last earnings + verdict)
+    by_sym_next: dict[str, str] = {}
+    by_sym_last: dict[str, dict] = {}  # {date, eps_actual, eps_estimated}
     for r in rows:
         if not isinstance(r, dict):
             continue
@@ -974,27 +979,55 @@ async def get_holdings_meta(symbols: str, request: Request) -> dict:
             continue
         try:
             d_iso = str(d)[:10]
-            # today より過去はスキップ
-            if d_iso < date_from:
-                continue
-            cur = by_sym.get(sym)
-            if cur is None or d_iso < cur:
-                by_sym[sym] = d_iso
+            if d_iso >= date_from:
+                # 未来: 最も今日に近い 1 件
+                cur = by_sym_next.get(sym)
+                if cur is None or d_iso < cur:
+                    by_sym_next[sym] = d_iso
+            else:
+                # 過去: 最も今日に近い 1 件 (= 直近決算)
+                cur = by_sym_last.get(sym)
+                if cur is None or d_iso > cur.get("date", ""):
+                    by_sym_last[sym] = {
+                        "date": d_iso,
+                        "eps_actual": r.get("epsActual") or r.get("eps"),
+                        "eps_estimated": r.get("epsEstimated") or r.get("estimatedEps"),
+                    }
         except Exception:
             continue
 
     meta: dict[str, dict] = {}
     for s in syms:
-        d = by_sym.get(s)
+        d_next = by_sym_next.get(s)
         days_to = None
-        if d:
+        if d_next:
             try:
-                days_to = (_dt.date.fromisoformat(d) - today).days
+                days_to = (_dt.date.fromisoformat(d_next) - today).days
             except Exception:
                 days_to = None
+        last = by_sym_last.get(s)
+        last_verdict = None
+        last_eps_actual = None
+        last_eps_estimated = None
+        last_surprise_pct = None
+        last_date = None
+        if last:
+            verdict_label, surprise_pct, _ = _verdict(
+                last.get("eps_actual"), last.get("eps_estimated")
+            )
+            last_verdict = None if verdict_label == "unknown" else verdict_label
+            last_eps_actual = _safe_float(last.get("eps_actual"))
+            last_eps_estimated = _safe_float(last.get("eps_estimated"))
+            last_surprise_pct = _safe_float(surprise_pct)
+            last_date = last.get("date")
         meta[s] = {
-            "next_earnings_date": d,
+            "next_earnings_date": d_next,
             "days_to_earnings": days_to,
+            "last_earnings_date": last_date,
+            "last_verdict": last_verdict,  # "beat" | "miss" | "in-line" | None
+            "last_eps_actual": last_eps_actual,
+            "last_eps_estimated": last_eps_estimated,
+            "last_surprise_pct": last_surprise_pct,
         }
     return {"meta": meta}
 
