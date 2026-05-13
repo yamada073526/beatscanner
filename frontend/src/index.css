@@ -5333,6 +5333,37 @@ button.ds-chip:active {
   box-shadow: var(--ws-shadow-row-active);
 }
 
+/* 2026-05-13 PR: is-open (Pane 5 reading 中) を視覚 highlight 持続。
+   user 要望「Pane 3 の選択中 highlight を Pane 4 にも」反映。
+   - Pane 4 NewsItem は既に isOpen prop + is-open class 付与済 (L29)、CSS だけ未実装だった
+   - hover と同強度の cyan glow を持続表示、mouse を外しても消えない
+   - !important は :hover と同じ specificity 規律 (is-holding/is-watch static ring 衝突回避) */
+.ws-pane4-news-item.is-open {
+  transform: translateY(var(--ws-hover-lift));
+  border-color: rgba(56, 189, 248, 0.55) !important;
+  background: rgba(56, 189, 248, 0.06) !important;
+  box-shadow: var(--ws-shadow-row-hover);
+}
+[data-theme="dark"] .ws-pane4-news-item.is-open {
+  background: rgba(56, 189, 248, 0.10) !important;
+  border-color: rgba(56, 189, 248, 0.75) !important;
+}
+.ws-pane4-news-item.is-open .ws-pane4-accent-bar {
+  width: 4px !important;
+  opacity: 1 !important;
+}
+.ws-pane4-news-item.is-open .ws-pane4-news-title {
+  color: rgb(186, 230, 253); /* sky-200 */
+}
+[data-theme="light"] .ws-pane4-news-item.is-open .ws-pane4-news-title {
+  color: rgb(2, 132, 199); /* sky-700 */
+}
+/* round 19 compound: is-holding/is-watch static ring を is-open でも上書き */
+.ws-pane4-news-item.is-holding.is-open,
+.ws-pane4-news-item.is-watch.is-open {
+  box-shadow: var(--ws-shadow-row-hover);
+}
+
 @keyframes ws-pane4-slide-in {
   from {
     opacity: 0;
