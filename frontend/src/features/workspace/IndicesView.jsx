@@ -26,6 +26,7 @@ import { aggregateWithTransactions } from '../../lib/holdings.js';
 import { supabase } from '../../lib/supabase.js';
 import { ACCOUNT_TYPE_LABEL } from '../../lib/accounts.js';
 import TransactionEntryModal from '../../components/TransactionEntryModal.jsx';
+import TransactionHistoryModal from '../../components/TransactionHistoryModal.jsx';
 import {
   fetchMarketIndices,
   fetchMovers,
@@ -427,8 +428,10 @@ function PortfolioSummaryRow({ holdings, prices, tickers, totalRealized = 0 }) {
 function PortfolioActions() {
   const user = useUserFromHoldings();
   const { accounts, defaultAccountId, addAccount, error: accountsError, reload } = useAccounts({ supabase, user });
-  const { addTransaction } = useTransactions({ supabase, user });
+  const { transactions, addTransaction, removeTransaction } = useTransactions({ supabase, user });
+  const selectedAccountId = useWorkspaceStore((s) => s.selectedAccountId);
   const [modalOpen, setModalOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const handleCreateDefaultAccount = async () => {
     const created = await addAccount({
@@ -466,6 +469,15 @@ function PortfolioActions() {
             <span aria-hidden="true" style={{ fontSize: 11 }}>＋</span>
             取引を登録
           </button>
+          <button
+            type="button"
+            onClick={() => setHistoryOpen(true)}
+            style={ctaButtonStyle}
+            aria-label="取引履歴を表示"
+          >
+            <span aria-hidden="true" style={{ fontSize: 11 }}>📋</span>
+            取引履歴 ({Array.isArray(transactions) ? transactions.length : 0})
+          </button>
           <TransactionEntryModal
             open={modalOpen}
             onClose={() => setModalOpen(false)}
@@ -474,6 +486,14 @@ function PortfolioActions() {
             onAdd={addTransaction}
             onCreateDefaultAccount={handleCreateDefaultAccount}
             accountsError={accountsError}
+          />
+          <TransactionHistoryModal
+            open={historyOpen}
+            onClose={() => setHistoryOpen(false)}
+            transactions={transactions}
+            accounts={accounts}
+            selectedAccountId={selectedAccountId}
+            onDelete={removeTransaction}
           />
         </>
       )}
