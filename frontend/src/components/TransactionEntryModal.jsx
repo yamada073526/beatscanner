@@ -120,7 +120,7 @@ export default function TransactionEntryModal({
         style={{
           width: '100%',
           maxWidth: 480,
-          background: 'var(--surface-card)',
+          background: 'var(--bg-card)',
           border: '1px solid var(--border)',
           borderRadius: 'var(--radius-lg)',
           padding: 20,
@@ -129,6 +129,7 @@ export default function TransactionEntryModal({
           gap: 14,
           maxHeight: '90vh',
           overflowY: 'auto',
+          boxShadow: 'var(--shadow-4)',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -347,7 +348,7 @@ const inputStyle = {
 const btnPrimaryStyle = {
   padding: '8px 16px',
   background: 'var(--text-primary)',
-  color: 'var(--surface-card)',
+  color: 'var(--bg-card)',
   border: 'none',
   borderRadius: 'var(--radius-pill)',
   fontSize: 12,
