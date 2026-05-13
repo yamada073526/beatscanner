@@ -21,6 +21,7 @@ import { useSpyHistory } from '../../hooks/useSpyHistory.js';
 import { useHoldingsMeta } from '../../hooks/useHoldingsMeta.js';
 import { useAccounts } from '../../hooks/useAccounts.js';
 import { useTransactions } from '../../hooks/useTransactions.js';
+import { aggregateWithTransactions } from '../../lib/holdings.js';
 import { supabase } from '../../lib/supabase.js';
 import { ACCOUNT_TYPE_LABEL } from '../../lib/accounts.js';
 import TransactionEntryModal from '../../components/TransactionEntryModal.jsx';
@@ -117,6 +118,7 @@ function PortfolioPaneSection({ holdings, portfolioPrices, user }) {
         holdings={holdings}
         prices={portfolioPrices}
         tickers={tickers}
+        user={user}
       />
     </>
   );
@@ -257,9 +259,36 @@ function PortfolioEmptyStateCta() {
   );
 }
 
-function PortfolioSummaryRow({ holdings, prices, tickers }) {
+function PortfolioSummaryRow({ holdings, prices, tickers, user }) {
   const collapsed = useWorkspaceStore((s) => s.portfolioCollapsed);
   const toggle = useWorkspaceStore((s) => s.togglePortfolio);
+  const selectedAccountId = useWorkspaceStore((s) => s.selectedAccountId);
+
+  // Phase 2 v68: transactions ベースで実現損益 (realized P/L) を算出。
+  // selectedAccountId が null = 全口座 rollup、特定 account ID = その口座のみ。
+  // 移動平均 cost basis で sell / dividend / fee を順次適用。
+  const { transactions } = useTransactions({ supabase, user });
+  const totalRealized = useMemo(() => {
+    if (!Array.isArray(transactions) || transactions.length === 0) return 0;
+    const filtered = selectedAccountId
+      ? transactions.filter((t) => t.account_id === selectedAccountId)
+      : transactions;
+    if (filtered.length === 0) return 0;
+    // ticker ごとに移動平均で realized を積算
+    const byTicker = {};
+    for (const tx of filtered) {
+      const t = (tx.ticker || '').toUpperCase();
+      if (!t) continue;
+      if (!byTicker[t]) byTicker[t] = [];
+      byTicker[t].push(tx);
+    }
+    let sum = 0;
+    for (const txs of Object.values(byTicker)) {
+      const a = aggregateWithTransactions(txs);
+      if (Number.isFinite(a.realized)) sum += a.realized;
+    }
+    return sum;
+  }, [transactions, selectedAccountId]);
 
   // vs SPY chip: 1Y SPY 累積リターン vs portfolio pnlPct (合議 PR-D)
   // 厳密な期間一致でなく「1Y 市場ベンチマーク」として比較 (MVP)。
@@ -363,6 +392,7 @@ function PortfolioSummaryRow({ holdings, prices, tickers }) {
           }
           maxTicker={totals.maxTicker}
           maxPct={totals.maxPct}
+          realizedAbs={Math.abs(totalRealized) >= 0.005 ? totalRealized : null}
         />
       )}
       {!collapsed && <PortfolioVerdictRollup tickers={tickers} />}
@@ -631,10 +661,11 @@ function EarningsCountdownChip({ ticker, days }) {
 // PR-C + PR-D 合議反映:
 //   - vs SPY (1Y): 累積リターン比較で alpha 確認
 //   - 集中リスク: 最大銘柄が 40%+ なら amber banner
-function PortfolioInsightsRow({ alphaPct, maxTicker, maxPct }) {
+function PortfolioInsightsRow({ alphaPct, maxTicker, maxPct, realizedAbs }) {
   const hasAlpha = Number.isFinite(alphaPct);
   const hasConcentrationRisk = maxTicker && maxPct >= 40;
-  if (!hasAlpha && !hasConcentrationRisk) return null;
+  const hasRealized = Number.isFinite(realizedAbs);
+  if (!hasAlpha && !hasConcentrationRisk && !hasRealized) return null;
   return (
     <div
       style={{
@@ -644,10 +675,54 @@ function PortfolioInsightsRow({ alphaPct, maxTicker, maxPct }) {
         padding: '0 12px 8px',
       }}
     >
-      {hasAlpha && <SPYAlphaChip alphaPct={alphaPct} />}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {hasAlpha && <SPYAlphaChip alphaPct={alphaPct} />}
+        {hasRealized && <RealizedPnLChip value={realizedAbs} />}
+      </div>
       {hasConcentrationRisk && (
         <ConcentrationRiskBanner ticker={maxTicker} pct={maxPct} />
       )}
+    </div>
+  );
+}
+
+// Phase 2 v68: 実現損益 chip (transactions ベース、selectedAccountId フィルタ済)
+// SPY α chip と並置、色は gain/loss tokens で意味整合。
+function RealizedPnLChip({ value }) {
+  const up = value >= 0;
+  const color = up ? 'var(--color-gain)' : 'var(--color-loss)';
+  const bg = up ? 'rgba(52, 239, 129, 0.08)' : 'rgba(248, 113, 113, 0.08)';
+  const border = up ? 'rgba(52, 239, 129, 0.30)' : 'rgba(248, 113, 113, 0.30)';
+  const sign = up ? '+' : '−';
+  return (
+    <div
+      title="売却 + 配当 − 手数料 (移動平均 cost basis)"
+      style={{
+        display: 'inline-flex',
+        alignSelf: 'flex-start',
+        alignItems: 'center',
+        gap: 6,
+        padding: '4px 10px',
+        background: bg,
+        border: '1px solid',
+        borderColor: border,
+        borderRadius: 'var(--radius-pill)',
+        fontSize: 11,
+        fontWeight: 500,
+        color: 'var(--text-secondary)',
+      }}
+    >
+      <span style={{ color, fontSize: 10 }} aria-hidden="true">●</span>
+      <span>実現損益</span>
+      <span
+        style={{
+          color,
+          fontWeight: 600,
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {sign}{formatUSDCompact(Math.abs(value))}
+      </span>
     </div>
   );
 }
