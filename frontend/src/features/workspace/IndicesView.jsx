@@ -19,6 +19,11 @@ import NewsPanel from '../../components/NewsPanel.jsx';
 import CompanyLogo from '../../components/CompanyLogo.jsx';
 import { useSpyHistory } from '../../hooks/useSpyHistory.js';
 import { useHoldingsMeta } from '../../hooks/useHoldingsMeta.js';
+import { useAccounts } from '../../hooks/useAccounts.js';
+import { useTransactions } from '../../hooks/useTransactions.js';
+import { supabase } from '../../lib/supabase.js';
+import { ACCOUNT_TYPE_LABEL } from '../../lib/accounts.js';
+import TransactionEntryModal from '../../components/TransactionEntryModal.jsx';
 import {
   fetchMarketIndices,
   fetchMovers,
@@ -97,15 +102,96 @@ function PortfolioPaneSection({ holdings, portfolioPrices, user }) {
   // 6 体合議 (金融/マーケ) で「保有 × じっちゃまプロトコル」が差別化核と確定し、
   // 既存 PortfolioDashboard を user に発見させる動線が最優先課題に。
   if (tickers.length === 0) {
-    return <PortfolioEmptyStateCta />;
+    return (
+      <>
+        <AccountSwitcher user={user} />
+        <PortfolioEmptyStateCta />
+      </>
+    );
   }
 
   return (
-    <PortfolioSummaryRow
-      holdings={holdings}
-      prices={portfolioPrices}
-      tickers={tickers}
-    />
+    <>
+      <AccountSwitcher user={user} />
+      <PortfolioSummaryRow
+        holdings={holdings}
+        prices={portfolioPrices}
+        tickers={tickers}
+      />
+    </>
+  );
+}
+
+// Phase 2 v68: 口座 switcher (segmented tabs)
+// 6 体合議 UI/UX: Linear の workspace switcher 方式、合計を常に左端固定、
+// オーバーフローは横スクロール。「合計」rollup + 各口座詳細の 2 階層。
+// Phase 2 はまず「選択 UI」を提供し、portfolio aggregation の account 絞り込みは
+// Phase 2.5 で useTransactions を本格統合してから (holdings は account 跨ぎの
+// 互換維持のため当面は rollup 表示固定)。
+function AccountSwitcher({ user }) {
+  const { accounts, loading } = useAccounts({ supabase, user });
+  const selectedAccountId = useWorkspaceStore((s) => s.selectedAccountId);
+  const setSelectedAccountId = useWorkspaceStore((s) => s.setSelectedAccountId);
+  const collapsed = useWorkspaceStore((s) => s.portfolioCollapsed);
+
+  // 折り畳み中は switcher も非表示
+  if (collapsed) return null;
+  if (loading || !Array.isArray(accounts)) return null;
+  // 口座 1 つ以下 (デフォルトのみ) なら switcher 不要、UI シンプル維持
+  if (accounts.length <= 1) return null;
+
+  const tabs = [
+    { id: null, label: '合計', isRollup: true },
+    ...accounts.map((a) => ({
+      id: a.id,
+      label: a.name,
+      type: a.type,
+      isDefault: a.is_default,
+      isRollup: false,
+    })),
+  ];
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: 6,
+        padding: '8px 12px 4px',
+        overflowX: 'auto',
+        scrollbarWidth: 'thin',
+      }}
+      role="tablist"
+      aria-label="口座切り替え"
+    >
+      {tabs.map((tab) => {
+        const active = (selectedAccountId || null) === (tab.id || null);
+        return (
+          <button
+            key={tab.id || 'rollup'}
+            role="tab"
+            aria-selected={active}
+            type="button"
+            onClick={() => setSelectedAccountId(tab.id)}
+            title={tab.type ? ACCOUNT_TYPE_LABEL[tab.type] || tab.type : '全口座統括'}
+            style={{
+              flexShrink: 0,
+              padding: '4px 12px',
+              background: active ? 'var(--surface-elevated)' : 'transparent',
+              border: '1px solid',
+              borderColor: active ? 'var(--text-secondary)' : 'var(--border)',
+              borderRadius: 'var(--radius-pill)',
+              color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+              fontSize: 11,
+              fontWeight: tab.isRollup ? 700 : 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {String(tab.label)}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -280,10 +366,98 @@ function PortfolioSummaryRow({ holdings, prices, tickers }) {
         />
       )}
       {!collapsed && <PortfolioVerdictRollup tickers={tickers} />}
-      {!collapsed && <PortfolioDetailCta />}
+      {!collapsed && <PortfolioActions />}
     </>
   );
 }
+
+// Phase 2 v68: 取引登録 modal entry + 既存 PortfolioDashboard 導線。
+// 「ロット履歴・推移チャート」(classic mode 遷移) と「取引を登録」(modal) を並置。
+function PortfolioActions() {
+  const user = useUserFromHoldings();
+  const { accounts, defaultAccountId } = useAccounts({ supabase, user });
+  const { addTransaction } = useTransactions({ supabase, user });
+  const [modalOpen, setModalOpen] = useState(false);
+
+  return (
+    <div style={{ display: 'flex', gap: 6, padding: '4px 14px 12px', flexWrap: 'wrap' }}>
+      <button
+        type="button"
+        onClick={switchToClassicPortfolio}
+        style={ctaButtonStyle}
+      >
+        ロット履歴・推移チャートを見る
+        <span aria-hidden="true" style={{ fontSize: 10 }}>→</span>
+      </button>
+      {user && (
+        <>
+          <button
+            type="button"
+            onClick={() => setModalOpen(true)}
+            style={{
+              ...ctaButtonStyle,
+              color: 'var(--text-primary)',
+              borderColor: 'var(--text-secondary)',
+            }}
+          >
+            <span aria-hidden="true" style={{ fontSize: 11 }}>＋</span>
+            取引を登録
+          </button>
+          <TransactionEntryModal
+            open={modalOpen}
+            onClose={() => setModalOpen(false)}
+            accounts={accounts}
+            defaultAccountId={defaultAccountId}
+            onAdd={addTransaction}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+// PortfolioPaneSection (`user` を props で受ける) から PortfolioActions に user を渡す
+// hack を避けるため、PortfolioActions 内で別途 user を取り出すヘルパ。
+// 現状 IndicesList → PortfolioPaneSection に user prop は来ているが、
+// PortfolioSummaryRow からは props 経路が無いので、Pane 2 全体での近い user 取得を Phase 2 で深堀り。
+// 暫定: Phase 2 では PortfolioPaneSection が user を直接渡せるように IndicesView を再構成する必要があるが、
+// 既存 component layering を最小変更で済ますため、useUserFromHoldings は context や
+// 既存 supabase.auth.getUser() に流すフォールバックを許容する。
+function useUserFromHoldings() {
+  // 既存 supabase の session から user を取り出す軽量フォールバック。
+  // Phase 2.5 で App.jsx → Workspace → IndicesList → PortfolioPaneSection → PortfolioActions
+  // の user props chain に整理予定。
+  const [user, setUser] = useState(null);
+  useEffect(() => {
+    if (!supabase) return;
+    let cancelled = false;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!cancelled) setUser(data?.user || null);
+    }).catch(() => {});
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
+      if (!cancelled) setUser(session?.user || null);
+    });
+    return () => {
+      cancelled = true;
+      sub?.subscription?.unsubscribe?.();
+    };
+  }, []);
+  return user;
+}
+
+const ctaButtonStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '4px 10px',
+  background: 'transparent',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-pill)',
+  color: 'var(--text-secondary)',
+  fontSize: 11,
+  fontWeight: 600,
+  cursor: 'pointer',
+};
 
 // Phase 1 v68 差別化機能: 「保有 × じっちゃまプロトコル」
 // 6 体合議 (金融視点) で「これが無いと Sharesight で十分という話になる」と最強推奨された
@@ -437,36 +611,7 @@ function EarningsCountdownChip({ ticker, days }) {
   );
 }
 
-// Phase 0 動線改善 (2026-05-14): Pane 2 サマリーから既存 PortfolioDashboard へ 1-click 遷移。
-// 既存 PortfolioDashboard (ロット履歴 / TWR 推移 / vs SPY / 集中リスク / 分割補正) は
-// workspace mode では未到達だった。6 体合議で「user が認知していない厚みの可視化」が
-// Phase 0 最優先課題と確定。Phase 1 で workspace 統合 (Pane 2 Portfolio Pane 格上げ) 予定。
-function PortfolioDetailCta() {
-  return (
-    <div style={{ padding: '4px 14px 12px' }}>
-      <button
-        type="button"
-        onClick={switchToClassicPortfolio}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '4px 10px',
-          background: 'transparent',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-pill)',
-          color: 'var(--text-secondary)',
-          fontSize: 11,
-          fontWeight: 600,
-          cursor: 'pointer',
-        }}
-      >
-        ロット履歴・推移チャートを見る
-        <span aria-hidden="true" style={{ fontSize: 10 }}>→</span>
-      </button>
-    </div>
-  );
-}
+// PortfolioDetailCta は Phase 2 で PortfolioActions に統合 (取引登録 button 並列追加)
 
 // Portfolio の追加 insights 行 (vs SPY chip + 集中リスク warning)
 // PR-C + PR-D 合議反映:

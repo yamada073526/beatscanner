@@ -63,6 +63,9 @@ export const useWorkspaceStore = create(
       // default false (expanded) = ログイン user の「自分の儲け」を first-fold に。
       // 未ログイン or 0 holdings なら component 自体が null return (空 state 罠回避)。
       portfolioCollapsed: false,
+      // Phase 2 v68: 口座 switcher 選択値。null = 「合計」(全口座 rollup) を意味する。
+      // account.id (uuid) を持つときは特定口座のみ表示。persist で再訪時に保たれる。
+      selectedAccountId: null,
       activeTab: 'home',
       activeTicker: null,
       // §dogfood-2: 指数 tab 用 symbol。activeTicker と分離することで Header click が
@@ -93,6 +96,7 @@ export const useWorkspaceStore = create(
       toggleEconomicCalendar: () => set((s) => ({ economicCalendarCollapsed: !s.economicCalendarCollapsed })),
       toggleMovers: () => set((s) => ({ moversCollapsed: !s.moversCollapsed })),
       togglePortfolio: () => set((s) => ({ portfolioCollapsed: !s.portfolioCollapsed })),
+      setSelectedAccountId: (id) => set(() => ({ selectedAccountId: id || null })),
       // tab 切替時は pane3JudgmentOverride を自動リセット (連続分析モードを解除)
       setActiveTab: (t) => set(() => ({ activeTab: t, pane3JudgmentOverride: false })),
       setActiveTicker: (s) => set(() => ({ activeTicker: s })),
@@ -126,13 +130,15 @@ export const useWorkspaceStore = create(
         economicCalendarCollapsed: state.economicCalendarCollapsed,
         moversCollapsed: state.moversCollapsed,
         portfolioCollapsed: state.portfolioCollapsed,
+        selectedAccountId: state.selectedAccountId,
       }),
-      version: 6,
+      version: 7,
       // v1 → v2: 新 collapse keys (nav/watchlist/holdings/observing) 追加。
       // v2 → v3: tier2Collapsed 追加 (Workspace Home Phase 0)。
       // v3 → v4: economicCalendarCollapsed 追加 (Workspace Home Phase 1)。
       // v4 → v5: moversCollapsed 追加 (Workspace Home Phase 2)。
       // v5 → v6: portfolioCollapsed 追加 (Workspace Home Phase 3)。
+      // v6 → v7: selectedAccountId 追加 (Phase 2 v68 口座 switcher)。
       migrate: (persistedState, version) => {
         if (version < 2) {
           persistedState = {
@@ -154,6 +160,9 @@ export const useWorkspaceStore = create(
         }
         if (version < 6) {
           persistedState = { ...persistedState, portfolioCollapsed: false };
+        }
+        if (version < 7) {
+          persistedState = { ...persistedState, selectedAccountId: null };
         }
         return persistedState;
       },
