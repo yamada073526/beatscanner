@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import glob
 import json
+import math
 import os
 import re
 import pathlib as _pathlib
@@ -70,6 +71,18 @@ if _SENTRY_DSN:
     except Exception as _e:
         # Sentry 初期化失敗でアプリを落とさない.
         print(f"[sentry] init failed: {_e}")
+
+# yfinance の "possibly delisted" / "404 Client Error" / "Failed downloads" は
+# 上場廃止銘柄や transient な data gap で頻発する WARNING。Sentry の logging
+# integration が breadcrumb / event として大量に拾ってしまうため ERROR 以上に抑制。
+# BACKEND-1..4, 7 系の event 騒音はこれで一括解消。
+import logging as _logging
+for _lname in ("yfinance", "py.warnings"):
+    _logging.getLogger(_lname).setLevel(_logging.ERROR)
+
+# 連続失敗した ticker を runtime で skip するための in-memory set。
+# プロセス再起動でリセット (lifespan を跨いだ persist は不要)。
+_MOVERS_DELISTED: set[str] = set()
 
 WARMUP_TICKERS = ["NVDA", "AAPL", "MSFT", "META", "GOOGL"]
 
@@ -320,6 +333,24 @@ async def safe_fmp_get(url: str, cache_key: str, ttl: int = CACHE_TTL_EARNINGS):
         # 例外時もstaleキャッシュがあれば返す
         if cached:
             return cached[1]
+        return None
+
+
+def _safe_float(x, ndigits: int | None = None):
+    """NaN / ±Inf を JSON 互換の None に正規化。
+
+    BACKEND-6 (Sentry 18 events): pandas/numpy の NaN や inf が JSON encoder で
+    "Out of range float values are not JSON compliant" を投げる。
+    数値 endpoint の最終出力で必ず通すこと。
+    """
+    try:
+        if x is None:
+            return None
+        f = float(x)
+        if not math.isfinite(f):
+            return None
+        return round(f, ndigits) if ndigits is not None else f
+    except (TypeError, ValueError):
         return None
 
 
@@ -6633,15 +6664,21 @@ async def get_chart_summary(ticker: str):
         if hist is None or hist.empty:
             raise HTTPException(status_code=404, detail="Data not found")
 
-        current = float(hist["Close"].iloc[-1])
+        current_raw = hist["Close"].iloc[-1]
+        current_safe = _safe_float(current_raw)
+        if current_safe is None:
+            raise HTTPException(status_code=404, detail="Latest close is NaN")
+        current = current_safe
 
         period_days = {"1d": 1, "1wk": 5, "1mo": 21, "6mo": 126, "1y": 252}
         performance = {}
         for key, days in period_days.items():
             idx = min(days, len(hist) - 1)
-            past = float(hist["Close"].iloc[-idx - 1])
-            pct = (current - past) / past * 100
-            performance[key] = round(pct, 2)
+            past = _safe_float(hist["Close"].iloc[-idx - 1])
+            if past is None or past == 0:
+                performance[key] = None
+                continue
+            performance[key] = _safe_float((current - past) / past * 100, 2)
 
         next_earnings = None
         try:
@@ -6658,13 +6695,19 @@ async def get_chart_summary(ticker: str):
         # 既存の 1y daily history を再利用するため追加 fetch なし、コストゼロ。
         sparkline_window = min(30, len(hist))
         try:
-            sparkline = [round(float(p), 2) for p in hist["Close"].iloc[-sparkline_window:].tolist()]
+            sparkline = [
+                v for v in (
+                    _safe_float(p, 2)
+                    for p in hist["Close"].iloc[-sparkline_window:].tolist()
+                )
+                if v is not None
+            ]
         except Exception:
             sparkline = []
 
         result = {
             "ticker": ticker,
-            "current_price": round(current, 2),
+            "current_price": _safe_float(current, 2),
             "performance": performance,
             "next_earnings": next_earnings,
             "sparkline": sparkline,  # number[] 直近 30 日 daily close
@@ -6735,8 +6778,11 @@ def _fetch_movers_sync() -> list[dict]:
     import yfinance as yf
     from .tickers_master import MASTER_TICKERS
 
+    # runtime で delisted 判定済の銘柄は除外して download コストを削減
+    active_tickers = [t for t in MASTER_TICKERS if t not in _MOVERS_DELISTED]
+
     raw = yf.download(
-        MASTER_TICKERS,
+        active_tickers,
         period="2d",
         interval="1d",
         progress=False,
@@ -6746,18 +6792,31 @@ def _fetch_movers_sync() -> list[dict]:
     close = raw["Close"] if "Close" in raw.columns.get_level_values(0) else raw.xs("Close", axis=1, level=0)
 
     movers = []
-    for ticker in MASTER_TICKERS:
+    for ticker in active_tickers:
         try:
+            if ticker not in close.columns:
+                _MOVERS_DELISTED.add(ticker)
+                continue
             series = close[ticker].dropna()
             if len(series) < 2:
+                # 2 日連続で empty なら delisted 候補に登録
+                _MOVERS_DELISTED.add(ticker)
                 continue
-            prev, last = float(series.iloc[-2]), float(series.iloc[-1])
+            prev_raw, last_raw = series.iloc[-2], series.iloc[-1]
+            prev = _safe_float(prev_raw)
+            last = _safe_float(last_raw)
+            if prev is None or last is None or prev == 0:
+                continue
             pct = (last - prev) / prev * 100
+            pct_safe = _safe_float(pct, 2)
+            last_safe = _safe_float(last, 2)
+            if pct_safe is None or last_safe is None:
+                continue
             movers.append({
                 "ticker": ticker,
-                "pct": round(pct, 2),
-                "price": round(last, 2),
-                "direction": "up" if pct > 0 else "down",
+                "pct": pct_safe,
+                "price": last_safe,
+                "direction": "up" if pct_safe > 0 else "down",
             })
         except Exception:
             continue

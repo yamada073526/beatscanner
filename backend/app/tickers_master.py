@@ -14,5 +14,6 @@ MASTER_TICKERS = [
     # 金融
     "GS", "MS", "BAC", "WFC", "C", "V", "MA", "AXP", "BX", "KKR",
     # 中小型・ミーム・注目
-    "PLTR", "HOOD", "SOFI", "UPST", "RIVN", "LCID", "NKLA", "MSTR", "COIN", "GME",
+    # NKLA は 2025-02 に破綻・上場廃止のため除外 (BACKEND-1..4: yfinance 404)
+    "PLTR", "HOOD", "SOFI", "UPST", "RIVN", "LCID", "MSTR", "COIN", "GME",
 ]

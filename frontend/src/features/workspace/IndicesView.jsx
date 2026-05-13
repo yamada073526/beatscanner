@@ -82,16 +82,22 @@ function formatPrice(item) {
 }
 
 // Workspace Home Phase 3: Portfolio (保有銘柄サマリ)
-// 5 体合議「未ログイン時は非表示、空 state 罠回避」を厳守:
+// 5 体合議「未ログイン時は非表示」を厳守:
 //  - !user → null return (component を mount せず、Trust Cliff 回避)
-//  - 0 holdings → null return (空 state 見せず、新規 user に「初見の沈黙」)
-//  - holdings あり → 評価額 / 当日変動 / 含み損益 の 1 行 summary
+//  - 0 holdings → 空 state CTA (Phase 0 動線改善 2026-05-14)
+//  - holdings あり → 評価額 / 当日変動 / 含み損益 の 1 行 summary + 詳細導線
 // translateEvent object bug (v1) の教訓: String(value) defensive wrap で render 安全性確保。
 function PortfolioPaneSection({ holdings, portfolioPrices, user }) {
   // 早期 return で「ログインしてください」モーダル等の Trust Cliff 完全回避
   if (!user) return null;
   const tickers = Object.keys(holdings || {});
-  if (tickers.length === 0) return null;
+
+  // Phase 0 動線改善 (2026-05-14): 0 holdings でも空 state CTA を出す。
+  // 6 体合議 (金融/マーケ) で「保有 × じっちゃまプロトコル」が差別化核と確定し、
+  // 既存 PortfolioDashboard を user に発見させる動線が最優先課題に。
+  if (tickers.length === 0) {
+    return <PortfolioEmptyStateCta />;
+  }
 
   return (
     <PortfolioSummaryRow
@@ -99,6 +105,68 @@ function PortfolioPaneSection({ holdings, portfolioPrices, user }) {
       prices={portfolioPrices}
       tickers={tickers}
     />
+  );
+}
+
+// classic SPA mode (= HomeTab.PortfolioDashboard が描画される layout) に遷移する。
+// workspace mode の Pane 2 サマリーは縮約版で、ロット履歴/TWR 推移/vs SPY 詳細は
+// PortfolioDashboard 側のみが持つ。Phase 1 で workspace 統合予定だが、Phase 0 では
+// 既存 SPA への 1-click 動線で「未認知の厚み」を発見させる。
+function switchToClassicPortfolio() {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('layout', 'classic');
+    window.history.pushState({}, '', url.toString());
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  } catch {
+    // SSR / 古いブラウザ向け fallback
+    window.location.search = '?layout=classic';
+  }
+}
+
+function PortfolioEmptyStateCta() {
+  return (
+    <div
+      style={{
+        padding: '14px 14px 16px',
+        borderBottom: '1px solid var(--border)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          color: 'var(--text-muted)',
+        }}
+      >
+        ポートフォリオ
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+        保有銘柄を登録すると、決算 PASS/FAIL を一括で watch できます。
+      </div>
+      <button
+        type="button"
+        onClick={switchToClassicPortfolio}
+        style={{
+          alignSelf: 'flex-start',
+          padding: '6px 12px',
+          background: 'transparent',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-pill)',
+          color: 'var(--text-primary)',
+          fontSize: 12,
+          fontWeight: 600,
+          cursor: 'pointer',
+        }}
+      >
+        保有銘柄を追加 →
+      </button>
+    </div>
   );
 }
 
@@ -210,7 +278,39 @@ function PortfolioSummaryRow({ holdings, prices, tickers }) {
           maxPct={totals.maxPct}
         />
       )}
+      {!collapsed && <PortfolioDetailCta />}
     </>
+  );
+}
+
+// Phase 0 動線改善 (2026-05-14): Pane 2 サマリーから既存 PortfolioDashboard へ 1-click 遷移。
+// 既存 PortfolioDashboard (ロット履歴 / TWR 推移 / vs SPY / 集中リスク / 分割補正) は
+// workspace mode では未到達だった。6 体合議で「user が認知していない厚みの可視化」が
+// Phase 0 最優先課題と確定。Phase 1 で workspace 統合 (Pane 2 Portfolio Pane 格上げ) 予定。
+function PortfolioDetailCta() {
+  return (
+    <div style={{ padding: '4px 14px 12px' }}>
+      <button
+        type="button"
+        onClick={switchToClassicPortfolio}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '4px 10px',
+          background: 'transparent',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-pill)',
+          color: 'var(--text-secondary)',
+          fontSize: 11,
+          fontWeight: 600,
+          cursor: 'pointer',
+        }}
+      >
+        ロット履歴・推移チャートを見る
+        <span aria-hidden="true" style={{ fontSize: 10 }}>→</span>
+      </button>
+    </div>
   );
 }
 
