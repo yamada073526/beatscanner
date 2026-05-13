@@ -375,9 +375,21 @@ function PortfolioSummaryRow({ holdings, prices, tickers }) {
 // 「ロット履歴・推移チャート」(classic mode 遷移) と「取引を登録」(modal) を並置。
 function PortfolioActions() {
   const user = useUserFromHoldings();
-  const { accounts, defaultAccountId } = useAccounts({ supabase, user });
+  const { accounts, defaultAccountId, addAccount, error: accountsError, reload } = useAccounts({ supabase, user });
   const { addTransaction } = useTransactions({ supabase, user });
   const [modalOpen, setModalOpen] = useState(false);
+
+  const handleCreateDefaultAccount = async () => {
+    const created = await addAccount({
+      name: 'デフォルト',
+      type: 'tokutei',
+      baseCurrency: 'USD',
+      displayOrder: 0,
+      isDefault: true,
+    });
+    await reload();
+    return created;
+  };
 
   return (
     <div style={{ display: 'flex', gap: 6, padding: '4px 14px 12px', flexWrap: 'wrap' }}>
@@ -409,6 +421,8 @@ function PortfolioActions() {
             accounts={accounts}
             defaultAccountId={defaultAccountId}
             onAdd={addTransaction}
+            onCreateDefaultAccount={handleCreateDefaultAccount}
+            accountsError={accountsError}
           />
         </>
       )}

@@ -36,6 +36,8 @@ export default function TransactionEntryModal({
   defaultAccountId,
   defaultTicker,
   onAdd,            // (payload) => Promise<tx>
+  onCreateDefaultAccount,  // 任意: 「デフォルト口座を作成」CTA で呼ぶ
+  accountsError,           // 任意: useAccounts の error を可視化
 }) {
   const [type, setType] = useState('buy');
   const [accountId, setAccountId] = useState(defaultAccountId || '');
@@ -164,19 +166,66 @@ export default function TransactionEntryModal({
         </Field>
 
         <Field label="口座">
-          <select
-            value={accountId}
-            onChange={(e) => setAccountId(e.target.value)}
-            style={inputStyle}
-            required
-          >
-            <option value="" disabled>選択...</option>
-            {(accounts || []).map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}{a.is_default ? ' (既定)' : ''}
-              </option>
-            ))}
-          </select>
+          {(accounts || []).length === 0 ? (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              padding: '10px 12px',
+              background: 'rgba(245, 158, 11, 0.08)',
+              border: '1px solid rgba(245, 158, 11, 0.30)',
+              borderRadius: 'var(--radius-sm)',
+            }}>
+              <div style={{ fontSize: 12, color: 'var(--text-primary)' }}>
+                口座が見つかりません。
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                {accountsError
+                  ? `エラー: ${String(accountsError.message || accountsError)}`
+                  : 'デフォルト口座を作成して取引登録を開始できます。'}
+              </div>
+              {onCreateDefaultAccount && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const created = await onCreateDefaultAccount();
+                      if (created?.id) setAccountId(created.id);
+                    } catch (e) {
+                      setError(e?.message || String(e));
+                    }
+                  }}
+                  style={{
+                    alignSelf: 'flex-start',
+                    padding: '6px 12px',
+                    background: 'var(--color-warning)',
+                    color: 'var(--bg-card)',
+                    border: 'none',
+                    borderRadius: 'var(--radius-pill)',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  デフォルト口座を作成
+                </button>
+              )}
+            </div>
+          ) : (
+            <select
+              value={accountId}
+              onChange={(e) => setAccountId(e.target.value)}
+              style={inputStyle}
+              required
+            >
+              <option value="" disabled>選択...</option>
+              {(accounts || []).map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}{a.is_default ? ' (既定)' : ''}
+                </option>
+              ))}
+            </select>
+          )}
         </Field>
 
         {spec.requiresTicker && (

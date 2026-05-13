@@ -27,8 +27,12 @@ export async function fetchAccounts(supabase, userId) {
     .order('display_order', { ascending: true })
     .order('created_at', { ascending: true });
   if (error) {
+    // grants 未適用時は code 42501 (insufficient_privilege) や類似のエラーが入る。
+    // RLS 通過 + GRANT 不在 = silent empty array は使わず、必ず throw して UI で可視化。
     console.error('[accounts] fetch failed', error);
-    return [];
+    const e = new Error(`accounts SELECT 失敗: ${error.message || error.code || 'unknown'}`);
+    e.cause = error;
+    throw e;
   }
   return data || [];
 }
