@@ -848,17 +848,18 @@ body {
   padding: 4px 0;
 }
 .news-list-card {
-  /* 2026-05-13 design unification v2: Pane 4 NewsItem と並べた時の不統一感を解消
-     (6 体合議 converge: typography + meta + 左 accent bar の差が真因)。
-     - align-items: flex-start → center (40px thumb 単独行で center が自然)
-     - border-radius 12 → 10px (Pane 4 inline と一致)
-     - `::before` で 2.5px cyan accent bar (Pane 3 = 銘柄文脈シグネチャ、cluster 概念なしで固定) */
+  /* 2026-05-13 design unification v3: Pane 4 NewsItem と pixel 一致するよう最終調整。
+     - border-radius を実 token `var(--radius-md)` = 12px に合わせる (v2 の 10px は Pane 4 inline の
+       fallback 10px を誤読していた、実値は --radius-md = 12px)
+     - margin 3px 4px で Pane 4 と同じ「カード外側の呼吸」を再現 */
   position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
+  width: calc(100% - 8px);
+  margin: 0 4px;
   padding: 6px 10px 6px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-md, 12px);
   border: 1px solid var(--border);
   background: transparent;
   cursor: pointer;
