@@ -54,3 +54,7 @@ uvicorn*.log
 
 # Backup files (created during editing — never commit)
 *.bak
+
+# Visual diagnostic harness output (handover v66 §1 round 3: CLAUDE.md visual harness exception)
+# headless Playwright が生成する PNG / JSON。使い捨て、Git 追跡しない
+frontend/.visual/

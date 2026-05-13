@@ -35,6 +35,20 @@
 - デプロイ後の検証は本番バンドル（`/assets/index-*.js` または `*.css`）を `curl` で取得して `grep` で文字列確認
 - 反映完了の判定はバンドルハッシュの変更で行う
 
+### Visual Diagnostic Harness Exception (preview 禁止の限定例外)
+`npm run dev` / Vite preview server は引き続き **禁止** (人間 dogfood と port / state が競合するため)。
+ただし以下 **4 条件を全て満たす** headless Playwright スクリプトは例外として許可する:
+
+1. `frontend/scripts/snap-*.mjs` の名前で配置 (使い捨て自明)
+2. `chromium.launch({ headless: true })` 固定、`--headed` / `devtools: true` 禁止
+3. 単一実行 **60 秒以内**、`setTimeout(... process.exit(2))` で hard timeout + `finally { await browser.close() }` 必須
+4. 出力は `frontend/.visual/` (gitignore 済) に PNG / JSON のみ。**HTTP / preview server を一切起動しない** (本番 URL or `file://dist/index.html` のみ)
+
+**禁止し続けるもの**: long-running dev server / preview / HMR / `localhost:5173` の bind / user セッションと並走起動。
+**目的**: dogfood 30 分ループで同じ pixel issue が複数回繰り返したとき、computed style を local で 10 秒検証して**「動いていないものを直す」空回り**を防止 (handover v66 §1 が 3 セッション空回りした教訓)。
+**運用**: `node scripts/snap-active.mjs` (Pane 3/4 click feedback の matrix 検証) が canonical 例。同パターンの新規スクリプトは PR 説明で目的明記。一度きりの検証ならスクリプトを残置せず削除可。
+**memory anchor**: `feedback_press_feedback_delta.md` の「running animation forwards fill 罠」教訓と double anchor。
+
 ### 表示テキストのポリシー
 - **UI に表示されるテキストには「じっちゃま」を出さない**（クラス課題提出物のため個人名を避ける）
 - 内部資料（コード comment、CSS、本ファイル、`docs/` 配下、コミットメッセージ）には「じっちゃま」表記を残してよい

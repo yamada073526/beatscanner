@@ -916,12 +916,13 @@ body {
 [data-theme="light"] .news-list-card:hover .news-list-title {
   color: rgb(2, 132, 199); /* sky-700 */
 }
-/* active 沈み (Stripe Press 流、translateY を完全に 0 まで戻さない) */
+/* v66 §1 round 2 (2 体合議 converge): Pane 4 と統一、Δy = 3px + Δscale = 0.038、
+   duration 140ms で Stripe/HIG 流の沈み込み (lift 解除 + scale 縮小) */
 .news-list-card:active {
-  transform: translateY(var(--ws-active-sink, -1px));
+  transform: translateY(0) scale(0.97);
   transition:
-    transform var(--ws-active-duration, 90ms) var(--ws-ease-sink, cubic-bezier(0.4, 0, 1, 1)),
-    box-shadow var(--ws-active-duration, 90ms) var(--ws-ease-sink, cubic-bezier(0.4, 0, 1, 1));
+    transform 140ms var(--ws-ease-sink, cubic-bezier(0.4, 0, 1, 1)),
+    box-shadow 140ms var(--ws-ease-sink, cubic-bezier(0.4, 0, 1, 1));
   box-shadow: var(--ws-shadow-row-active);
 }
 /* selected state: click して開いた記事を視覚 highlight (Pane 5 / modal が閉じるまで持続) */
@@ -5270,7 +5271,10 @@ button.ds-chip:active {
 /* ── 記事 row: hover lift + 4 層 shadow + slide-in mount ─────── */
 .ws-pane4-news-item {
   /* slide-in 演出 (mount 時 1 度のみ) */
-  animation: ws-pane4-slide-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  /* v66 §1 round 3 (2 体合議): `both` の forwards 部分が `to { transform: translateX(0) }` を
+     永続適用し :hover/:active の transform を全て無視させていた root cause。
+     `backwards` に変更し、stagger delay 中は from 値、animation 終了後は natural state に戻す */
+  animation: ws-pane4-slide-in 320ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
   animation-delay: var(--row-delay, 0ms);
   transition:
     transform var(--ws-hover-duration) var(--ws-ease-standard),
@@ -5305,13 +5309,15 @@ button.ds-chip:active {
   color: rgb(2, 132, 199); /* sky-700 */
 }
 
-/* §round18: active 沈み (translateY を完全に 0 まで戻さない Stripe Press 流) */
+/* v66 §1 round 2 (2 体合議 converge): Δy = 0 が知覚不可の root cause。
+   Stripe/HIG 流に「沈む = lift 解除 + scale 縮小」へ。Δy = 3px + Δscale = 0.038、
+   duration 140ms (HIG press 80-120ms より少し長めで Aman 級静謐感)。 */
 .ws-pane4-news-item:active {
-  transform: translateY(var(--ws-active-sink));
+  transform: translateY(0) scale(0.97);
   transition:
-    transform var(--ws-active-duration) var(--ws-ease-sink),
-    box-shadow var(--ws-active-duration) var(--ws-ease-sink),
-    background var(--ws-active-duration) var(--ws-ease-sink);
+    transform 140ms var(--ws-ease-sink),
+    box-shadow 140ms var(--ws-ease-sink),
+    background 140ms var(--ws-ease-sink);
   box-shadow: var(--ws-shadow-row-active);
 }
 
