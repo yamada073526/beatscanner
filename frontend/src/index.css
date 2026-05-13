@@ -848,19 +848,33 @@ body {
   padding: 4px 0;
 }
 .news-list-card {
-  /* 2026-05-13 design unification: Pane 4 NewsItem (padding 6/10、gap 8、thumb 40px) と
-     縦列表示時の外観を合わせる (user dogfood flag)。border 1px var(--border) で token 化、
-     border-radius を design_system.md の --radius-md (12) に統一。 */
+  /* 2026-05-13 design unification v2: Pane 4 NewsItem と並べた時の不統一感を解消
+     (6 体合議 converge: typography + meta + 左 accent bar の差が真因)。
+     - align-items: flex-start → center (40px thumb 単独行で center が自然)
+     - border-radius 12 → 10px (Pane 4 inline と一致)
+     - `::before` で 2.5px cyan accent bar (Pane 3 = 銘柄文脈シグネチャ、cluster 概念なしで固定) */
   position: relative;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   padding: 6px 10px 6px 12px;
-  border-radius: var(--radius-md, 12px);
+  border-radius: 10px;
   border: 1px solid var(--border);
   background: transparent;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.news-list-card::before {
+  /* 左端 cyan accent bar (Pane 4 attention bar と同形だが Pane 3 は固定値) */
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 30%;
+  bottom: 30%;
+  width: 2.5px;
+  border-radius: 0 2px 2px 0;
+  background: rgba(56, 189, 248, 0.50);
+  pointer-events: none;
 }
 /* §dogfood-round3: IRリソース と同じシアン縁取りに統一 (rgb(56,189,248)) */
 .news-list-card:hover {
@@ -907,10 +921,11 @@ body {
   gap: 4px;
 }
 .news-list-title {
-  font-size: 14px;
-  /* v41: UI/UX 推奨 — 600 → 500 で日本語の太重感を解消 */
-  font-weight: 500;
-  line-height: 1.6;
+  /* 2026-05-13 design unification v2: Pane 4 NewsItem title (12px/600/1.35) と縦リズム揃え。
+     ただし Pane 3 は chip 行が無いので 13px/600/1.4 で可読性確保 (合議推奨)。 */
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
   letter-spacing: 0.01em;
   color: var(--text-primary);
   display: -webkit-box;
@@ -920,10 +935,11 @@ body {
   margin: 0;
 }
 .news-list-meta {
+  /* 2026-05-13 design unification v2: Pane 4 meta (10px) と一致。 */
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-muted);
 }
 .news-list-source { font-weight: 500; }
