@@ -764,7 +764,13 @@ async def sentry_tunnel(request: Request) -> Response:
     except Exception as e:
         return Response(status_code=400, content=f"bad envelope: {e}")
 
-    forward_url = f"https://{host}/api/{project_id}/envelope/"
+    # Sentry ingest endpoint には public key (DSN の userinfo 部) を sentry_key query param で
+    # 渡さないと "ProjectId" rejection になる. dsn = https://<public_key>@<host>/<project_id>.
+    public_key = parsed.username or ""
+    forward_url = (
+        f"https://{host}/api/{project_id}/envelope/"
+        f"?sentry_version=7&sentry_key={public_key}"
+    )
     async with _sentry_httpx.AsyncClient(timeout=10.0) as client:
         try:
             r = await client.post(
