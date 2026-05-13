@@ -848,13 +848,16 @@ body {
   padding: 4px 0;
 }
 .news-list-card {
+  /* 2026-05-13 design unification: Pane 4 NewsItem (padding 6/10、gap 8、thumb 40px) と
+     縦列表示時の外観を合わせる (user dogfood flag)。border 1px var(--border) で token 化、
+     border-radius を design_system.md の --radius-md (12) に統一。 */
   position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid rgb(241, 245, 249);  /* slate-100 */
+  gap: 8px;
+  padding: 6px 10px 6px 12px;
+  border-radius: var(--radius-md, 12px);
+  border: 1px solid var(--border);
   background: transparent;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease;
@@ -872,16 +875,17 @@ body {
   background-color: var(--bg-hover);
 }
 .news-list-thumb {
-  width: 64px;
-  height: 64px;
+  /* 2026-05-13 design unification: Pane 4 NewsItem の 40x40 と統一 (64→40)。 */
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
   border-radius: 6px;
   object-fit: cover;
   background: var(--bg-subtle, #f8fafc);
 }
 .news-list-thumb-fallback {
-  width: 64px;
-  height: 64px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
   border-radius: 6px;
   background: rgba(100, 116, 139, 0.12);
@@ -889,7 +893,7 @@ body {
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
-  font-size: 22px;
+  font-size: 16px;
   font-weight: 700;
 }
 [data-theme="dark"] .news-list-thumb-fallback {
