@@ -943,29 +943,38 @@ async def get_holdings_meta(symbols: str, request: Request) -> dict:
     if len(syms) > 50:
         syms = syms[:50]
 
-    # Phase 1 v68 拡張: 過去 90 日 + 未来 120 日を 1 range で取得し、
-    # next earnings (未来) + last verdict (過去最新) の両方を同時に算出。
+    # Phase 1 v68 拡張: 過去 90 日 (last verdict) + 未来 120 日 (next earnings) を
+    # 別 query / 別 cache key で取得。FMP /earning_calendar は range が長いと空応答に
+    # なるケースがあるため (210 日 → empty 観測済)、最大 ~120 日に分割。
     # 「保有 × じっちゃまプロトコル」差別化機能の Phase 1 cheap path
     # (じっちゃま 5 条件は Phase 1.5、本 endpoint は EPS beat/miss verdict のみ提供)。
     today = _dt.date.today()
     date_from_past = (today - _dt.timedelta(days=90)).isoformat()
     date_from = today.isoformat()
     date_to = (today + _dt.timedelta(days=120)).isoformat()
-    range_key = f"{date_from_past}~{date_to}"
+    range_key_future = f"{date_from}~{date_to}"
+    range_key_past = f"{date_from_past}~{date_from}"
 
     now = _time.monotonic()
-    cached = _EARNINGS_RANGE_CACHE.get(range_key)
-    rows: list[dict] = []
-    if cached and now - cached["ts"] < _EARNINGS_RANGE_TTL:
-        rows = cached["data"]
-    else:
-        api_key = _get_fmp_key(request)
+    api_key = _get_fmp_key(request)
+
+    async def _fetch_range(rkey: str, dfrom: str, dto: str) -> list[dict]:
+        cached_local = _EARNINGS_RANGE_CACHE.get(rkey)
+        if cached_local and now - cached_local["ts"] < _EARNINGS_RANGE_TTL:
+            return cached_local["data"]
         try:
             client = FMPClient(api_key=api_key)
-            rows = await client.earning_calendar(date_from_past, date_to) or []
+            data = await client.earning_calendar(dfrom, dto) or []
         except Exception:
-            rows = []
-        _EARNINGS_RANGE_CACHE[range_key] = {"data": rows, "ts": now}
+            data = []
+        _EARNINGS_RANGE_CACHE[rkey] = {"data": data, "ts": now}
+        return data
+
+    rows_future, rows_past = await asyncio.gather(
+        _fetch_range(range_key_future, date_from, date_to),
+        _fetch_range(range_key_past,   date_from_past, date_from),
+    )
+    rows = rows_future + rows_past
 
     # symbol → 直近未来 (next_earnings) + 直近過去 (last earnings + verdict)
     by_sym_next: dict[str, str] = {}
