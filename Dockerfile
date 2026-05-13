@@ -10,11 +10,14 @@ ARG VITE_STRIPE_PUBLISHABLE_KEY
 # §11-D-Analytics: 計測基盤 (GA4 + Microsoft Clarity)。未設定時は完全 no-op。
 ARG VITE_GA4_ID
 ARG VITE_CLARITY_ID
+# handover v66 §1 round 3: Sentry frontend error tracking。未設定時は silent skip (lib/sentry.js).
+ARG VITE_SENTRY_DSN
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
     VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY \
     VITE_STRIPE_PUBLISHABLE_KEY=$VITE_STRIPE_PUBLISHABLE_KEY \
     VITE_GA4_ID=$VITE_GA4_ID \
-    VITE_CLARITY_ID=$VITE_CLARITY_ID
+    VITE_CLARITY_ID=$VITE_CLARITY_ID \
+    VITE_SENTRY_DSN=$VITE_SENTRY_DSN
 
 COPY frontend/package*.json ./frontend/
 RUN cd frontend && npm ci

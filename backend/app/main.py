@@ -43,6 +43,34 @@ from .visualizer.prompt import get_system_prompt, build_user_prompt
 # override=True would let a stale local .env silently shadow Railway variables.
 load_dotenv(override=False)
 
+# Sentry 初期化 (handover v66 §1 round 3 構造投資).
+# DSN 未設定なら silent skip (local 開発 / CI build で Sentry 不要なケース対応).
+# FastAPI 統合は SentryAsgiMiddleware (v8 系) で route ごとに transaction を捕捉.
+_SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
+if _SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+
+        sentry_sdk.init(
+            dsn=_SENTRY_DSN,
+            environment=os.getenv("SENTRY_ENVIRONMENT", "production"),
+            # Error tracking は常に 100% (低頻度なので budget に響かない).
+            sample_rate=1.0,
+            # Performance monitoring は production で 10% に抑える (free plan 5k events/月対策).
+            traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+            integrations=[
+                StarletteIntegration(transaction_style="endpoint"),
+                FastApiIntegration(transaction_style="endpoint"),
+            ],
+            # PII (user agent / IP) は送らない (個人投資家アプリのプライバシー配慮).
+            send_default_pii=False,
+        )
+    except Exception as _e:
+        # Sentry 初期化失敗でアプリを落とさない.
+        print(f"[sentry] init failed: {_e}")
+
 WARMUP_TICKERS = ["NVDA", "AAPL", "MSFT", "META", "GOOGL"]
 
 

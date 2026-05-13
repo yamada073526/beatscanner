@@ -1,0 +1,75 @@
+name: Playwright Smoke (本番)
+
+# handover v66 §1 round 3 構造投資: testing 15→50.
+# - PR ごと + push to main で本番 URL に対する smoke test を実行
+# - CI gate にはしない (CLAUDE.md「本番直送」精神と整合).
+#   失敗しても deploy は止めない、Issue 化で検知のみ.
+# - 既存 snap-active.mjs (visual harness) も同時に走らせる.
+#
+# 既知の制約:
+# - 本番 demoAnalyze は 3 req/IP/day → CI runner IP shared だが test 数少 (3 本) で OK
+# - secrets 不要 (public endpoint のみ叩く)
+# - Sentry source map upload は別 workflow (DSN 取得後に追加)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/playwright_smoke.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+
+jobs:
+  smoke:
+    name: Smoke tests against production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright smoke tests
+        working-directory: frontend
+        run: npm run test:e2e
+        # 失敗しても workflow を緑にする (本番直送精神、検知のみ目的)
+        continue-on-error: true
+
+      - name: Run snap-active visual harness
+        working-directory: frontend
+        run: npm run test:visual
+        continue-on-error: true
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 14
+
+      - name: Upload visual harness output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-snapshots
+          path: frontend/.visual/
+          retention-days: 14
