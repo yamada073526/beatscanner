@@ -1669,21 +1669,49 @@ async def demo_analyze(ticker: str, request: Request) -> dict:
 
 # ---------------------------------------------------------------------------
 
-@app.get("/api/analyze/{ticker}")
-async def analyze(ticker: str, request: Request) -> dict:
-    client = FMPClient(api_key=_get_fmp_key(request))
+# Phase 1.5 v68: analyze 結果 (5 条件 PASS/FAIL) の in-memory cache。
+# /api/analyze と /api/portfolio-judgment が共用。
+# TTL 6h = 決算データ更新サイクルと整合 (FMP earnings cache の CACHE_TTL_EARNINGS と同値)。
+_ANALYZE_CACHE: dict[str, dict] = {}  # key: ticker (upper) → {"data": dict, "ts": float}
+_ANALYZE_TTL = 6 * 3600.0
+
+
+class _AnalyzeETFError(Exception):
+    pass
+
+
+class _AnalyzeNotFoundError(Exception):
+    pass
+
+
+async def _analyze_core(ticker: str, fmp_key: str | None, use_cache: bool = True) -> dict:
+    """analyze の純粋計算部 (HTTPException を投げない、cache 付き)。
+
+    `/api/analyze/{ticker}` と `/api/portfolio-judgment` で共用。
+    raises:
+        _AnalyzeETFError: ETF / Fund / Index でじっちゃま 5 条件適用外
+        _AnalyzeNotFoundError: データが取得できない
+    """
+    ticker_u = ticker.upper()
+    now = _time.monotonic()
+
+    if use_cache:
+        cached = _ANALYZE_CACHE.get(ticker_u)
+        if cached and now - cached["ts"] < _ANALYZE_TTL:
+            return cached["data"]
+
+    client = FMPClient(api_key=fmp_key)
     income: list[dict] = []
     cash: list[dict] = []
     company_name: str | None = None
     source = "fmp"
     is_etf = False
 
-    # --- FMP で取得を試みる ---
     try:
         income, cash, profile = await asyncio.gather(
-            client.income_statement(ticker, limit=4, period="annual"),
-            client.cash_flow(ticker, limit=4, period="annual"),
-            client.profile(ticker),
+            client.income_statement(ticker_u, limit=4, period="annual"),
+            client.cash_flow(ticker_u, limit=4, period="annual"),
+            client.profile(ticker_u),
             return_exceptions=True,
         )
         if isinstance(income, Exception): income = []
@@ -1697,42 +1725,103 @@ async def analyze(ticker: str, request: Request) -> dict:
         cash = []
 
     if is_etf:
-        raise HTTPException(
-            status_code=422,
-            detail=f"{ticker.upper()} はETF（上場投資信託）のため、決算分析の対象外です。個別株のティッカーシンボルを入力してください。",
+        raise _AnalyzeETFError(
+            f"{ticker_u} はETF（上場投資信託）のため、決算分析の対象外です。"
         )
 
-    # --- FMP でデータが取れなければ yfinance にフォールバック ---
     currency = "USD"
     if not income or not cash:
         try:
-            income, cash, company_name, currency = await yfinance_source.fetch(ticker)
+            income, cash, company_name, currency = await yfinance_source.fetch(ticker_u)
         except Exception:
             income, cash = [], []
         source = "yfinance"
-        # yfinance でもETF判定
         if not income and not cash:
-            yf_quote_type = await yfinance_source.get_quote_type(ticker)
+            yf_quote_type = await yfinance_source.get_quote_type(ticker_u)
             if yf_quote_type in ("ETF", "MUTUALFUND", "INDEX"):
-                raise HTTPException(
-                    status_code=422,
-                    detail=f"{ticker.upper()} は{yf_quote_type}のため、決算分析の対象外です。個別株のティッカーシンボルを入力してください。",
+                raise _AnalyzeETFError(
+                    f"{ticker_u} は{yf_quote_type}のため、決算分析の対象外です。"
                 )
 
     if not income or not cash:
-        raise HTTPException(
-            status_code=404,
-            detail=f"{ticker} のデータが見つかりません。ティッカーシンボルを確認してください。",
+        raise _AnalyzeNotFoundError(
+            f"{ticker} のデータが見つかりません。"
         )
 
+    result = judge(ticker_u, income, cash, company_name=company_name, currency=currency)
+    data = result.to_dict()
+    data["dataSource"] = source
+
+    # 成功結果のみ cache (例外は即時 raise、再試行可能性を残す)
+    _ANALYZE_CACHE[ticker_u] = {"data": data, "ts": now}
+    return data
+
+
+@app.get("/api/analyze/{ticker}")
+async def analyze(ticker: str, request: Request) -> dict:
     try:
-        result = judge(ticker, income, cash, company_name=company_name, currency=currency)
+        return await _analyze_core(ticker, _get_fmp_key(request))
+    except _AnalyzeETFError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except _AnalyzeNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    data = result.to_dict()
-    data["dataSource"] = source
-    return data
+
+@app.get("/api/portfolio-judgment")
+async def portfolio_judgment(symbols: str, request: Request) -> dict:
+    """保有銘柄の 5 条件 PASS/FAIL 一括取得 (Phase 1.5 v68 差別化機能)。
+
+    6 体合議 (金融視点) 最強推奨「保有 × じっちゃまプロトコル」の backend 実装。
+    batch_size=8 で並列 + ticker ごとに 6h TTL cache → cold ~3-5s / warm 即時。
+
+    symbols: CSV (上限 50)
+    response: {
+      "verdicts": { TICKER: {overallPass, passedCount, totalCount, conditions, ...} | null },
+      "errors":   { TICKER: "ETF" | "NOT_FOUND" | "ERROR" }
+    }
+    """
+    raw_list = [s.strip().upper() for s in (symbols or "").split(",") if s.strip()]
+    syms: list[str] = []
+    seen: set[str] = set()
+    for s in raw_list:
+        if s not in seen:
+            seen.add(s)
+            syms.append(s)
+    if not syms:
+        return {"verdicts": {}, "errors": {}}
+    if len(syms) > 50:
+        syms = syms[:50]
+
+    api_key = _get_fmp_key(request)
+    verdicts: dict[str, dict | None] = {}
+    errors: dict[str, str] = {}
+
+    async def _one(sym: str) -> tuple[str, dict | None, str | None]:
+        try:
+            data = await _analyze_core(sym, api_key)
+            return sym, data, None
+        except _AnalyzeETFError:
+            return sym, None, "ETF"
+        except _AnalyzeNotFoundError:
+            return sym, None, "NOT_FOUND"
+        except Exception:
+            return sym, None, "ERROR"
+
+    # batch_size=8 で並列実行 + batch 間 0.3s sleep (get_movers と同パターン、FMP rate limit 対策)
+    batch_size = 8
+    for i in range(0, len(syms), batch_size):
+        batch = syms[i:i + batch_size]
+        results = await asyncio.gather(*[_one(s) for s in batch])
+        for sym, data, err in results:
+            verdicts[sym] = data
+            if err:
+                errors[sym] = err
+        if i + batch_size < len(syms):
+            await asyncio.sleep(0.3)
+
+    return {"verdicts": verdicts, "errors": errors}
 
 
 US_EXCHANGES = {"NASDAQ", "NYSE", "AMEX", "NYSE ARCA", "NYSE MKT"}

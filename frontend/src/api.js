@@ -408,6 +408,19 @@ export async function fetchHoldingsMeta(symbols) {
   return r.json();
 }
 
+// Phase 1.5 v68: 保有銘柄の 5 条件 PASS/FAIL 一括取得 (じっちゃまプロトコル)
+// 戻り値: { verdicts: { [SYMBOL]: {overallPass, passedCount, totalCount, conditions, ...} | null }, errors: {} }
+export async function fetchPortfolioJudgment(symbols) {
+  const list = Array.isArray(symbols) ? symbols : [];
+  if (list.length === 0) return { verdicts: {}, errors: {} };
+  const params = new URLSearchParams({ symbols: list.join(',') });
+  const r = await fetch(`/api/portfolio-judgment?${params.toString()}`, {
+    headers: fmpHeaders(),
+  });
+  if (!r.ok) return { verdicts: {}, errors: {} };
+  return r.json();
+}
+
 export async function fetchMarketIndices() {
   const r = await fetch('/api/market-indices', {
     headers: fmpHeaders(),

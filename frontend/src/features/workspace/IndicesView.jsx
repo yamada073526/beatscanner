@@ -19,6 +19,7 @@ import NewsPanel from '../../components/NewsPanel.jsx';
 import CompanyLogo from '../../components/CompanyLogo.jsx';
 import { useSpyHistory } from '../../hooks/useSpyHistory.js';
 import { useHoldingsMeta } from '../../hooks/useHoldingsMeta.js';
+import { usePortfolioJudgment } from '../../hooks/usePortfolioJudgment.js';
 import { useAccounts } from '../../hooks/useAccounts.js';
 import { useTransactions } from '../../hooks/useTransactions.js';
 import { aggregateWithTransactions } from '../../lib/holdings.js';
@@ -529,9 +530,13 @@ const ctaButtonStyle = {
 // じっちゃま 5 条件 PASS/FAIL は Phase 1.5 で /api/analyze の caching infra 同時実装予定。
 function PortfolioVerdictRollup({ tickers }) {
   const { meta } = useHoldingsMeta(tickers);
+  // Phase 1.5 v68: ファンダメンタル 5 条件 PASS/FAIL 一括取得。
+  // backend /api/portfolio-judgment (6h cache) 経由で 8 並列 batch、cold ~3-5s / warm 即時。
+  const { verdicts, loading: judgmentLoading } = usePortfolioJudgment(tickers);
 
   const stats = useMemo(() => {
     let beat = 0, miss = 0, inLine = 0, unknown = 0;
+    let jPass = 0, jFail = 0, jEtf = 0;
     const upcoming = [];
     for (const t of tickers || []) {
       const m = meta?.[t];
@@ -544,15 +549,27 @@ function PortfolioVerdictRollup({ tickers }) {
       if (Number.isFinite(days) && days >= 0 && days <= 30) {
         upcoming.push({ ticker: t, days });
       }
+      const jv = verdicts?.[t];
+      if (jv && typeof jv === 'object') {
+        if (jv.overallPass === true) jPass += 1;
+        else if (jv.overallPass === false) jFail += 1;
+      } else {
+        jEtf += 1;
+      }
     }
     upcoming.sort((a, b) => a.days - b.days);
-    return { beat, miss, inLine, unknown, total: (tickers || []).length, upcoming };
-  }, [tickers, meta]);
+    return {
+      beat, miss, inLine, unknown,
+      jPass, jFail, jEtf,
+      total: (tickers || []).length, upcoming,
+    };
+  }, [tickers, meta, verdicts]);
 
   if (stats.total === 0) return null;
   const hasVerdict = stats.beat + stats.miss + stats.inLine > 0;
   const hasUpcoming = stats.upcoming.length > 0;
-  if (!hasVerdict && !hasUpcoming) return null;
+  const hasJudgment = stats.jPass + stats.jFail > 0;
+  if (!hasVerdict && !hasUpcoming && !hasJudgment && !judgmentLoading) return null;
 
   return (
     <div
@@ -563,6 +580,41 @@ function PortfolioVerdictRollup({ tickers }) {
         padding: '0 12px 10px',
       }}
     >
+      {(hasJudgment || judgmentLoading) && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontSize: 11,
+            color: 'var(--text-secondary)',
+            flexWrap: 'wrap',
+          }}
+        >
+          <span
+            style={{ color: 'var(--text-muted)' }}
+            title="ファンダメンタル5条件 (EPS / 売上 / CFPS / CF 正値 / その他)"
+          >
+            5条件判定
+          </span>
+          {judgmentLoading && !hasJudgment && (
+            <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>
+              集計中...
+            </span>
+          )}
+          {hasJudgment && (
+            <>
+              <VerdictChip count={stats.jPass} label="PASS" color="var(--color-gain)" />
+              <VerdictChip count={stats.jFail} label="FAIL" color="var(--color-loss)" />
+              {stats.jEtf > 0 && (
+                <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>
+                  · ETF 等 {stats.jEtf}
+                </span>
+              )}
+            </>
+          )}
+        </div>
+      )}
       {hasVerdict && (
         <div
           style={{
