@@ -877,16 +877,10 @@ body {
   background: rgba(56, 189, 248, 0.50);
   pointer-events: none;
 }
-/* §dogfood-round3: IRリソース と同じシアン縁取りに統一 (rgb(56,189,248)) */
+/* 2026-05-13 design unification v4: Pane 4 NewsItem の hover は bg のみ (border 不変)。
+   Linear/Stripe 流の subtle hover に統一、cyan 縁取りは accent bar に集約。
+   dark mode override は var(--border) token で自動対応のため撤去。 */
 .news-list-card:hover {
-  border-color: rgb(56, 189, 248);
-  background-color: var(--bg-hover);
-}
-[data-theme="dark"] .news-list-card {
-  border-color: #253347;
-}
-[data-theme="dark"] .news-list-card:hover {
-  border-color: rgb(56, 189, 248);
   background-color: var(--bg-hover);
 }
 .news-list-thumb {
