@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { flushSync } from 'react-dom';
 import { analyze, demoAnalyze, fetchGuidance, fetchGuidanceBasic, prefetchAll } from './api.js';
+import { useWorkspaceStore } from './state/workspaceStore.js';
 import { useJsonLd } from './hooks/useJsonLd.js';
 import { buildWebSiteSchema, buildOrganizationSchema } from './utils/jsonLdBuilders.js';
 import { supabase, isSupabaseConfigured } from './lib/supabase.js';
@@ -656,12 +657,53 @@ export default function App() {
   // rich items (action 4 + recent + holdings + watchlist) を共有.
   const cmdPaletteItems = useMemo(() => {
     const items = [];
-    items.push({ id: 'tab:home', group: 'action', label: 'ホームへ', hint: 'G H',
-      action: () => withViewTransition(() => setActiveTab('home')) });
-    items.push({ id: 'tab:judgment', group: 'action', label: '判定タブへ', hint: 'G J',
-      action: () => withViewTransition(() => setActiveTab('judgment')) });
-    items.push({ id: 'tab:chart', group: 'action', label: 'チャートタブへ', hint: 'G C',
-      action: () => withViewTransition(() => setActiveTab('チャート')) });
+    // 2026-05-13: Cmd+K 拡張 — workspace mode と SPA mode で tab action を分離。
+    // workspace は 2 タブ (ホーム / 指数)、SPA は 4 タブ (旧 5 タブ - 指数)。
+    // setActiveTab を SPA state + workspaceStore 両方更新で mode を超えて動作。
+    const isWorkspaceMode = (() => {
+      if (typeof window === 'undefined') return false;
+      try {
+        return new URLSearchParams(window.location.search).get('layout') === 'workspace';
+      } catch { return false; }
+    })();
+    const switchAppTab = (key) => {
+      try { useWorkspaceStore.getState().setActiveTab(key); } catch { /* noop */ }
+      withViewTransition(() => setActiveTab(key));
+    };
+
+    if (isWorkspaceMode) {
+      items.push({ id: 'tab:home', group: 'action', label: 'ホームへ', hint: 'G H',
+        action: () => switchAppTab('home') });
+      items.push({ id: 'tab:indices', group: 'action', label: '指数 (世界市場) へ', hint: 'G I',
+        action: () => switchAppTab('indices') });
+      items.push({ id: 'layout:classic', group: 'action',
+        label: '旧 UI (Classic SPA) に切替',
+        description: '?layout=classic',
+        action: () => {
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('layout', 'classic');
+            window.location.href = url.toString();
+          } catch { /* noop */ }
+        } });
+    } else {
+      items.push({ id: 'tab:home', group: 'action', label: 'ホームへ', hint: 'G H',
+        action: () => switchAppTab('home') });
+      items.push({ id: 'tab:judgment', group: 'action', label: '判定タブへ', hint: 'G J',
+        action: () => switchAppTab('judgment') });
+      items.push({ id: 'tab:chart', group: 'action', label: 'チャートタブへ', hint: 'G C',
+        action: () => switchAppTab('チャート') });
+      items.push({ id: 'layout:workspace', group: 'action',
+        label: 'Workspace モードに切替',
+        description: '?layout=workspace (PC 推奨)',
+        action: () => {
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('layout', 'workspace');
+            window.location.href = url.toString();
+          } catch { /* noop */ }
+        } });
+    }
     items.push({ id: 'theme:toggle', group: 'action',
       label: isDarkState ? 'ライトモードへ切替' : 'ダークモードへ切替',
       action: () => toggleDarkMode() });
