@@ -17,6 +17,7 @@ import { useEffect, useMemo, useState } from 'react';
 import StockPriceChart from '../../components/StockPriceChart.jsx';
 import NewsPanel from '../../components/NewsPanel.jsx';
 import CompanyLogo from '../../components/CompanyLogo.jsx';
+import { useSpyHistory } from '../../hooks/useSpyHistory.js';
 import {
   fetchMarketIndices,
   fetchMovers,
@@ -105,6 +106,18 @@ function PortfolioSummaryRow({ holdings, prices, tickers }) {
   const collapsed = useWorkspaceStore((s) => s.portfolioCollapsed);
   const toggle = useWorkspaceStore((s) => s.togglePortfolio);
 
+  // vs SPY chip: 1Y SPY 累積リターン vs portfolio pnlPct (合議 PR-D)
+  // 厳密な期間一致でなく「1Y 市場ベンチマーク」として比較 (MVP)。
+  // 将来 lots data 経由で actual inception 期間に置換可能。
+  const { points: spyPoints } = useSpyHistory('1y');
+  const spyPct = useMemo(() => {
+    if (!Array.isArray(spyPoints) || spyPoints.length < 2) return null;
+    const first = Number(spyPoints[0]?.close);
+    const last = Number(spyPoints[spyPoints.length - 1]?.close);
+    if (!Number.isFinite(first) || !Number.isFinite(last) || first <= 0) return null;
+    return ((last - first) / first) * 100;
+  }, [spyPoints]);
+
   // 集計: 評価額 / 当日変動 / 含み損益 / 銘柄数 + 集中リスク
   const totals = useMemo(() => {
     let totalValue = 0;
@@ -188,10 +201,82 @@ function PortfolioSummaryRow({ holdings, prices, tickers }) {
           />
         </div>
       )}
-      {!collapsed && totals.maxTicker && totals.maxPct >= 40 && (
-        <ConcentrationRiskBanner ticker={totals.maxTicker} pct={totals.maxPct} />
+      {!collapsed && (
+        <PortfolioInsightsRow
+          alphaPct={
+            totals.pnlPct != null && spyPct != null ? totals.pnlPct - spyPct : null
+          }
+          maxTicker={totals.maxTicker}
+          maxPct={totals.maxPct}
+        />
       )}
     </>
+  );
+}
+
+// Portfolio の追加 insights 行 (vs SPY chip + 集中リスク warning)
+// PR-C + PR-D 合議反映:
+//   - vs SPY (1Y): 累積リターン比較で alpha 確認
+//   - 集中リスク: 最大銘柄が 40%+ なら amber banner
+function PortfolioInsightsRow({ alphaPct, maxTicker, maxPct }) {
+  const hasAlpha = Number.isFinite(alphaPct);
+  const hasConcentrationRisk = maxTicker && maxPct >= 40;
+  if (!hasAlpha && !hasConcentrationRisk) return null;
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        padding: '0 12px 8px',
+      }}
+    >
+      {hasAlpha && <SPYAlphaChip alphaPct={alphaPct} />}
+      {hasConcentrationRisk && (
+        <ConcentrationRiskBanner ticker={maxTicker} pct={maxPct} />
+      )}
+    </div>
+  );
+}
+
+function SPYAlphaChip({ alphaPct }) {
+  const up = alphaPct >= 0;
+  const color = up ? 'var(--color-gain)' : 'var(--color-loss)';
+  const bg = up ? 'rgba(52, 239, 129, 0.08)' : 'rgba(248, 113, 113, 0.08)';
+  const border = up ? 'rgba(52, 239, 129, 0.30)' : 'rgba(248, 113, 113, 0.30)';
+  const sign = up ? '+' : '';
+  return (
+    <div
+      style={{
+        display: 'inline-flex',
+        alignSelf: 'flex-start',
+        alignItems: 'center',
+        gap: 6,
+        padding: '4px 10px',
+        background: bg,
+        border: '1px solid',
+        borderColor: border,
+        borderRadius: 'var(--radius-pill)',
+        fontSize: 11,
+        fontWeight: 500,
+        color: 'var(--text-secondary)',
+      }}
+    >
+      <span aria-hidden="true" style={{ color, fontSize: 10 }}>
+        {up ? '▲' : '▼'}
+      </span>
+      <span>vs SPY (1Y)</span>
+      <span
+        style={{
+          color,
+          fontWeight: 600,
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {sign}
+        {alphaPct.toFixed(2)}%
+      </span>
+    </div>
   );
 }
 
@@ -206,8 +291,7 @@ function ConcentrationRiskBanner({ ticker, pct }) {
         display: 'flex',
         alignItems: 'center',
         gap: 8,
-        padding: '8px 14px',
-        margin: '4px 12px 8px',
+        padding: '8px 12px',
         background: 'rgba(245, 158, 11, 0.08)',
         borderLeft: '2px solid var(--color-warning)',
         borderRadius: 'var(--radius-sm)',
