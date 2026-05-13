@@ -25,12 +25,14 @@ export async function initSentry() {
     Sentry.init({
       dsn,
       environment: import.meta.env.MODE === 'production' ? 'production' : 'development',
+      // ad-blocker / privacy extension が sentry.io への直送を block する問題への
+      // Sentry 公式対策: 自社ドメインの /api/sentry-tunnel に投げ、backend が転送する.
+      // (https://docs.sentry.io/platforms/javascript/troubleshooting/#dealing-with-ad-blockers)
+      tunnel: '/api/sentry-tunnel',
       // Error tracking は常に 100% (低頻度なので budget に響かない)
       sampleRate: 1.0,
       // Performance monitoring は production で 10% に抑える (free plan 5k events/月対策)
       tracesSampleRate: import.meta.env.MODE === 'production' ? 0.1 : 1.0,
-      // BrowserTracing は v8+ で default 統合済。明示 add する場合はここに integrations:
-      // integrations: [Sentry.browserTracingIntegration()],
       beforeSend(event) {
         // 広告ブロッカー由来の analytics.js ERR_BLOCKED_BY_CLIENT 等の noise を抑制
         const msg = event.exception?.values?.[0]?.value || '';

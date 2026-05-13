@@ -718,8 +718,63 @@ async def health() -> dict:
             "FMP_DEMO_API_KEY":  bool(os.getenv("FMP_DEMO_API_KEY")),
             "ANTHROPIC_API_KEY": bool(os.getenv("ANTHROPIC_API_KEY")),
             "ALLOWED_ORIGINS":   os.getenv("ALLOWED_ORIGINS", "(default)"),
+            "SENTRY_DSN":        bool(os.getenv("SENTRY_DSN")),
         },
     }
+
+
+@app.get("/api/sentry-debug")
+async def sentry_debug() -> dict:
+    """Sentry verification endpoint (handover v66 §1 round 3 構造投資).
+    Sentry 公式推奨パターン: 意図的に ZeroDivisionError を発生させ
+    FastApiIntegration の unhandled exception capture を検証する.
+    本番でも残しておく (no-op when SENTRY_DSN unset)."""
+    1 / 0  # noqa: B018
+    return {"unreachable": True}
+
+
+# Sentry tunnel — frontend が ad-blocker で sentry.io 直送 block される問題への
+# Sentry 公式推奨対策。https://docs.sentry.io/platforms/javascript/troubleshooting/#dealing-with-ad-blockers
+# frontend は POST /api/sentry-tunnel に投げ、backend が Sentry ingest endpoint へ転送する.
+# ホスト固定 (env で許可された Sentry ingest org のみ) で open proxy 化を防ぐ.
+import httpx as _sentry_httpx  # 既存依存
+
+_SENTRY_TUNNEL_ALLOWED_HOSTS = {
+    "o4511382385459200.ingest.us.sentry.io",  # BeatScanner Sentry org (frontend + backend 同一 org)
+}
+
+
+@app.post("/api/sentry-tunnel")
+async def sentry_tunnel(request: Request) -> Response:
+    """Sentry envelope を frontend から受け取り、Sentry ingest endpoint へ転送する."""
+    body = await request.body()
+    # envelope の 1 行目に envelope header (JSON) があり、dsn 情報を含む。
+    # 最初の改行までを取り出し、JSON parse して dsn host を確認.
+    try:
+        first_line, _ = body.split(b"\n", 1)
+        envelope_header = json.loads(first_line)
+        dsn = envelope_header.get("dsn", "")
+        # dsn = "https://<public_key>@<host>/<project_id>"
+        from urllib.parse import urlparse
+        parsed = urlparse(dsn)
+        host = parsed.hostname or ""
+        if host not in _SENTRY_TUNNEL_ALLOWED_HOSTS:
+            return Response(status_code=403, content=f"host not allowed: {host}")
+        project_id = parsed.path.lstrip("/")
+    except Exception as e:
+        return Response(status_code=400, content=f"bad envelope: {e}")
+
+    forward_url = f"https://{host}/api/{project_id}/envelope/"
+    async with _sentry_httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            r = await client.post(
+                forward_url,
+                content=body,
+                headers={"Content-Type": "application/x-sentry-envelope"},
+            )
+            return Response(content=r.content, status_code=r.status_code, media_type="application/json")
+        except _sentry_httpx.HTTPError as e:
+            return Response(status_code=502, content=f"tunnel forward failed: {e}")
 
 
 # --- Bulk quotes endpoint (Holdings X-2 Phase 3 + future Portfolio Dashboard) ---
