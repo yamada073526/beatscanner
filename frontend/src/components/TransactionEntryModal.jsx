@@ -36,9 +36,12 @@ export default function TransactionEntryModal({
   defaultAccountId,
   defaultTicker,
   onAdd,            // (payload) => Promise<tx>
+  onUpdate,         // Phase 3: 編集モード用 (id, patch) => Promise<tx>
+  editingTx,        // Phase 3: 編集モード時に渡す既存 transaction (null = 新規登録)
   onCreateDefaultAccount,  // 任意: 「デフォルト口座を作成」CTA で呼ぶ
   accountsError,           // 任意: useAccounts の error を可視化
 }) {
+  const isEditing = !!editingTx?.id;
   const [type, setType] = useState('buy');
   const [accountId, setAccountId] = useState(defaultAccountId || '');
   const [ticker, setTicker] = useState(defaultTicker || '');
@@ -52,9 +55,22 @@ export default function TransactionEntryModal({
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
-  // open 時に default を反映
+  // open 時に default を反映 (新規) or 既存値を pre-fill (編集)
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+    if (editingTx?.id) {
+      // 編集モード: editingTx の値で全 field 初期化
+      setType(editingTx.type || 'buy');
+      setAccountId(editingTx.account_id || defaultAccountId || '');
+      setTicker(editingTx.ticker || '');
+      setShares(editingTx.shares != null ? String(editingTx.shares) : '');
+      setPrice(editingTx.price != null ? String(editingTx.price) : '');
+      setCurrency(editingTx.currency || 'USD');
+      setTradeDate(editingTx.trade_date || todayISO());
+      setFee(editingTx.fee != null ? String(editingTx.fee) : '');
+      setNote(editingTx.note || '');
+    } else {
+      // 新規モード
       setType('buy');
       setAccountId(defaultAccountId || (accounts?.[0]?.id ?? ''));
       setTicker(defaultTicker || '');
@@ -64,11 +80,11 @@ export default function TransactionEntryModal({
       setTradeDate(todayISO());
       setFee('');
       setNote('');
-      setError(null);
-      setSubmitting(false);
-      setSuccessMsg(null);
     }
-  }, [open, defaultAccountId, defaultTicker, accounts]);
+    setError(null);
+    setSubmitting(false);
+    setSuccessMsg(null);
+  }, [open, editingTx?.id, defaultAccountId, defaultTicker, accounts]);
 
   const spec = useMemo(
     () => TRANSACTION_TYPES.find((t) => t.value === type) || TRANSACTION_TYPES[0],
@@ -84,7 +100,7 @@ export default function TransactionEntryModal({
     if (!accountId) { setError('口座を選択してください'); return; }
     setSubmitting(true);
     try {
-      const created = await onAdd({
+      const payload = {
         account_id: accountId,
         type,
         ticker: spec.requiresTicker ? ticker : (ticker || null),
@@ -94,16 +110,21 @@ export default function TransactionEntryModal({
         trade_date: tradeDate,
         fee: fee === '' ? 0 : Number(fee),
         note: note || null,
-      });
-      // 成功フィードバック: type 別に短文を出し、1.4s 後に modal を閉じる
+      };
+      let result;
+      if (isEditing && onUpdate) {
+        result = await onUpdate(editingTx.id, payload);
+      } else {
+        result = await onAdd(payload);
+      }
+      // 成功フィードバック
       const tspec = TRANSACTION_TYPES.find((x) => x.value === type);
-      const tickerLabel = created?.ticker || ticker || '';
-      const sharesLabel = created?.shares ?? shares;
+      const tickerLabel = result?.ticker || ticker || '';
+      const sharesLabel = result?.shares ?? shares;
+      const verb = isEditing ? '更新しました' : '登録しました';
       setSuccessMsg(
-        `${tspec?.label || type} を登録しました${tickerLabel ? ` (${tickerLabel}${sharesLabel ? ` ${sharesLabel} 株` : ''})` : ''}`
+        `${tspec?.label || type} を${verb}${tickerLabel ? ` (${tickerLabel}${sharesLabel ? ` ${sharesLabel} 株` : ''})` : ''}`
       );
-      // 2.5s 表示で確実に視認させる (前回 1.4s は短すぎて missed の報告あり)。
-      // user が即閉じたい場合は × button / 背景クリックで dismiss 可能。
       setTimeout(() => {
         setSuccessMsg(null);
         onClose?.();
@@ -151,7 +172,7 @@ export default function TransactionEntryModal({
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>
-            取引を登録
+            {isEditing ? '取引を編集' : '取引を登録'}
           </h2>
           <button
             type="button"
@@ -385,7 +406,11 @@ export default function TransactionEntryModal({
             disabled={submitting || !!successMsg}
             style={btnPrimaryStyle}
           >
-            {submitting ? '登録中...' : successMsg ? '✓ 完了' : '登録'}
+            {submitting
+              ? (isEditing ? '更新中...' : '登録中...')
+              : successMsg
+              ? '✓ 完了'
+              : (isEditing ? '更新' : '登録')}
           </button>
         </div>
       </form>

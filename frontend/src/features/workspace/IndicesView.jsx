@@ -428,10 +428,23 @@ function PortfolioSummaryRow({ holdings, prices, tickers, totalRealized = 0 }) {
 function PortfolioActions() {
   const user = useUserFromHoldings();
   const { accounts, defaultAccountId, addAccount, error: accountsError, reload } = useAccounts({ supabase, user });
-  const { transactions, addTransaction, removeTransaction } = useTransactions({ supabase, user });
+  const { transactions, addTransaction, updateTransaction, removeTransaction } = useTransactions({ supabase, user });
   const selectedAccountId = useWorkspaceStore((s) => s.selectedAccountId);
   const [modalOpen, setModalOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Phase 3 v68: 編集モード対象 transaction (null = 新規登録)
+  const [editingTx, setEditingTx] = useState(null);
+
+  const handleEdit = (tx) => {
+    setEditingTx(tx);
+    setHistoryOpen(false);  // 履歴 modal を閉じて編集 modal を開く
+    setModalOpen(true);
+  };
+
+  const handleCloseEntryModal = () => {
+    setModalOpen(false);
+    setEditingTx(null);
+  };
 
   const handleCreateDefaultAccount = async () => {
     const created = await addAccount({
@@ -480,10 +493,12 @@ function PortfolioActions() {
           </button>
           <TransactionEntryModal
             open={modalOpen}
-            onClose={() => setModalOpen(false)}
+            onClose={handleCloseEntryModal}
             accounts={accounts}
             defaultAccountId={defaultAccountId}
             onAdd={addTransaction}
+            onUpdate={updateTransaction}
+            editingTx={editingTx}
             onCreateDefaultAccount={handleCreateDefaultAccount}
             accountsError={accountsError}
           />
@@ -494,6 +509,7 @@ function PortfolioActions() {
             accounts={accounts}
             selectedAccountId={selectedAccountId}
             onDelete={removeTransaction}
+            onEdit={handleEdit}
           />
         </>
       )}

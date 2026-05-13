@@ -44,6 +44,7 @@ export default function TransactionHistoryModal({
   accounts,
   selectedAccountId,
   onDelete,
+  onEdit,           // Phase 3 v68: (tx) => void - 編集 modal を開く callback
 }) {
   const [deletingId, setDeletingId] = useState(null);
   const [confirmId, setConfirmId] = useState(null);
@@ -263,7 +264,24 @@ export default function TransactionHistoryModal({
                     </>
                   ) : (
                     <>
-                      <span />
+                      <button
+                        type="button"
+                        onClick={() => onEdit?.(tx)}
+                        disabled={!onEdit}
+                        title="この取引を編集"
+                        aria-label="この取引を編集"
+                        style={{
+                          padding: '4px 8px',
+                          background: 'transparent',
+                          color: 'var(--text-secondary)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-sm)',
+                          fontSize: 11,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        編集
+                      </button>
                       <button
                         type="button"
                         onClick={() => setConfirmId(tx.id)}
@@ -294,7 +312,7 @@ export default function TransactionHistoryModal({
           color: 'var(--text-muted)',
           lineHeight: 1.5,
         }}>
-          編集は Phase 3 で実装予定。誤入力は削除 → 再登録で訂正してください。
+          編集・削除した内容は即座に Pane 2 集計に反映されます。
         </div>
       </div>
     </div>
