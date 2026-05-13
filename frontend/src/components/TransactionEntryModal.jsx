@@ -102,10 +102,12 @@ export default function TransactionEntryModal({
       setSuccessMsg(
         `${tspec?.label || type} を登録しました${tickerLabel ? ` (${tickerLabel}${sharesLabel ? ` ${sharesLabel} 株` : ''})` : ''}`
       );
+      // 2.5s 表示で確実に視認させる (前回 1.4s は短すぎて missed の報告あり)。
+      // user が即閉じたい場合は × button / 背景クリックで dismiss 可能。
       setTimeout(() => {
         setSuccessMsg(null);
         onClose?.();
-      }, 1400);
+      }, 2500);
     } catch (e) {
       setError(e?.message || String(e));
     } finally {
@@ -349,20 +351,22 @@ export default function TransactionEntryModal({
         {successMsg && (
           <div
             role="status"
+            aria-live="polite"
             style={{
-              padding: '10px 12px',
-              background: 'rgba(52, 239, 129, 0.10)',
-              border: '1px solid rgba(52, 239, 129, 0.30)',
+              padding: '14px 16px',
+              background: 'rgba(52, 239, 129, 0.14)',
+              border: '2px solid rgba(52, 239, 129, 0.50)',
               borderRadius: 'var(--radius-sm)',
               color: 'var(--color-gain)',
-              fontSize: 13,
-              fontWeight: 600,
+              fontSize: 15,
+              fontWeight: 700,
               display: 'flex',
               alignItems: 'center',
-              gap: 8,
+              gap: 10,
+              boxShadow: '0 0 0 4px rgba(52, 239, 129, 0.08)',
             }}
           >
-            <span aria-hidden="true">✓</span>
+            <span aria-hidden="true" style={{ fontSize: 18 }}>✓</span>
             <span>{successMsg}</span>
           </div>
         )}

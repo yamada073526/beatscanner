@@ -395,6 +395,13 @@ function PortfolioSummaryRow({ holdings, prices, tickers, user }) {
           realizedAbs={Math.abs(totalRealized) >= 0.005 ? totalRealized : null}
         />
       )}
+      {!collapsed && (
+        <PortfolioHoldingsList
+          holdings={holdings}
+          prices={prices}
+          tickers={tickers}
+        />
+      )}
       {!collapsed && <PortfolioVerdictRollup tickers={tickers} />}
       {!collapsed && <PortfolioActions />}
     </>
@@ -763,6 +770,111 @@ function SPYAlphaChip({ alphaPct }) {
       >
         {sign}
         {alphaPct.toFixed(2)}%
+      </span>
+    </div>
+  );
+}
+
+// Phase 2.5 v68: 保有銘柄リスト (Pane 2 サマリー直下)
+// user 指摘 (2026-05-14):「今、何の銘柄を何株持っているかが表示されないので、
+// 反映されているか不安です」 → top 5 銘柄を ticker + shares + 現在価格で可視化。
+// 5 件超は「+N 件」表示で classic mode の PortfolioDashboard 詳細導線へ。
+// 「シンプルかつリッチ」5 原則 #3 に沿って情報密度抑制。
+function PortfolioHoldingsList({ holdings, prices, tickers }) {
+  const items = useMemo(() => {
+    const rows = [];
+    for (const t of tickers || []) {
+      const h = holdings?.[t];
+      const q = prices?.[t];
+      const shares = Number(h?.shares) || 0;
+      const price = Number(q?.price);
+      const change = Number(q?.change);
+      const value = Number.isFinite(price) && price > 0 ? shares * price : null;
+      rows.push({ ticker: t, shares, price, change, value });
+    }
+    // value 降順 (大きい順)、value 不明なら末尾
+    rows.sort((a, b) => {
+      const av = Number.isFinite(a.value) ? a.value : -1;
+      const bv = Number.isFinite(b.value) ? b.value : -1;
+      return bv - av;
+    });
+    return rows;
+  }, [tickers, holdings, prices]);
+
+  if (items.length === 0) return null;
+
+  const top = items.slice(0, 5);
+  const remaining = items.length - top.length;
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+        padding: '4px 12px 10px',
+      }}
+    >
+      <div style={{
+        fontSize: 10,
+        fontWeight: 600,
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+        color: 'var(--text-muted)',
+        marginBottom: 2,
+      }}>
+        保有銘柄
+      </div>
+      {top.map((it) => (
+        <HoldingRowCompact key={it.ticker} item={it} />
+      ))}
+      {remaining > 0 && (
+        <div
+          style={{
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            paddingTop: 2,
+          }}
+        >
+          + {remaining} 銘柄 (詳細はロット履歴へ)
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HoldingRowCompact({ item }) {
+  const { ticker, shares, price, change, value } = item;
+  const changeColor =
+    Number.isFinite(change) && change !== 0
+      ? change > 0 ? 'var(--color-gain)' : 'var(--color-loss)'
+      : 'var(--text-muted)';
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(56px, 1fr) auto auto',
+        gap: 8,
+        alignItems: 'baseline',
+        fontVariantNumeric: 'tabular-nums',
+        fontSize: 12,
+        padding: '2px 0',
+      }}
+    >
+      <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+        {String(ticker)}
+      </span>
+      <span style={{ color: 'var(--text-secondary)' }}>
+        {Number.isFinite(shares) && shares > 0
+          ? `${shares.toLocaleString('en-US', { maximumFractionDigits: 4 })} 株`
+          : '—'}
+      </span>
+      <span style={{ color: changeColor, fontWeight: 600 }}>
+        {Number.isFinite(value)
+          ? formatUSDCompact(value)
+          : Number.isFinite(price) && price > 0
+          ? `$${price.toFixed(2)}`
+          : '—'}
       </span>
     </div>
   );
