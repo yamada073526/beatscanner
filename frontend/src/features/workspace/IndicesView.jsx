@@ -882,6 +882,10 @@ function SPYAlphaChip({ alphaPct }) {
 // 5 件超は「+N 件」表示で classic mode の PortfolioDashboard 詳細導線へ。
 // 「シンプルかつリッチ」5 原則 #3 に沿って情報密度抑制。
 function PortfolioHoldingsList({ holdings, prices, tickers }) {
+  // 銘柄ごとのファンダメンタル 5 条件 PASS/FAIL を取得 (PortfolioVerdictRollup と同 hook、
+  // 同 tickers なので backend 6h cache + frontend useEffect dedupe で実質 1 fetch)
+  const { verdicts } = usePortfolioJudgment(tickers);
+
   const items = useMemo(() => {
     const rows = [];
     for (const t of tickers || []) {
@@ -891,7 +895,12 @@ function PortfolioHoldingsList({ holdings, prices, tickers }) {
       const price = Number(q?.price);
       const change = Number(q?.change);
       const value = Number.isFinite(price) && price > 0 ? shares * price : null;
-      rows.push({ ticker: t, shares, price, change, value });
+      const jv = verdicts?.[t];
+      const judgment =
+        jv && typeof jv === 'object' && typeof jv.overallPass === 'boolean'
+          ? { pass: jv.overallPass, passedCount: jv.passedCount, totalCount: jv.totalCount }
+          : null;
+      rows.push({ ticker: t, shares, price, change, value, judgment });
     }
     // value 降順 (大きい順)、value 不明なら末尾
     rows.sort((a, b) => {
@@ -900,7 +909,7 @@ function PortfolioHoldingsList({ holdings, prices, tickers }) {
       return bv - av;
     });
     return rows;
-  }, [tickers, holdings, prices]);
+  }, [tickers, holdings, prices, verdicts]);
 
   if (items.length === 0) return null;
 
@@ -945,7 +954,7 @@ function PortfolioHoldingsList({ holdings, prices, tickers }) {
 }
 
 function HoldingRowCompact({ item }) {
-  const { ticker, shares, price, change, value } = item;
+  const { ticker, shares, price, change, value, judgment } = item;
   const changeColor =
     Number.isFinite(change) && change !== 0
       ? change > 0 ? 'var(--color-gain)' : 'var(--color-loss)'
@@ -954,9 +963,9 @@ function HoldingRowCompact({ item }) {
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(56px, 1fr) auto auto',
+        gridTemplateColumns: 'minmax(56px, auto) auto 1fr auto',
         gap: 8,
-        alignItems: 'baseline',
+        alignItems: 'center',
         fontVariantNumeric: 'tabular-nums',
         fontSize: 12,
         padding: '2px 0',
@@ -965,7 +974,8 @@ function HoldingRowCompact({ item }) {
       <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
         {String(ticker)}
       </span>
-      <span style={{ color: 'var(--text-secondary)' }}>
+      {judgment ? <HoldingJudgmentBadge judgment={judgment} /> : <span />}
+      <span style={{ color: 'var(--text-secondary)', textAlign: 'right' }}>
         {Number.isFinite(shares) && shares > 0
           ? `${shares.toLocaleString('en-US', { maximumFractionDigits: 4 })} 株`
           : '—'}
@@ -978,6 +988,51 @@ function HoldingRowCompact({ item }) {
           : '—'}
       </span>
     </div>
+  );
+}
+
+// 銘柄行に並べる小型 PASS/FAIL バッジ (Phase 3.5 v68)
+// user 指摘 (2026-05-14):「集計の PASS/FAIL は分かるが、どの銘柄が PASS/FAIL かわからない」
+// → ticker 隣に「✓ 5/5」「✗ 2/5」形式の compact badge を配置。
+function HoldingJudgmentBadge({ judgment }) {
+  const { pass, passedCount, totalCount } = judgment;
+  const color = pass ? 'var(--color-gain)' : 'var(--color-loss)';
+  const bg = pass ? 'rgba(52, 239, 129, 0.10)' : 'rgba(248, 113, 113, 0.10)';
+  const border = pass ? 'rgba(52, 239, 129, 0.30)' : 'rgba(248, 113, 113, 0.30)';
+  const icon = pass ? '✓' : '✗';
+  const label = pass ? 'PASS' : 'FAIL';
+  const ratio =
+    Number.isFinite(passedCount) && Number.isFinite(totalCount)
+      ? `${passedCount}/${totalCount}`
+      : '';
+  return (
+    <span
+      title={`ファンダメンタル5条件 ${label} (${ratio})`}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 3,
+        padding: '1px 7px',
+        background: bg,
+        border: '1px solid',
+        borderColor: border,
+        borderRadius: 'var(--radius-pill)',
+        color,
+        fontSize: 10,
+        fontWeight: 700,
+        lineHeight: 1.4,
+        fontVariantNumeric: 'tabular-nums',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span aria-hidden="true">{icon}</span>
+      <span>{label}</span>
+      {ratio && (
+        <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>
+          {ratio}
+        </span>
+      )}
+    </span>
   );
 }
 
