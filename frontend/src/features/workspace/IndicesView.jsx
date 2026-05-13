@@ -97,11 +97,49 @@ function formatPrice(item) {
 function PortfolioPaneSection({ holdings, portfolioPrices, user }) {
   // 早期 return で「ログインしてください」モーダル等の Trust Cliff 完全回避
   if (!user) return null;
-  const tickers = Object.keys(holdings || {});
+
+  // Phase 2.5 v68: transactions ベースの effectiveHoldings を集中計算。
+  // user 指摘 (2026-05-14):「売却登録したのに持ち株数が更新されない」 → holding_lots
+  // ベース集計を transactions の sell / split / dividend を反映した集計に切替。
+  // 後方互換: transactions が空 (まだ取引登録していない user) は legacy holding_lots
+  // ベースの holdings をそのまま表示。
+  const { transactions } = useTransactions({ supabase, user });
+  const selectedAccountId = useWorkspaceStore((s) => s.selectedAccountId);
+
+  const { effectiveHoldings, totalRealized } = useMemo(() => {
+    if (!Array.isArray(transactions) || transactions.length === 0) {
+      return { effectiveHoldings: holdings || {}, totalRealized: 0 };
+    }
+    const filtered = selectedAccountId
+      ? transactions.filter((t) => t.account_id === selectedAccountId)
+      : transactions;
+    // ticker ごとに移動平均で集計
+    const byTicker = {};
+    for (const tx of filtered) {
+      const t = (tx.ticker || '').toUpperCase();
+      if (!t) continue;
+      if (!byTicker[t]) byTicker[t] = [];
+      byTicker[t].push(tx);
+    }
+    const out = {};
+    let realizedSum = 0;
+    for (const [t, txs] of Object.entries(byTicker)) {
+      const a = aggregateWithTransactions(txs);
+      if (Number.isFinite(a.realized)) realizedSum += a.realized;
+      // sell で完全に減らした (shares ≈ 0) ticker は保有リストから除外
+      if (a.shares > 0.0001) {
+        out[t] = {
+          shares: a.shares,
+          avg_cost: a.avgCost,
+        };
+      }
+    }
+    return { effectiveHoldings: out, totalRealized: realizedSum };
+  }, [transactions, selectedAccountId, holdings]);
+
+  const tickers = Object.keys(effectiveHoldings);
 
   // Phase 0 動線改善 (2026-05-14): 0 holdings でも空 state CTA を出す。
-  // 6 体合議 (金融/マーケ) で「保有 × じっちゃまプロトコル」が差別化核と確定し、
-  // 既存 PortfolioDashboard を user に発見させる動線が最優先課題に。
   if (tickers.length === 0) {
     return (
       <>
@@ -115,10 +153,10 @@ function PortfolioPaneSection({ holdings, portfolioPrices, user }) {
     <>
       <AccountSwitcher user={user} />
       <PortfolioSummaryRow
-        holdings={holdings}
+        holdings={effectiveHoldings}
         prices={portfolioPrices}
         tickers={tickers}
-        user={user}
+        totalRealized={totalRealized}
       />
     </>
   );
@@ -259,36 +297,11 @@ function PortfolioEmptyStateCta() {
   );
 }
 
-function PortfolioSummaryRow({ holdings, prices, tickers, user }) {
+function PortfolioSummaryRow({ holdings, prices, tickers, totalRealized = 0 }) {
   const collapsed = useWorkspaceStore((s) => s.portfolioCollapsed);
   const toggle = useWorkspaceStore((s) => s.togglePortfolio);
-  const selectedAccountId = useWorkspaceStore((s) => s.selectedAccountId);
-
-  // Phase 2 v68: transactions ベースで実現損益 (realized P/L) を算出。
-  // selectedAccountId が null = 全口座 rollup、特定 account ID = その口座のみ。
-  // 移動平均 cost basis で sell / dividend / fee を順次適用。
-  const { transactions } = useTransactions({ supabase, user });
-  const totalRealized = useMemo(() => {
-    if (!Array.isArray(transactions) || transactions.length === 0) return 0;
-    const filtered = selectedAccountId
-      ? transactions.filter((t) => t.account_id === selectedAccountId)
-      : transactions;
-    if (filtered.length === 0) return 0;
-    // ticker ごとに移動平均で realized を積算
-    const byTicker = {};
-    for (const tx of filtered) {
-      const t = (tx.ticker || '').toUpperCase();
-      if (!t) continue;
-      if (!byTicker[t]) byTicker[t] = [];
-      byTicker[t].push(tx);
-    }
-    let sum = 0;
-    for (const txs of Object.values(byTicker)) {
-      const a = aggregateWithTransactions(txs);
-      if (Number.isFinite(a.realized)) sum += a.realized;
-    }
-    return sum;
-  }, [transactions, selectedAccountId]);
+  // Phase 2.5 v68: transactions ベース集計は親 PortfolioPaneSection が担当。
+  // 本コンポーネントは effectiveHoldings + totalRealized を受け取り、UI 計算に専念。
 
   // vs SPY chip: 1Y SPY 累積リターン vs portfolio pnlPct (合議 PR-D)
   // 厳密な期間一致でなく「1Y 市場ベンチマーク」として比較 (MVP)。
