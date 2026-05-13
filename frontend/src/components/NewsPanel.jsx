@@ -32,6 +32,9 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
+  // 2026-05-13 PR Phase 2: click した記事を視覚 highlight (Pane 4 is-open と同思想)。
+  // モーダル/Pane 5 が閉じるまで accent bar + cyan bg を維持 → 「今読んでる記事はコレ」が一目瞭然。
+  const [selectedIdx, setSelectedIdx] = useState(null);
 
   // 共通フック: 翻訳トグル + 記事モーダル
   const { enabled: translateNews, toggle: handleToggle, displayTitles, translating } = useTranslation(news);
@@ -153,6 +156,7 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false }) {
   // 記事クリック時: workspace mode は Pane 5 へ、それ以外はモーダルを開く
   const handleArticleClick = (item) => {
     const idx = news.indexOf(item);
+    setSelectedIdx(idx); // 選択中の記事を highlight (Pane 4 is-open と同)
     const title = displayTitles?.[idx] || item.title;
     if (useWorkspaceReader) {
       // Pane 5 ReadingMode が読み取る shape を維持 (title/url/source/published/image/summary)
@@ -161,6 +165,14 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false }) {
     }
     openArticle(item, title);
   };
+
+  // モーダル / Pane 5 が閉じたら selected state を解除 (両方 null になった時点で highlight 消す)
+  const activeReadingItem = useWorkspaceStore((s) => s.activeReadingItem);
+  useEffect(() => {
+    if (selectedIdx == null) return;
+    const stillOpen = (useWorkspaceReader ? !!activeReadingItem : !!articleModal);
+    if (!stillOpen) setSelectedIdx(null);
+  }, [articleModal, activeReadingItem, useWorkspaceReader, selectedIdx]);
 
   useEffect(() => { load(); }, [ticker]);
 
@@ -219,7 +231,8 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false }) {
                 {news.slice(0, visibleCount).map((item, i) => (
                   <div
                     key={i}
-                    className="news-list-card"
+                    className={`news-list-card${selectedIdx === i ? ' is-open' : ''}`}
+                    aria-pressed={selectedIdx === i}
                     onClick={() => handleArticleClick(item)}
                     role="button"
                     tabIndex={0}

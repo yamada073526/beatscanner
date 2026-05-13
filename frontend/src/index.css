@@ -848,10 +848,13 @@ body {
   padding: 4px 0;
 }
 .news-list-card {
-  /* 2026-05-13 design unification v3: Pane 4 NewsItem と pixel 一致するよう最終調整。
-     - border-radius を実 token `var(--radius-md)` = 12px に合わせる (v2 の 10px は Pane 4 inline の
-       fallback 10px を誤読していた、実値は --radius-md = 12px)
-     - margin 3px 4px で Pane 4 と同じ「カード外側の呼吸」を再現 */
+  /* 2026-05-13 design unification v5: Pane 4 NewsItem の rich hover を token 経由で再現
+     (4 体合議: UI/UX 推奨案 1 + Anthropic engineer Phase 1)。
+     - hover: translateY(-3px) + scale(1.008) + cyan border + bg + box-shadow (Pane 4 と同)
+     - active: translateY(-1px) (Stripe Press 流「戻さない」)
+     - selected (.is-open): accent bar 4px + bg cyan-6% 維持
+     - prefers-reduced-motion 対応必須 (合議 Must-fix)
+     - .is-arriving 非対象 (grep 済) のため compound 4-set 不要 */
   position: relative;
   display: flex;
   align-items: center;
@@ -863,7 +866,11 @@ body {
   border: 1px solid var(--border);
   background: transparent;
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition:
+    transform var(--ws-hover-duration, 220ms) var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
+    border-color var(--ws-hover-duration, 220ms) var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
+    box-shadow var(--ws-hover-duration, 220ms) var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
+    background-color var(--ws-hover-duration, 220ms) var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
 }
 .news-list-card::before {
   /* 左端 cyan accent bar (Pane 4 attention bar と同形だが Pane 3 は固定値) */
@@ -877,11 +884,65 @@ body {
   background: rgba(56, 189, 248, 0.50);
   pointer-events: none;
 }
-/* 2026-05-13 design unification v4: Pane 4 NewsItem の hover は bg のみ (border 不変)。
-   Linear/Stripe 流の subtle hover に統一、cyan 縁取りは accent bar に集約。
-   dark mode override は var(--border) token で自動対応のため撤去。 */
+/* 2026-05-13 design unification v5: Pane 4 NewsItem rich hover を再現 (token 経由)。
+   user dogfood で「v4 は何も反応がない」評価 → Pane 4 と同じ lift + cyan glow + accent bar 拡幅 */
 .news-list-card:hover {
-  background-color: var(--bg-hover);
+  transform: translateY(var(--ws-hover-lift, -3px)) scale(1.008);
+  border-color: rgba(56, 189, 248, 0.45);
+  background-color: rgba(56, 189, 248, 0.04);
+  box-shadow: var(--ws-shadow-row-hover);
+}
+/* dark mode: cyan glow 強化 (Pane 4 round 20 と同) */
+[data-theme="dark"] .news-list-card:hover {
+  border-color: rgba(56, 189, 248, 0.65);
+  background-color: rgba(56, 189, 248, 0.08);
+}
+/* hover 時に accent bar を 2.5px → 4px に拡幅 + opacity 引き上げ (Pane 4 round 18 と同) */
+.news-list-card::before {
+  transition: width var(--ws-hover-duration, 220ms) var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
+              opacity var(--ws-hover-duration, 220ms) var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
+}
+.news-list-card:hover::before {
+  width: 4px;
+  background: rgba(56, 189, 248, 0.9);
+}
+/* title color shift (Linear 流「1 つだけ動かす」) */
+.news-list-card .news-list-title {
+  transition: color 150ms var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
+}
+.news-list-card:hover .news-list-title {
+  color: rgb(186, 230, 253); /* sky-200 */
+}
+[data-theme="light"] .news-list-card:hover .news-list-title {
+  color: rgb(2, 132, 199); /* sky-700 */
+}
+/* active 沈み (Stripe Press 流、translateY を完全に 0 まで戻さない) */
+.news-list-card:active {
+  transform: translateY(var(--ws-active-sink, -1px));
+  transition:
+    transform var(--ws-active-duration, 90ms) var(--ws-ease-sink, cubic-bezier(0.4, 0, 1, 1)),
+    box-shadow var(--ws-active-duration, 90ms) var(--ws-ease-sink, cubic-bezier(0.4, 0, 1, 1));
+  box-shadow: var(--ws-shadow-row-active);
+}
+/* selected state: click して開いた記事を視覚 highlight (Pane 5 / modal が閉じるまで持続) */
+.news-list-card.is-open {
+  border-color: rgba(56, 189, 248, 0.55);
+  background-color: rgba(56, 189, 248, 0.06);
+  box-shadow: var(--ws-shadow-row-hover);
+}
+.news-list-card.is-open::before {
+  width: 4px;
+  background: rgba(56, 189, 248, 1);
+}
+/* prefers-reduced-motion: 酔い系 churn 防止 (マーケター指摘) */
+@media (prefers-reduced-motion: reduce) {
+  .news-list-card,
+  .news-list-card:hover,
+  .news-list-card:active,
+  .news-list-card::before {
+    transition: none;
+    transform: none;
+  }
 }
 .news-list-thumb {
   /* 2026-05-13 design unification: Pane 4 NewsItem の 40x40 と統一 (64→40)。 */
