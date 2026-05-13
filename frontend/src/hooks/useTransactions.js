@@ -87,10 +87,30 @@ export function useTransactions({ supabase, user }) {
     return () => { cancelled = true; };
   }, [supabase, user?.id]);
 
+  // 同じ user 内で複数 component が useTransactions を呼ぶ場合の state 同期。
+  // addTransaction が dispatch する window event を全インスタンスが listen し、
+  // 自分側 state を再取得する (Phase 2 v68: PortfolioActions の modal 登録を
+  // PortfolioSummaryRow の chip に即反映するため)。
+  useEffect(() => {
+    if (!supabase || !user?.id) return;
+    const handler = () => reload();
+    window.addEventListener('bs:transactions:changed', handler);
+    return () => window.removeEventListener('bs:transactions:changed', handler);
+  }, [supabase, user?.id, reload]);
+
+  const broadcast = () => {
+    try {
+      window.dispatchEvent(new CustomEvent('bs:transactions:changed'));
+    } catch {
+      // SSR / 古いブラウザ向け defensive
+    }
+  };
+
   const addTransaction = useCallback(async (payload) => {
     if (!supabase || !user?.id) throw new Error('Not logged in');
     const created = await addTransactionRemote(supabase, user.id, payload);
     setTransactions((prev) => [...prev, created]);
+    broadcast();
     return created;
   }, [supabase, user?.id]);
 
@@ -98,6 +118,7 @@ export function useTransactions({ supabase, user }) {
     if (!supabase || !user?.id) throw new Error('Not logged in');
     const updated = await updateTransactionRemote(supabase, user.id, txId, patch);
     setTransactions((prev) => prev.map((t) => (t.id === txId ? updated : t)));
+    broadcast();
     return updated;
   }, [supabase, user?.id]);
 
@@ -107,6 +128,7 @@ export function useTransactions({ supabase, user }) {
     setTransactions(transactions.filter((t) => t.id !== txId));
     try {
       await deleteTransactionRemote(supabase, user.id, txId);
+      broadcast();
     } catch (e) {
       setTransactions(prev);  // rollback
       throw e;

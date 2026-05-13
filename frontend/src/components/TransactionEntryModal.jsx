@@ -50,6 +50,7 @@ export default function TransactionEntryModal({
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
 
   // open 時に default を反映
   useEffect(() => {
@@ -65,6 +66,7 @@ export default function TransactionEntryModal({
       setNote('');
       setError(null);
       setSubmitting(false);
+      setSuccessMsg(null);
     }
   }, [open, defaultAccountId, defaultTicker, accounts]);
 
@@ -78,10 +80,11 @@ export default function TransactionEntryModal({
   const handleSubmit = async (e) => {
     e?.preventDefault?.();
     setError(null);
+    setSuccessMsg(null);
     if (!accountId) { setError('口座を選択してください'); return; }
     setSubmitting(true);
     try {
-      await onAdd({
+      const created = await onAdd({
         account_id: accountId,
         type,
         ticker: spec.requiresTicker ? ticker : (ticker || null),
@@ -92,7 +95,17 @@ export default function TransactionEntryModal({
         fee: fee === '' ? 0 : Number(fee),
         note: note || null,
       });
-      onClose?.();
+      // 成功フィードバック: type 別に短文を出し、1.4s 後に modal を閉じる
+      const tspec = TRANSACTION_TYPES.find((x) => x.value === type);
+      const tickerLabel = created?.ticker || ticker || '';
+      const sharesLabel = created?.shares ?? shares;
+      setSuccessMsg(
+        `${tspec?.label || type} を登録しました${tickerLabel ? ` (${tickerLabel}${sharesLabel ? ` ${sharesLabel} 株` : ''})` : ''}`
+      );
+      setTimeout(() => {
+        setSuccessMsg(null);
+        onClose?.();
+      }, 1400);
     } catch (e) {
       setError(e?.message || String(e));
     } finally {
@@ -333,6 +346,27 @@ export default function TransactionEntryModal({
           </div>
         )}
 
+        {successMsg && (
+          <div
+            role="status"
+            style={{
+              padding: '10px 12px',
+              background: 'rgba(52, 239, 129, 0.10)',
+              border: '1px solid rgba(52, 239, 129, 0.30)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--color-gain)',
+              fontSize: 13,
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <span aria-hidden="true">✓</span>
+            <span>{successMsg}</span>
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
           <button
             type="button"
@@ -344,10 +378,10 @@ export default function TransactionEntryModal({
           </button>
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || !!successMsg}
             style={btnPrimaryStyle}
           >
-            {submitting ? '登録中...' : '登録'}
+            {submitting ? '登録中...' : successMsg ? '✓ 完了' : '登録'}
           </button>
         </div>
       </form>
