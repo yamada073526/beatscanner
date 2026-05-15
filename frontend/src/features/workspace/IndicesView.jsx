@@ -613,8 +613,41 @@ function PortfolioSummaryRow({ holdings, prices, tickers, totalRealized = 0, tot
       >
         ポートフォリオ
       </GroupHeader>
+      {/* v71 Phase 3-d round 6 (3 体合議 / UI/UX + Web 設計 + 金融 全員一致):
+          旧構造 3 行 (詳細 button / 通貨 toggle / KPI 3 列 equal) を 2 行に圧縮。
+          - meta-strip 1 行: 通貨 toggle + 為替 + 詳細 button を 1 行統合 (Stripe Dashboard 流)
+          - KPI 1 大 + 2 小 layout: 評価額 primary + 当日変動 / 含み損益 sub (Robinhood / Empower 業界標準)
+          - 「Pane 3」 文言は内部語彙のため「詳細 →」に短縮
+          memory anchor: feedback_pane3_detail_view.md / 3 体合議 2026-05-15 */}
       {!collapsed && (
-        <div className="pane2-portfolio-detail-affordance">
+        <div className="pane2-portfolio-metastrip">
+          <ChipGroup prefix="通貨" ariaLabel="表示通貨を切替" role="radiogroup" gap="tight">
+            <Chip
+              size="xs"
+              variant="segmented"
+              pressed={displayCurrency === 'USD'}
+              onClick={() => setDisplayCurrency('USD')}
+            >
+              USD
+            </Chip>
+            <Chip
+              size="xs"
+              variant="segmented"
+              pressed={displayCurrency === 'JPY'}
+              onClick={() => setDisplayCurrency('JPY')}
+            >
+              JPY
+            </Chip>
+          </ChipGroup>
+          {displayCurrency === 'JPY' && Number.isFinite(forexRate) && forexRate > 0 && (
+            <span
+              className="pane2-portfolio-fxrate"
+              title="USD/JPY 為替レート (30 分ごと更新)"
+            >
+              1 USD = ¥{forexRate.toFixed(2)}
+            </span>
+          )}
+          <span style={{ flex: 1 }} />
           <Chip
             size="xs"
             variant="filter"
@@ -624,44 +657,45 @@ function PortfolioSummaryRow({ holdings, prices, tickers, totalRealized = 0, tot
                 ? { type: 'index', id: null }
                 : { type: 'portfolio', id: selectedAccountId || 'all' }
             )}
-            title="Pane 3 にポートフォリオの大チャート + 保有銘柄ニュースを表示"
+            title="ポートフォリオの大チャート + 保有銘柄ニュースを Pane 3 に表示"
           >
-            {isPortfolioDetailActive ? '指数に戻す ⤺' : '詳細を Pane 3 で見る →'}
+            {isPortfolioDetailActive ? '指数に戻す ⤺' : '詳細 →'}
           </Chip>
         </div>
       )}
       {!collapsed && (
-        <CurrencyToggleRow
-          displayCurrency={displayCurrency}
-          setDisplayCurrency={setDisplayCurrency}
-          forexRate={forexRate}
-        />
-      )}
-      {!collapsed && (
-        <div
-          style={{
-            padding: '10px 14px 12px',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-            gap: 12,
-            borderBottom: '1px solid var(--border)',
-          }}
-        >
-          <PortfolioStat
-            label="評価額"
-            value={formatCompactCurrency(totals.totalValue, displayCurrency, forexRate)}
-          />
-          <PortfolioStat
-            label="当日変動"
-            value={formatSignedCompactCurrency(totals.totalDayChange, displayCurrency, forexRate)}
-            color={getTrendColor(totals.totalDayChange)}
-          />
-          <PortfolioStat
-            label="含み損益"
-            value={formatSignedCompactCurrency(totals.pnlAbs, displayCurrency, forexRate)}
-            sub={totals.pnlPct != null ? formatSignedPct(totals.pnlPct) : null}
-            color={getTrendColor(totals.pnlAbs)}
-          />
+        <div className="pane2-portfolio-kpi-row">
+          <div className="pane2-portfolio-kpi-primary">
+            <span className="pane2-portfolio-kpi-primary-label">評価額</span>
+            <span className="pane2-portfolio-kpi-primary-value">
+              {formatCompactCurrency(totals.totalValue, displayCurrency, forexRate)}
+            </span>
+          </div>
+          <div className="pane2-portfolio-kpi-subgroup">
+            <div className="pane2-portfolio-kpi-sub">
+              <span className="pane2-portfolio-kpi-sub-label">当日</span>
+              <span
+                className="pane2-portfolio-kpi-sub-value"
+                style={{ color: getTrendColor(totals.totalDayChange) }}
+              >
+                {formatSignedCompactCurrency(totals.totalDayChange, displayCurrency, forexRate)}
+              </span>
+            </div>
+            <div className="pane2-portfolio-kpi-sub">
+              <span className="pane2-portfolio-kpi-sub-label">含み損益</span>
+              <span
+                className="pane2-portfolio-kpi-sub-value"
+                style={{ color: getTrendColor(totals.pnlAbs) }}
+              >
+                {formatSignedCompactCurrency(totals.pnlAbs, displayCurrency, forexRate)}
+                {totals.pnlPct != null && (
+                  <span className="pane2-portfolio-kpi-sub-pct">
+                    {' '}({formatSignedPct(totals.pnlPct)})
+                  </span>
+                )}
+              </span>
+            </div>
+          </div>
         </div>
       )}
       {!collapsed && (

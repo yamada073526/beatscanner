@@ -5575,11 +5575,86 @@ button.ds-chip[data-pressed="true"]:hover {
   height: 160px;
 }
 
-/* v71 抽象化: Pane 2 portfolio →「詳細を Pane 3 で見る」affordance。 */
+/* v71 抽象化: Pane 2 portfolio →「詳細を Pane 3 で見る」affordance。
+   v71 Phase 3-d round 6 (3 体合議 2026-05-15): 旧 .pane2-portfolio-detail-affordance
+   + CurrencyToggleRow + 3-col KPI grid (合計 3 行) → meta-strip + KPI 1 大 2 小 (2 行) に圧縮。
+   業界 4/4 (Bloomberg PORT / Robinhood / Empower / 楽天) の equal weight 採用例 0 を根拠。 */
 .pane2-portfolio-detail-affordance {
   display: flex;
   justify-content: flex-end;
   padding: 6px 14px 0;
+}
+.pane2-portfolio-metastrip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 2px;
+  flex-wrap: wrap;
+}
+.pane2-portfolio-fxrate {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+/* KPI: 評価額 (primary) + 当日 / 含み損益 (sub) の 1 大 + 2 小 layout。
+   Robinhood / Empower / 楽天証券の業界標準を踏襲。 align-items: flex-end で
+   primary の baseline と sub group の最下行を揃え視覚リズムを整える。 */
+.pane2-portfolio-kpi-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 14px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.pane2-portfolio-kpi-primary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.pane2-portfolio-kpi-primary-label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.pane2-portfolio-kpi-primary-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+.pane2-portfolio-kpi-subgroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+.pane2-portfolio-kpi-sub {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.pane2-portfolio-kpi-sub-label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.pane2-portfolio-kpi-sub-value {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.pane2-portfolio-kpi-sub-pct {
+  opacity: 0.85;
+  font-weight: 500;
 }
 
 /* v71 Phase 2.1 (6 体合議): best/worst chip 上に「期間中の主役銘柄」 micro-caption。
