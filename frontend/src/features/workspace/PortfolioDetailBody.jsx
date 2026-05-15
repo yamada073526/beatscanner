@@ -297,24 +297,60 @@ export default function PortfolioDetailBody({ scopeId = 'all' }) {
         {newsItems.length === 0 && !newsLoading && (
           <div className="pane3-portfolio-news-empty">最新ニュースを取得できませんでした</div>
         )}
-        <ul className="pane3-portfolio-news-list">
+        {/* v71 Phase 3-d round 8 (dogfood 2026-05-16 / Light 版):
+            指数ニュース (NewsPanel list view) と同じ visual treatment に統一:
+            - 発光する cyan accent bar (左端) + hover で lift / glow / scale
+            - サムネイル画像 (backend `image` field を流用、 fallback で 📰 emoji)
+            - TickerBadge を meta line に配置 (Bloomberg PORT 流)
+            Full 版 (JP/EN トグル + List/Grid 切替 + Pane 5 連動) は backlog で
+            subagent review 経てから着手。 memory anchor: project_personalization_backlog.md */}
+        <div className="news-list-container">
           {newsItems.map((item, i) => (
-            <li key={`${item.ticker}-${item.url || i}`} className="pane3-portfolio-news-item">
-              <a
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="pane3-portfolio-news-link"
-              >
-                {/* v71 Phase 3-d round 7 (4 体合議 4/4 Yes): Pane 4 NewsItem と整合する
-                    logo + ticker 表現に統一 (旧: 単独 ticker chip)。 設計負債 1 件解消。 */}
-                <TickerBadge ticker={item.ticker} size="xs" className="pane3-portfolio-news-ticker" />
-                <span className="pane3-portfolio-news-title-text">{item.title}</span>
-                <span className="pane3-portfolio-news-time">{timeAgo(item.publishedDate || item.publishedAt)}</span>
-              </a>
-            </li>
+            <a
+              key={`${item.ticker}-${item.url || i}`}
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="news-list-card"
+            >
+              {item.image ? (
+                <img
+                  src={item.image}
+                  alt=""
+                  className="news-list-thumb"
+                  loading="lazy"
+                  decoding="async"
+                  onError={(e) => {
+                    const wrap = e.currentTarget.parentElement;
+                    e.currentTarget.style.display = 'none';
+                    if (wrap && !wrap.querySelector('.news-list-thumb-fallback')) {
+                      const fb = document.createElement('div');
+                      fb.className = 'news-list-thumb-fallback';
+                      fb.textContent = '📰';
+                      wrap.insertBefore(fb, wrap.firstChild);
+                    }
+                  }}
+                />
+              ) : (
+                <div className="news-list-thumb-fallback" aria-hidden>📰</div>
+              )}
+              <div className="news-list-body">
+                <p className="news-list-title">{item.title}</p>
+                <div className="news-list-meta">
+                  <TickerBadge ticker={item.ticker} size="xs" />
+                  {item.source && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span className="news-list-source">{item.source}</span>
+                    </>
+                  )}
+                  <span aria-hidden="true">·</span>
+                  <span>{timeAgo(item.published || item.publishedDate || item.publishedAt)}</span>
+                </div>
+              </div>
+            </a>
           ))}
-        </ul>
+        </div>
       </section>
     </div>
   );
