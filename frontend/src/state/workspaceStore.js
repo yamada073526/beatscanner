@@ -38,7 +38,24 @@ export const useWorkspaceStore = create(
       macroExpanded: false, // default 折り畳み (5 原則 #1: 読み手に負担をかけない)
       macroOrder: [], // ユーザー DnD 並び替え結果 (空なら API 順を使用)
       // v62 WS-Phase2: sparkline 期間切替 (改善希望③) — frontend slice (handover §15-3)
-      sparklinePeriod: '1y', // §dogfood-round11: '1d' | '1w' | '1m' | '6m' | '1y' (1d は live change_pct を直読)
+      // 期間 selector。
+      // §dogfood-round11: '1d' | '1w' | '1m' | '6m' | '1y' (1d は live change_pct を直読)
+      // §round 6 (handover v69 dogfood 2026-05-15 後半): round 5 の「統合」を部分的に覆し再分離。
+      //   - round 5 で 1 つの state に統合 + default '1m' にしたが、dogfood で判定タブの
+      //     sparkline が 1M (21 営業日) で「荒い」と判明 (Web 開発/設計エキスパートが round 5 で
+      //     警告していた通り、sparkline と portfolio P/L は時間スケールの意味が異なる)。
+      //   - round 6: sparklinePeriod は sparkline 用に '1y' default に戻し、portfolio P/L 用に
+      //     portfolioPeriod ('1m' default) を別 state で再導入。
+      //   - 「ぎゅうぎゅう」UX 問題は UI 差別化 (smaller chips + label 変更) で取り組む。
+      sparklinePeriod: '1y',
+      // round 6: portfolio P/L 用、sparklinePeriod と独立。
+      // default '1m' = 決算 cadence (3M) と整合、Robinhood/Wealthfront 流の retention 毒回避。
+      portfolioPeriod: '1m',
+      // round 10 (handover v69 dogfood 2026-05-15): Portfolio section 数値の表示通貨。
+      // 'USD' (default) or 'JPY'。retail 日本人 × 米株 user 想定で「で、円ではいくら?」感を解消。
+      // PortfolioSummaryRow / PortfolioInsightsRow / PortfolioHoldingsList の数値のみ換算、
+      // 個別銘柄 price chart / Pane 2 list の price は USD 維持 (米株分析が主目的)。
+      displayCurrency: 'USD',
       // v62 WS-Phase2: Pane 4 inspector 表示切替 (default false、3 ペインで dogfood)
       pane4Expanded: false,
       // v63 §12-B-4: Pane 1 各セクション折り畳み (default 全 open)
@@ -92,6 +109,8 @@ export const useWorkspaceStore = create(
       toggleMacro: () => set((s) => ({ macroExpanded: !s.macroExpanded })),
       setMacroOrder: (order) => set(() => ({ macroOrder: order })),
       setSparklinePeriod: (p) => set(() => ({ sparklinePeriod: p })),
+      setPortfolioPeriod: (p) => set(() => ({ portfolioPeriod: p })),
+      setDisplayCurrency: (c) => set(() => ({ displayCurrency: c === 'JPY' ? 'JPY' : 'USD' })),
       togglePane4: () => set((s) => ({ pane4Expanded: !s.pane4Expanded })),
       toggleNav: () => set((s) => ({ navCollapsed: !s.navCollapsed })),
       toggleWatchlist: () => set((s) => ({ watchlistCollapsed: !s.watchlistCollapsed })),
@@ -130,6 +149,8 @@ export const useWorkspaceStore = create(
         macroExpanded: state.macroExpanded,
         macroOrder: state.macroOrder,
         sparklinePeriod: state.sparklinePeriod,
+        portfolioPeriod: state.portfolioPeriod,
+        displayCurrency: state.displayCurrency,
         pane4Expanded: state.pane4Expanded,
         navCollapsed: state.navCollapsed,
         watchlistCollapsed: state.watchlistCollapsed,
@@ -141,13 +162,18 @@ export const useWorkspaceStore = create(
         portfolioCollapsed: state.portfolioCollapsed,
         selectedAccountId: state.selectedAccountId,
       }),
-      version: 7,
+      version: 11,
       // v1 → v2: 新 collapse keys (nav/watchlist/holdings/observing) 追加。
       // v2 → v3: tier2Collapsed 追加 (Workspace Home Phase 0)。
       // v3 → v4: economicCalendarCollapsed 追加 (Workspace Home Phase 1)。
       // v4 → v5: moversCollapsed 追加 (Workspace Home Phase 2)。
       // v5 → v6: portfolioCollapsed 追加 (Workspace Home Phase 3)。
       // v6 → v7: selectedAccountId 追加 (Phase 2 v68 口座 switcher)。
+      // v7 → v8: portfolioPeriod 追加 (Phase A v69 §2 期間連動 portfolio performance)。
+      // v8 → v9: portfolioPeriod を sparklinePeriod に merge (round 5 合議)。
+      // v9 → v10: round 6 で再分離。sparklinePeriod default を '1y' に戻し、
+      //           portfolioPeriod ('1m') を別 state として再導入。
+      //           dogfood で「sparkline が 1M で荒い」と判明し round 5 を部分的に覆す。
       migrate: (persistedState, version) => {
         if (version < 2) {
           persistedState = {
@@ -172,6 +198,33 @@ export const useWorkspaceStore = create(
         }
         if (version < 7) {
           persistedState = { ...persistedState, selectedAccountId: null };
+        }
+        if (version < 8) {
+          persistedState = { ...persistedState, portfolioPeriod: '1m' };
+        }
+        if (version < 9) {
+          // (legacy) portfolioPeriod を sparklinePeriod に merge して廃止していた。
+          // v10 で再分離するため、ここでは sparklinePeriod 維持 (v9 → v10 で再 seed)。
+          const merged = persistedState?.portfolioPeriod || persistedState?.sparklinePeriod || '1m';
+          persistedState = { ...persistedState, sparklinePeriod: merged };
+          if (persistedState && 'portfolioPeriod' in persistedState) {
+            delete persistedState.portfolioPeriod;
+          }
+        }
+        if (version < 10) {
+          // round 6: 再分離。
+          //   - sparklinePeriod = (元の sparklinePeriod or '1y') に戻す
+          //     v9 で portfolioPeriod ('1m') が merged された user は '1m' のまま (ユーザーの直近選択を尊重)
+          //   - portfolioPeriod ('1m') を別 state として再 seed
+          persistedState = {
+            ...persistedState,
+            sparklinePeriod: persistedState?.sparklinePeriod || '1y',
+            portfolioPeriod: '1m',
+          };
+        }
+        if (version < 11) {
+          // round 10: Portfolio 表示通貨 (USD default、JPY 切替可)
+          persistedState = { ...persistedState, displayCurrency: 'USD' };
         }
         return persistedState;
       },

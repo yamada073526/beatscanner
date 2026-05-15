@@ -21,6 +21,8 @@ import CompanyLogo from '../../components/CompanyLogo.jsx';
 import { useSpyHistory } from '../../hooks/useSpyHistory.js';
 import { useHoldingsMeta } from '../../hooks/useHoldingsMeta.js';
 import { usePortfolioJudgment } from '../../hooks/usePortfolioJudgment.js';
+import { usePortfolioPerformance } from '../../hooks/usePortfolioPerformance.js';
+import { useForexRate } from '../../hooks/useForexRate.js';
 import { useAccounts } from '../../hooks/useAccounts.js';
 import { useTransactions } from '../../hooks/useTransactions.js';
 import { aggregateWithTransactions } from '../../lib/holdings.js';
@@ -73,6 +75,17 @@ const TIER2_ORDER = [
   'IBIT',                        // 仮想通貨 (現物 BTC ETF)
 ];
 
+// Phase A v69 §2: 期間連動 portfolio performance 用 period selector.
+// SPARKLINE_PERIOD_OPTIONS と内容は同形だが、用途を分離するため別定数として持つ。
+// (チャート用 sparklinePeriod と portfolio P/L 用 portfolioPeriod は workspaceStore で独立)
+const PORTFOLIO_PERIOD_OPTIONS = [
+  { key: '1d', label: '1D' },
+  { key: '1w', label: '1W' },
+  { key: '1m', label: '1M' },
+  { key: '6m', label: '6M' },
+  { key: '1y', label: '1Y' },
+];
+
 // 期間別変化率テーブル用 (RowSparkline と同じ営業日数)
 const PERIOD_TABLE = [
   { key: '1w', label: '1W', days: 5 },
@@ -110,20 +123,31 @@ function PortfolioPaneSection({ holdings, portfolioPrices, user }) {
   const { transactions } = useTransactions({ supabase, user });
   const selectedAccountId = useWorkspaceStore((s) => s.selectedAccountId);
 
-  const { effectiveHoldings, totalRealized } = useMemo(() => {
+  const { effectiveHoldings, totalRealized, totalDeposit } = useMemo(() => {
     if (!Array.isArray(transactions) || transactions.length === 0) {
-      return { effectiveHoldings: holdings || {}, totalRealized: 0 };
+      return { effectiveHoldings: holdings || {}, totalRealized: 0, totalDeposit: 0 };
     }
     const filtered = selectedAccountId
       ? transactions.filter((t) => t.account_id === selectedAccountId)
       : transactions;
     // ticker ごとに移動平均で集計
     const byTicker = {};
+    // round 5 件 2: deposit / withdraw を集計して「累計入金 (Net Deposit)」を出す。
+    // 業界 term: Sharesight/IBKR/Schwab = Net Deposit、SBI/楽天 = 累計入金。
+    // fee は cost なので含めず、純入金 = Σdeposit - Σwithdraw とする。
+    let depositSum = 0;
     for (const tx of filtered) {
       const t = (tx.ticker || '').toUpperCase();
-      if (!t) continue;
-      if (!byTicker[t]) byTicker[t] = [];
-      byTicker[t].push(tx);
+      if (t) {
+        if (!byTicker[t]) byTicker[t] = [];
+        byTicker[t].push(tx);
+      }
+      const ttype = tx.type;
+      const p = Number(tx.price);
+      if (Number.isFinite(p)) {
+        if (ttype === 'deposit') depositSum += p;
+        else if (ttype === 'withdraw') depositSum -= p;
+      }
     }
     const out = {};
     let realizedSum = 0;
@@ -138,7 +162,7 @@ function PortfolioPaneSection({ holdings, portfolioPrices, user }) {
         };
       }
     }
-    return { effectiveHoldings: out, totalRealized: realizedSum };
+    return { effectiveHoldings: out, totalRealized: realizedSum, totalDeposit: depositSum };
   }, [transactions, selectedAccountId, holdings]);
 
   const tickers = Object.keys(effectiveHoldings);
@@ -163,6 +187,8 @@ function PortfolioPaneSection({ holdings, portfolioPrices, user }) {
         prices={portfolioPrices}
         tickers={tickers}
         totalRealized={totalRealized}
+        totalDeposit={totalDeposit}
+        transactions={transactions}
       />
     </>
   );
@@ -490,9 +516,26 @@ function PortfolioEmptyStateCta() {
   );
 }
 
-function PortfolioSummaryRow({ holdings, prices, tickers, totalRealized = 0 }) {
+function PortfolioSummaryRow({ holdings, prices, tickers, totalRealized = 0, totalDeposit = 0, transactions = [] }) {
   const collapsed = useWorkspaceStore((s) => s.portfolioCollapsed);
   const toggle = useWorkspaceStore((s) => s.togglePortfolio);
+  // round 6 再分離: portfolio P/L は portfolioPeriod で独立切替。
+  // sparklinePeriod (上の Pane2MetaToggle) は判定タブ sparkline 等の用途で別 state。
+  // UI 上の差別化: 下の chips は smaller variant + 「P/L 期間」 label で視覚区別。
+  const portfolioPeriod = useWorkspaceStore((s) => s.portfolioPeriod);
+  const setPortfolioPeriod = useWorkspaceStore((s) => s.setPortfolioPeriod);
+  const selectedAccountId = useWorkspaceStore((s) => s.selectedAccountId);
+  // round 10 USD/JPY 段階再導入 step 4: CurrencyToggleRow を render。
+  // toggle UI が見えるだけ、各数値の formatter はまだ USD 固定で挙動変化なし。
+  // ここが真っ白原因なら、CurrencyToggleRow 内の Chip primitive 経由で問題あり。
+  const displayCurrency = useWorkspaceStore((s) => s.displayCurrency);
+  const setDisplayCurrency = useWorkspaceStore((s) => s.setDisplayCurrency);
+  const { rate: forexRate } = useForexRate('USD', 'JPY');
+  const { data: perfData, loading: perfLoading } = usePortfolioPerformance({
+    transactions,
+    selectedAccountId,
+    period: portfolioPeriod,
+  });
   // Phase 2.5 v68: transactions ベース集計は親 PortfolioPaneSection が担当。
   // 本コンポーネントは effectiveHoldings + totalRealized を受け取り、UI 計算に専念。
 
@@ -546,6 +589,7 @@ function PortfolioSummaryRow({ holdings, prices, tickers, totalRealized = 0 }) {
     return {
       totalValue: pricedCount > 0 ? totalValue : null,
       totalDayChange: pricedCount > 0 ? totalDayChange : null,
+      totalCost: pricedCount > 0 ? totalCost : 0,
       pnlAbs,
       pnlPct,
       count: tickers.length,
@@ -565,6 +609,13 @@ function PortfolioSummaryRow({ holdings, prices, tickers, totalRealized = 0 }) {
         ポートフォリオ
       </GroupHeader>
       {!collapsed && (
+        <CurrencyToggleRow
+          displayCurrency={displayCurrency}
+          setDisplayCurrency={setDisplayCurrency}
+          forexRate={forexRate}
+        />
+      )}
+      {!collapsed && (
         <div
           style={{
             padding: '10px 14px 12px',
@@ -576,20 +627,30 @@ function PortfolioSummaryRow({ holdings, prices, tickers, totalRealized = 0 }) {
         >
           <PortfolioStat
             label="評価額"
-            value={formatUSDCompact(totals.totalValue)}
+            value={formatCompactCurrency(totals.totalValue, displayCurrency, forexRate)}
           />
           <PortfolioStat
             label="当日変動"
-            value={formatSignedUSDCompact(totals.totalDayChange)}
+            value={formatSignedCompactCurrency(totals.totalDayChange, displayCurrency, forexRate)}
             color={getTrendColor(totals.totalDayChange)}
           />
           <PortfolioStat
             label="含み損益"
-            value={formatSignedUSDCompact(totals.pnlAbs)}
+            value={formatSignedCompactCurrency(totals.pnlAbs, displayCurrency, forexRate)}
             sub={totals.pnlPct != null ? formatSignedPct(totals.pnlPct) : null}
             color={getTrendColor(totals.pnlAbs)}
           />
         </div>
+      )}
+      {!collapsed && (
+        <PortfolioPeriodPerformanceRow
+          period={portfolioPeriod}
+          onPeriodChange={setPortfolioPeriod}
+          data={perfData}
+          loading={perfLoading}
+          displayCurrency={displayCurrency}
+          forexRate={forexRate}
+        />
       )}
       {!collapsed && (
         <PortfolioInsightsRow
@@ -599,6 +660,9 @@ function PortfolioSummaryRow({ holdings, prices, tickers, totalRealized = 0 }) {
           maxTicker={totals.maxTicker}
           maxPct={totals.maxPct}
           realizedAbs={Math.abs(totalRealized) >= 0.005 ? totalRealized : null}
+          netDeposit={totalDeposit}
+          displayCurrency={displayCurrency}
+          forexRate={forexRate}
         />
       )}
       {!collapsed && (
@@ -607,6 +671,8 @@ function PortfolioSummaryRow({ holdings, prices, tickers, totalRealized = 0 }) {
           prices={prices}
           tickers={tickers}
           onTickerClick={(t) => useWorkspaceStore.getState().setFilterTicker(t)}
+          displayCurrency={displayCurrency}
+          forexRate={forexRate}
         />
       )}
       {!collapsed && <PortfolioVerdictRollup tickers={tickers} />}
@@ -1084,11 +1150,13 @@ function EarningsCountdownChip({ ticker, days }) {
 // PR-C + PR-D 合議反映:
 //   - vs SPY (1Y): 累積リターン比較で alpha 確認
 //   - 集中リスク: 最大銘柄が 40%+ なら amber banner
-function PortfolioInsightsRow({ alphaPct, maxTicker, maxPct, realizedAbs }) {
+function PortfolioInsightsRow({ alphaPct, maxTicker, maxPct, realizedAbs, netDeposit, displayCurrency = 'USD', forexRate = null }) {
   const hasAlpha = Number.isFinite(alphaPct);
   const hasConcentrationRisk = maxTicker && maxPct >= 40;
   const hasRealized = Number.isFinite(realizedAbs);
-  if (!hasAlpha && !hasConcentrationRisk && !hasRealized) return null;
+  // round 5 件 2 + round 10 step 5c+5d: 累計入金 / 実現損益 を USD/JPY 換算対応。
+  const hasNetDeposit = Number.isFinite(netDeposit) && Math.abs(netDeposit) >= 0.5;
+  if (!hasAlpha && !hasConcentrationRisk && !hasRealized && !hasNetDeposit) return null;
   return (
     <div
       style={{
@@ -1099,8 +1167,13 @@ function PortfolioInsightsRow({ alphaPct, maxTicker, maxPct, realizedAbs }) {
       }}
     >
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {hasNetDeposit && (
+          <NetDepositChip value={netDeposit} displayCurrency={displayCurrency} forexRate={forexRate} />
+        )}
         {hasAlpha && <SPYAlphaChip alphaPct={alphaPct} />}
-        {hasRealized && <RealizedPnLChip value={realizedAbs} />}
+        {hasRealized && (
+          <RealizedPnLChip value={realizedAbs} displayCurrency={displayCurrency} forexRate={forexRate} />
+        )}
       </div>
       {hasConcentrationRisk && (
         <ConcentrationRiskBanner ticker={maxTicker} pct={maxPct} />
@@ -1109,85 +1182,65 @@ function PortfolioInsightsRow({ alphaPct, maxTicker, maxPct, realizedAbs }) {
   );
 }
 
-// Phase 2 v68: 実現損益 chip (transactions ベース、selectedAccountId フィルタ済)
-// SPY α chip と並置、色は gain/loss tokens で意味整合。
-function RealizedPnLChip({ value }) {
-  const up = value >= 0;
-  const color = up ? 'var(--color-gain)' : 'var(--color-loss)';
-  const bg = up ? 'rgba(52, 239, 129, 0.08)' : 'rgba(248, 113, 113, 0.08)';
-  const border = up ? 'rgba(52, 239, 129, 0.30)' : 'rgba(248, 113, 113, 0.30)';
-  const sign = up ? '+' : '−';
+// round 7: Insights chips を Chip primitive (sm + display variant + tone) に統一。
+// round 10 step 5c+5d: USD/JPY 換算対応。
+function NetDepositChip({ value, displayCurrency = 'USD', forexRate = null }) {
+  const isNegative = value < 0;
+  const label = isNegative ? '累計出金' : '累計入金';
   return (
-    <div
-      title="売却 + 配当 − 手数料 (移動平均 cost basis)"
-      style={{
-        display: 'inline-flex',
-        alignSelf: 'flex-start',
-        alignItems: 'center',
-        gap: 6,
-        padding: '4px 10px',
-        background: bg,
-        border: '1px solid',
-        borderColor: border,
-        borderRadius: 'var(--radius-pill)',
-        fontSize: 11,
-        fontWeight: 500,
-        color: 'var(--text-secondary)',
-      }}
+    <Chip
+      size="sm"
+      variant="display"
+      tone="muted"
+      title="入金 − 出金 (deposit / withdraw transactions の純額、手数料除く)"
+      icon={<span style={{ fontSize: 10, color: 'var(--text-muted)' }} aria-hidden="true">●</span>}
     >
-      <span style={{ color, fontSize: 10 }} aria-hidden="true">●</span>
-      <span>実現損益</span>
-      <span
-        style={{
-          color,
-          fontWeight: 600,
-          fontVariantNumeric: 'tabular-nums',
-        }}
-      >
-        {sign}{formatUSDCompact(Math.abs(value))}
+      {label}&nbsp;
+      <span style={{ color: 'var(--text-primary)', fontWeight: 600, marginLeft: 4 }}>
+        {formatCompactCurrency(Math.abs(value), displayCurrency, forexRate)}
       </span>
-    </div>
+    </Chip>
+  );
+}
+
+function RealizedPnLChip({ value, displayCurrency = 'USD', forexRate = null }) {
+  const up = value >= 0;
+  const sign = up ? '+' : '−';
+  const tone = up ? 'gain' : 'loss';
+  const color = up ? 'var(--color-gain)' : 'var(--color-loss)';
+  return (
+    <Chip
+      size="sm"
+      variant="display"
+      tone={tone}
+      title="売却 + 配当 − 手数料 (移動平均 cost basis)"
+      icon={<span style={{ color, fontSize: 10 }} aria-hidden="true">●</span>}
+    >
+      実現損益&nbsp;
+      <span style={{ color, fontWeight: 600, marginLeft: 4 }}>
+        {sign}{formatCompactCurrency(Math.abs(value), displayCurrency, forexRate)}
+      </span>
+    </Chip>
   );
 }
 
 function SPYAlphaChip({ alphaPct }) {
   const up = alphaPct >= 0;
-  const color = up ? 'var(--color-gain)' : 'var(--color-loss)';
-  const bg = up ? 'rgba(52, 239, 129, 0.08)' : 'rgba(248, 113, 113, 0.08)';
-  const border = up ? 'rgba(52, 239, 129, 0.30)' : 'rgba(248, 113, 113, 0.30)';
   const sign = up ? '+' : '';
+  const tone = up ? 'gain' : 'loss';
+  const color = up ? 'var(--color-gain)' : 'var(--color-loss)';
   return (
-    <div
-      style={{
-        display: 'inline-flex',
-        alignSelf: 'flex-start',
-        alignItems: 'center',
-        gap: 6,
-        padding: '4px 10px',
-        background: bg,
-        border: '1px solid',
-        borderColor: border,
-        borderRadius: 'var(--radius-pill)',
-        fontSize: 11,
-        fontWeight: 500,
-        color: 'var(--text-secondary)',
-      }}
+    <Chip
+      size="sm"
+      variant="display"
+      tone={tone}
+      icon={<span aria-hidden="true" style={{ color, fontSize: 10 }}>{up ? '▲' : '▼'}</span>}
     >
-      <span aria-hidden="true" style={{ color, fontSize: 10 }}>
-        {up ? '▲' : '▼'}
+      vs SPY (1Y)&nbsp;
+      <span style={{ color, fontWeight: 600, marginLeft: 4 }}>
+        {sign}{alphaPct.toFixed(2)}%
       </span>
-      <span>vs SPY (1Y)</span>
-      <span
-        style={{
-          color,
-          fontWeight: 600,
-          fontVariantNumeric: 'tabular-nums',
-        }}
-      >
-        {sign}
-        {alphaPct.toFixed(2)}%
-      </span>
-    </div>
+    </Chip>
   );
 }
 
@@ -1196,7 +1249,7 @@ function SPYAlphaChip({ alphaPct }) {
 // 反映されているか不安です」 → top 5 銘柄を ticker + shares + 現在価格で可視化。
 // 5 件超は「+N 件」表示で classic mode の PortfolioDashboard 詳細導線へ。
 // 「シンプルかつリッチ」5 原則 #3 に沿って情報密度抑制。
-function PortfolioHoldingsList({ holdings, prices, tickers, onTickerClick }) {
+function PortfolioHoldingsList({ holdings, prices, tickers, onTickerClick, displayCurrency = 'USD', forexRate = null }) {
   // 銘柄ごとのファンダメンタル 5 条件 PASS/FAIL を取得 (PortfolioVerdictRollup と同 hook、
   // 同 tickers なので backend 6h cache + frontend useEffect dedupe で実質 1 fetch)
   const { verdicts } = usePortfolioJudgment(tickers);
@@ -1261,6 +1314,8 @@ function PortfolioHoldingsList({ holdings, prices, tickers, onTickerClick }) {
           key={it.ticker}
           item={it}
           onClick={onTickerClick ? () => onTickerClick(it.ticker) : null}
+          displayCurrency={displayCurrency}
+          forexRate={forexRate}
         />
       ))}
       {remaining > 0 && (
@@ -1278,7 +1333,7 @@ function PortfolioHoldingsList({ holdings, prices, tickers, onTickerClick }) {
   );
 }
 
-function HoldingRowCompact({ item, onClick }) {
+function HoldingRowCompact({ item, onClick, displayCurrency = 'USD', forexRate = null }) {
   const { ticker, shares, price, value, pnl, judgment } = item;
   // v68 dogfood fix 2026-05-15: 評価額の色は「含み損益 (pnl)」で決定。
   // 旧 change ベースだと「評価額が赤」と「実際は利益」が衝突して直感に反する。
@@ -1301,7 +1356,7 @@ function HoldingRowCompact({ item, onClick }) {
       </span>
       <span style={{ color: valueColor, fontWeight: 600 }}>
         {Number.isFinite(value)
-          ? formatUSDCompact(value)
+          ? formatCompactCurrency(value, displayCurrency, forexRate)
           : Number.isFinite(price) && price > 0
           ? `$${price.toFixed(2)}`
           : '—'}
@@ -1472,6 +1527,145 @@ function ConcentrationRiskBanner({ ticker, pct }) {
   );
 }
 
+// round 10 (handover v69 dogfood): Portfolio section の USD/JPY toggle row.
+// 3-col grid の直前に出る 1 行で、`通貨: [USD] [JPY]` + `1 USD = ¥XXX` rate を inline 表示。
+function CurrencyToggleRow({ displayCurrency, setDisplayCurrency, forexRate }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+        padding: '6px 14px 4px',
+        flexWrap: 'wrap',
+      }}
+    >
+      <ChipGroup prefix="通貨" ariaLabel="表示通貨を切替" role="radiogroup" gap="tight">
+        <Chip
+          size="xs"
+          variant="segmented"
+          pressed={displayCurrency === 'USD'}
+          onClick={() => setDisplayCurrency('USD')}
+        >
+          USD
+        </Chip>
+        <Chip
+          size="xs"
+          variant="segmented"
+          pressed={displayCurrency === 'JPY'}
+          onClick={() => setDisplayCurrency('JPY')}
+        >
+          JPY
+        </Chip>
+      </ChipGroup>
+      {displayCurrency === 'JPY' && Number.isFinite(forexRate) && forexRate > 0 && (
+        <span
+          style={{
+            fontSize: 10,
+            color: 'var(--text-muted)',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+          title="USD/JPY 為替レート (30 分ごと更新)"
+        >
+          1 USD = ¥{forexRate.toFixed(2)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// round 6: 期間連動 P/L subordinate row
+//   - 1 行目: 「P/L 期間」 micro chips (右寄せ small variant) + P/L 数値
+//   - 2 行目: Claude haiku-4-5 が生成した 1 文 AI サマリー (3 行 clamp + title tooltip)
+//   - 上の Pane2MetaToggle (sparkline 用) と視覚的に区別するため smaller variant + 「P/L」label
+// round 10 USD/JPY 段階再導入 step 5b: P/L 数値を formatCompactCurrency に置換。
+function PortfolioPeriodPerformanceRow({ period, onPeriodChange, data, loading, displayCurrency = 'USD', forexRate = null }) {
+  const pnlAbs = data?.pnl_abs;
+  const pnlPct = data?.pnl_pct;
+  const aiSummary = data?.ai_summary || null;
+  const hasNumbers = Number.isFinite(pnlAbs);
+  const numberColor = hasNumbers ? getTrendColor(pnlAbs) : 'var(--text-muted)';
+  const numberText = hasNumbers
+    ? `${formatSignedCompactCurrency(pnlAbs, displayCurrency, forexRate)}${
+        Number.isFinite(pnlPct) ? ` (${formatSignedPct(pnlPct)})` : ''
+      }`
+    : (loading ? '計算中…' : '—');
+
+  return (
+    <div
+      style={{
+        padding: '8px 14px 12px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        borderBottom: '1px solid var(--border)',
+      }}
+    >
+      <div
+        role="group"
+        aria-label="ポートフォリオ P/L の期間を切替"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          flexWrap: 'wrap',
+        }}
+      >
+        {/* round 7: Chip xs variant で primitive 統一 */}
+        <ChipGroup prefix="P/L 期間" ariaLabel="ポートフォリオ P/L の期間を切替" role="radiogroup" gap="tight">
+          {PORTFOLIO_PERIOD_OPTIONS.map((opt) => (
+            <Chip
+              key={opt.key}
+              size="xs"
+              variant="segmented"
+              pressed={period === opt.key}
+              onClick={() => onPeriodChange(opt.key)}
+            >
+              {opt.label}
+            </Chip>
+          ))}
+        </ChipGroup>
+        <span
+          style={{
+            fontSize: 14,
+            fontWeight: 700,
+            color: numberColor,
+            fontVariantNumeric: 'tabular-nums',
+            opacity: loading ? 0.55 : 1,
+            transition: 'opacity 160ms ease',
+          }}
+        >
+          {numberText}
+        </span>
+      </div>
+      {aiSummary && (
+        <div
+          title={aiSummary}
+          style={{
+            fontSize: 12,
+            lineHeight: 1.5,
+            color: 'var(--text-secondary)',
+            // round 5 件 1 → round 6 dogfood 修正: 狭幅でも収まるよう 3 行 clamp に拡張。
+            // backend prompt も 55 字以内に絞ったので 3 行あれば最悪ケースでも全文見える。
+            // hover で title tooltip 全文表示が保険。
+            display: '-webkit-box',
+            WebkitLineClamp: 3,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            minHeight: 36,
+            opacity: loading ? 0.55 : 1,
+            transition: 'opacity 160ms ease',
+          }}
+        >
+          {aiSummary}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PortfolioStat({ label, value, sub, color }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
@@ -1535,6 +1729,28 @@ function formatSignedPct(n) {
 function getTrendColor(n) {
   if (!Number.isFinite(n) || n === 0) return 'var(--text-muted)';
   return n > 0 ? 'var(--color-gain)' : 'var(--color-loss)';
+}
+
+// round 10 (handover v69 dogfood): Portfolio 数値の通貨表示切替 helper.
+// currency='USD' で `$760K` / 'JPY' で `¥111M` のように compact 表示。
+// rate は USD/JPY (USD 1 = rate JPY)、null 時は USD fallback。
+function formatCompactCurrency(value, currency = 'USD', rate = null) {
+  if (!Number.isFinite(value)) return '—';
+  if (currency === 'JPY' && Number.isFinite(rate) && rate > 0) {
+    const jpy = value * rate;
+    const abs = Math.abs(jpy);
+    if (abs >= 1e8) return `¥${(jpy / 1e8).toFixed(2)}億`;
+    if (abs >= 1e4) return `¥${(jpy / 1e4).toFixed(1)}万`;
+    return `¥${jpy.toLocaleString('ja-JP', { maximumFractionDigits: 0 })}`;
+  }
+  // USD (default fallback)
+  return formatUSDCompact(value);
+}
+
+function formatSignedCompactCurrency(value, currency = 'USD', rate = null) {
+  if (!Number.isFinite(value)) return '—';
+  const sign = value > 0 ? '+' : value < 0 ? '-' : '';
+  return `${sign}${formatCompactCurrency(Math.abs(value), currency, rate)}`;
 }
 
 // Tier 2「世界市場」セクション。Workspace Home Phase 0 (5 体合議) の前提準備:

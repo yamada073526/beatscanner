@@ -380,6 +380,34 @@ export async function fetchPortfolioHistory(lots, period = '1y') {
   return r.json();
 }
 
+// Phase A v69 §2: 期間連動 portfolio performance (Modified Dietz + AI 1 文サマリー)
+// 戻り値: { period, from, to, start_value, end_value, net_cashflow, weighted_cashflow,
+//          pnl_abs, pnl_pct, method, ai_summary, ai_summary_error, top_ticker, top_contribution }
+// 認証必須 (Supabase JWT)、未ログイン or 0 transactions は呼ばない (上位で guard)
+export async function fetchPortfolioPerformance(transactions, period = '1m') {
+  const list = Array.isArray(transactions) ? transactions : [];
+  if (list.length === 0) return null;
+  const headers = { 'Content-Type': 'application/json', ...fmpHeaders() };
+  try {
+    const { supabase } = await import('./lib/supabase.js');
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
+    }
+  } catch { /* noop: 未ログイン or supabase 未初期化時はそのまま投げる (backend で 401) */ }
+  try {
+    const r = await fetch('/api/portfolio-performance', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ transactions: list, period }),
+    });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  }
+}
+
 // 株式分割検出: 指定銘柄の指定日近辺における close vs adjClose の比を取得。
 // 戻り値: { ticker, results: [{ date, matched_date, close, adjClose, ratio }] }
 // ratio < 0.99 = 当該日以降に分割あり → lot price を ratio 倍に補正すべき。
