@@ -4507,15 +4507,22 @@ body {
   box-shadow: 0 0 0 1px rgba(255,255,255,0.06);
 }
 /* v71 Phase 2.1 (6 体合議 / latency 改善): active 期間 chip に loading dot を出して
-   「押した瞬間 chip は反応した」を視覚化。 chart 自体は backend 反応待ち。 */
-.pd-history-period-tab.is-loading {
-  position: relative;
+   「押した瞬間 chip は反応した」を視覚化。 chart 自体は backend 反応待ち。
+   v71 Phase 3-c fix (2026-05-15): dot を absolute 配置にして tab 幅を不変に保つ
+   (旧: margin-left で inline 配置 → 切替時に SPY ボタンが折り返す layout shift)。 */
+.pd-history-period-tab {
+  position: relative;  /* dot を absolute 配置するための anchor (全 tab 共通) */
 }
 .pd-history-period-tab-dot {
-  display: inline-block;
-  margin-left: 4px;
+  position: absolute;
+  top: 1px;
+  right: 3px;
+  font-size: 12px;
+  line-height: 1;
   font-weight: 800;
+  color: var(--text-muted);
   animation: pd-history-dot-blink 900ms ease-in-out infinite;
+  pointer-events: none;
 }
 @keyframes pd-history-dot-blink {
   0%, 100% { opacity: 0.25; }
