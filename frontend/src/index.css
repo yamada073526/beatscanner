@@ -4427,6 +4427,9 @@ body {
   opacity: 0.55;
   font-size: 11px;
   margin-left: 2px;
+  /* v71 Phase 3-d round 8 (dogfood 2026-05-16): pane が狭い時に「プラス」が
+     「プラ/ス」と中黒の直前で改行されないように nowrap で固定。 */
+  white-space: nowrap;
 }
 .pd-history-delta-gain { color: var(--color-gain); }
 .pd-history-delta-loss { color: var(--color-loss); }
