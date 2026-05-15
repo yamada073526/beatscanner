@@ -19,6 +19,7 @@ import PortfolioAreaChartSlot from './PortfolioAreaChartSlot.jsx';
 import StockPriceChart from '../../components/StockPriceChart.jsx';
 import NewsPanel from '../../components/NewsPanel.jsx';
 import CompanyLogo from '../../components/CompanyLogo.jsx';
+import TickerBadge from '../../components/ui/TickerBadge.jsx';
 import { useSpyHistory } from '../../hooks/useSpyHistory.js';
 import { useHoldingsMeta } from '../../hooks/useHoldingsMeta.js';
 import { usePortfolioJudgment } from '../../hooks/usePortfolioJudgment.js';
@@ -1410,9 +1411,10 @@ function HoldingRowCompact({ item, onClick, displayCurrency = 'USD', forexRate =
   // 静的 div → button、chevron 右端、hover で背景 subtle、cursor: pointer
   const inner = (
     <>
-      <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-        {String(ticker)}
-      </span>
+      {/* v71 Phase 3-d round 7 (4 体合議 / UI/UX + Web 設計 + 金融 + Web 開発 で 4/4 Yes):
+          ticker 左に企業ロゴ追加で「自分の資産を見ている」 所有感 (Robinhood / Empower 業界標準)。
+          TickerBadge primitive 経由で他箇所と一貫、 size 20 で既存 Top Movers と density 整合。 */}
+      <TickerBadge ticker={ticker} size="sm" />
       {judgment ? <HoldingJudgmentBadge judgment={judgment} /> : <span />}
       <span style={{ color: 'var(--text-secondary)', textAlign: 'right' }}>
         {Number.isFinite(shares) && shares > 0

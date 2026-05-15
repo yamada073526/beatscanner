@@ -5821,16 +5821,16 @@ button.ds-chip[data-pressed="true"]:hover {
   text-decoration: none;
   color: inherit;
 }
+/* v71 Phase 3-d round 7 (4 体合議 / 4/4 Yes): Pane 4 NewsItem の logo + ticker
+   inline pattern と整合。 旧 chip 風 (bg + border) は廃止し、 TickerBadge primitive
+   のシンプルな inline-flex に置換。 grid 56px column に収まる font サイズ調整。 */
 .pane3-portfolio-news-ticker {
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 11px;
   color: var(--text-secondary);
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 2px 6px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
+}
+.pane3-portfolio-news-ticker .ticker-badge,
+.pane3-portfolio-news-ticker > span {
+  font-size: 11px;
 }
 .pane3-portfolio-news-title-text {
   font-size: 13px;

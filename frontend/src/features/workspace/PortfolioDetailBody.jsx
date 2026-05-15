@@ -25,6 +25,7 @@ import { usePortfolioPrices } from '../../hooks/usePortfolioPrices.js';
 import { usePortfolioEvents } from '../../hooks/usePortfolioEvents.js';
 import { fetchNewsBulk } from '../../api.js';
 import Chip from '../../components/ui/Chip.jsx';
+import TickerBadge from '../../components/ui/TickerBadge.jsx';
 
 // 既存 chart は lazy chunk 化済 (lightweight-charts heavy)。 Pane 3 visible 時のみ load。
 const PortfolioHistoryChart = lazy(() => import('../../components/PortfolioHistoryChart.jsx'));
@@ -305,7 +306,9 @@ export default function PortfolioDetailBody({ scopeId = 'all' }) {
                 rel="noopener noreferrer"
                 className="pane3-portfolio-news-link"
               >
-                <span className="pane3-portfolio-news-ticker">{item.ticker}</span>
+                {/* v71 Phase 3-d round 7 (4 体合議 4/4 Yes): Pane 4 NewsItem と整合する
+                    logo + ticker 表現に統一 (旧: 単独 ticker chip)。 設計負債 1 件解消。 */}
+                <TickerBadge ticker={item.ticker} size="xs" className="pane3-portfolio-news-ticker" />
                 <span className="pane3-portfolio-news-title-text">{item.title}</span>
                 <span className="pane3-portfolio-news-time">{timeAgo(item.publishedDate || item.publishedAt)}</span>
               </a>

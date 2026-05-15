@@ -209,6 +209,11 @@ export const TICKER_TV_SLUGS = {
   FTNT: 'fortinet',
   ANET: 'arista-networks',
   AVGO_alt: 'broadcom',
+
+  // ── 日本株 (Yahoo Finance ticker、 .T サフィックスは normalize で _T に変換) ──
+  // v71 Phase 3-d round 7 (4 体合議 / Web 開発エキスパート指摘): 日本株は FMP に無く
+  // 頭文字円「7」 など識別不能になるため、 TradingView slug を明示マップ。
+  '7203_T': 'toyota-motor',
 };
 
 // ティッカー（"BRK.B" 等のドット入り）正規化キー
