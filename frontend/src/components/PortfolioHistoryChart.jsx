@@ -52,16 +52,23 @@ const CHART_PALETTE = {
              dark:  { line: '#38bdf8', top: 'rgba(56,189,248,0.40)', bottom: 'rgba(56,189,248,0.02)' } },
 };
 
-// v71 Phase 3-c: events lane marker 用 hex (lightweight-charts は hex 文字列を要求するため allowed exception)
+// v71 Phase 3-c: events lane marker 用 rgba (lightweight-charts は色文字列を要求するため allowed exception)
 // gain / loss / warning / brand cyan のいずれとも衝突しない中立色 (CLAUDE.md「投資業界の色ルール」厳守)
+// dogfood 2026-05-15: dark theme で indigo 500 は背景と同化して読めなかった
+// → theme-aware (light = dark 系トーン / dark = light 系トーン) で contrast 確保。
 const EVENT_MARKER_PALETTE = {
-  earnings: 'rgba(245, 158, 11, 0.85)',  // amber warning (既存 Phase 3-a)
-  exDiv:    'rgba(99, 102, 241, 0.85)',  // indigo (新規 Phase 3-c)
+  earnings: { light: 'rgba(217, 119, 6, 0.95)',  dark: 'rgba(251, 191, 36, 0.95)'  },  // amber-600 / amber-400
+  exDiv:    { light: 'rgba(79, 70, 229, 0.95)',  dark: 'rgba(165, 180, 252, 0.95)' },  // indigo-600 / indigo-300
 };
 
 function pickPalette(status, isDark) {
   const p = CHART_PALETTE[status] || CHART_PALETTE.neutral;
   return isDark ? p.dark : p.light;
+}
+
+function pickEventColor(kind, isDark) {
+  const c = EVENT_MARKER_PALETTE[kind];
+  return isDark ? c.dark : c.light;
 }
 
 // §11-B-7-B Phase A: portfolio period に対応する SPY history の period mapping
@@ -87,6 +94,7 @@ export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null 
     // chart の表示期間最終日 + future earnings (max 90 日先) を marker 化
     const lastDate = series[series.length - 1]?.date;
     if (!lastDate) return [];
+    const isDark = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark';
     const ahead = new Date(lastDate);
     ahead.setDate(ahead.getDate() + 90);
     const aheadIso = ahead.toISOString().slice(0, 10);
@@ -100,7 +108,7 @@ export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null 
       out.push({
         time: e.date,
         position: 'aboveBar',
-        color: EVENT_MARKER_PALETTE.earnings,
+        color: pickEventColor('earnings', isDark),
         shape: 'circle',
         text: `📅 ${t}`,
       });
@@ -118,6 +126,7 @@ export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null 
     const firstDate = series[0]?.date;
     const lastDate = series[series.length - 1]?.date;
     if (!firstDate || !lastDate) return [];
+    const isDark = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark';
     const uniqTickers = [...new Set(lots.map((l) => (l.ticker || '').toUpperCase()).filter(Boolean))];
     const out = [];
     for (const t of uniqTickers) {
@@ -131,7 +140,7 @@ export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null 
         out.push({
           time: d.date,
           position: 'belowBar',
-          color: EVENT_MARKER_PALETTE.exDiv,
+          color: pickEventColor('exDiv', isDark),
           shape: 'square',
           text: `💰 ${t}${amtTxt}`,
         });
