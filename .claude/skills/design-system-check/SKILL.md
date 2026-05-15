@@ -63,7 +63,52 @@ grep -rEn ':has\([^)]*is-arriving' frontend/src/
 
 該当があれば exit 2 + design_recipes.md §C-1 / §C-2 / §C-4 の該当節を案内。
 
-### 4. 本番バンドル検査 (deploy 後)
+### 4. Chip primitive 違反検査 (round 7 + round 8 + round 9 追加)
+
+round 9 (6 体合議): rollup と個別 item の階層分離は `<ChipGroup.Separator />` で実装。
+rollup chip は `role='rollup'` を付け、直後に Separator を置く。
+
+```bash
+# round 9: rollup + 個別 item が divider なしで並んでいる疑い
+# isRollup フラグ直近に Chip があり、次の Chip までに Separator が無いケース
+grep -rEnA3 "isRollup.*true" frontend/src/ \
+  | grep -vE "ChipGroup\.Separator|components/ui/Chip\.jsx"
+```
+
+
+handover v69 round 7 で `frontend/src/components/ui/Chip.jsx` に chip 系 UI を SSOT 化済。
+round 8 で `add` variant 追加、add-action は必ず `<Chip variant="add">` 経由。
+inline style + `.ds-chip` class の組み合わせで新規 chip を作るパターンは禁止。
+
+```bash
+# inline style で chip っぽい要素を作っている疑い
+# - className="ds-chip" + style 内 padding が同居している箇所
+grep -rEnB1 'className=`?["{][^"`}]*ds-chip[^"`}]*["`}]' frontend/src/ \
+  | grep -E 'padding:\s*[0-9]' \
+  | grep -vE 'components/ui/Chip\.jsx'
+
+# .ds-chip class を直接書いている (新 Chip primitive 未使用)
+grep -rEn 'className=`?["{][^"`}]*ds-chip' frontend/src/ \
+  | grep -vE 'components/ui/Chip\.jsx|features/judgment/primitives/Chip\.jsx'
+
+# round 8: Plus icon を <Chip variant="add"> 経由でなく使っている疑い
+# (lucide Plus を import している file で Chip variant="add" を import していない)
+grep -rEn 'lucide-react.*Plus|<Plus\s' frontend/src/ \
+  | grep -vE 'components/ui/Chip\.jsx' \
+  | grep -vEf <(grep '^ALLOWED-PLUS-ICON:' docs/references/elevation_scale.md | awk '{print $2}')
+
+# round 8: dashed border + transparent bg + circular の inline (add chip 候補)
+grep -rEnB1 "border.*dashed.*border" frontend/src/ \
+  | grep -E "background:\s*'?transparent" \
+  | grep -vE 'components/ui/Chip\.jsx'
+```
+
+該当があれば warn (新規 chip-like / add-action UI を作る場合は必ず `<Chip>` primitive 経由)、
+`memory/chip_primitive_canonical.md` を案内。
+
+許可例外は `docs/references/elevation_scale.md` に `ALLOWED-CHIP:` / `ALLOWED-PLUS-ICON:` 行で whitelist。
+
+### 5. 本番バンドル検査 (deploy 後)
 
 ```bash
 BUNDLE_HASH=$(curl -s https://beatscanner-production.up.railway.app/ | grep -oE 'index-[A-Za-z0-9_-]+\.css' | sort -u)
@@ -73,7 +118,7 @@ curl -s "https://beatscanner-production.up.railway.app/assets/${BUNDLE_HASH}" > 
 # (vite が token を inline 展開する場合は許可、grep の matcher を調整)
 ```
 
-### 5. 「Aman/Ritz-Carlton ロビー級」5 基準の自己レビュー
+### 6. 「Aman/Ritz-Carlton ロビー級」5 基準の自己レビュー
 
 ユーザーに以下 5 点を提示して self-check を促す:
 

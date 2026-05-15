@@ -1,5 +1,5 @@
 import React from 'react';
-import Chip from '../../primitives/Chip.jsx';
+import Chip from '../../../../components/ui/Chip.jsx';
 import { useJudgment } from '../../state/JudgmentContext.jsx';
 
 const GROUP_OPTIONS = [
@@ -32,11 +32,15 @@ export default function JudgmentFilters() {
         borderBottom: '1px solid var(--border)',
       }}
     >
+      {/* round 7: 新 Chip primitive (md filter variant) に migrate。
+          tone は accent でなく pressed prop で表現、変換テーブル不要に。 */}
       <div style={{ display: 'flex', gap: 4 }} role="group" aria-label="グループ">
         {GROUP_OPTIONS.map((opt) => (
           <Chip
             key={opt.key}
-            tone={filters.group === opt.key ? 'accent' : 'muted'}
+            size="md"
+            variant="filter"
+            pressed={filters.group === opt.key}
             onClick={() => setFilters({ ...filters, group: opt.key })}
           >
             {opt.label}
@@ -48,7 +52,9 @@ export default function JudgmentFilters() {
         {SORT_OPTIONS.map((opt) => (
           <Chip
             key={opt.key}
-            tone={filters.sort === opt.key ? 'accent' : 'muted'}
+            size="md"
+            variant="filter"
+            pressed={filters.sort === opt.key}
             onClick={() => setFilters({ ...filters, sort: opt.key })}
           >
             {opt.label}

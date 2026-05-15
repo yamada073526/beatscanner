@@ -1,6 +1,6 @@
 import React from 'react';
 import Card from '../../primitives/Card.jsx';
-import Chip from '../../primitives/Chip.jsx';
+import Chip from '../../../../components/ui/Chip.jsx';
 
 /**
  * Hero section. design_system.md §B-2 Display tier 28-32px, fw600, -0.02em, lh1.1.
@@ -80,7 +80,7 @@ export default function Hero({ ticker, companyName, verdict = 'unknown', period 
           )}
         </div>
         <div style={{ flexShrink: 0 }}>
-          <Chip tone={tone}>{verdictLabel}</Chip>
+          <Chip size="md" variant="display" tone={tone}>{verdictLabel}</Chip>
         </div>
       </div>
     </Card>

@@ -183,8 +183,36 @@ ALLOWED-IMPORTANT: frontend/src/index.css:110  # scroll-behavior
 
 ---
 
+---
+
+## ALLOWED-CHIP (round 7 追加)
+
+Chip primitive 違反検査 (design-system-check skill §4) の whitelist。
+`<Chip>` primitive ([components/ui/Chip.jsx](../../frontend/src/components/ui/Chip.jsx)) を経由しない `.ds-chip` 直書きを許可する例外を列挙する。
+
+通常は **空であるべき** (全 chip は primitive 経由が原則)。
+やむを得ず inline chip を書く場合は、その都度 PR で議論 + 本リストに追加 + 理由コメント。
+
+```
+# ALLOWED-CHIP: <file:line>  # 理由
+(現在: 空)
+```
+
+## ALLOWED-PLUS-ICON (round 8 追加)
+
+lucide-react `Plus` icon は原則 `<Chip variant="add">` 経由で使う (add-action SSOT)。
+add 用途以外で Plus icon を使う場合の例外を列挙する。
+
+```
+# ALLOWED-PLUS-ICON: <file:line>  # 理由
+(現在: 空)
+```
+
+---
+
 ## 関連
 
 - `design_system.md` — token 定義 (上流)
 - `design_recipes.md §C-3 / §C-4` — !important / 禁止パターン
 - `.claude/hooks/pre_edit_trust_cliff.sh` — hook の参照実装パターン
+- `memory/chip_primitive_canonical.md` — Chip primitive SSOT (round 7)

@@ -5219,6 +5219,210 @@ button.ds-chip:active {
   }
 }
 
+/* ============================================================
+ * §Chip Primitive (4 体合議 round 7)
+ * SSOT: frontend/src/components/ui/Chip.jsx
+ *
+ * 全 chip は <Chip size variant tone pressed> 経由で描画する。
+ * 値の SSOT は本セクション。inline style 追加は禁止。
+ *
+ * specificity: button.ds-chip[data-pressed="true"] = (0,2,1)、
+ *              button.ds-chip:hover = (0,2,1)。同等。
+ * → CSS 内で [data-pressed="true"] を :hover の後に置き、pressed が hover に勝つよう順序勝負。
+ * ============================================================ */
+
+/* base (size 非依存) */
+.ds-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill, 9999px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: default;
+  white-space: nowrap;
+}
+button.ds-chip { cursor: pointer; }
+
+/* size scale (Aman 級 3 段、厳密 SSOT) */
+.ds-chip[data-size="xs"] {
+  font-size: 10px;
+  line-height: 14px;
+  padding: 1px 6px;
+  min-height: 18px;
+  min-width: 22px;
+}
+.ds-chip[data-size="sm"] {
+  font-size: 11px;
+  line-height: 16px;
+  padding: 2px 10px;
+  min-height: 22px;
+  min-width: 24px;
+}
+.ds-chip[data-size="md"] {
+  font-size: 12px;
+  line-height: 18px;
+  padding: 4px 14px;
+  min-height: 28px;
+  min-width: 32px;
+}
+
+/* tone (display variant 中心、status badge 用) */
+.ds-chip[data-tone="muted"] {
+  border-color: var(--border);
+}
+.ds-chip[data-tone="accent"] {
+  border-color: var(--border);
+}
+.ds-chip[data-tone="gain"] {
+  background: rgba(52, 239, 129, 0.08);
+  border-color: rgba(52, 239, 129, 0.30);
+}
+.ds-chip[data-tone="loss"] {
+  background: rgba(248, 113, 113, 0.08);
+  border-color: rgba(248, 113, 113, 0.30);
+}
+.ds-chip[data-tone="warning"] {
+  background: rgba(245, 158, 11, 0.10);
+  border-color: rgba(245, 158, 11, 0.30);
+}
+
+/* variant base styling */
+.ds-chip[data-variant="display"] {
+  /* display chip = badge、cursor default、tone bg はそのまま使う */
+  cursor: default;
+}
+.ds-chip[data-variant="switcher"] {
+  /* switcher = AccountSwitcher 用 large pill、border ベース */
+  border-color: var(--border);
+}
+
+/* round 8 (6 体合議): add variant = add-action trigger.
+   dashed border + transparent bg、hover で cyan tint。
+   children あり = label pill、children なし = icon-only circular (data-icon-only="true"). */
+.ds-chip[data-variant="add"] {
+  border-style: dashed;
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.ds-chip[data-variant="add"][data-icon-only="true"] {
+  border-radius: 50%;
+  padding: 0;
+  min-width: 0;
+}
+.ds-chip[data-variant="add"][data-icon-only="true"][data-size="xs"] {
+  width: 22px;
+  height: 22px;
+}
+.ds-chip[data-variant="add"][data-icon-only="true"][data-size="sm"] {
+  width: 26px;
+  height: 26px;
+}
+.ds-chip[data-variant="add"][data-icon-only="true"][data-size="md"] {
+  width: 32px;
+  height: 32px;
+}
+/* hover: dashed → solid + cyan tint (Aman 級「触れたときの驚き」) */
+button.ds-chip[data-variant="add"]:hover {
+  border-style: solid !important;
+  border-color: rgba(56, 189, 248, 0.50) !important;
+  background: rgba(56, 189, 248, 0.08) !important;
+  color: rgb(14, 165, 233) !important;
+}
+[data-theme="dark"] button.ds-chip[data-variant="add"]:hover {
+  background: rgba(56, 189, 248, 0.14) !important;
+  color: rgb(56, 189, 248) !important;
+}
+
+/* pressed (active selected) — :hover の後に置いて勝つ */
+.ds-chip[data-pressed="true"] {
+  font-weight: 600;
+  border-color: rgba(56, 189, 248, 0.70);
+  background: rgba(56, 189, 248, 0.12);
+  color: rgb(14, 165, 233);
+}
+.ds-chip[data-variant="filter"][data-pressed="true"] {
+  background: rgba(56, 189, 248, 0.18);
+}
+.ds-chip[data-variant="switcher"][data-pressed="true"] {
+  background: var(--bg-elevated);
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+[data-theme="dark"] .ds-chip[data-pressed="true"] {
+  color: rgb(56, 189, 248);
+}
+
+/* hover override for pressed: pressed は cyan のまま、hover で背景濃く. */
+button.ds-chip[data-pressed="true"]:hover {
+  background: rgba(56, 189, 248, 0.22) !important;
+  color: rgb(14, 165, 233) !important;
+}
+[data-theme="dark"] button.ds-chip[data-pressed="true"]:hover {
+  background: rgba(56, 189, 248, 0.30) !important;
+  color: rgb(56, 189, 248) !important;
+}
+
+/* ChipGroup wrapper */
+.ds-chip-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ds-chip-group[data-gap="tight"] { gap: 3px; }
+.ds-chip-group[data-gap="loose"] { gap: 8px; }
+.ds-chip-group__prefix {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+
+/* round 9 (6 体合議): ChipGroup.Separator = rollup と個別 item の階層境界。
+   1px hairline、Aman 級「線が主役にならない」設計 (Linear/Figma 準拠)。 */
+.ds-chip-group__separator {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 4px;
+  flex-shrink: 0;
+  align-self: center;
+  border-radius: 1px;
+}
+
+/* round 9: rollup chip は font-weight 600 で「上流階層」を ambient cue。
+   variant prop 拡張せず、data-role で CSS 経由で吸収 (SSOT 維持)。 */
+.ds-chip[data-role="rollup"] {
+  font-weight: 600;
+}
+
+/* ChipBar (Pane 上端の grey bar) */
+.ds-chip-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+  flex-wrap: wrap;
+}
+.ds-chip-bar.is-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
 /* §round20 Pane 4/5 ヘッダー帯 (Aman 級スリム): 左 2px cyan accent line.
    背景透明、bottom border は 1px hairline、タイトル + 更新時刻 1 行統合 (JSX 側). */
 .ws-pane4-header {
