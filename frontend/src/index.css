@@ -5423,6 +5423,32 @@ button.ds-chip[data-pressed="true"]:hover {
   gap: 4px;
 }
 
+/* Phase B (handover v70 §2-C): Pane 2 AreaChart slot.
+   PortfolioSummaryRow の 3-col grid と PortfolioPeriodPerformanceRow の間に
+   挟まる薄い chart 帯 (高さ ~190px = chart 160 + callout 30)。 */
+.pane2-areachart-slot {
+  padding: 8px 14px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pane2-areachart-callout {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.pane2-areachart-note {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+.pane2-areachart-canvas {
+  width: 100%;
+  height: 160px;
+}
+
 /* §round20 Pane 4/5 ヘッダー帯 (Aman 級スリム): 左 2px cyan accent line.
    背景透明、bottom border は 1px hairline、タイトル + 更新時刻 1 行統合 (JSX 側). */
 .ws-pane4-header {

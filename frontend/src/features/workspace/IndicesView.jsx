@@ -15,6 +15,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import Chip, { ChipBar, ChipGroup, ChipSeparator } from '../../components/ui/Chip.jsx';
+import PortfolioAreaChartSlot from './PortfolioAreaChartSlot.jsx';
 import StockPriceChart from '../../components/StockPriceChart.jsx';
 import NewsPanel from '../../components/NewsPanel.jsx';
 import CompanyLogo from '../../components/CompanyLogo.jsx';
@@ -641,6 +642,15 @@ function PortfolioSummaryRow({ holdings, prices, tickers, totalRealized = 0, tot
             color={getTrendColor(totals.pnlAbs)}
           />
         </div>
+      )}
+      {!collapsed && (
+        <PortfolioAreaChartSlot
+          transactions={transactions}
+          selectedAccountId={selectedAccountId}
+          period={portfolioPeriod}
+          displayCurrency={displayCurrency}
+          forexRate={forexRate}
+        />
       )}
       {!collapsed && (
         <PortfolioPeriodPerformanceRow

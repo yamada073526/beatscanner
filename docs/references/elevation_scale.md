@@ -91,6 +91,8 @@ ALLOWED-HEX: #dc2626   # --color-loss (light)
 ALLOWED-HEX: #f59e0b   # --color-warning
 ALLOWED-HEX: #34ef81   # --color-gain (dark)
 ALLOWED-HEX: #f87171   # --color-loss (dark)
+ALLOWED-HEX: #0ea5e9   # --color-accent (light) — lightweight-charts palette neutral 系 (PortfolioHistoryChart / PortfolioAreaChartSlot)
+ALLOWED-HEX: #38bdf8   # --color-accent (dark) — lightweight-charts palette neutral 系 (PortfolioHistoryChart / PortfolioAreaChartSlot)
 ALLOWED-HEX: #d4af37   # 保有銘柄ゴールドアクセント (ticker-row-v2 / ws-judgment-row)
 ALLOWED-HEX: #f4cd5d   # 保有銘柄ゴールドアクセント highlight (gradient mid)
 

@@ -11,6 +11,8 @@ import { fetchPortfolioHistory } from '../api.js';
 export function usePortfolioHistory(lots, period = '1y') {
   const [series, setSeries] = useState([]);
   const [warnings, setWarnings] = useState([]);
+  const [bestTicker, setBestTicker] = useState(null);
+  const [worstTicker, setWorstTicker] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -49,12 +51,17 @@ export function usePortfolioHistory(lots, period = '1y') {
         if (cancelled) return;
         setSeries(data?.series || []);
         setWarnings(Array.isArray(data?.warnings) ? data.warnings : []);
+        // Phase B-1: best / worst ticker (期間中の price-only contribution)
+        setBestTicker(data?.best_ticker || null);
+        setWorstTicker(data?.worst_ticker || null);
         setError(null);
       } catch (e) {
         if (!cancelled) {
           setError(e);
           setSeries([]);
           setWarnings([]);
+          setBestTicker(null);
+          setWorstTicker(null);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -63,7 +70,7 @@ export function usePortfolioHistory(lots, period = '1y') {
     return () => { cancelled = true; };
   }, [key]);  // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { series, warnings, loading, error, period };
+  return { series, warnings, bestTicker, worstTicker, loading, error, period };
 }
 
 /**

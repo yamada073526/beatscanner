@@ -1535,12 +1535,46 @@ async def portfolio_history(
             "total_return_pct": round(total_return_pct, 4),
         })
 
+    # Phase B-1: 期間中の best / worst 銘柄を price-only attribution で算出。
+    # contribution_t = current_shares_t × (end_close_t − start_close_t)
+    # 期間内 buy は current_shares に含まれるため、 短期保有銘柄でも end - period_open
+    # の値動きで評価される (= 「今ポジションを取っているなら期間中いくら稼いだか」)。
+    # Modified Dietz 並の strict cashflow 調整は B-3 で改善予定。
+    contributions: dict[str, float] = {}
+    period_from_iso = period_from.isoformat()
+    for t in tickers:
+        cmap = closes_by_ticker.get(t) or {}
+        if not cmap:
+            continue
+        cur_shares = sum(l["shares"] for l in lots_by_ticker.get(t, []) or [])
+        if cur_shares <= 0:
+            continue
+        sorted_dates = sorted(cmap.keys())
+        start_close = next((cmap[d] for d in sorted_dates if d >= period_from_iso), None)
+        end_close = cmap[sorted_dates[-1]] if sorted_dates else None
+        if start_close is None or end_close is None:
+            continue
+        contributions[t] = round(cur_shares * (end_close - start_close), 2)
+
+    best_ticker_obj: dict | None = None
+    worst_ticker_obj: dict | None = None
+    if contributions:
+        best_sym = max(contributions, key=lambda k: contributions[k])
+        worst_sym = min(contributions, key=lambda k: contributions[k])
+        if abs(contributions[best_sym]) >= 0.01:
+            best_ticker_obj = {"symbol": best_sym, "contribution": contributions[best_sym]}
+        # 単一銘柄ポートフォリオ or best == worst のケースは worst を出さない
+        if best_sym != worst_sym and abs(contributions[worst_sym]) >= 0.01:
+            worst_ticker_obj = {"symbol": worst_sym, "contribution": contributions[worst_sym]}
+
     return {
         "series": series,
         "warnings": warnings,
         "from": period_from.isoformat(),
         "to": today.isoformat(),
         "period": period,
+        "best_ticker": best_ticker_obj,
+        "worst_ticker": worst_ticker_obj,
     }
 
 
