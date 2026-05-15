@@ -302,19 +302,29 @@ export default function PortfolioHistoryChart({ lots = [] }) {
               <span className="pd-history-delta-pct"> 累積リターン</span>
             </span>
           )}
-          {/* §11-D Fix: drift 警告 chip (Web 開発 agent #2 + UI/UX agent #3) */}
+          {/* §11-D Fix: drift 警告 chip。 v71 Phase 2.1 (6 体合議 / 金融 + UI/UX): 文言を
+              「乖離」 → 「市場価格と差があります」に変更。 user 行動可能化 (分割 / 配当再投資 /
+              手入力ミスのいずれか + 税務申告で約定報告書確認推奨)。 Empower の Cost basis
+              date mismatch chip と同思想で、 amber warning → neutral info のトーン。 */}
           {Array.isArray(warnings) && warnings.length > 0 && (
             <span
               className="pd-history-warning-chip"
-              title={warnings
-                .slice(0, 5)
-                .map((w) => `${w.ticker}: 取得単価 $${w.user_price} は ${w.trade_date} 終値 $${w.market_close} と ${w.drift_pct}% 乖離`)
-                .join('\n')}
+              title={[
+                `取得単価が購入日の市場終値と差があります (${warnings.length} 件)`,
+                '原因の可能性: 株式分割 / 配当再投資 / 手入力時の typo',
+                '税務申告では約定報告書をご確認ください。',
+                '',
+                ...warnings.slice(0, 5).map((w) =>
+                  `${w.ticker}: 取得単価 $${w.user_price} vs ${w.trade_date} 終値 $${w.market_close} (${w.drift_pct}% 差)`
+                ),
+              ].join('\n')}
             >
-              ⚠ 取得単価と購入日が乖離 ({warnings.length} 件)
+              ⓘ 取得単価が市場価格と差あり ({warnings.length} 件)
             </span>
           )}
-          {/* §11-B-7-B Phase A: SPY 比較 alpha バッジ (Robinhood 流の主見出し右) */}
+          {/* §11-B-7-B Phase A: SPY 比較 alpha バッジ。 v71 Phase 2.1 (6 体合議 / 金融):
+              「vs SPY -X%」だけだと alpha (= portfolio − SPY) の意味が retail に伝わらない
+              ため、 期間 + Alpha 用語を併記 (Bloomberg PORT 流)。 */}
           {showSpy && Number.isFinite(spyAlpha.alphaPct) && (
             <span
               className={`bs-spy-badge ${
@@ -322,12 +332,13 @@ export default function PortfolioHistoryChart({ lots = [] }) {
                 : spyAlpha.alphaPct < -0.5 ? 'lose'
                 : 'neutral'
               }`}
-              title={`あなた: ${fmtSignedPct(spyAlpha.portfolioPct)} / SPY: ${fmtSignedPct(spyAlpha.spyPct)}`}
+              title={`Alpha = あなたのリターン − 同期間 S&P500 ETF のリターン\nあなた: ${fmtSignedPct(spyAlpha.portfolioPct)} / SPY: ${fmtSignedPct(spyAlpha.spyPct)}\nプラスなら市場平均より優位、 マイナスなら劣位`}
             >
               <span className="bs-spy-badge-arrow">
                 {spyAlpha.alphaPct > 0.5 ? '▲' : spyAlpha.alphaPct < -0.5 ? '▼' : '＝'}
               </span>
-              vs SPY {fmtSignedPct(spyAlpha.alphaPct)}
+              vs SPY ({period.toUpperCase()}) {fmtSignedPct(spyAlpha.alphaPct)}
+              <span className="bs-spy-badge-suffix"> α</span>
             </span>
           )}
         </div>

@@ -1910,6 +1910,15 @@ body {
   font-size: 11px;
   opacity: 0.7;
 }
+/* v71 Phase 2.1 (6 体合議 / 金融): α (alpha) サフィックスを薄く併記して
+   Bloomberg PORT 流の「α = 超過収益」用語を retail に学習させる。 */
+.bs-spy-badge-suffix {
+  margin-left: 3px;
+  font-weight: 500;
+  opacity: 0.6;
+  font-size: 10px;
+  font-style: italic;
+}
 
 /* ── 統合 filter bar (Linear 流): WatchlistSection 用 ── */
 .bs-filter-bar {
