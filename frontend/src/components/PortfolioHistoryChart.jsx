@@ -337,10 +337,13 @@ export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null 
           areaSeries.setData(rawData);
         }
 
-        // v71 Phase 3-a/3-c: events lane marker を chart 上に重ねる (lightweight-charts setMarkers API)
-        // earnings (aboveBar amber circle 📅) + ex-div (belowBar indigo square 💰) を時系列順 merge 済
-        if (allMarkers.length > 0 && typeof areaSeries.setMarkers === 'function') {
-          try { areaSeries.setMarkers(allMarkers); } catch { /* noop: API 互換問題 */ }
+        // v71 Phase 3-a/3-c: events lane marker を chart 上に重ねる。
+        // lightweight-charts v5 で series.setMarkers() は削除され、 createSeriesMarkers()
+        // primitive に migration された (2026-05-15 dogfood で v71 Phase 3-a も silent fail
+        // していたことが判明。 typeof setMarkers === 'function' が常に false で skip)。
+        // earnings (aboveBar amber circle 📅) + ex-div (belowBar indigo square 💰) を時系列順 merge 済。
+        if (allMarkers.length > 0 && typeof lc.createSeriesMarkers === 'function') {
+          try { lc.createSeriesMarkers(areaSeries, allMarkers); } catch { /* noop: API 互換問題 */ }
         }
 
         chart.timeScale().fitContent();
