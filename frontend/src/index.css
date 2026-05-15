@@ -4420,6 +4420,14 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .pd-history-delta-pct { font-weight: 500; opacity: 0.85; }
+/* v71 Phase 2.2 (dogfood 質問): chart 色の意味 (緑=プラス / 赤=マイナス / 青=動かず)
+   を chip 末尾の micro-legend で常時可視化。 「指数に勝った/負けた」と読まれる誤解防止。 */
+.pd-history-delta-legend {
+  font-weight: 400;
+  opacity: 0.55;
+  font-size: 11px;
+  margin-left: 2px;
+}
 .pd-history-delta-gain { color: var(--color-gain); }
 .pd-history-delta-loss { color: var(--color-loss); }
 .pd-history-delta-neutral { color: var(--text-muted); }
@@ -5535,6 +5543,23 @@ button.ds-chip[data-pressed="true"]:hover {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+}
+/* v71 Phase 3-b (6 体合議 / events lane MVP): 直近 |Δ%| ≥ 3% 銘柄を chip ribbon。
+   Bloomberg PORT Top Movers の簡易版、 「今日のポートフォリオで何が動いたか」を
+   chart の上に出して 2 秒で伝える。 */
+.pane3-portfolio-movers {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px 0 0;
+}
+.pane3-portfolio-movers-caption {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  margin-right: 2px;
 }
 .pane3-portfolio-empty {
   padding: 24px 16px;

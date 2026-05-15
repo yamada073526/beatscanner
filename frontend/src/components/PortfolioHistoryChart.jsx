@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePortfolioHistory, computeTWR, indexBenchmark } from '../hooks/usePortfolioHistory.js';
 import { useSpyHistory } from '../hooks/useSpyHistory.js';
+import { useEarningsCalendar } from '../hooks/useEarningsCalendar.js';
 import { fetchPortfolioHistory } from '../api.js';
 
 const PERIODS = [
@@ -69,6 +70,38 @@ export default function PortfolioHistoryChart({ lots = [] }) {
   const [showSpy, setShowSpy] = useState(true);  // §11-B-7-B: SPY overlay default ON
   const { series, warnings, loading } = usePortfolioHistory(lots, period);
   const { points: spyPoints } = useSpyHistory(PERIOD_TO_SPY[period] || '3mo');
+
+  // v71 Phase 3-a (6 体合議 / 金融エキスパート events lane 必須): 保有銘柄の
+  // 今後の決算日を chart 上に縦線 marker で表示。 Bloomberg PORT 流の events ribbon
+  // 簡易版 (ex-div / 8-K は Phase 3-c で追加予定)。
+  const { earningsBySymbol } = useEarningsCalendar();
+  const earningsMarkers = useMemo(() => {
+    if (!earningsBySymbol || !Array.isArray(series) || series.length === 0) return [];
+    // chart の表示期間最終日 + future earnings (max 90 日先) を marker 化
+    const lastDate = series[series.length - 1]?.date;
+    if (!lastDate) return [];
+    const ahead = new Date(lastDate);
+    ahead.setDate(ahead.getDate() + 90);
+    const aheadIso = ahead.toISOString().slice(0, 10);
+    const uniqTickers = [...new Set(lots.map((l) => (l.ticker || '').toUpperCase()).filter(Boolean))];
+    const out = [];
+    for (const t of uniqTickers) {
+      const e = earningsBySymbol.get(t);
+      if (!e?.date) continue;
+      if (e.date <= lastDate) continue;     // 過去 (= series 末以前) は除外
+      if (e.date > aheadIso) continue;       // 90 日超は除外
+      out.push({
+        time: e.date,
+        position: 'aboveBar',
+        color: 'rgba(245, 158, 11, 0.85)',  // --color-warning
+        shape: 'circle',
+        text: `📅 ${t}`,
+      });
+    }
+    // chart は時系列順 marker を期待する
+    out.sort((a, b) => (a.time < b.time ? -1 : 1));
+    return out;
+  }, [earningsBySymbol, series, lots]);
 
   // v71 Phase 2.1 (6 体合議 / latency 改善):
   // 期間 chip 切替の体感速度改善のため、 mount 時 + lots 変更時に他期間も
@@ -260,6 +293,11 @@ export default function PortfolioHistoryChart({ lots = [] }) {
           areaSeries.setData(rawData);
         }
 
+        // v71 Phase 3-a: 決算日 marker を chart 上に重ねる (lightweight-charts setMarkers API)
+        if (earningsMarkers.length > 0 && typeof areaSeries.setMarkers === 'function') {
+          try { areaSeries.setMarkers(earningsMarkers); } catch { /* noop: API 互換問題 */ }
+        }
+
         chart.timeScale().fitContent();
       }
 
@@ -275,7 +313,7 @@ export default function PortfolioHistoryChart({ lots = [] }) {
       seriesRef.current = null;
       spySeriesRef.current = null;
     };
-  }, [series, twrSeries, status, spyPoints, showSpy]);
+  }, [series, twrSeries, status, spyPoints, showSpy, earningsMarkers]);
 
   // ── リサイズ追従 ──
   useEffect(() => {
@@ -296,10 +334,25 @@ export default function PortfolioHistoryChart({ lots = [] }) {
           {periodReturn && (
             <span
               className={`pd-history-delta pd-history-delta-${status}`}
-              title="期間中の累積リターン (取得単価 × 株数 を投下資本としたリターン、Robinhood / 楽天 / SBI 流。リスト部の含み損益と一致します)"
+              title={
+                'chart の色は累積リターンの符号で決まります (vs SPY 比較とは独立):\n' +
+                '🟢 緑 = プラス (>+0.05%)\n' +
+                '🔴 赤 = マイナス (<-0.05%)\n' +
+                '🔵 シアン = ほぼ動かず (±0.05% 以内)\n\n' +
+                '累積リターン = (現在評価額 − 累積投下資本) / 累積投下資本\n' +
+                'Robinhood / 楽天 / SBI 流。 リスト部の含み損益と一致します。'
+              }
             >
+              {/* v71 Phase 2.2 (dogfood 質問): 色の意味が「指数に勝った/負けた」と
+                  誤読されるため、 累積リターン chip 直下に micro-legend を追加。
+                  vs SPY バッジは別 chip で独立判定 (α 緑/赤) と user に説明。 */}
               {fmtSignedPct(periodReturn.pctDelta)}
               <span className="pd-history-delta-pct"> 累積リターン</span>
+              <span className="pd-history-delta-legend" aria-hidden="true">
+                {status === 'gain' && ' · プラス'}
+                {status === 'loss' && ' · マイナス'}
+                {status === 'neutral' && ' · ほぼ動かず'}
+              </span>
             </span>
           )}
           {/* §11-D Fix: drift 警告 chip。 v71 Phase 2.1 (6 体合議 / 金融 + UI/UX): 文言を

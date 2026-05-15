@@ -21,6 +21,7 @@ import { useTransactions } from '../../hooks/useTransactions.js';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { usePortfolioJudgment } from '../../hooks/usePortfolioJudgment.js';
 import { useAccountName } from '../../hooks/useAccountName.js';
+import { usePortfolioPrices } from '../../hooks/usePortfolioPrices.js';
 import { fetchNewsBulk } from '../../api.js';
 import Chip from '../../components/ui/Chip.jsx';
 
@@ -84,12 +85,29 @@ export default function PortfolioDetailBody({ scopeId = 'all' }) {
   const lots = useMemo(() => txToLots(transactions, effectiveAccountId),
     [transactions, effectiveAccountId]);
 
-  // weight top 5 銘柄 (= 判定 badge 表示対象、 ニュース集約対象)
-  const topTickers = useMemo(() => rankByWeight(lots).slice(0, 5).map((x) => x.ticker),
+  // weight top 8 銘柄 (= 判定 badge 表示対象、 ニュース集約対象)
+  // v71 Phase 3-b (6 体合議 / 開発エキスパート converge): 5 → 8 に拡大して
+  // 「保有上位 + 直近変動上位」のハイブリッド集約に近づける (Bloomberg PORT 流)。
+  const topTickers = useMemo(() => rankByWeight(lots).slice(0, 8).map((x) => x.ticker),
     [lots]);
 
   // 判定 badge — 差別化軸 (マーケター必須条件): 保有 ticker の 5 条件 PASS/FAIL を chart 上に summary 表示
   const { verdicts } = usePortfolioJudgment(topTickers);
+
+  // v71 Phase 3-b (6 体合議 / UI/UX events lane MVP): 直近 |Δ%| ≥ 3% の保有銘柄を
+  // chip ribbon で chart 直下に出す。 news 重要度スコアの簡易版 (Δ news boost 相当)。
+  const { prices: portfolioPrices } = usePortfolioPrices(topTickers);
+  const movers = useMemo(() => {
+    const out = [];
+    for (const t of topTickers) {
+      const p = portfolioPrices?.[t];
+      const pct = Number(p?.change_pct);
+      if (!Number.isFinite(pct) || Math.abs(pct) < 3) continue;
+      out.push({ ticker: t, pct });
+    }
+    out.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+    return out.slice(0, 3);  // 上位 3 件で UI 圧迫を回避
+  }, [topTickers, portfolioPrices]);
 
   // 保有銘柄ニュース bulk: top 5 ticker × 3 件
   const [newsItems, setNewsItems] = useState([]);
@@ -163,13 +181,13 @@ export default function PortfolioDetailBody({ scopeId = 'all' }) {
         </div>
         <div className="pane3-portfolio-judgsummary">
           {passFailCount.pass > 0 && (
-            <Chip size="sm" variant="display" tone="gain" title="保有上位 5 銘柄の 5 条件 全 PASS 件数">
+            <Chip size="sm" variant="display" tone="gain" title="保有上位 8 銘柄の 5 条件 全 PASS 件数">
               ✓ PASS&nbsp;
               <span style={{ color: 'var(--color-gain)', fontWeight: 700 }}>{passFailCount.pass}</span>
             </Chip>
           )}
           {passFailCount.fail > 0 && (
-            <Chip size="sm" variant="display" tone="loss" title="保有上位 5 銘柄の 5 条件 FAIL 件数">
+            <Chip size="sm" variant="display" tone="loss" title="保有上位 8 銘柄の 5 条件 FAIL 件数">
               ✗ FAIL&nbsp;
               <span style={{ color: 'var(--color-loss)', fontWeight: 700 }}>{passFailCount.fail}</span>
             </Chip>
@@ -182,6 +200,30 @@ export default function PortfolioDetailBody({ scopeId = 'all' }) {
           )}
         </div>
       </div>
+
+      {/* v71 Phase 3-b: 直近変動 ≥ 3% の保有銘柄を chip ribbon で表示 (events lane MVP)。
+          Bloomberg PORT `Top Movers` の簡易版。 Phase 3-c で本格的 events lane (決算 +
+          ex-div + 8-K) に統合予定。 */}
+      {movers.length > 0 && (
+        <div className="pane3-portfolio-movers" role="group" aria-label="直近の大きな値動き">
+          <span className="pane3-portfolio-movers-caption">直近の大きな値動き</span>
+          {movers.map((m) => (
+            <Chip
+              key={m.ticker}
+              size="xs"
+              variant="display"
+              tone={m.pct >= 0 ? 'gain' : 'loss'}
+              title={`${m.ticker} は直近で ${m.pct >= 0 ? '+' : ''}${m.pct.toFixed(2)}% 変動`}
+            >
+              <span aria-hidden="true">{m.pct >= 0 ? '▲' : '▼'}</span>
+              &nbsp;{m.ticker}&nbsp;
+              <span style={{ color: m.pct >= 0 ? 'var(--color-gain)' : 'var(--color-loss)', fontWeight: 600 }}>
+                {m.pct >= 0 ? '+' : ''}{m.pct.toFixed(2)}%
+              </span>
+            </Chip>
+          ))}
+        </div>
+      )}
 
       {/* 大 chart (PortfolioHistoryChart 既存資産を Suspense + lazy で消費) */}
       <Suspense fallback={<div className="pane3-portfolio-chart-fallback" aria-label="読み込み中" />}>
