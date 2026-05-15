@@ -80,6 +80,36 @@ import logging as _logging
 for _lname in ("yfinance", "py.warnings"):
     _logging.getLogger(_lname).setLevel(_logging.ERROR)
 
+# v68 dogfood 2026-05-15: ETF / index / JPY ticker (XLV/HYG/EEM/SPY/^GSPC/JPY=X 等) に対する
+# yfinance の "No earnings dates found, symbol may be delisted" は ERROR レベル で emit されるため
+# 上記の setLevel(ERROR) では block されず Sentry に流入 (1 日 30+ events → 5k/月 budget 圧迫)。
+# logging.Filter で「期待される noise pattern」を message ベースで drop することで、
+# yfinance の真に重要な ERROR (network 障害 / api 仕様変更) は引き続き Sentry に届くようにする。
+class _YFinanceNoiseFilter(_logging.Filter):
+    _NOISE_PATTERNS = (
+        "No earnings dates found",
+        "may be delisted",
+        "possibly delisted",
+        "404 Client Error",
+        "Failed downloads",
+        "No timezone found",
+        "No data found",
+    )
+    def filter(self, record):  # True = keep, False = drop
+        try:
+            msg = record.getMessage()
+        except Exception:
+            return True
+        for pat in self._NOISE_PATTERNS:
+            if pat in msg:
+                return False
+        return True
+
+
+_yf_noise_filter = _YFinanceNoiseFilter()
+for _lname in ("yfinance", "py.warnings", "yfinance.utils", "yfinance.ticker"):
+    _logging.getLogger(_lname).addFilter(_yf_noise_filter)
+
 # 連続失敗した ticker を runtime で skip するための in-memory set。
 # プロセス再起動でリセット (lifespan を跨いだ persist は不要)。
 _MOVERS_DELISTED: set[str] = set()
@@ -1824,6 +1854,235 @@ async def portfolio_judgment(symbols: str, request: Request) -> dict:
     return {"verdicts": verdicts, "errors": errors}
 
 
+@app.get("/api/historical-dividends/{ticker}")
+async def historical_dividends(
+    ticker: str,
+    request: Request,
+    since: str | None = None,
+    limit: int = 60,
+) -> dict:
+    """銘柄の過去配当履歴を返却 (Phase 4 dividend UI auto-fill / handover v68 §2 #1)。
+
+    FMP `/stable/dividends?symbol=...` で free plan でも叩ける配当 endpoint を使用。
+    24h cache (配当は historical immutable data なので長め)。
+    Limit Reach / network error 時は stale cache or [] を graceful return。
+
+    query:
+      since: YYYY-MM-DD (除外日、これより新しいもののみ返却)
+      limit: 上限件数 (デフォ 60、最大 120)
+    response:
+      {"ticker": "AAPL", "dividends": [{date, amount, paymentDate, recordDate}, ...]}
+    """
+    sym = (ticker or "").strip().upper()
+    if not sym or len(sym) > 12:
+        return {"ticker": sym, "dividends": []}
+
+    if limit < 1:
+        limit = 1
+    if limit > 120:
+        limit = 120
+
+    api_key = _get_fmp_key(request) or os.getenv("FMP_API_KEY", "")
+    if not api_key:
+        return {"ticker": sym, "dividends": []}
+
+    cache_key = f"dividends::{sym}"
+    # FMP v3 historical-price-full/stock_dividend は free plan で premium 化 (Rate Limit).
+    # CLAUDE.md「既知の制限」と整合: earnings-surprises 同様 premium 必須。
+    # response: { "symbol": "AAPL", "historical": [ { date, adjDividend, dividend, paymentDate, ... }, ... ] }
+    url = (
+        f"https://financialmodelingprep.com/api/v3/historical-price-full/stock_dividend/{sym}"
+        f"?apikey={api_key}"
+    )
+    # 配当は更新頻度が低い (四半期 1 回程度)。24h cache で十分。
+    data = await safe_fmp_get(url, cache_key, ttl=60 * 60 * 24)
+
+    rows: list = []
+    if isinstance(data, dict) and isinstance(data.get("historical"), list):
+        rows = data["historical"]
+    elif isinstance(data, list):
+        rows = data
+
+    out: list[dict] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        date = row.get("date") or row.get("recordDate")
+        if not date:
+            continue
+        date_s = str(date)[:10]
+        if since and date_s < str(since)[:10]:
+            continue
+        amount = row.get("adjDividend")
+        if amount is None:
+            amount = row.get("dividend")
+        amount_f = _safe_float(amount, 6)
+        if amount_f is None or amount_f <= 0:
+            continue
+        out.append({
+            "date": date_s,
+            "amount": amount_f,
+            "paymentDate": (str(row.get("paymentDate"))[:10] if row.get("paymentDate") else None),
+            "recordDate": (str(row.get("recordDate"))[:10] if row.get("recordDate") else None),
+        })
+        if len(out) >= limit:
+            break
+
+    # FMP がデータを返したら即返却
+    if out:
+        return {"ticker": sym, "dividends": out}
+
+    # yfinance fallback: FMP free plan rate-limit (premium 化) で empty 時、Yahoo の dividends を試す。
+    # CLAUDE.md known issue: Railway IP が yfinance を block する可能性あり (earnings_dates の前例)。
+    # `Ticker.dividends` は pandas Series (index=date, values=per-share)。歴史的 immutable data。
+    try:
+        import yfinance as _yf_div
+        t_yf = _yf_div.Ticker(sym)
+        div_series = t_yf.dividends  # pandas Series
+        if div_series is not None and len(div_series) > 0:
+            # 新→古順に変換
+            sorted_idx = sorted(div_series.index, reverse=True)
+            yf_out: list[dict] = []
+            for ix in sorted_idx:
+                try:
+                    # ex-dividend date
+                    date_s = ix.strftime("%Y-%m-%d") if hasattr(ix, "strftime") else str(ix)[:10]
+                except Exception:
+                    date_s = str(ix)[:10]
+                if since and date_s < str(since)[:10]:
+                    continue
+                amt = div_series.loc[ix]
+                amt_f = _safe_float(amt, 6)
+                if amt_f is None or amt_f <= 0:
+                    continue
+                yf_out.append({
+                    "date": date_s,
+                    "amount": amt_f,
+                    "paymentDate": None,  # yfinance は payment date 提供しない (ex-date のみ)
+                    "recordDate": None,
+                })
+                if len(yf_out) >= limit:
+                    break
+            if yf_out:
+                # cache に書き込み (FMP cache 同経路で 24h 保持)
+                _fmp_response_cache[cache_key] = (_time.time(), {"symbol": sym, "historical": [
+                    {"date": d["date"], "adjDividend": d["amount"], "dividend": d["amount"]}
+                    for d in yf_out
+                ]})
+                return {"ticker": sym, "dividends": yf_out}
+    except Exception as e:
+        print(f"[yfinance] dividends fallback failed for {sym}: {e}")
+
+    return {"ticker": sym, "dividends": []}
+
+
+# 為替レート in-memory cache: key = "USD::JPY::2026-05-14" or "USD::JPY::latest"
+_FOREX_CACHE: dict[str, tuple[float, float]] = {}
+_FOREX_CACHE_TTL = 60 * 60 * 6  # 6h (為替は日次変動だが日内は誤差許容)
+
+
+@app.get("/api/forex-rate")
+async def forex_rate(base: str = "USD", quote: str = "JPY", date: str | None = None) -> dict:
+    """通貨ペアの為替レート (handover v68 §2 #2 Phase 2.5 最小実装)。
+
+    最小実装スコープ: USD/JPY のみ。他通貨は 400 でない 200 + rate=None 返却。
+    yfinance `${base}${quote}=X` から取得、6h cache + Limit Reach 時は stale 返却。
+
+    Stripe/Wise 方式: trade_date 時点のレートを transaction.fx_rate に凍結書き込み。
+    後から forex_rates の rate を変えても historical P/L が動かない (会計 audit 性)。
+
+    query:
+      base: 基軸通貨 (default USD)
+      quote: 換算先通貨 (default JPY)
+      date: YYYY-MM-DD (未指定 = latest)
+    response:
+      {"base": "USD", "quote": "JPY", "date": "2026-05-14", "rate": 152.34, "source": "yfinance"}
+      {"base": "USD", "quote": "USD", "rate": 1.0, "source": "identity"}
+      取得失敗時: {"base":..., "quote":..., "rate": null, "error": "unsupported"|"unavailable"}
+    """
+    base_u = (base or "USD").strip().upper()
+    quote_u = (quote or "JPY").strip().upper()
+
+    # 同一通貨 → 即 1.0 返却
+    if base_u == quote_u:
+        return {"base": base_u, "quote": quote_u, "date": date or "latest", "rate": 1.0, "source": "identity"}
+
+    # 最小実装: USD/JPY のみサポート (双方向)
+    SUPPORTED_PAIRS = {("USD", "JPY"), ("JPY", "USD")}
+    if (base_u, quote_u) not in SUPPORTED_PAIRS:
+        return {"base": base_u, "quote": quote_u, "date": date or "latest", "rate": None, "error": "unsupported"}
+
+    date_key = date or "latest"
+    cache_key = f"{base_u}::{quote_u}::{date_key}"
+    now = _time.time()
+    cached = _FOREX_CACHE.get(cache_key)
+    if cached and (now - cached[0]) < _FOREX_CACHE_TTL:
+        return {"base": base_u, "quote": quote_u, "date": date_key, "rate": cached[1], "source": "yfinance-cache"}
+
+    # yfinance: 'USDJPY=X' は USD→JPY (1 USD = N JPY)
+    # JPY→USD は逆数で計算
+    try:
+        import yfinance as _yf_fx
+        if base_u == "USD" and quote_u == "JPY":
+            yf_sym = "USDJPY=X"
+            invert = False
+        else:  # JPY -> USD
+            yf_sym = "USDJPY=X"
+            invert = True
+
+        t_fx = _yf_fx.Ticker(yf_sym)
+        rate_val: float | None = None
+        if date_key == "latest":
+            # latest: fast_info の last_price 優先、fallback で 1d history
+            try:
+                fast = getattr(t_fx, "fast_info", None)
+                if fast is not None:
+                    lp = fast.get("last_price") if hasattr(fast, "get") else getattr(fast, "last_price", None)
+                    if lp is not None and math.isfinite(float(lp)) and float(lp) > 0:
+                        rate_val = float(lp)
+            except Exception:
+                pass
+            if rate_val is None:
+                hist = t_fx.history(period="5d", interval="1d")
+                if hist is not None and not hist.empty and "Close" in hist.columns:
+                    rv = hist["Close"].dropna().iloc[-1]
+                    if math.isfinite(float(rv)) and float(rv) > 0:
+                        rate_val = float(rv)
+        else:
+            # date 指定: history で当該日 ±5d を取り、最も近い trading day の close
+            try:
+                from datetime import datetime as _dt, timedelta as _td
+                d_target = _dt.strptime(str(date_key)[:10], "%Y-%m-%d").date()
+                start = (d_target - _td(days=7)).isoformat()
+                end = (d_target + _td(days=2)).isoformat()
+                hist = t_fx.history(start=start, end=end, interval="1d")
+                if hist is not None and not hist.empty and "Close" in hist.columns:
+                    # date_key 以前で最新の行を採用
+                    closes = hist["Close"].dropna()
+                    candidates = [(idx, float(v)) for idx, v in closes.items() if hasattr(idx, "date") and idx.date() <= d_target]
+                    if candidates:
+                        rate_val = candidates[-1][1]
+                    elif len(closes) > 0:
+                        rate_val = float(closes.iloc[-1])
+            except Exception as e:
+                print(f"[forex] historical lookup failed for {yf_sym}@{date_key}: {e}")
+
+        if rate_val is not None and math.isfinite(rate_val) and rate_val > 0:
+            if invert:
+                rate_val = round(1.0 / rate_val, 8)
+            else:
+                rate_val = round(rate_val, 6)
+            _FOREX_CACHE[cache_key] = (now, rate_val)
+            return {"base": base_u, "quote": quote_u, "date": date_key, "rate": rate_val, "source": "yfinance"}
+    except Exception as e:
+        print(f"[forex] yfinance fetch failed for {base_u}/{quote_u}@{date_key}: {e}")
+
+    # 取得失敗時に stale cache があれば返す
+    if cached:
+        return {"base": base_u, "quote": quote_u, "date": date_key, "rate": cached[1], "source": "yfinance-stale"}
+    return {"base": base_u, "quote": quote_u, "date": date_key, "rate": None, "error": "unavailable"}
+
+
 US_EXCHANGES = {"NASDAQ", "NYSE", "AMEX", "NYSE ARCA", "NYSE MKT"}
 
 
@@ -1929,8 +2188,13 @@ def _verdict(actual: float | None, estimated: float | None) -> tuple[str, float 
     return label, pct, None
 
 
-def _safe_float(val) -> float | None:
-    """None・"None"・空文字を安全にfloatへ変換。0.0はestimated未設定の可能性があるため除外。"""
+def _safe_eps_float(val) -> float | None:
+    """EPS 専用: None・"None"・空文字を安全にfloatへ変換。0.0はestimated未設定の可能性があるため除外。
+
+    汎用版 (`_safe_float(x, ndigits)` L369) と名前が衝突していた歴史的経緯で、
+    1-arg / 0.0→None semantics が必要な箇所のみこの関数を使う。それ以外は L369 の
+    `_safe_float` (汎用 + NaN/Inf 対応 + 任意 ndigits) を使う。
+    """
     if val is None:
         return None
     try:
@@ -2689,20 +2953,20 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
     history: list[dict] = []
     for entry in surprises_sorted[:n]:
         date_str = _date_of(entry) or None
-        eps_actual = _safe_float(_pick(entry, "eps", "epsActual", "actualEarningResult", "actualEps"))
-        eps_estimated = _safe_float(_pick(entry, "epsEstimated", "estimatedEarning", "estimatedEps"))
+        eps_actual = _safe_eps_float(_pick(entry, "eps", "epsActual", "actualEarningResult", "actualEps"))
+        eps_estimated = _safe_eps_float(_pick(entry, "epsEstimated", "estimatedEarning", "estimatedEps"))
         # surprise が estimated を欠落 → estimates から最近接補完
         if eps_estimated is None and date_str:
             est_match = _nearest(date_str, estimates)
             if est_match:
-                eps_estimated = _safe_float(_pick(est_match, "epsAvg", "estimatedEpsAvg"))
+                eps_estimated = _safe_eps_float(_pick(est_match, "epsAvg", "estimatedEpsAvg"))
 
         # income_q から fiscal_period / revenue
         inc = _nearest(date_str, income_q) if date_str else None
         revenue_actual = None
         fiscal_period = _pick(entry, "fiscalPeriod", "period")
         if inc:
-            revenue_actual = _safe_float(_pick(inc, "revenue"))
+            revenue_actual = _safe_eps_float(_pick(inc, "revenue"))
             if not fiscal_period:
                 period = _pick(inc, "period")
                 year = _pick(inc, "calendarYear", "fiscalYear")
@@ -2714,7 +2978,7 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
         if date_str:
             est_match = _nearest(date_str, estimates)
             if est_match:
-                revenue_estimated = _safe_float(_pick(est_match, "revenueAvg", "estimatedRevenueAvg"))
+                revenue_estimated = _safe_eps_float(_pick(est_match, "revenueAvg", "estimatedRevenueAvg"))
 
         eps_label, eps_pct, _ = _verdict(eps_actual, eps_estimated)
         rev_label, rev_pct, _ = _verdict(revenue_actual, revenue_estimated)
@@ -7828,6 +8092,20 @@ _INSIGHTS_SYSTEM_PROMPT = """あなたは投資リサーチアシスタントで
 - JSONのみ返し、```json などは絶対に付けない
 - 入力テキストの内容をそのまま返してはいけない（必ず分析結果のJSONのみ返す）
 
+【絶対禁止: 特定個人の言及 (Trust Cliff 直撃)】
+以下の単語は出力 JSON のどこにも (summary / bull_points / bear_points / key_metrics) 絶対に使ってはならない:
+  「じっちゃま」「じっちゃまライブ」「じっちゃまライブ書記録」
+  「広瀬」「広瀬隆雄」「ライブ書記録」
+これらが文中に登場する場合は「市場参考資料」「市場での見方」等に書き換えること。
+出力前に必ず最終チェックを実行し、上記が 1 文字でも含まれていれば書き直すこと。
+
+【絶対禁止: ticker symbol の取り違え (重大バグ防止)】
+ユーザーが指定した ticker symbol (例: CBRS) と、参考資料中で言及されている ticker (例: CRCL) が
+完全一致しない場合、それは「言及なし」と扱う。社名・略称・事業内容での連想は一切禁止。
+- 例: 「CBRS」を尋ねられた場合、参考資料に「CBRS」という文字列が完全一致で登場するもののみ採用。
+- 「Cerebras」のような社名・通称表記は採用しない (Cerebras と Circle / CRCL を混同するリスクあり)。
+- ticker 完全一致の言及が見つからない場合: found: false、他は空配列で返す。
+
 【絶対禁止ルール（特定/不特定個人の主語化を完全排除）】
 以下の単語は文中のどこにも（主語・目的語・所有格・修飾語のいずれでも）絶対に使ってはならない:
   「氏」「〇〇氏」「アナリスト」「投資家」「市場参加者」「専門家」「ストラテジスト」
@@ -7867,6 +8145,14 @@ def _sanitize_insights_text(text: str) -> str:
         return text
     # 順序重要: 長いパターンから先に置換しないと誤マッチする
     replacements = [
+        # ── 「じっちゃま」関連 (Trust Cliff 直撃、CLAUDE.md 「UI に出さない」厳禁) ──
+        # 長い pattern を先に消す (順序重要)
+        ("じっちゃまライブ書記録", "市場参考資料"),
+        ("じっちゃまライブ", "市場参考資料"),
+        ("じっちゃま", ""),
+        ("ライブ書記録", "市場参考資料"),
+        ("広瀬隆雄", ""),
+        ("広瀬", ""),
         # ── 投資家 ──（複合語が先）
         ("機関投資家", "機関"),
         ("個人投資家", "個人"),
@@ -7951,8 +8237,10 @@ async def _analyze_text_to_insights(tkr: str, combined_text: str) -> dict:
         f"以下の <knowledge_base> 内のテキストは参考資料です。"
         f"このテキストの内容をそのまま返してはいけません。\n\n"
         f"<knowledge_base>\n{combined_text}\n</knowledge_base>\n\n"
-        f"上記の参考資料を読み、{tkr}（または同社の社名・通称・事業内容）に関する"
+        f"上記の参考資料を読み、ticker symbol が **{tkr}** と完全一致する言及のみを対象に、"
         f"複数の見解を統合し、システム指示の JSON 形式で結果のみを返してください。\n\n"
+        f"【厳守】 ticker {tkr} の完全一致言及が無ければ found: false (社名・通称・事業内容での連想は禁止)。\n"
+        f"【厳守】 「じっちゃま」「じっちゃまライブ」「広瀬」等の特定個人を示唆する語は一切出力に含めないこと。\n\n"
         f"再確認: 出力は必ず `{{` で始まる JSON オブジェクトのみとし、"
         f"マークダウン・前置き・コードフェンス・参考資料の echo back を一切含めないこと。"
     )
