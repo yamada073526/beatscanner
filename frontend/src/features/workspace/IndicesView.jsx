@@ -14,6 +14,7 @@
  *   - sparklinePeriod 双方向同期 (StockPriceChart は内部 period state)
  */
 import { useEffect, useMemo, useState } from 'react';
+import Chip, { ChipBar, ChipGroup, ChipSeparator } from '../../components/ui/Chip.jsx';
 import StockPriceChart from '../../components/StockPriceChart.jsx';
 import NewsPanel from '../../components/NewsPanel.jsx';
 import CompanyLogo from '../../components/CompanyLogo.jsx';
@@ -259,59 +260,55 @@ function AccountSwitcherInner({ accounts, selectedAccountId, setSelectedAccountI
         role="tablist"
         aria-label="口座切り替え"
       >
-        {/* 口座 1 つだけの user では tab は表示せず、「+ 口座を追加」だけ右寄せで見せる */}
-        {accounts.length > 1 && tabs.map((tab) => {
+        {/* round 7: Chip md + switcher variant に primitive 統一。
+            round 9 (6 体合議): 「合計」rollup と個別口座を ChipGroup.Separator で視覚分離。
+            「合計」は role='rollup' で font-weight 600 (ambient cue)、直後に 1px hairline を挿入。
+            口座 1 つだけの user では tab は非表示 (「+ 口座を追加」だけ右寄せ)。 */}
+        {accounts.length > 1 && tabs.map((tab, idx) => {
           const active = (selectedAccountId || null) === (tab.id || null);
-          return (
-            <button
+          const chip = (
+            <Chip
               key={tab.id || 'rollup'}
-              role="tab"
-              aria-selected={active}
-              type="button"
+              size="md"
+              variant="switcher"
+              role={tab.isRollup ? 'rollup' : 'item'}
+              pressed={active}
               onClick={() => setSelectedAccountId(tab.id)}
               title={tab.type ? ACCOUNT_TYPE_LABEL[tab.type] || tab.type : '全口座統括'}
-              style={{
-                flexShrink: 0,
-                padding: '4px 12px',
-                background: active ? 'var(--surface-elevated)' : 'transparent',
-                border: '1px solid',
-                borderColor: active ? 'var(--text-secondary)' : 'var(--border)',
-                borderRadius: 'var(--radius-pill)',
-                color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-                fontSize: 11,
-                fontWeight: tab.isRollup ? 700 : 600,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
+              ariaPressed={active}
+              aria-selected={active}
             >
               {String(tab.label)}
-            </button>
+            </Chip>
           );
+          // rollup (= tabs[0]、idx=0) と次の個別口座の間に separator を挿入。
+          // ChipGroup.Separator は wrap 時に行頭に来ても 1px hairline で違和感最小。
+          // map の中で fragment + key を使うため <>...</> でなく明示的 fragment key を持たせる。
+          if (tab.isRollup && idx === 0 && tabs.length > 1) {
+            return [
+              chip,
+              <ChipSeparator key="rollup-separator" />,
+            ];
+          }
+          return chip;
         })}
 
-        {/* 「+ 口座を追加」trigger: 常時表示 (口座 1 つの user も 2 つ目を作れる) */}
-        <button
-          type="button"
-          onClick={() => setCreateOpen((v) => !v)}
-          aria-expanded={createOpen}
-          aria-label="口座を追加"
-          title="新しい口座を作成 (NISA / 海外口座など)"
-          style={{
-            flexShrink: 0,
-            padding: '4px 12px',
-            background: createOpen ? 'var(--surface-elevated)' : 'transparent',
-            border: '1px dashed var(--border)',
-            borderRadius: 'var(--radius-pill)',
-            color: 'var(--text-secondary)',
-            fontSize: 11,
-            fontWeight: 600,
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-            marginLeft: accounts.length > 1 ? 4 : 'auto',
-          }}
-        >
-          + 口座を追加
-        </button>
+        {/* round 8: Chip variant='add' で WatchlistAddButton と外観統一。
+            size=sm = WatchlistAddButton と完全一致 (「同じ add-action は同じ size」原則)。
+            口座 tab (md) とは role が違うため意図的に size 階層で分離。 */}
+        <span style={{ marginLeft: accounts.length > 1 ? 4 : 'auto', flexShrink: 0 }}>
+          <Chip
+            size="sm"
+            variant="add"
+            onClick={() => setCreateOpen((v) => !v)}
+            ariaLabel="口座を追加"
+            aria-expanded={createOpen}
+            title="新しい口座を作成 (NISA / 海外口座など)"
+            pressed={createOpen}
+          >
+            + 口座を追加
+          </Chip>
+        </span>
       </div>
 
       {createOpen && (
@@ -1725,47 +1722,23 @@ function IndicesRow({ item, label, sym, desc, active, onClick, period = '1d' }) 
 function PeriodChipBar() {
   const sparklinePeriod = useWorkspaceStore((s) => s.sparklinePeriod);
   const setSparklinePeriod = useWorkspaceStore((s) => s.setSparklinePeriod);
+  // round 7: Chip primitive で完全 SSOT 化。判定タブ Pane2MetaToggle と完全 pixel 一致。
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '8px 12px',
-        borderBottom: '1px solid var(--border)',
-        background: 'var(--bg-card)',
-      }}
-    >
-      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>期間:</span>
-      <div role="group" aria-label="期間切替" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-        {SPARKLINE_PERIOD_OPTIONS.map((opt) => {
-          const active = sparklinePeriod === opt.key;
-          return (
-            <button
-              key={opt.key}
-              type="button"
-              onClick={() => setSparklinePeriod(opt.key)}
-              aria-pressed={active}
-              className={`ds-chip${active ? ' is-active' : ''}`}
-              style={{
-                padding: '2px 10px',
-                fontSize: 11,
-                fontWeight: active ? 600 : 400,
-                borderRadius: 'var(--radius-pill, 9999px)',
-                border: active
-                  ? '1px solid rgba(56,189,248,0.70)'
-                  : '1px solid var(--border)',
-                background: active ? 'rgba(56,189,248,0.12)' : 'transparent',
-                color: active ? 'rgb(14,165,233)' : 'var(--text-secondary)',
-                cursor: 'pointer',
-              }}
-            >
-              {opt.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    <ChipBar>
+      <ChipGroup prefix="期間:" ariaLabel="期間切替" role="radiogroup">
+        {SPARKLINE_PERIOD_OPTIONS.map((opt) => (
+          <Chip
+            key={opt.key}
+            size="sm"
+            variant="segmented"
+            pressed={sparklinePeriod === opt.key}
+            onClick={() => setSparklinePeriod(opt.key)}
+          >
+            {opt.label}
+          </Chip>
+        ))}
+      </ChipGroup>
+    </ChipBar>
   );
 }
 

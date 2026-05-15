@@ -23,6 +23,7 @@ import WorkspaceShell from './WorkspaceShell.jsx';
 import WorkspaceHeader from './WorkspaceHeader.jsx';
 import { useUrlSync } from './useUrlSync.js';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
+import Chip, { ChipBar, ChipGroup } from '../../components/ui/Chip.jsx';
 import { JudgmentProvider, useJudgment } from '../judgment/state/JudgmentContext.jsx';
 import { JudgmentList } from '../judgment/components/list/index.js';
 import { JudgmentDetail } from '../judgment/components/detail/index.js';
@@ -80,50 +81,27 @@ const SPARKLINE_PERIOD_OPTIONS = [
 // IndicesView などから再利用するため export
 export { SPARKLINE_PERIOD_OPTIONS };
 
-function ChipGroup({ ariaLabel, prefix, options, value, onChange }) {
+/**
+ * round 7 (4 体合議) で <Chip> primitive に migrate。
+ * 旧 inline style 版 ChipGroup は components/ui/Chip.jsx の ChipGroup に置換。
+ * size sm + variant segmented + pressed (排他選択) を統一仕様として固定。
+ */
+function ChipGroupSegmented({ ariaLabel, prefix, options, value, onChange }) {
   return (
-    <div
-      role="group"
-      aria-label={ariaLabel}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 4,
-        fontSize: 11,
-        color: 'var(--text-muted)',
-        flexWrap: 'wrap',
-      }}
-    >
-      {prefix && <span style={{ marginRight: 4 }}>{prefix}</span>}
-      {options.map((opt) => {
-        const active = value === opt.key;
-        // §dogfood-round8: ds-chip class で hover 浮き上がり + click 沈み + cyan hover を共有
-        return (
-          <button
-            key={opt.key}
-            type="button"
-            onClick={() => onChange(opt.key)}
-            aria-pressed={active}
-            title={opt.hint}
-            className={`ds-chip${active ? ' is-active' : ''}`}
-            style={{
-              padding: '2px 8px',
-              fontSize: 11,
-              fontWeight: active ? 600 : 400,
-              borderRadius: 'var(--radius-pill, 9999px)',
-              border: active
-                ? '1px solid rgba(56,189,248,0.70)'
-                : '1px solid var(--border)',
-              background: active ? 'rgba(56,189,248,0.12)' : 'transparent',
-              color: active ? 'rgb(14,165,233)' : 'var(--text-secondary)',
-              cursor: 'pointer',
-            }}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
-    </div>
+    <ChipGroup prefix={prefix} ariaLabel={ariaLabel} role="radiogroup">
+      {options.map((opt) => (
+        <Chip
+          key={opt.key}
+          size="sm"
+          variant="segmented"
+          pressed={value === opt.key}
+          onClick={() => onChange(opt.key)}
+          title={opt.hint}
+        >
+          {opt.label}
+        </Chip>
+      ))}
+    </ChipGroup>
   );
 }
 
@@ -133,31 +111,25 @@ function Pane2MetaToggle() {
   const sparklinePeriod = useWorkspaceStore((s) => s.sparklinePeriod);
   const setSparklinePeriod = useWorkspaceStore((s) => s.setSparklinePeriod);
 
+  // round 7: ChipBar + ChipGroup primitive で統一。
+  // 期間 chips が 1 行目固定 = 判定タブ / 指数タブ で位置統一済 (round 6)。
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
-        padding: '6px 10px',
-        borderBottom: '1px solid var(--border)',
-      }}
-    >
-      <ChipGroup
-        ariaLabel="リスト右端の表示内容を切替"
-        prefix="表示:"
-        options={META_OPTIONS}
-        value={pane2Meta}
-        onChange={setPane2Meta}
-      />
-      <ChipGroup
+    <ChipBar stacked>
+      <ChipGroupSegmented
         ariaLabel="sparkline の期間を切替"
         prefix="期間:"
         options={SPARKLINE_PERIOD_OPTIONS}
         value={sparklinePeriod}
         onChange={setSparklinePeriod}
       />
-    </div>
+      <ChipGroupSegmented
+        ariaLabel="リスト右端の表示内容を切替"
+        prefix="表示:"
+        options={META_OPTIONS}
+        value={pane2Meta}
+        onChange={setPane2Meta}
+      />
+    </ChipBar>
   );
 }
 
@@ -695,6 +667,7 @@ export default function Workspace({
   currentTicker,
   holdings = {},
   portfolioPrices = {},
+  onAddToWatchlist,
 }) {
   // URL ↔ Zustand 同期 (Linear 流 SSOT)
   useUrlSync();
@@ -748,7 +721,13 @@ export default function Workspace({
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
               <Pane2MetaToggle />
               <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-                <JudgmentList items={items} onAnalyze={onAnalyze} showFilters={true} />
+                <JudgmentList
+                  items={items}
+                  onAnalyze={onAnalyze}
+                  showFilters={true}
+                  onAddToWatchlist={onAddToWatchlist}
+                  isPro={plan === 'pro'}
+                />
               </div>
             </div>
           )
