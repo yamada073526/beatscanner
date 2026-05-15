@@ -20,6 +20,7 @@ import { useAuth } from '../../hooks/useAuth.js';
 import { useTransactions } from '../../hooks/useTransactions.js';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { usePortfolioJudgment } from '../../hooks/usePortfolioJudgment.js';
+import { useAccountName } from '../../hooks/useAccountName.js';
 import { fetchNewsBulk } from '../../api.js';
 import Chip from '../../components/ui/Chip.jsx';
 
@@ -75,6 +76,9 @@ export default function PortfolioDetailBody({ scopeId = 'all' }) {
   const selectedAccountId = useWorkspaceStore((s) => s.selectedAccountId);
   // scopeId が account_id 系なら selectedAccountId に従う、 'all' なら null (= 全口座)
   const effectiveAccountId = scopeId === 'all' ? null : (scopeId || selectedAccountId);
+  // v71 Phase 2.1 (6 体合議): 「選択中の口座」固定文言 → 実口座名を表示。
+  // hook が rename / 削除に自動追従するため Pane 2/3 で同期更新される。
+  const accountName = useAccountName(effectiveAccountId);
 
   const { transactions } = useTransactions({ supabase, user });
   const lots = useMemo(() => txToLots(transactions, effectiveAccountId),
@@ -154,7 +158,7 @@ export default function PortfolioDetailBody({ scopeId = 'all' }) {
         <div>
           <div className="pane3-portfolio-eyebrow">ポートフォリオ詳細</div>
           <div className="pane3-portfolio-title">
-            {effectiveAccountId ? '選択中の口座' : '全口座 合算'}
+            {effectiveAccountId ? (accountName || '口座読込中…') : '全口座 合算'}
           </div>
         </div>
         <div className="pane3-portfolio-judgsummary">

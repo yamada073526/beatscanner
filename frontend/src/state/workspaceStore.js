@@ -126,8 +126,22 @@ export const useWorkspaceStore = create(
       toggleEconomicCalendar: () => set((s) => ({ economicCalendarCollapsed: !s.economicCalendarCollapsed })),
       toggleMovers: () => set((s) => ({ moversCollapsed: !s.moversCollapsed })),
       togglePortfolio: () => set((s) => ({ portfolioCollapsed: !s.portfolioCollapsed })),
-      // 口座切替時は filterTicker を必ず auto-reset (6 体合議 / Web 開発エキスパート指摘)
-      setSelectedAccountId: (id) => set(() => ({ selectedAccountId: id || null, filterTicker: null })),
+      // 口座切替時は filterTicker を必ず auto-reset (6 体合議 / Web 開発エキスパート指摘)。
+      // v71 Phase 2.1 (6 体合議 converge): selectedTarget が portfolio scope の時は
+      // id も同期 sync。 user が Pane 2 で口座切替 → Pane 3 portfolio detail が auto-follow。
+      // 'all' (= 全口座合算) を明示的に表示中の場合は touch しない (sticky)。
+      setSelectedAccountId: (id) => set((s) => {
+        const next = id || null;
+        const t = s.selectedTarget;
+        const syncedTarget = (t?.type === 'portfolio' && t.id !== 'all')
+          ? { type: 'portfolio', id: next || 'all' }
+          : t;
+        return {
+          selectedAccountId: next,
+          filterTicker: null,
+          selectedTarget: syncedTarget,
+        };
+      }),
       setFilterTicker: (t) => set(() => ({
         filterTicker: t ? String(t).trim().toUpperCase() : null,
       })),
