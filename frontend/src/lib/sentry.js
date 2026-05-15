@@ -36,9 +36,14 @@ export async function initSentry() {
       // Performance monitoring は production で 10% に抑える (free plan 5k events/月対策)
       tracesSampleRate: import.meta.env.MODE === 'production' ? 0.1 : 1.0,
       beforeSend(event) {
-        // 広告ブロッカー由来の analytics.js ERR_BLOCKED_BY_CLIENT 等の noise を抑制
-        const msg = event.exception?.values?.[0]?.value || '';
-        if (/ERR_BLOCKED_BY_CLIENT|Loading chunk \d+ failed/i.test(msg)) {
+        // v71 §1: free plan 5k events/月 を圧迫していた noise pattern を drop.
+        // - ERR_BLOCKED_BY_CLIENT: 広告ブロッカー由来の analytics 失敗
+        // - Loading chunk N failed: code split chunk の network 失敗 (HMR / 遅延 import)
+        // - Failed to fetch / NetworkError: ブラウザ back-forward cache や offline 由来
+        // - ResizeObserver loop: Chrome の benign warning (実害なし)
+        // - Non-Error promise rejection: third-party script が throw した非 Error 値
+        const msg = event.exception?.values?.[0]?.value || event.message || '';
+        if (/ERR_BLOCKED_BY_CLIENT|Loading chunk \d+ failed|Failed to fetch|NetworkError|ResizeObserver loop|Non-Error promise rejection/i.test(msg)) {
           return null;
         }
         return event;

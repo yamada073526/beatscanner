@@ -54,6 +54,37 @@ if _SENTRY_DSN:
         from sentry_sdk.integrations.fastapi import FastApiIntegration
         from sentry_sdk.integrations.starlette import StarletteIntegration
 
+        # v71 §1: free plan 5k events/月 を圧迫していた expected error を drop.
+        # - HTTPException 4xx: 上場廃止 ticker (404) / FMP rate limit (429) / 認証エラー
+        #   (401/403) は user impact 無し、 server error ではない。
+        # - OperationalError / DatabaseError / ConnectionError / TimeoutError は
+        #   外部 API (yfinance / FMP / Supabase) の transient noise、 retry で回復する。
+        # - 5xx は drop しない (= 自分達の server error は届ける)。
+        # before_send 内の例外で Sentry 自体を壊さないよう try/except で包む。
+        def _sentry_before_send(event, hint):
+            try:
+                exc_info = hint.get("exc_info") if hint else None
+                if not exc_info:
+                    return event
+                exc_type, exc_value, _tb = exc_info
+                name = exc_type.__name__
+                if name == "HTTPException":
+                    sc = getattr(exc_value, "status_code", None)
+                    if isinstance(sc, int) and 400 <= sc < 500:
+                        return None
+                if name in (
+                    "OperationalError",
+                    "DatabaseError",
+                    "ConnectionError",
+                    "ReadTimeout",
+                    "TimeoutError",
+                    "ConnectionResetError",
+                ):
+                    return None
+            except Exception:
+                pass
+            return event
+
         sentry_sdk.init(
             dsn=_SENTRY_DSN,
             environment=os.getenv("SENTRY_ENVIRONMENT", "production"),
@@ -67,6 +98,7 @@ if _SENTRY_DSN:
             ],
             # PII (user agent / IP) は送らない (個人投資家アプリのプライバシー配慮).
             send_default_pii=False,
+            before_send=_sentry_before_send,
         )
     except Exception as _e:
         # Sentry 初期化失敗でアプリを落とさない.
