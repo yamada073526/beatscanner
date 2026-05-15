@@ -1335,12 +1335,19 @@ function PortfolioHoldingsList({ holdings, prices, tickers, onTickerClick, displ
       const pnl = Number.isFinite(value) && avgCost > 0
         ? value - shares * avgCost
         : null;
+      // v71 Phase 3-d round 8 (4 体合議 / per-ticker P/L MVP):
+      // costBasis = shares × avgCost、 P/L % = pnl / costBasis × 100。
+      // avgCost = 0 (dividend-only ticker 等) は guard 済 (pnl が null になる)。
+      const costBasis = avgCost > 0 ? shares * avgCost : null;
+      const pnlPct = Number.isFinite(pnl) && Number.isFinite(costBasis) && costBasis > 0
+        ? (pnl / costBasis) * 100
+        : null;
       const jv = verdicts?.[t];
       const judgment =
         jv && typeof jv === 'object' && typeof jv.overallPass === 'boolean'
           ? { pass: jv.overallPass, passedCount: jv.passedCount, totalCount: jv.totalCount }
           : null;
-      rows.push({ ticker: t, shares, price, change, value, pnl, judgment });
+      rows.push({ ticker: t, shares, price, change, value, pnl, pnlPct, costBasis, judgment });
     }
     // value 降順 (大きい順)、value 不明なら末尾
     rows.sort((a, b) => {
@@ -1400,13 +1407,22 @@ function PortfolioHoldingsList({ holdings, prices, tickers, onTickerClick, displ
 }
 
 function HoldingRowCompact({ item, onClick, displayCurrency = 'USD', forexRate = null }) {
-  const { ticker, shares, price, value, pnl, judgment } = item;
+  const { ticker, shares, price, value, pnl, pnlPct, judgment } = item;
   // v68 dogfood fix 2026-05-15: 評価額の色は「含み損益 (pnl)」で決定。
   // 旧 change ベースだと「評価額が赤」と「実際は利益」が衝突して直感に反する。
   const valueColor =
     Number.isFinite(pnl) && Math.abs(pnl) > 0.005
       ? pnl > 0 ? 'var(--color-gain)' : 'var(--color-loss)'
       : 'var(--text-primary)';
+  // v71 Phase 3-d round 8 (4 体合議 / per-ticker P/L MVP):
+  // 金額が primary (Robinhood 流)、 % は sub muted、 2 行 stack で右寄せ。
+  // ▲/▼ glyph + 緑/赤 token の色覚二重冗長性。 a11y は aria-label で意味補完。
+  const pnlVisible = Number.isFinite(pnl) && Math.abs(pnl) > 0.005;
+  const pnlAriaLabel = pnlVisible
+    ? `含み損益 ${pnl >= 0 ? 'プラス' : 'マイナス'} ${Math.abs(pnl).toFixed(0)} ドル${
+        Number.isFinite(pnlPct) ? `、 ${pnlPct.toFixed(2)} パーセント` : ''
+      }`
+    : '含み損益データなし';
   // v68 §2 #6 dogfood (6 体合議 / UI/UX + 開発エキスパート): click affordance
   // 静的 div → button、chevron 右端、hover で背景 subtle、cursor: pointer
   const inner = (
@@ -1428,6 +1444,37 @@ function HoldingRowCompact({ item, onClick, displayCurrency = 'USD', forexRate =
           ? `$${price.toFixed(2)}`
           : '—'}
       </span>
+      {/* v71 Phase 3-d round 8: per-ticker P/L 列 (4 体合議 / 4/4 一致)。
+          金額 (primary 12px) + % (sub 10px muted) の 2 行 stack、 右寄せ、 ▲▼ glyph。
+          Robinhood iOS 業界標準。 「自分の目利き力」 を可視化 (user proposal)。 */}
+      <span
+        aria-label={pnlAriaLabel}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-end',
+          gap: 1,
+          lineHeight: 1.15,
+          minWidth: 64,
+        }}
+      >
+        {pnlVisible ? (
+          <>
+            <span style={{ fontSize: 12, fontWeight: 600, color: valueColor }}>
+              <span aria-hidden="true">{pnl >= 0 ? '▲' : '▼'}</span>
+              {' '}
+              {formatSignedCompactCurrency(pnl, displayCurrency, forexRate)}
+            </span>
+            {Number.isFinite(pnlPct) && (
+              <span style={{ fontSize: 10, color: valueColor, opacity: 0.75, fontWeight: 500 }}>
+                {formatSignedPct(pnlPct)}
+              </span>
+            )}
+          </>
+        ) : (
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
+        )}
+      </span>
       {onClick && (
         <span
           aria-hidden="true"
@@ -1446,9 +1493,10 @@ function HoldingRowCompact({ item, onClick, displayCurrency = 'USD', forexRate =
       )}
     </>
   );
+  // v71 Phase 3-d round 8: P/L 列を追加して 5→6 列 (with chevron) / 4→5 列 (without) に拡張
   const gridCols = onClick
-    ? 'minmax(56px, auto) auto 1fr auto auto'
-    : 'minmax(56px, auto) auto 1fr auto';
+    ? 'minmax(56px, auto) auto 1fr auto auto auto'
+    : 'minmax(56px, auto) auto 1fr auto auto';
   if (!onClick) {
     return (
       <div
