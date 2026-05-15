@@ -206,38 +206,55 @@ export default function PortfolioAreaChartSlot({
 
   return (
     <div className="pane2-areachart-slot">
-      <div className="pane2-areachart-callout">
-        {bestTicker?.symbol && Number.isFinite(bestTicker?.contribution) && (
-          <Chip
-            size="xs"
-            variant="display"
-            tone="gain"
-            title="期間中の price 寄与額 (current shares × Δclose)"
+      {/* Phase 2.1 (6 体合議): chip 上に caption 配置で「期間中の主役」を 2 秒で伝える。
+          aria-label と role="group" で SR 対応、 chip text に「最高/最低」 prefix。
+          「主役銘柄」は日本人リテール向け文言 (マーケター推奨、 Yahoo!ファイナンス
+          流の物語的メタファー)。 */}
+      <div className="pane2-areachart-section" role="group" aria-label="期間中の主役銘柄 (株価寄与額)">
+        <div className="pane2-areachart-caption">
+          期間中の主役銘柄
+          <span
+            className="pane2-areachart-caption-note"
+            title="期間末保有株数 × 期間内の株価変化額で算出。 売買 / 配当は未考慮"
           >
-            ⬆&nbsp;{bestTicker.symbol}&nbsp;
-            <span style={{ color: 'var(--color-gain)', fontWeight: 600 }}>
-              {formatSignedChartCurrency(bestTicker.contribution, displayCurrency, forexRate)}
-            </span>
-          </Chip>
-        )}
-        {worstTicker?.symbol && Number.isFinite(worstTicker?.contribution) && (
-          <Chip
-            size="xs"
-            variant="display"
-            tone="loss"
-            title="期間中の price 寄与額 (current shares × Δclose)"
-          >
-            ⬇&nbsp;{worstTicker.symbol}&nbsp;
-            <span style={{ color: 'var(--color-loss)', fontWeight: 600 }}>
-              {formatSignedChartCurrency(worstTicker.contribution, displayCurrency, forexRate)}
-            </span>
-          </Chip>
-        )}
-        {(period === '1d' || period === '1w') && (
-          <span className="pane2-areachart-note" title="1D/1W の短期 area は次の改善で追加予定 (B-3)">
-            短期データ未対応 (1M を表示)
+            ⓘ
           </span>
-        )}
+        </div>
+        <div className="pane2-areachart-callout">
+          {bestTicker?.symbol && Number.isFinite(bestTicker?.contribution) && (
+            <Chip
+              size="xs"
+              variant="display"
+              tone="gain"
+              ariaLabel={`期間中の最高寄与 ${bestTicker.symbol} ${formatSignedChartCurrency(bestTicker.contribution, displayCurrency, forexRate)}`}
+              title="期間中で最も損益に貢献した銘柄 (期末株数ベース)"
+            >
+              <span aria-hidden="true">⬆</span>&nbsp;最高&nbsp;{bestTicker.symbol}&nbsp;
+              <span style={{ color: 'var(--color-gain)', fontWeight: 600 }}>
+                {formatSignedChartCurrency(bestTicker.contribution, displayCurrency, forexRate)}
+              </span>
+            </Chip>
+          )}
+          {worstTicker?.symbol && Number.isFinite(worstTicker?.contribution) && (
+            <Chip
+              size="xs"
+              variant="display"
+              tone="loss"
+              ariaLabel={`期間中の最低寄与 ${worstTicker.symbol} ${formatSignedChartCurrency(worstTicker.contribution, displayCurrency, forexRate)}`}
+              title="期間中で最も足を引っ張った銘柄 (期末株数ベース)"
+            >
+              <span aria-hidden="true">⬇</span>&nbsp;最低&nbsp;{worstTicker.symbol}&nbsp;
+              <span style={{ color: 'var(--color-loss)', fontWeight: 600 }}>
+                {formatSignedChartCurrency(worstTicker.contribution, displayCurrency, forexRate)}
+              </span>
+            </Chip>
+          )}
+          {(period === '1d' || period === '1w') && (
+            <span className="pane2-areachart-note" title="1D/1W の短期 area は次の改善で追加予定 (B-3)">
+              短期データ未対応 (1M を表示)
+            </span>
+          )}
+        </div>
       </div>
       <div
         ref={containerRef}

@@ -5456,6 +5456,28 @@ button.ds-chip[data-pressed="true"]:hover {
   padding: 6px 14px 0;
 }
 
+/* v71 Phase 2.1 (6 体合議): best/worst chip 上に「期間中の主役銘柄」 micro-caption。
+   chip 単体だと「何の数字か」が hover しないと不明 → 視覚 caption で常時可視化。 */
+.pane2-areachart-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pane2-areachart-caption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+.pane2-areachart-caption-note {
+  font-size: 10px;
+  color: var(--text-muted);
+  cursor: help;
+}
+
 /* v71 Pane 3 抽象化 (6 体合議 converge): portfolio detail body。
    chart 55% / news 35% / 余白 10% の vertical 配分 (UI/UX 推奨)。 */
 .pane3-portfolio-detail {
