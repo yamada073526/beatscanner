@@ -518,6 +518,24 @@ export async function fetchNewsBulk(tickers, limitPerTicker = 5) {
   return r.json();
 }
 
+// v71 Phase 3-c: Pane 3 events lane の bulk fetch (ex-div + 8-K filings)
+// 戻り値: { items: [{ ticker, ex_dividends: [...], filings_8k: [...] }, ...] }
+export async function fetchPortfolioEvents(tickers, opts = {}) {
+  if (!Array.isArray(tickers) || tickers.length === 0) return { items: [] };
+  const body = {
+    tickers,
+    lookback_days: opts.lookbackDays ?? 30,
+    filings_limit: opts.filingsLimit ?? 5,
+  };
+  const r = await fetch('/api/portfolio-events/bulk', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...fmpHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) return { items: [] };
+  return r.json();
+}
+
 export async function fetchIRLinks(ticker) {
   const r = await fetch(`/api/ir-links/${encodeURIComponent(ticker)}`, {
     headers: fmpHeaders(),

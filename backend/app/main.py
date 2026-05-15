@@ -2388,37 +2388,25 @@ async def portfolio_performance(
     }
 
 
-@app.get("/api/historical-dividends/{ticker}")
-async def historical_dividends(
-    ticker: str,
-    request: Request,
+async def _fetch_dividends_for_ticker(
+    sym: str,
+    api_key: str | None,
     since: str | None = None,
     limit: int = 60,
-) -> dict:
-    """銘柄の過去配当履歴を返却 (Phase 4 dividend UI auto-fill / handover v68 §2 #1)。
+) -> list[dict]:
+    """配当履歴を返す per-ticker helper (FMP → yfinance fallback、 24h cache).
 
-    FMP `/stable/dividends?symbol=...` で free plan でも叩ける配当 endpoint を使用。
-    24h cache (配当は historical immutable data なので長め)。
-    Limit Reach / network error 時は stale cache or [] を graceful return。
-
-    query:
-      since: YYYY-MM-DD (除外日、これより新しいもののみ返却)
-      limit: 上限件数 (デフォ 60、最大 120)
-    response:
-      {"ticker": "AAPL", "dividends": [{date, amount, paymentDate, recordDate}, ...]}
+    /api/historical-dividends/{ticker} と /api/portfolio-events/bulk が共用 (v71 Phase 3-c).
+    返却: [{date, amount, paymentDate, recordDate}, ...] (新→古順)、 該当なしは []。
     """
-    sym = (ticker or "").strip().upper()
     if not sym or len(sym) > 12:
-        return {"ticker": sym, "dividends": []}
-
+        return []
     if limit < 1:
         limit = 1
     if limit > 120:
         limit = 120
-
-    api_key = _get_fmp_key(request) or os.getenv("FMP_API_KEY", "")
     if not api_key:
-        return {"ticker": sym, "dividends": []}
+        return []
 
     cache_key = f"dividends::{sym}"
     # FMP v3 historical-price-full/stock_dividend は free plan で premium 化 (Rate Limit).
@@ -2462,9 +2450,8 @@ async def historical_dividends(
         if len(out) >= limit:
             break
 
-    # FMP がデータを返したら即返却
     if out:
-        return {"ticker": sym, "dividends": out}
+        return out
 
     # yfinance fallback: FMP free plan rate-limit (premium 化) で empty 時、Yahoo の dividends を試す。
     # CLAUDE.md known issue: Railway IP が yfinance を block する可能性あり (earnings_dates の前例)。
@@ -2474,7 +2461,6 @@ async def historical_dividends(
         t_yf = _yf_div.Ticker(sym)
         div_series = t_yf.dividends  # pandas Series
         if div_series is not None and len(div_series) > 0:
-            # 新→古順に変換
             sorted_idx = sorted(div_series.index, reverse=True)
             yf_out: list[dict] = []
             for ix in sorted_idx:
@@ -2503,11 +2489,91 @@ async def historical_dividends(
                     {"date": d["date"], "adjDividend": d["amount"], "dividend": d["amount"]}
                     for d in yf_out
                 ]})
-                return {"ticker": sym, "dividends": yf_out}
+                return yf_out
     except Exception as e:
         print(f"[yfinance] dividends fallback failed for {sym}: {e}")
 
-    return {"ticker": sym, "dividends": []}
+    return []
+
+
+async def _fetch_8k_for_ticker(
+    sym: str,
+    api_key: str | None,
+    limit: int = 5,
+) -> list[dict]:
+    """SEC 8-K filings を返す per-ticker helper (v71 Phase 3-c events lane).
+
+    FMPClient.sec_filings の薄い wrapper + 12h cache。
+    返却: [{date, title, url}, ...] (新→古順)、 該当なしは []。
+    """
+    if not sym or len(sym) > 12:
+        return []
+    if limit < 1:
+        limit = 1
+    if limit > 30:
+        limit = 30
+
+    cache_key = f"filings_8k::{sym}::{limit}"
+    now = _time.time()
+    cached = _fmp_response_cache.get(cache_key)
+    if cached and now - cached[0] < 60 * 60 * 12:
+        return cached[1] if isinstance(cached[1], list) else []
+
+    try:
+        client = FMPClient(api_key=api_key)
+        raw = await client.sec_filings(sym, limit=limit, filing_type="8-K")
+    except FMPError:
+        if cached:
+            return cached[1] if isinstance(cached[1], list) else []
+        return []
+    except Exception as e:
+        print(f"[FMP] sec_filings 8-K failed for {sym}: {e}")
+        if cached:
+            return cached[1] if isinstance(cached[1], list) else []
+        return []
+
+    out: list[dict] = []
+    if isinstance(raw, list):
+        for f in raw:
+            if not isinstance(f, dict):
+                continue
+            url_v = f.get("finalLink") or f.get("link")
+            date_v = f.get("fillingDate") or f.get("date")
+            if not url_v or not date_v:
+                continue
+            out.append({
+                "date": str(date_v)[:10],
+                "title": f.get("type") or "8-K",
+                "url": str(url_v),
+            })
+
+    _fmp_response_cache[cache_key] = (now, out)
+    return out
+
+
+@app.get("/api/historical-dividends/{ticker}")
+async def historical_dividends(
+    ticker: str,
+    request: Request,
+    since: str | None = None,
+    limit: int = 60,
+) -> dict:
+    """銘柄の過去配当履歴を返却 (Phase 4 dividend UI auto-fill / handover v68 §2 #1)。
+
+    FMP `/stable/dividends?symbol=...` で free plan でも叩ける配当 endpoint を使用。
+    24h cache (配当は historical immutable data なので長め)。
+    Limit Reach / network error 時は stale cache or [] を graceful return。
+
+    query:
+      since: YYYY-MM-DD (除外日、これより新しいもののみ返却)
+      limit: 上限件数 (デフォ 60、最大 120)
+    response:
+      {"ticker": "AAPL", "dividends": [{date, amount, paymentDate, recordDate}, ...]}
+    """
+    sym = (ticker or "").strip().upper()
+    api_key = _get_fmp_key(request) or os.getenv("FMP_API_KEY", "")
+    out = await _fetch_dividends_for_ticker(sym, api_key, since=since, limit=limit)
+    return {"ticker": sym, "dividends": out}
 
 
 # 為替レート in-memory cache: key = "USD::JPY::2026-05-14" or "USD::JPY::latest"
@@ -4221,6 +4287,83 @@ async def news_bulk(body: dict, request: Request) -> dict:
         else:
             items.append({"ticker": t, "status": "ok", "articles": r})
     return {"items": items}
+
+
+@app.post("/api/portfolio-events/bulk")
+async def portfolio_events_bulk(body: dict, request: Request) -> dict:
+    """複数銘柄の events lane data (ex-div + 8-K filings) を 1 req で取得.
+
+    v71 Phase 3-c: Pane 3 PortfolioDetailBody から呼び出し、 chart marker (ex-div)
+    と chip ribbon (8-K filing) の両方に供給する。 news_bulk と同じ fan-out pattern。
+
+    Body: { tickers: [...], lookback_days: 30, filings_limit: 5 }
+    Returns: {
+      items: [
+        {
+          ticker: "AAPL",
+          ex_dividends: [{date, amount, paymentDate, recordDate}, ...],
+          filings_8k: [{date, title, url}, ...]
+        },
+        ...
+      ]
+    }
+    """
+    raw = body.get("tickers", []) or []
+    tickers: list[str] = []
+    seen: set[str] = set()
+    for t in raw:
+        s = str(t).strip().upper()
+        if s and s not in seen:
+            seen.add(s)
+            tickers.append(s)
+    if len(tickers) > 30:
+        tickers = tickers[:30]
+
+    try:
+        lookback_days = max(1, min(int(body.get("lookback_days", 30)), 365))
+    except (TypeError, ValueError):
+        lookback_days = 30
+    try:
+        filings_limit = max(1, min(int(body.get("filings_limit", 5)), 20))
+    except (TypeError, ValueError):
+        filings_limit = 5
+
+    if not tickers:
+        return {"items": []}
+
+    # since cutoff (YYYY-MM-DD): 今日から lookback_days 前
+    from datetime import datetime as _dt, timedelta as _td
+    since_iso = (_dt.utcnow() - _td(days=lookback_days)).strftime("%Y-%m-%d")
+
+    api_key = _get_fmp_key(request) or os.getenv("FMP_API_KEY", "")
+
+    async def _fetch_pair(sym: str) -> dict:
+        # 2 helper を per-ticker 並列 (gather でさらに全 ticker 並列されるので合計 N*2 並列)
+        div_task = _fetch_dividends_for_ticker(sym, api_key, since=since_iso, limit=10)
+        flt_task = _fetch_8k_for_ticker(sym, api_key, limit=filings_limit)
+        try:
+            divs, filings = await asyncio.gather(div_task, flt_task, return_exceptions=True)
+        except Exception as e:
+            print(f"[portfolio-events] gather failed for {sym}: {e}")
+            return {"ticker": sym, "ex_dividends": [], "filings_8k": []}
+        return {
+            "ticker": sym,
+            "ex_dividends": divs if isinstance(divs, list) else [],
+            "filings_8k": filings if isinstance(filings, list) else [],
+        }
+
+    results = await asyncio.gather(
+        *[_fetch_pair(t) for t in tickers],
+        return_exceptions=True,
+    )
+    items: list[dict] = []
+    for t, r in zip(tickers, results):
+        if isinstance(r, Exception):
+            items.append({"ticker": t, "ex_dividends": [], "filings_8k": []})
+        else:
+            items.append(r)
+    return {"items": items}
+
 
 _translate_cache: dict[str, str] = {}
 _article_cache: dict[str, dict] = {}

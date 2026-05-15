@@ -52,6 +52,13 @@ const CHART_PALETTE = {
              dark:  { line: '#38bdf8', top: 'rgba(56,189,248,0.40)', bottom: 'rgba(56,189,248,0.02)' } },
 };
 
+// v71 Phase 3-c: events lane marker 用 hex (lightweight-charts は hex 文字列を要求するため allowed exception)
+// gain / loss / warning / brand cyan のいずれとも衝突しない中立色 (CLAUDE.md「投資業界の色ルール」厳守)
+const EVENT_MARKER_PALETTE = {
+  earnings: 'rgba(245, 158, 11, 0.85)',  // amber warning (既存 Phase 3-a)
+  exDiv:    'rgba(99, 102, 241, 0.85)',  // indigo (新規 Phase 3-c)
+};
+
 function pickPalette(status, isDark) {
   const p = CHART_PALETTE[status] || CHART_PALETTE.neutral;
   return isDark ? p.dark : p.light;
@@ -65,7 +72,7 @@ const PERIOD_TO_SPY = {
   '1y': '1y',
 };
 
-export default function PortfolioHistoryChart({ lots = [] }) {
+export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null }) {
   const [period, setPeriod] = useState('3m');
   const [showSpy, setShowSpy] = useState(true);  // §11-B-7-B: SPY overlay default ON
   const { series, warnings, loading } = usePortfolioHistory(lots, period);
@@ -73,7 +80,7 @@ export default function PortfolioHistoryChart({ lots = [] }) {
 
   // v71 Phase 3-a (6 体合議 / 金融エキスパート events lane 必須): 保有銘柄の
   // 今後の決算日を chart 上に縦線 marker で表示。 Bloomberg PORT 流の events ribbon
-  // 簡易版 (ex-div / 8-K は Phase 3-c で追加予定)。
+  // 簡易版。 Phase 3-c で ex-div も追加 (belowBar / indigo / square で差別化)。
   const { earningsBySymbol } = useEarningsCalendar();
   const earningsMarkers = useMemo(() => {
     if (!earningsBySymbol || !Array.isArray(series) || series.length === 0) return [];
@@ -93,7 +100,7 @@ export default function PortfolioHistoryChart({ lots = [] }) {
       out.push({
         time: e.date,
         position: 'aboveBar',
-        color: 'rgba(245, 158, 11, 0.85)',  // --color-warning
+        color: EVENT_MARKER_PALETTE.earnings,
         shape: 'circle',
         text: `📅 ${t}`,
       });
@@ -102,6 +109,43 @@ export default function PortfolioHistoryChart({ lots = [] }) {
     out.sort((a, b) => (a.time < b.time ? -1 : 1));
     return out;
   }, [earningsBySymbol, series, lots]);
+
+  // v71 Phase 3-c (events lane 本格化): 保有銘柄の過去 ex-div (配当落ち日) を
+  // chart 上の belowBar marker で表示。 「配当落ちで価格が下がった」因果関係を可視化。
+  // position / shape / color で earnings marker と多重冗長に差別化 (色覚多様性対応)。
+  const exDivMarkers = useMemo(() => {
+    if (!exDivByTicker || !Array.isArray(series) || series.length === 0) return [];
+    const firstDate = series[0]?.date;
+    const lastDate = series[series.length - 1]?.date;
+    if (!firstDate || !lastDate) return [];
+    const uniqTickers = [...new Set(lots.map((l) => (l.ticker || '').toUpperCase()).filter(Boolean))];
+    const out = [];
+    for (const t of uniqTickers) {
+      const divs = exDivByTicker.get(t);
+      if (!Array.isArray(divs)) continue;
+      for (const d of divs) {
+        if (!d?.date) continue;
+        if (d.date < firstDate || d.date > lastDate) continue;  // 表示窓内のみ
+        const amt = Number(d.amount);
+        const amtTxt = Number.isFinite(amt) ? ` $${amt.toFixed(2)}` : '';
+        out.push({
+          time: d.date,
+          position: 'belowBar',
+          color: EVENT_MARKER_PALETTE.exDiv,
+          shape: 'square',
+          text: `💰 ${t}${amtTxt}`,
+        });
+      }
+    }
+    out.sort((a, b) => (a.time < b.time ? -1 : 1));
+    return out;
+  }, [exDivByTicker, series, lots]);
+
+  // earnings + ex-div を 1 回の setMarkers 呼び出しで渡すため時系列順 merge
+  const allMarkers = useMemo(() => {
+    if (earningsMarkers.length === 0 && exDivMarkers.length === 0) return [];
+    return [...earningsMarkers, ...exDivMarkers].sort((a, b) => (a.time < b.time ? -1 : 1));
+  }, [earningsMarkers, exDivMarkers]);
 
   // v71 Phase 2.1 (6 体合議 / latency 改善):
   // 期間 chip 切替の体感速度改善のため、 mount 時 + lots 変更時に他期間も
@@ -293,9 +337,10 @@ export default function PortfolioHistoryChart({ lots = [] }) {
           areaSeries.setData(rawData);
         }
 
-        // v71 Phase 3-a: 決算日 marker を chart 上に重ねる (lightweight-charts setMarkers API)
-        if (earningsMarkers.length > 0 && typeof areaSeries.setMarkers === 'function') {
-          try { areaSeries.setMarkers(earningsMarkers); } catch { /* noop: API 互換問題 */ }
+        // v71 Phase 3-a/3-c: events lane marker を chart 上に重ねる (lightweight-charts setMarkers API)
+        // earnings (aboveBar amber circle 📅) + ex-div (belowBar indigo square 💰) を時系列順 merge 済
+        if (allMarkers.length > 0 && typeof areaSeries.setMarkers === 'function') {
+          try { areaSeries.setMarkers(allMarkers); } catch { /* noop: API 互換問題 */ }
         }
 
         chart.timeScale().fitContent();
@@ -313,7 +358,7 @@ export default function PortfolioHistoryChart({ lots = [] }) {
       seriesRef.current = null;
       spySeriesRef.current = null;
     };
-  }, [series, twrSeries, status, spyPoints, showSpy, earningsMarkers]);
+  }, [series, twrSeries, status, spyPoints, showSpy, allMarkers]);
 
   // ── リサイズ追従 ──
   useEffect(() => {

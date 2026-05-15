@@ -22,6 +22,7 @@ import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { usePortfolioJudgment } from '../../hooks/usePortfolioJudgment.js';
 import { useAccountName } from '../../hooks/useAccountName.js';
 import { usePortfolioPrices } from '../../hooks/usePortfolioPrices.js';
+import { usePortfolioEvents } from '../../hooks/usePortfolioEvents.js';
 import { fetchNewsBulk } from '../../api.js';
 import Chip from '../../components/ui/Chip.jsx';
 
@@ -108,6 +109,28 @@ export default function PortfolioDetailBody({ scopeId = 'all' }) {
     out.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
     return out.slice(0, 3);  // 上位 3 件で UI 圧迫を回避
   }, [topTickers, portfolioPrices]);
+
+  // v71 Phase 3-c (events lane 本格化): ex-div + 8-K filings を bulk fetch。
+  // chart には ex-div を marker として渡し、 8-K は chart 下の chip ribbon で表示。
+  const { exDivByTicker, filingsByTicker } = usePortfolioEvents(topTickers, { lookbackDays: 30 });
+
+  // 8-K chip ribbon: 全 ticker 横断で flatten、 過去 14 日以内、 date 降順、 top 5
+  const recentFilings = useMemo(() => {
+    if (!filingsByTicker || filingsByTicker.size === 0) return [];
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 14);
+    const cutoffIso = cutoff.toISOString().slice(0, 10);
+    const flat = [];
+    for (const [ticker, filings] of filingsByTicker.entries()) {
+      for (const f of (filings || [])) {
+        if (!f?.date || !f?.url) continue;
+        if (f.date < cutoffIso) continue;
+        flat.push({ ticker, date: f.date, title: f.title || '8-K', url: f.url });
+      }
+    }
+    flat.sort((a, b) => (a.date < b.date ? 1 : -1));
+    return flat.slice(0, 5);
+  }, [filingsByTicker]);
 
   // 保有銘柄ニュース bulk: top 5 ticker × 3 件
   const [newsItems, setNewsItems] = useState([]);
@@ -225,10 +248,42 @@ export default function PortfolioDetailBody({ scopeId = 'all' }) {
         </div>
       )}
 
-      {/* 大 chart (PortfolioHistoryChart 既存資産を Suspense + lazy で消費) */}
+      {/* 大 chart (PortfolioHistoryChart 既存資産を Suspense + lazy で消費)
+          v71 Phase 3-c: exDivByTicker prop で chart 上に 💰 marker を重ねる */}
       <Suspense fallback={<div className="pane3-portfolio-chart-fallback" aria-label="読み込み中" />}>
-        <PortfolioHistoryChart lots={lots} />
+        <PortfolioHistoryChart lots={lots} exDivByTicker={exDivByTicker} />
       </Suspense>
+
+      {/* v71 Phase 3-c: 最近のSEC 8-K 開示 chip ribbon (events lane 本格化)。
+          chart 直後・ニュース直前に配置し、 click で SEC EDGAR の filing 全文へ。
+          ex-div は chart marker 側で表示し、 8-K は URL link 動線を優先して chip 化。 */}
+      {recentFilings.length > 0 && (
+        <div className="pane3-portfolio-filings" role="group" aria-label="最近のSEC 8-K 開示">
+          <span className="pane3-portfolio-filings-caption">最近のSEC開示 (8-K)</span>
+          {recentFilings.map((f) => (
+            <a
+              key={`${f.ticker}-${f.url}`}
+              href={f.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="pane3-portfolio-filings-link"
+              title={`${f.ticker} 8-K filing (${f.date}) — SEC EDGAR で全文を開く`}
+            >
+              <Chip
+                size="xs"
+                variant="display"
+                tone="muted"
+                ariaLabel={`${f.ticker} の 8-K 開示、 ${timeAgo(f.date)}`}
+              >
+                <span aria-hidden="true">📄</span>
+                &nbsp;{f.ticker}&nbsp;·&nbsp;
+                <span style={{ color: 'var(--text-muted)' }}>{timeAgo(f.date)}</span>
+                <span aria-hidden="true">&nbsp;↗</span>
+              </Chip>
+            </a>
+          ))}
+        </div>
+      )}
 
       {/* 保有銘柄ニュース集約 */}
       <section className="pane3-portfolio-news">

@@ -5561,6 +5561,32 @@ button.ds-chip[data-pressed="true"]:hover {
   letter-spacing: 0.02em;
   margin-right: 2px;
 }
+/* v71 Phase 3-c (events lane 本格化): 最近の SEC 8-K filings chip ribbon。
+   Top Movers と同 pattern。 各 chip は <a> wrapper で外部 link、
+   hover で chip border を強調し clickable affordance を出す。 */
+.pane3-portfolio-filings {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px 0 0;
+}
+.pane3-portfolio-filings-caption {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  margin-right: 2px;
+}
+.pane3-portfolio-filings-link {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+.pane3-portfolio-filings-link:hover .ds-chip,
+.pane3-portfolio-filings-link:focus-visible .ds-chip {
+  border-color: var(--border-strong, var(--border));
+}
 .pane3-portfolio-empty {
   padding: 24px 16px;
   text-align: center;
