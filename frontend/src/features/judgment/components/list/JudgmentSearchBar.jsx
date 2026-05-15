@@ -14,6 +14,9 @@ export default function JudgmentSearchBar() {
     const onKey = (e) => {
       const isMod = e.metaKey || e.ctrlKey;
       if (isMod && e.key.toLowerCase() === 'k') {
+        // macOS IME (Japanese) で Cmd+K はカタカナ変換ショートカット。
+        // IME composition 中は native 変換を優先 (handover v68 dogfood fix)
+        if (e.isComposing || e.keyCode === 229) return;
         e.preventDefault();
         inputRef.current?.focus();
         inputRef.current?.select();

@@ -14,12 +14,15 @@ export function useCmdPalette() {
   useEffect(() => {
     const onKey = (e) => {
       const isMod = e.metaKey || e.ctrlKey;
-      if (isMod && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        // capture: true で他の listener (例: JudgmentSearchBar の local ⌘K) より先に発火
-        e.stopPropagation();
-        toggle();
-      }
+      if (!isMod || e.key.toLowerCase() !== 'k') return;
+      // macOS IME (Japanese) で Cmd+K は「全角ひらがな → カタカナ変換」のショートカット。
+      // IME composition 中 (isComposing=true) や keyCode=229 (IME proxy) のときは
+      // パレット開閉を skip して native IME 変換を優先する (handover v68 §2 dogfood fix)。
+      if (e.isComposing || e.keyCode === 229) return;
+      e.preventDefault();
+      // capture: true で他の listener (例: JudgmentSearchBar の local ⌘K) より先に発火
+      e.stopPropagation();
+      toggle();
     };
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });

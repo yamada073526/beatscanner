@@ -10,6 +10,8 @@ import { useArrivalSpotlight } from './hooks/useArrivalSpotlight.js';
 import { useIsMobile } from './hooks/useIsMobile.js';
 import { useTags } from './hooks/useTags.js';
 import { useHoldings } from './hooks/useHoldings.js';
+import { useAccounts } from './hooks/useAccounts.js';
+import { useTransactions } from './hooks/useTransactions.js';
 import { useEarningsCalendar } from './hooks/useEarningsCalendar.js';
 import { usePortfolioPrices } from './hooks/usePortfolioPrices.js';
 import { initDarkMode, toggleDarkMode, isDark } from './utils/darkMode.js';
@@ -224,13 +226,28 @@ export default function App() {
 
   // ── 保有 (Holdings X-2): Supabase 同期 + 楽観的更新 ─────────────
   const holdingStore = useHoldings({ supabase, user });
+
+  // v68 §2 #7 (handover): Cmd+K 拡張用 — 口座 / transaction 検索ソース
+  const { accounts: cmdAccounts } = useAccounts({ supabase, user });
+  const { transactions: cmdTransactions } = useTransactions({ supabase, user });
   // v62 WS-Phase2: Pane 2 「決算まで N 日」meta 用 earnings calendar (30 分 cache)
   const { earningsBySymbol } = useEarningsCalendar();
   // 案 D: HoldingModal は廃止。TagAssignSheet 内で完結するため
   // holdingModalTicker state は不要 (tagAssignTicker に統合)。
 
   // ── 保有銘柄の現在価格を 60s/900s 毎に再取得 (Phase 3 損益バッジ) ──
-  const portfolioPrices = usePortfolioPrices(holdingStore.tickers);
+  // v68 dogfood fix 2026-05-15: holding_lots ベースの ticker のみで price 取得すると、
+  // transaction 経由で追加された ticker (NVDA 等) の price が undefined になる bug。
+  // transactions に含まれる全 ticker を union して fetch する。
+  const allPortfolioTickers = useMemo(() => {
+    const set = new Set(Array.isArray(holdingStore?.tickers) ? holdingStore.tickers : []);
+    for (const tx of Array.isArray(cmdTransactions) ? cmdTransactions : []) {
+      const t = String(tx.ticker || '').trim().toUpperCase();
+      if (t) set.add(t);
+    }
+    return Array.from(set);
+  }, [holdingStore?.tickers, cmdTransactions]);
+  const portfolioPrices = usePortfolioPrices(allPortfolioTickers);
 
   // ── holdings 検知時の自動 hold モード起動 (Trust Cliff 解消)
   // 一度も明示選択していない (localStorage 空) かつ holdings>0 なら自動で 'hold' に切替
@@ -707,30 +724,122 @@ export default function App() {
     items.push({ id: 'theme:toggle', group: 'action',
       label: isDarkState ? 'ライトモードへ切替' : 'ダークモードへ切替',
       action: () => toggleDarkMode() });
+    // v68 dogfood fix 2026-05-15: workspace mode で Pane 3 に judgment detail を強制表示
+    // runAnalyze は setActiveTab('judgment') を呼ぶが workspace mode の tab 名は home/indices なので
+    // no-op。代わりに pane3JudgmentOverride で Pane 3 を judgment view に切替。
+    const runAnalyzeAndShowDetail = (t) => {
+      try { runAnalyze(t); } catch { /* noop */ }
+      try { useWorkspaceStore.getState().setPane3JudgmentOverride(true); } catch { /* noop */ }
+    };
+
+    // navigateToWorkspaceKeepingState: pushState + popState で reload せず workspace へ遷移
+    const navigateToWorkspaceKeepingState = () => {
+      try {
+        const inWs = new URLSearchParams(window.location.search).get('layout') === 'workspace';
+        if (inWs) return false;
+        const url = new URL(window.location.href);
+        url.searchParams.set('layout', 'workspace');
+        window.history.pushState({}, '', url.toString());
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    // v68 §2 #7 (2026-05-15): 口座切替
+    // v68 dogfood fix: workspace mode で Pane 2 portfolio は activeTab='indices' のときだけ mount される。
+    // switchAppTab で SPA + workspace 両方の activeTab を同期 + view transition 起動。
+    const switchAccountAndShowPortfolio = (accountId) => {
+      try {
+        switchAppTab('indices');
+        useWorkspaceStore.getState().setSelectedAccountId(accountId);
+      } catch { /* noop */ }
+      navigateToWorkspaceKeepingState();
+    };
+    // 視覚順 (bucket render order): action → account → recent → holdings → watchlist → transaction
+    // Down arrow keyboard nav が視覚順に揃うよう、push 順を bucket と一致させる (v68 dogfood fix 2026-05-15)
+    if (Array.isArray(cmdAccounts) && cmdAccounts.length > 1) {
+      items.push({
+        id: 'account:rollup',
+        group: 'account',
+        label: '全口座 (合計) に切替',
+        description: 'rollup 表示',
+        hint: 'A',
+        action: () => switchAccountAndShowPortfolio(null),
+      });
+      for (const a of cmdAccounts) {
+        items.push({
+          id: `account:${a.id}`,
+          group: 'account',
+          label: `${a.name} に切替`,
+          description: a.type || '口座切替',
+          action: () => switchAccountAndShowPortfolio(a.id),
+        });
+      }
+    }
     // 直近分析 (bs_analyzed localStorage)
     try {
       const data = JSON.parse(localStorage.getItem('bs_analyzed') || '{}');
       const sorted = Object.entries(data).sort(([, a], [, b]) => b - a).slice(0, 8);
       for (const [t] of sorted) {
         items.push({ id: `recent:${t}`, group: 'recent', label: `${t} を分析`,
-          ticker: t, action: () => runAnalyze(t) });
+          ticker: t, action: () => runAnalyzeAndShowDetail(t) });
       }
     } catch { /* ignore */ }
     // 保有
     const holdingTickers = Array.isArray(holdingStore?.tickers) ? holdingStore.tickers : [];
     for (const t of holdingTickers) {
       items.push({ id: `holding:${t}`, group: 'holdings', label: `${t} を分析`,
-        ticker: t, description: '保有銘柄', action: () => runAnalyze(t) });
+        ticker: t, description: '保有銘柄', action: () => runAnalyzeAndShowDetail(t) });
     }
     // ウォッチリスト
     for (const t of watchlist) {
       if (holdingTickers.includes(t)) continue; // 保有と重複させない
       items.push({ id: `watch:${t}`, group: 'watchlist', label: `${t} を分析`,
-        ticker: t, description: 'ウォッチリスト', action: () => runAnalyze(t) });
+        ticker: t, description: 'ウォッチリスト', action: () => runAnalyzeAndShowDetail(t) });
+    }
+    // v68 §2 #7: 取引履歴検索
+    const TYPE_LABEL_JP = { buy: '買付', sell: '売却', dividend: '配当', split: '分割',
+      fee: '手数料', deposit: '入金', withdraw: '出金' };
+    if (Array.isArray(cmdTransactions) && cmdTransactions.length > 0) {
+      const sorted = [...cmdTransactions]
+        .sort((a, b) => String(b.trade_date || '').localeCompare(String(a.trade_date || '')))
+        .slice(0, 50);
+      for (const tx of sorted) {
+        const t = String(tx.ticker || '').trim().toUpperCase();
+        if (!t) continue;
+        const txAccountId = tx.account_id;
+        const typeLabel = TYPE_LABEL_JP[String(tx.type || '').toLowerCase()] || tx.type;
+        const date = String(tx.trade_date || '').slice(0, 10).replace(/-/g, '/');
+        const sh = Number(tx.shares);
+        const pr = Number(tx.price);
+        const cur = String(tx.currency || 'USD').toUpperCase();
+        const sharesLabel = Number.isFinite(sh) && sh > 0 ? `${sh} 株` : '';
+        const priceLabel = Number.isFinite(pr) && pr > 0 ? `${cur} ${pr.toFixed(2)}` : '';
+        items.push({
+          id: `tx:${tx.id}`,
+          group: 'transaction',
+          label: `${date} ${typeLabel} ${t}`,
+          description: [sharesLabel, priceLabel].filter(Boolean).join(' × '),
+          ticker: t,
+          action: () => {
+            // その transaction の account に切替 + 指数 tab へ切替 (switchAppTab で SPA+ws 両方同期)
+            // setSelectedAccountId は filterTicker を null reset するので、setFilterTicker は最後。
+            try {
+              switchAppTab('indices');
+              const store = useWorkspaceStore.getState();
+              if (txAccountId) store.setSelectedAccountId(txAccountId);
+              store.setFilterTicker(t);
+            } catch { /* noop */ }
+            navigateToWorkspaceKeepingState();
+          },
+        });
+      }
     }
     return items;
     // setActiveTab / runAnalyze は安定参照、watchlist / holdings / isDarkState の変化で再計算
-  }, [isDarkState, watchlist, holdingStore?.tickers, runAnalyze, setActiveTab]);
+  }, [isDarkState, watchlist, holdingStore?.tickers, runAnalyze, setActiveTab, cmdAccounts, cmdTransactions]);
 
 
   // v62 WS-2/3.5/5: URL `?layout` flag で workspace ↔ SPA を切替.

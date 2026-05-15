@@ -82,6 +82,9 @@ export default function CmdPalette({ open, close, items = [], onAnalyze }) {
   if (!open) return null;
 
   const handleKey = (e) => {
+    // v68 dogfood fix 2026-05-15: 日本語 IME 入力中 (ひらがな → 漢字変換確定の Enter)
+    // をパレットの Enter / Escape として誤検知しないよう、composition 中は全 key を no-op。
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Escape') {
       e.preventDefault();
       close();
@@ -135,7 +138,11 @@ export default function CmdPalette({ open, close, items = [], onAnalyze }) {
         }}
       >
         <span aria-hidden style={{ color: 'var(--text-muted)', width: 18, fontSize: 13 }}>
-          {it.group === 'analyze' ? '⚡' : it.group === 'action' ? '◆' : '○'}
+          {it.group === 'analyze' ? '⚡'
+            : it.group === 'action' ? '◆'
+            : it.group === 'account' ? '🏦'
+            : it.group === 'transaction' ? '📋'
+            : '○'}
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
@@ -192,11 +199,13 @@ export default function CmdPalette({ open, close, items = [], onAnalyze }) {
   let sections = [];
   if (grouped) {
     const buckets = {
-      action:    { title: 'クイックアクション',     items: [] },
-      recent:    { title: '直近分析',               items: [] },
-      holdings:  { title: '保有銘柄',               items: [] },
-      watchlist: { title: 'ウォッチリスト',         items: [] },
-      analyze:   { title: '分析',                   items: [] },
+      action:      { title: 'クイックアクション',     items: [] },
+      account:     { title: '口座切替',               items: [] },
+      recent:      { title: '直近分析',               items: [] },
+      holdings:    { title: '保有銘柄',               items: [] },
+      watchlist:   { title: 'ウォッチリスト',         items: [] },
+      transaction: { title: '取引履歴',               items: [] },
+      analyze:     { title: '分析',                   items: [] },
     };
     let idx = 0;
     for (const it of view) {
