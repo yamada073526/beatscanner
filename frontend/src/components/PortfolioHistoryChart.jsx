@@ -57,8 +57,8 @@ const CHART_PALETTE = {
 // dogfood 2026-05-15: dark theme で indigo 500 は背景と同化して読めなかった
 // → theme-aware (light = dark 系トーン / dark = light 系トーン) で contrast 確保。
 const EVENT_MARKER_PALETTE = {
-  earnings: { light: 'rgba(217, 119, 6, 0.95)',  dark: 'rgba(251, 191, 36, 0.95)'  },  // amber-600 / amber-400
-  exDiv:    { light: 'rgba(79, 70, 229, 0.95)',  dark: 'rgba(165, 180, 252, 0.95)' },  // indigo-600 / indigo-300
+  earnings: { light: 'rgba(180, 83, 9, 1.0)',    dark: 'rgba(253, 224, 71, 1.0)'  },  // amber-700 / yellow-300
+  exDiv:    { light: 'rgba(67, 56, 202, 1.0)',   dark: 'rgba(199, 210, 254, 1.0)' },  // indigo-700 / indigo-200
 };
 
 function pickPalette(status, isDark) {
@@ -498,6 +498,23 @@ export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null 
         )}
         <div ref={containerRef} className="pd-history-chart" aria-hidden={series.length === 0} />
       </div>
+      {/* v71 Phase 3-c dogfood 2026-05-15 fix: marker の意味を凡例で明示。
+          icon-only では「📅 何の日？」「💰 何の日？」が UX 失敗。
+          marker が存在する時のみ表示 (空の chart で legend が孤立しないように)。 */}
+      {(earningsMarkers.length > 0 || exDivMarkers.length > 0) && (
+        <div className="pd-history-events-legend" aria-label="チャート上の marker 凡例">
+          {earningsMarkers.length > 0 && (
+            <span className="pd-history-events-legend-item">
+              <span aria-hidden="true">📅</span> 決算日 <span className="pd-history-events-legend-sub">(今後 90 日以内)</span>
+            </span>
+          )}
+          {exDivMarkers.length > 0 && (
+            <span className="pd-history-events-legend-item">
+              <span aria-hidden="true">💰</span> 配当落ち日 <span className="pd-history-events-legend-sub">(過去 30 日以内)</span>
+            </span>
+          )}
+        </div>
+      )}
     </section>
   );
 }

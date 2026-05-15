@@ -4533,6 +4533,30 @@ body {
   position: relative;
   min-height: 200px;
 }
+/* v71 Phase 3-c (2026-05-15 dogfood fix): chart marker 凡例。
+   📅 = 決算日 / 💰 = 配当落ち日 を user に明示。
+   surface-card 下端に置いて chart に密接、 muted color で控えめに。 */
+.pd-history-events-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+.pd-history-events-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.pd-history-events-legend-sub {
+  opacity: 0.7;
+  font-weight: 400;
+}
 .pd-history-chart {
   width: 100%;
   height: 200px;
