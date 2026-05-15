@@ -2537,15 +2537,118 @@ async def _fetch_dividends_for_ticker(
     return []
 
 
+# SEC EDGAR ticker → CIK mapping cache (24h TTL、 ticker → 10 桁 CIK 文字列)
+_SEC_CIK_CACHE: dict[str, tuple[float, str]] = {}
+_SEC_CIK_TTL = 60 * 60 * 24
+
+
+async def _sec_lookup_cik(sym: str) -> str | None:
+    """SEC EDGAR の ticker → CIK 解決 (24h cache)。 US 上場銘柄のみ対応 (日本株 7203.T 等は None)。
+
+    SEC が提供する `company_tickers.json` (https://www.sec.gov/files/company_tickers.json)
+    で全 US 上場銘柄の ticker → CIK マッピングを取得。 リクエスト 1 回で全マッピング取得 →
+    24h cache で全 ticker 共有。
+    """
+    if not sym:
+        return None
+    sym_u = sym.upper().strip()
+    if "." in sym_u:  # 7203.T 等の海外取引所 ticker は SEC 対象外
+        return None
+    now = _time.time()
+    cached = _SEC_CIK_CACHE.get(sym_u)
+    if cached and now - cached[0] < _SEC_CIK_TTL:
+        return cached[1] if cached[1] else None
+    # 全マッピング fetch (10MB 程度、 24h で 1 回のみ)
+    if "__all__" not in _SEC_CIK_CACHE or now - _SEC_CIK_CACHE["__all__"][0] >= _SEC_CIK_TTL:
+        try:
+            import httpx as _httpx
+            async with _httpx.AsyncClient(timeout=10.0) as client:
+                # SEC は User-Agent 必須 (空だと 403 / 429 で reject される)
+                resp = await client.get(
+                    "https://www.sec.gov/files/company_tickers.json",
+                    headers={"User-Agent": "BeatScanner support@beatscanner.example"},
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    # SEC response: {"0": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc."}, ...}
+                    for v in data.values():
+                        if not isinstance(v, dict):
+                            continue
+                        t = (v.get("ticker") or "").upper()
+                        cik = v.get("cik_str")
+                        if t and cik is not None:
+                            _SEC_CIK_CACHE[t] = (now, str(cik).zfill(10))
+                    _SEC_CIK_CACHE["__all__"] = (now, "ok")
+        except Exception as e:
+            print(f"[SEC EDGAR] CIK mapping fetch failed: {e}")
+            _SEC_CIK_CACHE["__all__"] = (now, "")  # 1 時間は retry しない (cache hit にする)
+    cached_after = _SEC_CIK_CACHE.get(sym_u)
+    return cached_after[1] if cached_after else None
+
+
+async def _fetch_8k_from_sec_edgar(sym: str, limit: int = 5) -> list[dict]:
+    """SEC EDGAR submissions.json から 8-K filings を取得 (v71 Phase 3-c fallback)。
+
+    FMP が empty を返した時の fallback、 完全無料 (User-Agent 必須)。
+    submissions.json は CIK 単位で全 filings (recent + historical) を返す。
+    返却: [{date, title, url}, ...]。 url は SEC EDGAR の filing index ページ。
+    """
+    cik = await _sec_lookup_cik(sym)
+    if not cik:
+        return []
+    try:
+        import httpx as _httpx
+        async with _httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"https://data.sec.gov/submissions/CIK{cik}.json",
+                headers={"User-Agent": "BeatScanner support@beatscanner.example"},
+            )
+            if resp.status_code != 200:
+                return []
+            data = resp.json()
+    except Exception as e:
+        print(f"[SEC EDGAR] submissions.json fetch failed for {sym}: {e}")
+        return []
+    recent = data.get("filings", {}).get("recent", {})
+    forms = recent.get("form", []) or []
+    dates = recent.get("filingDate", []) or []
+    accessions = recent.get("accessionNumber", []) or []
+    primary_docs = recent.get("primaryDocument", []) or []
+    out: list[dict] = []
+    cik_int = str(int(cik))  # 先頭 0 を落とした form (URL 構築用)
+    for i, form in enumerate(forms):
+        if form != "8-K":
+            continue
+        if i >= len(dates) or i >= len(accessions):
+            continue
+        date_s = str(dates[i])[:10]
+        accession = accessions[i].replace("-", "")  # 0000320193-25-XXXXXX → 000032019325XXXXXX
+        primary = primary_docs[i] if i < len(primary_docs) else ""
+        # SEC EDGAR filing index URL: https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type=8-K
+        # or filing-specific: https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession}/{primary}
+        if primary:
+            url = f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession}/{primary}"
+        else:
+            url = f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type=8-K"
+        out.append({
+            "date": date_s,
+            "title": "8-K",
+            "url": url,
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
 async def _fetch_8k_for_ticker(
     sym: str,
     api_key: str | None,
     limit: int = 5,
 ) -> list[dict]:
-    """SEC 8-K filings を返す per-ticker helper (v71 Phase 3-c events lane).
+    """SEC 8-K filings を返す per-ticker helper (v71 Phase 3-c events lane)。
 
-    FMPClient.sec_filings の薄い wrapper + 12h cache。
-    返却: [{date, title, url}, ...] (新→古順)、 該当なしは []。
+    FMPClient.sec_filings → empty なら SEC EDGAR submissions.json fallback (handover v71 4 体合議推奨)。
+    12h cache。 返却: [{date, title, url}, ...] (新→古順)、 該当なしは []。
     """
     if not sym or len(sym) > 12:
         return []
@@ -2560,33 +2663,38 @@ async def _fetch_8k_for_ticker(
     if cached and now - cached[0] < 60 * 60 * 12:
         return cached[1] if isinstance(cached[1], list) else []
 
+    out: list[dict] = []
+    # 第 1 候補: FMP /stable/sec-filings (Starter+ で取得可、 v3 deprecated 2025-08-31)
     try:
         client = FMPClient(api_key=api_key)
         raw = await client.sec_filings(sym, limit=limit, filing_type="8-K")
+        if isinstance(raw, list):
+            for f in raw:
+                if not isinstance(f, dict):
+                    continue
+                url_v = f.get("finalLink") or f.get("link")
+                date_v = f.get("fillingDate") or f.get("date")
+                if not url_v or not date_v:
+                    continue
+                out.append({
+                    "date": str(date_v)[:10],
+                    "title": f.get("type") or "8-K",
+                    "url": str(url_v),
+                })
     except FMPError:
-        if cached:
-            return cached[1] if isinstance(cached[1], list) else []
-        return []
+        pass
     except Exception as e:
         print(f"[FMP] sec_filings 8-K failed for {sym}: {e}")
-        if cached:
-            return cached[1] if isinstance(cached[1], list) else []
-        return []
 
-    out: list[dict] = []
-    if isinstance(raw, list):
-        for f in raw:
-            if not isinstance(f, dict):
-                continue
-            url_v = f.get("finalLink") or f.get("link")
-            date_v = f.get("fillingDate") or f.get("date")
-            if not url_v or not date_v:
-                continue
-            out.append({
-                "date": str(date_v)[:10],
-                "title": f.get("type") or "8-K",
-                "url": str(url_v),
-            })
+    # 第 2 候補 (fallback): SEC EDGAR submissions.json (無料、 認証不要、 10 req/s)
+    # 4 体合議 (handover v71 §11) で「FMP 空時の確実な fallback として推奨」 と確定。
+    if not out:
+        try:
+            edgar_out = await _fetch_8k_from_sec_edgar(sym, limit=limit)
+            if edgar_out:
+                out = edgar_out
+        except Exception as e:
+            print(f"[SEC EDGAR] fallback failed for {sym}: {e}")
 
     _fmp_response_cache[cache_key] = (now, out)
     return out
