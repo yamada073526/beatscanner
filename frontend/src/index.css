@@ -5873,3 +5873,33 @@ button.ds-chip:active {
     transform: none;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   TransactionHistoryModal v68 §2 #6 dogfood 6 体合議結果 (2026-05-15)
+   modal 内 row の狭幅折返し問題を container query で根治。
+   modal max-width 640px だが、Pane 2 が狭い (Pane 4 同時開) と modal も狭く描画される。
+   container-type: inline-size で modal 自身の幅を参照し、460px 未満で column 削減。
+   ───────────────────────────────────────────────────────────────────── */
+.ds-tx-history-card {
+  container-type: inline-size;
+  container-name: tx-history-card;
+}
+
+/* 狭幅: ticker 列 (= 4 列目の data col の left section) と account chip を隠す */
+@container tx-history-card (max-width: 520px) {
+  .ds-tx-row .ds-tx-account { display: none; }
+}
+@container tx-history-card (max-width: 460px) {
+  .ds-tx-row .ds-tx-ticker { display: none; }
+  .ds-tx-row {
+    /* 5 列 → 4 列 (ticker hide) */
+    grid-template-columns: minmax(72px, auto) 56px minmax(0, 1fr) auto !important;
+  }
+  .ds-tx-row-actions {
+    grid-column: 4 / 5;
+  }
+}
+@container tx-history-card (max-width: 380px) {
+  /* 極狭: fx_rate chip も小さく */
+  .ds-tx-row .ds-tx-fx-chip { font-size: 9px; padding: 1px 4px; }
+}

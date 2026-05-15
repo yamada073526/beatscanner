@@ -24,9 +24,10 @@ import { useAccounts } from '../../hooks/useAccounts.js';
 import { useTransactions } from '../../hooks/useTransactions.js';
 import { aggregateWithTransactions } from '../../lib/holdings.js';
 import { supabase } from '../../lib/supabase.js';
-import { ACCOUNT_TYPE_LABEL } from '../../lib/accounts.js';
+import { ACCOUNT_TYPE_LABEL, ACCOUNT_TYPES, SUPPORTED_CURRENCIES } from '../../lib/accounts.js';
 import TransactionEntryModal from '../../components/TransactionEntryModal.jsx';
 import TransactionHistoryModal from '../../components/TransactionHistoryModal.jsx';
+import PortfolioJudgmentDetailModal from '../../components/PortfolioJudgmentDetailModal.jsx';
 import {
   fetchMarketIndices,
   fetchMovers,
@@ -142,11 +143,13 @@ function PortfolioPaneSection({ holdings, portfolioPrices, user }) {
   const tickers = Object.keys(effectiveHoldings);
 
   // Phase 0 動線改善 (2026-05-14): 0 holdings でも空 state CTA を出す。
+  // v68 §2 #6 dogfood 2026-05-15: 各口座 view でも「+ 取引を登録」を提供 (PortfolioActions を常時 mount)
   if (tickers.length === 0) {
     return (
       <>
         <AccountSwitcher user={user} />
         <PortfolioEmptyStateCta />
+        <PortfolioActions prices={portfolioPrices} />
       </>
     );
   }
@@ -171,7 +174,7 @@ function PortfolioPaneSection({ holdings, portfolioPrices, user }) {
 // Phase 2.5 で useTransactions を本格統合してから (holdings は account 跨ぎの
 // 互換維持のため当面は rollup 表示固定)。
 function AccountSwitcher({ user }) {
-  const { accounts, loading } = useAccounts({ supabase, user });
+  const { accounts, loading, addAccount } = useAccounts({ supabase, user });
   const selectedAccountId = useWorkspaceStore((s) => s.selectedAccountId);
   const setSelectedAccountId = useWorkspaceStore((s) => s.setSelectedAccountId);
   const collapsed = useWorkspaceStore((s) => s.portfolioCollapsed);
@@ -179,8 +182,27 @@ function AccountSwitcher({ user }) {
   // 折り畳み中は switcher も非表示
   if (collapsed) return null;
   if (loading || !Array.isArray(accounts)) return null;
-  // 口座 1 つ以下 (デフォルトのみ) なら switcher 不要、UI シンプル維持
-  if (accounts.length <= 1) return null;
+  // 口座 0 (loading 完了直前) は非表示。1 以上で「+ 追加」 button を出す。
+  if (accounts.length === 0) return null;
+
+  return (
+    <AccountSwitcherInner
+      accounts={accounts}
+      selectedAccountId={selectedAccountId}
+      setSelectedAccountId={setSelectedAccountId}
+      addAccount={addAccount}
+    />
+  );
+}
+
+// 内部 component: useState を accounts.length のガード後に置くため分離
+function AccountSwitcherInner({ accounts, selectedAccountId, setSelectedAccountId, addAccount }) {
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newType, setNewType] = useState('tokutei');
+  const [newCurrency, setNewCurrency] = useState('USD');
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState(null);
 
   const tabs = [
     { id: null, label: '合計', isRollup: true },
@@ -193,46 +215,218 @@ function AccountSwitcher({ user }) {
     })),
   ];
 
+  const handleCreate = async (e) => {
+    e?.preventDefault?.();
+    setCreateError(null);
+    const name = newName.trim();
+    if (!name) {
+      setCreateError('口座名を入力してください');
+      return;
+    }
+    setCreating(true);
+    try {
+      const created = await addAccount({
+        name,
+        type: newType,
+        baseCurrency: newCurrency,
+      });
+      if (created?.id) {
+        setSelectedAccountId(created.id);  // 新規作成口座を即選択
+      }
+      setNewName('');
+      setNewType('tokutei');
+      setNewCurrency('USD');
+      setCreateOpen(false);
+    } catch (err) {
+      setCreateError(err?.message || String(err));
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        gap: 6,
-        padding: '8px 12px 4px',
-        overflowX: 'auto',
-        scrollbarWidth: 'thin',
-      }}
-      role="tablist"
-      aria-label="口座切り替え"
-    >
-      {tabs.map((tab) => {
-        const active = (selectedAccountId || null) === (tab.id || null);
-        return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: 6,
+          padding: '8px 12px 4px',
+          // pane 横幅が狭いとき横スクロールではなく折返しで全 tab を視認可能に。
+          // v68 dogfood 2026-05-15: narrow pane で「+ 口座を追加」 button が見切れる問題を解消。
+          flexWrap: 'wrap',
+          rowGap: 6,
+        }}
+        role="tablist"
+        aria-label="口座切り替え"
+      >
+        {/* 口座 1 つだけの user では tab は表示せず、「+ 口座を追加」だけ右寄せで見せる */}
+        {accounts.length > 1 && tabs.map((tab) => {
+          const active = (selectedAccountId || null) === (tab.id || null);
+          return (
+            <button
+              key={tab.id || 'rollup'}
+              role="tab"
+              aria-selected={active}
+              type="button"
+              onClick={() => setSelectedAccountId(tab.id)}
+              title={tab.type ? ACCOUNT_TYPE_LABEL[tab.type] || tab.type : '全口座統括'}
+              style={{
+                flexShrink: 0,
+                padding: '4px 12px',
+                background: active ? 'var(--surface-elevated)' : 'transparent',
+                border: '1px solid',
+                borderColor: active ? 'var(--text-secondary)' : 'var(--border)',
+                borderRadius: 'var(--radius-pill)',
+                color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                fontSize: 11,
+                fontWeight: tab.isRollup ? 700 : 600,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {String(tab.label)}
+            </button>
+          );
+        })}
+
+        {/* 「+ 口座を追加」trigger: 常時表示 (口座 1 つの user も 2 つ目を作れる) */}
+        <button
+          type="button"
+          onClick={() => setCreateOpen((v) => !v)}
+          aria-expanded={createOpen}
+          aria-label="口座を追加"
+          title="新しい口座を作成 (NISA / 海外口座など)"
+          style={{
+            flexShrink: 0,
+            padding: '4px 12px',
+            background: createOpen ? 'var(--surface-elevated)' : 'transparent',
+            border: '1px dashed var(--border)',
+            borderRadius: 'var(--radius-pill)',
+            color: 'var(--text-secondary)',
+            fontSize: 11,
+            fontWeight: 600,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            marginLeft: accounts.length > 1 ? 4 : 'auto',
+          }}
+        >
+          + 口座を追加
+        </button>
+      </div>
+
+      {createOpen && (
+        <form
+          onSubmit={handleCreate}
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 8,
+            padding: '8px 12px 10px',
+            background: 'transparent',
+            borderTop: '1px solid var(--border)',
+          }}
+        >
+          <input
+            type="text"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="口座名 (例: 楽天 NISA)"
+            maxLength={40}
+            disabled={creating}
+            style={{
+              flex: '2 1 160px',
+              padding: '4px 10px',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--text-primary)',
+              fontSize: 12,
+            }}
+          />
+          <select
+            value={newType}
+            onChange={(e) => setNewType(e.target.value)}
+            disabled={creating}
+            style={{
+              flex: '1 1 120px',
+              padding: '4px 8px',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--text-primary)',
+              fontSize: 12,
+            }}
+          >
+            {ACCOUNT_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+          <select
+            value={newCurrency}
+            onChange={(e) => setNewCurrency(e.target.value)}
+            disabled={creating}
+            style={{
+              flex: '0 1 80px',
+              padding: '4px 8px',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--text-primary)',
+              fontSize: 12,
+            }}
+          >
+            {SUPPORTED_CURRENCIES.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
           <button
-            key={tab.id || 'rollup'}
-            role="tab"
-            aria-selected={active}
-            type="button"
-            onClick={() => setSelectedAccountId(tab.id)}
-            title={tab.type ? ACCOUNT_TYPE_LABEL[tab.type] || tab.type : '全口座統括'}
+            type="submit"
+            disabled={creating || !newName.trim()}
             style={{
               flexShrink: 0,
               padding: '4px 12px',
-              background: active ? 'var(--surface-elevated)' : 'transparent',
-              border: '1px solid',
-              borderColor: active ? 'var(--text-secondary)' : 'var(--border)',
+              background: 'var(--text-primary)',
+              border: 'none',
               borderRadius: 'var(--radius-pill)',
-              color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+              color: 'var(--bg-card)',
               fontSize: 11,
-              fontWeight: tab.isRollup ? 700 : 600,
+              fontWeight: 700,
+              cursor: creating ? 'wait' : 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {creating ? '作成中...' : '作成'}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setCreateOpen(false); setCreateError(null); }}
+            disabled={creating}
+            style={{
+              flexShrink: 0,
+              padding: '4px 12px',
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-pill)',
+              color: 'var(--text-secondary)',
+              fontSize: 11,
               cursor: 'pointer',
               whiteSpace: 'nowrap',
             }}
           >
-            {String(tab.label)}
+            キャンセル
           </button>
-        );
-      })}
+          {createError && (
+            <div style={{
+              flexBasis: '100%',
+              fontSize: 11,
+              color: 'var(--color-loss)',
+              padding: '4px 0 0',
+            }}>
+              {String(createError)}
+            </div>
+          )}
+        </form>
+      )}
     </div>
   );
 }
@@ -415,35 +609,80 @@ function PortfolioSummaryRow({ holdings, prices, tickers, totalRealized = 0 }) {
           holdings={holdings}
           prices={prices}
           tickers={tickers}
+          onTickerClick={(t) => useWorkspaceStore.getState().setFilterTicker(t)}
         />
       )}
       {!collapsed && <PortfolioVerdictRollup tickers={tickers} />}
-      {!collapsed && <PortfolioActions />}
+      {!collapsed && <PortfolioActions prices={prices} />}
     </>
   );
 }
 
 // Phase 2 v68: 取引登録 modal entry + 既存 PortfolioDashboard 導線。
 // 「ロット履歴・推移チャート」(classic mode 遷移) と「取引を登録」(modal) を並置。
-function PortfolioActions() {
+function PortfolioActions({ prices }) {
   const user = useUserFromHoldings();
   const { accounts, defaultAccountId, addAccount, error: accountsError, reload } = useAccounts({ supabase, user });
   const { transactions, addTransaction, updateTransaction, removeTransaction } = useTransactions({ supabase, user });
   const selectedAccountId = useWorkspaceStore((s) => s.selectedAccountId);
+  const filterTicker = useWorkspaceStore((s) => s.filterTicker);
+  const setFilterTicker = useWorkspaceStore((s) => s.setFilterTicker);
   const [modalOpen, setModalOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   // Phase 3 v68: 編集モード対象 transaction (null = 新規登録)
   const [editingTx, setEditingTx] = useState(null);
+  // v68 §2 #6 dogfood: 0 件 ticker click 時の inline toast
+  const [emptyTickerToast, setEmptyTickerToast] = useState(null);
+  // v68 §2 #6 dogfood 2026-05-15: history modal → entry modal の chain で ticker prefill 用
+  const [newEntryTicker, setNewEntryTicker] = useState('');
+
+  // filterTicker が set されたら、その ticker に該当する transaction が
+  // 現在の account scope 内に 1 件以上あるかを判定。0 なら toast、>=1 なら modal を開く。
+  useEffect(() => {
+    if (!filterTicker) return;
+    const list = Array.isArray(transactions) ? transactions : [];
+    const norm = String(filterTicker).trim().toUpperCase();
+    const scoped = selectedAccountId
+      ? list.filter((t) => t.account_id === selectedAccountId)
+      : list;
+    const match = scoped.filter((t) => String(t.ticker || '').trim().toUpperCase() === norm);
+    if (match.length === 0) {
+      // 0 件 → modal を開かず toast 表示、filterTicker を即 reset
+      setEmptyTickerToast(norm);
+      setFilterTicker(null);
+      const timer = setTimeout(() => setEmptyTickerToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [filterTicker, transactions, selectedAccountId, setFilterTicker]);
 
   const handleEdit = (tx) => {
     setEditingTx(tx);
     setHistoryOpen(false);  // 履歴 modal を閉じて編集 modal を開く
+    setFilterTicker(null);
     setModalOpen(true);
+  };
+
+  // v68 §2 #6 dogfood 6 体合議 (2026-05-15): history modal → entry modal の chain。
+  // ticker prefill (買い増し 1-tap)、history を一旦 close → setTimeout(0) で z-index 戦争回避。
+  const handleNewFromHistory = (ticker) => {
+    setHistoryOpen(false);
+    setFilterTicker(null);
+    setNewEntryTicker(ticker || '');
+    setEditingTx(null);
+    // history modal の close transition 後に entry modal を open (Web 開発エキスパート指摘の z-index 競合回避)
+    setTimeout(() => setModalOpen(true), 0);
   };
 
   const handleCloseEntryModal = () => {
     setModalOpen(false);
     setEditingTx(null);
+    setNewEntryTicker('');
+  };
+
+  const handleCloseHistory = () => {
+    setHistoryOpen(false);
+    setFilterTicker(null);  // filter は modal を閉じたら clear (口座切替時 auto-reset 規約と整合)
   };
 
   const handleCreateDefaultAccount = async () => {
@@ -457,6 +696,23 @@ function PortfolioActions() {
     await reload();
     return created;
   };
+
+  const currentPriceForFilter = filterTicker && prices
+    ? Number(prices?.[filterTicker]?.price)
+    : null;
+
+  // v68 dogfood 2026-05-15: autocomplete 上位に pin する portfolio 既存 ticker (頻度順)
+  const pinnedTickersForEntry = useMemo(() => {
+    const counts = new Map();
+    for (const tx of Array.isArray(transactions) ? transactions : []) {
+      const t = String(tx.ticker || '').trim().toUpperCase();
+      if (!t) continue;
+      counts.set(t, (counts.get(t) || 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([t]) => t);
+  }, [transactions]);
 
   return (
     <div style={{ display: 'flex', gap: 6, padding: '4px 14px 12px', flexWrap: 'wrap' }}>
@@ -491,11 +747,33 @@ function PortfolioActions() {
             <span aria-hidden="true" style={{ fontSize: 11 }}>📋</span>
             取引履歴 ({Array.isArray(transactions) ? transactions.length : 0})
           </button>
+          {emptyTickerToast && (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                flexBasis: '100%',
+                padding: '6px 10px',
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--text-secondary)',
+                fontSize: 11,
+                marginTop: 4,
+              }}
+            >
+              <strong style={{ color: 'var(--text-primary)' }}>{emptyTickerToast}</strong> の取引は登録されていません。
+            </div>
+          )}
           <TransactionEntryModal
             open={modalOpen}
             onClose={handleCloseEntryModal}
             accounts={accounts}
-            defaultAccountId={defaultAccountId}
+            // v68 dogfood 2026-05-15: 現在選択中の口座を default に (各口座 view から登録時の文脈継承)
+            defaultAccountId={selectedAccountId || defaultAccountId}
+            defaultTicker={newEntryTicker}
+            // v68 dogfood 2026-05-15: 自分の portfolio に既存の ticker を autocomplete 上位 pin
+            pinnedTickers={pinnedTickersForEntry}
             onAdd={addTransaction}
             onUpdate={updateTransaction}
             editingTx={editingTx}
@@ -503,13 +781,16 @@ function PortfolioActions() {
             accountsError={accountsError}
           />
           <TransactionHistoryModal
-            open={historyOpen}
-            onClose={() => setHistoryOpen(false)}
+            open={historyOpen || !!filterTicker}
+            onClose={handleCloseHistory}
             transactions={transactions}
             accounts={accounts}
             selectedAccountId={selectedAccountId}
+            selectedTicker={filterTicker}
+            currentPrice={currentPriceForFilter}
             onDelete={removeTransaction}
             onEdit={handleEdit}
+            onNew={handleNewFromHistory}
           />
         </>
       )}
@@ -568,7 +849,10 @@ function PortfolioVerdictRollup({ tickers }) {
   const { meta } = useHoldingsMeta(tickers);
   // Phase 1.5 v68: ファンダメンタル 5 条件 PASS/FAIL 一括取得。
   // backend /api/portfolio-judgment (6h cache) 経由で 8 並列 batch、cold ~3-5s / warm 即時。
-  const { verdicts, loading: judgmentLoading } = usePortfolioJudgment(tickers);
+  const { verdicts, errors: judgmentErrors, loading: judgmentLoading } = usePortfolioJudgment(tickers);
+
+  // handover v68 §2 #5: 「5条件判定」row click で銘柄ごとの 5 条件 breakdown を modal 展開
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const stats = useMemo(() => {
     let beat = 0, miss = 0, inLine = 0, unknown = 0;
@@ -617,7 +901,11 @@ function PortfolioVerdictRollup({ tickers }) {
       }}
     >
       {(hasJudgment || judgmentLoading) && (
-        <div
+        <button
+          type="button"
+          onClick={() => hasJudgment && setDetailOpen(true)}
+          disabled={!hasJudgment}
+          aria-label="ファンダメンタル5条件 詳細を開く"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -625,6 +913,20 @@ function PortfolioVerdictRollup({ tickers }) {
             fontSize: 11,
             color: 'var(--text-secondary)',
             flexWrap: 'wrap',
+            background: 'transparent',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)',
+            padding: '6px 10px',
+            cursor: hasJudgment ? 'pointer' : 'default',
+            textAlign: 'left',
+            width: '100%',
+            transition: 'background 0.15s ease',
+          }}
+          onMouseEnter={(e) => {
+            if (hasJudgment) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
           }}
         >
           <span
@@ -647,9 +949,17 @@ function PortfolioVerdictRollup({ tickers }) {
                   · ETF 等 {stats.jEtf}
                 </span>
               )}
+              <span style={{
+                marginLeft: 'auto',
+                color: 'var(--text-muted)',
+                fontSize: 14,
+                lineHeight: 1,
+              }}>
+                ›
+              </span>
             </>
           )}
-        </div>
+        </button>
       )}
       {hasVerdict && (
         <div
@@ -695,6 +1005,14 @@ function PortfolioVerdictRollup({ tickers }) {
           )}
         </div>
       )}
+      <PortfolioJudgmentDetailModal
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        tickers={tickers}
+        verdicts={verdicts}
+        errors={judgmentErrors}
+        loading={judgmentLoading}
+      />
     </div>
   );
 }
@@ -881,7 +1199,7 @@ function SPYAlphaChip({ alphaPct }) {
 // 反映されているか不安です」 → top 5 銘柄を ticker + shares + 現在価格で可視化。
 // 5 件超は「+N 件」表示で classic mode の PortfolioDashboard 詳細導線へ。
 // 「シンプルかつリッチ」5 原則 #3 に沿って情報密度抑制。
-function PortfolioHoldingsList({ holdings, prices, tickers }) {
+function PortfolioHoldingsList({ holdings, prices, tickers, onTickerClick }) {
   // 銘柄ごとのファンダメンタル 5 条件 PASS/FAIL を取得 (PortfolioVerdictRollup と同 hook、
   // 同 tickers なので backend 6h cache + frontend useEffect dedupe で実質 1 fetch)
   const { verdicts } = usePortfolioJudgment(tickers);
@@ -892,15 +1210,21 @@ function PortfolioHoldingsList({ holdings, prices, tickers }) {
       const h = holdings?.[t];
       const q = prices?.[t];
       const shares = Number(h?.shares) || 0;
+      const avgCost = Number(h?.avg_cost) || 0;
       const price = Number(q?.price);
       const change = Number(q?.change);
       const value = Number.isFinite(price) && price > 0 ? shares * price : null;
+      // v68 dogfood fix 2026-05-15: 評価額の色は「含み損益」で決定 (user 直感: 赤=損失/緑=利益)。
+      // 旧仕様の change (今日の値動き) ベースは「評価額が赤」と「実際は利益」が衝突して混乱を招いていた。
+      const pnl = Number.isFinite(value) && avgCost > 0
+        ? value - shares * avgCost
+        : null;
       const jv = verdicts?.[t];
       const judgment =
         jv && typeof jv === 'object' && typeof jv.overallPass === 'boolean'
           ? { pass: jv.overallPass, passedCount: jv.passedCount, totalCount: jv.totalCount }
           : null;
-      rows.push({ ticker: t, shares, price, change, value, judgment });
+      rows.push({ ticker: t, shares, price, change, value, pnl, judgment });
     }
     // value 降順 (大きい順)、value 不明なら末尾
     rows.sort((a, b) => {
@@ -936,7 +1260,11 @@ function PortfolioHoldingsList({ holdings, prices, tickers }) {
         保有銘柄
       </div>
       {top.map((it) => (
-        <HoldingRowCompact key={it.ticker} item={it} />
+        <HoldingRowCompact
+          key={it.ticker}
+          item={it}
+          onClick={onTickerClick ? () => onTickerClick(it.ticker) : null}
+        />
       ))}
       {remaining > 0 && (
         <div
@@ -953,24 +1281,18 @@ function PortfolioHoldingsList({ holdings, prices, tickers }) {
   );
 }
 
-function HoldingRowCompact({ item }) {
-  const { ticker, shares, price, change, value, judgment } = item;
-  const changeColor =
-    Number.isFinite(change) && change !== 0
-      ? change > 0 ? 'var(--color-gain)' : 'var(--color-loss)'
-      : 'var(--text-muted)';
-  return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(56px, auto) auto 1fr auto',
-        gap: 8,
-        alignItems: 'center',
-        fontVariantNumeric: 'tabular-nums',
-        fontSize: 12,
-        padding: '2px 0',
-      }}
-    >
+function HoldingRowCompact({ item, onClick }) {
+  const { ticker, shares, price, value, pnl, judgment } = item;
+  // v68 dogfood fix 2026-05-15: 評価額の色は「含み損益 (pnl)」で決定。
+  // 旧 change ベースだと「評価額が赤」と「実際は利益」が衝突して直感に反する。
+  const valueColor =
+    Number.isFinite(pnl) && Math.abs(pnl) > 0.005
+      ? pnl > 0 ? 'var(--color-gain)' : 'var(--color-loss)'
+      : 'var(--text-primary)';
+  // v68 §2 #6 dogfood (6 体合議 / UI/UX + 開発エキスパート): click affordance
+  // 静的 div → button、chevron 右端、hover で背景 subtle、cursor: pointer
+  const inner = (
+    <>
       <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
         {String(ticker)}
       </span>
@@ -980,14 +1302,88 @@ function HoldingRowCompact({ item }) {
           ? `${shares.toLocaleString('en-US', { maximumFractionDigits: 4 })} 株`
           : '—'}
       </span>
-      <span style={{ color: changeColor, fontWeight: 600 }}>
+      <span style={{ color: valueColor, fontWeight: 600 }}>
         {Number.isFinite(value)
           ? formatUSDCompact(value)
           : Number.isFinite(price) && price > 0
           ? `$${price.toFixed(2)}`
           : '—'}
       </span>
-    </div>
+      {onClick && (
+        <span
+          aria-hidden="true"
+          className="ds-tx-row-chevron"
+          style={{
+            color: 'var(--text-muted)',
+            fontSize: 14,
+            lineHeight: 1,
+            // subtle baseline → hover で強調 (UI/UX 6 体合議推奨)
+            opacity: 0.28,
+            transition: 'opacity 0.12s ease',
+          }}
+        >
+          ›
+        </span>
+      )}
+    </>
+  );
+  const gridCols = onClick
+    ? 'minmax(56px, auto) auto 1fr auto auto'
+    : 'minmax(56px, auto) auto 1fr auto';
+  if (!onClick) {
+    return (
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: gridCols,
+          gap: 8,
+          alignItems: 'center',
+          fontVariantNumeric: 'tabular-nums',
+          fontSize: 12,
+          padding: '2px 0',
+        }}
+      >
+        {inner}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`${ticker} の取引履歴を表示`}
+      title="この銘柄の取引履歴を表示"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: gridCols,
+        gap: 8,
+        alignItems: 'center',
+        fontVariantNumeric: 'tabular-nums',
+        fontSize: 12,
+        padding: '4px 6px',
+        margin: '0 -6px',
+        background: 'transparent',
+        border: '1px solid transparent',
+        borderRadius: 'var(--radius-sm)',
+        cursor: 'pointer',
+        textAlign: 'left',
+        transition: 'background 0.12s ease, border-color 0.12s ease',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+        e.currentTarget.style.borderColor = 'var(--border)';
+        const chev = e.currentTarget.querySelector('.ds-tx-row-chevron');
+        if (chev) chev.style.opacity = '1';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'transparent';
+        e.currentTarget.style.borderColor = 'transparent';
+        const chev = e.currentTarget.querySelector('.ds-tx-row-chevron');
+        if (chev) chev.style.opacity = '0.28';
+      }}
+    >
+      {inner}
+    </button>
   );
 }
 
