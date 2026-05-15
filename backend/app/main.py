@@ -1211,6 +1211,13 @@ async def split_check(ticker: str, dates: str, request: Request) -> dict:
 _PORTFOLIO_HISTORY_CACHE: dict[str, dict] = {}
 _PORTFOLIO_HISTORY_TTL = 3600.0  # 1 hour (intraday 反映に重要 / 24h は流石に冗長)
 
+# v71 Phase 3-d round 9 (2026-05-16 dogfood latency fix):
+# /api/portfolio-performance の response 全体を 10 分 TTL で cache。 AI summary 生成
+# (Claude haiku-4-5, 1-3 秒) + FMP fetch を毎回走らせて 5 秒以上待たされる体感バグ対策。
+# cache key = user_id + period + txs hash、 同 input なら同 response 返却で即時 0ms。
+_PORTFOLIO_PERF_CACHE: dict[str, tuple[float, dict]] = {}
+_PORTFOLIO_PERF_TTL = 600.0  # 10 分 (AI summary が陳腐化しない程度、 ただし intraday 価格更新で 1h より短く)
+
 _PORTFOLIO_PERIODS = {
     "1m": 30,
     "3m": 90,
@@ -2093,6 +2100,8 @@ async def portfolio_performance(
     }
     """
     import datetime as _dt
+    import hashlib as _hashlib
+    import json as _json_perf
 
     user = await _verify_supabase_jwt(authorization)
     user_id = user["id"]
@@ -2116,6 +2125,34 @@ async def portfolio_performance(
     period_from = today - _dt.timedelta(days=period_days)
 
     txs = _validate_perf_transactions(raw_txs, today)
+
+    # v71 Phase 3-d round 9 (2026-05-16 dogfood latency fix):
+    # AI summary 生成 (Claude haiku-4-5, 1-3 秒) と FMP fetch を毎回走らせると
+    # period 切替で 5 秒以上待たされる体感バグ → response 全体を 10 分 TTL で cache。
+    # cache key = user_id + period + txs hash (deterministic、 同 input なら同 hash)。
+    # rate limit は cache hit でも維持 (DoS 保護維持、 30 req/min なら hit が多くても余裕)。
+    txs_sig_payload = _json_perf.dumps(
+        sorted(
+            [
+                {
+                    "t": t.get("ticker", ""),
+                    "ty": t.get("type", ""),
+                    "s": float(t.get("shares") or 0),
+                    "p": float(t.get("price") or 0),
+                    "d": t.get("trade_date", ""),
+                }
+                for t in txs
+            ],
+            key=lambda x: (x["d"], x["t"], x["s"]),
+        ),
+        sort_keys=True,
+    )
+    txs_sig = _hashlib.md5(txs_sig_payload.encode("utf-8")).hexdigest()[:16]
+    perf_cache_key = f"perf::{user_id}::{period}::{txs_sig}"
+    _now_perf = _time.monotonic()
+    _cached_perf = _PORTFOLIO_PERF_CACHE.get(perf_cache_key)
+    if _cached_perf and _now_perf - _cached_perf[0] < _PORTFOLIO_PERF_TTL:
+        return _cached_perf[1]
 
     # distinct ticker 上限 20 (FMP クォータ保護)
     distinct_tickers = list({t["ticker"] for t in txs if t.get("ticker")})
@@ -2370,7 +2407,7 @@ async def portfolio_performance(
     # 過去にあった問題: AI サマリーに "(dbg) | sv=... ev=... ncf=... cf:..." を append していたが、
     # 「期間内 buy → cashflow 2 重控除」の bug を発見し v3 で根治。
 
-    return {
+    result = {
         "period": period,
         "from": period_from.isoformat(),
         "to": today.isoformat(),
@@ -2386,6 +2423,10 @@ async def portfolio_performance(
         "top_ticker": top_ticker,
         "top_contribution": top_contribution,
     }
+    # v71 Phase 3-d round 9: response 全体を cache (10 分 TTL)。 同 user × period × txs
+    # の 2 回目以降は AI summary 再生成せず即返却 (5+ 秒 → <50ms)。
+    _PORTFOLIO_PERF_CACHE[perf_cache_key] = (_now_perf, result)
+    return result
 
 
 async def _fetch_dividends_for_ticker(

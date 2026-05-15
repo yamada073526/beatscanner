@@ -37,6 +37,8 @@ import {
   fetchMarketIndices,
   fetchMovers,
   fetchEconomicCalendar,
+  fetchPortfolioPerformance,
+  fetchPortfolioHistory,
 } from '../../api.js';
 import { translateEvent, CATEGORY } from '../../lib/i18n/economicEvents.js';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
@@ -542,6 +544,40 @@ function PortfolioSummaryRow({ holdings, prices, tickers, totalRealized = 0, tot
     selectedAccountId,
     period: portfolioPeriod,
   });
+
+  // v71 Phase 3-d round 9 (2026-05-16 dogfood latency fix): user 報告
+  // 「P/L 期間切替が 5 秒以上かかる」 → backend cache (10 分 TTL) を warm up するため
+  // mount 時 + transactions/account 変更時に他期間も fire-and-forget で prefetch。
+  // v71 Phase 2.1 で PortfolioHistoryChart に同パターン採用済 (commit d9b1aa3) と整合。
+  const perfPrefetchKey = useMemo(() => {
+    const filtered = selectedAccountId
+      ? (transactions || []).filter((t) => t.account_id === selectedAccountId)
+      : (transactions || []);
+    if (!filtered.length) return '';
+    return `${filtered.length}:${filtered[filtered.length - 1]?.id || ''}:${selectedAccountId || 'all'}`;
+  }, [transactions, selectedAccountId]);
+  useEffect(() => {
+    if (!perfPrefetchKey) return;
+    const filtered = selectedAccountId
+      ? (transactions || []).filter((t) => t.account_id === selectedAccountId)
+      : (transactions || []);
+    const payload = filtered.map((tx) => ({
+      ticker: tx.ticker,
+      type: tx.type,
+      shares: tx.shares,
+      price: tx.price,
+      trade_date: tx.trade_date,
+      fee: tx.fee,
+    }));
+    const others = ['1d', '1w', '1m', '6m', '1y'].filter((p) => p !== portfolioPeriod);
+    // 非同期 fire-and-forget。 失敗しても無視 (= 通常 fetch は usePortfolioPerformance が担う)。
+    // backend cache 10 分 TTL を全期間温める → 2 回目以降の period 切替は <50ms。
+    others.forEach((p) => {
+      fetchPortfolioPerformance(payload, p).catch(() => {});
+    });
+    // portfolioPeriod は意図的に deps から除外: 切替時に prefetch 連鎖を起こさず、
+    // transactions / account 変更時のみ全期間を warm up する。
+  }, [perfPrefetchKey]);  // eslint-disable-line react-hooks/exhaustive-deps
   // Phase 2.5 v68: transactions ベース集計は親 PortfolioPaneSection が担当。
   // 本コンポーネントは effectiveHoldings + totalRealized を受け取り、UI 計算に専念。
 
@@ -1728,19 +1764,31 @@ function PortfolioPeriodPerformanceRow({ period, onPeriodChange, data, loading, 
           flexWrap: 'wrap',
         }}
       >
-        {/* round 7: Chip xs variant で primitive 統一 */}
+        {/* round 7: Chip xs variant で primitive 統一
+            v71 Phase 3-d round 9 (2026-05-16 dogfood latency fix): active chip に loading dot
+            を追加 (PortfolioHistoryChart の Phase 2.1 pattern と同等)。 click 直後の
+            「押された感」 を perceived performance として担保 — chart 自体は backend 反応待ち。 */}
         <ChipGroup prefix="P/L 期間" ariaLabel="ポートフォリオ P/L の期間を切替" role="radiogroup" gap="tight">
-          {PORTFOLIO_PERIOD_OPTIONS.map((opt) => (
-            <Chip
-              key={opt.key}
-              size="xs"
-              variant="segmented"
-              pressed={period === opt.key}
-              onClick={() => onPeriodChange(opt.key)}
-            >
-              {opt.label}
-            </Chip>
-          ))}
+          {PORTFOLIO_PERIOD_OPTIONS.map((opt) => {
+            const active = period === opt.key;
+            const showLoading = active && loading;
+            return (
+              <Chip
+                key={opt.key}
+                size="xs"
+                variant="segmented"
+                pressed={active}
+                onClick={() => onPeriodChange(opt.key)}
+                ariaPressed={active}
+                className={showLoading ? 'is-loading' : ''}
+              >
+                {opt.label}
+                {showLoading && (
+                  <span className="pd-history-period-tab-dot" aria-hidden="true">·</span>
+                )}
+              </Chip>
+            );
+          })}
         </ChipGroup>
         <span
           style={{

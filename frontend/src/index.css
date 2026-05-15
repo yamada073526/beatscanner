@@ -5376,6 +5376,11 @@ button.ds-chip:active {
   cursor: default;
   white-space: nowrap;
 }
+/* v71 Phase 3-d round 9: loading dot を chip に absolute 配置するための anchor。
+   PortfolioPeriodPerformanceRow / 他の loading 系で再利用予定。 */
+.ds-chip.is-loading {
+  position: relative;
+}
 button.ds-chip { cursor: pointer; }
 
 /* size scale (Aman 級 3 段、厳密 SSOT) */

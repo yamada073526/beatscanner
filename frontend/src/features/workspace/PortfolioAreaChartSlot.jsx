@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { usePortfolioHistory } from '../../hooks/usePortfolioHistory.js';
+import { fetchPortfolioHistory } from '../../api.js';
 import Chip from '../../components/ui/Chip.jsx';
 
 /**
@@ -91,6 +92,32 @@ export default function PortfolioAreaChartSlot({
     [transactions, selectedAccountId]);
   const mappedPeriod = PERIOD_MAP[period] || '1m';
   const { series, bestTicker, worstTicker, loading } = usePortfolioHistory(lots, mappedPeriod);
+
+  // v71 Phase 3-d round 9 (2026-05-16 dogfood latency fix):
+  // chart 期間切替を爆速化するため lots 変更時に他期間も fire-and-forget で prefetch。
+  // PortfolioHistoryChart (Pane 3) は v71 Phase 2.1 で同パターン採用済 (commit d9b1aa3)。
+  const lotsKey = useMemo(() => {
+    if (!Array.isArray(lots) || lots.length === 0) return '';
+    return lots
+      .map((l) => `${(l.ticker || '').toUpperCase()}|${l.shares}|${l.price || ''}|${l.trade_date || ''}`)
+      .filter(Boolean).sort().join(',');
+  }, [lots]);
+  useEffect(() => {
+    if (!lotsKey) return;
+    const others = ['1m', '6m', '1y'].filter((p) => p !== mappedPeriod);
+    const payload = lots.map((l) => ({
+      ticker: (l.ticker || '').toUpperCase(),
+      shares: Number(l.shares),
+      price: l.price != null ? Number(l.price) : null,
+      trade_date: l.trade_date,
+      cost_basis_method: l.cost_basis_method || 'user_input',
+      lot_id: l.id || null,
+    }));
+    others.forEach((p) => {
+      fetchPortfolioHistory(payload, p).catch(() => {});
+    });
+    // mappedPeriod は意図的に deps から除外 (切替時に prefetch 連鎖回避)。
+  }, [lotsKey]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const containerRef = useRef(null);
   const chartRef = useRef(null);
