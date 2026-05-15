@@ -4489,6 +4489,21 @@ body {
   background: rgba(255,255,255,0.14);
   box-shadow: 0 0 0 1px rgba(255,255,255,0.06);
 }
+/* v71 Phase 2.1 (6 体合議 / latency 改善): active 期間 chip に loading dot を出して
+   「押した瞬間 chip は反応した」を視覚化。 chart 自体は backend 反応待ち。 */
+.pd-history-period-tab.is-loading {
+  position: relative;
+}
+.pd-history-period-tab-dot {
+  display: inline-block;
+  margin-left: 4px;
+  font-weight: 800;
+  animation: pd-history-dot-blink 900ms ease-in-out infinite;
+}
+@keyframes pd-history-dot-blink {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
 
 .pd-history-body {
   position: relative;

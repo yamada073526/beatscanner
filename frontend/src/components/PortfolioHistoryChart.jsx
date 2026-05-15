@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePortfolioHistory, computeTWR, indexBenchmark } from '../hooks/usePortfolioHistory.js';
 import { useSpyHistory } from '../hooks/useSpyHistory.js';
+import { fetchPortfolioHistory } from '../api.js';
 
 const PERIODS = [
   { key: '1m', label: '1M' },
@@ -68,6 +69,35 @@ export default function PortfolioHistoryChart({ lots = [] }) {
   const [showSpy, setShowSpy] = useState(true);  // §11-B-7-B: SPY overlay default ON
   const { series, warnings, loading } = usePortfolioHistory(lots, period);
   const { points: spyPoints } = useSpyHistory(PERIOD_TO_SPY[period] || '3mo');
+
+  // v71 Phase 2.1 (6 体合議 / latency 改善):
+  // 期間 chip 切替の体感速度改善のため、 mount 時 + lots 変更時に他期間も
+  // fire-and-forget で prefetch して backend cache を温めておく。
+  // _PORTFOLIO_HISTORY_TTL = 1h なので 2 回目以降の chip 切替は ~50ms で返る。
+  const lotsKey = useMemo(() => {
+    if (!Array.isArray(lots) || lots.length === 0) return '';
+    return lots
+      .map((l) => `${(l.ticker || '').toUpperCase()}|${l.shares}|${l.price || ''}|${l.trade_date || ''}`)
+      .filter(Boolean).sort().join(',');
+  }, [lots]);
+  useEffect(() => {
+    if (!lotsKey) return;
+    const others = ['1m', '3m', '1y'].filter((p) => p !== period);
+    const payload = lots.map((l) => ({
+      ticker: (l.ticker || '').toUpperCase(),
+      shares: Number(l.shares),
+      price: l.price != null ? Number(l.price) : null,
+      trade_date: l.trade_date,
+      cost_basis_method: l.cost_basis_method || 'user_input',
+      lot_id: l.id || null,
+    }));
+    // 非同期 fire-and-forget。 失敗しても無視 (= 通常 fetch は usePortfolioHistory が担う)。
+    others.forEach((p) => {
+      fetchPortfolioHistory(payload, p).catch(() => {});
+    });
+    // period は意図的に deps から除外: 切替時に prefetch 連鎖を起こさず、
+    // lots 変更時のみ全期間を warm up する。
+  }, [lotsKey]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const containerRef = useRef(null);
   const chartRef = useRef(null);
@@ -302,18 +332,26 @@ export default function PortfolioHistoryChart({ lots = [] }) {
           )}
         </div>
         <div className="pd-history-period-tabs" role="tablist" aria-label="表示期間">
-          {PERIODS.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              role="tab"
-              aria-selected={period === p.key}
-              className={`pd-history-period-tab ${period === p.key ? 'is-active' : ''}`}
-              onClick={() => setPeriod(p.key)}
-            >
-              {p.label}
-            </button>
-          ))}
+          {PERIODS.map((p) => {
+            const active = period === p.key;
+            // v71 Phase 2.1: 切替直後の体感 latency 改善のため、 active tab に
+            // loading dot を出す (現在 chip は即時 highlight、 chart 描画は遅延)。
+            const showLoading = active && loading;
+            return (
+              <button
+                key={p.key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                aria-busy={showLoading || undefined}
+                className={`pd-history-period-tab ${active ? 'is-active' : ''} ${showLoading ? 'is-loading' : ''}`}
+                onClick={() => setPeriod(p.key)}
+              >
+                {p.label}
+                {showLoading && <span className="pd-history-period-tab-dot" aria-hidden="true">·</span>}
+              </button>
+            );
+          })}
           {/* §11-B-7-B: SPY overlay toggle */}
           <button
             type="button"
