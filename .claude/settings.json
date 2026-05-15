@@ -43,6 +43,12 @@
             "command": "bash .claude/hooks/pre_edit_design_tokens.sh",
             "timeout": 5,
             "statusMessage": "Design Token チェック中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/pre_edit_lightweight_charts.sh",
+            "timeout": 5,
+            "statusMessage": "lightweight-charts v5 API チェック中..."
           }
         ]
       }

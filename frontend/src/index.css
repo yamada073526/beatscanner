@@ -4551,7 +4551,13 @@ body {
 .pd-history-events-legend-item {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+}
+/* v71 Phase 3-d: SVG icon (Lucide) を tone-down で luxury 感 — text-muted と同色、
+   stroke 0.25 厚で控えめにブランド表現。 currentColor で theme 追従。 */
+.pd-history-events-legend-item > svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
 }
 .pd-history-events-legend-sub {
   opacity: 0.7;

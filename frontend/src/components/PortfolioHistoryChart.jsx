@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Calendar, Coins } from 'lucide-react';
 import { usePortfolioHistory, computeTWR, indexBenchmark } from '../hooks/usePortfolioHistory.js';
 import { useSpyHistory } from '../hooks/useSpyHistory.js';
 import { useEarningsCalendar } from '../hooks/useEarningsCalendar.js';
@@ -105,12 +106,14 @@ export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null 
       if (!e?.date) continue;
       if (e.date <= lastDate) continue;     // 過去 (= series 末以前) は除外
       if (e.date > aheadIso) continue;       // 90 日超は除外
+      // v71 Phase 3-d (6 体合議 / UI 全員一致): chart canvas に emoji + text を焼くと
+      // OS font 依存で品格欠如 + 右端で見切れる。 dot only に切替、 意味は凡例側で担う。
       out.push({
         time: e.date,
         position: 'aboveBar',
         color: pickEventColor('earnings', isDark),
         shape: 'circle',
-        text: `📅 ${t}`,
+        text: '',
       });
     }
     // chart は時系列順 marker を期待する
@@ -135,14 +138,13 @@ export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null 
       for (const d of divs) {
         if (!d?.date) continue;
         if (d.date < firstDate || d.date > lastDate) continue;  // 表示窓内のみ
-        const amt = Number(d.amount);
-        const amtTxt = Number.isFinite(amt) ? ` $${amt.toFixed(2)}` : '';
+        // v71 Phase 3-d: canvas text 廃止 (上記 earnings と同 rationale)。
         out.push({
           time: d.date,
           position: 'belowBar',
           color: pickEventColor('exDiv', isDark),
           shape: 'square',
-          text: `💰 ${t}${amtTxt}`,
+          text: '',
         });
       }
     }
@@ -189,6 +191,14 @@ export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null 
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
   const spySeriesRef = useRef(null);
+  // v71 Phase 3-d (Web 開発エキスパート推奨): marker primitive を ref で保持し、
+  // marker 変更時は chart 全焼却せず markersRef.current.setMarkers() で incremental
+  // update する (再構築 cost 90% 減)。 chart cleanup 時に null 化。
+  const markersRef = useRef(null);
+  // allMarkers の最新値を ref で持つことで main useEffect から deps を外しても
+  // 初回 chart 構築時に正しい markers を渡せる (closure stale 回避)。
+  const allMarkersRef = useRef([]);
+  useEffect(() => { allMarkersRef.current = allMarkers; }, [allMarkers]);
   const [chartReady, setChartReady] = useState(false);
 
   // §11-B-7-B Fix-A: TWR (Time-Weighted Return) 系列を計算 (入金影響除外、純投資成果のみ)
@@ -265,6 +275,10 @@ export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null 
           timeVisible: false,
           fixLeftEdge: true,
           fixRightEdge: true,
+          // v71 Phase 3-d (Web 設計 + UI/UX 合議): marker (特に最新 ex-div) が
+          // 右端の price scale label 直下に張り付いて clipping する問題対策。
+          // 4 bar 分 (3M で ~4 日) の右余白を確保。 fixRightEdge と併用可能。
+          rightOffset: 4,
         },
         crosshair: { mode: 1 },
         handleScroll: false,
@@ -346,13 +360,17 @@ export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null 
           areaSeries.setData(rawData);
         }
 
-        // v71 Phase 3-a/3-c: events lane marker を chart 上に重ねる。
+        // v71 Phase 3-a/3-c/3-d: events lane marker を chart 上に重ねる。
         // lightweight-charts v5 で series.setMarkers() は削除され、 createSeriesMarkers()
-        // primitive に migration された (2026-05-15 dogfood で v71 Phase 3-a も silent fail
-        // していたことが判明。 typeof setMarkers === 'function' が常に false で skip)。
-        // earnings (aboveBar amber circle 📅) + ex-div (belowBar indigo square 💰) を時系列順 merge 済。
-        if (allMarkers.length > 0 && typeof lc.createSeriesMarkers === 'function') {
-          try { lc.createSeriesMarkers(areaSeries, allMarkers); } catch { /* noop: API 互換問題 */ }
+        // primitive に migration された。 v71 Phase 3-d で primitive を ref で保持し、
+        // 後続の marker 変更は別 useEffect で setMarkers() のみ呼ぶ (chart 再構築回避)。
+        // earnings (aboveBar amber circle) + ex-div (belowBar indigo square) を時系列順 merge 済、
+        // canvas 上には dot のみ (text 廃止)、 意味伝達は凡例側 (Bloomberg PORT 流 2 段構え)。
+        const initialMarkers = allMarkersRef.current;
+        if (initialMarkers.length > 0 && typeof lc.createSeriesMarkers === 'function') {
+          try {
+            markersRef.current = lc.createSeriesMarkers(areaSeries, initialMarkers);
+          } catch { /* noop: API 互換問題 */ }
         }
 
         chart.timeScale().fitContent();
@@ -369,8 +387,18 @@ export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null 
       }
       seriesRef.current = null;
       spySeriesRef.current = null;
+      markersRef.current = null;  // chart 焼却で primitive も無効化
     };
-  }, [series, twrSeries, status, spyPoints, showSpy, allMarkers]);
+  }, [series, twrSeries, status, spyPoints, showSpy]);  // allMarkers は ref 経由で渡すため deps から除外
+
+  // v71 Phase 3-d (Web 開発エキスパート): marker 変更だけで chart 全焼却するのは
+  // 数百 ms オーダーの無駄。 primitive の setMarkers() で incremental update。
+  // chart が未構築 (markersRef.current 無) ならスキップ (次回 chart 構築時に initialMarkers
+  // 経由で反映される)。
+  useEffect(() => {
+    if (!markersRef.current || typeof markersRef.current.setMarkers !== 'function') return;
+    try { markersRef.current.setMarkers(allMarkers); } catch { /* noop */ }
+  }, [allMarkers]);
 
   // ── リサイズ追従 ──
   useEffect(() => {
@@ -503,14 +531,21 @@ export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null 
           marker が存在する時のみ表示 (空の chart で legend が孤立しないように)。 */}
       {(earningsMarkers.length > 0 || exDivMarkers.length > 0) && (
         <div className="pd-history-events-legend" aria-label="チャート上の marker 凡例">
+          {/* v71 Phase 3-d (6 体合議 / UI/UX 全員一致): OS font 依存の絵文字 → Lucide SVG icon
+              に置換し品格 (Aman 級) を確保。 chart canvas 側の marker は text 廃止で dot のみ、
+              意味伝達は本凡例が担う 2 段構え (Bloomberg PORT 流)。 */}
           {earningsMarkers.length > 0 && (
             <span className="pd-history-events-legend-item">
-              <span aria-hidden="true">📅</span> 決算日 <span className="pd-history-events-legend-sub">(今後 90 日以内)</span>
+              <Calendar size={11} strokeWidth={2.25} aria-hidden="true" />
+              <span>決算日</span>
+              <span className="pd-history-events-legend-sub">(今後 90 日以内)</span>
             </span>
           )}
           {exDivMarkers.length > 0 && (
             <span className="pd-history-events-legend-item">
-              <span aria-hidden="true">💰</span> 配当落ち日 <span className="pd-history-events-legend-sub">(過去 30 日以内)</span>
+              <Coins size={11} strokeWidth={2.25} aria-hidden="true" />
+              <span>配当落ち日</span>
+              <span className="pd-history-events-legend-sub">(過去 30 日以内)</span>
             </span>
           )}
         </div>
