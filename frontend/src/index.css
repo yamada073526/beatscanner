@@ -4534,13 +4534,13 @@ body {
   min-height: 200px;
 }
 /* v71 Phase 3-c (2026-05-15 dogfood fix): chart marker 凡例。
-   📅 = 決算日 / 💰 = 配当落ち日 を user に明示。
-   surface-card 下端に置いて chart に密接、 muted color で控えめに。 */
+   surface-card 下端に置いて chart に密接、 muted color で控えめに。
+   v71 Phase 3-d round 2: 凡例 swatch を chart canvas の marker と完全一致させ
+   (同色・同形)、 さらに各 marker の銘柄+日付+金額を inline 併記。 */
 .pd-history-events-legend {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 4px;
   margin-top: 6px;
   padding-top: 6px;
   border-top: 1px solid var(--border);
@@ -4548,16 +4548,67 @@ body {
   color: var(--text-muted);
   letter-spacing: 0.02em;
 }
-.pd-history-events-legend-item {
-  display: inline-flex;
+.pd-history-events-legend-row {
+  display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  flex-wrap: wrap;
 }
-/* v71 Phase 3-d: SVG icon (Lucide) を tone-down で luxury 感 — text-muted と同色、
-   stroke 0.25 厚で控えめにブランド表現。 currentColor で theme 追従。 */
-.pd-history-events-legend-item > svg {
-  color: var(--text-muted);
+/* swatch: chart canvas の marker と同色・同形に。
+   theme-aware: light = 濃色 / dark = 明色 (lightweight-charts と完全一致). */
+.pd-history-events-legend-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
   flex-shrink: 0;
+}
+.pd-history-events-legend-swatch.is-earnings {
+  background: rgba(180, 83, 9, 1.0);    /* amber-700 light */
+  border-radius: 50%;
+}
+[data-theme="dark"] .pd-history-events-legend-swatch.is-earnings {
+  background: rgba(253, 224, 71, 1.0);  /* yellow-300 dark */
+}
+.pd-history-events-legend-swatch.is-exdiv {
+  background: rgba(67, 56, 202, 1.0);   /* indigo-700 light */
+  border-radius: 1px;                    /* canvas の square と一致 */
+}
+[data-theme="dark"] .pd-history-events-legend-swatch.is-exdiv {
+  background: rgba(199, 210, 254, 1.0); /* indigo-200 dark */
+}
+.pd-history-events-legend-label {
+  font-weight: 600;
+  color: var(--text-secondary, var(--text-muted));
+  flex-shrink: 0;
+}
+.pd-history-events-legend-tickers {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0;
+}
+.pd-history-events-legend-chip {
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+}
+.pd-history-events-legend-sep {
+  color: var(--border);
+  margin: 0 2px;
+}
+.pd-history-events-legend-tk {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+.pd-history-events-legend-dt {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+.pd-history-events-legend-amt {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+  margin-left: 1px;
 }
 .pd-history-events-legend-sub {
   opacity: 0.7;

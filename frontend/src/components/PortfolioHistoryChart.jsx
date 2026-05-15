@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Calendar, Coins } from 'lucide-react';
 import { usePortfolioHistory, computeTWR, indexBenchmark } from '../hooks/usePortfolioHistory.js';
 import { useSpyHistory } from '../hooks/useSpyHistory.js';
 import { useEarningsCalendar } from '../hooks/useEarningsCalendar.js';
@@ -27,6 +26,14 @@ function fmtSignedPct(n) {
   if (!Number.isFinite(n)) return '—';
   const sign = n > 0 ? '+' : '';
   return `${sign}${n.toFixed(2)}%`;
+}
+
+// v71 Phase 3-d: 凡例の ticker chip 用 (例: "5/22"). YYYY-MM-DD 想定。
+function fmtMD(iso) {
+  if (!iso || typeof iso !== 'string') return '';
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return iso;
+  return `${parseInt(m[2], 10)}/${parseInt(m[3], 10)}`;
 }
 
 /**
@@ -108,12 +115,14 @@ export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null 
       if (e.date > aheadIso) continue;       // 90 日超は除外
       // v71 Phase 3-d (6 体合議 / UI 全員一致): chart canvas に emoji + text を焼くと
       // OS font 依存で品格欠如 + 右端で見切れる。 dot only に切替、 意味は凡例側で担う。
+      // ticker は lightweight-charts が無視する extra field、 凡例 render で利用。
       out.push({
         time: e.date,
         position: 'aboveBar',
         color: pickEventColor('earnings', isDark),
         shape: 'circle',
         text: '',
+        ticker: t,
       });
     }
     // chart は時系列順 marker を期待する
@@ -139,12 +148,16 @@ export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null 
         if (!d?.date) continue;
         if (d.date < firstDate || d.date > lastDate) continue;  // 表示窓内のみ
         // v71 Phase 3-d: canvas text 廃止 (上記 earnings と同 rationale)。
+        // ticker / amount は lightweight-charts が無視する extra field、 凡例 render で利用。
+        const amt = Number(d.amount);
         out.push({
           time: d.date,
           position: 'belowBar',
           color: pickEventColor('exDiv', isDark),
           shape: 'square',
           text: '',
+          ticker: t,
+          amount: Number.isFinite(amt) ? amt : null,
         });
       }
     }
@@ -531,22 +544,45 @@ export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null 
           marker が存在する時のみ表示 (空の chart で legend が孤立しないように)。 */}
       {(earningsMarkers.length > 0 || exDivMarkers.length > 0) && (
         <div className="pd-history-events-legend" aria-label="チャート上の marker 凡例">
-          {/* v71 Phase 3-d (6 体合議 / UI/UX 全員一致): OS font 依存の絵文字 → Lucide SVG icon
-              に置換し品格 (Aman 級) を確保。 chart canvas 側の marker は text 廃止で dot のみ、
-              意味伝達は本凡例が担う 2 段構え (Bloomberg PORT 流)。 */}
+          {/* v71 Phase 3-d round 2 (dogfood fix): 凡例 swatch を chart canvas の marker
+              と完全一致させる (同色・同形)。 加えて各 marker の銘柄+日付+金額を
+              inline で併記し「どの dot が何の銘柄か」を解消 (Bloomberg PORT 流)。 */}
           {earningsMarkers.length > 0 && (
-            <span className="pd-history-events-legend-item">
-              <Calendar size={11} strokeWidth={2.25} aria-hidden="true" />
-              <span>決算日</span>
-              <span className="pd-history-events-legend-sub">(今後 90 日以内)</span>
-            </span>
+            <div className="pd-history-events-legend-row">
+              <span className="pd-history-events-legend-swatch is-earnings" aria-hidden="true" />
+              <span className="pd-history-events-legend-label">
+                決算日<span className="pd-history-events-legend-sub"> (今後 90 日)</span>
+              </span>
+              <span className="pd-history-events-legend-tickers">
+                {earningsMarkers.map((m, i) => (
+                  <span key={`e-${m.ticker}-${m.time}`} className="pd-history-events-legend-chip">
+                    {i > 0 && <span aria-hidden="true" className="pd-history-events-legend-sep"> · </span>}
+                    <span className="pd-history-events-legend-tk">{m.ticker}</span>
+                    <span className="pd-history-events-legend-dt"> {fmtMD(m.time)}</span>
+                  </span>
+                ))}
+              </span>
+            </div>
           )}
           {exDivMarkers.length > 0 && (
-            <span className="pd-history-events-legend-item">
-              <Coins size={11} strokeWidth={2.25} aria-hidden="true" />
-              <span>配当落ち日</span>
-              <span className="pd-history-events-legend-sub">(過去 30 日以内)</span>
-            </span>
+            <div className="pd-history-events-legend-row">
+              <span className="pd-history-events-legend-swatch is-exdiv" aria-hidden="true" />
+              <span className="pd-history-events-legend-label">
+                配当落ち日<span className="pd-history-events-legend-sub"> (過去 30 日)</span>
+              </span>
+              <span className="pd-history-events-legend-tickers">
+                {exDivMarkers.map((m, i) => (
+                  <span key={`d-${m.ticker}-${m.time}`} className="pd-history-events-legend-chip">
+                    {i > 0 && <span aria-hidden="true" className="pd-history-events-legend-sep"> · </span>}
+                    <span className="pd-history-events-legend-tk">{m.ticker}</span>
+                    <span className="pd-history-events-legend-dt"> {fmtMD(m.time)}</span>
+                    {Number.isFinite(m.amount) && (
+                      <span className="pd-history-events-legend-amt"> ${m.amount.toFixed(2)}</span>
+                    )}
+                  </span>
+                ))}
+              </span>
+            </div>
           )}
         </div>
       )}
