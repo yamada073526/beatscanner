@@ -556,9 +556,9 @@ export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null 
               <span className="pd-history-events-legend-tickers">
                 {earningsMarkers.map((m, i) => (
                   <span key={`e-${m.ticker}-${m.time}`} className="pd-history-events-legend-chip">
-                    {i > 0 && <span aria-hidden="true" className="pd-history-events-legend-sep"> · </span>}
+                    {i > 0 && <span aria-hidden="true" className="pd-history-events-legend-sep">·</span>}
                     <span className="pd-history-events-legend-tk">{m.ticker}</span>
-                    <span className="pd-history-events-legend-dt"> {fmtMD(m.time)}</span>
+                    <span className="pd-history-events-legend-dt">{fmtMD(m.time)}</span>
                   </span>
                 ))}
               </span>
@@ -573,11 +573,11 @@ export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null 
               <span className="pd-history-events-legend-tickers">
                 {exDivMarkers.map((m, i) => (
                   <span key={`d-${m.ticker}-${m.time}`} className="pd-history-events-legend-chip">
-                    {i > 0 && <span aria-hidden="true" className="pd-history-events-legend-sep"> · </span>}
+                    {i > 0 && <span aria-hidden="true" className="pd-history-events-legend-sep">·</span>}
                     <span className="pd-history-events-legend-tk">{m.ticker}</span>
-                    <span className="pd-history-events-legend-dt"> {fmtMD(m.time)}</span>
+                    <span className="pd-history-events-legend-dt">{fmtMD(m.time)}</span>
                     {Number.isFinite(m.amount) && (
-                      <span className="pd-history-events-legend-amt"> ${m.amount.toFixed(2)}</span>
+                      <span className="pd-history-events-legend-amt">${m.amount.toFixed(2)}</span>
                     )}
                   </span>
                 ))}

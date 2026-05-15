@@ -4592,23 +4592,29 @@ body {
   align-items: baseline;
   white-space: nowrap;
 }
+/* v71 Phase 3-d round 3 (dogfood UX polish): chip 内 (TICKER / 日付 / 金額) と
+   chip 間 (·) の breathing room を tabular-nums + 明示的な margin で整える。
+   Aman 級 luxury は generous whitespace が要、 ただし冗長にならないよう 6px 基準。 */
 .pd-history-events-legend-sep {
   color: var(--border);
-  margin: 0 2px;
+  margin: 0 6px;
+  opacity: 0.6;
 }
 .pd-history-events-legend-tk {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
+  letter-spacing: 0.01em;
 }
 .pd-history-events-legend-dt {
+  margin-left: 6px;
   font-variant-numeric: tabular-nums;
   opacity: 0.75;
 }
 .pd-history-events-legend-amt {
+  margin-left: 6px;
   font-variant-numeric: tabular-nums;
   opacity: 0.75;
-  margin-left: 1px;
 }
 .pd-history-events-legend-sub {
   opacity: 0.7;
