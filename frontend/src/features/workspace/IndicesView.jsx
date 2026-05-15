@@ -526,6 +526,10 @@ function PortfolioSummaryRow({ holdings, prices, tickers, totalRealized = 0, tot
   const portfolioPeriod = useWorkspaceStore((s) => s.portfolioPeriod);
   const setPortfolioPeriod = useWorkspaceStore((s) => s.setPortfolioPeriod);
   const selectedAccountId = useWorkspaceStore((s) => s.selectedAccountId);
+  // v71 Pane 3 抽象化: 「詳細」 click で Pane 3 を portfolio detail に切替。
+  const setSelectedTarget = useWorkspaceStore((s) => s.setSelectedTarget);
+  const selectedTargetType = useWorkspaceStore((s) => s.selectedTarget?.type);
+  const isPortfolioDetailActive = selectedTargetType === 'portfolio';
   // round 10 USD/JPY 段階再導入 step 4: CurrencyToggleRow を render。
   // toggle UI が見えるだけ、各数値の formatter はまだ USD 固定で挙動変化なし。
   // ここが真っ白原因なら、CurrencyToggleRow 内の Chip primitive 経由で問題あり。
@@ -609,6 +613,23 @@ function PortfolioSummaryRow({ holdings, prices, tickers, totalRealized = 0, tot
       >
         ポートフォリオ
       </GroupHeader>
+      {!collapsed && (
+        <div className="pane2-portfolio-detail-affordance">
+          <Chip
+            size="xs"
+            variant="filter"
+            pressed={isPortfolioDetailActive}
+            onClick={() => setSelectedTarget(
+              isPortfolioDetailActive
+                ? { type: 'index', id: null }
+                : { type: 'portfolio', id: selectedAccountId || 'all' }
+            )}
+            title="Pane 3 にポートフォリオの大チャート + 保有銘柄ニュースを表示"
+          >
+            {isPortfolioDetailActive ? '指数に戻す ⤺' : '詳細を Pane 3 で見る →'}
+          </Chip>
+        </div>
+      )}
       {!collapsed && (
         <CurrencyToggleRow
           displayCurrency={displayCurrency}

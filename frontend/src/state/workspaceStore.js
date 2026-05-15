@@ -93,6 +93,12 @@ export const useWorkspaceStore = create(
       // §dogfood-2: 指数 tab 用 symbol。activeTicker と分離することで Header click が
       // home tab の Pane 3 (= JudgmentDetail) を汚染しないようにする
       activeIndexSymbol: null,
+      // v71 Pane 3 抽象化 (6 体合議 converge): Pane 3 が表示する target を discriminated union で表現。
+      // type: 'index' (default、 既存と互換)、'portfolio' (handover v70 §2-C Phase B 拡張)、
+      // 将来: 'ticker' (watchlist click) / 'judgment' (判定詳細 deep link)。
+      // activeIndexSymbol は 1-2 sprint だけ backward compat のため keep 同期、 callsite 移行後に削除。
+      // URL prefix freeze: idx | pf | t (== 'チャート' key と同じく不変)。
+      selectedTarget: { type: 'index', id: null },
       // 2026-05-13: 指数タブ滞在中に Pane 3 を Judgment Detail に強制切替するフラグ。
       // user 要望: Pane 2 注目銘柄/ポートフォリオから ticker クリック → Pane 2 はそのまま、Pane 3 のみ判定詳細表示。
       // 連続分析時の「タブ往復」を撲滅。指数 row click でリセット (chart に戻る)、tab 切替でも自動リセット。
@@ -128,8 +134,23 @@ export const useWorkspaceStore = create(
       // tab 切替時は pane3JudgmentOverride を自動リセット (連続分析モードを解除)
       setActiveTab: (t) => set(() => ({ activeTab: t, pane3JudgmentOverride: false })),
       setActiveTicker: (s) => set(() => ({ activeTicker: s })),
-      // 指数 row click は chart 表示モードに戻る (override 解除)
-      setActiveIndexSymbol: (s) => set(() => ({ activeIndexSymbol: s, pane3JudgmentOverride: false })),
+      // 指数 row click は chart 表示モードに戻る (override 解除)。
+      // v71 抽象化: selectedTarget も同期 (Phase 1 dispatcher が読む正本)。
+      setActiveIndexSymbol: (s) => set(() => ({
+        activeIndexSymbol: s,
+        selectedTarget: { type: 'index', id: s || null },
+        pane3JudgmentOverride: false,
+      })),
+      // v71 抽象化 Phase 0: 新 setter。 target 受領、 既存 activeIndexSymbol も同期 (callsite 移行までの compat)。
+      setSelectedTarget: (target) => set(() => {
+        const t = (target && typeof target === 'object' && target.type) ? target : { type: 'index', id: null };
+        return {
+          selectedTarget: t,
+          // index target なら activeIndexSymbol も同期 (旧 callsite 用)。 他 type なら null。
+          activeIndexSymbol: t.type === 'index' ? (t.id || null) : null,
+          pane3JudgmentOverride: false,
+        };
+      }),
       setPane3JudgmentOverride: (v) => set(() => ({ pane3JudgmentOverride: !!v })),
       // §v66 §2: Reading Room を任意ペインから開く。Pane 4 が折り畳まれていれば自動展開.
       setActiveReadingItem: (item) =>
@@ -162,7 +183,7 @@ export const useWorkspaceStore = create(
         portfolioCollapsed: state.portfolioCollapsed,
         selectedAccountId: state.selectedAccountId,
       }),
-      version: 11,
+      version: 12,
       // v1 → v2: 新 collapse keys (nav/watchlist/holdings/observing) 追加。
       // v2 → v3: tier2Collapsed 追加 (Workspace Home Phase 0)。
       // v3 → v4: economicCalendarCollapsed 追加 (Workspace Home Phase 1)。
@@ -225,6 +246,12 @@ export const useWorkspaceStore = create(
         if (version < 11) {
           // round 10: Portfolio 表示通貨 (USD default、JPY 切替可)
           persistedState = { ...persistedState, displayCurrency: 'USD' };
+        }
+        if (version < 12) {
+          // v71 Pane 3 抽象化 (6 体合議 converge): selectedTarget discriminated union。
+          // selectedTarget は URL = SSOT で persist 対象外 (partialize に含めない) のため、
+          // ここは migration は no-op (URL が ?index=^GSPC を持っていれば useUrlSync で復元される)。
+          // 既存 user の Pane 3 体験はそのまま (index default)。
         }
         return persistedState;
       },

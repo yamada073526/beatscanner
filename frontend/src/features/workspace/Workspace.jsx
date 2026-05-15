@@ -27,7 +27,8 @@ import Chip, { ChipBar, ChipGroup } from '../../components/ui/Chip.jsx';
 import { JudgmentProvider, useJudgment } from '../judgment/state/JudgmentContext.jsx';
 import { JudgmentList } from '../judgment/components/list/index.js';
 import { JudgmentDetail } from '../judgment/components/detail/index.js';
-import { IndicesList, IndicesDetailView } from './IndicesView.jsx';
+import { IndicesList } from './IndicesView.jsx';
+import PaneDetailView from './PaneDetailView.jsx';
 import Pane4Inspector from './Pane4Inspector.jsx';
 
 // §12-A-1 + §dogfood-icon: 「指数」tab + lucide-react 細線アイコン
@@ -734,7 +735,7 @@ export default function Workspace({
         }
         pane3={
           isIndices && !pane3JudgmentOverride ? (
-            <IndicesDetailView />
+            <PaneDetailView />
           ) : (
             <JudgmentDetail
               plan={plan}
