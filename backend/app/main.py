@@ -1187,6 +1187,22 @@ _PORTFOLIO_PERIODS = {
     "3y": 365 * 3,
 }
 
+# Phase A v69 §2: 期間連動 portfolio performance (Modified Dietz default)
+_PORTFOLIO_PERFORMANCE_PERIODS = {
+    "1d": 1,
+    "1w": 7,
+    "1m": 30,
+    "6m": 182,
+    "1y": 365,
+}
+_PORTFOLIO_PERFORMANCE_PERIOD_LABEL = {
+    "1d": "1D",
+    "1w": "1W",
+    "1m": "1M",
+    "6m": "6M",
+    "1y": "1Y",
+}
+
 
 # §11-D: portfolio-history endpoint 用の per-user rate limit (Web 開発 agent #4)
 # 簡易 in-memory bucket: user_id (or IP) → list[timestamp]
@@ -1852,6 +1868,458 @@ async def portfolio_judgment(symbols: str, request: Request) -> dict:
             await asyncio.sleep(0.3)
 
     return {"verdicts": verdicts, "errors": errors}
+
+
+# --- Phase A v69 §2: 期間連動 portfolio performance (Modified Dietz) ---
+#
+# 致命的回避 (6 体合議 round 4):
+#   - 単純 P/L 差分は禁止 (cash flow を儲けと誤認)。Modified Dietz で時間加重
+#   - 数値は AI に触らせない: 計算は決定論、Claude は表示テキスト 1 文のみ
+#   - period 中の split / 期間中の取得は分母に加重平均で含める
+
+_PORTFOLIO_PERF_SUMMARY_PROMPT = """あなたは投資ポートフォリオの 1 文要約を生成するアシスタントです。
+入力: 期間 / 期間 P/L (絶対額・%) / 最大寄与 ticker / 期初評価額。
+出力: 日本語 1 文 (**30〜55 字**、句点 1 つで完結)。
+
+【絶対ルール】
+- 必ず **句点 (。) 1 つ** で文を終わらせる。2 文以上は禁止。
+- **30〜55 字** (句点込み) を厳守。55 字超は途中で切り捨てられる。
+- 余計な前置きや改行を含めず、本文 1 行のみを返す。
+- 主語のない『市場全体の見解』として記述する。
+- 簡潔さ優先: 数字 + 主要因 + 1 つの修飾で完結 (例:「1M で +4.8%、半導体上昇が寄与。」)
+
+【内容ルール】
+- 数値は入力された値のみを使い、勝手に丸めない・別の数字を作らない
+- 期間 P/L が +なら「上昇」「寄与」、−なら「下落」「圧迫」を使う
+- 最大寄与 ticker が ETF symbol (SPY/QQQ 等) ならテーマ名で言及してもよいが、社名連想は禁止
+
+【絶対禁止 (Trust Cliff 直撃)】
+- 「氏」「投資家」「アナリスト」「専門家」「ストラテジスト」「彼」「彼女」「自身」は使わない
+- 「じっちゃま」「広瀬」「ライブ書記録」は絶対に使わない
+- 「買い推奨」「売り推奨」「購入すべき」「売却すべき」等の投資判断助言は禁止"""
+
+
+def _validate_perf_transactions(raw_list: list, today: "date") -> list[dict]:
+    """transactions 入力を Phase 1 schema で正規化 + 検証。"""
+    import datetime as _dt
+    valid_types = {"buy", "sell", "dividend", "split", "fee", "deposit", "withdraw"}
+    min_valid_date = _dt.date(today.year - 30, 1, 1)
+    out: list[dict] = []
+    for raw in raw_list:
+        if not isinstance(raw, dict):
+            continue
+        ttype = (raw.get("type") or "").strip().lower()
+        if ttype not in valid_types:
+            continue
+        ticker = (raw.get("ticker") or "").strip().upper() or None
+        # ticker 必須 type
+        if ttype in {"buy", "sell", "dividend", "split"} and not ticker:
+            continue
+        try:
+            d_iso = str(raw.get("trade_date") or "")[:10]
+            d_parsed = _dt.date.fromisoformat(d_iso)
+            if d_parsed > today or d_parsed < min_valid_date:
+                continue
+        except Exception:
+            continue
+        shares_raw = raw.get("shares")
+        price_raw = raw.get("price")
+        fee_raw = raw.get("fee")
+        try:
+            shares = float(shares_raw) if shares_raw is not None else None
+        except Exception:
+            shares = None
+        try:
+            price = float(price_raw) if price_raw is not None else None
+        except Exception:
+            price = None
+        try:
+            fee = float(fee_raw) if fee_raw is not None else 0.0
+        except Exception:
+            fee = 0.0
+        # type 別の最低要件
+        if ttype in {"buy", "sell"}:
+            if shares is None or shares <= 0 or price is None or price <= 0:
+                continue
+        elif ttype == "dividend":
+            # shares NULL なら 0 (現株数で換算は呼び出し側、Phase A は scalar 換算で安全側)
+            if price is None:
+                continue
+            if shares is None:
+                shares = 0.0
+        elif ttype == "split":
+            # shares = ratio numerator, price = denominator
+            if shares is None or price is None or shares <= 0 or price <= 0:
+                continue
+        elif ttype in {"deposit", "withdraw", "fee"}:
+            # price = 金額。shares は ignore
+            if price is None or price <= 0:
+                continue
+            shares = 0.0
+        out.append({
+            "type": ttype,
+            "ticker": ticker,
+            "trade_date": d_iso,
+            "shares": shares,
+            "price": price,
+            "fee": fee,
+        })
+    return out
+
+
+def _shares_at(txs: list[dict], ticker: str, cutoff_iso: str) -> float:
+    """ticker の cutoff_iso 時点 (その日を含む) の保有株数を返す。
+    buy/sell/split を時系列で適用。"""
+    shares = 0.0
+    rows = sorted(
+        [t for t in txs if t.get("ticker") == ticker and t["trade_date"] <= cutoff_iso],
+        key=lambda r: r["trade_date"],
+    )
+    for r in rows:
+        ttype = r["type"]
+        if ttype == "buy":
+            shares += r["shares"] or 0.0
+        elif ttype == "sell":
+            shares -= r["shares"] or 0.0
+        elif ttype == "split":
+            num = r["shares"] or 0.0
+            den = r["price"] or 1.0
+            if den > 0:
+                ratio = num / den
+                shares *= ratio
+    return shares
+
+
+def _closest_close(cmap: dict[str, float], target_iso: str, max_back_days: int = 7) -> float | None:
+    """cmap (date_iso → close) から target_iso 以下で最新の close を取る。
+    休場日 fallback、max_back_days まで遡る。"""
+    import datetime as _dt
+    try:
+        base = _dt.date.fromisoformat(target_iso)
+    except Exception:
+        return cmap.get(target_iso)
+    for delta in range(0, max_back_days + 1):
+        d_iso = (base - _dt.timedelta(days=delta)).isoformat()
+        v = cmap.get(d_iso)
+        if v is not None:
+            return v
+    return None
+
+
+@app.post("/api/portfolio-performance")
+async def portfolio_performance(
+    payload: dict,
+    request: Request,
+    authorization: str = Header(default=""),
+) -> dict:
+    """Phase A v69 §2: 期間連動の Modified Dietz return + AI 1 文サマリー。
+
+    body: {
+      transactions: [{ticker, type, shares, price, trade_date, fee?}, ...],
+      period: "1d"|"1w"|"1m"|"6m"|"1y"
+    }
+    response: {
+      period, from, to, start_value, end_value,
+      net_cashflow, weighted_cashflow,
+      pnl_abs, pnl_pct, method,
+      ai_summary, ai_summary_error,
+      top_ticker, top_contribution
+    }
+    """
+    import datetime as _dt
+
+    user = await _verify_supabase_jwt(authorization)
+    user_id = user["id"]
+
+    if not _check_portfolio_history_rate(user_id):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded (30 req/min)")
+
+    raw_txs = payload.get("transactions") or []
+    if not isinstance(raw_txs, list):
+        raw_txs = []
+    if len(raw_txs) > 200:
+        raw_txs = raw_txs[:200]
+
+    period = (payload.get("period") or "1m").lower()
+    if period not in _PORTFOLIO_PERFORMANCE_PERIODS:
+        period = "1m"
+    period_days = _PORTFOLIO_PERFORMANCE_PERIODS[period]
+    period_label = _PORTFOLIO_PERFORMANCE_PERIOD_LABEL[period]
+
+    today = _dt.date.today()
+    period_from = today - _dt.timedelta(days=period_days)
+
+    txs = _validate_perf_transactions(raw_txs, today)
+
+    # distinct ticker 上限 20 (FMP クォータ保護)
+    distinct_tickers = list({t["ticker"] for t in txs if t.get("ticker")})
+    if len(distinct_tickers) > 20:
+        allowed = set(distinct_tickers[:20])
+        txs = [t for t in txs if (t.get("ticker") in allowed or t.get("ticker") is None)]
+        distinct_tickers = list(allowed)
+
+    empty_resp = {
+        "period": period,
+        "from": period_from.isoformat(),
+        "to": today.isoformat(),
+        "start_value": 0.0,
+        "end_value": 0.0,
+        "net_cashflow": 0.0,
+        "weighted_cashflow": 0.0,
+        "pnl_abs": None,
+        "pnl_pct": None,
+        "method": "modified_dietz",
+        "ai_summary": None,
+        "ai_summary_error": None,
+        "top_ticker": None,
+        "top_contribution": None,
+    }
+
+    if not txs:
+        return empty_resp
+
+    # close map 取得 (period_from の close + today の close を両方含むよう fetch_from を最古日まで遡る)
+    earliest_tx = min(t["trade_date"] for t in txs)
+    fetch_from = min(period_from.isoformat(), earliest_tx)
+
+    api_key = _get_fmp_key(request)
+    client: FMPClient | None = None
+    try:
+        client = FMPClient(api_key=api_key)
+    except Exception:
+        client = None
+
+    async def fetch_close_map(tk: str) -> dict[str, float]:
+        cache_key = f"{tk}:{fetch_from}:{today.isoformat()}"
+        now_m = _time.monotonic()
+        cached = _PORTFOLIO_HISTORY_CACHE.get(cache_key)
+        if cached and now_m - cached["ts"] < _PORTFOLIO_HISTORY_TTL:
+            return cached["data"]
+        rows: list[dict] = []
+        if client:
+            try:
+                rows = await client.historical_price(tk, fetch_from, today.isoformat()) or []
+            except Exception:
+                rows = []
+        cmap: dict[str, float] = {}
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            d = r.get("date")
+            if not d:
+                continue
+            v = r.get("adjClose") if r.get("adjClose") is not None else r.get("close")
+            try:
+                if v is not None:
+                    cmap[str(d)[:10]] = float(v)
+            except Exception:
+                continue
+        if not cmap:
+            try:
+                yf_rows = await yfinance_source.fetch_price_history(tk, fetch_from, today.isoformat()) or []
+                for r in yf_rows:
+                    if not isinstance(r, dict):
+                        continue
+                    d = r.get("date")
+                    v = r.get("close")
+                    if d and v is not None:
+                        try:
+                            cmap[str(d)[:10]] = float(v)
+                        except Exception:
+                            continue
+            except Exception:
+                pass
+        _PORTFOLIO_HISTORY_CACHE[cache_key] = {"data": cmap, "ts": now_m}
+        return cmap
+
+    closes_by_ticker: dict[str, dict[str, float]] = {}
+    if distinct_tickers:
+        fetched = await asyncio.gather(
+            *[fetch_close_map(t) for t in distinct_tickers],
+            return_exceptions=True,
+        )
+        for t, res in zip(distinct_tickers, fetched):
+            closes_by_ticker[t] = res if isinstance(res, dict) else {}
+
+    # round 10 hotfix (handover v69): end_value を current quote price ベースで計算。
+    # 旧仕様: end_value = close map の最新 close (= 米国市場 closed 前は前営業日 close)
+    # → 「P/L 1D」と「当日変動」が乖離する (intraday vs close-to-close mismatch)
+    # 新仕様: end_value = FMP /quote の current price (frontend の usePortfolioPrices と同じ source)
+    # close map fallback (quote 失敗時 or 米国市場 closed 後 で stale な場合) は維持。
+    current_prices: dict[str, float] = {}
+    if distinct_tickers and client:
+        try:
+            quote_rows = await client.batch_quotes(distinct_tickers) or []
+            for r in quote_rows:
+                if not isinstance(r, dict):
+                    continue
+                sym = r.get("symbol")
+                price = r.get("price") or r.get("regularMarketPrice")
+                if sym and isinstance(price, (int, float)) and price > 0:
+                    current_prices[str(sym).upper()] = float(price)
+        except Exception:
+            current_prices = {}
+    # missing tickers は yfinance fallback (close map fallback でなく quote 統一)
+    missing_quote = [t for t in distinct_tickers if t not in current_prices]
+    if missing_quote:
+        try:
+            yf_rows = await yfinance_source.fetch_batch_quotes(missing_quote) or []
+            for r in yf_rows:
+                if not isinstance(r, dict):
+                    continue
+                sym = r.get("symbol")
+                price = r.get("price") or r.get("regularMarketPrice")
+                if sym and isinstance(price, (int, float)) and price > 0:
+                    current_prices[str(sym).upper()] = float(price)
+        except Exception:
+            pass
+
+    # 期首 / 期末評価額 (split-adjusted shares × adjClose)
+    # round 10 hotfix v3: start_shares は「期間開始 *前* の shares」を使う (= period_from - 1 day)。
+    # 旧仕様: start_shares = _shares_at(period_from) で 5/14 *末* の shares 取得 → 5/14 中の buy が含まれ
+    #         「期初評価額」に「buy 後の AAPL」が混入 → cashflow を 2 重控除 → P/L 反転バグ。
+    # 新仕様: period_from の前日 (= 期間開始時点) の shares を使うと、期間中 buy は cashflow のみで反映。
+    period_open = period_from - _dt.timedelta(days=1)
+    start_value = 0.0
+    end_value = 0.0
+    contributions: dict[str, float] = {}  # ticker → shares_held × Δclose の絶対寄与
+    for tk in distinct_tickers:
+        cmap = closes_by_ticker.get(tk) or {}
+        start_close = _closest_close(cmap, period_from.isoformat())
+        # end_close: current_prices があれば優先、なければ close map の最新値
+        current_p = current_prices.get(tk)
+        end_close = current_p if current_p is not None else _closest_close(cmap, today.isoformat())
+        start_shares = _shares_at(txs, tk, period_open.isoformat())  # ← v3 fix
+        end_shares = _shares_at(txs, tk, today.isoformat())
+        if start_close is not None and start_shares > 0:
+            start_value += start_shares * start_close
+        if end_close is not None and end_shares > 0:
+            end_value += end_shares * end_close
+        # 寄与 (期間中保有 ticker の Δprice × 期間中平均株数の簡易代理: end_shares × Δ)
+        if start_close is not None and end_close is not None and end_shares > 0:
+            contributions[tk] = end_shares * (end_close - start_close)
+
+    # cash flow 集計 (期間内のみ)
+    # 符号規約: 投資へ入る = +, 投資から出る = - (Dietz 標準)
+    # buy / deposit: +, sell / withdraw / dividend: -, fee: + (口座から流出だがコスト計上、保守的に + で「足りない儲け」表示)
+    # → handover plan: dividend は分子から引きたい (儲けなので) ので、ここでは sign を「投資への純流入」として定義
+    #   - buy = +cost (株を買って投資が増えた)
+    #   - sell = -proceeds (株を売って投資から出た)
+    #   - dividend = -cash_received (儲けなので投資から出た扱い、Dietz で適切に控除)
+    #   - deposit = +amount (口座 cash 入金、株を買ってなくても portfolio value 増。Phase A の portfolio は holdings only なので
+    #     実質 deposit は無視推奨だが、将来 cash position 込みのために残す)
+    #   - withdraw = -amount
+    #   - fee = +amount (コスト = 投資追加と同等扱い)
+    net_cashflow = 0.0
+    weighted_cashflow = 0.0
+    T = float(period_days) or 1.0
+    for r in txs:
+        d_iso = r["trade_date"]
+        if d_iso < period_from.isoformat() or d_iso > today.isoformat():
+            continue
+        cf = 0.0
+        ttype = r["type"]
+        shares = r.get("shares") or 0.0
+        price = r.get("price") or 0.0
+        fee = r.get("fee") or 0.0
+        if ttype == "buy":
+            cf = shares * price + fee
+        elif ttype == "sell":
+            cf = -(shares * price - fee)
+        elif ttype == "dividend":
+            cf = -(shares * price)
+        elif ttype == "deposit":
+            cf = price
+        elif ttype == "withdraw":
+            cf = -price
+        elif ttype == "fee":
+            cf = price
+        elif ttype == "split":
+            cf = 0.0
+        try:
+            t_days = (_dt.date.fromisoformat(d_iso) - period_from).days
+            t_days = max(0, min(int(period_days), t_days))
+        except Exception:
+            t_days = 0
+        net_cashflow += cf
+        weighted_cashflow += cf * (T - t_days) / T
+
+    numer = end_value - start_value - net_cashflow
+    denom = start_value + weighted_cashflow
+    pnl_abs = round(numer, 2)
+    if denom > 0:
+        pnl_pct = round(numer / denom * 100.0, 4)
+    else:
+        pnl_pct = None
+
+    # 最大寄与 ticker
+    top_ticker = None
+    top_contribution = None
+    if contributions:
+        top_ticker = max(contributions.keys(), key=lambda k: abs(contributions[k]))
+        top_contribution = round(contributions[top_ticker], 2)
+
+    # AI 1 文サマリー (Claude haiku-4-5、Trust Cliff 二重防御)
+    ai_summary: str | None = None
+    ai_summary_error: str | None = None
+    # 計算結果が valid (pnl_pct あり) なときのみ AI 呼び出し
+    if pnl_pct is not None and start_value > 0:
+        try:
+            pnl_abs_str = f"{'+' if pnl_abs >= 0 else ''}${pnl_abs:,.2f}"
+            pnl_pct_str = f"{'+' if pnl_pct >= 0 else ''}{pnl_pct:.2f}%"
+            top_ticker_str = top_ticker or "なし"
+            top_contrib_str = (
+                f"{'+' if (top_contribution or 0) >= 0 else ''}${top_contribution:,.2f}"
+                if top_contribution is not None else "—"
+            )
+            ai_prompt = (
+                f"期間: {period_label}\n"
+                f"期間 P/L: {pnl_abs_str} ({pnl_pct_str})\n"
+                f"最大寄与 ticker: {top_ticker_str} ({top_contrib_str})\n"
+                f"期初評価額: ${start_value:,.2f}"
+            )
+            claude = ClaudeClient()
+            text = await claude.complete(
+                ai_prompt,
+                model="claude-haiku-4-5-20251001",
+                max_tokens=90,  # 55 字 ≒ 70 token、buffer 含めて 90
+                system=_PORTFOLIO_PERF_SUMMARY_PROMPT,
+            )
+            text = _sanitize_insights_text((text or "").strip())
+            # 1 文化:
+            #  (a) 最初の行のみ採用 (改行で 2 文目以降を捨てる)
+            #  (b) 引用符の前後をストリップ
+            #  (c) 句点が複数ある場合は最初の「。」までで切る (2 文目への暴走防止)
+            first_line = text.split("\n")[0].strip().strip("「」\"'")
+            if "。" in first_line:
+                first_line = first_line.split("。", 1)[0] + "。"
+            if first_line:
+                ai_summary = first_line
+        except ClaudeError:
+            ai_summary_error = "claude_error"
+        except Exception:
+            ai_summary_error = "claude_error"
+
+    # round 10 hotfix debug は v3 (period_open = period_from - 1day) 修正で除去済。
+    # 過去にあった問題: AI サマリーに "(dbg) | sv=... ev=... ncf=... cf:..." を append していたが、
+    # 「期間内 buy → cashflow 2 重控除」の bug を発見し v3 で根治。
+
+    return {
+        "period": period,
+        "from": period_from.isoformat(),
+        "to": today.isoformat(),
+        "start_value": round(start_value, 2),
+        "end_value": round(end_value, 2),
+        "net_cashflow": round(net_cashflow, 2),
+        "weighted_cashflow": round(weighted_cashflow, 2),
+        "pnl_abs": pnl_abs,
+        "pnl_pct": pnl_pct,
+        "method": "modified_dietz",
+        "ai_summary": ai_summary,
+        "ai_summary_error": ai_summary_error,
+        "top_ticker": top_ticker,
+        "top_contribution": top_contribution,
+    }
 
 
 @app.get("/api/historical-dividends/{ticker}")
