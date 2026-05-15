@@ -932,6 +932,7 @@ export default function App() {
             currentTicker={ticker || null}
             holdings={holdingStore?.holdings || {}}
             portfolioPrices={portfolioPrices?.prices || {}}
+            onAddToWatchlist={addToWatchlist}
             detailContext={{
               user,
               isPro: isSubscribed,

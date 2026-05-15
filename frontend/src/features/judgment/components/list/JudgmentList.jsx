@@ -4,6 +4,7 @@ import JudgmentSearchBar from './JudgmentSearchBar.jsx';
 import JudgmentFilters from './JudgmentFilters.jsx';
 import JudgmentGroupHeader from './JudgmentGroupHeader.jsx';
 import JudgmentRow from './JudgmentRow.jsx';
+import WatchlistAddButton from './WatchlistAddButton.jsx';
 
 const QUICK_PICKS = ['AAPL', 'NVDA', 'TSLA', 'MSFT'];
 
@@ -14,8 +15,10 @@ const QUICK_PICKS = ['AAPL', 'NVDA', 'TSLA', 'MSFT'];
  * @param {Array} props.items
  * @param {boolean} [props.showFilters=true]
  * @param {(ticker: string) => void} [props.onAnalyze] - 空状態の Quick Pick から analyze を発火
+ * @param {(ticker: string) => void} [props.onAddToWatchlist] - 観察銘柄追加 (handover v69 §3 #5)
+ * @param {boolean} [props.isPro] - Pro 判定 (無料制限表示用)
  */
-export default function JudgmentList({ items = [], showFilters = true, onAnalyze }) {
+export default function JudgmentList({ items = [], showFilters = true, onAnalyze, onAddToWatchlist, isPro = false }) {
   const { selectedTicker, selectTicker, filters } = useJudgment();
 
   // ── filter + sort + group ────────────────────────────────────
@@ -214,19 +217,32 @@ export default function JudgmentList({ items = [], showFilters = true, onAnalyze
             </div>
           )
         ) : view.grouped ? (
-          view.groups.map((g) => (
-            <section key={g.title}>
-              <JudgmentGroupHeader title={g.title} count={g.items.length} />
-              {g.items.map((it) => (
-                <JudgmentRow
-                  key={it.ticker}
-                  item={it}
-                  selected={selectedTicker === it.ticker}
-                  onClick={selectTicker}
+          view.groups.map((g) => {
+            // handover v69 §3 #5: 観察銘柄グループの右端に「+」追加 button
+            const isWatchlistGroup = g.title === '観察銘柄';
+            const currentTickerSet = new Set(items.map((it) => String(it.ticker || '').toUpperCase()));
+            const action =
+              isWatchlistGroup && typeof onAddToWatchlist === 'function' ? (
+                <WatchlistAddButton
+                  onAdd={onAddToWatchlist}
+                  currentSet={currentTickerSet}
+                  isPro={isPro}
                 />
-              ))}
-            </section>
-          ))
+              ) : null;
+            return (
+              <section key={g.title}>
+                <JudgmentGroupHeader title={g.title} count={g.items.length} action={action} />
+                {g.items.map((it) => (
+                  <JudgmentRow
+                    key={it.ticker}
+                    item={it}
+                    selected={selectedTicker === it.ticker}
+                    onClick={selectTicker}
+                  />
+                ))}
+              </section>
+            );
+          })
         ) : (
           view.items.map((it) => (
             <JudgmentRow
