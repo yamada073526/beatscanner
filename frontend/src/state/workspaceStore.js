@@ -66,6 +66,11 @@ export const useWorkspaceStore = create(
       // Phase 2 v68: 口座 switcher 選択値。null = 「合計」(全口座 rollup) を意味する。
       // account.id (uuid) を持つときは特定口座のみ表示。persist で再訪時に保たれる。
       selectedAccountId: null,
+      // v68 dogfood 2026-05-15 (6 体合議): 保有銘柄 row click → 取引履歴 filter ticker。
+      // null = filter なし (modal 閉じている), 'NVDA' 等 = その ticker でフィルタした modal を表示。
+      // selectedAccountId 切替時は auto-reset (口座またぎで別 ticker filter が残らないように)。
+      // persist しない (modal は session 内のみの一時 state)。
+      filterTicker: null,
       activeTab: 'home',
       activeTicker: null,
       // §dogfood-2: 指数 tab 用 symbol。activeTicker と分離することで Header click が
@@ -96,7 +101,11 @@ export const useWorkspaceStore = create(
       toggleEconomicCalendar: () => set((s) => ({ economicCalendarCollapsed: !s.economicCalendarCollapsed })),
       toggleMovers: () => set((s) => ({ moversCollapsed: !s.moversCollapsed })),
       togglePortfolio: () => set((s) => ({ portfolioCollapsed: !s.portfolioCollapsed })),
-      setSelectedAccountId: (id) => set(() => ({ selectedAccountId: id || null })),
+      // 口座切替時は filterTicker を必ず auto-reset (6 体合議 / Web 開発エキスパート指摘)
+      setSelectedAccountId: (id) => set(() => ({ selectedAccountId: id || null, filterTicker: null })),
+      setFilterTicker: (t) => set(() => ({
+        filterTicker: t ? String(t).trim().toUpperCase() : null,
+      })),
       // tab 切替時は pane3JudgmentOverride を自動リセット (連続分析モードを解除)
       setActiveTab: (t) => set(() => ({ activeTab: t, pane3JudgmentOverride: false })),
       setActiveTicker: (s) => set(() => ({ activeTicker: s })),

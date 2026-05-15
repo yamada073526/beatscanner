@@ -27,7 +27,9 @@ export async function fetchTransactions(supabase, userId, { accountId, ticker } 
     .order('trade_date', { ascending: true })
     .order('created_at', { ascending: true });
   if (accountId) q = q.eq('account_id', accountId);
-  if (ticker) q = q.eq('ticker', String(ticker).toUpperCase());
+  // ticker は fetch 境界で必ず正規化 (.trim().toUpperCase()) — 6 体合議 / Web 開発エキスパート指摘。
+  // 表記ゆれ ('nvda' / ' NVDA' / 'NVDA') による 0 件表示バグを書込側でも防ぐ。
+  if (ticker) q = q.eq('ticker', String(ticker).trim().toUpperCase());
   const { data, error } = await q;
   if (error) {
     console.error('[transactions] fetch failed', error);

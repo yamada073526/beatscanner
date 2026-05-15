@@ -421,6 +421,41 @@ export async function fetchPortfolioJudgment(symbols) {
   return r.json();
 }
 
+// handover v68 §2 #2: 為替レート (USD/JPY 最小実装、Stripe/Wise 方式の凍結書き込み用)
+// 戻り値: { base, quote, date, rate, source } or { ..., rate: null, error }
+// 6h cache (backend 側) + yfinance USDJPY=X 経由
+export async function fetchForexRate(base = 'USD', quote = 'JPY', date = null) {
+  const params = new URLSearchParams({ base: String(base).toUpperCase(), quote: String(quote).toUpperCase() });
+  if (date) params.set('date', String(date));
+  try {
+    const r = await fetch(`/api/forex-rate?${params.toString()}`, { headers: fmpHeaders() });
+    if (!r.ok) return { base, quote, date, rate: null, error: 'http' };
+    return r.json();
+  } catch {
+    return { base, quote, date, rate: null, error: 'network' };
+  }
+}
+
+// handover v68 §2 #1: 配当 UI auto-fill 用に銘柄の過去配当履歴を取得
+// 戻り値: { ticker: "AAPL", dividends: [{date, amount, paymentDate, recordDate}, ...] }
+// 24h cache (backend 側)、配当データは historical immutable なので保守的に長め
+export async function fetchHistoricalDividends(ticker, options = {}) {
+  const sym = String(ticker || '').trim().toUpperCase();
+  if (!sym) return { ticker: '', dividends: [] };
+  const params = new URLSearchParams();
+  if (options.since) params.set('since', String(options.since));
+  if (Number.isFinite(options.limit)) params.set('limit', String(options.limit));
+  const qs = params.toString();
+  const url = `/api/historical-dividends/${encodeURIComponent(sym)}${qs ? `?${qs}` : ''}`;
+  try {
+    const r = await fetch(url, { headers: fmpHeaders() });
+    if (!r.ok) return { ticker: sym, dividends: [] };
+    return r.json();
+  } catch {
+    return { ticker: sym, dividends: [] };
+  }
+}
+
 export async function fetchMarketIndices() {
   const r = await fetch('/api/market-indices', {
     headers: fmpHeaders(),

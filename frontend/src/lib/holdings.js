@@ -215,12 +215,15 @@ export function aggregateWithTransactions(rows) {
   let shares = 0;
   let costBasis = 0;  // shares × avgCost = 取得原価合計
   let realized = 0;
+  let dividendTotal = 0;  // 受取配当合計 (per-ticker summary header 用)
+  let txCount = 0;
 
   for (const r of sorted) {
     const type = String(r.type || '').toLowerCase();
     const sh = Number(r.shares);
     const pr = Number(r.price);
     const fee = Number(r.fee) || 0;
+    txCount += 1;
 
     if (type === 'buy') {
       if (!Number.isFinite(sh) || sh <= 0 || !Number.isFinite(pr) || pr <= 0) continue;
@@ -238,7 +241,9 @@ export function aggregateWithTransactions(rows) {
       // price = per-share 配当額。shares NULL → 配当受領時点の保有株数を使う
       if (!Number.isFinite(pr) || pr <= 0) continue;
       const divShares = Number.isFinite(sh) && sh > 0 ? sh : shares;
-      realized += divShares * pr - fee;
+      const divAmount = divShares * pr - fee;
+      realized += divAmount;
+      dividendTotal += divAmount;
     } else if (type === 'split') {
       // shares = 分子、price = 分母 として ratio = shares / price
       // 例: 10-for-1 split → shares=10, price=1 → ratio=10 (株数 ×10、avg ÷10)
@@ -259,6 +264,8 @@ export function aggregateWithTransactions(rows) {
     avgCost: shares > 0 ? costBasis / shares : 0,
     realized,
     totalCost: shares > 0 ? costBasis : 0,
+    dividendTotal,  // v68 §2 #6 dogfood: per-ticker summary header 用
+    txCount,
   };
 }
 

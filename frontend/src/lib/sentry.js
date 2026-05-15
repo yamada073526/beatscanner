@@ -11,6 +11,7 @@
  */
 
 let initialized = false;
+let _sentry = null;  // 一度 import した SDK module を保持して setTag を即時実行可能に
 
 export async function initSentry() {
   if (initialized) return;
@@ -22,6 +23,7 @@ export async function initSentry() {
 
   try {
     const Sentry = await import('@sentry/react');
+    _sentry = Sentry;
     Sentry.init({
       dsn,
       environment: import.meta.env.MODE === 'production' ? 'production' : 'development',
@@ -46,5 +48,22 @@ export async function initSentry() {
   } catch (e) {
     // Sentry SDK import 失敗時もアプリは動かす
     console.warn('[sentry] init failed:', e);
+  }
+}
+
+// handover v68 §2 #6: 選択中の口座 id を Sentry tag に固定。
+// 複数口座 user で error が発生したときに「どの口座経路で起きたか」を即特定するための
+// observability 拡張。id=null は tag を削除して baseline (全口座 rollup) 扱いに戻す。
+export function setAccountTag(accountId) {
+  if (!_sentry) return;  // initSentry が完了していない (DSN 未設定 / 起動失敗) ケース
+  try {
+    if (accountId) {
+      _sentry.setTag('account_id', String(accountId));
+    } else {
+      // setTag(key, null) は SDK によって挙動が違うので null 文字列で「未選択」状態を明示
+      _sentry.setTag('account_id', 'none');
+    }
+  } catch {
+    // tag set 失敗は silent (Sentry が機能していない時のアプリ機能維持)
   }
 }
