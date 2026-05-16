@@ -40,6 +40,10 @@
   --color-gain:    #16a34a;  /* 緑 (light) — 白背景でコントラスト確保 */
   --color-loss:    #dc2626;  /* 赤 (light) */
   --color-warning: #f59e0b;  /* amber (light/dark 共通) — 警告・緊急のみ */
+  /* Phase 2.1 Round 2 (2026-05-16): design_system.md §1 で定義されていたが index.css に未登録だった。
+     `var(--color-accent)` を使った CSS が transparent 描画される問題を解消。
+     用途: ブランド emphasis / フィルタ active / watchlist / hover ring。 上昇/下落の方向性には使わない。 */
+  --color-accent:  #38bdf8;  /* cyan (light/dark 共通) — ブランド色 (elevation_scale.md ALLOWED-HEX) */
 
   /* ─── §11-E v51 Phase 1 Week 1: デザイントークン体系 ─────────────
      Stripe Dashboard の --space-* + Linear の --motion-* + Vercel Geist の --radius-* ハイブリッド命名。
@@ -6555,10 +6559,44 @@ button.ds-chip[data-pressed="true"]:hover {
   margin: 0 auto;
 }
 
-/* Hero */
+/* Hero
+   Phase 3 ダークモード dogfood Round 2 (handover v72、 2026-05-16): LP との視覚整合のため
+   radial-gradient ambient (LP `LandingPage.jsx:166-179` と同パターン) を擬似要素で追加。
+   panel-card 系には触らない (subagent レビュー案 B、 v54-v62 教訓回避)。 静的装飾なので
+   compound 4 セット規律対象外、 useArrivalSpotlight SELECTOR にも追加しない。 */
 .backtest-hero {
+  position: relative;
   text-align: center;
   padding: 48px 24px;
+  overflow: hidden;     /* gradient はみ出し防止。 panel-card 系では禁止だが、 hero は
+                           is-arriving 対象外なので ring クリップ regression 無し */
+}
+.backtest-hero::before {
+  /* Round 5 fix (2026-05-16 dogfood): user 指摘「上だけクリップが残る」 解消。
+     原因: Round 4 の translate(-50%, -55%) は楕円中心を 5% 上 shift していたため、
+     光の peak が hero 縦中央より上にあり、 hero 上端で mask fade が完了する前にクリップ。
+     修正: (a) translate(-50%, -50%) で楕円中心 = hero 縦中央、
+           (b) height 600 → 400 で楕円が hero 内に収まるサイズに、
+           (c) mask radial の不透明領域を black 30% → 20%、 transparent 75 → 55% に縮小して
+               光の peak を中心に集中 + 縁の fade を早く完了。
+     これで上下左右 4 辺すべてで mask が hero 端より内側で完全透明化する。 */
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1100px;
+  height: 400px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(ellipse, rgba(56, 189, 248, 0.08) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+  /* 楕円形 mask: 中心 20% peak、 55% で完全透明 (hero 端より内側で fade 完了) */
+  -webkit-mask-image: radial-gradient(ellipse, black 20%, transparent 55%);
+          mask-image: radial-gradient(ellipse, black 20%, transparent 55%);
+}
+.backtest-hero > * {
+  position: relative;
+  z-index: 1;
 }
 .backtest-hero-eyebrow {
   font-size: 13px;
@@ -6705,6 +6743,19 @@ button.ds-chip[data-pressed="true"]:hover {
   background: var(--bg-card);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+/* Phase 3 ダークモード dogfood Round 2 (subagent 案 B 推奨):
+   transform / box-shadow 無しの「静謐 ambient」 = 数字密度との両立。
+   panel-card のような同 Y 帯シアン洪水は出ない (5 原則 #1「2 秒で読める」 維持)。
+   勝った行は cyan tint、 負け行 (is-muted) は微赤 tint で意味的階層を保持。 */
+.backtest-trade-row:hover {
+  background: rgba(56, 189, 248, 0.05);
+  border-color: rgba(56, 189, 248, 0.22);
+}
+.backtest-trade-row.is-muted:hover {
+  background: rgba(220, 38, 38, 0.045);
+  border-color: rgba(220, 38, 38, 0.20);
 }
 .backtest-trade-ticker {
   font-weight: 700;
@@ -6883,15 +6934,24 @@ button.ds-chip[data-pressed="true"]:hover {
   cursor: pointer;
   transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
+/* Phase 3 ダークモード dogfood Round 2 (subagent 案 B 推奨):
+   LP `PrimaryCTA` (LandingPage.jsx:54) の inline `boxShadow: '0 0 12px rgba(34,211,238,0.30)'`
+   と同強度の cyan glow を hover に追加。 LP の主役 CTA と視覚親和性を確保しつつ、
+   Aman 級 luxury 入口体験の「コンシェルジュが呼びかける」 演出。 */
 .backtest-cta-primary:hover {
   background: rgba(56, 189, 248, 0.16);
   border-color: rgba(56, 189, 248, 0.70);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 18px rgba(56, 189, 248, 0.18);
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 16px rgba(56, 189, 248, 0.30),
+    0 6px 20px rgba(56, 189, 248, 0.18);
 }
+/* Phase 2.1 (handover v72): feedback_press_feedback_delta.md の Δy ≥ 2px + Δscale ≥ 0.02 規律準拠。
+   hover (-2px) → active (0) で合計 Δy = 2px、 scale 0.98 で押した瞬間の sub-conscious feedback。 */
 .backtest-cta-primary:active {
-  transform: translateY(0);
-  box-shadow: none;
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.20);
+  background: rgba(56, 189, 248, 0.22);
 }
 .backtest-hero-cta-meta {
   font-size: 11px;
@@ -6899,7 +6959,9 @@ button.ds-chip[data-pressed="true"]:hover {
   letter-spacing: 0.04em;
 }
 
-/* Preliminary バッジ (n < 30 の正直表記) */
+/* Preliminary バッジ (n < 30 の正直表記)
+   Phase 2.1 R2: 勝率タイル内ではなく、 KPI ストリップ下の独立 note row に移動済。
+   旧 .backtest-kpi-badge クラスは後方互換のため残置 (現状未使用)。 */
 .backtest-kpi-badge {
   display: inline-flex;
   align-items: center;
@@ -6917,9 +6979,58 @@ button.ds-chip[data-pressed="true"]:hover {
   cursor: help;
 }
 
-/* methodology の業界比較セクション */
+/* Round 2 S-4: KPI 外の foot row preliminary note (信頼度 hint、 数字を弱化しない設計) */
+.backtest-prelim-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: -8px;                        /* KPI ストリップとの間隔 (gap 16px のうち half cancel) */
+  padding: 8px 14px;
+  border: 1px solid rgba(245, 158, 11, 0.18);
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.04);
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+.backtest-prelim-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid var(--color-warning);
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.10);
+  color: var(--color-warning);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  flex: 0 0 auto;
+}
+.backtest-prelim-text strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+/* Round 2 A-3: 負け銘柄 セクション (muted treatment、 Survivorship 開示) */
+.backtest-trades-bottom .backtest-trades-title {
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+.backtest-trade-row.is-muted {
+  opacity: 0.78;                           /* 勝った銘柄より controlling、 主役を奪わない */
+  background: rgba(220, 38, 38, 0.025);    /* 微赤の tint で「負け」 文脈を予告 */
+  border-color: rgba(220, 38, 38, 0.12);
+}
+
+/* methodology の業界比較セクション
+   Phase 2.1 Round 2 (2026-05-16): user dogfood 指摘 — 見出しが上の本文と連続して
+   見えるため、 margin-top を 16px → 32px に倍増 + padding-top で divider 強化。
+   subtitle と上方の境界を「Aman ロビーの section divider」 感で明示。 */
 .backtest-methodology-subtitle {
-  margin: 16px 0 8px 0;
+  margin: 32px 0 12px 0;
+  padding-top: 16px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -6935,6 +7046,108 @@ button.ds-chip[data-pressed="true"]:hover {
 .backtest-methodology-para strong {
   color: var(--text-primary);
   font-weight: 700;
+}
+
+/* Phase 2.1 (handover v72): 業界比較 horizontal bar 3 本図解。
+   5 原則 #1「読み手 2 秒」 + #5「図解で認知コスト下げる」 に準拠。
+   旧文章連続 4 統計 (12.6% / 33.3% / 58.3% / +4.65pp) を視覚的階段表現に変換。
+   token のみ使用 (raw hex / box-shadow 禁止)、 発光 0 (glow_elevation_postmortem.md 教訓)。 */
+.backtest-industry-comparison {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.backtest-icb-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(120px, 2.5fr) 56px;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.backtest-icb-label {
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+.backtest-icb-track {
+  position: relative;
+  height: 14px;                            /* Round 2: 8 → 14px (SPIVA/Morningstar 公式図表標準) */
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
+  overflow: hidden;
+}
+.backtest-icb-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  height: 100%;
+  min-width: 2px;                          /* Round 2: 0% でも視認できる tick (safety) */
+  border-radius: 999px;
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.backtest-icb-fill.is-baseline {
+  background: var(--color-warning);
+  opacity: 0.55;
+}
+.backtest-icb-fill.is-current {
+  background: var(--color-accent);          /* cyan brand 色 (中間 = 我々の指標)、 :root token 化済 */
+}
+.backtest-icb-fill.is-strategy {
+  background: var(--color-gain);
+}
+.backtest-icb-value {
+  text-align: right;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+}
+
+/* Round 2 A-2: 平均 α を「第 2 の Hero」 として格上げ (bar 群直下 28-32px) */
+.backtest-icb-conclusion {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.18);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.backtest-icb-conclusion-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.backtest-icb-conclusion-value {
+  font-size: clamp(24px, 4vw, 32px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.backtest-icb-conclusion-value.is-gain { color: var(--color-gain); }
+.backtest-icb-conclusion-value.is-loss { color: var(--color-loss); }
+.backtest-icb-conclusion-unit {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+.backtest-icb-conclusion-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+@media (max-width: 640px) {
+  .backtest-icb-row {
+    grid-template-columns: minmax(120px, 1fr) minmax(80px, 1.6fr) 48px;
+    gap: 8px;
+    font-size: 11px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .backtest-icb-fill { transition: none; }
 }
 
 /* Disclaimer 詳細リスト */
@@ -6965,4 +7178,482 @@ button.ds-chip[data-pressed="true"]:hover {
 .backtest-trade-row .ticker-badge {
   font-size: 12px;
   font-weight: 700;
+}
+
+/* Phase 2.2 full (handover v73 §2-A、 2026-05-16): equity curve chart
+   月次リバランス portfolio simulation の equity_curve / spy_curve を line chart 化。
+   Bloomberg Terminal / Linear 流の dot + line、 Aman 級 dark luxury。
+   SVG 自作で lightweight-charts v5 migration リスク回避 (CLAUDE.md「触ると危険」 anchor)。 */
+.backtest-equitychart {
+  padding: 24px 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.backtest-equitychart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.backtest-equitychart-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.backtest-equitychart-legend {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.backtest-equitychart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.backtest-equitychart-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+.backtest-equitychart-legend-dot.is-strat {
+  background: var(--color-gain);
+}
+.backtest-equitychart-legend-dot.is-spy {
+  background: rgba(148, 163, 184, 0.55);
+}
+.backtest-equitychart-svg-wrap {
+  width: 100%;
+  height: 220px;
+  position: relative;          /* Phase 2.2 Round 5: popover absolute 親 */
+}
+.backtest-equitychart-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Phase 2.2 Round 5 (handover v72): Aman 級 dark popover (bar hover/focus)
+   subagent 案 B 採用: React state + 外側 div absolute、 backdrop-blur で半透明ガラス感。
+   raw hex 禁止、 var() token 経由。 .panel-card 系流用禁止 (発光バグ regression 回避)。 */
+.backtest-bar-tip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 14px));
+  z-index: 5;
+  width: 240px;
+  padding: 12px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.92);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+          backdrop-filter: blur(14px) saturate(140%);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.40), 0 0 0 1px rgba(56, 189, 248, 0.04);
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: auto;
+  animation: backtest-bar-tip-in 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* 下向き三角 (border-trick) */
+.backtest-bar-tip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 7px solid rgba(15, 23, 42, 0.92);
+}
+.backtest-bar-tip-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.backtest-bar-tip-ticker {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+}
+.backtest-bar-tip-period {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 6px;
+}
+.backtest-bar-tip-return {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.005em;
+  line-height: 1.1;
+  margin-bottom: 4px;
+}
+.backtest-bar-tip-return.is-gain { color: var(--color-gain); }
+.backtest-bar-tip-return.is-loss { color: var(--color-loss); }
+.backtest-bar-tip-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.backtest-bar-tip-meta .is-gain { color: var(--color-gain); font-weight: 600; }
+.backtest-bar-tip-meta .is-loss { color: var(--color-loss); font-weight: 600; }
+.backtest-bar-tip-sep {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+@keyframes backtest-bar-tip-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-100% - 10px));
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, calc(-100% - 14px));
+  }
+}
+/* mobile (touch device) の bar focus 後 tap 領域確保、 hover を無効化 */
+@media (pointer: coarse) {
+  .backtest-bar-tip {
+    /* tap で表示、 そのまま外タップで消える挙動 (rect onBlur で実現) */
+    width: 220px;
+    padding: 10px 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .backtest-bar-tip {
+    animation: none;
+  }
+}
+/* 画面左右端 clamp は CSS だけでは難しいので、 max-width で安全側 */
+@media (max-width: 640px) {
+  .backtest-bar-tip {
+    width: min(220px, calc(100vw - 32px));
+  }
+}
+
+/* Phase 2.3 (handover v72、 2026-05-16): YoY 年次別成績 mini bar chart
+   TradeBarChart より小型 (height 200px)、 各年 2 本 bar (5 条件 緑 / SPY グレー)。 */
+.backtest-yearchart {
+  padding: 24px 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.backtest-yearchart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.backtest-yearchart-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.backtest-yearchart-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.backtest-yearchart-win {
+  color: var(--color-gain);
+  font-weight: 700;
+}
+.backtest-yearchart-svg-wrap {
+  width: 100%;
+  height: 200px;
+  position: relative;
+}
+.backtest-yearchart-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.backtest-yearchart-legend {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.backtest-yearchart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.backtest-yearchart-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.backtest-yearchart-legend-dot.is-strat {
+  background: var(--color-gain);
+}
+.backtest-yearchart-legend-dot.is-spy {
+  background: rgba(148, 163, 184, 0.65);
+}
+@media (max-width: 640px) {
+  .backtest-yearchart-svg-wrap {
+    height: 160px;
+  }
+}
+
+/* Phase 2.3 Sector breakdown (handover v72、 2026-05-16): セクター別 horizontal bar chart
+   row 単位 (sector 名 | bar | 値) で見やすく、 yearchart と同じ panel 構造。 */
+.backtest-sectorchart {
+  padding: 24px 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;       /* popover absolute 親 */
+}
+.backtest-sectorchart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.backtest-sectorchart-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.backtest-sectorchart-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.backtest-sectorchart-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 1.2fr) minmax(120px, 4fr) 64px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  outline: none;
+  transition: background 0.18s ease;
+}
+.backtest-sectorchart-row:hover,
+.backtest-sectorchart-row.is-hover,
+.backtest-sectorchart-row:focus {
+  background: rgba(148, 163, 184, 0.06);
+}
+.backtest-sectorchart-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.backtest-sectorchart-count {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+.backtest-sectorchart-track {
+  position: relative;
+  height: 12px;
+  background: rgba(148, 163, 184, 0.08);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.backtest-sectorchart-zero {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(148, 163, 184, 0.45);
+}
+.backtest-sectorchart-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 4px;
+  transition: opacity 0.18s ease;
+}
+.backtest-sectorchart-bar.is-gain {
+  background: var(--color-gain);
+  opacity: 0.85;
+}
+.backtest-sectorchart-bar.is-loss {
+  background: var(--color-loss);
+  opacity: 0.85;
+}
+.backtest-sectorchart-row.is-hover .backtest-sectorchart-bar {
+  opacity: 1;
+}
+.backtest-sectorchart-value {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  letter-spacing: -0.005em;
+}
+.backtest-sectorchart-value.is-gain { color: var(--color-gain); }
+.backtest-sectorchart-value.is-loss { color: var(--color-loss); }
+/* Sector popover は backtest-bar-tip を流用、 位置だけ固定 (row 上に absolute) */
+.backtest-sectorchart-tip {
+  position: absolute !important;
+  /* row は flex 内なので simple に中央上に配置 */
+  top: 20%;
+  left: 50%;
+  transform: translate(-50%, -10px);
+  z-index: 6;
+}
+.backtest-sectorchart-tip::after {
+  display: none;             /* sector popover では下三角不要 (row 中央寄せ) */
+}
+@media (max-width: 640px) {
+  .backtest-sectorchart-row {
+    grid-template-columns: minmax(90px, 1.1fr) minmax(80px, 2.5fr) 56px;
+    gap: 8px;
+  }
+}
+
+/* Phase 2.4 Methodology PDF (handover v72、 2026-05-16): download button
+   ProTeaser と同じ luxury card pattern、 ただし Free 訴求なので cyan brand 色で控えめ */
+.backtest-pdf-download {
+  display: flex;
+  justify-content: center;
+  margin: 8px 0;
+}
+.backtest-pdf-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 24px;
+  border: 1px solid rgba(56, 189, 248, 0.30);
+  border-radius: 12px;
+  background: rgba(56, 189, 248, 0.06);
+  color: var(--text-primary);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+.backtest-pdf-button:hover {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.55);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 18px rgba(56, 189, 248, 0.18);
+}
+.backtest-pdf-button:active {
+  transform: translateY(1px) scale(0.99);
+}
+.backtest-pdf-button-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  margin-left: 4px;
+}
+@media (max-width: 640px) {
+  .backtest-pdf-button {
+    flex-wrap: wrap;
+    text-align: center;
+    padding: 12px 18px;
+  }
+}
+.backtest-equitychart-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.18);
+}
+.backtest-equitychart-total {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  text-align: center;
+}
+.backtest-equitychart-total-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.backtest-equitychart-total-value {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.005em;
+  line-height: 1.1;
+}
+.backtest-equitychart-total-value.is-gain { color: var(--color-gain); }
+.backtest-equitychart-total-value.is-loss { color: var(--color-loss); }
+.backtest-equitychart-total-value.is-neutral { color: var(--text-secondary); }
+.backtest-equitychart-caption {
+  margin: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+}
+@media (max-width: 640px) {
+  .backtest-equitychart-svg-wrap {
+    height: 180px;
+  }
+  .backtest-equitychart-total-value {
+    font-size: 18px;
+  }
+}
+
+/* Phase 3 ダークモード dogfood Round 2 (subagent 案 B 推奨):
+   新規追加した hover transform / glow を a11y AAA 規律 (酔い系 churn 防止) で停止。
+   既存グローバル prefers-reduced-motion ブロック (index.css:150) に重ねて二重防御。 */
+@media (prefers-reduced-motion: reduce) {
+  .backtest-cta-primary,
+  .backtest-cta-primary:hover,
+  .backtest-cta-primary:active {
+    transition: none;
+    transform: none;
+  }
+  .backtest-cta-primary:hover {
+    /* glow は色のみで表現 (transform / shadow churn を回避) */
+    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.45);
+  }
+  .backtest-trade-row {
+    transition: none;
+  }
 }

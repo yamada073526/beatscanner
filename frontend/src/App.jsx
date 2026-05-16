@@ -862,10 +862,16 @@ export default function App() {
   const useWorkspaceLayout = urlWantsWorkspace && !isMobileForWorkspace;
 
   // v71 Phase 1 Day 5: `?layout=backtest` は最優先で full screen 表示
+  // Phase 3 Sub-3 (2026-05-16): isSubscribed / startCheckout を渡し、 Premium teaser から
+  // Stripe checkout に直結 (Premium tier、 ¥1,800/月)。
   if (urlWantsBacktest) {
     return (
       <Suspense fallback={<div style={{ padding: 48, color: 'var(--text-muted)' }}>読み込み中...</div>}>
-        <BacktestPage />
+        <BacktestPage
+          user={user}
+          isSubscribed={isSubscribed}
+          startCheckout={startCheckout}
+        />
       </Suspense>
     );
   }
@@ -978,7 +984,12 @@ export default function App() {
 
       {/* Header — Apple 式 1段ヘッダー。
           モバイル: 2 カラム (auto 1fr) でロゴ左 + ハンバーガー右。中央タブは hidden
-          md+    : 3 カラム (1fr auto 1fr) で中央タブが厳密に水平センター */}
+          md+    : 3 カラム (1fr auto 1fr) で中央タブが厳密に水平センター
+          Phase 3 Sub-3 dogfood Round 2 (handover v72、 2026-05-16): user 指摘
+          「ロゴ + アプリ名が消えた」 を解消。 LP 表示中は ロゴ + アプリ名は **表示**
+          (ブランド identity 維持)、 中央タブ + ハンバーガーのみ非表示 (5 原則 #4 + 未ログイン
+          状態では機能アクセス不要)。 旧版 (Round 1) は header 全体を display:none で
+          ブランド identity ごと消えていた。 */}
       <header
         className="mb-4 grid items-center grid-cols-[auto_1fr] md:grid-cols-[1fr_auto_1fr] gap-2"
       >
@@ -1032,11 +1043,17 @@ export default function App() {
         </div>
 
         {/* 中央タブ — md+ のみ。モバイルは drawer 内の Tabs 使用。
-            grid 中央セルに配置されるため自動的に水平中央に揃う */}
+            grid 中央セルに配置されるため自動的に水平中央に揃う
+            Phase 3 Sub-3 dogfood Round 2: LP 表示中 (showLP) は中央タブを非表示。
+            旧 UI 4 タブナビは新 workspace 動線と重複、 未ログインでも不要。 */}
         <nav
           aria-label="メインナビ"
           className="hidden items-center md:flex"
-          style={{ gap: '4px', justifyContent: 'center' }}
+          style={{
+            gap: '4px',
+            justifyContent: 'center',
+            ...(showLP ? { display: 'none' } : {}),
+          }}
         >
           {[
             { key: 'home',     label: 'ホーム' },
@@ -1079,8 +1096,18 @@ export default function App() {
             );
           })}
         </nav>
-        {/* 右: ハンバーガーのみ — grid 右カラムで右寄せ、flexShrink:0 で縮小防止 */}
-        <div className="flex items-center" style={{ gap: '4px', justifyContent: 'flex-end', flexShrink: 0 }}>
+        {/* 右: ハンバーガーのみ — grid 右カラムで右寄せ、flexShrink:0 で縮小防止
+            Phase 3 Sub-3 dogfood Round 2: LP 表示中 (未ログイン) は drawer 機能不要なので非表示。
+            ログイン後 (showLP === false) は従来通り表示。 */}
+        <div
+          className="flex items-center"
+          style={{
+            gap: '4px',
+            justifyContent: 'flex-end',
+            flexShrink: 0,
+            ...(showLP ? { display: 'none' } : {}),
+          }}
+        >
           <button
             id="dark-toggle-btn"
             type="button"
@@ -2309,8 +2336,11 @@ export default function App() {
 
       {/* フローティングボトムナビ — 常時 DOM 配置 + CSS transition で
           下からスッと立ち上がり（spring 風 cubic-bezier）。隠れ時は素直に ease。
-          スマホはアイコンのみ正方形、PC はアイコン+テキスト縦2段。 */}
-      {(
+          スマホはアイコンのみ正方形、PC はアイコン+テキスト縦2段。
+          Phase 3 Sub-3 dogfood (handover v72): LP 表示中 (未ログイン) は bottom nav も
+          完全非表示 (5 原則 #4 + Trust Cliff 整合)。 PC ナビ撤去 / スマホ bottom nav 残置の
+          戦略判断 (handover v72 §推奨タスク #2) は別セッション、 本修正は LP 内ノイズ削減のみ。 */}
+      {!showLP && (
         <nav
           aria-label="ボトムナビ"
           className="bottom-nav-floating"

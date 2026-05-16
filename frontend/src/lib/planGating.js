@@ -41,6 +41,11 @@ export const FEATURE_GATES = Object.freeze({
   news_recent_7d:         PLAN.FREE,   // 直近 7 日のニュース
   watchlist_basic:        PLAN.FREE,   // ウォッチリスト基本
   ir_links:               PLAN.FREE,   // IR リンク
+  // Phase 3 Sub-3 (handover v72、 2026-05-16、 6 体合議不要): backtest 自体は LP 訴求の
+  // 入口として Free 全開放を維持 (CLAUDE.md「Trust Cliff」 最重要バグカテゴリ、 LP hero に
+  // 「過去 5 年 +32.56%」 を訴求しながら Premium 限定にすると即離脱)。
+  // Premium 訴求は別 path: 銘柄別貢献度 / カスタム期間 / PDF / 10 年データ等。
+  backtest_basic:         PLAN.FREE,   // バックテスト基本 (5y/3y/1y + 200 銘柄、 LP 訴求の数字)
 
   // === Pro 機能 (¥980/月) ===
   search_unlimited:       PLAN.PRO,    // 銘柄検索無制限
@@ -65,7 +70,11 @@ export const FEATURE_GATES = Object.freeze({
   peer_compare:           PLAN.PREMIUM,  // 競合 5 社の決算同時表示
   earnings_whisper:       PLAN.PREMIUM,  // Earnings Whisper
   ten_conditions:         PLAN.PREMIUM,  // 8-10 条件拡張 (5+ROIC/FCF/OperLev)
-  backtest:               PLAN.PREMIUM,  // バックテスト
+  // Phase 3 Sub-3 (2026-05-16): 旧 `backtest: PREMIUM` (誰も canUse 呼出していなかった)
+  // を `backtest_advanced` にリネームしてねじれ解消。 基本 backtest (5y/3y/1y, 200 銘柄)
+  // は LP 訴求と整合する Free 全開放 (上 `backtest_basic`)、 advanced (銘柄別貢献度 /
+  // カスタム期間 / PDF / 10 年データ / forex 込み実 P/L) のみ Premium 限定。
+  backtest_advanced:      PLAN.PREMIUM,  // バックテスト高機能 (銘柄別貢献度 / カスタム期間 / PDF / 10y)
   sector_threshold:       PLAN.PREMIUM,  // セクター別閾値カスタム
   risk_analysis:          PLAN.PREMIUM,  // β / Sharpe / Max Drawdown
   claude_opus_report:     PLAN.PREMIUM,  // Claude Opus 多面分析レポート (月 20 銘柄)

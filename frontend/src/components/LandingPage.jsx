@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { Zap, MessageSquare, BarChart3, Flame, AlertTriangle, Eye, Clock, LineChart, Sparkles, Gift, Lock, Tag } from 'lucide-react';
+import { useBacktest } from '../hooks/useBacktest.js';
 
 /**
  * LandingPage — 未ログインユーザー向けランディングページ
@@ -116,7 +118,50 @@ function SectionTitle({ children }) {
 
 // ── セクション 1: ヒーロー ────────────────────────────────────────────────
 // 既存 App.jsx の Hero (line 681-) と同じ hero-badge / hero-title クラスを使用
+//
+// Phase 3 Sub-1 (handover v72 §2-B、 2026-05-16): backtest 実証データを hero に統合。
+// 「決算を見ても買うべきか分からない」 → 「過去 5 年で 100 万円 → 133 万円」 という
+// 痛み→ 解決→ 実証 の 3 段で説得力強化。 数字は useBacktest hook の動的取得値を使用
+// (Trust Cliff 回避: 訴求文言と本番 backtest 結果が常時一致)。
+
+// 数字フォーマッタ (BacktestPage と同じシグネチャ、 LP chunk 内 inline 定義)
+function fmtSignedPctLP(n, digits = 2) {
+  if (n === null || n === undefined || !Number.isFinite(n)) return '—';
+  const sign = n > 0 ? '+' : '';
+  return `${sign}${n.toFixed(digits)}%`;
+}
+function fmtJpyLP(yen) {
+  if (yen == null || !Number.isFinite(yen)) return '—';
+  if (yen >= 100_000_000) return `${(yen / 100_000_000).toFixed(yen >= 1_000_000_000 ? 0 : 1)} 億円`;
+  return `${Math.round(yen / 10_000).toLocaleString('ja-JP')} 万円`;
+}
+const HERO_BASE_JPY_LP = 1_000_000;
+
+function goToBacktest() {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('layout', 'backtest');
+    window.location.href = url.toString();
+  } catch {
+    window.location.href = '/?layout=backtest';
+  }
+}
+
 function HeroSection({ onFreeStart }) {
+  // backtest 実証データ取得 (5y / 365d 保有、 useBacktest は 30 分 module cache)
+  // Phase 2.2 full (handover v73 §2-A): per-trade avg → portfolio cum_return に切替。
+  // 「過去 5 年運用したら $10K → $XX,XXX」 という真の portfolio simulation 結果を訴求。
+  // portfolio 取得失敗時は per-trade avg に fallback (旧 LP 体験継続)。
+  const { data: bt, loading: btLoading } = useBacktest('5y', 365);
+  const pf = bt?.portfolio && !bt.portfolio.error ? bt.portfolio : null;
+  const pfCum = pf?.kpis?.cum_return_pct;
+  const pfAlpha = pf?.kpis?.alpha_pct;
+  const btAvg = pfCum != null ? pfCum : bt?.kpis?.avg_return_pct;
+  const btAlpha = pfAlpha != null ? pfAlpha : bt?.kpis?.avg_alpha_pct;
+  const usingPortfolio = pfCum != null;
+  const btFutureJpy = btAvg != null ? HERO_BASE_JPY_LP * (1 + btAvg / 100) : null;
+  const hasBacktest = !btLoading && btAvg != null && btAlpha != null;
+
   return (
     <section style={{
       textAlign: 'center',
@@ -125,51 +170,138 @@ function HeroSection({ onFreeStart }) {
       overflow: 'hidden',
       borderBottom: '1px solid var(--border)',  // v40: Hero 終端を視覚的に明示
     }}>
-      {/* 背景の装飾（既存 Hero と同じ放射状グロー） */}
+      {/* 背景の装飾（放射状グロー）
+          Phase 3 Sub-3 dogfood Round 3 (handover v72、 2026-05-16): user 指摘
+          「上に横一直線のクリッピング」 解消。 旧版は transform translate(-50%, -60%) で
+          楕円中心を上方シフトしていたため、 楕円の上端が hero overflow:hidden で
+          硬く切れて水平線として見えていた。 BacktestPage の hero::before と同じ
+          「mask radial 4 辺均一フェード」 pattern を適用 → 縁が hero の境界に到達する前に
+          二重 (gradient transparent + mask radial) で完全透明化。 */}
       <div
         aria-hidden="true"
         style={{
           position: 'absolute',
           top: '50%',
           left: '50%',
-          transform: 'translate(-50%, -60%)',
-          width: '600px',
-          height: '300px',
-          background: 'radial-gradient(ellipse, rgba(56,189,248,0.08) 0%, transparent 70%)',
+          transform: 'translate(-50%, -50%)',
+          width: '1100px',
+          height: '400px',
+          background: 'radial-gradient(ellipse, rgba(56,189,248,0.07) 0%, transparent 60%)',
           pointerEvents: 'none',
           zIndex: 0,
+          WebkitMaskImage: 'radial-gradient(ellipse, black 20%, transparent 55%)',
+          maskImage: 'radial-gradient(ellipse, black 20%, transparent 55%)',
         }}
       />
 
       {/* β バッジ削除 (v37): 招待制という虚偽訴求を回避 + Hero ノイズ削減 */}
 
-      {/* メインコピー — 痛み→解決型（v37 で「機能説明」から転換） */}
+      {/* メインコピー (Phase 3 Sub-3 dogfood Round 2、 handover v72、 subagent 案 A 採用)
+          旧版 (痛み→解決型 2 行)「決算を見ても / 買うべきか分からない」 + サブコピー
+          「プロが使う5条件で、2秒で判定。」 → 1 行断言型に圧縮。
+          根拠 3 個 (subagent レビュー):
+            (1) 5 原則 #1「読み手 2 秒で分かる」 体現: 12 字 1 行で reading time 0.8 秒
+                (旧版 1.4 秒から 43% 短縮)
+            (2) Aman / Ritz-Carlton 級 dark luxury 世界観と整合: 「勝てる」 能動語 +
+                体言止め+読点で Bloomberg Terminal × 茶室の余白を両立
+            (3) Trust Cliff / SEC/金商法回避: 「勝てる」 は能力訴求 (BeatScanner で判定可能の意)、
+                予測ではないので法的に安全。 数値訴求は実証 chip に閉じ込めて二段ロケット効果
+          Typography: clamp 32-56px → 40-72px / weight 600 → 700 / letter-spacing -0.02em → -0.025em
+          で「ロビーの天井高」 を演出。 */}
       <h1
         className="hero-title"
         style={{
           position: 'relative', zIndex: 1,
           textAlign: 'center',
-          fontSize: 'clamp(32px, 6vw, 56px)',
-          fontWeight: 600,
-          lineHeight: 1.15,
-          margin: '0 0 16px',
-          letterSpacing: '-0.02em',
+          fontSize: 'clamp(40px, 6.5vw, 72px)',
+          fontWeight: 700,
+          lineHeight: 1.1,
+          margin: '0 0 24px',
+          letterSpacing: '-0.025em',
         }}
       >
-        <span style={{ display: 'block' }}>決算を見ても</span>
-        <span style={{ display: 'block' }}>買うべきか分からない</span>
+        勝てる決算、 2 秒で。
       </h1>
 
-      {/* サブコピー — 解決策の提示 (権威性 + 具体性) */}
-      <p style={{
-        position: 'relative', zIndex: 1,
-        fontSize: 'clamp(13px, 1.8vw, 16px)',
-        color: 'var(--text-muted)',
-        margin: '0 auto 24px',
-        lineHeight: 1.6,
-      }}>
-        プロが使う5条件で、3秒で判定。
-      </p>
+      {/* Phase 3 Sub-1: 実証データブロック (過去 5 年バックテスト結果)
+          数字は動的取得 (Trust Cliff 回避)、 取得失敗時は section ごと自動非表示で hero 健全性維持 */}
+      {hasBacktest && (
+        <button
+          type="button"
+          onClick={goToBacktest}
+          aria-label="バックテスト実証データを見る"
+          style={{
+            position: 'relative', zIndex: 1,
+            display: 'inline-flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 6,
+            margin: '0 auto 24px',
+            padding: '14px 24px',
+            background: 'rgba(34, 197, 94, 0.06)',
+            border: '1px solid rgba(34, 197, 94, 0.22)',
+            borderRadius: 14,
+            cursor: 'pointer',
+            transition: 'background 0.2s ease, border-color 0.2s ease, transform 0.2s ease',
+            font: 'inherit',
+            color: 'inherit',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(34, 197, 94, 0.10)';
+            e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.45)';
+            e.currentTarget.style.transform = 'translateY(-1px)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(34, 197, 94, 0.06)';
+            e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.22)';
+            e.currentTarget.style.transform = 'translateY(0)';
+          }}
+        >
+          <span style={{
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+            color: 'var(--text-muted)',
+          }}>
+            過去 5 年 実証データ
+          </span>
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'baseline',
+            gap: 10,
+            fontVariantNumeric: 'tabular-nums',
+            letterSpacing: '0.01em',
+          }}>
+            <span style={{ fontSize: 'clamp(16px, 2.4vw, 20px)', fontWeight: 600, color: 'var(--text-secondary)' }}>
+              100 万円
+            </span>
+            <span style={{ fontSize: 'clamp(14px, 2vw, 16px)', color: 'var(--text-muted)', fontWeight: 300, opacity: 0.7 }}>
+              →
+            </span>
+            <span style={{ fontSize: 'clamp(22px, 3.6vw, 32px)', fontWeight: 700, color: 'var(--color-gain)' }}>
+              {fmtJpyLP(btFutureJpy)}
+            </span>
+          </span>
+          <span style={{
+            fontSize: 12,
+            color: 'var(--text-muted)',
+            letterSpacing: '0.02em',
+          }}>
+            {usingPortfolio ? '月次リバランスで運用、 5 年累積' : '1 銘柄あたり平均'} <strong style={{ color: 'var(--color-gain)', fontWeight: 700 }}>{fmtSignedPctLP(btAvg)}</strong>
+            <span style={{ margin: '0 6px', opacity: 0.5 }}>·</span>
+            S&amp;P 500 を <strong style={{ color: 'var(--color-gain)', fontWeight: 700 }}>{fmtSignedPctLP(btAlpha)}</strong> ポイント上回る
+          </span>
+          <span style={{
+            marginTop: 4,
+            fontSize: 11,
+            color: 'rgb(56, 189, 248)',
+            letterSpacing: '0.04em',
+          }}>
+            実証データを見る →
+          </span>
+        </button>
+      )}
 
       {/* メインCTA + 1行補助テキスト (v40: 「登録不要で試せる」と「登録30秒」の
           矛盾を解消。CTA は「無料で始める」、補助は「クレカ不要・Googleで30秒」に統一) */}
@@ -264,8 +396,14 @@ function TodayHotSection({ onTickerClick }) {
         letterSpacing: '0.1em',
         textAlign: 'center',
         marginBottom: 4,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        width: '100%',
       }}>
-        🔥 今日の注目
+        <Flame size={14} strokeWidth={2.2} style={{ color: 'rgb(245, 158, 11)' }} />
+        今日の注目
       </div>
       {/* v40: クリック可能シグナル — モバイルで hover が効かないため明示 */}
       <div style={{
@@ -409,8 +547,12 @@ function UpcomingEarningsSection({ onTickerClick }) {
           textTransform: 'uppercase',
           letterSpacing: '0.1em',
           marginBottom: 4,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
         }}>
-          ⚠️ 決算の近い銘柄
+          <AlertTriangle size={14} strokeWidth={2.2} style={{ color: 'var(--color-warning)' }} />
+          決算の近い銘柄
         </div>
         <div style={{
           fontSize: 11,
@@ -553,7 +695,8 @@ function MissedSection({ onTickerClick }) {
           letterSpacing: '0.1em',
           marginBottom: 4,
         }}>
-          👀 あなたが見た銘柄、決算が近づいています
+          <Eye size={14} strokeWidth={2.2} style={{ color: 'rgb(56, 189, 248)', display: 'inline-block', verticalAlign: 'middle', marginRight: 6, marginTop: -2 }} />
+          あなたが見た銘柄、決算が近づいています
         </div>
         <div style={{
           fontSize: 11,
@@ -659,8 +802,12 @@ function RecentlyAnalyzedSection({ onTickerClick }) {
           textTransform: 'uppercase',
           letterSpacing: '0.1em',
           marginBottom: 4,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
         }}>
-          🕘 以前に調べた銘柄
+          <Clock size={14} strokeWidth={2.2} style={{ color: 'var(--text-muted)' }} />
+          以前に調べた銘柄
         </div>
         <div style={{
           fontSize: 11,
@@ -748,8 +895,12 @@ function SampleAnalysisSection({ onTickerClick }) {
           textTransform: 'uppercase',
           letterSpacing: '0.1em',
           marginBottom: 4,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
         }}>
-          📊 サンプル分析結果
+          <LineChart size={14} strokeWidth={2.2} style={{ color: 'rgb(56, 189, 248)' }} />
+          サンプル分析結果
         </div>
         <div style={{
           fontSize: 11,
@@ -905,7 +1056,7 @@ function SampleAnalysisSection({ onTickerClick }) {
 // 既存 .panel-card クラスを使用 (ホバー演出付き)
 // v37: mockup prop で実 UI 表現を差し込み可能に
 // v38: flex column + height:100% で 3 カードを同高揃え
-function FeatureCard({ icon, title, description, mockup }) {
+function FeatureCard({ icon: Icon, title, description, mockup }) {
   return (
     <div
       className="panel-card"
@@ -919,7 +1070,25 @@ function FeatureCard({ icon, title, description, mockup }) {
         height: '100%',
       }}
     >
-      <div style={{ fontSize: 24, marginBottom: 10 }}>{icon}</div>
+      {/* Lucide SVG icon (Phase 3 dogfood、 handover v72): Aman ホテル風 - 極小金属プレート
+          + 微発光リング。 旧 ⚡/📊/📈 絵文字は OS 依存 native glyph で品格低下、 SVG で統一。
+          Bug fix (handover v72 round): lucide-react は React.forwardRef (typeof = 'object') なので
+          typeof === 'function' 判定では落ちる。 `Icon ?` で truthy 判定に変更。 */}
+      <div style={{
+        width: 40,
+        height: 40,
+        borderRadius: 10,
+        background: 'rgba(56, 189, 248, 0.08)',
+        border: '1px solid rgba(56, 189, 248, 0.18)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 12,
+        color: 'rgb(56, 189, 248)',
+        boxShadow: '0 0 12px rgba(56, 189, 248, 0.12)',
+      }}>
+        {Icon ? <Icon size={20} strokeWidth={2} /> : null}
+      </div>
       <h3
         className="section-heading"
         style={{ fontSize: 16, marginBottom: 8 }}
@@ -1140,17 +1309,17 @@ function FeaturesSection() {
             理由: 訴求力 / 情報均等性 / 認知コスト削減のいずれも案B (高さ統一のみ) より優れる。
             設計思想 ⑥「図解で認知コストを下げろ」を 3 カードすべてに適用。 */}
         <FeatureCard
-          icon="⚡"
+          icon={Zap}
           title="5条件、即判定"
           mockup={<FiveConditionsMockup />}
         />
         <FeatureCard
-          icon="📊"
+          icon={MessageSquare}
           title="市場の声"
           mockup={<MarketVoiceMockup />}
         />
         <FeatureCard
-          icon="📈"
+          icon={BarChart3}
           title="チャート連動"
           mockup={<ChartLinkMockup />}
         />
@@ -1194,7 +1363,22 @@ function PricingSection({ onFreeStart, onProCheckout }) {
               minHeight で Pro カードの上部 (アイコン+名+価格+¥33+pill+ベネフィット) と高さ揃え。
               v40: ベネフィットコピー追加に伴い 152 → 188 に増量 */}
           <div style={{ minHeight: 188 }}>
-            <div style={{ fontSize: 22, marginBottom: 4 }}>🆓</div>
+            {/* Phase 3 Sub-3 dogfood (handover v72): 旧 🆓 絵文字 → Lucide Sparkles icon。
+                Aman ロビーの極小金属プレート風 + 微発光リング。 */}
+            <div style={{
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              background: 'rgba(148, 163, 184, 0.08)',
+              border: '1px solid rgba(148, 163, 184, 0.18)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 8,
+              color: 'var(--text-secondary)',
+            }}>
+              <Sparkles size={18} strokeWidth={2} />
+            </div>
             <h3 className="section-heading" style={{ fontSize: 16, marginBottom: 4 }}>
               無料
             </h3>
@@ -1207,7 +1391,9 @@ function PricingSection({ onFreeStart, onProCheckout }) {
               }}>/月</span>
             </div>
           </div>
-          {/* 中部: ✓ リスト (上部直後に通常フロー — Pro と水平揃え) */}
+          {/* 中部: ✓ リスト (上部直後に通常フロー — Pro と水平揃え)
+              Phase 3 Sub-3 (handover v72): バックテスト実証データを Free 訴求に明示。
+              LP hero 「過去 5 年で 100 万円 → 133 万円」 と Pricing が完全整合。 */}
           <ul style={{
             listStyle: 'none', padding: 0, margin: '0 0 22px',
             fontSize: 13, lineHeight: 2, color: 'var(--text-secondary)',
@@ -1215,6 +1401,7 @@ function PricingSection({ onFreeStart, onProCheckout }) {
             <li>✓ 3銘柄/日まで無料分析</li>
             <li>✓ 5条件 即時判定</li>
             <li>✓ 株価チャート閲覧</li>
+            <li>✓ <strong style={{ color: 'rgb(56, 189, 248)' }}>バックテスト</strong> 5 年実証</li>
           </ul>
           {/* 下部: CTA を marginTop:auto で底固定 */}
           <div style={{ marginTop: 'auto' }}>
@@ -1240,11 +1427,16 @@ function PricingSection({ onFreeStart, onProCheckout }) {
             height: '100%',
           }}
         >
-          {/* おすすめバッジ */}
+          {/* おすすめバッジ
+              v72 dogfood Round (handover v72、 2026-05-16): subagent レビュー指摘
+              「右上半分隠れ」 解消。 旧 top:-10 で sticky 検索バー (z-index:50) や panel-card
+              :hover transform translateY(-5px) と干渉していた。 Stripe/Linear 流の
+              「カード内側収納」 パターンに変更 (top:12, right:12) + box-shadow で
+              luxury 感を担保。 sticky bar 通過時もクリップされない。 */}
           <div style={{
             position: 'absolute',
-            top: -10,
-            right: 18,
+            top: 12,
+            right: 12,
             padding: '3px 10px',
             borderRadius: 9999,
             background: 'rgb(56, 189, 248)',
@@ -1252,12 +1444,30 @@ function PricingSection({ onFreeStart, onProCheckout }) {
             fontSize: 10,
             fontWeight: 700,
             letterSpacing: '0.05em',
+            boxShadow: '0 4px 12px rgba(56, 189, 248, 0.35)',
+            zIndex: 2,
           }}>
             おすすめ
           </div>
           {/* v39: 上部エリアを div ラップ — Free カードと minHeight 揃え */}
           <div>
-            <div style={{ fontSize: 22, marginBottom: 4 }}>✨</div>
+            {/* Phase 3 Sub-3 dogfood (handover v72): 旧 ✨ 絵文字 → Lucide Sparkles icon
+                (cyan brand 色) でブランド統一。 */}
+            <div style={{
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              background: 'rgba(56, 189, 248, 0.10)',
+              border: '1px solid rgba(56, 189, 248, 0.30)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 8,
+              color: 'rgb(56, 189, 248)',
+              boxShadow: '0 0 12px rgba(56, 189, 248, 0.18)',
+            }}>
+              <Sparkles size={18} strokeWidth={2} />
+            </div>
             <h3 className="section-heading" style={{ fontSize: 16, marginBottom: 4 }}>
               Pro
             </h3>
@@ -1279,7 +1489,9 @@ function PricingSection({ onFreeStart, onProCheckout }) {
               1日あたり約¥33 — コーヒー1杯より安く
             </div>
             <div style={{
-              display: 'inline-block',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
               padding: '2px 10px',
               borderRadius: 9999,
               background: 'rgba(34,211,238,0.12)',
@@ -1289,7 +1501,8 @@ function PricingSection({ onFreeStart, onProCheckout }) {
               fontWeight: 600,
               marginBottom: 12,
             }}>
-              🎁 7日間 完全無料
+              <Gift size={12} strokeWidth={2.2} />
+              7日間 完全無料
             </div>
             {/* v40: ベネフィット1行コピー — 機能リストの前にPro価値を要約 */}
             <div style={{
@@ -1322,8 +1535,14 @@ function PricingSection({ onFreeStart, onProCheckout }) {
               textAlign: 'center',
               marginBottom: 10,
               lineHeight: 1.6,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 5,
+              width: '100%',
             }}>
-              🔒 Stripe で安全に決済 / いつでも解約可
+              <Lock size={11} strokeWidth={2.2} />
+              Stripe で安全に決済 / いつでも解約可
             </div>
             <PrimaryCTA onClick={onProCheckout} fullWidth>
               7日間無料で試す →
@@ -1331,7 +1550,9 @@ function PricingSection({ onFreeStart, onProCheckout }) {
             {/* Fix 3: 年払いバッジを目立つシアン pill に強化 */}
             <div style={{ textAlign: 'center', marginTop: 10 }}>
               <span style={{
-                display: 'inline-block',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
                 background: 'rgba(34,211,238,0.12)',
                 border: '1px solid rgba(34,211,238,0.35)',
                 borderRadius: 6,
@@ -1340,7 +1561,8 @@ function PricingSection({ onFreeStart, onProCheckout }) {
                 color: 'rgb(56, 189, 248)',
                 fontWeight: 600,
               }}>
-                🏷️ 年払いで2ヶ月分お得（¥1,960節約）
+                <Tag size={12} strokeWidth={2.2} />
+                年払いで2ヶ月分お得（¥1,960節約）
               </span>
             </div>
           </div>

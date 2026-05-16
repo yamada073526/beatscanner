@@ -26,6 +26,9 @@ from .og_image_generator import (
     generate_og_image as generate_today_og_image,
     prepare_image_data as prepare_today_og_data,
     render_static_fallback as render_today_og_fallback,
+    generate_backtest_og_image,
+    render_backtest_fallback,
+    generate_backtest_methodology_pdf,
 )
 from .rss_collector import collect_ticker_news
 
@@ -2711,8 +2714,8 @@ async def _fetch_8k_for_ticker(
 # memory anchor: project_backtest_phase1_design.md
 # ============================================================================
 
-# Phase 1 MVP: 50 銘柄 (S&P 500 top by market cap、 sector 分散)。
-# Phase 2 で FMP /sp500-constituent から動的取得に拡張予定。
+# Phase 1 MVP: 50 銘柄 (S&P 500 top by market cap、 sector 分散)。 fallback 用途。
+# Phase 2.1 で FMP /sp500-constituent から動的取得 (top 200) に拡張済 (_fetch_sp500_top200)。
 BACKTEST_PHASE1_UNIVERSE = [
     # メガキャップ (top 10)
     "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK-B", "AVGO", "LLY",
@@ -2724,6 +2727,119 @@ BACKTEST_PHASE1_UNIVERSE = [
     "CSCO", "ACN", "WFC", "DHR", "TXN", "VZ", "QCOM", "AMD", "RTX", "HON",
     "INTC", "NKE", "PM", "INTU", "AMGN",
 ]
+
+# Phase 2.1 (2026-05-16、 handover v72): S&P 500 上位 200 銘柄 (market cap 順)
+# project_backtest_phase1_design.md anchor: ~80% 市場価値カバー、 sample n=14→n=30+ 解消の前提。
+#
+# 重要: FMP Starter プランでは /stable/sp500-constituent が Restricted Endpoint (Premium 限定)。
+# そのため Phase 2.1 では hardcode 200 銘柄 list を採用。 FMP Premium 解禁時に
+# _fetch_sp500_top_n() 内の dynamic fetch path を試行し、 restricted error 時のみ hardcode に fallback。
+BACKTEST_UNIVERSE_SIZE = 200
+_BACKTEST_UNIVERSE_CACHE: dict[str, dict] = {}
+_BACKTEST_UNIVERSE_CACHE_TTL = 86400  # 24h (S&P 500 構成銘柄は四半期 rebalance なので 1 日 cache 妥当)
+
+# S&P 500 top 200 銘柄 (market cap 順、 2026 年初頭の concentration 状況反映)。
+# Phase 2.1 hardcode (FMP Starter restricted 回避)。 monthly 手動 update or Premium 解禁で dynamic 化。
+# 既存 BACKTEST_PHASE1_UNIVERSE (50 銘柄) を base に 150 銘柄追加 = 200 銘柄。
+# Sector 分散済 (Tech / Healthcare / Financials / Energy / Consumer / Industrial / Utilities)。
+BACKTEST_PHASE2_UNIVERSE_TOP200 = [
+    # 1-25: メガキャップ
+    "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "NVDA", "META", "TSLA", "BRK-B", "AVGO",
+    "LLY", "JPM", "V", "UNH", "XOM", "WMT", "JNJ", "PG", "MA", "HD",
+    "ORCL", "COST", "ABBV", "CVX", "MRK",
+    # 26-75: 大型 (Tier 1)
+    "BAC", "KO", "ADBE", "PEP", "CRM", "MCD", "ABT", "PFE", "NFLX", "TMO",
+    "DIS", "CSCO", "ACN", "WFC", "DHR", "TXN", "VZ", "QCOM", "AMD", "RTX",
+    "HON", "INTC", "NKE", "PM", "INTU", "AMGN", "AXP", "IBM", "LOW", "GE",
+    "CAT", "GS", "UNP", "ISRG", "SPGI", "BKNG", "ELV", "MS", "BLK", "TJX",
+    "PLD", "MDT", "VRTX", "CB", "DE", "SCHW", "MMC", "C", "ADI", "NOW",
+    # 76-125: 大型 (Tier 2)
+    "GILD", "REGN", "BMY", "MO", "SO", "BSX", "PYPL", "AMAT", "MDLZ", "ETN",
+    "DUK", "CI", "ITW", "PGR", "FI", "CMG", "T", "ZTS", "AON", "WM",
+    "ICE", "USB", "TGT", "CL", "MU", "EQIX", "CME", "PNC", "GD", "SHW",
+    "MCO", "EOG", "SLB", "LRCX", "FCX", "APD", "NOC", "PSX", "PSA", "EMR",
+    "WELL", "MAR", "MMM", "TFC", "ANET", "F", "ROP", "CTAS", "MNST", "AJG",
+    # 126-175: 中-大型 (Tier 3)
+    "ORLY", "MSI", "KLAC", "MCK", "AZO", "NSC", "OXY", "TT", "ECL", "SRE",
+    "ADSK", "PCAR", "AEP", "TRV", "URI", "AIG", "FDX", "SYK", "AFL", "SNPS",
+    "CDNS", "CARR", "WMB", "AMP", "ROST", "GM", "EXC", "STZ", "ALL", "HUM",
+    "MET", "D", "JCI", "PAYX", "MPC", "VLO", "DLR", "BK", "TEL", "HCA",
+    "KMB", "PRU", "FIS", "COF", "GIS", "KMI", "DOW", "BIIB", "NXPI", "CCI",
+    # 176-200: 中-大型 (Tier 4)
+    "EW", "CTSH", "OKE", "IDXX", "STT", "GWW", "AME", "FTNT", "YUM", "OTIS",
+    "RSG", "WBA", "VRSK", "MPWR", "ALGN", "CMI", "KHC", "LHX", "BAX", "HSY",
+    "EFX", "GLW", "WBD", "TROW", "IT",
+]
+# 配列長 sanity check (module load 時に assert で fail-fast、 typo / 重複検知)
+assert len(BACKTEST_PHASE2_UNIVERSE_TOP200) == 200, (
+    f"BACKTEST_PHASE2_UNIVERSE_TOP200 must be 200 tickers, got {len(BACKTEST_PHASE2_UNIVERSE_TOP200)}"
+)
+assert len(set(BACKTEST_PHASE2_UNIVERSE_TOP200)) == 200, (
+    "BACKTEST_PHASE2_UNIVERSE_TOP200 has duplicates"
+)
+
+
+async def _fetch_sp500_top_n(n: int = BACKTEST_UNIVERSE_SIZE) -> list[str]:
+    """S&P 500 top N 銘柄 (market cap 順) を返す (24h cache)。
+
+    Phase 2.1 実装方針:
+      1. FMP Premium 契約済なら /sp500-constituent + /quote batch で動的取得
+      2. Starter (現契約) では Restricted endpoint なので hardcode list (上記) を使用
+      3. 動的取得失敗時も hardcode に graceful fallback
+
+    n <= 200 のとき hardcode list の top n を返す (slice)。
+    n > 200 のときも 200 で打ち切る (universe size cap)。
+    """
+    n = max(1, min(200, n))
+    cache_key = f"sp500_top{n}"
+    cached = _BACKTEST_UNIVERSE_CACHE.get(cache_key)
+    if cached and (_time.time() - cached.get("ts", 0)) < _BACKTEST_UNIVERSE_CACHE_TTL:
+        return list(cached.get("tickers", []))
+
+    api_key = os.environ.get("FMP_API_KEY", "")
+    if not api_key:
+        print("[universe] FMP_API_KEY not set, using hardcode top200")
+        return list(BACKTEST_PHASE2_UNIVERSE_TOP200[:n])
+
+    # FMP Premium での dynamic fetch を試行 (Starter は restricted で例外発生 → hardcode fallback)
+    try:
+        client = FMPClient(api_key)
+        constituents = await client.sp500_constituent()
+        symbols_raw = [c.get("symbol") for c in (constituents or []) if isinstance(c, dict)]
+        symbols = [s.strip().upper() for s in symbols_raw if isinstance(s, str) and s.strip()]
+        if not symbols:
+            print("[universe] empty sp500_constituent, using hardcode top200")
+            return list(BACKTEST_PHASE2_UNIVERSE_TOP200[:n])
+
+        quotes: list[dict] = []
+        chunk = 200
+        for i in range(0, len(symbols), chunk):
+            batch = symbols[i:i + chunk]
+            try:
+                resp = await client.batch_quotes(batch)
+                if isinstance(resp, list):
+                    quotes.extend(resp)
+            except Exception as e:
+                print(f"[universe] batch_quotes failed for chunk {i}: {e}")
+                continue
+
+        valid = [q for q in quotes if isinstance(q, dict) and q.get("marketCap") and q.get("symbol")]
+        valid.sort(key=lambda q: float(q.get("marketCap") or 0), reverse=True)
+        top = [str(q["symbol"]).upper() for q in valid[:n]]
+
+        if not top:
+            print("[universe] no valid quotes, using hardcode top200")
+            return list(BACKTEST_PHASE2_UNIVERSE_TOP200[:n])
+
+        _BACKTEST_UNIVERSE_CACHE[cache_key] = {"ts": _time.time(), "tickers": top}
+        print(f"[universe] dynamic fetched sp500_top{n}: {len(top)} tickers (head: {top[:5]})")
+        return top
+    except Exception as e:
+        print(f"[universe] _fetch_sp500_top_n dynamic failed ({e}), using hardcode top200")
+        # hardcode list を返却 + cache (24h で再試行)
+        top = list(BACKTEST_PHASE2_UNIVERSE_TOP200[:n])
+        _BACKTEST_UNIVERSE_CACHE[cache_key] = {"ts": _time.time(), "tickers": top}
+        return top
 
 
 def _compute_earnings_metrics(income_data: list, cf_data: list) -> list[dict]:
@@ -3031,6 +3147,281 @@ async def _fetch_close_map_for_backtest(
     return cmap
 
 
+# ============================================================================
+# Phase 2.2 full (handover v73 §2-A): 時系列 portfolio rebalance simulation
+# ============================================================================
+# event-based の trade 集計 (`_run_jijima5_backtest` 既存ロジック) は Phase 1〜2.1。
+# Phase 2.2 full は「過去 5 年、 月次リバランスで $10K → $XX,XXX」 を裏付けるため
+# 実 portfolio の月次リバランスを simulate する。
+#
+# 設計判断 (plan: handover-v73-partitioned-torvalds.md):
+#   - 月次リバランス (各月の最終取引日、 SPY trading day から決定)
+#   - 初期資本 $10,000 / 同時保有上限 10 銘柄 / 各 position は V/cap (cash drag あり)
+#   - 保有期間 12 ヶ月 (PASS 発生から 365 日以内が eligible、 過ぎたら除外)
+#   - cap 超過時は最新 PASS 優先 truncate / overlap (同一 ticker 連続 PASS) は dedupe
+#   - 月内 PASS は次の月末まで保留 / transaction cost = 0 / look-ahead 防止: eval_date ≤ rb_date のみ
+#
+# memory anchor: project_backtest_phase1_design.md (Phase 2.2 full は handover v73 で追記)
+# ============================================================================
+
+def _last_trading_day_of_month(year: int, month: int, trading_days: set[str]) -> str | None:
+    """指定月の最終取引日 (SPY trading day) を ISO 文字列で返す。 無ければ None。"""
+    from datetime import date as _d_lm, timedelta as _td_lm
+    from calendar import monthrange as _mr_lm
+    last_calendar_day = _d_lm(year, month, _mr_lm(year, month)[1])
+    for offset in range(10):
+        candidate = (last_calendar_day - _td_lm(days=offset)).isoformat()
+        if candidate in trading_days:
+            return candidate
+    return None
+
+
+def _close_on_or_before(close_map: dict[str, float], target_iso: str, max_lookback: int = 10) -> float | None:
+    """target_iso 当日以前で最も近い取引日 close を取得 (max_lookback 日まで遡る)。"""
+    from datetime import date as _d_cb, timedelta as _td_cb
+    try:
+        d = _d_cb.fromisoformat(target_iso[:10])
+    except Exception:
+        return None
+    for i in range(max_lookback + 1):
+        key = (d - _td_cb(days=i)).isoformat()
+        v = close_map.get(key)
+        if v is not None:
+            try:
+                fv = float(v)
+                if fv > 0:
+                    return fv
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+def _simulate_portfolio_rebalance(
+    pass_events: list[dict],
+    close_maps: dict[str, dict[str, float]],
+    spy_map: dict[str, float],
+    start_date,
+    end_date,
+    *,
+    hold_days: int = 365,
+    max_positions: int = 10,
+    initial_capital: float = 10_000.0,
+) -> dict:
+    """月次リバランス portfolio simulation。
+
+    Args:
+        pass_events: [{ticker, evaluation_date}, ...]  earnings_evaluation の PASS イベント
+        close_maps:  ticker -> {date_iso: adj_close}
+        spy_map:     {date_iso: adj_close} (SPY)
+        start_date, end_date: simulation 期間 (datetime.date)
+        hold_days:   PASS から eligible とみなす日数 (default 365 = 12 ヶ月)
+        max_positions: 同時保有上限 (default 10)
+        initial_capital: 初期資本 (default $10,000)
+
+    Returns:
+        {equity_curve, spy_curve, kpis, holdings_history, config}
+        equity_curve: [{date, value}] 月次の portfolio 評価額
+        spy_curve:    [{date, value}] SPY 100% buy & hold の同期間評価額
+        kpis: cum_return_pct / spy_cum_return_pct / alpha_pct / cagr_pct
+              / max_drawdown_pct / monthly_win_rate_pct / n_rebalances / n_holdings_avg
+              / final_value / initial_capital
+        holdings_history: [{date, n, tickers, cash_pct}] (デバッグ / 図表化用)
+    """
+    from datetime import date as _d_pf, timedelta as _td_pf
+
+    if not spy_map:
+        return {"error": "SPY map empty"}
+
+    trading_days = set(spy_map.keys())
+
+    # 月次 rebalance 日 (各月の最終 SPY 取引日)
+    rb_dates: list[str] = []
+    y, m = start_date.year, start_date.month
+    while True:
+        cur = _d_pf(y, m, 1)
+        if cur > end_date:
+            break
+        last_td = _last_trading_day_of_month(y, m, trading_days)
+        if last_td is not None:
+            last_td_d = _d_pf.fromisoformat(last_td)
+            if start_date <= last_td_d <= end_date:
+                rb_dates.append(last_td)
+        m += 1
+        if m == 13:
+            m = 1
+            y += 1
+        if y > end_date.year + 1:
+            break
+
+    if len(rb_dates) < 2:
+        return {"error": "insufficient rebalance dates (need >= 2)"}
+
+    # PASS events を date 降順 + ticker dedupe しやすい形に
+    norm_events: list[tuple[str, str]] = []
+    for ev in pass_events:
+        try:
+            d_iso = str(ev.get("evaluation_date", ""))[:10]
+            _d_pf.fromisoformat(d_iso)  # validation
+        except Exception:
+            continue
+        tk = ev.get("ticker")
+        if not tk:
+            continue
+        norm_events.append((d_iso, tk))
+    norm_events.sort(key=lambda x: x[0], reverse=True)  # latest first
+
+    # SPY 100% benchmark
+    spy_initial = _close_on_or_before(spy_map, rb_dates[0])
+    if spy_initial is None or spy_initial <= 0:
+        return {"error": "SPY initial price missing"}
+
+    # Simulation state
+    positions: dict[str, float] = {}  # ticker -> shares
+    cash: float = initial_capital
+    equity_curve: list[dict] = []
+    spy_curve: list[dict] = []
+    monthly_returns: list[dict] = []
+    holdings_history: list[dict] = []
+
+    prev_value = initial_capital
+    prev_spy_close = spy_initial
+
+    for i, rb in enumerate(rb_dates):
+        # 1. 現 portfolio の market value を rb close で計算
+        if i == 0:
+            v_now = initial_capital
+        else:
+            mv = 0.0
+            for tk, shares in positions.items():
+                price = close_maps.get(tk, {}).get(rb)
+                if price is None or price <= 0:
+                    price = _close_on_or_before(close_maps.get(tk, {}), rb)
+                if price is None or price <= 0:
+                    # ticker 価格取得不能 → そのポジションは 0 と仮定 (delisting 相当)
+                    continue
+                mv += shares * price
+            v_now = mv + cash
+
+        # SPY benchmark value
+        spy_close = _close_on_or_before(spy_map, rb)
+        if spy_close is None or spy_close <= 0:
+            spy_close = prev_spy_close
+        spy_value = initial_capital * (spy_close / spy_initial)
+
+        equity_curve.append({"date": rb, "value": round(v_now, 2)})
+        spy_curve.append({"date": rb, "value": round(spy_value, 2)})
+
+        if i > 0:
+            strat_ret = (v_now / prev_value - 1.0) if prev_value > 0 else 0.0
+            spy_ret = (spy_close / prev_spy_close - 1.0) if prev_spy_close > 0 else 0.0
+            monthly_returns.append({"date": rb, "strat": strat_ret, "spy": spy_ret})
+        prev_value = v_now
+        prev_spy_close = spy_close
+
+        # 2. eligible ticker 抽出 (PASS が rb_date 以前 & hold_days 以内)
+        rb_d = _d_pf.fromisoformat(rb)
+        cutoff = rb_d - _td_pf(days=hold_days)
+        seen: set[str] = set()
+        target_tickers: list[str] = []
+        for eval_iso, tk in norm_events:
+            try:
+                eval_d = _d_pf.fromisoformat(eval_iso)
+            except Exception:
+                continue
+            if eval_d > rb_d:
+                continue
+            if eval_d < cutoff:
+                continue
+            if tk in seen:
+                continue
+            seen.add(tk)
+            target_tickers.append(tk)
+            if len(target_tickers) >= max_positions:
+                break
+
+        # 3. Rebalance: full liquidate → equal weight buy (V/cap each、 cash drag if n<cap)
+        positions = {}
+        per_position = v_now / max_positions
+        invested = 0.0
+        for tk in target_tickers:
+            price = close_maps.get(tk, {}).get(rb)
+            if price is None or price <= 0:
+                price = _close_on_or_before(close_maps.get(tk, {}), rb)
+            if price is None or price <= 0:
+                continue
+            shares = per_position / price
+            positions[tk] = shares
+            invested += shares * price
+        cash = v_now - invested
+
+        holdings_history.append({
+            "date": rb,
+            "n": len(positions),
+            "tickers": sorted(positions.keys()),
+            "cash_pct": round((cash / v_now * 100.0) if v_now > 0 else 0.0, 1),
+        })
+
+    # KPI 集計
+    final_value = equity_curve[-1]["value"]
+    cum_return_pct = (final_value / initial_capital - 1.0) * 100.0
+    spy_final = spy_curve[-1]["value"]
+    spy_cum_pct = (spy_final / initial_capital - 1.0) * 100.0
+    alpha_pp = cum_return_pct - spy_cum_pct
+
+    years = (end_date - start_date).days / 365.25
+    if years > 0 and final_value > 0:
+        cagr_pct = (((final_value / initial_capital) ** (1.0 / years)) - 1.0) * 100.0
+    else:
+        cagr_pct = 0.0
+
+    # Max drawdown (equity_curve の rolling peak からの最大下落率)
+    peak = initial_capital
+    max_dd = 0.0
+    for pt in equity_curve:
+        v = pt["value"]
+        if v > peak:
+            peak = v
+        if peak > 0:
+            dd = (v / peak - 1.0) * 100.0
+            if dd < max_dd:
+                max_dd = dd
+
+    if monthly_returns:
+        win_count = sum(1 for mr in monthly_returns if mr["strat"] > mr["spy"])
+        monthly_win_rate = 100.0 * win_count / len(monthly_returns)
+    else:
+        monthly_win_rate = None
+
+    n_holdings_avg = (
+        sum(h["n"] for h in holdings_history) / len(holdings_history)
+        if holdings_history else 0.0
+    )
+
+    return {
+        "equity_curve": equity_curve,
+        "spy_curve": spy_curve,
+        "kpis": {
+            "initial_capital": initial_capital,
+            "final_value": round(final_value, 2),
+            "cum_return_pct": round(cum_return_pct, 2),
+            "spy_cum_return_pct": round(spy_cum_pct, 2),
+            "alpha_pct": round(alpha_pp, 2),
+            "cagr_pct": round(cagr_pct, 2),
+            "max_drawdown_pct": round(max_dd, 2),
+            "monthly_win_rate_pct": round(monthly_win_rate, 1) if monthly_win_rate is not None else None,
+            "n_rebalances": len(rb_dates),
+            "n_holdings_avg": round(n_holdings_avg, 1),
+        },
+        "holdings_history": holdings_history,
+        "config": {
+            "rebalance": "monthly",
+            "max_positions": max_positions,
+            "hold_days": hold_days,
+            "initial_capital": initial_capital,
+        },
+    }
+
+
 async def _run_jijima5_backtest(period: str = "5y", hold_days: int = 90) -> dict:
     """じっちゃま 5 条件のバックテスト (event-based simulation)。
 
@@ -3050,19 +3441,60 @@ async def _run_jijima5_backtest(period: str = "5y", hold_days: int = 90) -> dict
         return {"error": "Supabase service not configured"}
 
     # 1. PASS イベント取得
+    # Phase 2.2 full (handover v73 §2-A): portfolio simulation の eligibility window が
+    # rb_date - 365 日まで遡るため、 start_date より 365 日前から fetch して warmup 期間の
+    # cash 100% 滞留を防ぐ。 trade-level 集計 (既存) は narrow window (>= start_date) で filter。
+    portfolio_warmup_days = 365
+    fetch_start_iso = (start_date - _td_bt(days=portfolio_warmup_days)).isoformat()
     try:
         resp = (
             sb.table("earnings_evaluation")
             .select("ticker, evaluation_date")
-            .gte("evaluation_date", start_date.isoformat())
+            .gte("evaluation_date", fetch_start_iso)
             .lte("evaluation_date", end_date.isoformat())
             .eq("all_passed", True)
             .order("evaluation_date", desc=False)
             .execute()
         )
-        pass_events = resp.data or []
+        pass_events_wide = resp.data or []
     except Exception as e:
         return {"error": f"earnings_evaluation fetch failed: {e}"}
+
+    # Trade-level (既存ロジック) は start_date 以降の event のみ使う (sample_size 不変)
+    start_iso = start_date.isoformat()
+    pass_events = [e for e in pass_events_wide if str(e.get("evaluation_date", ""))[:10] >= start_iso]
+
+    # Phase 2.1: universe_size は admin endpoint で更新された universe の実銘柄数 (S&P 500 top N)。
+    # earnings_history table から distinct ticker 数を引く。
+    # supabase-py の default limit は 1000、 4000+ rows では pagination で全件取得する必要あり。
+    universe_size = None
+    try:
+        all_hist_tickers: set[str] = set()
+        page_size = 1000
+        offset = 0
+        while True:
+            resp_page = (
+                sb.table("earnings_history")
+                .select("ticker")
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            rows = resp_page.data or []
+            if not rows:
+                break
+            for r in rows:
+                tk = r.get("ticker")
+                if tk:
+                    all_hist_tickers.add(tk)
+            if len(rows) < page_size:
+                break
+            offset += page_size
+            if offset > 100_000:  # safety brake
+                break
+        if all_hist_tickers:
+            universe_size = len(all_hist_tickers)
+    except Exception as e:
+        print(f"[backtest] universe_size lookup failed: {e}")
 
     if not pass_events:
         return {
@@ -3071,7 +3503,12 @@ async def _run_jijima5_backtest(period: str = "5y", hold_days: int = 90) -> dict
             "from_date": start_date.isoformat(),
             "to_date": end_date.isoformat(),
             "hold_days": hold_days,
-            "sample_size": {"total_events": 0, "completed_trades": 0, "unique_tickers": 0},
+            "sample_size": {
+                "total_events": 0,
+                "completed_trades": 0,
+                "unique_tickers": 0,
+                "universe_size": universe_size,
+            },
             "kpis": None,
             "trades": [],
             "message": "PASS イベントが見つかりませんでした",
@@ -3085,8 +3522,10 @@ async def _run_jijima5_backtest(period: str = "5y", hold_days: int = 90) -> dict
     fetch_from = (start_date - _td_bt(days=10)).isoformat()
     fetch_to = (end_date + _td_bt(days=hold_days + 30)).isoformat()
     unique_tickers = sorted({e["ticker"] for e in pass_events})
-    # SPY も同時 fetch
-    fetch_targets = unique_tickers + ["SPY"]
+    # Phase 2.2 full: warmup PASS の銘柄 (start_date より前に PASS) も close_map に含める。
+    # 例: start_date - 200 日に PASS → start_date + 165 日まで eligible で portfolio が hold する。
+    warmup_only_tickers = sorted({e["ticker"] for e in pass_events_wide} - set(unique_tickers))
+    fetch_targets = unique_tickers + warmup_only_tickers + ["SPY"]
     close_maps: dict[str, dict[str, float]] = {}
     for tk in fetch_targets:
         close_maps[tk] = await _fetch_close_map_for_backtest(tk, api_key, fetch_from, fetch_to)
@@ -3139,6 +3578,7 @@ async def _run_jijima5_backtest(period: str = "5y", hold_days: int = 90) -> dict
                 "total_events": len(pass_events),
                 "completed_trades": 0,
                 "unique_tickers": len(unique_tickers),
+                "universe_size": universe_size,
             },
             "kpis": None,
             "trades": [],
@@ -3166,6 +3606,25 @@ async def _run_jijima5_backtest(period: str = "5y", hold_days: int = 90) -> dict
     cum_return_pct = (compound - 1.0) * 100.0
     spy_cum_pct = (spy_compound - 1.0) * 100.0
 
+    # Phase 2.2 full (handover v73 §2-A): 月次リバランス portfolio simulation を併走。
+    # 既存 trades / kpis は per-trade 集計のまま後方互換維持し、 真の portfolio 結果は
+    # `portfolio` キーで別途返す (Hero / EquityCurve / LP の数字差し替え用)。
+    portfolio_result = None
+    try:
+        portfolio_result = _simulate_portfolio_rebalance(
+            pass_events=pass_events_wide,   # warmup 用に 365 日前から fetch 済 (look-back eligibility)
+            close_maps=close_maps,
+            spy_map=spy_map,
+            start_date=start_date,
+            end_date=end_date,
+            hold_days=365,        # 12 ヶ月 eligibility window (handover v73 §2-A)
+            max_positions=10,     # 同時保有上限
+            initial_capital=10_000.0,  # $10K LP 訴求基準
+        )
+    except Exception as e:
+        print(f"[backtest] portfolio simulation failed: {e}")
+        portfolio_result = {"error": f"portfolio simulation failed: {e}"}
+
     return {
         "strategy": "jijima5",
         "period": period,
@@ -3176,6 +3635,7 @@ async def _run_jijima5_backtest(period: str = "5y", hold_days: int = 90) -> dict
             "total_events": len(pass_events),
             "completed_trades": len(trades),
             "unique_tickers": len(set(t["ticker"] for t in trades)),
+            "universe_size": universe_size,
         },
         "kpis": {
             "avg_return_pct": round(avg_return, 2),
@@ -3188,6 +3648,7 @@ async def _run_jijima5_backtest(period: str = "5y", hold_days: int = 90) -> dict
             "alpha_cum_pct": round(cum_return_pct - spy_cum_pct, 2),
         },
         "trades": trades,
+        "portfolio": portfolio_result,
         "disclaimer": "過去実績は将来を保証しません。 本機能は教育目的、 投資勧誘ではありません。",
     }
 
@@ -9349,6 +9810,193 @@ async def og_image_today_regenerate():
     return {"regenerated": True, "size_bytes": len(png), "ts": int(TODAY_OG_CACHE["ts"])}
 
 
+# ── Phase 3 Sub-2 (2026-05-16、 handover v72): バックテスト訴求版 OGP ────────
+# LP / 銘柄 / backtest page で SNS シェアされたとき、 「過去 5 年 +XX% / 100 万円 → XXX 万円」
+# を表示する強力な CVR フック。 frontend/index.html の og:image を本 endpoint に切替予定。
+
+BACKTEST_OG_CACHE: dict = {"png": None, "ts": 0.0}
+BACKTEST_OG_TTL = 24 * 3600  # 24h (universe や cum return の変動緩やか、 nightly batch と整合)
+
+
+async def _build_backtest_og_image() -> bytes:
+    """バックテスト訴求 OGP 画像を生成。
+    _run_jijima5_backtest(5y, 365d) を呼んで実値を取得 → Pillow で PNG 化。
+    失敗時は経済指標 fallback (data 0 時の brand only) に graceful degrade。
+    """
+    try:
+        bt = await _run_jijima5_backtest(period="5y", hold_days=365)
+        kpis = bt.get("kpis") if isinstance(bt, dict) else None
+        sample = bt.get("sample_size") if isinstance(bt, dict) else None
+        if not kpis or not sample or kpis.get("avg_return_pct") is None:
+            print("[OG-backtest] empty kpis, falling back to static")
+            return await asyncio.to_thread(render_backtest_fallback)
+
+        # Phase 2.2 full (handover v73 §2-A): portfolio.cum_return_pct を主役に切替。
+        # Web Hero と OGP image の数字一致 (feedback_chart_metric_consistency.md 教訓)。
+        portfolio = bt.get("portfolio") if isinstance(bt, dict) else None
+        pf_kpis = portfolio.get("kpis") if isinstance(portfolio, dict) and not portfolio.get("error") else None
+        if pf_kpis and pf_kpis.get("cum_return_pct") is not None:
+            hero_return = float(pf_kpis.get("cum_return_pct"))
+            hero_alpha = pf_kpis.get("alpha_pct")
+            hero_alpha = float(hero_alpha) if hero_alpha is not None else None
+        else:
+            # Fallback: portfolio sim 失敗時は per-trade avg (旧版互換)
+            hero_return = float(kpis.get("avg_return_pct"))
+            hero_alpha = kpis.get("avg_alpha_pct")
+            hero_alpha = float(hero_alpha) if hero_alpha is not None else None
+
+        completed = int(sample.get("completed_trades") or 0)
+        universe = int(sample.get("universe_size") or 200)
+
+        png = await asyncio.to_thread(
+            generate_backtest_og_image,
+            hero_return,
+            hero_alpha,
+            None,  # future_jpy は派生で計算
+            completed,
+            universe,
+        )
+        return png
+    except Exception as e:
+        print(f"[OG-backtest] generate failed, fallback to static: {e}")
+        try:
+            return await asyncio.to_thread(render_backtest_fallback)
+        except Exception:
+            from io import BytesIO
+            from PIL import Image as _Image
+            buf = BytesIO()
+            _Image.new("RGB", (1, 1), (11, 17, 32)).save(buf, format="PNG")
+            return buf.getvalue()
+
+
+@app.get("/api/og-image-backtest.png")
+async def og_image_backtest():
+    """バックテスト訴求用 OGP (1200x630)、 24h memory cache。
+    SNS シェア時のヒーロー画像。 nightly batch 完了後に regenerate endpoint を叩く想定。"""
+    cached_png = BACKTEST_OG_CACHE.get("png")
+    cached_ts = BACKTEST_OG_CACHE.get("ts", 0.0)
+    if cached_png and (_time.time() - cached_ts) < BACKTEST_OG_TTL:
+        return Response(cached_png, media_type="image/png", headers={
+            "Cache-Control": "public, max-age=3600",
+        })
+    png = await _build_backtest_og_image()
+    BACKTEST_OG_CACHE["png"] = png
+    BACKTEST_OG_CACHE["ts"] = _time.time()
+    return Response(png, media_type="image/png", headers={
+        "Cache-Control": "public, max-age=3600",
+    })
+
+
+@app.api_route("/api/og-image-backtest/regenerate", methods=["GET", "POST"])
+async def og_image_backtest_regenerate():
+    """バックテスト OGP 強制再生成。
+    universe / earnings_history 更新 (admin refresh-earnings-history) 完走後に呼ばれる想定。"""
+    png = await _build_backtest_og_image()
+    BACKTEST_OG_CACHE["png"] = png
+    BACKTEST_OG_CACHE["ts"] = _time.time()
+    return {"regenerated": True, "size_bytes": len(png), "ts": int(BACKTEST_OG_CACHE["ts"])}
+
+
+# ── Phase 2.4 Methodology PDF (handover v72、 2026-05-16) ────────
+# Bloomberg/Morningstar 級信頼性訴求 PDF。 1 page (A4 縦)、 PIL/Pillow で生成。
+# 内容: hero (+32.56% / 100 万円 → 133 万円) + KPI 3 tile + methodology 5 条件 + disclaimer。
+# Free 全開放 (LP 訴求と整合)、 ProTeaser の Premium 訴求は高機能版 (期間カスタム / 月次)。
+
+BACKTEST_PDF_CACHE: dict = {"pdf": None, "ts": 0.0}
+BACKTEST_PDF_TTL = 24 * 3600  # 24h (nightly batch 完了後に regenerate を想定)
+
+
+async def _build_backtest_methodology_pdf() -> bytes:
+    """バックテスト methodology PDF を生成。 backend 計算結果から数値を引き、 PIL で 1 page PDF 化。
+    失敗時は最小 placeholder PDF を返却 (絶対に 500 を返さない)。"""
+    try:
+        bt = await _run_jijima5_backtest(period="5y", hold_days=365)
+        kpis = bt.get("kpis") if isinstance(bt, dict) else None
+        sample = bt.get("sample_size") if isinstance(bt, dict) else None
+        if not kpis or not sample:
+            raise ValueError("backtest result empty")
+
+        # Phase 2.2 full (handover v73 §2-A): portfolio.cum_return / alpha / spy_cum を主役に切替。
+        # Web Hero + PDF の数字完全一致 (feedback_chart_metric_consistency.md 教訓)。
+        portfolio = bt.get("portfolio") if isinstance(bt, dict) else None
+        pf_kpis = portfolio.get("kpis") if isinstance(portfolio, dict) and not portfolio.get("error") else None
+        if pf_kpis and pf_kpis.get("cum_return_pct") is not None:
+            hero_return = float(pf_kpis.get("cum_return_pct"))
+            hero_alpha_raw = pf_kpis.get("alpha_pct")
+            hero_alpha = float(hero_alpha_raw) if hero_alpha_raw is not None else None
+            hero_spy_raw = pf_kpis.get("spy_cum_return_pct")
+            hero_spy = float(hero_spy_raw) if hero_spy_raw is not None else None
+        else:
+            hero_return = float(kpis.get("avg_return_pct") or 0)
+            hero_alpha_raw = kpis.get("avg_alpha_pct")
+            hero_alpha = float(hero_alpha_raw) if hero_alpha_raw is not None else None
+            hero_spy_raw = kpis.get("avg_spy_return_pct")
+            hero_spy = float(hero_spy_raw) if hero_spy_raw is not None else None
+
+        win_rate = kpis.get("win_rate_pct")
+        win_vs_spy = kpis.get("win_vs_spy_rate_pct")  # Round 4: 業界比較 bar 用
+        completed = int(sample.get("completed_trades") or 0)
+        total_events = int(sample.get("total_events") or 0)
+        universe = int(sample.get("universe_size") or 200)
+        unique_tickers = int(sample.get("unique_tickers") or 0)
+        from_date = bt.get("from_date") or ""
+        to_date = bt.get("to_date") or ""
+
+        pdf = await asyncio.to_thread(
+            generate_backtest_methodology_pdf,
+            hero_return,
+            hero_alpha,
+            hero_spy,
+            float(win_rate) if win_rate is not None else None,
+            completed,
+            total_events,
+            universe,
+            unique_tickers,
+            from_date,
+            to_date,
+            win_vs_spy_rate_pct=float(win_vs_spy) if win_vs_spy is not None else None,
+        )
+        return pdf
+    except Exception as e:
+        print(f"[PDF-backtest] generate failed: {e}")
+        # 最終 fallback: 1x1 PDF
+        from io import BytesIO
+        from PIL import Image as _Image
+        buf = BytesIO()
+        img = _Image.new("RGB", (595, 842), (11, 17, 32))
+        img.save(buf, format="PDF", resolution=72.0)
+        return buf.getvalue()
+
+
+@app.get("/api/backtest/methodology.pdf")
+async def backtest_methodology_pdf():
+    """バックテスト methodology PDF (1 page、 A4 縦)、 24h memory cache。
+    LP / BacktestPage の「PDF レポート」 button から download 可。 SNS シェア / e-mail 添付に使用。"""
+    cached_pdf = BACKTEST_PDF_CACHE.get("pdf")
+    cached_ts = BACKTEST_PDF_CACHE.get("ts", 0.0)
+    if cached_pdf and (_time.time() - cached_ts) < BACKTEST_PDF_TTL:
+        return Response(cached_pdf, media_type="application/pdf", headers={
+            "Cache-Control": "public, max-age=3600",
+            "Content-Disposition": 'inline; filename="beatscanner-backtest-methodology.pdf"',
+        })
+    pdf = await _build_backtest_methodology_pdf()
+    BACKTEST_PDF_CACHE["pdf"] = pdf
+    BACKTEST_PDF_CACHE["ts"] = _time.time()
+    return Response(pdf, media_type="application/pdf", headers={
+        "Cache-Control": "public, max-age=3600",
+        "Content-Disposition": 'inline; filename="beatscanner-backtest-methodology.pdf"',
+    })
+
+
+@app.api_route("/api/backtest/methodology/regenerate", methods=["GET", "POST"])
+async def backtest_methodology_pdf_regenerate():
+    """PDF 強制再生成 (cron + admin)。 universe / earnings 更新後に呼ぶ想定。"""
+    pdf = await _build_backtest_methodology_pdf()
+    BACKTEST_PDF_CACHE["pdf"] = pdf
+    BACKTEST_PDF_CACHE["ts"] = _time.time()
+    return {"regenerated": True, "size_bytes": len(pdf), "ts": int(BACKTEST_PDF_CACHE["ts"])}
+
+
 # ── Phase 2a: Supabase service role クライアント（market_insights テーブル書き込み用） ──
 # RLS をバイパスして書き込むため SUPABASE_SERVICE_ROLE_KEY を使う（漏洩注意）
 _SB_SERVICE_CLIENT = None  # 遅延初期化（インポート失敗を許容）
@@ -9840,11 +10488,12 @@ async def admin_refresh_earnings_history(
     """Phase 1 Backtest data layer 更新 (4 体合議 / じっちゃま 5 条件)。
 
     Body (任意):
-      tickers: list[str] — 対象銘柄、 未指定なら BACKTEST_PHASE1_UNIVERSE (50 銘柄)
+      tickers: list[str] — 対象銘柄、 未指定なら S&P 500 top 200 (動的取得、 24h cache、 fallback=50 銘柄)
+      universe_size: int — top N (default 200、 上限 250)
       skip_evaluation: bool — True なら earnings_history 更新のみで evaluation 計算 skip
 
     Returns:
-      tickers_processed, history_total_rows, evaluation_total_rows,
+      tickers_processed, history_total_rows, evaluation_total_rows, universe_size,
       per_ticker breakdown
     """
     _check_cron_secret(x_cron_secret)
@@ -9854,7 +10503,14 @@ async def admin_refresh_earnings_history(
     if isinstance(raw_tickers, list) and raw_tickers:
         tickers = [str(t).upper().strip() for t in raw_tickers if t][:250]
     else:
-        tickers = list(BACKTEST_PHASE1_UNIVERSE)
+        # Phase 2.1: 動的に S&P 500 top N (default 200) を取得
+        size_raw = body.get("universe_size")
+        try:
+            size = int(size_raw) if size_raw is not None else BACKTEST_UNIVERSE_SIZE
+        except (TypeError, ValueError):
+            size = BACKTEST_UNIVERSE_SIZE
+        size = max(10, min(250, size))
+        tickers = await _fetch_sp500_top_n(size)
     skip_eval = bool(body.get("skip_evaluation", False))
 
     api_key = os.environ.get("FMP_API_KEY", "")
@@ -9866,10 +10522,10 @@ async def admin_refresh_earnings_history(
         raise HTTPException(status_code=503, detail="Supabase service not configured")
 
     # Stage 1: earnings_history を並列 upsert
-    # 元 serial 実装 (50 tickers × ~1.5s = 75 秒) → Railway gateway timeout 51 秒に hit。
-    # Semaphore(8) で FMP rate limit (300 req/min = 5 req/s) を超えない範囲で並列化。
-    # 50 tickers × 2 endpoints = 100 req → ~15-20 秒で完了見込み。
-    sem_hist = asyncio.Semaphore(8)
+    # Phase 1: Semaphore(8) で 50 tickers × 2 endpoint = 100 req → ~15-20 秒。
+    # Phase 2.1 (handover v72): Semaphore(16) に倍増、 200 tickers × 2 = 400 req → ~30-40 秒
+    # を Railway gateway timeout 51 秒以内に着地させる。 FMP Starter 300 req/min は依然余裕。
+    sem_hist = asyncio.Semaphore(16)
     async def _refresh_one(t: str) -> tuple[str, int]:
         async with sem_hist:
             try:
@@ -9885,7 +10541,7 @@ async def admin_refresh_earnings_history(
     # Stage 2: 5 条件 evaluation を並列計算 + upsert
     eval_per_ticker: dict[str, int] = {}
     if not skip_eval:
-        sem_eval = asyncio.Semaphore(8)
+        sem_eval = asyncio.Semaphore(16)
         async def _eval_one(t: str) -> tuple[str, int]:
             async with sem_eval:
                 try:
@@ -9897,8 +10553,17 @@ async def admin_refresh_earnings_history(
         eval_results = await asyncio.gather(*[_eval_one(t) for t in tickers])
         eval_per_ticker = dict(eval_results)
 
+    # Stage 3 (Phase 2.1): universe 変更 → backtest_result を不整合化するため
+    # Supabase backtest_result の jijima5 行を削除。 _run_jijima5_backtest は cache を持たず
+    # 毎回 supabase query するので、 _BACKTEST_*_CACHE 等の in-process cache の clear は不要。
+    try:
+        sb.table("backtest_result").delete().eq("strategy", "jijima5").execute()
+    except Exception as e:
+        print(f"[admin:refresh] backtest_result invalidation failed: {e}")
+
     return {
         "tickers_processed": len(tickers),
+        "universe_size": len(tickers),
         "history_total_rows": sum(history_per_ticker.values()),
         "evaluation_total_rows": sum(eval_per_ticker.values()),
         "history_per_ticker": history_per_ticker,

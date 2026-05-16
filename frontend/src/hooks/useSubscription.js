@@ -58,7 +58,9 @@ export function useSubscription(user) {
     return data;
   }, [fetchSub]);
 
-  const startCheckout = useCallback(async (plan = 'monthly') => {
+  // Phase 3 Sub-3 (2026-05-16): tier 引数追加 (default 'pro' で既存呼出と後方互換)。
+  // 'premium' を指定すると Premium tier (¥1,800/月) checkout に進む。
+  const startCheckout = useCallback(async (plan = 'monthly', tier = 'pro') => {
     if (!supabase || !user) return;
     setCheckoutLoading(true);
     try {
@@ -72,7 +74,7 @@ export function useSubscription(user) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({ plan, tier }),
       });
 
       if (!resp.ok) {
