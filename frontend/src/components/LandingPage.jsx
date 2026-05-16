@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Zap, MessageSquare, BarChart3, Flame, AlertTriangle, Eye, Clock, LineChart, Sparkles, Gift, Lock, Tag } from 'lucide-react';
 import { useBacktest } from '../hooks/useBacktest.js';
+import ProTeaser from './ui/ProTeaser.jsx';
+
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 /**
  * LandingPage — 未ログインユーザー向けランディングページ
@@ -874,18 +877,69 @@ function RecentlyAnalyzedSection({ onTickerClick }) {
   );
 }
 
-// ── セクション 2.7 (v40+ 新設): サンプル分析結果 ──────────────────────────
-// 「契約後にどんな画面が見られるか」を 1 枚で示す Show-don't-tell 戦略。
-// 静的データで NVDA の 5 条件 PASS + 市場の声 + CTA を実 UI 風に再現。
-// クリックで NVDA 分析を実行 → ログインなしで価値体験 → 登録動機を最大化。
-function SampleAnalysisSection({ onTickerClick }) {
-  const conditions = [
-    { label: '営業CFマージン', value: '38.2%' },
-    { label: 'EPS 連続増加', value: '4Q' },
-    { label: 'CFPS 連続増加', value: '4Q' },
-    { label: '売上 連続増加', value: '4Q' },
-    { label: 'CFPS > EPS (粉飾リスク低)', value: '✓' },
-  ];
+// ── セクション 2.7 (v40+ → v75 動的化): サンプル分析結果 ──────────────────
+// handover v74 §2-A #3 + 6 体合議 (2026-05-16) verdict:
+// gainers Top10 → PASS 5/5 → 4/5 fallback で 1 銘柄を表示。
+// 市場の声 mockup は ProTeaser (Premium 解禁訴求) に置換 (景表法・ステマ規制回避)。
+// 「最終更新 X 分前」 chip で動的感を担保。
+const SAMPLE_STATIC_FALLBACK = {
+  ticker: 'NVDA',
+  companyName: 'NVIDIA Corp.',
+  passedCount: 5,
+  totalCount: 5,
+  overallPass: true,
+  source: 'static_fallback',
+  conditions: [
+    { name: '営業CFマージン 5%以上', passed: true },
+    { name: 'EPS 連続増加 (3期)', passed: true },
+    { name: 'CFPS 連続増加 (3期)', passed: true },
+    { name: '売上 連続増加 (3期)', passed: true },
+    { name: 'CFPS > EPS (粉飾リスク低)', passed: true },
+  ],
+  updatedAt: null,
+};
+
+function SampleAnalysisSection({ onTickerClick, onProCheckout }) {
+  const [sample, setSample] = useState(SAMPLE_STATIC_FALLBACK);
+  const [loading, setLoading] = useState(true);
+  // 1 分毎に再レンダー (formatRelativeTime の表示更新)
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/api/sample-pass`)
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(d => {
+        if (cancelled) return;
+        if (d && d.ticker) setSample(d);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLoading(false);  // fallback static は既に initial state
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!sample?.updatedAt) return;
+    const t = setInterval(() => setTick(n => n + 1), 60_000);
+    return () => clearInterval(t);
+  }, [sample?.updatedAt]);
+
+  const ticker = sample.ticker || 'NVDA';
+  const companyName = sample.companyName || 'NVIDIA Corp.';
+  const passedCount = typeof sample.passedCount === 'number' ? sample.passedCount : 5;
+  const totalCount = sample.totalCount || 5;
+  const isPerfect = passedCount === totalCount;
+  // 5/5 → 緑、 4/5 → amber、 3 以下 → muted
+  const badgeColor = isPerfect
+    ? { bg: 'rgba(34,239,129,0.15)', fg: 'var(--color-gain)', border: 'rgba(34,239,129,0.35)' }
+    : passedCount >= 4
+      ? { bg: 'rgba(245,158,11,0.15)', fg: 'var(--color-warning)', border: 'rgba(245,158,11,0.35)' }
+      : { bg: 'rgba(127,127,127,0.10)', fg: 'var(--text-secondary)', border: 'rgba(127,127,127,0.25)' };
+  const handleClick = () => onTickerClick?.(ticker);
+
   return (
     <section style={{ padding: '32px 20px' }}>
       <div style={{ textAlign: 'center', marginBottom: 16 }}>
@@ -907,15 +961,21 @@ function SampleAnalysisSection({ onTickerClick }) {
           color: 'var(--text-muted)',
         }}>
           ↓ 実際にこういう画面が見られます
+          {sample.updatedAt && (
+            <span style={{ marginLeft: 8, opacity: 0.7 }}>
+              · 最終更新 {formatRelativeTime(sample.updatedAt)}
+            </span>
+          )}
         </div>
       </div>
 
       {/* 単一の panel-card で実 UI を再現。
           v62: baseline cyan border / boxShadow を撤去し他カードと揃える。
-          PASS バッジ (緑) と「✓ PASS 5/5」がサンプルらしさを十分担保する。 */}
+          PASS バッジ (緑/amber) でサンプルらしさを担保。
+          loading 中は initial NVDA hardcode (opacity 0.6) で skeleton 代用 (Web 開発 agent 推奨)。 */}
       <div
         className="panel-card"
-        onClick={() => onTickerClick?.('NVDA')}
+        onClick={handleClick}
         style={{
           maxWidth: 720,
           margin: '0 auto',
@@ -924,6 +984,8 @@ function SampleAnalysisSection({ onTickerClick }) {
           background: 'var(--bg-card)',
           border: '1px solid var(--border)',
           cursor: 'pointer',
+          opacity: loading ? 0.6 : 1,
+          transition: 'opacity 0.3s ease',
         }}
       >
         {/* ヘッダー: ティッカー + PASS バッジ */}
@@ -939,96 +1001,59 @@ function SampleAnalysisSection({ onTickerClick }) {
               fontWeight: 700,
               color: 'var(--text-primary)',
               lineHeight: 1.2,
-            }}>NVDA</div>
+            }}>{ticker}</div>
             <div style={{
               fontSize: 11,
               color: 'var(--text-muted)',
               marginTop: 2,
-            }}>NVIDIA Corp.</div>
+            }}>{companyName}</div>
           </div>
           <span style={{
-            background: 'rgba(34,239,129,0.15)',
-            color: 'var(--color-gain)',
+            background: badgeColor.bg,
+            color: badgeColor.fg,
             padding: '4px 12px',
             borderRadius: 6,
             fontSize: 13,
             fontWeight: 700,
-            border: '1px solid rgba(34,239,129,0.35)',
-          }}>✓ PASS 5/5</span>
+            border: `1px solid ${badgeColor.border}`,
+          }}>
+            {isPerfect ? '✓ ' : ''}PASS {passedCount}/{totalCount}
+          </span>
         </div>
 
-        {/* 5 条件リスト */}
+        {/* 5 条件リスト — ✓/✕ icon + 条件名のみ。 数値詳細は判定タブで */}
         <div style={{
           background: 'rgba(34,211,238,0.04)',
           borderRadius: 8,
           padding: '12px 14px',
           marginBottom: 14,
         }}>
-          {conditions.map(c => (
-            <div key={c.label} style={{
+          {(sample.conditions || []).slice(0, 5).map((c, i) => (
+            <div key={c.name || i} style={{
               display: 'flex',
-              justifyContent: 'space-between',
               alignItems: 'center',
               fontSize: 12,
               padding: '4px 0',
               color: 'var(--text-secondary)',
             }}>
-              <span>
-                <span style={{ color: 'var(--color-gain)', marginRight: 8 }}>✓</span>
-                {c.label}
-              </span>
-              <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-                {c.value}
+              <span style={{
+                color: c.passed ? 'var(--color-gain)' : 'var(--color-loss)',
+                marginRight: 8,
+                fontWeight: 700,
+                width: 14,
+                display: 'inline-block',
+              }}>{c.passed ? '✓' : '✕'}</span>
+              <span style={{ color: c.passed ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                {c.name}
               </span>
             </div>
           ))}
         </div>
 
-        {/* 市場の声プレビュー */}
-        <div style={{
-          background: 'rgba(245,158,11,0.04)',
-          borderRadius: 8,
-          padding: '12px 14px',
-          marginBottom: 14,
-          border: '1px solid rgba(245,158,11,0.15)',
-        }}>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 6,
-          }}>
-            <span style={{
-              fontSize: 12,
-              fontWeight: 600,
-              color: 'var(--text-secondary)',
-            }}>
-              📊 市場の声
-            </span>
-            <span style={{
-              background: 'rgba(245,158,11,0.15)',
-              color: 'var(--color-warning)',
-              padding: '2px 10px',
-              borderRadius: 4,
-              fontSize: 10,
-              fontWeight: 700,
-            }}>⚡ 強弱混在</span>
-          </div>
-          <div style={{
-            fontSize: 12,
-            color: 'var(--text-secondary)',
-            lineHeight: 1.6,
-            borderLeft: '2px solid rgba(34,211,238,0.3)',
-            paddingLeft: 10,
-          }}>
-            AI半導体需要は堅調。ただし競合台頭とバリュエーション面での割高感が懸念材料。
-          </div>
-        </div>
-
-        {/* CTA — クリックで NVDA 分析を実行 (デモ) */}
+        {/* CTA — クリックで動的 ticker 分析を実行 (demo モード対応、 handleLPTickerClick 経由) */}
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); onTickerClick?.('NVDA'); }}
+          onClick={(e) => { e.stopPropagation(); handleClick(); }}
           style={{
             width: '100%',
             padding: '12px',
@@ -1045,8 +1070,24 @@ function SampleAnalysisSection({ onTickerClick }) {
           onMouseEnter={(e) => { e.currentTarget.style.background = 'rgb(14, 165, 233)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'rgb(56, 189, 248)'; }}
         >
-          📄 NVDA の完全な分析を見る →
+          📄 {ticker} の完全な分析を見る →
         </button>
+      </div>
+
+      {/* 旧「市場の声」 mockup を ProTeaser に置換 (6 体合議 #3-a B 案、 マーケター指摘の景表法回避)。
+          AI 生成 (C 案) は hallucination + 景表法・ステマ規制リスクで本セッション見送り、 Phase 2 候補。 */}
+      <div style={{ maxWidth: 720, margin: '16px auto 0' }}>
+        <ProTeaser
+          title="市場の声 (Premium で解禁)"
+          description="ファンダメンタル PASS の銘柄について、 アナリスト評価・ニュース要約・カンファレンスコール抽出を Premium で提供。"
+          features={[
+            'アナリスト評価サマリ (買い/中立/売り 集計)',
+            'カンファレンスコールのポジ/ネガ抽出',
+            'AI ニュースタグ (材料、 リスク、 ガイダンス)',
+          ]}
+          onUpgrade={onProCheckout}
+          variant="gold"
+        />
       </div>
     </section>
   );
@@ -1707,7 +1748,7 @@ export default function LandingPage({ onSignIn, onProCheckout, onTickerClick }) 
       <RecentlyAnalyzedSection onTickerClick={onTickerClick} />
       {/* リピート訪問者用 — 過去分析した銘柄で決算が近いもの (緊急 amber 強調) */}
       <MissedSection onTickerClick={onTickerClick} />
-      <SampleAnalysisSection onTickerClick={onTickerClick} />
+      <SampleAnalysisSection onTickerClick={onTickerClick} onProCheckout={handleProClick} />
       <FeaturesSection />
       <PricingSection onFreeStart={onSignIn} onProCheckout={handleProClick} />
       <FAQSection />

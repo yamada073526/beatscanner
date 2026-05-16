@@ -83,6 +83,15 @@ export async function fetchPriceHistory(ticker, period = '1y') {
   return r.json();
 }
 
+// Cup-with-Handle Phase 1 (handover v75、 6 体合議 2026-05-17 B 案):
+// テクニカル指標 (Cup-Handle / SMA 50/200 / RS) bulk 取得。
+// 失敗時は空 overlays を返してチャート描画は継続 (graceful degrade)。
+export async function fetchTechnical(ticker, patterns = 'cup_handle,sma_50,sma_200') {
+  const r = await fetch(`/api/technical/${encodeURIComponent(ticker)}?patterns=${patterns}&period=1y`);
+  if (!r.ok) return { overlays: [], patterns: {} };
+  return r.json();
+}
+
 // v65 §4-B-3: 1D sparkline 用の intraday (5 分足) 取得.
 // 当日 NYSE セッションの ~78 点を返し、Pane 2/Header sparkline が直線化するのを回避.
 export async function fetchPriceIntraday(ticker) {

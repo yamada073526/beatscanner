@@ -774,6 +774,13 @@ SP500_SAMPLE = [
 _SCREENER_CACHE: dict = {"data": None, "ts": 0.0}
 _SCREENER_CACHE_TTL = 900.0  # 15分
 
+# Phase 3 LP 残 #3 (handover v74): LP サンプル分析動的化用 cache。
+# gainers Top10 から PASS 5/5 (or 4/5 fallback) 1 銘柄を 30 分 cache で keep。
+# asyncio.Lock で cold start 時の同時 cache miss stampede を防止 (6 体合議 Web 開発 agent 指摘)。
+_SAMPLE_PASS_CACHE: dict = {"data": None, "ts": 0.0}
+_SAMPLE_PASS_TTL = 30 * 60.0  # 30 分
+_SAMPLE_PASS_LOCK = asyncio.Lock()
+
 
 # --- Demo mode ---
 
@@ -1691,6 +1698,129 @@ async def custom_screener(request: Request) -> dict:
     _SCREENER_CACHE["data"] = data
     _SCREENER_CACHE["ts"] = now
     return data
+
+
+# --- LP Sample Pass endpoint (Phase 3 LP 残 #3, handover v74 §2-A) ---
+
+
+_SAMPLE_PASS_STATIC_FALLBACK: dict = {
+    "ticker": "NVDA",
+    "companyName": "NVIDIA Corp.",
+    "passedCount": 5,
+    "totalCount": 5,
+    "overallPass": True,
+    "conditions": [
+        {"name": "営業CFマージン 5%以上", "passed": True, "value": None, "detail": "", "series": []},
+        {"name": "EPS 連続増加 (3期)", "passed": True, "value": None, "detail": "", "series": []},
+        {"name": "CFPS 連続増加 (3期)", "passed": True, "value": None, "detail": "", "series": []},
+        {"name": "売上 連続増加 (3期)", "passed": True, "value": None, "detail": "", "series": []},
+        {"name": "CFPS > EPS (粉飾リスク低)", "passed": True, "value": None, "detail": "", "series": []},
+    ],
+}
+
+
+def _pick_sample_from_results(results: list[dict]) -> tuple[dict, str]:
+    """results から表示用 1 銘柄を選択。 6 体合議 #3-b A 案: 5/5 → 4/5 → static fallback。
+
+    本番検証 (handover v75 dogfood) で gainers Top10 の passedCount Top が 2/5 で
+    「PASS 2/5」 サンプル表示が LP 訴求と矛盾することが判明、 4/5 未満は static (NVDA) に戻す。
+
+    返り値: (pick_dict, source)
+    source は "gainers_5_5" | "gainers_4_5" | "static_fallback"
+    """
+    if not results:
+        return _SAMPLE_PASS_STATIC_FALLBACK, "static_fallback"
+
+    sorted_results = sorted(
+        results, key=lambda x: x.get("passedCount", 0), reverse=True
+    )
+
+    perfect = [r for r in sorted_results if r.get("passedCount") == 5]
+    if perfect:
+        return perfect[0], "gainers_5_5"
+
+    near = [r for r in sorted_results if r.get("passedCount") == 4]
+    if near:
+        return near[0], "gainers_4_5"
+
+    # 3/5 以下は LP サンプルとして不適切、 NVDA 静的 fallback に戻す。
+    return _SAMPLE_PASS_STATIC_FALLBACK, "static_fallback"
+
+
+@app.get("/api/sample-pass")
+async def sample_pass(request: Request) -> dict:
+    """LP サンプル分析用: gainers Top10 から PASS 5/5 (or 4/5 fallback) 1 銘柄を返す.
+
+    handover v74 §2-A #3 (6 体合議 verdict):
+    - 30 分 TTL in-memory cache
+    - PASS 5/5 → 4/5 → best → NVDA 静的の優先順位
+    - asyncio.Lock で cache stampede 防止 (Web 開発 agent 指摘)
+    - source field で UI 側がバッジを動的切替 (5/5 緑 / 4/5 amber)
+    """
+    now = _time.monotonic()
+    cached = _SAMPLE_PASS_CACHE["data"]
+    if cached and now - _SAMPLE_PASS_CACHE["ts"] < _SAMPLE_PASS_TTL:
+        return cached
+
+    async with _SAMPLE_PASS_LOCK:
+        now2 = _time.monotonic()
+        cached2 = _SAMPLE_PASS_CACHE["data"]
+        if cached2 and now2 - _SAMPLE_PASS_CACHE["ts"] < _SAMPLE_PASS_TTL:
+            return cached2
+
+        api_key = _get_fmp_key(request)
+        client = FMPClient(api_key=api_key)
+
+        candidates: list[str] = []
+        try:
+            gainers = await client.market_movers("biggest-gainers")
+            if isinstance(gainers, list):
+                for item in gainers[:10]:
+                    sym = item.get("symbol", "")
+                    if sym:
+                        candidates.append(sym)
+        except FMPError:
+            pass
+        except Exception:
+            pass
+
+        results: list[dict] = []
+
+        async def _judge_one(t: str) -> None:
+            try:
+                d = await _analyze_core(t, api_key, use_cache=True)
+                if isinstance(d, dict) and d.get("passedCount") is not None:
+                    results.append(d)
+            except (_AnalyzeETFError, _AnalyzeNotFoundError):
+                pass
+            except FMPError:
+                pass
+            except Exception:
+                pass
+
+        BATCH = 5
+        for i in range(0, len(candidates), BATCH):
+            await asyncio.gather(
+                *[_judge_one(t) for t in candidates[i:i + BATCH]],
+                return_exceptions=True,
+            )
+
+        pick, source = _pick_sample_from_results(results)
+
+        data = {
+            "ticker": pick.get("ticker"),
+            "companyName": pick.get("companyName"),
+            "conditions": pick.get("conditions", []),
+            "passedCount": pick.get("passedCount", 0),
+            "totalCount": pick.get("totalCount", 5),
+            "overallPass": pick.get("overallPass", False),
+            "source": source,
+            "candidateCount": len(candidates),
+            "updatedAt": int(_time.time()),  # epoch sec (client tz 非依存)
+        }
+        _SAMPLE_PASS_CACHE["data"] = data
+        _SAMPLE_PASS_CACHE["ts"] = now2
+        return data
 
 
 # --- Key validation endpoint ---
@@ -8830,6 +8960,65 @@ chart_candles_cache: dict = {}
 CHART_SUMMARY_TTL = 3600  # 1時間
 CHART_CANDLES_TTL = 3600  # 1時間（1y日足は日中変化しない）
 
+# Cup-with-Handle Phase 1 (handover v75、 2026-05-17 6 体合議 B 案):
+# /api/technical/{ticker} の cache。 key = "ticker:period:patterns_sorted_join"。
+# 24h TTL (daily close 更新で十分、 price-history と整合)。
+# 既存 chart_candles_cache 流用は cache key 衝突で 3 セッション溶ける典型パターンで回避 (Web 開発 agent 指摘)。
+_TECHNICAL_CACHE: dict = {}
+_TECHNICAL_TTL = 24 * 3600.0
+_TECHNICAL_LOCK = asyncio.Lock()
+# RS 計算用 SPY history (1y daily) を全銘柄で共有。 24h cache。
+_SPY_HISTORY_CACHE: dict = {"closes": None, "ts": 0.0}
+_SPY_HISTORY_TTL = 24 * 3600.0
+
+
+def _compute_sma(closes: list[float], period: int) -> list[float | None]:
+    """Simple Moving Average (rolling window)。 period 未満は None で埋める。 numpy 不依存."""
+    if not closes or len(closes) < period:
+        return [None] * len(closes)
+    result: list[float | None] = [None] * (period - 1)
+    cumsum = 0.0
+    window: list[float] = []
+    for i, c in enumerate(closes):
+        window.append(c)
+        cumsum += c
+        if len(window) > period:
+            cumsum -= window.pop(0)
+        if i >= period - 1:
+            result.append(round(cumsum / period, 4))
+    return result
+
+
+def _detect_cup_handle_skeleton(
+    times: list[str],
+    highs: list[float],
+    lows: list[float],
+    closes: list[float],
+    volumes: list[float],
+) -> dict:
+    """Cup-with-Handle 検出 skeleton (Phase 1 Session 1)。
+
+    本セッションは API contract 確立のみ、 検出ロジックは次セッション実装。
+    現状: 常に detected=False を返す。 frontend は detected=False の場合 overlay を表示しない。
+
+    将来実装 (project_cup_handle_design.md §確定設計):
+    - cup 深さ 12-33% / 期間 7-65 週 / U 字 (底部 weeks ≥ 3)
+    - handle ≤12% pullback / 1-4 週
+    - pivot = handle 高値 + $0.10
+    - breakout volume = 50 日平均 +40-50%
+    - SPY 200DMA filter (Confirmed Uptrend 代替)
+    - prior uptrend ≥ 30%
+    """
+    return {
+        "detected": False,
+        "state": None,
+        "cup": None,
+        "handle": None,
+        "pivot": None,
+        "breakout": None,
+        "note": "Phase 1 Session 2 で検出ロジック実装予定",
+    }
+
 
 @app.get("/api/chart/{ticker}/summary")
 async def get_chart_summary(ticker: str):
@@ -8959,6 +9148,145 @@ async def get_chart_candles(ticker: str, period: str = "1y"):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Technical Signals endpoint (Cup-with-Handle Phase 1、 2026-05-17 6 体合議 B 案) ──
+#
+# 拡張型 endpoint: `?patterns=cup_handle,sma_50,sma_200,rs` で複数指標 bulk 返却。
+# 将来 vcp / flag / 52w_high 等を同じ endpoint 内で吸収可能 (schema_version で後方互換管理)。
+
+OVERLAY_COLORS = {
+    "sma_50": "#f59e0b",   # amber (--color-overlay-sma-50)
+    "sma_200": "#a78bfa",  # purple (--color-overlay-sma-200)
+    "cup": "#38bdf8",      # cyan (--color-overlay-cup)
+}
+
+
+@app.get("/api/technical/{ticker}")
+async def get_technical(
+    ticker: str,
+    patterns: str = "cup_handle,sma_50,sma_200",
+    period: str = "1y",
+) -> dict:
+    """テクニカル指標 (Cup-Handle / SMA / RS) bulk return。
+
+    handover v75 Phase 1 Session 1 (6 体合議 2026-05-17 B 案):
+    - Cup-Handle: skeleton (Session 2 で検出ロジック実装)
+    - SMA 50/200: numpy 不依存の rolling window 計算で本セッション完成
+    - RS: Phase 1 Session 3 で SPY 比較 percentile rank
+    - schema_version で後方互換管理、 interpretation_hint で AI 解釈 (Phase 2) 用 field 確保
+
+    Pro auth は Phase 1 では `locked=false` 固定 (Stripe 統合は別タスク、 handover v74 §2-J Top 8)。
+    """
+    ticker_u = ticker.upper()
+    requested = {p.strip() for p in patterns.split(",") if p.strip()}
+    cache_key = f"{ticker_u}:{period}:{'+'.join(sorted(requested))}"
+    now = _time.monotonic()
+
+    cached = _TECHNICAL_CACHE.get(cache_key)
+    if cached and now - cached["ts"] < _TECHNICAL_TTL:
+        return cached["data"]
+
+    async with _TECHNICAL_LOCK:
+        # double check (Web 開発 agent 指摘の stampede 防止)
+        cached2 = _TECHNICAL_CACHE.get(cache_key)
+        if cached2 and now - cached2["ts"] < _TECHNICAL_TTL:
+            return cached2["data"]
+
+        # OHLC 取得: 6 体合議 (2026-05-17) verdict 「SMA 全期間表示」 のため 3y 分 fetch
+        # → full 3y で SMA 計算 → 表示 period に合わせて末尾を slice。
+        # frontend で受け取った overlays.data は full 3y、 frontend 側で chart 表示範囲を絞る。
+        # backend で slice しない理由: frontend がすでに range filter (Recharts) を持ち、
+        # backend で period パラメータ依存 cache key を増やすと cache hit rate が落ちる。
+        import yfinance as yf
+        try:
+            stock = yf.Ticker(ticker_u)
+            hist = stock.history(period="3y", interval="1d")
+            if hist.empty:
+                raise HTTPException(status_code=404, detail=f"{ticker_u} のデータが見つかりません")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"yfinance fetch failed: {e}")
+
+        times = [idx.strftime("%Y-%m-%d") for idx in hist.index]
+        closes = [round(float(v), 4) for v in hist["Close"].tolist()]
+        highs = [round(float(v), 4) for v in hist["High"].tolist()]
+        lows = [round(float(v), 4) for v in hist["Low"].tolist()]
+        volumes = [float(v) for v in hist["Volume"].tolist()]
+
+        # 表示 period に応じて返却データを末尾から N entry に絞る (frontend chart の x 軸範囲と整合)
+        # SMA は full 3y で計算済なので、 slice 後でも全 entry が valid value (None 含まない)。
+        period_days_map = {
+            "1m": 21, "3m": 63, "6m": 126, "1y": 252, "2y": 504, "3y": 756,
+        }
+        slice_n = period_days_map.get(period, len(closes))
+        slice_start = max(0, len(closes) - slice_n)
+
+        patterns_result: dict = {}
+        overlays: list[dict] = []
+
+        if "cup_handle" in requested:
+            # Cup-Handle 検出は full 3y データで実行 (long-term base 必要)
+            patterns_result["cup_handle"] = _detect_cup_handle_skeleton(
+                times, highs, lows, closes, volumes
+            )
+
+        if "sma_50" in requested:
+            sma_50 = _compute_sma(closes, 50)
+            # 表示 range 内で valid な SMA 50 のみ返却 (slice 後の period 全期間で valid)
+            sliced_times = times[slice_start:]
+            sliced_sma = sma_50[slice_start:]
+            overlays.append({
+                "type": "line",
+                "key": "sma_50",
+                "name": "SMA 50",
+                "color": OVERLAY_COLORS["sma_50"],
+                "lineWidth": 1,
+                "data": [
+                    {"time": t, "value": v}
+                    for t, v in zip(sliced_times, sliced_sma)
+                    if v is not None
+                ],
+            })
+
+        if "sma_200" in requested:
+            sma_200 = _compute_sma(closes, 200)
+            sliced_times = times[slice_start:]
+            sliced_sma = sma_200[slice_start:]
+            overlays.append({
+                "type": "line",
+                "key": "sma_200",
+                "name": "SMA 200",
+                "color": OVERLAY_COLORS["sma_200"],
+                "lineWidth": 1,
+                "data": [
+                    {"time": t, "value": v}
+                    for t, v in zip(sliced_times, sliced_sma)
+                    if v is not None
+                ],
+            })
+
+        # RS は Phase 1 Session 3 で実装予定 (SPY 比較 percentile rank)
+        if "rs" in requested:
+            patterns_result["rs"] = {
+                "value": None,
+                "rating": None,
+                "note": "Phase 1 Session 3 で SPY 比較計算実装予定",
+            }
+
+        data = {
+            "schema_version": "1.0",
+            "ticker": ticker_u,
+            "patterns": patterns_result,
+            "overlays": overlays,
+            "interpretation_hint": "",
+            "locked": False,
+            "generated_at": int(_time.time()),
+        }
+
+        _TECHNICAL_CACHE[cache_key] = {"data": data, "ts": now}
+        return data
 
 
 # ── 急騰・急落銘柄 (Movers) ──────────────────────────────────────────────────

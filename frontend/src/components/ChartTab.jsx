@@ -201,6 +201,41 @@ function CandleChart({ ticker, period }) {
         if (!Array.isArray(data.candles)) throw new Error("データ形式エラー");
         series.setData(data.candles);
 
+        // Cup-with-Handle Phase 1 (handover v75、 6 体合議 2026-05-17 B 案):
+        // /api/technical/{ticker} から SMA 50/200 overlay を取得して LineSeries で描画。
+        // Cup-Handle は Session 2 で検出ロジック実装予定 (skeleton は detected=false で何もしない)。
+        // fetch 失敗時は overlay 無しで chart 表示継続 (graceful degrade)。
+        try {
+          const techCacheKey = `${ticker}_tech`;
+          let techData;
+          if (window.__technicalCache?.[techCacheKey]) {
+            techData = window.__technicalCache[techCacheKey];
+          } else {
+            const techRes = await fetch(`${API_BASE}/api/technical/${ticker}?patterns=cup_handle,sma_50,sma_200&period=1y`);
+            if (techRes.ok) {
+              techData = await techRes.json();
+              if (!window.__technicalCache) window.__technicalCache = {};
+              window.__technicalCache[techCacheKey] = techData;
+            }
+          }
+          if (techData && Array.isArray(techData.overlays) && !destroyed) {
+            for (const overlay of techData.overlays) {
+              if (overlay.type === "line" && Array.isArray(overlay.data) && overlay.data.length > 0) {
+                const lineSeries = chart.addSeries(lc.LineSeries, {
+                  color: overlay.color,
+                  lineWidth: overlay.lineWidth || 1,
+                  priceLineVisible: false,
+                  lastValueVisible: false,
+                  title: overlay.name,
+                });
+                lineSeries.setData(overlay.data);
+              }
+            }
+          }
+        } catch (techErr) {
+          console.warn("[CandleChart] technical overlay skip:", techErr?.message);
+        }
+
         // 初期表示範囲を period に合わせて設定
         const now = Math.floor(Date.now() / 1000);
         const RANGE_SEC = { '1d': 86400*2, '1wk': 86400*7, '1mo': 86400*30, '6mo': 86400*180, '1y': 86400*365 };

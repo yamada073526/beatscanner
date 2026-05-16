@@ -1,9 +1,41 @@
-import { useState, useEffect, useMemo } from 'react';
+import { Component, useState, useEffect, useMemo } from 'react';
 import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { fetchPriceHistory } from '../api.js';
+import { fetchPriceHistory, fetchTechnical } from '../api.js';
+
+// SMA overlay 色 (design_system.md §1-A2 で token 登録済、 ALLOWED-HEX whitelist 適合)
+const SMA_50_COLOR  = '#f59e0b'; // amber (短期 trend)
+const SMA_200_COLOR = '#a78bfa'; // purple (長期 trend、 ファンダ協調指標 #1)
+
+// 2 段保護 (handover v75 真っ白事故 fix): 万一 Recharts overlay で crash しても
+// chart 部分だけ blank で Pane 3 全体は保護。 親 (JudgmentDetail) は影響受けない。
+class StockChartErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error, info) {
+    console.error('[StockPriceChart] chart render error:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+          <h3 className="section-heading" style={{ marginBottom: 12 }}>株価チャート</h3>
+          <div className="flex h-64 items-center justify-center text-sm" style={{ color: 'var(--text-muted)' }}>
+            チャートの表示に失敗しました。 ページを再読み込みしてください。
+          </div>
+        </section>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const PERIODS = [
   { label: '1ヶ月', value: '1m' },
@@ -136,10 +168,12 @@ function EarningsTooltip({ active, payload, label, earningsMap }) {
   );
 }
 
-export default function StockPriceChart({ ticker }) {
+function StockPriceChartInner({ ticker }) {
   const [period, setPeriod] = useState('1y');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  // SMA overlay state (handover v75 Phase 1 Session 1 safer 再追加)
+  const [technical, setTechnical] = useState(null);
 
   useEffect(() => {
     if (!ticker) return;
@@ -151,6 +185,61 @@ export default function StockPriceChart({ ticker }) {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [ticker, period]);
+
+  // SMA fetch (period 非依存、 ticker 単位)。 overlay 1 件以上の時のみ setTechnical
+  // (handover v75 真っ白事故 fix: 全 null Line が Recharts で crash した可能性、
+  //  ここで早期 filter して conditional render 側でも 2 段防御)。
+  useEffect(() => {
+    if (!ticker) return;
+    let cancelled = false;
+    setTechnical(null);  // ticker 切替時に古い SMA をクリア
+    fetchTechnical(ticker, 'sma_50,sma_200')
+      .then((t) => {
+        if (cancelled) return;
+        if (t && Array.isArray(t.overlays) && t.overlays.length > 0) {
+          setTechnical(t);
+        }
+      })
+      .catch(() => { /* graceful: SMA 抜きで chart 表示 */ });
+    return () => { cancelled = true; };
+  }, [ticker]);
+
+  // SMA date → value lookup (technical が null なら全 empty)
+  const smaMap = useMemo(() => {
+    const m = { sma_50: {}, sma_200: {} };
+    if (!technical?.overlays) return m;
+    for (const ov of technical.overlays) {
+      if ((ov.key === 'sma_50' || ov.key === 'sma_200') && Array.isArray(ov.data)) {
+        for (const p of ov.data) {
+          if (p && p.time != null && typeof p.value === 'number') {
+            m[ov.key][p.time] = p.value;
+          }
+        }
+      }
+    }
+    return m;
+  }, [technical]);
+
+  const hasSma50 = useMemo(() => Object.keys(smaMap.sma_50).length > 0, [smaMap]);
+  const hasSma200 = useMemo(() => Object.keys(smaMap.sma_200).length > 0, [smaMap]);
+
+  // SMA がある時のみ price データに merge (no SMA なら元 data そのまま = 旧挙動と同じ)
+  const chartData = useMemo(() => {
+    if (!data?.prices) return [];
+    if (!hasSma50 && !hasSma200) return data.prices;
+    return data.prices.map((p) => {
+      const entry = { ...p };
+      if (hasSma50) {
+        const v50 = smaMap.sma_50[p.date];
+        if (typeof v50 === 'number') entry.sma_50 = v50;
+      }
+      if (hasSma200) {
+        const v200 = smaMap.sma_200[p.date];
+        if (typeof v200 === 'number') entry.sma_200 = v200;
+      }
+      return entry;
+    });
+  }, [data, smaMap, hasSma50, hasSma200]);
 
   const dateSet = useMemo(
     () => new Set((data?.prices ?? []).map((p) => p.date)),
@@ -207,7 +296,7 @@ export default function StockPriceChart({ ticker }) {
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart
-                data={data.prices}
+                data={chartData}
                 margin={{ top: 36, right: 16, left: 0, bottom: 8 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
@@ -232,7 +321,39 @@ export default function StockPriceChart({ ticker }) {
                   cursor={{ stroke: CHART_CURSOR, strokeWidth: 1, strokeDasharray: '4 2' }}
                 />
 
-                {/* Price line */}
+                {/* SMA 200 (長期 trend、 ファンダ協調指標 #1、 conditional render で初期 mount 時の crash 回避) */}
+                {hasSma200 && (
+                  <Line
+                    key="sma_200"
+                    type="monotone"
+                    dataKey="sma_200"
+                    stroke={SMA_200_COLOR}
+                    strokeWidth={1}
+                    strokeOpacity={0.7}
+                    dot={false}
+                    activeDot={false}
+                    connectNulls
+                    name="SMA 200"
+                    isAnimationActive={false}
+                  />
+                )}
+                {/* SMA 50 (短期 trend) */}
+                {hasSma50 && (
+                  <Line
+                    key="sma_50"
+                    type="monotone"
+                    dataKey="sma_50"
+                    stroke={SMA_50_COLOR}
+                    strokeWidth={1}
+                    strokeOpacity={0.7}
+                    dot={false}
+                    activeDot={false}
+                    connectNulls
+                    name="SMA 50"
+                    isAnimationActive={false}
+                  />
+                )}
+                {/* Price line (主役、 SMA より太く前面) */}
                 <Line
                   type="monotone"
                   dataKey="close"
@@ -268,29 +389,45 @@ export default function StockPriceChart({ ticker }) {
             </ResponsiveContainer>
           </div>
 
-          {/* Legend */}
-          {earnings.length > 0 && (
-            <div
-              className="mt-3 flex flex-wrap items-center gap-5 text-xs"
-              style={{ color: 'var(--text-muted)' }}
-            >
+          {/* Legend — SMA + Beat/Miss が独立条件で常時表示 (handover v75 6 体合議 UI/UX 案) */}
+          <div
+            className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            {/* SMA 凡例 (hasSma50 / hasSma200 で個別表示、 earnings 有無と独立) */}
+            {hasSma50 && (
               <span className="flex items-center gap-1.5">
-                <span className="font-bold" style={{ color: VERDICT_COLOR.beat }}>▲</span>
-                上振れ Beat（+3%超）
+                <span style={{ display: 'inline-block', width: 14, height: 2, background: SMA_50_COLOR, opacity: 0.7 }} />
+                SMA 50（短期）
               </span>
+            )}
+            {hasSma200 && (
               <span className="flex items-center gap-1.5">
-                <span className="font-bold" style={{ color: VERDICT_COLOR.inline }}>▬</span>
-                概ね一致 In-line（±3%以内）
+                <span style={{ display: 'inline-block', width: 14, height: 2, background: SMA_200_COLOR, opacity: 0.7 }} />
+                SMA 200（長期）
               </span>
-              <span className="flex items-center gap-1.5">
-                <span className="font-bold" style={{ color: VERDICT_COLOR.miss }}>▼</span>
-                下振れ Miss（−3%超）
-              </span>
-              <span className="ml-auto" style={{ color: 'var(--text-muted)', opacity: 0.7 }}>
-                ※ 四半期GAAP EPS vs アナリスト予想比較 / 決算日にホバーで詳細表示
-              </span>
-            </div>
-          )}
+            )}
+            {/* Beat/Miss 凡例 (earnings 1 件以上の時のみ) */}
+            {earnings.length > 0 && (
+              <>
+                <span className="flex items-center gap-1.5">
+                  <span className="font-bold" style={{ color: VERDICT_COLOR.beat }}>▲</span>
+                  上振れ Beat（+3%超）
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="font-bold" style={{ color: VERDICT_COLOR.inline }}>▬</span>
+                  概ね一致 In-line（±3%以内）
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="font-bold" style={{ color: VERDICT_COLOR.miss }}>▼</span>
+                  下振れ Miss（−3%超）
+                </span>
+                <span className="ml-auto" style={{ color: 'var(--text-muted)', opacity: 0.7 }}>
+                  ※ 四半期GAAP EPS vs アナリスト予想比較 / 決算日にホバーで詳細表示
+                </span>
+              </>
+            )}
+          </div>
         </>
       )}
 
@@ -304,5 +441,14 @@ export default function StockPriceChart({ ticker }) {
         </div>
       )}
     </section>
+  );
+}
+
+// default export: ErrorBoundary で wrap して、 chart 内部 crash 時も Pane 3 全体は保護
+export default function StockPriceChart(props) {
+  return (
+    <StockChartErrorBoundary>
+      <StockPriceChartInner {...props} />
+    </StockChartErrorBoundary>
   );
 }

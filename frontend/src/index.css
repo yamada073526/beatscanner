@@ -7183,8 +7183,14 @@ button.ds-chip[data-pressed="true"]:hover {
 /* Phase 2.2 full (handover v73 §2-A、 2026-05-16): equity curve chart
    月次リバランス portfolio simulation の equity_curve / spy_curve を line chart 化。
    Bloomberg Terminal / Linear 流の dot + line、 Aman 級 dark luxury。
-   SVG 自作で lightweight-charts v5 migration リスク回避 (CLAUDE.md「触ると危険」 anchor)。 */
-.backtest-equitychart {
+   SVG 自作で lightweight-charts v5 migration リスク回避 (CLAUDE.md「触ると危険」 anchor)。
+
+   handover v75 fix (2026-05-17 user dogfood): TradeBarChart も同じ class 体系を共有 (v74 で
+   .backtest-cumchart-* → .backtest-equitychart-* rename した際、 TradeBarChart の JSX は旧 class
+   のまま残されて popover absolute parent が失われ表示崩壊)。 alias selector で両 class 体系を
+   許可、 wrap height は auto で各 chart の SVG aspect 維持。 */
+.backtest-equitychart,
+.backtest-cumchart {
   padding: 24px 20px;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -7193,14 +7199,16 @@ button.ds-chip[data-pressed="true"]:hover {
   flex-direction: column;
   gap: 16px;
 }
-.backtest-equitychart-header {
+.backtest-equitychart-header,
+.backtest-cumchart-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   flex-wrap: wrap;
   gap: 12px;
 }
-.backtest-equitychart-title {
+.backtest-equitychart-title,
+.backtest-cumchart-title {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
@@ -7208,27 +7216,32 @@ button.ds-chip[data-pressed="true"]:hover {
   text-transform: uppercase;
   color: var(--text-muted);
 }
-.backtest-equitychart-legend {
+.backtest-equitychart-legend,
+.backtest-cumchart-legend {
   display: flex;
   gap: 14px;
   align-items: center;
   font-size: 11px;
   color: var(--text-secondary);
 }
-.backtest-equitychart-legend-item {
+.backtest-equitychart-legend-item,
+.backtest-cumchart-legend-item {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
-.backtest-equitychart-legend-dot {
+.backtest-equitychart-legend-dot,
+.backtest-cumchart-legend-dot {
   width: 10px;
   height: 10px;
   border-radius: 999px;
 }
-.backtest-equitychart-legend-dot.is-strat {
+.backtest-equitychart-legend-dot.is-strat,
+.backtest-cumchart-legend-dot.is-strat {
   background: var(--color-gain);
 }
-.backtest-equitychart-legend-dot.is-spy {
+.backtest-equitychart-legend-dot.is-spy,
+.backtest-cumchart-legend-dot.is-spy {
   background: rgba(148, 163, 184, 0.55);
 }
 .backtest-equitychart-svg-wrap {
@@ -7236,11 +7249,45 @@ button.ds-chip[data-pressed="true"]:hover {
   height: 220px;
   position: relative;          /* Phase 2.2 Round 5: popover absolute 親 */
 }
-.backtest-equitychart-svg {
+.backtest-cumchart-svg-wrap {
+  width: 100%;
+  height: 260px;               /* TradeBarChart は SVG H=260 で aspect 確保 */
+  position: relative;
+}
+.backtest-equitychart-svg,
+.backtest-cumchart-svg {
   width: 100%;
   height: 100%;
   display: block;
 }
+/* TradeBarChart 統計 totals (CSS rename 漏れの復活、 handover v75 fix) */
+.backtest-cumchart-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.backtest-cumchart-total {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.backtest-cumchart-total-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+.backtest-cumchart-total-value {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.backtest-cumchart-total-value.is-gain { color: var(--color-gain); }
+.backtest-cumchart-total-value.is-loss { color: var(--color-loss); }
+.backtest-cumchart-total-value.is-neutral { color: var(--text-secondary); }
 
 /* Phase 2.2 Round 5 (handover v72): Aman 級 dark popover (bar hover/focus)
    subagent 案 B 採用: React state + 外側 div absolute、 backdrop-blur で半透明ガラス感。

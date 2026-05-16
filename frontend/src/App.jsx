@@ -1042,60 +1042,9 @@ export default function App() {
           </h1>
         </div>
 
-        {/* 中央タブ — md+ のみ。モバイルは drawer 内の Tabs 使用。
-            grid 中央セルに配置されるため自動的に水平中央に揃う
-            Phase 3 Sub-3 dogfood Round 2: LP 表示中 (showLP) は中央タブを非表示。
-            旧 UI 4 タブナビは新 workspace 動線と重複、 未ログインでも不要。 */}
-        <nav
-          aria-label="メインナビ"
-          className="hidden items-center md:flex"
-          style={{
-            gap: '4px',
-            justifyContent: 'center',
-            ...(showLP ? { display: 'none' } : {}),
-          }}
-        >
-          {[
-            { key: 'home',     label: 'ホーム' },
-            { key: 'judgment', label: '判定' },
-            { key: 'report',   label: '決算' },
-            { key: 'チャート', label: 'チャート' },
-          ].map(t => {
-            const active = activeTab === t.key;
-            const onClick = () => {
-              if (t.key === 'report' && !isProUser) {
-                upgrade.open('AI詳細レポート');
-              } else {
-                withViewTransition(() => setActiveTab(t.key));
-              }
-            };
-            return (
-              <button
-                key={t.key}
-                onClick={onClick}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '8px',
-                  fontSize: '13px',
-                  fontWeight: active ? 500 : 400,
-                  background: active ? 'rgba(127,127,127,0.10)' : 'transparent',
-                  color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  border: 'none',
-                  cursor: 'pointer',
-                  transition: 'background 0.12s, color 0.12s',
-                }}
-                onMouseEnter={e => {
-                  if (!active) e.currentTarget.style.background = 'rgba(127,127,127,0.06)';
-                }}
-                onMouseLeave={e => {
-                  if (!active) e.currentTarget.style.background = 'transparent';
-                }}
-              >
-                {t.label}
-              </button>
-            );
-          })}
-        </nav>
+        {/* 中央タブ — handover v74 §2-A #2 + 6 体合議 (2026-05-16) verdict:
+            PC 中央 nav を撤去し、 drawer 一本化 (Apple/Notion/Linear 寄り、 Aman 級 minimal)。
+            grid 中央セルは空のまま自然に詰まる (header grid 3 列 = ロゴ / 空 / drawer trigger)。 */}
         {/* 右: ハンバーガーのみ — grid 右カラムで右寄せ、flexShrink:0 で縮小防止
             Phase 3 Sub-3 dogfood Round 2: LP 表示中 (未ログイン) は drawer 機能不要なので非表示。
             ログイン後 (showLP === false) は従来通り表示。 */}
@@ -2059,8 +2008,9 @@ export default function App() {
           }}
         >✕</button>
 
-        {/* モバイル用タブ（md 未満で表示） */}
-        <div className="md:hidden" style={{
+        {/* タブ — handover v74 §2-A #2 + 6 体合議: PC 中央 nav 撤去に伴い drawer 内 Tab を
+            PC でも表示 (旧 md:hidden を削除)。 PC/モバイル共通の唯一の Tab 切替導線。 */}
+        <div style={{
           display: 'flex', flexDirection: 'column', gap: 2,
           paddingBottom: 8, marginBottom: 4,
           borderBottom: '1px solid var(--border)',
@@ -2338,9 +2288,10 @@ export default function App() {
           下からスッと立ち上がり（spring 風 cubic-bezier）。隠れ時は素直に ease。
           スマホはアイコンのみ正方形、PC はアイコン+テキスト縦2段。
           Phase 3 Sub-3 dogfood (handover v72): LP 表示中 (未ログイン) は bottom nav も
-          完全非表示 (5 原則 #4 + Trust Cliff 整合)。 PC ナビ撤去 / スマホ bottom nav 残置の
-          戦略判断 (handover v72 §推奨タスク #2) は別セッション、 本修正は LP 内ノイズ削減のみ。 */}
-      {!showLP && (
+          完全非表示 (5 原則 #4 + Trust Cliff 整合)。
+          handover v74 §2-A #2 + 6 体合議 (2026-05-16): PC では nav 撤去 + drawer 一本化のため
+          bottom nav も PC 非表示 (isMobile=false なら display: none)。 スマホ専用ナビとして残置。 */}
+      {!showLP && isMobile && (
         <nav
           aria-label="ボトムナビ"
           className="bottom-nav-floating"
@@ -2358,8 +2309,8 @@ export default function App() {
               : 'opacity 0.2s ease, transform 0.2s ease',
             zIndex: 60,
             display: 'flex',
-            gap: isMobile ? 0 : 4,
-            padding: isMobile ? '4px' : '6px 8px',
+            gap: 0,
+            padding: '4px',
             borderRadius: 999,
           }}
         >

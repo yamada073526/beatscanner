@@ -95,6 +95,9 @@ ALLOWED-HEX: #0ea5e9   # --color-accent (light) — lightweight-charts palette n
 ALLOWED-HEX: #38bdf8   # --color-accent (dark) — lightweight-charts palette neutral 系 (PortfolioHistoryChart / PortfolioAreaChartSlot)
 ALLOWED-HEX: #d4af37   # 保有銘柄ゴールドアクセント (ticker-row-v2 / ws-judgment-row)
 ALLOWED-HEX: #f4cd5d   # 保有銘柄ゴールドアクセント highlight (gradient mid)
+ALLOWED-HEX: #a78bfa   # --color-overlay-sma-200 (Cup-Handle Phase 1、 200DMA purple)
+ALLOWED-HEX: #22c55e   # --color-overlay-rs (light、 RS chip) + ChartTab CandlestickSeries upColor
+ALLOWED-HEX: #ef4444   # ChartTab CandlestickSeries downColor (既存 hardcode、 elevation_scale 漏れ追加)
 
 # Surface tokens (light/dark)
 ALLOWED-HEX: #f8fafc   # bg-primary (light)
