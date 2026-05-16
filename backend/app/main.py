@@ -2700,6 +2700,260 @@ async def _fetch_8k_for_ticker(
     return out
 
 
+# ============================================================================
+# Phase 1 Backtest: Nightly Batch helpers (2026-05-16、 handover v71 round 9)
+#
+# じっちゃまプロトコル (5 条件) のバックテスト機能の data layer。
+# - earnings_history: 銘柄 × 四半期 の fundamentals + computed metrics
+# - earnings_evaluation: 銘柄 × evaluation_date の 5 条件評価結果
+#
+# 4 体合議 (金融 + UI/UX + Web 開発 + Marketer) で 4/4 一致した実装。
+# memory anchor: project_backtest_phase1_design.md
+# ============================================================================
+
+# Phase 1 MVP: 50 銘柄 (S&P 500 top by market cap、 sector 分散)。
+# Phase 2 で FMP /sp500-constituent から動的取得に拡張予定。
+BACKTEST_PHASE1_UNIVERSE = [
+    # メガキャップ (top 10)
+    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK-B", "AVGO", "LLY",
+    # 大型 11-25
+    "JPM", "V", "UNH", "XOM", "WMT", "JNJ", "PG", "MA", "HD", "ORCL",
+    "COST", "ABBV", "CVX", "MRK", "BAC",
+    # 中-大型 26-50
+    "KO", "ADBE", "PEP", "CRM", "MCD", "ABT", "PFE", "NFLX", "TMO", "DIS",
+    "CSCO", "ACN", "WFC", "DHR", "TXN", "VZ", "QCOM", "AMD", "RTX", "HON",
+    "INTC", "NKE", "PM", "INTU", "AMGN",
+]
+
+
+def _compute_earnings_metrics(income_data: list, cf_data: list) -> list[dict]:
+    """income_statement と cash_flow を join して computed metrics (eps / cfps / op_cf_margin) を返す。
+
+    FMP /stable/income-statement と /stable/cash-flow-statement の response を結合し、
+    各四半期につき 1 row 出力。 必須 metric (revenue / diluted_shares / op_cf) が
+    1 つでも欠落していたらその四半期は skip。
+    """
+    by_period: dict[str, dict] = {}
+    # income statement → revenue / net_income / diluted_shares / eps / filing_date
+    for i in (income_data or []):
+        if not isinstance(i, dict):
+            continue
+        date_str = i.get("date") or i.get("period")
+        if not date_str:
+            continue
+        date_s = str(date_str)[:10]
+        # FMP /stable では fillingDate / acceptedDate どちらか
+        filing_raw = i.get("fillingDate") or i.get("filingDate") or i.get("acceptedDate") or ""
+        filing_s = str(filing_raw)[:10] if filing_raw else None
+        by_period.setdefault(date_s, {}).update({
+            "revenue": _safe_float(i.get("revenue"), 2),
+            "net_income": _safe_float(i.get("netIncome"), 2),
+            "diluted_shares": _safe_float(
+                i.get("weightedAverageShsOutDil") or i.get("weightedAverageShsOut"), 0
+            ),
+            "eps_reported": _safe_float(i.get("epsDiluted") or i.get("eps"), 4),
+            "filing_date": filing_s,
+        })
+    # cash flow statement → operatingCashFlow
+    for c in (cf_data or []):
+        if not isinstance(c, dict):
+            continue
+        date_str = c.get("date") or c.get("period")
+        if not date_str:
+            continue
+        date_s = str(date_str)[:10]
+        if date_s not in by_period:
+            continue
+        by_period[date_s]["op_cf"] = _safe_float(c.get("operatingCashFlow"), 2)
+
+    out: list[dict] = []
+    for period_end, m in sorted(by_period.items()):
+        revenue = m.get("revenue")
+        net_income = m.get("net_income")
+        op_cf = m.get("op_cf")
+        diluted_shares = m.get("diluted_shares")
+        # 必須 metric 欠落チェック (revenue / diluted_shares は計算に必須)
+        if revenue is None or revenue == 0 or diluted_shares is None or diluted_shares == 0:
+            continue
+        # eps: FMP 報告値優先、 fallback で net_income / diluted_shares
+        eps_reported = m.get("eps_reported")
+        if eps_reported is not None:
+            eps = eps_reported
+        elif net_income is not None:
+            eps = round(net_income / diluted_shares, 4)
+        else:
+            eps = None
+        cfps = round(op_cf / diluted_shares, 4) if (op_cf is not None and diluted_shares) else None
+        op_cf_margin = round(op_cf / revenue, 6) if (op_cf is not None and revenue) else None
+        out.append({
+            "period_end": period_end,
+            "filing_date": m.get("filing_date"),
+            "revenue": revenue,
+            "net_income": net_income,
+            "operating_cash_flow": op_cf,
+            "diluted_shares": diluted_shares,
+            "eps": eps,
+            "cfps": cfps,
+            "op_cf_margin": op_cf_margin,
+        })
+    return out
+
+
+async def refresh_earnings_history_for_ticker(ticker: str, api_key: str | None) -> int:
+    """単一銘柄の earnings_history を Supabase に upsert。 戻り値: upsert 行数。
+
+    FMP /stable/income-statement + /stable/cash-flow-statement (period=quarter, limit=20)
+    から過去 5 年 (20 四半期) を取得し、 _compute_earnings_metrics で計算後 upsert。
+    既存行は (ticker, period_end) primary key で update、 新規は insert。
+    """
+    sym = (ticker or "").upper().strip()
+    if not sym:
+        return 0
+    try:
+        client = FMPClient(api_key=api_key)
+        income_data = await client.income_statement(sym, limit=20, period="quarter")
+        cf_data = await client.cash_flow(sym, limit=20, period="quarter")
+    except FMPError as e:
+        print(f"[batch:earnings_history] FMP error for {sym}: {e}")
+        return 0
+    except Exception as e:
+        print(f"[batch:earnings_history] fetch failed for {sym}: {e}")
+        return 0
+
+    if not isinstance(income_data, list) or not isinstance(cf_data, list):
+        return 0
+    rows = _compute_earnings_metrics(income_data, cf_data)
+    if not rows:
+        return 0
+
+    sb = _get_supabase_service()
+    if not sb:
+        print(f"[batch:earnings_history] Supabase service client unavailable for {sym}")
+        return 0
+
+    # ticker + fiscal_year / fiscal_quarter を補完
+    from datetime import date as _date_pe
+    for r in rows:
+        r["ticker"] = sym
+        try:
+            pe = _date_pe.fromisoformat(r["period_end"])
+            r["fiscal_year"] = pe.year
+            r["fiscal_quarter"] = (pe.month - 1) // 3 + 1
+        except Exception:
+            r["fiscal_year"] = None
+            r["fiscal_quarter"] = None
+
+    try:
+        sb.table("earnings_history").upsert(rows, on_conflict="ticker,period_end").execute()
+        return len(rows)
+    except Exception as e:
+        print(f"[batch:earnings_history] upsert failed for {sym}: {e}")
+        return 0
+
+
+async def compute_evaluation_for_ticker(ticker: str) -> int:
+    """単一銘柄の earnings_evaluation を再計算して upsert。 戻り値: 評価行数。
+
+    earnings_history から過去 4 四半期以上を取得し、 各四半期について 5 条件評価。
+    evaluation_date = filing_date + 1 day (filing_date NULL なら period_end + 60 日)。
+    """
+    sym = (ticker or "").upper().strip()
+    if not sym:
+        return 0
+    sb = _get_supabase_service()
+    if not sb:
+        return 0
+    try:
+        resp = (
+            sb.table("earnings_history")
+            .select("*")
+            .eq("ticker", sym)
+            .order("period_end", desc=False)
+            .execute()
+        )
+        history = resp.data or []
+    except Exception as e:
+        print(f"[batch:evaluation] history fetch failed for {sym}: {e}")
+        return 0
+    if len(history) < 4:
+        return 0  # 3 連続増加判定には 4 四半期必要
+
+    from datetime import date as _date_e, timedelta as _td_e
+    evaluations: list[dict] = []
+    for i in range(3, len(history)):
+        q_t3, q_t2, q_t1, q_curr = history[i - 3], history[i - 2], history[i - 1], history[i]
+
+        # 条件 1: 営業 CF マージン ≥ 15%
+        margin = q_curr.get("op_cf_margin")
+        cond1 = bool(margin is not None and float(margin) >= 0.15)
+
+        # 条件 2: EPS 3 期連続増加 (q_t3 < q_t2 < q_t1 < q_curr)
+        eps_vals = [q.get("eps") for q in [q_t3, q_t2, q_t1, q_curr]]
+        cond2 = bool(
+            all(v is not None for v in eps_vals)
+            and float(eps_vals[0]) < float(eps_vals[1]) < float(eps_vals[2]) < float(eps_vals[3])
+        )
+
+        # 条件 3: CFPS 3 期連続増加
+        cfps_vals = [q.get("cfps") for q in [q_t3, q_t2, q_t1, q_curr]]
+        cond3 = bool(
+            all(v is not None for v in cfps_vals)
+            and float(cfps_vals[0]) < float(cfps_vals[1]) < float(cfps_vals[2]) < float(cfps_vals[3])
+        )
+
+        # 条件 4: 売上高 3 期連続増加
+        rev_vals = [q.get("revenue") for q in [q_t3, q_t2, q_t1, q_curr]]
+        cond4 = bool(
+            all(v is not None for v in rev_vals)
+            and float(rev_vals[0]) < float(rev_vals[1]) < float(rev_vals[2]) < float(rev_vals[3])
+        )
+
+        # 条件 5: CFPS > EPS (粉飾リスク回避)
+        cfps_c = q_curr.get("cfps")
+        eps_c = q_curr.get("eps")
+        cond5 = bool(cfps_c is not None and eps_c is not None and float(cfps_c) > float(eps_c))
+
+        passed_count = sum([cond1, cond2, cond3, cond4, cond5])
+        all_passed = cond1 and cond2 and cond3 and cond4 and cond5
+
+        # evaluation_date: filing_date + 1 day (action 可能になる日)
+        filing_date = q_curr.get("filing_date")
+        eval_date: str | None = None
+        if filing_date:
+            try:
+                eval_date = (_date_e.fromisoformat(str(filing_date)[:10]) + _td_e(days=1)).isoformat()
+            except Exception:
+                pass
+        if not eval_date:
+            # fallback: period_end + 60 日 (10-Q 提出期限の業界平均)
+            try:
+                eval_date = (_date_e.fromisoformat(str(q_curr["period_end"])[:10]) + _td_e(days=60)).isoformat()
+            except Exception:
+                continue
+
+        evaluations.append({
+            "ticker": sym,
+            "evaluation_date": eval_date,
+            "period_end": q_curr["period_end"],
+            "cond1_passed": cond1,
+            "cond2_passed": cond2,
+            "cond3_passed": cond3,
+            "cond4_passed": cond4,
+            "cond5_passed": cond5,
+            "all_passed": all_passed,
+            "passed_count": passed_count,
+        })
+
+    if not evaluations:
+        return 0
+    try:
+        sb.table("earnings_evaluation").upsert(evaluations, on_conflict="ticker,evaluation_date").execute()
+        return len(evaluations)
+    except Exception as e:
+        print(f"[batch:evaluation] upsert failed for {sym}: {e}")
+        return 0
+
+
 @app.get("/api/historical-dividends/{ticker}")
 async def historical_dividends(
     ticker: str,
@@ -9305,6 +9559,84 @@ async def refresh_insights_batch(
             results.append({"ticker": t, "status": "error", "error": str(e)})
 
     return {"processed": len(results), "results": results}
+
+
+# ============================================================================
+# Phase 1 Backtest: Admin endpoint for refreshing earnings_history + evaluation
+# (2026-05-16、 handover v71 round 9、 4 体合議で確定)
+#
+# Universe (50 銘柄 MVP) について FMP /stable/income-statement +
+# /stable/cash-flow-statement から過去 5 年 (20 四半期) を fetch → upsert →
+# 5 条件評価。
+#
+# Auth: X-Cron-Secret ヘッダー (既存 cron secret 再利用)。
+# 想定実行コスト: 50 銘柄 × 2 FMP req = 100 req (Starter 300/min なので余裕)。
+# 完了まで約 30-60 秒。 Railway 32 秒 timeout を超える可能性あり →
+# tickers をクエリ param で分割して 20 銘柄ずつ呼び出す運用も可。
+# ============================================================================
+
+@app.post("/api/admin/refresh-earnings-history")
+async def admin_refresh_earnings_history(
+    body: dict | None = None,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """Phase 1 Backtest data layer 更新 (4 体合議 / じっちゃま 5 条件)。
+
+    Body (任意):
+      tickers: list[str] — 対象銘柄、 未指定なら BACKTEST_PHASE1_UNIVERSE (50 銘柄)
+      skip_evaluation: bool — True なら earnings_history 更新のみで evaluation 計算 skip
+
+    Returns:
+      tickers_processed, history_total_rows, evaluation_total_rows,
+      per_ticker breakdown
+    """
+    _check_cron_secret(x_cron_secret)
+
+    body = body or {}
+    raw_tickers = body.get("tickers")
+    if isinstance(raw_tickers, list) and raw_tickers:
+        tickers = [str(t).upper().strip() for t in raw_tickers if t][:250]
+    else:
+        tickers = list(BACKTEST_PHASE1_UNIVERSE)
+    skip_eval = bool(body.get("skip_evaluation", False))
+
+    api_key = os.environ.get("FMP_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="FMP_API_KEY not configured")
+
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    # Stage 1: earnings_history を順次 upsert (FMP rate limit 配慮で serial)
+    history_per_ticker: dict[str, int] = {}
+    for ticker in tickers:
+        try:
+            count = await refresh_earnings_history_for_ticker(ticker, api_key)
+            history_per_ticker[ticker] = count
+        except Exception as e:
+            print(f"[admin:refresh] history failed for {ticker}: {e}")
+            history_per_ticker[ticker] = 0
+
+    # Stage 2: 5 条件 evaluation を計算 + upsert
+    eval_per_ticker: dict[str, int] = {}
+    if not skip_eval:
+        for ticker in tickers:
+            try:
+                count = await compute_evaluation_for_ticker(ticker)
+                eval_per_ticker[ticker] = count
+            except Exception as e:
+                print(f"[admin:refresh] evaluation failed for {ticker}: {e}")
+                eval_per_ticker[ticker] = 0
+
+    return {
+        "tickers_processed": len(tickers),
+        "history_total_rows": sum(history_per_ticker.values()),
+        "evaluation_total_rows": sum(eval_per_ticker.values()),
+        "history_per_ticker": history_per_ticker,
+        "evaluation_per_ticker": eval_per_ticker,
+        "skip_evaluation": skip_eval,
+    }
 
 
 @app.post("/api/insights/refresh/{ticker}")
