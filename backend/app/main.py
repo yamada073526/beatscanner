@@ -2954,6 +2954,263 @@ async def compute_evaluation_for_ticker(ticker: str) -> int:
         return 0
 
 
+# ============================================================================
+# Phase 1 Backtest: Event-based simulation engine (Day 3、 2026-05-16)
+#
+# 各 all_passed=true イベントを 1 trade として扱い、
+#   buy at evaluation_date close → hold 90 日 → sell
+# で per-trade return を計算。 SPY benchmark と比較。
+#
+# 4 体合議 (Marketer) 推奨 LP 文言「5 条件 PASS、 1 銘柄平均 +X%」 に直結。
+# 複雑な portfolio rebalance simulation は Phase 2 で。
+#
+# memory anchor: project_backtest_phase1_design.md
+# ============================================================================
+
+def _find_close_on_or_after(close_map: dict, target_date: str) -> float | None:
+    """close_map (date -> price) から target_date 以降の最初の取引日 close を取得。
+
+    休日 / 週末で target_date 当日に価格が無い場合、 翌営業日 → ... と探索。
+    最大 10 営業日まで遡って探す (祝日 + 連休程度を許容)。
+    """
+    if not close_map:
+        return None
+    from datetime import date as _d_cl, timedelta as _td_cl
+    try:
+        d = _d_cl.fromisoformat(target_date[:10])
+    except Exception:
+        return None
+    for i in range(10):
+        key = (d + _td_cl(days=i)).isoformat()
+        v = close_map.get(key)
+        if v is not None:
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+async def _fetch_close_map_for_backtest(
+    ticker: str,
+    api_key: str | None,
+    from_iso: str,
+    to_iso: str,
+) -> dict[str, float]:
+    """単一 ticker の historical close map を取得 (FMP /stable/historical-price-eod/full).
+
+    返却: { "YYYY-MM-DD": close, ... }。 adjClose を優先 (split-adjusted)。
+    既存 _PORTFOLIO_HISTORY_CACHE を再利用。
+    """
+    cache_key = f"backtest::{ticker.upper()}::{from_iso}::{to_iso}"
+    now_m = _time.monotonic()
+    cached = _PORTFOLIO_HISTORY_CACHE.get(cache_key)
+    if cached and now_m - cached["ts"] < _PORTFOLIO_HISTORY_TTL:
+        return cached["data"]
+    try:
+        client = FMPClient(api_key=api_key)
+        rows = await client.historical_price(ticker.upper(), from_iso, to_iso) or []
+    except Exception as e:
+        print(f"[backtest] historical_price failed for {ticker}: {e}")
+        return {}
+    cmap: dict[str, float] = {}
+    for r in (rows or []):
+        if not isinstance(r, dict):
+            continue
+        d = r.get("date")
+        if not d:
+            continue
+        d_iso = str(d)[:10]
+        v = r.get("adjClose") if r.get("adjClose") is not None else r.get("close")
+        try:
+            if v is not None:
+                cmap[d_iso] = float(v)
+        except (TypeError, ValueError):
+            continue
+    _PORTFOLIO_HISTORY_CACHE[cache_key] = {"data": cmap, "ts": now_m}
+    return cmap
+
+
+async def _run_jijima5_backtest(period: str = "5y", hold_days: int = 90) -> dict:
+    """じっちゃま 5 条件のバックテスト (event-based simulation)。
+
+    1. earnings_evaluation から all_passed=true & period 内のイベント取得
+    2. 各イベントについて buy at evaluation_date close → hold N days → sell
+    3. SPY benchmark と比較
+    4. KPI 集計 (avg return / win rate / cum return / alpha)
+    """
+    from datetime import date as _d_bt, timedelta as _td_bt
+
+    period_years = {"1y": 1, "3y": 3, "5y": 5}.get(period.lower(), 5)
+    end_date = _d_bt.today()
+    start_date = end_date - _td_bt(days=365 * period_years)
+
+    sb = _get_supabase_service()
+    if sb is None:
+        return {"error": "Supabase service not configured"}
+
+    # 1. PASS イベント取得
+    try:
+        resp = (
+            sb.table("earnings_evaluation")
+            .select("ticker, evaluation_date")
+            .gte("evaluation_date", start_date.isoformat())
+            .lte("evaluation_date", end_date.isoformat())
+            .eq("all_passed", True)
+            .order("evaluation_date", desc=False)
+            .execute()
+        )
+        pass_events = resp.data or []
+    except Exception as e:
+        return {"error": f"earnings_evaluation fetch failed: {e}"}
+
+    if not pass_events:
+        return {
+            "strategy": "jijima5",
+            "period": period,
+            "from_date": start_date.isoformat(),
+            "to_date": end_date.isoformat(),
+            "hold_days": hold_days,
+            "sample_size": {"total_events": 0, "completed_trades": 0, "unique_tickers": 0},
+            "kpis": None,
+            "trades": [],
+            "message": "PASS イベントが見つかりませんでした",
+        }
+
+    # 2. ticker 別 close map を fetch (SPY benchmark も含む)
+    api_key = os.environ.get("FMP_API_KEY", "")
+    if not api_key:
+        return {"error": "FMP_API_KEY not configured"}
+
+    fetch_from = (start_date - _td_bt(days=10)).isoformat()
+    fetch_to = (end_date + _td_bt(days=hold_days + 30)).isoformat()
+    unique_tickers = sorted({e["ticker"] for e in pass_events})
+    # SPY も同時 fetch
+    fetch_targets = unique_tickers + ["SPY"]
+    close_maps: dict[str, dict[str, float]] = {}
+    for tk in fetch_targets:
+        close_maps[tk] = await _fetch_close_map_for_backtest(tk, api_key, fetch_from, fetch_to)
+
+    spy_map = close_maps.get("SPY", {})
+
+    # 3. 各イベントを trade に変換
+    trades: list[dict] = []
+    for event in pass_events:
+        ticker = event["ticker"]
+        eval_date = str(event["evaluation_date"])[:10]
+        cmap = close_maps.get(ticker, {})
+        buy_price = _find_close_on_or_after(cmap, eval_date)
+        if buy_price is None:
+            continue
+        try:
+            sell_target = (_d_bt.fromisoformat(eval_date) + _td_bt(days=hold_days)).isoformat()
+        except Exception:
+            continue
+        sell_price = _find_close_on_or_after(cmap, sell_target)
+        if sell_price is None:
+            # 未だ売却日に達していない (recent event) → skip
+            continue
+        trade_ret = (sell_price / buy_price) - 1.0
+
+        spy_buy = _find_close_on_or_after(spy_map, eval_date)
+        spy_sell = _find_close_on_or_after(spy_map, sell_target)
+        spy_ret = ((spy_sell / spy_buy) - 1.0) if (spy_buy and spy_sell) else None
+        alpha = (trade_ret - spy_ret) if spy_ret is not None else None
+
+        trades.append({
+            "ticker": ticker,
+            "buy_date": eval_date,
+            "sell_date": sell_target,
+            "buy_price": round(buy_price, 4),
+            "sell_price": round(sell_price, 4),
+            "return_pct": round(trade_ret * 100, 2),
+            "spy_return_pct": round(spy_ret * 100, 2) if spy_ret is not None else None,
+            "alpha_pct": round(alpha * 100, 2) if alpha is not None else None,
+        })
+
+    if not trades:
+        return {
+            "strategy": "jijima5",
+            "period": period,
+            "from_date": start_date.isoformat(),
+            "to_date": end_date.isoformat(),
+            "hold_days": hold_days,
+            "sample_size": {
+                "total_events": len(pass_events),
+                "completed_trades": 0,
+                "unique_tickers": len(unique_tickers),
+            },
+            "kpis": None,
+            "trades": [],
+            "message": "trade が成立しませんでした (close 価格取得失敗 or 売却日未到達)",
+        }
+
+    # 4. KPI 集計
+    returns = [t["return_pct"] for t in trades]
+    spy_returns = [t["spy_return_pct"] for t in trades if t["spy_return_pct"] is not None]
+    alphas = [t["alpha_pct"] for t in trades if t["alpha_pct"] is not None]
+
+    avg_return = sum(returns) / len(returns)
+    avg_spy = sum(spy_returns) / len(spy_returns) if spy_returns else None
+    avg_alpha = sum(alphas) / len(alphas) if alphas else None
+    win_rate = 100.0 * sum(1 for r in returns if r > 0) / len(returns)
+    win_vs_spy = (100.0 * sum(1 for a in alphas if a > 0) / len(alphas)) if alphas else None
+
+    # 累積 (各 trade 同額の複利): $10K を全 trade に分散投資した場合の終値
+    compound = 1.0
+    spy_compound = 1.0
+    for t in trades:
+        compound *= 1.0 + (t["return_pct"] / 100.0)
+        if t["spy_return_pct"] is not None:
+            spy_compound *= 1.0 + (t["spy_return_pct"] / 100.0)
+    cum_return_pct = (compound - 1.0) * 100.0
+    spy_cum_pct = (spy_compound - 1.0) * 100.0
+
+    return {
+        "strategy": "jijima5",
+        "period": period,
+        "from_date": start_date.isoformat(),
+        "to_date": end_date.isoformat(),
+        "hold_days": hold_days,
+        "sample_size": {
+            "total_events": len(pass_events),
+            "completed_trades": len(trades),
+            "unique_tickers": len(set(t["ticker"] for t in trades)),
+        },
+        "kpis": {
+            "avg_return_pct": round(avg_return, 2),
+            "avg_spy_return_pct": round(avg_spy, 2) if avg_spy is not None else None,
+            "avg_alpha_pct": round(avg_alpha, 2) if avg_alpha is not None else None,
+            "win_rate_pct": round(win_rate, 1),
+            "win_vs_spy_rate_pct": round(win_vs_spy, 1) if win_vs_spy is not None else None,
+            "cum_return_pct": round(cum_return_pct, 2),
+            "spy_cum_return_pct": round(spy_cum_pct, 2),
+            "alpha_cum_pct": round(cum_return_pct - spy_cum_pct, 2),
+        },
+        "trades": trades,
+        "disclaimer": "過去実績は将来を保証しません。 本機能は教育目的、 投資勧誘ではありません。",
+    }
+
+
+@app.get("/api/backtest")
+async def get_backtest(strategy: str = "jijima5", period: str = "5y", hold_days: int = 90) -> dict:
+    """じっちゃま 5 条件のバックテスト結果を返却。
+
+    Query params:
+      strategy: "jijima5" (現状唯一)
+      period:   "1y" | "3y" | "5y"
+      hold_days: 1-365 (default 90 = 約 3 ヶ月)
+    """
+    if strategy != "jijima5":
+        raise HTTPException(status_code=400, detail="strategy must be 'jijima5'")
+    if period.lower() not in ("1y", "3y", "5y"):
+        raise HTTPException(status_code=400, detail="period must be 1y / 3y / 5y")
+    if not (1 <= hold_days <= 365):
+        raise HTTPException(status_code=400, detail="hold_days must be 1-365")
+
+    return await _run_jijima5_backtest(period=period.lower(), hold_days=hold_days)
+
+
 @app.get("/api/historical-dividends/{ticker}")
 async def historical_dividends(
     ticker: str,
