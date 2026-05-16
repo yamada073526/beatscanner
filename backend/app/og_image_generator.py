@@ -537,9 +537,11 @@ def generate_backtest_og_image(
     # 「5 年累積 (月次リバランス) / S&P 500 を +X.XX ポイント上回る」
     if avg_alpha_pct is not None:
         alpha_sign = "+" if avg_alpha_pct >= 0 else ""
-        caption = f"5 年累積・月次リバランス　・　S&P 500 を {alpha_sign}{avg_alpha_pct:.2f} ポイント上回る"
+        # user dogfood (handover v73 終盤、 2026-05-16): 3 セグメント均等 wide 区切りに統一
+        # (旧版は compound「5 年累積・月次リバランス」 が tight + 次の「・」 wide で視覚的にちぐはぐ)
+        caption = f"5 年累積　・　月次リバランス　・　S&P 500 を {alpha_sign}{avg_alpha_pct:.2f} ポイント上回る"
     else:
-        caption = "5 年累積・月次リバランス"
+        caption = "5 年累積　・　月次リバランス"
     draw.text(
         (cx, 520),
         caption,
@@ -793,8 +795,9 @@ def generate_backtest_methodology_pdf(
     # SPY 比較 (短文)
     if avg_alpha_pct is not None and avg_spy_return_pct is not None:
         alpha_sign = "+" if avg_alpha_pct >= 0 else ""
-        # Phase 2.2 full (handover v73 §2-A): portfolio cum_return ベースに切替
-        meta = f"5 年累積・月次リバランス　・　S&P 500 を {alpha_sign}{avg_alpha_pct:.2f} ポイント上回る"
+        # Phase 2.2 full (handover v73 §2-A): portfolio cum_return ベース
+        # user dogfood (handover v73 終盤): 3 セグメント均等 wide 区切りに統一
+        meta = f"5 年累積　・　月次リバランス　・　S&P 500 を {alpha_sign}{avg_alpha_pct:.2f} ポイント上回る"
         draw.text((cx, 700), meta, font=font_meta, fill=_TEXT_PRIMARY, anchor="mm")
 
     # === 3 KPI tile (Y=790〜910) — icon-style、 余白拡大 ===
