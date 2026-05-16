@@ -25,6 +25,8 @@ const JudgmentTabV2 = lazy(() => import('./features/judgment/index.js').then((m)
 const Workspace = lazy(() =>
   import('./features/workspace/index.js').then((m) => ({ default: m.Workspace }))
 );
+// v71 Phase 1 Day 5: ファンダメンタル 5 条件 実績証明 (`?layout=backtest` で起動)
+const BacktestPage = lazy(() => import('./components/BacktestPage.jsx'));
 import { withViewTransition } from './utils/viewTransition.js';
 import { CmdPalette, useCmdPalette } from './features/cmd-palette/index.js';
 import { useUpgradeModal } from './lib/useUpgradeModal.js';
@@ -845,16 +847,28 @@ export default function App() {
   // v62 WS-2/3.5/5: URL `?layout` flag で workspace ↔ SPA を切替.
   //   - `?layout=workspace`  → workspace mode
   //   - `?layout=classic`    → SPA mode (明示的、cutover 後に default 反転する想定)
+  //   - `?layout=backtest`   → ファンダメンタル 5 条件 実績証明 (v71 Phase 1 Day 5)
   //   - flag 無し            → SPA mode (現状の default)
   // WS-3.5: mobile (< 768px) では 3 ペインが破綻するため強制 SPA fallback
   // (マーケター指摘「mobile は /classic 強制、launch は PC 推奨機能と訴求」).
-  const urlWantsWorkspace = (() => {
-    if (typeof window === 'undefined') return false;
+  const urlLayout = (() => {
+    if (typeof window === 'undefined') return null;
     try {
-      return new URLSearchParams(window.location.search).get('layout') === 'workspace';
-    } catch { return false; }
+      return new URLSearchParams(window.location.search).get('layout');
+    } catch { return null; }
   })();
+  const urlWantsWorkspace = urlLayout === 'workspace';
+  const urlWantsBacktest = urlLayout === 'backtest';
   const useWorkspaceLayout = urlWantsWorkspace && !isMobileForWorkspace;
+
+  // v71 Phase 1 Day 5: `?layout=backtest` は最優先で full screen 表示
+  if (urlWantsBacktest) {
+    return (
+      <Suspense fallback={<div style={{ padding: 48, color: 'var(--text-muted)' }}>読み込み中...</div>}>
+        <BacktestPage />
+      </Suspense>
+    );
+  }
 
   // mobile + ?layout=workspace の場合は URL から flag を削除して SPA を表示
   // (リロードや bookmark 共有でも mobile では SPA 強制になる)
