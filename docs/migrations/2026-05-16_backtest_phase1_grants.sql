@@ -17,9 +17,15 @@ grant select on public.backtest_universe   to authenticated, anon;
 grant select on public.backtest_result     to authenticated, anon;
 
 -- write は service_role のみ (Railway nightly batch が RLS bypass で upsert)
--- service_role は default で全権限を持つので追加 GRANT 不要
+-- v71 round 9 (2026-05-16) 修正: service_role は default で全権限ではなく、
+-- 新規テーブルには明示 GRANT が必要 (Supabase の挙動)。 missing GRANT で
+-- 「permission denied for table earnings_history」 (code 42501) エラー発生。
+grant select, insert, update, delete on public.earnings_history    to service_role;
+grant select, insert, update, delete on public.earnings_evaluation to service_role;
+grant select, insert, update, delete on public.backtest_universe   to service_role;
+grant select, insert, update, delete on public.backtest_result     to service_role;
 
-grant usage on schema public to authenticated, anon;
+grant usage on schema public to authenticated, anon, service_role;
 
 -- 動作確認:
 --   select table_name, grantee, privilege_type
