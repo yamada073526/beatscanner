@@ -9865,26 +9865,37 @@ async def admin_refresh_earnings_history(
     if sb is None:
         raise HTTPException(status_code=503, detail="Supabase service not configured")
 
-    # Stage 1: earnings_history を順次 upsert (FMP rate limit 配慮で serial)
-    history_per_ticker: dict[str, int] = {}
-    for ticker in tickers:
-        try:
-            count = await refresh_earnings_history_for_ticker(ticker, api_key)
-            history_per_ticker[ticker] = count
-        except Exception as e:
-            print(f"[admin:refresh] history failed for {ticker}: {e}")
-            history_per_ticker[ticker] = 0
+    # Stage 1: earnings_history を並列 upsert
+    # 元 serial 実装 (50 tickers × ~1.5s = 75 秒) → Railway gateway timeout 51 秒に hit。
+    # Semaphore(8) で FMP rate limit (300 req/min = 5 req/s) を超えない範囲で並列化。
+    # 50 tickers × 2 endpoints = 100 req → ~15-20 秒で完了見込み。
+    sem_hist = asyncio.Semaphore(8)
+    async def _refresh_one(t: str) -> tuple[str, int]:
+        async with sem_hist:
+            try:
+                cnt = await refresh_earnings_history_for_ticker(t, api_key)
+                return (t, cnt)
+            except Exception as e:
+                print(f"[admin:refresh] history failed for {t}: {e}")
+                return (t, 0)
 
-    # Stage 2: 5 条件 evaluation を計算 + upsert
+    history_results = await asyncio.gather(*[_refresh_one(t) for t in tickers])
+    history_per_ticker: dict[str, int] = dict(history_results)
+
+    # Stage 2: 5 条件 evaluation を並列計算 + upsert
     eval_per_ticker: dict[str, int] = {}
     if not skip_eval:
-        for ticker in tickers:
-            try:
-                count = await compute_evaluation_for_ticker(ticker)
-                eval_per_ticker[ticker] = count
-            except Exception as e:
-                print(f"[admin:refresh] evaluation failed for {ticker}: {e}")
-                eval_per_ticker[ticker] = 0
+        sem_eval = asyncio.Semaphore(8)
+        async def _eval_one(t: str) -> tuple[str, int]:
+            async with sem_eval:
+                try:
+                    cnt = await compute_evaluation_for_ticker(t)
+                    return (t, cnt)
+                except Exception as e:
+                    print(f"[admin:refresh] evaluation failed for {t}: {e}")
+                    return (t, 0)
+        eval_results = await asyncio.gather(*[_eval_one(t) for t in tickers])
+        eval_per_ticker = dict(eval_results)
 
     return {
         "tickers_processed": len(tickers),
