@@ -38,7 +38,11 @@ const VALID_SIZES = ['xs', 'sm', 'md'];
 //   dashed border + Plus icon (children あり=label / なし=icon-only circular)。
 //   AccountSwitcher 「+ 口座を追加」 + WatchlistAddButton trigger を同 variant で吸収。
 const VALID_VARIANTS = ['segmented', 'filter', 'display', 'switcher', 'add'];
-const VALID_TONES = ['muted', 'accent', 'gain', 'loss', 'warning'];
+// handover v79 (2026-05-17、 UI/UX + マーケ subagent verdict): 'elite' tone を新設。
+//   gold #d4af37 (ALLOWED-HEX 登録済、 handover v69 保有銘柄ゴールド) で hue 流用。
+//   RS percentile ≥ 95 / ≤ 5 等の extreme value で「希少性視認」 を演出 (5 原則 #1 #3 整合)。
+//   投資業界色ルール (緑/赤/amber/cyan) と重複しない hue で「別の意味」 を 1 秒識別。
+const VALID_TONES = ['muted', 'accent', 'gain', 'loss', 'warning', 'elite'];
 // round 9 (6 体合議): rollup / item / action の階層を CSS hook で表現するための data 属性。
 // JSX 側で role を宣言 → CSS は `[data-role="rollup"]` で font-weight 強化等。
 // Chip prop の意味階層を変えず、ChipGroup.Separator と組合せて「合計 | 個別」を視覚分離。

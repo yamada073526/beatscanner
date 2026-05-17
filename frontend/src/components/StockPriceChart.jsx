@@ -294,15 +294,23 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
     const v = rsData.rs_vs_spy_pct;
     return typeof v === 'number' && Number.isFinite(v);
   }, [rsData]);
-  // RS tone: 上位 (percentile ≥ 75) = gain / 下位 (≤ 25) = loss / 中位 = muted
+  // RS tone: extreme (percentile ≥ 95 / ≤ 5) = elite (gold) / 上位 (≥75) = gain / 下位 (≤25) = loss / 中位 = muted
+  // handover v79 (2026-05-17、 UI/UX + マーケ 2 体 verdict): elite tone で希少性視覚化
+  const rsIsElite = useMemo(() => {
+    if (!hasRs) return false;
+    const pct = rsData.self_percentile;
+    if (typeof pct !== 'number') return false;
+    return pct >= 95 || pct <= 5;
+  }, [hasRs, rsData]);
   const rsTone = useMemo(() => {
     if (!hasRs) return 'muted';
     const pct = rsData.self_percentile;
     if (typeof pct !== 'number') return 'muted';
+    if (rsIsElite) return 'elite';
     if (pct >= 75) return 'gain';
     if (pct <= 25) return 'loss';
     return 'muted';
-  }, [hasRs, rsData]);
+  }, [hasRs, rsData, rsIsElite]);
 
   // Session 3: DMA Cross (golden cross 直近 60 日内)
   const dmaCross = technical?.patterns?.dma_cross || null;
@@ -311,6 +319,11 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
     if (dmaCross.kind !== 'golden') return false;
     return typeof dmaCross.days_ago === 'number' && Number.isFinite(dmaCross.days_ago);
   }, [dmaCross]);
+  // handover v79: fresh signal hook = ≤ 14 日内のクロスは gain tone 濃化 (data-fresh 属性)
+  const dmaIsFresh = useMemo(() => {
+    if (!hasDmaCross) return false;
+    return dmaCross.days_ago <= 14;
+  }, [hasDmaCross, dmaCross]);
 
   // Pro tier gate (handover v78 Session 4): Supabase subscription.tier === 'premium' で本判定。
   // 6 体合議 verdict (Session 3 → 4): Cup-Handle は Premium tier (¥1,800/月) 限定、 DMA/RS は Free 表示。
@@ -402,18 +415,21 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
               ☕ {cupChipLabel}{cupRequiresPro ? ' 🔒' : ''}
             </Chip>
           )}
-          {/* Session 3: DMA Cross chip (golden cross 直近 60 日内検出時のみ、 Free 表示) */}
+          {/* Session 3: DMA Cross chip (golden cross 直近 60 日内検出時のみ、 Free 表示)
+              handover v79: fresh signal (≤14 日) なら data-fresh で tone gain 濃化 */}
           {hasDmaCross && (
             <Chip
               size="xs"
               variant="display"
               tone="gain"
+              data-fresh={dmaIsFresh ? 'true' : undefined}
               title={`50DMA × 200DMA ゴールデンクロス成立 (${dmaCross.cross_date}、 ${dmaCross.days_ago} 日前)`}
             >
-              ✦ ゴールデンクロス ({dmaCross.days_ago}日前)
+              ✦ ゴールデンクロス {dmaCross.days_ago}日前
             </Chip>
           )}
-          {/* Session 3: RS chip (vs SPY 6 ヶ月 + 自己 252 日 percentile、 Free 表示) */}
+          {/* Session 3: RS chip (vs SPY 6 ヶ月 + 自己 252 日 percentile、 Free 表示)
+              handover v79: extreme value (percentile ≥95 / ≤5) は elite tone (gold) + percentile 先頭 strong */}
           {hasRs && (
             <Chip
               size="xs"
@@ -421,11 +437,22 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
               tone={rsTone}
               title={`相対強度 (Relative Strength): 過去 6 ヶ月の対 SPY リターン差${rsData.ranking_label ? `、 自己 1 年比 ${rsData.ranking_label}` : ''}`}
             >
-              RS {rsData.rs_vs_spy_pct > 0 ? '+' : ''}{rsData.rs_vs_spy_pct}%
-              {rsData.ranking_label && (
-                <span style={{ marginLeft: 4, opacity: 0.75, fontSize: '0.85em' }}>
-                  {rsData.ranking_label}
-                </span>
+              {rsIsElite && rsData.ranking_label ? (
+                <>
+                  <strong>{rsData.ranking_label}</strong>
+                  <span style={{ marginLeft: 4, opacity: 0.75, fontSize: '0.9em' }}>
+                    · RS {rsData.rs_vs_spy_pct > 0 ? '+' : ''}{rsData.rs_vs_spy_pct}%
+                  </span>
+                </>
+              ) : (
+                <>
+                  RS {rsData.rs_vs_spy_pct > 0 ? '+' : ''}{rsData.rs_vs_spy_pct}%
+                  {rsData.ranking_label && (
+                    <span style={{ marginLeft: 4, opacity: 0.75, fontSize: '0.85em' }}>
+                      {rsData.ranking_label}
+                    </span>
+                  )}
+                </>
               )}
             </Chip>
           )}
