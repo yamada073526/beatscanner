@@ -12,8 +12,49 @@ DNS 設定 (SPF/DKIM/DMARC) は Resend Dashboard で signals@beatscanner.app を
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import os
 from typing import Iterable
+
+
+# RFC 8058 List-Unsubscribe 用 HMAC token (handover v80 Phase B §9-6)
+# CRON_SECRET を流用 (新 env var 追加不要、 secret 未設定環境では全 token 拒否で fail-safe)
+_UNSUB_SECRET_ENV = "CRON_SECRET"
+_APP_BASE_URL_DEFAULT = "https://beatscanner-production.up.railway.app"
+
+
+def _unsub_secret() -> bytes:
+    """HMAC 用 secret bytes。 env 未設定なら空 (= verify 常に false)。"""
+    secret = os.environ.get(_UNSUB_SECRET_ENV, "").encode("utf-8")
+    return secret
+
+
+def make_unsubscribe_token(user_id: str) -> str:
+    """HMAC-SHA256(CRON_SECRET, user_id) → urlsafe base64 (no padding)。"""
+    secret = _unsub_secret()
+    if not secret or not user_id:
+        return ""
+    mac = hmac.new(secret, user_id.encode("utf-8"), hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(mac).decode("ascii").rstrip("=")
+
+
+def verify_unsubscribe_token(user_id: str, token: str) -> bool:
+    """token が make_unsubscribe_token(user_id) と一致するか constant-time 比較。"""
+    expected = make_unsubscribe_token(user_id)
+    if not expected or not token:
+        return False
+    return hmac.compare_digest(expected, token)
+
+
+def _unsubscribe_url(user_id: str) -> str | None:
+    """List-Unsubscribe header に入れる URL。 user_id 不足 or secret 未設定なら None。"""
+    token = make_unsubscribe_token(user_id)
+    if not token:
+        return None
+    base = os.environ.get("APP_BASE_URL", _APP_BASE_URL_DEFAULT).rstrip("/")
+    return f"{base}/api/unsubscribe?user_id={user_id}&token={token}"
 
 
 def _get_resend_client():
@@ -148,8 +189,11 @@ def _build_digest_text(transitions: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def send_cup_handle_digest(to_email: str, transitions: list[dict]) -> dict:
+def send_cup_handle_digest(to_email: str, transitions: list[dict], user_id: str | None = None) -> dict:
     """1 user 分の digest メール (Cup-Handle transition list) を送信。
+
+    user_id があれば RFC 8058 List-Unsubscribe / List-Unsubscribe-Post header を付与
+    (Gmail one-click 対応、 deliverability 向上)。 token 不正 / secret 未設定なら header 省略。
 
     Returns: {"status": "sent"|"failed"|"skipped", "detail": str, "id": str|None}
     """
@@ -175,6 +219,12 @@ def send_cup_handle_digest(to_email: str, transitions: list[dict]) -> dict:
             "html": html,
             "text": text,
         }
+        unsub_url = _unsubscribe_url(user_id) if user_id else None
+        if unsub_url:
+            params["headers"] = {
+                "List-Unsubscribe": f"<{unsub_url}>",
+                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            }
         res = client.Emails.send(params)
         msg_id = res.get("id") if isinstance(res, dict) else None
         return {"status": "sent", "detail": "ok", "id": msg_id}

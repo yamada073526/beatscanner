@@ -11890,7 +11890,7 @@ async def cron_cup_notify(
             result = {"status": "skipped", "detail": "dry_run", "id": None}
         else:
             result = await asyncio.to_thread(
-                send_cup_handle_digest, email_address, user_transitions
+                send_cup_handle_digest, email_address, user_transitions, user_id
             )
 
         status_label = result.get("status", "failed")
@@ -11931,6 +11931,65 @@ async def cron_cup_notify(
 
 # Cup-Handle Phase 2.3 cron: nightly cup-notify (cup-scan の 5 分後に発火)
 # scan 完了後の transition を翌朝 JST 8:05 に digest mail 送信
+
+
+# ============================================================================
+# Phase B §9-6: RFC 8058 List-Unsubscribe endpoint (Gmail one-click 対応)
+# (2026-05-17、 handover v80 Phase B Tier 1 §9-6)
+#
+# HMAC-SHA256(CRON_SECRET, user_id) で正当性検証。 token 不一致は 400。
+# 成功時は user_notification_preferences.email_enabled = false を set。
+# POST: Gmail / Apple Mail / Outlook の one-click flow が叩く (RFC 8058)
+# GET:  人間が browser でリンクを開いた場合のフォールバック (簡易 HTML)
+# ============================================================================
+
+
+def _execute_unsubscribe(user_id: str, token: str) -> None:
+    """token 検証 + email_enabled=false set。 失敗時は HTTPException raise。"""
+    from .mailer import verify_unsubscribe_token
+
+    if not user_id or not token:
+        raise HTTPException(status_code=400, detail="missing user_id or token")
+    if not verify_unsubscribe_token(user_id, token):
+        raise HTTPException(status_code=400, detail="invalid token")
+
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    try:
+        sb.table("user_notification_preferences").update({"email_enabled": False}).eq(
+            "user_id", user_id
+        ).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"unsubscribe failed: {e}")
+
+
+@app.post("/api/unsubscribe")
+async def api_unsubscribe_post(user_id: str = Query(...), token: str = Query(...)):
+    """RFC 8058 one-click unsubscribe (Gmail / Apple Mail / Outlook が叩く)。"""
+    _execute_unsubscribe(user_id, token)
+    return {"status": "unsubscribed"}
+
+
+_UNSUBSCRIBE_GET_HTML = """<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="utf-8"><title>配信停止完了 - BeatScanner</title></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;text-align:center;padding:64px 24px;color:#222;background:#f7f7f8;">
+<div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:40px 32px;">
+<h1 style="font-size:22px;margin:0 0 12px;">配信停止しました</h1>
+<p style="color:#666;font-size:14px;line-height:1.7;margin:0 0 20px;">今後 BeatScanner からのメール通知は届きません。</p>
+<p style="color:#888;font-size:12px;line-height:1.7;margin:0;">再開するには <a href="https://beatscanner-production.up.railway.app/?tab=notifications" style="color:#0a84ff;">通知設定</a> から ON にしてください。</p>
+</div>
+</body>
+</html>"""
+
+
+@app.get("/api/unsubscribe", response_class=HTMLResponse)
+async def api_unsubscribe_get(user_id: str = Query(...), token: str = Query(...)):
+    """人間が browser で配信停止リンクを直接開いた場合のフォールバック。"""
+    _execute_unsubscribe(user_id, token)
+    return HTMLResponse(content=_UNSUBSCRIBE_GET_HTML)
 
 
 # ============================================================================
