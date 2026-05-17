@@ -1,8 +1,5 @@
-import { getFmpKey } from './lib/fmpKey.js';
-
 function fmpHeaders() {
-  const key = getFmpKey();
-  return key ? { 'X-FMP-Api-Key': key } : {};
+  return {};
 }
 
 export async function analyze(ticker) {

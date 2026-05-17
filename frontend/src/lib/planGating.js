@@ -1,25 +1,19 @@
 /**
- * Plan detection + Feature gating (v60: Pro + Premium 2 段階課金対応)
+ * Plan detection + Feature gating (Pro + Premium 2 段階課金)
  *
- * 旧仕様 (BYOK only):
- *   - FMP API key holders = Pro
- *   - no-key demo users = Free
- *
- * 新仕様 (v60):
+ * Plans:
  *   - free       : 無料 (3 銘柄/日 + 基本機能のみ)
  *   - pro        : ¥980/月 (スクリーナーカスタム / CSV / アラート / Movers Top 5 全表示 / LINE 朝 6:00)
  *   - premium    : ¥1,800/月 (Pro + Insider/13F + Claude Opus 月 20 銘柄 + LINE 5:30 + Gold UI 等)
  *
  * 課金状態は subscriptions テーブルの tier カラム (free/pro/premium) で判定。
- * BYOK (FMP key 持ち) ユーザーは互換性のため pro 扱い (旧 isPro と同じ)。
  *
  * 利用例:
  *   import { PLAN, getPlan, canUse } from './lib/planGating.js';
- *   const plan = getPlan(subscription, hasFmpKey());  // 'free' | 'pro' | 'premium'
+ *   const plan = getPlan(subscription);  // 'free' | 'pro' | 'premium'
  *   if (canUse('insider_trades', plan)) { ... }
  *   if (canUse('claude_opus_report', plan)) { ... }
  */
-import { hasFmpKey } from './fmpKey.js';
 
 /** プラン enum (string literal) */
 export const PLAN = Object.freeze({
@@ -94,21 +88,17 @@ const _PLAN_RANK = Object.freeze({
 });
 
 /**
- * Subscription オブジェクトとレガシー BYOK フラグからユーザーの現在プランを判定。
+ * Subscription オブジェクトからユーザーの現在プランを判定。
  * Subscription は { tier: 'pro'|'premium', status: 'active'|... } 形式 (Supabase row)。
  *
  * @param {object|null} subscription - Supabase subscriptions テーブルの行
- * @param {boolean} byokKey - FMP API key 保有フラグ (レガシー BYOK 互換)
  * @returns {'free'|'pro'|'premium'}
  */
-export function getPlan(subscription, byokKey = false) {
-  // Stripe sub が active で tier が premium / pro なら最優先
+export function getPlan(subscription) {
   if (subscription && (subscription.status === 'active' || subscription.status === 'trialing')) {
     if (subscription.tier === PLAN.PREMIUM) return PLAN.PREMIUM;
     if (subscription.tier === PLAN.PRO) return PLAN.PRO;
   }
-  // レガシー BYOK は pro 扱い (Stripe 移行前の早期支援者)
-  if (byokKey) return PLAN.PRO;
   return PLAN.FREE;
 }
 
@@ -137,13 +127,4 @@ export function canUse(feature, plan) {
  */
 export function requiredPlan(feature) {
   return FEATURE_GATES[feature] ?? PLAN.FREE;
-}
-
-// ─── 旧 API (互換性、削除予定) ──────────────────────────────────────────
-/**
- * @deprecated 新規コードは getPlan(subscription, byokKey) を使用。
- *   FMP API key 保有のみで Pro 判定。Premium 判定は不可能。
- */
-export function isPro() {
-  return hasFmpKey();
 }

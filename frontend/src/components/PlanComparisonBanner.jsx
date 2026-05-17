@@ -2,17 +2,13 @@
  * PlanComparisonBanner — デモ分析後に表示されるプラン比較バナー。
  *
  * v40+: LP の PricingSection と同じ 2 段構造 (Free / Pro ¥980) に統一。
- *   - 旧: Free / Pro (FMP APIキー ¥0) / Premium ¥1,980 の 3 段 (Tailwind 白カード)
- *   - 新: Free / Pro ¥980 (Stripe / 7日間無料) の 2 段 (CSS 変数・ダーク対応)
- *   - BYOK (FMP APIキー無料) は脚注で控えめに案内
  *
  * Props:
- *   onOpenSettings  () => void   — APIキー設定モーダルを開く (BYOK 用)
  *   onStartCheckout () => void   — Stripe Checkout を開始 (Pro 用)
  *   user            object | null — ログイン状態 (Pro CTA の挙動制御)
  */
 
-export default function PlanComparisonBanner({ onOpenSettings, onStartCheckout }) {
+export default function PlanComparisonBanner({ onStartCheckout }) {
   // user チェックは親 (App.jsx) 側で処理するため、ここでは単に呼ぶだけ
   return (
     <section style={{
@@ -202,29 +198,6 @@ export default function PlanComparisonBanner({ onOpenSettings, onStartCheckout }
           </button>
         </div>
       </div>
-
-      {/* BYOK 脚注 (FMP APIキーで無料利用可) — 上級者向けに控えめに案内 */}
-      <p style={{
-        marginTop: 16,
-        textAlign: 'center',
-        fontSize: 11,
-        color: 'var(--text-muted)',
-        lineHeight: 1.6,
-      }}>
-        💡 上級者向け: <button
-          type="button"
-          onClick={onOpenSettings}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'rgb(56, 189, 248)',
-            textDecoration: 'underline',
-            cursor: 'pointer',
-            fontSize: 11,
-            padding: 0,
-          }}
-        >FMP API キー (無料)</button>を設定すれば全機能を無料で利用できます
-      </p>
     </section>
   );
 }

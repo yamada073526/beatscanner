@@ -5,7 +5,6 @@
  *   isOpen           boolean
  *   onClose          () => void
  *   featureName      string  e.g. "AI詳細レポート"
- *   onOpenSettings   () => void  — opens API key settings
  *   onCheckout       (plan: string) => void  — starts Stripe Checkout
  *   checkoutLoading  boolean
  *   user             Supabase user object | null
@@ -58,7 +57,7 @@ function FeatureRow({ label, val, active }) {
   );
 }
 
-export default function UpgradeModal({ isOpen, onClose, featureName, onOpenSettings, onCheckout, checkoutLoading, user }) {
+export default function UpgradeModal({ isOpen, onClose, featureName, onCheckout, checkoutLoading, user }) {
   if (!isOpen) return null;
 
   return (

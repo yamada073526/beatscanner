@@ -265,7 +265,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
         ⚠️ 現在は S&amp;P500 主要銘柄を対象（順次拡大予定）
       </div>
 
-      {/* Cache notice (BYOK 残骸テキストは削除済) */}
+      {/* Cache notice */}
       {data && (
         <div className="mb-4 rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs text-slate-500">
           結果は15分間キャッシュされます

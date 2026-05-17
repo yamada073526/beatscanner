@@ -15,8 +15,6 @@ import { useTransactions } from './hooks/useTransactions.js';
 import { useEarningsCalendar } from './hooks/useEarningsCalendar.js';
 import { usePortfolioPrices } from './hooks/usePortfolioPrices.js';
 import { initDarkMode, toggleDarkMode, isDark } from './utils/darkMode.js';
-import { hasFmpKey, loadFmpKey } from './lib/fmpKey.js';
-import { isPro } from './lib/planGating.js';
 import { useJudgmentResult } from './features/judgment/state/useJudgmentResult.js';
 // JudgmentTabV2 は ?j2=1 のときだけ評価されるため lazy load
 // (CLAUDE.md「行数 200+ → lazy で初期バンドル軽量化」基準)
@@ -53,9 +51,6 @@ import NewsPanel from './components/NewsPanel.jsx';
 import MarketWidget from './components/MarketWidget.jsx';
 import IRLinksPanel from './components/IRLinksPanel.jsx';
 import InsightsPanel from './components/InsightsPanel.jsx';
-import ApiKeySettings from './components/ApiKeySettings.jsx';
-import ApiKeyBanner from './components/ApiKeyBanner.jsx';
-import ApiKeyModal from './components/ApiKeyModal.jsx';
 import QuickAddHoldingModal from './components/QuickAddHoldingModal.jsx';
 import UpgradeModal from './components/UpgradeModal.jsx';
 import PlanComparisonBanner from './components/PlanComparisonBanner.jsx';
@@ -106,10 +101,8 @@ export default function App() {
   const [hoveredTab, setHoveredTab] = useState(null);
   const [reportStreaming, setReportStreaming] = useState(false);
   const [footerOpen, setFooterOpen] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   // Y-3 Phase A: 通知設定モーダル
   const [showNotifModal, setShowNotifModal] = useState(false);
-  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [showCustomScreener, setShowCustomScreener] = useState(false);
   const [forceCloseSuggestions, setForceCloseSuggestions] = useState(false);
   const [showFiveCondModal, setShowFiveCondModal] = useState(false);
@@ -128,6 +121,15 @@ export default function App() {
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     return () => obs.disconnect();
   }, []);
+
+  // ── Supabase Auth (useJudgmentResult が isProUser を受け取るため先に解決) ──
+  const { user, ready: authReady, signInWithGoogle, signOut } = useAuth();
+  const { subscription, isSubscribed, startCheckout, checkoutLoading, openPortal, refetch: refetchSub } = useSubscription(user);
+  // Stripe subscription のみで Pro 判定。
+  const isProUser = isSubscribed;
+  // handover v78 Session 4 (2026-05-17): Premium tier (¥1,800/月) 派生変数。
+  // Cup-Handle pivot 価格表示 + Phase 2 全銘柄 scan + push 通知 は Premium 限定。
+  const isPremiumUser = isSubscribed && subscription?.tier === 'premium';
 
   // ── Judgment result (Step 4 で hook 抽出) ───────────────────────
   // prefetchedRef / prefetch を hook より先に定義 (hook が prefetch コールバックを必要とするため).
@@ -154,7 +156,7 @@ export default function App() {
     handleLPTickerClick,
   } = useJudgmentResult({
     setActiveTab,
-    setShowApiKeyModal,
+    isProUser,
     setForceCloseSuggestions,
     prefetch,
   });
@@ -210,20 +212,10 @@ export default function App() {
   // - prefers-reduced-motion 完全対応
   // - tab 切替時の自動再観測 (MutationObserver で動的追加カードに追従)
   useArrivalSpotlight([activeTab]);
-  const [hasKey, setHasKey] = useState(hasFmpKey);
   const [toast, setToast] = useState(null);
   const upgrade = useUpgradeModal();
   const searchInputRef = useRef(null);
   // searchIdRef / prefetchedRef / resultCacheRef は useJudgmentResult hook 側 + 上記 prefetch 用 ref で管理 (Step 4)
-
-  // ── Supabase Auth ─────────────────────────────────────────────
-  const { user, ready: authReady, signInWithGoogle, signOut } = useAuth();
-  const { subscription, isSubscribed, startCheckout, checkoutLoading, openPortal, refetch: refetchSub } = useSubscription(user);
-  // FMPキー保有者(BYOK)またはStripeサブスク有効者をProとして扱う
-  const isProUser = isPro() || isSubscribed;
-  // handover v78 Session 4 (2026-05-17): Premium tier (¥1,800/月) 派生変数。
-  // Cup-Handle pivot 価格表示 + Phase 2 全銘柄 scan + push 通知 は Premium 限定。
-  const isPremiumUser = isSubscribed && subscription?.tier === 'premium';
   const syncedRef = useRef(false);
 
   // ── タグ機能 (X-1): Supabase 同期 + 楽観的更新 ─────────────────
@@ -449,25 +441,6 @@ export default function App() {
     })();
   }, [authReady, user]);
 
-  // ── FMP APIキー: Supabase クラウド同期（マウント時 + ログイン状態変化時） ──
-  useEffect(() => {
-    if (!authReady) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        await loadFmpKey(supabase);  // 内部で localStorage にミラー
-      } catch (e) {
-        console.error('[fmpKey sync] failed', e);
-      }
-      if (!cancelled) setHasKey(hasFmpKey());
-    })();
-    return () => { cancelled = true; };
-  }, [authReady, user]);
-
-  function handleKeySaved() {
-    setHasKey(hasFmpKey());
-  }
-
   function showToast(message) {
     const id = Date.now();
     setToast({ message, id });
@@ -505,12 +478,6 @@ export default function App() {
       durationMs: 5000,
     });
     setTimeout(() => setToast((t) => (t?.id === id ? null : t)), 5000);
-  }
-
-  function handleKeyDeleted() {
-    setHasKey(hasFmpKey());
-    setShowSettings(false);
-    showToast('APIキーを削除しました');
   }
 
   // runAnalyze / handleDemoResult / handleLPTickerClick は
@@ -1087,12 +1054,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Onboarding banner — LP 表示中・pro ユーザー・ホーム以外のタブでは隠す */}
-      {!showLP && !isProUser && activeTab === 'home' && (
-        <ApiKeyBanner onOpenSettings={() => setShowSettings(true)} hasKey={hasKey} />
-      )}
-
-      {/* Secondary toolbar — プロトコル / カレンダー / APIキー設定はハンバーガードロワーに集約済み。
+      {/* Secondary toolbar — プロトコル / カレンダーはハンバーガードロワーに集約済み。
           注目銘柄は MoversCard（ホームの「急騰落」）に統合済みのため削除。 */}
 
       {/* Market Widget — LP 表示中は隠す */}
@@ -1249,10 +1211,6 @@ export default function App() {
       {/* Result metadata — visible only when analysis result exists */}
       {result && (
         <div className="space-y-4 mb-2">
-          {/* v62: BYOK 廃止に伴いデモモードバナー削除。
-              旧文言「AAPL/MSFT/NVDA 限定」は実装と矛盾 (demo は任意銘柄 + 3 req/IP/day) の Trust Cliff だった。
-              レート上限超過時は runAnalyze の 429 catch でユーザー向けエラー表示する。 */}
-
           <div className="space-y-4">
             <ResultBadge result={result} />
 
@@ -1329,13 +1287,8 @@ export default function App() {
               </button>
             </div>
 
-            {/* v62: BYOK 廃止に伴い「FMP APIキー設定で全銘柄」CTA 削除。
-                demo モードでも実際は任意銘柄が動くため文言と乖離していた。
-                課金訴求は下の PlanComparisonBanner (Pro / Premium) に集約。 */}
-
             {isDemoResult && (
               <PlanComparisonBanner
-                onOpenSettings={() => setShowSettings(true)}
                 onStartCheckout={() => {
                   if (user) {
                     startCheckout('monthly');
@@ -1361,7 +1314,7 @@ export default function App() {
 
       {/* Tab: ホーム */}
       {/* 未ログイン LP — Google ログイン誘導 + Pro チェックアウト誘導 +
-          銘柄クリックで demo モード分析を実行 (v40+: APIキー無でも動くよう demoAnalyze 経路へ)
+          銘柄クリックで demo モード分析を実行 (demoAnalyze 経路、3 req/IP/day)
           v40+: lazy 化 — ログイン済みユーザーには初期バンドルから除外 */}
       {showLP && (
         <Suspense fallback={null}>
@@ -1854,8 +1807,8 @@ export default function App() {
         </Suspense>
       )}
 
-      {/* Demo mode — shown in ホーム tab when no API key (LP 表示中は隠す) */}
-      {activeTab === 'home' && !hasKey && !showLP && (
+      {/* Demo mode — ホーム tab で非 Pro user に表示 (LP 表示中は隠す) */}
+      {activeTab === 'home' && !isProUser && !showLP && (
         <div className="mt-4">
           <DemoTicker onResult={handleDemoResult} />
         </div>
@@ -2266,8 +2219,6 @@ export default function App() {
           設定
         </p>
 
-        {/* FMP APIキー設定: BYOK 廃止につき drawer から削除済 (RELEASE_TODO §2 で完全削除予定) */}
-
         {/* Y-3 Phase A: 通知設定 (ログイン済ユーザーのみ表示) */}
         {user && (
           <button
@@ -2404,20 +2355,6 @@ export default function App() {
       )}
 
       {/* Modals */}
-      {showSettings && (
-        <ApiKeySettings
-          onClose={() => setShowSettings(false)}
-          onSaved={handleKeySaved}
-          onDeleted={handleKeyDeleted}
-        />
-      )}
-
-      <ApiKeyModal
-        isOpen={showApiKeyModal}
-        onClose={() => setShowApiKeyModal(false)}
-        onOpenSettings={() => setShowSettings(true)}
-      />
-
       {/* v62 WS-PreA: 買付クイック登録モーダル (RELEASE_TODO §11-B-7-B Phase B) */}
       <QuickAddHoldingModal
         isOpen={!!quickAddTicker}
@@ -2434,7 +2371,6 @@ export default function App() {
 
       <UpgradeModal
         {...upgrade.props}
-        onOpenSettings={() => { upgrade.close(); setShowSettings(true); }}
         onCheckout={startCheckout}
         checkoutLoading={checkoutLoading}
         user={user}

@@ -4,12 +4,10 @@
  *
  * 設計方針:
  *   - state (ticker, result, guidance, loading, error, isDemoResult) は hook が所有
- *   - 横断的関心 (タブ切替、API キーモーダル、suggestions 閉、prefetch) はコールバックで注入
- *   - 既存 App.jsx の振る舞いを **完全 BC 維持** (signature / 副作用順序)
+ *   - 横断的関心 (タブ切替、suggestions 閉、prefetch、Pro 判定) はコールバックで注入
  *
  * 依存:
  *   - api.js: analyze, demoAnalyze, fetchGuidance, fetchGuidanceBasic
- *   - lib/fmpKey.js: hasFmpKey
  *
  * 注意 (CLAUDE.md):
  *   - LP からのクリックは `handleLPTickerClick` を必ず通す (demo モード対応)
@@ -17,7 +15,6 @@
  */
 import { useCallback, useRef, useState } from 'react';
 import { analyze, demoAnalyze, fetchGuidance, fetchGuidanceBasic } from '../../../api.js';
-import { hasFmpKey } from '../../../lib/fmpKey.js';
 import { useWorkspaceStore } from '../../../state/workspaceStore.js';
 
 /** 同銘柄の再訪を 0 秒化する result キャッシュ TTL (10 分)。F5 で消えるメモリキャッシュ。 */
@@ -52,13 +49,13 @@ function normalizeTicker(raw) {
 /**
  * @param {object} deps
  * @param {(tab: string) => void} deps.setActiveTab - タブ切替 (runAnalyze は 'judgment' に切替)
- * @param {(open: boolean) => void} deps.setShowApiKeyModal - API キー未設定時にモーダル表示
+ * @param {boolean} [deps.isProUser] - Pro subscriber は analyze (任意銘柄無制限)、非 Pro は demoAnalyze (3 req/IP/day)
  * @param {(closing: boolean) => void} [deps.setForceCloseSuggestions] - 検索 suggestions 強制閉
  * @param {(ticker: string) => void} [deps.prefetch] - 全 panel データ先取り (api.prefetchAll wrapper)
  */
 export function useJudgmentResult({
   setActiveTab,
-  setShowApiKeyModal,
+  isProUser = false,
   setForceCloseSuggestions,
   prefetch,
 }) {
@@ -76,11 +73,8 @@ export function useJudgmentResult({
   const runAnalyze = useCallback(
     async (sym) => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      // v62: BYOK 廃止に伴い、API キー無くても demoAnalyze で動かす
-      // (CLAUDE.md「無料お試しは IP ベース rate limit」「ホワイトリスト方式採用しない」)
-      // 旧来の setShowApiKeyModal gate は Trust Cliff (LP「登録不要」訴求と矛盾) のため撤去。
-      // demoAnalyze は backend で 3 req/IP/day の制限あり、任意銘柄対応。
-      const useDemo = !hasFmpKey();
+      // Pro subscriber → analyze (任意銘柄無制限)、 非 Pro → demoAnalyze (3 req/IP/day 制限)。
+      const useDemo = !isProUser;
       const t = normalizeTicker(sym || ticker);
       if (!t) return;
       setTicker(t);
@@ -121,7 +115,7 @@ export function useJudgmentResult({
         setTimeout(() => setForceCloseSuggestions(false), 500);
       }
 
-      // v62: API キー有 → analyze (任意銘柄)、無 → demoAnalyze (3 req/IP/day 制限)
+      // Pro subscriber → analyze (任意銘柄無制限)、 非 Pro → demoAnalyze (3 req/IP/day)
       const analyzeFn = useDemo ? demoAnalyze : analyze;
       analyzeFn(t)
         .then((data) => {
@@ -170,12 +164,12 @@ export function useJudgmentResult({
           if (searchIdRef.current === searchId) setGuidanceSecLoading(false);
         });
     },
-    [ticker, prefetch, setActiveTab, setForceCloseSuggestions]
+    [ticker, prefetch, setActiveTab, setForceCloseSuggestions, isProUser]
   );
 
   /**
    * LP からのクリック専用. 「登録不要で試せる」LP 訴求と整合させるため、
-   * 未ログイン+APIキー無の場合も demo (3銘柄/日) で必ず分析を実行する.
+   * 非 Pro user は必ず demo (3 req/IP/day) 経路で分析を実行する.
    */
   const handleLPTickerClick = useCallback(
     async (t) => {
@@ -192,7 +186,7 @@ export function useJudgmentResult({
       window.scrollTo({ top: 0, behavior: 'smooth' });
       recordAnalyzed(sym);
       try {
-        if (hasFmpKey()) {
+        if (isProUser) {
           const data = await analyze(sym);
           setResult(data);
           setIsDemoResult(false);
@@ -214,7 +208,7 @@ export function useJudgmentResult({
         setLoading(false);
       }
     },
-    [prefetch, setActiveTab]
+    [prefetch, setActiveTab, isProUser]
   );
 
   const handleDemoResult = useCallback(
