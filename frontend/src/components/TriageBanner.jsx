@@ -141,15 +141,42 @@ export default function TriageBanner({
     );
   }
 
-  if (!data) return null;
+  // handover v83 P0 fix (2026-05-18 dogfood で AMZN にて DOM null 発覚):
+  // 旧 silent fail (`return null`) → Trust Cliff 直撃 (機能無しと user 誤認)。
+  // memory feedback_data_completeness_guard.md の「カバー外 / 一時失敗 / データあり」
+  // 3 段階分岐に整合させて hint chip 表示。
+  // - 真因 A (data === null): fetch fail (HTTP error / token expired / network)
+  // - 真因 B (data 取得成功 + 内容空): 未保有 + パターン無し + peers 0
+  // - 真因 B' (全 source error): 既存仕様通り hide (memory feedback_triage_banner_pattern.md)
+  if (!data) {
+    return (
+      <div className="triage-banner triage-banner-muted">
+        <Chip variant="display" tone="muted" size="xs">データ取得失敗</Chip>
+        <span>少し待って再読込してください</span>
+      </div>
+    );
+  }
 
   const bannerText = buildBannerText(data);
   const peersCount = data.data?.peers?.passing_count;
   const hasPeers = Number.isFinite(peersCount) && peersCount > 0;
   const confidence = data.signal_quality?.confidence;
+  const allSourcesOk = data.sources
+    && Object.values(data.sources).every((s) => s === 'ok');
 
-  // 全 source error or holdings 未保有 + signal 無 + peers 0 なら banner 非表示
-  if (!bannerText && !hasPeers) return null;
+  if (!bannerText && !hasPeers) {
+    // 真因 B: data 取得成功 + 内容空 (未保有 + パターン無し + peers 0)
+    if (allSourcesOk) {
+      return (
+        <div className="triage-banner triage-banner-muted">
+          <span aria-hidden="true">·</span>
+          <span>未保有 / 該当パターン無し / 同条件 PASS 0 件</span>
+        </div>
+      );
+    }
+    // 真因 B': 全 source error → 既存仕様通り hide
+    return null;
+  }
 
   return (
     <div className="triage-banner">

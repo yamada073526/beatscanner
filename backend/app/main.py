@@ -4903,10 +4903,17 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
     except Exception:
         estimates = []
 
+    # handover v83 P1 fix (2026-05-18): /stable/earnings は upcoming earnings (eps actual 未確定)
+    # も返すため、 eps actual が無い entry は historical view から除外。 旧 /earnings-calendar
+    # workaround では起こらなかった挙動の差を吸収。
+    def _has_actual(d: dict) -> bool:
+        return _pick(d, "eps", "epsActual", "actualEarningResult", "actualEps") is not None
+    surprises_past = [s for s in surprises if _has_actual(s)]
+
     # surprises を date 降順にソート (FMP は通常降順だが念のため)
     def _date_of(d: dict) -> str:
         return _pick(d, "date") or ""
-    surprises_sorted = sorted(surprises, key=_date_of, reverse=True)
+    surprises_sorted = sorted(surprises_past, key=_date_of, reverse=True)
 
     # 日付に最も近い income_q / estimate を選ぶヘルパ
     from datetime import datetime as _dt2

@@ -83,13 +83,18 @@ class FMPClient:
         )
 
     async def earnings_surprises(self, ticker: str, limit: int = 16) -> list[dict]:
-        # /earnings-calendar (no date filter) returns recent entries for all companies.
-        # Filter client-side; the stable free plan does not support per-ticker symbol filter.
-        data = await self._get("/earnings-calendar", {})
+        # handover v83 P1 fix (2026-05-18): FMP Premium per-ticker endpoint に置換。
+        # 旧 free plan workaround (/earnings-calendar 日付 filter 無 + client-side filter) は
+        # AMZN のように直近 30 日に決算が無い銘柄で empty を返し、 /api/guidance/{T}/quarterly-history
+        # が history=[] で 404 化 (memory fmp_plan_naming.md の code smell 確定発火)。
+        # /stable/earnings は per-ticker historical surprises を返し Premium plan で利用可能。
+        data = await self._get(
+            "/earnings",
+            {"symbol": ticker.upper(), "limit": limit},
+        )
         if not isinstance(data, list):
             return []
-        sym = ticker.upper()
-        return [d for d in data if d.get("symbol") == sym][:limit]
+        return data
 
     async def analyst_estimates(self, ticker: str, period: str = "quarter", limit: int = 8) -> list[dict]:
         return await self._get(

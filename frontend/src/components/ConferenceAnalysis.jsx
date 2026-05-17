@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { fetchConferenceAnalysis, streamConferenceText, fetchAnalystData } from '../api.js';
-import LockedSection, { ConferenceGhost, AnalystGhost } from './LockedSection.jsx';
+import { streamConferenceText } from '../api.js';
+import LockedSection, { ConferenceGhost } from './LockedSection.jsx';
 
 const mdComponents = {
   h2: ({ children }) => (
@@ -141,248 +141,16 @@ function ConferenceCard({ ticker, onStreamingChange }) {
   );
 }
 
-/* ─── AnalystCard（内部コンテンツのみ） ─── */
-
-// 決算発表日 (YYYY-MM-DD) を「FY2024 Q3」のような会計四半期ラベルに変換。
-// 米国企業は四半期決算日が当該四半期終了後 4-6 週間で発表される慣習に基づく簡易ロジック:
-//   1-2月 → 前年Q4 / 3-5月 → Q1 / 6-8月 → Q2 / 9-11月 → Q3 / 12月 → Q4
-function formatFiscalQuarter(dateStr) {
-  if (!dateStr) return '-';
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return dateStr;
-  const month = d.getMonth() + 1;
-  const year = d.getFullYear();
-  let q, fy;
-  if (month <= 2)       { q = 4; fy = year - 1; }
-  else if (month <= 5)  { q = 1; fy = year; }
-  else if (month <= 8)  { q = 2; fy = year; }
-  else if (month <= 11) { q = 3; fy = year; }
-  else                  { q = 4; fy = year; }
-  return `${fy} Q${q}`;
-}
-
-// 数値の整形 (符号付き / 小数2桁) — null 安全
-function fmtEps(v) {
-  if (v === null || v === undefined) return '—';
-  const n = Number(v);
-  if (Number.isNaN(n)) return '—';
-  return n.toFixed(2);
-}
-
-function fmtSurprisePct(actual, estimated) {
-  if (actual === null || actual === undefined || estimated === null || estimated === undefined) return null;
-  const a = Number(actual), e = Number(estimated);
-  if (Number.isNaN(a) || Number.isNaN(e) || e === 0) return null;
-  return ((a - e) / Math.abs(e)) * 100;
-}
-
-function AnalystCard({ analyst, analystData }) {
-  const history  = analyst?.history     || [];
-  const beat     = analyst?.beat_count  ?? 0;
-  const miss     = analyst?.miss_count  ?? 0;
-  const total    = beat + miss;
-  const beatRate = total > 0 ? Math.round((beat / total) * 100) : null;
-
-  return (
-    <>
-      {total > 0 && (
-        <>
-          {/* Beat / Miss / Beat率 サマリー */}
-          <div className="mb-4 flex items-center gap-6">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{beat}</div>
-              <div className="text-xs text-slate-500">Beat</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-red-500">{miss}</div>
-              <div className="text-xs text-slate-500">Miss</div>
-            </div>
-            {beatRate !== null && (
-              <div className="text-center">
-                <div className="text-2xl font-bold text-slate-700">{beatRate}%</div>
-                <div className="text-xs text-slate-500">Beat率（直近{total}期）</div>
-              </div>
-            )}
-          </div>
-
-          {/* 4列乖離テーブル: 四半期 / 予想EPS / 実績EPS / サプライズ% */}
-          <div style={{
-            borderRadius: 10,
-            border: '1px solid var(--border)',
-            background: 'var(--bg-card)',
-            overflow: 'hidden',
-          }}>
-            {/* ヘッダー */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr 1fr 1.1fr',
-              gap: 8,
-              padding: '10px 14px',
-              fontSize: 11,
-              fontWeight: 500,
-              color: 'var(--text-muted)',
-              letterSpacing: '0.04em',
-              background: 'var(--bg-subtle)',
-              borderBottom: '1px solid var(--border)',
-            }}>
-              <div>四半期</div>
-              <div style={{ textAlign: 'right' }}>予想EPS</div>
-              <div style={{ textAlign: 'right' }}>実績EPS</div>
-              <div style={{ textAlign: 'right' }}>サプライズ</div>
-            </div>
-
-            {/* 行 (履歴は新しい順で表示) */}
-            {history.map((item, idx) => {
-              const surprisePct = fmtSurprisePct(item.actual, item.estimated);
-              const isBeat  = item.verdict === 'beat';
-              const isMiss  = item.verdict === 'miss';
-              const surpriseColor = surprisePct === null
-                ? 'var(--text-muted)'
-                : surprisePct >= 0 ? '#22c55e' : '#ef4444';
-              return (
-                <div
-                  key={item.date}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr 1fr 1.1fr',
-                    gap: 8,
-                    padding: '10px 14px',
-                    fontSize: 12.5,
-                    color: 'var(--text-primary)',
-                    borderBottom: idx < history.length - 1 ? '1px solid var(--border)' : 'none',
-                    alignItems: 'center',
-                  }}
-                >
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ fontWeight: 500 }}>{formatFiscalQuarter(item.date)}</span>
-                    <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{item.date}</span>
-                  </div>
-                  <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>
-                    {fmtEps(item.estimated)}
-                  </div>
-                  <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>
-                    {fmtEps(item.actual)}
-                  </div>
-                  <div style={{
-                    textAlign: 'right',
-                    fontVariantNumeric: 'tabular-nums',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'flex-end',
-                    gap: 6,
-                  }}>
-                    {surprisePct !== null ? (
-                      <>
-                        <span style={{
-                          fontSize: 12.5,
-                          fontWeight: 700,
-                          color: surpriseColor,
-                        }}>
-                          {surprisePct >= 0 ? '+' : ''}{surprisePct.toFixed(1)}%
-                        </span>
-                        <span style={{
-                          fontSize: 9.5,
-                          fontWeight: 700,
-                          padding: '2px 6px',
-                          borderRadius: 4,
-                          letterSpacing: '0.04em',
-                          background: isBeat ? 'rgba(34,197,94,0.14)' : isMiss ? 'rgba(239,68,68,0.14)' : 'var(--bg-subtle)',
-                          color: isBeat ? '#16a34a' : isMiss ? '#dc2626' : 'var(--text-muted)',
-                          border: `1px solid ${isBeat ? 'rgba(34,197,94,0.30)' : isMiss ? 'rgba(239,68,68,0.30)' : 'var(--border)'}`,
-                        }}>
-                          {isBeat ? 'BEAT' : isMiss ? 'MISS' : '—'}
-                        </span>
-                      </>
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>予想なし</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      {analystData && !analystData.error && (
-        <div style={{ marginTop: total > 0 ? '16px' : '0' }}>
-          {analystData.price_targets && (
-            <div style={{ marginBottom: '12px' }}>
-              <h4 className="text-sm font-semibold text-slate-700 mb-1">目標株価</h4>
-              <p className="text-sm">
-                平均: <strong>${analystData.price_targets.mean?.toFixed(2) ?? 'N/A'}</strong>
-                {analystData.price_targets.current && analystData.price_targets.mean && (
-                  <span style={{ marginLeft: '8px', color: analystData.price_targets.mean > analystData.price_targets.current ? '#22c55e' : '#ef4444' }}>
-                    ({((analystData.price_targets.mean / analystData.price_targets.current - 1) * 100).toFixed(1)}%)
-                  </span>
-                )}
-              </p>
-              <p style={{ fontSize: '0.85em', color: '#888' }}>
-                レンジ: ${analystData.price_targets.low?.toFixed(2)} 〜 ${analystData.price_targets.high?.toFixed(2)}
-              </p>
-            </div>
-          )}
-
-          {analystData.recommendations && (
-            <div style={{ marginBottom: '12px' }}>
-              <h4 className="text-sm font-semibold text-slate-700 mb-1">アナリスト推奨</h4>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {[
-                  // 両モード対応: light pastel bg → rgba alpha + theme-aware text token
-                  { label: '強買い', key: 'strongBuy',  color: 'var(--color-gain)',    bg: 'rgba(34, 197, 94, 0.18)' },
-                  { label: '買い',   key: 'buy',         color: 'var(--color-gain)',    bg: 'rgba(34, 197, 94, 0.10)' },
-                  { label: '中立',   key: 'hold',        color: 'var(--text-secondary)', bg: 'rgba(148, 163, 184, 0.14)' },
-                  { label: '売り',   key: 'sell',        color: 'var(--color-loss)',    bg: 'rgba(248, 113, 113, 0.12)' },
-                  { label: '強売り', key: 'strongSell',  color: 'var(--color-loss)',    bg: 'rgba(248, 113, 113, 0.20)' },
-                ].map(({ label, key, color, bg }) => (
-                  <span key={key} style={{ padding: '4px 10px', borderRadius: '12px', background: bg, color, fontWeight: 'bold', fontSize: '0.85em' }}>
-                    {label}: {analystData.recommendations[key] ?? 0}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {analystData.upgrades_downgrades?.length > 0 && (
-            <div>
-              <h4 className="text-sm font-semibold text-slate-700 mb-1">直近の格付け変更</h4>
-              {analystData.upgrades_downgrades.map((item, i) => (
-                <p key={i} style={{ fontSize: '0.9em', margin: '4px 0' }}>
-                  <span style={{ color: '#888' }}>{item.GradeDate?.split('T')[0]}</span>
-                  {' '}<strong>{item.Firm}</strong>
-                  {' → '}<span style={{ color: item.Action === 'up' ? '#22c55e' : item.Action === 'down' ? '#ef4444' : '#888', fontWeight: 'bold' }}>{item.ToGrade}</span>
-                </p>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </>
-  );
-}
+/* handover v83 P2 (2026-05-18): AnalystCard + 周辺 helper (formatFiscalQuarter / fmtEps / fmtSurprisePct)
+   は AnalystPanel (Phase 3 着地、 features/judgment/components/detail/JudgmentDetail.jsx:267-275) 移行により
+   完全 dead code 化。 219 行削除、 bundle 削減 5-8 KB 見込み。
+   再表示が必要になったら git history から復元可能。 */
 
 /* ─── ConferenceAnalysis（アコーディオン統合） ─── */
 export default function ConferenceAnalysis({ ticker, onStreamingChange, isPro = true, onUpgrade }) {
-  const [analyst,        setAnalyst]        = useState(null);
-  const [analystLoading, setAnalystLoading] = useState(false);
-  const [analystData,    setAnalystData]    = useState(null);
-  const [confStreaming,  setConfStreaming]   = useState(false);
-
-  // Pro のみ実データを取得 (無料ユーザーは API を叩かない)
-  useEffect(() => {
-    if (!ticker || !isPro) return;
-    let alive = true;
-    setAnalystLoading(true);
-    setAnalyst(null);
-    setAnalystData(null);
-    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000));
-    Promise.race([fetchConferenceAnalysis(ticker), timeout])
-      .then((d) => alive && setAnalyst(d?.analyst))
-      .catch(() => alive && setAnalyst(null))
-      .finally(() => alive && setAnalystLoading(false));
-    fetchAnalystData(ticker).then((d) => alive && setAnalystData(d));
-    return () => { alive = false; };
-  }, [ticker, isPro]);
+  // handover v83 P2 (2026-05-18): analyst / analystData / analystLoading state + useEffect (旧 AnalystCard 用) は
+  // AnalystPanel 移行で完全 dead 化、 削除。 confStreaming のみ ConferenceCard streaming 用に維持。
+  const [confStreaming, setConfStreaming] = useState(false);
 
   const handleConfStreaming = (v) => {
     setConfStreaming(v);
@@ -411,28 +179,10 @@ export default function ConferenceAnalysis({ ticker, onStreamingChange, isPro = 
         )}
       </AccordionSection>
 
-      <AccordionSection
-        title="アナリストの視点"
-        badge={isPro ? "EPS Beat/Miss履歴" : "PRO"}
-        badgeColor={isPro ? "#7c3aed" : "#0e7490"}
-      >
-        {isPro ? (
-          analystLoading ? (
-            <p className="text-sm text-slate-500 animate-pulse">Beat/Miss履歴を取得中...</p>
-          ) : (
-            <AnalystCard analyst={analyst} analystData={analystData} />
-          )
-        ) : (
-          <LockedSection
-            ctaLabel="履歴を見る"
-            onUpgrade={onUpgrade}
-            minHeight={280}
-            hint="EPS Beat/Miss 履歴とアナリスト予想の乖離をテーブルで可視化"
-          >
-            <AnalystGhost />
-          </LockedSection>
-        )}
-      </AccordionSection>
+      {/* handover v83 P2 (2026-05-18 dogfood): 「アナリストの視点 EPS Beat/Miss履歴」
+          AccordionSection は新 UI AnalystPanel (Phase 3 着地、 features/judgment/components/detail/JudgmentDetail.jsx:267-275)
+          と内容完全重複のため削除。 fetchAnalystData の useEffect は streaming 等の副作用
+          として残置 (ConferenceCard が依存する場合の安全側)。 削除前: 23 行 + AnalystCard / AnalystGhost import。 */}
     </>
   );
 }
