@@ -5293,6 +5293,24 @@ async def cache_status():
                 for k, v in _ANALYST_CACHE.items()
             ],
         },
+        "triage_cache": {
+            "user": {
+                "size": len(_TRIAGE_USER_CACHE),
+                "ttl_seconds": int(_TRIAGE_USER_TTL),
+            },
+            "signal": {
+                "size": len(_TRIAGE_SIGNAL_CACHE),
+                "ttl_seconds": int(_TRIAGE_SIGNAL_TTL),
+            },
+            "peers": {
+                "size": len(_TRIAGE_PEERS_CACHE),
+                "ttl_seconds": int(_TRIAGE_PEERS_TTL),
+                "entries": [
+                    {"key": k, "value": v[1], "age_seconds": int(now - v[0])}
+                    for k, v in _TRIAGE_PEERS_CACHE.items()
+                ],
+            },
+        },
         "fmp_cache": {
             "size": len(_fmp_response_cache),
             "entries": [
@@ -9104,6 +9122,124 @@ async def get_analyst_data(ticker: str, request: Request):
         return data
 
 
+@app.get("/api/triage/{ticker}")
+async def get_triage_view(
+    ticker: str,
+    request: Request,
+    authorization: str = Header(default=""),
+    min_pass: int = Query(5, ge=3, le=5),
+):
+    """handover v82 Phase 5 (三層トリアージ「保有 × 5 条件 × Cup-Handle」)。
+
+    multi-review 6 体合議 verdict:
+    - 3 並列 fetch (asyncio.gather + return_exceptions=True)
+    - 3 層分離 cache (user 60s / signal 6h / peers 24h)
+    - user_id scope check 冒頭必須 (RLS bypass 事故予防、 設計 verdict)
+    - per-source data namespace (Anthropic verdict)
+
+    schema (frontend TriageBanner が消費):
+        {ticker, sources: {holdings, pattern_signals, peers},
+         signal_quality, data: {holdings, pattern_signals, peers}}
+    """
+    from .aggregator.triage import build_triage_view
+
+    sym = (ticker or "").upper().strip()
+    if not sym:
+        raise HTTPException(status_code=400, detail="ticker is required")
+
+    # user_id scope check (holdings query は user-scoped、 RLS bypass 防止)
+    user = await _verify_supabase_jwt(authorization)
+    user_id = user["id"]
+
+    # ── 3 source の fetch closure (asyncio.gather 用) ──────────────────
+    user_cache_key = f"{user_id}:{sym}"
+    signal_cache_key = sym
+    peers_cache_key = f"min_pass={min_pass}"
+    now = _time.time()
+
+    async def _fetch_transactions() -> list[dict]:
+        """user の transactions list を Supabase から取得 (user-scoped 60s cache)."""
+        cached_u = _TRIAGE_USER_CACHE.get(user_cache_key)
+        if cached_u and now - cached_u[0] < _TRIAGE_USER_TTL:
+            return cached_u[1].get("transactions") or []
+        sb = _get_supabase_service()
+        if sb is None:
+            return []
+        try:
+            res = (
+                sb.table("transactions")
+                .select("ticker,side,qty,quantity,trade_date")
+                .eq("user_id", user_id)
+                .limit(1000)
+                .execute()
+            )
+            tx_list = res.data or []
+            _TRIAGE_USER_CACHE[user_cache_key] = (now, {"transactions": tx_list})
+            return tx_list
+        except Exception as e:
+            print(f"[triage] transactions fetch failed for {user_id}: {e}")
+            raise
+
+    async def _fetch_signal(t: str) -> dict | None:
+        """pattern_signals 最新 1 件 (ticker-scoped 6h cache)."""
+        cached_s = _TRIAGE_SIGNAL_CACHE.get(signal_cache_key)
+        if cached_s and now - cached_s[0] < _TRIAGE_SIGNAL_TTL:
+            return cached_s[1]
+        # _fetch_pattern_signal_latest は sync function (Supabase client は sync)
+        sig = _fetch_pattern_signal_latest(t, pattern_type="cup_handle")
+        _TRIAGE_SIGNAL_CACHE[signal_cache_key] = (now, sig)
+        return sig
+
+    async def _fetch_peers_count() -> int:
+        """top gainers で min_pass 以上 PASS している件数 (global 24h cache)."""
+        cached_p = _TRIAGE_PEERS_CACHE.get(peers_cache_key)
+        if cached_p and now - cached_p[0] < _TRIAGE_PEERS_TTL:
+            return cached_p[1]
+        # Top-10 gainers + _analyze_core で 5 条件評価 (BATCH=5 で並列)
+        api_key = _get_fmp_key(request)
+        try:
+            client = FMPClient(api_key=api_key)
+            gainers = await client.market_movers("biggest-gainers")
+        except (FMPError, Exception):
+            raise
+        candidates: list[str] = []
+        if isinstance(gainers, list):
+            for item in gainers[:10]:
+                s = item.get("symbol", "") if isinstance(item, dict) else ""
+                if s:
+                    candidates.append(s)
+        passing_count = 0
+
+        async def _judge_one(t: str):
+            nonlocal passing_count
+            try:
+                d = await _analyze_core(t, api_key, use_cache=True)
+                if isinstance(d, dict):
+                    pc = d.get("passedCount") or 0
+                    if pc >= min_pass:
+                        passing_count += 1
+            except Exception:
+                pass
+
+        BATCH = 5
+        for i in range(0, len(candidates), BATCH):
+            await asyncio.gather(
+                *[_judge_one(t) for t in candidates[i:i + BATCH]],
+                return_exceptions=True,
+            )
+        _TRIAGE_PEERS_CACHE[peers_cache_key] = (now, passing_count)
+        return passing_count
+
+    # 3 並列 fetch via build_triage_view (closure を渡す)
+    data = await build_triage_view(
+        sym,
+        fetch_transactions=_fetch_transactions,
+        fetch_signal=_fetch_signal,
+        fetch_peers_count=_fetch_peers_count,
+    )
+    return data
+
+
 # ───────────────────────────────────────────────────────────────
 # チャートタブ用エンドポイント
 # ───────────────────────────────────────────────────────────────
@@ -9128,6 +9264,21 @@ _TECHNICAL_LOCK = asyncio.Lock()
 _ANALYST_CACHE: dict[str, tuple[float, dict]] = {}
 _ANALYST_TTL = 6 * 3600.0
 _ANALYST_LOCK = asyncio.Lock()
+
+# handover v82 Phase 5 (三層トリアージ):
+# /api/triage/{ticker} は 3 層分離 cache (multi-review Web 設計 verdict)。
+# 単一 TTL は不適切 — transactions の Trust Cliff (user 売買後すぐ反映) のため:
+#   - user holdings:    60s TTL (user-scoped key = "{user_id}:{ticker}")
+#   - pattern_signals:  6h TTL  (ticker-scoped key = ticker)
+#   - peers count:     24h TTL  (global key = "min_pass={N}")
+# asyncio.Lock は user 1 つで stampede 防止 (異なる user / ticker は別 key で並列許容)。
+_TRIAGE_USER_CACHE: dict[str, tuple[float, dict]] = {}
+_TRIAGE_USER_TTL = 60.0
+_TRIAGE_SIGNAL_CACHE: dict[str, tuple[float, dict | None]] = {}
+_TRIAGE_SIGNAL_TTL = 6 * 3600.0
+_TRIAGE_PEERS_CACHE: dict[str, tuple[float, int]] = {}
+_TRIAGE_PEERS_TTL = 24 * 3600.0
+_TRIAGE_LOCK = asyncio.Lock()
 # RS 計算用 SPY history (1y daily) を全銘柄で共有。 24h cache。
 _SPY_HISTORY_CACHE: dict = {"closes": None, "ts": 0.0}
 _SPY_HISTORY_TTL = 24 * 3600.0
