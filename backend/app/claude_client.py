@@ -18,13 +18,24 @@ class ClaudeClient:
         self.client = AsyncAnthropic(api_key=key)
 
     @staticmethod
-    def _system_param(system: str | None, system_cache: bool):
+    def _system_param(system: str | list[dict] | None, system_cache: bool):
         """system を Anthropic API の system param 形式に変換する.
-        system_cache=True なら structured array + ephemeral cache_control を付与し、
-        prompt caching を有効化する (Haiku 4.5 で 5 分 TTL、最低 2048 token 必要).
+
+        handover v82 Phase 4 で multi-block prompt cache 対応:
+        - system: str + system_cache=True → 1-block array + ephemeral cache (backward compat)
+        - system: str + system_cache=False → str raw passthrough (backward compat)
+        - system: list[dict] → raw passthrough (新形式、 multi-block cache 対応、
+            呼出側が cache_control を各 block に付与する責務)
+        - system: None / "" → None
+
+        list[dict] は Phase 4 の prompt.get_system_blocks() で生成。 4 break point まで
+        cache 可能、 静的度の高い順 (instructions → few-shot → 将来 KB → user) で配置。
         """
         if not system:
             return None
+        if isinstance(system, list):
+            # multi-block 形式: 呼出側が cache_control を付与済前提、 raw passthrough
+            return system
         if system_cache:
             return [{
                 "type": "text",
@@ -40,7 +51,7 @@ class ClaudeClient:
         model: str = "claude-haiku-4-5-20251001",
         max_tokens: int = 1024,
         temperature: float = 0.0,
-        system: str | None = None,
+        system: str | list[dict] | None = None,
         system_cache: bool = False,
         prefill: str | None = None,
     ) -> str:
@@ -79,7 +90,7 @@ class ClaudeClient:
         model: str = "claude-haiku-4-5-20251001",
         max_tokens: int = 1024,
         temperature: float = 0.0,
-        system: str | None = None,
+        system: str | list[dict] | None = None,
         system_cache: bool = False,
         prefill: str | None = None,
     ):

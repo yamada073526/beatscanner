@@ -1,0 +1,153 @@
+"""NEGATIVE_EXAMPLES 6 BAD pattern for DiagramCard LLM (handover v82 Phase 4).
+
+multi-review 6 体合議 (2026-05-17) で確定:
+- BAD-1 英語混在 (Operating Income 等の生英語)
+- BAD-2 detail 抽象 (「業績好調」 等の形容詞のみ)
+- BAD-3 数値捏造 (precomputed_metrics に無い数値)
+- BAD-4 step 不足 (businessFlowSteps 2 件)
+- BAD-5 断定的将来予測 (金商法 §38 違反、 「確実」「必ず」)
+- BAD-6 最上級表現 (景表法 §5 違反、 「世界 No.1」)
+
+Anthropic 公式 prompt engineering best practice:
+- BAD pattern は具体例 + reason tag で示すと遵守率 95%+ (禁止文だけの場合 70%)
+- system block に XML で配置、 cache_control: ephemeral で 2 ブロック目
+
+frontend sanitize 用 regex blocklist も export (BLOCKLIST_REGEX)。
+
+memory anchors:
+- feedback_citation_required.md (景表法/金商法 risk anchor)
+- feedback_llm_calc_separation.md (precomputed_metrics 引用必須)
+"""
+from __future__ import annotations
+
+import re
+
+# ─── 6 BAD pattern with reason ────────────────────────────────────────
+NEGATIVE_EXAMPLES: list[dict] = [
+    {
+        "id": "BAD-1",
+        "category": "英語混在",
+        "bad_output": (
+            '"strengths": ["Operating Income +12% で margin 改善", '
+            '"Revenue growth が strong", "EBITDA 加速"]'
+        ),
+        "reason": "英語術語が裸で出ている。 GOOD = 「営業利益 (Operating Income) +12% でマージン改善」 のように 括弧併記 で 日本語主体に。 EBITDA は日本でも通用語なので例外的に裸 OK。",
+        "good_alternative": (
+            '"strengths": ["営業利益 (Operating Income) +12% でマージン改善", '
+            '"売上成長 +15% YoY で堅調", "EBITDA マージン拡大"]'
+        ),
+    },
+    {
+        "id": "BAD-2",
+        "category": "detail 抽象",
+        "bad_output": (
+            '"strengths": ["業績好調で成長基調", "市場で評価が高い", "競争力が強い"]'
+        ),
+        "reason": "形容詞のみで具体数値・固有名詞が無い。 「業績好調」「強い」「優れた」 は fact 無しの空文。 GOOD = precomputed_metrics の数値を引用して具体化。",
+        "good_alternative": (
+            '"strengths": ["売上 +15.4% YoY で計画線", '
+            '"営業マージン 44.6% (前年 43.0% から改善)", '
+            '"営業 CF $28.9B で配当原資確保"]'
+        ),
+    },
+    {
+        "id": "BAD-3",
+        "category": "数値捏造",
+        "bad_output": (
+            '"strengths": ["世界シェア 80% で No.1", '
+            '"次期 EPS +25% 確実", "業界トップの利益率 65%"]'
+        ),
+        "reason": "precomputed_metrics / material_facts に無い数値を捏造している (景表法 §5 優良誤認直撃)。 「世界シェア」 「No.1」 のような順位付けは出典必須。 GOOD = material_facts に存在する数値のみ引用、 該当 fact 無しなら **そのセンテンスを削除** する。",
+        "good_alternative": (
+            '"strengths": ["売上 +15.4% YoY (FMP analyst-estimates 経由)", '
+            '"営業マージン 44.6% (10-Q filing 引用)"]'
+        ),
+    },
+    {
+        "id": "BAD-4",
+        "category": "step 不足",
+        "bad_output": (
+            '"businessFlowSteps": ['
+            '{"label": "製品開発", "detail": "AI 半導体"}, '
+            '{"label": "販売", "detail": "クラウド向け"}]'
+        ),
+        "reason": "businessFlowSteps が 2 件で rule (3-5 件) 違反。 ビジネスモデル理解の最小単位は 4 ステップ (調達→生産→販売→還元)。 GOOD = 4 件 default、 強化したい場合 5 件まで。",
+        "good_alternative": (
+            '"businessFlowSteps": ['
+            '{"label": "設計", "detail": "GPU 開発"}, '
+            '{"label": "TSMC 製造", "detail": "委託生産"}, '
+            '{"label": "販売", "detail": "クラウド大手向け"}, '
+            '{"label": "再投資", "detail": "次世代開発"}]'
+        ),
+    },
+    {
+        "id": "BAD-5",
+        "category": "断定的将来予測",
+        "bad_output": (
+            '"bullCase": ["次期 EPS +20% は確実", '
+            '"株価は 2 倍に必ず到達", "AI 投資で絶対勝てる"]'
+        ),
+        "reason": "断定的判断の提供 (金商法 §38 第 2 号 違反)。 「確実」「必ず」「絶対」 等の断定語は禁止。 SBI / 楽天 でも行政処分例あり。 GOOD = シナリオ提示形式 (「強気シナリオでは...」「条件次第で...」)。",
+        "good_alternative": (
+            '"bullCase": ["強気シナリオでは Azure 売上 +35% YoY 達成可能性", '
+            '"Copilot 課金本格化で EPS 寄与の上振れ余地", '
+            '"AI capex の ROI が早期実現する場合の追加成長"]'
+        ),
+    },
+    {
+        "id": "BAD-6",
+        "category": "最上級表現",
+        "bad_output": (
+            '"strengths": ["世界 No.1 の半導体メーカー", '
+            '"業界最強の生産能力", "他社を圧倒する技術力"]'
+        ),
+        "reason": "最上級表現 (景表法 §5 第 1 号 優良誤認 違反)。 「世界一」「No.1」「最強」「業界トップ」「圧倒的」 等。 数値捏造 (BAD-3) と違反条文が異なるため分離。 GOOD = 具体数値で代替、 出典明示。",
+        "good_alternative": (
+            '"strengths": ["Data Center 売上比率 87.3% で AI 需要直接捕捉", '
+            '"営業マージン 64.9% (前年 50.2% から拡大)"]'
+        ),
+    },
+]
+
+
+def _format_negative(neg: dict) -> str:
+    """1 negative example を <example> XML tag で整形."""
+    return f"""<example id="{neg['id']}" category="{neg['category']}">
+<bad_output>{neg['bad_output']}</bad_output>
+<reason>{neg['reason']}</reason>
+<good_alternative>{neg['good_alternative']}</good_alternative>
+</example>"""
+
+
+def get_negatives_xml() -> str:
+    """6 BAD pattern を <negative_examples> XML block にまとめて返す.
+
+    system block に挿入し、 「以下のような出力は絶対禁止」 として LLM に学習させる。
+    """
+    body = "\n\n".join(_format_negative(n) for n in NEGATIVE_EXAMPLES)
+    return f"<negative_examples>\n{body}\n</negative_examples>"
+
+
+# ─── frontend sanitize 用 blocklist (BAD-5 + BAD-6 の正規表現) ────────
+# Phase 4 では log only、 Phase 4.5 / 5 で frontend pre-render sanitize の前段として import。
+BLOCKLIST_REGEX: list[re.Pattern] = [
+    # BAD-5: 断定的将来予測
+    re.compile(r"確実(です|に|な)?"),
+    re.compile(r"必ず(達成|到達|実現)?"),
+    re.compile(r"絶対(に|的)?(勝|成功|達成)"),
+    # BAD-6: 最上級表現 (世界/業界の後の半角/全角スペースを許容)
+    re.compile(r"世界\s*(一|No\.?\s*1|首位|最大)"),
+    re.compile(r"業界\s*(最強|トップ|首位|No\.?\s*1)"),
+    re.compile(r"(圧倒的|圧倒)(な|して|的)?"),
+    re.compile(r"他社を圧倒"),
+    re.compile(r"最強の"),
+]
+
+
+def find_blocklist_hits(text: str) -> list[str]:
+    """text 中の blocklist hit を返す (Phase 4 では log 用)."""
+    hits = []
+    for pat in BLOCKLIST_REGEX:
+        for m in pat.finditer(text):
+            hits.append(m.group(0))
+    return hits

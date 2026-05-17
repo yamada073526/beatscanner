@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 SYSTEM_PROMPT_TEMPLATE = """Return ONLY a valid JSON. No markdown, no explanation.
 
 # 役割分離 (HARD CONSTRAINT)
@@ -55,6 +57,38 @@ def get_system_prompt(years: int = 3) -> str:
 
 # 後方互換性のため SYSTEM_PROMPT はデフォルト3年で維持
 SYSTEM_PROMPT = get_system_prompt(3)
+
+
+def get_system_blocks(years: int = 3) -> list[dict]:
+    """handover v82 Phase 4: structured system blocks (multi-block prompt cache 対応).
+
+    Anthropic 公式 prompt caching の break point 設計:
+    - Block 1: SYSTEM_PROMPT_TEMPLATE (instructions + HARD CONSTRAINT + schema、 cache)
+    - Block 2: few-shot examples + NEGATIVE_EXAMPLES (BAD 1-6、 cache)
+    - user message は呼出側が attach (cache なし、 動的)
+
+    cache_control: ephemeral は 4 break point まで。 Phase 4 では 2 個消費、 残り 2 個は
+    Phase 5+ (銘柄別 KB context + locale) のため温存。
+
+    Returns: Anthropic SDK の system param に渡す list[dict]
+    """
+    from .prompt_examples import get_examples_xml
+    from .prompt_negatives import get_negatives_xml
+
+    instructions = SYSTEM_PROMPT_TEMPLATE.replace("{years}", str(years))
+    examples_block = f"{get_examples_xml()}\n\n{get_negatives_xml()}"
+    return [
+        {
+            "type": "text",
+            "text": instructions,
+            "cache_control": {"type": "ephemeral"},
+        },
+        {
+            "type": "text",
+            "text": examples_block,
+            "cache_control": {"type": "ephemeral"},
+        },
+    ]
 
 
 def build_user_prompt(data: dict) -> str:

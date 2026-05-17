@@ -41,7 +41,7 @@ from .fmp_client import FMPClient, FMPError
 from .judgment import judge
 from . import yfinance_source
 from . import alpha_vantage_source
-from .visualizer.prompt import get_system_prompt, build_user_prompt
+from .visualizer.prompt import get_system_prompt, get_system_blocks, build_user_prompt
 
 # override=False (default): Railway / Docker env vars take priority over any .env file.
 # override=True would let a stale local .env silently shadow Railway variables.
@@ -8589,7 +8589,9 @@ async def generate_visualization(
 
     # ── LLM + FMP補助データを並列取得 ──────────────────────────────────
     _fmp_key_post = _get_fmp_key(request) or os.getenv("FMP_API_KEY", "")
-    _system_prompt = get_system_prompt(years)
+    # handover v82 Phase 4: structured system blocks (instructions + few-shot + NEGATIVE_EXAMPLES)
+    # 2 break points で multi-block ephemeral cache、 残り 2 個は Phase 5+ KB context 用に温存。
+    _system_blocks = get_system_blocks(years)
 
     import anthropic as _anthropic
     _client_llm = _anthropic.AsyncAnthropic()
@@ -8598,7 +8600,7 @@ async def generate_visualization(
         _client_llm.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=8192,
-            system=[{"type": "text", "text": _system_prompt, "cache_control": {"type": "ephemeral"}}],
+            system=_system_blocks,
             messages=[{"role": "user", "content": user_prompt}]
         )
     )
@@ -8622,6 +8624,26 @@ async def generate_visualization(
     _fcf_pre, _capex_pre = _fcf_capex_pre if isinstance(_fcf_capex_pre, tuple) else ([], [])
     # ─────────────────────────────────────────────────────────────────────
     print(f"[TIMING] {ticker} LLM+FMP parallel done → {_time.time()-_t0:.2f}s")
+
+    # handover v82 Phase 4: cache hit 率実測 (multi-review 6 体合議 verdict)。
+    # cache_creation_input_tokens (cache miss + write) / cache_read_input_tokens (cache hit)
+    # Phase 4 は log only、 Phase 5+ で Supabase llm_metrics + Grafana alert 連動。
+    try:
+        _usage = getattr(message, "usage", None)
+        if _usage is not None:
+            _cache_creation = getattr(_usage, "cache_creation_input_tokens", 0) or 0
+            _cache_read = getattr(_usage, "cache_read_input_tokens", 0) or 0
+            _input_tokens = getattr(_usage, "input_tokens", 0) or 0
+            _output_tokens = getattr(_usage, "output_tokens", 0) or 0
+            _total_input = _cache_creation + _cache_read + _input_tokens
+            _hit_rate = (_cache_read / _total_input * 100) if _total_input > 0 else 0.0
+            print(
+                f"[VIZ-CACHE] {ticker} input={_input_tokens} "
+                f"cache_create={_cache_creation} cache_read={_cache_read} "
+                f"output={_output_tokens} hit_rate={_hit_rate:.1f}%"
+            )
+    except Exception as _e_log:
+        print(f"[VIZ-CACHE] usage logging failed: {_e_log}")
 
     raw = message.content[0].text.strip()
     raw = re.sub(r'^```[\w]*\n?', '', raw, flags=re.MULTILINE)
@@ -8999,6 +9021,24 @@ async def generate_visualization(
     # yfinance fallback 時は EPS が GAAP（FMP は Non-GAAP がメイン）
     if analysis_data.get("_eps_source") == "yfinance_gaap":
         parsed["epsSourceNote"] = "GAAP"
+
+    # handover v82 Phase 4: signal_quality envelope attach (Phase 3 sources schema と統合)。
+    # material_facts の存在 + LLM 出力品質を 3-tier (high/medium/low) で表現、 frontend
+    # DiagramCitation が「データ源 + 信頼性」 chip を出すための material。
+    _mf_count = len(analysis_data.get("material_facts") or [])
+    _eps_src = analysis_data.get("_eps_source") or "fmp"
+    if _eps_src == "fmp" and _mf_count >= 5:
+        _vq_confidence = "high"
+    elif _mf_count >= 3:
+        _vq_confidence = "medium"
+    else:
+        _vq_confidence = "low"
+    parsed["signal_quality"] = {
+        "source": _eps_src,
+        "confidence": _vq_confidence,
+        "material_facts_count": _mf_count,
+        "freshness_days": None,  # /api/visualize は filing date を持たないため null
+    }
 
     # デバッグ：実際に返すデータの期数を確認
     _return_pts = [len(t.get("data", [])) for t in parsed.get("trends", [])]
