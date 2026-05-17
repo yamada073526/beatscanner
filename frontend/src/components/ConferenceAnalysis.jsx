@@ -71,11 +71,11 @@ function AccordionSection({ title, badge, badgeColor = '#1e293b', children, stre
           display: 'inline-block',
           lineHeight: 1,
         }}>▶</span>
-        <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)', flex: 1 }}>
+        <span style={{ fontWeight: 500, fontSize: '14px', color: 'var(--text-primary)', flex: 1 }}>
           {title}
         </span>
         {badge && (
-          <span style={{ fontSize: '11px', fontWeight: '600', color: 'white', background: badgeColor, borderRadius: '4px', padding: '2px 7px' }}>
+          <span style={{ fontSize: '11px', fontWeight: 500, color: 'white', background: badgeColor, borderRadius: '4px', padding: '2px 7px' }}>
             {badge}
           </span>
         )}
@@ -219,7 +219,7 @@ function AnalystCard({ analyst, analystData }) {
               gap: 8,
               padding: '10px 14px',
               fontSize: 11,
-              fontWeight: 600,
+              fontWeight: 500,
               color: 'var(--text-muted)',
               letterSpacing: '0.04em',
               background: 'var(--bg-subtle)',
@@ -254,13 +254,13 @@ function AnalystCard({ analyst, analystData }) {
                   }}
                 >
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ fontWeight: 600 }}>{formatFiscalQuarter(item.date)}</span>
+                    <span style={{ fontWeight: 500 }}>{formatFiscalQuarter(item.date)}</span>
                     <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{item.date}</span>
                   </div>
                   <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>
                     {fmtEps(item.estimated)}
                   </div>
-                  <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                  <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>
                     {fmtEps(item.actual)}
                   </div>
                   <div style={{

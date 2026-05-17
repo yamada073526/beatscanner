@@ -735,7 +735,12 @@ export default function Workspace({
         }
         pane3={
           isIndices && !pane3JudgmentOverride ? (
-            <PaneDetailView />
+            <PaneDetailView
+              detailFor={detailFor}
+              onAnalyze={onAnalyze}
+              plan={plan}
+              detailContext={detailContext}
+            />
           ) : (
             <JudgmentDetail
               plan={plan}

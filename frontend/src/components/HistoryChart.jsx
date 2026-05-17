@@ -110,7 +110,7 @@ function SharesTrend({ periods }) {
           {periods.map((p) => (
             <div key={p.period} className="text-center">
               <div className="text-xs text-slate-400">FY{p.period}</div>
-              <div className="text-sm font-semibold text-slate-800">{formatShares(p.shares_diluted)}</div>
+              <div className="text-sm font-medium tabular-nums text-slate-800">{formatShares(p.shares_diluted)}</div>
             </div>
           ))}
         </div>
