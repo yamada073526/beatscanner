@@ -1,5 +1,9 @@
 import React, { Suspense, lazy } from 'react';
 import { useJudgment } from '../../state/JudgmentContext.jsx';
+// handover v82 Phase 5.5: ConditionRow click → DiagramCard pulse 連携 (multi-review 6 体合議 verdict、 2026-05-17)。
+// pulsingConditionIndex は workspaceStore (non-persist) で管理、 store setter は pure、
+// timer は DiagramCard 側 useEffect で auto-unset (Web 設計 + 開発 reviewer 一致)。
+import { useWorkspaceStore } from '../../../../state/workspaceStore.js';
 import Hero from './Hero.jsx';
 import KpiStrip from './KpiStrip.jsx';
 import VerdictDetail from './VerdictDetail.jsx';
@@ -67,6 +71,9 @@ export default function JudgmentDetail({
   useWorkspaceReader = false,
 }) {
   const { selectedTicker } = useJudgment();
+  // handover v82 Phase 5.5: ConditionRow click → workspaceStore.pulsingConditionIndex set。
+  // DiagramCard 側 useEffect で 2800ms 後 auto-unset (Web 設計 + 開発 reviewer 一致 verdict)。
+  const setPulsingConditionIndex = useWorkspaceStore((s) => s.setPulsingConditionIndex);
 
   if (!selectedTicker) {
     return (
@@ -187,6 +194,11 @@ export default function JudgmentDetail({
             totalCount={result?.totalCount}
             isPro={detailContext.isPro}
             onUpgrade={detailContext.onUpgrade}
+            onConditionPulse={(idx) => {
+              // condition 4 (営業利益増、 0-indexed) は全 step 該当 → toast fallback (DiagramCard 側で処理)。
+              // 0-3 は個別 step pulse。 'all_steps' 文字列を sentinel として store に保存。
+              setPulsingConditionIndex(idx === 4 ? 'all_steps' : idx);
+            }}
           />
         )
       )}

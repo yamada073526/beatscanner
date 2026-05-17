@@ -27,6 +27,7 @@ export default function FiveConditionsCard({
   totalCount,
   isPro = true,
   onUpgrade,
+  onConditionPulse,
 }) {
   // null = どれも展開されていない (default)
   // index = その index のみ展開 (Linear 流「同時に 1 つだけ」)
@@ -102,6 +103,7 @@ export default function FiveConditionsCard({
                 }
                 isPro={isPro}
                 onUpgrade={onUpgrade}
+                onConditionPulse={onConditionPulse}
               />
             ))}
           </ul>

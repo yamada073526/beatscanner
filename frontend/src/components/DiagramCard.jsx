@@ -9,6 +9,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import DiagramCitation from './DiagramCitation.jsx';
 import { sanitizeDiagramData, findBlocklistHits } from '../lib/blocklist.js';
+// handover v82 Phase 5.5: ConditionRow click → DiagramCard pulse 連携 (multi-review 6 体合議 verdict)。
+import { useWorkspaceStore } from '../state/workspaceStore.js';
+import { isStepPulsingForCondition } from '../lib/condition-mapping.js';
+import Toast from './Toast.jsx';
 
 function VizSectionLabel({ text }) {
   return (
@@ -21,15 +25,21 @@ function VizSectionLabel({ text }) {
   );
 }
 
-function FlowBox({ step }) {
+function FlowBox({ step, stepIndex, isPulsing }) {
   const label  = step.label  || '';
   const detail = step.detail || step.sub || '';
   return (
-    <div style={{
-      flex: '0 0 auto', width: '120px',
-      padding: '10px 8px', backgroundColor: '#38BDF8',
-      borderRadius: '10px', textAlign: 'center',
-    }}>
+    <div
+      className="diagram-step"
+      data-step-index={stepIndex}
+      data-pulsing={isPulsing ? 'true' : undefined}
+      style={{
+        flex: '0 0 auto', width: '120px',
+        padding: '10px 8px', backgroundColor: '#38BDF8',
+        borderRadius: '10px', textAlign: 'center',
+        position: 'relative',
+      }}
+    >
       <div style={{
         fontSize: '14px', fontWeight: '800', color: '#0F172A',
         marginBottom: detail ? '4px' : 0, lineHeight: 1.3,
@@ -817,6 +827,32 @@ export default function DiagramCard({
     return sanitized;
   }, [rawData]);
 
+  // handover v82 Phase 5.5: ConditionRow click → 該当 condition + step を pulse highlight。
+  // selector subscribe (primitive shallow、 不要 re-render 回避)、 timer は useEffect 内で
+  // 2800ms auto-unset (Web 設計 + 開発 reviewer 一致 verdict)。
+  const pulsingConditionIndex = useWorkspaceStore((s) => s.pulsingConditionIndex);
+  const setPulsingConditionIndex = useWorkspaceStore((s) => s.setPulsingConditionIndex);
+  const [toastMessage, setToastMessage] = useState(null);
+
+  useEffect(() => {
+    if (pulsingConditionIndex == null) return undefined;
+    // condition 4 (営業利益増、 sentinel 'all_steps') は全 step 該当 → toast fallback
+    if (pulsingConditionIndex === 'all_steps') {
+      setToastMessage('営業利益増は全工程に影響します');
+    }
+    // mobile auto-scroll (≤768px、 マーケ verdict、 視覚連携切断防止)
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+      const diagramEl = document.getElementById('sec-diagram');
+      if (diagramEl) {
+        diagramEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+    // 2800ms 後 auto-unset (UI/UX cadence 1.8s × 1.5 周期)。
+    // 連続 click で [pulsingConditionIndex] 変わると cleanup で前 timer 自動 cancel。
+    const t = setTimeout(() => setPulsingConditionIndex(null), 2800);
+    return () => clearTimeout(t);
+  }, [pulsingConditionIndex, setPulsingConditionIndex]);
+
   if (!data) return null;
 
   const isGenerating = data?._phase === 'instant';  // Phase1中（narrative生成待ち）
@@ -841,9 +877,17 @@ export default function DiagramCard({
   const valuation = data.valuation         || null;
   const dividend  = data.dividend          || null;
 
+  // handover v82 Phase 5.5: pulsingConditionIndex に応じて該当 step に pulse 適用。
+  // condition 4 (sentinel 'all_steps') は toast fallback で個別 pulse なし。
+  const isStepPulsing = (stepIdx) => {
+    if (pulsingConditionIndex == null) return false;
+    if (pulsingConditionIndex === 'all_steps') return false; // toast fallback
+    return isStepPulsingForCondition(stepIdx, pulsingConditionIndex, steps.length);
+  };
+
   // Build flow items as a flat array so keys work cleanly
   const flowItems = steps.flatMap((step, i) => {
-    const items = [<FlowBox key={`box-${i}`} step={step} />];
+    const items = [<FlowBox key={`box-${i}`} step={step} stepIndex={i} isPulsing={isStepPulsing(i)} />];
     if (i < steps.length - 1) {
       items.push(
         <span key={`arrow-${i}`} style={{ color: '#94a3b8', fontSize: '20px', lineHeight: 1, flexShrink: 0 }}>→</span>
@@ -1237,10 +1281,14 @@ export default function DiagramCard({
               {data.conditions.map((c, i) => (
                 <div
                   key={`cond-${showConditions}-${i}`}
+                  className="diagram-condition"
+                  data-condition-index={i}
+                  data-pulsing={pulsingConditionIndex === i ? 'true' : undefined}
                   style={{
                     display: 'flex', alignItems: 'flex-start', gap: '8px',
                     fontSize: '12px', color: 'var(--text-primary)',
                     lineHeight: 1.6, marginBottom: i < data.conditions.length - 1 ? '6px' : 0,
+                    position: 'relative',
                     ...fadeInStyle(i),
                   }}
                 >
@@ -2049,6 +2097,12 @@ export default function DiagramCard({
           signalQuality={data?.signal_quality || null}
         />
       </div>
+      {/* handover v82 Phase 5.5: 営業利益増 (condition 4) 全 step fallback toast (UI/UX verdict) */}
+      <Toast
+        message={toastMessage}
+        duration={2800}
+        onDismiss={() => setToastMessage(null)}
+      />
     </div>
   );
 }

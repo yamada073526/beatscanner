@@ -24,6 +24,9 @@ import {
  * @param {() => void} props.onToggle
  * @param {boolean} props.isPro
  * @param {() => void} props.onUpgrade
+ * @param {(idx: number) => void} [props.onConditionPulse] - handover v82 Phase 5.5:
+ *   onClick で onToggle と並行 trigger、 DiagramCard 該当条件 + step を pulse highlight。
+ *   index は 1-based なので 0-based に変換して渡す (mapping は 0-indexed)。
  */
 export default function ConditionRow({
   index,
@@ -32,6 +35,7 @@ export default function ConditionRow({
   onToggle,
   isPro = true,
   onUpgrade,
+  onConditionPulse,
 }) {
   const [showModal, setShowModal] = useState(false);
   const passed = condition.passed;
@@ -61,7 +65,15 @@ export default function ConditionRow({
       {/* ── Summary row (always visible) ────────────────────────────── */}
       <button
         type="button"
-        onClick={onToggle}
+        onClick={() => {
+          onToggle();
+          // handover v82 Phase 5.5: DiagramCard 該当条件 + step を pulse highlight。
+          // index は 1-based、 mapping は 0-indexed なので変換。
+          if (typeof onConditionPulse === 'function') {
+            onConditionPulse(index - 1);
+          }
+        }}
+        title="※ 図解との関連を示すものであり、 因果関係を保証しません"
         aria-expanded={expanded}
         aria-controls={`condition-detail-${index}`}
         style={{

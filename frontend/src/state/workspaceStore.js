@@ -110,6 +110,11 @@ export const useWorkspaceStore = create(
       // Pane 4 の selected を hoist し、Pane 3 NewsPanel からも setActiveReadingItem で
       // 同じ Reading Room を開けるようにする。null = 閉じている.
       activeReadingItem: null,
+      // handover v82 Phase 5.5 (multi-review 6 体合議 verdict、 2026-05-17):
+      // ConditionRow click → DiagramCard 該当 condition + step を pulse highlight。
+      // number (0-4) = 個別 condition index、 'all_steps' = 営業利益増 (toast fallback)、
+      // null = pulse なし。 persist 対象外 (URL SSOT 該当外 + 1 click feedback の ephemeral state)。
+      pulsingConditionIndex: null,
 
       toggleHeader: () => set((s) => ({ headerCollapsed: !s.headerCollapsed })),
       togglePane1: () => set((s) => ({ pane1Collapsed: !s.pane1Collapsed })),
@@ -181,6 +186,9 @@ export const useWorkspaceStore = create(
           pane4Expanded: item ? true : s.pane4Expanded,
         })),
       closeReadingRoom: () => set(() => ({ activeReadingItem: null })),
+      // handover v82 Phase 5.5: setter は pure (timer は consumer = DiagramCard 側 useEffect で管理)。
+      // Web 設計 + 開発 reviewer 一致 verdict: store 内 setTimeout は HMR / StrictMode で leak リスク。
+      setPulsingConditionIndex: (idx) => set(() => ({ pulsingConditionIndex: idx })),
     }),
     {
       name: STORAGE_KEY,

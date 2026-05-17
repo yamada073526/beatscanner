@@ -4809,6 +4809,53 @@ body {
 }
 .qhistory-table td.qh-muted { color: var(--text-muted); }
 
+/* ─────────────────────────────────────────────────────────────────
+   Phase 5.5: 5 条件 × 図解動的連携 (multi-review 6 体合議 verdict、 2026-05-17)
+   - CSS pulse: outline-only + @keyframes outline-color animate (開発 verdict、 ::before 不採用)
+   - cadence 1.8s ease-in-out (UI/UX verdict、 brand「呼吸」 整合)
+   - transform 一切触らない (feedback_press_feedback_delta.md 厳守)
+   ───────────────────────────────────────────────────────────────── */
+.diagram-condition[data-pulsing="true"],
+.diagram-step[data-pulsing="true"] {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 60%, transparent);
+  outline-offset: 2px;
+  border-radius: 6px;
+  animation: condition-pulse-glow 1.8s ease-in-out infinite;
+}
+@keyframes condition-pulse-glow {
+  0%, 100% { outline-color: color-mix(in srgb, var(--color-accent) 30%, transparent); }
+  50%      { outline-color: color-mix(in srgb, var(--color-accent) 80%, transparent); }
+}
+@media (max-width: 600px) {
+  .diagram-condition[data-pulsing="true"],
+  .diagram-step[data-pulsing="true"] {
+    outline-offset: 1px;
+  }
+}
+/* Phase 5.5 Toast (営業利益増 全 step fallback、 minimal custom) */
+.bs-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm, 6px);
+  background: rgb(30, 41, 59);
+  color: rgb(248, 250, 252);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+  max-width: calc(100vw - 32px);
+}
+.bs-toast[data-visible="true"] {
+  opacity: 1;
+}
+
 /* handover v82 Phase 5: 8Q streak grid (4 段階 strength + Aggregate 表記) */
 .qhistory-streak {
   display: flex;
