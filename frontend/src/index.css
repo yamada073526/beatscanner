@@ -4820,6 +4820,47 @@ body {
 .citation-chip-footer {
   white-space: nowrap;
 }
+/* Phase 4.5: hover popover (custom 実装、 既存 GuidanceCard Tooltip pattern 踏襲) */
+.citation-chip-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.citation-popover {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  white-space: nowrap;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm, 6px);
+  /* GuidanceCard.jsx の Tooltip と同色 (slate-800 相当)、 inline style 形と整合 */
+  background: rgb(30, 41, 59);
+  color: rgb(248, 250, 252);
+  font-size: 11px;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 280px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+.citation-popover-label {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.citation-popover-url {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.4);
+  font-size: 10px;
+  opacity: 0.85;
+}
+.citation-popover-url:hover {
+  opacity: 1;
+  text-decoration-color: currentColor;
+}
 .diagram-citation-footer {
   margin-top: 16px;
   padding-top: 12px;

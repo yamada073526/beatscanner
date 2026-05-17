@@ -6,8 +6,9 @@
  * handover v82 Phase 4: 出典 footer + degraded_mode banner を DiagramCitation で attach
  * (multi-review 6 体合議 verdict、 局所介入 +5 行で 2,027 → 2,033 行)。
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import DiagramCitation from './DiagramCitation.jsx';
+import { sanitizeDiagramData, findBlocklistHits } from '../lib/blocklist.js';
 
 function VizSectionLabel({ text }) {
   return (
@@ -796,10 +797,26 @@ function AccordionHeader({ label, isOpen, onToggle }) {
 }
 
 export default function DiagramCard({
-  data, ticker, onDownload, onYearsChange, selectedYears = 3,
+  data: rawData, ticker, onDownload, onYearsChange, selectedYears = 3,
   showCoach = false,         // R2v3: 年セレクター直上の吹き出し表示 ON/OFF（HomeTab 制御・初回のみ）
   onSelectorVisible,         // R2v2: 年セレクターが80%可視になった時に1度だけ呼ばれる
 }) {
+  // handover v82 Phase 4.5: frontend BLOCKLIST sanitize 適用 (BAD-5 / BAD-6 表示前削除)。
+  // NEGATIVE_EXAMPLES + few-shot で 87.5% 抑制、 残 12.5% を frontend で sentence 単位削除。
+  // memory: feedback_diagram_quality_guard.md
+  const data = useMemo(() => {
+    if (!rawData) return null;
+    const sanitized = sanitizeDiagramData(rawData);
+    if (sanitized?._sanitized) {
+      // log only — Phase 5+ で Sentry breadcrumb 送信予定
+      const hits = findBlocklistHits(JSON.stringify(rawData));
+      if (hits.length > 0 && typeof console !== 'undefined') {
+        console.warn('[DiagramCard] sanitized blocklist hits:', hits.slice(0, 8));
+      }
+    }
+    return sanitized;
+  }, [rawData]);
+
   if (!data) return null;
 
   const isGenerating = data?._phase === 'instant';  // Phase1中（narrative生成待ち）
