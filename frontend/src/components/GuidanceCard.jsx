@@ -1,5 +1,50 @@
 import { useState, useEffect, useRef } from 'react';
 import InfoModal from './InfoModal.jsx';
+import Chip from './ui/Chip.jsx';
+
+// ── signal_quality envelope (handover v82 Phase 0) を 3-tier badge に変換 ──
+// confidence 別に tone / label / tooltip を decide。 「ガイダンス: 非開示」 を
+// 「未確認」 (Not Provided) 等の文言に統一して Trust Cliff を解消する。
+//
+// memory: feedback_citation_required.md / project_pane3_visual_explainer_redesign.md
+function confidenceToTone(confidence) {
+  if (confidence === 'high') return 'gain';
+  if (confidence === 'medium') return 'warning';
+  return 'muted'; // low / undefined
+}
+function signalQualityLabel(sq) {
+  if (!sq) return '未確認';
+  if (sq.confidence === 'high') return '公式データ';
+  if (sq.confidence === 'medium') return '推定データ';
+  return '未確認';
+}
+function signalQualityTooltip(sq, kind = 'EPS') {
+  if (!sq) return `${kind} のデータソースが取得できませんでした`;
+  const parts = [];
+  if (sq.source && sq.source !== 'none') parts.push(`source: ${sq.source}`);
+  if (typeof sq.consensus_count === 'number') parts.push(`アナリスト ${sq.consensus_count}人`);
+  if (typeof sq.freshness_days === 'number') parts.push(`鮮度 ${sq.freshness_days}日`);
+  const detail = parts.length ? `（${parts.join(' / ')}）` : '';
+  if (sq.confidence === 'high') return `${kind}: FMP analyst consensus 等の公式データ${detail}`;
+  if (sq.confidence === 'medium') return `${kind}: 補完データ${detail}。 メインデータが取れず代替を使用`;
+  return `${kind}: データソース取得失敗${detail}`;
+}
+function SignalQualityChip({ signalQuality, kind = 'EPS' }) {
+  const sq = signalQuality || null;
+  // signal_quality 未提供 (旧 backend / fallback) なら何も表示しない
+  if (!sq) return null;
+  return (
+    <Chip
+      variant="display"
+      tone={confidenceToTone(sq.confidence)}
+      size="xs"
+      title={signalQualityTooltip(sq, kind)}
+      ariaLabel={`${kind} データ信頼性: ${signalQualityLabel(sq)}`}
+    >
+      {signalQualityLabel(sq)}
+    </Chip>
+  );
+}
 
 // ── Tooltip (PC: hover, スマホ: tap) ──────────────────────────────────────────
 function Tooltip({ text, children }) {
@@ -170,25 +215,17 @@ function formatAbsDiff(actual, estimated) {
   return `${sign}${formatEps(diff)}`;
 }
 
-function Row({ label, estimated, actual, surprisePct, verdict, verdictReason, formatter, source }) {
+function Row({ label, estimated, actual, surprisePct, verdict, verdictReason, formatter, source, signalQuality }) {
   const style = verdict ? VERDICT_STYLE[verdict] : null;
   const isUnknown = verdict === 'unknown' || verdict === '不明';
   const reasonText = verdictReason || 'データを取得できませんでした';
-  // FMP 以外（alphavantage / yfinance）のときだけ補完ソースを控えめに表示
-  const showSource = source && source !== 'fmp' && source !== 'none';
+  // signal_quality envelope (handover v82 Phase 0) があれば 3-tier badge を表示。
+  // 旧 「via {source}」 italic 文言は signal_quality 経由で SSOT 化、 重複を避けるため撤去。
   return (
     <div className="grid grid-cols-1 gap-2 border-t border-slate-100 py-3 md:grid-cols-[80px_1fr_auto] md:items-center md:gap-4">
-      <div className="text-sm font-semibold text-slate-700">
-        {label}
-        {showSource && (
-          <span
-            className="ml-1.5 italic"
-            style={{ fontSize: '10px', color: 'var(--text-muted)', opacity: 0.7, fontWeight: 400 }}
-            title={`データソース: ${source}（FMP で取得できなかったため補完）`}
-          >
-            via {source}
-          </span>
-        )}
+      <div className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+        <span>{label}</span>
+        <SignalQualityChip signalQuality={signalQuality} kind={label} />
       </div>
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
         <div>
@@ -237,13 +274,16 @@ function Row({ label, estimated, actual, surprisePct, verdict, verdictReason, fo
   );
 }
 
-function RevenueRow({ revenueActual, revenueEstimated }) {
+function RevenueRow({ revenueActual, revenueEstimated, signalQuality }) {
   const formatted = formatRevenue(revenueActual);
 
   if (!formatted) {
     return (
       <div className="grid grid-cols-1 gap-2 border-t border-slate-100 py-3 md:grid-cols-[80px_1fr_auto] md:items-center md:gap-4">
-        <div className="text-sm font-semibold text-slate-700">売上高</div>
+        <div className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+          <span>売上高</span>
+          <SignalQualityChip signalQuality={signalQuality} kind="売上高" />
+        </div>
         <div className="text-sm text-slate-500">—</div>
         <div>
           <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-medium text-slate-600">
@@ -255,13 +295,17 @@ function RevenueRow({ revenueActual, revenueEstimated }) {
   }
 
   if (revenueEstimated == null) {
+    // アナリスト予想未取得 → handover v82 Trust Cliff fix: 「公式未開示」 統一
     return (
       <div className="grid grid-cols-1 gap-2 border-t border-slate-100 py-3 md:grid-cols-[80px_1fr_auto] md:items-center md:gap-4">
-        <div className="text-sm font-semibold text-slate-700">売上高</div>
+        <div className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+          <span>売上高</span>
+          <SignalQualityChip signalQuality={signalQuality} kind="売上高" />
+        </div>
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
           <div>
             <span className="text-slate-500">予想: </span>
-            <span className="text-sm italic" style={{ color: 'var(--text-muted)', opacity: 0.7 }}>—</span>
+            <span className="text-sm italic" style={{ color: 'var(--text-muted)', opacity: 0.7 }}>公式未開示</span>
           </div>
           <div>
             <span className="text-slate-500">実績: </span>
@@ -284,7 +328,10 @@ function RevenueRow({ revenueActual, revenueEstimated }) {
   const style = VERDICT_STYLE[verdict];
   return (
     <div className="grid grid-cols-1 gap-2 border-t border-slate-100 py-3 md:grid-cols-[80px_1fr_auto] md:items-center md:gap-4">
-      <div className="text-sm font-semibold text-slate-700">売上高</div>
+      <div className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+        <span>売上高</span>
+        <SignalQualityChip signalQuality={signalQuality} kind="売上高" />
+      </div>
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
         <div>
           <span className="text-slate-500">予想: </span>
@@ -300,7 +347,7 @@ function RevenueRow({ revenueActual, revenueEstimated }) {
           <span>{style.icon}</span>
           <span>{style.label}</span>
         </span>
-        <span className="text-sm font-semibold text-slate-700">
+        <span className="text-sm font-semibold text-slate-700 tabular-nums">
           {surprisePct != null ? (surprisePct > 0 ? '+' : '') + surprisePct.toFixed(1) + '%' : ''}
         </span>
       </div>
@@ -390,7 +437,11 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
     );
   }
 
-  const { fiscal_period, date, eps, revenue_actual, revenue_estimated, sec_guidance_text, sec_guidance_source } = guidance;
+  const { fiscal_period, date, eps, revenue, revenue_actual, revenue_estimated, sec_guidance_text, sec_guidance_source } = guidance;
+  // handover v82 Phase 0 で eps.signal_quality / revenue.signal_quality envelope を backend 追加。
+  // 旧 guidance には存在しないので optional chaining で安全に取得。
+  const epsSignalQuality = eps?.signal_quality || null;
+  const revenueSignalQuality = revenue?.signal_quality || null;
   const subtitle = fiscal_period || date || '直近決算';
 
   return (
@@ -431,11 +482,13 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
           verdict={eps?.verdict}
           verdictReason={eps?.verdict_reason}
           source={eps?.source}
+          signalQuality={epsSignalQuality}
           formatter={formatEps}
         />
         <RevenueRow
           revenueActual={revenue_actual}
           revenueEstimated={revenue_estimated}
+          signalQuality={revenueSignalQuality}
         />
       </div>
       {isSecLoading && !sec_guidance_text ? (

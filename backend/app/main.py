@@ -5105,7 +5105,7 @@ async def guidance_basic(ticker: str, request: Request) -> dict:
             },
             "revenue_actual": float(revenue_actual) if revenue_actual is not None else None,
             "revenue_estimated": float(revenue_estimated) if revenue_estimated is not None else None,
-            "revenue_data_note": None if revenue_estimated is not None else "アナリスト予想は現在準備中です",
+            "revenue_data_note": None if revenue_estimated is not None else "企業が次期ガイダンスを公式に開示していません",
         }
     except HTTPException:
         raise
@@ -5242,7 +5242,7 @@ async def _guidance_impl(ticker: str, request: Request) -> dict:
         },
         "revenue_actual": float(revenue_actual) if revenue_actual is not None else None,
         "revenue_estimated": float(revenue_estimated) if revenue_estimated is not None else None,
-        "revenue_data_note": None if revenue_estimated is not None else "アナリスト予想は現在準備中です",
+        "revenue_data_note": None if revenue_estimated is not None else "企業が次期ガイダンスを公式に開示していません",
     }
 
     if sec_result:

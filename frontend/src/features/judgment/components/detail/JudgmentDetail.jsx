@@ -19,6 +19,9 @@ import InsightsPanel from '../../../../components/InsightsPanel.jsx';
 import StockPriceChart from '../../../../components/StockPriceChart.jsx';
 import GuidanceCard from '../../../../components/GuidanceCard.jsx';
 import HistoryChart from '../../../../components/HistoryChart.jsx';
+// handover v82 Phase 2: 8Q 履歴を Pane 3 に mount。 旧来は DetailReport tab だけだったが
+// Pane 3 で常時可視化することで「直近 8Q の Beat/Miss streak」 を Trust signal として front 出し。
+import QuarterlyHistoryTable from '../../../../components/QuarterlyHistoryTable.jsx';
 
 // DetailReport は重量級 (36 KB gzip) のため lazy load
 const DetailReport = lazy(() => import('../../../../components/DetailReport.jsx'));
@@ -224,6 +227,27 @@ export default function JudgmentDetail({
         <div id="sec-history-chart">
           <HistoryChart periods={result.periods} currency={result.currency} />
         </div>
+      )}
+
+      {/* 直近 8Q 履歴 (Pro 限定、 handover v82 Phase 2) — QuarterlyHistoryTable 自身が
+          panel-card 相当の枠を持つので outer Card 不要。 PremiumLock で Pro gating、
+          選択 ticker のみ fetch。 */}
+      {selectedTicker && (
+        <PremiumLock
+          feature="earnings_8q"
+          plan={plan}
+          label="直近 8Q の Beat/Miss streak を一覧で"
+          bullets={[
+            '過去 8 四半期の EPS / 売上 surprise %',
+            '連続 Beat 期数の自動集計',
+            'ピンクが直近、 直前の決算と並べて trend を可視化',
+          ]}
+          onUpgrade={detailContext.onUpgrade}
+        >
+          <div id="sec-quarterly-history">
+            <QuarterlyHistoryTable ticker={selectedTicker} limit={8} />
+          </div>
+        </PremiumLock>
       )}
 
       {/* 市場の声 — InsightsPanel 自身が panel-card を持つので outer Card 不要 */}
