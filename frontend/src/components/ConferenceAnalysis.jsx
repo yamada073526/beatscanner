@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { streamConferenceText } from '../api.js';
 import LockedSection, { ConferenceGhost } from './LockedSection.jsx';
