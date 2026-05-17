@@ -4065,6 +4065,51 @@ async def search(request: Request, q: str = Query(..., min_length=1)) -> list[di
     return (us + jp + others)[:12]
 
 
+def _build_signal_quality(
+    *,
+    source: str | None,
+    date_str: str | None,
+    consensus_count: int | None,
+) -> dict:
+    """guidance/basic response に埋め込む signal_quality envelope.
+
+    handover v82 Phase 0 (Hallucination Guard 基盤)。 frontend Phase 2 (8Q +
+    信頼性バッジ) で Chip variant="source" として可視化される。
+
+    confidence の source ベース mapping:
+        fmp + consensus_count >= 10 → "high"
+        fmp + consensus_count <  10 → "medium"
+        alphavantage / yfinance     → "medium"
+        none / null                 → "low"
+    """
+    cc = consensus_count if isinstance(consensus_count, int) else None
+    if source == "fmp":
+        confidence = "high" if (cc or 0) >= 10 else "medium"
+    elif source in ("alphavantage", "yfinance"):
+        confidence = "medium"
+    else:
+        confidence = "low"
+
+    freshness_days: int | None = None
+    if date_str:
+        try:
+            from datetime import datetime as _dt_sq, timezone as _tz_sq
+            _norm = date_str.replace("Z", "+00:00") if isinstance(date_str, str) else date_str
+            d = _dt_sq.fromisoformat(_norm)
+            if d.tzinfo is None:
+                d = d.replace(tzinfo=_tz_sq.utc)
+            freshness_days = (_dt_sq.now(_tz_sq.utc) - d).days
+        except (ValueError, TypeError):
+            freshness_days = None
+
+    return {
+        "source": source or "none",
+        "confidence": confidence,
+        "freshness_days": freshness_days,
+        "consensus_count": cc,
+    }
+
+
 def _verdict(actual: float | None, estimated: float | None) -> tuple[str, float | None, str | None]:
     """Return (verdict, surprise_pct, reason). Threshold ±3%.
 
@@ -4696,6 +4741,34 @@ async def _fetch_eps_data(ticker: str, fmp_key: str) -> dict:
             if period and year:
                 fiscal_period = f"{period} {year}"
 
+    # consensus_count: FMP analyst_estimates から analyst 数を抽出 (handover v82 Phase 0)
+    # surprise_date / income_date に最も近い estimate entry から取得。
+    consensus_count_eps: int | None = None
+    consensus_count_revenue: int | None = None
+    if estimates:
+        ref_date = surprise_date or income_date
+        if ref_date:
+            try:
+                from datetime import datetime as _dt_cc
+                _target = _dt_cc.fromisoformat(ref_date)
+                def _dist_cc(e: dict) -> float:
+                    d = e.get("date")
+                    if not d:
+                        return 1e12
+                    try:
+                        return abs((_dt_cc.fromisoformat(d) - _target).days)
+                    except ValueError:
+                        return 1e12
+                _best_cc = min(estimates, key=_dist_cc)
+                _cc_e = _best_cc.get("numberAnalystEstimatedEps")
+                _cc_r = _best_cc.get("numberAnalystEstimatedRevenue")
+                if isinstance(_cc_e, (int, float)):
+                    consensus_count_eps = int(_cc_e)
+                if isinstance(_cc_r, (int, float)):
+                    consensus_count_revenue = int(_cc_r)
+            except (ValueError, TypeError):
+                pass
+
     return {
         "surprises": surprises,
         "estimates": estimates,
@@ -4707,6 +4780,8 @@ async def _fetch_eps_data(ticker: str, fmp_key: str) -> dict:
         "revenue_actual_fmp": revenue_actual_fmp,
         "income_date": income_date,
         "source": source,  # "fmp" / "alphavantage" / "yfinance" / "none"
+        "consensus_count": consensus_count_eps,
+        "revenue_consensus_count": consensus_count_revenue,
     }
 
 
@@ -4991,6 +5066,13 @@ async def guidance_basic(ticker: str, request: Request) -> dict:
             float(revenue_estimated) if revenue_estimated is not None else None,
         )
 
+        # signal_quality envelope (handover v82 Phase 0、 Hallucination Guard 基盤)
+        eps_source = eps_result.get("source", "fmp") if isinstance(eps_result, dict) else "fmp"
+        # revenue source は revenue_actual_fmp が取れたら fmp、 そうでなければ yfinance fallback
+        rev_source = "fmp" if (
+            isinstance(eps_result, dict) and eps_result.get("revenue_actual_fmp") is not None
+        ) else ("yfinance" if revenue_actual is not None else "none")
+
         return {
             "ticker": ticker.upper(),
             "fiscal_period": fiscal_period,
@@ -5001,7 +5083,12 @@ async def guidance_basic(ticker: str, request: Request) -> dict:
                 "surprise_pct": eps_pct,
                 "verdict": eps_label,
                 "verdict_reason": eps_reason,
-                "source": eps_result.get("source", "fmp"),
+                "source": eps_source,
+                "signal_quality": _build_signal_quality(
+                    source=eps_source,
+                    date_str=surprise_date or income_date,
+                    consensus_count=eps_result.get("consensus_count") if isinstance(eps_result, dict) else None,
+                ),
             },
             "revenue": {
                 "estimated": revenue_estimated,
@@ -5009,6 +5096,12 @@ async def guidance_basic(ticker: str, request: Request) -> dict:
                 "surprise_pct": rev_pct,
                 "verdict": rev_label,
                 "verdict_reason": rev_reason,
+                "source": rev_source,
+                "signal_quality": _build_signal_quality(
+                    source=rev_source,
+                    date_str=income_date or surprise_date,
+                    consensus_count=eps_result.get("revenue_consensus_count") if isinstance(eps_result, dict) else None,
+                ),
             },
             "revenue_actual": float(revenue_actual) if revenue_actual is not None else None,
             "revenue_estimated": float(revenue_estimated) if revenue_estimated is not None else None,
@@ -8449,6 +8542,31 @@ async def generate_visualization(
         print("[VISUALIZE] metrics_trend rebuild FAILED: " + str(_e_rebuild) + ". Using frontend data.")
     # ════════════════════════════════════════════════════════
     print(f"[TIMING] {ticker} metrics_trend built → {_time.time()-_t0:.2f}s")
+
+    # ── Hallucination Guard: Python calc layer の precomputed_metrics を注入 (handover v82 Phase 0) ──
+    # LLM は数値を再計算せず、 この dict から「そのまま引用」 する責務。
+    # material_facts は Phase 4 (DiagramCard 強化) で SEC 8-K / FMP press release から構築予定。
+    try:
+        from .visualizer.calc import build_precomputed_metrics as _build_precomputed
+        # _periods_built は新しい順でない (年度昇順) ので逆順に
+        _periods_for_calc = list(reversed(_periods_built)) if _periods_built else []
+        # revenue キーを revenue_b エイリアスでも参照可能に
+        for _p_calc in _periods_for_calc:
+            if "revenue" in _p_calc and "revenue_b" not in _p_calc:
+                _p_calc["revenue_b"] = _p_calc.get("revenue")
+            if "eps" in _p_calc and "eps_diluted" not in _p_calc:
+                _p_calc["eps_diluted"] = _p_calc.get("eps")
+        analysis_data["precomputed_metrics"] = _build_precomputed(
+            ticker=ticker,
+            periods_built=_periods_for_calc,
+            eps_basic=None,        # Phase 1+ で guidance_basic レスポンスを wire
+            guidance_data=None,    # Phase 4 で SEC 8-K 抽出済 dict を wire
+        )
+        analysis_data["material_facts"] = []  # Phase 4 で実装
+    except Exception as _e_precomp:
+        print(f"[VISUALIZE] precomputed_metrics build FAILED: {_e_precomp}. Using empty fallback.")
+        analysis_data["precomputed_metrics"] = {}
+        analysis_data["material_facts"] = []
 
     user_prompt = build_user_prompt(analysis_data)
 

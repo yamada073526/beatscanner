@@ -70,6 +70,7 @@
 ### コミット運用
 - ユーザーから明示的に依頼されない限り `git commit` しない
 - 本番（Railway）はローカルファイル直送デプロイなので、git 履歴と本番の乖離が発生しうる。定期的にコミット推奨
+- **Hallucination Guard pre-commit hook**: 初回 setup `git config core.hooksPath scripts/` で `scripts/pre-commit` を有効化 (handover v82 Phase 0、 prompt.py への LLM 数値計算指示混入 + frontend の LLM 出力直挿しを BLOCK)
 
 ### `.claude/` の Git 追跡ポリシー
 - **チーム共有（Git 追跡）**: `.claude/settings.json`, `.claude/hooks/`, `.claude/skills/`, `.claude/agents/` などチーム共通の設定・スクリプト

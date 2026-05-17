@@ -1,5 +1,18 @@
 SYSTEM_PROMPT_TEMPLATE = """Return ONLY a valid JSON. No markdown, no explanation.
 
+# 役割分離 (HARD CONSTRAINT)
+あなたは narration 専属です。 以下を厳禁します:
+- 数値計算 (足し算・引き算・割り算・% 計算)
+- 「前年同期比」「QoQ」「YoY」「サプライズ%」「成長率」 等の独自算出
+- 順位付け (「最も大きい」「業界 No.1」「世界シェア X%」 等の比較断定)
+- 出典なき固有名詞 (具体的なシェア / 売上 / EPS 数値で source が material_facts に無いもの)
+
+数値・比率・順位は user prompt の `precomputed_metrics` / `metrics_trend` / `beat_miss_detail` から **そのまま引用** してください。 計算が必要な場合は precomputed_metrics に存在しないことを意味するので、 該当センテンスを **削除** してください。
+
+# Citation 強制
+strengths / risks / bullCase / bearCase に **数値 / 固有名詞 / 因果文** を含む場合、 user prompt の `material_facts` 配列に該当 fact があるか確認してください。 該当無しなら **そのセンテンスを削除** し、 残った 2 件で構成してください。 推測で URL や数値を捏造することは絶対禁止です (景表法 + 金商法リスク)。
+
+# Output schema
 Output ONLY these fields (DO NOT output trends/valuation/operatingMargins/fcfTrend/capexTrend):
 
 {
@@ -28,8 +41,8 @@ Output ONLY these fields (DO NOT output trends/valuation/operatingMargins/fcfTre
 
 RULES:
 - businessFlowSteps: 3〜5ステップ。detail は純日本語8字以内（英数字・製品名・略語禁止）
-- strengths/risks/bullCase/bearCase: 各3件固定
-- risks: 定量インパクト必須（例:Azure成長5pp下振れ→EPS-$0.40、売上-$2B）
+- strengths/risks/bullCase/bearCase: 各3件固定（material_facts 不足時は 2 件でも可）
+- risks: 定量インパクト必須（数値は metrics_trend / beat_miss_detail から引用、 推測値禁止）
 - 全フィールド日本語（ticker/companyName/consensusSource除く）
 - dividend.yield が不明なら null
 - DO NOT output: trends, valuation, operatingMargins, fcfTrend, capexTrend, segmentSummary"""
@@ -45,14 +58,15 @@ SYSTEM_PROMPT = get_system_prompt(3)
 
 
 def build_user_prompt(data: dict) -> str:
+    import json as _json_main
+
     years = data.get("years", 3)
     beat_miss_detail = data.get('beat_miss_detail') or ''
 
     # conditions_detail を圧縮（JSON全体 → 1行サマリー）
     conditions_raw = data.get("conditions_detail", "")
     try:
-        import json as _json_cond
-        conds = _json_cond.loads(conditions_raw) if conditions_raw else []
+        conds = _json_main.loads(conditions_raw) if conditions_raw else []
         conditions_compact = " | ".join(
             f"{'✓' if c.get('passed') else '✗'} {c.get('name','')}: {c.get('value','')}"
             for c in (conds if isinstance(conds, list) else [])
@@ -63,6 +77,30 @@ def build_user_prompt(data: dict) -> str:
     # guidance も圧縮
     guidance_raw = data.get("guidance", "データなし") or "データなし"
     guidance_compact = guidance_raw[:300] + "..." if len(guidance_raw) > 300 else guidance_raw
+
+    # precomputed_metrics: Python calc layer 出力 (handover v82 Phase 0)
+    # LLM は数値を再計算せず、 この dict から「そのまま引用」 する責務
+    precomputed = data.get("precomputed_metrics") or {}
+    try:
+        precomputed_block = _json_main.dumps(precomputed, ensure_ascii=False, indent=2)
+    except Exception:
+        precomputed_block = "{}"
+
+    # material_facts: 出典付き fact list (handover v82 Phase 0 / Phase 4 で本格利用)
+    # 各 entry shape: {"fact": "...", "source_url": "https://...", "date": "YYYY-MM-DD"}
+    material_facts = data.get("material_facts") or []
+    if material_facts and isinstance(material_facts, list):
+        material_lines = []
+        for mf in material_facts[:10]:  # 過剰流入防止 (cache hit 確保)
+            if isinstance(mf, dict):
+                fact = (mf.get("fact") or "").strip()
+                src = (mf.get("source_url") or "").strip()
+                if fact and src:
+                    material_lines.append(f"- {fact} [出典: {src}]")
+        material_block = "\n".join(material_lines) if material_lines else "（material_facts 未提供 — 数値・固有名詞含む文を生成しないこと）"
+    else:
+        material_block = "（material_facts 未提供 — 数値・固有名詞含む文を生成しないこと）"
+
     return f"""
 以下の決算分析データをもとに、上記スキーマに従い narrative フィールドのみを JSON 出力してください。
 
@@ -73,6 +111,9 @@ def build_user_prompt(data: dict) -> str:
 ## 5条件
 {conditions_compact}
 
+## 事前計算済み metrics (改変禁止・そのまま引用)
+{precomputed_block}
+
 ## 主要指標【参考・{years}期分】
 {data.get('metrics_trend', 'データなし')}
 
@@ -81,4 +122,7 @@ def build_user_prompt(data: dict) -> str:
 
 ## ガイダンス
 {guidance_compact}
+
+## 出典付き fact (citation source)
+{material_block}
 """
