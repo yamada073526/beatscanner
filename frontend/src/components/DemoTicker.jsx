@@ -31,8 +31,8 @@ export default function DemoTicker({ onResult }) {
   if (!expanded) {
     return (
       <div className="mt-4 rounded-2xl border-2 border-dashed border-slate-200 bg-white p-6 text-center">
-        <p className="mb-1 text-sm font-medium text-slate-600">APIキーなしでも試せます</p>
-        <p className="mb-4 text-xs text-slate-400">AAPL・MSFT・NVDA の3銘柄を1日3回まで無料で分析</p>
+        <p className="mb-1 text-sm font-medium text-slate-600">登録不要で試せます</p>
+        <p className="mb-4 text-xs text-slate-400">代表3銘柄を1日3回まで無料で試せます (登録不要)</p>
         <button
           onClick={() => setExpanded(true)}
           className="rounded-lg border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
@@ -76,7 +76,7 @@ export default function DemoTicker({ onResult }) {
         ))}
       </div>
       <p className="mt-3 text-center text-xs text-slate-400">
-        デモモードは1日3回まで。全銘柄を使うにはAPIキーを設定してください。
+        デモモードは1日3回まで (登録不要)。 ログインすると全銘柄を分析できます。
       </p>
     </div>
   );

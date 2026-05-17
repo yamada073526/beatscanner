@@ -11,6 +11,9 @@
 -- user_notification_preferences: 本人が CRUD 可能 (RLS で守られているので授権は広めで OK)
 grant select, insert, update, delete on public.user_notification_preferences to authenticated;
 
+-- service_role: backend からの read/write を許可 (handover v80 §0-D で発覚した GRANT 抜け落ち bug 修正、 2026-05-17 追記)
+grant select, insert, update, delete on public.user_notification_preferences to service_role;
+
 -- notification_log: 本人は SELECT のみ。INSERT/UPDATE/DELETE は backend (service role) 経由
 grant select on public.notification_log to authenticated;
 
