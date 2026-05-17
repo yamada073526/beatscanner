@@ -1,12 +1,16 @@
 import React from 'react';
 import Card from '../../primitives/Card.jsx';
 import Chip from '../../../../components/ui/Chip.jsx';
+import EarningsRing from '../../../../components/EarningsRing.jsx';
 
 /**
  * Hero section. design_system.md §B-2 Display tier 28-32px, fw600, -0.02em, lh1.1.
  * Verdict chip = beat/miss/in-line/unknown (§1-A).
+ *
+ * handover v82 Phase 5: EarningsRing を verdict chip の左隣 (small 40px) に mount。
+ * planGating earnings_countdown_ring = FREE (マーケ verdict、 LP 訴求 hook)。
  */
-export default function Hero({ ticker, companyName, verdict = 'unknown', period }) {
+export default function Hero({ ticker, companyName, verdict = 'unknown', period, nextEarningsDays, nextEarningsDate }) {
   const tone =
     verdict === 'beat' ? 'gain' : verdict === 'miss' ? 'loss' : verdict === 'in-line' ? 'muted' : 'muted';
   const verdictLabel =
@@ -79,7 +83,14 @@ export default function Hero({ ticker, companyName, verdict = 'unknown', period 
             </div>
           )}
         </div>
-        <div style={{ flexShrink: 0 }}>
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
+          {Number.isFinite(nextEarningsDays) && (
+            <EarningsRing
+              daysToEarnings={nextEarningsDays}
+              earningsDate={nextEarningsDate}
+              size={44}
+            />
+          )}
           <Chip size="md" variant="display" tone={tone}>{verdictLabel}</Chip>
         </div>
       </div>

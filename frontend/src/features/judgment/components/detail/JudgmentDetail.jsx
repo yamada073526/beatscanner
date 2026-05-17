@@ -145,6 +145,8 @@ export default function JudgmentDetail({
         companyName={result?.companyName}
         verdict={verdict}
         period={result?.latestPeriod ? `FY${result.latestPeriod}` : null}
+        nextEarningsDays={detail?.nextEarningsDays}
+        nextEarningsDate={detail?.nextEarningsDate}
       />
       <KpiStrip stats={kpis} />
       {/* handover v82 Phase 5: 三層トリアージ banner (UI/UX 6 体合議 B 案、 ConditionGrid 直前 hint 1 行)。

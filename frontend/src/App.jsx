@@ -899,6 +899,7 @@ export default function App() {
     const _detailForWS = (t) => {
       const cache = resultCacheRef.current.get(t);
       const px = portfolioPrices?.prices?.[t] || null;
+      const earn = earningsBySymbol?.get?.(t) || null;
       return {
         result: cache?.result || null,
         guidance: cache?.guidance || null,
@@ -906,6 +907,9 @@ export default function App() {
         changePct: px?.changePct ?? null,
         lastAnalyzedAt: cache?.ts ?? 0,
         isLoading: loading && ticker === t,
+        // handover v82 Phase 5: EarningsRing 用 (Hero 内 mount、 4 段階 pulse cadence)
+        nextEarningsDate: earn?.date ?? null,
+        nextEarningsDays: earn?.daysUntil ?? null,
       };
     };
     return (
