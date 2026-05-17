@@ -25,6 +25,9 @@ import QuarterlyHistoryTable from '../../../../components/QuarterlyHistoryTable.
 // handover v82 Phase 3: AnalystPanel (目標株価 / 推奨分布 / モメンタム / timeline)。
 // 階層 2 Fundamentals の HistoryChart 直後 + QuarterlyHistoryTable 直前に mount。
 import AnalystPanel from '../../../../components/AnalystPanel.jsx';
+// handover v82 Phase 5: TriageBanner (保有 × 5 条件 × Cup-Handle 三層)。
+// ConditionGrid 直前 hint 1 行 (UI/UX 6 体合議 B 案)。
+import TriageBanner from '../../../../components/TriageBanner.jsx';
 
 // DetailReport は重量級 (36 KB gzip) のため lazy load
 const DetailReport = lazy(() => import('../../../../components/DetailReport.jsx'));
@@ -144,6 +147,18 @@ export default function JudgmentDetail({
         period={result?.latestPeriod ? `FY${result.latestPeriod}` : null}
       />
       <KpiStrip stats={kpis} />
+      {/* handover v82 Phase 5: 三層トリアージ banner (UI/UX 6 体合議 B 案、 ConditionGrid 直前 hint 1 行)。
+          保有 × 5 条件 × Cup-Handle を 1 行で示し、 「他 N 件」 click で Pane 2 ヒートマップへ jump。 */}
+      {selectedTicker && (
+        <TriageBanner
+          ticker={selectedTicker}
+          user={detailContext.user}
+          plan={plan}
+          onUpgrade={detailContext.onUpgrade}
+          onJumpToScanner={detailContext.onJumpToScanner}
+        />
+      )}
+
       {/* 2026-05-12 PR-2: VerdictDetail + ConditionGrid を FiveConditionsCard に統合。
           feature flag `localStorage.pane3_v1='1'` で旧 UI に切替可 (撤回コスト最小化、§-1-B postmortem 学び適用)。
           6 体合議 (UI/UX / 金融 / Web 設計 / Web 開発 / マーケター / Anthropic engineer) 推奨。 */}

@@ -52,6 +52,11 @@ export const FEATURE_GATES = Object.freeze({
   guidance_full:          PLAN.PRO,    // ガイダンス AI 要約 (簡易版から full 版へ)
   line_morning_6am:       PLAN.PRO,    // LINE 朝 6:00 配信
   analyst_estimates:      PLAN.PRO,    // アナリスト予想 (最新値)
+  // handover v82 Phase 5 (multi-review 6 体合議 verdict、 マーケ A 案):
+  // 三層トリアージ「保有 × 5 条件 × Cup-Handle」 は最強訴求素材 → 最安 tier Pro に配置。
+  // earnings_countdown_ring は LP 訴求素材として Free 全開放 (マーケ verdict)。
+  triage_banner:          PLAN.PRO,    // 保有 × 5 条件 × Cup-Handle 三層 banner
+  earnings_countdown_ring:PLAN.FREE,   // 決算カウントダウンリング (LP 訴求 hook、 全 tier 開放)
   referral_1_month:       PLAN.PRO,    // 紹介 1 ヶ月/人
 
   // === Premium 機能 (¥1,800/月) — 「プロ級意思決定支援」===

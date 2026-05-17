@@ -635,6 +635,45 @@ export const fetchAnalystData = async (ticker) => {
 };
 
 /**
+ * handover v82 Phase 5 (三層トリアージ) 用 fetcher.
+ *
+ * Returns:
+ *   {
+ *     ticker, sources: {holdings, pattern_signals, peers},
+ *     signal_quality: {source, confidence, ...},
+ *     data: {
+ *       holdings: {owns, shares} | null,
+ *       pattern_signals: {state, state_label, signal_date} | null,
+ *       peers: {passing_count} | null,
+ *     },
+ *   }
+ *
+ * Supabase session の access_token を自動取得して Authorization に attach。
+ * 未ログイン user / token 取得失敗時は null を返す (frontend で banner 非表示)。
+ */
+export async function fetchTriage(ticker, supabaseClient, minPass = 5) {
+  if (!supabaseClient) return null;
+  try {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return null;
+    const r = await fetch(
+      `/api/triage/${encodeURIComponent(ticker)}?min_pass=${minPass}`,
+      {
+        headers: {
+          ...fmpHeaders(),
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+    if (!r.ok) return null;
+    return r.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * handover v82 Phase 3 (analyst-view) 新 schema 用 fetcher.
  *
  * Returns:
