@@ -201,9 +201,14 @@ export default function TriageBanner({
           <span aria-hidden="true"> →</span>
         </button>
       )}
-      {confidence && confidence !== 'high' && (
+      {/* handover v84 dogfood 4 (2026-05-19): chip 条件を hasFatal に絞る。
+          backend signal_quality は empty を non-ok 扱いで confidence=medium にするが、
+          empty は「fetch 成功 + データ無し」 で失敗ではない → 「取得失敗」 表示は
+          誤誘導 (例: AMZN は pattern_signals='empty' (Cup-Handle 未形成) で
+          「保有 110 株一部データ取得失敗」 と表示される問題)。 */}
+      {hasFatal && (
         <Chip variant="display" tone="muted" size="xs">
-          {confidence === 'medium' ? '一部データ取得失敗' : 'データ取得失敗'}
+          {allSourcesFatal ? 'データ取得失敗' : '一部データ取得失敗'}
         </Chip>
       )}
     </div>
