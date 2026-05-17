@@ -22,6 +22,9 @@ import HistoryChart from '../../../../components/HistoryChart.jsx';
 // handover v82 Phase 2: 8Q 履歴を Pane 3 に mount。 旧来は DetailReport tab だけだったが
 // Pane 3 で常時可視化することで「直近 8Q の Beat/Miss streak」 を Trust signal として front 出し。
 import QuarterlyHistoryTable from '../../../../components/QuarterlyHistoryTable.jsx';
+// handover v82 Phase 3: AnalystPanel (目標株価 / 推奨分布 / モメンタム / timeline)。
+// 階層 2 Fundamentals の HistoryChart 直後 + QuarterlyHistoryTable 直前に mount。
+import AnalystPanel from '../../../../components/AnalystPanel.jsx';
 
 // DetailReport は重量級 (36 KB gzip) のため lazy load
 const DetailReport = lazy(() => import('../../../../components/DetailReport.jsx'));
@@ -226,6 +229,19 @@ export default function JudgmentDetail({
       {result?.periods?.length > 0 && (
         <div id="sec-history-chart">
           <HistoryChart periods={result.periods} currency={result.currency} />
+        </div>
+      )}
+
+      {/* アナリスト視点 (handover v82 Phase 3) — AnalystPanel 自身が panel-card を持つ。
+          上段 3 view は全員可視 (見せ部分 b)、 下段 timeline は Pro でフル firm 名表示。
+          現在値は detail.price から渡し、 target_upside_pct を計算可能にする。 */}
+      {selectedTicker && (
+        <div id="sec-analyst">
+          <AnalystPanel
+            ticker={selectedTicker}
+            plan={plan}
+            currentPrice={Number.isFinite(detail?.price) ? Number(detail.price) : null}
+          />
         </div>
       )}
 

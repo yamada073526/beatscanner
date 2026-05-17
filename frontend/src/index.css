@@ -4807,6 +4807,280 @@ body {
   .qhistory-table thead th, .qhistory-table tbody td { padding: 7px 6px; font-size: 11px; }
   .qh-period-name { font-size: 12px; }
 }
+.qhistory-table td.qh-muted { color: var(--text-muted); }
+
+/* ─────────────────────────────────────────────────────────────────
+   AnalystPanel (handover v82 Phase 3) — pure CSS only (Recharts 不使用)
+   memory: feedback_chart_overlay_safety.md (overlay 4 層防御の対象外)
+   ───────────────────────────────────────────────────────────────── */
+.anp-panel {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+.anp-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+.anp-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+  margin: 0;
+}
+.anp-subhead {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0 0 8px;
+}
+.anp-fact {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.anp-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+@media (max-width: 720px) {
+  .anp-grid { grid-template-columns: 1fr; }
+}
+.anp-cell { display: grid; gap: 6px; }
+.anp-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 12px 8px;
+  text-align: center;
+  border: 1px dashed rgba(148, 163, 184, 0.25);
+  border-radius: var(--radius-sm, 6px);
+}
+
+/* ── Target Price Range Bar ─────────────────────────────────── */
+.anp-range { display: grid; gap: 6px; }
+.anp-range-track {
+  position: relative;
+  height: 12px;
+  border-radius: 6px;
+  background: rgba(148, 163, 184, 0.12);
+}
+.anp-range-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  /* gradient: slate (low/high 端) → accent (median 中央) で
+     「中央寄り = アナリスト合意」 を視覚化。 token 由来色を rgba 化して使用。 */
+  background: linear-gradient(
+    to right,
+    rgba(148, 163, 184, 0.18) 0%,
+    color-mix(in srgb, var(--color-accent) 20%, transparent) 50%,
+    rgba(148, 163, 184, 0.18) 100%
+  );
+}
+.anp-range-marker {
+  position: absolute;
+  top: -3px;
+  width: 4px;
+  height: 18px;
+  border-radius: 2px;
+  transform: translateX(-50%);
+  background: var(--text-muted);
+}
+.anp-range-marker.anp-tone-accent { background: var(--color-accent); }
+.anp-range-current {
+  position: absolute;
+  top: -5px;
+  width: 2px;
+  height: 22px;
+  border-radius: 1px;
+  transform: translateX(-50%);
+  background: var(--text-primary);
+  box-shadow: 0 0 0 2px var(--bg-elevated, #fff);
+}
+.anp-range-legend {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.anp-range-mid { color: var(--text-secondary); }
+
+/* ── Recommendation Stacked Bar ─────────────────────────────── */
+.anp-stack { display: grid; gap: 6px; }
+.anp-stack-bar {
+  display: flex;
+  height: 14px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: rgba(148, 163, 184, 0.10);
+}
+.anp-stack-seg { height: 100%; }
+.anp-stack-buy { background: var(--color-gain); }
+.anp-stack-hold { background: rgba(148, 163, 184, 0.55); }
+.anp-stack-sell { background: var(--color-loss); }
+.anp-stack-legend {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.anp-stack-label-buy { color: var(--color-gain); }
+.anp-stack-label-hold { color: var(--text-muted); }
+.anp-stack-label-sell { color: var(--color-loss); }
+
+/* ── Momentum KPI ───────────────────────────────────────────── */
+.anp-kpi {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: var(--radius-sm, 6px);
+  background: rgba(148, 163, 184, 0.04);
+}
+.anp-kpi-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.anp-kpi-arrow {
+  font-size: 14px;
+  line-height: 1;
+}
+.anp-kpi-net {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+.anp-kpi-detail {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.anp-tone-gain { color: var(--color-gain); }
+.anp-tone-loss { color: var(--color-loss); }
+.anp-tone-muted { color: var(--text-muted); }
+.anp-tone-accent { color: var(--color-accent); }
+
+/* ── Timeline (details 折りたたみ) ──────────────────────────── */
+.anp-details { display: grid; gap: 8px; }
+.anp-details-summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm, 6px);
+  list-style: none;
+}
+.anp-details-summary::-webkit-details-marker { display: none; }
+.anp-details-summary::before {
+  content: '▶';
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+.anp-details[open] .anp-details-summary::before { transform: rotate(90deg); }
+.anp-details-summary:hover {
+  background: rgba(148, 163, 184, 0.08);
+}
+.anp-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.anp-timeline-item {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+.anp-timeline-date {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.anp-timeline-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.anp-timeline-firm {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.anp-timeline-grade { color: var(--text-secondary); }
+.anp-timeline-price {
+  margin-left: auto;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* ── Footer (signal_quality + 金商法 disclaimer) ────────────── */
+.anp-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.anp-footer-note {
+  flex: 1 1 100%;
+  line-height: 1.5;
+}
+
+/* ── Empty / Skeleton ───────────────────────────────────────── */
+.anp-state-empty {
+  text-align: center;
+  padding: 20px 12px;
+  display: grid;
+  gap: 6px;
+}
+.anp-state-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+.anp-state-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+.anp-skel { display: grid; gap: 8px; padding: 8px 0; }
+.anp-skel-bar {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    rgba(148, 163, 184, 0.08) 0%,
+    rgba(148, 163, 184, 0.18) 50%,
+    rgba(148, 163, 184, 0.08) 100%
+  );
+  background-size: 200% 100%;
+  animation: anp-skel-shimmer 1.6s linear infinite;
+}
+@keyframes anp-skel-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 
 /* ── ダッシュボード展開ヒントバナー (X-2-5-A 補強) ──────────────────
    holdings あるが「保有」モードでないユーザーに、1 クリックでダッシュボードを

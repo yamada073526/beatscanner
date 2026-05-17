@@ -633,3 +633,28 @@ export const fetchAnalystData = async (ticker) => {
   if (!res.ok) return null;
   return await res.json();
 };
+
+/**
+ * handover v82 Phase 3 (analyst-view) 新 schema 用 fetcher.
+ *
+ * Returns:
+ *   {
+ *     ticker, sources: {analyst_estimates, grades, price_target},
+ *     signal_quality: {source, confidence, freshness_days, consensus_count},
+ *     precomputed_metrics: {
+ *       rating_consensus, rating_distribution, target_upside_pct,
+ *       target_range, recent_changes,
+ *     },
+ *     top_5_changes: [{date, firm, action, previous_grade, new_grade, target_price}],
+ *     raw: {price_target, analyst_estimates_latest},
+ *   }
+ *
+ * 旧 `fetchAnalystData` は deprecate (削除は別 PR で安全に)。 新 component は本 fetcher を使う。
+ */
+export async function fetchAnalyst(ticker) {
+  const r = await fetch(`/api/analyst/${encodeURIComponent(ticker)}`, {
+    headers: fmpHeaders(),
+  });
+  if (!r.ok) return null;
+  return r.json();
+}

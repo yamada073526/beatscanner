@@ -44,8 +44,104 @@ export function QuarterlyHistoryGhost() {
   );
 }
 
+// ── 列定義 (handover v82 Phase 3 で columns prop 拡張) ──────────────
+// 既存 7 列 = default。 caller が columns prop で順序や列追加を override 可能。
+// op_margin_qoq は backend API が値を返したら自動表示、 未提供なら '—'。
+const COLUMN_DEFS = {
+  period: {
+    header: '期',
+    headerClass: '',
+    cellClass: 'qh-period',
+    render: (r) => {
+      const period = r.fiscal_period || (r.date || '').slice(0, 7);
+      return (
+        <>
+          <div className="qh-period-name">{period}</div>
+          {r.date && <div className="qh-period-date">{r.date}</div>}
+        </>
+      );
+    },
+  },
+  eps_actual: {
+    header: 'EPS 実績',
+    headerClass: 'qh-num',
+    cellClass: 'qh-num',
+    render: (r) => fmtEPS(r.eps_actual),
+  },
+  eps_estimated: {
+    header: 'EPS 予想',
+    headerClass: 'qh-num qh-hide-mobile',
+    cellClass: 'qh-num qh-hide-mobile',
+    render: (r) => fmtEPS(r.eps_estimated),
+  },
+  eps_surprise: {
+    header: 'サプライズ',
+    headerClass: 'qh-num',
+    cellClass: (r) => `qh-num qh-${statusFromVerdict(r.eps_verdict)}`,
+    render: (r) => {
+      const cls = statusFromVerdict(r.eps_verdict);
+      return (
+        <div className="qh-verdict-line">
+          <span className={`qh-verdict-badge qh-${cls}`}>{verdictLabel(r.eps_verdict)}</span>
+          <span className="qh-surprise">{fmtSurprisePct(r.eps_surprise_pct)}</span>
+        </div>
+      );
+    },
+  },
+  revenue_actual: {
+    header: '売上 実績',
+    headerClass: 'qh-num qh-hide-mobile',
+    cellClass: 'qh-num qh-hide-mobile',
+    render: (r) => fmtRevenue(r.revenue_actual),
+  },
+  revenue_estimated: {
+    header: '売上 予想',
+    headerClass: 'qh-num qh-hide-mobile',
+    cellClass: 'qh-num qh-hide-mobile',
+    render: (r) => fmtRevenue(r.revenue_estimated),
+  },
+  revenue_surprise: {
+    header: '売上 サプライズ',
+    headerClass: 'qh-num',
+    cellClass: (r) => `qh-num qh-${statusFromVerdict(r.revenue_verdict)}`,
+    render: (r) => {
+      const cls = statusFromVerdict(r.revenue_verdict);
+      return (
+        <div className="qh-verdict-line">
+          <span className={`qh-verdict-badge qh-${cls}`}>{verdictLabel(r.revenue_verdict)}</span>
+          <span className="qh-surprise">{fmtSurprisePct(r.revenue_surprise_pct)}</span>
+        </div>
+      );
+    },
+  },
+  // handover v82 Phase 3: 8 列拡張用 (AnalystPanel から指定するときのみ含める)。
+  // backend `/api/guidance/{ticker}/quarterly-history` が op_margin_qoq を返したら
+  // 自動表示、 未提供 (現状 default) は '—' で muted 表示。
+  op_margin_qoq: {
+    header: '営業利益率 QoQ',
+    headerClass: 'qh-num qh-hide-mobile',
+    cellClass: 'qh-num qh-hide-mobile qh-muted',
+    render: (r) => {
+      const v = r.op_margin_qoq;
+      if (!Number.isFinite(v)) return '—';
+      const sign = v > 0 ? '+' : '';
+      return `${sign}${v.toFixed(1)}pp`;
+    },
+  },
+};
+
+const DEFAULT_COLUMNS = [
+  'period',
+  'eps_actual',
+  'eps_estimated',
+  'eps_surprise',
+  'revenue_actual',
+  'revenue_estimated',
+  'revenue_surprise',
+];
+
 // ── 本体 ────────────────────────────────────────────────
-export default function QuarterlyHistoryTable({ ticker, limit = 8 }) {
+export default function QuarterlyHistoryTable({ ticker, limit = 8, columns }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -127,52 +223,42 @@ export default function QuarterlyHistoryTable({ ticker, limit = 8 }) {
       </div>
 
       {/* ── テーブル ── */}
-      <div className="qhistory-table-wrap">
-        <table className="qhistory-table">
-          <thead>
-            <tr>
-              <th>期</th>
-              <th className="qh-num">EPS 実績</th>
-              <th className="qh-num qh-hide-mobile">EPS 予想</th>
-              <th className="qh-num">サプライズ</th>
-              <th className="qh-num qh-hide-mobile">売上 実績</th>
-              <th className="qh-num qh-hide-mobile">売上 予想</th>
-              <th className="qh-num">売上 サプライズ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, idx) => {
-              const epsCls = statusFromVerdict(r.eps_verdict);
-              const revCls = statusFromVerdict(r.revenue_verdict);
-              const period = r.fiscal_period || (r.date || '').slice(0, 7);
-              return (
-                <tr key={`${r.date || idx}`}>
-                  <td className="qh-period">
-                    <div className="qh-period-name">{period}</div>
-                    {r.date && <div className="qh-period-date">{r.date}</div>}
-                  </td>
-                  <td className="qh-num">{fmtEPS(r.eps_actual)}</td>
-                  <td className="qh-num qh-hide-mobile">{fmtEPS(r.eps_estimated)}</td>
-                  <td className={`qh-num qh-${epsCls}`}>
-                    <div className="qh-verdict-line">
-                      <span className={`qh-verdict-badge qh-${epsCls}`}>{verdictLabel(r.eps_verdict)}</span>
-                      <span className="qh-surprise">{fmtSurprisePct(r.eps_surprise_pct)}</span>
-                    </div>
-                  </td>
-                  <td className="qh-num qh-hide-mobile">{fmtRevenue(r.revenue_actual)}</td>
-                  <td className="qh-num qh-hide-mobile">{fmtRevenue(r.revenue_estimated)}</td>
-                  <td className={`qh-num qh-${revCls}`}>
-                    <div className="qh-verdict-line">
-                      <span className={`qh-verdict-badge qh-${revCls}`}>{verdictLabel(r.revenue_verdict)}</span>
-                      <span className="qh-surprise">{fmtSurprisePct(r.revenue_surprise_pct)}</span>
-                    </div>
-                  </td>
+      {(() => {
+        const colIds = (Array.isArray(columns) && columns.length > 0)
+          ? columns.filter((id) => COLUMN_DEFS[id])
+          : DEFAULT_COLUMNS;
+        return (
+          <div className="qhistory-table-wrap">
+            <table className="qhistory-table">
+              <thead>
+                <tr>
+                  {colIds.map((id) => {
+                    const def = COLUMN_DEFS[id];
+                    return (
+                      <th key={id} className={def.headerClass || ''}>
+                        {def.header}
+                      </th>
+                    );
+                  })}
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody>
+                {rows.map((r, idx) => (
+                  <tr key={`${r.date || idx}`}>
+                    {colIds.map((id) => {
+                      const def = COLUMN_DEFS[id];
+                      const cls = typeof def.cellClass === 'function'
+                        ? def.cellClass(r)
+                        : def.cellClass || '';
+                      return <td key={id} className={cls}>{def.render(r)}</td>;
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
     </div>
   );
 }
