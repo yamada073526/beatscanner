@@ -338,7 +338,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
                     tone={isActive ? 'accent' : 'muted'}
                     pressed={isActive}
                     onClick={() => runCupFilter(f.key)}
-                    title={f.premium ? 'Premium 限定 — ファンダ ∩ Cup-Handle 形成' : undefined}
+                    title={f.premium ? 'Premium ¥1,800/月 限定 (ファンダ ∩ Cup-Handle AND 検索)\nPro tier はファンダのみ / Cup のみ 個別 scan 可' : undefined}
                   >
                     {f.premium ? '🔒 ' : ''}{f.label}
                   </Chip>

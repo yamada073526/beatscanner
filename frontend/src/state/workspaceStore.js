@@ -58,6 +58,9 @@ export const useWorkspaceStore = create(
       displayCurrency: 'USD',
       // v62 WS-Phase2: Pane 4 inspector 表示切替 (default false、3 ペインで dogfood)
       pane4Expanded: false,
+      // handover v81 Top 4 (6 体合議 5/6 賛成): Pane 4 内の section 切替。
+      // 'macro' = The Macro Lens (ニュース、 既存)、 'scanner' = CustomScreenerPanel (Cup-Handle + ファンダ 5)。
+      pane4Section: 'macro',
       // v63 §12-B-4: Pane 1 各セクション折り畳み (default 全 open)
       navCollapsed: false,
       watchlistCollapsed: false,
@@ -118,6 +121,11 @@ export const useWorkspaceStore = create(
       setPortfolioPeriod: (p) => set(() => ({ portfolioPeriod: p })),
       setDisplayCurrency: (c) => set(() => ({ displayCurrency: c === 'JPY' ? 'JPY' : 'USD' })),
       togglePane4: () => set((s) => ({ pane4Expanded: !s.pane4Expanded })),
+      // pane4Section setter: section 切替時に Pane 4 を自動展開 (collapsed のまま切替えると気づかない)。
+      setPane4Section: (section) => set((s) => ({
+        pane4Section: section === 'scanner' ? 'scanner' : 'macro',
+        pane4Expanded: s.pane4Expanded || section === 'scanner', // scanner 起動時は展開、 macro 戻りは現状維持
+      })),
       toggleNav: () => set((s) => ({ navCollapsed: !s.navCollapsed })),
       toggleWatchlist: () => set((s) => ({ watchlistCollapsed: !s.watchlistCollapsed })),
       toggleHoldings: () => set((s) => ({ holdingsCollapsed: !s.holdingsCollapsed })),
@@ -196,8 +204,9 @@ export const useWorkspaceStore = create(
         moversCollapsed: state.moversCollapsed,
         portfolioCollapsed: state.portfolioCollapsed,
         selectedAccountId: state.selectedAccountId,
+        pane4Section: state.pane4Section,
       }),
-      version: 12,
+      version: 13,
       // v1 → v2: 新 collapse keys (nav/watchlist/holdings/observing) 追加。
       // v2 → v3: tier2Collapsed 追加 (Workspace Home Phase 0)。
       // v3 → v4: economicCalendarCollapsed 追加 (Workspace Home Phase 1)。
@@ -266,6 +275,11 @@ export const useWorkspaceStore = create(
           // selectedTarget は URL = SSOT で persist 対象外 (partialize に含めない) のため、
           // ここは migration は no-op (URL が ?index=^GSPC を持っていれば useUrlSync で復元される)。
           // 既存 user の Pane 3 体験はそのまま (index default)。
+        }
+        if (version < 13) {
+          // handover v81 Top 4 (6 体合議): Pane 4 に scanner section を追加。
+          // 既存 user は 'macro' (= 旧来の Macro Lens) を default で維持。
+          persistedState = { ...persistedState, pane4Section: 'macro' };
         }
         return persistedState;
       },

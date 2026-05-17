@@ -16,6 +16,7 @@ import { buildSignals } from './pane4/signal.js';
 import { fmtRelative } from './pane4/format.js';
 import NewsItem from './pane4/NewsItem.jsx';
 import ReadingMode from './pane4/ReadingMode.jsx';
+import ScannerSlot from './pane4/ScannerSlot.jsx';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 
 // ── pane4/markdown.jsx + pane4/format.js に分離済 (v65 §C-3) ────────────
@@ -39,6 +40,9 @@ export default function Pane4Inspector({ items = [] }) {
   const selected = useWorkspaceStore((s) => s.activeReadingItem);
   const setSelected = useWorkspaceStore((s) => s.setActiveReadingItem);
   const closeReadingRoom = useWorkspaceStore((s) => s.closeReadingRoom);
+  // handover v81 Top 4 (6 体合議): Pane 4 内の section 切替 (Macro Lens ⇔ Scanner)。
+  const pane4Section = useWorkspaceStore((s) => s.pane4Section);
+  const setPane4Section = useWorkspaceStore((s) => s.setPane4Section);
   const [jpEnabled, setJpEnabled] = useState(true);
   const [titleTranslations, setTitleTranslations] = useState({});
   const [translateUnavailable, setTranslateUnavailable] = useState(false);
@@ -229,85 +233,100 @@ export default function Pane4Inspector({ items = [] }) {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8 }}>
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 500,
-                color: 'var(--text-secondary)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.18em',
-              }}
-            >
-              The Macro Lens
-            </span>
-            {latestPublished && (
+            {/* handover v81 Top 4: Pane 4 section 切替 segmented tab */}
+            <div role="group" aria-label="Pane 4 section" className="ws-pane4-jp-segmented">
+              <button
+                type="button"
+                onClick={() => setPane4Section('macro')}
+                aria-pressed={pane4Section === 'macro'}
+                className={pane4Section === 'macro' ? 'is-active' : ''}
+                title="The Macro Lens (マクロニュース)"
+              >
+                ニュース
+              </button>
+              <button
+                type="button"
+                onClick={() => setPane4Section('scanner')}
+                aria-pressed={pane4Section === 'scanner'}
+                className={pane4Section === 'scanner' ? 'is-active' : ''}
+                title="スクリーナー (ファンダ 5 条件 + Cup-Handle)"
+              >
+                スキャナー
+              </button>
+            </div>
+            {pane4Section === 'macro' && latestPublished && (
               <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
                 · {fmtRelative(latestPublished)}
               </span>
             )}
-            {!latestPublished && loading && (
+            {pane4Section === 'macro' && !latestPublished && loading && (
               <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>· 読込中</span>
             )}
           </div>
-          {/* §round16: 話題 / 新着 segmented + JP segmented を 1 行同居 */}
-          <div role="group" aria-label="並び替え" className="ws-pane4-jp-segmented">
-            <button
-              type="button"
-              onClick={() => setSortMode('attention')}
-              aria-pressed={sortMode === 'attention'}
-              className={sortMode === 'attention' ? 'is-active' : ''}
-              title="話題順 (アテンション)"
-            >
-              話題
-            </button>
-            <button
-              type="button"
-              onClick={() => setSortMode('recent')}
-              aria-pressed={sortMode === 'recent'}
-              className={sortMode === 'recent' ? 'is-active' : ''}
-              title="新着順"
-            >
-              新着
-            </button>
-          </div>
-          {translateUnavailable && jpEnabled && (
-            <span
-              title="翻訳サービスが一時的に利用できません。英文を表示しています。"
-              style={{
-                fontSize: 10,
-                color: 'var(--text-muted)',
-                padding: '2px 8px',
-                borderRadius: 999,
-                border: '1px solid var(--border)',
-                background: 'transparent',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              翻訳一時停止中
-            </span>
+          {/* §round16: 話題 / 新着 segmented + JP segmented を 1 行同居 (Macro Lens のみ) */}
+          {pane4Section === 'macro' && (
+            <>
+              <div role="group" aria-label="並び替え" className="ws-pane4-jp-segmented">
+                <button
+                  type="button"
+                  onClick={() => setSortMode('attention')}
+                  aria-pressed={sortMode === 'attention'}
+                  className={sortMode === 'attention' ? 'is-active' : ''}
+                  title="話題順 (アテンション)"
+                >
+                  話題
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSortMode('recent')}
+                  aria-pressed={sortMode === 'recent'}
+                  className={sortMode === 'recent' ? 'is-active' : ''}
+                  title="新着順"
+                >
+                  新着
+                </button>
+              </div>
+              {translateUnavailable && jpEnabled && (
+                <span
+                  title="翻訳サービスが一時的に利用できません。英文を表示しています。"
+                  style={{
+                    fontSize: 10,
+                    color: 'var(--text-muted)',
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    border: '1px solid var(--border)',
+                    background: 'transparent',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  翻訳一時停止中
+                </span>
+              )}
+              <div role="group" aria-label="表示言語" className="ws-pane4-jp-segmented">
+                <button
+                  type="button"
+                  onClick={() => setJpEnabled(false)}
+                  aria-pressed={!jpEnabled}
+                  className={!jpEnabled ? 'is-active' : ''}
+                >
+                  EN
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setJpEnabled(true)}
+                  aria-pressed={jpEnabled}
+                  className={jpEnabled ? 'is-active' : ''}
+                  title="日本語に翻訳"
+                >
+                  <Languages size={11} aria-hidden style={{ marginRight: 2 }} />
+                  日
+                </button>
+              </div>
+            </>
           )}
-          <div role="group" aria-label="表示言語" className="ws-pane4-jp-segmented">
-            <button
-              type="button"
-              onClick={() => setJpEnabled(false)}
-              aria-pressed={!jpEnabled}
-              className={!jpEnabled ? 'is-active' : ''}
-            >
-              EN
-            </button>
-            <button
-              type="button"
-              onClick={() => setJpEnabled(true)}
-              aria-pressed={jpEnabled}
-              className={jpEnabled ? 'is-active' : ''}
-              title="日本語に翻訳"
-            >
-              <Languages size={11} aria-hidden style={{ marginRight: 2 }} />
-              日
-            </button>
-          </div>
         </div>
-        {/* §round16: フィルタ chip (5 個 + 件数 badge) */}
+        {/* §round16: フィルタ chip (5 個 + 件数 badge、 Macro Lens のみ) */}
+        {pane4Section === 'macro' && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {FILTER_CHIPS.map((c) => {
             const isActive = filter === c.key;
@@ -341,10 +360,13 @@ export default function Pane4Inspector({ items = [] }) {
             );
           })}
         </div>
+        )}
       </div>
 
       <div style={{ flex: 1, minHeight: 0 }}>
-        {selected ? (
+        {pane4Section === 'scanner' ? (
+          <ScannerSlot />
+        ) : selected ? (
           <PanelGroup direction="vertical" autoSaveId="bs:ws:pane4-vertical">
             <Panel defaultSize={55} minSize={25}>
               <NewsList
