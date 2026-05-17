@@ -405,11 +405,11 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
               data-cup-state={cupHandle.state}
               title={
                 cupRequiresPro
-                  ? `取っ手付きカップ (Cup-with-Handle)\n${cupChipLabel}\n深さ ${cupHandle.cup.depth_pct}% / ${cupHandle.cup.weeks}週\n［Pro で全データ解放］`
+                  ? `取っ手付きカップ (Cup-with-Handle)\n${cupChipLabel}\n深さ ${cupHandle.cup.depth_pct}% / ${cupHandle.cup.weeks}週\n［Premium で全データ解放］`
                   : `取っ手付きカップ (Cup-with-Handle)\n${cupChipLabel}\n深さ ${cupHandle.cup.depth_pct}% / ${cupHandle.cup.weeks}週\nPivot $${cupHandle.pivot.price.toFixed(2)}`
               }
               onClick={cupRequiresPro ? () => {
-                window.alert('「取っ手付きカップ」 形状検出は Pro 限定機能です。\n\n・ファンダ 5 条件 PASS × Cup-Handle 形成 の AND スキャナー\n・全 500-1000 銘柄の nightly スキャン\n・形成 → breakout 確定の push 通知\n\nPro tier (¥2,000/月) は Coming Soon。 詳細は近日 LP で公開予定。');
+                window.alert('「取っ手付きカップ」 形状検出は Premium 限定機能です。\n\n・ファンダ 5 条件 PASS × Cup-Handle 形成 の AND スキャナー\n・全 500-1000 銘柄の nightly スキャン\n・形成 → breakout 確定の push 通知\n\nPremium tier (¥1,800/月) で全データ解放されます。');
               } : undefined}
             >
               ☕ {cupChipLabel}{cupRequiresPro ? ' 🔒' : ''}
@@ -505,7 +505,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     backdropFilter: 'blur(4px)',
                   }}
                 >
-                  🔒 Cup-Handle overlay は Pro で全データ解放 (Coming Soon)
+                  🔒 Cup-Handle overlay は Premium で全データ解放
                 </div>
               </div>
             )}
@@ -647,7 +647,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     dot={false}
                     activeDot={false}
                     connectNulls
-                    name="取っ手付きカップ (Pro)"
+                    name="取っ手付きカップ (Premium)"
                     legendType="none"
                     isAnimationActive={false}
                   />
@@ -710,7 +710,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                   {hasCup && cupRequiresPro && (
                     <span className="flex items-center gap-1.5" style={{ opacity: 0.7 }}>
                       <span style={{ display: 'inline-block', width: 14, height: 0, borderTop: `2px dashed ${CUP_COLOR}`, opacity: 0.5 }} />
-                      取っ手付きカップ 🔒 (Pro で pivot 価格解放)
+                      取っ手付きカップ 🔒 (Premium で pivot 価格解放)
                     </span>
                   )}
                 </div>
