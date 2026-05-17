@@ -161,28 +161,28 @@ export default function TriageBanner({
   const peersCount = data.data?.peers?.passing_count;
   const hasPeers = Number.isFinite(peersCount) && peersCount > 0;
   const confidence = data.signal_quality?.confidence;
-  // handover v84 dogfood 2 (2026-05-19): AMZN で `.triage-banner` DOM null 再発。
-  // 旧 allSourcesOk (= 全 'ok' のみ true) は transactions empty (= 取引履歴未登録) の
-  // 「成功 + データ無し」 ケースで false → silent hide 発火。
-  // 「empty」 は fetch 成功扱いなので hint 表示すべき (Trust Cliff)。
-  // error/timeout のみ fatal とみなし、 1 つ以上の fatal 時のみ silent hide。
-  const fatalCount = data.sources
-    ? Object.values(data.sources).filter((s) => s === 'error' || s === 'timeout').length
-    : 0;
-  const allSourcesNonFatal = fatalCount === 0;
+  // handover v84 dogfood 3 (2026-05-19): 「全 fatal の時のみ hide」 という memory
+  // feedback_triage_banner_pattern.md の本来仕様に合わせ、 condition を再緩和。
+  // - 全 source が error/timeout → silent hide (本来仕様)
+  // - 1 つでも非 fatal source あり → hint 表示 (Trust Cliff 回避)
+  const sourceVals = data.sources ? Object.values(data.sources) : [];
+  const allSourcesFatal = sourceVals.length > 0
+    && sourceVals.every((s) => s === 'error' || s === 'timeout');
+  const hasFatal = sourceVals.some((s) => s === 'error' || s === 'timeout');
 
   if (!bannerText && !hasPeers) {
-    // 真因 B: data 取得成功 (or empty) + 内容空 (取引履歴未登録 + パターン無し + peers 0)
-    if (allSourcesNonFatal) {
-      return (
-        <div className="triage-banner triage-banner-muted">
-          <span aria-hidden="true">·</span>
-          <span>取引履歴未登録 / 該当パターン無し / 同条件 PASS 0 件</span>
-        </div>
-      );
+    if (allSourcesFatal) {
+      // 真因 B': 全 source error/timeout → 既存仕様通り hide
+      return null;
     }
-    // 真因 B': 1 つ以上の source が error/timeout → 既存仕様通り hide
-    return null;
+    // 真因 B: 1 つ以上の source が non-fatal (ok or empty) → hint 表示
+    return (
+      <div className="triage-banner triage-banner-muted">
+        {hasFatal && <Chip variant="display" tone="muted" size="xs">一部データ取得失敗</Chip>}
+        <span aria-hidden="true">·</span>
+        <span>取引履歴未登録 / 該当パターン無し / 同条件 PASS 0 件</span>
+      </div>
+    );
   }
 
   return (
