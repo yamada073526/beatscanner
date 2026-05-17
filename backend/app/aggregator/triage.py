@@ -114,6 +114,9 @@ async def _holdings_from_transactions(
     if not ticker_upper:
         return None
 
+    # handover v84 dogfood 3 (2026-05-19): 正本 schema (memory portfolio_account_schema.md) に整合。
+    # column 名: type (buy/sell/dividend/split/fee/deposit/withdraw) / shares (numeric)。
+    # 後方互換: 旧 'side'/'qty'/'quantity' も fallback で読む (test fixture が両 schema 混在の可能性)。
     shares = 0.0
     found = False
     for tx in transactions:
@@ -123,20 +126,31 @@ async def _holdings_from_transactions(
         if tx_ticker != ticker_upper:
             continue
         found = True
-        side = (tx.get("side") or "").lower()
-        qty = tx.get("qty") or tx.get("quantity") or 0
+        tx_type = (tx.get("type") or tx.get("side") or "").lower()
+        qty = tx.get("shares") or tx.get("qty") or tx.get("quantity") or 0
         try:
             qty_f = float(qty)
         except (TypeError, ValueError):
             qty_f = 0.0
-        if side == "buy":
+        if tx_type == "buy":
             shares += qty_f
-        elif side == "sell":
+        elif tx_type == "sell":
             shares -= qty_f
-        elif side == "split":
-            # split ratio (qty が ratio として渡される想定、 例: 2.0 = 2:1 split)
-            if qty_f > 0:
-                shares *= qty_f
+        elif tx_type == "split":
+            # 2 schema 対応:
+            # - 新 (memory portfolio_account_schema.md): shares = 分子, price = 分母 → ratio = shares / price
+            # - 旧 (legacy test fixture): qty が ratio 直接 (例: 2.0 = 2:1 split)
+            try:
+                price = float(tx.get("price") or 0)
+                if price > 0 and qty_f > 0:
+                    ratio = qty_f / price
+                    shares *= ratio
+                elif qty_f > 0:
+                    # 旧 schema fallback
+                    shares *= qty_f
+            except (TypeError, ValueError):
+                pass
+        # dividend / fee / deposit / withdraw は持株数に影響しない
 
     if not found:
         return {"owns": False, "shares": 0.0}

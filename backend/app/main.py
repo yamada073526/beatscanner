@@ -9173,9 +9173,12 @@ async def get_triage_view(
         if sb is None:
             return []
         try:
+            # handover v84 dogfood 3 (2026-05-19): 正本 schema (memory portfolio_account_schema.md
+            # handover v68 Phase 1) に整合する column 名で SELECT。 旧 'side'/'qty'/'quantity' は
+            # 実 DB に存在せず PG 42703 エラー → triage 'error' silent hide root cause。
             res = (
                 sb.table("transactions")
-                .select("ticker,side,qty,quantity,trade_date")
+                .select("ticker,type,shares,price,trade_date")
                 .eq("user_id", user_id)
                 .limit(1000)
                 .execute()
