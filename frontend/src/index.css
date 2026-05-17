@@ -4810,6 +4810,57 @@ body {
 .qhistory-table td.qh-muted { color: var(--text-muted); }
 
 /* ─────────────────────────────────────────────────────────────────
+   CitationChip / DiagramCitation (handover v82 Phase 4)
+   multi-review 6 体合議 verdict: muted tone 1 種固定、 Aman 級 neutral
+   ───────────────────────────────────────────────────────────────── */
+.citation-chip-inline {
+  vertical-align: super;
+  line-height: 1.2;
+}
+.citation-chip-footer {
+  white-space: nowrap;
+}
+.diagram-citation-footer {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+  display: grid;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.diagram-citation-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm, 6px);
+  background: color-mix(in srgb, var(--color-warning) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, transparent);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.diagram-citation-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+.diagram-citation-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.diagram-citation-disclaimer {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  opacity: 0.8;
+}
+
+/* ─────────────────────────────────────────────────────────────────
    AnalystPanel (handover v82 Phase 3) — pure CSS only (Recharts 不使用)
    memory: feedback_chart_overlay_safety.md (overlay 4 層防御の対象外)
    ───────────────────────────────────────────────────────────────── */

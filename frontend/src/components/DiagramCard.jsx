@@ -2,8 +2,12 @@
  * DiagramCard — React DOM-based visualization panel.
  * Replaces VizPanel's dangerouslySetInnerHTML SVG rendering with proper React elements.
  * Business model flow uses CSS flexbox; charts use inline JSX SVG (no string templates).
+ *
+ * handover v82 Phase 4: 出典 footer + degraded_mode banner を DiagramCitation で attach
+ * (multi-review 6 体合議 verdict、 局所介入 +5 行で 2,027 → 2,033 行)。
  */
 import { useState, useEffect, useRef } from 'react';
+import DiagramCitation from './DiagramCitation.jsx';
 
 function VizSectionLabel({ text }) {
   return (
@@ -2021,6 +2025,12 @@ export default function DiagramCard({
           </div>
         )}
 
+        {/* handover v82 Phase 4: 出典 footer + degraded_mode banner */}
+        <DiagramCitation
+          materialFacts={data?.material_facts || []}
+          degradedMode={data?.degraded_mode === true}
+          signalQuality={data?.signal_quality || null}
+        />
       </div>
     </div>
   );
