@@ -161,20 +161,27 @@ export default function TriageBanner({
   const peersCount = data.data?.peers?.passing_count;
   const hasPeers = Number.isFinite(peersCount) && peersCount > 0;
   const confidence = data.signal_quality?.confidence;
-  const allSourcesOk = data.sources
-    && Object.values(data.sources).every((s) => s === 'ok');
+  // handover v84 dogfood 2 (2026-05-19): AMZN で `.triage-banner` DOM null 再発。
+  // 旧 allSourcesOk (= 全 'ok' のみ true) は transactions empty (= 取引履歴未登録) の
+  // 「成功 + データ無し」 ケースで false → silent hide 発火。
+  // 「empty」 は fetch 成功扱いなので hint 表示すべき (Trust Cliff)。
+  // error/timeout のみ fatal とみなし、 1 つ以上の fatal 時のみ silent hide。
+  const fatalCount = data.sources
+    ? Object.values(data.sources).filter((s) => s === 'error' || s === 'timeout').length
+    : 0;
+  const allSourcesNonFatal = fatalCount === 0;
 
   if (!bannerText && !hasPeers) {
-    // 真因 B: data 取得成功 + 内容空 (未保有 + パターン無し + peers 0)
-    if (allSourcesOk) {
+    // 真因 B: data 取得成功 (or empty) + 内容空 (取引履歴未登録 + パターン無し + peers 0)
+    if (allSourcesNonFatal) {
       return (
         <div className="triage-banner triage-banner-muted">
           <span aria-hidden="true">·</span>
-          <span>未保有 / 該当パターン無し / 同条件 PASS 0 件</span>
+          <span>取引履歴未登録 / 該当パターン無し / 同条件 PASS 0 件</span>
         </div>
       );
     }
-    // 真因 B': 全 source error → 既存仕様通り hide
+    // 真因 B': 1 つ以上の source が error/timeout → 既存仕様通り hide
     return null;
   }
 
