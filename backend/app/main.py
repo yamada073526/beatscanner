@@ -3552,13 +3552,22 @@ def _simulate_portfolio_rebalance(
     }
 
 
-async def _run_jijima5_backtest(period: str = "5y", hold_days: int = 90) -> dict:
+async def _run_jijima5_backtest(
+    period: str = "5y",
+    hold_days: int = 90,
+    technical_filters: dict | None = None,
+) -> dict:
     """じっちゃま 5 条件のバックテスト (event-based simulation)。
 
     1. earnings_evaluation から all_passed=true & period 内のイベント取得
-    2. 各イベントについて buy at evaluation_date close → hold N days → sell
-    3. SPY benchmark と比較
-    4. KPI 集計 (avg return / win rate / cum return / alpha)
+    2. (Phase 2.5 新規) technical_filters 指定時、 pattern_signals 時系列 lookup で AND filter
+    3. 各イベントについて buy at evaluation_date close → hold N days → sell
+    4. SPY benchmark と比較
+    5. KPI 集計 (avg return / win rate / cum return / alpha)
+
+    Args:
+      technical_filters: {"cup_handle": True} 形式。 multi-review SaaS PM verdict:
+        eval_date 時点で cup_handle state ∈ {breakout_pending, breakout_confirmed} の銘柄のみ通す
     """
     from datetime import date as _d_bt, timedelta as _td_bt
 
@@ -3593,6 +3602,38 @@ async def _run_jijima5_backtest(period: str = "5y", hold_days: int = 90) -> dict
     # Trade-level (既存ロジック) は start_date 以降の event のみ使う (sample_size 不変)
     start_iso = start_date.isoformat()
     pass_events = [e for e in pass_events_wide if str(e.get("evaluation_date", ""))[:10] >= start_iso]
+
+    # Phase 2.5 (handover v79 後継、 multi-review SaaS PM verdict):
+    # technical_filters 指定時、 pattern_signals 時系列 lookup で AND filter。
+    # eval_date 時点で cup_handle state ∈ {breakout_pending, breakout_confirmed} の銘柄のみ通す
+    pre_tech_count = len(pass_events)
+    pass_events_wide_pre_tech = len(pass_events_wide)
+    cup_filter_stats: dict | None = None
+    if technical_filters and technical_filters.get("cup_handle"):
+        _strong_states = {"breakout_pending", "breakout_confirmed"}
+
+        def _has_cup_signal_at(ticker: str, eval_date_iso: str) -> bool:
+            try:
+                eval_d = _d_bt.fromisoformat(eval_date_iso[:10])
+            except Exception:
+                return False
+            sig = _fetch_pattern_signal_at_or_before(ticker, eval_d, "cup_handle")
+            return bool(sig) and sig.get("state") in _strong_states
+
+        filtered_wide: list[dict] = []
+        for e in pass_events_wide:
+            t = e.get("ticker")
+            ed = str(e.get("evaluation_date", ""))[:10]
+            if t and ed and _has_cup_signal_at(t, ed):
+                filtered_wide.append(e)
+        pass_events_wide = filtered_wide
+        pass_events = [e for e in pass_events_wide if str(e.get("evaluation_date", ""))[:10] >= start_iso]
+        cup_filter_stats = {
+            "before_count": pre_tech_count,
+            "after_count": len(pass_events),
+            "wide_before": pass_events_wide_pre_tech,
+            "wide_after": len(pass_events_wide),
+        }
 
     # Phase 2.1: universe_size は admin endpoint で更新された universe の実銘柄数 (S&P 500 top N)。
     # earnings_history table から distinct ticker 数を引く。
@@ -3761,6 +3802,8 @@ async def _run_jijima5_backtest(period: str = "5y", hold_days: int = 90) -> dict
         "from_date": start_date.isoformat(),
         "to_date": end_date.isoformat(),
         "hold_days": hold_days,
+        "technical_filters": technical_filters or {},
+        "technical_filter_stats": cup_filter_stats,
         "sample_size": {
             "total_events": len(pass_events),
             "completed_trades": len(trades),
@@ -3784,13 +3827,19 @@ async def _run_jijima5_backtest(period: str = "5y", hold_days: int = 90) -> dict
 
 
 @app.get("/api/backtest")
-async def get_backtest(strategy: str = "jijima5", period: str = "5y", hold_days: int = 90) -> dict:
+async def get_backtest(
+    strategy: str = "jijima5",
+    period: str = "5y",
+    hold_days: int = 90,
+    technical_filter: str | None = None,
+) -> dict:
     """じっちゃま 5 条件のバックテスト結果を返却。
 
     Query params:
       strategy: "jijima5" (現状唯一)
       period:   "1y" | "3y" | "5y"
       hold_days: 1-365 (default 90 = 約 3 ヶ月)
+      technical_filter: "cup_handle" を指定すると pattern_signals で AND filter (Phase 2.5)
     """
     if strategy != "jijima5":
         raise HTTPException(status_code=400, detail="strategy must be 'jijima5'")
@@ -3799,7 +3848,19 @@ async def get_backtest(strategy: str = "jijima5", period: str = "5y", hold_days:
     if not (1 <= hold_days <= 365):
         raise HTTPException(status_code=400, detail="hold_days must be 1-365")
 
-    return await _run_jijima5_backtest(period=period.lower(), hold_days=hold_days)
+    tech_filters: dict | None = None
+    if technical_filter:
+        for token in technical_filter.split(","):
+            tok = token.strip()
+            if tok == "cup_handle":
+                tech_filters = (tech_filters or {})
+                tech_filters["cup_handle"] = True
+
+    return await _run_jijima5_backtest(
+        period=period.lower(),
+        hold_days=hold_days,
+        technical_filters=tech_filters,
+    )
 
 
 @app.get("/api/historical-dividends/{ticker}")
@@ -10735,6 +10796,103 @@ def _get_supabase_service():
         return None
 
 
+# ── Cup-with-Handle Phase 2: pattern_signals helper (handover v79 後継) ──
+# RLS service_role only / migration: 2026-05-17_pattern_signals_phase2.sql
+# - _upsert: nightly scan で _detect_cup_handle() の output をそのまま保存
+# - _fetch_latest: transition detector の「最新 state」 取得 / scanner UI 表示用
+# - _fetch_at_or_before: backtest engine の eval_date 時系列 lookup 用
+def _upsert_pattern_signal(
+    ticker: str,
+    pattern_type: str,
+    signal_date: date,
+    state: str,
+    payload: dict,
+) -> bool:
+    """pattern_signals テーブルに 1 行 upsert。 失敗時 False (caller でログ要否判断)。"""
+    sb = _get_supabase_service()
+    if sb is None:
+        return False
+    try:
+        sb.table("pattern_signals").upsert(
+            {
+                "ticker": ticker,
+                "pattern_type": pattern_type,
+                "signal_date": signal_date.isoformat(),
+                "state": state,
+                "payload": payload,
+            },
+            on_conflict="ticker,pattern_type,signal_date",
+        ).execute()
+        return True
+    except Exception as e:
+        print(f"[pattern_signals] upsert failed for {ticker}: {e}")
+        return False
+
+
+def _fetch_pattern_signal_latest(ticker: str, pattern_type: str = "cup_handle") -> dict | None:
+    """指定 ticker の最新 signal を返す。 無ければ None。"""
+    sb = _get_supabase_service()
+    if sb is None:
+        return None
+    try:
+        res = (
+            sb.table("pattern_signals")
+            .select("*")
+            .eq("ticker", ticker)
+            .eq("pattern_type", pattern_type)
+            .order("signal_date", desc=True)
+            .limit(1)
+            .execute()
+        )
+        return res.data[0] if res.data else None
+    except Exception as e:
+        print(f"[pattern_signals] fetch_latest failed for {ticker}: {e}")
+        return None
+
+
+def _fetch_pattern_signal_at_or_before(
+    ticker: str,
+    target_date: date,
+    pattern_type: str = "cup_handle",
+) -> dict | None:
+    """指定 ticker × target_date 以前で最も新しい signal を返す (backtest 時系列 lookup 用)。"""
+    sb = _get_supabase_service()
+    if sb is None:
+        return None
+    try:
+        res = (
+            sb.table("pattern_signals")
+            .select("*")
+            .eq("ticker", ticker)
+            .eq("pattern_type", pattern_type)
+            .lte("signal_date", target_date.isoformat())
+            .order("signal_date", desc=True)
+            .limit(1)
+            .execute()
+        )
+        return res.data[0] if res.data else None
+    except Exception as e:
+        print(f"[pattern_signals] fetch_at_or_before failed for {ticker}: {e}")
+        return None
+
+
+def _delete_pattern_signals_before(cutoff_date: date, pattern_type: str | None = None) -> int:
+    """retention: cutoff_date より古い signal を削除。 返却値は削除行数 (失敗時 -1)。
+    SRE verdict: Supabase Free 500MB 圧迫回避のため 90 日 retention を月次 cron で実行。"""
+    sb = _get_supabase_service()
+    if sb is None:
+        return -1
+    try:
+        q = sb.table("pattern_signals").delete().lt("signal_date", cutoff_date.isoformat())
+        if pattern_type:
+            q = q.eq("pattern_type", pattern_type)
+        res = q.execute()
+        return len(res.data) if hasattr(res, "data") and res.data else 0
+    except Exception as e:
+        print(f"[pattern_signals] delete_before failed: {e}")
+        return -1
+
+
 # ── Phase 1: 投資家ナレッジベースから銘柄言及を抽出 ──
 # backend/data/insights/*.md を結合して Claude Sonnet 4.5 に投げ、
 # 指定 ticker への言及を JSON 構造で抽出する。24h インメモリキャッシュ。
@@ -11321,6 +11479,639 @@ async def av_cache_clear(ticker: str | None = Query(None)):
     n = len(av_cache)
     av_cache.clear()
     return {"cleared_count": n, "remaining": 0}
+
+
+# ============================================================================
+# Cup-with-Handle Phase 2.1: Nightly scan + retention cron
+# (2026-05-17、 handover v79 後継、 multi-review 6 体合議 verdict 反映)
+#
+# 合議 verdict:
+#  - Universe: S&P500 top 200 (BACKTEST_PHASE2_UNIVERSE_TOP200 既存 hardcode 流用)
+#  - 頻度: nightly UTC 23:00 (= ET 18:00 / JST 8:00)、 米国市場 close 1.5h 後
+#  - Data source: yfinance primary (既存実装と同 pattern)、 失敗時は skip
+#  - Retention: 90 日 (Supabase Free 500MB 圧迫回避、 月次 cleanup cron)
+# ============================================================================
+
+
+def _fetch_ohlcv_3y(ticker: str) -> tuple[list[str], list[float], list[float], list[float], list[float]] | None:
+    """3 年 OHLCV history を yfinance で取得。 失敗時 None (caller で skip)。
+
+    返却 tuple: (times, highs, lows, closes, volumes)。
+    既存 /api/technical/{ticker} (main.py:9560) と同 pattern。
+    """
+    try:
+        import yfinance as yf
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period="3y", interval="1d")
+        if hist.empty:
+            return None
+        times = [idx.strftime("%Y-%m-%d") for idx in hist.index]
+        closes = [round(float(v), 4) for v in hist["Close"].tolist()]
+        highs = [round(float(v), 4) for v in hist["High"].tolist()]
+        lows = [round(float(v), 4) for v in hist["Low"].tolist()]
+        volumes = [float(v) for v in hist["Volume"].tolist()]
+        return times, highs, lows, closes, volumes
+    except Exception as e:
+        print(f"[ohlcv] yfinance fetch failed for {ticker}: {e}")
+        return None
+
+
+@app.post("/api/cron/cup-scan")
+async def cron_cup_scan(
+    body: dict | None = None,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """Nightly Cup-with-Handle scan: 200 銘柄 iterate → _detect_cup_handle → upsert。
+
+    Body (任意):
+      tickers: list[str] — 対象銘柄、 未指定なら BACKTEST_PHASE2_UNIVERSE_TOP200
+      chunk_size: int — yfinance rate limit 対応 (default 10、 sleep 1s between chunks)
+      dry_run: bool — True なら DB 書き込み skip (動作確認用)
+
+    Returns:
+      processed_count, detected_count, state_breakdown, failed_tickers
+    """
+    _check_cron_secret(x_cron_secret)
+
+    body = body or {}
+    raw_tickers = body.get("tickers")
+    if isinstance(raw_tickers, list) and raw_tickers:
+        tickers = [str(t).upper().strip() for t in raw_tickers if t][:250]
+    else:
+        tickers = list(BACKTEST_PHASE2_UNIVERSE_TOP200)
+
+    chunk_size = int(body.get("chunk_size", 10))
+    chunk_size = max(1, min(50, chunk_size))
+    dry_run = bool(body.get("dry_run", False))
+
+    # SPY 200DMA filter (B 案) は 1 回 fetch して全 ticker で共有
+    spy_history = _get_spy_history()
+    spy_up = _spy_uptrend(spy_history)
+
+    today = date.today()
+    detected = 0
+    state_counts: dict[str, int] = {}
+    failed: list[dict] = []
+    upserted = 0
+
+    for i, ticker in enumerate(tickers):
+        # chunk 境界で sleep (yfinance rate limit 緩和)
+        if i > 0 and i % chunk_size == 0:
+            await asyncio.sleep(1.0)
+
+        ohlcv = await asyncio.to_thread(_fetch_ohlcv_3y, ticker)
+        if ohlcv is None:
+            failed.append({"ticker": ticker, "reason": "ohlcv_fetch_failed"})
+            continue
+        times, highs, lows, closes, volumes = ohlcv
+
+        try:
+            result = _detect_cup_handle(times, highs, lows, closes, volumes, spy_up)
+        except Exception as e:
+            failed.append({"ticker": ticker, "reason": f"detect_failed: {e}"})
+            continue
+
+        if result.get("detected"):
+            detected += 1
+        state = result.get("state") or "not_detected"
+        state_counts[state] = state_counts.get(state, 0) + 1
+
+        if not dry_run and result.get("detected"):
+            # 検出された場合のみ DB 保存 (未検出は履歴に残さない = retention 圧縮)
+            ok = await asyncio.to_thread(
+                _upsert_pattern_signal, ticker, "cup_handle", today, state, result
+            )
+            if ok:
+                upserted += 1
+
+    return {
+        "processed_count": len(tickers),
+        "detected_count": detected,
+        "upserted_count": upserted,
+        "state_breakdown": state_counts,
+        "failed_count": len(failed),
+        "failed_tickers": failed[:20],  # 上位 20 件のみ返却
+        "signal_date": today.isoformat(),
+        "dry_run": dry_run,
+    }
+
+
+@app.post("/api/cron/pattern-signals-cleanup")
+async def cron_pattern_signals_cleanup(
+    body: dict | None = None,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """retention cron: 90 日より古い pattern_signals を削除 (SRE verdict)。
+
+    Body (任意):
+      retention_days: int — default 90 (Supabase Free 500MB を 2 年圏内に維持)
+      pattern_type: str — 特定 type のみ、 未指定なら全 type
+    """
+    _check_cron_secret(x_cron_secret)
+
+    body = body or {}
+    retention_days = int(body.get("retention_days", 90))
+    retention_days = max(7, min(365, retention_days))
+    pattern_type = body.get("pattern_type")
+
+    cutoff = date.today() - timedelta(days=retention_days)
+    deleted = await asyncio.to_thread(_delete_pattern_signals_before, cutoff, pattern_type)
+
+    return {
+        "cutoff_date": cutoff.isoformat(),
+        "retention_days": retention_days,
+        "pattern_type": pattern_type,
+        "deleted_count": deleted,
+    }
+
+
+# ============================================================================
+# Cup-with-Handle Phase 2.2: State transition detector + 通知 queue
+# (2026-05-17、 multi-review 6 体合議 SaaS PM verdict 反映)
+#
+# 合議 verdict:
+#  - デフォルト宛先 = 「ファンダ 5 PASS × transition」 のみ (Premium churn 回避)
+#  - 採用 transition: formation→breakout_pending + breakout_pending→breakout_confirmed
+#  - 狼少年化ガード: 同 (user, ticker, transition_type) で 7 日 dedup
+#  - 解約即停止: 送信時に subscriptions.tier を再確認 (前日 cache 使用禁止)
+# ============================================================================
+
+# 採用する transition のみ列挙 (合議 verdict B 案、 全 transition でなく 2 種に絞る)
+_CUP_TRANSITION_MAP = {
+    ("formation", "breakout_pending"): "formation_to_breakout_pending",
+    ("breakout_pending", "breakout_confirmed"): "breakout_pending_to_confirmed",
+}
+
+
+def _is_ticker_funda_pass(ticker: str, lookback_days: int = 95) -> bool:
+    """ticker が直近 lookback_days 以内に earnings_evaluation で all_passed=True か。
+
+    SaaS PM verdict: ファンダ AND default ON で日 0-3 件レベルに通知 volume を絞る。
+    lookback 95 日 (= 1 四半期 + 5 日 buffer) で「直近の決算で 5 条件 PASS した銘柄」 を抽出。
+    """
+    sb = _get_supabase_service()
+    if sb is None:
+        return False
+    cutoff = (date.today() - timedelta(days=lookback_days)).isoformat()
+    try:
+        res = (
+            sb.table("earnings_evaluation")
+            .select("evaluation_date,all_passed")
+            .eq("ticker", ticker)
+            .eq("all_passed", True)
+            .gte("evaluation_date", cutoff)
+            .order("evaluation_date", desc=True)
+            .limit(1)
+            .execute()
+        )
+        return bool(res.data)
+    except Exception as e:
+        print(f"[funda_pass] check failed for {ticker}: {e}")
+        return False
+
+
+def _detect_signal_transitions(pattern_type: str = "cup_handle") -> list[dict]:
+    """前日以前の最新 signal と今日の signal を比較し、 transition list を返す。
+
+    返却 list の各 item: {ticker, transition_type, prev_state, today_state, payload, signal_date}
+    """
+    sb = _get_supabase_service()
+    if sb is None:
+        return []
+    today = date.today()
+
+    # 今日の全 detected signal
+    try:
+        today_res = (
+            sb.table("pattern_signals")
+            .select("ticker,state,payload,signal_date")
+            .eq("pattern_type", pattern_type)
+            .eq("signal_date", today.isoformat())
+            .execute()
+        )
+    except Exception as e:
+        print(f"[transition] today signals fetch failed: {e}")
+        return []
+
+    today_signals = {r["ticker"]: r for r in (today_res.data or [])}
+    if not today_signals:
+        return []
+
+    transitions: list[dict] = []
+    for ticker, today_sig in today_signals.items():
+        # 今日以前で最も新しい signal を取得 (1 件)
+        try:
+            prev_res = (
+                sb.table("pattern_signals")
+                .select("state,signal_date")
+                .eq("ticker", ticker)
+                .eq("pattern_type", pattern_type)
+                .lt("signal_date", today.isoformat())
+                .order("signal_date", desc=True)
+                .limit(1)
+                .execute()
+            )
+        except Exception as e:
+            print(f"[transition] prev signal fetch failed for {ticker}: {e}")
+            continue
+
+        prev_data = prev_res.data or []
+        prev_state = prev_data[0]["state"] if prev_data else None
+        today_state = today_sig["state"]
+
+        transition_type = _CUP_TRANSITION_MAP.get((prev_state, today_state))
+        if not transition_type:
+            continue
+
+        transitions.append({
+            "ticker": ticker,
+            "transition_type": transition_type,
+            "prev_state": prev_state,
+            "today_state": today_state,
+            "payload": today_sig["payload"],
+            "signal_date": today.isoformat(),
+        })
+
+    return transitions
+
+
+def _is_already_dispatched(
+    user_id: str,
+    ticker: str,
+    transition_type: str,
+    dedup_days: int = 7,
+) -> bool:
+    """過去 dedup_days 以内に同 (user, ticker, transition) が status='sent' で送信済か。
+
+    Trust Cliff verdict: 狼少年化ガード = 同一通知の 7 日連投禁止。
+    """
+    sb = _get_supabase_service()
+    if sb is None:
+        return False
+    cutoff = (date.today() - timedelta(days=dedup_days)).isoformat()
+    try:
+        res = (
+            sb.table("notification_dispatch_log")
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("ticker", ticker)
+            .eq("transition_type", transition_type)
+            .gte("signal_date", cutoff)
+            .eq("status", "sent")
+            .limit(1)
+            .execute()
+        )
+        return bool(res.data)
+    except Exception as e:
+        print(f"[dedup] check failed: {e}")
+        return False
+
+
+@app.post("/api/cron/cup-notify")
+async def cron_cup_notify(
+    body: dict | None = None,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """transition + ファンダ AND filter + Premium user dedup → per-user digest mail 送信。
+
+    Phase 2.3 で Resend mailer に接続済。 1 user に 1 通 digest (SaaS PM verdict)。
+
+    Body (任意):
+      skip_funda_filter: bool — True で「ファンダ AND default ON」 を無効化 (debug 用)
+      dry_run: bool — True で実送信 skip (log のみ insert、 dispatch=skipped)
+    """
+    _check_cron_secret(x_cron_secret)
+
+    body = body or {}
+    skip_funda = bool(body.get("skip_funda_filter", False))
+    dry_run = bool(body.get("dry_run", False))
+
+    transitions = await asyncio.to_thread(_detect_signal_transitions)
+    if not transitions:
+        return {
+            "transitions": 0,
+            "funda_filtered": 0,
+            "premium_users": 0,
+            "queue_size": 0,
+            "sent_mails": 0,
+            "failed_mails": 0,
+            "skipped_dedup": 0,
+            "skipped_no_email": 0,
+        }
+
+    # ファンダ 5 PASS filter (default ON、 SaaS PM verdict)
+    if skip_funda:
+        funda_filtered = list(transitions)
+    else:
+        funda_filtered = []
+        for t in transitions:
+            if await asyncio.to_thread(_is_ticker_funda_pass, t["ticker"]):
+                funda_filtered.append(t)
+
+    if not funda_filtered:
+        return {
+            "transitions": len(transitions),
+            "funda_filtered": 0,
+            "premium_users": 0,
+            "queue_size": 0,
+            "sent_mails": 0,
+            "failed_mails": 0,
+            "skipped_dedup": 0,
+            "skipped_no_email": 0,
+        }
+
+    # Premium user fetch (解約即停止: 送信時 fetch、 cache 使用禁止)
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    try:
+        premium_res = (
+            sb.table("subscriptions")
+            .select("user_id,tier,status")
+            .eq("tier", "premium")
+            .eq("status", "active")
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"premium fetch failed: {e}")
+
+    premium_users = premium_res.data or []
+    user_ids = [u["user_id"] for u in premium_users if u.get("user_id")]
+
+    # user_notification_preferences で email_enabled+email_address 解決
+    prefs: dict[str, dict] = {}
+    if user_ids:
+        try:
+            prefs_res = (
+                sb.table("user_notification_preferences")
+                .select("user_id,email_enabled,email_address")
+                .in_("user_id", user_ids)
+                .eq("email_enabled", True)
+                .execute()
+            )
+            for p in (prefs_res.data or []):
+                if p.get("email_address"):
+                    prefs[p["user_id"]] = p
+        except Exception as e:
+            print(f"[notify] prefs fetch failed: {e}")
+
+    # user ごとに transition 集約 (dedup pass 後)
+    per_user_queue: dict[str, list[dict]] = {}
+    skipped_dedup = 0
+    skipped_no_email = 0
+
+    for user in premium_users:
+        user_id = user.get("user_id")
+        if not user_id:
+            continue
+        if user_id not in prefs:
+            skipped_no_email += 1
+            continue
+        for t in funda_filtered:
+            if await asyncio.to_thread(
+                _is_already_dispatched, user_id, t["ticker"], t["transition_type"]
+            ):
+                skipped_dedup += 1
+                continue
+            per_user_queue.setdefault(user_id, []).append(t)
+
+    # mailer 接続 (Phase 2.3)
+    from .mailer import send_cup_handle_digest
+
+    sent_count = 0
+    failed_count = 0
+    queue_size = sum(len(v) for v in per_user_queue.values())
+
+    for user_id, user_transitions in per_user_queue.items():
+        email_address = prefs[user_id]["email_address"]
+
+        if dry_run:
+            result = {"status": "skipped", "detail": "dry_run", "id": None}
+        else:
+            result = await asyncio.to_thread(
+                send_cup_handle_digest, email_address, user_transitions
+            )
+
+        status_label = result.get("status", "failed")
+        # 全 transition について log (dedup 用)、 status は mail 結果に従う
+        log_status = "sent" if status_label == "sent" else ("skipped_dedup" if status_label == "skipped" else "failed")
+        for t in user_transitions:
+            try:
+                sb.table("notification_dispatch_log").insert({
+                    "user_id": user_id,
+                    "ticker": t["ticker"],
+                    "pattern_type": "cup_handle",
+                    "transition_type": t["transition_type"],
+                    "signal_date": t["signal_date"],
+                    "channel": "email",
+                    "status": log_status,
+                    "error_detail": result.get("detail") if log_status == "failed" else None,
+                }).execute()
+            except Exception as e:
+                print(f"[notify] log insert failed: {e}")
+
+        if status_label == "sent":
+            sent_count += 1
+        elif status_label == "failed":
+            failed_count += 1
+
+    return {
+        "transitions": len(transitions),
+        "funda_filtered": len(funda_filtered),
+        "premium_users": len(premium_users),
+        "queue_size": queue_size,
+        "sent_mails": sent_count,
+        "failed_mails": failed_count,
+        "skipped_dedup": skipped_dedup,
+        "skipped_no_email": skipped_no_email,
+        "dry_run": dry_run,
+    }
+
+
+# Cup-Handle Phase 2.3 cron: nightly cup-notify (cup-scan の 5 分後に発火)
+# scan 完了後の transition を翌朝 JST 8:05 に digest mail 送信
+
+
+# ============================================================================
+# Cup-with-Handle Phase 2.4: AND scanner endpoint (ファンダ 5 PASS × Cup)
+# (2026-05-17、 multi-review 6 体合議 Security + Trust Cliff verdict 反映)
+#
+# 合議 verdict:
+#  - frontend blur は見せかけ。 backend response 段階で Free user 用 payload mask
+#  - Free user は top 5 ticker name のみ visible、 6 件目以降は ticker name も含めず
+#  - Premium 価値情報 (pivot 値 / state 詳細) は Free response から除外
+#  - total_count + visible_count を返却 (Trust Cliff: 実数明示で fair teaser)
+# ============================================================================
+
+_SCANNER_CUP_FREE_LIMIT = 5  # Free user は top N ticker name のみ visible
+
+
+def _mask_signal_for_free(item: dict) -> dict:
+    """Free user 向けに pivot/state 詳細を除外。 ticker と社名のみ残す。
+
+    Security verdict: blur は CSS でなく backend response 段階で payload を削る。
+    """
+    return {
+        "ticker": item.get("ticker"),
+        "company_name": item.get("company_name"),
+        "passed_count": item.get("passed_count"),
+        # state / pivot / payload は意図的に含めない (Premium 価値情報)
+        "_masked": True,
+    }
+
+
+async def _fetch_premium_status_from_auth(
+    authorization: str | None,
+) -> bool:
+    """Authorization header から user を解決して Premium 判定。
+    auth header 不正 / 未指定 / 失敗時は False (Free 扱い)。
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        return False
+    try:
+        user_info = await _verify_supabase_jwt(authorization)
+        user_id = user_info.get("id") or user_info.get("sub")
+        if not user_id:
+            return False
+        sb = _get_supabase_service()
+        if sb is None:
+            return False
+        res = (
+            sb.table("subscriptions")
+            .select("tier,status")
+            .eq("user_id", user_id)
+            .eq("status", "active")
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        return bool(rows) and rows[0].get("tier") == "premium"
+    except Exception as e:
+        print(f"[scanner] premium check failed: {e}")
+        return False
+
+
+@app.get("/api/scanner/cup-handle")
+async def scanner_cup_handle(
+    filter: str = "both",
+    authorization: str | None = Header(None),
+):
+    """ファンダ 5 PASS × Cup-Handle 形成 AND scanner (Phase 2.4)。
+
+    Query params:
+      filter: 'all' | 'funda' | 'cup' | 'both' (default 'both')
+        - 'all': 全 universe + 全 cup signal
+        - 'funda': earnings_evaluation で all_passed=True の最新銘柄
+        - 'cup': pattern_signals で最新 state ∈ {formation, breakout_pending, breakout_confirmed}
+        - 'both': ファンダ AND Cup (Premium 中核訴求、 Free は top 5 のみ visible)
+
+    Returns:
+      filter, total_count, visible_count, is_premium, items
+    """
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    is_premium = await _fetch_premium_status_from_auth(authorization)
+
+    today = date.today()
+    lookback_days = 95
+
+    # ── ファンダ 5 PASS 銘柄 取得 (earnings_evaluation) ──
+    funda_tickers: set[str] = set()
+    if filter in ("funda", "both"):
+        try:
+            funda_cutoff = (today - timedelta(days=lookback_days)).isoformat()
+            f_res = (
+                sb.table("earnings_evaluation")
+                .select("ticker,evaluation_date,all_passed")
+                .eq("all_passed", True)
+                .gte("evaluation_date", funda_cutoff)
+                .execute()
+            )
+            for r in (f_res.data or []):
+                if r.get("ticker"):
+                    funda_tickers.add(r["ticker"])
+        except Exception as e:
+            print(f"[scanner] funda fetch failed: {e}")
+
+    # ── Cup-Handle 銘柄 取得 (pattern_signals 最新) ──
+    cup_signals: dict[str, dict] = {}  # ticker -> latest signal row
+    if filter in ("cup", "both"):
+        try:
+            cup_cutoff = (today - timedelta(days=7)).isoformat()
+            c_res = (
+                sb.table("pattern_signals")
+                .select("ticker,state,payload,signal_date")
+                .eq("pattern_type", "cup_handle")
+                .gte("signal_date", cup_cutoff)
+                .order("signal_date", desc=True)
+                .execute()
+            )
+            for r in (c_res.data or []):
+                ticker = r.get("ticker")
+                if not ticker or ticker in cup_signals:
+                    continue
+                cup_signals[ticker] = r
+        except Exception as e:
+            print(f"[scanner] cup fetch failed: {e}")
+
+    # ── filter 適用 → 集計 ──
+    if filter == "funda":
+        matched_tickers = funda_tickers
+    elif filter == "cup":
+        matched_tickers = set(cup_signals.keys())
+    elif filter == "both":
+        matched_tickers = funda_tickers & set(cup_signals.keys())
+    else:  # 'all'
+        matched_tickers = funda_tickers | set(cup_signals.keys())
+
+    # ── items 構築 (state priority: confirmed > pending > formation) ──
+    state_priority = {
+        "breakout_confirmed": 0,
+        "breakout_pending": 1,
+        "formation": 2,
+        "formation_market_weak": 3,
+    }
+
+    full_items: list[dict] = []
+    for ticker in sorted(matched_tickers):
+        signal = cup_signals.get(ticker)
+        item = {
+            "ticker": ticker,
+            "company_name": None,  # TODO: subsequent enrichment
+            "passed_count": 5 if ticker in funda_tickers else None,
+            "state": signal.get("state") if signal else None,
+            "payload": signal.get("payload") if signal else None,
+            "signal_date": signal.get("signal_date") if signal else None,
+        }
+        full_items.append(item)
+
+    # state priority sort (confirmed が上位)、 None state は最後
+    full_items.sort(
+        key=lambda x: state_priority.get(x.get("state"), 99)
+    )
+
+    total_count = len(full_items)
+
+    # ── Free user mask (Security verdict: backend で payload 除外) ──
+    if is_premium:
+        items = full_items
+        visible_count = total_count
+    else:
+        # top N まで ticker name + 件数のみ、 残りは件数のみ
+        visible_count = min(_SCANNER_CUP_FREE_LIMIT, total_count)
+        items = [_mask_signal_for_free(item) for item in full_items[:visible_count]]
+
+    return {
+        "filter": filter,
+        "total_count": total_count,
+        "visible_count": visible_count,
+        "is_premium": is_premium,
+        "items": items,
+        "free_limit": _SCANNER_CUP_FREE_LIMIT,
+    }
 
 
 # ── Stripe 決済 ──────────────────────────────────────────────────────────────

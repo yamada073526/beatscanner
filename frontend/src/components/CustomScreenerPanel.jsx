@@ -1,7 +1,30 @@
 import { useState } from 'react';
-import { fetchCustomScreener } from '../api.js';
+import { fetchCustomScreener, fetchCupHandleScanner } from '../api.js';
+import Chip, { ChipGroup } from './ui/Chip.jsx';
 
 const CONDITION_SHORT = ['CF率', 'EPS', 'CFPS', '売上', 'CF>EPS'];
+
+// Cup-Handle Phase 2.4 (multi-review 6 体合議 verdict)
+// filter chip 4 個: 全て / ファンダ / Cup-Handle / 両方 (両方は Premium lock)
+const SCANNER_FILTERS = [
+  { key: 'funda', label: 'ファンダ', mobile: 'ファンダ' },
+  { key: 'cup',   label: 'Cup-Handle', mobile: 'Cup' },
+  { key: 'both',  label: 'ファンダ ∩ Cup', mobile: '両方', premium: true },
+];
+
+const CUP_STATE_LABEL = {
+  formation: '形成中',
+  formation_market_weak: '形成中・市場待機',
+  breakout_pending: 'ブレイクアウト待機',
+  breakout_confirmed: 'ブレイクアウト確定',
+};
+
+const CUP_STATE_TONE = {
+  formation: 'muted',
+  formation_market_weak: 'muted',
+  breakout_pending: 'warning',
+  breakout_confirmed: 'gain',
+};
 
 function ConditionDots({ conditions = [], showLabels = false }) {
   return (
@@ -71,14 +94,141 @@ function ResultCard({ item, onSelect }) {
   );
 }
 
-export default function CustomScreenerPanel({ onSelect }) {
+function CupScannerResults({ data, onSelect, onUpgrade, filterKey }) {
+  if (!data) {
+    return (
+      <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs text-slate-500">
+        スキャン中...
+      </div>
+    );
+  }
+  if (data.error) {
+    return (
+      <div className="rounded-lg border border-red-100 bg-red-50 p-3 text-xs text-red-600">
+        スキャン失敗: {data.error}
+      </div>
+    );
+  }
+
+  const items = data.items || [];
+  const totalCount = data.total_count || 0;
+  const visibleCount = data.visible_count || items.length;
+  const isPremium = !!data.is_premium;
+  const filterLabel = filterKey === 'both' ? 'ファンダ ∩ Cup-Handle' : 'Cup-Handle';
+
+  if (totalCount === 0) {
+    return (
+      <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm text-slate-500">
+        現在 {filterLabel} 該当銘柄はありません (nightly scan は UTC 23:00 = JST 8:00 に実行)
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <span className="font-semibold text-slate-700">
+          {filterLabel}: 全 {totalCount} 件
+        </span>
+        {!isPremium && totalCount > visibleCount && (
+          <span className="text-xs text-slate-500">
+            ({visibleCount} 件公開 / 残り {totalCount - visibleCount} 件 Premium)
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {items.map((item, i) => (
+          <CupResultCard
+            key={`${item.ticker || 'masked'}-${i}`}
+            item={item}
+            onSelect={onSelect}
+            masked={item._masked === true}
+          />
+        ))}
+      </div>
+
+      {!isPremium && totalCount > visibleCount && (
+        <div className="rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50 p-4">
+          <p className="text-sm font-semibold text-amber-900">
+            残り {totalCount - visibleCount} 件 + 毎営業日 email 通知
+          </p>
+          <p className="mt-1 text-xs text-amber-800">
+            Premium ¥1,800/月 で全銘柄 + Pivot 価格 + nightly scan 通知を解放。
+          </p>
+          {onUpgrade && (
+            <button
+              onClick={onUpgrade}
+              className="mt-3 inline-flex items-center rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700"
+            >
+              Premium にアップグレード
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CupResultCard({ item, onSelect, masked = false }) {
+  const ticker = item.ticker;
+  const state = item.state;
+  const stateLabel = CUP_STATE_LABEL[state] || '—';
+  const stateTone = CUP_STATE_TONE[state] || 'muted';
+  const pivotPrice = item?.payload?.pivot?.price;
+  const pivotStr = typeof pivotPrice === 'number' ? `$${pivotPrice.toFixed(2)}` : '—';
+
+  return (
+    <div className={`rounded-xl border border-slate-200 transition hover:border-slate-400 ${masked ? 'pointer-events-none' : ''}`}>
+      <div className="flex items-center gap-2 p-3">
+        <button
+          onClick={() => !masked && onSelect && onSelect(ticker)}
+          className="min-w-0 flex-1 text-left"
+          disabled={masked}
+        >
+          <div className="flex items-baseline gap-1.5">
+            <span className={`text-sm font-bold ${masked ? 'text-slate-400 blur-[3px] select-none' : 'text-slate-900'}`}>
+              {ticker}
+            </span>
+            {item.company_name && (
+              <span className="truncate text-xs text-slate-400 hidden sm:inline">
+                {item.company_name}
+              </span>
+            )}
+          </div>
+          {!masked && state && (
+            <div className="mt-1.5">
+              <Chip size="xs" variant="display" tone={stateTone}>
+                ☕ {stateLabel}
+              </Chip>
+              {pivotPrice != null && (
+                <span className="ml-2 text-xs text-slate-500">Pivot: {pivotStr}</span>
+              )}
+            </div>
+          )}
+        </button>
+        {item.passed_count != null && (
+          <span className="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold bg-green-100 text-green-700">
+            {item.passed_count}/5
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
   const [phase, setPhase] = useState('idle'); // idle | loading | done | error
   const [data, setData] = useState(null);
+  const [cupData, setCupData] = useState(null);
+  const [activeFilter, setActiveFilter] = useState(null); // null | 'funda' | 'cup' | 'both'
   const [error, setError] = useState(null);
 
   async function run() {
     setPhase('loading');
     setError(null);
+    setCupData(null);
+    setActiveFilter(null);
     try {
       const result = await fetchCustomScreener();
       setData(result);
@@ -86,6 +236,18 @@ export default function CustomScreenerPanel({ onSelect }) {
     } catch (e) {
       setError(e.message);
       setPhase('error');
+    }
+  }
+
+  async function runCupFilter(filterKey) {
+    setActiveFilter(filterKey);
+    setCupData(null);
+    if (filterKey === 'funda') return; // 既存 data でカバー、 cup endpoint 呼ばない
+    try {
+      const result = await fetchCupHandleScanner(filterKey);
+      setCupData(result);
+    } catch (e) {
+      setCupData({ error: e.message, items: [], total_count: 0, visible_count: 0, is_premium: false });
     }
   }
 
@@ -153,6 +315,47 @@ export default function CustomScreenerPanel({ onSelect }) {
             )}
             <span className="ml-auto text-xs text-slate-300">{data.screenedAt} 実行</span>
           </div>
+
+          {/* Cup-Handle filter chips (Phase 2.4、 multi-review verdict D + 7) */}
+          <div className="flex flex-wrap items-center gap-2">
+            <ChipGroup prefix="絞り込み:" gap="normal" ariaLabel="スキャナー絞り込み">
+              <Chip
+                size="sm"
+                variant="filter"
+                tone={activeFilter === null ? 'accent' : 'muted'}
+                pressed={activeFilter === null}
+                onClick={() => { setActiveFilter(null); setCupData(null); }}
+              >
+                全て
+              </Chip>
+              {SCANNER_FILTERS.map((f) => {
+                const isActive = activeFilter === f.key;
+                return (
+                  <Chip
+                    key={f.key}
+                    size="sm"
+                    variant="filter"
+                    tone={isActive ? 'accent' : 'muted'}
+                    pressed={isActive}
+                    onClick={() => runCupFilter(f.key)}
+                    title={f.premium ? 'Premium 限定 — ファンダ ∩ Cup-Handle 形成' : undefined}
+                  >
+                    {f.premium ? '🔒 ' : ''}{f.label}
+                  </Chip>
+                );
+              })}
+            </ChipGroup>
+          </div>
+
+          {/* Cup-Handle scanner results (activeFilter が cup / both のとき表示) */}
+          {activeFilter && activeFilter !== 'funda' && (
+            <CupScannerResults
+              data={cupData}
+              onSelect={onSelect}
+              onUpgrade={onUpgrade}
+              filterKey={activeFilter}
+            />
+          )}
 
           {/* Legend — desktop only */}
           <div className="hidden sm:flex flex-wrap items-center gap-3 text-xs text-slate-400">

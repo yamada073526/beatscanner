@@ -564,6 +564,28 @@ export async function fetchCustomScreener() {
   return r.json();
 }
 
+// Cup-with-Handle Phase 2.4 (handover v79 後継、 multi-review verdict):
+// ファンダ 5 PASS × Cup-Handle AND scanner。 Free user は backend で payload mask
+// (Security verdict)、 visible_count + total_count + is_premium を返す。
+export async function fetchCupHandleScanner(filter = 'both') {
+  const headers = { ...fmpHeaders() };
+  try {
+    const { supabase } = await import('./lib/supabase.js');
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
+    }
+  } catch { /* 未ログイン時は Authorization 無し = Free 扱い */ }
+  const r = await fetch(`/api/scanner/cup-handle?filter=${encodeURIComponent(filter)}`, {
+    headers,
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || `HTTP ${r.status}`);
+  }
+  return r.json();
+}
+
 export async function validateFmpKey(apiKey) {
   const r = await fetch('/api/validate-fmp-key', {
     method: 'POST',

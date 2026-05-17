@@ -34,3 +34,22 @@ command = "curl -s https://beatscanner-production.up.railway.app/health > /dev/n
 [[crons]]
 schedule = "0 11 * * *"
 command = "curl -s -X POST https://beatscanner-production.up.railway.app/api/og-image-today/regenerate > /dev/null 2>&1"
+
+# Cup-with-Handle Phase 2.1: nightly scan (2026-05-17、 multi-review 6 体合議 verdict)
+# SRE verdict: UTC 23:00 (= ET 18:00 / JST 8:00)、 米国市場 close 1.5h 後で日足 OHLC 確定済
+# S&P500 top 200 銘柄を _detect_cup_handle で scan → pattern_signals に upsert
+[[crons]]
+schedule = "0 23 * * *"
+command = "curl -s -X POST -H \"X-Cron-Secret: $CRON_SECRET\" https://beatscanner-production.up.railway.app/api/cron/cup-scan > /dev/null 2>&1"
+
+# Cup-with-Handle Phase 2.3: nightly digest mail (cup-scan 完了から 15 分後)
+# UTC 23:15 = ET 18:15 / JST 8:15。 scan 結果の transition を集約して Premium user に digest 配信
+[[crons]]
+schedule = "15 23 * * *"
+command = "curl -s -X POST -H \"X-Cron-Secret: $CRON_SECRET\" https://beatscanner-production.up.railway.app/api/cron/cup-notify > /dev/null 2>&1"
+
+# Cup-with-Handle Phase 2.1: monthly retention cleanup (毎月 1 日 UTC 02:00 = JST 11:00)
+# SRE verdict: Supabase Free 500MB 圧迫回避のため 90 日より古い pattern_signals を削除
+[[crons]]
+schedule = "0 2 1 * *"
+command = "curl -s -X POST -H \"X-Cron-Secret: $CRON_SECRET\" https://beatscanner-production.up.railway.app/api/cron/pattern-signals-cleanup > /dev/null 2>&1"

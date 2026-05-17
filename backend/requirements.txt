@@ -12,5 +12,6 @@ Pillow>=10.0            # OGP動的画像生成 (P2-4)
 supabase>=2.5           # Phase 2a: market_insights サーバーサイド書き込み
 stripe>=10.0            # Stripe決済
 sentry-sdk[fastapi]>=2.20 # 本番 error tracking (handover v66 §1 round 3 構造投資)
+resend>=2.0             # Cup-Handle Phase 2.3 nightly digest mail (handover v79 後継、 multi-review 6 体合議 verdict)
 pytest>=8.3
 pytest-asyncio>=0.24
