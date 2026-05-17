@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import CompanyLogo from '../../components/CompanyLogo.jsx';
+import { searchMasterTickers } from '../../data/masterTickers.js';
 
 /**
  * Cmd Palette — Linear / Raycast 流のグローバル ⌘K UI.
@@ -18,38 +20,57 @@ export default function CmdPalette({ open, close, items = [], onAnalyze }) {
   const inputRef = useRef(null);
   const listRef = useRef(null);
 
-  // ── filter + analyze suggestion ────────────────────────────
+  // ── filter + analyze suggestion + master オートコンプリート ────────
+  // handover v77 user feedback (2026-05-17、 dogfood #5/#7): ticker 全部入力するのが面倒 → master
+  // 80 銘柄から prefix/contains match で候補を出す (CompanyLogo 付き)。
+  // 重複表示 (items 側の watchlist/recent と analyze candidate) は group 不問で除外する。
   const view = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let base = items;
-    if (q) {
-      base = items.filter(
-        (it) =>
-          it.label?.toLowerCase().includes(q) ||
-          it.ticker?.toLowerCase().includes(q) ||
-          it.description?.toLowerCase().includes(q)
-      );
-      // ティッカー風 (英大文字 1-5 文字) を入力した場合「分析する」を先頭に追加
-      if (/^[A-Za-z]{1,5}(\.[A-Za-z]+)?$/.test(query.trim())) {
-        const upper = query.trim().toUpperCase();
-        if (!base.some((it) => it.ticker === upper && it.group === 'analyze')) {
-          base = [
-            {
-              id: `analyze-typed:${upper}`,
-              group: 'analyze',
-              label: `${upper} を分析`,
-              ticker: upper,
-              hint: 'Enter',
-              // §dogfood-round14: ウォッチリスト未登録 ticker を分析する action を注入.
-              //  従来は action 未定義のため Enter / click が no-op だった (検索バグ).
-              action: onAnalyze ? () => onAnalyze(upper) : undefined,
-            },
-            ...base,
-          ];
-        }
+    const qRaw = query.trim();
+    if (!q) return items;
+
+    const filteredItems = items.filter(
+      (it) =>
+        it.label?.toLowerCase().includes(q) ||
+        it.ticker?.toLowerCase().includes(q) ||
+        it.description?.toLowerCase().includes(q)
+    );
+
+    // items 側に既にある ticker は analyze candidate (master / typed 両方) で重複させない
+    const existingTickerSet = new Set(
+      filteredItems.map((it) => (it.ticker || '').toUpperCase()).filter(Boolean)
+    );
+
+    // master tickers prefix/contains match 候補 (最大 6 件、 既存 items に重複しないもの)
+    const masterSuggestions = searchMasterTickers(qRaw, 6)
+      .filter((s) => !existingTickerSet.has(s.ticker));
+    const masterTickerSet = new Set(masterSuggestions.map((s) => s.ticker));
+    const masterItems = masterSuggestions.map((s) => ({
+      id: `analyze-master:${s.ticker}`,
+      group: 'analyze',
+      label: `${s.ticker} を分析`,
+      description: s.name,
+      ticker: s.ticker,
+      hint: 'Enter',
+      action: onAnalyze ? () => onAnalyze(s.ticker) : undefined,
+    }));
+
+    // ティッカー風 (英 1-5 文字) かつ items にも master にも無い「未知ティッカー」 を直接分析する候補
+    const candidates = [...masterItems, ...filteredItems];
+    if (/^[A-Za-z]{1,5}(\.[A-Za-z]+)?$/.test(qRaw)) {
+      const upper = qRaw.toUpperCase();
+      if (!existingTickerSet.has(upper) && !masterTickerSet.has(upper)) {
+        candidates.unshift({
+          id: `analyze-typed:${upper}`,
+          group: 'analyze',
+          label: `${upper} を分析`,
+          ticker: upper,
+          hint: 'Enter',
+          action: onAnalyze ? () => onAnalyze(upper) : undefined,
+        });
       }
     }
-    return base;
+    return candidates;
   }, [items, query, onAnalyze]);
 
   // open 時に reset + auto focus + 閉じた時に元の focus へ復帰
@@ -137,13 +158,19 @@ export default function CmdPalette({ open, close, items = [], onAnalyze }) {
           transition: 'background var(--motion-fast, 120ms) var(--ease-out-expo)',
         }}
       >
-        <span aria-hidden style={{ color: 'var(--text-muted)', width: 18, fontSize: 13 }}>
-          {it.group === 'analyze' ? '⚡'
-            : it.group === 'action' ? '◆'
-            : it.group === 'account' ? '🏦'
-            : it.group === 'transaction' ? '📋'
-            : '○'}
-        </span>
+        {/* handover v77 user feedback (2026-05-17):
+            ticker を持つ item (analyze / recent / watchlist / holdings) は CompanyLogo を leading icon に。
+            それ以外の action / account / transaction は記号 (⚡ → ↗ に変更で品格 up)。 */}
+        {it.ticker ? (
+          <CompanyLogo ticker={it.ticker} size={20} />
+        ) : (
+          <span aria-hidden style={{ color: 'var(--text-muted)', width: 20, height: 20, fontSize: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {it.group === 'action' ? '◆'
+              : it.group === 'account' ? '🏦'
+              : it.group === 'transaction' ? '📋'
+              : '○'}
+          </span>
+        )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{

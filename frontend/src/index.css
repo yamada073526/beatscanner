@@ -5430,6 +5430,27 @@ button.ds-chip { cursor: pointer; }
   border-color: rgba(245, 158, 11, 0.30);
 }
 
+/* Cup-with-Handle Phase 1 Session 2 (2026-05-17、 6 体合議 B 案):
+   breakout_pending state は「pivot 価格に近接 (= 突破前夜)」 = 注意誘導。
+   amber tone (warning) を pulse animation (2s ease-in-out infinite) で「待機中」 を表現。
+   formation_market_weak は muted tone のままで pulse なし (= 静寂)。
+   prefers-reduced-motion で animation を停止 (a11y、 UI/UX agent 指摘)。 */
+@keyframes ds-chip-cup-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+.ds-chip[data-cup-state="breakout_pending"] {
+  animation: ds-chip-cup-pulse 2s ease-in-out infinite;
+}
+.ds-chip[data-cup-state="formation_market_weak"] {
+  opacity: 0.65;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-chip[data-cup-state="breakout_pending"] {
+    animation: none;
+  }
+}
+
 /* variant base styling */
 .ds-chip[data-variant="display"] {
   /* display chip = badge、cursor default、tone bg はそのまま使う */

@@ -1,13 +1,19 @@
 import { Component, useState, useEffect, useMemo } from 'react';
 import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, ReferenceLine,
+  Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot,
 } from 'recharts';
 import { fetchPriceHistory, fetchTechnical } from '../api.js';
+import Chip from './ui/Chip.jsx';
 
 // SMA overlay 色 (design_system.md §1-A2 で token 登録済、 ALLOWED-HEX whitelist 適合)
 const SMA_50_COLOR  = '#f59e0b'; // amber (短期 trend)
 const SMA_200_COLOR = '#a78bfa'; // purple (長期 trend、 ファンダ協調指標 #1)
+// Cup overlay 色: v76 dogfood で price line cyan と同化 → UI/UX subagent verdict で neutral slate に変更。
+// 哲学的整合: cup は「形成中 = neutral / 未確定」、 投資業界色ルール (緑=上昇/赤=下落/amber=警告/cyan=ブランド)
+// のどれにも属さない観察対象 → 彩色 hue を持たない。 breakout 確定時に green ReferenceDot が前面で対比演出。
+const CUP_COLOR     = 'rgba(148, 163, 184, 0.85)'; // slate-400、 両モード neutral
+const BREAKOUT_COLOR = '#22c55e'; // green-500 (breakout confirmed marker、 「形成中 → 確定」 ドラマ強化)
 
 // 2 段保護 (handover v75 真っ白事故 fix): 万一 Recharts overlay で crash しても
 // chart 部分だけ blank で Pane 3 全体は保護。 親 (JudgmentDetail) は影響受けない。
@@ -168,7 +174,7 @@ function EarningsTooltip({ active, payload, label, earningsMap }) {
   );
 }
 
-function StockPriceChartInner({ ticker }) {
+function StockPriceChartInner({ ticker, isPremiumUser = false }) {
   const [period, setPeriod] = useState('1y');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -186,21 +192,26 @@ function StockPriceChartInner({ ticker }) {
     return () => { cancelled = true; };
   }, [ticker, period]);
 
-  // SMA fetch (period 非依存、 ticker 単位)。 overlay 1 件以上の時のみ setTechnical
+  // Technical overlays fetch (period 非依存、 ticker 単位)。
+  // overlay 1 件以上 OR Cup-Handle detected の時のみ setTechnical
   // (handover v75 真っ白事故 fix: 全 null Line が Recharts で crash した可能性、
   //  ここで早期 filter して conditional render 側でも 2 段防御)。
   useEffect(() => {
     if (!ticker) return;
     let cancelled = false;
-    setTechnical(null);  // ticker 切替時に古い SMA をクリア
-    fetchTechnical(ticker, 'sma_50,sma_200')
+    setTechnical(null);  // ticker 切替時に古い state をクリア
+    fetchTechnical(ticker, 'cup_handle,sma_50,sma_200,rs,dma_cross')
       .then((t) => {
         if (cancelled) return;
-        if (t && Array.isArray(t.overlays) && t.overlays.length > 0) {
+        const hasOverlay = t && Array.isArray(t.overlays) && t.overlays.length > 0;
+        const hasCupDetected = t?.patterns?.cup_handle?.detected === true;
+        const hasRsValue = typeof t?.patterns?.rs?.rs_vs_spy_pct === 'number';
+        const hasDmaDetected = t?.patterns?.dma_cross?.detected === true;
+        if (hasOverlay || hasCupDetected || hasRsValue || hasDmaDetected) {
           setTechnical(t);
         }
       })
-      .catch(() => { /* graceful: SMA 抜きで chart 表示 */ });
+      .catch(() => { /* graceful: technical 抜きで chart 表示 */ });
     return () => { cancelled = true; };
   }, [ticker]);
 
@@ -223,10 +234,108 @@ function StockPriceChartInner({ ticker }) {
   const hasSma50 = useMemo(() => Object.keys(smaMap.sma_50).length > 0, [smaMap]);
   const hasSma200 = useMemo(() => Object.keys(smaMap.sma_200).length > 0, [smaMap]);
 
-  // SMA がある時のみ price データに merge (no SMA なら元 data そのまま = 旧挙動と同じ)
+  // Cup-with-Handle pattern 抽出 + 4 層防御 (handover v75 真っ白事故 SSOT 継承)
+  // 1) ErrorBoundary wrap (default export 側)、 2) conditional render (hasCup gate)、
+  // 3) Number.isFinite guard、 4) isAnimationActive={false}
+  const cupHandle = technical?.patterns?.cup_handle || null;
+  const hasCup = useMemo(() => {
+    if (!cupHandle?.detected) return false;
+    if (!cupHandle.cup || !cupHandle.pivot) return false;
+    const pivotPrice = cupHandle.pivot.price;
+    const leftRim = cupHandle.cup.left_rim_price;
+    const cupLow = cupHandle.cup.cup_low_price;
+    const rightRim = cupHandle.cup.right_rim_price;
+    return [pivotPrice, leftRim, cupLow, rightRim].every(
+      (v) => typeof v === 'number' && Number.isFinite(v)
+    );
+  }, [cupHandle]);
+
+  // Cup の 3 点 (left rim → cup low → right rim) を date → value lookup map で保持。
+  // chartData merge 時に cup_value field を該当 date のみ埋め、 connectNulls で 3 点を結ぶ。
+  // handover v76 dogfood 教訓: 別 data array (data={cupShape}) を Line に渡すと
+  // ComposedChart の x 軸 domain が overlay の date 範囲に絞られて、 price line / SMA line が消える。
+  const cupValueMap = useMemo(() => {
+    if (!hasCup) return null;
+    return {
+      [cupHandle.cup.left_rim_date]:  cupHandle.cup.left_rim_price,
+      [cupHandle.cup.cup_low_date]:   cupHandle.cup.cup_low_price,
+      [cupHandle.cup.right_rim_date]: cupHandle.cup.right_rim_price,
+    };
+  }, [hasCup, cupHandle]);
+
+  // chip tone は market_context と state の 2 軸直交で決定 (6 体合議 Web 設計案):
+  //   market_weak → muted (市場待機)
+  //   breakout_confirmed → gain (緑)
+  //   breakout_pending → warning (amber) + pulse keyframe
+  //   formation → muted (cyan border)
+  const cupChipTone = useMemo(() => {
+    if (!hasCup) return 'muted';
+    if (cupHandle.state === 'formation_market_weak') return 'muted';
+    if (cupHandle.state === 'breakout_confirmed') return 'gain';
+    if (cupHandle.state === 'breakout_pending') return 'warning';
+    return 'muted';
+  }, [hasCup, cupHandle]);
+
+  const cupChipLabel = useMemo(() => {
+    if (!hasCup) return '';
+    switch (cupHandle.state) {
+      case 'breakout_confirmed': return 'breakout 確定';
+      case 'breakout_pending':   return 'breakout 待ち';
+      case 'formation_market_weak': return '形成中 ・市場待機';
+      case 'formation':
+      default:                   return '形成中';
+    }
+  }, [hasCup, cupHandle]);
+
+  // Session 3: RS (vs SPY 6m ratio + 自己 252 日 percentile)
+  const rsData = technical?.patterns?.rs || null;
+  const hasRs = useMemo(() => {
+    if (!rsData) return false;
+    const v = rsData.rs_vs_spy_pct;
+    return typeof v === 'number' && Number.isFinite(v);
+  }, [rsData]);
+  // RS tone: 上位 (percentile ≥ 75) = gain / 下位 (≤ 25) = loss / 中位 = muted
+  const rsTone = useMemo(() => {
+    if (!hasRs) return 'muted';
+    const pct = rsData.self_percentile;
+    if (typeof pct !== 'number') return 'muted';
+    if (pct >= 75) return 'gain';
+    if (pct <= 25) return 'loss';
+    return 'muted';
+  }, [hasRs, rsData]);
+
+  // Session 3: DMA Cross (golden cross 直近 60 日内)
+  const dmaCross = technical?.patterns?.dma_cross || null;
+  const hasDmaCross = useMemo(() => {
+    if (!dmaCross?.detected) return false;
+    if (dmaCross.kind !== 'golden') return false;
+    return typeof dmaCross.days_ago === 'number' && Number.isFinite(dmaCross.days_ago);
+  }, [dmaCross]);
+
+  // Pro tier gate (handover v78 Session 4): Supabase subscription.tier === 'premium' で本判定。
+  // 6 体合議 verdict (Session 3 → 4): Cup-Handle は Premium tier (¥1,800/月) 限定、 DMA/RS は Free 表示。
+  // 既存 v60 で Stripe + webhook + 4 SKU + Customer Portal + 30s polling 全て稼働中、 useSubscription
+  // で subscription.tier を取れる (Pro = ¥980、 Premium = ¥1,800)。
+  // dev override: import.meta.env.DEV のみ localStorage('bs_pro')='1' で強制 unlock (production bundle では
+  // tree-shake で消える、 dogfood 用 + Stripe test card 不要)。
+  const isPremiumUnlocked = useMemo(() => {
+    if (isPremiumUser) return true;
+    if (import.meta.env?.DEV && typeof window !== 'undefined') {
+      try {
+        return window.localStorage.getItem('bs_pro') === '1';
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }, [isPremiumUser, ticker]);
+  // Cup-Handle は Premium 限定 (DMA/RS は Free 表示で送客)。 chip 自体は表示するが overlay/詳細は blur。
+  const cupRequiresPro = hasCup && !isPremiumUnlocked;
+
+  // SMA/Cup がある時のみ price データに merge (何もなければ元 data そのまま = 旧挙動と同じ)
   const chartData = useMemo(() => {
     if (!data?.prices) return [];
-    if (!hasSma50 && !hasSma200) return data.prices;
+    if (!hasSma50 && !hasSma200 && !hasCup) return data.prices;
     return data.prices.map((p) => {
       const entry = { ...p };
       if (hasSma50) {
@@ -237,9 +346,13 @@ function StockPriceChartInner({ ticker }) {
         const v200 = smaMap.sma_200[p.date];
         if (typeof v200 === 'number') entry.sma_200 = v200;
       }
+      if (hasCup && cupValueMap) {
+        const vc = cupValueMap[p.date];
+        if (typeof vc === 'number' && Number.isFinite(vc)) entry.cup_value = vc;
+      }
       return entry;
     });
-  }, [data, smaMap, hasSma50, hasSma200]);
+  }, [data, smaMap, hasSma50, hasSma200, hasCup, cupValueMap]);
 
   const dateSet = useMemo(
     () => new Set((data?.prices ?? []).map((p) => p.date)),
@@ -265,8 +378,58 @@ function StockPriceChartInner({ ticker }) {
   return (
     <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
       {/* Header */}
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="section-heading" style={{ marginBottom: 0 }}>株価チャート</h3>
+      <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <h3 className="section-heading" style={{ marginBottom: 0 }}>株価チャート</h3>
+          {/* Cup-Handle chip (Session 2 着地): Pro tier 限定機能 (Session 3 で blur 対象)。
+              free user にも chip 自体は表示 → 「価値を見せて Pro へ」 (マーケター verdict)。
+              click で Coming Soon modal (Stripe 連動は Session 4 で実装予定)。 */}
+          {hasCup && (
+            <Chip
+              size="xs"
+              variant="display"
+              tone={cupChipTone}
+              data-cup-state={cupHandle.state}
+              title={
+                cupRequiresPro
+                  ? `取っ手付きカップ (Cup-with-Handle)\n${cupChipLabel}\n深さ ${cupHandle.cup.depth_pct}% / ${cupHandle.cup.weeks}週\n［Pro で全データ解放］`
+                  : `取っ手付きカップ (Cup-with-Handle)\n${cupChipLabel}\n深さ ${cupHandle.cup.depth_pct}% / ${cupHandle.cup.weeks}週\nPivot $${cupHandle.pivot.price.toFixed(2)}`
+              }
+              onClick={cupRequiresPro ? () => {
+                window.alert('「取っ手付きカップ」 形状検出は Pro 限定機能です。\n\n・ファンダ 5 条件 PASS × Cup-Handle 形成 の AND スキャナー\n・全 500-1000 銘柄の nightly スキャン\n・形成 → breakout 確定の push 通知\n\nPro tier (¥2,000/月) は Coming Soon。 詳細は近日 LP で公開予定。');
+              } : undefined}
+            >
+              ☕ {cupChipLabel}{cupRequiresPro ? ' 🔒' : ''}
+            </Chip>
+          )}
+          {/* Session 3: DMA Cross chip (golden cross 直近 60 日内検出時のみ、 Free 表示) */}
+          {hasDmaCross && (
+            <Chip
+              size="xs"
+              variant="display"
+              tone="gain"
+              title={`50DMA × 200DMA ゴールデンクロス成立 (${dmaCross.cross_date}、 ${dmaCross.days_ago} 日前)`}
+            >
+              ✦ ゴールデンクロス ({dmaCross.days_ago}日前)
+            </Chip>
+          )}
+          {/* Session 3: RS chip (vs SPY 6 ヶ月 + 自己 252 日 percentile、 Free 表示) */}
+          {hasRs && (
+            <Chip
+              size="xs"
+              variant="display"
+              tone={rsTone}
+              title={`相対強度 (Relative Strength): 過去 6 ヶ月の対 SPY リターン差${rsData.ranking_label ? `、 自己 1 年比 ${rsData.ranking_label}` : ''}`}
+            >
+              RS {rsData.rs_vs_spy_pct > 0 ? '+' : ''}{rsData.rs_vs_spy_pct}%
+              {rsData.ranking_label && (
+                <span style={{ marginLeft: 4, opacity: 0.75, fontSize: '0.85em' }}>
+                  {rsData.ranking_label}
+                </span>
+              )}
+            </Chip>
+          )}
+        </div>
         <div className="flex gap-1">
           {PERIODS.map((p) => (
             <button
@@ -293,11 +456,36 @@ function StockPriceChartInner({ ticker }) {
       {/* Chart */}
       {!loading && data && data.prices.length > 0 && (
         <>
-          <div className="h-72">
+          <div
+            className="h-72 relative"
+            data-cup-locked={cupRequiresPro ? 'true' : undefined}
+          >
+            {/* Pro tier teaser: Cup-Handle 検出済 + Free user 時に chart 全体を軽く blur + CTA overlay。
+                pointer-events:none で chart の hover を殺さない (4 層防御継承)。
+                blur 強度 4px = 「形だけ見える、 詳細は不明」 演出 (8px は強すぎ、 業界標準 4-6px)。 */}
+            {cupRequiresPro && (
+              <div
+                aria-hidden="true"
+                className="absolute inset-0 z-10 flex items-end justify-center pointer-events-none"
+                style={{ paddingBottom: 12 }}
+              >
+                <div
+                  className="rounded-full px-3 py-1 text-[11px] font-medium"
+                  style={{
+                    background: 'rgba(15, 23, 42, 0.72)',
+                    color: 'rgb(241, 245, 249)',
+                    border: '1px solid rgba(56, 189, 248, 0.45)',
+                    backdropFilter: 'blur(4px)',
+                  }}
+                >
+                  🔒 Cup-Handle overlay は Pro で全データ解放 (Coming Soon)
+                </div>
+              </div>
+            )}
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart
                 data={chartData}
-                margin={{ top: 36, right: 16, left: 0, bottom: 8 }}
+                margin={{ top: 36, right: 88, left: 0, bottom: 8 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
                 <XAxis
@@ -364,6 +552,80 @@ function StockPriceChartInner({ ticker }) {
                   name="終値"
                 />
 
+                {/* Cup-with-Handle overlay (取っ手付きカップ、 6 体合議 2026-05-17 B 案):
+                    - cup の 3 点 (left rim / cup low / right rim) を dashed line で結ぶ
+                    - pivot 横線 (right rim + $0.10) を chart 全幅で描画
+                    - breakout 確定 marker は state === 'breakout_confirmed' のみ
+                    - 4 層防御: ErrorBoundary / conditional render (hasCup) / Number.isFinite / isAnimationActive=false
+                    - v76 dogfood 教訓: data={cupShape} で別 array 渡すと x 軸 domain が cup 範囲に縮む。
+                      cup_value field を chartData に merge + connectNulls で 3 点を結ぶ方式に変更。
+                */}
+                {/* Free user は Cup overlay を blur で曖昧化 (formation = 形 / pivot = $ は Pro 限定情報) */}
+                {hasCup && !cupRequiresPro && (
+                  <Line
+                    key="cup_shape"
+                    type="monotone"
+                    dataKey="cup_value"
+                    stroke={CUP_COLOR}
+                    strokeWidth={1.5}
+                    strokeDasharray="3 3"
+                    strokeOpacity={cupHandle.state === 'formation_market_weak' ? 0.45 : 0.85}
+                    dot={{ r: 3, fill: CUP_COLOR }}
+                    activeDot={false}
+                    connectNulls
+                    name="取っ手付きカップ"
+                    legendType="none"
+                    isAnimationActive={false}
+                  />
+                )}
+                {hasCup && !cupRequiresPro && (
+                  <ReferenceLine
+                    y={cupHandle.pivot.price}
+                    stroke={CUP_COLOR}
+                    strokeWidth={1}
+                    strokeDasharray="2 4"
+                    strokeOpacity={cupHandle.state === 'formation_market_weak' ? 0.45 : 0.85}
+                    label={{
+                      value: `Pivot $${cupHandle.pivot.price.toFixed(2)}`,
+                      fill: CUP_COLOR,
+                      fontSize: 10,
+                      position: 'right',
+                    }}
+                    ifOverflow="extendDomain"
+                    isFront={false}
+                  />
+                )}
+                {hasCup && !cupRequiresPro && cupHandle.state === 'breakout_confirmed' && cupHandle.breakout?.confirmed_date && (
+                  <ReferenceDot
+                    x={cupHandle.breakout.confirmed_date}
+                    y={cupHandle.pivot.price}
+                    r={6}
+                    fill={BREAKOUT_COLOR}
+                    stroke="#fff"
+                    strokeWidth={2}
+                    isFront
+                    isAnimationActive={false}
+                  />
+                )}
+                {/* Free user 用の cup overlay (blur 化、 形状は見えるが pivot 値や date は曖昧) */}
+                {hasCup && cupRequiresPro && (
+                  <Line
+                    key="cup_shape_locked"
+                    type="monotone"
+                    dataKey="cup_value"
+                    stroke={CUP_COLOR}
+                    strokeWidth={3}
+                    strokeDasharray="4 4"
+                    strokeOpacity={0.3}
+                    dot={false}
+                    activeDot={false}
+                    connectNulls
+                    name="取っ手付きカップ (Pro)"
+                    legendType="none"
+                    isAnimationActive={false}
+                  />
+                )}
+
                 {/* Earnings markers — dashed vertical line + label above */}
                 {earnings.map((e) => {
                   const color = VERDICT_COLOR[e.verdict] ?? VERDICT_COLOR.unknown;
@@ -389,45 +651,72 @@ function StockPriceChartInner({ ticker }) {
             </ResponsiveContainer>
           </div>
 
-          {/* Legend — SMA + Beat/Miss が独立条件で常時表示 (handover v75 6 体合議 UI/UX 案) */}
-          <div
-            className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs"
-            style={{ color: 'var(--text-muted)' }}
-          >
-            {/* SMA 凡例 (hasSma50 / hasSma200 で個別表示、 earnings 有無と独立) */}
-            {hasSma50 && (
-              <span className="flex items-center gap-1.5">
-                <span style={{ display: 'inline-block', width: 14, height: 2, background: SMA_50_COLOR, opacity: 0.7 }} />
-                SMA 50（短期）
-              </span>
-            )}
-            {hasSma200 && (
-              <span className="flex items-center gap-1.5">
-                <span style={{ display: 'inline-block', width: 14, height: 2, background: SMA_200_COLOR, opacity: 0.7 }} />
-                SMA 200（長期）
-              </span>
-            )}
-            {/* Beat/Miss 凡例 (earnings 1 件以上の時のみ) */}
-            {earnings.length > 0 && (
-              <>
-                <span className="flex items-center gap-1.5">
-                  <span className="font-bold" style={{ color: VERDICT_COLOR.beat }}>▲</span>
-                  上振れ Beat（+3%超）
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="font-bold" style={{ color: VERDICT_COLOR.inline }}>▬</span>
-                  概ね一致 In-line（±3%以内）
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="font-bold" style={{ color: VERDICT_COLOR.miss }}>▼</span>
-                  下振れ Miss（−3%超）
-                </span>
-                <span className="ml-auto" style={{ color: 'var(--text-muted)', opacity: 0.7 }}>
-                  ※ 四半期GAAP EPS vs アナリスト予想比較 / 決算日にホバーで詳細表示
-                </span>
-              </>
-            )}
-          </div>
+          {/* Legend — 2 行構造 (テクニカル / 決算判定) + 末尾 ⓘ tooltip 縮約
+              handover v76 dogfood + UI/UX subagent verdict (Aman 級 シンプルかつリッチ + 5 原則 #1 読み手負担減)。
+              Miller 認知 chunk 3-4 上限を尊重、 Bloomberg / Linear 流の group label prefix 構造。 */}
+          {(hasSma50 || hasSma200 || hasCup || earnings.length > 0) && (
+            <div className="mt-3 flex flex-col gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+              {/* Row 1: テクニカル指標 (連続描画 line 系) */}
+              {(hasSma50 || hasSma200 || hasCup) && (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <span className="font-medium" style={{ color: 'var(--text-secondary)', minWidth: 64 }}>
+                    テクニカル
+                  </span>
+                  {hasSma50 && (
+                    <span className="flex items-center gap-1.5">
+                      <span style={{ display: 'inline-block', width: 14, height: 2, background: SMA_50_COLOR, opacity: 0.7 }} />
+                      SMA 50（短期）
+                    </span>
+                  )}
+                  {hasSma200 && (
+                    <span className="flex items-center gap-1.5">
+                      <span style={{ display: 'inline-block', width: 14, height: 2, background: SMA_200_COLOR, opacity: 0.7 }} />
+                      SMA 200（長期）
+                    </span>
+                  )}
+                  {hasCup && !cupRequiresPro && (
+                    <span className="flex items-center gap-1.5">
+                      <span style={{ display: 'inline-block', width: 14, height: 0, borderTop: `2px dashed ${CUP_COLOR}` }} />
+                      取っ手付きカップ（pivot ${cupHandle.pivot.price.toFixed(2)}）
+                    </span>
+                  )}
+                  {hasCup && cupRequiresPro && (
+                    <span className="flex items-center gap-1.5" style={{ opacity: 0.7 }}>
+                      <span style={{ display: 'inline-block', width: 14, height: 0, borderTop: `2px dashed ${CUP_COLOR}`, opacity: 0.5 }} />
+                      取っ手付きカップ 🔒 (Pro で pivot 価格解放)
+                    </span>
+                  )}
+                </div>
+              )}
+              {/* Row 2: 決算判定 (離散 event marker) */}
+              {earnings.length > 0 && (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <span className="font-medium" style={{ color: 'var(--text-secondary)', minWidth: 64 }}>
+                    決算判定
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="font-bold" style={{ color: VERDICT_COLOR.beat }}>▲</span>
+                    Beat（+3%超）
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="font-bold" style={{ color: VERDICT_COLOR.inline }}>▬</span>
+                    In-line（±3%以内）
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="font-bold" style={{ color: VERDICT_COLOR.miss }}>▼</span>
+                    Miss（−3%超）
+                  </span>
+                  <span
+                    className="ml-auto cursor-help"
+                    title="四半期 GAAP EPS vs アナリスト予想比較 / 決算日にホバーで詳細表示"
+                    style={{ opacity: 0.7 }}
+                  >
+                    ⓘ
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 
@@ -445,6 +734,7 @@ function StockPriceChartInner({ ticker }) {
 }
 
 // default export: ErrorBoundary で wrap して、 chart 内部 crash 時も Pane 3 全体は保護
+// props: { ticker: string, isPremiumUser?: boolean (handover v78 Session 4 で追加) }
 export default function StockPriceChart(props) {
   return (
     <StockChartErrorBoundary>

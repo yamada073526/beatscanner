@@ -8989,35 +8989,283 @@ def _compute_sma(closes: list[float], period: int) -> list[float | None]:
     return result
 
 
-def _detect_cup_handle_skeleton(
+def _get_spy_history() -> dict | None:
+    """SPY daily history (3y) を 24h cache で fetch。
+
+    Cup-Handle SPY 200DMA filter (Confirmed Uptrend 代替) + Session 3 RS 計算で共有。
+    fetch 失敗時は None を返し、 caller 側で graceful degrade。
+    """
+    now = _time.monotonic()
+    cached_ts = _SPY_HISTORY_CACHE.get("ts", 0.0)
+    if _SPY_HISTORY_CACHE.get("closes") and now - cached_ts < _SPY_HISTORY_TTL:
+        return {
+            "closes": _SPY_HISTORY_CACHE["closes"],
+            "times": _SPY_HISTORY_CACHE.get("times", []),
+        }
+    try:
+        import yfinance as yf
+        stock = yf.Ticker("SPY")
+        hist = stock.history(period="3y", interval="1d")
+        if hist.empty:
+            return None
+        closes = [round(float(v), 4) for v in hist["Close"].tolist()]
+        times = [idx.strftime("%Y-%m-%d") for idx in hist.index]
+        _SPY_HISTORY_CACHE["closes"] = closes
+        _SPY_HISTORY_CACHE["times"] = times
+        _SPY_HISTORY_CACHE["ts"] = now
+        return {"closes": closes, "times": times}
+    except Exception:
+        return None
+
+
+def _spy_uptrend(spy_history: dict | None) -> bool | None:
+    """SPY が 200DMA 上か。 Confirmed Uptrend (IBD M condition) の簡易代替。
+
+    Return: True/False (判定可能)、 None (SPY fetch 失敗、 graceful degrade)。
+    """
+    if not spy_history or not spy_history.get("closes"):
+        return None
+    closes = spy_history["closes"]
+    if len(closes) < 200:
+        return None
+    sma_200 = _compute_sma(closes, 200)
+    latest_sma = sma_200[-1]
+    if latest_sma is None:
+        return None
+    return closes[-1] > latest_sma
+
+
+def _detect_cup_handle(
     times: list[str],
     highs: list[float],
     lows: list[float],
     closes: list[float],
     volumes: list[float],
+    spy_uptrend: bool | None,
+    *,
+    depth_min: float = 0.12,
+    depth_max: float = 0.33,
+    cup_min_weeks: int = 7,
+    cup_max_weeks: int = 65,
+    u_shape_min_days: int = 10,  # 2 週、 大型株 fast cup でも検出可能 (canonical は U 字定性条件のみ)
+    handle_max_weeks: int = 4,
+    handle_pullback_max: float = 0.12,
+    pivot_offset: float = 0.10,
+    breakout_volume_multiplier: float = 1.40,
+    prior_uptrend_pct: float = 0.20,  # O'Neil 原典「base 前の上昇」 は曖昧、 0.20 で実用
+    prior_uptrend_days: int = 90,  # 4 ヶ月、 大型株 trend 確認に十分
 ) -> dict:
-    """Cup-with-Handle 検出 skeleton (Phase 1 Session 1)。
+    """O'Neil canonical strict Cup-with-Handle detector (Phase 1 Session 2)。
 
-    本セッションは API contract 確立のみ、 検出ロジックは次セッション実装。
-    現状: 常に detected=False を返す。 frontend は detected=False の場合 overlay を表示しない。
+    numpy 不依存 O(n) scan。 6 体合議 (2026-05-17) 確定パラメータ:
+    - cup 深さ 12-33% / 期間 7-65 週 / U 字 (底部 ±5% に 15 日以上滞在)
+    - handle 1-4 週 / pullback ≤12% / 高値超え禁止
+    - pivot = handle 期間中の最高値 + $0.10
+    - breakout volume = 50 日平均 × 1.40 以上
+    - SPY 200DMA 外 → detected=True / state="formation_market_weak" / market_context="weak" (B 案)
+    - prior uptrend = cup 形成前 60 営業日で ≥ 30%
 
-    将来実装 (project_cup_handle_design.md §確定設計):
-    - cup 深さ 12-33% / 期間 7-65 週 / U 字 (底部 weeks ≥ 3)
-    - handle ≤12% pullback / 1-4 週
-    - pivot = handle 高値 + $0.10
-    - breakout volume = 50 日平均 +40-50%
-    - SPY 200DMA filter (Confirmed Uptrend 代替)
-    - prior uptrend ≥ 30%
+    Return: dict with keys (detected, state, market_context, cup, handle, pivot, breakout, reason)
     """
-    return {
+    n = len(closes)
+    market_context = "weak" if spy_uptrend is False else ("strong" if spy_uptrend else "unknown")
+    not_detected = {
         "detected": False,
         "state": None,
+        "market_context": market_context,
         "cup": None,
         "handle": None,
         "pivot": None,
         "breakout": None,
-        "note": "Phase 1 Session 2 で検出ロジック実装予定",
+        "reason": None,
+        "reject_stats": {},  # debug 用、 各 reject step の count
     }
+
+    # データ量不足チェック (cup 7 週 + handle 1 週 + prior 60 日 ≈ 100 営業日最小)
+    if n < cup_min_weeks * 5 + prior_uptrend_days + 5:
+        return {**not_detected, "reason": "insufficient_history"}
+
+    reject_stats: dict[str, int] = {}
+    def _reject(key: str) -> None:
+        reject_stats[key] = reject_stats.get(key, 0) + 1
+
+    cup_min_days = cup_min_weeks * 5
+    cup_max_days = cup_max_weeks * 5
+    handle_max_days = handle_max_weeks * 5
+    handle_min_days = 3  # 最低 3 営業日 (= 半週) の handle
+
+    # 直近の最新 close と最新 volume
+    today_close = closes[-1]
+    today_volume = volumes[-1]
+
+    # 50 日平均 volume
+    if n < 50:
+        avg_volume_50 = sum(volumes) / max(1, n)
+    else:
+        avg_volume_50 = sum(volumes[-50:]) / 50
+
+    # ── Step 1: right_rim 候補を「直近の局所最大」 として探す ──
+    # 元の「handle_len 固定 → right_rim 逆算」 だと ATH 更新中の銘柄が全て handle_exceeds_rim で
+    # reject される (Phase 3-C dogfood 2026-05-17 で 10/10 reject 発覚)。
+    # 正しいアプローチ: right_rim = それ以降の全 high が rim 以下となる「ピーク」。
+    # その後 handle_min_days 〜 handle_max_days の pullback が handle。
+    best_result: dict | None = None
+
+    # right_rim 探索範囲: 直近 (n - 1 - handle_min_days) から (n - 1 - handle_max_days) まで逆走
+    right_rim_search_max = n - 1 - handle_min_days
+    right_rim_search_min = max(prior_uptrend_days + cup_min_days, n - 1 - handle_max_days)
+
+    for right_rim_idx in range(right_rim_search_max, right_rim_search_min - 1, -1):
+        handle_len = n - 1 - right_rim_idx
+        if handle_len < handle_min_days or handle_len > handle_max_days:
+            _reject("handle_len_out_of_range"); continue
+
+        right_rim_high = highs[right_rim_idx]
+        if right_rim_high <= 0:
+            _reject("right_rim_invalid"); continue
+
+        # right_rim が「直近 ピーク」 か (handle 期間中の全 high が rim 以下)
+        # 1.5% の small overshoot は intraday noise として許容 (O'Neil shake out 概念)
+        handle_highs = highs[right_rim_idx + 1: n]
+        if any(h > right_rim_high * 1.015 for h in handle_highs):
+            _reject("handle_exceeds_rim"); continue
+
+        # handle low と pullback
+        handle_lows_slice = lows[right_rim_idx + 1: n]
+        if not handle_lows_slice:
+            _reject("handle_empty"); continue
+        handle_low = min(handle_lows_slice)
+        handle_low_idx = right_rim_idx + 1 + handle_lows_slice.index(handle_low)
+        handle_pullback = (right_rim_high - handle_low) / right_rim_high
+        if handle_pullback > handle_pullback_max:
+            _reject("handle_pullback_too_deep"); continue
+        if handle_pullback < 0:
+            _reject("handle_pullback_negative"); continue
+
+        # ── Step 2: cup 形状検証 (right rim から逆走で「最新の」 rim を取る) ──
+        # left rim 候補 = right_rim_high の 95% 以上の高値 (cup の対称性)。
+        # 「最古」 を取ると cup が大きくなり U 字判定が大型株で fail するため、
+        # 「最新の (right rim に最も近い) rim」 = 短い cup を優先 (Phase 3-C dogfood で判明)。
+        rim_threshold = right_rim_high * 0.95
+        left_rim_idx = -1
+        search_far = max(prior_uptrend_days, right_rim_idx - cup_max_days)
+        search_near = right_rim_idx - cup_min_days
+        for i in range(search_near, search_far - 1, -1):
+            if highs[i] >= rim_threshold:
+                left_rim_idx = i
+                break
+
+        if left_rim_idx < 0:
+            _reject("no_left_rim"); continue
+
+        cup_days = right_rim_idx - left_rim_idx
+        if cup_days < cup_min_days:
+            _reject("cup_too_short"); continue
+        if cup_days > cup_max_days:
+            _reject("cup_too_long"); continue
+
+        # cup 内の lows と最低値
+        cup_lows_slice = lows[left_rim_idx: right_rim_idx + 1]
+        cup_low = min(cup_lows_slice)
+        cup_low_idx = left_rim_idx + cup_lows_slice.index(cup_low)
+        rim_max = max(highs[left_rim_idx], right_rim_high)
+        cup_depth = (rim_max - cup_low) / rim_max
+        if cup_depth < depth_min:
+            _reject("cup_too_shallow"); continue
+        if cup_depth > depth_max:
+            _reject("cup_too_deep"); continue
+
+        # U 字判定: cup_low ± 5% レンジに closes が u_shape_min_days 以上滞在
+        u_band_high = cup_low * 1.05
+        u_band_low = cup_low * 0.95
+        u_count = sum(1 for c in closes[left_rim_idx: right_rim_idx + 1] if u_band_low <= c <= u_band_high)
+        if u_count < u_shape_min_days:
+            _reject("no_u_shape"); continue
+
+        # prior uptrend: cup 形成 _前_ 60 営業日の close 上昇率 ≥ 30%
+        prior_start_idx = left_rim_idx - prior_uptrend_days
+        if prior_start_idx < 0:
+            _reject("prior_window_oob"); continue
+        prior_start_close = closes[prior_start_idx]
+        prior_end_close = closes[left_rim_idx]
+        if prior_start_close <= 0:
+            _reject("prior_invalid"); continue
+        prior_gain = (prior_end_close - prior_start_close) / prior_start_close
+        if prior_gain < prior_uptrend_pct:
+            _reject("no_prior_uptrend"); continue
+
+        # ── Step 3: pivot + state ──
+        pivot_price = round(right_rim_high + pivot_offset, 2)
+        # state 判定
+        if today_close < pivot_price:
+            state = "formation"
+            breakout_info: dict | None = None
+        else:
+            vol_ratio = today_volume / avg_volume_50 if avg_volume_50 > 0 else 0
+            if vol_ratio >= breakout_volume_multiplier:
+                state = "breakout_confirmed"
+                breakout_info = {
+                    "confirmed_date": times[-1],
+                    "volume_ratio": round(vol_ratio, 2),
+                    "threshold": breakout_volume_multiplier,
+                }
+            else:
+                state = "breakout_pending"
+                breakout_info = None
+
+        # ── Step 4: SPY filter (B 案) ──
+        if spy_uptrend is False:
+            state = "formation_market_weak"
+            market_context = "weak"
+        else:
+            market_context = "strong" if spy_uptrend else "unknown"
+
+        result = {
+            "detected": True,
+            "state": state,
+            "market_context": market_context,
+            "cup": {
+                "left_rim_date": times[left_rim_idx],
+                "left_rim_price": round(highs[left_rim_idx], 2),
+                "cup_low_date": times[cup_low_idx],
+                "cup_low_price": round(cup_low, 2),
+                "right_rim_date": times[right_rim_idx],
+                "right_rim_price": round(right_rim_high, 2),
+                "depth_pct": round(cup_depth * 100, 2),
+                "weeks": round(cup_days / 5, 1),
+            },
+            "handle": {
+                "low_date": times[handle_low_idx],
+                "low_price": round(handle_low, 2),
+                "depth_pct": round(handle_pullback * 100, 2),
+                "weeks": round(handle_len / 5, 1),
+            },
+            "pivot": {
+                "price": pivot_price,
+                "date": times[-1],
+            },
+            "breakout": breakout_info,
+            "reason": None,
+            "thresholds": {
+                "depth_min": depth_min,
+                "depth_max": depth_max,
+                "handle_max_weeks": handle_max_weeks,
+                "handle_pullback_max": handle_pullback_max,
+                "breakout_volume_multiplier": breakout_volume_multiplier,
+                "prior_uptrend_pct": prior_uptrend_pct,
+            },
+        }
+        # 最も近い (handle が長い = より成熟した) cup を優先
+        if best_result is None or handle_len > best_result.get("_handle_len", 0):
+            result["_handle_len"] = handle_len
+            best_result = result
+
+    if best_result is None:
+        return {**not_detected, "reason": "no_pattern", "reject_stats": reject_stats}
+
+    best_result.pop("_handle_len", None)
+    best_result["reject_stats"] = reject_stats
+    return best_result
 
 
 @app.get("/api/chart/{ticker}/summary")
@@ -9162,10 +9410,119 @@ OVERLAY_COLORS = {
 }
 
 
+def _compute_rs(ticker_closes: list[float], spy_closes: list[float]) -> dict:
+    """RS (Relative Strength) vs SPY: 6 ヶ月リターン差 + 自己 252 日 percentile rank。
+
+    handover v76 Session 3 (6 体合議 2026-05-17): universe 集約は per-ticker endpoint で重いため Phase 2 nightly batch に先送り。
+    Session 3 は SPY 比較 1 銘柄 only で realtime 計算、 ranking は ticker 自身の 252 日 rolling 6m ratio に対する percentile。
+
+    Return: {rs_vs_spy_pct, self_percentile, ranking_label, period_months}、 算出不可は全 None。
+    """
+    if not ticker_closes or not spy_closes:
+        return {"rs_vs_spy_pct": None, "self_percentile": None, "ranking_label": None, "period_months": 6}
+    n = min(len(ticker_closes), len(spy_closes))
+    period_days = 126  # 6 ヶ月
+    if n < period_days + 5:
+        return {"rs_vs_spy_pct": None, "self_percentile": None, "ranking_label": None, "period_months": 6}
+
+    # 末尾を同じ長さに揃える (yfinance の SPY と ticker fetch が微妙にズレるケースに備える)
+    t_closes = ticker_closes[-n:]
+    s_closes = spy_closes[-n:]
+
+    def _ratio(closes: list[float], idx_end: int, lookback: int) -> float | None:
+        if idx_end - lookback < 0:
+            return None
+        c_now = closes[idx_end]
+        c_past = closes[idx_end - lookback]
+        if c_past <= 0:
+            return None
+        return (c_now / c_past - 1.0) * 100.0
+
+    # 現在の rs_vs_spy
+    t_now = _ratio(t_closes, n - 1, period_days)
+    s_now = _ratio(s_closes, n - 1, period_days)
+    if t_now is None or s_now is None:
+        return {"rs_vs_spy_pct": None, "self_percentile": None, "ranking_label": None, "period_months": 6}
+    rs_now = t_now - s_now
+
+    # 自己 252 日 rolling: 過去 252 日の各日について rs_vs_spy を計算 → percentile
+    self_window = 252
+    rs_history: list[float] = []
+    for i in range(max(period_days, n - self_window), n):
+        t_r = _ratio(t_closes, i, period_days)
+        s_r = _ratio(s_closes, i, period_days)
+        if t_r is not None and s_r is not None:
+            rs_history.append(t_r - s_r)
+    if len(rs_history) < 30:
+        self_percentile = None
+        ranking_label = None
+    else:
+        rank = sum(1 for v in rs_history if v <= rs_now)
+        self_percentile = int(round(rank / len(rs_history) * 100))
+        # ranking_label: 自己 252 日中の現在 percentile を「上位 / 下位 / 中位」 3 段階で表記
+        # (percentile 高 = 強い、 低 = 弱い、 中間は中位)。 v76 dogfood で「percentile 19 → 上位 81%」 の誤表記を修正。
+        if self_percentile >= 75:
+            ranking_label = f"上位 {max(1, 100 - self_percentile)}%"
+        elif self_percentile <= 25:
+            ranking_label = f"下位 {max(1, self_percentile)}%"
+        else:
+            ranking_label = "中位"
+
+    return {
+        "rs_vs_spy_pct": round(rs_now, 1),
+        "self_percentile": self_percentile,
+        "ranking_label": ranking_label,
+        "period_months": 6,
+    }
+
+
+def _detect_dma_cross(
+    times: list[str],
+    sma_50: list[float | None],
+    sma_200: list[float | None],
+    *,
+    lookback_days: int = 60,
+) -> dict:
+    """50DMA × 200DMA のゴールデンクロス検出 (直近 lookback_days 営業日内)。
+
+    handover v76 Session 3 (6 体合議 2026-05-17 B 案): golden cross のみ検出、 dead cross は Phase 2 で portfolio stop-loss 連携時に再導入予定。
+    じっちゃまプロトコル = 買いシグナル発見 product として方向性整合。
+
+    Return: {detected, kind: "golden"|None, cross_date, days_ago, lookback_days}。
+    """
+    n = len(sma_50)
+    if n < 200 or len(sma_200) != n or len(times) != n:
+        return {"detected": False, "kind": None, "cross_date": None, "days_ago": None, "lookback_days": lookback_days}
+
+    scan_start = max(200, n - lookback_days)
+    cross_idx = -1
+    for i in range(scan_start, n):
+        prev_50 = sma_50[i - 1]
+        prev_200 = sma_200[i - 1]
+        cur_50 = sma_50[i]
+        cur_200 = sma_200[i]
+        if prev_50 is None or prev_200 is None or cur_50 is None or cur_200 is None:
+            continue
+        # 前日: 50 ≤ 200 / 当日: 50 > 200 = golden cross
+        if prev_50 <= prev_200 and cur_50 > cur_200:
+            cross_idx = i  # 最新の golden cross (= 直近 N 日内で最も後ろのもの) を採用
+
+    if cross_idx < 0:
+        return {"detected": False, "kind": None, "cross_date": None, "days_ago": None, "lookback_days": lookback_days}
+
+    return {
+        "detected": True,
+        "kind": "golden",
+        "cross_date": times[cross_idx],
+        "days_ago": n - 1 - cross_idx,
+        "lookback_days": lookback_days,
+    }
+
+
 @app.get("/api/technical/{ticker}")
 async def get_technical(
     ticker: str,
-    patterns: str = "cup_handle,sma_50,sma_200",
+    patterns: str = "cup_handle,sma_50,sma_200,rs,dma_cross",
     period: str = "1y",
 ) -> dict:
     """テクニカル指標 (Cup-Handle / SMA / RS) bulk return。
@@ -9228,52 +9585,75 @@ async def get_technical(
 
         if "cup_handle" in requested:
             # Cup-Handle 検出は full 3y データで実行 (long-term base 必要)
-            patterns_result["cup_handle"] = _detect_cup_handle_skeleton(
-                times, highs, lows, closes, volumes
+            # SPY 200DMA filter (B 案): uptrend 外なら detected=True / state="formation_market_weak"
+            spy_history = _get_spy_history()
+            spy_up = _spy_uptrend(spy_history)
+            patterns_result["cup_handle"] = _detect_cup_handle(
+                times, highs, lows, closes, volumes, spy_up
             )
 
-        if "sma_50" in requested:
-            sma_50 = _compute_sma(closes, 50)
-            # 表示 range 内で valid な SMA 50 のみ返却 (slice 後の period 全期間で valid)
-            sliced_times = times[slice_start:]
-            sliced_sma = sma_50[slice_start:]
-            overlays.append({
-                "type": "line",
-                "key": "sma_50",
-                "name": "SMA 50",
-                "color": OVERLAY_COLORS["sma_50"],
-                "lineWidth": 1,
-                "data": [
-                    {"time": t, "value": v}
-                    for t, v in zip(sliced_times, sliced_sma)
-                    if v is not None
-                ],
-            })
+        # SMA は dma_cross 検出でも使うため事前計算 (slice 用とは別 reference を保持)
+        sma_50_full: list[float | None] | None = None
+        sma_200_full: list[float | None] | None = None
 
-        if "sma_200" in requested:
-            sma_200 = _compute_sma(closes, 200)
-            sliced_times = times[slice_start:]
-            sliced_sma = sma_200[slice_start:]
-            overlays.append({
-                "type": "line",
-                "key": "sma_200",
-                "name": "SMA 200",
-                "color": OVERLAY_COLORS["sma_200"],
-                "lineWidth": 1,
-                "data": [
-                    {"time": t, "value": v}
-                    for t, v in zip(sliced_times, sliced_sma)
-                    if v is not None
-                ],
-            })
+        if "sma_50" in requested or "dma_cross" in requested:
+            sma_50_full = _compute_sma(closes, 50)
+            if "sma_50" in requested:
+                # 表示 range 内で valid な SMA 50 のみ返却 (slice 後の period 全期間で valid)
+                sliced_times = times[slice_start:]
+                sliced_sma = sma_50_full[slice_start:]
+                overlays.append({
+                    "type": "line",
+                    "key": "sma_50",
+                    "name": "SMA 50",
+                    "color": OVERLAY_COLORS["sma_50"],
+                    "lineWidth": 1,
+                    "data": [
+                        {"time": t, "value": v}
+                        for t, v in zip(sliced_times, sliced_sma)
+                        if v is not None
+                    ],
+                })
 
-        # RS は Phase 1 Session 3 で実装予定 (SPY 比較 percentile rank)
+        if "sma_200" in requested or "dma_cross" in requested:
+            sma_200_full = _compute_sma(closes, 200)
+            if "sma_200" in requested:
+                sliced_times = times[slice_start:]
+                sliced_sma = sma_200_full[slice_start:]
+                overlays.append({
+                    "type": "line",
+                    "key": "sma_200",
+                    "name": "SMA 200",
+                    "color": OVERLAY_COLORS["sma_200"],
+                    "lineWidth": 1,
+                    "data": [
+                        {"time": t, "value": v}
+                        for t, v in zip(sliced_times, sliced_sma)
+                        if v is not None
+                    ],
+                })
+
+        # RS (Session 3 実装、 SPY 比較 6 ヶ月 + 自己 252 日 percentile)
         if "rs" in requested:
-            patterns_result["rs"] = {
-                "value": None,
-                "rating": None,
-                "note": "Phase 1 Session 3 で SPY 比較計算実装予定",
-            }
+            spy_history_for_rs = _get_spy_history()  # 24h cache 流用
+            if spy_history_for_rs and spy_history_for_rs.get("closes"):
+                patterns_result["rs"] = _compute_rs(closes, spy_history_for_rs["closes"])
+            else:
+                patterns_result["rs"] = {
+                    "rs_vs_spy_pct": None,
+                    "self_percentile": None,
+                    "ranking_label": None,
+                    "period_months": 6,
+                    "error": "SPY history unavailable",
+                }
+
+        # DMA Cross (Session 3 実装、 50DMA × 200DMA golden cross 直近 60 日内)
+        if "dma_cross" in requested:
+            if sma_50_full is None:
+                sma_50_full = _compute_sma(closes, 50)
+            if sma_200_full is None:
+                sma_200_full = _compute_sma(closes, 200)
+            patterns_result["dma_cross"] = _detect_dma_cross(times, sma_50_full, sma_200_full)
 
         data = {
             "schema_version": "1.0",
@@ -9685,13 +10065,19 @@ def _ogp_html(ticker: str) -> str:
 async def root(
     ticker: str | None = Query(None),
     t: str | None = Query(None),
+    layout: str | None = Query(None),  # workspace 等の layout 指定 (handover v77 user feedback)
     __r: str | None = Query(None),  # SPA リダイレクト後の再呼び出しを区別
 ):
     """`/?ticker=XXX` （または `?t=XXX`）で動的 OGP HTML を返す。
-    それ以外（クエリ無し or リダイレクト後）は SPA index.html を返す。"""
+    それ以外（クエリ無し or リダイレクト後）は SPA index.html を返す。
+
+    handover v77 user feedback fix: `?layout=workspace&ticker=MSFT` で OGP HTML 経由 redirect
+    すると `layout=workspace` が失われて旧 UI が開く問題があった。 layout 指定時は OGP スキップ
+    して SPA を直接返す (bot 用 OGP は ticker のみの URL = SNS share 経由でのみ使われる前提)。"""
     eff = (ticker or t or "").upper().strip()
     # __r=1 は SPA 側にすでにリダイレクト済み → 通常の SPA を返す（無限ループ防止）
-    if not eff or __r:
+    # layout 指定時 (workspace/classic/backtest) も SPA mode を優先 (frontend で URL parse)
+    if not eff or __r or layout:
         index = _STATIC_DIR / "index.html"
         if index.exists():
             return FileResponse(index)

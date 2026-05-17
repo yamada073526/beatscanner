@@ -242,7 +242,7 @@ export default function JudgmentDetail({
       {/* 株価チャート — StockPriceChart 自身が panel-card を持つので outer Card 不要 */}
       {selectedTicker && (
         <div id="sec-chart">
-          <StockPriceChart ticker={selectedTicker} />
+          <StockPriceChart ticker={selectedTicker} isPremiumUser={plan === 'premium'} />
         </div>
       )}
 

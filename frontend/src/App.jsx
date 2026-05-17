@@ -218,9 +218,12 @@ export default function App() {
 
   // ── Supabase Auth ─────────────────────────────────────────────
   const { user, ready: authReady, signInWithGoogle, signOut } = useAuth();
-  const { isSubscribed, startCheckout, checkoutLoading, openPortal, refetch: refetchSub } = useSubscription(user);
+  const { subscription, isSubscribed, startCheckout, checkoutLoading, openPortal, refetch: refetchSub } = useSubscription(user);
   // FMPキー保有者(BYOK)またはStripeサブスク有効者をProとして扱う
   const isProUser = isPro() || isSubscribed;
+  // handover v78 Session 4 (2026-05-17): Premium tier (¥1,800/月) 派生変数。
+  // Cup-Handle pivot 価格表示 + Phase 2 全銘柄 scan + push 通知 は Premium 限定。
+  const isPremiumUser = isSubscribed && subscription?.tier === 'premium';
   const syncedRef = useRef(false);
 
   // ── タグ機能 (X-1): Supabase 同期 + 楽観的更新 ─────────────────
@@ -844,11 +847,11 @@ export default function App() {
   }, [isDarkState, watchlist, holdingStore?.tickers, runAnalyze, setActiveTab, cmdAccounts, cmdTransactions]);
 
 
-  // v62 WS-2/3.5/5: URL `?layout` flag で workspace ↔ SPA を切替.
-  //   - `?layout=workspace`  → workspace mode
-  //   - `?layout=classic`    → SPA mode (明示的、cutover 後に default 反転する想定)
+  // v62 WS-2/3.5/5 + handover v77 user feedback (2026-05-17): URL `?layout` flag.
+  //   - `?layout=classic`    → SPA mode 強制 (旧 UI、 PC でも明示時のみ)
+  //   - `?layout=workspace`  → workspace mode 強制 (mobile でも明示時のみ)
   //   - `?layout=backtest`   → ファンダメンタル 5 条件 実績証明 (v71 Phase 1 Day 5)
-  //   - flag 無し            → SPA mode (現状の default)
+  //   - flag 無し            → **PC は workspace / mobile は SPA** (handover v77 cutover)
   // WS-3.5: mobile (< 768px) では 3 ペインが破綻するため強制 SPA fallback
   // (マーケター指摘「mobile は /classic 強制、launch は PC 推奨機能と訴求」).
   const urlLayout = (() => {
@@ -857,9 +860,12 @@ export default function App() {
       return new URLSearchParams(window.location.search).get('layout');
     } catch { return null; }
   })();
+  const urlWantsClassic = urlLayout === 'classic';
   const urlWantsWorkspace = urlLayout === 'workspace';
   const urlWantsBacktest = urlLayout === 'backtest';
-  const useWorkspaceLayout = urlWantsWorkspace && !isMobileForWorkspace;
+  // PC default = workspace、 mobile は常に SPA (`?layout=workspace` でも mobile では SPA 強制 = 既存ロジック維持)。
+  // `?layout=classic` 明示時のみ PC でも SPA mode (旧 UI 強制、 bookmark 互換)。
+  const useWorkspaceLayout = !isMobileForWorkspace && !urlWantsClassic;
 
   // v71 Phase 1 Day 5: `?layout=backtest` は最優先で full screen 表示
   // Phase 3 Sub-3 (2026-05-16): isSubscribed / startCheckout を渡し、 Premium teaser から
@@ -922,7 +928,7 @@ export default function App() {
         tagPosition: tagObj?.position ?? Number.POSITIVE_INFINITY,
       };
     });
-    const _planWS = isProUser ? 'pro' : 'free';
+    const _planWS = isPremiumUser ? 'premium' : (isProUser ? 'pro' : 'free');
     const _detailForWS = (t) => {
       const cache = resultCacheRef.current.get(t);
       const px = portfolioPrices?.prices?.[t] || null;
@@ -1713,7 +1719,7 @@ export default function App() {
               詳細・参照
             </div>
             <HistoryChart periods={result.periods} currency={result.currency} />
-            <StockPriceChart ticker={result.ticker} />
+            <StockPriceChart ticker={result.ticker} isPremiumUser={isPremiumUser} />
             <IRLinksPanel ticker={result.ticker} />
           </div>
         ) : (
