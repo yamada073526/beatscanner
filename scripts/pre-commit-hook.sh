@@ -11,6 +11,8 @@
 #   1. backend/app/visualizer/prompt.py に LLM への数値計算指示が staged されたら BLOCK
 #   2. frontend-next の staged ファイルで LLM 出力を dangerouslySetInnerHTML へ
 #      直接渡しているコードが追加されたら BLOCK
+#   3. backend/app/aggregator/*.py に LLM SDK の import (anthropic / claude_client /
+#      messages.create) が staged されたら BLOCK (handover v82 Phase 3 で追加)
 #
 # memory anchors:
 #   feedback_llm_calc_separation.md / feedback_citation_required.md
@@ -36,6 +38,30 @@ if [ -n "$STAGED_PROMPT" ]; then
         exit 1
     fi
 fi
+
+# --- Check 3: aggregator/*.py への LLM SDK import 検出 ---
+# handover v82 Phase 3: aggregator/ は「数値物理層」 として LLM SDK を一切持たない。
+# anthropic / claude_client import や messages.create 呼び出しが staged されたら BLOCK。
+# 検査対象は `^\s*(from|import)` で始まる import 行のみ (docstring 中の単語は false positive 回避)。
+STAGED_AGG=$(git diff --cached --name-only | grep -E '^backend/app/aggregator/.+\.py$' || true)
+for f in $STAGED_AGG; do
+    if [ ! -f "$f" ]; then
+        continue
+    fi
+    ADDED=$(git diff --cached "$f" | grep -E '^\+' || true)
+    if [ -z "$ADDED" ]; then
+        continue
+    fi
+    if echo "$ADDED" \
+        | grep -E '^\+\s*(from|import)\s+' \
+        | grep -E '\b(anthropic|claude_client|claude\.messages|\.messages\.create)\b' > /dev/null; then
+        echo "[pre-commit] BLOCKED: $f に LLM SDK の import が含まれています"
+        echo "  ↳ aggregator/ は数値物理層 (memory feedback_llm_calc_separation.md)"
+        echo "  ↳ LLM narration が必要なら backend/app/visualizer/ 配下に分離してください。"
+        echo "  ↳ 検証用の意図的混入なら --no-verify で迂回可。"
+        exit 1
+    fi
+done
 
 # --- Check 2: frontend-next の LLM 出力直挿し ---
 STAGED_TSX=$(git diff --cached --name-only | grep -E '^frontend-next/.*\.(tsx|jsx|ts)$' || true)

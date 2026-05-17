@@ -123,6 +123,35 @@ class FMPClient:
             "/analyst-stock-recommendations",
             {"symbol": ticker.upper(), "limit": limit},
         )
+
+    async def grades(self, ticker: str, limit: int = 50) -> list[dict]:
+        """アナリスト格付け変更履歴 (upgrades / downgrades / initiates / maintains).
+
+        Returns: [{symbol, date, gradingCompany, previousGrade, newGrade, action, ...}]
+        action: "upgrade" | "downgrade" | "maintain" | "initiate" 等 (FMP の正規化値)
+        ratings timeline / Top 3 アナリスト統合 / upgrade-downgrade kpi の元データ。
+        """
+        return await self._get(
+            "/grades",
+            {"symbol": ticker.upper(), "limit": limit},
+        )
+
+    async def price_target_consensus(self, ticker: str) -> dict:
+        """アナリスト目標株価 consensus (mean / median / high / low + analyst count).
+
+        Returns: {"symbol", "targetHigh", "targetLow", "targetConsensus", "targetMedian", ...}
+        FMP は dict 単一返却 (list[dict] でない) ことに注意。 list で返ってきたら
+        最初の要素を採用 (defensive)。
+        """
+        data = await self._get(
+            "/price-target-consensus",
+            {"symbol": ticker.upper()},
+        )
+        if isinstance(data, list):
+            return data[0] if data else {}
+        if isinstance(data, dict):
+            return data
+        return {}
     async def stock_news(self, ticker: str, limit: int = 20) -> list[dict]:
         return await self._get(
             "/stock-news",

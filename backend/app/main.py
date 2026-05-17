@@ -5269,6 +5269,7 @@ async def cache_status():
             "earnings":  CACHE_TTL_EARNINGS,
             "profile":   CACHE_TTL_PROFILE,
             "segment":   CACHE_TTL_SEGMENT,
+            "analyst":   _ANALYST_TTL,
         },
         "guidance_cache": {
             "size": len(_guidance_cache),
@@ -5279,6 +5280,17 @@ async def cache_status():
                     "expires_in_seconds": int(GUIDANCE_CACHE_TTL - (now - v[0])),
                 }
                 for k, v in _guidance_cache.items()
+            ],
+        },
+        "analyst_cache": {
+            "size": len(_ANALYST_CACHE),
+            "entries": [
+                {
+                    "ticker": k,
+                    "age_seconds": int(now - v[0]),
+                    "expires_in_seconds": int(_ANALYST_TTL - (now - v[0])),
+                }
+                for k, v in _ANALYST_CACHE.items()
             ],
         },
         "fmp_cache": {
@@ -9001,133 +9013,55 @@ async def generate_visualization(
 
 
 @app.get("/api/analyst/{ticker}")
-async def get_analyst_data(ticker: str):
-    try:
-        import yfinance as yf
-        t = yf.Ticker(ticker)
-        result = {}
+async def get_analyst_data(ticker: str, request: Request):
+    """handover v82 Phase 3 (analyst-view) 新 aggregator 実装.
 
+    旧 yfinance + Alpha Vantage 実装は drop (並走しない、 6 体合議 verdict)。
+    FMP /stable/ の 3 endpoint (analyst-estimates / grades / price-target-consensus) を
+    asyncio.gather で並列 fetch し、 partial_failure を sources field に集約。
+
+    schema: {ticker, sources, signal_quality, precomputed_metrics, top_5_changes, raw}
+    cache: 6h TTL + asyncio.Lock (stampede 防止)
+    """
+    from .aggregator.analyst import build_analyst_view
+
+    sym = (ticker or "").upper().strip()
+    if not sym:
+        raise HTTPException(status_code=400, detail="ticker is required")
+
+    now = _time.time()
+    cached = _ANALYST_CACHE.get(sym)
+    if cached and now - cached[0] < _ANALYST_TTL:
+        return cached[1]
+
+    async with _ANALYST_LOCK:
+        now2 = _time.time()
+        cached2 = _ANALYST_CACHE.get(sym)
+        if cached2 and now2 - cached2[0] < _ANALYST_TTL:
+            return cached2[1]
+
+        api_key = _get_fmp_key(request)
         try:
-            pt = t.analyst_price_targets
-            if pt and isinstance(pt, dict):
-                result["price_targets"] = {
-                    "current": pt.get("current"),
-                    "mean": pt.get("mean"),
-                    "high": pt.get("high"),
-                    "low": pt.get("low"),
-                    "median": pt.get("median"),
-                }
-        except Exception:
-            result["price_targets"] = None
+            client = FMPClient(api_key=api_key)
+        except FMPError as e:
+            raise HTTPException(status_code=500, detail=f"FMP key missing: {e}")
 
+        # 現値取得 (target_upside_pct 計算用)。 失敗時は None で続行 (precomputed_metrics
+        # の upside_pct のみ None になり、 他 field は影響しない)。
+        current_price: float | None = None
         try:
-            rec = t.recommendations
-            if rec is not None and not rec.empty:
-                latest = rec.tail(1).to_dict(orient="records")[0]
-                result["recommendations"] = {
-                    "strongBuy": latest.get("strongBuy", 0),
-                    "buy": latest.get("buy", 0),
-                    "hold": latest.get("hold", 0),
-                    "sell": latest.get("sell", 0),
-                    "strongSell": latest.get("strongSell", 0),
-                }
-        except Exception:
-            result["recommendations"] = None
+            quotes = await client.batch_quotes([sym])
+            if isinstance(quotes, list) and quotes:
+                q = quotes[0]
+                p = q.get("price") if isinstance(q, dict) else None
+                if p is not None:
+                    current_price = float(p)
+        except Exception as e:
+            print(f"[analyst] batch_quotes failed for {sym}: {e}")
 
-        try:
-            ud = t.upgrades_downgrades
-            if ud is not None and not ud.empty:
-                recent = ud.head(3).reset_index()
-                result["upgrades_downgrades"] = recent[["GradeDate", "Firm", "ToGrade", "Action"]].to_dict(orient="records")
-        except Exception:
-            result["upgrades_downgrades"] = None
-
-        # EPS Beat/Miss 履歴 — Alpha Vantage primary, yfinance supplement
-        import pandas as pd
-        import httpx as _httpx_eps
-
-        AV_KEY = os.environ.get("ALPHA_VANTAGE_API_KEY", "")
-        eps_records = []
-
-        try:
-            if AV_KEY:
-                r = _httpx_eps.get(
-                    f"https://www.alphavantage.co/query?function=EARNINGS&symbol={ticker}&apikey={AV_KEY}",
-                    timeout=15,
-                ).json()
-                for q in r.get("quarterlyEarnings", [])[:12]:
-                    actual = q.get("reportedEPS")
-                    estimate = q.get("estimatedEPS")
-                    surprise = q.get("surprisePercentage")
-                    date_str = q.get("reportedDate") or q.get("fiscalDateEnding", "")
-                    if actual and actual not in ("None", ""):
-                        act_f = float(actual)
-                        est_f = float(estimate) if estimate and estimate != "None" else None
-                        if est_f is not None and est_f != 0:
-                            surp_f = round((act_f - est_f) / abs(est_f) * 100, 2)
-                        elif surprise and surprise != "None":
-                            raw = float(surprise)
-                            # AV free plan may return ratio (0.08) instead of percent (8.02)
-                            surp_f = round(raw * 100, 2) if abs(raw) < 2 else round(raw, 2)
-                        else:
-                            surp_f = None
-                        eps_records.append({
-                            "date": date_str[:10],
-                            "epsActual": round(act_f, 2),
-                            "epsEstimate": round(est_f, 2) if est_f is not None else None,
-                            "surprise_pct": surp_f,
-                        })
-                print(f"Alpha Vantage eps_history: {len(eps_records)} records")
-        except Exception as e_av:
-            print(f"Alpha Vantage EARNINGS failed: {e_av}")
-
-        # yfinance で補完（常時実行；surprisePercent は比率なので ×100 してパーセントに変換）
-        try:
-            eh = t.earnings_history
-            if eh is not None and not eh.empty:
-                records = eh.tail(12).reset_index()
-                date_col = records.columns[0]
-                av_dates = {r["date"] for r in eps_records}
-                for _, row in records.iterrows():
-                    actual = row.get("epsActual") or row.get("EPS Actual")
-                    d = str(row[date_col])[:10]
-                    if not pd.notna(actual) or d in ("NaT", "") or len(d) < 10:
-                        continue
-                    # AV は発表日、yfinance は期末日のためズレがある。±35 日以内は重複とみなす
-                    if any(abs((pd.Timestamp(d) - pd.Timestamp(ed)).days) <= 35
-                           for ed in av_dates if len(ed) == 10):
-                        continue
-                    surp_raw = row.get("surprisePercent")
-                    surp_f = round(float(surp_raw) * 100, 2) if pd.notna(surp_raw) else None
-                    eps_records.append({
-                        "date": d,
-                        "epsActual": round(float(actual), 2),
-                        "epsEstimate": None,
-                        "surprise_pct": surp_f,
-                    })
-            eps_records.sort(key=lambda x: x["date"], reverse=True)
-            eps_records = eps_records[:12]
-            print(f"eps_history final: {len(eps_records)} records")
-        except Exception as e_yf:
-            print(f"yfinance supplement failed: {e_yf}")
-
-        # 同一四半期（報告月ベース）の重複排除 — AV と yfinance が同じ四半期で
-        # 45日超離れた日付を返すと _deduplicate が通過してしまうためここで除去
-        eps_records.sort(key=lambda x: x.get("date", ""), reverse=True)
-        _seen_fq: dict = {}
-        for _r in eps_records:
-            _d = _r.get("date", "")
-            if len(_d) >= 10:
-                _m = int(_d[5:7])
-                _qk = f"{_d[:4]}Q{1 if _m <= 3 else 2 if _m <= 6 else 3 if _m <= 9 else 4}"
-                _seen_fq.setdefault(_qk, _r)  # newest-first: first wins
-        eps_records = sorted(_seen_fq.values(), key=lambda x: x.get("date", ""), reverse=True)[:12]
-        result["eps_history"] = eps_records
-
-        return result
-
-    except Exception as e:
-        return {"error": str(e), "price_targets": None, "recommendations": None, "upgrades_downgrades": None}
+        data = await build_analyst_view(sym, client=client, current_price=current_price)
+        _ANALYST_CACHE[sym] = (now2, data)
+        return data
 
 
 # ───────────────────────────────────────────────────────────────
@@ -9146,6 +9080,14 @@ CHART_CANDLES_TTL = 3600  # 1時間（1y日足は日中変化しない）
 _TECHNICAL_CACHE: dict = {}
 _TECHNICAL_TTL = 24 * 3600.0
 _TECHNICAL_LOCK = asyncio.Lock()
+
+# handover v82 Phase 3 (analyst-view):
+# /api/analyst/{ticker} の aggregated cache。 key = ticker.upper()。
+# 6h TTL (アナリスト評価/target は日内大きく動かない、 _guidance_cache と整合)。
+# asyncio.Lock で cold start 時の同時 cache miss stampede を防止 (6 体合議 Web 開発 agent 同 pattern)。
+_ANALYST_CACHE: dict[str, tuple[float, dict]] = {}
+_ANALYST_TTL = 6 * 3600.0
+_ANALYST_LOCK = asyncio.Lock()
 # RS 計算用 SPY history (1y daily) を全銘柄で共有。 24h cache。
 _SPY_HISTORY_CACHE: dict = {"closes": None, "ts": 0.0}
 _SPY_HISTORY_TTL = 24 * 3600.0

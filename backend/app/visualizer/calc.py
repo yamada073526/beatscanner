@@ -89,6 +89,103 @@ def classify_trend_8q(values: list[float | None]) -> str:
     return "stable"
 
 
+def classify_rating_consensus(
+    *,
+    buy: int | None,
+    hold: int | None,
+    sell: int | None,
+) -> str:
+    """アナリスト推奨分布から consensus label を返す.
+
+    Returns: "bullish" | "neutral" | "bearish" | "mixed" | "unknown"
+
+    判定 logic (FMP grades は strong_buy/buy/hold/sell/strong_sell の 5 段階だが、
+    呼び出し側で buy = strong_buy + buy, sell = strong_sell + sell に集約済を想定):
+        - 全 None or total == 0 → unknown
+        - polarization (buy/sell が拮抗 + 双方 30%+) → mixed (bearish より先に判定)
+        - buy_share >= 0.60 → bullish
+        - sell_share >= 0.40 → bearish
+        - 上記以外 → neutral
+    """
+    b = buy if isinstance(buy, int) and buy >= 0 else 0
+    h = hold if isinstance(hold, int) and hold >= 0 else 0
+    s = sell if isinstance(sell, int) and sell >= 0 else 0
+    total = b + h + s
+    if total == 0:
+        return "unknown"
+    buy_share = b / total
+    sell_share = s / total
+    if (
+        abs(buy_share - sell_share) < 0.10
+        and buy_share >= 0.30
+        and sell_share >= 0.30
+    ):
+        return "mixed"
+    if buy_share >= 0.60:
+        return "bullish"
+    if sell_share >= 0.40:
+        return "bearish"
+    return "neutral"
+
+
+def compute_target_upside_pct(
+    target_median: float | None,
+    current: float | None,
+) -> float | None:
+    """目標株価 (median) と現値の差分 % を返す.
+
+    None-safe: 欠損 / NaN / 現値 0 で None を返す。
+    """
+    t = _to_float(target_median)
+    c = _to_float(current)
+    if t is None or c is None or c == 0:
+        return None
+    return round((t - c) / abs(c) * 100, 2)
+
+
+def compute_target_range(prices: list[float | None]) -> dict:
+    """目標株価分布 (analyst price targets) の統計量を返す.
+
+    Returns:
+        {
+            "mean": float | None,
+            "median": float | None,
+            "high": float | None,
+            "low": float | None,
+            "std_dev": float | None,
+            "count": int,
+        }
+
+    1 件以下なら mean=median=high=low=該当値、 std_dev=None。
+    全て欠損なら全 None + count=0。
+    """
+    clean = [v for v in (_to_float(p) for p in prices) if v is not None]
+    n = len(clean)
+    if n == 0:
+        return {"mean": None, "median": None, "high": None, "low": None, "std_dev": None, "count": 0}
+    sorted_vals = sorted(clean)
+    mean = sum(clean) / n
+    if n % 2 == 1:
+        median = sorted_vals[n // 2]
+    else:
+        median = (sorted_vals[n // 2 - 1] + sorted_vals[n // 2]) / 2
+    high = sorted_vals[-1]
+    low = sorted_vals[0]
+    if n < 2:
+        std_dev = None
+    else:
+        variance = sum((v - mean) ** 2 for v in clean) / (n - 1)
+        std_dev = round(variance ** 0.5, 2)
+    return {
+        "mean": round(mean, 2),
+        "median": round(median, 2),
+        "high": round(high, 2),
+        "low": round(low, 2),
+        "std_dev": std_dev,
+        "count": n,
+    }
+
+
 def classify_guidance_vs_consensus(
     guidance_eps: float | None,
     consensus_eps: float | None,
