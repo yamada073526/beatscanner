@@ -59,6 +59,23 @@
 - backdrop-filter のフェード境界を CSS で消そうとしてはいけない（必ず切断ラインが出る）。Apple/Linear 方式は **1px border で意図的に区切る** 設計
 - **発光系 (`.panel-card / .bs-panel / .surface-card`)** は v54-v59 で 6 セッション溶けた高リスク領域。新規 card 系を追加 / CSS を触る前に必ず [`design_recipes.md §C-1〜C-4`](docs/references/design_recipes.md) を読む。compound `.X.is-arriving:hover` 4 セット必須・`contain: paint` 禁止・入れ子 `surface-card` 禁止
 
+### Hallucination Guard 4 重防御 (LLM 出力に関わる全 endpoint で適用、 handover v82 で確立)
+
+LLM (Claude API) を呼ぶ endpoint は **4 層防御** を必ず通すこと。 違反は **景表法 §5 (優良誤認) / 金商法 §38 (断定的判断の提供) 抵触 risk**、 brand 信頼毀損 6-12 ヶ月コスト (multi-review マーケ + 金融 verdict)。
+
+1. **pre-commit hook**: `backend/app/aggregator/*.py` への LLM SDK import を BLOCK + `prompt.py` への LLM 数値計算指示を BLOCK ([`scripts/pre-commit-hook.sh`](scripts/pre-commit-hook.sh) Check 1+3)
+2. **system block 内 NEGATIVE_EXAMPLES**: BAD-1〜6 pattern を `<example>` XML tag で明示 ([`backend/app/visualizer/prompt_negatives.py`](backend/app/visualizer/prompt_negatives.py))
+   - BAD-1 英語混在 / BAD-2 detail 抽象 / BAD-3 数値捏造 / BAD-4 step 不足
+   - **BAD-5 断定的将来予測 (金商法 §38) / BAD-6 最上級表現 (景表法 §5)**
+3. **frontend sanitize layer**: 表示前 BLOCKLIST_REGEX で違反 sentence 単位削除 ([`frontend/src/lib/blocklist.js`](frontend/src/lib/blocklist.js))。 backend と JS で 1:1 mirror、 sentence 単位削除で LLM 出力の自然性維持
+4. **sources schema + per-source data namespace**: partial_failure を frontend で `sources.X === 'ok' && data.X` の compound check、 出典欠落時は signal_quality 降格 + 数値削除 (Phase 3 aggregator/analyst.py + Phase 5 aggregator/triage.py で確立)
+
+**新規 LLM endpoint** は上記 4 層全て通すか、 通さない場合は **静的 dictionary + sanitize layer のみ** で narration を出す (Phase 5.5 condition pulse pattern の `STATE_LABEL_JP` が例)。 「ちょっとだけ LLM に narration を生成させたい」 という近道は **必ず Trust Cliff バグ** を生む (Refinitiv 2017 EPS misprint 事件で機関投資家が 6 ヶ月離れた前例参照)。
+
+**aggregator/ パッケージは数値物理層**: LLM SDK 一切 import 禁止 (pre-commit Check 3 で enforce)、 narration は別 layer (visualizer/) に分離。
+
+詳細 memory: [feedback_diagram_quality_guard.md](memory/feedback_diagram_quality_guard.md) (BAD 1-6 + Trust Cliff DoD SSOT) / [feedback_data_completeness_guard.md](memory/feedback_data_completeness_guard.md) (per-source namespace + 3 段階分岐 UI) / [feedback_llm_calc_separation.md](memory/feedback_llm_calc_separation.md) (数値 Python / narration LLM 物理分離)
+
 ### 内部値の混在
 - タブの内部 key は `'home' / 'judgment' / 'report' / 'チャート'`（最後だけ日本語）。文字化け回避のため変えない
 
@@ -144,6 +161,28 @@ docs/references/api_endpoints.md を参照
 
 ## スキル一覧
 各機能の実装手順は .claude/skills/ 配下の対応SKILL.mdを参照
+
+### multi-review 6 体 vs 3 体の判断基準 (Phase gate 時、 handover v82 で確立)
+
+`multi-review` skill 起動時の reviewer 数判定。 Phase 4 で Anthropic verdict 「3 体で十分」 と Phase 5 で「6 体 valuable」 が両立した経緯から方法論として明文化 (v82 で 3 セット 18 体起動、 累計 67 体)。
+
+**6 体合議起動** (Phase gate / 重要設計判断 / リリース前):
+- 以下 **3 軸のうち 2+ が active** なら 6 体推奨
+  1. **LLM 出力品質**: 景表法 / 金商法 / hallucination risk が関わる
+  2. **Trust Cliff**: LP 訴求 vs 実装の整合、 brand 訴求文言の正当化
+  3. **新 backend endpoint + RLS / 認証境界 + cache 設計**: blast radius が大きい
+- Phase 6 (マーケ launch) は 3 軸全 active のため **必ず 6 体**
+- v82 例: Phase 4 (few-shot + NEGATIVE) / Phase 5 (Pane 3 4 機能 + RLS) = 6 体起動
+
+**3 体合議で十分** (Anthropic verdict、 cost 30-50% 圧縮):
+- LLM prompt 不変 + 既存 schema 維持 + frontend 局所修正のみ
+- 設計判断が limited (Explore で scope 縮小済)
+- 推奨 reviewer 構成: **ui-designer + frontend-architect + qa-dogfooder** (or 金融 + 開発 + UI/UX) の 3 体
+- v82 例: Phase 5.5 (5 条件 × 図解動的連携、 frontend 局所のみ) = 3 体で十分だった (実際は 6 体で実施したが verdict 後判明、 次回は 3 体)
+
+判断時は `multi-review` skill 呼出前に上記 3 軸を 1 行で記載 → reviewer 数を選択。
+
+詳細 memory: [project_pane3_visual_explainer_redesign.md](memory/project_pane3_visual_explainer_redesign.md) (v82 multi-review 3 セット記録)
 
 ## 引き継ぎ書（短命・最新版のみ参照）
 - `handover_YYYY-MM-DD_v*.md` がプロジェクトルートにある場合、そのセッションの直近の経緯が書かれている
