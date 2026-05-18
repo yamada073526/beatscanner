@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect } from 'react';
+import React, { Suspense, lazy, useEffect, useRef } from 'react';
 import { useJudgment } from '../../state/JudgmentContext.jsx';
 // handover v82 Phase 5.5: ConditionRow click → DiagramCard pulse 連携 (multi-review 6 体合議 verdict、 2026-05-17)。
 // pulsingConditionIndex は workspaceStore (non-persist) で管理、 store setter は pure、
@@ -174,6 +174,27 @@ export default function JudgmentDetail({
     }
   }, []); // deps 空配列 = mount 時 once 実行
 
+  // P0-2: auto runAnalyze — ticker 選択時に結果がなければ自動 fire。
+  // selectedTicker が変わるたびに 1 回だけ実行 (重複 fire 禁止)。
+  // feedback_dead_code_hook_dependency.md: useRef で fire 済み ticker を記録し、
+  // strict-mode の double-invoke でも 2 回目を skip。
+  const analyzedTickerRef = useRef(null);
+  useEffect(() => {
+    if (!selectedTicker || !onAnalyze) return;
+    const detail = detailFor ? detailFor(selectedTicker) : null;
+    const hasResult = !!(detail?.result);
+    if (hasResult) return; // 既に結果あり → skip
+    if (analyzedTickerRef.current === selectedTicker) return; // 既に fire 済み → skip
+    analyzedTickerRef.current = selectedTicker;
+    console.log('[analyze] auto fire:', selectedTicker);
+    try {
+      onAnalyze(selectedTicker);
+    } catch (err) {
+      console.warn('[analyze] auto runAnalyze failed:', err);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTicker]); // selectedTicker 変更時のみ re-run (onAnalyze / detailFor は安定参照)
+
   if (!selectedTicker) {
     return (
       <div
@@ -320,23 +341,25 @@ export default function JudgmentDetail({
           )}
         </>
       ) : (
-        conditions.length > 0 && (
-          <FiveConditionsCard
-            conditions={conditions}
-            passedCount={result?.passedCount}
-            totalCount={result?.totalCount}
-            isPro={detailContext.isPro}
-            onUpgrade={detailContext.onUpgrade}
-            onConditionPulse={(idx) => {
-              // condition 4 (営業利益増、 0-indexed) は全 step 該当 → toast fallback (DiagramCard 側で処理)。
-              // 0-3 は個別 step pulse。 'all_steps' 文字列を sentinel として store に保存。
-              setPulsingConditionIndex(idx === 4 ? 'all_steps' : idx);
-            }}
-          />
-        )
+        // P0-3: FiveConditionsCard を常時 render。conditions 空なら skeleton 表示。
+        <FiveConditionsCard
+          conditions={conditions}
+          passedCount={result?.passedCount}
+          totalCount={result?.totalCount}
+          isPro={detailContext.isPro}
+          onUpgrade={detailContext.onUpgrade}
+          onConditionPulse={(idx) => {
+            // condition 4 (営業利益増、 0-indexed) は全 step 該当 → toast fallback (DiagramCard 側で処理)。
+            // 0-3 は個別 step pulse。 'all_steps' 文字列を sentinel として store に保存。
+            setPulsingConditionIndex(idx === 4 ? 'all_steps' : idx);
+          }}
+        />
       )}
 
-      {!result && onAnalyze && (
+      {/* P0-1/P0-3: 分析する button は auto runAnalyze (P0-2) が失敗した場合の fallback。
+          result が取得できず、かつ loading でもない場合のみ retry link を表示。
+          auto runAnalyze が fire 中 (loading) は非表示。 */}
+      {!result && onAnalyze && !(detailFor ? detailFor(selectedTicker)?.isLoading : false) && (
         <div
           style={{
             padding: 'var(--space-3, 12px) var(--space-4, 16px)',
@@ -349,23 +372,31 @@ export default function JudgmentDetail({
           }}
         >
           <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-            この銘柄はまだ分析されていません
+            分析データを取得中...
           </span>
           <button
             type="button"
-            onClick={() => onAnalyze(selectedTicker)}
+            onClick={() => {
+              console.log('[analyze] retry button clicked:', selectedTicker);
+              analyzedTickerRef.current = null; // 再試行を許可
+              try {
+                onAnalyze(selectedTicker);
+              } catch (err) {
+                console.warn('[analyze] retry failed:', err);
+              }
+            }}
             style={{
-              padding: '6px 14px',
+              padding: '4px 12px',
               fontSize: 12,
-              fontWeight: 600,
-              color: '#fff',
-              background: 'var(--color-accent)',
-              border: 'none',
+              fontWeight: 500,
+              color: 'var(--text-secondary)',
+              background: 'transparent',
+              border: '1px solid var(--border)',
               borderRadius: 'var(--radius-sm)',
               cursor: 'pointer',
             }}
           >
-            分析する
+            再試行
           </button>
         </div>
       )}
@@ -380,7 +411,11 @@ export default function JudgmentDetail({
       {/* GuidanceCard: expanded 固定 (今期/来期 EPS = 投資判断の直接 input) */}
       {guidance && (
         <div id="sec-guidance">
-          <GuidanceCard guidance={guidance} isSecLoading={false} />
+          <GuidanceCard
+            guidance={guidance}
+            isSecLoading={false}
+            nextEarningsDays={detail?.nextEarningsDays ?? null}
+          />
         </div>
       )}
 

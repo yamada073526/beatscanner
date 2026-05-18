@@ -97,9 +97,55 @@ export default function FiveConditionsCard({
           }
         />
         {conditions.length === 0 ? (
-          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-            分析結果がありません
-          </div>
+          // P0-3: skeleton placeholder — 5 行のフレームを表示してページ open 時から枠を見せる。
+          // prefers-reduced-motion 対応: animation は CSS で制御。
+          <ul
+            aria-label="分析中の 5 条件"
+            style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}
+          >
+            {[1, 2, 3, 4, 5].map((n) => (
+              <li
+                key={n}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '10px 0',
+                  borderTop: n === 1 ? 'none' : '1px solid var(--border)',
+                  opacity: 0.5,
+                }}
+              >
+                <span
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: '50%',
+                    background: 'var(--bg-subtle)',
+                    border: '1px solid var(--border)',
+                    flexShrink: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 10,
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  {n}
+                </span>
+                <span
+                  style={{
+                    flex: 1,
+                    height: 12,
+                    borderRadius: 4,
+                    background: 'var(--bg-subtle)',
+                    maxWidth: `${[180, 200, 160, 220, 190][n - 1]}px`,
+                  }}
+                  className="ds-skeleton-bar"
+                />
+                <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>分析中...</span>
+              </li>
+            ))}
+          </ul>
         ) : (
           <ul
             style={{

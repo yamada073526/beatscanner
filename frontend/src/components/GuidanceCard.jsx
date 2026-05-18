@@ -70,8 +70,14 @@ function Tooltip({ text, children }) {
       {open && (
         <span
           role="tooltip"
-          className="absolute bottom-full left-1/2 z-50 mb-2 max-w-[260px] -translate-x-1/2 whitespace-normal rounded-md px-3 py-1.5 text-xs font-normal leading-snug text-white shadow-lg"
-          style={{ background: 'rgb(30, 41, 59)' }}
+          className="absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 rounded-md px-3 py-1.5 text-xs font-normal leading-snug text-white shadow-lg"
+          style={{
+            background: 'rgb(30, 41, 59)',
+            whiteSpace: 'nowrap',
+            maxWidth: 280,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
         >
           {text}
           <span
@@ -215,10 +221,13 @@ function formatAbsDiff(actual, estimated) {
   return `${sign}${formatEps(diff)}`;
 }
 
-function Row({ label, estimated, actual, surprisePct, verdict, verdictReason, formatter, source, signalQuality }) {
+function Row({ label, estimated, actual, surprisePct, verdict, verdictReason, formatter, source, signalQuality, nextEarningsDays }) {
   const style = verdict ? VERDICT_STYLE[verdict] : null;
   const isUnknown = verdict === 'unknown' || verdict === '不明';
   const reasonText = verdictReason || 'データを取得できませんでした';
+  // P0-4: unknown verdict で「発表待ち」表示に切替。
+  // nextEarningsDays が正の数 → 次の決算前 → 「📅 発表待ち」を示す。
+  const isAwaitingEarnings = isUnknown && Number.isFinite(nextEarningsDays) && nextEarningsDays > 0;
   // signal_quality envelope (handover v82 Phase 0) があれば 3-tier badge を表示。
   // 旧 「via {source}」 italic 文言は signal_quality 経由で SSOT 化、 重複を避けるため撤去。
   return (
@@ -234,21 +243,39 @@ function Row({ label, estimated, actual, surprisePct, verdict, verdictReason, fo
         </div>
         <div>
           <span className="text-slate-500">実績: </span>
-          <span className="font-medium text-slate-900">{formatter(actual)}</span>
+          <span className="font-medium text-slate-900">
+            {/* P0-4: actual が未定の場合、発表待ちなら D-N 表示、それ以外は — */}
+            {actual == null && isAwaitingEarnings
+              ? `発表待ち (D-${nextEarningsDays})`
+              : formatter(actual)}
+          </span>
         </div>
       </div>
       <div className="flex items-center gap-2">
         {style ? (
           isUnknown ? (
+            isAwaitingEarnings ? (
+              // P0-4: 発表待ち chip (tone="muted"、📅 prefix)
+              <Chip
+                variant="display"
+                tone="muted"
+                size="sm"
+                title={`次回決算まで ${nextEarningsDays} 日。実績はまだ発表されていません。`}
+              >
+                📅 発表待ち
+              </Chip>
+            ) : (
             <Tooltip text={reasonText}>
               <span
                 className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold cursor-help"
                 style={{ background: style.bg, color: style.color }}
               >
+                {/* P0-5: white-space nowrap で縦書き防止 */}
                 <span>{style.icon}</span>
-                <span>{style.label}</span>
+                <span style={{ whiteSpace: 'nowrap' }}>{style.label}</span>
               </span>
             </Tooltip>
+            )
           ) : (
             <>
               <span
@@ -403,7 +430,7 @@ const renderGuidanceText = (text) => {
   }).filter(Boolean);
 };
 
-export default function GuidanceCard({ guidance, isLoading = false, isSecLoading = false }) {
+export default function GuidanceCard({ guidance, isLoading = false, isSecLoading = false, nextEarningsDays = null }) {
   const [showModal, setShowModal] = useState(false);
   if (isLoading && !guidance) return <GuidanceSkeleton />;
 
@@ -412,7 +439,7 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
       <section className="panel-card rounded-2xl p-5 shadow-sm" style={GUIDANCE_SECTION_STYLE}>
         <div className="flex items-center justify-between">
           <h3 className="section-label flex items-center gap-1" style={{ marginBottom: 0 }}>
-            📊 ガイダンス達成状況
+            📊 ガイダンス進捗
             <button
               onClick={() => setShowModal(true)}
               className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
@@ -448,7 +475,7 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
     <section className="panel-card rounded-2xl p-5 shadow-sm" style={GUIDANCE_SECTION_STYLE}>
       <div className="flex items-baseline justify-between">
         <h3 className="section-label flex items-center gap-1" style={{ marginBottom: 0 }}>
-          📊 ガイダンス達成状況（直近決算）
+          📊 ガイダンス進捗
           <button
             onClick={() => setShowModal(true)}
             className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
@@ -484,6 +511,7 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
           source={eps?.source}
           signalQuality={epsSignalQuality}
           formatter={formatEps}
+          nextEarningsDays={nextEarningsDays}
         />
         <RevenueRow
           revenueActual={revenue_actual}
