@@ -3,6 +3,7 @@ import Card from '../../primitives/Card.jsx';
 import SectionHeader from '../../primitives/SectionHeader.jsx';
 import ConditionRow from './ConditionRow.jsx';
 import FiveConditionsOverviewModal from './FiveConditionsOverviewModal.jsx';
+import { useWorkspaceStore } from '../../../../state/workspaceStore.js';
 
 /**
  * FiveConditionsCard — VerdictDetail と ConditionGrid を統合した unified card (PR-2)
@@ -21,6 +22,20 @@ import FiveConditionsOverviewModal from './FiveConditionsOverviewModal.jsx';
  * @param {boolean} props.isPro
  * @param {() => void} props.onUpgrade
  */
+/**
+ * Sprint 5: condition click → collapsed AccordionSection 自動展開 + smooth scroll。
+ * feedback_condition_pulse_pattern.md 流儀に従い、static dictionary で mapping を定義。
+ * 0-indexed: idx=3 → 条件 4 (CC コール / アナリスト視点) → 'analyst-panel'
+ * LLM 不変、静的 dictionary のみ (Hallucination Guard 4 重防御 §4 該当外)。
+ */
+const CONDITION_SECTION_MAP = {
+  0: null, // 条件 1: EarningsHistoryChart expanded → pulse のみ
+  1: null, // 条件 2: EarningsHistoryChart expanded → pulse のみ
+  2: null, // 条件 3: EarningsHistoryChart expanded → pulse のみ
+  3: 'analyst-panel', // 条件 4 (CC コール): AnalystPanel collapsed → 自動展開
+  4: null, // 条件 5: GuidanceCard expanded → pulse のみ
+};
+
 export default function FiveConditionsCard({
   conditions = [],
   passedCount,
@@ -33,6 +48,9 @@ export default function FiveConditionsCard({
   // index = その index のみ展開 (Linear 流「同時に 1 つだけ」)
   const [expandedIndex, setExpandedIndex] = useState(null);
   const [showOverview, setShowOverview] = useState(false);
+
+  // Sprint 5: condition 4 click → AnalystPanel 自動展開 + smooth scroll
+  const expandSection = useWorkspaceStore((s) => s.expandSection);
 
   // 他セクション (GuidanceCard 等) と統一: タイトル横の cyan ? chip (3 体合議 2026-05-12)
   // user 元提案 + UI/UX 推奨案 1 で converge、整合性最優先
@@ -103,7 +121,36 @@ export default function FiveConditionsCard({
                 }
                 isPro={isPro}
                 onUpgrade={onUpgrade}
-                onConditionPulse={onConditionPulse}
+                onConditionPulse={(idx) => {
+                  // Sprint 5: static dictionary で対応 AccordionSection を自動展開 + smooth scroll。
+                  // feedback_condition_pulse_pattern.md 流儀: LLM 不変、静的 mapping のみ。
+                  const targetSectionId = CONDITION_SECTION_MAP[idx] ?? null;
+                  if (targetSectionId) {
+                    expandSection(targetSectionId);
+                    // 80ms 後に smooth scroll (expand state が React re-render されるのを待つ)。
+                    // AccordionSection の DOM id 構造: id prop="sec-analyst" → headerId="acc-header-sec-analyst"。
+                    // 'analyst-panel' → AccordionSection id="sec-analyst" の mapping。
+                    const SECTION_ID_MAP = {
+                      'analyst-panel': 'sec-analyst',
+                    };
+                    const domId = SECTION_ID_MAP[targetSectionId] || `sec-${targetSectionId}`;
+                    setTimeout(() => {
+                      try {
+                        // header button を scroll target に (開いた section の先頭が viewport に来る)
+                        const headerEl = document.getElementById(`acc-header-${domId}`);
+                        if (headerEl) {
+                          headerEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                      } catch {
+                        // scroll 失敗は silent
+                      }
+                    }, 80);
+                  }
+                  // 既存 pulse callback (DiagramCard 連動) は必ず呼ぶ
+                  if (typeof onConditionPulse === 'function') {
+                    onConditionPulse(idx);
+                  }
+                }}
               />
             ))}
           </ul>

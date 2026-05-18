@@ -115,6 +115,12 @@ export const useWorkspaceStore = create(
       // number (0-4) = 個別 condition index、 'all_steps' = 営業利益増 (toast fallback)、
       // null = pulse なし。 persist 対象外 (URL SSOT 該当外 + 1 click feedback の ephemeral state)。
       pulsingConditionIndex: null,
+      // Sprint 5 (SPEC_2026-05-19_scroll-hierarchy.md §5 Sprint 5):
+      // FiveConditionsCard の condition click → collapsed AccordionSection を自動展開するための
+      // section id Set。 Set は mutable なため、 immutable update は必ず new Set([...prev]) で実施。
+      // persist 対象外 (ephemeral UI state、 session 内のみ保持)。
+      // setter: expandSection / collapseSection / toggleSection
+      expandedSections: new Set(),
 
       toggleHeader: () => set((s) => ({ headerCollapsed: !s.headerCollapsed })),
       togglePane1: () => set((s) => ({ pane1Collapsed: !s.pane1Collapsed })),
@@ -189,6 +195,26 @@ export const useWorkspaceStore = create(
       // handover v82 Phase 5.5: setter は pure (timer は consumer = DiagramCard 側 useEffect で管理)。
       // Web 設計 + 開発 reviewer 一致 verdict: store 内 setTimeout は HMR / StrictMode で leak リスク。
       setPulsingConditionIndex: (idx) => set(() => ({ pulsingConditionIndex: idx })),
+      // Sprint 5: expandedSections setters。
+      // immutable update: new Set([...prev]) で React re-render を確実に trigger。
+      expandSection: (sectionId) => set((s) => ({
+        expandedSections: new Set([...s.expandedSections, String(sectionId)]),
+      })),
+      collapseSection: (sectionId) => set((s) => {
+        const next = new Set([...s.expandedSections]);
+        next.delete(String(sectionId));
+        return { expandedSections: next };
+      }),
+      toggleSection: (sectionId) => set((s) => {
+        const id = String(sectionId);
+        const next = new Set([...s.expandedSections]);
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          next.add(id);
+        }
+        return { expandedSections: next };
+      }),
     }),
     {
       name: STORAGE_KEY,

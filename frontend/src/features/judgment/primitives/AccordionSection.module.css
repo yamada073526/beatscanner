@@ -1,0 +1,214 @@
+/**
+ * AccordionSection.module.css
+ *
+ * Sprint 2: SPEC_2026-05-19_scroll-hierarchy.md §5 Sprint 2
+ *
+ * 設計原則:
+ *   - AccordionSection 自体は glow host にならない (design_recipes.md §C-1)
+ *     → .root に bs-panel / surface-card / panel-card クラスを付与しない
+ *     → box-shadow は付与しない (elevation_scale.md whitelist 違反回避)
+ *   - 既存 .panel-card / .bs-panel / .surface-card rules は不触 (SPEC §6-1)
+ *   - 新 selector のみ追加 (AccordionSection.module.css scope 内で完結)
+ *   - accordion header baseline は neutral (feedback_no_baseline_cyan.md)
+ *     → hover 時のみ var(--bg-hover) に変色、常時 cyan tint 禁止
+ *   - raw hex 禁止 (elevation_scale.md ALLOWED-HEX 外の値は使わない)
+ *   - prefers-reduced-motion: reduce 対応 (design_recipes.md §C-7-6)
+ */
+
+/* ===== Root wrapper ===== */
+/* glow host にならないため: no background, no box-shadow, no border-radius override */
+.root {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: var(--space-3, 12px);
+}
+
+/* Context tier (階層 3): collapsed 時は border-bottom only (elevation 0) — brand-aspiration verdict */
+.root.contextTier {
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: var(--radius-md, 12px);
+  overflow: hidden; /* border-radius clipping のみ、glow host ではないため OK */
+}
+
+/* ===== Header (折りたたみ toggle button) ===== */
+.header {
+  /* reset */
+  all: unset;
+  box-sizing: border-box;
+
+  /* layout */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+  width: 100%;
+
+  /* spacing: collapsed 時は --space-3 padding */
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+
+  /* baseline neutral — 常時 cyan tint 禁止 (feedback_no_baseline_cyan.md) */
+  background: transparent;
+  color: var(--text-primary, #0f172a);
+  cursor: pointer;
+  border-radius: var(--radius-md, 12px);
+
+  /* micro-interaction: background-color のみ、120ms (--motion-fast) */
+  transition: background-color var(--motion-fast, 120ms) ease-out;
+
+  /* focus-visible: gold ring (design_system.md §0 基準 #5 / elevation_scale.md ALLOWED-SHADOW) */
+  /* NOTE: all: unset でリセット後に明示 outline で復元 */
+}
+
+/* hover: var(--bg-hover) のみ (cyan 禁止) */
+.header:hover {
+  background-color: var(--bg-hover, #f1f5f9);
+}
+
+/* focus-visible: gold ring (kbd専用、§0 基準 #5) */
+.header:focus-visible {
+  outline: none;
+  /* gold ring は elevation_scale.md ALLOWED-SHADOW の "Focus-visible gold ring" */
+  box-shadow: 0 0 0 2px var(--bg-primary, #0f172a), 0 0 0 4px rgba(245, 158, 11, 0.85);
+  border-radius: var(--radius-md, 12px);
+}
+
+/* dark mode hover */
+[data-theme="dark"] .header:hover {
+  background-color: var(--bg-hover, #253045);
+}
+
+/* ===== Header left cluster (chevron + title + badge) ===== */
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  min-width: 0; /* テキスト折り返し許容 */
+}
+
+/* ===== Chevron icon ===== */
+.chevron {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted, #64748b);
+
+  /* rotate アニメーション: open 時に 180deg */
+  /* --motion-slow (360ms) で「ゆったりと開く重厚なドア」idiom (brand-aspiration verdict) */
+  transform: rotate(0deg);
+  transition: transform var(--motion-slow, 360ms) ease-out;
+}
+
+/* open 時 chevron を 180deg 回転 */
+.isOpen .chevron {
+  transform: rotate(180deg);
+}
+
+/* ===== Title typography (SectionHeader mimic、import/継承禁止) ===== */
+/* design_system.md §B-2 Heading tier: 18px / fw500 / -0.015em / lh1.2 を踏襲 */
+.title {
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  color: var(--text-primary, #0f172a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ===== Badge (カウント等、Chip primitive 経由が推奨) ===== */
+.badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted, #64748b);
+  /* Chip primitive 経由で描画する場合はこの style は上書きされる */
+}
+
+/* ===== Label (right-side small caps) ===== */
+/* design_system.md §B-2 sub-label: 11px / fw500 / 0.06em uppercase */
+.label {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted, #64748b);
+}
+
+/* ===== Panel ===== */
+/* NOTE: `hidden` attribute は HTML spec 準拠で display: none を保証する。
+   View Transitions API (JS 側) の後に DOM を hidden → visible にするため
+   CSS animation は collapsed→open 方向のみ適用。 */
+.panel {
+  overflow: hidden;
+}
+
+/* panel が hidden=false (open) のとき */
+.panel:not([hidden]) {
+  /* View Transitions API 非対応 browser 向け fallback: clip-path transition */
+  /* clip-path で collapsed → expanded アニメーション */
+  animation: acc-expand var(--motion-slow, 360ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) forwards;
+}
+
+/* expanded 時の panel inner padding */
+.panelInner {
+  padding-top: var(--space-3, 12px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 16px);
+}
+
+/* ===== Expand animation (clip-path fallback) ===== */
+/* View Transitions API が存在する browser では JS 側の cross-fade が優先される */
+@keyframes acc-expand {
+  from {
+    clip-path: inset(0 0 100% 0);
+    opacity: 0;
+  }
+  to {
+    clip-path: inset(0 0 0% 0);
+    opacity: 1;
+  }
+}
+
+/* ===== prefers-reduced-motion ===== */
+/* design_recipes.md §C-7-6 準拠: transition: none + animation なし */
+@media (prefers-reduced-motion: reduce) {
+  .header {
+    transition: none;
+  }
+
+  .chevron {
+    transition: none;
+  }
+
+  .panel:not([hidden]) {
+    animation: none;
+    clip-path: none;
+    opacity: 1;
+  }
+}
+
+/* ===== dark mode title / label color override ===== */
+[data-theme="dark"] .title {
+  color: var(--text-primary, #f1f5f9);
+}
+
+[data-theme="dark"] .label {
+  color: var(--text-muted, #94a3b8);
+}
+
+[data-theme="dark"] .badge {
+  color: var(--text-muted, #94a3b8);
+}
+
+[data-theme="dark"] .chevron {
+  color: var(--text-muted, #94a3b8);
+}
+
+/* ===== context tier dark mode ===== */
+[data-theme="dark"] .root.contextTier {
+  border-color: var(--border, #334155);
+}
