@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useJudgment } from '../../state/JudgmentContext.jsx';
+import { Search } from 'lucide-react';
 
 /**
  * Sticky 44px 検索バー (⌘K / Ctrl+K でフォーカス).
@@ -46,7 +47,9 @@ export default function JudgmentSearchBar() {
         borderBottom: '1px solid var(--border)',
       }}
     >
-      <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 14 }}>🔍</span>
+      <span aria-hidden style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+        <Search size={16} strokeWidth={1.5} />
+      </span>
       <input
         ref={inputRef}
         type="search"

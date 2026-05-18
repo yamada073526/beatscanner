@@ -6,6 +6,7 @@ import TranslationToggle from './TranslationToggle.jsx';
 import useArticleModal from '../hooks/useArticleModal.js';
 import useTranslation from '../hooks/useTranslation.js';
 import { useWorkspaceStore } from '../state/workspaceStore.js';
+import { Newspaper } from 'lucide-react';
 
 const VIEW_STORAGE_KEY = 'bs_newsView.panel';
 const VIEW_AUTO_THRESHOLD = 12;  // 件数 ≤12 → grid、>12 → list デフォルト
@@ -181,8 +182,11 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false }) {
   return (
     <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
       <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
-        <h3 className="section-heading" style={{ marginBottom: 0 }}>
-          📰 最新ニュース
+        <h3 className="section-heading" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="section-header-icon" aria-hidden="true">
+            <Newspaper size={18} strokeWidth={1.5} />
+          </span>
+          最新ニュース
           <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>{ticker}</span>
         </h3>
         {news.length > 0 && (

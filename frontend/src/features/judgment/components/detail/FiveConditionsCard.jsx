@@ -4,6 +4,7 @@ import SectionHeader from '../../primitives/SectionHeader.jsx';
 import ConditionRow from './ConditionRow.jsx';
 import FiveConditionsOverviewModal from './FiveConditionsOverviewModal.jsx';
 import { useWorkspaceStore } from '../../../../state/workspaceStore.js';
+import { BarChart3 } from 'lucide-react';
 
 /**
  * FiveConditionsCard — VerdictDetail と ConditionGrid を統合した unified card (PR-2)
@@ -89,6 +90,7 @@ export default function FiveConditionsCard({
       <div style={{ padding: 'var(--space-6, 24px)' }}>
         <SectionHeader
           id="judgment-conditions"
+          icon={<BarChart3 size={18} strokeWidth={1.5} />}
           title={titleWithHelp}
           label={
             passedCount != null && totalCount != null

@@ -935,6 +935,13 @@ export default function App() {
               isPro: isSubscribed,
               onUpgrade: () => upgrade.open('詳細分析（強気/弱気）'),
               onSignIn: signInWithGoogle,
+              // Sprint 5: TriageBanner 「新規買付」 button → IndicesView の
+              // TransactionEntryModal を 'bs:open:addtx' カスタムイベント経由で起動。
+              onOpenAddTransaction: (tkr) => {
+                try {
+                  window.dispatchEvent(new CustomEvent('bs:open:addtx', { detail: { ticker: tkr } }));
+                } catch { /* noop */ }
+              },
             }}
           />
         </Suspense>
@@ -1436,6 +1443,12 @@ export default function App() {
                   isPro: isSubscribed,
                   onUpgrade: () => upgrade.open('詳細分析（強気/弱気）'),
                   onSignIn: signInWithGoogle,
+                  // Sprint 5: TriageBanner 「新規買付」 button 対応 (Workspace 側と同一)
+                  onOpenAddTransaction: (tkr) => {
+                    try {
+                      window.dispatchEvent(new CustomEvent('bs:open:addtx', { detail: { ticker: tkr } }));
+                    } catch { /* noop */ }
+                  },
                 }}
               />
             </Suspense>

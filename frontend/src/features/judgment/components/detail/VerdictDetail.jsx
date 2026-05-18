@@ -1,6 +1,7 @@
 import React from 'react';
 import Card from '../../primitives/Card.jsx';
 import SectionHeader from '../../primitives/SectionHeader.jsx';
+import { BarChart3 } from 'lucide-react';
 
 /**
  * 5 (or N) 条件の詳細リスト.
@@ -15,6 +16,7 @@ export default function VerdictDetail({ conditions = [], passedCount, totalCount
       <div style={{ padding: 'var(--space-6, 24px)' }}>
         <SectionHeader
           id="judgment-conditions"
+          icon={<BarChart3 size={18} strokeWidth={1.5} />}
           title="ファンダメンタル 5 条件"
           label={
             passedCount != null && totalCount != null

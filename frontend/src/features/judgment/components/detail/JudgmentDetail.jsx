@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useEffect, useRef } from 'react';
+import { FileBarChart2 } from 'lucide-react';
 import { useJudgment } from '../../state/JudgmentContext.jsx';
 // handover v82 Phase 5.5: ConditionRow click → DiagramCard pulse 連携 (multi-review 6 体合議 verdict、 2026-05-17)。
 // pulsingConditionIndex は workspaceStore (non-persist) で管理、 store setter は pure、
@@ -33,6 +34,10 @@ import AnalystPanel from '../../../../components/AnalystPanel.jsx';
 // handover v82 Phase 5: TriageBanner (保有 × 5 条件 × Cup-Handle 三層)。
 // ConditionGrid 直前 hint 1 行 (UI/UX 6 体合議 B 案)。
 import TriageBanner from '../../../../components/TriageBanner.jsx';
+// Sprint 6 (SPEC 2026-05-19): SummaryBrief (AI 要約) を Pane 3 Hero 直下に port。
+// Hallucination Guard 4 重防御 (ErrorBoundary / BLOCKLIST_REGEX / conditional render / 数値非該当)。
+// brand-aspiration §-1「コンシェルジュの一言挨拶」比喩。 frontend-architect 判定: risk 最大 → 末尾 sprint で隔離。
+import SummaryBrief from '../../../../components/SummaryBrief.jsx';
 // Sprint 2: AccordionSection primitive + useIntersectionLazy hook
 import { AccordionSection, useIntersectionLazy } from '../../primitives/index.js';
 
@@ -304,13 +309,31 @@ export default function JudgmentDetail({
         nextEarningsDate={detail?.nextEarningsDate}
       />
 
+      {/* Sprint 6: SummaryBrief (AI 要約) — Hero と KpiStrip の間に mount。
+          ui-designer verdict 「Pane 3 上部 (Hero 直下) は §5 図解認知に最も貢献、最優先位置」。
+          brand-aspiration 比喩「コンシェルジュの一言挨拶」。
+          Hallucination Guard 4 重防御:
+            第 1 層: SummaryBriefErrorBoundary (SummaryBrief 内で wrap 済)
+            第 2 層: sanitizeText per-line BLOCKLIST_REGEX (SummaryBrief 内で適用済)
+            第 3 層: conditional render — result が null なら mount しない
+            第 4 層: 数値系 Number.isFinite — string-only LLM 出力のため非該当
+          condition pulse 連動: Sprint 6 では deferred (FiveConditionsCard の CONDITION_SECTION_MAP と
+          SummaryBrief の LLM 出力行は 1:1 対応が困難、SPEC §5 Sprint 6 末尾に deferred 注記)。 */}
+      {result && (
+        <SummaryBrief
+          analysis={result}
+          guidance={guidance}
+        />
+      )}
+
       {/* Sprint 3: KpiStrip — grid 密着配置は KpiStrip.jsx 内部に依存。
           JudgmentDetail レベルでは gap 短縮で上部スカスカを解消。 */}
       <KpiStrip stats={kpis} />
 
       {/* handover v82 Phase 5: 三層トリアージ banner (UI/UX 6 体合議 B 案、 ConditionGrid 直前 hint 1 行)。
           保有 × 5 条件 × Cup-Handle を 1 行で示し、 「他 N 件」 click で Pane 2 ヒートマップへ jump。
-          v84 hotfix 6 段階で確立済 (hasFatal 条件)、accordion 化対象外 (SPEC §6)。 */}
+          v84 hotfix 6 段階で確立済 (hasFatal 条件)、accordion 化対象外 (SPEC §6)。
+          Sprint 5: currentPrice (含み損益計算用) + onOpenAddTransaction (新規買付 button) を追加。 */}
       {selectedTicker && (
         <TriageBanner
           ticker={selectedTicker}
@@ -318,6 +341,8 @@ export default function JudgmentDetail({
           plan={plan}
           onUpgrade={detailContext.onUpgrade}
           onJumpToScanner={detailContext.onJumpToScanner}
+          currentPrice={Number.isFinite(detail?.price) ? Number(detail.price) : null}
+          onOpenAddTransaction={detailContext.onOpenAddTransaction}
         />
       )}
 
@@ -403,9 +428,11 @@ export default function JudgmentDetail({
 
       {/* === 階層 2: Fundamentals ===
           Sprint 3: Verdict→Fundamentals 境界のみ margin-top var(--space-8) で間を開ける。
-          Sprint 4: label="詳細分析" を inject。 Verdict → Fundamentals 層境界を明示。 */}
+          Sprint 4: label="詳細分析" を inject。 Verdict → Fundamentals 層境界を明示。
+          SPEC 2026-05-19 Sprint 1 Item 6: expandedLabel に変更して h2 級 typography + 左 4px cyan accent bar を適用。
+          SectionDivider 内の margin (var(--space-6) 0 var(--space-4)) が padding を包含するため、外側 marginTop は維持。 */}
       <div style={{ marginTop: 'var(--space-8, 32px)' }}>
-        <SectionDivider tier={2} label="詳細分析" />
+        <SectionDivider expandedLabel="詳細分析" />
       </div>
 
       {/* GuidanceCard: expanded 固定 (今期/来期 EPS = 投資判断の直接 input) */}
@@ -695,6 +722,7 @@ export default function JudgmentDetail({
               <div style={{ padding: 'var(--space-6, 24px)' }}>
                 <SectionHeader
                   id="sec-report"
+                  icon={<FileBarChart2 size={18} strokeWidth={1.5} />}
                   title="AI 詳細レポート"
                   label="DETAIL REPORT"
                 />

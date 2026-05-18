@@ -74,6 +74,11 @@
   --shadow-3: 0 4px 12px rgba(0, 0, 0, 0.08), 0 12px 24px rgba(0, 0, 0, 0.06);
   --shadow-4: 0 12px 32px rgba(0, 0, 0, 0.12), 0 24px 48px rgba(0, 0, 0, 0.08);
   --shadow-glow-cyan: 0 0 0 1px rgba(56, 189, 248, 0.20), 0 8px 32px rgba(56, 189, 248, 0.12);
+  /* Sprint 3 SPEC_2026-05-19_pane3-header-polish: EarningsRing 外周 subtle cyan glow
+     design_system.md §4 に token 登録済。brand emphasis 専用 (chandelier 演出)。
+     上昇/下落の方向性には使わない (CLAUDE.md 投資業界色ルール遵守)。
+     elevation_scale.md ALLOWED-SHADOW 登録済。 */
+  --ring-glow: 0 0 20px rgba(56, 189, 248, 0.20), 0 0 8px rgba(56, 189, 248, 0.10);
 
   /* §-1-B Reading Mode (ベッドの間接照明) — design_system.md §1-D / design_recipes.md §C-7
      `.bs-mode-reading` scope 内でのみ参照可。Phase 1 POC では Pane 3 判定詳細のみに適用。
@@ -138,6 +143,8 @@
   --shadow-3: 0 4px 12px rgba(0, 0, 0, 0.50), 0 12px 24px rgba(0, 0, 0, 0.30);
   --shadow-4: 0 12px 32px rgba(0, 0, 0, 0.60), 0 24px 48px rgba(0, 0, 0, 0.40);
   --shadow-glow-cyan: 0 0 0 1px rgba(56, 189, 248, 0.30), 0 8px 32px rgba(56, 189, 248, 0.20);
+  /* Sprint 3: dark mode では --ring-glow を強化 (dark 背景で subtle に引き立つ 30%増) */
+  --ring-glow: 0 0 24px rgba(56, 189, 248, 0.30), 0 0 10px rgba(56, 189, 248, 0.16);
   /* §-1-B dark mode: warm cream (candlelight 2700K 相当、hue ~25°)
      amber (#f59e0b ≒ hue 38°) と HSL 上 13° 離して分離。
      α 0.12 = Phase 1 dogfood で「気づかない」フィードバックを受け 0.05 → 0.12 にバンプ (2026-05-12)。
@@ -1388,6 +1395,28 @@ body {
   color: #22d3ee;
   font-weight: 700;
   box-shadow: 0 0 8px rgba(34,211,238,0.25);
+}
+
+/* ─── Sprint 4: section-header-icon (lucide-react icon 統一 token) ───
+   brand-aspiration verdict: baseline = neutral (var(--text-secondary))、hover/active 時のみ cyan。
+   ui-designer verdict: stroke 1.5 / size 16-18px / currentColor で token 化。
+   elevation_scale.md: raw hex 禁止。currentColor は SVG stroke が自動追従。 */
+.section-header-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--icon-size-md, 18px);
+  height: var(--icon-size-md, 18px);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  /* transition: 120ms ease-out (Linear 流 micro-animation) */
+  transition: color 120ms ease-out;
+}
+
+/* hover / active 時のみ cyan accent (brand-aspiration「active 時のみ点灯」 verdict 遵守) */
+.ds-section-header:hover .section-header-icon,
+.ds-section-header[aria-expanded="true"] .section-header-icon {
+  color: var(--color-accent);
 }
 
 /* ─── 見出しタイポグラフィ（Apple inspired・3階層） ───
@@ -4958,6 +4987,52 @@ body {
   100% { opacity: 0.4; }
 }
 
+/* Sprint 3 SPEC_2026-05-19_pane3-header-polish: EarningsRing wrapper (glow + 呼吸 animation)
+   multi-review verdict (3 体 2026-05-19):
+   - ui-designer: 「chip overlay は実装しない、下ラベルのみ」
+   - brand-aspiration: 「呼吸 animation 4s loop (opacity 0.85↔1.0)、Aman 自動ドア 0.8s 所作と同等」
+   - frontend-architect: 「--ring-glow token 経由、raw shadow 禁止」
+   注意: transform / scale 禁止 (feedback_press_feedback_delta.md 厳守、opacity のみ) */
+.earnings-ring-wrapper {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  /* subtle cyan glow: design_system.md §4 --ring-glow token 経由 (raw shadow 禁止) */
+  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.22));
+}
+/* 呼吸 animation: opacity 0.85 ↔ 1.0 の subtle loop (Aman 自動ドア 0.8s 所作 analog)
+   transform / scale は絶対使わない (feedback_press_feedback_delta.md 厳守) */
+.earnings-ring-wrapper .earnings-ring {
+  box-shadow: var(--ring-glow);
+  border-radius: var(--radius-pill);
+  animation: ring-breath 4s ease-in-out infinite;
+}
+@keyframes ring-breath {
+  0%   { opacity: 0.85; }
+  50%  { opacity: 1.0; }
+  100% { opacity: 0.85; }
+}
+/* 下ラベル「次の決算まで」 — chip overlay は実装しない (ui-designer verdict 絶対遵守) */
+.earnings-ring-sublabel {
+  font-size: 0.6875rem;         /* 11px */
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-top: var(--space-2);
+  white-space: nowrap;
+  line-height: 1.2;
+  text-align: center;
+}
+/* prefers-reduced-motion: 呼吸 animation を無効化 (brand-aspiration verdict + a11y AAA) */
+@media (prefers-reduced-motion: reduce) {
+  .earnings-ring-wrapper .earnings-ring {
+    animation: none;
+    opacity: 1.0;
+  }
+}
+
 /* handover v82 Phase 5: TriageBanner (multi-review UI/UX B 案、 ConditionGrid 直前 hint 1 行) */
 .triage-banner {
   display: flex;
@@ -5022,6 +5097,87 @@ body {
 }
 .triage-locked-cta:active {
   transform: translateY(2px) scale(0.98);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   TriageBanner Sprint 5 (SPEC 2026-05-19 Item 5)
+   保有情報 2 行 grid: 株数/平均取得/含み損益 + 初回買付日/新規買付 button
+   投資業界色ルール: gain=var(--color-gain) / loss=var(--color-loss) / neutral=var(--text-secondary)
+   raw hex 禁止 (elevation_scale.md whitelist 準拠)
+   ───────────────────────────────────────────────────────────────── */
+.triage-banner-sprint5 {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2, 8px);
+}
+
+.triage-holdings-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  width: 100%;
+}
+
+.triage-holdings-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3, 12px);
+}
+
+.triage-holdings-row--noholding {
+  gap: var(--space-2, 8px);
+}
+
+.triage-holdings-cell {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.triage-holdings-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.triage-holdings-label--muted {
+  color: var(--text-muted);
+}
+
+.triage-holdings-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* 含み損益: 緑/赤/neutral は inline style (color prop) で設定 (token 経由)。
+   フォントスタイルのみここで定義 */
+.triage-holdings-pnl {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.triage-signal-text {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* 新規買付 button — Chip variant=filter tone=accent を margin 調整で統合 */
+.triage-add-tx-btn {
+  margin-left: auto;
+}
+
+@media (max-width: 480px) {
+  .triage-add-tx-btn {
+    margin-left: 0;
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -8319,5 +8475,84 @@ button.ds-chip[data-pressed="true"]:hover {
   }
   .backtest-trade-row {
     transition: none;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   SPEC 2026-05-19 Sprint 2 Item 1: Hero 企業ロゴ fade-in
+   brand-aspiration: 「ドアマンが胸章で迎える瞬間」(arrival ceremony)
+   ──────────────────────────────────────────────────────────────────── */
+
+/* logo が load された瞬間に opacity 0 → 1 / 200ms ease-out */
+.hero-company-logo {
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+.hero-company-logo.logo-loaded {
+  opacity: 1;
+}
+
+/* fallback (頭文字円) は最初から表示（opacity transition 不要・即時表示） */
+.hero-company-logo.logo-fallback {
+  opacity: 1;
+  transition: none;
+}
+
+/* a11y: prefers-reduced-motion では animation: none */
+@media (prefers-reduced-motion: reduce) {
+  .hero-company-logo {
+    opacity: 1;
+    transition: none;
+  }
+}
+
+/* ── Sprint 6: SummaryBrief (AI 要約) ───────────────────────────────────────
+   SPEC 2026-05-19 Sprint 6: Item 4 AI 要約を Pane 3 Hero 直下に port。
+   Hallucination Guard 4 重防御対応、design token 経由で raw hex 排除。
+   brand-aspiration §-1「コンシェルジュの一言挨拶」比喩。
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* badge: "AI要約" ラベル (bg-dark でブランド感) */
+.summary-brief-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-inverse, #f8fafc);
+  background: var(--bg-primary, #0f172a);
+  border-radius: var(--radius-sm, 4px);
+  cursor: default;
+  user-select: none;
+}
+
+/* help button: cyan ? アイコン (FiveConditionsCard / SummaryBrief 統一パターン) */
+.summary-brief-help-btn {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 700;
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--color-accent);
+  border: 1px solid rgba(56, 189, 248, 0.40);
+  cursor: pointer;
+  transition: background var(--motion-fast, 120ms) ease;
+}
+.summary-brief-help-btn:hover {
+  background: rgba(56, 189, 248, 0.30);
+}
+
+/* prefers-reduced-motion: SummaryBrief の fade-in transition を無効化。
+   inline style の opacity/transition を CSS から上書きできないため、
+   JS 側で window.matchMedia('(prefers-reduced-motion: reduce)') を参照してフォールバック。
+   本 @media block は CSS レイヤーの documentation として残す (実効 rule なし)。
+   animation-duration !important パターン (行 107-109) と同じ prefers-reduced-motion 対応。 */
+@media (prefers-reduced-motion: reduce) {
+  .summary-brief-section {
+    /* opacity / transition は JS (SummaryBriefInner useEffect) で制御 */
   }
 }

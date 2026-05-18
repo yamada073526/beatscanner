@@ -1,6 +1,59 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { Component, useEffect, useRef, useState } from 'react';
 import { streamSummaryBrief } from '../api.js';
 import InfoModal from './InfoModal.jsx';
+import { sanitizeText } from '../lib/blocklist.js';
+
+// ── Hallucination Guard 第 1 層: ErrorBoundary ─────────────────────────────
+// feedback_chart_overlay_safety.md 4 層防御 第 1 層。
+// SummaryBrief 内部 crash が Pane 3 全体の真っ白事故にならないよう隔離。
+// fallback UI: 「要約の表示に失敗しました」+ silent fail 禁止 (ユーザーに見える)
+class SummaryBriefErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(err, info) {
+    console.error('[SummaryBrief] ErrorBoundary caught:', err, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div
+          style={{
+            padding: 'var(--space-4, 16px)',
+            background: 'var(--bg-subtle)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)',
+            color: 'var(--text-muted)',
+            fontSize: 13,
+            textAlign: 'center',
+          }}
+        >
+          <span>要約の表示に失敗しました。</span>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            style={{
+              marginLeft: 8,
+              color: 'var(--color-accent)',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 13,
+              textDecoration: 'underline',
+            }}
+          >
+            再読み込み
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function renderBold(text) {
   return text.split(/\*\*(.+?)\*\*/g).map((part, i) =>
@@ -21,22 +74,29 @@ const TAG_CONFIG = {
   },
 };
 
-const NEU_WRAPPER = { background: 'var(--neu-bg)', borderLeft: '4px solid #94a3b8' };
+// NEU (中立) ブロックの color はトークン経由。
+// borderLeft は --text-muted (dark: #94a3b8 = ALLOWED-HEX 済) で代替。
+const NEU_WRAPPER = { background: 'var(--neu-bg)', borderLeft: '4px solid var(--text-muted)' };
 const NEU_TEXT    = { color: 'var(--neu-text)' };
 
 function SummaryLine({ line }) {
-  if (line.startsWith('[NEU]')) {
-    const content = line.slice('[NEU]'.length).trim();
+  // Hallucination Guard 第 3 層: conditional render — line が sanitize 後に null ならスキップ
+  // sanitizeText は BAD-5 (断定的将来予測) / BAD-6 (最上級表現) sentence 単位削除
+  const sanitized = sanitizeText(line);
+  if (!sanitized) return null;
+
+  if (sanitized.startsWith('[NEU]')) {
+    const content = sanitized.slice('[NEU]'.length).trim();
     return (
       <div className="flex items-start gap-2 rounded-r-lg p-2 mb-2" style={NEU_WRAPPER}>
-        <span className="mt-0.5 shrink-0 font-bold" style={{ color: '#94a3b8' }}>–</span>
+        <span className="mt-0.5 shrink-0 font-bold" style={{ color: 'var(--text-muted)' }}>–</span>
         <span className="text-sm" style={{ ...NEU_TEXT, flex: 1, lineHeight: '1.5' }}>{renderBold(content)}</span>
       </div>
     );
   }
   for (const [tag, cfg] of Object.entries(TAG_CONFIG)) {
-    if (line.startsWith(tag)) {
-      const content = line.slice(tag.length).trim();
+    if (sanitized.startsWith(tag)) {
+      const content = sanitized.slice(tag.length).trim();
       return (
         <div className={cfg.wrapper}>
           {cfg.icon}
@@ -45,10 +105,10 @@ function SummaryLine({ line }) {
       );
     }
   }
-  if (!line.trim()) return null;
+  if (!sanitized.trim()) return null;
   return (
     <p className="mb-2 text-sm" style={{ color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-      {renderBold(line)}
+      {renderBold(sanitized)}
     </p>
   );
 }
@@ -64,7 +124,7 @@ function SummaryInfoModal({ onClose }) {
 
       {/* 色分けの意味 — 実際のバッジで表示 */}
       <div style={CARD_STYLE}>
-        <p style={{ ...LABEL_STYLE, marginBottom: '8px' }}>🎨 色分けの意味</p>
+        <p style={{ ...LABEL_STYLE, marginBottom: '8px' }}>色分けの意味</p>
         <div className="space-y-2">
           <div className="flex items-start gap-2 bg-green-50 border-l-4 border-green-400 rounded-r-lg p-2">
             <span className="mt-0.5 shrink-0 font-bold text-green-500">✓</span>
@@ -75,7 +135,7 @@ function SummaryInfoModal({ onClose }) {
             <span className="text-sm text-red-800">ネガティブ：条件未達・減少・課題など</span>
           </div>
           <div className="flex items-start gap-2 rounded-r-lg p-2" style={NEU_WRAPPER}>
-            <span className="mt-0.5 shrink-0 font-bold" style={{ color: '#94a3b8' }}>–</span>
+            <span className="mt-0.5 shrink-0 font-bold" style={{ color: 'var(--text-muted)' }}>–</span>
             <span className="text-sm" style={NEU_TEXT}>中立・補足：ガイダンス維持・背景説明など</span>
           </div>
         </div>
@@ -86,15 +146,15 @@ function SummaryInfoModal({ onClose }) {
 
       {/* 太字の意味 */}
       <div style={CARD_STYLE}>
-        <p style={LABEL_STYLE}>💡 太字の意味</p>
+        <p style={LABEL_STYLE}>太字の意味</p>
         <p style={BODY_STYLE}>
           各項目内で特に重要な数値やキーワードが太字で表示されます。太字箇所を中心に読むことで、素早く要点を把握できます。
         </p>
       </div>
 
       {/* ご注意 */}
-      <div className="mb-3 rounded-r-lg p-3" style={{ background: 'var(--amber-bg)', borderLeft: '4px solid #f59e0b' }}>
-        <p className="text-sm font-bold" style={{ color: 'var(--amber-title)' }}>⚠️ ご注意</p>
+      <div className="mb-3 rounded-r-lg p-3" style={{ background: 'var(--amber-bg)', borderLeft: '4px solid var(--color-warning)' }}>
+        <p className="text-sm font-bold" style={{ color: 'var(--amber-title)' }}>ご注意</p>
         <p className="mt-1 text-sm" style={{ color: 'var(--amber-body)' }}>
           AI要約はデータに基づく自動生成です。投資判断は必ずご自身の責任で行ってください。
         </p>
@@ -104,14 +164,33 @@ function SummaryInfoModal({ onClose }) {
   );
 }
 
-export default function SummaryBrief({ analysis, guidance }) {
+// prefers-reduced-motion の取得 (JS 側で制御、CSS !important 不使用)
+// memo: 同パターンは StockPriceChart.jsx / EarningsHistoryChart.jsx でも使用
+function prefersReducedMotion() {
+  try {
+    return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  } catch {
+    return false;
+  }
+}
+
+// SummaryBrief 内部 (ErrorBoundary 内) の実体
+// Hallucination Guard 4 重防御:
+//   第 1 層: SummaryBriefErrorBoundary (class component、 外側 default export で wrap)
+//   第 2 層: sanitizeText を SummaryLine 内 per-line で適用 (BAD-5/6 sentence 削除)
+//   第 3 層: conditional render — analysis が null なら何も表示しない
+//   第 4 層: Number.isFinite — SummaryBrief は string-only LLM 出力のため数値バリデーション対象外
+function SummaryBriefInner({ analysis, guidance }) {
   const [text, setText] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState(null);
   const [showInfoModal, setShowInfoModal] = useState(false);
+  // fade-in: prefers-reduced-motion の場合は最初から visible
+  const [visible, setVisible] = useState(() => prefersReducedMotion());
   const controllerRef = useRef(null);
 
   useEffect(() => {
+    // Hallucination Guard 第 3 層: analysis が null なら fetch しない
     if (!analysis) return;
 
     controllerRef.current?.abort();
@@ -121,62 +200,97 @@ export default function SummaryBrief({ analysis, guidance }) {
     setStreaming(true);
     setError(null);
     setText('');
+    setVisible(false); // ticker 変更時に fade リセット
 
     streamSummaryBrief(analysis, guidance, (chunk) => {
-      if (!controller.signal.aborted) setText((prev) => prev + chunk);
+      if (!controller.signal.aborted) {
+        setText((prev) => prev + chunk);
+        // 最初の chunk が届いたら fade-in 開始
+        if (!visible) setVisible(true);
+      }
     }, controller.signal)
       .catch((e) => {
-        if (!controller.signal.aborted) setError(e.message);
+        if (!controller.signal.aborted) {
+          setError(e.message);
+          setVisible(true); // error 表示は即座に
+        }
       })
       .finally(() => {
-        if (!controller.signal.aborted) setStreaming(false);
+        if (!controller.signal.aborted) {
+          setStreaming(false);
+          setVisible(true); // 完了後も確実に visible
+        }
       });
 
     return () => controller.abort();
-  }, [analysis?.ticker, analysis?.latestDate]);
+  }, [analysis?.ticker, analysis?.latestDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lines = text.split('\n');
 
+  // prefers-reduced-motion: reduce なら transition を skip (visible は初期 true)
+  const reducedMotion = prefersReducedMotion();
+
   return (
-    <section className="panel-card rounded-xl p-5" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
+    <section
+      className="summary-brief-section"
+      style={{
+        background: 'var(--bg-subtle)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-md)',
+        padding: 'var(--space-5, 20px)',
+        // fade-in: streaming 開始前は opacity 0、最初の chunk または error で opacity 1
+        // prefers-reduced-motion 時は transition なし (visible 初期 true で即時表示)
+        opacity: visible ? 1 : 0,
+        transition: reducedMotion ? 'none' : 'opacity 200ms ease-out',
+      }}
+    >
       <div className="mb-3 flex items-center gap-2">
         <span
-          title="Powered by Claude Haiku 4.5"
-          className="cursor-help rounded-md bg-slate-900 px-2 py-0.5 text-xs font-semibold text-white"
+          title="独自プロトコルに基づく AI 分析"
+          className="summary-brief-badge"
         >
           AI要約
         </span>
         <button
+          type="button"
           onClick={() => setShowInfoModal(true)}
-          className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
-          style={{
-            background: 'rgba(34,211,238,0.15)',
-            color: '#22d3ee',
-            border: '1px solid rgba(34,211,238,0.4)',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.30)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.15)'; }}
+          className="summary-brief-help-btn"
           aria-label="AI要約の見方を表示"
         >
           ？
         </button>
-        {streaming && <span className="text-xs text-slate-400">生成中...</span>}
+        {streaming && (
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>生成中...</span>
+        )}
       </div>
       {showInfoModal && <SummaryInfoModal onClose={() => setShowInfoModal(false)} />}
 
       {/* コンテンツ領域：高さを固定してレイアウトシフトを防ぐ */}
-      <div style={{ minHeight: '180px' }}>
+      <div style={{ minHeight: '160px' }}>
+        {/* Hallucination Guard 第 3 層: error 状態は chip で示す (silent fail 禁止) */}
         {error && (
-          <p className="text-sm text-red-500">要約を生成できませんでした: {error}</p>
+          <div
+            style={{
+              padding: 'var(--space-3, 12px)',
+              background: 'var(--bg-subtle)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--color-loss)',
+              fontSize: 13,
+            }}
+          >
+            要約の取得に失敗しました。しばらく後に再試行してください。
+          </div>
         )}
+        {/* skeleton: analysis あり + text 未着 (streaming 開始前) */}
         {!error && !text && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minHeight: '180px', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minHeight: '160px', justifyContent: 'center' }}>
             {[70, 90, 55, 80].map((w, i) => (
               <span key={i} className="skel skel-line" style={{ width: `${w}%` }} />
             ))}
           </div>
         )}
-        {!error && (text || streaming) && (
+        {/* Hallucination Guard 第 3 層: text が string で truthy な場合のみ render */}
+        {!error && typeof text === 'string' && text.length > 0 && (
           <div>
             {lines.map((line, i) => {
               if (!line.trim()) return null;
@@ -186,10 +300,31 @@ export default function SummaryBrief({ analysis, guidance }) {
                 </div>
               );
             })}
-            {streaming && <span className="text-slate-400">▌</span>}
+            {streaming && <span style={{ color: 'var(--text-muted)' }}>▌</span>}
           </div>
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * SummaryBrief — Pane 3 Hero 直下に表示する AI 要約 (5 条件短文箇条書き)
+ *
+ * Hallucination Guard 4 重防御:
+ *   第 1 層: SummaryBriefErrorBoundary (class component) — 真っ白事故防止
+ *   第 2 層: sanitizeText (per-line BLOCKLIST_REGEX) — BAD-5/6 sentence 単位削除
+ *   第 3 層: conditional render — analysis null 時は fetch しない / text truthy 時のみ render
+ *   第 4 層: 数値系 Number.isFinite — 本 component は string-only 出力のため非該当
+ *
+ * @param {object} props
+ * @param {object|null} props.analysis - /api/analyze result
+ * @param {object|null} props.guidance - /api/guidance result (optional)
+ */
+export default function SummaryBrief({ analysis, guidance }) {
+  return (
+    <SummaryBriefErrorBoundary>
+      <SummaryBriefInner analysis={analysis} guidance={guidance} />
+    </SummaryBriefErrorBoundary>
   );
 }

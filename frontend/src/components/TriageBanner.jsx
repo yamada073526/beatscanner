@@ -11,17 +11,26 @@
  * - Anthropic: Phase 4.5 sanitize layer を narration にも適用
  * - マーケ: 三層トリアージは最強訴求素材 → Pro 全 4 機能 (A 案)
  *
+ * Sprint 5 (SPEC 2026-05-19 Item 5) 拡張:
+ * - 保有情報 2 行 grid (株数/平均取得価格/含み損益 + 初回買付日/新規買付 button)
+ * - 含み損益: var(--color-gain) 緑 / var(--color-loss) 赤 (投資業界色ルール厳守)
+ * - 新規買付 button: onOpenAddTransaction callback 経由 (ManualEntryModal 相当)
+ * - v84 hasFatal 条件維持 (絶対変更禁止)
+ *
  * memory:
  *   - project_pane3_visual_explainer_redesign.md (Phase 5 plan)
  *   - feedback_diagram_quality_guard.md (Trust Cliff DoD)
  *   - feedback_data_completeness_guard.md (per-source data namespace)
  *   - chip_primitive_canonical.md (Chip primitive 流用、 新 tone 追加禁止)
+ *   - feedback_triage_banner_pattern.md (hasFatal SSOT)
+ *   - portfolio_account_schema.md (transactions schema、type='buy' / shares)
  */
 import { useEffect, useState } from 'react';
 import { fetchTriage } from '../api.js';
 import { canUse } from '../lib/planGating.js';
 import { supabase } from '../lib/supabase.js';
 import { sanitizeText } from '../lib/blocklist.js';
+import { aggregateWithTransactions } from '../lib/holdings.js';
 import Chip from './ui/Chip.jsx';
 
 const PASS_COUNT_THRESHOLD = 5; // 「他 N 件」 の閾値 (PASS 5/5)
@@ -34,27 +43,115 @@ function formatShares(shares) {
   return shares.toFixed(2);
 }
 
-function buildBannerText(data) {
+/** USD 金額を $X,XXX.XX 形式にフォーマット */
+function formatUSD(val) {
+  if (!Number.isFinite(val)) return '—';
+  const abs = Math.abs(val);
+  const sign = val < 0 ? '-' : val > 0 ? '+' : '';
+  return `${sign}$${abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** 含み損益 % を +X.X% / -X.X% 形式にフォーマット */
+function formatPct(pct) {
+  if (!Number.isFinite(pct)) return '';
+  const sign = pct > 0 ? '+' : '';
+  return `(${sign}${pct.toFixed(1)}%)`;
+}
+
+/** YYYY-MM-DD を M/D 形式に変換 */
+function formatDateShort(iso) {
+  if (!iso) return '—';
+  try {
+    const [, m, d] = String(iso).split('-');
+    return `${Number(m)}/${Number(d)}`;
+  } catch {
+    return iso;
+  }
+}
+
+/**
+ * ticker-specific transactions を Supabase から直接取得し、
+ * aggregateWithTransactions で avgCost / shares / firstBuyDate を返す hook。
+ * backend / migration を触らず frontend 側で計算 (SPEC §6 禁止事項遵守)。
+ */
+function useTickerTransactionSummary({ ticker, user }) {
+  const [summary, setSummary] = useState(null);
+  const [refetchKey, setRefetchKey] = useState(0);
+
+  // bs:transactions:changed イベントで refetchKey をインクリメントし useEffect を再 fire
+  useEffect(() => {
+    const onChanged = () => setRefetchKey((k) => k + 1);
+    window.addEventListener('bs:transactions:changed', onChanged);
+    return () => window.removeEventListener('bs:transactions:changed', onChanged);
+  }, []);
+
+  useEffect(() => {
+    if (!ticker || !user?.id || !supabase) {
+      setSummary(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const t = String(ticker).trim().toUpperCase();
+        const { data, error } = await supabase
+          .from('transactions')
+          .select('id, type, shares, price, fee, trade_date, created_at')
+          .eq('user_id', user.id)
+          .eq('ticker', t)
+          .order('trade_date', { ascending: true })
+          .order('created_at', { ascending: true });
+        if (cancelled) return;
+        if (error || !Array.isArray(data) || data.length === 0) {
+          setSummary(null);
+          return;
+        }
+        // aggregateWithTransactions: buy/sell/dividend/split/fee を移動平均で集計
+        const agg = aggregateWithTransactions(data);
+        // firstBuyDate: trade_date asc ソート済なので最初の buy の日付
+        const firstBuy = data.find((r) => String(r.type || '').toLowerCase() === 'buy');
+        setSummary({
+          shares: agg.shares,
+          avgCost: agg.avgCost,
+          firstBuyDate: firstBuy?.trade_date || null,
+        });
+      } catch {
+        if (!cancelled) setSummary(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ticker, user?.id, refetchKey]);
+
+  return summary;
+}
+
+/**
+ * bannerText: Cup-Handle signal label のみ残す (保有株数は 2 行 grid に移管)
+ * v84 hasFatal 条件は不変 (絶対触らない)
+ */
+function buildSignalText(data) {
   if (!data) return null;
-  const parts = [];
-  const holdings = data.data?.holdings;
   const signal = data.data?.pattern_signals;
-  const peers = data.data?.peers;
-
-  if (holdings?.owns && holdings.shares > 0) {
-    parts.push(`保有 ${formatShares(holdings.shares)} 株`);
-  } else if (holdings && holdings.owns === false) {
-    parts.push('未保有');
-  }
-
   if (signal?.state_label) {
-    // sanitize layer (Phase 4.5) 適用 — backend STATE_LABEL_JP は static dict だが
-    // 念のため pipeline 整合性のため通す
     const label = sanitizeText(signal.state_label) || signal.state_label;
-    parts.push(`Cup-Handle: ${label}`);
+    return `Cup-Handle: ${label}`;
   }
+  return null;
+}
 
-  return parts.length > 0 ? parts.join(' / ') : null;
+/** 保有情報が表示可能かどうかを判定 (owns=true + shares > 0) */
+function hasHoldings(data) {
+  const h = data?.data?.holdings;
+  return !!(h?.owns && h.shares > 0);
+}
+
+/** 未保有 hint を表示するか判定 (owns=false) */
+function isNoHolding(data) {
+  const h = data?.data?.holdings;
+  return h && h.owns === false;
 }
 
 function ProTeaser({ onUpgrade }) {
@@ -89,6 +186,8 @@ function NoSessionHint() {
  * @param {'free'|'pro'|'premium'} props.plan
  * @param {Function} [props.onUpgrade]
  * @param {Function} [props.onJumpToScanner] - 「他 N 件」 click 時、 Pane 2 ヒートマップ (PASS 5/5 filter) jump
+ * @param {number|null} [props.currentPrice] - 現在株価 (含み損益計算用、JudgmentDetail から渡す)
+ * @param {Function} [props.onOpenAddTransaction] - 「新規買付」 button click 時の callback (TransactionEntryModal 起動)
  */
 export default function TriageBanner({
   ticker,
@@ -96,9 +195,15 @@ export default function TriageBanner({
   plan = 'free',
   onUpgrade,
   onJumpToScanner,
+  currentPrice = null,
+  onOpenAddTransaction,
 }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // Sprint 5: ticker-specific transactions summary (avgCost / shares / firstBuyDate)
+  // user がいる場合のみ取得 (未ログインは null)
+  const txSummary = useTickerTransactionSummary({ ticker, user });
 
   const allowed = canUse('triage_banner', plan);
 
@@ -157,10 +262,9 @@ export default function TriageBanner({
     );
   }
 
-  const bannerText = buildBannerText(data);
+  const signalText = buildSignalText(data);
   const peersCount = data.data?.peers?.passing_count;
   const hasPeers = Number.isFinite(peersCount) && peersCount > 0;
-  const confidence = data.signal_quality?.confidence;
   // handover v84 dogfood 3 (2026-05-19): 「全 fatal の時のみ hide」 という memory
   // feedback_triage_banner_pattern.md の本来仕様に合わせ、 condition を再緩和。
   // - 全 source が error/timeout → silent hide (本来仕様)
@@ -170,7 +274,36 @@ export default function TriageBanner({
     && sourceVals.every((s) => s === 'error' || s === 'timeout');
   const hasFatal = sourceVals.some((s) => s === 'error' || s === 'timeout');
 
-  if (!bannerText && !hasPeers) {
+  // Sprint 5: 含み損益計算 (txSummary + currentPrice)
+  // 投資業界色ルール: gain=緑 / loss=赤 / neutral=secondary
+  const hasHoldingData = hasHoldings(data);
+  const isNoHold = isNoHolding(data);
+
+  let unrealizedPnl = null;
+  let unrealizedPnlPct = null;
+  let pnlStatus = 'neutral'; // 'gain' | 'loss' | 'neutral'
+  if (
+    hasHoldingData &&
+    txSummary &&
+    Number.isFinite(txSummary.avgCost) && txSummary.avgCost > 0 &&
+    Number.isFinite(txSummary.shares) && txSummary.shares > 0 &&
+    Number.isFinite(currentPrice) && currentPrice > 0
+  ) {
+    unrealizedPnl = (currentPrice - txSummary.avgCost) * txSummary.shares;
+    unrealizedPnlPct = ((currentPrice - txSummary.avgCost) / txSummary.avgCost) * 100;
+    if (Math.abs(unrealizedPnlPct) > 0.5) {
+      pnlStatus = unrealizedPnlPct > 0 ? 'gain' : 'loss';
+    }
+  }
+
+  const pnlColor = pnlStatus === 'gain'
+    ? 'var(--color-gain)'
+    : pnlStatus === 'loss'
+    ? 'var(--color-loss)'
+    : 'var(--text-secondary)';
+
+  // 保有なし + peers なし + signal なし の場合の分岐 (v84 hasFatal 条件は絶対不変)
+  if (!hasHoldingData && !isNoHold && !hasPeers && !signalText) {
     if (allSourcesFatal) {
       // 真因 B': 全 source error/timeout → 既存仕様通り hide
       return null;
@@ -186,10 +319,88 @@ export default function TriageBanner({
   }
 
   return (
-    <div className="triage-banner">
-      {bannerText && (
-        <span className="triage-banner-body">{bannerText}</span>
+    <div className="triage-banner triage-banner-sprint5">
+      {/* Sprint 5: 保有情報 2 行 grid */}
+      {hasHoldingData && (
+        <div className="triage-holdings-grid">
+          {/* 1 行目: 株数 / 平均取得価格 / 含み損益 */}
+          <div className="triage-holdings-row triage-holdings-row--top">
+            <span className="triage-holdings-cell">
+              <span className="triage-holdings-label">保有</span>
+              <span className="triage-holdings-value">
+                {formatShares(txSummary?.shares ?? data.data?.holdings?.shares)} 株
+              </span>
+            </span>
+            {txSummary && Number.isFinite(txSummary.avgCost) && txSummary.avgCost > 0 && (
+              <span className="triage-holdings-cell">
+                <span className="triage-holdings-label">平均取得</span>
+                <span className="triage-holdings-value">
+                  ${txSummary.avgCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </span>
+            )}
+            {unrealizedPnl !== null && (
+              <span className="triage-holdings-cell">
+                <span className="triage-holdings-label">含み損益</span>
+                <span
+                  className="triage-holdings-value triage-holdings-pnl"
+                  style={{ color: pnlColor }}
+                >
+                  {formatUSD(unrealizedPnl)} {formatPct(unrealizedPnlPct)}
+                </span>
+              </span>
+            )}
+          </div>
+          {/* 2 行目: 初回買付日 / 新規買付 button */}
+          <div className="triage-holdings-row triage-holdings-row--bottom">
+            {txSummary?.firstBuyDate && (
+              <span className="triage-holdings-cell">
+                <span className="triage-holdings-label">初回買付</span>
+                <span className="triage-holdings-value">
+                  {formatDateShort(txSummary.firstBuyDate)}
+                </span>
+              </span>
+            )}
+            {/* 新規買付 button: user ありの場合のみ表示 (Trust Cliff 回避) */}
+            {typeof onOpenAddTransaction === 'function' && (
+              <Chip
+                variant="filter"
+                tone="accent"
+                size="xs"
+                onClick={() => onOpenAddTransaction(ticker)}
+                className="triage-add-tx-btn"
+              >
+                新規買付
+              </Chip>
+            )}
+          </div>
+        </div>
       )}
+
+      {/* 未保有 hint + 新規買付 button (Trust Cliff: 「保有を追加」 の誘導) */}
+      {!hasHoldingData && isNoHold && (
+        <div className="triage-holdings-row triage-holdings-row--noholding">
+          <span className="triage-holdings-label triage-holdings-label--muted">未保有</span>
+          {typeof onOpenAddTransaction === 'function' && (
+            <Chip
+              variant="filter"
+              tone="muted"
+              size="xs"
+              onClick={() => onOpenAddTransaction(ticker)}
+              className="triage-add-tx-btn"
+            >
+              保有を追加
+            </Chip>
+          )}
+        </div>
+      )}
+
+      {/* Cup-Handle signal テキスト (保有 grid と横並び) */}
+      {signalText && (
+        <span className="triage-banner-body triage-signal-text">{signalText}</span>
+      )}
+
+      {/* peers button */}
       {hasPeers && (
         <button
           type="button"

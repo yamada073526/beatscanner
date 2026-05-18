@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import InfoModal from './InfoModal.jsx';
 import Chip from './ui/Chip.jsx';
+import { BarChart3, Calendar } from 'lucide-react';
 
 // ── signal_quality envelope (handover v82 Phase 0) を 3-tier badge に変換 ──
 // confidence 別に tone / label / tooltip を decide。 「ガイダンス: 非開示」 を
@@ -262,7 +263,10 @@ function Row({ label, estimated, actual, surprisePct, verdict, verdictReason, fo
                 size="sm"
                 title={`次回決算まで ${nextEarningsDays} 日。実績はまだ発表されていません。`}
               >
-                📅 発表待ち
+                <span className="section-header-icon" aria-hidden="true" style={{ width: 14, height: 14, marginRight: 4 }}>
+                  <Calendar size={14} strokeWidth={1.5} />
+                </span>
+                発表待ち
               </Chip>
             ) : (
             <Tooltip text={reasonText}>
@@ -438,8 +442,11 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
     return (
       <section className="panel-card rounded-2xl p-5 shadow-sm" style={GUIDANCE_SECTION_STYLE}>
         <div className="flex items-center justify-between">
-          <h3 className="section-label flex items-center gap-1" style={{ marginBottom: 0 }}>
-            📊 ガイダンス進捗
+          <h3 className="section-label flex items-center gap-1.5" style={{ marginBottom: 0 }}>
+            <span className="section-header-icon" aria-hidden="true">
+              <BarChart3 size={18} strokeWidth={1.5} />
+            </span>
+            ガイダンス進捗
             <button
               onClick={() => setShowModal(true)}
               className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
@@ -473,9 +480,12 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
 
   return (
     <section className="panel-card rounded-2xl p-5 shadow-sm" style={GUIDANCE_SECTION_STYLE}>
-      <div className="flex items-baseline justify-between">
-        <h3 className="section-label flex items-center gap-1" style={{ marginBottom: 0 }}>
-          📊 ガイダンス進捗
+      <div className="flex items-center justify-between">
+        <h3 className="section-label flex items-center gap-1.5" style={{ marginBottom: 0 }}>
+          <span className="section-header-icon" aria-hidden="true">
+            <BarChart3 size={18} strokeWidth={1.5} />
+          </span>
+          ガイダンス進捗
           <button
             onClick={() => setShowModal(true)}
             className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"

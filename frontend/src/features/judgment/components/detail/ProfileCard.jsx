@@ -2,6 +2,7 @@ import React from 'react';
 import Card from '../../primitives/Card.jsx';
 import SectionHeader from '../../primitives/SectionHeader.jsx';
 import CompanyLogo from '../../../../components/CompanyLogo.jsx';
+import { Building2 } from 'lucide-react';
 
 /**
  * Profile section. ロゴ + 会社名 + ティッカー + データソース.
@@ -12,7 +13,7 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
   return (
     <Card>
       <div style={{ padding: 'var(--space-6, 24px)' }}>
-        <SectionHeader id="sec-profile" title="プロフィール" label="COMPANY" />
+        <SectionHeader id="sec-profile" icon={<Building2 size={18} strokeWidth={1.5} />} title="プロフィール" label="COMPANY" />
         <div
           style={{
             display: 'flex',

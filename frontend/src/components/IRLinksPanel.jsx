@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchIRLinks } from '../api.js';
+import { Link, FileText, Mic, Globe, Building2, FileBadge2 } from 'lucide-react';
 
 function LinkItem({ label, url, desc }) {
   return (
@@ -115,8 +116,11 @@ export default function IRLinksPanel({ ticker }) {
       className="panel-card rounded-2xl p-6 shadow-sm"
       style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
     >
-      <h3 className="section-heading">
-        📎 IRリソース
+      <h3 className="section-heading" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="section-header-icon" aria-hidden="true">
+          <Link size={18} strokeWidth={1.5} />
+        </span>
+        IRリソース
         <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
           {ticker}
         </span>
@@ -137,7 +141,7 @@ export default function IRLinksPanel({ ticker }) {
           <div className="space-y-4 md:pr-6">
             {/* 最新プレスリリース (FMP動的データ) */}
             {pressReleases.length > 0 && (
-              <Section title="最新プレスリリース" icon="📋">
+              <Section title="最新プレスリリース" icon={<FileText size={14} strokeWidth={1.5} />}>
                 {pressReleases.map((pr, i) => (
                   <LinkItem
                     key={i}
@@ -151,7 +155,7 @@ export default function IRLinksPanel({ ticker }) {
 
             {/* 最新 8-K ファイリング (FMP動的データ) */}
             {secFilings.length > 0 && (
-              <Section title="最新 SEC 8-K ファイリング" icon="🏛️">
+              <Section title="最新 SEC 8-K ファイリング" icon={<FileBadge2 size={14} strokeWidth={1.5} />}>
                 {secFilings.map((f, i) => (
                   <LinkItem
                     key={i}
@@ -163,7 +167,7 @@ export default function IRLinksPanel({ ticker }) {
               </Section>
             )}
 
-            <Section title="決算発表" icon="📄">
+            <Section title="決算発表" icon={<FileText size={14} strokeWidth={1.5} />}>
               {static_links.earnings.map((l, i) => (
                 <LinkItem key={i} label={l.label} url={l.url} desc={l.desc} />
               ))}
@@ -175,14 +179,14 @@ export default function IRLinksPanel({ ticker }) {
             className="space-y-4 md:pl-6"
             style={{ borderLeft: '1px solid var(--border)' }}
           >
-            <Section title="カンファレンスコール" icon="🎙️">
+            <Section title="カンファレンスコール" icon={<Mic size={14} strokeWidth={1.5} />}>
               {static_links.conference.map((l, i) => (
                 <LinkItem key={i} label={l.label} url={l.url} desc={l.desc} />
               ))}
             </Section>
 
             {website && (
-              <Section title="IR公式サイト" icon="🌐">
+              <Section title="IR公式サイト" icon={<Globe size={14} strokeWidth={1.5} />}>
                 <LinkItem
                   label="企業公式サイト"
                   url={website}

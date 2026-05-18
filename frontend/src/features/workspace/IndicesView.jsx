@@ -801,6 +801,20 @@ function PortfolioActions({ prices }) {
   // v68 §2 #6 dogfood 2026-05-15: history modal → entry modal の chain で ticker prefill 用
   const [newEntryTicker, setNewEntryTicker] = useState('');
 
+  // Sprint 5 (SPEC 2026-05-19): TriageBanner 「新規買付」 button から発火される
+  // カスタムイベント 'bs:open:addtx' を受信して取引登録 modal を開く。
+  // ticker は event.detail.ticker で受け取る。
+  useEffect(() => {
+    const handler = (e) => {
+      const t = e?.detail?.ticker;
+      setEditingTx(null);
+      setNewEntryTicker(String(t || '').trim().toUpperCase());
+      setTimeout(() => setModalOpen(true), 0);
+    };
+    window.addEventListener('bs:open:addtx', handler);
+    return () => window.removeEventListener('bs:open:addtx', handler);
+  }, []);
+
   // filterTicker が set されたら、その ticker に該当する transaction が
   // 現在の account scope 内に 1 件以上あるかを判定。0 なら toast、>=1 なら modal を開く。
   useEffect(() => {

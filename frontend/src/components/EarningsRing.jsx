@@ -10,11 +10,19 @@
  * - Chip primitive idiom 踏襲: data-pulse attribute + CSS で variant 切替
  * - planGating: earnings_countdown_ring = FREE (マーケ verdict、 LP 訴求 hook として全 tier 開放)
  *
+ * SPEC_2026-05-19 Sprint 3 追加:
+ * - subtle cyan glow (--ring-glow token 経由、 raw shadow 禁止、 elevation_scale.md whitelist 登録済)
+ * - 下ラベル「次の決算まで」 (static text、 chip overlay は実装しない — ui-designer verdict 絶対遵守)
+ * - 呼吸 animation 4s loop (opacity 0.85 ↔ 1.0)、 prefers-reduced-motion で無効化
+ * - wrapper transform / scale 禁止 (feedback_press_feedback_delta.md 厳守)
+ *
  * memory:
  *   - feedback_press_feedback_delta.md (animation forwards fill 禁止、 transform 禁止)
  *   - chip_primitive_canonical.md (primitive idiom、 inline style 禁止、 data attribute + CSS)
  *   - feedback_brand_aspiration.md (Aman 級「呼吸」 cadence)
  *   - project_pane3_visual_explainer_redesign.md (Phase 5 plan)
+ *   - glow_elevation_postmortem.md (ring 外周 glow が .panel-card 既存 glow と干渉しないこと)
+ *   - feedback_no_baseline_cyan.md (glow は brand emphasis 専用、baseline cyan 濫用禁止)
  */
 import { useMemo } from 'react';
 
@@ -85,44 +93,52 @@ export default function EarningsRing({
     : `決算まで ${labelText}`;
 
   return (
-    <span
-      className="earnings-ring"
-      data-pulse={state}
-      role="img"
-      aria-label={titleText}
-      title={titleText}
-      style={{ width: size, height: size }}
-    >
-      <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${size} ${size}`}
-        aria-hidden="true"
+    /* Sprint 3: .earnings-ring-wrapper が glow (--ring-glow token) + 呼吸 animation (ring-breath 4s) を担当。
+       chip overlay は実装しない (ui-designer multi-review verdict 絶対遵守)。
+       .panel-card / .bs-panel / .surface-card の既存 glow には一切触らない。 */
+    <span className="earnings-ring-wrapper">
+      <span
+        className="earnings-ring"
+        data-pulse={state}
+        role="img"
+        aria-label={titleText}
+        title={titleText}
+        style={{ width: size, height: size }}
       >
-        {/* track (背景円) */}
-        <circle
-          className="earnings-ring-track"
-          cx={center}
-          cy={center}
-          r={radius}
-          fill="none"
-          strokeWidth={strokeWidth}
-        />
-        {/* progress (進捗弧、 12 時方向起点で時計回り) */}
-        <circle
-          className="earnings-ring-progress"
-          cx={center}
-          cy={center}
-          r={radius}
-          fill="none"
-          strokeWidth={strokeWidth}
-          strokeDasharray={circumference}
-          strokeDashoffset={dashOffset}
-          strokeLinecap="round"
-          transform={`rotate(-90 ${center} ${center})`}
-        />
-      </svg>
-      <span className="earnings-ring-label">{labelText}</span>
+        <svg
+          width={size}
+          height={size}
+          viewBox={`0 0 ${size} ${size}`}
+          aria-hidden="true"
+        >
+          {/* track (背景円) */}
+          <circle
+            className="earnings-ring-track"
+            cx={center}
+            cy={center}
+            r={radius}
+            fill="none"
+            strokeWidth={strokeWidth}
+          />
+          {/* progress (進捗弧、 12 時方向起点で時計回り) */}
+          <circle
+            className="earnings-ring-progress"
+            cx={center}
+            cy={center}
+            r={radius}
+            fill="none"
+            strokeWidth={strokeWidth}
+            strokeDasharray={circumference}
+            strokeDashoffset={dashOffset}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${center} ${center})`}
+          />
+        </svg>
+        <span className="earnings-ring-label">{labelText}</span>
+      </span>
+      {/* 下ラベル「次の決算まで」 — static text、 chip overlay は実装しない (ui-designer verdict)
+          typography: 0.6875rem / letter-spacing 0.08em / uppercase / text-secondary / margin-top space-2 */}
+      <span className="earnings-ring-sublabel" aria-hidden="true">次の決算まで</span>
     </span>
   );
 }

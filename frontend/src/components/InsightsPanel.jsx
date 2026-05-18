@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import InfoModal from "./InfoModal.jsx";
 import LockedSection, { InsightsGhost } from "./LockedSection.jsx";
+import { BarChart3, Search } from "lucide-react";
 
 // CLAUDE.md「投資業界の色ルール」準拠:
 // 強気(Bullish)=緑 / 弱気(Bearish)=赤 / 中立=グレー / 強弱混在=amber
@@ -536,8 +537,11 @@ export default function InsightsPanel({ ticker, user, isPro, onUpgradeClick, onS
           flexWrap: "wrap",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span className="section-heading" style={{ marginBottom: 0 }}>
-              📊 市場の声
+            <span className="section-heading" style={{ marginBottom: 0, display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="section-header-icon" aria-hidden="true">
+                <BarChart3 size={18} strokeWidth={1.5} />
+              </span>
+              市場の声
             </span>
             <InfoButton onOpen={() => setIsInfoOpen(true)} />
           </div>
@@ -581,8 +585,11 @@ export default function InsightsPanel({ ticker, user, isPro, onUpgradeClick, onS
         flexWrap: "wrap",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span className="section-heading" style={{ marginBottom: 0 }}>
-            📊 市場の声
+          <span className="section-heading" style={{ marginBottom: 0, display: "flex", alignItems: "center", gap: 8 }}>
+            <span className="section-header-icon" aria-hidden="true">
+              <BarChart3 size={18} strokeWidth={1.5} />
+            </span>
+            市場の声
           </span>
           <InfoButton onOpen={() => setIsInfoOpen(true)} />
         </div>
@@ -617,7 +624,9 @@ export default function InsightsPanel({ ticker, user, isPro, onUpgradeClick, onS
             textAlign: "center",
             lineHeight: 1.75,
           }}>
-            <div style={{ fontSize: 24, marginBottom: 8 }}>🔍</div>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 8, color: "var(--text-muted)" }}>
+              <Search size={24} strokeWidth={1.5} />
+            </div>
             <div style={{ fontWeight: 600, color: "var(--text-primary)", marginBottom: 8 }}>
               {ticker} の市場データを準備しています
             </div>
