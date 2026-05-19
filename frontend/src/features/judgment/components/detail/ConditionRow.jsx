@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Info } from 'lucide-react';
 import Sparkline from '../../../../components/Sparkline.jsx';
+import ConditionSparkline from './ConditionSparkline.jsx';
 import {
   DeltaRow,
   CONDITION_DETAILS,
@@ -52,6 +53,7 @@ export default function ConditionRow({
 
   return (
     <li
+      data-testid={`condition-row-${index - 1}`}
       style={{
         listStyle: 'none',
         background: passed ? bgPass : bgFail,
@@ -80,7 +82,8 @@ export default function ConditionRow({
           width: '100%',
           display: 'grid',
           // v86 R3: 数値カラムを固定幅 80px に変更 (auto → 80px)、 行をまたいだ縦の桁揃えを担保
-          gridTemplateColumns: '24px 1fr 80px 16px',
+          // Sprint 1: ミニスパークライン カラム (96px) を追加 → 5 カラム構成
+          gridTemplateColumns: '24px 1fr 80px 96px 16px',
           alignItems: 'center',
           gap: 12,
           padding: '10px 12px',
@@ -168,6 +171,16 @@ export default function ConditionRow({
             </div>
           );
         })()}
+        {/* Sprint 1: per-condition ミニスパークライン (collapsed 状態でも常時表示)
+            SPEC §5 Sprint 1: width 96px / height 32px / neutral slate baseline + PASS/FAIL dot
+            data 不在時は ConditionSparkline 内部で null return → placeholder div で幅を確保 */}
+        <ConditionSparkline
+          series={condition.series}
+          passed={passed}
+          conditionIndex={index - 1}
+          conditionName={condition.label || condition.name}
+        />
+
         <span
           aria-hidden="true"
           style={{
