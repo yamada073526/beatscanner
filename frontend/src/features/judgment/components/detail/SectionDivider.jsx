@@ -29,14 +29,23 @@ export default function SectionDivider({ tier, label, expandedLabel }) {
   const isMajor = Boolean(expandedLabel);
 
   if (isMajor) {
+    // v86 R2 Vision 改善 #5: 章替わりの breathing room + gradient accent
+    //  - 直前 --space-10 (40px) で「章の切り替わり」 を演出 (旧 --space-6=24px)
+    //  - 縦バー 4px solid → linear-gradient (transparent → accent → transparent)
+    //    accent の上下が消える「光の柱」 idiom (Aman/Ritz 流の chandelier 演出)
     return (
       <div
         role="presentation"
         data-testid="section-divider-major"
         style={{
-          margin: 'var(--space-6, 24px) 0 var(--space-4, 16px)',
+          margin: 'var(--space-10, 40px) 0 var(--space-4, 16px)',
           paddingLeft: 'var(--space-3, 12px)',
-          borderLeft: '4px solid var(--color-accent)',
+          borderLeft: 'none',
+          backgroundImage:
+            'linear-gradient(180deg, transparent 0%, var(--color-accent) 22%, var(--color-accent) 78%, transparent 100%)',
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: '4px 100%',
+          backgroundPosition: 'left center',
         }}
       >
         <span

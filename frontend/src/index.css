@@ -78,7 +78,7 @@
      design_system.md §4 に token 登録済。brand emphasis 専用 (chandelier 演出)。
      上昇/下落の方向性には使わない (CLAUDE.md 投資業界色ルール遵守)。
      elevation_scale.md ALLOWED-SHADOW 登録済。 */
-  --ring-glow: 0 0 20px rgba(56, 189, 248, 0.20), 0 0 8px rgba(56, 189, 248, 0.10);
+  --ring-glow: 0 0 28px rgba(56, 189, 248, 0.32), 0 0 12px rgba(56, 189, 248, 0.18);
 
   /* §-1-B Reading Mode (ベッドの間接照明) — design_system.md §1-D / design_recipes.md §C-7
      `.bs-mode-reading` scope 内でのみ参照可。Phase 1 POC では Pane 3 判定詳細のみに適用。
@@ -143,8 +143,9 @@
   --shadow-3: 0 4px 12px rgba(0, 0, 0, 0.50), 0 12px 24px rgba(0, 0, 0, 0.30);
   --shadow-4: 0 12px 32px rgba(0, 0, 0, 0.60), 0 24px 48px rgba(0, 0, 0, 0.40);
   --shadow-glow-cyan: 0 0 0 1px rgba(56, 189, 248, 0.30), 0 8px 32px rgba(56, 189, 248, 0.20);
-  /* Sprint 3: dark mode では --ring-glow を強化 (dark 背景で subtle に引き立つ 30%増) */
-  --ring-glow: 0 0 24px rgba(56, 189, 248, 0.30), 0 0 10px rgba(56, 189, 248, 0.16);
+  /* Sprint 3: dark mode では --ring-glow を強化 (dark 背景で subtle に引き立つ)
+     v86 R2: 静止フレーム視認性のため halo 拡大 24→32px + opacity 0.30→0.42 */
+  --ring-glow: 0 0 32px rgba(56, 189, 248, 0.42), 0 0 14px rgba(56, 189, 248, 0.24);
   /* §-1-B dark mode: warm cream (candlelight 2700K 相当、hue ~25°)
      amber (#f59e0b ≒ hue 38°) と HSL 上 13° 離して分離。
      α 0.12 = Phase 1 dogfood で「気づかない」フィードバックを受け 0.05 → 0.12 にバンプ (2026-05-12)。
@@ -4998,8 +4999,9 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 0;
-  /* subtle cyan glow: design_system.md §4 --ring-glow token 経由 (raw shadow 禁止) */
-  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.22));
+  /* subtle cyan glow: design_system.md §4 --ring-glow token 経由 (raw shadow 禁止)
+     v86 R2: 静止フレーム halo 視認性 ↑ (8→14px / 0.22→0.34) */
+  filter: drop-shadow(0 0 14px rgba(56, 189, 248, 0.34));
 }
 /* 呼吸 animation: opacity 0.85 ↔ 1.0 の subtle loop (Aman 自動ドア 0.8s 所作 analog)
    transform / scale は絶対使わない (feedback_press_feedback_delta.md 厳守) */

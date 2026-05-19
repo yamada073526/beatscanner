@@ -150,6 +150,12 @@ function CustomTooltip({ active, payload, label, seriesLabel, unit, formatter })
 }
 
 // ── Single chart row (small multiple) ────────────────────────────────────────
+// v86 R2 Vision 改善提案 #4: メトリクス色相差
+// - 売上高 (revenue): --color-gain solid opacity 1.0  (基幹指標)
+// - EPS: --color-gain opacity 0.72             (収益性、 売上の派生指標)
+// - CFPS: --color-accent (cyan)                (キャッシュフロー、 brand emphasis)
+//   ※ 投資業界色ルール: cyan は「上昇」 意味で使わない → CFPS は中立メトリクスとして cyan 採用
+//      (緑/赤の方向性 semantics を保持しつつ、 視覚的差別化)
 function SmallMultipleBar({
   data,
   dataKey,
@@ -158,6 +164,8 @@ function SmallMultipleBar({
   height = 100,
   formatter,
   showXAxis = false,
+  metricFill,
+  metricOpacity = 0.85,
 }) {
   return (
     <div style={{ marginBottom: 'var(--space-2, 8px)' }}>
@@ -226,8 +234,10 @@ function SmallMultipleBar({
                 // Chart Overlay Safety: Number.isFinite check
                 const val = entry[dataKey];
                 const safeVal = Number.isFinite(Number(val)) ? Number(val) : 0;
-                const fill = safeVal >= 0 ? 'var(--color-gain)' : 'var(--color-loss)';
-                return <Cell key={`cell-${index}`} fill={fill} opacity={0.85} />;
+                // v86 R2: metricFill が指定されていれば使用 (正値時のみ)、 負値は --color-loss 固定
+                const positiveFill = metricFill ?? 'var(--color-gain)';
+                const fill = safeVal >= 0 ? positiveFill : 'var(--color-loss)';
+                return <Cell key={`cell-${index}`} fill={fill} opacity={metricOpacity} />;
               })}
             </Bar>
           </BarChart>
@@ -363,7 +373,11 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
         </span>
       </div>
 
-      {/* ── Small multiples: 売上高 / EPS / CFPS の 3 段 ── */}
+      {/* ── Small multiples: 売上高 / EPS / CFPS の 3 段 ──
+          v86 R2 Vision 改善 #4: メトリクスごとに subtle な色相差 (上昇 semantics 維持)
+            - 売上 (revenue): --color-gain solid opacity 1.00  (基幹)
+            - EPS: --color-gain opacity 0.72                 (収益性、派生)
+            - CFPS: --color-accent (cyan) opacity 0.92       (キャッシュ、 brand emphasis) */}
       <SmallMultipleBar
         data={chartData}
         dataKey="revenue"
@@ -372,6 +386,8 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
         height={100}
         formatter={revenueFormatter}
         showXAxis={false}
+        metricFill="var(--color-gain)"
+        metricOpacity={1.0}
       />
       <SmallMultipleBar
         data={chartData}
@@ -381,6 +397,8 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
         height={100}
         formatter={epsFormatter}
         showXAxis={!hasCfps}
+        metricFill="var(--color-gain)"
+        metricOpacity={0.72}
       />
       {hasCfps && (
         <SmallMultipleBar
@@ -391,6 +409,8 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
           height={100}
           formatter={cfpsFormatter}
           showXAxis={true}
+          metricFill="var(--color-accent)"
+          metricOpacity={0.92}
         />
       )}
 

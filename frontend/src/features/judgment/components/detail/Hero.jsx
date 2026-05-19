@@ -47,7 +47,7 @@ export default function Hero({ ticker, companyName, verdict = 'unknown', period,
           display: 'flex',
           alignItems: 'flex-start',
           justifyContent: 'space-between',
-          gap: 16,
+          gap: 'var(--space-8, 32px)',
           flexWrap: 'wrap',
         }}
       >

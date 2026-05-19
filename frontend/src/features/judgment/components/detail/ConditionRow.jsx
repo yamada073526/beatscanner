@@ -134,19 +134,39 @@ export default function ConditionRow({
             </div>
           )}
         </div>
-        {condition.value != null && (
-          <div
-            style={{
-              fontSize: 13,
-              fontWeight: 700,
-              lineHeight: 1.05,
-              color: valueColor,
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            {formatValue(condition.value)}
-          </div>
-        )}
+        {condition.value != null && (() => {
+          // v86 R2 Vision 改善提案 #3: 数値と補助単位を 2 層階層に分離。
+          //  - 数値: fw700 / tabular-nums / text-align:right
+          //  - 単位 (B / M / %): 0.75em の補助 tier、 色も text-muted で控えめに。
+          const parts = formatValueParts(condition.value);
+          return (
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                lineHeight: 1.05,
+                color: valueColor,
+                fontVariantNumeric: 'tabular-nums',
+                textAlign: 'right',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {parts.num}
+              {parts.unit && (
+                <span
+                  style={{
+                    fontSize: '0.75em',
+                    fontWeight: 500,
+                    color: 'var(--text-muted)',
+                    marginLeft: 2,
+                  }}
+                >
+                  {parts.unit}
+                </span>
+              )}
+            </div>
+          );
+        })()}
         <span
           aria-hidden="true"
           style={{
@@ -261,4 +281,21 @@ function formatValue(v) {
   }
   // string 受け取りはそのまま (backend 整形済 % 等)
   return String(v);
+}
+
+// v86 R2 Vision 改善提案 #3: 数値と補助単位 (B/M/%) を 2 層階層に分離。
+// 戻り値: { num: string, unit: string|null }
+function formatValueParts(v) {
+  if (v == null) return { num: '—', unit: null };
+  if (typeof v === 'number') {
+    if (Math.abs(v) >= 1e9) return { num: (v / 1e9).toFixed(1), unit: 'B' };
+    if (Math.abs(v) >= 1e6) return { num: (v / 1e6).toFixed(1), unit: 'M' };
+    if (Math.abs(v) >= 100) return { num: v.toFixed(0), unit: null };
+    return { num: v.toFixed(2), unit: null };
+  }
+  // string 受け取り: backend 整形済の "12.3%" 等から数値部と単位を分離。
+  const s = String(v);
+  const m = s.match(/^([\-+]?[\d.,]+)\s*([%a-zA-Z]+)$/);
+  if (m) return { num: m[1], unit: m[2] };
+  return { num: s, unit: null };
 }
