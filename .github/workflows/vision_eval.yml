@@ -1,0 +1,97 @@
+name: Vision Eval (本番 visual regression)
+
+# SPEC: docs/specs/SPEC_2026-05-19_vision-dogfood-agent.md §5 Sprint 5
+# 目的: main push 後に本番 URL に対して Claude Vision を使い visual regression を自動検知する。
+#
+# ★ CI gate にしない設計 (continue-on-error: true で全ステップを緑にする)
+#   - 検知のみ目的。失敗しても deploy / main merge を止めない。
+#   - 将来 sprint で Issue 自動起票 / Slack 通知を追加予定 (v2 deferred)
+#
+# 既知の制約:
+#   - 本番 demoAnalyze は 3 req/IP/day → CI runner IP は GitHub Actions shared (非固定) なので
+#     1 日 1-2 push の通常運用では制限に当たりにくい。多発 push 時は注意 (README 参照)
+#   - ANTHROPIC_API_KEY が secrets 未設定の場合: capture のみ + exit 0 (workflow 緑を維持)
+#   - PR では trigger しない (demoAnalyze rate limit 圧迫回避。push to main + workflow_dispatch のみ)
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'capture 対象 URL (既定: 本番 URL)'
+        required: false
+        default: 'https://beatscanner-production.up.railway.app/'
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/vision_eval.yml'
+
+jobs:
+  vision-eval:
+    name: Vision regression against production
+    runs-on: ubuntu-latest
+    # SPEC §5 Sprint 5: script は HARD_TIMEOUT_MS=120s で終わる + buffer → 10 分で十分
+    timeout-minutes: 10
+
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # workflow_dispatch で url input がある場合はそちらを優先する
+      SNAP_URL: ${{ github.event.inputs.url || 'https://beatscanner-production.up.railway.app/' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node (v20 LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install deps (lockfile 厳格)
+        working-directory: frontend
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            playwright-chromium-
+
+      - name: Install Playwright browsers (chromium のみ)
+        working-directory: frontend
+        # キャッシュヒット時でも --with-deps だけは実行 (OS deps は cache 対象外)
+        run: npx playwright install --with-deps chromium
+
+      - name: Check ANTHROPIC_API_KEY presence
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "[vision-eval] WARNING: ANTHROPIC_API_KEY が secrets に設定されていません。"
+            echo "[vision-eval] capture のみ実行し、Vision eval はスキップします。"
+            echo "[vision-eval] 設定方法: Settings → Secrets and variables → Actions → New repository secret"
+          else
+            echo "[vision-eval] ANTHROPIC_API_KEY を検出しました。Vision eval を実行します。"
+          fi
+
+      - name: Run vision regression
+        working-directory: frontend
+        run: node scripts/snap-visual-regression.mjs
+        # CI gate にしない (overall < 70 / regression でも workflow を緑に維持)
+        continue-on-error: true
+
+      - name: Upload vision eval artifacts (30 日保管)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vision-regression-${{ github.run_number }}
+          # タイムスタンプ付きサブディレクトリ + JSON 全件をアップロード
+          path: |
+            frontend/.visual/regression/
+          # デフォルト 90 日より短く storage 節約
+          retention-days: 30
+          # artifact が空 (capture 失敗等) でも workflow を落とさない
+          if-no-files-found: warn
