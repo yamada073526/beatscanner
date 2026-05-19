@@ -140,7 +140,8 @@ export default function FiveConditionsCard({
                     height: 12,
                     borderRadius: 4,
                     background: 'var(--bg-subtle)',
-                    maxWidth: `${[180, 200, 160, 220, 190][n - 1]}px`,
+                    // 5 条件の実コンテンツ可変感: 60-85% で randomize (Vision eval 改善提案 #3)
+                    maxWidth: `${[78, 65, 82, 60, 72][n - 1]}%`,
                   }}
                   className="ds-skeleton-bar"
                 />

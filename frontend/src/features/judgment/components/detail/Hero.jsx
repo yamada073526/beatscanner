@@ -70,8 +70,8 @@ export default function Hero({ ticker, companyName, verdict = 'unknown', period,
           <div
             style={{
               fontSize: 11,
-              fontWeight: 500,
-              letterSpacing: '0.06em',
+              fontWeight: 600,
+              letterSpacing: '0.08em',
               textTransform: 'uppercase',
               color: 'var(--text-muted)',
             }}

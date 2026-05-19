@@ -5082,6 +5082,32 @@ body {
   color: var(--text-muted);
   font-size: 11px;
 }
+/* Vision eval 改善提案 #5: コンシェルジュ案内 idiom
+   - 左端 cyan pulse dot (8px / 1.6s ease-in-out infinite)
+   - 微細 gradient border (左 cyan→transparent、 内側のみ控えめに) */
+.triage-banner-concierge {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-accent) 4%, transparent) 0%,
+    rgba(148, 163, 184, 0.05) 24%
+  );
+  border-color: color-mix(in srgb, var(--color-accent) 18%, rgba(148, 163, 184, 0.15));
+}
+.triage-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  flex-shrink: 0;
+  animation: triage-pulse 1.6s ease-in-out infinite;
+}
+@keyframes triage-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.18); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .triage-pulse-dot { animation: none; opacity: 0.8; }
+}
 .triage-locked-icon { font-size: 12px; }
 .triage-locked-text { flex: 1; }
 .triage-locked-cta {

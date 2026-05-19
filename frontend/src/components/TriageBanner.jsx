@@ -172,8 +172,8 @@ function ProTeaser({ onUpgrade }) {
 
 function NoSessionHint() {
   return (
-    <div className="triage-banner triage-banner-muted">
-      <span aria-hidden="true">·</span>
+    <div className="triage-banner triage-banner-muted triage-banner-concierge">
+      <span className="triage-pulse-dot" aria-hidden="true" />
       <span>ログインすると、 保有銘柄の 5 条件 / Cup-Handle 状態を確認できます</span>
     </div>
   );

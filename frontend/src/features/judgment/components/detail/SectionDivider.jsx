@@ -41,8 +41,9 @@ export default function SectionDivider({ tier, label, expandedLabel }) {
       >
         <span
           style={{
-            fontSize: '1.125rem',
-            fontWeight: 600,
+            fontSize: '1.25rem',
+            fontWeight: 700,
+            letterSpacing: '-0.01em',
             lineHeight: 1.4,
             color: 'var(--text-primary)',
             whiteSpace: 'nowrap',
