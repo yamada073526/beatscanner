@@ -159,11 +159,17 @@ function parseAndValidateResponse(rawText) {
 // ---------------------------------------------------------------------------
 
 /**
- * evaluate: 10 PNG を Vision API に投げて 5 軸スコア + overall + improvements を返す。
+ * evaluate: PNG を Vision API に投げて 5 軸スコア + overall + improvements を返す。
  *
- * @param {Array<{name: string, filePath: string}>} images
+ * Sprint 4 suggested_fix #1 (skipMissing):
+ *   sectionFound: false の fallback PNG は caller 側でフィルタしてから渡すこと。
+ *   fallback PNG を Vision eval に渡すと rubric が低スコアになる可能性がある。
+ *   caller (snap-visual-regression.mjs) は evaluableImages = images.filter(img => img.sectionFound) を実施済み。
+ *
+ * @param {Array<{name: string, filePath: string, sectionFound?: boolean}>} images
  *   - name: 'Hero-pc', 'FiveConditions-mobile' 等の識別名
  *   - filePath: PNG の絶対パス
+ *   - sectionFound: true のみを渡すこと (false = fallback PNG は caller でフィルタ済み)
  * @returns {Promise<{
  *   scores: Object,
  *   overall: number,

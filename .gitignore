@@ -58,6 +58,8 @@ uvicorn*.log
 # Visual diagnostic harness output (handover v66 §1 round 3: CLAUDE.md visual harness exception)
 # headless Playwright が生成する PNG / JSON。使い捨て、Git 追跡しない
 frontend/.visual/
+# ただし vision baseline JSON は git 追跡する (regression 検知の anchor として)
+# frontend/scripts/vision-baseline.json は .gitignore の対象外 (= tracked)
 
 # Playwright test artifacts (handover v66 §1 round 3 構造投資)
 frontend/playwright-report/
