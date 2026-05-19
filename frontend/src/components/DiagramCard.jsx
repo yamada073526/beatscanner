@@ -1403,7 +1403,7 @@ export default function DiagramCard({
             }}
           >
             <span style={{ fontSize: '13px' }}>📊</span>
-            <span>バリュエーション — データ準備中</span>
+            <span>バリュエーション情報は次回開示でお届けします</span>
           </div>
         )}
 
@@ -1466,7 +1466,7 @@ export default function DiagramCard({
             }}
           >
             <span style={{ fontSize: '13px' }}>🏢</span>
-            <span>ビジネスモデル — データ準備中</span>
+            <span>事業フローを精査しています</span>
           </div>
         )}
 
@@ -1850,7 +1850,7 @@ export default function DiagramCard({
             }}
           >
             <span style={{ fontSize: '13px' }}>📈</span>
-            <span>年次グラフ — データ準備中</span>
+            <span>決算データを集約しています</span>
           </div>
         )}
 
@@ -1985,7 +1985,7 @@ export default function DiagramCard({
             }}
           >
             <span style={{ fontSize: '13px' }}>💵</span>
-            <span>FCF・CapEx — データ準備中</span>
+            <span>キャッシュフロー詳細を整理しています</span>
           </div>
         )}
 
@@ -2090,7 +2090,7 @@ export default function DiagramCard({
             }}
           >
             <span style={{ fontSize: '13px' }}>⚖️</span>
-            <span>強み・リスク対比 — データ準備中</span>
+            <span>強み・リスク要因を整理しています</span>
           </div>
         )}
 
@@ -2199,7 +2199,7 @@ export default function DiagramCard({
             }}
           >
             <span style={{ fontSize: '13px' }}>💬</span>
-            <span>投資家への問い — データ準備中</span>
+            <span>ストーリー要点を抽出しています</span>
           </div>
         )}
 

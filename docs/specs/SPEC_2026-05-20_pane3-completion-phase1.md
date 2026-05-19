@@ -111,7 +111,7 @@ LP 訴求文言との整合を確認:
 **設計詳細**:
 - 各 ConditionRow の右端に **width 80-120px / height 28-36px** の sparkline
 - 色は **neutral slate** (`rgba(148, 163, 184, 0.85)`) baseline、 最新 point のみ PASS=`var(--color-gain)` / FAIL=`var(--color-loss)` で 4-5px circle dot
-- data source: `result.conditions[i].history_values` (backend 既存 schema、 無い場合は `result.history.eps[]` / `result.history.cfps[]` から derive)
+- data source: `result.conditions[i].series` (backend 既存 schema 既存、 frontend ConditionSparkline.jsx と整合済)
 - data 不在 (4Q 未満) なら sparkline 非 render (conditional render gate)
 - accessibility: `aria-label="条件 N: 直近 8Q 推移 — 最新値 X、 PASS"`
 
@@ -310,7 +310,7 @@ sprint 中 (各 sprint 完了時) は Evaluator 4 層 (L1-L4) のみで進行、
 
 ### リスク 1: Sprint 1 で ConditionRow sparkline が backend schema 不在 → 真っ白
 
-- **原因**: `result.conditions[i].history_values` が backend response に無い場合、 sparkline data source なし
+- **原因**: `result.conditions[i].series` が backend response に無い場合、 sparkline data source なし
 - **対策**: Sprint 1 開始時に AAPL / NVDA / MSFT の API response を `curl` で確認、 不在なら `result.history.eps[]` / `result.history.cfps[]` / `result.history.revenue[]` から derive (frontend 純計算、 LLM 不要)
 - **roll-back**: ConditionRow.jsx を git revert 1 commit + Railway redeploy (5 分)
 
