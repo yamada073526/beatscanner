@@ -200,13 +200,15 @@ function SummaryBriefInner({ analysis, guidance }) {
     setStreaming(true);
     setError(null);
     setText('');
-    setVisible(false); // ticker 変更時に fade リセット
+    // v86 hotfix: skeleton も表示するため visible は streaming 開始時に true 化。
+    // 旧 logic は「first chunk 到着で visible=true」 だったが、 LLM streaming 3-5 秒間
+    // section 全体 opacity:0 で「壊れている」 見え方になっていた (user dogfood feedback)。
+    // fade-in は skeleton 表示時に発火、 text 到着時は skeleton → text の自然な置換で十分。
+    setVisible(true);
 
     streamSummaryBrief(analysis, guidance, (chunk) => {
       if (!controller.signal.aborted) {
         setText((prev) => prev + chunk);
-        // 最初の chunk が届いたら fade-in 開始
-        if (!visible) setVisible(true);
       }
     }, controller.signal)
       .catch((e) => {
