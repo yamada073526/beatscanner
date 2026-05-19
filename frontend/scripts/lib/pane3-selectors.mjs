@@ -137,9 +137,16 @@ export async function setupWorkspacePane3(page) {
   // 進行中 animation を強制完了
   // feedback_press_feedback_delta.md の「running animation forwards fill 罠」対策
   // snap-active.mjs L138-141 と同パターン
+  // 無限 animation (EarningsRing 呼吸 / pulse 等) は finish 不能なため try/catch でスキップ
   await page.evaluate(() => {
     document.querySelectorAll('[class]').forEach((el) =>
-      el.getAnimations().forEach((a) => a.finish()),
+      el.getAnimations().forEach((a) => {
+        try {
+          a.finish();
+        } catch {
+          // InvalidStateError: 無限 animation は finish 不能 — 無視
+        }
+      }),
     );
   });
 

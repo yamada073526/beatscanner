@@ -311,9 +311,16 @@ try {
 
           // 進行中 animation を強制完了 (snap-active.mjs L138-141 と同パターン)
           // feedback_press_feedback_delta.md の「running animation forwards fill 罠」対策
+          // 無限 animation (EarningsRing 呼吸 / pulse 等) は finish 不能なため try/catch
           await page.evaluate(() => {
             document.querySelectorAll('[class]').forEach((el) =>
-              el.getAnimations().forEach((a) => a.finish()),
+              el.getAnimations().forEach((a) => {
+                try {
+                  a.finish();
+                } catch {
+                  // InvalidStateError: 無限 animation は finish 不能 — 無視
+                }
+              }),
             );
           });
           await page.waitForTimeout(50);
@@ -381,8 +388,9 @@ try {
         2,
       ),
     );
-    process.exitCode = 1;
-    return;
+    await browser.close();
+    clearTimeout(killer);
+    process.exit(1);
   }
 
   console.log('\n[vision-regression] Vision API 評価を開始...');
@@ -411,8 +419,9 @@ try {
       ),
     );
 
-    process.exitCode = 0;
-    return;
+    await browser.close();
+    clearTimeout(killer);
+    process.exit(0);
   }
 
   // evaluate は skipMissing に対応した evaluableImages を渡す
@@ -420,8 +429,9 @@ try {
 
   if (!visionResult) {
     // evaluate が null を返す = API key 不在 (evaluate 内でも確認している二重チェック)
-    process.exitCode = 0;
-    return;
+    await browser.close();
+    clearTimeout(killer);
+    process.exit(0);
   }
 
   // ---------------------------------------------------------------------------
