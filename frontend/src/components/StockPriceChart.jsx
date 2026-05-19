@@ -933,13 +933,58 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                   )}
                   {hasCup && !cupRequiresPro && (
                     <span className="flex items-center gap-1.5">
-                      <span style={{ display: 'inline-block', width: 14, height: 0, borderTop: `2px dashed ${CUP_COLOR}` }} />
+                      {/* v86 R2 凡例更新: band fill + dashed overlay + handle dot の 3 要素複合 swatch
+                          UI/UX subagent Phase 2 verdict、 chart 上の Cup-Handle 視覚と 1:1 対応 */}
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          position: 'relative',
+                          width: 22,
+                          height: 10,
+                          borderRadius: 2,
+                          background: `color-mix(in srgb, ${CUP_COLOR} 14%, transparent)`,
+                        }}
+                      >
+                        <span
+                          style={{
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            top: '50%',
+                            height: 0,
+                            borderTop: `1px dashed ${CUP_COLOR}`,
+                            opacity: 0.6,
+                            transform: 'translateY(-50%)',
+                          }}
+                        />
+                        <span
+                          style={{
+                            position: 'absolute',
+                            right: 2,
+                            top: '50%',
+                            width: 4,
+                            height: 4,
+                            borderRadius: '50%',
+                            background: SMA_50_COLOR,
+                            transform: 'translateY(-50%)',
+                          }}
+                        />
+                      </span>
                       取っ手付きカップ（pivot ${cupHandle.pivot.price.toFixed(2)}）
                     </span>
                   )}
                   {hasCup && cupRequiresPro && (
                     <span className="flex items-center gap-1.5" style={{ opacity: 0.7 }}>
-                      <span style={{ display: 'inline-block', width: 14, height: 0, borderTop: `2px dashed ${CUP_COLOR}`, opacity: 0.5 }} />
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          width: 22,
+                          height: 10,
+                          borderRadius: 2,
+                          background: `color-mix(in srgb, ${CUP_COLOR} 10%, transparent)`,
+                          opacity: 0.5,
+                        }}
+                      />
                       取っ手付きカップ 🔒 (Premium で pivot 価格解放)
                     </span>
                   )}
