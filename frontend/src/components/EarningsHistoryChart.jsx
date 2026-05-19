@@ -8,6 +8,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  ReferenceLine,
 } from 'recharts';
 import InfoModal from './InfoModal.jsx';
 
@@ -166,6 +167,9 @@ function SmallMultipleBar({
   showXAxis = false,
   metricFill,
   metricOpacity = 0.85,
+  // Sprint 2: (CFPS - EPS) 補助線。CFPS 段のみ渡す。
+  // 各要素: { y: number, color: 'var(--color-gain)' | 'var(--color-loss)', testId: string }
+  deltaLines = [],
 }) {
   return (
     <div
@@ -247,6 +251,25 @@ function SmallMultipleBar({
                 return <Cell key={`cell-${index}`} fill={fill} opacity={metricOpacity} />;
               })}
             </Bar>
+            {/* Sprint 2: (CFPS - EPS) 補助線 — CFPS 段のみ。Chart Overlay Safety 4 層防御適用。
+                - Number.isFinite ガード済み y 値のみ render (conditional gate)
+                - isAnimationActive=false (PGE 落とし穴 4 対策)
+                - var(--color-gain) / var(--color-loss) のみ使用 (投資業界色ルール準拠)
+                - data-testid="cfps-eps-delta-Q{N}" (N は 1-based) で Evaluator L2 verify */}
+            {deltaLines.map((dl) =>
+              Number.isFinite(dl.y) ? (
+                <ReferenceLine
+                  key={dl.testId}
+                  y={dl.y}
+                  stroke={dl.color}
+                  strokeWidth={1.5}
+                  strokeOpacity={0.55}
+                  strokeDasharray="4 3"
+                  isAnimationActive={false}
+                  data-testid={dl.testId}
+                />
+              ) : null
+            )}
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -285,6 +308,36 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
     () => chartData?.some((d) => d.cfps !== null),
     [chartData]
   );
+
+  // Sprint 2: (CFPS - EPS) 補助線データ生成。
+  // CFPS 段の各 Bar 上端に薄い green/red horizontal ReferenceLine を描画するための配列。
+  // - delta = cfps - eps の符号で色分け (投資業界色ルール: 緑 = gain / 赤 = loss)
+  // - delta === 0 または cfps が null なら補助線非 render (conditional gate)
+  // - y 値は cfps の実際の値を使用 (= Bar 上端位置)
+  // - Number.isFinite ガードは SmallMultipleBar 内で行う
+  const cfpsEpsDeltaLines = useMemo(() => {
+    if (!chartData) return [];
+    return chartData
+      .map((d, idx) => {
+        // cfps が null (データなし) なら skip
+        if (d.cfps === null) return null;
+        const cfps = Number(d.cfps);
+        const eps = Number(d.eps);
+        if (!Number.isFinite(cfps) || !Number.isFinite(eps)) return null;
+        const delta = cfps - eps;
+        // delta === 0 なら補助線非 render (conditional gate)
+        if (delta === 0) return null;
+        return {
+          // y 値は cfps の Bar 上端 (= cfps 値) に設定
+          y: cfps,
+          // 投資業界色ルール: CFPS > EPS = じっちゃま 5 条件 §5 PASS = 緑 / FAIL = 赤
+          color: delta > 0 ? 'var(--color-gain)' : 'var(--color-loss)',
+          // data-testid: "cfps-eps-delta-Q{N}" N は 1-based
+          testId: `cfps-eps-delta-Q${idx + 1}`,
+        };
+      })
+      .filter(Boolean);
+  }, [chartData]);
 
   // Chart Overlay Safety: conditional render guard
   if (!chartData) {
@@ -418,6 +471,7 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
           showXAxis={true}
           metricFill="var(--color-accent)"
           metricOpacity={0.92}
+          deltaLines={cfpsEpsDeltaLines}
         />
       )}
 
