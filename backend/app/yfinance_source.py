@@ -107,17 +107,36 @@ async def get_quote_type(ticker: str) -> str | None:
 
 
 def _fetch_price_history_sync(ticker: str, from_date: str, to_date: str) -> list[dict]:
+    import math
     import pandas as pd
     t = yf.Ticker(ticker)
     hist = t.history(start=from_date, end=to_date, auto_adjust=True)
     if hist is None or hist.empty:
         return []
+
+    def _safe_float(v):
+        # v86 chart hybrid Sprint 1: OHLC+V のうち NaN は None として返す (frontend で Number.isFinite guard)
+        if v is None:
+            return None
+        try:
+            f = float(v)
+            return None if math.isnan(f) else f
+        except (TypeError, ValueError):
+            return None
+
     out = []
     for ts, row in hist.iterrows():
         date_str = ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts)[:10]
-        close = row.get("Close")
-        if close is not None and not (hasattr(close, "__float__") and __import__("math").isnan(float(close))):
-            out.append({"date": date_str, "close": float(close)})
+        close = _safe_float(row.get("Close"))
+        if close is not None:
+            out.append({
+                "date": date_str,
+                "open": _safe_float(row.get("Open")),
+                "high": _safe_float(row.get("High")),
+                "low": _safe_float(row.get("Low")),
+                "close": close,
+                "volume": _safe_float(row.get("Volume")),
+            })
     return out
 
 

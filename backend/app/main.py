@@ -5563,8 +5563,18 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
         except Exception:
             raw = []
 
+    # v86 chart hybrid Sprint 1: OHLC+V を返却 (旧 close のみ)
+    # 既存 frontend (StockPriceChart.jsx) は close フィールドだけ参照するので後方互換維持。
+    # candle toggle 実装後は open/high/low + volume を参照する。
     prices = [
-        {"date": p["date"], "close": p.get("close") or p.get("adjClose")}
+        {
+            "date": p["date"],
+            "open": p.get("open"),
+            "high": p.get("high"),
+            "low": p.get("low"),
+            "close": p.get("close") or p.get("adjClose"),
+            "volume": p.get("volume"),
+        }
         for p in reversed(raw)
         if p.get("date") and (p.get("close") or p.get("adjClose"))
     ]
