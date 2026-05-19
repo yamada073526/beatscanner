@@ -298,6 +298,7 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
   return (
     <section
       className="panel-card"
+      data-testid="earnings-history-chart"
       style={{
         background: 'var(--bg-card)',
         border: '1px solid var(--border)',

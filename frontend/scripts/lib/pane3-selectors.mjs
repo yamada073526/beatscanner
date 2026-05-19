@@ -37,17 +37,16 @@
 export const SECTION_DEFS = [
   {
     name: 'Hero',
-    primary: '.pane3-hero-section',
-    fallback: '[data-testid="pane3-hero"]',
-    // Hero section が見つからない場合の広めのセレクタ
+    primary: '[data-testid="pane3-hero"]',
+    fallback: '.pane3-hero-section',
     broadFallback: '.judgment-detail-header, .verdict-header, [class*="hero"]',
     requiresAccordionOpen: false,
     description: 'verdict badge + CompanyLogo + EarningsRing + 次の決算まで',
   },
   {
     name: 'FiveConditions',
-    primary: '.five-conditions-card',
-    fallback: '[data-testid="five-conditions"]',
+    primary: '[data-testid="five-conditions-card"]',
+    fallback: '.five-conditions-card',
     broadFallback: '[class*="five-condition"], [class*="conditions"]',
     requiresAccordionOpen: false,
     description: 'FiveConditionsCard — じっちゃまプロトコル 5 条件',
@@ -62,16 +61,16 @@ export const SECTION_DEFS = [
   },
   {
     name: 'SectionDivider',
-    primary: '.section-divider',
-    fallback: '[data-testid="section-divider"]',
+    primary: '[data-testid="section-divider-major"]',
+    fallback: '.section-divider',
     broadFallback: '[class*="section-divider"], [class*="divider"]',
     requiresAccordionOpen: false,
     description: 'SectionDivider — h2 + accent bar (Polish Sprint 5 着地済)',
   },
   {
     name: 'EarningsHistoryChart',
-    primary: '.earnings-history-chart',
-    fallback: '[data-testid="earnings-history-chart"]',
+    primary: '[data-testid="earnings-history-chart"]',
+    fallback: '.earnings-history-chart',
     broadFallback: '[class*="earnings-history"], [class*="history-chart"]',
     // EarningsHistoryChart は AccordionSection 内に格納されている場合がある
     requiresAccordionOpen: true,

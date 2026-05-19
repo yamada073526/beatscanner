@@ -86,7 +86,7 @@ export default function FiveConditionsCard({
   );
 
   return (
-    <Card>
+    <Card data-testid="five-conditions-card">
       <div style={{ padding: 'var(--space-6, 24px)' }}>
         <SectionHeader
           id="judgment-conditions"

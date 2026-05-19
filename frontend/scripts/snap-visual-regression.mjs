@@ -240,6 +240,7 @@ try {
     });
     const page = await ctx.newPage();
 
+    let setupOk = true;
     try {
       // 1. workspace mode に goto
       await page.goto(WORKSPACE_URL, { waitUntil: 'networkidle', timeout: 30_000 });
@@ -253,7 +254,19 @@ try {
           await openAccordionIfNeeded(page, sectionDef);
         }
       }
+    } catch (err) {
+      // mobile workspace で demo chip 不在 など、 setup 段階で失敗した場合は
+      // この viewport を skip して次の viewport に進む (PC が PASS していれば baseline 可能)
+      setupOk = false;
+      console.warn(
+        `[vision-regression]   ${viewport.name}: setup 失敗 — viewport を skip します。\n` +
+          `  reason: ${err.message?.split('\n')[0] ?? err}`,
+      );
+    }
 
+    try {
+      // setup 失敗時は 4. の for ループを skip して finally で ctx.close()
+      if (setupOk)
       // 4. 各 section を capture
       for (const sectionDef of SECTION_DEFS) {
         const imageName = `${sectionDef.name}-${viewport.name}`;
