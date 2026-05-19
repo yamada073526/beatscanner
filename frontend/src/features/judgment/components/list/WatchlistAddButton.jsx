@@ -238,7 +238,9 @@ export default function WatchlistAddButton({
               </div>
             )}
             {results.map((r, i) => {
-              const ticker = String(r.ticker || '').toUpperCase();
+              // v86 hotfix: /api/search は `symbol` フィールドを返す (FMP / master 共通)。
+              // 旧 `r.ticker` 参照は undefined → silent fail + CompanyLogo "?" fallback の二重 bug。
+              const ticker = String(r.symbol || r.ticker || '').toUpperCase();
               const exists = dedupedSet.has(ticker);
               const active = i === activeIndex;
               return (

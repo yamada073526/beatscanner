@@ -37,8 +37,16 @@ export default function CmdPalette({ open, close, items = [], onAnalyze }) {
     );
 
     // items 側に既にある ticker は analyze candidate (master / typed 両方) で重複させない
+    // v86 hotfix: transaction / account group は dedup 対象から除外する。
+    //   旧 logic は「全 group の ticker を dedup」 だったため、 例えば NVDA を買付 transaction として
+    //   持っている user が "nvda" 入力時に「NVDA を分析」 master 候補が消えて、 transaction の
+    //   「indices タブで filter」 action しか残らず、 個別銘柄分析への遷移ができない bug 発生。
+    //   分析・追加 action と transaction action は別 intent なので併存させる。
     const existingTickerSet = new Set(
-      filteredItems.map((it) => (it.ticker || '').toUpperCase()).filter(Boolean)
+      filteredItems
+        .filter((it) => it.group !== 'transaction' && it.group !== 'account')
+        .map((it) => (it.ticker || '').toUpperCase())
+        .filter(Boolean)
     );
 
     // master tickers prefix/contains match 候補 (最大 6 件、 既存 items に重複しないもの)
