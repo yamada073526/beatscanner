@@ -243,7 +243,10 @@ try {
     let setupOk = true;
     try {
       // 1. workspace mode に goto
-      await page.goto(WORKSPACE_URL, { waitUntil: 'networkidle', timeout: 30_000 });
+      // networkidle は Pane 3 の WebSocket / polling で settle せず timeout する。
+      // domcontentloaded で確実に load 完了させて、 setupWorkspacePane3 内で
+      // demo chip の visibility wait + 3.5s wait に任せる (handover v86 hotfix)。
+      await page.goto(WORKSPACE_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
 
       // 2. demo ticker click + Pane 3 mount (setupWorkspacePane3)
       await setupWorkspacePane3(page);
