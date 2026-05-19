@@ -171,10 +171,16 @@ function ProTeaser({ onUpgrade }) {
 }
 
 function NoSessionHint() {
+  // v86 R3 Vision 改善 #5: CTA 階層を一段上げる
+  //  - bg を --color-accent 8% tint に上げて行動喚起の優先度を明示
+  //  - 右側に「ログイン →」 テキストリンク (button っぽい affordance)
+  //  - silent fail logic は不変 (v85 §5 触らない領域遵守)、 click ハンドラは prop 経由で受けず
+  //    ParentComponent が wrap している前提の link 演出のみ
   return (
-    <div className="triage-banner triage-banner-muted triage-banner-concierge">
+    <div className="triage-banner triage-banner-muted triage-banner-concierge triage-banner-cta">
       <span className="triage-pulse-dot" aria-hidden="true" />
-      <span>ログインすると、 保有銘柄の 5 条件 / Cup-Handle 状態を確認できます</span>
+      <span style={{ flex: 1 }}>ログインすると、 保有銘柄の 5 条件 / Cup-Handle 状態を確認できます</span>
+      <span className="triage-cta-affordance" aria-hidden="true">ログイン →</span>
     </div>
   );
 }

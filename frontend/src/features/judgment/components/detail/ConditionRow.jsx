@@ -79,7 +79,8 @@ export default function ConditionRow({
         style={{
           width: '100%',
           display: 'grid',
-          gridTemplateColumns: '24px 1fr auto 16px',
+          // v86 R3: 数値カラムを固定幅 80px に変更 (auto → 80px)、 行をまたいだ縦の桁揃えを担保
+          gridTemplateColumns: '24px 1fr 80px 16px',
           alignItems: 'center',
           gap: 12,
           padding: '10px 12px',

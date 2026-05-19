@@ -77,11 +77,14 @@ ALLOWED-SHADOW: inset 0 0 0 1px rgba(56, 189, 248, 0.28), 0 0 22px rgba(56, 189,
 # Hover effect token (--shadow-hover、light)
 ALLOWED-SHADOW: 0 16px 40px rgba(0, 0, 0, 0.35)
 
-# EarningsRing glow (light) — v86 R2 静止フレーム視認性強化 (旧 20px/0.20 + 8px/0.10、 vision API motion_timing 改善)
-ALLOWED-SHADOW: 0 0 28px rgba(56, 189, 248, 0.32), 0 0 12px rgba(56, 189, 248, 0.18)
+# EarningsRing glow (light) — v86 R3 三層 halo (vision motion_timing 62 → 75+ 狙い、 内 12px + 中 28px + 外 48px)
+ALLOWED-SHADOW: 0 0 12px rgba(56, 189, 248, 0.20), 0 0 28px rgba(56, 189, 248, 0.32), 0 0 48px rgba(56, 189, 248, 0.14)
 
-# EarningsRing glow (dark) — v86 R2 静止フレーム視認性強化 (旧 24px/0.30 + 10px/0.16、 vision API motion_timing 改善)
-ALLOWED-SHADOW: 0 0 32px rgba(56, 189, 248, 0.42), 0 0 14px rgba(56, 189, 248, 0.24)
+# EarningsRing glow (dark) — v86 R3 三層 halo (内 14px + 中 32px + 外 56px、 dark 背景 contrast 強化)
+ALLOWED-SHADOW: 0 0 14px rgba(56, 189, 248, 0.26), 0 0 32px rgba(56, 189, 248, 0.42), 0 0 56px rgba(56, 189, 248, 0.18)
+
+# Hero LIVE pulse dot (v86 R3、 static frame motion proxy)
+ALLOWED-SHADOW: 0 0 0 4px rgba(56, 189, 248, 0.18), 0 0 12px rgba(56, 189, 248, 0.36)
 ```
 
 ---

@@ -168,7 +168,14 @@ function SmallMultipleBar({
   metricOpacity = 0.85,
 }) {
   return (
-    <div style={{ marginBottom: 'var(--space-2, 8px)' }}>
+    <div
+      style={{
+        // v86 R3 Vision 改善 #3: 段間 spacing 拡大 + hairline divider で「縦長詰め込み」感を解消
+        marginBottom: 'var(--space-6, 24px)',
+        paddingBottom: 'var(--space-3, 12px)',
+        borderBottom: '1px solid rgba(148, 163, 184, 0.10)',
+      }}
+    >
       {/* Row label */}
       <div
         style={{
