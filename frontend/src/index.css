@@ -5097,10 +5097,7 @@ body {
   );
   border-color: color-mix(in srgb, var(--color-accent) 18%, rgba(148, 163, 184, 0.15));
 }
-.triage-banner-cta {
-  background: color-mix(in srgb, var(--color-accent) 8%, var(--bg-card));
-  border-color: color-mix(in srgb, var(--color-accent) 28%, var(--border));
-}
+/* v86 R3 → revert: .triage-banner-cta (accent 8% tint) は color_hierarchy -6 の主因として削除済 */
 .triage-cta-affordance {
   font-size: 11px;
   font-weight: 600;
