@@ -41,6 +41,15 @@ overall = 重み付き平均 (JS 側で計算)。
 
 ローカル: `frontend/.env.local` に `ANTHROPIC_API_KEY=sk-ant-xxx` を追加 (gitignore 済)。
 
+**注: Node の `--env-file` フラグは値の format によっては読み込み失敗する**
+(v86 step 6 dogfood で発覚)。 確実に env var を渡すには shell side で `set -a` を使う:
+
+```bash
+cd frontend
+set -a; . ./.env.local; set +a
+node scripts/snap-visual-regression.mjs --baseline-init
+```
+
 GitHub Actions: Settings → Secrets → Actions → `ANTHROPIC_API_KEY` を追加。
 
 ```yaml
