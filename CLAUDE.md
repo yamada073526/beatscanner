@@ -162,6 +162,20 @@ docs/references/api_endpoints.md を参照
 ## スキル一覧
 各機能の実装手順は .claude/skills/ 配下の対応SKILL.mdを参照
 
+### skill 自動呼出ルール (proactive routing)
+
+ユーザーが skill 名を明示しなくても、 以下の file path / context を編集する前に **対応 skill を必ず呼ぶ**。 description トリガーだけに頼ると 60-70% で漏れるため、 file path ベースで明文化する。
+
+| 編集対象 / 起動 context | 呼出すべき skill | 理由 |
+|---|---|---|
+| `frontend/src/components/LandingPage.jsx` / `SampleAnalysisSection*` / `ProTeaser*` / Pro tier 課金 UI / LP の訴求文言 | `funnel-cro` | Trust Cliff 防止 7 項目 checklist 必須 |
+| `backend/app/visualizer/` / `backend/app/aggregator/` / `backend/app/agents/` / 新規 Claude API call 追加 | `hallucination-guard` | 4 重防御 + BAD 1-6 + citation 必須 |
+| Claude API call の `system` 配列 / few-shot examples / `cache_control` 編集 | `prompt-cache-optimizer` | cache hit 80%+ 維持で月 cost $10 死守 |
+| `/planner <要望>` 起動前 / `/generator` 起動前 / `frontend/scripts/snap-*.mjs` 編集 | `pge-loop-debugger` | v86 落とし穴 4 件 (sprint 累積なし / selector hallucination / ESM return / infinite animation) |
+| 本番デプロイ前 (`railway up`) | `release-check` (内部で上記を順次呼ぶ) | CLAUDE.md 違反 + Trust Cliff + 4 重防御の最終 gate |
+
+Claude は **編集対象 file を decide した時点**で proactive に「この変更は <skill 名> 観点で確認します」 と宣言してから skill を呼ぶこと。 ユーザーが明示的に skill を指定した場合は、 該当 skill のみで進めて他は省略してよい。
+
 ### multi-review 6 体 vs 3 体の判断基準 (Phase gate 時、 handover v82 で確立)
 
 `multi-review` skill 起動時の reviewer 数判定。 Phase 4 で Anthropic verdict 「3 体で十分」 と Phase 5 で「6 体 valuable」 が両立した経緯から方法論として明文化 (v82 で 3 セット 18 体起動、 累計 67 体)。
