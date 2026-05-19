@@ -1,10 +1,60 @@
 import { Component, useState, useEffect, useMemo } from 'react';
 import {
-  ComposedChart, Line, XAxis, YAxis, CartesianGrid,
+  ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot,
 } from 'recharts';
 import { fetchPriceHistory, fetchTechnical } from '../api.js';
 import Chip from './ui/Chip.jsx';
+
+// v86 chart hybrid Sprint 2: localStorage key for 折れ線/candle toggle persist
+const CHART_STYLE_KEY = 'pane3_chart_style_v1';
+
+// v86 chart hybrid Sprint 2: Recharts custom shape for candlestick
+// props: x, y, width, height (bar bbox)、 payload (data point with open/high/low/close)
+// 緑 = close >= open (上昇)、 赤 = close < open (下落) — 投資業界色ルール遵守
+// Number.isFinite guard で Chart Overlay Safety 4 層防御継承
+function CandleShape(props) {
+  const { x, y, width, height, payload } = props;
+  if (!payload || !Number.isFinite(width) || !Number.isFinite(height)) return null;
+  const { open, high, low, close } = payload;
+  if (![open, high, low, close].every((v) => Number.isFinite(v))) return null;
+  // y / height は [low, high] range (Bar が yAxis range で計算済)
+  // 計算: high → y、 low → y + height
+  // open / close の Y 座標は線形補間で求める
+  const range = high - low;
+  if (range <= 0) {
+    // doji 等の極端値: 1px の横線として描画
+    return <line x1={x} x2={x + width} y1={y + height / 2} y2={y + height / 2} stroke="var(--text-muted)" strokeWidth={1} />;
+  }
+  const yHigh = y;
+  const yLow = y + height;
+  const yOpen = yHigh + ((high - open) / range) * height;
+  const yClose = yHigh + ((high - close) / range) * height;
+  const isUp = close >= open;
+  const color = isUp ? 'var(--color-gain)' : 'var(--color-loss)';
+  const bodyTop = Math.min(yOpen, yClose);
+  const bodyHeight = Math.max(1, Math.abs(yClose - yOpen));
+  const cx = x + width / 2;
+  const bodyWidth = Math.max(2, width * 0.7);
+  const bodyX = cx - bodyWidth / 2;
+  return (
+    <g>
+      {/* wick: low → high の縦線 */}
+      <line x1={cx} x2={cx} y1={yHigh} y2={yLow} stroke={color} strokeWidth={1} />
+      {/* body: open → close の rectangle */}
+      <rect
+        x={bodyX}
+        y={bodyTop}
+        width={bodyWidth}
+        height={bodyHeight}
+        fill={isUp ? color : color}
+        fillOpacity={isUp ? 0.85 : 1}
+        stroke={color}
+        strokeWidth={1}
+      />
+    </g>
+  );
+}
 
 // SMA overlay 色 (design_system.md §1-A2 で token 登録済、 ALLOWED-HEX whitelist 適合)
 const SMA_50_COLOR  = '#f59e0b'; // amber (短期 trend)
@@ -180,6 +230,21 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
   const [loading, setLoading] = useState(false);
   // SMA overlay state (handover v75 Phase 1 Session 1 safer 再追加)
   const [technical, setTechnical] = useState(null);
+  // v86 chart hybrid Sprint 2: 折れ線 ⇄ candle toggle (localStorage persist)
+  // 'line' (default、 UI/UX 観点 Aman 級世界観) / 'candle' (玄人 user 向け Webull 戦略)
+  const [chartStyle, setChartStyle] = useState(() => {
+    try {
+      const saved = localStorage.getItem(CHART_STYLE_KEY);
+      return saved === 'candle' ? 'candle' : 'line';
+    } catch {
+      return 'line';
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHART_STYLE_KEY, chartStyle);
+    } catch { /* localStorage 不可な環境 (Safari private 等) では silent */ }
+  }, [chartStyle]);
 
   useEffect(() => {
     if (!ticker) return;
@@ -457,7 +522,59 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
             </Chip>
           )}
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1 items-center flex-wrap">
+          {/* v86 chart hybrid Sprint 2: 折れ線 / candle toggle (Webull 戦略)
+              - default: 折れ線 (Aman 級 UI、 リテール初見 2 秒理解)
+              - candle: 玄人 user 向け (localStorage persist)
+              - Pro lock は v2 で追加予定 (現状は free user にも UI 表示) */}
+          <div
+            role="group"
+            aria-label="チャート形式"
+            style={{
+              display: 'inline-flex',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm, 6px)',
+              overflow: 'hidden',
+              marginRight: 8,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setChartStyle('line')}
+              aria-pressed={chartStyle === 'line'}
+              title="折れ線"
+              style={{
+                appearance: 'none',
+                border: 'none',
+                background: chartStyle === 'line' ? 'var(--color-accent)' : 'transparent',
+                color: chartStyle === 'line' ? 'var(--bg-primary)' : 'var(--text-secondary)',
+                fontSize: 11,
+                fontWeight: 600,
+                padding: '4px 10px',
+                cursor: 'pointer',
+              }}
+            >
+              折れ線
+            </button>
+            <button
+              type="button"
+              onClick={() => setChartStyle('candle')}
+              aria-pressed={chartStyle === 'candle'}
+              title="ローソク足"
+              style={{
+                appearance: 'none',
+                border: 'none',
+                background: chartStyle === 'candle' ? 'var(--color-accent)' : 'transparent',
+                color: chartStyle === 'candle' ? 'var(--bg-primary)' : 'var(--text-secondary)',
+                fontSize: 11,
+                fontWeight: 600,
+                padding: '4px 10px',
+                cursor: 'pointer',
+              }}
+            >
+              ローソク
+            </button>
+          </div>
           {PERIODS.map((p) => (
             <button
               key={p.value}
@@ -568,16 +685,32 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     isAnimationActive={false}
                   />
                 )}
-                {/* Price line (主役、 SMA より太く前面) */}
-                <Line
-                  type="monotone"
-                  dataKey="close"
-                  stroke={CHART_PRICE}
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4, fill: CHART_PRICE }}
-                  name="終値"
-                />
+                {/* Price 表示: chartStyle === 'line' → Line / 'candle' → Bar + custom shape
+                    v86 chart hybrid Sprint 2 (Webull 戦略、 デフォルト折れ線維持) */}
+                {chartStyle === 'line' ? (
+                  <Line
+                    type="monotone"
+                    dataKey="close"
+                    stroke={CHART_PRICE}
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 4, fill: CHART_PRICE }}
+                    name="終値"
+                  />
+                ) : (
+                  <Bar
+                    dataKey={(entry) => {
+                      // Number.isFinite guard (Chart Overlay Safety 4 層防御継承)
+                      const lo = Number(entry?.low);
+                      const hi = Number(entry?.high);
+                      if (!Number.isFinite(lo) || !Number.isFinite(hi)) return [0, 0];
+                      return [lo, hi];
+                    }}
+                    shape={<CandleShape />}
+                    isAnimationActive={false}
+                    name="ローソク足"
+                  />
+                )}
 
                 {/* Cup-with-Handle overlay (取っ手付きカップ、 6 体合議 2026-05-17 B 案):
                     - cup の 3 点 (left rim / cup low / right rim) を dashed line で結ぶ
