@@ -3,6 +3,7 @@ import {
   ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot,
 } from 'recharts';
+import { LineChart as LineChartIcon, CandlestickChart as CandlestickChartIcon } from 'lucide-react';
 import { fetchPriceHistory, fetchTechnical } from '../api.js';
 import Chip from './ui/Chip.jsx';
 
@@ -523,10 +524,12 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
           )}
         </div>
         <div className="flex gap-1 items-center flex-wrap">
-          {/* v86 chart hybrid Sprint 2: 折れ線 / candle toggle (Webull 戦略)
+          {/* v86 chart hybrid Sprint 2 + R2: 折れ線 / candle toggle (icon 化、 TradingView 流)
               - default: 折れ線 (Aman 級 UI、 リテール初見 2 秒理解)
               - candle: 玄人 user 向け (localStorage persist)
-              - Pro lock は v2 で追加予定 (現状は free user にも UI 表示) */}
+              - icon ベース: text label は読解負荷を生む (user feedback)、 lucide-react で統一
+              - aria-label / title でアクセシビリティ担保
+              - Pro lock は v2 で追加予定 */}
           <div
             role="group"
             aria-label="チャート形式"
@@ -542,37 +545,41 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
               type="button"
               onClick={() => setChartStyle('line')}
               aria-pressed={chartStyle === 'line'}
+              aria-label="折れ線"
               title="折れ線"
               style={{
                 appearance: 'none',
                 border: 'none',
                 background: chartStyle === 'line' ? 'var(--color-accent)' : 'transparent',
                 color: chartStyle === 'line' ? 'var(--bg-primary)' : 'var(--text-secondary)',
-                fontSize: 11,
-                fontWeight: 600,
-                padding: '4px 10px',
+                padding: '5px 10px',
                 cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                lineHeight: 0,
               }}
             >
-              折れ線
+              <LineChartIcon size={14} strokeWidth={1.75} />
             </button>
             <button
               type="button"
               onClick={() => setChartStyle('candle')}
               aria-pressed={chartStyle === 'candle'}
+              aria-label="ローソク足"
               title="ローソク足"
               style={{
                 appearance: 'none',
                 border: 'none',
                 background: chartStyle === 'candle' ? 'var(--color-accent)' : 'transparent',
                 color: chartStyle === 'candle' ? 'var(--bg-primary)' : 'var(--text-secondary)',
-                fontSize: 11,
-                fontWeight: 600,
-                padding: '4px 10px',
+                padding: '5px 10px',
                 cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                lineHeight: 0,
               }}
             >
-              ローソク
+              <CandlestickChartIcon size={14} strokeWidth={1.75} />
             </button>
           </div>
           {PERIODS.map((p) => (
