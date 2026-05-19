@@ -284,10 +284,11 @@ export default function JudgmentDetail({
     <div
       className="ds-judgment-detail"
       style={{
-        // Sprint 3: gap: 20 → var(--space-4) (16px) base に変更
-        // Verdict→Fundamentals 境界のみ個別 margin-top で分離
+        // v86 R5 A: gap を --space-4 (16px) → --space-6 (24px) に拡大、 Aman 級 breathing room
+        // Verdict→Fundamentals 境界は --space-8 (32px) で更に上回り、 hierarchy 保持
+        // Vision spacing_ratio 73 → 78+ 狙い
         display: 'grid',
-        gap: 'var(--space-4, 16px)',
+        gap: 'var(--space-6, 24px)',
       }}
     >
       {/* === 階層 1: Verdict (expanded 固定) ===
@@ -430,8 +431,9 @@ export default function JudgmentDetail({
           Sprint 3: Verdict→Fundamentals 境界のみ margin-top var(--space-8) で間を開ける。
           Sprint 4: label="詳細分析" を inject。 Verdict → Fundamentals 層境界を明示。
           SPEC 2026-05-19 Sprint 1 Item 6: expandedLabel に変更して h2 級 typography + 左 4px cyan accent bar を適用。
-          SectionDivider 内の margin (var(--space-6) 0 var(--space-4)) が padding を包含するため、外側 marginTop は維持。 */}
-      <div style={{ marginTop: 'var(--space-8, 32px)' }}>
+          SectionDivider 内の margin (var(--space-6) 0 var(--space-4)) が padding を包含するため、外側 marginTop は維持。
+          v86 R5 A: Verdict→Fundamentals 境界 marginTop --space-8 → --space-10 (32→40px) で章扉感強化。 */}
+      <div style={{ marginTop: 'var(--space-10, 40px)' }}>
         <SectionDivider expandedLabel="詳細分析" />
       </div>
 

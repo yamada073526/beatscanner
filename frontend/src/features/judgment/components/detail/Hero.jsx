@@ -67,7 +67,10 @@ export default function Hero({ ticker, companyName, verdict = 'unknown', period,
       <span className="hero-live-pulse" aria-hidden="true" />
       <div
         style={{
-          padding: 'var(--space-6, 24px)',
+          // v86 R5 C: Aman / Ritz 入場感のため padding を --space-6 (24px) → --space-8 (32px) に
+          // 一段「ロビー」 感が出る breathing room (token は 4/8/12/16/24/32/48 のみ、 7 は無し)。
+          // Vision aman 70 → 75+ 狙い、 既存 token を使用 (design system 整合)。
+          padding: 'var(--space-8, 32px)',
           display: 'flex',
           alignItems: 'flex-start',
           justifyContent: 'space-between',

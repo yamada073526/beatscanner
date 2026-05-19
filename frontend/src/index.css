@@ -6273,6 +6273,25 @@ button.ds-chip { cursor: pointer; }
   /* display chip = badge、cursor default、tone bg はそのまま使う */
   cursor: default;
 }
+/* v86 R5 B: display variant + tone は Hero verdict chip 等の主役 badge 用途。
+   default tone より色彩を強化し、 Miss/Beat/Warning を 2 秒で識別可能にする
+   (color_hierarchy 74 → 80+ 狙い、 Vision 評価で「色階層が浅い」 解消)
+   投資業界色ルール (CLAUDE.md): 緑↑/赤↓/amber=警告、 hex は ALLOWED 既存 */
+.ds-chip[data-variant="display"][data-tone="loss"] {
+  background: rgba(248, 113, 113, 0.16);
+  border-color: rgba(248, 113, 113, 0.50);
+  color: rgba(248, 113, 113, 0.96);
+}
+.ds-chip[data-variant="display"][data-tone="gain"] {
+  background: rgba(52, 239, 129, 0.16);
+  border-color: rgba(52, 239, 129, 0.50);
+  color: rgba(52, 239, 129, 0.96);
+}
+.ds-chip[data-variant="display"][data-tone="warning"] {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.50);
+  color: rgba(245, 158, 11, 0.96);
+}
 .ds-chip[data-variant="switcher"] {
   /* switcher = AccountSwitcher 用 large pill、border ベース */
   border-color: var(--border);

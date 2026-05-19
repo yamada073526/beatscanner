@@ -29,10 +29,10 @@ export default function SectionDivider({ tier, label, expandedLabel }) {
   const isMajor = Boolean(expandedLabel);
 
   if (isMajor) {
-    // v86 R3 revert: gradient bar は「光の柱」 idiom を狙ったが Vision 評価では
-    // 「accent bar が細く見える」 と判定されて aman 軸 regression。 solid 4px に戻す。
-    //  - --space-10 (40px) breathing room は維持 (Vision 評価が肯定的だった)
-    //  - 縦バー: solid 4px var(--color-accent) (元の Polish #4 状態)
+    // v86 R5 C: 章扉感の強化 (aman_vs_bloomberg 70 → 78+ 狙い)。
+    //  - 4px solid accent bar + h2 typography は維持
+    //  - text 右側に fading hairline を追加 (Aman / 書籍の章扉 idiom、 「驚き」 演出)
+    //  - hairline は border 色から transparent へ gradient、 raw hex なし
     return (
       <div
         role="presentation"
@@ -41,6 +41,9 @@ export default function SectionDivider({ tier, label, expandedLabel }) {
           margin: 'var(--space-10, 40px) 0 var(--space-4, 16px)',
           paddingLeft: 'var(--space-3, 12px)',
           borderLeft: '4px solid var(--color-accent)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-4, 16px)',
         }}
       >
         <span
@@ -51,11 +54,19 @@ export default function SectionDivider({ tier, label, expandedLabel }) {
             lineHeight: 1.4,
             color: 'var(--text-primary)',
             whiteSpace: 'nowrap',
-            display: 'block',
           }}
         >
           {displayText}
         </span>
+        {/* v86 R5 C: 右側 fading hairline (Aman 級 章扉) */}
+        <span
+          aria-hidden
+          style={{
+            flex: 1,
+            height: 1,
+            background: 'linear-gradient(90deg, var(--border) 0%, transparent 80%)',
+          }}
+        />
       </div>
     );
   }
