@@ -32,6 +32,7 @@ export default function SectionDivider({ tier, label, expandedLabel }) {
     return (
       <div
         role="presentation"
+        data-testid="section-divider-major"
         style={{
           margin: 'var(--space-6, 24px) 0 var(--space-4, 16px)',
           paddingLeft: 'var(--space-3, 12px)',

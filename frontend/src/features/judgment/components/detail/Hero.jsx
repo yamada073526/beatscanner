@@ -40,7 +40,7 @@ export default function Hero({ ticker, companyName, verdict = 'unknown', period,
       : undefined;
 
   return (
-    <Card>
+    <Card data-testid="pane3-hero">
       <div
         style={{
           padding: 'var(--space-6, 24px)',
