@@ -76,6 +76,12 @@ ALLOWED-SHADOW: inset 0 0 0 1px rgba(56, 189, 248, 0.28), 0 0 22px rgba(56, 189,
 
 # Hover effect token (--shadow-hover、light)
 ALLOWED-SHADOW: 0 16px 40px rgba(0, 0, 0, 0.35)
+
+# EarningsRing glow (light) — Sprint 3 SPEC_2026-05-19_pane3-header-polish, brand emphasis 専用 (--ring-glow)
+ALLOWED-SHADOW: 0 0 20px rgba(56, 189, 248, 0.20), 0 0 8px rgba(56, 189, 248, 0.10)
+
+# EarningsRing glow (dark) — Sprint 3 SPEC_2026-05-19_pane3-header-polish, brand emphasis 専用 (--ring-glow)
+ALLOWED-SHADOW: 0 0 24px rgba(56, 189, 248, 0.30), 0 0 10px rgba(56, 189, 248, 0.16)
 ```
 
 ---

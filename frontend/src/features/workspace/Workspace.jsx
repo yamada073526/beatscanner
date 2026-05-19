@@ -727,7 +727,7 @@ export default function Workspace({
                   onAnalyze={onAnalyze}
                   showFilters={true}
                   onAddToWatchlist={onAddToWatchlist}
-                  isPro={plan === 'pro'}
+                  isPro={plan === 'pro' || plan === 'premium'}
                 />
               </div>
             </div>

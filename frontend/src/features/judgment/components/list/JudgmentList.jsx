@@ -221,12 +221,16 @@ export default function JudgmentList({ items = [], showFilters = true, onAnalyze
             // handover v69 §3 #5: 観察銘柄グループの右端に「+」追加 button
             const isWatchlistGroup = g.title === '観察銘柄';
             const currentTickerSet = new Set(items.map((it) => String(it.ticker || '').toUpperCase()));
+            // H2: maxFreeReached — 無料ユーザーが 3 件到達済かどうかを計算して渡す
+            const watchlistCount = isWatchlistGroup ? g.items.length : 0;
+            const maxFreeReached = !isPro && watchlistCount >= 3;
             const action =
               isWatchlistGroup && typeof onAddToWatchlist === 'function' ? (
                 <WatchlistAddButton
                   onAdd={onAddToWatchlist}
                   currentSet={currentTickerSet}
                   isPro={isPro}
+                  maxFreeReached={maxFreeReached}
                 />
               ) : null;
             return (

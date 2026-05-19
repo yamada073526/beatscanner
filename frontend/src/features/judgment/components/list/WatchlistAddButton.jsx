@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Plus } from 'lucide-react';
 import { searchTickers } from '../../../../api.js';
 import Chip from '../../../../components/ui/Chip.jsx';
+import CompanyLogo from '../../../../components/CompanyLogo.jsx';
 
 /**
  * 観察銘柄追加 button (handover v69 §3 #5).
@@ -17,16 +18,18 @@ import Chip from '../../../../components/ui/Chip.jsx';
  *  - Esc / outside click で閉じる
  *
  * Props:
- *   onAdd: (ticker: string) => void  // 親で addToWatchlist を呼ぶ
- *   currentSet: Set<string>          // 既存 watchlist (重複防止)
- *   isPro?: boolean                  // Pro 判定 (将来制限 UI 用)
- *   maxFree?: number (default 3)     // 無料制限件数
+ *   onAdd: (ticker: string) => void    // 親で addToWatchlist を呼ぶ
+ *   currentSet: Set<string>            // 既存 watchlist (重複防止)
+ *   isPro?: boolean                    // Pro 判定 (将来制限 UI 用)
+ *   maxFree?: number (default 3)       // 無料制限件数
+ *   maxFreeReached?: boolean           // H2: 無料制限到達済フラグ (親で計算)
  */
 export default function WatchlistAddButton({
   onAdd,
   currentSet,
   isPro = false,
   maxFree = 3,
+  maxFreeReached = false,
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -154,20 +157,34 @@ export default function WatchlistAddButton({
   // round 8 (6 体合議): Chip primitive variant='add' で「+ 追加」label pill 化。
   // dashed border default + hover cyan、視認性 + アフォーダンス両立 (Linear/Notion 流)。
   // triggerRef を Chip 内部に渡せないので、wrapper span に ref を取る。
+  // H2: maxFreeReached 時は disabled 状態 + 「Pro で無制限」hint chip を隣表示。
   return (
     <>
-      <span ref={triggerRef} style={{ display: 'inline-flex' }}>
-        <Chip
-          size="sm"
-          variant="add"
-          onClick={() => setOpen((v) => !v)}
-          ariaLabel="観察銘柄を追加"
-          aria-expanded={open}
-          title="観察銘柄を追加"
-          icon={<Plus size={12} strokeWidth={2.2} />}
-        >
-          追加
-        </Chip>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <span ref={triggerRef} style={{ display: 'inline-flex' }}>
+          <Chip
+            size="sm"
+            variant="add"
+            onClick={maxFreeReached ? undefined : () => setOpen((v) => !v)}
+            ariaLabel={maxFreeReached ? '無料プランの観察銘柄上限に達しました' : '観察銘柄を追加'}
+            aria-expanded={maxFreeReached ? undefined : open}
+            title={maxFreeReached ? '無料プランは 3 件まで。Pro / Premium で無制限' : '観察銘柄を追加'}
+            icon={<Plus size={12} strokeWidth={2.2} />}
+            style={maxFreeReached ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+          >
+            追加
+          </Chip>
+        </span>
+        {maxFreeReached && (
+          <Chip
+            size="xs"
+            variant="display"
+            tone="accent"
+            title="Pro / Premium にアップグレードすると観察銘柄を無制限に追加できます"
+          >
+            Pro で無制限
+          </Chip>
+        )}
       </span>
 
       {open && createPortal(
@@ -234,7 +251,7 @@ export default function WatchlistAddButton({
                   style={{
                     display: 'flex',
                     width: '100%',
-                    alignItems: 'baseline',
+                    alignItems: 'center',
                     justifyContent: 'space-between',
                     gap: 8,
                     padding: '5px 8px',
@@ -247,7 +264,14 @@ export default function WatchlistAddButton({
                     textAlign: 'left',
                   }}
                 >
-                  <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{ticker}</span>
+                  {/* H3: CompanyLogo 24px — TV→FMP→頭文字円 3 段フォールバック */}
+                  <CompanyLogo
+                    ticker={ticker}
+                    size={24}
+                    shape="rounded"
+                    monoFallback
+                  />
+                  <span style={{ fontWeight: 600, fontFamily: 'monospace', flexShrink: 0 }}>{ticker}</span>
                   <span
                     style={{
                       flex: 1,
