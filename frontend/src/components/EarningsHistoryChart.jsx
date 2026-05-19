@@ -118,6 +118,13 @@ function EarningsHistoryInfoModal({ onClose }) {
           <li>
             <span style={{ color: 'var(--color-loss)', fontWeight: 600 }}>赤</span> = マイナス / 減少傾向
           </li>
+          <li className="pt-1 border-t border-slate-200 mt-1">
+            <span style={{ color: 'var(--color-gain)', fontWeight: 600 }}>緑補助線</span> = CFPS &gt; EPS — 独自プロトコル §5
+            <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> PASS</span>
+            ／
+            <span style={{ color: 'var(--color-loss)', fontWeight: 600 }}>赤補助線</span> = CFPS ≤ EPS —
+            <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> FAIL</span>
+          </li>
         </ul>
       </div>
     </InfoModal>
