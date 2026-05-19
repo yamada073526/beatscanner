@@ -72,10 +72,11 @@ export const SECTION_DEFS = [
     primary: '[data-testid="earnings-history-chart"]',
     fallback: '.earnings-history-chart',
     broadFallback: '[class*="earnings-history"], [class*="history-chart"]',
-    // EarningsHistoryChart は AccordionSection 内に格納されている場合がある
-    requiresAccordionOpen: true,
-    accordionSelector: 'button[aria-expanded="false"]',
-    description: 'EarningsHistoryChart — AccordionSection 開状態で capture',
+    // v86 R4 #4: 実装は AccordionSection 非 wrap、 `result?.periods?.length > 0` の
+    // unconditional render なので requiresAccordionOpen は false が正しい
+    // (旧 true 設定は openAccordionIfNeeded で別 accordion を誤クリックする副作用あった)
+    requiresAccordionOpen: false,
+    description: 'EarningsHistoryChart — unconditional render (periods 必須、 demo rate limit 時は欠落)',
   },
 ];
 

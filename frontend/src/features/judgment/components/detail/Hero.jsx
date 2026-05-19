@@ -4,6 +4,25 @@ import Chip from '../../../../components/ui/Chip.jsx';
 import EarningsRing from '../../../../components/EarningsRing.jsx';
 import CompanyLogo from '../../../../components/CompanyLogo.jsx';
 
+// v86 R4 #3: 補助情報 chip スタイル (Hero 中央密度 anchor、 tabular-nums)
+const heroFactChipStyle = {
+  fontSize: 11,
+  fontWeight: 500,
+  color: 'var(--text-secondary)',
+  background: 'var(--bg-subtle)',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-sm, 6px)',
+  padding: '3px 8px',
+  fontVariantNumeric: 'tabular-nums',
+  whiteSpace: 'nowrap',
+};
+const heroFactChipAccent = {
+  ...heroFactChipStyle,
+  color: 'var(--color-accent)',
+  borderColor: 'color-mix(in srgb, var(--color-accent) 35%, var(--border))',
+  fontWeight: 600,
+};
+
 /**
  * Hero section. design_system.md §B-2 Display tier 28-32px, fw600, -0.02em, lh1.1.
  * Verdict chip = beat/miss/in-line/unknown (§1-A).
@@ -85,10 +104,10 @@ export default function Hero({ ticker, companyName, verdict = 'unknown', period,
           </div>
           <h1
             style={{
-              fontSize: 32,
-              fontWeight: 600,
+              fontSize: 40,
+              fontWeight: 700,
               letterSpacing: '-0.02em',
-              lineHeight: 1.1,
+              lineHeight: 1.05,
               margin: '4px 0 4px',
               color: 'var(--text-primary)',
             }}
@@ -107,16 +126,31 @@ export default function Hero({ ticker, companyName, verdict = 'unknown', period,
               {companyName}
             </div>
           )}
-          {period && (
+          {/* v86 R4 #3: 補助情報行 — 中央空白帯を意味のある密度で埋める
+              (Vision Round 2,3 共通指摘「中央の AAPL と右側 D-XX リングの間に空白帯」 解消)
+              chip 形式で 3 fact (期間 / 次回決算日 / D-XX) を並べる */}
+          {(period || nextEarningsDate || Number.isFinite(nextEarningsDays)) && (
             <div
               style={{
-                fontSize: 11,
-                fontWeight: 500,
-                color: 'var(--text-muted)',
-                marginTop: 8,
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 6,
+                marginTop: 10,
+                alignItems: 'center',
               }}
             >
-              対象期間: {period}
+              {period && (
+                <span style={heroFactChipStyle}>{period}</span>
+              )}
+              {nextEarningsDate && (
+                <span style={heroFactChipStyle}>
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginRight: 4 }}>次回</span>
+                  {nextEarningsDate}
+                </span>
+              )}
+              {Number.isFinite(nextEarningsDays) && nextEarningsDays > 0 && (
+                <span style={heroFactChipAccent}>D-{nextEarningsDays}</span>
+              )}
             </div>
           )}
           </div>{/* end: テキスト情報 div */}
