@@ -356,18 +356,19 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
     return { x1: right_rim_date, x2: lastDate, y1: low_price, y2: pivotPrice };
   }, [hasCup, cupHandle, data]);
 
-  // v86 R2 Cup polish: Pivot ラベル多段化 (右リム高値 / Pivot / +X.X%)
-  // 金融アナリスト verdict 2-B: user が「あと何 % で breakout」 を即座に判断可能
+  // v86 R2 Cup polish: Pivot ラベル + 現在価格との残距離 (金融アナリスト 2-B)
+  // user dogfood 「右端見切れ」 fix: 「・ あと」 削減で string を短縮、 ASCII のみで描画幅を抑制
+  // 上昇余地 (need-to-rise): "Pivot $XXX.XX (+X.X%)"  (現在価格が pivot 未満、 形成中の典型)
+  // 既に超過: "Pivot $XXX.XX (達)"  (pivot 突破済、 breakout 検知中 or 直後)
   const pivotLabelText = useMemo(() => {
     if (!hasCup) return '';
     const pivot = cupHandle.pivot.price;
-    const rim = cupHandle.cup.right_rim_price;
     const lastClose = data?.prices?.length ? Number(data.prices[data.prices.length - 1].close) : null;
     const remainingPct = Number.isFinite(lastClose) && lastClose > 0
       ? ((pivot - lastClose) / lastClose) * 100
       : null;
     const remainingStr = Number.isFinite(remainingPct)
-      ? (remainingPct >= 0 ? ` ・ あと +${remainingPct.toFixed(1)}%` : ` ・ +${(-remainingPct).toFixed(1)}% 超え`)
+      ? (remainingPct >= 0 ? ` (+${remainingPct.toFixed(1)}%)` : ' (達)')
       : '';
     return `Pivot $${pivot.toFixed(2)}${remainingStr}`;
   }, [hasCup, cupHandle, data]);
@@ -679,7 +680,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart
                 data={chartData}
-                margin={{ top: 36, right: 88, left: 0, bottom: 8 }}
+                margin={{ top: 36, right: 120, left: 0, bottom: 8 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
                 <XAxis
