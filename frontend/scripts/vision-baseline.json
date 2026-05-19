@@ -1,13 +1,13 @@
 {
-  "created_at": null,
-  "model": null,
+  "created_at": "2026-05-19T11:25:28Z",
+  "model": "claude-opus-4-7",
   "axes": {
-    "typography_grid": null,
-    "spacing_ratio": null,
-    "color_hierarchy": null,
-    "motion_timing": null,
-    "aman_vs_bloomberg": null
+    "typography_grid": 72,
+    "spacing_ratio": 68,
+    "color_hierarchy": 70,
+    "motion_timing": 45,
+    "aman_vs_bloomberg": 60
   },
-  "overall": null,
-  "suggestions_count": null
+  "overall": 65,
+  "suggestions_count": 5
 }
