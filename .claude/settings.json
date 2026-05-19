@@ -49,6 +49,12 @@
             "command": "bash .claude/hooks/pre_edit_lightweight_charts.sh",
             "timeout": 5,
             "statusMessage": "lightweight-charts v5 API チェック中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/pre_edit_autonomy_forbidden.sh",
+            "timeout": 5,
+            "statusMessage": "Autonomy 禁止領域チェック中..."
           }
         ]
       }
