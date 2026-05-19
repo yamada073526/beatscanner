@@ -14,14 +14,26 @@ import { useWorkspaceStore } from '../state/workspaceStore.js';
 import { isStepPulsingForCondition } from '../lib/condition-mapping.js';
 import Toast from './Toast.jsx';
 
-function VizSectionLabel({ text }) {
+function VizSectionLabel({ text, first = false }) {
   return (
-    <div style={{
-      fontSize: '13px', fontWeight: '700', letterSpacing: '0.5px',
-      color: '#38BDF8', marginBottom: '10px', marginTop: '32px',  // 20→32px
-    }}>
-      {text}
-    </div>
+    <>
+      {/* Sprint 3: Saga-like scroll narrative — section 間 1px hairline divider (Linear 流) */}
+      {!first && (
+        <div style={{
+          height: '1px',
+          background: 'var(--border)',
+          marginTop: '20px',
+          marginBottom: '0',
+          opacity: 0.5,
+        }} />
+      )}
+      <div style={{
+        fontSize: '13px', fontWeight: '700', letterSpacing: '0.5px',
+        color: '#38BDF8', marginBottom: '10px', marginTop: first ? '32px' : '16px',
+      }}>
+        {text}
+      </div>
+    </>
   );
 }
 
@@ -1108,12 +1120,15 @@ export default function DiagramCard({
 
       <div style={{ padding: '4px 16px 20px' }}>
 
-        {/* ── Section 1: Headline ── */}
-        <div style={{
-          position: 'relative',
-          margin: '16px 0 4px', padding: '18px 20px',
-          borderRadius: '10px', background: passBg, textAlign: 'center',
-        }}>
+        {/* ── Section 1: Headline (story) ── */}
+        <div
+          data-testid="diagram-section-story"
+          style={{
+            position: 'relative',
+            margin: '16px 0 4px', padding: '18px 20px',
+            borderRadius: '10px', background: passBg, textAlign: 'center',
+          }}
+        >
           {/* X (Twitter) シェアボタン — narrative 完成後のみ表示 */}
           {!isGenerating && data.headline && (
             <button
@@ -1323,9 +1338,11 @@ export default function DiagramCard({
         </div>
 
         {/* ── Section 2: Valuation + Dividend ── */}
-        {(valuation || dividend) && (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '20px', marginBottom: '10px' }}>
+        {(valuation || dividend) ? (
+          <div data-testid="diagram-section-valuation">
+            {/* Sprint 3: Saga-like section divider */}
+            <div style={{ height: '1px', background: 'var(--border)', marginTop: '20px', opacity: 0.5 }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '16px', marginBottom: '10px' }}>
               <span style={{ fontSize: '13px', fontWeight: '700', letterSpacing: '0.5px', color: '#38BDF8' }}>
                 バリュエーション
               </span>
@@ -1371,12 +1388,28 @@ export default function DiagramCard({
                 <DividendCard dividend={dividend} />
               )}
             </div>
-          </>
+          </div>
+        ) : (
+          /* valuation データなし — empty state */
+          <div
+            data-testid="diagram-section-valuation"
+            style={{
+              marginTop: '16px', padding: '10px 14px',
+              borderRadius: '8px',
+              border: '1px dashed var(--border)',
+              background: 'var(--bg-subtle)',
+              fontSize: '12px', color: 'var(--text-muted)',
+              display: 'flex', alignItems: 'center', gap: '6px',
+            }}
+          >
+            <span style={{ fontSize: '13px' }}>📊</span>
+            <span>バリュエーション — データ準備中</span>
+          </div>
         )}
 
         {/* ── Section 3: Business Model ── */}
         {isGenerating ? (
-          <>
+          <div data-testid="diagram-section-business-flow">
             <VizSectionLabel text="ビジネスモデル" />
             <div style={{
               display: 'flex', gap: '8px', padding: '14px 12px',
@@ -1398,9 +1431,9 @@ export default function DiagramCard({
                 return items;
               })}
             </div>
-          </>
-        ) : flowItems.length > 0 && (
-          <div className="narrative-appear">
+          </div>
+        ) : flowItems.length > 0 ? (
+          <div className="narrative-appear" data-testid="diagram-section-business-flow">
             <VizSectionLabel text="ビジネスモデル" />
             {isMobile && (
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>
@@ -1418,6 +1451,22 @@ export default function DiagramCard({
                 {flowItems}
               </div>
             </div>
+          </div>
+        ) : (
+          /* businessFlowSteps なし — empty state */
+          <div
+            data-testid="diagram-section-business-flow"
+            style={{
+              marginTop: '16px', padding: '10px 14px',
+              borderRadius: '8px',
+              border: '1px dashed var(--border)',
+              background: 'var(--bg-subtle)',
+              fontSize: '12px', color: 'var(--text-muted)',
+              display: 'flex', alignItems: 'center', gap: '6px',
+            }}
+          >
+            <span style={{ fontSize: '13px' }}>🏢</span>
+            <span>ビジネスモデル — データ準備中</span>
           </div>
         )}
 
@@ -1439,9 +1488,9 @@ export default function DiagramCard({
           </>
         )}
 
-        {/* ── Section 4: Growth Story ── */}
-        {trends.length > 0 && (
-          <div ref={flashRef}>
+        {/* ── Section 4: Growth Story (yearly) ── */}
+        {trends.length > 0 ? (
+          <div ref={flashRef} data-testid="diagram-section-yearly">
             {/* レンジセレクター（カード右上から移動：操作と結果を視覚的に近接させる）*/}
             <div style={{
               display: 'flex', alignItems: 'center',
@@ -1787,12 +1836,28 @@ export default function DiagramCard({
             </div>
             )}
           </div>
+        ) : (
+          /* trends なし — empty state (yearly) */
+          <div
+            data-testid="diagram-section-yearly"
+            style={{
+              marginTop: '16px', padding: '10px 14px',
+              borderRadius: '8px',
+              border: '1px dashed var(--border)',
+              background: 'var(--bg-subtle)',
+              fontSize: '12px', color: 'var(--text-muted)',
+              display: 'flex', alignItems: 'center', gap: '6px',
+            }}
+          >
+            <span style={{ fontSize: '13px' }}>📈</span>
+            <span>年次グラフ — データ準備中</span>
+          </div>
         )}
 
         {/* ── Section 4.5: FCF・CapEx ── */}
         {/* データあり → 表示 / フラグだけある（false）→ N/A表示 / どちらもなし → 非表示 */}
-        {(data.fcfTrend?.length > 0 || data.capexTrend?.length > 0 || data.fcfDataAvailable === false) && (
-          <>
+        {(data.fcfTrend?.length > 0 || data.capexTrend?.length > 0 || data.fcfDataAvailable === false) ? (
+          <div data-testid="diagram-section-fcf">
             <VizSectionLabel text="FCF・設備投資（CapEx）" />
             {!(data.fcfTrend?.length > 0 || data.capexTrend?.length > 0) ? (
               <div style={{
@@ -1905,12 +1970,28 @@ export default function DiagramCard({
                 </div>
               );
             })()}
-          </>
+          </div>
+        ) : (
+          /* fcf データなし — empty state */
+          <div
+            data-testid="diagram-section-fcf"
+            style={{
+              marginTop: '16px', padding: '10px 14px',
+              borderRadius: '8px',
+              border: '1px dashed var(--border)',
+              background: 'var(--bg-subtle)',
+              fontSize: '12px', color: 'var(--text-muted)',
+              display: 'flex', alignItems: 'center', gap: '6px',
+            }}
+          >
+            <span style={{ fontSize: '13px' }}>💵</span>
+            <span>FCF・CapEx — データ準備中</span>
+          </div>
         )}
 
         {/* ── Section 5: Strengths / Risks ── */}
         {isGenerating ? (
-          <>
+          <div data-testid="diagram-section-strengths-risks">
             <VizSectionLabel text="強み・リスク対比" />
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '10px' }}>
               {[
@@ -1943,9 +2024,9 @@ export default function DiagramCard({
                 </div>
               ))}
             </div>
-          </>
-        ) : (strengths.length > 0 || risks.length > 0) && (
-          <div className="narrative-appear">
+          </div>
+        ) : (strengths.length > 0 || risks.length > 0) ? (
+          <div className="narrative-appear" data-testid="diagram-section-strengths-risks">
             <VizSectionLabel text="強み・リスク対比" />
             <AccordionHeader
               label={`強み ${strengths.length}件 / リスク ${risks.length}件`}
@@ -1995,11 +2076,27 @@ export default function DiagramCard({
               </div>
             )}
           </div>
+        ) : (
+          /* strengths/risks なし — empty state */
+          <div
+            data-testid="diagram-section-strengths-risks"
+            style={{
+              marginTop: '16px', padding: '10px 14px',
+              borderRadius: '8px',
+              border: '1px dashed var(--border)',
+              background: 'var(--bg-subtle)',
+              fontSize: '12px', color: 'var(--text-muted)',
+              display: 'flex', alignItems: 'center', gap: '6px',
+            }}
+          >
+            <span style={{ fontSize: '13px' }}>⚖️</span>
+            <span>強み・リスク対比 — データ準備中</span>
+          </div>
         )}
 
-        {/* ── Section 6: Investor Question + Bull/Bear ── */}
+        {/* ── Section 6: Investor Question + Bull/Bear (highlights) ── */}
         {isGenerating ? (
-          <>
+          <div data-testid="diagram-section-highlights">
             <VizSectionLabel text="投資家への問い" />
             <div style={{
               borderRadius: '8px', padding: '14px 16px',
@@ -2013,9 +2110,9 @@ export default function DiagramCard({
                 }} />
               ))}
             </div>
-          </>
-        ) : (data.investorQuestion || bullCase.length > 0 || bearCase.length > 0) && (
-          <div className="narrative-appear">
+          </div>
+        ) : (data.investorQuestion || bullCase.length > 0 || bearCase.length > 0) ? (
+          <div className="narrative-appear" data-testid="diagram-section-highlights">
             <VizSectionLabel text="投資家への問い" />
             {data.investorQuestion && (
               <div style={{
@@ -2087,6 +2184,22 @@ export default function DiagramCard({
                 )}
               </>
             )}
+          </div>
+        ) : (
+          /* highlights なし — empty state */
+          <div
+            data-testid="diagram-section-highlights"
+            style={{
+              marginTop: '16px', padding: '10px 14px',
+              borderRadius: '8px',
+              border: '1px dashed var(--border)',
+              background: 'var(--bg-subtle)',
+              fontSize: '12px', color: 'var(--text-muted)',
+              display: 'flex', alignItems: 'center', gap: '6px',
+            }}
+          >
+            <span style={{ fontSize: '13px' }}>💬</span>
+            <span>投資家への問い — データ準備中</span>
           </div>
         )}
 
