@@ -1,7 +1,7 @@
 import { Component, useState, useEffect, useMemo } from 'react';
 import {
   ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot,
+  Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot, ReferenceArea,
 } from 'recharts';
 import { LineChart as LineChartIcon, CandlestickChart as CandlestickChartIcon } from 'lucide-react';
 import { fetchPriceHistory, fetchTechnical } from '../api.js';
@@ -316,18 +316,61 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
     );
   }, [cupHandle]);
 
-  // Cup の 3 点 (left rim → cup low → right rim) を date → value lookup map で保持。
-  // chartData merge 時に cup_value field を該当 date のみ埋め、 connectNulls で 3 点を結ぶ。
+  // Cup の 3-4 点 (left rim → cup low → right rim [→ handle low]) を date → value lookup map で保持。
+  // chartData merge 時に cup_value field を該当 date のみ埋め、 connectNulls で結ぶ。
   // handover v76 dogfood 教訓: 別 data array (data={cupShape}) を Line に渡すと
   // ComposedChart の x 軸 domain が overlay の date 範囲に絞られて、 price line / SMA line が消える。
+  // v86 R2 Cup polish: handle.low_date が backend で返っていれば 4 点目として追加
   const cupValueMap = useMemo(() => {
     if (!hasCup) return null;
-    return {
+    const map = {
       [cupHandle.cup.left_rim_date]:  cupHandle.cup.left_rim_price,
       [cupHandle.cup.cup_low_date]:   cupHandle.cup.cup_low_price,
       [cupHandle.cup.right_rim_date]: cupHandle.cup.right_rim_price,
     };
+    if (cupHandle.handle?.low_date && Number.isFinite(cupHandle.handle?.low_price)) {
+      map[cupHandle.handle.low_date] = cupHandle.handle.low_price;
+    }
+    return map;
   }, [hasCup, cupHandle]);
+
+  // v86 R2 Cup polish: ReferenceArea / ReferenceDot 用に派生 props を抽出 (Number.isFinite guard 込)
+  const cupArea = useMemo(() => {
+    if (!hasCup) return null;
+    const { left_rim_date, right_rim_date, cup_low_price } = cupHandle.cup;
+    const pivotPrice = cupHandle.pivot.price;
+    if (!left_rim_date || !right_rim_date) return null;
+    if (![cup_low_price, pivotPrice].every((v) => Number.isFinite(v))) return null;
+    return { x1: left_rim_date, x2: right_rim_date, y1: cup_low_price, y2: pivotPrice };
+  }, [hasCup, cupHandle]);
+
+  const handleArea = useMemo(() => {
+    if (!hasCup || !cupHandle.handle) return null;
+    const { right_rim_date } = cupHandle.cup;
+    const { low_date, low_price } = cupHandle.handle;
+    const pivotPrice = cupHandle.pivot.price;
+    if (!right_rim_date || !low_date) return null;
+    if (![low_price, pivotPrice].every((v) => Number.isFinite(v))) return null;
+    // 取っ手範囲: right_rim_date → 最後の close date (data の右端)。 handle.low_date は area 内に含まれる。
+    const lastDate = data?.prices?.length ? data.prices[data.prices.length - 1].date : low_date;
+    return { x1: right_rim_date, x2: lastDate, y1: low_price, y2: pivotPrice };
+  }, [hasCup, cupHandle, data]);
+
+  // v86 R2 Cup polish: Pivot ラベル多段化 (右リム高値 / Pivot / +X.X%)
+  // 金融アナリスト verdict 2-B: user が「あと何 % で breakout」 を即座に判断可能
+  const pivotLabelText = useMemo(() => {
+    if (!hasCup) return '';
+    const pivot = cupHandle.pivot.price;
+    const rim = cupHandle.cup.right_rim_price;
+    const lastClose = data?.prices?.length ? Number(data.prices[data.prices.length - 1].close) : null;
+    const remainingPct = Number.isFinite(lastClose) && lastClose > 0
+      ? ((pivot - lastClose) / lastClose) * 100
+      : null;
+    const remainingStr = Number.isFinite(remainingPct)
+      ? (remainingPct >= 0 ? ` ・ あと +${remainingPct.toFixed(1)}%` : ` ・ +${(-remainingPct).toFixed(1)}% 超え`)
+      : '';
+    return `Pivot $${pivot.toFixed(2)}${remainingStr}`;
+  }, [hasCup, cupHandle, data]);
 
   // chip tone は market_context と state の 2 軸直交で決定 (6 体合議 Web 設計案):
   //   market_weak → muted (市場待機)
@@ -719,25 +762,55 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                   />
                 )}
 
-                {/* Cup-with-Handle overlay (取っ手付きカップ、 6 体合議 2026-05-17 B 案):
-                    - cup の 3 点 (left rim / cup low / right rim) を dashed line で結ぶ
-                    - pivot 横線 (right rim + $0.10) を chart 全幅で描画
-                    - breakout 確定 marker は state === 'breakout_confirmed' のみ
+                {/* Cup-with-Handle overlay (取っ手付きカップ、 v86 R2 polish):
+                    2 体合議 (金融アナリスト + UI/UX デザイナー、 2026-05-20):
+                    - ReferenceArea で cup 期間を slate area fill (面性、 highlighter idiom)
+                    - 取っ手期間に amber area fill (金融重点情報: handle = pattern 心臓部)
+                    - Pivot ReferenceLine: solid 1.25px + 多段ラベル「Pivot + あと X.X%」
+                    - 既存 cup_value dashed line は薄く維持 (subtle 輪郭ガイド)
+                    - handle_low ReferenceDot を 4 点目として追加 (金融 4-C)
                     - 4 層防御: ErrorBoundary / conditional render (hasCup) / Number.isFinite / isAnimationActive=false
-                    - v76 dogfood 教訓: data={cupShape} で別 array 渡すと x 軸 domain が cup 範囲に縮む。
-                      cup_value field を chartData に merge + connectNulls で 3 点を結ぶ方式に変更。
+                    - v76 教訓: data={cupShape} で別 array 渡すと x 軸 domain 縮む。 cup_value merge 方式維持。
                 */}
-                {/* Free user は Cup overlay を blur で曖昧化 (formation = 形 / pivot = $ は Pro 限定情報) */}
+                {/* MVP #1: ReferenceArea で cup 期間を slate area fill (主役、 highlighter 効果) */}
+                {hasCup && !cupRequiresPro && cupArea && (
+                  <ReferenceArea
+                    x1={cupArea.x1}
+                    x2={cupArea.x2}
+                    y1={cupArea.y1}
+                    y2={cupArea.y2}
+                    fill={CUP_COLOR}
+                    fillOpacity={cupHandle.state === 'formation_market_weak' ? 0.06 : 0.10}
+                    stroke="none"
+                    ifOverflow="extendDomain"
+                    isFront={false}
+                  />
+                )}
+                {/* MVP #4: 取っ手 (handle) 期間を amber area fill で 2 段強調 (金融アナリスト 4-B) */}
+                {hasCup && !cupRequiresPro && handleArea && (
+                  <ReferenceArea
+                    x1={handleArea.x1}
+                    x2={handleArea.x2}
+                    y1={handleArea.y1}
+                    y2={handleArea.y2}
+                    fill={SMA_50_COLOR}
+                    fillOpacity={cupHandle.state === 'formation_market_weak' ? 0.05 : 0.08}
+                    stroke="none"
+                    ifOverflow="extendDomain"
+                    isFront={false}
+                  />
+                )}
+                {/* MVP #3: 既存 dashed line を薄く維持 (subtle 輪郭ガイド、 area との 2 層構造) */}
                 {hasCup && !cupRequiresPro && (
                   <Line
                     key="cup_shape"
                     type="monotone"
                     dataKey="cup_value"
                     stroke={CUP_COLOR}
-                    strokeWidth={1.5}
-                    strokeDasharray="3 3"
-                    strokeOpacity={cupHandle.state === 'formation_market_weak' ? 0.45 : 0.85}
-                    dot={{ r: 3, fill: CUP_COLOR }}
+                    strokeWidth={1}
+                    strokeDasharray="4 4"
+                    strokeOpacity={cupHandle.state === 'formation_market_weak' ? 0.35 : 0.55}
+                    dot={{ r: 2.5, fill: CUP_COLOR, fillOpacity: 0.7 }}
                     activeDot={false}
                     connectNulls
                     name="取っ手付きカップ"
@@ -745,18 +818,34 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     isAnimationActive={false}
                   />
                 )}
+                {/* MVP #5: handle_low ReferenceDot (cup の 4 点目、 取っ手の底を視覚化) */}
+                {hasCup && !cupRequiresPro && cupHandle.handle?.low_date && Number.isFinite(cupHandle.handle?.low_price) && (
+                  <ReferenceDot
+                    x={cupHandle.handle.low_date}
+                    y={cupHandle.handle.low_price}
+                    r={3}
+                    fill={SMA_50_COLOR}
+                    stroke={SMA_50_COLOR}
+                    strokeWidth={1.5}
+                    fillOpacity={0.85}
+                    isFront
+                    isAnimationActive={false}
+                  />
+                )}
+                {/* MVP #2: Pivot ReferenceLine solid + 多段ラベル (金融アナリスト 2-B) */}
                 {hasCup && !cupRequiresPro && (
                   <ReferenceLine
                     y={cupHandle.pivot.price}
                     stroke={CUP_COLOR}
-                    strokeWidth={1}
-                    strokeDasharray="2 4"
-                    strokeOpacity={cupHandle.state === 'formation_market_weak' ? 0.45 : 0.85}
+                    strokeWidth={1.25}
+                    strokeDasharray={cupHandle.state === 'breakout_confirmed' ? null : '6 3'}
+                    strokeOpacity={cupHandle.state === 'formation_market_weak' ? 0.55 : 0.9}
                     label={{
-                      value: `Pivot $${cupHandle.pivot.price.toFixed(2)}`,
+                      value: pivotLabelText,
                       fill: CUP_COLOR,
                       fontSize: 10,
                       position: 'right',
+                      offset: 4,
                     }}
                     ifOverflow="extendDomain"
                     isFront={false}
