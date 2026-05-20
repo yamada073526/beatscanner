@@ -29,7 +29,7 @@ RUN cd frontend && npm run build
 
 
 # ── Stage 2: Python runtime + compiled frontend ───────────────────────────────
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 
