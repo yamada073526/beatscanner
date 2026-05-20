@@ -436,38 +436,71 @@ const renderGuidanceText = (text) => {
 
 export default function GuidanceCard({ guidance, isLoading = false, isSecLoading = false, nextEarningsDays = null }) {
   const [showModal, setShowModal] = useState(false);
+  // Phase 2.6 5-1: Tier M halo sweep (FiveConditionsCard と同一パターン)
+  // IntersectionObserver で初入場時に 1 回限り halo-sweep animation を発火
+  const cardRef = useRef(null);
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    if (el.dataset.haloFired === '1') return;
+    let timer = null;
+    const io = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry.isIntersecting) return;
+        if (el.dataset.haloFired === '1') return;
+        io.disconnect();
+        el.dataset.haloReady = '1';
+        const HALO_DURATION_MS = 920; // 900ms CSS duration + 20ms buffer
+        timer = setTimeout(() => {
+          el.removeAttribute('data-halo-ready');
+          el.dataset.haloFired = '1';
+        }, HALO_DURATION_MS);
+      },
+      { rootMargin: '-10% 0px -10% 0px', threshold: 0.15 }
+    );
+    io.observe(el);
+    return () => {
+      io.disconnect();
+      if (timer) clearTimeout(timer);
+    };
+  }, []); // mount 時 once
+
   if (isLoading && !guidance) return <GuidanceSkeleton />;
 
   if (!guidance) {
     return (
-      <section className="panel-card rounded-2xl p-5 shadow-sm" style={GUIDANCE_SECTION_STYLE}>
-        <div className="flex items-center justify-between">
-          <h3 className="section-label flex items-center gap-1.5" style={{ marginBottom: 0 }}>
-            <span className="section-header-icon" aria-hidden="true">
-              <BarChart3 size={18} strokeWidth={1.5} />
+      // Phase 2.6 5-1: tier-m-glow wrapper — halo sweep の IO observe 対象
+      <div ref={cardRef} className="tier-m-glow" data-testid="guidance-card-wrapper">
+        <section className="panel-card rounded-2xl p-5 shadow-sm" style={GUIDANCE_SECTION_STYLE}>
+          <div className="flex items-center justify-between">
+            <h3 className="section-label flex items-center gap-1.5" style={{ marginBottom: 0 }}>
+              <span className="section-header-icon" aria-hidden="true">
+                <BarChart3 size={18} strokeWidth={1.5} />
+              </span>
+              ガイダンス進捗
+              <button
+                onClick={() => setShowModal(true)}
+                className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
+                style={{
+                  background: 'rgba(34,211,238,0.15)',
+                  color: 'rgb(56, 189, 248)',
+                  border: '1px solid rgba(34,211,238,0.4)',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.30)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.15)'; }}
+                aria-label="ガイダンス達成状況の説明を表示"
+              >
+                ？
+              </button>
+            </h3>
+            <span className="text-xs text-amber-600">
+              ※ データプランの制限により取得できませんでした。
             </span>
-            ガイダンス進捗
-            <button
-              onClick={() => setShowModal(true)}
-              className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
-              style={{
-                background: 'rgba(34,211,238,0.15)',
-                color: 'rgb(56, 189, 248)',
-                border: '1px solid rgba(34,211,238,0.4)',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.30)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.15)'; }}
-              aria-label="ガイダンス達成状況の説明を表示"
-            >
-              ？
-            </button>
-          </h3>
-          <span className="text-xs text-amber-600">
-            ※ データプランの制限により取得できませんでした。
-          </span>
-        </div>
-        {showModal && <GuidanceInfoModal onClose={() => setShowModal(false)} />}
-      </section>
+          </div>
+          {showModal && <GuidanceInfoModal onClose={() => setShowModal(false)} />}
+        </section>
+      </div>
     );
   }
 
@@ -479,6 +512,8 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
   const subtitle = fiscal_period || date || '直近決算';
 
   return (
+    // Phase 2.6 5-1: tier-m-glow wrapper — halo sweep の IO observe 対象
+    <div ref={cardRef} className="tier-m-glow" data-testid="guidance-card-wrapper">
     <section className="panel-card rounded-2xl p-5 shadow-sm" style={GUIDANCE_SECTION_STYLE}>
       <div className="flex items-center justify-between">
         <h3 className="section-label flex items-center gap-1.5" style={{ marginBottom: 0 }}>
@@ -549,5 +584,6 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
         </div>
       ) : null}
     </section>
+    </div>
   );
 }

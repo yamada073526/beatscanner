@@ -3,20 +3,21 @@ import ReactMarkdown from 'react-markdown';
 import { streamConferenceText } from '../api.js';
 import LockedSection, { ConferenceGhost } from './LockedSection.jsx';
 
-// Phase 2.5 hotfix #5: font-bold (fw700) → font-semibold (fw600) で typography 階層を整理。
-// Stat fw700 / Section fw600 / Body fw500 の 3 階層に合わせ、h2/h3/p[isSection] を fw600 に統一。
+// Phase 2.6 hotfix #9: font-semibold (fw600) → font-medium (fw500) で他 section SectionHeader と整合。
+// Stat fw700 / Header fw500 / Body fw400 の 3 階層に合わせ、h2/h3/p[isSection]/strong を fw500 に統一。
+// chip 化 (bg-subtle + padding) は維持 (情報階層の visual 区切りとして必要)。
 // bg-slate-100 → CSS token var(--bg-subtle) でダークモード対応。
 const mdComponents = {
   h2: ({ children }) => (
     <h2
-      className="text-sm font-semibold rounded px-3 py-1.5 mt-8 mb-2"
+      className="text-sm font-medium rounded px-3 py-1.5 mt-8 mb-2"
       style={{ color: 'var(--text-secondary)', background: 'var(--bg-subtle)' }}
     >
       {children}
     </h2>
   ),
   h3: ({ children }) => (
-    <h3 className="text-sm font-semibold mt-4 mb-1" style={{ color: 'var(--text-primary)' }}>{children}</h3>
+    <h3 className="text-sm font-medium mt-4 mb-1" style={{ color: 'var(--text-primary)' }}>{children}</h3>
   ),
   p: ({ children }) => {
     const text = typeof children === 'string' ? children : Array.isArray(children) ? children.join('') : '';
@@ -25,7 +26,7 @@ const mdComponents = {
     if (isSection) {
       return (
         <p
-          className="text-sm font-semibold rounded px-3 py-1.5 mt-6 mb-2"
+          className="text-sm font-medium rounded px-3 py-1.5 mt-6 mb-2"
           style={{ color: 'var(--text-secondary)', background: 'var(--bg-subtle)' }}
         >
           {children}
@@ -35,7 +36,7 @@ const mdComponents = {
     return <p className="text-sm mb-3 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{children}</p>;
   },
   strong: ({ children }) => (
-    <strong className="font-semibold text-slate-900">{children}</strong>
+    <strong className="font-medium text-slate-900">{children}</strong>
   ),
   ul: ({ children }) => (
     <ul className="text-sm text-slate-700 mb-3 pl-4 space-y-1 list-disc">{children}</ul>
