@@ -83,7 +83,10 @@ export default function ConditionRow({
           display: 'grid',
           // v86 R3: 数値カラムを固定幅 80px に変更 (auto → 80px)、 行をまたいだ縦の桁揃えを担保
           // Sprint 1: ミニスパークライン カラム (96px) を追加 → 5 カラム構成
-          gridTemplateColumns: '24px 1fr 80px 96px 16px',
+          // Sprint B: ConditionSparkline が sparkline + trend chip を flex row で内包するため
+          //           sparkline 列を 96px → auto に変更 (chip 幅分を自然に収容)。
+          //           overflow 防止のため列に minmax(96px, auto) を使用。
+          gridTemplateColumns: '24px 1fr 80px minmax(96px, auto) 16px',
           alignItems: 'center',
           gap: 12,
           padding: '10px 12px',
