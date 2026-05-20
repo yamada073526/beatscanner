@@ -15,27 +15,33 @@ import InfoModal from './InfoModal.jsx';
 /**
  * EarningsHistoryChart
  *
- * Sprint 3: SPEC_2026-05-19_scroll-hierarchy.md §5 Sprint 3 — user override 2 実装。
- * 旧 EarningsBars.jsx (EPS のみ) + HistoryChart.jsx (LineChart 3 系列) を統合した
- * "small multiples" 縦バー grouped chart 3 段重ね。
+ * Sprint A (Phase 1.5): SPEC_2026-05-20_pane3-phase15-hotfix.md §5 Sprint A
+ * user dogfood feedback「y 軸高さ小さすぎ / 3 期差視認不能」を解消。
  *
- * 設計:
- *   - Bloomberg / Stripe Sigma 流「small multiples」idiom: 3 系列 (売上高 / EPS / CFPS) を
- *     同一 X 軸 (最大 8Q) で縦に 3 段重ねる。Y 軸スケール衝突なし (各段独立 scale)。
- *   - 既存 HistoryChart の縦バー視覚 idiom を踏襲 (視覚的な楽しさ維持)。
- *   - expanded 固定 (Fundamentals 層、ファンダメンタル5条件 §5 連続増加判定の anchor)。
- *   - Chart Overlay Safety 4 層防御 (feedback_chart_overlay_safety.md 準拠):
- *     1. ErrorBoundary (class component wrapper)
- *     2. conditional render (data guard)
- *     3. Number.isFinite check (全数値)
- *     4. isAnimationActive=false (ResponsiveContainer resize reflow 防止)
+ * 設計: small multiples 縦 3 段 → **grouped bars 1 段** (年次 5 年 × 3 指標 cluster)
+ *   - SPS (Sales Per Share) = revenue / shares_diluted — cyan (var(--color-accent))
+ *   - EPS (Earnings Per Share)                        — teal (#0d9488)
+ *   - CFPS (Cash Flow Per Share)                     — slate (rgba of #64748b)
+ *   - 3 指標すべて per-share ($ 単位統一)、単一 Y 軸
+ *   - YoY% は tooltip テキスト + X 軸直下 badge (var(--color-gain) / var(--color-loss))
+ *   - bar 色は brand tone 固定 (投資業界色ルール: 上昇/下落は YoY badge のみ、bar 色に出さない)
+ *   - DPS (配当/株) は periods に dps があれば 4 本目追加 (default 3 本固定)
+ *   - Sprint 2 で追加した (CFPS - EPS) 補助線は grouped bars 構成で削除
+ *     (cluster 内で CFPS bar vs EPS bar の高さ比較で自然に伝わる)
+ *
+ * Chart Overlay Safety 4 層防御 (feedback_chart_overlay_safety.md 準拠):
+ *   1. ErrorBoundary (class component wrapper) — 削除禁止
+ *   2. conditional render (data guard)
+ *   3. Number.isFinite check (全数値)
+ *   4. isAnimationActive=false (全 Bar / ReferenceLine)
  *
  * Props:
- *   periods: Array<{ period, revenue, eps, cfps?, shares_diluted? }>
+ *   periods: Array<{ period, revenue, eps, cfps?, shares_diluted?, dps? }>
  *   currency: string (default 'USD')
  */
 
 // ── Chart Overlay Safety: ErrorBoundary ──────────────────────────────────────
+// 削除禁止 (Chart Overlay Safety 4 層防御 1 層目)
 class EarningsHistoryChartErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -67,12 +73,17 @@ class EarningsHistoryChartErrorBoundary extends React.Component {
   }
 }
 
-// ── Scale helpers ────────────────────────────────────────────────────────────
-const REVENUE_SCALE = {
-  JPY: [1e12, '兆円'],
-  KRW: [1e12, '兆KRW'],
-  CNY: [1e9, 'B CNY'],
-  HKD: [1e9, 'B HKD'],
+// ── grouped bars の brand tone palette ───────────────────────────────────────
+// 投資業界色ルール: bar 色は brand tone (上昇/下落は YoY badge のみで表現)
+// SPS: var(--color-accent) = cyan — brand emphasis
+// EPS: teal-600 (#0d9488) — elevation_scale.md ALLOWED-HEX 追加済み
+// CFPS: slate-500 rgba  — ALLOWED-HEX (#64748b ベース)
+// DPS: var(--color-warning) = amber — 配当 emphasis
+const BAR_COLORS = {
+  sps:  'var(--color-accent)',          // cyan (brand)
+  eps:  '#0d9488',                      // teal-600 (elevation_scale.md ALLOWED-HEX)
+  cfps: 'rgba(100, 116, 139, 0.80)',   // slate-500 alpha
+  dps:  'var(--color-warning)',         // amber (配当)
 };
 
 // ── Info modal ───────────────────────────────────────────────────────────────
@@ -84,18 +95,27 @@ function EarningsHistoryInfoModal({ onClose }) {
           概要
         </p>
         <p className="text-sm leading-relaxed text-slate-700">
-          直近 8 四半期の「売上高 / EPS / CFPS」を 3 段の縦バーグラフで表示します。
-          各段は独立したスケールを持ちます。
+          年次 5 年分の「SPS / EPS / CFPS」を 1 段の grouped bars で表示します。
+          1 cluster = 1 年で、3 指標すべてが $ 単位で比較できます。
         </p>
       </div>
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-          3 指標をセットで見る理由
+          3 指標 (per-share) の見方
         </p>
         <ul className="space-y-1 text-sm text-slate-700">
-          <li>・売上高が増加 → 本業の需要が拡大している証拠（成長の質）</li>
-          <li>・EPS が増加 → 利益が成長している（ただし会計操作の可能性あり）</li>
-          <li>・CFPS が増加 → 実際の現金創出力が伸びている（ごまかしにくい）</li>
+          <li>
+            <span style={{ color: 'var(--color-accent)', fontWeight: 600 }}>■ SPS</span>
+            {' '}(Sales Per Share) = 売上高 ÷ 希薄化後株式数。成長の規模を株主視点で把握。
+          </li>
+          <li>
+            <span style={{ color: '#0d9488', fontWeight: 600 }}>■ EPS</span>
+            {' '}(Earnings Per Share) = 利益 ÷ 希薄化後株式数。収益性の中核指標。
+          </li>
+          <li>
+            <span style={{ color: 'rgba(100, 116, 139, 0.9)', fontWeight: 600 }}>■ CFPS</span>
+            {' '}(Cash Flow Per Share) = 営業 CF ÷ 希薄化後株式数。会計操作を除外した実態。
+          </li>
         </ul>
       </div>
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -103,8 +123,9 @@ function EarningsHistoryInfoModal({ onClose }) {
           チェックポイント
         </p>
         <p className="text-sm leading-relaxed text-slate-700">
-          3 段すべてが右肩上がりであれば理想的です。EPS だけ上昇して CFPS が
-          横ばい・下降している場合は、会計操作による見せかけの利益成長の可能性があります。
+          同年の cluster で CFPS ≥ EPS であれば独自プロトコル §5 PASS です。
+          EPS だけ突出して CFPS が低い年は会計操作の可能性があります。
+          cluster が右肩上がり (年次増加) であれば成長継続のサインです。
         </p>
       </div>
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -113,17 +134,23 @@ function EarningsHistoryInfoModal({ onClose }) {
         </p>
         <ul className="space-y-1 text-sm text-slate-700">
           <li>
-            <span style={{ color: 'var(--color-gain)', fontWeight: 600 }}>緑</span> = プラス / 増加傾向
+            <span style={{ color: 'var(--color-accent)', fontWeight: 600 }}>■ シアン</span>
+            {' '}= SPS (売上/株)
           </li>
           <li>
-            <span style={{ color: 'var(--color-loss)', fontWeight: 600 }}>赤</span> = マイナス / 減少傾向
+            <span style={{ color: '#0d9488', fontWeight: 600 }}>■ ティール</span>
+            {' '}= EPS (利益/株)
+          </li>
+          <li>
+            <span style={{ color: 'rgba(100, 116, 139, 0.9)', fontWeight: 600 }}>■ スレート</span>
+            {' '}= CFPS (営業 CF/株)
           </li>
           <li className="pt-1 border-t border-slate-200 mt-1">
-            <span style={{ color: 'var(--color-gain)', fontWeight: 600 }}>緑補助線</span> = CFPS &gt; EPS — 独自プロトコル §5
-            <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> PASS</span>
-            ／
-            <span style={{ color: 'var(--color-loss)', fontWeight: 600 }}>赤補助線</span> = CFPS ≤ EPS —
-            <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> FAIL</span>
+            X 軸直下の数字 = EPS 前年比 (
+            <span style={{ color: 'var(--color-gain)', fontWeight: 600 }}>緑</span>
+            {' '}増加 ／{' '}
+            <span style={{ color: 'var(--color-loss)', fontWeight: 600 }}>赤</span>
+            {' '}減少)
           </li>
         </ul>
       </div>
@@ -131,155 +158,108 @@ function EarningsHistoryInfoModal({ onClose }) {
   );
 }
 
-// ── Custom tooltip ───────────────────────────────────────────────────────────
-function CustomTooltip({ active, payload, label, seriesLabel, unit, formatter }) {
+// ── Custom grouped tooltip ────────────────────────────────────────────────────
+function GroupedTooltip({ active, payload, label, yoyMap }) {
   if (!active || !payload || !payload.length) return null;
-  const val = payload[0]?.value;
-  const formatted = typeof formatter === 'function' ? formatter(val) : val;
+
+  const metaMap = {
+    sps:  { label: 'SPS',  color: BAR_COLORS.sps  },
+    eps:  { label: 'EPS',  color: BAR_COLORS.eps  },
+    cfps: { label: 'CFPS', color: BAR_COLORS.cfps },
+    dps:  { label: 'DPS',  color: BAR_COLORS.dps  },
+  };
+
   return (
     <div
       style={{
         background: 'var(--bg-card)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-sm)',
-        padding: '6px 10px',
+        padding: '8px 12px',
         fontSize: 11,
         color: 'var(--text-primary)',
         boxShadow: 'var(--shadow-2)',
         pointerEvents: 'none',
+        minWidth: 140,
       }}
     >
-      <div style={{ fontWeight: 600, marginBottom: 2 }}>{label}</div>
-      <div style={{ color: 'var(--text-secondary)' }}>
-        {seriesLabel}: {formatted} {unit}
+      <div style={{ fontWeight: 700, marginBottom: 6, color: 'var(--text-secondary)' }}>
+        {label}
       </div>
+      {payload.map((entry) => {
+        const key = entry.dataKey;
+        const meta = metaMap[key] || { label: key, color: entry.fill };
+        // Chart Overlay Safety: Number.isFinite guard
+        const rawVal = entry.value;
+        const val = Number.isFinite(Number(rawVal)) ? Number(rawVal).toFixed(2) : '—';
+        const yoy = yoyMap?.[label]?.[key];
+        const yoyColor = Number(yoy) > 0
+          ? 'var(--color-gain)'
+          : Number(yoy) < 0
+          ? 'var(--color-loss)'
+          : 'var(--text-muted)';
+        const yoySign = Number(yoy) > 0 ? '+' : '';
+        return (
+          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+            <span
+              style={{
+                display: 'inline-block',
+                width: 8,
+                height: 8,
+                borderRadius: 2,
+                background: meta.color,
+                flexShrink: 0,
+              }}
+            />
+            <span style={{ color: 'var(--text-secondary)', minWidth: 36 }}>{meta.label}</span>
+            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>${val}</span>
+            {yoy != null && Number.isFinite(Number(yoy)) && (
+              <span style={{ color: yoyColor, fontSize: 10, marginLeft: 2 }}>
+                {yoySign}{Number(yoy).toFixed(1)}%
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-// ── Single chart row (small multiple) ────────────────────────────────────────
-// v86 R2 Vision 改善提案 #4: メトリクス色相差
-// - 売上高 (revenue): --color-gain solid opacity 1.0  (基幹指標)
-// - EPS: --color-gain opacity 0.72             (収益性、 売上の派生指標)
-// - CFPS: --color-accent (cyan)                (キャッシュフロー、 brand emphasis)
-//   ※ 投資業界色ルール: cyan は「上昇」 意味で使わない → CFPS は中立メトリクスとして cyan 採用
-//      (緑/赤の方向性 semantics を保持しつつ、 視覚的差別化)
-function SmallMultipleBar({
-  data,
-  dataKey,
-  seriesLabel,
-  unit,
-  height = 100,
-  formatter,
-  showXAxis = false,
-  metricFill,
-  metricOpacity = 0.85,
-  // Sprint 2: (CFPS - EPS) 補助線。CFPS 段のみ渡す。
-  // 各要素: { y: number, color: 'var(--color-gain)' | 'var(--color-loss)', testId: string }
-  deltaLines = [],
-}) {
+// ── Custom legend ─────────────────────────────────────────────────────────────
+function GroupedLegend({ hasDps }) {
+  const items = [
+    { key: 'sps',  label: 'SPS',  color: BAR_COLORS.sps },
+    { key: 'eps',  label: 'EPS',  color: BAR_COLORS.eps },
+    { key: 'cfps', label: 'CFPS', color: BAR_COLORS.cfps },
+    ...(hasDps ? [{ key: 'dps', label: 'DPS', color: BAR_COLORS.dps }] : []),
+  ];
   return (
     <div
       style={{
-        // v86 R3 Vision 改善 #3: 段間 spacing 拡大 + hairline divider で「縦長詰め込み」感を解消
-        marginBottom: 'var(--space-6, 24px)',
-        paddingBottom: 'var(--space-3, 12px)',
-        borderBottom: '1px solid rgba(148, 163, 184, 0.10)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        flexWrap: 'wrap',
+        fontSize: 10,
+        color: 'var(--text-muted)',
+        marginBottom: 6,
       }}
     >
-      {/* Row label */}
-      <div
-        style={{
-          fontSize: 10,
-          fontWeight: 600,
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-          color: 'var(--text-muted)',
-          marginBottom: 4,
-          paddingLeft: 4,
-        }}
-      >
-        {seriesLabel}
-      </div>
-      <div style={{ height }}>
-        {/* Chart Overlay Safety: ResponsiveContainer + isAnimationActive=false */}
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={data}
-            margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
-            barCategoryGap="28%"
-          >
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="rgba(148, 163, 184, 0.12)"
-              vertical={false}
-            />
-            <XAxis
-              dataKey="period"
-              stroke="rgba(148, 163, 184, 0.5)"
-              tick={{ fontSize: 9, fill: 'var(--text-muted)', fontWeight: 500 }}
-              tickLine={false}
-              axisLine={{ stroke: 'rgba(148, 163, 184, 0.25)' }}
-              hide={!showXAxis}
-            />
-            <YAxis
-              stroke="transparent"
-              tick={{ fontSize: 9, fill: 'var(--text-muted)' }}
-              tickLine={false}
-              axisLine={false}
-              width={32}
-              tickFormatter={(v) =>
-                typeof formatter === 'function' ? formatter(v) : String(v)
-              }
-            />
-            <Tooltip
-              cursor={{ fill: 'rgba(255,255,255,0.04)' }}
-              content={
-                <CustomTooltip
-                  seriesLabel={seriesLabel}
-                  unit={unit}
-                  formatter={formatter}
-                />
-              }
-            />
-            <Bar
-              dataKey={dataKey}
-              isAnimationActive={false}
-              radius={[2, 2, 0, 0]}
-              maxBarSize={36}
-            >
-              {data.map((entry, index) => {
-                // Chart Overlay Safety: Number.isFinite check
-                const val = entry[dataKey];
-                const safeVal = Number.isFinite(Number(val)) ? Number(val) : 0;
-                // v86 R2: metricFill が指定されていれば使用 (正値時のみ)、 負値は --color-loss 固定
-                const positiveFill = metricFill ?? 'var(--color-gain)';
-                const fill = safeVal >= 0 ? positiveFill : 'var(--color-loss)';
-                return <Cell key={`cell-${index}`} fill={fill} opacity={metricOpacity} />;
-              })}
-            </Bar>
-            {/* Sprint 2: (CFPS - EPS) 補助線 — CFPS 段のみ。Chart Overlay Safety 4 層防御適用。
-                - Number.isFinite ガード済み y 値のみ render (conditional gate)
-                - isAnimationActive=false (PGE 落とし穴 4 対策)
-                - var(--color-gain) / var(--color-loss) のみ使用 (投資業界色ルール準拠)
-                - data-testid="cfps-eps-delta-Q{N}" (N は 1-based) で Evaluator L2 verify */}
-            {deltaLines.map((dl) =>
-              Number.isFinite(dl.y) ? (
-                <ReferenceLine
-                  key={dl.testId}
-                  y={dl.y}
-                  stroke={dl.color}
-                  strokeWidth={1.5}
-                  strokeOpacity={0.55}
-                  strokeDasharray="4 3"
-                  isAnimationActive={false}
-                  data-testid={dl.testId}
-                />
-              ) : null
-            )}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      {items.map((item) => (
+        <span key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span
+            style={{
+              display: 'inline-block',
+              width: 10,
+              height: 10,
+              borderRadius: 2,
+              background: item.color,
+              flexShrink: 0,
+            }}
+          />
+          <span>{item.label}</span>
+        </span>
+      ))}
     </div>
   );
 }
@@ -287,63 +267,91 @@ function SmallMultipleBar({
 // ── Main component ───────────────────────────────────────────────────────────
 function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
   const [showModal, setShowModal] = useState(false);
-  const [scale, unit] = REVENUE_SCALE[currency] ?? [1e9, 'B$'];
 
   // Chart Overlay Safety: conditional render + Number.isFinite
+  // Sprint A: 年次集計 (最大 5 年)。
+  // periods は { period (FY2023 形式 or 2023), revenue, eps, cfps, shares_diluted } の array (古→新)。
+  // 同一年 entry が複数ある場合は最後 (最新) のものを使用。
   const chartData = useMemo(() => {
     if (!Array.isArray(periods) || periods.length === 0) return null;
-    const recent = periods.slice(-8);
-    if (recent.length === 0) return null;
 
-    return recent.map((p) => {
-      const rev = Number(p.revenue);
+    // period から年を抽出 (FY2023 → 2023、2023 → 2023、2023-09-30 → 2023)
+    const byYear = new Map();
+    for (const p of periods) {
+      const rawPeriod = String(p.period || '');
+      const year = rawPeriod.replace(/^FY/, '').slice(0, 4);
+      if (!year || !/^\d{4}$/.test(year)) continue;
+      // 同年は最後 (最新) を優先
+      byYear.set(year, p);
+    }
+
+    // 古→新 sort → 最大 5 年
+    const sortedEntries = [...byYear.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-5);
+
+    if (sortedEntries.length === 0) return null;
+
+    return sortedEntries.map(([year, p]) => {
+      const revenue = Number(p.revenue);
       const eps = Number(p.eps);
-      const cfps = p.cfps != null ? Number(p.cfps) : null;
+      const cfpsRaw = p.cfps != null ? Number(p.cfps) : null;
+      const shares = Number(p.shares_diluted);
+      const dpsRaw = p.dps != null ? Number(p.dps) : null;
+
+      // SPS: revenue / shares_diluted (Chart Overlay Safety: Number.isFinite ガード)
+      let sps = undefined;
+      if (Number.isFinite(revenue) && Number.isFinite(shares) && shares > 0) {
+        sps = +(revenue / shares).toFixed(2);
+      }
 
       return {
-        period: String(p.period || '').replace(/^20/, "'"),
-        // Chart Overlay Safety: Number.isFinite guard
-        revenue: Number.isFinite(rev) ? +(rev / scale).toFixed(2) : 0,
-        eps: Number.isFinite(eps) ? +eps.toFixed(2) : 0,
-        cfps: cfps !== null && Number.isFinite(cfps) ? +cfps.toFixed(2) : null,
+        year: `'${year.slice(-2)}`,     // X 軸表示ラベル ('23 形式)
+        yearFull: year,                  // tooltip + testid 用
+        // Chart Overlay Safety: undefined は「データなし」で Bar 非表示
+        sps,
+        eps: Number.isFinite(eps) ? +eps.toFixed(2) : undefined,
+        cfps: cfpsRaw !== null && Number.isFinite(cfpsRaw) ? +cfpsRaw.toFixed(2) : undefined,
+        dps: dpsRaw !== null && Number.isFinite(dpsRaw) && dpsRaw > 0 ? +dpsRaw.toFixed(2) : undefined,
       };
     });
-  }, [periods, scale]);
+  }, [periods]);
 
-  // hasCfps: CFPS が 1 件でもあれば 3 段表示、なければ 2 段
+  // hasCfps: CFPS が 1 件でもあれば表示
   const hasCfps = useMemo(
-    () => chartData?.some((d) => d.cfps !== null),
+    () => Boolean(chartData?.some((d) => d.cfps !== undefined)),
     [chartData]
   );
 
-  // Sprint 2: (CFPS - EPS) 補助線データ生成。
-  // CFPS 段の各 Bar 上端に薄い green/red horizontal ReferenceLine を描画するための配列。
-  // - delta = cfps - eps の符号で色分け (投資業界色ルール: 緑 = gain / 赤 = loss)
-  // - delta === 0 または cfps が null なら補助線非 render (conditional gate)
-  // - y 値は cfps の実際の値を使用 (= Bar 上端位置)
-  // - Number.isFinite ガードは SmallMultipleBar 内で行う
-  const cfpsEpsDeltaLines = useMemo(() => {
-    if (!chartData) return [];
-    return chartData
-      .map((d, idx) => {
-        // cfps が null (データなし) なら skip
-        if (d.cfps === null) return null;
-        const cfps = Number(d.cfps);
-        const eps = Number(d.eps);
-        if (!Number.isFinite(cfps) || !Number.isFinite(eps)) return null;
-        const delta = cfps - eps;
-        // delta === 0 なら補助線非 render (conditional gate)
-        if (delta === 0) return null;
-        return {
-          // y 値は cfps の Bar 上端 (= cfps 値) に設定
-          y: cfps,
-          // 投資業界色ルール: CFPS > EPS = じっちゃま 5 条件 §5 PASS = 緑 / FAIL = 赤
-          color: delta > 0 ? 'var(--color-gain)' : 'var(--color-loss)',
-          // data-testid: "cfps-eps-delta-Q{N}" N は 1-based
-          testId: `cfps-eps-delta-Q${idx + 1}`,
-        };
-      })
-      .filter(Boolean);
+  // hasDps: DPS が 1 件でもあれば 4 本目表示 (配当銘柄のみ)
+  const hasDps = useMemo(
+    () => Boolean(chartData?.some((d) => d.dps !== undefined)),
+    [chartData]
+  );
+
+  // YoY マップ: { [yearLabel]: { sps: %, eps: %, cfps: %, dps: % } }
+  const yoyMap = useMemo(() => {
+    if (!chartData || chartData.length < 2) return {};
+    const map = {};
+    for (let i = 1; i < chartData.length; i++) {
+      const curr = chartData[i];
+      const prev = chartData[i - 1];
+      const computeYoy = (c, p) => {
+        if (c == null || p == null) return null;
+        const cn = Number(c);
+        const pn = Number(p);
+        if (!Number.isFinite(cn) || !Number.isFinite(pn)) return null;
+        if (Math.abs(pn) < 1e-9) return null;
+        return ((cn - pn) / Math.abs(pn)) * 100;
+      };
+      map[curr.year] = {
+        sps:  computeYoy(curr.sps,  prev.sps),
+        eps:  computeYoy(curr.eps,  prev.eps),
+        cfps: computeYoy(curr.cfps, prev.cfps),
+        dps:  computeYoy(curr.dps,  prev.dps),
+      };
+    }
+    return map;
   }, [chartData]);
 
   // Chart Overlay Safety: conditional render guard
@@ -365,17 +373,10 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
     );
   }
 
-  const revenueFormatter = (v) =>
-    Number.isFinite(Number(v)) ? Number(v).toFixed(1) : '—';
-  const epsFormatter = (v) =>
-    Number.isFinite(Number(v)) ? `$${Number(v).toFixed(2)}` : '—';
-  const cfpsFormatter = (v) =>
-    Number.isFinite(Number(v)) ? `$${Number(v).toFixed(2)}` : '—';
-
   return (
     <section
       className="panel-card"
-      data-testid="earnings-history-chart"
+      data-testid="earnings-history-grouped-bars"
       style={{
         background: 'var(--bg-card)',
         border: '1px solid var(--border)',
@@ -389,7 +390,7 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          marginBottom: 'var(--space-4, 16px)',
+          marginBottom: 'var(--space-3, 12px)',
           flexWrap: 'wrap',
           gap: 8,
         }}
@@ -405,7 +406,7 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
               color: 'var(--text-secondary)',
             }}
           >
-            過去業績推移
+            過去業績推移 (per-share)
           </h3>
           <button
             type="button"
@@ -436,51 +437,189 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
             color: 'var(--text-muted)',
           }}
         >
-          {chartData.length}Q · {currency}
+          {chartData.length}Y · {currency}
         </span>
       </div>
 
-      {/* ── Small multiples: 売上高 / EPS / CFPS の 3 段 ──
-          v86 R2 Vision 改善 #4: メトリクスごとに subtle な色相差 (上昇 semantics 維持)
-            - 売上 (revenue): --color-gain solid opacity 1.00  (基幹)
-            - EPS: --color-gain opacity 0.72                 (収益性、派生)
-            - CFPS: --color-accent (cyan) opacity 0.92       (キャッシュ、 brand emphasis) */}
-      <SmallMultipleBar
-        data={chartData}
-        dataKey="revenue"
-        seriesLabel={`売上高 (${unit})`}
-        unit={unit}
-        height={100}
-        formatter={revenueFormatter}
-        showXAxis={false}
-        metricFill="var(--color-gain)"
-        metricOpacity={1.0}
-      />
-      <SmallMultipleBar
-        data={chartData}
-        dataKey="eps"
-        seriesLabel="EPS ($)"
-        unit="$"
-        height={100}
-        formatter={epsFormatter}
-        showXAxis={!hasCfps}
-        metricFill="var(--color-gain)"
-        metricOpacity={0.72}
-      />
-      {hasCfps && (
-        <SmallMultipleBar
-          data={chartData.map((d) => ({ ...d, cfps: d.cfps ?? 0 }))}
-          dataKey="cfps"
-          seriesLabel="CFPS ($)"
-          unit="$"
-          height={100}
-          formatter={cfpsFormatter}
-          showXAxis={true}
-          metricFill="var(--color-accent)"
-          metricOpacity={0.92}
-          deltaLines={cfpsEpsDeltaLines}
-        />
-      )}
+      {/* ── 凡例 ── */}
+      <GroupedLegend hasDps={hasDps} />
+
+      {/* ── Grouped bars 1 段 ──
+          Sprint A: small multiples 縦 3 段 → grouped bars 1 段。
+          Bar×3 (SPS/EPS/CFPS) + オプション Bar×1 (DPS)。
+          PGE 落とし穴 4 対策: isAnimationActive=false 全 Bar / ReferenceLine。
+          Chart Overlay Safety: ResponsiveContainer + isAnimationActive=false */}
+      <div style={{ height: 200 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart
+            data={chartData}
+            margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+            barCategoryGap="22%"
+            barGap={2}
+          >
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke="rgba(148, 163, 184, 0.12)"
+              vertical={false}
+            />
+            <XAxis
+              dataKey="year"
+              stroke="rgba(148, 163, 184, 0.5)"
+              tick={{ fontSize: 10, fill: 'var(--text-muted)', fontWeight: 600 }}
+              tickLine={false}
+              axisLine={{ stroke: 'rgba(148, 163, 184, 0.25)' }}
+            />
+            <YAxis
+              stroke="transparent"
+              tick={{ fontSize: 9, fill: 'var(--text-muted)' }}
+              tickLine={false}
+              axisLine={false}
+              width={36}
+              tickFormatter={(v) => {
+                // Chart Overlay Safety: Number.isFinite guard
+                const n = Number(v);
+                if (!Number.isFinite(n)) return '—';
+                return `$${n.toFixed(0)}`;
+              }}
+            />
+            <Tooltip
+              cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+              content={<GroupedTooltip yoyMap={yoyMap} />}
+            />
+
+            {/* SPS — cyan (brand emphasis) */}
+            <Bar
+              dataKey="sps"
+              name="SPS"
+              fill={BAR_COLORS.sps}
+              isAnimationActive={false}
+              radius={[2, 2, 0, 0]}
+              maxBarSize={22}
+              data-testid="earnings-history-bar-sps"
+            >
+              {chartData.map((entry, index) => (
+                // Chart Overlay Safety: Number.isFinite check
+                <Cell
+                  key={`sps-cell-${index}`}
+                  fill={BAR_COLORS.sps}
+                  fillOpacity={Number.isFinite(Number(entry.sps)) ? 0.90 : 0}
+                  data-testid="earnings-grouped-bar-sps"
+                />
+              ))}
+            </Bar>
+
+            {/* EPS — teal (#0d9488, elevation_scale.md ALLOWED-HEX) */}
+            <Bar
+              dataKey="eps"
+              name="EPS"
+              fill={BAR_COLORS.eps}
+              isAnimationActive={false}
+              radius={[2, 2, 0, 0]}
+              maxBarSize={22}
+              data-testid="earnings-history-bar-eps"
+            >
+              {chartData.map((entry, index) => (
+                <Cell
+                  key={`eps-cell-${index}`}
+                  fill={BAR_COLORS.eps}
+                  fillOpacity={Number.isFinite(Number(entry.eps)) ? 0.90 : 0}
+                  data-testid="earnings-grouped-bar-eps"
+                />
+              ))}
+            </Bar>
+
+            {/* CFPS — slate (条件付き表示) */}
+            {hasCfps && (
+              <Bar
+                dataKey="cfps"
+                name="CFPS"
+                fill={BAR_COLORS.cfps}
+                isAnimationActive={false}
+                radius={[2, 2, 0, 0]}
+                maxBarSize={22}
+                data-testid="earnings-history-bar-cfps"
+              >
+                {chartData.map((entry, index) => (
+                  <Cell
+                    key={`cfps-cell-${index}`}
+                    fill={BAR_COLORS.cfps}
+                    fillOpacity={Number.isFinite(Number(entry.cfps)) ? 0.85 : 0}
+                    data-testid="earnings-grouped-bar-cfps"
+                  />
+                ))}
+              </Bar>
+            )}
+
+            {/* DPS — amber (配当銘柄: dps > 0 の場合のみ) */}
+            {hasDps && (
+              <Bar
+                dataKey="dps"
+                name="DPS"
+                fill={BAR_COLORS.dps}
+                isAnimationActive={false}
+                radius={[2, 2, 0, 0]}
+                maxBarSize={22}
+                data-testid="earnings-history-bar-dps"
+              >
+                {chartData.map((entry, index) => (
+                  <Cell
+                    key={`dps-cell-${index}`}
+                    fill={BAR_COLORS.dps}
+                    fillOpacity={Number.isFinite(Number(entry.dps)) ? 0.80 : 0}
+                    data-testid="earnings-grouped-bar-dps"
+                  />
+                ))}
+              </Bar>
+            )}
+
+            {/* 0 ライン強調 (負値 EPS / CFPS の視認性向上) */}
+            <ReferenceLine
+              y={0}
+              stroke="rgba(148, 163, 184, 0.30)"
+              strokeWidth={1}
+              isAnimationActive={false}
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* YoY badge 行 — EPS 前年比 (X 軸直下) */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 0,
+          marginTop: 4,
+          paddingLeft: 36,
+        }}
+      >
+        {chartData.map((d) => {
+          const yoy = yoyMap[d.year]?.eps;
+          const hasYoy = yoy != null && Number.isFinite(Number(yoy));
+          const yoyNum = hasYoy ? Number(yoy) : 0;
+          const color = yoyNum > 0
+            ? 'var(--color-gain)'
+            : yoyNum < 0
+            ? 'var(--color-loss)'
+            : 'var(--text-muted)';
+          const sign = yoyNum > 0 ? '+' : '';
+          return (
+            <div
+              key={d.year}
+              data-testid={`earnings-history-yoy-badge-${d.yearFull}`}
+              style={{
+                flex: 1,
+                textAlign: 'center',
+                fontSize: 9,
+                fontWeight: 600,
+                color: hasYoy ? color : 'transparent',
+                userSelect: 'none',
+              }}
+            >
+              {hasYoy ? `${sign}${Math.round(yoyNum)}%` : '—'}
+            </div>
+          );
+        })}
+      </div>
 
       <p
         style={{
@@ -490,7 +629,7 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
           lineHeight: 1.5,
         }}
       >
-        ※ CFPS = 1 株あたり営業 CF（営業 CF ÷ 希薄化後株式数）。資本支出を差し引いた FCF とは異なります。
+        ※ SPS = 1 株あたり売上。CFPS = 1 株あたり営業 CF（FCF とは異なります）。YoY% = EPS 前年比。
       </p>
 
       {/* Info modal */}
