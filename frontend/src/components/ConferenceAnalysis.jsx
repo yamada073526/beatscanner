@@ -3,14 +3,20 @@ import ReactMarkdown from 'react-markdown';
 import { streamConferenceText } from '../api.js';
 import LockedSection, { ConferenceGhost } from './LockedSection.jsx';
 
+// Phase 2.5 hotfix #5: font-bold (fw700) → font-semibold (fw600) で typography 階層を整理。
+// Stat fw700 / Section fw600 / Body fw500 の 3 階層に合わせ、h2/h3/p[isSection] を fw600 に統一。
+// bg-slate-100 → CSS token var(--bg-subtle) でダークモード対応。
 const mdComponents = {
   h2: ({ children }) => (
-    <h2 className="text-sm font-bold text-slate-700 bg-slate-100 rounded px-3 py-1.5 mt-8 mb-2">
+    <h2
+      className="text-sm font-semibold rounded px-3 py-1.5 mt-8 mb-2"
+      style={{ color: 'var(--text-secondary)', background: 'var(--bg-subtle)' }}
+    >
       {children}
     </h2>
   ),
   h3: ({ children }) => (
-    <h3 className="text-sm font-bold text-slate-800 mt-4 mb-1">{children}</h3>
+    <h3 className="text-sm font-semibold mt-4 mb-1" style={{ color: 'var(--text-primary)' }}>{children}</h3>
   ),
   p: ({ children }) => {
     const text = typeof children === 'string' ? children : Array.isArray(children) ? children.join('') : '';
@@ -18,12 +24,15 @@ const mdComponents = {
     const isSection = /^[①②③④⑤]/.test(text) || /^【.+】/.test(text);
     if (isSection) {
       return (
-        <p className="text-sm font-bold text-slate-700 bg-slate-100 rounded px-3 py-1.5 mt-6 mb-2">
+        <p
+          className="text-sm font-semibold rounded px-3 py-1.5 mt-6 mb-2"
+          style={{ color: 'var(--text-secondary)', background: 'var(--bg-subtle)' }}
+        >
           {children}
         </p>
       );
     }
-    return <p className="text-sm text-slate-700 mb-3 leading-relaxed">{children}</p>;
+    return <p className="text-sm mb-3 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{children}</p>;
   },
   strong: ({ children }) => (
     <strong className="font-semibold text-slate-900">{children}</strong>
