@@ -137,8 +137,8 @@ export default function Hero({ ticker, companyName, verdict = 'unknown', period,
               style={{
                 display: 'flex',
                 flexWrap: 'wrap',
-                gap: 6,
-                marginTop: 10,
+                gap: 'var(--space-2, 8px)',
+                marginTop: 'var(--space-2, 8px)',
                 alignItems: 'center',
               }}
             >
@@ -159,7 +159,7 @@ export default function Hero({ ticker, companyName, verdict = 'unknown', period,
           </div>{/* end: テキスト情報 div */}
         </div>{/* end: ロゴ + テキスト flex div */}
         {/* Sprint 3: EarningsRing が wrapper(ring + 下ラベル) を返すため flex-start に変更 */}
-        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3, 12px)' }}>
           {Number.isFinite(nextEarningsDays) && (
             <EarningsRing
               daysToEarnings={nextEarningsDays}

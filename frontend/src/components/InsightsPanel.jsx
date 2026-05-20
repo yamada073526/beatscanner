@@ -120,8 +120,8 @@ function ProgressSteps({ loading }) {
 
   return (
     <div style={{
-      marginTop: 16,
-      padding: 12,
+      marginTop: 'var(--space-4, 16px)',
+      padding: 'var(--space-3, 12px)',
       background: "rgba(56, 189, 248,0.06)",
       border: "1px solid rgba(56, 189, 248,0.20)",
       borderRadius: 8,
@@ -129,7 +129,7 @@ function ProgressSteps({ loading }) {
       color: "var(--text-muted)",
     }}>
       {steps.map((s, i) => (
-        <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+        <div key={i} style={{ display: "flex", gap: 'var(--space-2, 8px)', alignItems: "center", marginBottom: 'var(--space-1, 4px)' }}>
           <span style={{ width: 14, color: s.done ? "rgb(56, 189, 248)" : "var(--text-muted)" }}>
             {s.done ? "✓" : "⟳"}
           </span>
@@ -139,7 +139,7 @@ function ProgressSteps({ loading }) {
         </div>
       ))}
       {elapsed >= 15 && (
-        <div style={{ marginTop: 8, color: "var(--text-muted)", fontSize: 11, lineHeight: 1.6 }}>
+        <div style={{ marginTop: 'var(--space-2, 8px)', color: "var(--text-muted)", fontSize: 11, lineHeight: 1.6 }}>
           ℹ️ 初めて分析する銘柄のため、通常より時間がかかっています（最大60秒）
           <br />📌 次回からは即座に表示されます
         </div>
@@ -163,11 +163,11 @@ function InsightsSkeleton() {
     <div>
       {/* サマリー行 3 本 */}
       <div style={{
-        padding: "14px 16px",
+        padding: 'var(--space-4, 16px)',
         borderRadius: 10,
         background: "rgba(56, 189, 248,0.04)",
         border: "1px solid rgba(56, 189, 248,0.15)",
-        marginBottom: 16,
+        marginBottom: 'var(--space-4, 16px)',
       }}>
         {[100, 92, 70].map((w, i) => (
           <div key={i} style={{ ...skel, width: `${w}%`, height: 12, marginBottom: i < 2 ? 10 : 0 }} />
@@ -177,18 +177,18 @@ function InsightsSkeleton() {
       <div className="md:grid-cols-2" style={{
         display: "grid",
         gridTemplateColumns: "1fr",
-        gap: 12,
+        gap: 'var(--space-3, 12px)',
       }}>
         {[0, 1].map((i) => (
           <div key={i} style={{
-            padding: "12px 14px",
+            padding: 'var(--space-3, 12px) var(--space-4, 16px)',
             borderRadius: 10,
             background: i === 0 ? "rgba(56, 189, 248,0.04)" : "rgba(248,113,113,0.04)",
             border: `1px solid ${i === 0 ? "rgba(56, 189, 248,0.15)" : "rgba(248,113,113,0.15)"}`,
           }}>
-            <div style={{ ...skel, width: 70, height: 12, marginBottom: 10 }} />
+            <div style={{ ...skel, width: 70, height: 12, marginBottom: 'var(--space-3, 12px)' }} />
             {[80, 65, 75].map((w, j) => (
-              <div key={j} style={{ ...subSkel, width: `${w}%`, height: 10, marginBottom: 6 }} />
+              <div key={j} style={{ ...subSkel, width: `${w}%`, height: 10, marginBottom: 'var(--space-2, 8px)' }} />
             ))}
           </div>
         ))}
@@ -225,13 +225,13 @@ function FullView({ data }) {
       {/* 統合見解（400字） — v40+: panel-card で LP と同じ発光・ホバー演出 */}
       {data.summary && (
         <div className="panel-card" style={{
-          padding: "14px 16px",
+          padding: 'var(--space-4, 16px)',
           borderRadius: 10,
           background: "rgba(56, 189, 248,0.07)",
           border: "1px solid rgba(56, 189, 248,0.25)",
           fontSize: 13,
           lineHeight: 1.75,
-          marginBottom: 16,
+          marginBottom: 'var(--space-4, 16px)',
           color: "var(--text-primary)",
         }}>
           {data.summary}
@@ -245,29 +245,29 @@ function FullView({ data }) {
           style={{
             display: "grid",
             gridTemplateColumns: "1fr",
-            gap: 12,
-            marginBottom: 16,
+            gap: 'var(--space-3, 12px)',
+            marginBottom: 'var(--space-4, 16px)',
           }}
         >
           {data.bull_points?.length > 0 && (
             <div className="panel-card" style={{
-              padding: "12px 14px",
+              padding: 'var(--space-3, 12px) var(--space-4, 16px)',
               borderRadius: 10,
               background: "rgba(56, 189, 248,0.07)",
               border: "1px solid rgba(56, 189, 248,0.25)",
             }}>
               <div style={{
                 fontSize: 11, fontWeight: 500, color: "rgb(56, 189, 248)",
-                letterSpacing: "0.06em", marginBottom: 8,
+                letterSpacing: "0.06em", marginBottom: 'var(--space-2, 8px)',
               }}>
                 🟢 強気材料
               </div>
               <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none" }}>
                 {data.bull_points.map((p, i) => (
                   <li key={i} style={{
-                    display: "flex", gap: 6, fontSize: 12.5,
+                    display: "flex", gap: 'var(--space-2, 8px)', fontSize: 12.5,
                     lineHeight: 1.65, color: "var(--text-primary)",
-                    marginBottom: 4,
+                    marginBottom: 'var(--space-1, 4px)',
                   }}>
                     <span style={{ color: "rgb(56, 189, 248)", flexShrink: 0 }}>・</span>
                     <span>{p}</span>
@@ -278,23 +278,23 @@ function FullView({ data }) {
           )}
           {data.bear_points?.length > 0 && (
             <div className="panel-card" style={{
-              padding: "12px 14px",
+              padding: 'var(--space-3, 12px) var(--space-4, 16px)',
               borderRadius: 10,
               background: "rgba(248,113,113,0.07)",
               border: "1px solid rgba(248,113,113,0.25)",
             }}>
               <div style={{
                 fontSize: 11, fontWeight: 500, color: "#f87171",
-                letterSpacing: "0.06em", marginBottom: 8,
+                letterSpacing: "0.06em", marginBottom: 'var(--space-2, 8px)',
               }}>
                 🔴 弱気材料
               </div>
               <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none" }}>
                 {data.bear_points.map((p, i) => (
                   <li key={i} style={{
-                    display: "flex", gap: 6, fontSize: 12.5,
+                    display: "flex", gap: 'var(--space-2, 8px)', fontSize: 12.5,
                     lineHeight: 1.65, color: "var(--text-primary)",
-                    marginBottom: 4,
+                    marginBottom: 'var(--space-1, 4px)',
                   }}>
                     <span style={{ color: "#f87171", flexShrink: 0 }}>・</span>
                     <span>{p}</span>
@@ -311,11 +311,11 @@ function FullView({ data }) {
         <div>
           <div style={{
             fontSize: 11, fontWeight: 500, color: "var(--text-muted)",
-            letterSpacing: "0.06em", marginBottom: 6,
+            letterSpacing: "0.06em", marginBottom: 'var(--space-2, 8px)',
           }}>
             📌 注目指標
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 'var(--space-2, 8px)' }}>
             {data.key_metrics.map((m, i) => (
               <span key={i} style={{
                 display: "inline-block", fontSize: 11.5,
@@ -348,10 +348,10 @@ function NonLoggedTeaserView({ data, ticker, onSignIn }) {
     <div>
       {/* データあり: チラ見せ。データなし: 価値訴求のみ */}
       {hasData && (
-        <div style={{ position: "relative", marginBottom: 16 }}>
+        <div style={{ position: "relative", marginBottom: 'var(--space-4, 16px)' }}>
           {/* 平文プレビュー（最初の80文字） */}
           <div style={{
-            padding: "14px 16px 8px 16px",
+            padding: 'var(--space-4, 16px) var(--space-4, 16px) var(--space-2, 8px)',
             borderRadius: "10px 10px 0 0",
             background: "rgba(56, 189, 248,0.07)",
             border: "1px solid rgba(56, 189, 248,0.25)",
@@ -365,7 +365,7 @@ function NonLoggedTeaserView({ data, ticker, onSignIn }) {
           {/* ぼかし続き（blur(4px) + マスクで自然にフェードアウト） */}
           <div style={{
             position: "relative",
-            padding: "0 16px 14px 16px",
+            padding: '0 var(--space-4, 16px) var(--space-4, 16px)',
             borderRadius: "0 0 10px 10px",
             background: "rgba(56, 189, 248,0.07)",
             borderLeft: "1px solid rgba(56, 189, 248,0.25)",
@@ -389,7 +389,7 @@ function NonLoggedTeaserView({ data, ticker, onSignIn }) {
 
       {/* 価値訴求 + Google ログイン CTA */}
       <div style={{
-        padding: 20,
+        padding: 'var(--space-5, 20px)',
         borderRadius: 12,
         border: "1px solid rgba(56, 189, 248,0.35)",
         background: "rgba(56, 189, 248,0.07)",
@@ -397,13 +397,13 @@ function NonLoggedTeaserView({ data, ticker, onSignIn }) {
       }}>
         <div style={{
           fontSize: 14, fontWeight: 600, color: "rgb(56, 189, 248)",
-          marginBottom: 12,
+          marginBottom: 'var(--space-3, 12px)',
         }}>
           ✅ ログインすると見られる内容
         </div>
         <div style={{
           fontSize: 12, color: "var(--text-muted)",
-          marginBottom: 16, lineHeight: 1.9, textAlign: "left",
+          marginBottom: 'var(--space-4, 16px)', lineHeight: 1.9, textAlign: "left",
           display: "inline-block",
         }}>
           ・全銘柄の市場分析を毎朝更新<br />
@@ -415,7 +415,7 @@ function NonLoggedTeaserView({ data, ticker, onSignIn }) {
             type="button"
             onClick={onSignIn}
             style={{
-              padding: "12px 28px",
+              padding: 'var(--space-3, 12px) var(--space-8, 32px)',
               borderRadius: 10,
               border: "none",
               background: "rgb(56, 189, 248)",
@@ -425,7 +425,7 @@ function NonLoggedTeaserView({ data, ticker, onSignIn }) {
               cursor: "pointer",
               display: "inline-flex",
               alignItems: "center",
-              gap: 8,
+              gap: 'var(--space-2, 8px)',
               boxShadow: "0 0 12px rgba(56, 189, 248,0.30)",
               transition: "all 0.2s",
             }}
@@ -526,17 +526,17 @@ export default function InsightsPanel({ ticker, user, isPro, onUpgradeClick, onS
   // 未ログイン: チラ見せ + センチメントバッジ + Google ログイン CTA
   if (!user) {
     return (
-      <div style={{ margin: "24px 0" }}>
+      <div style={{ margin: 'var(--space-6, 24px) 0' }}>
         {/* ヘッダー: タイトル + ? + センチメントバッジ（結論だけ公開） */}
         <div style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          gap: 8,
-          marginBottom: 16,
+          gap: 'var(--space-2, 8px)',
+          marginBottom: 'var(--space-4, 16px)',
           flexWrap: "wrap",
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 'var(--space-2, 8px)' }}>
             <span className="section-heading" style={{ marginBottom: 0, display: "flex", alignItems: "center", gap: 8 }}>
               <span className="section-header-icon" aria-hidden="true">
                 <BarChart3 size={18} strokeWidth={1.5} />
@@ -580,11 +580,11 @@ export default function InsightsPanel({ ticker, user, isPro, onUpgradeClick, onS
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        gap: 8,
-        marginBottom: 16,
+        gap: 'var(--space-2, 8px)',
+        marginBottom: 'var(--space-4, 16px)',
         flexWrap: "wrap",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 'var(--space-2, 8px)' }}>
           <span className="section-heading" style={{ marginBottom: 0, display: "flex", alignItems: "center", gap: 8 }}>
             <span className="section-header-icon" aria-hidden="true">
               <BarChart3 size={18} strokeWidth={1.5} />
@@ -615,7 +615,7 @@ export default function InsightsPanel({ ticker, user, isPro, onUpgradeClick, onS
       {data && !data.found && !loading && (
         isPro ? (
           <div style={{
-            padding: "20px 16px",
+            padding: 'var(--space-5, 20px) var(--space-4, 16px)',
             borderRadius: 10,
             background: "var(--bg-subtle)",
             border: "1px solid var(--border)",
@@ -624,13 +624,13 @@ export default function InsightsPanel({ ticker, user, isPro, onUpgradeClick, onS
             textAlign: "center",
             lineHeight: 1.75,
           }}>
-            <div style={{ display: "flex", justifyContent: "center", marginBottom: 8, color: "var(--text-muted)" }}>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 'var(--space-2, 8px)', color: "var(--text-muted)" }}>
               <Search size={24} strokeWidth={1.5} />
             </div>
-            <div style={{ fontWeight: 600, color: "var(--text-primary)", marginBottom: 8 }}>
+            <div style={{ fontWeight: 600, color: "var(--text-primary)", marginBottom: 'var(--space-2, 8px)' }}>
               {ticker} の市場データを準備しています
             </div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 'var(--space-4, 16px)' }}>
               現在この銘柄の情報を収集中です。<br />
               しばらく経ってから再度ご確認いただくか、<br />
               ウォッチリストに追加すると次回から優先的に分析されます。
@@ -643,7 +643,7 @@ export default function InsightsPanel({ ticker, user, isPro, onUpgradeClick, onS
                 color: "rgb(56, 189, 248)",
                 border: "1px solid rgba(56, 189, 248,0.4)",
                 borderRadius: 8,
-                padding: "8px 20px",
+                padding: 'var(--space-2, 8px) var(--space-5, 20px)',
                 fontSize: 13,
                 fontWeight: 500,
                 cursor: "pointer",

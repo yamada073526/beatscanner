@@ -182,7 +182,7 @@ export default function JudgmentList({ items = [], showFilters = true, onAnalyze
                   style={{
                     display: 'flex',
                     flexWrap: 'wrap',
-                    gap: 6,
+                    gap: 'var(--space-2, 8px)',
                     justifyContent: 'center',
                   }}
                 >

@@ -330,7 +330,7 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false }) {
             <div style={{
               display: 'flex',
               justifyContent: 'center',
-              marginTop: 16,
+              marginTop: 'var(--space-4, 16px)',
             }}>
               <button
                 type="button"
@@ -338,8 +338,8 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false }) {
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 8,
-                  padding: '10px 22px',
+                  gap: 'var(--space-2, 8px)',
+                  padding: 'var(--space-3, 12px) var(--space-6, 24px)',
                   borderRadius: 999,
                   background: 'rgba(56, 189, 248,0.10)',
                   border: '1px solid rgba(56, 189, 248,0.35)',

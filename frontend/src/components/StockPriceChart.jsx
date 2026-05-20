@@ -83,7 +83,7 @@ class StockChartErrorBoundary extends Component {
     if (this.state.hasError) {
       return (
         <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-          <h3 className="section-heading" style={{ marginBottom: 12 }}>株価チャート</h3>
+          <h3 className="section-heading" style={{ marginBottom: 'var(--space-3, 12px)' }}>株価チャート</h3>
           <div className="flex h-64 items-center justify-center text-sm" style={{ color: 'var(--text-muted)' }}>
             チャートの表示に失敗しました。 ページを再読み込みしてください。
           </div>
@@ -662,7 +662,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
               <div
                 aria-hidden="true"
                 className="absolute inset-0 z-10 flex items-end justify-center pointer-events-none"
-                style={{ paddingBottom: 12 }}
+                style={{ paddingBottom: 'var(--space-3, 12px)' }}
               >
                 <div
                   className="rounded-full px-3 py-1 text-[11px] font-medium"

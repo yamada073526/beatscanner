@@ -152,12 +152,14 @@
   animation: acc-expand var(--motion-slow, 360ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) forwards;
 }
 
-/* expanded 時の panel inner padding */
+/* expanded 時の panel inner padding
+   Sprint 2 (Phase 2): Aman 級余白の美学 — 16px → 20px (--space-5) に拡大
+   §3 「視覚的密度 10-15% 減」 target に貢献。gap も 16px → 24px (--space-6) に統一。 */
 .panelInner {
-  padding-top: var(--space-3, 12px);
+  padding-top: var(--space-5, 20px);
   display: flex;
   flex-direction: column;
-  gap: var(--space-4, 16px);
+  gap: var(--space-6, 24px);
 }
 
 /* ===== Expand animation (clip-path fallback) ===== */

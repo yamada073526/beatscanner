@@ -22,7 +22,7 @@ export default function KpiStrip({ stats = [] }) {
           padding: 'var(--space-4, 16px) var(--space-6, 24px)',
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
-          gap: 16,
+          gap: 'var(--space-4, 16px)',
           position: 'sticky',
           top: 56, // SearchBar 44px + 余白
           zIndex: 'var(--z-base, 1)',

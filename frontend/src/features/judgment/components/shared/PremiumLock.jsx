@@ -75,7 +75,7 @@ export default function PremiumLock({
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 12,
+          gap: 'var(--space-3, 12px)',
           padding: 'var(--space-6, 24px)',
           background: `radial-gradient(ellipse at top, ${gradientStops})`,
           backdropFilter: 'saturate(160%) blur(3px)',
@@ -87,7 +87,7 @@ export default function PremiumLock({
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 6,
+            gap: 'var(--space-2, 8px)',
             padding: '4px 12px',
             borderRadius: 'var(--radius-pill)',
             fontSize: 11,
@@ -138,7 +138,7 @@ export default function PremiumLock({
                 style={{
                   display: 'flex',
                   alignItems: 'flex-start',
-                  gap: 8,
+                  gap: 'var(--space-2, 8px)',
                   fontSize: 12,
                   fontWeight: 500,
                   lineHeight: 1.4,
@@ -159,7 +159,7 @@ export default function PremiumLock({
             type="button"
             onClick={onUpgrade}
             style={{
-              padding: '8px 18px',
+              padding: 'var(--space-2, 8px) var(--space-5, 20px)',
               fontSize: 13,
               fontWeight: 600,
               color: '#fff',

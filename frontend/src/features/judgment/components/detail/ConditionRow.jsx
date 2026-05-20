@@ -88,8 +88,8 @@ export default function ConditionRow({
           //           overflow 防止のため列に minmax(96px, auto) を使用。
           gridTemplateColumns: '24px 1fr 80px minmax(96px, auto) 16px',
           alignItems: 'center',
-          gap: 12,
-          padding: '10px 12px',
+          gap: 'var(--space-3, 12px)',
+          padding: 'var(--space-3, 12px) var(--space-3, 12px)',
           background: 'transparent',
           border: 'none',
           cursor: 'pointer',
@@ -204,9 +204,9 @@ export default function ConditionRow({
         <div
           id={`condition-detail-${index}`}
           style={{
-            padding: '4px 12px 14px 44px',
+            padding: 'var(--space-1, 4px) var(--space-3, 12px) var(--space-3, 12px) 44px',
             display: 'grid',
-            gap: 10,
+            gap: 'var(--space-3, 12px)',
             borderTop: '1px solid rgba(148, 163, 184, 0.12)',
           }}
         >
@@ -259,7 +259,7 @@ export default function ConditionRow({
                 justifySelf: 'start',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 4,
+                gap: 'var(--space-1, 4px)',
                 fontSize: 11,
                 fontWeight: 500,
                 color: 'var(--text-muted)',

@@ -27,11 +27,11 @@ export default function SectionHeader({ id, title, label, action, icon }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: 12,
+        gap: 'var(--space-3, 12px)',
         marginBottom: 'var(--space-3, 12px)',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)' }}>
         {iconNode}
         {/* h2: Sprint 1 — font-size を raw 18px → var(--text-h2) token に変更 */}
         <h2

@@ -28,7 +28,7 @@ export default function JudgmentGroupHeader({ title, count, action }) {
       }}
     >
       <span>{title}</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)' }}>
         {count != null && <span>{count}</span>}
         {action}
       </div>
