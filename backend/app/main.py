@@ -4955,9 +4955,10 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
             if est_match:
                 eps_estimated = _safe_eps_float(_pick(est_match, "epsAvg", "estimatedEpsAvg"))
 
-        # income_q から fiscal_period / revenue
+        # income_q から fiscal_period / revenue / sps_actual
         inc = _nearest(date_str, income_q) if date_str else None
         revenue_actual = None
+        sps_actual = None
         fiscal_period = _pick(entry, "fiscalPeriod", "period")
         if inc:
             revenue_actual = _safe_eps_float(_pick(inc, "revenue"))
@@ -4966,6 +4967,14 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
                 year = _pick(inc, "calendarYear", "fiscalYear")
                 if period and year:
                     fiscal_period = f"{period} {year}"
+            # SPS (Sales Per Share) = revenue / diluted_shares
+            # Sprint A: EarningsHistoryChart grouped bars の per-share view 統一に使用。
+            # aggregator/ への LLM SDK import 厳禁。純粋数値計算のみ。
+            diluted_shares_q = _safe_float(
+                _pick(inc, "weightedAverageShsOutDil") or _pick(inc, "weightedAverageShsOut"), 0
+            )
+            if revenue_actual is not None and diluted_shares_q and diluted_shares_q > 0:
+                sps_actual = round(revenue_actual / diluted_shares_q, 4)
 
         # estimates から revenue_estimated を補完
         revenue_estimated = None
@@ -4988,6 +4997,8 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
             "revenue_estimated": revenue_estimated,
             "revenue_surprise_pct": rev_pct,
             "revenue_verdict": rev_label,
+            # Sprint A: grouped bars per-share view 統一用 (SPS = revenue / diluted_shares)
+            "sps_actual": sps_actual,
         })
 
     # 全件 EPS 取得失敗の場合 404
@@ -8151,6 +8162,7 @@ async def generate_visualization_instant(
                 "eps": round(float(_eps_i), 2) if _eps_i is not None else None,
                 "cfps": _cfps,
                 "op_ratio": round(float(_op_r)*100, 1) if _op_r is not None else None,
+                "shares_diluted": round(float(_shr), 0) if _shr else None,
             })
     else:
         try:
@@ -8197,6 +8209,7 @@ async def generate_visualization_instant(
                         "revenue": rev, "operating_cf": ocf,
                         "eps": round(eps, 2) if eps is not None else None,
                         "cfps": cfps, "op_ratio": op_r,
+                        "shares_diluted": round(shares, 0) if shares else None,
                     })
                 return list(reversed(rows))
             _periods_built = await asyncio.to_thread(_fetch_yf_i)
@@ -8485,6 +8498,7 @@ async def generate_visualization(
                     "operating_cf": _ocf,
                     "eps": _eps_rounded,
                     "cfps": _cfps,
+                    "shares_diluted": round(float(_shr), 0) if _shr else None,
                 })
 
         # ── 部分年度チェック：シンプルな年度ベース判定 ──

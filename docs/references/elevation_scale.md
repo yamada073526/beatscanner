@@ -139,6 +139,9 @@ ALLOWED-HEX: #78350f   # color-border-warning (dark)
 
 # Earnings urgency
 ALLOWED-HEX: #ea580c   # D-3 amber-orange
+
+# EarningsHistoryChart grouped bars — Sprint A (Phase 1.5)
+ALLOWED-HEX: #0d9488   # teal-600 — EPS bar (grouped bars 中央列。SPS=cyan / EPS=teal / CFPS=slate tone)
 ```
 
 ---
