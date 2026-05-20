@@ -476,7 +476,8 @@ export default function JudgmentDetail({
         </SectionFade>
       )}
 
-      {/* === Sprint 3: ProfileCard → AccordionSection wrap (collapsed) === */}
+      {/* === Sprint 3: ProfileCard → AccordionSection wrap (collapsed) ===
+          Phase 2.6 5-4: onNavigateTicker で競合 chip click → 銘柄 navigate */}
       {isScrollV1 ? (
         <ProfileCard
           ticker={selectedTicker}
@@ -484,6 +485,7 @@ export default function JudgmentDetail({
           dataSource={result?.dataSource}
           latestPeriod={result?.latestPeriod}
           latestDate={result?.latestDate}
+          onNavigateTicker={onAnalyze}
         />
       ) : (
         <AccordionSection
@@ -499,6 +501,7 @@ export default function JudgmentDetail({
             dataSource={result?.dataSource}
             latestPeriod={result?.latestPeriod}
             latestDate={result?.latestDate}
+            onNavigateTicker={onAnalyze}
           />
         </AccordionSection>
       )}

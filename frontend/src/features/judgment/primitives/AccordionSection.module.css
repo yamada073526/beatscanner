@@ -24,10 +24,15 @@
 }
 
 /* Context tier (階層 3): collapsed 時は border-bottom only (elevation 0) — brand-aspiration verdict */
+/* Phase 2.6 5-3: overflow: hidden → overflow: visible で halo クリッピング解消。
+   v54-v59 教訓: contain: paint は絶対禁止 (glow_elevation_postmortem.md 最重要 rule)。
+   closing/open animation は framer-motion の m.div が overflow:hidden を自前で制御するため、
+   .root.contextTier レベルの overflow: hidden は不要。
+   含まれる children (panel-card + tier-m-glow) の halo が border-radius clip されなくなる。 */
 .root.contextTier {
   border: 1px solid var(--border, #e2e8f0);
   border-radius: var(--radius-md, 12px);
-  overflow: hidden; /* border-radius clipping のみ、glow host ではないため OK */
+  overflow: visible; /* Phase 2.6: halo クリッピング解消。contain: paint 追加禁止 */
 }
 
 /* ===== Header (折りたたみ toggle button) ===== */

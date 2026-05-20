@@ -157,6 +157,19 @@ class FMPClient:
         if isinstance(data, dict):
             return data
         return {}
+    async def stock_peers(self, ticker: str) -> list[str]:
+        """競合 peer ticker 一覧を返す (FMP /stock-peers)。
+        返値: ["MSFT", "GOOG", "AMZN", ...] (ticker string list)
+        FMP は {"symbol": str, "peersList": [str, ...]} を返す。
+        """
+        data = await self._get("/stock-peers", {"symbol": ticker.upper()})
+        if isinstance(data, list) and data:
+            peers = data[0].get("peersList", []) if isinstance(data[0], dict) else []
+            return [p for p in peers if isinstance(p, str)]
+        if isinstance(data, dict):
+            return [p for p in data.get("peersList", []) if isinstance(p, str)]
+        return []
+
     async def stock_news(self, ticker: str, limit: int = 20) -> list[dict]:
         return await self._get(
             "/stock-news",

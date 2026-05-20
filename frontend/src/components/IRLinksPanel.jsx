@@ -66,13 +66,23 @@ function Section({ title, icon, children }) {
 export default function IRLinksPanel({ ticker }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  // Phase 2.6 Evaluator FAIL-2 hotfix: 3 段階分岐 SSOT (feedback_data_completeness_guard.md)
+  // 「取得中 / 取得失敗 / データなし正常」 を loading + fetchError + data 0 件 で区別
+  const [fetchError, setFetchError] = useState(false);
 
   useEffect(() => {
     if (!ticker) return;
     setLoading(true);
+    setFetchError(false);
     fetchIRLinks(ticker)
-      .then(setData)
-      .catch(() => setData(null))
+      .then((res) => {
+        setData(res);
+        setFetchError(false);
+      })
+      .catch(() => {
+        setData(null);
+        setFetchError(true);
+      })
       .finally(() => setLoading(false));
   }, [ticker]);
 
@@ -144,8 +154,8 @@ export default function IRLinksPanel({ ticker }) {
         <div className="grid gap-5 md:grid-cols-2">
           {/* 左列: 決算発表 */}
           <div className="space-y-4 md:pr-6">
-            {/* 最新プレスリリース (FMP動的データ) */}
-            {pressReleases.length > 0 && (
+            {/* 最新プレスリリース (FMP動的データ) — feedback_data_completeness_guard.md 3 段階分岐 UI */}
+            {pressReleases.length > 0 ? (
               <Section title="最新プレスリリース" icon={<FileText size={14} strokeWidth={1.5} />}>
                 {pressReleases.map((pr, i) => (
                   <LinkItem
@@ -156,6 +166,26 @@ export default function IRLinksPanel({ ticker }) {
                   />
                 ))}
               </Section>
+            ) : (
+              /* Phase 2.6 5-2: empty skeleton — 3 段階分岐: カバー外 / 一時失敗 / データなし正常 */
+              <div
+                className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs"
+                style={{
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-muted)',
+                  background: 'var(--bg-subtle)',
+                }}
+                data-testid="ir-press-releases-empty"
+              >
+                <FileText size={13} strokeWidth={1.5} style={{ flexShrink: 0 }} />
+                <span>
+                  {fetchError
+                    ? 'IR データ取得失敗 (一時的)'
+                    : data === null
+                      ? 'IR リソース取得中...'
+                      : '公開プレスリリース 0 件'}
+                </span>
+              </div>
             )}
 
             {/* 最新 8-K ファイリング (FMP動的データ) */}

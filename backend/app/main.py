@@ -6295,6 +6295,88 @@ async def ir_links(ticker: str, request: Request) -> dict:
     }
 
 
+# ─── Phase A: 会社概要静的拡張 /api/profile-extended/{ticker} ────────────────
+# 既存 FMP /profile + /stock-peers の static data を frontend に渡す。
+# LLM 不使用・Hallucination Guard Layer 1 のみ (aggregator/*.py 変更 0 件)。
+# Trust Cliff 解消: LP「AI 詳細レポート」訴求 vs 現状「会社名のみ」 を最低限解消。
+# demo mode (3 req/IP/day) は runAnalyze flow と同じ limit が適用される。
+_PROFILE_EXTENDED_CACHE: dict[str, tuple[float, dict]] = {}
+_PROFILE_EXTENDED_TTL = CACHE_TTL_PROFILE  # 24h
+
+@app.get("/api/profile-extended/{ticker}")
+async def profile_extended(ticker: str, request: Request) -> dict:
+    """FMP /profile + /stock-peers から会社概要拡張データを返す。
+    LLM 不使用 (Phase A 静的のみ)。Phase B で LLM 日本語要約に進む際は別 SPEC。
+
+    Trust Cliff 対策 (Phase 2.6 Evaluator FAIL-1 hotfix): demo mode rate limit
+    (3 req/IP/day) を適用。 cache hit 時は rate limit カウント不要 (既存 data 返却)。
+    """
+    import time as _time_mod
+    t = ticker.upper()
+    now = _time_mod.time()
+    cached = _PROFILE_EXTENDED_CACHE.get(t)
+    if cached and (now - cached[0]) < _PROFILE_EXTENDED_TTL:
+        return cached[1]
+
+    # demo mode rate limit (LP「3 銘柄/日まで無料」 訴求と整合)
+    ip = _client_ip(request)
+    if not _check_demo_rate_limit(ip):
+        raise HTTPException(
+            status_code=429,
+            detail="本日のお試し回数 (3銘柄) を超えました。Googleログインで無制限になります。",
+        )
+
+    client = FMPClient(api_key=_get_fmp_key(request))
+
+    # FMP /profile + /stock-peers を並列取得 (rate limit 対策で return_exceptions=True)
+    profile_data, peers_data = await asyncio.gather(
+        client.profile(t),
+        client.stock_peers(t),
+        return_exceptions=True,
+    )
+
+    if isinstance(profile_data, Exception):
+        profile_data = []
+    if isinstance(peers_data, Exception):
+        peers_data = []
+
+    rec: dict = {}
+    if isinstance(profile_data, list) and profile_data:
+        rec = profile_data[0] if isinstance(profile_data[0], dict) else {}
+
+    # profile field 抽出 (null safe)
+    result = {
+        "ticker": t,
+        "companyName":       rec.get("companyName") or None,
+        "description":       rec.get("description") or None,       # 英語 ~300-800 字
+        "image":             rec.get("image") or None,              # FMP logo URL
+        "website":           rec.get("website") or None,
+        "city":              rec.get("city") or None,
+        "state":             rec.get("state") or None,
+        "country":           rec.get("country") or None,
+        "fullTimeEmployees": _safe_int(rec.get("fullTimeEmployees")),
+        "sector":            rec.get("sector") or None,
+        "industry":          rec.get("industry") or None,
+        "mktCap":            _safe_float(rec.get("mktCap")),
+        "ipoDate":           rec.get("ipoDate") or None,
+        "exchange":          rec.get("exchange") or None,
+        # 競合 peer chips (3-5 件に絞る)
+        "peers":             (peers_data or [])[:5] if isinstance(peers_data, list) else [],
+    }
+
+    _PROFILE_EXTENDED_CACHE[t] = (now, result)
+    return result
+
+
+def _safe_int(v) -> int | None:
+    if v is None:
+        return None
+    try:
+        return int(v)
+    except (ValueError, TypeError):
+        return None
+
+
 MARKET_SYMBOLS = [
     # 株価指数（メイン行・主指標）
     {"symbol": "^GSPC",    "label": "S&P 500",  "type": "index",     "desc_ja": "米大型株 500 銘柄の代表指数"},

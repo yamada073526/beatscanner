@@ -550,6 +550,23 @@ export async function fetchIRLinks(ticker) {
   return r.json();
 }
 
+/**
+ * Phase A 会社概要静的拡張 (SPEC_2026-05-21 §5-4)
+ * FMP /profile + /stock-peers の static data を返す。LLM 不使用。
+ * @returns {{ ticker, companyName, description, image, city, state, country,
+ *             fullTimeEmployees, sector, industry, mktCap, peers }} | null
+ */
+export async function fetchProfileExtended(ticker, { signal } = {}) {
+  // Phase 2.6 Evaluator FAIL-3 hotfix: AbortController signal を fetch に伝播、
+  // ProfileCard の useEffect cleanup で race condition (古い response 上書き) 防止
+  const r = await fetch(`/api/profile-extended/${encodeURIComponent(ticker)}`, {
+    headers: fmpHeaders(),
+    signal,
+  });
+  if (!r.ok) return null;
+  return r.json();
+}
+
 export async function fetchCustomScreener() {
   const r = await fetch('/api/custom-screener', {
     headers: fmpHeaders(),
