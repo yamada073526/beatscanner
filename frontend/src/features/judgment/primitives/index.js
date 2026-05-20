@@ -6,3 +6,5 @@ export { default as ConditionDots } from './ConditionDots.jsx';
 // Sprint 2: accordion primitive + lazy-load hook
 export { default as AccordionSection } from './AccordionSection.jsx';
 export { useIntersectionLazy } from './useIntersectionLazy.js';
+// Phase 2.5 Sprint 2: SectionFadeSubtle (Tier L 入場 fade、 y:6 subtle variant)
+export { default as SectionFadeSubtle } from './SectionFadeSubtle.jsx';

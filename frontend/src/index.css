@@ -8953,7 +8953,9 @@ button.ds-chip[data-pressed="true"]:hover {
 }
 
 /* ── Tier M: tier-m-glow (5 条件 cards + Fundamentals 3 列) ──────
-   IntersectionObserver で section 初入場時に 600ms halo sweep (左→右 linear-gradient mask)。
+   IntersectionObserver で section 初入場時に 900ms halo sweep (左→右 linear-gradient mask)。
+   Sprint 2 Phase 2.5: opacity 強化 (25%→40-55%) + mask peak 帯締め (30-70%→35-65%) +
+   filter: blur(2px) 追加 + duration 600ms→900ms (Aman 級「視認可能な微光」 レベルへ)。
    1 回限り: data-halo-fired 属性で記録し、再 mount でも 2 回目は発火しない。
    loop 禁止 (animation-iteration-count: 1 enforce)。
    ::after pseudo で sweep overlay を実装 (本体 card は既存 panel-card CSS 維持)。 */
@@ -8984,28 +8986,33 @@ button.ds-chip[data-pressed="true"]:hover {
 }
 
 /* data-halo-ready 付与中 (IntersectionObserver が once 発火した直後) に sweep */
+/* Sprint 2 Phase 2.5: opacity 25%→40-55%、mask peak 帯 30-70%→35-65%、blur(2px) 追加、duration 900ms */
 .tier-m-glow[data-halo-ready="1"]::after {
   content: '';
   position: absolute;
   inset: -2px;
   border-radius: inherit;
   pointer-events: none;
-  /* left→right で流れる cyan halo */
+  /* left→right で流れる cyan halo — opacity 強化で視認可能領域に (Aman 級「微光」 維持) */
   background: linear-gradient(
     90deg,
     transparent 0%,
-    color-mix(in srgb, var(--color-accent) 25%, transparent) 40%,
-    color-mix(in srgb, var(--color-accent) 40%, transparent) 50%,
-    color-mix(in srgb, var(--color-accent) 25%, transparent) 60%,
+    color-mix(in srgb, var(--color-accent) 40%, transparent) 40%,
+    color-mix(in srgb, var(--color-accent) 55%, transparent) 50%,
+    color-mix(in srgb, var(--color-accent) 40%, transparent) 60%,
     transparent 100%
   );
+  /* mask peak 帯を 35%-65% に締めて中央輝度を高める */
   mask:
-    linear-gradient(90deg, transparent 0%, black 30%, black 70%, transparent 100%)
+    linear-gradient(90deg, transparent 0%, black 35%, black 65%, transparent 100%)
     -200% center / 200% 100% no-repeat;
   -webkit-mask:
-    linear-gradient(90deg, transparent 0%, black 30%, black 70%, transparent 100%)
+    linear-gradient(90deg, transparent 0%, black 35%, black 65%, transparent 100%)
     -200% center / 200% 100% no-repeat;
-  animation: halo-sweep var(--motion-stage, 600ms) var(--ease-out-cubic, cubic-bezier(0.22, 1, 0.36, 1)) 1 forwards;
+  /* 光の粒を保ちつつ Aman 級「微光」 のソフトさを演出 */
+  filter: blur(2px);
+  /* duration 900ms: v86/v87 より視認しやすい入場感 (loop 禁止: 1 回のみ) */
+  animation: halo-sweep 900ms var(--ease-out-cubic, cubic-bezier(0.22, 1, 0.36, 1)) 1 forwards;
   /* loop 禁止: 1 回のみ (infinite 禁止: feedback_pge_loop_pitfalls.md §4) */
   z-index: 1;
 }
@@ -9015,34 +9022,39 @@ button.ds-chip[data-pressed="true"]:hover {
   display: none;
 }
 
-/* dark mode: halo をやや強化 */
+/* dark mode: halo をさらに強化 (Sprint 2 Phase 2.5: 35%/55%→55%/70%) */
 [data-theme="dark"] .tier-m-glow[data-halo-ready="1"]::after {
   background: linear-gradient(
     90deg,
     transparent 0%,
-    color-mix(in srgb, var(--color-accent) 35%, transparent) 40%,
-    color-mix(in srgb, var(--color-accent) 55%, transparent) 50%,
-    color-mix(in srgb, var(--color-accent) 35%, transparent) 60%,
+    color-mix(in srgb, var(--color-accent) 55%, transparent) 40%,
+    color-mix(in srgb, var(--color-accent) 70%, transparent) 50%,
+    color-mix(in srgb, var(--color-accent) 55%, transparent) 60%,
     transparent 100%
   );
 }
 
-/* ── Tier L: tier-l-glow (Library section) ───────────────────────
-   hover 時の hairline border tint 変化のみ。glow / shadow なし。
-   Tier M より軽い: 情報量過多防止 (feedback_glow_active_pattern.md §3 Tier L)。 */
+/* ── Tier L: tier-l-glow (Library section — NewsPanel / IRLinksPanel) ──────
+   Sprint 2 Phase 2.5: hover 時 border-color 強化 (accent 40%→60%) +
+   box-shadow inset 1px accent で「Aman 廊下の間接光」体感。
+   Tier M halo より弱い: 情報階層 (5 条件 > news) を保つ。
+   3 体合議 verdict: Tier M halo 非適用 + border/inset shadow 強化で補完。 */
 .tier-l-glow {
   border: 1px solid var(--border);
   border-radius: var(--radius-md, 12px);
   transition:
-    border-color var(--motion-base, 200ms) ease-out;
+    border-color var(--motion-base, 200ms) ease-out,
+    box-shadow var(--motion-base, 200ms) ease-out;
 }
 
 .tier-l-glow:hover {
-  border-color: color-mix(in srgb, var(--color-accent) 40%, var(--border));
+  border-color: color-mix(in srgb, var(--color-accent) 60%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 30%, transparent) inset;
 }
 
 [data-theme="dark"] .tier-l-glow:hover {
-  border-color: color-mix(in srgb, var(--color-accent) 55%, var(--border));
+  border-color: color-mix(in srgb, var(--color-accent) 70%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 40%, transparent) inset;
 }
 
 /* ── 投資業界色ルール enforcement comments ────────────────────────
