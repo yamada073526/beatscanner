@@ -653,8 +653,12 @@ export default function JudgmentDetail({
               title="Insider 取引"
               label="FORM 4 / 13F"
             >
-              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                (preview placeholder)
+              {/* Phase 2.5 hotfix #8: placeholder 文言 → Premium teaser banner に変更。
+                  backend /api/insider* endpoint は未実装 (Phase 3 候補)。
+                  「壊れている」 と見えない明示的な Premium 訴求で Trust Cliff を解消。 */}
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                <span aria-hidden="true" style={{ fontSize: 16, flexShrink: 0 }}>🔒</span>
+                <span>Premium で開放: Form 4 (役員株式売買) / 13F (機関投資家保有)</span>
               </div>
             </SimpleSection>
           </PremiumLock>
@@ -678,8 +682,12 @@ export default function JudgmentDetail({
               ]}
               onUpgrade={detailContext.onUpgrade}
             >
-              <div id="sec-insider-inner" style={{ fontSize: 13, color: 'var(--text-muted)', padding: 'var(--space-4, 16px)' }}>
-                (preview placeholder)
+              {/* Phase 2.5 hotfix #8: placeholder 文言 → Premium teaser banner に変更。
+                  SPEC §4 Hallucination Guard: 静的文言のみ、LLM 不使用。
+                  文言は SPEC §4 で確定済 (一字一句変更禁止)。 */}
+              <div id="sec-insider-inner" style={{ fontSize: 13, color: 'var(--text-muted)', padding: 'var(--space-4, 16px)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                <span aria-hidden="true" style={{ fontSize: 16, flexShrink: 0 }}>🔒</span>
+                <span>Premium で開放: Form 4 (役員株式売買) / 13F (機関投資家保有)</span>
               </div>
             </PremiumLock>
           </AccordionSection>

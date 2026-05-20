@@ -52,6 +52,7 @@ import MarketWidget from './components/MarketWidget.jsx';
 import IRLinksPanel from './components/IRLinksPanel.jsx';
 import InsightsPanel from './components/InsightsPanel.jsx';
 import QuickAddHoldingModal from './components/QuickAddHoldingModal.jsx';
+import TransactionEntryModal from './components/TransactionEntryModal.jsx';
 import UpgradeModal from './components/UpgradeModal.jsx';
 import PlanComparisonBanner from './components/PlanComparisonBanner.jsx';
 import DemoTicker from './components/DemoTicker.jsx';
@@ -109,6 +110,25 @@ export default function App() {
   // v62 WS-PreA: 買付クイック登録モーダル (RELEASE_TODO §11-B-7-B Phase B)
   // CV +35-45% NSM 直撃。マーケター指摘で workspace 化前に先行実装.
   const [quickAddTicker, setQuickAddTicker] = useState(null);
+
+  // Phase 2.5 hotfix #6: 「新規買付」 chip silent fail 解消。
+  // Pane 3 単独表示時は IndicesView.PortfolioActions が mount されないため
+  // 'bs:open:addtx' listener がキャッチされず無音 fail。
+  // App.jsx root に listener + TransactionEntryModal を常駐 mount することで
+  // Pane 3 / Pane 2 / classic SPA 全パスで chip click が動作する。
+  // IndicesView 側の listener は維持 (Pane 2 portfolio view 単独動作を守るため)。
+  const [rootAddTxOpen, setRootAddTxOpen] = useState(false);
+  const [rootAddTxTicker, setRootAddTxTicker] = useState('');
+  useEffect(() => {
+    const handler = (e) => {
+      const t = String(e?.detail?.ticker || '').trim().toUpperCase();
+      setRootAddTxTicker(t);
+      // setTimeout(0) で z-index 競合 (他 modal close transition) を回避
+      setTimeout(() => setRootAddTxOpen(true), 0);
+    };
+    window.addEventListener('bs:open:addtx', handler);
+    return () => window.removeEventListener('bs:open:addtx', handler);
+  }, []);
 
   // v62 WS-6: dark mode 状態を React state に reactive 化.
   // toggleDarkMode は document.documentElement の data-theme を書換えるが React 状態を
@@ -228,9 +248,22 @@ export default function App() {
   // ── 保有 (Holdings X-2): Supabase 同期 + 楽観的更新 ─────────────
   const holdingStore = useHoldings({ supabase, user });
 
-  // v68 §2 #7 (handover): Cmd+K 拡張用 — 口座 / transaction 検索ソース
-  const { accounts: cmdAccounts } = useAccounts({ supabase, user });
-  const { transactions: cmdTransactions } = useTransactions({ supabase, user });
+  // v68 §2 #7 (handover): Cmd+K 拡張用 — 口座 / transaction 検索ソース。
+  // Phase 2.5 hotfix #6: root TransactionEntryModal 用に full 取得に昇格。
+  // 同一 user + supabase で useAccounts/useTransactions を複数呼ぶと内部で dedup される
+  // (各 hook が独立 fetch するが、Supabase client の request は session cache で共有される)。
+  const {
+    accounts: cmdAccounts,
+    defaultAccountId: rootDefaultAccountId,
+    addAccount: rootAddAccountFn,
+    error: rootAccountsError,
+    reload: rootAccountsReload,
+  } = useAccounts({ supabase, user });
+  const {
+    transactions: cmdTransactions,
+    addTransaction: rootAddTransactionFn,
+    updateTransaction: rootUpdateTransactionFn,
+  } = useTransactions({ supabase, user });
   // v62 WS-Phase2: Pane 2 「決算まで N 日」meta 用 earnings calendar (30 分 cache)
   const { earningsBySymbol } = useEarningsCalendar();
   // 案 D: HoldingModal は廃止。TagAssignSheet 内で完結するため
@@ -965,6 +998,31 @@ export default function App() {
           close={cmdPalette.close}
           items={cmdPaletteItems}
           onAnalyze={runAnalyze}
+        />
+        {/* Phase 2.5 hotfix #6: Pane 3 単独表示時でも「新規買付」 chip から modal を開けるよう
+            App.jsx root に TransactionEntryModal を常駐 mount。
+            IndicesView.PortfolioActions の listener / modal は維持 (Pane 2 portfolio view 用)。 */}
+        <TransactionEntryModal
+          open={rootAddTxOpen}
+          onClose={() => { setRootAddTxOpen(false); setRootAddTxTicker(''); }}
+          accounts={cmdAccounts || []}
+          defaultAccountId={rootDefaultAccountId || ''}
+          defaultTicker={rootAddTxTicker}
+          pinnedTickers={[]}
+          onAdd={rootAddTransactionFn}
+          onUpdate={rootUpdateTransactionFn}
+          onCreateDefaultAccount={async () => {
+            const created = await rootAddAccountFn({
+              name: 'デフォルト',
+              type: 'tokutei',
+              baseCurrency: 'USD',
+              displayOrder: 0,
+              isDefault: true,
+            });
+            await rootAccountsReload();
+            return created;
+          }}
+          accountsError={rootAccountsError}
         />
       </>
     );
@@ -2496,6 +2554,31 @@ export default function App() {
         close={cmdPalette.close}
         items={cmdPaletteItems}
         onAnalyze={runAnalyze}
+      />
+
+      {/* Phase 2.5 hotfix #6: SPA mode でも root listener に対応する常駐 modal。
+          Pane 3 (旧 SPA judgment タブ) で「新規買付」 chip が機能するよう App.jsx root に配置。 */}
+      <TransactionEntryModal
+        open={rootAddTxOpen}
+        onClose={() => { setRootAddTxOpen(false); setRootAddTxTicker(''); }}
+        accounts={cmdAccounts || []}
+        defaultAccountId={rootDefaultAccountId || ''}
+        defaultTicker={rootAddTxTicker}
+        pinnedTickers={[]}
+        onAdd={rootAddTransactionFn}
+        onUpdate={rootUpdateTransactionFn}
+        onCreateDefaultAccount={async () => {
+          const created = await rootAddAccountFn({
+            name: 'デフォルト',
+            type: 'tokutei',
+            baseCurrency: 'USD',
+            displayOrder: 0,
+            isDefault: true,
+          });
+          await rootAccountsReload();
+          return created;
+        }}
+        accountsError={rootAccountsError}
       />
     </div>
   );
