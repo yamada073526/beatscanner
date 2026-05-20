@@ -168,6 +168,19 @@ ALLOWED-IMPORTANT: frontend/src/index.css:982  # background-color (dark hover)
 ALLOWED-IMPORTANT: frontend/src/index.css:886  # box-shadow (dark hover)
 ALLOWED-IMPORTANT: frontend/src/index.css:887  # background-color (dark hover)
 
+# Phase 2 Sprint 3: 3 tier glow grammar (.verdict-hero / .tier-m-glow / .tier-l-glow)
+# compound 4 セット (.X.is-arriving:hover) で border-color / background-color
+# / box-shadow を inline / tailwind base に勝つため
+ALLOWED-IMPORTANT: frontend/src/index.css  # .verdict-hero.is-arriving:hover border-color (light/dark)
+ALLOWED-IMPORTANT: frontend/src/index.css  # .verdict-hero.is-arriving:hover background-color (dark)
+ALLOWED-IMPORTANT: frontend/src/index.css  # .verdict-hero.is-arriving:hover box-shadow (light/dark)
+ALLOWED-IMPORTANT: frontend/src/index.css  # .tier-m-glow halo sweep border (light/dark)
+ALLOWED-IMPORTANT: frontend/src/index.css  # .tier-l-glow hover hairline border (light/dark)
+ALLOWED-IMPORTANT: frontend/src/index.css  # prefers-reduced-motion animation-duration override
+ALLOWED-IMPORTANT: frontend/src/index.css  # prefers-reduced-motion transition-duration override
+ALLOWED-IMPORTANT: frontend/src/index.css  # prefers-reduced-motion scroll-behavior override
+ALLOWED-IMPORTANT: frontend/src/index.css  # prefers-reduced-motion .tier-m-glow animation: none
+
 # prefers-reduced-motion — a11y AAA (Vercel Geist / Linear / Stripe 標準パターン)
 # Sprint 0 (Phase 2 前提整備) で確認済。index.css §11-E v51 Phase 1 から既存の宣言。
 # prefers-reduced-motion: reduce が設定された際に全 animation / transition を 0.01ms に縮退する。
