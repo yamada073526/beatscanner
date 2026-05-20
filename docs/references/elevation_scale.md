@@ -168,11 +168,13 @@ ALLOWED-IMPORTANT: frontend/src/index.css:982  # background-color (dark hover)
 ALLOWED-IMPORTANT: frontend/src/index.css:886  # box-shadow (dark hover)
 ALLOWED-IMPORTANT: frontend/src/index.css:887  # background-color (dark hover)
 
-# prefers-reduced-motion
-ALLOWED-IMPORTANT: frontend/src/index.css:107  # animation-duration
-ALLOWED-IMPORTANT: frontend/src/index.css:108  # animation-iteration-count
-ALLOWED-IMPORTANT: frontend/src/index.css:109  # transition-duration
-ALLOWED-IMPORTANT: frontend/src/index.css:110  # scroll-behavior
+# prefers-reduced-motion — a11y AAA (Vercel Geist / Linear / Stripe 標準パターン)
+# Sprint 0 (Phase 2 前提整備) で確認済。index.css §11-E v51 Phase 1 から既存の宣言。
+# prefers-reduced-motion: reduce が設定された際に全 animation / transition を 0.01ms に縮退する。
+ALLOWED-IMPORTANT: frontend/src/index.css:107  # animation-duration (0.01ms 縮退)
+ALLOWED-IMPORTANT: frontend/src/index.css:108  # animation-iteration-count (1 回のみ)
+ALLOWED-IMPORTANT: frontend/src/index.css:109  # transition-duration (0.01ms 縮退)
+ALLOWED-IMPORTANT: frontend/src/index.css:110  # scroll-behavior (auto 固定)
 ```
 
 **注**: 上記の行番号は v60 時点。リファクタで動いたら本ファイルも同時更新。hook は exact match ではなく selector ベースで検証する実装にしてもよい (将来検討)。
