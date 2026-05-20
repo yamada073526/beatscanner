@@ -212,9 +212,11 @@ function GroupedTooltip({ active, payload, label, yoyMap }) {
               }}
             />
             <span style={{ color: 'var(--text-secondary)', minWidth: 36 }}>{meta.label}</span>
-            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>${val}</span>
+            {/* Sprint 1: tabular-nums で数値を等幅に (earnings-history-tooltip-value class) */}
+            <span className="earnings-history-tooltip-value" style={{ color: 'var(--text-primary)' }}>${val}</span>
             {yoy != null && Number.isFinite(Number(yoy)) && (
-              <span style={{ color: yoyColor, fontSize: 10, marginLeft: 2 }}>
+              /* Sprint 1: YoY % も tabular-nums で桁揃え */
+              <span className="earnings-history-yoy-badge" style={{ color: yoyColor, marginLeft: 2 }}>
                 {yoySign}{Number(yoy).toFixed(1)}%
               </span>
             )}
@@ -602,15 +604,15 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
             ? 'var(--color-loss)'
             : 'var(--text-muted)';
           const sign = yoyNum > 0 ? '+' : '';
+          // Sprint 1: earnings-history-yoy-badge class で tabular-nums 適用
           return (
             <div
               key={d.year}
+              className="earnings-history-yoy-badge"
               data-testid={`earnings-history-yoy-badge-${d.yearFull}`}
               style={{
                 flex: 1,
                 textAlign: 'center',
-                fontSize: 9,
-                fontWeight: 600,
                 color: hasYoy ? color : 'transparent',
                 userSelect: 'none',
               }}

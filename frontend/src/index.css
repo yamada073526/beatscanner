@@ -89,6 +89,25 @@
   --reading-dim-bg-filter: brightness(0.92); /* 周囲 Pane 背景のみ dim (Phase 2 で本格運用) */
   --shadow-glow-cyan-reading: 0 0 0 1px rgba(56, 189, 248, 0.10), 0 6px 24px rgba(56, 189, 248, 0.06);
 
+  /* ─── Sprint 1 (Phase 2): Typography 6 階層トークン ─────────────────────────
+     design_system.md §7 の Tabular Nums P0 ルール + 6 tier 定義に準拠。
+     SPEC_2026-05-20_pane3-phase2-100point.md §5 Sprint 1 で確定。
+     vision-eval typography_grid 78 → 90 target。
+     - --text-display  : Hero verdict badge (28-32px)
+     - --text-h1       : 銘柄 ticker / 現在値 (22-24px)
+     - --text-h2       : section heading (18-20px)
+     - --text-body-lg  : 主要 body (16-17px)
+     - --text-body     : standard body (14-15px)
+     - --text-caption  : badge / unit / metadata (11-13px)
+     raw px 直書きの代替 token として Pane 3 全 component で参照する。
+     ─────────────────────────────────────────────────────────────────────────── */
+  --text-display:  32px;   /* Hero 主見出し (display tier) */
+  --text-h1:       24px;   /* 銘柄 ticker / 現在値 */
+  --text-h2:       18px;   /* section 見出し */
+  --text-body-lg:  16px;   /* 主要 body */
+  --text-body:     14px;   /* standard body */
+  --text-caption:  12px;   /* caption / badge / unit */
+
   /* Motion — Linear cubic-bezier 標準 */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out-quad: cubic-bezier(0.45, 0, 0.55, 1);
@@ -5218,7 +5237,8 @@ body {
   font-weight: 600;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
-  line-height: 1;
+  font-feature-settings: "tnum" 1; /* Sprint 1: safari/mobile fallback */
+  line-height: 1.05;
 }
 
 /* 含み損益: 緑/赤/neutral は inline style (color prop) で設定 (token 経由)。
@@ -5227,6 +5247,8 @@ body {
   font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1; /* Sprint 1: safari/mobile fallback */
+  letter-spacing: 0.01em;
 }
 
 .triage-signal-text {
@@ -8596,6 +8618,14 @@ button.ds-chip[data-pressed="true"]:hover {
    brand-aspiration §-1「コンシェルジュの一言挨拶」比喩。
    ──────────────────────────────────────────────────────────────────────────── */
 
+/* Sprint 1: SummaryBrief 全体に tabular-nums cascading 適用
+   ストリーミングテキスト内の数値 (EPS / CFPS / 売上等) を等幅に。
+   design_system.md §7 Tabular Nums P0 ルール準拠。 */
+.summary-brief-section {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
 /* badge: "AI要約" ラベル (bg-dark でブランド感) */
 .summary-brief-badge {
   display: inline-flex;
@@ -8640,3 +8670,140 @@ button.ds-chip[data-pressed="true"]:hover {
     /* opacity / transition は JS (SummaryBriefInner useEffect) で制御 */
   }
 }
+
+/* ── Sprint 1 (Phase 2): Pane 3 Typography Polish ──────────────────────────
+   SPEC_2026-05-20_pane3-phase2-100point.md §5 Sprint 1
+   vision-eval typography_grid 78 → 90 target (3 run mean)
+   5 原則: §1「読み手に負担をかけない」、§3「シンプルかつリッチ」
+   Aman 級世界観: 「洗練さ」= 数値が「キリッと揃う」印象を最大化
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* .pane3-numeric — Pane 3 内の全数値表示に適用する utility class
+   design_system.md §7 Tabular Nums P0 ルール準拠。
+   font-variant-numeric: tabular-nums  = 全桁等幅 (CLS=0 + プロ感)
+   font-feature-settings: "tnum" 1     = 旧 OpenType fallback (safari/mobile 対応)
+   line-height: 1.0                    = 数値: タイト (design_system.md §Sprint1 指定)
+   letter-spacing: 0.01em              = 僅かな字間で読みやすさ向上
+   適用箇所: KpiStrip / FiveConditionsCard / ConditionSparkline / EarningsHistoryChart
+             AnalystPanel / QuarterlyHistoryTable / SummaryBrief / GuidanceCard / DiagramCard */
+.pane3-numeric {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "cv11" 1;
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+}
+
+/* .pane3-numeric-tight — 数値 stat 大 (株価 / EPS / CFPS 等の hero display)
+   design_system.md §7-B: Stat fw700 lh≤1.1 */
+.pane3-numeric-tight {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "cv11" 1;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  font-weight: 700;
+}
+
+/* ds-stat__value — Stat プリミティブの数値部 (KpiStrip で使用)
+   既存の inline style を CSS class に昇格 (specificity 整理)
+   design_system.md §7-B: Stat fw700 lh≤1.1 + tabular-nums P0 */
+.ds-stat__value {
+  font-size: var(--text-h1, 24px);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "cv11" 1;
+}
+
+/* ds-stat__label — Stat プリミティブのラベル部
+   design_system.md §7-B: Label fw500 lh≥1.3 */
+.ds-stat__label {
+  font-size: var(--text-caption, 12px);
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ds-stat__hint — hint テキスト */
+.ds-stat__hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+/* .pane3-section-heading — Pane 3 section heading (h2 tier)
+   design_system.md §7: Heading 18px / fw500 / -0.015em / lh1.2 */
+.pane3-section-heading {
+  font-size: var(--text-h2, 18px);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--text-primary);
+}
+
+/* .pane3-body-lg — 主要 body (SummaryBrief / GuidanceCard 等)
+   design_system.md §Sprint1: body-lg 16px / lh1.6 / ja letter-spacing 0.02em */
+.pane3-body-lg {
+  font-size: var(--text-body-lg, 16px);
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+}
+
+/* .pane3-caption — caption / badge / unit / metadata
+   design_system.md §7: Label small caps 11px / fw500 / +0.06em / lh1.4 */
+.pane3-caption {
+  font-size: var(--text-caption, 12px);
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* EarningsHistoryChart tooltip 数値セル tabular-nums
+   chart 4 層防御 (feedback_chart_overlay_safety.md) でスタイルのみ変更、
+   isAnimationActive 等の Recharts prop は変更しない */
+.earnings-history-tooltip-value {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+}
+
+/* EarningsHistoryChart YoY badge tabular-nums
+   bar 直下の年次 YoY% (var(--color-gain) / var(--color-loss)) */
+.earnings-history-yoy-badge {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+}
+
+/* TriageBanner 数値セル tabular-nums
+   含み損益 / 株数 / 平均取得価格 / 日付 */
+.triage-numeric {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+}
+
+/* Pane 3 全体への cascading tabular-nums (最広範囲適用)
+   § SPEC Sprint 1: 「Pane 3 全体に cascading で適用も OK (widespread でも OK)」
+   詳細 component に .pane3-numeric 個別指定と二重防御になるが問題なし。
+   ds-judgment-detail はワークスペース Pane 3 の root class。 */
+.ds-judgment-detail {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* line-height + letter-spacing 調整 (Sprint 1 §3)
+   - 日本語 body: lh 1.6-1.7 / ls 0.02em
+   - 英数字 heading: lh 1.2-1.3
+   これらは component 別 class で個別制御 (cascading 汚染を避ける)
+   グローバル適用は tabular-nums のみ (.ds-judgment-detail で実施済) */

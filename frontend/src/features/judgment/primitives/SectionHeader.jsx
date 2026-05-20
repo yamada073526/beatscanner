@@ -2,7 +2,9 @@ import React from 'react';
 
 /**
  * Section header with title + meta.
- * design_system.md §B-2 Heading tier (18px / fw500 / -0.015em / 1.2).
+ * design_system.md §7: Heading tier (--text-h2 = 18px / fw500 / -0.015em / lh1.2).
+ * Sprint 1 (Phase 2): font-size を raw px → --text-h2 token に変更。
+ *   label (passedCount/totalCount 等の数値) に tabular-nums を追加。
  *
  * Sprint 4: icon prop を追加。
  * - string (emoji) を渡した場合 → <span> で wrap して後方互換を維持 (legacy 経路)
@@ -31,25 +33,22 @@ export default function SectionHeader({ id, title, label, action, icon }) {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {iconNode}
+        {/* h2: Sprint 1 — font-size を raw 18px → var(--text-h2) token に変更 */}
         <h2
           id={id}
-          className="ds-heading"
+          className="ds-heading pane3-section-heading"
           style={{
-            fontSize: 18,
-            fontWeight: 500,
-            letterSpacing: '-0.015em',
-            lineHeight: 1.2,
-            color: 'var(--text-primary)',
             margin: 0,
           }}
         >
           {title}
         </h2>
         {label && (
+          /* label: Sprint 1 — tabular-nums 追加 (passedCount/totalCount 等の数値部に効く) */
           <span
-            className="ds-label"
+            className="ds-label pane3-numeric"
             style={{
-              fontSize: 11,
+              fontSize: 'var(--text-caption, 11px)',
               fontWeight: 500,
               letterSpacing: '0.06em',
               textTransform: 'uppercase',
