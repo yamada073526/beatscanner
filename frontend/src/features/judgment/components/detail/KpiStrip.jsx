@@ -1,6 +1,8 @@
 import React from 'react';
 import Card from '../../primitives/Card.jsx';
 import Stat from '../../primitives/Stat.jsx';
+import { useCountUp } from '../../../../hooks/useCountUp.js';
+import SectionFade from '../../primitives/SectionFade.jsx';
 
 /**
  * Sticky KPI strip. position: sticky で Hero の直下に貼り付く.
@@ -12,38 +14,104 @@ import Stat from '../../primitives/Stat.jsx';
  * Sprint 1 (Phase 2): wrapper に pane3-numeric class を付与。
  *   Stat プリミティブの .ds-stat__value が tabular-nums を担うが、
  *   wrapper 側でも明示して cascading の二重防御を確保する。
+ *
+ * Sprint 4 (Phase 2): 案2 number count-up
+ *   - $X.XX 形式 (現在値) と +XX.XX% YTD 形式 (リターン) を検出し count-up
+ *   - 欠損 (—) はそのまま表示
+ *   - useCountUp hook (hooks/useCountUp.js) を活用 (既存実装)
+ *   - prefers-reduced-motion: useReducedMotion() true なら即 final value (useCountUp 内で対応済)
+ *
+ * 案1 section in-view fade-in: SectionFade wrapper を適用
  */
+
+/**
+ * 数値文字列をパースして count-up 可能な数値と書式情報を返す。
+ * 対応フォーマット:
+ *   "$123.45"  → { num: 123.45, prefix: '$', suffix: '', sign: '' }
+ *   "+12.34% YTD" → { num: 12.34, prefix: '', suffix: '% YTD', sign: '+' }
+ *   "-5.67% YTD" → { num: 5.67, prefix: '', suffix: '% YTD', sign: '-' }
+ *   "3/5"     → null (count-up 不可)
+ *   "—"       → null (欠損)
+ *
+ * @param {string} val
+ * @returns {{ num: number, prefix: string, suffix: string, sign: string }|null}
+ */
+function parseKpiValue(val) {
+  if (!val || typeof val !== 'string') return null;
+  if (val === '—') return null;
+
+  // $X.XX 形式
+  const dollarMatch = val.match(/^\$(\d+(?:\.\d+)?)$/);
+  if (dollarMatch) {
+    const num = parseFloat(dollarMatch[1]);
+    if (Number.isFinite(num)) return { num, prefix: '$', suffix: '', sign: '' };
+  }
+
+  // +/-XX.XX% YTD / +/-XX.XX% 形式
+  const pctMatch = val.match(/^([+-]?)(\d+(?:\.\d+)?)(%.*)$/);
+  if (pctMatch) {
+    const num = parseFloat(pctMatch[2]);
+    if (Number.isFinite(num)) {
+      return { num, prefix: '', suffix: pctMatch[3], sign: pctMatch[1] };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * AnimatedStat — KpiStrip 内の 1 つの KPI を count-up animation で表示する。
+ * parseKpiValue が null の場合 (— / 3/5 等) は元の value をそのまま表示する。
+ */
+function AnimatedStat({ stat }) {
+  const parsed = parseKpiValue(stat.value);
+  // useCountUp 内で prefers-reduced-motion チェック済 (skip して即 final value)
+  const countedNum = useCountUp(parsed ? parsed.num : null, { duration: 600, digits: 2 });
+
+  let displayValue = stat.value;
+  if (parsed && countedNum != null) {
+    const absVal = Math.abs(countedNum);
+    const formatted = absVal >= 100 ? absVal.toFixed(0) : absVal.toFixed(2);
+    displayValue = `${parsed.prefix}${parsed.sign}${formatted}${parsed.suffix}`;
+  }
+
+  return (
+    <Stat
+      value={displayValue}
+      label={stat.label}
+      trend={stat.trend}
+      verdict={stat.verdict}
+      hint={stat.hint}
+    />
+  );
+}
+
 export default function KpiStrip({ stats = [] }) {
   return (
-    <Card>
-      <div
-        className="pane3-numeric"
-        style={{
-          padding: 'var(--space-4, 16px) var(--space-6, 24px)',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
-          gap: 'var(--space-4, 16px)',
-          position: 'sticky',
-          top: 56, // SearchBar 44px + 余白
-          zIndex: 'var(--z-base, 1)',
-          background: 'var(--bg-card)',
-        }}
-      >
-        {stats.length === 0 ? (
-          <Stat value="—" label="N/A" trend="neutral" />
-        ) : (
-          stats.map((s, i) => (
-            <Stat
-              key={i}
-              value={s.value}
-              label={s.label}
-              trend={s.trend}
-              verdict={s.verdict}
-              hint={s.hint}
-            />
-          ))
-        )}
-      </div>
-    </Card>
+    <SectionFade>
+      <Card>
+        <div
+          className="pane3-numeric"
+          style={{
+            padding: 'var(--space-4, 16px) var(--space-6, 24px)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+            gap: 'var(--space-4, 16px)',
+            position: 'sticky',
+            top: 56, // SearchBar 44px + 余白
+            zIndex: 'var(--z-base, 1)',
+            background: 'var(--bg-card)',
+          }}
+        >
+          {stats.length === 0 ? (
+            <Stat value="—" label="N/A" trend="neutral" />
+          ) : (
+            stats.map((s, i) => (
+              <AnimatedStat key={i} stat={s} />
+            ))
+          )}
+        </div>
+      </Card>
+    </SectionFade>
   );
 }

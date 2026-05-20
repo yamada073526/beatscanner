@@ -44,6 +44,8 @@ import TriageBanner from '../../../../components/TriageBanner.jsx';
 import SummaryBrief from '../../../../components/SummaryBrief.jsx';
 // Sprint 2: AccordionSection primitive + useIntersectionLazy hook
 import { AccordionSection, useIntersectionLazy } from '../../primitives/index.js';
+// Sprint 4 (Phase 2): 案1 section in-view fade-in — 主要セクション wrapper
+import SectionFade from '../../primitives/SectionFade.jsx';
 // Sprint 0 (Phase 2): MotionProvider — LazyMotion + domAnimation (framer-motion subset)。
 // Pane 3 全体を wrap することで Sprint 4 以降の m.* motion component を有効化する。
 // framer-motion chunk は vite.config.js manualChunks で react-vendor から分離済 (20KB 以下目標)。
@@ -356,8 +358,10 @@ export default function JudgmentDetail({
       {/* handover v82 Phase 5: 三層トリアージ banner (UI/UX 6 体合議 B 案、 ConditionGrid 直前 hint 1 行)。
           保有 × 5 条件 × Cup-Handle を 1 行で示し、 「他 N 件」 click で Pane 2 ヒートマップへ jump。
           v84 hotfix 6 段階で確立済 (hasFatal 条件)、accordion 化対象外 (SPEC §6)。
-          Sprint 5: currentPrice (含み損益計算用) + onOpenAddTransaction (新規買付 button) を追加。 */}
+          Sprint 5: currentPrice (含み損益計算用) + onOpenAddTransaction (新規買付 button) を追加。
+          Sprint 4: SectionFade で section in-view fade-in (案1) */}
       {selectedTicker && (
+        <SectionFade>
         <TriageBanner
           ticker={selectedTicker}
           user={detailContext.user}
@@ -367,6 +371,7 @@ export default function JudgmentDetail({
           currentPrice={Number.isFinite(detail?.price) ? Number(detail.price) : null}
           onOpenAddTransaction={detailContext.onOpenAddTransaction}
         />
+        </SectionFade>
       )}
 
       {/* 2026-05-12 PR-2: VerdictDetail + ConditionGrid を FiveConditionsCard に統合。
@@ -459,15 +464,16 @@ export default function JudgmentDetail({
         <SectionDivider expandedLabel="詳細分析" />
       </div>
 
-      {/* GuidanceCard: expanded 固定 (今期/来期 EPS = 投資判断の直接 input) */}
+      {/* GuidanceCard: expanded 固定 (今期/来期 EPS = 投資判断の直接 input)
+          Sprint 4: SectionFade で section in-view fade-in (案1) */}
       {guidance && (
-        <div id="sec-guidance">
+        <SectionFade id="sec-guidance">
           <GuidanceCard
             guidance={guidance}
             isSecLoading={false}
             nextEarningsDays={detail?.nextEarningsDays ?? null}
           />
-        </div>
+        </SectionFade>
       )}
 
       {/* === Sprint 3: ProfileCard → AccordionSection wrap (collapsed) === */}
@@ -499,14 +505,15 @@ export default function JudgmentDetail({
 
       {/* === Sprint 3: EarningsHistoryChart (旧 EarningsBars + HistoryChart 統合、expanded 固定) ===
           user override 2: small multiples 縦バー 3 段 (売上高 / EPS / CFPS)。
-          ファンダメンタル5条件 §5 連続増加判定の視覚 anchor として expanded 維持。 */}
+          ファンダメンタル5条件 §5 連続増加判定の視覚 anchor として expanded 維持。
+          Sprint 4: SectionFade で section in-view fade-in (案1) */}
       {result?.periods?.length > 0 && (
-        <div id="sec-earnings-history">
+        <SectionFade id="sec-earnings-history">
           <EarningsHistoryChart
             periods={result.periods}
             currency={result.currency}
           />
-        </div>
+        </SectionFade>
       )}
 
       {/* === Sprint 3: AnalystPanel → AccordionSection wrap (collapsed) === */}
@@ -619,11 +626,12 @@ export default function JudgmentDetail({
 
       {/* === StockPriceChart: expanded 固定 (user override 1) ===
           「株価チャートは常に展開しておいてほしい」 (user 原文、SPEC §5 Sprint 1 Override 1)
-          accordion wrap 対象外。 */}
+          accordion wrap 対象外。
+          Sprint 4: SectionFade で section in-view fade-in (案1) */}
       {selectedTicker && (
-        <div id="sec-chart">
+        <SectionFade id="sec-chart">
           <StockPriceChart ticker={selectedTicker} isPremiumUser={plan === 'premium'} />
-        </div>
+        </SectionFade>
       )}
 
       {/* === Sprint 3: Insider 取引 → AccordionSection wrap (collapsed) === */}

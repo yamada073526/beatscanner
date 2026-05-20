@@ -9041,3 +9041,58 @@ button.ds-chip[data-pressed="true"]:hover {
    - var(--color-accent)  : ブランド emphasis / verdict PASS tint のみ = cyan
                             「上昇」意味での使用禁止 (CLAUDE.md 投資業界色ルール)
    ─────────────────────────────────────────────────────────────────── */
+
+/* ============================================================
+ * §Sprint 4 (Phase 2): 案6 press feedback delta
+ *
+ * feedback_press_feedback_delta.md SSOT:
+ *   - |Δtranslate_y| ≥ 2px かつ Δscale ≥ 0.02 (card height ≥ 60px)
+ *   - duration: 80-140ms (press) → hover transition 220ms で復元
+ *   - animation forwards fill 罠回避: :active に animation: none !important を明示
+ *     (running animation が :active の transform を独占する罠 — 3 セッション空回りの教訓)
+ *   - prefers-reduced-motion: transform: none (visual feedback 消失防止のため background flash を代替)
+ *
+ * 適用対象: Pane 3 内の全 interactive element
+ *   - accordion header (.acc-header → AccordionSection.module.css `.header`)
+ *   - Pane 3 全ての button (`.ds-judgment-detail button`)
+ *   - FiveConditionsCard の ? ボタン
+ *   - ConditionRow の展開行
+ * ============================================================ */
+
+/* Pane 3 内の汎用 button press feedback */
+.ds-judgment-detail button:not([aria-expanded]):not(.ds-chip):not([data-no-press]) {
+  transition: transform 100ms ease-out;
+}
+.ds-judgment-detail button:not([aria-expanded]):not(.ds-chip):not([data-no-press]):active {
+  transform: translateY(2px) scale(0.98);
+  /* animation forwards fill 罠回避 (feedback_press_feedback_delta.md)
+     running animation の forwards fill が transform を独占するのを防ぐ */
+  animation: none !important;
+  transition: none;
+}
+
+/* AccordionSection header button (aria-expanded を持つ) */
+.ds-judgment-detail button[aria-expanded] {
+  transition:
+    background-color var(--motion-fast, 120ms) ease-out,
+    transform 100ms ease-out;
+}
+.ds-judgment-detail button[aria-expanded]:active {
+  transform: translateY(2px) scale(0.99);
+  animation: none !important;
+  transition: none;
+}
+
+/* prefers-reduced-motion: transform を無効化して background flash で代替 */
+@media (prefers-reduced-motion: reduce) {
+  .ds-judgment-detail button:not(.ds-chip):not([data-no-press]):active {
+    transform: none;
+    background-color: var(--bg-hover);
+    animation: none !important;
+  }
+  .ds-judgment-detail button[aria-expanded]:active {
+    transform: none;
+    background-color: var(--bg-hover);
+    animation: none !important;
+  }
+}
