@@ -34,7 +34,11 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # System deps for yfinance / httpx + 日本語フォント (OGP画像生成 Pillow 用)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# 2026-05-21: apt-get install transient 障害 (Debian trixie repository or Railway
+# build node) で 4 回連続 deploy failed。 Acquire::Retries で retry + fix-missing
+# 追加で robust 化。
+RUN apt-get -o Acquire::Retries=5 update && \
+    apt-get -o Acquire::Retries=5 install -y --no-install-recommends --fix-missing \
     ca-certificates \
     fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
