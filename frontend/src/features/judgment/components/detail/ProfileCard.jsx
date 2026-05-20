@@ -18,7 +18,7 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 16,
+            gap: 'var(--space-4, 16px)',
           }}
         >
           <CompanyLogo ticker={ticker} size={56} variant="badge" />
@@ -43,9 +43,9 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
                 fontWeight: 500,
                 lineHeight: 1.3,
                 color: 'var(--text-muted)',
-                marginTop: 4,
+                marginTop: 'var(--space-1, 4px)',
                 display: 'flex',
-                gap: 12,
+                gap: 'var(--space-3, 12px)',
                 flexWrap: 'wrap',
               }}
             >

@@ -56,7 +56,7 @@ export default function FiveConditionsCard({
   // 他セクション (GuidanceCard 等) と統一: タイトル横の cyan ? chip (3 体合議 2026-05-12)
   // user 元提案 + UI/UX 推奨案 1 で converge、整合性最優先
   const titleWithHelp = (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2, 8px)' }}>
       ファンダメンタル 5 条件
       <button
         type="button"
@@ -103,7 +103,7 @@ export default function FiveConditionsCard({
           // prefers-reduced-motion 対応: animation は CSS で制御。
           <ul
             aria-label="分析中の 5 条件"
-            style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}
+            style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 'var(--space-2, 8px)' }}
           >
             {[1, 2, 3, 4, 5].map((n) => (
               <li
@@ -111,8 +111,8 @@ export default function FiveConditionsCard({
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 10,
-                  padding: '10px 0',
+                  gap: 'var(--space-3, 12px)',
+                  padding: 'var(--space-3, 12px) 0',
                   borderTop: n === 1 ? 'none' : '1px solid var(--border)',
                   opacity: 0.5,
                 }}
@@ -156,7 +156,7 @@ export default function FiveConditionsCard({
               padding: 0,
               margin: 0,
               display: 'grid',
-              gap: 8,
+              gap: 'var(--space-2, 8px)',
             }}
           >
             {conditions.map((c, i) => (

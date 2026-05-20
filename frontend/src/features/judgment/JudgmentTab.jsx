@@ -57,9 +57,9 @@ function JudgmentTabInner({ plan, items, detailFor, onAnalyze, detailContext, cu
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 6,
-                padding: '6px 12px',
-                marginBottom: 12,
+                gap: 'var(--space-2, 8px)',
+                padding: 'var(--space-2, 8px) var(--space-3, 12px)',
+                marginBottom: 'var(--space-3, 12px)',
                 fontSize: 13,
                 fontWeight: 500,
                 color: 'var(--text-secondary)',

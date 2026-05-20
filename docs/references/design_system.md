@@ -334,19 +334,42 @@ ChartTab.jsx の lightweight-charts overlay 専用。 lightweight-charts は CSS
 
 ## 2. Spacing Scale
 
-`4px` ベースのリニアスケール (Stripe Dashboard 流)。**px / rem の直書き禁止**。
+**8pt grid 厳格化** (Sprint 2 Phase 2: spacing_ratio 74 → 88 target)。**px / rem の直書き禁止**。
+
+### 8pt grid ルール (Sprint 2 で確立)
+
+- **許容値**: 4/8/12/16/20/24/32/40/48/64/80px のみ (= `--space-1` 〜 `--space-20`)
+- **例外** (使用可能な非 8pt 値): `1px` hairline border / `2px` focus ring / `4px` (= `--space-1`) micro-gap
+- **禁止**: `6px / 10px / 14px / 20px` (20px は `--space-5` を使用) / `28px` 等の中間値を raw px で直書きすること
+- **置換ルール**: `10px → 8px` (`--space-2`) / `14px → 12px` (`--space-3`) / `20px → --space-5` / `28px → 24px` (`--space-6`)
 
 | Token | Value | 主な用途 |
 |---|---|---|
-| `--space-1` | `4px` | icon gap / dot |
+| `--space-1` | `4px` | icon gap / dot / micro-gap |
 | `--space-2` | `8px` | inline gap / chip padding |
-| `--space-3` | `12px` | card inner gutter (small) |
-| `--space-4` | `16px` | section gutter (default) |
-| `--space-6` | `24px` | card padding / section break |
+| `--space-3` | `12px` | card inner gutter (small) / row gap tight |
+| `--space-4` | `16px` | section gutter (default) / card padding compact |
+| `--space-5` | `20px` | **Sprint 2 追加**: accordion inner padding / Aman 余裕 padding |
+| `--space-6` | `24px` | card padding / section break / **section gap 統一 (24px)** |
 | `--space-8` | `32px` | hero margin / pane separator |
+| `--space-10` | `40px` | **Sprint 2 追加**: Verdict→Fundamentals 境界 (章扉感) |
 | `--space-12` | `48px` | hero block vertical |
 | `--space-16` | `64px` | page-level vertical |
-| `--space-20` *(planned)* | `80px` | hero gutter (judgment Hero 用、UI/UX レビュー追加要望) |
+| `--space-20` | `80px` | **Sprint 2 追加**: hero gutter (judgment Hero 用) |
+
+### section gap 統一ルール (Sprint 2)
+
+- Pane 3 root (`ds-judgment-detail`) の grid gap: `var(--space-6, 24px)`
+- 階層内部 (Verdict / Fundamentals / Context) の section 間: 24px
+- 階層境界 (SectionDivider 前後): `--space-10` (40px) で章扉感
+- AccordionSection の panelInner padding-top: `--space-5` (20px)、gap: `--space-6` (24px)
+
+### Aman 級余白の美学 (Sprint 2)
+
+- card 内部 padding: `--space-6` (24px) を基準 (Hero は `--space-8` = 32px で luxury 化)
+- accordion inner padding: `--space-5` (20px) (旧 16px から拡大)
+- 数値 + label 間 gap: `--space-2` (8px) (旧 6px から揃え)
+- section 間: `--space-6` (24px) 統一 (旧 16-32px 混在 → 均一化)
 
 ---
 

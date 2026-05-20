@@ -12,11 +12,11 @@ import Card from '../../primitives/Card.jsx';
  */
 export default function SkeletonDetail() {
   return (
-    <div className="ds-judgment-detail" aria-busy="true" aria-label="読み込み中" style={{ display: 'grid', gap: 20 }}>
+    <div className="ds-judgment-detail" aria-busy="true" aria-label="読み込み中" style={{ display: 'grid', gap: 'var(--space-6, 24px)' }}>
       {/* Hero skeleton */}
       <Card>
-        <div style={{ padding: 'var(--space-6, 24px)', display: 'flex', justifyContent: 'space-between', gap: 16 }}>
-          <div style={{ flex: 1, display: 'grid', gap: 10 }}>
+        <div style={{ padding: 'var(--space-6, 24px)', display: 'flex', justifyContent: 'space-between', gap: 'var(--space-4, 16px)' }}>
+          <div style={{ flex: 1, display: 'grid', gap: 'var(--space-3, 12px)' }}>
             <span className="skel-base skel-badge" />
             <span className="skel-base skel-stat-lg" style={{ width: 160, height: 36 }} />
             <span className="skel-base skel-stat" style={{ width: 200 }} />
@@ -32,11 +32,11 @@ export default function SkeletonDetail() {
             padding: 'var(--space-4, 16px) var(--space-6, 24px)',
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
-            gap: 16,
+            gap: 'var(--space-4, 16px)',
           }}
         >
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} style={{ display: 'grid', gap: 6 }}>
+            <div key={i} style={{ display: 'grid', gap: 'var(--space-2, 8px)' }}>
               <span className="skel-base skel-stat-lg" />
               <span className="skel-base skel-stat" style={{ width: 60, height: 11 }} />
             </div>
@@ -46,7 +46,7 @@ export default function SkeletonDetail() {
 
       {/* VerdictDetail skeleton */}
       <Card>
-        <div style={{ padding: 'var(--space-6, 24px)', display: 'grid', gap: 8 }}>
+        <div style={{ padding: 'var(--space-6, 24px)', display: 'grid', gap: 'var(--space-2, 8px)' }}>
           <span className="skel-base skel-stat" style={{ width: 200, height: 22 }} />
           {[0, 1, 2, 3, 4].map((i) => (
             <div
@@ -55,8 +55,8 @@ export default function SkeletonDetail() {
                 display: 'grid',
                 gridTemplateColumns: '24px 1fr 60px',
                 alignItems: 'center',
-                gap: 12,
-                padding: '10px 12px',
+                gap: 'var(--space-3, 12px)',
+                padding: 'var(--space-3, 12px) var(--space-3, 12px)',
                 borderRadius: 'var(--radius-sm)',
                 background: 'var(--bg-subtle)',
               }}

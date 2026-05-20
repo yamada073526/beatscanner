@@ -403,7 +403,7 @@ export default function JudgmentDetail({
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            gap: 12,
+            gap: 'var(--space-3, 12px)',
           }}
         >
           <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>

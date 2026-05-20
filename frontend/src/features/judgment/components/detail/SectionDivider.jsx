@@ -77,7 +77,7 @@ export default function SectionDivider({ tier, label, expandedLabel }) {
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 12,
+        gap: 'var(--space-3, 12px)',
         padding: 'var(--space-6, 24px) 0 var(--space-2, 8px)',
       }}
     >

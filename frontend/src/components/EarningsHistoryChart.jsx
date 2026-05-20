@@ -183,7 +183,7 @@ function GroupedTooltip({ active, payload, label, yoyMap }) {
         minWidth: 140,
       }}
     >
-      <div style={{ fontWeight: 700, marginBottom: 6, color: 'var(--text-secondary)' }}>
+      <div style={{ fontWeight: 700, marginBottom: 'var(--space-2, 8px)', color: 'var(--text-secondary)' }}>
         {label}
       </div>
       {payload.map((entry) => {
@@ -200,7 +200,7 @@ function GroupedTooltip({ active, payload, label, yoyMap }) {
           : 'var(--text-muted)';
         const yoySign = Number(yoy) > 0 ? '+' : '';
         return (
-          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)', marginBottom: 'var(--space-1, 4px)' }}>
             <span
               style={{
                 display: 'inline-block',
@@ -240,11 +240,11 @@ function GroupedLegend({ hasDps }) {
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 12,
+        gap: 'var(--space-3, 12px)',
         flexWrap: 'wrap',
         fontSize: 10,
         color: 'var(--text-muted)',
-        marginBottom: 6,
+        marginBottom: 'var(--space-2, 8px)',
       }}
     >
       {items.map((item) => (
@@ -394,10 +394,10 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
           justifyContent: 'space-between',
           marginBottom: 'var(--space-3, 12px)',
           flexWrap: 'wrap',
-          gap: 8,
+          gap: 'var(--space-2, 8px)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)' }}>
           <h3
             style={{
               margin: 0,

@@ -50,15 +50,33 @@
      Aman Resorts の照明モデル (天井/壁/床) に倣った 4 階層 shadow + cyan glow。
      全 component は hex / px 直書きを避け、これらのトークンを参照する。 */
 
-  /* Spacing — 4-base scale */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-6: 24px;
-  --space-8: 32px;
+  /* Spacing — 8pt grid strict (Sprint 2 Phase 2: spacing 74 → 88)
+     許容値: 4/8/12/16/20/24/32/40/48/64/80px のみ。
+     例外: 1px hairline border / 2px focus ring / 4px (--space-1) micro-gap は許容。
+     非 8pt 値 (6/10/14/20/28px 等) は --space-* token に置換必須。
+     usage rule:
+       --space-1 (4px)  : icon gap / dot / micro-gap
+       --space-2 (8px)  : inline gap / chip padding
+       --space-3 (12px) : card inner gutter (small) / row gap tight
+       --space-4 (16px) : section gutter (default) / card padding compact
+       --space-5 (20px) : accordion inner padding / Aman 余裕 padding
+       --space-6 (24px) : card padding / section break / section gap 統一
+       --space-8 (32px) : hero margin / pane separator
+       --space-10 (40px): Verdict→Fundamentals 境界 (章扉感)
+       --space-12 (48px): hero block vertical
+       --space-16 (64px): page-level vertical
+       --space-20 (80px): hero gutter (judgment Hero 用)  */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;   /* Sprint 2 追加: accordion inner / Aman padding */
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;   /* Sprint 2 追加: Verdict→Fundamentals 境界 */
   --space-12: 48px;
   --space-16: 64px;
+  --space-20: 80px;   /* Sprint 2 追加: hero gutter (planned) */
 
   /* Radius — Vercel Geist tier */
   --radius-xs: 4px;
