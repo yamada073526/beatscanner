@@ -6,6 +6,10 @@ import { useJudgment } from '../../state/JudgmentContext.jsx';
 // timer は DiagramCard 側 useEffect で auto-unset (Web 設計 + 開発 reviewer 一致)。
 import { useWorkspaceStore } from '../../../../state/workspaceStore.js';
 import Hero from './Hero.jsx';
+// Sprint 3 (Phase 2): VerdictHero — Tier S glow wrapper (Pane 3 で 1 個のみ)。
+// verdict に連動した glow tint を Hero + SummaryBrief に適用。
+// data-spotlight="card" で useArrivalSpotlight に自動登録。
+import VerdictHero from './VerdictHero.jsx';
 import KpiStrip from './KpiStrip.jsx';
 import VerdictDetail from './VerdictDetail.jsx';
 import FiveConditionsCard from './FiveConditionsCard.jsx';
@@ -305,36 +309,45 @@ export default function JudgmentDetail({
           accordion header が既に「階層 chrome」を提供するため冗長。
           Hero 自身が入場感を持つため、前置 divider は不要。 */}
 
-      {/* Sprint 3: Hero — 上方重心 padding 非対称化 (入場感演出)
-          Hero.jsx 内部は不触。wrapper で padding override を適用。
-          ただし Hero は Card wrapper を持つため、ここでは JudgmentDetail レベルで
-          Hero の外側に non-padding override は不要 (Card padding は Hero 内で完結)。
-          token spacing 調整: JudgmentDetail grid gap で上部密度を制御。 */}
-      <Hero
-        ticker={selectedTicker}
-        companyName={result?.companyName}
-        verdict={verdict}
-        period={result?.latestPeriod ? `FY${result.latestPeriod}` : null}
-        nextEarningsDays={detail?.nextEarningsDays}
-        nextEarningsDate={detail?.nextEarningsDate}
-      />
-
-      {/* Sprint 6: SummaryBrief (AI 要約) — Hero と KpiStrip の間に mount。
-          ui-designer verdict 「Pane 3 上部 (Hero 直下) は §5 図解認知に最も貢献、最優先位置」。
-          brand-aspiration 比喩「コンシェルジュの一言挨拶」。
-          Hallucination Guard 4 重防御:
-            第 1 層: SummaryBriefErrorBoundary (SummaryBrief 内で wrap 済)
-            第 2 層: sanitizeText per-line BLOCKLIST_REGEX (SummaryBrief 内で適用済)
-            第 3 層: conditional render — result が null なら mount しない
-            第 4 層: 数値系 Number.isFinite — string-only LLM 出力のため非該当
-          condition pulse 連動: Sprint 6 では deferred (FiveConditionsCard の CONDITION_SECTION_MAP と
-          SummaryBrief の LLM 出力行は 1:1 対応が困難、SPEC §5 Sprint 6 末尾に deferred 注記)。 */}
-      {result && (
-        <SummaryBrief
-          analysis={result}
-          guidance={guidance}
+      {/* Sprint 3 (Phase 2): VerdictHero — Tier S glow wrapper
+          Hero + SummaryBrief を verdict 連動 tint で包む。
+          glow_elevation_postmortem.md 安全パターン:
+            - 既存 Hero の Card wrapper と入れ子にしない (VerdictHero は外側の薄い div のみ)
+            - is-arriving は useArrivalSpotlight に一元管理 (data-spotlight="card" で登録)
+            - contain: paint 禁止 (index.css .verdict-hero で isolation: isolate のみ)
+          verdict → tint: beat/in-line → cyan (PASS) / miss → amber (FAIL) / unknown → slate (WAIT) */}
+      <VerdictHero verdict={verdict}>
+        {/* Sprint 3: Hero — 上方重心 padding 非対称化 (入場感演出)
+            Hero.jsx 内部は不触。wrapper で padding override を適用。
+            ただし Hero は Card wrapper を持つため、ここでは JudgmentDetail レベルで
+            Hero の外側に non-padding override は不要 (Card padding は Hero 内で完結)。
+            token spacing 調整: JudgmentDetail grid gap で上部密度を制御。 */}
+        <Hero
+          ticker={selectedTicker}
+          companyName={result?.companyName}
+          verdict={verdict}
+          period={result?.latestPeriod ? `FY${result.latestPeriod}` : null}
+          nextEarningsDays={detail?.nextEarningsDays}
+          nextEarningsDate={detail?.nextEarningsDate}
         />
-      )}
+
+        {/* Sprint 6: SummaryBrief (AI 要約) — Hero と KpiStrip の間に mount。
+            ui-designer verdict 「Pane 3 上部 (Hero 直下) は §5 図解認知に最も貢献、最優先位置」。
+            brand-aspiration 比喩「コンシェルジュの一言挨拶」。
+            Hallucination Guard 4 重防御:
+              第 1 層: SummaryBriefErrorBoundary (SummaryBrief 内で wrap 済)
+              第 2 層: sanitizeText per-line BLOCKLIST_REGEX (SummaryBrief 内で適用済)
+              第 3 層: conditional render — result が null なら mount しない
+              第 4 層: 数値系 Number.isFinite — string-only LLM 出力のため非該当
+            condition pulse 連動: Sprint 6 では deferred (FiveConditionsCard の CONDITION_SECTION_MAP と
+            SummaryBrief の LLM 出力行は 1:1 対応が困難、SPEC §5 Sprint 6 末尾に deferred 注記)。 */}
+        {result && (
+          <SummaryBrief
+            analysis={result}
+            guidance={guidance}
+          />
+        )}
+      </VerdictHero>
 
       {/* Sprint 3: KpiStrip — grid 密着配置は KpiStrip.jsx 内部に依存。
           JudgmentDetail レベルでは gap 短縮で上部スカスカを解消。 */}
@@ -670,52 +683,60 @@ export default function JudgmentDetail({
           Sprint 4: tier=3 SectionDivider を削除済。accordion header の chrome (tier prop) が
           階層境界を代替するため冗長だった divider を除去。 */}
 
-      {/* === Sprint 3: NewsPanel → AccordionSection wrap (collapsed) === */}
+      {/* === Sprint 3: NewsPanel → AccordionSection wrap (collapsed) ===
+          Sprint 3 (Phase 2): Tier L glow — hover 時の hairline border tint のみ、発光なし。
+          tier-l-glow wrapper を AccordionSection の外側に付与。 */}
       {selectedTicker && (
         isScrollV1 ? (
           <div id="sec-news">
             <NewsPanel ticker={selectedTicker} useWorkspaceReader={useWorkspaceReader} />
           </div>
         ) : (
-          <AccordionSection
-            id="sec-news"
-            title="最新ニュース"
-            tier={3}
-            defaultOpen={false}
-            controlledOpen={expandedSections.has('news') || undefined}
-          >
-            <div id="sec-news-inner">
-              <NewsPanel ticker={selectedTicker} useWorkspaceReader={useWorkspaceReader} />
-            </div>
-          </AccordionSection>
+          <div className="tier-l-glow" data-testid="library-news-wrapper">
+            <AccordionSection
+              id="sec-news"
+              title="最新ニュース"
+              tier={3}
+              defaultOpen={false}
+              controlledOpen={expandedSections.has('news') || undefined}
+            >
+              <div id="sec-news-inner">
+                <NewsPanel ticker={selectedTicker} useWorkspaceReader={useWorkspaceReader} />
+              </div>
+            </AccordionSection>
+          </div>
         )
       )}
 
-      {/* === Sprint 3: IRLinksPanel → AccordionSection wrap (collapsed) === */}
+      {/* === Sprint 3: IRLinksPanel → AccordionSection wrap (collapsed) ===
+          Sprint 3 (Phase 2): Tier L glow — hover 時の hairline border tint のみ。 */}
       {selectedTicker && (
         isScrollV1 ? (
           <div id="sec-ir">
             <IRLinksPanel ticker={selectedTicker} />
           </div>
         ) : (
-          <AccordionSection
-            id="sec-ir"
-            title="IR Links"
-            tier={3}
-            defaultOpen={false}
-            controlledOpen={expandedSections.has('ir-links') || undefined}
-          >
-            <div id="sec-ir-inner">
-              <IRLinksPanel ticker={selectedTicker} />
-            </div>
-          </AccordionSection>
+          <div className="tier-l-glow" data-testid="library-ir-wrapper">
+            <AccordionSection
+              id="sec-ir"
+              title="IR Links"
+              tier={3}
+              defaultOpen={false}
+              controlledOpen={expandedSections.has('ir-links') || undefined}
+            >
+              <div id="sec-ir-inner">
+                <IRLinksPanel ticker={selectedTicker} />
+              </div>
+            </AccordionSection>
+          </div>
         )
       )}
 
       {/* === Sprint 3: DetailReport → AccordionSection wrap + useIntersectionLazy 連動 ===
           collapsed 時に lazy chunk fetch を抑制。
           header が viewport に入った時のみ fetch trigger (useIntersectionLazy)。
-          React.lazy + Suspense 機構は不触 (DetailReport.jsx 内部不変)。 */}
+          React.lazy + Suspense 機構は不触 (DetailReport.jsx 内部不変)。
+          Sprint 3 (Phase 2): Tier L glow — hover 時の hairline border tint のみ。 */}
       {result && (
         isScrollV1 ? (
           <PremiumLock
@@ -756,32 +777,34 @@ export default function JudgmentDetail({
             </Card>
           </PremiumLock>
         ) : (
-          <AccordionSection
-            id="sec-report"
-            title="AI 詳細レポート"
-            label="PRO"
-            tier={3}
-            defaultOpen={false}
-            controlledOpen={expandedSections.has('detail-report') || undefined}
-          >
-            <PremiumLock
-              feature="claude_opus_report"
-              plan={plan}
-              label="AI 詳細レポートで意思決定を加速"
-              bullets={[
-                '5 条件 + ガイダンスをまとめた決算サマリー',
-                '直近ニュース/業績との相関分析',
-                'Premium は Claude Opus 多面分析 (月 20 銘柄)',
-              ]}
-              onUpgrade={detailContext.onUpgrade}
+          <div className="tier-l-glow" data-testid="library-report-wrapper">
+            <AccordionSection
+              id="sec-report"
+              title="AI 詳細レポート"
+              label="PRO"
+              tier={3}
+              defaultOpen={false}
+              controlledOpen={expandedSections.has('detail-report') || undefined}
             >
-              <DetailReportAccordionContent
-                result={result}
-                guidance={guidance}
-                detailContext={detailContext}
-              />
-            </PremiumLock>
-          </AccordionSection>
+              <PremiumLock
+                feature="claude_opus_report"
+                plan={plan}
+                label="AI 詳細レポートで意思決定を加速"
+                bullets={[
+                  '5 条件 + ガイダンスをまとめた決算サマリー',
+                  '直近ニュース/業績との相関分析',
+                  'Premium は Claude Opus 多面分析 (月 20 銘柄)',
+                ]}
+                onUpgrade={detailContext.onUpgrade}
+              >
+                <DetailReportAccordionContent
+                  result={result}
+                  guidance={guidance}
+                  detailContext={detailContext}
+                />
+              </PremiumLock>
+            </AccordionSection>
+          </div>
         )
       )}
     </div>
