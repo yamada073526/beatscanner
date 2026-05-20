@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { fetchIRLinks } from '../api.js';
 import { Link, FileText, Mic, Globe, Building2, FileBadge2 } from 'lucide-react';
+// Phase 2.5 Sprint 2: Tier L 入場 fade (y:6 subtle variant)
+import SectionFadeSubtle from '../features/judgment/primitives/SectionFadeSubtle.jsx';
 
 function LinkItem({ label, url, desc }) {
   return (
@@ -8,13 +10,14 @@ function LinkItem({ label, url, desc }) {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors"
+      // Phase 2.5 Sprint 2: raw hex → token 化 (tier-l-glow 観点と統一)
+      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ir-link-item"
       style={{
         border: '1px solid var(--border)',
         color: 'var(--text-primary)',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = 'rgb(56, 189, 248)';
+        e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-accent) 60%, var(--border))';
         e.currentTarget.style.background = 'var(--bg-hover)';
       }}
       onMouseLeave={(e) => {
@@ -112,9 +115,11 @@ export default function IRLinksPanel({ ticker }) {
   const website = data?.website;
 
   return (
+    <SectionFadeSubtle>
+    {/* tier-l-glow: Sprint 2 Phase 2.5 — hover border tint + inset shadow で Tier L 階層演出 */}
     <section
-      className="panel-card rounded-2xl p-6 shadow-sm"
-      style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
+      className="panel-card tier-l-glow rounded-2xl p-6 shadow-sm"
+      style={{ background: 'var(--bg-card)' }}
     >
       <h3 className="section-heading" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span className="section-header-icon" aria-hidden="true">
@@ -198,5 +203,6 @@ export default function IRLinksPanel({ ticker }) {
         </div>
       )}
     </section>
+    </SectionFadeSubtle>
   );
 }

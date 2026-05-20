@@ -7,6 +7,8 @@ import useArticleModal from '../hooks/useArticleModal.js';
 import useTranslation from '../hooks/useTranslation.js';
 import { useWorkspaceStore } from '../state/workspaceStore.js';
 import { Newspaper } from 'lucide-react';
+// Phase 2.5 Sprint 2: Tier L 入場 fade (y:6 subtle variant)
+import SectionFadeSubtle from '../features/judgment/primitives/SectionFadeSubtle.jsx';
 
 const VIEW_STORAGE_KEY = 'bs_newsView.panel';
 const VIEW_AUTO_THRESHOLD = 12;  // 件数 ≤12 → grid、>12 → list デフォルト
@@ -180,7 +182,9 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false }) {
   if (!ticker) return null;
 
   return (
-    <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+    <SectionFadeSubtle>
+    {/* tier-l-glow: Sprint 2 Phase 2.5 — hover border tint + inset shadow で Tier L 階層演出 */}
+    <section className="panel-card tier-l-glow rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)' }}>
       <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
         <h3 className="section-heading" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
           <span className="section-header-icon" aria-hidden="true">
@@ -341,22 +345,22 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false }) {
                   gap: 'var(--space-2, 8px)',
                   padding: 'var(--space-3, 12px) var(--space-6, 24px)',
                   borderRadius: 999,
-                  background: 'rgba(56, 189, 248,0.10)',
-                  border: '1px solid rgba(56, 189, 248,0.35)',
-                  color: 'rgb(56, 189, 248)',
+                  background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--color-accent) 35%, transparent)',
+                  color: 'var(--color-accent)',
                   fontSize: 13,
                   fontWeight: 600,
                   cursor: 'pointer',
                   transition: 'all 0.18s ease',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(56, 189, 248,0.18)';
-                  e.currentTarget.style.borderColor = 'rgba(56, 189, 248,0.60)';
+                  e.currentTarget.style.background = 'color-mix(in srgb, var(--color-accent) 18%, transparent)';
+                  e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-accent) 60%, transparent)';
                   e.currentTarget.style.transform = 'translateY(-1px)';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(56, 189, 248,0.10)';
-                  e.currentTarget.style.borderColor = 'rgba(56, 189, 248,0.35)';
+                  e.currentTarget.style.background = 'color-mix(in srgb, var(--color-accent) 10%, transparent)';
+                  e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-accent) 35%, transparent)';
                   e.currentTarget.style.transform = 'translateY(0)';
                 }}
               >
@@ -372,5 +376,6 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false }) {
 
       <NewsArticleModal article={articleModal} onClose={closeArticle} />
     </section>
+    </SectionFadeSubtle>
   );
 }

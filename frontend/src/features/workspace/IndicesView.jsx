@@ -801,6 +801,15 @@ function PortfolioActions({ prices }) {
   // v68 §2 #6 dogfood 2026-05-15: history modal → entry modal の chain で ticker prefill 用
   const [newEntryTicker, setNewEntryTicker] = useState('');
 
+  // Phase 2.5 Sprint 2 WARN 対応: IndicesView mount 状態をグローバルに通知。
+  // App.jsx root listener がこのフラグを見て二重 modal open を防止する。
+  useEffect(() => {
+    if (typeof window !== 'undefined') window.__bs_indices_mounted = true;
+    return () => {
+      if (typeof window !== 'undefined') window.__bs_indices_mounted = false;
+    };
+  }, []);
+
   // Sprint 5 (SPEC 2026-05-19): TriageBanner 「新規買付」 button から発火される
   // カスタムイベント 'bs:open:addtx' を受信して取引登録 modal を開く。
   // ticker は event.detail.ticker で受け取る。

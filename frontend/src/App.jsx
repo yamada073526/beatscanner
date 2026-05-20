@@ -117,10 +117,24 @@ export default function App() {
   // App.jsx root に listener + TransactionEntryModal を常駐 mount することで
   // Pane 3 / Pane 2 / classic SPA 全パスで chip click が動作する。
   // IndicesView 側の listener は維持 (Pane 2 portfolio view 単独動作を守るため)。
+  //
+  // Phase 2.5 Sprint 2 WARN 対応: 二重 modal event guard 追加。
+  // Workspace mode で indices tab が mount されている場合、IndicesView の listener も
+  // 同時に 'bs:open:addtx' をキャッチする。このとき App.jsx root listener は:
+  // 1) rootAddTxOpen が既に true なら早期 return (二重 modal open を防止)
+  // 2) IndicesView が mount されている (isIndicesViewMounted ref) 場合は App.jsx 側を skip
+  //    して IndicesView に任せる (indices tab 専用 modal が正しい context を持つため)。
   const [rootAddTxOpen, setRootAddTxOpen] = useState(false);
   const [rootAddTxTicker, setRootAddTxTicker] = useState('');
+  // IndicesView mount 状態を ref で追跡 (cross-component communication)
+  // IndicesView 自身が mount/unmount 時に window.BS_INDICES_MOUNTED を set する規約で運用。
   useEffect(() => {
     const handler = (e) => {
+      // guard 1: 既に root modal が open 中なら二重 open を防止
+      if (rootAddTxOpen) return;
+      // guard 2: IndicesView が mount されている場合 (= workspace mode + indices tab)、
+      //          IndicesView 側の listener に任せて root modal は開かない
+      if (typeof window !== 'undefined' && window.__bs_indices_mounted) return;
       const t = String(e?.detail?.ticker || '').trim().toUpperCase();
       setRootAddTxTicker(t);
       // setTimeout(0) で z-index 競合 (他 modal close transition) を回避
@@ -128,7 +142,9 @@ export default function App() {
     };
     window.addEventListener('bs:open:addtx', handler);
     return () => window.removeEventListener('bs:open:addtx', handler);
-  }, []);
+  // rootAddTxOpen を依存に含めてガード条件を最新状態で評価
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rootAddTxOpen]);
 
   // v62 WS-6: dark mode 状態を React state に reactive 化.
   // toggleDarkMode は document.documentElement の data-theme を書換えるが React 状態を
