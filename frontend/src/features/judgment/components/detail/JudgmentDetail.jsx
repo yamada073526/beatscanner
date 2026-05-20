@@ -40,6 +40,10 @@ import TriageBanner from '../../../../components/TriageBanner.jsx';
 import SummaryBrief from '../../../../components/SummaryBrief.jsx';
 // Sprint 2: AccordionSection primitive + useIntersectionLazy hook
 import { AccordionSection, useIntersectionLazy } from '../../primitives/index.js';
+// Sprint 0 (Phase 2): MotionProvider — LazyMotion + domAnimation (framer-motion subset)。
+// Pane 3 全体を wrap することで Sprint 4 以降の m.* motion component を有効化する。
+// framer-motion chunk は vite.config.js manualChunks で react-vendor から分離済 (20KB 以下目標)。
+import MotionProvider from '../../../../components/MotionProvider.jsx';
 
 // DetailReport は重量級 (36 KB gzip) のため lazy load
 const DetailReport = lazy(() => import('../../../../components/DetailReport.jsx'));
@@ -281,6 +285,11 @@ export default function JudgmentDetail({
   const isScrollV1 = isPane3ScrollV1();
 
   return (
+    // Sprint 0 (Phase 2): MotionProvider で Pane 3 全体を wrap。
+    // LazyMotion + domAnimation features (framer-motion subset) を有効化。
+    // Sprint 4 以降の m.section / m.div / useMotionValue 等はこの scope 内で動作する。
+    // prefers-reduced-motion 対応は index.css @media ブロックで全体カバー済。
+    <MotionProvider>
     <div
       className="ds-judgment-detail"
       style={{
@@ -776,5 +785,6 @@ export default function JudgmentDetail({
         )
       )}
     </div>
+    </MotionProvider>
   );
 }

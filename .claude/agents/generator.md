@@ -60,7 +60,7 @@ SPEC が指名した skill を Skill tool で invoke。 例:
 
 ### Step 4: 自己評価メトリクス (5 項目、 全 PASS 必須)
 
-実装完了後、 以下を順次実行し、 結果を `frontend/.visual/generator-selfcheck-sprint${SPRINT_NUMBER}.json` に書き出す:
+実装完了後、 **以下を必ず最後まで順次実行する** (v87 SOP: design-system-check で止まらず 5 項目全件実行)。 結果は **必ず Write tool で** `frontend/.visual/generator-selfcheck-sprint${SPRINT_NUMBER}.json` に書き出す。 JSON Write を省略した場合、 Evaluator は起動しない。
 
 ```json
 {
@@ -88,15 +88,32 @@ SPEC が指名した skill を Skill tool で invoke。 例:
 | post_edit_hook_pass | 既存 `.claude/hooks/post_edit_build_check.sh` の asyncRewake 結果を最後の Edit 後に確認 |
 | design_system_check_pass | Skill tool で `design-system-check` を invoke、 violations 0 件 |
 
-### Step 5: 失敗時の self-fix (Evaluator 呼出前)
+**重要 (v87 SOP `feedback_generator_selfeval_incomplete.md` より)**:
+- `design_system_check_pass` を確認した時点で report を終了してはいけない
+- 5 項目全件を `checks` オブジェクトに埋めてから JSON を Write する
+- JSON Write 完了後に「JSON Write 済 + Evaluator 起動済」 を self-verify してから report を終わらせる
 
-5 項目のいずれかが FAIL の場合、 **Generator 内部で 1 回だけ self-fix を試行**。 失敗が build / lint レベルなら typo / syntax を修正、 design-system-check 違反なら raw hex → token に置換 等。 self-fix 後に再度 5 項目を計測。
+### Step 5: 失敗時の self-fix (Evaluator 呼出前、 最大 3 回ループ)
 
-再度 FAIL なら `failure_reason` を記載し、 Evaluator を呼ばずに user escalate。
+5 項目のいずれかが FAIL の場合、 **Generator 内部で self-fix を試行** (最大 3 回)。 以下の対応方針に従う:
 
-### Step 6: Evaluator subagent に引き渡し
+| FAIL 種別 | self-fix 方針 |
+|---|---|
+| build_pass FAIL | エラーログの typo / syntax を修正、 再 build |
+| design_system_check FAIL | raw hex → CSS token 置換、 !important 整理 |
+| pre_commit_pass FAIL | pre-commit check の指摘箇所を修正 |
+| pytest_pass FAIL | backend の型エラー / import エラーを修正 (本来 backend 触らない sprint では自動 pass) |
 
-5 項目全 PASS したら、 Agent tool で `subagent_type=evaluator` を起動。 入力:
+self-fix 後に **5 項目全件を再測定**。 3 回試みても FAIL が残る場合は `failure_reason` を記載し、 **Evaluator を呼ばずに user escalate**。
+
+### Step 6: Evaluator subagent に引き渡し (必須 — 省略不可)
+
+5 項目全 PASS を確認したら、 **必ず Agent tool で evaluator subagent を起動する**。 起動前に:
+
+1. `frontend/.visual/generator-selfcheck-sprint<N>.json` が **Write 済みであること** を Bash で確認 (`ls -la` で存在確認)
+2. `next_action` が `"handoff_to_evaluator"` であること を確認
+
+確認後、 Agent tool で evaluator subagent を起動:
 
 ```
 SPRINT_NUMBER=<N>
@@ -104,6 +121,13 @@ SPEC_PATH=<path>
 BRANCH=claude/<slug>-sprint<N>
 SELFCHECK_PATH=frontend/.visual/generator-selfcheck-sprint<N>.json
 ```
+
+**v87 SOP**: このステップを省略した場合、 main 側で以下を手動補完する必要が生じる:
+- `npm run build` (worktree 内)
+- `grep -c 'MNaN' frontend/dist/assets/*.js`
+- Evaluator subagent 手動起動
+
+**Generator は完了 report の前に「JSON Write 済 + Evaluator 起動済」 を必ず自己確認する。**
 
 ### Step 7: Evaluator フィードバック処理 (retry ループ、 最大 3 回)
 

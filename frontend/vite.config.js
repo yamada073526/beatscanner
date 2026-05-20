@@ -24,6 +24,10 @@ export default defineConfig({
           'charts': ['lightweight-charts', 'recharts'],
           'dnd': ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
           'markdown': ['react-markdown'],
+          // Sprint 0 (Phase 2): framer-motion を react-vendor から分離。
+          // Pane 3 専用 chunk として lazy load 対応。LazyMotion + domAnimation subset で
+          // バンドル 20KB 以下 (gzip) を目標とする。
+          'framer-motion': ['framer-motion'],
         },
       },
     },
