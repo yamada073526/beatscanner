@@ -1,6 +1,6 @@
 /**
  * ConditionSparkline — per-condition ミニスパークライン + trend % chip
- *   (Sprint 1: sparkline 追加 / Sprint B: trend chip 追加)
+ *   (Sprint 1: sparkline 追加 / Sprint B: trend chip 追加 / Sprint 4: draw-in animation)
  *
  * SPEC 要件:
  *  - collapsed 状態の ConditionRow 右端に常時表示 (width 80-120px / height 28-36px)
@@ -16,14 +16,31 @@
  *  2. conditional render → valid 値 2 点未満で null return
  *  3. Number.isFinite guard → chartData 生成時 + trend 計算時に filter
  *  4. isAnimationActive={false} → Line コンポーネントに必須設定
+ *     Sprint 4 案3: feature flag `?pane3_sparkline_animate=1` で mount 時のみ例外的に有効化
+ *     (default: false 維持、chart 4 層防御の他 3 層は全維持)
  *
  * chip は div + span のみ (Recharts/SVG 不使用)。
  * chip の色: PASS + 正方向 → var(--color-gain) / FAIL + 負方向 → var(--color-loss) / その他 → var(--text-muted)
  */
 
-import React, { Component } from 'react';
+import React, { Component, useRef, useState } from 'react';
 import { LineChart, Line, YAxis, ReferenceDot, ResponsiveContainer } from 'recharts';
 import Chip from '../../../../components/ui/Chip.jsx';
+
+// Sprint 4 案3: feature flag — ?pane3_sparkline_animate=1 で sparkline draw-in を有効化
+// default: false (chart 4 層防御: isAnimationActive={false} 維持)
+// prefers-reduced-motion: true の場合は feature flag に関わらず無効
+function isSparklineAnimateEnabled() {
+  try {
+    if (typeof window === 'undefined') return false;
+    // prefers-reduced-motion check
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return false;
+    // URL param check
+    return new URLSearchParams(window.location.search).get('pane3_sparkline_animate') === '1';
+  } catch {
+    return false;
+  }
+}
 
 // ── Trend % chip (Sprint B) ─────────────────────────────────────────────────
 /**
@@ -161,6 +178,12 @@ class SparklineErrorBoundary extends Component {
  * @param {string} [props.conditionName] - aria-label 用
  */
 function ConditionSparklineInner({ series, passed, conditionIndex, conditionName }) {
+  // Sprint 4 案3: mount 時 1 回のみ draw animation (feature flag 制御)
+  // isAnimationActive は mount 時のみ true (一度 draw 完了したら false に戻す)
+  // Recharts 4 層防御: 他 3 層 (ErrorBoundary/conditional/Number.isFinite) は全維持
+  const sparklineAnimateEnabled = isSparklineAnimateEnabled();
+  const [isAnimating, setIsAnimating] = useState(sparklineAnimateEnabled);
+  const animDoneRef = useRef(false);
   // Recharts 4 層防御 第 2-3 層: conditional render + Number.isFinite guard
   if (!Array.isArray(series)) return null;
 
@@ -234,7 +257,17 @@ function ConditionSparklineInner({ series, passed, conditionIndex, conditionName
               strokeWidth={1.5}
               dot={false}
               // Recharts 4 層防御 第 4 層: infinite animation finish() throw を防ぐ
-              isAnimationActive={false}
+              // Sprint 4 案3: feature flag pane3_sparkline_animate=1 で mount 時のみ例外的に有効化
+              // default: false 維持 (prefers-reduced-motion: false の場合も default は false)
+              isAnimationActive={isAnimating}
+              animationDuration={1200}
+              animationEasing="ease-out"
+              onAnimationEnd={() => {
+                if (!animDoneRef.current) {
+                  animDoneRef.current = true;
+                  setIsAnimating(false);
+                }
+              }}
               connectNulls={false}
             />
 

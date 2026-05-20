@@ -1,4 +1,18 @@
+/**
+ * AccordionSection primitive
+ *
+ * Sprint 4 (Phase 2): 案5 accordion expansion spring を追加。
+ *   panel の height: auto を framer-motion spring (SPRING_SOFT) で 320ms animate する。
+ *   内部 logic (toggle / aria / keyboard) は不変。
+ *   CSS の clip-path animation (acc-expand) は framer-motion と共存。
+ *   prefers-reduced-motion: useReducedMotion() true → animate 無効 (高さ即変化)。
+ *
+ *   feedback_motion_timing_recipes.md SPRING_SOFT preset:
+ *     { type: 'spring', stiffness: 220, damping: 28 }
+ *   PGE 落とし穴 4: infinite animation 禁止 → open/close で完結 → OK
+ */
 import React, { useState, useCallback, useId } from 'react';
+import { m, AnimatePresence, useReducedMotion } from 'framer-motion';
 import styles from './AccordionSection.module.css';
 
 /**
@@ -61,6 +75,9 @@ export default function AccordionSection({
       return false;
     }
   })();
+
+  // Sprint 4: prefers-reduced-motion 対応 (案5 accordion spring)
+  const reduce = useReducedMotion();
 
   // isControlled: Sprint 5 で workspaceStore が controlledOpen を渡す想定
   const isControlled = typeof controlledOpen === 'boolean';
@@ -156,19 +173,37 @@ export default function AccordionSection({
 
       {/* ===== Accordion Panel ===== */}
       {/*
-        View Transitions API が存在する場合は JS 側で startViewTransition() を呼ぶ。
-        fallback (未対応 browser): clip-path transition で collapse/expand アニメーション。
-        prefers-reduced-motion: reduce → CSS 側で transition: none を設定 (AccordionSection.module.css)。
+        Sprint 4: framer-motion spring (SPRING_SOFT) で height: 0 ↔ height: auto を animate。
+        - `hidden` attribute は aria-hidden 用に維持 (アクセシビリティ)
+        - framer-motion AnimatePresence + m.div の overflow:hidden で jump-cut を排除
+        - prefers-reduced-motion: useReducedMotion() true → animate 無効 (即変化)
+        - CSS acc-expand (clip-path) は framer-motion 導入後も保留 (View Transitions fallback)
+        PGE 落とし穴 4: open/close で完結 (infinite なし) → OK
       */}
-      <div
-        id={panelId}
-        role="region"
-        aria-labelledby={headerId}
-        className={styles.panel}
-        hidden={!isOpen}
-      >
-        <div className={styles.panelInner}>{children}</div>
-      </div>
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <m.div
+            id={panelId}
+            role="region"
+            aria-labelledby={headerId}
+            className={styles.panel}
+            key={panelId}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={
+              // prefers-reduced-motion: reduce → 即変化 (duration 0)
+              // SPRING_SOFT preset (feedback_motion_timing_recipes.md)
+              reduce
+                ? { duration: 0 }
+                : { type: 'spring', stiffness: 220, damping: 28 }
+            }
+            style={{ overflow: 'hidden' }}
+          >
+            <div className={styles.panelInner}>{children}</div>
+          </m.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

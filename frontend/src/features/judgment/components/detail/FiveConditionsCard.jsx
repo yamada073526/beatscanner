@@ -5,6 +5,8 @@ import ConditionRow from './ConditionRow.jsx';
 import FiveConditionsOverviewModal from './FiveConditionsOverviewModal.jsx';
 import { useWorkspaceStore } from '../../../../state/workspaceStore.js';
 import { BarChart3 } from 'lucide-react';
+// Sprint 4 (Phase 2): 案1 section in-view fade-in
+import SectionFade from '../../primitives/SectionFade.jsx';
 
 /**
  * FiveConditionsCard — VerdictDetail と ConditionGrid を統合した unified card (PR-2)
@@ -156,6 +158,8 @@ export default function FiveConditionsCard({
     // Card の forwardRef 非対応のため、Card を囲む div に ref + tier-m-glow を付与。
     // contain: paint 禁止 (glow_elevation_postmortem.md v54)。
     // overflow: visible で halo が clip されない (index.css .tier-m-glow で設定済)。
+    // Sprint 4: SectionFade で section in-view fade-in (案1) を outer wrapper に適用
+    <SectionFade>
     <div ref={cardRef} className="tier-m-glow" data-testid="five-conditions-card-wrapper">
     <Card data-testid="five-conditions-card">
       <div style={{ padding: 'var(--space-6, 24px)' }}>
@@ -281,5 +285,6 @@ export default function FiveConditionsCard({
       )}
     </Card>
     </div>
+    </SectionFade>
   );
 }

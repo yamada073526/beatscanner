@@ -13,6 +13,12 @@ import { sanitizeDiagramData, findBlocklistHits } from '../lib/blocklist.js';
 import { useWorkspaceStore } from '../state/workspaceStore.js';
 import { isStepPulsingForCondition } from '../lib/condition-mapping.js';
 import Toast from './Toast.jsx';
+// Sprint 4 (Phase 2): 案8 DiagramCard step reveal — expanded 時 7 要素 80ms stagger fade-in
+// m.* (LazyMotion 経由)、motion.* (Eager) は禁止
+// DiagramCard は HomeTab / DetailReport からも呼ばれるため、
+// LazyMotion scope を self-contained にするため MotionProvider を local wrap する
+import { m, useReducedMotion } from 'framer-motion';
+import MotionProvider from './MotionProvider.jsx';
 
 function VizSectionLabel({ text, first = false }) {
   return (
@@ -37,11 +43,29 @@ function VizSectionLabel({ text, first = false }) {
   );
 }
 
+// Sprint 4 案8: stagger variants (feedback_motion_timing_recipes.md §stagger 80ms upper bound)
+// expanded 時のみ発火 (DiagramCard mount = expanded 後に render)
+const STEP_CONTAINER_VARIANTS = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.08, // 80ms stagger (最大 upper bound、 7 要素まで)
+      delayChildren: 0.05, // 最初の要素 50ms delay で「一呼吸置いてから」演出
+    },
+  },
+};
+
+const STEP_ITEM_VARIANTS = {
+  hidden: { opacity: 0, y: 8 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.25, ease: [0.2, 0.8, 0.2, 1] } },
+};
+
 function FlowBox({ step, stepIndex, isPulsing }) {
   const label  = step.label  || '';
   const detail = step.detail || step.sub || '';
   return (
-    <div
+    <m.div
+      variants={STEP_ITEM_VARIANTS}
       className="diagram-step"
       data-step-index={stepIndex}
       data-pulsing={isPulsing ? 'true' : undefined}
@@ -67,7 +91,7 @@ function FlowBox({ step, stepIndex, isPulsing }) {
           {detail}
         </div>
       )}
-    </div>
+    </m.div>
   );
 }
 
@@ -839,6 +863,9 @@ export default function DiagramCard({
     return sanitized;
   }, [rawData]);
 
+  // Sprint 4 案8: prefers-reduced-motion チェック (stagger variants の initial を 'visible' に切替)
+  const reduce = useReducedMotion();
+
   // handover v82 Phase 5.5: ConditionRow click → 該当 condition + step を pulse highlight。
   // selector subscribe (primitive shallow、 不要 re-render 回避)、 timer は useEffect 内で
   // 2800ms auto-unset (Web 設計 + 開発 reviewer 一致 verdict)。
@@ -1444,12 +1471,24 @@ export default function DiagramCard({
               overflowX: 'auto', WebkitOverflowScrolling: 'touch',
               borderRadius: '8px', background: 'var(--bg-subtle)', padding: '14px 12px',
             }}>
-              <div style={{
-                display: 'flex', alignItems: 'center', flexWrap: 'nowrap',
-                gap: '8px', width: 'fit-content', margin: '0 auto',
-              }}>
-                {flowItems}
-              </div>
+              {/* Sprint 4 案8: step reveal — expanded 時 7 要素 80ms stagger fade-in
+                  MotionProvider で LazyMotion scope を self-contained に wrap
+                  (DiagramCard は HomeTab / DetailReport など複数 context から呼ばれるため)
+                  m.div variants="STEP_CONTAINER_VARIANTS" で staggerChildren 制御 */}
+              <MotionProvider>
+                <m.div
+                  variants={STEP_CONTAINER_VARIANTS}
+                  // prefers-reduced-motion: reduce なら 'visible' で即表示 (stagger skip)
+                  initial={reduce ? 'visible' : 'hidden'}
+                  animate="visible"
+                  style={{
+                    display: 'flex', alignItems: 'center', flexWrap: 'nowrap',
+                    gap: '8px', width: 'fit-content', margin: '0 auto',
+                  }}
+                >
+                  {flowItems}
+                </m.div>
+              </MotionProvider>
             </div>
           </div>
         ) : (
