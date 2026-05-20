@@ -8825,3 +8825,219 @@ button.ds-chip[data-pressed="true"]:hover {
    - 英数字 heading: lh 1.2-1.3
    これらは component 別 class で個別制御 (cascading 汚染を避ける)
    グローバル適用は tabular-nums のみ (.ds-judgment-detail で実施済) */
+
+/* ═══════════════════════════════════════════════════════════════════
+   § Sprint 3 (Phase 2): color + glow 3 tier grammar
+   SPEC_2026-05-20_pane3-phase2-100point.md §5 Sprint 3
+   glow_elevation_postmortem.md 安全パターン完全遵守:
+     - compound `.X.is-arriving:hover` 4 セット必須
+     - contain: paint 絶対禁止
+     - 入れ子 surface-card 禁止
+     - 既存 .panel-card / .bs-panel / .surface-card 構造変更禁止
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── glow tint 3 variant (verdict 連動) ───────────────────────────
+   PASS = cyan (brand emphasis)   → var(--color-accent)
+   FAIL = amber (警告)            → var(--color-warning)
+   WAIT = slate (muted)           → var(--text-muted)
+   投資業界色ルール遵守: cyan を「上昇」意味では使わない。
+   ここでは verdict 連動 (PASS/FAIL/WAIT) という「状態」に使う。
+   PASS = 判定合格の「状態」であり、上昇/緑 (--color-gain) とは別物。 */
+.glow-tint-pass { --glow-tint: var(--color-accent); }
+.glow-tint-fail { --glow-tint: var(--color-warning); }
+.glow-tint-wait { --glow-tint: var(--text-muted); }
+
+/* ── Tier S: verdict-hero wrapper (Hero + SummaryBrief 包括) ──────
+   Pane 3 で 1 個のみ。既存 panel-card / surface-card と入れ子にしない。
+   contain: paint 禁止 (glow が clip される v54 root cause)。
+   compound 4 セット: light arrival / light arrival+hover /
+                      dark arrival / dark arrival+hover */
+.verdict-hero {
+  border-radius: var(--radius-lg, 16px);
+  border: 1.5px solid transparent;
+  transition:
+    box-shadow var(--motion-slow, 360ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    border-color var(--motion-slow, 360ms) ease,
+    transform var(--motion-slow, 360ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+  /* GPU 合成 (postmortem v54 安全パターン) */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  isolation: isolate;
+  will-change: transform, box-shadow;
+  /* contain: paint 絶対禁止 — glow が clip される v54 root cause */
+}
+
+/* arrival (スクロール中央帯でのみ点灯 / useArrivalSpotlight 一元) */
+.verdict-hero.is-arriving {
+  transform: translateY(-4px) translateZ(0);
+  box-shadow:
+    0 0 18px color-mix(in srgb, var(--glow-tint, var(--color-accent)) 18%, transparent),
+    0 8px 24px color-mix(in srgb, var(--glow-tint, var(--color-accent)) 12%, transparent),
+    0 0 0 1.5px color-mix(in srgb, var(--glow-tint, var(--color-accent)) 45%, transparent);
+  border-color: color-mix(in srgb, var(--glow-tint, var(--color-accent)) 45%, transparent);
+}
+
+/* arrival + hover (能動 > 受動: specificity 0,3,1 で .is-arriving 0,2,0 に勝つ) */
+.verdict-hero.is-arriving:hover {
+  transform: translateY(-6px) translateZ(0);
+  box-shadow:
+    0 0 28px color-mix(in srgb, var(--glow-tint, var(--color-accent)) 34%, transparent),
+    0 14px 36px color-mix(in srgb, var(--glow-tint, var(--color-accent)) 24%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--glow-tint, var(--color-accent)) 65%, transparent);
+  border-color: color-mix(in srgb, var(--glow-tint, var(--color-accent)) 65%, transparent) !important;
+}
+
+/* dark mode: arrival */
+[data-theme="dark"] .verdict-hero.is-arriving {
+  box-shadow:
+    0 0 24px color-mix(in srgb, var(--glow-tint, var(--color-accent)) 30%, transparent),
+    0 10px 28px color-mix(in srgb, var(--glow-tint, var(--color-accent)) 20%, transparent),
+    0 0 0 1.5px color-mix(in srgb, var(--glow-tint, var(--color-accent)) 62%, transparent);
+  border-color: color-mix(in srgb, var(--glow-tint, var(--color-accent)) 62%, transparent) !important;
+}
+
+/* dark mode: arrival + hover (4 セット完結) */
+[data-theme="dark"] .verdict-hero.is-arriving:hover {
+  box-shadow:
+    0 0 36px color-mix(in srgb, var(--glow-tint, var(--color-accent)) 42%, transparent),
+    0 16px 40px color-mix(in srgb, var(--glow-tint, var(--color-accent)) 28%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--glow-tint, var(--color-accent)) 80%, transparent) !important;
+  border-color: color-mix(in srgb, var(--glow-tint, var(--color-accent)) 80%, transparent) !important;
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* hover (arrival 不在の場合) */
+.verdict-hero:hover {
+  transform: translateY(-4px) translateZ(0);
+  box-shadow:
+    0 0 20px color-mix(in srgb, var(--glow-tint, var(--color-accent)) 22%, transparent),
+    0 10px 28px color-mix(in srgb, var(--glow-tint, var(--color-accent)) 15%, transparent),
+    0 0 0 1.5px color-mix(in srgb, var(--glow-tint, var(--color-accent)) 50%, transparent);
+  border-color: color-mix(in srgb, var(--glow-tint, var(--color-accent)) 50%, transparent);
+}
+
+[data-theme="dark"] .verdict-hero:hover {
+  transform: translateY(-4px) translateZ(0);
+  box-shadow:
+    0 0 26px color-mix(in srgb, var(--glow-tint, var(--color-accent)) 32%, transparent),
+    0 12px 32px color-mix(in srgb, var(--glow-tint, var(--color-accent)) 22%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--glow-tint, var(--color-accent)) 70%, transparent) !important;
+  border-color: color-mix(in srgb, var(--glow-tint, var(--color-accent)) 70%, transparent) !important;
+}
+
+/* prefers-reduced-motion: verdict-hero の transform 抑制 */
+@media (prefers-reduced-motion: reduce) {
+  .verdict-hero,
+  .verdict-hero.is-arriving,
+  .verdict-hero.is-arriving:hover,
+  .verdict-hero:hover {
+    transform: none !important;
+    animation: none !important;
+  }
+  /* tier-m-glow: halo sweep animation を無効化 */
+  .tier-m-glow::after {
+    animation: none !important;
+  }
+}
+
+/* ── Tier M: tier-m-glow (5 条件 cards + Fundamentals 3 列) ──────
+   IntersectionObserver で section 初入場時に 600ms halo sweep (左→右 linear-gradient mask)。
+   1 回限り: data-halo-fired 属性で記録し、再 mount でも 2 回目は発火しない。
+   loop 禁止 (animation-iteration-count: 1 enforce)。
+   ::after pseudo で sweep overlay を実装 (本体 card は既存 panel-card CSS 維持)。 */
+.tier-m-glow {
+  position: relative;
+  overflow: visible; /* glow が clip されない (contain: paint 禁止の理由と同じ) */
+  /* ring-glow 三層 halo を継承 (既存 --ring-glow token 活用) */
+  transition:
+    box-shadow var(--motion-slow, 360ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    border-color var(--motion-slow, 360ms) ease;
+}
+
+/* halo sweep overlay: 初入場時に 1 回だけ */
+@keyframes halo-sweep {
+  0% {
+    opacity: 0.7;
+    mask-position: -200% center;
+    -webkit-mask-position: -200% center;
+  }
+  60% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+    mask-position: 200% center;
+    -webkit-mask-position: 200% center;
+  }
+}
+
+/* data-halo-ready 付与中 (IntersectionObserver が once 発火した直後) に sweep */
+.tier-m-glow[data-halo-ready="1"]::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  pointer-events: none;
+  /* left→right で流れる cyan halo */
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--color-accent) 25%, transparent) 40%,
+    color-mix(in srgb, var(--color-accent) 40%, transparent) 50%,
+    color-mix(in srgb, var(--color-accent) 25%, transparent) 60%,
+    transparent 100%
+  );
+  mask:
+    linear-gradient(90deg, transparent 0%, black 30%, black 70%, transparent 100%)
+    -200% center / 200% 100% no-repeat;
+  -webkit-mask:
+    linear-gradient(90deg, transparent 0%, black 30%, black 70%, transparent 100%)
+    -200% center / 200% 100% no-repeat;
+  animation: halo-sweep var(--motion-stage, 600ms) var(--ease-out-cubic, cubic-bezier(0.22, 1, 0.36, 1)) 1 forwards;
+  /* loop 禁止: 1 回のみ (infinite 禁止: feedback_pge_loop_pitfalls.md §4) */
+  z-index: 1;
+}
+
+/* data-halo-fired 付与後: ::after を非表示に (2 回目は発火しない) */
+.tier-m-glow[data-halo-fired="1"]::after {
+  display: none;
+}
+
+/* dark mode: halo をやや強化 */
+[data-theme="dark"] .tier-m-glow[data-halo-ready="1"]::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--color-accent) 35%, transparent) 40%,
+    color-mix(in srgb, var(--color-accent) 55%, transparent) 50%,
+    color-mix(in srgb, var(--color-accent) 35%, transparent) 60%,
+    transparent 100%
+  );
+}
+
+/* ── Tier L: tier-l-glow (Library section) ───────────────────────
+   hover 時の hairline border tint 変化のみ。glow / shadow なし。
+   Tier M より軽い: 情報量過多防止 (feedback_glow_active_pattern.md §3 Tier L)。 */
+.tier-l-glow {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 12px);
+  transition:
+    border-color var(--motion-base, 200ms) ease-out;
+}
+
+.tier-l-glow:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 40%, var(--border));
+}
+
+[data-theme="dark"] .tier-l-glow:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, var(--border));
+}
+
+/* ── 投資業界色ルール enforcement comments ────────────────────────
+   下記の使い分けを全 Pane 3 component で維持:
+   - var(--color-gain)    : 上昇・ポジティブ = 緑  [絶対遵守]
+   - var(--color-loss)    : 下落・ネガティブ = 赤  [絶対遵守]
+   - var(--color-warning) : 緊急・警告 = amber     [絶対遵守]
+   - var(--color-accent)  : ブランド emphasis / verdict PASS tint のみ = cyan
+                            「上昇」意味での使用禁止 (CLAUDE.md 投資業界色ルール)
+   ─────────────────────────────────────────────────────────────────── */
