@@ -11,6 +11,7 @@
  */
 import { Suspense, lazy, useCallback } from 'react';
 import { useWorkspaceStore } from '../../../state/workspaceStore.js';
+import { withViewTransition } from '../../../utils/viewTransition.js';
 
 const CustomScreenerPanel = lazy(() => import('../../../components/CustomScreenerPanel.jsx'));
 
@@ -20,13 +21,16 @@ export default function ScannerSlot() {
   const setSelectedTarget = useWorkspaceStore((s) => s.setSelectedTarget);
   const setPane3JudgmentOverride = useWorkspaceStore((s) => s.setPane3JudgmentOverride);
 
+  // Phase 3 #6 View Transition: スキャナー銘柄選択時に Pane 3 ticker 切替を cross-fade。
   const handleSelect = useCallback((ticker) => {
     if (!ticker) return;
     const sym = String(ticker).trim().toUpperCase();
-    setActiveTicker(sym);
-    setSelectedTarget({ type: 'ticker', id: sym });
-    setPane3JudgmentOverride(true);
-    setActiveTab('judgment');
+    withViewTransition(() => {
+      setActiveTicker(sym);
+      setSelectedTarget({ type: 'ticker', id: sym });
+      setPane3JudgmentOverride(true);
+      setActiveTab('judgment');
+    });
   }, [setActiveTicker, setActiveTab, setSelectedTarget, setPane3JudgmentOverride]);
 
   return (

@@ -643,10 +643,14 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
 }
 
 // Chart Overlay Safety 最外層 ErrorBoundary wrap
+// Phase 3 #6: outermost wrapper div に viewTransitionName を付与。
+// ErrorBoundary / Recharts / isAnimationActive は一切変更しない (4 層防御維持)。
 export default function EarningsHistoryChart(props) {
   return (
-    <EarningsHistoryChartErrorBoundary>
-      <EarningsHistoryChartInner {...props} />
-    </EarningsHistoryChartErrorBoundary>
+    <div style={{ viewTransitionName: 'pane3-earnings-history' }}>
+      <EarningsHistoryChartErrorBoundary>
+        <EarningsHistoryChartInner {...props} />
+      </EarningsHistoryChartErrorBoundary>
+    </div>
   );
 }

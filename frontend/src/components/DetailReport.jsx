@@ -933,8 +933,10 @@ export default function DetailReport({ analysis, guidance, onStreamingChange, is
 
   const borderColor = analysis?.overallPass ? '#22c55e' : '#ef4444';
 
+  // Phase 3 #6: outermost wrapper div に viewTransitionName を付与。
+  // ticker 切替時に AI レポート section が cross-fade morph。
   return (
-    <div>
+    <div style={{ viewTransitionName: 'pane3-detail-report' }}>
       <AccordionSection
         title="AIによる決算詳報"
         badge={isPro ? "AI詳報" : "PRO"}
