@@ -77,7 +77,8 @@ const COLUMN_DEFS = {
   eps_surprise: {
     header: 'サプライズ',
     headerClass: 'qh-num',
-    cellClass: (r) => `qh-num qh-${statusFromVerdict(r.eps_verdict)}`,
+    // #7-b: qh-cell-surprise で fw600 + accent tint 縦帯強調
+    cellClass: (r) => `qh-num qh-cell-surprise qh-${statusFromVerdict(r.eps_verdict)}`,
     render: (r) => {
       const cls = statusFromVerdict(r.eps_verdict);
       return (
@@ -90,8 +91,9 @@ const COLUMN_DEFS = {
   },
   revenue_actual: {
     header: '売上 実績',
-    headerClass: 'qh-num qh-hide-mobile',
-    cellClass: 'qh-num qh-hide-mobile',
+    // #7-a: qh-rev-start で EPS group との境界に 1px 縦罫を付与
+    headerClass: 'qh-num qh-rev-start qh-hide-mobile',
+    cellClass: 'qh-num qh-rev-start qh-hide-mobile',
     render: (r) => fmtRevenue(r.revenue_actual),
   },
   revenue_estimated: {
@@ -102,8 +104,11 @@ const COLUMN_DEFS = {
   },
   revenue_surprise: {
     header: '売上 サプライズ',
-    headerClass: 'qh-num',
-    cellClass: (r) => `qh-num qh-${statusFromVerdict(r.revenue_verdict)}`,
+    // #7-a/#7-c: mobile では revenue_actual/estimated が非表示のため
+    //           revenue_surprise に qh-rev-start を付与して divider を維持
+    headerClass: 'qh-num qh-rev-start-mobile',
+    // #7-b: qh-cell-surprise で fw600 + accent tint 縦帯強調
+    cellClass: (r) => `qh-num qh-cell-surprise qh-rev-start-mobile qh-${statusFromVerdict(r.revenue_verdict)}`,
     render: (r) => {
       const cls = statusFromVerdict(r.revenue_verdict);
       return (
@@ -246,6 +251,14 @@ export default function QuarterlyHistoryTable({ ticker, limit = 8, columns }) {
         )}
       </div>
 
+      {/* #7-d: 凡例 + 金商法 §38 配慮文言 (文言一字一句変更禁止) */}
+      <div className="qh-legend">
+        Beat ≥ +3% / In-line ±3% / Miss ≤ -3%
+        <span className="qh-legend-disclaimer">
+          （過去実績ベース、将来予測を含みません）
+        </span>
+      </div>
+
       {/* handover v82 Phase 5: 8Q streak grid (4 段階 strength + Aggregate 表記) */}
       {totalCells > 0 && (
         <div className="qhistory-streak">
@@ -272,6 +285,10 @@ export default function QuarterlyHistoryTable({ ticker, limit = 8, columns }) {
         return (
           <div className="qhistory-table-wrap">
             <table className="qhistory-table">
+              {/* #7-a: EPS group / 売上 group の colgroup divider */}
+              <colgroup span="1" />
+              <colgroup span="3" className="qh-group-eps" />
+              <colgroup span="3" className="qh-group-rev" />
               <thead>
                 <tr>
                   {colIds.map((id) => {

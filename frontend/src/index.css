@@ -4881,13 +4881,59 @@ body {
   height: 18px;
 }
 
-/* モバイル: 細い列を省略 */
-@media (max-width: 600px) {
+/* #7-c: mobile breakpoint sm→md 変更 (売上 Beat/Miss fallback 確保)
+   600px → 640px: iPhone SE (375px) では revenue_surprise は既表示のまま維持
+   qh-hide-mobile は 640px 以下で非表示 (revenue_actual / revenue_estimated を省略) */
+@media (max-width: 640px) {
   .qhistory-table th.qh-hide-mobile, .qhistory-table td.qh-hide-mobile { display: none; }
   .qhistory-table thead th, .qhistory-table tbody td { padding: 7px 6px; font-size: 11px; }
   .qh-period-name { font-size: 12px; }
 }
 .qhistory-table td.qh-muted { color: var(--text-muted); }
+
+/* #7-a: EPS group / 売上 group 縦罫区切り
+   border-collapse: collapse 環境では colgroup への直接スタイルが機能しないため
+   revenue_actual 列の先頭セル (qh-rev-start) に border-left を付与する方式を採用 */
+.qhistory-table th.qh-rev-start,
+.qhistory-table td.qh-rev-start {
+  border-left: 1px solid var(--border);
+}
+/* mobile (640px 以下) では revenue_actual/estimated が非表示になるため
+   revenue_surprise 列が revenue group 先頭になる → qh-rev-start-mobile で divider 維持 */
+@media (max-width: 640px) {
+  .qhistory-table th.qh-rev-start-mobile,
+  .qhistory-table td.qh-rev-start-mobile {
+    border-left: 1px solid var(--border);
+  }
+}
+/* desktop: qh-rev-start-mobile は border-left 不要 (revenue_actual が担う) */
+@media (min-width: 641px) {
+  .qhistory-table th.qh-rev-start-mobile,
+  .qhistory-table td.qh-rev-start-mobile {
+    border-left: none;
+  }
+}
+
+/* #7-b: サプライズ列強調 (eps_surprise / revenue_surprise)
+   font-weight: 600 + accent tint 縦帯 (color-mix token 経由、 raw rgba 禁止) */
+.qhistory-table td.qh-cell-surprise {
+  font-weight: 600;
+  background: color-mix(in srgb, var(--color-accent) 4%, transparent);
+}
+
+/* #7-d: 凡例スタイル (金商法 §38 配慮文言、 静的文言)
+   margin-top は --space-2 相当の 8px を直接指定 (space token が未定義の場合の fallback) */
+.qh-legend {
+  font-size: var(--text-caption, 11px);
+  color: var(--text-muted);
+  margin-top: 8px;
+  padding: 0 2px;
+  line-height: 1.5;
+}
+.qh-legend-disclaimer {
+  margin-left: 8px;
+  font-style: italic;
+}
 
 /* ─────────────────────────────────────────────────────────────────
    Phase 5.5: 5 条件 × 図解動的連携 (multi-review 6 体合議 verdict、 2026-05-17)
