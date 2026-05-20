@@ -91,6 +91,12 @@
   --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.06), 0 4px 8px rgba(0, 0, 0, 0.04);
   --shadow-3: 0 4px 12px rgba(0, 0, 0, 0.08), 0 12px 24px rgba(0, 0, 0, 0.06);
   --shadow-4: 0 12px 32px rgba(0, 0, 0, 0.12), 0 24px 48px rgba(0, 0, 0, 0.08);
+  /* Sprint 5 (Phase 2): elevation scale 5 層拡張 (Aman 級「優しい奥行き」 / light) */
+  --shadow-elevation-1: var(--shadow-1);
+  --shadow-elevation-2: var(--shadow-2);
+  --shadow-elevation-3: var(--shadow-3);
+  --shadow-elevation-4: 0 8px 20px rgba(0, 0, 0, 0.10), 0 16px 36px rgba(0, 0, 0, 0.07);
+  --shadow-elevation-5: 0 16px 40px rgba(0, 0, 0, 0.16), 0 32px 64px rgba(0, 0, 0, 0.10);
   --shadow-glow-cyan: 0 0 0 1px rgba(56, 189, 248, 0.20), 0 8px 32px rgba(56, 189, 248, 0.12);
   /* Sprint 3 SPEC_2026-05-19_pane3-header-polish: EarningsRing 外周 subtle cyan glow
      design_system.md §4 に token 登録済。brand emphasis 専用 (chandelier 演出)。
@@ -180,6 +186,12 @@
   --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.40), 0 4px 8px rgba(0, 0, 0, 0.24);
   --shadow-3: 0 4px 12px rgba(0, 0, 0, 0.50), 0 12px 24px rgba(0, 0, 0, 0.30);
   --shadow-4: 0 12px 32px rgba(0, 0, 0, 0.60), 0 24px 48px rgba(0, 0, 0, 0.40);
+  /* Sprint 5 (Phase 2): elevation scale 5 層拡張 (dark mode) */
+  --shadow-elevation-1: var(--shadow-1);
+  --shadow-elevation-2: var(--shadow-2);
+  --shadow-elevation-3: var(--shadow-3);
+  --shadow-elevation-4: 0 8px 20px rgba(0, 0, 0, 0.55), 0 16px 36px rgba(0, 0, 0, 0.35);
+  --shadow-elevation-5: 0 16px 40px rgba(0, 0, 0, 0.70), 0 32px 64px rgba(0, 0, 0, 0.50);
   --shadow-glow-cyan: 0 0 0 1px rgba(56, 189, 248, 0.30), 0 8px 32px rgba(56, 189, 248, 0.20);
   /* Sprint 3: dark mode では --ring-glow を強化 (dark 背景で subtle に引き立つ)
      v86 R3: 三層 halo (内/中/外) で静止フレームでも「呼吸の輪郭」が見える状態 */
