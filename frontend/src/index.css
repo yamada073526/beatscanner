@@ -2822,6 +2822,23 @@ body {
   }
 }
 
+/* ── Phase 2.8 Sprint 2 #4-fix: news-list-card (workspace mode list view) にも arrow 移植 ──
+   既存 .news-list-card::before の accent bar 拡幅 (2.5 → 4px) は維持 (Phase 2.7 design unification v5)、
+   hover 時に右端の ↗ を translateX(4px) で IRLinks SSOT 同等の「進む感」 を表現。 */
+.news-list-arrow {
+  display: inline-block;
+  font-size: 0.7rem;
+  margin-left: auto;
+  opacity: 0.45;
+  transition: transform 200ms ease-out, opacity 200ms ease-out;
+}
+@media (hover: hover) {
+  .news-list-card:hover .news-list-arrow {
+    transform: translateX(4px);
+    opacity: 0.85;
+  }
+}
+
 /* ─── ウォッチリストチップ（ロゴ + タグ pill 対応版） ─── */
 .wl-chip {
   display: inline-flex;

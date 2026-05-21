@@ -291,6 +291,8 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false, hideHead
                         )}
                         {item.source && <span>·</span>}
                         <span>{timeAgo(item.published)}</span>
+                        {/* Phase 2.8 Sprint 2 #4-fix: list view (workspace mode) にも IRLinksPanel SSOT mirror */}
+                        <span className="news-list-arrow" aria-hidden="true">↗</span>
                       </div>
                     </div>
                   </div>

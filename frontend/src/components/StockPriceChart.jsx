@@ -3,7 +3,7 @@ import {
   ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot, ReferenceArea,
 } from 'recharts';
-import { LineChart as LineChartIcon, CandlestickChart as CandlestickChartIcon } from 'lucide-react';
+import { LineChart as LineChartIcon, CandlestickChart as CandlestickChartIcon, Target, Lock } from 'lucide-react';
 import { fetchPriceHistory, fetchTechnical } from '../api.js';
 import Chip from './ui/Chip.jsx';
 
@@ -522,7 +522,13 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                 window.alert('「取っ手付きカップ」 形状検出は Premium 限定機能です。\n\n・ファンダ 5 条件 PASS × Cup-Handle 形成 の AND スキャナー\n・全 500-1000 銘柄の nightly スキャン\n・形成 → breakout 確定の push 通知\n\nPremium tier (¥1,800/月) で全データ解放されます。');
               } : undefined}
             >
-              ☕ {cupChipLabel}{cupRequiresPro ? ' 🔒' : ''}
+              {/* Phase 2.8 Sprint 2: ☕ コーヒーカップ emoji → lucide Target (格調高い金融シンボル)、
+                  feedback_icon_brand_consistency.md 準拠 (Aman 級品格)。 🔒 → Lock 同様。 */}
+              <Target size={12} strokeWidth={1.75} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 4 }} />
+              {cupChipLabel}
+              {cupRequiresPro && (
+                <Lock size={11} strokeWidth={1.75} style={{ display: 'inline', verticalAlign: '-1px', marginLeft: 4, opacity: 0.7 }} />
+              )}
             </Chip>
           )}
           {/* Session 3: DMA Cross chip (golden cross 直近 60 日内検出時のみ、 Free 表示)
