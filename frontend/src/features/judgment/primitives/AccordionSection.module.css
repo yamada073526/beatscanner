@@ -146,8 +146,14 @@
 /* NOTE: `hidden` attribute は HTML spec 準拠で display: none を保証する。
    View Transitions API (JS 側) の後に DOM を hidden → visible にするため
    CSS animation は collapsed→open 方向のみ適用。 */
+/* Phase 2.8 Sprint 1 #1 + #5-a root cause fix:
+   overflow: hidden を削除 → framer-motion m.div の style={{ overflow: isOpen && !isAnimating ? 'visible' : 'hidden' }}
+   が実際に有効になる。CSS の overflow: hidden が JS の state-aware overflow を上書きして
+   halo が AccordionSection 境界で left/right clip されていた (アナリスト視点 / 会社概要 両方解消)。
+   jump-cut は framer-motion の height 0↔auto animate が担保するため overflow を CSS で hidden にする必要なし。
+   contain: paint 絶対禁止 (glow_elevation_postmortem.md §v54) 維持。 */
 .panel {
-  overflow: hidden;
+  /* overflow は framer-motion m.div の state-aware style prop で制御 (AccordionSection.jsx L214) */
 }
 
 /* panel が hidden=false (open) のとき */

@@ -79,7 +79,7 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
   const mktCapStr = formatMktCap(profile?.mktCap);
 
   return (
-    <Card>
+    <Card data-testid="profile-card">
       <div style={{ padding: 'var(--space-6, 24px)' }}>
         <SectionHeader id="sec-profile" icon={<Building2 size={18} strokeWidth={1.5} />} title="プロフィール" label="COMPANY" />
 

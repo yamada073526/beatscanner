@@ -248,6 +248,7 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false, hideHead
                   <div
                     key={i}
                     className={`news-list-card${selectedIdx === i ? ' is-open' : ''}`}
+                    data-testid="news-article"
                     aria-pressed={selectedIdx === i}
                     onClick={() => handleArticleClick(item)}
                     role="button"
@@ -311,6 +312,7 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false, hideHead
                     onMouseEnter={() => handleCardEnter(i)}
                     onMouseLeave={handleCardLeave}
                     className="news-card scroll-reveal"
+                    data-testid="news-article"
                     style={{ transitionDelay: `${i * 0.06}s` }}
                   >
                     {item.image && (
@@ -330,6 +332,8 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false, hideHead
                           <span className="news-card-source">{item.source}</span>
                         )}
                         <span>{timeAgo(item.published)}</span>
+                        {/* Phase 2.8 Sprint 1 #4: IRLinksPanel arrow と同様 — hover で translateX(4px) */}
+                        <span className="news-card-arrow" aria-hidden="true">↗</span>
                       </div>
                     </div>
                   </div>
