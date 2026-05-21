@@ -189,6 +189,13 @@ export default function JudgmentDetail({
     }
   }, []); // deps 空配列 = mount 時 once 実行
 
+  // Phase 2.8 Sprint 1 #3: accordion 内 section の halo trigger refs
+  // AccordionSection の onOpenChange(id, true) 時に haloTriggerRef.current?.() を呼んで
+  // AnalystPanel / QuarterlyHistoryTable の halo を 1 回発火させる。
+  // data-halo-fired guard により 2 回目は発火しない (useHaloSweepOnce SSOT 維持)。
+  const analystHaloTriggerRef = useRef(null);   // AnalystPanel から register される
+  const qhistoryHaloTriggerRef = useRef(null);  // QuarterlyHistoryTable から register される
+
   // P0-2: auto runAnalyze — ticker 選択時に結果がなければ自動 fire。
   // selectedTicker が変わるたびに 1 回だけ実行 (重複 fire 禁止)。
   // feedback_dead_code_hook_dependency.md: useRef で fire 済み ticker を記録し、
@@ -536,11 +543,16 @@ export default function JudgmentDetail({
             tier={2}
             defaultOpen={false}
             controlledOpen={expandedSections.has('analyst-panel') || undefined}
+            onOpenChange={(id, isOpen) => {
+              // Phase 2.8 Sprint 1 #3: accordion 展開時に halo を 1 回発火
+              if (isOpen) analystHaloTriggerRef.current?.();
+            }}
           >
             <AnalystPanel
               ticker={selectedTicker}
               plan={plan}
               currentPrice={Number.isFinite(detail?.price) ? Number(detail.price) : null}
+              haloTriggerRef={analystHaloTriggerRef}
             />
           </AccordionSection>
         )
@@ -573,6 +585,10 @@ export default function JudgmentDetail({
             tier={2}
             defaultOpen={false}
             controlledOpen={expandedSections.has('quarterly-history') || undefined}
+            onOpenChange={(id, isOpen) => {
+              // Phase 2.8 Sprint 1 #3: accordion 展開時に halo を 1 回発火
+              if (isOpen) qhistoryHaloTriggerRef.current?.();
+            }}
           >
             <PremiumLock
               feature="earnings_8q"
@@ -586,7 +602,11 @@ export default function JudgmentDetail({
               onUpgrade={detailContext.onUpgrade}
             >
               <div id="sec-quarterly-history-inner">
-                <QuarterlyHistoryTable ticker={selectedTicker} limit={8} />
+                <QuarterlyHistoryTable
+                  ticker={selectedTicker}
+                  limit={8}
+                  haloTriggerRef={qhistoryHaloTriggerRef}
+                />
               </div>
             </PremiumLock>
           </AccordionSection>

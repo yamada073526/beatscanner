@@ -296,13 +296,28 @@ function PanelFooter({ signalQuality }) {
 }
 
 // ── 本体 ────────────────────────────────────────────────────────────
-export default function AnalystPanel({ ticker, plan = 'free', currentPrice = null }) {
+// Phase 2.8 Sprint 1 #3: haloTriggerRef prop
+//   AccordionSection 内にある場合、親が haloTriggerRef (useRef) を渡し
+//   onOpenChange(id, true) 時に haloTriggerRef.current?.() を呼ぶことで accordion 展開時に halo 発火。
+//   haloTriggerRef.current に triggerOnAccordionOpen をセットする。
+export default function AnalystPanel({ ticker, plan = 'free', currentPrice = null, haloTriggerRef = null }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errored, setErrored] = useState(false);
   // Phase 2.7 Sprint 1 #1': Tier M halo sweep ref (1 回限り)
   const haloRef = useRef(null);
-  useHaloSweepOnce(haloRef);
+  // Phase 2.8 Sprint 1 #3: triggerOnAccordionOpen を受け取り haloRef に data-halo-ready を付与
+  const { triggerOnAccordionOpen } = useHaloSweepOnce(haloRef);
+
+  // Phase 2.8 Sprint 1 #3: haloTriggerRef に trigger 関数を register
+  // (mount 時 1 回のみ、親が AccordionSection の onOpenChange から呼ぶ)
+  useEffect(() => {
+    if (haloTriggerRef && typeof haloTriggerRef === 'object') {
+      haloTriggerRef.current = triggerOnAccordionOpen;
+    }
+  // triggerOnAccordionOpen は useCallback で stable
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [haloTriggerRef]);
 
   useEffect(() => {
     if (!ticker) return;

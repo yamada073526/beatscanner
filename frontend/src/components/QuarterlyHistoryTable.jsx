@@ -148,13 +148,24 @@ const DEFAULT_COLUMNS = [
 ];
 
 // ── 本体 ────────────────────────────────────────────────
-export default function QuarterlyHistoryTable({ ticker, limit = 8, columns }) {
+// Phase 2.8 Sprint 1 #3: haloTriggerRef prop — AccordionSection 内にある場合に使用
+// 親が haloTriggerRef (useRef) を渡し、onOpenChange(id, true) 時に
+// haloTriggerRef.current?.() を呼ぶことで accordion 展開時に halo を 1 回発火。
+export default function QuarterlyHistoryTable({ ticker, limit = 8, columns, haloTriggerRef = null }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   // Phase 2.7 Sprint 1 #1': Tier M halo sweep ref (1 回限り)
   const haloRef = useRef(null);
-  useHaloSweepOnce(haloRef);
+  const { triggerOnAccordionOpen } = useHaloSweepOnce(haloRef);
+
+  // Phase 2.8 Sprint 1 #3: haloTriggerRef に trigger 関数を register
+  useEffect(() => {
+    if (haloTriggerRef && typeof haloTriggerRef === 'object') {
+      haloTriggerRef.current = triggerOnAccordionOpen;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [haloTriggerRef]);
 
   useEffect(() => {
     if (!ticker) return;

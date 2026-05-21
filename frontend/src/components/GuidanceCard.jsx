@@ -138,13 +138,17 @@ function GuidanceInfoModal({ onClose }) {
   );
 }
 
-// Phase 2.7 Sprint 1 #1: inner section に inset 1px accent shadow で baseline 補強
-// (tier-m-glow の外 glow に対する「内側から支える光」、Aman ロビー間接照明比喩)
-// contain: paint は v54 禁止教訓のため絶対追加しない
+// Phase 2.8 Sprint 1 #2: inset shadow opacity 20% → 30% (user dogfood 4 回目「まだ弱い」 fix)
+// + outer 0 2px 8px 0 accent 12% で EarningsHistoryChart cluster と同等の elevation 感
+// token 経由のみ (hex 直書き禁止)。contain: paint は v54 禁止教訓のため絶対追加しない。
+// glow_elevation_postmortem.md §v54 準拠。
 const GUIDANCE_SECTION_STYLE = {
   border: '1px solid var(--border)',
   background: 'var(--bg-card)',
-  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 20%, transparent)',
+  boxShadow: [
+    'inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 30%, transparent)',
+    '0 2px 8px 0 color-mix(in srgb, var(--color-accent) 12%, transparent)',
+  ].join(', '),
   transition: 'transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease',
 };
 
