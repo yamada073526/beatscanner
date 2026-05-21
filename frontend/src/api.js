@@ -585,7 +585,14 @@ export async function fetchProfileExtended(ticker, { signal } = {}) {
     headers: fmpHeaders(),
     signal,
   });
-  if (!r.ok) return null;
+  if (!r.ok) {
+    // Phase 2.9 Sprint 5 #profile-extended-fallback: rate limit / 失敗時は status + detail を expose
+    // 旧: return null → ProfileCard が silent fail で全 description / metadata 消失
+    // 新: { _error: { status, detail } } を返し、 UI 側で「demo 回数超過」 等の親切表示
+    let detail = null;
+    try { detail = (await r.json())?.detail || null; } catch { /* JSON parse fail OK */ }
+    return { _error: { status: r.status, detail } };
+  }
   return r.json();
 }
 

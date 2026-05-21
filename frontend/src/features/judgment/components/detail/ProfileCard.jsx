@@ -68,15 +68,20 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
     return () => ac.abort();
   }, [ticker]);
 
+  // Phase 2.9 Sprint 5 #profile-extended-fallback:
+  // 429 / fetch fail を { _error: { status, detail } } で受け取って親切 UI へ
+  const profileError = profile && profile._error ? profile._error : null;
+  const profileOk = profile && !profile._error ? profile : null;
+
   if (!ticker) return null;
 
-  const description = profile?.description || null;
-  const location = buildLocation(profile?.city, profile?.state, profile?.country);
-  const employees = formatEmployees(profile?.fullTimeEmployees);
-  const sector = profile?.sector || null;
-  const industry = profile?.industry || null;
-  const peers = Array.isArray(profile?.peers) ? profile.peers : [];
-  const mktCapStr = formatMktCap(profile?.mktCap);
+  const description = profileOk?.description || null;
+  const location = buildLocation(profileOk?.city, profileOk?.state, profileOk?.country);
+  const employees = formatEmployees(profileOk?.fullTimeEmployees);
+  const sector = profileOk?.sector || null;
+  const industry = profileOk?.industry || null;
+  const peers = Array.isArray(profileOk?.peers) ? profileOk.peers : [];
+  const mktCapStr = formatMktCap(profileOk?.mktCap);
 
   return (
     <Card data-testid="profile-card">
@@ -108,7 +113,7 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
               }}
               data-testid="profile-company-name"
             >
-              {companyName || profile?.companyName || ticker}
+              {companyName || profileOk?.companyName || ticker}
             </div>
             <div
               style={{
@@ -130,8 +135,53 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
           </div>
         </div>
 
+        {/* === Phase 2.9 Sprint 5: rate limit / 取得失敗時の親切 CTA ===
+            旧: silent fail で description / metadata 全消失
+            新: 429 → 「お試し回数超過、 Google ログインで無制限」 等の明示メッセージ */}
+        {!loading && profileError && (
+          <div
+            style={{
+              marginTop: 'var(--space-3, 12px)',
+              padding: 'var(--space-3, 12px) var(--space-4, 16px)',
+              borderRadius: 'var(--radius-md, 12px)',
+              border: '1px solid var(--border)',
+              background: 'color-mix(in srgb, var(--color-accent) 4%, transparent)',
+              fontSize: 13,
+              color: 'var(--text-secondary)',
+              lineHeight: 1.55,
+            }}
+            data-testid="profile-error-cta"
+          >
+            {profileError.status === 429 ? (
+              <>
+                <strong style={{ color: 'var(--text-primary)' }}>
+                  会社概要を表示できませんでした
+                </strong>
+                <br />
+                <span>
+                  {profileError.detail || '本日のお試し回数 (3 銘柄) を超えました。'}
+                  {' '}
+                  <a
+                    href="#login"
+                    style={{ color: 'var(--color-accent)', textDecoration: 'underline' }}
+                    onClick={(e) => { e.preventDefault(); window.dispatchEvent(new CustomEvent('bs:open-login')); }}
+                  >
+                    Google ログインで無制限
+                  </a>
+                  。
+                </span>
+              </>
+            ) : (
+              <>
+                会社概要を取得できませんでした (HTTP {profileError.status})。
+                {' '}しばらく時間をおいて再度お試しください。
+              </>
+            )}
+          </div>
+        )}
+
         {/* === メタデータ行 (時価総額 / 本社 / 従業員 / セクター) === */}
-        {!loading && profile && (
+        {!loading && profileOk && (
           <div
             style={{
               display: 'flex',
