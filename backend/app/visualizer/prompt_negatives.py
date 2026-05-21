@@ -141,6 +141,19 @@ BLOCKLIST_REGEX: list[re.Pattern] = [
     re.compile(r"(圧倒的|圧倒)(な|して|的)?"),
     re.compile(r"他社を圧倒"),
     re.compile(r"最強の"),
+    # ─── Phase B grey zone (must-fix #2): BAD-6 系 景表法 §5 強化 ───────────────
+    # SPEC_2026-05-22 §4 Layer 3 記載の 7-10 表現。 frontend blocklist.js と 1:1 mirror。
+    # 既存 BAD 1-6 anchor は編集しない (追加のみ許可)
+    re.compile(r"圧倒的シェア|圧倒的優位|圧倒的な"),
+    re.compile(r"他の追随を許さない|追随を許さない"),
+    re.compile(r"群を抜く|群を抜いて"),
+    re.compile(r"\b(leading|dominant|first-mover|market\s*leader)\b"),
+    re.compile(r"市場リーダー|業界リーダー"),
+    # ─── Phase B grey zone (must-fix #2): BAD-5 系 金商法 §38 強化 ───────────────
+    re.compile(r"成長見込み|成長が見込まれる|成長が期待"),
+    re.compile(r"拡大基調|拡大が続く|拡大傾向"),
+    re.compile(r"追い風となる|追い風が吹く|追い風"),
+    re.compile(r"中長期的に有望|中長期的な成長|長期的に有望"),
 ]
 
 

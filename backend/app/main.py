@@ -6459,6 +6459,86 @@ async def profile_extended(
     return result
 
 
+# ─── Phase B: LLM 和文要約 /api/profile-summary/{ticker} ─────────────────────
+# SPEC_2026-05-22 §5 Sprint B.1
+# Claude Haiku 4.5 で FMP 英文 description → 和文 4 セクション要約。
+# aggregator/ は数値物理層 (LLM SDK import BLOCK)。 本 endpoint は visualizer/ 層。
+# Hallucination Guard 4 重防御:
+#   Layer 1: pre-commit hook (本 file は aggregator/ ではないため LLM OK)
+#   Layer 2: NEGATIVE_EXAMPLES (prompt_negatives.py から import)
+#   Layer 3: frontend blocklist.js sanitize (呼出側)
+#   Layer 4: product_names 完全 token match self-check (profile_summary.py 内)
+
+@app.get("/api/profile-summary/{ticker}")
+async def profile_summary(
+    ticker: str,
+    request: Request,
+    force_regenerate: bool = False,
+) -> dict:
+    """FMP 英文 description を Claude Haiku で和文 4 セクション要約に変換する。
+
+    Response schema:
+        ticker, summary_jp, sections: {main_business, revenue_model, customers},
+        product_names, sources, data, signal_quality, citation, confidence,
+        generated_at, cache_read_input_tokens, cache_creation_input_tokens
+
+    demo mode rate limit (3 req/IP/day) を適用。
+    backend cache: (ticker, description_hash) で 7 日 TTL。
+    LLM 4 重防御 (Hallucination Guard) 適用済。
+
+    must-fix #7: cache breakpoint 2 段 + Sentry metric (profile_summary.py 内で実施)
+    must-fix #8: product_names 完全 token match self-check (profile_summary.py 内で実施)
+    """
+    from .visualizer.profile_summary import summarize_profile
+
+    t = ticker.upper()
+
+    # demo mode rate limit (LP「3 銘柄/日まで無料」 訴求と整合)
+    ip = _client_ip(request)
+    if not _check_demo_rate_limit(ip):
+        raise HTTPException(
+            status_code=429,
+            detail="本日のお試し回数 (3銘柄) を超えました。Googleログインで無制限になります。",
+        )
+
+    # FMP profile から description_en を取得 (profile-extended と同じ FMP client 使用)
+    client = FMPClient(api_key=_get_fmp_key(request))
+    try:
+        profile_data = await client.profile(t)
+    except Exception:
+        profile_data = []
+
+    description_en = ""
+    if isinstance(profile_data, list) and profile_data:
+        rec = profile_data[0] if isinstance(profile_data[0], dict) else {}
+        description_en = rec.get("description") or ""
+
+    if not description_en:
+        raise HTTPException(
+            status_code=404,
+            detail=f"{t} の会社概要データが見つかりません。",
+        )
+
+    # LLM 和文要約呼び出し (profile_summary.py が 4 重防御を適用)
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    result = await summarize_profile(
+        t,
+        description_en,
+        api_key=api_key,
+        force_regenerate=force_regenerate,
+    )
+
+    # LLM 失敗時は _error field を expose (frontend で親切表示)
+    if result.get("_error"):
+        err = result["_error"]
+        raise HTTPException(
+            status_code=err.get("status", 500),
+            detail=err.get("detail", "会社概要の日本語要約に失敗しました。"),
+        )
+
+    return result
+
+
 def _safe_int(v) -> int | None:
     if v is None:
         return None

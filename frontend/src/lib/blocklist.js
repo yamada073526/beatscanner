@@ -31,6 +31,19 @@ const BLOCKLIST_PATTERNS = [
   /(圧倒的|圧倒)(な|して|的)?/g,
   /他社を圧倒/g,
   /最強の/g,
+  // ─── Phase B grey zone (must-fix #2): BAD-6 系 景表法 §5 強化 ──────────────
+  // SPEC_2026-05-22 §4 Layer 3 記載の 7-10 表現。 backend prompt_negatives.py と 1:1 mirror。
+  // 既存 anchor は編集しない (追加のみ許可)
+  /圧倒的シェア|圧倒的優位|圧倒的な/g,
+  /他の追随を許さない|追随を許さない/g,
+  /群を抜く|群を抜いて/g,
+  /\b(leading|dominant|first-mover|market\s*leader)\b/gi,
+  /市場リーダー|業界リーダー/g,
+  // ─── Phase B grey zone (must-fix #2): BAD-5 系 金商法 §38 強化 ──────────────
+  /成長見込み|成長が見込まれる|成長が期待/g,
+  /拡大基調|拡大が続く|拡大傾向/g,
+  /追い風となる|追い風が吹く|追い風/g,
+  /中長期的に有望|中長期的な成長|長期的に有望/g,
 ];
 
 /**

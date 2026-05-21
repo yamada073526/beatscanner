@@ -608,6 +608,52 @@ export async function fetchProfileExtended(ticker, { signal } = {}) {
   return r.json();
 }
 
+/**
+ * Phase B: LLM 和文要約 (SPEC_2026-05-22 §5 Sprint B.1)
+ *
+ * FMP 英文 description を Claude Haiku で和文 4 セクション要約に変換する。
+ * LLM 呼び出しは backend /api/profile-summary/{ticker} 経由。
+ *
+ * must-fix #5: AbortController + 30s timeout 対応。
+ * ProfileCard.jsx の useEffect cleanup で ac.abort() を呼ぶこと。
+ *
+ * must-fix #4: prefetchAll に含めない (ProfileCard mount 時に lazy fetch)。
+ *
+ * エラー時は { _error: { status, detail } } を返す (Sprint 5 の profile-extended pattern と同 SOP)。
+ *
+ * @param {string} ticker
+ * @param {{ signal?: AbortSignal, forceRegenerate?: boolean }} options
+ * @returns {Promise<object>}
+ */
+export async function fetchProfileSummary(ticker, { signal, forceRegenerate = false } = {}) {
+  const t = encodeURIComponent(ticker);
+  const qs = forceRegenerate ? '?force_regenerate=true' : '';
+  // 30s タイムアウト (永遠ハング防止)
+  const innerController = new AbortController();
+  const timer = setTimeout(() => innerController.abort(), 30000);
+  try {
+    const r = await fetch(`/api/profile-summary/${t}${qs}`, {
+      headers: fmpHeaders(),
+      // 外部 AbortSignal (ProfileCard useEffect cleanup) を優先
+      signal: signal || innerController.signal,
+    });
+    clearTimeout(timer);
+    if (!r.ok) {
+      let detail = null;
+      try { detail = (await r.json())?.detail || null; } catch { /* JSON parse fail OK */ }
+      return { _error: { status: r.status, detail } };
+    }
+    return r.json();
+  } catch (err) {
+    clearTimeout(timer);
+    if (err?.name === 'AbortError') {
+      // AbortError は呼出側で無視 (race condition cleanup の正常動作)
+      throw err;
+    }
+    return { _error: { status: 0, detail: 'ネットワークエラー' } };
+  }
+}
+
 export async function fetchCustomScreener() {
   const r = await fetch('/api/custom-screener', {
     headers: fmpHeaders(),
