@@ -100,7 +100,7 @@ import { fileURLToPath } from 'url';
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForTimeout(1500);
 
-    // ── 1. AnalystPanel wrapper chain trace ──────────────────────
+    // ── 1. AnalystPanel wrapper chain trace + border-radius ──────────────
     result.analyst_panel_chain = await page.evaluate(() => {
       const el = document.querySelector('[data-testid="analyst-panel-wrapper"]');
       if (!el) return [{ error: 'analyst-panel-wrapper not found in DOM' }];
@@ -120,6 +120,9 @@ import { fileURLToPath } from 'url';
           overflowY: cs.overflowY,
           contain: cs.contain,
           clipPath: cs.clipPath,
+          borderRadius: cs.borderRadius,
+          boxShadow: cs.boxShadow !== 'none' ? cs.boxShadow.slice(0, 200) : 'none',
+          border: cs.border !== 'none' ? cs.border : 'none',
           boundingClientRect: {
             x: Math.round(node.getBoundingClientRect().x),
             width: Math.round(node.getBoundingClientRect().width),
