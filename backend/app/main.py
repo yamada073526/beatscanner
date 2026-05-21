@@ -926,16 +926,26 @@ async def get_quotes(symbols: str, request: Request) -> dict:
     now = _time.monotonic()
     cached = _QUOTES_CACHE.get(cache_key)
     if cached and now - cached["ts"] < ttl:
-        return {"quotes": cached["data"], "market_open": market_open, "_cached": True}
+        return {**cached["data"], "market_open": market_open, "_cached": True}
 
     api_key = _get_fmp_key(request)
     client = FMPClient(api_key=api_key)
     rows: list[dict] = []
+    fmp_error = False
     try:
         rows = await client.batch_quotes(syms) or []
     except FMPError:
         # FMP 失敗時 (free plan limit / endpoint 制限等) は空のまま yfinance fallback へ
         rows = []
+        fmp_error = True
+
+    # Phase 2.9 Sprint B #pane2-stocks-fix: source 別の取得状態を track
+    # user dogfood: 「NAT/MSFT 等で 一部銘柄株価取得失敗 (—)」 silent fail。
+    # 真因: FMP fail/quota → yfinance fallback も Railway IP block 等で失敗 → quotes に含まれず
+    #       frontend は portfolioPrices?.prices?.[t] が undefined → 「—」 表示。
+    # 修正: per-symbol source ('fmp' / 'yfinance' / 'missing') を expose、 frontend で
+    #       「データ未取得」 placeholder + retry button 表示可。
+    sources_by_sym: dict[str, str] = {}
 
     # 整形: FMP /quote のレスポンスから必要項目だけ抽出
     quotes_by_sym: dict[str, dict] = {}
@@ -953,6 +963,7 @@ async def get_quotes(symbols: str, request: Request) -> dict:
             "change": float(r["change"]) if isinstance(r.get("change"), (int, float)) else None,
             "previous_close": float(r["previousClose"]) if isinstance(r.get("previousClose"), (int, float)) else None,
         }
+        sources_by_sym[sym] = "fmp"
 
     # 欠落分は yfinance フォールバック (market-indices と同パターン)
     missing = [s for s in syms if s not in quotes_by_sym]
@@ -977,14 +988,27 @@ async def get_quotes(symbols: str, request: Request) -> dict:
                     ),
                     "previous_close": float(r["previousClose"]) if isinstance(r.get("previousClose"), (int, float)) else None,
                 }
+                sources_by_sym[sym] = "yfinance"
         except Exception:
             pass
 
+    # 最終的に欠落している symbol を明示
+    for s in syms:
+        if s not in sources_by_sym:
+            sources_by_sym[s] = "missing"
+
     # syms 順を保持
     quotes = [quotes_by_sym[s] for s in syms if s in quotes_by_sym]
+    missing_final = [s for s in syms if s not in quotes_by_sym]
 
-    _QUOTES_CACHE[cache_key] = {"data": quotes, "ts": now}
-    return {"quotes": quotes, "market_open": market_open}
+    response_data = {
+        "quotes": quotes,
+        "sources": sources_by_sym,
+        "missing": missing_final,
+        "fmp_error": fmp_error,
+    }
+    _QUOTES_CACHE[cache_key] = {"data": response_data, "ts": now}
+    return {**response_data, "market_open": market_open}
 
 
 # --- Holdings meta (next earnings dates) for Portfolio Dashboard Phase X-2-5-A ---

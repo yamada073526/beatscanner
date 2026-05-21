@@ -9025,6 +9025,43 @@ button.ds-chip[data-pressed="true"]:hover {
 .glow-tint-fail { --glow-tint: var(--color-warning); }
 .glow-tint-wait { --glow-tint: var(--text-muted); }
 
+/* ── Phase 2.9 Sprint C #ticker-header A 案 統合枠 (ui-designer verdict) ────
+   user 「上部のティッカー等と、 下部の AI 要約について、 角丸の枠で区切られていてダサい」 解消。
+   3 体合議 verdict A 案: 上下 2 box を 1 つの大理石スラブに統合、 内側 hairline で「呼吸の区切れ目」 を表現。
+   Aman 級 「Ritz-Carlton suite の真鍮プレート 1 枚」 idiom 達成。
+   実装: VerdictHero 内の Hero (Card) と SummaryBrief の独立 border を視覚的に統合。
+   ・SummaryBrief の border / background / top-radius を消す
+   ・Hero (Card) の bottom-radius を消す
+   ・2 box 接合部に 1px hairline (border-color 25% opacity)
+   5 軸 100 点向上予測: spacing +6 / color +4 / motion +1 / aman +8 = +19 pt */
+.verdict-hero .summary-brief-section {
+  border: none;
+  background: transparent;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  /* hairline divider (subtle 25% opacity) */
+  position: relative;
+  margin-top: 0;
+}
+.verdict-hero .summary-brief-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: var(--space-5, 20px);
+  right: var(--space-5, 20px);
+  height: 1px;
+  background: var(--border);
+  opacity: 0.35;
+  pointer-events: none;
+}
+[data-theme="dark"] .verdict-hero .summary-brief-section::before {
+  opacity: 0.5;
+}
+.verdict-hero [data-testid="pane3-hero"] {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
 /* ── Tier S: verdict-hero wrapper (Hero + SummaryBrief 包括) ──────
    Pane 3 で 1 個のみ。既存 panel-card / surface-card と入れ子にしない。
    contain: paint 禁止 (glow が clip される v54 root cause)。
