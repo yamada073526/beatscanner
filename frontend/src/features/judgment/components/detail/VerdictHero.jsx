@@ -100,12 +100,16 @@ export default function VerdictHero({ verdict = 'unknown', children, className =
     }
   }, [isPassing]);
 
+  // Phase 3 #6 View Transition: VerdictHero (Pane 3 内 1 個のみ) に named group を付与。
+  // ticker 切替時に glow wrapper が cross-fade morph (Framer Motion と CSS layer 別、衝突なし)。
+  // m.div は style prop を受け取るため inline style で付与。
   return (
     <m.div
       animate={controls}
       className={`verdict-hero ${tintClass} ${className}`.trim()}
       data-testid="verdict-hero"
       data-spotlight="card"
+      style={{ viewTransitionName: 'pane3-verdict-hero' }}
     >
       {children}
     </m.div>

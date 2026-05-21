@@ -35,20 +35,34 @@ export default function PaneDetailView({
 } = {}) {
   const target = useWorkspaceStore((s) => s.selectedTarget) || { type: 'index', id: null };
 
+  // Phase 3 #6 View Transition: 各 case の outermost に unique view-transition-name を付与。
+  // Pane 切替 / target 切替時に cross-fade morph が発火する (withViewTransition wrapper は caller 側)。
+  // PGE 落とし穴 R6: case ごとに異なる name を付与 → 別 transition group として cross-fade。
+  // contain: layout は view-transition snapshot の境界を安定させるため付与。
   switch (target.type) {
     case 'portfolio':
-      return <PortfolioDetailBody scopeId={target.id || 'all'} />;
+      return (
+        <div style={{ viewTransitionName: 'pane3-portfolio', contain: 'layout' }}>
+          <PortfolioDetailBody scopeId={target.id || 'all'} />
+        </div>
+      );
     case 'ticker':
       return (
-        <TickerDetailBody
-          detailFor={detailFor}
-          onAnalyze={onAnalyze}
-          plan={plan}
-          detailContext={detailContext}
-        />
+        <div style={{ viewTransitionName: 'pane3-ticker', contain: 'layout' }}>
+          <TickerDetailBody
+            detailFor={detailFor}
+            onAnalyze={onAnalyze}
+            plan={plan}
+            detailContext={detailContext}
+          />
+        </div>
       );
     case 'index':
     default:
-      return <IndicesDetailView />;
+      return (
+        <div style={{ viewTransitionName: 'pane3-index', contain: 'layout' }}>
+          <IndicesDetailView />
+        </div>
+      );
   }
 }

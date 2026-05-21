@@ -159,7 +159,9 @@ export default function FiveConditionsCard({
     // contain: paint 禁止 (glow_elevation_postmortem.md v54)。
     // overflow: visible で halo が clip されない (index.css .tier-m-glow で設定済)。
     // Sprint 4: SectionFade で section in-view fade-in (案1) を outer wrapper に適用
-    <SectionFade>
+    // Phase 3 #6: SectionFade の style prop 経由で viewTransitionName を付与。
+    // SectionFade は修正不要 (既存 style prop サポート済)。Recharts/chart 系に触れない。
+    <SectionFade style={{ viewTransitionName: 'pane3-five-conditions' }}>
     <div ref={cardRef} className="tier-m-glow" data-testid="five-conditions-card-wrapper">
     <Card data-testid="five-conditions-card">
       <div style={{ padding: 'var(--space-6, 24px)' }}>

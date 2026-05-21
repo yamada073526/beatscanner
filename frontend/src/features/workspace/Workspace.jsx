@@ -10,7 +10,7 @@
  *
  * Pane 1 nav は WS-5 で実装。WS-4 では暫定 dummy tab toggle を維持.
  */
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import {
   ChevronRight,
   Home,
@@ -23,6 +23,7 @@ import WorkspaceShell from './WorkspaceShell.jsx';
 import WorkspaceHeader from './WorkspaceHeader.jsx';
 import { useUrlSync } from './useUrlSync.js';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
+import { withViewTransition } from '../../utils/viewTransition.js';
 import Chip, { ChipBar, ChipGroup } from '../../components/ui/Chip.jsx';
 import { JudgmentProvider, useJudgment } from '../judgment/state/JudgmentContext.jsx';
 import { JudgmentList } from '../judgment/components/list/index.js';
@@ -367,7 +368,7 @@ function Pane1NavRail({ items = [] }) {
           <button
             key={t.key}
             type="button"
-            onClick={() => setActiveTab(t.key)}
+            onClick={() => withViewTransition(() => setActiveTab(t.key))}
             aria-pressed={active}
             aria-label={t.label}
             title={t.label}
@@ -414,7 +415,7 @@ function Pane1NavRail({ items = [] }) {
           <button
             key={it.ticker}
             type="button"
-            onClick={() => setActiveTicker(it.ticker)}
+            onClick={() => withViewTransition(() => setActiveTicker(it.ticker))}
             aria-pressed={active}
             aria-label={it.ticker}
             title={`${it.ticker}${it.companyName ? ` — ${it.companyName}` : ''}`}
@@ -505,7 +506,7 @@ function Pane1Nav({ items = [] }) {
               <button
                 key={t.key}
                 type="button"
-                onClick={() => setActiveTab(t.key)}
+                onClick={() => withViewTransition(() => setActiveTab(t.key))}
                 aria-pressed={active}
                 className={`ws-pane1-tab${active ? ' is-active' : ''}`}
                 style={{
@@ -575,7 +576,7 @@ function Pane1Nav({ items = [] }) {
                         key={it.ticker}
                         it={it}
                         active={activeTicker === it.ticker}
-                        onClick={setActiveTicker}
+                        onClick={(t) => withViewTransition(() => setActiveTicker(t))}
                         indent={observing.length > 0}
                       />
                     ))}
@@ -600,7 +601,7 @@ function Pane1Nav({ items = [] }) {
                         key={it.ticker}
                         it={it}
                         active={activeTicker === it.ticker}
-                        onClick={setActiveTicker}
+                        onClick={(t) => withViewTransition(() => setActiveTicker(t))}
                         indent={holdings.length > 0}
                       />
                     ))}

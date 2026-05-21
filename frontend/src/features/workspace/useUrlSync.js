@@ -22,6 +22,7 @@
  */
 import { useEffect } from 'react';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
+import { withViewTransition } from '../../utils/viewTransition.js';
 
 // §12-A-1: 'indices' を 5 番目として追加 ('チャート' は CLAUDE.md ルールで維持)
 const VALID_TABS = new Set(['home', 'judgment', 'report', 'チャート', 'indices']);
@@ -130,12 +131,16 @@ export function useUrlSync() {
   }, []);
 
   // 3. popstate listener (ブラウザ戻る)
+  // Phase 3 #6 View Transition: URL 変化 (ブラウザ back/forward) を cross-fade で表現。
+  // withViewTransition は prefers-reduced-motion / 非対応ブラウザで即時実行 fallback。
   useEffect(() => {
     const handler = () => {
       const { tab, ticker, target } = readUrl();
-      setActiveTab(tab || 'home');
-      setActiveTicker(ticker);
-      setSelectedTarget(target || { type: 'index', id: null });
+      withViewTransition(() => {
+        setActiveTab(tab || 'home');
+        setActiveTicker(ticker);
+        setSelectedTarget(target || { type: 'index', id: null });
+      });
     };
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);

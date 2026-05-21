@@ -14,6 +14,7 @@
  *   - sparklinePeriod 双方向同期 (StockPriceChart は内部 period state)
  */
 import { useEffect, useMemo, useState } from 'react';
+import { withViewTransition } from '../../utils/viewTransition.js';
 import Chip, { ChipBar, ChipGroup, ChipSeparator } from '../../components/ui/Chip.jsx';
 import PortfolioAreaChartSlot from './PortfolioAreaChartSlot.jsx';
 import StockPriceChart from '../../components/StockPriceChart.jsx';
@@ -689,11 +690,11 @@ function PortfolioSummaryRow({ holdings, prices, tickers, totalRealized = 0, tot
             size="xs"
             variant="filter"
             pressed={isPortfolioDetailActive}
-            onClick={() => setSelectedTarget(
+            onClick={() => withViewTransition(() => setSelectedTarget(
               isPortfolioDetailActive
                 ? { type: 'index', id: null }
                 : { type: 'portfolio', id: selectedAccountId || 'all' }
-            )}
+            ))}
             title="ポートフォリオの大チャート + 保有銘柄ニュースを Pane 3 に表示"
           >
             {isPortfolioDetailActive ? '指数に戻す ⤺' : '詳細 →'}

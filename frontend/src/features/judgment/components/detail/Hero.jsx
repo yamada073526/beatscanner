@@ -58,8 +58,11 @@ export default function Hero({ ticker, companyName, verdict = 'unknown', period,
       ? '決算発表前のため判定保留中'
       : undefined;
 
+  // Phase 3 #6 View Transition: Pane 3 で 1 個のみ (重複なし)。
+  // ticker 切替時に logo + ticker + 企業名 + verdict chip が cross-fade morph。
+  // Card は ...rest を受け取るため style で直接付与可能。
   return (
-    <Card data-testid="pane3-hero">
+    <Card data-testid="pane3-hero" style={{ viewTransitionName: 'ticker-hero' }}>
       {/* v86 R3 Vision 改善 #4: Hero 右上 LIVE pulse dot (motion_timing 静止フレーム anchor)
           位置: card 右上 12px offset、 8px cyan dot、 1.4s ease-in-out infinite pulse。
           aria-hidden: 装飾要素、 screen reader には伝えない (情報は他で取得)。
