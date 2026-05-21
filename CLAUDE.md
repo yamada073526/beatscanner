@@ -35,6 +35,30 @@
 - デプロイ後の検証は本番バンドル（`/assets/index-*.js` または `*.css`）を `curl` で取得して `grep` で文字列確認
 - 反映完了の判定はバンドルハッシュの変更で行う
 
+### Auto-PDCA visual verification (Phase 2.9 Sprint 4 着地、 user judgement 待ち時間 80% 削減)
+
+user 「実装 → 目視 → 不発なら再修正 → 再目視」 の手動 PDCA を Claude Haiku vision で自動化。 修正反映を user 起床/応答待ちなしで verify、 PDCA cycle 時間 45-60 分 → 8-12 分。
+
+**実行 example** (Bug 1 「角直角」 を自動 verify):
+```bash
+cd frontend && ANTHROPIC_API_KEY=$(grep ANTHROPIC_API_KEY ../backend/.env | cut -d= -f2) \
+  node scripts/snap-pdca-loop.mjs \
+  --check "アナリスト視点 section の box-shadow / 発光の角が丸角になっているか" \
+  --selector "[data-testid='analyst-panel-wrapper']" \
+  --expand-summary "アナリスト視点" \
+  --ticker AAPL
+```
+
+出力 (JSON):
+- `verdict: "pass"` → 修正反映 OK、 exit 0
+- `verdict: "fail"` → 修正不発、 root_cause_hint + exit 1
+- `verdict: "uncertain"` → 判定不能 (screenshot 品質 / aspect)
+
+**コスト**: PDCA 1 cycle ≈ $0.005-0.01 (Haiku image input、 月 50 cycle で $0.5 以下)。
+**精度**: typography / spacing / color / 形状 (border-radius / shape) は 1 run で十分。 motion / aman 軸は 3 run mean 必須 ([[feedback-vision-api-noise]])。
+
+**実装**: [`frontend/scripts/snap-pdca-loop.mjs`](frontend/scripts/snap-pdca-loop.mjs) - visual harness exception 4 条件遵守 (headless / 55s timeout / .visual/ 出力 / HTTP server なし)。
+
 ### Visual Diagnostic Harness Exception (preview 禁止の限定例外)
 `npm run dev` / Vite preview server は引き続き **禁止** (人間 dogfood と port / state が競合するため)。
 ただし以下 **4 条件を全て満たす** headless Playwright スクリプトは例外として許可する:
@@ -146,8 +170,21 @@ LLM (Claude API) を呼ぶ endpoint は **4 層防御** を必ず通すこと。
 - DiagramCard / DetailReport / LandingPage は最強の lazy 候補
 - Vite manualChunks の標準: `react-vendor`（react + react-dom）/ `supabase`（@supabase/supabase-js）
 
-## 判定ロジック
-docs/references/jijima_protocol.md を参照
+## コスト効率運用 (v94+ 確立、 月 $407→$100-150 削減目標)
+
+handover v94 で「過去 30 日 $407 消費、 大半は dev session の Opus 4.7 sub-agent」 と真因確定。 以下ルールで速度を維持しつつ cost 50%+ 削減:
+
+1. **main session**: Opus 4.7 (1M context) 維持 — 複雑 reasoning / multi-step debugging で速度確保
+2. **sub-agent default**: **Sonnet 4.6/4.7** — Agent tool 呼出時に必ず `model: "sonnet"` を指定。 single-shot review / file ops / grep 主体の sub-agent は Sonnet で十分 (Opus 90-95% の精度、 5x 安い)
+3. **例外で Opus sub-agent**: 以下のみ Opus 指定
+   - `planner` subagent (SPEC 起票、 multi-step 推論主体)
+   - 6 体合議の **2-3 体だけ** (金融 verdict / Anthropic engineer / マーケター 等、 法務 / cost 設計の精度が高 priority な reviewer)
+4. **6 体合議 mixed model**: 残り 3-4 体 (ui-designer / frontend-architect / qa-dogfooder) は Sonnet で並列起動
+5. **handover lazy read**: session 開始時に handover full-read 禁止、 `fetch-handover` skill (圧縮 30 行 summary) のみ。 full-read は user 明示要請時のみ
+6. **memory lazy load**: MEMORY.md index 行だけ読み、 anchor 本体は必要時のみ Read (現状 proactive full-read を避ける)
+7. **billing alert**: Anthropic console で日次 $5 / 月 $50 / 月 $200 email alert 3 段設定済 (v94 セッションで user 設定済、 spike 24h 内検知)
+
+詳細: handover_2026-05-22_v94.md / Phase 2.10 cost reduction sub-agent verdict 参照
 
 ## デザインルール
 - **トークン (色 / spacing / radius / elevation / motion)**: [`docs/references/design_system.md`](docs/references/design_system.md) が Single Source of Truth
