@@ -30,7 +30,9 @@ const INITIAL_VISIBLE = 12;
 const VISIBLE_INCREMENT = 20;
 const MAX_FETCH = 50;
 
-export default function NewsPanel({ ticker, useWorkspaceReader = false }) {
+// Phase 2.7 Sprint 1 #2': hideHeading prop — workspace mode では大見出し/小見出し重複を解消
+// default = false で SPA classic mode 維持
+export default function NewsPanel({ ticker, useWorkspaceReader = false, hideHeading = false }) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -185,14 +187,20 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false }) {
     <SectionFadeSubtle>
     {/* tier-l-glow: Sprint 2 Phase 2.5 — hover border tint + inset shadow で Tier L 階層演出 */}
     <section className="panel-card tier-l-glow rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)' }}>
+      {/* Phase 2.7 Sprint 1 #2': hideHeading=true (workspace mode) で AccordionSection 重複解消 */}
       <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
-        <h3 className="section-heading" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className="section-header-icon" aria-hidden="true">
-            <Newspaper size={18} strokeWidth={1.5} />
-          </span>
-          最新ニュース
-          <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>{ticker}</span>
-        </h3>
+        {!hideHeading && (
+          <h3
+            className="section-heading"
+            style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 8 }}
+          >
+            <span className="section-header-icon" aria-hidden="true">
+              <Newspaper size={18} strokeWidth={1.5} />
+            </span>
+            最新ニュース
+            <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>{ticker}</span>
+          </h3>
+        )}
         {news.length > 0 && (
           <div className="flex items-center gap-3">
             {view !== null && (

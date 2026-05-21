@@ -18,10 +18,12 @@
  *   - feedback_llm_calc_separation.md (narration 静的のみ)
  *   - feedback_chart_overlay_safety.md (Recharts 不使用、 pure CSS のみで安全)
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { fetchAnalyst } from '../api.js';
 import { canUse } from '../lib/planGating.js';
 import Chip from './ui/Chip.jsx';
+// Phase 2.7 Sprint 1 #1': Tier M halo sweep (1 回限り) — useHaloSweepOnce 共通 hook
+import { useHaloSweepOnce } from '../hooks/useHaloSweepOnce.js';
 
 // ── signal_quality → tone / label ──────────────────────────────────
 function confidenceToTone(confidence) {
@@ -298,6 +300,9 @@ export default function AnalystPanel({ ticker, plan = 'free', currentPrice = nul
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errored, setErrored] = useState(false);
+  // Phase 2.7 Sprint 1 #1': Tier M halo sweep ref (1 回限り)
+  const haloRef = useRef(null);
+  useHaloSweepOnce(haloRef);
 
   useEffect(() => {
     if (!ticker) return;
@@ -371,6 +376,14 @@ export default function AnalystPanel({ ticker, plan = 'free', currentPrice = nul
   const upsideAvailable = Number.isFinite(m.target_upside_pct);
 
   return (
+    // Phase 2.7 Sprint 1 #1': tier-m-glow wrapper で halo sweep を適用
+    // panel-card anp-panel は内側に維持 (入れ子 surface-card 禁止、glow_elevation_postmortem.md §v58→v59)
+    <div
+      ref={haloRef}
+      className="tier-m-glow"
+      data-testid="analyst-panel-wrapper"
+      data-spotlight="card"
+    >
     <section className="panel-card anp-panel">
       <header className="anp-head">
         <h3 className="anp-title">アナリスト視点</h3>
@@ -411,5 +424,6 @@ export default function AnalystPanel({ ticker, plan = 'free', currentPrice = nul
 
       <PanelFooter signalQuality={data.signal_quality} />
     </section>
+    </div>
   );
 }

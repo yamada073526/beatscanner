@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { fetchQuarterlyHistory } from '../api.js';
+// Phase 2.7 Sprint 1 #1': Tier M halo sweep (1 回限り) — useHaloSweepOnce 共通 hook
+import { useHaloSweepOnce } from '../hooks/useHaloSweepOnce.js';
 
 // ── フォーマット ────────────────────────────────────────
 function fmtEPS(v) {
@@ -150,6 +152,9 @@ export default function QuarterlyHistoryTable({ ticker, limit = 8, columns }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // Phase 2.7 Sprint 1 #1': Tier M halo sweep ref (1 回限り)
+  const haloRef = useRef(null);
+  useHaloSweepOnce(haloRef);
 
   useEffect(() => {
     if (!ticker) return;
@@ -226,7 +231,14 @@ export default function QuarterlyHistoryTable({ ticker, limit = 8, columns }) {
   const totalCells = streakCells.length;
 
   return (
-    <div className="qhistory-wrap">
+    // Phase 2.7 Sprint 1 #1': tier-m-glow wrapper で halo sweep を適用
+    // qhistory-wrap は内側に維持 (入れ子 surface-card 禁止教訓遵守)
+    <div
+      ref={haloRef}
+      className="tier-m-glow qhistory-wrap"
+      data-testid="quarterly-history-table-wrapper"
+      data-spotlight="card"
+    >
       {/* ── サマリー帯 (Beat/Miss 比率) ── */}
       <div className="qhistory-summary">
         <div className="qhistory-stat">

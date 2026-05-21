@@ -38,9 +38,11 @@ function LinkItem({ label, url, desc }) {
           </div>
         )}
       </div>
+      {/* Phase 2.7 Sprint 1 #2: .ir-link-arrow で hover translateX(4px) translateY(-2px) 適用 */}
       <span
-        className="shrink-0 text-xs"
+        className="ir-link-arrow shrink-0 text-xs"
         style={{ color: 'var(--text-muted)' }}
+        aria-hidden="true"
       >
         ↗
       </span>
@@ -63,7 +65,9 @@ function Section({ title, icon, children }) {
   );
 }
 
-export default function IRLinksPanel({ ticker }) {
+// Phase 2.7 Sprint 1 #2': hideHeading prop — workspace mode では大見出し/小見出し重複を解消
+// default = false で SPA classic mode 維持 (既存 isScrollV1 mode でも表示)
+export default function IRLinksPanel({ ticker, hideHeading = false }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   // Phase 2.6 Evaluator FAIL-2 hotfix: 3 段階分岐 SSOT (feedback_data_completeness_guard.md)
@@ -131,15 +135,23 @@ export default function IRLinksPanel({ ticker }) {
       className="panel-card tier-l-glow rounded-2xl p-6 shadow-sm"
       style={{ background: 'var(--bg-card)' }}
     >
-      <h3 className="section-heading" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span className="section-header-icon" aria-hidden="true">
-          <Link size={18} strokeWidth={1.5} />
-        </span>
-        IRリソース
-        <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
-          {ticker}
-        </span>
-      </h3>
+      {/* Phase 2.7 Sprint 1 #2': hideHeading=true (workspace mode) で大見出し/小見出し重複を解消
+          AccordionSection の header が「IRリソース」を表示するため内部 h3 は冗長になる
+          default = false で SPA classic / isScrollV1 mode 維持 */}
+      {!hideHeading && (
+        <h3
+          className="section-heading"
+          style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 'var(--space-4, 16px)' }}
+        >
+          <span className="section-header-icon" aria-hidden="true">
+            <Link size={18} strokeWidth={1.5} />
+          </span>
+          IRリソース
+          <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
+            {ticker}
+          </span>
+        </h3>
+      )}
 
       {loading && (
         <div
