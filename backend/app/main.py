@@ -1983,13 +1983,25 @@ async def _analyze_core(ticker: str, fmp_key: str | None, use_cache: bool = True
 
     currency = "USD"
     if not income or not cash:
+        # Phase 2.9 Sprint 3 #Pane3-perf: yfinance に asyncio.wait_for(20s) timeout 追加
+        # 真因: Railway IP が yfinance に block されると無期限ハング → frontend 永遠分析中
+        # 修正: 20s で必ず timeout、 fallback で income/cash 空配列 → _AnalyzeNotFoundError へ落ちる
         try:
-            income, cash, company_name, currency = await yfinance_source.fetch(ticker_u)
-        except Exception:
+            income, cash, company_name, currency = await asyncio.wait_for(
+                yfinance_source.fetch(ticker_u),
+                timeout=20.0,
+            )
+        except (asyncio.TimeoutError, Exception):
             income, cash = [], []
         source = "yfinance"
         if not income and not cash:
-            yf_quote_type = await yfinance_source.get_quote_type(ticker_u)
+            try:
+                yf_quote_type = await asyncio.wait_for(
+                    yfinance_source.get_quote_type(ticker_u),
+                    timeout=10.0,
+                )
+            except (asyncio.TimeoutError, Exception):
+                yf_quote_type = None
             if yf_quote_type in ("ETF", "MUTUALFUND", "INDEX"):
                 raise _AnalyzeETFError(
                     f"{ticker_u} は{yf_quote_type}のため、決算分析の対象外です。"

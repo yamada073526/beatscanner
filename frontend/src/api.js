@@ -2,10 +2,32 @@ function fmpHeaders() {
   return {};
 }
 
+/**
+ * Phase 2.9 Sprint 3 #Pane3-perf: AbortController + 30s timeout fetch helper
+ * 真因: backend yfinance fallback (Railway IP block) で永遠にハング → frontend 永遠分析中
+ * 修正: 30s で必ず timeout、 user に明示エラー表示 + 再試行可能化
+ */
+async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { ...options, signal: controller.signal });
+    return r;
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      throw new Error(`タイムアウト (${timeoutMs / 1000}秒以内に応答なし)。 ページをリロードして再試行してください。`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function analyze(ticker) {
-  const r = await fetch(`/api/analyze/${encodeURIComponent(ticker)}`, {
+  // Phase 2.9 Sprint 3 #Pane3-perf: 30s timeout で永遠分析中を撲滅
+  const r = await fetchWithTimeout(`/api/analyze/${encodeURIComponent(ticker)}`, {
     headers: fmpHeaders(),
-  });
+  }, 30000);
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
     throw new Error(err.detail || `HTTP ${r.status}`);
@@ -611,7 +633,8 @@ export async function validateFmpKey(apiKey) {
 }
 
 export async function demoAnalyze(ticker) {
-  const r = await fetch(`/api/demo/analyze/${encodeURIComponent(ticker)}`);
+  // Phase 2.9 Sprint 3 #Pane3-perf: demoAnalyze にも 30s timeout (analyze と同 SOP)
+  const r = await fetchWithTimeout(`/api/demo/analyze/${encodeURIComponent(ticker)}`, {}, 30000);
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
     throw new Error(err.detail || `HTTP ${r.status}`);
