@@ -204,7 +204,7 @@ export default function AccordionSection({
               // SPRING_SOFT preset (feedback_motion_timing_recipes.md)
               reduce
                 ? { duration: 0 }
-                : { type: 'spring', stiffness: 220, damping: 28 }
+                : { type: 'spring', stiffness: 220, damping: 32 }
             }
             // Phase 2.7 Sprint 1 #3: state-aware overflow
             // animate 中 (isAnimating=true) は 'hidden' で height 0↔auto の clip を担保

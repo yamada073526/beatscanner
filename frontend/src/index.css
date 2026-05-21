@@ -9097,6 +9097,27 @@ button.ds-chip[data-pressed="true"]:hover {
   border-color: color-mix(in srgb, var(--glow-tint, var(--color-accent)) 70%, transparent) !important;
 }
 
+/* ── Phase 2.9 Sprint 3 #会社概要 visual 引き算 (発光階層 3 体合議 verdict) ────
+   user dogfood: 「会社概要のみ、 5 条件より下なのに発光強い」 違和感解消。
+   真因: ProfileCard は Card (bs-panel) 経由で is-arriving 時に full cyan shadow が発火、
+   Tier M sections (analyst/quarterly) より強く見える。
+   修正: Tier L まで弱める ─ profile-card の is-arriving shadow を 1 tier 下げる + accent を neutral。
+   feedback_brand_aspiration.md 準拠: 「Aman ロビーのシャンデリア (Tier 0) > 壁面アート (Tier M) > 案内サイン (Tier L)」 の 3 階層を visual hierarchy で一貫。 */
+[data-testid="profile-card"].bs-panel.is-arriving {
+  box-shadow:
+    0 0 8px color-mix(in srgb, var(--color-accent) 8%, transparent),
+    0 3px 12px color-mix(in srgb, var(--color-accent) 5%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color-accent) 18%, var(--border)) !important;
+  border-color: color-mix(in srgb, var(--color-accent) 18%, var(--border)) !important;
+}
+[data-theme="dark"] [data-testid="profile-card"].bs-panel.is-arriving {
+  box-shadow:
+    0 0 12px color-mix(in srgb, var(--color-accent) 14%, transparent),
+    0 4px 14px color-mix(in srgb, var(--color-accent) 8%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color-accent) 28%, var(--border)) !important;
+  border-color: color-mix(in srgb, var(--color-accent) 28%, var(--border)) !important;
+}
+
 /* prefers-reduced-motion: verdict-hero の transform 抑制 */
 @media (prefers-reduced-motion: reduce) {
   .verdict-hero,
