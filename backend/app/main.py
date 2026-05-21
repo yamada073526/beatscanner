@@ -6373,12 +6373,24 @@ _PROFILE_EXTENDED_CACHE: dict[str, tuple[float, dict]] = {}
 _PROFILE_EXTENDED_TTL = CACHE_TTL_PROFILE  # 24h
 
 @app.get("/api/profile-extended/{ticker}")
-async def profile_extended(ticker: str, request: Request) -> dict:
+async def profile_extended(
+    ticker: str,
+    request: Request,
+    authorization: str = Header(default=""),
+) -> dict:
     """FMP /profile + /stock-peers から会社概要拡張データを返す。
     LLM 不使用 (Phase A 静的のみ)。Phase B で LLM 日本語要約に進む際は別 SPEC。
 
+    Phase 2.9 Sprint G3 真因 fix (sub-agent 95% confidence):
+      旧実装は authorization header を受け取らず、 全 user に demo rate limit を適用。
+      他 endpoint (analyze 等) は authorization で logged-in user を識別済だが、
+      profile-extended は demo 専用 endpoint のロジックをコピー流用した結果、
+      logged-in user も「3 銘柄/日」 制限に hit する bug。 user dogfood で発覚。
+    修正: authorization header 受け取り、 logged-in user は rate limit 免除。
+
     Trust Cliff 対策 (Phase 2.6 Evaluator FAIL-1 hotfix): demo mode rate limit
-    (3 req/IP/day) を適用。 cache hit 時は rate limit カウント不要 (既存 data 返却)。
+    (3 req/IP/day) は **未ログイン user のみ** 適用。 cache hit 時は rate limit
+    カウント不要 (既存 data 返却)。
     """
     import time as _time_mod
     t = ticker.upper()
@@ -6387,13 +6399,23 @@ async def profile_extended(ticker: str, request: Request) -> dict:
     if cached and (now - cached[0]) < _PROFILE_EXTENDED_TTL:
         return cached[1]
 
-    # demo mode rate limit (LP「3 銘柄/日まで無料」 訴求と整合)
-    ip = _client_ip(request)
-    if not _check_demo_rate_limit(ip):
-        raise HTTPException(
-            status_code=429,
-            detail="本日のお試し回数 (3銘柄) を超えました。Googleログインで無制限になります。",
-        )
+    # Phase 2.9 Sprint G3: logged-in user は rate limit 免除
+    is_authed = False
+    if authorization:
+        try:
+            await _verify_supabase_jwt(authorization)
+            is_authed = True
+        except Exception:
+            is_authed = False
+
+    # demo mode rate limit (LP「3 銘柄/日まで無料」 訴求と整合、 未ログイン user のみ)
+    if not is_authed:
+        ip = _client_ip(request)
+        if not _check_demo_rate_limit(ip):
+            raise HTTPException(
+                status_code=429,
+                detail="本日のお試し回数 (3銘柄) を超えました。Googleログインで無制限になります。",
+            )
 
     client = FMPClient(api_key=_get_fmp_key(request))
 

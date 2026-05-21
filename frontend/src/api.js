@@ -581,8 +581,20 @@ export async function fetchIRLinks(ticker) {
 export async function fetchProfileExtended(ticker, { signal } = {}) {
   // Phase 2.6 Evaluator FAIL-3 hotfix: AbortController signal を fetch に伝播、
   // ProfileCard の useEffect cleanup で race condition (古い response 上書き) 防止
+  // Phase 2.9 Sprint G3 真因 fix: logged-in user は Authorization header を付けて
+  // backend に「demo rate limit 免除」 を伝える。 shared supabase singleton (lib/supabase.js)
+  // を dynamic import (tree-shake 安全、 test 環境で supabase 未設定でも fallback)。
+  let authHeader = {};
+  try {
+    const { supabase } = await import('./lib/supabase.js');
+    if (supabase) {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (token) authHeader = { Authorization: `Bearer ${token}` };
+    }
+  } catch { /* unauthenticated / supabase 未設定 は OK、 demo 経路に fallback */ }
   const r = await fetch(`/api/profile-extended/${encodeURIComponent(ticker)}`, {
-    headers: fmpHeaders(),
+    headers: { ...authHeader, ...fmpHeaders() },
     signal,
   });
   if (!r.ok) {

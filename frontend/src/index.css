@@ -9034,28 +9034,32 @@ button.ds-chip[data-pressed="true"]:hover {
    ・Hero (Card) の bottom-radius を消す
    ・2 box 接合部に 1px hairline (border-color 25% opacity)
    5 軸 100 点向上予測: spacing +6 / color +4 / motion +1 / aman +8 = +19 pt */
-.verdict-hero .summary-brief-section {
-  border: none;
-  background: transparent;
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
-  /* hairline divider (subtle 25% opacity) */
-  position: relative;
+/* Phase 2.9 Sprint G1 真因 fix: user 「端っこに継ぎ目」 解消
+   真因: SummaryBrief.jsx の `<section style={{ border: '1px solid...', borderRadius, background }}>` が
+   inline style (specificity 1,0,0) で CSS cascade を override していた。
+   修正: !important + [style] attribute selector で inline style 打ち消し、
+   hairline を box 全幅 (inset 0) で「1 枚スラブ」 感達成。 */
+.verdict-hero .summary-brief-section,
+.verdict-hero .summary-brief-section[style] {
+  border: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
   margin-top: 0;
+  position: relative;
 }
 .verdict-hero .summary-brief-section::before {
   content: '';
   position: absolute;
   top: 0;
-  left: var(--space-5, 20px);
-  right: var(--space-5, 20px);
+  left: 0;
+  right: 0;
   height: 1px;
   background: var(--border);
-  opacity: 0.35;
+  opacity: 0.25;
   pointer-events: none;
 }
 [data-theme="dark"] .verdict-hero .summary-brief-section::before {
-  opacity: 0.5;
+  opacity: 0.45;
 }
 .verdict-hero [data-testid="pane3-hero"] {
   border-bottom-left-radius: 0;

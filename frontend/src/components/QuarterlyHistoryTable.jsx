@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { CheckCircle2, XCircle } from 'lucide-react';
 import { fetchQuarterlyHistory } from '../api.js';
 // Phase 2.7 Sprint 1 #1': Tier M halo sweep (1 回限り) — useHaloSweepOnce 共通 hook
 import { useHaloSweepOnce } from '../hooks/useHaloSweepOnce.js';
@@ -135,15 +136,16 @@ const COLUMN_DEFS = {
       return `${sign}${v.toFixed(1)}pp`;
     },
   },
-  // Phase 2.9 Sprint D #8q-history-phase1: 5 条件 #3 CFPS (1 株あたり営業 CF)
+  // Phase 2.9 Sprint D #8q-history-phase1 + Sprint G2 文字壁解消:
+  // CFPS / CF マージン は PC でも qh-hide-mobile で非表示 (情報は健全性 ✓× で代替表示可)
+  // user 「文字壁、 健全性が一番重要」 → 列を絞って健全性 emphasize
   cfps_actual: {
     header: 'CFPS',
     headerClass: 'qh-num qh-hide-mobile',
     cellClass: 'qh-num qh-hide-mobile',
     render: (r) => fmtEPS(r.cfps_actual),
   },
-  // Phase 2.9 Sprint D #8q-history-phase1: 5 条件 #1 CF マージン (CF/売上)
-  // 15% 未満 = 赤 (loss tone) / 15% 以上 = 緑 (gain tone) でセルタイント
+  // 5 条件 #1 CF マージン (CF/売上)、 15% 線で gain/loss tint
   op_cf_margin: {
     header: 'CF マージン',
     headerClass: 'qh-num qh-hide-mobile',
@@ -159,34 +161,61 @@ const COLUMN_DEFS = {
       return `${(v * 100).toFixed(1)}%`;
     },
   },
-  // Phase 2.9 Sprint D #8q-history-phase1: 5 条件 #5 CFPS > EPS 健全性 (粉飾リスク判定)
-  // ✓ = 健全 / × = 要確認
+  // Phase 2.9 Sprint G2 #健全性強調 (ui-designer + 金融 UX verdict 採用):
+  // 5 条件 #5 CFPS > EPS 健全性 (粉飾リスク判定) を「最重要 signal」 として強調
+  //   - 列を 2 列目 (期 の隣) に配置 (DEFAULT_COLUMNS で reorder)
+  //   - ✓×テキスト → Lucide CheckCircle2 (gain) / XCircle (loss) icon
+  //   - セル背景に 4% color-mix tint (gain/loss)
+  //   - bold + 短ラベル「CF良好 / 要確認」 で 2 秒理解
   cfps_gt_eps: {
-    header: '健全性',
-    headerClass: 'qh-num qh-hide-mobile',
+    header: (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <span style={{ fontSize: 11, color: 'var(--color-accent)', fontWeight: 700 }}>★</span>
+        健全性
+      </span>
+    ),
+    headerClass: 'qh-num',
     cellClass: (r) => {
-      if (r.cfps_gt_eps === null || r.cfps_gt_eps === undefined) return 'qh-num qh-hide-mobile';
-      return `qh-num qh-hide-mobile qh-${r.cfps_gt_eps ? 'gain' : 'loss'}`;
+      if (r.cfps_gt_eps === null || r.cfps_gt_eps === undefined) return 'qh-num qh-health-cell';
+      return `qh-num qh-health-cell qh-health-${r.cfps_gt_eps ? 'ok' : 'warn'}`;
     },
     render: (r) => {
-      if (r.cfps_gt_eps === null || r.cfps_gt_eps === undefined) return '—';
-      return r.cfps_gt_eps ? '✓ 健全' : '× 要確認';
+      if (r.cfps_gt_eps === null || r.cfps_gt_eps === undefined) {
+        return <span style={{ color: 'var(--text-muted)' }}>—</span>;
+      }
+      const Icon = r.cfps_gt_eps ? CheckCircle2 : XCircle;
+      const label = r.cfps_gt_eps ? 'CF良好' : '要確認';
+      const colorVar = r.cfps_gt_eps ? 'var(--color-gain)' : 'var(--color-loss)';
+      return (
+        <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 4,
+          fontWeight: 600,
+          color: colorVar,
+        }}>
+          <Icon size={14} strokeWidth={2} />
+          <span>{label}</span>
+        </span>
+      );
     },
   },
 };
 
 const DEFAULT_COLUMNS = [
   'period',
+  // Phase 2.9 Sprint G2 #健全性強調: 健全性を 2 列目 (期 の隣) に移動、
+  // user 最初に見る位置で「最重要 signal」 を pop。 5 原則 §1 「2 秒理解」 直撃。
+  'cfps_gt_eps',
   'eps_actual',
   'eps_estimated',
   'eps_surprise',
   'revenue_actual',
   'revenue_estimated',
   'revenue_surprise',
-  // Phase 2.9 Sprint D #8q-history-phase1: 5 条件 #1/#3/#5 を 8Q で trace
+  // CFPS / CF マージン は qh-hide-mobile で PC でも非表示 (情報は健全性 ✓ で代替)
   'cfps_actual',
   'op_cf_margin',
-  'cfps_gt_eps',
 ];
 
 // ── 本体 ────────────────────────────────────────────────
