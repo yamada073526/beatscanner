@@ -138,9 +138,13 @@ function GuidanceInfoModal({ onClose }) {
   );
 }
 
+// Phase 2.7 Sprint 1 #1: inner section に inset 1px accent shadow で baseline 補強
+// (tier-m-glow の外 glow に対する「内側から支える光」、Aman ロビー間接照明比喩)
+// contain: paint は v54 禁止教訓のため絶対追加しない
 const GUIDANCE_SECTION_STYLE = {
   border: '1px solid var(--border)',
   background: 'var(--bg-card)',
+  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 20%, transparent)',
   transition: 'transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease',
 };
 

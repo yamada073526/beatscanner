@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import Card from '../../primitives/Card.jsx';
 import SectionHeader from '../../primitives/SectionHeader.jsx';
 import ConditionRow from './ConditionRow.jsx';
@@ -7,6 +7,9 @@ import { useWorkspaceStore } from '../../../../state/workspaceStore.js';
 import { BarChart3 } from 'lucide-react';
 // Sprint 4 (Phase 2): 案1 section in-view fade-in
 import SectionFade from '../../primitives/SectionFade.jsx';
+// Phase 2.7 Sprint 1 #1' (step H): 既存 inline IO 実装を共通 hook に置換 (DRY)
+// glow_elevation_postmortem.md / feedback_glow_active_pattern.md 安全パターン準拠
+import { useHaloSweepOnce } from '../../../../hooks/useHaloSweepOnce.js';
 
 /**
  * FiveConditionsCard — VerdictDetail と ConditionGrid を統合した unified card (PR-2)
@@ -52,71 +55,12 @@ export default function FiveConditionsCard({
   const [expandedIndex, setExpandedIndex] = useState(null);
   const [showOverview, setShowOverview] = useState(false);
 
-  // Sprint 3 (Phase 2): Tier M halo sweep — IntersectionObserver で 1 回限り発火。
-  // data-halo-fired 属性で記録し、再 mount でも 2 回目は発火しない。
-  // glow_elevation_postmortem.md §v62: is-arriving は useArrivalSpotlight 一元。
-  // 本 hook は halo sweep (CSS animation) の trigger のみ担当。
-  // feedback_pge_loop_pitfalls.md §4: infinite animation 禁止。
-  // prefers-reduced-motion: CSS @media で animation を無効化 (index.css 側)。
+  // Phase 2.7 Sprint 1 step H: 既存 inline IO 実装を useHaloSweepOnce hook に置換 (DRY)
+  // 動作は完全に同一: IO observe + data-halo-ready/fired + cleanup
+  // glow_elevation_postmortem.md §v62: is-arriving は useArrivalSpotlight 一元 (不変)
+  // feedback_pge_loop_pitfalls.md §4: infinite animation 禁止 (hook 内で担保)
   const cardRef = useRef(null);
-  useEffect(() => {
-    const el = cardRef.current;
-    if (!el) return;
-
-    // prefers-reduced-motion: halo sweep を skip
-    if (
-      typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    ) {
-      return;
-    }
-
-    // 既に発火済みなら skip (ページ内で再 mount されても 2 回目は発火しない)
-    if (el.dataset.haloFired === '1') return;
-
-    // hotfix (Sprint 3 evaluator 指摘): timer を useEffect scope に hoist して
-    // cleanup で確実に clearTimeout (IO callback 内 return は cleanup として機能しない)
-    let timer = null;
-
-    const io = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        if (!entry.isIntersecting) return;
-
-        // 発火済み flag を先に立てる (animation finish() 後に data-halo-fired に移す)
-        if (el.dataset.haloFired === '1') return;
-
-        // once: 1 回だけ発火
-        io.disconnect();
-
-        // data-halo-ready を付与 → CSS の [data-halo-ready="1"]::after が animation 開始
-        el.dataset.haloReady = '1';
-
-        // animation 終了後に ::after を非表示に (2 回目抑制)
-        const HALO_DURATION_MS = 620; // CSS var(--motion-stage) 600ms + buffer 20ms
-        timer = setTimeout(() => {
-          el.removeAttribute('data-halo-ready');
-          el.dataset.haloFired = '1';
-        }, HALO_DURATION_MS);
-      },
-      {
-        rootMargin: '-10% 0px -10% 0px', // 上下 10% 入ったときに発火 (画面中央近くで点灯)
-        threshold: 0.15, // 15% 以上可視になったら発火
-      }
-    );
-
-    io.observe(el);
-
-    // useEffect cleanup: unmount 時に IO disconnect + 残 timer clearTimeout
-    return () => {
-      io.disconnect();
-      if (timer) clearTimeout(timer);
-    };
-
-    return () => {
-      io.disconnect();
-    };
-  }, []); // mount 時 once 実行
+  useHaloSweepOnce(cardRef);
 
   // Sprint 5: condition 4 click → AnalystPanel 自動展開 + smooth scroll
   const expandSection = useWorkspaceStore((s) => s.expandSection);

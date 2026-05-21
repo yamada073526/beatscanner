@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   BarChart,
   Bar,
@@ -11,6 +11,8 @@ import {
   ReferenceLine,
 } from 'recharts';
 import InfoModal from './InfoModal.jsx';
+// Phase 2.7 Sprint 1 #1: Tier M halo sweep (1 回限り) — useHaloSweepOnce 共通 hook
+import { useHaloSweepOnce } from '../hooks/useHaloSweepOnce.js';
 
 /**
  * EarningsHistoryChart
@@ -269,6 +271,9 @@ function GroupedLegend({ hasDps }) {
 // ── Main component ───────────────────────────────────────────────────────────
 function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
   const [showModal, setShowModal] = useState(false);
+  // Phase 2.7 Sprint 1 #1: Tier M halo sweep ref
+  const haloRef = useRef(null);
+  useHaloSweepOnce(haloRef);
 
   // Chart Overlay Safety: conditional render + Number.isFinite
   // Sprint A: 年次集計 (最大 5 年)。
@@ -376,9 +381,13 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
   }
 
   return (
+    // Phase 2.7 Sprint 1 #1: tier-m-glow wrapper に ref を付けて halo sweep を適用
+    // Recharts 内部 (Bar / ReferenceLine) は一切変更しない (chart-overlay-safety 4 層防御維持)
     <section
-      className="panel-card"
-      data-testid="earnings-history-grouped-bars"
+      ref={haloRef}
+      className="panel-card tier-m-glow"
+      data-testid="earnings-history-chart-wrapper"
+      data-spotlight="card"
       style={{
         background: 'var(--bg-card)',
         border: '1px solid var(--border)',

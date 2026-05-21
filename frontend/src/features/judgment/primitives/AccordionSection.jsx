@@ -11,7 +11,7 @@
  *     { type: 'spring', stiffness: 220, damping: 28 }
  *   PGE 落とし穴 4: infinite animation 禁止 → open/close で完結 → OK
  */
-import React, { useState, useCallback, useId } from 'react';
+import React, { useState, useCallback, useId, useRef } from 'react';
 import { m, AnimatePresence, useReducedMotion } from 'framer-motion';
 import styles from './AccordionSection.module.css';
 
@@ -83,6 +83,14 @@ export default function AccordionSection({
   const isControlled = typeof controlledOpen === 'boolean';
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const isOpen = isControlled ? controlledOpen : internalOpen;
+
+  // Phase 2.7 Sprint 1 #3: state-aware overflow — animate 中は 'hidden' を維持し jump-cut を排除
+  // isAnimating=true 中は overflow:hidden → framer-motion の height 0↔auto animate が clip を担保
+  // isAnimating=false かつ isOpen の場合のみ overflow:visible → tier-m-glow halo が AccordionSection 境界で clip されない
+  // glow_elevation_postmortem.md §v54: contain: paint 絶対禁止維持
+  const [isAnimating, setIsAnimating] = useState(false);
+  // useRef は useId の前後どこでも OK だが宣言をここに集約
+  const _animateRef = useRef(null); // 将来の cleanup 用予約 (現在は onAnimationStart/Complete で直接 state set)
 
   // View Transitions API サポート検出
   const supportsVT = typeof document !== 'undefined' && 'startViewTransition' in document;
@@ -198,7 +206,14 @@ export default function AccordionSection({
                 ? { duration: 0 }
                 : { type: 'spring', stiffness: 220, damping: 28 }
             }
-            style={{ overflow: 'hidden' }}
+            // Phase 2.7 Sprint 1 #3: state-aware overflow
+            // animate 中 (isAnimating=true) は 'hidden' で height 0↔auto の clip を担保
+            // animate 完了後 (isOpen && !isAnimating) は 'visible' で halo が境界で clip されない
+            // jump-cut risk: animate 中は hidden 維持で安全 ✅
+            // contain: paint 絶対禁止 (glow_elevation_postmortem.md §v54) ✅
+            style={{ overflow: isOpen && !isAnimating ? 'visible' : 'hidden' }}
+            onAnimationStart={() => setIsAnimating(true)}
+            onAnimationComplete={() => setIsAnimating(false)}
           >
             <div className={styles.panelInner}>{children}</div>
           </m.div>

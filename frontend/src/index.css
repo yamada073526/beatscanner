@@ -1396,6 +1396,44 @@ body {
     background-color: var(--bg-subtle) !important;
   }
 }
+
+/* ── Phase 2.7 Sprint 1 #2: IRLinksPanel item micro-interaction ─────────────────
+   border-left 2px slide-in (transparent → accent 60%) + arrow translateX(4px) 200ms ease-out
+   prefers-reduced-motion: グローバルの transition-duration: 0.01ms !important で自動 0 化 (二重防御)
+   chip primitive 外 (<a> tag) のため inline style 禁止ルールは非該当、CSS class で定義
+   contain: paint 禁止 (glow_elevation_postmortem.md §v54) */
+.ir-link-item {
+  position: relative;
+  overflow: visible; /* contain: paint 禁止維持 */
+}
+/* border-left slide-in: ::before pseudo-element で 2px accent bar を実装 */
+.ir-link-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--color-accent) 60%, var(--border));
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform 200ms ease-out;
+}
+@media (hover: hover) {
+  .ir-link-item:hover::before {
+    transform: scaleY(1);
+  }
+  /* arrow icon hover translate (↗ span を .ir-link-arrow class で識別) */
+  .ir-link-item:hover .ir-link-arrow {
+    transform: translateX(4px) translateY(-2px);
+  }
+}
+.ir-link-arrow {
+  display: inline-block;
+  transition: transform 200ms ease-out;
+}
+
 /* PC: 常に表示（!important を付けない — news-active/news-dimmed が無効化されるため） */
 @media (hover: hover) {
   .scroll-reveal {

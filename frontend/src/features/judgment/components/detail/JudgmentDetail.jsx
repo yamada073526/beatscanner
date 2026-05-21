@@ -720,7 +720,8 @@ export default function JudgmentDetail({
               controlledOpen={expandedSections.has('news') || undefined}
             >
               <div id="sec-news-inner">
-                <NewsPanel ticker={selectedTicker} useWorkspaceReader={useWorkspaceReader} />
+                {/* Phase 2.7 Sprint 1 #2': workspace mode は AccordionSection header で見出し表示済 → 内部 h3 hide */}
+                <NewsPanel ticker={selectedTicker} useWorkspaceReader={useWorkspaceReader} hideHeading={!isScrollV1} />
               </div>
             </AccordionSection>
           </div>
@@ -744,7 +745,8 @@ export default function JudgmentDetail({
               controlledOpen={expandedSections.has('ir-links') || undefined}
             >
               <div id="sec-ir-inner">
-                <IRLinksPanel ticker={selectedTicker} />
+                {/* Phase 2.7 Sprint 1 #2': workspace mode は AccordionSection header で見出し表示済 → 内部 h3 hide */}
+                <IRLinksPanel ticker={selectedTicker} hideHeading={!isScrollV1} />
               </div>
             </AccordionSection>
           </div>
