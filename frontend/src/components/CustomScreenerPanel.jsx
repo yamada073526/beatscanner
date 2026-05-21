@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Mountain } from 'lucide-react';
 import { fetchCustomScreener, fetchCupHandleScanner } from '../api.js';
 import Chip, { ChipGroup } from './ui/Chip.jsx';
 
@@ -199,7 +200,9 @@ function CupResultCard({ item, onSelect, masked = false }) {
           {!masked && state && (
             <div className="mt-1.5">
               <Chip size="xs" variant="display" tone={stateTone}>
-                ☕ {stateLabel}
+                {/* Phase 2.9 Sprint 1: ☕ → Mountain (3 体合議 verdict、 StockPriceChart と SSOT 統一) */}
+                <Mountain size={11} strokeWidth={1.75} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 3 }} />
+                {stateLabel}
               </Chip>
               {pivotPrice != null && (
                 <span className="ml-2 text-xs text-slate-500">Pivot: {pivotStr}</span>

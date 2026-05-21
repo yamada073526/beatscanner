@@ -175,13 +175,23 @@
 
 /* ===== Expand animation (clip-path fallback) ===== */
 /* View Transitions API が存在する browser では JS 側の cross-fade が優先される */
+/* Phase 2.9 Sprint 1 #1 + #5-a 真因 fix:
+   keyframe 終了状態を clip-path: none に変更 (inset(0 0 0% 0) は bounding box clip と
+   等価で、 tier-m-glow ::after の outer halo を AccordionSection 境界で切っていた)。
+   inset(0 0 0% 0) → none 直接遷移は interpolation 不可なため 99% trick で 1 frame 前に clip-path 解除。
+   glow_elevation_postmortem.md §v54: contain: paint 絶対禁止 + clip-path forwards 持続は
+   同じ class の bug (visible 境界の不可視 clip context)。 */
 @keyframes acc-expand {
   from {
     clip-path: inset(0 0 100% 0);
     opacity: 0;
   }
-  to {
+  99% {
     clip-path: inset(0 0 0% 0);
+    opacity: 1;
+  }
+  to {
+    clip-path: none;
     opacity: 1;
   }
 }

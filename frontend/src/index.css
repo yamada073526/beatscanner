@@ -935,16 +935,22 @@ body {
     background-color var(--ws-hover-duration, 220ms) var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
 }
 .news-list-card::before {
-  /* 左端 cyan accent bar (Pane 4 attention bar と同形だが Pane 3 は固定値) */
+  /* Phase 2.9 Sprint 1 #4 真因 fix: IRLinks SSOT mirror — scaleY slide-in animation
+     user dogfood「枠と一緒に動くが伸びるアニメーションしない」 解消。
+     旧 design unification v5 (static accent bar) を IRLinks 同等の scaleY(0→1) に変更、
+     初期 invisible + hover で center から上下に slide-in。
+     selected (.is-open) state も visible 維持で「click した記事の highlight」 を継続。 */
   content: '';
   position: absolute;
   left: 0;
-  top: 30%;
-  bottom: 30%;
-  width: 2.5px;
+  top: 15%;
+  bottom: 15%;
+  width: 3px;
   border-radius: 0 2px 2px 0;
-  background: rgba(56, 189, 248, 0.50);
+  background: color-mix(in srgb, var(--color-accent) 75%, transparent);
   pointer-events: none;
+  transform: scaleY(0);
+  transform-origin: center;
 }
 /* 2026-05-13 design unification v5: Pane 4 NewsItem rich hover を再現 (token 経由)。
    user dogfood で「v4 は何も反応がない」評価 → Pane 4 と同じ lift + cyan glow + accent bar 拡幅 */
@@ -959,14 +965,16 @@ body {
   border-color: rgba(56, 189, 248, 0.65);
   background-color: rgba(56, 189, 248, 0.08);
 }
-/* hover 時に accent bar を 2.5px → 4px に拡幅 + opacity 引き上げ (Pane 4 round 18 と同) */
+/* Phase 2.9 Sprint 1 #4: scaleY slide-in transition (IRLinks SSOT mirror) */
 .news-list-card::before {
-  transition: width var(--ws-hover-duration, 220ms) var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
-              opacity var(--ws-hover-duration, 220ms) var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
+  transition: transform var(--ws-hover-duration, 220ms) var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
 }
 .news-list-card:hover::before {
-  width: 4px;
-  background: rgba(56, 189, 248, 0.9);
+  transform: scaleY(1);
+}
+/* selected state も visible 維持 (.is-open はクリックで開いた記事の highlight) */
+.news-list-card.is-open::before {
+  transform: scaleY(1);
 }
 /* title color shift (Linear 流「1 つだけ動かす」) */
 .news-list-card .news-list-title {
@@ -9172,6 +9180,23 @@ button.ds-chip[data-pressed="true"]:hover {
 /* data-halo-fired 付与後: ::after を非表示に (2 回目は発火しない) */
 .tier-m-glow[data-halo-fired="1"]::after {
   display: none;
+}
+
+/* Phase 2.9 Sprint 1 #2 真因 fix:
+   user dogfood「ガイダンス進捗まだ弱い」 = halo-fired 後は ::after display:none で
+   wrapper にも box-shadow が無く、 baseline は border 1px のみで「ambient halo presence」 が消失。
+   Phase 2.5 SSOT (halo sweep 1 回限り) は維持しつつ、 fire 後は wrapper box-shadow で
+   低強度 ambient glow を持続 (Aman 廊下の常夜灯比喩、 sweep 後の余韻を保つ)。
+   glow_elevation_postmortem.md §v54 準拠: contain: paint 禁止維持、 hex 直書き禁止。 */
+.tier-m-glow[data-halo-fired="1"] {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 14%, transparent),
+    0 4px 16px -4px color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+[data-theme="dark"] .tier-m-glow[data-halo-fired="1"] {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 22%, transparent),
+    0 6px 20px -4px color-mix(in srgb, var(--color-accent) 16%, transparent);
 }
 
 /* dark mode: halo をさらに強化 (Sprint 2 Phase 2.5: 35%/55%→55%/70%) */

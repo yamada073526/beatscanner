@@ -544,8 +544,12 @@ export default function JudgmentDetail({
             defaultOpen={false}
             controlledOpen={expandedSections.has('analyst-panel') || undefined}
             onOpenChange={(id, isOpen) => {
-              // Phase 2.8 Sprint 1 #3: accordion 展開時に halo を 1 回発火
-              if (isOpen) analystHaloTriggerRef.current?.();
+              // Phase 2.9 Sprint 1 #3 真因 fix: AccordionSection は isOpen=false 中 children を
+              // mount しない ({isOpen && (...)})。 onOpenChange 同期 fire 時点では AnalystPanel が
+              // まだ mount してないため haloTriggerRef.current は null。
+              // accordion 展開アニメ (spring 220/28 ≈ 400ms) + AnalystPanel mount + useEffect
+              // 完了を待って fire させる。 spring 完了後の triggers は visible で見える。
+              if (isOpen) setTimeout(() => analystHaloTriggerRef.current?.(), 500);
             }}
           >
             <AnalystPanel
@@ -586,8 +590,8 @@ export default function JudgmentDetail({
             defaultOpen={false}
             controlledOpen={expandedSections.has('quarterly-history') || undefined}
             onOpenChange={(id, isOpen) => {
-              // Phase 2.8 Sprint 1 #3: accordion 展開時に halo を 1 回発火
-              if (isOpen) qhistoryHaloTriggerRef.current?.();
+              // Phase 2.9 Sprint 1 #3 真因 fix: mount + spring animation 完了を待つ (詳細は AnalystPanel 側)
+              if (isOpen) setTimeout(() => qhistoryHaloTriggerRef.current?.(), 500);
             }}
           >
             <PremiumLock
