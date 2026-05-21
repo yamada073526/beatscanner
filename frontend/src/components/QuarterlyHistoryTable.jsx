@@ -135,6 +135,44 @@ const COLUMN_DEFS = {
       return `${sign}${v.toFixed(1)}pp`;
     },
   },
+  // Phase 2.9 Sprint D #8q-history-phase1: 5 条件 #3 CFPS (1 株あたり営業 CF)
+  cfps_actual: {
+    header: 'CFPS',
+    headerClass: 'qh-num qh-hide-mobile',
+    cellClass: 'qh-num qh-hide-mobile',
+    render: (r) => fmtEPS(r.cfps_actual),
+  },
+  // Phase 2.9 Sprint D #8q-history-phase1: 5 条件 #1 CF マージン (CF/売上)
+  // 15% 未満 = 赤 (loss tone) / 15% 以上 = 緑 (gain tone) でセルタイント
+  op_cf_margin: {
+    header: 'CF マージン',
+    headerClass: 'qh-num qh-hide-mobile',
+    cellClass: (r) => {
+      const v = r.op_cf_margin;
+      if (!Number.isFinite(v)) return 'qh-num qh-hide-mobile';
+      // 5 条件 #1 基準: 15% 以上を健全とする
+      return `qh-num qh-hide-mobile qh-${v >= 0.15 ? 'gain' : 'loss'}`;
+    },
+    render: (r) => {
+      const v = r.op_cf_margin;
+      if (!Number.isFinite(v)) return '—';
+      return `${(v * 100).toFixed(1)}%`;
+    },
+  },
+  // Phase 2.9 Sprint D #8q-history-phase1: 5 条件 #5 CFPS > EPS 健全性 (粉飾リスク判定)
+  // ✓ = 健全 / × = 要確認
+  cfps_gt_eps: {
+    header: '健全性',
+    headerClass: 'qh-num qh-hide-mobile',
+    cellClass: (r) => {
+      if (r.cfps_gt_eps === null || r.cfps_gt_eps === undefined) return 'qh-num qh-hide-mobile';
+      return `qh-num qh-hide-mobile qh-${r.cfps_gt_eps ? 'gain' : 'loss'}`;
+    },
+    render: (r) => {
+      if (r.cfps_gt_eps === null || r.cfps_gt_eps === undefined) return '—';
+      return r.cfps_gt_eps ? '✓ 健全' : '× 要確認';
+    },
+  },
 };
 
 const DEFAULT_COLUMNS = [
@@ -145,6 +183,10 @@ const DEFAULT_COLUMNS = [
   'revenue_actual',
   'revenue_estimated',
   'revenue_surprise',
+  // Phase 2.9 Sprint D #8q-history-phase1: 5 条件 #1/#3/#5 を 8Q で trace
+  'cfps_actual',
+  'op_cf_margin',
+  'cfps_gt_eps',
 ];
 
 // ── 本体 ────────────────────────────────────────────────

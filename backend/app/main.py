@@ -4922,10 +4922,14 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
     surprises_task = asyncio.create_task(client.earnings_surprises(sym, limit=fetch_n))
     income_task = asyncio.create_task(client.income_statement(sym, limit=fetch_n, period="quarter"))
     estimates_task = asyncio.create_task(client.analyst_estimates(sym, period="quarter", limit=24))
+    # Phase 2.9 Sprint D #8q-history-phase1: cash_flow quarterly 追加 fetch
+    # 5 条件 #1 (営業 CF margin) / #3 (CFPS) / #5 (CFPS > EPS 健全性) を 8Q 推移で trace
+    cash_flow_task = asyncio.create_task(client.cash_flow(sym, limit=fetch_n, period="quarter"))
 
     surprises: list[dict] = []
     income_q: list[dict] = []
     estimates: list[dict] = []
+    cash_flow_q: list[dict] = []
     try:
         surprises = await surprises_task or []
     except Exception:
@@ -4938,6 +4942,10 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
         estimates = await estimates_task or []
     except Exception:
         estimates = []
+    try:
+        cash_flow_q = await cash_flow_task or []
+    except Exception:
+        cash_flow_q = []
 
     # handover v83 P1 fix (2026-05-18): /stable/earnings は upcoming earnings (eps actual 未確定)
     # も返すため、 eps actual が無い entry は historical view から除外。 旧 /earnings-calendar
@@ -4995,6 +5003,7 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
         inc = _nearest(date_str, income_q) if date_str else None
         revenue_actual = None
         sps_actual = None
+        diluted_shares_q = 0
         fiscal_period = _pick(entry, "fiscalPeriod", "period")
         if inc:
             revenue_actual = _safe_eps_float(_pick(inc, "revenue"))
@@ -5011,6 +5020,25 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
             )
             if revenue_actual is not None and diluted_shares_q and diluted_shares_q > 0:
                 sps_actual = round(revenue_actual / diluted_shares_q, 4)
+
+        # Phase 2.9 Sprint D #8q-history-phase1: cash_flow から CFPS / CF マージン / 健全性
+        # 5 条件 #1 (CF margin > 15%) / #3 (CFPS 連続増加) / #5 (CFPS > EPS) を 8Q で trace
+        cf = _nearest(date_str, cash_flow_q) if date_str else None
+        operating_cf = None
+        cfps_actual = None
+        op_cf_margin = None
+        cfps_gt_eps = None
+        if cf:
+            operating_cf = _safe_eps_float(_pick(cf, "operatingCashFlow", "netCashProvidedByOperatingActivities"))
+            # CFPS = operating_cf / diluted_shares (income_q と同 share 数を使用)
+            if operating_cf is not None and diluted_shares_q and diluted_shares_q > 0:
+                cfps_actual = round(operating_cf / diluted_shares_q, 4)
+            # CF margin = operating_cf / revenue_actual (5 条件 #1 基準 15%)
+            if operating_cf is not None and revenue_actual is not None and revenue_actual > 0:
+                op_cf_margin = round(operating_cf / revenue_actual, 4)
+            # CFPS > EPS 健全性 (5 条件 #5、 粉飾リスク判定)
+            if cfps_actual is not None and eps_actual is not None:
+                cfps_gt_eps = cfps_actual > eps_actual
 
         # estimates から revenue_estimated を補完
         revenue_estimated = None
@@ -5035,6 +5063,11 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
             "revenue_verdict": rev_label,
             # Sprint A: grouped bars per-share view 統一用 (SPS = revenue / diluted_shares)
             "sps_actual": sps_actual,
+            # Phase 2.9 Sprint D #8q-history-phase1: 5 条件 #1/#3/#5 を 8Q で trace
+            "operating_cf": operating_cf,
+            "cfps_actual": cfps_actual,
+            "op_cf_margin": op_cf_margin,
+            "cfps_gt_eps": cfps_gt_eps,
         })
 
     # 全件 EPS 取得失敗の場合 404
