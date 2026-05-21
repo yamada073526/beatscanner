@@ -157,7 +157,9 @@ export default function QuarterlyHistoryTable({ ticker, limit = 8, columns, halo
   const [error, setError] = useState(null);
   // Phase 2.7 Sprint 1 #1': Tier M halo sweep ref (1 回限り)
   const haloRef = useRef(null);
-  const { triggerOnAccordionOpen } = useHaloSweepOnce(haloRef);
+  // Phase 2.9 Sprint 2 #Bug2: haloTriggerRef あり (accordion-controlled) なら IO skip
+  // (parent JudgmentDetail の haloFiredSetRef で 1 回限り保証、 詳細は AnalystPanel 側 comment)
+  const { triggerOnAccordionOpen } = useHaloSweepOnce(haloRef, { skipIO: !!haloTriggerRef });
 
   // Phase 2.8 Sprint 1 #3: haloTriggerRef に trigger 関数を register
   useEffect(() => {

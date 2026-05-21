@@ -192,9 +192,19 @@ export default function JudgmentDetail({
   // Phase 2.8 Sprint 1 #3: accordion 内 section の halo trigger refs
   // AccordionSection の onOpenChange(id, true) 時に haloTriggerRef.current?.() を呼んで
   // AnalystPanel / QuarterlyHistoryTable の halo を 1 回発火させる。
-  // data-halo-fired guard により 2 回目は発火しない (useHaloSweepOnce SSOT 維持)。
   const analystHaloTriggerRef = useRef(null);   // AnalystPanel から register される
   const qhistoryHaloTriggerRef = useRef(null);  // QuarterlyHistoryTable から register される
+
+  // Phase 2.9 Sprint 2 #Bug2 fix: 再閉じ + 再展開で 2 回目発火する真因
+  // 真因: data-halo-fired は DOM dataset で、 accordion close で children unmount →
+  // re-open で新規 mount → fresh element の dataset=null → guard 突破で 2 回目発火。
+  // 解決: parent (JudgmentDetail) に Set で fired 状態を persistent 保持、 child re-mount でも維持。
+  // ticker 切替 時は Set.clear() で reset (別銘柄では halo 再発火が望ましい)。
+  const haloFiredSetRef = useRef(new Set());
+  useEffect(() => {
+    // ticker 切替時に halo fired 状態を reset (別銘柄では halo を再演出)
+    haloFiredSetRef.current.clear();
+  }, [selectedTicker]);
 
   // P0-2: auto runAnalyze — ticker 選択時に結果がなければ自動 fire。
   // selectedTicker が変わるたびに 1 回だけ実行 (重複 fire 禁止)。
@@ -544,12 +554,12 @@ export default function JudgmentDetail({
             defaultOpen={false}
             controlledOpen={expandedSections.has('analyst-panel') || undefined}
             onOpenChange={(id, isOpen) => {
-              // Phase 2.9 Sprint 1 #3 真因 fix: AccordionSection は isOpen=false 中 children を
-              // mount しない ({isOpen && (...)})。 onOpenChange 同期 fire 時点では AnalystPanel が
-              // まだ mount してないため haloTriggerRef.current は null。
-              // accordion 展開アニメ (spring 220/28 ≈ 400ms) + AnalystPanel mount + useEffect
-              // 完了を待って fire させる。 spring 完了後の triggers は visible で見える。
-              if (isOpen) setTimeout(() => analystHaloTriggerRef.current?.(), 500);
+              // Phase 2.9 Sprint 1 #3: setTimeout 500ms で mount + useEffect 完了を待つ
+              // Phase 2.9 Sprint 2 #Bug2 fix: haloFiredSetRef で 2 回目発火を防止 (re-mount でも persist)
+              if (isOpen && !haloFiredSetRef.current.has('analyst-panel')) {
+                haloFiredSetRef.current.add('analyst-panel');
+                setTimeout(() => analystHaloTriggerRef.current?.(), 500);
+              }
             }}
           >
             <AnalystPanel
@@ -590,8 +600,11 @@ export default function JudgmentDetail({
             defaultOpen={false}
             controlledOpen={expandedSections.has('quarterly-history') || undefined}
             onOpenChange={(id, isOpen) => {
-              // Phase 2.9 Sprint 1 #3 真因 fix: mount + spring animation 完了を待つ (詳細は AnalystPanel 側)
-              if (isOpen) setTimeout(() => qhistoryHaloTriggerRef.current?.(), 500);
+              // Phase 2.9 Sprint 1 #3 + Phase 2.9 Sprint 2 #Bug2: 詳細は AnalystPanel 側 comment 参照
+              if (isOpen && !haloFiredSetRef.current.has('quarterly-history')) {
+                haloFiredSetRef.current.add('quarterly-history');
+                setTimeout(() => qhistoryHaloTriggerRef.current?.(), 500);
+              }
             }}
           >
             <PremiumLock

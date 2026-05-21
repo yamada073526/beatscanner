@@ -35,15 +35,24 @@ const HALO_DURATION_MS = 920;
 
 /**
  * @param {React.RefObject<HTMLElement>} ref - halo を適用する wrapper 要素の ref
+ * @param {{ skipIO?: boolean }} [options] - skipIO=true で IO observe を無効化 (accordion 内で
+ *   親からの triggerOnAccordionOpen のみで halo を発火させる場合に使用)
  * @returns {{ triggerOnAccordionOpen: () => void }} accordion open 時の手動 trigger 関数
  */
-export function useHaloSweepOnce(ref) {
+export function useHaloSweepOnce(ref, options = {}) {
+  const { skipIO = false } = options;
   // timer ref: cleanup で clearTimeout できるよう保持 (複数 timer の安全管理)
   const timerRef = useRef(null);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+
+    // Phase 2.9 Sprint 2 #Bug2: accordion 内 use case では IO 経由 fire を skip。
+    // accordion close → re-open で AnalystPanel が re-mount され data-halo-fired dataset が
+    // 新規 element でリセットされる結果、 IO observer が 2 回目の halo を fire してしまうのを防ぐ。
+    // accordion-controlled mode では parent (JudgmentDetail) が haloFiredSetRef で 1 回限り保証する。
+    if (skipIO) return;
 
     // 既に 1 回発火済み (例: Strict Mode double-invoke / re-mount) → skip
     if (el.dataset.haloFired === '1') return;

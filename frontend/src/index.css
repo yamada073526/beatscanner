@@ -9122,6 +9122,12 @@ button.ds-chip[data-pressed="true"]:hover {
 .tier-m-glow {
   position: relative;
   overflow: visible; /* glow が clip されない (contain: paint 禁止の理由と同じ) */
+  /* Phase 2.9 Sprint 2 #Bug1 fix: AnalystPanel が 90 度直角に見える真因
+     真因: tier-m-glow base に border-radius なし、 GuidanceCard 専用 override のみだったため、
+     Phase 2.9 baseline box-shadow が square で render されていた。
+     全 wrapper (FiveConditions/Earnings/Analyst/Quarterly) に border-radius を統一適用、
+     ::after halo も border-radius: inherit で同形状を保証。 */
+  border-radius: var(--radius-lg, 16px);
   /* ring-glow 三層 halo を継承 (既存 --ring-glow token 活用) */
   transition:
     box-shadow var(--motion-slow, 360ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),

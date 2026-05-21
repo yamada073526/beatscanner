@@ -307,7 +307,9 @@ export default function AnalystPanel({ ticker, plan = 'free', currentPrice = nul
   // Phase 2.7 Sprint 1 #1': Tier M halo sweep ref (1 回限り)
   const haloRef = useRef(null);
   // Phase 2.8 Sprint 1 #3: triggerOnAccordionOpen を受け取り haloRef に data-halo-ready を付与
-  const { triggerOnAccordionOpen } = useHaloSweepOnce(haloRef);
+  // Phase 2.9 Sprint 2 #Bug2: haloTriggerRef 経由 (accordion-controlled) なら IO observe を skip、
+  // parent (JudgmentDetail) の haloFiredSetRef が 1 回限り保証 (re-mount でも persist)。
+  const { triggerOnAccordionOpen } = useHaloSweepOnce(haloRef, { skipIO: !!haloTriggerRef });
 
   // Phase 2.8 Sprint 1 #3: haloTriggerRef に trigger 関数を register
   // (mount 時 1 回のみ、親が AccordionSection の onOpenChange から呼ぶ)
