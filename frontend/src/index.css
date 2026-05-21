@@ -1131,6 +1131,12 @@ body {
 
 /* 外枠パネルカード全体（HomeTab・CalendarPanel・SummaryBrief・ChartTab・ConditionCard・GuidanceCard・NewsPanel） */
 .panel-card {
+  /* Phase 2.9 Sprint 4 #Bug1 真因 fix:
+     .panel-card に border-radius なし → .panel-card.is-arriving の強い cyan box-shadow が
+     SQUARE で render され、 user 「発光は四角」 と feedback。
+     .bs-panel (border-radius: 16px) と同水準に統一、 is-arriving shadow が rounded 化。
+     AnalystPanel / QuarterlyHistory 等の .panel-card 利用 section 全てに適用。 */
+  border-radius: var(--radius-lg, 16px);
   transition: transform 0.35s ease,
               filter 0.35s ease,
               box-shadow 0.35s ease,
