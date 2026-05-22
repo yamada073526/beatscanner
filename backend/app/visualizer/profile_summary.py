@@ -319,7 +319,7 @@ async def summarize_profile(
     result = None
     for attempt in range(2):
         try:
-            result = await _call_llm(t, desc, key, attempt=attempt)
+            result = await _call_llm(t, desc, key, attempt=attempt, peers_tickers=peers_tickers)
             if result is None:
                 continue
             # confidence=low 15% 超の場合は再生成 (1 周目のみ)
@@ -352,6 +352,7 @@ async def _call_llm(
     api_key: str,
     *,
     attempt: int = 0,
+    peers_tickers: list[str] | None = None,
 ) -> dict[str, Any] | None:
     """Anthropic API を直接呼び出して tool use 結果を返す."""
     client = AsyncAnthropic(api_key=api_key)
@@ -440,6 +441,7 @@ async def _call_llm(
             "main_business": sections.get("main_business", ""),
             "revenue_model": sections.get("revenue_model", ""),
             "customers": sections.get("customers", ""),
+            "competitive_moat": sections.get("competitive_moat", ""),
         },
         "product_names": product_names,
         "sources": {"fmp_profile": "ok"},
