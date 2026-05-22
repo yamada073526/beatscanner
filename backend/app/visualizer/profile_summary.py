@@ -273,6 +273,7 @@ async def summarize_profile(
     *,
     api_key: str | None = None,
     force_regenerate: bool = False,
+    peers_tickers: list[str] | None = None,
 ) -> dict[str, Any]:
     """FMP 英文 description を Claude Haiku で和文 4 セクション要約に変換する.
 
@@ -378,10 +379,17 @@ async def _call_llm(
     ]
 
     # (must-fix #7) ticker は messages に渡す (system block 内に埋め込まない)
+    # Sprint H8 (案 A、 金融 sub-agent verdict): peers_tickers を user_message に挿入。
+    # 「顧客・競合」 セクションで LLM が peer ticker を「実データ引用」 として記述可能化。
+    # 金商法 §38 防御強化 (推測でなく FMP /stock-peers 由来の事実)。
+    peers_line = ""
+    if peers_tickers:
+        peers_line = f"\n\nFMP /stock-peers 競合 ticker (上位 {len(peers_tickers)} 社、 実データ): {', '.join(peers_tickers)}"
     user_message = (
         f"以下の FMP 英文 company description を日本語で要約してください。\n\n"
         f"ticker: {ticker}\n\n"
         f"description_en:\n{description_en}"
+        f"{peers_line}"
     )
 
     try:

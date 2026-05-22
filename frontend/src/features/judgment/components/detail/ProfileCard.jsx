@@ -84,50 +84,83 @@ function SummaryShimmer() {
       data-testid="profile-summary-loading"
       style={{ marginTop: 'var(--space-4, 16px)' }}
     >
+      {/* Phase 2.9 Sprint H7 #shimmer fix: 旧 --bg-surface-2/3 token が存在せず gradient が
+          transparent で「静止」 に見えていた。 既存 --bg-subtle / --bg-muted / --bg-hover に
+          置換 + 「日本語で要約中」 文字の dot pulse animation で「動いている」 感を保証。 */}
       <style>{`
-        @keyframes bs-profile-shimmer {
+        @keyframes bs-profile-shimmer-h7 {
           0% { background-position: -200% 0; }
           100% { background-position: 200% 0; }
         }
-        @media (prefers-reduced-motion: no-preference) {
-          .profile-shimmer-line {
-            background: linear-gradient(
-              90deg,
-              var(--bg-surface-2) 25%,
-              var(--bg-surface-3) 50%,
-              var(--bg-surface-2) 75%
-            );
-            background-size: 200% 100%;
-            animation: bs-profile-shimmer 1.5s infinite linear;
-          }
+        @keyframes bs-shimmer-dots-h7 {
+          0%, 80%, 100% { opacity: 0.3; }
+          40% { opacity: 1; }
         }
-        @media (prefers-reduced-motion: reduce) {
-          .profile-shimmer-line {
-            background: var(--bg-surface-2);
-          }
-        }
-        .profile-shimmer-line {
+        .profile-shimmer-line-h7 {
           border-radius: var(--radius-sm, 4px);
           height: 12px;
           margin-bottom: 8px;
+          background: linear-gradient(
+            90deg,
+            var(--bg-subtle) 0%,
+            color-mix(in srgb, var(--color-gold) 12%, var(--bg-subtle)) 50%,
+            var(--bg-subtle) 100%
+          );
+          background-size: 200% 100%;
+          animation: bs-profile-shimmer-h7 1.5s infinite linear;
+        }
+        [data-theme="dark"] .profile-shimmer-line-h7 {
+          background: linear-gradient(
+            90deg,
+            var(--bg-muted) 0%,
+            color-mix(in srgb, var(--color-gold) 18%, var(--bg-muted)) 50%,
+            var(--bg-muted) 100%
+          );
+          background-size: 200% 100%;
+          animation: bs-profile-shimmer-h7 1.5s infinite linear;
+        }
+        .profile-shimmer-dot-h7 {
+          display: inline-block;
+          animation: bs-shimmer-dots-h7 1.4s infinite both;
+        }
+        .profile-shimmer-dot-h7:nth-child(2) { animation-delay: 0.2s; }
+        .profile-shimmer-dot-h7:nth-child(3) { animation-delay: 0.4s; }
+        @media (prefers-reduced-motion: reduce) {
+          .profile-shimmer-line-h7 {
+            background: var(--bg-subtle);
+            animation: none;
+          }
+          [data-theme="dark"] .profile-shimmer-line-h7 {
+            background: var(--bg-muted);
+            animation: none;
+          }
+          .profile-shimmer-dot-h7 {
+            animation: none;
+            opacity: 0.7;
+          }
         }
       `}</style>
       {[70, 55, 65, 50, 60, 45, 70, 40].map((w, i) => (
         <div
           key={i}
-          className="profile-shimmer-line"
+          className="profile-shimmer-line-h7"
           style={{ width: `${w}%` }}
         />
       ))}
       <div
         style={{
           fontSize: 12,
-          color: 'var(--text-muted)',
-          marginTop: 'var(--space-2, 8px)',
+          color: 'var(--text-secondary)',
+          marginTop: 'var(--space-3, 12px)',
           textAlign: 'center',
+          fontWeight: 500,
+          letterSpacing: '0.04em',
         }}
       >
         日本語で要約中
+        <span className="profile-shimmer-dot-h7" aria-hidden="true">.</span>
+        <span className="profile-shimmer-dot-h7" aria-hidden="true">.</span>
+        <span className="profile-shimmer-dot-h7" aria-hidden="true">.</span>
       </div>
     </div>
   );

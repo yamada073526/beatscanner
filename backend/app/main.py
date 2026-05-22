@@ -6514,11 +6514,22 @@ async def profile_summary(
             )
 
     # FMP profile から description_en を取得 (profile-extended と同じ FMP client 使用)
+    # Phase 2.9 Sprint H8 (案 A): peers tickers も並列 fetch、 LLM の「顧客・競合」 セクションに
+    # 実競合企業名を実データで挿入 (機関投資家 Reuters 並み品質)。
     client = FMPClient(api_key=_get_fmp_key(request))
     try:
-        profile_data = await client.profile(t)
+        profile_data, peers_list = await asyncio.gather(
+            client.profile(t),
+            client.stock_peers(t),
+            return_exceptions=True,
+        )
     except Exception:
+        profile_data, peers_list = [], []
+
+    if isinstance(profile_data, Exception):
         profile_data = []
+    if isinstance(peers_list, Exception):
+        peers_list = []
 
     description_en = ""
     if isinstance(profile_data, list) and profile_data:
@@ -6531,13 +6542,18 @@ async def profile_summary(
             detail=f"{t} の会社概要データが見つかりません。",
         )
 
+    # peers は ticker list (e.g., ["MSFT", "GOOG"])、 最大 5 件で truncate
+    peers_top5 = (peers_list or [])[:5] if isinstance(peers_list, list) else []
+
     # LLM 和文要約呼び出し (profile_summary.py が 4 重防御を適用)
+    # Phase 2.9 Sprint H8 (案 A): peers_tickers を user_message に挿入で「顧客・競合」 実名強化
     api_key = os.getenv("ANTHROPIC_API_KEY")
     result = await summarize_profile(
         t,
         description_en,
         api_key=api_key,
         force_regenerate=force_regenerate,
+        peers_tickers=peers_top5,
     )
 
     # LLM 失敗時は _error field を expose (frontend で親切表示)
