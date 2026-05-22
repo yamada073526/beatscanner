@@ -471,13 +471,13 @@ export default function JudgmentDetail({
         </div>
       )}
 
-      {/* === 階層 2: Fundamentals ===
+      {/* === 章 1 → 章 2: Verdict → Fundamentals 境界 (H2 Chapter Break、 100 点 sub-agent verdict 短期 4 案 残 1) ===
           Sprint 3: Verdict→Fundamentals 境界のみ margin-top var(--space-8) で間を開ける。
           Sprint 4: label="詳細分析" を inject。 Verdict → Fundamentals 層境界を明示。
           SPEC 2026-05-19 Sprint 1 Item 6: expandedLabel に変更して h2 級 typography + 左 4px cyan accent bar を適用。
-          SectionDivider 内の margin (var(--space-6) 0 var(--space-4)) が padding を包含するため、外側 marginTop は維持。
-          v86 R5 A: Verdict→Fundamentals 境界 marginTop --space-8 → --space-10 (32→40px) で章扉感強化。 */}
-      <div style={{ marginTop: 'var(--space-10, 40px)' }}>
+          v86 R5 A: marginTop --space-8 → --space-10 (32→40px) で章扉感強化。
+          H2 Chapter Break: marginTop を撤去し data-chapter-start で統一管理 (CSS .ds-judgment-detail > [data-chapter-start="true"] で --space-12=48px)。 */}
+      <div data-chapter-start="true">
         <SectionDivider expandedLabel="詳細分析" />
       </div>
 
@@ -536,10 +536,11 @@ export default function JudgmentDetail({
         </SectionFade>
       )}
 
-      {/* === Sprint 3: AnalystPanel → AccordionSection wrap (collapsed) === */}
+      {/* === 章 2 → 章 3: Fundamentals → 市場評価 境界 (H2 Chapter Break) ===
+          Sprint 3: AnalystPanel → AccordionSection wrap (collapsed) */}
       {selectedTicker && (
         isScrollV1 ? (
-          <div id="sec-analyst">
+          <div id="sec-analyst" data-chapter-start="true">
             <AnalystPanel
               ticker={selectedTicker}
               plan={plan}
@@ -553,6 +554,7 @@ export default function JudgmentDetail({
             tier={2}
             defaultOpen={false}
             controlledOpen={expandedSections.has('analyst-panel') || undefined}
+            data-chapter-start="true"
             onOpenChange={(id, isOpen) => {
               // Phase 2.9 Sprint 1 #3: setTimeout 500ms で mount + useEffect 完了を待つ
               // Phase 2.9 Sprint 2 #Bug2 fix: haloFiredSetRef で 2 回目発火を防止 (re-mount でも persist)
@@ -664,12 +666,13 @@ export default function JudgmentDetail({
         )
       )}
 
-      {/* === StockPriceChart: expanded 固定 (user override 1) ===
+      {/* === 章 3 → 章 4: 市場評価 → チャート & インサイダー 境界 (H2 Chapter Break) ===
+          StockPriceChart: expanded 固定 (user override 1)
           「株価チャートは常に展開しておいてほしい」 (user 原文、SPEC §5 Sprint 1 Override 1)
           accordion wrap 対象外。
           Sprint 4: SectionFade で section in-view fade-in (案1) */}
       {selectedTicker && (
-        <SectionFade id="sec-chart">
+        <SectionFade id="sec-chart" data-chapter-start="true">
           <StockPriceChart ticker={selectedTicker} isPremiumUser={plan === 'premium'} />
         </SectionFade>
       )}
@@ -734,21 +737,20 @@ export default function JudgmentDetail({
         )
       )}
 
-      {/* === 階層 3: Context (collapsed) ===
+      {/* === 章 4 → 章 5: チャート & インサイダー → Context 境界 (H2 Chapter Break) ===
           Sprint 3: Context ボックス化 (border subtle で 3 件 group)。
           Sprint 4: tier=3 SectionDivider を削除済。accordion header の chrome (tier prop) が
-          階層境界を代替するため冗長だった divider を除去。 */}
-
-      {/* === Sprint 3: NewsPanel → AccordionSection wrap (collapsed) ===
+          階層境界を代替するため冗長だった divider を除去。
+          === Sprint 3: NewsPanel → AccordionSection wrap (collapsed) ===
           Sprint 3 (Phase 2): Tier L glow — hover 時の hairline border tint のみ、発光なし。
           tier-l-glow wrapper を AccordionSection の外側に付与。 */}
       {selectedTicker && (
         isScrollV1 ? (
-          <div id="sec-news">
+          <div id="sec-news" data-chapter-start="true">
             <NewsPanel ticker={selectedTicker} useWorkspaceReader={useWorkspaceReader} />
           </div>
         ) : (
-          <div className="tier-l-glow" data-testid="library-news-wrapper">
+          <div className="tier-l-glow" data-testid="library-news-wrapper" data-chapter-start="true">
             <AccordionSection
               id="sec-news"
               title="最新ニュース"

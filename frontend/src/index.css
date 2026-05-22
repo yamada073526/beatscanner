@@ -9050,6 +9050,25 @@ button.ds-chip[data-pressed="true"]:hover {
   font-feature-settings: "tnum" 1;
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   § H2 Chapter Break (100 点 sub-agent verdict 短期 4 案 残 1)
+   handover_2026-05-23_v96.md §3 polish queue (spacing+5 / aman+4 期待)
+   commit 68c8b9e (H1+H3+H4) で「未着手 (H2 案 3 Chapter Break)」 明記の SSOT。
+   ───────────────────────────────────────────────────────────────────
+   Pane 3 16 section を 5 ブロック化、 章境界 4 箇所に --space-12 (48px) breathing room。
+   各章先頭 section に data-chapter-start="true" を付与、 ds-judgment-detail grid の direct child
+   である必要あり (selector で direct child 限定)。
+   既存 grid gap (--space-6=24px) と合算で 24+48=72px の Aman 級「章扉」 体感を実現。
+   章 1 (判定): Hero / KpiStrip / TriageBanner / FiveConditionsCard
+   章 2 (基本財務): SectionDivider / GuidanceCard / ProfileCard / EarningsHistoryChart
+   章 3 (市場評価): AnalystPanel / QuarterlyHistoryTable / InsightsPanel
+   章 4 (チャート & インサイダー): StockPriceChart / Insider 取引
+   章 5 (Context): NewsPanel / IRLinksPanel / DetailReport
+   ═══════════════════════════════════════════════════════════════════ */
+.ds-judgment-detail > [data-chapter-start="true"] {
+  margin-top: var(--space-12, 48px);
+}
+
 /* line-height + letter-spacing 調整 (Sprint 1 §3)
    - 日本語 body: lh 1.6-1.7 / ls 0.02em
    - 英数字 heading: lh 1.2-1.3

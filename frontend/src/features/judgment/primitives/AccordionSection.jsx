@@ -62,6 +62,7 @@ export default function AccordionSection({
   onOpenChange,
   tier = 2,
   children,
+  ...rest
 }) {
   // feature flag: pane3_scroll_v1='1' のとき AccordionSection は透過的にレンダーする
   // (JudgmentDetail.jsx 側 wrap 条件 + 本 flag で 2 重チェック、Sprint 3 完成形)
@@ -143,6 +144,7 @@ export default function AccordionSection({
         .join(' ')}
       data-tier={tier}
       data-open={isOpen ? 'true' : 'false'}
+      {...rest}
     >
       {/* ===== Accordion Header ===== */}
       <button

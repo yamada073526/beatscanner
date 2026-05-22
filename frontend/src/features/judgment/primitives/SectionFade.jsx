@@ -50,7 +50,7 @@ const noMotionVariants = {
  * @param {string} [props.id] - section id (アンカー用)
  * @param {string} [props.as='div'] - タグ名 (互換 prop、内部では m.div 固定)
  */
-export default function SectionFade({ children, className, style, id, as: _Tag = 'div' }) {
+export default function SectionFade({ children, className, style, id, as: _Tag = 'div', ...rest }) {
   const reduce = useReducedMotion();
   const variants = reduce ? noMotionVariants : fadeVariants;
 
@@ -58,6 +58,7 @@ export default function SectionFade({ children, className, style, id, as: _Tag =
   //   - margin 撤去 (framer-motion の "既に viewport 内 = animation skip" 問題を回避)
   //   - amount: 0.15 で要素の 15% が viewport に入った時点で発火
   //   - whileInView="visible" + variants 化でより確実に initial 状態から遷移
+  // H2 Chapter Break: rest を spread で受け、 data-chapter-start 等の data-* 属性を pass-through。
   return (
     <m.div
       id={id}
@@ -68,6 +69,7 @@ export default function SectionFade({ children, className, style, id, as: _Tag =
       viewport={{ once: true, amount: 0.15 }}
       variants={variants}
       transition={EASE_OUT_400}
+      {...rest}
     >
       {children}
     </m.div>
