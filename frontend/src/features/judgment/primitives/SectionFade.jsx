@@ -50,7 +50,7 @@ const noMotionVariants = {
  * @param {string} [props.id] - section id (アンカー用)
  * @param {string} [props.as='div'] - タグ名 (互換 prop、内部では m.div 固定)
  */
-export default function SectionFade({ children, className, style, id, as: _Tag = 'div', ...rest }) {
+export default function SectionFade({ children, className, style, id, as: _Tag = 'div', staggerIndex = 0, ...rest }) {
   const reduce = useReducedMotion();
   const variants = reduce ? noMotionVariants : fadeVariants;
 
@@ -59,6 +59,11 @@ export default function SectionFade({ children, className, style, id, as: _Tag =
   //   - amount: 0.15 で要素の 15% が viewport に入った時点で発火
   //   - whileInView="visible" + variants 化でより確実に initial 状態から遷移
   // H2 Chapter Break: rest を spread で受け、 data-chapter-start 等の data-* 属性を pass-through。
+  // v97 Phase D (motion 案 5): staggerIndex で delay = idx * 0.06s。
+  //   page initial load + ticker 切替時に複数 SectionFade が同時 viewport 入りする場合、
+  //   index 順に連続 fade で「ロビーへ案内されるシーケンス」 体感を演出 (motion +5-8 期待)。
+  //   reduce-motion 時は delay 0 で skip (即表示)。
+  const delay = reduce ? 0 : Math.min(staggerIndex * 0.06, 0.5);
   return (
     <m.div
       id={id}
@@ -68,7 +73,7 @@ export default function SectionFade({ children, className, style, id, as: _Tag =
       whileInView="visible"
       viewport={{ once: true, amount: 0.15 }}
       variants={variants}
-      transition={EASE_OUT_400}
+      transition={{ ...EASE_OUT_400, delay }}
       {...rest}
     >
       {children}

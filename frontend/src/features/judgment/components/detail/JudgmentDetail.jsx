@@ -378,7 +378,7 @@ export default function JudgmentDetail({
           Sprint 5: currentPrice (含み損益計算用) + onOpenAddTransaction (新規買付 button) を追加。
           Sprint 4: SectionFade で section in-view fade-in (案1) */}
       {selectedTicker && (
-        <SectionFade>
+        <SectionFade staggerIndex={0}>
         <TriageBanner
           ticker={selectedTicker}
           user={detailContext.user}
@@ -487,7 +487,7 @@ export default function JudgmentDetail({
           conditional render だと guidance 後追い load で縦幅 0 → 数百 px 突然増加し、
           下にある ProfileCard の click target が押し下げられて user が誤 click する CLS bug。
           isLoading={detail?.isLoading} で 3 state: loading→skeleton / no-data→未提示 UI / ok→通常。 */}
-      <SectionFade id="sec-guidance">
+      <SectionFade id="sec-guidance" staggerIndex={1}>
         <GuidanceCard
           guidance={guidance}
           isLoading={!guidance && detail?.isLoading !== false}
@@ -531,7 +531,7 @@ export default function JudgmentDetail({
           ファンダメンタル5条件 §5 連続増加判定の視覚 anchor として expanded 維持。
           Sprint 4: SectionFade で section in-view fade-in (案1) */}
       {result?.periods?.length > 0 && (
-        <SectionFade id="sec-earnings-history">
+        <SectionFade id="sec-earnings-history" staggerIndex={2}>
           <EarningsHistoryChart
             periods={result.periods}
             currency={result.currency}
@@ -675,7 +675,7 @@ export default function JudgmentDetail({
           accordion wrap 対象外。
           Sprint 4: SectionFade で section in-view fade-in (案1) */}
       {selectedTicker && (
-        <SectionFade id="sec-chart" data-chapter-start="true">
+        <SectionFade id="sec-chart" data-chapter-start="true" staggerIndex={3}>
           <StockPriceChart ticker={selectedTicker} isPremiumUser={plan === 'premium'} />
         </SectionFade>
       )}
