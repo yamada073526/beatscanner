@@ -98,10 +98,10 @@ function FlowBox({ step, stepIndex, isPulsing }) {
 // ── Segment row (e.g. Intelligent Cloud / P&BP / MPC) ─────────────────────
 function SegmentBar({ seg }) {
   const yoyColor = (seg.yoy_pct ?? 0) >= 0 ? '#10B981' : '#ef4444';
+  // v97 Phase F emoji audit: ☁️ / 📊 / 💻 emoji prepend を削除 (Aman 級、 OS 依存 glyph 解消)
+  // 名前の短縮は維持 (横幅節約)
   const displayName = String(seg.name || '')
-    .replace('Intelligent Cloud', '☁️ Intelligent Cloud')
-    .replace('Productivity and Business Processes', '📊 Productivity & BP')
-    .replace('More Personal Computing', '💻 More Personal Computing');
+    .replace('Productivity and Business Processes', 'Productivity & BP');
   return (
     <div style={{
       display: 'flex', alignItems: 'center',

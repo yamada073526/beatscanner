@@ -233,13 +233,16 @@ const SecSkeleton = () => (
   </div>
 );
 
+// v97 Phase F emoji audit: ✅ 🟡 ❌ ❓ (full-width OS emoji glyph、 Aman 級ではない) を
+// unicode 半角記号 (✓ – ✕ ·) に置換。 OS 依存 glyph 解消 + 「最高級ホテル」 タイポ品格。
+// 色 / 背景は既存 token (緑/amber/赤/グレー) 維持で投資業界色ルール遵守。
 const VERDICT_STYLE = {
-  beat:     { bg: 'bg-[#22c55e]', icon: '✅', label: '上振れ（Beat）' },
-  'in-line':{ bg: 'bg-[#eab308]', icon: '🟡', label: '概ね一致（In-line）' },
-  miss:     { bg: 'bg-[#ef4444]', icon: '❌', label: '下振れ（Miss）' },
+  beat:     { bg: 'bg-[#22c55e]', icon: '✓', label: '上振れ（Beat）' },
+  'in-line':{ bg: 'bg-[#eab308]', icon: '–', label: '概ね一致（In-line）' },
+  miss:     { bg: 'bg-[#ef4444]', icon: '✕', label: '下振れ（Miss）' },
   // unknown は inline style（color/bg はインライン適用、Row 側で分岐）
-  unknown:  { color: '#9ca3af', bg: 'rgba(156,163,175,0.15)', icon: '❓', label: '不明' },
-  '不明':   { color: '#9ca3af', bg: 'rgba(156,163,175,0.15)', icon: '❓', label: '不明' },
+  unknown:  { color: '#9ca3af', bg: 'rgba(156,163,175,0.15)', icon: '·', label: '不明' },
+  '不明':   { color: '#9ca3af', bg: 'rgba(156,163,175,0.15)', icon: '·', label: '不明' },
 };
 
 function formatEps(v) {

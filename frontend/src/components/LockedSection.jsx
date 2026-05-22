@@ -97,11 +97,13 @@ export function InsightsGhost({ previewSentence, sentiment }) {
           background: 'rgba(34,211,238,0.05)',
           border: '1px solid rgba(34,211,238,0.20)',
         }}>
+          {/* v97 Phase F emoji audit: 🟢 → unicode 半角記号 ↑ (Aman 級、 OS 依存 glyph 解消) */}
           <div style={{
-            fontSize: 11, color: '#22d3ee', fontWeight: 500,
-            letterSpacing: '0.06em', marginBottom: 10,
+            fontSize: 11, color: 'var(--color-gain)', fontWeight: 600,
+            letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10,
           }}>
-            🟢 強気材料
+            <span style={{ marginRight: 6 }} aria-hidden="true">↑</span>
+            強気材料
           </div>
           {[92, 78, 85, 70].map((w, i) => (
             <GhostBar key={i} width={w} />
@@ -113,11 +115,13 @@ export function InsightsGhost({ previewSentence, sentiment }) {
           background: 'rgba(248,113,113,0.05)',
           border: '1px solid rgba(248,113,113,0.20)',
         }}>
+          {/* v97 Phase F emoji audit: 🔴 → unicode 半角記号 ↓ */}
           <div style={{
-            fontSize: 11, color: '#f87171', fontWeight: 500,
-            letterSpacing: '0.06em', marginBottom: 10,
+            fontSize: 11, color: 'var(--color-loss)', fontWeight: 600,
+            letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10,
           }}>
-            🔴 弱気材料
+            <span style={{ marginRight: 6 }} aria-hidden="true">↓</span>
+            弱気材料
           </div>
           {[88, 72, 90, 65].map((w, i) => (
             <GhostBar key={i} width={w} />
@@ -126,11 +130,13 @@ export function InsightsGhost({ previewSentence, sentiment }) {
       </div>
 
       {/* 注目指標 pill 群 */}
+      {/* v97 Phase F emoji audit: 📌 → unicode 記号 ※ (formal タイポ品格) */}
       <div style={{
         fontSize: 11, color: 'var(--text-muted)', marginBottom: 8,
-        letterSpacing: '0.06em',
+        letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600,
       }}>
-        📌 注目指標
+        <span style={{ marginRight: 6 }} aria-hidden="true">◆</span>
+        注目指標
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {[64, 88, 52, 76, 60].map((w, i) => (

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import InfoModal from "./InfoModal.jsx";
 import LockedSection, { InsightsGhost } from "./LockedSection.jsx";
-import { BarChart3, Search } from "lucide-react";
+import { BarChart3, Search, TrendingUp, TrendingDown } from "lucide-react";
 
 // CLAUDE.md「投資業界の色ルール」準拠:
 // 強気(Bullish)=緑 / 弱気(Bearish)=赤 / 中立=グレー / 強弱混在=amber
@@ -256,11 +256,15 @@ function FullView({ data }) {
               background: "rgba(56, 189, 248,0.07)",
               border: "1px solid rgba(56, 189, 248,0.25)",
             }}>
+              {/* v97 Phase F emoji audit: 🟢 → Lucide TrendingUp (Aman 級品格、 OS 依存 glyph 解消) */}
               <div style={{
-                fontSize: 11, fontWeight: 500, color: "rgb(56, 189, 248)",
-                letterSpacing: "0.06em", marginBottom: 'var(--space-2, 8px)',
+                display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)',
+                fontSize: 11, fontWeight: 600, color: "var(--color-gain)",
+                letterSpacing: "0.08em", textTransform: 'uppercase',
+                marginBottom: 'var(--space-2, 8px)',
               }}>
-                🟢 強気材料
+                <TrendingUp size={13} strokeWidth={2} aria-hidden="true" />
+                強気材料
               </div>
               <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none" }}>
                 {data.bull_points.map((p, i) => (
@@ -283,11 +287,15 @@ function FullView({ data }) {
               background: "rgba(248,113,113,0.07)",
               border: "1px solid rgba(248,113,113,0.25)",
             }}>
+              {/* v97 Phase F emoji audit: 🔴 → Lucide TrendingDown (Aman 級品格、 token color-loss 統一) */}
               <div style={{
-                fontSize: 11, fontWeight: 500, color: "#f87171",
-                letterSpacing: "0.06em", marginBottom: 'var(--space-2, 8px)',
+                display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)',
+                fontSize: 11, fontWeight: 600, color: "var(--color-loss)",
+                letterSpacing: "0.08em", textTransform: 'uppercase',
+                marginBottom: 'var(--space-2, 8px)',
               }}>
-                🔴 弱気材料
+                <TrendingDown size={13} strokeWidth={2} aria-hidden="true" />
+                弱気材料
               </div>
               <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none" }}>
                 {data.bear_points.map((p, i) => (
