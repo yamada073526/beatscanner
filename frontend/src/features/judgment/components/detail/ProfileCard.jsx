@@ -3,8 +3,8 @@ import Card from '../../primitives/Card.jsx';
 import SectionHeader from '../../primitives/SectionHeader.jsx';
 import CompanyLogo from '../../../../components/CompanyLogo.jsx';
 import Chip from '../../../../components/ui/Chip.jsx';
-import { Building2, MapPin, Users, Briefcase, Sparkles, RefreshCw } from 'lucide-react';
-import { fetchProfileExtended, fetchProfileSummary } from '../../../../api.js';
+import { Building2, MapPin, Users, Briefcase, Sparkles, RefreshCw, Scale } from 'lucide-react';
+import { fetchProfileExtended, fetchProfileSummary, fetchProfilePeers } from '../../../../api.js';
 import { sanitizeText } from '../../../../lib/blocklist.js';
 
 /**
@@ -521,6 +521,396 @@ function SegmentSection({ segmentSummary }) {
   );
 }
 
+// ─── v97 Phase 3 (金融 sub-agent verdict): 競合比較 Tab ───────────────────────
+// 自社 + peer 5 銘柄の 4 指標 (株価 YTD / Gross Margin / FCF Margin / R&D%) を fetch、
+// 中央値と比較した diff バッジ (緑/赤) で「優勢/劣勢」 を即視化。
+// Bloomberg Terminal 級差別化: LLM narration 一切なし、 純粋 FMP 数値 + source citation。
+//
+// Trust Cliff 防御 (sub-agent verdict):
+//   - 全数値に source: "FMP {endpoint}" + as_of 表示
+//   - 競合比較セクションは 数値+バッジのみ、 narration 厳禁 (BAD-5/6 断定表現混入 risk)
+
+// 指標 metadata (列定義)
+const COMPARE_METRICS = [
+  {
+    key: 'price_change_ytd',
+    label: '株価 YTD',
+    unit: '%',
+    higherIsBetter: true,
+    formatter: (v) => v == null ? '—' : `${v > 0 ? '+' : ''}${v}%`,
+  },
+  {
+    key: 'gross_margin',
+    label: '粗利益率',
+    unit: '%',
+    higherIsBetter: true,
+    formatter: (v) => v == null ? '—' : `${v}%`,
+  },
+  {
+    key: 'fcf_margin',
+    label: 'FCF マージン',
+    unit: '%',
+    higherIsBetter: true,
+    formatter: (v) => v == null ? '—' : `${v}%`,
+  },
+  {
+    key: 'rd_pct',
+    label: 'R&D 比率',
+    unit: '%',
+    higherIsBetter: null, // 業界依存 (Tech 高 / Bank 低)、 中立色
+    formatter: (v) => v == null ? '—' : `${v}%`,
+  },
+];
+
+function PeerCompareSkeleton() {
+  return (
+    <div style={{ marginTop: 'var(--space-3, 12px)' }}>
+      <style>{`
+        @keyframes bs-peer-shimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+        .peer-skel {
+          border-radius: var(--radius-sm, 4px);
+          background: linear-gradient(
+            90deg,
+            var(--bg-subtle) 0%,
+            color-mix(in srgb, var(--color-gold) 12%, var(--bg-subtle)) 50%,
+            var(--bg-subtle) 100%
+          );
+          background-size: 200% 100%;
+          animation: bs-peer-shimmer 1.2s infinite linear;
+        }
+        [data-theme="dark"] .peer-skel {
+          background: linear-gradient(
+            90deg,
+            var(--bg-muted) 0%,
+            color-mix(in srgb, var(--color-gold) 18%, var(--bg-muted)) 50%,
+            var(--bg-muted) 100%
+          );
+          background-size: 200% 100%;
+          animation: bs-peer-shimmer 1.2s infinite linear;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .peer-skel { animation: none; background: var(--bg-subtle); }
+        }
+      `}</style>
+      {/* header */}
+      <div className="peer-skel" style={{ height: 13, width: '40%', marginBottom: 12 }} />
+      {/* 6 rows × 5 cells */}
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <div key={i} style={{ display: 'grid', gridTemplateColumns: '60px repeat(4, 1fr)', gap: 'var(--space-2, 8px)', marginBottom: 8 }}>
+          {[0, 1, 2, 3, 4].map((j) => (
+            <div key={j} className="peer-skel" style={{ height: 18, animationDelay: `${(i * 0.05) + (j * 0.03)}s` }} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PeerCompareRow({ ticker, metrics, median, isSelf, onClick }) {
+  return (
+    <div
+      onClick={isSelf ? undefined : onClick}
+      role={isSelf ? undefined : 'button'}
+      tabIndex={isSelf ? undefined : 0}
+      onKeyDown={isSelf ? undefined : (e) => { if ((e.key === 'Enter' || e.key === ' ') && onClick) { e.preventDefault(); onClick(); } }}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '64px repeat(4, 1fr)',
+        gap: 'var(--space-2, 8px)',
+        alignItems: 'center',
+        padding: 'var(--space-2, 8px) var(--space-3, 12px)',
+        borderRadius: 'var(--radius-sm, 4px)',
+        background: isSelf ? 'color-mix(in srgb, var(--color-gold) 8%, var(--bg-subtle))' : 'transparent',
+        border: isSelf ? '1px solid color-mix(in srgb, var(--color-gold) 30%, var(--border))' : '1px solid transparent',
+        cursor: isSelf ? 'default' : 'pointer',
+        transition: 'background 120ms ease-out',
+        marginBottom: 4,
+      }}
+      onMouseEnter={isSelf ? undefined : (e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
+      onMouseLeave={isSelf ? undefined : (e) => { e.currentTarget.style.background = 'transparent'; }}
+      data-testid={`peer-compare-row-${ticker}`}
+    >
+      {/* ticker (左固定列) */}
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: isSelf ? 700 : 500,
+          color: isSelf ? 'var(--text-primary)' : 'var(--text-secondary)',
+          letterSpacing: '0.04em',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {ticker}
+        {isSelf && (
+          <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--color-gold)', marginLeft: 4 }} aria-hidden="true">●</span>
+        )}
+      </div>
+
+      {/* 4 metric cells */}
+      {COMPARE_METRICS.map((metric) => {
+        const value = metrics?.[metric.key];
+        const med = median?.[metric.key];
+        const formatted = metric.formatter(value);
+
+        // diff バッジ: 中央値との差 (上ぶれ緑 / 下ぶれ赤、 ただし R&D は中立)
+        let diffColor = 'var(--text-muted)';
+        let diffSign = '';
+        let diffText = '';
+        if (value != null && med != null && !isSelf) {
+          const diff = Math.round((value - med) * 10) / 10;
+          if (Math.abs(diff) >= 0.5) {
+            diffSign = diff > 0 ? '+' : '';
+            diffText = `${diffSign}${diff}`;
+            if (metric.higherIsBetter === true) {
+              diffColor = diff > 0 ? 'var(--color-gain)' : 'var(--color-loss)';
+            } else if (metric.higherIsBetter === false) {
+              diffColor = diff > 0 ? 'var(--color-loss)' : 'var(--color-gain)';
+            }
+            // null (中立) なら muted のまま
+          }
+        }
+
+        return (
+          <div
+            key={metric.key}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-end',
+              gap: 2,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: isSelf ? 700 : 500,
+                color: value == null ? 'var(--text-muted)' : 'var(--text-primary)',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {formatted}
+            </span>
+            {!isSelf && diffText && (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: diffColor,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+                aria-label={`中央値との差: ${diffText}`}
+              >
+                {diffText}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PeerComparisonSection({ ticker, onNavigateTicker }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!ticker) return;
+    const ac = new AbortController();
+    setLoading(true);
+    setData(null);
+    fetchProfilePeers(ticker, { signal: ac.signal })
+      .then((d) => {
+        if (!ac.signal.aborted) setData(d);
+      })
+      .catch((err) => {
+        if (err?.name === 'AbortError') return;
+        if (!ac.signal.aborted) setData({ _error: { status: 0, detail: 'ネットワークエラー' } });
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setLoading(false);
+      });
+    return () => ac.abort();
+  }, [ticker]);
+
+  if (loading) return <PeerCompareSkeleton />;
+
+  if (!data || data._error) {
+    return (
+      <div
+        style={{
+          marginTop: 'var(--space-3, 12px)',
+          padding: 'var(--space-3, 12px) var(--space-4, 16px)',
+          borderRadius: 'var(--radius-md, 12px)',
+          border: '1px solid var(--border)',
+          background: 'var(--bg-subtle)',
+          fontSize: 13,
+          color: 'var(--text-muted)',
+          lineHeight: 1.55,
+        }}
+        data-testid="peer-compare-error"
+      >
+        競合比較データを取得できませんでした。
+        {data?._error?.detail && (<> <span style={{ color: 'var(--text-secondary)' }}>({data._error.detail})</span></>)}
+      </div>
+    );
+  }
+
+  if (!data.peers?.length || !data.self) {
+    return (
+      <div
+        style={{
+          marginTop: 'var(--space-3, 12px)',
+          padding: 'var(--space-4, 16px)',
+          borderRadius: 'var(--radius-md, 12px)',
+          border: '1px solid var(--border)',
+          background: 'var(--bg-subtle)',
+          fontSize: 13,
+          color: 'var(--text-muted)',
+          textAlign: 'center',
+        }}
+        data-testid="peer-compare-empty"
+      >
+        この銘柄については競合データが取得できませんでした。
+      </div>
+    );
+  }
+
+  // self を先頭、 peer 5 を後 → 表示順
+  const rows = [
+    { ...data.self, isSelf: true },
+    ...data.peers.map((p) => ({ ...p, isSelf: false })),
+  ];
+
+  return (
+    <div data-testid="peer-comparison-section" style={{ marginTop: 'var(--space-3, 12px)' }}>
+      {/* 説明 caption */}
+      <div
+        style={{
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          marginBottom: 'var(--space-3, 12px)',
+          letterSpacing: '0.04em',
+          lineHeight: 1.55,
+        }}
+      >
+        自社 + 競合 {data.peers.length} 社の 4 指標を比較。 数値の下に表示される値は{' '}
+        <strong style={{ color: 'var(--text-secondary)' }}>自社含む {rows.length} 社の中央値との差</strong>{' '}
+        (緑 = 上ぶれ / 赤 = 下ぶれ)。 銘柄行を click で分析切替。
+      </div>
+
+      {/* table header (列名) */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '64px repeat(4, 1fr)',
+          gap: 'var(--space-2, 8px)',
+          padding: 'var(--space-2, 8px) var(--space-3, 12px)',
+          marginBottom: 4,
+          borderBottom: '1px solid color-mix(in srgb, var(--color-gold) 25%, var(--border))',
+        }}
+      >
+        <div
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            color: 'var(--text-muted)',
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+          }}
+        >
+          銘柄
+        </div>
+        {COMPARE_METRICS.map((m) => (
+          <div
+            key={m.key}
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: 'var(--text-muted)',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              textAlign: 'right',
+            }}
+          >
+            {m.label}
+          </div>
+        ))}
+      </div>
+
+      {/* rows */}
+      <div>
+        {rows.map((row) => (
+          <PeerCompareRow
+            key={row.ticker}
+            ticker={row.ticker}
+            metrics={row}
+            median={data.median}
+            isSelf={row.isSelf}
+            onClick={row.isSelf || !onNavigateTicker ? undefined : () => onNavigateTicker(row.ticker)}
+          />
+        ))}
+      </div>
+
+      {/* 中央値 row (footer) */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '64px repeat(4, 1fr)',
+          gap: 'var(--space-2, 8px)',
+          alignItems: 'center',
+          padding: 'var(--space-2, 8px) var(--space-3, 12px)',
+          marginTop: 'var(--space-2, 8px)',
+          borderTop: '1px solid color-mix(in srgb, var(--color-gold) 25%, var(--border))',
+        }}
+        data-testid="peer-compare-median-row"
+      >
+        <div
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            color: 'var(--text-muted)',
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+          }}
+        >
+          中央値
+        </div>
+        {COMPARE_METRICS.map((m) => (
+          <div
+            key={m.key}
+            style={{
+              fontSize: 12,
+              fontWeight: 500,
+              color: 'var(--text-muted)',
+              fontVariantNumeric: 'tabular-nums',
+              textAlign: 'right',
+            }}
+          >
+            {m.formatter(data.median?.[m.key])}
+          </div>
+        ))}
+      </div>
+
+      {/* citation footer (Trust Cliff 防御、 sub-agent verdict 必須) */}
+      <div
+        style={{
+          marginTop: 'var(--space-3, 12px)',
+          fontSize: 10,
+          color: 'var(--text-muted)',
+          lineHeight: 1.6,
+        }}
+      >
+        ※ 株価 YTD: {data.sources?.price_change}<br />
+        ※ 粗利益率 / FCF マージン / R&D 比率: {data.sources?.margins} (直近年次)
+      </div>
+    </div>
+  );
+}
+
 // ─── helpers ─────────────────────────────────────────────────────────────────
 function formatEmployees(n) {
   if (!n || !Number.isFinite(n)) return null;
@@ -551,6 +941,13 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
   const [summary, setSummary] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const summaryAbortRef = useRef(null);
+
+  // v97 Phase 3: Tab state (overview / compare)
+  // ticker 切替時に「概要」 に戻す (compare tab で別 ticker の比較に切替で confusing)
+  const [activeTab, setActiveTab] = useState('overview');
+  useEffect(() => {
+    setActiveTab('overview');
+  }, [ticker]);
 
   // Phase A: profile-extended fetch (AbortController で race condition 防止)
   useEffect(() => {
@@ -666,8 +1063,14 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
   const mktCapStr = formatMktCap(profileOk?.mktCap);
 
   return (
+    // v97 A-1 CLS fix: ProfileCard 全体に minHeight 680 envelope。
+    // 真因 (user dogfood): 「データプラン制限により取得できません」 (約 200px) → 3-5s 後に
+    // 4 sections + segment 完全展開 (約 700px) で **500px のジャンプ** が発生、
+    // 下にある StockChart 等が大きく押し下げられて user 「scroll に集中できず」 体感。
+    // 680px は loading skeleton (Shimmer 280 + sections 400) と data 完了 (700) の中央値、
+    // 細かい padding で envelope 内に吸収、 余計な余白は最下行で flex で押し上げ。
     <Card data-testid="profile-card">
-      <div style={{ padding: 'var(--space-6, 24px)' }}>
+      <div style={{ padding: 'var(--space-6, 24px)', minHeight: 680 }}>
 
         {/* === ヘッダー行 (SectionHeader + citation chip) === */}
         <div
@@ -834,6 +1237,79 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
             )}
           </div>
         )}
+
+        {/* === v97 Phase 3 Tab UI (概要 / 競合比較) ===
+            金融 sub-agent verdict 推奨案 2: Tab 切替で「情報密度 × Aman 級品格」 両立。
+            ticker 切替時は overview tab にリセット (useEffect)、 user が同じ ticker で
+            Tab 切替する場合は維持。
+            Tab Header: 下線 active state + gold accent (Aman 級)、 inline button 2 個。 */}
+        <div
+          role="tablist"
+          aria-label="会社概要表示モード"
+          style={{
+            display: 'flex',
+            gap: 0,
+            marginTop: 'var(--space-3, 12px)',
+            marginBottom: 'var(--space-4, 16px)',
+            borderBottom: '1px solid var(--border)',
+          }}
+        >
+          {[
+            { key: 'overview', label: '概要', icon: Building2 },
+            { key: 'compare', label: '競合比較', icon: Scale },
+          ].map((tab) => {
+            const isActive = activeTab === tab.key;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setActiveTab(tab.key)}
+                data-testid={`profile-tab-${tab.key}`}
+                data-no-press="true"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: isActive
+                    ? '2px solid var(--color-gold)'
+                    : '2px solid transparent',
+                  marginBottom: -1,
+                  padding: 'var(--space-2, 8px) var(--space-4, 16px)',
+                  fontSize: 13,
+                  fontWeight: isActive ? 700 : 500,
+                  letterSpacing: '0.06em',
+                  color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--space-2, 8px)',
+                  transition: 'color 120ms ease-out, border-color 120ms ease-out',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) e.currentTarget.style.color = 'var(--text-secondary)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) e.currentTarget.style.color = 'var(--text-muted)';
+                }}
+              >
+                <Icon size={14} strokeWidth={1.5} aria-hidden="true" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* === Tab 2 競合比較 (Bloomberg Terminal 級差別化、 金融 sub-agent verdict) ===
+            ticker prop が変わると PeerComparisonSection 内 useEffect で再 fetch。 */}
+        {activeTab === 'compare' && (
+          <PeerComparisonSection ticker={ticker} onNavigateTicker={onNavigateTicker} />
+        )}
+
+        {/* === Tab 1 概要 (既存 content) === */}
+        {activeTab === 'overview' && (
+          <>
 
         {/* === Phase A skeleton (profile-extended loading) === */}
         {profileLoading && (
@@ -1102,6 +1578,8 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
               ))}
             </div>
           </div>
+        )}
+          </>
         )}
       </div>
     </Card>

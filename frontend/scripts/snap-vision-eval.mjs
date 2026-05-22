@@ -99,28 +99,51 @@ const url = opts.url || PROD_URL_BASE;
       });
     }
 
-    // accordion open 動的 frame (会社概要 を開いて 3 frame)
+    // v97 G-4 改修: accordion open を fallback chain で試行、 失敗時は scroll 位置を変えて
+    // padding frame で必ず 8 frames を確保 (旧: ticker 違いで frame 数 5-8 変動 → scoring 基準 ばらつき)。
     await page.evaluate(() => window.scrollTo({ top: 1800, behavior: 'instant' }));
     await page.waitForTimeout(400);
-    const profileHeader = page.locator(`button[aria-expanded]:has-text("会社概要")`).first();
-    if (await profileHeader.count() > 0) {
-      const isExpanded = await profileHeader.getAttribute('aria-expanded');
-      if (isExpanded !== 'true') {
-        await profileHeader.click();
-        // 3 frames at 100ms / 250ms / 500ms after click (motion transition 評価用)
+
+    const TARGET_TOTAL_FRAMES = 8;
+    const accordionLabels = ['会社概要', '最新ニュース', '市場の声', '直近 8Q 履歴', 'アナリスト視点'];
+    let accordionOpened = false;
+    for (const label of accordionLabels) {
+      if (frames.length >= TARGET_TOTAL_FRAMES) break;
+      const btn = page.locator(`button[aria-expanded="false"]:has-text("${label}")`).first();
+      if (await btn.count() === 0) continue;
+      try {
+        await btn.scrollIntoViewIfNeeded({ timeout: 1500 });
+        await btn.click({ timeout: 1500 });
+        accordionOpened = true;
+        // 3 frames at 100ms / 250ms / 500ms after click (motion transition 評価)
         await page.waitForTimeout(100);
         const f1 = await page.screenshot({ fullPage: false });
-        frames.push({ id: 'acc-100ms', png_base64: f1.toString('base64'), label: 'accordion +100ms' });
+        frames.push({ id: `acc-${label}-100ms`, png_base64: f1.toString('base64'), label: `accordion "${label}" +100ms (transition start)` });
         await page.waitForTimeout(150);
         const f2 = await page.screenshot({ fullPage: false });
-        frames.push({ id: 'acc-250ms', png_base64: f2.toString('base64'), label: 'accordion +250ms' });
+        frames.push({ id: `acc-${label}-250ms`, png_base64: f2.toString('base64'), label: `accordion "${label}" +250ms (mid)` });
         await page.waitForTimeout(250);
         const f3 = await page.screenshot({ fullPage: false });
-        frames.push({ id: 'acc-500ms', png_base64: f3.toString('base64'), label: 'accordion +500ms (fully open)' });
+        frames.push({ id: `acc-${label}-500ms`, png_base64: f3.toString('base64'), label: `accordion "${label}" +500ms (fully open)` });
+        break;
+      } catch (e) {
+        // 1 accordion 失敗 → 次の label を試す
       }
     }
 
-    console.error(`[vision-eval] captured ${frames.length} frames in ${Date.now() - startTime}ms`);
+    // fallback: accordion open ができなかった、 もしくは frame が足りない場合は scroll 位置で padding
+    let paddingIdx = 0;
+    while (frames.length < TARGET_TOTAL_FRAMES) {
+      const y = 2400 + (paddingIdx * 800);  // scroll 2400 / 3200 / 4000 / 4800 ...
+      await page.evaluate((yy) => window.scrollTo({ top: yy, behavior: 'instant' }), y);
+      await page.waitForTimeout(350);
+      const buf = await page.screenshot({ fullPage: false });
+      frames.push({ id: `padding-${y}`, png_base64: buf.toString('base64'), label: `scroll padding ${y}px (frame ${frames.length + 1}/${TARGET_TOTAL_FRAMES})` });
+      paddingIdx++;
+      if (paddingIdx > 5) break; // safety
+    }
+
+    console.error(`[vision-eval] captured ${frames.length} frames (accordion_opened=${accordionOpened}) in ${Date.now() - startTime}ms`);
 
     // ─── Claude vision scoring ────────────────────────────────────────
     const RUBRIC = `

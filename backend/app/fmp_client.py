@@ -159,15 +159,37 @@ class FMPClient:
         return {}
     async def stock_peers(self, ticker: str) -> list[str]:
         """競合 peer ticker 一覧を返す (FMP /stock-peers)。
-        返値: ["MSFT", "GOOG", "AMZN", ...] (ticker string list)
-        FMP は {"symbol": str, "peersList": [str, ...]} を返す。
+        返値: ["AAPL", "GOOG", "AMZN", ...] (ticker string list)
+
+        v97 真因 fix: FMP `/stable/stock-peers` の response 形式が legacy と異なる:
+        - 旧 /api/v3: {"symbol": str, "peersList": [str, ...]} (dict、 peersList 配列)
+        - 新 /stable: [{"symbol": str, "companyName": str, "price": ..., "mktCap": ...}, ...]
+          (各 entry = 1 peer 銘柄、 symbol field が ticker)
+
+        既存 parsing は peersList を期待していたため常に空 list を silent 返却していた
+        (Phase 3 競合比較 Tab で「データ取得できませんでした」 表示 root cause)。
+        自社 ticker は除外 (FMP が自分自身を含めるケースあり)。
         """
-        data = await self._get("/stock-peers", {"symbol": ticker.upper()})
-        if isinstance(data, list) and data:
-            peers = data[0].get("peersList", []) if isinstance(data[0], dict) else []
-            return [p for p in peers if isinstance(p, str)]
+        t = ticker.upper()
+        data = await self._get("/stock-peers", {"symbol": t})
+
+        if isinstance(data, list):
+            # 新 /stable 形式: 各 entry から symbol を抽出
+            new_format = [
+                d.get("symbol") for d in data
+                if isinstance(d, dict) and isinstance(d.get("symbol"), str) and d.get("symbol") != t
+            ]
+            if new_format:
+                return new_format
+            # legacy entry が混在の場合 (1 entry が dict で peersList を持つ)
+            if data and isinstance(data[0], dict) and "peersList" in data[0]:
+                peers = data[0].get("peersList", [])
+                return [p for p in peers if isinstance(p, str) and p != t]
+
         if isinstance(data, dict):
-            return [p for p in data.get("peersList", []) if isinstance(p, str)]
+            # legacy: {"symbol": ..., "peersList": [...]}
+            return [p for p in data.get("peersList", []) if isinstance(p, str) and p != t]
+
         return []
 
     async def stock_news(self, ticker: str, limit: int = 20) -> list[dict]:

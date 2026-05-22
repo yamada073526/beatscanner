@@ -661,8 +661,9 @@ async def get_segment_data(ticker: str, fmp_key: str | None) -> list[dict]:
     data = await safe_fmp_get(url, cache_key, ttl=CACHE_TTL_SEGMENT)
     if not isinstance(data, list):
         return []
-    # 最新5四半期分（前年同期比に4Q前を使うため）
-    return data[:5]
+    # v97 真因 fix: 最新 4Q だけだと NVDA 等で「最新四半期は Data Center しか確定なし」
+    # → 100% Data Center の誤表示。 8 四半期分取得して build 側で「完全な四半期」 を選択。
+    return data[:8]
 
 
 def build_segment_summary(segment_data: list[dict]) -> dict | None:
@@ -692,10 +693,21 @@ def build_segment_summary(segment_data: list[dict]) -> dict | None:
         skip = {"date", "period", "reportedCurrency", "calendarYear", "fiscalYear", "symbol", "cik"}
         return date, {k: v for k, v in entry.items() if k not in skip}
 
-    latest_date, latest = _flatten(segment_data[0])
+    # v97 真因 fix: 「2+ segments 揃った最新四半期」 を選択 (NVDA Q1 FY2027 は Data Center 1 件のみ
+    # = 100% の誤表示を解消)。 segment が 1 件のみの entry (部分 data) は skip。
+    selected_idx = 0
+    for i in range(min(len(segment_data), 4)):  # 最大 4 四半期さかのぼる
+        _, candidate = _flatten(segment_data[i])
+        if isinstance(candidate, dict) and len(candidate) >= 2:
+            selected_idx = i
+            break
+
+    latest_date, latest = _flatten(segment_data[selected_idx])
+    # 前年同期比 = selected の 4 四半期前
     prev_yoy: dict = {}
-    if len(segment_data) >= 5:
-        _, prev_yoy = _flatten(segment_data[4])
+    prev_idx = selected_idx + 4
+    if prev_idx < len(segment_data):
+        _, prev_yoy = _flatten(segment_data[prev_idx])
 
     segments = []
     for seg_name, latest_val in latest.items():
@@ -717,6 +729,180 @@ def build_segment_summary(segment_data: list[dict]) -> dict | None:
     return {
         "date": latest_date,
         "segments": sorted(segments, key=lambda x: x["value_b"], reverse=True),
+    }
+
+
+# ── v97 Phase 3: 競合比較 (peer metrics 並列 fetch) ────────────────────────────
+# 金融 sub-agent verdict (2026-05-23): Tab 2「競合比較」 で 4 指標 (株価 YTD + Gross Margin
+# + FCF Margin + R&D%) を peer 5 銘柄 + 自社 で並列 fetch。 Bloomberg Terminal 差別化。
+# Trust Cliff 防御: 全数値に source citation 付き、 LLM narration 一切なし (数値物理層)。
+async def _fetch_peer_metrics(ticker: str, fmp_key: str) -> dict:
+    """1 ticker について YTD + Margin metrics を fetch (24h cache)。
+
+    Returns:
+        {"ticker": str, "price_change_ytd": float|None, "gross_margin": float|None,
+         "fcf_margin": float|None, "rd_pct": float|None}
+    """
+    t = ticker.upper()
+    # FMP 3 endpoints 並列
+    pc_url = f"https://financialmodelingprep.com/stable/stock-price-change?symbol={t}&apikey={fmp_key}"
+    is_url = f"https://financialmodelingprep.com/stable/income-statement?symbol={t}&limit=1&period=annual&apikey={fmp_key}"
+    cf_url = f"https://financialmodelingprep.com/stable/cash-flow-statement?symbol={t}&limit=1&period=annual&apikey={fmp_key}"
+
+    pc, is_data, cf_data = await asyncio.gather(
+        safe_fmp_get(pc_url, f"peer-pc::{t}", ttl=CACHE_TTL_PROFILE),
+        safe_fmp_get(is_url, f"peer-is::{t}", ttl=CACHE_TTL_PROFILE),
+        safe_fmp_get(cf_url, f"peer-cf::{t}", ttl=CACHE_TTL_PROFILE),
+        return_exceptions=True,
+    )
+    if isinstance(pc, Exception): pc = []
+    if isinstance(is_data, Exception): is_data = []
+    if isinstance(cf_data, Exception): cf_data = []
+
+    # price change YTD (FMP は list of dict、 各 dict に "1D", "5D", "1M", "YTD" 等)
+    ytd = None
+    if isinstance(pc, list) and pc:
+        rec = pc[0] if isinstance(pc[0], dict) else {}
+        # FMP /stable は "ytd" or "YTD"、 念のため両対応
+        raw = rec.get("ytd") if rec.get("ytd") is not None else rec.get("YTD")
+        if isinstance(raw, (int, float)):
+            ytd = round(float(raw), 1)
+
+    # income statement: gross_margin, rd_pct
+    gm = rd = revenue = None
+    if isinstance(is_data, list) and is_data:
+        rec = is_data[0] if isinstance(is_data[0], dict) else {}
+        try:
+            revenue = float(rec.get("revenue") or 0)
+        except (TypeError, ValueError):
+            revenue = 0
+        if revenue:
+            try:
+                gp = float(rec.get("grossProfit") or 0)
+                if gp > 0:
+                    gm = round(gp / revenue * 100, 1)
+            except (TypeError, ValueError):
+                pass
+            try:
+                rd_exp = float(rec.get("researchAndDevelopmentExpenses") or 0)
+                if rd_exp > 0:
+                    rd = round(rd_exp / revenue * 100, 1)
+            except (TypeError, ValueError):
+                pass
+
+    # cash flow: fcf_margin (operating CF + capex; capex は FMP で負値)
+    fm = None
+    if isinstance(cf_data, list) and cf_data and revenue:
+        rec = cf_data[0] if isinstance(cf_data[0], dict) else {}
+        try:
+            ocf = float(rec.get("operatingCashFlow") or 0)
+            capex = float(rec.get("capitalExpenditure") or 0)
+            fcf = ocf + capex  # capex は負値
+            if fcf and revenue:
+                fm = round(fcf / revenue * 100, 1)
+        except (TypeError, ValueError):
+            pass
+
+    return {
+        "ticker": t,
+        "price_change_ytd": ytd,
+        "gross_margin": gm,
+        "fcf_margin": fm,
+        "rd_pct": rd,
+    }
+
+
+def _median(values: list) -> float | None:
+    """None を除外して中央値を計算 (None なら None 返却)。"""
+    valid = sorted([v for v in values if isinstance(v, (int, float))])
+    if not valid:
+        return None
+    n = len(valid)
+    if n % 2 == 1:
+        return round(valid[n // 2], 1)
+    return round((valid[n // 2 - 1] + valid[n // 2]) / 2, 1)
+
+
+@app.get("/api/profile-peers/{ticker}")
+async def get_profile_peers(ticker: str, request: Request):
+    """自社 + peer 5 銘柄の 4 指標 (YTD / GM / FCF Margin / R&D%) を返却。
+
+    Trust Cliff: 全数値に source citation 付き、 LLM 一切介在せず純粋 FMP 数値。
+    cache: 24h (CACHE_TTL_PROFILE)、 FMP Starter 300 req/min 内に余裕。
+
+    Response:
+        {
+          "ticker": "MSFT",
+          "self": {ticker, price_change_ytd, gross_margin, fcf_margin, rd_pct},
+          "peers": [{ticker, ...}, ...],  # 5 件以下
+          "median": {price_change_ytd, gross_margin, fcf_margin, rd_pct},
+          "sources": {
+            "price_change": "FMP /stable/stock-price-change",
+            "margins": "FMP /stable/income-statement + /stable/cash-flow-statement"
+          },
+          "fetched_at": <unix timestamp>
+        }
+    """
+    t = ticker.upper()
+    fmp_key = _get_fmp_key(request) or os.getenv("FMP_API_KEY")
+    if not fmp_key:
+        raise HTTPException(status_code=500, detail="FMP_API_KEY not configured")
+
+    client = FMPClient(api_key=fmp_key)
+    try:
+        peers_list = await client.stock_peers(t)
+    except Exception:
+        peers_list = []
+    peers_top5 = (peers_list or [])[:5] if isinstance(peers_list, list) else []
+
+    # 自社 + peer 5 = 最大 6 銘柄 並列 fetch (各 3 endpoint × 6 = 18 req)
+    all_tickers = [t] + peers_top5
+    metrics_results = await asyncio.gather(
+        *[_fetch_peer_metrics(tk, fmp_key) for tk in all_tickers],
+        return_exceptions=True,
+    )
+
+    metrics: list[dict] = []
+    for m in metrics_results:
+        if isinstance(m, Exception):
+            continue
+        if isinstance(m, dict):
+            metrics.append(m)
+
+    if not metrics:
+        return {
+            "ticker": t,
+            "self": None,
+            "peers": [],
+            "median": {"price_change_ytd": None, "gross_margin": None, "fcf_margin": None, "rd_pct": None},
+            "sources": {
+                "price_change": "FMP /stable/stock-price-change",
+                "margins": "FMP /stable/income-statement + /stable/cash-flow-statement",
+            },
+            "fetched_at": _time.time(),
+        }
+
+    # 中央値 (自社 + peers 全体)
+    median = {
+        "price_change_ytd": _median([m.get("price_change_ytd") for m in metrics]),
+        "gross_margin": _median([m.get("gross_margin") for m in metrics]),
+        "fcf_margin": _median([m.get("fcf_margin") for m in metrics]),
+        "rd_pct": _median([m.get("rd_pct") for m in metrics]),
+    }
+
+    self_metric = next((m for m in metrics if m.get("ticker") == t), None)
+    peer_metrics = [m for m in metrics if m.get("ticker") != t]
+
+    return {
+        "ticker": t,
+        "self": self_metric,
+        "peers": peer_metrics,
+        "median": median,
+        "sources": {
+            "price_change": "FMP /stable/stock-price-change",
+            "margins": "FMP /stable/income-statement + /stable/cash-flow-statement",
+        },
+        "fetched_at": _time.time(),
     }
 
 

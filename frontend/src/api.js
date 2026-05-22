@@ -676,6 +676,30 @@ export async function fetchCustomScreener() {
   return r.json();
 }
 
+// v97 Phase 3 (金融 sub-agent verdict): 自社 + peer 5 銘柄の 4 指標 (YTD/GM/FCF Margin/R&D%)
+// + 中央値を fetch。 Bloomberg Terminal 級競合比較 Tab 用。
+// Trust Cliff: 全数値 source citation 付き、 LLM 一切介在せず純粋 FMP 数値。
+export async function fetchProfilePeers(ticker, { signal } = {}) {
+  let authHeader = {};
+  try {
+    const { supabase } = await import('./lib/supabase.js');
+    if (supabase) {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (token) authHeader = { Authorization: `Bearer ${token}` };
+    }
+  } catch { /* unauthenticated OK、 demo 経路 */ }
+  const r = await fetch(`/api/profile-peers/${encodeURIComponent(ticker)}`, {
+    headers: { ...authHeader, ...fmpHeaders() },
+    signal,
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    return { _error: { status: r.status, detail: err.detail || `HTTP ${r.status}` } };
+  }
+  return r.json();
+}
+
 // Cup-with-Handle Phase 2.4 (handover v79 後継、 multi-review verdict):
 // ファンダ 5 PASS × Cup-Handle AND scanner。 Free user は backend で payload mask
 // (Security verdict)、 visible_count + total_count + is_premium を返す。
