@@ -63,7 +63,8 @@ FEW_SHOT_EXAMPLES: list[dict] = [
         "sections": {
             "main_business": "スマートフォン (iPhone)、パソコン (Mac)、タブレット (iPad)、ウェアラブル (Apple Watch/AirPods) を世界中で設計・製造・販売。",
             "revenue_model": "ハードウェア販売とサービス (App Store 手数料・iCloud 月額・Apple Music・Apple TV+) の2本柱で収益を構成。",
-            "customers": "個人消費者 (B2C) が主体。競合はSamsung、Google (Android)、PC市場ではDell、HP。"
+            "customers": "個人消費者 (B2C) が主体。競合はSamsung、Google (Android)、PC市場ではDell、HP。",
+            "competitive_moat": "Apple エコシステム (iPhone + Mac + Apple Watch + iCloud) の switching cost と brand premium で囲い込み。"
         },
         "product_names": ["iPhone", "Mac", "iPad", "Apple Watch", "AirPods", "App Store", "iCloud", "Apple Music", "Apple TV+"]
     },
@@ -79,7 +80,8 @@ FEW_SHOT_EXAMPLES: list[dict] = [
         "sections": {
             "main_business": "Azure クラウドサービス、Office 365/Teams 企業向けソフトウェア、Windows OS、Xbox ゲーム、Surface デバイスを展開。",
             "revenue_model": "クラウドサービス (Azure) のサブスクリプション収益と Office 365 の月額課金が主力。LinkedIn の広告収益も貢献。",
-            "customers": "法人顧客 (B2B) が主体。クラウドではAWS (Amazon)、Google Cloud と競合。生産性ソフトはGoogle Workspace と競合。"
+            "customers": "法人顧客 (B2B) が主体。クラウドではAWS (Amazon)、Google Cloud と競合。生産性ソフトはGoogle Workspace と競合。",
+            "competitive_moat": "Office 365 と Azure を統合した企業 IT スタックで、 切替コスト + Active Directory の認証 lock-in が強い。"
         },
         "product_names": ["Azure", "Office 365", "LinkedIn", "Dynamics 365", "Windows", "Xbox", "Surface", "Teams", "SQL Server"]
     },
@@ -95,7 +97,8 @@ FEW_SHOT_EXAMPLES: list[dict] = [
         "sections": {
             "main_business": "AI・HPC 向けデータセンター GPU (H100/A100) とゲーミング向け GeForce GPU を設計。製造はTSMC等に委託 (ファブレス)。",
             "revenue_model": "GPU ハードウェア販売が主力。CUDA ソフトウェアエコシステムで顧客の切り替えコストを高める。",
-            "customers": "データセンター向けはクラウド大手 (Amazon/Microsoft/Google) が主要顧客。競合はAMD (Instinct) やIntel (Gaudi)。"
+            "customers": "データセンター向けはクラウド大手 (Amazon/Microsoft/Google) が主要顧客。競合はAMD (Instinct) やIntel (Gaudi)。",
+            "competitive_moat": "CUDA ソフトウェアエコシステムと NVLink 接続規格で、 AI 開発者の switching cost を高水準で維持。"
         },
         "product_names": ["H100", "A100", "GeForce", "CUDA", "NVLink", "Hopper", "Grace Hopper"]
     },
@@ -111,7 +114,8 @@ FEW_SHOT_EXAMPLES: list[dict] = [
         "sections": {
             "main_business": "オンライン小売 (amazon.com) と Amazon Web Services (AWS) クラウドが2大事業。Prime 会員サービスと広告事業も展開。",
             "revenue_model": "小売マージン・AWS クラウド月額・Prime 年会費・広告収益の4本柱。AWS が利益の大部分を創出。",
-            "customers": "小売はB2C一般消費者、AWS はB2B企業顧客。競合は小売でWalmart、クラウドでMicrosoft Azure・Google Cloud。"
+            "customers": "小売はB2C一般消費者、AWS はB2B企業顧客。競合は小売でWalmart、クラウドでMicrosoft Azure・Google Cloud。",
+            "competitive_moat": "Prime 会員制 (2 億+ 加入) の囲い込みと AWS のクラウド先行者 scale で参入障壁を維持。"
         },
         "product_names": ["AWS", "Prime", "Amazon.com", "Alexa", "Kindle", "Fire TV", "Amazon Advertising"]
     },
@@ -127,7 +131,8 @@ FEW_SHOT_EXAMPLES: list[dict] = [
         "sections": {
             "main_business": "リテール銀行 (預金・住宅ローン・クレジットカード)、投資銀行 (M&A助言・引受)、資産運用を世界規模で展開。",
             "revenue_model": "純利息収益 (ローン金利差) と手数料収益 (投資銀行手数料・運用報酬・トレーディング) の複合モデル。",
-            "customers": "個人消費者 (B2C) から機関投資家・事業会社 (B2B) まで。競合はBank of America、Citigroup、Goldman Sachs。"
+            "customers": "個人消費者 (B2C) から機関投資家・事業会社 (B2B) まで。競合はBank of America、Citigroup、Goldman Sachs。",
+            "competitive_moat": "Tier-1 銀行の regulatory capital と Chase 全米支店網で、 retail 預金基盤と investment bank 双方に scale 優位。"
         },
         "product_names": ["Chase", "JPMorgan", "J.P. Morgan Private Bank", "JPMorgan Asset Management"]
     },
@@ -145,6 +150,7 @@ def _format_few_shot() -> str:
             f'<output_main_business>{ex["sections"]["main_business"]}</output_main_business>\n'
             f'<output_revenue_model>{ex["sections"]["revenue_model"]}</output_revenue_model>\n'
             f'<output_customers>{ex["sections"]["customers"]}</output_customers>\n'
+            f'<output_competitive_moat>{ex["sections"].get("competitive_moat", "")}</output_competitive_moat>\n'
             f'<output_product_names>{", ".join(ex["product_names"])}</output_product_names>\n'
             f'</example>'
         )
@@ -194,6 +200,15 @@ PROFILE_SUMMARY_TOOL_SCHEMA = {
                     "customers": {
                         "type": "string",
                         "description": "顧客/競合 (B2B/B2C 別 + 主要顧客 or 競合企業を 1-2 文)。日本語のみ。",
+                    },
+                    "competitive_moat": {
+                        "type": "string",
+                        "description": (
+                            "競争優位 / 経済的護城河 (1-2 文)。 例: 'Apple エコシステムの switching cost と "
+                            "brand premium'、 'CUDA ソフトウェアエコシステムによる lock-in'。"
+                            "**FMP description に根拠が明示されている場合のみ記述。 根拠なければ空文字列 '' を返す**。"
+                            "断定的将来予測 (BAD-5) / 最上級表現 (BAD-6) 禁止。 日本語のみ。"
+                        ),
                     },
                 },
             },

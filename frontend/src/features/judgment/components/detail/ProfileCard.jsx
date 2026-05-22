@@ -3,7 +3,7 @@ import Card from '../../primitives/Card.jsx';
 import SectionHeader from '../../primitives/SectionHeader.jsx';
 import CompanyLogo from '../../../../components/CompanyLogo.jsx';
 import Chip from '../../../../components/ui/Chip.jsx';
-import { Building2, MapPin, Users, Briefcase, Sparkles, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Building2, MapPin, Users, Briefcase, Sparkles, RefreshCw } from 'lucide-react';
 import { fetchProfileExtended, fetchProfileSummary } from '../../../../api.js';
 import { sanitizeText } from '../../../../lib/blocklist.js';
 
@@ -140,28 +140,63 @@ const CITATION_TOOLTIP =
   '一次資料は SEC EDGAR 10-K を参照推奨。';
 const SECTION_FOOTNOTE = '※ FMP description 記載時点';
 
-// ─── 4 セクション表示 (must-fix #9: 案 A h4 label + body text 二段) ─────────
-function SummarySection({ label, content, showFootnote = false, testId }) {
+// ─── Phase 2.9 Sprint H5 #会社概要 UI/UX 改善 (UI/UX sub-agent verdict、 +27 pt 期待) ────
+// h4 階層強化 (Aman メニュー章立て idiom):
+//   - fontWeight 600 → 700 (label と body の差を明確化)
+//   - letterSpacing 0.06em → 0.08em (formal/luxury)
+//   - color text-muted → text-secondary (輝度+)
+//   - marginBottom 4px → 8px (breathing room)
+//   - 3px gold accent bar prepend (Sprint H1 真鍮 anchor と統一)
+// body text:
+//   - color text-secondary → text-primary (label との 2 層構造明確化)
+// section 間 hairline:
+//   - 2 つ目以降に border-top: 1px gold 25% opacity + paddingTop で chapter divider
+function SummarySection({ label, content, showFootnote = false, testId, isFirst = false }) {
   if (!content) return null;
   return (
-    <div data-testid={testId} style={{ marginBottom: 'var(--space-4, 16px)' }}>
+    <div
+      data-testid={testId}
+      style={{
+        marginBottom: 'var(--space-4, 16px)',
+        // 2 つ目以降の section に subtle gold hairline divider
+        ...(isFirst ? {} : {
+          paddingTop: 'var(--space-4, 16px)',
+          borderTop: '1px solid color-mix(in srgb, var(--color-gold) 25%, var(--border))',
+        }),
+      }}
+    >
       <div
         style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-2, 8px)',
           fontSize: 11,
-          fontWeight: 600,
-          letterSpacing: '0.06em',
+          fontWeight: 700,
+          letterSpacing: '0.08em',
           textTransform: 'uppercase',
-          color: 'var(--text-muted)',
-          marginBottom: 'var(--space-1, 4px)',
+          color: 'var(--text-secondary)',
+          marginBottom: 'var(--space-2, 8px)',
         }}
       >
+        {/* 3px gold accent bar (Sprint H1 真鍮 anchor) */}
+        <span
+          style={{
+            display: 'inline-block',
+            width: 3,
+            height: 11,
+            borderRadius: 2,
+            background: 'var(--color-gold)',
+            flexShrink: 0,
+          }}
+          aria-hidden="true"
+        />
         {label}
       </div>
       <div
         style={{
           fontSize: 13,
           lineHeight: 1.65,
-          color: 'var(--text-secondary)',
+          color: 'var(--text-primary)',
         }}
       >
         {content}
@@ -592,41 +627,21 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
         {!summaryLoading && summaryOk && (
           <div data-testid="profile-summary-section" style={{ marginTop: 'var(--space-4, 16px)' }}>
 
-            {/* partial_failure (signal_quality=low) 警告バナー */}
-            {summarySignalLow && (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 'var(--space-2, 8px)',
-                  padding: 'var(--space-2, 8px) var(--space-3, 12px)',
-                  borderRadius: 'var(--radius-sm, 4px)',
-                  border: '1px solid var(--color-warning)',
-                  background: 'color-mix(in srgb, var(--color-warning) 6%, transparent)',
-                  fontSize: 11,
-                  color: 'var(--color-warning)',
-                  marginBottom: 'var(--space-3, 12px)',
-                }}
-                data-testid="profile-summary-low-quality-banner"
-              >
-                <AlertTriangle size={12} strokeWidth={1.5} style={{ flexShrink: 0 }} />
-                <span>信頼度低 — SEC EDGAR 10-K での確認を推奨します</span>
-              </div>
-            )}
+            {/* Phase 2.9 Sprint H5 #会社概要 UX 改善 (UI/UX sub-agent verdict、 +27 pt 期待):
+                user 「信頼度低が目に飛び込んで読む気失せる」 → amber 警告バナー削除、
+                summarySignalLow は文末 footnote に統合 (法的担保は citation chip + footer 維持)。
+                Trust Cliff 維持: CITATION_TOOLTIP + footer disclaimer + header chip の 3 点セット。 */}
 
-            {/* 全体要約 (summary_jp) */}
+            {/* 全体要約 (summary_jp) — リード文 style (box 廃止で「箱の入れ子」 感解消) */}
             {summaryOk.summary_jp && (
               <p
                 style={{
                   fontSize: 14,
-                  fontWeight: 500,
-                  lineHeight: 1.6,
+                  fontWeight: 600,
+                  lineHeight: 1.65,
                   color: 'var(--text-primary)',
-                  marginBottom: 'var(--space-4, 16px)',
-                  padding: 'var(--space-3, 12px) var(--space-4, 16px)',
-                  borderRadius: 'var(--radius-md, 12px)',
-                  background: 'color-mix(in srgb, var(--color-accent) 4%, transparent)',
-                  border: '1px solid color-mix(in srgb, var(--color-accent) 15%, transparent)',
+                  marginBottom: 'var(--space-5, 20px)',
+                  padding: 0,
                 }}
                 data-testid="profile-summary-jp"
               >
@@ -634,12 +649,13 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
               </p>
             )}
 
-            {/* 主力事業 */}
+            {/* 主力事業 (Sprint H5: isFirst=true で hairline divider なし) */}
             <SummarySection
               label="主力事業"
               content={summaryOk.sections?.main_business}
               showFootnote={false}
               testId="profile-summary-main-business"
+              isFirst={true}
             />
 
             {/* 収益モデル (must-fix #11: section footnote) */}
@@ -656,6 +672,16 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
               content={summaryOk.sections?.customers}
               showFootnote={true}
               testId="profile-summary-customers"
+            />
+
+            {/* Sprint H6 (金融アナリスト verdict 案 E、 Phase 1): competitive_moat
+                経済的護城河 / 競争優位 — LLM schema 拡張 (profile_summary.py) + frontend section 追加。
+                FMP description に根拠ない場合は backend が null 返却 → 表示しない graceful skip。 */}
+            <SummarySection
+              label="競争優位 (Moat)"
+              content={summaryOk.sections?.competitive_moat}
+              showFootnote={true}
+              testId="profile-summary-moat"
             />
 
             {/* must-fix #1 + #11: 文末固定 citation (Trust Cliff anchor、 削除禁止) */}
@@ -680,6 +706,11 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
               >
                 ※ FMP 提供の企業概要 (SEC 提出書類より作成) を AI が日本語要約。
                 一次資料は SEC EDGAR 10-K を参照推奨。
+                {/* Sprint H5: summarySignalLow disclaimer を amber 警告 → 文末 footnote 統合
+                    (Trust Cliff DoD は CITATION_TOOLTIP + footer disclaimer + header chip で維持) */}
+                {summarySignalLow && (
+                  <> 情報源が限定的なため、 特に詳細はご確認ください。</>
+                )}
               </p>
 
               {/* polish P1: 再生成 button (confidence=low 時のみ) */}
