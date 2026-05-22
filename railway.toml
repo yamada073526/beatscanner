@@ -13,6 +13,15 @@ restartPolicyMaxRetries = 3
 schedule = "0 19 * * *"
 command = "curl -s -X POST -H \"X-Cron-Secret: $CRON_SECRET\" https://beatscanner-production.up.railway.app/api/insights/refresh/batch"
 
+# v97 Round 2: profile-summary (会社概要 LLM 和文要約) cron warmup
+# user dogfood 「会社概要は 10 秒前後あるので短縮頂きたい」 対策。
+# insights cron の 30 分後 JST 4:30 (UTC 19:30) に watchlist + S&P top 30 = 最大 50 銘柄を warmup。
+# memory cache (_SUMMARY_CACHE) は process scope のため daily refresh が必要。
+# cost: 50 銘柄 × Claude Haiku $0.003-0.005 = $0.15-0.25/day = ¥25-40/day
+[[crons]]
+schedule = "30 19 * * *"
+command = "curl -s -X POST -H \"X-Cron-Secret: $CRON_SECRET\" --max-time 300 https://beatscanner-production.up.railway.app/api/profile-summary/refresh/batch > /dev/null 2>&1"
+
 # v40+: 「今日の注目」の cold cache 問題対策。
 # /api/movers の在メモリキャッシュ TTL は 20 分・cold 時 10-15 秒かかるため、
 # 15 分毎に curl で叩いてキャッシュを常時温める。

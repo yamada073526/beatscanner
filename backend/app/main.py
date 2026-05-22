@@ -11897,6 +11897,108 @@ async def _refresh_one(tkr: str) -> dict:
     }
 
 
+# ── v97 Round 2: profile-summary cron warmup ───────────────────────────────
+# user dogfood 「会社概要 LLM 要約は 10 秒前後あるので短縮頂きたい」 への直接対策。
+# Round 1 (CLS fix) で操作ストレスは解消、 残るは初回 LLM call 体感。
+# insights batch と同じ pattern で「watchlist + S&P 500 top 30」 で最大 50 件 warmup。
+# memory cache (_SUMMARY_CACHE in profile_summary.py) は process scope だが daily cron で常時 warm 維持。
+# cost: 50 銘柄 × Claude Haiku $0.003-0.005 (cache hit 多くため insights より安い) = $0.15-0.25/day = ¥25-40/day
+@app.post("/api/profile-summary/refresh/batch")
+async def refresh_profile_summary_batch(
+    request: Request,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """主要 50 銘柄の profile-summary を一括 LLM warmup (memory cache 充填)。
+
+    Railway Cron から JST 4:30 (UTC 19:30、 insights cron の 30 分後) に呼ぶ。
+    insights と同じく watchlist + S&P 500 top 30 = 最大 50 件 を対象。
+    deploy で memory cache が消えるため daily refresh が必要。
+
+    cron secret 必須 (demo rate limit 回避)。
+    """
+    _check_cron_secret(x_cron_secret)
+
+    from .visualizer.profile_summary import summarize_profile
+
+    # 1. watchlist tickers
+    sb = _get_supabase_service()
+    wl_tickers = set()
+    if sb is not None:
+        try:
+            wl_result = sb.table("watchlist").select("ticker").execute()
+            wl_tickers = {row.get("ticker") for row in (wl_result.data or []) if row.get("ticker")}
+        except Exception as e:
+            print(f"[profile-summary/batch] watchlist fetch failed: {e}")
+
+    # 2. S&P 500 top 30 (動的、 fallback あり)
+    try:
+        top_tickers = set(await _fetch_sp500_top_n(30))
+    except Exception as e:
+        print(f"[profile-summary/batch] sp500 top fetch failed: {e}")
+        top_tickers = {
+            "AAPL", "MSFT", "NVDA", "AMZN", "META", "TSLA", "GOOG", "GOOGL",
+            "BRK-B", "AVGO", "JPM", "LLY", "V", "XOM", "UNH", "MA",
+            "HD", "PG", "JNJ", "COST", "WMT", "ABBV", "BAC", "MRK",
+            "ORCL", "NFLX", "ADBE", "CRM", "AMD", "CVX",
+        }
+
+    tickers = sorted(wl_tickers | top_tickers)[:50]
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+
+    fmp_key = _get_fmp_key(request) or os.getenv("FMP_API_KEY")
+    if not fmp_key:
+        raise HTTPException(status_code=500, detail="FMP_API_KEY not configured")
+
+    client = FMPClient(api_key=fmp_key)
+    results: list[dict] = []
+    for t in tickers:
+        try:
+            # FMP profile + peers 並列 fetch
+            profile_data, peers_list = await asyncio.gather(
+                client.profile(t),
+                client.stock_peers(t),
+                return_exceptions=True,
+            )
+            if isinstance(profile_data, Exception):
+                profile_data = []
+            if isinstance(peers_list, Exception):
+                peers_list = []
+            description_en = ""
+            if isinstance(profile_data, list) and profile_data:
+                rec = profile_data[0] if isinstance(profile_data[0], dict) else {}
+                description_en = rec.get("description") or ""
+            if not description_en:
+                results.append({"ticker": t, "status": "no_description"})
+                continue
+            peers_top5 = (peers_list or [])[:5] if isinstance(peers_list, list) else []
+            # LLM call (cache に格納)
+            result = await summarize_profile(
+                t, description_en, api_key=api_key, peers_tickers=peers_top5
+            )
+            if result.get("_error"):
+                results.append({"ticker": t, "status": "llm_error", "error": result["_error"].get("detail")})
+            else:
+                results.append({
+                    "ticker": t,
+                    "status": "ok",
+                    "cache_read_tokens": result.get("cache_read_input_tokens", 0),
+                    "cache_creation_tokens": result.get("cache_creation_input_tokens", 0),
+                })
+        except Exception as e:
+            results.append({"ticker": t, "status": "exception", "error": str(e)[:120]})
+
+    ok_count = sum(1 for r in results if r["status"] == "ok")
+    return {
+        "processed": len(results),
+        "ok": ok_count,
+        "watchlist_count": len(wl_tickers),
+        "top30_count": len(top_tickers),
+        "results": results,
+    }
+
+
 # ⚠️ 重要: /api/insights/refresh/batch を /api/insights/refresh/{ticker} より
 # **先に** 定義する。FastAPI は登録順にルートを評価するため、ワイルドカード {ticker}
 # が先だと「batch」が ticker="BATCH" として吸い込まれる。
