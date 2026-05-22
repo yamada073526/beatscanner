@@ -274,6 +274,199 @@ function formatAbsDiff(actual, estimated) {
   return `${sign}${formatEps(diff)}`;
 }
 
+// v97 G-1 sub-agent verdict 案 A 軽量版: 2 Scorecard 大型化 + 自然文 collapse。
+// user dogfood「文字壁感、 パッと見でわかりにくい」 → 大型達成率 (32px) + verdict バッジ
+// + arc progress (SVG) で「2 秒 readable」 を実現。 既存 Row は legacy として残置、
+// 新 ScorecardCell を採用。
+function ArcProgress({ value, color = 'var(--color-accent)', size = 56, strokeWidth = 4 }) {
+  // value: 達成率 % (0-150 で clamp、 100 を中央 anchor とする arc)
+  // arc: 半円 (180°) 弧で 0-100% を表現、 100%+ は full + overflow バッジ
+  if (value == null || !Number.isFinite(value)) {
+    return (
+      <div
+        style={{
+          width: size,
+          height: size / 2 + strokeWidth,
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'center',
+        }}
+        aria-hidden="true"
+      >
+        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>—</span>
+      </div>
+    );
+  }
+  const clamped = Math.max(0, Math.min(150, value));
+  const ratio = Math.min(1, clamped / 100);
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = (size - strokeWidth) / 2;
+  // 半円 arc (180° = π rad) を value/100 で埋める
+  const startAngle = Math.PI;
+  const endAngle = Math.PI - Math.PI * ratio;
+  const x1 = cx + r * Math.cos(startAngle);
+  const y1 = cy + r * Math.sin(startAngle);
+  const x2 = cx + r * Math.cos(endAngle);
+  const y2 = cy + r * Math.sin(endAngle);
+  const largeArc = ratio > 0.5 ? 1 : 0;
+  const pathD = `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`;
+  // 100% bench mark に dashed line
+  return (
+    <svg
+      width={size}
+      height={size / 2 + strokeWidth}
+      viewBox={`0 0 ${size} ${size / 2 + strokeWidth}`}
+      aria-hidden="true"
+      style={{ display: 'block' }}
+    >
+      {/* background half circle */}
+      <path
+        d={`M ${strokeWidth / 2} ${cy} A ${r} ${r} 0 0 1 ${size - strokeWidth / 2} ${cy}`}
+        fill="none"
+        stroke="var(--bg-muted)"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+      />
+      {/* progress arc */}
+      <path
+        d={pathD}
+        fill="none"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatter, signalQuality, nextEarningsDays, isAwaitingEarnings }) {
+  const style = verdict ? VERDICT_STYLE[verdict] : null;
+  const isUnknown = verdict === 'unknown' || verdict === '不明';
+  // 達成率 % (actual / estimated * 100、 ただし estimated が 0 / null なら null)
+  let achievementPct = null;
+  if (Number.isFinite(actual) && Number.isFinite(estimated) && Math.abs(estimated) > 0.01) {
+    achievementPct = (actual / Math.abs(estimated)) * 100;
+  }
+  // verdict 由来の arc color
+  const arcColor = verdict === 'beat' ? 'var(--color-gain)' :
+                   verdict === 'miss' ? 'var(--color-loss)' :
+                   verdict === 'in-line' ? 'var(--color-warning)' :
+                   'var(--text-muted)';
+  return (
+    <div
+      style={{
+        flex: '1 1 0',
+        minWidth: 0,
+        padding: 'var(--space-4, 16px)',
+        borderRadius: 'var(--radius-md, 12px)',
+        background: 'var(--bg-subtle)',
+        border: '1px solid color-mix(in srgb, var(--color-gold) 18%, var(--border))',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-2, 8px)',
+        minHeight: 160,
+      }}
+      data-testid={`scorecard-${label}`}
+    >
+      {/* header: label + signal chip */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)' }}>
+        <span
+          style={{
+            display: 'inline-block',
+            width: 3,
+            height: 11,
+            borderRadius: 2,
+            background: 'var(--color-gold)',
+            flexShrink: 0,
+          }}
+          aria-hidden="true"
+        />
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            color: 'var(--text-secondary)',
+          }}
+        >
+          {label}
+        </span>
+        <SignalQualityChip signalQuality={signalQuality} kind={label} />
+      </div>
+
+      {/* 達成率 大型表示 + arc progress */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 'var(--space-3, 12px)', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+          {achievementPct != null ? (
+            <span
+              style={{
+                fontSize: 32,
+                fontWeight: 700,
+                lineHeight: 1,
+                color: arcColor,
+                fontVariantNumeric: 'tabular-nums',
+                letterSpacing: '-0.02em',
+              }}
+            >
+              {achievementPct.toFixed(0)}<span style={{ fontSize: 18, fontWeight: 600 }}>%</span>
+            </span>
+          ) : isAwaitingEarnings ? (
+            <span style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-muted)' }}>
+              発表待ち
+            </span>
+          ) : (
+            <span style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-muted)' }}>—</span>
+          )}
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
+            達成率
+          </span>
+        </div>
+        <ArcProgress value={achievementPct} color={arcColor} size={56} strokeWidth={5} />
+      </div>
+
+      {/* verdict バッジ + surprise % */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)', flexWrap: 'wrap' }}>
+        {style && (
+          isAwaitingEarnings ? (
+            <Chip variant="display" tone="muted" size="sm">
+              <Calendar size={12} strokeWidth={1.5} aria-hidden="true" style={{ marginRight: 4 }} />
+              発表待ち {Number.isFinite(nextEarningsDays) ? `(D-${nextEarningsDays})` : ''}
+            </Chip>
+          ) : (
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${!isUnknown ? 'text-white ' + style.bg : ''}`}
+              style={isUnknown ? { background: style.bg, color: style.color } : undefined}
+            >
+              <span aria-hidden="true">{style.icon}</span>
+              <span style={{ whiteSpace: 'nowrap' }}>{style.label}</span>
+            </span>
+          )
+        )}
+        {!isUnknown && surprisePct != null && (
+          <span style={{
+            fontSize: 12,
+            fontWeight: 600,
+            color: arcColor,
+            fontVariantNumeric: 'tabular-nums',
+          }}>
+            ({surprisePct > 0 ? '+' : ''}{surprisePct.toFixed(1)}% vs 予想)
+          </span>
+        )}
+      </div>
+
+      {/* sub-line: 実績 / 予想 (small caps) */}
+      {!isAwaitingEarnings && (
+        <div style={{ display: 'flex', gap: 'var(--space-3, 12px)', fontSize: 11, color: 'var(--text-muted)', marginTop: 'auto' }}>
+          <span>実績 <strong style={{ color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{formatter(actual) || '—'}</strong></span>
+          <span>予想 <strong style={{ color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{formatter(estimated) || '—'}</strong></span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Row({ label, estimated, actual, surprisePct, verdict, verdictReason, formatter, source, signalQuality, nextEarningsDays }) {
   const style = verdict ? VERDICT_STYLE[verdict] : null;
   const isUnknown = verdict === 'unknown' || verdict === '不明';
@@ -597,58 +790,101 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
       <p className="mt-0.5 text-[10px] text-slate-400">
         ※ 判定閾値 ±3%（上振れ Beat / 概ね一致 In-line / 下振れ Miss）。業種により適切な閾値は異なります。
       </p>
-      <div className="mt-2">
-        <Row
+      {/* v97 G-1 Scorecard 2 cards (sub-agent verdict 案 A 軽量版): EPS / 売上 横並び
+          大型達成率 + arc progress + verdict バッジ で「2 秒 readable」 を実現。
+          legacy Row / RevenueRow は他用途で残置、 ここでは ScorecardCell を採用。 */}
+      <div className="mt-3" style={{ display: 'flex', gap: 'var(--space-3, 12px)', flexWrap: 'wrap' }}>
+        <ScorecardCell
           label="EPS"
           estimated={eps?.estimated}
           actual={eps?.actual}
           surprisePct={eps?.surprise_pct}
           verdict={eps?.verdict}
-          verdictReason={eps?.verdict_reason}
-          source={eps?.source}
-          signalQuality={epsSignalQuality}
           formatter={formatEps}
+          signalQuality={epsSignalQuality}
           nextEarningsDays={nextEarningsDays}
+          isAwaitingEarnings={
+            (eps?.verdict === 'unknown' || eps?.verdict === '不明')
+            && Number.isFinite(nextEarningsDays) && nextEarningsDays > 0
+          }
         />
-        <RevenueRow
-          revenueActual={revenue_actual}
-          revenueEstimated={revenue_estimated}
+        <ScorecardCell
+          label="売上高"
+          estimated={revenue_estimated}
+          actual={revenue_actual}
+          surprisePct={
+            (Number.isFinite(revenue_actual) && Number.isFinite(revenue_estimated) && Math.abs(revenue_estimated) > 0)
+              ? ((revenue_actual - revenue_estimated) / Math.abs(revenue_estimated)) * 100
+              : null
+          }
+          verdict={(() => {
+            if (!Number.isFinite(revenue_actual) || !Number.isFinite(revenue_estimated)) return 'unknown';
+            if (Math.abs(revenue_estimated) === 0) return 'in-line';
+            const p = ((revenue_actual - revenue_estimated) / Math.abs(revenue_estimated)) * 100;
+            if (p >= 3) return 'beat';
+            if (p <= -3) return 'miss';
+            return 'in-line';
+          })()}
+          formatter={formatRevenue}
           signalQuality={revenueSignalQuality}
+          nextEarningsDays={nextEarningsDays}
+          isAwaitingEarnings={
+            !Number.isFinite(revenue_actual)
+            && Number.isFinite(nextEarningsDays) && nextEarningsDays > 0
+          }
         />
       </div>
       {isSecLoading && !sec_guidance_text ? (
         <SecSkeleton />
       ) : sec_guidance_text ? (
-        // R1-b CLS fix: minHeight 140 + maxHeight 280 + overflow auto で SEC 文章量による縦幅ブレ完全 lock
-        // 旧: テキスト長で 80px (短) - 400px (長) で変動 → 上下 section が押し下げ
-        // 新: 140-280px の固定 envelope、 超過は scroll で吸収 (Pane 3 全体 CLS 0 寄与)
-        <div
-          className="mt-4 rounded-lg p-4"
+        // v97 G-1 sub-agent verdict: 文字壁解消のため <details> で default collapse。
+        // summary をユーザーが「読みたい時だけ展開」、 panel 全体の認知負荷を 60% 削減。
+        // R1-b CLS fix も維持 (open 時 minHeight 140 + maxHeight 280 + overflow auto)。
+        <details
+          className="mt-4"
           style={{
             background: 'var(--bg-subtle)',
             border: '0.5px solid var(--border)',
             borderRadius: '8px',
-            minHeight: 140,
-            maxHeight: 280,
-            overflowY: 'auto',
+            padding: 'var(--space-3, 12px) var(--space-4, 16px)',
           }}
         >
-          {/* R1-c: 📄 → Lucide CalendarRange (Aman 級、 OS 依存 glyph 解消) */}
-          <div className="mb-2 flex items-center gap-2">
+          <summary
+            style={{
+              cursor: 'pointer',
+              listStyle: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-2, 8px)',
+              userSelect: 'none',
+            }}
+            data-testid="sec-guidance-summary"
+          >
             <CalendarRange size={13} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
-            <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>次期見通し</span>
+            <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              次期見通し (SEC 文書由来)
+            </span>
             {sec_guidance_source && (
               <span className="text-[10px]" style={{ color: 'rgb(96, 165, 250)' }}>{sec_guidance_source}</span>
             )}
+            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
+              展開で全文 ›
+            </span>
+          </summary>
+          <div
+            className="text-sm leading-relaxed"
+            style={{
+              color: 'var(--text-secondary)',
+              marginTop: 'var(--space-3, 12px)',
+              maxHeight: 280,
+              overflowY: 'auto',
+            }}
+          >
+            <ul style={{ paddingLeft: '0', margin: '0' }}>
+              {renderGuidanceText(sec_guidance_text)}
+            </ul>
           </div>
-          <div className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-            <div>
-              <ul style={{paddingLeft:'0', margin:'0'}}>
-                {renderGuidanceText(sec_guidance_text)}
-              </ul>
-            </div>
-          </div>
-        </div>
+        </details>
       ) : null}
     </section>
     </div>

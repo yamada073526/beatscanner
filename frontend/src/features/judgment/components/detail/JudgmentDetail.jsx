@@ -54,6 +54,46 @@ import MotionProvider from '../../../../components/MotionProvider.jsx';
 // DetailReport は重量級 (36 KB gzip) のため lazy load
 const DetailReport = lazy(() => import('../../../../components/DetailReport.jsx'));
 
+// v97 G-2 sub-agent verdict 案 B 軽量版: 章境界 軽量強化
+// user dogfood「H2 Chapter Break は subtle すぎる、 言われないと気付かない」
+// sub-agent 推奨: 章タイトル のみ (番号なし) + cyan accent uppercase 11px + hairline 1px
+// 工数 S、 Aman 級「ホテルメニューの章立て」 idiom 維持、 教科書感を回避。
+function ChapterHeader({ label, isChapterStart = false }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--space-3, 12px)',
+        marginBottom: 'var(--space-4, 16px)',
+      }}
+      data-chapter-header="true"
+      data-chapter-start={isChapterStart ? 'true' : undefined}
+    >
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          color: 'var(--color-accent)',
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          flexShrink: 0,
+        }}
+      >
+        {label}
+      </span>
+      <div
+        style={{
+          flex: 1,
+          height: 1,
+          background: 'color-mix(in srgb, var(--color-accent) 30%, var(--border))',
+        }}
+        aria-hidden="true"
+      />
+    </div>
+  );
+}
+
 // PR-2 feature flag: localStorage.pane3_v1='1' で旧 UI (VerdictDetail + ConditionGrid 二重) に切替可。
 // 6 体合議 + §-1-B postmortem「撤回コスト最小化設計」の学び適用。
 // デフォルト = 新 UI (FiveConditionsCard 統合)。dogfood で問題があれば DevTools で
@@ -471,14 +511,11 @@ export default function JudgmentDetail({
         </div>
       )}
 
-      {/* === 章 1 → 章 2: Verdict → Fundamentals 境界 (H2 Chapter Break、 100 点 sub-agent verdict 短期 4 案 残 1) ===
-          Sprint 3: Verdict→Fundamentals 境界のみ margin-top var(--space-8) で間を開ける。
-          Sprint 4: label="詳細分析" を inject。 Verdict → Fundamentals 層境界を明示。
-          SPEC 2026-05-19 Sprint 1 Item 6: expandedLabel に変更して h2 級 typography + 左 4px cyan accent bar を適用。
-          v86 R5 A: marginTop --space-8 → --space-10 (32→40px) で章扉感強化。
-          H2 Chapter Break: marginTop を撤去し data-chapter-start で統一管理 (CSS .ds-judgment-detail > [data-chapter-start="true"] で --space-12=48px)。 */}
+      {/* === 章 2: 基本財務 (H2 Chapter Break + v97 G-2 軽量強化) ===
+          v97 G-2 sub-agent verdict: SectionDivider expandedLabel を「数値の根拠」 に変更、
+          より「機関投資家向け 投資判断 anchor」 idiom 表現。 */}
       <div data-chapter-start="true">
-        <SectionDivider expandedLabel="詳細分析" />
+        <SectionDivider expandedLabel="数値の根拠" />
       </div>
 
       {/* GuidanceCard: expanded 固定 (今期/来期 EPS = 投資判断の直接 input)
@@ -539,11 +576,13 @@ export default function JudgmentDetail({
         </SectionFade>
       )}
 
-      {/* === 章 2 → 章 3: Fundamentals → 市場評価 境界 (H2 Chapter Break) ===
-          Sprint 3: AnalystPanel → AccordionSection wrap (collapsed) */}
+      {/* === 章 3: 市場評価 (H2 Chapter Break + v97 G-2 軽量強化) ===
+          ChapterHeader「市場評価」 で章扉感強化、 data-chapter-start で 48px breathing room。
+          AnalystPanel 起点 (旧 data-chapter-start を ChapterHeader に移譲)。 */}
+      <ChapterHeader label="市場評価" isChapterStart />
       {selectedTicker && (
         isScrollV1 ? (
-          <div id="sec-analyst" data-chapter-start="true">
+          <div id="sec-analyst">
             <AnalystPanel
               ticker={selectedTicker}
               plan={plan}
@@ -557,7 +596,6 @@ export default function JudgmentDetail({
             tier={2}
             defaultOpen={false}
             controlledOpen={expandedSections.has('analyst-panel') || undefined}
-            data-chapter-start="true"
             onOpenChange={(id, isOpen) => {
               // Phase 2.9 Sprint 1 #3: setTimeout 500ms で mount + useEffect 完了を待つ
               // Phase 2.9 Sprint 2 #Bug2 fix: haloFiredSetRef で 2 回目発火を防止 (re-mount でも persist)
@@ -669,13 +707,12 @@ export default function JudgmentDetail({
         )
       )}
 
-      {/* === 章 3 → 章 4: 市場評価 → チャート & インサイダー 境界 (H2 Chapter Break) ===
-          StockPriceChart: expanded 固定 (user override 1)
-          「株価チャートは常に展開しておいてほしい」 (user 原文、SPEC §5 Sprint 1 Override 1)
-          accordion wrap 対象外。
-          Sprint 4: SectionFade で section in-view fade-in (案1) */}
+      {/* === 章 4: チャート (H2 Chapter Break + v97 G-2 軽量強化) ===
+          ChapterHeader「テクニカル」、 StockPriceChart 起点。
+          user override 1「株価チャートは常に展開」 維持。 */}
+      <ChapterHeader label="テクニカル" isChapterStart />
       {selectedTicker && (
-        <SectionFade id="sec-chart" data-chapter-start="true" staggerIndex={3}>
+        <SectionFade id="sec-chart" staggerIndex={3}>
           <StockPriceChart ticker={selectedTicker} isPremiumUser={plan === 'premium'} />
         </SectionFade>
       )}
@@ -740,20 +777,17 @@ export default function JudgmentDetail({
         )
       )}
 
-      {/* === 章 4 → 章 5: チャート & インサイダー → Context 境界 (H2 Chapter Break) ===
-          Sprint 3: Context ボックス化 (border subtle で 3 件 group)。
-          Sprint 4: tier=3 SectionDivider を削除済。accordion header の chrome (tier prop) が
-          階層境界を代替するため冗長だった divider を除去。
-          === Sprint 3: NewsPanel → AccordionSection wrap (collapsed) ===
-          Sprint 3 (Phase 2): Tier L glow — hover 時の hairline border tint のみ、発光なし。
-          tier-l-glow wrapper を AccordionSection の外側に付与。 */}
+      {/* === 章 5: リファレンス (H2 Chapter Break + v97 G-2 軽量強化) ===
+          ChapterHeader「リファレンス」、 News / IR / DetailReport で「補足資料」 章扉感。
+          Sprint 3 (Phase 2): Tier L glow — hover 時の hairline border tint のみ、発光なし。 */}
+      <ChapterHeader label="リファレンス" isChapterStart />
       {selectedTicker && (
         isScrollV1 ? (
-          <div id="sec-news" data-chapter-start="true">
+          <div id="sec-news">
             <NewsPanel ticker={selectedTicker} useWorkspaceReader={useWorkspaceReader} />
           </div>
         ) : (
-          <div className="tier-l-glow" data-testid="library-news-wrapper" data-chapter-start="true">
+          <div className="tier-l-glow" data-testid="library-news-wrapper">
             <AccordionSection
               id="sec-news"
               title="最新ニュース"
