@@ -71,6 +71,10 @@ function sanitizeSummaryData(data) {
       customers: data.sections?.customers
         ? (sanitizeText(data.sections.customers) || data.sections.customers)
         : data.sections?.customers,
+      // Sprint H6 漏れ修正: competitive_moat も sanitize 対象に追加 (Sprint H6 追加時に落としていた)
+      competitive_moat: data.sections?.competitive_moat
+        ? (sanitizeText(data.sections.competitive_moat) || data.sections.competitive_moat)
+        : data.sections?.competitive_moat,
     },
   };
 }
@@ -246,6 +250,170 @@ function SummarySection({ label, content, showFootnote = false, testId, isFirst 
           {SECTION_FOOTNOTE}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Sprint H9 (金融 Phase 2 案 B): セグメント別売上 (Bloomberg Terminal 並み数値根拠) ────
+// backend `/api/profile-summary/{ticker}` の response に segmentSummary 同梱 (LLM 不関与、 数値物理層)。
+// 「文章浅い」 user feedback への直接対策: 売上構成比率 + YoY% を数値で front 出し。
+// Aman 級フォーマル文脈のため emoji なし、 token base のシンプル list (DiagramCard 既存 SegmentBar とは
+// 別 design — 「会社概要」 セクション内では label hairline + 真鍮 anchor で整合)。
+function SegmentSection({ segmentSummary }) {
+  if (!segmentSummary?.segments?.length) return null;
+  const segments = segmentSummary.segments;
+  const total = segments.reduce((acc, s) => acc + (Number(s.value_b) || 0), 0);
+
+  return (
+    <div
+      data-testid="profile-segment-section"
+      style={{
+        marginBottom: 'var(--space-4, 16px)',
+        paddingTop: 'var(--space-4, 16px)',
+        borderTop: '1px solid color-mix(in srgb, var(--color-gold) 25%, var(--border))',
+      }}
+    >
+      {/* label (SummarySection と同じ Sprint H1 真鍮 anchor idiom) */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-2, 8px)',
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          color: 'var(--text-secondary)',
+          marginBottom: 'var(--space-2, 8px)',
+        }}
+      >
+        <span
+          style={{
+            display: 'inline-block',
+            width: 3,
+            height: 11,
+            borderRadius: 2,
+            background: 'var(--color-gold)',
+            flexShrink: 0,
+          }}
+          aria-hidden="true"
+        />
+        セグメント別売上
+      </div>
+
+      {/* sub-label: 直近四半期 + 前年同期比 */}
+      <div
+        style={{
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          marginBottom: 'var(--space-3, 12px)',
+        }}
+      >
+        直近四半期 {segmentSummary.date} ／ 前年同期比
+      </div>
+
+      {/* segment list: name + share% + $value_b + YoY chip */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2, 8px)' }}>
+        {segments.map((seg, i) => {
+          const share = total > 0 ? Math.round((seg.value_b / total) * 100) : null;
+          const yoy = Number.isFinite(seg.yoy_pct) ? seg.yoy_pct : null;
+          const yoyTone = yoy == null
+            ? null
+            : yoy >= 0
+              ? 'var(--color-gain)'
+              : 'var(--color-loss)';
+          return (
+            <div
+              key={i}
+              data-testid={`profile-segment-row-${i}`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-3, 12px)',
+                padding: 'var(--space-2, 8px) var(--space-3, 12px)',
+                borderRadius: 'var(--radius-md, 12px)',
+                background: 'var(--bg-subtle)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              {/* segment name (主要、 flex 拡張) */}
+              <div
+                style={{
+                  flex: '1 1 0',
+                  minWidth: 0,
+                  fontSize: 13,
+                  color: 'var(--text-primary)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {seg.name}
+              </div>
+
+              {/* share% (構成比) */}
+              {share != null && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--text-muted)',
+                    fontVariantNumeric: 'tabular-nums',
+                    flexShrink: 0,
+                  }}
+                >
+                  {share}%
+                </div>
+              )}
+
+              {/* $ value */}
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: 'var(--text-primary)',
+                  fontVariantNumeric: 'tabular-nums',
+                  flexShrink: 0,
+                  minWidth: 56,
+                  textAlign: 'right',
+                }}
+              >
+                ${seg.value_b}B
+              </div>
+
+              {/* YoY badge (緑/赤、 token base) */}
+              {yoy != null && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: yoyTone,
+                    background: `color-mix(in srgb, ${yoyTone} 12%, transparent)`,
+                    padding: '2px 7px',
+                    borderRadius: 'var(--radius-sm, 4px)',
+                    fontVariantNumeric: 'tabular-nums',
+                    flexShrink: 0,
+                    minWidth: 48,
+                    textAlign: 'center',
+                  }}
+                >
+                  {yoy >= 0 ? '+' : ''}{yoy}%
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* citation: FMP /revenue-product-segmentation 由来 (Trust Cliff anchor) */}
+      <div
+        style={{
+          fontSize: 10,
+          color: 'var(--text-muted)',
+          marginTop: 'var(--space-2, 8px)',
+        }}
+      >
+        ※ FMP /revenue-product-segmentation 由来。 通期合算ではなく直近四半期の構成比。
+      </div>
     </div>
   );
 }
@@ -716,6 +884,11 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
               showFootnote={true}
               testId="profile-summary-moat"
             />
+
+            {/* Sprint H9 (金融 Phase 2 案 B): セグメント別売上 (Bloomberg Terminal 並み数値根拠)
+                backend response の segmentSummary を表示。 セグメント不在 (REIT 等) や FMP プラン
+                制限時は graceful skip (SegmentSection 自身が null 返却)。 */}
+            <SegmentSection segmentSummary={summaryOk.segmentSummary} />
 
             {/* must-fix #1 + #11: 文末固定 citation (Trust Cliff anchor、 削除禁止) */}
             <div

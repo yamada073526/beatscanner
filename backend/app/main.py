@@ -637,10 +637,16 @@ async def get_fcf_capex_trends(ticker: str, fmp_key: str | None) -> tuple[list[d
 async def get_segment_data(ticker: str, fmp_key: str | None) -> list[dict]:
     """FMP からセグメント別売上を取得する（24h キャッシュ + Limit Reach フォールバック）。
 
-    /api/v4/revenue-product-segmentation を叩く。MSFT の場合：
-      Intelligent Cloud / Productivity and Business Processes / More Personal Computing
-    の3セグメントが返る。プラン制限/レート上限時は None ではなく [] を返し、
-    呼び出し側でセグメントセクションを非表示にする graceful degradation を実現。
+    2025-08-31 以降 `/api/v4/revenue-product-segmentation` は Legacy 認定で 403 化。
+    新 path `/stable/revenue-product-segmentation` に移行 (memory: fmp_plan_naming.md
+    「2026-05-17 /api/v3→/stable 移行 SSOT」 と整合)。
+
+    新 endpoint は `{"symbol", "fiscalYear", "period", "date", "data": {...}}` 形式で
+    返却 (data field 内に segment dict)。 build_segment_summary の `_flatten` が
+    両 構造 (data ネスト / flat) 対応のため処理側は不変。
+
+    MSFT の場合: Intelligent Cloud / Productivity and Business Processes / More Personal Computing。
+    プラン制限/レート上限時は None ではなく [] を返し、 呼び出し側で graceful skip。
     """
     if not fmp_key:
         fmp_key = os.getenv("FMP_API_KEY", "")
@@ -648,8 +654,8 @@ async def get_segment_data(ticker: str, fmp_key: str | None) -> list[dict]:
         return []
 
     url = (
-        f"https://financialmodelingprep.com/api/v4/revenue-product-segmentation"
-        f"?symbol={ticker.upper()}&structure=flat&period=quarter&apikey={fmp_key}"
+        f"https://financialmodelingprep.com/stable/revenue-product-segmentation"
+        f"?symbol={ticker.upper()}&period=quarter&apikey={fmp_key}"
     )
     cache_key = f"segment::{ticker.upper()}"
     data = await safe_fmp_get(url, cache_key, ttl=CACHE_TTL_SEGMENT)
@@ -6516,20 +6522,27 @@ async def profile_summary(
     # FMP profile から description_en を取得 (profile-extended と同じ FMP client 使用)
     # Phase 2.9 Sprint H8 (案 A): peers tickers も並列 fetch、 LLM の「顧客・競合」 セクションに
     # 実競合企業名を実データで挿入 (機関投資家 Reuters 並み品質)。
+    # Sprint H9 (金融 Phase 2 案 B): セグメント別売上も並列 fetch、 ProfileCard に Bloomberg
+    # Terminal 並みの数値根拠 (segment 売上構成比率 + YoY) を front 出し。
+    # 数値物理層 = main.py で fetch + build (LLM 関与なし、 hallucination-guard 数値分離原則遵守)。
     client = FMPClient(api_key=_get_fmp_key(request))
+    fmp_key = _get_fmp_key(request)
     try:
-        profile_data, peers_list = await asyncio.gather(
+        profile_data, peers_list, segment_raw = await asyncio.gather(
             client.profile(t),
             client.stock_peers(t),
+            get_segment_data(t, fmp_key),
             return_exceptions=True,
         )
     except Exception:
-        profile_data, peers_list = [], []
+        profile_data, peers_list, segment_raw = [], [], []
 
     if isinstance(profile_data, Exception):
         profile_data = []
     if isinstance(peers_list, Exception):
         peers_list = []
+    if isinstance(segment_raw, Exception):
+        segment_raw = []
 
     description_en = ""
     if isinstance(profile_data, list) and profile_data:
@@ -6563,6 +6576,19 @@ async def profile_summary(
             status_code=err.get("status", 500),
             detail=err.get("detail", "会社概要の日本語要約に失敗しました。"),
         )
+
+    # Sprint H9 (金融 Phase 2 案 B): segment summary を payload に同梱。
+    # FMP プラン制限/レート上限 / 銘柄が単一 segment 構成 (e.g., REIT 等) の場合は
+    # build_segment_summary が None を返し、 frontend で graceful skip。
+    try:
+        segment_summary = build_segment_summary(segment_raw if isinstance(segment_raw, list) else [])
+        if segment_summary:
+            result["segmentSummary"] = segment_summary
+            result["sources"]["segment"] = "ok"
+        else:
+            result["sources"]["segment"] = "empty"
+    except Exception:
+        result["sources"]["segment"] = "error"
 
     return result
 
