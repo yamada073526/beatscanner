@@ -27,12 +27,13 @@
 import React from 'react';
 import { m, useReducedMotion } from 'framer-motion';
 
-// EASE_OUT_400 preset (Phase 2.5 hotfix #3: 300→400ms で GuidanceCard fade-in を確実発火)
-const EASE_OUT_400 = { duration: 0.4, ease: [0.2, 0.8, 0.2, 1] };
+// R1-d v97 Phase D 強化: duration 400 → 500ms / y 16 → 24px で visible 演出に
+// EASE_OUT_500 preset (旧 EASE_OUT_400 ベース、 体感 motion 演出 強化)
+const EASE_OUT_500 = { duration: 0.5, ease: [0.2, 0.8, 0.2, 1] };
 
-// variants 定義: initial で opacity=0+y=16、visible で opacity=1+y=0
+// variants 定義: initial で opacity=0+y=24、visible で opacity=1+y=0
 const fadeVariants = {
-  hidden: { opacity: 0, y: 16 },
+  hidden: { opacity: 0, y: 24 },
   visible: { opacity: 1, y: 0 },
 };
 
@@ -59,11 +60,11 @@ export default function SectionFade({ children, className, style, id, as: _Tag =
   //   - amount: 0.15 で要素の 15% が viewport に入った時点で発火
   //   - whileInView="visible" + variants 化でより確実に initial 状態から遷移
   // H2 Chapter Break: rest を spread で受け、 data-chapter-start 等の data-* 属性を pass-through。
-  // v97 Phase D (motion 案 5): staggerIndex で delay = idx * 0.06s。
-  //   page initial load + ticker 切替時に複数 SectionFade が同時 viewport 入りする場合、
-  //   index 順に連続 fade で「ロビーへ案内されるシーケンス」 体感を演出 (motion +5-8 期待)。
-  //   reduce-motion 時は delay 0 で skip (即表示)。
-  const delay = reduce ? 0 : Math.min(staggerIndex * 0.06, 0.5);
+  // v97 R1-d 強化: stagger delay 0.06 → 0.12s + y 16 → 24px で visible 演出に。
+  //   user dogfood「指摘されないと気付かないレベル」 を「目に見えるシーケンス」 に進化。
+  //   index 順に 0 / 120 / 240 / 360 / 480ms で「ロビーへ案内される動的シーケンス」 体感。
+  //   reduce-motion 時は delay 0 で skip (即表示、 a11y 遵守)。
+  const delay = reduce ? 0 : Math.min(staggerIndex * 0.12, 0.6);
   return (
     <m.div
       id={id}
@@ -73,7 +74,7 @@ export default function SectionFade({ children, className, style, id, as: _Tag =
       whileInView="visible"
       viewport={{ once: true, amount: 0.15 }}
       variants={variants}
-      transition={{ ...EASE_OUT_400, delay }}
+      transition={{ ...EASE_OUT_500, delay }}
       {...rest}
     >
       {children}

@@ -499,7 +499,11 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
   if (!ticker) return null;
 
   return (
-    <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+    // R1-a v97 CLS fix: minHeight 480 で loading / data 双方で固定 envelope。
+    // 旧: loading 中 h-64 (256px) + header (60px) = ~316px、 data 到達で h-72 (288px) + buttons + footer = ~440px
+    //     → 124px 高さブレで上下 section が押し下げ (user 「scroll 中ガクつき」 主因の 1)。
+    // 新: minHeight 480px で常に 480px 確保、 data 到達時の 440px は wrapper 内で flex で center 配置。
+    <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', minHeight: 480 }}>
       {/* Header */}
       <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-wrap">

@@ -362,6 +362,7 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
   }, [chartData]);
 
   // Chart Overlay Safety: conditional render guard
+  // R1-a v97 CLS fix: loading/error 状態でも minHeight 360 で固定 envelope
   if (!chartData) {
     return (
       <section
@@ -371,6 +372,10 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
           border: '1px solid var(--border)',
           borderRadius: 'var(--radius-lg)',
           padding: 'var(--space-6, 24px)',
+          minHeight: 360,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
       >
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
@@ -383,6 +388,7 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
   return (
     // Phase 2.7 Sprint 1 #1: tier-m-glow wrapper に ref を付けて halo sweep を適用
     // Recharts 内部 (Bar / ReferenceLine) は一切変更しない (chart-overlay-safety 4 層防御維持)
+    // R1-a v97 CLS fix: minHeight 360 で loading→data 切替時の高さ差 (旧 80px→320px) を吸収。
     <section
       ref={haloRef}
       className="panel-card tier-m-glow"
@@ -393,6 +399,7 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-lg)',
         padding: 'var(--space-6, 24px)',
+        minHeight: 360,
       }}
     >
       {/* ── ヘッダー ── */}

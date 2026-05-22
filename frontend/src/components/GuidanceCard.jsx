@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import InfoModal from './InfoModal.jsx';
 import Chip from './ui/Chip.jsx';
-import { BarChart3, Calendar } from 'lucide-react';
+import { BarChart3, Calendar, CalendarRange } from 'lucide-react';
 
 // ── signal_quality envelope (handover v82 Phase 0) を 3-tier badge に変換 ──
 // confidence 別に tone / label / tooltip を decide。 「ガイダンス: 非開示」 を
@@ -619,9 +619,24 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
       {isSecLoading && !sec_guidance_text ? (
         <SecSkeleton />
       ) : sec_guidance_text ? (
-        <div className="mt-4 rounded-lg p-4" style={{ background: 'var(--bg-subtle)', border: '0.5px solid var(--border)', borderRadius: '8px' }}>
+        // R1-b CLS fix: minHeight 140 + maxHeight 280 + overflow auto で SEC 文章量による縦幅ブレ完全 lock
+        // 旧: テキスト長で 80px (短) - 400px (長) で変動 → 上下 section が押し下げ
+        // 新: 140-280px の固定 envelope、 超過は scroll で吸収 (Pane 3 全体 CLS 0 寄与)
+        <div
+          className="mt-4 rounded-lg p-4"
+          style={{
+            background: 'var(--bg-subtle)',
+            border: '0.5px solid var(--border)',
+            borderRadius: '8px',
+            minHeight: 140,
+            maxHeight: 280,
+            overflowY: 'auto',
+          }}
+        >
+          {/* R1-c: 📄 → Lucide CalendarRange (Aman 級、 OS 依存 glyph 解消) */}
           <div className="mb-2 flex items-center gap-2">
-            <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>📄 次期見通し</span>
+            <CalendarRange size={13} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
+            <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>次期見通し</span>
             {sec_guidance_source && (
               <span className="text-[10px]" style={{ color: 'rgb(96, 165, 250)' }}>{sec_guidance_source}</span>
             )}
