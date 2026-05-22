@@ -82,6 +82,23 @@
   background-color: var(--bg-hover, #253045);
 }
 
+/* ── v97 Phase B (100 点ドリブン aman 強化): expanded 時 gold hairline ──
+   user note より「brand identity (gold accent + icon) が散発的で一貫性に欠ける」 (vision-eval aman 67)。
+   .ds-section-header (Card 内 SectionHeader、 GuidanceCard / Hero 等) には Sprint H1 で
+   gold hairline 適用済だが、 Pane 3 の 8 AccordionSection header には未適用 → 真鍮感の break。
+   open 時のみ gold (closed 時は header と body が一体、 区切る必要なし = 既存 ds-section-header 同 idiom)。
+   light 40% / dark 35% opacity で過剰防止、 投資業界色 (cyan/green/red/amber) と競合しない 5th tone。
+   期待 vision-eval: aman +5-8 / color +2 = +7-10 pt。 */
+.isOpen .header {
+  border-bottom: 1px solid color-mix(in srgb, var(--color-gold) 40%, var(--border));
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+[data-theme="dark"] .isOpen .header {
+  border-bottom-color: color-mix(in srgb, var(--color-gold) 35%, var(--border));
+}
+
 /* ===== Header left cluster (chevron + title + badge) ===== */
 .headerLeft {
   display: flex;
