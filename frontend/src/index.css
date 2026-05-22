@@ -12,6 +12,12 @@
   --text-secondary: #334155;
   --text-muted:   #64748b;
   --border:       #e2e8f0;
+  /* Phase 2.9 Sprint H1 #真鍮感 (Aman 級 100 点ドリブン verdict、 案 14):
+     SectionHeader gold hairline + 案 1 verdict badge gold foil 用 token。
+     elevation_scale.md ALLOWED-HEX 登録済。 */
+  --color-gold:        #d4af37;   /* base = 真鍮 / brass tone */
+  --color-gold-mid:    #f4cd5d;   /* gradient mid = 蜂蜜光 */
+  --color-gold-dark:   #c8952c;   /* gradient end = 古銅 / antique brass */
   /* NEU block */
   --neu-bg:       #f1f5f9;
   --neu-text:     #334155;
@@ -8938,6 +8944,52 @@ button.ds-chip[data-pressed="true"]:hover {
   line-height: 1.2;
   letter-spacing: -0.015em;
   color: var(--text-primary);
+}
+
+/* ── Phase 2.9 Sprint H1 #真鍮感 (Aman 級 100 点ドリブン verdict、 案 14) ──
+   user 「真鍮感があるか疑問」 → root cause: 全 SectionHeader が均質で section に「格付け」 がない。
+   Ritz-Carlton メニューが金箔ラインで区切られる比喩 → SectionHeader 下に gold hairline。
+   gold は subtle (light 40% / dark 35% opacity) で過剰防止、 投資業界色ルール (cyan/green/red/amber) と
+   競合しない 5th tone として brand identity 強化。
+   期待 5 軸変動: aman +5 / color +2 / typography +1 = +8 pt */
+.ds-section-header {
+  padding-bottom: var(--space-2, 8px);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-gold) 40%, var(--border));
+}
+[data-theme="dark"] .ds-section-header {
+  border-bottom-color: color-mix(in srgb, var(--color-gold) 35%, var(--border));
+}
+
+/* ── Phase 2.9 Sprint H3 #Gold Foil verdict badge (Aman 級 100 点 verdict、 案 1) ──
+   Beat (PASS) verdict のみ gold metallic gradient で「最高級ホテルの真鍮プレート」 表現。
+   Miss / In-line / 判定待ち は既存 tone 維持 (Beat だけが「達成」 chip)。
+   inset 0 1px highlight + outer subtle shadow で metallic depth、 letter-spacing で formal 感。
+   期待 5 軸変動: aman +8 / color +5 / typography +2 = +15 pt (最大インパクト) */
+[data-verdict-gold="true"] {
+  background: linear-gradient(
+    135deg,
+    var(--color-gold) 0%,
+    var(--color-gold-mid) 45%,
+    var(--color-gold-dark) 100%
+  ) !important;
+  /* dark text on gold for high contrast — text-primary は dark theme で light なので逆 */
+  color: var(--text-primary, #0f172a) !important;
+  border-color: color-mix(in srgb, var(--color-gold-dark) 70%, transparent) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 2px 6px -1px color-mix(in srgb, var(--color-gold-dark) 35%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color-gold-dark) 30%, transparent) !important;
+}
+[data-theme="dark"] [data-verdict-gold="true"] {
+  /* dark theme でも text を強制 dark (gold gradient 上で contrast 維持) */
+  color: #0f172a !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 2px 8px -1px color-mix(in srgb, var(--color-gold) 50%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color-gold) 60%, transparent) !important;
 }
 
 /* .pane3-body-lg — 主要 body (SummaryBrief / GuidanceCard 等)

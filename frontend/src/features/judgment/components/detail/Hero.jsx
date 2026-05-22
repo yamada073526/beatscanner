@@ -170,7 +170,19 @@ export default function Hero({ ticker, companyName, verdict = 'unknown', period,
               size={44}
             />
           )}
-          <Chip size="md" variant="display" tone={tone} title={verdictTooltip}>{verdictLabel}</Chip>
+          {/* Phase 2.9 Sprint H3 #Gold Foil verdict badge (Aman 級 100 点 verdict、 案 1):
+              Beat 時に gold metallic gradient で「最高級ホテルの真鍮プレート」 idiom。
+              他 verdict (Miss / In-line / 判定待ち) は既存 tone (loss / muted) 維持。
+              CSS rule は index.css [data-verdict-gold="true"] で 1 箇所定義。 */}
+          <Chip
+            size="md"
+            variant="display"
+            tone={tone}
+            title={verdictTooltip}
+            data-verdict-gold={verdict === 'beat' ? 'true' : undefined}
+          >
+            {verdictLabel}
+          </Chip>
         </div>
       </div>
     </Card>

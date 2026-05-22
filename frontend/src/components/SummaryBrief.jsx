@@ -61,23 +61,63 @@ function renderBold(text) {
   );
 }
 
+// Phase 2.9 Sprint H4 #SummaryBrief token 化 (案 4):
+// 旧 Tailwind 生クラス (bg-green-50 / border-green-400 等) は brand identity ではなく
+// React チュートリアル感、 5 軸 100 点 verdict で却下。 token 経由 + Stripe SDK 風で再設計。
+//   - background: color-mix(--color-gain 8%, --bg-card) で subtle tint
+//   - borderLeft: 3px solid var(--color-gain) で accent
+//   - border-radius: var(--radius-sm) で統一感
+//   - 期待 5 軸変動: color +4 / typography +2 / aman +2 = +8 pt
+const POS_STYLE = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: 'var(--space-2, 8px)',
+  background: 'color-mix(in srgb, var(--color-gain) 8%, var(--bg-card))',
+  borderLeft: '3px solid var(--color-gain)',
+  borderRadius: 'var(--radius-sm, 4px)',
+  padding: 'var(--space-2, 8px)',
+  marginBottom: 'var(--space-2, 8px)',
+};
+const POS_TEXT = { fontSize: 13, color: 'var(--color-gain)', fontWeight: 500 };
+
+const NEG_STYLE = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: 'var(--space-2, 8px)',
+  background: 'color-mix(in srgb, var(--color-loss) 8%, var(--bg-card))',
+  borderLeft: '3px solid var(--color-loss)',
+  borderRadius: 'var(--radius-sm, 4px)',
+  padding: 'var(--space-2, 8px)',
+  marginBottom: 'var(--space-2, 8px)',
+};
+const NEG_TEXT = { fontSize: 13, color: 'var(--color-loss)', fontWeight: 500 };
+
 const TAG_CONFIG = {
   '[POS]': {
-    wrapper: 'flex items-start gap-2 bg-green-50 border-l-4 border-green-400 rounded-r-lg p-2 mb-2',
-    icon: <span className="mt-0.5 shrink-0 font-bold text-green-500">✓</span>,
-    textClass: 'text-sm text-green-800',
+    style: POS_STYLE,
+    icon: <span style={{ marginTop: 2, flexShrink: 0, fontWeight: 700, color: 'var(--color-gain)' }}>✓</span>,
+    textStyle: POS_TEXT,
   },
   '[NEG]': {
-    wrapper: 'flex items-start gap-2 bg-red-50 border-l-4 border-red-400 rounded-r-lg p-2 mb-2',
-    icon: <span className="mt-0.5 shrink-0 font-bold text-red-500">✗</span>,
-    textClass: 'text-sm text-red-800',
+    style: NEG_STYLE,
+    icon: <span style={{ marginTop: 2, flexShrink: 0, fontWeight: 700, color: 'var(--color-loss)' }}>✗</span>,
+    textStyle: NEG_TEXT,
   },
 };
 
 // NEU (中立) ブロックの color はトークン経由。
 // borderLeft は --text-muted (dark: #94a3b8 = ALLOWED-HEX 済) で代替。
-const NEU_WRAPPER = { background: 'var(--neu-bg)', borderLeft: '4px solid var(--text-muted)' };
-const NEU_TEXT    = { color: 'var(--neu-text)' };
+const NEU_WRAPPER = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: 'var(--space-2, 8px)',
+  background: 'var(--neu-bg)',
+  borderLeft: '3px solid var(--text-muted)',
+  borderRadius: 'var(--radius-sm, 4px)',
+  padding: 'var(--space-2, 8px)',
+  marginBottom: 'var(--space-2, 8px)',
+};
+const NEU_TEXT    = { color: 'var(--neu-text)', fontSize: 13 };
 
 function SummaryLine({ line }) {
   // Hallucination Guard 第 3 層: conditional render — line が sanitize 後に null ならスキップ
@@ -88,9 +128,9 @@ function SummaryLine({ line }) {
   if (sanitized.startsWith('[NEU]')) {
     const content = sanitized.slice('[NEU]'.length).trim();
     return (
-      <div className="flex items-start gap-2 rounded-r-lg p-2 mb-2" style={NEU_WRAPPER}>
-        <span className="mt-0.5 shrink-0 font-bold" style={{ color: 'var(--text-muted)' }}>–</span>
-        <span className="text-sm" style={{ ...NEU_TEXT, flex: 1, lineHeight: '1.5' }}>{renderBold(content)}</span>
+      <div style={NEU_WRAPPER}>
+        <span style={{ marginTop: 2, flexShrink: 0, fontWeight: 700, color: 'var(--text-muted)' }}>–</span>
+        <span style={{ ...NEU_TEXT, flex: 1, lineHeight: '1.5' }}>{renderBold(content)}</span>
       </div>
     );
   }
@@ -98,9 +138,9 @@ function SummaryLine({ line }) {
     if (sanitized.startsWith(tag)) {
       const content = sanitized.slice(tag.length).trim();
       return (
-        <div className={cfg.wrapper}>
+        <div style={cfg.style}>
           {cfg.icon}
-          <span className={cfg.textClass} style={{ flex: 1, lineHeight: '1.5' }}>{renderBold(content)}</span>
+          <span style={{ ...cfg.textStyle, flex: 1, lineHeight: 1.5 }}>{renderBold(content)}</span>
         </div>
       );
     }
