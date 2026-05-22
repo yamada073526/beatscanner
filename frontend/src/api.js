@@ -631,9 +631,20 @@ export async function fetchProfileSummary(ticker, { signal, forceRegenerate = fa
   // 30s タイムアウト (永遠ハング防止)
   const innerController = new AbortController();
   const timer = setTimeout(() => innerController.abort(), 30000);
+  // Phase 2.9 Sprint G4: logged-in user は Authorization header 添付で
+  // backend に「demo rate limit 免除」 を伝える (fetchProfileExtended と同 pattern)
+  let authHeader = {};
+  try {
+    const { supabase } = await import('./lib/supabase.js');
+    if (supabase) {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (token) authHeader = { Authorization: `Bearer ${token}` };
+    }
+  } catch { /* unauthenticated / supabase 未設定 は demo 経路 fallback */ }
   try {
     const r = await fetch(`/api/profile-summary/${t}${qs}`, {
-      headers: fmpHeaders(),
+      headers: { ...authHeader, ...fmpHeaders() },
       // 外部 AbortSignal (ProfileCard useEffect cleanup) を優先
       signal: signal || innerController.signal,
     });

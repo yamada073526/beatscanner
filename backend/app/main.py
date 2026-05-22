@@ -6474,32 +6474,44 @@ async def profile_summary(
     ticker: str,
     request: Request,
     force_regenerate: bool = False,
+    authorization: str = Header(default=""),
 ) -> dict:
     """FMP 英文 description を Claude Haiku で和文 4 セクション要約に変換する。
+
+    Phase 2.9 Sprint G4 真因 fix (Sprint G3 漏れ):
+      Sprint A B.1 で新規追加した本 endpoint も authorization header 受け取らず、
+      logged-in user にも demo rate limit 適用 bug。 profile-extended と同 pattern。
 
     Response schema:
         ticker, summary_jp, sections: {main_business, revenue_model, customers},
         product_names, sources, data, signal_quality, citation, confidence,
         generated_at, cache_read_input_tokens, cache_creation_input_tokens
 
-    demo mode rate limit (3 req/IP/day) を適用。
+    demo mode rate limit (3 req/IP/day) を **未ログイン user のみ** 適用。
     backend cache: (ticker, description_hash) で 7 日 TTL。
     LLM 4 重防御 (Hallucination Guard) 適用済。
-
-    must-fix #7: cache breakpoint 2 段 + Sentry metric (profile_summary.py 内で実施)
-    must-fix #8: product_names 完全 token match self-check (profile_summary.py 内で実施)
     """
     from .visualizer.profile_summary import summarize_profile
 
     t = ticker.upper()
 
-    # demo mode rate limit (LP「3 銘柄/日まで無料」 訴求と整合)
-    ip = _client_ip(request)
-    if not _check_demo_rate_limit(ip):
-        raise HTTPException(
-            status_code=429,
-            detail="本日のお試し回数 (3銘柄) を超えました。Googleログインで無制限になります。",
-        )
+    # Phase 2.9 Sprint G4: logged-in user は rate limit 免除
+    is_authed = False
+    if authorization:
+        try:
+            await _verify_supabase_jwt(authorization)
+            is_authed = True
+        except Exception:
+            is_authed = False
+
+    # demo mode rate limit (LP「3 銘柄/日まで無料」 訴求と整合、 未ログイン user のみ)
+    if not is_authed:
+        ip = _client_ip(request)
+        if not _check_demo_rate_limit(ip):
+            raise HTTPException(
+                status_code=429,
+                detail="本日のお試し回数 (3銘柄) を超えました。Googleログインで無制限になります。",
+            )
 
     # FMP profile から description_en を取得 (profile-extended と同じ FMP client 使用)
     client = FMPClient(api_key=_get_fmp_key(request))
