@@ -11904,19 +11904,44 @@ async def _refresh_one(tkr: str) -> dict:
 async def refresh_insights_batch(
     x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
 ):
-    """全ウォッチリスト銘柄の market_insights を一括更新する（Railway Cron から呼ぶ）。"""
+    """全ウォッチリスト銘柄 + S&P 500 top 30 の market_insights を一括更新する（Railway Cron から呼ぶ）。
+
+    v97 拡張: user 起動 dogfood で /api/insights が cold cache 19 秒待ちになる issue 解消。
+    旧 watchlist 限定 20 件 → 「watchlist + S&P top 30」 で最大 50 件 warmup。
+    これで未ログイン user の主要 ticker click でも cache hit (~0.5s 応答)。
+
+    cost: 50 銘柄 × Claude Haiku $0.005-0.01 = $0.25-0.5/day = ¥40-80/day (¥1200-2400/月)。
+    Aman 級 UX (Trust Cliff 防御 + 体感速度) への投資、 acceptable。
+    """
     _check_cron_secret(x_cron_secret)
 
     sb = _get_supabase_service()
     if sb is None:
         raise HTTPException(status_code=503, detail="Supabase service not configured")
 
+    # 1. watchlist tickers
     try:
         wl_result = sb.table("watchlist").select("ticker").execute()
+        wl_tickers = {row.get("ticker") for row in (wl_result.data or []) if row.get("ticker")}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"watchlist fetch failed: {e}")
+        print(f"[insights/batch] watchlist fetch failed: {e}")
+        wl_tickers = set()
 
-    tickers = sorted({row.get("ticker") for row in (wl_result.data or []) if row.get("ticker")})[:20]
+    # 2. S&P 500 top 30 (動的取得、 fallback あり)
+    try:
+        top_tickers = set(await _fetch_sp500_top_n(30))
+    except Exception as e:
+        print(f"[insights/batch] sp500 top fetch failed: {e}")
+        # hardcode fallback (大型株 30 銘柄、 user dogfood で頻出)
+        top_tickers = {
+            "AAPL", "MSFT", "NVDA", "AMZN", "META", "TSLA", "GOOG", "GOOGL",
+            "BRK-B", "AVGO", "JPM", "LLY", "V", "XOM", "UNH", "MA",
+            "HD", "PG", "JNJ", "COST", "WMT", "ABBV", "BAC", "MRK",
+            "ORCL", "NFLX", "ADBE", "CRM", "AMD", "CVX",
+        }
+
+    # 合算 + alphabetical sort、 上限 50 件 (cost 制御)
+    tickers = sorted(wl_tickers | top_tickers)[:50]
 
     results: list[dict] = []
     for t in tickers:
@@ -11927,7 +11952,13 @@ async def refresh_insights_batch(
         except Exception as e:
             results.append({"ticker": t, "status": "error", "error": str(e)})
 
-    return {"processed": len(results), "results": results}
+    return {
+        "processed": len(results),
+        "watchlist_count": len(wl_tickers),
+        "top30_count": len(top_tickers),
+        "total_targeted": len(tickers),
+        "results": results,
+    }
 
 
 # ============================================================================

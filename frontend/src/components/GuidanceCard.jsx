@@ -152,32 +152,73 @@ const GUIDANCE_SECTION_STYLE = {
   transition: 'transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease',
 };
 
+// v97 CLS fix + Aman 級 skeleton 統一:
+// raw hex (slate-200) を token (--bg-muted / --bg-subtle) に置換 + gold shimmer animation 統一
+// (ProfileCard SummaryShimmer Sprint H7 と同じ idiom)。
+// min-height を明示することで GuidanceCard 後追い load 時の ProfileCard ジャンプ防止。
 const GuidanceSkeleton = () => (
-  <section className="panel-card rounded-2xl p-5 shadow-sm" style={GUIDANCE_SECTION_STYLE}>
-    <div className="mb-3 h-4 w-40 rounded bg-slate-200" style={{animation:'pulse 1.5s infinite'}} />
-    <div className="mt-2 space-y-4">
+  <section
+    className="panel-card rounded-2xl p-5 shadow-sm"
+    style={{ ...GUIDANCE_SECTION_STYLE, minHeight: 360 }}
+    data-testid="guidance-skeleton"
+  >
+    <style>{`
+      @keyframes bs-guidance-shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+      }
+      .bs-guidance-skel {
+        border-radius: var(--radius-sm, 4px);
+        background: linear-gradient(
+          90deg,
+          var(--bg-subtle) 0%,
+          color-mix(in srgb, var(--color-gold) 12%, var(--bg-subtle)) 50%,
+          var(--bg-subtle) 100%
+        );
+        background-size: 200% 100%;
+        animation: bs-guidance-shimmer 1.5s infinite linear;
+      }
+      [data-theme="dark"] .bs-guidance-skel {
+        background: linear-gradient(
+          90deg,
+          var(--bg-muted) 0%,
+          color-mix(in srgb, var(--color-gold) 18%, var(--bg-muted)) 50%,
+          var(--bg-muted) 100%
+        );
+        background-size: 200% 100%;
+        animation: bs-guidance-shimmer 1.5s infinite linear;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .bs-guidance-skel { animation: none; background: var(--bg-subtle); }
+        [data-theme="dark"] .bs-guidance-skel { background: var(--bg-muted); }
+      }
+    `}</style>
+    {/* header line */}
+    <div className="bs-guidance-skel mb-3" style={{ height: 16, width: 160 }} />
+    <div className="mt-2" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4, 16px)' }}>
       {/* EPS row */}
-      <div className="flex items-center gap-3 border-t border-slate-100 pt-3">
-        <div className="h-4 w-10 rounded bg-slate-200" style={{animation:'pulse 1.5s infinite'}} />
-        <div className="h-4 w-44 rounded bg-slate-200" style={{animation:'pulse 1.5s infinite'}} />
-        <div className="ml-auto h-6 w-24 rounded-full bg-slate-200" style={{animation:'pulse 1.5s infinite'}} />
+      <div className="flex items-center gap-3" style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--space-3, 12px)' }}>
+        <div className="bs-guidance-skel" style={{ height: 16, width: 40 }} />
+        <div className="bs-guidance-skel" style={{ height: 16, width: 176 }} />
+        <div className="bs-guidance-skel ml-auto" style={{ height: 24, width: 96, borderRadius: 999 }} />
       </div>
       {/* Revenue row */}
-      <div className="flex items-center gap-3 border-t border-slate-100 pt-3">
-        <div className="h-4 w-14 rounded bg-slate-200" style={{animation:'pulse 1.5s infinite'}} />
-        <div className="h-4 w-48 rounded bg-slate-200" style={{animation:'pulse 1.5s infinite',animationDelay:'0.1s'}} />
-        <div className="ml-auto h-6 w-24 rounded-full bg-slate-200" style={{animation:'pulse 1.5s infinite',animationDelay:'0.1s'}} />
+      <div className="flex items-center gap-3" style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--space-3, 12px)' }}>
+        <div className="bs-guidance-skel" style={{ height: 16, width: 56 }} />
+        <div className="bs-guidance-skel" style={{ height: 16, width: 192 }} />
+        <div className="bs-guidance-skel ml-auto" style={{ height: 24, width: 96, borderRadius: 999 }} />
       </div>
     </div>
-    {/* SEC section placeholder */}
-    <div className="mt-4 rounded-lg p-4" style={{ background: 'var(--bg-subtle)', border: '0.5px solid var(--border)' }}>
-      <div className="mb-3 h-3 w-20 rounded bg-slate-200" style={{animation:'pulse 1.5s infinite'}} />
+    {/* SEC section placeholder (min-height 確保で CLS 防止) */}
+    <div
+      className="mt-4 rounded-lg p-4"
+      style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)', minHeight: 140 }}
+    >
+      <div className="bs-guidance-skel mb-3" style={{ height: 12, width: 80 }} />
       {[140, 200, 170, 190, 155].map((w, i) => (
-        <div key={i} className="mb-2.5 h-3 rounded bg-slate-200"
-          style={{width:`${w}px`, animation:'pulse 1.5s infinite', animationDelay:`${i * 0.1}s`}} />
+        <div key={i} className="bs-guidance-skel mb-2.5" style={{ height: 12, width: `${w}px`, animationDelay: `${i * 0.08}s` }} />
       ))}
     </div>
-    <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
   </section>
 );
 

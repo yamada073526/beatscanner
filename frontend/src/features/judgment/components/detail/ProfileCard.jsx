@@ -80,30 +80,65 @@ function sanitizeSummaryData(data) {
 }
 
 // ─── Shimmer skeleton (must-fix #3) ──────────────────────────────────────────
-// infinite animation: pge-loop-debugger 落とし穴 #4 の教訓より
-// Playwright snap-*.mjs で getAnimations().finish() を呼ぶ場合は try/catch + iterations check 必須
+// v97 user dogfood「のっぺりしている、 ダサい」 への直接対策。
+// 改善 3 点:
+//   1. 実 output shape (lead + 4 sections × 3px gold accent + 2 lines) に近似
+//      → mount → 実 content 表示で「形」 がブレない (CLS 0、 認知連続性)
+//   2. 進捗 step text を動的に切替 (2 秒おき 3 段階)
+//      → 「FMP データ取得中」 → 「AI 要約生成中」 → 「もう少しで完了」
+//      → user に「進んでいる」 体感を与え「壊れていない」 安心感 (Trust Cliff 防御)
+//   3. shimmer wave を 1.5s → 1.2s で 25% 高速化 (体感「進行速度」 増)
+// infinite animation 注: pge-loop-debugger 落とし穴 #4 (Playwright getAnimations().finish() は
+// try/catch + iterations check 必須) は snap-*.mjs 側で対応する責務 (本 component は inifinite OK)。
 function SummaryShimmer() {
+  // 進捗 step state: 2 秒おきに切替 (0 → 1 → 2 で stop)
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    const t1 = setTimeout(() => setStep(1), 2000);
+    const t2 = setTimeout(() => setStep(2), 4500);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
+
+  const PROGRESS_MESSAGES = [
+    'FMP 企業データを取得中',
+    '日本語で要約を生成中',
+    'もう少しで完了',
+  ];
+  const message = PROGRESS_MESSAGES[step];
+
+  // 4 sections の skeleton shape (実 output: 主力事業 / 収益モデル / 顧客競合 / 競争優位)
+  // 各 section の line widths を異なるパターンで配置 (機械的均一感を回避)
+  const SECTION_SHAPES = [
+    { lines: [72, 58] },  // 主力事業
+    { lines: [64, 54] },  // 収益モデル
+    { lines: [70, 50] },  // 顧客・競合
+    { lines: [62, 66] },  // 競争優位 (Moat)
+  ];
+
   return (
     <div
       data-testid="profile-summary-loading"
-      style={{ marginTop: 'var(--space-4, 16px)' }}
+      style={{ marginTop: 'var(--space-4, 16px)', minHeight: 280 }}
     >
-      {/* Phase 2.9 Sprint H7 #shimmer fix: 旧 --bg-surface-2/3 token が存在せず gradient が
-          transparent で「静止」 に見えていた。 既存 --bg-subtle / --bg-muted / --bg-hover に
-          置換 + 「日本語で要約中」 文字の dot pulse animation で「動いている」 感を保証。 */}
       <style>{`
-        @keyframes bs-profile-shimmer-h7 {
+        @keyframes bs-profile-shimmer-v97 {
           0% { background-position: -200% 0; }
           100% { background-position: 200% 0; }
         }
-        @keyframes bs-shimmer-dots-h7 {
+        @keyframes bs-shimmer-dots-v97 {
           0%, 80%, 100% { opacity: 0.3; }
           40% { opacity: 1; }
         }
-        .profile-shimmer-line-h7 {
+        @keyframes bs-step-fade-v97 {
+          0% { opacity: 0; transform: translateY(2px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+        .profile-shimmer-line-v97 {
           border-radius: var(--radius-sm, 4px);
-          height: 12px;
-          margin-bottom: 8px;
+          height: 13px;
           background: linear-gradient(
             90deg,
             var(--bg-subtle) 0%,
@@ -111,9 +146,9 @@ function SummaryShimmer() {
             var(--bg-subtle) 100%
           );
           background-size: 200% 100%;
-          animation: bs-profile-shimmer-h7 1.5s infinite linear;
+          animation: bs-profile-shimmer-v97 1.2s infinite linear;
         }
-        [data-theme="dark"] .profile-shimmer-line-h7 {
+        [data-theme="dark"] .profile-shimmer-line-v97 {
           background: linear-gradient(
             90deg,
             var(--bg-muted) 0%,
@@ -121,50 +156,118 @@ function SummaryShimmer() {
             var(--bg-muted) 100%
           );
           background-size: 200% 100%;
-          animation: bs-profile-shimmer-h7 1.5s infinite linear;
+          animation: bs-profile-shimmer-v97 1.2s infinite linear;
         }
-        .profile-shimmer-dot-h7 {
+        .profile-shimmer-dot-v97 {
           display: inline-block;
-          animation: bs-shimmer-dots-h7 1.4s infinite both;
+          animation: bs-shimmer-dots-v97 1.4s infinite both;
         }
-        .profile-shimmer-dot-h7:nth-child(2) { animation-delay: 0.2s; }
-        .profile-shimmer-dot-h7:nth-child(3) { animation-delay: 0.4s; }
+        .profile-shimmer-dot-v97:nth-child(2) { animation-delay: 0.2s; }
+        .profile-shimmer-dot-v97:nth-child(3) { animation-delay: 0.4s; }
+        .profile-step-text-v97 {
+          animation: bs-step-fade-v97 320ms ease-out;
+        }
         @media (prefers-reduced-motion: reduce) {
-          .profile-shimmer-line-h7 {
+          .profile-shimmer-line-v97 {
             background: var(--bg-subtle);
             animation: none;
           }
-          [data-theme="dark"] .profile-shimmer-line-h7 {
+          [data-theme="dark"] .profile-shimmer-line-v97 {
             background: var(--bg-muted);
             animation: none;
           }
-          .profile-shimmer-dot-h7 {
+          .profile-shimmer-dot-v97 {
             animation: none;
             opacity: 0.7;
           }
+          .profile-step-text-v97 {
+            animation: none;
+          }
         }
       `}</style>
-      {[70, 55, 65, 50, 60, 45, 70, 40].map((w, i) => (
+
+      {/* lead 1 行 (実 summary_jp、 14px / fw600 / lh 1.65) */}
+      <div
+        className="profile-shimmer-line-v97"
+        style={{
+          height: 16,
+          width: '85%',
+          marginBottom: 'var(--space-5, 20px)',
+        }}
+      />
+
+      {/* 4 sections (実 SummarySection と shape 一致: 3px gold accent + label + 2 body lines) */}
+      {SECTION_SHAPES.map((sec, sidx) => (
         <div
-          key={i}
-          className="profile-shimmer-line-h7"
-          style={{ width: `${w}%` }}
-        />
+          key={sidx}
+          style={{
+            marginBottom: 'var(--space-4, 16px)',
+            // 2 つ目以降は hairline divider (実 SummarySection isFirst=false と整合)
+            ...(sidx === 0 ? {} : {
+              paddingTop: 'var(--space-4, 16px)',
+              borderTop: '1px solid color-mix(in srgb, var(--color-gold) 25%, var(--border))',
+            }),
+          }}
+        >
+          {/* label row: 3px gold accent + label width skeleton */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-2, 8px)',
+              marginBottom: 'var(--space-2, 8px)',
+            }}
+          >
+            <span
+              style={{
+                display: 'inline-block',
+                width: 3,
+                height: 11,
+                borderRadius: 2,
+                background: 'var(--color-gold)',
+                flexShrink: 0,
+                opacity: 0.7,
+              }}
+              aria-hidden="true"
+            />
+            <div
+              className="profile-shimmer-line-v97"
+              style={{ height: 11, width: 80 }}
+            />
+          </div>
+          {/* body 2 lines (異なる幅で機械的均一感回避) */}
+          {sec.lines.map((w, i) => (
+            <div
+              key={i}
+              className="profile-shimmer-line-v97"
+              style={{
+                width: `${w}%`,
+                marginTop: i === 0 ? 0 : 'var(--space-2, 8px)',
+                animationDelay: `${(sidx * 0.05) + (i * 0.04)}s`,
+              }}
+            />
+          ))}
+        </div>
       ))}
+
+      {/* 進捗 step text (動的、 2s おき切替で「進んでる」 体感) */}
       <div
         style={{
           fontSize: 12,
           color: 'var(--text-secondary)',
-          marginTop: 'var(--space-3, 12px)',
+          marginTop: 'var(--space-4, 16px)',
           textAlign: 'center',
           fontWeight: 500,
           letterSpacing: '0.04em',
         }}
+        data-testid="profile-summary-progress-text"
       >
-        日本語で要約中
-        <span className="profile-shimmer-dot-h7" aria-hidden="true">.</span>
-        <span className="profile-shimmer-dot-h7" aria-hidden="true">.</span>
-        <span className="profile-shimmer-dot-h7" aria-hidden="true">.</span>
+        <span key={step} className="profile-step-text-v97">
+          {message}
+        </span>
+        <span className="profile-shimmer-dot-v97" aria-hidden="true">.</span>
+        <span className="profile-shimmer-dot-v97" aria-hidden="true">.</span>
+        <span className="profile-shimmer-dot-v97" aria-hidden="true">.</span>
       </div>
     </div>
   );

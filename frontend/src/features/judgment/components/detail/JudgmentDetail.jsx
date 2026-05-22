@@ -482,16 +482,19 @@ export default function JudgmentDetail({
       </div>
 
       {/* GuidanceCard: expanded 固定 (今期/来期 EPS = 投資判断の直接 input)
-          Sprint 4: SectionFade で section in-view fade-in (案1) */}
-      {guidance && (
-        <SectionFade id="sec-guidance">
-          <GuidanceCard
-            guidance={guidance}
-            isSecLoading={false}
-            nextEarningsDays={detail?.nextEarningsDays ?? null}
-          />
-        </SectionFade>
-      )}
+          Sprint 4: SectionFade で section in-view fade-in (案1)
+          v97 CLS fix: `{guidance && (...)}` を撤去し常時 mount (skeleton で min-height 確保)。
+          conditional render だと guidance 後追い load で縦幅 0 → 数百 px 突然増加し、
+          下にある ProfileCard の click target が押し下げられて user が誤 click する CLS bug。
+          isLoading={detail?.isLoading} で 3 state: loading→skeleton / no-data→未提示 UI / ok→通常。 */}
+      <SectionFade id="sec-guidance">
+        <GuidanceCard
+          guidance={guidance}
+          isLoading={!guidance && detail?.isLoading !== false}
+          isSecLoading={false}
+          nextEarningsDays={detail?.nextEarningsDays ?? null}
+        />
+      </SectionFade>
 
       {/* === Sprint 3: ProfileCard → AccordionSection wrap (collapsed) ===
           Phase 2.6 5-4: onNavigateTicker で競合 chip click → 銘柄 navigate */}
