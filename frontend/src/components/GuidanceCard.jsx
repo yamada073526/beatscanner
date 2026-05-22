@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import InfoModal from './InfoModal.jsx';
 import Chip from './ui/Chip.jsx';
-import { BarChart3, Calendar, CalendarRange } from 'lucide-react';
+import { BarChart3, Calendar, CalendarRange, EyeOff } from 'lucide-react';
 
 // ── signal_quality envelope (handover v82 Phase 0) を 3-tier badge に変換 ──
 // confidence 別に tone / label / tooltip を decide。 「ガイダンス: 非開示」 を
@@ -343,6 +343,9 @@ function ArcProgress({ value, color = 'var(--color-accent)', size = 56, strokeWi
 function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatter, signalQuality, nextEarningsDays, isAwaitingEarnings }) {
   const style = verdict ? VERDICT_STYLE[verdict] : null;
   const isUnknown = verdict === 'unknown' || verdict === '不明';
+  // v97 sub-agent verdict: 「不明」 = ガイダンス未公開 (バグではなく企業の意図的非開示) を明示。
+  // 発表待ち でない unknown は「ガイダンス非公開」 表現に変更、 EyeOff icon で「見えない=存在しない」 直感伝達。
+  const isGuidanceNotProvided = isUnknown && !isAwaitingEarnings;
   // 達成率 % (actual / estimated * 100、 ただし estimated が 0 / null なら null)
   let achievementPct = null;
   if (Number.isFinite(actual) && Number.isFinite(estimated) && Math.abs(estimated) > 0.01) {
@@ -397,6 +400,37 @@ function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatt
       </div>
 
       {/* 達成率 大型表示 + arc progress */}
+      {/* v97 sub-agent verdict: ガイダンス未公開時は「達成率」 を出さず、 EyeOff + 大型ラベル統一 */}
+      {isGuidanceNotProvided ? (
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 'var(--space-2, 8px)',
+          padding: 'var(--space-3, 12px) 0',
+          opacity: 0.85,
+        }}>
+          <EyeOff size={20} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--text-muted)' }} />
+          <span style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: 'var(--text-secondary)',
+            letterSpacing: '0.04em',
+            textAlign: 'center',
+          }}>
+            ガイダンス非公開
+          </span>
+          <span style={{
+            fontSize: 10,
+            color: 'var(--text-muted)',
+            textAlign: 'center',
+            lineHeight: 1.4,
+          }}>
+            当四半期は業績見通し未発表
+          </span>
+        </div>
+      ) : (
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 'var(--space-3, 12px)', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
           {achievementPct != null ? (
@@ -425,8 +459,10 @@ function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatt
         </div>
         <ArcProgress value={achievementPct} color={arcColor} size={56} strokeWidth={5} />
       </div>
+      )}
 
-      {/* verdict バッジ + surprise % */}
+      {/* verdict バッジ + surprise % (ガイダンス非公開時は EyeOff display に統合済のため skip) */}
+      {!isGuidanceNotProvided && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)', flexWrap: 'wrap' }}>
         {style && (
           isAwaitingEarnings ? (
@@ -455,9 +491,10 @@ function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatt
           </span>
         )}
       </div>
+      )}
 
-      {/* sub-line: 実績 / 予想 (small caps) */}
-      {!isAwaitingEarnings && (
+      {/* sub-line: 実績 / 予想 (small caps) — ガイダンス非公開時は出さない (data が無いため) */}
+      {!isAwaitingEarnings && !isGuidanceNotProvided && (
         <div style={{ display: 'flex', gap: 'var(--space-3, 12px)', fontSize: 11, color: 'var(--text-muted)', marginTop: 'auto' }}>
           <span>実績 <strong style={{ color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{formatter(actual) || '—'}</strong></span>
           <span>予想 <strong style={{ color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{formatter(estimated) || '—'}</strong></span>

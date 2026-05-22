@@ -439,7 +439,7 @@ function SegmentSection({ segmentSummary }) {
                 border: '1px solid var(--border)',
               }}
             >
-              {/* segment name (主要、 flex 拡張) */}
+              {/* segment name (主要、 flex 拡張)。 v97: 和文 dictionary で日本人 user 向け */}
               <div
                 style={{
                   flex: '1 1 0',
@@ -450,8 +450,9 @@ function SegmentSection({ segmentSummary }) {
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
                 }}
+                title={seg.name !== translateSegmentName(seg.name) ? `原文: ${seg.name}` : undefined}
               >
-                {seg.name}
+                {translateSegmentName(seg.name)}
               </div>
 
               {/* share% (構成比) */}
@@ -519,6 +520,70 @@ function SegmentSection({ segmentSummary }) {
       </div>
     </div>
   );
+}
+
+// v97 segment 和文化 dictionary (主要 Tech 企業の segment 名を日本語表示)
+// user dogfood「日本人ユーザー向けに和文で表示してほしい」 への対策。
+// 既知名のみ翻訳、 未登録は英語のままで graceful (機械翻訳禁止 = brand 一貫性)。
+const SEGMENT_NAME_JP = {
+  // NVDA
+  'Data Center': 'データセンター',
+  'Gaming': 'ゲーミング',
+  'Professional Visualization': 'プロフェッショナル映像',
+  'Automotive': '自動運転',
+  'OEM And Other': 'OEM・その他',
+  // MSFT
+  'Intelligent Cloud': 'クラウド (Azure)',
+  'Productivity and Business Processes': '業務生産性 (Office 365 等)',
+  'More Personal Computing': 'PC・デバイス',
+  'Server Products And Cloud Services': 'サーバ・クラウド',
+  'Microsoft Three Six Five Commercial Products And Cloud Services': 'M365 法人',
+  'Microsoft Office Products And Cloud Services': 'Office 製品',
+  'Windows': 'Windows OS',
+  'Linked In Corporation': 'LinkedIn',
+  'Search And News Advertising': '広告 (検索・ニュース)',
+  'Search Advertising': '検索広告',
+  'Gaming Xbox Hardware And Software And Services': 'Xbox ハード・ソフト',
+  'Enterprise Services': 'エンタープライズサービス',
+  'Devices': 'デバイス',
+  'Other': 'その他',
+  // AMZN
+  'AWS': 'AWS クラウド',
+  'Online Stores': 'オンラインストア',
+  'Online stores': 'オンラインストア',
+  'Physical Stores': '実店舗',
+  'Physical stores': '実店舗',
+  'Third Party Seller Services': 'マーケットプレイス',
+  'Third-party Seller Services': 'マーケットプレイス',
+  'Subscription Services': 'Prime サブスク',
+  'Advertising Services': '広告事業',
+  // AAPL
+  'iPhone': 'iPhone',
+  'Mac': 'Mac',
+  'iPad': 'iPad',
+  'Wearables Home And Accessories': 'ウェアラブル・周辺機器',
+  'Wearables, Home and Accessories': 'ウェアラブル・周辺機器',
+  'Services': 'サービス事業',
+  // GOOGL
+  'Google Services': 'Google サービス',
+  'Google Cloud': 'Google Cloud',
+  'Other Bets': 'その他事業',
+  'YouTube Advertising': 'YouTube 広告',
+  'Google Network': 'Google ネットワーク',
+  'Google Search And Other': 'Google 検索・その他',
+  // META
+  'Family Of Apps': 'アプリ群 (Facebook/IG/WhatsApp)',
+  'Reality Labs': 'Reality Labs (VR/AR)',
+  // TSLA
+  'Automotive Sales': '自動車販売',
+  'Automotive Leasing': '自動車リース',
+  'Energy Generation And Storage': 'エネルギー事業',
+  'Services And Other': 'サービス・その他',
+};
+
+function translateSegmentName(name) {
+  if (typeof name !== 'string') return name;
+  return SEGMENT_NAME_JP[name] || name;
 }
 
 // ─── v97 Phase 3 (金融 sub-agent verdict): 競合比較 Tab ───────────────────────
@@ -855,37 +920,43 @@ function PeerComparisonSection({ ticker, onNavigateTicker }) {
         ))}
       </div>
 
-      {/* 中央値 row (footer) */}
+      {/* v97 sub-agent verdict 案 C: 中央値 row 強調 (footer + surface tint + accent left border) ===
+          user dogfood「中央値が一番重要 (投資するなら業界トップを狙う)、 もっと目立たせる」 への対策。
+          surface-2 tint + 3px cyan accent left border + font-semibold で「業界 anchor」 明示。 */}
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: '64px repeat(4, 1fr)',
           gap: 'var(--space-2, 8px)',
           alignItems: 'center',
-          padding: 'var(--space-2, 8px) var(--space-3, 12px)',
-          marginTop: 'var(--space-2, 8px)',
-          borderTop: '1px solid color-mix(in srgb, var(--color-gold) 25%, var(--border))',
+          padding: 'var(--space-3, 12px) var(--space-3, 12px) var(--space-3, 12px) var(--space-2, 8px)',
+          marginTop: 'var(--space-3, 12px)',
+          background: 'color-mix(in srgb, var(--color-accent) 6%, var(--bg-subtle))',
+          borderRadius: 'var(--radius-md, 12px)',
+          borderLeft: '3px solid var(--color-accent)',
+          borderTop: '1px solid color-mix(in srgb, var(--color-accent) 25%, var(--border))',
         }}
         data-testid="peer-compare-median-row"
       >
         <div
           style={{
-            fontSize: 10,
+            fontSize: 11,
             fontWeight: 700,
-            color: 'var(--text-muted)',
-            letterSpacing: '0.08em',
+            color: 'var(--color-accent)',
+            letterSpacing: '0.1em',
             textTransform: 'uppercase',
+            paddingLeft: 'var(--space-2, 8px)',
           }}
         >
-          中央値
+          業界中央値
         </div>
         {COMPARE_METRICS.map((m) => (
           <div
             key={m.key}
             style={{
-              fontSize: 12,
-              fontWeight: 500,
-              color: 'var(--text-muted)',
+              fontSize: 13,
+              fontWeight: 700,
+              color: 'var(--text-primary)',
               fontVariantNumeric: 'tabular-nums',
               textAlign: 'right',
             }}
@@ -893,6 +964,18 @@ function PeerComparisonSection({ ticker, onNavigateTicker }) {
             {m.formatter(data.median?.[m.key])}
           </div>
         ))}
+      </div>
+      <div
+        style={{
+          fontSize: 10,
+          color: 'var(--text-muted)',
+          marginTop: 'var(--space-2, 8px)',
+          letterSpacing: '0.04em',
+          textAlign: 'right',
+          paddingRight: 'var(--space-2, 8px)',
+        }}
+      >
+        ※ 業界中央値 = 自社 + 競合 {data.peers.length} 社の中央値。 投資判断の「業界 anchor」 として活用。
       </div>
 
       {/* citation footer (Trust Cliff 防御、 sub-agent verdict 必須) */}

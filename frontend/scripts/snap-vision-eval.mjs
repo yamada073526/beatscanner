@@ -146,29 +146,55 @@ const url = opts.url || PROD_URL_BASE;
     console.error(`[vision-eval] captured ${frames.length} frames (accordion_opened=${accordionOpened}) in ${Date.now() - startTime}ms`);
 
     // ─── Claude vision scoring ────────────────────────────────────────
+    // v97 G-4 改修: 各軸の絶対 anchor (0/50/80/100) を明示することで session 間 drift bias 解消。
+    // 旧 rubric は「品質が高いか」 の主観評価で「初回甘め、 2 回目以降 厳しめ」 pattern (3 run mean
+    // でも variance ±4)。 新 rubric は anchor base で絶対基準、 「これは何点に該当するか」 の判定。
     const RUBRIC = `
 あなたは Aman/Ritz-Carlton 級の高級 SaaS デザイン評価専門家です。
-これから米国株決算分析アプリ「BeatScanner」 の Pane 3 (詳細パネル) の
-スクリーンショット連続 frame ${frames.length} 枚を送ります。
+米国株決算分析アプリ「BeatScanner」 の Pane 3 (詳細パネル) のスクリーンショット連続 frame ${frames.length} 枚を 5 軸で **絶対基準** 採点します。
 
-frame 1-5: ページの上から下 への scroll 連続 (0 / 1200 / 2400 / 3600 / 4800px)
-frame 6-8: アコーディオン (会社概要) を開いた直後の連続 frame (+100 / +250 / +500ms)
+frame 1-5: 上から下への scroll 連続 (0 / 1200 / 2400 / 3600 / 4800px)
+frame 6-8: アコーディオン open 直後の連続 frame (+100 / +250 / +500ms)
+(frame 数が 5 以下の場合は scroll padding のみ、 motion 軸は scroll smoothness のみで判定)
 
-これを以下 5 軸で 0-100 点で採点してください:
+# 採点 anchor (各軸の 0/50/80/100 点に相当する絶対基準)
 
-1. **typography**: 文字の hierarchy (見出し / 本文 / caption の差)、 行間、 letter-spacing、
-   tabular-nums の数値整列、 フォント品質。 漢字仮名英数字の混在バランス。
-2. **spacing**: 余白の品格、 8pt grid 遵守、 章扉感 (section 間 breathing room)、
-   詰まりすぎ / スカスカ の両極を回避できているか。
-3. **color**: 配色の調和、 強調色の使い分け (投資業界 = 緑/赤、 ブランド = cyan + gold)、
-   過剰な装飾色の不在、 dark mode 適合性。
-4. **motion**: scroll の smoothness、 CLS (frame 1-5 間で要素位置が大きくジャンプしてないか)、
-   accordion open の transition (frame 6-8 が 段階的か / cross-fade or scale animation の品格)。
-   過剰アニメ / confetti は減点。 ease-out / 軽妙さは加点。
-5. **aman**: 全体の「最高級ホテル ロビー級」 体感。 驚き・豪華さ・興奮・洗練さ・楽しさ。
-   gold accent / hairline / brand identity が一貫しているか。
+## typography (文字の品格)
+- **0 点**: 1 種類のフォント / 全て同じ size、 hierarchy 皆無、 行間詰まり、 数値ガタガタ
+- **50 点**: 2-3 size の hierarchy、 行間調整あり、 ただし letter-spacing 未調整 / tabular-nums なし
+- **80 点**: 4+ size + fw、 漢字英数字バランス OK、 tabular-nums で数値整列、 caption と body 明確
+- **100 点**: serif/sans 混在で context 別最適化、 letter-spacing 0.04-0.08em formal、 数字 32px+ 大型 display
 
-各軸の根拠を 1-2 文ずつ note として返してください。
+## spacing (余白の品格)
+- **0 点**: padding 0 / 詰まりすぎ、 section 区切り無し、 button 至近距離 (click 困難)
+- **50 点**: 8pt grid 概ね遵守、 padding 12-16px、 section gap あるが breathing room 不足
+- **80 点**: 8pt grid 完全遵守、 section gap 24px、 章境界 48px、 luxury 余白 (40-60%)
+- **100 点**: 章扉 64-80px、 sub-card 内 32px、 「余白こそ高級」 idiom 達成 (Aman ロビー水準)
+
+## color (配色の調和)
+- **0 点**: 投資業界 色ルール違反 (上昇=赤 等)、 raw hex 乱用、 6+ 強調色乱雑
+- **50 点**: 緑/赤 (gain/loss) + cyan (brand) 基本配色、 ただし amber / gold 強調混在散発
+- **80 点**: token 統一 (--color-gain/loss/accent/gold)、 dark mode 完全適合、 強調色 3-4 種以内
+- **100 点**: gold accent 統一の真鍮感、 cyan/gold 双子 brand、 装飾色ゼロ、 数値色 = verdict 連動
+
+## motion (動きの上品さ)
+- **0 点**: linear transition、 過剰 bounce、 CLS 大 (frame 間 200px+ ジャンプ)、 confetti
+- **50 点**: ease-out 部分採用、 CLS 中 (50-150px)、 accordion open 一気展開 (段階性なし)
+- **80 点**: ease-out [0.2,0.8,0.2,1] 統一、 CLS 0、 stagger fade (delay 順)、 accordion 段階的展開
+- **100 点**: View Transition morphing、 scroll-driven micro-motion、 視線誘導 (gold halo sweep)、 prefers-reduced-motion 完備
+
+## aman (Aman/Ritz-Carlton 級)
+- **0 点**: 大衆 SaaS テンプレ (Bootstrap デフォルト感)、 emoji 乱用、 hierarchy 不明
+- **50 点**: dark mode + cyan accent で「やや高級」、 ただし gold/真鍮 不在、 brand identity 散発
+- **80 点**: 5 感情語彙 (驚き・豪華・興奮・洗練・楽しい) のうち 3+ を実感、 gold accent + 真鍮 token 統一
+- **100 点**: 「Aman ロビー入場」 体感、 5 感情全達成、 1 ピクセルにもこだわり、 一切の妥協なし
+
+# 採点 task
+
+frame 群を見て、 上記 anchor に照らして 0-100 点で採点してください。
+**「過去の改善幅」 や「他アプリ比較」 ではなく anchor 自体に対する絶対 position** で判定。
+
+各軸の根拠を 1-2 文の note で返します (どの anchor に該当するか / 何が惜しいか)。
 
 # 出力 JSON 形式 (strict)
 {
@@ -180,15 +206,15 @@ frame 6-8: アコーディオン (会社概要) を開いた直後の連続 fram
     "aman": <int 0-100>
   },
   "notes": {
-    "typography": "<1-2 文の根拠>",
-    "spacing": "<1-2 文の根拠>",
-    "color": "<1-2 文の根拠>",
-    "motion": "<1-2 文の根拠>",
-    "aman": "<1-2 文の根拠>"
+    "typography": "<どの anchor に該当 / 何が惜しい>",
+    "spacing": "...",
+    "color": "...",
+    "motion": "...",
+    "aman": "..."
   }
 }
 
-JSON 以外の前後の文章は絶対に含めないこと。
+JSON 以外の文章は絶対に含めないこと。
 `.trim();
 
     const content = [
