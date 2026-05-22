@@ -535,18 +535,26 @@ const SEGMENT_NAME_JP = {
   // MSFT
   'Intelligent Cloud': 'クラウド (Azure)',
   'Productivity and Business Processes': '業務生産性 (Office 365 等)',
+  'Productivity And Business Processes': '業務生産性 (Office 365 等)',
   'More Personal Computing': 'PC・デバイス',
   'Server Products And Cloud Services': 'サーバ・クラウド',
   'Microsoft Three Six Five Commercial Products And Cloud Services': 'M365 法人',
   'Microsoft Office Products And Cloud Services': 'Office 製品',
+  'Microsoft Three Six Five Consumer Products And Cloud Services': 'M365 個人',
+  'Office Consumer Products And Cloud Services': 'Office 個人',
   'Windows': 'Windows OS',
   'Linked In Corporation': 'LinkedIn',
+  'LinkedIn Corporation': 'LinkedIn',
   'Search And News Advertising': '広告 (検索・ニュース)',
   'Search Advertising': '検索広告',
   'Gaming Xbox Hardware And Software And Services': 'Xbox ハード・ソフト',
+  'Gaming Xbox Content And Services': 'Xbox コンテンツ・サービス',
   'Enterprise Services': 'エンタープライズサービス',
   'Devices': 'デバイス',
-  'Other': 'その他',
+  'Surface': 'Surface',
+  'Dynamics': 'Dynamics (法人向け業務 SaaS)',
+  'Server Products': 'サーバ製品',
+  'Office Products': 'Office 製品',
   // AMZN
   'AWS': 'AWS クラウド',
   'Online Stores': 'オンラインストア',
@@ -555,8 +563,12 @@ const SEGMENT_NAME_JP = {
   'Physical stores': '実店舗',
   'Third Party Seller Services': 'マーケットプレイス',
   'Third-party Seller Services': 'マーケットプレイス',
+  'Third-party seller services': 'マーケットプレイス',
   'Subscription Services': 'Prime サブスク',
+  'Subscription services': 'Prime サブスク',
   'Advertising Services': '広告事業',
+  'Advertising services': '広告事業',
+  'Other Services': 'その他サービス',
   // AAPL
   'iPhone': 'iPhone',
   'Mac': 'Mac',
@@ -564,21 +576,54 @@ const SEGMENT_NAME_JP = {
   'Wearables Home And Accessories': 'ウェアラブル・周辺機器',
   'Wearables, Home and Accessories': 'ウェアラブル・周辺機器',
   'Services': 'サービス事業',
-  // GOOGL
+  // GOOGL — user dogfood 由来追加
   'Google Services': 'Google サービス',
   'Google Cloud': 'Google Cloud',
   'Other Bets': 'その他事業',
   'YouTube Advertising': 'YouTube 広告',
+  'YouTube Advertising Revenue': 'YouTube 広告',
+  'YouTube Ads Revenue': 'YouTube 広告',
   'Google Network': 'Google ネットワーク',
-  'Google Search And Other': 'Google 検索・その他',
+  'Google Network Revenue': 'Google ネットワーク',
+  'Google Network Members Properties': 'Google パートナー広告',
+  'Google Search And Other': 'Google 検索 等',
+  'Google Search & Other': 'Google 検索 等',
+  'Google Advertising': 'Google 広告',
+  'Google Advertising Revenue': 'Google 広告',
+  'Subscriptions Platforms And Devices': 'サブスク・プラットフォーム・端末',
+  'Subscriptions Platforms And Devices Revenue': 'サブスク・プラットフォーム・端末',
+  'Subscriptions, Platforms, and Devices': 'サブスク・プラットフォーム・端末',
+  'Subscriptions, Platforms, And Devices Revenue': 'サブスク・プラットフォーム・端末',
+  'Hardware': 'ハードウェア',
+  'Google Other': 'Google その他',
+  'Google Other Revenue': 'Google その他',
   // META
   'Family Of Apps': 'アプリ群 (Facebook/IG/WhatsApp)',
+  'Family of Apps': 'アプリ群 (Facebook/IG/WhatsApp)',
   'Reality Labs': 'Reality Labs (VR/AR)',
   // TSLA
   'Automotive Sales': '自動車販売',
   'Automotive Leasing': '自動車リース',
   'Energy Generation And Storage': 'エネルギー事業',
+  'Energy Generation and Storage': 'エネルギー事業',
   'Services And Other': 'サービス・その他',
+  'Services and Other': 'サービス・その他',
+  // 汎用 (Other / Misc 系を統一表記、 user dogfood で「英語残」 と感じる箇所を解消)
+  'Other': 'その他',
+  'Other Segment': 'その他セグメント',
+  'Other Segments': 'その他セグメント',
+  'Other Revenue': 'その他収益',
+  'Total Revenue': '総収益',
+  // BAC / JPM 等 金融
+  'Consumer Banking': '個人向け銀行',
+  'Global Wealth And Investment Management': '富裕層・資産運用',
+  'Global Banking': '法人銀行',
+  'Global Markets': 'マーケット (トレーディング)',
+  'Investment Banking': '投資銀行',
+  'Asset And Wealth Management': '資産運用',
+  'Commercial Banking': '商業銀行',
+  'Consumer And Community Banking': 'リテール銀行',
+  'Corporate And Investment Bank': '法人・投資銀行',
 };
 
 function translateSegmentName(name) {
@@ -683,7 +728,7 @@ function PeerCompareRow({ ticker, metrics, median, isSelf, onClick }) {
       onKeyDown={isSelf ? undefined : (e) => { if ((e.key === 'Enter' || e.key === ' ') && onClick) { e.preventDefault(); onClick(); } }}
       style={{
         display: 'grid',
-        gridTemplateColumns: '64px repeat(4, 1fr)',
+        gridTemplateColumns: '96px repeat(4, 1fr)',
         gap: 'var(--space-2, 8px)',
         alignItems: 'center',
         padding: 'var(--space-2, 8px) var(--space-3, 12px)',
@@ -871,7 +916,7 @@ function PeerComparisonSection({ ticker, onNavigateTicker }) {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '64px repeat(4, 1fr)',
+          gridTemplateColumns: '96px repeat(4, 1fr)',
           gap: 'var(--space-2, 8px)',
           padding: 'var(--space-2, 8px) var(--space-3, 12px)',
           marginBottom: 4,
@@ -922,11 +967,13 @@ function PeerComparisonSection({ ticker, onNavigateTicker }) {
 
       {/* v97 sub-agent verdict 案 C: 中央値 row 強調 (footer + surface tint + accent left border) ===
           user dogfood「中央値が一番重要 (投資するなら業界トップを狙う)、 もっと目立たせる」 への対策。
-          surface-2 tint + 3px cyan accent left border + font-semibold で「業界 anchor」 明示。 */}
+          surface-2 tint + 3px cyan accent left border + font-semibold で「業界 anchor」 明示。
+          v97 R5-b fix: label 「業界中央値」 が「業界中央/値」 で改行されて読みにくい問題 →
+          column 幅 64 → 96px に拡大 + white-space: nowrap で 1 行強制。 */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '64px repeat(4, 1fr)',
+          gridTemplateColumns: '96px repeat(4, 1fr)',
           gap: 'var(--space-2, 8px)',
           alignItems: 'center',
           padding: 'var(--space-3, 12px) var(--space-3, 12px) var(--space-3, 12px) var(--space-2, 8px)',
@@ -943,9 +990,10 @@ function PeerComparisonSection({ ticker, onNavigateTicker }) {
             fontSize: 11,
             fontWeight: 700,
             color: 'var(--color-accent)',
-            letterSpacing: '0.1em',
+            letterSpacing: '0.08em',
             textTransform: 'uppercase',
             paddingLeft: 'var(--space-2, 8px)',
+            whiteSpace: 'nowrap',
           }}
         >
           業界中央値

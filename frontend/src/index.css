@@ -9048,6 +9048,41 @@ button.ds-chip[data-pressed="true"]:hover {
 .ds-judgment-detail {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
+  /* v97 R7 anchor 80 push: 漢字英数字混在 body の最適 letter-spacing。
+     vision-eval Claude note 「letter-spacing formal 調整未」 への対策。
+     0 → 0.015em で漢字間隔 微調整、 英数字 default も整合。 */
+  letter-spacing: 0.015em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   § v97 R7 typography anchor 80 push (vision-eval Claude note 由来)
+   ───────────────────────────────────────────────────────────────────
+   Pane 3 で「letter-spacing formal 調整未」 を指摘されたため、
+   見出し系 (大型 display) に -0.025em の formal 圧縮を適用、
+   small caps 系 (label / caption) に 0.08em の formal 拡張を統一。
+   serif/sans 混在は build size 影響大のため後回し、 まず spacing 最適化のみ。
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* heading: 大型 display 風の formal 圧縮 (Aman ロビーの真鍮 plaque idiom) */
+.ds-judgment-detail h1,
+.ds-judgment-detail h2,
+.ds-judgment-detail .section-heading,
+.ds-judgment-detail .pane3-section-heading {
+  letter-spacing: -0.025em;
+}
+
+/* small caps label: uppercase + wide spacing で formal/luxury (Sprint H1/H5 idiom 統一) */
+.ds-judgment-detail .section-label,
+.ds-judgment-detail .pane3-caption {
+  letter-spacing: 0.08em;
+}
+
+/* 数値 大型 display (32px+): tracking 圧縮で「タワー時計」 idiom */
+.ds-judgment-detail [data-display-numeric="true"],
+.ds-judgment-detail .display-numeric-lg {
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ═══════════════════════════════════════════════════════════════════

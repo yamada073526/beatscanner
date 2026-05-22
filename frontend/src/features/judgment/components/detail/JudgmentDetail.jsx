@@ -549,7 +549,7 @@ export default function JudgmentDetail({
           id="sec-profile"
           title="会社概要"
           tier={2}
-          defaultOpen={false}
+          defaultOpen={true}
           controlledOpen={expandedSections.has('profile') || undefined}
         >
           <ProfileCard
