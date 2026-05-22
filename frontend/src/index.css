@@ -9046,8 +9046,11 @@ button.ds-chip[data-pressed="true"]:hover {
    詳細 component に .pane3-numeric 個別指定と二重防御になるが問題なし。
    ds-judgment-detail はワークスペース Pane 3 の root class。 */
 .ds-judgment-detail {
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
+  font-variant-numeric: tabular-nums lining-nums;
+  /* v97 R7-2: lnum (lining figures、 全数字を baseline/高さ揃え) を追加。
+     旧 'tnum' のみは spacing 整列のみ、 lnum で「高さ揃え」 = 「タワー時計」 idiom 強化。
+     formal 金融 UI で必須 (Bloomberg Terminal は完全 lining)。 */
+  font-feature-settings: "tnum" 1, "lnum" 1, "kern" 1, "calt" 1;
   /* v97 R7 anchor 80 push: 漢字英数字混在 body の最適 letter-spacing。
      vision-eval Claude note 「letter-spacing formal 調整未」 への対策。
      0 → 0.015em で漢字間隔 微調整、 英数字 default も整合。 */
@@ -9063,12 +9066,14 @@ button.ds-chip[data-pressed="true"]:hover {
    serif/sans 混在は build size 影響大のため後回し、 まず spacing 最適化のみ。
    ═══════════════════════════════════════════════════════════════════ */
 
-/* heading: 大型 display 風の formal 圧縮 (Aman ロビーの真鍮 plaque idiom) */
+/* heading: 大型 display 風の formal 圧縮 + 600 weight 強化 (Aman ロビーの真鍮 plaque idiom)
+   v97 R7-2: fw 500 → 600 で hierarchy 強化、 body との対比明確化 (anchor 80 への push)。 */
 .ds-judgment-detail h1,
 .ds-judgment-detail h2,
 .ds-judgment-detail .section-heading,
 .ds-judgment-detail .pane3-section-heading {
   letter-spacing: -0.025em;
+  font-weight: 600;
 }
 
 /* small caps label: uppercase + wide spacing で formal/luxury (Sprint H1/H5 idiom 統一) */

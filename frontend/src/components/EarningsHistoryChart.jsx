@@ -361,34 +361,13 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
     return map;
   }, [chartData]);
 
-  // Chart Overlay Safety: conditional render guard
-  // R1-a v97 CLS fix: loading/error 状態でも minHeight 360 で固定 envelope
-  if (!chartData) {
-    return (
-      <section
-        className="panel-card"
-        style={{
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg)',
-          padding: 'var(--space-6, 24px)',
-          minHeight: 360,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-          過去業績データを取得中...
-        </div>
-      </section>
-    );
-  }
-
+  // v97 R8 halo 不発 fix: 旧構造 (loading/data で別 wrapper 早期 return) → halo wrapper が
+  // data 取得後に遅延 mount → user 既 scroll 通過済で IO fire しない問題。
+  // 新構造: wrapper 不変 (haloRef + tier-m-glow + minHeight 360 固定)、 内部 content のみ切替。
+  // これで loading 段階から halo IO 観察開始、 viewport 入った時点で 1 回 fire (前後 section と整合)。
+  // R1-a CLS fix も維持 (minHeight 360)。
+  // Recharts 内部 (Bar / ReferenceLine) は一切変更しない (chart-overlay-safety 4 層防御維持)。
   return (
-    // Phase 2.7 Sprint 1 #1: tier-m-glow wrapper に ref を付けて halo sweep を適用
-    // Recharts 内部 (Bar / ReferenceLine) は一切変更しない (chart-overlay-safety 4 層防御維持)
-    // R1-a v97 CLS fix: minHeight 360 で loading→data 切替時の高さ差 (旧 80px→320px) を吸収。
     <section
       ref={haloRef}
       className="panel-card tier-m-glow"
@@ -400,8 +379,15 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
         borderRadius: 'var(--radius-lg)',
         padding: 'var(--space-6, 24px)',
         minHeight: 360,
+        ...(!chartData ? { display: 'flex', alignItems: 'center', justifyContent: 'center' } : {}),
       }}
     >
+    {!chartData ? (
+      <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+        過去業績データを取得中...
+      </div>
+    ) : (
+      <>
       {/* ── ヘッダー ── */}
       <div
         style={{
@@ -654,6 +640,8 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
       {showModal && (
         <EarningsHistoryInfoModal onClose={() => setShowModal(false)} />
       )}
+      </>
+    )}
     </section>
   );
 }
