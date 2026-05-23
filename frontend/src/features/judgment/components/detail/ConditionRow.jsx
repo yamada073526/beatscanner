@@ -8,6 +8,10 @@ import {
   ConditionModal,
   compactDetail,
 } from '../../../../components/ConditionCard.jsx';
+// v100 (handover §100点 multi-review UI/UX verdict C):
+// 5 条件 value に count-up animation を適用、 motion 軸 +5-8pt 期待。
+// Bloomberg / Robinhood idiom = 数値が 0 → target へ 600ms ease-out で count-up。
+import { useCountUp } from '../../../../hooks/useCountUp.js';
 
 /**
  * ConditionRow — 5 条件統合 row primitive (PR-2、§-1-B 撤回後の正攻法 redesign)
@@ -42,6 +46,12 @@ export default function ConditionRow({
   const passed = condition.passed;
   const detailContent = CONDITION_DETAILS[index];
   const valueColor = passed ? 'var(--color-gain)' : 'var(--color-loss)';
+  // v100: count-up animation を value に適用。 string value (backend 整形済 "12.3%" 等) は数値抽出不能なので
+  // raw value のみ animate (typeof === 'number')、 string は instant 表示 fallback。
+  const numericRawValue = typeof condition.value === 'number' ? condition.value : null;
+  const animatedValue = useCountUp(numericRawValue, { duration: 600, digits: 2 });
+  // useCountUp は string value 時 numericRawValue=null で animation skip、 display は元 string 維持。
+  const displayValue = typeof condition.value === 'number' ? animatedValue : condition.value;
   // Sparkline (Recharts SVG stroke) には CSS var を文字列で渡す。
   // 既存 ConditionCard の raw hex は ALLOWED-HEX で grandfather 済、
   // 新規追加は design-system-check で block されるため CSS var 経由。
@@ -145,7 +155,8 @@ export default function ConditionRow({
           // v86 R2 Vision 改善提案 #3: 数値と補助単位を 2 層階層に分離。
           //  - 数値: fw700 / tabular-nums / text-align:right
           //  - 単位 (B / M / %): 0.75em の補助 tier、 色も text-muted で控えめに。
-          const parts = formatValueParts(condition.value);
+          // v100 (handover §100点 UI/UX verdict C): displayValue で count-up animation 適用。
+          const parts = formatValueParts(displayValue);
           return (
             <div
               style={{

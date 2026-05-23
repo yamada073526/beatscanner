@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import InfoModal from './InfoModal.jsx';
 import Chip from './ui/Chip.jsx';
 import { BarChart3, Calendar, CalendarRange, EyeOff } from 'lucide-react';
+// v100 (handover §100点 UI/UX verdict C): GuidanceCard 達成率 / サプライズ % に count-up animation
+import { useCountUp } from '../hooks/useCountUp.js';
 
 // ── signal_quality envelope (handover v82 Phase 0) を 3-tier badge に変換 ──
 // confidence 別に tone / label / tooltip を decide。 「ガイダンス: 非開示」 を
@@ -353,6 +355,9 @@ function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatt
   if (Number.isFinite(actual) && Number.isFinite(estimated) && Math.abs(estimated) > 0.01) {
     achievementPct = (actual / Math.abs(estimated)) * 100;
   }
+  // v100 (UI/UX verdict C): 達成率 % + サプライズ % に count-up animation 適用、 motion +5-8pt 期待
+  const animatedAchievement = useCountUp(achievementPct, { duration: 700, digits: 0 });
+  const animatedSurprise = useCountUp(surprisePct, { duration: 700, digits: 1 });
   // verdict 由来の arc color
   const arcColor = verdict === 'beat' ? 'var(--color-gain)' :
                    verdict === 'miss' ? 'var(--color-loss)' :
@@ -445,7 +450,7 @@ function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatt
                 color: arcColor,
               }}
             >
-              {achievementPct.toFixed(0)}<span style={{ fontSize: 18, fontWeight: 600 }}>%</span>
+              {Math.round(animatedAchievement)}<span style={{ fontSize: 18, fontWeight: 600 }}>%</span>
             </span>
           ) : isAwaitingEarnings ? (
             <span style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-muted)' }}>
@@ -488,7 +493,7 @@ function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatt
             color: arcColor,
             fontVariantNumeric: 'tabular-nums',
           }}>
-            ({surprisePct > 0 ? '+' : ''}{surprisePct.toFixed(1)}% vs 予想)
+            ({animatedSurprise > 0 ? '+' : ''}{animatedSurprise.toFixed(1)}% vs 予想)
           </span>
         )}
       </div>
