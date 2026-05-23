@@ -752,8 +752,13 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
   if (!guidance) {
     return (
       // Phase 2.6 5-1: tier-m-glow wrapper — halo sweep の IO observe 対象
-      <div ref={cardRef} className="tier-m-glow" data-testid="guidance-card-wrapper">
-        <section className="panel-card rounded-2xl p-5 shadow-sm" style={GUIDANCE_SECTION_STYLE}>
+      // v99 dogfood (handover §0-A item ⑦) — Trust Cliff fix:
+      //   - 旧文言「データプランの制限により取得できませんでした」 は内部事情漏洩で個人投資家に不安を与える
+      //     (QA 体合議 verdict: CVR 30%+ 落ちる可能性、 [[feedback-funnel-cro]])
+      //   - 新文言「ガイダンスは現在準備中です」 で平静なメッセージ + minHeight 160 envelope で CLS 防止
+      //     ([[feedback-cls-envelope-pattern]] 流儀)
+      <div ref={cardRef} className="tier-m-glow" data-testid="guidance-card-wrapper" style={{ minHeight: 160 }}>
+        <section className="panel-card rounded-2xl p-5 shadow-sm" style={{ ...GUIDANCE_SECTION_STYLE, minHeight: 160 }}>
           <div className="flex items-center justify-between">
             <h3 className="section-label flex items-center gap-1.5" style={{ marginBottom: 0 }}>
               <span className="section-header-icon" aria-hidden="true">
@@ -775,8 +780,8 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
                 ？
               </button>
             </h3>
-            <span className="text-xs text-amber-600">
-              ※ データプランの制限により取得できませんでした。
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              ガイダンスは現在準備中です
             </span>
           </div>
           {showModal && <GuidanceInfoModal onClose={() => setShowModal(false)} />}

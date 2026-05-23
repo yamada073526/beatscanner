@@ -571,10 +571,11 @@ export default function JudgmentDetail({
       {/* === 章 2: 基本財務 (H2 Chapter Break + v97 G-2 軽量強化) ===
           v97 G-2 sub-agent verdict: SectionDivider expandedLabel を「数値の根拠」 に変更、
           より「機関投資家向け 投資判断 anchor」 idiom 表現。 */}
-      {/* Phase G Phase 3 (handover v99 §0-D): v2 mode で章扉「II. 数値」 (gold hairline + Noto Serif JP)、
-          default は既存 SectionDivider「数値の根拠」 を維持 (revert 安全)。 */}
+      {/* Phase G Phase 3 + v99 dogfood 3 体合議 verdict (2+3 構成):
+          - v2 mode: 副柱 (II. 数値) = sans 13px + muted (主柱 III と差別化)
+          - default: 既存 SectionDivider「数値の根拠」 維持 (revert 安全) */}
       {isV2 ? (
-        <ChapterSection chapterNumber="II" chapterTitle="数値" headerOnly />
+        <ChapterSection chapterNumber="II" chapterTitle="数値" headerOnly tier="sub" />
       ) : (
         <div data-chapter-start="true">
           <SectionDivider expandedLabel="数値の根拠" />
@@ -642,9 +643,10 @@ export default function JudgmentDetail({
       {/* === 章 3: 市場評価 (H2 Chapter Break + v97 G-2 軽量強化) ===
           ChapterHeader「市場評価」 で章扉感強化、 data-chapter-start で 48px breathing room。
           AnalystPanel 起点 (旧 data-chapter-start を ChapterHeader に移譲)。 */}
-      {/* Phase G Phase 3: v2 mode で「III. 市場評価」 ChapterSection、 default は既存 ChapterHeader */}
+      {/* Phase G Phase 3: v2 mode で「III. 市場評価」 主柱 (Noto Serif JP + gold hairline)
+          [2+3 構成 主柱]、 default は既存 ChapterHeader */}
       {isV2 ? (
-        <ChapterSection chapterNumber="III" chapterTitle="市場評価" headerOnly />
+        <ChapterSection chapterNumber="III" chapterTitle="市場評価" headerOnly tier="main" />
       ) : (
         <ChapterHeader label="市場評価" isChapterStart />
       )}
@@ -778,9 +780,10 @@ export default function JudgmentDetail({
       {/* === 章 4: チャート (H2 Chapter Break + v97 G-2 軽量強化) ===
           ChapterHeader「テクニカル」、 StockPriceChart 起点。
           user override 1「株価チャートは常に展開」 維持。 */}
-      {/* Phase G Phase 3: v2 mode で「IV. テクニカル」 ChapterSection、 default は既存 ChapterHeader */}
+      {/* Phase G Phase 3: v2 mode で「IV. テクニカル」 副柱 (sans 13px + muted)
+          [2+3 構成 副柱]、 default は既存 ChapterHeader */}
       {isV2 ? (
-        <ChapterSection chapterNumber="IV" chapterTitle="テクニカル" headerOnly />
+        <ChapterSection chapterNumber="IV" chapterTitle="テクニカル" headerOnly tier="sub" />
       ) : (
         <ChapterHeader label="テクニカル" isChapterStart />
       )}
@@ -853,9 +856,10 @@ export default function JudgmentDetail({
       {/* === 章 5: リファレンス (H2 Chapter Break + v97 G-2 軽量強化) ===
           ChapterHeader「リファレンス」、 News / IR / DetailReport で「補足資料」 章扉感。
           Sprint 3 (Phase 2): Tier L glow — hover 時の hairline border tint のみ、発光なし。 */}
-      {/* Phase G Phase 3: v2 mode で「V. リファレンス」 ChapterSection、 default は既存 ChapterHeader */}
+      {/* Phase G Phase 3: v2 mode で「V. リファレンス」 副柱 (sans 13px + muted)
+          [2+3 構成 副柱]、 default は既存 ChapterHeader */}
       {isV2 ? (
-        <ChapterSection chapterNumber="V" chapterTitle="リファレンス" headerOnly />
+        <ChapterSection chapterNumber="V" chapterTitle="リファレンス" headerOnly tier="sub" />
       ) : (
         <ChapterHeader label="リファレンス" isChapterStart />
       )}

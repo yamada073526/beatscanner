@@ -9663,6 +9663,54 @@ button.ds-chip[data-pressed="true"]:hover {
   margin-top: var(--space-6, 24px);
 }
 
+/* v99 dogfood 3 体合議 verdict (2+3 構成): 副柱 (II. 数値 / IV. テクニカル / V. リファレンス) は
+   小柱 idiom — Aman ロビーの「メイン柱 2 本 + サブ柱 3 本」 hierarchy。 [[feedback-minimalism-over-additive]]
+   流儀: 全 5 章扉同等強度は希少性薄れる、 主柱/副柱 hierarchy で「menu idiom」 強化。
+   - gold hairline なし (主柱との差別化、 brand signal は主柱に集中)
+   - margin-top 縮小 (主柱 24px → 副柱 16px、 副柱は brief な lane separator)
+   - typography: serif → sans、 18px → 13px、 muted color */
+.chapter-section--sub {
+  margin-top: var(--space-4, 16px);
+  padding: var(--space-4, 16px) 0 var(--space-2, 8px);
+}
+
+.chapter-section--sub::before {
+  /* 副柱は gold hairline なし、 hierarchy 差別化 */
+  display: none;
+}
+
+.judgment-chapter-heading--sub {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2, 8px);
+  /* 主柱の border-bottom + padding-bottom も なし (副柱は brief) */
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: var(--space-3, 12px);
+}
+
+.judgment-chapter-heading--sub .judgment-chapter-number {
+  /* 副柱の番号: serif 維持で「menu idiom」 一貫性、 ただし小さく + muted */
+  font-family: 'Noto Serif JP', 'IBM Plex Mono', serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  font-variant-numeric: oldstyle-nums;
+  line-height: 1;
+}
+
+.judgment-chapter-heading--sub .judgment-chapter-title {
+  /* 副柱の title: sans-serif + smaller + muted、 「lane separator」 idiom */
+  font-family: 'Noto Sans JP', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  line-height: 1.2;
+  margin: 0;
+}
+
 .chapter-section--header-only::before {
   content: '';
   position: absolute;
