@@ -880,7 +880,7 @@ export default function JudgmentDetail({
             <AccordionSection
               id="sec-news"
               title="最新ニュース"
-              tier={3}
+              tier={2}
               defaultOpen={false}
               controlledOpen={expandedSections.has('news') || undefined}
             >
@@ -905,7 +905,7 @@ export default function JudgmentDetail({
             <AccordionSection
               id="sec-ir"
               title="IR Links"
-              tier={3}
+              tier={2}
               defaultOpen={false}
               controlledOpen={expandedSections.has('ir-links') || undefined}
             >
@@ -968,7 +968,7 @@ export default function JudgmentDetail({
               id="sec-report"
               title="AI 詳細レポート"
               label="PRO"
-              tier={3}
+              tier={2}
               defaultOpen={false}
               controlledOpen={expandedSections.has('detail-report') || undefined}
             >

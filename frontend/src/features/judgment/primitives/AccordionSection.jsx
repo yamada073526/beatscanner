@@ -198,15 +198,15 @@ export default function AccordionSection({
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={
-              // v99 dogfood feedback F (4 巡目): exit 時 opacity を 80ms で即落とす、 height は spring で smooth に。
-              // 旧 spring 220/32 で opacity も同期 (300ms) だと content visible なまま height shrink = 残像。
-              // 修正: opacity を 80ms ease-out で先に落とし、 height は spring 280/30 で滑らかに閉じる。
-              // 結果: content が「サッ」 と消える + 枠が「フワッ」 と閉じる、 Aman 級 motion。
+              // v99 dogfood feedback F (5 巡目): 80ms opacity でも user 体感 残像残存。 50ms に短縮 +
+              // height spring 320/32 で snappier に。 加えて exit 時のみ opacity を duration 0.05 +
+              // animate 時は spring (open は smooth)、 mode 別 transition で「open しなやか / close 即座」
+              // を両立。
               reduce
                 ? { duration: 0 }
                 : {
-                    height: { type: 'spring', stiffness: 280, damping: 30 },
-                    opacity: { duration: 0.08, ease: 'easeOut' },
+                    height: { type: 'spring', stiffness: 320, damping: 32 },
+                    opacity: { duration: 0.05, ease: 'easeOut' },
                   }
             }
             // Phase 2.7 Sprint 1 #3: state-aware overflow

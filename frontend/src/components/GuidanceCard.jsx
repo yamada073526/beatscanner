@@ -893,11 +893,13 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
         // v97 G-1 sub-agent verdict: 文字壁解消のため <details> で default collapse。
         // summary をユーザーが「読みたい時だけ展開」、 panel 全体の認知負荷を 60% 削減。
         // R1-b CLS fix も維持 (open 時 minHeight 140 + maxHeight 280 + overflow auto)。
+        // v99 dogfood feedback H (5 巡目): user 体感「下部分が二重ダブり」 真因確定。
+        //   <details> 要素の border: 0.5px が Card の outer border と近接して二重に見えていた。
+        //   修正: border 削除、 bg-subtle のみで differentiation 担保 (Stripe / Linear idiom)。
         <details
           className="mt-4"
           style={{
             background: 'var(--bg-subtle)',
-            border: '0.5px solid var(--border)',
             borderRadius: '8px',
             padding: 'var(--space-3, 12px) var(--space-4, 16px)',
           }}
