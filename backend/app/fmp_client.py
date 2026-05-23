@@ -247,3 +247,21 @@ class FMPClient:
 
     async def sp500_constituent(self) -> list[dict]:
         return await self._get("/sp500-constituent")
+
+    # v100 (handover §100点 multi-review、 金融アナリスト verdict + user dogfood):
+    # FMP Premium per-ticker endpoint を活用、 Pane 3 Insider 取引 section の placeholder 解消。
+    async def insider_trading(self, ticker: str, limit: int = 50) -> list[dict]:
+        """Form 4 経営者株式売買 (直近 N 件)。 transactionType: P-Purchase / S-Sale 等"""
+        data = await self._get(
+            "/insider-trading",
+            {"symbol": ticker.upper(), "limit": limit},
+        )
+        return data if isinstance(data, list) else []
+
+    async def institutional_holder(self, ticker: str, limit: int = 50) -> list[dict]:
+        """13F 機関投資家保有比率の variation tracking。 主要 Fund の保有株数変動"""
+        data = await self._get(
+            "/institutional-ownership/holder-performance-summary",
+            {"symbol": ticker.upper(), "limit": limit},
+        )
+        return data if isinstance(data, list) else []

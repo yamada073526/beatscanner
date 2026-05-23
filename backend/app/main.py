@@ -11915,6 +11915,78 @@ async def _analyze_text_to_insights(tkr: str, combined_text: str) -> dict:
         )
 
 
+# v100 user dogfood (handover §100点 multi-review): Pane 3 Insider 取引 section の
+# placeholder を解消、 FMP Premium /stable/insider-trading + /stable/institutional-ownership で
+# Form 4 経営者売買 + 13F 機関投資家保有変動を返す。 6h cache (data 更新頻度 daily 程度)。
+_INSIDER_CACHE: dict = {}
+_INSIDER_TTL = 21600  # 6h
+
+
+@app.get("/api/insider/{ticker}")
+async def get_insider(ticker: str, request: Request) -> dict:
+    """Form 4 経営者株式売買 + 13F 機関投資家保有 (FMP Premium 活用)。
+
+    Response schema:
+      { ticker, form4: [{date, name, type, shares, price, value}], holders: [{name, shares, change}], sources: {form4, holders} }
+    """
+    tkr = ticker.upper().strip()
+    now_ts = _time.time()
+    cached = _INSIDER_CACHE.get(tkr)
+    if cached and now_ts - cached["ts"] < _INSIDER_TTL:
+        return cached["data"]
+
+    api_key = _get_fmp_key(request)
+    client = FMPClient(api_key=api_key)
+
+    # 並列 fetch (per-source namespace + sources 4 値分類 = [feedback-data-completeness-guard])
+    form4_data, holders_data = await asyncio.gather(
+        client.insider_trading(tkr, limit=50),
+        client.institutional_holder(tkr, limit=20),
+        return_exceptions=True,
+    )
+
+    sources = {"form4": "ok", "holders": "ok"}
+    form4: list[dict] = []
+    holders: list[dict] = []
+
+    if isinstance(form4_data, Exception):
+        sources["form4"] = "error"
+    elif not form4_data:
+        sources["form4"] = "empty"
+    else:
+        for it in form4_data[:30]:
+            shares = it.get("securitiesTransacted") or it.get("transactionShares") or 0
+            price = it.get("price") or 0
+            ttype = (it.get("transactionType") or "").upper()
+            form4.append({
+                "date": it.get("transactionDate") or it.get("filingDate"),
+                "name": it.get("reportingName") or it.get("insiderName") or "—",
+                "type": "P" if ttype.startswith("P") else ("S" if ttype.startswith("S") else ttype[:1] or "—"),
+                "shares": int(shares) if shares else 0,
+                "price": float(price) if price else 0.0,
+                "value": int(shares) * float(price) if shares and price else 0,
+            })
+
+    if isinstance(holders_data, Exception):
+        sources["holders"] = "error"
+    elif not holders_data:
+        sources["holders"] = "empty"
+    else:
+        for h in holders_data[:20]:
+            cur_shares = h.get("shares") or h.get("holdingShares") or 0
+            prev_shares = h.get("prevShares") or h.get("priorShares") or 0
+            change = (int(cur_shares) - int(prev_shares)) if cur_shares and prev_shares else 0
+            holders.append({
+                "name": h.get("holder") or h.get("investorName") or "—",
+                "shares": int(cur_shares) if cur_shares else 0,
+                "change": change,
+            })
+
+    data = {"ticker": tkr, "form4": form4, "holders": holders, "sources": sources}
+    _INSIDER_CACHE[tkr] = {"ts": now_ts, "data": data}
+    return data
+
+
 @app.get("/api/insights/{ticker}")
 async def get_insights(ticker: str, refresh: int = Query(0)):
     tkr = ticker.upper().strip()

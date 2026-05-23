@@ -26,6 +26,8 @@ import IRLinksPanel from '../../../../components/IRLinksPanel.jsx';
 import InsightsPanel from '../../../../components/InsightsPanel.jsx';
 import StockPriceChart from '../../../../components/StockPriceChart.jsx';
 import GuidanceCard from '../../../../components/GuidanceCard.jsx';
+// v100 user dogfood (handover §100点 multi-review): Pane 3 Insider 取引 section の中身実装
+import InsiderPanel from '../../../../components/InsiderPanel.jsx';
 // Sprint 3: EarningsBars + HistoryChart を EarningsHistoryChart (small multiples 3 段) に統合。
 // user override 2 (SPEC §5 Sprint 1 末尾): 売上高 / EPS / CFPS を縦バー 3 段重ねで統合表示。
 import EarningsHistoryChart from '../../../../components/EarningsHistoryChart.jsx';
@@ -825,13 +827,9 @@ export default function JudgmentDetail({
               title="Insider 取引"
               label="FORM 4 / 13F"
             >
-              {/* Phase 2.5 hotfix #8: placeholder 文言 → Premium teaser banner に変更。
-                  backend /api/insider* endpoint は未実装 (Phase 3 候補)。
-                  「壊れている」 と見えない明示的な Premium 訴求で Trust Cliff を解消。 */}
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                <span aria-hidden="true" style={{ fontSize: 16, flexShrink: 0 }}>🔒</span>
-                <span>Premium で開放: Form 4 (役員株式売買) / 13F (機関投資家保有)</span>
-              </div>
+              {/* v100 user dogfood (handover §100点 multi-review): backend /api/insider/{T} 実装に伴い
+                  placeholder → InsiderPanel (FMP Premium /stable/insider-trading + /stable/institutional-ownership) */}
+              <InsiderPanel ticker={selectedTicker} />
             </SimpleSection>
           </PremiumLock>
         ) : (
@@ -854,12 +852,9 @@ export default function JudgmentDetail({
               ]}
               onUpgrade={detailContext.onUpgrade}
             >
-              {/* Phase 2.5 hotfix #8: placeholder 文言 → Premium teaser banner に変更。
-                  SPEC §4 Hallucination Guard: 静的文言のみ、LLM 不使用。
-                  文言は SPEC §4 で確定済 (一字一句変更禁止)。 */}
-              <div id="sec-insider-inner" style={{ fontSize: 13, color: 'var(--text-muted)', padding: 'var(--space-4, 16px)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                <span aria-hidden="true" style={{ fontSize: 16, flexShrink: 0 }}>🔒</span>
-                <span>Premium で開放: Form 4 (役員株式売買) / 13F (機関投資家保有)</span>
+              {/* v100 user dogfood (handover §100点 multi-review): InsiderPanel 実装に置換 */}
+              <div id="sec-insider-inner">
+                <InsiderPanel ticker={selectedTicker} />
               </div>
             </PremiumLock>
           </AccordionSection>
