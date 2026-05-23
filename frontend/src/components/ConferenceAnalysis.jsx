@@ -86,6 +86,11 @@ const mdComponents = {
 };
 
 /* ─── アコーディオン（DetailReport.jsx と同じ実装） ─── */
+// v100 user dogfood 再 feedback (左右クリッピング残存):
+//   WorkspaceShell L177 で Pane 3 のみ allowOverflowX (横スクロール許可)、 内部 content が
+//   pane width 超えると user は scroll しないまま「クリッピング」 認識。
+//   outer div に maxWidth 100% + boxSizing border-box + overflow hidden + minWidth 0 を強制し、
+//   child (mdComponents h2/p の background ボックス) が父 width を絶対超えないようにする。
 function AccordionSection({ title, badge, badgeColor = '#1e293b', children, streaming = false }) {
   const [open, setOpen] = useState(false);
 
@@ -98,6 +103,10 @@ function AccordionSection({ title, badge, badgeColor = '#1e293b', children, stre
         background: 'var(--bg-primary)',
         marginBottom: '12px',
         boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        maxWidth: '100%',
+        boxSizing: 'border-box',
+        overflow: 'hidden',
+        minWidth: 0,
       }}
     >
       <button

@@ -964,7 +964,18 @@ export default function DetailReport({ analysis, guidance, onStreamingChange, is
   // Phase 3 #6: outermost wrapper div に viewTransitionName を付与。
   // ticker 切替時に AI レポート section が cross-fade morph。
   return (
-    <div style={{ viewTransitionName: 'pane3-detail-report' }}>
+    // v100 user dogfood 再 feedback (左右クリッピング残存):
+    //   Pane 3 (allowOverflowX) 内で DetailReport の inner content が pane width 超え、
+    //   user は scroll しないまま「クリッピング」 認識。 outer wrapper に
+    //   maxWidth + boxSizing + overflow hidden + minWidth 0 を強制し、 child が父 width
+    //   を絶対超えないようにする。 ConferenceAnalysis と同 pattern。
+    <div style={{
+      viewTransitionName: 'pane3-detail-report',
+      maxWidth: '100%',
+      boxSizing: 'border-box',
+      overflow: 'hidden',
+      minWidth: 0,
+    }}>
       <AccordionSection
         title="AIによる決算詳報"
         badge={isPro ? "AI詳報" : "PRO"}
