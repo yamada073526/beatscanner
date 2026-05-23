@@ -73,11 +73,34 @@ const url = opts.url || PROD_URL_BASE;
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 18_000 });
     await page.waitForTimeout(2500);
 
-    // ticker 選択 (workspace mode の左 pane から)
+    // ticker 選択 (workspace mode で AAPL/MSFT 等の button をクリック)
+    // v100 (handover v99 §0-D) NVDA UNRELIABLE bug 修正:
+    //   旧実装は click 後 assert が無く、 ticker が watchlist 外で別 button (modal の Cmd+K 候補
+    //   等) が match した場合に modal を採点していた (NVDA で発覚)。
+    //   click 後に Pane 3 Hero `[data-testid="pane3-hero"] h1` 内に ticker が表示されているかを
+    //   assert し、 未表示なら fail-fast (exit 3)。 これで modal / 旧 view 残存採点を完全に防ぐ。
+    //   waitFor 4500ms 内で assert PASS なら通過、 timeout で fail-fast。
     const tk = page.locator(`button:has-text("${opts.ticker}")`).first();
     if (await tk.count() > 0) {
       await tk.click();
-      await page.waitForTimeout(3500); // analyze + render
+    } else {
+      console.error(
+        `[vision-eval] FATAL: ticker "${opts.ticker}" を含む button が一切見つからない。 fail-fast。`
+      );
+      process.exit(3);
+    }
+    await page.waitForTimeout(3500); // analyze + render
+
+    // post-click assert: Pane 3 Hero h1 に ticker が表示されているか (4500ms 以内)。
+    // modal や旧 view が残っていれば h1 ticker text は無く → fail-fast (modal 誤採点防止)。
+    try {
+      await page.locator(`[data-testid="pane3-hero"] h1`).filter({ hasText: opts.ticker }).first().waitFor({ timeout: 4500 });
+    } catch {
+      console.error(
+        `[vision-eval] FATAL: click 後 [data-testid="pane3-hero"] h1 に ticker "${opts.ticker}" が ` +
+        `表示されない。 navigate 失敗 / modal 残存の可能性 (NVDA UNRELIABLE bug pattern)。 fail-fast。`
+      );
+      process.exit(3);
     }
 
     // ─── frame 取得 ────────────────────────────────────────────────────
