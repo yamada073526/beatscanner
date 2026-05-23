@@ -106,7 +106,17 @@ export default function FiveConditionsCard({
     // Phase 3 #6: SectionFade の style prop 経由で viewTransitionName を付与。
     // SectionFade は修正不要 (既存 style prop サポート済)。Recharts/chart 系に触れない。
     <SectionFade style={{ viewTransitionName: 'pane3-five-conditions' }}>
-    <div ref={cardRef} className="tier-m-glow" data-testid="five-conditions-card-wrapper">
+    <div
+      ref={cardRef}
+      className="tier-m-glow"
+      data-testid="five-conditions-card-wrapper"
+      style={{
+        // v99 CLS envelope: skeleton 5 行 (220px) と expanded 1 行+collapsed 4 行 (280-340px) を吸収。
+        // expanded toggle 中の section 伸縮は ConditionRow 内部 motion で滑らかに、 root は固定。
+        // [[feedback-cls-envelope-pattern]] 流儀: 上方 section minHeight で scroll CLS 防止。
+        minHeight: '280px',
+      }}
+    >
     <Card data-testid="five-conditions-card">
       <div style={{ padding: 'var(--space-6, 24px)' }}>
         <SectionHeader

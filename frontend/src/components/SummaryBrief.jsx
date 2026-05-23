@@ -280,6 +280,10 @@ function SummaryBriefInner({ analysis, guidance }) {
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-md)',
         padding: 'var(--space-5, 20px)',
+        // v99 CLS envelope: badge row (28px) + content (160px) + padding (40px) = 228px。
+        // LLM streaming 中 (skeleton 160px) と 完了後 (text 80-340px 揺れ) を envelope で吸収。
+        // [[feedback-cls-envelope-pattern]]: 上方 section minHeight で scroll 中 CLS 防止。
+        minHeight: '240px',
         // fade-in: streaming 開始前は opacity 0、最初の chunk または error で opacity 1
         // prefers-reduced-motion 時は transition なし (visible 初期 true で即時表示)
         opacity: visible ? 1 : 0,

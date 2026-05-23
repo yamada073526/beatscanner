@@ -50,6 +50,9 @@ import SectionFade from '../../primitives/SectionFade.jsx';
 // Pane 3 全体を wrap することで Sprint 4 以降の m.* motion component を有効化する。
 // framer-motion chunk は vite.config.js manualChunks で react-vendor から分離済 (20KB 以下目標)。
 import MotionProvider from '../../../../components/MotionProvider.jsx';
+// Phase G Phase 1 (handover v98 §0-B): UnifiedJudgmentSection — 章 1「判定」 4 components 統合 wrapper。
+// feature flag `pane3_v2=1` で URL parameter / localStorage 切替 (default off)。
+import UnifiedJudgmentSection from './UnifiedJudgmentSection.jsx';
 
 // DetailReport は重量級 (36 KB gzip) のため lazy load
 const DetailReport = lazy(() => import('../../../../components/DetailReport.jsx'));
@@ -111,6 +114,23 @@ function isPane3V1() {
 function isPane3ScrollV1() {
   try {
     return typeof window !== 'undefined' && window.localStorage?.getItem('pane3_scroll_v1') === '1';
+  } catch {
+    return false;
+  }
+}
+
+// Phase G Phase 1 (handover v98 §0-B): pane3_v2='1' で章 1「判定」 を unified section に統合。
+// URL parameter (?pane3_v2=1) と localStorage 両対応で、 dogfood revert option 最大化。
+// default off — user dogfood で keep/revert 判断後に default on に切替予定 (Phase G Phase 2 以降)。
+function isPane3V2() {
+  try {
+    if (typeof window === 'undefined') return false;
+    // URL parameter (一時試用)
+    const urlParam = new URLSearchParams(window.location.search).get('pane3_v2');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    // localStorage (永続切替)
+    return window.localStorage?.getItem('pane3_v2') === '1';
   } catch {
     return false;
   }
@@ -366,15 +386,16 @@ export default function JudgmentDetail({
       {/* === 階層 1: Verdict (expanded 固定) ===
           Sprint 4: tier=1 SectionDivider を削除。
           accordion header が既に「階層 chrome」を提供するため冗長。
-          Hero 自身が入場感を持つため、前置 divider は不要。 */}
+          Hero 自身が入場感を持つため、前置 divider は不要。
 
-      {/* Sprint 3 (Phase 2): VerdictHero — Tier S glow wrapper
-          Hero + SummaryBrief を verdict 連動 tint で包む。
-          glow_elevation_postmortem.md 安全パターン:
-            - 既存 Hero の Card wrapper と入れ子にしない (VerdictHero は外側の薄い div のみ)
-            - is-arriving は useArrivalSpotlight に一元管理 (data-spotlight="card" で登録)
-            - contain: paint 禁止 (index.css .verdict-hero で isolation: isolate のみ)
-          verdict → tint: beat/in-line → cyan (PASS) / miss → amber (FAIL) / unknown → slate (WAIT) */}
+          Phase G Phase 1 (handover v98 §0-B):
+          isPane3V2() の場合、 Hero + SummaryBrief + KpiStrip + TriageBanner +
+          FiveConditionsCard 4 ブロックを UnifiedJudgmentSection で「章 1 判定」 として
+          1 つの unified section に統合する (default off、 ?pane3_v2=1 で試用可)。 */}
+      {(() => {
+        const v2 = isPane3V2();
+        const innerVerdictBlock = (
+          <>
       <VerdictHero verdict={verdict}>
         {/* Sprint 3: Hero — 上方重心 padding 非対称化 (入場感演出)
             Hero.jsx 内部は不触。wrapper で padding override を適用。
@@ -465,6 +486,14 @@ export default function JudgmentDetail({
           }}
         />
       )}
+          </>
+        );
+        return v2 ? (
+          <UnifiedJudgmentSection>{innerVerdictBlock}</UnifiedJudgmentSection>
+        ) : (
+          innerVerdictBlock
+        );
+      })()}
 
       {/* P0-1/P0-3: 分析する button は auto runAnalyze (P0-2) が失敗した場合の fallback。
           result が取得できず、かつ loading でもない場合のみ retry link を表示。

@@ -5270,6 +5270,10 @@ body {
   font-size: 12px;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
+  /* v99 CLS envelope: muted/locked/concierge は 1 行表示で min 40px、
+     state variants (sprint5) は下記 selector で override。
+     scroll 中 fetch (triage) の load→done で section が伸びる CLS を吸収。 */
+  min-height: 40px;
 }
 .triage-banner-body {
   flex: 1;
@@ -5395,6 +5399,9 @@ body {
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-2, 8px);
+  /* v99 CLS envelope: holdings 2 行 grid + signal text + peers button のフル展開時 88-120px。
+     envelope 96px で fetch 中 (skeleton/loading) → done (実体) の差分を吸収。 */
+  min-height: 96px;
 }
 
 .triage-holdings-grid {
@@ -9539,3 +9546,93 @@ button.ds-chip[data-pressed="true"]:hover {
     animation: none !important;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Phase G Phase 1: UnifiedJudgmentSection (handover v98 §0-B)
+   章 1「判定」 = Hero + SummaryBrief + KpiStrip + TriageBanner + FiveConditionsCard
+   - feature flag `pane3_v2=1` で URL parameter / localStorage 切替 (default off)
+   - 章扉「I. 判定」 (Aman menu idiom、 Noto Serif JP)
+   - gold accent line + 上下 spacing 統一 + 大きな 1 まとまり感の演出
+   - [[feedback-gold-accent-continuity]] 流儀: J1 全 panel gold hairline と整合
+   - Phase 2 で予定: sub-component frameless 化 (本 Phase 1 では未着手)
+   ───────────────────────────────────────────────────────────────── */
+.judgment-chapter {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-8, 32px) var(--space-6, 24px);
+  border-radius: var(--radius-lg, 16px);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  overflow: visible;
+  /* 章間 spacing: 章扉 64px は Phase G Phase 4 で別途 (本 Phase 1 では 32px 既存 spacing 維持) */
+  margin-bottom: var(--space-6, 24px);
+}
+
+/* 章上端の gold hairline (J1 全 panel hairline と一貫) */
+.judgment-chapter::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-gold) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+.judgment-chapter-heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3, 12px);
+  margin-bottom: var(--space-6, 24px);
+  padding-bottom: var(--space-3, 12px);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-gold) 18%, transparent);
+}
+
+.judgment-chapter-number {
+  font-family: 'Noto Serif JP', 'IBM Plex Mono', serif;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--color-gold);
+  font-variant-numeric: oldstyle-nums;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.judgment-chapter-title {
+  font-family: 'Noto Serif JP', serif;
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: var(--text-primary);
+  line-height: 1;
+  margin: 0;
+}
+
+.judgment-chapter-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5, 20px);
+}
+
+/* 章内 sub-component 間の subtle divider (Aman pavilion 風 1 まとまり感)
+   sub-component の二重 border が冗長に見えるため、 内側で控えめな分節線を追加。
+   Phase 2 で sub-component frameless 化したら divider を強調する。 */
+.judgment-chapter-body > * + *:not(:empty)::before {
+  /* divider は将来 Phase 2 で 強調する。 Phase 1 では gap のみで段感を出す (未使用) */
+}
+
+/* 上下 spacing は子の wrapper (VerdictHero / SectionFade) の既存 spacing と競合しないよう
+   .judgment-chapter-body 直下の VerdictHero margin / SectionFade gap を不干渉に保つ */
+.judgment-chapter-body > .verdict-hero,
+.judgment-chapter-body > .section-fade {
+  margin: 0;
+}
+

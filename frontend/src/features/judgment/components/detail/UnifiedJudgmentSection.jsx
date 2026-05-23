@@ -1,0 +1,50 @@
+/**
+ * UnifiedJudgmentSection — Phase G Phase 1 (handover v98 §0-B)
+ *
+ * 4 components (Hero + SummaryBrief + KpiStrip + TriageBanner + FiveConditionsCard) を
+ * 章 1「判定」 として 1 つの unified section に統合する wrapper。
+ *
+ * 設計方針 (handover v98 §0-B):
+ *   - feature flag `pane3_v2=1` で URL parameter or localStorage 切替 (default off)
+ *   - dogfood で revert option 保持 (sub-component 内部は完全に不変、wrapper のみ)
+ *   - 章扉「I. 判定」 (Aman menu idiom、 Noto Serif JP)
+ *   - 上下 spacing 統一 + gold accent 強化 ([[feedback-gold-accent-continuity]])
+ *   - 「1 つの大きな段」 感の演出 (sub-component 間に subtle divider)
+ *
+ * Phase 2 で予定 (本 Phase 1 では未着手):
+ *   - sub-component 内部の Card frameless 化 (二重 wrap 完全排除)
+ *   - sub-component 順序 / spacing の最終 polish
+ *
+ * memory anchor:
+ *   - feedback_cls_envelope_pattern.md (CLS envelope は sub-component 側で完結済)
+ *   - feedback_gold_accent_continuity.md (gold accent は全 panel 一貫で signal 検出)
+ *   - feedback_icon_brand_consistency.md (章番号は ローマ数字 "I." for Aman idiom)
+ */
+import React from 'react';
+
+/**
+ * @param {object} props
+ * @param {React.ReactNode} props.children - Hero, SummaryBrief, KpiStrip, TriageBanner, FiveConditionsCard
+ */
+export default function UnifiedJudgmentSection({ children }) {
+  return (
+    <section
+      className="judgment-chapter judgment-chapter--verdict"
+      aria-labelledby="judgment-chapter-verdict-heading"
+      data-testid="judgment-chapter-verdict"
+    >
+      <header className="judgment-chapter-heading">
+        <span className="judgment-chapter-number" aria-hidden="true">I.</span>
+        <h2
+          id="judgment-chapter-verdict-heading"
+          className="judgment-chapter-title"
+        >
+          判定
+        </h2>
+      </header>
+      <div className="judgment-chapter-body">
+        {children}
+      </div>
+    </section>
+  );
+}
