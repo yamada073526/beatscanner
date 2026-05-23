@@ -640,15 +640,18 @@ export default function JudgmentDetail({
       {/* === Sprint 3: EarningsHistoryChart (旧 EarningsBars + HistoryChart 統合、expanded 固定) ===
           user override 2: small multiples 縦バー 3 段 (売上高 / EPS / CFPS)。
           ファンダメンタル5条件 §5 連続増加判定の視覚 anchor として expanded 維持。
-          Sprint 4: SectionFade で section in-view fade-in (案1) */}
-      {result?.periods?.length > 0 && (
-        <SectionFade id="sec-earnings-history" staggerIndex={2}>
-          <EarningsHistoryChart
-            periods={result.periods}
-            currency={result.currency}
-          />
-        </SectionFade>
-      )}
+          Sprint 4: SectionFade で section in-view fade-in (案1)
+          v100 QA #1 章扉 skeleton CLS fix: 旧 `{periods?.length > 0 && ...}` の conditional
+          render を撤去し常時 mount。 EarningsHistoryChart 自身が minHeight 360 envelope を持つ
+          ため、 result 後追い load 時にも章扉「II. 市場評価」 位置が動かない。 periods 空時は
+          内部「過去業績データを取得中...」 placeholder で skeleton 表示維持。
+          [[feedback-cls-envelope-pattern]] と整合。 */}
+      <SectionFade id="sec-earnings-history" staggerIndex={2}>
+        <EarningsHistoryChart
+          periods={result?.periods ?? []}
+          currency={result?.currency}
+        />
+      </SectionFade>
 
       {/* === 章 3: 市場評価 (H2 Chapter Break + v97 G-2 軽量強化) ===
           ChapterHeader「市場評価」 で章扉感強化、 data-chapter-start で 48px breathing room。
