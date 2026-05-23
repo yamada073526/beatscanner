@@ -1,4 +1,7 @@
-import { Component, useState, useEffect, useMemo } from 'react';
+import { Component, useState, useEffect, useMemo, useRef } from 'react';
+// Phase G Phase 5 (handover v99 §0-E): Tier M halo sweep (motion axis +5-10 期待)。
+// glow_elevation_postmortem.md / feedback_glow_active_pattern.md 安全パターン準拠。
+import { useHaloSweepOnce } from '../hooks/useHaloSweepOnce.js';
 import {
   ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot, ReferenceArea,
@@ -226,6 +229,9 @@ function EarningsTooltip({ active, payload, label, earningsMap }) {
 }
 
 function StockPriceChartInner({ ticker, isPremiumUser = false }) {
+  // Phase G Phase 5: halo sweep ref (v99 §0-E、 motion axis +5-10 期待)
+  const haloRef = useRef(null);
+  useHaloSweepOnce(haloRef);
   const [period, setPeriod] = useState('1y');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -503,7 +509,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
     // 旧: loading 中 h-64 (256px) + header (60px) = ~316px、 data 到達で h-72 (288px) + buttons + footer = ~440px
     //     → 124px 高さブレで上下 section が押し下げ (user 「scroll 中ガクつき」 主因の 1)。
     // 新: minHeight 480px で常に 480px 確保、 data 到達時の 440px は wrapper 内で flex で center 配置。
-    <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', minHeight: 480 }}>
+    <section ref={haloRef} className="panel-card tier-m-glow rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', minHeight: 480 }}>
       {/* Header */}
       <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-wrap">
