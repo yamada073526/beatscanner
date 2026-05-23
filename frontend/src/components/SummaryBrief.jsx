@@ -2,9 +2,6 @@ import React, { Component, useEffect, useRef, useState } from 'react';
 import { streamSummaryBrief } from '../api.js';
 import InfoModal from './InfoModal.jsx';
 import { sanitizeText } from '../lib/blocklist.js';
-// Phase G Phase 5 (handover v99 §0-E): Tier M halo sweep (motion axis +5-10 期待)。
-// glow_elevation_postmortem.md / feedback_glow_active_pattern.md 安全パターン準拠。
-import { useHaloSweepOnce } from '../hooks/useHaloSweepOnce.js';
 
 // ── Hallucination Guard 第 1 層: ErrorBoundary ─────────────────────────────
 // feedback_chart_overlay_safety.md 4 層防御 第 1 層。
@@ -231,9 +228,6 @@ function SummaryBriefInner({ analysis, guidance, frameless = false }) {
   // fade-in: prefers-reduced-motion の場合は最初から visible
   const [visible, setVisible] = useState(() => prefersReducedMotion());
   const controllerRef = useRef(null);
-  // Phase G Phase 5: halo sweep ref (v99 §0-E、 motion axis +5-10 期待)
-  const haloRef = useRef(null);
-  useHaloSweepOnce(haloRef);
 
   useEffect(() => {
     // Hallucination Guard 第 3 層: analysis が null なら fetch しない
@@ -280,8 +274,7 @@ function SummaryBriefInner({ analysis, guidance, frameless = false }) {
 
   return (
     <section
-      ref={haloRef}
-      className={`summary-brief-section tier-m-glow ${frameless ? 'is-frameless' : ''}`.trim()}
+      className={`summary-brief-section ${frameless ? 'is-frameless' : ''}`.trim()}
       style={{
         background: frameless ? 'transparent' : 'var(--bg-subtle)',
         border: frameless ? 'none' : '1px solid var(--border)',

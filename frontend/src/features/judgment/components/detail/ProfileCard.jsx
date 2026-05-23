@@ -6,8 +6,6 @@ import Chip from '../../../../components/ui/Chip.jsx';
 import { Building2, MapPin, Users, Briefcase, Sparkles, RefreshCw, Scale } from 'lucide-react';
 import { fetchProfileExtended, fetchProfileSummary, fetchProfilePeers } from '../../../../api.js';
 import { sanitizeText } from '../../../../lib/blocklist.js';
-// Phase G Phase 5 (handover v99 §0-E): Tier M halo sweep (motion axis +5-10 期待)。
-import { useHaloSweepOnce } from '../../../../hooks/useHaloSweepOnce.js';
 
 /**
  * Phase B 会社概要 LLM 和文化 (SPEC_2026-05-22 §5 Sprint B.1)
@@ -1067,10 +1065,6 @@ function buildLocation(city, state, country) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function ProfileCard({ ticker, companyName, dataSource, latestPeriod, latestDate, onNavigateTicker }) {
-  // Phase G Phase 5: halo sweep ref (v99 §0-E、 motion axis +5-10 期待)
-  // Card primitive は forwardRef 非対応のため、 Card を囲む div に ref + tier-m-glow を付与。
-  const haloRef = useRef(null);
-  useHaloSweepOnce(haloRef);
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
 
@@ -1206,7 +1200,6 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
     // 下にある StockChart 等が大きく押し下げられて user 「scroll に集中できず」 体感。
     // 680px は loading skeleton (Shimmer 280 + sections 400) と data 完了 (700) の中央値、
     // 細かい padding で envelope 内に吸収、 余計な余白は最下行で flex で押し上げ。
-    <div ref={haloRef} className="tier-m-glow" data-testid="profile-card-wrapper">
     <Card data-testid="profile-card">
       <div style={{ padding: 'var(--space-6, 24px)', minHeight: 680 }}>
 
@@ -1721,6 +1714,5 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
         )}
       </div>
     </Card>
-    </div>
   );
 }
