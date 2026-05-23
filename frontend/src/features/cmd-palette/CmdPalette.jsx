@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Wallet, FileText } from 'lucide-react';
 import CompanyLogo from '../../components/CompanyLogo.jsx';
 import { searchMasterTickers } from '../../data/masterTickers.js';
 
@@ -168,14 +169,15 @@ export default function CmdPalette({ open, close, items = [], onAnalyze }) {
       >
         {/* handover v77 user feedback (2026-05-17):
             ticker を持つ item (analyze / recent / watchlist / holdings) は CompanyLogo を leading icon に。
-            それ以外の action / account / transaction は記号 (⚡ → ↗ に変更で品格 up)。 */}
+            それ以外の action / account / transaction は記号 (⚡ → ↗ に変更で品格 up)。
+            v105 emoji audit: account / transaction の emoji を lucide Wallet / FileText に置換。 */}
         {it.ticker ? (
           <CompanyLogo ticker={it.ticker} size={20} />
         ) : (
           <span aria-hidden style={{ color: 'var(--text-muted)', width: 20, height: 20, fontSize: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             {it.group === 'action' ? '◆'
-              : it.group === 'account' ? '🏦'
-              : it.group === 'transaction' ? '📋'
+              : it.group === 'account' ? <Wallet size={16} strokeWidth={1.75} />
+              : it.group === 'transaction' ? <FileText size={16} strokeWidth={1.75} />
               : '○'}
           </span>
         )}

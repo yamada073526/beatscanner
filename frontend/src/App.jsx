@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { flushSync } from 'react-dom';
+import { Sun, Moon, Home, BarChart3, FileText, TrendingUp } from 'lucide-react';
 import { analyze, demoAnalyze, fetchGuidance, fetchGuidanceBasic, prefetchAll } from './api.js';
 import { useWorkspaceStore } from './state/workspaceStore.js';
 import { useJsonLd } from './hooks/useJsonLd.js';
@@ -2236,7 +2237,9 @@ export default function App() {
           onMouseEnter={e => { e.currentTarget.style.background = 'rgba(127,127,127,0.10)'; }}
           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
         >
-          <span style={{ fontSize: 18, lineHeight: 1 }}>{isDark() ? '☀️' : '🌙'}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}>
+            {isDark() ? <Sun size={18} aria-hidden /> : <Moon size={18} aria-hidden />}
+          </span>
           {isDark() ? 'ライトモードに切替' : 'ダークモードに切替'}
         </button>
 
@@ -2378,10 +2381,10 @@ export default function App() {
           }}
         >
           {[
-            { key: 'home',     label: 'ホーム',  icon: '🏠' },
-            { key: 'judgment', label: '判定',    icon: '📊' },
-            { key: 'report',   label: '決算',    icon: '📋' },
-            { key: 'チャート', label: 'チャート', icon: '📈' },
+            { key: 'home',     label: 'ホーム',  Icon: Home },
+            { key: 'judgment', label: '判定',    Icon: BarChart3 },
+            { key: 'report',   label: '決算',    Icon: FileText },
+            { key: 'チャート', label: 'チャート', Icon: TrendingUp },
           ].map(tab => {
             const active = activeTab === tab.key;
             const onClick = () => {
@@ -2419,7 +2422,9 @@ export default function App() {
                   whiteSpace: 'nowrap',
                 }}
               >
-                <span style={{ fontSize: isMobile ? 18 : 16, lineHeight: 1 }}>{tab.icon}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}>
+                  <tab.Icon size={isMobile ? 18 : 16} aria-hidden strokeWidth={active ? 2.25 : 2} />
+                </span>
                 <span style={{ fontSize: isMobile ? 10 : 12, lineHeight: 1 }}>{tab.label}</span>
               </button>
             );

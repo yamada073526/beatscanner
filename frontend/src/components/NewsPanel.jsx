@@ -57,6 +57,17 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false, hideHead
   });
   const viewDefaultAppliedRef = useRef(false);
 
+  // v105 emoji audit: news thumbnail fallback を React state 管理 (lucide Newspaper 描画用)
+  const [failedThumbs, setFailedThumbs] = useState(() => new Set());
+  const markThumbFailed = (i) => {
+    setFailedThumbs(prev => {
+      if (prev.has(i)) return prev;
+      const next = new Set(prev);
+      next.add(i);
+      return next;
+    });
+  };
+
   const handleViewChange = (v) => {
     setView(v);
     try { localStorage.setItem(VIEW_STORAGE_KEY, v); } catch { /* ignore */ }
@@ -260,26 +271,19 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false, hideHead
                       }
                     }}
                   >
-                    {item.image ? (
+                    {item.image && !failedThumbs.has(i) ? (
                       <img
                         src={item.image}
                         alt=""
                         className="news-list-thumb"
                         loading="lazy"
                         decoding="async"
-                        onError={(e) => {
-                          const wrap = e.currentTarget.parentElement;
-                          e.currentTarget.style.display = 'none';
-                          if (wrap && !wrap.querySelector('.news-list-thumb-fallback')) {
-                            const fb = document.createElement('div');
-                            fb.className = 'news-list-thumb-fallback';
-                            fb.textContent = '📰';
-                            wrap.insertBefore(fb, wrap.firstChild);
-                          }
-                        }}
+                        onError={() => markThumbFailed(i)}
                       />
                     ) : (
-                      <div className="news-list-thumb-fallback" aria-hidden>📰</div>
+                      <div className="news-list-thumb-fallback" aria-hidden>
+                        <Newspaper size={20} strokeWidth={1.75} />
+                      </div>
                     )}
                     <div className="news-list-body">
                       <p className="news-list-title">

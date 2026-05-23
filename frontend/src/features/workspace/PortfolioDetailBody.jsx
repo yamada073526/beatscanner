@@ -26,6 +26,7 @@ import { usePortfolioEvents } from '../../hooks/usePortfolioEvents.js';
 import { fetchNewsBulk } from '../../api.js';
 import Chip from '../../components/ui/Chip.jsx';
 import TickerBadge from '../../components/ui/TickerBadge.jsx';
+import { Newspaper } from 'lucide-react';
 
 // 既存 chart は lazy chunk 化済 (lightweight-charts heavy)。 Pane 3 visible 時のみ load。
 const PortfolioHistoryChart = lazy(() => import('../../components/PortfolioHistoryChart.jsx'));
@@ -136,6 +137,16 @@ export default function PortfolioDetailBody({ scopeId = 'all' }) {
   // 保有銘柄ニュース bulk: top 5 ticker × 3 件
   const [newsItems, setNewsItems] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
+  // v105 emoji audit: thumbnail fallback を React state 管理 (lucide Newspaper 描画用)
+  const [failedThumbs, setFailedThumbs] = useState(() => new Set());
+  const markThumbFailed = (i) => {
+    setFailedThumbs(prev => {
+      if (prev.has(i)) return prev;
+      const next = new Set(prev);
+      next.add(i);
+      return next;
+    });
+  };
   const tickerKey = topTickers.join(',');
   useEffect(() => {
     if (!tickerKey) {
@@ -300,7 +311,7 @@ export default function PortfolioDetailBody({ scopeId = 'all' }) {
         {/* v71 Phase 3-d round 8 (dogfood 2026-05-16 / Light 版):
             指数ニュース (NewsPanel list view) と同じ visual treatment に統一:
             - 発光する cyan accent bar (左端) + hover で lift / glow / scale
-            - サムネイル画像 (backend `image` field を流用、 fallback で 📰 emoji)
+            - サムネイル画像 (backend `image` field を流用、 fallback で Newspaper lucide icon)
             - TickerBadge を meta line に配置 (Bloomberg PORT 流)
             Full 版 (JP/EN トグル + List/Grid 切替 + Pane 5 連動) は backlog で
             subagent review 経てから着手。 memory anchor: project_personalization_backlog.md */}
@@ -313,26 +324,19 @@ export default function PortfolioDetailBody({ scopeId = 'all' }) {
               rel="noopener noreferrer"
               className="news-list-card"
             >
-              {item.image ? (
+              {item.image && !failedThumbs.has(i) ? (
                 <img
                   src={item.image}
                   alt=""
                   className="news-list-thumb"
                   loading="lazy"
                   decoding="async"
-                  onError={(e) => {
-                    const wrap = e.currentTarget.parentElement;
-                    e.currentTarget.style.display = 'none';
-                    if (wrap && !wrap.querySelector('.news-list-thumb-fallback')) {
-                      const fb = document.createElement('div');
-                      fb.className = 'news-list-thumb-fallback';
-                      fb.textContent = '📰';
-                      wrap.insertBefore(fb, wrap.firstChild);
-                    }
-                  }}
+                  onError={() => markThumbFailed(i)}
                 />
               ) : (
-                <div className="news-list-thumb-fallback" aria-hidden>📰</div>
+                <div className="news-list-thumb-fallback" aria-hidden>
+                  <Newspaper size={20} strokeWidth={1.75} />
+                </div>
               )}
               <div className="news-list-body">
                 <p className="news-list-title">{item.title}</p>

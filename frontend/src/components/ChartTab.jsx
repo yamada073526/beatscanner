@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, Component, memo } from "react";
 import { createPortal } from "react-dom";
-import { MoreHorizontal, ArrowUp, ArrowDown, Tag, Trash2, X, GripVertical } from "lucide-react";
+import { MoreHorizontal, ArrowUp, ArrowDown, Tag, Trash2, X, GripVertical, Search } from "lucide-react";
 import {
   DndContext,
   PointerSensor,
@@ -987,7 +987,7 @@ export default memo(function ChartTab({
     // ここに来るのは「フィルタ結果が 0 件」のケース。文言を汎用化。
     return (
       <div className="flex flex-col items-center justify-center py-16" style={{ color: 'var(--text-muted)' }}>
-        <div className="text-4xl mb-3">🔍</div>
+        <Search size={40} className="mb-3" aria-hidden strokeWidth={1.5} />
         <p className="text-sm">該当する銘柄がありません</p>
         <p className="text-xs mt-1" style={{ opacity: 0.7 }}>フィルタ条件を変えてみてください</p>
       </div>
