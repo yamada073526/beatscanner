@@ -60,6 +60,61 @@
     <meta name="twitter:description" content="過去 5 年バックテスト: ファンダメンタル 5 条件 PASS 銘柄を 1 年保有で 1 銘柄あたり平均 +32.56%、S&P 500 を +11.38% ポイント上回る。米国株決算を 2 秒で判定。" />
     <meta name="twitter:image" content="https://beatscanner-production.up.railway.app/api/og-image-backtest.png" />
 
+    <!-- v104 release MVP: JSON-LD 構造化データ (Sprint C-LP、 AIO 集客強化)
+         AI 検索エンジン (ChatGPT / Perplexity / Google AI Overviews) が
+         BeatScanner を「米国株決算分析ツール」 として引用しやすくなる。
+         WebApplication + Organization の 2 schema を埋め込む。 -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "BeatScanner",
+      "alternateName": "ビートスキャナー",
+      "url": "https://beatscanner-production.up.railway.app/",
+      "description": "米国株の決算 Beat/Miss を 2 秒で判定する個人投資家向け Web ダッシュボード。独自プロトコルに基づくファンダメンタル 5 条件 (Good Growth / Durability / Financials / Earnings Beat History / Valuation) を自動採点し、 過去 5 年バックテストでは PASS 銘柄が S&P 500 を +11.38pt 上回った実績。",
+      "applicationCategory": "FinanceApplication",
+      "applicationSubCategory": "Stock Analysis",
+      "operatingSystem": "Web (Chrome, Safari, Firefox, Edge)",
+      "inLanguage": "ja-JP",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "米国株個人投資家 (長期 buy-and-hold / 決算プレイヤー / ファンダメンタル分析重視層)"
+      },
+      "featureList": [
+        "決算 Beat/Miss 自動判定 (EPS / Revenue を実績 vs アナリスト予想で比較)",
+        "ファンダメンタル 5 条件 PASS/FAIL バッジ + AI 要約",
+        "経済指標カレンダー (CPI / FOMC / NFP / PCE)",
+        "マクロニュース統合 (Reuters / Bloomberg)",
+        "株価チャート + 決算日マーカー",
+        "保有銘柄ダッシュボード",
+        "図解 HTML 自動生成",
+        "SEC EDGAR 10-K 直 fetch"
+      ],
+      "offers": [
+        {
+          "@type": "Offer",
+          "name": "Free",
+          "price": "0",
+          "priceCurrency": "JPY",
+          "description": "1 日 3 銘柄まで無料分析、 5 条件 PASS/FAIL バッジ、 基本機能"
+        },
+        {
+          "@type": "Offer",
+          "name": "Pro",
+          "price": "2000",
+          "priceCurrency": "JPY",
+          "billingIncrement": "P1M",
+          "description": "無制限分析、 直近 8Q 履歴、 AI 詳細レポート、 銘柄スクリーナー、 Cup-Handle テクニカル検出"
+        }
+      ],
+      "publisher": {
+        "@type": "Organization",
+        "name": "BeatScanner",
+        "url": "https://beatscanner-production.up.railway.app/"
+      }
+    }
+    </script>
+
     <!-- §11-D-Analytics: 計測基盤の初期化は src/lib/analytics.js (main.jsx 経由)
          で実行。ID 未設定時は完全 no-op、本体に影響なし。 -->
   </head>
