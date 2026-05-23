@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useRef } from 'react';
+import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { FileBarChart2 } from 'lucide-react';
 import { useJudgment } from '../../state/JudgmentContext.jsx';
 // handover v82 Phase 5.5: ConditionRow click → DiagramCard pulse 連携 (multi-review 6 体合議 verdict、 2026-05-17)。
@@ -62,6 +62,9 @@ import UnifiedJudgmentSection from './UnifiedJudgmentSection.jsx';
 import EpsBeatStreakChip from './EpsBeatStreakChip.jsx';
 // v104 release MVP: 10-K (年次報告書) — リファレンス章 5 で SEC EDGAR 直 fetch。
 import TenKLinksPanel from '../../../../components/TenKLinksPanel.jsx';
+// v104 Phase G Phase 4: 章 2 (基本財務) を 3 tab (Guidance / 過去業績 / 直近 8Q) に reorg。
+//   feature flag pane3_v3='1' で gated、 default 既存維持 (dogfood revert 安全)。
+import ChapterTabs from '../../primitives/ChapterTabs.jsx';
 // Phase G Phase 3 (handover v99 §0-D): ChapterSection — 章 2-5 用 generic 章扉 (Noto Serif JP / gold hairline)。
 // headerOnly mode で content 再配置せず brand 一貫性 ([[feedback-gold-accent-continuity]]) を実現。
 import ChapterSection from './ChapterSection.jsx';
@@ -146,6 +149,22 @@ function isPane3V2() {
     return true;
   } catch {
     return true;
+  }
+}
+
+// v104 Phase G Phase 4 (handover v100/103 §release MVP item 2):
+// pane3_v3='1' で章 2「基本財務」 を 3 tab 切替に統合 (Guidance / 過去業績 / 直近 8Q)。
+// default OFF、 ?pane3_v3=1 で試用、 localStorage で永続。
+// Bloomberg / Refinitiv 流の「同カテゴリ複数 viewport」 idiom、 dogfood feedback で OK なら default ON。
+function isPane3V3() {
+  try {
+    if (typeof window === 'undefined') return false;
+    const urlParam = new URLSearchParams(window.location.search).get('pane3_v3');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('pane3_v3') === '1';
+  } catch {
+    return false;
   }
 }
 
@@ -401,6 +420,10 @@ export default function JudgmentDetail({
   // Phase G Phase 3 (handover v99 §0-D): pane3_v2 で章 2-5 全章扉に gold 章扉 (Noto Serif JP)
   // を投入。 isPane3V2() を component スコープに hoist し、 章扉 conditional swap に利用。
   const isV2 = isPane3V2();
+  // v104 Phase G Phase 4: 章 2 tab interface 切替 flag
+  const isV3 = isPane3V3();
+  // 章 2 tab state (Guidance / EarningsHistory / QuarterlyHistory)
+  const [ch2Tab, setCh2Tab] = useState('guidance');
 
   return (
     // Sprint 0 (Phase 2): MotionProvider で Pane 3 全体を wrap。
@@ -605,23 +628,9 @@ export default function JudgmentDetail({
         </div>
       )}
 
-      {/* GuidanceCard: expanded 固定 (今期/来期 EPS = 投資判断の直接 input)
-          Sprint 4: SectionFade で section in-view fade-in (案1)
-          v97 CLS fix: `{guidance && (...)}` を撤去し常時 mount (skeleton で min-height 確保)。
-          conditional render だと guidance 後追い load で縦幅 0 → 数百 px 突然増加し、
-          下にある ProfileCard の click target が押し下げられて user が誤 click する CLS bug。
-          isLoading={detail?.isLoading} で 3 state: loading→skeleton / no-data→未提示 UI / ok→通常。 */}
-      <SectionFade id="sec-guidance" staggerIndex={1}>
-        <GuidanceCard
-          guidance={guidance}
-          isLoading={!guidance && detail?.isLoading !== false}
-          isSecLoading={false}
-          nextEarningsDays={detail?.nextEarningsDays ?? null}
-        />
-      </SectionFade>
-
       {/* === Sprint 3: ProfileCard → AccordionSection wrap (collapsed) ===
-          Phase 2.6 5-4: onNavigateTicker で競合 chip click → 銘柄 navigate */}
+          Phase 2.6 5-4: onNavigateTicker で競合 chip click → 銘柄 navigate
+          v104 Phase G Phase 4: ProfileCard は tab 外 (会社概要 anchor 維持)、 isV3 でも常時表示 */}
       {isScrollV1 ? (
         <ProfileCard
           ticker={selectedTicker}
@@ -650,22 +659,86 @@ export default function JudgmentDetail({
         </AccordionSection>
       )}
 
-      {/* === Sprint 3: EarningsHistoryChart (旧 EarningsBars + HistoryChart 統合、expanded 固定) ===
-          user override 2: small multiples 縦バー 3 段 (売上高 / EPS / CFPS)。
-          ファンダメンタル5条件 §5 連続増加判定の視覚 anchor として expanded 維持。
-          Sprint 4: SectionFade で section in-view fade-in (案1)
-          v100 QA #1 章扉 skeleton CLS fix: 旧 `{periods?.length > 0 && ...}` の conditional
-          render を撤去し常時 mount。 EarningsHistoryChart 自身が minHeight 360 envelope を持つ
-          ため、 result 後追い load 時にも章扉「II. 市場評価」 位置が動かない。 periods 空時は
-          内部「過去業績データを取得中...」 placeholder で skeleton 表示維持。
-          [[feedback-cls-envelope-pattern]] と整合。 */}
-      <SectionFade id="sec-earnings-history" staggerIndex={2}>
-        <EarningsHistoryChart
-          periods={result?.periods ?? []}
-          currency={result?.currency}
-          isLoading={!result?.periods && detail?.isLoading !== false}
-        />
-      </SectionFade>
+      {/* v104 Phase G Phase 4 (handover v100/103 §release MVP item 2):
+          Guidance + 過去 5 年 EarningsHistory + 直近 8Q を 1 tab interface に統合。
+          feature flag pane3_v3='1' で gated、 default 既存 (縦並び) 維持で dogfood revert 安全。
+          Bloomberg / Refinitiv 流「同カテゴリ複数 viewport」 idiom、
+          章 3 (市場評価) の QuarterlyHistoryTable は isV3 ON 時にここに統合される。 */}
+      {isV3 ? (
+        <SectionFade id="sec-ch2-tabs" staggerIndex={1}>
+          <ChapterTabs
+            tabs={[
+              { key: 'guidance', label: '今期/来期' },
+              { key: 'history', label: '過去 5 年' },
+              { key: 'quarterly', label: '直近 8Q', badge: 'PRO' },
+            ]}
+            activeKey={ch2Tab}
+            onChange={setCh2Tab}
+            ariaLabel="基本財務 — 期間別 EPS / Revenue"
+          >
+            {{
+              guidance: (
+                <GuidanceCard
+                  guidance={guidance}
+                  isLoading={!guidance && detail?.isLoading !== false}
+                  isSecLoading={false}
+                  nextEarningsDays={detail?.nextEarningsDays ?? null}
+                />
+              ),
+              history: (
+                <EarningsHistoryChart
+                  periods={result?.periods ?? []}
+                  currency={result?.currency}
+                  isLoading={!result?.periods && detail?.isLoading !== false}
+                />
+              ),
+              quarterly: selectedTicker ? (
+                <PremiumLock
+                  feature="earnings_8q"
+                  plan={plan}
+                  label="直近 8Q の Beat/Miss streak を一覧で"
+                  bullets={[
+                    '過去 8 四半期の EPS / 売上 surprise %',
+                    '連続 Beat 期数の自動集計',
+                    'ピンクが直近、 直前の決算と並べて trend を可視化',
+                  ]}
+                  onUpgrade={detailContext.onUpgrade}
+                >
+                  <div id="sec-quarterly-history-v3">
+                    <QuarterlyHistoryTable ticker={selectedTicker} limit={8} />
+                  </div>
+                </PremiumLock>
+              ) : null,
+            }}
+          </ChapterTabs>
+        </SectionFade>
+      ) : (
+        <>
+          {/* GuidanceCard: expanded 固定 (今期/来期 EPS = 投資判断の直接 input)
+              Sprint 4: SectionFade で section in-view fade-in (案1)
+              v97 CLS fix: `{guidance && (...)}` を撤去し常時 mount (skeleton で min-height 確保)。 */}
+          <SectionFade id="sec-guidance" staggerIndex={1}>
+            <GuidanceCard
+              guidance={guidance}
+              isLoading={!guidance && detail?.isLoading !== false}
+              isSecLoading={false}
+              nextEarningsDays={detail?.nextEarningsDays ?? null}
+            />
+          </SectionFade>
+
+          {/* === Sprint 3: EarningsHistoryChart (旧 EarningsBars + HistoryChart 統合、expanded 固定) ===
+              v100 QA #1 章扉 skeleton CLS fix: 旧 `{periods?.length > 0 && ...}` 撤去し常時 mount。
+              EarningsHistoryChart 自身が minHeight 360 envelope を持つため CLS なし。
+              [[feedback-cls-envelope-pattern]] と整合。 */}
+          <SectionFade id="sec-earnings-history" staggerIndex={2}>
+            <EarningsHistoryChart
+              periods={result?.periods ?? []}
+              currency={result?.currency}
+              isLoading={!result?.periods && detail?.isLoading !== false}
+            />
+          </SectionFade>
+        </>
+      )}
 
       {/* === 章 3: 市場評価 (H2 Chapter Break + v97 G-2 軽量強化) ===
           ChapterHeader「市場評価」 で章扉感強化、 data-chapter-start で 48px breathing room。
@@ -713,8 +786,10 @@ export default function JudgmentDetail({
       )}
 
       {/* === Sprint 3: QuarterlyHistoryTable → AccordionSection wrap (collapsed) ===
-          PremiumLock は AccordionSection の外 (Premium lock 表示を header で見せるため)。 */}
-      {selectedTicker && (
+          PremiumLock は AccordionSection の外 (Premium lock 表示を header で見せるため)。
+          v104 Phase G Phase 4: isV3 ON 時は章 2 ChapterTabs の「直近 8Q」 tab に統合されるため、
+          ここでは render しない (二重表示防止)。 */}
+      {selectedTicker && !isV3 && (
         isScrollV1 ? (
           <PremiumLock
             feature="earnings_8q"
