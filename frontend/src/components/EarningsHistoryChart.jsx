@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   BarChart,
   Bar,
@@ -302,11 +302,21 @@ function YoYBadge({ year, yearFull, yoyNum, hasYoy }) {
 // ── Main component ───────────────────────────────────────────────────────────
 // v100 QA #5 (handover v99 §0-A) 0 件 fallback:
 //   isLoading prop で「loading 中」 vs「データなし」 を分岐し、 misleading な永久 loading 表示を避ける。
-function EarningsHistoryChartInner({ periods = [], currency = 'USD', isLoading = false }) {
+// v108 multi-review verdict (議題 1): triggerOnMount prop で ChapterTabs 内 tab 切替時に halo 発火可能化。
+//   IO trigger は parent viewport 内で発火済 → tab 切替 mount で再発火しないため、 manual trigger 追加。
+function EarningsHistoryChartInner({ periods = [], currency = 'USD', isLoading = false, triggerOnMount = false }) {
   const [showModal, setShowModal] = useState(false);
   // Phase 2.7 Sprint 1 #1: Tier M halo sweep ref
   const haloRef = useRef(null);
-  useHaloSweepOnce(haloRef);
+  const { triggerOnAccordionOpen: triggerHaloManual } = useHaloSweepOnce(haloRef, { skipIO: triggerOnMount });
+  // v108 多くの場合 ChapterTabs から `triggerOnMount={ch2Tab === 'history'}` で mount 時 true、
+  //   useEffect で 1 回だけ halo 発火 (data-halo-fired guard で 2 回目防止)。
+  useEffect(() => {
+    if (triggerOnMount) {
+      triggerHaloManual?.();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [triggerOnMount]);
 
   // Chart Overlay Safety: conditional render + Number.isFinite
   // Sprint A: 年次集計 (最大 5 年)。

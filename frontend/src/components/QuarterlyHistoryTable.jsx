@@ -222,15 +222,15 @@ const DEFAULT_COLUMNS = [
 // Phase 2.8 Sprint 1 #3: haloTriggerRef prop — AccordionSection 内にある場合に使用
 // 親が haloTriggerRef (useRef) を渡し、onOpenChange(id, true) 時に
 // haloTriggerRef.current?.() を呼ぶことで accordion 展開時に halo を 1 回発火。
-export default function QuarterlyHistoryTable({ ticker, limit = 8, columns, haloTriggerRef = null }) {
+export default function QuarterlyHistoryTable({ ticker, limit = 8, columns, haloTriggerRef = null, triggerOnMount = false }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   // Phase 2.7 Sprint 1 #1': Tier M halo sweep ref (1 回限り)
   const haloRef = useRef(null);
   // Phase 2.9 Sprint 2 #Bug2: haloTriggerRef あり (accordion-controlled) なら IO skip
-  // (parent JudgmentDetail の haloFiredSetRef で 1 回限り保証、 詳細は AnalystPanel 側 comment)
-  const { triggerOnAccordionOpen } = useHaloSweepOnce(haloRef, { skipIO: !!haloTriggerRef });
+  // v108 multi-review verdict (議題 1): triggerOnMount=true (ChapterTabs 内) でも IO skip + mount 時 manual trigger
+  const { triggerOnAccordionOpen } = useHaloSweepOnce(haloRef, { skipIO: !!haloTriggerRef || triggerOnMount });
 
   // Phase 2.8 Sprint 1 #3: haloTriggerRef に trigger 関数を register
   useEffect(() => {
@@ -239,6 +239,15 @@ export default function QuarterlyHistoryTable({ ticker, limit = 8, columns, halo
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [haloTriggerRef]);
+
+  // v108 multi-review verdict (議題 1): ChapterTabs の「直近 8Q」 tab 切替 mount 時に halo 1 回発火。
+  //   data-halo-fired guard で 2 回目発火防止 (既存 hook の仕様)。
+  useEffect(() => {
+    if (triggerOnMount) {
+      triggerOnAccordionOpen?.();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [triggerOnMount]);
 
   useEffect(() => {
     if (!ticker) return;

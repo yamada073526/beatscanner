@@ -17,14 +17,14 @@
  */
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronUp, ChevronDown, PanelRightOpen, PanelRightClose, MoreHorizontal, Search } from 'lucide-react';
+import { PanelRightOpen, PanelRightClose, MoreHorizontal, Search } from 'lucide-react';
 import MarketStripCompact from './MarketStripCompact.jsx';
 import MarketStatusPill from './MarketStatusPill.jsx';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 
 export default function WorkspaceHeader() {
-  const headerCollapsed = useWorkspaceStore((s) => s.headerCollapsed);
-  const toggleHeader = useWorkspaceStore((s) => s.toggleHeader);
+  // v108 multi-review verdict: headerCollapsed state は store 残置 (migration risk 回避) するが
+  //   button 削除 + 常時展開固定で実質無効化。 toggleHeader も呼び出し箇所なくなる。
   const pane4Expanded = useWorkspaceStore((s) => s.pane4Expanded);
   const togglePane4 = useWorkspaceStore((s) => s.togglePane4);
 
@@ -311,55 +311,22 @@ export default function WorkspaceHeader() {
           document.body
         )}
 
-        {/* Tier 1 折りたたみ toggle (改善希望①) */}
-        <button
-          type="button"
-          onClick={toggleHeader}
-          aria-expanded={!headerCollapsed}
-          aria-controls="ws-tier1-strip"
-          aria-label={headerCollapsed ? '指標バーを展開' : '指標バーを折りたたむ'}
-          title={headerCollapsed ? '指標バーを展開' : '指標バーを折りたたむ'}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 24,
-            height: 24,
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm, 8px)',
-            background: 'var(--bg-card)',
-            color: 'var(--text-secondary)',
-            cursor: 'pointer',
-            flexShrink: 0,
-            transition: 'background 0.15s, border-color 0.15s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(56,189,248,0.10)';
-            e.currentTarget.style.borderColor = 'rgba(56,189,248,0.40)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'var(--bg-card)';
-            e.currentTarget.style.borderColor = 'var(--border)';
-          }}
-        >
-          {headerCollapsed ? (
-            <ChevronDown size={14} aria-hidden />
-          ) : (
-            <ChevronUp size={14} aria-hidden />
-          )}
-        </button>
+        {/* v108 multi-review 5 体合議 verdict (2026-05-24): 指標バー折りたたみ button 削除。
+            UI/UX + Frontend + QA = 3/5 賛成 (chrome 清潔、 「2 秒理解」 5 原則整合)、
+            金融 + マーケ = 削除反対 (morning routine anchor) → 妥協案: button 削除 + 指標常時表示維持。
+            workspaceStore の headerCollapsed state は削除しない (localStorage migration risk 回避)、
+            component 側で常に展開状態に固定。 既存 user の persist (headerCollapsed=true) は無効化される。 */}
         </div>
       </div>
 
-      {/* ── 下段 (24px、collapsible): Tier 1 指標バー ────────────── */}
+      {/* ── 下段 (24px、 常時展開): Tier 1 指標バー ────────────── */}
       <div
         id="ws-tier1-strip"
         style={{
-          maxHeight: headerCollapsed ? 0 : 24,
+          maxHeight: 24,
           minHeight: 0,
           overflow: 'hidden',
-          transition: 'max-height var(--motion-base, 200ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1))',
-          borderTop: headerCollapsed ? 'none' : '1px solid var(--border)',
+          borderTop: '1px solid var(--border)',
         }}
       >
         <MarketStripCompact />

@@ -736,10 +736,12 @@ export default function JudgmentDetail({
                 />
               ),
               history: (
+                // v108 multi-review verdict (議題 1): tab 切替 mount 時に halo 強制発火
                 <EarningsHistoryChart
                   periods={result?.periods ?? []}
                   currency={result?.currency}
                   isLoading={!result?.periods && detail?.isLoading !== false}
+                  triggerOnMount={ch2Tab === 'history'}
                 />
               ),
               quarterly: selectedTicker ? (
@@ -755,7 +757,12 @@ export default function JudgmentDetail({
                   onUpgrade={detailContext.onUpgrade}
                 >
                   <div id="sec-quarterly-history-v3">
-                    <QuarterlyHistoryTable ticker={selectedTicker} limit={8} />
+                    {/* v108 multi-review verdict (議題 1): tab 切替 mount 時に halo 強制発火 */}
+                    <QuarterlyHistoryTable
+                      ticker={selectedTicker}
+                      limit={8}
+                      triggerOnMount={ch2Tab === 'quarterly'}
+                    />
                   </div>
                 </PremiumLock>
               ) : null,

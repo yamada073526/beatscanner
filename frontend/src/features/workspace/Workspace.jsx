@@ -675,7 +675,8 @@ export default function Workspace({
   useUrlSync();
 
   // 改善希望①: Tier 1 折りたたみで shell の header height も縮小し、下ペインを広げる
-  const headerCollapsed = useWorkspaceStore((s) => s.headerCollapsed);
+  // v108 multi-review verdict: 指標バー折りたたみ button 削除 + 常時展開固定で headerCollapsed を ignore
+  const headerCollapsed = false;
   const pane4Expanded = useWorkspaceStore((s) => s.pane4Expanded);
   const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
   // §12-A-1: 指数 tab のとき Pane 2 / Pane 3 の中身を IndicesView に切替
