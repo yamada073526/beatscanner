@@ -97,20 +97,22 @@ export default function KpiStrip({ stats = [], frameless = false }) {
             - sticky 維持 (top 56 で SearchBar 直下)
             Phase G Phase 2: frameless mode で sticky / border / background を抑制
               (unified section 内で sticky + bg-card は冗長、 外枠と相互干渉) */}
+        {/* v99 dogfood feedback C (3 巡目): 旧 inner pane3-numeric は bg-card + padding 24px の
+            「内側 dark box」 が Card 外側 24px padding と二重 stacking、 user 体感「下半分空欄」 主因。
+            修正: inner dark box の bg/border/padding を完全削除、 Card padding 24px のみ使用。
+            grid layout は維持、 sticky も維持 (KpiStrip の浮遊 idiom を保つ)。 */}
         <div
           className="pane3-numeric"
           style={{
-            padding: frameless
-              ? 'var(--space-3, 12px) 0'
-              : 'var(--space-6, 24px) var(--space-7, 28px)',
+            padding: 0,
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
             gap: 'var(--space-5, 20px)',
             position: frameless ? 'static' : 'sticky',
             top: frameless ? undefined : 56,
             zIndex: frameless ? undefined : 'var(--z-base, 1)',
-            background: frameless ? 'transparent' : 'var(--bg-card)',
-            borderTop: frameless ? 'none' : '1px solid color-mix(in srgb, var(--color-gold) 35%, var(--border))',
+            background: 'transparent',
+            borderTop: 'none',
           }}
         >
           {stats.length === 0 ? (

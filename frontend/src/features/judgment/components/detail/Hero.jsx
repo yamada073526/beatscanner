@@ -103,11 +103,12 @@ export default function Hero({
               fadeIn=true: logo load 時に opacity 0→1 / 200ms ease-out
               monoFallback=true: fallback 頭文字円を neutral gray（投資業界色ルール遵守）
               shape='rounded': border-radius = var(--radius-md, 12px) */}
-          {/* v99 dogfood feedback B (2 巡目): 旧 48px center 揃えで数学的に正しいが視覚的に違和感
-              (Amazon ロゴの smile が icon 上半分にあり optical center が geometric center と乖離)。
-              修正: logo size 40px (ticker h1 fontSize と一致) + marginTop 4px (h1 margin と一致) で
-              ticker top edge と logo top edge が完全一致、 視覚的整合性最大化。 */}
-          <div style={{ flexShrink: 0, marginTop: 4 }}>
+          {/* v99 dogfood feedback B (3 巡目): 旧 marginTop:4 でも user 体感「頭が高い」。
+              真因: h1 fontSize 40 + lineHeight 1.05 で line box 42px、 letter glyph は
+              line box top から ~3-5px 下、 cap height は ~28px (fontSize の 70%)。
+              logo top edge と letter cap top を揃えるには marginTop が 9-11px 必要。
+              修正: marginTop 9px で「ticker 文字の頭」 と「logo 上端」 を視覚的に揃える。 */}
+          <div style={{ flexShrink: 0, marginTop: 9 }}>
             <CompanyLogo
               ticker={ticker}
               size={40}

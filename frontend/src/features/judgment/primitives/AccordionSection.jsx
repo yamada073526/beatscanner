@@ -97,25 +97,16 @@ export default function AccordionSection({
   const supportsVT = typeof document !== 'undefined' && 'startViewTransition' in document;
 
   // 開閉トグル
-  // v99 dogfood feedback F (3 体合議): close 時 View Transition と framer-motion AnimatePresence の
-  // 二重 animation で「残像」 発生 — VT は scroll/page change で活躍するが accordion 開閉では
-  // framer-motion spring と競合。 open は VT 維持 (cross-fade 効果あり)、 close は framer-motion のみで
-  // smooth に折り畳む方針。
+  // v99 dogfood feedback F (3 巡目): 2 巡目で「open のみ VT、 close は framer-motion 単独」 にしたが
+  // それでも残像残存。 真因再特定: VT は open でも snapshot を取って transition するため、
+  // framer-motion の height animation と競合し残像発生。 完全 fix: open/close 両方 VT を無効化、
+  // framer-motion AnimatePresence + spring に一元化。 (smooth 動きは保つ、 cross-fade 効果は失うが
+  // height + opacity の同時 spring で十分 Aman 級の motion を実現)
   const toggle = useCallback(() => {
     const next = !isOpen;
-
-    const apply = () => {
-      if (!isControlled) setInternalOpen(next);
-      if (onOpenChange) onOpenChange(id, next);
-    };
-
-    // 開く時のみ VT (cross-fade効果)、 閉じる時は framer-motion 単独で残像防止
-    if (supportsVT && next) {
-      document.startViewTransition(apply);
-    } else {
-      apply();
-    }
-  }, [isOpen, isControlled, onOpenChange, id, supportsVT]);
+    if (!isControlled) setInternalOpen(next);
+    if (onOpenChange) onOpenChange(id, next);
+  }, [isOpen, isControlled, onOpenChange, id]);
 
   // a11y: Enter / Space で toggle
   const handleKeyDown = useCallback(

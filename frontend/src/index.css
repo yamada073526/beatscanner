@@ -9684,6 +9684,31 @@ button.ds-chip[data-pressed="true"]:hover {
   padding: var(--space-4, 16px) 0 var(--space-2, 8px);
 }
 
+/* v99 dogfood feedback D (3 巡目): GuidanceCard loading 演出 ellipsis 3 段階アニメ。
+   UX writer subagent verdict: Stripe/Linear/Bloomberg idiom (静的・品格高 spinner よりも文言寄り)。
+   prefers-reduced-motion 配慮で animation 停止。 */
+.guidance-loading-ellipsis::after {
+  content: '';
+  animation: bs-loading-ellipsis 1.5s steps(3, end) infinite;
+  display: inline-block;
+  width: 1.2em;
+  text-align: left;
+}
+
+@keyframes bs-loading-ellipsis {
+  0%   { content: '.'; }
+  33%  { content: '..'; }
+  66%  { content: '...'; }
+  100% { content: '.'; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guidance-loading-ellipsis::after {
+    animation: none;
+    content: '...';
+  }
+}
+
 .chapter-section--sub::before {
   /* v99 dogfood feedback E (2 巡目): 旧「副柱は hairline なし」 だと V「リファレンス」 が
      accordion 群と外枠ダブって見える。 副柱にも薄い gold hairline (主柱 30% 強度) を追加、
@@ -9707,9 +9732,11 @@ button.ds-chip[data-pressed="true"]:hover {
   display: flex;
   align-items: baseline;
   gap: var(--space-2, 8px);
-  /* 主柱の border-bottom + padding-bottom も なし (副柱は brief) */
-  border-bottom: none;
-  padding-bottom: 0;
+  /* v99 dogfood feedback E (3 巡目): user 体感「リファレンス accordion 二重線、 market 評価のような
+     gold underline」 → 副柱にも subtle border-bottom (主柱 18% → 副柱 10%) で「アンダーライン」 を追加。
+     accordion との間に breathing room も増す (padding-bottom 0 → 8px)。 */
+  border-bottom: 1px solid color-mix(in srgb, var(--color-gold) 10%, transparent);
+  padding-bottom: var(--space-2, 8px);
   margin-bottom: var(--space-3, 12px);
 }
 

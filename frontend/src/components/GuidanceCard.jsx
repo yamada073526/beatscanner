@@ -784,8 +784,14 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
                 ？
               </button>
             </h3>
-            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              ガイダンスは現在準備中です
+            {/* v99 dogfood feedback D (3 巡目、 UX writer subagent verdict): 旧「ガイダンスは現在準備中です」
+                は淡白。 「照合中 — 少々お待ちください」 + ellipsis 3 段階アニメーションで Aman idiom + 寄り添い感両立。
+                Bloomberg Terminal「Retrieving...」 idiom + Stripe「Processing」 ellipsis pattern を継承。 */}
+            <span
+              className="text-xs guidance-loading-ellipsis"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              ガイダンス情報を照合中 — 少々お待ちください
             </span>
           </div>
           {showModal && <GuidanceInfoModal onClose={() => setShowModal(false)} />}
