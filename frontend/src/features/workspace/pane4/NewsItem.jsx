@@ -34,8 +34,11 @@ export default function NewsItem({ item, displayTitle, onSelect, isOpen, index }
         gap: 8,
         width: 'calc(100% - 8px)',
         textAlign: 'left',
-        padding: '6px 10px 6px 12px',
-        margin: '3px 4px',
+        // v101 Sprint B-L (Linear Inbox 流 density): padding 6→4 / margin 3→2 / row height 52→~42px、
+        //  viewport 10-12 件表示。 既存 :hover/:active/.is-arriving の transform 計算は不変
+        //  ([[feedback-press-feedback-delta]] :active translateY(0) scale(0.97) は CSS で keep).
+        padding: '4px 10px 4px 12px',
+        margin: '2px 4px',
         borderRadius: 'var(--radius-md, 10px)',
         border: '1px solid var(--border)',
         background: 'transparent',
@@ -73,8 +76,8 @@ export default function NewsItem({ item, displayTitle, onSelect, isOpen, index }
           decoding="async"
           onError={() => setImgError(true)}
           style={{
-            width: 40,
-            height: 40,
+            width: 32,
+            height: 32,
             flexShrink: 0,
             borderRadius: 6,
             objectFit: 'cover',
@@ -85,8 +88,8 @@ export default function NewsItem({ item, displayTitle, onSelect, isOpen, index }
         <div
           aria-hidden
           style={{
-            width: 40,
-            height: 40,
+            width: 32,
+            height: 32,
             flexShrink: 0,
             borderRadius: 6,
             display: 'flex',
@@ -96,11 +99,12 @@ export default function NewsItem({ item, displayTitle, onSelect, isOpen, index }
             color: colors.fg,
           }}
         >
-          {Icon && <Icon size={16} strokeWidth={1.75} aria-hidden />}
+          {Icon && <Icon size={14} strokeWidth={1.75} aria-hidden />}
         </div>
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
+        {/* v101 Sprint B-L: header gap 6→4 / marginBottom 4→2 で 1 行高さ圧縮 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginBottom: 2 }}>
           {cat && cat !== '登録銘柄' && (
             <span
               style={{
@@ -199,10 +203,13 @@ export default function NewsItem({ item, displayTitle, onSelect, isOpen, index }
           style={{
             fontSize: 12,
             fontWeight: 600,
-            lineHeight: 1.35,
+            // v101 Sprint B-L (Linear Inbox 流): 2 行 → 1 行 line-clamp、 line-height 1.35→1.3 で
+            //  viewport 件数 10-12 件確保。 title 切れる場合は ReadingMode で全文を出すので
+            //  ニュース一覧では「件数優先」 (Linear / Gmail / Mailbox 共通設計)
+            lineHeight: 1.3,
             color: 'var(--text-primary)',
             display: '-webkit-box',
-            WebkitLineClamp: 2,
+            WebkitLineClamp: 1,
             WebkitBoxOrient: 'vertical',
             overflow: 'hidden',
           }}

@@ -9,7 +9,6 @@
  *   - 本文 SSE ストリーミング (旧 useArticleModal パターン)、ストリーミング翻訳 (/api/translate/stream)
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { TrendingUp, Globe, BarChart3, Bookmark, Languages } from 'lucide-react';
 import { fetchMacroNews, fetchNewsBulk, translateTexts } from '../../api.js';
 import { buildSignals } from './pane4/signal.js';
@@ -258,9 +257,32 @@ export default function Pane4Inspector({ items = [] }) {
                 onClick={() => setPane4Section('scanner')}
                 aria-pressed={pane4Section === 'scanner'}
                 className={pane4Section === 'scanner' ? 'is-active' : ''}
-                title="スクリーナー (ファンダ 5 条件 + Cup-Handle)"
+                title="スクリーナー (ファンダ 5 条件 + Cup-Handle) — Pro 限定機能"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
               >
-                スキャナー
+                <span>スキャナー</span>
+                {/* v101 Sprint B-pro-badge: 期待値設計 — Pro 機能であることを segmented tab で先行通知。
+                    ProTeaser §66-82 と同 cyan-outline pattern、 inline サイズに圧縮 (9px / 2px padding). */}
+                <span
+                  aria-label="Pro 限定"
+                  data-testid="pane4-scanner-pro-badge"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    padding: '1px 6px',
+                    border: '1px solid rgba(56, 189, 248, 0.55)',
+                    borderRadius: 999,
+                    color: 'rgb(56, 189, 248)',
+                    fontSize: 9,
+                    fontWeight: 700,
+                    letterSpacing: '0.10em',
+                    textTransform: 'uppercase',
+                    lineHeight: 1.2,
+                    background: 'rgba(56, 189, 248, 0.06)',
+                  }}
+                >
+                  Pro
+                </span>
               </button>
             </div>
             {pane4Section === 'macro' && latestPublished && (
@@ -376,29 +398,14 @@ export default function Pane4Inspector({ items = [] }) {
         {pane4Section === 'scanner' ? (
           <ScannerSlot />
         ) : selected ? (
-          <PanelGroup direction="vertical" autoSaveId="bs:ws:pane4-vertical">
-            <Panel defaultSize={55} minSize={25}>
-              <NewsList
-                sorted={sorted}
-                loading={loading}
-                jpEnabled={jpEnabled}
-                titleTranslations={titleTranslations}
-                onSelect={setSelected}
-                selected={selected}
-              />
-            </Panel>
-            <PanelResizeHandle
-              style={{ height: 1, background: 'var(--border)', cursor: 'row-resize' }}
-              aria-label="高さを調整"
-            />
-            <Panel defaultSize={45} minSize={20}>
-              <ReadingMode
-                item={selected}
-                onClose={closeReadingRoom}
-                jpEnabled={jpEnabled}
-              />
-            </Panel>
-          </PanelGroup>
+          /* v101 Sprint B-E (UI/UX + 設計レビュー反映): Reading Mode 全面 Overlay (100%)
+             旧 PanelGroup (55/45 縦割) を破棄。 ReadingMode close で NewsList に戻る Linear / Gmail 流。
+             Notion Reader 風 typography (max-width 680px + line-height 1.78) は ReadingMode 内で適用. */
+          <ReadingMode
+            item={selected}
+            onClose={closeReadingRoom}
+            jpEnabled={jpEnabled}
+          />
         ) : (
           <NewsList
             sorted={sorted}

@@ -5,8 +5,10 @@
 import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { X, ExternalLink } from 'lucide-react';
+import { m, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { translateTexts } from '../../../api.js';
 import { sanitizeText } from '../../../lib/blocklist.js';
+import MotionProvider from '../../../components/MotionProvider.jsx';
 import { MD_COMPONENTS, stripArticleTrailer } from './markdown.jsx';
 import {
   CATEGORY_ICON,
@@ -142,6 +144,10 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
   // **二重翻訳**を行っており、TTFT が +5-10s 倍化していた。
   // 旧 UI に倣い、frontend 再翻訳を完全廃止し enContent を直接表示する.
 
+  // §v101 Sprint B-motion: framer-motion で記事 open/close + 記事切替時の slide transition
+  // (NewsItem slide-in は既存 CSS @keyframes ws-pane4-slide-in v66 §1 round 3 で確立済の
+  //  backwards 戦略を保持、hover/active transform 保護のため触らない)
+  const shouldReduceMotion = useReducedMotion();
   if (!item) return null;
   const cat = pickPrimaryCategory(item);
   const colors = getNewsColors(item.importance, cat);
@@ -161,7 +167,16 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
   const isWaitingForJa = !enContent && !enError;
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <MotionProvider>
+      <AnimatePresence mode="wait" initial={false}>
+        <m.div
+          key={item.url || 'reading-empty'}
+          initial={shouldReduceMotion ? false : { opacity: 0, x: 12 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={shouldReduceMotion ? undefined : { opacity: 0, x: -8 }}
+          transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+          style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+        >
       <div
         className="ws-pane4-header"
         style={{
@@ -216,7 +231,12 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
           </a>
         )}
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px' }}>
+      {/* v101 Sprint B-E (UI/UX + 設計レビュー反映): Reading Room 全面 Overlay 化に伴い
+          Notion Reader 風 typography を適用。 max-width 680px (記事カラム幅) + 中央寄せ +
+          上下 padding 24px (overlay 全面化で hairline border が遠くなる分の reading rhythm 補正).
+          line-height 1.78 は --longform-p-leading で既に達成済 (CSS .ws-pane4-article-body). */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 16px', display: 'flex', justifyContent: 'center' }}>
+        <div style={{ width: '100%', maxWidth: 680 }}>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
           {cat && (
             <span
@@ -384,7 +404,10 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
             )}
           </div>
         )}
+        </div>
       </div>
-    </div>
+        </m.div>
+      </AnimatePresence>
+    </MotionProvider>
   );
 }
