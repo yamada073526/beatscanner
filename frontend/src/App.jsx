@@ -167,10 +167,7 @@ export default function App() {
   // handover v78 Session 4 (2026-05-17): Premium tier (¥1,800/月) 派生変数。
   // Cup-Handle pivot 価格表示 + Phase 2 全銘柄 scan + push 通知 は Premium 限定。
   const isPremiumUser = isSubscribed && subscription?.tier === 'premium';
-  // H4 diagnostic: Premium 判定デバッグ log (真因確定済のため残置不要だが 1 deploy 後に状況確認)
-  if (subscription) {
-    console.log('[watchlist H4] isProUser:', isProUser, 'isPremiumUser:', isPremiumUser, 'tier:', subscription?.tier, 'status:', subscription?.status);
-  }
+  // v106 release-check audit: H4 diagnostic console.log 削除済 (真因確定済、 残置不要)
 
   // ── Judgment result (Step 4 で hook 抽出) ───────────────────────
   // prefetchedRef / prefetch を hook より先に定義 (hook が prefetch コールバックを必要とするため).

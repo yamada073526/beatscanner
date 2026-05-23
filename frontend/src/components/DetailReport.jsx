@@ -525,7 +525,7 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
 
     // ★ 事前生成済みなら即座に表示
     if (bgVizData && safeYears === 3) {
-      console.log('[BG_VIZ] Using pre-generated data instantly');
+      // v106 release-check audit: [BG_VIZ] debug log 削除 (動作確認済、 production trace 不要)
       setVizData(bgVizData);
       setVizState('done');
       setTimeout(() => vizPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
@@ -534,7 +534,6 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
 
     // ★ bg進行中 かつ years=3 → 新規リクエストを立てず bg完了を待つ
     if (bgVizLoading && bgVizPromiseRef.current && safeYears === 3) {
-      console.log('[BG_VIZ] Waiting for in-progress background generation...');
       setVizState('loading');
       startProgressSimulation();
       try {
@@ -686,7 +685,7 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
           setVizState('done');
           setAutoDisplayed(true);
           setTimeout(() => setAutoDisplayed(false), 3000);
-          console.log('[BG_VIZ] Phase1 instant displayed');
+          // v106 release-check audit: [BG_VIZ] Phase1 debug log 削除
         } catch (e1) {
           console.warn('[BG_VIZ] Phase1 instant failed:', e1?.message || e1);
         }
@@ -714,7 +713,7 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
           _phase: 'complete',
         }));
         setBgVizData(fullJson);
-        console.log('[BG_VIZ] Phase2 narrative completed');
+        // v106 release-check audit: [BG_VIZ] Phase2 debug log 削除
       } catch (e) {
         console.warn('[BG_VIZ] Failed:', e?.message || e);
       } finally {

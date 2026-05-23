@@ -976,7 +976,10 @@ _SAMPLE_PASS_LOCK = asyncio.Lock()
 
 # --- Demo mode ---
 
-DEMO_TICKERS = {"AAPL", "MSFT", "NVDA"}
+# v106 release-check skill audit (2026-05-24): DEMO_TICKERS 削除済 (dead code、 参照 0)。
+#   当初 v?? で 3 銘柄 whitelist 案だったが、 LP「タップで即分析（登録不要）」 と矛盾する Trust Cliff
+#   risk のため任意銘柄 + 3 req/IP/day rate limit (_DEMO_RATE_LIMIT) に置換済。 dead var が残ると
+#   LP/UX 設計の意図を読み違える source となるため削除。
 _DEMO_RATE_LIMIT: dict[str, list[float]] = {}
 DEMO_LIMIT_COUNT = 3
 DEMO_LIMIT_WINDOW = 86400.0  # 24 hours

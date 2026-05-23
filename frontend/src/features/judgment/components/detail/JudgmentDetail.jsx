@@ -326,10 +326,10 @@ export default function JudgmentDetail({
     if (hasResult) return; // 既に結果あり → skip
     if (analyzedTickerRef.current === selectedTicker) return; // 既に fire 済み → skip
     analyzedTickerRef.current = selectedTicker;
-    console.log('[analyze] auto fire:', selectedTicker);
     try {
       onAnalyze(selectedTicker);
     } catch (err) {
+      // v106 release-check audit: console.warn は error 系列で保持 (production trace 用)
       console.warn('[analyze] auto runAnalyze failed:', err);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -633,7 +633,7 @@ export default function JudgmentDetail({
           <button
             type="button"
             onClick={() => {
-              console.log('[analyze] retry button clicked:', selectedTicker);
+              // v106 release-check audit: debug log 削除 (retry button は user action なので trace 不要)
               analyzedTickerRef.current = null; // 再試行を許可
               try {
                 onAnalyze(selectedTicker);
