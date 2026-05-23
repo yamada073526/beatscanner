@@ -231,8 +231,12 @@ export default function Pane4Inspector({ items = [] }) {
           zIndex: 2,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        {/* v100 QA #3-B (handover v99 §0-A): iPad 横で Pane 4 width 圧縮時、 旧 flexWrap 無しで
+            character break (「13 時間前」 が 1 文字 1 行に縦並び) が user dogfood で発覚。
+            outer + inner flex 両方に flexWrap: 'wrap' を追加し、 各 inline label には whiteSpace: nowrap
+            で文字単位 wrap を絶対防止。 [[feedback-clipping-root-cause-chain]] と同 pattern。 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
             {/* handover v81 Top 4: Pane 4 section 切替 segmented tab */}
             <div role="group" aria-label="Pane 4 section" className="ws-pane4-jp-segmented">
               <button
@@ -255,12 +259,12 @@ export default function Pane4Inspector({ items = [] }) {
               </button>
             </div>
             {pane4Section === 'macro' && latestPublished && (
-              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+              <span style={{ fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                 · {fmtRelative(latestPublished)}
               </span>
             )}
             {pane4Section === 'macro' && !latestPublished && loading && (
-              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>· 読込中</span>
+              <span style={{ fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>· 読込中</span>
             )}
           </div>
           {/* §round16: 話題 / 新着 segmented + JP segmented を 1 行同居 (Macro Lens のみ) */}
