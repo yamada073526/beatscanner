@@ -191,7 +191,10 @@ export default function Pane4Inspector({ items = [] }) {
     const ctrl = new AbortController();
     (async () => {
       try {
-        const out = await translateTexts(pending.map((v) => v.title));
+        // v101 Sprint B-abort (multi-review Frontend Architect + 実装 verdict):
+        //   旧実装は ctrl 生成だけで signal を渡しておらず cleanup で abort 効かなかった。
+        //   translateTexts に signal pass-through、 unmount 時に in-flight fetch を実際に中止。
+        const out = await translateTexts(pending.map((v) => v.title), { signal: ctrl.signal });
         if (seq !== translateSeqRef.current) return; // race guard
         if (!Array.isArray(out)) {
           setTranslateUnavailable(true);
@@ -206,7 +209,9 @@ export default function Pane4Inspector({ items = [] }) {
         } else {
           setTranslateUnavailable(true);
         }
-      } catch {
+      } catch (e) {
+        // AbortError は意図的な cancel、 fail 扱いしない
+        if (e?.name === 'AbortError') return;
         setTranslateUnavailable(true);
       }
     })();

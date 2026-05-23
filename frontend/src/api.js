@@ -265,11 +265,15 @@ export async function fetchEconomicCalendar(days = 7, impact = null) {
   return r.json();
 }
 
-export async function translateTexts(texts) {
+export async function translateTexts(texts, { signal } = {}) {
+  // v101 Sprint B-abort (multi-review Frontend Architect + 実装 verdict):
+  //   signal を optional 引数で受け、 fetch に渡すことで AbortController による
+  //   in-flight cancellation を実現。 Pane4Inspector cleanup で abort 動作するように。
   const r = await fetch('/api/translate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ texts }),
+    signal,
   });
   if (!r.ok) throw new Error('translate failed');
   const data = await r.json();
