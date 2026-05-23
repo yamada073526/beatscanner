@@ -350,7 +350,12 @@ function AccordionSection({ title, badge, badgeColor = '#1e293b', children, stre
 
       <div style={{ display: 'grid', gridTemplateRows: open ? '1fr' : '0fr', transition: 'grid-template-rows 0.25s ease' }}>
         <div style={{ overflow: 'hidden' }}>
-          <div style={{ padding: '0 16px 16px' }}>
+          {/* v100 user dogfood feedback (2026-05-23、 AI 詳細レポート 左右クリッピング polish):
+              padding 左右 16px → 20px に拡大。 WorkspaceShell allowOverflowX で Pane 3 のみ
+              横スクロール許可されているため、 markdown 本体の行末「。」 が card right border (cyan)
+              に当たる「ギリギリ感」 を 4px 余裕で解消。 [[feedback-clipping-root-cause-chain]]
+              wrapper chain の最終 inner layer での adjustment、 親 wrapper は不変。 */}
+          <div style={{ padding: '0 20px 16px' }}>
             {children}
           </div>
         </div>
