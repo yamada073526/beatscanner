@@ -2953,9 +2953,62 @@ async def _sec_lookup_cik(sym: str) -> str | None:
     return cached_after[1] if cached_after else None
 
 
+async def _fetch_filings_from_sec_edgar(sym: str, form_type: str, limit: int = 5) -> list[dict]:
+    """SEC EDGAR submissions.json から指定 form type の filings を取得 (v104 release MVP)。
+
+    form_type 例: "10-K" (年次) / "10-Q" (四半期) / "8-K" (重大事象)。
+    完全無料 (User-Agent 必須)、 12h cache 推奨。
+    返却: [{date, title, url}, ...] (新→古順)、 該当なしは []。
+    """
+    cik = await _sec_lookup_cik(sym)
+    if not cik:
+        return []
+    try:
+        import httpx as _httpx
+        async with _httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"https://data.sec.gov/submissions/CIK{cik}.json",
+                headers={"User-Agent": "BeatScanner support@beatscanner.example"},
+            )
+            if resp.status_code != 200:
+                return []
+            data = resp.json()
+    except Exception as e:
+        print(f"[SEC EDGAR] submissions.json fetch failed for {sym} ({form_type}): {e}")
+        return []
+    recent = data.get("filings", {}).get("recent", {})
+    forms = recent.get("form", []) or []
+    dates = recent.get("filingDate", []) or []
+    accessions = recent.get("accessionNumber", []) or []
+    primary_docs = recent.get("primaryDocument", []) or []
+    out: list[dict] = []
+    cik_int = str(int(cik))
+    for i, form in enumerate(forms):
+        if form != form_type:
+            continue
+        if i >= len(dates) or i >= len(accessions):
+            continue
+        date_s = str(dates[i])[:10]
+        accession = accessions[i].replace("-", "")
+        primary = primary_docs[i] if i < len(primary_docs) else ""
+        if primary:
+            url = f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession}/{primary}"
+        else:
+            url = f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type={form_type}"
+        out.append({
+            "date": date_s,
+            "title": form_type,
+            "url": url,
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
 async def _fetch_8k_from_sec_edgar(sym: str, limit: int = 5) -> list[dict]:
     """SEC EDGAR submissions.json から 8-K filings を取得 (v71 Phase 3-c fallback)。
 
+    v104 で _fetch_filings_from_sec_edgar に generic 化、 本 helper は 8-K caller 互換のための薄い wrapper。
     FMP が empty を返した時の fallback、 完全無料 (User-Agent 必須)。
     submissions.json は CIK 単位で全 filings (recent + historical) を返す。
     返却: [{date, title, url}, ...]。 url は SEC EDGAR の filing index ページ。
@@ -5092,6 +5145,36 @@ async def _fetch_revenue_data(ticker: str, ref_date: str | None = None) -> dict:
 # 四半期決算履歴 (Pro 同梱機能)。ticker 単位 1h キャッシュで FMP 呼出を抑制。
 _QUARTERLY_HISTORY_CACHE: dict[str, dict] = {}
 _QUARTERLY_HISTORY_TTL = 3600.0
+
+# v104 release MVP: SEC EDGAR 10-K filings 直 fetch (12h cache)。
+#   無料 SEC EDGAR submissions.json から form="10-K" のみ filter、 frontend のリファレンス章で
+#   年次報告書リンクを表示。 FMP non-dependent (User-Agent のみ必須、 _sec_lookup_cik で CIK 解決)。
+_TEN_K_FILINGS_CACHE: dict[str, dict] = {}
+_TEN_K_FILINGS_TTL = 12 * 3600.0
+
+
+@app.get("/api/filings/10k/{ticker}")
+async def filings_10k(ticker: str, limit: int = 5) -> dict:
+    """SEC EDGAR から 10-K (年次報告書) の filings リストを返す (v104 release MVP)。
+
+    完全無料 (User-Agent のみ)、 12h cache。 US 上場銘柄のみ対応 (日本株 7203.T 等は空配列)。
+    返却: {"ticker": "AAPL", "items": [{"date": "2024-11-01", "title": "10-K", "url": "..."}, ...]}
+    """
+    sym = (ticker or "").strip().upper()
+    if not sym:
+        raise HTTPException(status_code=400, detail="ticker required")
+    n = max(1, min(int(limit or 5), 20))
+
+    cache_key = f"{sym}:{n}"
+    now = _time.monotonic()
+    cached = _TEN_K_FILINGS_CACHE.get(cache_key)
+    if cached and now - cached["ts"] < _TEN_K_FILINGS_TTL:
+        return cached["data"]
+
+    items = await _fetch_filings_from_sec_edgar(sym, "10-K", limit=n)
+    data = {"ticker": sym, "items": items}
+    _TEN_K_FILINGS_CACHE[cache_key] = {"ts": now, "data": data}
+    return data
 
 
 @app.get("/api/guidance/{ticker}/quarterly-history")

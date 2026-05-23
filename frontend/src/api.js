@@ -372,6 +372,20 @@ export async function fetchRecentNotificationLog(supabase, limit = 10) {
   return r.json();
 }
 
+// v104 release MVP: SEC EDGAR 10-K (年次報告書) filings リスト取得。
+// 完全無料 (SEC EDGAR User-Agent のみ)、 backend 12h cache。
+// 戻り値: { ticker, items: [{ date, title: "10-K", url }, ...] } | null
+export async function fetchTenK(ticker, limit = 5) {
+  const t = (ticker || '').toUpperCase();
+  if (!t) return null;
+  const params = new URLSearchParams({ limit: String(limit) });
+  const r = await fetch(`/api/filings/10k/${encodeURIComponent(t)}?${params.toString()}`, {
+    headers: fmpHeaders(),
+  });
+  if (!r.ok) return null;
+  return r.json();
+}
+
 // 四半期決算履歴を取得 (Pro 同梱機能)。
 // 戻り値: { ticker, history: [{ date, fiscal_period, eps_actual, eps_estimated,
 //   eps_surprise_pct, eps_verdict, revenue_actual, revenue_estimated,

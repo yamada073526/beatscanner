@@ -380,9 +380,11 @@ export default function App() {
       return;
     }
 
-    // 「確認中」トースト表示（クリックで消せる）
+    // v104 emoji audit: 🔄🎉⚠️ を brand 一貫の plain text に。
+    //   toast は string ベースで lucide icon embed 不可 → emoji 削除 + 文章調整で対応
+    //   ([[feedback-icon-brand-consistency]] Aman 級品格チェック)。
     const confirmingId = Date.now();
-    setToast({ id: confirmingId, message: '🔄 決済を確認中...' });
+    setToast({ id: confirmingId, message: '決済を確認中…' });
 
     let attempts = 0;
     const MAX_ATTEMPTS = 15; // 2s × 15 = 30 秒
@@ -394,12 +396,12 @@ export default function App() {
         clearInterval(timer);
         if (activated) {
           const id = Date.now();
-          setToast({ id, message: '🎉 Pro 会員になりました！全機能が解放されました' });
+          setToast({ id, message: 'Pro 会員に登録完了。全機能を解放しました' });
           setTimeout(() => setToast((t) => (t?.id === id ? null : t)), 6000);
         } else {
           // Webhook 遅延で確認できなかった場合（ページリロードで解決）
           const id = Date.now();
-          setToast({ id, message: '⚠️ 確認に時間がかかっています。しばらく後にページを再読み込みしてください。' });
+          setToast({ id, message: '確認に時間がかかっています。しばらく後にページを再読み込みしてください。' });
           setTimeout(() => setToast((t) => (t?.id === id ? null : t)), 8000);
         }
       }
@@ -505,7 +507,7 @@ export default function App() {
     const id = Date.now();
     setToast({
       id,
-      message: '💡 Googleでログインするとデバイス間で同期できます',
+      message: 'Google ログインでデバイス間同期できます',
       onClick: () => {
         setToast(null);
         signInWithGoogle();

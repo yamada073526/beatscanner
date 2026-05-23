@@ -57,6 +57,11 @@ import MotionProvider from '../../../../components/MotionProvider.jsx';
 // Phase G Phase 1 (handover v98 §0-B): UnifiedJudgmentSection — 章 1「判定」 4 components 統合 wrapper。
 // feature flag `pane3_v2=1` で URL parameter / localStorage 切替 (default off)。
 import UnifiedJudgmentSection from './UnifiedJudgmentSection.jsx';
+// v104 release MVP: EPS Beat Streak chip — 章 1 verdict anchor、 過去 N 期 Beat の retention 訴求。
+//   QuarterlyHistoryTable が accordion collapsed default で見えない問題を chip 前出しで解消。
+import EpsBeatStreakChip from './EpsBeatStreakChip.jsx';
+// v104 release MVP: 10-K (年次報告書) — リファレンス章 5 で SEC EDGAR 直 fetch。
+import TenKLinksPanel from '../../../../components/TenKLinksPanel.jsx';
 // Phase G Phase 3 (handover v99 §0-D): ChapterSection — 章 2-5 用 generic 章扉 (Noto Serif JP / gold hairline)。
 // headerOnly mode で content 再配置せず brand 一貫性 ([[feedback-gold-accent-continuity]]) を実現。
 import ChapterSection from './ChapterSection.jsx';
@@ -470,6 +475,10 @@ export default function JudgmentDetail({
           JudgmentDetail レベルでは gap 短縮で上部スカスカを解消。
           Phase G Phase 2: v2 mode で frameless (sticky / bg / border 抑制) */}
       <KpiStrip stats={kpis} frameless={v2Frameless} />
+
+      {/* v104 release MVP: EPS Beat Streak chip — 章 1 verdict anchor、 streak >= 2 のみ表示。
+          QuarterlyHistoryTable (章 3 accordion collapsed default) の streak 情報を前出しで anchor 強化。 */}
+      {selectedTicker && <EpsBeatStreakChip ticker={selectedTicker} />}
 
       {/* handover v82 Phase 5: 三層トリアージ banner (UI/UX 6 体合議 B 案、 ConditionGrid 直前 hint 1 行)。
           保有 × 5 条件 × Cup-Handle を 1 行で示し、 「他 N 件」 click で Pane 2 ヒートマップへ jump。
@@ -945,6 +954,24 @@ export default function JudgmentDetail({
             </AccordionSection>
           </div>
         )
+      )}
+
+      {/* v104 release MVP: 10-K (年次報告書) AccordionSection — IR Links と DetailReport の間に挿入。
+          SEC EDGAR 直 fetch (無料、 US 上場のみ)、 free user 開放。 isScrollV1 (classic) では出さない。 */}
+      {selectedTicker && !isScrollV1 && (
+        <div className="tier-l-glow" data-testid="library-10k-wrapper">
+          <AccordionSection
+            id="sec-10k"
+            title="10-K (年次報告書)"
+            tier={2}
+            defaultOpen={false}
+            controlledOpen={expandedSections.has('ten-k') || undefined}
+          >
+            <div id="sec-10k-inner" style={{ padding: '0 var(--space-3, 12px)' }}>
+              <TenKLinksPanel ticker={selectedTicker} hideHeading />
+            </div>
+          </AccordionSection>
+        </div>
       )}
 
       {/* === Sprint 3: DetailReport → AccordionSection wrap + useIntersectionLazy 連動 ===
