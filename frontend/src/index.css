@@ -9463,21 +9463,11 @@ button.ds-chip[data-pressed="true"]:hover {
    box-shadow inset 1px accent で「Aman 廊下の間接光」体感。
    Tier M halo より弱い: 情報階層 (5 条件 > news) を保つ。
    3 体合議 verdict: Tier M halo 非適用 + border/inset shadow 強化で補完。 */
-/* v99 dogfood feedback G (5 巡目): user 体感「リファレンス accordion が市場評価と外観違う」 真因確定。
-   旧 .tier-l-glow に base border 1px + border-radius 12px があり pill outline 発生。
-   修正: base border / border-radius を削除、 :hover 時の inset glow のみ維持 (interactivity 担保)。
-   AccordionSection.root の gold hairline top のみで「節区切り」 を表現、 市場評価 children と統一。 */
+/* v99 dogfood feedback G (7 巡目): :hover 時の inset box-shadow が「四角の枠」 として user 体感不自然
+   (他 accordion items は hover effect なし)。 :hover rule を完全削除、 市場評価 children と完全統一。
+   tier-l-glow class 自体は wrapper として残存 (data-testid 等の hook 互換)、 visual effect なし。 */
 .tier-l-glow {
-  transition:
-    box-shadow var(--motion-base, 200ms) ease-out;
-}
-
-.tier-l-glow:hover {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 30%, transparent) inset;
-}
-
-[data-theme="dark"] .tier-l-glow:hover {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 40%, transparent) inset;
+  /* visual styles なし — AccordionSection 自身の hover (background-color) のみで interactivity */
 }
 
 /* ── Phase 2.8 Sprint 1 #2: GuidanceCard Tier M elevation 強化 ──────────────────
@@ -9486,13 +9476,12 @@ button.ds-chip[data-pressed="true"]:hover {
    既存 §tier-m-glow keyframes / mask / blur 値は変更しない (Phase 2.5 SSOT 維持)。
    hex 直書き禁止: color-mix(in srgb, var(--color-accent) N%, ...) 経由のみ。
    contain: paint 絶対禁止 (glow_elevation_postmortem.md §v54)。 */
+/* v99 dogfood feedback H (7 巡目): 真因確定 — outer wrapper .tier-m-glow に border 1px cyan-tint +
+   inner section に border 1px var(--border) で **二重 borders** になっていた。
+   修正: outer wrapper の border 完全削除、 inner section の border + cyan drop shadow のみで
+   「Aman 級 single border + glow」 効果を実現。 */
 [data-testid="guidance-card-wrapper"].tier-m-glow {
-  /* EarningsHistoryChart cluster halo 同等の border tint を baseline で付加 */
-  border: 1px solid color-mix(in srgb, var(--color-accent) 25%, var(--border));
   border-radius: var(--radius-lg, 16px);
-}
-[data-theme="dark"] [data-testid="guidance-card-wrapper"].tier-m-glow {
-  border-color: color-mix(in srgb, var(--color-accent) 32%, var(--border));
 }
 
 /* ── 投資業界色ルール enforcement comments ────────────────────────

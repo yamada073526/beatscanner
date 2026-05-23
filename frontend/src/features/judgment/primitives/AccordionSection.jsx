@@ -12,7 +12,7 @@
  *   PGE 落とし穴 4: infinite animation 禁止 → open/close で完結 → OK
  */
 import React, { useState, useCallback, useId, useRef } from 'react';
-import { m, useReducedMotion } from 'framer-motion';
+import { m, AnimatePresence, useReducedMotion } from 'framer-motion';
 import styles from './AccordionSection.module.css';
 
 /**
@@ -179,37 +179,39 @@ export default function AccordionSection({
 
       {/* ===== Accordion Panel ===== */}
       {/*
-        v99 dogfood feedback F (6 巡目): AnimatePresence + exit animation を完全削除。
-        旧 spring exit + opacity 50ms でも user 体感「残像」 残存。
-        真因仮説: AnimatePresence の exit phase 中、 m.div がまだ DOM に存在し続け、
-          内部 children (panel-card / tier-m-glow 等) が height shrink 中に visible で
-          「残像」 として user の網膜に焼き付く。
-        修正: AnimatePresence + exit を物理的に削除。 isOpen=false → 即時 unmount =
-          close animation なし、 残像が render される時間が物理的にゼロ。
-          open は initial+animate で smooth 維持 (spring 320/32 で「Aman 級 motion」)。
-        trade-off: close の smooth fade は失うが、 「壊れてる感」 が消える方を優先。
+        v99 dogfood feedback F (7 巡目): user 体感「閉じるアニメーション欲しいが残像なし」 を両立。
+        前 round (6 巡目) AnimatePresence 完全削除 → close 即時 unmount で残像消えたが
+        smooth close 失った。 7 巡目: AnimatePresence 復活 + height のみ transition + overflow:hidden で
+        children を物理 clip = 「drawer 閉まる」 idiom (Linear / Notion 流儀):
+          - height: auto → 0 を spring で smooth animate
+          - overflow: hidden 常時で children を境界で clip
+          - opacity は維持 (animate しない) → children は最後まで visible だが clip で見えない
+          - 結果: 「箱の高さが滑らかに 0 になる、 中身は clip で見えない」 = 残像なし + smooth
       */}
-      {isOpen && (
-        <m.div
-          id={panelId}
-          role="region"
-          aria-labelledby={headerId}
-          className={styles.panel}
-          key={panelId}
-          initial={{ height: 0, opacity: 0 }}
-          animate={{ height: 'auto', opacity: 1 }}
-          transition={
-            reduce
-              ? { duration: 0 }
-              : { type: 'spring', stiffness: 320, damping: 32 }
-          }
-          style={{ overflow: isAnimating ? 'hidden' : 'visible' }}
-          onAnimationStart={() => setIsAnimating(true)}
-          onAnimationComplete={() => setIsAnimating(false)}
-        >
-          <div className={styles.panelInner}>{children}</div>
-        </m.div>
-      )}
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <m.div
+            id={panelId}
+            role="region"
+            aria-labelledby={headerId}
+            className={styles.panel}
+            key={panelId}
+            initial={{ height: 0 }}
+            animate={{ height: 'auto' }}
+            exit={{ height: 0 }}
+            transition={
+              reduce
+                ? { duration: 0 }
+                : { type: 'spring', stiffness: 320, damping: 32 }
+            }
+            style={{ overflow: 'hidden' }}
+            onAnimationStart={() => setIsAnimating(true)}
+            onAnimationComplete={() => setIsAnimating(false)}
+          >
+            <div className={styles.panelInner}>{children}</div>
+          </m.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
