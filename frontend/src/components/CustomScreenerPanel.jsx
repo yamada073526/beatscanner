@@ -35,7 +35,7 @@ function ConditionDots({ conditions = [], showLabels = false }) {
           key={i}
           title={c.name}
           className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-            c.passed ? 'bg-green-100 text-green-700' : 'bg-red-50 text-red-400'
+            c.passed ? 'bg-[color-mix(in_srgb,var(--color-gain)_18%,transparent)] text-[var(--color-gain)]' : 'bg-[color-mix(in_srgb,var(--color-loss)_12%,transparent)] text-[var(--color-loss)]'
           }`}
         >
           {c.passed ? '✓' : '✕'}
@@ -51,7 +51,7 @@ function ResultCard({ item, onSelect }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="rounded-xl border border-slate-200 transition hover:border-slate-400">
+    <div className="rounded-xl border border-[var(--border)] transition hover:border-[var(--text-muted)]">
       {/* Main row — always visible */}
       <div className="flex items-center gap-2 p-3">
         <button
@@ -59,9 +59,9 @@ function ResultCard({ item, onSelect }) {
           className="min-w-0 flex-1 text-left"
         >
           <div className="flex items-baseline gap-1.5">
-            <span className="text-sm font-bold text-slate-900">{item.ticker}</span>
+            <span className="text-sm font-bold text-[var(--text-primary)]">{item.ticker}</span>
             {item.companyName && (
-              <span className="truncate text-xs text-slate-400 hidden sm:inline">
+              <span className="truncate text-xs text-[var(--text-muted)] hidden sm:inline">
                 {item.companyName}
               </span>
             )}
@@ -71,7 +71,7 @@ function ResultCard({ item, onSelect }) {
         {/* Pass count badge */}
         <span
           className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold ${
-            item.overallPass ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+            item.overallPass ? 'bg-[color-mix(in_srgb,var(--color-gain)_18%,transparent)] text-[var(--color-gain)]' : 'bg-[var(--bg-subtle)] text-[var(--text-muted)]'
           }`}
         >
           {passCount}/5
@@ -80,7 +80,7 @@ function ResultCard({ item, onSelect }) {
         {/* Expand toggle — mobile only */}
         <button
           onClick={() => setExpanded((v) => !v)}
-          className="shrink-0 rounded p-1 text-xs text-slate-400 hover:text-slate-600 sm:hidden"
+          className="shrink-0 rounded p-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] sm:hidden"
           aria-label="条件詳細を展開"
         >
           {expanded ? '▲' : '▼'}
@@ -98,14 +98,14 @@ function ResultCard({ item, onSelect }) {
 function CupScannerResults({ data, onSelect, onUpgrade, filterKey }) {
   if (!data) {
     return (
-      <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs text-slate-500">
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-3 text-xs text-[var(--text-muted)]">
         スキャン中...
       </div>
     );
   }
   if (data.error) {
     return (
-      <div className="rounded-lg border border-red-100 bg-red-50 p-3 text-xs text-red-600">
+      <div className="rounded-lg border border-[color-mix(in_srgb,var(--color-loss)_25%,transparent)] bg-[color-mix(in_srgb,var(--color-loss)_8%,transparent)] p-3 text-xs text-[var(--color-loss)]">
         スキャン失敗: {data.error}
       </div>
     );
@@ -119,7 +119,7 @@ function CupScannerResults({ data, onSelect, onUpgrade, filterKey }) {
 
   if (totalCount === 0) {
     return (
-      <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm text-slate-500">
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-3 text-sm text-[var(--text-muted)]">
         現在 {filterLabel} 該当銘柄はありません (nightly scan は UTC 23:00 = JST 8:00 に実行)
       </div>
     );
@@ -128,11 +128,11 @@ function CupScannerResults({ data, onSelect, onUpgrade, filterKey }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3 text-sm">
-        <span className="font-semibold text-slate-700">
+        <span className="font-semibold text-[var(--text-primary)]">
           {filterLabel}: 全 {totalCount} 件
         </span>
         {!isPremium && totalCount > visibleCount && (
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-[var(--text-muted)]">
             ({visibleCount} 件公開 / 残り {totalCount - visibleCount} 件 Premium)
           </span>
         )}
@@ -150,17 +150,17 @@ function CupScannerResults({ data, onSelect, onUpgrade, filterKey }) {
       </div>
 
       {!isPremium && totalCount > visibleCount && (
-        <div className="rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50 p-4">
-          <p className="text-sm font-semibold text-amber-900">
+        <div className="rounded-xl border border-[color-mix(in_srgb,var(--color-warning)_35%,transparent)] bg-[color-mix(in_srgb,var(--color-warning)_8%,transparent)] p-4">
+          <p className="text-sm font-semibold text-[var(--text-primary)]">
             残り {totalCount - visibleCount} 件 + 毎営業日 email 通知
           </p>
-          <p className="mt-1 text-xs text-amber-800">
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">
             Premium ¥1,800/月 で全銘柄 + Pivot 価格 + nightly scan 通知を解放。
           </p>
           {onUpgrade && (
             <button
               onClick={onUpgrade}
-              className="mt-3 inline-flex items-center rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700"
+              className="mt-3 inline-flex items-center rounded-lg bg-[var(--color-warning)] px-3 py-1.5 text-xs font-semibold text-[var(--bg-card)] hover:bg-[color-mix(in_srgb,var(--color-warning)_85%,black)]"
             >
               Premium にアップグレード
             </button>
@@ -180,7 +180,7 @@ function CupResultCard({ item, onSelect, masked = false }) {
   const pivotStr = typeof pivotPrice === 'number' ? `$${pivotPrice.toFixed(2)}` : '—';
 
   return (
-    <div className={`rounded-xl border border-slate-200 transition hover:border-slate-400 ${masked ? 'pointer-events-none' : ''}`}>
+    <div className={`rounded-xl border border-[var(--border)] transition hover:border-[var(--text-muted)] ${masked ? 'pointer-events-none' : ''}`}>
       <div className="flex items-center gap-2 p-3">
         <button
           onClick={() => !masked && onSelect && onSelect(ticker)}
@@ -188,11 +188,11 @@ function CupResultCard({ item, onSelect, masked = false }) {
           disabled={masked}
         >
           <div className="flex items-baseline gap-1.5">
-            <span className={`text-sm font-bold ${masked ? 'text-slate-400 blur-[3px] select-none' : 'text-slate-900'}`}>
+            <span className={`text-sm font-bold ${masked ? 'text-[var(--text-muted)] blur-[3px] select-none' : 'text-[var(--text-primary)]'}`}>
               {ticker}
             </span>
             {item.company_name && (
-              <span className="truncate text-xs text-slate-400 hidden sm:inline">
+              <span className="truncate text-xs text-[var(--text-muted)] hidden sm:inline">
                 {item.company_name}
               </span>
             )}
@@ -205,13 +205,13 @@ function CupResultCard({ item, onSelect, masked = false }) {
                 {stateLabel}
               </Chip>
               {pivotPrice != null && (
-                <span className="ml-2 text-xs text-slate-500">Pivot: {pivotStr}</span>
+                <span className="ml-2 text-xs text-[var(--text-muted)]">Pivot: {pivotStr}</span>
               )}
             </div>
           )}
         </button>
         {item.passed_count != null && (
-          <span className="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold bg-green-100 text-green-700">
+          <span className="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold bg-[color-mix(in_srgb,var(--color-gain)_18%,transparent)] text-[var(--color-gain)]">
             {item.passed_count}/5
           </span>
         )}
@@ -262,10 +262,10 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
   }
 
   return (
-    <section className="rounded-2xl bg-white p-6 shadow-sm">
+    <section className="rounded-2xl bg-[var(--bg-card)] p-6 shadow-[var(--shadow-sm)]">
       <div className="mb-4">
         <h3 className="section-label">ファンダメンタル5条件スクリーナー</h3>
-        <p className="mt-0.5 text-xs text-slate-400">
+        <p className="mt-0.5 text-xs text-[var(--text-muted)]">
           ファンダメンタル5条件で自動判定
         </p>
       </div>
@@ -278,7 +278,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
       {phase === 'idle' && (
         <button
           onClick={run}
-          className="w-full rounded-lg bg-slate-900 py-2.5 text-sm font-semibold text-white hover:bg-slate-700"
+          className="w-full rounded-lg bg-[var(--text-primary)] py-2.5 text-sm font-semibold text-[var(--bg-card)] hover:bg-[var(--text-secondary)]"
         >
           スクリーニングを実行
         </button>
@@ -287,18 +287,18 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
       {/* Loading */}
       {phase === 'loading' && (
         <div className="py-8 text-center">
-          <p className="text-sm font-medium text-slate-600">スクリーニング中...</p>
-          <p className="mt-1 text-xs text-slate-400">財務データを取得・分析しています（約30秒）</p>
+          <p className="text-sm font-medium text-[var(--text-secondary)]">スクリーニング中...</p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">財務データを取得・分析しています（約30秒）</p>
         </div>
       )}
 
       {/* Error */}
       {phase === 'error' && (
         <div className="space-y-3">
-          <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</div>
+          <div className="rounded-lg bg-[color-mix(in_srgb,var(--color-loss)_10%,transparent)] p-3 text-sm text-[var(--color-loss)]">{error}</div>
           <button
             onClick={run}
-            className="w-full rounded-lg border border-slate-300 py-2 text-sm text-slate-600 hover:bg-slate-50"
+            className="w-full rounded-lg border border-[var(--border)] py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
           >
             再試行
           </button>
@@ -310,12 +310,12 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
         <div className="space-y-5">
           {/* Summary bar */}
           <div className="flex flex-wrap items-center gap-4 text-sm">
-            <span className="font-semibold text-green-600">✅ PASS: {data.passing.length}銘柄</span>
-            <span className="text-slate-400">FAIL: {data.failing.length}銘柄</span>
+            <span className="font-semibold text-[var(--color-gain)]">✅ PASS: {data.passing.length}銘柄</span>
+            <span className="text-[var(--text-muted)]">FAIL: {data.failing.length}銘柄</span>
             {data.skipped.length > 0 && (
-              <span className="text-slate-400">スキップ: {data.skipped.length}銘柄</span>
+              <span className="text-[var(--text-muted)]">スキップ: {data.skipped.length}銘柄</span>
             )}
-            <span className="ml-auto text-xs text-slate-300">{data.screenedAt} 実行</span>
+            <span className="ml-auto text-xs text-[var(--text-muted)]">{data.screenedAt} 実行</span>
           </div>
 
           {/* Cup-Handle filter chips (Phase 2.4、 multi-review verdict D + 7) */}
@@ -360,8 +360,8 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
           )}
 
           {/* Legend — desktop only */}
-          <div className="hidden sm:flex flex-wrap items-center gap-3 text-xs text-slate-400">
-            <span className="font-medium text-slate-500">条件:</span>
+          <div className="hidden sm:flex flex-wrap items-center gap-3 text-xs text-[var(--text-muted)]">
+            <span className="font-medium text-[var(--text-muted)]">条件:</span>
             {['①CF率≥15%', '②EPS成長', '③CFPS成長', '④売上成長', '⑤CFPS>EPS'].map((l, i) => (
               <span key={i}>{l}</span>
             ))}
@@ -370,7 +370,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
           {/* PASS */}
           {data.passing.length > 0 ? (
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-green-700">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-gain)]">
                 PASS 銘柄 — 5条件すべてクリア
               </p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -380,13 +380,13 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
               </div>
             </div>
           ) : (
-            <p className="text-sm text-slate-500">現時点でPASS銘柄はありません。</p>
+            <p className="text-sm text-[var(--text-muted)]">現時点でPASS銘柄はありません。</p>
           )}
 
           {/* FAIL (collapsible) */}
           {data.failing.length > 0 && (
             <details className="group">
-              <summary className="cursor-pointer list-none text-xs text-slate-400 hover:text-slate-600">
+              <summary className="cursor-pointer list-none text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition">
                 FAIL銘柄を表示 ({data.failing.length}件) ▼
               </summary>
               <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -399,7 +399,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
 
           {/* Skipped */}
           {data.skipped.length > 0 && (
-            <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
+            <div className="rounded-lg bg-[var(--bg-subtle)] p-3 text-xs text-[var(--text-muted)]">
               データ不足のためスキップ: {data.skipped.map((s) => s.ticker).join(', ')}
               （新規上場等でデータが3期分揃っていない銘柄です）
             </div>
@@ -409,7 +409,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
           <div className="text-center">
             <button
               onClick={run}
-              className="text-xs text-slate-400 hover:text-slate-600"
+              className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
             >
               再実行（キャッシュ期限前はAPIを消費しません）
             </button>
