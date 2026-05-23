@@ -1863,12 +1863,18 @@ async def custom_screener(request: Request) -> dict:
     except Exception:
         pass
 
-    # フォールバック: カスタムリストを使用
-    if not candidates:
+    # v100 user dogfood (handover §100点 multi-review、 Frontend Architect verdict):
+    #   旧実装は `if not candidates` で完全 0 件時のみ SP500_SAMPLE fallback。 user 体感「Google や
+    #   Apple がスクリーナーに出てこない」 = market_movers × SP500 intersection が 1 件のみ (今日の
+    #   gainers 上位 10 件に Apple/Google 含まれず) → fallback trigger しない → candidates=1 で終了。
+    #   修正: candidates が 10 件未満なら SP500_SAMPLE 補完で 15 件まで埋める (主要銘柄カバー保証)。
+    MIN_CANDIDATES = 10
+    if len(candidates) < MIN_CANDIDATES:
         if sp500_set:
-            candidates = [t for t in SP500_SAMPLE if t in sp500_set]
+            sample = [t for t in SP500_SAMPLE if t in sp500_set and t not in candidates]
         else:
-            candidates = list(SP500_SAMPLE)
+            sample = [t for t in SP500_SAMPLE if t not in candidates]
+        candidates = (candidates + sample)[:15]
 
     # Step 2: 5銘柄ずつバッチ処理
     passing: list[dict] = []
