@@ -7,17 +7,33 @@ import LockedSection, { ConferenceGhost } from './LockedSection.jsx';
 // Stat fw700 / Header fw500 / Body fw400 の 3 階層に合わせ、h2/h3/p[isSection]/strong を fw500 に統一。
 // chip 化 (bg-subtle + padding) は維持 (情報階層の visual 区切りとして必要)。
 // bg-slate-100 → CSS token var(--bg-subtle) でダークモード対応。
+// v100 真の QA #4-3 (handover v100、 user dogfood 再 feedback):
+// 旧実装は strong: text-slate-900 / ul: text-slate-700 で dark 非対応、
+// h2/h3/p (section heading) が同 idiom + section heading の差別化なし → user「野暮ったい」 認識。
+// dark token (var(--text-primary/secondary/--color-accent)) + hierarchy 強化版に統一。
+// DetailReport.jsx mdComponents (v100 commit d0c10a7) と 1:1 mirror。
 const mdComponents = {
   h2: ({ children }) => (
-    <h2
-      className="text-sm font-medium rounded px-3 py-1.5 mt-8 mb-2"
-      style={{ color: 'var(--text-secondary)', background: 'var(--bg-subtle)' }}
-    >
+    <h2 style={{
+      fontSize: '15px', fontWeight: 700,
+      color: 'var(--text-primary)',
+      background: 'var(--bg-subtle)',
+      borderRadius: '6px',
+      padding: '8px 12px',
+      marginTop: '24px', marginBottom: '10px',
+      borderLeft: '3px solid #38BDF8',
+      lineHeight: 1.4,
+    }}>
       {children}
     </h2>
   ),
   h3: ({ children }) => (
-    <h3 className="text-sm font-medium mt-4 mb-1" style={{ color: 'var(--text-primary)' }}>{children}</h3>
+    <h3 style={{
+      fontSize: '13px', fontWeight: 700,
+      color: 'var(--text-primary)',
+      marginTop: '16px', marginBottom: '4px',
+      lineHeight: 1.4,
+    }}>{children}</h3>
   ),
   p: ({ children }) => {
     const text = typeof children === 'string' ? children : Array.isArray(children) ? children.join('') : '';
@@ -25,23 +41,48 @@ const mdComponents = {
     const isSection = /^[①②③④⑤]/.test(text) || /^【.+】/.test(text);
     if (isSection) {
       return (
-        <p
-          className="text-sm font-medium rounded px-3 py-1.5 mt-6 mb-2"
-          style={{ color: 'var(--text-secondary)', background: 'var(--bg-subtle)' }}
-        >
+        <p style={{
+          fontSize: '14px', fontWeight: 700,
+          color: 'var(--text-primary)',
+          background: 'var(--bg-subtle)',
+          borderRadius: '6px',
+          padding: '8px 12px',
+          marginTop: '20px', marginBottom: '8px',
+          borderLeft: '3px solid var(--color-accent, #38BDF8)',
+          lineHeight: 1.4,
+        }}>
           {children}
         </p>
       );
     }
-    return <p className="text-sm mb-3 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{children}</p>;
+    return <p style={{
+      fontSize: '13px',
+      color: 'var(--text-secondary)',
+      marginBottom: '12px',
+      lineHeight: 1.7,
+    }}>{children}</p>;
   },
   strong: ({ children }) => (
-    <strong className="font-medium text-slate-900">{children}</strong>
+    <strong style={{
+      fontWeight: 700,
+      color: 'var(--color-accent, #38BDF8)',
+    }}>{children}</strong>
   ),
   ul: ({ children }) => (
-    <ul className="text-sm text-slate-700 mb-3 pl-4 space-y-1 list-disc">{children}</ul>
+    <ul style={{
+      fontSize: '13px',
+      color: 'var(--text-secondary)',
+      marginBottom: '12px',
+      paddingLeft: '20px',
+      listStyleType: 'disc',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '4px',
+    }}>{children}</ul>
   ),
-  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+  li: ({ children }) => (
+    <li style={{ lineHeight: 1.7 }}>{children}</li>
+  ),
 };
 
 /* ─── アコーディオン（DetailReport.jsx と同じ実装） ─── */
