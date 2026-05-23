@@ -281,7 +281,8 @@ export default function App() {
     updateTransaction: rootUpdateTransactionFn,
   } = useTransactions({ supabase, user });
   // v62 WS-Phase2: Pane 2 「決算まで N 日」meta 用 earnings calendar (30 分 cache)
-  const { earningsBySymbol } = useEarningsCalendar();
+  // v100 user dogfood: watchlist 渡しで yfinance 個別取得 fallback、 AA / NVDA 等 Finnhub 漏れ銘柄カバー
+  const { earningsBySymbol } = useEarningsCalendar(watchlist);
   // 案 D: HoldingModal は廃止。TagAssignSheet 内で完結するため
   // holdingModalTicker state は不要 (tagAssignTicker に統合)。
 

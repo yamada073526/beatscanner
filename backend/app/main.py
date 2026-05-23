@@ -7813,9 +7813,13 @@ _TICKER_NAMES: dict[str, str] = {
 
 @app.get("/api/calendar")
 async def calendar(
-    days: int = Query(90, ge=1, le=90),
+    days: int = Query(90, ge=1, le=180),
     watchlist: str = Query("", description="カンマ区切りの銘柄リスト（yfinanceで個別取得）"),
 ) -> list[dict]:
+    # v100 user dogfood (handover §100点 multi-review、 AA / NVDA countdown 表示なし真因):
+    # 旧 le=90 では Finnhub バルク取得 + 90 日範囲のみで NVDA (96 日先) / AA (Finnhub 漏れ) が
+    # 取得できなかった。 le=180 に拡張し、 watchlist 経由の yfinance 個別取得 fallback と合わせて
+    # 主要銘柄の countdown 表示を保証。
     """今日から N 日先までの決算発表予定を返す（yfinance + Finnhub）."""
     import httpx as _httpx_cal
 
