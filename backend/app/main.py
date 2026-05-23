@@ -11921,6 +11921,60 @@ async def _analyze_text_to_insights(tkr: str, combined_text: str) -> dict:
 _INSIDER_CACHE: dict = {}
 _INSIDER_TTL = 21600  # 6h
 
+# v100 (handover §SPEC FMP Premium 打ち手 5、 金融アナリスト verdict):
+# 過去 8 Q の決算 ±5 営業日 価格反応を集計、 「Beat 後 / Miss 後の平均 return」 を可視化。
+# LLM 不要、 純 Python 計算 (aggregator/earnings_reaction.py)、 12h cache。
+_EARNINGS_REACTION_CACHE: dict = {}
+_EARNINGS_REACTION_TTL = 43200  # 12h
+
+
+@app.get("/api/earnings-reaction/{ticker}")
+async def get_earnings_reaction(ticker: str, request: Request) -> dict:
+    """過去 8 Q の決算 ±5 営業日 価格反応 (event study)。 LLM 不要、 純 Python。
+
+    Response: aggregator.earnings_reaction.compute_reaction() の出力 + ticker。
+    """
+    from .aggregator.earnings_reaction import compute_reaction, date_range_for_quarters
+
+    tkr = ticker.upper().strip()
+    now_ts = _time.time()
+    cached = _EARNINGS_REACTION_CACHE.get(tkr)
+    if cached and now_ts - cached["ts"] < _EARNINGS_REACTION_TTL:
+        return cached["data"]
+
+    api_key = _get_fmp_key(request)
+    client = FMPClient(api_key=api_key)
+
+    # 過去 8 Q (16 entries 余裕で fetch、 未発表 entry も含まれる)
+    date_from, date_to = date_range_for_quarters(quarters_back=8)
+    earnings_data, price_data = await asyncio.gather(
+        client.earnings_surprises(tkr, limit=16),
+        client.historical_price(tkr, date_from, date_to),
+        return_exceptions=True,
+    )
+
+    sources = {"earnings": "ok", "prices": "ok"}
+    if isinstance(earnings_data, Exception):
+        sources["earnings"] = "error"
+        earnings_data = []
+    elif not earnings_data:
+        sources["earnings"] = "empty"
+    if isinstance(price_data, Exception):
+        sources["prices"] = "error"
+        price_data = []
+    elif not price_data:
+        sources["prices"] = "empty"
+
+    result = compute_reaction(earnings_data or [], price_data or [], max_quarters=8)
+    data = {
+        "ticker": tkr,
+        "quarters": result["quarters"],
+        "summary": result["summary"],
+        "sources": sources,
+    }
+    _EARNINGS_REACTION_CACHE[tkr] = {"ts": now_ts, "data": data}
+    return data
+
 
 @app.get("/api/insider/{ticker}")
 async def get_insider(ticker: str, request: Request) -> dict:

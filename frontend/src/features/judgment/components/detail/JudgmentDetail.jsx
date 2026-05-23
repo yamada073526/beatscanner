@@ -28,6 +28,8 @@ import StockPriceChart from '../../../../components/StockPriceChart.jsx';
 import GuidanceCard from '../../../../components/GuidanceCard.jsx';
 // v100 user dogfood (handover §100点 multi-review): Pane 3 Insider 取引 section の中身実装
 import InsiderPanel from '../../../../components/InsiderPanel.jsx';
+// v100 (handover §SPEC FMP Premium 打ち手 5): 過去 8Q 決算 ±5 日 価格反応 (event study)
+import EarningsReactionPanel from '../../../../components/EarningsReactionPanel.jsx';
 // Sprint 3: EarningsBars + HistoryChart を EarningsHistoryChart (small multiples 3 段) に統合。
 // user override 2 (SPEC §5 Sprint 1 末尾): 売上高 / EPS / CFPS を縦バー 3 段重ねで統合表示。
 import EarningsHistoryChart from '../../../../components/EarningsHistoryChart.jsx';
@@ -806,6 +808,28 @@ export default function JudgmentDetail({
         <SectionFade id="sec-chart" staggerIndex={3}>
           <StockPriceChart ticker={selectedTicker} isPremiumUser={plan === 'premium'} />
         </SectionFade>
+      )}
+
+      {/* v100 (handover §SPEC FMP Premium 打ち手 5): 過去 8Q 決算 ±5 日 価格反応 (event study)。
+          章 4 テクニカル子に統合、 「判定 PASS → どう動くか」 期待値可視化。 LLM 不要、 純数値計算。 */}
+      {selectedTicker && (
+        isScrollV1 ? (
+          <div id="sec-earnings-reaction">
+            <EarningsReactionPanel ticker={selectedTicker} />
+          </div>
+        ) : (
+          <AccordionSection
+            id="sec-earnings-reaction"
+            title="過去 8Q 決算反応"
+            tier={2}
+            defaultOpen={false}
+            controlledOpen={expandedSections.has('earnings-reaction') || undefined}
+          >
+            <div id="sec-earnings-reaction-inner">
+              <EarningsReactionPanel ticker={selectedTicker} />
+            </div>
+          </AccordionSection>
+        )
       )}
 
       {/* === Sprint 3: Insider 取引 → AccordionSection wrap (collapsed) === */}
