@@ -884,7 +884,11 @@ export default function JudgmentDetail({
               defaultOpen={false}
               controlledOpen={expandedSections.has('news') || undefined}
             >
-              <div id="sec-news-inner">
+              {/* v100 user dogfood (handover §100点 multi-review): リファレンス章 3 子の hover 発光
+                  左右クリッピング fix。 子 component (NewsPanel row 等) の border が父境界に張り付き、
+                  hover 時 cyan tint が「左右切れた」 体感を発生。 inner div 左右 padding で breathing
+                  room を担保し、 panel-card hover halo + border tint が viewport で切れないようにする。 */}
+              <div id="sec-news-inner" style={{ padding: '0 var(--space-3, 12px)' }}>
                 {/* Phase 2.7 Sprint 1 #2': workspace mode は AccordionSection header で見出し表示済 → 内部 h3 hide */}
                 <NewsPanel ticker={selectedTicker} useWorkspaceReader={useWorkspaceReader} hideHeading={!isScrollV1} />
               </div>
@@ -909,7 +913,8 @@ export default function JudgmentDetail({
               defaultOpen={false}
               controlledOpen={expandedSections.has('ir-links') || undefined}
             >
-              <div id="sec-ir-inner">
+              {/* v100 リファレンス章 hover クリッピング fix: 同 §sec-news-inner */}
+              <div id="sec-ir-inner" style={{ padding: '0 var(--space-3, 12px)' }}>
                 {/* Phase 2.7 Sprint 1 #2': workspace mode は AccordionSection header で見出し表示済 → 内部 h3 hide */}
                 <IRLinksPanel ticker={selectedTicker} hideHeading={!isScrollV1} />
               </div>
@@ -972,23 +977,26 @@ export default function JudgmentDetail({
               defaultOpen={false}
               controlledOpen={expandedSections.has('detail-report') || undefined}
             >
-              <PremiumLock
-                feature="claude_opus_report"
-                plan={plan}
-                label="AI 詳細レポートで意思決定を加速"
-                bullets={[
-                  '5 条件 + ガイダンスをまとめた決算サマリー',
-                  '直近ニュース/業績との相関分析',
-                  'Premium は Claude Opus 多面分析 (月 20 銘柄)',
-                ]}
-                onUpgrade={detailContext.onUpgrade}
-              >
-                <DetailReportAccordionContent
-                  result={result}
-                  guidance={guidance}
-                  detailContext={detailContext}
-                />
-              </PremiumLock>
+              {/* v100 リファレンス章 hover クリッピング fix: 同 §sec-news-inner */}
+              <div style={{ padding: '0 var(--space-3, 12px)' }}>
+                <PremiumLock
+                  feature="claude_opus_report"
+                  plan={plan}
+                  label="AI 詳細レポートで意思決定を加速"
+                  bullets={[
+                    '5 条件 + ガイダンスをまとめた決算サマリー',
+                    '直近ニュース/業績との相関分析',
+                    'Premium は Claude Opus 多面分析 (月 20 銘柄)',
+                  ]}
+                  onUpgrade={detailContext.onUpgrade}
+                >
+                  <DetailReportAccordionContent
+                    result={result}
+                    guidance={guidance}
+                    detailContext={detailContext}
+                  />
+                </PremiumLock>
+              </div>
             </AccordionSection>
           </div>
         )
