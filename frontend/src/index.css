@@ -9081,13 +9081,16 @@ button.ds-chip[data-pressed="true"]:hover {
    ═══════════════════════════════════════════════════════════════════ */
 
 /* heading: 大型 display 風の formal 圧縮 + 600 weight 強化 (Aman ロビーの真鍮 plaque idiom)
-   v97 R7-2: fw 500 → 600 で hierarchy 強化、 body との対比明確化 (anchor 80 への push)。 */
+   v97 R7-2: fw 500 → 600 で hierarchy 強化、 body との対比明確化 (anchor 80 への push)。
+   v97 K1: Noto Serif JP heading で「Ritz-Carlton メニュー heading」 idiom 強化、
+   sans body + serif heading の formal 混在で typography +3-5 期待 (Claude vision note 由来)。 */
 .ds-judgment-detail h1,
 .ds-judgment-detail h2,
 .ds-judgment-detail .section-heading,
 .ds-judgment-detail .pane3-section-heading {
   letter-spacing: -0.025em;
   font-weight: 600;
+  font-family: 'Noto Serif JP', 'Times New Roman', 'YuMincho', 'Yu Mincho', serif;
 }
 
 /* small caps label: uppercase + wide spacing で formal/luxury (Sprint H1/H5 idiom 統一) */
