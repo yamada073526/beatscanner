@@ -70,18 +70,23 @@ for ticker in AAPL MSFT; do
 done
 ```
 
-集計 (per-ticker mean、 axis 名は scores object key に従う):
+集計 (per-ticker mean、 軸名は script の scores object key と 1:1 mirror):
 
 ```bash
 for ticker_lc in aapl msft; do
   echo "=== $ticker_lc mean ==="
-  jq -s '
-    map(.scores)
-    | (.[0] | keys) as $axes
-    | reduce $axes[] as $k ({}; . + {($k): (map(.[$k]) | add / length)})
-  ' .visual/eval-${ticker_lc}-r*.json
+  jq -s '{
+    typography: (map(.scores.typography) | add / length),
+    spacing: (map(.scores.spacing) | add / length),
+    color: (map(.scores.color) | add / length),
+    motion: (map(.scores.motion) | add / length),
+    aman: (map(.scores.aman) | add / length),
+    overall: (map(.scores.overall) | add / length)
+  }' .visual/eval-${ticker_lc}-r*.json
 done
 ```
+
+軸を追加 / 改名する場合は script (snap-vision-eval.mjs の prompt) + 本 jq 両方を update (§仕様変更時のチェックリスト 参照)。
 
 2 ticker average は AAPL/MSFT を等加重で算術平均 (NVDA は除外、 §運用上の制約)。
 
