@@ -136,6 +136,22 @@ function isPane3V2() {
   }
 }
 
+// Phase G Phase 2 (handover v99 §0-B): pane3_v2_frameless='1' で sub-component frameless 化。
+// Phase 2 vision-eval verdict は Phase 1 比 regression (AAPL -1.73 / MSFT -1.47) のため
+// 単独 flag で opt-in に変更。 ?pane3_v2=1 単独では frameless 無効、 ?pane3_v2=1&pane3_v2_frameless=1
+// で初めて Phase 2 frameless が有効。
+function isPane3V2Frameless() {
+  try {
+    if (typeof window === 'undefined') return false;
+    const urlParam = new URLSearchParams(window.location.search).get('pane3_v2_frameless');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('pane3_v2_frameless') === '1';
+  } catch {
+    return false;
+  }
+}
+
 /**
  * DetailReportAccordionContent
  *
@@ -394,6 +410,7 @@ export default function JudgmentDetail({
           1 つの unified section に統合する (default off、 ?pane3_v2=1 で試用可)。 */}
       {(() => {
         const v2 = isPane3V2();
+        const v2Frameless = v2 && isPane3V2Frameless(); // Phase 2 は v2 mode 内で opt-in
         const innerVerdictBlock = (
           <>
       <VerdictHero verdict={verdict}>
@@ -409,7 +426,7 @@ export default function JudgmentDetail({
           period={result?.latestPeriod ? `FY${result.latestPeriod}` : null}
           nextEarningsDays={detail?.nextEarningsDays}
           nextEarningsDate={detail?.nextEarningsDate}
-          frameless={v2}
+          frameless={v2Frameless}
         />
 
         {/* Sprint 6: SummaryBrief (AI 要約) — Hero と KpiStrip の間に mount。
@@ -426,7 +443,7 @@ export default function JudgmentDetail({
           <SummaryBrief
             analysis={result}
             guidance={guidance}
-            frameless={v2}
+            frameless={v2Frameless}
           />
         )}
       </VerdictHero>
@@ -434,7 +451,7 @@ export default function JudgmentDetail({
       {/* Sprint 3: KpiStrip — grid 密着配置は KpiStrip.jsx 内部に依存。
           JudgmentDetail レベルでは gap 短縮で上部スカスカを解消。
           Phase G Phase 2: v2 mode で frameless (sticky / bg / border 抑制) */}
-      <KpiStrip stats={kpis} frameless={v2} />
+      <KpiStrip stats={kpis} frameless={v2Frameless} />
 
       {/* handover v82 Phase 5: 三層トリアージ banner (UI/UX 6 体合議 B 案、 ConditionGrid 直前 hint 1 行)。
           保有 × 5 条件 × Cup-Handle を 1 行で示し、 「他 N 件」 click で Pane 2 ヒートマップへ jump。
@@ -451,7 +468,7 @@ export default function JudgmentDetail({
           onJumpToScanner={detailContext.onJumpToScanner}
           currentPrice={Number.isFinite(detail?.price) ? Number(detail.price) : null}
           onOpenAddTransaction={detailContext.onOpenAddTransaction}
-          frameless={v2}
+          frameless={v2Frameless}
         />
         </SectionFade>
       )}
@@ -483,7 +500,7 @@ export default function JudgmentDetail({
           totalCount={result?.totalCount}
           isPro={detailContext.isPro}
           onUpgrade={detailContext.onUpgrade}
-          frameless={v2}
+          frameless={v2Frameless}
           onConditionPulse={(idx) => {
             // condition 4 (営業利益増、 0-indexed) は全 step 該当 → toast fallback (DiagramCard 側で処理)。
             // 0-3 は個別 step pulse。 'all_steps' 文字列を sentinel として store に保存。

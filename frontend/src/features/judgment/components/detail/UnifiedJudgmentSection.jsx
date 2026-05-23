@@ -29,10 +29,18 @@ import React from 'react';
 /**
  * @param {object} props
  * @param {React.ReactNode} props.children - Hero, SummaryBrief, KpiStrip, TriageBanner, FiveConditionsCard
- * @param {boolean} [props.frameless=true] - Phase 2: 内部 sub-component を frameless 化、
+ * @param {boolean} [props.frameless=false] - Phase 2: 内部 sub-component を frameless 化、
  *   章内 sub-component 間に gold-fade hairline で「節」 を表現 (Aman pavilion 流の控えめな仕切り)。
+ *
+ * Phase 2 verdict (vision-eval 6 runs):
+ *   AAPL Phase 1 → Phase 2: overall -1.73 (regression)
+ *   MSFT Phase 1 → Phase 2: overall -1.47 (regression)
+ *   2 ticker avg: Phase 1 +2.97 → Phase 2 +1.37 (frameless で borders が消えると vision AI が
+ *   「視覚的階層 less」 と判定する仮説)。
+ *
+ *   よって default false に戻す。 frameless mode 試用は ?pane3_v2_frameless=1 で opt-in。
  */
-export default function UnifiedJudgmentSection({ children, frameless = true }) {
+export default function UnifiedJudgmentSection({ children, frameless = false }) {
   const bodyClass = frameless
     ? 'judgment-chapter-body is-frameless-children'
     : 'judgment-chapter-body';
