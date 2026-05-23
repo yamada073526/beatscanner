@@ -433,6 +433,10 @@ export default function JudgmentDetail({
           nextEarningsDays={detail?.nextEarningsDays}
           nextEarningsDate={detail?.nextEarningsDate}
           frameless={v2Frameless}
+          /* v99 dogfood feedback ① / ③: 章扉「I. 判定」 + EarningsRing「次の決算まで D-XX」
+             との二重表示防止 (v2 mode 時) */
+          hideEyebrow={v2}
+          hideCountdownChip={v2}
         />
 
         {/* Sprint 6: SummaryBrief (AI 要約) — Hero と KpiStrip の間に mount。

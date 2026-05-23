@@ -41,7 +41,23 @@ const heroFactChipAccent = {
  *   fallback: TV → FMP → neutral gray 頭文字円 (投資業界色ルール遵守)。
  *   fade-in: logo load 後 opacity 0→1 / 200ms ease-out (prefers-reduced-motion: none 時)。
  */
-export default function Hero({ ticker, companyName, verdict = 'unknown', period, nextEarningsDays, nextEarningsDate, frameless = false }) {
+export default function Hero({
+  ticker,
+  companyName,
+  verdict = 'unknown',
+  period,
+  nextEarningsDays,
+  nextEarningsDate,
+  frameless = false,
+  /**
+   * v99 dogfood feedback ① / ③ (3 体合議):
+   * - hideEyebrow=true で「判定」 eyebrow を非表示 (章扉「I. 判定」 と二重防止、 v2 mode 時)
+   * - hideCountdownChip=true で D-XX chip を非表示 (EarningsRing 側に統一、 v2 mode 時)
+   * default false で完全 backward compat。
+   */
+  hideEyebrow = false,
+  hideCountdownChip = false,
+}) {
   const tone =
     verdict === 'beat' ? 'gain' : verdict === 'miss' ? 'loss' : verdict === 'in-line' ? 'muted' : 'muted';
   const verdictLabel =
@@ -97,6 +113,9 @@ export default function Hero({ ticker, companyName, verdict = 'unknown', period,
             />
           </div>
           <div style={{ minWidth: 0, flex: 1 }}>
+          {/* v99 dogfood feedback ① (3 体合議): v2 mode (?pane3_v2=1) では章扉「I. 判定」 と二重に
+              なるため eyebrow「判定」 label を非表示。 default は維持 (revert 安全)。 */}
+          {!hideEyebrow && (
           <div
             style={{
               fontSize: 11,
@@ -108,6 +127,7 @@ export default function Hero({ ticker, companyName, verdict = 'unknown', period,
           >
             判定
           </div>
+          )}
           <h1
             style={{
               fontSize: 40,
@@ -154,7 +174,10 @@ export default function Hero({ ticker, companyName, verdict = 'unknown', period,
                   {nextEarningsDate}
                 </span>
               )}
-              {Number.isFinite(nextEarningsDays) && nextEarningsDays > 0 && (
+              {/* v99 dogfood feedback ③ (3 体合議): v2 mode では EarningsRing 隣に「次の決算まで D-XX」 が
+                  あり、 chip と二重表示で機関投資家 idiom 違反 (Bloomberg は同一 field を 1 箇所のみ表示)。
+                  v2 mode で chip 非表示、 default は維持。 */}
+              {Number.isFinite(nextEarningsDays) && nextEarningsDays > 0 && !hideCountdownChip && (
                 <span style={heroFactChipAccent}>D-{nextEarningsDays}</span>
               )}
             </div>
