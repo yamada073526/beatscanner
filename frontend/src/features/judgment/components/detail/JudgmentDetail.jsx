@@ -335,6 +335,53 @@ export default function JudgmentDetail({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTicker]); // selectedTicker 変更時のみ re-run (onAnalyze / detailFor は安定参照)
 
+  // v107 hotfix (React #310 fix): ch2Tab / ch3Tab useState は ALL early returns の前に置く必要。
+  //   v105/v106 で JSX return 直前に置いていたが、 L338 `if (!selectedTicker)` early return より後ろのため
+  //   初回 (selectedTicker=undefined) は hooks 2 個 skip、 2 回目 (set) で 2 個追加 → Rules of Hooks 違反。
+  //   memory anchor: feedback_chart_overlay_safety.md / handover v75 真っ白事故 同 category。
+  const [ch2Tab, setCh2TabRaw] = useState(() => {
+    try {
+      if (typeof window === 'undefined') return 'guidance';
+      const p = new URLSearchParams(window.location.search).get('ch2tab');
+      if (p === 'history' || p === 'quarterly' || p === 'guidance') return p;
+    } catch { /* localStorage / URL 利用不可環境 */ }
+    return 'guidance';
+  });
+  const setCh2Tab = (key) => {
+    setCh2TabRaw(key);
+    try {
+      if (typeof window === 'undefined') return;
+      const u = new URL(window.location.href);
+      if (key === 'guidance') {
+        u.searchParams.delete('ch2tab');
+      } else {
+        u.searchParams.set('ch2tab', key);
+      }
+      window.history.replaceState({}, '', u.toString());
+    } catch { /* noop */ }
+  };
+  const [ch3Tab, setCh3TabRaw] = useState(() => {
+    try {
+      if (typeof window === 'undefined') return 'analyst';
+      const p = new URLSearchParams(window.location.search).get('ch3tab');
+      if (p === 'analyst' || p === 'insights') return p;
+    } catch { /* noop */ }
+    return 'analyst';
+  });
+  const setCh3Tab = (key) => {
+    setCh3TabRaw(key);
+    try {
+      if (typeof window === 'undefined') return;
+      const u = new URL(window.location.href);
+      if (key === 'analyst') {
+        u.searchParams.delete('ch3tab');
+      } else {
+        u.searchParams.set('ch3tab', key);
+      }
+      window.history.replaceState({}, '', u.toString());
+    } catch { /* noop */ }
+  };
+
   if (!selectedTicker) {
     return (
       <div
@@ -422,53 +469,8 @@ export default function JudgmentDetail({
   const isV2 = isPane3V2();
   // v104 Phase G Phase 4: 章 2 tab interface 切替 flag
   const isV3 = isPane3V3();
-  // 章 2 tab state (Guidance / EarningsHistory / QuarterlyHistory)
-  //  v105 PDCA: URL `?ch2tab=guidance|history|quarterly` で permalink shareable + dogfood 利便性向上。
-  //  setCh2Tab 経由で URL 同期 (history.replaceState、 navigation 起こさない)。
-  const [ch2Tab, setCh2TabRaw] = useState(() => {
-    try {
-      if (typeof window === 'undefined') return 'guidance';
-      const p = new URLSearchParams(window.location.search).get('ch2tab');
-      if (p === 'history' || p === 'quarterly' || p === 'guidance') return p;
-    } catch { /* localStorage / URL 利用不可環境 */ }
-    return 'guidance';
-  });
-  const setCh2Tab = (key) => {
-    setCh2TabRaw(key);
-    try {
-      if (typeof window === 'undefined') return;
-      const u = new URL(window.location.href);
-      if (key === 'guidance') {
-        u.searchParams.delete('ch2tab'); // default は param 出さない (URL クリーン)
-      } else {
-        u.searchParams.set('ch2tab', key);
-      }
-      window.history.replaceState({}, '', u.toString());
-    } catch { /* noop */ }
-  };
-  // v105 Phase G Phase 5: 章 3 (市場評価) tab state (AnalystPanel / InsightsPanel)
-  //  URL `?ch3tab=analyst|insights` permalink shareable、 default 'analyst'
-  const [ch3Tab, setCh3TabRaw] = useState(() => {
-    try {
-      if (typeof window === 'undefined') return 'analyst';
-      const p = new URLSearchParams(window.location.search).get('ch3tab');
-      if (p === 'analyst' || p === 'insights') return p;
-    } catch { /* noop */ }
-    return 'analyst';
-  });
-  const setCh3Tab = (key) => {
-    setCh3TabRaw(key);
-    try {
-      if (typeof window === 'undefined') return;
-      const u = new URL(window.location.href);
-      if (key === 'analyst') {
-        u.searchParams.delete('ch3tab');
-      } else {
-        u.searchParams.set('ch3tab', key);
-      }
-      window.history.replaceState({}, '', u.toString());
-    } catch { /* noop */ }
-  };
+  // ch2Tab / ch3Tab の useState は v107 hotfix で early return より前 (L320 周辺) に移動済。
+  // 本位置に置くと Rules of Hooks 違反 (React #310 Rendered more hooks than during the previous render)。
 
   return (
     // Sprint 0 (Phase 2): MotionProvider で Pane 3 全体を wrap。
