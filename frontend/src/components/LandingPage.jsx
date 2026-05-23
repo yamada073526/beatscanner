@@ -1561,11 +1561,19 @@ function PricingSection({ onFreeStart, onProCheckout }) {
             listStyle: 'none', padding: 0, margin: '0 0 22px',
             fontSize: 13, lineHeight: 2, color: 'var(--text-secondary)',
           }}>
+            {/* v100 LP Trust Cliff audit (handover §100点 multi-review、 マーケター verdict):
+                旧「✓ 決算前自動分析」 は cron + analyze trigger + Resend email が未実装、 LP 訴求と
+                実装の不一致が確定 Trust Cliff。 path B (release 速度優先) で「(近日提供予定)」 grace
+                表記に変更。 footer §今後の予定「決算前メール通知」 と idiom 統一。
+                release 後 1-2 週で実装後、 grace 削除 + 訴求復活。 */}
             <li>✓ 分析数 <strong style={{ color: 'rgb(56, 189, 248)' }}>無制限</strong></li>
             <li>✓ 市場の声 フル表示</li>
             <li>✓ AI 詳細レポート</li>
+            <li>✓ Insider 取引 (Form 4 経営者売買)</li>
             <li>✓ ウォッチリスト無制限</li>
-            <li>✓ 決算前自動分析</li>
+            <li style={{ color: 'var(--text-muted)' }}>
+              ⌛ 決算前自動分析 <span style={{ fontSize: 11, fontWeight: 600 }}>(近日提供予定)</span>
+            </li>
           </ul>
           {/* 下部: 信頼バッジ + CTA + 年払いバッジを marginTop:auto で底固定 */}
           <div style={{ marginTop: 'auto' }}>
@@ -1680,7 +1688,7 @@ function FAQSection() {
       />
       <FAQItem
         q="Q. 7日間無料トライアルはいつでも解約できますか？"
-        a="はい。トライアル期間中（7日間）であれば、Stripe 経由でいつでも解約でき、料金は一切発生しません。トライアル終了前に解約のリマインドメールもお送りします。"
+        a="はい。トライアル期間中（7日間）であれば、Stripe 経由でいつでも解約でき、料金は一切発生しません。Stripe マイページからトライアル終了日と解約手順がいつでも確認できます。"
       />
       <FAQItem
         q="Q. 投資初心者でも使えますか？"
