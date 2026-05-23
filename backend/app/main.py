@@ -11958,19 +11958,29 @@ async def get_insider(ticker: str, request: Request) -> dict:
             shares = it.get("securitiesTransacted") or it.get("transactionShares") or 0
             price = it.get("price") or 0
             ttype = (it.get("transactionType") or "").upper()
+            # transactionType: P-Purchase / S-Sale / A-Award (RSU) / D-Disposition / G-Gift 等
+            type_short = (
+                "P" if ttype.startswith("P") else
+                "S" if ttype.startswith("S") else
+                "A" if ttype.startswith("A") else
+                "D" if ttype.startswith("D") else
+                ttype[:1] or "—"
+            )
             form4.append({
                 "date": it.get("transactionDate") or it.get("filingDate"),
                 "name": it.get("reportingName") or it.get("insiderName") or "—",
-                "type": "P" if ttype.startswith("P") else ("S" if ttype.startswith("S") else ttype[:1] or "—"),
+                "type": type_short,
                 "shares": int(shares) if shares else 0,
                 "price": float(price) if price else 0.0,
                 "value": int(shares) * float(price) if shares and price else 0,
             })
 
+    # 13F: FMP Premium では Restricted Endpoint、 Ultimate ($79/月) で開放。
+    # 現状 Premium 加入のため holders=restricted で frontend に明示。 Ultimate 移行時に ok 復活。
     if isinstance(holders_data, Exception):
         sources["holders"] = "error"
     elif not holders_data:
-        sources["holders"] = "empty"
+        sources["holders"] = "restricted"  # Premium plan 制限、 Ultimate で開放
     else:
         for h in holders_data[:20]:
             cur_shares = h.get("shares") or h.get("holdingShares") or 0

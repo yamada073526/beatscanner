@@ -124,7 +124,11 @@ export default function InsiderPanel({ ticker }) {
         </header>
         {holders.length === 0 ? (
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            {hStatus === 'empty' ? '13F データはありません' : '取得できませんでした'}
+            {hStatus === 'restricted'
+              ? '13F 機関投資家保有データは Ultimate プラン (FMP $79/月) で開放されます'
+              : hStatus === 'empty'
+                ? '13F データはありません'
+                : '取得できませんでした'}
           </div>
         ) : (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>

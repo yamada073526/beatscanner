@@ -250,18 +250,28 @@ class FMPClient:
 
     # v100 (handover §100点 multi-review、 金融アナリスト verdict + user dogfood):
     # FMP Premium per-ticker endpoint を活用、 Pane 3 Insider 取引 section の placeholder 解消。
+    # endpoint 名修正 (2026-05-23 試行): /insider-trading → /insider-trading/search
     async def insider_trading(self, ticker: str, limit: int = 50) -> list[dict]:
-        """Form 4 経営者株式売買 (直近 N 件)。 transactionType: P-Purchase / S-Sale 等"""
+        """Form 4 経営者株式売買 (直近 N 件)。 transactionType: P-Purchase / S-Sale / A-Award 等"""
         data = await self._get(
-            "/insider-trading",
+            "/insider-trading/search",
             {"symbol": ticker.upper(), "limit": limit},
         )
         return data if isinstance(data, list) else []
 
     async def institutional_holder(self, ticker: str, limit: int = 50) -> list[dict]:
-        """13F 機関投資家保有比率の variation tracking。 主要 Fund の保有株数変動"""
-        data = await self._get(
-            "/institutional-ownership/holder-performance-summary",
-            {"symbol": ticker.upper(), "limit": limit},
-        )
-        return data if isinstance(data, list) else []
+        """13F 機関投資家保有比率の variation tracking。
+
+        ⚠️ FMP **Ultimate plan ($79/月)** で利用可能、 Premium ($39/月) では Restricted。
+        現状 Premium 加入のため、 backend で呼ぶと「Restricted Endpoint」 エラー文字列が返る。
+        try/except + isinstance チェックで silent fail、 frontend では sources=restricted 表示。
+        Ultimate アップグレード時に sources=ok で復活。
+        """
+        try:
+            data = await self._get(
+                "/institutional-ownership/symbol-positions-summary",
+                {"symbol": ticker.upper(), "limit": limit},
+            )
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []
