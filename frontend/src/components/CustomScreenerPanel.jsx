@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Mountain } from 'lucide-react';
 import { fetchCustomScreener, fetchCupHandleScanner } from '../api.js';
 import Chip, { ChipGroup } from './ui/Chip.jsx';
@@ -242,6 +242,13 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
     }
   }
 
+  // v100 Sprint A-B (multi-review 6 体合議 verdict、 UI/UX + 金融 + マーケター 3 体一致):
+  //   mount 時に auto-run、 「button 押さないと何も見えない」 を解消。
+  //   backend 15 分 TTL cache 済のため再 fetch cost なし。 retention / CVR 最大改善。
+  useEffect(() => {
+    run();
+  }, []);
+
   async function runCupFilter(filterKey) {
     setActiveFilter(filterKey);
     setCupData(null);
@@ -263,17 +270,9 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
         </p>
       </div>
 
-      {/* 検索対象範囲の注記（Phase A 完了時に削除予定） */}
-      <div className="mb-3 rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
-        ⚠️ 現在は S&amp;P500 主要銘柄を対象（順次拡大予定）
-      </div>
-
-      {/* Cache notice */}
-      {data && (
-        <div className="mb-4 rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs text-slate-500">
-          結果は15分間キャッシュされます
-        </div>
-      )}
+      {/* v100 Sprint A-C (multi-review 6 体合議): grace 注記 2 件削除。
+          ⚠️ S&P500 限定注記 + 15 分キャッシュ注記は 5 原則 §1 読み手の負担増。
+          v100 commit 59925ea で SP500_SAMPLE 補完済、 user に意識させる必要なし。 */}
 
       {/* Idle */}
       {phase === 'idle' && (

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { X, ExternalLink } from 'lucide-react';
 import { translateTexts } from '../../../api.js';
+import { sanitizeText } from '../../../lib/blocklist.js';
 import { MD_COMPONENTS, stripArticleTrailer } from './markdown.jsx';
 import {
   CATEGORY_ICON,
@@ -147,7 +148,11 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
   const Icon = cat ? CATEGORY_ICON[cat] : null;
   const displayTitle = jpEnabled && translatedTitle ? translatedTitle : item.title;
   // §v66 dogfood-10: backend が日本語化済 → enContent をそのまま表示
-  const aiContent = enContent;
+  // v100 Sprint A-K (multi-review Anthropic Engineer verdict、 release block):
+  //   Hallucination Guard layer 3 (frontend sanitize) を enContent に適用。
+  //   翻訳記事に BAD-5 (断定的将来予測) / BAD-6 (最上級表現) が混入する景表法/金商法 risk を解消。
+  //   sanitizeText は違反 sentence 単位削除で LLM 出力の自然性を維持。
+  const aiContent = sanitizeText(enContent);
   const fallbackContent = item.summary || '';
   const displayContent = aiContent || fallbackContent;
   const isUsingFallback = !aiContent && !!fallbackContent;
