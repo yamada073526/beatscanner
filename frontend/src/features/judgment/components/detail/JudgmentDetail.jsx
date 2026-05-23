@@ -409,6 +409,7 @@ export default function JudgmentDetail({
           period={result?.latestPeriod ? `FY${result.latestPeriod}` : null}
           nextEarningsDays={detail?.nextEarningsDays}
           nextEarningsDate={detail?.nextEarningsDate}
+          frameless={v2}
         />
 
         {/* Sprint 6: SummaryBrief (AI 要約) — Hero と KpiStrip の間に mount。
@@ -425,13 +426,15 @@ export default function JudgmentDetail({
           <SummaryBrief
             analysis={result}
             guidance={guidance}
+            frameless={v2}
           />
         )}
       </VerdictHero>
 
       {/* Sprint 3: KpiStrip — grid 密着配置は KpiStrip.jsx 内部に依存。
-          JudgmentDetail レベルでは gap 短縮で上部スカスカを解消。 */}
-      <KpiStrip stats={kpis} />
+          JudgmentDetail レベルでは gap 短縮で上部スカスカを解消。
+          Phase G Phase 2: v2 mode で frameless (sticky / bg / border 抑制) */}
+      <KpiStrip stats={kpis} frameless={v2} />
 
       {/* handover v82 Phase 5: 三層トリアージ banner (UI/UX 6 体合議 B 案、 ConditionGrid 直前 hint 1 行)。
           保有 × 5 条件 × Cup-Handle を 1 行で示し、 「他 N 件」 click で Pane 2 ヒートマップへ jump。
@@ -448,6 +451,7 @@ export default function JudgmentDetail({
           onJumpToScanner={detailContext.onJumpToScanner}
           currentPrice={Number.isFinite(detail?.price) ? Number(detail.price) : null}
           onOpenAddTransaction={detailContext.onOpenAddTransaction}
+          frameless={v2}
         />
         </SectionFade>
       )}
@@ -479,6 +483,7 @@ export default function JudgmentDetail({
           totalCount={result?.totalCount}
           isPro={detailContext.isPro}
           onUpgrade={detailContext.onUpgrade}
+          frameless={v2}
           onConditionPulse={(idx) => {
             // condition 4 (営業利益増、 0-indexed) は全 step 該当 → toast fallback (DiagramCard 側で処理)。
             // 0-3 は個別 step pulse。 'all_steps' 文字列を sentinel として store に保存。

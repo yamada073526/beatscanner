@@ -26,7 +26,16 @@ import React from 'react';
  * @param {object} props
  * @param {React.ReactNode} props.children - Hero, SummaryBrief, KpiStrip, TriageBanner, FiveConditionsCard
  */
-export default function UnifiedJudgmentSection({ children }) {
+/**
+ * @param {object} props
+ * @param {React.ReactNode} props.children - Hero, SummaryBrief, KpiStrip, TriageBanner, FiveConditionsCard
+ * @param {boolean} [props.frameless=true] - Phase 2: 内部 sub-component を frameless 化、
+ *   章内 sub-component 間に gold-fade hairline で「節」 を表現 (Aman pavilion 流の控えめな仕切り)。
+ */
+export default function UnifiedJudgmentSection({ children, frameless = true }) {
+  const bodyClass = frameless
+    ? 'judgment-chapter-body is-frameless-children'
+    : 'judgment-chapter-body';
   return (
     <section
       className="judgment-chapter judgment-chapter--verdict"
@@ -42,7 +51,7 @@ export default function UnifiedJudgmentSection({ children }) {
           判定
         </h2>
       </header>
-      <div className="judgment-chapter-body">
+      <div className={bodyClass}>
         {children}
       </div>
     </section>

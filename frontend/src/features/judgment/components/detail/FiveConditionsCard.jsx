@@ -49,6 +49,7 @@ export default function FiveConditionsCard({
   isPro = true,
   onUpgrade,
   onConditionPulse,
+  frameless = false,
 }) {
   // null = どれも展開されていない (default)
   // index = その index のみ展開 (Linear 流「同時に 1 つだけ」)
@@ -108,16 +109,17 @@ export default function FiveConditionsCard({
     <SectionFade style={{ viewTransitionName: 'pane3-five-conditions' }}>
     <div
       ref={cardRef}
-      className="tier-m-glow"
+      className={frameless ? 'tier-m-glow is-frameless' : 'tier-m-glow'}
       data-testid="five-conditions-card-wrapper"
       style={{
         // v99 CLS envelope: skeleton 5 行 (220px) と expanded 1 行+collapsed 4 行 (280-340px) を吸収。
         // expanded toggle 中の section 伸縮は ConditionRow 内部 motion で滑らかに、 root は固定。
         // [[feedback-cls-envelope-pattern]] 流儀: 上方 section minHeight で scroll CLS 防止。
+        // frameless でも minHeight 維持 (CLS は frameless mode でも防止必須)
         minHeight: '280px',
       }}
     >
-    <Card data-testid="five-conditions-card">
+    <Card data-testid="five-conditions-card" frameless={frameless}>
       <div style={{ padding: 'var(--space-6, 24px)' }}>
         <SectionHeader
           id="judgment-conditions"

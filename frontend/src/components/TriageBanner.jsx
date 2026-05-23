@@ -154,9 +154,9 @@ function isNoHolding(data) {
   return h && h.owns === false;
 }
 
-function ProTeaser({ onUpgrade }) {
+function ProTeaser({ onUpgrade, frameClass = '' }) {
   return (
-    <div className="triage-banner triage-banner-locked">
+    <div className={`triage-banner triage-banner-locked ${frameClass}`.trim()}>
       <span className="triage-locked-icon" aria-hidden="true">🔒</span>
       <span className="triage-locked-text">
         Pro で「保有 × 5 条件 × Cup-Handle」 を 1 画面に統合
@@ -170,12 +170,12 @@ function ProTeaser({ onUpgrade }) {
   );
 }
 
-function NoSessionHint() {
+function NoSessionHint({ frameClass = '' }) {
   // v86 R3 → revert (color_hierarchy -6 の主因が triage-banner-cta bg accent 8% tint)
   //  - bg/border は R2 concierge (左 cyan→transparent 4% gradient) に戻す
   //  - 「ログイン →」 affordance は Vision が肯定的だったので残置 (accent-cyan fw600)
   return (
-    <div className="triage-banner triage-banner-muted triage-banner-concierge">
+    <div className={`triage-banner triage-banner-muted triage-banner-concierge ${frameClass}`.trim()}>
       <span className="triage-pulse-dot" aria-hidden="true" />
       <span style={{ flex: 1 }}>ログインすると、 保有銘柄の 5 条件 / Cup-Handle 状態を確認できます</span>
       <span className="triage-cta-affordance" aria-hidden="true">ログイン →</span>
@@ -201,7 +201,10 @@ export default function TriageBanner({
   onJumpToScanner,
   currentPrice = null,
   onOpenAddTransaction,
+  frameless = false,
 }) {
+  // Phase G Phase 2: frameless mode で background / border 透明化 (unified section 内)
+  const frameClass = frameless ? 'is-frameless' : '';
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -234,16 +237,16 @@ export default function TriageBanner({
   if (!ticker) return null;
 
   if (!user) {
-    return <NoSessionHint />;
+    return <NoSessionHint frameClass={frameClass} />;
   }
 
   if (!allowed) {
-    return <ProTeaser onUpgrade={onUpgrade} />;
+    return <ProTeaser onUpgrade={onUpgrade} frameClass={frameClass} />;
   }
 
   if (loading && !data) {
     return (
-      <div className="triage-banner triage-banner-muted" aria-busy>
+      <div className={`triage-banner triage-banner-muted ${frameClass}`.trim()} aria-busy>
         <span aria-hidden="true">·</span>
         <span>トリアージを取得中…</span>
       </div>
@@ -259,7 +262,7 @@ export default function TriageBanner({
   // - 真因 B' (全 source error): 既存仕様通り hide (memory feedback_triage_banner_pattern.md)
   if (!data) {
     return (
-      <div className="triage-banner triage-banner-muted">
+      <div className={`triage-banner triage-banner-muted ${frameClass}`.trim()}>
         <Chip variant="display" tone="muted" size="xs">データ取得失敗</Chip>
         <span>少し待って再読込してください</span>
       </div>
@@ -314,7 +317,7 @@ export default function TriageBanner({
     }
     // 真因 B: 1 つ以上の source が non-fatal (ok or empty) → hint 表示
     return (
-      <div className="triage-banner triage-banner-muted">
+      <div className={`triage-banner triage-banner-muted ${frameClass}`.trim()}>
         {hasFatal && <Chip variant="display" tone="muted" size="xs">一部データ取得失敗</Chip>}
         <span aria-hidden="true">·</span>
         <span>取引履歴未登録 / 該当パターン無し / 同条件 PASS 0 件</span>
@@ -323,7 +326,7 @@ export default function TriageBanner({
   }
 
   return (
-    <div className="triage-banner triage-banner-sprint5">
+    <div className={`triage-banner triage-banner-sprint5 ${frameClass}`.trim()}>
       {/* Sprint 5: 保有情報 2 行 grid */}
       {hasHoldingData && (
         <div className="triage-holdings-grid">

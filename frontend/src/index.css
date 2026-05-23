@@ -9636,3 +9636,41 @@ button.ds-chip[data-pressed="true"]:hover {
   margin: 0;
 }
 
+/* Phase G Phase 2: Card primitive frameless mode
+   - background / border / box-shadow / padding を全て無効化
+   - outer wrapper (UnifiedJudgmentSection) が枠を担う
+   - 二重 wrap (外: unified section / 内: Card border) の冗長解消
+   - default OFF、 Card に frameless={true} 渡された時のみ適用 */
+.ds-card-frameless {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* sub-component frameless mode: outer wrapper の bg/border 透明化
+   .is-frameless modifier class で各 sub-component 内の root wrapper を制御。
+   sub-component 内部の Card は frameless={true} で Card primitive 経由、
+   それ以外の root section / div は本 class で個別に制御。 */
+.summary-brief-section.is-frameless {
+  background: transparent;
+  border: none;
+  /* minHeight envelope (240px) は保持 — CLS 防止は frameless mode でも必要 */
+}
+
+.triage-banner.is-frameless {
+  background: transparent;
+  border: none;
+  padding-left: 0;
+  padding-right: 0;
+  /* minHeight 40/96 は保持 */
+}
+
+/* 章内 sub-component 間 divider 強調 (frameless mode で section が透明になる分、
+   subtle hairline で「節」 を区切る、 Aman pavilion 流の控えめな仕切り) */
+.judgment-chapter-body.is-frameless-children > * + *:not(:empty) {
+  border-top: 1px solid color-mix(in srgb, var(--color-gold) 8%, transparent);
+  padding-top: var(--space-5, 20px);
+}
+
