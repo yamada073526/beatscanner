@@ -268,6 +268,37 @@ function GroupedLegend({ hasDps }) {
   );
 }
 
+// v100 (handover §100点 UI/UX verdict C): YoY badge に count-up animation 適用、 motion 軸 +
+// 期待。 useCountUp は React hook なので map 内呼出不可、 子 component に分離する。
+import { useCountUp as _useCountUpHook } from '../hooks/useCountUp.js';
+
+function YoYBadge({ year, yearFull, yoyNum, hasYoy }) {
+  const animatedYoy = _useCountUpHook(hasYoy ? yoyNum : null, { duration: 600, digits: 0 });
+  const display = hasYoy ? animatedYoy : null;
+  const color = hasYoy
+    ? yoyNum > 0
+      ? 'var(--color-gain)'
+      : yoyNum < 0
+      ? 'var(--color-loss)'
+      : 'var(--text-muted)'
+    : 'transparent';
+  const sign = hasYoy && display > 0 ? '+' : '';
+  return (
+    <div
+      className="earnings-history-yoy-badge"
+      data-testid={`earnings-history-yoy-badge-${yearFull}`}
+      style={{
+        flex: 1,
+        textAlign: 'center',
+        color,
+        userSelect: 'none',
+      }}
+    >
+      {hasYoy ? `${sign}${Math.round(display)}%` : '—'}
+    </div>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 // v100 QA #5 (handover v99 §0-A) 0 件 fallback:
 //   isLoading prop で「loading 中」 vs「データなし」 を分岐し、 misleading な永久 loading 表示を避ける。
@@ -606,27 +637,15 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD', isLoading =
           const yoy = yoyMap[d.year]?.eps;
           const hasYoy = yoy != null && Number.isFinite(Number(yoy));
           const yoyNum = hasYoy ? Number(yoy) : 0;
-          const color = yoyNum > 0
-            ? 'var(--color-gain)'
-            : yoyNum < 0
-            ? 'var(--color-loss)'
-            : 'var(--text-muted)';
-          const sign = yoyNum > 0 ? '+' : '';
-          // Sprint 1: earnings-history-yoy-badge class で tabular-nums 適用
+          // v100 UI/UX verdict C: count-up animation 適用 (子 YoYBadge component で hook 経由)
           return (
-            <div
+            <YoYBadge
               key={d.year}
-              className="earnings-history-yoy-badge"
-              data-testid={`earnings-history-yoy-badge-${d.yearFull}`}
-              style={{
-                flex: 1,
-                textAlign: 'center',
-                color: hasYoy ? color : 'transparent',
-                userSelect: 'none',
-              }}
-            >
-              {hasYoy ? `${sign}${Math.round(yoyNum)}%` : '—'}
-            </div>
+              year={d.year}
+              yearFull={d.yearFull}
+              yoyNum={yoyNum}
+              hasYoy={hasYoy}
+            />
           );
         })}
       </div>
