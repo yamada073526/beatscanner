@@ -90,17 +90,23 @@ export default function KpiStrip({ stats = [] }) {
   return (
     <SectionFade>
       <Card>
+        {/* v97 Phase H: KpiStrip 大型 number display 刷新
+            - padding 16/24 → 24/28 (luxury 余白、 大型数値とのバランス)
+            - gridTemplateColumns minmax 120 → 140 (大型数値の確保)
+            - 真鍮 accent: 上端に 1px gold hairline (Sprint H1 idiom 統一、 全 panel で brand 一貫性)
+            - sticky 維持 (top 56 で SearchBar 直下) */}
         <div
           className="pane3-numeric"
           style={{
-            padding: 'var(--space-4, 16px) var(--space-6, 24px)',
+            padding: 'var(--space-6, 24px) var(--space-7, 28px)',
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
-            gap: 'var(--space-4, 16px)',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+            gap: 'var(--space-5, 20px)',
             position: 'sticky',
-            top: 56, // SearchBar 44px + 余白
+            top: 56,
             zIndex: 'var(--z-base, 1)',
             background: 'var(--bg-card)',
+            borderTop: '1px solid color-mix(in srgb, var(--color-gold) 35%, var(--border))',
           }}
         >
           {stats.length === 0 ? (

@@ -435,13 +435,12 @@ function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatt
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
           {achievementPct != null ? (
             <span
+              data-display-numeric="true"
               style={{
-                fontSize: 32,
+                fontSize: 36,
                 fontWeight: 700,
                 lineHeight: 1,
                 color: arcColor,
-                fontVariantNumeric: 'tabular-nums',
-                letterSpacing: '-0.02em',
               }}
             >
               {achievementPct.toFixed(0)}<span style={{ fontSize: 18, fontWeight: 600 }}>%</span>

@@ -8906,15 +8906,21 @@ button.ds-chip[data-pressed="true"]:hover {
 }
 
 /* ds-stat__value — Stat プリミティブの数値部 (KpiStrip で使用)
-   既存の inline style を CSS class に昇格 (specificity 整理)
-   design_system.md §7-B: Stat fw700 lh≤1.1 + tabular-nums P0 */
+   v97 Phase H/I: 大型 number display 刷新 + IBM Plex Mono (数値専用 font)
+   - font-size 24 → 36px (Bloomberg Terminal 主要指標 panel idiom、 タワー時計感)
+   - font-family: IBM Plex Mono (lining figures 完璧 + monospace 高さ揃え)
+   - letter-spacing -0.025em (大型 display 圧縮)
+   - line-height 1.0 (panel 高さ最適化)
+   - fw 700 維持 (主役感)
+   design_system.md §7-B 拡張: 旧 24px は body との対比弱、 36px で hierarchy 明確化 */
 .ds-stat__value {
-  font-size: var(--text-h1, 24px);
+  font-size: 36px;
   font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1, "cv11" 1;
+  line-height: 1.0;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', SFMono-Regular, Consolas, monospace;
 }
 
 /* ds-stat__label — Stat プリミティブのラベル部
@@ -9082,12 +9088,15 @@ button.ds-chip[data-pressed="true"]:hover {
   letter-spacing: 0.08em;
 }
 
-/* 数値 大型 display (32px+): tracking 圧縮で「タワー時計」 idiom */
+/* 数値 大型 display (32px+): tracking 圧縮で「タワー時計」 idiom
+   v97 Phase I: IBM Plex Mono (lining figures 完璧 + monospace 高さ揃え) を全 display 数値に統一 */
 .ds-judgment-detail [data-display-numeric="true"],
 .ds-judgment-detail .display-numeric-lg {
   letter-spacing: -0.02em;
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', SFMono-Regular, Consolas, monospace;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
