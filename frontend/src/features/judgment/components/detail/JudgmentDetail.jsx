@@ -365,13 +365,16 @@ export default function JudgmentDetail({
     });
   }
   // EPS Beat: 実績はあるが予想欠損 → Unknown を honest に表示 (recipes §C-9)
+  // v99 dogfood feedback C (2 巡目): 旧 hint「予想は更新待ち」 が EPS BEAT cell のみ表示で
+  // 他 3 cell との height 不揃い + grid stretch → 「下半分空欄」 体感の主因。 hint 削除で
+  // 全 cell 均一 height、 「—」 が「データ無し」 を honest に語る (Bloomberg idiom)。
   kpis.push({
     value: result?.epsBeatPct != null
       ? `${result.epsBeatPct > 0 ? '+' : ''}${(result.epsBeatPct * 100).toFixed(1)}%`
       : '—',
     label: 'EPS Beat',
     verdict: result?.epsBeatPct == null ? 'unknown' : result.epsBeatPct > 0 ? 'beat' : 'miss',
-    hint: result?.epsBeatPct == null ? '予想は更新待ち' : null,
+    // hint: 削除 (全 cell 均一 height のため)
   });
 
   // InsightsPanel 件数バッジ: bull_points + bear_points の合計件数
@@ -578,8 +581,10 @@ export default function JudgmentDetail({
       {/* Phase G Phase 3 + v99 dogfood 3 体合議 verdict (2+3 構成):
           - v2 mode: 副柱 (II. 数値) = sans 13px + muted (主柱 III と差別化)
           - default: 既存 SectionDivider「数値の根拠」 維持 (revert 安全) */}
+      {/* v99 dogfood feedback A (3 体合議 verdict): 親子誤読防止のため副柱は丸数字 ① ② ③、
+          主柱はローマ数字 I II で別系統 marker、 「並列だが格差」 を視覚的に表現 */}
       {isV2 ? (
-        <ChapterSection chapterNumber="II" chapterTitle="数値" headerOnly tier="sub" />
+        <ChapterSection chapterNumber="①" chapterTitle="数値" headerOnly tier="sub" />
       ) : (
         <div data-chapter-start="true">
           <SectionDivider expandedLabel="数値の根拠" />
@@ -647,10 +652,10 @@ export default function JudgmentDetail({
       {/* === 章 3: 市場評価 (H2 Chapter Break + v97 G-2 軽量強化) ===
           ChapterHeader「市場評価」 で章扉感強化、 data-chapter-start で 48px breathing room。
           AnalystPanel 起点 (旧 data-chapter-start を ChapterHeader に移譲)。 */}
-      {/* Phase G Phase 3: v2 mode で「III. 市場評価」 主柱 (Noto Serif JP + gold hairline)
-          [2+3 構成 主柱]、 default は既存 ChapterHeader */}
+      {/* Phase G Phase 3 + v99 dogfood A: 主柱「II. 市場評価」 (ローマ数字 連番 I→II)、
+          副柱とは別系統 marker で親子誤読防止 */}
       {isV2 ? (
-        <ChapterSection chapterNumber="III" chapterTitle="市場評価" headerOnly tier="main" />
+        <ChapterSection chapterNumber="II" chapterTitle="市場評価" headerOnly tier="main" />
       ) : (
         <ChapterHeader label="市場評価" isChapterStart />
       )}
@@ -784,10 +789,9 @@ export default function JudgmentDetail({
       {/* === 章 4: チャート (H2 Chapter Break + v97 G-2 軽量強化) ===
           ChapterHeader「テクニカル」、 StockPriceChart 起点。
           user override 1「株価チャートは常に展開」 維持。 */}
-      {/* Phase G Phase 3: v2 mode で「IV. テクニカル」 副柱 (sans 13px + muted)
-          [2+3 構成 副柱]、 default は既存 ChapterHeader */}
+      {/* Phase G Phase 3 + v99 dogfood A: 副柱「② テクニカル」 (丸数字、 別系統 marker) */}
       {isV2 ? (
-        <ChapterSection chapterNumber="IV" chapterTitle="テクニカル" headerOnly tier="sub" />
+        <ChapterSection chapterNumber="②" chapterTitle="テクニカル" headerOnly tier="sub" />
       ) : (
         <ChapterHeader label="テクニカル" isChapterStart />
       )}
@@ -860,10 +864,9 @@ export default function JudgmentDetail({
       {/* === 章 5: リファレンス (H2 Chapter Break + v97 G-2 軽量強化) ===
           ChapterHeader「リファレンス」、 News / IR / DetailReport で「補足資料」 章扉感。
           Sprint 3 (Phase 2): Tier L glow — hover 時の hairline border tint のみ、発光なし。 */}
-      {/* Phase G Phase 3: v2 mode で「V. リファレンス」 副柱 (sans 13px + muted)
-          [2+3 構成 副柱]、 default は既存 ChapterHeader */}
+      {/* Phase G Phase 3 + v99 dogfood A: 副柱「③ リファレンス」 (丸数字、 別系統 marker) */}
       {isV2 ? (
-        <ChapterSection chapterNumber="V" chapterTitle="リファレンス" headerOnly tier="sub" />
+        <ChapterSection chapterNumber="③" chapterTitle="リファレンス" headerOnly tier="sub" />
       ) : (
         <ChapterHeader label="リファレンス" isChapterStart />
       )}

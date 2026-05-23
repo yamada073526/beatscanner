@@ -9685,8 +9685,22 @@ button.ds-chip[data-pressed="true"]:hover {
 }
 
 .chapter-section--sub::before {
-  /* 副柱は gold hairline なし、 hierarchy 差別化 */
-  display: none;
+  /* v99 dogfood feedback E (2 巡目): 旧「副柱は hairline なし」 だと V「リファレンス」 が
+     accordion 群と外枠ダブって見える。 副柱にも薄い gold hairline (主柱 30% 強度) を追加、
+     「節区切り」 を visual に示す。 主柱との差は強度のみ (主柱 100% / 副柱 30%)。 */
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--color-gold) 30%, transparent) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
 }
 
 .judgment-chapter-heading--sub {

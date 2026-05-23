@@ -97,6 +97,10 @@ export default function AccordionSection({
   const supportsVT = typeof document !== 'undefined' && 'startViewTransition' in document;
 
   // 開閉トグル
+  // v99 dogfood feedback F (3 体合議): close 時 View Transition と framer-motion AnimatePresence の
+  // 二重 animation で「残像」 発生 — VT は scroll/page change で活躍するが accordion 開閉では
+  // framer-motion spring と競合。 open は VT 維持 (cross-fade 効果あり)、 close は framer-motion のみで
+  // smooth に折り畳む方針。
   const toggle = useCallback(() => {
     const next = !isOpen;
 
@@ -105,7 +109,8 @@ export default function AccordionSection({
       if (onOpenChange) onOpenChange(id, next);
     };
 
-    if (supportsVT) {
+    // 開く時のみ VT (cross-fade効果)、 閉じる時は framer-motion 単独で残像防止
+    if (supportsVT && next) {
       document.startViewTransition(apply);
     } else {
       apply();

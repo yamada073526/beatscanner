@@ -34,9 +34,12 @@ export default function ChapterSection({
 }) {
   const headingId = `chapter-heading-${String(chapterNumber).toLowerCase()}`;
   const tierClass = tier === 'sub' ? 'judgment-chapter-heading--sub' : 'judgment-chapter-heading';
+  // v99 dogfood feedback A (3 体合議): 主柱はローマ数字 + period「I.」、 副柱は丸数字「①」 (period なし)。
+  // tier=main は period 自動付与、 tier=sub は marker そのまま (丸数字に period は idiom 違反)
+  const formattedNumber = tier === 'main' ? `${chapterNumber}.` : chapterNumber;
   const headerJsx = (
     <header className={tierClass}>
-      <span className="judgment-chapter-number" aria-hidden="true">{chapterNumber}.</span>
+      <span className="judgment-chapter-number" aria-hidden="true">{formattedNumber}</span>
       <h2 id={headingId} className="judgment-chapter-title">
         {chapterTitle}
       </h2>
