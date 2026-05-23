@@ -423,7 +423,29 @@ export default function JudgmentDetail({
   // v104 Phase G Phase 4: 章 2 tab interface 切替 flag
   const isV3 = isPane3V3();
   // 章 2 tab state (Guidance / EarningsHistory / QuarterlyHistory)
-  const [ch2Tab, setCh2Tab] = useState('guidance');
+  //  v105 PDCA: URL `?ch2tab=guidance|history|quarterly` で permalink shareable + dogfood 利便性向上。
+  //  setCh2Tab 経由で URL 同期 (history.replaceState、 navigation 起こさない)。
+  const [ch2Tab, setCh2TabRaw] = useState(() => {
+    try {
+      if (typeof window === 'undefined') return 'guidance';
+      const p = new URLSearchParams(window.location.search).get('ch2tab');
+      if (p === 'history' || p === 'quarterly' || p === 'guidance') return p;
+    } catch { /* localStorage / URL 利用不可環境 */ }
+    return 'guidance';
+  });
+  const setCh2Tab = (key) => {
+    setCh2TabRaw(key);
+    try {
+      if (typeof window === 'undefined') return;
+      const u = new URL(window.location.href);
+      if (key === 'guidance') {
+        u.searchParams.delete('ch2tab'); // default は param 出さない (URL クリーン)
+      } else {
+        u.searchParams.set('ch2tab', key);
+      }
+      window.history.replaceState({}, '', u.toString());
+    } catch { /* noop */ }
+  };
 
   return (
     // Sprint 0 (Phase 2): MotionProvider で Pane 3 全体を wrap。
