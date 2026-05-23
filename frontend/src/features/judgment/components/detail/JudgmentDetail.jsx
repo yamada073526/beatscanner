@@ -123,19 +123,20 @@ function isPane3ScrollV1() {
 }
 
 // Phase G Phase 1 (handover v98 §0-B): pane3_v2='1' で章 1「判定」 を unified section に統合。
-// URL parameter (?pane3_v2=1) と localStorage 両対応で、 dogfood revert option 最大化。
-// default off — user dogfood で keep/revert 判断後に default on に切替予定 (Phase G Phase 2 以降)。
+// v100 (handover v99 §0-A): user dogfood 7 round で 8/8 OK 達成 (verdict 68/100) のため
+// default ON に昇格。 `?pane3_v2=0` で明示 revert、 localStorage で永続切替も維持。
 function isPane3V2() {
   try {
-    if (typeof window === 'undefined') return false;
-    // URL parameter (一時試用)
+    if (typeof window === 'undefined') return true;
+    // URL parameter (明示 revert / 試用)
     const urlParam = new URLSearchParams(window.location.search).get('pane3_v2');
-    if (urlParam === '1') return true;
     if (urlParam === '0') return false;
-    // localStorage (永続切替)
-    return window.localStorage?.getItem('pane3_v2') === '1';
+    if (urlParam === '1') return true;
+    // localStorage (永続 revert)
+    if (window.localStorage?.getItem('pane3_v2') === '0') return false;
+    return true;
   } catch {
-    return false;
+    return true;
   }
 }
 
