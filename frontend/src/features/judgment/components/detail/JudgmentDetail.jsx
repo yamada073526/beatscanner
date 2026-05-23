@@ -446,6 +446,29 @@ export default function JudgmentDetail({
       window.history.replaceState({}, '', u.toString());
     } catch { /* noop */ }
   };
+  // v105 Phase G Phase 5: 章 3 (市場評価) tab state (AnalystPanel / InsightsPanel)
+  //  URL `?ch3tab=analyst|insights` permalink shareable、 default 'analyst'
+  const [ch3Tab, setCh3TabRaw] = useState(() => {
+    try {
+      if (typeof window === 'undefined') return 'analyst';
+      const p = new URLSearchParams(window.location.search).get('ch3tab');
+      if (p === 'analyst' || p === 'insights') return p;
+    } catch { /* noop */ }
+    return 'analyst';
+  });
+  const setCh3Tab = (key) => {
+    setCh3TabRaw(key);
+    try {
+      if (typeof window === 'undefined') return;
+      const u = new URL(window.location.href);
+      if (key === 'analyst') {
+        u.searchParams.delete('ch3tab');
+      } else {
+        u.searchParams.set('ch3tab', key);
+      }
+      window.history.replaceState({}, '', u.toString());
+    } catch { /* noop */ }
+  };
 
   return (
     // Sprint 0 (Phase 2): MotionProvider で Pane 3 全体を wrap。
@@ -772,7 +795,46 @@ export default function JudgmentDetail({
       ) : (
         <ChapterHeader label="市場評価" isChapterStart />
       )}
-      {selectedTicker && (
+      {/* v105 Phase G Phase 5: 章 3 (市場評価) を 2 tab interface に統合 (isV3 ON 時)。
+          Tab 1: アナリスト視点 (AnalystPanel)、 Tab 2: 市場の声 (InsightsPanel)。
+          QuarterlyHistoryTable は章 2 ChapterTabs に統合済 (Phase G Phase 4)。
+          ch3tab URL state で permalink shareable (?ch3tab=insights)、 default 'analyst'。
+          halo sweep は tab 切替時の mount 動作と等価のため初期 active=analyst で発火されるが、
+          haloTriggerRef は accordion 専用のため tab 内では渡さない (v1 簡素化、 v2 で trigger 化検討)。 */}
+      {selectedTicker && isV3 && !isScrollV1 ? (
+        <ChapterTabs
+          tabs={[
+            { key: 'analyst', label: 'アナリスト視点' },
+            { key: 'insights', label: '市場の声' },
+          ]}
+          activeKey={ch3Tab}
+          onChange={setCh3Tab}
+          ariaLabel="市場評価 — アナリスト視点 / 市場の声"
+        >
+          {{
+            analyst: (
+              <div id="sec-analyst-v3">
+                <AnalystPanel
+                  ticker={selectedTicker}
+                  plan={plan}
+                  currentPrice={Number.isFinite(detail?.price) ? Number(detail.price) : null}
+                />
+              </div>
+            ),
+            insights: (
+              <div id="sec-insights-v3">
+                <InsightsPanel
+                  ticker={selectedTicker}
+                  user={detailContext.user}
+                  isPro={detailContext.isPro}
+                  onUpgradeClick={detailContext.onUpgrade}
+                  onSignIn={detailContext.onSignIn}
+                />
+              </div>
+            ),
+          }}
+        </ChapterTabs>
+      ) : selectedTicker && (
         isScrollV1 ? (
           <div id="sec-analyst">
             <AnalystPanel
@@ -870,8 +932,10 @@ export default function JudgmentDetail({
       {/* === Sprint 3: InsightsPanel → AccordionSection wrap (collapsed)
           SPEC §5 Sprint 3 #3: header に「市場の声」表示。
           N 件カウントは InsightsPanel 内部データ (外部アクセス不可) のため、
-          accordion header は title="市場の声" のみ。 === */}
-      {selectedTicker && (
+          accordion header は title="市場の声" のみ。
+          v105 Phase G Phase 5: isV3 ON 時は章 3 ChapterTabs の「市場の声」 tab に統合済、
+          ここでは render しない (二重表示防止)。 === */}
+      {selectedTicker && !isV3 && (
         isScrollV1 ? (
           <div id="sec-insights">
             <InsightsPanel
