@@ -103,7 +103,12 @@ export default function Hero({
               fadeIn=true: logo load 時に opacity 0→1 / 200ms ease-out
               monoFallback=true: fallback 頭文字円を neutral gray（投資業界色ルール遵守）
               shape='rounded': border-radius = var(--radius-md, 12px) */}
-          <div style={{ flexShrink: 0, marginTop: 4 }}>
+          {/* v99 dogfood feedback ② (3 体合議): eyebrow「判定」 が hideEyebrow で削除されると
+              ticker (40px h1、 margin 4px 0) と logo (48px square) の baseline が崩れる。
+              - eyebrow あり: marginTop 4px (ticker eyebrow top と整合)
+              - eyebrow なし (v2): marginTop 0 + (50-48)/2 = 1px で ticker block と中心揃え。
+              ticker block 推定 height ≈ 42+8 = 50px、 logo 48px → 1px offset で center 揃え */}
+          <div style={{ flexShrink: 0, marginTop: hideEyebrow ? 1 : 4 }}>
             <CompanyLogo
               ticker={ticker}
               size={48}

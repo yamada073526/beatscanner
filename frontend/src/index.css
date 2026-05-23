@@ -8949,6 +8949,16 @@ button.ds-chip[data-pressed="true"]:hover {
   line-height: 1.4;
 }
 
+/* v99 dogfood feedback ⑤ (3 体合議): KpiStrip 内の 1 つの Stat (EPS Beat) のみ hint を
+   持つと、 CSS Grid stretch で他 stat の cell に下半分空白が発生 (user 「現在株価の下半分が空欄」)。
+   ds-stat を flex column + justify-content center で cell 内 vertically centered、
+   下半分空欄違和感を解消。 */
+.ds-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
 /* .pane3-section-heading — Pane 3 section heading (h2 tier)
    design_system.md §7: Heading 18px / fw500 / -0.015em / lh1.2 */
 .pane3-section-heading {
