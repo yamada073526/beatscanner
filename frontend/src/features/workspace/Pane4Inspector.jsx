@@ -1,25 +1,34 @@
 /**
- * Pane4Inspector — Workspace Pane 4 inspector v3 (dogfood round 15).
+ * Pane4Inspector — Workspace Pane 4 inspector (v102 Sprint B-D orchestrator)
  *
- * 5 体並列レビュー結論を反映:
- *   - 金融 CRITICAL: 2 文字以下の ticker は company name alias 必須 (false positive 回避)
- *   - 開発 CRITICAL: SSE / 翻訳の race condition を AbortController + seqId でガード
- *   - UX: セクション名 The Macro Lens / The Reading Room、JP segmented、hover lift+shadow、slide-in
- *   - 出典 pill 化 (rounded-full)
- *   - 本文 SSE ストリーミング (旧 useArticleModal パターン)、ストリーミング翻訳 (/api/translate/stream)
+ * v102 Sprint B-D で 4 hook + 2 component に分解 (449 → ~250 行):
+ *   - useNewsFeeds: マクロ + 個別銘柄 news fetch + polling + latestPublished
+ *   - useSignalPipeline: buildSignals + filter + sort + visibleTitles
+ *   - useTranslation: title translate + AbortController + race guard (v101 B-abort)
+ *   - usePrefetchTopNews: 上位 3 件 fire-and-forget
+ *   - MacroLensPanel: NewsList body (旧 internal NewsList)
+ *   - ReadingRoomPanel: ReadingMode 全面 Overlay wrap (v101 B-E)
+ *
+ * Pane4Inspector は header (sticky tabs + chips + sort + jp toggle) と body 切替の
+ * orchestrator として state hoist (filter / sortMode / store) + JSX 構成のみを担う。
+ *
+ * 旧 5 体並列レビュー結論は各 hook/component の JSDoc 内に分散保存:
+ *   - 金融 CRITICAL ticker alias → pane4/signal.js
+ *   - 開発 CRITICAL SSE race condition → useTranslation.js (B-abort) + ReadingMode.jsx
+ *   - UX セクション名 / JP segmented / hover lift → 本 file 内 JSX
+ *   - 出典 pill 化 + SSE ストリーミング → ReadingMode.jsx
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useState } from 'react';
 import { TrendingUp, Globe, BarChart3, Bookmark, Languages } from 'lucide-react';
-import { fetchMacroNews, fetchNewsBulk, translateTexts } from '../../api.js';
-import { buildSignals } from './pane4/signal.js';
 import { fmtRelative } from './pane4/format.js';
-import NewsItem from './pane4/NewsItem.jsx';
-import ReadingMode from './pane4/ReadingMode.jsx';
+import MacroLensPanel from './pane4/MacroLensPanel.jsx';
+import ReadingRoomPanel from './pane4/ReadingRoomPanel.jsx';
 import ScannerSlot from './pane4/ScannerSlot.jsx';
+import { useNewsFeeds } from './pane4/useNewsFeeds.js';
+import { useSignalPipeline } from './pane4/useSignalPipeline.js';
+import { useTranslation } from './pane4/useTranslation.js';
+import { usePrefetchTopNews } from './pane4/usePrefetchTopNews.js';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
-
-// ── pane4/markdown.jsx + pane4/format.js に分離済 (v65 §C-3) ────────────
-
 
 // ── フィルタ chip / sort toggle ───────────────────────────────────
 const FILTER_CHIPS = [
@@ -30,11 +39,8 @@ const FILTER_CHIPS = [
   { key: '市場全体',  label: '市場全体', Icon: BarChart3 },
 ];
 
-// ── メイン: Pane 4 Inspector ─────────────────────────────────────────
+// ── メイン: Pane 4 Inspector (orchestrator) ─────────────────────────
 export default function Pane4Inspector({ items = [] }) {
-  const [news, setNews] = useState([]);
-  const [tickerNews, setTickerNews] = useState([]); // 個別銘柄ニュース
-  const [loading, setLoading] = useState(true);
   // §v66 §2: Reading Room は store で hoist 済 (Pane 3 NewsPanel からも開けるよう統合).
   const selected = useWorkspaceStore((s) => s.activeReadingItem);
   const setSelected = useWorkspaceStore((s) => s.setActiveReadingItem);
@@ -42,180 +48,17 @@ export default function Pane4Inspector({ items = [] }) {
   // handover v81 Top 4 (6 体合議): Pane 4 内の section 切替 (Macro Lens ⇔ Scanner)。
   const pane4Section = useWorkspaceStore((s) => s.pane4Section);
   const setPane4Section = useWorkspaceStore((s) => s.setPane4Section);
-  const [jpEnabled, setJpEnabled] = useState(true);
-  const [titleTranslations, setTitleTranslations] = useState({});
-  const [translateUnavailable, setTranslateUnavailable] = useState(false);
   // §round16: タグフィルタ + 話題/新着 toggle
   const [filter, setFilter] = useState('all'); // 'all' | 'mine' | 'マクロ' | '地政学' | '市場全体'
   const [sortMode, setSortMode] = useState('attention'); // 'attention' | 'recent'
-  const translateSeqRef = useRef(0);
 
-  // ── マクロニュース取得 ───────────────────────────
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const d = await fetchMacroNews();
-        if (cancelled) return;
-        if (Array.isArray(d?.items)) setNews(d.items);
-      } catch { /* noop */ }
-      finally { if (!cancelled) setLoading(false); }
-    };
-    load();
-    const t = setInterval(load, 5 * 60_000);
-    return () => { cancelled = true; clearInterval(t); };
-  }, []);
-
-  const holdingItems = useMemo(() => items.filter((it) => it.isHolding), [items]);
-  const watchItems = useMemo(
-    () => items.filter((it) => !it.isHolding && it.isWatchlist),
-    [items]
-  );
-
-  // ── §round16 個別銘柄ニュース集約 (Promise.allSettled、5 分 polling) ──
-  const myTickers = useMemo(
-    () => [...holdingItems, ...watchItems].map((it) => it.ticker).filter(Boolean).slice(0, 30),
-    [holdingItems, watchItems]
-  );
-  const myTickersKey = myTickers.join(',');
-
-  useEffect(() => {
-    if (!myTickersKey) { setTickerNews([]); return; }
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const arr = myTickersKey.split(',');
-        // v65 §C-2: N+1 fetch を bulk endpoint に置換 (memory pane4_roadmap_round16 #2)
-        const res = await fetchNewsBulk(arr, 5);
-        if (cancelled) return;
-        const flat = [];
-        for (const r of res?.items || []) {
-          if (r.status !== 'ok' || !Array.isArray(r.articles)) continue;
-          for (const n of r.articles) {
-            flat.push({ ...n, _sourceTicker: r.ticker });
-          }
-        }
-        setTickerNews(flat);
-      } catch { /* noop */ }
-    };
-    load();
-    const t = setInterval(load, 5 * 60_000);
-    return () => { cancelled = true; clearInterval(t); };
-  }, [myTickersKey]);
-
-  // ── annotate + score + dedup を Signal pipeline に委譲 (v65 §C-1) ──
-  // 旧 annotated / scored は signal.js の buildSignals に統合。
-  // 返り値は Signal[] だが payload spread + legacy field 併存により NewsItem 互換.
-  const scored = useMemo(
-    () => buildSignals(news, tickerNews, holdingItems, watchItems),
-    [news, tickerNews, holdingItems, watchItems]
-  );
-
-  // ── filter ────────────────────────────────────────
-  const filtered = useMemo(() => {
-    let list = scored;
-    if (filter === 'mine') {
-      list = list.filter((n) => n._holdingHits.length > 0 || n._watchHits.length > 0);
-    } else if (filter !== 'all') {
-      list = list.filter((n) => {
-        if (filter === '登録銘柄') return n._kind === 'ticker';
-        if (Array.isArray(n.tags) && n.tags.includes(filter)) return true;
-        return n.category === filter;
-      });
-    }
-    return list;
-  }, [scored, filter]);
-
-  // ── sort ──────────────────────────────────────────
-  const sorted = useMemo(() => {
-    const arr = [...filtered];
-    if (sortMode === 'recent') {
-      arr.sort((a, b) => b._ts - a._ts);
-    } else {
-      // attention: score desc
-      arr.sort((a, b) => b._score - a._score);
-    }
-    // §round16 上限 cap: 個別ニュース由来は最大 8 件 (UI/UX 「重心が日替わり不安定」リスク回避)
-    if (filter === 'all' && sortMode === 'attention') {
-      const tickerCount = { count: 0 };
-      const capped = [];
-      for (const n of arr) {
-        if (n._kind === 'ticker') {
-          if (tickerCount.count >= 8) continue;
-          tickerCount.count += 1;
-        }
-        capped.push(n);
-      }
-      return capped;
-    }
-    return arr;
-  }, [filtered, sortMode, filter]);
-
-  const latestPublished = useMemo(() => {
-    let max = 0;
-    for (const n of news) {
-      const t = n.published ? Date.parse(n.published) : 0;
-      if (Number.isFinite(t) && t > max) max = t;
-    }
-    return max > 0 ? new Date(max).toISOString() : null;
-  }, [news]);
-
-  // §v66 §3 (マーケター + 設計エキスパート推奨): 上位 3 件を fire-and-forget で
-  // prefetch し Pane 5 クリック時 TTFT 0s (cache hit). コストは 3x だがクリック率
-  // 60-70% が上位 3 件に集中する想定で ROI 良し.
-  const prefetchedRef = useRef(new Set());
-  useEffect(() => {
-    const top3 = sorted.slice(0, 3).filter((n) => n.url);
-    for (const item of top3) {
-      if (prefetchedRef.current.has(item.url)) continue;
-      prefetchedRef.current.add(item.url);
-      fetch('/api/news/article', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: item.url, max_lines: 25 }),
-      }).catch(() => { /* fire-and-forget */ });
-    }
-  }, [sorted]);
-
-  // ── タイトル翻訳: AbortController + seqId で race guard ──
-  const visibleTitles = useMemo(
-    () => sorted.slice(0, 30).map((n) => ({ url: n.url, title: n.title || '' })),
-    [sorted]
-  );
-  useEffect(() => {
-    if (!jpEnabled) return;
-    const pending = visibleTitles.filter((v) => v.url && v.title && !titleTranslations[v.url]);
-    if (pending.length === 0) return;
-    const seq = ++translateSeqRef.current;
-    const ctrl = new AbortController();
-    (async () => {
-      try {
-        // v101 Sprint B-abort (multi-review Frontend Architect + 実装 verdict):
-        //   旧実装は ctrl 生成だけで signal を渡しておらず cleanup で abort 効かなかった。
-        //   translateTexts に signal pass-through、 unmount 時に in-flight fetch を実際に中止。
-        const out = await translateTexts(pending.map((v) => v.title), { signal: ctrl.signal });
-        if (seq !== translateSeqRef.current) return; // race guard
-        if (!Array.isArray(out)) {
-          setTranslateUnavailable(true);
-          return;
-        }
-        const update = {};
-        let any = false;
-        pending.forEach((v, i) => { if (out[i]) { update[v.url] = out[i]; any = true; } });
-        if (any) {
-          setTitleTranslations((prev) => ({ ...prev, ...update }));
-          setTranslateUnavailable(false);
-        } else {
-          setTranslateUnavailable(true);
-        }
-      } catch (e) {
-        // AbortError は意図的な cancel、 fail 扱いしない
-        if (e?.name === 'AbortError') return;
-        setTranslateUnavailable(true);
-      }
-    })();
-    return () => { ctrl.abort(); };
-  }, [jpEnabled, visibleTitles, titleTranslations]);
+  // ── 4 hook pipeline (v102 Sprint B-D) ─────────────────────────────
+  const { news, tickerNews, loading, latestPublished, holdingItems, watchItems } = useNewsFeeds(items);
+  const { sorted, visibleTitles } = useSignalPipeline({
+    news, tickerNews, holdingItems, watchItems, filter, sortMode,
+  });
+  const { jpEnabled, setJpEnabled, titleTranslations, translateUnavailable } = useTranslation(visibleTitles);
+  usePrefetchTopNews(sorted);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 0 }}>
@@ -398,16 +241,16 @@ export default function Pane4Inspector({ items = [] }) {
         {pane4Section === 'scanner' ? (
           <ScannerSlot />
         ) : selected ? (
-          /* v101 Sprint B-E (UI/UX + 設計レビュー反映): Reading Mode 全面 Overlay (100%)
+          /* v101 Sprint B-E: Reading Mode 全面 Overlay (100%)
              旧 PanelGroup (55/45 縦割) を破棄。 ReadingMode close で NewsList に戻る Linear / Gmail 流。
              Notion Reader 風 typography (max-width 680px + line-height 1.78) は ReadingMode 内で適用. */
-          <ReadingMode
+          <ReadingRoomPanel
             item={selected}
             onClose={closeReadingRoom}
             jpEnabled={jpEnabled}
           />
         ) : (
-          <NewsList
+          <MacroLensPanel
             sorted={sorted}
             loading={loading}
             jpEnabled={jpEnabled}
@@ -417,33 +260,6 @@ export default function Pane4Inspector({ items = [] }) {
           />
         )}
       </div>
-    </div>
-  );
-}
-
-function NewsList({ sorted, loading, jpEnabled, titleTranslations, onSelect, selected }) {
-  return (
-    <div style={{ height: '100%', overflowY: 'auto', padding: '8px 0 16px' }}>
-      {loading && sorted.length === 0 ? (
-        <div style={{ padding: 16, fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
-          ニュースを読込中...
-        </div>
-      ) : sorted.length === 0 ? (
-        <div style={{ padding: 16, fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
-          該当ニュースなし
-        </div>
-      ) : (
-        sorted.slice(0, 30).map((n, i) => (
-          <NewsItem
-            key={n.url || `${n.title}-${i}`}
-            item={n}
-            displayTitle={jpEnabled ? titleTranslations[n.url] : null}
-            onSelect={onSelect}
-            isOpen={selected?.url === n.url}
-            index={i}
-          />
-        ))
-      )}
     </div>
   );
 }
