@@ -142,13 +142,15 @@ function GuidanceInfoModal({ onClose }) {
 // + outer 0 2px 8px 0 accent 12% で EarningsHistoryChart cluster と同等の elevation 感
 // token 経由のみ (hex 直書き禁止)。contain: paint は v54 禁止教訓のため絶対追加しない。
 // glow_elevation_postmortem.md §v54 準拠。
+// v99 dogfood feedback H (6 巡目): user 「下部分が二重ダブり」 真因確定:
+//   - border 1px solid var(--border) (outer line)
+//   - boxShadow inset 0 0 0 1px cyan 30% (inner line 1px から離れた cyan ring)
+//   この 2 線が 1px 間隔で全周表示 → 「二重ダブり」 体感主因
+// 修正: inset boxShadow を削除、 outer ring (drop shadow) は cyan 12% を維持で「glow」 感保持。
 const GUIDANCE_SECTION_STYLE = {
   border: '1px solid var(--border)',
   background: 'var(--bg-card)',
-  boxShadow: [
-    'inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 30%, transparent)',
-    '0 2px 8px 0 color-mix(in srgb, var(--color-accent) 12%, transparent)',
-  ].join(', '),
+  boxShadow: '0 2px 8px 0 color-mix(in srgb, var(--color-accent) 12%, transparent)',
   transition: 'transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease',
 };
 

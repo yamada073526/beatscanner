@@ -12,7 +12,7 @@
  *   PGE 落とし穴 4: infinite animation 禁止 → open/close で完結 → OK
  */
 import React, { useState, useCallback, useId, useRef } from 'react';
-import { m, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { m, useReducedMotion } from 'framer-motion';
 import styles from './AccordionSection.module.css';
 
 /**
@@ -179,49 +179,37 @@ export default function AccordionSection({
 
       {/* ===== Accordion Panel ===== */}
       {/*
-        Sprint 4: framer-motion spring (SPRING_SOFT) で height: 0 ↔ height: auto を animate。
-        - `hidden` attribute は aria-hidden 用に維持 (アクセシビリティ)
-        - framer-motion AnimatePresence + m.div の overflow:hidden で jump-cut を排除
-        - prefers-reduced-motion: useReducedMotion() true → animate 無効 (即変化)
-        - CSS acc-expand (clip-path) は framer-motion 導入後も保留 (View Transitions fallback)
-        PGE 落とし穴 4: open/close で完結 (infinite なし) → OK
+        v99 dogfood feedback F (6 巡目): AnimatePresence + exit animation を完全削除。
+        旧 spring exit + opacity 50ms でも user 体感「残像」 残存。
+        真因仮説: AnimatePresence の exit phase 中、 m.div がまだ DOM に存在し続け、
+          内部 children (panel-card / tier-m-glow 等) が height shrink 中に visible で
+          「残像」 として user の網膜に焼き付く。
+        修正: AnimatePresence + exit を物理的に削除。 isOpen=false → 即時 unmount =
+          close animation なし、 残像が render される時間が物理的にゼロ。
+          open は initial+animate で smooth 維持 (spring 320/32 で「Aman 級 motion」)。
+        trade-off: close の smooth fade は失うが、 「壊れてる感」 が消える方を優先。
       */}
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <m.div
-            id={panelId}
-            role="region"
-            aria-labelledby={headerId}
-            className={styles.panel}
-            key={panelId}
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={
-              // v99 dogfood feedback F (5 巡目): 80ms opacity でも user 体感 残像残存。 50ms に短縮 +
-              // height spring 320/32 で snappier に。 加えて exit 時のみ opacity を duration 0.05 +
-              // animate 時は spring (open は smooth)、 mode 別 transition で「open しなやか / close 即座」
-              // を両立。
-              reduce
-                ? { duration: 0 }
-                : {
-                    height: { type: 'spring', stiffness: 320, damping: 32 },
-                    opacity: { duration: 0.05, ease: 'easeOut' },
-                  }
-            }
-            // Phase 2.7 Sprint 1 #3: state-aware overflow
-            // animate 中 (isAnimating=true) は 'hidden' で height 0↔auto の clip を担保
-            // animate 完了後 (isOpen && !isAnimating) は 'visible' で halo が境界で clip されない
-            // jump-cut risk: animate 中は hidden 維持で安全 ✅
-            // contain: paint 絶対禁止 (glow_elevation_postmortem.md §v54) ✅
-            style={{ overflow: isOpen && !isAnimating ? 'visible' : 'hidden' }}
-            onAnimationStart={() => setIsAnimating(true)}
-            onAnimationComplete={() => setIsAnimating(false)}
-          >
-            <div className={styles.panelInner}>{children}</div>
-          </m.div>
-        )}
-      </AnimatePresence>
+      {isOpen && (
+        <m.div
+          id={panelId}
+          role="region"
+          aria-labelledby={headerId}
+          className={styles.panel}
+          key={panelId}
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          transition={
+            reduce
+              ? { duration: 0 }
+              : { type: 'spring', stiffness: 320, damping: 32 }
+          }
+          style={{ overflow: isAnimating ? 'hidden' : 'visible' }}
+          onAnimationStart={() => setIsAnimating(true)}
+          onAnimationComplete={() => setIsAnimating(false)}
+        >
+          <div className={styles.panelInner}>{children}</div>
+        </m.div>
+      )}
     </div>
   );
 }
