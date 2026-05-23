@@ -8,33 +8,61 @@ import LockedSection, { AiReportGhost } from './LockedSection.jsx';
 // (DetailReport 内の重複 AccordionSection 削除に伴う dead import 整理)。
 // 新 UI 側 JudgmentDetail.jsx:280-296 で直接 import + 使用継続。
 
+// v100 QA #4-3 (handover v99 §0-A) AI レポート文字壁解消:
+// 旧実装は tailwind text-slate-* 固定で dark mode 非対応 + h2 13px と小さく hierarchy 不足。
+// dark token (var(--text-primary/secondary)) + 階層強化 (h2 15px / strong cyan accent / list 装飾)。
 const mdComponents = {
   h2: ({ children }) => (
     <h2 style={{
-      fontSize: '13px', fontWeight: '700',
+      fontSize: '15px', fontWeight: '700',
       color: 'var(--text-primary)',
       background: 'var(--bg-subtle)',
       borderRadius: '6px',
-      padding: '6px 12px 6px 10px',
-      marginTop: '20px', marginBottom: '8px',
+      padding: '8px 12px 8px 12px',
+      marginTop: '24px', marginBottom: '10px',
       borderLeft: '3px solid #38BDF8',
+      lineHeight: 1.4,
     }}>
       {children}
     </h2>
   ),
   h3: ({ children }) => (
-    <h3 className="text-sm font-bold text-slate-800 mt-4 mb-1">{children}</h3>
+    <h3 style={{
+      fontSize: '13px', fontWeight: '700',
+      color: 'var(--text-primary)',
+      marginTop: '16px', marginBottom: '4px',
+      lineHeight: 1.4,
+    }}>{children}</h3>
   ),
   p: ({ children }) => (
-    <p className="text-sm text-slate-700 mb-3 leading-relaxed">{children}</p>
+    <p style={{
+      fontSize: '13px',
+      color: 'var(--text-secondary)',
+      marginBottom: '12px',
+      lineHeight: 1.7,
+    }}>{children}</p>
   ),
   strong: ({ children }) => (
-    <strong className="font-semibold text-slate-900">{children}</strong>
+    <strong style={{
+      fontWeight: 700,
+      color: 'var(--color-accent, #38BDF8)',
+    }}>{children}</strong>
   ),
   ul: ({ children }) => (
-    <ul className="text-sm text-slate-700 mb-3 pl-4 space-y-1 list-disc">{children}</ul>
+    <ul style={{
+      fontSize: '13px',
+      color: 'var(--text-secondary)',
+      marginBottom: '12px',
+      paddingLeft: '20px',
+      listStyleType: 'disc',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '4px',
+    }}>{children}</ul>
   ),
-  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+  li: ({ children }) => (
+    <li style={{ lineHeight: 1.7 }}>{children}</li>
+  ),
 };
 
 /**
@@ -946,7 +974,10 @@ export default function DetailReport({ analysis, guidance, onStreamingChange, is
         onOpenChange={setReportOpen}
       >
         {isPro ? (
-          <div style={{ borderLeft: `3px solid ${borderColor}`, paddingLeft: '12px' }}>
+          // v100 QA #4-2 (handover v99 §0-A): 旧 `paddingLeft: 12` のみで右 padding 無しのため、
+          // iPad 横等で content が AccordionSection 境界に張り付き「左右クリッピング」 と user 認識
+          // ([[feedback-clipping-root-cause-chain]] 参照)。 左右対称 padding に修正。
+          <div style={{ borderLeft: `3px solid ${borderColor}`, padding: '0 12px' }}>
             <ReportCard
               analysis={analysis}
               guidance={guidance}

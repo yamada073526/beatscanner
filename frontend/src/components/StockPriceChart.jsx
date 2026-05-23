@@ -1,4 +1,4 @@
-import { Component, useState, useEffect, useMemo } from 'react';
+import { Component, useState, useEffect, useMemo, useRef } from 'react';
 import {
   ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot, ReferenceArea,
@@ -246,6 +246,26 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
       localStorage.setItem(CHART_STYLE_KEY, chartStyle);
     } catch { /* localStorage 不可な環境 (Safari private 等) では silent */ }
   }, [chartStyle]);
+
+  // v100 QA #4-1 (handover v99 §0-A): chart 凡例 ⓘ chip を click popover 化。
+  // 旧実装は native `title=` attribute のみで mobile/tablet では発動せず、 desktop でも click 反応なし
+  // → user は「クリックしても反応がない」 と bug 認識。
+  const [showChartInfo, setShowChartInfo] = useState(false);
+  const chartInfoRef = useRef(null);
+  useEffect(() => {
+    if (!showChartInfo) return;
+    const handler = (e) => {
+      if (chartInfoRef.current && !chartInfoRef.current.contains(e.target)) {
+        setShowChartInfo(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('touchstart', handler);
+    };
+  }, [showChartInfo]);
 
   useEffect(() => {
     if (!ticker) return;
@@ -1020,12 +1040,51 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     <span className="font-bold" style={{ color: VERDICT_COLOR.miss }}>▼</span>
                     Miss（−3%超）
                   </span>
-                  <span
-                    className="ml-auto cursor-help"
-                    title="四半期 GAAP EPS vs アナリスト予想比較 / 決算日にホバーで詳細表示"
-                    style={{ opacity: 0.7 }}
-                  >
-                    ⓘ
+                  <span ref={chartInfoRef} className="ml-auto" style={{ position: 'relative' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowChartInfo((v) => !v)}
+                      aria-expanded={showChartInfo}
+                      aria-label="チャート凡例の補足説明を表示"
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: '2px 4px',
+                        cursor: 'pointer',
+                        color: 'var(--text-muted)',
+                        opacity: 0.7,
+                        fontSize: 'inherit',
+                        lineHeight: 1,
+                      }}
+                    >
+                      ⓘ
+                    </button>
+                    {showChartInfo && (
+                      <div
+                        role="dialog"
+                        aria-label="チャート凡例の補足"
+                        style={{
+                          position: 'absolute',
+                          bottom: 'calc(100% + 8px)',
+                          right: 0,
+                          zIndex: 10,
+                          minWidth: 240,
+                          maxWidth: 320,
+                          padding: 'var(--space-3, 12px) var(--space-4, 16px)',
+                          background: 'var(--bg-card)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-md, 12px)',
+                          boxShadow: 'var(--shadow-md)',
+                          color: 'var(--text-secondary)',
+                          fontSize: 12,
+                          lineHeight: 1.55,
+                          whiteSpace: 'normal',
+                          textAlign: 'left',
+                        }}
+                      >
+                        四半期 GAAP EPS をアナリスト予想と比較した結果を示します。 決算日マーカーにホバー (PC) / タップ (スマホ) すると実績・予想・surprise % の詳細が表示されます。
+                      </div>
+                    )}
                   </span>
                 </div>
               )}
