@@ -22,6 +22,8 @@ import { useEffect, useRef, useState } from 'react';
 import { fetchAnalyst } from '../api.js';
 import { canUse } from '../lib/planGating.js';
 import Chip from './ui/Chip.jsx';
+// v100 UI/UX verdict C: 目標株価 low/median/high に count-up animation 適用
+import { useCountUp as _useCountUpHook } from '../hooks/useCountUp.js';
 // Phase 2.7 Sprint 1 #1': Tier M halo sweep (1 回限り) — useHaloSweepOnce 共通 hook
 import { useHaloSweepOnce } from '../hooks/useHaloSweepOnce.js';
 
@@ -79,6 +81,13 @@ function actionTone(action) {
 // ── pure CSS Target Price Range Bar (Recharts 不使用) ──────────────
 function TargetPriceRangeBar({ targetRange, currentPrice }) {
   const { high, low, mean, median } = targetRange || {};
+  // v100 (handover §100点 UI/UX verdict C): low / median / high に count-up animation 適用
+  const lowSafe = Number.isFinite(low) ? low : null;
+  const medianSafe = Number.isFinite(median) ? median : null;
+  const highSafe = Number.isFinite(high) ? high : null;
+  const animatedLow = _useCountUpHook(lowSafe, { duration: 700, digits: 2 });
+  const animatedMedian = _useCountUpHook(medianSafe, { duration: 700, digits: 2 });
+  const animatedHigh = _useCountUpHook(highSafe, { duration: 700, digits: 2 });
   if (!Number.isFinite(high) || !Number.isFinite(low) || high === low) {
     return <div className="anp-empty">目標株価分布データなし</div>;
   }
@@ -117,9 +126,9 @@ function TargetPriceRangeBar({ targetRange, currentPrice }) {
         )}
       </div>
       <div className="anp-range-legend">
-        <span>{fmtUsd(low)}</span>
-        <span className="anp-range-mid">中央 {fmtUsd(median)}</span>
-        <span>{fmtUsd(high)}</span>
+        <span>{fmtUsd(animatedLow)}</span>
+        <span className="anp-range-mid">中央 {fmtUsd(animatedMedian)}</span>
+        <span>{fmtUsd(animatedHigh)}</span>
       </div>
     </div>
   );
