@@ -53,6 +53,9 @@ import MotionProvider from '../../../../components/MotionProvider.jsx';
 // Phase G Phase 1 (handover v98 §0-B): UnifiedJudgmentSection — 章 1「判定」 4 components 統合 wrapper。
 // feature flag `pane3_v2=1` で URL parameter / localStorage 切替 (default off)。
 import UnifiedJudgmentSection from './UnifiedJudgmentSection.jsx';
+// Phase G Phase 3 (handover v99 §0-D): ChapterSection — 章 2-5 用 generic 章扉 (Noto Serif JP / gold hairline)。
+// headerOnly mode で content 再配置せず brand 一貫性 ([[feedback-gold-accent-continuity]]) を実現。
+import ChapterSection from './ChapterSection.jsx';
 
 // DetailReport は重量級 (36 KB gzip) のため lazy load
 const DetailReport = lazy(() => import('../../../../components/DetailReport.jsx'));
@@ -382,6 +385,9 @@ export default function JudgmentDetail({
 
   // Sprint 3: pane3_scroll_v1 flag でフラット旧 UI に切替可能
   const isScrollV1 = isPane3ScrollV1();
+  // Phase G Phase 3 (handover v99 §0-D): pane3_v2 で章 2-5 全章扉に gold 章扉 (Noto Serif JP)
+  // を投入。 isPane3V2() を component スコープに hoist し、 章扉 conditional swap に利用。
+  const isV2 = isPane3V2();
 
   return (
     // Sprint 0 (Phase 2): MotionProvider で Pane 3 全体を wrap。
@@ -409,7 +415,7 @@ export default function JudgmentDetail({
           FiveConditionsCard 4 ブロックを UnifiedJudgmentSection で「章 1 判定」 として
           1 つの unified section に統合する (default off、 ?pane3_v2=1 で試用可)。 */}
       {(() => {
-        const v2 = isPane3V2();
+        const v2 = isV2; // hoisted from component scope (Phase G Phase 3)
         const v2Frameless = v2 && isPane3V2Frameless(); // Phase 2 は v2 mode 内で opt-in
         const innerVerdictBlock = (
           <>
@@ -565,9 +571,15 @@ export default function JudgmentDetail({
       {/* === 章 2: 基本財務 (H2 Chapter Break + v97 G-2 軽量強化) ===
           v97 G-2 sub-agent verdict: SectionDivider expandedLabel を「数値の根拠」 に変更、
           より「機関投資家向け 投資判断 anchor」 idiom 表現。 */}
-      <div data-chapter-start="true">
-        <SectionDivider expandedLabel="数値の根拠" />
-      </div>
+      {/* Phase G Phase 3 (handover v99 §0-D): v2 mode で章扉「II. 数値」 (gold hairline + Noto Serif JP)、
+          default は既存 SectionDivider「数値の根拠」 を維持 (revert 安全)。 */}
+      {isV2 ? (
+        <ChapterSection chapterNumber="II" chapterTitle="数値" headerOnly />
+      ) : (
+        <div data-chapter-start="true">
+          <SectionDivider expandedLabel="数値の根拠" />
+        </div>
+      )}
 
       {/* GuidanceCard: expanded 固定 (今期/来期 EPS = 投資判断の直接 input)
           Sprint 4: SectionFade で section in-view fade-in (案1)
@@ -630,7 +642,12 @@ export default function JudgmentDetail({
       {/* === 章 3: 市場評価 (H2 Chapter Break + v97 G-2 軽量強化) ===
           ChapterHeader「市場評価」 で章扉感強化、 data-chapter-start で 48px breathing room。
           AnalystPanel 起点 (旧 data-chapter-start を ChapterHeader に移譲)。 */}
-      <ChapterHeader label="市場評価" isChapterStart />
+      {/* Phase G Phase 3: v2 mode で「III. 市場評価」 ChapterSection、 default は既存 ChapterHeader */}
+      {isV2 ? (
+        <ChapterSection chapterNumber="III" chapterTitle="市場評価" headerOnly />
+      ) : (
+        <ChapterHeader label="市場評価" isChapterStart />
+      )}
       {selectedTicker && (
         isScrollV1 ? (
           <div id="sec-analyst">
@@ -761,7 +778,12 @@ export default function JudgmentDetail({
       {/* === 章 4: チャート (H2 Chapter Break + v97 G-2 軽量強化) ===
           ChapterHeader「テクニカル」、 StockPriceChart 起点。
           user override 1「株価チャートは常に展開」 維持。 */}
-      <ChapterHeader label="テクニカル" isChapterStart />
+      {/* Phase G Phase 3: v2 mode で「IV. テクニカル」 ChapterSection、 default は既存 ChapterHeader */}
+      {isV2 ? (
+        <ChapterSection chapterNumber="IV" chapterTitle="テクニカル" headerOnly />
+      ) : (
+        <ChapterHeader label="テクニカル" isChapterStart />
+      )}
       {selectedTicker && (
         <SectionFade id="sec-chart" staggerIndex={3}>
           <StockPriceChart ticker={selectedTicker} isPremiumUser={plan === 'premium'} />
@@ -831,7 +853,12 @@ export default function JudgmentDetail({
       {/* === 章 5: リファレンス (H2 Chapter Break + v97 G-2 軽量強化) ===
           ChapterHeader「リファレンス」、 News / IR / DetailReport で「補足資料」 章扉感。
           Sprint 3 (Phase 2): Tier L glow — hover 時の hairline border tint のみ、発光なし。 */}
-      <ChapterHeader label="リファレンス" isChapterStart />
+      {/* Phase G Phase 3: v2 mode で「V. リファレンス」 ChapterSection、 default は既存 ChapterHeader */}
+      {isV2 ? (
+        <ChapterSection chapterNumber="V" chapterTitle="リファレンス" headerOnly />
+      ) : (
+        <ChapterHeader label="リファレンス" isChapterStart />
+      )}
       {selectedTicker && (
         isScrollV1 ? (
           <div id="sec-news">

@@ -9649,6 +9649,39 @@ button.ds-chip[data-pressed="true"]:hover {
   border-radius: 0;
 }
 
+/* Phase G Phase 3: ChapterSection header-only mode (章 2-5 用)
+   - 章扉 (number + title) のみ render、 section body は wrap しない
+   - gold hairline 上端 (J1 全 panel + 章 1 と一貫、 [[feedback-gold-accent-continuity]])
+   - bg/border なし (floating header)、 既存 section content と干渉しない */
+.chapter-section--header-only {
+  position: relative;
+  padding: var(--space-7, 28px) 0 var(--space-3, 12px);
+  margin-top: var(--space-6, 24px);
+}
+
+.chapter-section--header-only::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-gold) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+/* header-only mode では section body の border-bottom 不要 (直後に既存 content) */
+.chapter-section--header-only .judgment-chapter-heading {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
 /* sub-component frameless mode: outer wrapper の bg/border 透明化
    .is-frameless modifier class で各 sub-component 内の root wrapper を制御。
    sub-component 内部の Card は frameless={true} で Card primitive 経由、
