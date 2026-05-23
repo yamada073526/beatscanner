@@ -154,17 +154,20 @@ function isPane3V2() {
 
 // v104 Phase G Phase 4 (handover v100/103 §release MVP item 2):
 // pane3_v3='1' で章 2「基本財務」 を 3 tab 切替に統合 (Guidance / 過去業績 / 直近 8Q)。
-// default OFF、 ?pane3_v3=1 で試用、 localStorage で永続。
-// Bloomberg / Refinitiv 流の「同カテゴリ複数 viewport」 idiom、 dogfood feedback で OK なら default ON。
+// v107 dogfood OK 後 (handover v106 / user 確認 2026-05-24) default ON 昇格、
+// ?pane3_v3=0 で明示 revert 可、 localStorage で永続。
+// Bloomberg / Refinitiv 流の「同カテゴリ複数 viewport」 idiom、 章 2 + 章 3 両方を 1 flag で制御。
 function isPane3V3() {
   try {
-    if (typeof window === 'undefined') return false;
+    if (typeof window === 'undefined') return true;
     const urlParam = new URLSearchParams(window.location.search).get('pane3_v3');
-    if (urlParam === '1') return true;
     if (urlParam === '0') return false;
-    return window.localStorage?.getItem('pane3_v3') === '1';
+    if (urlParam === '1') return true;
+    // localStorage (永続 revert)
+    if (window.localStorage?.getItem('pane3_v3') === '0') return false;
+    return true;
   } catch {
-    return false;
+    return true;
   }
 }
 
