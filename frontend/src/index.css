@@ -5399,9 +5399,12 @@ body {
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-2, 8px);
-  /* v99 CLS envelope: holdings 2 行 grid + signal text + peers button のフル展開時 88-120px。
-     envelope 96px で fetch 中 (skeleton/loading) → done (実体) の差分を吸収。 */
-  min-height: 96px;
+  /* v99 dogfood feedback C (4 巡目): user 体感「下半分まだ空欄」 は実は TriageBanner の min-height 96
+     と content (50-60px) の差で生じる empty space。 holdings 2 行 + 初回買付 + 新規買付 button の
+     content は ~70-80px。 min-height を 80 に縮小して empty 残余を ~10px に圧縮。
+     旧 96px は holdings + signal + peers 全表示時の保守値だったが、 ほとんどのケースで過剰。 */
+  min-height: 80px;
+  justify-content: center;
 }
 
 .triage-holdings-grid {

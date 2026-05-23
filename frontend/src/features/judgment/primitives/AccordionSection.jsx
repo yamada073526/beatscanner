@@ -198,11 +198,16 @@ export default function AccordionSection({
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={
-              // prefers-reduced-motion: reduce → 即変化 (duration 0)
-              // SPRING_SOFT preset (feedback_motion_timing_recipes.md)
+              // v99 dogfood feedback F (4 巡目): exit 時 opacity を 80ms で即落とす、 height は spring で smooth に。
+              // 旧 spring 220/32 で opacity も同期 (300ms) だと content visible なまま height shrink = 残像。
+              // 修正: opacity を 80ms ease-out で先に落とし、 height は spring 280/30 で滑らかに閉じる。
+              // 結果: content が「サッ」 と消える + 枠が「フワッ」 と閉じる、 Aman 級 motion。
               reduce
                 ? { duration: 0 }
-                : { type: 'spring', stiffness: 220, damping: 32 }
+                : {
+                    height: { type: 'spring', stiffness: 280, damping: 30 },
+                    opacity: { duration: 0.08, ease: 'easeOut' },
+                  }
             }
             // Phase 2.7 Sprint 1 #3: state-aware overflow
             // animate 中 (isAnimating=true) は 'hidden' で height 0↔auto の clip を担保
