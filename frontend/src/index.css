@@ -8961,9 +8961,17 @@ button.ds-chip[data-pressed="true"]:hover {
 .ds-section-header {
   padding-bottom: var(--space-2, 8px);
   border-bottom: 1px solid color-mix(in srgb, var(--color-gold) 40%, var(--border));
+  /* v97 J2 簡素版: 左端 3px gold accent bar で「Aman ホテル plaque」 idiom 強化。
+     既存 padding-bottom + border-bottom hairline と組み合わせて L 字 gold frame。
+     vision-eval Claude note 「gold accent 一貫性 / 1px observation」 への直接対策。 */
+  border-left: 3px solid var(--color-gold);
+  padding-left: var(--space-3, 12px);
+  /* 微妙な左 negative margin で「左端から飛び出す」 plaque 感 (-3px で flush 維持) */
+  margin-left: -3px;
 }
 [data-theme="dark"] .ds-section-header {
   border-bottom-color: color-mix(in srgb, var(--color-gold) 35%, var(--border));
+  border-left-color: color-mix(in srgb, var(--color-gold) 80%, transparent);
 }
 
 /* ── Phase 2.9 Sprint H3 #Gold Foil verdict badge (Aman 級 100 点 verdict、 案 1) ──
