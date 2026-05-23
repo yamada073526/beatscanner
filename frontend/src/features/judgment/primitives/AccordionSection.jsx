@@ -50,6 +50,9 @@ import styles from './AccordionSection.module.css';
  *   onOpenChange: fn       — 開閉変更コールバック (id, isOpen) => void
  *   tier: 1|2|3            — 階層識別 (1=Verdict, 2=Fundamentals, 3=Context)
  *                            tier=3 は context-tier クラスで border-bottom only elevation
+ *   badgeColor: string     — badge background color (optional)。 渡された時のみ colored chip 表示
+ *                            (white text + bg + 4px radius)、 未指定なら text-muted plain
+ *   streaming: boolean     — header 右端に 「生成中...」 pulse 表示 (optional、 LLM streaming 状態用)
  *   children: ReactNode    — 展開時に表示するコンテンツ
  */
 export default function AccordionSection({
@@ -57,6 +60,8 @@ export default function AccordionSection({
   title,
   label,
   badge = null,
+  badgeColor,
+  streaming = false,
   defaultOpen = false,
   controlledOpen,
   onOpenChange,
@@ -170,11 +175,29 @@ export default function AccordionSection({
             </svg>
           </span>
           <span className={styles.title}>{title}</span>
-          {badge && <span className={styles.badge}>{badge}</span>}
+          {badge && (
+            badgeColor ? (
+              <span
+                className={styles.badgeColored}
+                style={{ background: badgeColor }}
+              >
+                {badge}
+              </span>
+            ) : (
+              <span className={styles.badge}>{badge}</span>
+            )
+          )}
         </span>
 
-        {/* Right: label (small caps) */}
-        {label && <span className={styles.label}>{label}</span>}
+        {/* Right cluster: streaming indicator + label (small caps) */}
+        <span className={styles.headerRight}>
+          {streaming && (
+            <span className={styles.streamingIndicator} aria-live="polite">
+              生成中...
+            </span>
+          )}
+          {label && <span className={styles.label}>{label}</span>}
+        </span>
       </button>
 
       {/* ===== Accordion Panel ===== */}

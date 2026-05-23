@@ -51,6 +51,12 @@
      用途: ブランド emphasis / フィルタ active / watchlist / hover ring。 上昇/下落の方向性には使わない。 */
   --color-accent:  #38bdf8;  /* cyan (light/dark 共通) — ブランド色 (elevation_scale.md ALLOWED-HEX) */
 
+  /* AccordionSection badgeColor 用 chip background tokens (v100 hotfix、 raw hex 直書き解消)。
+     cyan (--color-accent) は「ブランド色」専用、 上昇 / 下落 / AI / PRO の意味分離を維持するため
+     AI badge は blue-600、 PRO badge は teal-700 で cyan と区別。 white text + 4px radius chip。 */
+  --badge-ai-bg:   #2563eb;  /* AI分析 chip background (blue-600、 cyan brand と区別) */
+  --badge-pro-bg:  #0e7490;  /* PRO tier chip background (teal-700、 cyan brand と区別) */
+
   /* ─── §11-E v51 Phase 1 Week 1: デザイントークン体系 ─────────────
      Stripe Dashboard の --space-* + Linear の --motion-* + Vercel Geist の --radius-* ハイブリッド命名。
      Aman Resorts の照明モデル (天井/壁/床) に倣った 4 階層 shadow + cyan glow。

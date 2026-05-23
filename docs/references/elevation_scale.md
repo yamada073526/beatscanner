@@ -143,6 +143,11 @@ ALLOWED-HEX: #ea580c   # D-3 amber-orange
 
 # EarningsHistoryChart grouped bars — Sprint A (Phase 1.5)
 ALLOWED-HEX: #0d9488   # teal-600 — EPS bar (grouped bars 中央列。SPS=cyan / EPS=teal / CFPS=slate tone)
+
+# AccordionSection badge chip tokens — v100 hotfix (ConferenceAnalysis raw hex 解消)
+# cyan (--color-accent) は「ブランド色」専用なので、 AI/PRO badge は意味分離のため別 hex を割当
+ALLOWED-HEX: #2563eb   # --badge-ai-bg (AI分析 chip、 blue-600、 cyan brand と区別)
+ALLOWED-HEX: #0e7490   # --badge-pro-bg (PRO tier chip、 teal-700、 cyan brand と区別)
 ```
 
 ---

@@ -290,6 +290,20 @@ ChartTab.jsx の lightweight-charts overlay 専用。 lightweight-charts は CSS
 - `[In-line]` = `--text-muted`
 - `[Unknown]` = `--text-muted` + `?` icon (信頼破壊回避、§B-4-D 参照)
 
+### 1-A3. Badge / Chip backgrounds (AccordionSection badgeColor 用、 v100 hotfix)
+
+`AccordionSection` の `badgeColor` prop に渡す chip background。 cyan (`--color-accent`) は「ブランド色」専用 (上昇/下落の方向性に使わない CLAUDE.md ルール) のため、 AI badge / PRO badge は意味分離維持のため別 hex を割当てる。 white text + 4px radius chip idiom。
+
+| Token | Light | Dark | 用途 | 禁止用途 |
+|---|---|---|---|---|
+| `--badge-ai-bg` | `#2563eb` | `#2563eb` | "AI分析" / "AI詳報" chip background (blue-600) | 方向性 (上昇/下落) / ブランド emphasis |
+| `--badge-pro-bg` | `#0e7490` | `#0e7490` | "PRO" tier lock chip background (teal-700) | 方向性 (上昇/下落) / ブランド emphasis |
+
+**運用ルール**:
+- inline style 経由で `background: var(--badge-ai-bg)` のように参照 (AccordionSection は `style={{ background: badgeColor }}` で動的指定)
+- light/dark 共通値 — solid-fill chip + white text で十分なコントラストが両モードで確保される
+- `--color-accent` (cyan) を AI/PRO badge に流用しない (上昇緑/下落赤/ブランド cyan の 3 意味分離を維持)
+
 ### 1-B. Surfaces
 
 | Token | Light | Dark |

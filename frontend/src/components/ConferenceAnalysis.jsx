@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { streamConferenceText } from '../api.js';
 import LockedSection, { ConferenceGhost } from './LockedSection.jsx';
+import { AccordionSection } from '../features/judgment/primitives/index.js';
 
 // Phase 2.6 hotfix #9: font-semibold (fw600) → font-medium (fw500) で他 section SectionHeader と整合。
 // Stat fw700 / Header fw500 / Body fw400 の 3 階層に合わせ、h2/h3/p[isSection]/strong を fw500 に統一。
@@ -21,7 +22,7 @@ const mdComponents = {
       borderRadius: '6px',
       padding: '8px 12px',
       marginTop: '24px', marginBottom: '10px',
-      borderLeft: '3px solid #38BDF8',
+      borderLeft: '3px solid var(--color-accent, #38BDF8)',
       lineHeight: 1.4,
     }}>
       {children}
@@ -85,77 +86,13 @@ const mdComponents = {
   ),
 };
 
-/* ─── アコーディオン（DetailReport.jsx と同じ実装） ─── */
-// v100 user dogfood 再 feedback (左右クリッピング残存):
-//   WorkspaceShell L177 で Pane 3 のみ allowOverflowX (横スクロール許可)、 内部 content が
-//   pane width 超えると user は scroll しないまま「クリッピング」 認識。
-//   outer div に maxWidth 100% + boxSizing border-box + overflow hidden + minWidth 0 を強制し、
-//   child (mdComponents h2/p の background ボックス) が父 width を絶対超えないようにする。
-function AccordionSection({ title, badge, badgeColor = '#1e293b', children, streaming = false }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div
-      className="panel-card"
-      style={{
-        borderRadius: '12px',
-        border: '1px solid var(--border)',
-        background: 'var(--bg-primary)',
-        marginBottom: '12px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-        maxWidth: '100%',
-        boxSizing: 'border-box',
-        overflow: 'hidden',
-        minWidth: 0,
-      }}
-    >
-      <button
-        onClick={() => setOpen((v) => !v)}
-        style={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          padding: '14px 16px',
-          background: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
-          textAlign: 'left',
-        }}
-      >
-        <span style={{
-          fontSize: '13px',
-          color: 'var(--text-secondary)',
-          transition: 'transform 0.2s',
-          transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
-          display: 'inline-block',
-          lineHeight: 1,
-        }}>▶</span>
-        <span style={{ fontWeight: 500, fontSize: '14px', color: 'var(--text-primary)', flex: 1 }}>
-          {title}
-        </span>
-        {badge && (
-          <span style={{ fontSize: '11px', fontWeight: 500, color: 'white', background: badgeColor, borderRadius: '4px', padding: '2px 7px' }}>
-            {badge}
-          </span>
-        )}
-        {streaming && (
-          <span style={{ fontSize: '11px', color: '#94a3b8' }} className="animate-pulse">生成中...</span>
-        )}
-      </button>
-
-      <div style={{ display: 'grid', gridTemplateRows: open ? '1fr' : '0fr', transition: 'grid-template-rows 0.25s ease' }}>
-        <div style={{ overflow: 'hidden' }}>
-          <div style={{ padding: '0 16px 16px' }}>
-            {children}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ─── ConferenceCard（内部コンテンツのみ） ─── */
+/* handover v100 release MVP item 1 (2026-05-23 着地):
+ *   旧自前 AccordionSection (94-156 行) を共通 primitive
+ *   (features/judgment/primitives/AccordionSection) に置換。
+ *   width クリッピング問題は共通 primitive 側 panelInner + symmetric padding で完全解消。
+ *   badgeColor + streaming props は共通 primitive に追加済 (release MVP item 1)。
+ */
 function ConferenceCard({ ticker, onStreamingChange }) {
   const [text, setText] = useState('');
   const [streaming, setStreaming] = useState(false);
@@ -220,9 +157,11 @@ export default function ConferenceAnalysis({ ticker, onStreamingChange, isPro = 
   return (
     <>
       <AccordionSection
+        id="conference-analysis"
+        tier={2}
         title="決算ハイライト分析"
         badge={isPro ? "AI分析" : "PRO"}
-        badgeColor={isPro ? "#2563eb" : "#0e7490"}
+        badgeColor={isPro ? "var(--badge-ai-bg)" : "var(--badge-pro-bg)"}
         streaming={isPro && confStreaming}
       >
         {isPro ? (

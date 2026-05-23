@@ -153,6 +153,49 @@
   /* Chip primitive 経由で描画する場合はこの style は上書きされる */
 }
 
+/* ===== Badge (colored chip variant、 badgeColor prop 指定時) ===== */
+/* white text + bg color + 4px radius、 旧 ConferenceAnalysis / DetailReport の chip idiom を継承 */
+.badgeColored {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: white;
+  border-radius: 4px;
+  padding: 2px 7px;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  /* background は inline style で動的指定 (badgeColor prop) */
+}
+
+/* ===== Header right cluster (streaming indicator + label) ===== */
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  flex-shrink: 0;
+}
+
+/* ===== Streaming indicator (生成中... pulse) ===== */
+/* LLM streaming 状態を header 右端に表示。 design_recipes.md §C-7-6 prefers-reduced-motion 対応 */
+.streamingIndicator {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted, #94a3b8);
+  animation: streaming-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes streaming-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streamingIndicator {
+    animation: none;
+    opacity: 0.85;
+  }
+}
+
 /* ===== Label (right-side small caps) ===== */
 /* design_system.md §B-2 sub-label: 11px / fw500 / 0.06em uppercase */
 .label {
