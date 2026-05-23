@@ -17,10 +17,15 @@
 
 /* ===== Root wrapper ===== */
 /* glow host にならないため: no background, no box-shadow, no border-radius override */
+/* v97 J1: gold accent 全 panel 拡張、 AccordionSection root にも 1px gold hairline 上端 */
 .root {
   display: flex;
   flex-direction: column;
   margin-bottom: var(--space-3, 12px);
+  border-top: 1px solid color-mix(in srgb, var(--color-gold) 25%, var(--border));
+}
+[data-theme="dark"] .root {
+  border-top-color: color-mix(in srgb, var(--color-gold) 20%, var(--border));
 }
 
 /* Context tier (階層 3): collapsed 時は border-bottom only (elevation 0) — brand-aspiration verdict */
@@ -173,11 +178,13 @@
   /* overflow は framer-motion m.div の state-aware style prop で制御 (AccordionSection.jsx L214) */
 }
 
-/* panel が hidden=false (open) のとき */
+/* panel が hidden=false (open) のとき
+   v97 J3 Phase E motion 改造: 旧 360ms expo → 480ms + 段階的 opacity で
+   「ゆっくり姿を現す Aman ドア」 idiom 強化。 vision-eval Claude note
+   「accordion open transition linear に見える」 解消狙い。
+   ease は cubic-bezier(0.22, 1, 0.36, 1) (smooth-out-back、 終盤に微 settle) */
 .panel:not([hidden]) {
-  /* View Transitions API 非対応 browser 向け fallback: clip-path transition */
-  /* clip-path で collapsed → expanded アニメーション */
-  animation: acc-expand var(--motion-slow, 360ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) forwards;
+  animation: acc-expand 480ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 /* expanded 時の panel inner padding
@@ -198,18 +205,35 @@
    inset(0 0 0% 0) → none 直接遷移は interpolation 不可なため 99% trick で 1 frame 前に clip-path 解除。
    glow_elevation_postmortem.md §v54: contain: paint 絶対禁止 + clip-path forwards 持続は
    同じ class の bug (visible 境界の不可視 clip context)。 */
+/* v97 J3 改修: 段階的 opacity + 微 translateY で「Aman ドアが静かに開く」 idiom
+   - 0%   : 完全 hidden (opacity 0 + y -4px)
+   - 35%  : 出始め (opacity 0.3)
+   - 70%  : ほぼ完成 (opacity 0.85)
+   - 99%  : clip 解除直前
+   - 100% : 完全表示 (clip-path none で halo の outer 部分も露出可能) */
 @keyframes acc-expand {
   from {
     clip-path: inset(0 0 100% 0);
     opacity: 0;
+    transform: translateY(-4px);
+  }
+  35% {
+    opacity: 0.3;
+    transform: translateY(-2px);
+  }
+  70% {
+    opacity: 0.85;
+    transform: translateY(0);
   }
   99% {
     clip-path: inset(0 0 0% 0);
     opacity: 1;
+    transform: translateY(0);
   }
   to {
     clip-path: none;
     opacity: 1;
+    transform: translateY(0);
   }
 }
 

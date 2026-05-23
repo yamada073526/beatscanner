@@ -9118,6 +9118,28 @@ button.ds-chip[data-pressed="true"]:hover {
   margin-top: var(--space-12, 48px);
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   § v97 J1 (anchor 80 push、 Claude vision note 由来):
+   gold accent 全 panel 拡張で「brand 一貫性」 確立
+   ───────────────────────────────────────────────────────────────────
+   Claude vision 一貫指摘「gold accent 一貫性欠如 / 1 panel のみ」 → 全 panel に
+   1px gold hairline (上端) を統一適用、 KpiStrip / SectionHeader / AccordionSection
+   と整合した「Ritz-Carlton 金箔区切り」 idiom を全 17 panel で達成。
+   既存 panel design (border / background) は不触、 上端 hairline のみ追加 (additive)。
+   opacity 25% で控えめ、 ダークモードは 20% でさらに subtle。
+   期待 vision-eval: color +3-5 / aman +3-5 / brand 一貫性 = anchor 80 への小路。
+   ═══════════════════════════════════════════════════════════════════ */
+.ds-judgment-detail .panel-card,
+.ds-judgment-detail .bs-panel,
+.ds-judgment-detail .surface-card {
+  border-top: 1px solid color-mix(in srgb, var(--color-gold) 25%, var(--border));
+}
+[data-theme="dark"] .ds-judgment-detail .panel-card,
+[data-theme="dark"] .ds-judgment-detail .bs-panel,
+[data-theme="dark"] .ds-judgment-detail .surface-card {
+  border-top-color: color-mix(in srgb, var(--color-gold) 20%, var(--border));
+}
+
 /* line-height + letter-spacing 調整 (Sprint 1 §3)
    - 日本語 body: lh 1.6-1.7 / ls 0.02em
    - 英数字 heading: lh 1.2-1.3
