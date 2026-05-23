@@ -63,7 +63,7 @@ export default function ProTeaser({
       />
 
       <div style={{ position: 'relative', zIndex: 1 }}>
-        {/* eyebrow: PREMIUM 限定 */}
+        {/* eyebrow: PRO 限定 (v100 LP Trust Cliff 監査 fix: 「Premium」 → 「Pro」 統一) */}
         <span
           style={{
             display: 'inline-block',
@@ -78,7 +78,7 @@ export default function ProTeaser({
             marginBottom: 12,
           }}
         >
-          Premium 限定
+          Pro 限定
         </span>
 
         <h3
@@ -169,7 +169,7 @@ export default function ProTeaser({
               transition: 'all 0.18s ease',
             }}
           >
-            Premium で解放する
+            Pro で解放する
             <span
               style={{
                 fontSize: 11,

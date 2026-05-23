@@ -1078,8 +1078,8 @@ function SampleAnalysisSection({ onTickerClick, onProCheckout }) {
           AI 生成 (C 案) は hallucination + 景表法・ステマ規制リスクで本セッション見送り、 Phase 2 候補。 */}
       <div style={{ maxWidth: 720, margin: '16px auto 0' }}>
         <ProTeaser
-          title="市場の声 (Premium で解禁)"
-          description="ファンダメンタル PASS の銘柄について、 アナリスト評価・ニュース要約・カンファレンスコール抽出を Premium で提供。"
+          title="市場の声 (Pro で解禁)"
+          description="ファンダメンタル PASS の銘柄について、 アナリスト評価・ニュース要約・カンファレンスコール抽出を Pro で提供。"
           features={[
             'アナリスト評価サマリ (買い/中立/売り 集計)',
             'カンファレンスコールのポジ/ネガ抽出',

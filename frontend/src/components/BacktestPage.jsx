@@ -1437,7 +1437,7 @@ export default function BacktestPage({ user, isSubscribed, startCheckout }) {
         {showPremiumTeaser && (
           <ProTeaser
             title="銘柄別 α 貢献度と高度分析"
-            description="バックテストの全 trade を 1 銘柄ごとに分解、 期間カスタマイズ、 forex 込み実 P/L。 投資判断の根拠を更に深掘りできる Premium 機能群。"
+            description="バックテストの全 trade を 1 銘柄ごとに分解、 期間カスタマイズ、 forex 込み実 P/L。 投資判断の根拠を更に深掘りできる Pro 機能群。"
             features={[
               '銘柄別 α 貢献度 chart (どの銘柄が α を生んだか可視化)',
               '期間カスタマイズ (任意日付範囲 + 10 年遡及)',
