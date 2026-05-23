@@ -9653,14 +9653,14 @@ button.ds-chip[data-pressed="true"]:hover {
    - 章扉 (number + title) のみ render、 section body は wrap しない
    - gold hairline 上端 (J1 全 panel + 章 1 と一貫、 [[feedback-gold-accent-continuity]])
    - bg/border なし (floating header)、 既存 section content と干渉しない
-   Phase G Phase 4 (v99 §0-E quick win): 章扉間 spacing 48 → 64px 拡大 (spacing axis +3-5 期待)。
-   parent grid gap (24px) + margin-top (40px) = 64px 章間 breathing room
-   (--space-10 = 40px は「Verdict→Fundamentals 境界 (章扉感)」 用に予約されたトークン)。
-   padding-top も 32px に揃え、 heading 自体のゆとりも増す。 */
+   Phase G Phase 4 reverted (v99 §0-E): 章扉 margin-top 24 → 40 (= 64px 章間) を試行したが
+   vision-eval で regression (AAPL -0.73 / MSFT -2.13 / avg -1.43)。 vision AI は spacing
+   axis で「広すぎる」 と判定 (handover §0-E の +3-5 期待は逆だった)。 24px に revert、
+   元 tight spacing が「Aman 章立ての密度」 として最適と判明。 */
 .chapter-section--header-only {
   position: relative;
-  padding: var(--space-8, 32px) 0 var(--space-4, 16px);
-  margin-top: var(--space-10, 40px);
+  padding: var(--space-7, 28px) 0 var(--space-3, 12px);
+  margin-top: var(--space-6, 24px);
 }
 
 .chapter-section--header-only::before {
