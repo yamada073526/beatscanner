@@ -269,7 +269,9 @@ function GroupedLegend({ hasDps }) {
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
-function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
+// v100 QA #5 (handover v99 §0-A) 0 件 fallback:
+//   isLoading prop で「loading 中」 vs「データなし」 を分岐し、 misleading な永久 loading 表示を避ける。
+function EarningsHistoryChartInner({ periods = [], currency = 'USD', isLoading = false }) {
   const [showModal, setShowModal] = useState(false);
   // Phase 2.7 Sprint 1 #1: Tier M halo sweep ref
   const haloRef = useRef(null);
@@ -383,8 +385,12 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD' }) {
       }}
     >
     {!chartData ? (
-      <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-        過去業績データを取得中...
+      <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center' }}>
+        {isLoading ? (
+          <>過去業績データを取得中<span className="guidance-loading-ellipsis" /></>
+        ) : (
+          <>過去業績データは取得できませんでした</>
+        )}
       </div>
     ) : (
       <>

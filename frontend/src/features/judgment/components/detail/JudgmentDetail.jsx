@@ -650,6 +650,7 @@ export default function JudgmentDetail({
         <EarningsHistoryChart
           periods={result?.periods ?? []}
           currency={result?.currency}
+          isLoading={!result?.periods && detail?.isLoading !== false}
         />
       </SectionFade>
 
