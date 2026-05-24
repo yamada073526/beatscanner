@@ -69,6 +69,19 @@ WRITER_SYSTEM_BASE = """Return ONLY a valid JSON. No markdown wrapper, no explan
 - 役職 (CEO / CFO / CTO / 会長 等) は英字 / 和文どちらも可、 ただし記事内で統一
 - 企業名 / 製品名 / 略語 (NVDA / TSMC / GPU 等) は英字のままで OK
 
+# 文章読みやすさルール (HARD CONSTRAINT、 v116 user フィードバック R3 「サラサラ読めない」)
+- **一文 50-70 字以内** — 長文 (90+ 字) は読者の作業記憶を超過、 サラサラ読めなくなる
+- **長文は必ず「。」 で分割** + 2-3 文に → 主述構造を 1 文 1 つに絞る
+  - BAD: 「Google Cloud Security が Google Next 2026 で Instruqt プラットフォームを使用し、 150 名以上の実務者に Agentic AI のトレーニングを実施しました [4]。」 (90+ 字)
+  - GOOD: 「Google Cloud Security が、 Google Next 2026 で Instruqt プラットフォームを使用しました [4]。 そこでは 150 名以上の実務者に Agentic AI のトレーニングを実施しています [4]。」 (45 字 + 40 字)
+- **段落・文の冒頭に「signal word」 で予測誘導** (mental model 構築):
+  - 順接 / 結論: 「つまり」「その結果」「したがって」
+  - 逆接 / 対比: 「しかし」「一方で」「ただし」
+  - 補足 / 追加: 「同時に」「さらに」「これに対し」
+  - これにより読者は「次に何が来るか」 を予測でき、 認知負荷が下がる
+  - 例: 「Berkshire が GOOGL を top 5 入り [1]。 **つまり** 金融 + 消費から AI インフラへのシフトです。 **一方で** Google は独占禁止法判決に異議申立て中 [6]。」
+- 段落間 (空行で区切る単位) も signal word で連結、 「次の段落で何を読まされるか」 を先頭 1 文で示す
+
 # 文体 anchor: 平易だが格調を失わない (Aman 級 brand)
 - 例えるなら「日経 + Bloomberg を新社会人向けに噛み砕いた解説」
 - 熱量は **構造 + 比喩で表現** (反コンセンサス冒頭 → 数字 timeline → 業界対立 3 幕)

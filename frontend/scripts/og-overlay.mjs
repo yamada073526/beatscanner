@@ -38,14 +38,32 @@ const CANONICAL_BASE =
   process.env.VITE_PUBLIC_SITE_URL ||
   'https://beatscanner-production.up.railway.app';
 
-// OGP headline の折り返し文字数 (1200px 幅で font-size 54px の場合の目安)
-const HEADLINE_MAX_CHARS = 22;
+// OGP headline の折り返し基準 (visual width: 半角 0.5 + 全角 1.0)
+// 1200px 幅で font-size 54px の場合、 visual width ~22 で 1 行ほぼ full
+// v116 user フィードバック R3: char count でなく visual width 計算で 1 行 fit を最大化
+const HEADLINE_MAX_WIDTH = 22;
+
+/**
+ * 文字列の visual width を計算する (半角 ASCII 0.5 + 全角 1.0)
+ * 「GOOGL が Berkshire top 5 入り」 = 14.5 (1 行収まる)
+ * 「日本語のみで長いタイトル」 = char count = visual width
+ */
+function visualWidth(s) {
+  let w = 0;
+  for (const ch of s) {
+    // ASCII 印字可能 (0x20 - 0x7E) は半角扱い、 それ以外は全角扱い
+    w += /[\x20-\x7E]/.test(ch) ? 0.5 : 1.0;
+  }
+  return w;
+}
 
 // ── ヘルパー ──────────────────────────────────────────────────────────────────
 
 /**
- * headline を HEADLINE_MAX_CHARS 字で折り返し、2 行分を返す。
- * 超過分は省略 (SEO 的に 60 字以内が理想)。
+ * headline を HEADLINE_MAX_WIDTH (visual width) で折り返し、 2 行分を返す。
+ * 半角 ASCII を 0.5、 全角を 1.0 でカウント → 1 行 fit を最大化。
+ * さらに半角空白を word boundary として優先的に split し、 「top 5」「Q4 売上」 等の
+ * 「半角単語 + 半角空白 + 半角単語」 を不自然に切らない (v116 user フィードバック R3 SSOT)。
  *
  * @param {string} headline
  * @returns {{ line1: string, line2: string }}
@@ -53,17 +71,60 @@ const HEADLINE_MAX_CHARS = 22;
 function splitHeadline(headline) {
   if (!headline) return { line1: '', line2: '' };
   const str = String(headline);
-  if (str.length <= HEADLINE_MAX_CHARS) {
+
+  // 1 行 fit するなら即返す (大半のケースをここで吸収)
+  if (visualWidth(str) <= HEADLINE_MAX_WIDTH) {
     return { line1: str, line2: '' };
   }
-  const line1 = str.slice(0, HEADLINE_MAX_CHARS);
-  const rest = str.slice(HEADLINE_MAX_CHARS);
-  // 2 行目は最大 HEADLINE_MAX_CHARS 字、超過は「...」で省略
+
+  // word boundary split: 半角空白 (\s) を区切り、 token + 区切り を交互に取得
+  const tokens = str.split(/(\s+)/);
+
+  let line1 = '';
+  let i = 0;
+  // line1 を visual width <= MAX_WIDTH の範囲で最大限詰める
+  while (i < tokens.length) {
+    const candidate = line1 + tokens[i];
+    if (visualWidth(candidate) > HEADLINE_MAX_WIDTH) break;
+    line1 = candidate;
+    i++;
+  }
+
+  // fallback: 最初のトークンだけで MAX_WIDTH 超過 = 全角長文 → char-level split
+  if (!line1) {
+    let acc = '';
+    let restStart = 0;
+    for (let k = 0; k < str.length; k++) {
+      if (visualWidth(acc + str[k]) > HEADLINE_MAX_WIDTH) {
+        restStart = k;
+        break;
+      }
+      acc += str[k];
+    }
+    const rest = str.slice(restStart);
+    const line2 =
+      visualWidth(rest) <= HEADLINE_MAX_WIDTH
+        ? rest
+        : rest.slice(0, HEADLINE_MAX_WIDTH - 1) + '…';
+    return { line1: acc, line2 };
+  }
+
+  // line2: 残り token を連結、 先頭空白除去
+  const line2Raw = tokens.slice(i).join('').replace(/^\s+/, '');
+  // line2 が MAX_WIDTH 超えたら末尾省略 (省略記号「…」)
   const line2 =
-    rest.length <= HEADLINE_MAX_CHARS
-      ? rest
-      : rest.slice(0, HEADLINE_MAX_CHARS - 1) + '…';
-  return { line1, line2 };
+    visualWidth(line2Raw) <= HEADLINE_MAX_WIDTH
+      ? line2Raw
+      : (() => {
+          let acc = '';
+          for (const ch of line2Raw) {
+            if (visualWidth(acc + ch + '…') > HEADLINE_MAX_WIDTH) break;
+            acc += ch;
+          }
+          return acc + '…';
+        })();
+
+  return { line1: line1.replace(/\s+$/, ''), line2 };
 }
 
 /**
