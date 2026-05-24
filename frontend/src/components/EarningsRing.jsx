@@ -32,10 +32,11 @@ import { useMemo } from 'react';
  *  - warning: 7-13 日  (amber、 pulse 1.8s)
  *  - urgent : 1-6 日   (red、 pulse 1.2s)
  *  - post   : -3〜0 日 (green、 pulse 2.0s、 PEAD 効果)
- *  - none   : それ以上の過去 or 未取得 (表示しない)
+ *  - unknown: 取得失敗 / 未取得 (v115 user feedback: 「壊れて見える」 対策で fallback 表示)
+ *  - none   : 過去すぎ (4 日以上前、 表示しない)
  */
 function classifyState(daysToEarnings) {
-  if (!Number.isFinite(daysToEarnings)) return 'none';
+  if (!Number.isFinite(daysToEarnings)) return 'unknown';
   if (daysToEarnings <= -4) return 'none';
   if (daysToEarnings <= 0) return 'post';
   if (daysToEarnings <= 6) return 'urgent';
@@ -69,8 +70,12 @@ export default function EarningsRing({
 }) {
   const state = classifyState(daysToEarnings);
 
-  // state="none" は何も表示しない (data 未取得 or 過去すぎ)
+  // state="none" は何も表示しない (過去すぎ: -4 日以前)
   if (state === 'none') return null;
+
+  // v115 user feedback: state="unknown" (取得失敗 / data null) は「次回決算日 取得待ち」 fallback
+  // 旧仕様: silently null → 「壊れて見える」 → 透明性向上で 「?」 表示 + tooltip
+  const isUnknown = state === 'unknown';
 
   const progress = useMemo(() => computeProgress(daysToEarnings), [daysToEarnings]);
 
@@ -80,17 +85,19 @@ export default function EarningsRing({
   const dashOffset = circumference * (1 - progress);
   const center = size / 2;
 
-  // 中央テキスト: D-X / D+X / D-day
+  // 中央テキスト: D-X / D+X / D-day、 unknown は「?」
   const labelText = (() => {
-    if (!Number.isFinite(daysToEarnings)) return '—';
+    if (isUnknown) return '?';
     if (daysToEarnings === 0) return 'D';
     if (daysToEarnings > 0) return `D-${daysToEarnings}`;
     return `D+${Math.abs(daysToEarnings)}`;
   })();
 
-  const titleText = earningsDate
-    ? `決算日: ${earningsDate} (${labelText})`
-    : `決算まで ${labelText}`;
+  const titleText = isUnknown
+    ? '次回決算日 取得待ち (データソース未取得)'
+    : earningsDate
+      ? `決算日: ${earningsDate} (${labelText})`
+      : `決算まで ${labelText}`;
 
   return (
     /* Sprint 3: .earnings-ring-wrapper が glow (--ring-glow token) + 呼吸 animation (ring-breath 4s) を担当。
@@ -137,8 +144,11 @@ export default function EarningsRing({
         <span className="earnings-ring-label">{labelText}</span>
       </span>
       {/* 下ラベル「次の決算まで」 — static text、 chip overlay は実装しない (ui-designer verdict)
-          typography: 0.6875rem / letter-spacing 0.08em / uppercase / text-secondary / margin-top space-2 */}
-      <span className="earnings-ring-sublabel" aria-hidden="true">次の決算まで</span>
+          typography: 0.6875rem / letter-spacing 0.08em / uppercase / text-secondary / margin-top space-2
+          v115: unknown 時は「取得待ち」 表示 (壊れて見える問題対策) */}
+      <span className="earnings-ring-sublabel" aria-hidden="true">
+        {isUnknown ? '取得待ち' : '次の決算まで'}
+      </span>
     </span>
   );
 }

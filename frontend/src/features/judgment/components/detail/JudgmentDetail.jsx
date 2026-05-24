@@ -805,11 +805,22 @@ export default function JudgmentDetail({
           Bloomberg / Refinitiv 流「同カテゴリ複数 viewport」 idiom、
           章 3 (市場評価) の QuarterlyHistoryTable は isV3 ON 時にここに統合される。 */}
       {isV3 ? (
+        (() => {
+          // v115 user feedback: 過去 5 年 タブが 3 年分しか表示されない → label を data 件数で動的化
+          // FMP free tier 等で 3 年分のみ返ることがあるため、 実 years 件数を honest 表示
+          const periodYears = new Set(
+            (result?.periods ?? [])
+              .map((p) => String(p?.period || '').replace(/^FY/, '').slice(0, 4))
+              .filter((y) => /^\d{4}$/.test(y))
+          );
+          const displayYears = Math.min(periodYears.size, 5);
+          const historyLabel = displayYears > 0 ? `過去 ${displayYears} 年` : '過去 5 年';
+          return (
         <SectionFade id="sec-ch2-tabs" staggerIndex={1}>
           <ChapterTabs
             tabs={[
               { key: 'guidance', label: '今期/来期' },
-              { key: 'history', label: '過去 5 年' },
+              { key: 'history', label: historyLabel },
               { key: 'quarterly', label: '直近 8Q', badge: 'PRO' },
             ]}
             activeKey={ch2Tab}
@@ -859,6 +870,8 @@ export default function JudgmentDetail({
             }}
           </ChapterTabs>
         </SectionFade>
+          );
+        })()
       ) : (
         <>
           {/* GuidanceCard: expanded 固定 (今期/来期 EPS = 投資判断の直接 input)
