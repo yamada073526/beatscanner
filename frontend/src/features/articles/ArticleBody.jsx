@@ -86,12 +86,17 @@ function extractImplications(md) {
   const nextH2 = /\n##\s/.exec(sectionText);
   const sectionBody = nextH2 ? sectionText.slice(0, nextH2.index) : sectionText;
   const extractH3 = (label) => {
+    // v116 R6 fix:
+    //   ① m flag + $ lookahead は each line end で early match → group 1 が 1 文字で終了し
+    //      下流の trim() で例外 → ErrorBoundary catch。 m flag を外す。
+    //   ② label に alternation (例: "推奨アクション|アクション") が含まれる場合、 (?:label) で
+    //      非キャプチャグループ化しないと alternation precedence で「### \s*推奨アクション」 か
+    //      「アクション\s*\n」 になり capture group が後ろに無くて undefined。
     const re = new RegExp(
-      `###\\s*${label}\\s*\\n([\\s\\S]*?)(?=\\n###\\s|$)`,
-      'm',
+      `###\\s*(?:${label})\\s*\\n([\\s\\S]*?)(?=\\n###\\s|$)`,
     );
     const m = re.exec(sectionBody);
-    return m ? m[1].trim() : '';
+    return m && typeof m[1] === 'string' ? m[1].trim() : '';
   };
   const bull = extractH3('強気(?:シナリオ)?');
   const bear = extractH3('弱気(?:シナリオ)?');
