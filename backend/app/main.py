@@ -43,6 +43,7 @@ from . import yfinance_source
 from . import alpha_vantage_source
 from .visualizer.prompt import get_system_prompt, get_system_blocks, build_user_prompt
 from .article_pipeline.router import router as article_pipeline_router
+from .sitemap import router as sitemap_router
 
 # override=False (default): Railway / Docker env vars take priority over any .env file.
 # override=True would let a stale local .env silently shadow Railway variables.
@@ -328,6 +329,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Earnings Judgment API", version="0.1.0", lifespan=lifespan)
 app.include_router(article_pipeline_router)
+app.include_router(sitemap_router)
 
 _guidance_cache: dict = {}
 # 決算ガイダンスはSEC 8-K発表後ほぼ変わらない → 6時間に延長（FMPレート上限緩和）

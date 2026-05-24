@@ -148,6 +148,14 @@ ALLOWED-HEX: #0d9488   # teal-600 — EPS bar (grouped bars 中央列。SPS=cyan
 # cyan (--color-accent) は「ブランド色」専用なので、 AI/PRO badge は意味分離のため別 hex を割当
 ALLOWED-HEX: #2563eb   # --badge-ai-bg (AI分析 chip、 blue-600、 cyan brand と区別)
 ALLOWED-HEX: #0e7490   # --badge-pro-bg (PRO tier chip、 teal-700、 cyan brand と区別)
+
+# OGP SVG template (build-time only、 React バンドル非含有) — CSS var() が使えない SVG 属性空間での許可
+# SVG は xml attribute で色を指定するため CSS token を直接参照できない。
+# brand accent の 4B9EFF は design_system.md の --color-accent (brand cyan) の OGP 用近似値。
+# 090E1A / 0D1526 はダークキャンバス背景 (0f172a 系の更に深いネイビー、OGP 専用)。
+ALLOWED-HEX: #4b9eff   # OGP SVG template brand cyan (SVG attribute 専用、 React bundle 非含有)
+ALLOWED-HEX: #090e1a   # OGP SVG dark canvas base (OGP 専用ダークネイビー、 React bundle 非含有)
+ALLOWED-HEX: #0d1526   # OGP SVG dark canvas gradient end (OGP 専用、 React bundle 非含有)
 ```
 
 ---

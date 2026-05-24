@@ -1,5 +1,8 @@
 import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
-import { FileBarChart2 } from 'lucide-react';
+import { FileBarChart2, FileText } from 'lucide-react';
+// P3.7: Pane 3 → 関連記事 link 用 hook + Chip primitive
+import { useRelatedArticle } from '../../../articles/useRelatedArticle.js';
+import Chip from '../../../../components/ui/Chip.jsx';
 import { useJudgment } from '../../state/JudgmentContext.jsx';
 // handover v82 Phase 5.5: ConditionRow click → DiagramCard pulse 連携 (multi-review 6 体合議 verdict、 2026-05-17)。
 // pulsingConditionIndex は workspaceStore (non-persist) で管理、 store setter は pure、
@@ -288,6 +291,10 @@ export default function JudgmentDetail({
   // expandedSections は Set<string>、expandSection は setter。
   const expandedSections = useWorkspaceStore((s) => s.expandedSections);
   const expandSection = useWorkspaceStore((s) => s.expandSection);
+  // P3.7: Pane 3 → 関連記事 link (Supabase から ticker 一致 published 記事を 1 件 fetch)。
+  // 記事がない場合は null → Chip 非表示 (conditional render)。
+  // Rules of Hooks: early return より前に必ず呼ぶ (v107 hotfix 同 category)。
+  const { article: relatedArticle } = useRelatedArticle(selectedTicker);
 
   // Sprint 5 残作業 3: URL ?section=<id> で direct expand (1 件)。
   // 既存 ?detail=PREFIX:ID URL pattern と共存 (feedback_pane3_detail_view.md)。
@@ -1307,6 +1314,34 @@ export default function JudgmentDetail({
             </AccordionSection>
           </div>
         )
+      )}
+
+      {/* P3.7: Pane 3 → 関連記事 link (conditional render — 記事がある時だけ表示)
+          5 原則 §4「1 クリックを減らせ」: 記事存在時に 1 タップで /articles/<slug> に到達。
+          5 原則 §1「2 秒でわかる」: 末尾 Chip 1 個、Pane 3 構造を阻害しない最小配置。
+          chip primitive ([[chip-primitive-canonical]]) 流用。variant='display' でクリッカブル。
+          inline style 禁止 (CLAUDE.md §Chip primitive canonical)、className 経由で spacing。
+          isScrollV1 (classic SPA mode) でも表示する (Pane 3 link は workspace/SPA 両方で有効)。 */}
+      {relatedArticle && (
+        <div
+          className="pane3-related-article"
+          data-testid="pane3-related-article-link"
+        >
+          <a
+            href={`/articles/${relatedArticle.slug}`}
+            className="pane3-related-article__link"
+            aria-label={`${selectedTicker} の解説記事を読む — ${relatedArticle.title || ''}`}
+          >
+            <Chip
+              variant="display"
+              tone="accent"
+              size="sm"
+              icon={<FileText size={13} strokeWidth={1.5} />}
+            >
+              {selectedTicker} の解説記事を読む
+            </Chip>
+          </a>
+        </div>
       )}
     </div>
     </MotionProvider>

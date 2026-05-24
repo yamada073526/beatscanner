@@ -9837,3 +9837,448 @@ button.ds-chip[data-pressed="true"]:hover {
   padding-top: var(--space-5, 20px);
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   P3.2: /articles/:slug ページ — 編集 typography + ArticlePage レイアウト
+   設計思想: FT Weekend 級 "Luxury Financial Editorial"
+   - max-width 680px + Noto Serif JP 16px + line-height 1.85
+   - gold accent 数字 highlight (design_system.md --color-gold)
+   - シンプル & リッチ (5 原則 §3): 装飾はモダンでリッチ、 構造は中学生でもシンプル
+   - hex 直書き禁止 (design_system.md token のみ)
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* ── ArticlePage ルートラッパー ─────────────────────────────────────────── */
+.article-page {
+  min-height: 100vh;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: var(--space-8, 32px) var(--space-4, 16px) var(--space-12, 48px);
+}
+
+.article-page--loading,
+.article-page--notfound {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.article-page__loading-inner,
+.article-page__notfound-inner {
+  text-align: center;
+  max-width: 480px;
+}
+
+.article-page__loading-pulse {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-gold) 30%, transparent);
+  margin: 0 auto var(--space-4, 16px);
+  animation: article-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes article-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.85); }
+  50%       { opacity: 1;   transform: scale(1);    }
+}
+
+.article-page__loading-text {
+  font-size: var(--text-body);
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.article-page__notfound-title {
+  font-family: 'Noto Serif JP', 'Times New Roman', serif;
+  font-size: var(--text-h1, 24px);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-3, 12px);
+}
+
+.article-page__notfound-body {
+  font-size: var(--text-body);
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin: 0 0 var(--space-5, 20px);
+}
+
+/* ── コンテナ: max-width 680px 中央寄せ ────────────────────────────────── */
+.article-page__container {
+  max-width: 680px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ── ArticleHero ─────────────────────────────────────────────────────────── */
+.article-hero {
+  margin-bottom: var(--space-8, 32px);
+  padding-bottom: var(--space-6, 24px);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-gold) 20%, transparent);
+}
+
+.article-hero__ticker-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-accent);
+  font-size: var(--text-caption, 12px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-bottom: var(--space-3, 12px);
+}
+
+/* title: Noto Serif JP — FT Weekend 「Ritz-Carlton メニュー heading」 idiom */
+.article-hero__title {
+  font-family: 'Noto Serif JP', 'Times New Roman', 'YuMincho', 'Yu Mincho', serif;
+  font-size: clamp(22px, 4vw, 32px);
+  font-weight: 700;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-3, 12px);
+}
+
+.article-hero__subtitle {
+  font-family: 'Noto Serif JP', 'Times New Roman', serif;
+  font-size: var(--text-body-lg, 16px);
+  font-weight: 400;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-4, 16px);
+}
+
+.article-hero__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  flex-wrap: wrap;
+}
+
+.article-hero__date {
+  font-size: var(--text-caption, 12px);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.article-hero__author {
+  font-size: var(--text-caption, 12px);
+  color: var(--text-muted);
+}
+
+.article-hero__author::before {
+  content: '|';
+  margin-right: var(--space-3, 12px);
+  color: color-mix(in srgb, var(--text-muted) 40%, transparent);
+}
+
+/* Hallucination Guard 透明性 note */
+.article-hero__sanitized-note {
+  margin-top: var(--space-3, 12px);
+  font-size: var(--text-caption, 12px);
+  color: var(--color-warning);
+  font-style: italic;
+}
+
+/* ── .article-prose — Markdown 本文 タイポグラフィ ──────────────────────── */
+
+.article-prose {
+  font-family: 'Noto Serif JP', 'Times New Roman', 'YuMincho', 'Yu Mincho', serif;
+  font-size: var(--text-body-lg, 16px);
+  line-height: 1.85;
+  color: var(--text-primary);
+}
+
+/* h1〜h2: セクション見出し (Noto Serif JP weight 700) */
+.article-prose h1,
+.article-prose h2 {
+  font-family: 'Noto Serif JP', 'Times New Roman', serif;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  margin: var(--space-8, 32px) 0 var(--space-3, 12px);
+}
+
+.article-prose h1 { font-size: clamp(20px, 3vw, 26px); }
+.article-prose h2 { font-size: clamp(18px, 2.5vw, 22px); }
+
+/* h3〜h4: サブ見出し (sans-serif 降格で階層 contrast) */
+.article-prose h3,
+.article-prose h4 {
+  font-family: 'Noto Sans JP', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: var(--text-body-lg, 16px);
+  color: var(--text-secondary);
+  margin: var(--space-6, 24px) 0 var(--space-2, 8px);
+  letter-spacing: 0.01em;
+}
+
+/* paragraph: 1.5rem spacing で段落リズム */
+.article-prose p {
+  margin: 0 0 1.5rem;
+}
+
+.article-prose p:last-child {
+  margin-bottom: 0;
+}
+
+/* blockquote: gold left border — FT Weekend quote idiom */
+.article-prose blockquote {
+  margin: var(--space-6, 24px) 0;
+  padding: var(--space-3, 12px) var(--space-5, 20px);
+  border-left: 3px solid var(--color-gold);
+  background: color-mix(in srgb, var(--color-gold) 5%, transparent);
+  border-radius: 0 var(--radius-sm, 8px) var(--radius-sm, 8px) 0;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+.article-prose blockquote p {
+  margin: 0;
+}
+
+/* code: IBM Plex Mono (既存 index.css §font-family と統一) */
+.article-prose code {
+  font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', SFMono-Regular, Consolas, monospace;
+  font-size: 0.875em;
+  background: var(--bg-subtle);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs, 4px);
+  color: var(--text-primary);
+}
+
+.article-prose pre {
+  background: var(--bg-subtle);
+  border-radius: var(--radius-md, 12px);
+  padding: var(--space-4, 16px);
+  overflow-x: auto;
+  margin: var(--space-5, 20px) 0;
+}
+
+.article-prose pre code {
+  background: transparent;
+  padding: 0;
+  font-size: var(--text-caption, 12px);
+  line-height: 1.6;
+}
+
+/* list: ul/ol */
+.article-prose ul,
+.article-prose ol {
+  margin: 0 0 1.5rem;
+  padding-left: var(--space-6, 24px);
+}
+
+.article-prose li {
+  margin-bottom: var(--space-2, 8px);
+  line-height: 1.75;
+}
+
+/* table: zebra stripe + gold header */
+.article-prose__table-wrapper {
+  overflow-x: auto;
+  margin: var(--space-5, 20px) 0;
+  border-radius: var(--radius-md, 12px);
+  border: 1px solid var(--bg-muted);
+}
+
+.article-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-body, 14px);
+  font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.article-prose th {
+  background: color-mix(in srgb, var(--color-gold) 10%, var(--bg-subtle));
+  color: var(--text-primary);
+  font-weight: 600;
+  font-family: 'Noto Sans JP', system-ui, sans-serif;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  text-align: left;
+  font-size: var(--text-caption, 12px);
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--bg-muted);
+}
+
+.article-prose td {
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border-bottom: 1px solid color-mix(in srgb, var(--bg-muted) 60%, transparent);
+}
+
+.article-prose tr:last-child td {
+  border-bottom: none;
+}
+
+.article-prose tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--bg-subtle) 50%, transparent);
+}
+
+/* anchor: ブランド accent + underline */
+.article-prose a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  text-underline-offset: 3px;
+  transition: text-decoration-color 0.15s ease;
+}
+
+.article-prose a:hover {
+  text-decoration-color: var(--color-accent);
+}
+
+/* citation inline anchor [N] */
+.article-prose__cite-link {
+  font-size: 0.8em;
+  vertical-align: super;
+  text-decoration: none;
+  color: var(--color-gold);
+  font-weight: 600;
+  font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+}
+
+.article-prose__cite-link:hover {
+  color: var(--color-gold-mid);
+  text-decoration: underline;
+}
+
+/* ── ArticleCitations ────────────────────────────────────────────────────── */
+.article-citations {
+  margin-top: var(--space-10, 40px);
+  padding-top: var(--space-6, 24px);
+  border-top: 1px solid color-mix(in srgb, var(--color-gold) 20%, transparent);
+}
+
+.article-citations__heading {
+  font-family: 'Noto Sans JP', system-ui, sans-serif;
+  font-size: var(--text-caption, 12px);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0 0 var(--space-3, 12px);
+}
+
+.article-citations__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.article-citations__item {
+  display: flex;
+  gap: var(--space-2, 8px);
+  align-items: baseline;
+  margin-bottom: var(--space-2, 8px);
+  font-size: var(--text-caption, 12px);
+  color: var(--text-muted);
+}
+
+.article-citations__num {
+  font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  font-weight: 600;
+  color: var(--color-gold);
+  flex-shrink: 0;
+  min-width: 28px;
+}
+
+.article-citations__link {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  word-break: break-all;
+}
+
+.article-citations__link:hover {
+  text-decoration-color: var(--color-accent);
+}
+
+.article-citations__text {
+  color: var(--text-secondary);
+}
+
+/* ── ArticlePage フッター ────────────────────────────────────────────────── */
+.article-page__footer {
+  margin-top: var(--space-10, 40px);
+  padding-top: var(--space-5, 20px);
+  text-align: center;
+}
+
+.article-page__back-link {
+  font-size: var(--text-body, 14px);
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.article-page__back-link:hover {
+  color: var(--color-accent);
+}
+
+/* ── P3.7: Pane 3 → 関連記事 link ────────────────────────────────────────
+   Pane 3 末尾 (DetailReport AccordionSection の後) に配置する secondary CTA。
+   chip primitive (CLAUDE.md §Chip primitive canonical) を流用し、
+   inline style 禁止・variant prop で制御する規約に従う。
+   5 原則 §1 (2 秒理解) + §4 (1 クリックを減らせ) との整合:
+     - Pane 3 の主要コンテンツ (Hero / KpiStrip / FiveConditions) を阻害しない末尾配置
+     - 記事ゼロ時は display:none (conditional render で制御) → DOM に残らない設計
+   sticky 検索 div / 発光 card 系には一切触れない (CLAUDE.md §触ると危険な箇所)。 */
+
+.pane3-related-article {
+  margin-top: var(--space-6, 24px);
+  padding-top: var(--space-5, 20px);
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  display: flex;
+  justify-content: flex-start;
+}
+
+.pane3-related-article__link {
+  text-decoration: none;
+  color: inherit;
+  display: inline-flex;
+}
+
+.pane3-related-article__link:hover .ds-chip {
+  opacity: 0.85;
+}
+
+/* ── dark mode 対応 ─────────────────────────────────────────────────────── */
+[data-theme="dark"] .article-page {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .article-prose code {
+  background: var(--bg-subtle);
+}
+
+[data-theme="dark"] .article-prose pre {
+  background: var(--bg-subtle);
+}
+
+[data-theme="dark"] .article-prose th {
+  background: color-mix(in srgb, var(--color-gold) 8%, var(--bg-subtle));
+}
+
+/* ── モバイル responsive ─────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .article-page {
+    padding: var(--space-5, 20px) var(--space-3, 12px) var(--space-8, 32px);
+  }
+
+  .article-page__container {
+    max-width: 100%;
+  }
+
+  .article-hero__title {
+    font-size: 22px;
+  }
+
+  .article-prose {
+    font-size: 15px;
+  }
+}
+
