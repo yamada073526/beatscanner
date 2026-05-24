@@ -9159,7 +9159,11 @@ button.ds-chip[data-pressed="true"]:hover {
    章 5 (Context): NewsPanel / IRLinksPanel / DetailReport
    ═══════════════════════════════════════════════════════════════════ */
 .ds-judgment-detail > [data-chapter-start="true"] {
-  margin-top: var(--space-12, 48px);
+  /* v112-6 multi-review 4 体 verdict: 48px → 64px に拡大
+     comment l9154 では「Aman 級 章扉」 と書いてあるが実値は 48px (--space-12) で コメント詐欺。
+     spacing 高信頼軸 +2〜+3 期待、 既存 grid gap (24px) と合算で 24+64=88px の Aman 級。
+     v112-5「装飾追加」 とは正反対、 既存値の修正のみ ([[minimalism-over-additive]] 整合)。 */
+  margin-top: var(--space-16, 64px);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -9176,12 +9180,16 @@ button.ds-chip[data-pressed="true"]:hover {
 .ds-judgment-detail .panel-card,
 .ds-judgment-detail .bs-panel,
 .ds-judgment-detail .surface-card {
-  border-top: 1px solid color-mix(in srgb, var(--color-gold) 25%, var(--border));
+  /* v112-6 multi-review 4 体 verdict: 1px 25% → 2px 35% に強化
+     既存 gold hairline の intensity 強化のみ (装飾追加なし、 [[minimalism-over-additive]] 整合)。
+     Ritz lobby 真鍮 inlay 帯 idiom、 静的 frame で確実 visible、 aman + color 軸 +1〜+2 期待。 */
+  border-top: 2px solid color-mix(in srgb, var(--color-gold) 35%, var(--border));
 }
 [data-theme="dark"] .ds-judgment-detail .panel-card,
 [data-theme="dark"] .ds-judgment-detail .bs-panel,
 [data-theme="dark"] .ds-judgment-detail .surface-card {
-  border-top-color: color-mix(in srgb, var(--color-gold) 20%, var(--border));
+  /* v112-6: dark mode は light より 5% 控えめ (proportional 30%) */
+  border-top-color: color-mix(in srgb, var(--color-gold) 30%, var(--border));
 }
 
 /* line-height + letter-spacing 調整 (Sprint 1 §3)
@@ -9624,7 +9632,10 @@ button.ds-chip[data-pressed="true"]:hover {
   font-family: 'Noto Serif JP', serif;
   font-size: 18px;
   font-weight: 500;
-  letter-spacing: 0.12em;
+  /* v112-6 multi-review 4 体 verdict: 0.12em → 0.10em に統一。
+     現状 0.12em は body (0.015em) / heading (-0.025em) tier から孤立した異端値。
+     Noto Serif JP heading は 0.10em が業界標準、 typography 高信頼軸 +1〜+2 期待。 */
+  letter-spacing: 0.10em;
   color: var(--text-primary);
   line-height: 1;
   margin: 0;
