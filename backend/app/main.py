@@ -13992,6 +13992,28 @@ async def stripe_webhook(request: Request):
     return {"received": True}
 
 
+# ── v113 Phase 3: /articles/<slug> clean URL bridge ──────────────────────────
+# build-articles.mjs は dist/articles/<slug>/index.html に SSG 出力するが、
+# Starlette StaticFiles の html=True は nested directory の index 自動 serve が
+# 動かない (root index.html のみ)。 SEO friendly clean URL `/articles/<slug>` で
+# 静的 HTML を返すため、 FastAPI route を明示追加。
+# /assets/* や /og/* 等は下記の app.mount("/") で従来通り serve される。
+import re as _re_articles
+
+_ARTICLE_SLUG_RE = _re_articles.compile(r"^[a-z0-9-]{1,64}$")
+
+
+@app.get("/articles/{slug}", response_class=HTMLResponse)
+async def serve_article_html(slug: str) -> HTMLResponse:
+    """SSG 生成済 dist/articles/<slug>/index.html を SEO friendly URL で返す."""
+    if not _ARTICLE_SLUG_RE.match(slug):
+        raise HTTPException(status_code=404, detail="Invalid slug")
+    article_html = _STATIC_DIR / "articles" / slug / "index.html"
+    if not article_html.exists():
+        raise HTTPException(status_code=404, detail="Article not found")
+    return HTMLResponse(content=article_html.read_text(encoding="utf-8"))
+
+
 # ── Static file serving (must be LAST — after all /api/* routes) ─────────────
 # Only mounted when frontend/dist exists (i.e. production build is present).
 # StaticFiles(html=True) serves index.html as SPA fallback for any unknown path,
