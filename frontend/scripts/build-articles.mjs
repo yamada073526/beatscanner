@@ -297,6 +297,12 @@ const TICKER_BLOCKLIST = new Set([
   'US', 'EU', 'UK', 'DE', 'JP', 'CN', 'IN',
   'AI', 'ML', 'NLP', 'GPU', 'CPU', 'SSD', 'API', 'SDK', 'IDE', 'CDN', 'LLM',
   'AWS', 'GCP',
+  // v116 user フィードバック (GOOGL 記事 dogfood): 物理単位 + 投資略語 が ticker 誤認
+  'GW', 'MW', 'KW', 'TW',                  // ワット単位 (giga / mega / kilo / tera)
+  'GWh', 'MWh', 'KWh', 'TWh',              // ワット時 (大文字 5 文字以内)
+  'ROI',                                    // Return On Investment (ROIC は既存)
+  'ERS',                                    // ERShares 等の短縮 (XOVR が valid ETF ticker、 ERS 単独は ticker でない)
+  'TL', 'TLDR',                             // tl;dr 系
   // BAD-5/6 パターンに含まれる英字列 / テスト用 marker
   'No', 'OK', 'PR', 'VP', 'BAD', 'GOOD', 'MAX', 'MIN', 'AVG',
 ]);

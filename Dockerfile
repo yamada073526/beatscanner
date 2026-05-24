@@ -2,6 +2,11 @@
 FROM node:22-alpine AS frontend-builder
 WORKDIR /app
 
+# v116: OGP PNG 生成 (build-articles.mjs + og-overlay.mjs + @resvg/resvg-js) で
+# 日本語 + Latin glyph が描画されるよう alpine に Noto fonts を install する。
+# 未 install だと resvg が text を空 glyph で render し、 OGP image が "中身が空" になる。
+RUN apk add --no-cache font-noto font-noto-cjk
+
 # Vite は import.meta.env.VITE_* をビルド時に静的展開するため、
 # Railway の Service Variables を ARG/ENV 経由でビルドステージに注入する。
 ARG VITE_SUPABASE_URL

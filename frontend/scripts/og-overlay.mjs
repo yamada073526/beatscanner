@@ -200,10 +200,11 @@ export async function generateOgImage({ slug, title, ticker, published_at, verdi
         value: 1200,
       },
       font: {
-        // Railway build 環境ではシステムフォントが限られるため、
-        // Noto Serif JP は embed せず Inter / system-ui にフォールバック
+        // v116: Dockerfile stage-1 に font-noto-cjk を install したので Noto Sans CJK が
+        // 利用可能。 日本語 + Latin glyph 両方 render できる。 Inter は無いので
+        // defaultFontFamily を Noto Sans CJK JP に切替 (fallback chain は SVG 側で指定)。
         loadSystemFonts: true,
-        defaultFontFamily: 'Inter',
+        defaultFontFamily: 'Noto Sans CJK JP',
       },
     });
     pngBuffer = resvg.render().asPng();

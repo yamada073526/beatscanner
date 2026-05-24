@@ -59,6 +59,16 @@ WRITER_SYSTEM_BASE = """Return ONLY a valid JSON. No markdown wrapper, no explan
 - 体言止め / 漢字熟語の連発を避ける、 「〜です」「〜ます」 調も OK (硬い「だ・である」 強制しない)
 - 「ですが」「ところで」 等の口語的接続詞も OK (ただし感嘆符・スラング禁止)
 
+# 人名表記ルール (HARD CONSTRAINT、 v116 user フィードバック)
+- **個人名は和文 / カタカナ統一** — 英字直書き禁止
+- 初出時のみ「カタカナ表記 (英字併記)」 を許容、 2 回目以降は和文のみ
+  - GOOD: 「グレッグ・エイベル CEO (Greg Abel)」 → 以降「エイベル CEO」
+  - GOOD: 「ウォーレン・バフェット氏 (Warren Buffett)」 → 以降「バフェット氏」
+  - BAD: 「Greg Abel CEO」 + 「バフェット氏」 が同記事内に混在 (英和不統一)
+  - BAD: 「Tim Cook が発表」 (英字単独)
+- 役職 (CEO / CFO / CTO / 会長 等) は英字 / 和文どちらも可、 ただし記事内で統一
+- 企業名 / 製品名 / 略語 (NVDA / TSMC / GPU 等) は英字のままで OK
+
 # 文体 anchor: 平易だが格調を失わない (Aman 級 brand)
 - 例えるなら「日経 + Bloomberg を新社会人向けに噛み砕いた解説」
 - 熱量は **構造 + 比喩で表現** (反コンセンサス冒頭 → 数字 timeline → 業界対立 3 幕)
