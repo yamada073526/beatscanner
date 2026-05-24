@@ -718,6 +718,31 @@ export async function fetchProfilePeers(ticker, { signal } = {}) {
   return r.json();
 }
 
+// v108 議題 5A (multi-review 5/5 verdict 「release 前 mandatory」):
+// Forward P/E + PEG + 配当性向 + Buyback 比率 — 投資判断 KPI 補完。
+// 純数値層 (LLM 一切介在せず)、 12h cache、 sources schema で per-source 監視。
+// 金商法 §38 / 景表法 §5 配慮で narration / 警告 chip なし、 数値のみ返却。
+export async function fetchValuationExtras(ticker, { signal } = {}) {
+  let authHeader = {};
+  try {
+    const { supabase } = await import('./lib/supabase.js');
+    if (supabase) {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (token) authHeader = { Authorization: `Bearer ${token}` };
+    }
+  } catch { /* unauthenticated OK */ }
+  const r = await fetch(`/api/valuation-extras/${encodeURIComponent(ticker)}`, {
+    headers: { ...authHeader, ...fmpHeaders() },
+    signal,
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    return { _error: { status: r.status, detail: err.detail || `HTTP ${r.status}` } };
+  }
+  return r.json();
+}
+
 // Cup-with-Handle Phase 2.4 (handover v79 後継、 multi-review verdict):
 // ファンダ 5 PASS × Cup-Handle AND scanner。 Free user は backend で payload mask
 // (Security verdict)、 visible_count + total_count + is_premium を返す。

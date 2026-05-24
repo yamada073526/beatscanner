@@ -906,6 +906,209 @@ async def get_profile_peers(ticker: str, request: Request):
     }
 
 
+@app.get("/api/valuation-extras/{ticker}")
+async def get_valuation_extras(ticker: str, request: Request):
+    """Forward P/E + PEG + 配当性向 + Buyback比率 — 投資判断 KPI 補完 (v108 議題 5A)。
+
+    multi-review 5/5 verdict 「release 前 mandatory」、 金商法 §38 (断定的判断提供禁止) /
+    景表法 §5 (優良誤認) 配慮で **narration / 警告 chip なし、 純数値のみ** 返却。
+    LLM 一切介在せず (aggregator/ 不使用)、 12h cache (CACHE_TTL_EARNINGS 6h を流用)。
+
+    じっちゃまプロトコル: 「配当増 = 成長余力低下 sign」 を 4 数値 (Forward P/E /
+    PEG / 配当性向 / Buyback 比率) で user に提示、 narration は frontend 表示側で
+    static label のみ。
+
+    Response:
+        {
+          "ticker": "NVDA",
+          "payoutRatio": 0.012,             # 配当性向 (0.0-1.0)
+          "dividendYield": 0.0008,          # 配当利回り (0.0-0.1)
+          "buybackYield": 0.025,            # 自社株買い利回り (0.0-0.1)、 計算式: -netCommonStockRepurchased/marketCap
+          "dividendBuybackRatio": 0.031,    # 配当の還元割合 = div / (div + buyback)、 frontend で 1-x → buyback chip
+          "forwardPE": 38.2,                # price / forwardEPSAnnual (analyst-estimates 由来)
+          "pegRatio": 1.45,                 # ratios-ttm.priceToEarningsGrowthRatioTTM
+          "evToEbitda": 52.8,               # key-metrics-ttm.enterpriseValueOverEBITDATTM
+          "sources": {
+            "ratios": "ok"|"empty"|"timeout"|"error",
+            "key_metrics": "ok"|"empty"|"timeout"|"error",
+            "analyst_estimates": "ok"|"empty"|"timeout"|"error",
+            "quote": "ok"|"empty"|"timeout"|"error",
+          },
+          "fetched_at": <unix>,
+        }
+
+    partial failure (rate limit / timeout) は honest fallback: 該当 field は None、
+    frontend で「—」 表示。 sources schema で per-source 監視 (feedback_data_completeness_guard)。
+    """
+    t = ticker.upper()
+    fmp_key = _get_fmp_key(request) or os.getenv("FMP_API_KEY", "")
+    if not fmp_key:
+        raise HTTPException(status_code=500, detail="FMP_API_KEY not configured")
+
+    base = "https://financialmodelingprep.com/stable"
+    urls = {
+        "ratios":            f"{base}/ratios-ttm?symbol={t}&apikey={fmp_key}",
+        "key_metrics":       f"{base}/key-metrics-ttm?symbol={t}&apikey={fmp_key}",
+        # period=annual, limit=4 で次期含む直近 4 年予想を取得 → 未来日エントリを採用
+        "analyst_estimates": f"{base}/analyst-estimates?symbol={t}&period=annual&limit=4&apikey={fmp_key}",
+        "quote":             f"{base}/quote-short?symbol={t}&apikey={fmp_key}",
+        # buyback 計算用: FMP TTM 系 endpoint は buyback fields を含まない (NVDA dogfood で確認)。
+        # cash-flow-statement?period=quarter&limit=4 の commonStockRepurchased 4Q 合計で TTM 算出。
+        "cash_flow":         f"{base}/cash-flow-statement?symbol={t}&period=quarter&limit=4&apikey={fmp_key}",
+    }
+    cache_keys = {
+        "ratios":            f"valuation-extras::ratios::{t}",
+        "key_metrics":       f"valuation-extras::key-metrics::{t}",
+        "analyst_estimates": f"valuation-extras::analyst-est::{t}",
+        "quote":             f"valuation-extras::quote::{t}",
+        "cash_flow":         f"valuation-extras::cash-flow-4q::{t}",
+    }
+    # quote は 15min cache、 他 4 つは 12h (TTM 値は決算更新で変動、 過剰 fetch 抑制)
+    ttls = {
+        "ratios":            60 * 60 * 12,
+        "key_metrics":       60 * 60 * 12,
+        "analyst_estimates": 60 * 60 * 12,
+        "quote":             CACHE_TTL_QUOTE,
+        "cash_flow":         60 * 60 * 12,
+    }
+
+    # 5 endpoint 並列 fetch、 各々独立に sources schema で監視
+    results = await asyncio.gather(
+        safe_fmp_get(urls["ratios"],            cache_keys["ratios"],            ttl=ttls["ratios"]),
+        safe_fmp_get(urls["key_metrics"],       cache_keys["key_metrics"],       ttl=ttls["key_metrics"]),
+        safe_fmp_get(urls["analyst_estimates"], cache_keys["analyst_estimates"], ttl=ttls["analyst_estimates"]),
+        safe_fmp_get(urls["quote"],             cache_keys["quote"],             ttl=ttls["quote"]),
+        safe_fmp_get(urls["cash_flow"],         cache_keys["cash_flow"],         ttl=ttls["cash_flow"]),
+        return_exceptions=True,
+    )
+    ratios_data, metrics_data, est_data, quote_data, cf_data = results
+
+    def _classify(data) -> str:
+        if isinstance(data, Exception):
+            return "error"
+        if data is None:
+            return "timeout"  # safe_fmp_get の None は rate limit / network / JSON err 統合 (timeout 系)
+        if isinstance(data, list) and not data:
+            return "empty"
+        if isinstance(data, dict) and not data:
+            return "empty"
+        return "ok"
+
+    sources = {k: _classify(v) for k, v in zip(
+        ["ratios", "key_metrics", "analyst_estimates", "quote", "cash_flow"], results
+    )}
+
+    def _first_dict(data) -> dict:
+        if isinstance(data, list) and data and isinstance(data[0], dict):
+            return data[0]
+        if isinstance(data, dict):
+            return data
+        return {}
+
+    r_rec = _first_dict(ratios_data)
+    m_rec = _first_dict(metrics_data)
+
+    def _pick(src: dict, *keys) -> float | None:
+        """指定 keys のうち最初に見つかった finite float を返す。"""
+        for k in keys:
+            v = src.get(k) if isinstance(src, dict) else None
+            if isinstance(v, (int, float)):
+                f = float(v)
+                if math.isfinite(f):
+                    return f
+        return None
+
+    # ── 単純抽出 (ratios-ttm / key-metrics-ttm) ────────────────────────────
+    payout_ratio    = _pick(r_rec, "payoutRatioTTM", "dividendPayoutRatioTTM") or _pick(m_rec, "payoutRatioTTM")
+    dividend_yield  = _pick(r_rec, "dividendYieldTTM", "dividendYieldPercentageTTM") or _pick(m_rec, "dividendYieldTTM")
+    peg_ratio       = _pick(r_rec, "priceToEarningsGrowthRatioTTM", "pegRatioTTM") or _pick(m_rec, "pegRatioTTM")
+    ev_to_ebitda    = _pick(m_rec, "enterpriseValueOverEBITDATTM", "evToEBITDATTM") or _pick(r_rec, "enterpriseValueMultipleTTM")
+
+    # FMP の dividendYieldPercentageTTM は 0-100 表記の場合あり → 0-1 に正規化
+    if dividend_yield is not None and dividend_yield > 1.0:
+        dividend_yield = dividend_yield / 100.0
+
+    # ── Buyback Yield 計算 (-commonStockRepurchased 4Q 合計 / marketCap) ──────
+    # FMP convention: 自社株買いは負値 (cash outflow)、 発行は正値。
+    # NVDA dogfood: FMP TTM endpoint (ratios-ttm / key-metrics-ttm) は buyback fields を
+    # 含まないため、 cash-flow-statement (period=quarter, limit=4) の commonStockRepurchased
+    # を 4Q 合計して TTM 算出する。
+    # FMP /stable/key-metrics-ttm の marketCap field は TTM 後置なし (NVDA 確認済)。
+    market_cap = _pick(m_rec, "marketCap", "marketCapTTM", "enterpriseValueTTM")
+    net_repurchase_ttm: float | None = None
+    if isinstance(cf_data, list) and cf_data:
+        repurchase_values: list[float] = []
+        for q in cf_data[:4]:  # 最新 4Q
+            if not isinstance(q, dict):
+                continue
+            v = _pick(q, "commonStockRepurchased", "netCommonStockRepurchased",
+                      "commonStockRepurchasedTTM")
+            if v is not None:
+                repurchase_values.append(v)
+        if repurchase_values:
+            net_repurchase_ttm = sum(repurchase_values)
+
+    buyback_yield: float | None = None
+    if market_cap and market_cap > 0 and net_repurchase_ttm is not None:
+        # 負値 (買い戻し) → 正の利回り、 正値 (発行) → 0 (株主還元として扱わない)
+        if net_repurchase_ttm < 0:
+            buyback_yield = abs(net_repurchase_ttm) / market_cap
+        else:
+            buyback_yield = 0.0
+    # alt: shareholderYieldTTM が直接利回り化されている場合 (FMP plan 差異対応)
+    if buyback_yield is None:
+        shareholder_yield = _pick(m_rec, "shareholderYieldTTM")
+        if shareholder_yield is not None and dividend_yield is not None:
+            buyback_yield = max(0.0, shareholder_yield - dividend_yield)
+
+    # ── dividendBuybackRatio = div / (div + buyback) ────────────────────────
+    dividend_buyback_ratio: float | None = None
+    if dividend_yield is not None and buyback_yield is not None:
+        denom = dividend_yield + buyback_yield
+        if denom > 0:
+            dividend_buyback_ratio = dividend_yield / denom
+
+    # ── Forward P/E = price / forwardEPSAnnual ───────────────────────────────
+    # analyst-estimates から **次期 (最も近い未来)** の epsAvg を採用。
+    # NVDA dogfood: FMP は newest-first で返す (2031 → 2028 …) → date 昇順 sort 必須。
+    #   sort なしだと future_entries[0] = 2031 (6 年先) で forwardPE が非現実的に小さい値となる。
+    forward_pe: float | None = None
+    forward_eps: float | None = None
+    if isinstance(est_data, list) and est_data:
+        from datetime import date as _date
+        today_iso = _date.today().isoformat()
+        future_entries = sorted(
+            [
+                e for e in est_data
+                if isinstance(e, dict) and isinstance(e.get("date"), str) and e["date"] >= today_iso
+            ],
+            key=lambda e: e["date"],
+        )
+        target = future_entries[0] if future_entries else (est_data[0] if isinstance(est_data[0], dict) else None)
+        if isinstance(target, dict):
+            forward_eps = _pick(target, "estimatedEpsAvg", "epsAvg")
+    # price は quote-short の price (or close) 取得
+    price: float | None = None
+    q_rec = _first_dict(quote_data)
+    if q_rec:
+        price = _pick(q_rec, "price", "close", "previousClose")
+    if forward_eps is not None and forward_eps > 0 and price is not None and price > 0:
+        forward_pe = price / forward_eps
+
+    return {
+        "ticker":               t,
+        "payoutRatio":          _safe_float(payout_ratio, 4),
+        "dividendYield":        _safe_float(dividend_yield, 4),
+        "buybackYield":         _safe_float(buyback_yield, 4),
+        "dividendBuybackRatio": _safe_float(dividend_buyback_ratio, 4),
+        "forwardPE":            _safe_float(forward_pe, 2),
+        "pegRatio":             _safe_float(peg_ratio, 2),
+        "evToEbitda":           _safe_float(ev_to_ebitda, 2),
+        "sources":              sources,
+        "fetched_at":           _time.time(),
+    }
+
+
 # ── CORS ──────────────────────────────────────────────────────────────────────
 # Comma-separated list via env var so production origins can be injected without
 # code changes.  Falls back to localhost for local development.

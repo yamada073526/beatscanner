@@ -60,6 +60,10 @@ import UnifiedJudgmentSection from './UnifiedJudgmentSection.jsx';
 // v104 release MVP: EPS Beat Streak chip — 章 1 verdict anchor、 過去 N 期 Beat の retention 訴求。
 //   QuarterlyHistoryTable が accordion collapsed default で見えない問題を chip 前出しで解消。
 import EpsBeatStreakChip from './EpsBeatStreakChip.jsx';
+// v108 議題 5A (multi-review 5/5 verdict「release 前 mandatory」):
+// Forward P/E / PEG / 配当性向 / Buyback比率 を KpiStrip に追加するための fetcher。
+// 金商法 §38 / 景表法 §5 配慮で narration / 警告 chip なし、 数値のみ。
+import { fetchValuationExtras } from '../../../../api.js';
 // v104 release MVP: 10-K (年次報告書) — リファレンス章 5 で SEC EDGAR 直 fetch。
 import TenKLinksPanel from '../../../../components/TenKLinksPanel.jsx';
 // v104 Phase G Phase 4: 章 2 (基本財務) を 3 tab (Guidance / 過去業績 / 直近 8Q) に reorg。
@@ -338,6 +342,33 @@ export default function JudgmentDetail({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTicker]); // selectedTicker 変更時のみ re-run (onAnalyze / detailFor は安定参照)
 
+  // v108 議題 5A (multi-review 5/5 verdict): Forward P/E / PEG / 配当性向 / Buyback 比率
+  //   を KpiStrip に注入するため backend /api/valuation-extras/{ticker} を fetch。
+  //   selectedTicker 変化時に再 fetch、 unmount / 切替時は cancelled flag で stale set 防止。
+  //   v107 hotfix と同じく early return 前に hooks 配置 (Rules of Hooks 違反防止)。
+  const [valuationExtras, setValuationExtras] = useState(null);
+  useEffect(() => {
+    if (!selectedTicker) {
+      setValuationExtras(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchValuationExtras(selectedTicker);
+        if (cancelled) return;
+        if (data && !data._error) {
+          setValuationExtras(data);
+        } else {
+          setValuationExtras(null);
+        }
+      } catch {
+        if (!cancelled) setValuationExtras(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedTicker]);
+
   // v107 hotfix (React #310 fix): ch2Tab / ch3Tab useState は ALL early returns の前に置く必要。
   //   v105/v106 で JSX return 直前に置いていたが、 L338 `if (!selectedTicker)` early return より後ろのため
   //   初回 (selectedTicker=undefined) は hooks 2 個 skip、 2 回目 (set) で 2 個追加 → Rules of Hooks 違反。
@@ -454,6 +485,57 @@ export default function JudgmentDetail({
     label: 'EPS Beat',
     verdict: result?.epsBeatPct == null ? 'unknown' : result.epsBeatPct > 0 ? 'beat' : 'miss',
     // hint: 削除 (全 cell 均一 height のため)
+  });
+
+  // v108 議題 5A (multi-review 5/5 verdict「release 前 mandatory」):
+  //   じっちゃまプロトコル「配当増 = 成長余力低下 sign」 を 4 数値で提示。
+  //   金商法 §38 (断定的判断提供禁止) / 景表法 §5 (優良誤認) 配慮で **narration / 警告
+  //   chip / amber tint 一切なし、 純数値のみ**、 trend / verdict は付与しない (中立 neutral)。
+  //   欠損 (sources timeout / FMP plan 不足) は「—」 で honest fallback (Bloomberg idiom)。
+  //   KpiStrip 内 grid auto-fit (minmax 140px) で 4 → 8 chip でも自然に折返し。
+  const _ve = valuationExtras;
+  // Forward P/E
+  kpis.push({
+    value: _ve?.forwardPE != null && Number.isFinite(_ve.forwardPE)
+      ? _ve.forwardPE.toFixed(1)
+      : '—',
+    label: 'Forward P/E',
+    trend: 'neutral',
+  });
+  // PEG ratio (将来予測込みの相対割安度)
+  kpis.push({
+    value: _ve?.pegRatio != null && Number.isFinite(_ve.pegRatio)
+      ? _ve.pegRatio.toFixed(2)
+      : '—',
+    label: 'PEG',
+    trend: 'neutral',
+  });
+  // 配当性向 (Payout Ratio): 利益の何% を配当に回したか
+  kpis.push({
+    value: _ve?.payoutRatio != null && Number.isFinite(_ve.payoutRatio)
+      ? `${(_ve.payoutRatio * 100).toFixed(1)}%`
+      : '—',
+    label: '配当性向',
+    trend: 'neutral',
+  });
+  // Buyback 比率: 株主還元のうち自社株買いが占める割合 = buyback / (div + buyback)
+  // backend response の dividendBuybackRatio は div の割合なので 1 - x で buyback 割合化。
+  // dividend + buyback の両方が 0 なら還元なし → 「—」 表示。
+  const buybackProportion = (() => {
+    if (!_ve) return null;
+    const div = Number.isFinite(_ve.dividendYield) ? _ve.dividendYield : null;
+    const buy = Number.isFinite(_ve.buybackYield) ? _ve.buybackYield : null;
+    if (div == null || buy == null) return null;
+    const denom = div + buy;
+    if (!(denom > 0)) return null;
+    return buy / denom;
+  })();
+  kpis.push({
+    value: buybackProportion != null
+      ? `${(buybackProportion * 100).toFixed(0)}%`
+      : '—',
+    label: 'Buyback比率',
+    trend: 'neutral',
   });
 
   // InsightsPanel 件数バッジ: bull_points + bear_points の合計件数
