@@ -311,7 +311,10 @@ export default function App() {
     if (wsActiveTickerForPrice) set.add(String(wsActiveTickerForPrice).trim().toUpperCase());
     return Array.from(set);
   }, [holdingStore?.tickers, cmdTransactions, watchlist, ticker, wsActiveTickerForPrice]);
-  const portfolioPrices = usePortfolioPrices(allPortfolioTickers);
+  // v112-3: priorityTicker = selectedTicker (Pane 3 中央) を渡し、 単独先行 fetch で
+  //   株価 chip 体感 5s → 1-2s に短縮。 ticker (legacy) / wsActiveTicker のどちらかを採用。
+  const _priorityTicker = ticker || wsActiveTickerForPrice || null;
+  const portfolioPrices = usePortfolioPrices(allPortfolioTickers, _priorityTicker);
 
   // ── holdings 検知時の自動 hold モード起動 (Trust Cliff 解消)
   // 一度も明示選択していない (localStorage 空) かつ holdings>0 なら自動で 'hold' に切替
