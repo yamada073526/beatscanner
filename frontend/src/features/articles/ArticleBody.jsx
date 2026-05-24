@@ -33,6 +33,29 @@ function preprocessMarkdownCitations(md) {
 }
 
 /**
+ * v116 (multi-review 3 体合議 verdict): body_md 冒頭の `## TL;DR\n- ...` section を
+ * 抽出して別 component で render する。 残りの body は通常 ReactMarkdown で render。
+ * 文字壁感緩和 + 2 秒把握スコア向上が目的。
+ *
+ * @param {string} md
+ * @returns {{ tldr: Array<string>|null, rest: string }}
+ */
+function extractTLDR(md) {
+  if (!md || typeof md !== 'string') return { tldr: null, rest: md || '' };
+  // 「## TL;DR\n- ...\n- ...\n- ...」 を match (許容: TL;DR / TLDR / 要約)
+  const match = md.match(/^##\s*(?:TL;DR|TLDR|要約|要点)\s*\n((?:[ \t]*-\s*.+\n?)+)/m);
+  if (!match) return { tldr: null, rest: md };
+  const items = match[1]
+    .split('\n')
+    .filter((line) => /^[ \t]*-\s/.test(line))
+    .map((line) => line.replace(/^[ \t]*-\s*/, '').trim())
+    .filter((item) => item.length > 0);
+  if (items.length === 0) return { tldr: null, rest: md };
+  const rest = md.replace(match[0], '').replace(/^\s*\n+/, '');
+  return { tldr: items, rest };
+}
+
+/**
  * react-markdown の components で使用するカスタム renderer factory
  * onSanitized: sanitize で削除が発生した場合に呼ぶ callback
  */
@@ -158,16 +181,37 @@ export default function ArticleBody({ bodyMd, onSanitized }) {
   const handleSanitized = typeof onSanitized === 'function' ? onSanitized : () => {};
   const components = buildComponents(handleSanitized);
 
-  // citation [N] を footnote anchor に前処理
-  const processedMd = preprocessMarkdownCitations(bodyMd);
+  // v116: TL;DR section を抽出して accent box で render、 残りは通常 ReactMarkdown
+  const { tldr, rest } = extractTLDR(bodyMd);
+  // citation [N] を footnote anchor に前処理 (TL;DR + 本文どちらにも適用)
+  const processedRest = preprocessMarkdownCitations(rest);
+  const processedTldr = tldr
+    ? tldr.map((item) => preprocessMarkdownCitations(item))
+    : null;
 
   return (
     <div
       data-testid="article-body"
       className="article-prose"
     >
+      {processedTldr && (
+        <aside
+          className="article-tldr"
+          data-testid="article-tldr"
+          aria-label="この記事の要点"
+        >
+          <div className="article-tldr__label">この記事の要点</div>
+          <ul className="article-tldr__list">
+            {processedTldr.map((item, i) => (
+              <li key={i} className="article-tldr__item">
+                <ReactMarkdown components={components}>{item}</ReactMarkdown>
+              </li>
+            ))}
+          </ul>
+        </aside>
+      )}
       <ReactMarkdown components={components}>
-        {processedMd}
+        {processedRest}
       </ReactMarkdown>
     </div>
   );

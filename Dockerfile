@@ -32,7 +32,7 @@ RUN cd frontend && npm ci
 COPY frontend/ ./frontend/
 # v116 cache-bust: echo を RUN 行内に置くことで Dockerfile string hash を強制更新
 # (= layer cache miss → build-articles.mjs が再実行され Supabase fetch が走る)
-RUN cd frontend && npm run build && echo "build-articles-ssg-2026-05-25"
+RUN cd frontend && npm run build && echo "build-articles-ssg-2026-05-25-tldr"
 # Output: /app/frontend/dist/ + /app/frontend/dist/articles/<slug>/index.html (build-articles.mjs)
 
 

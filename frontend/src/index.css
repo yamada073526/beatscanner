@@ -10001,6 +10001,72 @@ button.ds-chip[data-pressed="true"]:hover {
   color: var(--text-primary);
 }
 
+/* ── .article-tldr — v116 冒頭 3 行 TL;DR (multi-review 3 体合議 verdict) ──
+ *
+ * 「2 秒の把握」 5 原則第 1 を実現するため、 hero 直下に accent box を配置。
+ * Aman 級 brand: gold accent + surface-card (装飾過多せず構造で演出)。
+ *
+ * design token のみ使用 (raw hex 禁止、 design-system-check 通過):
+ *   - gold accent: --color-gold (border-left + label color)
+ *   - surface: --surface-2 (bg) / --border-subtle (frame)
+ *   - typography: 'Noto Sans JP' (本文 Serif と階層 contrast)
+ */
+.article-tldr {
+  margin: var(--space-5, 20px) 0 var(--space-8, 32px);
+  padding: var(--space-5, 20px) var(--space-6, 24px);
+  background: color-mix(in srgb, var(--color-gold) 4%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--color-gold) 25%, var(--border-subtle));
+  border-left: 4px solid var(--color-gold);
+  border-radius: var(--radius-md, 12px);
+  box-shadow: var(--shadow-sm);
+}
+
+.article-tldr__label {
+  font-family: 'Noto Sans JP', system-ui, sans-serif;
+  font-size: var(--text-body-sm, 13px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--color-gold);
+  text-transform: uppercase;
+  margin-bottom: var(--space-3, 12px);
+}
+
+.article-tldr__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.article-tldr__item {
+  font-family: 'Noto Sans JP', system-ui, sans-serif;
+  font-size: var(--text-body, 15px);
+  line-height: 1.7;
+  color: var(--text-primary);
+  padding: var(--space-2, 8px) 0 var(--space-2, 8px) var(--space-5, 20px);
+  position: relative;
+  border-top: 1px solid color-mix(in srgb, var(--color-gold) 12%, transparent);
+}
+
+.article-tldr__item:first-child {
+  border-top: none;
+}
+
+.article-tldr__item::before {
+  content: '';
+  position: absolute;
+  left: var(--space-1, 4px);
+  top: 1.05em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-gold);
+}
+
+/* TL;DR item 内の citation link は本文と同じスタイル維持 */
+.article-tldr__item p {
+  margin: 0;
+}
+
 /* h1〜h2: セクション見出し (Noto Serif JP weight 700) */
 .article-prose h1,
 .article-prose h2 {
