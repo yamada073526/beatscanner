@@ -4,9 +4,10 @@ name: Generate Daily Articles (v113)
 # 旧 design (Python script + articles/ commit) は v113 で全面廃止、 backend pipeline
 # (article_pipeline/) + Supabase articles table に置換。
 #
-# - 毎朝 21:00 UTC (= 06:00 JST) に NVDA で pipeline 1 件起動 (P2 MVP)
-# - P3+ で matrix 化して multi-ticker (movers + watchlist 上位 5-10 銘柄) に拡張
-# - workflow_dispatch で任意 ticker を手動実行可能
+# - 毎朝 19:00 UTC (= 04:00 JST) に day-of-year rotation で 1 銘柄起動 (v115 user feedback)
+# - ticker は 5 銘柄ローテーション: NVDA / AAPL / MSFT / GOOGL / AMZN
+#   day_of_year (1-366) % 5 で index 計算、 毎日違う銘柄が選ばれる (5 日サイクル)
+# - workflow_dispatch で任意 ticker を手動実行可能 (rotation 無視)
 # - secret 不要 (公開 endpoint、 demo rate limit 3/day だが本 cron は IP 制限内)
 # - 失敗しても workflow は緑にする (continue-on-error) → 早朝アラート疲れ防止
 #
@@ -28,11 +29,11 @@ on:
         type: string
         default: "deep_dive"
   schedule:
-    - cron: '0 21 * * *'   # 21:00 UTC = 06:00 JST
+    - cron: '0 19 * * *'   # 19:00 UTC = 04:00 JST (v115 user feedback、 朝 4 時起床に合わせる)
 
 jobs:
   generate:
-    name: Trigger article pipeline (${{ github.event.inputs.ticker || 'NVDA' }})
+    name: Trigger article pipeline (rotation)
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -48,9 +49,19 @@ jobs:
         env:
           BASE: https://beatscanner-production.up.railway.app
         run: |
-          TICKER="${{ github.event.inputs.ticker || 'NVDA' }}"
+          # v115: workflow_dispatch 入力 > day-of-year rotation
+          # rotation 5 銘柄: NVDA / AAPL / MSFT / GOOGL / AMZN (5 日サイクル)
+          if [ -n "${{ github.event.inputs.ticker }}" ]; then
+            TICKER="${{ github.event.inputs.ticker }}"
+          else
+            DOY=$(date -u +%j)
+            ROTATION=(NVDA AAPL MSFT GOOGL AMZN)
+            INDEX=$(( 10#$DOY % ${#ROTATION[@]} ))
+            TICKER="${ROTATION[$INDEX]}"
+          fi
           FORMAT="${{ github.event.inputs.format || 'deep_dive' }}"
           ENDPOINT="$BASE/api/cron/generate-articles?ticker=$TICKER&format=$FORMAT"
+          echo "selected ticker: $TICKER (DOY=$(date -u +%j))"
 
           mkdir -p reports
           REPORT="reports/article_$(date -u +%Y-%m-%d)_${TICKER}.json"
@@ -64,6 +75,7 @@ jobs:
             -w '%{http_code}' || echo "000")
 
           echo "HTTP status: $status"
+          echo "selected_ticker=$TICKER" >> "$GITHUB_OUTPUT"
           if [ -f "$REPORT" ]; then
             echo '--- response ---'
             jq . "$REPORT" || cat "$REPORT"
@@ -84,12 +96,10 @@ jobs:
 
       - name: Summary
         if: always()
-        env:
-          TICKER: ${{ github.event.inputs.ticker || 'NVDA' }}
         run: |
           echo "### Article Pipeline Run ($(date -u +'%Y-%m-%d %H:%M UTC'))" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **ticker**: \`${TICKER}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **ticker**: \`${{ steps.trigger.outputs.selected_ticker || 'auto-rotation' }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **final_status**: \`${{ steps.trigger.outputs.final_status }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **report**: \`${{ steps.trigger.outputs.report }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

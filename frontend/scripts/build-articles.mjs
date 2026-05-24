@@ -286,13 +286,17 @@ const TICKER_BLOCKLIST = new Set([
   // 英単語 / 金融略語と衝突する ticker
   'IT', 'AI', 'CO', 'DO', 'ME', 'OR', 'ARE', 'ALL',
   // 決算記事で頻出する金融略語 (NYSE/NASDAQ ticker でない)
-  'EPS', 'YOY', 'YOY%', 'SPS', 'BPS', 'KPI', 'CEO', 'CFO', 'CTO', 'COO',
-  'IPO', 'ETF', 'ETFs', 'ROE', 'ROA', 'FCF', 'DCF', 'EBIT', 'EBITDA',
-  'USD', 'EUR', 'JPY', 'GBP',
+  // v115 user フィードバック: "PEG" が ticker 誤認 → 財務略語を網羅的に追加
+  'EPS', 'YOY', 'YOY%', 'SPS', 'BPS', 'CFPS', 'KPI', 'CEO', 'CFO', 'CTO', 'COO',
+  'IPO', 'ETF', 'ETFs', 'ROE', 'ROA', 'ROIC', 'FCF', 'DCF', 'EBIT', 'EBITDA',
+  'PEG', 'PER', 'PBR', 'PSR', 'WACC', 'CAGR', 'QoQ', 'NPV', 'IRR', 'YTD', 'MTD',
+  'GAAP', 'IFRS', 'ESG', 'SEC', 'SaaS', 'PaaS', 'IaaS',
+  'USD', 'EUR', 'JPY', 'GBP', 'CNY', 'HKD',
   'PASS', 'FAIL', 'NA', 'Q1', 'Q2', 'Q3', 'Q4',
+  'FY', 'FY24', 'FY25', 'FY26', 'FY27',
   'US', 'EU', 'UK', 'DE', 'JP', 'CN', 'IN',
-  'AI', 'ML', 'NLP', 'GPU', 'CPU', 'SSD', 'API', 'SDK', 'IDE',
-  'AWS', 'GCP', 'SaaS', 'PaaS', 'IaaS',
+  'AI', 'ML', 'NLP', 'GPU', 'CPU', 'SSD', 'API', 'SDK', 'IDE', 'CDN', 'LLM',
+  'AWS', 'GCP',
   // BAD-5/6 パターンに含まれる英字列 / テスト用 marker
   'No', 'OK', 'PR', 'VP', 'BAD', 'GOOD', 'MAX', 'MIN', 'AVG',
 ]);
