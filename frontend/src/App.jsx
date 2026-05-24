@@ -288,14 +288,29 @@ export default function App() {
   // v68 dogfood fix 2026-05-15: holding_lots ベースの ticker のみで price 取得すると、
   // transaction 経由で追加された ticker (NVDA 等) の price が undefined になる bug。
   // transactions に含まれる全 ticker を union して fetch する。
+  // v112-2: workspace mode で「Pane 2 watchlist click → setActiveTicker(t) 直接呼出 (runAnalyze 経由なし)」
+  //   pattern (Workspace.jsx:418/579/604) があるため、 legacy ticker と workspace activeTicker を
+  //   両方 deps + set に union しないと sync ズレで fetch 対象から漏れる。
+  const wsActiveTickerForPrice = useWorkspaceStore((s) => s.activeTicker);
   const allPortfolioTickers = useMemo(() => {
     const set = new Set(Array.isArray(holdingStore?.tickers) ? holdingStore.tickers : []);
     for (const tx of Array.isArray(cmdTransactions) ? cmdTransactions : []) {
       const t = String(tx.ticker || '').trim().toUpperCase();
       if (t) set.add(t);
     }
+    // v112-2: Pane 2/3 で「保有以外の銘柄 (観察 / その他) の株価が永続 null」
+    //   bug fix。 watchlist (観察明示追加) と selectedTicker (Pane 3 中央表示中) を
+    //   fetch 対象に union、 user 指摘「株価を確認できない株式アプリは失格」 整合。
+    //   FMP は 1 batch で multi-symbol 対応、 100 銘柄 × 60s polling = 6K calls/h で
+    //   Active プラン上限 45K calls/h 余裕。 「その他」 = resultCache 履歴は
+    //   useRef のため deps 不可、 ticker / wsActiveTicker 更新時に自然再評価される。
+    for (const t of Array.isArray(watchlist) ? watchlist : []) {
+      if (t) set.add(String(t).trim().toUpperCase());
+    }
+    if (ticker) set.add(String(ticker).trim().toUpperCase());
+    if (wsActiveTickerForPrice) set.add(String(wsActiveTickerForPrice).trim().toUpperCase());
     return Array.from(set);
-  }, [holdingStore?.tickers, cmdTransactions]);
+  }, [holdingStore?.tickers, cmdTransactions, watchlist, ticker, wsActiveTickerForPrice]);
   const portfolioPrices = usePortfolioPrices(allPortfolioTickers);
 
   // ── holdings 検知時の自動 hold モード起動 (Trust Cliff 解消)
