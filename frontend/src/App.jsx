@@ -20,6 +20,9 @@ import { useJudgmentResult } from './features/judgment/state/useJudgmentResult.j
 // JudgmentTabV2 は ?j2=1 のときだけ評価されるため lazy load
 // (CLAUDE.md「行数 200+ → lazy で初期バンドル軽量化」基準)
 const JudgmentTabV2 = lazy(() => import('./features/judgment/index.js').then((m) => ({ default: m.JudgmentTab })));
+// P3.2: /articles/:slug route — react-markdown を含む ArticlePage を lazy load
+// (markdown chunk から分離、 初期 bundle 影響ゼロ)
+const ArticlePage = lazy(() => import('./features/articles/ArticlePage.jsx'));
 // v62 WS-3: 画面全体 workspace top-level (useUrlSync + Tier 1 + Pane 1-3、`?layout=workspace` で起動)
 const Workspace = lazy(() =>
   import('./features/workspace/index.js').then((m) => ({ default: m.Workspace }))
@@ -925,6 +928,30 @@ export default function App() {
           isSubscribed={isSubscribed}
           startCheckout={startCheckout}
         />
+      </Suspense>
+    );
+  }
+
+  // P3.2: /articles/:slug route
+  // pathname が /articles/ を含む場合は ArticlePage を全画面表示
+  // react-router-dom は未使用 (App.jsx が URLSearchParams ベースのカスタムルーター)
+  // のため pathname ベースで分岐する。sticky 検索 div / workspace には干渉しない。
+  // P3.6 fix: 先頭 ^ を除去 — file:// での vision-eval において Playwright が
+  //   file:///path/to/dist/articles/<slug>/index.html 形式の pathname を返すため、
+  //   /articles/<slug> を含む pathname 全体に対してマッチする。
+  //   本番 URL (https://...) でも /articles/<slug> を含むので動作は同一。
+  const articlesSlug = (() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const m = window.location.pathname.match(/\/articles\/([^/?#]+)/);
+      return m ? m[1] : null;
+    } catch { return null; }
+  })();
+
+  if (articlesSlug) {
+    return (
+      <Suspense fallback={<div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>読み込み中...</div>}>
+        <ArticlePage slug={articlesSlug} />
       </Suspense>
     );
   }

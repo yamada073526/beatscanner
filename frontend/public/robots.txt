@@ -1,18 +1,23 @@
 User-agent: *
 Allow: /
+Allow: /articles/
 Disallow: /api/
 
 # AI search crawlers (公開情報のクロール許可)
 User-agent: GPTBot
 Allow: /
+Allow: /articles/
 
 User-agent: ClaudeBot
 Allow: /
+Allow: /articles/
 
 User-agent: PerplexityBot
 Allow: /
+Allow: /articles/
 
 User-agent: Google-Extended
 Allow: /
+Allow: /articles/
 
-Sitemap: https://beatscanner-production.up.railway.app/sitemap.xml
+Sitemap: https://beatscanner-production.up.railway.app/api/sitemap.xml
