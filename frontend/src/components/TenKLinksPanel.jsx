@@ -11,7 +11,7 @@
  *   - 日付は ISO (YYYY-MM-DD) → 「2024年11月1日」 表記
  */
 import { useEffect, useState } from 'react';
-import { ExternalLink, FileText } from 'lucide-react';
+import { FileText } from 'lucide-react';  // v115 round 3: ExternalLink → ↗ arrow (IR Links 統一)
 import { fetchTenK } from '../api.js';
 
 function fmtDateJa(iso) {
@@ -81,44 +81,48 @@ export default function TenKLinksPanel({ ticker, hideHeading = false }) {
           10-K (年次報告書)
         </h3>
       )}
+      {/* v115 round 3: IR Links と同 hover/spacing 統一 (.ir-link-item class 流用) */}
       <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {items.map((it, i) => {
           // v115 multi-review A-4: 会計年度ラベル (FY2024 形式) を主表示、 提出日は補助
           const fyLabel = fmtFiscalYearLabel(it.report_date);
+          const titleLine = fyLabel ? `${fyLabel} 10-K` : `${fmtDateJa(it.date)} 提出 — 10-K`;
+          const subLine = fyLabel ? `提出日: ${fmtDateJa(it.date)}` : null;
           return (
             <li key={`${it.url}-${i}`}>
               <a
                 href={it.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="tenk-link-card"
+                className="ir-link-item flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors"
                 style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontSize: 12,
+                  border: '1px solid var(--border)',
                   color: 'var(--text-primary)',
                   textDecoration: 'none',
-                  padding: '6px 10px',
-                  borderRadius: 'var(--radius-sm, 8px)',
-                  border: '1px solid var(--border)',
-                  background: 'transparent',
-                  transition: 'background 0.16s ease, border-color 0.16s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-accent) 60%, var(--border))';
+                  e.currentTarget.style.background = 'var(--bg-hover)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border)';
+                  e.currentTarget.style.background = 'transparent';
                 }}
               >
-                {/* v115 multi-review A-3: raw hex → design token */}
-                <FileText size={14} strokeWidth={1.75} aria-hidden style={{ color: 'var(--color-accent)' }} />
-                <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  {fyLabel ? (
-                    <>
-                      <span style={{ fontWeight: 600 }}>{fyLabel} 10-K</span>
-                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>提出日: {fmtDateJa(it.date)}</span>
-                    </>
-                  ) : (
-                    <span>{fmtDateJa(it.date)} 提出 — 10-K</span>
+                <FileText size={14} strokeWidth={1.75} aria-hidden style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {titleLine}
+                  </div>
+                  {subLine && (
+                    <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                      {subLine}
+                    </div>
                   )}
+                </div>
+                <span className="ir-link-arrow shrink-0 text-xs" style={{ color: 'var(--text-muted)' }} aria-hidden="true">
+                  ↗
                 </span>
-                <ExternalLink size={12} strokeWidth={1.75} aria-hidden style={{ color: 'var(--text-muted)' }} />
               </a>
             </li>
           );
