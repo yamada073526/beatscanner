@@ -36,13 +36,18 @@ setTimeout(() => {
 
 // CLI args parse
 const args = process.argv.slice(2);
-const opts = { checks: [], selector: null, expandSummary: null, url: PROD_URL, ticker: 'AAPL' };
+const opts = { checks: [], selector: null, expandSummary: null, url: PROD_URL, ticker: 'AAPL', bypassToken: null };
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--check') opts.checks.push(args[++i]);
   else if (args[i] === '--selector') opts.selector = args[++i];
   else if (args[i] === '--expand-summary') opts.expandSummary = args[++i];
   else if (args[i] === '--url') opts.url = args[++i];
   else if (args[i] === '--ticker') opts.ticker = args[++i];
+  else if (args[i] === '--bypass-token') opts.bypassToken = args[++i];
+}
+// v112-4: env var BYPASS_TOKEN を default として採用 (CLI --bypass-token > env > none)
+if (!opts.bypassToken && process.env.BYPASS_TOKEN) {
+  opts.bypassToken = process.env.BYPASS_TOKEN;
 }
 
 if (opts.checks.length === 0) {
@@ -63,6 +68,14 @@ const client = new Anthropic({ apiKey });
   try {
     browser = await chromium.launch({ headless: true });
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 1800 } });
+    // v112-4: BYPASS_TOKEN を全 request に header 付与、 demo rate limit skip。
+    //   本番 user は X-Bypass-Token header 持たないので影響なし。
+    if (opts.bypassToken) {
+      await ctx.setExtraHTTPHeaders({ 'X-Bypass-Token': opts.bypassToken });
+      console.error(`[snap-pdca-loop] X-Bypass-Token header set (${opts.bypassToken.length} chars)`);
+    } else {
+      console.error('[snap-pdca-loop] BYPASS_TOKEN not set, demo rate limit may apply');
+    }
     const page = await ctx.newPage();
     await page.goto(opts.url, { waitUntil: 'domcontentloaded', timeout: 20_000 });
     await page.waitForTimeout(3000);

@@ -1207,6 +1207,25 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def _is_bypassed(request: Request) -> bool:
+    """Vision-eval / PDCA loop で demo rate limit を bypass するための token check.
+
+    v112-4: snap-pdca-loop.mjs から本番 URL へ access する際、 demo rate limit
+    (3 req/IP/day) に hit して vision-eval PDCA が止まる問題の解消。 BYPASS_TOKEN
+    env を Railway / local 両方に設定し、 request header `X-Bypass-Token` と
+    一致すれば True を返す (rate limit skip)。
+
+    - BYPASS_TOKEN env が未設定 (空文字列) なら常に False (= bypass 無効)
+    - token 長 16 文字未満は reject (短い偶然一致防止)
+    - constant-time 比較は不要 (timing attack 対象でない、 LP は demo rate limit のみ)
+    """
+    expected = os.getenv("BYPASS_TOKEN", "").strip()
+    if not expected or len(expected) < 16:
+        return False
+    provided = request.headers.get("X-Bypass-Token", "").strip()
+    return provided == expected
+
+
 # ---------------------------------------------------------------------------
 
 @app.get("/health")
@@ -2293,12 +2312,15 @@ async def demo_analyze(ticker: str, request: Request) -> dict:
     """
     t = ticker.upper()
 
-    ip = _client_ip(request)
-    if not _check_demo_rate_limit(ip):
-        raise HTTPException(
-            status_code=429,
-            detail="本日のお試し回数 (3銘柄) を超えました。Googleログインで無制限になります。",
-        )
+    # v112-4: snap-pdca-loop / vision-eval PDCA で BYPASS_TOKEN header 付与時は
+    #   rate limit skip (本番 user 影響なし、 BYPASS_TOKEN env 未設定なら従来通り)
+    if not _is_bypassed(request):
+        ip = _client_ip(request)
+        if not _check_demo_rate_limit(ip):
+            raise HTTPException(
+                status_code=429,
+                detail="本日のお試し回数 (3銘柄) を超えました。Googleログインで無制限になります。",
+            )
 
     demo_key = os.getenv("FMP_DEMO_API_KEY") or os.getenv("FMP_API_KEY")
     if not demo_key:
@@ -6896,7 +6918,8 @@ async def profile_extended(
             is_authed = False
 
     # demo mode rate limit (LP「3 銘柄/日まで無料」 訴求と整合、 未ログイン user のみ)
-    if not is_authed:
+    # v112-4: snap-pdca-loop / vision-eval は BYPASS_TOKEN で rate limit skip
+    if not is_authed and not _is_bypassed(request):
         ip = _client_ip(request)
         if not _check_demo_rate_limit(ip):
             raise HTTPException(
@@ -6992,7 +7015,8 @@ async def profile_summary(
             is_authed = False
 
     # demo mode rate limit (LP「3 銘柄/日まで無料」 訴求と整合、 未ログイン user のみ)
-    if not is_authed:
+    # v112-4: snap-pdca-loop / vision-eval は BYPASS_TOKEN で rate limit skip
+    if not is_authed and not _is_bypassed(request):
         ip = _client_ip(request)
         if not _check_demo_rate_limit(ip):
             raise HTTPException(
