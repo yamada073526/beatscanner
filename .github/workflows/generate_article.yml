@@ -4,7 +4,8 @@ name: Generate Daily Articles (v113)
 # 旧 design (Python script + articles/ commit) は v113 で全面廃止、 backend pipeline
 # (article_pipeline/) + Supabase articles table に置換。
 #
-# - 毎朝 19:00 UTC (= 04:00 JST) に day-of-year rotation で 1 銘柄起動 (v115 user feedback)
+# - 毎朝 19:05 UTC (= 04:05 JST) に day-of-year rotation で 1 銘柄起動 (v115 user feedback)
+#   - hourly boundary (=00分) は GitHub Actions schedule の高負荷 skip 帯のため 5 分ずらす (v116 教訓)
 # - ticker は 5 銘柄ローテーション: NVDA / AAPL / MSFT / GOOGL / AMZN
 #   day_of_year (1-366) % 5 で index 計算、 毎日違う銘柄が選ばれる (5 日サイクル)
 # - workflow_dispatch で任意 ticker を手動実行可能 (rotation 無視)
@@ -29,7 +30,7 @@ on:
         type: string
         default: "deep_dive"
   schedule:
-    - cron: '0 19 * * *'   # 19:00 UTC = 04:00 JST (v115 user feedback、 朝 4 時起床に合わせる)
+    - cron: '5 19 * * *'   # 19:05 UTC = 04:05 JST (v116: hourly boundary skip 回避のため :00→:05)
 
 jobs:
   generate:
