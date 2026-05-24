@@ -200,6 +200,29 @@ export default function ArticlePage({ slug }) {
         {/* 出典リスト */}
         <ArticleCitations citations={citations} />
 
+        {/* v116 user dogfood + QA dogfooder 案 2: 記事末 ticker 特化 CTA */}
+        {/*   - 「読み終わったら次行動へ」 5 原則 4 + 5 原則 2 (毎日開きたくなる) */}
+        {/*   - href は /?ticker=<TICKER> で App.jsx の useEffect 経由 runAnalyze 起動 */}
+        {ticker && (
+          <aside
+            className="article-cta"
+            data-testid="article-cta"
+            aria-label={`${ticker} を BeatScanner で詳しく見る`}
+          >
+            <a
+              href={`/?ticker=${encodeURIComponent(ticker)}`}
+              className="article-cta__button"
+            >
+              <span className="article-cta__main">
+                <strong className="article-cta__ticker">{ticker}</strong>
+                <span className="article-cta__label">の決算詳細を BeatScanner で見る</span>
+              </span>
+              <span className="article-cta__arrow" aria-hidden="true">→</span>
+            </a>
+            <p className="article-cta__sub">ファンダメンタル 5 条件で BEAT 判定 + 過去 5 年の推移を即時確認</p>
+          </aside>
+        )}
+
         {/* フッター: トップへ戻るリンク */}
         <footer className="article-page__footer">
           <a href="/" className="article-page__back-link">

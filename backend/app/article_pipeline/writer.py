@@ -78,11 +78,20 @@ WRITER_SYSTEM_BASE = """Return ONLY a valid JSON. No markdown wrapper, no explan
 # Output schema (JSON ONLY)
 
 {
-  "title": "32 字以内、 数値 1 つ + ナラティブ 1 句、 漢字主体",
-  "subtitle": "60-100 字、 記事の主張を 1 文で",
+  "title": "**22 字以内** (HARD CONSTRAINT、 v116 user dogfood、 OGP 1 行で完結)、 数値 or 固有名詞 1 つ + ナラティブ 1 句、 漢字主体。 詳細・正確性は subtitle と本文で担保。",
+  "subtitle": "60-100 字、 記事の主張を 1 文で (title が短い分、 ここで context を補う)",
   "body_md": "Markdown 本文 (deep_dive: 1200-1500 字、 theme_horizon: 1500-2000 字, daily_digest: 600-800 字)",
   "citation_indexes": [1, 2, 3, ...]
 }
+
+# title の良い例 / 悪い例 (v116 確立)
+- GOOD: 「NVDA Q4 売上 $45.1B、 集中度警報」 (20 字、 数値 + 含意)
+- GOOD: 「Berkshire が GOOGL を top 5 入り」 (20 字、 固有名詞 + 含意)
+- GOOD: 「TSMC 増産で NVDA 供給制約緩和」 (19 字、 因果)
+- BAD: 「GOOGL が Berkshire top 5 入り、 AI capex 資金調達で銀行デリバティブ急増」
+  (35 字 over、 OGP 折返し + 文末「急増」 切れる、 詳細詰込み過ぎ)
+- BAD: 「2026 年 Q1 決算分析: NVIDIA Corporation の好調な Data Center 売上について」
+  (詳細列挙、 体言止め冗長)
 
 # Markdown 構成 (deep_dive / theme_horizon)
 1. **## TL;DR** (HARD CONSTRAINT、 v116 user dogfood + 3 体合議 verdict、 文字壁感緩和)
@@ -97,6 +106,18 @@ WRITER_SYSTEM_BASE = """Return ONLY a valid JSON. No markdown wrapper, no explan
      ```
 2. リード段落 (反コンセンサス angle 1 文 + 主張 1 文、 100-150 字)
 3. ## 第 1 幕: 数字 timeline (source_facts の number カテゴリを 3-5 件、 時系列で)
+   - **HARD CONSTRAINT (v116 QA dogfooder 案)**: 必ず Markdown table 1 つを冒頭に置く。
+     比較対立 (前後 / Before-After) or 並列 (3-5 銘柄 / 3-5 事象) を 2-4 行で。
+     文字壁感緩和 + 視覚 hook の 5 原則 5「図解で認知コスト下げる」 を満たす。
+   - table 内の数値は **必ず source_facts から引用** (citation [N] を行末に置く)
+   - 例 (Before-After):
+     ```
+     | Berkshire ポートフォリオ | Before | After |
+     |---|---|---|
+     | Amazon | 保有 | **撤退** [1] |
+     | Visa / Mastercard | 保有 | **撤退** [1] |
+     | GOOGL | 保有なし | **top 5 入り** [1] |
+     ```
 4. ## 第 2 幕: 業界対立 / 競合 (proper_noun / causal を使い、 3-4 文)
 5. ## 第 3 幕: 投資家への含意 (両論併記、 確率表現で 100-150 字)
 
@@ -134,9 +155,9 @@ def _few_shot_block() -> str:
 </source_facts>
 <output>
 {
-  "title": "NVDA Q4 売上 $45.1B、 TSMC 増設で需給圧力後退",
+  "title": "NVDA $45.1B 達成、 TSMC 増設で供給緩和",
   "subtitle": "Data Center 比率 87.3% の集中度はリスクとも見れるが、 TSMC の CoWoS 増産は供給制約を緩和する",
-  "body_md": "## TL;DR\\n- NVDA Q4 売上 $45.1B、 前年同期比 +22% を達成 [1]\\n- Data Center 比率 87.3% で集中度リスク顕在化 [2]\\n- TSMC CoWoS-S 増産で供給制約緩和の可能性 [3]\\n\\n「決算が予想を超えた」 と片付けられがちな NVDA ですが、 数字を 1 枚めくると供給制約の構造変化が見えてきます。\\n\\n## 第 1 幕: 数字を時系列で\\nQ4 の売上は $45.1B (前年同期比 +22%) を達成しました [1]。 ここで注目したいのが Data Center (AI 学習用 GPU を企業向けに販売する部門) の売上比率で、 全体の 87.3% に達しています [2]。 自動車に例えると、 売上の 9 割近くが SUV だけで稼げている状態 — 構造的な「集中」 が進んでいるわけです。\\n\\n## 第 2 幕: TSMC の動き\\nTSMC (NVDA の半導体を製造する台湾企業) が、 CoWoS-S と呼ばれる先進パッケージング技術の生産能力を、 2026 年末までに 1.5 倍に拡張すると発表しました [3]。 AI ASIC (推論専用チップ) 各社の需要を取り込む動きですが、 結果として NVDA の供給制約が緩和される可能性があります。\\n\\n## 第 3 幕: 投資家への含意\\n強気シナリオでは、 供給増による販売数量の上振れが期待できます。 一方、 弱気シナリオでは Data Center 集中度に依存しすぎていることのリスクが顕在化する可能性もあります。 1 社依存度を確認しながらポジションを判断したいところです。",
+  "body_md": "## TL;DR\\n- NVDA Q4 売上 $45.1B、 前年同期比 +22% を達成 [1]\\n- Data Center 比率 87.3% で集中度リスク顕在化 [2]\\n- TSMC CoWoS-S 増産で供給制約緩和の可能性 [3]\\n\\n「決算が予想を超えた」 と片付けられがちな NVDA ですが、 数字を 1 枚めくると供給制約の構造変化が見えてきます。\\n\\n## 第 1 幕: 数字を時系列で\\n| NVDA Q4 指標 | 数値 |\\n|---|---|\\n| 売上 (前年同期比) | **$45.1B** (+22%) [1] |\\n| Data Center 売上比率 | **87.3%** [2] |\\n| TSMC CoWoS-S 増産 (2026 末) | **1.5 倍** [3] |\\n\\nここで注目したいのが Data Center (AI 学習用 GPU を企業向けに販売する部門) の売上比率です。 自動車に例えると、 売上の 9 割近くが SUV だけで稼げている状態 — 構造的な「集中」 が進んでいるわけです。\\n\\n## 第 2 幕: TSMC の動き\\nTSMC (NVDA の半導体を製造する台湾企業) が、 CoWoS-S と呼ばれる先進パッケージング技術の生産能力を、 2026 年末までに 1.5 倍に拡張すると発表しました [3]。 AI ASIC (推論専用チップ) 各社の需要を取り込む動きですが、 結果として NVDA の供給制約が緩和される可能性があります。\\n\\n## 第 3 幕: 投資家への含意\\n強気シナリオでは、 供給増による販売数量の上振れが期待できます。 一方、 弱気シナリオでは Data Center 集中度に依存しすぎていることのリスクが顕在化する可能性もあります。 1 社依存度を確認しながらポジションを判断したいところです。",
   "citation_indexes": [1, 2, 3]
 }
 </output>
@@ -151,9 +172,9 @@ def _few_shot_block() -> str:
 </source_facts>
 <output>
 {
-  "title": "AI ASIC 第二波: CRBS IPO と GROQ $2.5B が示す GPU 寡占への挑戦",
+  "title": "CRBS / GROQ が GPU 寡占に挑戦",
   "subtitle": "NVDA の Data Center 寡占が 4 年続いた中、 ASIC スタートアップ 2 社の資金調達と IPO が示すのは需要側の多様化への期待",
-  "body_md": "## TL;DR\\n- CRBS が SEC S-1 を 2026-05-09 提出、 上場 channel 確保 [1]\\n- GROQ が評価額 $2.5B で Series D 完了、 ASIC 専業に資金集中 [2]\\n- NVDA 一強前提 portfolio は再点検余地あり\\n\\nGPU 一強の時代に変化の兆しが出ている。\\n\\n## 第 1 幕: 動き\\nCRBS が SEC S-1 を 2026-05-09 に提出した [1]。 同時期に GROQ が評価額 $2.5B で Series D を完了 [2]、 ASIC 専業 2 社が同時に資金/上場 channel を確保した形だ。\\n\\n## 第 2 幕: 業界対立\\nGPU は学習に強いが推論コストでは ASIC が有利との見方が強まる。 ただし両社とも生産は TSMC 依存で、 NVDA との容量取り合いになる可能性もある。\\n\\n## 第 3 幕: 投資家への含意\\n強気シナリオでは推論市場の二極化、 弱気シナリオでは ASIC スタートアップの量産歩留まりリスクが顕在化する。 NVDA 一強を前提とした portfolio は再点検の余地がある。",
+  "body_md": "## TL;DR\\n- CRBS が SEC S-1 を 2026-05-09 提出、 上場 channel 確保 [1]\\n- GROQ が評価額 $2.5B で Series D 完了、 ASIC 専業に資金集中 [2]\\n- NVDA 一強前提 portfolio は再点検余地あり\\n\\nGPU 一強の時代に変化の兆しが出ている。\\n\\n## 第 1 幕: 動き\\n| ASIC 2 社 | アクション | 時期 |\\n|---|---|---|\\n| CRBS | **SEC S-1 提出** | 2026-05-09 [1] |\\n| GROQ | **Series D 完了 ($2.5B)** | 同時期 [2] |\\n\\nASIC 専業 2 社が同時に資金/上場 channel を確保した形だ。\\n\\n## 第 2 幕: 業界対立\\nGPU は学習に強いが推論コストでは ASIC が有利との見方が強まる。 ただし両社とも生産は TSMC 依存で、 NVDA との容量取り合いになる可能性もある。\\n\\n## 第 3 幕: 投資家への含意\\n強気シナリオでは推論市場の二極化、 弱気シナリオでは ASIC スタートアップの量産歩留まりリスクが顕在化する。 NVDA 一強を前提とした portfolio は再点検の余地がある。",
   "citation_indexes": [1, 2]
 }
 </output>
@@ -169,7 +190,7 @@ def _few_shot_block() -> str:
 </source_facts>
 <output>
 {
-  "title": "2026-05-24 朝刊: AAPL / MSFT / GOOGL が揃って予想超え",
+  "title": "AAPL/MSFT/GOOGL 揃って予想超え",
   "subtitle": "ビッグテック 3 社が同日に予想を上回る決算を発表、 Azure 28% 成長と Search 12% 成長が AI 投資の ROI 顕在化を示唆",
   "body_md": "本日注目の決算 3 件。\\n\\n- **AAPL**: Q4 EPS $2.40 でコンセンサス $2.35 を上回り [1]\\n- **MSFT**: Azure 売上 +28% YoY [2]、 Copilot 課金の本格化が背景\\n- **GOOGL**: Search 売上 +12% YoY [3]、 AI 検索の収益化が進む\\n\\nAI 投資の ROI が早期実現する場合、 capex 増の正当性が補強される。 各銘柄の詳細分析は本文 article を参照。",
   "citation_indexes": [1, 2, 3]
