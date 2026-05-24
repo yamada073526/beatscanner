@@ -70,8 +70,13 @@ function parseKpiValue(val) {
 /**
  * AnimatedStat — KpiStrip 内の 1 つの KPI を count-up animation で表示する。
  * parseKpiValue が null の場合 (— / 3/5 等) は元の value をそのまま表示する。
+ *
+ * v112-5: stagger reveal (index * 60ms) を CSS animation で追加。
+ *   Ritz エレベーター unveil idiom、 mount 時 6 chip 順次 fade-in + translateY(8px → 0)。
+ *   既存 SectionFade と二重 transform 干渉なし (KpiStrip 内部の children level)。
+ *   1 回限り (animation-fill-mode: both)、 chip 切替時は key 変動で再 trigger。
  */
-function AnimatedStat({ stat }) {
+function AnimatedStat({ stat, index = 0 }) {
   const parsed = parseKpiValue(stat.value);
   // v111-2 fix: initial mount のみ forceFromZero=true で 0 → target の count-up 確実発火。
   //   現在値 ($X.XX) は initial mount 時に price prefetched 済 → fromRef = target で
@@ -103,13 +108,22 @@ function AnimatedStat({ stat }) {
   }
 
   return (
-    <Stat
-      value={displayValue}
-      label={stat.label}
-      trend={stat.trend}
-      verdict={stat.verdict}
-      hint={stat.hint}
-    />
+    <div
+      style={{
+        // v112-5 stagger reveal: 60ms × index (chip 0-5 で 0-300ms cascade)、 mount + chip 切替時のみ。
+        //   既存 count-up と並行発火 (count-up は 600ms duration、 stagger は 400ms で先に完了)。
+        animation: 'ds-kpistrip-stagger 400ms cubic-bezier(0.16, 1, 0.3, 1) both',
+        animationDelay: `${index * 60}ms`,
+      }}
+    >
+      <Stat
+        value={displayValue}
+        label={stat.label}
+        trend={stat.trend}
+        verdict={stat.verdict}
+        hint={stat.hint}
+      />
+    </div>
   );
 }
 
@@ -129,7 +143,7 @@ export default function KpiStrip({ stats = [], frameless = false }) {
             修正: inner dark box の bg/border/padding を完全削除、 Card padding 24px のみ使用。
             grid layout は維持、 sticky も維持 (KpiStrip の浮遊 idiom を保つ)。 */}
         <div
-          className="pane3-numeric"
+          className="pane3-numeric ds-kpistrip-shimmer-host"
           style={{
             padding: 0,
             display: 'grid',
@@ -137,7 +151,11 @@ export default function KpiStrip({ stats = [], frameless = false }) {
             //   一般的なラップトップ幅 (1280px) で 1 行収容、 Buyback (= 自社株買い) 改行解消。
             gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
             gap: 'var(--space-5, 20px)',
-            position: frameless ? 'static' : 'sticky',
+            // v112-5: frameless 時は relative に変更 (shimmer ::before の anchor)、
+            //   frameless でない時は sticky 維持。 sticky 時も ::before は absolute で機能する。
+            //   gold entry shimmer host、 ::before で 1200ms gold line sweep (1 回限り)。
+            //   Ritz エントランス「驚き (surprise on first entry)」 idiom、 aman 軸 +1〜+3 期待。
+            position: frameless ? 'relative' : 'sticky',
             top: frameless ? undefined : 56,
             zIndex: frameless ? undefined : 'var(--z-base, 1)',
             background: 'transparent',
@@ -148,7 +166,7 @@ export default function KpiStrip({ stats = [], frameless = false }) {
             <Stat value="—" label="N/A" trend="neutral" />
           ) : (
             stats.map((s, i) => (
-              <AnimatedStat key={i} stat={s} />
+              <AnimatedStat key={i} stat={s} index={i} />
             ))
           )}
         </div>

@@ -9184,6 +9184,91 @@ button.ds-chip[data-pressed="true"]:hover {
   border-top-color: color-mix(in srgb, var(--color-gold) 20%, var(--border));
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   § v112-5 stagger reveal + gold entry shimmer (Pane 3 motion + aman polish)
+   multi-review 4 体合議 (2026-05-24) verdict 集約:
+     - gold accent 全 panel 一貫 (既存 9176-9185 で適用済) + stagger / cascade reveal
+     - 重要 4-5 section 限定 ([[minimalism-over-additive]] 制約)
+   実装範囲:
+     1. KpiStrip 6 chip stagger (60ms cascade、 Ritz エレベーター unveil)
+     2. 5 条件 ConditionRow stagger (60ms cascade、 Aman ためと解放)
+     3. KpiStrip 上端 gold entry shimmer (1 回限り 1200ms、 Ritz エントランス 驚き)
+   期待 vision-eval Δ: motion +1〜+3 (mount 時 stagger は scroll frame で残り少)、
+   aman +1〜+3 (gold shimmer 中間 frame で 5/5 keywords 到達期待)
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* stagger reveal: KpiStrip AnimatedStat + ConditionRow 共有 keyframe
+   400ms ease-out (cubic-bezier 0.16,1,0.3,1) で 8px下から fade-in、 1 回限り (animation-fill-mode: both)。
+   parent から animationDelay (index * 60ms) で 6 chip / 5 row 順次 reveal。 */
+@keyframes ds-kpistrip-stagger {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes ds-stagger-children {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* gold entry shimmer: KpiStrip 上端を gold line で sweep (1 回限り 1200ms)。
+   ::before で absolute placement、 sticky context でも上端固定。 transparent → gold → transparent
+   linear-gradient で背景 position を -100% → 200% に移動、 sweep 感を演出。
+   Ritz エントランス「驚き (surprise on first entry)」 idiom、 brand integrity:
+   - 1 回限り (animation-iteration-count: 1)
+   - 1500ms 未満で「成金感」 回避 ([[icon-brand-consistency]] 整合)
+   - pointer-events: none で interaction 影響なし */
+.ds-judgment-detail .ds-kpistrip-shimmer-host {
+  /* 既存 position は inline style で制御 (frameless 時 relative / sticky 時も ::before 機能) */
+}
+.ds-judgment-detail .ds-kpistrip-shimmer-host::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--color-gold) 80%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 50% 100%;
+  background-repeat: no-repeat;
+  background-position: -100% 0;
+  animation: ds-gold-shimmer 1200ms cubic-bezier(0.25, 1, 0.5, 1) 1;
+  animation-fill-mode: forwards;
+  pointer-events: none;
+  z-index: 2;
+}
+@keyframes ds-gold-shimmer {
+  0% {
+    background-position: -50% 0;
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    background-position: 200% 0;
+    opacity: 0;
+  }
+}
+
 /* line-height + letter-spacing 調整 (Sprint 1 §3)
    - 日本語 body: lh 1.6-1.7 / ls 0.02em
    - 英数字 heading: lh 1.2-1.3

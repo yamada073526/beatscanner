@@ -41,6 +41,7 @@ export default function ConditionRow({
   isPro = true,
   onUpgrade,
   onConditionPulse,
+  staggerDelay = 0,
 }) {
   const [showModal, setShowModal] = useState(false);
   const passed = condition.passed;
@@ -72,6 +73,11 @@ export default function ConditionRow({
         borderRadius: 'var(--radius-sm)',
         overflow: 'hidden',
         transition: 'background var(--motion-fast) ease',
+        // v112-5: stagger reveal (parent FiveConditionsCard から index*60ms 渡される)。
+        //   Aman idiom「ためと解放」、 5 row 連鎖 reveal で motion + 体感 +。
+        //   既存 ConditionRow accordion expand と独立、 mount + condition 変動時のみ。
+        animation: 'ds-stagger-children 400ms cubic-bezier(0.16, 1, 0.3, 1) both',
+        animationDelay: `${staggerDelay}ms`,
       }}
     >
       {/* ── Summary row (always visible) ────────────────────────────── */}

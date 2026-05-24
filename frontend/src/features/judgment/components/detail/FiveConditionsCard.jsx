@@ -196,6 +196,7 @@ export default function FiveConditionsCard({
               <ConditionRow
                 key={i}
                 index={i + 1}
+                staggerDelay={i * 60}
                 condition={c}
                 expanded={expandedIndex === i}
                 onToggle={() =>
