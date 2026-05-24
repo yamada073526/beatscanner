@@ -6938,8 +6938,13 @@ button.ds-chip[data-pressed="true"]:hover {
   font-family: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
   font-weight: 700;
   font-size: 12px;
-  letter-spacing: 0.04em;
+  /* v112-8 multi-review 4 体 verdict: 0.04em → 0.06em (Aman 真鍮 typography 強化)
+     ticker は識別子なので tracking 拡大で「刻印感」 増、 typography 軸 +0.5〜+1 期待。
+     pill 0.03em / title 0.01em / ticker 0.06em で 3 tier 明示化。 */
+  letter-spacing: 0.06em;
   font-variant-numeric: tabular-nums;
+  /* v112-8: lining-nums 明示で数値高さ統一 (tnum と双子) */
+  font-feature-settings: "tnum" 1, "lnum" 1;
 }
 
 /* §round20 LIVE dot pulse */
@@ -6993,6 +6998,10 @@ button.ds-chip[data-pressed="true"]:hover {
 /* §round18: title color shift (Linear 流「1 つだけ動かす」) */
 .ws-pane4-news-item .ws-pane4-news-title {
   transition: color 150ms var(--ws-ease-standard);
+  /* v112-8 multi-review 4 体 verdict: typography 高信頼軸 +1〜+2 期待
+     既存値なし → letter-spacing 0.01em 追加で「typography hierarchy 細部統一」 signal。
+     v112-6 chapter-title 0.10em と整合 (heading 系の Noto Sans JP tracking)。 */
+  letter-spacing: 0.01em;
 }
 .ws-pane4-news-item:hover .ws-pane4-news-title {
   color: rgb(186, 230, 253); /* sky-200 */
@@ -7078,13 +7087,16 @@ button.ds-chip[data-pressed="true"]:hover {
   display: inline-flex;
   align-items: center;
   font-size: 10px;
-  font-weight: 500;
+  /* v112-8 multi-review 4 体 verdict: font-weight 500 → 600 (細部統一 + readability)
+     typography 軸 +0.5〜+1 期待。 pill text の読みやすさと「source label = 信頼源」 強化。 */
+  font-weight: 600;
   padding: 1px 8px;
   border-radius: var(--radius-pill, 9999px);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border);
   color: var(--text-muted);
-  letter-spacing: 0.02em;
+  /* v112-8: letter-spacing 0.02 → 0.03em (ticker 0.04em の中間 tier、 typography 統一) */
+  letter-spacing: 0.03em;
   white-space: nowrap;
 }
 [data-theme="dark"] .ws-pane4-source-pill {
