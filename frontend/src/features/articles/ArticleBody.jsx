@@ -19,7 +19,12 @@
  */
 
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { sanitizeText } from '../../lib/blocklist.js';
+
+// v116 R4: remark-gfm を有効化することで、 Markdown table syntax (| col |---| value |) を
+// <table> として render する。 plugin なしでは | パイプ生テキストが <p> に落ちるブランド毀損バグ。
+const REMARK_PLUGINS = [remarkGfm];
 
 /**
  * Markdown 本文中の [N] を footnote anchor リンクに変換する前処理
@@ -210,7 +215,7 @@ export default function ArticleBody({ bodyMd, onSanitized }) {
           </ul>
         </aside>
       )}
-      <ReactMarkdown components={components}>
+      <ReactMarkdown components={components} remarkPlugins={REMARK_PLUGINS}>
         {processedRest}
       </ReactMarkdown>
     </div>

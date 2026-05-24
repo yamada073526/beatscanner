@@ -29,6 +29,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import ArticleHero from './ArticleHero.jsx';
 import ArticleBody from './ArticleBody.jsx';
 import ArticleCitations from './ArticleCitations.jsx';
+import ArticleErrorBoundary from './ArticleErrorBoundary.jsx';
 
 // ── CANONICAL_BASE (build-articles.mjs と同値) ─────────────────────────────────
 const CANONICAL_BASE = 'https://beatscanner-production.up.railway.app';
@@ -178,6 +179,7 @@ export default function ArticlePage({ slug }) {
   const { title, subtitle, body_md, citations, ticker, published_at } = article;
 
   return (
+    <ArticleErrorBoundary>
     <main className="article-page">
       {/* 記事コンテナ: max-width 680px + 中央寄せ */}
       <div className="article-page__container">
@@ -191,7 +193,7 @@ export default function ArticlePage({ slug }) {
           _sanitized={sanitized}
         />
 
-        {/* 本文: react-markdown + sanitize */}
+        {/* 本文: react-markdown + sanitize (v116 R4 ErrorBoundary 内側) */}
         <ArticleBody
           bodyMd={body_md}
           onSanitized={handleSanitized}
@@ -231,5 +233,6 @@ export default function ArticlePage({ slug }) {
         </footer>
       </div>
     </main>
+    </ArticleErrorBoundary>
   );
 }

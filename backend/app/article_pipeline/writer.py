@@ -59,15 +59,38 @@ WRITER_SYSTEM_BASE = """Return ONLY a valid JSON. No markdown wrapper, no explan
 - 体言止め / 漢字熟語の連発を避ける、 「〜です」「〜ます」 調も OK (硬い「だ・である」 強制しない)
 - 「ですが」「ところで」 等の口語的接続詞も OK (ただし感嘆符・スラング禁止)
 
-# 人名表記ルール (HARD CONSTRAINT、 v116 user フィードバック)
-- **個人名は和文 / カタカナ統一** — 英字直書き禁止
+# 人名表記ルール (HARD CONSTRAINT、 v116 user フィードバック、 R4 で subtitle 明示)
+- **個人名は title / subtitle / body_md 全てで和文 / カタカナ統一** — 英字直書き禁止
+  - **v116 R4 追加: subtitle にも適用**。 body だけ和文で subtitle が「Greg Abel 体制下の...」 になる
+    バグを防ぐ
 - 初出時のみ「カタカナ表記 (英字併記)」 を許容、 2 回目以降は和文のみ
   - GOOD: 「グレッグ・エイベル CEO (Greg Abel)」 → 以降「エイベル CEO」
   - GOOD: 「ウォーレン・バフェット氏 (Warren Buffett)」 → 以降「バフェット氏」
   - BAD: 「Greg Abel CEO」 + 「バフェット氏」 が同記事内に混在 (英和不統一)
-  - BAD: 「Tim Cook が発表」 (英字単独)
+  - BAD: subtitle に「Greg Abel」、 body に「グレッグ・エイベル」 (subtitle 漏れ、 R4 で発覚)
 - 役職 (CEO / CFO / CTO / 会長 等) は英字 / 和文どちらも可、 ただし記事内で統一
 - 企業名 / 製品名 / 略語 (NVDA / TSMC / GPU 等) は英字のままで OK
+
+# 専門用語補足ルール (HARD CONSTRAINT、 v116 R4 QA dogfooder verdict)
+- 投資歴 1 年未満の読者が **初見** であろう用語は、 **初出時に必ず 1 行括弧で噛み砕いた補足**
+- 補足対象例: 「クレジットデリバティブ (貸し倒れリスクを別の投資家に転嫁する金融商品)」、
+  「capex (設備投資)」、 「ROI (投資収益率)」、 「ハイパースケーラー (Google / Microsoft / Amazon 等の大規模クラウド事業者)」、
+  「PEG / EBITDA / Data Center 集中度」 等
+- TL;DR 内では補足を省略可、 ただし 本文中の **初出時** には必ず補足
+- BAD: 「銀行がクレジットデリバティブで AI capex 融資リスクを分散」 (用語 3 連発で persona 離脱)
+- GOOD: 「銀行が**クレジットデリバティブ (貸し倒れリスクを保険で分散する金融商品)** で AI 融資のリスクを分散」
+
+# 主役 ticker 関連性ルール (HARD CONSTRAINT、 v116 R4 QA dogfooder verdict)
+- 各幕は **主役 ticker (article.ticker) との関連性を 1 文以上で明示**
+- 「業界全体の話 → 主役銘柄への波及効果」 という橋渡しを必ず幕末に置く
+- BAD: 第 2 幕で「Google Cloud Security が Instruqt で 150 名トレーニング [4]」 だけで完結
+- GOOD: 「...150 名トレーニング [4]。 **これは GOOGL の Cloud 部門売上拡大の前段で**、 採用障壁低下が直接収益化につながる」
+
+# 投資家への含意 アクション 1 行ルール (HARD CONSTRAINT、 v116 R4 QA dogfooder verdict)
+- 「投資家への含意」 section の **末尾に必ず 1 行の具体的アクション** を置く
+- BAD: 強気 / 弱気シナリオ列挙で終わる (persona は「で、 自分は何すべき?」 で迷う)
+- GOOD: 「次の決算 (YYYY-MM-DD) と独占禁止法判決を待ってからエントリ判断、 それまではウォッチリストで動向観察を推奨」
+- アクション内容: ウォッチリスト追加 / 次イベント待ち / ポジションサイズ調整 / 静観 等の 1 つを明示
 
 # 文章読みやすさルール (HARD CONSTRAINT、 v116 user フィードバック R3 「サラサラ読めない」)
 - **一文 50-70 字以内** — 長文 (90+ 字) は読者の作業記憶を超過、 サラサラ読めなくなる
