@@ -1,70 +1,95 @@
-name: 決算記事生成
+name: Generate Daily Articles (v113)
+
+# v113 Phase 2: GitHub Actions cron で Railway endpoint を curl で叩く HTTP trigger pattern。
+# 旧 design (Python script + articles/ commit) は v113 で全面廃止、 backend pipeline
+# (article_pipeline/) + Supabase articles table に置換。
+#
+# - 毎朝 21:00 UTC (= 06:00 JST) に NVDA で pipeline 1 件起動 (P2 MVP)
+# - P3+ で matrix 化して multi-ticker (movers + watchlist 上位 5-10 銘柄) に拡張
+# - workflow_dispatch で任意 ticker を手動実行可能
+# - secret 不要 (公開 endpoint、 demo rate limit 3/day だが本 cron は IP 制限内)
+# - 失敗しても workflow は緑にする (continue-on-error) → 早朝アラート疲れ防止
+#
+# memory anchors:
+#   project_pane45_redesign.md (v113 spec Phase 2)
+#   feedback_demo_rate_limit_smoke_test.md (response 構造確認 pattern)
 
 on:
-  # 手動トリガー: Actions タブから銘柄を指定して実行
   workflow_dispatch:
     inputs:
       ticker:
-        description: "銘柄ティッカー (例: AAPL)"
-        required: true
-        type: string
-      company_name:
-        description: "会社名 (例: Apple Inc.)"
+        description: "銘柄ティッカー (default NVDA)"
         required: false
         type: string
-        default: ""
-
-  # 定期実行: 決算シーズン中の平日 9:00 JST (= 0:00 UTC)
-  # schedule:
-  #   - cron: '0 0 * * 1-5'
+        default: "NVDA"
+      format:
+        description: "deep_dive | theme_horizon | daily_digest"
+        required: false
+        type: string
+        default: "deep_dive"
+  schedule:
+    - cron: '0 21 * * *'   # 21:00 UTC = 06:00 JST
 
 jobs:
   generate:
-    name: 記事生成 (${{ github.event.inputs.ticker }})
+    name: Trigger article pipeline (${{ github.event.inputs.ticker || 'NVDA' }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
+      - name: Setup tools
         run: |
-          pip install anthropic
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq jq curl
 
-      - name: Generate article
+      - name: Trigger pipeline
+        id: trigger
+        continue-on-error: true
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          BEATSCANNER_URL:   ${{ secrets.BEATSCANNER_URL || 'https://beatscanner.vercel.app' }}
+          BASE: https://beatscanner-production.up.railway.app
         run: |
-          TICKER="${{ github.event.inputs.ticker }}"
-          COMPANY="${{ github.event.inputs.company_name }}"
-          OUTPUT="articles/${TICKER}_$(date +%Y%m%d).md"
+          TICKER="${{ github.event.inputs.ticker || 'NVDA' }}"
+          FORMAT="${{ github.event.inputs.format || 'deep_dive' }}"
+          ENDPOINT="$BASE/api/cron/generate-articles?ticker=$TICKER&format=$FORMAT"
 
-          python scripts/generate_article.py \
-            --ticker "$TICKER" \
-            --company-name "$COMPANY" \
-            --output "$OUTPUT"
+          mkdir -p reports
+          REPORT="reports/article_$(date -u +%Y-%m-%d)_${TICKER}.json"
 
-          echo "OUTPUT_FILE=$OUTPUT" >> $GITHUB_ENV
+          # POST + body は空 (raw_sources 自動 fetch path、 backend sources.py 経由)
+          status=$(curl -fsS -X POST "$ENDPOINT" \
+            -H 'Content-Type: application/json' \
+            -d '{}' \
+            -o "$REPORT" \
+            -w '%{http_code}' || echo "000")
 
-      - name: Commit and push article
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          echo "HTTP status: $status"
+          if [ -f "$REPORT" ]; then
+            echo '--- response ---'
+            jq . "$REPORT" || cat "$REPORT"
+            echo '----------------'
+            # final_status 抽出 (passed / regenerate_failed / no_sources / writer_failed)
+            final_status=$(jq -r '.final_status // "unknown"' "$REPORT" 2>/dev/null || echo "parse-err")
+            echo "final_status=$final_status" >> "$GITHUB_OUTPUT"
+            echo "report=$REPORT" >> "$GITHUB_OUTPUT"
+          fi
 
-          git add articles/
-          git diff --cached --quiet || \
-            git commit -m "docs: 決算記事追加 ${{ github.event.inputs.ticker }} $(date +%Y-%m-%d)"
-          git push
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: article-pipeline-${{ github.run_id }}
+          path: reports/
+          retention-days: 30
 
       - name: Summary
+        if: always()
+        env:
+          TICKER: ${{ github.event.inputs.ticker || 'NVDA' }}
         run: |
-          echo "### 生成完了 ✅" >> $GITHUB_STEP_SUMMARY
-          echo "- **銘柄**: ${{ github.event.inputs.ticker }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **ファイル**: \`${{ env.OUTPUT_FILE }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **アプリURL**: ${{ env.BEATSCANNER_URL }}/?ticker=${{ github.event.inputs.ticker }}" >> $GITHUB_STEP_SUMMARY
+          echo "### Article Pipeline Run ($(date -u +'%Y-%m-%d %H:%M UTC'))" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **ticker**: \`${TICKER}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **final_status**: \`${{ steps.trigger.outputs.final_status }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **report**: \`${{ steps.trigger.outputs.report }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Supabase \`articles\` table に status='draft' で保存 (人間 review 後 status='published')" >> $GITHUB_STEP_SUMMARY

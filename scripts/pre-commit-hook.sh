@@ -13,6 +13,8 @@
 #      直接渡しているコードが追加されたら BLOCK
 #   3. backend/app/aggregator/*.py に LLM SDK の import (anthropic / claude_client /
 #      messages.create) が staged されたら BLOCK (handover v82 Phase 3 で追加)
+#   4. backend/app/article_pipeline/*.py に LLM への数値計算指示が staged されたら BLOCK
+#      (v113 P1 追加、 article_pipeline は narration layer だが BAD-3 数値捏造直撃 zone)
 #
 # memory anchors:
 #   feedback_llm_calc_separation.md / feedback_citation_required.md
@@ -58,6 +60,33 @@ for f in $STAGED_AGG; do
         echo "[pre-commit] BLOCKED: $f に LLM SDK の import が含まれています"
         echo "  ↳ aggregator/ は数値物理層 (memory feedback_llm_calc_separation.md)"
         echo "  ↳ LLM narration が必要なら backend/app/visualizer/ 配下に分離してください。"
+        echo "  ↳ 検証用の意図的混入なら --no-verify で迂回可。"
+        exit 1
+    fi
+done
+
+# --- Check 4: article_pipeline/*.py への LLM 数値計算指示検出 (v113 P1) ---
+# article_pipeline は LLM narration を担う layer (aggregator/ と異なり LLM SDK 持つ) だが、
+# 数値計算 (推測 / 算出 / 割合) を LLM に依頼する prompt は依然として BLOCK (BAD-3 直撃)。
+# 数値は呼出側 (scheduler) が事前計算して source_facts に詰めて渡し、 LLM はそれを
+# 「そのまま引用」 する責務 (feedback_llm_calc_separation.md SSOT)。
+# negation 文脈 (禁止 / 厳禁 / 行わない / そのまま引用) は除外。
+STAGED_AP=$(git diff --cached --name-only | grep -E '^backend/app/article_pipeline/.+\.py$' || true)
+for f in $STAGED_AP; do
+    if [ ! -f "$f" ]; then
+        continue
+    fi
+    ADDED=$(git diff --cached "$f" | grep -E '^\+' || true)
+    if [ -z "$ADDED" ]; then
+        continue
+    fi
+    if echo "$ADDED" \
+        | grep -vE '(禁止|厳禁|禁ずる|FORBIDDEN|MUST NOT|MUST_NOT|行わない|そのまま引用|計算を行わない)' \
+        | grep -E '(計算してください|算出してください|を計算しろ|を算出しろ|を計算する必要|を算出する必要|を割ってください|を引いてください)' > /dev/null; then
+        echo "[pre-commit] BLOCKED: $f に LLM への数値計算指示が含まれています"
+        echo "  ↳ Hallucination Guard 違反 (memory feedback_llm_calc_separation.md)"
+        echo "  ↳ 数値は呼出側 (scheduler.py) が事前計算し、 source_facts に詰めて渡す"
+        echo "  ↳ LLM はそれを「そのまま引用」 する責務 (BAD-3 数値捏造防止)"
         echo "  ↳ 検証用の意図的混入なら --no-verify で迂回可。"
         exit 1
     fi
