@@ -243,10 +243,9 @@ export default function InsiderPanel({ ticker }) {
           <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
             {hStatus === 'restricted' ? (
               <>
-                {/* v115 multi-review A-1: Trust Cliff 修正 — Ultimate plan 訴求でなく
-                    無料代替 (SEC EDGAR 13F 検索) を提示。 景表法 §5 (優良誤認) 防止。 */}
-                <div>現状は Form 4 経営者売買のみ取得可能 (現プラン制限)。</div>
-                <div style={{ marginTop: 4 }}>
+                {/* v115 round 3 user feedback: 実装都合 (現プラン制限) の文言を削除、
+                    user 価値 (SEC EDGAR 無料閲覧導線) のみ残す。 Trust Cliff + 景表法 §5 防止維持。 */}
+                <div>
                   機関投資家の保有動向は{' '}
                   <a
                     href={`https://efts.sec.gov/LATEST/search-index?q=%22${encodeURIComponent(ticker)}%22&forms=13F-HR&dateRange=custom`}
