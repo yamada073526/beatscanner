@@ -8937,6 +8937,11 @@ button.ds-chip[data-pressed="true"]:hover {
   font-variant-numeric: tabular-nums lining-nums;
   font-feature-settings: "tnum" 1, "lnum" 1;
   font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', SFMono-Regular, Consolas, monospace;
+  /* v112 multi-review 4 体合議 議題 C (UI/UX + Frontend 一致): 真因 = text-align 未指定 (default left) で
+     大数値 ($266.32) が column 右端まで伸び、 隣小数値 (5/5) が左端貼付き → 数値間 visual gap が
+     他ペアより半減して見える bug。 center 揃えで各 column 中心に揃え、 Bloomberg/Refinitiv 数値
+     strip の「整然たるリズム」 実現。 影響範囲: Stat primitive は KpiStrip 専用 (frontend scan 確認)。 */
+  text-align: center;
 }
 
 /* ds-stat__label — Stat プリミティブのラベル部
@@ -8948,6 +8953,8 @@ button.ds-chip[data-pressed="true"]:hover {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
+  /* v112 議題 C: value と整合させ center 揃え (Bloomberg KPI strip idiom) */
+  text-align: center;
 }
 
 /* ds-stat__hint — hint テキスト */

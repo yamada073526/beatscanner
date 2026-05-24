@@ -455,7 +455,10 @@ export default function JudgmentDetail({
   if (detail?.price != null) {
     kpis.push({
       value: `$${Number(detail.price).toFixed(2)}`,
-      label: '現在値',
+      // v112 multi-review 4 体合議 議題 B (全員一致 B3): 「現在値」 → 「株価」
+      //   2 文字最短で「2 秒理解」 最大化、 日経電子版 / SBI / 楽天証券 標準。
+      //   「現在値」 は ETF/債券にも使う generic term で株式専用 context では冗長。
+      label: '株価',
       trend: detail.changePct > 0 ? 'up' : detail.changePct < 0 ? 'down' : 'neutral',
     });
   }
@@ -502,14 +505,10 @@ export default function JudgmentDetail({
     label: 'Forward P/E',
     trend: 'neutral',
   });
-  // PEG ratio (将来予測込みの相対割安度)
-  kpis.push({
-    value: _ve?.pegRatio != null && Number.isFinite(_ve.pegRatio)
-      ? _ve.pegRatio.toFixed(2)
-      : '—',
-    label: 'PEG',
-    trend: 'neutral',
-  });
+  // v112 multi-review 4 体合議 議題 A: PEG chip 削除 (7 → 6 chip)。
+  //   真因: workspace mode で Pane 3 width 500-700px、 7 chip × minmax(130px) で折返し継続。
+  //   PEG は個人投資家認知度低 + valuation は Forward P/E で担保、 金融 verdict 「削除可」 (Forward P/E + PEG 統合は業界 idiom 違反、 PEG 単独削除が正解)。
+  //   6 chip × 130 = 780px で Pane 3 600-700px でも 3+3 安定折返し。
   // 配当性向 (Payout Ratio): 利益の何% を配当に回したか
   kpis.push({
     value: _ve?.payoutRatio != null && Number.isFinite(_ve.payoutRatio)
