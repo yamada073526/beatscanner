@@ -10178,6 +10178,39 @@ button.ds-chip[data-pressed="true"]:hover {
 .article-prose h1 { font-size: clamp(20px, 3vw, 26px); }
 .article-prose h2 { font-size: clamp(18px, 2.5vw, 22px); }
 
+/* v116 R5 章間 gold hairline divider (multi-review 3 体合議 verdict、 Pane 3 直移植) ──
+ *
+ * user dogfood R3「次の見出しに移るとき、 前の本文と次の見出しのあいだが狭く、 話題に
+ * 仕切りが視覚的にわかりづらい」 → Pane 3 ProfileCard SummarySection の gold hairline を横展開。
+ *
+ * 設計判断:
+ *   - 案 A 採用 (frontend architect 推奨、 CSS only 最小介入 0.1h)
+ *   - 左 accent bar は見送り (qa Top 1「比較表直前 gap 圧縮」 + 過剰装飾回避)
+ *   - :not(:first-of-type) で **第 1 幕除外** (qa Top 3「TL;DR 直後の第 1 幕は spacing 既に十分」)
+ *   - mobile (480px-) で gold opacity 25% → 40% 強化 (qa Top 2「高 DPI 非対応端末で hairline 消える」)
+ *
+ * gold grammar 一貫性 ([[gold-accent-continuity]]):
+ *   Pane 3 ProfileCard SummarySection (isFirst=false) と border-top 完全同一式 →
+ *   「全 panel 一貫適用で初めて vision-eval が signal 検出」 ルール準拠
+ */
+.article-prose h2:not(:first-of-type) {
+  margin-top: var(--space-10, 40px);
+  padding-top: var(--space-5, 20px);
+  border-top: 1px solid color-mix(in srgb, var(--color-gold) 25%, var(--border));
+}
+
+/* mobile: gold visibility 強化 (1px gold 25% は小画面 + 高 DPI 非対応で消失リスク) */
+@media (max-width: 480px) {
+  .article-prose h2:not(:first-of-type) {
+    border-top-color: color-mix(in srgb, var(--color-gold) 40%, var(--border));
+  }
+}
+
+/* 比較表直後の h2 ではなく、 h2 直後の table が来る場合に gap 圧縮回避 */
+.article-prose h2:not(:first-of-type) + .article-prose__table-wrapper {
+  margin-top: var(--space-4, 16px);
+}
+
 /* h3〜h4: サブ見出し (sans-serif 降格で階層 contrast) */
 .article-prose h3,
 .article-prose h4 {
