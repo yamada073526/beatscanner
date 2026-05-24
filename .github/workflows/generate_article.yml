@@ -55,10 +55,11 @@ jobs:
           mkdir -p reports
           REPORT="reports/article_$(date -u +%Y-%m-%d)_${TICKER}.json"
 
-          # POST + body は空 (raw_sources 自動 fetch path、 backend sources.py 経由)
+          # POST + body 省略 (raw_sources 自動 fetch path、 backend sources.py 経由)。
+          # router の raw_sources は Body(default=None) で list 期待のため、 `-d '{}'` は
+          # FastAPI が object として parse して 422 になる (v114 smoke test で確認済)。
           status=$(curl -fsS -X POST "$ENDPOINT" \
             -H 'Content-Type: application/json' \
-            -d '{}' \
             -o "$REPORT" \
             -w '%{http_code}' || echo "000")
 
