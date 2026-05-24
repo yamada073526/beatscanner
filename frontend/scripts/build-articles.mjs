@@ -302,7 +302,7 @@ const TICKER_BLOCKLIST = new Set([
   'GWh', 'MWh', 'KWh', 'TWh',              // ワット時 (大文字 5 文字以内)
   'ROI',                                    // Return On Investment (ROIC は既存)
   'ERS',                                    // ERShares 等の短縮 (XOVR が valid ETF ticker、 ERS 単独は ticker でない)
-  'TL', 'TLDR',                             // tl;dr 系
+  'TL', 'TLDR', 'DR',                       // tl;dr 系 ("TL;DR" の "DR" が独立 match されるため blocklist 化
   // BAD-5/6 パターンに含まれる英字列 / テスト用 marker
   'No', 'OK', 'PR', 'VP', 'BAD', 'GOOD', 'MAX', 'MIN', 'AVG',
 ]);
