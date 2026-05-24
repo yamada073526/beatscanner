@@ -155,7 +155,19 @@ WRITER_SYSTEM_BASE = """Return ONLY a valid JSON. No markdown wrapper, no explan
      | GOOGL | 保有なし | **top 5 入り** [1] |
      ```
 4. ## 第 2 幕: 業界対立 / 競合 (proper_noun / causal を使い、 3-4 文)
-5. ## 第 3 幕: 投資家への含意 (両論併記、 確率表現で 100-150 字)
+5. ## 第 3 幕: 投資家への含意 (両論併記、 確率表現で 100-150 字) — **v116 R6 構造化テンプレート HARD CONSTRAINT**:
+   ```
+   ## 投資家への含意
+   ### 強気シナリオ
+   〜 (50-80 字、 確率表現 + 主役 ticker の上昇 driver を 1 つ)
+   ### 弱気シナリオ
+   〜 (50-80 字、 確率表現 + 主役 ticker の下落 risk を 1 つ)
+   ### 推奨アクション
+   〜 (40-60 字、 ウォッチリスト追加 / 次イベント待ち / ポジションサイズ調整 / 静観 の 1 つを明示)
+   ```
+   - frontend は ### 強気/弱気 を緑/赤 2 列 callout で render、 ### 推奨アクション は full-width で
+     強調表示する設計 (ArticleBody.jsx)
+   - h3 marker の順序固定 (強気 → 弱気 → 推奨アクション)
 
 # Markdown 構成 (daily_digest、 600-800 字)
 - TL;DR section 不要 (記事全体が短く要約的なため重複)

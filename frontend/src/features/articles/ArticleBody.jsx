@@ -65,6 +65,103 @@ function preprocessMarkdownCitations(md) {
 }
 
 /**
+ * v116 R6 (UI/UX P1): body 末尾の `## 投資家への含意` section を抽出し、
+ *   ### 強気シナリオ / ### 弱気シナリオ / ### 推奨アクション の 3 H3 を構造化して返す。
+ * frontend で 2 列 callout (緑/赤) + アクション full-width で render する。
+ *
+ * @param {string} md
+ * @returns {{ before: string, implications: { bull: string, bear: string, action: string }|null }}
+ */
+function extractImplications(md) {
+  if (!md || typeof md !== 'string') return { before: md || '', implications: null };
+  // 「## 投資家への含意」 or 「## 含意」 を検出
+  const headingRe = /^##\s*(?:投資家への含意|含意|まとめ|総括)\s*$/m;
+  const headingMatch = headingRe.exec(md);
+  if (!headingMatch) return { before: md, implications: null };
+  const sectionStart = headingMatch.index;
+  const before = md.slice(0, sectionStart).replace(/\n+$/, '');
+  const sectionText = md.slice(sectionStart + headingMatch[0].length);
+  // ### 強気シナリオ / 弱気シナリオ / 推奨アクション を抽出
+  // 注: 末尾は次の ## が来るか EOF まで
+  const nextH2 = /\n##\s/.exec(sectionText);
+  const sectionBody = nextH2 ? sectionText.slice(0, nextH2.index) : sectionText;
+  const extractH3 = (label) => {
+    const re = new RegExp(
+      `###\\s*${label}\\s*\\n([\\s\\S]*?)(?=\\n###\\s|$)`,
+      'm',
+    );
+    const m = re.exec(sectionBody);
+    return m ? m[1].trim() : '';
+  };
+  const bull = extractH3('強気(?:シナリオ)?');
+  const bear = extractH3('弱気(?:シナリオ)?');
+  const action = extractH3('推奨アクション|アクション|提案|推奨');
+  // 1 つも見つからない場合は実装なしと判定 (旧 article 形式)
+  if (!bull && !bear && !action) return { before: md, implications: null };
+  return {
+    before,
+    implications: { bull, bear, action },
+  };
+}
+
+/**
+ * v116 R6: 投資家への含意 2 列 callout component.
+ * 強気 (緑) + 弱気 (赤) を grid、 推奨アクション (gold) を full-width で render。
+ */
+function InvestorImplications({ bull, bear, action, components }) {
+  return (
+    <aside
+      className="article-implications"
+      data-testid="article-implications"
+      aria-label="投資家への含意"
+    >
+      <h2 className="article-implications__heading">投資家への含意</h2>
+      <div className="article-implications__grid">
+        {bull && (
+          <div
+            className="article-implications__panel article-implications__panel--bull"
+            data-testid="article-implications-bull"
+          >
+            <div className="article-implications__label">強気シナリオ</div>
+            <div className="article-implications__body">
+              <ReactMarkdown components={components} remarkPlugins={REMARK_PLUGINS}>
+                {bull}
+              </ReactMarkdown>
+            </div>
+          </div>
+        )}
+        {bear && (
+          <div
+            className="article-implications__panel article-implications__panel--bear"
+            data-testid="article-implications-bear"
+          >
+            <div className="article-implications__label">弱気シナリオ</div>
+            <div className="article-implications__body">
+              <ReactMarkdown components={components} remarkPlugins={REMARK_PLUGINS}>
+                {bear}
+              </ReactMarkdown>
+            </div>
+          </div>
+        )}
+      </div>
+      {action && (
+        <div
+          className="article-implications__action"
+          data-testid="article-implications-action"
+        >
+          <div className="article-implications__label article-implications__label--action">推奨アクション</div>
+          <div className="article-implications__body">
+            <ReactMarkdown components={components} remarkPlugins={REMARK_PLUGINS}>
+              {action}
+            </ReactMarkdown>
+          </div>
+        </div>
+      )}
+    </aside>
+  );
+}
+
+/**
  * v116 (multi-review 3 体合議 verdict): body_md 冒頭の `## TL;DR\n- ...` section を
  * 抽出して別 component で render する。 残りの body は通常 ReactMarkdown で render。
  * 文字壁感緩和 + 2 秒把握スコア向上が目的。
@@ -231,11 +328,21 @@ export default function ArticleBody({ bodyMd, onSanitized, ticker }) {
   const components = buildComponents(handleSanitized, ticker, tableRenderedRef);
 
   // v116: TL;DR section を抽出して accent box で render、 残りは通常 ReactMarkdown
-  const { tldr, rest } = extractTLDR(bodyMd);
+  const { tldr, rest: afterTldr } = extractTLDR(bodyMd);
+  // v116 R6: 投資家への含意を抽出して 2 列 callout で render、 残りは通常 ReactMarkdown
+  const { before: mainBody, implications } = extractImplications(afterTldr);
+
   // citation [N] を footnote anchor に前処理 (TL;DR + 本文どちらにも適用)
-  const processedRest = preprocessMarkdownCitations(rest);
+  const processedMain = preprocessMarkdownCitations(mainBody);
   const processedTldr = tldr
     ? tldr.map((item) => preprocessMarkdownCitations(item))
+    : null;
+  const processedImplications = implications
+    ? {
+        bull: preprocessMarkdownCitations(implications.bull),
+        bear: preprocessMarkdownCitations(implications.bear),
+        action: preprocessMarkdownCitations(implications.action),
+      }
     : null;
 
   return (
@@ -260,8 +367,16 @@ export default function ArticleBody({ bodyMd, onSanitized, ticker }) {
         </aside>
       )}
       <ReactMarkdown components={components} remarkPlugins={REMARK_PLUGINS}>
-        {processedRest}
+        {processedMain}
       </ReactMarkdown>
+      {processedImplications && (
+        <InvestorImplications
+          bull={processedImplications.bull}
+          bear={processedImplications.bear}
+          action={processedImplications.action}
+          components={components}
+        />
+      )}
     </div>
   );
 }
