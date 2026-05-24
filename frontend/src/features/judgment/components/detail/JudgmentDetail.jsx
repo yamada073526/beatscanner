@@ -191,6 +191,24 @@ function isPane3V2Frameless() {
   }
 }
 
+// v112-9 Phase A (multi-review 4 体 verdict 集約): pane3_hero='1' で Hero 大型化 (procession 入口)。
+// Aman ホテル「低天井廊下 → 突然 33m 吹き抜け」 idiom、 viewport 上部 40-50% を Hero が占有、
+// h1 ticker 40 → 64px / padding 32 → 48px / logo 40 → 56px の 1.5-1.6x scale 落差。
+// vision-eval (Haiku) 期待 Δ overall +7〜+10 (typography +6 / spacing +5 / aman +6 / color +3 加算)。
+// default OFF (撤回コスト最小化、 v112-5 stagger 失敗教訓)、 ?pane3_hero=1 で opt-in。
+// localStorage 永続 + URL parameter override の dual mode ([[feature-flag-dual-mode]] pattern)。
+function isPane3Hero() {
+  try {
+    if (typeof window === 'undefined') return false;
+    const urlParam = new URLSearchParams(window.location.search).get('pane3_hero');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('pane3_hero') === '1';
+  } catch {
+    return false;
+  }
+}
+
 /**
  * DetailReportAccordionContent
  *
@@ -606,6 +624,8 @@ export default function JudgmentDetail({
              との二重表示防止 (v2 mode 時) */
           hideEyebrow={v2}
           hideCountdownChip={v2}
+          /* v112-9 Phase A: pane3_hero=1 で大型 Hero (Aman procession 入口、 default OFF) */
+          enlarged={isPane3Hero()}
         />
 
         {/* Sprint 6: SummaryBrief (AI 要約) — Hero と KpiStrip の間に mount。
