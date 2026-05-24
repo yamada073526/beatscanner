@@ -13,9 +13,13 @@ import { useEffect, useRef, useState } from 'react';
 
 const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
 
-export function useCountUp(target, { duration = 800, digits = 2 } = {}) {
-  const [val, setVal] = useState(target ?? 0);
-  const fromRef = useRef(target ?? 0);
+export function useCountUp(target, { duration = 800, digits = 2, forceFromZero = false } = {}) {
+  // v111-2 fix: forceFromZero=true なら initial mount で必ず 0 → target の count-up 発火。
+  //   user dogfood (2026-05-24): 「現在値だけ count-up しない」 真因 = stat.value が prefetched で
+  //   initial mount 時に既に final 値 → fromRef = target → 同値判定で animation skip。
+  //   forceFromZero で initial state を 0 に固定し、 全 chip で count-up 確実発火。
+  const [val, setVal] = useState(forceFromZero ? 0 : (target ?? 0));
+  const fromRef = useRef(forceFromZero ? 0 : (target ?? 0));
   const rafRef = useRef(0);
 
   useEffect(() => {

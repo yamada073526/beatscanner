@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import Card from '../../primitives/Card.jsx';
 import Stat from '../../primitives/Stat.jsx';
 import { useCountUp } from '../../../../hooks/useCountUp.js';
@@ -73,8 +73,19 @@ function parseKpiValue(val) {
  */
 function AnimatedStat({ stat }) {
   const parsed = parseKpiValue(stat.value);
-  // useCountUp 内で prefers-reduced-motion チェック済 (skip して即 final value)
-  const countedNum = useCountUp(parsed ? parsed.num : null, { duration: 600, digits: 2 });
+  // v111-2 fix: initial mount のみ forceFromZero=true で 0 → target の count-up 確実発火。
+  //   現在値 ($X.XX) は initial mount 時に price prefetched 済 → fromRef = target で
+  //   useCountUp の同値判定 (Math.abs(from-target)<0.001) で animation skip していた。
+  //   subsequent updates (chip 切替 / data update) は forceFromZero=false で natural transition。
+  const initialMountRef = useRef(true);
+  useEffect(() => {
+    initialMountRef.current = false;
+  }, []);
+  const countedNum = useCountUp(parsed ? parsed.num : null, {
+    duration: 600,
+    digits: 2,
+    forceFromZero: initialMountRef.current,
+  });
 
   let displayValue = stat.value;
   if (parsed && countedNum != null) {
