@@ -534,7 +534,9 @@ export default function JudgmentDetail({
     value: buybackProportion != null
       ? `${(buybackProportion * 100).toFixed(0)}%`
       : '—',
-    label: 'Buyback比率',
+    // v111 UI/UX 1 体合議 verdict (議題 1): 「Buyback比率」 (英 8 文字) で改行発生 → 「自社株買い」
+    //   (日 5 文字、 視覚幅 30% 短縮) に変更。 Bloomberg JP / 日経の標準語、 「2 秒理解」 5 原則整合。
+    label: '自社株買い',
     trend: 'neutral',
   });
 

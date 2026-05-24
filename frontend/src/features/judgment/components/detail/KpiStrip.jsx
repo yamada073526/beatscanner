@@ -47,13 +47,21 @@ function parseKpiValue(val) {
     if (Number.isFinite(num)) return { num, prefix: '$', suffix: '', sign: '' };
   }
 
-  // +/-XX.XX% YTD / +/-XX.XX% 形式
+  // +/-XX.XX% YTD / +/-XX.XX% / XX% 形式 (配当性向 / 自社株買い 含む)
   const pctMatch = val.match(/^([+-]?)(\d+(?:\.\d+)?)(%.*)$/);
   if (pctMatch) {
     const num = parseFloat(pctMatch[2]);
     if (Number.isFinite(num)) {
       return { num, prefix: '', suffix: pctMatch[3], sign: pctMatch[1] };
     }
+  }
+
+  // v111 UI/UX verdict (議題 2): plain decimal (Forward P/E 17.4 / PEG 0.30 等) count-up 対応
+  //   既存 pctMatch / dollarMatch に該当しない純小数を拾う、 必ず数値のみ (整数 or 小数)
+  const plainDecimalMatch = val.match(/^(\d+(?:\.\d+)?)$/);
+  if (plainDecimalMatch) {
+    const num = parseFloat(plainDecimalMatch[1]);
+    if (Number.isFinite(num)) return { num, prefix: '', suffix: '', sign: '' };
   }
 
   return null;
@@ -71,7 +79,15 @@ function AnimatedStat({ stat }) {
   let displayValue = stat.value;
   if (parsed && countedNum != null) {
     const absVal = Math.abs(countedNum);
-    const formatted = absVal >= 100 ? absVal.toFixed(0) : absVal.toFixed(2);
+    // v111 UI/UX verdict (議題 2): count-up 中の表示桁を原値の表示桁に合わせる。
+    //   17.4 (1 桁) / 0.30 (2 桁) / 98.00 (2 桁) を区別、 final value で原表示と一致。
+    const originalDecimals = (() => {
+      const m = stat.value?.match(/\.(\d+)/);
+      return m ? Math.min(m[1].length, 2) : 0;
+    })();
+    const formatted = absVal >= 100 && originalDecimals === 0
+      ? absVal.toFixed(0)
+      : absVal.toFixed(originalDecimals);
     displayValue = `${parsed.prefix}${parsed.sign}${formatted}${parsed.suffix}`;
   }
 
@@ -106,7 +122,9 @@ export default function KpiStrip({ stats = [], frameless = false }) {
           style={{
             padding: 0,
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+            // v111 UI/UX verdict (議題 1): 140 → 130px に微調整、 7 chip × 130 = 910px で
+            //   一般的なラップトップ幅 (1280px) で 1 行収容、 Buyback (= 自社株買い) 改行解消。
+            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
             gap: 'var(--space-5, 20px)',
             position: frameless ? 'static' : 'sticky',
             top: frameless ? undefined : 56,
