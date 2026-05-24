@@ -56,8 +56,8 @@ for (let i = 0; i < args.length; i++) {
 if (!opts.bypassToken && process.env.BYPASS_TOKEN) {
   opts.bypassToken = process.env.BYPASS_TOKEN;
 }
-if (!['pane3', 'pane4'].includes(opts.pane)) {
-  console.error(`[vision-eval] FATAL: --pane must be 'pane3' or 'pane4', got: ${opts.pane}`);
+if (!['pane3', 'pane4', 'pane5'].includes(opts.pane)) {
+  console.error(`[vision-eval] FATAL: --pane must be 'pane3', 'pane4', or 'pane5', got: ${opts.pane}`);
   process.exit(2);
 }
 
@@ -121,8 +121,10 @@ const url = opts.url || PROD_URL_BASE;
     }
 
     // v112-7: Pane 4 採点モード — toggle button click で Pane 4 open + 専用 frame 取得 + 専用 prompt
+    // v112-10: Pane 5 採点モード — Pane 4 open + ニュース item click で Reading Mode mount
     const isPane4 = opts.pane === 'pane4';
-    if (isPane4) {
+    const isPane5 = opts.pane === 'pane5';
+    if (isPane4 || isPane5) {
       // Pane 4 を toggle で開く (default 折りたたみ、 既に開いていれば click skip)
       const toggleBtn = page.locator(`button[aria-label="インスペクタを開く"]`).first();
       if (await toggleBtn.count() > 0) {
@@ -137,11 +139,81 @@ const url = opts.url || PROD_URL_BASE;
         process.exit(3);
       }
     }
+    if (isPane5) {
+      // Pane 4 内最初の NewsItem を click → Reading Mode mount
+      const firstNews = page.locator(`.ws-pane4-news-item`).first();
+      try {
+        await firstNews.waitFor({ timeout: 5000 });
+        await firstNews.click();
+        await page.waitForTimeout(800); // overlay transition (240ms) + SSE 初回 chunk wait
+      } catch {
+        console.error(`[vision-eval] FATAL: .ws-pane4-news-item が見つからない / click 失敗`);
+        process.exit(3);
+      }
+      // Reading Mode mount assert (.ws-pane4-article-body)
+      try {
+        await page.locator(`.ws-pane4-article-body`).first().waitFor({ timeout: 8000 });
+        // SSE 翻訳 stream の first chunk + 部分表示まで wait (typical 2-4s)
+        await page.waitForTimeout(3000);
+      } catch {
+        console.error(`[vision-eval] FATAL: Reading Mode (.ws-pane4-article-body) が mount されない`);
+        process.exit(3);
+      }
+    }
 
     // ─── frame 取得 ────────────────────────────────────────────────────
     const frames = []; // { id, png_base64, label }
 
-    if (isPane4) {
+    if (isPane5) {
+      // Pane 5 専用 frame: Reading Mode (記事閲読 overlay) を locator-based clip
+      // v112-10 update: viewport 全体撮影は Pane 3/4 混入で精度低下、 [data-testid="pane5-reading-mode"]
+      // wrapper の bounding box のみ clip して Pane 5 領域に focus。
+      const pane5Locator = page.locator('[data-testid="pane5-reading-mode"]').first();
+      try {
+        await pane5Locator.waitFor({ timeout: 3000 });
+      } catch {
+        console.error(`[vision-eval] FATAL: [data-testid="pane5-reading-mode"] が mount されない`);
+        process.exit(3);
+      }
+      // 5 frames at scroll 0/200/400/600/800 (Reading Mode 内 scroll)
+      const readingScrollPositions = [0, 200, 400, 600, 800];
+      for (const y of readingScrollPositions) {
+        await page.evaluate((yy) => {
+          const root = document.querySelector('[data-testid="pane5-reading-mode"]');
+          if (!root) return;
+          // ReadingMode 内の scrollable container を探索 (overflow-y: auto/scroll)
+          const scrollers = root.querySelectorAll('*');
+          for (const el of scrollers) {
+            const cs = getComputedStyle(el);
+            if ((cs.overflowY === 'auto' || cs.overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
+              el.scrollTop = yy;
+              return;
+            }
+          }
+          // fallback: root 自身が scrollable
+          if (root.scrollHeight > root.clientHeight) root.scrollTop = yy;
+        }, y);
+        await page.waitForTimeout(450);
+        const buf = await pane5Locator.screenshot();
+        frames.push({
+          id: `reading-scroll-${y}`,
+          png_base64: buf.toString('base64'),
+          label: `Pane 5 Reading Mode (clipped) scroll ${y}px (frame ${frames.length + 1}/8)`,
+        });
+      }
+      // 翻訳 stream 完了 wait + 3 frames (typography / aman 評価用)、 同じく clipped
+      const translationWaitTimes = [2000, 2000, 2000]; // 累積 +2/+4/+6 秒
+      for (let i = 0; i < translationWaitTimes.length; i++) {
+        await page.waitForTimeout(translationWaitTimes[i]);
+        const buf = await pane5Locator.screenshot();
+        frames.push({
+          id: `reading-translation-${(i + 1) * 2}s`,
+          png_base64: buf.toString('base64'),
+          label: `Pane 5 SSE 翻訳 (clipped) +${(i + 1) * 2}s (frame ${frames.length + 1}/8)`,
+        });
+        if (frames.length >= 8) break;
+      }
+    } else if (isPane4) {
       // Pane 4 専用 frame: ニュース feed scroll + スキャナー切替 + scroll
       // 5 frames at ニュース tab (default): scroll 0 / 400 / 800 / 1200 / 1600
       // 3 frames at スキャナー tab: スキャナー click + 100ms / 500ms / scroll 400
@@ -206,9 +278,10 @@ const url = opts.url || PROD_URL_BASE;
     // v97 G-4 改修: accordion open を fallback chain で試行、 失敗時は scroll 位置を変えて
     // padding frame で必ず 8 frames を確保 (旧: ticker 違いで frame 数 5-8 変動 → scoring 基準 ばらつき)。
     // v112-7: Pane 4 mode では既に 8 frame 確保済 (新 Pane 4 frame ブロック内で完結)、 Pane 3 のみ実行。
+    // v112-10: Pane 5 mode も同様に skip (Reading Mode frame は完結済)
     let accordionOpened = false;
     const TARGET_TOTAL_FRAMES = 8;
-    if (!isPane4) {
+    if (!isPane4 && !isPane5) {
       await page.evaluate(() => window.scrollTo({ top: 1800, behavior: 'instant' }));
       await page.waitForTimeout(400);
 
@@ -255,18 +328,27 @@ const url = opts.url || PROD_URL_BASE;
     // v97 G-4 改修: 各軸の絶対 anchor (0/50/80/100) を明示することで session 間 drift bias 解消。
     // 旧 rubric は「品質が高いか」 の主観評価で「初回甘め、 2 回目以降 厳しめ」 pattern (3 run mean
     // でも variance ±4)。 新 rubric は anchor base で絶対基準、 「これは何点に該当するか」 の判定。
-    // v112-7: pane 別 context (Pane 3 = 詳細パネル全体 / Pane 4 = inspector ニュース+スキャナー)
-    const paneContext = isPane4
-      ? `「BeatScanner」 の Pane 4 (inspector、 narrow column 18-25% 幅、 マクロニュース feed + Cup-Handle スキャナー segmented tab) のスクリーンショット連続 frame ${frames.length} 枚
+    // v112-7/10: pane 別 context (Pane 3 = 詳細パネル全体 / Pane 4 = inspector ニュース+スキャナー / Pane 5 = Reading Mode 記事閲読 overlay)
+    let paneContext;
+    if (isPane5) {
+      paneContext = `「BeatScanner」 の Pane 5 (Reading Mode、 ニュース記事の構造化 + SSE 翻訳 viewer、 Pane 4 内 overlay) のスクリーンショット連続 frame ${frames.length} 枚
+
+frame 1-5: 記事 body scroll (0 / 200 / 400 / 600 / 800px、 narrow column 内 scroll)
+frame 6-8: SSE 翻訳 stream chunk 表示 (+2s / +4s / +6s、 翻訳 content reveal 過程)
+(Pane 5 は記事閲読 UX、 typography (serif 採用 / 行間 1.8-2.0 / max-width 640px) と spacing (余白 luxury) が aman 軸の核)`;
+    } else if (isPane4) {
+      paneContext = `「BeatScanner」 の Pane 4 (inspector、 narrow column 18-25% 幅、 マクロニュース feed + Cup-Handle スキャナー segmented tab) のスクリーンショット連続 frame ${frames.length} 枚
 
 frame 1-5: ニュース feed scroll (0 / 400 / 800 / 1200 / 1600px)
 frame 6-8: スキャナー tab 切替 (+100 / +500ms / scroll 400)
-(Pane 4 は narrow column のため scroll 量も Pane 3 の 1/3、 段落 reveal は section header divider + accent bar で評価)`
-      : `「BeatScanner」 の Pane 3 (詳細パネル) のスクリーンショット連続 frame ${frames.length} 枚
+(Pane 4 は narrow column のため scroll 量も Pane 3 の 1/3、 段落 reveal は section header divider + accent bar で評価)`;
+    } else {
+      paneContext = `「BeatScanner」 の Pane 3 (詳細パネル) のスクリーンショット連続 frame ${frames.length} 枚
 
 frame 1-5: 上から下への scroll 連続 (0 / 1200 / 2400 / 3600 / 4800px)
 frame 6-8: アコーディオン open 直後の連続 frame (+100 / +250 / +500ms)
 (frame 数が 5 以下の場合は scroll padding のみ、 motion 軸は scroll smoothness のみで判定)`;
+    }
 
     const RUBRIC = `
 あなたは Aman/Ritz-Carlton 級の高級 SaaS デザイン評価専門家です。

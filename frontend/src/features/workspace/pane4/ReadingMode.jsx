@@ -176,6 +176,7 @@ export default function ReadingMode({ item, onClose, jpEnabled }) {
           exit={shouldReduceMotion ? undefined : { opacity: 0, x: -8 }}
           transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
           style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+          data-testid="pane5-reading-mode"
         >
       <div
         className="ws-pane4-header"
