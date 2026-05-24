@@ -44,11 +44,21 @@ setTimeout(() => {
 }, HARD_TIMEOUT_MS).unref();
 
 const args = process.argv.slice(2);
-const opts = { ticker: 'AAPL', out: '.visual/vision-eval.json' };
+const opts = { ticker: 'AAPL', out: '.visual/vision-eval.json', bypassToken: null, pane: 'pane3' };
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--ticker') opts.ticker = args[++i];
   else if (args[i] === '--out') opts.out = args[++i];
   else if (args[i] === '--url') opts.url = args[++i];
+  else if (args[i] === '--bypass-token') opts.bypassToken = args[++i];
+  else if (args[i] === '--pane') opts.pane = args[++i]; // v112-7: pane3 (default) | pane4
+}
+// v112-4: env BYPASS_TOKEN を default として採用、 demo rate limit skip
+if (!opts.bypassToken && process.env.BYPASS_TOKEN) {
+  opts.bypassToken = process.env.BYPASS_TOKEN;
+}
+if (!['pane3', 'pane4'].includes(opts.pane)) {
+  console.error(`[vision-eval] FATAL: --pane must be 'pane3' or 'pane4', got: ${opts.pane}`);
+  process.exit(2);
 }
 
 const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -67,6 +77,13 @@ const url = opts.url || PROD_URL_BASE;
   try {
     browser = await chromium.launch({ headless: true });
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    // v112-4: BYPASS_TOKEN で demo rate limit skip、 PDCA 連続実行可能化
+    if (opts.bypassToken) {
+      await ctx.setExtraHTTPHeaders({ 'X-Bypass-Token': opts.bypassToken });
+      console.error(`[vision-eval] X-Bypass-Token header set (${opts.bypassToken.length} chars)`);
+    } else {
+      console.error('[vision-eval] BYPASS_TOKEN not set, demo rate limit may apply (6 run/IP/day max)');
+    }
     const page = await ctx.newPage();
 
     console.error(`[vision-eval] loading ${url} (ticker=${opts.ticker})`);
@@ -103,82 +120,157 @@ const url = opts.url || PROD_URL_BASE;
       process.exit(3);
     }
 
-    // ─── frame 取得 ────────────────────────────────────────────────────
-    // 静止フレーム: scroll 5 step (0 / 1200 / 2400 / 3600 / 4800px) で typography / spacing / color / aman 採点
-    // 動的フレーム: 上記 5 frame の連続性で motion 軸を採点 (scroll smoothness / CLS 検知)
-    // 加えて accordion open 3 frame で motion の transition 品格を採点
+    // v112-7: Pane 4 採点モード — toggle button click で Pane 4 open + 専用 frame 取得 + 専用 prompt
+    const isPane4 = opts.pane === 'pane4';
+    if (isPane4) {
+      // Pane 4 を toggle で開く (default 折りたたみ、 既に開いていれば click skip)
+      const toggleBtn = page.locator(`button[aria-label="インスペクタを開く"]`).first();
+      if (await toggleBtn.count() > 0) {
+        await toggleBtn.click();
+        await page.waitForTimeout(800); // panel mount + resize
+      }
+      // Pane 4 が mount されたか assert (.ws-pane4-header)
+      try {
+        await page.locator(`.ws-pane4-header`).first().waitFor({ timeout: 3000 });
+      } catch {
+        console.error(`[vision-eval] FATAL: Pane 4 (.ws-pane4-header) が mount されない。 toggle 失敗`);
+        process.exit(3);
+      }
+    }
 
+    // ─── frame 取得 ────────────────────────────────────────────────────
     const frames = []; // { id, png_base64, label }
 
-    const scrollPositions = [0, 1200, 2400, 3600, 4800];
-    for (const y of scrollPositions) {
-      await page.evaluate((yy) => window.scrollTo({ top: yy, behavior: 'instant' }), y);
-      await page.waitForTimeout(450); // layout settle (CLS が起きるなら検出される間隔)
-      const buf = await page.screenshot({ fullPage: false });
-      frames.push({
-        id: `scroll-${y}`,
-        png_base64: buf.toString('base64'),
-        label: `scroll position ${y}px (frame ${frames.length + 1}/8)`,
-      });
+    if (isPane4) {
+      // Pane 4 専用 frame: ニュース feed scroll + スキャナー切替 + scroll
+      // 5 frames at ニュース tab (default): scroll 0 / 400 / 800 / 1200 / 1600
+      // 3 frames at スキャナー tab: スキャナー click + 100ms / 500ms / scroll 400
+      const newsScrollPositions = [0, 400, 800, 1200, 1600];
+      for (const y of newsScrollPositions) {
+        await page.evaluate((yy) => window.scrollTo({ top: yy, behavior: 'instant' }), y);
+        await page.waitForTimeout(450);
+        const buf = await page.screenshot({ fullPage: false });
+        frames.push({
+          id: `news-scroll-${y}`,
+          png_base64: buf.toString('base64'),
+          label: `Pane 4 ニュース feed scroll ${y}px (frame ${frames.length + 1}/8)`,
+        });
+      }
+      // スキャナー tab click (3 frame)
+      await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+      await page.waitForTimeout(200);
+      const scannerBtn = page.locator(`.ws-pane4-jp-segmented button:has-text("スキャナー")`).first();
+      if (await scannerBtn.count() > 0) {
+        try {
+          await scannerBtn.click({ timeout: 1500 });
+          await page.waitForTimeout(100);
+          const f1 = await page.screenshot({ fullPage: false });
+          frames.push({ id: 'scanner-100ms', png_base64: f1.toString('base64'), label: `Pane 4 スキャナー切替 +100ms` });
+          await page.waitForTimeout(400);
+          const f2 = await page.screenshot({ fullPage: false });
+          frames.push({ id: 'scanner-500ms', png_base64: f2.toString('base64'), label: `Pane 4 スキャナー切替 +500ms (mount 完了)` });
+          await page.evaluate(() => window.scrollTo({ top: 400, behavior: 'instant' }));
+          await page.waitForTimeout(400);
+          const f3 = await page.screenshot({ fullPage: false });
+          frames.push({ id: 'scanner-scroll-400', png_base64: f3.toString('base64'), label: `Pane 4 スキャナー scroll 400px` });
+        } catch (e) {
+          // スキャナー click 失敗 → padding frame で補完
+        }
+      }
+      // padding (frame 数 8 確保)
+      let paddingIdx = 0;
+      while (frames.length < 8) {
+        const y = 2000 + (paddingIdx * 400);
+        await page.evaluate((yy) => window.scrollTo({ top: yy, behavior: 'instant' }), y);
+        await page.waitForTimeout(350);
+        const buf = await page.screenshot({ fullPage: false });
+        frames.push({ id: `padding-${y}`, png_base64: buf.toString('base64'), label: `Pane 4 scroll padding ${y}px` });
+        paddingIdx++;
+        if (paddingIdx > 5) break;
+      }
+    } else {
+      // Pane 3 既存挙動 (scroll 5 step + accordion 3 frame)
+      const scrollPositions = [0, 1200, 2400, 3600, 4800];
+      for (const y of scrollPositions) {
+        await page.evaluate((yy) => window.scrollTo({ top: yy, behavior: 'instant' }), y);
+        await page.waitForTimeout(450);
+        const buf = await page.screenshot({ fullPage: false });
+        frames.push({
+          id: `scroll-${y}`,
+          png_base64: buf.toString('base64'),
+          label: `scroll position ${y}px (frame ${frames.length + 1}/8)`,
+        });
+      }
     }
 
     // v97 G-4 改修: accordion open を fallback chain で試行、 失敗時は scroll 位置を変えて
     // padding frame で必ず 8 frames を確保 (旧: ticker 違いで frame 数 5-8 変動 → scoring 基準 ばらつき)。
-    await page.evaluate(() => window.scrollTo({ top: 1800, behavior: 'instant' }));
-    await page.waitForTimeout(400);
-
-    const TARGET_TOTAL_FRAMES = 8;
-    const accordionLabels = ['会社概要', '最新ニュース', '市場の声', '直近 8Q 履歴', 'アナリスト視点'];
+    // v112-7: Pane 4 mode では既に 8 frame 確保済 (新 Pane 4 frame ブロック内で完結)、 Pane 3 のみ実行。
     let accordionOpened = false;
-    for (const label of accordionLabels) {
-      if (frames.length >= TARGET_TOTAL_FRAMES) break;
-      const btn = page.locator(`button[aria-expanded="false"]:has-text("${label}")`).first();
-      if (await btn.count() === 0) continue;
-      try {
-        await btn.scrollIntoViewIfNeeded({ timeout: 1500 });
-        await btn.click({ timeout: 1500 });
-        accordionOpened = true;
-        // 3 frames at 100ms / 250ms / 500ms after click (motion transition 評価)
-        await page.waitForTimeout(100);
-        const f1 = await page.screenshot({ fullPage: false });
-        frames.push({ id: `acc-${label}-100ms`, png_base64: f1.toString('base64'), label: `accordion "${label}" +100ms (transition start)` });
-        await page.waitForTimeout(150);
-        const f2 = await page.screenshot({ fullPage: false });
-        frames.push({ id: `acc-${label}-250ms`, png_base64: f2.toString('base64'), label: `accordion "${label}" +250ms (mid)` });
-        await page.waitForTimeout(250);
-        const f3 = await page.screenshot({ fullPage: false });
-        frames.push({ id: `acc-${label}-500ms`, png_base64: f3.toString('base64'), label: `accordion "${label}" +500ms (fully open)` });
-        break;
-      } catch (e) {
-        // 1 accordion 失敗 → 次の label を試す
+    const TARGET_TOTAL_FRAMES = 8;
+    if (!isPane4) {
+      await page.evaluate(() => window.scrollTo({ top: 1800, behavior: 'instant' }));
+      await page.waitForTimeout(400);
+
+      const accordionLabels = ['会社概要', '最新ニュース', '市場の声', '直近 8Q 履歴', 'アナリスト視点'];
+      for (const label of accordionLabels) {
+        if (frames.length >= TARGET_TOTAL_FRAMES) break;
+        const btn = page.locator(`button[aria-expanded="false"]:has-text("${label}")`).first();
+        if (await btn.count() === 0) continue;
+        try {
+          await btn.scrollIntoViewIfNeeded({ timeout: 1500 });
+          await btn.click({ timeout: 1500 });
+          accordionOpened = true;
+          await page.waitForTimeout(100);
+          const f1 = await page.screenshot({ fullPage: false });
+          frames.push({ id: `acc-${label}-100ms`, png_base64: f1.toString('base64'), label: `accordion "${label}" +100ms (transition start)` });
+          await page.waitForTimeout(150);
+          const f2 = await page.screenshot({ fullPage: false });
+          frames.push({ id: `acc-${label}-250ms`, png_base64: f2.toString('base64'), label: `accordion "${label}" +250ms (mid)` });
+          await page.waitForTimeout(250);
+          const f3 = await page.screenshot({ fullPage: false });
+          frames.push({ id: `acc-${label}-500ms`, png_base64: f3.toString('base64'), label: `accordion "${label}" +500ms (fully open)` });
+          break;
+        } catch (e) {
+          // 1 accordion 失敗 → 次の label を試す
+        }
+      }
+
+      // fallback: accordion open ができなかった、 もしくは frame が足りない場合は scroll 位置で padding
+      let paddingIdx = 0;
+      while (frames.length < TARGET_TOTAL_FRAMES) {
+        const y = 2400 + (paddingIdx * 800);
+        await page.evaluate((yy) => window.scrollTo({ top: yy, behavior: 'instant' }), y);
+        await page.waitForTimeout(350);
+        const buf = await page.screenshot({ fullPage: false });
+        frames.push({ id: `padding-${y}`, png_base64: buf.toString('base64'), label: `scroll padding ${y}px (frame ${frames.length + 1}/${TARGET_TOTAL_FRAMES})` });
+        paddingIdx++;
+        if (paddingIdx > 5) break;
       }
     }
 
-    // fallback: accordion open ができなかった、 もしくは frame が足りない場合は scroll 位置で padding
-    let paddingIdx = 0;
-    while (frames.length < TARGET_TOTAL_FRAMES) {
-      const y = 2400 + (paddingIdx * 800);  // scroll 2400 / 3200 / 4000 / 4800 ...
-      await page.evaluate((yy) => window.scrollTo({ top: yy, behavior: 'instant' }), y);
-      await page.waitForTimeout(350);
-      const buf = await page.screenshot({ fullPage: false });
-      frames.push({ id: `padding-${y}`, png_base64: buf.toString('base64'), label: `scroll padding ${y}px (frame ${frames.length + 1}/${TARGET_TOTAL_FRAMES})` });
-      paddingIdx++;
-      if (paddingIdx > 5) break; // safety
-    }
-
-    console.error(`[vision-eval] captured ${frames.length} frames (accordion_opened=${accordionOpened}) in ${Date.now() - startTime}ms`);
+    console.error(`[vision-eval] captured ${frames.length} frames (pane=${opts.pane}, accordion_opened=${accordionOpened}) in ${Date.now() - startTime}ms`);
 
     // ─── Claude vision scoring ────────────────────────────────────────
     // v97 G-4 改修: 各軸の絶対 anchor (0/50/80/100) を明示することで session 間 drift bias 解消。
     // 旧 rubric は「品質が高いか」 の主観評価で「初回甘め、 2 回目以降 厳しめ」 pattern (3 run mean
     // でも variance ±4)。 新 rubric は anchor base で絶対基準、 「これは何点に該当するか」 の判定。
-    const RUBRIC = `
-あなたは Aman/Ritz-Carlton 級の高級 SaaS デザイン評価専門家です。
-米国株決算分析アプリ「BeatScanner」 の Pane 3 (詳細パネル) のスクリーンショット連続 frame ${frames.length} 枚を 5 軸で **絶対基準** 採点します。
+    // v112-7: pane 別 context (Pane 3 = 詳細パネル全体 / Pane 4 = inspector ニュース+スキャナー)
+    const paneContext = isPane4
+      ? `「BeatScanner」 の Pane 4 (inspector、 narrow column 18-25% 幅、 マクロニュース feed + Cup-Handle スキャナー segmented tab) のスクリーンショット連続 frame ${frames.length} 枚
+
+frame 1-5: ニュース feed scroll (0 / 400 / 800 / 1200 / 1600px)
+frame 6-8: スキャナー tab 切替 (+100 / +500ms / scroll 400)
+(Pane 4 は narrow column のため scroll 量も Pane 3 の 1/3、 段落 reveal は section header divider + accent bar で評価)`
+      : `「BeatScanner」 の Pane 3 (詳細パネル) のスクリーンショット連続 frame ${frames.length} 枚
 
 frame 1-5: 上から下への scroll 連続 (0 / 1200 / 2400 / 3600 / 4800px)
 frame 6-8: アコーディオン open 直後の連続 frame (+100 / +250 / +500ms)
-(frame 数が 5 以下の場合は scroll padding のみ、 motion 軸は scroll smoothness のみで判定)
+(frame 数が 5 以下の場合は scroll padding のみ、 motion 軸は scroll smoothness のみで判定)`;
+
+    const RUBRIC = `
+あなたは Aman/Ritz-Carlton 級の高級 SaaS デザイン評価専門家です。
+米国株決算分析アプリ ${paneContext} を 5 軸で **絶対基準** 採点します。
 
 # 採点 anchor (各軸の 0/50/80/100 点に相当する絶対基準)
 
