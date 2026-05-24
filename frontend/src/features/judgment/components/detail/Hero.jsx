@@ -57,13 +57,6 @@ export default function Hero({
    */
   hideEyebrow = false,
   hideCountdownChip = false,
-  /**
-   * v112-9 Phase A (multi-review 4 体 verdict 集約): pane3_hero='1' flag で大型 Hero。
-   * Aman ホテル「procession 入口 (低天井廊下 → 突然 33m 吹き抜け)」 idiom、
-   * padding 32 → 48px / h1 ticker 40 → 64px / logo 40 → 56px の 1.5-1.6x scale 落差。
-   * default false で既存挙動完全維持 (撤回コスト最小化)。
-   */
-  enlarged = false,
 }) {
   const tone =
     verdict === 'beat' ? 'gain' : verdict === 'miss' ? 'loss' : verdict === 'in-line' ? 'muted' : 'muted';
@@ -96,33 +89,29 @@ export default function Hero({
           // v86 R5 C: Aman / Ritz 入場感のため padding を --space-6 (24px) → --space-8 (32px) に
           // 一段「ロビー」 感が出る breathing room (token は 4/8/12/16/24/32/48 のみ、 7 は無し)。
           // Vision aman 70 → 75+ 狙い、 既存 token を使用 (design system 整合)。
-          //
-          // v112-9 Phase A: enlarged 時は padding 32 → 48px (Aman procession、 1.5x scale)
-          padding: enlarged ? 'var(--space-12, 48px)' : 'var(--space-8, 32px)',
+          padding: 'var(--space-8, 32px)',
           display: 'flex',
           alignItems: 'flex-start',
           justifyContent: 'space-between',
-          gap: enlarged ? 'var(--space-12, 48px)' : 'var(--space-8, 32px)',
+          gap: 'var(--space-8, 32px)',
           flexWrap: 'wrap',
         }}
       >
         {/* ticker 左側: ロゴ + テキスト情報 */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: enlarged ? 'var(--space-5, 20px)' : 'var(--space-3, 12px)', minWidth: 0, flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3, 12px)', minWidth: 0, flex: 1 }}>
           {/* Sprint 2: 企業ロゴ (48px / 角丸 / neutral gray fallback / fade-in 200ms)
               fadeIn=true: logo load 時に opacity 0→1 / 200ms ease-out
               monoFallback=true: fallback 頭文字円を neutral gray（投資業界色ルール遵守）
-              shape='rounded': border-radius = var(--radius-md, 12px)
-              v112-9 Phase A: enlarged 時 logo 40 → 56px、 marginTop も letter cap 揃え再計算 */}
+              shape='rounded': border-radius = var(--radius-md, 12px) */}
           {/* v99 dogfood feedback B (3 巡目): 旧 marginTop:4 でも user 体感「頭が高い」。
               真因: h1 fontSize 40 + lineHeight 1.05 で line box 42px、 letter glyph は
               line box top から ~3-5px 下、 cap height は ~28px (fontSize の 70%)。
               logo top edge と letter cap top を揃えるには marginTop が 9-11px 必要。
-              修正: marginTop 9px で「ticker 文字の頭」 と「logo 上端」 を視覚的に揃える。
-              v112-9 Phase A: enlarged 時 h1 64px / cap ~45px、 logo 56 → marginTop 14px (5px 増)。 */}
-          <div style={{ flexShrink: 0, marginTop: enlarged ? 14 : 9 }}>
+              修正: marginTop 9px で「ticker 文字の頭」 と「logo 上端」 を視覚的に揃える。 */}
+          <div style={{ flexShrink: 0, marginTop: 9 }}>
             <CompanyLogo
               ticker={ticker}
-              size={enlarged ? 56 : 40}
+              size={40}
               shape="rounded"
               monoFallback
               fadeIn
@@ -146,12 +135,11 @@ export default function Hero({
           )}
           <h1
             style={{
-              // v112-9 Phase A: enlarged 時 fontSize 40 → 64px (1.6x scale 落差、 Aman procession)
-              fontSize: enlarged ? 64 : 40,
+              fontSize: 40,
               fontWeight: 700,
-              letterSpacing: '-0.025em',
-              lineHeight: enlarged ? 1.0 : 1.05,
-              margin: enlarged ? '6px 0 8px' : '4px 0 4px',
+              letterSpacing: '-0.02em',
+              lineHeight: 1.05,
+              margin: '4px 0 4px',
               color: 'var(--text-primary)',
             }}
           >
@@ -160,8 +148,7 @@ export default function Hero({
           {companyName && (
             <div
               style={{
-                // v112-9 Phase A: enlarged 時 14 → 18px (補助 typography 段階化)
-                fontSize: enlarged ? 18 : 14,
+                fontSize: 14,
                 fontWeight: 500,
                 color: 'var(--text-secondary)',
                 lineHeight: 1.3,
