@@ -31,20 +31,43 @@ function formatPublishedAt(isoStr) {
   }
 }
 
-export default function ArticleHero({ title, subtitle, ticker, published_at, _sanitized }) {
+/**
+ * v116 R6 verdict 正規化 (UI/UX P2、 multi-review verdict)
+ *   - BEAT / PASS: 緑 (--color-gain)
+ *   - MISS / FAIL: 赤 (--color-loss)
+ *   - WATCH / unknown: amber (--color-warning) — default
+ */
+function normalizeVerdict(verdict) {
+  const v = String(verdict || '').toUpperCase();
+  if (v === 'BEAT' || v === 'PASS') return { label: 'BEAT', tone: 'gain' };
+  if (v === 'MISS' || v === 'FAIL') return { label: 'MISS', tone: 'loss' };
+  return { label: 'WATCH', tone: 'warning' };
+}
+
+export default function ArticleHero({ title, subtitle, ticker, published_at, verdict, _sanitized }) {
   const dateLabel = formatPublishedAt(published_at);
+  const verdictInfo = normalizeVerdict(verdict);
 
   return (
     <header
       data-testid="article-hero"
       className="article-hero"
     >
-      {/* ticker badge */}
-      {ticker && (
-        <div className="article-hero__ticker-badge">
-          {ticker}
+      {/* ticker + verdict badge row (v116 R6 UI/UX P2) */}
+      <div className="article-hero__badge-row">
+        {ticker && (
+          <div className="article-hero__ticker-badge">
+            {ticker}
+          </div>
+        )}
+        <div
+          className={`article-hero__verdict-badge article-hero__verdict-badge--${verdictInfo.tone}`}
+          data-testid="article-hero-verdict"
+          aria-label={`判定: ${verdictInfo.label}`}
+        >
+          {verdictInfo.label}
         </div>
-      )}
+      </div>
 
       {/* 記事 title — Noto Serif JP で FT Weekend idiom */}
       <h1 className="article-hero__title">

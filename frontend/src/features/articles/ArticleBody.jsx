@@ -18,6 +18,7 @@
  *   - feedback_citation_required.md (景表法/金商法 anchor)
  */
 
+import { useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { sanitizeText } from '../../lib/blocklist.js';
@@ -25,6 +26,32 @@ import { sanitizeText } from '../../lib/blocklist.js';
 // v116 R4: remark-gfm を有効化することで、 Markdown table syntax (| col |---| value |) を
 // <table> として render する。 plugin なしでは | パイプ生テキストが <p> に落ちるブランド毀損バグ。
 const REMARK_PLUGINS = [remarkGfm];
+
+/**
+ * v116 R6 (QA dogfooder P2): 比較表直後に挿入する中間 CTA component.
+ * 記事末 CTA だけだと途中離脱読者に届かないため、 第 1 幕の表直後にも CTA を置く。
+ * 末尾 CTA より控えめスタイル (text link 寄り、 gold accent border 1px) で重複感を回避。
+ */
+function MidArticleCTA({ ticker }) {
+  if (!ticker) return null;
+  return (
+    <aside
+      className="article-mid-cta"
+      data-testid="article-mid-cta"
+      aria-label={`${ticker} を BeatScanner で詳しく見る`}
+    >
+      <a
+        href={`/?ticker=${encodeURIComponent(ticker)}`}
+        className="article-mid-cta__link"
+      >
+        <span className="article-mid-cta__icon" aria-hidden="true">→</span>
+        <span className="article-mid-cta__text">
+          <strong>{ticker}</strong> の決算詳細・5 条件判定を見る
+        </span>
+      </a>
+    </aside>
+  );
+}
 
 /**
  * Markdown 本文中の [N] を footnote anchor リンクに変換する前処理
@@ -64,7 +91,7 @@ function extractTLDR(md) {
  * react-markdown の components で使用するカスタム renderer factory
  * onSanitized: sanitize で削除が発生した場合に呼ぶ callback
  */
-function buildComponents(onSanitized) {
+function buildComponents(onSanitized, ticker, tableRenderedRef) {
   /**
    * children の text 内容を sanitize し、 違反 sentence を削除して返す。
    * 削除が発生した場合は onSanitized() を呼ぶ。
@@ -137,11 +164,17 @@ function buildComponents(onSanitized) {
     },
 
     // table 系: そのまま (数値 table は BAD-5/6 対象外)
+    // v116 R6 (QA P2): 最初の table 直後に中間 CTA を挿入 (途中離脱読者向け導線)
     table({ children }) {
+      const isFirstTable = tableRenderedRef && !tableRenderedRef.current;
+      if (isFirstTable) tableRenderedRef.current = true;
       return (
-        <div className="article-prose__table-wrapper">
-          <table>{children}</table>
-        </div>
+        <>
+          <div className="article-prose__table-wrapper">
+            <table>{children}</table>
+          </div>
+          {isFirstTable && ticker && <MidArticleCTA ticker={ticker} />}
+        </>
       );
     },
     thead({ children }) { return <thead>{children}</thead>; },
@@ -153,11 +186,19 @@ function buildComponents(onSanitized) {
     // anchor:
     //   - 外部リンク (http/https): target="_blank" + rel="noopener noreferrer"
     //   - /stock/<TICKER> (P3.7 internal link): rel="noopener" のみ (same-origin)
-    //   - #cite-N (footnote): className で装飾
+    //   - #cite-N (footnote): className で装飾 + aria-label (v116 R6 a11y、 UI/UX P3)
     a({ href, children }) {
       const isExternal = href && (href.startsWith('http://') || href.startsWith('https://'));
       const isCitation = href && href.startsWith('#cite-');
       const isInternalStock = href && href.startsWith('/stock/');
+      // v116 R6 a11y: citation [N] は VoiceOver で「かっこ 1 かっこ」 と読まれるだけだったため
+      //   aria-label="出典 N を見る" を付与。 N は href の #cite-N から抽出。
+      //   internal stock link は ticker 名 (children) が読み上げられるので追加不要。
+      let ariaLabel;
+      if (isCitation) {
+        const m = /#cite-(\d+)/.exec(href);
+        if (m) ariaLabel = `出典 ${m[1]} を見る`;
+      }
       return (
         <a
           href={href}
@@ -168,6 +209,7 @@ function buildComponents(onSanitized) {
             : undefined
           }
           className={isCitation ? 'article-prose__cite-link' : undefined}
+          aria-label={ariaLabel}
         >
           {children}
         </a>
@@ -182,9 +224,11 @@ function buildComponents(onSanitized) {
  * @param {string} bodyMd       - Markdown 本文
  * @param {Function} onSanitized - sanitize で削除が発生したときの callback
  */
-export default function ArticleBody({ bodyMd, onSanitized }) {
+export default function ArticleBody({ bodyMd, onSanitized, ticker }) {
   const handleSanitized = typeof onSanitized === 'function' ? onSanitized : () => {};
-  const components = buildComponents(handleSanitized);
+  // v116 R6: 最初の table 直後に中間 CTA を挿入するための tracker (再 render で reset しない)
+  const tableRenderedRef = useRef(false);
+  const components = buildComponents(handleSanitized, ticker, tableRenderedRef);
 
   // v116: TL;DR section を抽出して accent box で render、 残りは通常 ReactMarkdown
   const { tldr, rest } = extractTLDR(bodyMd);

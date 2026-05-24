@@ -184,19 +184,21 @@ export default function ArticlePage({ slug }) {
       {/* 記事コンテナ: max-width 680px + 中央寄せ */}
       <div className="article-page__container">
 
-        {/* Hero: title + subtitle + 発行日 + _sanitized note */}
+        {/* Hero: title + subtitle + 発行日 + verdict badge + _sanitized note */}
         <ArticleHero
           title={title}
           subtitle={subtitle}
           ticker={ticker}
           published_at={published_at}
+          verdict={article.verdict}
           _sanitized={sanitized}
         />
 
-        {/* 本文: react-markdown + sanitize (v116 R4 ErrorBoundary 内側) */}
+        {/* 本文: react-markdown + sanitize + 中間 CTA (v116 R6 ticker 渡し) */}
         <ArticleBody
           bodyMd={body_md}
           onSanitized={handleSanitized}
+          ticker={ticker}
         />
 
         {/* 出典リスト */}

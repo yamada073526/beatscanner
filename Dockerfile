@@ -2,9 +2,10 @@
 FROM node:22-alpine AS frontend-builder
 WORKDIR /app
 
-# v116: OGP PNG 生成 (build-articles.mjs + og-overlay.mjs + @resvg/resvg-js) で
-# 日本語 + Latin glyph が描画されるよう alpine に Noto fonts を install する。
-# 未 install だと resvg が text を空 glyph で render し、 OGP image が "中身が空" になる。
+# v116 R6: font layer を package.json COPY より前段に配置 (cache 効率化、 frontend architect P3)。
+# OGP PNG 生成 (build-articles.mjs + og-overlay.mjs + @resvg/resvg-js) で
+# 日本語 + Latin glyph 描画に Noto CJK が必要。 alpine デフォルトでは未 install。
+# この layer は font package が変わらない限り cache hit (毎 deploy 60-90s 短縮)。
 RUN apk add --no-cache font-noto font-noto-cjk
 
 # Vite は import.meta.env.VITE_* をビルド時に静的展開するため、
@@ -19,20 +20,25 @@ ARG VITE_SENTRY_DSN
 # v113 P3: build-articles.mjs (SSG) が Supabase から記事を fetch するため必要。
 # service_role key を渡すと RLS bypass で draft も含めてビルド可能 (P3.1 では anon でも published のみで動作)。
 ARG SUPABASE_SERVICE_ROLE_KEY
+# v116 R6: cache-bust を ARG 化 (frontend architect P3 推奨)。 Railway Service Variables で
+# `BUILD_TIMESTAMP=$(date +%s)` を任意に set すれば Dockerfile 編集なしで build cache invalidation
+# 可能。 article publish 後の手動 deploy で cache hit を防ぐ。 default は固定文字列 (cache 維持)。
+ARG BUILD_TIMESTAMP=stable
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
     VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY \
     VITE_GA4_ID=$VITE_GA4_ID \
     VITE_CLARITY_ID=$VITE_CLARITY_ID \
     VITE_SENTRY_DSN=$VITE_SENTRY_DSN \
-    SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY
+    SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY \
+    BUILD_TIMESTAMP=$BUILD_TIMESTAMP
 
 COPY frontend/package*.json ./frontend/
 RUN cd frontend && npm ci
 
 COPY frontend/ ./frontend/
-# v116 cache-bust: echo を RUN 行内に置くことで Dockerfile string hash を強制更新
-# (= layer cache miss → build-articles.mjs が再実行され Supabase fetch が走る)
-RUN cd frontend && npm run build && echo "build-articles-ssg-2026-05-25-r5-gold-divider"
+# v116 R6 cache-bust: ARG 経由で動的 invalidation 可。 BUILD_TIMESTAMP 値が変わると
+# 以下 layer が cache miss → build-articles.mjs (Supabase fetch) が再実行される。
+RUN cd frontend && npm run build && echo "build-articles-ssg-r6-$BUILD_TIMESTAMP"
 # Output: /app/frontend/dist/ + /app/frontend/dist/articles/<slug>/index.html (build-articles.mjs)
 
 

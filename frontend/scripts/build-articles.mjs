@@ -308,6 +308,68 @@ const TICKER_BLOCKLIST = new Set([
 ]);
 
 /**
+ * v116 R6 (multi-review verdict 案 C、 user 明示依頼): company name → ticker mapping.
+ *
+ * 「Berkshire」「Visa」 等の company name 形式言及も internal link 化する。
+ * 業界事例 (Bloomberg / WSJ) と同パターン。 1 記事 1 ticker 初出 1 回ルールは継承。
+ *
+ * whitelist: S&P 500 主要 + メガキャップ 30 社程度。 過剰拡張すると視覚 noise + 誤マップ
+ * リスク高、 「主要 30 社のみ」 で start し、 user dogfood で増やす方針。
+ *
+ * Trust Cliff 防止: 各 ticker は FMP / yfinance で分析可能 (BRK.B 含む) のため
+ * link 先 404 / 「準備中」 リスクなし。
+ *
+ * mapping rule:
+ *   - key: 記事本文に現れる company name (case-insensitive、 word-boundary match)
+ *   - value: BeatScanner で `/stock/<value>` route に飛ぶ valid ticker symbol
+ *   - 同 ticker は同記事内 1 回のみ link 化 (TICKER_RE / linkedSet と共用)
+ */
+const COMPANY_TICKER_MAP = {
+  // メガキャップ (FAANG + 主要)
+  'Amazon': 'AMZN',
+  'Apple': 'AAPL',
+  'Microsoft': 'MSFT',
+  'Google': 'GOOGL',           // GOOGL を Alphabet と分けて使う場合は別 mapping (下に追加)
+  'Alphabet': 'GOOGL',
+  'Meta': 'META',
+  'Tesla': 'TSLA',
+  'Nvidia': 'NVDA',
+  'NVIDIA': 'NVDA',
+  'Netflix': 'NFLX',
+  // 金融
+  'Berkshire Hathaway': 'BRK.B',
+  'Berkshire': 'BRK.B',
+  'Visa': 'V',
+  'Mastercard': 'MA',
+  'JPMorgan': 'JPM',
+  'Bank of America': 'BAC',
+  'Goldman Sachs': 'GS',
+  'Morgan Stanley': 'MS',
+  // ヘルスケア
+  'UnitedHealth': 'UNH',
+  'Johnson & Johnson': 'JNJ',
+  'Pfizer': 'PFE',
+  'Eli Lilly': 'LLY',
+  // 半導体 / Tech
+  'TSMC': 'TSM',
+  'Broadcom': 'AVGO',
+  'AMD': 'AMD',
+  'Intel': 'INTC',
+  'Salesforce': 'CRM',
+  'Oracle': 'ORCL',
+  'Adobe': 'ADBE',
+  // 消費財
+  'Costco': 'COST',
+  'Walmart': 'WMT',
+  'McDonald\'s': 'MCD',
+  'Coca-Cola': 'KO',
+  'Procter & Gamble': 'PG',
+  // エネルギー
+  'Exxon': 'XOM',
+  'Chevron': 'CVX',
+};
+
+/**
  * markdown body_md 内の ticker mention を `/stock/<TICKER>` 内部リンクに変換する。
  *
  * @param {string} bodyMd   元の markdown テキスト (sanitize 済み)
@@ -350,21 +412,42 @@ function addTickerInternalLinks(bodyMd, articleTicker) {
   const TICKER_RE = /(?<![A-Z])([A-Z]{2,5})(?![A-Z])/g;
 
   function replaceInPlainText(text) {
-    return text.replace(TICKER_RE, (match, ticker) => {
+    // Step 1: ticker symbol match (大文字 2-5 文字、 既存処理)
+    let processed = text.replace(TICKER_RE, (match, ticker) => {
       // blocklist チェック (英単語と衝突する ticker をスキップ)
       if (TICKER_BLOCKLIST.has(ticker)) return match;
-
       // 初出チェック
-      if (linkedSet.has(ticker)) {
-        // 2 件目以降: plain text のまま (自リンク含む)
-        return match;
-      }
-
+      if (linkedSet.has(ticker)) return match;
       // 初出: リンク化
       linkedSet.add(ticker);
       linkedTickers.push(ticker);
       return `[${ticker}](/stock/${ticker})`;
     });
+
+    // Step 2: v116 R6 company name match (whitelist 限定)
+    //   word-boundary + case-sensitive (固有名詞のため)、 longest-first で「Berkshire Hathaway」 を
+    //   「Berkshire」 より先に match (短い prefix が先 match して長い name が漏れるのを防ぐ)
+    const companyNames = Object.keys(COMPANY_TICKER_MAP).sort((a, b) => b.length - a.length);
+    for (const name of companyNames) {
+      const ticker = COMPANY_TICKER_MAP[name];
+      // 既に link 化済の ticker は skip (初出 1 回ルール)
+      if (linkedSet.has(ticker)) continue;
+      // word-boundary: 前後が ASCII 英数 / `-` でない位置 (日本語 / 句読点 / 空白で囲まれる)
+      // escape regex special chars in name (e.g. "McDonald's", "Johnson & Johnson")
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(`(?<![A-Za-z0-9-])${escaped}(?![A-Za-z0-9-])`, 'g');
+      // first match のみ link 化 (replace 1 回)
+      let replaced = false;
+      processed = processed.replace(re, (match) => {
+        if (replaced || linkedSet.has(ticker)) return match;
+        replaced = true;
+        linkedSet.add(ticker);
+        linkedTickers.push(`${name}→${ticker}`);
+        return `[${match}](/stock/${ticker})`;
+      });
+    }
+
+    return processed;
   }
 
   // テキストを preserved blocks と通常テキストに分割して処理
@@ -490,12 +573,14 @@ function buildArticleHtml(baseHtml, article, ogImageUrl) {
   <meta property="og:title" content="${escapeHtml(title || 'BeatScanner')}" />
   <meta property="og:description" content="${escapeHtml(description)}" />
   <meta property="og:image" content="${escapeHtml(ogImageUrl)}" />
+  <meta property="og:image:alt" content="${escapeHtml(title || 'BeatScanner 決算分析レポート')}" />
   <meta property="og:url" content="${canonicalUrl}" />
   <meta property="og:type" content="article" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${escapeHtml(title || 'BeatScanner')}" />
   <meta name="twitter:description" content="${escapeHtml(description)}" />
   <meta name="twitter:image" content="${escapeHtml(ogImageUrl)}" />
+  <meta name="twitter:image:alt" content="${escapeHtml(title || 'BeatScanner 決算分析レポート')}" />
   ${schemaOrgScript}`;
 
   // dist/index.html の <title> は vite が "Earnings Dashboard" 等を入れている
