@@ -86,6 +86,9 @@ export default function InsiderPanel({ ticker }) {
               const isBuy = r.type === 'P';
               const isSell = r.type === 'S';
               const tone = isBuy ? 'var(--color-gain)' : isSell ? 'var(--color-loss)' : 'var(--text-secondary)';
+              // v115 multi-review A-2: role (CEO/CFO/Director 等) を name 横に表示
+              // 主要役職 (CEO / CFO / COO / President / Chairman) は gold accent で強調
+              const isKeyExec = r.role && /CEO|CFO|COO|President|Chairman|Chief/i.test(r.role);
               return (
                 <li key={`${r.date}-${i}`} style={{
                   display: 'grid',
@@ -96,8 +99,26 @@ export default function InsiderPanel({ ticker }) {
                   alignItems: 'baseline',
                 }}>
                   <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{r.date || '—'}</span>
-                  <span style={{ color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {r.name}
+                  <span style={{
+                    color: 'var(--text-primary)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    gap: 6,
+                  }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>
+                    {r.role && (
+                      <span style={{
+                        fontSize: 10,
+                        color: isKeyExec ? 'var(--color-gold-accent, var(--text-secondary))' : 'var(--text-muted)',
+                        fontWeight: isKeyExec ? 600 : 500,
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {r.role}
+                      </span>
+                    )}
                   </span>
                   <span style={{ color: tone, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                     {isBuy ? '買' : isSell ? '売' : r.type}
@@ -123,12 +144,30 @@ export default function InsiderPanel({ ticker }) {
           </span>
         </header>
         {holders.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            {hStatus === 'restricted'
-              ? '13F 機関投資家保有データは Ultimate プラン (FMP $79/月) で開放されます'
-              : hStatus === 'empty'
-                ? '13F データはありません'
-                : '取得できませんでした'}
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            {hStatus === 'restricted' ? (
+              <>
+                {/* v115 multi-review A-1: Trust Cliff 修正 — Ultimate plan 訴求でなく
+                    無料代替 (SEC EDGAR 13F 検索) を提示。 景表法 §5 (優良誤認) 防止。 */}
+                <div>現状は Form 4 経営者売買のみ取得可能 (現プラン制限)。</div>
+                <div style={{ marginTop: 4 }}>
+                  機関投資家の保有動向は{' '}
+                  <a
+                    href={`https://efts.sec.gov/LATEST/search-index?q=%22${encodeURIComponent(ticker)}%22&forms=13F-HR&dateRange=custom`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: 'var(--color-accent)', textDecoration: 'underline' }}
+                  >
+                    SEC EDGAR 13F 検索
+                  </a>{' '}
+                  で無料閲覧できます。
+                </div>
+              </>
+            ) : hStatus === 'empty' ? (
+              '13F データはありません'
+            ) : (
+              '取得できませんでした'
+            )}
           </div>
         ) : (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>

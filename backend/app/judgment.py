@@ -148,13 +148,16 @@ def judge(
     company_name: str | None = None,
     currency: str = "USD",
 ) -> JudgmentResult:
-    periods = build_periods(income_statements, cash_flows, needed=3)
+    # v115: 機関投資家 standard 5 年表示。 5 条件 logic は最新 3 期 (t-2/t-1/t) のみ使用、
+    # 残り 2 期は chart 表示用 (W. O'Neil / IBD CAN SLIM「accelerating earnings」判定可能)。
+    periods = build_periods(income_statements, cash_flows, needed=5)
     if len(periods) < 3:
         raise ValueError(
             f"Need at least 3 annual periods of data, got {len(periods)}"
         )
 
-    p_t2, p_t1, p_t = periods
+    # 5 条件は最新 3 期のみ使用 (logic 不変)、 chart は全 periods (最大 5 期) を slice(-5) で描画
+    p_t2, p_t1, p_t = periods[-3:]
 
     # 条件①: 営業CFマージン ≥ 15%
     # ゼロ除算ガード: 売上高が正値の場合のみ計算

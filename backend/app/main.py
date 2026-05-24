@@ -2414,9 +2414,11 @@ async def _analyze_core(ticker: str, fmp_key: str | None, use_cache: bool = True
     is_etf = False
 
     try:
+        # v115: 機関投資家 standard 5 年表示のため limit=4 → limit=6 (1 件 buffer)
+        # 5 条件 logic は judge() 内で periods[-3:] のみ使用、 残り 2 件は chart 表示用
         income, cash, profile = await asyncio.gather(
-            client.income_statement(ticker_u, limit=4, period="annual"),
-            client.cash_flow(ticker_u, limit=4, period="annual"),
+            client.income_statement(ticker_u, limit=6, period="annual"),
+            client.cash_flow(ticker_u, limit=6, period="annual"),
             client.profile(ticker_u),
             return_exceptions=True,
         )
@@ -3211,6 +3213,7 @@ async def _fetch_filings_from_sec_edgar(sym: str, form_type: str, limit: int = 5
     recent = data.get("filings", {}).get("recent", {})
     forms = recent.get("form", []) or []
     dates = recent.get("filingDate", []) or []
+    report_dates = recent.get("reportDate", []) or []  # v115: 会計年度末日 (例 "2024-09-28")
     accessions = recent.get("accessionNumber", []) or []
     primary_docs = recent.get("primaryDocument", []) or []
     out: list[dict] = []
@@ -3221,6 +3224,7 @@ async def _fetch_filings_from_sec_edgar(sym: str, form_type: str, limit: int = 5
         if i >= len(dates) or i >= len(accessions):
             continue
         date_s = str(dates[i])[:10]
+        report_date_s = str(report_dates[i])[:10] if i < len(report_dates) and report_dates[i] else None
         accession = accessions[i].replace("-", "")
         primary = primary_docs[i] if i < len(primary_docs) else ""
         if primary:
@@ -3229,6 +3233,7 @@ async def _fetch_filings_from_sec_edgar(sym: str, form_type: str, limit: int = 5
             url = f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type={form_type}"
         out.append({
             "date": date_s,
+            "report_date": report_date_s,  # v115 multi-review A-4: 会計年度末日を frontend に pass
             "title": form_type,
             "url": url,
         })
@@ -12337,9 +12342,17 @@ async def get_insider(ticker: str, request: Request) -> dict:
                 "D" if ttype.startswith("D") else
                 ttype[:1] or "—"
             )
+            # v115 multi-review verdict A-2: officerTitle 役職を pass through
+            # CEO / CFO / Director / 10% Owner 等を frontend で太字/gold accent 強調可能化
+            raw_title = it.get("officerTitle") or it.get("typeOfOwner") or ""
+            if not raw_title and it.get("isDirector"):
+                raw_title = "Director"
+            elif not raw_title and it.get("isOfficer"):
+                raw_title = "Officer"
             form4.append({
                 "date": it.get("transactionDate") or it.get("filingDate"),
                 "name": it.get("reportingName") or it.get("insiderName") or "—",
+                "role": raw_title or None,
                 "type": type_short,
                 "shares": int(shares) if shares else 0,
                 "price": float(price) if price else 0.0,

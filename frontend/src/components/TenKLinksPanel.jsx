@@ -21,6 +21,16 @@ function fmtDateJa(iso) {
   return `${y}年${parseInt(m, 10)}月${parseInt(d, 10)}日`;
 }
 
+// v115 multi-review A-4: report_date (会計年度末日 例 "2024-09-28") を
+// 「FY2024 (2024年9月期)」 形式に整形。 文書の意味が 2 秒で伝わる institutional label
+function fmtFiscalYearLabel(reportDateIso) {
+  if (!reportDateIso) return null;
+  const [y, m] = reportDateIso.split('-');
+  if (!y || !m) return null;
+  const monthNum = parseInt(m, 10);
+  return `FY${y} (${y}年${monthNum}月期)`;
+}
+
 export default function TenKLinksPanel({ ticker, hideHeading = false }) {
   const [items, setItems] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -72,40 +82,47 @@ export default function TenKLinksPanel({ ticker, hideHeading = false }) {
         </h3>
       )}
       <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {items.map((it, i) => (
-          <li key={`${it.url}-${i}`}>
-            <a
-              href={it.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                fontSize: 12,
-                color: 'var(--text-primary)',
-                textDecoration: 'none',
-                padding: '6px 10px',
-                borderRadius: 'var(--radius-sm, 8px)',
-                border: '1px solid var(--border)',
-                background: 'transparent',
-                transition: 'background 0.16s ease, border-color 0.16s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(56, 189, 248, 0.06)';
-                e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.45)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.borderColor = 'var(--border)';
-              }}
-            >
-              <FileText size={14} strokeWidth={1.75} aria-hidden style={{ color: 'rgb(56, 189, 248)' }} />
-              <span style={{ flex: 1 }}>{fmtDateJa(it.date)} 提出 — 10-K</span>
-              <ExternalLink size={12} strokeWidth={1.75} aria-hidden style={{ color: 'var(--text-muted)' }} />
-            </a>
-          </li>
-        ))}
+        {items.map((it, i) => {
+          // v115 multi-review A-4: 会計年度ラベル (FY2024 形式) を主表示、 提出日は補助
+          const fyLabel = fmtFiscalYearLabel(it.report_date);
+          return (
+            <li key={`${it.url}-${i}`}>
+              <a
+                href={it.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="tenk-link-card"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 12,
+                  color: 'var(--text-primary)',
+                  textDecoration: 'none',
+                  padding: '6px 10px',
+                  borderRadius: 'var(--radius-sm, 8px)',
+                  border: '1px solid var(--border)',
+                  background: 'transparent',
+                  transition: 'background 0.16s ease, border-color 0.16s ease',
+                }}
+              >
+                {/* v115 multi-review A-3: raw hex → design token */}
+                <FileText size={14} strokeWidth={1.75} aria-hidden style={{ color: 'var(--color-accent)' }} />
+                <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {fyLabel ? (
+                    <>
+                      <span style={{ fontWeight: 600 }}>{fyLabel} 10-K</span>
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>提出日: {fmtDateJa(it.date)}</span>
+                    </>
+                  ) : (
+                    <span>{fmtDateJa(it.date)} 提出 — 10-K</span>
+                  )}
+                </span>
+                <ExternalLink size={12} strokeWidth={1.75} aria-hidden style={{ color: 'var(--text-muted)' }} />
+              </a>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

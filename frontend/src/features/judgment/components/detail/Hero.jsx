@@ -189,15 +189,15 @@ export default function Hero({
           )}
           </div>{/* end: テキスト情報 div */}
         </div>{/* end: ロゴ + テキスト flex div */}
-        {/* Sprint 3: EarningsRing が wrapper(ring + 下ラベル) を返すため flex-start に変更 */}
+        {/* Sprint 3: EarningsRing が wrapper(ring + 下ラベル) を返すため flex-start に変更
+            v115 fix: Number.isFinite() gate を除去、 EarningsRing 内部で 'unknown' state を扱う
+            (data 未取得時に「取得待ち」 fallback 表示で「壊れて見える」 bug 対策) */}
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3, 12px)' }}>
-          {Number.isFinite(nextEarningsDays) && (
-            <EarningsRing
-              daysToEarnings={nextEarningsDays}
-              earningsDate={nextEarningsDate}
-              size={44}
-            />
-          )}
+          <EarningsRing
+            daysToEarnings={nextEarningsDays}
+            earningsDate={nextEarningsDate}
+            size={44}
+          />
           {/* Phase 2.9 Sprint H3 #Gold Foil verdict badge (Aman 級 100 点 verdict、 案 1):
               Beat 時に gold metallic gradient で「最高級ホテルの真鍮プレート」 idiom。
               他 verdict (Miss / In-line / 判定待ち) は既存 tone (loss / muted) 維持。

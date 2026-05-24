@@ -10293,3 +10293,11 @@ button.ds-chip[data-pressed="true"]:hover {
   }
 }
 
+
+/* v115 multi-review A-3: TenKLinksPanel hover (raw hex → design token).
+   旧: onMouseEnter で rgba(56,189,248,0.06) 直書き → design-system-check BLOCK
+   inline style border (0,1,0) override: attr selector + class で 0,2,1 確保 */
+a.tenk-link-card[href]:hover {
+  background: color-mix(in srgb, var(--color-accent) 6%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+}

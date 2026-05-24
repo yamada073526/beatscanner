@@ -480,7 +480,7 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
   const stepTimerRef = useRef(null);
   const vizPanelRef = useRef(null);
   const bannerShownRef = useRef(false);
-  const [selectedYears, setSelectedYears] = useState(3);
+  const [selectedYears, setSelectedYears] = useState(5);  // v115: 機関投資家 standard (W. O'Neil / CAN SLIM「accelerating earnings」判定可能、 過去 sub-agent verdict 整合)
 
   // バックグラウンド事前生成
   const [bgVizData, setBgVizData] = useState(null);
@@ -680,7 +680,7 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
         };
         // ★ Phase1: LLMなしで数値データのみ即取得（0.3〜1秒）
         try {
-          const instantJson = await generateVisualizationInstant(analysis.ticker, enrichedData, 3);
+          const instantJson = await generateVisualizationInstant(analysis.ticker, enrichedData, 5);  // v115: 機関投資家 standard 5 年
           setVizData(instantJson);
           setVizState('done');
           setAutoDisplayed(true);
@@ -691,7 +691,7 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
         }
 
         // ★ Phase2: narrative を通常エンドポイントで取得（バックグラウンド）
-        const promise = generateVisualization(analysis.ticker, enrichedData, 3);
+        const promise = generateVisualization(analysis.ticker, enrichedData, 5);  // v115: 機関投資家 standard 5 年
         bgVizPromiseRef.current = promise;
         const fullJson = await promise;
         // narrative で上書き（Phase1の数値データを保持しつつテキスト系を補完）
