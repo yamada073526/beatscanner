@@ -114,6 +114,13 @@ async function fetchPublishedArticles() {
   // service_role key があれば draft も含めてビルド可 (P3.1 では optional)
   const apiKey = serviceRoleKey || anonKey;
 
+  // v114 deploy 診断: env 取得状況を build log に明示出力
+  console.log(
+    `[build-articles] env diag: VITE_SUPABASE_URL=${supabaseUrl ? supabaseUrl.slice(0, 30) + '...' : '<missing>'} | ` +
+    `serviceRoleKey=${serviceRoleKey ? 'present' : '<missing>'} | ` +
+    `anonKey=${anonKey ? 'present' : '<missing>'}`,
+  );
+
   if (!supabaseUrl || !apiKey) {
     console.warn(
       '[build-articles] VITE_SUPABASE_URL or key が未設定。記事 HTML 生成をスキップします。',

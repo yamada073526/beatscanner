@@ -11,11 +11,15 @@ ARG VITE_GA4_ID
 ARG VITE_CLARITY_ID
 # handover v66 §1 round 3: Sentry frontend error tracking。未設定時は silent skip (lib/sentry.js).
 ARG VITE_SENTRY_DSN
+# v113 P3: build-articles.mjs (SSG) が Supabase から記事を fetch するため必要。
+# service_role key を渡すと RLS bypass で draft も含めてビルド可能 (P3.1 では anon でも published のみで動作)。
+ARG SUPABASE_SERVICE_ROLE_KEY
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
     VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY \
     VITE_GA4_ID=$VITE_GA4_ID \
     VITE_CLARITY_ID=$VITE_CLARITY_ID \
-    VITE_SENTRY_DSN=$VITE_SENTRY_DSN
+    VITE_SENTRY_DSN=$VITE_SENTRY_DSN \
+    SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY
 
 COPY frontend/package*.json ./frontend/
 RUN cd frontend && npm ci
