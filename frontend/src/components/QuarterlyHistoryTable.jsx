@@ -240,14 +240,19 @@ export default function QuarterlyHistoryTable({ ticker, limit = 8, columns, halo
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [haloTriggerRef]);
 
-  // v108 multi-review verdict (議題 1): ChapterTabs の「直近 8Q」 tab 切替 mount 時に halo 1 回発火。
+  // v108 multi-review verdict (議題 1) + v109 hotfix:
+  //   ChapterTabs の「直近 8Q」 tab 切替 mount 時に halo 1 回発火。
+  //   真因: mount 時は loading=true で `<QuarterlyHistoryGhost />` early return、
+  //         haloRef.current が null で trigger 呼出 no-op。
+  //   fix: deps に `data` 追加 → data fetch 完了後に re-render → ref.current set 済 →
+  //         useEffect 再発火 → trigger 呼出で halo 発火。
   //   data-halo-fired guard で 2 回目発火防止 (既存 hook の仕様)。
   useEffect(() => {
-    if (triggerOnMount) {
+    if (triggerOnMount && data) {
       triggerOnAccordionOpen?.();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [triggerOnMount]);
+  }, [triggerOnMount, data]);
 
   useEffect(() => {
     if (!ticker) return;
