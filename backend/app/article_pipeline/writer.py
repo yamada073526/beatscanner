@@ -225,7 +225,7 @@ async def write(
     researcher_output: ResearcherOutput,
     article_format: ArticleFormat = ArticleFormat.deep_dive,
     client: ClaudeClient | None = None,
-    model: str = "claude-opus-4-7",
+    model: str = "claude-sonnet-4-5",
     max_tokens: int = 4096,
 ) -> ArticleDraft:
     """SourceFact[] から記事 draft を生成.
@@ -234,7 +234,8 @@ async def write(
         researcher_output: Researcher の最終出力 (filter_high_confidence 適用済)
         article_format: deep_dive / theme_horizon / daily_digest
         client: 注入用 ClaudeClient、 None なら ENV から構築
-        model: Opus 4.7 (narration 最高精度)、 cost 削減時は Sonnet 4.6 fallback 可
+        model: Sonnet 4.5 (prefill + temperature 両対応の proven model)。 4-6/4-7 系は
+            extended thinking で temperature/prefill 拒否のため article_pipeline では非採用
         max_tokens: 4096 (1500 字 ≈ 3000-4000 token)
 
     Returns:

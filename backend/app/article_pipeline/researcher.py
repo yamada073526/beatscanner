@@ -102,7 +102,7 @@ async def research(
     raw_sources: list[dict],
     client: ClaudeClient | None = None,
     confidence_threshold: float = 0.7,
-    model: str = "claude-sonnet-4-6",
+    model: str = "claude-sonnet-4-5",
     max_tokens: int = 4096,
 ) -> ResearcherOutput:
     """raw_sources から SourceFact[] を整形して ResearcherOutput を返す.
@@ -120,7 +120,7 @@ async def research(
             }
         client: 注入用 ClaudeClient、 None なら ENV から構築
         confidence_threshold: filter_high_confidence の閾値 (default 0.7)
-        model: Sonnet 4.6 (cost rule default)、 上位 sprint で Opus に切替可
+        model: Sonnet 4.5 (prefill + temperature 両対応の proven model、 backend 7 箇所稼働実績)
         max_tokens: 4096 (15 fact × 200 tok 目安)
 
     Returns:
