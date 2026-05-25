@@ -46,9 +46,11 @@ function useDailyDigest() {
     let cancelled = false;
     (async () => {
       try {
+        // v117 P4 fix: articles table schema に verdict column 不在のため select から除外。
+        //   normalizeVerdict() は undefined を WATCH (default) に変換するため UI に影響なし。
         const { data, error } = await supabase
           .from('articles')
-          .select('slug, title, subtitle, ticker, verdict, published_at, generated_at')
+          .select('slug, title, subtitle, ticker, published_at, generated_at')
           .eq('status', 'published')
           .order('generated_at', { ascending: false })
           .limit(FETCH_LIMIT);
