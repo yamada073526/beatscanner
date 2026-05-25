@@ -8,3 +8,5 @@ export { default as AccordionSection } from './AccordionSection.jsx';
 export { useIntersectionLazy } from './useIntersectionLazy.js';
 // Phase 2.5 Sprint 2: SectionFadeSubtle (Tier L 入場 fade、 y:6 subtle variant)
 export { default as SectionFadeSubtle } from './SectionFadeSubtle.jsx';
+// ReturnGrid Sprint 2: 8 期間 cumulative return % chip grid (ETF + 個別株共通)
+export { default as ReturnGrid } from './ReturnGrid.jsx';
