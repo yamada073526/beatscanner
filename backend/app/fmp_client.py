@@ -117,15 +117,11 @@ class FMPClient:
     async def etf_holdings(self, ticker: str) -> list[dict]:
         """ETF top holdings list (weight / shares / name).
 
-        v118 ETF MVP: /stable/etf-holdings?symbol=SPY → [{asset, name, weightPercentage, ...}]
-
-        NOTE (v118 prod smoke test): FMP /stable/etf-holdings + /stable/etf-info は SPY で
-        404 を返した。 SPEC_2026-05-23_fmp-premium-features.md §4-H には `/stable/etf-holders`
-        (s 付) 表記もあり、 FMP plan か path 名が要確認。 現状は graceful degradation で
-        profile + historical_price のみで 5 metric の 3 つを埋め (AUM/TER/Top5 は null)、
-        次 sprint で FMP plan 確認 + 正規 path に修正。
+        v118 prod smoke test: /stable/etf-holdings は SPY で 404、 /stable/etf-holder (単数) を
+        試す。 SPEC §4-H には `/stable/etf-holders` 表記もあり、 stable は v3 と path 名が
+        微妙にズレている疑い (v3 は etf-holder 単数)。 失敗時は引き続き graceful degradation。
         """
-        return await self._get("/etf-holdings", {"symbol": ticker.upper()})
+        return await self._get("/etf-holder", {"symbol": ticker.upper()})
 
     async def etf_sector_weightings(self, ticker: str) -> list[dict]:
         """ETF sector breakdown (sector / weight %).
