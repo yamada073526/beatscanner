@@ -21,6 +21,8 @@
  *   - design token のみ (raw hex 禁止、 design-system-check 通過)
  */
 import React from 'react';
+import ReturnGrid from '../features/judgment/primitives/ReturnGrid.jsx';
+import StockPriceChart from './StockPriceChart.jsx';
 
 function _formatAum(aum) {
   if (aum == null || !Number.isFinite(aum)) return '—';
@@ -273,6 +275,7 @@ export default function EtfOverviewPanel({ etfInfo }) {
         </p>
       </div>
 
+      {/* Row 1: AUM / TER / 設定日 — 1Y Return は ReturnGrid に統合済のため削除 (Sprint 4) */}
       <div
         style={{
           display: 'grid',
@@ -282,17 +285,18 @@ export default function EtfOverviewPanel({ etfInfo }) {
       >
         <MetricChip label="AUM" value={_formatAum(ov.aum)} hint="運用資産総額" />
         <MetricChip label="TER" value={_formatTer(ov.expense_ratio)} hint="経費率 (年率)" />
-        <MetricChip
-          label="1Y Return"
-          value={_formatPct(ov.one_year_return_pct, 1)}
-          hint="直近 1 年リターン"
-        />
         <MetricChip label="設定日" value={_formatDate(ov.inception_date)} hint="運用開始" />
         {/* R9.4: 「籍」 chip 削除 (BeatScanner user は US 上場 ETF 前提で自明、 余白を活かす)。
             domicile データは backend response に残し、 将来 international ETF (FXI 等) で
             US 以外の値が頻出するなら再度表示検討。 */}
       </div>
 
+      {/* ReturnGrid: 8 期間 (1W/1M/3M/6M/1Y/3Y/5Y/10Y) — Sprint 4 mount。
+          1Y Return chip を Row 1 から削除して ReturnGrid に統合 (information density 改善)。
+          feedback_cls_envelope_pattern.md: minHeight 80 は ReturnGrid 内部で適用済。 */}
+      <ReturnGrid ticker={ticker} frameless={true} testId="etf-return-grid" />
+
+      {/* Row 2: 運用会社 / 保有銘柄数 / 平均出来高 / 資産クラス */}
       <div
         style={{
           display: 'grid',
@@ -331,6 +335,13 @@ export default function EtfOverviewPanel({ etfInfo }) {
             ))}
           </div>
         </div>
+      )}
+
+      {/* StockPriceChart: セクター構成直後 (= panel 末尾) — Sprint 4 mount。
+          ETF は Pro feature 不要のため isPremiumUser=false 固定。
+          既存 component を流用、 新規 logic なし。 */}
+      {ticker && (
+        <StockPriceChart ticker={ticker} isPremiumUser={false} />
       )}
     </section>
   );
