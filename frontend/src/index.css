@@ -10046,8 +10046,13 @@ button.ds-chip[data-pressed="true"]:hover {
  *   - typography: 'Noto Sans JP' (本文 Serif と階層 contrast)
  */
 .article-tldr {
-  margin: var(--space-5, 20px) 0 var(--space-8, 32px);
-  padding: var(--space-5, 20px) var(--space-6, 24px);
+  /* v117 R7-3 (3 体合議 UI/UX 推奨案 1 「label-as-tab」 layout):
+     label を box 外 上部に float、 bullet を box 上端から開始 → 「label 部が埋まり、
+     下部だけ空く」 非対称知覚を構造で解消 (Notion / Linear callout idiom)。
+     box 自身の上部に label の高さ分の margin-top を確保、 label を absolute で重ねる。 */
+  position: relative;
+  margin: var(--space-8, 32px) 0 var(--space-8, 32px);   /* label 分の上 margin */
+  padding: var(--space-3, 12px) var(--space-6, 24px) var(--space-3, 12px);
   background: color-mix(in srgb, var(--color-gold) 4%, var(--surface-2));
   border: 1px solid color-mix(in srgb, var(--color-gold) 25%, var(--border-subtle));
   border-left: 4px solid var(--color-gold);
@@ -10056,13 +10061,21 @@ button.ds-chip[data-pressed="true"]:hover {
 }
 
 .article-tldr__label {
+  /* v117 R7-3: label-as-tab. position: absolute で box 外上部に float */
+  position: absolute;
+  top: calc(-1 * var(--space-3, 12px) - 7px);   /* 文字 base line を box top と密着 */
+  left: var(--space-3, 12px);
+  padding: 2px var(--space-2, 8px);
+  background: var(--surface-2);                /* page bg と差別化、 chip 風 */
   font-family: 'Noto Sans JP', system-ui, sans-serif;
-  font-size: var(--text-body-sm, 13px);
+  font-size: var(--text-caption, 11px);
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   color: var(--color-gold);
   text-transform: uppercase;
-  margin-bottom: var(--space-3, 12px);
+  border: 1px solid color-mix(in srgb, var(--color-gold) 35%, var(--border));
+  border-radius: 999px;
+  line-height: 1.4;
 }
 
 .article-tldr__list {
@@ -10074,11 +10087,23 @@ button.ds-chip[data-pressed="true"]:hover {
 .article-tldr__item {
   font-family: 'Noto Sans JP', system-ui, sans-serif;
   font-size: var(--text-body, 15px);
-  line-height: 1.7;
+  line-height: 1.65;
   color: var(--text-primary);
-  padding: var(--space-2, 8px) 0 var(--space-2, 8px) var(--space-5, 20px);
+  /* v117 R7-3 label-as-tab: 上下 padding 同一 6px、 bullet 全体を box 中で均等分配 */
+  padding: var(--space-1, 6px) 0 var(--space-1, 6px) var(--space-5, 20px);
   position: relative;
   border-top: 1px solid color-mix(in srgb, var(--color-gold) 12%, transparent);
+}
+
+/* v117 R7-3 label-as-tab: 最初の item は box 上端と密着 (label は外に float) */
+.article-tldr__item:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+/* v117 R7-3 label-as-tab: 最後の item は box bottom と密着 */
+.article-tldr__item:last-child {
+  padding-bottom: 0;
 }
 
 .article-tldr__item:first-child {

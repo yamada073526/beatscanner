@@ -59,6 +59,18 @@ WRITER_SYSTEM_BASE = """Return ONLY a valid JSON. No markdown wrapper, no explan
 - 体言止め / 漢字熟語の連発を避ける、 「〜です」「〜ます」 調も OK (硬い「だ・である」 強制しない)
 - 「ですが」「ところで」 等の口語的接続詞も OK (ただし感嘆符・スラング禁止)
 
+# ticker symbol 正規化ルール (HARD CONSTRAINT、 v117 R7-2 user 指摘)
+- **企業を言及する時は正規の ticker symbol を必ず使う**、 略称や誤った symbol 禁止
+- BAD: 「Super Micro (SMIC)」 (SMIC は中国半導体製造大手の別企業、 Super Micro は **SMCI**)
+- GOOD: 「Super Micro Computer (SMCI)」 (NASDAQ 上場の正規 ticker)
+- ticker 不明の場合は **ticker 表記を省略** (company name のみで OK、 誤 ticker 記載より優先)
+  - BAD: 「Alice & Bob (ABOB)」 (ABOB は実在しない捏造 ticker、 Alice & Bob は仏 startup で未上場)
+  - GOOD: 「Alice & Bob (フランスの量子スタートアップ、 未上場)」
+- 米国上場確実な主要 ticker: SMCI / NVDA / GOOGL / AMZN / MSFT / AAPL / META / TSLA /
+  AVGO / AMD / INTC / TSM / AMAT / LRCX / MU / ASML / ARM / QCOM / MRVL / CRM / ORCL /
+  ADBE / CSCO / IBM / BABA / BIDU / JD / DELL / HPE 等
+- 不確実な場合は LLM 内蔵知識でなく **source_facts の citation 元 URL** に基づいて判断
+
 # 人名表記ルール (HARD CONSTRAINT、 v116 user フィードバック、 R4 で subtitle 明示)
 - **個人名は title / subtitle / body_md 全てで和文 / カタカナ統一** — 英字直書き禁止
   - **v116 R4 追加: subtitle にも適用**。 body だけ和文で subtitle が「Greg Abel 体制下の...」 になる
@@ -215,7 +227,10 @@ WRITER_SYSTEM_BASE = """Return ONLY a valid JSON. No markdown wrapper, no explan
      | GOOGL | 保有なし | **top 5 入り** [1] |
      ```
 4. ## 第 2 幕: 業界対立 / 競合 (proper_noun / causal を使い、 3-4 文)
-5. ## 第 3 幕: 投資家への含意 (両論併記、 確率表現で 100-150 字) — **v116 R6 構造化テンプレート HARD CONSTRAINT**:
+5. ## 第 3 幕: 業界対立 / 法的リスク / 競合動向 等 (proper_noun / causal、 3-4 文)
+   - 第 1 幕 数字、 第 2 幕 業界文脈、 第 3 幕 法的 / 競合 / 規制 が default 構成
+   - 各幕末で主役 ticker への影響を 1 文以上明示 (主役連関ルール)
+6. **## 投資家への含意** (HARD CONSTRAINT、 v117 R7-2 で第 3 幕とは **別 H2** に明確分離):
    ```
    ## 投資家への含意
    ### 強気シナリオ
@@ -225,6 +240,10 @@ WRITER_SYSTEM_BASE = """Return ONLY a valid JSON. No markdown wrapper, no explan
    ### 推奨アクション
    〜 (40-60 字、 ウォッチリスト追加 / 次イベント待ち / ポジションサイズ調整 / 静観 の 1 つを明示)
    ```
+   - **絶対禁止**: 「## 第 3 幕: 投資家への含意」 のように第 3 幕と合体させること
+     → frontend extractImplications が「## 投資家への含意」 のみ認識、 第 3 幕に書くと
+        2 列 callout デザインが適用されず散文 3 paragraph 表示になる
+   - 第 3 幕 (5.) と投資家への含意 (6.) は **必ず別 H2** として書く (= 1 記事で **4 つの H2**)
    - frontend は ### 強気/弱気 を緑/赤 2 列 callout で render、 ### 推奨アクション は full-width で
      強調表示する設計 (ArticleBody.jsx)
    - h3 marker の順序固定 (強気 → 弱気 → 推奨アクション)
@@ -273,7 +292,7 @@ def _few_shot_block() -> str:
 {
   "title": "NVDA $45.1B 達成、 TSMC 増設で供給緩和",
   "subtitle": "Data Center 比率 87.3% の集中度はリスクとも見れるが、 TSMC の CoWoS 増産は供給制約を緩和する",
-  "body_md": "## TL;DR\\n- NVDA Q4 売上 $45.1B、 前年同期比 +22% を達成 [1]\\n- Data Center 比率 87.3% で集中度リスク顕在化 [2]\\n- TSMC CoWoS-S 増産で供給制約緩和の可能性 [3]\\n\\n「決算が予想を超えた」 と片付けられがちな NVDA ですが、 数字を 1 枚めくると供給制約の構造変化が見えてきます。\\n\\n## 第 1 幕: 数字を時系列で\\n| NVDA Q4 指標 | 数値 |\\n|---|---|\\n| 売上 (前年同期比) | **$45.1B** (+22%) [1] |\\n| Data Center 売上比率 | **87.3%** [2] |\\n| TSMC CoWoS-S 増産 (2026 末) | **1.5 倍** [3] |\\n\\nここで注目したいのが Data Center (AI 学習用 GPU を企業向けに販売する部門) の売上比率です。 自動車に例えると、 売上の 9 割近くが SUV だけで稼げている状態 — 構造的な「集中」 が進んでいるわけです。\\n\\n## 第 2 幕: TSMC の動き\\nTSMC (NVDA の半導体を製造する台湾企業) が、 CoWoS-S と呼ばれる先進パッケージング技術の生産能力を、 2026 年末までに 1.5 倍に拡張すると発表しました [3]。 AI ASIC (推論専用チップ) 各社の需要を取り込む動きですが、 結果として NVDA の供給制約が緩和される可能性があります。\\n\\n## 第 3 幕: 投資家への含意\\n強気シナリオでは、 供給増による販売数量の上振れが期待できます。 一方、 弱気シナリオでは Data Center 集中度に依存しすぎていることのリスクが顕在化する可能性もあります。 1 社依存度を確認しながらポジションを判断したいところです。",
+  "body_md": "## TL;DR\\n- NVDA Q4 売上 $45.1B、 前年同期比 +22% を達成 [1]\\n- Data Center 比率 87.3% で集中度リスク顕在化 [2]\\n- TSMC CoWoS-S 増産で供給制約緩和の可能性 [3]\\n\\n「決算が予想を超えた」 と片付けられがちな NVDA ですが、 数字を 1 枚めくると供給制約の構造変化が見えてきます。\\n\\n## 第 1 幕: 数字を時系列で\\n| NVDA Q4 指標 | 数値 |\\n|---|---|\\n| 売上 (前年同期比) | **$45.1B** (+22%) [1] |\\n| Data Center 売上比率 | **87.3%** [2] |\\n| TSMC CoWoS-S 増産 (2026 末) | **1.5 倍** [3] |\\n\\nここで注目したいのが Data Center (AI 学習用 GPU を企業向けに販売する部門) の売上比率です。 自動車に例えると、 売上の 9 割近くが SUV だけで稼げている状態 — 構造的な「集中」 が進んでいるわけです。\\n\\n## 第 2 幕: TSMC の動き\\nTSMC (NVDA の半導体を製造する台湾企業) が、 CoWoS-S と呼ばれる先進パッケージング技術の生産能力を、 2026 年末までに 1.5 倍に拡張すると発表しました [3]。 AI ASIC (推論専用チップ) 各社の需要を取り込む動きですが、 結果として NVDA の供給制約が緩和される可能性があります。\\n\\n## 第 3 幕: 業界の競合動向\\n推論市場では ASIC (推論専用チップ) スタートアップが各社の調達枠を取り込み始めています。 一方で学習用 GPU は NVDA 寡占が続く構造です。 つまり NVDA は学習市場の値段決定力を維持しつつ、 推論市場での競合圧力を受ける二面性のリスクを抱えています。\\n\\n## 投資家への含意\\n### 強気シナリオ\\nTSMC CoWoS-S 増産で供給制約が緩和され、 販売数量の上振れと市場シェア確保が同時に進む可能性があります [3]。\\n### 弱気シナリオ\\nData Center 売上 87.3% の集中度に依存する構造が ASIC 競合台頭で揺らぐ可能性があります [2]。\\n### 推奨アクション\\n次の四半期決算 (FY2026 Q2、 8 月予定) で Data Center 売上比率の推移を確認するまでウォッチリスト保有を推奨します。",
   "citation_indexes": [1, 2, 3]
 }
 </output>
@@ -290,7 +309,7 @@ def _few_shot_block() -> str:
 {
   "title": "CRBS / GROQ が GPU 寡占に挑戦",
   "subtitle": "NVDA の Data Center 寡占が 4 年続いた中、 ASIC スタートアップ 2 社の資金調達と IPO が示すのは需要側の多様化への期待",
-  "body_md": "## TL;DR\\n- CRBS が SEC S-1 を 2026-05-09 提出、 上場 channel 確保 [1]\\n- GROQ が評価額 $2.5B で Series D 完了、 ASIC 専業に資金集中 [2]\\n- NVDA 一強前提 portfolio は再点検余地あり\\n\\nGPU 一強の時代に変化の兆しが出ている。\\n\\n## 第 1 幕: 動き\\n| ASIC 2 社 | アクション | 時期 |\\n|---|---|---|\\n| CRBS | **SEC S-1 提出** | 2026-05-09 [1] |\\n| GROQ | **Series D 完了 ($2.5B)** | 同時期 [2] |\\n\\nASIC 専業 2 社が同時に資金/上場 channel を確保した形だ。\\n\\n## 第 2 幕: 業界対立\\nGPU は学習に強いが推論コストでは ASIC が有利との見方が強まる。 ただし両社とも生産は TSMC 依存で、 NVDA との容量取り合いになる可能性もある。\\n\\n## 第 3 幕: 投資家への含意\\n強気シナリオでは推論市場の二極化、 弱気シナリオでは ASIC スタートアップの量産歩留まりリスクが顕在化する。 NVDA 一強を前提とした portfolio は再点検の余地がある。",
+  "body_md": "## TL;DR\\n- CRBS が SEC S-1 を 2026-05-09 提出、 上場 channel 確保 [1]\\n- GROQ が評価額 $2.5B で Series D 完了、 ASIC 専業に資金集中 [2]\\n- NVDA 一強前提 portfolio は再点検余地あり\\n\\nGPU 一強の時代に変化の兆しが出ている。\\n\\n## 第 1 幕: 動き\\n| ASIC 2 社 | アクション | 時期 |\\n|---|---|---|\\n| CRBS | **SEC S-1 提出** | 2026-05-09 [1] |\\n| GROQ | **Series D 完了 ($2.5B)** | 同時期 [2] |\\n\\nASIC 専業 2 社が同時に資金/上場 channel を確保した形だ。\\n\\n## 第 2 幕: 業界対立\\nGPU は学習に強いが推論コストでは ASIC が有利との見方が強まる。 ただし両社とも生産は TSMC 依存で、 NVDA との容量取り合いになる可能性もある。\\n\\n## 第 3 幕: 規制 / 法的環境\\n米国輸出規制の強化で中国向け AI チップ販売が制約を受ける可能性がある。 これは ASIC スタートアップ・NVDA 双方に影響する地政学リスクで、 投資家は注視が必要だ。\\n\\n## 投資家への含意\\n### 強気シナリオ\\n推論市場の二極化で ASIC 2 社のシェア拡大が NVDA 寡占を緩和し、 業界全体の効率化が進む可能性がある。\\n### 弱気シナリオ\\nASIC スタートアップの量産歩留まりが想定を下回り、 GPU 一強構造に回帰するリスクがある。\\n### 推奨アクション\\n両社の IPO 価格決定までは静観し、 NVDA を保有する場合はポジションサイズの再評価を推奨する。",
   "citation_indexes": [1, 2]
 }
 </output>
