@@ -6,64 +6,46 @@ description: |
   「注目銘柄トグルで自動スクロールしない」などの指示で呼び出す。
 ---
 
-# 注目銘柄スクリーナースキル（screener）
+# 注目銘柄スクリーナースキル
 
-## 概要
-FMP APIの gainers/losers/volume エンドポイントを使い、
-急騰・急落・出来高上位の3タブで銘柄をリスト表示する。
+FMP の gainers / losers / volume 系 endpoint を使い、 急騰 / 急落 / 出来高上位の 3 タブで銘柄をリスト表示する機能の SSOT。
 
-## 関連ファイル
-- バックエンド: /api/screener?category={gainers|losers|volume}
-- フロントエンド: Screener.jsx（またはScreenerSection）
-- APIエンドポイント: docs/references/api_endpoints.md を参照
+## 依存
 
-## 自動スクロール（要確認）
-ページ上部の「注目銘柄」トグルをONにしたとき、
-スクリーナーセクションに自動スクロールする実装を確認。
-未実装の場合は screener セクションに ref を付けて scrollIntoView を使う。
+- `frontend/src/components/CustomScreenerPanel.jsx` (および `Screener.jsx` / `ScreenerSection`) — 表示 component
+- `backend/app/main.py` — `/api/screener?category=<gainers|losers|volume>` endpoint + `_SCREENER_CACHE` legacy cache
+- `docs/references/api_endpoints.md` — endpoint 詳細仕様
+- `docs/references/design_system.md` — 上昇 / 下落色 (緑 / 赤) の semantic token
+- CLAUDE.md「投資業界の色ルール」 — 緑 = 上昇 / 赤 = 下落 / シアン = ブランド色 (上昇では使わない)
+- skill `fmp-api-retry` — FMP fallback 規約 + `memory/fmp_plan_naming.md` (Premium endpoint 活用未完了 code)
+- skill `earnings-urgency` — 決算直前銘柄をスクリーナー結果でも強調する場合の閾値 SSOT
+- skill `designing-workspace-ui` — 色 / 列追加 / レイアウト変更時の規律
+- memory `fmp_plan_naming.md` — `earnings_surprises` / `market_movers` / `screener` の Premium 活用未完了 code が要 audit
+
+## 表示内容
+
+- ティッカー / 企業名 / セクター / 株価 / 前日比 (%) / 出来高 / 時価総額
+- 上昇 / 下落の強調 (色は `var(--color-gain)` / `var(--color-loss)` を使用、 emoji 🔵🔴 ではなく semantic token)
+- 銘柄クリック → 判定画面遷移 (`handleLPTickerClick` 経由、 LP からも踏まれる場合は `funnel-cro` skill 参照)
+
+具体的なカラム順 / ハイライト閾値 / フィルター条件は `CustomScreenerPanel.jsx` および `backend/app/main.py` の screener 実装が SSOT (skill にコピーしない)。
 
 ## 拡張ポイント
-- 各銘柄行をクリックして分析画面に遷移
-- じっちゃまプロトコル判定済みバッジを行に表示
-- フィルター条件（セクター・時価総額など）の追加
 
----
+- ウォッチリスト登録銘柄を強調表示
+- セクター / 時価総額 / 出来高 等のフィルター追加
+- じっちゃまプロトコル判定済みバッジを行に表示 (内部資料の用語、 UI 文言は CLAUDE.md「表示テキストのポリシー」 遵守)
+- 自動スクロール: 「注目銘柄」 トグル ON 時に該当 section へ `scrollIntoView` (未実装の場合 ref + scrollIntoView で実装)
 
-# 注目度スクリーニングスキル（詳細仕様）
+## 「注目銘柄トグルで自動スクロールしない」 系 bug
 
-## 依存ファイル
-- docs/references/api_endpoints.md（エンドポイント詳細）
-- docs/references/jijima_protocol.md（判定ロジック）
-- docs/references/design_guide.md（デザインルール）
+- 該当 section に `ref` 付与済か確認
+- トグル state 変化で `useEffect` → `ref.current?.scrollIntoView({behavior: 'smooth'})` が呼ばれるか
+- 「ユーザー初期 dogfood で auto-scroll が逆に違和感」 系のフィードバックなら、 trigger 条件 (初回 click 時のみ等) を user と合意
 
-## 実装仕様
+## 注意
 
-### スクリーニング条件
-以下の条件で注目度の高い銘柄を抽出する：
-
-| 条件 | 閾値 |
-|------|------|
-| 出来高 | 100万株以上 |
-| 株価 | $10以上 |
-| 時価総額 | 10億ドル以上 |
-
-### 表示仕様
-- スクリーニング結果を一覧テーブルで表示
-- 各銘柄に以下を表示する：
-  - ティッカー・企業名・セクター
-  - 株価・前日比（%）
-  - 出来高
-  - 時価総額
-- 前日比5%以上の上昇：🔵で強調
-- 前日比5%以上の下落：🔴で強調
-- 銘柄をクリックするとじっちゃまプロトコル判定画面へ遷移する
-
-### デザイン
-docs/references/design_guide.md のカラー定義・レイアウト原則に従う。
-
-## 実装ステップ
-1. api_endpoints.md を読みエンドポイントを確認する
-2. バックエンドにスクリーニングAPIルートを追加する
-3. フロントエンドにスクリーニング画面を追加する
-4. トップ画面からスクリーニング画面へのナビゲーションを追加する
-5. 銘柄クリック→判定画面への遷移を確認する
+- FMP の screener / market_movers endpoint は plan によって挙動 / 上限が異なる (`memory/fmp_plan_naming.md` 参照、 Premium Annual で 750 req/min 余裕あり)
+- 「Premium 活用未完了」 の code smell (上位 10 件 limit / fallback ロジック) を release 前に audit すべき (memory 既知 issue)
+- `_SCREENER_CACHE: dict` は legacy、 新規実装は `safe_fmp_get` 経由を優先 (`fmp-api-retry` skill 参照)
+- 強調色は CLAUDE.md「投資業界の色ルール」 厳守、 シアン (`--color-accent`) を上昇の意味で使わない
