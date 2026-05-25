@@ -18,7 +18,7 @@
  *   - feedback_citation_required.md (景表法/金商法 anchor)
  */
 
-import { useRef, useMemo } from 'react';
+import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { sanitizeText } from '../../lib/blocklist.js';
@@ -328,14 +328,18 @@ function buildComponents(onSanitized, ticker, tableRenderedRef) {
  */
 export default function ArticleBody({ bodyMd, onSanitized, ticker }) {
   const handleSanitized = typeof onSanitized === 'function' ? onSanitized : () => {};
-  // v116 R6: 最初の table 直後に中間 CTA を挿入するための tracker (再 render で reset しない)
-  const tableRenderedRef = useRef(false);
-  // v117 Frontend P5: buildComponents を useMemo メモ化 (毎 render の全 component object 再生成回避)
-  //   tableRenderedRef は ref で stable、 deps から除外。
-  //   handleSanitized は inline () => {} で初回 mount 後 stable (typeof check で同 instance 維持)。
-  //   ticker / handleSanitized が同じなら同じ components object → react-markdown 内部の diff cost 削減。
+  // v117 R7 bug fix: useMemo メモ化と tableRenderedRef.current 状態保持の組合せで、
+  //   2 回目以降の re-render で「ref.current = true (前回 render 残)」 のままになり
+  //   isFirstTable=false で MidArticleCTA が表示されないバグが発生していた。
+  //
+  //   解: useMemo deps が同じなら同じ components を返すが、 各 buildComponents 計算時に
+  //   local ref を新規生成 → ref は components 1 set 内で閉じている → 同じ ReactMarkdown
+  //   render pass 内で「最初の table」 を確実に判定できる。
   const components = useMemo(
-    () => buildComponents(handleSanitized, ticker, tableRenderedRef),
+    () => {
+      const tableRenderedRef = { current: false };
+      return buildComponents(handleSanitized, ticker, tableRenderedRef);
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [ticker, handleSanitized],
   );

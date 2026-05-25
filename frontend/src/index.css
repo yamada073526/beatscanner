@@ -10118,6 +10118,11 @@ button.ds-chip[data-pressed="true"]:hover {
 .daily-digest {
   padding: var(--space-4, 16px) var(--space-3, 12px) var(--space-5, 20px);
   border-bottom: 1px solid color-mix(in srgb, var(--color-gold) 15%, var(--border));
+  /* v117 R7 scroll bug fix: 親 flex layout で auto height で膨らみ JudgmentList を圧迫していた。
+     max-height + overflow-y で自身の高さを限定 + 溢れた場合は自身で scroll。 */
+  flex-shrink: 0;
+  max-height: 280px;
+  overflow-y: auto;
 }
 
 .daily-digest__header {
@@ -10148,8 +10153,18 @@ button.ds-chip[data-pressed="true"]:hover {
   gap: var(--space-3, 12px);
 }
 
+/* v117 R7 (QA verdict): 1 件のみのときは full-width 1 列で「空 grid」 感を消す */
+.daily-digest__grid--count-1 {
+  grid-template-columns: 1fr;
+}
+
+.daily-digest__grid--count-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
 @media (max-width: 900px) {
-  .daily-digest__grid {
+  .daily-digest__grid,
+  .daily-digest__grid--count-2 {
     grid-template-columns: 1fr;
   }
 }

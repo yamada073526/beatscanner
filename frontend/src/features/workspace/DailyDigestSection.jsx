@@ -169,7 +169,9 @@ export default function DailyDigestSection() {
       </header>
       {loading && <DigestLoadingState />}
       {!loading && !showEmpty && (
-        <div className="daily-digest__grid">
+        <div
+          className={`daily-digest__grid daily-digest__grid--count-${Math.min(articles.length, 3)}`}
+        >
           {articles.map((article) => (
             <DigestCard key={article.slug} article={article} />
           ))}

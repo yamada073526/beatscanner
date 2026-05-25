@@ -723,12 +723,14 @@ export default function Workspace({
             />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <Pane2MetaToggle />
-              {/* v113 P4: workspace home Pane 2 上部に Daily Digest 3 card embed
-                  - Supabase published articles から最新 3 件 fetch、 click で /articles/<slug>
-                  - home tab のみ表示 (isIndices=false 時、 ここに到達した時点で home 確定) */}
-              <DailyDigestSection />
-              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              {/* v117 R7 scroll bug fix (3 体合議 frontend architect verdict 案 C):
+                  - 上部固定ブロック (flexShrink: 0) + 下部 JudgmentList (flex: 1 + overflow auto)
+                  - 旧: DailyDigestSection が auto height で残量を食いつぶし JudgmentList が overflow:hidden で切れていた */}
+              <div style={{ flexShrink: 0 }}>
+                <Pane2MetaToggle />
+                <DailyDigestSection />
+              </div>
+              <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
                 <JudgmentList
                   items={items}
                   onAnalyze={onAnalyze}
