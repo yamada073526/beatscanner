@@ -1,20 +1,24 @@
 /**
- * EtfOverviewPanel.jsx — v118 ETF MVP (handover v118 Step 3 P1).
+ * EtfOverviewPanel.jsx — v118 ETF MVP (R9.3 拡充).
  *
- * ETF を入力した user に「5 条件対象外」 エラーで終わらせず、 ETF 固有 5 metric
- * (AUM / TER / 1Y / Top 5 Holdings / Inception) を提示する Trust Cliff 防止 panel。
+ * ETF を入力した user に「5 条件対象外」 エラーで終わらせず、 ETF 固有指標を
+ * 提示する Trust Cliff 防止 panel。
  *
- * data source: /api/etf-info/{ticker} (Phase G の other panel と同 fetch pattern)
+ * data source: /api/etf-info/{ticker}
+ *
+ * 表示構成 (R9.3):
+ *   Row 1: AUM / TER / 1Y Return / 設定日 / 籍
+ *   Row 2: 運用会社 / 保有銘柄数 / 平均出来高 / 資産クラス
+ *   Section: セクター構成 (industry / exposure bars 降順)
+ *
+ * R9.3 修正 (user dogfood feedback):
+ *   - 「じっちゃま」 単語を UI から削除 (CLAUDE.md 表示テキストポリシー違反)
+ *   - 「構成銘柄データは取得できませんでした (FMP plan...)」 文言削除
+ *     (機能不足アピールで Trust Cliff、 holdings 空時は section 自体を非表示)
  *
  * design grammar:
- *   - SectionHeader + 5 metric grid (KpiStrip と同形)
- *   - Top 5 Holdings は table (weight % 降順)
- *   - Trust Cliff msg: 「ETF は 5 条件対象外、 下記は ETF 固有指標」
+ *   - SectionHeader + 2 row metric grid + sector breakdown bars
  *   - design token のみ (raw hex 禁止、 design-system-check 通過)
- *
- * 5 原則整合:
- *   原則 1「2 秒理解」: 5 metric を card chip で並列表示
- *   原則 5「図解で認知コストを下げろ」: holdings は table、 sector は Phase 2 で donut
  */
 import React from 'react';
 
@@ -33,17 +37,47 @@ function _formatPct(v, digits = 2) {
 
 function _formatTer(expenseRatio) {
   if (expenseRatio == null || !Number.isFinite(expenseRatio)) return '—';
-  // FMP は 0.0945 (= 9.45%) の表記 or 0.000945 (= 0.0945%) の混在があるため正規化
-  // 0.05 以下は元から %、 0.05 超は 100 倍前提
   const normalized = expenseRatio > 0.05 ? expenseRatio : expenseRatio * 100;
   return `${normalized.toFixed(2)}%`;
 }
 
 function _formatDate(iso) {
   if (!iso || typeof iso !== 'string') return '—';
-  // FMP は 'YYYY-MM-DD' 形式 (タイムゾーンなし)、 そのまま表示
   return iso.slice(0, 10);
 }
+
+function _formatVolume(v) {
+  if (v == null || !Number.isFinite(v)) return '—';
+  if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+  if (v >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
+  if (v >= 1e3) return `${(v / 1e3).toFixed(0)}K`;
+  return v.toLocaleString();
+}
+
+function _formatCount(v) {
+  if (v == null || !Number.isFinite(v)) return '—';
+  return `${v.toLocaleString()} 銘柄`;
+}
+
+function _formatAssetClass(v) {
+  if (!v) return '—';
+  const map = { Equity: '株式', Bond: '債券', Commodity: '商品', 'Real Estate': '不動産', Currency: '通貨' };
+  return map[v] || v;
+}
+
+const SECTOR_LABEL_JP = {
+  'Technology': 'テクノロジー',
+  'Financial Services': '金融',
+  'Healthcare': 'ヘルスケア',
+  'Consumer Cyclical': '消費循環',
+  'Communication Services': '通信',
+  'Industrials': '資本財',
+  'Consumer Defensive': '生活必需品',
+  'Energy': 'エネルギー',
+  'Basic Materials': '素材',
+  'Real Estate': '不動産',
+  'Utilities': '公益',
+};
 
 function MetricChip({ label, value, hint }) {
   return (
@@ -93,127 +127,72 @@ function MetricChip({ label, value, hint }) {
   );
 }
 
-function HoldingsTable({ holdings }) {
-  if (!Array.isArray(holdings) || holdings.length === 0) {
-    return (
-      <div
-        style={{
-          color: 'var(--text-muted)',
-          fontSize: 'var(--text-body, 14px)',
-          padding: 'var(--space-3, 12px) 0',
-        }}
-      >
-        構成銘柄データは取得できませんでした (FMP plan / API rate limit)。
-      </div>
-    );
-  }
+function SectorBar({ industry, exposure, maxExposure }) {
+  const width = maxExposure > 0 ? Math.max(2, (exposure / maxExposure) * 100) : 0;
+  const labelJp = SECTOR_LABEL_JP[industry] || industry;
   return (
-    <table
+    <div
       style={{
-        width: '100%',
-        borderCollapse: 'collapse',
-        fontSize: 'var(--text-body, 14px)',
+        display: 'grid',
+        gridTemplateColumns: '120px 1fr 60px',
+        gap: 'var(--space-3, 12px)',
+        alignItems: 'center',
+        padding: 'var(--space-1, 4px) 0',
       }}
     >
-      <thead>
-        <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-          <th
-            style={{
-              textAlign: 'left',
-              padding: 'var(--space-2, 8px)',
-              fontWeight: 600,
-              color: 'var(--text-muted)',
-              fontSize: 11,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-            }}
-          >
-            銘柄
-          </th>
-          <th
-            style={{
-              textAlign: 'left',
-              padding: 'var(--space-2, 8px)',
-              fontWeight: 600,
-              color: 'var(--text-muted)',
-              fontSize: 11,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-            }}
-          >
-            名称
-          </th>
-          <th
-            style={{
-              textAlign: 'right',
-              padding: 'var(--space-2, 8px)',
-              fontWeight: 600,
-              color: 'var(--text-muted)',
-              fontSize: 11,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-            }}
-          >
-            構成比
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {holdings.map((h, i) => (
-          <tr
-            key={`${h.symbol || ''}-${i}`}
-            style={{ borderBottom: '1px solid var(--border-subtle)' }}
-          >
-            <td
-              style={{
-                padding: 'var(--space-2, 8px)',
-                fontWeight: 700,
-                color: 'var(--color-accent)',
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
-              {h.symbol || '—'}
-            </td>
-            <td
-              style={{
-                padding: 'var(--space-2, 8px)',
-                color: 'var(--text-primary)',
-                maxWidth: 320,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {h.name || '—'}
-            </td>
-            <td
-              style={{
-                padding: 'var(--space-2, 8px)',
-                textAlign: 'right',
-                fontVariantNumeric: 'tabular-nums',
-                color: 'var(--text-primary)',
-                fontWeight: 600,
-              }}
-            >
-              {_formatPct(h.weight_pct)}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+      <div
+        style={{
+          fontSize: 'var(--text-body-sm, 13px)',
+          color: 'var(--text-primary)',
+          fontWeight: 500,
+        }}
+      >
+        {labelJp}
+      </div>
+      <div
+        style={{
+          height: 8,
+          background: 'var(--surface-3, rgba(255,255,255,0.04))',
+          borderRadius: 'var(--radius-pill, 999px)',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            width: `${width}%`,
+            height: '100%',
+            background: 'linear-gradient(90deg, var(--color-accent), color-mix(in srgb, var(--color-accent) 60%, var(--color-gold)))',
+            borderRadius: 'var(--radius-pill, 999px)',
+            transition: 'width 600ms ease',
+          }}
+        />
+      </div>
+      <div
+        style={{
+          fontSize: 'var(--text-body-sm, 13px)',
+          color: 'var(--text-primary)',
+          fontWeight: 700,
+          textAlign: 'right',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {exposure.toFixed(2)}%
+      </div>
+    </div>
   );
 }
 
 /**
  * @param {object} props
- * @param {object} props.etfInfo - /api/etf-info response (ticker / companyName / overview / top_holdings / sources)
+ * @param {object} props.etfInfo - /api/etf-info response
  */
 export default function EtfOverviewPanel({ etfInfo }) {
   if (!etfInfo || typeof etfInfo !== 'object') return null;
   const ticker = etfInfo.ticker || '';
   const companyName = etfInfo.companyName || '';
   const ov = etfInfo.overview || {};
-  const holdings = etfInfo.top_holdings || [];
+  const sectors = Array.isArray(etfInfo.sectors) ? etfInfo.sectors : [];
+  const maxExposure = sectors.length > 0 ? sectors[0].exposure : 0;
 
   return (
     <section
@@ -260,7 +239,7 @@ export default function EtfOverviewPanel({ etfInfo }) {
             lineHeight: 1.6,
           }}
         >
-          ETF / 投資信託のため、 じっちゃまファンダメンタル 5 条件の判定対象外です。
+          ETF / 投資信託のため、 ファンダメンタル 5 条件の判定対象外です。
           下記は ETF 固有の主要指標です。
         </p>
       </div>
@@ -279,33 +258,49 @@ export default function EtfOverviewPanel({ etfInfo }) {
           value={_formatPct(ov.one_year_return_pct, 1)}
           hint="直近 1 年リターン"
         />
-        <MetricChip
-          label="設定日"
-          value={_formatDate(ov.inception_date)}
-          hint="運用開始"
-        />
-        <MetricChip
-          label="籍"
-          value={ov.domicile || '—'}
-          hint="ドミサイル"
-        />
+        <MetricChip label="設定日" value={_formatDate(ov.inception_date)} hint="運用開始" />
+        <MetricChip label="籍" value={ov.domicile || '—'} hint="ドミサイル" />
       </div>
 
-      <div>
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: '0.08em',
-            color: 'var(--text-muted)',
-            textTransform: 'uppercase',
-            marginBottom: 'var(--space-2, 8px)',
-          }}
-        >
-          上位構成銘柄 (Top 5)
-        </div>
-        <HoldingsTable holdings={holdings.slice(0, 5)} />
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+          gap: 'var(--space-3, 12px)',
+        }}
+      >
+        <MetricChip label="運用会社" value={ov.etf_company || '—'} hint="ETF Issuer" />
+        <MetricChip label="保有銘柄数" value={_formatCount(ov.holdings_count)} hint="構成銘柄数" />
+        <MetricChip label="平均出来高" value={_formatVolume(ov.avg_volume)} hint="日次平均株数" />
+        <MetricChip label="資産クラス" value={_formatAssetClass(ov.asset_class)} hint="Asset Class" />
       </div>
+
+      {sectors.length > 0 && (
+        <div>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              color: 'var(--text-muted)',
+              textTransform: 'uppercase',
+              marginBottom: 'var(--space-3, 12px)',
+            }}
+          >
+            セクター構成
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1, 4px)' }}>
+            {sectors.map((s) => (
+              <SectorBar
+                key={s.industry}
+                industry={s.industry}
+                exposure={s.exposure}
+                maxExposure={maxExposure}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

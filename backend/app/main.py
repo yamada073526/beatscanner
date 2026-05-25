@@ -2633,6 +2633,32 @@ async def etf_info_endpoint(ticker: str, request: Request) -> dict:
     )
     domicile = etf_info_row.get("domicile") or profile.get("country") or None
 
+    # v118 R9.3: etf_info 内の追加 field (Premium で取得済 + 表示価値高)
+    etf_company = etf_info_row.get("etfCompany") or None
+    asset_class = etf_info_row.get("assetClass") or None
+    holdings_count = etf_info_row.get("holdingsCount")
+    if isinstance(holdings_count, str):
+        try:
+            holdings_count = int(holdings_count)
+        except ValueError:
+            holdings_count = None
+    avg_volume = _as_float(etf_info_row.get("avgVolume"))
+    nav = _as_float(etf_info_row.get("nav"))
+    nav_currency = etf_info_row.get("navCurrency") or None
+
+    # sectorsList: [{industry, exposure}] を exposure 降順で正規化
+    sectors_raw = etf_info_row.get("sectorsList") or []
+    sectors: list[dict] = []
+    if isinstance(sectors_raw, list):
+        for s in sectors_raw:
+            if not isinstance(s, dict):
+                continue
+            industry = s.get("industry") or s.get("sector") or ""
+            exposure = _as_float(s.get("exposure") or s.get("weightPercentage"))
+            if industry and exposure is not None:
+                sectors.append({"industry": industry, "exposure": exposure})
+        sectors.sort(key=lambda x: x["exposure"], reverse=True)
+
     # 1Y return = (latest close - close ~252 trading days ago) / oldest close
     one_year_return_pct: float | None = None
     if hist_rows:
@@ -2666,7 +2692,15 @@ async def etf_info_endpoint(ticker: str, request: Request) -> dict:
             "inception_date": inception_date,
             "domicile": domicile,
             "one_year_return_pct": one_year_return_pct,
+            # v118 R9.3 追加 (Premium で取得済、 panel 拡充用)
+            "etf_company": etf_company,
+            "asset_class": asset_class,
+            "holdings_count": holdings_count,
+            "avg_volume": avg_volume,
+            "nav": nav,
+            "nav_currency": nav_currency,
         },
+        "sectors": sectors,
         "top_holdings": top_holdings,
         "sources": sources,
     }
