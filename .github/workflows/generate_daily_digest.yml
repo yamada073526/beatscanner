@@ -1,0 +1,77 @@
+name: Generate Daily Digest (v118)
+
+# v118: 「本日の注目銘柄まとめ」 daily_digest format を毎朝自動配信。
+#
+# - 毎朝 19:35 UTC (= 04:35 JST) で起動 (deep_dive cron 19:05 の 30 分後)
+#   - 30 分 offset で deep_dive と FMP rate limit を分散
+#   - hourly boundary skip 回避 (v116 教訓と整合)
+# - daily_digest format で ticker / theme なし、 backend 側で gainers Top10 を自動選定
+# - slug は date-only (`daily-digest-YYYYMMDD`)、 1 日 1 件 idempotent
+# - 失敗しても workflow は緑 (continue-on-error) → 早朝アラート疲れ防止
+#
+# memory anchors:
+#   project_pane45_redesign.md (v113 spec)
+#   feedback_demo_rate_limit_smoke_test.md (response 構造確認 pattern)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '35 19 * * *'   # 19:35 UTC = 04:35 JST (deep_dive 19:05 の 30 分後)
+
+jobs:
+  generate:
+    name: Trigger daily_digest pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Setup tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq jq curl
+
+      - name: Trigger pipeline
+        id: trigger
+        continue-on-error: true
+        env:
+          BASE: https://beatscanner-production.up.railway.app
+        run: |
+          ENDPOINT="$BASE/api/cron/generate-articles?format=daily_digest"
+
+          mkdir -p reports
+          REPORT="reports/digest_$(date -u +%Y-%m-%d).json"
+
+          # daily_digest は backend が gainers Top10 を自動取得するため body 不要
+          status=$(curl -fsS -X POST "$ENDPOINT" \
+            -H 'Content-Type: application/json' \
+            -o "$REPORT" \
+            -w '%{http_code}' || echo "000")
+
+          echo "HTTP status: $status"
+          if [ -f "$REPORT" ]; then
+            echo '--- response ---'
+            jq . "$REPORT" || cat "$REPORT"
+            echo '----------------'
+            final_status=$(jq -r '.final_status // "unknown"' "$REPORT" 2>/dev/null || echo "parse-err")
+            echo "final_status=$final_status" >> "$GITHUB_OUTPUT"
+            echo "report=$REPORT" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-digest-${{ github.run_id }}
+          path: reports/
+          retention-days: 30
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Daily Digest Run ($(date -u +'%Y-%m-%d %H:%M UTC'))" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **format**: \`daily_digest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **final_status**: \`${{ steps.trigger.outputs.final_status }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **report**: \`${{ steps.trigger.outputs.report }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "slug は \`daily-digest-YYYYMMDD\` 形式 (date-only、 1 日 1 件 idempotent)" >> $GITHUB_STEP_SUMMARY

@@ -82,7 +82,13 @@ def _build_user_prompt(
     raw_sources: list[dict],
 ) -> str:
     raw_block = json.dumps(raw_sources[:20], ensure_ascii=False, indent=2)
-    target = f"ticker: {ticker}" if ticker else f"theme: {theme}"
+    # v118 daily_digest: ticker / theme 共に None の場合は raw_sources の source_ticker を信頼
+    if ticker:
+        target = f"ticker: {ticker}"
+    elif theme:
+        target = f"theme: {theme}"
+    else:
+        target = "theme: 本日の注目銘柄 (raw_sources の source_ticker field を参照して複数銘柄をまとめる)"
     return f"""## ターゲット
 {target}
 

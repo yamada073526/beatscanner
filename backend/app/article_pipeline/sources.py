@@ -1,14 +1,14 @@
-"""raw_sources 自動 fetch layer (v113 P2-S3).
+"""raw_sources 自動 fetch layer (v113 P2-S3 + v118 daily_digest).
 
 # 設計方針:
 - 既存 rss_collector.collect_ticker_news (Yahoo Finance + Seeking Alpha RSS) を流用
 - 各 RSS item を article_pipeline の raw_sources schema にマップ
 - 失敗時は silent log + 空 list 返却 (pipeline は no_sources で完走)
 
-# P2 MVP scope:
-- 銘柄 (ticker) のみ対応、 theme は P3+
-- description は 300 字以下なので fact extraction は弱い、 SEC EDGAR / FMP filings
-  fetch は P3+ で拡張
+# v118 daily_digest (本 update):
+- collect_raw_sources_for_daily_digest: FMP gainers Top10 から ticker 抽出 → 各 ticker
+  ニュース上位 N 件を集約 → 1 つの raw_sources list として返す
+- 「複数銘柄まとめ」 記事は writer.py GOOD-3 example 通り 600-800 字 / 銘柄 bullet 形式
 
 # raw_sources schema (researcher.py 入力):
 - url: 必須、 LLM が citation に書ける唯一の URL
@@ -19,8 +19,10 @@
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 
+from ..fmp_client import FMPClient, FMPError
 from ..rss_collector import collect_ticker_news
 
 log = logging.getLogger(__name__)
@@ -90,3 +92,87 @@ async def collect_raw_sources_for_ticker(ticker: str, *, max_items: int = 15) ->
         ticker,
     )
     return dedup[:max_items]
+
+
+async def collect_raw_sources_for_daily_digest(
+    *,
+    api_key: str | None = None,
+    max_tickers: int = 10,
+    items_per_ticker: int = 2,
+    max_total_items: int = 18,
+) -> list[dict]:
+    """daily_digest 用: FMP gainers Top N から ticker 抽出 → 各 ticker ニュース集約.
+
+    Args:
+        api_key: FMP API key (None 環境変数依存)
+        max_tickers: gainers Top N (default 10)
+        items_per_ticker: 各 ticker から最大何 item 採取するか (default 2)
+        max_total_items: raw_sources 全体上限 (default 18、 researcher の 15 件目安 + buffer)
+
+    Returns:
+        list[dict] (raw_sources schema)。 各 item は source_ticker key を追加し、
+        researcher が「どの ticker の fact か」 を判定できるようにする。
+    """
+    client = FMPClient(api_key=api_key)
+
+    candidates: list[str] = []
+    try:
+        gainers = await client.market_movers("biggest-gainers")
+        if isinstance(gainers, list):
+            for item in gainers[:max_tickers]:
+                sym = item.get("symbol", "")
+                if sym:
+                    candidates.append(sym.upper())
+    except FMPError as e:
+        log.warning("article_pipeline.sources: FMP gainers 取得失敗: %s", e)
+        return []
+    except Exception as e:
+        log.warning("article_pipeline.sources: gainers 例外: %s", e)
+        return []
+
+    if not candidates:
+        log.info("article_pipeline.sources: gainers 0 件、 daily_digest skip")
+        return []
+
+    async def _fetch_one(t: str) -> list[dict]:
+        try:
+            items = await collect_ticker_news(t)
+        except Exception as e:
+            log.warning(
+                "article_pipeline.sources: collect_ticker_news(%s) 失敗: %s", t, e
+            )
+            return []
+        mapped: list[dict] = []
+        for item in items[:items_per_ticker]:
+            if not item.get("url"):
+                continue
+            row = _map_rss_item_to_raw_source(item)
+            row["source_ticker"] = t
+            mapped.append(row)
+        return mapped
+
+    results = await asyncio.gather(
+        *[_fetch_one(t) for t in candidates],
+        return_exceptions=True,
+    )
+
+    all_items: list[dict] = []
+    for r in results:
+        if isinstance(r, list):
+            all_items.extend(r)
+
+    seen: set[str] = set()
+    dedup: list[dict] = []
+    for s in all_items:
+        u = s.get("url", "")
+        if not u or u in seen:
+            continue
+        seen.add(u)
+        dedup.append(s)
+
+    log.info(
+        "article_pipeline.sources: daily_digest collected %d raw_sources from %d tickers",
+        len(dedup[:max_total_items]),
+        len(candidates),
+    )
+    return dedup[:max_total_items]

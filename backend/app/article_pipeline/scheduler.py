@@ -69,10 +69,15 @@ async def generate_article(
         }
 
     Raises:
-        ValueError: ticker / theme 両方 None、 もしくは両方指定された場合
+        ValueError: ticker / theme 両方指定された場合 (排他)、 もしくは format != daily_digest
+            で両方 None の場合
     """
-    if (ticker is None) == (theme is None):
-        raise ValueError("Exactly one of ticker / theme must be provided")
+    if ticker is not None and theme is not None:
+        raise ValueError("ticker and theme are mutually exclusive")
+    if ticker is None and theme is None and article_format != ArticleFormat.daily_digest:
+        raise ValueError(
+            "ticker or theme must be provided for deep_dive / theme_horizon formats"
+        )
 
     # raw_sources 空時は LLM call スキップ、 ClaudeClient instantiation も遅延
     # (ANTHROPIC_API_KEY 未設定環境での early-return path を防御)

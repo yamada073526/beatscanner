@@ -22,7 +22,7 @@ from fastapi import APIRouter, Body, HTTPException
 
 from .scheduler import generate_article
 from .schemas import ArticleFormat
-from .sources import collect_raw_sources_for_ticker
+from .sources import collect_raw_sources_for_daily_digest, collect_raw_sources_for_ticker
 from .storage import upsert_article_draft
 
 log = logging.getLogger(__name__)
@@ -53,12 +53,6 @@ async def generate_articles_endpoint(
     Returns:
         scheduler.generate_article の dict (final_status / draft / fact_check / verdict_sign)
     """
-    if (ticker is None) == (theme is None):
-        raise HTTPException(
-            status_code=400,
-            detail="Exactly one of ticker / theme query param must be provided",
-        )
-
     try:
         article_format = ArticleFormat(format)
     except ValueError:
@@ -67,10 +61,31 @@ async def generate_articles_endpoint(
             detail=f"Invalid format '{format}'. Allowed: deep_dive | theme_horizon | daily_digest",
         )
 
+    # daily_digest は ticker / theme 不要 (gainers Top10 から自動選定)
+    if article_format == ArticleFormat.daily_digest:
+        if ticker is not None or theme is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="daily_digest format does not accept ticker / theme query params",
+            )
+    else:
+        if (ticker is None) == (theme is None):
+            raise HTTPException(
+                status_code=400,
+                detail="Exactly one of ticker / theme query param must be provided",
+            )
+
     if raw_sources is None or not isinstance(raw_sources, list):
-        # P2: ticker 指定なら rss_collector で自動 fetch (Yahoo Finance + Seeking Alpha)
-        # theme は P3+ で web_search 統合、 現状は no_sources fallback
-        if ticker:
+        if article_format == ArticleFormat.daily_digest:
+            # v118: FMP gainers Top10 + 各 ticker RSS news を自動集約
+            raw_sources = await collect_raw_sources_for_daily_digest()
+            if not raw_sources:
+                return {
+                    "final_status": "no_sources",
+                    "message": "daily_digest: gainers Top10 から ticker / news を取得できませんでした",
+                }
+        elif ticker:
+            # P2: ticker 指定なら rss_collector で自動 fetch (Yahoo Finance + Seeking Alpha)
             raw_sources = await collect_raw_sources_for_ticker(ticker)
             if not raw_sources:
                 return {

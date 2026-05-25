@@ -65,15 +65,23 @@ def generate_slug(
     ticker: str | None = None,
     theme: str | None = None,
     generated_at: datetime | None = None,
+    article_format: str | None = None,
 ) -> str:
     """{ticker_or_theme}-{YYYYMMDDHHmm} 形式の slug を生成.
+
+    daily_digest は日次 idempotent (date-only) でユニーク → 1 日 1 件のみ保存.
+    UNIQUE 衝突時は storage 側で catch + log + skip。
 
     Examples:
         ticker='NVDA' → 'nvda-202605241850'
         theme='AI ASIC 第二波' → 'ai-asic-202605241850'
-        ticker=None, theme=None → 'article-202605241850' (daily_digest 用)
+        article_format='daily_digest' → 'daily-digest-20260524'
+        ticker=None, theme=None (legacy) → 'article-202605241850'
     """
-    ts = (generated_at or datetime.utcnow()).strftime("%Y%m%d%H%M")
+    dt = generated_at or datetime.utcnow()
+    if article_format == "daily_digest":
+        return f"daily-digest-{dt.strftime('%Y%m%d')}"
+    ts = dt.strftime("%Y%m%d%H%M")
     if ticker:
         base = _slugify(ticker)
     elif theme:
@@ -130,7 +138,12 @@ def upsert_article_draft(
     except Exception:
         generated_at_dt = datetime.utcnow()
 
-    slug = generate_slug(ticker=ticker, theme=theme, generated_at=generated_at_dt)
+    slug = generate_slug(
+        ticker=ticker,
+        theme=theme,
+        generated_at=generated_at_dt,
+        article_format=article_format,
+    )
 
     row = {
         "slug": slug,

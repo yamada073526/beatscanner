@@ -376,11 +376,13 @@ def _build_user_prompt(
         )
     source_block = "\n".join(source_lines) if source_lines else "(source_facts なし)"
 
-    target = (
-        f"ticker: {researcher_output.ticker}"
-        if researcher_output.ticker
-        else f"theme: {researcher_output.theme}"
-    )
+    # v118 daily_digest: ticker / theme 共に None の場合は「本日の注目銘柄まとめ」
+    if researcher_output.ticker:
+        target = f"ticker: {researcher_output.ticker}"
+    elif researcher_output.theme:
+        target = f"theme: {researcher_output.theme}"
+    else:
+        target = "theme: 本日の注目銘柄 (daily_digest: source_facts に含まれる複数 ticker をまとめる)"
 
     length_hint = {
         ArticleFormat.deep_dive: "1200-1500 字",

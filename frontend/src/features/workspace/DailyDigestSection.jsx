@@ -49,9 +49,10 @@ function useDailyDigest() {
       try {
         // v117 P4 fix: articles table schema に verdict column 不在のため select から除外。
         //   normalizeVerdict() は undefined を WATCH (default) に変換するため UI に影響なし。
+        // v118: format column を select に追加 (deep_dive / daily_digest を label で区別)
         const { data, error } = await supabase
           .from('articles')
-          .select('slug, title, subtitle, ticker, published_at, generated_at')
+          .select('slug, title, subtitle, ticker, format, published_at, generated_at')
           .eq('status', 'published')
           .order('generated_at', { ascending: false })
           .limit(FETCH_LIMIT);
@@ -97,21 +98,45 @@ function truncate(s, maxLen) {
 }
 
 /**
+ * format → 表示 label のマッピング (v118).
+ * - deep_dive: ticker chip + verdict (BEAT/MISS/WATCH)
+ * - daily_digest: 「まとめ」 badge (ticker は null のため verdict 不要)
+ * - theme_horizon: 「テーマ」 badge
+ */
+function getFormatLabel(format) {
+  if (format === 'daily_digest') return { label: 'まとめ', tone: 'accent' };
+  if (format === 'theme_horizon') return { label: 'テーマ', tone: 'accent' };
+  return null;
+}
+
+/**
  * 個別 article card
  */
 function DigestCard({ article }) {
-  const { slug, title, subtitle, ticker, verdict } = article;
+  const { slug, title, subtitle, ticker, format, verdict } = article;
   const v = normalizeVerdict(verdict);
+  const formatBadge = getFormatLabel(format);
   return (
     <a
       href={`/articles/${encodeURIComponent(slug)}`}
       className="daily-digest__card"
       data-testid={`daily-digest-card-${slug}`}
+      data-format={format || 'deep_dive'}
       aria-label={`記事を読む: ${title}`}
     >
       <div className="daily-digest__card-badges">
-        {ticker && <span className="daily-digest__ticker">{ticker}</span>}
-        <span className={`daily-digest__verdict daily-digest__verdict--${v.tone}`}>{v.label}</span>
+        {formatBadge ? (
+          <span
+            className={`daily-digest__format-badge daily-digest__format-badge--${formatBadge.tone}`}
+          >
+            {formatBadge.label}
+          </span>
+        ) : (
+          ticker && <span className="daily-digest__ticker">{ticker}</span>
+        )}
+        {!formatBadge && (
+          <span className={`daily-digest__verdict daily-digest__verdict--${v.tone}`}>{v.label}</span>
+        )}
       </div>
       <h3 className="daily-digest__title">{truncate(title, 28)}</h3>
       {subtitle && (
