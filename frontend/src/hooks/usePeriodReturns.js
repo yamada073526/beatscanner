@@ -78,7 +78,11 @@ export function usePeriodReturns(ticker) {
     let p = _inFlight.get(key);
     if (!p) {
       p = fetchPeriodReturns(key).then((d) => {
-        _cache.set(key, { ts: Date.now(), data: d });
+        // Sprint 6 multi-review fix (qa-dogfooder P3): null は cache しない。
+        // backend 一時障害で null を 6h cache すると復旧後も section 非表示が続く問題を防止。
+        if (d) {
+          _cache.set(key, { ts: Date.now(), data: d });
+        }
         _inFlight.delete(key);
         return d;
       }).catch((e) => {

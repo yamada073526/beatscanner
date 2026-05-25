@@ -78,10 +78,11 @@ function PeriodChip({ periodDef, periodData }) {
         minWidth: 0, // grid auto-fit でオーバーフロー防止
       }}
     >
-      {/* 値: tabular-nums + fw700 (ds-stat__value class が担当) */}
+      {/* 値: tabular-nums + fw700 (ds-stat__value class が担当)。
+          font-size 22px override で KpiStrip (36px) と視覚ヒエラルキー分離 (Sprint 6 multi-review fix)。 */}
       <div
         className="ds-stat__value"
-        style={{ color }}
+        style={{ color, fontSize: 22, lineHeight: 1.2 }}
       >
         {displayValue}
       </div>
@@ -138,7 +139,37 @@ function SkeletonChip() {
   );
 }
 
-export default function ReturnGrid({ ticker, frameless = true, testId = 'return-grid' }) {
+/**
+ * SectionLabel — Sprint 6 multi-review fix で導入。
+ *
+ * UI/UX agent + qa-dogfooder 共通指摘: 上下の KpiStrip / MetricChip 群と視覚的に
+ * 区別するため、 ReturnGrid 上部に小見出しを表示する。 caller が sectionLabel={null}
+ * 渡すと非表示 (custom mount 用)。
+ */
+function SectionLabel({ text }) {
+  if (!text) return null;
+  return (
+    <div
+      style={{
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: '0.08em',
+        color: 'var(--text-muted)',
+        textTransform: 'uppercase',
+        marginBottom: 'var(--space-2, 8px)',
+      }}
+    >
+      {text}
+    </div>
+  );
+}
+
+export default function ReturnGrid({
+  ticker,
+  frameless = true,
+  testId = 'return-grid',
+  sectionLabel = '期間別リターン',
+}) {
   const { data, loading } = usePeriodReturns(ticker);
 
   // loading 中: skeleton chip 8 個
@@ -149,15 +180,21 @@ export default function ReturnGrid({ ticker, frameless = true, testId = 'return-
         className={frameless ? '' : 'ds-card-frameless'}
         style={{
           padding: frameless ? 0 : 'var(--space-4, 16px)',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
-          gap: 'var(--space-4, 16px)',
           minHeight: 80, // CLS envelope (feedback_cls_envelope_pattern.md)
         }}
       >
-        {PERIODS.map((p) => (
-          <SkeletonChip key={p.key} />
-        ))}
+        <SectionLabel text={sectionLabel} />
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+            gap: 'var(--space-4, 16px)',
+          }}
+        >
+          {PERIODS.map((p) => (
+            <SkeletonChip key={p.key} />
+          ))}
+        </div>
       </div>
     );
   }
@@ -181,19 +218,25 @@ export default function ReturnGrid({ ticker, frameless = true, testId = 'return-
       className={frameless ? '' : 'ds-card-frameless'}
       style={{
         padding: frameless ? 0 : 'var(--space-4, 16px)',
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
-        gap: 'var(--space-4, 16px)',
         minHeight: 80, // CLS envelope (feedback_cls_envelope_pattern.md)
       }}
     >
-      {PERIODS.map((p) => (
-        <PeriodChip
-          key={p.key}
-          periodDef={p}
-          periodData={data.periods[p.key]}
-        />
-      ))}
+      <SectionLabel text={sectionLabel} />
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+          gap: 'var(--space-4, 16px)',
+        }}
+      >
+        {PERIODS.map((p) => (
+          <PeriodChip
+            key={p.key}
+            periodDef={p}
+            periodData={data.periods[p.key]}
+          />
+        ))}
+      </div>
     </div>
   );
 }
