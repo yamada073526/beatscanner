@@ -10,3 +10,5 @@ export { useIntersectionLazy } from './useIntersectionLazy.js';
 export { default as SectionFadeSubtle } from './SectionFadeSubtle.jsx';
 // ReturnGrid Sprint 2: 8 期間 cumulative return % chip grid (ETF + 個別株共通)
 export { default as ReturnGrid } from './ReturnGrid.jsx';
+// institutional-ttm-panel Sprint 2: TTM バリュエーション 3×2 chip grid (個別株専用)
+export { default as TtmValuationPanel } from './TtmValuationPanel.jsx';
