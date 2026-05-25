@@ -22,6 +22,7 @@
  */
 import React from 'react';
 import ReturnGrid from '../features/judgment/primitives/ReturnGrid.jsx';
+import SectorDonut from '../features/judgment/primitives/SectorDonut.jsx';
 import StockPriceChart from './StockPriceChart.jsx';
 
 function _formatAum(aum) {
@@ -310,31 +311,12 @@ export default function EtfOverviewPanel({ etfInfo }) {
         <MetricChip label="資産クラス" value={_formatAssetClass(ov.asset_class)} hint="Asset Class" />
       </div>
 
+      {/* v118 ETF Phase 2: SectorBar 横棒 → SectorDonut PieChart 差替。
+          11 sector の縦長 list が donut + legend で「2 秒理解」 強化、
+          section 高さ も削減。 SectorBar component は dead code、
+          legacy 参照確認後に削除予定。 */}
       {sectors.length > 0 && (
-        <div>
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              color: 'var(--text-muted)',
-              textTransform: 'uppercase',
-              marginBottom: 'var(--space-3, 12px)',
-            }}
-          >
-            セクター構成
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1, 4px)' }}>
-            {sectors.map((s) => (
-              <SectorBar
-                key={s.industry}
-                industry={s.industry}
-                exposure={s.exposure}
-                maxExposure={maxExposure}
-              />
-            ))}
-          </div>
-        </div>
+        <SectorDonut sectors={sectors} sectionLabel="セクター構成" />
       )}
 
       {/* StockPriceChart: セクター構成直後 (= panel 末尾) — Sprint 4 mount。

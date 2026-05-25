@@ -12,3 +12,5 @@ export { default as SectionFadeSubtle } from './SectionFadeSubtle.jsx';
 export { default as ReturnGrid } from './ReturnGrid.jsx';
 // institutional-ttm-panel Sprint 2: TTM バリュエーション 3×2 chip grid (個別株専用)
 export { default as TtmValuationPanel } from './TtmValuationPanel.jsx';
+// etf-sector-donut Sprint 1: ETF セクター構成 donut chart (PieChart)
+export { default as SectorDonut } from './SectorDonut.jsx';
