@@ -50,7 +50,8 @@ import TriageBanner from '../../../../components/TriageBanner.jsx';
 // brand-aspiration §-1「コンシェルジュの一言挨拶」比喩。 frontend-architect 判定: risk 最大 → 末尾 sprint で隔離。
 import SummaryBrief from '../../../../components/SummaryBrief.jsx';
 // Sprint 2: AccordionSection primitive + useIntersectionLazy hook
-import { AccordionSection, useIntersectionLazy } from '../../primitives/index.js';
+// Sprint 3 (return-grid-primitive): ReturnGrid を primitives/index.js から追加
+import { AccordionSection, useIntersectionLazy, ReturnGrid } from '../../primitives/index.js';
 // Sprint 4 (Phase 2): 案1 section in-view fade-in — 主要セクション wrapper
 import SectionFade from '../../primitives/SectionFade.jsx';
 // Sprint 0 (Phase 2): MotionProvider — LazyMotion + domAnimation (framer-motion subset)。
@@ -646,6 +647,21 @@ export default function JudgmentDetail({
           JudgmentDetail レベルでは gap 短縮で上部スカスカを解消。
           Phase G Phase 2: v2 mode で frameless (sticky / bg / border 抑制) */}
       <KpiStrip stats={kpis} frameless={v2Frameless} />
+
+      {/* Sprint 3 (return-grid-primitive): 各期間 cumulative return % chip grid (1W〜10Y)。
+          KpiStrip 直後に mount。 result && selectedTicker guard で ETF / loading 中は非表示。
+          frameless=true で外枠なし (KpiStrip と同じ密着配置)。
+          CLS envelope は ReturnGrid 内部 minHeight:80px で吸収
+          (feedback_cls_envelope_pattern.md 適用)。
+          「年率」 表記なし (SPEC §5 Sprint 2/3 禁止事項、ReturnGrid 内で cumulative hint のみ)。
+          raw hex / !important / 発光系クラス 一切なし。 */}
+      {result && selectedTicker && (
+        <ReturnGrid
+          ticker={selectedTicker}
+          frameless={true}
+          testId="judgment-return-grid"
+        />
+      )}
 
       {/* v104 release MVP: EPS Beat Streak chip — 章 1 verdict anchor、 streak >= 2 のみ表示。
           QuarterlyHistoryTable (章 3 accordion collapsed default) の streak 情報を前出しで anchor 強化。 */}
