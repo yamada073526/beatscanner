@@ -107,28 +107,31 @@ class FMPClient:
         return await self._get(f"/{category}")
 
     async def etf_info(self, ticker: str) -> list[dict]:
-        """ETF metadata (AUM / expense_ratio / inception_date / domicile 等).
+        """ETF metadata (AUM / expense_ratio / inception_date / domicile / sectorsList 等).
 
-        v118 ETF MVP: /stable/etf-info?symbol=SPY → [{symbol, assetsUnderManagement,
-        expenseRatio, inceptionDate, ...}]
+        v118 R9.3 path 確定: /stable/etf/info?symbol=SPY (slash 区切り、 hyphen ではない)
+        返却 keys: symbol, name, description, isin, assetClass, domicile, etfCompany,
+                  expenseRatio, assetsUnderManagement, avgVolume, inceptionDate, nav,
+                  navCurrency, holdingsCount, isActivelyTrading, sectorsList
         """
-        return await self._get("/etf-info", {"symbol": ticker.upper()})
+        return await self._get("/etf/info", {"symbol": ticker.upper()})
 
     async def etf_holdings(self, ticker: str) -> list[dict]:
         """ETF top holdings list (weight / shares / name).
 
-        v118 prod smoke test: /stable/etf-holdings は SPY で 404、 /stable/etf-holder (単数) を
-        試す。 SPEC §4-H には `/stable/etf-holders` 表記もあり、 stable は v3 と path 名が
-        微妙にズレている疑い (v3 は etf-holder 単数)。 失敗時は引き続き graceful degradation。
+        v118 R9.3 path 確定: /stable/etf/holdings — ただし FMP 402 Restricted Endpoint で
+        Premium 上位 plan (Ultimate 等) 必要。 user FMP plan の features 確認で判断。
+        現状 Premium plan では 402 returning subscription upgrade message。
         """
-        return await self._get("/etf-holder", {"symbol": ticker.upper()})
+        return await self._get("/etf/holdings", {"symbol": ticker.upper()})
 
     async def etf_sector_weightings(self, ticker: str) -> list[dict]:
         """ETF sector breakdown (sector / weight %).
 
-        v118 ETF MVP (Phase 2 で donut chart 化予定): /stable/etf-sector-weightings
+        v118 R9.3: /stable/etf/sector-weightings (slash 区切り)。 etf_info の sectorsList
+        field で同等情報取得可能なため、 Phase 2 donut chart まで本 method は未使用。
         """
-        return await self._get("/etf-sector-weightings", {"symbol": ticker.upper()})
+        return await self._get("/etf/sector-weightings", {"symbol": ticker.upper()})
 
     async def historical_price(self, ticker: str, from_date: str, to_date: str) -> list[dict]:
         data = await self._get(
