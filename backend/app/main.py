@@ -932,11 +932,19 @@ async def get_valuation_extras(ticker: str, request: Request):
           "forwardPE": 38.2,                # price / forwardEPSAnnual (analyst-estimates 由来)
           "pegRatio": 1.45,                 # ratios-ttm.priceToEarningsGrowthRatioTTM
           "evToEbitda": 52.8,               # key-metrics-ttm.enterpriseValueOverEBITDATTM
+          # ── Sprint 1 NEW: TTM バリュエーション 6 field ──────────────────────
+          "ttmRevenue": 165200000000,        # TTM 売上高 USD (revenuePerShareTTM × shares)
+          "ttmEps": 2.85,                   # TTM EPS USD/株 (netIncomePerShareTTM)
+          "ttmOperatingMargin": 0.621,      # TTM 営業利益率 0.0-1.0 (operatingProfitMarginTTM)
+          "fcfYield": 0.0285,               # FCF Yield 0.0-0.1 (freeCashFlowYieldTTM)
+          "enterpriseValue": 3450000000000, # EV USD 絶対値 (enterpriseValueTTM)
+          "debtToEquity": 0.42,             # D/E 比率 raw (debtToEquityTTM)
           "sources": {
             "ratios": "ok"|"empty"|"timeout"|"error",
             "key_metrics": "ok"|"empty"|"timeout"|"error",
             "analyst_estimates": "ok"|"empty"|"timeout"|"error",
             "quote": "ok"|"empty"|"timeout"|"error",
+            "cash_flow": "ok"|"empty"|"timeout"|"error",
           },
           "fetched_at": <unix>,
         }
@@ -1099,6 +1107,60 @@ async def get_valuation_extras(ticker: str, request: Request):
     if forward_eps is not None and forward_eps > 0 and price is not None and price > 0:
         forward_pe = price / forward_eps
 
+    # ── Sprint 1 NEW: TTM バリュエーション 6 field 追加抽出 ──────────────────
+    # sources schema: key_metrics ok/empty/timeout/error に応じて graceful degrade
+    # (feedback_data_completeness_guard pattern)。 LLM 経路ゼロ — 全て Python 数値抽出。
+
+    # TTM 売上高: revenuePerShareTTM × weightedAverageSharesDilutedTTM を優先
+    # FMP key-metrics-ttm の代替 key は revenueTTM (plan 差異 fallback)
+    ttm_revenue: float | None = None
+    if sources.get("key_metrics") == "ok":
+        rev_per_share  = _pick(m_rec, "revenuePerShareTTM")
+        shares_diluted = _pick(m_rec, "weightedAverageSharesDilutedTTM",
+                               "weightedAverageShsOutTTM", "sharesOutstanding")
+        if rev_per_share is not None and shares_diluted is not None and shares_diluted > 0:
+            ttm_revenue = rev_per_share * shares_diluted
+        else:
+            # fallback: revenueTTM が直接提供される場合 (FMP plan 差異)
+            ttm_revenue = _pick(m_rec, "revenueTTM", "revenue")
+
+    # TTM EPS: key-metrics-ttm 優先、 fallback ratios-ttm
+    ttm_eps: float | None = None
+    ttm_eps = _pick(m_rec, "netIncomePerShareTTM") or _pick(r_rec, "epsTTM", "epsEarningsPerShareTTM")
+
+    # TTM 営業利益率: ratios-ttm の operatingProfitMarginTTM (0.0-1.0 scale)
+    # FMP は 0-1 で返す (0.621 = 62.1%)。 frontend で × 100 して表示。
+    ttm_operating_margin: float | None = None
+    ttm_operating_margin = _pick(r_rec, "operatingProfitMarginTTM", "operatingIncomeRatioTTM")
+    # 0-100 表記の場合は 0-1 に正規化 (dividendYield と同パターン)
+    if ttm_operating_margin is not None and ttm_operating_margin > 1.5:
+        ttm_operating_margin = ttm_operating_margin / 100.0
+
+    # FCF Yield: key-metrics-ttm の freeCashFlowYieldTTM (0.0-0.1 scale)
+    # 0-100 表記の場合は 0-1 に正規化。
+    fcf_yield: float | None = None
+    fcf_yield = _pick(m_rec, "freeCashFlowYieldTTM", "fcfYieldTTM")
+    if fcf_yield is not None and fcf_yield > 1.5:
+        fcf_yield = fcf_yield / 100.0
+
+    # EV (Enterprise Value): key-metrics-ttm の enterpriseValueTTM (USD 絶対値)
+    enterprise_value: float | None = None
+    if sources.get("key_metrics") == "ok":
+        enterprise_value = _pick(m_rec, "enterpriseValueTTM", "enterpriseValue")
+
+    # D/E ratio: ratios-ttm の debtToEquityTTM (比率 raw、 例 0.42 = 42%)
+    debt_to_equity: float | None = None
+    debt_to_equity = _pick(r_rec, "debtToEquityTTM", "debtToEquityRatioTTM") or _pick(m_rec, "debtToEquityTTM")
+
+    # EV/EBITDA の分子 (ebitda) 抽出 — 既存 ev_to_ebitda が None の場合の保険計算
+    # SPEC 注記: evToEbitda は既存 field を再利用、 重複追加禁止。
+    # ただし企業価値 (EV 絶対値) と EBITDA が両方取れる場合は Python で再計算して精度向上。
+    # ebitda=0 / None の場合は null (ゼロ除算 + 意味なし数値の回避)。
+    if ev_to_ebitda is None and enterprise_value is not None:
+        ebitda_ttm = _pick(m_rec, "ebitdaTTM", "ebitdaPerShareTTM")
+        if ebitda_ttm is not None and ebitda_ttm != 0:
+            ev_to_ebitda = enterprise_value / ebitda_ttm
+
     return {
         "ticker":               t,
         "payoutRatio":          _safe_float(payout_ratio, 4),
@@ -1108,6 +1170,14 @@ async def get_valuation_extras(ticker: str, request: Request):
         "forwardPE":            _safe_float(forward_pe, 2),
         "pegRatio":             _safe_float(peg_ratio, 2),
         "evToEbitda":           _safe_float(ev_to_ebitda, 2),
+        # ── Sprint 1 NEW: TTM バリュエーション 6 field ───────────────────────
+        "ttmRevenue":           _safe_float(ttm_revenue, 0),   # USD 絶対値 (整数精度)
+        "ttmEps":               _safe_float(ttm_eps, 2),        # USD/株
+        "ttmOperatingMargin":   _safe_float(ttm_operating_margin, 4),  # 0.0-1.0
+        "fcfYield":             _safe_float(fcf_yield, 4),      # 0.0-0.1
+        "enterpriseValue":      _safe_float(enterprise_value, 0),  # USD 絶対値
+        "debtToEquity":         _safe_float(debt_to_equity, 4),  # 比率 raw
+        # ─────────────────────────────────────────────────────────────────────
         "sources":              sources,
         "fetched_at":           _time.time(),
     }
