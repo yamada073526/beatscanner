@@ -18,7 +18,6 @@
  *   - feedback_citation_required.md (景表法/金商法 anchor)
  */
 
-import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { sanitizeText } from '../../lib/blocklist.js';
@@ -331,21 +330,15 @@ function buildComponents(onSanitized, ticker, tableRenderedRef) {
  */
 export default function ArticleBody({ bodyMd, onSanitized, ticker }) {
   const handleSanitized = typeof onSanitized === 'function' ? onSanitized : () => {};
-  // v117 R7 bug fix: useMemo メモ化と tableRenderedRef.current 状態保持の組合せで、
-  //   2 回目以降の re-render で「ref.current = true (前回 render 残)」 のままになり
-  //   isFirstTable=false で MidArticleCTA が表示されないバグが発生していた。
-  //
-  //   解: useMemo deps が同じなら同じ components を返すが、 各 buildComponents 計算時に
-  //   local ref を新規生成 → ref は components 1 set 内で閉じている → 同じ ReactMarkdown
-  //   render pass 内で「最初の table」 を確実に判定できる。
-  const components = useMemo(
-    () => {
-      const tableRenderedRef = { current: false };
-      return buildComponents(handleSanitized, ticker, tableRenderedRef);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ticker, handleSanitized],
-  );
+  // v117 R7 root cause + fix: useMemo メモ化を **完全廃止**。
+  //   問題: useMemo deps が同じだと memo が同 components を返す → table fn closure 内の
+  //   local ref が永続化 → 2 回目以降の render で `ref.current=true` のまま固定 →
+  //   isFirstTable=false で MidArticleCTA が表示されないバグ
+  //   解: 毎 render で buildComponents 再呼出 + 毎 render で新 local ref で reset。
+  //   trade-off: react-markdown 内部の component identity 変化で diff コスト微増だが
+  //   feature > perf 優先 (P5-a の useMemo メモ化を rollback、 中間 CTA 確実表示)。
+  const tableRenderedRef = { current: false };
+  const components = buildComponents(handleSanitized, ticker, tableRenderedRef);
 
   // v116: TL;DR section を抽出して accent box で render、 残りは通常 ReactMarkdown
   const { tldr, rest: afterTldr } = extractTLDR(bodyMd);
