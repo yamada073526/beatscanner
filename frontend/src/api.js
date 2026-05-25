@@ -35,6 +35,18 @@ export async function analyze(ticker) {
   return r.json();
 }
 
+/**
+ * v118 ETF MVP: ETF Overview (AUM / TER / 1Y / Top 5 / Inception).
+ * 404 → null (ticker 不存在 / profile 取れない)、 422 → null。
+ */
+export async function fetchEtfInfo(ticker) {
+  const r = await fetchWithTimeout(`/api/etf-info/${encodeURIComponent(ticker)}`, {
+    headers: fmpHeaders(),
+  }, 15000);
+  if (!r.ok) return null;
+  return r.json();
+}
+
 export async function searchTickers(q) {
   if (!q.trim()) return [];
   const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {

@@ -12,7 +12,7 @@ import time as _time
 from datetime import date, timedelta
 from html.parser import HTMLParser as _HTMLParser
 from bs4 import BeautifulSoup
-from typing import Optional
+from typing import Any, Optional
 
 from contextlib import asynccontextmanager
 
@@ -2492,6 +2492,184 @@ async def analyze(ticker: str, request: Request) -> dict:
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+
+# ─── ETF MVP (v118 Step 3 P1) ──────────────────────────────────────────────
+
+# 5 metric overview (AUM / TER / 1Y Return / Top 5 Holdings / Inception)。
+# handover v118 multi-review verdict: ETF は 5 条件適用外で error 表示 → Trust Cliff
+# を防ぐため最小限の overview panel を表示 (1.5 人日 MVP)。
+#
+# fallback 階層 (sources schema 準拠):
+#   - profile (基本情報) は必須、 取れなければ 404
+#   - etf-info / etf-holdings は per-source ok/empty/error で UI 側分岐 (3 段階)
+#   - 1Y Return は historical_price から calc (FMP 250 trading day 取得)
+
+
+@app.get("/api/etf-info/{ticker}")
+async def etf_info_endpoint(ticker: str, request: Request) -> dict:
+    """ETF Overview MVP (v118): AUM / TER / 1Y Return / Top 5 Holdings / Inception.
+
+    Returns:
+        {
+            "ticker": str,
+            "companyName": str,
+            "isEtf": bool,
+            "overview": {
+                "aum": float | None,
+                "expense_ratio": float | None,
+                "inception_date": str | None,
+                "domicile": str | None,
+                "one_year_return_pct": float | None,
+            },
+            "top_holdings": [{"symbol": str, "name": str, "weight_pct": float}, ...],
+            "sources": {
+                "profile": "ok" | "empty" | "error",
+                "etf_info": "ok" | "empty" | "error",
+                "etf_holdings": "ok" | "empty" | "error",
+                "historical_price": "ok" | "empty" | "error",
+            }
+        }
+    """
+    sym = (ticker or "").upper().strip()
+    if not sym:
+        raise HTTPException(status_code=400, detail="ticker is empty")
+
+    api_key = _get_fmp_key(request)
+    try:
+        client = FMPClient(api_key=api_key)
+    except FMPError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    sources: dict[str, str] = {}
+
+    async def _safe_profile() -> list[dict]:
+        try:
+            data = await client.profile(sym)
+            sources["profile"] = "ok" if data else "empty"
+            return data if isinstance(data, list) else []
+        except FMPError as e:
+            sources["profile"] = "error"
+            print(f"[etf-info] profile error for {sym}: {e}")
+            return []
+
+    async def _safe_etf_info() -> list[dict]:
+        try:
+            data = await client.etf_info(sym)
+            # FMP は時に dict (single) / list (multi) 両方返すので list に正規化
+            if isinstance(data, dict):
+                data = [data]
+            sources["etf_info"] = "ok" if data else "empty"
+            return data if isinstance(data, list) else []
+        except FMPError as e:
+            sources["etf_info"] = "error"
+            print(f"[etf-info] etf_info error for {sym}: {e}")
+            return []
+
+    async def _safe_etf_holdings() -> list[dict]:
+        try:
+            data = await client.etf_holdings(sym)
+            if isinstance(data, dict):
+                data = [data]
+            sources["etf_holdings"] = "ok" if data else "empty"
+            return data if isinstance(data, list) else []
+        except FMPError as e:
+            sources["etf_holdings"] = "error"
+            print(f"[etf-info] etf_holdings error for {sym}: {e}")
+            return []
+
+    async def _safe_history() -> list[dict]:
+        try:
+            today = datetime.date.today()
+            from_date = (today - datetime.timedelta(days=400)).isoformat()
+            data = await client.historical_price(sym, from_date, today.isoformat())
+            sources["historical_price"] = "ok" if data else "empty"
+            return data if isinstance(data, list) else []
+        except FMPError as e:
+            sources["historical_price"] = "error"
+            print(f"[etf-info] historical_price error for {sym}: {e}")
+            return []
+
+    profile_rows, etf_info_rows, holdings_rows, hist_rows = await asyncio.gather(
+        _safe_profile(),
+        _safe_etf_info(),
+        _safe_etf_holdings(),
+        _safe_history(),
+    )
+
+    if not profile_rows:
+        raise HTTPException(
+            status_code=404,
+            detail=f"{sym} の profile が取得できません。 ティッカーをご確認ください。",
+        )
+
+    profile = profile_rows[0] if isinstance(profile_rows[0], dict) else {}
+    company_name = profile.get("companyName") or profile.get("name") or sym
+    is_etf = bool(profile.get("isEtf") or profile.get("isFund"))
+
+    etf_info_row = etf_info_rows[0] if etf_info_rows and isinstance(etf_info_rows[0], dict) else {}
+
+    def _as_float(v: Any) -> float | None:
+        if v is None or v == "":
+            return None
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    aum = (
+        _as_float(etf_info_row.get("assetsUnderManagement"))
+        or _as_float(etf_info_row.get("aum"))
+        or _as_float(profile.get("mktCap"))
+    )
+    expense_ratio = _as_float(etf_info_row.get("expenseRatio")) or _as_float(
+        etf_info_row.get("expense_ratio")
+    )
+    inception_date = (
+        etf_info_row.get("inceptionDate")
+        or etf_info_row.get("inception_date")
+        or profile.get("ipoDate")
+        or None
+    )
+    domicile = etf_info_row.get("domicile") or profile.get("country") or None
+
+    # 1Y return = (latest close - close ~252 trading days ago) / oldest close
+    one_year_return_pct: float | None = None
+    if hist_rows:
+        rows_sorted = sorted(
+            (r for r in hist_rows if isinstance(r, dict) and r.get("date")),
+            key=lambda r: r["date"],
+        )
+        if len(rows_sorted) >= 2:
+            latest = _as_float(rows_sorted[-1].get("close") or rows_sorted[-1].get("adjClose"))
+            oldest = _as_float(rows_sorted[0].get("close") or rows_sorted[0].get("adjClose"))
+            if latest and oldest and oldest != 0:
+                one_year_return_pct = round((latest - oldest) / oldest * 100, 2)
+
+    top_holdings: list[dict] = []
+    for h in holdings_rows[:5]:
+        if not isinstance(h, dict):
+            continue
+        top_holdings.append({
+            "symbol": h.get("asset") or h.get("symbol") or "",
+            "name": h.get("name") or "",
+            "weight_pct": _as_float(h.get("weightPercentage") or h.get("weight")),
+        })
+
+    return {
+        "ticker": sym,
+        "companyName": company_name,
+        "isEtf": is_etf,
+        "overview": {
+            "aum": aum,
+            "expense_ratio": expense_ratio,
+            "inception_date": inception_date,
+            "domicile": domicile,
+            "one_year_return_pct": one_year_return_pct,
+        },
+        "top_holdings": top_holdings,
+        "sources": sources,
+    }
 
 
 @app.get("/api/portfolio-judgment")

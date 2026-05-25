@@ -1010,6 +1010,8 @@ export default function App() {
       return {
         result: cache?.result || null,
         guidance: cache?.guidance || null,
+        // v118 ETF MVP: ETF 入力時は 5 条件 result 不在 + etfInfo を Pane 3 で render
+        etfInfo: cache?.etfInfo || null,
         price: px?.price ?? null,
         changePct: px?.changePct ?? null,
         lastAnalyzedAt: cache?.ts ?? 0,

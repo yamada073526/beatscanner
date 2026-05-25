@@ -14,7 +14,7 @@
  *   - 重い API は prefetchAll に含まれている前提 (api.js 側)
  */
 import { useCallback, useRef, useState } from 'react';
-import { analyze, demoAnalyze, fetchGuidance, fetchGuidanceBasic } from '../../../api.js';
+import { analyze, demoAnalyze, fetchEtfInfo, fetchGuidance, fetchGuidanceBasic } from '../../../api.js';
 import { useWorkspaceStore } from '../../../state/workspaceStore.js';
 
 /** 同銘柄の再訪を 0 秒化する result キャッシュ TTL (10 分)。F5 で消えるメモリキャッシュ。 */
@@ -136,8 +136,28 @@ export function useJudgmentResult({
             } else if (msg === 'Failed to fetch' || msg.includes('NetworkError')) {
               setError('バックエンド接続エラー (サーバーが応答していません)。 数分後に再試行してください。');
             } else if (msg.includes('ETF') || msg.includes('Fund') || msg.includes('はETF')) {
-              // ETF / 投資信託 / インデックス: 5 条件適用外
-              setError(`${t} は ETF / 投資信託のため、 ファンダメンタル 5 条件の判定対象外です。 個別株 (例: NVDA / AAPL / MSFT) をお試しください。`);
+              // v118 ETF MVP: 5 条件適用外 → error 表示せず ETF Overview を fetch して
+              // resultCacheRef に保存。 detailFor 経由で JudgmentDetail が <EtfOverviewPanel />
+              // を render する (Trust Cliff 防止)。
+              setError(null);
+              fetchEtfInfo(t)
+                .then((etfInfo) => {
+                  if (searchIdRef.current !== searchId) return;
+                  if (etfInfo) {
+                    const prev = resultCacheRef.current.get(t) || {};
+                    resultCacheRef.current.set(t, { ...prev, etfInfo, ts: Date.now() });
+                    // detailFor 再評価を促すため activeTicker を再 set (no-op だが store subscribe 発火)
+                    try {
+                      useWorkspaceStore.getState().setActiveTicker(t);
+                    } catch { /* noop */ }
+                  } else {
+                    // ETF info も取れなかった → 既存の error メッセージに fallback
+                    setError(`${t} は ETF / 投資信託のため、 ファンダメンタル 5 条件の判定対象外です。 個別株 (例: NVDA / AAPL / MSFT) をお試しください。`);
+                  }
+                })
+                .catch(() => {
+                  setError(`${t} は ETF / 投資信託のため、 ファンダメンタル 5 条件の判定対象外です。 個別株 (例: NVDA / AAPL / MSFT) をお試しください。`);
+                });
             } else if (msg.includes('データが見つかりません') || msg.includes('Need at least') || msg.includes('annual periods')) {
               // 上場廃止 / IPO 直後 / SPAC / 財務 3 期未満
               setError(`${t} の財務データが取得できません。 上場廃止・IPO 直後・SPAC・取引停止などの可能性があります。 別のティッカーをお試しください。`);

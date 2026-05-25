@@ -75,6 +75,8 @@ import ChapterTabs from '../../primitives/ChapterTabs.jsx';
 // Phase G Phase 3 (handover v99 §0-D): ChapterSection — 章 2-5 用 generic 章扉 (Noto Serif JP / gold hairline)。
 // headerOnly mode で content 再配置せず brand 一貫性 ([[feedback-gold-accent-continuity]]) を実現。
 import ChapterSection from './ChapterSection.jsx';
+// v118 ETF MVP: ETF 入力時は 5 条件適用外 → EtfOverviewPanel を render (Trust Cliff 防止)。
+import EtfOverviewPanel from '../../../../components/EtfOverviewPanel.jsx';
 
 // DetailReport は重量級 (36 KB gzip) のため lazy load
 const DetailReport = lazy(() => import('../../../../components/DetailReport.jsx'));
@@ -450,6 +452,12 @@ export default function JudgmentDetail({
   // ticker は選択されたが結果まだ無 → skeleton 表示 (loading 中の体感改善)
   if (selectedTicker && !result && detail?.isLoading) {
     return <SkeletonDetail />;
+  }
+  // v118 ETF MVP: ETF 判定 (5 条件結果なし + etfInfo あり) → EtfOverviewPanel のみ表示。
+  //   useJudgmentResult が ETF error catch 時に fetchEtfInfo して cache に保存、
+  //   detailFor が cache.etfInfo を返す。 Trust Cliff 防止 (空白 / generic error 回避)。
+  if (selectedTicker && !result && detail?.etfInfo) {
+    return <EtfOverviewPanel etfInfo={detail.etfInfo} />;
   }
   const verdict = result
     ? result.overallPass

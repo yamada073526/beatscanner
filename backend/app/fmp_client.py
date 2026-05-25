@@ -106,6 +106,28 @@ class FMPClient:
         """category: 'biggest-gainers' | 'biggest-losers' | 'most-actives'"""
         return await self._get(f"/{category}")
 
+    async def etf_info(self, ticker: str) -> list[dict]:
+        """ETF metadata (AUM / expense_ratio / inception_date / domicile 等).
+
+        v118 ETF MVP: /stable/etf-info?symbol=SPY → [{symbol, assetsUnderManagement,
+        expenseRatio, inceptionDate, ...}]
+        """
+        return await self._get("/etf-info", {"symbol": ticker.upper()})
+
+    async def etf_holdings(self, ticker: str) -> list[dict]:
+        """ETF top holdings list (weight / shares / name).
+
+        v118 ETF MVP: /stable/etf-holdings?symbol=SPY → [{asset, name, weightPercentage, ...}]
+        """
+        return await self._get("/etf-holdings", {"symbol": ticker.upper()})
+
+    async def etf_sector_weightings(self, ticker: str) -> list[dict]:
+        """ETF sector breakdown (sector / weight %).
+
+        v118 ETF MVP (Phase 2 で donut chart 化予定): /stable/etf-sector-weightings
+        """
+        return await self._get("/etf-sector-weightings", {"symbol": ticker.upper()})
+
     async def historical_price(self, ticker: str, from_date: str, to_date: str) -> list[dict]:
         data = await self._get(
             "/historical-price-eod/full",
