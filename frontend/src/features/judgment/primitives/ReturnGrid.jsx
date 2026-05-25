@@ -251,7 +251,7 @@ export default function ReturnGrid({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+          gridTemplateColumns: 'repeat(4, 1fr)',
           gap: 'var(--space-4, 16px)',
         }}
       >
