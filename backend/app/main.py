@@ -6483,6 +6483,174 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
     }
 
 
+# ---------------------------------------------------------------------------
+# Sprint 1: /api/period-returns/{ticker}
+# 8 期間 cumulative return % (1W/1M/3M/6M/1Y/3Y/5Y/10Y) を Python 純計算で返す。
+# LLM SDK 一切不使用。aggregator/ 不触。cache TTL 6h (CACHE_TTL_EARNINGS 流用)。
+# SPEC: docs/specs/SPEC_2026-05-26_return-grid-primitive.md §5 Sprint 1
+# ---------------------------------------------------------------------------
+
+# period-returns 専用 in-memory cache (cache key → {"data": dict, "ts": float})
+_PERIOD_RETURNS_CACHE: dict[str, dict] = {}
+_PERIOD_RETURNS_TTL = CACHE_TTL_EARNINGS  # 6h (= 6 * 3600 秒)
+
+# 8 期間の定義: ラベル → calendar days
+_RETURN_PERIODS: list[tuple[str, int]] = [
+    ("1W",  7),
+    ("1M",  30),
+    ("3M",  91),
+    ("6M",  182),
+    ("1Y",  365),
+    ("3Y",  1095),
+    ("5Y",  1825),
+    ("10Y", 3650),
+]
+
+
+def _lookup_close_on_or_before(close_map: dict[str, float], target_iso: str, max_lookback: int = 10) -> tuple[float | None, str | None]:
+    """target_iso 当日以前で最も近い取引日 close と実際の日付を返す。 見つからなければ (None, None)。"""
+    try:
+        d = date.fromisoformat(target_iso[:10])
+    except Exception:
+        return None, None
+    for i in range(max_lookback + 1):
+        key = (d - timedelta(days=i)).isoformat()
+        v = close_map.get(key)
+        if v is not None:
+            try:
+                fv = float(v)
+                if fv > 0:
+                    return fv, key
+            except (TypeError, ValueError):
+                continue
+    return None, None
+
+
+@app.get("/api/period-returns/{ticker}")
+async def period_returns(ticker: str, request: Request) -> dict:
+    """8 期間 (1W/1M/3M/6M/1Y/3Y/5Y/10Y) の累積リターン % を返す。
+
+    計算式: (latest_close - past_close) / past_close * 100
+    adjClose 優先 (split-adjusted)。 inception_date 前の期間は available=false。
+    LLM SDK 一切不使用 / Python 純計算。 cache TTL 6h。
+    demo rate limit を継承 (LP 「3銘柄/日まで無料」 整合)。
+    """
+    t = ticker.upper()
+    today = date.today()
+    today_iso = today.isoformat()
+    cache_key = f"period_returns::{t}::{today_iso}"
+
+    # --- cache hit check ---
+    now_m = _time.monotonic()
+    cached = _PERIOD_RETURNS_CACHE.get(cache_key)
+    if cached and now_m - cached["ts"] < _PERIOD_RETURNS_TTL:
+        return {**cached["data"], "cached": True}
+
+    # --- demo rate limit (BYPASS_TOKEN 対応済) ---
+    if not _is_bypassed(request):
+        ip = _client_ip(request)
+        if not _check_demo_rate_limit(ip):
+            raise HTTPException(
+                status_code=429,
+                detail="本日のお試し回数 (3銘柄) を超えました。Googleログインで無制限になります。",
+            )
+
+    # --- API key 取得 ---
+    fmp_key = (
+        _get_fmp_key(request)
+        or os.getenv("FMP_API_KEY")
+        or os.getenv("FMP_DEMO_API_KEY")
+    )
+    if not fmp_key:
+        raise HTTPException(status_code=503, detail="FMP API key が設定されていません。")
+
+    # --- 10Y 分 (3650 日) を一括 fetch (FMP rate limit 配慮: 1 ticker 1 request) ---
+    max_days = _RETURN_PERIODS[-1][1]  # 3650
+    from_date = (today - timedelta(days=max_days + 30)).isoformat()  # 余裕を 30 日持つ
+
+    raw_rows: list[dict] = []
+    try:
+        client = FMPClient(api_key=fmp_key)
+        raw_rows = await client.historical_price(t, from_date, today_iso) or []
+    except Exception as e:
+        print(f"[period-returns] historical_price failed for {t}: {e}")
+        # graceful degradation: 全期間 null で HTTP 200 を返す (frontend が — 表示)
+        null_periods = {
+            label: {"return_pct": None, "from_date": None, "to_date": today_iso, "available": False}
+            for label, _ in _RETURN_PERIODS
+        }
+        return {
+            "ticker": t,
+            "as_of": today_iso,
+            "periods": null_periods,
+            "source": "fmp",
+            "cached": False,
+            "error": "price_fetch_failed",
+        }
+
+    # --- adjClose 優先の close_map 構築 ---
+    close_map: dict[str, float] = {}
+    for r in (raw_rows or []):
+        if not isinstance(r, dict):
+            continue
+        d_raw = r.get("date")
+        if not d_raw:
+            continue
+        d_iso = str(d_raw)[:10]
+        v = r.get("adjClose") if r.get("adjClose") is not None else r.get("close")
+        try:
+            if v is not None:
+                close_map[d_iso] = float(v)
+        except (TypeError, ValueError):
+            continue
+
+    if not close_map:
+        # ticker が存在しない or データなし → 404 で明示 (graceful degradation 範囲外)
+        raise HTTPException(status_code=404, detail=f"{t} の価格データが見つかりません。")
+
+    # --- 最新 close (today or 最近の取引日) ---
+    latest_close, latest_date = _lookup_close_on_or_before(close_map, today_iso, max_lookback=10)
+    if latest_close is None:
+        raise HTTPException(status_code=404, detail=f"{t} の直近価格が取得できませんでした。")
+
+    # --- 各期間リターン計算 ---
+    periods_result: dict[str, dict] = {}
+    for label, days in _RETURN_PERIODS:
+        past_target = (today - timedelta(days=days)).isoformat()
+        past_close, past_date = _lookup_close_on_or_before(close_map, past_target, max_lookback=10)
+        if past_close is None or past_date is None:
+            # inception_date 前 (データなし) → available=false
+            periods_result[label] = {
+                "return_pct": None,
+                "from_date": None,
+                "to_date": latest_date,
+                "available": False,
+            }
+        else:
+            try:
+                ret_pct = round((latest_close - past_close) / past_close * 100, 2)
+            except (ZeroDivisionError, TypeError):
+                ret_pct = None
+            periods_result[label] = {
+                "return_pct": ret_pct,
+                "from_date": past_date,
+                "to_date": latest_date,
+                "available": ret_pct is not None,
+            }
+
+    result = {
+        "ticker": t,
+        "as_of": today_iso,
+        "periods": periods_result,
+        "source": "fmp",
+        "cached": False,
+    }
+
+    # --- cache 書き込み ---
+    _PERIOD_RETURNS_CACHE[cache_key] = {"data": result, "ts": now_m}
+    return result
+
+
 async def _fetch_news_for_ticker(ticker: str, api_key: str | None, limit: int) -> list[dict]:
     """単一銘柄ニュース取得 (FMP → yfinance fallback)。/api/news と /api/news/bulk が共用."""
     client = FMPClient(api_key=api_key)
