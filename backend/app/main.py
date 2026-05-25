@@ -2438,7 +2438,12 @@ async def _analyze_core(ticker: str, fmp_key: str | None, use_cache: bool = True
         )
 
     currency = "USD"
-    if not income or not cash:
+    # v117 R8 h2 (frontend architect verdict): FMP primary 強化。
+    #   旧: `not income or not cash` で FMP 片方欠落でも yfinance fallback → 中国 ADR /
+    #       SMCI 等で yfinance も Railway IP block されて結局空に落ちる
+    #   新: `not income and not cash` で FMP 完全失敗時のみ yfinance fallback。
+    #       FMP 片方取れた場合は judge() が補完判定 (judge は 3 期不足等で _AnalyzeNotFoundError)
+    if not income and not cash:
         # Phase 2.9 Sprint 3 #Pane3-perf: yfinance に asyncio.wait_for(20s) timeout 追加
         # 真因: Railway IP が yfinance に block されると無期限ハング → frontend 永遠分析中
         # 修正: 20s で必ず timeout、 fallback で income/cash 空配列 → _AnalyzeNotFoundError へ落ちる

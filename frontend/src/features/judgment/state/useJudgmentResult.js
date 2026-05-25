@@ -128,13 +128,24 @@ export function useJudgmentResult({
         .catch((e) => {
           if (searchIdRef.current === searchId) {
             const msg = e.message || '';
-            // demo の rate limit (429) 専用メッセージ (handleLPTickerClick と挙動を揃える)
+            // v117 R8 h1: error UI 分類 (frontend architect verdict)
+            //   旧: 全エラーが「分析対象外」 単一メッセージで離脱動機 → user 不信
+            //   新: ETF / データ無し / SPAC / rate limit / network で別メッセージ + 次行動誘導
             if (useDemo && (msg.includes('429') || msg.includes('limit') || msg.includes('Rate'))) {
-              setError('本日のお試し回数 (3銘柄) を超えました。Googleログインで無制限になります。');
+              setError('本日のお試し回数 (3銘柄) を超えました。 Google ログインで無制限になります。');
             } else if (msg === 'Failed to fetch' || msg.includes('NetworkError')) {
-              setError('バックエンド接続エラー（サーバーが応答していません）。start.sh でサーバーが起動しているか確認してください。');
+              setError('バックエンド接続エラー (サーバーが応答していません)。 数分後に再試行してください。');
+            } else if (msg.includes('ETF') || msg.includes('Fund') || msg.includes('はETF')) {
+              // ETF / 投資信託 / インデックス: 5 条件適用外
+              setError(`${t} は ETF / 投資信託のため、 ファンダメンタル 5 条件の判定対象外です。 個別株 (例: NVDA / AAPL / MSFT) をお試しください。`);
+            } else if (msg.includes('データが見つかりません') || msg.includes('Need at least') || msg.includes('annual periods')) {
+              // 上場廃止 / IPO 直後 / SPAC / 財務 3 期未満
+              setError(`${t} の財務データが取得できません。 上場廃止・IPO 直後・SPAC・取引停止などの可能性があります。 別のティッカーをお試しください。`);
+            } else if (msg.includes('404')) {
+              setError(`${t} が見つかりません。 ティッカーの綴りをご確認ください (例: GOOGL、 NVDA、 BRK.B)。`);
             } else {
-              setError(msg);
+              // 想定外エラー: backend 修正待ち、 user に再試行誘導
+              setError(`${t} の分析中に問題が発生しました: ${msg}。 時間を置いて再試行してください。`);
             }
           }
         });
