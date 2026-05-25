@@ -274,6 +274,31 @@ export async function generateOgImage({ slug, title, ticker, published_at, verdi
     return null;
   }
 
+  // ── v117 Frontend P4: sharp で PNG 圧縮 (SNS クローラ 5s timeout 回避) ────
+  // resvg のデフォルト PNG は非圧縮 1200x630 で 80KB+、 SNS bot の image fetch が
+  // 遅延するとシェア時に preview が出ない事故が起きる。 sharp の palette + adaptiveFiltering で
+  // 30-40KB に圧縮 (画質は OG 用途で十分)。 失敗時は元 buffer を維持 (silent-fail)。
+  try {
+    const { default: sharp } = await import('sharp');
+    const compressed = await sharp(pngBuffer)
+      .png({
+        compressionLevel: 9,    // 0-9 max
+        adaptiveFiltering: true,
+        palette: true,          // 8-bit palette (text + flat color OGP に最適)
+        quality: 90,            // palette quality (lossy 1-100)
+        effort: 7,              // 1-10、 7 で compression vs CPU balance
+      })
+      .toBuffer();
+    if (compressed && compressed.length > 0 && compressed.length < pngBuffer.length) {
+      const ratio = Math.round((1 - compressed.length / pngBuffer.length) * 100);
+      console.log(`[og-overlay] sharp 圧縮: ${Math.round(pngBuffer.length / 1024)} → ${Math.round(compressed.length / 1024)} KB (-${ratio}%)`);
+      pngBuffer = compressed;
+    }
+  } catch (err) {
+    // sharp は build-only devDep、 install 漏れや native binding 失敗時は silent-fail
+    console.warn('[og-overlay] sharp 圧縮 skip (元 buffer 維持):', err.message);
+  }
+
   // ── PNG を dist/articles/og/<slug>.png に書き出し ─────────────────────────
   try {
     if (!fs.existsSync(outDir)) {

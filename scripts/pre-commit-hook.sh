@@ -115,4 +115,32 @@ for f in $STAGED_TSX; do
     fi
 done
 
+# --- Check 5: BLOCKLIST_PATTERNS / BLOCKLIST_PATTERNS_SSG mirror 同期検証 (v117 Frontend P5) ---
+# frontend/src/lib/blocklist.js (BLOCKLIST_PATTERNS) と
+# frontend/scripts/build-articles.mjs (BLOCKLIST_PATTERNS_SSG) は
+# Hallucination Guard 第 3 層の SSG / SPA 両 path で 1:1 mirror が必須。
+# 片方だけ変更されたら BLOCK し、 両方更新を強制する。
+#
+# 検出方法:
+#   - blocklist.js 内 `BLOCKLIST_PATTERNS = [` から `]` までの正規表現行数を計測
+#   - build-articles.mjs 内 `BLOCKLIST_PATTERNS_SSG = [` から `]` までの正規表現行数を計測
+#   - 不一致なら BLOCK
+BLOCKLIST_FILE="frontend/src/lib/blocklist.js"
+SSG_FILE="frontend/scripts/build-articles.mjs"
+STAGED_BLOCKLIST=$(git diff --cached --name-only | grep -E "^($BLOCKLIST_FILE|$SSG_FILE)\$" || true)
+if [ -n "$STAGED_BLOCKLIST" ] && [ -f "$BLOCKLIST_FILE" ] && [ -f "$SSG_FILE" ]; then
+    # awk で BLOCKLIST_PATTERNS = [ ... ] 区間内の `/` 始まる行 (regex literal) を count
+    COUNT_A=$(awk '/BLOCKLIST_PATTERNS\s*=\s*\[/,/^\];?\s*$/' "$BLOCKLIST_FILE" | grep -cE '^\s*/' || true)
+    COUNT_B=$(awk '/BLOCKLIST_PATTERNS_SSG\s*=\s*\[/,/^\];?\s*$/' "$SSG_FILE" | grep -cE '^\s*/' || true)
+    if [ "$COUNT_A" != "$COUNT_B" ]; then
+        echo "[pre-commit] BLOCKED: BLOCKLIST_PATTERNS と BLOCKLIST_PATTERNS_SSG の regex 数が一致しません"
+        echo "  ↳ $BLOCKLIST_FILE     : $COUNT_A patterns"
+        echo "  ↳ $SSG_FILE : $COUNT_B patterns"
+        echo "  ↳ Hallucination Guard 第 3 層 (SSG / SPA mirror) が崩れます。"
+        echo "  ↳ 両方の file を同じ pattern set に揃えてから commit してください。"
+        echo "  ↳ 意図的に片方だけ変更したい場合は --no-verify で迂回可、 ただし mirror 復旧 commit を即時推奨。"
+        exit 1
+    fi
+fi
+
 exit 0

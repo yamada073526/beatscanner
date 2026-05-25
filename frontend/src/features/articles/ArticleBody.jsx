@@ -18,7 +18,7 @@
  *   - feedback_citation_required.md (景表法/金商法 anchor)
  */
 
-import { useRef } from 'react';
+import { useRef, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { sanitizeText } from '../../lib/blocklist.js';
@@ -330,7 +330,15 @@ export default function ArticleBody({ bodyMd, onSanitized, ticker }) {
   const handleSanitized = typeof onSanitized === 'function' ? onSanitized : () => {};
   // v116 R6: 最初の table 直後に中間 CTA を挿入するための tracker (再 render で reset しない)
   const tableRenderedRef = useRef(false);
-  const components = buildComponents(handleSanitized, ticker, tableRenderedRef);
+  // v117 Frontend P5: buildComponents を useMemo メモ化 (毎 render の全 component object 再生成回避)
+  //   tableRenderedRef は ref で stable、 deps から除外。
+  //   handleSanitized は inline () => {} で初回 mount 後 stable (typeof check で同 instance 維持)。
+  //   ticker / handleSanitized が同じなら同じ components object → react-markdown 内部の diff cost 削減。
+  const components = useMemo(
+    () => buildComponents(handleSanitized, ticker, tableRenderedRef),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ticker, handleSanitized],
+  );
 
   // v116: TL;DR section を抽出して accent box で render、 残りは通常 ReactMarkdown
   const { tldr, rest: afterTldr } = extractTLDR(bodyMd);
