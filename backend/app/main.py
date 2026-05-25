@@ -2580,8 +2580,8 @@ async def etf_info_endpoint(ticker: str, request: Request) -> dict:
 
     async def _safe_history() -> list[dict]:
         try:
-            today = datetime.date.today()
-            from_date = (today - datetime.timedelta(days=400)).isoformat()
+            today = date.today()
+            from_date = (today - timedelta(days=400)).isoformat()
             data = await client.historical_price(sym, from_date, today.isoformat())
             sources["historical_price"] = "ok" if data else "empty"
             return data if isinstance(data, list) else []
