@@ -45,7 +45,7 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false, hideHead
   const { enabled: translateNews, toggle: handleToggle, displayTitles, translating } = useTranslation(news);
   const { articleModal, openArticle, closeArticle } = useArticleModal();
   // §v66 §2: workspace mode では Pane 5 (Reading Room) を開く. それ以外は modal.
-  const setActiveReadingItem = useWorkspaceStore((s) => s.setActiveReadingItem);
+  // v118 P6: setActiveReadingItem 不使用 (Pane 5 廃止、 modal で代替)
 
   // 表示方式 (list / grid). データロード後、件数ベースで自動初期化 + ユーザー上書きで永続化。
   const [view, setView] = useState(() => {
@@ -169,26 +169,22 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false, hideHead
       .finally(() => setLoading(false));
   }
 
-  // 記事クリック時: workspace mode は Pane 5 へ、それ以外はモーダルを開く
+  // v118 P6: Pane 5 (Reading Room) 廃止により、 workspace mode でも modal を使用。
+  // 旧来 useWorkspaceReader=true → setActiveReadingItem だったが、 Pane4Inspector + pane4/
+  // 削除で ReadingRoom 描画者が消滅、 click → 何も起こらない broken UX を防止するため
+  // 常に modal で開く。 useWorkspaceReader prop は backward compat で残置。
   const handleArticleClick = (item) => {
     const idx = news.indexOf(item);
-    setSelectedIdx(idx); // 選択中の記事を highlight (Pane 4 is-open と同)
+    setSelectedIdx(idx);
     const title = displayTitles?.[idx] || item.title;
-    if (useWorkspaceReader) {
-      // Pane 5 ReadingMode が読み取る shape を維持 (title/url/source/published/image/summary)
-      setActiveReadingItem({ ...item, _wsTitle: title });
-      return;
-    }
     openArticle(item, title);
   };
 
-  // モーダル / Pane 5 が閉じたら selected state を解除 (両方 null になった時点で highlight 消す)
-  const activeReadingItem = useWorkspaceStore((s) => s.activeReadingItem);
+  // v118 P6: Pane 5 廃止により modal のみで判定
   useEffect(() => {
     if (selectedIdx == null) return;
-    const stillOpen = (useWorkspaceReader ? !!activeReadingItem : !!articleModal);
-    if (!stillOpen) setSelectedIdx(null);
-  }, [articleModal, activeReadingItem, useWorkspaceReader, selectedIdx]);
+    if (!articleModal) setSelectedIdx(null);
+  }, [articleModal, selectedIdx]);
 
   useEffect(() => { load(); }, [ticker]);
 

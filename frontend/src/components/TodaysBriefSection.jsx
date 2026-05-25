@@ -5,7 +5,7 @@ import NewsViewToggle from './NewsViewToggle.jsx';
 import NewsArticleModal from './NewsArticleModal.jsx';
 import TranslationToggle from './TranslationToggle.jsx';
 import useArticleModal from '../hooks/useArticleModal.js';
-import { useWorkspaceStore } from '../state/workspaceStore.js';
+// v118 P6: useWorkspaceStore 不使用 (Pane 5 廃止で setActiveReadingItem 削除)
 import useTranslation from '../hooks/useTranslation.js';
 
 // 重要度バッジ 3 種でタブ切替 (v41 Phase 3.5a)
@@ -345,17 +345,12 @@ export default function TodaysBriefSection({ useWorkspaceReader = false }) {
   const { enabled: translateEnabled, toggle: toggleTranslate, displayTitles, translating } =
     useTranslation(data.items);
   const { articleModal, openArticle, closeArticle } = useArticleModal();
-  // §v66 §2: workspace mode では Pane 5 (Reading Room) を開く
-  const setActiveReadingItem = useWorkspaceStore((s) => s.setActiveReadingItem);
+  // v118 P6: Pane 5 (Reading Room) 廃止、 workspace mode でも modal を使用。
+  // useWorkspaceReader prop は backward compat で残置、 click handler は modal 統一。
 
-  // 記事クリック: workspace mode は Pane 5、それ以外はモーダル
   const handleArticleClick = (item) => {
     const idx = data.items.indexOf(item);
     const title = displayTitles?.[idx] || item.title;
-    if (useWorkspaceReader) {
-      setActiveReadingItem({ ...item, _wsTitle: title });
-      return;
-    }
     openArticle(item, title);
   };
 

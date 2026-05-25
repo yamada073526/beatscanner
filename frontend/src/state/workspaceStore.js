@@ -56,11 +56,8 @@ export const useWorkspaceStore = create(
       // PortfolioSummaryRow / PortfolioInsightsRow / PortfolioHoldingsList の数値のみ換算、
       // 個別銘柄 price chart / Pane 2 list の price は USD 維持 (米株分析が主目的)。
       displayCurrency: 'USD',
-      // v62 WS-Phase2: Pane 4 inspector 表示切替 (default false、3 ペインで dogfood)
-      pane4Expanded: false,
-      // handover v81 Top 4 (6 体合議 5/6 賛成): Pane 4 内の section 切替。
-      // 'macro' = The Macro Lens (ニュース、 既存)、 'scanner' = CustomScreenerPanel (Cup-Handle + ファンダ 5)。
-      pane4Section: 'macro',
+      // v118 P6: Pane 4 inspector 廃止 (pane4Expanded / pane4Section 削除)。
+      // Pane4Inspector + pane4/ 全 component 削除済 (handover v118 §残バックログ)。
       // v63 §12-B-4: Pane 1 各セクション折り畳み (default 全 open)
       navCollapsed: false,
       watchlistCollapsed: false,
@@ -106,10 +103,7 @@ export const useWorkspaceStore = create(
       // user 要望: Pane 2 注目銘柄/ポートフォリオから ticker クリック → Pane 2 はそのまま、Pane 3 のみ判定詳細表示。
       // 連続分析時の「タブ往復」を撲滅。指数 row click でリセット (chart に戻る)、tab 切替でも自動リセット。
       pane3JudgmentOverride: false,
-      // §v66 §2: Pane 3 ↔ Pane 5 統合 (6 体合議: Pane 5 統一推奨).
-      // Pane 4 の selected を hoist し、Pane 3 NewsPanel からも setActiveReadingItem で
-      // 同じ Reading Room を開けるようにする。null = 閉じている.
-      activeReadingItem: null,
+      // v118 P6: activeReadingItem 削除 (Pane 5 ReadingRoom 廃止、 NewsPanel + TodaysBriefSection は modal で代替)
       // handover v82 Phase 5.5 (multi-review 6 体合議 verdict、 2026-05-17):
       // ConditionRow click → DiagramCard 該当 condition + step を pulse highlight。
       // number (0-4) = 個別 condition index、 'all_steps' = 営業利益増 (toast fallback)、
@@ -136,12 +130,7 @@ export const useWorkspaceStore = create(
       setSparklinePeriod: (p) => set(() => ({ sparklinePeriod: p })),
       setPortfolioPeriod: (p) => set(() => ({ portfolioPeriod: p })),
       setDisplayCurrency: (c) => set(() => ({ displayCurrency: c === 'JPY' ? 'JPY' : 'USD' })),
-      togglePane4: () => set((s) => ({ pane4Expanded: !s.pane4Expanded })),
-      // pane4Section setter: section 切替時に Pane 4 を自動展開 (collapsed のまま切替えると気づかない)。
-      setPane4Section: (section) => set((s) => ({
-        pane4Section: section === 'scanner' ? 'scanner' : 'macro',
-        pane4Expanded: s.pane4Expanded || section === 'scanner', // scanner 起動時は展開、 macro 戻りは現状維持
-      })),
+      // v118 P6: togglePane4 / setPane4Section 削除 (Pane4 廃止)
       toggleNav: () => set((s) => ({ navCollapsed: !s.navCollapsed })),
       toggleWatchlist: () => set((s) => ({ watchlistCollapsed: !s.watchlistCollapsed })),
       toggleHoldings: () => set((s) => ({ holdingsCollapsed: !s.holdingsCollapsed })),
@@ -190,13 +179,7 @@ export const useWorkspaceStore = create(
         };
       }),
       setPane3JudgmentOverride: (v) => set(() => ({ pane3JudgmentOverride: !!v })),
-      // §v66 §2: Reading Room を任意ペインから開く。Pane 4 が折り畳まれていれば自動展開.
-      setActiveReadingItem: (item) =>
-        set((s) => ({
-          activeReadingItem: item,
-          pane4Expanded: item ? true : s.pane4Expanded,
-        })),
-      closeReadingRoom: () => set(() => ({ activeReadingItem: null })),
+      // v118 P6: setActiveReadingItem / closeReadingRoom 削除 (Pane 5 廃止、 modal で代替)
       // handover v82 Phase 5.5: setter は pure (timer は consumer = DiagramCard 側 useEffect で管理)。
       // Web 設計 + 開発 reviewer 一致 verdict: store 内 setTimeout は HMR / StrictMode で leak リスク。
       setPulsingConditionIndex: (idx) => set(() => ({ pulsingConditionIndex: idx })),
@@ -233,7 +216,7 @@ export const useWorkspaceStore = create(
         sparklinePeriod: state.sparklinePeriod,
         portfolioPeriod: state.portfolioPeriod,
         displayCurrency: state.displayCurrency,
-        pane4Expanded: state.pane4Expanded,
+        // v118 P6: pane4Expanded 削除 (Pane 4 廃止)
         navCollapsed: state.navCollapsed,
         watchlistCollapsed: state.watchlistCollapsed,
         holdingsCollapsed: state.holdingsCollapsed,
@@ -243,7 +226,7 @@ export const useWorkspaceStore = create(
         moversCollapsed: state.moversCollapsed,
         portfolioCollapsed: state.portfolioCollapsed,
         selectedAccountId: state.selectedAccountId,
-        pane4Section: state.pane4Section,
+        // v118 P6: pane4Section 削除
       }),
       version: 13,
       // v1 → v2: 新 collapse keys (nav/watchlist/holdings/observing) 追加。
@@ -316,9 +299,7 @@ export const useWorkspaceStore = create(
           // 既存 user の Pane 3 体験はそのまま (index default)。
         }
         if (version < 13) {
-          // handover v81 Top 4 (6 体合議): Pane 4 に scanner section を追加。
-          // 既存 user は 'macro' (= 旧来の Macro Lens) を default で維持。
-          persistedState = { ...persistedState, pane4Section: 'macro' };
+          // v118 P6: 旧 pane4Section migration は no-op (Pane 4 廃止)
         }
         return persistedState;
       },

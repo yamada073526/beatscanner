@@ -17,7 +17,8 @@
  */
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { PanelRightOpen, PanelRightClose, MoreHorizontal, Search } from 'lucide-react';
+// v118 P6: PanelRightOpen / PanelRightClose 削除 (Pane4 toggle 廃止)
+import { MoreHorizontal, Search } from 'lucide-react';
 import MarketStripCompact from './MarketStripCompact.jsx';
 import MarketStatusPill from './MarketStatusPill.jsx';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
@@ -25,8 +26,7 @@ import { useWorkspaceStore } from '../../state/workspaceStore.js';
 export default function WorkspaceHeader() {
   // v108 multi-review verdict: headerCollapsed state は store 残置 (migration risk 回避) するが
   //   button 削除 + 常時展開固定で実質無効化。 toggleHeader も呼び出し箇所なくなる。
-  const pane4Expanded = useWorkspaceStore((s) => s.pane4Expanded);
-  const togglePane4 = useWorkspaceStore((s) => s.togglePane4);
+  // v118 P6: pane4Expanded / togglePane4 削除 (Pane4 廃止)
 
   // v65 §4-B-2: kebab menu state (旧 UI / 将来 settings / help を集約)
   // v65 fix: dropdown は createPortal で body 直下に描画 + position: fixed。
@@ -195,42 +195,7 @@ export default function WorkspaceHeader() {
         >
         {/* v65 §B Step 2: MarketStatusPill (NYSE 開閉状態 + 次イベントまでの時間) */}
         <MarketStatusPill />
-        {/* v62 WS-Phase2: Pane 4 inspector toggle (Phase 2 placeholder、default 折り畳み) */}
-        <button
-          type="button"
-          onClick={togglePane4}
-          aria-pressed={pane4Expanded}
-          aria-label={pane4Expanded ? 'インスペクタを閉じる' : 'インスペクタを開く'}
-          title={pane4Expanded ? 'Pane 4 (インスペクタ) を閉じる' : 'Pane 4 (インスペクタ) を開く ※ Phase 2 placeholder'}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 24,
-            height: 24,
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm, 8px)',
-            background: pane4Expanded ? 'rgba(56,189,248,0.10)' : 'var(--bg-card)',
-            color: pane4Expanded ? 'rgb(14,165,233)' : 'var(--text-secondary)',
-            cursor: 'pointer',
-            flexShrink: 0,
-            transition: 'background 0.15s, border-color 0.15s, color 0.15s',
-          }}
-          onMouseEnter={(e) => {
-            if (!pane4Expanded) {
-              e.currentTarget.style.background = 'rgba(56,189,248,0.06)';
-              e.currentTarget.style.borderColor = 'rgba(56,189,248,0.30)';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!pane4Expanded) {
-              e.currentTarget.style.background = 'var(--bg-card)';
-              e.currentTarget.style.borderColor = 'var(--border)';
-            }
-          }}
-        >
-          {pane4Expanded ? <PanelRightClose size={14} aria-hidden /> : <PanelRightOpen size={14} aria-hidden />}
-        </button>
+        {/* v118 P6: Pane 4 inspector toggle button 削除 (Pane4 機能廃止) */}
 
         {/* v65 §4-B-2: kebab menu (旧 UI / 将来の settings / help を集約)
             BETA 段階公開導線「旧 UI」を表に出さず Trust Cliff 逆効果を回避.

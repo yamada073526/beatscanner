@@ -31,7 +31,9 @@ import { JudgmentDetail } from '../judgment/components/detail/index.js';
 import { IndicesList } from './IndicesView.jsx';
 import DailyDigestSection from './DailyDigestSection.jsx';
 import PaneDetailView from './PaneDetailView.jsx';
-import Pane4Inspector from './Pane4Inspector.jsx';
+// v118 P6: Pane4Inspector + pane4/ ディレクトリ削除 (handover v118 §残バックログ、 1 人日)。
+// 6 体並列レビューで「Pane 4 = AI chat → マクロニュース連動」 と確定済だったが、
+// release MVP scope 外と判断、 Phase 2 で再評価。
 
 // §12-A-1 + §dogfood-icon: 「指数」tab + lucide-react 細線アイコン
 // (emoji の玩具感を排除、stroke 1.5 で Aman 級の控えめな高級感、active 時のみ 1.75 補強)
@@ -137,87 +139,8 @@ function Pane2MetaToggle() {
   );
 }
 
-/** v62 WS-Phase2: Pane 4 inspector placeholder.
- *  6 体並列レビューで「Pane 4 = AI chat → 11-B-22 マクロニュース連動 に変更」が確定.
- *  現状は skeleton (default 折り畳み)、Phase 2 で 11-B-22 (マクロニュース × watchlist 連動) を実装. */
-function Pane4Placeholder() {
-  const activeTicker = useWorkspaceStore((s) => s.activeTicker);
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-        padding: '12px 14px',
-        height: '100%',
-        color: 'var(--text-secondary)',
-      }}
-    >
-      <div
-        style={{
-          fontSize: 10,
-          fontWeight: 600,
-          color: 'var(--text-muted)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-          padding: '4px 0',
-        }}
-      >
-        Inspector (Phase 2)
-      </div>
-
-      <div
-        style={{
-          padding: '12px',
-          borderRadius: 'var(--radius-md, 12px)',
-          border: '1px dashed var(--border)',
-          background: 'var(--bg-subtle, rgba(0,0,0,0.03))',
-          fontSize: 12,
-          lineHeight: 1.6,
-        }}
-      >
-        <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>
-          🔮 マクロニュース × watchlist 連動
-        </div>
-        <div style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>
-          (RELEASE_TODO §11-B-22、6 体並列レビュー一致の差別化最強機能)
-        </div>
-        <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>
-          マクロニュース → 影響セクター ETF 推定 → 保有銘柄セクターと一致する記事を優先表示。
-          Bloomberg / Reuters にも無い領域。
-        </div>
-      </div>
-
-      <div
-        style={{
-          padding: '10px 12px',
-          fontSize: 11,
-          color: 'var(--text-muted)',
-          background: 'var(--bg-subtle, rgba(0,0,0,0.03))',
-          borderRadius: 'var(--radius-sm, 8px)',
-          lineHeight: 1.5,
-        }}
-      >
-        現在選択中: <code>{activeTicker || '(なし)'}</code>
-        <br />
-        Phase 2 ではこの銘柄の関連 AI 解析がここに出ます。
-      </div>
-
-      <div
-        style={{
-          marginTop: 'auto',
-          fontSize: 10,
-          color: 'var(--text-muted)',
-          fontStyle: 'italic',
-          textAlign: 'center',
-          padding: '8px 0',
-        }}
-      >
-        Coming soon — dogfood A 判定後に実装
-      </div>
-    </div>
-  );
-}
+// v118 P6: Pane4Placeholder 削除 (handover v118 §残バックログ)。
+// 旧来 11-B-22 「マクロニュース × watchlist 連動」 placeholder。 release MVP scope 外。
 
 /** v63 §12-B-4: Pane 1 各セクションの折り畳み header.
  * dogfood round 6 反映:
@@ -679,7 +602,7 @@ export default function Workspace({
   // 改善希望①: Tier 1 折りたたみで shell の header height も縮小し、下ペインを広げる
   // v108 multi-review verdict: 指標バー折りたたみ button 削除 + 常時展開固定で headerCollapsed を ignore
   const headerCollapsed = false;
-  const pane4Expanded = useWorkspaceStore((s) => s.pane4Expanded);
+  // v118 P6: pane4Expanded 削除 (Pane4Inspector 廃止により不要)
   const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
   // §12-A-1: 指数 tab のとき Pane 2 / Pane 3 の中身を IndicesView に切替
   const activeTab = useWorkspaceStore((s) => s.activeTab);
@@ -761,8 +684,6 @@ export default function Workspace({
             />
           )
         }
-        pane4={<Pane4Inspector items={items} />}
-        pane4Visible={pane4Expanded}
       />
     </JudgmentProvider>
   );
