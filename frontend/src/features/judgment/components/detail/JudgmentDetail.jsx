@@ -51,7 +51,8 @@ import TriageBanner from '../../../../components/TriageBanner.jsx';
 import SummaryBrief from '../../../../components/SummaryBrief.jsx';
 // Sprint 2: AccordionSection primitive + useIntersectionLazy hook
 // Sprint 3 (return-grid-primitive): ReturnGrid を primitives/index.js から追加
-import { AccordionSection, useIntersectionLazy, ReturnGrid } from '../../primitives/index.js';
+// institutional-ttm-panel Sprint 3: TtmValuationPanel を primitives/index.js から追加
+import { AccordionSection, useIntersectionLazy, ReturnGrid, TtmValuationPanel } from '../../primitives/index.js';
 // Sprint 4 (Phase 2): 案1 section in-view fade-in — 主要セクション wrapper
 import SectionFade from '../../primitives/SectionFade.jsx';
 // Sprint 0 (Phase 2): MotionProvider — LazyMotion + domAnimation (framer-motion subset)。
@@ -660,6 +661,23 @@ export default function JudgmentDetail({
           ticker={selectedTicker}
           frameless={true}
           testId="judgment-return-grid"
+        />
+      )}
+
+      {/* institutional-ttm-panel Sprint 3: TTM バリュエーション panel mount。
+          ReturnGrid 直後、 EpsBeatStreakChip 直前。
+          ETF は valuationExtras=null (fetchValuationExtras で etfInfo あり時は null 返却)
+          → condition 非通過のため panel 非表示 (Trust Cliff 防止)。
+          valuationExtras=null (fetch 失敗 / loading 中) も非表示 (空 panel 出さない)。
+          frameless は v2Frameless と同期 (KpiStrip / ReturnGrid と同 idiom)。
+          CLS envelope は TtmValuationPanel 内部 min-height で吸収
+          (feedback_cls_envelope_pattern.md 適用)。 */}
+      {result && selectedTicker && valuationExtras && (
+        <TtmValuationPanel
+          ticker={selectedTicker}
+          valuationExtras={valuationExtras}
+          frameless={v2Frameless}
+          sectionLabel="TTM バリュエーション"
         />
       )}
 

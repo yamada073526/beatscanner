@@ -262,9 +262,11 @@ export default function TtmValuationPanel({
   sectionLabel = 'TTM バリュエーション',
 }) {
   // Trust Cliff 防止: data がない場合は section 非表示
-  if (!valuationExtras || !valuationExtras.data) return null;
+  // Sprint 3 修正: valuationExtras は /api/valuation-extras レスポンスのフラット object
+  // (SPEC 付録 A 参照)。.data サブキーは存在しないため直接アクセス。
+  if (!valuationExtras) return null;
 
-  const d = valuationExtras.data;
+  const d = valuationExtras;
   const metrics = useMemo(() => buildMetrics(d), [d]);
 
   const relTime = _relativeTime(valuationExtras.fetched_at);
