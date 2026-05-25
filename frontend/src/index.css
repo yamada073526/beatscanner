@@ -10101,6 +10101,197 @@ button.ds-chip[data-pressed="true"]:hover {
   margin: 0;
 }
 
+/* ── .daily-digest — v113 P4 workspace ホーム Pane 2 上部 Daily Digest 3 card ──
+ *
+ * 最新 published article 3 件 を 3 列 grid で並べ、 click で /articles/<slug> 遷移。
+ * design grammar は ArticleHero と統一 (ticker chip + WATCH amber + gold accent)。
+ *
+ * design token のみ使用 (raw hex 禁止、 design-system-check 通過):
+ *   - background: --surface-2 + 1px hairline
+ *   - badge: --color-accent (ticker) / --color-warning (WATCH) / --color-gain (BEAT) / --color-loss (MISS)
+ *   - hover: translate -2px + box-shadow lg
+ *
+ * memory anchors:
+ *   - project_pane45_redesign.md (v113 P4 0.5d sprint)
+ *   - feedback_minimalism_over_additive.md (拡張は重要 4-5 section 限定、 Pane 2 上部のみ embed)
+ */
+.daily-digest {
+  padding: var(--space-4, 16px) var(--space-3, 12px) var(--space-5, 20px);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-gold) 15%, var(--border));
+}
+
+.daily-digest__header {
+  margin-bottom: var(--space-3, 12px);
+}
+
+.daily-digest__label {
+  font-family: 'Noto Sans JP', system-ui, sans-serif;
+  font-size: var(--text-caption, 11px);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--color-gold);
+  margin-bottom: var(--space-1, 4px);
+}
+
+.daily-digest__heading {
+  font-family: 'Noto Sans JP', system-ui, sans-serif;
+  font-size: var(--text-body-lg, 16px);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+
+.daily-digest__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3, 12px);
+}
+
+@media (max-width: 900px) {
+  .daily-digest__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.daily-digest__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  padding: var(--space-4, 16px);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 12px);
+  text-decoration: none;
+  color: var(--text-primary);
+  transition: transform 0.15s ease-out, box-shadow 0.15s ease-out, border-color 0.15s ease-out;
+  box-shadow: var(--shadow-sm);
+  min-height: 144px;
+}
+
+.daily-digest__card:hover,
+.daily-digest__card:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+  border-color: color-mix(in srgb, var(--color-gold) 30%, var(--border));
+  text-decoration: none;
+}
+
+.daily-digest__card-badges {
+  display: flex;
+  gap: var(--space-2, 8px);
+  align-items: center;
+}
+
+.daily-digest__ticker {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill, 999px);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-accent);
+  font-size: var(--text-caption, 11px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.daily-digest__verdict {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill, 999px);
+  font-size: var(--text-caption, 11px);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.daily-digest__verdict--gain {
+  background: color-mix(in srgb, var(--color-gain) 14%, transparent);
+  color: var(--color-gain);
+}
+.daily-digest__verdict--loss {
+  background: color-mix(in srgb, var(--color-loss) 14%, transparent);
+  color: var(--color-loss);
+}
+.daily-digest__verdict--warning {
+  background: color-mix(in srgb, var(--color-warning) 14%, transparent);
+  color: var(--color-warning);
+}
+
+.daily-digest__title {
+  font-family: 'Noto Serif JP', 'Times New Roman', serif;
+  font-size: var(--text-body, 14px);
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--text-primary);
+  margin: var(--space-1, 4px) 0 0;
+}
+
+.daily-digest__subtitle {
+  font-family: 'Noto Sans JP', system-ui, sans-serif;
+  font-size: var(--text-caption, 12px);
+  line-height: 1.55;
+  color: var(--text-secondary);
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.daily-digest__read-more {
+  margin-top: auto;
+  font-family: 'Noto Sans JP', system-ui, sans-serif;
+  font-size: var(--text-caption, 12px);
+  font-weight: 600;
+  color: var(--color-gold);
+  letter-spacing: 0.04em;
+}
+
+.daily-digest__arrow {
+  transition: transform 0.15s ease-out;
+  display: inline-block;
+}
+
+.daily-digest__card:hover .daily-digest__arrow {
+  transform: translateX(3px);
+}
+
+.daily-digest__empty {
+  padding: var(--space-5, 20px);
+  background: var(--surface-2);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md, 12px);
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: var(--text-body-sm, 13px);
+}
+
+/* skeleton loading (white flicker 防止) */
+.daily-digest__card--skeleton {
+  cursor: default;
+  pointer-events: none;
+  border-color: var(--border);
+}
+
+.daily-digest__skeleton-line {
+  height: 12px;
+  background: color-mix(in srgb, var(--text-tertiary) 25%, transparent);
+  border-radius: 4px;
+  animation: dailyDigestPulse 1.6s ease-in-out infinite;
+}
+
+.daily-digest__skeleton-line--short {
+  width: 40%;
+}
+.daily-digest__skeleton-line--long {
+  width: 90%;
+  height: 18px;
+}
+
+@keyframes dailyDigestPulse {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1.0; }
+}
+
 /* ── .article-implications — v116 R6 投資家への含意 2 列 callout (UI/UX P1) ──
  *
  * 強気/弱気を緑/赤の 2 列 callout で並列表示、 推奨アクションを下に full-width で強調。
