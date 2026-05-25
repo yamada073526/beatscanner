@@ -50,11 +50,23 @@ function PeriodChip({ periodDef, periodData }) {
   // Number.isFinite guard: null / undefined / NaN は全て em-dash (feedback_chart_overlay_safety.md)
   const isValid = available && Number.isFinite(returnPct);
 
-  // 値の表示文字列: +X.XX% / -X.XX% / —
+  // 値の表示文字列: R9.6 smart format で chip 内 overflow を防止。
+  //   < 100%        → 2 decimal (+64.01%)
+  //   100-999%      → 1 decimal (+452.8%)
+  //   ≥ 1000%       → 0 decimal + comma (+1,272%)
+  //   ≥ 10000%      → 0 decimal + comma (+18,624%) ※ NVDA 10Y 等の outlier 対応
   let displayValue;
   if (isValid) {
     const sign = returnPct > 0 ? '+' : '';
-    displayValue = `${sign}${returnPct.toFixed(2)}%`;
+    const abs = Math.abs(returnPct);
+    if (abs >= 1000) {
+      // 大きな値は comma 桁区切り + 小数なし
+      displayValue = `${sign}${Math.round(returnPct).toLocaleString('en-US')}%`;
+    } else if (abs >= 100) {
+      displayValue = `${sign}${returnPct.toFixed(1)}%`;
+    } else {
+      displayValue = `${sign}${returnPct.toFixed(2)}%`;
+    }
   } else {
     displayValue = '—';
   }
@@ -150,24 +162,30 @@ function SkeletonChip() {
  */
 function SectionLabel({ text }) {
   if (!text) return null;
-  // R9.5 (subagent verdict): fontSize 11→13 + color muted→primary で視認性 up。
-  // title tooltip で「価格ベース・分配金含まず」 を honest 開示 (FMP adjClose は
-  // split-adjusted のみで配当再投資含まず、 SPY 10Y 254% vs 配当込み ~310% の
-  // 乖離を user が誤読しないように明示)。
+  // R9.6: 旧 title tooltip は user dogfood で「確認できない」 と feedback、
+  // 可視 sub-text で「価格ベース・分配金含まず」 を honest 開示する形に変更。
   return (
-    <div
-      title="価格ベース・分配金含まず"
-      style={{
-        fontSize: 13,
-        fontWeight: 700,
-        letterSpacing: '0.08em',
-        color: 'var(--text-primary)',
-        textTransform: 'uppercase',
-        marginBottom: 'var(--space-2, 8px)',
-        cursor: 'default',
-      }}
-    >
-      {text}
+    <div style={{ marginBottom: 'var(--space-2, 8px)' }}>
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 700,
+          letterSpacing: '0.08em',
+          color: 'var(--text-primary)',
+          textTransform: 'uppercase',
+        }}
+      >
+        {text}
+      </div>
+      <div
+        style={{
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          marginTop: 2,
+        }}
+      >
+        価格ベース・分配金含まず
+      </div>
     </div>
   );
 }
@@ -195,7 +213,7 @@ export default function ReturnGrid({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))',
+            gridTemplateColumns: 'repeat(4, 1fr)',
             gap: 'var(--space-4, 16px)',
           }}
         >
