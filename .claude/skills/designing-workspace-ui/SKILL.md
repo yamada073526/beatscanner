@@ -1,142 +1,120 @@
 ---
 name: designing-workspace-ui
-description: 配布物/workspace-ui-kit のワークスペース UI 作業（ペイン修正・コンポーネント追加・色や角丸や余白の変更・レイアウト調整・情報設計の検討・JSX の編集）で、shadcn idiom に準拠したコード生成とデザイン規律を強制するスキル。「Pane を変えたい」「ボタンを追加したい」「色を変えたい」「コンポーネントを作りたい」「workspace の見た目を直したい」「余白を直したい」「フォームを追加したい」「レイアウトを調整したい」と依頼された際に使用する。次の場合は使用しない: components/ 配下を編集しない単純な質問・タイポ修正・README やドキュメントのみの編集・openspec/ の ADR 起草のみ・テストコードのみの修正・依存パッケージ更新。
+description: |
+  BeatScanner の workspace UI (Pane 1-N / features/workspace / 既存 components) を編集する際に、
+  デザイン SSOT (design_system.md / design_recipes.md / elevation_scale.md) を経由しない変更を防ぐスキル。
+  「Pane を変えたい」「ペインに機能を追加したい」「色を変えたい」「余白を変えたい」「角丸を変えたい」
+  「コンポーネントを作りたい」「workspace のレイアウトを調整したい」「フォームを追加したい」
+  と依頼された際に使用する。 次の場合は使用しない: design SSOT を触らない typo 修正 / README 編集 /
+  test code のみ修正 / 依存パッケージ更新。
 ---
 
-# Designing Workspace UI
+# designing-workspace-ui スキル
 
-`配布物/workspace-ui-kit` で UI を編集する際は、以下の2軸を必ず両方適用する:
-
-1. **shadcn idiom に従ってコード生成する** — base UI / semantic token / 親管理の余白
-2. **SSoT を経由しないデザイン変更を拒否する** — トークン・部品・パターン・情報設計の不足は4分岐で診断し、ユーザーに確認する
-
-CLAUDE.md の「コード生成ルール」を常時適用の禁止事項として参照する。本スキルはその詳細根拠とプロジェクト固有規律を提供する。
+BeatScanner の workspace UI を編集する際の **デザイン規律強制 skill**。 ブランド世界観 (Aman/Ritz-Carlton 級) と 5 原則 を満たしつつ、 v54-v59 で 6 セッション溶けた発光バグや Trust Cliff の再発を防ぐ。
 
 ## 依存
 
-このスキルが参照する SSoT:
+- CLAUDE.md「設計思想」 (ブランド世界観 + 5 原則) / 「触ると危険な箇所」 / 「投資業界の色ルール」 / 「動的データには『最終更新 X 分前』を併記」
+- `docs/references/design_system.md` — token (色 / spacing / radius / elevation / motion) の Single Source of Truth
+- `docs/references/design_recipes.md` — 適用パターン (card layering / glow host / shadcn 統合 / staleness UI / 数値表示)
+- `docs/references/elevation_scale.md` — 機械的 enforcement (raw hex / shadow / !important whitelist)
+- `frontend/src/index.css` — Tailwind v3 + `:root` CSS 変数の実装
+- `frontend/src/components/ui/` — primitive 群 (`Chip.jsx` / `ProTeaser.jsx` / `TickerBadge.jsx`)
+- `frontend/src/features/workspace/` — workspace mode の Pane 実装
+- `frontend/tailwind.config.js` — Tailwind v3 設定 (v4 `@theme` ではない)
+- memory `glow_elevation_postmortem.md` — 発光バグ root cause + 症状別 quick reference
+- memory `workspace_path_map.md` — workspace 化後の component path 移行マップ
+- memory `chip_primitive_canonical.md` — chip 系 UI の SSOT
+- memory `css_specificity_gotchas.md` — `.is-arriving` (0,2,0) vs `:hover` (0,1,1) compound 解
+- memory `feedback_brand_aspiration.md` — Aman/Ritz-Carlton 級世界観 anchor
+- skill `design-system-check` — 機械検査 (raw hex / shadow / !important / 発光バグ兆候)
+- skill `dark-mode` / `chart-tab` / `stock-chart` / `screener` / `earnings-calendar` 等 — 個別 UI 領域の SSOT
 
-- `app/globals.css` — デザイントークン（`@theme` 内の CSS 変数）
-- `components.json` — shadcn 設定（base / style / iconLibrary / alias。ファイルを読んで確認する）
-- `components/ui/` — shadcn 素体（編集可能。方針は後述）
-- `components/primitives/` — プロジェクト固有プリミティブ（`ls` して確認する。名前はハードコードしない）
-- `openspec/decision/` — ADR（ペイン責務・配色・角丸等。番号はハードコードせず `ls` で最新を確認する）
+## いつ呼び出すか
 
-前提: shadcn スキル（`.claude/skills/shadcn/`）がインストール済みであること。ただしこのスキルから shadcn スキルを読みに行く指示は出さない。必要なルールは自己完結で持つ。
+- workspace mode の Pane (Pane 1-N) を編集する前
+- 新規 component を `frontend/src/components/` または `frontend/src/features/` に追加する前
+- 既存 component の色 / 余白 / 角丸 / shadow / typography を変える前
+- `frontend/src/index.css` の `:root` 変数 / utility class / pattern (`.panel-card` / `.bs-panel` / `.surface-card`) を変える前
+- レイアウト (grid / flex 構成) を変える前
+- 「ちょっと見た目を整えたい」 要望に対する proactive 提案
 
-## コード生成ルール
+## 使ってはいけない場合
 
-CLAUDE.md の禁止事項の根拠と、このプロジェクトでの適用方法を示す。
+- design SSOT (`docs/references/design_*.md` / `elevation_scale.md`) を触らない typo / 文言修正
+- test code のみ修正
+- 依存パッケージ更新 / lint 修正
+- README / `docs/` のドキュメント編集のみ
 
-### 中心の禁止事項
+## コード生成の禁止事項
 
-| 禁止                                                       | 正しい方法                            | なぜ                                                                                 |
-| ---------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------ |
-| `space-y-*` / `space-x-*`                                  | `flex flex-col gap-*` / `flex gap-*`  | 子要素が条件で消えたとき余白が崩れる。親が管理すれば子が何個でも安定                 |
-| `className` で色・フォントサイズ・フォントウェイトを上書き | variant / semantic token / CSS 変数   | コピペが蔓延し、ダークモードで対応漏れが起きる。部品側にサイズ展開を用意する         |
-| 生の色クラス（`bg-blue-500` 等）                           | `bg-primary` 等の semantic token      | テーマ変更時に全ファイル書き換えになる。名前で指定すれば定義 1箇所で済む             |
-| `w-N h-N`（正方形時）                                      | `size-N`                              | 「正方形にしたい」意図が明確になる                                                   |
-| `asChild`（radix の API）                                  | `render`（base の API）               | このプロジェクトは base を使用（`components.json` で確認）。radix の書き方は動かない |
-| shadcn 部品がある場面で自前の div                          | `Badge` / `Separator` / `Skeleton` 等 | a11y・ダークモード・テーマ連動が組み込み済み。自作すると全部欠落する                 |
+CLAUDE.md と既存 memory で確立された禁止 pattern。 違反は即 design-system-check で BLOCK される。
 
-このプロジェクトで最も誤りやすいパターン（**必ず暗記**）:
-
-```tsx
-// Incorrect — radix の書き方は base では動かない
-<DialogTrigger asChild>
-  <Button variant="outline">設定を開く</Button>
-</DialogTrigger>
-
-// Correct — base の API
-<DialogTrigger render={<Button variant="outline" />}>
-  設定を開く
-</DialogTrigger>
-```
-
-その他のパターン（スペーシング・タイポグラフィ・セマンティックカラー・アイコン・コンポジション・フォーム）は [references/coding-rules.md](references/coding-rules.md) を参照。
-
-### components/ui/ の編集方針
-
-shadcn の Open Code 思想に基づき、`components/ui/` は**プロジェクトのコード**として編集してよい。ただし方法に規律がある。
-
-**OK**:
-
-- 部品に新しい variant を追加する（例: `CardTitle` に `data-size="sm"` を追加）
-- 部品の間隔やスタイルを構造的に変更する
-- 新しい CSS 変数を `globals.css` に定義して部品から参照する
-
-**NG**:
-
-- 呼び出し側で `className` を使って見た目を毎回打ち消す
-- 部品ファイルを丸ごとコピーして別名で作る
-
-部品を編集した後、公式の更新を取り込みたいときは `npx shadcn@latest add <component> --diff <file>` で差分を確認してマージする。
-
-### 出力後セルフレビュー
-
-コードを出力した後、以下の 3点をセルフレビューし、違反があれば修正版を出す:
-
-1. **shadcn の書き方**: 間隔は親管理（`gap-*`）か？ 色は名前指定（semantic token）か？ 部品の見た目を `className` で上書きしていないか？
-2. **base 準拠**: `asChild` ではなく `render` を使っているか？
-3. **プロジェクトトークン**: `globals.css` の既存トークンで表現できるか？
+| 禁止 | 正しい方法 | 根拠 |
+|---|---|---|
+| 生 hex 色 (`#RRGGBB`) | `var(--color-gain)` 等の semantic CSS 変数 | `docs/references/design_system.md` token / `elevation_scale.md` whitelist |
+| 生 box-shadow | `var(--shadow-*)` 変数 | `docs/references/design_system.md` elevation |
+| `!important` の新規追加 | semantic token + 親管理 / specificity 解消 | `docs/references/elevation_scale.md` の `ALLOWED-IMPORTANT:` whitelist のみ可 |
+| 「上昇」 をシアン色 | 緑 (`var(--color-gain)`)、 シアンはブランド色 | CLAUDE.md「投資業界の色ルール」 |
+| `space-y-*` / `space-x-*` | `flex flex-col gap-*` / `flex gap-*` | 子要素が条件で消えると余白崩れ |
+| `className` で色 / フォントサイズ / フォントウェイトを上書き | semantic token + 親 component 側の variant 追加 | コピペ蔓延でダークモード対応漏れ |
+| 自前 div で chip / badge / separator | `frontend/src/components/ui/Chip.jsx` 等の primitive | a11y + ダークモード + テーマ連動が組み込み済 (`memory/chip_primitive_canonical.md`) |
+| 新規 `.panel-card` / `.bs-panel` / `.surface-card` 系 class 追加 | 既存 pattern を `design_recipes.md §C-1〜C-4` の compound rule で適用 | 6 セッション溶けた発光バグの再発リスク |
+| `contain: paint` を glow host に | 禁止 (発光が clip される) | `memory/glow_elevation_postmortem.md` |
+| `:has(.is-arriving)` 親抑制 | 禁止 (v54 で削除済) | `memory/glow_elevation_postmortem.md` |
+| `.X.is-arriving:hover` の compound 4 セット不足 | 必ず 4 セット (`.X`, `.X:hover`, `.X.is-arriving`, `.X.is-arriving:hover`) を揃える | `memory/css_specificity_gotchas.md` |
 
 ## SSoT エスカレーション規律
 
-このプロジェクトは教材。受講生が「自分の思想を画面にする」ことがゴール。AI が独断でデザインを決めると受講生の学習機会を奪う。
+**design SSOT を経由しない UI 変更は禁止**。 既存 SSOT で作れないものが出てきたら、 以下の 4 分岐で診断し、 必ず user に確認。
 
-**SSoT を経由しない UI 変更は禁止。** 既存 SSoT で作れないものが出てきたら、以下の 4分岐で診断し、必ずユーザーに聞く。
+### 作業前の確認 (必ず実行)
 
-### 作業前の確認（必ず実行）
-
-以下のチェックリストを応答にそのままコピーし、各項目を完了したら `[x]` に置き換えながら進む。スキップは禁止。
+以下のチェックリストを応答にそのまま含め、 各項目を完了したら `[x]` に置き換える:
 
 ```
 SSoT 把握:
-- [ ] app/globals.css を読み、既存の semantic token を列挙した
-- [ ] components/ui/ を ls し、利用可能な shadcn 部品を列挙した
-- [ ] components/primitives/ を ls し、Inline* 等のプロジェクト固有部品を列挙した
-- [ ] openspec/decision/ を ls し、関連する ADR を読了した
+- [ ] docs/references/design_system.md を読み、 既存 token を列挙した
+- [ ] frontend/src/index.css を grep し、 既存 utility class / pattern を列挙した
+- [ ] frontend/src/components/ui/ を ls し、 利用可能な primitive を列挙した
+- [ ] memory/glow_elevation_postmortem.md を読了 (card 系 / 発光系を触る場合)
+- [ ] CLAUDE.md「触ると危険な箇所」 を読了
 ```
 
 このチェックが全て埋まる前にコード生成を開始してはならない。
 
 ### 4 分岐の決定木
 
-既存 SSoT で作れる → そのまま実装。作れない → 以下に進む。
-
-**いずれの分岐でも、ユーザーの判断なしに実装に進んではならない。**
+既存 SSoT で作れる → そのまま実装。 作れない → 以下に進む。 **いずれの分岐でも、 user の判断なしに実装に進んではならない。**
 
 #### 3a. トークンの穴
 
-色・余白・角丸・影・フォント等の値が既存トークンで足りない。
+色 / 余白 / 角丸 / 影 / フォント等の値が既存 token で足りない。
 
-やること: 何が足りないかを 1行で説明 → `@theme` への追加案を提示 → ユーザーの判断を仰ぐ
-
-やってはいけないこと: 生の色クラスの使用 / 「一時的に hardcoded で後で直す」式の仮対応 / ユーザーに聞かず `@theme` を変更
+- やる: 何が足りないかを 1 行で説明 → `design_system.md` への追加案 + `elevation_scale.md` whitelist 追加案を提示 → user の判断を仰ぐ
+- やらない: 生 hex の使用 / 「一時的に hardcoded」 仮対応 / user に聞かず `:root` を変更
 
 #### 3b. 部品の穴
 
-既存部品で表現できない形・variant が必要。
+既存 primitive (`Chip` / `ProTeaser` / `TickerBadge` 等) で表現できない形 / variant が必要。
 
-やること: 既存部品の variant / size で代替できないか先に試す → 不可能なら新 variant または新プリミティブを起案 → ユーザーの判断を仰ぐ
-
-やってはいけないこと: 部品ファイルを fork コピー / 呼び出し側で className の上書きで済ませる
+- やる: 既存 primitive の variant / size で代替できないか先に試す → 不可能なら新 variant または新 primitive を起案 → user の判断を仰ぐ
+- やらない: primitive ファイルを fork コピー / 呼び出し側で className 上書きで済ませる
 
 #### 3c. パターンの穴
 
-レイアウトパターン・複数部品の組み合わせ規則・状態（empty / error / loading）の規律がない。
+レイアウトパターン / 複数 component の組み合わせ規則 / 状態 (empty / error / loading / staleness) の規律がない。
 
-やること: 既存 ADR を読み、本当に規律がないことを確認 → 規律案を起案 → ユーザーの判断を仰ぐ
-
-やってはいけないこと: 「とりあえず置いてみる」で恒久パターンを既成事実化
+- やる: `design_recipes.md` を読み、 本当に規律がないことを確認 → 規律案を起案 → user の判断を仰ぐ
+- やらない: 「とりあえず置いてみる」 で恒久パターン既成事実化
 
 #### 3d. 情報設計の穴
 
-ペインに何を載せるか・並び順・情報の増減の規律がない。
+Pane に何を載せるか / 並び順 / 情報の増減の規律がない。
 
-やること: **コードを書かない**。何を載せるか・優先順位・並び順を質問する → ユーザーが決めてから実装
-
-やってはいけないこと: 「採用管理ならこれが普通だろう」と独断で情報を足す / 削る / 並び替える
+- やる: **コードを書かない**。 何を載せるか / 優先順位 / 並び順を質問する → user が決めてから実装
+- やらない: 「投資アプリならこれが普通」 と独断で情報を足す / 削る / 並び替える
 
 ### エスカレーションのテンプレート
 
@@ -146,78 +124,63 @@ SSoT 把握:
 分岐: 3a / 3b / 3c / 3d のどれか
 
 [根拠]
-Refactoring UI の <軸> / ADR の <規律> / shadcn idiom 上の <理由>
+design_system.md §X / design_recipes.md §Y / elevation_scale.md / memory anchor の <根拠>
 
 [提案]
-案1: <内容>（メリット / デメリット）
-案2: <内容>（メリット / デメリット）
+案 1: <内容>(メリット / デメリット)
+案 2: <内容>(メリット / デメリット)
 
 [ユーザーへの質問]
-どちらで進めますか？別案ありますか？
+どちらで進めますか？ 別案ありますか？
 ```
 
-### 評価軸（Refactoring UI）
+## Pane 責務分離 (workspace mode)
 
-エスカレーション時の根拠に使う:
+Pane 構成と各 Pane の責務は `memory/workspace_path_map.md` および `docs/references/design_recipes.md` が SSOT。 個別 Pane の機能変更時は対応 skill を呼ぶ:
 
-- Hierarchy（階層）/ Spacing（余白）/ Typography（タイポ）/ Color（色）/ Depth（影）/ Polish（空状態・エラー状態・ローディング状態・微調整）
+- Pane 2 (注目銘柄系) → `screener` skill
+- Pane 3 (主、 銘柄詳細 / 判定) → 該当 domain skill (`stock-chart` / `chart-tab` / `summary-text` / `hallucination-guard` 等)
+- Pane 4 (補助情報) → 該当 domain skill
+- 経済カレンダー Pane → `earnings-calendar` skill
 
-## ペイン編集導線
+「Pane の責務を変えたい」「Pane を増やしたい」 等の大改修は **`multi-review` skill で 6 体合議** を経て decide。
 
-### Pane 3 と Pane 4 の責務分離
+## 角丸 (border-radius) の階層ルール
 
-**「Pane 3 = 読む場所、Pane 4 = 編集の本拠地」**。詳細は `openspec/decision/` 配下の最新 ADR を確認する。
+`rounded-*` / `border-radius` の選択に迷ったとき:
 
-- Pane 3 のカードに inline 編集 UI（input・textarea・編集ボタン）を新たに置かない
-- 編集機能を足したい時は Pane 4 側に置く
-- 「Pane 3 にも編集を持たせたい」と要望が来たら、まず原則との衝突を伝え、本当に必要かを問い直す
+1. **親 R ≧ 子 R** — 親の箱に当てた R より大きな R を子に付けない
+2. **同格の島は同じ R** — `panel-card` で囲った「島」 は基本同じ R に揃える
+3. **厳密な同心までは求めない** — Tailwind スケール (`xl/lg/md/sm`) で段差が分かれば十分
+4. **高密度 UI での例外** — 行密度を上げるため `panel-card` を 1 段下げてよい (ルール 1 維持)
 
-### インライン編集プリミティブの再利用
+具体的な R クラスと役割の対応表は `docs/references/design_recipes.md` を参照。
 
-`components/primitives/` の既存プリミティブを再利用する（`ls` して名前を確認すること）。新しい編集 UI のスタイル流派を独自に増やさない。
+## React 18 + hook ルール
 
-導入禁止の編集 UI: 鉛筆アイコン式 / 「編集」ボタン式 / フォーム・モーダル一括編集式
+BeatScanner は React 18.3.1。 以下の禁止 pattern を守る:
 
-### 入力保存規約
+- **`useEffect` 内同期 `setState` で初期値入れ直し禁止** → 親側で `key` 変更で子を再マウントし `useState(initialValue)` で初期化
+- **フォーカス + 全選択** → `autoFocus` + `onFocus={(e) => e.target.select()}`
+- **依存配列の eslint warning** → 必ず解消する (silence しない)
 
-- 1 行 `input`: Enter で保存 / Esc でキャンセル / blur で保存
-- 複数行 `textarea`: **Cmd+Enter で保存**（Enter は改行）/ Esc でキャンセル / blur で保存
-- ホバー時のみ薄い枠を出す。常時の枠は出さない
+## 出力後セルフレビュー
 
-### 担当の用語分離
+コードを出力した後、 以下 5 点をセルフレビューし、 違反があれば修正版を出す:
 
-候補者単位とステージ単位で用語を使い分ける。混ぜない。
+1. **間隔は親管理** か (`gap-*`)? `space-y-*` / `space-x-*` を使っていないか?
+2. **色は semantic token** か? 生 hex / 生 RGB を使っていないか?
+3. **shadow は semantic token** か? `elevation_scale.md` whitelist 内か?
+4. **既存 primitive (`Chip` 等) を再利用** したか? 自前 div で chip / badge を作っていないか?
+5. **発光系 / card 系を触ったなら** `design_recipes.md §C-1〜C-4` の compound 4 セットを揃えたか?
 
-- 候補者単位: 「採用担当」
-- ステージ単位: 「面接官」（書類選考は「審査担当」）
+レビュー完了後、 必ず `design-system-check` skill を走らせて機械検査も通す。
 
-## 角丸（border-radius）の階層ルール
+## 関連 skill
 
-`rounded-*` クラスの選択に迷ったとき、以下の 4 ルールで判断する。役割 × R クラスの対応表は `openspec/changes/add-4pane-workspace-template/mockup-guide.md` の角丸セクションを参照。
-
-### ルール 1: 親 R ≧ 子 R
-
-親の箱に当てた R より大きな R を、その中の要素に付けない。
-
-### ルール 2: 同格の島は同じ R
-
-`bg-card` で囲った「島」は原則 `rounded-lg` に揃える。`Card` 本体だけは `rounded-xl` の例外。
-
-### ルール 3: 厳密な同心までは求めない
-
-Tailwind のスケール（`xl/lg/md/sm`）で段差が視覚的に分かれば十分。
-
-### ルール 4: 高密度 UI での例外
-
-行密度を上げるために `bg-card` の島を `rounded-md` に下げてよい。ただし子要素には `rounded-md` より大きな R を付けない（ルール 1 を維持）。
-
-## React 19 ルール
-
-### Effect 内同期 setState 禁止
-
-`useEffect` の中で同期的に `setState` を呼んで初期値を入れ直すパターンは禁止。
-
-代替パターン:
-
-- 親側で `key` を変更して子コンポーネントを再マウントし、`useState(initialValue)` で初期化する
-- フォーカス + 全選択は `autoFocus` + `onFocus={(e) => e.target.select()}` で実現する
+- `design-system-check` — 機械検査 (本 skill の自己レビュー後に必ず実行)
+- `shadcn` — shadcn 汎用知識 (BeatScanner は shadcn CLI 未使用、 idiom のみ参考)
+- `multi-review` — Pane 責務変更 / 大規模 UI 改修時の 6 体合議
+- `funnel-cro` — LP / Pro tier UI を触るなら Trust Cliff 防止
+- `dark-mode` — darkMode prop 連携を触る場合
+- `chart-tab` / `stock-chart` / `screener` / `earnings-calendar` 等 — domain 別 UI skill
