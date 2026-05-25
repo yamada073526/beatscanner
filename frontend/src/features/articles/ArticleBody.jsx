@@ -267,16 +267,19 @@ function buildComponents(onSanitized, ticker, tableRenderedRef) {
 
     // table 系: そのまま (数値 table は BAD-5/6 対象外)
     // v116 R6 (QA P2): 最初の table 直後に中間 CTA を挿入 (途中離脱読者向け導線)
+    // v117 R7 hotfix: Fragment `<>` でなく明示 `<div>` で wrap、 React Fragment 内挿入で
+    //   MidArticleCTA が DOM 反映されない bug の workaround。 親 div は visual に影響なし
+    //   (display: contents で flow layout を保つ)。
     table({ children }) {
       const isFirstTable = tableRenderedRef && !tableRenderedRef.current;
       if (isFirstTable) tableRenderedRef.current = true;
       return (
-        <>
+        <div className="article-prose__table-section" style={{ display: 'contents' }}>
           <div className="article-prose__table-wrapper">
             <table>{children}</table>
           </div>
           {isFirstTable && ticker && <MidArticleCTA ticker={ticker} />}
-        </>
+        </div>
       );
     },
     thead({ children }) { return <thead>{children}</thead>; },
