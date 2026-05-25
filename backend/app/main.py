@@ -1111,22 +1111,25 @@ async def get_valuation_extras(ticker: str, request: Request):
     # sources schema: key_metrics ok/empty/timeout/error に応じて graceful degrade
     # (feedback_data_completeness_guard pattern)。 LLM 経路ゼロ — 全て Python 数値抽出。
 
-    # TTM 売上高: revenuePerShareTTM × weightedAverageSharesDilutedTTM を優先
-    # FMP key-metrics-ttm の代替 key は revenueTTM (plan 差異 fallback)
-    ttm_revenue: float | None = None
-    if sources.get("key_metrics") == "ok":
-        rev_per_share  = _pick(m_rec, "revenuePerShareTTM")
-        shares_diluted = _pick(m_rec, "weightedAverageSharesDilutedTTM",
-                               "weightedAverageShsOutTTM", "sharesOutstanding")
-        if rev_per_share is not None and shares_diluted is not None and shares_diluted > 0:
-            ttm_revenue = rev_per_share * shares_diluted
-        else:
-            # fallback: revenueTTM が直接提供される場合 (FMP plan 差異)
-            ttm_revenue = _pick(m_rec, "revenueTTM", "revenue")
+    # Sprint 1 hotfix (2026-05-26): revenuePerShareTTM / netIncomePerShareTTM は実際は
+    # `ratios-ttm` にある (FMP probe で確認、 key-metrics-ttm には無い)。 旧 logic は
+    # m_rec から探していたため NVDA 等で None 返却 → hotfix で r_rec ベースに修正。
+    # shares 取得は FMP profile / quote では非提供のため、 marketCap / price で推定。
 
-    # TTM EPS: key-metrics-ttm 優先、 fallback ratios-ttm
+    # TTM 売上高 (絶対値): r_rec.revenuePerShareTTM × shares
+    #   shares = m_rec.marketCap / q_rec.price で推定 (実 NVDA で 24.7B shares、 ±2% 誤差)
+    ttm_revenue: float | None = None
+    rev_per_share = _pick(r_rec, "revenuePerShareTTM")
+    market_cap = _pick(m_rec, "marketCap") or (_pick(q_rec, "marketCap") if q_rec else None)
+    if rev_per_share is not None and rev_per_share > 0 and market_cap is not None and market_cap > 0 \
+            and price is not None and price > 0:
+        shares_estimate = market_cap / price
+        if shares_estimate > 0:
+            ttm_revenue = rev_per_share * shares_estimate
+
+    # TTM EPS (USD/株): r_rec.netIncomePerShareTTM 直接取得 (per-share scale 維持)
     ttm_eps: float | None = None
-    ttm_eps = _pick(m_rec, "netIncomePerShareTTM") or _pick(r_rec, "epsTTM", "epsEarningsPerShareTTM")
+    ttm_eps = _pick(r_rec, "netIncomePerShareTTM", "epsTTM", "epsEarningsPerShareTTM")
 
     # TTM 営業利益率: ratios-ttm の operatingProfitMarginTTM (0.0-1.0 scale)
     # FMP は 0-1 で返す (0.621 = 62.1%)。 frontend で × 100 して表示。
