@@ -6533,7 +6533,11 @@ async def period_returns(ticker: str, request: Request) -> dict:
     計算式: (latest_close - past_close) / past_close * 100
     adjClose 優先 (split-adjusted)。 inception_date 前の期間は available=false。
     LLM SDK 一切不使用 / Python 純計算。 cache TTL 6h。
-    demo rate limit を継承 (LP 「3銘柄/日まで無料」 整合)。
+
+    R9.5 hotfix (2026-05-26): demo rate limit を削除。 LP「3銘柄/日まで無料」 は
+    Claude API 込みの analyze() に対する制約であり、 純数値の period-returns 表示は
+    user dogfood で 4 銘柄以上見ると ReturnGrid が表示されない 体験崩壊の主因だった。
+    本 endpoint は FMP 1 req + Python calc のみで cost 微小、 rate limit 不要。
     """
     t = ticker.upper()
     today = date.today()
@@ -6545,15 +6549,6 @@ async def period_returns(ticker: str, request: Request) -> dict:
     cached = _PERIOD_RETURNS_CACHE.get(cache_key)
     if cached and now_m - cached["ts"] < _PERIOD_RETURNS_TTL:
         return {**cached["data"], "cached": True}
-
-    # --- demo rate limit (BYPASS_TOKEN 対応済) ---
-    if not _is_bypassed(request):
-        ip = _client_ip(request)
-        if not _check_demo_rate_limit(ip):
-            raise HTTPException(
-                status_code=429,
-                detail="本日のお試し回数 (3銘柄) を超えました。Googleログインで無制限になります。",
-            )
 
     # --- API key 取得 ---
     fmp_key = (

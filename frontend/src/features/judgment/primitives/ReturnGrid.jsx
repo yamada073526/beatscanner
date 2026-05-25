@@ -21,15 +21,17 @@ import { usePeriodReturns } from '../../../hooks/usePeriodReturns.js';
  */
 
 // 表示する期間の定義 (順序固定)
+// R9.5 (subagent verdict): hint 全削除 → section header「期間別累積リターン」 に一括移管。
+// 旧来 1Y/3Y/5Y/10Y のみ「累積」 hint で chip 高さ不揃い → layout 崩れていたのを解消。
 const PERIODS = [
   { key: '1W',  label: '1W',  hint: null },
   { key: '1M',  label: '1M',  hint: null },
   { key: '3M',  label: '3M',  hint: null },
   { key: '6M',  label: '6M',  hint: null },
-  { key: '1Y',  label: '1Y',  hint: '累積' },
-  { key: '3Y',  label: '3Y',  hint: '累積' },
-  { key: '5Y',  label: '5Y',  hint: '累積' },
-  { key: '10Y', label: '10Y', hint: '累積' },
+  { key: '1Y',  label: '1Y',  hint: null },
+  { key: '3Y',  label: '3Y',  hint: null },
+  { key: '5Y',  label: '5Y',  hint: null },
+  { key: '10Y', label: '10Y', hint: null },
 ];
 
 /**
@@ -148,15 +150,21 @@ function SkeletonChip() {
  */
 function SectionLabel({ text }) {
   if (!text) return null;
+  // R9.5 (subagent verdict): fontSize 11→13 + color muted→primary で視認性 up。
+  // title tooltip で「価格ベース・分配金含まず」 を honest 開示 (FMP adjClose は
+  // split-adjusted のみで配当再投資含まず、 SPY 10Y 254% vs 配当込み ~310% の
+  // 乖離を user が誤読しないように明示)。
   return (
     <div
+      title="価格ベース・分配金含まず"
       style={{
-        fontSize: 11,
+        fontSize: 13,
         fontWeight: 700,
         letterSpacing: '0.08em',
-        color: 'var(--text-muted)',
+        color: 'var(--text-primary)',
         textTransform: 'uppercase',
         marginBottom: 'var(--space-2, 8px)',
+        cursor: 'default',
       }}
     >
       {text}
@@ -168,7 +176,7 @@ export default function ReturnGrid({
   ticker,
   frameless = true,
   testId = 'return-grid',
-  sectionLabel = '期間別リターン',
+  sectionLabel = '期間別累積リターン',
 }) {
   const { data, loading } = usePeriodReturns(ticker);
 
@@ -187,7 +195,7 @@ export default function ReturnGrid({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))',
             gap: 'var(--space-4, 16px)',
           }}
         >
