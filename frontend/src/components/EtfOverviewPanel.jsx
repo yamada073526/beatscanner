@@ -95,19 +95,7 @@ function _formatAssetClass(v) {
   return v;
 }
 
-const SECTOR_LABEL_JP = {
-  'Technology': 'テクノロジー',
-  'Financial Services': '金融',
-  'Healthcare': 'ヘルスケア',
-  'Consumer Cyclical': '消費循環',
-  'Communication Services': '通信',
-  'Industrials': '資本財',
-  'Consumer Defensive': '生活必需品',
-  'Energy': 'エネルギー',
-  'Basic Materials': '素材',
-  'Real Estate': '不動産',
-  'Utilities': '公益',
-};
+// v118 ETF Phase 2: SECTOR_LABEL_JP は SectorDonut.jsx 内に移管済、 本 file からは削除。
 
 function MetricChip({ label, value, hint }) {
   return (
@@ -157,60 +145,7 @@ function MetricChip({ label, value, hint }) {
   );
 }
 
-function SectorBar({ industry, exposure, maxExposure }) {
-  const width = maxExposure > 0 ? Math.max(2, (exposure / maxExposure) * 100) : 0;
-  const labelJp = SECTOR_LABEL_JP[industry] || industry;
-  return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '120px 1fr 60px',
-        gap: 'var(--space-3, 12px)',
-        alignItems: 'center',
-        padding: 'var(--space-1, 4px) 0',
-      }}
-    >
-      <div
-        style={{
-          fontSize: 'var(--text-body-sm, 13px)',
-          color: 'var(--text-primary)',
-          fontWeight: 500,
-        }}
-      >
-        {labelJp}
-      </div>
-      <div
-        style={{
-          height: 8,
-          background: 'var(--surface-3, rgba(255,255,255,0.04))',
-          borderRadius: 'var(--radius-pill, 999px)',
-          overflow: 'hidden',
-        }}
-      >
-        <div
-          style={{
-            width: `${width}%`,
-            height: '100%',
-            background: 'linear-gradient(90deg, var(--color-accent), color-mix(in srgb, var(--color-accent) 60%, var(--color-gold)))',
-            borderRadius: 'var(--radius-pill, 999px)',
-            transition: 'width 600ms ease',
-          }}
-        />
-      </div>
-      <div
-        style={{
-          fontSize: 'var(--text-body-sm, 13px)',
-          color: 'var(--text-primary)',
-          fontWeight: 700,
-          textAlign: 'right',
-          fontVariantNumeric: 'tabular-nums',
-        }}
-      >
-        {exposure.toFixed(2)}%
-      </div>
-    </div>
-  );
-}
+// v118 ETF Phase 2: SectorBar (横棒) は SectorDonut (PieChart) に置換、 本 file から削除。
 
 /**
  * @param {object} props
@@ -222,7 +157,6 @@ export default function EtfOverviewPanel({ etfInfo }) {
   const companyName = etfInfo.companyName || '';
   const ov = etfInfo.overview || {};
   const sectors = Array.isArray(etfInfo.sectors) ? etfInfo.sectors : [];
-  const maxExposure = sectors.length > 0 ? sectors[0].exposure : 0;
 
   return (
     <section
