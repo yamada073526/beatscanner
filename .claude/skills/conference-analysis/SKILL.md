@@ -6,110 +6,85 @@ description: |
   「ストリーミングが止まる」などの指示で呼び出す。
 ---
 
-# カンファレンスコール分析スキル（conference-analysis）
+# カンファレンスコール分析スキル
 
-## 概要
-Claude Sonnet を使い、決算データとCCコール情報から
-詳細分析レポートをストリーミングで生成する。
-決算レポートタブの「カンファレンスコール要点」カードに表示。
+Claude Sonnet を使い、 決算データと CC コール transcript から詳細分析レポートを **SSE ストリーミング** で生成する機能の SSOT。 決算レポートタブの「カンファレンスコール要点」 + 「アナリストの視点」 2 カードに表示。
 
-## 関連ファイル
-- バックエンド: /api/conference/{ticker}（ストリーミング対応）
-- フロントエンド: 決算レポートタブ内のCCコールカード
+## 依存
+
+- `frontend/src/components/ConferenceAnalysis.jsx` — ConferenceCard + AnalystCard 表示
+- `frontend/src/components/DetailReport.jsx` — タブ 2「決算レポート」 のホスト
+- `frontend/src/api.js` — `fetchConferenceAnalysis()` (SSE 受信)
+- `backend/app/main.py` — `/api/conference/{ticker}` endpoint (SSE)
+- `backend/app/fmp_client.py` — `earnings_transcript()` / `analyst_recommendations()` メソッド
+- `frontend/src/lib/blocklist.js` — frontend sanitize (LLM 出力)
+- `docs/references/design_system.md` — カード border 色の semantic token
+- skill `hallucination-guard` — 4 重防御 (BAD 1-6 + citation + partial_failure)
+- skill `prompt-cache-optimizer` — Sonnet call の cache 戦略
+- skill `fmp-api-retry` — FMP transcript fallback 規約
+- memory `feedback_diagram_quality_guard.md` — BAD pattern SSOT (本 skill 内で重複してきた 13 項目 はここに集約)
+- memory `feedback_data_completeness_guard.md` — transcript 不在時の partial_failure UI
+- memory `feedback_citation_required.md` — 数値・固有名詞には source_url
+- memory `feedback_llm_calc_separation.md` — 数値は Python / narration は LLM
+- memory `fmp_plan_naming.md` — FMP endpoint base (`/stable/`) + Premium 活用未完了の code smell
 
 ## モデル
-claude-sonnet-4-5（詳細分析・長文対応）
+
+Sonnet (詳細分析 + 長文対応、 citation tool use の精度が必要)。 具体的な model 名は `backend/app/claude_client.py` および endpoint 実装が SSOT。
 
 ## 出力構成
-- ポジティブ要点（緑タグ）
-- ネガティブ要点（赤タグ）
-- ニュートラル要点（グレータグ）
-- アナリスト視点まとめ
 
-## ストリーミング実装
-Server-Sent Events (SSE) でフロントに逐次配信。
-止まる場合は /api/conference/{ticker} のタイムアウト設定を確認する。
+### カード①「カンファレンスコール要点」 (ConferenceCard)
 
----
+経営陣の重要発言 / ガイダンス・見通し / Q&A ハイライト / 総評の 4 セクション。 各セクションの prompt / 行数 / 構造化方針は `backend/app/main.py` の `/api/conference/{ticker}` 実装が SSOT (skill に prompt を verbatim コピーしない)。
 
-# カンファレンスコール・アナリスト分析スキル（詳細仕様）
+### カード②「アナリストの視点」 (AnalystCard)
 
-## 依存ファイル
-- docs/references/jijima_protocol.md
-- docs/references/design_guide.md
-- docs/references/api_endpoints.md
+FMP `analyst-stock-recommendations` から直近の推奨 (Strong Buy / Buy / Hold / Sell / Strong Sell) を集計し、 アナリスト総数 + コンセンサスレーティングを表示。 endpoint 仕様は `memory/fmp_plan_naming.md` (`/stable/analyst-stock-recommendations`) と backend 実装が SSOT。
 
-## FMP APIからの取得概要
-FMP APIからearning-call-transcriptを取得し、Claude APIで以下の4項目に構造化分析する。
-取得できない場合はエラーメッセージを表示する（Coming Soonではなく実データを優先）。
+## データ整合性 (LLM 出力 hallucination 対策)
 
-## FMP APIエンドポイント
-```
-GET /stable/earning-call-transcript?symbol={ticker}&year={year}&quarter={quarter}&apikey={key}
-```
-- 最新のtranscriptを取得するため、直近8四半期を逆順に試行する
-- レスポンス: [{content: "...", date: "...", quarter: N, year: YYYY, symbol: "..."}]
+LLM プロンプトに必ず注入する厳守事項の **詳細リストは `memory/feedback_diagram_quality_guard.md` (BAD 1-6) + `memory/feedback_citation_required.md` + `memory/feedback_llm_calc_separation.md` が SSOT** (skill に項目を verbatim 列挙しない、 BAD 追加で stale 化するため)。
 
-## Claude分析プロンプト構造（カード①カンファレンスコール要点）
-```
-以下のカンファレンスコールのトランスクリプトを、独自プロトコルの観点で日本語分析してください。
+主要 invariant のみ skill 内で再掲:
 
-## ① 経営陣の重要発言
-## ② ガイダンス・見通し
-## ③ Q&Aハイライト（アナリストの主要質問と回答）
-## ④ 総評（投資家として注目すべき点）
+- 数値は Python 側で計算済の `precomputed_metrics` から引用、 LLM に算出させない
+- 過去期データが API に無ければ「過去データなし」 と表記、 推測しない
+- 通期データと四半期データを混在させない、 EPS は年次 / 四半期を明記
+- 専門用語は標準的な財務用語 (誤字「相利率」 等を避ける)
+- Markdown 記法 (`**`, `##`, `__`, `*`) は使わずプレーンテキスト
+- 出力前の self-check: 全数値が API 起源 / 方向性矛盾なし / Markdown なし / 推測値なし
 
-各セクションは##記法で出力。全体15〜25行。数字は省略せず記載。
-```
+## SSE ストリーミング実装
 
-## データ整合性に関する厳守事項（プロンプト末尾に必ず挿入）
-1. 表示対象の決算期（年次 or 四半期）を冒頭で明示し、全ての数値をその期に統一すること
-2. 通期データと四半期データを混在させてはならない
-3. EPSは必ず年次EPSまたは四半期EPSのいずれかを明記し、両者を混同しないこと
-4. 財務APIから取得した数値のみを使用し、数値を推測・補完してはならない
-5. 取得できなかった数値は「-」または「データなし」と表示すること
-6. 「業績ハイライト」と「ガイダンス・見通し」で同一指標の方向性が矛盾してはならない
-   （例：同じ会計年度のOCFを「減少」と「拡大」と同時に表現することは禁止）
-7. 過去期のデータをAPIから参照できなかった場合、その値を推測・生成してはならない。「過去データなし」と表記すること
-8. 文章内の専門用語は標準的な財務用語を使用すること
-   （「粗利率」「売上総利益率」など。「相利率」等の誤字を避ける）
+SSE (Server-Sent Events) で frontend に逐次配信。 ストリーミング停止 / タイムアウト系 bug は:
 
-## ティッカー固有データの厳守事項
-9. 分析対象は必ず {ticker} の財務データのみを使用すること。他の銘柄の数値をいかなる場合も流用してはならない。
-10. 過去期のデータは必ず【財務データ】に含まれる値のみ使用すること。含まれていない数値を推測・補完してはならない。
-11. 成長率の記述は取得済みデータから計算可能な場合のみ記載すること。データ不足の場合は「成長トレンドの詳細は開示データが限定的」と表記すること。
-12. 出力テキストにMarkdown記法（**太字**、##見出し、__下線__、*斜体*等）を一切使用しないこと。プレーンテキストのみで出力すること。
-13. 【出力前の自己チェック】全数値がAPIデータのみか・方向性矛盾がないか・Markdown記法が含まれていないか・過去期が推測値でないかを確認してから出力すること。
+- `/api/conference/{ticker}` の timeout 設定確認
+- FMP transcript 取得が直近 8 四半期 fallback で失敗していないか
+- frontend 側の `EventSource` リスナーが close されていないか
 
-## カード②アナリストの視点（FMP analyst-stock-recommendations）
-```
-GET /stable/analyst-stock-recommendations?symbol={ticker}&apikey={key}
-```
-- 直近5件の推奨を集計（Strong Buy / Buy / Hold / Sell / Strong Sell）
-- アナリスト総数・コンセンサスレーティングを表示
+## styling
 
-## 画面構成（DetailReport.jsx のタブ2）
-```
-カード①「AIによる決算詳報」（既存・ReportCard）
-　↓
-カード②「カンファレンスコール要点」（ConferenceCard）← 今回実装
-　↓
-カード③「アナリストの視点」（AnalystCard）← 今回実装
-```
+カード border 色は `var(--color-*)` semantic token を使用 (生 hex `#3b82f6` / `#8b5cf6` 禁止、 `design-system-check` skill で BLOCK される)。
 
-## デザインルール
-- カード②：背景white・左ボーダー4px #3b82f6（青）
-- カード③：背景white・左ボーダー4px #8b5cf6（紫）
-- ローディング中: 「取得中...」テキスト
-- エラー時: 赤テキストでエラー内容表示
-- 各カードにpadding: 24px・カード間margin: 16px
+具体的な padding / margin / loading text は `design_system.md` token と `ConferenceAnalysis.jsx` 実装が SSOT。
 
-## 実装ステップ
-1. FMPClientにearnings_transcript・analyst_recommendations メソッド追加
-2. バックエンド /api/conference/{ticker} エンドポイント実装
-   - transcriptを取得しClaudeで分析
-   - analyst recommendationsを集計して返す
-3. api.js に fetchConferenceAnalysis 追加
-4. ConferenceAnalysis.jsx コンポーネント作成（ConferenceCard + AnalystCard）
-5. DetailReport.jsx のPlaceholderCardを ConferenceAnalysis に置き換え
-6. AAPLで動作確認
+## エラー / カバー外時の UI
+
+- transcript 取得失敗 → memory `feedback_data_completeness_guard.md` の 3 段階分岐 (カバー外 / 一時失敗 / データあり)
+- analyst recommendations 0 件 → 「カバレッジなし」 専用 chip 表示
+- 「Coming Soon」 placeholder は **使わない** (実データ優先、 取得不可なら明示)
+
+## プロンプト調整の手順
+
+1. `hallucination-guard` skill の 4 重防御 4 層を確認
+2. `backend/app/main.py` の `/api/conference/{ticker}` プロンプトを直接編集
+3. `prompt-cache-optimizer` skill で system block cache 境界を維持
+4. AAPL で SSE streaming + 4 セクション生成 + 数値整合性を確認
+5. `hallucination-guard/references/dod_verify.md` で 8 ticker × BAD 0 件検証
+
+## 注意
+
+- LLM 出力は **必ず frontend sanitize 適用** (`blocklist.js`)
+- transcript 取得制限 (FMP plan / 8 四半期 fallback) は `fmp-api-retry` skill + `memory/fmp_plan_naming.md` 参照
+- 同じ FMP endpoint の Premium 活用未完了 code が残っている可能性 (release 前 audit 推奨)
