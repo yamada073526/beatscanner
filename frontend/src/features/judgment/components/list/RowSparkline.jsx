@@ -88,13 +88,16 @@ const PERIOD_DAYS = {
 };
 
 /**
+ * v117 R8 g2 (multi-review verdict): default size 60x16 → 80x28、 stroke 1→1.5px
+ * user 指摘「sparkline 細い + 小さい」 → 視認性向上、 stroke 1.5px で trend 明確化
+ *
  * @param {object} props
  * @param {string} props.ticker
  * @param {string} [props.period='1y']  - '1w' | '1m' | '6m' | '1y'
- * @param {number} [props.width=60]
- * @param {number} [props.height=16]
+ * @param {number} [props.width=80]
+ * @param {number} [props.height=28]
  */
-export default function RowSparkline({ ticker, period = '1y', width = 60, height = 16 }) {
+export default function RowSparkline({ ticker, period = '1y', width = 80, height = 28 }) {
   // v65 §4-B-3: '1d' は intraday 5 分足 endpoint (~78 点)、それ以外は日次 1Y を slice.
   // 旧実装は period 無視で常に '1y' fetch → '1d' は末尾 2 日 slice で直線化していた.
   const fetchPeriod = period === '1d' ? '1d' : '1y';
@@ -155,7 +158,7 @@ export default function RowSparkline({ ticker, period = '1y', width = 60, height
         points={points.join(' ')}
         fill="none"
         stroke={stroke}
-        strokeWidth="1"
+        strokeWidth="1.5"
         strokeLinejoin="round"
         strokeLinecap="round"
       />

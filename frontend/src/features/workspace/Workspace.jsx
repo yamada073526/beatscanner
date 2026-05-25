@@ -114,10 +114,11 @@ function Pane2MetaToggle() {
   const sparklinePeriod = useWorkspaceStore((s) => s.sparklinePeriod);
   const setSparklinePeriod = useWorkspaceStore((s) => s.setSparklinePeriod);
 
-  // round 7: ChipBar + ChipGroup primitive で統一。
-  // 期間 chips が 1 行目固定 = 判定タブ / 指数タブ で位置統一済 (round 6)。
+  // v117 R8 (multi-review verdict): stacked 廃止、 期間 + 表示 を 1 行に統合
+  //   → chip 4 行 → 2 行統合 (Pane 2 全体改善 Priority 1)
+  //   wrap で width 不足時に自然に 2 行に折返し
   return (
-    <ChipBar stacked>
+    <ChipBar>
       <ChipGroupSegmented
         ariaLabel="sparkline の期間を切替"
         prefix="期間:"

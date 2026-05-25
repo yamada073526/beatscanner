@@ -121,6 +121,11 @@ export const useWorkspaceStore = create(
       // persist 対象外 (ephemeral UI state、 session 内のみ保持)。
       // setter: expandSection / collapseSection / toggleSection
       expandedSections: new Set(),
+      // v117 R8 g3 (multi-review verdict): DailyDigest が掲載中の ticker 一覧。
+      // JudgmentRow で「DIGEST」 mini badge 表示 + DailyDigest と銘柄リストの連携感を演出。
+      // persist しない (ephemeral、 DailyDigest fetch で毎回更新)。
+      digestTickers: [],
+      setDigestTickers: (arr) => set(() => ({ digestTickers: Array.isArray(arr) ? arr : [] })),
 
       toggleHeader: () => set((s) => ({ headerCollapsed: !s.headerCollapsed })),
       togglePane1: () => set((s) => ({ pane1Collapsed: !s.pane1Collapsed })),

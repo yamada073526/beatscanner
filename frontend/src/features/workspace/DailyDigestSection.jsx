@@ -28,6 +28,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase.js';
+import { useWorkspaceStore } from '../../state/workspaceStore.js';
 
 const FETCH_LIMIT = 3;
 
@@ -153,31 +154,54 @@ function DigestLoadingState() {
 
 export default function DailyDigestSection() {
   const { articles, loading, error } = useDailyDigest();
+  const setDigestTickers = useWorkspaceStore((s) => s.setDigestTickers);
+
+  // v117 R8 g3: DailyDigest が表示している ticker 一覧を workspace store に push
+  //   → JudgmentRow で「DIGEST」 badge を表示できるように連携
+  useEffect(() => {
+    const tickers = articles
+      .map((a) => (a.ticker || '').toUpperCase())
+      .filter(Boolean);
+    setDigestTickers(tickers);
+  }, [articles, setDigestTickers]);
 
   // Supabase 未設定 / error / 0 件 全て 「準備中」 fallback (Trust Cliff 防止)
   const showEmpty = !loading && (error || articles.length === 0);
 
+  // v117 R8 g4 (multi-review verdict): <details> accordion 化、 default open。
+  //   user が自身で折りたたみ可、 Pane 2 高さ節約。
+  const count = articles.length;
   return (
-    <section
+    <details
       className="daily-digest"
       data-testid="daily-digest-section"
       aria-label="本日の Daily Digest"
+      open
     >
-      <header className="daily-digest__header">
-        <div className="daily-digest__label">DAILY DIGEST</div>
-        <h2 className="daily-digest__heading">本日の決算分析記事</h2>
-      </header>
-      {loading && <DigestLoadingState />}
-      {!loading && !showEmpty && (
-        <div
-          className={`daily-digest__grid daily-digest__grid--count-${Math.min(articles.length, 3)}`}
-        >
-          {articles.map((article) => (
-            <DigestCard key={article.slug} article={article} />
-          ))}
+      <summary className="daily-digest__summary">
+        <div className="daily-digest__summary-inner">
+          <div>
+            <div className="daily-digest__label">DAILY DIGEST</div>
+            <h2 className="daily-digest__heading">本日の決算分析記事</h2>
+          </div>
+          <span className="daily-digest__count" aria-hidden="true">
+            {loading ? '' : count > 0 ? `${count} 件` : ''}
+          </span>
         </div>
-      )}
-      {showEmpty && <DigestEmptyState />}
-    </section>
+      </summary>
+      <div className="daily-digest__body">
+        {loading && <DigestLoadingState />}
+        {!loading && !showEmpty && (
+          <div
+            className={`daily-digest__grid daily-digest__grid--count-${Math.min(count, 3)}`}
+          >
+            {articles.map((article) => (
+              <DigestCard key={article.slug} article={article} />
+            ))}
+          </div>
+        )}
+        {showEmpty && <DigestEmptyState />}
+      </div>
+    </details>
   );
 }

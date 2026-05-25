@@ -31,6 +31,9 @@ export default function JudgmentRow({ item, selected, onClick }) {
 
   const pane2Meta = useWorkspaceStore((s) => s.pane2Meta);
   const sparklinePeriod = useWorkspaceStore((s) => s.sparklinePeriod);
+  // v117 R8 g3: DailyDigest 掲載中の ticker か判定 → 「DIGEST」 mini badge 表示
+  const digestTickers = useWorkspaceStore((s) => s.digestTickers);
+  const isInDigest = Array.isArray(digestTickers) && digestTickers.includes(String(ticker || '').toUpperCase());
 
   const trendColor =
     changePct == null
@@ -42,14 +45,16 @@ export default function JudgmentRow({ item, selected, onClick }) {
           : 'var(--text-muted)';
 
   // メタ表示 (右端 column): pane2Meta に応じて切替
+  // v117 R8 g2: changePct/daysUntil null の時は dim text のみ (pill 装飾廃止、 意味ある時のみ強調)
   let metaCell;
   if (pane2Meta === 'change1d') {
     metaCell = (
       <span
         style={{
           fontSize: 13,
-          fontWeight: 700,
-          color: trendColor,
+          fontWeight: changePct == null ? 400 : 700,
+          color: changePct == null ? 'var(--text-tertiary, var(--text-muted))' : trendColor,
+          opacity: changePct == null ? 0.4 : 1,
           minWidth: 56,
           textAlign: 'right',
           fontVariantNumeric: 'tabular-nums',
@@ -60,15 +65,21 @@ export default function JudgmentRow({ item, selected, onClick }) {
     );
   } else if (pane2Meta === 'earnings') {
     const daysUntil = item.nextEarningsDays;
+    const isUrgent = daysUntil != null && daysUntil <= 7;
     metaCell = (
       <span
         style={{
           fontSize: 12,
-          fontWeight: 600,
-          color: daysUntil != null && daysUntil <= 7 ? 'var(--color-warning)' : 'var(--text-muted)',
-          padding: '2px 8px',
-          borderRadius: 'var(--radius-pill, 9999px)',
-          background: daysUntil != null && daysUntil <= 7 ? 'rgba(245,158,11,0.10)' : 'transparent',
+          fontWeight: isUrgent ? 700 : 500,
+          color: isUrgent
+            ? 'var(--color-warning)'
+            : daysUntil == null
+              ? 'var(--text-tertiary, var(--text-muted))'
+              : 'var(--text-secondary)',
+          opacity: daysUntil == null ? 0.4 : 1,
+          padding: isUrgent ? '2px 8px' : '0',
+          borderRadius: isUrgent ? 'var(--radius-pill, 9999px)' : '0',
+          background: isUrgent ? 'color-mix(in srgb, var(--color-warning) 10%, transparent)' : 'transparent',
           minWidth: 56,
           textAlign: 'center',
         }}
@@ -154,21 +165,44 @@ export default function JudgmentRow({ item, selected, onClick }) {
           <CompanyLogo ticker={ticker} size={28} />
         </span>
         <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
-          <span
-            style={{
-              fontSize: 14,
-              fontWeight: 700,
-              lineHeight: 1.05,
-              letterSpacing: '-0.01em',
-              color: 'var(--text-primary)',
-              // §dogfood-round9: col 1 が squeeze されたとき ticker が col 3 へ overflow しないよう保険
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              minWidth: 0,
-            }}
-          >
-            {ticker}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            <span
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                lineHeight: 1.05,
+                letterSpacing: '-0.01em',
+                color: 'var(--text-primary)',
+                // §dogfood-round9: col 1 が squeeze されたとき ticker が col 3 へ overflow しないよう保険
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                minWidth: 0,
+              }}
+            >
+              {ticker}
+            </span>
+            {/* v117 R8 g3: DailyDigest 掲載中 mini badge (連携感を演出) */}
+            {isInDigest && (
+              <span
+                title="本日の Daily Digest に掲載中"
+                style={{
+                  fontSize: 9,
+                  fontWeight: 700,
+                  letterSpacing: '0.1em',
+                  color: 'var(--color-gold)',
+                  padding: '1px 6px',
+                  borderRadius: 999,
+                  background: 'color-mix(in srgb, var(--color-gold) 12%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--color-gold) 30%, transparent)',
+                  textTransform: 'uppercase',
+                  flexShrink: 0,
+                  lineHeight: 1.4,
+                }}
+              >
+                DIGEST
+              </span>
+            )}
           </span>
           <span
             style={{

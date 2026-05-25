@@ -369,14 +369,20 @@ export default function ArticleBody({ bodyMd, onSanitized, ticker }) {
           data-testid="article-tldr"
           aria-label="この記事の要点"
         >
-          <div className="article-tldr__label">この記事の要点</div>
-          <ul className="article-tldr__list">
+          {/* v117 R7-4 Editorial Hero layout (UI/UX 案 B):
+              h2 級 gold 見出し + ghost 数字 (3xl opacity 30%) + bullet テキスト
+              card 廃止、 typography 主導で「TL;DR = 記事の主役」 を表現 */}
+          <h2 className="article-tldr__heading">この記事の要点</h2>
+          <ol className="article-tldr__list">
             {processedTldr.map((item, i) => (
               <li key={i} className="article-tldr__item">
-                <ReactMarkdown components={components}>{item}</ReactMarkdown>
+                <span className="article-tldr__number" aria-hidden="true">{i + 1}</span>
+                <div className="article-tldr__text">
+                  <ReactMarkdown components={components}>{item}</ReactMarkdown>
+                </div>
               </li>
             ))}
-          </ul>
+          </ol>
         </aside>
       )}
       <ReactMarkdown components={components} remarkPlugins={REMARK_PLUGINS}>

@@ -7508,34 +7508,53 @@ button.ds-chip[data-pressed="true"]:hover {
     0 1px 4px -1px rgba(15, 23, 42, 0.20);
 }
 
-/* 保有銘柄: 左端 2px ゴールドアクセントバー (常時表示、ホテルロビー感) */
+/* v117 R8 g2: 左端 accent bar を「保有 = 常時 gold、 観察 = 常時 cyan」 に色分け
+ * (旧: 保有 gold 常時 / 観察 cyan hover only → user QA「全 row 同色」 誤認)
+ * raw hex → design token 化、 観察銘柄も視覚 distinguish を常時提供 */
 .ws-judgment-row.is-holding::before {
   content: '';
   position: absolute;
   left: 0;
   top: 0;
   bottom: 0;
-  width: 2px;
-  background: linear-gradient(to bottom, #d4af37 0%, #f4cd5d 50%, #d4af37 100%);
+  width: 3px;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--color-gold) 80%, transparent) 0%,
+    var(--color-gold) 50%,
+    color-mix(in srgb, var(--color-gold) 80%, transparent) 100%
+  );
   border-radius: 0 1px 1px 0;
   pointer-events: none;
 }
 
-/* 非保有銘柄: 左端 2px シアンアクセントバー (hover 時のみ) */
+/* 観察銘柄: 左端 cyan accent (常時表示、 但し gold より控えめ opacity) */
 .ws-judgment-row:not(.is-holding)::before {
   content: '';
   position: absolute;
   left: 0;
   top: 0;
   bottom: 0;
-  width: 2px;
-  background: linear-gradient(to bottom, rgba(56,189,248,0) 0%, rgba(56,189,248,0.7) 50%, rgba(56,189,248,0) 100%);
+  width: 3px;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--color-accent) 0%, transparent) 0%,
+    color-mix(in srgb, var(--color-accent) 55%, transparent) 50%,
+    color-mix(in srgb, var(--color-accent) 0%, transparent) 100%
+  );
   border-radius: 0 1px 1px 0;
-  opacity: 0;
-  transition: opacity var(--motion-base, 200ms) ease;
+  transition: background var(--motion-base, 200ms) ease;
   pointer-events: none;
 }
-.ws-judgment-row:not(.is-holding):hover::before { opacity: 1; }
+/* hover で観察銘柄も accent 強調 */
+.ws-judgment-row:not(.is-holding):hover::before {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--color-accent) 40%, transparent) 0%,
+    var(--color-accent) 50%,
+    color-mix(in srgb, var(--color-accent) 40%, transparent) 100%
+  );
+}
 
 /* drag handle: hover で出現 (DnD 並び替え可能を示唆) */
 .ws-judgment-row .ws-row-handle {
@@ -10035,96 +10054,87 @@ button.ds-chip[data-pressed="true"]:hover {
   color: var(--text-primary);
 }
 
-/* ── .article-tldr — v116 冒頭 3 行 TL;DR (multi-review 3 体合議 verdict) ──
+/* ── .article-tldr — v117 R7-4 Editorial Hero layout (UI/UX 案 B) ──
  *
- * 「2 秒の把握」 5 原則第 1 を実現するため、 hero 直下に accent box を配置。
- * Aman 級 brand: gold accent + surface-card (装飾過多せず構造で演出)。
+ * 過去の card layout (R7-3 label-as-tab 含む) を完全廃止。
+ * Aman 級「驚き」 を typography で表現する magazine 流 editorial design:
+ *   - card / border / shadow 全廃 (情報の入れ物 → editorial 章扉に格上げ)
+ *   - h2 級 gold 見出し「この記事の要点」 (記事の主役 = 章扉)
+ *   - ghost 番号 (3xl opacity 30% gold)、 bullet テキストと baseline align
+ *   - bullet 間 separator なし、 spacing のみでリズム
  *
- * design token のみ使用 (raw hex 禁止、 design-system-check 通過):
- *   - gold accent: --color-gold (border-left + label color)
- *   - surface: --surface-2 (bg) / --border-subtle (frame)
- *   - typography: 'Noto Sans JP' (本文 Serif と階層 contrast)
+ * design token のみ使用 (raw hex 禁止)
+ * memory anchors: feedback_minimalism_over_additive.md (装飾廃止、 構造で演出)
  */
 .article-tldr {
-  /* v117 R7-3 (3 体合議 UI/UX 推奨案 1 「label-as-tab」 layout):
-     label を box 外 上部に float、 bullet を box 上端から開始 → 「label 部が埋まり、
-     下部だけ空く」 非対称知覚を構造で解消 (Notion / Linear callout idiom)。
-     box 自身の上部に label の高さ分の margin-top を確保、 label を absolute で重ねる。 */
-  position: relative;
-  margin: var(--space-8, 32px) 0 var(--space-8, 32px);   /* label 分の上 margin */
-  padding: var(--space-3, 12px) var(--space-6, 24px) var(--space-3, 12px);
-  background: color-mix(in srgb, var(--color-gold) 4%, var(--surface-2));
-  border: 1px solid color-mix(in srgb, var(--color-gold) 25%, var(--border-subtle));
-  border-left: 4px solid var(--color-gold);
-  border-radius: var(--radius-md, 12px);
-  box-shadow: var(--shadow-sm);
+  margin: var(--space-8, 32px) 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
-.article-tldr__label {
-  /* v117 R7-3: label-as-tab. position: absolute で box 外上部に float */
-  position: absolute;
-  top: calc(-1 * var(--space-3, 12px) - 7px);   /* 文字 base line を box top と密着 */
-  left: var(--space-3, 12px);
-  padding: 2px var(--space-2, 8px);
-  background: var(--surface-2);                /* page bg と差別化、 chip 風 */
+.article-tldr__heading {
   font-family: 'Noto Sans JP', system-ui, sans-serif;
-  font-size: var(--text-caption, 11px);
+  font-size: clamp(18px, 2.4vw, 22px);
   font-weight: 700;
-  letter-spacing: 0.12em;
   color: var(--color-gold);
-  text-transform: uppercase;
-  border: 1px solid color-mix(in srgb, var(--color-gold) 35%, var(--border));
-  border-radius: 999px;
-  line-height: 1.4;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  margin: 0 0 var(--space-5, 20px);
 }
 
 .article-tldr__list {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 16px);
 }
 
 .article-tldr__item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3, 12px);
+}
+
+.article-tldr__number {
+  font-family: 'Noto Sans JP', system-ui, sans-serif;
+  font-size: clamp(28px, 4vw, 36px);
+  font-weight: 800;
+  color: color-mix(in srgb, var(--color-gold) 35%, transparent);
+  line-height: 1;
+  flex-shrink: 0;
+  min-width: 1.5em;
+  letter-spacing: -0.02em;
+  align-self: flex-start;
+  position: relative;
+  top: 0.1em;
+}
+
+.article-tldr__text {
   font-family: 'Noto Sans JP', system-ui, sans-serif;
   font-size: var(--text-body, 15px);
-  line-height: 1.65;
+  line-height: 1.7;
   color: var(--text-primary);
-  /* v117 R7-3 label-as-tab: 上下 padding 同一 6px、 bullet 全体を box 中で均等分配 */
-  padding: var(--space-1, 6px) 0 var(--space-1, 6px) var(--space-5, 20px);
-  position: relative;
-  border-top: 1px solid color-mix(in srgb, var(--color-gold) 12%, transparent);
+  flex: 1;
+  min-width: 0;
 }
 
-/* v117 R7-3 label-as-tab: 最初の item は box 上端と密着 (label は外に float) */
-.article-tldr__item:first-child {
-  border-top: none;
-  padding-top: 0;
-}
-
-/* v117 R7-3 label-as-tab: 最後の item は box bottom と密着 */
-.article-tldr__item:last-child {
-  padding-bottom: 0;
-}
-
-.article-tldr__item:first-child {
-  border-top: none;
-}
-
-.article-tldr__item::before {
-  content: '';
-  position: absolute;
-  left: var(--space-1, 4px);
-  top: 1.05em;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-gold);
-}
-
-/* TL;DR item 内の citation link は本文と同じスタイル維持 */
-.article-tldr__item p {
+.article-tldr__text p {
   margin: 0;
 }
+
+@media (max-width: 480px) {
+  .article-tldr__heading {
+    font-size: 18px;
+  }
+  .article-tldr__number {
+    font-size: 26px;
+  }
+}
+
 
 /* ── .daily-digest — v113 P4 workspace ホーム Pane 2 上部 Daily Digest 3 card ──
  *
@@ -10140,18 +10150,65 @@ button.ds-chip[data-pressed="true"]:hover {
  *   - project_pane45_redesign.md (v113 P4 0.5d sprint)
  *   - feedback_minimalism_over_additive.md (拡張は重要 4-5 section 限定、 Pane 2 上部のみ embed)
  */
+/* v117 R8 g4: <details> accordion 化、 default open + user 折りたたみ可 */
 .daily-digest {
-  padding: var(--space-4, 16px) var(--space-3, 12px) var(--space-5, 20px);
+  padding: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--color-gold) 15%, var(--border));
-  /* v117 R7 scroll bug fix: 親 flex layout で auto height で膨らみ JudgmentList を圧迫していた。
-     max-height + overflow-y で自身の高さを限定 + 溢れた場合は自身で scroll。 */
   flex-shrink: 0;
-  max-height: 280px;
-  overflow-y: auto;
 }
 
-.daily-digest__header {
-  margin-bottom: var(--space-3, 12px);
+.daily-digest__summary {
+  list-style: none;
+  cursor: pointer;
+  padding: var(--space-3, 12px) var(--space-3, 12px);
+  user-select: none;
+  outline: none;
+  border-radius: var(--radius-sm, 8px);
+  transition: background var(--motion-base, 200ms) ease;
+}
+
+.daily-digest__summary::-webkit-details-marker {
+  display: none;
+}
+
+.daily-digest__summary:hover {
+  background: color-mix(in srgb, var(--color-gold) 4%, transparent);
+}
+
+.daily-digest__summary-inner {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3, 12px);
+}
+
+.daily-digest__count {
+  font-family: 'Noto Sans JP', system-ui, sans-serif;
+  font-size: var(--text-caption, 11px);
+  font-weight: 600;
+  color: var(--text-tertiary, var(--text-muted));
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+}
+
+/* details[open]::after は collapse / expand chevron 表示用 */
+.daily-digest__summary::after {
+  content: '▾';
+  margin-left: var(--space-2, 8px);
+  color: var(--color-gold);
+  font-size: 10px;
+  transition: transform var(--motion-base, 200ms) ease;
+}
+
+.daily-digest:not([open]) .daily-digest__summary::after {
+  transform: rotate(-90deg);
+}
+
+.daily-digest__body {
+  padding: 0 var(--space-3, 12px) var(--space-5, 20px);
+  /* default open でも親 flex の max 高さ制御は親側で設定 (scroll は親 div で吸収) */
+  max-height: 280px;
+  overflow-y: auto;
 }
 
 .daily-digest__label {
