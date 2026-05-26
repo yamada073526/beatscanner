@@ -1,10 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   PieChart,
   Pie,
   Cell,
   ResponsiveContainer,
-  Tooltip,
 } from 'recharts';
 
 /**
@@ -242,6 +241,11 @@ export default function SectorDonut({
     );
   }, [sectors]);
 
+  // R9.7 (user dogfood feedback): hover 中の sector を中央 label に動的表示。
+  // tooltip の chip が donut 中央の「合計 100%」 と重なって読みづらい問題を解決。
+  // hover 時 = sector 名 + %、 非 hover = ticker / 「合計 100%」。 brand 整合 (中央 spotlight)。
+  const [activeIndex, setActiveIndex] = useState(null);
+
   // 全 sector 不正なら section 非表示 (Trust Cliff 防止)
   if (validSectors.length === 0) return null;
 
@@ -296,11 +300,7 @@ export default function SectorDonut({
           >
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                {/* CustomTooltip */}
-                <Tooltip
-                  content={<CustomTooltip />}
-                  cursor={false}
-                />
+                {/* R9.7: tooltip 削除、 中央 label に hover sector を統合表示 */}
                 <Pie
                   data={pieData}
                   dataKey="value"
@@ -313,6 +313,8 @@ export default function SectorDonut({
                   paddingAngle={1}
                   label={false}
                   labelLine={false}
+                  onMouseEnter={(_, idx) => setActiveIndex(idx)}
+                  onMouseLeave={() => setActiveIndex(null)}
                 >
                   {pieData.map((entry, index) => (
                     <Cell
@@ -324,7 +326,8 @@ export default function SectorDonut({
                 </Pie>
               </PieChart>
             </ResponsiveContainer>
-            {/* donut 中央ラベル: absolute で重ねる */}
+            {/* R9.7: donut 中央ラベル — hover 時は sector 名 + %、 非 hover は合計表示。
+                ホバー時の重なり問題を解決、 brand 整合 (中央 spotlight) */}
             <div
               style={{
                 position: 'absolute',
@@ -334,27 +337,56 @@ export default function SectorDonut({
                 textAlign: 'center',
                 pointerEvents: 'none',
                 lineHeight: 1.3,
+                minWidth: 120,
               }}
             >
-              <div
-                style={{
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: 'var(--text-primary)',
-                  fontVariantNumeric: 'tabular-nums',
-                }}
-              >
-                {ticker || '合計'}
-              </div>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: 'var(--text-muted)',
-                  marginTop: 2,
-                }}
-              >
-                100%
-              </div>
+              {activeIndex != null && pieData[activeIndex] ? (
+                <>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: 'var(--text-primary)',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {SECTOR_LABEL_JP[pieData[activeIndex].name] || pieData[activeIndex].name}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 700,
+                      color: 'var(--color-gold)',
+                      marginTop: 2,
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {pieData[activeIndex].value.toFixed(2)}%
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: 'var(--text-primary)',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {ticker || '合計'}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: 'var(--text-muted)',
+                      marginTop: 2,
+                    }}
+                  >
+                    100%
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
