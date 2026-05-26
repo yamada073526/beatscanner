@@ -101,20 +101,8 @@ export default function WorkspaceScreenerModal({ isOpen, onClose }) {
         aria-modal="true"
         aria-labelledby="workspace-screener-title"
         data-testid="workspace-screener-modal"
+        className="ds-workspace-screener-modal"
         onClick={(e) => e.stopPropagation()}
-        style={{
-          position: 'relative',
-          width: '100%',
-          maxWidth: 880,
-          maxHeight: '88vh',
-          background: 'var(--bg-card, #ffffff)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg, 16px)',
-          boxShadow: 'var(--shadow-4, 0 20px 60px -10px rgba(15, 23, 42, 0.45))',
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
       >
         {/* Header */}
         <div
@@ -213,20 +201,6 @@ export default function WorkspaceScreenerModal({ isOpen, onClose }) {
         </div>
       </div>
 
-      <style>{`
-        @keyframes workspaceScreenerFadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @media (max-width: 640px) {
-          [data-testid="workspace-screener-modal"] {
-            max-width: 100% !important;
-            max-height: 100% !important;
-            border-radius: 0 !important;
-            height: 100vh;
-          }
-        }
-      `}</style>
     </div>,
     document.body
   );
