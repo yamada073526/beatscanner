@@ -223,10 +223,21 @@ function Pane1NavRail({ items = [] }) {
   const activeTicker = useWorkspaceStore((s) => s.activeTicker);
   const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
 
+  // v120 hotfix (3 体合議 QA P4): rail mode は「保有銘柄のみ」 に縮小。
+  // 観察銘柄は Pane 2 (JudgmentList) で常時 visible なので Pane 1 重複は noise。
+  // 保有銘柄は P/L 管理上 常に手元に置きたい → 縦 stack に残す。
+  const railItems = items.filter((it) => it.isHolding);
   // watchlist は最大 8 件表示、超過は「+N」chip
   const MAX_VISIBLE = 8;
-  const visibleItems = items.slice(0, MAX_VISIBLE);
-  const overflow = Math.max(0, items.length - MAX_VISIBLE);
+  const visibleItems = railItems.slice(0, MAX_VISIBLE);
+  const overflow = Math.max(0, railItems.length - MAX_VISIBLE);
+
+  // v120 hotfix (3 体合議 QA P5): 2 日以内に決算予定の watchlist 銘柄数を badge 表示。
+  // 機関投資家は決算前ポジション調整を毎日意識、 「watchlist 内の決算 N 件」 は最重要 alert。
+  const earningsSoonCount = items.filter((it) => {
+    const d = it.nextEarningsDays;
+    return d != null && d >= 0 && d <= 2;
+  }).length;
 
   return (
     <div
@@ -283,8 +294,36 @@ function Pane1NavRail({ items = [] }) {
       />
       <FtdRailDots />
 
-      {/* divider */}
-      {items.length > 0 && (
+      {/* v120 hotfix (QA P5): 決算 2 日以内 alert badge. 0 なら非表示 (CLS 防止)。 */}
+      {earningsSoonCount > 0 && (
+        <div
+          title={`watchlist 内、 2 日以内に決算: ${earningsSoonCount} 件`}
+          aria-label={`決算間近 ${earningsSoonCount} 件`}
+          data-testid="ws-rail-earnings-badge"
+          style={{
+            marginTop: 6,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 3,
+            fontSize: 10,
+            fontWeight: 700,
+            color: 'var(--color-warning)',
+            background: 'color-mix(in srgb, var(--color-warning) 14%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--color-warning) 30%, transparent)',
+            padding: '2px 6px',
+            borderRadius: 'var(--radius-pill, 9999px)',
+            fontVariantNumeric: 'tabular-nums',
+            flexShrink: 0,
+            letterSpacing: '0.02em',
+          }}
+        >
+          <CalendarDays size={11} strokeWidth={2} aria-hidden />
+          {earningsSoonCount}
+        </div>
+      )}
+
+      {/* divider — holdings (railItems) があるときのみ */}
+      {railItems.length > 0 && (
         <div
           aria-hidden
           style={{

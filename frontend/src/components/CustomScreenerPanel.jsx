@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Mountain } from 'lucide-react';
+import { Mountain, Crown } from 'lucide-react';
 import { fetchCustomScreener, fetchCupHandleScanner } from '../api.js';
 import Chip, { ChipGroup } from './ui/Chip.jsx';
 
 const CONDITION_SHORT = ['CF率', 'EPS', 'CFPS', '売上', 'CF>EPS'];
 
 // Cup-Handle Phase 2.4 (multi-review 6 体合議 verdict)
-// filter chip 4 個: 全て / ファンダ / Cup-Handle / 両方 (両方は Premium lock)
+// v120 hotfix (user dogfood): 「ファンダ ∩ Cup」 → 「ファンダ & カップ」 で可読性向上 (∩ 記号は読みにくい)
 const SCANNER_FILTERS = [
   { key: 'funda', label: 'ファンダ', mobile: 'ファンダ' },
-  { key: 'cup',   label: 'Cup-Handle', mobile: 'Cup' },
-  { key: 'both',  label: 'ファンダ ∩ Cup', mobile: '両方', premium: true },
+  { key: 'cup',   label: 'カップ', mobile: 'カップ' },
+  { key: 'both',  label: 'ファンダ & カップ', mobile: '両方', premium: true },
 ];
 
 const CUP_STATE_LABEL = {
@@ -340,9 +340,19 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
                     tone={isActive ? 'accent' : 'muted'}
                     pressed={isActive}
                     onClick={() => runCupFilter(f.key)}
-                    title={f.premium ? 'Premium ¥1,800/月 限定 (ファンダ ∩ Cup-Handle AND 検索)\nPro tier はファンダのみ / Cup のみ 個別 scan 可' : undefined}
+                    title={f.premium ? 'Premium ¥1,800/月 限定 (ファンダ × Cup-Handle 複合検索)\nPro tier はファンダのみ / カップのみ 個別 scan 可' : undefined}
                   >
-                    {f.premium ? '🔒 ' : ''}{f.label}
+                    {/* v120 hotfix (user dogfood + icon-brand-consistency): 🔒 emoji の安っぽさを Crown 格調シンボルへ。
+                        Aman 級ブランド世界観整合、 Pro 限定 = 「王冠 = 王者の選別」 メタファー */}
+                    {f.premium && (
+                      <Crown
+                        size={11}
+                        strokeWidth={1.75}
+                        aria-hidden
+                        style={{ color: 'var(--color-gold)', marginRight: 4, verticalAlign: '-1px' }}
+                      />
+                    )}
+                    {f.label}
                   </Chip>
                 );
               })}
