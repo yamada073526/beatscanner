@@ -35,6 +35,8 @@ import PaneDetailView from './PaneDetailView.jsx';
 // v120 Task 3 hotfix: FtdChipRow / FtdRailDots を Pane1MacroSection (dead code) から named export
 // FtdChipRow = full mode 用 (3 行 chip)、 FtdRailDots = rail mode 用 (3 点 dot、 multi-review 3 体合議 verdict 案 B)
 import { FtdChipRow, FtdRailDots } from './Pane1MacroSection.jsx';
+// v120 hotfix (user dogfood req): rail mode の銘柄 tile を 2 文字 monogram → CompanyLogo (TV/FMP/頭文字 fallback) へ
+import CompanyLogo from '../../components/CompanyLogo.jsx';
 // v120 Sprint 3 (Frontend verdict mandatory fix 2): WorkspaceScreenerModal を lazy 化
 // (modal は Pro user が screener button 押下時のみ open、 chunk reuse + 初期 bundle 軽量化)
 const WorkspaceScreenerModal = lazy(() => import('./WorkspaceScreenerModal.jsx'));
@@ -366,8 +368,9 @@ function Pane1NavRail({ items = [] }) {
               color: 'var(--text-secondary)',
             }}
           >
-            {/* 簡易: ticker 先頭 2 文字 monogram (logo 取得失敗 fallback と同じ) */}
-            {it.ticker.slice(0, 2)}
+            {/* v120 hotfix (user dogfood): ticker monogram 2 文字だと AA(Alcoa)/AAPL(Apple) 等で衝突。
+                CompanyLogo (TV → FMP → 頭文字円 fallback) で銘柄識別性向上。 size 28 = 32×32 円内に余裕。 */}
+            <CompanyLogo ticker={it.ticker} size={28} />
           </button>
         );
       })}

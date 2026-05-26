@@ -6,11 +6,12 @@ import Chip, { ChipGroup } from './ui/Chip.jsx';
 const CONDITION_SHORT = ['CF率', 'EPS', 'CFPS', '売上', 'CF>EPS'];
 
 // Cup-Handle Phase 2.4 (multi-review 6 体合議 verdict)
-// v120 hotfix (user dogfood): 「ファンダ ∩ Cup」 → 「ファンダ & カップ」 で可読性向上 (∩ 記号は読みにくい)
+// v120 hotfix v2 (user dogfood): 「ファンダ & カップ」 chip が 2 行 wrap (chrome 圧迫) → 「両方」 に短縮統一。
+// title (hover tooltip) で「ファンダ × Cup-Handle 複合検索」 を補足、 chip 1 行統一で chrome 整理。
 const SCANNER_FILTERS = [
-  { key: 'funda', label: 'ファンダ', mobile: 'ファンダ' },
-  { key: 'cup',   label: 'カップ', mobile: 'カップ' },
-  { key: 'both',  label: 'ファンダ & カップ', mobile: '両方', premium: true },
+  { key: 'funda', label: 'ファンダ' },
+  { key: 'cup',   label: 'カップ' },
+  { key: 'both',  label: '両方', premium: true, fullLabel: 'ファンダ & カップ' },
 ];
 
 const CUP_STATE_LABEL = {
