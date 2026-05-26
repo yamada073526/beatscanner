@@ -24,7 +24,8 @@ import WorkspaceHeader from './WorkspaceHeader.jsx';
 import { useUrlSync } from './useUrlSync.js';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { withViewTransition } from '../../utils/viewTransition.js';
-import Chip, { ChipBar, ChipGroup } from '../../components/ui/Chip.jsx';
+// v120 Sprint 1: Pane2MetaToggle 廃止 → Chip / ChipBar / ChipGroup の Workspace 内直接利用が消えた
+// (SPARKLINE_PERIOD_OPTIONS 配列は IndicesView の PeriodChipBar が使用するため export 維持)
 import { JudgmentProvider, useJudgment } from '../judgment/state/JudgmentContext.jsx';
 import { JudgmentList } from '../judgment/components/list/index.js';
 import { JudgmentDetail } from '../judgment/components/detail/index.js';
@@ -64,17 +65,12 @@ function normalizeWorkspaceTab(tab) {
   return WORKSPACE_LEGACY_TAB_KEYS.includes(tab) ? 'home' : tab;
 }
 
-/** v62 WS-4 + Phase2: Pane 2 上部の表示メタ切替 (改善希望④ 拡張)
- *  §dogfood-round3: 1日騰落率 が最頻使用想定なので先頭に */
-const META_OPTIONS = [
-  { key: 'change1d', label: '1日騰落率', hint: '前日比 ±%' },
-  { key: 'condition', label: '5条件', hint: 'ファンダメンタル5条件 PASS/FAIL' },
-  { key: 'earnings', label: '決算まで', hint: '次の決算発表まで' },
-  { key: 'tag', label: 'タグ', hint: 'ユーザー設定タグ (色 + 名前)' },
-];
-
 /** v62 WS-Phase2: 改善希望③ sparkline 期間切替 (frontend slice)
- *  §dogfood-round11: '1d' を追加 (= 全画面で前日比 / 期間別 % を一括切替) */
+ *  §dogfood-round11: '1d' を追加 (= 全画面で前日比 / 期間別 % を一括切替)
+ *
+ *  v120 Sprint 1: Pane 2 の Pane2MetaToggle 廃止に伴い Workspace.jsx 内では未使用化、
+ *  IndicesView.jsx の PeriodChipBar (指数 tab 用 sparkline 期間切替) が引き続き import するため export 維持。
+ */
 const SPARKLINE_PERIOD_OPTIONS = [
   { key: '1d', label: '1D' },
   { key: '1w', label: '1W' },
@@ -86,58 +82,11 @@ const SPARKLINE_PERIOD_OPTIONS = [
 // IndicesView などから再利用するため export
 export { SPARKLINE_PERIOD_OPTIONS };
 
-/**
- * round 7 (4 体合議) で <Chip> primitive に migrate。
- * 旧 inline style 版 ChipGroup は components/ui/Chip.jsx の ChipGroup に置換。
- * size sm + variant segmented + pressed (排他選択) を統一仕様として固定。
- */
-function ChipGroupSegmented({ ariaLabel, prefix, options, value, onChange }) {
-  return (
-    <ChipGroup prefix={prefix} ariaLabel={ariaLabel} role="radiogroup">
-      {options.map((opt) => (
-        <Chip
-          key={opt.key}
-          size="sm"
-          variant="segmented"
-          pressed={value === opt.key}
-          onClick={() => onChange(opt.key)}
-          title={opt.hint}
-        >
-          {opt.label}
-        </Chip>
-      ))}
-    </ChipGroup>
-  );
-}
-
-function Pane2MetaToggle() {
-  const pane2Meta = useWorkspaceStore((s) => s.pane2Meta);
-  const setPane2Meta = useWorkspaceStore((s) => s.setPane2Meta);
-  const sparklinePeriod = useWorkspaceStore((s) => s.sparklinePeriod);
-  const setSparklinePeriod = useWorkspaceStore((s) => s.setSparklinePeriod);
-
-  // v117 R8 (multi-review verdict): stacked 廃止、 期間 + 表示 を 1 行に統合
-  //   → chip 4 行 → 2 行統合 (Pane 2 全体改善 Priority 1)
-  //   wrap で width 不足時に自然に 2 行に折返し
-  return (
-    <ChipBar>
-      <ChipGroupSegmented
-        ariaLabel="sparkline の期間を切替"
-        prefix="期間:"
-        options={SPARKLINE_PERIOD_OPTIONS}
-        value={sparklinePeriod}
-        onChange={setSparklinePeriod}
-      />
-      <ChipGroupSegmented
-        ariaLabel="リスト右端の表示内容を切替"
-        prefix="表示:"
-        options={META_OPTIONS}
-        value={pane2Meta}
-        onChange={setPane2Meta}
-      />
-    </ChipBar>
-  );
-}
+// v120 Sprint 1: Pane2MetaToggle + ChipGroupSegmented + META_OPTIONS 削除 (multi-review 6 体合議 verdict 反映)。
+//   - chip 4 行 → search 44px + JudgmentFilters 32px = ~76px に圧縮
+//   - sparkline は Sprint 2 で削除予定、 1Y trend % で代替
+//   - pane2Meta store は維持 (default 'condition' 固定、 JudgmentRow.jsx でのみ参照)
+//   - sparklinePeriod store も維持 (IndicesView の PeriodChipBar が共有)
 
 // v118 P6: Pane4Placeholder 削除 (handover v118 §残バックログ)。
 // 旧来 11-B-22 「マクロニュース × watchlist 連動」 placeholder。 release MVP scope 外。
@@ -651,7 +600,7 @@ export default function Workspace({
                   - 上部固定ブロック (flexShrink: 0) + 下部 JudgmentList (flex: 1 + overflow auto)
                   - 旧: DailyDigestSection が auto height で残量を食いつぶし JudgmentList が overflow:hidden で切れていた */}
               <div style={{ flexShrink: 0 }}>
-                <Pane2MetaToggle />
+                {/* v120 Sprint 1: Pane2MetaToggle 削除 (chip 9 個圧縮、 multi-review 6 体合議 verdict 反映) */}
                 <DailyDigestSection />
               </div>
               <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>

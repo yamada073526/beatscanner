@@ -33,7 +33,11 @@ export const useWorkspaceStore = create(
     (set) => ({
       headerCollapsed: false,
       pane1Collapsed: false,
-      pane2Meta: 'change1d', // §dogfood-round3: 1日騰落率 が最頻使用想定でデフォルト変更
+      // v120 Sprint 1: Pane2MetaToggle 廃止 (chip 4 行 → 0)、 default 'condition' 固定。
+      //   旧 'change1d' は Col 3 と redundant、 v120 migrate 14 で 'condition' reset。
+      //   pane2Meta state は残置 (UI 切替廃止のため事実上 'condition' 固定だが、
+      //   将来復活時の migration 起点として state 維持。 callsite は JudgmentRow.jsx のみ)。
+      pane2Meta: 'condition',
       // v62 WS-5 Step 2: MACRO 詳細 collapse + 並び替え (改善希望②)
       macroExpanded: false, // default 折り畳み (5 原則 #1: 読み手に負担をかけない)
       macroOrder: [], // ユーザー DnD 並び替え結果 (空なら API 順を使用)
@@ -228,7 +232,7 @@ export const useWorkspaceStore = create(
         selectedAccountId: state.selectedAccountId,
         // v118 P6: pane4Section 削除
       }),
-      version: 13,
+      version: 14,
       // v1 → v2: 新 collapse keys (nav/watchlist/holdings/observing) 追加。
       // v2 → v3: tier2Collapsed 追加 (Workspace Home Phase 0)。
       // v3 → v4: economicCalendarCollapsed 追加 (Workspace Home Phase 1)。
@@ -300,6 +304,14 @@ export const useWorkspaceStore = create(
         }
         if (version < 13) {
           // v118 P6: 旧 pane4Section migration は no-op (Pane 4 廃止)
+        }
+        if (version < 14) {
+          // v120 Sprint 1 (multi-review 6 体合議 verdict): Pane2MetaToggle 廃止 →
+          // 旧 pane2Meta='change1d' は Col 3 と redundant のため Col 4 を 5 条件 dot 固定。
+          // localStorage に残る 'change1d' / 'earnings' / 'tag' は 'condition' に reset。
+          if (persistedState && persistedState.pane2Meta !== 'condition') {
+            persistedState = { ...persistedState, pane2Meta: 'condition' };
+          }
         }
         return persistedState;
       },
