@@ -986,7 +986,9 @@ export default function App() {
         ticker: t,
         companyName: r?.companyName,
         price: px?.price ?? null,
-        changePct: px?.changePct ?? null,
+        // v120 Sprint 4 (QA verdict F1): backend は change_pct (snake_case、 percent unit) で返す。
+        // frontend は fraction (0.0234 = 2.34%) 想定なので /100 で変換 (既存 changePct camelCase は常に undefined → 1日% 永続非表示バグ)。
+        changePct: px?.change_pct != null ? px.change_pct / 100 : null,
         judgment: r,
         isHolding: _holdingTickers.includes(t),
         isWatchlist: watchlist.includes(t),
@@ -1013,7 +1015,9 @@ export default function App() {
         // v118 ETF MVP: ETF 入力時は 5 条件 result 不在 + etfInfo を Pane 3 で render
         etfInfo: cache?.etfInfo || null,
         price: px?.price ?? null,
-        changePct: px?.changePct ?? null,
+        // v120 Sprint 4 (QA verdict F1): backend は change_pct (snake_case、 percent unit) で返す。
+        // frontend は fraction (0.0234 = 2.34%) 想定なので /100 で変換 (既存 changePct camelCase は常に undefined → 1日% 永続非表示バグ)。
+        changePct: px?.change_pct != null ? px.change_pct / 100 : null,
         lastAnalyzedAt: cache?.ts ?? 0,
         isLoading: loading && ticker === t,
         // handover v82 Phase 5: EarningsRing 用 (Hero 内 mount、 4 段階 pulse cadence)
@@ -1534,7 +1538,9 @@ export default function App() {
               ticker: t,
               companyName: r?.companyName,
               price: px?.price ?? null,
-              changePct: px?.changePct ?? null,
+              // v120 Sprint 4 (QA verdict F1): backend は change_pct (snake_case、 percent unit) で返す。
+        // frontend は fraction (0.0234 = 2.34%) 想定なので /100 で変換 (既存 changePct camelCase は常に undefined → 1日% 永続非表示バグ)。
+        changePct: px?.change_pct != null ? px.change_pct / 100 : null,
               judgment: r,
               isHolding: holdingTickers.includes(t),
               isWatchlist: watchlist.includes(t),
@@ -1549,7 +1555,9 @@ export default function App() {
               result: cache?.result || null,
               guidance: cache?.guidance || null,
               price: px?.price ?? null,
-              changePct: px?.changePct ?? null,
+              // v120 Sprint 4 (QA verdict F1): backend は change_pct (snake_case、 percent unit) で返す。
+        // frontend は fraction (0.0234 = 2.34%) 想定なので /100 で変換 (既存 changePct camelCase は常に undefined → 1日% 永続非表示バグ)。
+        changePct: px?.change_pct != null ? px.change_pct / 100 : null,
               lastAnalyzedAt: cache?.ts ?? 0,
               // 現在分析中の銘柄なら loading 状態を伝える (Detail 側 Skeleton 表示)
               isLoading: loading && ticker === t,
