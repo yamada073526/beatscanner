@@ -145,6 +145,15 @@ def upsert_article_draft(
         article_format=article_format,
     )
 
+    # v122: Hallucination Guard 通過した article は status='published' で自動 publish。
+    # 'passed' = fact_check.passed=True (4 重防御の Block 3 fact_check + Block 4
+    # source schema 完全通過)。 verdict_sign は block しない設計 (balanced_view_needed=True
+    # の警告のみ) のため fact_check 通過だけで自動 publish 安全。
+    # 'regenerate_failed' = retry 後も mismatch 残存 → 'draft' で人間 review 必須。
+    final_status = pipeline_result.get("final_status")
+    is_published = final_status == "passed"
+    article_status = "published" if is_published else "draft"
+
     row = {
         "slug": slug,
         "title": draft.get("title", "")[:80],
@@ -154,13 +163,14 @@ def upsert_article_draft(
         "ticker": ticker,
         "theme": theme,
         "format": article_format,
-        "status": "draft",
+        "status": article_status,
         "generated_at": generated_at_dt.isoformat(),
+        "published_at": generated_at_dt.isoformat() if is_published else None,
         "fact_check": pipeline_result.get("fact_check"),
         "verdict_sign": pipeline_result.get("verdict_sign"),
         "pipeline_metadata": {
             "attempts": pipeline_result.get("attempts"),
-            "final_status": pipeline_result.get("final_status"),
+            "final_status": final_status,
             "researcher_facts_count": pipeline_result.get("researcher_facts_count"),
         },
     }
@@ -168,11 +178,12 @@ def upsert_article_draft(
     try:
         resp = client.table("articles").insert(row).execute()
         log.info(
-            "article_pipeline.storage: inserted article slug=%s (final_status=%s)",
+            "article_pipeline.storage: inserted article slug=%s (final_status=%s, status=%s)",
             slug,
-            pipeline_result.get("final_status"),
+            final_status,
+            article_status,
         )
-        return {"slug": slug, "data": getattr(resp, "data", None)}
+        return {"slug": slug, "status": article_status, "data": getattr(resp, "data", None)}
     except Exception as e:
         # UNIQUE 違反 / GRANT 不足 / migration 未実行 等
         log.warning("article_pipeline.storage: insert 失敗 slug=%s: %s", slug, e)

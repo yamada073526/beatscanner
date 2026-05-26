@@ -110,7 +110,9 @@ async def generate_articles_endpoint(
         log.exception("scheduler.generate_article failed")
         raise HTTPException(status_code=500, detail=str(e))
 
-    # P2: Supabase articles table に status='draft' で insert (副作用は最外殻で)
+    # P2 (v113) / v122: Supabase articles table に insert (副作用は最外殻で)
+    # - final_status='passed' (Hallucination Guard 完全通過) → status='published' + published_at=now()
+    # - final_status='regenerate_failed' (mismatch 残存) → status='draft' (人間 review 必須)
     # 失敗 (ENV 未設定 / migration 未実行 / GRANT 不足) は silent log、 pipeline 結果は返す
     storage_result = upsert_article_draft(
         pipeline_result=result,

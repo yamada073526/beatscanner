@@ -8,12 +8,14 @@ const CONDITION_SHORT = ['CF率', 'EPS', 'CFPS', '売上', 'CF>EPS'];
 // v120 hotfix v3 (user dogfood 2 件 fix + 金融 sub-agent verdict 反映):
 // 1. 「ファンダ」 chip 削除 = 「全て」 (default = 5 条件 PASS 表示) と結果同一の矛盾解消
 // 2. 「両方」 → 「ファンダ&カップ」 復活 = 3 条件中 2 条件 を意味する曖昧さ解消
-// Phase 2 (handover v121): 「O'Neil 完全」 (ファンダ AND カップ AND RS80+) chip 追加検討
-//   金融 sub-agent (Opus) verdict: 「両立は希少だが価値極めて高い、 月 5-15 銘柄、 じっちゃま流最強 setup」
+// v122 (handover v121 backlog): 「O'Neil 完全」 (ファンダ AND カップ AND RS80+) chip 追加
+//   金融 sub-agent (Opus) verdict: 「両立は希少だが価値極めて高い、 月 5-15 銘柄、 独自プロトコル最強 setup」
+//   実装は frontend intersection (backend は 'both' + 'rs' 既存 endpoint 流用、 cost ゼロ)
 const SCANNER_FILTERS = [
   { key: 'cup',   label: 'カップ' },
   { key: 'rs',    label: 'RS強', titleExtra: 'Relative Strength ≥ 80 (CAN SLIM L 条件、 SP500 universe で上位 20%)' },
   { key: 'both',  label: 'ファンダ&カップ', premium: true, fullLabel: 'ファンダ AND Cup-Handle 複合検索' },
+  { key: 'oneill', label: "O'Neil 完全", premium: true, fullLabel: "ファンダ AND Cup-Handle AND RS≥80 (William O'Neil CAN SLIM 完全)", titleExtra: '打診買い 3 点セット (ファンダメンタル5条件 × Cup-Handle × Relative Strength)' },
 ];
 
 const CUP_STATE_LABEL = {
@@ -333,12 +335,169 @@ function CupResultCard({ item, onSelect, masked = false }) {
   );
 }
 
+/**
+ * v122 O'Neil 完全 (ファンダ AND Cup-Handle AND RS≥80) 結果表示.
+ * frontend intersection (backend は 'both' + 'rs' 既存 endpoint 流用、 cost ゼロ)。
+ * 月 5-15 銘柄想定 (金融 sub-agent verdict)、 0 件時は丁寧な「条件全て稀少」 表示。
+ */
+function OneillScannerResults({ data, onSelect, onUpgrade }) {
+  if (!data) {
+    return (
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-3 text-xs text-[var(--text-muted)]">
+        3 条件 (ファンダ × Cup × RS) 並列スキャン中...
+      </div>
+    );
+  }
+  if (data.error) {
+    return (
+      <div className="rounded-lg border border-[color-mix(in_srgb,var(--color-loss)_25%,transparent)] bg-[color-mix(in_srgb,var(--color-loss)_8%,transparent)] p-3 text-xs text-[var(--color-loss)]">
+        スキャン失敗: {data.error}
+      </div>
+    );
+  }
+
+  const items = data.items || [];
+  const isPremium = !!data.is_premium;
+
+  if (items.length === 0) {
+    return (
+      <div className="rounded-xl border border-[color-mix(in_srgb,var(--color-gold)_25%,transparent)] bg-[color-mix(in_srgb,var(--color-gold)_6%,transparent)] p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Crown size={14} strokeWidth={1.75} style={{ color: 'var(--color-gold)' }} aria-hidden />
+          <p className="text-sm font-semibold text-[var(--text-primary)]">
+            現在 O'Neil 完全 該当銘柄はありません
+          </p>
+        </div>
+        <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+          ファンダメンタル5条件 PASS かつ Cup-Handle 形成中 かつ RS ≥ 80 を全て満たす銘柄は希少です
+          (月 5-15 銘柄目安)。 nightly scan (JST 8:00-8:30) の翌朝に再 check 推奨。
+        </p>
+        <p className="text-[10px] text-[var(--text-muted)] mt-2 tabular-nums">
+          内訳: ファンダ∩Cup {data.both_total} 件 / RS≥80 {data.rs_total} 件
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <Crown size={14} strokeWidth={1.75} style={{ color: 'var(--color-gold)' }} aria-hidden />
+        <span className="font-semibold text-[var(--text-primary)]">
+          O'Neil 完全: 全 {items.length} 件
+        </span>
+        <span className="text-[10px] text-[var(--text-muted)] tabular-nums ml-auto">
+          ファンダ∩Cup {data.both_total} / RS≥80 {data.rs_total}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {items.map((item, i) => (
+          <OneillResultCard
+            key={`${item.ticker || 'masked'}-${i}`}
+            item={item}
+            onSelect={onSelect}
+            masked={item._masked === true}
+          />
+        ))}
+      </div>
+
+      {!isPremium && (
+        <div className="rounded-xl border border-[color-mix(in_srgb,var(--color-warning)_35%,transparent)] bg-[color-mix(in_srgb,var(--color-warning)_8%,transparent)] p-4">
+          <p className="text-sm font-semibold text-[var(--text-primary)]">
+            Premium ¥1,800/月 で O'Neil 完全 + 毎営業日 email 通知
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+            打診買い 3 点セット (ファンダ × Cup-Handle × RS≥80) を全銘柄解放。
+          </p>
+          {onUpgrade && (
+            <button
+              onClick={onUpgrade}
+              className="mt-3 inline-flex items-center rounded-lg bg-[var(--color-warning)] px-3 py-1.5 text-xs font-semibold text-[var(--bg-card)] hover:bg-[color-mix(in_srgb,var(--color-warning)_85%,black)]"
+            >
+              Premium にアップグレード
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OneillResultCard({ item, onSelect, masked = false }) {
+  const ticker = item.ticker;
+  const state = item.state;
+  const stateLabel = CUP_STATE_LABEL[state] || '—';
+  const stateTone = CUP_STATE_TONE[state] || 'muted';
+  const pivotPrice = item?.payload?.pivot?.price;
+  const pivotStr = typeof pivotPrice === 'number' ? `$${pivotPrice.toFixed(2)}` : '—';
+  const rsPct = item.rs_universe_percentile;
+
+  return (
+    <div
+      className={`rounded-xl border transition-all duration-200 ${masked ? 'pointer-events-none border-[var(--border)]' : 'border-[color-mix(in_srgb,var(--color-gold)_30%,transparent)] hover:-translate-y-1 hover:border-[color-mix(in_srgb,var(--color-gold)_60%,transparent)]'}`}
+      style={!masked ? {
+        boxShadow: '0 0 0 1px color-mix(in srgb, var(--color-gold) 22%, transparent), 0 1px 3px color-mix(in srgb, var(--color-gold) 8%, transparent)',
+      } : undefined}
+    >
+      <div className="flex items-center gap-2 p-3">
+        <button
+          onClick={() => !masked && onSelect && onSelect(ticker)}
+          className="min-w-0 flex-1 text-left"
+          disabled={masked}
+        >
+          <div className="flex items-baseline gap-1.5">
+            <Crown size={11} strokeWidth={1.75} style={{ color: 'var(--color-gold)', flexShrink: 0 }} aria-hidden />
+            <span className={`text-sm font-bold ${masked ? 'text-[var(--text-muted)] blur-[3px] select-none' : 'text-[var(--text-primary)]'}`}>
+              {ticker}
+            </span>
+            {item.company_name && (
+              <span className="truncate text-xs text-[var(--text-muted)] hidden sm:inline">
+                {item.company_name}
+              </span>
+            )}
+          </div>
+          {!masked && state && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <Chip size="xs" variant="display" tone={stateTone}>
+                <Mountain size={11} strokeWidth={1.75} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 3 }} />
+                {stateLabel}
+              </Chip>
+              {pivotPrice != null && (
+                <span className="text-xs text-[var(--text-muted)]">Pivot: {pivotStr}</span>
+              )}
+              {typeof rsPct === 'number' && (
+                <span
+                  className="ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums"
+                  style={{
+                    color: 'var(--color-gain)',
+                    background: 'color-mix(in srgb, var(--color-gain) 16%, transparent)',
+                  }}
+                >
+                  RS {rsPct}
+                </span>
+              )}
+            </div>
+          )}
+        </button>
+        {item.passed_count != null && (
+          <span className="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold bg-[color-mix(in_srgb,var(--color-gain)_18%,transparent)] text-[var(--color-gain)]">
+            {item.passed_count}/5
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
   const [phase, setPhase] = useState('idle'); // idle | loading | done | error
   const [data, setData] = useState(null);
   const [cupData, setCupData] = useState(null);
   const [rsData, setRsData] = useState(null); // v120 RS Screener
-  const [activeFilter, setActiveFilter] = useState(null); // null | 'funda' | 'cup' | 'rs' | 'both'
+  const [oneillData, setOneillData] = useState(null); // v122 O'Neil 完全 (frontend intersection)
+  const [activeFilter, setActiveFilter] = useState(null); // null | 'funda' | 'cup' | 'rs' | 'both' | 'oneill'
   const [error, setError] = useState(null);
 
   async function run() {
@@ -346,6 +505,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
     setError(null);
     setCupData(null);
     setRsData(null);
+    setOneillData(null);
     setActiveFilter(null);
     try {
       const result = await fetchCustomScreener();
@@ -368,6 +528,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
     setActiveFilter(filterKey);
     setCupData(null);
     setRsData(null);
+    setOneillData(null);
     if (filterKey === 'funda') return; // 既存 data でカバー、 cup endpoint 呼ばない
     if (filterKey === 'rs') {
       // v120 RS Screener: 別 endpoint (Supabase DB SELECT only、 高速)
@@ -376,6 +537,38 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
         setRsData(result);
       } catch (e) {
         setRsData({ error: e.message, items: [], universe_size: 0 });
+      }
+      return;
+    }
+    if (filterKey === 'oneill') {
+      // v122 O'Neil 完全: 'both' (ファンダ ∩ カップ) と RS≥80 を並列 fetch して frontend intersection
+      try {
+        const [bothResult, rsResult] = await Promise.all([
+          fetchCupHandleScanner('both').catch((e) => ({ error: e.message, items: [], total_count: 0, visible_count: 0, is_premium: false })),
+          fetchRsScanner(80, 500).catch((e) => ({ error: e.message, items: [], universe_size: 0 })),
+        ]);
+        const rsTickers = new Set((rsResult.items || []).map((r) => (r.ticker || '').toUpperCase()));
+        const rsPctByTicker = new Map((rsResult.items || []).map((r) => [(r.ticker || '').toUpperCase(), r]));
+        const intersected = (bothResult.items || []).filter((it) => {
+          const t = (it.ticker || '').toUpperCase();
+          return t && rsTickers.has(t);
+        }).map((it) => ({
+          ...it,
+          rs_universe_percentile: rsPctByTicker.get((it.ticker || '').toUpperCase())?.universe_percentile,
+          rs_vs_spy_pct: rsPctByTicker.get((it.ticker || '').toUpperCase())?.rs_vs_spy_pct,
+        }));
+        setOneillData({
+          items: intersected,
+          total_count: intersected.length,
+          is_premium: !!bothResult.is_premium,
+          both_total: bothResult.total_count || 0,
+          rs_total: (rsResult.items || []).length,
+          rs_universe_size: rsResult.universe_size || 0,
+          rs_calc_date: rsResult.calc_date,
+          error: bothResult.error || rsResult.error || null,
+        });
+      } catch (e) {
+        setOneillData({ error: e.message, items: [], total_count: 0, is_premium: false });
       }
       return;
     }
@@ -508,7 +701,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
                     tone={isActive ? 'accent' : 'muted'}
                     pressed={isActive}
                     onClick={() => runCupFilter(f.key)}
-                    title={f.premium ? 'Premium ¥1,800/月 限定 (ファンダ × Cup-Handle 複合検索)\nPro tier はファンダのみ / カップのみ 個別 scan 可' : f.titleExtra}
+                    title={f.premium ? `${f.fullLabel || 'Premium 限定'}\nPremium ¥1,800/月 限定 (Pro tier はファンダのみ / カップのみ 個別 scan 可)${f.titleExtra ? `\n\n${f.titleExtra}` : ''}` : f.titleExtra}
                   >
                     {/* v120 hotfix (user dogfood + icon-brand-consistency): 🔒 emoji の安っぽさを Crown 格調シンボルへ。
                         Aman 級ブランド世界観整合、 Pro 限定 = 「王冠 = 王者の選別」 メタファー */}
@@ -541,8 +734,13 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
             <RsScannerResults data={rsData} onSelect={onSelect} />
           )}
 
+          {/* v122 O'Neil 完全 results (activeFilter === 'oneill' のとき表示) */}
+          {activeFilter === 'oneill' && (
+            <OneillScannerResults data={oneillData} onSelect={onSelect} onUpgrade={onUpgrade} />
+          )}
+
           {/* Cup-Handle scanner results (activeFilter が cup / both のとき表示) */}
-          {activeFilter && activeFilter !== 'funda' && activeFilter !== 'rs' && (
+          {activeFilter && activeFilter !== 'funda' && activeFilter !== 'rs' && activeFilter !== 'oneill' && (
             <CupScannerResults
               data={cupData}
               onSelect={onSelect}

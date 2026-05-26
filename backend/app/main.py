@@ -13797,6 +13797,213 @@ async def cron_cup_notify(
 
 
 # ============================================================================
+# v122 Article Notify (2026-05-27、 handover v121 残バックログ「article URL email 通知」)
+#
+# auto-publish 化された article (status='published') を 24h 以内に publish 済の物だけ
+# 集約して Premium user に digest 配信。 cup-notify と同じ Resend mailer / dedup pattern
+# を流用、 notification_dispatch_log の pattern_type='article' で並走可能。
+# ============================================================================
+
+
+@app.post("/api/cron/article-notify")
+async def cron_article_notify(
+    body: dict | None = None,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """直近 24h で auto-publish 化された article を集約 → Premium user に digest 配信。
+
+    Body (任意):
+      hours: int — 直近何時間以内 (default 24)
+      dry_run: bool — True で実送信 skip
+      target_email: str — 特定 email のみ (debug 用、 Premium user fetch skip)
+    """
+    _check_cron_secret(x_cron_secret)
+
+    body = body or {}
+    lookback_hours = int(body.get("hours", 24))
+    dry_run = bool(body.get("dry_run", False))
+    target_email = body.get("target_email")
+
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    # 直近 N 時間以内に publish された article を fetch (status='published' のみ)
+    import datetime as _dt_an
+    cutoff_utc = (_dt_an.datetime.utcnow() - timedelta(hours=lookback_hours)).isoformat()
+    try:
+        articles_res = (
+            sb.table("articles")
+            .select("slug,title,subtitle,ticker,format,published_at,generated_at")
+            .eq("status", "published")
+            .gte("published_at", cutoff_utc)
+            .order("published_at", desc=True)
+            .limit(20)
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"articles fetch failed: {e}")
+
+    articles = articles_res.data or []
+    if not articles:
+        return {
+            "articles": 0,
+            "premium_users": 0,
+            "sent_mails": 0,
+            "failed_mails": 0,
+            "skipped_dedup": 0,
+            "skipped_no_email": 0,
+            "dry_run": dry_run,
+        }
+
+    # debug path: target_email 単独送信
+    if target_email:
+        from .mailer import send_article_digest
+
+        result = await asyncio.to_thread(
+            send_article_digest, target_email, articles, None
+        )
+        return {
+            "articles": len(articles),
+            "premium_users": 1,
+            "sent_mails": 1 if result.get("status") == "sent" else 0,
+            "failed_mails": 1 if result.get("status") == "failed" else 0,
+            "skipped_dedup": 0,
+            "skipped_no_email": 0,
+            "target_email": target_email,
+            "result": result,
+            "dry_run": dry_run,
+        }
+
+    # Premium user fetch (解約即停止: 送信時 fetch、 cache 使用禁止)
+    try:
+        premium_res = (
+            sb.table("subscriptions")
+            .select("user_id,tier,status")
+            .eq("tier", "premium")
+            .eq("status", "active")
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"premium fetch failed: {e}")
+
+    premium_users = premium_res.data or []
+    user_ids = [u["user_id"] for u in premium_users if u.get("user_id")]
+
+    # user_notification_preferences で email_enabled+email_address 解決
+    prefs: dict[str, dict] = {}
+    if user_ids:
+        try:
+            prefs_res = (
+                sb.table("user_notification_preferences")
+                .select("user_id,email_enabled,email_address")
+                .in_("user_id", user_ids)
+                .eq("email_enabled", True)
+                .execute()
+            )
+            for p in (prefs_res.data or []):
+                if p.get("email_address"):
+                    prefs[p["user_id"]] = p
+        except Exception as e:
+            print(f"[article-notify] prefs fetch failed: {e}")
+
+    # dedup: notification_dispatch_log (pattern_type='article', signal_date=published_at の日付)
+    # 1 user 1 article 1 channel で 1 回まで
+    def _article_already_sent(user_id: str, slug: str) -> bool:
+        try:
+            res = (
+                sb.table("notification_dispatch_log")
+                .select("id")
+                .eq("user_id", user_id)
+                .eq("pattern_type", "article")
+                .eq("ticker", slug)  # ticker column に slug を入れる (article は slug が一意)
+                .eq("channel", "email")
+                .eq("status", "sent")
+                .limit(1)
+                .execute()
+            )
+            return bool(res.data)
+        except Exception as e:
+            print(f"[article-notify] dedup check failed: {e}")
+            return False
+
+    from .mailer import send_article_digest
+
+    sent_count = 0
+    failed_count = 0
+    skipped_dedup = 0
+    skipped_no_email = 0
+
+    for user in premium_users:
+        user_id = user.get("user_id")
+        if not user_id:
+            continue
+        if user_id not in prefs:
+            skipped_no_email += 1
+            continue
+
+        # 未送信 article のみ集約
+        fresh_articles = []
+        for a in articles:
+            slug = a.get("slug")
+            if not slug:
+                continue
+            if _article_already_sent(user_id, slug):
+                skipped_dedup += 1
+                continue
+            fresh_articles.append(a)
+
+        if not fresh_articles:
+            continue
+
+        email_address = prefs[user_id]["email_address"]
+
+        if dry_run:
+            result = {"status": "skipped", "detail": "dry_run", "id": None}
+        else:
+            result = await asyncio.to_thread(
+                send_article_digest, email_address, fresh_articles, user_id
+            )
+
+        status_label = result.get("status", "failed")
+        log_status = "sent" if status_label == "sent" else ("skipped" if status_label == "skipped" else "failed")
+
+        # 送信した article 群を全て dispatch_log に insert
+        for a in fresh_articles:
+            slug = a.get("slug")
+            published_at = a.get("published_at") or a.get("generated_at")
+            signal_date = (published_at or "")[:10]
+            try:
+                sb.table("notification_dispatch_log").insert({
+                    "user_id": user_id,
+                    "ticker": slug,
+                    "pattern_type": "article",
+                    "transition_type": "published",
+                    "signal_date": signal_date,
+                    "channel": "email",
+                    "status": log_status,
+                    "error_detail": result.get("detail") if log_status == "failed" else None,
+                }).execute()
+            except Exception as e:
+                print(f"[article-notify] log insert failed: {e}")
+
+        if status_label == "sent":
+            sent_count += 1
+        elif status_label == "failed":
+            failed_count += 1
+
+    return {
+        "articles": len(articles),
+        "premium_users": len(premium_users),
+        "sent_mails": sent_count,
+        "failed_mails": failed_count,
+        "skipped_dedup": skipped_dedup,
+        "skipped_no_email": skipped_no_email,
+        "dry_run": dry_run,
+    }
+
+
+# ============================================================================
 # v120 RS Screener Phase 1 (2026-05-27、 handover v120 user 提案 + 金融 sub-agent CONDITIONAL PASS)
 #
 # William O'Neil CAN SLIM の L (Leader/RS ≥ 80) を BeatScanner screener に統合。

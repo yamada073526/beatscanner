@@ -57,6 +57,22 @@ command = "curl -s -X POST -H \"X-Cron-Secret: $CRON_SECRET\" https://beatscanne
 schedule = "15 23 * * *"
 command = "curl -s -X POST -H \"X-Cron-Secret: $CRON_SECRET\" https://beatscanner-production.up.railway.app/api/cron/cup-notify > /dev/null 2>&1"
 
+# v121→v122 RS Screener Phase 1.5: nightly RS scan (cup-scan 完了から 30 分後)
+# UTC 23:30 = ET 18:30 / JST 8:30。 SP500 全 500 銘柄を _compute_rs() で集約 → rs_ratings 24h cache
+# William O'Neil CAN SLIM L 条件 (RS≥80)、 日本人向け米国株 retail で唯一の RS screener 装備
+# 実行時間目安: 197 銘柄処理で ~3 分 (FMP rate limit 内、 cup-scan と直列で安全)
+[[crons]]
+schedule = "30 23 * * *"
+command = "curl -s -X POST -H \"X-Cron-Secret: $CRON_SECRET\" --max-time 600 https://beatscanner-production.up.railway.app/api/cron/rs-scan > /dev/null 2>&1"
+
+# v122: article auto-publish digest (記事 cron 完了から数時間後、 朝の dogfood 帯)
+# UTC 22:00 = ET 17:00 / JST 7:00。 直近 24h で auto-publish 化された記事を集約し Premium user に digest 配信。
+# 既存 cup-notify と同じ Resend mailer + notification_dispatch_log dedup (pattern_type='article')
+# 真因: v121 dogfood で「記事生成されても気付けない」 課題発覚 → 通知で起床時 dogfood 経路を確立
+[[crons]]
+schedule = "0 22 * * *"
+command = "curl -s -X POST -H \"X-Cron-Secret: $CRON_SECRET\" --max-time 120 https://beatscanner-production.up.railway.app/api/cron/article-notify > /dev/null 2>&1"
+
 # Cup-with-Handle Phase 2.1: monthly retention cleanup (毎月 1 日 UTC 02:00 = JST 11:00)
 # SRE verdict: Supabase Free 500MB 圧迫回避のため 90 日より古い pattern_signals を削除
 [[crons]]

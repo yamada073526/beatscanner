@@ -230,3 +230,140 @@ def send_cup_handle_digest(to_email: str, transitions: list[dict], user_id: str 
         return {"status": "sent", "detail": "ok", "id": msg_id}
     except Exception as e:
         return {"status": "failed", "detail": str(e)[:200], "id": None}
+
+
+# ─── v122 article digest mailer (auto-publish 後の通知) ──────────────────────
+
+
+_ARTICLE_FORMAT_LABEL = {
+    "deep_dive": "銘柄分析",
+    "theme_horizon": "テーマ分析",
+    "daily_digest": "デイリーダイジェスト",
+}
+
+ARTICLE_SUBJECT_TEMPLATE = "BeatScanner: 新しい記事 {count} 本が公開されました"
+
+
+def _article_url(slug: str) -> str:
+    base = os.environ.get("APP_BASE_URL", _APP_BASE_URL_DEFAULT).rstrip("/")
+    return f"{base}/articles/{slug}"
+
+
+def _build_article_digest_html(articles: list[dict]) -> str:
+    """articles: [{slug, title, subtitle, ticker, format, published_at}, ...] (新しい順)."""
+    rows: list[str] = []
+    for a in articles:
+        slug = a.get("slug", "")
+        title = a.get("title", "—")
+        subtitle = a.get("subtitle", "")
+        ticker = a.get("ticker") or ""
+        fmt = a.get("format", "")
+        flabel = _ARTICLE_FORMAT_LABEL.get(fmt, fmt or "記事")
+        meta = f"{flabel}"
+        if ticker:
+            meta = f"{ticker} • {flabel}"
+        url = _article_url(slug)
+        rows.append(f"""
+<tr>
+  <td style="padding:14px 8px;border-bottom:1px solid #eee;">
+    <div style="color:#888;font-size:12px;letter-spacing:0.02em;margin-bottom:4px;">{meta}</div>
+    <div style="font-weight:600;font-size:16px;color:#222;line-height:1.4;">{title}</div>
+    <div style="color:#666;font-size:13px;margin-top:4px;line-height:1.6;">{subtitle}</div>
+  </td>
+  <td style="padding:14px 8px;border-bottom:1px solid #eee;text-align:right;vertical-align:middle;">
+    <a href="{url}" style="background:#0a84ff;color:#fff;text-decoration:none;padding:8px 16px;border-radius:6px;font-size:13px;font-weight:500;display:inline-block;">記事を読む</a>
+  </td>
+</tr>
+""")
+
+    table_rows = "".join(rows)
+    count = len(articles)
+    return f"""\
+<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f7f7f8;font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f7f7f8;padding:24px 0;">
+  <tr><td align="center">
+    <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;padding:32px;max-width:92%;">
+      <tr><td>
+        <h1 style="margin:0 0 8px;font-size:20px;color:#222;font-weight:600;">新しい記事 ({count} 本)</h1>
+        <p style="margin:0 0 20px;color:#666;font-size:14px;line-height:1.6;">
+          独自プロトコルに基づき自動生成された最新記事をお届けします。 Hallucination Guard 4 重防御を通過した記事のみ配信されます。
+        </p>
+        <table width="100%" cellpadding="0" cellspacing="0">
+          {table_rows}
+        </table>
+        {DISCLAIMER_HTML}
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>
+"""
+
+
+def _build_article_digest_text(articles: list[dict]) -> str:
+    lines: list[str] = []
+    lines.append(f"新しい記事 ({len(articles)} 本)")
+    lines.append("")
+    lines.append("独自プロトコルに基づき自動生成された最新記事をお届けします。")
+    lines.append("Hallucination Guard 4 重防御を通過した記事のみ配信されます。")
+    lines.append("")
+    for a in articles:
+        slug = a.get("slug", "")
+        title = a.get("title", "—")
+        ticker = a.get("ticker") or ""
+        fmt = a.get("format", "")
+        flabel = _ARTICLE_FORMAT_LABEL.get(fmt, fmt or "記事")
+        meta = f"{ticker} • {flabel}" if ticker else flabel
+        lines.append(f"[{meta}] {title}")
+        lines.append(f"  {_article_url(slug)}")
+        lines.append("")
+    lines.append(DISCLAIMER_TEXT)
+    return "\n".join(lines)
+
+
+def send_article_digest(to_email: str, articles: list[dict], user_id: str | None = None) -> dict:
+    """1 user 分の article digest メール (auto-publish 化された記事一覧) を送信。
+
+    Args:
+        to_email: 送信先 email
+        articles: [{slug, title, subtitle, ticker, format, published_at}, ...] (新しい順)
+        user_id: List-Unsubscribe header 用 (任意)
+
+    Returns: {"status": "sent"|"failed"|"skipped", "detail": str, "id": str|None}
+    """
+    if not articles:
+        return {"status": "skipped", "detail": "no articles", "id": None}
+    if not to_email:
+        return {"status": "skipped", "detail": "no email", "id": None}
+
+    client = _get_resend_client()
+    if client is None:
+        return {"status": "skipped", "detail": "resend not configured", "id": None}
+
+    subject = ARTICLE_SUBJECT_TEMPLATE.format(count=len(articles))
+    html = _build_article_digest_html(articles)
+    text = _build_article_digest_text(articles)
+    mail_from = os.environ.get("MAIL_FROM", MAIL_FROM_DEFAULT)
+
+    try:
+        params = {
+            "from": mail_from,
+            "to": [to_email],
+            "subject": subject,
+            "html": html,
+            "text": text,
+        }
+        unsub_url = _unsubscribe_url(user_id) if user_id else None
+        if unsub_url:
+            params["headers"] = {
+                "List-Unsubscribe": f"<{unsub_url}>",
+                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            }
+        res = client.Emails.send(params)
+        msg_id = res.get("id") if isinstance(res, dict) else None
+        return {"status": "sent", "detail": "ok", "id": msg_id}
+    except Exception as e:
+        return {"status": "failed", "detail": str(e)[:200], "id": None}
