@@ -32,8 +32,9 @@ import { JudgmentDetail } from '../judgment/components/detail/index.js';
 import { IndicesList } from './IndicesView.jsx';
 import DailyDigestSection from './DailyDigestSection.jsx';
 import PaneDetailView from './PaneDetailView.jsx';
-// v120 Task 3 hotfix: FtdChipRow を Pane1MacroSection (dead code) から named export して mount し直し
-import { FtdChipRow } from './Pane1MacroSection.jsx';
+// v120 Task 3 hotfix: FtdChipRow / FtdRailDots を Pane1MacroSection (dead code) から named export
+// FtdChipRow = full mode 用 (3 行 chip)、 FtdRailDots = rail mode 用 (3 点 dot、 multi-review 3 体合議 verdict 案 B)
+import { FtdChipRow, FtdRailDots } from './Pane1MacroSection.jsx';
 // v120 Sprint 3 (Frontend verdict mandatory fix 2): WorkspaceScreenerModal を lazy 化
 // (modal は Pro user が screener button 押下時のみ open、 chunk reuse + 初期 bundle 軽量化)
 const WorkspaceScreenerModal = lazy(() => import('./WorkspaceScreenerModal.jsx'));
@@ -272,6 +273,15 @@ function Pane1NavRail({ items = [] }) {
           </button>
         );
       })}
+
+      {/* v120 hotfix (3 体合議 verdict): rail mode でも FTD 確認可能にする 3 点 dot indicator.
+          full mode は FtdChipRow (3 行 chip)、 rail mode は FtdRailDots (3 点 dot + tooltip).
+          Pane 1 最小幅 user (画面占有幅優先) でも市場局面 (FTD) を 0.3 秒で判別可能。 */}
+      <div
+        aria-hidden
+        style={{ width: 24, height: 1, background: 'var(--border)', margin: '6px 0', flexShrink: 0 }}
+      />
+      <FtdRailDots />
 
       {/* divider */}
       {items.length > 0 && (

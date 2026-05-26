@@ -59,10 +59,15 @@ function ftdLabel(ftd) {
   }
 }
 
-/** FTD 行: 3 indices を inline 横並びで表示 (Pane 1 幅 280px 程度を想定).
- *  v120 Task 3 hotfix: Pane1MacroSection は v63 で Pane 1 から撤去済 dead code のため、
- *  本 component を named export して Workspace.jsx の Pane1Nav 内に mount し直す。 */
-export function FtdChipRow() {
+/** tone → CSS color token mapping (FtdRailDots / FtdChipRow 共有) */
+function ftdToneColor(tone) {
+  return tone === 'gain' ? 'var(--color-gain)'
+       : tone === 'warning' ? 'var(--color-warning)'
+       : 'var(--text-muted)';
+}
+
+/** v120 hotfix: FTD fetch logic を hook 化、 full mode + rail mode で共有 (fetch 重複防止) */
+function useFtdMap() {
   const [ftdMap, setFtdMap] = useState({});
   const [loading, setLoading] = useState(true);
 
@@ -78,6 +83,67 @@ export function FtdChipRow() {
       });
     return () => { cancelled = true; };
   }, []);
+
+  return { ftdMap, loading };
+}
+
+/** v120 hotfix (3 体合議 verdict UI/UX 案 B): rail mode 用 FTD 3 点 dot indicator.
+ *  幅 36px の rail に収まる、 色のみで FTD 状態を 0.3 秒で判別。 tooltip で詳細。 */
+export function FtdRailDots() {
+  const { ftdMap, loading } = useFtdMap();
+  if (loading) {
+    return (
+      <div
+        aria-label="FTD 計算中"
+        style={{ display: 'flex', gap: 3, padding: '4px 0', justifyContent: 'center' }}
+      >
+        {FTD_INDICES.map((idx) => (
+          <span
+            key={idx}
+            aria-hidden
+            style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--border)', opacity: 0.4 }}
+          />
+        ))}
+      </div>
+    );
+  }
+  const tooltip = FTD_INDICES.map((idx) => {
+    const lbl = ftdLabel(ftdMap[idx]);
+    return `${ftdMap[idx]?.label_ja || idx}: ${lbl.text}`;
+  }).join(' / ');
+  return (
+    <div
+      title={`FTD (Follow-Through Day): ${tooltip}`}
+      aria-label={`FTD 状態 - ${tooltip}`}
+      data-testid="ftd-rail-dots"
+      style={{ display: 'flex', gap: 3, padding: '4px 0', justifyContent: 'center' }}
+    >
+      {FTD_INDICES.map((idx) => {
+        const { tone } = ftdLabel(ftdMap[idx]);
+        return (
+          <span
+            key={idx}
+            aria-hidden
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: '50%',
+              background: ftdToneColor(tone),
+              flexShrink: 0,
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+/** FTD 行: 3 indices を inline 横並びで表示 (Pane 1 幅 280px 程度を想定).
+ *  v120 Task 3 hotfix: Pane1MacroSection は v63 で Pane 1 から撤去済 dead code のため、
+ *  本 component を named export して Workspace.jsx の Pane1Nav 内に mount し直す。
+ *  v120 hotfix v2: fetch logic を useFtdMap hook に共通化 (FtdRailDots と共有、 fetch 重複防止). */
+export function FtdChipRow() {
+  const { ftdMap, loading } = useFtdMap();
 
   if (loading) {
     return (
