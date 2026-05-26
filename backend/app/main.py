@@ -2862,6 +2862,13 @@ _PORTFOLIO_PERF_SUMMARY_PROMPT = """あなたは投資ポートフォリオの 1
 - 「じっちゃま」「広瀬」「ライブ書記録」は絶対に使わない
 - 「買い推奨」「売り推奨」「購入すべき」「売却すべき」等の投資判断助言は禁止"""
 
+# v120 Task 2 v2: Portfolio narration にも文体憲法 summary 版 inject (user 要望)
+try:
+    from .prompts import get_style_constitution_summary as _get_style_summary_pf
+    _PORTFOLIO_PERF_SUMMARY_PROMPT = _PORTFOLIO_PERF_SUMMARY_PROMPT + "\n\n## 文体憲法 (BeatScanner 全 LLM 出力 SSOT)\n" + _get_style_summary_pf()
+except Exception as _e:
+    print(f"[style_constitution] inject failed for _PORTFOLIO_PERF_SUMMARY_PROMPT: {_e}")
+
 
 def _validate_perf_transactions(raw_list: list, today: "date") -> list[dict]:
     """transactions 入力を Phase 1 schema で正規化 + 検証。"""
@@ -9238,6 +9245,16 @@ _SUMMARY_SYSTEM_PROMPT = (
     "- 例（OK）：「唯一の課題は、営業CFマージンが基準に届いていない点」\n"
     "- 主語には「が」より「は」を優先し、読点で文を区切ること\n"
 )
+
+# v120 Task 2 v2 (user 要望「AI 要約 等 既存 LLM 出力 全部に文体憲法 適用」):
+# _SUMMARY_SYSTEM_PROMPT (Pane 3 AI 要約) に文体憲法 summary 版 (~643 字) を inline append。
+# ClaudeClient.complete() は system 文字列のみ受付のため、 multi-block ではなく concat で対応。
+# Anthropic Auto Cache (同一 system 5 分 idle) で cache 効率維持。
+try:
+    from .prompts import get_style_constitution_summary as _get_style_summary
+    _SUMMARY_SYSTEM_PROMPT = _SUMMARY_SYSTEM_PROMPT + "\n\n## 文体憲法 (BeatScanner 全 LLM 出力 SSOT)\n" + _get_style_summary()
+except Exception as _e:
+    print(f"[style_constitution] inject failed for _SUMMARY_SYSTEM_PROMPT: {_e}")
 
 
 def _build_summary_brief_prompt(context: str, ticker: str, name: str) -> str:

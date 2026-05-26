@@ -309,12 +309,37 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
       {/* Results */}
       {phase === 'done' && data && (
         <div className="space-y-5">
-          {/* Summary bar */}
-          <div className="flex flex-wrap items-center gap-4 text-sm">
-            <span className="font-semibold text-[var(--color-gain)]">✅ PASS: {data.passing.length}銘柄</span>
-            <span className="text-[var(--text-muted)]">FAIL: {data.failing.length}銘柄</span>
+          {/* Summary bar — v120 Scanner design refresh Phase 1 (UI/UX subagent verdict):
+              フラットテキスト → pill badge で数値を主役に。
+              PASS は gain tone 強調 + 数値 text-xl で 2 秒視認、 FAIL/スキップ は muted。 */}
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <div
+              className="flex items-center gap-2 rounded-xl border px-3 py-1.5"
+              style={{
+                background: 'color-mix(in srgb, var(--color-gain) 10%, transparent)',
+                borderColor: 'color-mix(in srgb, var(--color-gain) 25%, transparent)',
+              }}
+            >
+              <span className="text-xs font-medium" style={{ color: 'var(--color-gain)' }}>PASS</span>
+              <span className="text-xl font-bold tabular-nums" style={{ color: 'var(--color-gain)' }}>
+                {data.passing.length}
+              </span>
+              <span className="text-xs opacity-70" style={{ color: 'var(--color-gain)' }}>銘柄</span>
+            </div>
+            <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-3 py-1.5">
+              <span className="text-xs font-medium text-[var(--text-muted)]">FAIL</span>
+              <span className="text-base font-semibold tabular-nums text-[var(--text-secondary)]">
+                {data.failing.length}
+              </span>
+              <span className="text-xs text-[var(--text-muted)]">銘柄</span>
+            </div>
             {data.skipped.length > 0 && (
-              <span className="text-[var(--text-muted)]">スキップ: {data.skipped.length}銘柄</span>
+              <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-3 py-1.5">
+                <span className="text-xs font-medium text-[var(--text-muted)]">スキップ</span>
+                <span className="text-base font-semibold tabular-nums text-[var(--text-secondary)]">
+                  {data.skipped.length}
+                </span>
+              </div>
             )}
             <span className="ml-auto text-xs text-[var(--text-muted)]">{data.screenedAt} 実行</span>
           </div>

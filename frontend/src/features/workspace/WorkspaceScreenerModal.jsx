@@ -125,15 +125,18 @@ export default function WorkspaceScreenerModal({ isOpen, onClose }) {
         className="ds-workspace-screener-modal"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
+        {/* Header — v120 Scanner design refresh Phase 1 (UI/UX subagent verdict P4):
+            Stripe / Linear 風 top accent line + gradient background で「会議室の配布資料」 感を解消、
+            h2 17px + letterSpacing -0.02em でよりクリスプに. */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '14px 18px',
+            borderTop: '2px solid var(--color-accent)',
             borderBottom: '1px solid var(--border)',
-            background: 'var(--bg-subtle, rgba(0,0,0,0.02))',
+            background: 'linear-gradient(to bottom, color-mix(in srgb, var(--color-accent) 4%, var(--bg-card)), var(--bg-card))',
             flexShrink: 0,
           }}
         >
@@ -141,10 +144,10 @@ export default function WorkspaceScreenerModal({ isOpen, onClose }) {
             id="workspace-screener-title"
             style={{
               margin: 0,
-              fontSize: 15,
+              fontSize: 17,
               fontWeight: 700,
               color: 'var(--text-primary)',
-              letterSpacing: '-0.005em',
+              letterSpacing: '-0.02em',
             }}
           >
             銘柄スクリーナー
