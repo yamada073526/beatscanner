@@ -10,7 +10,7 @@
  *
  * Pane 1 nav は WS-5 で実装。WS-4 では暫定 dummy tab toggle を維持.
  */
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, lazy, Suspense } from 'react';
 import {
   ChevronRight,
   Home,
@@ -32,8 +32,9 @@ import { JudgmentDetail } from '../judgment/components/detail/index.js';
 import { IndicesList } from './IndicesView.jsx';
 import DailyDigestSection from './DailyDigestSection.jsx';
 import PaneDetailView from './PaneDetailView.jsx';
-// v120 Sprint 3: 銘柄スクリーナー modal (workspace mode から CustomScreenerPanel access 復活)
-import WorkspaceScreenerModal from './WorkspaceScreenerModal.jsx';
+// v120 Sprint 3 (Frontend verdict mandatory fix 2): WorkspaceScreenerModal を lazy 化
+// (modal は Pro user が screener button 押下時のみ open、 chunk reuse + 初期 bundle 軽量化)
+const WorkspaceScreenerModal = lazy(() => import('./WorkspaceScreenerModal.jsx'));
 // v118 P6: Pane4Inspector + pane4/ ディレクトリ削除 (handover v118 §残バックログ、 1 人日)。
 // 6 体並列レビューで「Pane 4 = AI chat → マクロニュース連動」 と確定済だったが、
 // release MVP scope 外と判断、 Phase 2 で再評価。
@@ -651,11 +652,16 @@ export default function Workspace({
         }
       />
       {/* v120 Sprint 3: 銘柄スクリーナー modal (workspace mode から CustomScreenerPanel access 復活).
-          App.jsx の <UpgradeModal> は非 Pro user の Pro 訴求を担当 (本 modal とは別 instance)。 */}
-      <WorkspaceScreenerModal
-        isOpen={screenerOpen}
-        onClose={() => setScreenerOpen(false)}
-      />
+          App.jsx の <UpgradeModal> は非 Pro user の Pro 訴求を担当 (本 modal とは別 instance)。
+          screenerOpen=false の間は Suspense fallback も unmount で初期 bundle 軽量化. */}
+      {screenerOpen && (
+        <Suspense fallback={null}>
+          <WorkspaceScreenerModal
+            isOpen={screenerOpen}
+            onClose={() => setScreenerOpen(false)}
+          />
+        </Suspense>
+      )}
     </JudgmentProvider>
   );
 }

@@ -28,6 +28,7 @@ export default function WorkspaceScreenerModal({ isOpen, onClose }) {
   const setPane3JudgmentOverride = useWorkspaceStore((s) => s.setPane3JudgmentOverride);
   const closeBtnRef = useRef(null);
   const triggerRef = useRef(null);
+  const dialogRef = useRef(null);
 
   // open 時に Aman 級 magic moment (Sprint 3 必須化、 Marketer A-5)
   useArrivalSpotlight([isOpen]);
@@ -51,13 +52,32 @@ export default function WorkspaceScreenerModal({ isOpen, onClose }) {
     }
   }, [isOpen]);
 
-  // Esc key
+  // Esc key + focus trap (Frontend verdict mandatory fix 1)
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
         onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const root = dialogRef.current;
+      if (!root) return;
+      const focusable = root.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      // Shift+Tab: 先頭で last へ wrap、 Tab: 末尾で first へ wrap
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -97,6 +117,7 @@ export default function WorkspaceScreenerModal({ isOpen, onClose }) {
       }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="workspace-screener-title"
