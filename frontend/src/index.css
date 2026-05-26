@@ -6354,6 +6354,20 @@ body {
   }
 }
 
+/* v120 Scanner design Phase 4 (UI/UX subagent verdict P5): shimmer skeleton.
+   loading 中の card shape 予告で 30 秒待機の体感速度向上 (5 原則 §5 整合)。
+   background-size: 200% で gradient を左右にスライド、 透過変化と組合せで「光が走る」 演出。 */
+@keyframes dsShimmer {
+  0% { background-position: -100% 0; opacity: 0.6; }
+  50% { background-position: 100% 0; opacity: 1; }
+  100% { background-position: 200% 0; opacity: 0.6; }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes dsShimmer {
+    0%, 100% { opacity: 0.7; background-position: 0 0; }
+  }
+}
+
 /* v120 Sprint 3: WorkspaceScreenerModal (銘柄スクリーナー modal) の dialog 本体.
    inline style + !important を避けて class 化 (design-system-check PASS のため). */
 @keyframes workspaceScreenerFadeIn {

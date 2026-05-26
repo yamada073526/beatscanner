@@ -51,9 +51,17 @@ function ConditionDots({ conditions = [], showLabels = false }) {
 function ResultCard({ item, onSelect }) {
   const passCount = item.passedCount ?? item.conditions?.filter((c) => c.passed).length ?? 0;
   const [expanded, setExpanded] = useState(false);
+  // v120 Scanner design Phase 2 (UI/UX subagent verdict P1): PASS card に常時 subtle gold glow、
+  // hover で card lift + halo (design_recipes.md §C-1 準拠、 Aman 級「触れる前から生きている UI」)
+  const isPass = item.overallPass === true || passCount >= 5;
 
   return (
-    <div className="rounded-xl border border-[var(--border)] transition hover:border-[var(--text-muted)]">
+    <div
+      className="rounded-xl border border-[var(--border)] transition-all duration-200 hover:-translate-y-1 hover:border-[color-mix(in_srgb,var(--color-accent)_40%,transparent)]"
+      style={isPass ? {
+        boxShadow: '0 0 0 1px color-mix(in srgb, var(--color-gain) 25%, transparent)',
+      } : undefined}
+    >
       {/* Main row — always visible */}
       <div className="flex items-center gap-2 p-3">
         <button
@@ -254,7 +262,12 @@ function CupResultCard({ item, onSelect, masked = false }) {
   const pivotStr = typeof pivotPrice === 'number' ? `$${pivotPrice.toFixed(2)}` : '—';
 
   return (
-    <div className={`rounded-xl border border-[var(--border)] transition hover:border-[var(--text-muted)] ${masked ? 'pointer-events-none' : ''}`}>
+    <div
+      className={`rounded-xl border border-[var(--border)] transition-all duration-200 ${masked ? 'pointer-events-none' : 'hover:-translate-y-1 hover:border-[color-mix(in_srgb,var(--color-accent)_40%,transparent)]'}`}
+      style={state === 'breakout_confirmed' ? {
+        boxShadow: '0 0 0 1px color-mix(in srgb, var(--color-gain) 25%, transparent)',
+      } : undefined}
+    >
       <div className="flex items-center gap-2 p-3">
         <button
           onClick={() => !masked && onSelect && onSelect(ticker)}
@@ -371,11 +384,28 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
         </button>
       )}
 
-      {/* Loading */}
+      {/* Loading — v120 Scanner design Phase 4 (UI/UX subagent P5): shimmer skeleton で
+          card shape を予告、 30 秒待機の体感速度向上 (5 原則 §5 図解で認知コスト↓). */}
       {phase === 'loading' && (
-        <div className="py-8 text-center">
-          <p className="text-sm font-medium text-[var(--text-secondary)]">スクリーニング中...</p>
-          <p className="mt-1 text-xs text-[var(--text-muted)]">財務データを取得・分析しています（約30秒）</p>
+        <div className="space-y-4">
+          <div className="text-center">
+            <p className="text-sm font-medium text-[var(--text-secondary)]">スクリーニング中...</p>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">財務データを取得・分析しています（約 30 秒）</p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-16 rounded-xl"
+                style={{
+                  background: 'linear-gradient(90deg, var(--bg-subtle) 0%, var(--bg-card) 50%, var(--bg-subtle) 100%)',
+                  backgroundSize: '200% 100%',
+                  animation: `dsShimmer 1.6s ease-in-out infinite`,
+                  animationDelay: `${i * 0.1}s`,
+                }}
+              />
+            ))}
+          </div>
         </div>
       )}
 
