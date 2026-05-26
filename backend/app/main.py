@@ -3733,15 +3733,19 @@ assert len(set(BACKTEST_PHASE2_UNIVERSE_TOP200)) == 200, (
 async def _fetch_sp500_top_n(n: int = BACKTEST_UNIVERSE_SIZE) -> list[str]:
     """S&P 500 top N 銘柄 (market cap 順) を返す (24h cache)。
 
+    v120 Phase 1 universe 拡大 (user 承認、 2026-05-27):
+      cap 200 → **500** に拡大 (Premium plan 契約済 + nightly batch 実行時間 16 分以内)。
+      じっちゃまプロトコル「小型株重要」 への第一歩 (Phase 2 で Russell 3000 へ拡張予定)。
+
     Phase 2.1 実装方針:
       1. FMP Premium 契約済なら /sp500-constituent + /quote batch で動的取得
       2. Starter (現契約) では Restricted endpoint なので hardcode list (上記) を使用
       3. 動的取得失敗時も hardcode に graceful fallback
 
     n <= 200 のとき hardcode list の top n を返す (slice)。
-    n > 200 のときも 200 で打ち切る (universe size cap)。
+    n > 200 のときも 500 で打ち切る (universe size cap、 nightly batch 時間 < 16 分維持)。
     """
-    n = max(1, min(200, n))
+    n = max(1, min(500, n))
     cache_key = f"sp500_top{n}"
     cached = _BACKTEST_UNIVERSE_CACHE.get(cache_key)
     if cached and (_time.time() - cached.get("ts", 0)) < _BACKTEST_UNIVERSE_CACHE_TTL:
@@ -13378,11 +13382,16 @@ async def cron_cup_scan(
     body: dict | None = None,
     x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
 ):
-    """Nightly Cup-with-Handle scan: 200 銘柄 iterate → _detect_cup_handle → upsert。
+    """Nightly Cup-with-Handle scan: SP500 全 500 銘柄 iterate → _detect_cup_handle → upsert。
+
+    v120 Phase 1 universe 拡大 (user 承認、 2026-05-27):
+      200 銘柄 (hardcode) → **SP500 全 500 銘柄** (FMP Premium dynamic fetch、 24h cache 共有)。
+      じっちゃまプロトコル「小型株重要」 への第一歩、 Phase 2 で Russell 3000 拡張予定。
+      Premium plan 750 req/min で nightly batch 実行時間 16 分以内見込み。
 
     Body (任意):
-      tickers: list[str] — 対象銘柄、 未指定なら BACKTEST_PHASE2_UNIVERSE_TOP200
-      chunk_size: int — yfinance rate limit 対応 (default 10、 sleep 1s between chunks)
+      tickers: list[str] — 対象銘柄、 未指定なら _fetch_sp500_top_n(500) (FMP 動的、 失敗時 hardcode top200 fallback)
+      chunk_size: int — FMP rate limit 対応 (default 10、 sleep 1s between chunks)
       dry_run: bool — True なら DB 書き込み skip (動作確認用)
 
     Returns:
@@ -13393,9 +13402,10 @@ async def cron_cup_scan(
     body = body or {}
     raw_tickers = body.get("tickers")
     if isinstance(raw_tickers, list) and raw_tickers:
-        tickers = [str(t).upper().strip() for t in raw_tickers if t][:250]
+        tickers = [str(t).upper().strip() for t in raw_tickers if t][:500]
     else:
-        tickers = list(BACKTEST_PHASE2_UNIVERSE_TOP200)
+        # v120 Phase 1: SP500 全 500 銘柄を動的 fetch (24h cache、 dynamic 失敗時は hardcode top200 fallback)
+        tickers = await _fetch_sp500_top_n(500)
 
     chunk_size = int(body.get("chunk_size", 10))
     chunk_size = max(1, min(50, chunk_size))
