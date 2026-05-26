@@ -480,10 +480,13 @@ export default function JudgmentDetail({
     });
   }
   if (detail?.changePct != null) {
+    // v120 hotfix (user dogfood Bug 6): detail.changePct は 1日% (= 前日比) であり YTD ではない。
+    // 旧表示「+12.34% YTD」 = 1 日比を YTD label で表示する致命的 mislabel (Trust Cliff)。
+    // label を「前日比」 に修正 + suffix「% YTD」 を「%」 に変更。 真の YTD は ReturnGrid 側で表示。
     const pct = (detail.changePct * 100).toFixed(2);
     kpis.push({
-      value: `${detail.changePct > 0 ? '+' : ''}${pct}% YTD`,
-      label: 'リターン',
+      value: `${detail.changePct > 0 ? '+' : ''}${pct}%`,
+      label: '前日比',
       trend: detail.changePct > 0 ? 'up' : detail.changePct < 0 ? 'down' : 'neutral',
     });
   }

@@ -195,27 +195,33 @@ export default function JudgmentRow({ item, selected, onClick }) {
               </span>
             )}
           </span>
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 500,
-              lineHeight: 1.3,
-              color: 'var(--text-muted)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {companyName || (judgment ? `${conditions.filter(Boolean).length}/5 条件合致` : '未分析')}
-          </span>
+          {/* v120 hotfix (user dogfood Bug 2): 「未分析」 文字は冗長
+              (右端の 5 条件 dot が全消し = 未分析 を visual で既に示している)。
+              companyName があるときのみ表示、 無い + 未分析時は何も表示しない (空白で hint)。 */}
+          {companyName && (
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 500,
+                lineHeight: 1.3,
+                color: 'var(--text-muted)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {companyName}
+            </span>
+          )}
         </div>
       </div>
 
       {/* v120 Sprint 2: Col 2 (sparkline 80×28 SVG) 削除 — chrome 軽量化、 1Y trend は Col 3 に統合 */}
 
-      {/* Col 3: $price (14/700) + 1日% (12/600/trendColor) + 1Y trend (10/trendColor)
-          v120 Sprint 2 (Marketer A-4 採用): sparkline 削除の代替視覚要素として 1Y trend % を追記。
-          null 時は span 自体 hide (em dash 廃止、 視覚 noise 削減). */}
+      {/* Col 3: $price (14/700) + 1日% (12/700 大) + 1Y trend (9/400 控えめ)
+          v120 hotfix (user dogfood Bug 1): 1日% と 1Y trend が同サイズで 1日% が埋没していたため
+          visual hierarchy 強化: 株価 > 1日% (主) >> 1Y trend (補助、 fontSize 縮小 + opacity 0.6 で控えめ)。
+          null 時は span 自体 hide (em dash 廃止). */}
       <div className="ws-row-price">
         {price != null && (
           <span
@@ -234,9 +240,9 @@ export default function JudgmentRow({ item, selected, onClick }) {
           <span
             style={{
               fontSize: 12,
-              fontWeight: 600,
+              fontWeight: 700,
               color: trendColor,
-              lineHeight: 1.05,
+              lineHeight: 1.1,
               fontVariantNumeric: 'tabular-nums',
             }}
           >
@@ -246,16 +252,17 @@ export default function JudgmentRow({ item, selected, onClick }) {
         {trend1yPct != null && (
           <span
             style={{
-              fontSize: 10,
-              fontWeight: 500,
-              color: trend1yColor,
-              lineHeight: 1.05,
+              fontSize: 9,
+              fontWeight: 400,
+              color: 'var(--text-muted)',
+              lineHeight: 1.1,
               fontVariantNumeric: 'tabular-nums',
-              opacity: 0.85,
+              opacity: 0.6,
+              letterSpacing: '0.02em',
             }}
             title="1 年トレンド (期初比)"
           >
-            {`1Y ${trend1yPct > 0 ? '▲' : trend1yPct < 0 ? '▼' : '—'} ${trend1yPct > 0 ? '+' : ''}${trend1yPct.toFixed(1)}%`}
+            {`1Y ${trend1yPct > 0 ? '▲' : trend1yPct < 0 ? '▼' : '—'}${Math.abs(trend1yPct).toFixed(1)}%`}
           </span>
         )}
       </div>
