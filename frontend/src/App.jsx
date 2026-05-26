@@ -1042,7 +1042,8 @@ export default function App() {
             detailContext={{
               user,
               isPro: isSubscribed,
-              onUpgrade: () => upgrade.open('詳細分析（強気/弱気）'),
+              // v120 Sprint 3: featureName 引数追加 (backward compat 維持、 default 「詳細分析（強気/弱気）」)
+              onUpgrade: (featureName) => upgrade.open(featureName || '詳細分析（強気/弱気）'),
               onSignIn: signInWithGoogle,
               // Sprint 5: TriageBanner 「新規買付」 button → IndicesView の
               // TransactionEntryModal を 'bs:open:addtx' カスタムイベント経由で起動。

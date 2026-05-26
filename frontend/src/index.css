@@ -6346,6 +6346,14 @@ body {
   container-name: ws-judgment-list;
 }
 
+/* v120 Sprint 3: WorkspaceHeader「スクリーナー」 button の label を mobile <768px で非表示
+   (Marketer A-1 mobile fallback: icon only + aria-label/title tooltip で識別) */
+@media (max-width: 767px) {
+  .ws-screener-btn-label {
+    display: none;
+  }
+}
+
 .ws-judgment-row {
   position: relative;
   display: grid;

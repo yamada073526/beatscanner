@@ -18,12 +18,19 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 // v118 P6: PanelRightOpen / PanelRightClose 削除 (Pane4 toggle 廃止)
-import { MoreHorizontal, Search } from 'lucide-react';
+// v120 Sprint 3: SlidersHorizontal = 銘柄スクリーナー access point icon (multi-review 6 体合議 verdict 反映、 UI/UX R3 で Filter → SlidersHorizontal に格上げ品格維持)
+import { MoreHorizontal, Search, SlidersHorizontal } from 'lucide-react';
 import MarketStripCompact from './MarketStripCompact.jsx';
 import MarketStatusPill from './MarketStatusPill.jsx';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 
-export default function WorkspaceHeader() {
+/**
+ * @param {object} [props]
+ * @param {boolean} [props.isPro] - Pro/Premium tier 判定 (Workspace.jsx から伝播)
+ * @param {() => void} [props.onOpenScreener] - スクリーナー button click handler (Pro user 時 modal open)
+ * @param {(featureName: string) => void} [props.onUpgrade] - 非 Pro user click 時 ProTeaser 起動
+ */
+export default function WorkspaceHeader({ isPro = false, onOpenScreener, onUpgrade } = {}) {
   // v108 multi-review verdict: headerCollapsed state は store 残置 (migration risk 回避) するが
   //   button 削除 + 常時展開固定で実質無効化。 toggleHeader も呼び出し箇所なくなる。
   // v118 P6: pane4Expanded / togglePane4 削除 (Pane4 廃止)
@@ -196,6 +203,74 @@ export default function WorkspaceHeader() {
         {/* v65 §B Step 2: MarketStatusPill (NYSE 開閉状態 + 次イベントまでの時間) */}
         <MarketStatusPill />
         {/* v118 P6: Pane 4 inspector toggle button 削除 (Pane4 機能廃止) */}
+
+        {/* v120 Sprint 3 (multi-review 6 体合議 verdict 反映): 銘柄スクリーナー access button.
+            P6 で Pane 4 削除 → workspace mode から CustomScreenerPanel への access 経路消失 (Trust Cliff 級) の fix.
+            desktop ≥768px: icon + label「スクリーナー」 (Marketer A-1 機能発見性 fix)
+            mobile <768px: icon only + tooltip (Marketer A-1 mobile fallback)
+            非 Pro user: Pro amber badge + click → ProTeaser (Marketer A-2 + Trust Cliff fair lock) */}
+        <button
+          type="button"
+          onClick={() => {
+            if (!isPro) {
+              onUpgrade?.('銘柄スクリーナー');
+              return;
+            }
+            onOpenScreener?.();
+          }}
+          aria-label="銘柄スクリーナー (Cup-Handle × ファンダ 5 条件)"
+          title="銘柄スクリーナー"
+          data-testid="ws-header-screener-btn"
+          style={{
+            position: 'relative',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '0 10px',
+            height: 24,
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-pill, 9999px)',
+            background: 'var(--bg-card)',
+            color: 'var(--text-secondary)',
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: 'pointer',
+            flexShrink: 0,
+            transition: 'background 0.15s, border-color 0.15s, color 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(56,189,248,0.08)';
+            e.currentTarget.style.borderColor = 'rgba(56,189,248,0.30)';
+            e.currentTarget.style.color = 'rgb(14,165,233)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'var(--bg-card)';
+            e.currentTarget.style.borderColor = 'var(--border)';
+            e.currentTarget.style.color = 'var(--text-secondary)';
+          }}
+        >
+          <SlidersHorizontal size={13} strokeWidth={1.75} aria-hidden />
+          <span className="ws-screener-btn-label">スクリーナー</span>
+          {!isPro && (
+            <span
+              aria-hidden
+              style={{
+                fontSize: 9,
+                fontWeight: 700,
+                letterSpacing: '0.06em',
+                color: 'var(--color-gold, #d4af37)',
+                padding: '1px 5px',
+                borderRadius: 999,
+                background: 'color-mix(in srgb, var(--color-gold, #d4af37) 14%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--color-gold, #d4af37) 30%, transparent)',
+                textTransform: 'uppercase',
+                lineHeight: 1.3,
+              }}
+            >
+              Pro
+            </span>
+          )}
+        </button>
 
         {/* v65 §4-B-2: kebab menu (旧 UI / 将来の settings / help を集約)
             BETA 段階公開導線「旧 UI」を表に出さず Trust Cliff 逆効果を回避.
