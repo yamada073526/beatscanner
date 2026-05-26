@@ -13838,8 +13838,9 @@ async def cron_rs_scan(
     dry_run = bool(body.get("dry_run", False))
 
     # SPY history (24h cache、 Cup-Handle scan と共有)
+    # v120 hotfix: _get_spy_history() は dict {closes: [...], times: [...]} を返す (5-tuple list ではない)
     spy_history = _get_spy_history()
-    spy_closes = [c for _, _, _, c, _ in (spy_history or [])] if spy_history else []
+    spy_closes = (spy_history or {}).get("closes") or []
 
     if not spy_closes:
         raise HTTPException(status_code=503, detail="SPY history fetch failed (yfinance / FMP)")
