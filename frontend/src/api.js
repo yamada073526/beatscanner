@@ -550,6 +550,21 @@ export async function fetchMarketIndices() {
   return r.json();
 }
 
+/**
+ * v120 Task 3: Follow-Through Day (William O'Neil 理論) を主要 index で検出.
+ * Phase 1: 主要 3 index (^GSPC / ^NDX / ^DJI)、 Pane 1 マクロ section に chip 表示.
+ *
+ * @param {string} index - '^GSPC' / '^NDX' / '^DJI' (URL encode 内部処理)
+ * @returns {Promise<{index, label_ja, status, ftd_day_number, ftd_date, ftd_pct, rally_attempt_date, updated_at}>}
+ *          status: 'ftd_confirmed' | 'watching' | 'no_attempt' | 'insufficient_data' | 'error'
+ */
+export async function fetchFollowThroughDay(index) {
+  const encoded = encodeURIComponent(index);
+  const r = await fetch(`/api/follow-through-day/${encoded}`);
+  if (!r.ok) return null;
+  return r.json();
+}
+
 // Workspace Home Phase 2: 注目銘柄 Top 5 (急騰/急落).
 // /api/movers は { gainers: [], losers: [], updated_at } を返す。
 // 各 mover: { ticker, price, pct, direction, keyword?, source_url? }

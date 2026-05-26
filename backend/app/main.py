@@ -14458,6 +14458,203 @@ async def stripe_webhook(request: Request):
     return {"received": True}
 
 
+# ── v120 Task 3: Follow-Through Day (FTD) Phase 1 ────────────────────────────
+# William O'Neil 理論 (IBD) ベース、 主要 3 index (^GSPC / ^NDX / ^DJI) で計算。
+#
+# FTD 検出ロジック (簡素版):
+#   1. 直近 21 営業日の historical price を取得 (FMP /historical-price-eod/full)
+#   2. Rally Attempt Day (Day 1) = 「3 日以上連続下落後の初の上昇日」
+#   3. FTD = Day 4-7 範囲内で「+1.7% 以上 + 出来高が前日比 increase」 した day
+#   4. Day 1-3 では FTD として認定不可 (短すぎる)、 Day 8+ なら attempt 失敗 (要再試行)
+#
+# Phase 2 (Resend メール通知 + Twitter Bot) は集客効果検討後 (handover v119 §残バックログ)。
+#
+# memory anchors:
+# - handover_2026-05-26_v119.md §Task 3 (実装範囲)
+# - feedback_pre_release_priority.md (Phase 1 のみ着手)
+
+_FTD_INDICES = {
+    "^GSPC": {"label": "S&P 500", "label_ja": "S&P 500"},
+    "^NDX":  {"label": "NASDAQ 100", "label_ja": "NASDAQ"},
+    "^DJI":  {"label": "DOW", "label_ja": "DOW"},
+}
+
+# FTD 検出パラメータ (William O'Neil 標準値)
+_FTD_GAIN_THRESHOLD = 0.017   # +1.7% 以上の上昇
+_FTD_VOLUME_INCREASE = True   # 前日比 出来高 increase 必須
+_FTD_DAY_WINDOW = (4, 7)      # Day 4-7 範囲のみ FTD 認定
+_FTD_DECLINE_DAYS = 3         # rally attempt 前提: 3 日以上連続下落
+_FTD_LOOKBACK_DAYS = 21       # 直近 21 営業日 (約 1 ヶ月)
+
+_ftd_cache: dict[str, dict] = {}  # {index: {"data": dict, "ts": float}}
+_FTD_TTL = 3600  # 1 時間 cache (daily EOD なので長めで OK)
+
+
+def _detect_ftd(prices: list[dict]) -> dict:
+    """historical prices から FTD を検出。
+
+    Args:
+        prices: FMP /historical-price-eod/full の response (新→旧 順)
+                各要素 = {date, open, high, low, close, volume, ...}
+
+    Returns:
+        {
+            "status": "ftd_confirmed" | "watching" | "no_attempt" | "insufficient_data",
+            "ftd_day_number": int | None,  # Day 1 からの距離
+            "ftd_date": str | None,
+            "ftd_pct": float | None,
+            "rally_attempt_date": str | None,
+            "label_ja": str,  # caller がセット
+        }
+    """
+    if not prices or len(prices) < _FTD_LOOKBACK_DAYS:
+        return {
+            "status": "insufficient_data",
+            "ftd_day_number": None, "ftd_date": None, "ftd_pct": None,
+            "rally_attempt_date": None,
+        }
+
+    # FMP response は date 降順 (新→旧)、 古→新 順に並び替えて使う
+    sorted_prices = sorted(prices[:_FTD_LOOKBACK_DAYS], key=lambda p: p.get("date", ""))
+
+    # Rally Attempt Day を探す: 直近 (= 末尾近く) で「3 日以上連続下落 → 上昇」 の上昇日
+    rally_idx = None
+    for i in range(_FTD_DECLINE_DAYS, len(sorted_prices)):
+        # i 日目が rally attempt 候補
+        cur = sorted_prices[i]
+        prev = sorted_prices[i - 1]
+        cur_close = cur.get("close")
+        prev_close = prev.get("close")
+        if cur_close is None or prev_close is None or prev_close == 0:
+            continue
+        # 当日が上昇日
+        if cur_close <= prev_close:
+            continue
+        # 直前 _FTD_DECLINE_DAYS 日が連続下落かチェック (i-1 から i-DECLINE_DAYS)
+        decline_ok = True
+        for j in range(1, _FTD_DECLINE_DAYS + 1):
+            a = sorted_prices[i - j]
+            b = sorted_prices[i - j - 1] if i - j - 1 >= 0 else None
+            if b is None:
+                decline_ok = False
+                break
+            a_close = a.get("close")
+            b_close = b.get("close")
+            if a_close is None or b_close is None or a_close >= b_close:
+                decline_ok = False
+                break
+        if decline_ok:
+            rally_idx = i  # 直近の rally attempt で上書き (最新を採用)
+
+    if rally_idx is None:
+        return {
+            "status": "no_attempt",
+            "ftd_day_number": None, "ftd_date": None, "ftd_pct": None,
+            "rally_attempt_date": None,
+        }
+
+    rally_date = sorted_prices[rally_idx].get("date")
+
+    # Day 4-7 範囲で FTD を探す
+    day1_to_day7 = sorted_prices[rally_idx:rally_idx + _FTD_DAY_WINDOW[1]]
+    for offset in range(_FTD_DAY_WINDOW[0] - 1, _FTD_DAY_WINDOW[1]):
+        # offset = Day(offset+1) からの index
+        if offset >= len(day1_to_day7):
+            break
+        d = day1_to_day7[offset]
+        prev_d = day1_to_day7[offset - 1] if offset > 0 else None
+        if prev_d is None:
+            continue
+        d_close = d.get("close")
+        prev_close = prev_d.get("close")
+        d_volume = d.get("volume", 0)
+        prev_volume = prev_d.get("volume", 0)
+        if d_close is None or prev_close is None or prev_close == 0:
+            continue
+        pct = (d_close - prev_close) / prev_close
+        volume_inc = d_volume > prev_volume if _FTD_VOLUME_INCREASE else True
+        if pct >= _FTD_GAIN_THRESHOLD and volume_inc:
+            return {
+                "status": "ftd_confirmed",
+                "ftd_day_number": offset + 1,
+                "ftd_date": d.get("date"),
+                "ftd_pct": round(pct * 100, 2),
+                "rally_attempt_date": rally_date,
+            }
+
+    # FTD 未検出だが rally attempt は存在
+    return {
+        "status": "watching",
+        "ftd_day_number": None, "ftd_date": None, "ftd_pct": None,
+        "rally_attempt_date": rally_date,
+    }
+
+
+@app.get("/api/follow-through-day/{index}")
+async def get_follow_through_day(index: str, x_bypass_token: str | None = Header(None)):
+    """主要 index の Follow-Through Day を検出して返す.
+
+    Path param:
+      index: '^GSPC' | '^NDX' | '^DJI' (URL encode 必要: %5EGSPC 等)
+             または 'GSPC' / 'NDX' / 'DJI' (^ 省略形も受付、 内部で正規化)
+
+    Returns:
+      {
+        "index": "^GSPC",
+        "label_ja": "S&P 500",
+        "status": "ftd_confirmed" | "watching" | "no_attempt" | "insufficient_data" | "error",
+        "ftd_day_number": int | null,
+        "ftd_date": "YYYY-MM-DD" | null,
+        "ftd_pct": float | null,
+        "rally_attempt_date": "YYYY-MM-DD" | null,
+        "updated_at": int (epoch sec)
+      }
+    """
+    # ^ 省略形を正規化
+    norm = index if index.startswith("^") else f"^{index.upper()}"
+    if norm not in _FTD_INDICES:
+        raise HTTPException(status_code=400, detail=f"Unsupported index: {index}. Supported: {list(_FTD_INDICES.keys())}")
+
+    label_ja = _FTD_INDICES[norm]["label_ja"]
+    now = _time.time()
+
+    # cache check
+    cached = _ftd_cache.get(norm)
+    if cached and now - cached["ts"] < _FTD_TTL:
+        return cached["data"]
+
+    # FMP fetch (直近 30 営業日 = ~45 calendar 日)
+    today = date.today()
+    from_date = (today - timedelta(days=60)).isoformat()
+    to_date = today.isoformat()
+    try:
+        client = FMPClient()
+        prices = await client.historical_price(norm, from_date=from_date, to_date=to_date)
+    except FMPError as e:
+        result = {
+            "index": norm,
+            "label_ja": label_ja,
+            "status": "error",
+            "ftd_day_number": None,
+            "ftd_date": None,
+            "ftd_pct": None,
+            "rally_attempt_date": None,
+            "updated_at": int(now),
+            "error": str(e)[:200],
+        }
+        return result
+
+    detect = _detect_ftd(prices)
+    result = {
+        "index": norm,
+        "label_ja": label_ja,
+        **detect,
+        "updated_at": int(now),
+    }
+    _ftd_cache[norm] = {"data": result, "ts": now}
+    return result
+
+
 # ── v113 Phase 3: /articles/<slug> clean URL bridge ──────────────────────────
 # build-articles.mjs は dist/articles/<slug>/index.html に SSG 出力するが、
 # Starlette StaticFiles の html=True は nested directory の index 自動 serve が

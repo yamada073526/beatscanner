@@ -32,9 +32,110 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { fetchMarketIndices } from '../../api.js';
+import { fetchMarketIndices, fetchFollowThroughDay } from '../../api.js';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import RowSparkline from '../judgment/components/list/RowSparkline.jsx';
+
+// v120 Task 3: FTD Phase 1 — William O'Neil Follow-Through Day chip
+const FTD_INDICES = ['^GSPC', '^NDX', '^DJI'];
+
+/** FTD status を 日本語 ラベル + tone に mapping */
+function ftdLabel(ftd) {
+  if (!ftd) return { text: '—', tone: 'muted' };
+  switch (ftd.status) {
+    case 'ftd_confirmed':
+      return {
+        text: `Day ${ftd.ftd_day_number} ✓ ${ftd.ftd_pct != null ? `+${ftd.ftd_pct.toFixed(1)}%` : ''}`.trim(),
+        tone: 'gain',
+      };
+    case 'watching':
+      return { text: '監視中', tone: 'warning' };
+    case 'no_attempt':
+      return { text: '—', tone: 'muted' };
+    case 'insufficient_data':
+    case 'error':
+    default:
+      return { text: '—', tone: 'muted' };
+  }
+}
+
+/** FTD 行: 3 indices を inline 横並びで表示 (Pane 1 幅 280px 程度を想定) */
+function FtdChipRow() {
+  const [ftdMap, setFtdMap] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(FTD_INDICES.map((idx) => fetchFollowThroughDay(idx).catch(() => null)))
+      .then((results) => {
+        if (cancelled) return;
+        const map = {};
+        results.forEach((r, i) => { if (r) map[FTD_INDICES[i]] = r; });
+        setFtdMap(map);
+        setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          fontSize: 10,
+          color: 'var(--text-muted)',
+          padding: '4px 8px 6px 4px',
+          opacity: 0.6,
+        }}
+      >
+        FTD 計算中...
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2,
+        padding: '4px 8px 6px 4px',
+        fontSize: 10,
+        color: 'var(--text-muted)',
+      }}
+      title="Follow-Through Day (William O'Neil 理論): 上昇局面入りの確認指標"
+      data-testid="ftd-chip-row"
+    >
+      <div style={{ fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+        FTD
+      </div>
+      {FTD_INDICES.map((idx) => {
+        const ftd = ftdMap[idx];
+        const { text, tone } = ftdLabel(ftd);
+        const toneColor =
+          tone === 'gain' ? 'var(--color-gain)' :
+          tone === 'warning' ? 'var(--color-warning)' :
+          'var(--text-muted)';
+        return (
+          <div
+            key={idx}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontSize: 11,
+              fontWeight: 500,
+            }}
+          >
+            <span style={{ color: 'var(--text-secondary)' }}>{ftd?.label_ja || idx}</span>
+            <span style={{ color: toneColor, fontWeight: tone === 'gain' ? 700 : 500, fontVariantNumeric: 'tabular-nums' }}>
+              {text}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 // header MarketStripCompact と同じ Tier 1 8 指標 (重複表示を避けるため除外)
 const TIER1_SET = new Set(['^GSPC', '^IXIC', '^DJI', '^VIX', 'DX-Y.NYB', '^TNX', 'CL=F', 'JPY=X']);
@@ -239,6 +340,8 @@ export default function Pane1MacroSection() {
             paddingTop: 4,
           }}
         >
+          {/* v120 Task 3: FTD (Follow-Through Day) Phase 1 — 主要 3 index で上昇局面入り確認 */}
+          <FtdChipRow />
           {ordered.length === 0 ? (
             <div style={{ padding: '8px 10px', fontSize: 11, color: 'var(--text-muted)' }}>
               読込中...
