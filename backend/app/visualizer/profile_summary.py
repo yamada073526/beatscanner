@@ -361,6 +361,10 @@ async def _call_llm(
     #   block 1: static system (always cache)
     #   block 2: few-shot 後に ephemeral cache (breakpoint 1)
     #   block 3: NEGATIVE_EXAMPLES 後に ephemeral cache (breakpoint 2)
+    # v120 Task 2: 文体憲法 (summary 版) を inject。
+    # profile_summary は短い narration (300-500 字想定) のため summary 版で system block 軽量維持。
+    from ..prompts import get_style_constitution_summary
+
     system_blocks: list[dict] = [
         {
             "type": "text",
@@ -376,6 +380,12 @@ async def _call_llm(
             "type": "text",
             "text": _format_negatives_for_profile(),
             "cache_control": {"type": "ephemeral"},  # breakpoint 2
+        },
+        # v120 Task 2: 文体憲法 summary (軽量 endpoint 用、 ephemeral 3 / 4 個消費)
+        {
+            "type": "text",
+            "text": "\n\n# 文体憲法 (要約版)\n" + get_style_constitution_summary(),
+            "cache_control": {"type": "ephemeral"},  # breakpoint 3
         },
     ]
 

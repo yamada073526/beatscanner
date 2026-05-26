@@ -75,6 +75,10 @@ def get_system_blocks(years: int = 3) -> list[dict]:
     from .prompt_examples import get_examples_xml
     from .prompt_negatives import get_negatives_xml
 
+    # v120 Task 2: 文体憲法 (POSITIVE rule) を Block 3 として inject。
+    # 既存 examples (POSITIVE few-shot) + NEGATIVE_EXAMPLES (BAD 1-6) と相補的。
+    from ..prompts import STYLE_CONSTITUTION_BLOCK
+
     instructions = SYSTEM_PROMPT_TEMPLATE.replace("{years}", str(years))
     examples_block = f"{get_examples_xml()}\n\n{get_negatives_xml()}"
     return [
@@ -88,6 +92,9 @@ def get_system_blocks(years: int = 3) -> list[dict]:
             "text": examples_block,
             "cache_control": {"type": "ephemeral"},
         },
+        # v120 Task 2: 文体憲法 (style_constitution.md) Block 3、 ephemeral 3 個消費 / 4。
+        # AI っぽさ排除 + 5 ステップ + 両面提示 + ジブンゴト化 を図解 narration に強制。
+        STYLE_CONSTITUTION_BLOCK,
     ]
 
 

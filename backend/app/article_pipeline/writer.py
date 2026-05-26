@@ -27,6 +27,7 @@ import re
 from datetime import datetime
 
 from ..claude_client import ClaudeClient
+from ..prompts import STYLE_CONSTITUTION_BLOCK
 from ..visualizer.prompt_negatives import get_negatives_xml
 from .schemas import (
     ArticleDraft,
@@ -341,8 +342,9 @@ def get_writer_system_blocks() -> list[dict]:
 
     Block 1: WRITER_SYSTEM_BASE (instructions + HARD CONSTRAINT + schema、 cache)
     Block 2: get_negatives_xml() + few-shot 3 本 (cache)
+    Block 3: 文体憲法 (v120 Task 2、 POSITIVE rule 6 軸、 cache)
 
-    cache_control: ephemeral 2 個消費、 残り 2 個は P2+ で KB / locale 用に温存。
+    cache_control: ephemeral 3 個消費、 残り 1 個は P2+ で KB / locale 用に温存。
     """
     negatives_and_few_shot = f"{get_negatives_xml()}\n\n{_few_shot_block()}"
     return [
@@ -356,6 +358,9 @@ def get_writer_system_blocks() -> list[dict]:
             "text": negatives_and_few_shot,
             "cache_control": {"type": "ephemeral"},
         },
+        # v120 Task 2: 文体憲法 (style_constitution.md) を Block 3 として inject。
+        # BAD pattern (NEGATIVE、 Block 2) と相補的、 POSITIVE 「こう書け」 = AI っぽさ排除 + 5 ステップ構成 + 両面提示。
+        STYLE_CONSTITUTION_BLOCK,
     ]
 
 
