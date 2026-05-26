@@ -551,6 +551,22 @@ export async function fetchMarketIndices() {
 }
 
 /**
+ * v120 RS Screener Phase 1 (user 提案、 金融 sub-agent CONDITIONAL PASS verdict):
+ * William O'Neil CAN SLIM の L (Leader/RS≥80) screener.
+ * 既存 _compute_rs() を SP500 universe で集約、 nightly batch + Supabase 永続化。
+ *
+ * @param {number} [minPercentile=80] - universe_percentile の下限 (1-99)
+ * @param {number} [limit=50] - 取得件数 上限
+ * @returns {Promise<{universe_size, calc_date, min_percentile, items: [{ticker, rs_vs_spy_pct, universe_percentile, self_percentile, period_months}]}>}
+ */
+export async function fetchRsScanner(minPercentile = 80, limit = 50) {
+  const url = `/api/scanner/rs?min_percentile=${minPercentile}&limit=${limit}`;
+  const r = await fetch(url);
+  if (!r.ok) return null;
+  return r.json();
+}
+
+/**
  * v120 Task 3: Follow-Through Day (William O'Neil 理論) を主要 index で検出.
  * Phase 1: 主要 3 index (^GSPC / ^NDX / ^DJI)、 Pane 1 マクロ section に chip 表示.
  *

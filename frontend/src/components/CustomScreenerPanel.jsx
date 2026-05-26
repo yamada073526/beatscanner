@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Mountain, Crown } from 'lucide-react';
-import { fetchCustomScreener, fetchCupHandleScanner } from '../api.js';
+import { Mountain, Crown, TrendingUp } from 'lucide-react';
+import { fetchCustomScreener, fetchCupHandleScanner, fetchRsScanner } from '../api.js';
 import Chip, { ChipGroup } from './ui/Chip.jsx';
 
 const CONDITION_SHORT = ['CF率', 'EPS', 'CFPS', '売上', 'CF>EPS'];
 
 // Cup-Handle Phase 2.4 (multi-review 6 体合議 verdict)
 // v120 hotfix v2 (user dogfood): 「ファンダ & カップ」 chip が 2 行 wrap (chrome 圧迫) → 「両方」 に短縮統一。
-// title (hover tooltip) で「ファンダ × Cup-Handle 複合検索」 を補足、 chip 1 行統一で chrome 整理。
+// v120 RS Screener Phase 1: William O'Neil CAN SLIM L 条件 (RS≥80) 追加 (金融 sub-agent verdict 案 A 採用)
 const SCANNER_FILTERS = [
   { key: 'funda', label: 'ファンダ' },
   { key: 'cup',   label: 'カップ' },
+  { key: 'rs',    label: 'RS強', titleExtra: 'Relative Strength ≥ 80 (CAN SLIM L 条件、 SP500 universe で上位 20%)' },
   { key: 'both',  label: '両方', premium: true, fullLabel: 'ファンダ & カップ' },
 ];
 
@@ -91,6 +92,78 @@ function ResultCard({ item, onSelect }) {
       {/* Condition dots — always visible on desktop, toggle on mobile */}
       <div className={`px-3 pb-3 ${expanded ? 'block' : 'hidden sm:block'}`}>
         <ConditionDots conditions={item.conditions} showLabels />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * v120 RS Screener Phase 1: William O'Neil CAN SLIM L 条件 (RS≥80) results.
+ * 既存 _compute_rs() を SP500 universe で集約、 nightly batch + Supabase 永続化。
+ * Trust Cliff 防止: universe 範囲 (SP500 N 銘柄 / 6 ヶ月 / calc_date) を明示。
+ */
+function RsScannerResults({ data, onSelect }) {
+  if (!data) {
+    return (
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-3 text-xs text-[var(--text-muted)]">
+        スキャン中...
+      </div>
+    );
+  }
+  if (data.error) {
+    return (
+      <div className="rounded-lg border border-[var(--color-loss)] bg-[var(--bg-subtle)] p-3 text-xs text-[var(--color-loss)]">
+        RS スキャン失敗: {data.error}
+      </div>
+    );
+  }
+  const items = data.items || [];
+  if (items.length === 0) {
+    return (
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-3 text-xs text-[var(--text-muted)]">
+        {data.note || `RS ≥ ${data.min_percentile ?? 80} の銘柄なし (nightly batch 未実行の可能性、 明朝確認)`}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      {/* Trust Cliff 防止: universe 範囲を 1 行で明示 */}
+      <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--text-muted)]">
+        <span>universe: SP500 {data.universe_size}銘柄 / 6 ヶ月 RS / {data.calc_date} 計算</span>
+        <span className="ml-auto">CAN SLIM の L = RS ≥ {data.min_percentile} (上位 {100 - data.min_percentile}%)</span>
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {items.map((item) => {
+          const pct = Number(item.universe_percentile ?? 0);
+          const rsDiff = Number(item.rs_vs_spy_pct ?? 0);
+          return (
+            <button
+              key={item.ticker}
+              onClick={() => onSelect(item.ticker)}
+              className="rounded-xl border border-[var(--border)] p-3 text-left transition hover:border-[var(--color-gain)] hover:-translate-y-0.5"
+              style={{
+                background: 'color-mix(in srgb, var(--color-gain) 5%, transparent)',
+              }}
+              title={`SP500 universe 内 上位 ${100 - pct}% / SPY 比 ${rsDiff > 0 ? '+' : ''}${rsDiff.toFixed(1)}pt (6 ヶ月)`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-[var(--text-primary)]">{item.ticker}</span>
+                <span
+                  className="rounded-full px-2 py-0.5 text-xs font-bold tabular-nums"
+                  style={{
+                    color: 'var(--color-gain)',
+                    background: 'color-mix(in srgb, var(--color-gain) 18%, transparent)',
+                  }}
+                >
+                  RS {pct}
+                </span>
+              </div>
+              <div className="mt-1 text-xs text-[var(--text-muted)] tabular-nums">
+                SPY 比 {rsDiff > 0 ? '+' : ''}{rsDiff.toFixed(1)}pt (6 ヶ月)
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -225,13 +298,15 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
   const [phase, setPhase] = useState('idle'); // idle | loading | done | error
   const [data, setData] = useState(null);
   const [cupData, setCupData] = useState(null);
-  const [activeFilter, setActiveFilter] = useState(null); // null | 'funda' | 'cup' | 'both'
+  const [rsData, setRsData] = useState(null); // v120 RS Screener
+  const [activeFilter, setActiveFilter] = useState(null); // null | 'funda' | 'cup' | 'rs' | 'both'
   const [error, setError] = useState(null);
 
   async function run() {
     setPhase('loading');
     setError(null);
     setCupData(null);
+    setRsData(null);
     setActiveFilter(null);
     try {
       const result = await fetchCustomScreener();
@@ -253,7 +328,18 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
   async function runCupFilter(filterKey) {
     setActiveFilter(filterKey);
     setCupData(null);
+    setRsData(null);
     if (filterKey === 'funda') return; // 既存 data でカバー、 cup endpoint 呼ばない
+    if (filterKey === 'rs') {
+      // v120 RS Screener: 別 endpoint (Supabase DB SELECT only、 高速)
+      try {
+        const result = await fetchRsScanner(80, 50);
+        setRsData(result);
+      } catch (e) {
+        setRsData({ error: e.message, items: [], universe_size: 0 });
+      }
+      return;
+    }
     try {
       const result = await fetchCupHandleScanner(filterKey);
       setCupData(result);
@@ -366,7 +452,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
                     tone={isActive ? 'accent' : 'muted'}
                     pressed={isActive}
                     onClick={() => runCupFilter(f.key)}
-                    title={f.premium ? 'Premium ¥1,800/月 限定 (ファンダ × Cup-Handle 複合検索)\nPro tier はファンダのみ / カップのみ 個別 scan 可' : undefined}
+                    title={f.premium ? 'Premium ¥1,800/月 限定 (ファンダ × Cup-Handle 複合検索)\nPro tier はファンダのみ / カップのみ 個別 scan 可' : f.titleExtra}
                   >
                     {/* v120 hotfix (user dogfood + icon-brand-consistency): 🔒 emoji の安っぽさを Crown 格調シンボルへ。
                         Aman 級ブランド世界観整合、 Pro 限定 = 「王冠 = 王者の選別」 メタファー */}
@@ -378,6 +464,15 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
                         style={{ color: 'var(--color-gold)', marginRight: 4, verticalAlign: '-1px' }}
                       />
                     )}
+                    {/* v120 RS Screener: 'rs' chip に TrendingUp icon で「相対強度」 視覚化 */}
+                    {f.key === 'rs' && (
+                      <TrendingUp
+                        size={11}
+                        strokeWidth={2}
+                        aria-hidden
+                        style={{ color: 'var(--color-gain)', marginRight: 4, verticalAlign: '-1px' }}
+                      />
+                    )}
                     {f.label}
                   </Chip>
                 );
@@ -385,8 +480,13 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
             </ChipGroup>
           </div>
 
+          {/* v120 RS Screener results (activeFilter === 'rs' のとき表示) */}
+          {activeFilter === 'rs' && (
+            <RsScannerResults data={rsData} onSelect={onSelect} />
+          )}
+
           {/* Cup-Handle scanner results (activeFilter が cup / both のとき表示) */}
-          {activeFilter && activeFilter !== 'funda' && (
+          {activeFilter && activeFilter !== 'funda' && activeFilter !== 'rs' && (
             <CupScannerResults
               data={cupData}
               onSelect={onSelect}

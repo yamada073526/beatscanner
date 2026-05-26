@@ -13796,6 +13796,192 @@ async def cron_cup_notify(
     }
 
 
+# ============================================================================
+# v120 RS Screener Phase 1 (2026-05-27、 handover v120 user 提案 + 金融 sub-agent CONDITIONAL PASS)
+#
+# William O'Neil CAN SLIM の L (Leader/RS ≥ 80) を BeatScanner screener に統合。
+# 既存 _compute_rs() (handover v76 Session 3) を universe (SP500 全 500 銘柄) で集約。
+#
+# 設計:
+#  - nightly batch (cron_rs_scan): SP500 全銘柄を _compute_rs() で計算 → universe_percentile
+#    rank → rs_ratings table upsert (24h cache、 cup_scan 同居 deploy)
+#  - read endpoint (/api/scanner/rs?min_percentile=80): DB SELECT only で高速 (cup-handle 同 pattern)
+#  - Trust Cliff 防止: universe 範囲 (SP500 N 銘柄 / 6 ヶ月 / 計算時刻) を response に明示
+# ============================================================================
+
+
+@app.post("/api/cron/rs-scan")
+async def cron_rs_scan(
+    body: dict | None = None,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """Nightly RS (Relative Strength) scan: SP500 全 500 銘柄を _compute_rs() で集約。
+
+    各 ticker の rs_vs_spy_pct (6 ヶ月 ticker return - SPY return) を計算後、
+    universe 内 percentile rank (1-99) を算出して rs_ratings table に upsert。
+
+    Body (任意):
+      tickers: list[str] — 対象銘柄、 未指定なら SP500 全 500 銘柄
+      dry_run: bool — True なら DB 書き込み skip
+
+    Returns:
+      processed_count, scored_count, top10 (universe_percentile DESC)、 failed_tickers
+    """
+    _check_cron_secret(x_cron_secret)
+
+    body = body or {}
+    raw_tickers = body.get("tickers")
+    if isinstance(raw_tickers, list) and raw_tickers:
+        tickers = [str(t).upper().strip() for t in raw_tickers if t][:500]
+    else:
+        tickers = await _fetch_sp500_top_n(500)
+    dry_run = bool(body.get("dry_run", False))
+
+    # SPY history (24h cache、 Cup-Handle scan と共有)
+    spy_history = _get_spy_history()
+    spy_closes = [c for _, _, _, c, _ in (spy_history or [])] if spy_history else []
+
+    if not spy_closes:
+        raise HTTPException(status_code=503, detail="SPY history fetch failed (yfinance / FMP)")
+
+    today = date.today()
+    raw_rs: list[dict] = []  # [{ticker, rs_vs_spy_pct, self_percentile}]
+    failed: list[dict] = []
+
+    for ticker in tickers:
+        ohlcv = await asyncio.to_thread(_fetch_ohlcv_3y, ticker)
+        if ohlcv is None:
+            failed.append({"ticker": ticker, "reason": "ohlcv_fetch_failed"})
+            continue
+        _, _, _, t_closes, _ = ohlcv
+        if not t_closes:
+            failed.append({"ticker": ticker, "reason": "empty_closes"})
+            continue
+        result = _compute_rs(t_closes, spy_closes)
+        if result.get("rs_vs_spy_pct") is None:
+            failed.append({"ticker": ticker, "reason": "compute_rs_returned_none"})
+            continue
+        raw_rs.append({
+            "ticker": ticker,
+            "rs_vs_spy_pct": float(result["rs_vs_spy_pct"]),
+            "self_percentile": result.get("self_percentile"),
+        })
+
+    # universe_percentile rank (1-99): rs_vs_spy_pct 昇順で順位 → 上位ほど high percentile
+    raw_rs.sort(key=lambda r: r["rs_vs_spy_pct"])
+    n = len(raw_rs)
+    for i, r in enumerate(raw_rs):
+        # i=0 (最下位) → 1、 i=n-1 (最上位) → 99
+        r["universe_percentile"] = max(1, min(99, int(round((i + 1) / n * 99))))
+
+    upserted = 0
+    if not dry_run:
+        sb = _get_supabase_service()
+        if sb is None:
+            raise HTTPException(status_code=503, detail="Supabase service not configured")
+        try:
+            # batch upsert (chunk 500、 conflict ticker,calc_date)
+            rows = [{
+                "ticker": r["ticker"],
+                "calc_date": today.isoformat(),
+                "rs_vs_spy_pct": r["rs_vs_spy_pct"],
+                "self_percentile": r.get("self_percentile"),
+                "universe_percentile": r["universe_percentile"],
+                "period_months": 6,
+            } for r in raw_rs]
+            if rows:
+                sb.table("rs_ratings").upsert(rows, on_conflict="ticker,calc_date").execute()
+                upserted = len(rows)
+        except Exception as e:
+            print(f"[cron_rs_scan] upsert failed: {e}")
+            raise HTTPException(status_code=500, detail=f"upsert_failed: {e}")
+
+    # top 10 by universe_percentile (response 用)
+    top10 = sorted(raw_rs, key=lambda r: -r["universe_percentile"])[:10]
+    return {
+        "processed_count": len(tickers),
+        "scored_count": len(raw_rs),
+        "upserted_count": upserted,
+        "failed_count": len(failed),
+        "top10": top10,
+        "calc_date": today.isoformat(),
+        "dry_run": dry_run,
+    }
+
+
+@app.get("/api/scanner/rs")
+async def scanner_rs(
+    min_percentile: int = 80,
+    limit: int = 50,
+):
+    """RS Screener: universe_percentile >= min_percentile の銘柄を返す (DB SELECT only)。
+
+    Query params:
+      min_percentile: int (default 80、 IBD CAN SLIM L 条件互換)
+      limit: int (default 50)
+
+    Returns:
+      universe_size, calc_date, min_percentile, items (ticker / rs_vs_spy_pct / universe_percentile / self_percentile)
+    """
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    min_percentile = max(1, min(99, int(min_percentile)))
+    limit = max(1, min(200, int(limit)))
+
+    try:
+        # 直近 1 週間で最新の calc_date を取得 (nightly batch が稀に skip しても fallback)
+        latest = (
+            sb.table("rs_ratings")
+            .select("calc_date")
+            .order("calc_date", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = latest.data or []
+        if not rows:
+            return {
+                "universe_size": 0,
+                "calc_date": None,
+                "min_percentile": min_percentile,
+                "items": [],
+                "note": "rs_ratings empty - nightly batch (cron_rs_scan) 未実行",
+            }
+        calc_date = rows[0]["calc_date"]
+
+        # universe size = その日の全レコード件数
+        all_today = (
+            sb.table("rs_ratings")
+            .select("ticker", count="exact")
+            .eq("calc_date", calc_date)
+            .execute()
+        )
+        universe_size = all_today.count or 0
+
+        # min_percentile 以上を universe_percentile DESC で取得
+        result = (
+            sb.table("rs_ratings")
+            .select("ticker,rs_vs_spy_pct,self_percentile,universe_percentile,period_months")
+            .eq("calc_date", calc_date)
+            .gte("universe_percentile", min_percentile)
+            .order("universe_percentile", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        items = result.data or []
+
+        return {
+            "universe_size": universe_size,
+            "calc_date": calc_date,
+            "min_percentile": min_percentile,
+            "items": items,
+        }
+    except Exception as e:
+        print(f"[scanner_rs] fetch failed: {e}")
+        raise HTTPException(status_code=500, detail=f"fetch_failed: {e}")
+
+
 # Cup-Handle Phase 2.3 cron: nightly cup-notify (cup-scan の 5 分後に発火)
 # scan 完了後の transition を翌朝 JST 8:05 に digest mail 送信
 
