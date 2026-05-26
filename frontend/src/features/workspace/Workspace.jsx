@@ -32,6 +32,8 @@ import { JudgmentDetail } from '../judgment/components/detail/index.js';
 import { IndicesList } from './IndicesView.jsx';
 import DailyDigestSection from './DailyDigestSection.jsx';
 import PaneDetailView from './PaneDetailView.jsx';
+// v120 Task 3 hotfix: FtdChipRow を Pane1MacroSection (dead code) から named export して mount し直し
+import { FtdChipRow } from './Pane1MacroSection.jsx';
 // v120 Sprint 3 (Frontend verdict mandatory fix 2): WorkspaceScreenerModal を lazy 化
 // (modal は Pro user が screener button 押下時のみ open、 chunk reuse + 初期 bundle 軽量化)
 const WorkspaceScreenerModal = lazy(() => import('./WorkspaceScreenerModal.jsx'));
@@ -414,6 +416,13 @@ function Pane1Nav({ items = [] }) {
           })}
         </div>
       )}
+
+      {/* v120 Task 3 hotfix: FTD (Follow-Through Day) section — Pane1MacroSection は v63 で
+          撤去済 dead code だったため、 Pane1Nav に直接 mount。 ナビ section 直下 + watchlist 上に配置。
+          市場全体の上昇局面入り (William O'Neil 理論) を 3 主要 index で常時可視化。 */}
+      <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+        <FtdChipRow />
+      </div>
 
       {/* ── ウォッチリスト (collapsible、§12-B-4) — 中身は §12-B-5 で 2 階層化 ── */}
       <div style={{ marginTop: 12 }}>

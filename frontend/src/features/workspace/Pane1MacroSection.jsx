@@ -59,8 +59,10 @@ function ftdLabel(ftd) {
   }
 }
 
-/** FTD 行: 3 indices を inline 横並びで表示 (Pane 1 幅 280px 程度を想定) */
-function FtdChipRow() {
+/** FTD 行: 3 indices を inline 横並びで表示 (Pane 1 幅 280px 程度を想定).
+ *  v120 Task 3 hotfix: Pane1MacroSection は v63 で Pane 1 から撤去済 dead code のため、
+ *  本 component を named export して Workspace.jsx の Pane1Nav 内に mount し直す。 */
+export function FtdChipRow() {
   const [ftdMap, setFtdMap] = useState({});
   const [loading, setLoading] = useState(true);
 
