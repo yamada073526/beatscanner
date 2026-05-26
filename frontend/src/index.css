@@ -6349,8 +6349,9 @@ body {
 .ws-judgment-row {
   position: relative;
   display: grid;
-  /* handle / [logo+ticker+name] / sparkline / [price+change] / meta / chevron */
-  grid-template-columns: 18px minmax(0, 1fr) auto auto auto auto;
+  /* v120 Sprint 2: sparkline 列削除 (auto 1 つ減、 multi-review 6 体合議 verdict 反映)
+     handle / [logo+ticker+name] / [price+change+1Y] / meta / chevron */
+  grid-template-columns: 18px minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 8px;
   width: 100%;
