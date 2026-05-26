@@ -37,7 +37,8 @@ import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import RowSparkline from '../judgment/components/list/RowSparkline.jsx';
 
 // v120 Task 3: FTD Phase 1 — William O'Neil Follow-Through Day chip
-const FTD_INDICES = ['^GSPC', '^NDX', '^DJI'];
+// v120 hotfix: ^NDX は FMP Premium 限定 → ^IXIC (NASDAQ Composite) に切替
+const FTD_INDICES = ['^GSPC', '^IXIC', '^DJI'];
 
 /** FTD status を 日本語 ラベル + tone に mapping */
 function ftdLabel(ftd) {

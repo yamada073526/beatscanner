@@ -14475,7 +14475,9 @@ async def stripe_webhook(request: Request):
 
 _FTD_INDICES = {
     "^GSPC": {"label": "S&P 500", "label_ja": "S&P 500"},
-    "^NDX":  {"label": "NASDAQ 100", "label_ja": "NASDAQ"},
+    # v120 hotfix (user dogfood): ^NDX は FMP Premium subscription 限定 endpoint で error 402、
+    # ^IXIC (NASDAQ Composite、 ~3000 銘柄連動) に切替。 Active plan で取得可。
+    "^IXIC": {"label": "NASDAQ Composite", "label_ja": "NASDAQ"},
     "^DJI":  {"label": "DOW", "label_ja": "DOW"},
 }
 

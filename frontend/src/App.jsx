@@ -61,6 +61,8 @@ import UpgradeModal from './components/UpgradeModal.jsx';
 import PlanComparisonBanner from './components/PlanComparisonBanner.jsx';
 import DemoTicker from './components/DemoTicker.jsx';
 import CompanyLogo from './components/CompanyLogo.jsx';
+// v120 hotfix Q3 案 A: companyName localStorage cache (デバイス内永続、 静的データなので version 不要)
+import { getCompanyName, setCompanyName } from './lib/companyNameCache.js';
 const TagManagerModal = lazy(() => import('./components/TagManagerModal.jsx'));
 const TagAssignSheet = lazy(() => import('./components/TagAssignSheet.jsx'));
 const NotificationSettingsModal = lazy(() => import('./components/NotificationSettingsModal.jsx'));
@@ -982,9 +984,14 @@ export default function App() {
       // v62 WS-Phase2: 改善希望④ "タグ" meta (既存 useTags 流用)
       const tagId = tagStore?.assignments?.[t] ?? null;
       const tagObj = tagId ? tagStore?.tagsById?.[tagId] || null : null;
+      // v120 hotfix Q3 案 A: companyName は cache (localStorage) → result の順で取得。
+      // 過去に分析済の銘柄は再 fetch なしで会社名表示、 cache miss なら result から取得して cache 書き込み (App.jsx 別 effect で 保存)。
+      const cachedName = getCompanyName(t);
+      const liveName = r?.companyName;
+      if (liveName && liveName !== cachedName) setCompanyName(t, liveName);
       return {
         ticker: t,
-        companyName: r?.companyName,
+        companyName: liveName || cachedName,
         price: px?.price ?? null,
         // v120 Sprint 4 (QA verdict F1): backend は change_pct (snake_case、 percent unit) で返す。
         // frontend は fraction (0.0234 = 2.34%) 想定なので /100 で変換 (既存 changePct camelCase は常に undefined → 1日% 永続非表示バグ)。
@@ -1534,9 +1541,13 @@ export default function App() {
             const cache = resultCacheRef.current.get(t);
             const r = cache?.result || null;
             const px = portfolioPrices?.[t] || null;
+            // v120 hotfix Q3 案 A (classic SPA mode 同期適用)
+            const cachedNameV2 = getCompanyName(t);
+            const liveNameV2 = r?.companyName;
+            if (liveNameV2 && liveNameV2 !== cachedNameV2) setCompanyName(t, liveNameV2);
             return {
               ticker: t,
-              companyName: r?.companyName,
+              companyName: liveNameV2 || cachedNameV2,
               price: px?.price ?? null,
               // v120 Sprint 4 (QA verdict F1): backend は change_pct (snake_case、 percent unit) で返す。
         // frontend は fraction (0.0234 = 2.34%) 想定なので /100 で変換 (既存 changePct camelCase は常に undefined → 1日% 永続非表示バグ)。
