@@ -299,7 +299,7 @@ function Pane1NavRail({ items = [] }) {
       {/* v120 hotfix (QA P5): 決算 2 日以内 alert badge. 0 なら非表示 (CLS 防止)。 */}
       {earningsSoonCount > 0 && (
         <div
-          title={`watchlist 内、 2 日以内に決算: ${earningsSoonCount} 件`}
+          title={`📅 決算アラート: watchlist 内に「今日・明日・明後日」 に決算発表予定の銘柄が ${earningsSoonCount} 件あります。 click は未対応 (Pane 2 ウォッチリスト内の「決算まで」 で詳細確認可能)。`}
           aria-label={`決算間近 ${earningsSoonCount} 件`}
           data-testid="ws-rail-earnings-badge"
           style={{

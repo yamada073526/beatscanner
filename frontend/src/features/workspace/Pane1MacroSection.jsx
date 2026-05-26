@@ -40,23 +40,35 @@ import RowSparkline from '../judgment/components/list/RowSparkline.jsx';
 // v120 hotfix: ^NDX は FMP Premium 限定 → ^IXIC (NASDAQ Composite) に切替
 const FTD_INDICES = ['^GSPC', '^IXIC', '^DJI'];
 
-/** FTD status を 日本語 ラベル + tone に mapping */
+/** v120 hotfix v3 (user dogfood): FTD status を user 視点 4 段階 label に改善.
+ *  「監視中」 / 「—」 だけだと「機能していない」 と誤解される (user feedback)。
+ *  William O'Neil 理論の 4 段階 (上昇 / シグナル待ち / 安定 / データ不足) を明示。 */
 function ftdLabel(ftd) {
-  if (!ftd) return { text: '—', tone: 'muted' };
+  if (!ftd) return { text: '—', tone: 'muted', tip: 'データ未取得' };
   switch (ftd.status) {
     case 'ftd_confirmed':
       return {
         text: `Day ${ftd.ftd_day_number} ✓ ${ftd.ftd_pct != null ? `+${ftd.ftd_pct.toFixed(1)}%` : ''}`.trim(),
         tone: 'gain',
+        tip: `上昇トレンド入り確認 (Day ${ftd.ftd_day_number} で +${ftd.ftd_pct?.toFixed(1)}% 上昇 + 出来高増加)`,
       };
     case 'watching':
-      return { text: '監視中', tone: 'warning' };
+      return {
+        text: 'シグナル待ち',
+        tone: 'warning',
+        tip: `上昇試行 ${ftd.rally_attempt_date} 開始、 Day 4-7 内に +1.7% 以上 + 出来高増加で FTD 確定`,
+      };
     case 'no_attempt':
-      return { text: '—', tone: 'muted' };
+      return {
+        text: '安定',
+        tone: 'muted',
+        tip: '直近 21 営業日内に 3 日連続下落 event なし (= 大きな調整局面なし、 上昇試行イベント無し)',
+      };
     case 'insufficient_data':
+      return { text: '—', tone: 'muted', tip: 'データ不足 (21 営業日未満)' };
     case 'error':
     default:
-      return { text: '—', tone: 'muted' };
+      return { text: '—', tone: 'muted', tip: 'データ取得エラー (FMP API)' };
   }
 }
 
@@ -108,13 +120,14 @@ export function FtdRailDots() {
       </div>
     );
   }
+  // v120 hotfix v3: tooltip も 4 段階 label の説明を含む詳細版に
   const tooltip = FTD_INDICES.map((idx) => {
     const lbl = ftdLabel(ftdMap[idx]);
-    return `${ftdMap[idx]?.label_ja || idx}: ${lbl.text}`;
-  }).join(' / ');
+    return `${ftdMap[idx]?.label_ja || idx}: ${lbl.text} (${lbl.tip})`;
+  }).join('\n');
   return (
     <div
-      title={`FTD (Follow-Through Day): ${tooltip}`}
+      title={`FTD = Follow-Through Day (William O'Neil 理論、 上昇局面入り確認指標)\n\n${tooltip}\n\n緑=上昇トレンド入り / 黄=シグナル待ち / 灰=安定`}
       aria-label={`FTD 状態 - ${tooltip}`}
       data-testid="ftd-rail-dots"
       style={{ display: 'flex', gap: 3, padding: '4px 0', justifyContent: 'center' }}
@@ -179,7 +192,7 @@ export function FtdChipRow() {
       </div>
       {FTD_INDICES.map((idx) => {
         const ftd = ftdMap[idx];
-        const { text, tone } = ftdLabel(ftd);
+        const { text, tone, tip } = ftdLabel(ftd);
         const toneColor =
           tone === 'gain' ? 'var(--color-gain)' :
           tone === 'warning' ? 'var(--color-warning)' :
@@ -187,6 +200,7 @@ export function FtdChipRow() {
         return (
           <div
             key={idx}
+            title={tip}
             style={{
               display: 'flex',
               justifyContent: 'space-between',

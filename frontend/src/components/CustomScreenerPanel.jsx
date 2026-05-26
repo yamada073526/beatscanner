@@ -5,14 +5,15 @@ import Chip, { ChipGroup } from './ui/Chip.jsx';
 
 const CONDITION_SHORT = ['CF率', 'EPS', 'CFPS', '売上', 'CF>EPS'];
 
-// Cup-Handle Phase 2.4 (multi-review 6 体合議 verdict)
-// v120 hotfix v2 (user dogfood): 「ファンダ & カップ」 chip が 2 行 wrap (chrome 圧迫) → 「両方」 に短縮統一。
-// v120 RS Screener Phase 1: William O'Neil CAN SLIM L 条件 (RS≥80) 追加 (金融 sub-agent verdict 案 A 採用)
+// v120 hotfix v3 (user dogfood 2 件 fix + 金融 sub-agent verdict 反映):
+// 1. 「ファンダ」 chip 削除 = 「全て」 (default = 5 条件 PASS 表示) と結果同一の矛盾解消
+// 2. 「両方」 → 「ファンダ&カップ」 復活 = 3 条件中 2 条件 を意味する曖昧さ解消
+// Phase 2 (handover v121): 「O'Neil 完全」 (ファンダ AND カップ AND RS80+) chip 追加検討
+//   金融 sub-agent (Opus) verdict: 「両立は希少だが価値極めて高い、 月 5-15 銘柄、 じっちゃま流最強 setup」
 const SCANNER_FILTERS = [
-  { key: 'funda', label: 'ファンダ' },
   { key: 'cup',   label: 'カップ' },
   { key: 'rs',    label: 'RS強', titleExtra: 'Relative Strength ≥ 80 (CAN SLIM L 条件、 SP500 universe で上位 20%)' },
-  { key: 'both',  label: '両方', premium: true, fullLabel: 'ファンダ & カップ' },
+  { key: 'both',  label: 'ファンダ&カップ', premium: true, fullLabel: 'ファンダ AND Cup-Handle 複合検索' },
 ];
 
 const CUP_STATE_LABEL = {
@@ -140,35 +141,60 @@ function RsScannerResults({ data, onSelect }) {
         <span>universe: SP500 {data.universe_size}銘柄 / 6 ヶ月 RS / {data.calc_date} 計算</span>
         <span className="ml-auto">CAN SLIM の L = RS ≥ {data.min_percentile} (上位 {100 - data.min_percentile}%)</span>
       </div>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map((item) => {
+      {/* v120 hotfix v3 (user dogfood): 3 列 grid → 1 列縦並び + ランキング番号で順位を即視認.
+          各 row は左端 #順位 / 中央 ticker + SPY 比 / 右端 RS percentile badge の 3 column layout. */}
+      <div className="flex flex-col gap-1.5">
+        {items.map((item, idx) => {
           const pct = Number(item.universe_percentile ?? 0);
           const rsDiff = Number(item.rs_vs_spy_pct ?? 0);
+          const rank = idx + 1;
           return (
             <button
               key={item.ticker}
               onClick={() => onSelect(item.ticker)}
-              className="rounded-xl border border-[var(--border)] p-3 text-left transition hover:border-[var(--color-gain)] hover:-translate-y-0.5"
+              className="flex items-center gap-3 rounded-xl border border-[var(--border)] px-3 py-2 text-left transition-all duration-150 hover:-translate-y-0.5 hover:border-[var(--color-gain)]"
               style={{
-                background: 'color-mix(in srgb, var(--color-gain) 5%, transparent)',
+                background: rank <= 3
+                  ? 'color-mix(in srgb, var(--color-gain) 10%, transparent)'
+                  : 'color-mix(in srgb, var(--color-gain) 4%, transparent)',
               }}
-              title={`SP500 universe 内 上位 ${100 - pct}% / SPY 比 ${rsDiff > 0 ? '+' : ''}${rsDiff.toFixed(1)}pt (6 ヶ月)`}
+              title={`#${rank} / SP500 universe 内 上位 ${100 - pct}% / SPY 比 ${rsDiff > 0 ? '+' : ''}${rsDiff.toFixed(1)}pt (6 ヶ月)`}
             >
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-[var(--text-primary)]">{item.ticker}</span>
-                <span
-                  className="rounded-full px-2 py-0.5 text-xs font-bold tabular-nums"
-                  style={{
-                    color: 'var(--color-gain)',
-                    background: 'color-mix(in srgb, var(--color-gain) 18%, transparent)',
-                  }}
-                >
-                  RS {pct}
+              {/* 左端: ランキング番号 (上位 3 は gold、 4-10 は accent、 残り muted) */}
+              <span
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold tabular-nums"
+                style={{
+                  background: rank <= 3
+                    ? 'color-mix(in srgb, var(--color-gold) 18%, transparent)'
+                    : rank <= 10
+                      ? 'color-mix(in srgb, var(--color-accent) 14%, transparent)'
+                      : 'var(--bg-subtle)',
+                  color: rank <= 3
+                    ? 'var(--color-gold)'
+                    : rank <= 10
+                      ? 'var(--color-accent)'
+                      : 'var(--text-muted)',
+                }}
+              >
+                {rank}
+              </span>
+              {/* 中央: ticker + SPY 比 */}
+              <div className="flex flex-1 min-w-0 flex-col">
+                <span className="text-sm font-bold text-[var(--text-primary)]">{item.ticker}</span>
+                <span className="text-xs text-[var(--text-muted)] tabular-nums">
+                  SPY 比 {rsDiff > 0 ? '+' : ''}{rsDiff.toFixed(1)}pt (6 ヶ月)
                 </span>
               </div>
-              <div className="mt-1 text-xs text-[var(--text-muted)] tabular-nums">
-                SPY 比 {rsDiff > 0 ? '+' : ''}{rsDiff.toFixed(1)}pt (6 ヶ月)
-              </div>
+              {/* 右端: RS percentile badge */}
+              <span
+                className="shrink-0 rounded-full px-2.5 py-1 text-xs font-bold tabular-nums"
+                style={{
+                  color: 'var(--color-gain)',
+                  background: 'color-mix(in srgb, var(--color-gain) 18%, transparent)',
+                }}
+              >
+                RS {pct}
+              </span>
             </button>
           );
         })}
