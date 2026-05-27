@@ -145,25 +145,33 @@ pattern** (Writer の few-shot で指示済)。 wrapper の存在自体は misma
   - 固有名詞が違う
   - 「絶対」「必ず」「確実」 等で確率を取り去り hard fact 化している (BAD-5 違反)
 
-# Output schema (JSON ONLY)
+# Output schema (JSON ONLY、 v124 cost 削減: mismatch のみ列挙)
 
 {
-  "results": [
+  "mismatches": [
     {
-      "index": 0,
-      "verdict": "ok" | "mismatch",
-      "reason": "mismatch の場合のみ 40 字以内で具体的に"
+      "index": 5,
+      "reason": "数値違い: 期待 $45.1B / sentence $54.1B"
     },
-    ...
+    {
+      "index": 12,
+      "reason": "固有名詞違い: TSMC → Samsung"
+    }
   ]
 }
 
-# Rules
-- results は判定対象と同数・同順
-- verdict は **"ok" / "mismatch" の 2 値のみ**、 "uncertain" 等は禁止
-- mismatch の reason は具体的に (「数値違い: 期待 $45.1B / sentence $54.1B」 等)
+# Rules (v124 schema 変更後)
+- 配列 `mismatches` に **mismatch 判定の sentence のみ** 列挙、 ok は **絶対に含めない**
+- mismatches が 0 件 = 全 sentence が ok 判定の意味 → `{"mismatches": []}` を返す
+- 各 entry: index (判定対象 array の 0-based index) + reason (40 字以内具体的)
 - 「partial coverage だから mismatch」 は判定 **禁止**
 - sentence_type='interpretive' で 「確率 wrapper があるから OK」 と判定したものは絶対 mismatch にしない
+- 旧 schema (results 配列) を返してはいけない、 必ず mismatches 配列
+
+# Cost 効率 (v124 削減後)
+- 30 sentence × 全 ok の場合: output token ~30 (旧 ~600)、 削減率 95%
+- 30 sentence × 3 mismatch の場合: output token ~150 (旧 ~600)、 削減率 75%
+- max_tokens 1024 で十分 (旧 2048 から半減、 cost ~50% 削減)
 """
 
 
@@ -235,7 +243,7 @@ async def check(
     researcher_output: ResearcherOutput,
     client: ClaudeClient | None = None,
     model: str = "claude-haiku-4-5-20251001",
-    max_tokens: int = 2048,
+    max_tokens: int = 1024,
 ) -> FactCheckResult:
     """ArticleDraft の各 [N] sentence を source_facts と突き合わせる.
 
@@ -244,12 +252,11 @@ async def check(
         researcher_output: writer に渡したものと同じ ResearcherOutput
         client: 注入用 ClaudeClient、 None なら ENV から構築
         model: Haiku 4.5 (cost 最重視)
-        max_tokens: 2048 (v123 hotfix Step 2、 旧 default 512→1024 でもまだ不足。
-            文体憲法 v3 + researcher_facts 10+ + multi-line JSON で 1024 tokens 超過する
-            ケースを MSFT 手動 verify で観測 (行 96 で truncated)。 2048 に増やして余裕確保、
-            cost 増は 1 article +$0.005 = 月 500-1000 円 negligible。 LLM 出力削減は
-            prompt 修正で対応するが、 prompt 不変境界を守るため config だけで解決。
-            META (8 facts → 行 35 truncate) も MSFT (11 facts → 行 96 truncate) も覆う)
+        max_tokens: 1024 (v124 削減: prompt 修正で output schema を mismatches 配列のみに
+            変更し、 ok verdicts 含めない設計に転換。 30 sentence × 全 ok = ~30 tok、
+            30 sentence × 3 mismatch = ~150 tok で 1024 で大幅余裕。
+            旧 v123 で 2048 まで上げた経緯 (META 8 facts → 行 35 truncate / MSFT 11 facts
+            → 行 96 truncate) は v124 schema 変更で構造的解消、 cost ~50% 削減 effect)
 
     Returns:
         FactCheckResult (mismatches 0 件で passed=True、 regenerate_needed=False)
@@ -363,17 +370,30 @@ def _parse_response(
             regenerate_needed=True,
         )
 
-    results_raw = parsed.get("results", [])
-    if not isinstance(results_raw, list):
-        return FactCheckResult(passed=False, mismatches=[], regenerate_needed=True)
+    # v124 schema 変更後: mismatches 配列を優先 parse、 旧 results 配列 (verdict 別) も
+    # backward compat で fallback 解釈 (deploy 移行期間 + LLM が誤って旧 schema 返す保険)
+    mismatches_raw = parsed.get("mismatches")
+    if isinstance(mismatches_raw, list):
+        # 新 schema: mismatches のみ含まれる
+        entries_to_process = mismatches_raw
+        is_new_schema = True
+    else:
+        # 旧 schema fallback: results 配列で verdict='mismatch' のみ抽出
+        results_raw = parsed.get("results", [])
+        if not isinstance(results_raw, list):
+            return FactCheckResult(passed=False, mismatches=[], regenerate_needed=True)
+        entries_to_process = [
+            r for r in results_raw
+            if isinstance(r, dict) and r.get("verdict") == "mismatch"
+        ]
+        is_new_schema = False
 
     mismatches: list[FactCheckMismatch] = []
-    for r in results_raw:
+    for r in entries_to_process:
         if not isinstance(r, dict):
             continue
-        verdict = r.get("verdict", "")
-        if verdict != "mismatch":
-            continue
+        # 新 schema は verdict field なし、 entry 存在自体が mismatch を示す。
+        # 旧 schema fallback path は既に verdict=='mismatch' で filter 済。
         try:
             idx = int(r.get("index", -1))
         except (TypeError, ValueError):
