@@ -203,7 +203,10 @@ const BLOCKLIST_PATTERNS_SSG = [
   // Phase B grey zone: BAD-5 系 金商法 §38 強化
   /成長見込み|成長が見込まれる|成長が期待/,
   /拡大基調|拡大が続く|拡大傾向/,
-  /追い風となる|追い風が吹く|追い風/,
+  // v124 hotfix (user dogfood 2026-05-28、 TSLA tsla-202605272023 で発覚): 単独「追い風」
+  // match は過剰削除 (例: 「~押し上げる追い風でもあります」)。 frontend lib/blocklist.js
+  // + backend visualizer/prompt_negatives.py と 1:1 mirror、 必ず 3 箇所セット更新。
+  /追い風となる|追い風が吹く/,
   /中長期的に有望|中長期的な成長|長期的に有望/,
 ];
 
@@ -567,21 +570,15 @@ function addTickerInternalLinks(bodyMd, articleTicker) {
       // - TSMC (company name): universe NO → Step 2 COMPANY_TICKER_MAP で TSM link 化
       // cache 未読込時 (fallback) は validation skip して旧 logic で継続 (graceful degrade)
       if (VALID_TICKER_UNIVERSE && !VALID_TICKER_UNIVERSE.has(ticker)) {
-        // v124 朝 R4 (user 要望、 2026-05-28): universe NO の candidate に対して
-        // fuzzy correct を試行。 例: QTREX (universe NO) → QTEX (universe YES、 distance 1)
-        // 補正成功時は corrected ticker で link 化 (本文の literal 「QTREX」 は「QTEX」 に置換)。
-        const corrected = findClosestTicker(ticker);
-        if (corrected) {
-          if (linkedSet.has(corrected)) {
-            // v124 R4 hotfix: 2 箇所目以降の occurrence も literal は corrected に置換
-            // (link 1 回ルールは維持、 ただし body 全体で「QTREX」 → 「QTEX」 統一で
-            // user 視点の brand 信頼維持)
-            return corrected;
-          }
-          linkedSet.add(corrected);
-          linkedTickers.push(`${ticker}→${corrected}(fuzzy)`);
-          return `[${corrected}](/stock/${corrected})`;
-        }
+        // v124 朝 R5 hotfix (2026-05-28、 BMW→BBW / SUV→SAV 誤変換発覚):
+        // fuzzy correct (Phase 40 で導入) は **構造的に過剰補正** で廃止:
+        //   - benefit (QTREX → QTEX 等 LLM hallucination 救済): 稀。 Phase 32 writer
+        //     prompt 強化で hallucination 自体抑制済
+        //   - risk (BMW → BBW / SUV → SAV / CEO → ? / IPO → ?): 頻発。 4 文字以下大文字
+        //     略語多数 (車種 / 役職 / 用語) で Levenshtein 距離 1 候補誤 match 不可避
+        //   - 「正しい候補」 を文脈なしで判定不可能 = 構造的に safe な実装不可
+        // 代替: universe NO は skip (link 化なし、 literal 不変)、 hallucination 抑制は
+        // 上流 (writer.py source_facts ticker only ルール) に委任。
         return match;
       }
       // 初出チェック
