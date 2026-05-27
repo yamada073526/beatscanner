@@ -15254,13 +15254,25 @@ _ARTICLE_SLUG_RE = _re_articles.compile(r"^[a-z0-9-]{1,64}$")
 
 @app.get("/articles/{slug}", response_class=HTMLResponse)
 async def serve_article_html(slug: str) -> HTMLResponse:
-    """SSG 生成済 dist/articles/<slug>/index.html を SEO friendly URL で返す."""
+    """SSG 生成済 dist/articles/<slug>/index.html を SEO friendly URL で返す.
+
+    v124 hotfix (5/28 user dogfood で TSLA Phase 48 sample が 404 で発覚):
+      SSG file 不在時 (cron auto-publish 後、 次 deploy 前の article) は SPA shell
+      (dist/index.html) を返して frontend ArticlePage component を render させる。
+      ArticlePage は v123 Phase 5 で実装した Supabase fallback fetch (anon key で
+      published 記事を直接 fetch) で article を取得 → 表示。 SEO/OGP は次 deploy で
+      正常 SSG 化された時点で復活。 brand 信頼維持 (404 page にしない)。
+    """
     if not _ARTICLE_SLUG_RE.match(slug):
         raise HTTPException(status_code=404, detail="Invalid slug")
     article_html = _STATIC_DIR / "articles" / slug / "index.html"
-    if not article_html.exists():
-        raise HTTPException(status_code=404, detail="Article not found")
-    return HTMLResponse(content=article_html.read_text(encoding="utf-8"))
+    if article_html.exists():
+        return HTMLResponse(content=article_html.read_text(encoding="utf-8"))
+    # SSG 未済 → SPA shell fallback (frontend Supabase fallback fetch に橋渡し)
+    spa_shell = _STATIC_DIR / "index.html"
+    if spa_shell.exists():
+        return HTMLResponse(content=spa_shell.read_text(encoding="utf-8"))
+    raise HTTPException(status_code=404, detail="Article not found")
 
 
 # ── Static file serving (must be LAST — after all /api/* routes) ─────────────
