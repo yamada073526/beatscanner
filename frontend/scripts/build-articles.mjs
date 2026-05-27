@@ -480,8 +480,11 @@ function findClosestTicker(candidate) {
   if (!candidates || candidates.length === 0) return null;
 
   // Levenshtein distance (small m,n、 simple impl)
+  // v124 R4 hotfix: 早期 skip 「dp[i][j] > 1 return 99」 はバグ (中間 dp が >1 でも
+  // 最終 dp[m][n] が ≤1 のケースあり、 例: QTREX vs QTEX の中間 dp に 2 が出るが
+  // 最終 dp[5][4] = 1)。 length 差 > 1 の早期 skip のみ維持、 dp は full 計算 (m,n ≤ 5 で軽量)。
   function levDist(a, b) {
-    if (Math.abs(a.length - b.length) > 1) return 99; // 早期 skip
+    if (Math.abs(a.length - b.length) > 1) return 99; // length 差 > 1 = 距離 ≥ 2 確定
     const m = a.length, n = b.length;
     const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
     for (let i = 0; i <= m; i++) dp[i][0] = i;
@@ -491,7 +494,6 @@ function findClosestTicker(candidate) {
         dp[i][j] = a[i - 1] === b[j - 1]
           ? dp[i - 1][j - 1]
           : 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1]);
-        if (dp[i][j] > 1) return 99; // 早期 skip (距離 ≥ 2 確定)
       }
     }
     return dp[m][n];
