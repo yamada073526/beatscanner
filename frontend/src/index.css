@@ -11036,3 +11036,206 @@ button.ds-chip[data-pressed="true"]:hover {
 
 /* v115 round 3: TenKLinksPanel は .ir-link-item class に統一済 (IR Links と hover 同一)、
    旧 .tenk-link-card class は不要 (class removed in TenKLinksPanel.jsx) */
+
+
+/* ─────────────────────────────────────────────────────────────────
+   AnalystTargetCard (SPEC 2026-05-28 Sprint 4、 pillar 2 technical)
+   Chart 直下に「アナリスト目標株価」 を hero として表示する summary card.
+   memory anchor: feedback_cls_envelope_pattern.md (minHeight 116px envelope)
+   ───────────────────────────────────────────────────────────────── */
+.atc-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px 20px;
+}
+.atc-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+.atc-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+  margin: 0;
+}
+.atc-body {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  align-items: center;
+}
+@media (max-width: 720px) {
+  .atc-body { grid-template-columns: 1fr; }
+}
+.atc-hero {
+  display: grid;
+  gap: 4px;
+}
+.atc-consensus-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.atc-consensus-value {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.atc-upside { font-size: 12px; font-weight: 500; }
+.atc-upside--gain { color: var(--color-gain); }
+.atc-upside--loss { color: var(--color-loss); }
+.atc-upside--muted { color: var(--text-muted); }
+
+.atc-range {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.atc-range-cell {
+  display: grid;
+  gap: 2px;
+  min-width: 64px;
+}
+.atc-range-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.atc-range-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.atc-range-divider {
+  width: 1px;
+  height: 28px;
+  background: rgba(148, 163, 184, 0.20);
+}
+.atc-skeleton {
+  height: 64px;
+  border-radius: var(--radius-sm, 6px);
+  background: linear-gradient(
+    90deg,
+    rgba(148, 163, 184, 0.08) 0%,
+    rgba(148, 163, 184, 0.16) 50%,
+    rgba(148, 163, 184, 0.08) 100%
+  );
+  background-size: 200% 100%;
+  animation: atc-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes atc-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.atc-state-empty {
+  display: grid;
+  place-items: center;
+  min-height: 64px;
+  padding: 12px 8px;
+  text-align: center;
+  border: 1px dashed rgba(148, 163, 184, 0.25);
+  border-radius: var(--radius-sm, 6px);
+}
+.atc-state-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+
+/* AnalystTargetCard + SellZoneCard 2-col grid layout (Chart 直下に並列配置) */
+.atc-szc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 16px 0 0;
+}
+@media (max-width: 840px) {
+  .atc-szc-grid { grid-template-columns: 1fr; }
+}
+
+
+/* ─────────────────────────────────────────────────────────────────
+   SellZoneCard (SPEC 2026-05-28 Sprint 6、 pillar 2 technical)
+   IBD 50DMA extension rule + 8% trailing stop の objective marker card.
+   静的 dictionary narration (LLM 不使用、 金商法 §38 / 景表法 §5 safe)
+   ───────────────────────────────────────────────────────────────── */
+.szc-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px 20px;
+}
+.szc-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+.szc-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+  margin: 0;
+}
+.szc-body { display: grid; gap: 10px; }
+.szc-zone {
+  display: grid;
+  gap: 4px;
+}
+.szc-zone-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.szc-zone-value {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  color: var(--text-primary);
+}
+.szc-zone-value--normal { color: var(--text-primary); }
+.szc-zone-value--extended { color: var(--color-warning); }
+.szc-zone-value--climax { color: var(--color-loss); }
+.szc-zone-value--stop_hit { color: var(--color-loss); }
+.szc-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 0;
+}
+.szc-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.szc-meta-value { font-weight: 600; color: var(--text-secondary); }
+.szc-state-empty {
+  display: grid;
+  place-items: center;
+  min-height: 64px;
+  padding: 12px 8px;
+  text-align: center;
+  border: 1px dashed rgba(148, 163, 184, 0.25);
+  border-radius: var(--radius-sm, 6px);
+}
+.szc-state-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}

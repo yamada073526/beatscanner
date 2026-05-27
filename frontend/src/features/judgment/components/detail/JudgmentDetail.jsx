@@ -28,6 +28,9 @@ import NewsPanel from '../../../../components/NewsPanel.jsx';
 import IRLinksPanel from '../../../../components/IRLinksPanel.jsx';
 import InsightsPanel from '../../../../components/InsightsPanel.jsx';
 import StockPriceChart from '../../../../components/StockPriceChart.jsx';
+// SPEC 2026-05-28 Sprint 4 + 6 (pillar 2 technical): Chart 直下に hero card 2 つを並列配置
+import AnalystTargetCard from '../../../../components/AnalystTargetCard.jsx';
+import SellZoneCard from '../../../../components/SellZoneCard.jsx';
 import GuidanceCard from '../../../../components/GuidanceCard.jsx';
 // v100 user dogfood (handover §100点 multi-review): Pane 3 Insider 取引 section の中身実装
 import InsiderPanel from '../../../../components/InsiderPanel.jsx';
@@ -1137,6 +1140,18 @@ export default function JudgmentDetail({
       {selectedTicker && (
         <SectionFade id="sec-chart" staggerIndex={3}>
           <StockPriceChart ticker={selectedTicker} isPremiumUser={plan === 'premium'} />
+        </SectionFade>
+      )}
+
+      {/* SPEC 2026-05-28 Sprint 4 + 6 (pillar 2 technical): Chart 直下の hero card 2 並列
+          目標株価 (AnalystTargetCard) + 売り timing (SellZoneCard) を 2-col grid (desktop) / 1-col stack (mobile)
+          memory: feedback_data_completeness_guard.md (per-source data namespace で graceful degrade) */}
+      {selectedTicker && (
+        <SectionFade id="sec-target-and-zone" staggerIndex={3}>
+          <div className="atc-szc-grid">
+            <AnalystTargetCard ticker={selectedTicker} />
+            <SellZoneCard ticker={selectedTicker} />
+          </div>
         </SectionFade>
       )}
 

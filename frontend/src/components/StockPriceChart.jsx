@@ -4,7 +4,7 @@ import {
   Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot, ReferenceArea,
 } from 'recharts';
 import { LineChart as LineChartIcon, CandlestickChart as CandlestickChartIcon, Mountain, Lock } from 'lucide-react';
-import { fetchPriceHistory, fetchTechnical } from '../api.js';
+import { fetchPriceHistory, fetchTechnical, fetchAnalyst } from '../api.js';
 import Chip from './ui/Chip.jsx';
 
 // v86 chart hybrid Sprint 2: localStorage key for 折れ線/candle toggle persist
@@ -231,6 +231,8 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
   const [loading, setLoading] = useState(false);
   // SMA overlay state (handover v75 Phase 1 Session 1 safer 再追加)
   const [technical, setTechnical] = useState(null);
+  // SPEC 2026-05-28 Sprint 5 (pillar 2): analyst consensus を chart overlay 用に取得
+  const [analystData, setAnalystData] = useState(null);
   // v86 chart hybrid Sprint 2: 折れ線 ⇄ candle toggle (localStorage persist)
   // 'line' (default、 UI/UX 観点 Aman 級世界観) / 'candle' (玄人 user 向け Webull 戦略)
   const [chartStyle, setChartStyle] = useState(() => {
@@ -301,6 +303,19 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
     return () => { cancelled = true; };
   }, [ticker]);
 
+  // SPEC 2026-05-28 Sprint 5 (pillar 2 technical): analyst consensus (overlay line 用)
+  // /api/analyst/{ticker} は backend 6h cache + asyncio.Lock 共有のため AnalystTargetCard と
+  // 重複 fetch しても FMP call は 1 回。 graceful: 失敗時は line だけ skip。
+  useEffect(() => {
+    if (!ticker) return;
+    let cancelled = false;
+    setAnalystData(null);
+    fetchAnalyst(ticker)
+      .then((res) => { if (!cancelled) setAnalystData(res); })
+      .catch(() => { /* graceful */ });
+    return () => { cancelled = true; };
+  }, [ticker]);
+
   // SMA date → value lookup (technical が null なら全 empty)
   const smaMap = useMemo(() => {
     const m = { sma_50: {}, sma_200: {} };
@@ -319,6 +334,44 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
 
   const hasSma50 = useMemo(() => Object.keys(smaMap.sma_50).length > 0, [smaMap]);
   const hasSma200 = useMemo(() => Object.keys(smaMap.sma_200).length > 0, [smaMap]);
+
+  // SPEC 2026-05-28 Sprint 5 (pillar 2 technical): chart overlay 4 本の y 値を派生
+  //   - sma50 latest × 1.15 (extended、 amber)
+  //   - sma50 latest × 1.25 (climax、 red)
+  //   - max(close, 1y window) × 0.92 (8% trailing stop、 red dashed)
+  //   - analyst consensus (cyan brand、 solid thin)
+  // chart-overlay-safety 4 層防御: Number.isFinite guard + conditional render + isAnimationActive=false
+  const pillar2Markers = useMemo(() => {
+    // sma50 latest = smaMap.sma_50 で最新の date を取り出す
+    const dates = Object.keys(smaMap.sma_50);
+    let sma50Latest = null;
+    if (dates.length) {
+      dates.sort();
+      const lastDate = dates[dates.length - 1];
+      const v = smaMap.sma_50[lastDate];
+      if (Number.isFinite(v)) sma50Latest = v;
+    }
+    // max close (1y window) — data.prices[].close の最大値
+    let maxClose = null;
+    if (Array.isArray(data?.prices) && data.prices.length) {
+      for (const p of data.prices) {
+        const c = Number(p?.close);
+        if (Number.isFinite(c) && (maxClose == null || c > maxClose)) maxClose = c;
+      }
+    }
+    // analyst consensus
+    const consensus = Number.isFinite(analystData?.precomputed_metrics?.target_range?.mean)
+      ? analystData.precomputed_metrics.target_range.mean
+      : null;
+    const sourceOk = analystData?.sources?.price_target === 'ok';
+
+    return {
+      extended15: Number.isFinite(sma50Latest) ? sma50Latest * 1.15 : null,
+      extended25: Number.isFinite(sma50Latest) ? sma50Latest * 1.25 : null,
+      stop8:      Number.isFinite(maxClose) ? maxClose * 0.92 : null,
+      consensus:  sourceOk && Number.isFinite(consensus) ? consensus : null,
+    };
+  }, [smaMap, data, analystData]);
 
   // Cup-with-Handle pattern 抽出 + 4 層防御 (handover v75 真っ白事故 SSOT 継承)
   // 1) ErrorBoundary wrap (default export 側)、 2) conditional render (hasCup gate)、
@@ -911,6 +964,93 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     connectNulls
                     name="取っ手付きカップ (Premium)"
                     legendType="none"
+                    isAnimationActive={false}
+                  />
+                )}
+
+                {/* SPEC 2026-05-28 Sprint 5 (pillar 2 technical): 4 本 ReferenceLine
+                    chart-overlay-safety 4 層防御 厳守:
+                    1) ErrorBoundary 包囲 (default export 側)
+                    2) conditional render (`!= null` guard)
+                    3) Number.isFinite (pillar2Markers の派生時に既に filter 済)
+                    4) isAnimationActive={false}
+                    投資業界色ルール: amber=警告 / red=危険 / cyan=brand (情報)、 線種で重み調整 */}
+                {pillar2Markers.extended15 != null && (
+                  <ReferenceLine
+                    key="pillar2_ext15"
+                    y={pillar2Markers.extended15}
+                    stroke="var(--color-warning)"
+                    strokeWidth={1}
+                    strokeDasharray="4 4"
+                    strokeOpacity={0.55}
+                    label={{
+                      value: 'extended +15%',
+                      fill: 'var(--color-warning)',
+                      fontSize: 9,
+                      position: 'right',
+                      offset: 4,
+                    }}
+                    ifOverflow="extendDomain"
+                    isFront={false}
+                    isAnimationActive={false}
+                  />
+                )}
+                {pillar2Markers.extended25 != null && (
+                  <ReferenceLine
+                    key="pillar2_ext25"
+                    y={pillar2Markers.extended25}
+                    stroke="var(--color-loss)"
+                    strokeWidth={1}
+                    strokeDasharray="4 4"
+                    strokeOpacity={0.55}
+                    label={{
+                      value: 'climax +25%',
+                      fill: 'var(--color-loss)',
+                      fontSize: 9,
+                      position: 'right',
+                      offset: 4,
+                    }}
+                    ifOverflow="extendDomain"
+                    isFront={false}
+                    isAnimationActive={false}
+                  />
+                )}
+                {pillar2Markers.stop8 != null && (
+                  <ReferenceLine
+                    key="pillar2_stop8"
+                    y={pillar2Markers.stop8}
+                    stroke="var(--color-loss)"
+                    strokeWidth={1}
+                    strokeDasharray="2 4"
+                    strokeOpacity={0.45}
+                    label={{
+                      value: '8% stop',
+                      fill: 'var(--color-loss)',
+                      fontSize: 9,
+                      position: 'left',
+                      offset: 4,
+                    }}
+                    ifOverflow="extendDomain"
+                    isFront={false}
+                    isAnimationActive={false}
+                  />
+                )}
+                {pillar2Markers.consensus != null && (
+                  <ReferenceLine
+                    key="pillar2_consensus"
+                    y={pillar2Markers.consensus}
+                    stroke="var(--color-accent)"
+                    strokeWidth={1.25}
+                    strokeOpacity={0.5}
+                    label={{
+                      value: 'アナリスト目標',
+                      fill: 'var(--color-accent)',
+                      fontSize: 9,
+                      position: 'right',
+                      offset: 4,
+                    }}
+                    ifOverflow="extendDomain"
+                    isFront={false}
                     isAnimationActive={false}
                   />
                 )}
