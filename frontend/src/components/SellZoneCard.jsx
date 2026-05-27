@@ -34,12 +34,17 @@ export default function SellZoneCard({ ticker }) {
   const [technical, setTechnical] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errored, setErrored] = useState(false);
+  // 3 体合議 verdict M6: partial failure (technical 単独失敗) を silent でなく visible に
+  const [techFailed, setTechFailed] = useState(false);
+  const [priceFailed, setPriceFailed] = useState(false);
 
   useEffect(() => {
     if (!ticker) return;
     let cancelled = false;
     setLoading(true);
     setErrored(false);
+    setTechFailed(false);
+    setPriceFailed(false);
     Promise.allSettled([
       fetchPriceHistory(ticker, '1y'),
       fetchTechnical(ticker, 'sma_50'),
@@ -50,6 +55,8 @@ export default function SellZoneCard({ ticker }) {
         const techOK = techRes.status === 'fulfilled' ? techRes.value : null;
         setPriceData(priceOK);
         setTechnical(techOK);
+        setPriceFailed(!priceOK);
+        setTechFailed(!techOK || !techOK.overlays?.length);
         if (!priceOK && !techOK) setErrored(true);
       })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -88,7 +95,7 @@ export default function SellZoneCard({ ticker }) {
     return (
       <section className="panel-card szc-card" aria-busy style={{ minHeight: 116 }}>
         <header className="szc-head">
-          <h3 className="szc-title">売り timing シグナル</h3>
+          <h3 className="szc-title">50DMA extension 状況</h3>
         </header>
         <div className="szc-state-empty">
           <p className="szc-state-sub">読み込み中…</p>
@@ -101,7 +108,7 @@ export default function SellZoneCard({ ticker }) {
     return (
       <section className="panel-card szc-card" style={{ minHeight: 116 }}>
         <header className="szc-head">
-          <h3 className="szc-title">売り timing シグナル</h3>
+          <h3 className="szc-title">50DMA extension 状況</h3>
         </header>
         <div className="szc-state-empty">
           <p className="szc-state-sub">テクニカルデータ取得に失敗しました</p>
@@ -118,7 +125,7 @@ export default function SellZoneCard({ ticker }) {
       style={{ minHeight: 116 }}
     >
       <header className="szc-head">
-        <h3 className="szc-title">売り timing シグナル</h3>
+        <h3 className="szc-title">50DMA extension 状況</h3>
       </header>
 
       <div className="szc-body">
@@ -140,6 +147,14 @@ export default function SellZoneCard({ ticker }) {
             extension <span className="szc-meta-value">{fmtPct(extensionPct)}</span>
           </span>
         </div>
+
+        {/* 3 体合議 verdict M6: partial failure を visible に */}
+        {(priceFailed || techFailed) && (
+          <p className="szc-warning">
+            {priceFailed && '現在価格データ取得失敗。 '}
+            {techFailed && !priceFailed && '50DMA データ取得失敗、 zone 判定不正確の可能性あり。 '}
+          </p>
+        )}
       </div>
     </section>
   );

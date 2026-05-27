@@ -19,6 +19,25 @@ import { useEffect, useState } from 'react';
 import { fetchAnalyst } from '../api.js';
 import Chip from './ui/Chip.jsx';
 
+// 「最終更新 X 分前」 表示用、 1 分毎に再レンダーを促す tick state
+function useMinuteTick() {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
+}
+
+function fmtRelativeMin(fetchedAt) {
+  if (!fetchedAt) return null;
+  const diffMs = Date.now() - fetchedAt;
+  const min = Math.max(0, Math.floor(diffMs / 60_000));
+  if (min < 1) return '更新したて';
+  if (min < 60) return `${min} 分前`;
+  const hour = Math.floor(min / 60);
+  return `${hour} 時間前`;
+}
+
 function fmtUsd(v) {
   if (!Number.isFinite(v)) return '—';
   return `$${v.toFixed(2)}`;
@@ -34,6 +53,8 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errored, setErrored] = useState(false);
+  const [fetchedAt, setFetchedAt] = useState(null);
+  useMinuteTick(); // 1 分毎に re-render で「最終更新 X 分前」 更新
 
   useEffect(() => {
     if (!ticker) return;
@@ -48,6 +69,7 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
           setData(null);
         } else {
           setData(res);
+          setFetchedAt(Date.now());
         }
       })
       .catch(() => {
@@ -151,6 +173,17 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
           </div>
         </div>
       </div>
+
+      {/* Trust Cliff 防止 disclaimer (3 体合議 verdict、 upside マイナス時の誤読対策) +
+          最終更新 (CLAUDE.md「動的データには 最終更新 X 分前 を併記」 永続ルール) */}
+      <footer className="atc-footer">
+        <span className="atc-disclaimer">
+          コンセンサスは目安。 アナリスト予想は外れることがあります。
+        </span>
+        {fetchedAt && (
+          <span className="atc-updated">最終更新 {fmtRelativeMin(fetchedAt)}</span>
+        )}
+      </footer>
     </section>
   );
 }

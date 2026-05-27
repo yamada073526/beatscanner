@@ -1000,9 +1000,9 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     key="pillar2_ext25"
                     y={pillar2Markers.extended25}
                     stroke="var(--color-loss)"
-                    strokeWidth={1}
-                    strokeDasharray="4 4"
-                    strokeOpacity={0.55}
+                    strokeWidth={1.25}
+                    strokeDasharray="1 3"
+                    strokeOpacity={0.6}
                     label={{
                       value: 'climax +25%',
                       fill: 'var(--color-loss)',
@@ -1019,13 +1019,13 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                   <ReferenceLine
                     key="pillar2_stop8"
                     y={pillar2Markers.stop8}
-                    stroke="var(--color-loss)"
+                    stroke="var(--text-muted)"
                     strokeWidth={1}
                     strokeDasharray="2 4"
-                    strokeOpacity={0.45}
+                    strokeOpacity={0.4}
                     label={{
-                      value: '8% stop',
-                      fill: 'var(--color-loss)',
+                      value: '8% stop (高値比)',
+                      fill: 'var(--text-muted)',
                       fontSize: 9,
                       position: 'left',
                       offset: 4,

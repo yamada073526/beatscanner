@@ -11120,16 +11120,17 @@ button.ds-chip[data-pressed="true"]:hover {
 .atc-range-divider {
   width: 1px;
   height: 28px;
-  background: rgba(148, 163, 184, 0.20);
+  background: var(--border);
+  opacity: 0.6;
 }
 .atc-skeleton {
   height: 64px;
   border-radius: var(--radius-sm, 6px);
   background: linear-gradient(
     90deg,
-    rgba(148, 163, 184, 0.08) 0%,
-    rgba(148, 163, 184, 0.16) 50%,
-    rgba(148, 163, 184, 0.08) 100%
+    color-mix(in srgb, var(--border) 40%, transparent) 0%,
+    color-mix(in srgb, var(--border) 80%, transparent) 50%,
+    color-mix(in srgb, var(--border) 40%, transparent) 100%
   );
   background-size: 200% 100%;
   animation: atc-skeleton-shimmer 1.4s ease-in-out infinite;
@@ -11144,7 +11145,7 @@ button.ds-chip[data-pressed="true"]:hover {
   min-height: 64px;
   padding: 12px 8px;
   text-align: center;
-  border: 1px dashed rgba(148, 163, 184, 0.25);
+  border: 1px dashed var(--border);
   border-radius: var(--radius-sm, 6px);
 }
 .atc-state-sub {
@@ -11152,6 +11153,17 @@ button.ds-chip[data-pressed="true"]:hover {
   color: var(--text-muted);
   margin: 0;
 }
+.atc-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.atc-disclaimer { flex: 1; line-height: 1.4; }
+.atc-updated { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 
 /* AnalystTargetCard + SellZoneCard 2-col grid layout (Chart 直下に並列配置) */
@@ -11231,11 +11243,20 @@ button.ds-chip[data-pressed="true"]:hover {
   min-height: 64px;
   padding: 12px 8px;
   text-align: center;
-  border: 1px dashed rgba(148, 163, 184, 0.25);
+  border: 1px dashed var(--border);
   border-radius: var(--radius-sm, 6px);
 }
 .szc-state-sub {
   font-size: 12px;
   color: var(--text-muted);
   margin: 0;
+}
+.szc-warning {
+  font-size: 11px;
+  color: var(--color-warning);
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  border-left: 2px solid var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 8%, transparent);
+  border-radius: 0 var(--radius-sm, 4px) var(--radius-sm, 4px) 0;
 }
