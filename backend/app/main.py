@@ -3827,13 +3827,14 @@ async def _fetch_market_cap_top_n(n: int = 1000) -> list[str]:
     try:
         # FMP /stable/company-screener (公式 endpoint、 /stock-screener は alias)
         # mutual fund / share class (JNSXX / PRNHX 等) を除外するため isEtf=false&isFund=false
+        import httpx as _httpx_mc  # 関数 scope local import (他の helper と同 pattern)
         url = (
             f"https://financialmodelingprep.com/stable/company-screener"
             f"?marketCapMoreThan=500000000"
             f"&isActivelyTrading=true&isEtf=false&isFund=false"
             f"&exchange=NASDAQ,NYSE&limit={n}&apikey={api_key}"
         )
-        async with _httpx.AsyncClient(timeout=30.0) as client:
+        async with _httpx_mc.AsyncClient(timeout=30.0) as client:
             resp = await client.get(url)
             resp.raise_for_status()
             data = resp.json()
