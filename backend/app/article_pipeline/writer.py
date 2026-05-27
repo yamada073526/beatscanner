@@ -250,8 +250,43 @@ WRITER_SYSTEM_BASE = """Return ONLY a valid JSON. No markdown wrapper, no explan
    - h3 marker の順序固定 (強気 → 弱気 → 推奨アクション)
 
 # Markdown 構成 (daily_digest、 600-800 字)
-- TL;DR section 不要 (記事全体が短く要約的なため重複)
-- 銘柄ごとに `**TICKER**:` bullet で 1-2 行、 末尾に総括 100 字
+
+## v123 構造化 ルール (HARD CONSTRAINT、 user dogfood 2026-05-27)
+
+旧版 (v118) は「1 段落 + 8 bullets で文字壁」「選定基準が不明」 が user 指摘 → 構造を以下に強制:
+
+### 1. **## 選定基準** (1 文、 必須、 冒頭 H2)
+本日選定された N 銘柄が **どんな基準で選ばれたか** を 1 文で明示。 抽象的「注目」 NG、 客観的事実を書く。
+- GOOD: 「本日は日次 +5% 以上の値動きがあった銘柄 + 重要 IR ニュースがあった銘柄 から N 件を選別しました。」
+- GOOD: 「FMP gainers 日次 Top10 + Yahoo Finance / Seeking Alpha 速報から、 株価変動と news impact が大きい N 件を選別しました。」
+- BAD: 「本日の注目銘柄をお届けします。」 (基準なし、 user の「なぜこれら？」 疑問残る)
+- BAD: 「市場で話題になっている銘柄をピックアップしました。」 (主観的「話題」、 客観基準なし)
+
+### 2. **## 本日の銘柄** (各銘柄を構造化 bullet、 各 1-2 文)
+各 ticker block を以下 統一フォーマットで:
+
+```
+- **TICKER** ([日次 値動き or タグ]): [1 文 insight、 数値 + 出典 [N]]
+```
+
+- TICKER は **太字 ticker shorthand** (例: `**NVDA**`、 `**CODX**`)
+- 値動き 表示 OK (`(+15%)` 等)、 ない場合は分類タグ (`(決算)` / `(IR)` / `(M&A)` 等)
+- 1 文 insight: **数値・固有名詞・因果のいずれか** を 1 つ含む。 形容詞だけの「期待される」「注目」 は NG
+- 各 bullet 末尾に citation [N] 必須
+
+### 3. **## 注目テーマ** (任意、 100 字以内 総括)
+複数銘柄に共通する **業界 theme** があれば 1-2 文で。 なければ skip 可。
+
+例:
+- 「半導体 + AI インフラ 3 銘柄 (MU / GLW / INTC) が同日急騰、 RS 強 上位独占の動きと整合 [N]。」
+- 「医療検査 (CODX) と固体電池 (J-Star) は別文脈だが、 ともに sovereign 融資 / IR 起点の急騰。 個別銘柄分析は別記事参照。」
+
+### 4. **絶対禁止**:
+- 1 段落で 8 銘柄を bullet 列挙 (= 文字壁、 user dogfood で revert 確定)
+- 「## 投資家への含意」 / 「### 強気シナリオ」 等の deep_dive 構造 (daily_digest は **短く広く**、 詳細は個別記事 link)
+- TL;DR section (記事全体が要約的、 重複)
+
+旧版「銘柄ごとに `**TICKER**:` bullet で 1-2 行、 末尾に総括 100 字」 は構造として弱い → v123 で「選定基準 H2 + 銘柄 H2 + 注目テーマ H2 (任意)」 の 3 H2 構造に**強制**。
 
 # Citation 表記
 本文内で fact を引用したら **直後に [N]** の形で citation index を埋め込む。
@@ -328,7 +363,7 @@ def _few_shot_block() -> str:
 {
   "title": "AAPL/MSFT/GOOGL 揃って予想超え",
   "subtitle": "ビッグテック 3 社が同日に予想を上回る決算を発表、 Azure 28% 成長と Search 12% 成長が AI 投資の ROI 顕在化を示唆",
-  "body_md": "本日注目の決算 3 件。\\n\\n- **AAPL**: Q4 EPS $2.40 でコンセンサス $2.35 を上回り [1]\\n- **MSFT**: Azure 売上 +28% YoY [2]、 Copilot 課金の本格化が背景\\n- **GOOGL**: Search 売上 +12% YoY [3]、 AI 検索の収益化が進む\\n\\nAI 投資の ROI が早期実現する場合、 capex 増の正当性が補強される。 各銘柄の詳細分析は本文 article を参照。",
+  "body_md": "## 選定基準\\n\\n本日の決算発表で **アナリスト予想を上回った** ビッグテック 3 銘柄を選別しました。 数値の出所はすべて公式 IR 資料です。\\n\\n## 本日の銘柄\\n\\n- **AAPL** (決算): Q4 EPS $2.40 でコンセンサス $2.35 を上回り [1]\\n- **MSFT** (決算): Azure 売上 +28% YoY、 Copilot 課金の本格化が背景 [2]\\n- **GOOGL** (決算): Search 売上 +12% YoY、 AI 検索の収益化が進む [3]\\n\\n## 注目テーマ\\n\\n3 社共通で AI capex の ROI 早期実現が示唆されています。 capex 増の正当性が補強される構造で、 個別銘柄の詳細分析は各 article を参照してください。",
   "citation_indexes": [1, 2, 3]
 }
 </output>
