@@ -429,11 +429,20 @@ const VALID_SHORT_TICKERS = new Set(
  * cache 更新: `node frontend/scripts/fetch-tickers-cache.mjs` 週次推奨。
  */
 let VALID_TICKER_UNIVERSE = null;
+let UNIVERSE_BY_FIRST_LETTER = null;
 try {
   const cacheData = JSON.parse(
     fs.readFileSync(path.resolve(__dirname, 'tickers-cache.json'), 'utf-8'),
   );
   VALID_TICKER_UNIVERSE = new Set(cacheData.symbols || []);
+  // v124 朝 R4 (user 要望「会社名 → ticker fuzzy 補正」): first-letter index で
+  // Levenshtein 高速化。 first-letter + length 近接の candidate のみ scan。
+  UNIVERSE_BY_FIRST_LETTER = {};
+  for (const sym of cacheData.symbols || []) {
+    const first = sym[0];
+    if (!UNIVERSE_BY_FIRST_LETTER[first]) UNIVERSE_BY_FIRST_LETTER[first] = [];
+    UNIVERSE_BY_FIRST_LETTER[first].push(sym);
+  }
   console.log(
     `[build-articles] [P3.7 universe] ticker validation set loaded: ${VALID_TICKER_UNIVERSE.size} symbols (updated: ${cacheData.updated_at})`,
   );
@@ -441,6 +450,62 @@ try {
   console.warn(
     `[build-articles] [P3.7 universe] tickers-cache.json not found or invalid: ${e.message}. ticker auto-link は BLOCKLIST + 2 文字 skip のみで継続`,
   );
+}
+
+/**
+ * v124 朝 R4 (user 要望、 2026-05-28 dogfood):
+ *
+ * universe に無い ticker-like candidate を Levenshtein 距離 ≤ 1 で universe 内 ticker に補正。
+ * 例: QTREX (writer LLM hallucination、 universe NO) → QTEX (universe YES、 distance 1: 'R' 削除)
+ *
+ * 高速化:
+ *   - first-letter index で universe 全 45k → 同 first-letter の 2000-3000 件に絞る
+ *   - length 差 |len(a) - len(b)| > 1 なら 即座に skip (distance > 1 確定)
+ *   - distance 計算は dynamic programming で O(m*n)、 m,n ≤ 5 char で軽量
+ *
+ * 安全弁:
+ *   - distance == 0 は universe.has(ticker) で既に判定済、 本関数は呼ばれない
+ *   - distance ≥ 2 は誤補正 risk 高、 ≤ 1 のみ採用
+ *   - tie-break (同 distance 候補複数) は最初の 1 件 (alphabetical sort 順、 安定)
+ *
+ * @param {string} candidate - ticker-like uppercase 2-5 char
+ * @returns {string|null} - 補正 ticker or null (補正不可)
+ */
+function findClosestTicker(candidate) {
+  if (!UNIVERSE_BY_FIRST_LETTER || !VALID_TICKER_UNIVERSE) return null;
+  if (VALID_TICKER_UNIVERSE.has(candidate)) return null; // 既に valid、 補正不要
+  if (candidate.length < 2 || candidate.length > 5) return null;
+
+  const candidates = UNIVERSE_BY_FIRST_LETTER[candidate[0]];
+  if (!candidates || candidates.length === 0) return null;
+
+  // Levenshtein distance (small m,n、 simple impl)
+  function levDist(a, b) {
+    if (Math.abs(a.length - b.length) > 1) return 99; // 早期 skip
+    const m = a.length, n = b.length;
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        dp[i][j] = a[i - 1] === b[j - 1]
+          ? dp[i - 1][j - 1]
+          : 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1]);
+        if (dp[i][j] > 1) return 99; // 早期 skip (距離 ≥ 2 確定)
+      }
+    }
+    return dp[m][n];
+  }
+
+  let best = null;
+  for (const sym of candidates) {
+    const d = levDist(candidate, sym);
+    if (d <= 1) {
+      best = sym;
+      break; // tie-break: 最初の 1 件 (sorted のため安定)
+    }
+  }
+  return best;
 }
 
 /**
@@ -499,7 +564,20 @@ function addTickerInternalLinks(bodyMd, articleTicker) {
       // - WWDC / NASDAQ (acronym): universe NO → skip
       // - TSMC (company name): universe NO → Step 2 COMPANY_TICKER_MAP で TSM link 化
       // cache 未読込時 (fallback) は validation skip して旧 logic で継続 (graceful degrade)
-      if (VALID_TICKER_UNIVERSE && !VALID_TICKER_UNIVERSE.has(ticker)) return match;
+      if (VALID_TICKER_UNIVERSE && !VALID_TICKER_UNIVERSE.has(ticker)) {
+        // v124 朝 R4 (user 要望、 2026-05-28): universe NO の candidate に対して
+        // fuzzy correct を試行。 例: QTREX (universe NO) → QTEX (universe YES、 distance 1)
+        // 補正成功時は corrected ticker で link 化 (本文の literal 「QTREX」 は「QTEX」 に置換)。
+        const corrected = findClosestTicker(ticker);
+        if (corrected) {
+          // 補正 ticker が既に linkedSet にある場合 (例: 別箇所で QTEX が既に link 化済) は skip
+          if (linkedSet.has(corrected)) return match;
+          linkedSet.add(corrected);
+          linkedTickers.push(`${ticker}→${corrected}(fuzzy)`);
+          return `[${corrected}](/stock/${corrected})`;
+        }
+        return match;
+      }
       // 初出チェック
       if (linkedSet.has(ticker)) return match;
       // 初出: リンク化

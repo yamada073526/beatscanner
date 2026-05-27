@@ -16,7 +16,7 @@ name: Generate Daily Digest (v118)
 on:
   workflow_dispatch:
   schedule:
-    - cron: '35 19 * * *'   # 19:35 UTC = 04:35 JST (deep_dive 19:05 の 30 分後)
+    - cron: '53 19 * * *'   # 19:53 UTC = 04:53 JST (v124 Option A: :35 → :53 半端時刻、 deep_dive 19:23 の 30 分後で FMP 分散維持)
 
 jobs:
   generate:

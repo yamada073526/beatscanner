@@ -30,7 +30,7 @@ on:
         type: string
         default: "deep_dive"
   schedule:
-    - cron: '5 19 * * *'   # 19:05 UTC = 04:05 JST (v116: hourly boundary skip 回避のため :00→:05)
+    - cron: '23 19 * * *'   # 19:23 UTC = 04:23 JST (v124 Option A: :05 もまだ高負荷帯、 :23 で遅延短縮 + morning_health 17 の 6 分後で FMP rate limit 余裕)
 
 jobs:
   generate:

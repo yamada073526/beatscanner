@@ -10785,8 +10785,12 @@ button.ds-chip[data-pressed="true"]:hover {
    Tailwind preflight が `ol, ul { list-style: none; }` を default 適用するため、
    .article-prose 内の bullet marker が非表示 → user 視点で箇条書きと認識しづらい。
    list-style を明示復活で marker (disc / decimal) を表示。
-   gold accent marker で brand 整合 (color: var(--color-gold))。 */
-.article-prose ul {
+   gold accent marker で brand 整合 (color: var(--color-gold))。
+   v124 朝 R4 (2026-05-28、 AMZN dogfood で 「・ ・」 二重表示発覚):
+   .article-tldr__list (custom ::before あり) を除外しないと標準 disc と二重で
+   bullet marker が「・ ・」 並びになる。 加えて padding 累積で右寄り体感再発。
+   :not(.article-tldr__list) / :not(.article-tldr__item) で除外。 */
+.article-prose ul:not(.article-tldr__list) {
   list-style: disc;
   margin: 0 0 1.5rem;
   padding-left: var(--space-6, 24px);
@@ -10803,7 +10807,7 @@ button.ds-chip[data-pressed="true"]:hover {
   line-height: 1.75;
 }
 
-.article-prose li::marker {
+.article-prose li:not(.article-tldr__item)::marker {
   color: var(--color-gold);
 }
 

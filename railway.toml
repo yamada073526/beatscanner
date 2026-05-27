@@ -66,11 +66,13 @@ schedule = "30 23 * * *"
 command = "curl -s -X POST -H \"X-Cron-Secret: $CRON_SECRET\" --max-time 600 https://beatscanner-production.up.railway.app/api/cron/rs-scan > /dev/null 2>&1"
 
 # v122: article auto-publish digest (記事 cron 完了から数時間後、 朝の dogfood 帯)
-# UTC 22:00 = ET 17:00 / JST 7:00。 直近 24h で auto-publish 化された記事を集約し Premium user に digest 配信。
+# v124 朝 R4 (user 要望: メール 5 時希望、 遅くとも 7 時): 22:00 → 21:00 UTC に 1 時間前倒し。
+# Railway native cron は定時発火 (遅延なし)、 21:00 UTC = JST 06:00 着想定。
+# 7 時上限クリア。 5 時希望は dogfood 1 週間後に article 生成時刻 さらに前倒し可能か判断。
 # 既存 cup-notify と同じ Resend mailer + notification_dispatch_log dedup (pattern_type='article')
 # 真因: v121 dogfood で「記事生成されても気付けない」 課題発覚 → 通知で起床時 dogfood 経路を確立
 [[crons]]
-schedule = "0 22 * * *"
+schedule = "0 21 * * *"
 command = "curl -s -X POST -H \"X-Cron-Secret: $CRON_SECRET\" --max-time 120 https://beatscanner-production.up.railway.app/api/cron/article-notify > /dev/null 2>&1"
 
 # Cup-with-Handle Phase 2.1: monthly retention cleanup (毎月 1 日 UTC 02:00 = JST 11:00)

@@ -13,7 +13,7 @@ name: Morning Health Check
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 19 * * *'   # 19:00 UTC = 04:00 JST (翌日)
+    - cron: '17 19 * * *'   # 19:17 UTC = 04:17 JST (v124 Option A、 :00 高負荷帯回避で 遅延 90→20-40 分短縮見込み)
 
 jobs:
   health-check:
