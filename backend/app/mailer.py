@@ -241,7 +241,7 @@ _ARTICLE_FORMAT_LABEL = {
     "daily_digest": "デイリーダイジェスト",
 }
 
-ARTICLE_SUBJECT_TEMPLATE = "BeatScanner: 新しい記事 {count} 本が公開されました"
+ARTICLE_SUBJECT_TEMPLATE = "BeatScanner: 本日の厳選記事 {count} 本"
 
 
 def _article_url(slug: str) -> str:
@@ -287,9 +287,9 @@ def _build_article_digest_html(articles: list[dict]) -> str:
   <tr><td align="center">
     <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;padding:32px;max-width:92%;">
       <tr><td>
-        <h1 style="margin:0 0 8px;font-size:20px;color:#222;font-weight:600;">新しい記事 ({count} 本)</h1>
+        <h1 style="margin:0 0 8px;font-size:20px;color:#222;font-weight:600;">本日の厳選記事 ({count} 本)</h1>
         <p style="margin:0 0 20px;color:#666;font-size:14px;line-height:1.6;">
-          独自プロトコルに基づき自動生成された最新記事をお届けします。 Hallucination Guard 4 重防御を通過した記事のみ配信されます。
+          独自プロトコルで生成した最新記事をお届けします。 出典確認・両論併記・誇張排除の 4 段品質チェックを通過しました。
         </p>
         <table width="100%" cellpadding="0" cellspacing="0">
           {table_rows}
@@ -305,10 +305,10 @@ def _build_article_digest_html(articles: list[dict]) -> str:
 
 def _build_article_digest_text(articles: list[dict]) -> str:
     lines: list[str] = []
-    lines.append(f"新しい記事 ({len(articles)} 本)")
+    lines.append(f"本日の厳選記事 ({len(articles)} 本)")
     lines.append("")
-    lines.append("独自プロトコルに基づき自動生成された最新記事をお届けします。")
-    lines.append("Hallucination Guard 4 重防御を通過した記事のみ配信されます。")
+    lines.append("独自プロトコルで生成した最新記事をお届けします。")
+    lines.append("出典確認・両論併記・誇張排除の 4 段品質チェックを通過しました。")
     lines.append("")
     for a in articles:
         slug = a.get("slug", "")

@@ -10996,6 +10996,22 @@ button.ds-chip[data-pressed="true"]:hover {
   .article-prose {
     font-size: 15px;
   }
+
+  /* v123 user dogfood: スマホで TL;DR box の bullets が gold border から離れて
+     右寄り体感 → padding-left 24px → 16px + item padding-left 20px → 14px に圧縮、
+     gold accent と本文の距離を縮めて中央バランス回復 */
+  .article-tldr {
+    padding-left: var(--space-4, 16px);
+    padding-right: var(--space-4, 16px);
+  }
+
+  .article-tldr__item {
+    padding-left: var(--space-4, 14px);
+  }
+
+  .article-tldr__item::before {
+    left: 0;
+  }
 }
 
 

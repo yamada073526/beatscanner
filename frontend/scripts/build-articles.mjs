@@ -305,6 +305,14 @@ const TICKER_BLOCKLIST = new Set([
   'TL', 'TLDR', 'DR',                       // tl;dr 系 ("TL;DR" の "DR" が独立 match されるため blocklist 化
   // BAD-5/6 パターンに含まれる英字列 / テスト用 marker
   'No', 'OK', 'PR', 'VP', 'BAD', 'GOOD', 'MAX', 'MIN', 'AVG',
+  // v123 user dogfood (AAPL/NVDA 記事): カンファレンス名 + 略語 + 単位 が ticker 誤認
+  'WWDC',                                   // Worldwide Developers Conference (Apple カンファレンス)
+  'OS',                                     // Operating System (iOS の文脈で誤 link 化)
+  'PCR',                                    // Polymerase Chain Reaction (Co-Dx 記事)
+  'EPC',                                    // Engineering Procurement Construction (VCI Global 記事)
+  'WiFi',                                   // 無線 LAN (PicoCELA 記事)
+  'NASDAQ', 'NYSE', 'AMEX',                 // 証券取引所名
+  'EBITDA', 'EBIT',                         // 既存だが念のため
 ]);
 
 /**
@@ -442,6 +450,16 @@ function addTickerInternalLinks(bodyMd, articleTicker) {
       if (linkedSet.has(ticker)) return match;
       // 初出: リンク化
       linkedSet.add(ticker);
+      // v123 hotfix (user dogfood AAPL 記事 TSMC ネスト link 真因):
+      // company name と ticker symbol が異なる mapping (例: TSMC → TSM) の場合、
+      // Step 1 で `[TSMC](/stock/TSMC)` を生成 → Step 2 が同じ「TSMC」 を再 match
+      // (linkedSet.has('TSM') = false なので skip されない) → `[[TSMC](/stock/TSM)](/stock/TSMC)`
+      // ネスト link 化 → react-markdown parse 失敗で raw 文字列露出。
+      // 対策: mapping の反対側 ticker (TSM) も linkedSet に add して Step 2 を確実に skip。
+      const mappedTicker = COMPANY_TICKER_MAP[ticker];
+      if (mappedTicker && mappedTicker !== ticker) {
+        linkedSet.add(mappedTicker);
+      }
       linkedTickers.push(ticker);
       return `[${ticker}](/stock/${ticker})`;
     });
