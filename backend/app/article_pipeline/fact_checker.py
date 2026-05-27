@@ -175,7 +175,7 @@ async def check(
     researcher_output: ResearcherOutput,
     client: ClaudeClient | None = None,
     model: str = "claude-haiku-4-5-20251001",
-    max_tokens: int = 1024,
+    max_tokens: int = 2048,
 ) -> FactCheckResult:
     """ArticleDraft の各 [N] sentence を source_facts と突き合わせる.
 
@@ -184,10 +184,12 @@ async def check(
         researcher_output: writer に渡したものと同じ ResearcherOutput
         client: 注入用 ClaudeClient、 None なら ENV から構築
         model: Haiku 4.5 (cost 最重視)
-        max_tokens: 1024 (v123 hotfix、 旧 default 512 では文体憲法 v3 + 長文 article で
-            「Unterminated string」 JSON parse 失敗が頻発し regenerate_failed false negative
-            化。 META 手動 verify で 3 attempts 全 fail を観測。 cost 増は 1 article +$0.002
-            程度 = 月 200-300 円 negligible。 sentences 30+ や reason 長文時の余裕確保)
+        max_tokens: 2048 (v123 hotfix Step 2、 旧 default 512→1024 でもまだ不足。
+            文体憲法 v3 + researcher_facts 10+ + multi-line JSON で 1024 tokens 超過する
+            ケースを MSFT 手動 verify で観測 (行 96 で truncated)。 2048 に増やして余裕確保、
+            cost 増は 1 article +$0.005 = 月 500-1000 円 negligible。 LLM 出力削減は
+            prompt 修正で対応するが、 prompt 不変境界を守るため config だけで解決。
+            META (8 facts → 行 35 truncate) も MSFT (11 facts → 行 96 truncate) も覆う)
 
     Returns:
         FactCheckResult (mismatches 0 件で passed=True、 regenerate_needed=False)
