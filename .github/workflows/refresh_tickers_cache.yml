@@ -1,0 +1,111 @@
+name: Refresh Tickers Cache (Weekly)
+
+# v124 自律 Task A (handover v123→v124): ticker universe validation の cache 自動更新。
+#
+# 背景:
+#   `frontend/scripts/tickers-cache.json` は FMP `/stable/stock-list` 由来 ~45k 件、
+#   build-articles.mjs の universe validation で「これは本当に上場銘柄か」 を構造的に判定。
+#   新規 IPO + delisting 反映のため週次更新が SSOT (memory: feedback_ticker_universe_validation.md)。
+#
+# Schedule:
+#   毎週日曜 02:00 UTC (= 月曜 11:00 JST、 米国市場 closed 帯)。
+#   GitHub Actions 高負荷 skip 回避のため hourly boundary (:00) を避け :07 にずらす。
+#
+# 設計:
+#   - actions/checkout (write 権限)
+#   - node 20 setup
+#   - FMP_API_KEY を repo secrets から注入
+#   - node frontend/scripts/fetch-tickers-cache.mjs を実行 → tickers-cache.json 更新
+#   - 差分があれば auto-commit + push (gh-actions bot author)
+#   - 差分なしなら skip (commit せず終了)
+#
+# 失敗時:
+#   - continue-on-error で fail-safe (FMP 一時障害でも CI 失敗を作らない)
+#   - 翌週再試行で recover (cache は前週のままで build 自体は graceful degrade)
+#
+# memory anchors:
+#   - feedback_ticker_universe_validation.md (universe validation の SSOT)
+#   - feedback_railway_native_cron.md (Railway native cron vs GitHub Actions の使い分け)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '7 2 * * 0'   # 毎週日曜 02:07 UTC = 月曜 11:07 JST
+
+jobs:
+  refresh-cache:
+    name: Fetch FMP stock-list → tickers-cache.json
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write   # auto-commit + push 用
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fetch tickers cache from FMP
+        id: fetch
+        continue-on-error: true
+        env:
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+        run: |
+          if [ -z "$FMP_API_KEY" ]; then
+            echo "::warning::FMP_API_KEY secret 未設定、 cache 更新 skip"
+            exit 0
+          fi
+          cd frontend
+          node scripts/fetch-tickers-cache.mjs
+          echo "fetched=true" >> "$GITHUB_OUTPUT"
+
+      - name: Diff check + auto-commit
+        id: commit
+        if: steps.fetch.outputs.fetched == 'true'
+        run: |
+          cd "${{ github.workspace }}"
+          if git diff --quiet frontend/scripts/tickers-cache.json; then
+            echo "::notice::tickers-cache.json 差分なし、 commit skip"
+            echo "committed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # auto-commit (gh-actions bot author)
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add frontend/scripts/tickers-cache.json
+
+          # diff summary 抽出 (追加 / 削除 ticker 件数)
+          ADDED=$(git diff --cached --unified=0 frontend/scripts/tickers-cache.json | grep -c '^+"' || echo 0)
+          REMOVED=$(git diff --cached --unified=0 frontend/scripts/tickers-cache.json | grep -c '^-"' || echo 0)
+
+          git commit -m "chore(tickers-cache): weekly refresh from FMP /stable/stock-list
+
+          - +${ADDED} new symbols / -${REMOVED} delisted
+          - workflow: refresh_tickers_cache.yml (auto)
+          - SSOT: feedback_ticker_universe_validation.md"
+
+          git push origin main
+          echo "committed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Tickers Cache Refresh ($(date -u +'%Y-%m-%d %H:%M UTC'))" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **fetched**: ${{ steps.fetch.outputs.fetched || 'failed' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **committed**: ${{ steps.commit.outputs.committed || 'n/a' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f frontend/scripts/tickers-cache.json ]; then
+            TOTAL=$(python3 -c "import json; print(json.load(open('frontend/scripts/tickers-cache.json')).get('total_count', '?'))")
+            UPDATED=$(python3 -c "import json; print(json.load(open('frontend/scripts/tickers-cache.json')).get('updated_at', '?'))")
+            echo "- **total symbols**: $TOTAL" >> $GITHUB_STEP_SUMMARY
+            echo "- **last updated**: $UPDATED" >> $GITHUB_STEP_SUMMARY
+          fi
