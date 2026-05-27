@@ -417,6 +417,33 @@ const VALID_SHORT_TICKERS = new Set(
 );
 
 /**
+ * v123 本質的改善 (user dogfood 2026-05-27 daily-digest-20260527 で「QTREX」 LLM hallucination 検出後):
+ *
+ * Authoritative US ticker universe (FMP /stable/stock-list、 ~45k 件) との照合で:
+ *   - QTREX (writer LLM hallucination): universe に NO → skip
+ *   - WWDC / NASDAQ / PCR (acronym): universe に NO → skip
+ *   - TSMC (company name): universe に NO → COMPANY_TICKER_MAP['TSMC']='TSM' で TSM link 化
+ *   - CODX / BRAI / QTEX 等の small-cap: universe に YES → 正常 link
+ *
+ * BLOCKLIST 都度拡張 (patchwork) を universe validation (構造予防) に置換。
+ * cache 更新: `node frontend/scripts/fetch-tickers-cache.mjs` 週次推奨。
+ */
+let VALID_TICKER_UNIVERSE = null;
+try {
+  const cacheData = JSON.parse(
+    fs.readFileSync(path.resolve(__dirname, 'tickers-cache.json'), 'utf-8'),
+  );
+  VALID_TICKER_UNIVERSE = new Set(cacheData.symbols || []);
+  console.log(
+    `[build-articles] [P3.7 universe] ticker validation set loaded: ${VALID_TICKER_UNIVERSE.size} symbols (updated: ${cacheData.updated_at})`,
+  );
+} catch (e) {
+  console.warn(
+    `[build-articles] [P3.7 universe] tickers-cache.json not found or invalid: ${e.message}. ticker auto-link は BLOCKLIST + 2 文字 skip のみで継続`,
+  );
+}
+
+/**
  * markdown body_md 内の ticker mention を `/stock/<TICKER>` 内部リンクに変換する。
  *
  * @param {string} bodyMd   元の markdown テキスト (sanitize 済み)
@@ -467,6 +494,12 @@ function addTickerInternalLinks(bodyMd, articleTicker) {
       // COMPANY_TICKER_MAP value に含まれる valid 1-2 文字 ticker (V/MA/KO/PG/JD/GS/MS/MU) のみ許可、
       // それ以外は skip。 構造的予防で BLOCKLIST 都度拡張の漏れを根本対策。
       if (ticker.length <= 2 && !VALID_SHORT_TICKERS.has(ticker)) return match;
+      // v123 本質的改善: Authoritative US ticker universe (FMP /stable/stock-list ~45k) 照合
+      // - QTREX (LLM hallucination): universe NO → skip
+      // - WWDC / NASDAQ (acronym): universe NO → skip
+      // - TSMC (company name): universe NO → Step 2 COMPANY_TICKER_MAP で TSM link 化
+      // cache 未読込時 (fallback) は validation skip して旧 logic で継続 (graceful degrade)
+      if (VALID_TICKER_UNIVERSE && !VALID_TICKER_UNIVERSE.has(ticker)) return match;
       // 初出チェック
       if (linkedSet.has(ticker)) return match;
       // 初出: リンク化
@@ -493,6 +526,9 @@ function addTickerInternalLinks(bodyMd, articleTicker) {
       const ticker = COMPANY_TICKER_MAP[name];
       // 既に link 化済の ticker は skip (初出 1 回ルール)
       if (linkedSet.has(ticker)) continue;
+      // v123 本質的改善: mapped ticker も universe で validation
+      // (COMPANY_TICKER_MAP のメンテ漏れで universe に無い ticker mapping を防止)
+      if (VALID_TICKER_UNIVERSE && !VALID_TICKER_UNIVERSE.has(ticker)) continue;
       // word-boundary: 前後が ASCII 英数 / `-` でない位置 (日本語 / 句読点 / 空白で囲まれる)
       // escape regex special chars in name (e.g. "McDonald's", "Johnson & Johnson")
       const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

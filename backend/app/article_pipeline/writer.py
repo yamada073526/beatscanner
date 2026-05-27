@@ -60,7 +60,7 @@ WRITER_SYSTEM_BASE = """Return ONLY a valid JSON. No markdown wrapper, no explan
 - 体言止め / 漢字熟語の連発を避ける、 「〜です」「〜ます」 調も OK (硬い「だ・である」 強制しない)
 - 「ですが」「ところで」 等の口語的接続詞も OK (ただし感嘆符・スラング禁止)
 
-# ticker symbol 正規化ルール (HARD CONSTRAINT、 v117 R7-2 user 指摘)
+# ticker symbol 正規化ルール (HARD CONSTRAINT、 v117 R7-2 user 指摘 + v123 強化)
 - **企業を言及する時は正規の ticker symbol を必ず使う**、 略称や誤った symbol 禁止
 - BAD: 「Super Micro (SMIC)」 (SMIC は中国半導体製造大手の別企業、 Super Micro は **SMCI**)
 - GOOD: 「Super Micro Computer (SMCI)」 (NASDAQ 上場の正規 ticker)
@@ -71,6 +71,24 @@ WRITER_SYSTEM_BASE = """Return ONLY a valid JSON. No markdown wrapper, no explan
   AVGO / AMD / INTC / TSM / AMAT / LRCX / MU / ASML / ARM / QCOM / MRVL / CRM / ORCL /
   ADBE / CSCO / IBM / BABA / BIDU / JD / DELL / HPE 等
 - 不確実な場合は LLM 内蔵知識でなく **source_facts の citation 元 URL** に基づいて判断
+
+## v123 強化 (user dogfood で「QTREX」 hallucination 検出後、 SSOT):
+
+**HARD CONSTRAINT — source_facts 内に明示されている ticker symbol のみ使用可**:
+
+writer は LLM 内蔵知識から ticker を「推測」 してはならない。 ticker symbol を本文中に書く時、 以下のいずれかに該当しないなら、 **必ず company name のみで言及** (ticker 記載を省略):
+
+- (a) source_facts.fact 文字列内に ticker が **literal で書かれている** (例: source_facts に「QTEX」 と書いてあれば QTEX 使用 OK)
+- (b) source_facts.source_url の path / query で ticker が確認できる (例: `stocktwits.com/symbol/CODX` → CODX OK)
+- (c) 上記「米国上場確実な主要 ticker」 リストに含まれる (NVDA / AAPL 等)
+
+**BAD-7 (v123 新規 anti-pattern): ticker 捏造**:
+- BAD: 「**QTREX** (量子協業): ...」 (QTREX は QTEX の捏造、 source_facts には QTEX としか書かれていない)
+- BAD: 「**ABCD** が IPO を申請しました」 (ABCD が source_facts に無いのに記載)
+- GOOD: 「**QTEX** (量子協業): ...」 (source_facts に書かれているとおり)
+- GOOD: 「Alice & Bob (仏量子 startup) が...」 (未上場、 ticker 不明、 company name のみ)
+
+frontend で build-articles.mjs が `/api/stock-list` (FMP 全 ~45k 銘柄) と照合し、 **universe に存在しない ticker symbol は ticker link 化されない** (skip)。 ただし writer が ticker を本文に書いてしまうと、 reader は plain text として読むので「これは正規 ticker か？」 が分からない。 **上流 (writer) で捏造を防ぐのが SSOT**。
 
 # 人名表記ルール (HARD CONSTRAINT、 v116 user フィードバック、 R4 で subtitle 明示)
 - **個人名は title / subtitle / body_md 全てで和文 / カタカナ統一** — 英字直書き禁止
