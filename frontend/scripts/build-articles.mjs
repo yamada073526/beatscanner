@@ -572,8 +572,12 @@ function addTickerInternalLinks(bodyMd, articleTicker) {
         // 補正成功時は corrected ticker で link 化 (本文の literal 「QTREX」 は「QTEX」 に置換)。
         const corrected = findClosestTicker(ticker);
         if (corrected) {
-          // 補正 ticker が既に linkedSet にある場合 (例: 別箇所で QTEX が既に link 化済) は skip
-          if (linkedSet.has(corrected)) return match;
+          if (linkedSet.has(corrected)) {
+            // v124 R4 hotfix: 2 箇所目以降の occurrence も literal は corrected に置換
+            // (link 1 回ルールは維持、 ただし body 全体で「QTREX」 → 「QTEX」 統一で
+            // user 視点の brand 信頼維持)
+            return corrected;
+          }
           linkedSet.add(corrected);
           linkedTickers.push(`${ticker}→${corrected}(fuzzy)`);
           return `[${corrected}](/stock/${corrected})`;
