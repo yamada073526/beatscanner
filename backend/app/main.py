@@ -3797,6 +3797,64 @@ async def _fetch_sp500_top_n(n: int = BACKTEST_UNIVERSE_SIZE) -> list[str]:
         return top
 
 
+async def _fetch_market_cap_top_n(n: int = 1000) -> list[str]:
+    """Russell 3000 相当: market_cap top N 銘柄 (NASDAQ + NYSE) を返す (24h cache).
+
+    v124 Russell 3000 拡張 Phase 1 (SPEC §3-1):
+      - FMP `/stable/company-screener?marketCapMoreThan=500M&isActivelyTrading=true
+        &isEtf=false&isFund=false&exchange=NASDAQ,NYSE&limit=N` で market_cap 降順 top N 抽出
+      - 既存 `_fetch_sp500_top_n()` と並列、 既存挙動を破壊しない
+      - cap 3000 (Phase 2 = Russell 3000 相当)、 default 1000 (Phase 1 試行)
+
+    Phase 1 段階展開 (SPEC §5):
+      - top 1000 で nightly batch 時間 ~10-15 分内に収まる試行
+      - 1 週間運用後 Phase 2 (top 3000) へ拡大判断
+
+    Returns:
+        ticker symbol list (market_cap desc sort、 mutual fund / ETF 除外済)
+    """
+    n = max(1, min(3000, n))
+    cache_key = f"mktcap_top{n}"
+    cached = _BACKTEST_UNIVERSE_CACHE.get(cache_key)
+    if cached and (_time.time() - cached.get("ts", 0)) < _BACKTEST_UNIVERSE_CACHE_TTL:
+        return list(cached.get("tickers", []))
+
+    api_key = os.environ.get("FMP_API_KEY", "")
+    if not api_key:
+        print("[universe] FMP_API_KEY not set, _fetch_market_cap_top_n returning empty")
+        return []
+
+    try:
+        # FMP /stable/company-screener (公式 endpoint、 /stock-screener は alias)
+        # mutual fund / share class (JNSXX / PRNHX 等) を除外するため isEtf=false&isFund=false
+        url = (
+            f"https://financialmodelingprep.com/stable/company-screener"
+            f"?marketCapMoreThan=500000000"
+            f"&isActivelyTrading=true&isEtf=false&isFund=false"
+            f"&exchange=NASDAQ,NYSE&limit={n}&apikey={api_key}"
+        )
+        async with _httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            data = resp.json()
+        if not isinstance(data, list):
+            print("[universe] _fetch_market_cap_top_n: FMP response not list")
+            return []
+        # marketCap 降順 sort (FMP の return order 信頼するが defense in depth で再 sort)
+        valid = [r for r in data if isinstance(r, dict) and r.get("marketCap") and r.get("symbol")]
+        valid.sort(key=lambda r: float(r.get("marketCap") or 0), reverse=True)
+        top = [str(r["symbol"]).upper().strip() for r in valid[:n]]
+        if not top:
+            print("[universe] _fetch_market_cap_top_n: 0 valid entries")
+            return []
+        _BACKTEST_UNIVERSE_CACHE[cache_key] = {"ts": _time.time(), "tickers": top}
+        print(f"[universe] dynamic fetched mktcap_top{n}: {len(top)} tickers (head: {top[:5]} / tail: {top[-3:]})")
+        return top
+    except Exception as e:
+        print(f"[universe] _fetch_market_cap_top_n failed ({e})")
+        return []
+
+
 def _compute_earnings_metrics(income_data: list, cf_data: list) -> list[dict]:
     """income_statement と cash_flow を join して computed metrics (eps / cfps / op_cf_margin) を返す。
 
@@ -13390,25 +13448,44 @@ async def cron_cup_scan(
       Premium plan 750 req/min で nightly batch 実行時間 16 分以内見込み。
 
     Body (任意):
-      tickers: list[str] — 対象銘柄、 未指定なら _fetch_sp500_top_n(500) (FMP 動的、 失敗時 hardcode top200 fallback)
+      tickers: list[str] — 対象銘柄、 未指定なら universe_source / universe_size で動的 fetch
+      universe_source: "sp500" | "russell3000" — default "sp500" (既存挙動維持)
+      universe_size: int — universe_source="sp500" なら 500 cap、 "russell3000" なら 3000 cap
       chunk_size: int — FMP rate limit 対応 (default 10、 sleep 1s between chunks)
+      worker_count: int — v124 Russell 3000 Phase 1 並列化 (default 1 = sequential、 3 で 3x 並列)
       dry_run: bool — True なら DB 書き込み skip (動作確認用)
 
     Returns:
-      processed_count, detected_count, state_breakdown, failed_tickers
+      processed_count, detected_count, state_breakdown, failed_tickers, universe_source, universe_size
     """
     _check_cron_secret(x_cron_secret)
 
     body = body or {}
     raw_tickers = body.get("tickers")
+    universe_source = body.get("universe_source", "sp500")
+    universe_size_arg = body.get("universe_size")
+
     if isinstance(raw_tickers, list) and raw_tickers:
-        tickers = [str(t).upper().strip() for t in raw_tickers if t][:500]
+        # v124: 明示 tickers 指定時は 3000 cap (Russell 3000 対応)
+        tickers = [str(t).upper().strip() for t in raw_tickers if t][:3000]
+    elif universe_source == "russell3000":
+        # v124 Russell 3000 Phase 1: market_cap top N (NASDAQ+NYSE)、 default 1000
+        n = int(universe_size_arg) if universe_size_arg else 1000
+        tickers = await _fetch_market_cap_top_n(n)
+        if not tickers:
+            # fallback: russell3000 fetch 失敗時は SP500 へ graceful degrade
+            print("[cup-scan] russell3000 fetch failed, falling back to sp500")
+            tickers = await _fetch_sp500_top_n(500)
+            universe_source = "sp500_fallback"
     else:
-        # v120 Phase 1: SP500 全 500 銘柄を動的 fetch (24h cache、 dynamic 失敗時は hardcode top200 fallback)
-        tickers = await _fetch_sp500_top_n(500)
+        # v120 既存: SP500 全 500 銘柄
+        n = int(universe_size_arg) if universe_size_arg else 500
+        tickers = await _fetch_sp500_top_n(n)
 
     chunk_size = int(body.get("chunk_size", 10))
     chunk_size = max(1, min(50, chunk_size))
+    worker_count = int(body.get("worker_count", 1))
+    worker_count = max(1, min(5, worker_count))  # safety cap
     dry_run = bool(body.get("dry_run", False))
 
     # SPY 200DMA filter (B 案) は 1 回 fetch して全 ticker で共有
@@ -13421,35 +13498,68 @@ async def cron_cup_scan(
     failed: list[dict] = []
     upserted = 0
 
-    for i, ticker in enumerate(tickers):
-        # chunk 境界で sleep (yfinance rate limit 緩和)
-        if i > 0 and i % chunk_size == 0:
-            await asyncio.sleep(1.0)
+    # v124 Russell 3000 Phase 1: worker_count > 1 で並列化 (asyncio.Semaphore で rate limit)
+    if worker_count > 1:
+        sem = asyncio.Semaphore(worker_count)
 
-        ohlcv = await asyncio.to_thread(_fetch_ohlcv_3y, ticker)
-        if ohlcv is None:
-            failed.append({"ticker": ticker, "reason": "ohlcv_fetch_failed"})
-            continue
-        times, highs, lows, closes, volumes = ohlcv
+        async def _scan_one(idx: int, ticker: str):
+            async with sem:
+                # chunk 境界で sleep (FMP/yfinance rate limit 緩和、 並列時も維持)
+                if idx > 0 and idx % chunk_size == 0:
+                    await asyncio.sleep(1.0)
+                ohlcv = await asyncio.to_thread(_fetch_ohlcv_3y, ticker)
+                if ohlcv is None:
+                    return ticker, None, "ohlcv_fetch_failed"
+                times, highs, lows, closes, volumes = ohlcv
+                try:
+                    result = _detect_cup_handle(times, highs, lows, closes, volumes, spy_up)
+                    return ticker, result, None
+                except Exception as e:
+                    return ticker, None, f"detect_failed: {e}"
 
-        try:
-            result = _detect_cup_handle(times, highs, lows, closes, volumes, spy_up)
-        except Exception as e:
-            failed.append({"ticker": ticker, "reason": f"detect_failed: {e}"})
-            continue
-
-        if result.get("detected"):
-            detected += 1
-        state = result.get("state") or "not_detected"
-        state_counts[state] = state_counts.get(state, 0) + 1
-
-        if not dry_run and result.get("detected"):
-            # 検出された場合のみ DB 保存 (未検出は履歴に残さない = retention 圧縮)
-            ok = await asyncio.to_thread(
-                _upsert_pattern_signal, ticker, "cup_handle", today, state, result
-            )
-            if ok:
-                upserted += 1
+        results = await asyncio.gather(
+            *[_scan_one(i, t) for i, t in enumerate(tickers)],
+            return_exceptions=False,
+        )
+        for ticker, result, err in results:
+            if err:
+                failed.append({"ticker": ticker, "reason": err})
+                continue
+            if result.get("detected"):
+                detected += 1
+            state = result.get("state") or "not_detected"
+            state_counts[state] = state_counts.get(state, 0) + 1
+            if not dry_run and result.get("detected"):
+                ok = await asyncio.to_thread(
+                    _upsert_pattern_signal, ticker, "cup_handle", today, state, result
+                )
+                if ok:
+                    upserted += 1
+    else:
+        # 既存 sequential path (worker_count=1)、 既存挙動維持
+        for i, ticker in enumerate(tickers):
+            if i > 0 and i % chunk_size == 0:
+                await asyncio.sleep(1.0)
+            ohlcv = await asyncio.to_thread(_fetch_ohlcv_3y, ticker)
+            if ohlcv is None:
+                failed.append({"ticker": ticker, "reason": "ohlcv_fetch_failed"})
+                continue
+            times, highs, lows, closes, volumes = ohlcv
+            try:
+                result = _detect_cup_handle(times, highs, lows, closes, volumes, spy_up)
+            except Exception as e:
+                failed.append({"ticker": ticker, "reason": f"detect_failed: {e}"})
+                continue
+            if result.get("detected"):
+                detected += 1
+            state = result.get("state") or "not_detected"
+            state_counts[state] = state_counts.get(state, 0) + 1
+            if not dry_run and result.get("detected"):
+                ok = await asyncio.to_thread(
+                    _upsert_pattern_signal, ticker, "cup_handle", today, state, result
+                )
+                if ok:
+                    upserted += 1
 
     return {
         "processed_count": len(tickers),
@@ -13459,6 +13569,9 @@ async def cron_cup_scan(
         "failed_count": len(failed),
         "failed_tickers": failed[:20],  # 上位 20 件のみ返却
         "signal_date": today.isoformat(),
+        "universe_source": universe_source,
+        "universe_size": len(tickers),
+        "worker_count": worker_count,
         "dry_run": dry_run,
     }
 
@@ -14028,7 +14141,10 @@ async def cron_rs_scan(
     universe 内 percentile rank (1-99) を算出して rs_ratings table に upsert。
 
     Body (任意):
-      tickers: list[str] — 対象銘柄、 未指定なら SP500 全 500 銘柄
+      tickers: list[str] — 対象銘柄、 未指定なら universe_source / universe_size で動的 fetch
+      universe_source: "sp500" | "russell3000" — default "sp500" (既存挙動維持)
+      universe_size: int — universe_source="sp500" なら 500 cap、 "russell3000" なら 3000 cap
+      worker_count: int — v124 Russell 3000 Phase 1 並列化 (default 1 = sequential、 3 で 3x 並列)
       dry_run: bool — True なら DB 書き込み skip
 
     Returns:
@@ -14038,10 +14154,24 @@ async def cron_rs_scan(
 
     body = body or {}
     raw_tickers = body.get("tickers")
+    universe_source = body.get("universe_source", "sp500")
+    universe_size_arg = body.get("universe_size")
+
     if isinstance(raw_tickers, list) and raw_tickers:
-        tickers = [str(t).upper().strip() for t in raw_tickers if t][:500]
+        tickers = [str(t).upper().strip() for t in raw_tickers if t][:3000]
+    elif universe_source == "russell3000":
+        n = int(universe_size_arg) if universe_size_arg else 1000
+        tickers = await _fetch_market_cap_top_n(n)
+        if not tickers:
+            print("[rs-scan] russell3000 fetch failed, falling back to sp500")
+            tickers = await _fetch_sp500_top_n(500)
+            universe_source = "sp500_fallback"
     else:
-        tickers = await _fetch_sp500_top_n(500)
+        n = int(universe_size_arg) if universe_size_arg else 500
+        tickers = await _fetch_sp500_top_n(n)
+
+    worker_count = int(body.get("worker_count", 1))
+    worker_count = max(1, min(5, worker_count))
     dry_run = bool(body.get("dry_run", False))
 
     # SPY history (24h cache、 Cup-Handle scan と共有)
@@ -14056,24 +14186,53 @@ async def cron_rs_scan(
     raw_rs: list[dict] = []  # [{ticker, rs_vs_spy_pct, self_percentile}]
     failed: list[dict] = []
 
-    for ticker in tickers:
-        ohlcv = await asyncio.to_thread(_fetch_ohlcv_3y, ticker)
-        if ohlcv is None:
-            failed.append({"ticker": ticker, "reason": "ohlcv_fetch_failed"})
-            continue
-        _, _, _, t_closes, _ = ohlcv
-        if not t_closes:
-            failed.append({"ticker": ticker, "reason": "empty_closes"})
-            continue
-        result = _compute_rs(t_closes, spy_closes)
-        if result.get("rs_vs_spy_pct") is None:
-            failed.append({"ticker": ticker, "reason": "compute_rs_returned_none"})
-            continue
-        raw_rs.append({
-            "ticker": ticker,
-            "rs_vs_spy_pct": float(result["rs_vs_spy_pct"]),
-            "self_percentile": result.get("self_percentile"),
-        })
+    # v124 Russell 3000 Phase 1: worker_count > 1 で並列化
+    if worker_count > 1:
+        sem = asyncio.Semaphore(worker_count)
+
+        async def _score_one(ticker: str):
+            async with sem:
+                ohlcv = await asyncio.to_thread(_fetch_ohlcv_3y, ticker)
+                if ohlcv is None:
+                    return ticker, None, "ohlcv_fetch_failed"
+                _, _, _, t_closes, _ = ohlcv
+                if not t_closes:
+                    return ticker, None, "empty_closes"
+                result = _compute_rs(t_closes, spy_closes)
+                if result.get("rs_vs_spy_pct") is None:
+                    return ticker, None, "compute_rs_returned_none"
+                return ticker, result, None
+
+        results = await asyncio.gather(*[_score_one(t) for t in tickers], return_exceptions=False)
+        for ticker, result, err in results:
+            if err:
+                failed.append({"ticker": ticker, "reason": err})
+                continue
+            raw_rs.append({
+                "ticker": ticker,
+                "rs_vs_spy_pct": float(result["rs_vs_spy_pct"]),
+                "self_percentile": result.get("self_percentile"),
+            })
+    else:
+        # 既存 sequential path、 既存挙動維持
+        for ticker in tickers:
+            ohlcv = await asyncio.to_thread(_fetch_ohlcv_3y, ticker)
+            if ohlcv is None:
+                failed.append({"ticker": ticker, "reason": "ohlcv_fetch_failed"})
+                continue
+            _, _, _, t_closes, _ = ohlcv
+            if not t_closes:
+                failed.append({"ticker": ticker, "reason": "empty_closes"})
+                continue
+            result = _compute_rs(t_closes, spy_closes)
+            if result.get("rs_vs_spy_pct") is None:
+                failed.append({"ticker": ticker, "reason": "compute_rs_returned_none"})
+                continue
+            raw_rs.append({
+                "ticker": ticker,
+                "rs_vs_spy_pct": float(result["rs_vs_spy_pct"]),
+                "self_percentile": result.get("self_percentile"),
+            })
 
     # universe_percentile rank (1-99): rs_vs_spy_pct 昇順で順位 → 上位ほど high percentile
     raw_rs.sort(key=lambda r: r["rs_vs_spy_pct"])
@@ -14113,6 +14272,9 @@ async def cron_rs_scan(
         "failed_count": len(failed),
         "top10": top10,
         "calc_date": today.isoformat(),
+        "universe_source": universe_source,
+        "universe_size": len(tickers),
+        "worker_count": worker_count,
         "dry_run": dry_run,
     }
 
