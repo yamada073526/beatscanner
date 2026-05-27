@@ -313,6 +313,10 @@ const TICKER_BLOCKLIST = new Set([
   'WiFi',                                   // 無線 LAN (PicoCELA 記事)
   'NASDAQ', 'NYSE', 'AMEX',                 // 証券取引所名
   'EBITDA', 'EBIT',                         // 既存だが念のため
+  // v123 hotfix Step 2: company name shorthand が ticker と異なるケース
+  // (例: TSMC は company name、 正しい ticker は TSM)。 Step 1 で BLOCKLIST 化して
+  // Step 2 (COMPANY_TICKER_MAP) 経由で正しく `[TSMC](/stock/TSM)` 生成させる。
+  'TSMC',                                   // → TSM (Taiwan Semiconductor、 COMPANY_TICKER_MAP で mapping 済)
 ]);
 
 /**
