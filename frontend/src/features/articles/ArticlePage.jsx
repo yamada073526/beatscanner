@@ -167,10 +167,19 @@ export default function ArticlePage({ slug }) {
       return;
     }
 
+    // v123 hotfix: published_at が null の article は generated_at で fallback。
+    // (v121 末期に user が service_role で status='published' 手動 update した残骸 2 件 -
+    // googl-202605241934 / nvda-202605251039 - 等への defense-in-depth。
+    // ArticleHero formatPublishedAt(null) → '' で <time> tag が消える bug を防止)
+    const withPublishedAtFallback = (data) => ({
+      ...data,
+      published_at: data?.published_at || data?.generated_at || null,
+    });
+
     // SSG inject データが既にある場合は fetch をスキップ (hydration)
     const injected = getInjectedData(slug);
     if (injected) {
-      setArticle(injected);
+      setArticle(withPublishedAtFallback(injected));
       setLoading(false);
       return;
     }
@@ -194,7 +203,7 @@ export default function ArticlePage({ slug }) {
           const fallback = await fetchArticleFromSupabase(slug);
           if (aborted) return;
           if (fallback) {
-            setArticle(fallback);
+            setArticle(withPublishedAtFallback(fallback));
             setLoading(false);
             return;
           }
@@ -207,7 +216,7 @@ export default function ArticlePage({ slug }) {
         const data = await res.json();
         if (aborted) return;
 
-        setArticle(data);
+        setArticle(withPublishedAtFallback(data));
         setLoading(false);
       } catch (err) {
         if (aborted) return;
@@ -217,7 +226,7 @@ export default function ArticlePage({ slug }) {
         const fallback = await fetchArticleFromSupabase(slug);
         if (aborted) return;
         if (fallback) {
-          setArticle(fallback);
+          setArticle(withPublishedAtFallback(fallback));
           setLoading(false);
           return;
         }
