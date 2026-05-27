@@ -46,10 +46,13 @@ command = "curl -s -X POST https://beatscanner-production.up.railway.app/api/og-
 
 # Cup-with-Handle Phase 2.1: nightly scan (2026-05-17、 multi-review 6 体合議 verdict)
 # SRE verdict: UTC 23:00 (= ET 18:00 / JST 8:00)、 米国市場 close 1.5h 後で日足 OHLC 確定済
-# S&P500 top 200 銘柄を _detect_cup_handle で scan → pattern_signals に upsert
+# v124 Russell 3000 Phase 1 (user 承認 2026-05-28): SP500 top 500 → Russell 3000 top 1000 拡張、
+# worker_count=3 並列化で実行時間 ~4.3 分 (dry_run verify、 SPEC §5 Phase 1 目標内)。
+# 1 週間 dogfood 後 Phase 2 (top 3000) 拡大判断。
+# fallback: russell3000 fetch 失敗時は SP500 へ graceful degrade (main.py:13478)
 [[crons]]
 schedule = "0 23 * * *"
-command = "curl -s -X POST -H \"X-Cron-Secret: $CRON_SECRET\" https://beatscanner-production.up.railway.app/api/cron/cup-scan > /dev/null 2>&1"
+command = "curl -s -X POST -H \"X-Cron-Secret: $CRON_SECRET\" -H \"Content-Type: application/json\" --max-time 1200 -d '{\"universe_source\":\"russell3000\",\"universe_size\":1000,\"worker_count\":3}' https://beatscanner-production.up.railway.app/api/cron/cup-scan > /dev/null 2>&1"
 
 # Cup-with-Handle Phase 2.3: nightly digest mail (cup-scan 完了から 15 分後)
 # UTC 23:15 = ET 18:15 / JST 8:15。 scan 結果の transition を集約して Premium user に digest 配信
@@ -58,12 +61,13 @@ schedule = "15 23 * * *"
 command = "curl -s -X POST -H \"X-Cron-Secret: $CRON_SECRET\" https://beatscanner-production.up.railway.app/api/cron/cup-notify > /dev/null 2>&1"
 
 # v121→v122 RS Screener Phase 1.5: nightly RS scan (cup-scan 完了から 30 分後)
-# UTC 23:30 = ET 18:30 / JST 8:30。 SP500 全 500 銘柄を _compute_rs() で集約 → rs_ratings 24h cache
-# William O'Neil CAN SLIM L 条件 (RS≥80)、 日本人向け米国株 retail で唯一の RS screener 装備
-# 実行時間目安: 197 銘柄処理で ~3 分 (FMP rate limit 内、 cup-scan と直列で安全)
+# UTC 23:30 = ET 18:30 / JST 8:30。 v124 Russell 3000 Phase 1 (user 承認 2026-05-28):
+# SP500 top 500 → Russell 3000 top 1000、 worker_count=3 並列化で ~4.3 分。
+# cup-scan 23:00 完了 (~5 分) → rs-scan 23:30 (25 分 buffer 十分)。
+# William O'Neil CAN SLIM L 条件 (RS≥80)、 universe 拡大で半導体一極集中 → 業種分散見込み。
 [[crons]]
 schedule = "30 23 * * *"
-command = "curl -s -X POST -H \"X-Cron-Secret: $CRON_SECRET\" --max-time 600 https://beatscanner-production.up.railway.app/api/cron/rs-scan > /dev/null 2>&1"
+command = "curl -s -X POST -H \"X-Cron-Secret: $CRON_SECRET\" -H \"Content-Type: application/json\" --max-time 1200 -d '{\"universe_source\":\"russell3000\",\"universe_size\":1000,\"worker_count\":3}' https://beatscanner-production.up.railway.app/api/cron/rs-scan > /dev/null 2>&1"
 
 # v122: article auto-publish digest (記事 cron 完了から数時間後、 朝の dogfood 帯)
 # v124 朝 R4 (user 要望: メール 5 時希望、 遅くとも 7 時): 22:00 → 21:00 UTC に 1 時間前倒し。
