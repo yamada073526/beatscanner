@@ -10781,8 +10781,19 @@ button.ds-chip[data-pressed="true"]:hover {
 }
 
 /* list: ul/ol */
-.article-prose ul,
+/* v123 hotfix (user dogfood 2026-05-27 daily-digest-20260527):
+   Tailwind preflight が `ol, ul { list-style: none; }` を default 適用するため、
+   .article-prose 内の bullet marker が非表示 → user 視点で箇条書きと認識しづらい。
+   list-style を明示復活で marker (disc / decimal) を表示。
+   gold accent marker で brand 整合 (color: var(--color-gold))。 */
+.article-prose ul {
+  list-style: disc;
+  margin: 0 0 1.5rem;
+  padding-left: var(--space-6, 24px);
+}
+
 .article-prose ol {
+  list-style: decimal;
   margin: 0 0 1.5rem;
   padding-left: var(--space-6, 24px);
 }
@@ -10790,6 +10801,10 @@ button.ds-chip[data-pressed="true"]:hover {
 .article-prose li {
   margin-bottom: var(--space-2, 8px);
   line-height: 1.75;
+}
+
+.article-prose li::marker {
+  color: var(--color-gold);
 }
 
 /* table: zebra stripe + gold header */

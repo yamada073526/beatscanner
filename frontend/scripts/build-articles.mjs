@@ -404,6 +404,19 @@ const COMPANY_TICKER_MAP = {
 };
 
 /**
+ * v123 hotfix (user dogfood 2026-05-27 daily-digest-20260527 で「IR」 誤 ticker 認識):
+ *
+ * 2 文字 ticker は誤認率が極めて高い (IR / AI / EU / US / IT / OS / CO / DO / ME / OR / TL / DR / VP / PR 等)
+ * → default skip ルール、 ただし COMPANY_TICKER_MAP の value に含まれる「明らかに valid な 1-2 文字 ticker」
+ *   (V / MA / KO / PG / JD / GS / MS / MU) は許可。
+ *
+ * BLOCKLIST 都度拡張だけでは抜け漏れ続く構造的問題 → 「許可リスト」 反転で根本対策。
+ */
+const VALID_SHORT_TICKERS = new Set(
+  Object.values(COMPANY_TICKER_MAP).filter((t) => t.length <= 2),
+);
+
+/**
  * markdown body_md 内の ticker mention を `/stock/<TICKER>` 内部リンクに変換する。
  *
  * @param {string} bodyMd   元の markdown テキスト (sanitize 済み)
@@ -450,6 +463,10 @@ function addTickerInternalLinks(bodyMd, articleTicker) {
     let processed = text.replace(TICKER_RE, (match, ticker) => {
       // blocklist チェック (英単語と衝突する ticker をスキップ)
       if (TICKER_BLOCKLIST.has(ticker)) return match;
+      // v123 hotfix Step 3: 2 文字 ticker は誤認率高い (IR/AI/EU/US/IT/OS/CO/DO/ME...)
+      // COMPANY_TICKER_MAP value に含まれる valid 1-2 文字 ticker (V/MA/KO/PG/JD/GS/MS/MU) のみ許可、
+      // それ以外は skip。 構造的予防で BLOCKLIST 都度拡張の漏れを根本対策。
+      if (ticker.length <= 2 && !VALID_SHORT_TICKERS.has(ticker)) return match;
       // 初出チェック
       if (linkedSet.has(ticker)) return match;
       // 初出: リンク化

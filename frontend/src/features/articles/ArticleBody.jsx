@@ -289,12 +289,26 @@ function buildComponents(onSanitized, ticker, tableRenderedRef) {
 
     // anchor:
     //   - 外部リンク (http/https): target="_blank" + rel="noopener noreferrer"
-    //   - /stock/<TICKER> (P3.7 internal link): rel="noopener" のみ (same-origin)
+    //   - /stock/<TICKER> (P3.7 internal link): /?ticker=<TICKER> に rewrite (v123 hotfix、
+    //     React Router で /stock/<X> route 未定義 → 404 だった真因。 既存 App.jsx の useEffect
+    //     ticker query param 経由で runAnalyze が起動して分析 ペインを開く設計に接続)
     //   - #cite-N (footnote): className で装飾 + aria-label (v116 R6 a11y、 UI/UX P3)
     a({ href, children }) {
       const isExternal = href && (href.startsWith('http://') || href.startsWith('https://'));
       const isCitation = href && href.startsWith('#cite-');
       const isInternalStock = href && href.startsWith('/stock/');
+
+      // v123 hotfix (user dogfood 2026-05-27 daily-digest-20260527 「CODX/BRAI ticker
+      // クリックでリンク先繋がらない」 への対応): /stock/<TICKER> を /?ticker=<TICKER>
+      // に rewrite して既存 App.jsx の analyze flow に接続。
+      let resolvedHref = href;
+      if (isInternalStock) {
+        const ticker = href.slice('/stock/'.length).split(/[?#]/)[0];
+        if (ticker) {
+          resolvedHref = `/?ticker=${encodeURIComponent(ticker)}`;
+        }
+      }
+
       // v116 R6 a11y: citation [N] は VoiceOver で「かっこ 1 かっこ」 と読まれるだけだったため
       //   aria-label="出典 N を見る" を付与。 N は href の #cite-N から抽出。
       //   internal stock link は ticker 名 (children) が読み上げられるので追加不要。
@@ -305,7 +319,7 @@ function buildComponents(onSanitized, ticker, tableRenderedRef) {
       }
       return (
         <a
-          href={href}
+          href={resolvedHref}
           target={isExternal && !isCitation ? '_blank' : undefined}
           rel={
             isExternal && !isCitation ? 'noopener noreferrer'
