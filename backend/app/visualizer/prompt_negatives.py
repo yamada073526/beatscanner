@@ -152,7 +152,10 @@ BLOCKLIST_REGEX: list[re.Pattern] = [
     # ─── Phase B grey zone (must-fix #2): BAD-5 系 金商法 §38 強化 ───────────────
     re.compile(r"成長見込み|成長が見込まれる|成長が期待"),
     re.compile(r"拡大基調|拡大が続く|拡大傾向"),
-    re.compile(r"追い風となる|追い風が吹く|追い風"),
+    # v124 hotfix (user dogfood 2026-05-28、 TSLA tsla-202605272023 で発覚):
+    # 単独「追い風」 match は「~を押し上げる追い風でもあります」 等 BAD ではない文脈を
+    # 過剰削除するため除外。 frontend lib/blocklist.js と 1:1 mirror。
+    re.compile(r"追い風となる|追い風が吹く"),
     re.compile(r"中長期的に有望|中長期的な成長|長期的に有望"),
 ]
 
