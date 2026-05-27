@@ -26,7 +26,7 @@ export const SELL_ZONE_DESC_JP = {
   normal:   '50DMA から +15% 未満。 William O\'Neil 著「How to Make Money in Stocks」 で示される通常レンジで、 急いだ利確は不要とされる範囲です。',
   extended: '50DMA から +15% 以上 +25% 未満。 IBD ルール (O\'Neil 著) では過熱の目安、 段階利確を検討する領域として紹介されています。',
   climax:   '50DMA から +25% 以上。 IBD/O\'Neil 著の climax top criteria に該当する範囲です。 過去の climax run では短期 reversion を示した事例が IBD 教材で紹介されています (将来を保証するものではありません)。',
-  stop_hit: 'IBD/O\'Neil 著の universal stop loss は購入価格から -8%。 損切り検討領域として紹介されています (Phase 1 では汎用説明のみ表示)。',
+  stop_hit: '過去最高値から -8% (Chandelier Exit 方式) の参考レベル。 IBD/O\'Neil 著の universal stop loss (購入価格から -8%) とは別の指標で、 保有銘柄の利確検討の補助として参考表示しています (Phase 2 で portfolio integration 予定)。',
   unknown:  '50DMA の値が取得できないため zone 判定を保留しています。 IPO < 50 日の銘柄等で発生します。',
 };
 
