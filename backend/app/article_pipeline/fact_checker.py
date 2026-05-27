@@ -33,10 +33,70 @@ import re
 from ..claude_client import ClaudeClient
 from .schemas import (
     ArticleDraft,
+    ArticleFormat,
     FactCheckMismatch,
     FactCheckResult,
     ResearcherOutput,
 )
+
+
+# ─── v123 Phase 34: structural validation (5 ステップ regenerate logic、 LLM 不要) ──
+#
+# writer が 5 ステップ構成 + format ごとの H2/H3 階層を守ったか regex match で軽量 check。
+# 違反 sentence なしでも structural 不備があれば regenerate (cost: cheap、 fail fast)。
+#
+# 緩い match (writer の表記揺れに対応):
+#   - 「## TL;DR」 / 「## 要約」 / 「## 要点」 を許容 (extractTLDR と同 anchor)
+#   - 「## 第 1 幕」 / 「## 第1幕」 / 「## 第１幕」 / 「## 第一幕」 を許容 (全角・漢数字)
+#   - 「## 投資家への含意」 / 「## 含意」 / 「## まとめ」 を許容
+#   - 「### 強気」 / 「### 強気シナリオ」 を許容 (suffix optional)
+
+
+def _has_pattern(body_md: str, pattern: str) -> bool:
+    """body_md 内に regex pattern が存在するか (re.MULTILINE)."""
+    return bool(re.search(pattern, body_md, re.MULTILINE))
+
+
+def validate_structure(body_md: str, article_format: ArticleFormat) -> list[str]:
+    """body_md の structural 整合性を check.
+
+    deep_dive / theme_horizon: ## TL;DR + ## 第 1-3 幕 + ## 投資家への含意 + ### 強気/弱気/推奨
+    daily_digest: ## 選定基準 + ## 本日の銘柄 (## 注目テーマ は optional)
+
+    Returns:
+        欠落 section の名前 list (空なら OK)
+    """
+    issues: list[str] = []
+
+    if article_format in (ArticleFormat.deep_dive, ArticleFormat.theme_horizon):
+        # TL;DR (必須、 別 anchor で extractTLDR と同 logic)
+        if not _has_pattern(body_md, r"^##\s*(?:TL;DR|TLDR|要約|要点)"):
+            issues.append("missing_tldr")
+        # 第 1-3 幕 (3 章 timeline + 業界 + 法的)
+        for n, kanji in [(1, "一"), (2, "二"), (3, "三")]:
+            pat = rf"^##\s*第\s*[{n}{'１２３'[n-1]}{kanji}]\s*幕"
+            if not _has_pattern(body_md, pat):
+                issues.append(f"missing_act_{n}")
+        # 投資家への含意 (必須、 frontend extractImplications anchor)
+        if not _has_pattern(body_md, r"^##\s*(?:投資家への含意|含意|まとめ|総括)"):
+            issues.append("missing_implications")
+        # ### 強気 / 弱気 / 推奨 (含意 H2 下の 3 軸 callout)
+        if not _has_pattern(body_md, r"^###\s*強気"):
+            issues.append("missing_h3_bullish")
+        if not _has_pattern(body_md, r"^###\s*弱気"):
+            issues.append("missing_h3_bearish")
+        if not _has_pattern(body_md, r"^###\s*(?:推奨|アクション|提案)"):
+            issues.append("missing_h3_action")
+
+    elif article_format == ArticleFormat.daily_digest:
+        # daily_digest v123 3 H2 構造 (writer.py SSOT)
+        if not _has_pattern(body_md, r"^##\s*選定基準"):
+            issues.append("missing_selection_criteria")
+        if not _has_pattern(body_md, r"^##\s*(?:本日の銘柄|今日の銘柄|本日の注目)"):
+            issues.append("missing_tickers_section")
+        # 注目テーマは optional のため check しない
+
+    return issues
 
 # ─── System prompt ─────────────────────────────────────────────────────────
 
@@ -194,6 +254,23 @@ async def check(
     Returns:
         FactCheckResult (mismatches 0 件で passed=True、 regenerate_needed=False)
     """
+    # v123 Phase 34: structural validation (5 ステップ regenerate logic、 LLM call 前に fail fast)
+    # format ごとの H2/H3 階層が欠落していれば Haiku call skip して regenerate trigger。
+    # cost: cheap regex match のみ、 article 1 件あたり < 1ms。
+    structure_issues = validate_structure(draft.body_md, draft.format)
+    if structure_issues:
+        return FactCheckResult(
+            passed=False,
+            mismatches=[
+                FactCheckMismatch(
+                    article_sentence="(structure missing)",
+                    expected_value=", ".join(structure_issues),
+                    reason=f"structure_missing: {', '.join(structure_issues)}"[:60],
+                )
+            ],
+            regenerate_needed=True,
+        )
+
     pairs = extract_cited_sentences(draft.body_md)
 
     if not pairs:
