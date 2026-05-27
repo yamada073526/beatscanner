@@ -175,7 +175,7 @@ async def check(
     researcher_output: ResearcherOutput,
     client: ClaudeClient | None = None,
     model: str = "claude-haiku-4-5-20251001",
-    max_tokens: int = 512,
+    max_tokens: int = 1024,
 ) -> FactCheckResult:
     """ArticleDraft の各 [N] sentence を source_facts と突き合わせる.
 
@@ -184,7 +184,10 @@ async def check(
         researcher_output: writer に渡したものと同じ ResearcherOutput
         client: 注入用 ClaudeClient、 None なら ENV から構築
         model: Haiku 4.5 (cost 最重視)
-        max_tokens: 512 (10 sentence × 50 tok 目安、 過剰は cost 増)
+        max_tokens: 1024 (v123 hotfix、 旧 default 512 では文体憲法 v3 + 長文 article で
+            「Unterminated string」 JSON parse 失敗が頻発し regenerate_failed false negative
+            化。 META 手動 verify で 3 attempts 全 fail を観測。 cost 増は 1 article +$0.002
+            程度 = 月 200-300 円 negligible。 sentences 30+ や reason 長文時の余裕確保)
 
     Returns:
         FactCheckResult (mismatches 0 件で passed=True、 regenerate_needed=False)
