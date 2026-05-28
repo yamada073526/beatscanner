@@ -11349,6 +11349,77 @@ button.ds-chip[data-pressed="true"]:hover {
   font-size: 11px;
   line-height: 1.45;
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   v126 R8-3 Phase 2: CupPivotCard (MarketSurge 互換 Cup-Handle pivot narration)
+   静的 dictionary narration (LLM 不使用、 金商法 §38 / 景表法 §5 safe)
+   SellZoneCard と同 layout idiom、 token 違反なし、 Phase 4 で 3 card 並列 grid に統合予定
+   ───────────────────────────────────────────────────────────────── */
+.cpc-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px 20px;
+}
+.cpc-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+.cpc-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+  margin: 0;
+}
+.cpc-body { display: grid; gap: 10px; }
+.cpc-narration { display: grid; gap: 6px; }
+.cpc-desc {
+  margin: 0;
+  line-height: 1.45;
+}
+.cpc-desc--conclusion {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 13.5px;
+}
+.cpc-desc--detail {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.cpc-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  flex-wrap: wrap;
+}
+.cpc-meta-value { font-weight: 600; color: var(--text-secondary); }
+.cpc-state-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 0;
+}
+.cpc-state-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.cpc-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.cpc-source { font-weight: 500; }
+.cpc-disclaimer { font-style: italic; opacity: 0.8; }
 .szc-meta {
   display: flex;
   gap: 12px;

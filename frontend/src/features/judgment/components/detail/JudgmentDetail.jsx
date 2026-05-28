@@ -31,6 +31,8 @@ import StockPriceChart from '../../../../components/StockPriceChart.jsx';
 // SPEC 2026-05-28 Sprint 4 + 6 (pillar 2 technical): Chart 直下に hero card 2 つを並列配置
 import AnalystTargetCard from '../../../../components/AnalystTargetCard.jsx';
 import SellZoneCard from '../../../../components/SellZoneCard.jsx';
+// v126 R8-3 Phase 2: MarketSurge 互換 Cup-Handle pivot narration (state=formation 時のみ表示)
+import CupPivotCard from '../../../../components/CupPivotCard.jsx';
 import GuidanceCard from '../../../../components/GuidanceCard.jsx';
 // v100 user dogfood (handover §100点 multi-review): Pane 3 Insider 取引 section の中身実装
 import InsiderPanel from '../../../../components/InsiderPanel.jsx';
@@ -851,6 +853,9 @@ export default function JudgmentDetail({
               <AnalystTargetCard ticker={selectedTicker} />
               <SellZoneCard ticker={selectedTicker} />
             </div>
+            {/* v126 R8-3 Phase 2: Cup-Handle pivot narration (state=formation 時のみ render、 検出なしは non-display)。
+                Phase 4 で BuyZoneCard と共に 3 card grid に統合予定。 */}
+            <CupPivotCard ticker={selectedTicker} />
           </SectionFade>
         ) : null;
 
