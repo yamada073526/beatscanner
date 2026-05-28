@@ -76,8 +76,13 @@ async function fetchCupHandle({ limit = 20 } = {}) {
  * @param {Function} props.onSelect
  * @param {React.Ref<HTMLDivElement>} props.sectionRef - chip click scroll-to 用 ref
  * @param {boolean} props.active - chip filter active 時 highlight
+ * @param {boolean} props.demoMode - true なら top 1 visible + 残 blur + ProTeaser overlay (v125 P5-2)
+ * @param {Function} props.onUpgrade - ProTeaser CTA で呼び出し (Pro 訴求 modal 起動)
  */
-function HeroSection({ title, testId, description, tickers, loading, emptyMessage, onSelect, sectionRef, active = false }) {
+function HeroSection({ title, testId, description, tickers, loading, emptyMessage, onSelect, sectionRef, active = false, demoMode = false, onUpgrade }) {
+  // v125 P5-2: demo モード時は top 1 visible + 残り blur (marketer 6 体合議 verdict)
+  const visibleCount = demoMode ? 1 : tickers.length;
+  const blurredCount = demoMode ? Math.max(0, tickers.length - 1) : 0;
   return (
     <div
       ref={sectionRef}
@@ -128,37 +133,72 @@ function HeroSection({ title, testId, description, tickers, loading, emptyMessag
         </div>
       ) : (
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {tickers.map((t) => (
-            <li key={t.ticker}>
-              <button
-                type="button"
-                onClick={() => onSelect(t.ticker)}
-                data-testid={`screener-hero-ticker-${t.ticker}`}
-                style={{
-                  width: '100%',
-                  padding: '6px 8px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  textAlign: 'left',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-sm, 4px)',
-                  background: 'var(--bg-subtle)',
-                  color: 'var(--text-primary)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                <span style={{ fontFamily: 'var(--font-mono, monospace)' }}>{t.ticker}</span>
-                {t.badge && (
-                  <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 400 }}>{t.badge}</span>
-                )}
-              </button>
-            </li>
-          ))}
+          {tickers.map((t, idx) => {
+            // v125 P5-2: demo モード時は idx === 0 のみ visible、 残りは blur
+            const isBlurred = demoMode && idx >= visibleCount;
+            return (
+              <li key={t.ticker}>
+                <button
+                  type="button"
+                  onClick={isBlurred ? onUpgrade : () => onSelect(t.ticker)}
+                  data-testid={`screener-hero-ticker-${isBlurred ? 'blurred' : t.ticker}`}
+                  data-blurred={isBlurred ? 'true' : 'false'}
+                  aria-label={isBlurred ? 'Premium プランで全銘柄を解放' : `${t.ticker} の詳細を表示`}
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    textAlign: 'left',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm, 4px)',
+                    background: 'var(--bg-subtle)',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 8,
+                    filter: isBlurred ? 'blur(4px)' : 'none',
+                    opacity: isBlurred ? 0.5 : 1,
+                    pointerEvents: isBlurred ? 'none' : 'auto',
+                  }}
+                >
+                  <span style={{ fontFamily: 'var(--font-mono, monospace)' }}>{t.ticker}</span>
+                  {t.badge && (
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 400 }}>{t.badge}</span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
         </ul>
+      )}
+
+      {/* v125 P5-2: demo モード時の ProTeaser overlay (marketer 6 体合議 verdict)
+          「Premium で全 N 銘柄」 文言で具体性 + LP「3 銘柄/日まで無料試用」 整合 */}
+      {demoMode && blurredCount > 0 && (
+        <button
+          type="button"
+          onClick={onUpgrade}
+          data-testid={`screener-hero-proteaser-${testId}`}
+          style={{
+            marginTop: 'var(--space-2, 8px)',
+            width: '100%',
+            padding: '8px 12px',
+            fontSize: 11,
+            fontWeight: 600,
+            textAlign: 'center',
+            border: '1px solid color-mix(in srgb, var(--color-accent) 40%, transparent)',
+            borderRadius: 'var(--radius-sm, 4px)',
+            background: 'color-mix(in srgb, var(--color-accent) 8%, transparent)',
+            color: 'var(--color-accent)',
+            cursor: 'pointer',
+            transition: 'background 0.2s ease',
+          }}
+        >
+          Premium で残り {blurredCount} 銘柄を解放
+        </button>
       )}
     </div>
   );
@@ -174,6 +214,11 @@ function HeroSection({ title, testId, description, tickers, loading, emptyMessag
 export default function ScreenerPane({ detailContext = {}, isProUser = false, handleUpgradeRequest }) {
   const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
   const setActiveTab = useWorkspaceStore((s) => s.setActiveTab);
+
+  // v125 P5-2: demo モード判定 (未ログイン + 非 Pro)。
+  // marketer 6 体合議 verdict: demo user に「top 1 visible + 残り blur」 で訴求、
+  // LP「3 銘柄/日まで無料試用」 と整合 (各 Hero section top 1 = 3 銘柄/日 換算)
+  const demoMode = !detailContext?.user || !isProUser;
 
   // 3 Hero section の state
   const [leaderCwh, setLeaderCwh] = useState({ tickers: [], loading: true });
@@ -283,7 +328,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           color: 'var(--color-warning)',
         }}
       >
-        Phase 4-A Sprint 4-A-4 (feature flag preview)。 Hero 3 セクション fetch + chip filter active highlight 実装済、 demo blur + WorkspaceHeader 既存 button 削除は user gate 3 通過後。
+        Phase 4-A Sprint 4-A-4 (feature flag preview)。 Hero 3 セクション fetch + chip filter active highlight + demo blur + ProTeaser overlay 実装済、 WorkspaceHeader 既存 button 削除は user gate 3 通過後。
       </div>
 
       {/* Sprint 4-A-4: chip filter (Hero 3 section の jump + active highlight、 ui-designer 6 体合議 verdict) */}
@@ -348,6 +393,8 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           onSelect={handleSelect}
           sectionRef={leaderRef}
           active={activeChip === 'leader'}
+          demoMode={demoMode}
+          onUpgrade={handleUpgradeRequest}
         />
         <HeroSection
           title="RS 急上昇"
@@ -363,6 +410,8 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           onSelect={handleSelect}
           sectionRef={risingRef}
           active={activeChip === 'rising'}
+          demoMode={demoMode}
+          onUpgrade={handleUpgradeRequest}
         />
         <HeroSection
           title="新規 Cup-Handle 検出"
@@ -374,6 +423,8 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           onSelect={handleSelect}
           sectionRef={newCwhRef}
           active={activeChip === 'new-cwh'}
+          demoMode={demoMode}
+          onUpgrade={handleUpgradeRequest}
         />
       </section>
 
