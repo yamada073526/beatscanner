@@ -11420,6 +11420,40 @@ button.ds-chip[data-pressed="true"]:hover {
 }
 .cpc-source { font-weight: 500; }
 .cpc-disclaimer { font-style: italic; opacity: 0.8; }
+
+/* v126 R8-3 Phase 3: BuyZoneCard (直近 breakout = support level narration)
+   CupPivotCard と同 layout idiom、 token 違反なし */
+.bzc-card { display: grid; gap: 12px; padding: 16px 20px; }
+.bzc-head { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.bzc-title { font-size: 13px; font-weight: 600; letter-spacing: 0.02em; color: var(--text-primary); margin: 0; }
+.bzc-body { display: grid; gap: 10px; }
+.bzc-narration { display: grid; gap: 6px; }
+.bzc-desc { margin: 0; line-height: 1.45; }
+.bzc-desc--conclusion { color: var(--text-primary); font-weight: 600; font-size: 13.5px; }
+.bzc-desc--detail { color: var(--text-muted); font-size: 11px; }
+.bzc-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  flex-wrap: wrap;
+}
+.bzc-meta-value { font-weight: 600; color: var(--text-secondary); }
+.bzc-state-empty { display: flex; align-items: center; justify-content: center; padding: 16px 0; }
+.bzc-state-sub { font-size: 12px; color: var(--text-muted); margin: 0; }
+.bzc-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.bzc-source { font-weight: 500; }
+.bzc-disclaimer { font-style: italic; opacity: 0.8; }
 .szc-meta {
   display: flex;
   gap: 12px;

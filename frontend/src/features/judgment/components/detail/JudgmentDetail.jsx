@@ -33,6 +33,8 @@ import AnalystTargetCard from '../../../../components/AnalystTargetCard.jsx';
 import SellZoneCard from '../../../../components/SellZoneCard.jsx';
 // v126 R8-3 Phase 2: MarketSurge 互換 Cup-Handle pivot narration (state=formation 時のみ表示)
 import CupPivotCard from '../../../../components/CupPivotCard.jsx';
+// v126 R8-3 Phase 3: 直近 breakout = support level narration (last_breakout 取得時のみ表示)
+import BuyZoneCard from '../../../../components/BuyZoneCard.jsx';
 import GuidanceCard from '../../../../components/GuidanceCard.jsx';
 // v100 user dogfood (handover §100点 multi-review): Pane 3 Insider 取引 section の中身実装
 import InsiderPanel from '../../../../components/InsiderPanel.jsx';
@@ -853,9 +855,11 @@ export default function JudgmentDetail({
               <AnalystTargetCard ticker={selectedTicker} />
               <SellZoneCard ticker={selectedTicker} />
             </div>
-            {/* v126 R8-3 Phase 2: Cup-Handle pivot narration (state=formation 時のみ render、 検出なしは non-display)。
-                Phase 4 で BuyZoneCard と共に 3 card grid に統合予定。 */}
+            {/* v126 R8-3 Phase 2+3: Cup-Handle pivot + 直近 breakout support narration。
+                各々 non-display 条件 (検出なし / last_breakout なし) で null return、 Pane 3 ノイズゼロ設計。
+                Phase 4 で AnalystTargetCard + SellZoneCard と共に 3-4 card grid 統合予定。 */}
             <CupPivotCard ticker={selectedTicker} />
+            <BuyZoneCard ticker={selectedTicker} />
           </SectionFade>
         ) : null;
 

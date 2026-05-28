@@ -11295,6 +11295,21 @@ async def get_technical(
             patterns_result["cup_handle"] = _detect_cup_handle(
                 times, highs, lows, closes, volumes, spy_up
             )
+            # v126 R8-3 Phase 3: NVDA 型「直近 breakout = support level」 narration 用に
+            # 過去の breakout_confirmed signal の pivot price を inject。
+            # data namespace: cup_handle.last_breakout = { price, date }
+            try:
+                last_breakout = _fetch_pattern_signal_latest_breakout(ticker_u)
+                if last_breakout and isinstance(last_breakout.get("payload"), dict):
+                    payload = last_breakout["payload"]
+                    pivot = payload.get("pivot")
+                    if isinstance(pivot, dict) and "price" in pivot:
+                        patterns_result["cup_handle"]["last_breakout"] = {
+                            "price": pivot["price"],
+                            "date": last_breakout.get("signal_date"),
+                        }
+            except Exception as e:
+                print(f"[cup_handle] last_breakout inject failed: {e}")
 
         # SMA は dma_cross 検出でも使うため事前計算 (slice 用とは別 reference を保持)
         sma_50_full: list[float | None] | None = None
@@ -12490,6 +12505,34 @@ def _fetch_pattern_signal_latest(ticker: str, pattern_type: str = "cup_handle") 
         return res.data[0] if res.data else None
     except Exception as e:
         print(f"[pattern_signals] fetch_latest failed for {ticker}: {e}")
+        return None
+
+
+def _fetch_pattern_signal_latest_breakout(
+    ticker: str,
+    pattern_type: str = "cup_handle",
+) -> dict | None:
+    """v126 R8-3 Phase 3: 指定 ticker の **直近 breakout_confirmed** signal を返す。
+    NVDA 型の「直前 breakout = 上値抵抗線 = support level」 narration の data 提供用。
+    無ければ None。
+    """
+    sb = _get_supabase_service()
+    if sb is None:
+        return None
+    try:
+        res = (
+            sb.table("pattern_signals")
+            .select("*")
+            .eq("ticker", ticker)
+            .eq("pattern_type", pattern_type)
+            .eq("state", "breakout_confirmed")
+            .order("signal_date", desc=True)
+            .limit(1)
+            .execute()
+        )
+        return res.data[0] if res.data else None
+    except Exception as e:
+        print(f"[pattern_signals] fetch_latest_breakout failed for {ticker}: {e}")
         return None
 
 
