@@ -57,3 +57,39 @@ production bundle (P7-1 R1 hotfix 後): index-bXxCdCXp.js (frontend) + backend d
 - **P7-3** (commit a8adfbf): testid 横展開 phase 5 — EarningsReactionPanel + InsiderPanel に統一付与。 累計 13 component の testid audit 全完了
 
 累計 v125 = **35 commit**、 deploy 18 回、 全 healthcheck pass。
+
+## user 帰宅後 dogfood feedback + R4 hotfix (commit 39c32b5)
+
+**user 確認結果** (5/28 帰宅後):
+- ✅ 既存 user 体験: Chart 直下 2 card visible、 4 本 ReferenceLine OK、 WorkspaceHeader 既存 button 維持 (default OFF)
+- ✅ Pane 1 スクリーナー Pane visible、 chip filter + Hero 3 section + Explorer 動作
+- ✅ Supabase migration apply 実行済 (Sprint 2.5 完了、 5/29 cron 次回 populate)
+- ❌ Chart label 「extended +15%」 と「アナリスト目標」 が重なる (NVDA で Y 位置近接) → **R4-1 修正**
+- ❌ SellZoneCard 文章順序、「結論 → 理由 → 根拠」 に並び替え + 根拠灰色希望 → **R4-2 修正**
+- ⚠️ アナリスト数 4 人少ない、 出典追記希望 → AnalystTargetCard footer に AnalystPanel への scroll link 追加案 (次 session 30 min)
+- ⚠️ demo blur 不発 (user は Pro 認識、 logic 正常)
+
+**user 判断**:
+- Phase 4-B 案 A vs 案 B: **案 B 推奨** (5 条件カード accordion 外維持、 LP「2 秒で判定」 完全保持)
+- 図解 sticky accordion: **default OFF** (user 指示「メインは Chart、 図解は 2 回目以降しつこい」)
+- DiagramCard mount 維持: 技術判定 (Phase 4-B 着手時に SPEC §5 明文化)
+- Phase 4-B release 前着手: **OK**
+- flag default ON 化: **OK** (他 user いない、 即時公開)
+- scan-all: **現状維持** (backup 待機)
+
+**R4 hotfix (commit 39c32b5)**:
+- R4-1: アナリスト目標 label position 'right' → 'insideTopRight' で extended +15% と分離
+- R4-2: SELL_ZONE_DESC_JP を 3 field (conclusion/reason/source) 構造化、 SellZoneCard で順次表示、 source 灰色 (var(--text-muted) fs 11px)
+
+累計 v125 = **38 commit**、 deploy 19 回。
+
+## 🔴 次 session 推奨タスク (優先度順)
+
+1. **flag default ON 化** (user 承認済): Workspace.jsx + WorkspaceHeader.jsx の `isPillar2Pane1()` を `() => true` に変更 (10 min)
+2. **Phase 4-B 着手** (user release 前指示): 案 B (5 条件カード accordion 外維持) + 図解 default OFF + DiagramCard mount 維持で SPEC §5 patch → Sprint A (抽出分離、 1.0 人日) → Sprint B (順序変更、 1.5 人日)
+3. **AnalystTargetCard footer link 追加** (user feedback): 「直近 grade 変更を見る」 link → AnalystPanel scroll、 アナリスト出典動線確保 (30 min)
+4. **マーケ launch punch line 確定**: top 3 = (1) IBD テクニカル × ファンダ 5 条件 (推奨) / (2) 決算 quarterly + テクニカル daily / (3) IBD CAN SLIM 決定版
+5. **Article digest 件名確定**: top 3 = (1) 今日の注目 — IBD テクニカル × 5 条件 (推奨) / (2) 今日の米国株を 2 分で / (3) 本日の米国株記事
+6. **Cup-Handle digest 件名確定**: top 3 = (1) Leader + Breakout 候補 (推奨) / (2) 本日の Cup-Handle 検出 / (3) テクニカル × ファンダ 交差
+
+詳細は handover_2026-05-28_v125_full.md 参照。
