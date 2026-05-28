@@ -90,10 +90,10 @@ export default function SellZoneCard({ ticker }) {
   const zoneLabel = SELL_ZONE_LABEL_JP[zone] || SELL_ZONE_LABEL_JP.unknown;
   const zoneDesc = SELL_ZONE_DESC_JP[zone] || SELL_ZONE_DESC_JP.unknown;
 
-  // CLS envelope
+  // CLS envelope。 data-testid は全 state に付与 (QA / snap-pdca-loop selector 安定性)
   if (loading && !priceData && !technical) {
     return (
-      <section className="panel-card szc-card" aria-busy style={{ minHeight: 116 }}>
+      <section className="panel-card szc-card" data-testid="sell-zone-card" aria-busy style={{ minHeight: 116 }}>
         <header className="szc-head">
           <h3 className="szc-title">50DMA extension 状況</h3>
         </header>
@@ -106,7 +106,7 @@ export default function SellZoneCard({ ticker }) {
 
   if (errored) {
     return (
-      <section className="panel-card szc-card" style={{ minHeight: 116 }}>
+      <section className="panel-card szc-card" data-testid="sell-zone-card" style={{ minHeight: 116 }}>
         <header className="szc-head">
           <h3 className="szc-title">50DMA extension 状況</h3>
         </header>

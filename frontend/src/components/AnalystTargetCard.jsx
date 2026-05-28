@@ -82,10 +82,10 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
     return () => { cancelled = true; };
   }, [ticker]);
 
-  // CLS envelope: fetch 前後で section 高さを固定 (envelope 116px) して伸縮防止
+  // CLS envelope: fetch 前後で section 高さを固定 (envelope 116px) + data-testid を全 state に付与
   if (loading && !data) {
     return (
-      <section className="panel-card atc-card" aria-busy style={{ minHeight: 116 }}>
+      <section className="panel-card atc-card" data-testid="analyst-target-card" aria-busy style={{ minHeight: 116 }}>
         <header className="atc-head">
           <h3 className="atc-title">アナリスト目標株価</h3>
         </header>
@@ -96,7 +96,7 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
 
   if (errored || !data) {
     return (
-      <section className="panel-card atc-card" style={{ minHeight: 116 }}>
+      <section className="panel-card atc-card" data-testid="analyst-target-card" style={{ minHeight: 116 }}>
         <header className="atc-head">
           <h3 className="atc-title">アナリスト目標株価</h3>
         </header>
@@ -111,7 +111,7 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
   // sources.price_target が ok でなければ「カバー外」 表示 (per-source data namespace 厳守)
   if (sources.price_target !== 'ok') {
     return (
-      <section className="panel-card atc-card" style={{ minHeight: 116 }}>
+      <section className="panel-card atc-card" data-testid="analyst-target-card" style={{ minHeight: 116 }}>
         <header className="atc-head">
           <h3 className="atc-title">アナリスト目標株価</h3>
         </header>
