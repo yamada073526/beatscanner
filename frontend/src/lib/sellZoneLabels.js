@@ -24,6 +24,8 @@ export const SELL_ZONE_LABEL_JP = {
   extended: 'extension 段階',
   climax:   'climax warning',
   stop_hit: '8% stop hit',
+  // v126 R13-4 R1: 50DMA Break with Heavy Volume zone (IBD/O'Neil S5)
+  dma_break: '50DMA break',
   unknown:  '判定不可',
 };
 
@@ -54,6 +56,12 @@ export const SELL_ZONE_DESC_JP = {
     conclusion: '保有銘柄の利確検討の参考表示です。',
     detail: '過去最高値から -8% (Chandelier Exit 方式)、 IBD/O\'Neil 著の universal stop loss とは別指標。',
   },
+  // v126 R13-4 R1 (5/29 sub-agent verdict、 user 承認): 50DMA Break + Heavy Volume detection。
+  // IBD/O'Neil 7 sell rules の S5 (50DMA Break with Heavy Volume) 目安。 frontend で動的 inject。
+  dma_break: {
+    conclusion: '50DMA 下抜けが報告されています。',
+    detail: '50DMA を高出来高で下抜けると pattern failure の signal とされる事例があります (IBD ルール、 W. O\'Neil 著)。 再奪取で持ち直すケースも紹介されています。',
+  },
   unknown: {
     conclusion: 'zone 判定を保留しています。',
     detail: '50DMA の値が取得できません (IPO < 50 日の銘柄等で発生)。',
@@ -63,10 +71,14 @@ export const SELL_ZONE_DESC_JP = {
 /**
  * extension % から zone を分類.
  * @param {number} extensionPct - (currentPrice / sma50 - 1) * 100
- * @returns {'normal'|'extended'|'climax'|'unknown'}
+ * @param {object} [extra] - 追加 detection 用 input
+ * @param {boolean} [extra.dmaBreak] - 50DMA を high volume で下抜けたか (R13-4 R1)
+ * @returns {'normal'|'extended'|'climax'|'dma_break'|'unknown'}
  */
-export function classifyZone(extensionPct) {
+export function classifyZone(extensionPct, extra = {}) {
   if (!Number.isFinite(extensionPct)) return 'unknown';
+  // v126 R13-4 R1: 50DMA Break (extension < 0) + high volume の場合は別 zone 優先
+  if (extensionPct < 0 && extra.dmaBreak) return 'dma_break';
   if (extensionPct >= 25) return 'climax';
   if (extensionPct >= 15) return 'extended';
   return 'normal';

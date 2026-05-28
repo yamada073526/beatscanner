@@ -36,7 +36,7 @@ Output ONLY these fields (DO NOT output trends/valuation/operatingMargins/fcfTre
   "risks": ["リスク名:EPS-$X.XX / 売上-$XB の定量インパクト", "リスク2", "リスク3"],
   "bullCase": ["ブル根拠1（20字）", "ブル根拠2", "ブル根拠3"],
   "bearCase": ["ベア根拠1（20字）", "ベア根拠2", "ベア根拠3"],
-  "investorQuestion": "なぜ今この銘柄を保有（または回避）すべきか2〜3文",
+  "investorQuestion": "なぜ今この銘柄が注目されるかの目安1文（40字以内、 「買い/売り/すべき」等の断定表現BAN、 §38 safe表現のみ）",
   "consensusSource": "FactSet via FMP analyst-estimates",
   "dividend": {"yield": 0.8, "payoutRatio": 28.0, "buyback": true}
 }

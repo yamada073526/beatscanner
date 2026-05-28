@@ -89,7 +89,34 @@ export default function SellZoneCard({ ticker }) {
     return (currentPrice / sma50Latest - 1) * 100;
   }, [currentPrice, sma50Latest]);
 
-  const zone = classifyZone(extensionPct);
+  // v126 R13-4 R1 (5/29 sub-agent verdict): 50DMA Break with Heavy Volume detection。
+  // 直近 5 営業日に close が sma50 を下抜けた日 + その日 volume が 50d avg の 1.4 倍以上、 該当時 dmaBreak=true。
+  const dmaBreak = useMemo(() => {
+    if (!priceData?.prices?.length || !technical?.overlays) return false;
+    const sma50Overlay = technical.overlays.find((ov) => ov.key === 'sma_50');
+    if (!sma50Overlay?.data?.length) return false;
+    const smaMap = new Map(sma50Overlay.data.map((d) => [d.time, d.value]));
+    const recent5 = priceData.prices.slice(-5);
+    if (recent5.length < 2) return false;
+    // 50d avg volume (直近 50 営業日)
+    const volumes50 = priceData.prices.slice(-50).map((p) => p.volume).filter(Number.isFinite);
+    if (volumes50.length < 10) return false;
+    const avgVol50 = volumes50.reduce((a, b) => a + b, 0) / volumes50.length;
+    // 直近 5 日のうち sma50 下抜け + volume 1.4x avg の日があるか
+    for (let i = 1; i < recent5.length; i++) {
+      const today = recent5[i];
+      const yest = recent5[i - 1];
+      const smaToday = smaMap.get(today.time);
+      const smaYest = smaMap.get(yest.time);
+      if (!Number.isFinite(smaToday) || !Number.isFinite(smaYest)) continue;
+      const crossedBelow = yest.close >= smaYest && today.close < smaToday;
+      const heavyVol = Number.isFinite(today.volume) && today.volume >= avgVol50 * 1.4;
+      if (crossedBelow && heavyVol) return true;
+    }
+    return false;
+  }, [priceData, technical]);
+
+  const zone = classifyZone(extensionPct, { dmaBreak });
   const zoneLabel = SELL_ZONE_LABEL_JP[zone] || SELL_ZONE_LABEL_JP.unknown;
   const zoneDesc = SELL_ZONE_DESC_JP[zone] || SELL_ZONE_DESC_JP.unknown;
 
@@ -124,7 +151,8 @@ export default function SellZoneCard({ ticker }) {
   // normal=muted (中立) / extended=warning (amber) / climax/stop_hit=loss (赤)、 unknown=muted。
   const chipTone =
     zone === 'extended' ? 'warning' :
-    (zone === 'climax' || zone === 'stop_hit') ? 'loss' :
+    // v126 R13-4 R1: dma_break も climax/stop_hit と同様 loss tone (赤、 警告)
+    (zone === 'climax' || zone === 'stop_hit' || zone === 'dma_break') ? 'loss' :
     'muted';
 
   return (

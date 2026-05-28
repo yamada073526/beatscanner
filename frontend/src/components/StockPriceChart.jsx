@@ -365,11 +365,21 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
       : null;
     const sourceOk = analystData?.sources?.price_target === 'ok';
 
+    // v126 R13-4 R3 (5/29 sub-agent verdict、 user 承認): +20% Profit Take ライン。
+    // IBD/O'Neil 7 sell rules の S2 (+20-25% Profit Take Rule) 目安。
+    // base 価格 = 直近 52w low (= cup low or recent base low) を基準、 簡易計算で 252d window の最安値 × 1.20。
+    // false positive 低めにするため 252 営業日範囲で計算 (1 年安値からの +20%)。
+    let baseLow52w = null;
+    if (Array.isArray(data) && data.length > 0) {
+      const closes252 = data.slice(-252).map((d) => d.close).filter((v) => Number.isFinite(v));
+      if (closes252.length > 0) baseLow52w = Math.min(...closes252);
+    }
     return {
       extended15: Number.isFinite(sma50Latest) ? sma50Latest * 1.15 : null,
       extended25: Number.isFinite(sma50Latest) ? sma50Latest * 1.25 : null,
       stop8:      Number.isFinite(maxClose) ? maxClose * 0.92 : null,
       consensus:  sourceOk && Number.isFinite(consensus) ? consensus : null,
+      profitTake20: Number.isFinite(baseLow52w) ? baseLow52w * 1.20 : null,
     };
   }, [smaMap, data, analystData]);
 
@@ -1048,6 +1058,28 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     label={{
                       value: 'climax +25%',
                       fill: 'var(--color-loss)',
+                      fontSize: 9,
+                      position: 'right',
+                      offset: 4,
+                    }}
+                    ifOverflow="extendDomain"
+                    isFront={false}
+                    isAnimationActive={false}
+                  />
+                )}
+                {/* v126 R13-4 R3 (sub-agent verdict、 5/29): +20% Profit Take ライン (IBD/O'Neil S2)。
+                    base low (252d 最安値) からの +20% を gold (warning tone) dashed で表示。 */}
+                {pillar2Markers.profitTake20 != null && (
+                  <ReferenceLine
+                    key="pillar2_profit20"
+                    y={pillar2Markers.profitTake20}
+                    stroke="var(--color-gold, #d4af37)"
+                    strokeWidth={1.25}
+                    strokeDasharray="2 4"
+                    strokeOpacity={0.55}
+                    label={{
+                      value: 'profit take +20% (base比)',
+                      fill: 'var(--color-gold, #d4af37)',
                       fontSize: 9,
                       position: 'right',
                       offset: 4,
