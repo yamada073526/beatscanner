@@ -10829,9 +10829,12 @@ def _detect_cup_handle(
             _reject("right_rim_invalid"); continue
 
         # right_rim が「直近 ピーク」 か (handle 期間中の全 high が rim 以下)
-        # 1.5% の small overshoot は intraday noise として許容 (O'Neil shake out 概念)
+        # v126 R11-2 Phase 1 (2026-05-29 金融アナリスト Opus verdict + user 承認):
+        # 1.5% → 5% overshoot 許容に緩和。 MarketSurge 推定 tolerance 3-5% (TradingView 公開 Cup-Handle indicator 既定 + IBD 教材「shake out 容認」 言及) と整合。
+        # LLY/NVDA の handle_exceeds_rim 大量 reject を catch するため。
+        # Phase 3 で 10 銘柄 dogfood verify、 false positive 10x 超なら 0.035 に微調整。
         handle_highs = highs[right_rim_idx + 1: n]
-        if any(h > right_rim_high * 1.015 for h in handle_highs):
+        if any(h > right_rim_high * 1.05 for h in handle_highs):
             _reject("handle_exceeds_rim"); continue
 
         # handle low と pullback
