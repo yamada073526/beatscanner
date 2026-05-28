@@ -58,12 +58,26 @@ try {
     }
   }
 
+  // P5-2 verify: ProTeaser button + blurred ticker buttons
+  const proteasers = await page.$$('[data-testid^="screener-hero-proteaser-"]');
+  const proteaser_count = proteasers.length;
+  let proteaser_texts = [];
+  for (const pt of proteasers) {
+    const t = await pt.innerText().catch(() => null);
+    proteaser_texts.push(t);
+  }
+  const blurred_tickers = await page.$$('[data-testid="screener-hero-ticker-blurred"]');
+  const blurred_count = blurred_tickers.length;
+
   console.log(JSON.stringify({
     url: URL,
     bypass_token_used: BYPASS.length > 0,
     checks: results,
     chip_texts: chipTexts,
     chip_count: chipTexts.length,
+    proteaser_count, // P5-2: 期待 3 (3 section × 1 overlay)
+    proteaser_texts,
+    blurred_count, // P5-2: 期待 6+ (各 section で blur 数による)
     verdict: results.every((r) => r.visible) && chipTexts.length === 3 ? 'pass' : 'fail',
   }, null, 2));
 
