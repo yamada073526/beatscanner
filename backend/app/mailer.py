@@ -71,8 +71,11 @@ def _get_resend_client():
         return None
 
 
-# 件名 (マーケター verdict: emoji 控えめ、 spam スコア 上昇回避)
-SUBJECT_TEMPLATE = "BeatScanner: ファンダ × Cup-Handle 形成銘柄 ({count} 件)"
+# 件名 (v125 P8-5 Task 4-C: 3 体合議 (マーケター + qa-dogfooder + ui-designer) 推奨案 + マーケター 法務修正)。
+# 旧: "BeatScanner: ファンダ × Cup-Handle 形成銘柄 ({count} 件)"
+# 新: 「Leader + Breakout」 で直感伝達 + 「今日注目の」 で §38 推奨 risk 回避 (元の「候補」 は推奨解釈 risk)。
+# 横断方針: 専門用語 (IBD / Cup-Handle) は brand 内部に閉じ込め、 件名は平易な日本語で wrap。
+SUBJECT_TEMPLATE = "📊 BeatScanner: 今日注目の Leader + Breakout {count} 銘柄"
 
 MAIL_FROM_DEFAULT = "BeatScanner Signals <signals@beatscanner.app>"
 
@@ -241,7 +244,10 @@ _ARTICLE_FORMAT_LABEL = {
     "daily_digest": "デイリーダイジェスト",
 }
 
-ARTICLE_SUBJECT_TEMPLATE = "BeatScanner: 本日の厳選記事 {count} 本"
+# v125 P8-5 Task 4-B: 3 体合議 (マーケター + qa-dogfooder) 推奨案。
+# 旧: "BeatScanner: 本日の厳選記事 {count} 本"
+# 新: 「2 分で」 = LP「2 秒で判定」 brand DNA 継承、 「図解」 = 5 原則⑤ 視覚表現の差別化を訴求。
+ARTICLE_SUBJECT_TEMPLATE = "📈 BeatScanner: 今日の米国株を 2 分で — 記事 {count} 本 + 図解"
 
 
 def _article_url(slug: str) -> str:

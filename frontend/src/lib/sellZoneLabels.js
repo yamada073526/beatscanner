@@ -28,36 +28,35 @@ export const SELL_ZONE_LABEL_JP = {
 };
 
 /**
- * narration 3 field 構造 (v125 user dogfood hotfix):
- *   conclusion: 結論 (1 番目に表示、 通常文字色)
- *   reason: 理由 (2 番目に表示、 通常文字色)
- *   source: 根拠/出典 (3 番目に表示、 灰色文字、 目立たせない)
+ * narration 2 field 構造 (v125 P8-5 R5 hotfix、 3 体合議統合推奨案):
+ *   conclusion: 結論 (1 番目に表示、 visual anchor として font 13-14px 600)
+ *   detail: 理由 + 出典を 1 行 muted で merge (`50DMA から +15% 未満 (IBD / O'Neil 著)` 形式)
+ *
+ * 旧 3 field (conclusion / reason / source) を 2 field に圧縮することで段数を減らし、
+ * 「壁感」 を解消 (user dogfood feedback「R4-2 後もパッと見読みづらい」)。
+ * 出典は括弧内に inline して文脈維持 (Trust Cliff: 決算アプリ内のテクニカル補助として O'Neil 根拠を保持)。
+ * climax の長い narration は 28 字程度に短縮 (mobile 折返し対策、 qa-dogfooder critical)。
  */
 export const SELL_ZONE_DESC_JP = {
   normal: {
     conclusion: '急いだ利確は不要とされる範囲です。',
-    reason: '50DMA から +15% 未満。',
-    source: 'William O\'Neil 著「How to Make Money in Stocks」 で示される通常レンジ。',
+    detail: '50DMA から +15% 未満 (IBD / O\'Neil 著)。',
   },
   extended: {
-    conclusion: '段階利確を検討する領域として紹介されています。',
-    reason: '50DMA から +15% 以上 +25% 未満、 IBD ルールでは過熱の目安。',
-    source: 'IBD ルール (William O\'Neil 著)。',
+    conclusion: '段階利確を検討する領域です。',
+    detail: '50DMA から +15% 以上 +25% 未満、 IBD ルールでは過熱の目安 (William O\'Neil 著)。',
   },
   climax: {
-    conclusion: '過去の climax run では短期 reversion を示した事例が紹介されています (将来を保証するものではありません)。',
-    reason: '50DMA から +25% 以上、 IBD/O\'Neil 著の climax top criteria に該当。',
-    source: 'IBD 教材 (William O\'Neil 著)。',
+    conclusion: '短期 reversion 事例が報告されています (将来保証なし)。',
+    detail: '50DMA から +25% 以上、 IBD/O\'Neil 著の climax top criteria に該当。',
   },
   stop_hit: {
-    conclusion: '保有銘柄の利確検討の補助として参考表示しています (Phase 2 で portfolio integration 予定)。',
-    reason: '過去最高値から -8% (Chandelier Exit 方式) の参考レベル。',
-    source: 'IBD/O\'Neil 著の universal stop loss (購入価格から -8%) とは別の指標。',
+    conclusion: '保有銘柄の利確検討の参考表示です。',
+    detail: '過去最高値から -8% (Chandelier Exit 方式)、 IBD/O\'Neil 著の universal stop loss とは別指標。',
   },
   unknown: {
     conclusion: 'zone 判定を保留しています。',
-    reason: '50DMA の値が取得できません。',
-    source: 'IPO < 50 日の銘柄等で発生します。',
+    detail: '50DMA の値が取得できません (IPO < 50 日の銘柄等で発生)。',
   },
 };
 

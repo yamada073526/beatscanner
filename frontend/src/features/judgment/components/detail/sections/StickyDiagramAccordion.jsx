@@ -1,117 +1,54 @@
-import React, { useState } from 'react';
-import { ChevronDown, BookOpen } from 'lucide-react';
+import React from 'react';
+import { BookOpen } from 'lucide-react';
+import Chip from '../../../../../components/ui/Chip.jsx';
 
 /**
- * v125 P8-3 Sprint B: 図解 sticky accordion (default-collapsed = OFF)。
+ * v125 P8-3 Sprint B + R6-2 (user dogfood feedback 2026-05-28):
+ *   sticky 撤去 + 小型 chip button 1 個に書換。
  *
- * SPEC §5 Phase 4-B 案 B (user gate 3 確定):
- *   - user 指示「メインは Chart、 図解は 2 回目以降しつこい → default OFF」
- *   - click で expand、 中身は「AI 詳細レポートを開くと自動で図解が生成されます」 + anchor link
+ * user 指摘 (スクショ「マコなり」 アプリ参考):
+ *   - 「scroll しても常時表示するつもりはなかった、 画面が狭くなる」
+ *   - 「よく見える位置に小さく図解ボタンが置いてある」
+ *   - 「ふだんから対象銘柄をチェックしている人は (図解を) 開かないので圧迫感ない small button が良い」
  *
- * NOTE: 真の DiagramCard mount 維持 ([[feedback-diagram-card-remount-cache]] 完全準拠) は
- * DetailReport.jsx 内部からの vizData lift up が必要で大規模 refactor。 本 sprint は wrapper のみで、
- * DiagramCard 物理 mount は ContextSection 内 DetailReport accordion 経由のまま (Phase 4-B 後続 sprint で物理分離)。
+ * 設計:
+ *   - sticky 撤去、 通常 inline 配置 (Pane 3 案 B 新順序の section 2、 Chart の前)
+ *   - chip primitive 経由 (variant=display + size=sm + tone=accent)、 inline style ゼロ
+ *   - icon: BookOpen (lucide)、 label: 「図解 — AI 解説」
+ *   - click で AI 詳細レポート accordion (#sec-report) に smooth scroll
+ *   - scroll で消えて OK (常時 visible 義務なし、 user 想定整合)
  *
- * 配置: Pane 3 最上位 (Hero 直前)。 sticky は top:0、 z-index は検索 bar より下 (40)。
- * accordion 状態は localStorage で永続化しない (default OFF をユーザーが click で都度 expand)。
+ * NOTE: DiagramCard 物理 mount 維持 ([[feedback-diagram-card-remount-cache]]) は別 sprint で
+ * DetailReport.jsx の vizData lift up が必要。 本 sprint は「user が click したら詳細レポートを開く」
+ * 動線提供のみ (1 click 減 + brand 整合、 5 原則 #4)。
  */
 export default function StickyDiagramAccordion() {
-  const [isOpen, setIsOpen] = useState(false);
+  const handleJumpToDiagram = () => {
+    // R6-1 と同 idiom: AccordionSection の open + manual offset scroll
+    setTimeout(() => {
+      const el = document.getElementById('sec-report');
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const offsetTop = window.pageYOffset + rect.top - 72;
+      window.scrollTo({ top: offsetTop, behavior: 'smooth' });
+    }, 50);
+  };
 
   return (
     <div
-      className="sticky-diagram-accordion"
-      style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 40,
-        background: 'var(--bg-elevated, var(--bg-subtle))',
-        borderRadius: 'var(--radius-md, 8px)',
-        border: '1px solid var(--border, rgba(255,255,255,0.08))',
-        marginBottom: 'var(--space-4, 16px)',
-      }}
+      className="sticky-diagram-button-row"
       data-testid="sticky-diagram-accordion"
     >
-      <button
-        type="button"
-        onClick={() => setIsOpen((v) => !v)}
-        aria-expanded={isOpen}
-        aria-controls="sticky-diagram-accordion-content"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-3, 12px)',
-          width: '100%',
-          padding: 'var(--space-3, 12px) var(--space-4, 16px)',
-          background: 'transparent',
-          border: 'none',
-          color: 'var(--text-primary)',
-          cursor: 'pointer',
-          textAlign: 'left',
-          fontSize: 14,
-          fontWeight: 500,
-        }}
+      <Chip
+        variant="display"
+        size="sm"
+        tone="accent"
+        icon={<BookOpen size={13} strokeWidth={1.5} />}
+        onClick={handleJumpToDiagram}
+        ariaLabel="AI 図解を見る"
       >
-        <BookOpen size={16} strokeWidth={1.5} style={{ color: 'var(--color-accent)' }} />
-        <span style={{ flex: 1 }}>図解 — AI 解説</span>
-        <span
-          style={{
-            fontSize: 11,
-            color: 'var(--text-muted)',
-            letterSpacing: '0.04em',
-          }}
-        >
-          {isOpen ? '閉じる' : '開く'}
-        </span>
-        <ChevronDown
-          size={14}
-          strokeWidth={1.5}
-          style={{
-            color: 'var(--text-muted)',
-            transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-            transition: 'transform 200ms ease',
-          }}
-        />
-      </button>
-
-      {isOpen && (
-        <div
-          id="sticky-diagram-accordion-content"
-          style={{
-            padding: 'var(--space-2, 8px) var(--space-4, 16px) var(--space-4, 16px)',
-            borderTop: '1px solid var(--border, rgba(255,255,255,0.05))',
-            color: 'var(--text-secondary)',
-            fontSize: 13,
-            lineHeight: 1.6,
-          }}
-        >
-          <p style={{ margin: 0 }}>
-            下の「AI 詳細レポート」 を開くと、 図解 (5 条件 × 業績推移) が自動で生成されます。
-          </p>
-          <a
-            href="#sec-report"
-            onClick={(e) => {
-              e.preventDefault();
-              const el = document.getElementById('sec-report');
-              if (el) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }
-            }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 'var(--space-2, 8px)',
-              marginTop: 'var(--space-3, 12px)',
-              fontSize: 12,
-              color: 'var(--color-accent)',
-              textDecoration: 'none',
-              fontWeight: 500,
-            }}
-          >
-            AI 詳細レポートへ →
-          </a>
-        </div>
-      )}
+        図解 — AI 解説
+      </Chip>
     </div>
   );
 }

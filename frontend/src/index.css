@@ -11186,6 +11186,15 @@ button.ds-chip[data-pressed="true"]:hover {
   border-radius: var(--radius-sm, 4px);
 }
 
+/* v125 P8-3 Sprint B + R6-2: 図解 chip button row (sticky 撤去、 small chip 1 個のみ)。
+   Pane 3 案 B 新順序の section 2 (Chart の前) に inline 配置、 scroll で消えて OK。
+   token 経由のみ、 chip primitive で description / spacing は完結。 */
+.sticky-diagram-button-row {
+  display: flex;
+  justify-content: flex-start;
+  margin: var(--space-1, 4px) 0 var(--space-3, 12px);
+}
+
 
 /* AnalystTargetCard + SellZoneCard 2-col grid layout (Chart 直下に並列配置) */
 .atc-szc-grid {
@@ -11223,39 +11232,29 @@ button.ds-chip[data-pressed="true"]:hover {
   margin: 0;
 }
 .szc-body { display: grid; gap: 10px; }
-.szc-zone {
-  display: grid;
-  gap: 4px;
-}
-.szc-zone-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-.szc-zone-value {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.005em;
-  color: var(--text-primary);
-}
-.szc-zone-value--normal { color: var(--text-primary); }
-.szc-zone-value--extended { color: var(--color-warning); }
-.szc-zone-value--climax { color: var(--color-loss); }
-.szc-zone-value--stop_hit { color: var(--color-loss); }
+/* v125 P8-5 R5 hotfix (3 体合議統合推奨案): zone value を Chip 化、 header 内右配置。
+   旧 .szc-zone / .szc-zone-label / .szc-zone-value--* 関連 CSS は削除 (DOM 撤去のため不要)。 */
 .szc-desc {
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-secondary);
   margin: 0;
 }
-/* v125 user dogfood hotfix: narration 3 field (結論 / 理由 / 根拠) で順次表示、
-   根拠は灰色で目立たせない。 user 要望「結論を先に見たい、 根拠は控えめ」 反映。 */
-.szc-narration { display: grid; gap: 4px; }
-.szc-desc--conclusion { color: var(--text-primary); font-weight: 500; }
-.szc-desc--reason { color: var(--text-secondary); }
-.szc-desc--source { color: var(--text-muted); font-size: 11px; }
+/* v125 P8-5 R5 hotfix: narration 2 field 構造 (conclusion / detail)、 旧 reason+source は detail に merge。
+   conclusion を visual anchor として font 13.5px 600 で前面化 (ui-designer 案 B)、
+   detail は muted text-secondary 11px で 1 行に圧縮 (qa-dogfooder 段数縮小)。 */
+.szc-narration { display: grid; gap: 6px; }
+.szc-desc--conclusion {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.szc-desc--detail {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
 .szc-meta {
   display: flex;
   gap: 12px;

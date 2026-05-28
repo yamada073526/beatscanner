@@ -17,6 +17,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchPriceHistory, fetchTechnical } from '../api.js';
 import { SELL_ZONE_LABEL_JP, SELL_ZONE_DESC_JP, classifyZone } from '../lib/sellZoneLabels.js';
+// v125 P8-5 R5 hotfix (3 体合議統合推奨案): zone value を Chip primitive 化、 header に配置で
+// AnalystTargetCard と H 方向 visual rhythm 統一 (frontend-architect 案 A + ui-designer 案 B 集約)。
+import Chip from './ui/Chip.jsx';
 
 function fmtUsd(v) {
   if (!Number.isFinite(v)) return '—';
@@ -117,6 +120,13 @@ export default function SellZoneCard({ ticker }) {
     );
   }
 
+  // v125 P8-5 R5 hotfix (3 体合議統合推奨案): zone tone を Chip primitive の tone prop に mapping。
+  // normal=muted (中立) / extended=warning (amber) / climax/stop_hit=loss (赤)、 unknown=muted。
+  const chipTone =
+    zone === 'extended' ? 'warning' :
+    (zone === 'climax' || zone === 'stop_hit') ? 'loss' :
+    'muted';
+
   return (
     <section
       className="panel-card szc-card"
@@ -126,20 +136,20 @@ export default function SellZoneCard({ ticker }) {
     >
       <header className="szc-head">
         <h3 className="szc-title">50DMA extension 状況</h3>
+        {/* v125 P8-5 R5: zone value を Chip 化、 header 右に配置で AnalystTargetCard と visual rhythm 統一。
+            「現在の zone」 label を削除 (header title「50DMA extension 状況」 と redundant)。 */}
+        <Chip variant="display" size="xs" tone={chipTone}>
+          {zoneLabel}
+        </Chip>
       </header>
 
       <div className="szc-body">
-        <div className="szc-zone">
-          <div className="szc-zone-label">現在の zone</div>
-          <div className={`szc-zone-value szc-zone-value--${zone}`}>{zoneLabel}</div>
-        </div>
-
-        {/* v125 user dogfood hotfix: narration 3 field 構造 (結論 → 理由 → 根拠)。
-            user 要望「結論を先、 根拠は灰色で控えめ」 を反映。 */}
+        {/* v125 P8-5 R5: narration 2 field (conclusion / detail) 構造、 旧 reason+source を detail に merge。
+            conclusion は visual anchor として font 13.5px 600 で前面化 (ui-designer 案 B)。
+            detail は muted text-secondary 11px で 1 行に圧縮 (qa-dogfooder 段数縮小)。 */}
         <div className="szc-narration">
           <p className="szc-desc szc-desc--conclusion">{zoneDesc.conclusion}</p>
-          <p className="szc-desc szc-desc--reason">{zoneDesc.reason}</p>
-          <p className="szc-desc szc-desc--source">{zoneDesc.source}</p>
+          <p className="szc-desc szc-desc--detail">{zoneDesc.detail}</p>
         </div>
 
         <div className="szc-meta">

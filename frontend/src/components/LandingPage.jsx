@@ -219,12 +219,32 @@ function HeroSection({ onFreeStart }) {
           fontSize: 'clamp(40px, 6.5vw, 72px)',
           fontWeight: 700,
           lineHeight: 1.1,
-          margin: '0 0 24px',
+          margin: '0 0 16px',
           letterSpacing: '-0.025em',
         }}
       >
         勝てる決算、 2 秒で。
       </h1>
+
+      {/* v125 P8-5 Task 4-A (3 体合議推奨案 A3 改、 マーケター 法務修正): pillar 2 訴求の subtitle。
+          Hero タイトル (確立 brand DNA) は維持しつつ、 「決算 + テクニカル 2 本柱」 pillar 2 launch 訴求を補強。
+          元案「米国株の買い時と売り時」 は §38 断定的判断 risk → 「2 本柱で日本語チェック」 に修正。 */}
+      <p
+        className="hero-subtitle"
+        style={{
+          position: 'relative', zIndex: 1,
+          textAlign: 'center',
+          fontSize: 'clamp(15px, 2vw, 18px)',
+          fontWeight: 500,
+          lineHeight: 1.5,
+          margin: '0 auto 24px',
+          maxWidth: '720px',
+          color: 'var(--text-secondary)',
+          letterSpacing: '-0.005em',
+        }}
+      >
+        決算 quarterly + テクニカル daily、 米国株を 2 本柱で日本語チェック。
+      </p>
 
       {/* Phase 3 Sub-1: 実証データブロック (過去 5 年バックテスト結果)
           数字は動的取得 (Trust Cliff 回避)、 取得失敗時は section ごと自動非表示で hero 健全性維持 */}

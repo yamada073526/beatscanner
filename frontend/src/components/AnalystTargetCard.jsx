@@ -59,20 +59,28 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
   const [fetchedAt, setFetchedAt] = useState(null);
   useMinuteTick(); // 1 分毎に re-render で「最終更新 X 分前」 更新
 
-  // v125 P8-4: AnalystPanel への jump 動線 (footer link)。
-  // AnalystPanel は Pane 3 内の AccordionSection (id='sec-analyst' or 'sec-analyst-v3') に mount。
-  // V2 default mode: AccordionSection collapsed → expandSection で開く + scrollIntoView
-  // V3 mode: ChapterTabs の analyst tab 内に mount (sec-analyst-v3) → 直接 scroll
+  // v125 P8-4 + R6-1: AnalystPanel への jump 動線 (footer link)。
+  // V2 default mode: AccordionSection collapsed (children unmount or invisible) → expandSection 必要。
+  // expandSection は Zustand state update → React re-render → AccordionSection content mount に
+  // tick が必要 (同期取れない) ため、 setTimeout で 1 tick + 100ms 待ってから scroll する (R6-1 timing fix)。
+  // V3 mode: ChapterTabs の analyst tab 内 mount (sec-analyst-v3)、 default tab='analyst' なら最初から存在。
   const expandSection = useWorkspaceStore((s) => s.expandSection);
   const handleJumpToAnalyst = () => {
-    // V3 ON 時の anchor 優先、 fallback で V2 default の anchor
-    const el =
-      document.getElementById('sec-analyst-v3') ||
-      document.getElementById('sec-analyst');
-    if (!el) return;
-    // V2 mode の AccordionSection 用 expand (V3 mode では no-op)
+    // V2 mode の AccordionSection 用 expand (V3 mode では no-op、 silent fallback)
     try { expandSection('analyst-panel'); } catch { /* noop */ }
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // R6-1 hotfix: scrollIntoView({behavior:'smooth'}) が iOS Safari + 大画面 scroll で
+    // 動かないケースを回避。 requestAnimationFrame 2 回で確実に next render 後に
+    // getBoundingClientRect → window.scrollTo({top, behavior:'smooth'}) で manual offset 計算。
+    // 250ms 待つことで AccordionSection の expand animation 完了を待つ (Framer Motion ~200ms)。
+    setTimeout(() => {
+      const el =
+        document.getElementById('sec-analyst-v3') ||
+        document.getElementById('sec-analyst');
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const offsetTop = window.pageYOffset + rect.top - 72; // 72px = sticky 検索 bar の buffer
+      window.scrollTo({ top: offsetTop, behavior: 'smooth' });
+    }, 250);
   };
 
   useEffect(() => {
