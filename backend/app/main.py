@@ -14443,6 +14443,75 @@ async def scanner_rs(
 
 
 # ============================================================================
+# v125 P5-1 Unified scan endpoint (asyncio.gather で cup-scan + rs-scan 並列)
+# (2026-05-28、 handover v125 P5-1)
+#
+# Why: 既存 cup_scan + rs_scan は別 cron entry で sequential 実行 (合計 ~8 分)。
+#       並列実行で FMP rate limit pool 共有 + 全体時間短縮 (期待 ~4-5 分)。
+#       railway.toml cron entry も 2 件 → 1 件で運用簡略化可能 (移行は user gate 後)。
+#
+# 設計方針:
+#  - 既存 /api/cron/cup-scan + /api/cron/rs-scan は **完全維持** (既存 cron 影響 0)
+#  - 新 /api/cron/scan-all は asyncio.gather で両者を並列起動 + return_exceptions=True で
+#    partial failure 許容 (片方失敗でも他方は完了報告)
+#  - body は両 endpoint に共通 forward (universe_source / universe_size / chunk_size /
+#    worker_count / dry_run 等の同 param が両者で意味同一のため)
+#  - x_cron_secret は内部 2 endpoint で再 check (重複だが冗長 safe)
+# ============================================================================
+
+
+@app.post("/api/cron/scan-all")
+async def cron_scan_all(
+    body: dict | None = None,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """Unified cron: cup-scan + rs-scan を asyncio.gather で並列実行。
+
+    既存 /api/cron/cup-scan + /api/cron/rs-scan を内部で並列 await。
+    両 endpoint の return_exceptions=True で partial recovery (片方失敗でも他方完了)。
+
+    Body (任意、 両 endpoint に共通 forward):
+      tickers / universe_source / universe_size / chunk_size / worker_count / dry_run
+
+    Returns:
+      {
+        "cup_scan": cup_scan の return dict, または { "error": str },
+        "rs_scan": rs_scan の return dict, または { "error": str },
+        "completed_at": ISO 8601 UTC,
+        "any_failed": bool,
+      }
+
+    移行手順 (user gate 後):
+      1. railway.toml で既存 cup-scan + rs-scan cron を 1 行に統合:
+         [[crons]] schedule = "0 23 * * *"  command = "POST /api/cron/scan-all"
+      2. 旧 cup-scan + rs-scan cron entry を comment out (削除はしない、 fallback path)
+      3. 1 週間 dogfood + KPI 監視
+    """
+    _check_cron_secret(x_cron_secret)
+
+    cup_task = cron_cup_scan(body=body, x_cron_secret=x_cron_secret)
+    rs_task = cron_rs_scan(body=body, x_cron_secret=x_cron_secret)
+
+    cup_result, rs_result = await asyncio.gather(
+        cup_task, rs_task, return_exceptions=True
+    )
+
+    def _normalize(result):
+        if isinstance(result, Exception):
+            return {"error": str(result), "error_type": type(result).__name__}
+        return result
+
+    any_failed = isinstance(cup_result, Exception) or isinstance(rs_result, Exception)
+
+    return {
+        "cup_scan": _normalize(cup_result),
+        "rs_scan": _normalize(rs_result),
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "any_failed": any_failed,
+    }
+
+
+# ============================================================================
 # Phase B §9-6: RFC 8058 List-Unsubscribe endpoint (Gmail one-click 対応)
 # (2026-05-17、 handover v80 Phase B Tier 1 §9-6)
 #
