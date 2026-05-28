@@ -48,3 +48,12 @@ Tag: `pre-pillar2-redesign-2026-05-28` (b8380bf) + backup branch `backup/pre-pil
 - /api/cron/scan-all は既存 cup-scan + rs-scan endpoint を await、 既存 cron entry 完全維持で risk 0
 
 production bundle (P7-1 R1 hotfix 後): index-bXxCdCXp.js (frontend) + backend datetime import 修正済。
+
+## P7 自律 PDCA 追加進捗 (19:00-19:35 JST)
+
+- **P7-1**: `/api/cron/scan-all` 本番 dry_run smoke test PASS (HTTP 200、 24s/20 銘柄、 sequential vs 40% 時間短縮、 top10 = GOOGL/GOOG/XOM/.../WMT)
+- **P7-1 R1 hotfix** (commit 227479d): cron_scan_all NameError 'datetime' is not defined → top-level import に datetime + timezone class 追加
+- **P7-2** (commit 9b6542b): handover を summary (50 行) + full (783 行) 2 ファイルに分割。 次 session の fetch-handover skill が summary のみで context 復元可能、 lazy load cost 50% → 5%
+- **P7-3** (commit a8adfbf): testid 横展開 phase 5 — EarningsReactionPanel + InsiderPanel に統一付与。 累計 13 component の testid audit 全完了
+
+累計 v125 = **35 commit**、 deploy 18 回、 全 healthcheck pass。
