@@ -10793,6 +10793,13 @@ def _detect_cup_handle(
     def _reject(key: str) -> None:
         reject_stats[key] = reject_stats.get(key, 0) + 1
 
+    # v126 R13-5 案 A (5/29 金融アナリスト Opus verdict、 user 承認): breakout_extended fallback。
+    # handle_exceeds_rim で reject される ATH 大幅更新中銘柄 (LLY/GE/META 型) を catch するため、
+    # best reject candidate を保持し、 全 loop 終了後の fallback で extended state として return する。
+    # 条件: ATH 95% 以上の現在価格 + reject_stats["handle_exceeds_rim"] >= 5 件 + handle 期間中の rim 高値が複数。
+    # 工数 0.5-1.0 人日、 工数達成のため新規 _detect_breakout_extended 関数化せず本関数内 fallback で実装。
+    extended_candidate: dict | None = None
+
     cup_min_days = cup_min_weeks * 5
     cup_max_days = cup_max_weeks * 5
     handle_max_days = handle_max_weeks * 5
@@ -10835,6 +10842,18 @@ def _detect_cup_handle(
         # Phase 3 で 10 銘柄 dogfood verify、 false positive 10x 超なら 0.07 に微調整。
         handle_highs = highs[right_rim_idx + 1: n]
         if any(h > right_rim_high * 1.10 for h in handle_highs):
+            # v126 R13-5 案 A: ATH 大幅更新中 candidate を保持 (best = handle が長い = 最新の base)
+            # extended candidate に必要な情報を最 minimum で保持、 後で fallback return に使う
+            if extended_candidate is None or handle_len > extended_candidate.get("_handle_len", 0):
+                # left_rim 推定: handle_highs の最大値を pivot 候補とする (= ATH 更新中の最近高値)
+                ext_pivot = max(handle_highs)
+                extended_candidate = {
+                    "_handle_len": handle_len,
+                    "right_rim_idx": right_rim_idx,
+                    "right_rim_high": right_rim_high,
+                    "ext_pivot": ext_pivot,
+                    "handle_max_overshoot_pct": round((ext_pivot / right_rim_high - 1.0) * 100.0, 2),
+                }
             _reject("handle_exceeds_rim"); continue
 
         # handle low と pullback
@@ -10969,6 +10988,35 @@ def _detect_cup_handle(
             best_result = result
 
     if best_result is None:
+        # v126 R13-5 案 A: breakout_extended fallback
+        # 全 cup-handle candidate が reject されたとき、 ATH 大幅更新中 (handle_exceeds_rim 多発) ならば
+        # extended state として最 minimum 情報で return する。 LLY/GE/META 型銘柄を catch。
+        if (extended_candidate is not None
+                and reject_stats.get("handle_exceeds_rim", 0) >= 5
+                and n >= 252):
+            high_252 = max(highs[-252:])
+            # ATH 95% 以上で現在価格更新中の場合のみ extended として認定
+            if today_close >= high_252 * 0.95:
+                pivot_price = round(extended_candidate["ext_pivot"], 2)
+                # extended は cup data なし (handle ATH 更新で classical pattern 外)、 pivot のみ確定
+                extended_result = {
+                    "detected": True,
+                    "state": "breakout_extended",
+                    "market_context": market_context,
+                    "cup": None,  # cup なし (ATH 更新で classical 形状非該当)
+                    "handle": None,
+                    "pivot": {
+                        "price": pivot_price,
+                        "offset": 0.0,
+                        "note": "ATH付近のpivot目安 (Cup-Handle classical 緩和 fallback、 IBD extended buy point 概念)",
+                    },
+                    "breakout": None,
+                    "reason": "extended_fallback",
+                    "reject_stats": reject_stats,
+                    "ath_252w_high": round(high_252, 2),
+                    "extended_overshoot_pct": extended_candidate["handle_max_overshoot_pct"],
+                }
+                return extended_result
         return {**not_detected, "reason": "no_pattern", "reject_stats": reject_stats}
 
     best_result.pop("_handle_len", None)

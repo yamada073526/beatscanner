@@ -25,6 +25,8 @@
 export const BUY_ZONE_LABEL_JP = {
   cup_pivot:         'Cup-Handle pivot 目安',
   breakout_support:  '直前 breakout support 目安',
+  // v126 R13-5 案 A (5/29): ATH 大幅更新中の breakout_extended state 用 label
+  breakout_extended: 'ATH付近 pivot 目安',
   unknown:           '判定不可',
 };
 
@@ -41,6 +43,12 @@ export const BUY_ZONE_DESC_JP = {
   breakout_support: {
     conclusion: '直前 breakout price の support 目安です。',
     detail: 'IBD ルールでは前回の base breakout price が次回の support level の目安として知られています。 ただし support 割れは pattern failure の signal にもなり得るため、 出来高 + 終値ベースの確認が必要とされています。',
+  },
+  // v126 R13-5 案 A (5/29): ATH 大幅更新中銘柄 (LLY/GE/META 型) 用 narration。
+  // classical Cup-Handle pattern から外れているため「目安」 + IBD extended buy point 概念引用で表現。
+  breakout_extended: {
+    conclusion: 'ATH付近での高値更新局面です。',
+    detail: 'classical Cup-with-Handle pattern からは外れていますが、 IBD ルールでは既存 pivot から大きく上昇 (extended buy point 目安超過) した銘柄として知られています。 新規 entry より段階利確 / 押し目待ち検討の局面とされる事例が紹介されています。',
   },
   unknown: {
     conclusion: 'pivot / support の判定を保留しています。',
@@ -60,6 +68,8 @@ export const BUY_ZONE_DESC_JP = {
 export function classifyBuyZone(state) {
   if (state === 'formation' || state === 'breakout_pending') return 'cup_pivot';
   if (state === 'breakout_confirmed') return 'breakout_support';
+  // v126 R13-5 案 A (5/29): breakout_extended state を独立 buy zone type として返す
+  if (state === 'breakout_extended') return 'breakout_extended';
   return 'unknown';
 }
 

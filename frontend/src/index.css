@@ -11203,6 +11203,8 @@ button.ds-chip[data-pressed="true"]:hover {
     var(--bg-elevated, var(--bg-subtle)) 100%
   );
   border: 1px solid color-mix(in srgb, var(--color-accent) 28%, var(--border));
+  /* v126 R13-3 (ui-designer verdict): gold hairline で静的状態の格調感、 hover 時 cyan halo との温度差で序列演出 */
+  border-top-color: rgba(212, 175, 55, 0.35);
   border-radius: var(--radius-md, 8px);
   color: var(--text-primary);
   cursor: pointer;
@@ -11264,8 +11266,9 @@ button.ds-chip[data-pressed="true"]:hover {
 }
 .diagram-banner__title {
   font-size: 13.5px;
-  font-weight: 600;
-  letter-spacing: 0.005em;
+  /* v126 R13-3 (ui-designer verdict 5/29): 600 → 500 で太文字主張軽減、 letter-spacing 0.04em で格調感拡張 */
+  font-weight: 500;
+  letter-spacing: 0.04em;
   color: var(--text-primary);
   line-height: 1.3;
 }

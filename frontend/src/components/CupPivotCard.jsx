@@ -91,11 +91,11 @@ export default function CupPivotCard({ ticker }) {
     );
   }
 
-  // v126 R11-3 (5/29 user dogfood): 'formation' + 'breakout_pending' 両 state catch。
-  // AAPL detected:true,state:'breakout_pending' で検出済みだが旧 'formation' のみ条件で漏れていた。
-  // breakout_pending = handle 形成中で pivot 上抜け待ち、 narration「pivot 上抜けで新波動入りの目安」 対象。
+  // v126 R11-3 + R13-5 (5/29): 'formation' + 'breakout_pending' + 'breakout_extended' 3 state catch。
+  // AAPL/NVDA: formation or breakout_pending、 LLY/GE/META 等 ATH 銘柄: breakout_extended (案 A fallback)。
+  // breakout_confirmed のみ別 BuyZoneCard 担当 (重複回避)。
   const showCupPivot = cupHandle?.detected
-    && (state === 'formation' || state === 'breakout_pending')
+    && ['formation', 'breakout_pending', 'breakout_extended'].includes(state)
     && pivotPrice != null
     && !errored;
   if (!showCupPivot) {
@@ -133,15 +133,33 @@ export default function CupPivotCard({ ticker }) {
           <span>
             pivot <span className="cpc-meta-value">{fmtUsd(pivotPrice)}</span>
           </span>
-          {Number.isFinite(cupHandle.cup?.depth_pct) && (
-            <span>
-              cup 深さ <span className="cpc-meta-value">{fmtPct(cupHandle.cup.depth_pct)}</span>
-            </span>
-          )}
-          {Number.isFinite(cupHandle.cup?.weeks) && (
-            <span>
-              形成 <span className="cpc-meta-value">{cupHandle.cup.weeks} 週</span>
-            </span>
+          {/* v126 R13-5: breakout_extended は cup data なし、 代わりに ATH 252w high + overshoot % を meta 表示 */}
+          {state === 'breakout_extended' ? (
+            <>
+              {Number.isFinite(cupHandle.ath_252w_high) && (
+                <span>
+                  ATH (252w) <span className="cpc-meta-value">{fmtUsd(cupHandle.ath_252w_high)}</span>
+                </span>
+              )}
+              {Number.isFinite(cupHandle.extended_overshoot_pct) && (
+                <span>
+                  rim overshoot <span className="cpc-meta-value">{fmtPct(cupHandle.extended_overshoot_pct)}</span>
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              {Number.isFinite(cupHandle.cup?.depth_pct) && (
+                <span>
+                  cup 深さ <span className="cpc-meta-value">{fmtPct(cupHandle.cup.depth_pct)}</span>
+                </span>
+              )}
+              {Number.isFinite(cupHandle.cup?.weeks) && (
+                <span>
+                  形成 <span className="cpc-meta-value">{cupHandle.cup.weeks} 週</span>
+                </span>
+              )}
+            </>
           )}
         </div>
 

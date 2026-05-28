@@ -1895,7 +1895,9 @@ export default function DiagramCard({
             }}
           >
             <span style={{ fontSize: '13px' }}>📈</span>
-            <span>決算データを集約しています</span>
+            {/* v126 R13-1: 旧「決算データを集約しています」 (進行中表現) が user に「ロード中で止まっている」 と誤読される dogfood 5/29
+                → 「決算データなし」 (empty state 明示) に変更。 backend response trends 配列が空 = 必要な決算データ未提供。 */}
+            <span>決算データなし</span>
           </div>
         )}
 
@@ -2030,7 +2032,8 @@ export default function DiagramCard({
             }}
           >
             <span style={{ fontSize: '13px' }}>💵</span>
-            <span>キャッシュフロー詳細を整理しています</span>
+            {/* v126 R13-1: 旧「キャッシュフロー詳細を整理しています」 (進行中表現) → empty state 明示「FCF/CapEx データなし」 */}
+            <span>FCF/CapEx データなし</span>
           </div>
         )}
 
