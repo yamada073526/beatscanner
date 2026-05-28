@@ -18,6 +18,9 @@
 import { useEffect, useState } from 'react';
 import { fetchAnalyst } from '../api.js';
 import Chip from './ui/Chip.jsx';
+// v125 P8-4: footer「直近の grade 変更を見る」 link 用に workspaceStore の expandSection を読み込み、
+// click で AnalystPanel (sec-analyst-v3 or sec-analyst) の AccordionSection を expand + smooth scroll。
+import { useWorkspaceStore } from '../state/workspaceStore.js';
 
 // 「最終更新 X 分前」 表示用、 1 分毎に再レンダーを促す tick state
 function useMinuteTick() {
@@ -55,6 +58,22 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
   const [errored, setErrored] = useState(false);
   const [fetchedAt, setFetchedAt] = useState(null);
   useMinuteTick(); // 1 分毎に re-render で「最終更新 X 分前」 更新
+
+  // v125 P8-4: AnalystPanel への jump 動線 (footer link)。
+  // AnalystPanel は Pane 3 内の AccordionSection (id='sec-analyst' or 'sec-analyst-v3') に mount。
+  // V2 default mode: AccordionSection collapsed → expandSection で開く + scrollIntoView
+  // V3 mode: ChapterTabs の analyst tab 内に mount (sec-analyst-v3) → 直接 scroll
+  const expandSection = useWorkspaceStore((s) => s.expandSection);
+  const handleJumpToAnalyst = () => {
+    // V3 ON 時の anchor 優先、 fallback で V2 default の anchor
+    const el =
+      document.getElementById('sec-analyst-v3') ||
+      document.getElementById('sec-analyst');
+    if (!el) return;
+    // V2 mode の AccordionSection 用 expand (V3 mode では no-op)
+    try { expandSection('analyst-panel'); } catch { /* noop */ }
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   useEffect(() => {
     if (!ticker) return;
@@ -175,7 +194,8 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
       </div>
 
       {/* Trust Cliff 防止 disclaimer (3 体合議 verdict、 upside マイナス時の誤読対策) +
-          最終更新 (CLAUDE.md「動的データには 最終更新 X 分前 を併記」 永続ルール) */}
+          最終更新 (CLAUDE.md「動的データには 最終更新 X 分前 を併記」 永続ルール) +
+          v125 P8-4 AnalystPanel jump link (アナリスト名 / grade 動線、 user 帰宅後要望) */}
       <footer className="atc-footer">
         <span className="atc-disclaimer">
           コンセンサスは目安。 アナリスト予想は外れることがあります。
@@ -183,6 +203,14 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
         {fetchedAt && (
           <span className="atc-updated">最終更新 {fmtRelativeMin(fetchedAt)}</span>
         )}
+        <button
+          type="button"
+          className="atc-jump-analyst"
+          onClick={handleJumpToAnalyst}
+          data-testid="analyst-target-card-jump-link"
+        >
+          直近の grade 変更を見る →
+        </button>
       </footer>
     </section>
   );

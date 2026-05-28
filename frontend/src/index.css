@@ -11164,6 +11164,27 @@ button.ds-chip[data-pressed="true"]:hover {
 }
 .atc-disclaimer { flex: 1; line-height: 1.4; }
 .atc-updated { white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* v125 P8-4: footer jump link「直近の grade 変更を見る」 (AnalystPanel scroll 動線、 user 帰宅後要望)。
+   token 経由のみ (raw hex / shadow 直書きなし)、 hover で accent tint だけ強調、 button reset。 */
+.atc-jump-analyst {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--color-accent);
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: color 160ms ease;
+}
+.atc-jump-analyst:hover { color: var(--text-primary); text-decoration: underline; }
+.atc-jump-analyst:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm, 4px);
+}
 
 
 /* AnalystTargetCard + SellZoneCard 2-col grid layout (Chart 直下に並列配置) */
