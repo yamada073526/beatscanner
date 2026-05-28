@@ -66,10 +66,10 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
   // V3 mode: ChapterTabs の analyst tab 内 mount (sec-analyst-v3)、 default tab='analyst' なら最初から存在。
   const expandSection = useWorkspaceStore((s) => s.expandSection);
   const handleJumpToAnalyst = () => {
-    // R8-1 第 2 真因 fix: V3 mode default ON → ChapterTabs 経由 mount、 user が他 tab に切替済の corner case 対策。
-    // 段階的 fallback: sec-analyst-v3 (ChapterTabs analyst tab active 時) → acc-header-sec-analyst (V2 mode AccordionSection)
-    //   → testid query (mount path 違っても拾う) → 市場評価 章扉 (最終 fallback)。
-    // behavior:'auto' で確実即 jump (smooth は user 動作確認後 R9 で戻す)。
+    // R9-1 第 3 真因 fix: BeatScanner workspace は WorkspaceShell.jsx PaneContainer (overflow-y:auto) が
+    // 内部 scroll container。 `window.scrollTo` は window scroll のみで内部 div の scrollTop は変化しない。
+    // → 対象 element の最近接 scrollable ancestor を探し、 その container 経由で scroll する。
+    // SPA mode 互換 (window が scrollable な場合は従来通り window.scrollTo) も自動判別。
     try { expandSection('analyst-panel'); } catch { /* noop */ }
     setTimeout(() => {
       const candidates = [
@@ -84,14 +84,29 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
         try { el = find(); if (el) break; } catch { /* noop */ }
       }
       if (!el) {
-        // debug log: user devtools で確認可能、 production trace
         // eslint-disable-next-line no-console
-        console.warn('[AnalystTargetCard] jump target not found, candidates exhausted');
+        console.warn('[AnalystTargetCard] jump target not found');
         return;
       }
+      // 最近接の scrollable ancestor を探す (overflow-y:auto/scroll かつ scrollHeight > clientHeight)
+      let container = el.parentElement;
+      while (container) {
+        const sty = window.getComputedStyle(container);
+        if ((sty.overflowY === 'auto' || sty.overflowY === 'scroll')
+            && container.scrollHeight > container.clientHeight + 4) break;
+        container = container.parentElement;
+      }
       const rect = el.getBoundingClientRect();
-      const offsetTop = window.pageYOffset + rect.top - 72;
-      window.scrollTo({ top: offsetTop, behavior: 'auto' });
+      if (!container) {
+        // SPA mode (window が scroll)
+        const offsetTop = window.pageYOffset + rect.top - 72;
+        window.scrollTo({ top: offsetTop, behavior: 'smooth' });
+      } else {
+        // workspace mode (PaneContainer が scroll)
+        const cRect = container.getBoundingClientRect();
+        const offsetTop = container.scrollTop + (rect.top - cRect.top) - 24;
+        container.scrollTo({ top: offsetTop, behavior: 'smooth' });
+      }
     }, 100);
   };
 

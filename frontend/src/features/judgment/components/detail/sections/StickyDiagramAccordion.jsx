@@ -3,29 +3,23 @@ import { BookOpen, ArrowRight, Sparkles } from 'lucide-react';
 import { useWorkspaceStore } from '../../../../../state/workspaceStore.js';
 
 /**
- * v125 P8-3 Sprint B + R6-2/R7-2 (user dogfood feedback 2026-05-28):
- *   sticky 撤去 + 小型 chip button 1 個 → Aman 級格調感の hero banner に格上げ (R7-2)。
+ * v125 P8-3 Sprint B + R6-2/R7-2/R8-2/R9 (user dogfood feedback 2026-05-28〜29):
+ *   sticky 撤去 + 小型 chip button → Aman 級 banner (R7-2) → R9-1 scroll fix + R8-2 text + R9-2 halo upgrade。
  *
- * R7-2 修正背景:
- *   - user 評価: 「Chip primitive 単体は 60 点未満、 リッチさ足りない」
- *   - user 評価: 「click で何も反応しない」 → root cause: AccordionSection 内部 id `acc-header-${id}` に修正
- *
- * 設計 (R7-2 デザインリッチ化):
- *   - Chip primitive ではなく dedicated banner component (border + gradient subtle accent)
- *   - 左に large icon (BookOpen 18px) + accent tint
- *   - 右に「AI 詳細レポートで生成 →」 sub label + ArrowRight icon
- *   - hover で subtle elevation + accent border 強化、 Aman 級「ロビーの案内板」 idiom
- *   - sticky なし、 通常 inline 配置 (scroll で消えて OK)
- *   - click で AI 詳細レポート (#acc-header-sec-report) に expand + smooth scroll
- *
- * Trust Cliff: 「AI 解説」 + 「詳細レポートで生成」 で動作の明示、 click 後の挙動を予告。
+ * 修正履歴:
+ *   - R6-2: sticky 撤去、 user「画面が狭くなる」 反映
+ *   - R7-2: Chip primitive → dedicated banner、 大型 icon + 2 行 text + arrow
+ *   - R8-2: text を「業績・ビジネス・強みを図解」 + 「7 セクションで銘柄の全体像を視覚化」 に置換
+ *     (user feedback「AI を主張しすぎ、 click したら何がわかるかが重要」 + 3 体合議統合最終案)
+ *   - R9-1: scroll target を内部 scrollable ancestor に対して container.scrollTo()
+ *     (PaneContainer overflow-y:auto で window.scrollTo が silent fail していた)
+ *   - R9-2: hover halo を旧 SPA UI 風 panel-card / tier-m-glow idiom upgrade
  */
 export default function StickyDiagramAccordion() {
   const expandSection = useWorkspaceStore((s) => s.expandSection);
 
   const handleJumpToDiagram = () => {
-    // R8-1 fallback 強化: AccordionSection の root に id 属性なし → 候補 id 複数 + testid fallback。
-    // behavior:'auto' で確実 jump (smooth は次 R で復活検討)。
+    // R9-1 scroll fix: PaneContainer (内部 scrollable container) 対応で container.scrollTo に切替。
     try { expandSection('detail-report'); } catch { /* noop */ }
     setTimeout(() => {
       const candidates = [
@@ -43,9 +37,23 @@ export default function StickyDiagramAccordion() {
         console.warn('[StickyDiagramAccordion] jump target not found');
         return;
       }
+      // 最近接の scrollable ancestor を探す
+      let container = el.parentElement;
+      while (container) {
+        const sty = window.getComputedStyle(container);
+        if ((sty.overflowY === 'auto' || sty.overflowY === 'scroll')
+            && container.scrollHeight > container.clientHeight + 4) break;
+        container = container.parentElement;
+      }
       const rect = el.getBoundingClientRect();
-      const offsetTop = window.pageYOffset + rect.top - 72;
-      window.scrollTo({ top: offsetTop, behavior: 'auto' });
+      if (!container) {
+        const offsetTop = window.pageYOffset + rect.top - 72;
+        window.scrollTo({ top: offsetTop, behavior: 'smooth' });
+      } else {
+        const cRect = container.getBoundingClientRect();
+        const offsetTop = container.scrollTop + (rect.top - cRect.top) - 24;
+        container.scrollTo({ top: offsetTop, behavior: 'smooth' });
+      }
     }, 100);
   };
 
@@ -55,15 +63,15 @@ export default function StickyDiagramAccordion() {
       className="diagram-banner"
       onClick={handleJumpToDiagram}
       data-testid="sticky-diagram-accordion"
-      aria-label="AI 図解を見る — 詳細レポートを開いて生成"
+      aria-label="銘柄の全体像を図解で見る"
     >
       <span className="diagram-banner__icon-wrap" aria-hidden="true">
         <BookOpen size={18} strokeWidth={1.5} />
         <Sparkles size={10} strokeWidth={1.5} className="diagram-banner__sparkle" />
       </span>
       <span className="diagram-banner__text">
-        <span className="diagram-banner__title">図解 — AI 解説</span>
-        <span className="diagram-banner__sub">AI 詳細レポートで自動生成</span>
+        <span className="diagram-banner__title">業績・ビジネス・強みを図解</span>
+        <span className="diagram-banner__sub">7 セクションで銘柄の全体像を視覚化</span>
       </span>
       <span className="diagram-banner__arrow" aria-hidden="true">
         <ArrowRight size={14} strokeWidth={1.5} />

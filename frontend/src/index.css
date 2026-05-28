@@ -11213,12 +11213,25 @@ button.ds-chip[data-pressed="true"]:hover {
   position: relative;
   overflow: hidden;
 }
+/* R9-2 hover halo upgrade: 旧 SPA panel-card.is-arriving:hover の 3 段 cyan glow を流用。
+   ALLOWED-SHADOW 既登録 (elevation_scale.md)、 token-level glow idiom。 user feedback
+   「旧 SPA UI の発光が格好良かった」 に応える Tier-S hover effect。 */
 .diagram-banner:hover {
-  border-color: color-mix(in srgb, var(--color-accent) 60%, var(--border));
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px color-mix(in srgb, var(--color-accent) 12%, transparent);
+  border-color: rgba(56, 189, 248, 0.60);
+  transform: translateY(-3px) translateZ(0);
+  box-shadow:
+    0 0 26px rgba(56, 189, 248, 0.30),
+    0 12px 30px rgba(56, 189, 248, 0.20),
+    0 0 0 2px rgba(56, 189, 248, 0.60);
 }
-.diagram-banner:active { transform: translateY(0); }
+[data-theme="dark"] .diagram-banner:hover {
+  border-color: rgba(99, 179, 237, 0.80);
+  box-shadow:
+    0 0 32px rgba(56, 189, 248, 0.38),
+    0 14px 36px rgba(56, 189, 248, 0.24),
+    0 0 0 2px rgba(99, 179, 237, 0.80);
+}
+.diagram-banner:active { transform: translateY(-1px); }
 .diagram-banner:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
