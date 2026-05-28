@@ -50,16 +50,17 @@ export default function EarningsReactionPanel({ ticker }) {
     return () => { cancelled = true; };
   }, [ticker]);
 
+  // v125 P7-3: data-testid を全 state (loading/error/empty/main) に統一付与
   if (loading) {
     return (
-      <div style={{ padding: 'var(--space-4, 16px)', color: 'var(--text-muted)', fontSize: 13 }}>
+      <div data-testid="earnings-reaction-panel" style={{ padding: 'var(--space-4, 16px)', color: 'var(--text-muted)', fontSize: 13 }}>
         過去 8Q 決算反応を取得中…
       </div>
     );
   }
   if (error || !data) {
     return (
-      <div style={{ padding: 'var(--space-4, 16px)', color: 'var(--text-muted)', fontSize: 13 }}>
+      <div data-testid="earnings-reaction-panel" style={{ padding: 'var(--space-4, 16px)', color: 'var(--text-muted)', fontSize: 13 }}>
         過去 8Q 決算反応データを取得できませんでした
       </div>
     );
@@ -70,14 +71,14 @@ export default function EarningsReactionPanel({ ticker }) {
 
   if (quarters.length === 0) {
     return (
-      <div style={{ padding: 'var(--space-4, 16px)', color: 'var(--text-muted)', fontSize: 13 }}>
+      <div data-testid="earnings-reaction-panel" style={{ padding: 'var(--space-4, 16px)', color: 'var(--text-muted)', fontSize: 13 }}>
         過去 8Q の決算発表データはまだありません
       </div>
     );
   }
 
   return (
-    <div style={{ padding: 'var(--space-4, 16px)', display: 'flex', flexDirection: 'column', gap: 'var(--space-5, 20px)' }}>
+    <div data-testid="earnings-reaction-panel" style={{ padding: 'var(--space-4, 16px)', display: 'flex', flexDirection: 'column', gap: 'var(--space-5, 20px)' }}>
       {/* Summary: Beat / Miss 平均リターン */}
       <section>
         <header style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>

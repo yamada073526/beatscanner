@@ -100,16 +100,17 @@ export default function InsiderPanel({ ticker }) {
     return () => { cancelled = true; };
   }, [ticker]);
 
+  // v125 P7-3: data-testid を全 state (loading/error/main) に統一付与
   if (loading) {
     return (
-      <div style={{ padding: 'var(--space-4, 16px)', color: 'var(--text-muted)', fontSize: 13 }}>
+      <div data-testid="insider-panel" style={{ padding: 'var(--space-4, 16px)', color: 'var(--text-muted)', fontSize: 13 }}>
         Insider 取引データを取得中…
       </div>
     );
   }
   if (error || !data) {
     return (
-      <div style={{ padding: 'var(--space-4, 16px)', color: 'var(--text-muted)', fontSize: 13 }}>
+      <div data-testid="insider-panel" style={{ padding: 'var(--space-4, 16px)', color: 'var(--text-muted)', fontSize: 13 }}>
         Insider 取引データを取得できませんでした
       </div>
     );
@@ -121,7 +122,7 @@ export default function InsiderPanel({ ticker }) {
   const hStatus = data.sources?.holders || 'ok';
 
   return (
-    <div style={{ padding: 'var(--space-4, 16px)', display: 'flex', flexDirection: 'column', gap: 'var(--space-5, 20px)' }}>
+    <div data-testid="insider-panel" style={{ padding: 'var(--space-4, 16px)', display: 'flex', flexDirection: 'column', gap: 'var(--space-5, 20px)' }}>
       {/* Form 4 (経営者株式売買) */}
       <section>
         <header style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
