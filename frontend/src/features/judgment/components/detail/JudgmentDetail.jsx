@@ -88,6 +88,10 @@ import EtfOverviewPanel from '../../../../components/EtfOverviewPanel.jsx';
 import FundamentalsAccordion from './sections/FundamentalsAccordion.jsx';
 import MarketEvalSection from './sections/MarketEvalSection.jsx';
 import ContextSection from './sections/ContextSection.jsx';
+// v125 P8-3 Sprint B: 図解 sticky accordion (default OFF、 案 B 新順序の section 2)。
+// DiagramCard 物理 mount 維持は本 sprint では deferred (DetailReport.jsx vizData lift up が必要)、
+// wrapper のみ実装で AI 詳細レポートへの anchor link を提供 ([[feedback-diagram-card-remount-cache]] は次 phase)。
+import StickyDiagramAccordion from './sections/StickyDiagramAccordion.jsx';
 
 // v97 G-2 sub-agent verdict 案 B 軽量版: 章境界 軽量強化
 // user dogfood「H2 Chapter Break は subtle すぎる、 言われないと気付かない」
@@ -193,6 +197,22 @@ function isPane3V3() {
 // Phase 2 vision-eval verdict は Phase 1 比 regression (AAPL -1.73 / MSFT -1.47) のため
 // 単独 flag で opt-in に変更。 ?pane3_v2=1 単独では frameless 無効、 ?pane3_v2=1&pane3_v2_frameless=1
 // で初めて Phase 2 frameless が有効。
+// v125 P8-3 Sprint B: Pane 3 案 B 新順序 (StickyDiagramAccordion + Chart + Target+Zone + 5 条件 accordion 外維持 + ファンダ accordion + その他)。
+// default OFF (URL ?pane3_v4=1 で先行 dogfood、 user 確認後 ON 化)。
+// 「pane3_v4」 は SPEC §11-B-4 で確定した feature flag 名称。
+// URL ?pane3_v4=0 で kill switch、 ?pane3_v4=1 で ON、 localStorage 'pane3_v4'='1' で永続化。
+function isPane3V4() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('pane3_v4');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('pane3_v4') === '1';
+  } catch {
+    return false;
+  }
+}
+
 function isPane3V2Frameless() {
   try {
     if (typeof window === 'undefined') return false;
@@ -542,6 +562,8 @@ export default function JudgmentDetail({
   const isV2 = isPane3V2();
   // v104 Phase G Phase 4: 章 2 tab interface 切替 flag
   const isV3 = isPane3V3();
+  // v125 P8-3 Sprint B: Pane 3 案 B 新順序 flag (default OFF、 URL ?pane3_v4=1 で先行 dogfood)。
+  const isV4 = isPane3V4();
   // ch2Tab / ch3Tab の useState は v107 hotfix で early return より前 (L320 周辺) に移動済。
   // 本位置に置くと Rules of Hooks 違反 (React #310 Rendered more hooks than during the previous render)。
 
@@ -764,126 +786,99 @@ export default function JudgmentDetail({
         </div>
       )}
 
-      {/* === 章 ① 数値 (FundamentalsAccordion 抽出、 v125 P8-2 Sprint A) ===
-          描画順序不変。 SPEC §11-B-5 「Sprint A 抽出 + Sprint B 順序変更」 の Sprint A 着地点。
-          sections/FundamentalsAccordion.jsx 参照。 */}
-      <FundamentalsAccordion
-        selectedTicker={selectedTicker}
-        result={result}
-        guidance={guidance}
-        plan={plan}
-        detail={detail}
-        detailContext={detailContext}
-        isV2={isV2}
-        isV3={isV3}
-        isScrollV1={isScrollV1}
-        expandedSections={expandedSections}
-        ch2Tab={ch2Tab}
-        setCh2Tab={setCh2Tab}
-        onAnalyze={onAnalyze}
-      />
+      {/* === v125 P8-3 Sprint B: 章 ① 数値 + 章 II 市場評価 + 章 ② テクニカル + 章 ③ リファレンス を順序入替 ===
+          isV4 (= URL ?pane3_v4=1 or localStorage 'pane3_v4'='1') ON 時に案 B 新順序を適用、
+          OFF 時は既存順序 (Sprint A 完了状態) を維持。 各 block を inline-in-component fragment に切り出し、
+          render 順序で表現することで diff が「移動」 のみに局所化される (SPEC §11-B-5 アトミック XL refactor NG 教訓)。
+          階層 1 (判定 + 5 条件) は両 mode で同位置に維持 (5 条件 accordion 外維持 = 案 B 確定)。 */}
+      {(() => {
+        // 章 ① 数値 (FundamentalsAccordion 抽出、 Sprint A 着地点)
+        const fundamentalsBlock = (
+          <FundamentalsAccordion
+            key="fundamentals"
+            selectedTicker={selectedTicker}
+            result={result}
+            guidance={guidance}
+            plan={plan}
+            detail={detail}
+            detailContext={detailContext}
+            isV2={isV2}
+            isV3={isV3}
+            isScrollV1={isScrollV1}
+            expandedSections={expandedSections}
+            ch2Tab={ch2Tab}
+            setCh2Tab={setCh2Tab}
+            onAnalyze={onAnalyze}
+          />
+        );
 
-      {/* === 章 II 市場評価 (MarketEvalSection 抽出、 v125 P8-2 Sprint A) ===
-          描画順序不変。 sections/MarketEvalSection.jsx 参照。 */}
-      <MarketEvalSection
-        selectedTicker={selectedTicker}
-        plan={plan}
-        detail={detail}
-        detailContext={detailContext}
-        isV2={isV2}
-        isV3={isV3}
-        isScrollV1={isScrollV1}
-        expandedSections={expandedSections}
-        ch3Tab={ch3Tab}
-        setCh3Tab={setCh3Tab}
-        analystHaloTriggerRef={analystHaloTriggerRef}
-        qhistoryHaloTriggerRef={qhistoryHaloTriggerRef}
-        haloFiredSetRef={haloFiredSetRef}
-      />
+        // 章 II 市場評価 (MarketEvalSection 抽出、 Sprint A 着地点)
+        const marketEvalBlock = (
+          <MarketEvalSection
+            key="market-eval"
+            selectedTicker={selectedTicker}
+            plan={plan}
+            detail={detail}
+            detailContext={detailContext}
+            isV2={isV2}
+            isV3={isV3}
+            isScrollV1={isScrollV1}
+            expandedSections={expandedSections}
+            ch3Tab={ch3Tab}
+            setCh3Tab={setCh3Tab}
+            analystHaloTriggerRef={analystHaloTriggerRef}
+            qhistoryHaloTriggerRef={qhistoryHaloTriggerRef}
+            haloFiredSetRef={haloFiredSetRef}
+          />
+        );
 
-      {/* === 章 4: チャート (H2 Chapter Break + v97 G-2 軽量強化) ===
-          ChapterHeader「テクニカル」、 StockPriceChart 起点。
-          user override 1「株価チャートは常に展開」 維持。 */}
-      {/* Phase G Phase 3 + v99 dogfood A: 副柱「② テクニカル」 (丸数字、 別系統 marker) */}
-      {isV2 ? (
-        <ChapterSection chapterNumber="②" chapterTitle="テクニカル" headerOnly tier="sub" />
-      ) : (
-        <ChapterHeader label="テクニカル" isChapterStart />
-      )}
-      {selectedTicker && (
-        <SectionFade id="sec-chart" staggerIndex={3}>
-          <StockPriceChart ticker={selectedTicker} isPremiumUser={plan === 'premium'} />
-        </SectionFade>
-      )}
-
-      {/* SPEC 2026-05-28 Sprint 4 + 6 (pillar 2 technical): Chart 直下の hero card 2 並列
-          目標株価 (AnalystTargetCard) + 売り timing (SellZoneCard) を 2-col grid (desktop) / 1-col stack (mobile)
-          memory: feedback_data_completeness_guard.md (per-source data namespace で graceful degrade) */}
-      {selectedTicker && (
-        <SectionFade id="sec-target-and-zone" staggerIndex={3}>
-          <div className="atc-szc-grid">
-            <AnalystTargetCard ticker={selectedTicker} />
-            <SellZoneCard ticker={selectedTicker} />
-          </div>
-        </SectionFade>
-      )}
-
-      {/* v100 (handover §SPEC FMP Premium 打ち手 5): 過去 8Q 決算 ±5 日 価格反応 (event study)。
-          章 4 テクニカル子に統合、 「判定 PASS → どう動くか」 期待値可視化。 LLM 不要、 純数値計算。 */}
-      {selectedTicker && (
-        isScrollV1 ? (
-          <div id="sec-earnings-reaction">
-            <EarningsReactionPanel ticker={selectedTicker} />
-          </div>
+        // 章 ② テクニカル の header (legacy 順では Chart の前に配置、 isV4 では削除)
+        const technicalHeader = isV2 ? (
+          <ChapterSection key="tech-header" chapterNumber="②" chapterTitle="テクニカル" headerOnly tier="sub" />
         ) : (
-          <AccordionSection
-            id="sec-earnings-reaction"
-            title="過去 8Q 決算反応"
-            tier={2}
-            defaultOpen={false}
-            controlledOpen={expandedSections.has('earnings-reaction') || undefined}
-          >
-            <div id="sec-earnings-reaction-inner">
+          <ChapterHeader key="tech-header" label="テクニカル" isChapterStart />
+        );
+
+        const chartBlock = selectedTicker ? (
+          <SectionFade key="chart" id="sec-chart" staggerIndex={3}>
+            <StockPriceChart ticker={selectedTicker} isPremiumUser={plan === 'premium'} />
+          </SectionFade>
+        ) : null;
+
+        const targetZoneBlock = selectedTicker ? (
+          <SectionFade key="target-zone" id="sec-target-and-zone" staggerIndex={3}>
+            <div className="atc-szc-grid">
+              <AnalystTargetCard ticker={selectedTicker} />
+              <SellZoneCard ticker={selectedTicker} />
+            </div>
+          </SectionFade>
+        ) : null;
+
+        const earningsReactionBlock = selectedTicker ? (
+          isScrollV1 ? (
+            <div key="earnings-reaction" id="sec-earnings-reaction">
               <EarningsReactionPanel ticker={selectedTicker} />
             </div>
-          </AccordionSection>
-        )
-      )}
-
-      {/* === Sprint 3: Insider 取引 → AccordionSection wrap (collapsed) === */}
-      {selectedTicker && (
-        isScrollV1 ? (
-          <PremiumLock
-            feature="insider_trades"
-            plan={plan}
-            label="Insider 取引で先行情報を掴む"
-            bullets={[
-              'Form 4 (役員株式取引) 直近 90 日',
-              '13F 機関投資家保有の Q/Q 変動',
-              '大口購入時の自動アラート',
-            ]}
-            onUpgrade={detailContext.onUpgrade}
-          >
-            <SimpleSection
-              id="sec-insider"
-              title="Insider 取引"
-              label="FORM 4 / 13F"
+          ) : (
+            <AccordionSection
+              key="earnings-reaction"
+              id="sec-earnings-reaction"
+              title="過去 8Q 決算反応"
+              tier={2}
+              defaultOpen={false}
+              controlledOpen={expandedSections.has('earnings-reaction') || undefined}
             >
-              {/* v100 user dogfood (handover §100点 multi-review): backend /api/insider/{T} 実装に伴い
-                  placeholder → InsiderPanel (FMP Premium /stable/insider-trading + /stable/institutional-ownership) */}
-              <InsiderPanel ticker={selectedTicker} />
-            </SimpleSection>
-          </PremiumLock>
-        ) : (
-          <AccordionSection
-            id="sec-insider"
-            title="Insider 取引"
-            label="PRO"
-            tier={2}
-            defaultOpen={false}
-            controlledOpen={expandedSections.has('insider') || undefined}
-          >
+              <div id="sec-earnings-reaction-inner">
+                <EarningsReactionPanel ticker={selectedTicker} />
+              </div>
+            </AccordionSection>
+          )
+        ) : null;
+
+        const insiderBlock = selectedTicker ? (
+          isScrollV1 ? (
             <PremiumLock
+              key="insider"
               feature="insider_trades"
               plan={plan}
               label="Insider 取引で先行情報を掴む"
@@ -894,28 +889,96 @@ export default function JudgmentDetail({
               ]}
               onUpgrade={detailContext.onUpgrade}
             >
-              {/* v100 user dogfood (handover §100点 multi-review): InsiderPanel 実装に置換 */}
-              <div id="sec-insider-inner">
+              <SimpleSection
+                id="sec-insider"
+                title="Insider 取引"
+                label="FORM 4 / 13F"
+              >
                 <InsiderPanel ticker={selectedTicker} />
-              </div>
+              </SimpleSection>
             </PremiumLock>
-          </AccordionSection>
-        )
-      )}
+          ) : (
+            <AccordionSection
+              key="insider"
+              id="sec-insider"
+              title="Insider 取引"
+              label="PRO"
+              tier={2}
+              defaultOpen={false}
+              controlledOpen={expandedSections.has('insider') || undefined}
+            >
+              <PremiumLock
+                feature="insider_trades"
+                plan={plan}
+                label="Insider 取引で先行情報を掴む"
+                bullets={[
+                  'Form 4 (役員株式取引) 直近 90 日',
+                  '13F 機関投資家保有の Q/Q 変動',
+                  '大口購入時の自動アラート',
+                ]}
+                onUpgrade={detailContext.onUpgrade}
+              >
+                <div id="sec-insider-inner">
+                  <InsiderPanel ticker={selectedTicker} />
+                </div>
+              </PremiumLock>
+            </AccordionSection>
+          )
+        ) : null;
 
-      {/* === 章 ③ リファレンス (ContextSection 抽出、 v125 P8-2 Sprint A) ===
-          描画順序不変。 News / IR / 10-K / DetailReport を内包。 sections/ContextSection.jsx 参照。 */}
-      <ContextSection
-        selectedTicker={selectedTicker}
-        result={result}
-        guidance={guidance}
-        plan={plan}
-        detailContext={detailContext}
-        isV2={isV2}
-        isScrollV1={isScrollV1}
-        useWorkspaceReader={useWorkspaceReader}
-        expandedSections={expandedSections}
-      />
+        const contextBlock = (
+          <ContextSection
+            key="context"
+            selectedTicker={selectedTicker}
+            result={result}
+            guidance={guidance}
+            plan={plan}
+            detailContext={detailContext}
+            isV2={isV2}
+            isScrollV1={isScrollV1}
+            useWorkspaceReader={useWorkspaceReader}
+            expandedSections={expandedSections}
+          />
+        );
+
+        if (isV4) {
+          // === 案 B 新順序 (v125 P8-3 Sprint B、 user gate 3 確定) ===
+          // 階層 1 (判定 + 5 条件) は既に上で render 済 → 続く順序:
+          // 1. StickyDiagramAccordion (default OFF、 sticky top:0)
+          // 2. Chart (技術 header なしで直接 chart、 案 B シンプル化)
+          // 3. 目標 + 売り card 並列
+          // 4. ファンダ accordion (FundamentalsAccordion 旧 章 ①)
+          // 5. 市場評価 (MarketEvalSection 旧 章 II)
+          // 6. その他 (EarningsReaction + Insider)
+          // 7. リファレンス (ContextSection 旧 章 ③)
+          return (
+            <>
+              <StickyDiagramAccordion key="sticky-diagram" />
+              {chartBlock}
+              {targetZoneBlock}
+              {fundamentalsBlock}
+              {marketEvalBlock}
+              {earningsReactionBlock}
+              {insiderBlock}
+              {contextBlock}
+            </>
+          );
+        }
+
+        // === legacy 既存順序 (Sprint A 完了状態) ===
+        return (
+          <>
+            {fundamentalsBlock}
+            {marketEvalBlock}
+            {technicalHeader}
+            {chartBlock}
+            {targetZoneBlock}
+            {earningsReactionBlock}
+            {insiderBlock}
+            {contextBlock}
+          </>
+        );
+      })()}
 
       {/* P3.7: Pane 3 → 関連記事 link (conditional render — 記事がある時だけ表示)
           5 原則 §4「1 クリックを減らせ」: 記事存在時に 1 タップで /articles/<slug> に到達。
