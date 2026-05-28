@@ -14247,16 +14247,46 @@ async def cron_rs_scan(
         sb = _get_supabase_service()
         if sb is None:
             raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+        # v125 Phase 4-A Sprint 2.5 (qa-dogfooder 6 体合議 verdict): 前日 percentile を fetch
+        # して delta_1d_percentile を計算。 前日 row なし (新規 IPO 等) は None で graceful skip。
+        prev_percentile_by_ticker: dict[str, int] = {}
+        try:
+            yesterday = today - timedelta(days=1)
+            prev_rows = (
+                sb.table("rs_ratings")
+                .select("ticker, universe_percentile")
+                .eq("calc_date", yesterday.isoformat())
+                .execute()
+                .data
+                or []
+            )
+            for pr in prev_rows:
+                if pr.get("ticker") and pr.get("universe_percentile") is not None:
+                    prev_percentile_by_ticker[pr["ticker"]] = int(pr["universe_percentile"])
+        except Exception as e:
+            # 前日 fetch 失敗時は delta なしで継続 (新規導入時 / Supabase 一時 down 時の graceful)
+            print(f"[cron_rs_scan] prev percentile fetch failed (continue without delta): {e}")
+
         try:
             # batch upsert (chunk 500、 conflict ticker,calc_date)
-            rows = [{
-                "ticker": r["ticker"],
-                "calc_date": today.isoformat(),
-                "rs_vs_spy_pct": r["rs_vs_spy_pct"],
-                "self_percentile": r.get("self_percentile"),
-                "universe_percentile": r["universe_percentile"],
-                "period_months": 6,
-            } for r in raw_rs]
+            rows = []
+            for r in raw_rs:
+                prev = prev_percentile_by_ticker.get(r["ticker"])
+                delta = (
+                    r["universe_percentile"] - prev
+                    if prev is not None
+                    else None
+                )
+                rows.append({
+                    "ticker": r["ticker"],
+                    "calc_date": today.isoformat(),
+                    "rs_vs_spy_pct": r["rs_vs_spy_pct"],
+                    "self_percentile": r.get("self_percentile"),
+                    "universe_percentile": r["universe_percentile"],
+                    "delta_1d_percentile": delta,  # v125 Sprint 2.5 新規 (migration 2026-05-28)
+                    "period_months": 6,
+                })
             if rows:
                 sb.table("rs_ratings").upsert(rows, on_conflict="ticker,calc_date").execute()
                 upserted = len(rows)
@@ -14284,15 +14314,19 @@ async def cron_rs_scan(
 async def scanner_rs(
     min_percentile: int = 80,
     limit: int = 50,
+    sort: str = "percentile",
+    min_delta: int | None = None,
 ):
     """RS Screener: universe_percentile >= min_percentile の銘柄を返す (DB SELECT only)。
 
     Query params:
       min_percentile: int (default 80、 IBD CAN SLIM L 条件互換)
       limit: int (default 50)
+      sort: str (default 'percentile' = universe_percentile DESC、 v125 Sprint 2.5 で 'delta' 追加 = delta_1d_percentile DESC)
+      min_delta: int | None (v125 Sprint 2.5、 Pane 1 Hero「RS 急上昇」 用、 delta_1d_percentile >= min_delta フィルタ)
 
     Returns:
-      universe_size, calc_date, min_percentile, items (ticker / rs_vs_spy_pct / universe_percentile / self_percentile)
+      universe_size, calc_date, min_percentile, items (ticker / rs_vs_spy_pct / universe_percentile / self_percentile / delta_1d_percentile)
     """
     sb = _get_supabase_service()
     if sb is None:
@@ -14330,22 +14364,28 @@ async def scanner_rs(
         )
         universe_size = all_today.count or 0
 
-        # min_percentile 以上を universe_percentile DESC で取得
-        result = (
+        # v125 Sprint 2.5: sort/min_delta param で「RS 急上昇」 (Pane 1 Hero) も同 endpoint で対応
+        query = (
             sb.table("rs_ratings")
-            .select("ticker,rs_vs_spy_pct,self_percentile,universe_percentile,period_months")
+            .select("ticker,rs_vs_spy_pct,self_percentile,universe_percentile,delta_1d_percentile,period_months")
             .eq("calc_date", calc_date)
             .gte("universe_percentile", min_percentile)
-            .order("universe_percentile", desc=True)
-            .limit(limit)
-            .execute()
         )
+        if min_delta is not None:
+            query = query.gte("delta_1d_percentile", int(min_delta))
+        if sort == "delta":
+            query = query.order("delta_1d_percentile", desc=True, nullsfirst=False)
+        else:
+            query = query.order("universe_percentile", desc=True)
+        result = query.limit(limit).execute()
         items = result.data or []
 
         return {
             "universe_size": universe_size,
             "calc_date": calc_date,
             "min_percentile": min_percentile,
+            "sort": sort,
+            "min_delta": min_delta,
             "items": items,
         }
     except Exception as e:
