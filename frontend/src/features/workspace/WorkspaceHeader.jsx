@@ -30,7 +30,24 @@ import { useWorkspaceStore } from '../../state/workspaceStore.js';
  * @param {() => void} [props.onOpenScreener] - スクリーナー button click handler (Pro user 時 modal open)
  * @param {(featureName: string) => void} [props.onUpgrade] - 非 Pro user click 時 ProTeaser 起動
  */
+// v125 P6-1: Pane 1 nav screener tab feature flag (Workspace.jsx と同一 logic、 entry 1 本化用)
+// flag enable 時 = 既存 button hide (qa-dogfooder 6 体合議 verdict、 entry 1 本化)
+// flag disable 時 = 既存 button visible 維持 (default OFF、 user 影響 0)
+function isPillar2Pane1() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('pillar2_pane1');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('pillar2_pane1') === '1';
+  } catch {
+    return false;
+  }
+}
+
 export default function WorkspaceHeader({ isPro = false, onOpenScreener, onUpgrade } = {}) {
+  // v125 P6-1: feature flag enable 時は既存 screener button hide (Pane 1 nav に一本化)
+  const hideScreenerBtn = isPillar2Pane1();
   // v108 multi-review verdict: headerCollapsed state は store 残置 (migration risk 回避) するが
   //   button 削除 + 常時展開固定で実質無効化。 toggleHeader も呼び出し箇所なくなる。
   // v118 P6: pane4Expanded / togglePane4 削除 (Pane4 廃止)
@@ -208,7 +225,11 @@ export default function WorkspaceHeader({ isPro = false, onOpenScreener, onUpgra
             P6 で Pane 4 削除 → workspace mode から CustomScreenerPanel への access 経路消失 (Trust Cliff 級) の fix.
             desktop ≥768px: icon + label「スクリーナー」 (Marketer A-1 機能発見性 fix)
             mobile <768px: icon only + tooltip (Marketer A-1 mobile fallback)
-            非 Pro user: Pro amber badge + click → ProTeaser (Marketer A-2 + Trust Cliff fair lock) */}
+            非 Pro user: Pro amber badge + click → ProTeaser (Marketer A-2 + Trust Cliff fair lock)
+
+            v125 P6-1: feature flag enable (?pillar2_pane1=1) 時は hide (entry 1 本化、 qa-dogfooder 6 体合議 verdict)
+            default OFF では visible 維持 (user 影響 0)、 user gate 3 通過後 = flag default ON で完全削除予定。 */}
+        {!hideScreenerBtn && (
         <button
           type="button"
           onClick={() => {
@@ -271,6 +292,7 @@ export default function WorkspaceHeader({ isPro = false, onOpenScreener, onUpgra
             </span>
           )}
         </button>
+        )}
 
         {/* v65 §4-B-2: kebab menu (旧 UI / 将来の settings / help を集約)
             BETA 段階公開導線「旧 UI」を表に出さず Trust Cliff 逆効果を回避.
