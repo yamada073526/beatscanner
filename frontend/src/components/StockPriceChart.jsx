@@ -949,6 +949,48 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     isAnimationActive={false}
                   />
                 )}
+                {/* v126 R8-3 Phase 4: 過去 breakout = buy zone support level 目安。
+                    last_breakout.price を中心に ±5% の 2 本 ReferenceLine。
+                    chart-overlay-safety 4 層: conditional render + Number.isFinite + isAnimationActive=false +
+                    ifOverflow="extendDomain" (silent fail 防止)。 */}
+                {Number.isFinite(cupHandle?.last_breakout?.price) && cupHandle.last_breakout.price > 0 && (
+                  <ReferenceLine
+                    y={cupHandle.last_breakout.price * 1.05}
+                    stroke="#a78bfa"
+                    strokeWidth={1}
+                    strokeDasharray="4 4"
+                    strokeOpacity={0.55}
+                    label={{
+                      value: 'buy zone upper',
+                      fill: '#a78bfa',
+                      fontSize: 10,
+                      position: 'right',
+                      offset: 4,
+                    }}
+                    ifOverflow="extendDomain"
+                    isFront={false}
+                    isAnimationActive={false}
+                  />
+                )}
+                {Number.isFinite(cupHandle?.last_breakout?.price) && cupHandle.last_breakout.price > 0 && (
+                  <ReferenceLine
+                    y={cupHandle.last_breakout.price * 0.95}
+                    stroke="#a78bfa"
+                    strokeWidth={1}
+                    strokeDasharray="4 4"
+                    strokeOpacity={0.55}
+                    label={{
+                      value: 'buy zone lower',
+                      fill: '#a78bfa',
+                      fontSize: 10,
+                      position: 'right',
+                      offset: 4,
+                    }}
+                    ifOverflow="extendDomain"
+                    isFront={false}
+                    isAnimationActive={false}
+                  />
+                )}
                 {/* Free user 用の cup overlay (blur 化、 形状は見えるが pivot 値や date は曖昧) */}
                 {hasCup && cupRequiresPro && (
                   <Line
