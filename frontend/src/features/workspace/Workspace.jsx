@@ -44,6 +44,9 @@ const WorkspaceScreenerModal = lazy(() => import('./WorkspaceScreenerModal.jsx')
 // v125 Phase 4-A Sprint 4-A-1 (feature flag hidden、 default OFF): Pane 1 nav screener tab で
 // CustomScreenerPanel を embedded 表示。 既存 modal lazy chunk と reuse (Vite モジュールキャッシュ)。
 const CustomScreenerPanel = lazy(() => import('../../components/CustomScreenerPanel.jsx'));
+// v125 Phase 4-A Sprint 4-A-2 (stub): ScreenerPane.jsx 雛形 (Hero + Explorer)。
+// user gate 3 通過後の Sprint 4-A-3 で Hero 3 セクション top 5 fetch を実装予定。
+const ScreenerPane = lazy(() => import('./ScreenerPane.jsx'));
 // v118 P6: Pane4Inspector + pane4/ ディレクトリ削除 (handover v118 §残バックログ、 1 人日)。
 // 6 体並列レビューで「Pane 4 = AI chat → マクロニュース連動」 と確定済だったが、
 // release MVP scope 外と判断、 Phase 2 で再評価。
@@ -725,34 +728,15 @@ export default function Workspace({
         }
         pane3={
           isScreener ? (
-            // v125 Phase 4-A Sprint 4-A-1 (feature flag hidden): CustomScreenerPanel を
-            // pane3 内に embedded として表示 (Hero + Explorer 完全 layout は Sprint 4-A-2/3 で着手予定)。
-            // user gate 3 通過後 flag default ON 化 + ScreenerPane.jsx 新規作成で置換予定。
-            <div
-              data-testid="screener-pane-placeholder"
-              style={{ padding: 'var(--space-4, 16px)', height: '100%', overflowY: 'auto' }}
-            >
-              <h2 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 12px', color: 'var(--text-primary)' }}>
-                スクリーナー (Phase 4-A WIP, feature flag preview)
-              </h2>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 16px' }}>
-                URL <code>?pillar2_pane1=1</code> または <code>localStorage.pillar2_pane1=1</code> で
-                feature flag 有効化されています。 Hero「今日の注目 3 セクション × top 5」 + Explorer の
-                完全 layout は Phase 4-A Sprint 4-A-2/3 (user gate 3 通過後) で実装予定。
-              </p>
-              <Suspense fallback={<div style={{ padding: 16 }}>Loading…</div>}>
-                <CustomScreenerPanel
-                  user={detailContext.user}
-                  isPro={isProUser}
-                  onUpgrade={handleUpgradeRequest}
-                  onSelect={(sym) => {
-                    setActiveTicker(sym);
-                    // screener から click 後は home へ自動遷移 (Pane 3 で詳細表示)
-                    useWorkspaceStore.getState().setActiveTab('home');
-                  }}
-                />
-              </Suspense>
-            </div>
+            // v125 Phase 4-A Sprint 4-A-2 (stub): ScreenerPane.jsx に lifting。 Hero + Explorer の
+            // 完全 layout は Sprint 4-A-3 (user gate 3 通過後) で fetch 実装予定。
+            <Suspense fallback={<div style={{ padding: 16, color: 'var(--text-muted)' }}>Loading screener…</div>}>
+              <ScreenerPane
+                detailContext={detailContext}
+                isProUser={isProUser}
+                handleUpgradeRequest={handleUpgradeRequest}
+              />
+            </Suspense>
           ) : isIndices && !pane3JudgmentOverride ? (
             <PaneDetailView
               detailFor={detailFor}
