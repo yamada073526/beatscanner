@@ -23,8 +23,9 @@
  *
  * memory anchor: [[feedback-screener-hero-3sections]] / [[feedback-oneill-screener-frontend-intersection]]
  */
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
+import Chip from '../../components/ui/Chip.jsx';
 
 // CustomScreenerPanel を lazy 化 (既存 modal lazy chunk と reuse、 Workspace.jsx と統一)
 const CustomScreenerPanel = lazy(() => import('../../components/CustomScreenerPanel.jsx'));
@@ -73,18 +74,28 @@ async function fetchCupHandle({ limit = 20 } = {}) {
  * @param {boolean} props.loading
  * @param {string} props.emptyMessage - tickers 0 件時の文言
  * @param {Function} props.onSelect
+ * @param {React.Ref<HTMLDivElement>} props.sectionRef - chip click scroll-to 用 ref
+ * @param {boolean} props.active - chip filter active 時 highlight
  */
-function HeroSection({ title, testId, description, tickers, loading, emptyMessage, onSelect }) {
+function HeroSection({ title, testId, description, tickers, loading, emptyMessage, onSelect, sectionRef, active = false }) {
   return (
     <div
+      ref={sectionRef}
       data-testid={testId}
+      data-active={active ? 'true' : 'false'}
       style={{
         flex: 1,
         minHeight: 220,
         padding: 'var(--space-4, 16px)',
-        border: '1px solid var(--border)',
+        border: active
+          ? '1px solid var(--color-accent)'
+          : '1px solid var(--border)',
         borderRadius: 'var(--radius-md, 8px)',
         background: 'var(--bg-card)',
+        boxShadow: active
+          ? '0 0 0 2px color-mix(in srgb, var(--color-accent) 25%, transparent)'
+          : 'none',
+        transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
       }}
     >
       <h4
@@ -169,6 +180,24 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
   const [rsRising, setRsRising] = useState({ tickers: [], loading: true, migrationPending: false });
   const [newCwh, setNewCwh] = useState({ tickers: [], loading: true });
 
+  // Sprint 4-A-4: chip filter active state + scroll-to refs
+  // activeChip: null = all visible (default) / 'leader' / 'rising' / 'new-cwh' のいずれかで該当 section を highlight
+  const [activeChip, setActiveChip] = useState(null);
+  const leaderRef = useRef(null);
+  const risingRef = useRef(null);
+  const newCwhRef = useRef(null);
+
+  const handleChipClick = (chipKey) => {
+    // 同 chip を再 click で全 highlight 解除 (toggle、 Linear 流)
+    const next = activeChip === chipKey ? null : chipKey;
+    setActiveChip(next);
+    // scroll-into-view (smooth、 nearest = scroll 最小化)
+    if (next) {
+      const ref = next === 'leader' ? leaderRef : next === 'rising' ? risingRef : newCwhRef;
+      ref.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -241,7 +270,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
       data-testid="screener-pane"
       style={{ padding: 'var(--space-4, 16px)', height: '100%', overflowY: 'auto' }}
     >
-      {/* WIP banner (Phase 4-A Sprint 4-A-3 着地、 Sprint 4-A-4 chip filter + demo blur 残作業) */}
+      {/* WIP banner (Phase 4-A Sprint 4-A-4 chip filter 着地、 demo blur + WorkspaceHeader 既存 button 削除は残作業) */}
       <div
         data-testid="screener-wip-banner"
         style={{
@@ -254,7 +283,49 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           color: 'var(--color-warning)',
         }}
       >
-        Phase 4-A Sprint 4-A-3 (feature flag preview)。 Hero 3 セクション fetch 実装済、 chip filter active highlight + demo blur は Sprint 4-A-4 で実装予定。
+        Phase 4-A Sprint 4-A-4 (feature flag preview)。 Hero 3 セクション fetch + chip filter active highlight 実装済、 demo blur + WorkspaceHeader 既存 button 削除は user gate 3 通過後。
+      </div>
+
+      {/* Sprint 4-A-4: chip filter (Hero 3 section の jump + active highlight、 ui-designer 6 体合議 verdict) */}
+      <div
+        data-testid="screener-chip-filter"
+        style={{
+          display: 'flex',
+          gap: 'var(--space-2, 8px)',
+          marginBottom: 'var(--space-3, 12px)',
+          flexWrap: 'wrap',
+        }}
+      >
+        <Chip
+          variant="filter"
+          size="sm"
+          tone="accent"
+          pressed={activeChip === 'leader'}
+          onClick={() => handleChipClick('leader')}
+          ariaLabel="Leader + Breakout + Cup-Handle 交差 section に jump"
+        >
+          Leader + Breakout + CWH
+        </Chip>
+        <Chip
+          variant="filter"
+          size="sm"
+          tone="accent"
+          pressed={activeChip === 'rising'}
+          onClick={() => handleChipClick('rising')}
+          ariaLabel="RS 急上昇 section に jump"
+        >
+          RS 急上昇
+        </Chip>
+        <Chip
+          variant="filter"
+          size="sm"
+          tone="accent"
+          pressed={activeChip === 'new-cwh'}
+          onClick={() => handleChipClick('new-cwh')}
+          ariaLabel="新規 Cup-Handle 検出 section に jump"
+        >
+          新規 Cup-Handle
+        </Chip>
       </div>
 
       {/* Hero: 3 セクション × top 5 */}
@@ -275,6 +346,8 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           loading={leaderCwh.loading}
           emptyMessage="交差銘柄 0 件"
           onSelect={handleSelect}
+          sectionRef={leaderRef}
+          active={activeChip === 'leader'}
         />
         <HeroSection
           title="RS 急上昇"
@@ -288,6 +361,8 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           loading={rsRising.loading}
           emptyMessage={rsRising.migrationPending ? 'データ準備中' : '急上昇銘柄なし'}
           onSelect={handleSelect}
+          sectionRef={risingRef}
+          active={activeChip === 'rising'}
         />
         <HeroSection
           title="新規 Cup-Handle 検出"
@@ -297,6 +372,8 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           loading={newCwh.loading}
           emptyMessage="検出銘柄なし"
           onSelect={handleSelect}
+          sectionRef={newCwhRef}
+          active={activeChip === 'new-cwh'}
         />
       </section>
 
