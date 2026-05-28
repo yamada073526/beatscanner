@@ -83,14 +83,18 @@ import ChapterSection from './ChapterSection.jsx';
 // v118 ETF MVP: ETF 入力時は 5 条件適用外 → EtfOverviewPanel を render (Trust Cliff 防止)。
 import EtfOverviewPanel from '../../../../components/EtfOverviewPanel.jsx';
 
-// DetailReport は重量級 (36 KB gzip) のため lazy load
-const DetailReport = lazy(() => import('../../../../components/DetailReport.jsx'));
+// v125 P8-2 Sprint A: section 3 component 抽出 (描画順序不変)。
+// Sprint B で順序入替時にこれら component を新位置に移動するだけで diff 「移動」 のみ。
+import FundamentalsAccordion from './sections/FundamentalsAccordion.jsx';
+import MarketEvalSection from './sections/MarketEvalSection.jsx';
+import ContextSection from './sections/ContextSection.jsx';
 
 // v97 G-2 sub-agent verdict 案 B 軽量版: 章境界 軽量強化
 // user dogfood「H2 Chapter Break は subtle すぎる、 言われないと気付かない」
 // sub-agent 推奨: 章タイトル のみ (番号なし) + cyan accent uppercase 11px + hairline 1px
 // 工数 S、 Aman 級「ホテルメニューの章立て」 idiom 維持、 教科書感を回避。
-function ChapterHeader({ label, isChapterStart = false }) {
+// v125 P8-2 Sprint A: sections/ 配下の 3 component から再利用するため named export 化。
+export function ChapterHeader({ label, isChapterStart = false }) {
   return (
     <div
       style={{
@@ -209,47 +213,7 @@ function isPane3V2Frameless() {
  * header が viewport に入った時点でのみ fetch trigger を発火する。
  * React.lazy + Suspense 機構は不触 (import 文は維持)。
  */
-function DetailReportAccordionContent({ result, guidance, detailContext }) {
-  const { ref, shouldLoad } = useIntersectionLazy({
-    isOpen: false, // accordion 開閉は AccordionSection 側で管理。本 hook は ref element の viewport 可視を検出。
-    rootMargin: '200px', // header が viewport 200px 前後で pre-load 開始
-    once: true, // 一度 shouldLoad=true になったら戻らない
-  });
-
-  return (
-    <div ref={ref}>
-      {shouldLoad && (
-        <Suspense
-          fallback={
-            <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: 'var(--space-4, 16px)' }}>
-              レポートを読み込み中...
-            </div>
-          }
-        >
-          <DetailReport
-            analysis={result}
-            guidance={guidance}
-            onStreamingChange={() => {}}
-            isPro={detailContext.isPro}
-            onUpgrade={detailContext.onUpgrade}
-          />
-        </Suspense>
-      )}
-      {!shouldLoad && (
-        <div
-          style={{
-            padding: 'var(--space-6, 24px)',
-            color: 'var(--text-muted)',
-            fontSize: 13,
-            textAlign: 'center',
-          }}
-        >
-          セクションを展開すると AI 詳細レポートを読み込みます
-        </div>
-      )}
-    </div>
-  );
-}
+// v125 P8-2 Sprint A: DetailReportAccordionContent は sections/ContextSection.jsx 内に移動。
 
 /**
  * Pane 3: 判定タブ詳細ペイン (Step 6 + 既存 component 配線).
@@ -800,333 +764,42 @@ export default function JudgmentDetail({
         </div>
       )}
 
-      {/* === 章 2: 基本財務 (H2 Chapter Break + v97 G-2 軽量強化) ===
-          v97 G-2 sub-agent verdict: SectionDivider expandedLabel を「数値の根拠」 に変更、
-          より「機関投資家向け 投資判断 anchor」 idiom 表現。 */}
-      {/* Phase G Phase 3 + v99 dogfood 3 体合議 verdict (2+3 構成):
-          - v2 mode: 副柱 (II. 数値) = sans 13px + muted (主柱 III と差別化)
-          - default: 既存 SectionDivider「数値の根拠」 維持 (revert 安全) */}
-      {/* v99 dogfood feedback A (3 体合議 verdict): 親子誤読防止のため副柱は丸数字 ① ② ③、
-          主柱はローマ数字 I II で別系統 marker、 「並列だが格差」 を視覚的に表現 */}
-      {isV2 ? (
-        <ChapterSection chapterNumber="①" chapterTitle="数値" headerOnly tier="sub" />
-      ) : (
-        <div data-chapter-start="true">
-          <SectionDivider expandedLabel="数値の根拠" />
-        </div>
-      )}
+      {/* === 章 ① 数値 (FundamentalsAccordion 抽出、 v125 P8-2 Sprint A) ===
+          描画順序不変。 SPEC §11-B-5 「Sprint A 抽出 + Sprint B 順序変更」 の Sprint A 着地点。
+          sections/FundamentalsAccordion.jsx 参照。 */}
+      <FundamentalsAccordion
+        selectedTicker={selectedTicker}
+        result={result}
+        guidance={guidance}
+        plan={plan}
+        detail={detail}
+        detailContext={detailContext}
+        isV2={isV2}
+        isV3={isV3}
+        isScrollV1={isScrollV1}
+        expandedSections={expandedSections}
+        ch2Tab={ch2Tab}
+        setCh2Tab={setCh2Tab}
+        onAnalyze={onAnalyze}
+      />
 
-      {/* === Sprint 3: ProfileCard → AccordionSection wrap (collapsed) ===
-          Phase 2.6 5-4: onNavigateTicker で競合 chip click → 銘柄 navigate
-          v104 Phase G Phase 4: ProfileCard は tab 外 (会社概要 anchor 維持)、 isV3 でも常時表示 */}
-      {isScrollV1 ? (
-        <ProfileCard
-          ticker={selectedTicker}
-          companyName={result?.companyName}
-          dataSource={result?.dataSource}
-          latestPeriod={result?.latestPeriod}
-          latestDate={result?.latestDate}
-          onNavigateTicker={onAnalyze}
-        />
-      ) : (
-        <AccordionSection
-          id="sec-profile"
-          title="会社概要"
-          tier={2}
-          defaultOpen={true}
-          controlledOpen={expandedSections.has('profile') || undefined}
-        >
-          <ProfileCard
-            ticker={selectedTicker}
-            companyName={result?.companyName}
-            dataSource={result?.dataSource}
-            latestPeriod={result?.latestPeriod}
-            latestDate={result?.latestDate}
-            onNavigateTicker={onAnalyze}
-          />
-        </AccordionSection>
-      )}
-
-      {/* v104 Phase G Phase 4 (handover v100/103 §release MVP item 2):
-          Guidance + 過去 5 年 EarningsHistory + 直近 8Q を 1 tab interface に統合。
-          feature flag pane3_v3='1' で gated、 default 既存 (縦並び) 維持で dogfood revert 安全。
-          Bloomberg / Refinitiv 流「同カテゴリ複数 viewport」 idiom、
-          章 3 (市場評価) の QuarterlyHistoryTable は isV3 ON 時にここに統合される。 */}
-      {isV3 ? (
-        (() => {
-          // v115 user feedback: 過去 5 年 タブが 3 年分しか表示されない → label を data 件数で動的化
-          // FMP free tier 等で 3 年分のみ返ることがあるため、 実 years 件数を honest 表示
-          const periodYears = new Set(
-            (result?.periods ?? [])
-              .map((p) => String(p?.period || '').replace(/^FY/, '').slice(0, 4))
-              .filter((y) => /^\d{4}$/.test(y))
-          );
-          const displayYears = Math.min(periodYears.size, 5);
-          const historyLabel = displayYears > 0 ? `過去 ${displayYears} 年` : '過去 5 年';
-          return (
-        <SectionFade id="sec-ch2-tabs" staggerIndex={1}>
-          <ChapterTabs
-            tabs={[
-              { key: 'guidance', label: '今期/来期' },
-              { key: 'history', label: historyLabel },
-              { key: 'quarterly', label: '直近 8Q', badge: 'PRO' },
-            ]}
-            activeKey={ch2Tab}
-            onChange={setCh2Tab}
-            ariaLabel="基本財務 — 期間別 EPS / Revenue"
-          >
-            {{
-              guidance: (
-                <GuidanceCard
-                  guidance={guidance}
-                  isLoading={!guidance && detail?.isLoading !== false}
-                  isSecLoading={false}
-                  nextEarningsDays={detail?.nextEarningsDays ?? null}
-                />
-              ),
-              history: (
-                // v108 multi-review verdict (議題 1): tab 切替 mount 時に halo 強制発火
-                <EarningsHistoryChart
-                  periods={result?.periods ?? []}
-                  currency={result?.currency}
-                  isLoading={!result?.periods && detail?.isLoading !== false}
-                  triggerOnMount={ch2Tab === 'history'}
-                />
-              ),
-              quarterly: selectedTicker ? (
-                <PremiumLock
-                  feature="earnings_8q"
-                  plan={plan}
-                  label="直近 8Q の Beat/Miss streak を一覧で"
-                  bullets={[
-                    '過去 8 四半期の EPS / 売上 surprise %',
-                    '連続 Beat 期数の自動集計',
-                    'ピンクが直近、 直前の決算と並べて trend を可視化',
-                  ]}
-                  onUpgrade={detailContext.onUpgrade}
-                >
-                  <div id="sec-quarterly-history-v3">
-                    {/* v108 multi-review verdict (議題 1): tab 切替 mount 時に halo 強制発火 */}
-                    <QuarterlyHistoryTable
-                      ticker={selectedTicker}
-                      limit={8}
-                      triggerOnMount={ch2Tab === 'quarterly'}
-                    />
-                  </div>
-                </PremiumLock>
-              ) : null,
-            }}
-          </ChapterTabs>
-        </SectionFade>
-          );
-        })()
-      ) : (
-        <>
-          {/* GuidanceCard: expanded 固定 (今期/来期 EPS = 投資判断の直接 input)
-              Sprint 4: SectionFade で section in-view fade-in (案1)
-              v97 CLS fix: `{guidance && (...)}` を撤去し常時 mount (skeleton で min-height 確保)。 */}
-          <SectionFade id="sec-guidance" staggerIndex={1}>
-            <GuidanceCard
-              guidance={guidance}
-              isLoading={!guidance && detail?.isLoading !== false}
-              isSecLoading={false}
-              nextEarningsDays={detail?.nextEarningsDays ?? null}
-            />
-          </SectionFade>
-
-          {/* === Sprint 3: EarningsHistoryChart (旧 EarningsBars + HistoryChart 統合、expanded 固定) ===
-              v100 QA #1 章扉 skeleton CLS fix: 旧 `{periods?.length > 0 && ...}` 撤去し常時 mount。
-              EarningsHistoryChart 自身が minHeight 360 envelope を持つため CLS なし。
-              [[feedback-cls-envelope-pattern]] と整合。 */}
-          <SectionFade id="sec-earnings-history" staggerIndex={2}>
-            <EarningsHistoryChart
-              periods={result?.periods ?? []}
-              currency={result?.currency}
-              isLoading={!result?.periods && detail?.isLoading !== false}
-            />
-          </SectionFade>
-        </>
-      )}
-
-      {/* === 章 3: 市場評価 (H2 Chapter Break + v97 G-2 軽量強化) ===
-          ChapterHeader「市場評価」 で章扉感強化、 data-chapter-start で 48px breathing room。
-          AnalystPanel 起点 (旧 data-chapter-start を ChapterHeader に移譲)。 */}
-      {/* Phase G Phase 3 + v99 dogfood A: 主柱「II. 市場評価」 (ローマ数字 連番 I→II)、
-          副柱とは別系統 marker で親子誤読防止 */}
-      {isV2 ? (
-        <ChapterSection chapterNumber="II" chapterTitle="市場評価" headerOnly tier="main" />
-      ) : (
-        <ChapterHeader label="市場評価" isChapterStart />
-      )}
-      {/* v105 Phase G Phase 5: 章 3 (市場評価) を 2 tab interface に統合 (isV3 ON 時)。
-          Tab 1: アナリスト視点 (AnalystPanel)、 Tab 2: 市場の声 (InsightsPanel)。
-          QuarterlyHistoryTable は章 2 ChapterTabs に統合済 (Phase G Phase 4)。
-          ch3tab URL state で permalink shareable (?ch3tab=insights)、 default 'analyst'。
-          halo sweep は tab 切替時の mount 動作と等価のため初期 active=analyst で発火されるが、
-          haloTriggerRef は accordion 専用のため tab 内では渡さない (v1 簡素化、 v2 で trigger 化検討)。 */}
-      {selectedTicker && isV3 && !isScrollV1 ? (
-        <ChapterTabs
-          tabs={[
-            { key: 'analyst', label: 'アナリスト視点' },
-            { key: 'insights', label: '市場の声' },
-          ]}
-          activeKey={ch3Tab}
-          onChange={setCh3Tab}
-          ariaLabel="市場評価 — アナリスト視点 / 市場の声"
-        >
-          {{
-            analyst: (
-              <div id="sec-analyst-v3">
-                <AnalystPanel
-                  ticker={selectedTicker}
-                  plan={plan}
-                  currentPrice={Number.isFinite(detail?.price) ? Number(detail.price) : null}
-                />
-              </div>
-            ),
-            insights: (
-              <div id="sec-insights-v3">
-                <InsightsPanel
-                  ticker={selectedTicker}
-                  user={detailContext.user}
-                  isPro={detailContext.isPro}
-                  onUpgradeClick={detailContext.onUpgrade}
-                  onSignIn={detailContext.onSignIn}
-                />
-              </div>
-            ),
-          }}
-        </ChapterTabs>
-      ) : selectedTicker && (
-        isScrollV1 ? (
-          <div id="sec-analyst">
-            <AnalystPanel
-              ticker={selectedTicker}
-              plan={plan}
-              currentPrice={Number.isFinite(detail?.price) ? Number(detail.price) : null}
-            />
-          </div>
-        ) : (
-          <AccordionSection
-            id="sec-analyst"
-            title="アナリスト視点"
-            tier={2}
-            defaultOpen={false}
-            controlledOpen={expandedSections.has('analyst-panel') || undefined}
-            onOpenChange={(id, isOpen) => {
-              // Phase 2.9 Sprint 1 #3: setTimeout 500ms で mount + useEffect 完了を待つ
-              // Phase 2.9 Sprint 2 #Bug2 fix: haloFiredSetRef で 2 回目発火を防止 (re-mount でも persist)
-              if (isOpen && !haloFiredSetRef.current.has('analyst-panel')) {
-                haloFiredSetRef.current.add('analyst-panel');
-                setTimeout(() => analystHaloTriggerRef.current?.(), 500);
-              }
-            }}
-          >
-            <AnalystPanel
-              ticker={selectedTicker}
-              plan={plan}
-              currentPrice={Number.isFinite(detail?.price) ? Number(detail.price) : null}
-              haloTriggerRef={analystHaloTriggerRef}
-            />
-          </AccordionSection>
-        )
-      )}
-
-      {/* === Sprint 3: QuarterlyHistoryTable → AccordionSection wrap (collapsed) ===
-          PremiumLock は AccordionSection の外 (Premium lock 表示を header で見せるため)。
-          v104 Phase G Phase 4: isV3 ON 時は章 2 ChapterTabs の「直近 8Q」 tab に統合されるため、
-          ここでは render しない (二重表示防止)。 */}
-      {selectedTicker && !isV3 && (
-        isScrollV1 ? (
-          <PremiumLock
-            feature="earnings_8q"
-            plan={plan}
-            label="直近 8Q の Beat/Miss streak を一覧で"
-            bullets={[
-              '過去 8 四半期の EPS / 売上 surprise %',
-              '連続 Beat 期数の自動集計',
-              'ピンクが直近、 直前の決算と並べて trend を可視化',
-            ]}
-            onUpgrade={detailContext.onUpgrade}
-          >
-            <div id="sec-quarterly-history">
-              <QuarterlyHistoryTable ticker={selectedTicker} limit={8} />
-            </div>
-          </PremiumLock>
-        ) : (
-          <AccordionSection
-            id="sec-quarterly-history"
-            title="直近 8Q 履歴"
-            label="PRO"
-            tier={2}
-            defaultOpen={false}
-            controlledOpen={expandedSections.has('quarterly-history') || undefined}
-            onOpenChange={(id, isOpen) => {
-              // Phase 2.9 Sprint 1 #3 + Phase 2.9 Sprint 2 #Bug2: 詳細は AnalystPanel 側 comment 参照
-              if (isOpen && !haloFiredSetRef.current.has('quarterly-history')) {
-                haloFiredSetRef.current.add('quarterly-history');
-                setTimeout(() => qhistoryHaloTriggerRef.current?.(), 500);
-              }
-            }}
-          >
-            <PremiumLock
-              feature="earnings_8q"
-              plan={plan}
-              label="直近 8Q の Beat/Miss streak を一覧で"
-              bullets={[
-                '過去 8 四半期の EPS / 売上 surprise %',
-                '連続 Beat 期数の自動集計',
-                'ピンクが直近、 直前の決算と並べて trend を可視化',
-              ]}
-              onUpgrade={detailContext.onUpgrade}
-            >
-              <div id="sec-quarterly-history-inner">
-                <QuarterlyHistoryTable
-                  ticker={selectedTicker}
-                  limit={8}
-                  haloTriggerRef={qhistoryHaloTriggerRef}
-                />
-              </div>
-            </PremiumLock>
-          </AccordionSection>
-        )
-      )}
-
-      {/* === Sprint 3: InsightsPanel → AccordionSection wrap (collapsed)
-          SPEC §5 Sprint 3 #3: header に「市場の声」表示。
-          N 件カウントは InsightsPanel 内部データ (外部アクセス不可) のため、
-          accordion header は title="市場の声" のみ。
-          v105 Phase G Phase 5: isV3 ON 時は章 3 ChapterTabs の「市場の声」 tab に統合済、
-          ここでは render しない (二重表示防止)。 === */}
-      {selectedTicker && !isV3 && (
-        isScrollV1 ? (
-          <div id="sec-insights">
-            <InsightsPanel
-              ticker={selectedTicker}
-              user={detailContext.user}
-              isPro={detailContext.isPro}
-              onUpgradeClick={detailContext.onUpgrade}
-              onSignIn={detailContext.onSignIn}
-            />
-          </div>
-        ) : (
-          <AccordionSection
-            id="sec-insights"
-            title="市場の声"
-            tier={2}
-            defaultOpen={false}
-            controlledOpen={expandedSections.has('insights') || undefined}
-          >
-            <InsightsPanel
-              ticker={selectedTicker}
-              user={detailContext.user}
-              isPro={detailContext.isPro}
-              onUpgradeClick={detailContext.onUpgrade}
-              onSignIn={detailContext.onSignIn}
-            />
-          </AccordionSection>
-        )
-      )}
+      {/* === 章 II 市場評価 (MarketEvalSection 抽出、 v125 P8-2 Sprint A) ===
+          描画順序不変。 sections/MarketEvalSection.jsx 参照。 */}
+      <MarketEvalSection
+        selectedTicker={selectedTicker}
+        plan={plan}
+        detail={detail}
+        detailContext={detailContext}
+        isV2={isV2}
+        isV3={isV3}
+        isScrollV1={isScrollV1}
+        expandedSections={expandedSections}
+        ch3Tab={ch3Tab}
+        setCh3Tab={setCh3Tab}
+        analystHaloTriggerRef={analystHaloTriggerRef}
+        qhistoryHaloTriggerRef={qhistoryHaloTriggerRef}
+        haloFiredSetRef={haloFiredSetRef}
+      />
 
       {/* === 章 4: チャート (H2 Chapter Break + v97 G-2 軽量強化) ===
           ChapterHeader「テクニカル」、 StockPriceChart 起点。
@@ -1230,164 +903,19 @@ export default function JudgmentDetail({
         )
       )}
 
-      {/* === 章 5: リファレンス (H2 Chapter Break + v97 G-2 軽量強化) ===
-          ChapterHeader「リファレンス」、 News / IR / DetailReport で「補足資料」 章扉感。
-          Sprint 3 (Phase 2): Tier L glow — hover 時の hairline border tint のみ、発光なし。 */}
-      {/* Phase G Phase 3 + v99 dogfood A: 副柱「③ リファレンス」 (丸数字、 別系統 marker) */}
-      {isV2 ? (
-        <ChapterSection chapterNumber="③" chapterTitle="リファレンス" headerOnly tier="sub" />
-      ) : (
-        <ChapterHeader label="リファレンス" isChapterStart />
-      )}
-      {selectedTicker && (
-        isScrollV1 ? (
-          <div id="sec-news">
-            <NewsPanel ticker={selectedTicker} useWorkspaceReader={useWorkspaceReader} />
-          </div>
-        ) : (
-          <div className="tier-l-glow" data-testid="library-news-wrapper">
-            <AccordionSection
-              id="sec-news"
-              title="最新ニュース"
-              tier={2}
-              defaultOpen={false}
-              controlledOpen={expandedSections.has('news') || undefined}
-            >
-              {/* v100 user dogfood (handover §100点 multi-review): リファレンス章 3 子の hover 発光
-                  左右クリッピング fix。 子 component (NewsPanel row 等) の border が父境界に張り付き、
-                  hover 時 cyan tint が「左右切れた」 体感を発生。 inner div 左右 padding で breathing
-                  room を担保し、 panel-card hover halo + border tint が viewport で切れないようにする。 */}
-              <div id="sec-news-inner" style={{ padding: '0 var(--space-3, 12px)' }}>
-                {/* Phase 2.7 Sprint 1 #2': workspace mode は AccordionSection header で見出し表示済 → 内部 h3 hide */}
-                <NewsPanel ticker={selectedTicker} useWorkspaceReader={useWorkspaceReader} hideHeading={!isScrollV1} />
-              </div>
-            </AccordionSection>
-          </div>
-        )
-      )}
-
-      {/* === Sprint 3: IRLinksPanel → AccordionSection wrap (collapsed) ===
-          Sprint 3 (Phase 2): Tier L glow — hover 時の hairline border tint のみ。 */}
-      {selectedTicker && (
-        isScrollV1 ? (
-          <div id="sec-ir">
-            <IRLinksPanel ticker={selectedTicker} />
-          </div>
-        ) : (
-          <div className="tier-l-glow" data-testid="library-ir-wrapper">
-            <AccordionSection
-              id="sec-ir"
-              title="IR Links"
-              tier={2}
-              defaultOpen={false}
-              controlledOpen={expandedSections.has('ir-links') || undefined}
-            >
-              {/* v100 リファレンス章 hover クリッピング fix: 同 §sec-news-inner */}
-              <div id="sec-ir-inner" style={{ padding: '0 var(--space-3, 12px)' }}>
-                {/* Phase 2.7 Sprint 1 #2': workspace mode は AccordionSection header で見出し表示済 → 内部 h3 hide */}
-                <IRLinksPanel ticker={selectedTicker} hideHeading={!isScrollV1} />
-              </div>
-            </AccordionSection>
-          </div>
-        )
-      )}
-
-      {/* v104 release MVP: 10-K (年次報告書) AccordionSection — IR Links と DetailReport の間に挿入。
-          SEC EDGAR 直 fetch (無料、 US 上場のみ)、 free user 開放。 isScrollV1 (classic) では出さない。 */}
-      {selectedTicker && !isScrollV1 && (
-        <div className="tier-l-glow" data-testid="library-10k-wrapper">
-          <AccordionSection
-            id="sec-10k"
-            title="10-K (年次報告書)"
-            tier={2}
-            defaultOpen={false}
-            controlledOpen={expandedSections.has('ten-k') || undefined}
-          >
-            <div id="sec-10k-inner" style={{ padding: '0 var(--space-3, 12px)' }}>
-              <TenKLinksPanel ticker={selectedTicker} hideHeading />
-            </div>
-          </AccordionSection>
-        </div>
-      )}
-
-      {/* === Sprint 3: DetailReport → AccordionSection wrap + useIntersectionLazy 連動 ===
-          collapsed 時に lazy chunk fetch を抑制。
-          header が viewport に入った時のみ fetch trigger (useIntersectionLazy)。
-          React.lazy + Suspense 機構は不触 (DetailReport.jsx 内部不変)。
-          Sprint 3 (Phase 2): Tier L glow — hover 時の hairline border tint のみ。 */}
-      {result && (
-        isScrollV1 ? (
-          <PremiumLock
-            feature="claude_opus_report"
-            plan={plan}
-            label="AI 詳細レポートで意思決定を加速"
-            bullets={[
-              '5 条件 + ガイダンスをまとめた決算サマリー',
-              '直近ニュース/業績との相関分析',
-              'Premium は Claude Opus 多面分析 (月 20 銘柄)',
-            ]}
-            onUpgrade={detailContext.onUpgrade}
-          >
-            <Card>
-              <div style={{ padding: 'var(--space-6, 24px)' }}>
-                <SectionHeader
-                  id="sec-report"
-                  icon={<FileBarChart2 size={18} strokeWidth={1.5} />}
-                  title="AI 詳細レポート"
-                  label="DETAIL REPORT"
-                />
-                <Suspense
-                  fallback={
-                    <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-                      レポートを読み込み中...
-                    </div>
-                  }
-                >
-                  <DetailReport
-                    analysis={result}
-                    guidance={guidance}
-                    onStreamingChange={() => {}}
-                    isPro={detailContext.isPro}
-                    onUpgrade={detailContext.onUpgrade}
-                  />
-                </Suspense>
-              </div>
-            </Card>
-          </PremiumLock>
-        ) : (
-          <div className="tier-l-glow" data-testid="library-report-wrapper">
-            <AccordionSection
-              id="sec-report"
-              title="AI 詳細レポート"
-              label="PRO"
-              tier={2}
-              defaultOpen={false}
-              controlledOpen={expandedSections.has('detail-report') || undefined}
-            >
-              {/* v100 リファレンス章 hover クリッピング fix: 同 §sec-news-inner */}
-              <div style={{ padding: '0 var(--space-3, 12px)' }}>
-                <PremiumLock
-                  feature="claude_opus_report"
-                  plan={plan}
-                  label="AI 詳細レポートで意思決定を加速"
-                  bullets={[
-                    '5 条件 + ガイダンスをまとめた決算サマリー',
-                    '直近ニュース/業績との相関分析',
-                    'Premium は Claude Opus 多面分析 (月 20 銘柄)',
-                  ]}
-                  onUpgrade={detailContext.onUpgrade}
-                >
-                  <DetailReportAccordionContent
-                    result={result}
-                    guidance={guidance}
-                    detailContext={detailContext}
-                  />
-                </PremiumLock>
-              </div>
-            </AccordionSection>
-          </div>
-        )
-      )}
+      {/* === 章 ③ リファレンス (ContextSection 抽出、 v125 P8-2 Sprint A) ===
+          描画順序不変。 News / IR / 10-K / DetailReport を内包。 sections/ContextSection.jsx 参照。 */}
+      <ContextSection
+        selectedTicker={selectedTicker}
+        result={result}
+        guidance={guidance}
+        plan={plan}
+        detailContext={detailContext}
+        isV2={isV2}
+        isScrollV1={isScrollV1}
+        useWorkspaceReader={useWorkspaceReader}
+        expandedSections={expandedSections}
+      />
 
       {/* P3.7: Pane 3 → 関連記事 link (conditional render — 記事がある時だけ表示)
           5 原則 §4「1 クリックを減らせ」: 記事存在時に 1 タップで /articles/<slug> に到達。

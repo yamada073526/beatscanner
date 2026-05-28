@@ -307,17 +307,31 @@ SELL_ZONE_DESC_JP = {
 
 ### Phase 4-B: Pane 3 セクション順序入替 (2.5 人日、 blast radius **XL**)
 
-grill-me #3 verdict 通り 5 セクション順序:
-1. **図解 sticky accordion (default-collapsed)** — top 56-64px、 click で inline expand に DiagramCard
+**2026-05-28 user gate 3 確定** (案 B + 図解 default OFF + DiagramCard mount 維持):
+
+新 5 セクション順序:
+1. **図解 sticky accordion (default-collapsed = OFF)** — user 指示「メインは Chart、 図解は 2 回目以降しつこい → default OFF」。 top 56-64px、 click で inline expand に DiagramCard
 2. **Chart** — StockPriceChart (Sprint 5 で line overlay 追加済)
 3. **目標株価 + 売り card 並列** — AnalystTargetCard + SellZoneCard (Sprint 4/6 で追加済)
-4. **ファンダ accordion (default-collapsed)** — 5 条件カード + Triage / Profile / Guidance / Earnings History 全部内包
-5. **その他** — News / IR Links / Analyst view / Conference
+4. **5 条件カード (accordion 外、 常時 visible)** — 案 B 確定 (user 帰宅後判断、 LP「2 秒で判定」 完全保持)
+5. **ファンダ accordion (default-collapsed)** — 業績推移 + 詳細レポート + アナリスト視点 + ガイダンス + Profile + Triage 内包 (5 条件カードは accordion 外なので除外)
+6. **その他** — News / IR Links / Analyst view / Conference / Insider / Earnings Reaction
+
+**DiagramCard mount 維持** (技術判定、 [[feedback-diagram-card-remount-cache]] 遵守):
+- StickyDiagramAccordion は mount 維持、 表示制御は CSS `display: none` / `hidden` attribute のみ
+- accordion expand/collapse で unmount→remount BAN (5 分 TTL ephemeral cache 破壊 → 月 cost $4.5 → $30-45 膨張 risk 回避)
+- React Query / SWR の `staleTime` を `/api/visualize` で 5 分以上に明示
 
 **触るファイル**:
-- 編集: `frontend/src/features/workspace/panes/Pane3.jsx` (大規模 refactor、 既存 7 ブロック構造 [[project-pane3-completion-backlog]] を維持しつつ順序入替)
-- 新規: `frontend/src/features/workspace/components/StickyDiagramAccordion.jsx`
-- 新規: `frontend/src/features/workspace/components/FundamentalsAccordion.jsx` (5 条件 + Triage / Profile / Guidance / Earnings History の wrapper)
+- 編集: `frontend/src/features/judgment/components/detail/JudgmentDetail.jsx` (1422 行、 大規模 refactor。 既存 ChapterSection ① 数値 / II 市場評価 / ② テクニカル / ③ リファレンス 構造を新順序へ並べ替え)
+- 新規: `frontend/src/features/judgment/components/detail/sections/StickyDiagramAccordion.jsx` (DiagramCard mount 維持 wrapper、 default-collapsed)
+- 新規: `frontend/src/features/judgment/components/detail/sections/FundamentalsAccordion.jsx` (Triage / Profile / Guidance / EarningsHistory / 詳細レポート / アナリスト視点 の wrapper、 5 条件カードは含まない)
+- 新規: `frontend/src/features/judgment/components/detail/sections/MarketEvalSection.jsx` (AnalystPanel + InsightsPanel)
+- 新規: `frontend/src/features/judgment/components/detail/sections/ContextSection.jsx` (News / IR / Conference / Insider / Earnings Reaction)
+
+**feature flag** (Sprint B DoD):
+- `localStorage.pane3_v4 = '0'` または URL `?pane3_v4=0` で旧 Pane 3 順序に即時 revert (reload のみ)
+- 7 日 dogfood 後に旧フラグ群 (`isPane3ScrollV1` / `isPane3V2` / `isPane3V3` / `isPane3V2Frameless`) と共に cleanup
 
 ### Phase 4-C: SPA route + URL parameter sync (0.5 人日)
 
