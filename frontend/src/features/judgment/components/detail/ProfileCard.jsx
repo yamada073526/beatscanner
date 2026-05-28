@@ -846,7 +846,8 @@ function PeerComparisonSection({ ticker, onNavigateTicker }) {
     return () => ac.abort();
   }, [ticker]);
 
-  if (loading) return <PeerCompareSkeleton />;
+  // v125 R3 hotfix lesson: data-testid="peer-compare-section" を全 state (skeleton/error/empty/main) で統一
+  if (loading) return <div data-testid="peer-compare-section" data-state="loading"><PeerCompareSkeleton /></div>;
 
   if (!data || data._error) {
     return (
