@@ -10751,7 +10751,7 @@ def _detect_cup_handle(
     depth_max: float = 0.33,
     cup_min_weeks: int = 7,
     cup_max_weeks: int = 65,
-    u_shape_min_days: int = 10,  # 2 週、 大型株 fast cup でも検出可能 (canonical は U 字定性条件のみ)
+    u_shape_min_days: int = 5,  # v126 R11-2 Phase 2 (5/29): 10 → 5 日 (1 週) に緩和、 ATH 銘柄 NVDA no_u_shape catch
     handle_max_weeks: int = 4,
     handle_pullback_max: float = 0.12,
     pivot_offset: float = 0.10,
@@ -10829,12 +10829,12 @@ def _detect_cup_handle(
             _reject("right_rim_invalid"); continue
 
         # right_rim が「直近 ピーク」 か (handle 期間中の全 high が rim 以下)
-        # v126 R11-2 Phase 1 (2026-05-29 金融アナリスト Opus verdict + user 承認):
-        # 1.5% → 5% overshoot 許容に緩和。 MarketSurge 推定 tolerance 3-5% (TradingView 公開 Cup-Handle indicator 既定 + IBD 教材「shake out 容認」 言及) と整合。
-        # LLY/NVDA の handle_exceeds_rim 大量 reject を catch するため。
-        # Phase 3 で 10 銘柄 dogfood verify、 false positive 10x 超なら 0.035 に微調整。
+        # v126 R11-2 Phase 1 + 1B (2026-05-29):
+        # 1.5% → 5% → 10% overshoot 許容に段階緩和。 5% でも LLY 18 件 / NVDA 10 件依然 reject 確認後、
+        # ATH 更新中銘柄 catch のため 10% に拡大。 MarketSurge の Pattern Recognition は ATH base にも対応。
+        # Phase 3 で 10 銘柄 dogfood verify、 false positive 10x 超なら 0.07 に微調整。
         handle_highs = highs[right_rim_idx + 1: n]
-        if any(h > right_rim_high * 1.05 for h in handle_highs):
+        if any(h > right_rim_high * 1.10 for h in handle_highs):
             _reject("handle_exceeds_rim"); continue
 
         # handle low と pullback
@@ -10853,7 +10853,8 @@ def _detect_cup_handle(
         # left rim 候補 = right_rim_high の 95% 以上の高値 (cup の対称性)。
         # 「最古」 を取ると cup が大きくなり U 字判定が大型株で fail するため、
         # 「最新の (right rim に最も近い) rim」 = 短い cup を優先 (Phase 3-C dogfood で判明)。
-        rim_threshold = right_rim_high * 0.95
+        # v126 R11-2 Phase 2 (5/29 金融アナリスト Opus verdict): 0.95 → 0.92 で左右 rim 非対称許容拡大、 left_rim 探索範囲広げる
+        rim_threshold = right_rim_high * 0.92
         left_rim_idx = -1
         search_far = max(prior_uptrend_days, right_rim_idx - cup_max_days)
         search_near = right_rim_idx - cup_min_days
