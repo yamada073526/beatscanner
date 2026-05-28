@@ -103,3 +103,64 @@ production bundle (P7-1 R1 hotfix 後): index-bXxCdCXp.js (frontend) + backend d
 スクショ 1 + 2 があれば sub-agent review で具体的改善案が出やすい。 1 のみでも可。
 
 詳細は handover_2026-05-28_v125_full.md 参照。
+
+---
+
+## v125 P8 自律 PDCA (2026-05-28 22:00-翌 04:30 JST) — 全 9 修正着地
+
+### P8-1〜P8-4 (deploy 済):
+- **P8-1** (commit b0b7cae): pillar2_pane1 flag default ON 化 — `index-DzaC3B13.js`
+- **P8-2 Sprint A** (commit 5cf34ae): JudgmentDetail から sections/ 配下に 3 component 抽出 (FundamentalsAccordion + MarketEvalSection + ContextSection)、 描画順序不変
+- **P8-3 Sprint B** (commit 3b12638): Pane 3 案 B 新順序 + `pane3_v4` flag (default OFF、 ?pane3_v4=1 で先行 dogfood) — `index-CksQVj3P.js`
+- **P8-4** (commit ba85a2a): AnalystTargetCard footer に「直近の grade 変更を見る →」 link 追加 — `index-BYw12JcR.js`
+
+### P8-5 user dogfood feedback 即対応 (deploy 済):
+- **R6-1**: AnalystTargetCard link 不動 → timing fix (setTimeout 250ms + manual offset)
+- **R6-2**: 図解 sticky 「画面狭くなる」 → 小型 Chip button 化 (sticky 撤去、 user スクショ「マコなり」 アプリ参考)
+- **Task 3 実装**: SellZoneCard 統合推奨案 (zone Chip 化 + conclusion 13.5px 600 anchor + reason/source 1 行 merge + climax 短縮)
+- **Task 4 実装**: LP Hero subtitle + Article Digest 件名 + Cup-Handle Digest 件名 全 3 区分 — bundle `index-BTqhPN83.js`
+
+### P8-6 R7 user dogfood 2 回目 即対応 (deploy 済) — bundle **`index-BKS9VPzn.js`**:
+
+**user feedback 23:00**:
+- AnalystTargetCard link 「click で何も反応しない」
+- 図解 chip 「click で何も反応しない」 + 「リッチさ 60 点未満」
+
+**真因特定 (commit 29de1a7)**:
+- **AccordionSection の props 分割代入で `id` が抜かれている** (line 59) → `...rest` に含まれず、 root div に id 属性付与なし
+- `document.getElementById('sec-analyst')` / `'sec-report'` は **常に null** → scroll が動かなかった
+- 正しい id: `acc-header-${id}` (line 152 で header button に付与)
+
+**R7-1 修正**: AnalystTargetCard link の scroll target を `acc-header-sec-analyst` に変更 (V3 mode の `sec-analyst-v3` は通常 div で id 付与のため fallback で維持)
+
+**R7-2 修正 + リッチ化** (60→80+ 点目標):
+- StickyDiagramAccordion を Chip primitive 撤去 → dedicated `.diagram-banner` button に書換
+- 左 large icon (BookOpen 18px + Sparkles 10px overlay) + accent 14% bg + 円形 wrap
+- 中央 2 行 text (タイトル 13.5px 600 +「AI 詳細レポートで自動生成」 11px muted)
+- 右 ArrowRight icon (hover で +2px slide animation)
+- gradient background (accent 6% → bg-elevated)、 hover で elevation + accent border 強化
+- subtle gold-accent border (color-mix in srgb、 raw hex なし)
+- click で `acc-header-sec-report` expandSection + smooth scroll
+
+### 🔴 user 起床後 (4:30+) 確認すべき項目
+
+1. **R7-1: AnalystTargetCard link 再動作確認**
+   - URL: `?layout=workspace&pillar2_pane1=1&ticker=AAPL`
+   - 「直近の grade 変更を見る →」 click でアナリスト視点 panel に scroll するか
+
+2. **R7-2: 図解 banner デザイン re-verdict**
+   - URL: `?layout=workspace&pillar2_pane1=1&pane3_v4=1&ticker=AAPL`
+   - Pane 3 上部の banner button (左 icon + 2 行 text + 右 arrow) を確認
+   - リッチさ 60 → 80+ 点に到達したか自己評価
+   - click で AI 詳細レポート (page 下部) に scroll するか
+
+3. **LP subtitle 確認** (PDCA で headless verify 不能、 user 手動)
+   - URL: `https://beatscanner-production.up.railway.app/` (未ログイン状態 / cookie clear)
+   - Hero「勝てる決算、 2 秒で。」 直下に subtitle「決算 quarterly + テクニカル daily、 米国株を 2 本柱で日本語チェック。」 が表示されるか
+   - bundle 内に文字列確認済 (`LandingPage-CIGGrJj2.js` に「2 本柱」 「決算 quarterly」 「勝てる決算」 grep PASS)
+
+### 🟡 自律 PDCA で省略 (Anthropic API rate limit / BYPASS_TOKEN 未実装)
+
+- snap-pdca-loop で R7-2 vision-eval 採点: production が「分析中」 のまま loading で UI 未描画、 verify 中断
+- 次 session で backend に BYPASS_TOKEN middleware 実装 (handover full 推奨タスク扱い)
+- 静的検証は production bundle に文字列含まれることを curl + grep で 1:1 confirmed

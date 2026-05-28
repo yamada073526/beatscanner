@@ -781,3 +781,100 @@ memory anchor: `feedback_data_completeness_guard.md` (per-source data namespace 
 7. **A/B 件名 + マーケ launch punch line 選定**
 
 19:25 JST、 P6 着地。 残時間 ~1h、 autonomous PDCA はここで完全 closure。
+
+---
+
+## v125 P7 + P8 + R6 + R7 autonomous PDCA (5/28 19:00 - 翌 04:30 JST)
+
+### P7 (19:00-19:35): testid 横展開 phase 5 + scan-all unified endpoint
+- P7-1: `/api/cron/scan-all` (cup_scan + rs_scan asyncio.gather 並列) smoke test PASS、 R1 hotfix commit 227479d
+- P7-2: handover を summary (50 行) + full (783 行) 2 ファイル分割、 fetch-handover skill が summary のみで context 復元可能
+- P7-3: testid 横展開 phase 5 (EarningsReactionPanel + InsiderPanel、 累計 13 component 全完了)
+- P7 累計: 35 commit、 deploy 18 回
+
+### user 帰宅後 R4 hotfix (commit 39c32b5): Chart label + SellZoneCard 並び替え
+- R4-1: アナリスト目標 label position 'right' → 'insideTopRight' で extended +15% と分離
+- R4-2: SELL_ZONE_DESC_JP を 3 field 構造化 (conclusion/reason/source) + SellZoneCard で順次表示 + source 灰色
+
+### P8 (本セッション 22:00-翌 04:30、 9 commit / 4 deploy)
+
+**P8-1 (commit b0b7cae)**: `isPillar2Pane1()` default ON 化、 Pane 1 「スクリーナー」 全 user 公開 — `index-DzaC3B13.js`
+
+**P8-2 Sprint A (commit 5cf34ae)**: JudgmentDetail.jsx (1422 行) から sections/ 配下に 3 component 抽出 (FundamentalsAccordion + MarketEvalSection + ContextSection)、 描画順序不変
+
+**P8-3 Sprint B (commit 3b12638)**: Pane 3 案 B 新順序 + `pane3_v4` flag (default OFF、 URL `?pane3_v4=1` で先行 dogfood) — `index-CksQVj3P.js`
+- 新順序: 階層 1 (判定 + 5 条件 accordion 外維持) → StickyDiagramAccordion (default OFF) → Chart → 目標+売り 並列 → ファンダ accordion → 市場評価 → その他 → リファレンス
+- DiagramCard 物理 mount 維持は別 sprint で deferred (DetailReport.jsx vizData lift up 必要)
+
+**P8-4 (commit ba85a2a)**: AnalystTargetCard footer に「直近の grade 変更を見る →」 link 追加 — `index-BYw12JcR.js`
+
+### P8-5 user dogfood feedback (5/28 21:00) 即対応 (commit d9b6bc3) — `index-BTqhPN83.js`:
+- **R6-1**: AnalystTargetCard link 不動 → timing fix (setTimeout 250ms + manual offset)
+- **R6-2**: 図解 sticky 「画面狭くなる」 → 小型 Chip button 化 (sticky 撤去、 スクショ「マコなり」 アプリ参考)
+- **Task 3 実装**: SellZoneCard 統合推奨案 (zone Chip 化 + conclusion 13.5px 600 anchor + reason/source 1 行 merge + climax 短縮)
+- **Task 4 実装**: LP Hero subtitle (`勝てる決算、 2 秒で。` 維持 + 直下に `決算 quarterly + テクニカル daily、 米国株を 2 本柱で日本語チェック。`) + Article Digest 件名 + Cup-Handle Digest 件名 全 3 区分
+
+### P8-6 R7 user dogfood 2 回目 (5/28 23:00) 即対応 (commit 29de1a7) — `index-BKS9VPzn.js`:
+
+**user 不満**:
+- AnalystTargetCard link 「click で何も反応しない」
+- 図解 chip 「click で何も反応しない」 + 「リッチさ 60 点未満」
+
+**真因特定**:
+- `frontend/src/features/judgment/primitives/AccordionSection.jsx` line 59 で props 分割代入で `id` が抜かれている → `...rest` に含まれず、 root div に id 属性付与なし
+- `document.getElementById('sec-analyst')` / `document.getElementById('sec-report')` は **常に null** → scroll が動かなかった
+- 正しい id: `acc-header-${id}` (line 152 で header button に付与)
+
+**R7-1 修正**: AnalystTargetCard link の scroll target を `acc-header-sec-analyst` に変更
+
+**R7-2 修正 + リッチ化** (60→80+ 点目標):
+- StickyDiagramAccordion を Chip primitive 撤去 → dedicated `.diagram-banner` button に書換
+- 左 large icon (BookOpen 18px + Sparkles 10px overlay) + accent 14% bg + 円形 wrap
+- 中央 2 行 text (タイトル 13.5px 600 + 「AI 詳細レポートで自動生成」 11px muted)
+- 右 ArrowRight icon (hover で +2px slide animation)
+- gradient background (accent 6% → bg-elevated)、 hover で elevation + accent border 強化
+- subtle gold-accent border (color-mix in srgb、 raw hex なし)
+- click で `acc-header-sec-report` expandSection + smooth scroll
+
+### P8 自律検証結果 (production smoke test):
+- 🟢 全 R7 CSS class が production CSS bundle (`index-DnHUef4M.css`) に反映済
+- 🟢 旧 class (szc-zone-label / szc-zone-value / szc-desc--reason / szc-desc--source) 削除確認
+- 🟢 LP subtitle 文字列 production bundle (`LandingPage-CIGGrJj2.js`) に反映 (grep PASS)
+- 🟢 design-system-check: raw hex/!important/glow/chip 違反なし
+- 🟡 raw shadow 1 件: `.diagram-banner:hover` の `box-shadow: 0 4px 16px color-mix(...)` 数値部分 → 次 session で `elevation_scale.md` ALLOWED-SHADOW 追加登録推奨
+- 🔴 vision-eval (snap-pdca-loop): demo rate limit のため verify 中断 (BYPASS_TOKEN backend 未実装)
+
+### 🔴 user 起床後 (4:30+) 確認すべき項目
+
+1. **R7-1: AnalystTargetCard link 再動作確認**
+   - URL: `?layout=workspace&pillar2_pane1=1&ticker=AAPL`
+   - 「直近の grade 変更を見る →」 click でアナリスト視点 panel に scroll するか
+2. **R7-2: 図解 banner デザイン re-verdict**
+   - URL: `?layout=workspace&pillar2_pane1=1&pane3_v4=1&ticker=AAPL`
+   - Pane 3 上部の banner button (左 icon + 2 行 text + 右 arrow + gradient + hover elevation) を確認
+   - リッチさ 60 → 80+ 点に到達したか自己評価、 60 点未満なら追加 R8 hotfix
+   - click で AI 詳細レポート (page 下部) に smooth scroll するか
+3. **LP subtitle 確認** (PDCA で headless verify 不能、 user 手動)
+   - URL: `https://beatscanner-production.up.railway.app/` (未ログイン or cookie clear)
+   - Hero「勝てる決算、 2 秒で。」 直下に subtitle「決算 quarterly + テクニカル daily、 米国株を 2 本柱で日本語チェック。」 が表示されるか
+4. **Task 3 SellZoneCard 改修版 確認**
+   - AAPL Pane 3 で「50DMA extension 状況」 card header 右に「**通常レンジ**」 small chip (muted) が出ているか
+   - conclusion 行が太字 13.5px、 detail 行が muted 1 行 (「50DMA から +15% 未満 (IBD / O'Neil 著)」) になっているか
+5. **Task 4-B/C メール件名** 確認
+   - 次回 article digest mail で `📈 BeatScanner: 今日の米国株を 2 分で — 記事 N 本 + 図解`
+   - 次回 cup-handle digest mail で `📊 BeatScanner: 今日注目の Leader + Breakout N 銘柄`
+
+### 🟡 次 session 推奨タスク (P8 closure 後の自然な続き)
+
+1. **flag default ON 化** (pane3_v4): user 確認後 → `isPane3V4()` を default true に。 旧 Pane 3 flag (V1/V2/V3) と共に cleanup (技術的負債解消)
+2. **BYPASS_TOKEN backend 実装** (1-2 hr): snap-pdca-loop で demo rate limit skip、 vision-eval 自律検証復活。 X-Bypass-Token middleware + Railway env vars
+3. **JudgmentDetail.jsx 不要 imports cleanup** (15 min): Sprint A 後の dead imports 整理 (ProfileCard / SectionDivider / NewsPanel / IRLinksPanel / GuidanceCard / TenKLinksPanel / ChapterTabs / SectionHeader / FileBarChart2 等 1-2 ref のもの)
+4. **DiagramCard 物理 mount 維持** (P8-3 Sprint B で deferred): DetailReport.jsx vizData lift up、 5 分 TTL ephemeral cache 保護 ([[feedback-diagram-card-remount-cache]])
+5. **elevation_scale.md に新規 ALLOWED-SHADOW 追加** (5 min): `.diagram-banner:hover` の `0 4px 16px color-mix(...)` パターン登録
+
+### v125 累計
+- **commit 47 件** (本 session 含む)、 **deploy 22 回**、 全 healthcheck PASS
+- production bundle: **`index-BKS9VPzn.js`** (frontend) / `index-DnHUef4M.css`
+
+詳細 user 操作の確認手順は handover_2026-05-28_v125_summary.md 参照。
+2026-05-29 04:00 JST、 autonomous PDCA P8-6 closure。
