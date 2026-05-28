@@ -78,8 +78,10 @@ async function fetchCupHandle({ limit = 20 } = {}) {
  * @param {boolean} props.active - chip filter active 時 highlight
  * @param {boolean} props.demoMode - true なら top 1 visible + 残 blur + ProTeaser overlay (v125 P5-2)
  * @param {Function} props.onUpgrade - ProTeaser CTA で呼び出し (Pro 訴求 modal 起動)
+ * @param {string|null} props.error - P6-2: per-source partial failure 文言 (null なら error UI 非表示)
+ * @param {Function} props.onRetry - P6-2: retry button click handler
  */
-function HeroSection({ title, testId, description, tickers, loading, emptyMessage, onSelect, sectionRef, active = false, demoMode = false, onUpgrade }) {
+function HeroSection({ title, testId, description, tickers, loading, emptyMessage, onSelect, sectionRef, active = false, demoMode = false, onUpgrade, error = null, onRetry }) {
   // v125 P5-2: demo モード時は top 1 visible + 残り blur (marketer 6 体合議 verdict)
   const visibleCount = demoMode ? 1 : tickers.length;
   const blurredCount = demoMode ? Math.max(0, tickers.length - 1) : 0;
@@ -126,6 +128,43 @@ function HeroSection({ title, testId, description, tickers, loading, emptyMessag
       {loading ? (
         <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--space-3, 12px)' }}>
           読み込み中…
+        </div>
+      ) : error ? (
+        // P6-2: per-source partial failure UI (「該当銘柄なし」 vs「データ取得失敗」 を明示)
+        <div
+          data-testid={`${testId}-error`}
+          style={{
+            display: 'grid',
+            gap: 6,
+            fontSize: 11,
+            color: 'var(--color-warning)',
+            textAlign: 'center',
+            padding: 'var(--space-3, 12px)',
+            border: '1px solid color-mix(in srgb, var(--color-warning) 30%, transparent)',
+            borderRadius: 'var(--radius-sm, 4px)',
+            background: 'color-mix(in srgb, var(--color-warning) 6%, transparent)',
+          }}
+        >
+          <span>{error}</span>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              style={{
+                padding: '4px 10px',
+                fontSize: 10,
+                fontWeight: 600,
+                border: '1px solid var(--color-warning)',
+                borderRadius: 'var(--radius-sm, 4px)',
+                background: 'transparent',
+                color: 'var(--color-warning)',
+                cursor: 'pointer',
+                justifySelf: 'center',
+              }}
+            >
+              再取得
+            </button>
+          )}
         </div>
       ) : tickers.length === 0 ? (
         <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--space-3, 12px)' }}>
@@ -220,10 +259,13 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
   // LP「3 銘柄/日まで無料試用」 と整合 (各 Hero section top 1 = 3 銘柄/日 換算)
   const demoMode = !detailContext?.user || !isProUser;
 
-  // 3 Hero section の state
-  const [leaderCwh, setLeaderCwh] = useState({ tickers: [], loading: true });
-  const [rsRising, setRsRising] = useState({ tickers: [], loading: true, migrationPending: false });
-  const [newCwh, setNewCwh] = useState({ tickers: [], loading: true });
+  // 3 Hero section の state (P6-2: error flag を追加で「該当銘柄なし」 vs「データ取得失敗」 区別)
+  const [leaderCwh, setLeaderCwh] = useState({ tickers: [], loading: true, error: null });
+  const [rsRising, setRsRising] = useState({ tickers: [], loading: true, migrationPending: false, error: null });
+  const [newCwh, setNewCwh] = useState({ tickers: [], loading: true, error: null });
+  // P6-2: fetch retry trigger
+  const [retryNonce, setRetryNonce] = useState(0);
+  const handleRetry = () => setRetryNonce((n) => n + 1);
 
   // Sprint 4-A-4: chip filter active state + scroll-to refs
   // activeChip: null = all visible (default) / 'leader' / 'rising' / 'new-cwh' のいずれかで該当 section を highlight
@@ -246,6 +288,11 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
   useEffect(() => {
     let cancelled = false;
 
+    // P6-2: retry 時の loading state 初期化
+    setLeaderCwh({ tickers: [], loading: true, error: null });
+    setRsRising({ tickers: [], loading: true, migrationPending: false, error: null });
+    setNewCwh({ tickers: [], loading: true, error: null });
+
     (async () => {
       // 3 fetch 並列起動
       const [rsLeader, rsDelta, cup] = await Promise.all([
@@ -255,8 +302,12 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
       ]);
       if (cancelled) return;
 
+      // P6-2: per-source error 判定 (fetcher は error field 返却で graceful、 ここで「該当銘柄なし」 と区別)
+      const rsLeaderFailed = !!rsLeader.error;
+      const rsDeltaFailed = !!rsDelta.error;
+      const cupFailed = !!cup.error;
+
       // section 1: Leader + Breakout + CWH 交差 = RS >= 80 ∩ Cup-Handle 検出
-      const rsLeaderTickers = new Set((rsLeader.items || []).map((r) => r.ticker));
       const cupTickers = new Set((cup.items || []).map((c) => c.ticker));
       const intersection = [];
       for (const item of (rsLeader.items || [])) {
@@ -268,8 +319,12 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           if (intersection.length >= 5) break;
         }
       }
-
-      setLeaderCwh({ tickers: intersection, loading: false });
+      // section 1 は RS + Cup 両方が必要、 どちらか失敗で error 表示
+      setLeaderCwh({
+        tickers: intersection,
+        loading: false,
+        error: (rsLeaderFailed || cupFailed) ? (rsLeaderFailed && cupFailed ? '両 source 取得失敗' : rsLeaderFailed ? 'RS 取得失敗' : 'Cup-Handle 取得失敗') : null,
+      });
 
       // section 2: RS 急上昇 = sort=delta items (section 1 で使われた ticker は除外、 qa-dogfooder verdict)
       const usedTickers = new Set(intersection.map((t) => t.ticker));
@@ -284,7 +339,12 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
         usedTickers.add(item.ticker);
         if (risingItems.length >= 5) break;
       }
-      setRsRising({ tickers: risingItems, loading: false, migrationPending });
+      setRsRising({
+        tickers: risingItems,
+        loading: false,
+        migrationPending,
+        error: rsDeltaFailed ? 'RS scanner 取得失敗' : null,
+      });
 
       // section 3: 新規 Cup-Handle 検出 (last 24h は signal_date でなく state=breakout_confirmed/pending を優先)
       // section 1/2 で使われた ticker を除外
@@ -298,11 +358,15 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
         usedTickers.add(item.ticker);
         if (newCwhItems.length >= 5) break;
       }
-      setNewCwh({ tickers: newCwhItems, loading: false });
+      setNewCwh({
+        tickers: newCwhItems,
+        loading: false,
+        error: cupFailed ? 'Cup-Handle scanner 取得失敗' : null,
+      });
     })();
 
     return () => { cancelled = true; };
-  }, []);
+  }, [retryNonce]);
 
   const handleSelect = (sym) => {
     setActiveTicker(sym);
@@ -389,12 +453,14 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           description="RS percentile ≥ 80 ∩ Cup-Handle 検出済 (推奨ではありません)"
           tickers={leaderCwh.tickers}
           loading={leaderCwh.loading}
+          error={leaderCwh.error}
           emptyMessage="交差銘柄 0 件"
           onSelect={handleSelect}
           sectionRef={leaderRef}
           active={activeChip === 'leader'}
           demoMode={demoMode}
           onUpgrade={handleUpgradeRequest}
+          onRetry={handleRetry}
         />
         <HeroSection
           title="RS 急上昇"
@@ -406,12 +472,14 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           }
           tickers={rsRising.tickers}
           loading={rsRising.loading}
+          error={rsRising.error}
           emptyMessage={rsRising.migrationPending ? 'データ準備中' : '急上昇銘柄なし'}
           onSelect={handleSelect}
           sectionRef={risingRef}
           active={activeChip === 'rising'}
           demoMode={demoMode}
           onUpgrade={handleUpgradeRequest}
+          onRetry={handleRetry}
         />
         <HeroSection
           title="新規 Cup-Handle 検出"
@@ -419,12 +487,14 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           description="Cup-Handle pattern 検出済 (IBD MarketSmith 流の breakout candidate)"
           tickers={newCwh.tickers}
           loading={newCwh.loading}
+          error={newCwh.error}
           emptyMessage="検出銘柄なし"
           onSelect={handleSelect}
           sectionRef={newCwhRef}
           active={activeChip === 'new-cwh'}
           demoMode={demoMode}
           onUpgrade={handleUpgradeRequest}
+          onRetry={handleRetry}
         />
       </section>
 
