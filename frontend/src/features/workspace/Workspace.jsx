@@ -66,17 +66,17 @@ const TABS = [
   { key: 'screener', label: 'スクリーナー', Icon: SlidersHorizontal },
 ];
 
-// v125 Phase 4-A Sprint 4-A-1: feature flag 関数 (URL parameter or localStorage、 default OFF)
-// gate 3 通過後 (user 判断) に default ON 化 or 削除予定。
+// v125 Phase 4-A Sprint 4-A-1: feature flag 関数。
+// 2026-05-28 v125 gate 3 通過 (user 承認、 帰宅後 dogfood で flag default ON OK 判断)。
+// default ON、 URL ?pillar2_pane1=0 で kill switch (revert 容易性のため残置)。
 function isPillar2Pane1() {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   try {
     const urlParam = new URLSearchParams(window.location.search).get('pillar2_pane1');
-    if (urlParam === '1') return true;
     if (urlParam === '0') return false;
-    return window.localStorage?.getItem('pillar2_pane1') === '1';
+    return true;
   } catch {
-    return false;
+    return true;
   }
 }
 

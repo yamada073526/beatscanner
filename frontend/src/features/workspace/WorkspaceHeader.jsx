@@ -31,17 +31,16 @@ import { useWorkspaceStore } from '../../state/workspaceStore.js';
  * @param {(featureName: string) => void} [props.onUpgrade] - 非 Pro user click 時 ProTeaser 起動
  */
 // v125 P6-1: Pane 1 nav screener tab feature flag (Workspace.jsx と同一 logic、 entry 1 本化用)
-// flag enable 時 = 既存 button hide (qa-dogfooder 6 体合議 verdict、 entry 1 本化)
-// flag disable 時 = 既存 button visible 維持 (default OFF、 user 影響 0)
+// 2026-05-28 v125 gate 3 通過: default ON (user 帰宅後 dogfood で flag default ON OK 判断)
+// URL ?pillar2_pane1=0 で kill switch (revert 容易性のため残置、 enable 時 = 既存 button hide)
 function isPillar2Pane1() {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   try {
     const urlParam = new URLSearchParams(window.location.search).get('pillar2_pane1');
-    if (urlParam === '1') return true;
     if (urlParam === '0') return false;
-    return window.localStorage?.getItem('pillar2_pane1') === '1';
+    return true;
   } catch {
-    return false;
+    return true;
   }
 }
 
