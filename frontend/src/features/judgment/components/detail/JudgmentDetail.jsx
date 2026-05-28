@@ -202,18 +202,16 @@ function isPane3V3() {
 // 単独 flag で opt-in に変更。 ?pane3_v2=1 単独では frameless 無効、 ?pane3_v2=1&pane3_v2_frameless=1
 // で初めて Phase 2 frameless が有効。
 // v125 P8-3 Sprint B: Pane 3 案 B 新順序 (StickyDiagramAccordion + Chart + Target+Zone + 5 条件 accordion 外維持 + ファンダ accordion + その他)。
-// default OFF (URL ?pane3_v4=1 で先行 dogfood、 user 確認後 ON 化)。
-// 「pane3_v4」 は SPEC §11-B-4 で確定した feature flag 名称。
-// URL ?pane3_v4=0 で kill switch、 ?pane3_v4=1 で ON、 localStorage 'pane3_v4'='1' で永続化。
+// v126 R10-1 (2026-05-29 user 確認後): default ON 昇格 (user 承認済「OK なら ON 化」 + R9-1 scroll fix verified)。
+// URL ?pane3_v4=0 で kill switch (revert 容易性のため残置)、 ?pane3_v4=1 / localStorage は明示的にも動作。
 function isPane3V4() {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   try {
     const urlParam = new URLSearchParams(window.location.search).get('pane3_v4');
-    if (urlParam === '1') return true;
     if (urlParam === '0') return false;
-    return window.localStorage?.getItem('pane3_v4') === '1';
+    return true;
   } catch {
-    return false;
+    return true;
   }
 }
 
