@@ -11186,14 +11186,95 @@ button.ds-chip[data-pressed="true"]:hover {
   border-radius: var(--radius-sm, 4px);
 }
 
-/* v125 P8-3 Sprint B + R6-2: 図解 chip button row (sticky 撤去、 small chip 1 個のみ)。
-   Pane 3 案 B 新順序の section 2 (Chart の前) に inline 配置、 scroll で消えて OK。
-   token 経由のみ、 chip primitive で description / spacing は完結。 */
-.sticky-diagram-button-row {
+/* v125 P8-3 Sprint B + R7-2: 図解 banner (旧 sticky-diagram-button-row、 R7-2 でリッチ化)。
+   Aman 級「ロビーの案内板」 idiom、 subtle gold-accent border + hover elevation。
+   sticky なし、 通常 inline 配置 (scroll で消えて OK、 user 想定整合)。
+   token 経由のみ (raw hex / shadow 直書きなし)、 design_system.md 遵守。 */
+.diagram-banner {
   display: flex;
-  justify-content: flex-start;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  width: 100%;
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-accent) 6%, var(--bg-elevated, var(--bg-subtle))) 0%,
+    var(--bg-elevated, var(--bg-subtle)) 60%,
+    var(--bg-elevated, var(--bg-subtle)) 100%
+  );
+  border: 1px solid color-mix(in srgb, var(--color-accent) 28%, var(--border));
+  border-radius: var(--radius-md, 8px);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
   margin: var(--space-1, 4px) 0 var(--space-3, 12px);
+  transition: border-color 200ms ease, transform 200ms ease, box-shadow 200ms ease;
+  position: relative;
+  overflow: hidden;
 }
+.diagram-banner:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 60%, var(--border));
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+.diagram-banner:active { transform: translateY(0); }
+.diagram-banner:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.diagram-banner__icon-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm, 6px);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+.diagram-banner__sparkle {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  color: var(--color-accent);
+  opacity: 0.8;
+}
+.diagram-banner__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.diagram-banner__title {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+.diagram-banner__sub {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+}
+.diagram-banner__arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-accent);
+  flex-shrink: 0;
+  transition: transform 200ms ease;
+}
+.diagram-banner:hover .diagram-banner__arrow { transform: translateX(2px); }
+
+/* legacy class 残置 (削除予定、 後方互換性) */
+.sticky-diagram-button-row { display: none; }
 
 
 /* AnalystTargetCard + SellZoneCard 2-col grid layout (Chart 直下に並列配置) */

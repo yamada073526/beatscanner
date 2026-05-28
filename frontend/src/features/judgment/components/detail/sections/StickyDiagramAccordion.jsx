@@ -1,54 +1,60 @@
 import React from 'react';
-import { BookOpen } from 'lucide-react';
-import Chip from '../../../../../components/ui/Chip.jsx';
+import { BookOpen, ArrowRight, Sparkles } from 'lucide-react';
+import { useWorkspaceStore } from '../../../../../state/workspaceStore.js';
 
 /**
- * v125 P8-3 Sprint B + R6-2 (user dogfood feedback 2026-05-28):
- *   sticky 撤去 + 小型 chip button 1 個に書換。
+ * v125 P8-3 Sprint B + R6-2/R7-2 (user dogfood feedback 2026-05-28):
+ *   sticky 撤去 + 小型 chip button 1 個 → Aman 級格調感の hero banner に格上げ (R7-2)。
  *
- * user 指摘 (スクショ「マコなり」 アプリ参考):
- *   - 「scroll しても常時表示するつもりはなかった、 画面が狭くなる」
- *   - 「よく見える位置に小さく図解ボタンが置いてある」
- *   - 「ふだんから対象銘柄をチェックしている人は (図解を) 開かないので圧迫感ない small button が良い」
+ * R7-2 修正背景:
+ *   - user 評価: 「Chip primitive 単体は 60 点未満、 リッチさ足りない」
+ *   - user 評価: 「click で何も反応しない」 → root cause: AccordionSection 内部 id `acc-header-${id}` に修正
  *
- * 設計:
- *   - sticky 撤去、 通常 inline 配置 (Pane 3 案 B 新順序の section 2、 Chart の前)
- *   - chip primitive 経由 (variant=display + size=sm + tone=accent)、 inline style ゼロ
- *   - icon: BookOpen (lucide)、 label: 「図解 — AI 解説」
- *   - click で AI 詳細レポート accordion (#sec-report) に smooth scroll
- *   - scroll で消えて OK (常時 visible 義務なし、 user 想定整合)
+ * 設計 (R7-2 デザインリッチ化):
+ *   - Chip primitive ではなく dedicated banner component (border + gradient subtle accent)
+ *   - 左に large icon (BookOpen 18px) + accent tint
+ *   - 右に「AI 詳細レポートで生成 →」 sub label + ArrowRight icon
+ *   - hover で subtle elevation + accent border 強化、 Aman 級「ロビーの案内板」 idiom
+ *   - sticky なし、 通常 inline 配置 (scroll で消えて OK)
+ *   - click で AI 詳細レポート (#acc-header-sec-report) に expand + smooth scroll
  *
- * NOTE: DiagramCard 物理 mount 維持 ([[feedback-diagram-card-remount-cache]]) は別 sprint で
- * DetailReport.jsx の vizData lift up が必要。 本 sprint は「user が click したら詳細レポートを開く」
- * 動線提供のみ (1 click 減 + brand 整合、 5 原則 #4)。
+ * Trust Cliff: 「AI 解説」 + 「詳細レポートで生成」 で動作の明示、 click 後の挙動を予告。
  */
 export default function StickyDiagramAccordion() {
+  const expandSection = useWorkspaceStore((s) => s.expandSection);
+
   const handleJumpToDiagram = () => {
-    // R6-1 と同 idiom: AccordionSection の open + manual offset scroll
+    // R7-1/R7-2 root cause fix: AccordionSection の root に id 属性は付与されない (props 分割代入で抜かれる)。
+    // 内部 button に `acc-header-${id}` で id 付与されるため、 それを scroll target に。
+    try { expandSection('detail-report'); } catch { /* noop */ }
     setTimeout(() => {
-      const el = document.getElementById('sec-report');
+      const el = document.getElementById('acc-header-sec-report');
       if (!el) return;
       const rect = el.getBoundingClientRect();
       const offsetTop = window.pageYOffset + rect.top - 72;
       window.scrollTo({ top: offsetTop, behavior: 'smooth' });
-    }, 50);
+    }, 250);
   };
 
   return (
-    <div
-      className="sticky-diagram-button-row"
+    <button
+      type="button"
+      className="diagram-banner"
+      onClick={handleJumpToDiagram}
       data-testid="sticky-diagram-accordion"
+      aria-label="AI 図解を見る — 詳細レポートを開いて生成"
     >
-      <Chip
-        variant="display"
-        size="sm"
-        tone="accent"
-        icon={<BookOpen size={13} strokeWidth={1.5} />}
-        onClick={handleJumpToDiagram}
-        ariaLabel="AI 図解を見る"
-      >
-        図解 — AI 解説
-      </Chip>
-    </div>
+      <span className="diagram-banner__icon-wrap" aria-hidden="true">
+        <BookOpen size={18} strokeWidth={1.5} />
+        <Sparkles size={10} strokeWidth={1.5} className="diagram-banner__sparkle" />
+      </span>
+      <span className="diagram-banner__text">
+        <span className="diagram-banner__title">図解 — AI 解説</span>
+        <span className="diagram-banner__sub">AI 詳細レポートで自動生成</span>
+      </span>
+      <span className="diagram-banner__arrow" aria-hidden="true">
+        <ArrowRight size={14} strokeWidth={1.5} />
+      </span>
+    </button>
   );
 }

@@ -68,14 +68,14 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
   const handleJumpToAnalyst = () => {
     // V2 mode の AccordionSection 用 expand (V3 mode では no-op、 silent fallback)
     try { expandSection('analyst-panel'); } catch { /* noop */ }
-    // R6-1 hotfix: scrollIntoView({behavior:'smooth'}) が iOS Safari + 大画面 scroll で
-    // 動かないケースを回避。 requestAnimationFrame 2 回で確実に next render 後に
-    // getBoundingClientRect → window.scrollTo({top, behavior:'smooth'}) で manual offset 計算。
-    // 250ms 待つことで AccordionSection の expand animation 完了を待つ (Framer Motion ~200ms)。
+    // R7-1 root cause fix: AccordionSection の props で `id` が分割代入されているため
+    // root div には id 属性が付与されない (...rest に含まれない)。
+    // 代わりに internal `headerId = acc-header-${id}` で header button に id 付与されるため、
+    // それを scroll target に使う。 V3 mode は ChapterTabs 内 sec-analyst-v3 (普通の div で id 付与) を優先。
     setTimeout(() => {
       const el =
         document.getElementById('sec-analyst-v3') ||
-        document.getElementById('sec-analyst');
+        document.getElementById('acc-header-sec-analyst');
       if (!el) return;
       const rect = el.getBoundingClientRect();
       const offsetTop = window.pageYOffset + rect.top - 72; // 72px = sticky 検索 bar の buffer
