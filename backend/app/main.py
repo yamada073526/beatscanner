@@ -14288,8 +14288,24 @@ async def cron_rs_scan(
                     "period_months": 6,
                 })
             if rows:
-                sb.table("rs_ratings").upsert(rows, on_conflict="ticker,calc_date").execute()
-                upserted = len(rows)
+                try:
+                    sb.table("rs_ratings").upsert(rows, on_conflict="ticker,calc_date").execute()
+                    upserted = len(rows)
+                except Exception as inner_e:
+                    # v125 Sprint 2.5 fallback: migration (2026-05-28_rs_ratings_delta_1d.sql) 未適用時の
+                    # 「delta_1d_percentile column not exists」 を graceful 検知、 該当 key を drop して再 upsert。
+                    # user が migration を Supabase SQL Editor で apply するまでの bridge。
+                    err_msg = str(inner_e).lower()
+                    if "delta_1d_percentile" in err_msg or "column" in err_msg:
+                        print(f"[cron_rs_scan] delta_1d_percentile column 不在、 fallback without delta: {inner_e}")
+                        rows_no_delta = [
+                            {k: v for k, v in r.items() if k != "delta_1d_percentile"}
+                            for r in rows
+                        ]
+                        sb.table("rs_ratings").upsert(rows_no_delta, on_conflict="ticker,calc_date").execute()
+                        upserted = len(rows_no_delta)
+                    else:
+                        raise
         except Exception as e:
             print(f"[cron_rs_scan] upsert failed: {e}")
             raise HTTPException(status_code=500, detail=f"upsert_failed: {e}")
@@ -14365,20 +14381,49 @@ async def scanner_rs(
         universe_size = all_today.count or 0
 
         # v125 Sprint 2.5: sort/min_delta param で「RS 急上昇」 (Pane 1 Hero) も同 endpoint で対応
-        query = (
-            sb.table("rs_ratings")
-            .select("ticker,rs_vs_spy_pct,self_percentile,universe_percentile,delta_1d_percentile,period_months")
-            .eq("calc_date", calc_date)
-            .gte("universe_percentile", min_percentile)
-        )
-        if min_delta is not None:
-            query = query.gte("delta_1d_percentile", int(min_delta))
-        if sort == "delta":
-            query = query.order("delta_1d_percentile", desc=True, nullsfirst=False)
-        else:
-            query = query.order("universe_percentile", desc=True)
-        result = query.limit(limit).execute()
-        items = result.data or []
+        # migration 未適用時 (delta_1d_percentile column 不在) は fallback で従来 columns のみ select
+        try:
+            query = (
+                sb.table("rs_ratings")
+                .select("ticker,rs_vs_spy_pct,self_percentile,universe_percentile,delta_1d_percentile,period_months")
+                .eq("calc_date", calc_date)
+                .gte("universe_percentile", min_percentile)
+            )
+            if min_delta is not None:
+                query = query.gte("delta_1d_percentile", int(min_delta))
+            if sort == "delta":
+                query = query.order("delta_1d_percentile", desc=True, nullsfirst=False)
+            else:
+                query = query.order("universe_percentile", desc=True)
+            result = query.limit(limit).execute()
+            items = result.data or []
+        except Exception as inner_e:
+            err_msg = str(inner_e).lower()
+            if "delta_1d_percentile" in err_msg or "column" in err_msg:
+                print(f"[scanner_rs] delta column 不在 fallback (migration 未適用): {inner_e}")
+                # fallback: 従来 columns のみで再 query、 sort/min_delta param は無視
+                fallback_query = (
+                    sb.table("rs_ratings")
+                    .select("ticker,rs_vs_spy_pct,self_percentile,universe_percentile,period_months")
+                    .eq("calc_date", calc_date)
+                    .gte("universe_percentile", min_percentile)
+                    .order("universe_percentile", desc=True)
+                    .limit(limit)
+                )
+                result = fallback_query.execute()
+                items = result.data or []
+                # frontend が「データ準備中」 を判別できるよう sources field を返す
+                return {
+                    "universe_size": universe_size,
+                    "calc_date": calc_date,
+                    "min_percentile": min_percentile,
+                    "sort": sort,
+                    "min_delta": min_delta,
+                    "items": items,
+                    "sources": {"delta_1d_percentile": "empty_migration_pending"},
+                    "note": "delta_1d_percentile migration 未適用、 sort=delta 無視で従来 sort で fallback",
+                }
+            raise
 
         return {
             "universe_size": universe_size,
