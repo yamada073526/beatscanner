@@ -18,6 +18,7 @@ import {
   CalendarDays,
   CandlestickChart,
   Activity,
+  SlidersHorizontal,
 } from 'lucide-react';
 import WorkspaceShell from './WorkspaceShell.jsx';
 import WorkspaceHeader from './WorkspaceHeader.jsx';
@@ -40,6 +41,9 @@ import CompanyLogo from '../../components/CompanyLogo.jsx';
 // v120 Sprint 3 (Frontend verdict mandatory fix 2): WorkspaceScreenerModal を lazy 化
 // (modal は Pro user が screener button 押下時のみ open、 chunk reuse + 初期 bundle 軽量化)
 const WorkspaceScreenerModal = lazy(() => import('./WorkspaceScreenerModal.jsx'));
+// v125 Phase 4-A Sprint 4-A-1 (feature flag hidden、 default OFF): Pane 1 nav screener tab で
+// CustomScreenerPanel を embedded 表示。 既存 modal lazy chunk と reuse (Vite モジュールキャッシュ)。
+const CustomScreenerPanel = lazy(() => import('../../components/CustomScreenerPanel.jsx'));
 // v118 P6: Pane4Inspector + pane4/ ディレクトリ削除 (handover v118 §残バックログ、 1 人日)。
 // 6 体並列レビューで「Pane 4 = AI chat → マクロニュース連動」 と確定済だったが、
 // release MVP scope 外と判断、 Phase 2 で再評価。
@@ -54,7 +58,24 @@ const TABS = [
   { key: 'report', label: '決算', Icon: CalendarDays },
   { key: 'チャート', label: 'チャート', Icon: CandlestickChart },
   { key: 'indices', label: '指数', Icon: Activity },
+  // v125 Phase 4-A Sprint 4-A-1 (feature flag hidden、 default OFF):
+  //   user gate 3 通過後に flag 解除で visible に。 URL ?pillar2_pane1=1 / localStorage で先行 dogfood。
+  { key: 'screener', label: 'スクリーナー', Icon: SlidersHorizontal },
 ];
+
+// v125 Phase 4-A Sprint 4-A-1: feature flag 関数 (URL parameter or localStorage、 default OFF)
+// gate 3 通過後 (user 判断) に default ON 化 or 削除予定。
+function isPillar2Pane1() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('pillar2_pane1');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('pillar2_pane1') === '1';
+  } catch {
+    return false;
+  }
+}
 
 // 2026-05-13: workspace の 3 タブ (判定/決算/チャート) は Pane 3/4/5 に機能統合済で
 // workspace mode では no-op (active 状態以外コンテンツ不変)。
@@ -62,15 +83,22 @@ const TABS = [
 // SPA mode は App.jsx の独立 TABS 定義で全 5 タブ維持 (legacy 互換)。
 // 内部 key (`judgment` / `report` / `チャート`) は予約のため TABS から削除せず、
 // nav 表示にだけ含めない (CLAUDE.md「内部値の混在」「'チャート' key 維持」ルール準拠)。
-const WORKSPACE_NAV_TABS = TABS.filter((t) =>
-  ['home', 'indices'].includes(t.key)
-);
+// v125 Phase 4-A: 'screener' は feature flag hidden、 isPillar2Pane1() === true のときだけ visible。
+const WORKSPACE_NAV_TABS = TABS.filter((t) => {
+  if (['home', 'indices'].includes(t.key)) return true;
+  if (t.key === 'screener') return isPillar2Pane1();
+  return false;
+});
 
 // activeTab が legacy 値 (judgment/report/チャート) のとき workspace では home に正規化。
 // URL `?tab=judgment` 等の deep link が来ても home へ自動 redirect、bookmark 救済。
+// v125 Phase 4-A: 'screener' は feature flag enable 時のみ正規化対象外 (= screener 維持)、
+// flag disable 時は home に redirect (silently fallback)。
 const WORKSPACE_LEGACY_TAB_KEYS = ['judgment', 'report', 'チャート'];
 function normalizeWorkspaceTab(tab) {
-  return WORKSPACE_LEGACY_TAB_KEYS.includes(tab) ? 'home' : tab;
+  if (WORKSPACE_LEGACY_TAB_KEYS.includes(tab)) return 'home';
+  if (tab === 'screener' && !isPillar2Pane1()) return 'home';
+  return tab;
 }
 
 /** v62 WS-Phase2: 改善希望③ sparkline 期間切替 (frontend slice)
@@ -620,6 +648,8 @@ export default function Workspace({
   // §12-A-1: 指数 tab のとき Pane 2 / Pane 3 の中身を IndicesView に切替
   const activeTab = useWorkspaceStore((s) => s.activeTab);
   const isIndices = activeTab === 'indices';
+  // v125 Phase 4-A Sprint 4-A-1: feature flag hidden、 default user 影響 0
+  const isScreener = activeTab === 'screener' && isPillar2Pane1();
   // 2026-05-13: 指数タブで Pane 2 の注目銘柄/ポートフォリオから ticker click したとき、
   // Pane 2 はそのまま (注目銘柄リスト表示維持) + Pane 3 のみ判定詳細に切替えるフラグ。
   const pane3JudgmentOverride = useWorkspaceStore((s) => s.pane3JudgmentOverride);
@@ -694,7 +724,36 @@ export default function Workspace({
           )
         }
         pane3={
-          isIndices && !pane3JudgmentOverride ? (
+          isScreener ? (
+            // v125 Phase 4-A Sprint 4-A-1 (feature flag hidden): CustomScreenerPanel を
+            // pane3 内に embedded として表示 (Hero + Explorer 完全 layout は Sprint 4-A-2/3 で着手予定)。
+            // user gate 3 通過後 flag default ON 化 + ScreenerPane.jsx 新規作成で置換予定。
+            <div
+              data-testid="screener-pane-placeholder"
+              style={{ padding: 'var(--space-4, 16px)', height: '100%', overflowY: 'auto' }}
+            >
+              <h2 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 12px', color: 'var(--text-primary)' }}>
+                スクリーナー (Phase 4-A WIP, feature flag preview)
+              </h2>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 16px' }}>
+                URL <code>?pillar2_pane1=1</code> または <code>localStorage.pillar2_pane1=1</code> で
+                feature flag 有効化されています。 Hero「今日の注目 3 セクション × top 5」 + Explorer の
+                完全 layout は Phase 4-A Sprint 4-A-2/3 (user gate 3 通過後) で実装予定。
+              </p>
+              <Suspense fallback={<div style={{ padding: 16 }}>Loading…</div>}>
+                <CustomScreenerPanel
+                  user={detailContext.user}
+                  isPro={isProUser}
+                  onUpgrade={handleUpgradeRequest}
+                  onSelect={(sym) => {
+                    setActiveTicker(sym);
+                    // screener から click 後は home へ自動遷移 (Pane 3 で詳細表示)
+                    useWorkspaceStore.getState().setActiveTab('home');
+                  }}
+                />
+              </Suspense>
+            </div>
+          ) : isIndices && !pane3JudgmentOverride ? (
             <PaneDetailView
               detailFor={detailFor}
               onAnalyze={onAnalyze}

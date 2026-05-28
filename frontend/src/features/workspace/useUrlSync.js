@@ -25,7 +25,11 @@ import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { withViewTransition } from '../../utils/viewTransition.js';
 
 // §12-A-1: 'indices' を 5 番目として追加 ('チャート' は CLAUDE.md ルールで維持)
-const VALID_TABS = new Set(['home', 'judgment', 'report', 'チャート', 'indices']);
+// v125 Phase 4-A Sprint 4-A-1: 'screener' を 6 番目として追加 (feature flag hidden、
+//   Workspace.jsx の isPillar2Pane1() で nav 表示制御、 normalizeWorkspaceTab で
+//   flag disable 時に home へ silent redirect。 URL ?tab=screener bookmark は flag enable
+//   時のみ機能。 frontend-architect 6 体合議 verdict 反映)
+const VALID_TABS = new Set(['home', 'judgment', 'report', 'チャート', 'indices', 'screener']);
 
 // v71: Pane 3 target prefix。 freeze 必須 (CLAUDE.md 「触ると危険な箇所」と同列)。
 const VALID_TARGET_TYPES = new Set(['index', 'portfolio', 'ticker']);
