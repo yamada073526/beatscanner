@@ -1,81 +1,146 @@
-import React from 'react';
-import { BookOpen, ArrowRight, Sparkles } from 'lucide-react';
-import { useWorkspaceStore } from '../../../../../state/workspaceStore.js';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { BookOpen, ArrowRight, Sparkles, X } from 'lucide-react';
+import { generateVisualization } from '../../../../../api.js';
+
+// DiagramCard は重量級 (52KB gzip 14KB)、 lazy load で初期 bundle 軽量化。
+// banner expand 時に初回 mount され、 同銘柄を閉じる→開くしても unmount しない (mount 維持で cache 保護)。
+const DiagramCard = lazy(() => import('../../../../../components/DiagramCard.jsx'));
 
 /**
- * v125 P8-3 Sprint B + R6-2/R7-2/R8-2/R9 (user dogfood feedback 2026-05-28〜29):
- *   sticky 撤去 + 小型 chip button → Aman 級 banner (R7-2) → R9-1 scroll fix + R8-2 text + R9-2 halo upgrade。
+ * v126 R11-1: 図解 inline 展開 banner (sub-agent verdict 案 1 推奨)。
  *
- * 修正履歴:
- *   - R6-2: sticky 撤去、 user「画面が狭くなる」 反映
- *   - R7-2: Chip primitive → dedicated banner、 大型 icon + 2 行 text + arrow
- *   - R8-2: text を「業績・ビジネス・強みを図解」 + 「7 セクションで銘柄の全体像を視覚化」 に置換
- *     (user feedback「AI を主張しすぎ、 click したら何がわかるかが重要」 + 3 体合議統合最終案)
- *   - R9-1: scroll target を内部 scrollable ancestor に対して container.scrollTo()
- *     (PaneContainer overflow-y:auto で window.scrollTo が silent fail していた)
- *   - R9-2: hover halo を旧 SPA UI 風 panel-card / tier-m-glow idiom upgrade
+ * 旧版 (R7-2): click で AI 詳細レポートへ scroll → user feedback「行ったり来たり面倒、 inline で展開してほしい」
+ * 新版 (R11-1):
+ *   - click で **banner 直下に DiagramCard が inline 展開**
+ *   - 閉じる X button が expanded 時 header 右に visible
+ *   - mount 維持 ([[feedback-diagram-card-remount-cache]] 遵守): expand/collapse は内部 visibility のみ、 vizData state 保持
+ *   - scroll 不要、 page context 維持
+ *
+ * DiagramCard 2 instance 問題 (Phase 4-B SPEC §5 で deferred とした問題):
+ *   - 既存 DetailReport.jsx 内にも DiagramCard が render される (legacy compat)
+ *   - 本 banner が新規 1 instance を mount = 2 instance 状態
+ *   - **mount 維持**で cache 破壊なし、 Claude API prompt cache (ticker base) で実 cost 1 倍
+ *   - 完全な 1 mount 化は workspaceStore lift up + DetailReport refactor 必要 (1.5 人日)、 次 sprint で検討
  */
-export default function StickyDiagramAccordion() {
-  const expandSection = useWorkspaceStore((s) => s.expandSection);
+export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
+  const [expanded, setExpanded] = useState(false);
+  const [vizData, setVizData] = useState(null);
+  const [vizState, setVizState] = useState('idle'); // 'idle' | 'loading' | 'done' | 'error'
+  const [vizError, setVizError] = useState(null);
+  const [vizTicker, setVizTicker] = useState(null);
 
-  const handleJumpToDiagram = () => {
-    // R9-1 scroll fix: PaneContainer (内部 scrollable container) 対応で container.scrollTo に切替。
-    try { expandSection('detail-report'); } catch { /* noop */ }
-    setTimeout(() => {
-      const candidates = [
-        () => document.getElementById('acc-header-sec-report'),
-        () => document.getElementById('sec-report'),
-        () => document.querySelector('[data-testid="library-report-wrapper"]'),
-        () => document.querySelector('[data-testid="chapter-section-③"]'),
-      ];
-      let el = null;
-      for (const find of candidates) {
-        try { el = find(); if (el) break; } catch { /* noop */ }
-      }
-      if (!el) {
-        // eslint-disable-next-line no-console
-        console.warn('[StickyDiagramAccordion] jump target not found');
-        return;
-      }
-      // 最近接の scrollable ancestor を探す
-      let container = el.parentElement;
-      while (container) {
-        const sty = window.getComputedStyle(container);
-        if ((sty.overflowY === 'auto' || sty.overflowY === 'scroll')
-            && container.scrollHeight > container.clientHeight + 4) break;
-        container = container.parentElement;
-      }
-      const rect = el.getBoundingClientRect();
-      if (!container) {
-        const offsetTop = window.pageYOffset + rect.top - 72;
-        window.scrollTo({ top: offsetTop, behavior: 'smooth' });
-      } else {
-        const cRect = container.getBoundingClientRect();
-        const offsetTop = container.scrollTop + (rect.top - cRect.top) - 24;
-        container.scrollTo({ top: offsetTop, behavior: 'smooth' });
-      }
-    }, 100);
+  // ticker 変更時に vizData reset (別銘柄では再 fetch 必要)
+  useEffect(() => {
+    if (vizTicker !== ticker) {
+      setVizData(null);
+      setVizState('idle');
+      setVizError(null);
+      setVizTicker(ticker);
+    }
+  }, [ticker, vizTicker]);
+
+  // expanded + 未 fetch + analysis 揃ったら fetch
+  useEffect(() => {
+    if (!expanded || !ticker || !analysis || vizState !== 'idle') return;
+    setVizState('loading');
+    const enrichedData = {
+      ticker,
+      company_name: analysis.companyName,
+      fiscal_period: analysis.latestPeriod,
+      verdict: analysis.overallPass ? 'PASS' : 'FAIL',
+      passed_conditions: analysis.passedCount,
+      conditions_detail: JSON.stringify(analysis.conditions ?? [], null, 2),
+      metrics_trend: '',
+      guidance: guidance ? JSON.stringify(guidance, null, 2) : 'データなし',
+      conference_call_points: 'データなし',
+      ai_summary: '',
+      beat_miss: {
+        eps: {
+          actual: guidance?.eps?.actual ?? null,
+          estimated: guidance?.eps?.estimated ?? null,
+          verdict: guidance?.eps?.verdict ?? null,
+        },
+        revenue: {
+          actual: guidance?.revenue?.actual ?? null,
+          estimated: guidance?.revenue?.estimated ?? null,
+          verdict: guidance?.revenue?.verdict ?? null,
+        },
+      },
+    };
+    generateVisualization(ticker, enrichedData, 3)
+      .then((json) => {
+        setVizData(json);
+        setVizState('done');
+        setVizError(null);
+      })
+      .catch((err) => {
+        setVizState('error');
+        setVizError(err?.message || String(err));
+      });
+  }, [expanded, ticker, analysis, guidance, vizState]);
+
+  const handleToggle = () => {
+    setExpanded((v) => !v);
   };
 
   return (
-    <button
-      type="button"
-      className="diagram-banner"
-      onClick={handleJumpToDiagram}
-      data-testid="sticky-diagram-accordion"
-      aria-label="銘柄の全体像を図解で見る"
-    >
-      <span className="diagram-banner__icon-wrap" aria-hidden="true">
-        <BookOpen size={18} strokeWidth={1.5} />
-        <Sparkles size={10} strokeWidth={1.5} className="diagram-banner__sparkle" />
-      </span>
-      <span className="diagram-banner__text">
-        <span className="diagram-banner__title">業績・ビジネス・強みを図解</span>
-        <span className="diagram-banner__sub">7 セクションで銘柄の全体像を視覚化</span>
-      </span>
-      <span className="diagram-banner__arrow" aria-hidden="true">
-        <ArrowRight size={14} strokeWidth={1.5} />
-      </span>
-    </button>
+    <div className="diagram-banner-wrap" data-testid="sticky-diagram-accordion">
+      <button
+        type="button"
+        className={`diagram-banner${expanded ? ' diagram-banner--expanded' : ''}`}
+        onClick={handleToggle}
+        aria-expanded={expanded}
+        aria-controls="diagram-banner-content"
+        aria-label={expanded ? '図解を閉じる' : '図解を見る'}
+      >
+        <span className="diagram-banner__icon-wrap" aria-hidden="true">
+          <BookOpen size={18} strokeWidth={1.5} />
+          <Sparkles size={10} strokeWidth={1.5} className="diagram-banner__sparkle" />
+        </span>
+        <span className="diagram-banner__text">
+          <span className="diagram-banner__title">業績・ビジネス・強みを図解</span>
+          <span className="diagram-banner__sub">7 セクションで銘柄の全体像を視覚化</span>
+        </span>
+        <span className="diagram-banner__arrow" aria-hidden="true">
+          {expanded ? <X size={14} strokeWidth={1.5} /> : <ArrowRight size={14} strokeWidth={1.5} />}
+        </span>
+      </button>
+
+      {/* Inline 展開 content: mount 維持 + display 切替で cache 保護 */}
+      <div
+        id="diagram-banner-content"
+        className={`diagram-banner-content${expanded ? ' diagram-banner-content--expanded' : ''}`}
+        aria-hidden={!expanded}
+      >
+        {expanded && (
+          <>
+            {vizState === 'loading' && (
+              <div className="diagram-banner-loading">
+                <span className="diagram-banner-loading__spinner" aria-hidden="true" />
+                <span className="diagram-banner-loading__text">図解を生成中…</span>
+              </div>
+            )}
+            {vizState === 'error' && (
+              <div className="diagram-banner-error">
+                <p>図解の生成に失敗しました。</p>
+                {vizError && <p style={{ fontSize: 11, opacity: 0.7 }}>{vizError}</p>}
+                <button
+                  type="button"
+                  onClick={() => { setVizState('idle'); setVizError(null); }}
+                  className="diagram-banner-error__retry"
+                >
+                  再試行
+                </button>
+              </div>
+            )}
+            {vizState === 'done' && vizData && (
+              <Suspense fallback={<div className="diagram-banner-loading"><span className="diagram-banner-loading__text">読み込み中…</span></div>}>
+                <DiagramCard data={vizData} ticker={ticker} selectedYears={3} />
+              </Suspense>
+            )}
+          </>
+        )}
+      </div>
+    </div>
   );
 }

@@ -960,7 +960,12 @@ export default function JudgmentDetail({
           // 7. リファレンス (ContextSection 旧 章 ③)
           return (
             <>
-              <StickyDiagramAccordion key="sticky-diagram" />
+              <StickyDiagramAccordion
+                key="sticky-diagram"
+                ticker={selectedTicker}
+                analysis={result}
+                guidance={guidance}
+              />
               {chartBlock}
               {targetZoneBlock}
               {fundamentalsBlock}

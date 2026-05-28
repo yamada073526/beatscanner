@@ -11289,6 +11289,81 @@ button.ds-chip[data-pressed="true"]:hover {
 /* legacy class 残置 (削除予定、 後方互換性) */
 .sticky-diagram-button-row { display: none; }
 
+/* v126 R11-1: 図解 inline 展開 (sub-agent verdict 案 1)。
+   banner + collapsible content の wrap、 slide-down + fade-in アニメーション。
+   mount 維持で content の display 切替のみ、 DiagramCard cache 保護。 */
+.diagram-banner-wrap {
+  margin: var(--space-1, 4px) 0 var(--space-3, 12px);
+}
+.diagram-banner-wrap > .diagram-banner {
+  margin: 0; /* wrap で margin 制御に変更 */
+}
+.diagram-banner--expanded {
+  /* expand 状態の banner: 下角 0 + bottom border 強調で content と接続 */
+  border-bottom-left-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+.diagram-banner-content {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition:
+    max-height 400ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 280ms ease-out;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 28%, var(--border));
+  border-top: none;
+  border-radius: 0 0 var(--radius-md, 8px) var(--radius-md, 8px);
+  background: var(--bg-elevated, var(--bg-subtle));
+}
+.diagram-banner-content--expanded {
+  max-height: 6000px; /* DiagramCard が高くても収まる envelope */
+  opacity: 1;
+  padding: var(--space-4, 16px) var(--space-4, 16px) var(--space-5, 20px);
+}
+.diagram-banner-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3, 12px);
+  padding: var(--space-8, 32px) var(--space-4, 16px);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.diagram-banner-loading__spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--color-accent);
+  animation: diagram-banner-spin 0.8s linear infinite;
+}
+@keyframes diagram-banner-spin {
+  to { transform: rotate(360deg); }
+}
+.diagram-banner-loading__text {
+  letter-spacing: 0.02em;
+}
+.diagram-banner-error {
+  padding: var(--space-4, 16px);
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: center;
+}
+.diagram-banner-error__retry {
+  margin-top: var(--space-2, 8px);
+  padding: 6px 14px;
+  background: transparent;
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+}
+.diagram-banner-error__retry:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
 
 /* AnalystTargetCard + SellZoneCard 2-col grid layout (Chart 直下に並列配置) */
 .atc-szc-grid {
