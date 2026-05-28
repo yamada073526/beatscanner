@@ -24,16 +24,29 @@ export default function StickyDiagramAccordion() {
   const expandSection = useWorkspaceStore((s) => s.expandSection);
 
   const handleJumpToDiagram = () => {
-    // R7-1/R7-2 root cause fix: AccordionSection の root に id 属性は付与されない (props 分割代入で抜かれる)。
-    // 内部 button に `acc-header-${id}` で id 付与されるため、 それを scroll target に。
+    // R8-1 fallback 強化: AccordionSection の root に id 属性なし → 候補 id 複数 + testid fallback。
+    // behavior:'auto' で確実 jump (smooth は次 R で復活検討)。
     try { expandSection('detail-report'); } catch { /* noop */ }
     setTimeout(() => {
-      const el = document.getElementById('acc-header-sec-report');
-      if (!el) return;
+      const candidates = [
+        () => document.getElementById('acc-header-sec-report'),
+        () => document.getElementById('sec-report'),
+        () => document.querySelector('[data-testid="library-report-wrapper"]'),
+        () => document.querySelector('[data-testid="chapter-section-③"]'),
+      ];
+      let el = null;
+      for (const find of candidates) {
+        try { el = find(); if (el) break; } catch { /* noop */ }
+      }
+      if (!el) {
+        // eslint-disable-next-line no-console
+        console.warn('[StickyDiagramAccordion] jump target not found');
+        return;
+      }
       const rect = el.getBoundingClientRect();
       const offsetTop = window.pageYOffset + rect.top - 72;
-      window.scrollTo({ top: offsetTop, behavior: 'smooth' });
-    }, 250);
+      window.scrollTo({ top: offsetTop, behavior: 'auto' });
+    }, 100);
   };
 
   return (

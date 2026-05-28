@@ -66,21 +66,33 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
   // V3 mode: ChapterTabs の analyst tab 内 mount (sec-analyst-v3)、 default tab='analyst' なら最初から存在。
   const expandSection = useWorkspaceStore((s) => s.expandSection);
   const handleJumpToAnalyst = () => {
-    // V2 mode の AccordionSection 用 expand (V3 mode では no-op、 silent fallback)
+    // R8-1 第 2 真因 fix: V3 mode default ON → ChapterTabs 経由 mount、 user が他 tab に切替済の corner case 対策。
+    // 段階的 fallback: sec-analyst-v3 (ChapterTabs analyst tab active 時) → acc-header-sec-analyst (V2 mode AccordionSection)
+    //   → testid query (mount path 違っても拾う) → 市場評価 章扉 (最終 fallback)。
+    // behavior:'auto' で確実即 jump (smooth は user 動作確認後 R9 で戻す)。
     try { expandSection('analyst-panel'); } catch { /* noop */ }
-    // R7-1 root cause fix: AccordionSection の props で `id` が分割代入されているため
-    // root div には id 属性が付与されない (...rest に含まれない)。
-    // 代わりに internal `headerId = acc-header-${id}` で header button に id 付与されるため、
-    // それを scroll target に使う。 V3 mode は ChapterTabs 内 sec-analyst-v3 (普通の div で id 付与) を優先。
     setTimeout(() => {
-      const el =
-        document.getElementById('sec-analyst-v3') ||
-        document.getElementById('acc-header-sec-analyst');
-      if (!el) return;
+      const candidates = [
+        () => document.getElementById('sec-analyst-v3'),
+        () => document.getElementById('acc-header-sec-analyst'),
+        () => document.getElementById('sec-analyst'),
+        () => document.querySelector('[data-testid="analyst-panel-wrapper"]'),
+        () => document.querySelector('[data-testid="chapter-section-ii"]'),
+      ];
+      let el = null;
+      for (const find of candidates) {
+        try { el = find(); if (el) break; } catch { /* noop */ }
+      }
+      if (!el) {
+        // debug log: user devtools で確認可能、 production trace
+        // eslint-disable-next-line no-console
+        console.warn('[AnalystTargetCard] jump target not found, candidates exhausted');
+        return;
+      }
       const rect = el.getBoundingClientRect();
-      const offsetTop = window.pageYOffset + rect.top - 72; // 72px = sticky 検索 bar の buffer
-      window.scrollTo({ top: offsetTop, behavior: 'smooth' });
-    }, 250);
+      const offsetTop = window.pageYOffset + rect.top - 72;
+      window.scrollTo({ top: offsetTop, behavior: 'auto' });
+    }, 100);
   };
 
   useEffect(() => {
