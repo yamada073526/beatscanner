@@ -50,11 +50,15 @@ export const BUY_ZONE_DESC_JP = {
 
 /**
  * Cup-Handle pattern state から buy zone type を分類.
- * @param {string} state - 'formation' | 'breakout_confirmed' | 'failed' | null
+ * @param {string} state - 'formation' | 'breakout_pending' | 'breakout_confirmed' | 'failed' | null
  * @returns {'cup_pivot'|'breakout_support'|'unknown'}
+ *
+ * v126 R11-3 (2026-05-29 user dogfood): AAPL detected:true, state:'breakout_pending' で検出済みだが
+ * 既存 'formation' のみ表示条件では catch されない問題を発見。 breakout_pending も pivot 上抜け待ち状態
+ * = CupPivot 表示対象として追加 (handle 形成中、 まだ breakout 完了していない段階)。
  */
 export function classifyBuyZone(state) {
-  if (state === 'formation') return 'cup_pivot';
+  if (state === 'formation' || state === 'breakout_pending') return 'cup_pivot';
   if (state === 'breakout_confirmed') return 'breakout_support';
   return 'unknown';
 }

@@ -91,8 +91,14 @@ export default function CupPivotCard({ ticker }) {
     );
   }
 
-  // Phase 2 は state='formation' のみ表示、 それ以外は何も描画しない (ノイズ最小化)
-  if (errored || !cupHandle?.detected || state !== 'formation' || pivotPrice == null) {
+  // v126 R11-3 (5/29 user dogfood): 'formation' + 'breakout_pending' 両 state catch。
+  // AAPL detected:true,state:'breakout_pending' で検出済みだが旧 'formation' のみ条件で漏れていた。
+  // breakout_pending = handle 形成中で pivot 上抜け待ち、 narration「pivot 上抜けで新波動入りの目安」 対象。
+  const showCupPivot = cupHandle?.detected
+    && (state === 'formation' || state === 'breakout_pending')
+    && pivotPrice != null
+    && !errored;
+  if (!showCupPivot) {
     return null;
   }
 
