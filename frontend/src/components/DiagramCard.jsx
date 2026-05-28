@@ -1023,11 +1023,17 @@ export default function DiagramCard({
   };
 
   return (
-    <div style={{
-      position: 'relative',
-      borderRadius: '12px', border: '1px solid var(--border)',
-      background: 'var(--bg-primary)', marginTop: '16px', overflow: 'hidden',
-    }}>
+    // v125 P4-1: data-testid="diagram-card-wrapper" を outer wrapper に追加。
+    // 既存 diagram-section-* testid (内部 7 section) は変更なし、 outer は単独 QA selector 用。
+    // L895 の `if (!data) return null` は null return のため testid 不可 (component 不在 = absent)。
+    <div
+      data-testid="diagram-card-wrapper"
+      style={{
+        position: 'relative',
+        borderRadius: '12px', border: '1px solid var(--border)',
+        background: 'var(--bg-primary)', marginTop: '16px', overflow: 'hidden',
+      }}
+    >
       {/* スケルトンアニメーション定義（shimmer） */}
       <style>{`
         @keyframes shimmer {
