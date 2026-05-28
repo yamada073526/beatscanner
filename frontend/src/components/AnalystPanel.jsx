@@ -357,9 +357,11 @@ export default function AnalystPanel({ ticker, plan = 'free', currentPrice = nul
     return () => { cancelled = true; };
   }, [ticker]);
 
+  // v125 R3 hotfix lesson: data-testid を全 render path に付与 (loading/errored/empty/main、
+  // 1 state 漏れで QA selector 不安定、 memory [[testid-all-render-paths]])
   if (loading && !data) {
     return (
-      <section className="panel-card anp-panel" aria-busy>
+      <section className="panel-card anp-panel" data-testid="analyst-panel-wrapper" aria-busy>
         <header className="anp-head">
           <h3 className="anp-title">アナリスト視点</h3>
         </header>
@@ -370,7 +372,7 @@ export default function AnalystPanel({ ticker, plan = 'free', currentPrice = nul
 
   if (errored || !data) {
     return (
-      <section className="panel-card anp-panel">
+      <section className="panel-card anp-panel" data-testid="analyst-panel-wrapper">
         <header className="anp-head">
           <h3 className="anp-title">アナリスト視点</h3>
         </header>
@@ -385,7 +387,7 @@ export default function AnalystPanel({ ticker, plan = 'free', currentPrice = nul
   const allEmpty = Object.values(sources).every((s) => s === 'empty');
   if (allEmpty) {
     return (
-      <section className="panel-card anp-panel">
+      <section className="panel-card anp-panel" data-testid="analyst-panel-wrapper">
         <header className="anp-head">
           <h3 className="anp-title">アナリスト視点</h3>
         </header>

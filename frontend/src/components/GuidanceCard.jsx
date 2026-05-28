@@ -754,7 +754,9 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
     };
   }, []); // mount 時 once
 
-  if (isLoading && !guidance) return <GuidanceSkeleton />;
+  // v125 R3 hotfix lesson: data-testid="guidance-card-wrapper" を全 state (skeleton/no-data/main)
+  // で統一、 既存「guidance-skeleton」 testid も保持 (旧 QA test 後方互換)
+  if (isLoading && !guidance) return <div data-testid="guidance-card-wrapper" data-state="skeleton"><GuidanceSkeleton /></div>;
 
   if (!guidance) {
     return (

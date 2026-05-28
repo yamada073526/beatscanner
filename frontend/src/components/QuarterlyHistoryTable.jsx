@@ -281,10 +281,12 @@ export default function QuarterlyHistoryTable({ ticker, limit = 8, columns, halo
     return () => { cancelled = true; };
   }, [ticker, limit]);
 
-  if (loading && !data) return <QuarterlyHistoryGhost />;
+  // v125 R3 hotfix lesson: data-testid を全 render path に付与
+  // (loading は QuarterlyHistoryGhost、 error は <p>、 main は <div> でそれぞれ wrapper 異なる)
+  if (loading && !data) return <div data-testid="quarterly-history-table-wrapper"><QuarterlyHistoryGhost /></div>;
   if (error || !data) {
     return (
-      <p className="qhistory-empty">
+      <p className="qhistory-empty" data-testid="quarterly-history-table-wrapper">
         {error || '履歴データはまだありません'}
       </p>
     );
