@@ -83,13 +83,23 @@ production bundle (P7-1 R1 hotfix 後): index-bXxCdCXp.js (frontend) + backend d
 
 累計 v125 = **38 commit**、 deploy 19 回。
 
-## 🔴 次 session 推奨タスク (優先度順)
+## 🔴 次 session 推奨タスク (優先度順、 5/28 帰宅後 user 確認反映)
 
-1. **flag default ON 化** (user 承認済): Workspace.jsx + WorkspaceHeader.jsx の `isPillar2Pane1()` を `() => true` に変更 (10 min)
-2. **Phase 4-B 着手** (user release 前指示): 案 B (5 条件カード accordion 外維持) + 図解 default OFF + DiagramCard mount 維持で SPEC §5 patch → Sprint A (抽出分離、 1.0 人日) → Sprint B (順序変更、 1.5 人日)
-3. **AnalystTargetCard footer link 追加** (user feedback): 「直近 grade 変更を見る」 link → AnalystPanel scroll、 アナリスト出典動線確保 (30 min)
-4. **マーケ launch punch line 確定**: top 3 = (1) IBD テクニカル × ファンダ 5 条件 (推奨) / (2) 決算 quarterly + テクニカル daily / (3) IBD CAN SLIM 決定版
-5. **Article digest 件名確定**: top 3 = (1) 今日の注目 — IBD テクニカル × 5 条件 (推奨) / (2) 今日の米国株を 2 分で / (3) 本日の米国株記事
-6. **Cup-Handle digest 件名確定**: top 3 = (1) Leader + Breakout 候補 (推奨) / (2) 本日の Cup-Handle 検出 / (3) テクニカル × ファンダ 交差
+1. **flag default ON 化** (10 min、 user 承認済): Workspace.jsx + WorkspaceHeader.jsx の `isPillar2Pane1()` を `() => true` に変更
+2. **Phase 4-B 着手** (user release 前指示): **案 B 確定** (5 条件カード accordion 外維持) + 図解 default OFF + DiagramCard mount 維持で SPEC §5 patch → Sprint A (抽出分離、 1.0 人日) → Sprint B (順序変更、 1.5 人日)
+3. **SellZoneCard narration デザイン sub-agent review** (user 指示「R4-2 後もパッと見読みづらい、 デザイン改善 sub-agent review」): ui-designer + frontend-architect + qa-dogfooder 3 体合議で SellZoneCard レイアウト改善案 (typography hierarchy / spacing / visual focus 軸)。 input: user スクショ + 現状 frontend/src/components/SellZoneCard.jsx (R4-2 着地版)
+4. **punch line + 件名 順位付け sub-agent review** (user 指示「IBD/CAN SLIM 専門用語 vs 初心者向け、 裾野広いユーザー相手にどれがベスト」): マーケター + qa-dogfooder + ui-designer 3 体合議で 9 候補 (punch line 3 + Article 3 + Cup-Handle 3) に推奨順位を付ける。 軸: 初心者認知性 / brand 訴求力 / 金商法 §38 safe / CVR 期待値
+5. **AnalystTargetCard footer link 追加** (30 min、 アナリスト名/grade 動線): 「直近 grade 変更を見る」 link → AnalystPanel scroll
+6. (任意) **R4-2 sub-agent review verdict 反映** + マーケ punch line 確定 commit
+
+## 📸 次 session 開始時に user 提出推奨スクショ
+
+| # | 用途 | 撮り方 |
+|---|---|---|
+| 1 | **R4-2 SellZoneCard 現状** (デザイン review input、 必須) | `?ticker=AAPL` → Chart 直下の「50DMA extension 状況」 card 拡大 |
+| 2 | NVDA で「climax warning」 表示 (red zone narration の長さ確認) | `?ticker=NVDA` → SellZoneCard 拡大 |
+| 3 | (任意) mobile 表示 (768px 以下、 2 card 1-col stack 確認) | dev tools mobile mode で AAPL Pane 3 |
+
+スクショ 1 + 2 があれば sub-agent review で具体的改善案が出やすい。 1 のみでも可。
 
 詳細は handover_2026-05-28_v125_full.md 参照。
