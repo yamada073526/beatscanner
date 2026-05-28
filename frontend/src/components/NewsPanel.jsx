@@ -193,7 +193,7 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false, hideHead
   return (
     <SectionFadeSubtle>
     {/* tier-l-glow: Sprint 2 Phase 2.5 — hover border tint + inset shadow で Tier L 階層演出 */}
-    <section className="panel-card tier-l-glow rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)' }}>
+    <section className="panel-card tier-l-glow rounded-2xl p-6 shadow-sm" data-testid="news-panel" style={{ background: 'var(--bg-card)' }}>
       {/* Phase 2.7 Sprint 1 #2': hideHeading=true (workspace mode) で AccordionSection 重複解消 */}
       <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
         {!hideHeading && (

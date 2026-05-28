@@ -133,6 +133,7 @@ export default function IRLinksPanel({ ticker, hideHeading = false }) {
     {/* tier-l-glow: Sprint 2 Phase 2.5 — hover border tint + inset shadow で Tier L 階層演出 */}
     <section
       className="panel-card tier-l-glow rounded-2xl p-6 shadow-sm"
+      data-testid="ir-links-panel"
       style={{ background: 'var(--bg-card)' }}
     >
       {/* Phase 2.7 Sprint 1 #2': hideHeading=true (workspace mode) で大見出し/小見出し重複を解消

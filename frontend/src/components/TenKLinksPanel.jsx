@@ -63,12 +63,13 @@ export default function TenKLinksPanel({ ticker, hideHeading = false }) {
     return () => { cancelled = true; };
   }, [ticker]);
 
+  // v125 R3 hotfix lesson: data-testid="tenk-links-panel" を全 render path に統一付与
   if (loading && items === null) {
-    return <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>10-K 取得中…</p>;
+    return <p data-testid="tenk-links-panel" style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>10-K 取得中…</p>;
   }
   if (error || !items || items.length === 0) {
     return (
-      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+      <p data-testid="tenk-links-panel" style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
         {error || '10-K (年次報告書) は SEC EDGAR で見つかりませんでした'}
       </p>
     );
