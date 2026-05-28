@@ -134,7 +134,13 @@ export default function SellZoneCard({ ticker }) {
           <div className={`szc-zone-value szc-zone-value--${zone}`}>{zoneLabel}</div>
         </div>
 
-        <p className="szc-desc">{zoneDesc}</p>
+        {/* v125 user dogfood hotfix: narration 3 field 構造 (結論 → 理由 → 根拠)。
+            user 要望「結論を先、 根拠は灰色で控えめ」 を反映。 */}
+        <div className="szc-narration">
+          <p className="szc-desc szc-desc--conclusion">{zoneDesc.conclusion}</p>
+          <p className="szc-desc szc-desc--reason">{zoneDesc.reason}</p>
+          <p className="szc-desc szc-desc--source">{zoneDesc.source}</p>
+        </div>
 
         <div className="szc-meta">
           <span>

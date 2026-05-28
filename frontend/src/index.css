@@ -11229,6 +11229,12 @@ button.ds-chip[data-pressed="true"]:hover {
   color: var(--text-secondary);
   margin: 0;
 }
+/* v125 user dogfood hotfix: narration 3 field (結論 / 理由 / 根拠) で順次表示、
+   根拠は灰色で目立たせない。 user 要望「結論を先に見たい、 根拠は控えめ」 反映。 */
+.szc-narration { display: grid; gap: 4px; }
+.szc-desc--conclusion { color: var(--text-primary); font-weight: 500; }
+.szc-desc--reason { color: var(--text-secondary); }
+.szc-desc--source { color: var(--text-muted); font-size: 11px; }
 .szc-meta {
   display: flex;
   gap: 12px;

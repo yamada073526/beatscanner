@@ -1046,7 +1046,10 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                       value: 'アナリスト目標',
                       fill: 'var(--color-accent)',
                       fontSize: 9,
-                      position: 'right',
+                      // v125 user dogfood hotfix: position 'right' だと extended +15% label と
+                      // Y 軸近接時 (consensus ≒ 50DMA × 1.15 のケース、 NVDA 等) に重なる。
+                      // 'insideTopRight' で chart 内側 右端 上部に配置、 extended +15% (chart 外右) と分離。
+                      position: 'insideTopRight',
                       offset: 4,
                     }}
                     ifOverflow="extendDomain"
