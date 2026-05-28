@@ -9,7 +9,7 @@ import os
 import re
 import pathlib as _pathlib
 import time as _time
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime, timezone
 from html.parser import HTMLParser as _HTMLParser
 from bs4 import BeautifulSoup
 from typing import Any, Optional
