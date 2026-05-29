@@ -183,12 +183,36 @@ function surpriseLabel(e) {
 
 // ---------------------------------------------------------------------------
 // Custom tooltip — shows earnings details when hovering on an earnings date
+// v130 方針 #13 (user dogfood 5/30、 STRONG_RECOMMEND verdict): 終値 + 主要 reference line
+// (Pivot / 損切り目安) との距離 % を 2 行追加。 「BeatScanner ないとトレードできない」 retention 観点で
+// 「次の行動 (buy/sell) の準備」 が hover 1 回で完結する。 chart-overlay-safety 4 層防御:
+//   1. ErrorBoundary 内 (既存)、 2. distLines 空配列 default で conditional render、
+//   3. Number.isFinite + Math.abs(pct) < 50 で異常値排除、 4. static element で isAnimationActive 不要
 // ---------------------------------------------------------------------------
-function EarningsTooltip({ active, payload, label, earningsMap }) {
+function EarningsTooltip({ active, payload, label, earningsMap, pillar2Markers, cupHandle }) {
   if (!active || !payload?.length) return null;
 
   const price = payload.find((p) => p.dataKey === 'close')?.value;
   const e = earningsMap?.[label];
+
+  // v130 方針 #13: actionable な 1-2 本の reference line 距離 % を動的算出。
+  const distLines = [];
+  if (Number.isFinite(price) && price > 0) {
+    const pivot = cupHandle?.pivot?.price;
+    if (Number.isFinite(pivot)) {
+      const pct = ((pivot - price) / price) * 100;
+      if (Math.abs(pct) < 50) {
+        distLines.push({ label: 'Pivot まで', pct, color: 'var(--text-muted)' });
+      }
+    }
+    const stop = pillar2Markers?.stop8;
+    if (Number.isFinite(stop)) {
+      const pct = ((stop - price) / price) * 100;
+      if (Math.abs(pct) < 50) {
+        distLines.push({ label: '損切り目安', pct, color: 'var(--color-loss)' });
+      }
+    }
+  }
 
   return (
     <div className="min-w-[180px] rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs shadow-lg">
@@ -202,6 +226,12 @@ function EarningsTooltip({ active, payload, label, earningsMap }) {
           </span>
         </p>
       )}
+
+      {distLines.map((d) => (
+        <p key={d.label} style={{ color: d.color, marginTop: 2 }}>
+          {d.label}: <strong>{d.pct >= 0 ? '+' : ''}{d.pct.toFixed(1)}%</strong>
+        </p>
+      ))}
 
       {e && (
         <div
@@ -845,7 +875,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
 
                 {/* Custom tooltip with earnings hover info */}
                 <Tooltip
-                  content={<EarningsTooltip earningsMap={earningsMap} />}
+                  content={<EarningsTooltip earningsMap={earningsMap} pillar2Markers={pillar2Markers} cupHandle={cupHandle} />}
                   cursor={{ stroke: CHART_CURSOR, strokeWidth: 1, strokeDasharray: '4 2' }}
                 />
 

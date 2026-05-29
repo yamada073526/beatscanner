@@ -154,9 +154,11 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
           <BookOpen size={18} strokeWidth={1.5} />
           <Sparkles size={10} strokeWidth={1.5} className="diagram-banner__sparkle" />
         </span>
+        {/* v130 P1 #8 (user dogfood 5/30): 旧 2 行 (title「業績・ビジネス・強みを図解」 +
+            sub「7 セクションで銘柄の全体像を視覚化」) は冗長。 5 原則 §3「シンプルかつリッチ」
+            準拠で 1 行に統合、 sub 撤去で「シンプル」 を全面化。 */}
         <span className="diagram-banner__text">
-          <span className="diagram-banner__title">業績・ビジネス・強みを図解</span>
-          <span className="diagram-banner__sub">7 セクションで銘柄の全体像を視覚化</span>
+          <span className="diagram-banner__title">図解 業績・ビジネス・強みを視覚化</span>
         </span>
         <span className="diagram-banner__arrow" aria-hidden="true">
           {expanded ? <X size={14} strokeWidth={1.5} /> : <ArrowRight size={14} strokeWidth={1.5} />}

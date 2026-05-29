@@ -11276,6 +11276,10 @@ button.ds-chip[data-pressed="true"]:hover {
 .diagram-banner {
   display: flex;
   align-items: center;
+  /* v130 P1 #9 (user dogfood 5/30、 「Hero が中央揃えなのでボタンも中央寄せに」): justify-content
+     center で icon + text + arrow の 3 要素グループを button 内中央に集約。 旧版は左寄せだったため
+     視線移動が不自然だった。 */
+  justify-content: center;
   gap: var(--space-3, 12px);
   width: 100%;
   padding: 14px 20px;
@@ -11288,7 +11292,7 @@ button.ds-chip[data-pressed="true"]:hover {
   /* color を text-secondary に変更 → title が inherit で抑制色、 hover で全体 cyan に発火 (旧 UI 非対称性) */
   color: var(--text-secondary);
   cursor: pointer;
-  text-align: left;
+  text-align: center;
   font-family: inherit;
   margin: var(--space-1, 4px) 0 var(--space-3, 12px);
   /* idle box-shadow 撤去、 hover で 3 段 glow 発火に集約 */
@@ -11497,6 +11501,9 @@ button.ds-chip[data-pressed="true"]:hover {
 .diagram-skel__caption {
   display: flex;
   align-items: center;
+  /* v130 P1 #9 (user dogfood 5/30): 図解 Hero が中央揃えなので「図解を生成中…」 caption も中央寄せに統一。
+     spinner + text のペアを左寄せ → 中央集約で視線移動が自然 (Hero 出現後の hierarchy 維持)。 */
+  justify-content: center;
   gap: 8px;
   font-size: 12px;
   color: var(--text-muted);

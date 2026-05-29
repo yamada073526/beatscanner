@@ -61,11 +61,14 @@ export default function BuyZoneCard({ ticker }) {
   const cupHandle = technical?.patterns?.cup_handle || null;
   const lastBreakout = cupHandle?.last_breakout || null;
   const breakoutPrice = Number.isFinite(lastBreakout?.price) ? lastBreakout.price : null;
-  // v127 R16-3 (NVDA $200): box_support (複数回 test された長期ボックス支持線) を優先、 last_breakout は fallback。
-  // role='overhead_resistance' (現在価格が box の下 = box は抵抗線) は「支持線」 と呼べないため除外 (correctness)。
+  // v130 P1 #10 (2 体合議 verdict [FILTER]、 2026-05-30 user dogfood「ほぼ全銘柄で表示、 客観判断できない」):
+  //   旧版 (v127 R16-3) は role !== 'overhead_resistance' のみで filter、 ほぼ全銘柄 hit していた。
+  //   O'Neil 基準「3 回は偶然、 5 回以上は本物」 と「resistance_turned_support (= 抵抗線突破後の支持線転換、
+  //   最も actionable な signal)」 のみ採用、 NVDA $195 / LLY $1130 型 genuine signal だけ残す。
   const boxSupport = (cupHandle?.box_support
       && Number.isFinite(cupHandle.box_support.level)
-      && cupHandle.box_support.role !== 'overhead_resistance')
+      && cupHandle.box_support.role === 'resistance_turned_support'
+      && (cupHandle.box_support.touch_count ?? 0) >= 5)
     ? cupHandle.box_support : null;
   // support 基準値: box_support 優先、 なければ last_breakout pivot
   const refPrice = boxSupport ? boxSupport.level : breakoutPrice;
