@@ -564,6 +564,8 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
         passed_conditions:    analysis.passedCount,
         conditions_detail:    JSON.stringify(analysis.conditions, null, 2),
         metrics_trend:        formatMetricsTrend(analysis.periods),
+        // v126 R15-1: 構造化 periods を送信、 backend が FMP/yfinance fetch 失敗時に fallback 使用 (trends 構築用)
+        periods:              Array.isArray(analysis.periods) ? analysis.periods : [],
         guidance:             guidance ? JSON.stringify(guidance, null, 2) : 'データなし',
         conference_call_points: 'データなし',
         ai_summary:           '',
@@ -662,6 +664,8 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
           passed_conditions:      analysis.passedCount,
           conditions_detail:      JSON.stringify(analysis.conditions, null, 2),
           metrics_trend:          formatMetricsTrend(analysis.periods),
+          // v126 R15-1: 構造化 periods を送信、 backend FMP fetch 失敗時の trends fallback 用
+          periods:                Array.isArray(analysis.periods) ? analysis.periods : [],
           guidance:               guidance ? JSON.stringify(guidance, null, 2) : 'データなし',
           conference_call_points: 'データなし',
           ai_summary:             '',

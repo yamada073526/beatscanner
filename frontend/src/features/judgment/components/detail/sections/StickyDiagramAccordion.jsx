@@ -51,6 +51,8 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
       passed_conditions: analysis.passedCount,
       conditions_detail: JSON.stringify(analysis.conditions ?? [], null, 2),
       metrics_trend: '',
+      // v126 R15-1: 構造化 periods を送信、 backend FMP fetch 失敗時の trends fallback 用 (DiagramCard 決算図解 生成)
+      periods: Array.isArray(analysis.periods) ? analysis.periods : [],
       guidance: guidance ? JSON.stringify(guidance, null, 2) : 'データなし',
       conference_call_points: 'データなし',
       ai_summary: '',

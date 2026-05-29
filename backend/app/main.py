@@ -9960,6 +9960,32 @@ async def generate_visualization(
     except Exception as _e_rebuild:
         print("[VISUALIZE] metrics_trend rebuild FAILED: " + str(_e_rebuild) + ". Using frontend data.")
     # ════════════════════════════════════════════════════════
+    # v126 R15-1 (5/29 user dogfood「決算図解が生成されない」 真因 fix):
+    # production で FMP /stable/income-statement + /stable/cash-flow-statement が plan 制約 / rate limit で失敗、
+    # yfinance fallback も Railway IP block で失敗 → _periods_built 空 → trends/fcfTrend/capexTrend が全て空配列。
+    # frontend は judgment endpoint で既に periods 構造 (period/date/revenue/operating_cf/eps/cfps) を保有しているため、
+    # FMP/yfinance 両失敗時に frontend periods を fallback として使う (構造は _periods_built とほぼ同一)。
+    if not _periods_built:
+        _fe_periods = analysis_data.get("periods")
+        if isinstance(_fe_periods, list) and _fe_periods:
+            try:
+                _periods_built = [
+                    {
+                        "period": str(_p.get("period", "")),
+                        "date": str(_p.get("date", ""))[:10],
+                        "revenue": _p.get("revenue"),
+                        "operating_cf": _p.get("operating_cf"),
+                        "eps": _p.get("eps"),
+                        "cfps": _p.get("cfps"),
+                        "shares_diluted": _p.get("shares_diluted"),
+                        "op_ratio": _p.get("op_ratio"),
+                    }
+                    for _p in _fe_periods
+                    if isinstance(_p, dict) and _p.get("period")
+                ]
+                print(f"[VISUALIZE] frontend periods fallback used: {len(_periods_built)} periods for {ticker}")
+            except Exception as _e_fe_fb:
+                print(f"[VISUALIZE] frontend periods fallback FAILED: {_e_fe_fb}")
     print(f"[TIMING] {ticker} metrics_trend built → {_time.time()-_t0:.2f}s")
 
     # ── Hallucination Guard: Python calc layer の precomputed_metrics を注入 (handover v82 Phase 0) ──
