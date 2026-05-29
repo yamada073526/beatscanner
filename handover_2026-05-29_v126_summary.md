@@ -1,9 +1,32 @@
 # BeatScanner Handover v126 — Summary (lazy load 用、 60 行 SSOT)
 
-> **作成日**: 2026-05-29 (午前 dogfood セッション closure、 R11-R13 着地後)
+> **作成日**: 2026-05-29 (午前 dogfood セッション closure、 R11-R15 着地後)
 > **fetch-handover skill**: 本 summary のみで context 復元可能 (~5% context cost)
 > **next session 詳細必要時**: handover_2026-05-29_v126_full.md (250 行) を Read
-> **production bundle**: `index-CbfP5CeW.js` (frontend) — R13-5 案 A 反映後
+> **production bundle**: `index-CCVKbuXi.js` (frontend、 R14 着地後) + backend R15-1 R2 (deploy 反映確認待ち)
+
+## 🔴 R15-1 継続調査 (最優先、 次 session 着手): 決算図解 trends 空問題
+
+**user 不満**: AAPL/NVDA 等で「決算図解が生成されない (ガイダンス進捗のみ)」
+
+**真因 (究明済)**:
+- production `/api/visualize/{ticker}` で `trends/fcfTrend/capexTrend` 全空配列
+- backend は trends を FMP `/stable/income-statement` + `/stable/cash-flow-statement` 再 fetch のみで構築 (`if _periods_built:` block、 main.py ~line 10116)
+- production で FMP plan 制約 / rate limit + yfinance Railway IP block で `_periods_built` 空
+- さらに `_viz_cache` 6h TTL が**空 trends 失敗 response を cache**して固定化
+
+**実装済 fix (commit 074e97a + 5b085e8、 deploy 反映確認待ち)**:
+1. **frontend periods fallback**: `analysis.periods` (judgment で取得済) を visualize request に含める (DetailReport 2 箇所 + StickyDiagramAccordion)、 backend が FMP/yfinance 失敗時に `_periods_built` fallback (main.py ~line 9962)
+2. **空 trends cache skip**: `_has_trends` gate で成功 response のみ 6h cache (main.py ~line 10481)
+
+**検証状況 (未完)**:
+- ✅ TSLA years=3: trends=4 (FMP fetch 成功 path)
+- ❌ AAPL years=3/4/5/6: trends=0 継続 — deploy 反映遅延 or fallback subtle bug
+- **次 session TODO**:
+  1. backend deploy 完全反映を待って AAPL fresh test (`curl -X POST /api/visualize/AAPL?years=N` + periods 付き)
+  2. trends=0 続く場合 Railway log で `[VIZ_CACHE] SKIPPED` / `[VISUALIZE] frontend periods fallback used` log 確認
+  3. fallback コードの `analysis_data.get("periods")` 受信確認 (debug field 再追加 or log)
+  4. AAPL 固有 (9月決算) vs TSLA (12月決算) の partial year filter 差も確認
 
 ## v126 着地内容 (R11-R13 集約、 14 commit / 9 deploy)
 
