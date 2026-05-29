@@ -11053,28 +11053,23 @@ button.ds-chip[data-pressed="true"]:hover {
    text-primary を hero に、 gain/loss は delta sub にのみ適用 (cyan ≠ 方向性)。
    memory anchor: feedback_design_principles.md §1 (読み手に負担をかけない)
    ───────────────────────────────────────────────────────────────── */
-/* v132 P1-C (ui-designer verdict APPROVE、 2026-05-30 user dogfood):
-   株価 hero 上に「買い/売り/サポート ゾーン」 の category chip を独立行で配置、
-   context-first 認知 (大分類 → 数字) でメンタルモデル先出し。 Miller (1956) Chunking +
-   Sweller (1988) Cognitive Load Theory に基づき、 数字の前に概念フレームを置くことで
-   認知負荷 30-50% 削減。 emoji は Aman 級ブランド品位のため lucide icon に統一 (Target /
-   AlertTriangle / MapPin)。 */
-.card-zone-context {
+/* v132 P1-C → P1-G (ui-designer verdict APPROVE、 2026-05-30 user dogfood 「軽い文字壁感」):
+   旧 3 row (chip / hero / header) → 2 row (chip+hero 統合 / header) で「3 説明 → 1 視線」 圧縮。
+   context chip + 株価 value を同一 row に配置することで「買いゾーン $311.50」 を 1 視線停止で
+   両方取得可能。 hero label 削除 (chip が代替)。 [[feedback-icon-brand-consistency]] lucide 統一。 */
+.card-price-hero {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding-bottom: 4px;
+  gap: 10px;
+  padding: 4px 0 6px;
+}
+.card-price-hero__chip {
+  flex-shrink: 0;
 }
 .card-zone-context__icon {
   font-size: 11px;
   line-height: 1;
   flex-shrink: 0;
-}
-.card-price-hero {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 2px 0 4px;
 }
 .card-price-hero__label {
   font-size: 10.5px;

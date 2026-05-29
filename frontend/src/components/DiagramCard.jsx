@@ -7,7 +7,7 @@
  * (multi-review 6 体合議 verdict、 局所介入 +5 行で 2,027 → 2,033 行)。
  */
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { FileBarChart2, Banknote } from 'lucide-react';
+import { FileBarChart2, Banknote, Calendar, CheckCircle2, XCircle, AlertTriangle, Shield, TrendingUp, TrendingDown } from 'lucide-react';
 import DiagramCitation from './DiagramCitation.jsx';
 import Chip from './ui/Chip.jsx';
 import { sanitizeDiagramData, findBlocklistHits } from '../lib/blocklist.js';
@@ -1377,8 +1377,12 @@ export default function DiagramCard({
                     ...fadeInStyle(i),
                   }}
                 >
-                  <span aria-hidden="true" style={{ flexShrink: 0, fontSize: '13px', lineHeight: 1.4 }}>
-                    {c.pass ? '✅' : '❌'}
+                  {/* v132 P0-E (user dogfood 5/30): emoji ✅❌ → lucide CheckCircle2/XCircle で
+                      [[feedback-icon-brand-consistency]] Aman 級品格遵守、 全 OS で一貫レンダリング。 */}
+                  <span aria-hidden="true" style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', lineHeight: 1.4 }}>
+                    {c.pass
+                      ? <CheckCircle2 size={14} strokeWidth={2.2} color="var(--color-gain)" />
+                      : <XCircle size={14} strokeWidth={2.2} color="var(--color-loss)" />}
                   </span>
                   <span>
                     <span style={{ fontWeight: 600 }}>{c.name || c.label}</span>
@@ -1580,10 +1584,12 @@ export default function DiagramCard({
               gap: '8px', marginTop: '24px', marginBottom: '6px',
             }}>
               <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
                 fontSize: '11px', color: 'var(--text-muted)',
                 fontWeight: 600, letterSpacing: '0.02em',
               }}>
-                📅 表示期間
+                <Calendar size={12} strokeWidth={2} aria-hidden="true" />
+                表示期間
               </div>
               <div style={{
                 display: 'flex', flexDirection: 'column',
@@ -1613,7 +1619,10 @@ export default function DiagramCard({
                       position: 'relative',
                       boxShadow: '0 4px 12px rgba(15,23,42,0.30)',
                     }}>
-                      📅 期間を切り替えると、グラフが連動して変わります
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <Calendar size={12} strokeWidth={2} aria-hidden="true" />
+                        期間を切り替えると、 グラフが連動して変わります
+                      </span>
                       {/* 下向き三角 */}
                       <div style={{
                         position: 'absolute',
@@ -1681,7 +1690,7 @@ export default function DiagramCard({
                 border: '1px solid rgba(239,159,39,0.30)',
                 fontSize: '11px', color: '#854F0B',
               }}>
-                <span style={{ fontSize: '13px' }}>⚠️</span>
+                <AlertTriangle size={14} strokeWidth={2} color="#854F0B" aria-hidden="true" />
                 <span>
                   <strong>{data.partialPeriod.period}</strong> は通期未完了のため年次比較から除外しています
                   （{data.partialPeriod.note}）
@@ -1957,7 +1966,7 @@ export default function DiagramCard({
                 gap: '8px',
                 marginBottom: '4px',
               }}>
-                <span style={{ fontSize: '14px' }}>⚠️</span>
+                <AlertTriangle size={14} strokeWidth={2} color="var(--text-muted)" aria-hidden="true" />
                 <span>
                   FCF・CapExデータは現在準備中です
                 </span>
@@ -2118,7 +2127,9 @@ export default function DiagramCard({
                   borderRadius: '8px', background: 'rgba(34,197,94,0.12)',
                   border: '1px solid rgba(34,197,94,0.30)', padding: '12px',
                 }}>
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#16a34a', marginBottom: '8px' }}>💪 強み</div>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '700', color: '#16a34a', marginBottom: '8px' }}>
+                    <Shield size={12} strokeWidth={2.2} aria-hidden="true" /> 強み
+                  </div>
                   {strengths.map((s, i) => (
                     <div
                       key={`str-${openSections.strengths}-${i}`}
@@ -2137,7 +2148,9 @@ export default function DiagramCard({
                   borderRadius: '8px', background: 'rgba(239,68,68,0.12)',
                   border: '1px solid rgba(239,68,68,0.30)', padding: '12px',
                 }}>
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#dc2626', marginBottom: '8px' }}>⚠️ リスク</div>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '700', color: '#dc2626', marginBottom: '8px' }}>
+                    <AlertTriangle size={12} strokeWidth={2.2} aria-hidden="true" /> リスク
+                  </div>
                   {risks.map((r, i) => (
                     <div
                       key={`risk-${openSections.strengths}-${i}`}
@@ -2230,8 +2243,9 @@ export default function DiagramCard({
                         borderRadius: '8px', background: 'rgba(34,197,94,0.12)',
                         border: '1px solid rgba(34,197,94,0.30)', padding: '12px',
                       }}>
-                        <div style={{ fontSize: '11px', fontWeight: '700', color: '#16a34a', marginBottom: '8px' }}>
-                          🐂 ブル派の根拠
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '700', color: '#16a34a', marginBottom: '8px' }}>
+                          <TrendingUp size={12} strokeWidth={2.2} aria-hidden="true" />
+                          ブル派の根拠
                         </div>
                         {bullCase.map((s, i) => (
                           <div
@@ -2253,8 +2267,9 @@ export default function DiagramCard({
                         borderRadius: '8px', background: 'rgba(239,68,68,0.12)',
                         border: '1px solid rgba(239,68,68,0.30)', padding: '12px',
                       }}>
-                        <div style={{ fontSize: '11px', fontWeight: '700', color: '#dc2626', marginBottom: '8px' }}>
-                          🐻 ベア派の根拠
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '700', color: '#dc2626', marginBottom: '8px' }}>
+                          <TrendingDown size={12} strokeWidth={2.2} aria-hidden="true" />
+                          ベア派の根拠
                         </div>
                         {bearCase.map((r, i) => (
                           <div

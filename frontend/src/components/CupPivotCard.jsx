@@ -125,18 +125,14 @@ export default function CupPivotCard({ ticker }) {
       data-spotlight="card"
       style={{ minHeight: 128 }}
     >
-      {/* v132 P1-C (ui-designer verdict APPROVE、 2026-05-30 user dogfood):
-          株価 hero の上に「買いゾーン」 category chip を独立行で配置、 メンタルモデル先出し。 */}
-      <div className="card-zone-context" data-testid="cup-pivot-card-zone-context">
-        <Chip variant="display" size="xs" tone="accent">
+      {/* v132 P1-G (ui-designer verdict APPROVE、 2026-05-30 user dogfood「文字壁感」):
+          chip + hero を 1 row 統合、 「3 説明 → 1 視線」 圧縮。 hero label「買い目安」 は chip
+          「買いゾーン」 が代替するため削除。 */}
+      <div className="card-price-hero" data-testid="cup-pivot-card-price-hero">
+        <Chip variant="display" size="xs" tone="accent" className="card-price-hero__chip">
           <Target size={11} strokeWidth={2} className="card-zone-context__icon" aria-hidden="true" />
           買いゾーン
         </Chip>
-      </div>
-      {/* v130 P1 #5 (3 体合議): 株価 hero を header 上に独立挿入、 user dogfood
-          「一番読みたいのは株価」 を 2 秒判読 hierarchy で実現。 narration は 2 番目以降に配置。 */}
-      <div className="card-price-hero" data-testid="cup-pivot-card-price-hero">
-        <span className="card-price-hero__label">買い目安</span>
         <span className="card-price-hero__value" aria-label={`pivot price ${fmtUsd(pivotPrice)}`}>
           {fmtUsd(pivotPrice)}
         </span>

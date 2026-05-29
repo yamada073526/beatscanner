@@ -183,9 +183,14 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
           <span className="diagram-banner__title">図解</span>
           <span className="diagram-banner__sub">業績・ビジネス・強みを視覚化</span>
         </span>
-        <span className="diagram-banner__arrow" aria-hidden="true">
-          {expanded ? <X size={14} strokeWidth={1.5} /> : <ArrowRight size={14} strokeWidth={1.5} />}
-        </span>
+        {/* v132 P0-D (user dogfood 5/30): expanded 時の X icon は冗長 (banner 自体が toggle)、
+            ArrowRight (→) のみ表示し、 展開時は rotate で下向き (▽) を表現する代替も検討したが、
+            シンプルに展開時は arrow を hide で「アイコンなし」 にして CLS / 装飾過多を回避。 */}
+        {!expanded && (
+          <span className="diagram-banner__arrow" aria-hidden="true">
+            <ArrowRight size={14} strokeWidth={1.5} />
+          </span>
+        )}
       </button>
 
       {/* Inline 展開 content: mount 維持 + display 切替で cache 保護 */}

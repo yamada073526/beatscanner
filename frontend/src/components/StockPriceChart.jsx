@@ -201,20 +201,22 @@ function EarningsTooltip({ active, payload, label, earningsMap, pillar2Markers, 
   const e = earningsMap?.[label];
 
   // v130 方針 #13: actionable な 1-2 本の reference line 距離 % を動的算出。
+  // v132 P1-F (ui-designer verdict APPROVE、 user dogfood 5/30「Pivot+3.2% / 損切り+2.7% 同方向%混乱」):
+  // 旧 signed pct (+/-) は初心者が方向誤読する risk → ↑↓ 矢印 + 絶対値で表示、 一目で方向判定可能。
   const distLines = [];
   if (Number.isFinite(price) && price > 0) {
     const pivot = cupHandle?.pivot?.price;
     if (Number.isFinite(pivot)) {
       const pct = ((pivot - price) / price) * 100;
       if (Math.abs(pct) < 50) {
-        distLines.push({ label: 'Pivot まで', pct, color: 'var(--text-muted)' });
+        distLines.push({ label: 'Pivot まで', pct, arrow: pct >= 0 ? '↑' : '↓', color: 'var(--text-muted)' });
       }
     }
     const stop = pillar2Markers?.stop8;
     if (Number.isFinite(stop)) {
       const pct = ((stop - price) / price) * 100;
       if (Math.abs(pct) < 50) {
-        distLines.push({ label: '損切り目安', pct, color: 'var(--color-loss)' });
+        distLines.push({ label: '損切り目安', pct, arrow: pct < 0 ? '↓' : '↑', color: 'var(--color-loss)' });
       }
     }
   }
@@ -234,7 +236,7 @@ function EarningsTooltip({ active, payload, label, earningsMap, pillar2Markers, 
 
       {distLines.map((d) => (
         <p key={d.label} style={{ color: d.color, marginTop: 2 }}>
-          {d.label}: <strong>{d.pct >= 0 ? '+' : ''}{d.pct.toFixed(1)}%</strong>
+          {d.label}: <strong>{d.arrow}{Math.abs(d.pct).toFixed(1)}%</strong>
         </p>
       ))}
 
@@ -653,6 +655,35 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
     return m;
   }, [earnings]);
 
+  // v132 P0-F (user dogfood 5/30、 1年表示で「6月 6月 7月 7月」 同月重複 bug):
+  // Recharts XAxis の interval='preserveStartEnd' は daily データで同月の tick を複数生成。
+  // period 別に「最初の出現日のみ」 ticks prop で明示 → monthly (1y/3y) or daily (1m) 重複排除。
+  const xTicks = useMemo(() => {
+    if (!chartData?.length) return undefined;
+    const seen = new Set();
+    const ticks = [];
+    for (const d of chartData) {
+      let key;
+      if (period === '1m') {
+        key = String(d.date); // daily 全表示
+      } else if (period === '3m' || period === '6m') {
+        // 週単位 (date を週初に丸める)
+        const dt = new Date(d.date);
+        const weekStart = new Date(dt);
+        weekStart.setDate(dt.getDate() - dt.getDay());
+        key = weekStart.toISOString().slice(0, 10);
+      } else {
+        // 1y / 3y / 5y: 月の最初のみ
+        key = String(d.date).slice(0, 7);
+      }
+      if (!seen.has(key)) {
+        seen.add(key);
+        ticks.push(d.date);
+      }
+    }
+    return ticks;
+  }, [chartData, period]);
+
   if (!ticker) return null;
 
   return (
@@ -865,12 +896,12 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                 <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
                 <XAxis
                   dataKey="date"
-                  /* v132 P0-C (user dogfood 5/30): 旧 tickFormatter `d.slice(0, 7)` は全 tick で
-                     YYYY-MM 冗長表示、 1ヶ月モードで「2026-05 2026-05」 重複 bug + 1年モードで
-                     「2026-04 2026-05」 と毎月年付き冗長。 period 別 + 月境/年境で表示変える。
-                     - 1m: DD のみ (日表示)
-                     - 3m / 6m: MM/DD
-                     - 1y / 3y: 月の数字、 1 月のみ YYYY/MM で年境マーク */
+                  /* v132 P0-C + P0-F (user dogfood 5/30): period 別 tickFormatter + ticks 明示で
+                     「6月 6月 7月 7月」 同月重複を解消 (ticks を「最初の出現日のみ」 に絞り込み)。
+                     - 1m: DD のみ
+                     - 3m / 6m: M/D (週単位)
+                     - 1y / 3y: 月のみ、 1 月のみ YYYY/MM で年境マーク */
+                  ticks={xTicks}
                   tickFormatter={(d) => {
                     const s = String(d);
                     if (period === '1m') return s.slice(8, 10); // DD
