@@ -613,7 +613,9 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
               click で Coming Soon modal (Stripe 連動は Session 4 で実装予定)。 */}
           {hasCup && (
             <Chip
-              size="xs"
+              /* v126 R14-4 (5/29 user dogfood): breakout_pending は「興奮喚起シグナル」 として size sm + pulse animation で強調。
+                 他 state は xs 維持 (静かな表示)。 user 「ユーザーの興奮を喚起するシグナルだから、 もう少し強くしてもいい」 */
+              size={cupHandle.state === 'breakout_pending' ? 'sm' : 'xs'}
               variant="display"
               tone={cupChipTone}
               data-cup-state={cupHandle.state}

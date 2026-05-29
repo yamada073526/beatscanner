@@ -23,7 +23,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { fetchTechnical } from '../api.js';
-import { BUY_ZONE_LABEL_JP, BUY_ZONE_DESC_JP, BUY_ZONE_FOOTER, classifyBuyZone } from '../lib/buyZoneLabels.js';
+import { BUY_ZONE_LABEL_JP, BUY_ZONE_DESC_JP, BUY_ZONE_FOOTER, CUP_SELL_ZONE_DESC_JP, classifyBuyZone } from '../lib/buyZoneLabels.js';
 import Chip from './ui/Chip.jsx';
 
 function fmtUsd(v) {
@@ -174,6 +174,19 @@ export default function CupPivotCard({ ticker }) {
             </>
           )}
         </div>
+
+        {/* v126 R14-6 (5/29 user 要望、 金融アナリスト Sonnet verdict 案 A):
+            CupPivotCard 内に sell section 併記。 buy narration の下に divider + sell zone narration。
+            既存 SellZoneCard (50DMA absolute) との役割分担: pivot 相対値 (S1 -8% / S2 +20-25% / S5 50DMA break) を担当。 */}
+        {CUP_SELL_ZONE_DESC_JP[state] && (
+          <div className="cpc-section cpc-section--sell">
+            <div className="cpc-section-header">
+              <span className="cpc-section-label">{CUP_SELL_ZONE_DESC_JP[state].label}</span>
+            </div>
+            <p className="cpc-desc cpc-desc--conclusion cpc-desc--sell">{CUP_SELL_ZONE_DESC_JP[state].conclusion}</p>
+            <p className="cpc-desc cpc-desc--detail">{CUP_SELL_ZONE_DESC_JP[state].detail}</p>
+          </div>
+        )}
 
         {/* 金融アナリスト Opus verdict (R8-3): 強制 footer (citation + disclaimer) */}
         <footer className="cpc-footer">

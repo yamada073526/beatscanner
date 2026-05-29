@@ -93,15 +93,43 @@ export function hasBlocklistViolation(text) {
 }
 
 /**
+ * v126 R14-2 (5/29 user dogfood):「現金生成」 → 「キャッシュフロー」 等の用語統一 substitution。
+ * BLOCKLIST (sentence 削除) より前に適用、 word 単位の置換で文意維持。
+ * backend visualizer/prompt.py の用語憲法 (line 50-) と 1:1 mirror。
+ */
+const WORD_SUBSTITUTIONS = [
+  // 「現金生成 / 現金創出 / 現金獲得 / 現金フロー / CF生成」 → 「キャッシュフロー」
+  [/現金生成/g, 'キャッシュフロー'],
+  [/現金創出/g, 'キャッシュフロー'],
+  [/現金獲得力?/g, 'キャッシュフロー'],
+  [/(?<![ァ-ヿ])現金フロー(?![ァ-ヿ])/g, 'キャッシュフロー'],
+  [/CF生成/gi, 'キャッシュフロー'],
+];
+
+export function applyWordSubstitutions(text) {
+  if (!text || typeof text !== 'string') return text;
+  let result = text;
+  for (const [pattern, replacement] of WORD_SUBSTITUTIONS) {
+    result = result.replace(pattern, replacement);
+  }
+  return result;
+}
+
+/**
  * 違反を含むセンテンスを削除して安全な text を返す.
  * 句点 「。」 で区切られたセンテンス単位で処理。
  * 削除後の文字列が空なら null を返す (呼出側は該当 array entry を skip 可能)。
+ *
+ * v126 R14-2: 最初に word substitution (「現金生成」 → 「キャッシュフロー」) を適用、
+ * その後 blocklist check で sentence 削除。 用語憲法違反は word 置換で救済、 法務違反のみ削除。
  *
  * @param {string} text
  * @returns {string|null}
  */
 export function sanitizeText(text) {
   if (!text || typeof text !== 'string') return text;
+  // v126 R14-2: word substitution 先行適用 (用語憲法救済)
+  text = applyWordSubstitutions(text);
   // 違反がないなら原文返却 (速度優先 short-circuit)
   if (!hasBlocklistViolation(text)) return text;
   // 句点・改行で sentence 分割、 違反文を drop

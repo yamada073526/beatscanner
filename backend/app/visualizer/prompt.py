@@ -47,7 +47,10 @@ RULES:
 - risks: 定量インパクト必須（数値は metrics_trend / beat_miss_detail から引用、 推測値禁止）
 - 全フィールド日本語（ticker/companyName/consensusSource除く）
 - dividend.yield が不明なら null
-- 用語統一: 「現金生成 / 現金創出」 等の表記は使わず、 **「キャッシュフロー」** を使うこと (例: 「現金生成が減速」 ❌ → 「キャッシュフローが減速」 ⭕)
+- 用語統一 (絶対遵守、 違反は API エラー): 以下の word は出力 BAN、 必ず「キャッシュフロー」 を使うこと:
+  ❌ 「現金生成」 ❌ 「現金創出」 ❌ 「現金獲得」 ❌ 「現金獲得力」 ❌ 「現金フロー」 ❌ 「CF生成」
+  ⭕ 「キャッシュフロー」 (例: 「キャッシュフローが減速」 「キャッシュフロー創出が伸び悩む」)
+  これは BeatScanner 用語憲法であり、 投資家向け表現として「キャッシュフロー」 が標準。
 - DO NOT output: trends, valuation, operatingMargins, fcfTrend, capexTrend, segmentSummary"""
 
 

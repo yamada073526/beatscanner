@@ -81,3 +81,30 @@ export const BUY_ZONE_FOOTER = {
   source: '出典: IBD / William O\'Neil 著 "How to Make Money in Stocks"',
   disclaimer: '※ テクニカル分析は将来の値動きを保証するものではありません',
 };
+
+/**
+ * v126 R14-6 (5/29 user 要望、 金融アナリスト Sonnet verdict 案 A):
+ *   CupPivotCard 内に buy section と並列で sell section を追加するための narration dictionary。
+ *   pivot price を anchor に IBD 公式 sell rules (S1 -8% stop / S2 +20-25% Profit Take / S5 50DMA Break) を state ごとに 表現。
+ *   既存 SellZoneCard (50DMA extension absolute) との役割分担:
+ *     - SellZoneCard: 50DMA 絶対値 (S4 climax / S5 dma_break)
+ *     - CupPivotCard sell section: pivot price 相対値 (S1 / S2)
+ *   §38 / §5 safe な「目安」 idiom + IBD 公式出典明示。
+ */
+export const CUP_SELL_ZONE_DESC_JP = {
+  formation: {
+    label: '売り目安 (IBD)',
+    conclusion: 'pivot price から -8% の水準が損切り目安として紹介されています。',
+    detail: 'O\'Neil 著では base 形成中に pivot 下 -8% を下回った場合、 pattern failure の signal とされる事例があります。',
+  },
+  breakout_pending: {
+    label: '売り目安 (IBD)',
+    conclusion: 'pivot 上抜け後 +20-25% 水準が段階利確の目安として紹介されています。',
+    detail: 'IBD ルールでは breakout 後に +20-25% に到達した場合、 少なくとも一部の利確を検討する目安として知られています (S2 Profit Take rule)。',
+  },
+  breakout_extended: {
+    label: '売り目安 (IBD)',
+    conclusion: '50DMA 下抜けが pattern failure の signal とされる事例があります。',
+    detail: 'extended 局面では -8% stop に加え、 50DMA を高出来高で下抜けた場合に保有継続を再検討する目安として紹介されています (IBD S5 50DMA Break rule)。',
+  },
+};
