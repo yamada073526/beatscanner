@@ -10113,9 +10113,6 @@ async def generate_visualization(
     # ══════════════════════════════════════════════════════════════
     # ★ バックエンドで数値データを直接構築（LLMに任せない）
     # ══════════════════════════════════════════════════════════════
-    # v126 R15-1 debug (一時): _periods_built の状態を response に露出して真因特定
-    parsed["_dbg_periods_built"] = len(_periods_built) if isinstance(_periods_built, list) else -1
-    parsed["_dbg_fe_periods"] = len(analysis_data.get("periods")) if isinstance(analysis_data.get("periods"), list) else -1
     if _periods_built:
         def _mk_beat(metric, i, pts):
             """最新期のみ beat/beatMargin を計算。旧期は null。"""
@@ -10481,8 +10478,17 @@ async def generate_visualization(
     print(f"[RETURN] trends data lengths: {_return_pts} for {ticker} (years={years})")
 
     # キャッシュ保存（次回同一銘柄・years で即返却される）
-    _viz_cache[_viz_cache_key] = (_time.time(), parsed)
-    print(f"[VIZ_CACHE] STORED for {ticker} years={years}")
+    # v126 R15-1 (5/29): trends が空の「失敗 response」 は cache しない。
+    # FMP fetch 失敗 + frontend periods 未送信のレガシー request で trends=[] になった response を 6h cache すると、
+    # frontend periods fallback 実装後も古い空 response が返り続ける問題を防ぐ (user dogfood「決算図解が生成されない」 の温床)。
+    _has_trends = isinstance(parsed.get("trends"), list) and any(
+        isinstance(t, dict) and t.get("data") for t in parsed.get("trends", [])
+    )
+    if _has_trends:
+        _viz_cache[_viz_cache_key] = (_time.time(), parsed)
+        print(f"[VIZ_CACHE] STORED for {ticker} years={years}")
+    else:
+        print(f"[VIZ_CACHE] SKIPPED (empty trends) for {ticker} years={years} — 次回再生成で fallback path")
     print(f"[TIMING] {ticker} post-process done → {_time.time()-_t0:.2f}s total")
 
     return parsed
