@@ -11806,3 +11806,37 @@ button.ds-chip[data-pressed="true"]:hover {
   background: color-mix(in srgb, var(--color-warning) 8%, transparent);
   border-radius: 0 var(--radius-sm, 4px) var(--radius-sm, 4px) 0;
 }
+
+/* v127 R16-3 (R12-1 Phase 1 R2): DistributionDaysCard — IBD 機関売り圧力カウンター。
+   bzc/szc と同 card idiom + 大型 count の横レイアウト。健全=緑/注意=amber/圧力=赤の traffic-light。 */
+.ddc-card { display: grid; gap: 12px; padding: 16px 20px; }
+.ddc-head { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.ddc-title { font-size: 13px; font-weight: 600; letter-spacing: 0.02em; color: var(--text-primary); margin: 0; }
+.ddc-body { display: grid; gap: 10px; }
+.ddc-count-row { display: flex; align-items: center; gap: 18px; }
+.ddc-count { display: flex; align-items: baseline; gap: 4px; flex-shrink: 0; }
+.ddc-count-num { font-size: 34px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.ddc-count-num--healthy { color: var(--color-gain); }
+.ddc-count-num--caution { color: var(--color-warning); }
+.ddc-count-num--pressure { color: var(--color-loss); }
+.ddc-count-unit { font-size: 12px; color: var(--text-muted); }
+.ddc-narration { display: grid; gap: 6px; }
+.ddc-desc { margin: 0; line-height: 1.45; }
+.ddc-desc--conclusion { color: var(--text-primary); font-weight: 600; font-size: 13.5px; }
+.ddc-desc--detail { color: var(--text-muted); font-size: 11px; }
+.ddc-state-empty {
+  display: grid; place-items: center; min-height: 64px; padding: 12px 8px;
+  text-align: center; border: 1px dashed var(--border); border-radius: var(--radius-sm, 6px);
+}
+.ddc-state-sub { font-size: 12px; color: var(--text-muted); margin: 0; }
+.ddc-footer {
+  display: flex; flex-direction: column; gap: 2px; padding-top: 8px;
+  border-top: 1px solid var(--border); font-size: 10px; color: var(--text-muted);
+  line-height: 1.4; margin-top: 4px;
+}
+.ddc-source { font-weight: 500; }
+.ddc-disclaimer { font-style: italic; opacity: 0.8; }
+@media (max-width: 640px) {
+  .ddc-count-row { gap: 14px; }
+  .ddc-count-num { font-size: 28px; }
+}

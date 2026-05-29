@@ -31,6 +31,8 @@ import StockPriceChart from '../../../../components/StockPriceChart.jsx';
 // SPEC 2026-05-28 Sprint 4 + 6 (pillar 2 technical): Chart 直下に hero card 2 つを並列配置
 import AnalystTargetCard from '../../../../components/AnalystTargetCard.jsx';
 import SellZoneCard from '../../../../components/SellZoneCard.jsx';
+// v127 R16-3 (R12-1 Phase 1 R2): IBD Distribution Day カウンター (機関の売り圧力目安)
+import DistributionDaysCard from '../../../../components/DistributionDaysCard.jsx';
 // v126 R8-3 Phase 2: MarketSurge 互換 Cup-Handle pivot narration (state=formation 時のみ表示)
 import CupPivotCard from '../../../../components/CupPivotCard.jsx';
 // v126 R8-3 Phase 3: 直近 breakout = support level narration (last_breakout 取得時のみ表示)
@@ -858,6 +860,9 @@ export default function JudgmentDetail({
                 Phase 4 で AnalystTargetCard + SellZoneCard と共に 3-4 card grid 統合予定。 */}
             <CupPivotCard ticker={selectedTicker} />
             <BuyZoneCard ticker={selectedTicker} />
+            {/* v127 R16-3 (R12-1 Phase 1 R2): Distribution Days = 機関の売り圧力目安 (full-width)。
+                SellZone (価格 vs MA) / Cup-Handle (買い目安) と相補的な volume ベース sell-side シグナル。 */}
+            <DistributionDaysCard ticker={selectedTicker} />
           </SectionFade>
         ) : null;
 

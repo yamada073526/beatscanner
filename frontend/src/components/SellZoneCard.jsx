@@ -107,8 +107,10 @@ export default function SellZoneCard({ ticker }) {
     for (let i = 1; i < recent5.length; i++) {
       const today = recent5[i];
       const yest = recent5[i - 1];
-      const smaToday = smaMap.get(today.time);
-      const smaYest = smaMap.get(yest.time);
+      // v127 R16-3 fix: price は date キー / overlay smaMap は time キー (= date 文字列)。
+      // 旧 today.time は undefined で smaMap.get が常に miss → dmaBreak が常時 false の silent bug だった。
+      const smaToday = smaMap.get(today.date);
+      const smaYest = smaMap.get(yest.date);
       if (!Number.isFinite(smaToday) || !Number.isFinite(smaYest)) continue;
       const crossedBelow = yest.close >= smaYest && today.close < smaToday;
       const heavyVol = Number.isFinite(today.volume) && today.volume >= avgVol50 * 1.4;
@@ -128,14 +130,15 @@ export default function SellZoneCard({ ticker }) {
     if (recent.length < 2) return false;
     // 現在 close が 200DMA 未満 (break 確定) でなければ false (一時的な dip 後の回復を除外)
     const last = recent[recent.length - 1];
-    const smaLast = smaMap.get(last.time);
+    // v127 R16-3 fix: price は date キー / overlay smaMap は time キー (= date 文字列) のため date で引く。
+    const smaLast = smaMap.get(last.date);
     if (!Number.isFinite(smaLast) || !Number.isFinite(last?.close) || last.close >= smaLast) return false;
     // 直近 10 日に下抜け (yest >= sma, today < sma) が発生したか (fresh break のみ、 旧来の下降は対象外)
     for (let i = 1; i < recent.length; i++) {
       const today = recent[i];
       const yest = recent[i - 1];
-      const smaToday = smaMap.get(today.time);
-      const smaYest = smaMap.get(yest.time);
+      const smaToday = smaMap.get(today.date);
+      const smaYest = smaMap.get(yest.date);
       if (!Number.isFinite(smaToday) || !Number.isFinite(smaYest)) continue;
       if (yest.close >= smaYest && today.close < smaToday) return true;
     }
