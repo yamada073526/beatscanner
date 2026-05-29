@@ -10672,6 +10672,84 @@ def _spy_uptrend(spy_history: dict | None) -> bool | None:
     return closes[-1] > latest_sma
 
 
+def _detect_horizontal_support(
+    times: list[str],
+    highs: list[float],
+    lows: list[float],
+    closes: list[float],
+    *,
+    lookback_days: int = 189,   # 約 9 ヶ月 (じっちゃま「去年 8 月から揉んでいる」 に対応)
+    band_pct: float = 0.015,    # ±1.5% 帯を「ほぼ同一水平線」 とみなす
+    min_touches: int = 3,       # 最低 3 回 test で「ボックスレンジ」 と認定
+) -> dict | None:
+    """直近 lookback_days で複数回 test された水平価格帯 (= 強い支持/抵抗線) を検出。
+
+    v127 R16-3 (R12-1 NVDA $200 下値支持線、 金融アナリスト Opus verdict):
+    じっちゃま「ブレイクアウトした直前の上値抵抗線 (NVDA $200) が新支持線になる。
+    去年 8 月からずっと揉んでいる長期ボックスレンジ」 を表現。
+    last_breakout (単発 pivot) より「複数回 test された水平帯」 の方が支持線として強い。
+
+    swing 極値 (前後 ±3 日の局所 high/low) のみ touch カウント (横ばい連続日の膨張防止)。
+    数値物理層 (LLM 不使用)。 narration は別 layer (buyZoneLabels.js 静的 dict)。
+    """
+    n = len(closes)
+    if n < 60:
+        return None
+    today = closes[-1]
+    if today <= 0:
+        return None
+    w_start = max(0, n - lookback_days)
+    k = 3
+    swings: list[tuple[int, float]] = []
+    for i in range(w_start + k, n - k):
+        h = highs[i]
+        l = lows[i]
+        if h > 0 and h == max(highs[i - k:i + k + 1]):
+            swings.append((i, h))
+        if l > 0 and l == min(lows[i - k:i + k + 1]):
+            swings.append((i, l))
+    if len(swings) < min_touches:
+        return None
+    best: dict | None = None
+    for _, price_c in swings:
+        if price_c <= 0:
+            continue
+        lo = price_c * (1 - band_pct)
+        hi = price_c * (1 + band_pct)
+        members = [(i, p) for (i, p) in swings if lo <= p <= hi]
+        tc = len(members)
+        if tc < min_touches:
+            continue
+        center = sum(p for _, p in members) / tc
+        first_idx = min(i for i, _ in members)
+        span_days = max(i for i, _ in members) - first_idx
+        score = tc * (1 + span_days / max(1, lookback_days))
+        if best is None or score > best["score"]:
+            best = {"score": score, "center": center, "tc": tc, "first_idx": first_idx}
+    if best is None:
+        return None
+    center = best["center"]
+    band_low = round(center * (1 - band_pct), 2)
+    band_high = round(center * (1 + band_pct), 2)
+    # role 判定: 現在価格が band より上 → 旧抵抗が支持に転換した可能性 / band 内 → zone 内 / 下 → 上値抵抗
+    if today > band_high:
+        role = "resistance_turned_support"
+    elif today < band_low:
+        role = "overhead_resistance"
+    else:
+        role = "in_zone"
+    return {
+        "level": round(center, 2),
+        "band_low": band_low,
+        "band_high": band_high,
+        "touch_count": best["tc"],
+        "first_touch_date": times[best["first_idx"]],
+        "lookback_weeks": round(min(n, lookback_days) / 5, 1),
+        "role": role,
+        "strength": "strong" if best["tc"] >= 4 else "moderate",
+    }
+
+
 def _detect_cup_handle(
     times: list[str],
     highs: list[float],
@@ -10921,15 +10999,115 @@ def _detect_cup_handle(
             best_result = result
 
     if best_result is None:
-        # v126 R13-5 案 A: breakout_extended fallback
-        # 全 cup-handle candidate が reject されたとき、 ATH 大幅更新中 (handle_exceeds_rim 多発) ならば
-        # extended state として最 minimum 情報で return する。 LLY/GE/META 型銘柄を catch。
+        # ── v127 R16-3 Phase 2: cup_completing (じっちゃま型「カップ完成間近」検出) ──
+        # 古典 cup+handle が不成立 (LLY 型: 深い調整から左 rim へ回復中で handle 未形成) でも、
+        # 「深い U 字 (depth 12-33%) + 現在価格が左 rim (= cup 形成前の過去高値) の 92-100% に回復・未突破」 を
+        # カップ右側形成中の局面として検出。pivot = 左 rim (= これから抜ける目標、 O'Neil canonical: pivot は左右 rim の高い方)。
+        # breakout_extended fallback (= 既に上抜けた extended) より _手前_ で評価し、 未突破銘柄を優先 catch する。
+        cc_result = None
+        # 直近から逆走し「現在価格の直上にある _直近の_ ピーク (= 再 approach 中の左 rim)」 を探す。
+        # v127 R16-3 修正: 旧実装は window 全体の global-min をトラフにしたため、 古い深い底
+        # (LLY: $623 @ 2025-08) の古いカップを誤検出していた。 じっちゃま型は「直近の左 rim
+        # (LLY: $1133 @ 2026-01) に price が今まさに接近中」 なので、 左 rim を逆走探索し最初の
+        # valid cup で確定する (= 最も新しいカップを優先)。
+        if n >= cup_min_days + prior_uptrend_days + 10:
+            # v127 R16-3 精度向上 (dogfood 過剰発火 33%→ 抑制): 52 週高値を基準に「高値圏のベース」 のみ採用。
+            cc_high_252 = max(highs[-252:]) if n >= 252 else max(highs)
+            cc_search_max = n - 1 - cup_min_days   # これより新しいと cup span が短すぎる
+            cc_search_min = prior_uptrend_days     # これより古いと prior uptrend 窓が取れない
+            for cc_lr_idx in range(cc_search_max, cc_search_min - 1, -1):
+                cc_left_rim = highs[cc_lr_idx]
+                if cc_left_rim <= 0:
+                    continue
+                cc_recovery = today_close / cc_left_rim
+                # 左 rim は現在価格の直上 (recovery 95-100% = カップ「完成しそう」 で接近中・未突破) であること。
+                # v127 R16-3 精度向上: 0.92 → 0.95 (rim の 5% 以内まで回復した「完成間近」 のみ。 じっちゃま LLY=99.7%)。
+                if not (0.95 <= cc_recovery < 1.00):
+                    continue
+                # 左 rim は 52 週高値の 90% 以上 = 「高値圏で形成中のベース」 (じっちゃま注目の強い setup)。
+                # 中段の戻り (52 週高値から大きく下のベース) を除外し誤発火を抑制。
+                if cc_high_252 > 0 and cc_left_rim < cc_high_252 * 0.90:
+                    continue
+                # 左 rim は局所ピーク (前後 ±5 日で最高) — mid-cup のノイズ除外
+                _lo_nb = max(0, cc_lr_idx - 5)
+                _hi_nb = min(n, cc_lr_idx + 6)
+                if cc_left_rim < max(highs[_lo_nb:_hi_nb]):
+                    continue
+                # cup span (左 rim → today) が 7-65 週
+                cup_span = n - 1 - cc_lr_idx
+                if cup_span < cup_min_days or cup_span > cup_max_days:
+                    continue
+                # cup_low = 左 rim 以降 today までのトラフ
+                cc_low_seg = lows[cc_lr_idx + 1:n]
+                if not cc_low_seg:
+                    continue
+                cc_low = min(cc_low_seg)
+                cc_low_idx = cc_lr_idx + 1 + cc_low_seg.index(cc_low)
+                if cc_low <= 0:
+                    continue
+                # 右側が形成済み (トラフが直近すぎない = V 字急反発直後を除外)
+                if (n - 1 - cc_low_idx) < u_shape_min_days + 3:
+                    continue
+                cc_depth = (cc_left_rim - cc_low) / cc_left_rim
+                if not (depth_min <= cc_depth <= depth_max):
+                    continue
+                # U 字: cup_low ±5% に u_shape_min_days 以上滞在
+                cc_u_count = sum(1 for c in closes[cc_lr_idx:n] if cc_low * 0.95 <= c <= cc_low * 1.05)
+                if cc_u_count < u_shape_min_days:
+                    continue
+                # prior uptrend: 左 rim 形成前 90 日で +20% 以上
+                cc_prior_start = cc_lr_idx - prior_uptrend_days
+                if not (cc_prior_start >= 0 and closes[cc_prior_start] > 0
+                        and (closes[cc_lr_idx] - closes[cc_prior_start]) / closes[cc_prior_start] >= prior_uptrend_pct):
+                    continue
+                # ── 全条件 PASS: 直近カップの左 rim 確定 ──
+                cc_pivot = round(cc_left_rim + pivot_offset, 2)
+                cc_state = "cup_completing"
+                cc_market = market_context
+                if spy_uptrend is False:
+                    cc_state = "formation_market_weak"
+                    cc_market = "weak"
+                cc_result = {
+                    "detected": True,
+                    "state": cc_state,
+                    "market_context": cc_market,
+                    "cup": {
+                        "left_rim_date": times[cc_lr_idx],
+                        "left_rim_price": round(cc_left_rim, 2),
+                        "cup_low_date": times[cc_low_idx],
+                        "cup_low_price": round(cc_low, 2),
+                        "right_rim_date": times[-1],
+                        "right_rim_price": round(today_close, 2),
+                        "depth_pct": round(cc_depth * 100, 2),
+                        "weeks": round(cup_span / 5, 1),
+                    },
+                    "handle": None,  # handle 未形成 (カップ右側完成間近の段階)
+                    "pivot": {
+                        "price": cc_pivot,
+                        "date": times[-1],
+                        "note": "カップ左側高値 (過去高値) を pivot 目安とする。上抜けで base breakout (O'Neil)。",
+                    },
+                    "breakout": None,
+                    "reason": "cup_completing",
+                    "reject_stats": reject_stats,
+                    "recovery_ratio_pct": round(cc_recovery * 100, 2),
+                }
+                break
+        if cc_result is not None:
+            return cc_result
+
+        # v126 R13-5 案 A + v127 R16-3 Phase 1: breakout_extended fallback (pivot 上抜け済みに限定)。
+        # 全 cup-handle candidate が reject + ATH 大幅更新中 (handle_exceeds_rim 多発) で、
+        # かつ現在価格が ext_pivot を _実際に上抜けている_ (= 真に extended) GE/META 型のみ catch。
+        # LLY 型 (今 < pivot = 未突破) は上の cup_completing で return 済み。
         if (extended_candidate is not None
                 and reject_stats.get("handle_exceeds_rim", 0) >= 5
                 and n >= 252):
             high_252 = max(highs[-252:])
-            # ATH 95% 以上で現在価格更新中の場合のみ extended として認定
-            if today_close >= high_252 * 0.95:
+            # v127 R16-3 Phase 1: today_close > ext_pivot ガード追加。
+            # 旧実装は ATH 95% 以上のみで判定し「ATH 近傍」 と「pivot 上抜け済み (extended)」 を混同、
+            # LLY (今 $1126 < pivot $1149 = 未突破) を extended と誤分類していた (user dogfood 真因)。
+            if today_close >= high_252 * 0.95 and today_close > extended_candidate["ext_pivot"]:
                 pivot_price = round(extended_candidate["ext_pivot"], 2)
                 # extended は cup data なし (handle ATH 更新で classical pattern 外)、 pivot のみ確定
                 extended_result = {
@@ -11295,6 +11473,16 @@ async def get_technical(
                         }
             except Exception as e:
                 print(f"[cup_handle] last_breakout inject failed: {e}")
+
+            # v127 R16-3 (NVDA $200 下値支持線、 金融アナリスト Opus verdict): 長期ボックスレンジ支持線を
+            # box_support に inject。 last_breakout (単発 pivot) と併設し、 frontend は box_support 優先 +
+            # last_breakout fallback。 複数回 test された水平帯 = じっちゃまの「揉み合いボックス上限が支持線」。
+            try:
+                box_sup = _detect_horizontal_support(times, highs, lows, closes)
+                if box_sup:
+                    patterns_result["cup_handle"]["box_support"] = box_sup
+            except Exception as e:
+                print(f"[cup_handle] box_support inject failed: {e}")
 
         # SMA は dma_cross 検出でも使うため事前計算 (slice 用とは別 reference を保持)
         sma_50_full: list[float | None] | None = None

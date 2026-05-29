@@ -61,6 +61,11 @@ export default function BuyZoneCard({ ticker }) {
   const cupHandle = technical?.patterns?.cup_handle || null;
   const lastBreakout = cupHandle?.last_breakout || null;
   const breakoutPrice = Number.isFinite(lastBreakout?.price) ? lastBreakout.price : null;
+  // v127 R16-3 (NVDA $200): box_support (複数回 test された長期ボックス支持線) を優先、 last_breakout は fallback。
+  const boxSupport = (cupHandle?.box_support && Number.isFinite(cupHandle.box_support.level))
+    ? cupHandle.box_support : null;
+  // support 基準値: box_support 優先、 なければ last_breakout pivot
+  const refPrice = boxSupport ? boxSupport.level : breakoutPrice;
 
   // 現在価格 (price-history 最新 close)
   const currentPrice = useMemo(() => {
@@ -69,11 +74,11 @@ export default function BuyZoneCard({ ticker }) {
     return Number.isFinite(last?.close) ? last.close : null;
   }, [priceData]);
 
-  // breakout price からの distance % (現在価格 vs breakout)
+  // support 水準からの distance % (現在価格 vs 支持線)
   const distancePct = useMemo(() => {
-    if (!Number.isFinite(currentPrice) || !Number.isFinite(breakoutPrice) || breakoutPrice <= 0) return null;
-    return ((currentPrice / breakoutPrice) - 1) * 100;
-  }, [currentPrice, breakoutPrice]);
+    if (!Number.isFinite(currentPrice) || !Number.isFinite(refPrice) || refPrice <= 0) return null;
+    return ((currentPrice / refPrice) - 1) * 100;
+  }, [currentPrice, refPrice]);
 
   if (loading && !technical) {
     return (
@@ -88,17 +93,28 @@ export default function BuyZoneCard({ ticker }) {
     );
   }
 
-  // 過去 breakout 履歴なし = 表示しない (Trust Cliff、 ノイズゼロ)
-  if (!breakoutPrice) {
+  // v127 R16-3: box_support も last_breakout も無ければ非表示 (Trust Cliff、 ノイズゼロ)
+  if (!boxSupport && !breakoutPrice) {
     return null;
   }
 
-  const buyZone = classifyBuyZone('breakout_confirmed');
-  const label = BUY_ZONE_LABEL_JP[buyZone];
-  const desc = BUY_ZONE_DESC_JP[buyZone];
+  // v127 R16-3 (NVDA $200): box_support 優先表示、 なければ last_breakout fallback。
+  const useBox = !!boxSupport;
+  const zoneKey = useBox ? 'box_support' : classifyBuyZone('breakout_confirmed');
+  const label = BUY_ZONE_LABEL_JP[zoneKey];
+  const desc = BUY_ZONE_DESC_JP[zoneKey];
+  const cardTitle = useBox ? '長期ボックス支持線' : '直近 breakout support';
 
-  // breakout price を narration の placeholder に inject
-  const detailWithPrice = desc.detail.replace(/breakout price/, `breakout price (${fmtUsd(breakoutPrice)})`);
+  // narration placeholder inject (数値は backend 計算、 JS は文字列置換のみ)
+  let detailText;
+  if (useBox) {
+    const months = Math.max(1, Math.round((boxSupport.lookback_weeks || 0) / 4.3));
+    detailText = desc.detail
+      .replace('{N}', String(months))
+      .replace('{M}', String(boxSupport.touch_count ?? '—'));
+  } else {
+    detailText = desc.detail.replace(/breakout price/, `breakout price (${fmtUsd(breakoutPrice)})`);
+  }
 
   return (
     <section
@@ -108,7 +124,7 @@ export default function BuyZoneCard({ ticker }) {
       style={{ minHeight: 116 }}
     >
       <header className="bzc-head">
-        <h3 className="bzc-title">直近 breakout support</h3>
+        <h3 className="bzc-title">{cardTitle}</h3>
         <Chip variant="display" size="xs" tone="accent">
           {label}
         </Chip>
@@ -117,19 +133,30 @@ export default function BuyZoneCard({ ticker }) {
       <div className="bzc-body">
         <div className="bzc-narration">
           <p className="bzc-desc bzc-desc--conclusion">{desc.conclusion}</p>
-          <p className="bzc-desc bzc-desc--detail">{detailWithPrice}</p>
+          <p className="bzc-desc bzc-desc--detail">{detailText}</p>
         </div>
 
         <div className="bzc-meta">
           <span>
             現在 <span className="bzc-meta-value">{fmtUsd(currentPrice)}</span>
           </span>
-          <span>
-            breakout price <span className="bzc-meta-value">{fmtUsd(breakoutPrice)}</span>
-          </span>
+          {useBox ? (
+            <>
+              <span>
+                支持線 <span className="bzc-meta-value">{fmtUsd(boxSupport.level)}</span>
+              </span>
+              <span>
+                test <span className="bzc-meta-value">{boxSupport.touch_count}回</span>
+              </span>
+            </>
+          ) : (
+            <span>
+              breakout price <span className="bzc-meta-value">{fmtUsd(breakoutPrice)}</span>
+            </span>
+          )}
           {distancePct != null && (
             <span>
-              vs breakout <span className="bzc-meta-value">{fmtPct(distancePct)}</span>
+              {useBox ? 'vs 支持線' : 'vs breakout'} <span className="bzc-meta-value">{fmtPct(distancePct)}</span>
             </span>
           )}
         </div>

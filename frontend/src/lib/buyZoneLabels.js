@@ -27,6 +27,10 @@ export const BUY_ZONE_LABEL_JP = {
   breakout_support:  '直前 breakout support 目安',
   // v126 R13-5 案 A (5/29): ATH 大幅更新中の breakout_extended state 用 label
   breakout_extended: 'ATH付近 pivot 目安',
+  // v127 R16-3 (5/29 user dogfood、 LLY): カップ完成間近 (左 rim へ回復中・未突破) 用 label
+  cup_completing:    'Cup 完成間近 pivot 目安',
+  // v127 R16-3 (5/29 user dogfood、 NVDA $200): 長期ボックスレンジ支持線 (複数回 test された水平帯) 用 label
+  box_support:       '長期ボックス支持線目安',
   unknown:           '判定不可',
 };
 
@@ -44,11 +48,23 @@ export const BUY_ZONE_DESC_JP = {
     conclusion: '直前 breakout price の support 目安です。',
     detail: 'IBD ルールでは前回の base breakout price が次回の support level の目安として知られています。 ただし support 割れは pattern failure の signal にもなり得るため、 出来高 + 終値ベースの確認が必要とされています。',
   },
-  // v126 R13-5 案 A (5/29): ATH 大幅更新中銘柄 (LLY/GE/META 型) 用 narration。
+  // v126 R13-5 案 A (5/29): ATH 大幅更新中銘柄 (GE/META 型: pivot を実際に上抜けて extended) 用 narration。
   // classical Cup-Handle pattern から外れているため「目安」 + IBD extended buy point 概念引用で表現。
   breakout_extended: {
     conclusion: 'ATH付近での高値更新局面です。',
     detail: 'classical Cup-with-Handle pattern からは外れていますが、 IBD ルールでは既存 pivot から大きく上昇 (extended buy point 目安超過) した銘柄として知られています。 新規 entry より段階利確 / 押し目待ち検討の局面とされる事例が紹介されています。',
+  },
+  // v127 R16-3 (5/29 user dogfood、 LLY): 深い調整からカップ左側の高値 (pivot 目安) 付近まで回復・未突破の局面。
+  // 旧実装は LLY を breakout_extended (= 既に上抜けた) と誤分類していたが、 現在価格は pivot 未満 = カップ完成間近が正。
+  cup_completing: {
+    conclusion: 'カップ右側が完成に近づいている局面です。',
+    detail: 'O\'Neil 著では、 深い調整からカップ左側の高値水準 (pivot price 目安) 付近まで回復した段階を base 完成間近として紹介しています。 この pivot 水準の上抜けが新たな base breakout の目安とされ、 出来高 40%+ 増加を伴う確認が条件とされています。 現時点では pivot 未突破の段階です。',
+  },
+  // v127 R16-3 (5/29 user dogfood、 NVDA $200): 長期ボックスレンジ上限 = 支持線目安。
+  // {M}=touch_count / {N}=lookback_months は BuyZoneCard で数値 inject (Python 計算・JS は文字列置換のみ)。
+  box_support: {
+    conclusion: '長期の揉み合い (ボックスレンジ) 上限が support の目安とされる水準です。',
+    detail: 'テクニカル分析では、 複数回 test された水平価格帯 (ボックスレンジ上限) が、 上抜け後に support level の目安として知られています。 この水準は過去 {N} ヶ月で {M} 回 test された価格帯です。 ただし下抜けは trend 転換の signal にもなり得るため、 終値 + 出来高ベースの確認が必要とされています。',
   },
   unknown: {
     conclusion: 'pivot / support の判定を保留しています。',
@@ -70,6 +86,8 @@ export function classifyBuyZone(state) {
   if (state === 'breakout_confirmed') return 'breakout_support';
   // v126 R13-5 案 A (5/29): breakout_extended state を独立 buy zone type として返す
   if (state === 'breakout_extended') return 'breakout_extended';
+  // v127 R16-3 (5/29): cup_completing (カップ完成間近・未突破) を独立 buy zone type として返す
+  if (state === 'cup_completing') return 'cup_completing';
   return 'unknown';
 }
 
@@ -106,5 +124,11 @@ export const CUP_SELL_ZONE_DESC_JP = {
     label: '売り目安 (IBD)',
     conclusion: '50DMA 下抜けが pattern failure の signal とされる事例があります。',
     detail: 'extended 局面では -8% stop に加え、 50DMA を高出来高で下抜けた場合に保有継続を再検討する目安として紹介されています (IBD S5 50DMA Break rule)。',
+  },
+  // v127 R16-3 (5/29): カップ完成間近。base 形成中なので formation と同じ pivot -8% stop idiom。
+  cup_completing: {
+    label: '売り目安 (IBD)',
+    conclusion: 'pivot price から -8% の水準が損切り目安として紹介されています。',
+    detail: 'O\'Neil 著では base 形成中に pivot 下 -8% を下回った場合、 pattern failure の signal とされる事例があります。',
   },
 };

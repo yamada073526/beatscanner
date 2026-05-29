@@ -501,6 +501,9 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
     if (cupHandle.state === 'formation_market_weak') return 'muted';
     if (cupHandle.state === 'breakout_confirmed') return 'gain';
     if (cupHandle.state === 'breakout_pending') return 'warning';
+    // v127 R16-3 (5/29): cup_completing (カップ完成間近・未突破) は accent (cyan) で静かに notable。
+    // breakout_pending の amber pulse は「突破前夜」専用、 まだ距離がある cup_completing とは区別。
+    if (cupHandle.state === 'cup_completing') return 'accent';
     return 'muted';
   }, [hasCup, cupHandle]);
 
@@ -509,6 +512,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
     switch (cupHandle.state) {
       case 'breakout_confirmed': return 'breakout 確定';
       case 'breakout_pending':   return 'breakout 待ち';
+      case 'cup_completing':     return 'カップ完成間近';
       case 'formation_market_weak': return '形成中 ・市場待機';
       case 'formation':
       default:                   return '形成中';
@@ -1000,20 +1004,40 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     isAnimationActive={false}
                   />
                 )}
-                {/* v126 R8-3 Phase 4: 過去 breakout = buy zone support level 目安。
-                    last_breakout.price を中心に ±5% の 2 本 ReferenceLine。
-                    chart-overlay-safety 4 層: conditional render + Number.isFinite + isAnimationActive=false +
-                    ifOverflow="extendDomain" (silent fail 防止)。 */}
-                {Number.isFinite(cupHandle?.last_breakout?.price) && cupHandle.last_breakout.price > 0 && (
+                {/* v127 R16-3 (NVDA 下値支持線、 金融アナリスト Opus verdict): box_support (長期ボックスレンジ支持線)
+                    を cyan ReferenceArea (帯) で表示。 独自プロトコル「直前 breakout 抵抗線 = 新支持線 / 長期ボックス上限」。
+                    chart-overlay-safety 4 層: conditional render + Number.isFinite + isAnimationActive=false + ifOverflow。
+                    color: SMA200 と衝突する purple を避け cyan (= ブランド色、 方向でなく水準なので投資業界色ルール非抵触)。 */}
+                {Number.isFinite(cupHandle?.box_support?.band_low) && Number.isFinite(cupHandle?.box_support?.band_high) && (
+                  <ReferenceArea
+                    y1={cupHandle.box_support.band_low}
+                    y2={cupHandle.box_support.band_high}
+                    fill="var(--color-accent)"
+                    fillOpacity={0.10}
+                    stroke="var(--color-accent)"
+                    strokeOpacity={0.35}
+                    strokeDasharray="4 4"
+                    ifOverflow="extendDomain"
+                    isFront={false}
+                    isAnimationActive={false}
+                    label={makeEdgeLabel(
+                      `支持線目安 $${Number(cupHandle.box_support.level).toFixed(0)}`,
+                      'var(--color-accent)',
+                      { dy: 12, fontSize: 9 },
+                    )}
+                  />
+                )}
+                {/* box_support が無いとき last_breakout (単発 pivot ±5%) を fallback 表示 (cyan に統一)。 */}
+                {!cupHandle?.box_support && Number.isFinite(cupHandle?.last_breakout?.price) && cupHandle.last_breakout.price > 0 && (
                   <ReferenceLine
                     y={cupHandle.last_breakout.price * 1.05}
-                    stroke="#a78bfa"
+                    stroke="var(--color-accent)"
                     strokeWidth={1}
                     strokeDasharray="4 4"
-                    strokeOpacity={0.55}
+                    strokeOpacity={0.5}
                     label={{
                       value: 'buy zone upper',
-                      fill: '#a78bfa',
+                      fill: 'var(--color-accent)',
                       fontSize: 10,
                       position: 'right',
                       offset: 4,
@@ -1023,16 +1047,16 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     isAnimationActive={false}
                   />
                 )}
-                {Number.isFinite(cupHandle?.last_breakout?.price) && cupHandle.last_breakout.price > 0 && (
+                {!cupHandle?.box_support && Number.isFinite(cupHandle?.last_breakout?.price) && cupHandle.last_breakout.price > 0 && (
                   <ReferenceLine
                     y={cupHandle.last_breakout.price * 0.95}
-                    stroke="#a78bfa"
+                    stroke="var(--color-accent)"
                     strokeWidth={1}
                     strokeDasharray="4 4"
-                    strokeOpacity={0.55}
+                    strokeOpacity={0.5}
                     label={{
                       value: 'buy zone lower',
-                      fill: '#a78bfa',
+                      fill: 'var(--color-accent)',
                       fontSize: 10,
                       position: 'right',
                       offset: 4,

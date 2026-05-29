@@ -23,6 +23,9 @@ const CUP_STATE_LABEL = {
   formation_market_weak: '形成中・市場待機',
   breakout_pending: 'ブレイクアウト待機',
   breakout_confirmed: 'ブレイクアウト確定',
+  // v127 R16-3 (5/29): カップ完成間近 (左 rim へ回復中・未突破、 LLY 型)
+  cup_completing: 'カップ完成間近',
+  breakout_extended: 'ATH付近 extended',
 };
 
 const CUP_STATE_TONE = {
@@ -30,6 +33,8 @@ const CUP_STATE_TONE = {
   formation_market_weak: 'muted',
   breakout_pending: 'warning',
   breakout_confirmed: 'gain',
+  cup_completing: 'accent',
+  breakout_extended: 'muted',
 };
 
 function ConditionDots({ conditions = [], showLabels = false }) {

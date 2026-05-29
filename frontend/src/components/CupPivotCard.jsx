@@ -91,11 +91,12 @@ export default function CupPivotCard({ ticker }) {
     );
   }
 
-  // v126 R11-3 + R13-5 (5/29): 'formation' + 'breakout_pending' + 'breakout_extended' 3 state catch。
-  // AAPL/NVDA: formation or breakout_pending、 LLY/GE/META 等 ATH 銘柄: breakout_extended (案 A fallback)。
+  // v126 R11-3 + R13-5 + v127 R16-3 (5/29): 'formation' + 'breakout_pending' + 'breakout_extended'
+  //   + 'cup_completing' (カップ完成間近・未突破、 LLY 型) の 4 state catch。
+  // AAPL/NVDA: formation or breakout_pending、 LLY: cup_completing、 GE/META 等真の ATH 更新: breakout_extended。
   // breakout_confirmed のみ別 BuyZoneCard 担当 (重複回避)。
   const showCupPivot = cupHandle?.detected
-    && ['formation', 'breakout_pending', 'breakout_extended'].includes(state)
+    && ['formation', 'breakout_pending', 'breakout_extended', 'cup_completing'].includes(state)
     && pivotPrice != null
     && !errored;
   if (!showCupPivot) {
