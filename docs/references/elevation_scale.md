@@ -85,6 +85,18 @@ ALLOWED-SHADOW: 0 0 14px rgba(56, 189, 248, 0.26), 0 0 32px rgba(56, 189, 248, 0
 
 # Hero LIVE pulse dot (v86 R3、 static frame motion proxy)
 ALLOWED-SHADOW: 0 0 0 4px rgba(56, 189, 248, 0.18), 0 0 12px rgba(56, 189, 248, 0.36)
+
+# v126 R14-1 図解 banner idle cyan halo (旧 cta-btn 0 0 10px halo 継承、 「click 可能」 signal)
+ALLOWED-SHADOW: 0 0 10px rgba(34, 211, 238, 0.15)
+
+# v126 R14-1 図解 banner icon-wrap hover gold spot glow (Aman 真鍮 emit、 質的変化 Δ)
+ALLOWED-SHADOW: 0 0 14px rgba(212, 175, 55, 0.40)
+
+# v126 R14-4 「breakout 待ち」 chip pulse glow (idle / animation 0% & 100%)
+ALLOWED-SHADOW: 0 0 8px rgba(245, 158, 11, 0.25)
+
+# v126 R14-4 「breakout 待ち」 chip pulse glow (animation 50% peak)
+ALLOWED-SHADOW: 0 0 16px rgba(245, 158, 11, 0.45)
 ```
 
 ---

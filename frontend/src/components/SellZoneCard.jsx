@@ -16,7 +16,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { fetchPriceHistory, fetchTechnical } from '../api.js';
-import { SELL_ZONE_LABEL_JP, SELL_ZONE_DESC_JP, classifyZone } from '../lib/sellZoneLabels.js';
+import { SELL_ZONE_LABEL_JP, SELL_ZONE_DESC_JP, SELL_ZONE_FOOTER, classifyZone } from '../lib/sellZoneLabels.js';
 // v125 P8-5 R5 hotfix (3 体合議統合推奨案): zone value を Chip primitive 化、 header に配置で
 // AnalystTargetCard と H 方向 visual rhythm 統一 (frontend-architect 案 A + ui-designer 案 B 集約)。
 import Chip from './ui/Chip.jsx';
@@ -200,6 +200,13 @@ export default function SellZoneCard({ ticker }) {
           </p>
         )}
       </div>
+
+      {/* v126 R14-6 (sub-agent verdict、 景表法 §5 対称性): CupPivotCard と同じ footer pattern。
+          「50DMA break = 売り確定」 誤認を防ぐ disclaimer + IBD 出典強制表示。 */}
+      <footer className="szc-footer">
+        <span className="szc-source">{SELL_ZONE_FOOTER.source}</span>
+        <span className="szc-disclaimer">{SELL_ZONE_FOOTER.disclaimer}</span>
+      </footer>
     </section>
   );
 }

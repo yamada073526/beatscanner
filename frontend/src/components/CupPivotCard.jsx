@@ -118,7 +118,16 @@ export default function CupPivotCard({ ticker }) {
     >
       <header className="cpc-head">
         <h3 className="cpc-title">Cup-Handle pivot</h3>
-        <Chip variant="display" size="xs" tone="accent">
+        {/* v126 R14-4 (user dogfood feedback): breakout_pending chip 自己主張強化。
+            - data-cup-state attribute で既存 pulse animation 経路 (index.css §6561) を発火
+            - state='breakout_pending' のみ size up xs→sm + tone warning + glow halo
+            - 他 state (formation / breakout_extended) は xs / accent のまま (静寂 hierarchy 維持) */}
+        <Chip
+          variant="display"
+          size={state === 'breakout_pending' ? 'sm' : 'xs'}
+          tone={state === 'breakout_pending' ? 'warning' : 'accent'}
+          data-cup-state={state}
+        >
           {label}
         </Chip>
       </header>
@@ -137,8 +146,11 @@ export default function CupPivotCard({ ticker }) {
           {state === 'breakout_extended' ? (
             <>
               {Number.isFinite(cupHandle.ath_252w_high) && (
-                <span>
-                  ATH (252w) <span className="cpc-meta-value">{fmtUsd(cupHandle.ath_252w_high)}</span>
+                <span title="ATH = All-Time High (1 年最高値): 過去 252 営業日 (= 約 1 年) で最も高い終値">
+                  ATH <span className="cpc-meta-value">{fmtUsd(cupHandle.ath_252w_high)}</span>
+                  {/* v126 R14-5 (user dogfood「ATH 用語 教育文」): retail 投資家向け補足文。
+                      muted small text で「直近 1 年最高値」 を併記、 hover で title tooltip も表示。 */}
+                  <span className="cpc-meta-note">直近 1 年最高値</span>
                 </span>
               )}
               {Number.isFinite(cupHandle.extended_overshoot_pct) && (

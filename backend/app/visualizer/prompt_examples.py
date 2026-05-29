@@ -41,7 +41,7 @@ FEW_SHOT_EXAMPLES: list[dict] = [
                 {"name": "売上成長", "pass": True, "value": "+5.2% YoY", "detail": "コンセンサス整合"},
                 {"name": "EPS 成長", "pass": True, "value": "+9.1% YoY", "detail": "営業マージン改善寄与"},
                 {"name": "CF マージン", "pass": True, "value": "28.9%", "detail": "業界平均超過"},
-                {"name": "CFPS > EPS", "pass": True, "value": "$6.85 vs $5.92", "detail": "現金創出力健全"},
+                {"name": "CFPS > EPS", "pass": True, "value": "$6.85 vs $5.92", "detail": "キャッシュフロー創出力健全"},
                 {"name": "営業利益増", "pass": True, "value": "+10.4%", "detail": "サービス寄与"},
             ],
             "businessFlowSteps": [
@@ -96,7 +96,7 @@ FEW_SHOT_EXAMPLES: list[dict] = [
                 {"name": "売上成長", "pass": True, "value": "+122% YoY", "detail": "Data Center 急拡大"},
                 {"name": "EPS 成長", "pass": True, "value": "+168% YoY", "detail": "マージン拡大寄与"},
                 {"name": "CF マージン", "pass": True, "value": "55.2%", "detail": "業界 1 位水準"},
-                {"name": "CFPS > EPS", "pass": True, "value": "$3.42 vs $2.70", "detail": "現金創出力強"},
+                {"name": "CFPS > EPS", "pass": True, "value": "$3.42 vs $2.70", "detail": "キャッシュフロー創出力強"},
                 {"name": "営業利益増", "pass": True, "value": "+174%", "detail": "高付加価値化"},
             ],
             "businessFlowSteps": [
@@ -205,7 +205,7 @@ FEW_SHOT_EXAMPLES: list[dict] = [
                 {"name": "売上成長", "pass": True, "value": "+15.4% YoY", "detail": "クラウド寄与"},
                 {"name": "EPS 成長", "pass": True, "value": "+12.1% YoY", "detail": "マージン拡大"},
                 {"name": "CF マージン", "pass": True, "value": "37.8%", "detail": "高い水準"},
-                {"name": "CFPS > EPS", "pass": True, "value": "$11.50 vs $10.85", "detail": "現金創出力強"},
+                {"name": "CFPS > EPS", "pass": True, "value": "$11.50 vs $10.85", "detail": "キャッシュフロー創出力強"},
                 {"name": "営業利益増", "pass": True, "value": "+18.9%", "detail": "Azure 高マージン"},
             ],
             "businessFlowSteps": [
@@ -259,7 +259,7 @@ FEW_SHOT_EXAMPLES: list[dict] = [
             "conditions": [
                 {"name": "売上成長", "pass": True, "value": "+20.6% YoY", "detail": "広告単価上昇"},
                 {"name": "EPS 成長", "pass": True, "value": "+37.4% YoY", "detail": "効率化寄与"},
-                {"name": "CF マージン", "pass": True, "value": "38.5%", "detail": "強い現金創出"},
+                {"name": "CF マージン", "pass": True, "value": "38.5%", "detail": "強いキャッシュフロー創出"},
                 {"name": "CFPS > EPS", "pass": True, "value": "$9.85 vs $6.20", "detail": "減価償却寄与"},
                 {"name": "営業利益増", "pass": True, "value": "+26.0%", "detail": "コスト管理"},
             ],

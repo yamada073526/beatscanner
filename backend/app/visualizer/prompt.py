@@ -47,6 +47,7 @@ RULES:
 - risks: 定量インパクト必須（数値は metrics_trend / beat_miss_detail から引用、 推測値禁止）
 - 全フィールド日本語（ticker/companyName/consensusSource除く）
 - dividend.yield が不明なら null
+- 用語統一: 「現金生成 / 現金創出」 等の表記は使わず、 **「キャッシュフロー」** を使うこと (例: 「現金生成が減速」 ❌ → 「キャッシュフローが減速」 ⭕)
 - DO NOT output: trends, valuation, operatingMargins, fcfTrend, capexTrend, segmentSummary"""
 
 

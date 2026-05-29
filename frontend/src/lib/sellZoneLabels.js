@@ -83,3 +83,13 @@ export function classifyZone(extensionPct, extra = {}) {
   if (extensionPct >= 15) return 'extended';
   return 'normal';
 }
+
+/**
+ * v126 R14-6 (sub-agent verdict、 景表法 §5 対称性): SellZoneCard 強制 footer 文.
+ * buyZoneLabels.js BUY_ZONE_FOOTER と対称、 「テクニカル分析は将来の値動きを保証しません」 を
+ * sell side でも必ず表示することで「50DMA break = 売り確定」 等の誤認を防ぐ。
+ */
+export const SELL_ZONE_FOOTER = {
+  source: '出典: IBD / William O\'Neil 著 "How to Make Money in Stocks"',
+  disclaimer: '※ テクニカル分析は将来の値動きを保証するものではありません',
+};

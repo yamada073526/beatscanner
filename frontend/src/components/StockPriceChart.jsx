@@ -442,6 +442,15 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
   // v86 R2 Cup polish: Pivot ラベル + 現在価格との残距離 (金融アナリスト 2-B)
   // user dogfood 「右端見切れ」 fix: 「・ あと」 削減で string を短縮、 ASCII のみで描画幅を抑制
   // 上昇余地 (need-to-rise): "Pivot $XXX.XX (+X.X%)"  (現在価格が pivot 未満、 形成中の典型)
+  // v126 R14-7 (user dogfood「Chart に現在株価表示」): 直近終値を chart header 右端に大型表示。
+  // 既存 ReferenceLine 群 (extended15/25, profitTake20, stop8, consensus) と重複しないよう header overlay。
+  const currentPrice = useMemo(() => {
+    if (!Array.isArray(data?.prices) || data.prices.length === 0) return null;
+    const last = data.prices[data.prices.length - 1];
+    const c = Number(last?.close);
+    return Number.isFinite(c) ? c : null;
+  }, [data]);
+
   // 既に超過: "Pivot $XXX.XX (達)"  (pivot 突破済、 breakout 検知中 or 直後)
   const pivotLabelText = useMemo(() => {
     if (!hasCup) return '';
@@ -591,6 +600,14 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
       <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-wrap">
           <h3 className="section-heading" style={{ marginBottom: 0 }}>株価チャート</h3>
+          {/* v126 R14-7 (user dogfood「Chart に現在株価表示」): chart title 隣に直近終値を大型表示。
+              既存 axis label のみだと「今いくらか」 即視認難、 retail 「2 秒判定」 (5 原則 #1) 整合。 */}
+          {Number.isFinite(currentPrice) && (
+            <span className="chart-current-price" title="直近終値">
+              現在
+              <strong>${currentPrice.toFixed(2)}</strong>
+            </span>
+          )}
           {/* Cup-Handle chip (Session 2 着地): Pro tier 限定機能 (Session 3 で blur 対象)。
               free user にも chip 自体は表示 → 「価値を見せて Pro へ」 (マーケター verdict)。
               click で Coming Soon modal (Stripe 連動は Session 4 で実装予定)。 */}
@@ -1067,25 +1084,34 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     isAnimationActive={false}
                   />
                 )}
-                {/* v126 R13-4 R3 (sub-agent verdict、 5/29): +20% Profit Take ライン (IBD/O'Neil S2)。
-                    base low (252d 最安値) からの +20% を gold (warning tone) dashed で表示。 */}
+                {/* v126 R13-4 R3 + v126 R14-3 visibility fix (5/29 sub-agent verdict): +20% Profit Take ライン (IBD/O'Neil S2)。
+                    base low (252d 最安値) からの +20% を gold (warning tone) dashed で表示。
+                    R14-3 user dogfood 「見えない」 fix:
+                    - strokeOpacity 0.55 → 0.85 (薄すぎ root cause)
+                    - strokeWidth 1.25 → 2 (細線 → 明確 dashed)
+                    - strokeDasharray "2 4" → "5 5" (連続性 visible)
+                    - fontSize 9 → 11 + fontWeight 600 (label 視認)
+                    - position 'right' → 'insideTopRight' (chart 内側、 確実 visible)
+                    - isFront false → true (chart 主要 series の前面描画)
+                */}
                 {pillar2Markers.profitTake20 != null && (
                   <ReferenceLine
                     key="pillar2_profit20"
                     y={pillar2Markers.profitTake20}
                     stroke="var(--color-gold, #d4af37)"
-                    strokeWidth={1.25}
-                    strokeDasharray="2 4"
-                    strokeOpacity={0.55}
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    strokeOpacity={0.85}
                     label={{
-                      value: 'profit take +20% (base比)',
+                      value: '+20% profit take',
                       fill: 'var(--color-gold, #d4af37)',
-                      fontSize: 9,
-                      position: 'right',
-                      offset: 4,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      position: 'insideTopRight',
+                      offset: 6,
                     }}
                     ifOverflow="extendDomain"
-                    isFront={false}
+                    isFront={true}
                     isAnimationActive={false}
                   />
                 )}
