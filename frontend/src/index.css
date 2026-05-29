@@ -11414,6 +11414,105 @@ button.ds-chip[data-pressed="true"]:hover {
 .diagram-banner-loading__text {
   letter-spacing: 0.02em;
 }
+/* v127 R16 (user dogfood): 図解生成中 (~10s) の skeleton。実 DiagramCard レイアウトを模した
+   block 群 + 既存 .skel-base/skelShimmer の shimmer。各 block の animationDelay (JSX inline) で
+   光が順次流れ、 体感待機時間を短縮。 */
+.diagram-skel {
+  display: grid;
+  gap: var(--space-3, 12px);
+  padding: var(--space-4, 16px) var(--space-4, 16px) var(--space-6, 24px);
+}
+.diagram-skel__caption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  margin-bottom: 2px;
+}
+.diagram-skel__spinner {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--color-accent);
+  animation: diagram-banner-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+.diagram-skel__headline { height: 26px; width: 58%; }
+.diagram-skel__cond-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.diagram-skel__cond { height: 62px; border-radius: var(--radius-md, 12px); }
+.diagram-skel__main { height: 108px; border-radius: var(--radius-md, 12px); }
+.diagram-skel__two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.diagram-skel__half { height: 76px; border-radius: var(--radius-md, 12px); }
+.diagram-skel__sm { height: 54px; border-radius: var(--radius-md, 12px); }
+@media (prefers-reduced-motion: reduce) {
+  .diagram-skel .skel-base { animation-duration: 0.01ms; }
+  .diagram-skel__spinner { animation: none; }
+}
+/* v127 R16 (user dogfood「開発中感、 今風に」): Workspace 初期 boot loader。
+   Aman ロビー入場の第一印象 — branded wordmark が静かに呼吸 + cyan 3-dot が順次脈動。 */
+.ws-boot-loader {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5, 20px);
+  background: var(--bg-primary);
+}
+.ws-boot-loader__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.ws-boot-loader__wordmark {
+  font-size: clamp(22px, 4vw, 30px);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+  animation: ws-boot-breathe 2.4s ease-in-out infinite;
+}
+.ws-boot-loader__tagline {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  color: var(--text-muted);
+}
+.ws-boot-loader__dots {
+  display: flex;
+  gap: 6px;
+}
+.ws-boot-loader__dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: ws-boot-dot 1.2s ease-in-out infinite;
+}
+.ws-boot-loader__dots span:nth-child(2) { animation-delay: 0.18s; }
+.ws-boot-loader__dots span:nth-child(3) { animation-delay: 0.36s; }
+@keyframes ws-boot-breathe {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+@keyframes ws-boot-dot {
+  0%, 100% { opacity: 0.25; transform: scale(0.8); }
+  50%      { opacity: 0.95; transform: scale(1.15); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ws-boot-loader__wordmark,
+  .ws-boot-loader__dots span { animation: none; }
+}
 .diagram-banner-error {
   padding: var(--space-4, 16px);
   color: var(--text-secondary);

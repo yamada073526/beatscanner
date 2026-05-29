@@ -43,48 +43,64 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
     }
   }, [ticker, vizTicker]);
 
-  // v127 R16: enrichedData 構築 + fetch を共通化 (初回 fetch + 年切替 re-fetch で再利用)。
-  // re-fetch は backend cache キー ticker::years で分離されるため汚染なし。
+  // v127 R16: enrichedData 構築を共通化 (初回 fetch + 年切替 re-fetch で再利用)。
+  const buildEnriched = useCallback(() => ({
+    ticker,
+    company_name: analysis?.companyName,
+    fiscal_period: analysis?.latestPeriod,
+    verdict: analysis?.overallPass ? 'PASS' : 'FAIL',
+    passed_conditions: analysis?.passedCount,
+    conditions_detail: JSON.stringify(analysis?.conditions ?? [], null, 2),
+    metrics_trend: '',
+    // v126 R15-1: 構造化 periods を送信、 backend FMP fetch 失敗時の trends fallback 用 (DiagramCard 決算図解 生成)
+    periods: Array.isArray(analysis?.periods) ? analysis.periods : [],
+    guidance: guidance ? JSON.stringify(guidance, null, 2) : 'データなし',
+    conference_call_points: 'データなし',
+    ai_summary: '',
+    beat_miss: {
+      eps: {
+        actual: guidance?.eps?.actual ?? null,
+        estimated: guidance?.eps?.estimated ?? null,
+        verdict: guidance?.eps?.verdict ?? null,
+      },
+      revenue: {
+        actual: guidance?.revenue?.actual ?? null,
+        estimated: guidance?.revenue?.estimated ?? null,
+        verdict: guidance?.revenue?.verdict ?? null,
+      },
+    },
+  }), [ticker, analysis, guidance]);
+
+  // 初回 fetch (banner 展開時): vizState を loading→done で遷移 (DiagramCard を新規 mount)。
   const fetchViz = useCallback((years) => {
     if (!ticker || !analysis) return;
     setVizState('loading');
-    const enrichedData = {
-      ticker,
-      company_name: analysis.companyName,
-      fiscal_period: analysis.latestPeriod,
-      verdict: analysis.overallPass ? 'PASS' : 'FAIL',
-      passed_conditions: analysis.passedCount,
-      conditions_detail: JSON.stringify(analysis.conditions ?? [], null, 2),
-      metrics_trend: '',
-      // v126 R15-1: 構造化 periods を送信、 backend FMP fetch 失敗時の trends fallback 用 (DiagramCard 決算図解 生成)
-      periods: Array.isArray(analysis.periods) ? analysis.periods : [],
-      guidance: guidance ? JSON.stringify(guidance, null, 2) : 'データなし',
-      conference_call_points: 'データなし',
-      ai_summary: '',
-      beat_miss: {
-        eps: {
-          actual: guidance?.eps?.actual ?? null,
-          estimated: guidance?.eps?.estimated ?? null,
-          verdict: guidance?.eps?.verdict ?? null,
-        },
-        revenue: {
-          actual: guidance?.revenue?.actual ?? null,
-          estimated: guidance?.revenue?.estimated ?? null,
-          verdict: guidance?.revenue?.verdict ?? null,
-        },
-      },
-    };
-    generateVisualization(ticker, enrichedData, years)
+    generateVisualization(ticker, buildEnriched(), years)
+      .then((json) => { setVizData(json); setVizState('done'); setVizError(null); })
+      .catch((err) => { setVizState('error'); setVizError(err?.message || String(err)); });
+  }, [ticker, analysis, buildEnriched]);
+
+  // v127 R16 (user dogfood): 年切替は「数字で見る成長ストーリー (trends) だけ差し替え」。
+  // vizState を loading に落とさず DiagramCard を mount 維持したまま background re-fetch し、
+  // trends 系 field のみ merge する。これで (1) 図解が一旦閉じて scroll が飛ぶ問題を解消、
+  // (2) narration は再生成せず「数値部分だけ変わる」体験になる。失敗時は既存図解を維持。
+  const refetchTrendsForYear = useCallback((years) => {
+    if (!ticker || !analysis) return;
+    setSelectedYears(years); // 年トグルの選択 highlight は即時更新 (click feedback)
+    generateVisualization(ticker, buildEnriched(), years)
       .then((json) => {
-        setVizData(json);
-        setVizState('done');
-        setVizError(null);
+        setVizData((prev) => (prev ? {
+          ...prev,
+          trends: json.trends,
+          fcfTrend: json.fcfTrend,
+          capexTrend: json.capexTrend,
+          operatingMargins: json.operatingMargins,
+          fcfDataAvailable: json.fcfDataAvailable,
+          fcfYield: json.fcfYield,
+        } : json));
       })
-      .catch((err) => {
-        setVizState('error');
-        setVizError(err?.message || String(err));
-      });
-  }, [ticker, analysis, guidance]);
+      .catch(() => { /* 年切替の失敗は無視 (既存図解を維持) */ });
+  }, [ticker, analysis, buildEnriched]);
 
   // expanded + 未 fetch + analysis 揃ったら fetch (現在の selectedYears で)
   useEffect(() => {
@@ -127,10 +143,30 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
       >
         {expanded && (
           <>
+            {/* v127 R16 (user dogfood「視覚的な動きがなく体感が長い」): spinner+text →
+                図解レイアウトを模した skeleton + shimmer (既存 .skel-base / skelShimmer 再利用)。
+                stagger animationDelay で光が順次流れ、 ~10s 生成中も視覚的な変化が続く。 */}
             {vizState === 'loading' && (
-              <div className="diagram-banner-loading">
-                <span className="diagram-banner-loading__spinner" aria-hidden="true" />
-                <span className="diagram-banner-loading__text">図解を生成中…</span>
+              <div className="diagram-skel" aria-busy="true" aria-label="図解を生成中">
+                <div className="diagram-skel__caption">
+                  <span className="diagram-skel__spinner" aria-hidden="true" />
+                  図解を生成中…
+                </div>
+                <div className="skel-base diagram-skel__headline" />
+                <div className="diagram-skel__cond-grid">
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <div key={i} className="skel-base diagram-skel__cond" style={{ animationDelay: `${i * 0.12}s` }} />
+                  ))}
+                </div>
+                <div className="skel-base diagram-skel__main" style={{ animationDelay: '0.1s' }} />
+                <div className="diagram-skel__two-col">
+                  <div className="skel-base diagram-skel__half" />
+                  <div className="skel-base diagram-skel__half" style={{ animationDelay: '0.18s' }} />
+                </div>
+                <div className="diagram-skel__two-col">
+                  <div className="skel-base diagram-skel__sm" />
+                  <div className="skel-base diagram-skel__sm" style={{ animationDelay: '0.15s' }} />
+                </div>
               </div>
             )}
             {vizState === 'error' && (
@@ -152,7 +188,7 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
                   data={vizData}
                   ticker={ticker}
                   selectedYears={selectedYears}
-                  onYearsChange={(y) => { setSelectedYears(y); fetchViz(y); }}
+                  onYearsChange={refetchTrendsForYear}
                 />
               </Suspense>
             )}

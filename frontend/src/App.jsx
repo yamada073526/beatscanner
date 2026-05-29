@@ -1036,8 +1036,16 @@ export default function App() {
       <>
         <Suspense
           fallback={
-            <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-              Workspace を読み込み中...
+            /* v127 R16 (user dogfood「開発中感がある、 今風に」): branded wordmark + pulse + 3-dot loader。
+               Aman ロビー入場の第一印象。既存 keyframe (pulse-subtle) 再利用 + ws-boot-dot 1 個追加。 */
+            <div className="ws-boot-loader" aria-label="Workspace を読み込み中" aria-busy="true">
+              <div className="ws-boot-loader__brand">
+                <span className="ws-boot-loader__wordmark">BeatScanner</span>
+                <span className="ws-boot-loader__tagline">LOADING WORKSPACE</span>
+              </div>
+              <div className="ws-boot-loader__dots" aria-hidden="true">
+                <span /><span /><span />
+              </div>
             </div>
           }
         >
