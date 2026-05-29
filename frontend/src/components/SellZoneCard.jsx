@@ -192,6 +192,29 @@ export default function SellZoneCard({ ticker }) {
           </span>
         </div>
 
+        {/* v127 (5/29 user dogfood): チャート右端の extended / climax ラインの意味を併記。
+            user「extended +15% の意味が記載ない」+ 「pivot 上抜け後 +20-25%」(S2 Profit Take、 別基準) との混同防止。
+            投資業界色ルール: amber=過熱警告 / red=climax 危険。 */}
+        <div
+          className="szc-legend"
+          style={{
+            marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '3px',
+            fontSize: '10.5px', color: 'var(--text-muted)', lineHeight: 1.5,
+          }}
+        >
+          <span>
+            <span style={{ color: 'var(--color-warning)', fontWeight: 700 }}>―</span>{' '}
+            50DMA +15%（extended、 過熱注意）
+          </span>
+          <span>
+            <span style={{ color: 'var(--color-loss)', fontWeight: 700 }}>―</span>{' '}
+            50DMA +25%（climax top、 反落警戒）
+          </span>
+          <span style={{ opacity: 0.85 }}>
+            ※「pivot 上抜け後 +20-25%」（S2 Profit Take）とは基準点が異なります
+          </span>
+        </div>
+
         {/* 3 体合議 verdict M6: partial failure を visible に */}
         {(priceFailed || techFailed) && (
           <p className="szc-warning">

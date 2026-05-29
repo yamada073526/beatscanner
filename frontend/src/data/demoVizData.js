@@ -109,6 +109,12 @@ export const DEMO_VIZ_DATA = {
   ],
   investorQuestion:
     'AI CapEx $80B が今後 3 年でどの程度の収益に転換するか — Azure AI ARR の伸びと営業 CF への寄与で見極めたい。',
+  // v127: 角度タグ付き 2-3 問。各問いは非断定 (§38) / 最上級回避 (§5)。
+  investorQuestions: [
+    { angle: '資本効率', question: 'AI CapEx $80B が今後どの程度の収益に転換するか。' },
+    { angle: '成長源', question: 'Azure AI ARR の伸びが営業キャッシュフローに寄与するか。' },
+    { angle: '競争環境', question: 'Workspace 等のシェア奪取の動きをどう見るか。' },
+  ],
 
   _phase: 'complete',
   _isDemo: true,

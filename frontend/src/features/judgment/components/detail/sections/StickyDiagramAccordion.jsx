@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { BookOpen, ArrowRight, Sparkles, X } from 'lucide-react';
 import { generateVisualization } from '../../../../../api.js';
 
@@ -28,6 +28,9 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
   const [vizState, setVizState] = useState('idle'); // 'idle' | 'loading' | 'done' | 'error'
   const [vizError, setVizError] = useState(null);
   const [vizTicker, setVizTicker] = useState(null);
+  // v127 R16 (user dogfood): 表示期間 1Y/3Y/5Y toggle と連動。旧版は selectedYears=3 ハードコード +
+  // onYearsChange 未配線で toggle が no-op だった (trends が年切替で変わらない bug)。
+  const [selectedYears, setSelectedYears] = useState(3);
 
   // ticker 変更時に vizData reset (別銘柄では再 fetch 必要)
   useEffect(() => {
@@ -36,12 +39,14 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
       setVizState('idle');
       setVizError(null);
       setVizTicker(ticker);
+      setSelectedYears(3); // 別銘柄では default 3 に戻す
     }
   }, [ticker, vizTicker]);
 
-  // expanded + 未 fetch + analysis 揃ったら fetch
-  useEffect(() => {
-    if (!expanded || !ticker || !analysis || vizState !== 'idle') return;
+  // v127 R16: enrichedData 構築 + fetch を共通化 (初回 fetch + 年切替 re-fetch で再利用)。
+  // re-fetch は backend cache キー ticker::years で分離されるため汚染なし。
+  const fetchViz = useCallback((years) => {
+    if (!ticker || !analysis) return;
     setVizState('loading');
     const enrichedData = {
       ticker,
@@ -69,7 +74,7 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
         },
       },
     };
-    generateVisualization(ticker, enrichedData, 3)
+    generateVisualization(ticker, enrichedData, years)
       .then((json) => {
         setVizData(json);
         setVizState('done');
@@ -79,7 +84,13 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
         setVizState('error');
         setVizError(err?.message || String(err));
       });
-  }, [expanded, ticker, analysis, guidance, vizState]);
+  }, [ticker, analysis, guidance]);
+
+  // expanded + 未 fetch + analysis 揃ったら fetch (現在の selectedYears で)
+  useEffect(() => {
+    if (!expanded || vizState !== 'idle') return;
+    fetchViz(selectedYears);
+  }, [expanded, vizState, selectedYears, fetchViz]);
 
   const handleToggle = () => {
     setExpanded((v) => !v);
@@ -137,7 +148,12 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
             )}
             {vizState === 'done' && vizData && (
               <Suspense fallback={<div className="diagram-banner-loading"><span className="diagram-banner-loading__text">読み込み中…</span></div>}>
-                <DiagramCard data={vizData} ticker={ticker} selectedYears={3} />
+                <DiagramCard
+                  data={vizData}
+                  ticker={ticker}
+                  selectedYears={selectedYears}
+                  onYearsChange={(y) => { setSelectedYears(y); fetchViz(y); }}
+                />
               </Suspense>
             )}
           </>

@@ -7,7 +7,9 @@
  * (multi-review 6 体合議 verdict、 局所介入 +5 行で 2,027 → 2,033 行)。
  */
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { FileBarChart2, Banknote } from 'lucide-react';
 import DiagramCitation from './DiagramCitation.jsx';
+import Chip from './ui/Chip.jsx';
 import { sanitizeDiagramData, findBlocklistHits } from '../lib/blocklist.js';
 // handover v82 Phase 5.5: ConditionRow click → DiagramCard pulse 連携 (multi-review 6 体合議 verdict)。
 import { useWorkspaceStore } from '../state/workspaceStore.js';
@@ -914,6 +916,21 @@ export default function DiagramCard({
   const bullCase  = data.bullCase          || [];
   const bearCase  = data.bearCase          || [];
   const valuation = data.valuation         || null;
+  // v127: 投資家への問いを「角度タグ付き 2-3 問」配列で render。
+  // 新 schema = investorQuestions: [{angle, question}]。stale cache / 旧 response 互換のため、
+  // 配列が無く単一文字列 investorQuestion だけある場合は 1 件配列に正規化する。
+  const investorQuestions = (() => {
+    const arr = data.investorQuestions;
+    if (Array.isArray(arr) && arr.length > 0) {
+      return arr
+        .map((q) => (typeof q === 'string' ? { angle: '', question: q } : q))
+        .filter((q) => q && typeof q.question === 'string' && q.question.trim());
+    }
+    if (typeof data.investorQuestion === 'string' && data.investorQuestion.trim()) {
+      return [{ angle: '', question: data.investorQuestion }];
+    }
+    return [];
+  })();
   const dividend  = data.dividend          || null;
 
   // handover v82 Phase 5.5: pulsingConditionIndex に応じて該当 step に pulse 適用。
@@ -1894,7 +1911,8 @@ export default function DiagramCard({
               display: 'flex', alignItems: 'center', gap: '6px',
             }}
           >
-            <span style={{ fontSize: '13px' }}>📈</span>
+            {/* v127: 汎用 emoji 📈 → lucide FileBarChart2 (icon brand consistency: Aman 級品格、 emoji 禁止) */}
+            <FileBarChart2 size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} aria-hidden="true" />
             {/* v126 R13-1: 旧「決算データを集約しています」 (進行中表現) が user に「ロード中で止まっている」 と誤読される dogfood 5/29
                 → 「決算データなし」 (empty state 明示) に変更。 backend response trends 配列が空 = 必要な決算データ未提供。 */}
             <span>決算データなし</span>
@@ -2031,7 +2049,8 @@ export default function DiagramCard({
               display: 'flex', alignItems: 'center', gap: '6px',
             }}
           >
-            <span style={{ fontSize: '13px' }}>💵</span>
+            {/* v127: 汎用 emoji 💵 → lucide Banknote (icon brand consistency: Aman 級品格、 emoji 禁止) */}
+            <Banknote size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} aria-hidden="true" />
             {/* v126 R13-1: 旧「キャッシュフロー詳細を整理しています」 (進行中表現) → empty state 明示「FCF/CapEx データなし」 */}
             <span>FCF/CapEx データなし</span>
           </div>
@@ -2159,18 +2178,30 @@ export default function DiagramCard({
               ))}
             </div>
           </div>
-        ) : (data.investorQuestion || bullCase.length > 0 || bearCase.length > 0) ? (
+        ) : (investorQuestions.length > 0 || bullCase.length > 0 || bearCase.length > 0) ? (
           <div className="narrative-appear" data-testid="diagram-section-highlights">
             <VizSectionLabel text="投資家への問い" />
-            {data.investorQuestion && (
+            {investorQuestions.length > 0 && (
               <div style={{
-                borderRadius: '8px', background: 'var(--bg-subtle)',
-                border: '1px solid var(--border)',
-                padding: '14px 16px', fontSize: '13px',
-                color: 'var(--text-primary)', lineHeight: 1.8,
-                borderLeft: '3px solid #38BDF8', marginBottom: '10px',
+                display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px',
               }}>
-                {data.investorQuestion}
+                {/* v127: 角度タグ (収益性 / 資本効率 / マクロ 等) + 非断定の問い。各問いは §38/§5 safe。 */}
+                {investorQuestions.map((q, i) => (
+                  <div key={i} style={{
+                    borderRadius: '8px', background: 'var(--bg-subtle)',
+                    border: '1px solid var(--border)',
+                    borderLeft: '3px solid var(--color-accent)',
+                    padding: '12px 14px',
+                    display: 'flex', alignItems: 'flex-start', gap: '10px',
+                  }}>
+                    {q.angle ? (
+                      <Chip variant="display" size="xs" tone="accent">{q.angle}</Chip>
+                    ) : null}
+                    <span style={{
+                      fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.7,
+                    }}>{q.question}</span>
+                  </div>
+                ))}
               </div>
             )}
             {(bullCase.length > 0 || bearCase.length > 0) && (

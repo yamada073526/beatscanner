@@ -166,7 +166,7 @@ export function sanitizeStringArray(arr) {
 /**
  * DiagramCard data オブジェクト全体を sanitize。
  * 影響を受けるフィールド: headline / summary / strengths / risks / bullCase /
- * bearCase / investorQuestion / conditions[].detail。
+ * bearCase / investorQuestion / investorQuestions[].question / conditions[].detail。
  *
  * 元 data を mutate せず新オブジェクトを返す (immutable)。
  * sanitize 結果として有意な変更があった場合 `_sanitized: true` flag を attach。
@@ -183,6 +183,10 @@ export function sanitizeDiagramData(data) {
     data.headline,
     data.summary,
     data.investorQuestion,
+    ...(Array.isArray(data.investorQuestions)
+      ? data.investorQuestions.map((q) =>
+          q && typeof q === 'object' ? q.question : (typeof q === 'string' ? q : null))
+      : []),
     ...(Array.isArray(data.strengths) ? data.strengths : []),
     ...(Array.isArray(data.risks) ? data.risks : []),
     ...(Array.isArray(data.bullCase) ? data.bullCase : []),
@@ -208,6 +212,21 @@ export function sanitizeDiagramData(data) {
   if (Array.isArray(next.bearCase)) next.bearCase = sanitizeStringArray(next.bearCase);
   if (typeof next.investorQuestion === 'string') {
     next.investorQuestion = sanitizeText(next.investorQuestion) || next.investorQuestion;
+  }
+  // v127: investorQuestions (角度タグ付き配列) を per-question sanitize。
+  // 各 question を sentence 単位削除、 angle は静的カテゴリラベルなので sanitize 対象外。
+  if (Array.isArray(next.investorQuestions)) {
+    next.investorQuestions = next.investorQuestions
+      .map((q) => {
+        if (typeof q === 'string') {
+          return { angle: '', question: sanitizeText(q) || q };
+        }
+        if (q && typeof q === 'object' && typeof q.question === 'string') {
+          return { ...q, question: sanitizeText(q.question) || q.question };
+        }
+        return q;
+      })
+      .filter((q) => q && typeof q.question === 'string' && q.question.trim().length > 0);
   }
   if (Array.isArray(next.conditions)) {
     next.conditions = next.conditions.map((c) => {

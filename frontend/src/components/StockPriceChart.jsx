@@ -3,7 +3,7 @@ import {
   ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot, ReferenceArea,
 } from 'recharts';
-import { LineChart as LineChartIcon, CandlestickChart as CandlestickChartIcon, Mountain, Lock } from 'lucide-react';
+import { LineChart as LineChartIcon, CandlestickChart as CandlestickChartIcon, ChartCandlestick, Lock } from 'lucide-react';
 import { fetchPriceHistory, fetchTechnical, fetchAnalyst } from '../api.js';
 import Chip from './ui/Chip.jsx';
 
@@ -65,6 +65,32 @@ const SMA_200_COLOR = '#a78bfa'; // purple (長期 trend、 ファンダ協調�
 // のどれにも属さない観察対象 → 彩色 hue を持たない。 breakout 確定時に green ReferenceDot が前面で対比演出。
 const CUP_COLOR     = 'rgba(148, 163, 184, 0.85)'; // slate-400、 両モード neutral
 const BREAKOUT_COLOR = '#22c55e'; // green-500 (breakout confirmed marker、 「形成中 → 確定」 ドラマ強化)
+
+// v127 (5/29 user dogfood + サブエージェント verdict): ReferenceLine ラベルの右端密集を解消する
+// custom content factory。 y 座標が近接する 2 本 (pivot ≈ 50DMA+15% 等) のラベルを dy で縦に
+// stagger させ重なりを防ぐ。 chart-overlay-safety 厳守: viewBox / 座標が null・NaN なら null を
+// 返す (白画面防止)。 object-form label と混在可 (Recharts 仕様)。
+function makeEdgeLabel(text, fill, { dy = 0, fontSize = 9, fontWeight = 400 } = {}) {
+  return function EdgeLabel(props) {
+    const vb = props && props.viewBox;
+    if (!vb) return null;
+    const { x, y, width } = vb;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width)) return null;
+    return (
+      <text
+        x={x + width + 6}
+        y={y + dy}
+        fill={fill}
+        fontSize={fontSize}
+        fontWeight={fontWeight}
+        textAnchor="start"
+        dominantBaseline="middle"
+      >
+        {text}
+      </text>
+    );
+  };
+}
 
 // 2 段保護 (handover v75 真っ白事故 fix): 万一 Recharts overlay で crash しても
 // chart 部分だけ blank で Pane 3 全体は保護。 親 (JudgmentDetail) は影響受けない。
@@ -628,11 +654,12 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                 window.alert('「取っ手付きカップ」 形状検出は Premium 限定機能です。\n\n・ファンダ 5 条件 PASS × Cup-Handle 形成 の AND スキャナー\n・全 500-1000 銘柄の nightly スキャン\n・形成 → breakout 確定の push 通知\n\nPremium tier (¥1,800/月) で全データ解放されます。');
               } : undefined}
             >
-              {/* Phase 2.9 Sprint 1: Target → Mountain (3 体合議 verdict)
-                  Cup-Handle pattern の形状 1:1 対応 + Aman リゾート (Amangiri/Amankora) brand 連想 +
-                  金商法 §38 断定示唆回避 (Target = aim/狙う = 予測示唆 risk)。
-                  feedback_icon_brand_consistency.md 準拠 (Aman 級品格)、 🔒 → Lock 維持。 */}
-              <Mountain size={12} strokeWidth={1.75} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 4 }} />
+              {/* v127 (5/29 user dogfood): Mountain → ChartCandlestick (サブエージェントレビュー verdict)。
+                  user 「山形アイコンが Cup-with-Handle とパッと見で関連づかない」。Cup-Handle は
+                  チャートパターンなので、 ローソク足アイコンが「チャート上の形」 を 1:1 で直伝する。
+                  Phase 2.9 Sprint 1 で Target → Mountain (3 体合議) とした経緯を上書き。
+                  金商法 §38 断定示唆回避 (中立な chart icon)、 feedback_icon_brand_consistency.md 準拠。 */}
+              <ChartCandlestick size={12} strokeWidth={1.75} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 4 }} />
               {cupChipLabel}
               {cupRequiresPro && (
                 <Lock size={11} strokeWidth={1.75} style={{ display: 'inline', verticalAlign: '-1px', marginLeft: 4, opacity: 0.7 }} />
@@ -794,7 +821,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart
                 data={chartData}
-                margin={{ top: 36, right: 120, left: 0, bottom: 8 }}
+                margin={{ top: 36, right: 160, left: 0, bottom: 8 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
                 <XAxis
@@ -947,7 +974,8 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     isAnimationActive={false}
                   />
                 )}
-                {/* MVP #2: Pivot ReferenceLine solid + 多段ラベル (金融アナリスト 2-B) */}
+                {/* MVP #2: Pivot ReferenceLine solid + 多段ラベル (金融アナリスト 2-B)。
+                    v127: pivot は 50DMA+15% と y 近接で重なるため makeEdgeLabel dy +11 で下方向に stagger。 */}
                 {hasCup && !cupRequiresPro && (
                   <ReferenceLine
                     y={cupHandle.pivot.price}
@@ -955,13 +983,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     strokeWidth={1.25}
                     strokeDasharray={cupHandle.state === 'breakout_confirmed' ? null : '6 3'}
                     strokeOpacity={cupHandle.state === 'formation_market_weak' ? 0.55 : 0.9}
-                    label={{
-                      value: pivotLabelText,
-                      fill: CUP_COLOR,
-                      fontSize: 10,
-                      position: 'right',
-                      offset: 4,
-                    }}
+                    label={makeEdgeLabel(pivotLabelText, CUP_COLOR, { dy: 11, fontSize: 10 })}
                     ifOverflow="extendDomain"
                     isFront={false}
                   />
@@ -1046,6 +1068,9 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     3) Number.isFinite (pillar2Markers の派生時に既に filter 済)
                     4) isAnimationActive={false}
                     投資業界色ルール: amber=警告 / red=危険 / cyan=brand (情報)、 線種で重み調整 */}
+                {/* v127 (5/29 user dogfood + サブエージェント verdict): 「extended +15%」 → 「50DMA +15%」。
+                    基準点 (50DMA からの乖離) を label 自体に明示 → pivot 上抜け後 +20-25% (S2 Profit Take、 別基準) との混同を防ぐ。
+                    文字幅も短縮され右端ラベル密集を緩和。pivot と y 近接するため makeEdgeLabel dy -9 で上方向に stagger。 */}
                 {pillar2Markers.extended15 != null && (
                   <ReferenceLine
                     key="pillar2_ext15"
@@ -1054,13 +1079,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     strokeWidth={1}
                     strokeDasharray="4 4"
                     strokeOpacity={0.55}
-                    label={{
-                      value: 'extended +15%',
-                      fill: 'var(--color-warning)',
-                      fontSize: 9,
-                      position: 'right',
-                      offset: 4,
-                    }}
+                    label={makeEdgeLabel('50DMA +15%', 'var(--color-warning)', { dy: -9, fontSize: 9 })}
                     ifOverflow="extendDomain"
                     isFront={false}
                     isAnimationActive={false}
@@ -1075,7 +1094,8 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     strokeDasharray="1 3"
                     strokeOpacity={0.6}
                     label={{
-                      value: 'climax +25%',
+                      // v127: 「climax +25%」 → 「50DMA +25%」。基準点を明示 (50DMA × 1.25 = climax top 水準)。
+                      value: '50DMA +25%',
                       fill: 'var(--color-loss)',
                       fontSize: 9,
                       position: 'right',
@@ -1117,6 +1137,9 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     isAnimationActive={false}
                   />
                 )}
+                {/* v127 R16 (user dogfood): position 'left' + margin.left:0 で「8% stop」 の左半分が
+                    クリップされ「top (高値比)」 に化けていた → 'insideTopLeft' で chart 内側に描画してクリップ解消。
+                    文言も「損切り -8%」 と明示 (上値抵抗線でなく、 直近高値比 -8% の下値 損切り目安)。 */}
                 {pillar2Markers.stop8 != null && (
                   <ReferenceLine
                     key="pillar2_stop8"
@@ -1126,11 +1149,11 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     strokeDasharray="2 4"
                     strokeOpacity={0.4}
                     label={{
-                      value: '8% stop (高値比)',
+                      value: '損切り -8% (高値比)',
                       fill: 'var(--text-muted)',
                       fontSize: 9,
-                      position: 'left',
-                      offset: 4,
+                      position: 'insideTopLeft',
+                      offset: 6,
                     }}
                     ifOverflow="extendDomain"
                     isFront={false}

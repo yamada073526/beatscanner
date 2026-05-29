@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Mountain, Crown, TrendingUp } from 'lucide-react';
+import { ChartCandlestick, Crown, TrendingUp } from 'lucide-react';
 import { fetchCustomScreener, fetchCupHandleScanner, fetchRsScanner } from '../api.js';
 import Chip, { ChipGroup } from './ui/Chip.jsx';
 
@@ -315,8 +315,8 @@ function CupResultCard({ item, onSelect, masked = false }) {
           {!masked && state && (
             <div className="mt-1.5">
               <Chip size="xs" variant="display" tone={stateTone}>
-                {/* Phase 2.9 Sprint 1: ☕ → Mountain (3 体合議 verdict、 StockPriceChart と SSOT 統一) */}
-                <Mountain size={11} strokeWidth={1.75} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 3 }} />
+                {/* v127 (5/29): Mountain → ChartCandlestick (StockPriceChart と SSOT 統一、 Cup-Handle = チャート形状を直伝) */}
+                <ChartCandlestick size={11} strokeWidth={1.75} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 3 }} />
                 {stateLabel}
               </Chip>
               {pivotPrice != null && (
@@ -460,7 +460,8 @@ function OneillResultCard({ item, onSelect, masked = false }) {
           {!masked && state && (
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <Chip size="xs" variant="display" tone={stateTone}>
-                <Mountain size={11} strokeWidth={1.75} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 3 }} />
+                {/* v127: Mountain → ChartCandlestick (StockPriceChart と SSOT 統一) */}
+                <ChartCandlestick size={11} strokeWidth={1.75} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 3 }} />
                 {stateLabel}
               </Chip>
               {pivotPrice != null && (

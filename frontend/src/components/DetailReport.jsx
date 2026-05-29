@@ -262,7 +262,11 @@ function buildDownloadSVG(data, ticker) {
   parts.push(`<text x="24" y="${y + 20}" font-family="Hiragino Sans,sans-serif" font-size="14" font-weight="700" fill="#38BDF8">投資家への問い</text>`);
   y += 34;
 
-  const question = data.investorQuestion || '';
+  // v127: investorQuestions (角度タグ付き配列) を優先、 legacy 単一文字列に fallback。
+  const _iqArr = Array.isArray(data.investorQuestions) ? data.investorQuestions : [];
+  const question = _iqArr.length > 0
+    ? _iqArr.map((q) => (q && q.angle ? `【${q.angle}】${q.question || ''}` : (q && q.question) || '')).filter(Boolean).join('　')
+    : (data.investorQuestion || '');
   const qLines = [];
   let line = '';
   for (const ch of question) {
@@ -710,6 +714,7 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
           bullCase:          fullJson.bullCase,
           bearCase:          fullJson.bearCase,
           investorQuestion:  fullJson.investorQuestion,
+          investorQuestions: fullJson.investorQuestions,
           dividend:          fullJson.dividend,
           gaapAdjustment:    fullJson.gaapAdjustment,
           partialPeriod:     fullJson.partialPeriod,

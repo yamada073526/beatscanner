@@ -45,11 +45,24 @@ export default function DiagramCitation({
   }
 
   const isEmpty = uniqueSources.length === 0;
-  const shouldShowDegradedBanner = degradedMode || (signalQuality?.confidence === 'low');
+  // v127 R16 (user dogfood): banner trigger から `signalQuality.confidence === 'low'` を除外。
+  // 理由: material_facts (出典付き fact) はこのアプリの visualize 経路で未配線のため confidence が
+  // 常時 'low' → 全図解で「データ源取得失敗・数値降格」 banner が誤発火する Trust Cliff だった。
+  // 表示数値 (trends / valuation) は FMP/Python (precomputed_metrics) 由来で confidence とは独立に信頼でき、
+  // material_facts=0 は「narration の外部出典が無い」 ことのみを意味する (数値の不正ではない)。
+  // 真の data source 失敗は backend が degraded_mode=true を立てたときのみ banner を出す。
+  // (signalQuality は将来 material_facts pipeline を配線したとき再活用するため prop は維持)
+  const shouldShowDegradedBanner = degradedMode === true;
 
   if (isEmpty && !shouldShowDegradedBanner) {
-    // 完全に出典なし + degraded mode でもない = 何も表示しない (signal_quality high の異例ケース)
-    return null;
+    // 出典 chip も degraded banner も無い = footer disclaimer のみ表示 (通常状態)
+    return (
+      <div className="diagram-citation-footer">
+        <div className="diagram-citation-disclaimer">
+          本表示は情報提供のみを目的とし、 投資勧誘ではありません。 最終判断はご自身でお願いします。
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -57,7 +70,9 @@ export default function DiagramCitation({
       {shouldShowDegradedBanner && (
         <div className="diagram-citation-banner" role="status">
           <span aria-hidden="true">⚠</span>
-          <span>データ源の一部が取得できませんでした。 表示数値は signal_quality 降格中です。</span>
+          {/* v127 R16: 「表示数値が降格」 という数値不信を招く旧文言を是正。
+              数値 (trends/valuation) は財務データ由来で信頼でき、 ここで欠けたのは外部出典の参照情報のみ。 */}
+          <span>一部の参照データ（外部出典）を取得できませんでした。 表示中の数値は財務データに基づきます。</span>
         </div>
       )}
       {!isEmpty && (

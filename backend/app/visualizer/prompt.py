@@ -36,13 +36,16 @@ Output ONLY these fields (DO NOT output trends/valuation/operatingMargins/fcfTre
   "risks": ["リスク名:EPS-$X.XX / 売上-$XB の定量インパクト", "リスク2", "リスク3"],
   "bullCase": ["ブル根拠1（20字）", "ブル根拠2", "ブル根拠3"],
   "bearCase": ["ベア根拠1（20字）", "ベア根拠2", "ベア根拠3"],
-  "investorQuestion": "なぜ今この銘柄が注目されるかの目安1文（40字以内、 「買い/売り/すべき」等の断定表現BAN、 §38 safe表現のみ）",
+  "investorQuestions": [
+    {"angle": "観点ラベル6字以内（例: 収益性 / 資本効率 / 競争環境 / マクロ / 成長持続）", "question": "その観点で「今この銘柄をどう見るか」の着眼点を問う1文（40字以内、 「買い/売り/すべき」等の断定表現BAN、 §38 safe、 最上級・No.1等の優良誤認表現BAN）"}
+  ],
   "consensusSource": "FactSet via FMP analyst-estimates",
   "dividend": {"yield": 0.8, "payoutRatio": 28.0, "buyback": true}
 }
 
 RULES:
 - businessFlowSteps: 3〜5ステップ。detail は純日本語8字以内（英数字・製品名・略語禁止）
+- investorQuestions: 2〜3件。各 angle は相互に異なる観点（収益性 / 資本効率 / 競争環境 / マクロ / 成長持続 等から選ぶ）。各 question は疑問文（「〜か。」「〜が鍵。」「〜が分岐点。」等）で終え、断定（買い/売り/すべき）・将来予測の断定・最上級（最も/No.1/業界一）を含めない（§38 / §5）。material_facts に無い数値・固有名詞は question に含めない
 - strengths/risks/bullCase/bearCase: 各3件固定（material_facts 不足時は 2 件でも可）
 - risks: 定量インパクト必須（数値は metrics_trend / beat_miss_detail から引用、 推測値禁止）
 - 全フィールド日本語（ticker/companyName/consensusSource除く）

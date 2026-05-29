@@ -168,17 +168,21 @@ async def lifespan(app: FastAPI):
 
         # ── 図解の事前生成 ──
         await asyncio.sleep(3)
-        print("[WARMUP] Starting viz pre-generation...")
+        print("[WARMUP] Starting viz FMP data prewarm (narration 事前生成は廃止)...")
         _fmp_key_wu = os.getenv("FMP_API_KEY", "")
 
         for ticker in WARMUP_TICKERS:
             try:
-                _cache_key_wu = f"{ticker}::3"
-                if _cache_key_wu in _viz_cache:
-                    print(f"[WARMUP_VIZ] {ticker} already cached, skip")
-                    continue
-
-                _inc_wu, _cf_wu = await asyncio.gather(
+                # v127 R15-1 fix: 図解 narration の事前生成を廃止し、FMP prewarm のみに留める。
+                # 旧実装は conditions_detail="[]" 等のスタブ payload で Haiku を呼び、汎用 narration
+                # 「データ不足で評価留保」を _viz_cache[{ticker}::3] に保存していた。_viz_cache の
+                # キーは {ticker}::{years} のみ (request の analysis payload 非依存) のため、frontend が
+                # 実判定データ付きで送る rich な図解 request が warmup のスタブ narration で上書きされる
+                # 設計バグだった (user dogfood「決算図解が薄い/おかしい」の真因)。
+                # ここでは real visualize endpoint と同一 cache キー (viz-income-3 / viz-cf-3) の FMP
+                # income/cash-flow だけ温め、初回 request の trends 構築を高速化する。narration は
+                # 必ず real request 側でユーザーの実判定 (analysis_data) から生成させる。
+                await asyncio.gather(
                     safe_fmp_get(
                         "https://financialmodelingprep.com/stable/income-statement"
                         f"?symbol={ticker}&limit=4&period=annual&apikey={_fmp_key_wu}",
@@ -193,131 +197,7 @@ async def lifespan(app: FastAPI):
                     ),
                     return_exceptions=True,
                 )
-                _periods_wu = []
-                if isinstance(_inc_wu, list) and _inc_wu:
-                    # ── FMP 成功時 ──
-                    _inc_sorted_wu = list(reversed(_inc_wu))[-3:]
-                    _cf_map_wu = {}
-                    if isinstance(_cf_wu, list):
-                        for _r in _cf_wu:
-                            _yr_k = str(_r.get("calendarYear") or _r.get("fiscalYear") or str(_r.get("date", ""))[:4])
-                            _cf_map_wu[_yr_k] = _r
-
-                    for _inc in _inc_sorted_wu:
-                        _yr = str(_inc.get("calendarYear") or _inc.get("fiscalYear") or str(_inc.get("date", ""))[:4])
-                        _cf_r = _cf_map_wu.get(_yr, {})
-                        _ocf = _cf_r.get("operatingCashFlow")
-                        _shr = _inc.get("weightedAverageShsOutDil") or _inc.get("weightedAverageShsOut")
-                        _cfps = None
-                        if _ocf and _shr:
-                            try:
-                                _cfps = round(float(_ocf) / float(_shr), 2)
-                            except Exception:
-                                pass
-                        _eps_w = _inc.get("eps") or _inc.get("epsDiluted")
-                        _periods_wu.append({
-                            "period": _yr,
-                            "date": str(_inc.get("date", ""))[:10],
-                            "revenue": _inc.get("revenue"),
-                            "operating_cf": _ocf,
-                            "eps": round(float(_eps_w), 2) if _eps_w is not None else None,
-                            "cfps": _cfps,
-                        })
-                else:
-                    # ── FMP 失敗 → yfinance フォールバック ──
-                    print(f"[WARMUP_VIZ] {ticker} FMP unavailable, trying yfinance...")
-                    try:
-                        import yfinance as _yf_wu
-                        import pandas as _pd_wu
-
-                        def _fetch_wu_yf():
-                            t = _yf_wu.Ticker(ticker)
-                            inc = t.income_stmt
-                            cf  = t.cash_flow
-                            if inc is None or (hasattr(inc, 'empty') and inc.empty):
-                                return []
-                            cols = list(inc.columns)[:4]
-                            cf_map_yf = {}
-                            if cf is not None and not (hasattr(cf, 'empty') and cf.empty):
-                                for col in cf.columns:
-                                    cf_map_yf[str(col)[:4]] = cf[col]
-
-                            def _g(stmt, col, *keys):
-                                for k in keys:
-                                    if k in stmt.index:
-                                        v = stmt.loc[k, col]
-                                        if not _pd_wu.isna(v):
-                                            return float(v)
-                                return None
-
-                            rows = []
-                            for col in cols:
-                                yr = str(col)[:4]
-                                rev    = _g(inc, col, 'Total Revenue', 'Revenue')
-                                shares = _g(inc, col, 'Diluted Average Shares', 'Basic Average Shares')
-                                eps    = _g(inc, col, 'Diluted EPS', 'Basic EPS')
-                                ocf = None
-                                cf_col = cf_map_yf.get(yr)
-                                if cf_col is not None:
-                                    for k in ('Operating Cash Flow', 'Cash From Operations'):
-                                        if k in cf_col.index:
-                                            v = cf_col[k]
-                                            if not _pd_wu.isna(v):
-                                                ocf = float(v)
-                                                break
-                                cfps = round(ocf / shares, 2) if (ocf and shares) else None
-                                rows.append({
-                                    "period": yr,
-                                    "date": str(col)[:10],
-                                    "revenue": rev,
-                                    "operating_cf": ocf,
-                                    "eps": round(eps, 2) if eps is not None else None,
-                                    "cfps": cfps,
-                                })
-                            return list(reversed(rows))[-3:]
-
-                        _periods_wu = await asyncio.to_thread(_fetch_wu_yf)
-                        if _periods_wu:
-                            print(f"[WARMUP_VIZ] {ticker} yfinance fallback: {len(_periods_wu)} periods")
-                        else:
-                            print(f"[WARMUP_VIZ] {ticker} both FMP and yfinance failed, skip")
-                            continue
-                    except Exception as _e_yf_wu:
-                        print(f"[WARMUP_VIZ] {ticker} yfinance failed: {_e_yf_wu}, skip")
-                        continue
-
-                _wu_data = {
-                    "ticker": ticker,
-                    "company_name": ticker,
-                    "fiscal_period": f"FY{_periods_wu[-1]['period']}" if _periods_wu else "",
-                    "verdict": "PASS",
-                    "passed_conditions": 3,
-                    "conditions_detail": "[]",
-                    "metrics_trend": formatMetricsTrend_py(_periods_wu),
-                    "guidance": "データなし",
-                    "conference_call_points": "データなし",
-                    "ai_summary": "",
-                    "beat_miss_detail": "データなし",
-                    "years": 3,
-                }
-                _sys_wu = get_system_prompt(3)
-                _usr_wu = build_user_prompt(_wu_data)
-
-                import anthropic as _anth_wu
-                _cli_wu = _anth_wu.AsyncAnthropic()
-                _msg_wu = await _cli_wu.messages.create(
-                    model="claude-haiku-4-5-20251001",
-                    max_tokens=5120,
-                    system=[{"type": "text", "text": _sys_wu, "cache_control": {"type": "ephemeral"}}],
-                    messages=[{"role": "user", "content": _usr_wu}],
-                )
-                _raw_wu = _msg_wu.content[0].text.strip()
-                _raw_wu = re.sub(r'^```[\w]*\n?', '', _raw_wu, flags=re.MULTILINE)
-                _raw_wu = re.sub(r'\n?```$', '', _raw_wu, flags=re.MULTILINE)
-                _parsed_wu = json.loads(_raw_wu.strip())
-
-                _viz_cache[_cache_key_wu] = (_time.time(), _parsed_wu)
-                print(f"[WARMUP_VIZ] {ticker} ✓ cached (years=3)")
+                print(f"[WARMUP_VIZ] {ticker} FMP data prewarmed (narration 事前生成は廃止)")
 
             except Exception as e:
                 print(f"[WARMUP_VIZ] {ticker} failed: {e}")
@@ -9636,6 +9516,7 @@ async def generate_visualization_instant(
         "businessFlowSteps": [],
         "strengths": [], "risks": [], "bullCase": [], "bearCase": [],
         "investorQuestion": "",
+        "investorQuestions": [],
         "consensusSource": "FMP financial statements",
         "trends": [
             {"metric": "売上高", "unit": "B$", "epsType": None,       "data": _build_pts_i("revenue", 1e9)},
@@ -10472,6 +10353,23 @@ async def generate_visualization(
         "material_facts_count": _mf_count,
         "freshness_days": None,  # /api/visualize は filing date を持たないため null
     }
+
+    # v127: investorQuestions (角度タグ付き配列) と investorQuestion (単一文字列, legacy) の双方向正規化。
+    # frontend は配列優先で render するが、 stale cache / 旧 bundle 互換のため両 field を populate する。
+    _iq_arr = parsed.get("investorQuestions")
+    _iq_str = parsed.get("investorQuestion")
+    if isinstance(_iq_arr, list) and _iq_arr:
+        # 配列あり → legacy 文字列を先頭 question から導出 (未設定 or 空のとき)
+        if not _iq_str:
+            _first_q = _iq_arr[0]
+            parsed["investorQuestion"] = (
+                _first_q.get("question") if isinstance(_first_q, dict) else str(_first_q)
+            ) or ""
+    elif _iq_str:
+        # 旧 LLM 出力 (文字列のみ) → 配列に wrap (angle なし、 frontend は angle 無しでも render 可)
+        parsed["investorQuestions"] = [{"angle": "", "question": _iq_str}]
+    else:
+        parsed.setdefault("investorQuestions", [])
 
     # デバッグ：実際に返すデータの期数を確認
     _return_pts = [len(t.get("data", [])) for t in parsed.get("trends", [])]
