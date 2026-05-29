@@ -85,7 +85,7 @@ export default function BuyZoneCard({ ticker }) {
 
   if (loading && !technical) {
     return (
-      <section className="panel-card bzc-card" data-testid="buy-zone-card" aria-busy style={{ minHeight: 116 }}>
+      <section className="panel-card bzc-card" data-testid="buy-zone-card" aria-busy style={{ minHeight: 128 }}>
         <header className="bzc-head">
           <h3 className="bzc-title">直近 breakout support</h3>
         </header>
@@ -119,13 +119,30 @@ export default function BuyZoneCard({ ticker }) {
     detailText = desc.detail.replace(/breakout price/, `breakout price (${fmtUsd(breakoutPrice)})`);
   }
 
+  // v130 P1 #5 (3 体合議): 支持線/breakout 価格 を hero に、 現在価格との distance を delta sub に。
+  // 「これが割れたら撤退」 の閾値が hero として最重要 (qa-dogfooder verdict)。
+  const heroLabel = useBox ? '支持線' : 'breakout';
+  const deltaTone = distancePct == null ? 'muted' : (distancePct >= 0 ? 'gain' : 'loss');
+
   return (
     <section
       className="panel-card bzc-card"
       data-testid="buy-zone-card"
       data-spotlight="card"
-      style={{ minHeight: 116 }}
+      style={{ minHeight: 128 }}
     >
+      {/* v130 P1 #5: 支持線/breakout 価格 hero + 現在価格 distance sub。 dogfood「一番読みたいのは株価」 を 2 秒判読 hierarchy で実現。 */}
+      <div className="card-price-hero" data-testid="buy-zone-card-price-hero">
+        <span className="card-price-hero__label">{heroLabel}</span>
+        <span className="card-price-hero__value" aria-label={`${heroLabel} ${fmtUsd(refPrice)}`}>
+          {fmtUsd(refPrice)}
+        </span>
+        {Number.isFinite(currentPrice) && distancePct != null && (
+          <span className={`card-price-hero__delta card-price-hero__delta--${deltaTone}`}>
+            現在 {fmtUsd(currentPrice)} ({fmtPct(distancePct)})
+          </span>
+        )}
+      </div>
       <header className="bzc-head">
         <h3 className="bzc-title">{cardTitle}</h3>
         <Chip variant="display" size="xs" tone="accent">

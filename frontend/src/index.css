@@ -11047,6 +11047,71 @@ button.ds-chip[data-pressed="true"]:hover {
 
 
 /* ─────────────────────────────────────────────────────────────────
+   v130 P1 (3 体合議、 2026-05-30): 株価系 card 共通 idiom。
+   CupPivot / SellZone / BuyZone の header 上に price hero を独立挿入し
+   「2 秒で株価を読める」 hierarchy を実現する。 投資業界色 + brand 整合:
+   text-primary を hero に、 gain/loss は delta sub にのみ適用 (cyan ≠ 方向性)。
+   memory anchor: feedback_design_principles.md §1 (読み手に負担をかけない)
+   ───────────────────────────────────────────────────────────────── */
+.card-price-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 2px 0 4px;
+}
+.card-price-hero__label {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.card-price-hero__value {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.card-price-hero__delta {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.card-price-hero__delta--gain  { color: var(--color-gain); }
+.card-price-hero__delta--loss  { color: var(--color-loss); }
+.card-price-hero__delta--warning { color: var(--color-warning); }
+.card-price-hero__delta--muted { color: var(--text-muted); }
+
+/* v130 P1 #6: 損切り価格 pill。 CupPivotCard sell section 内に挿入、 pivot × 0.92 を
+   投資業界 赤 tone (8% bg-mix + 25% border) で表示。 narration 後の付随情報として配置。 */
+.tc-stoploss-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-top: 6px;
+  background: color-mix(in srgb, var(--color-loss) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-loss) 25%, var(--border));
+  border-radius: 6px;
+  font-size: 11.5px;
+  color: var(--color-loss);
+  font-variant-numeric: tabular-nums;
+}
+.tc-stoploss-row__label { font-weight: 600; }
+.tc-stoploss-row__value { font-weight: 700; font-size: 14px; }
+.tc-stoploss-row__hint {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+
+/* ─────────────────────────────────────────────────────────────────
    AnalystTargetCard (SPEC 2026-05-28 Sprint 4、 pillar 2 technical)
    Chart 直下に「アナリスト目標株価」 を hero として表示する summary card.
    memory anchor: feedback_cls_envelope_pattern.md (minHeight 116px envelope)
@@ -11161,16 +11226,23 @@ button.ds-chip[data-pressed="true"]:hover {
   color: var(--text-muted);
   margin: 0;
 }
+/* v130 P1 #7 (3 体合議): atc-footer を 2-row grid 化、 disclaimer と「最終更新」 の視覚混在を解消。
+   row1: disclaimer 単独 (全幅) / row2: 最終更新 (左) + jump link (右) を flex で並べる。 */
 .atc-footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  gap: 6px;
   padding-top: 8px;
   border-top: 1px solid var(--border);
   font-size: 10px;
   color: var(--text-muted);
 }
-.atc-disclaimer { flex: 1; line-height: 1.4; }
+.atc-footer-row2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.atc-disclaimer { line-height: 1.4; }
 .atc-updated { white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* v125 P8-4: footer jump link「直近の grade 変更を見る」 (AnalystPanel scroll 動線、 user 帰宅後要望)。
    token 経由のみ (raw hex / shadow 直書きなし)、 hover で accent tint だけ強調、 button reset。 */

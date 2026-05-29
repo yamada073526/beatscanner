@@ -912,6 +912,16 @@ export default function DiagramCard({
   const steps     = data.businessFlowSteps || [];
   const trends    = data.trends            || [];
   const strengths = data.strengths         || [];
+
+  // v130 P0 #1: LLM 出力で passCount/totalCount が欠落するケース (NVDA dogfood 5/30) を
+  // conditions 配列から派生して fallback。 conditions も無ければ button を hide する。
+  const effectivePassCount = Number.isFinite(data.passCount)
+    ? data.passCount
+    : (Array.isArray(data.conditions) ? data.conditions.filter(c => c?.pass).length : null);
+  const effectiveTotalCount = Number.isFinite(data.totalCount)
+    ? data.totalCount
+    : (Array.isArray(data.conditions) && data.conditions.length > 0 ? data.conditions.length : null);
+  const showConditionsButton = effectiveTotalCount != null;
   const risks     = data.risks             || [];
   const bullCase  = data.bullCase          || [];
   const bearCase  = data.bearCase          || [];
@@ -1215,9 +1225,13 @@ export default function DiagramCard({
               </svg>
             </button>
           )}
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>
-            {data.companyName} · {data.period}
-          </div>
+          {(data.companyName || data.period) && (
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>
+              {data.companyName && data.period
+                ? `${data.companyName} · ${data.period}`
+                : (data.companyName || data.period)}
+            </div>
+          )}
           {isGenerating ? (
             <div className="skeleton" style={{ height: '28px', width: '55%', margin: '0 auto 12px' }} />
           ) : (
@@ -1273,8 +1287,8 @@ export default function DiagramCard({
                   >
                     アナリスト予想データが取得できないため<br />
                     Beat / Miss の判定ができません。<br />
-                    <span style={{ color: '#38BDF8' }}>
-                      FMP有料プランで解決できます。
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      順次データ拡充予定です。
                     </span>
                     {/* 下向き三角 */}
                     <div style={{
@@ -1299,41 +1313,45 @@ export default function DiagramCard({
                 {data.overallPass ? 'PASS' : 'FAIL'}
               </span>
             )}
-            <button
-              onClick={() => setShowConditions(v => !v)}
-              onMouseEnter={e => {
-                e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.15)';
-                e.currentTarget.style.borderColor = '#38BDF8';
-                e.currentTarget.style.color = '#38BDF8';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.08)';
-                e.currentTarget.style.borderColor = 'rgba(56,189,248,0.40)';
-                e.currentTarget.style.color = '#38BDF8';
-              }}
-              style={{
-                background: 'rgba(56,189,248,0.08)',
-                border: '1px solid rgba(56,189,248,0.40)',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                padding: '3px 10px',
-                fontSize: '12px',
-                fontWeight: '600',
-                color: '#38BDF8',
-                transition: 'background-color 0.15s, border-color 0.15s',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-              }}
-            >
-              {data.passCount}/{data.totalCount} 条件クリア
-              <span style={{
-                fontSize: '10px',
-                transition: 'transform 0.2s',
-                display: 'inline-block',
-                transform: showConditions ? 'rotate(180deg)' : 'rotate(0deg)',
-              }}>▼</span>
-            </button>
+            {showConditionsButton && (
+              <button
+                onClick={() => setShowConditions(v => !v)}
+                onMouseEnter={e => {
+                  e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.15)';
+                  e.currentTarget.style.borderColor = '#38BDF8';
+                  e.currentTarget.style.color = '#38BDF8';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.08)';
+                  e.currentTarget.style.borderColor = 'rgba(56,189,248,0.40)';
+                  e.currentTarget.style.color = '#38BDF8';
+                }}
+                style={{
+                  background: 'rgba(56,189,248,0.08)',
+                  border: '1px solid rgba(56,189,248,0.40)',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  padding: '3px 10px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  color: '#38BDF8',
+                  transition: 'background-color 0.15s, border-color 0.15s',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                {effectivePassCount != null
+                  ? `${effectivePassCount}/${effectiveTotalCount} 条件クリア`
+                  : `${effectiveTotalCount} 条件 詳細`}
+                <span style={{
+                  fontSize: '10px',
+                  transition: 'transform 0.2s',
+                  display: 'inline-block',
+                  transform: showConditions ? 'rotate(180deg)' : 'rotate(0deg)',
+                }}>▼</span>
+              </button>
+            )}
           </div>
 
           {/* ── 条件一覧の展開 ── */}
@@ -1940,14 +1958,6 @@ export default function DiagramCard({
                 <span style={{ fontSize: '14px' }}>⚠️</span>
                 <span>
                   FCF・CapExデータは現在準備中です
-                  <span style={{
-                    marginLeft: '8px', fontSize: '10px',
-                    background: 'rgba(100,116,139,0.15)',
-                    padding: '1px 6px', borderRadius: '3px',
-                    color: 'var(--text-muted)',
-                  }}>
-                    FMP有料プランで取得可能
-                  </span>
                 </span>
               </div>
             ) : (

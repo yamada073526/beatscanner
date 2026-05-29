@@ -6,6 +6,34 @@ import { generateVisualization } from '../../../../../api.js';
 // banner expand 時に初回 mount され、 同銘柄を閉じる→開くしても unmount しない (mount 維持で cache 保護)。
 const DiagramCard = lazy(() => import('../../../../../components/DiagramCard.jsx'));
 
+// v130 P0 #4: vizState loading 中 + Suspense fallback (lazy chunk 未 load 中) の双方で同一
+// skeleton を共有することで「skeleton → 旧"読み込み中…" → DiagramCard」 の flicker を排除。
+function DiagramSkeleton() {
+  return (
+    <div className="diagram-skel" aria-busy="true" aria-label="図解を生成中">
+      <div className="diagram-skel__caption">
+        <span className="diagram-skel__spinner" aria-hidden="true" />
+        図解を生成中…
+      </div>
+      <div className="skel-base diagram-skel__headline" />
+      <div className="diagram-skel__cond-grid">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div key={i} className="skel-base diagram-skel__cond" style={{ animationDelay: `${i * 0.12}s` }} />
+        ))}
+      </div>
+      <div className="skel-base diagram-skel__main" style={{ animationDelay: '0.1s' }} />
+      <div className="diagram-skel__two-col">
+        <div className="skel-base diagram-skel__half" />
+        <div className="skel-base diagram-skel__half" style={{ animationDelay: '0.18s' }} />
+      </div>
+      <div className="diagram-skel__two-col">
+        <div className="skel-base diagram-skel__sm" />
+        <div className="skel-base diagram-skel__sm" style={{ animationDelay: '0.15s' }} />
+      </div>
+    </div>
+  );
+}
+
 /**
  * v126 R11-1: 図解 inline 展開 banner (sub-agent verdict 案 1 推奨)。
  *
@@ -145,29 +173,11 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
           <>
             {/* v127 R16 (user dogfood「視覚的な動きがなく体感が長い」): spinner+text →
                 図解レイアウトを模した skeleton + shimmer (既存 .skel-base / skelShimmer 再利用)。
-                stagger animationDelay で光が順次流れ、 ~10s 生成中も視覚的な変化が続く。 */}
-            {vizState === 'loading' && (
-              <div className="diagram-skel" aria-busy="true" aria-label="図解を生成中">
-                <div className="diagram-skel__caption">
-                  <span className="diagram-skel__spinner" aria-hidden="true" />
-                  図解を生成中…
-                </div>
-                <div className="skel-base diagram-skel__headline" />
-                <div className="diagram-skel__cond-grid">
-                  {[0, 1, 2, 3, 4].map((i) => (
-                    <div key={i} className="skel-base diagram-skel__cond" style={{ animationDelay: `${i * 0.12}s` }} />
-                  ))}
-                </div>
-                <div className="skel-base diagram-skel__main" style={{ animationDelay: '0.1s' }} />
-                <div className="diagram-skel__two-col">
-                  <div className="skel-base diagram-skel__half" />
-                  <div className="skel-base diagram-skel__half" style={{ animationDelay: '0.18s' }} />
-                </div>
-                <div className="diagram-skel__two-col">
-                  <div className="skel-base diagram-skel__sm" />
-                  <div className="skel-base diagram-skel__sm" style={{ animationDelay: '0.15s' }} />
-                </div>
-              </div>
+                stagger animationDelay で光が順次流れ、 ~10s 生成中も視覚的な変化が続く。
+                v130 P0 #4 (user dogfood 5/30): vizState loading→done 遷移で Suspense fallback
+                の旧「読み込み中…」 が一瞬挟まる flicker を skeleton 共通化で解消。 */}
+            {(vizState === 'loading' || (vizState === 'done' && !vizData)) && (
+              <DiagramSkeleton />
             )}
             {vizState === 'error' && (
               <div className="diagram-banner-error">
@@ -183,7 +193,7 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
               </div>
             )}
             {vizState === 'done' && vizData && (
-              <Suspense fallback={<div className="diagram-banner-loading"><span className="diagram-banner-loading__text">読み込み中…</span></div>}>
+              <Suspense fallback={<DiagramSkeleton />}>
                 <DiagramCard
                   data={vizData}
                   ticker={ticker}

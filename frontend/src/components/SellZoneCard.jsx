@@ -152,7 +152,7 @@ export default function SellZoneCard({ ticker }) {
   // CLS envelope。 data-testid は全 state に付与 (QA / snap-pdca-loop selector 安定性)
   if (loading && !priceData && !technical) {
     return (
-      <section className="panel-card szc-card" data-testid="sell-zone-card" aria-busy style={{ minHeight: 116 }}>
+      <section className="panel-card szc-card" data-testid="sell-zone-card" aria-busy style={{ minHeight: 128 }}>
         <header className="szc-head">
           <h3 className="szc-title">50DMA extension 状況</h3>
         </header>
@@ -165,7 +165,7 @@ export default function SellZoneCard({ ticker }) {
 
   if (errored) {
     return (
-      <section className="panel-card szc-card" data-testid="sell-zone-card" style={{ minHeight: 116 }}>
+      <section className="panel-card szc-card" data-testid="sell-zone-card" style={{ minHeight: 128 }}>
         <header className="szc-head">
           <h3 className="szc-title">50DMA extension 状況</h3>
         </header>
@@ -185,13 +185,32 @@ export default function SellZoneCard({ ticker }) {
     (zone === 'climax' || zone === 'stop_hit' || zone === 'dma_break' || zone === 'dma200_break') ? 'loss' :
     'muted';
 
+  // v130 P1 #5 (3 体合議 2026-05-30): price hero delta tone を zone と連動。
+  // normal は muted (中立)、 extended は warning (amber)、 climax/stop/dma break は loss (赤)。
+  const deltaTone =
+    zone === 'extended' ? 'warning' :
+    (zone === 'climax' || zone === 'stop_hit' || zone === 'dma_break' || zone === 'dma200_break') ? 'loss' :
+    'muted';
+
   return (
     <section
       className="panel-card szc-card"
       data-testid="sell-zone-card"
       data-spotlight="card"
-      style={{ minHeight: 116 }}
+      style={{ minHeight: 128 }}
     >
+      {/* v130 P1 #5: 現在価格 hero + 50DMA からの extension % を sub に。 dogfood「一番読みたいのは株価」 を 2 秒判読 hierarchy で実現。 */}
+      <div className="card-price-hero" data-testid="sell-zone-card-price-hero">
+        <span className="card-price-hero__label">現在</span>
+        <span className="card-price-hero__value" aria-label={`現在価格 ${fmtUsd(currentPrice)}`}>
+          {fmtUsd(currentPrice)}
+        </span>
+        {Number.isFinite(extensionPct) && Number.isFinite(sma50Latest) && (
+          <span className={`card-price-hero__delta card-price-hero__delta--${deltaTone}`}>
+            50DMA {fmtUsd(sma50Latest)} から {fmtPct(extensionPct)}
+          </span>
+        )}
+      </div>
       <header className="szc-head">
         <h3 className="szc-title">50DMA extension 状況</h3>
         {/* v125 P8-5 R5: zone value を Chip 化、 header 右に配置で AnalystTargetCard と visual rhythm 統一。

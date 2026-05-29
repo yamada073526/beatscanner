@@ -67,10 +67,9 @@ export default function ScreenerPanel({ onSelect }) {
       {error && (
         error.includes('有料プラン') ? (
           <div className="rounded-lg bg-slate-50 border border-slate-200 p-4 text-center">
-            <p className="text-sm font-medium text-slate-600 mb-1">FMP有料プランが必要</p>
+            <p className="text-sm font-medium text-slate-600 mb-1">スクリーナーは準備中です</p>
             <p className="text-xs text-slate-400">
-              注目銘柄スクリーナーはFMPの有料エンドポイントです。
-              <br />無料プランでは個別銘柄の分析をご利用ください。
+              個別銘柄の分析をご利用ください。
             </p>
           </div>
         ) : (

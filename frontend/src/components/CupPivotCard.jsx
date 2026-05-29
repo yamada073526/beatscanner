@@ -80,7 +80,7 @@ export default function CupPivotCard({ ticker }) {
   // non-display 判定: Phase 2 は state=formation のみ表示 (breakout_confirmed 等は Phase 3 BuyZoneCard)
   if (loading) {
     return (
-      <section className="panel-card cpc-card" data-testid="cup-pivot-card" aria-busy style={{ minHeight: 116 }}>
+      <section className="panel-card cpc-card" data-testid="cup-pivot-card" aria-busy style={{ minHeight: 128 }}>
         <header className="cpc-head">
           <h3 className="cpc-title">Cup-Handle pivot</h3>
         </header>
@@ -110,13 +110,28 @@ export default function CupPivotCard({ ticker }) {
   // 数値の動的 inject は Python aggregator でなく frontend で直接行うのが BeatScanner pattern)
   const detailWithPrice = desc.detail.replace(/pivot price/, `pivot price (${fmtUsd(pivotPrice)})`);
 
+  // v130 P1 #6 (3 体合議 2026-05-30 user dogfood): pivot 上抜け前の formation / cup_completing
+  // 状態のみ「pivot × 0.92 = 損切り目安」 を frontend 計算で導出 (LLM 不使用、 [[feedback-llm-calc-separation]])。
+  // breakout_pending / breakout_extended では S2 +20-25% Profit Take 等別 framework が主軸のため出さない。
+  const stopLoss = (state === 'formation' || state === 'cup_completing') && Number.isFinite(pivotPrice)
+    ? +(pivotPrice * 0.92).toFixed(2)
+    : null;
+
   return (
     <section
       className="panel-card cpc-card"
       data-testid="cup-pivot-card"
       data-spotlight="card"
-      style={{ minHeight: 116 }}
+      style={{ minHeight: 128 }}
     >
+      {/* v130 P1 #5 (3 体合議): 株価 hero を header 上に独立挿入、 user dogfood
+          「一番読みたいのは株価」 を 2 秒判読 hierarchy で実現。 narration は 2 番目以降に配置。 */}
+      <div className="card-price-hero" data-testid="cup-pivot-card-price-hero">
+        <span className="card-price-hero__label">pivot</span>
+        <span className="card-price-hero__value" aria-label={`pivot price ${fmtUsd(pivotPrice)}`}>
+          {fmtUsd(pivotPrice)}
+        </span>
+      </div>
       <header className="cpc-head">
         <h3 className="cpc-title">Cup-Handle pivot</h3>
         {/* v126 R14-4 (user dogfood feedback): breakout_pending chip 自己主張強化。
@@ -186,6 +201,15 @@ export default function CupPivotCard({ ticker }) {
             </div>
             <p className="cpc-desc cpc-desc--conclusion cpc-desc--sell">{CUP_SELL_ZONE_DESC_JP[state].conclusion}</p>
             <p className="cpc-desc cpc-desc--detail">{CUP_SELL_ZONE_DESC_JP[state].detail}</p>
+            {/* v130 P1 #6 (3 体合議): 損切り具体価格を pill 形式で表示 (静的 dictionary は不変、
+                frontend inject)。 投資業界 赤 tone、 pivot との関係を hint で明示。 */}
+            {stopLoss != null && (
+              <div className="tc-stoploss-row" data-testid="cup-pivot-card-stoploss">
+                <span className="tc-stoploss-row__label">損切り目安</span>
+                <span className="tc-stoploss-row__value">{fmtUsd(stopLoss)}</span>
+                <span className="tc-stoploss-row__hint">pivot × 0.92</span>
+              </div>
+            )}
           </div>
         )}
 

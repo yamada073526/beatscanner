@@ -139,7 +139,7 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
   // CLS envelope: fetch 前後で section 高さを固定 (envelope 116px) + data-testid を全 state に付与
   if (loading && !data) {
     return (
-      <section className="panel-card atc-card" data-testid="analyst-target-card" aria-busy style={{ minHeight: 116 }}>
+      <section className="panel-card atc-card" data-testid="analyst-target-card" aria-busy style={{ minHeight: 128 }}>
         <header className="atc-head">
           <h3 className="atc-title">アナリスト目標株価</h3>
         </header>
@@ -150,7 +150,7 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
 
   if (errored || !data) {
     return (
-      <section className="panel-card atc-card" data-testid="analyst-target-card" style={{ minHeight: 116 }}>
+      <section className="panel-card atc-card" data-testid="analyst-target-card" style={{ minHeight: 128 }}>
         <header className="atc-head">
           <h3 className="atc-title">アナリスト目標株価</h3>
         </header>
@@ -165,7 +165,7 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
   // sources.price_target が ok でなければ「カバー外」 表示 (per-source data namespace 厳守)
   if (sources.price_target !== 'ok') {
     return (
-      <section className="panel-card atc-card" data-testid="analyst-target-card" style={{ minHeight: 116 }}>
+      <section className="panel-card atc-card" data-testid="analyst-target-card" style={{ minHeight: 128 }}>
         <header className="atc-head">
           <h3 className="atc-title">アナリスト目標株価</h3>
         </header>
@@ -193,7 +193,7 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
       className="panel-card atc-card"
       data-testid="analyst-target-card"
       data-spotlight="card"
-      style={{ minHeight: 116 }}
+      style={{ minHeight: 128 }}
     >
       <header className="atc-head">
         <h3 className="atc-title">アナリスト目標株価</h3>
@@ -228,24 +228,26 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
         </div>
       </div>
 
-      {/* Trust Cliff 防止 disclaimer (3 体合議 verdict、 upside マイナス時の誤読対策) +
-          最終更新 (CLAUDE.md「動的データには 最終更新 X 分前 を併記」 永続ルール) +
-          v125 P8-4 AnalystPanel jump link (アナリスト名 / grade 動線、 user 帰宅後要望) */}
+      {/* v130 P1 #7 (3 体合議 2026-05-30 user dogfood): footer を 2-row grid 化、
+          disclaimer 単独行 + 最終更新/jump link を 2 行目で左右分離。 旧 1-row flex で
+          disclaimer flex:1 が「最終更新 X 分前」 を圧迫し視覚混在していた問題を解消。 */}
       <footer className="atc-footer">
         <span className="atc-disclaimer">
           コンセンサスは目安。 アナリスト予想は外れることがあります。
         </span>
-        {fetchedAt && (
-          <span className="atc-updated">最終更新 {fmtRelativeMin(fetchedAt)}</span>
-        )}
-        <button
-          type="button"
-          className="atc-jump-analyst"
-          onClick={handleJumpToAnalyst}
-          data-testid="analyst-target-card-jump-link"
-        >
-          直近の grade 変更を見る →
-        </button>
+        <div className="atc-footer-row2">
+          {fetchedAt && (
+            <span className="atc-updated">最終更新 {fmtRelativeMin(fetchedAt)}</span>
+          )}
+          <button
+            type="button"
+            className="atc-jump-analyst"
+            onClick={handleJumpToAnalyst}
+            data-testid="analyst-target-card-jump-link"
+          >
+            直近の grade 変更を見る →
+          </button>
+        </div>
       </footer>
     </section>
   );
