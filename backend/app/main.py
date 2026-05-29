@@ -9975,21 +9975,35 @@ async def generate_visualization(
         print(f"[VISUALIZE] stop_reason={stop_reason}, raw length={len(raw_clean)}")
         print(f"[VISUALIZE] raw tail (last 200 chars): {raw_clean[-200:]}")
 
-        repaired = raw_clean
-        open_braces   = raw_clean.count('{') - raw_clean.count('}')
-        open_brackets = raw_clean.count('[') - raw_clean.count(']')
-        if open_brackets > 0:
-            repaired += ']' * open_brackets
-        if open_braces > 0:
-            repaired += '}' * open_braces
+        parsed = None
+        # v127 R16-3 修復1: "Extra data" (LLM が完全な JSON の後に余分なテキストを付加) →
+        # raw_decode で先頭の完全な JSON object のみ抽出 (Haiku が稀に出力する trailing 解説文を無視)。
+        # 旧 repair (未閉じ括弧補完) は Extra data には無効だったため先に試す。
         try:
-            parsed = json.loads(repaired)
-            print(f"[VISUALIZE] JSON repair succeeded for {ticker}")
-        except json.JSONDecodeError as e2:
-            raise HTTPException(
-                status_code=500,
-                detail=f"JSON parse error (repair also failed): {e2}. stop_reason={stop_reason}"
-            )
+            _obj, _ = json.JSONDecoder().raw_decode(raw_clean)
+            if isinstance(_obj, dict):
+                parsed = _obj
+                print(f"[VISUALIZE] JSON repair (raw_decode / extra-data) succeeded for {ticker}")
+        except json.JSONDecodeError:
+            pass
+
+        # 修復2: 未閉じ括弧 (max_tokens truncation) を補完
+        if parsed is None:
+            repaired = raw_clean
+            open_braces   = raw_clean.count('{') - raw_clean.count('}')
+            open_brackets = raw_clean.count('[') - raw_clean.count(']')
+            if open_brackets > 0:
+                repaired += ']' * open_brackets
+            if open_braces > 0:
+                repaired += '}' * open_braces
+            try:
+                parsed = json.loads(repaired)
+                print(f"[VISUALIZE] JSON repair (bracket-close) succeeded for {ticker}")
+            except json.JSONDecodeError as e2:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"JSON parse error (repair also failed): {e2}. stop_reason={stop_reason}"
+                )
 
     # ══════════════════════════════════════════════════════════════
     # ★ バックエンドで数値データを直接構築（LLMに任せない）
