@@ -10113,6 +10113,9 @@ async def generate_visualization(
     # ══════════════════════════════════════════════════════════════
     # ★ バックエンドで数値データを直接構築（LLMに任せない）
     # ══════════════════════════════════════════════════════════════
+    # v126 R15-1 debug (一時): _periods_built の状態を response に露出して真因特定
+    parsed["_dbg_periods_built"] = len(_periods_built) if isinstance(_periods_built, list) else -1
+    parsed["_dbg_fe_periods"] = len(analysis_data.get("periods")) if isinstance(analysis_data.get("periods"), list) else -1
     if _periods_built:
         def _mk_beat(metric, i, pts):
             """最新期のみ beat/beatMargin を計算。旧期は null。"""
