@@ -26,6 +26,8 @@ export const SELL_ZONE_LABEL_JP = {
   stop_hit: '8% stop hit',
   // v126 R13-4 R1: 50DMA Break with Heavy Volume zone (IBD/O'Neil S5)
   dma_break: '50DMA break',
+  // v127 R16-3 (R6): 200DMA Break zone (IBD/O'Neil、 長期トレンド break = 最重大)
+  dma200_break: '200DMA break',
   unknown:  '判定不可',
 };
 
@@ -62,6 +64,12 @@ export const SELL_ZONE_DESC_JP = {
     conclusion: '50DMA 下抜けが報告されています。',
     detail: '50DMA を高出来高で下抜けると pattern failure の signal とされる事例があります (IBD ルール、 W. O\'Neil 著)。 再奪取で持ち直すケースも紹介されています。',
   },
+  // v127 R16-3 (R6): 200DMA Break。長期 (約 1 年) 移動平均割れ = 長期トレンド転換の目安。
+  // 50DMA break より重大とされるため classifyZone で最優先。 非断定 (§38) / IBD 出典。
+  dma200_break: {
+    conclusion: '長期トレンドの目安 200DMA を下抜けています。',
+    detail: '200DMA (長期移動平均) 割れは長期上昇トレンドの転換目安とされる事例があります (IBD/O\'Neil 著)。 再び上抜けて持ち直すケースも紹介されています。',
+  },
   unknown: {
     conclusion: 'zone 判定を保留しています。',
     detail: '50DMA の値が取得できません (IPO < 50 日の銘柄等で発生)。',
@@ -73,9 +81,12 @@ export const SELL_ZONE_DESC_JP = {
  * @param {number} extensionPct - (currentPrice / sma50 - 1) * 100
  * @param {object} [extra] - 追加 detection 用 input
  * @param {boolean} [extra.dmaBreak] - 50DMA を high volume で下抜けたか (R13-4 R1)
- * @returns {'normal'|'extended'|'climax'|'dma_break'|'unknown'}
+ * @param {boolean} [extra.dma200Break] - 200DMA を下抜けたか (R6、 長期トレンド break)
+ * @returns {'normal'|'extended'|'climax'|'dma_break'|'dma200_break'|'unknown'}
  */
 export function classifyZone(extensionPct, extra = {}) {
+  // v127 R16-3 (R6): 200DMA break = 長期トレンド転換、 最重大 → 最優先 (extension の有無に関わらず)。
+  if (extra.dma200Break) return 'dma200_break';
   if (!Number.isFinite(extensionPct)) return 'unknown';
   // v126 R13-4 R1: 50DMA Break (extension < 0) + high volume の場合は別 zone 優先
   if (extensionPct < 0 && extra.dmaBreak) return 'dma_break';

@@ -50,7 +50,8 @@ export default function SellZoneCard({ ticker }) {
     setPriceFailed(false);
     Promise.allSettled([
       fetchPriceHistory(ticker, '1y'),
-      fetchTechnical(ticker, 'sma_50'),
+      // v127 R16-3 (R6): 200DMA Break 判定のため sma_200 も取得
+      fetchTechnical(ticker, 'sma_50,sma_200'),
     ])
       .then(([priceRes, techRes]) => {
         if (cancelled) return;
@@ -116,7 +117,32 @@ export default function SellZoneCard({ ticker }) {
     return false;
   }, [priceData, technical]);
 
-  const zone = classifyZone(extensionPct, { dmaBreak });
+  // v127 R16-3 (R6): 200DMA Break detection。200DMA (長期移動平均) を下抜け、 かつ現在も下回る
+  // (= 一時的な髭でなく break 確定) を直近 10 営業日の fresh cross で判定。50DMA break より重大。
+  const dma200Break = useMemo(() => {
+    if (!priceData?.prices?.length || !technical?.overlays) return false;
+    const sma200Overlay = technical.overlays.find((ov) => ov.key === 'sma_200');
+    if (!sma200Overlay?.data?.length) return false;
+    const smaMap = new Map(sma200Overlay.data.map((d) => [d.time, d.value]));
+    const recent = priceData.prices.slice(-10);
+    if (recent.length < 2) return false;
+    // 現在 close が 200DMA 未満 (break 確定) でなければ false (一時的な dip 後の回復を除外)
+    const last = recent[recent.length - 1];
+    const smaLast = smaMap.get(last.time);
+    if (!Number.isFinite(smaLast) || !Number.isFinite(last?.close) || last.close >= smaLast) return false;
+    // 直近 10 日に下抜け (yest >= sma, today < sma) が発生したか (fresh break のみ、 旧来の下降は対象外)
+    for (let i = 1; i < recent.length; i++) {
+      const today = recent[i];
+      const yest = recent[i - 1];
+      const smaToday = smaMap.get(today.time);
+      const smaYest = smaMap.get(yest.time);
+      if (!Number.isFinite(smaToday) || !Number.isFinite(smaYest)) continue;
+      if (yest.close >= smaYest && today.close < smaToday) return true;
+    }
+    return false;
+  }, [priceData, technical]);
+
+  const zone = classifyZone(extensionPct, { dmaBreak, dma200Break });
   const zoneLabel = SELL_ZONE_LABEL_JP[zone] || SELL_ZONE_LABEL_JP.unknown;
   const zoneDesc = SELL_ZONE_DESC_JP[zone] || SELL_ZONE_DESC_JP.unknown;
 
@@ -152,7 +178,8 @@ export default function SellZoneCard({ ticker }) {
   const chipTone =
     zone === 'extended' ? 'warning' :
     // v126 R13-4 R1: dma_break も climax/stop_hit と同様 loss tone (赤、 警告)
-    (zone === 'climax' || zone === 'stop_hit' || zone === 'dma_break') ? 'loss' :
+    // v127 R16-3 (R6): dma200_break も loss tone (200DMA break = 最重大の下値警告)
+    (zone === 'climax' || zone === 'stop_hit' || zone === 'dma_break' || zone === 'dma200_break') ? 'loss' :
     'muted';
 
   return (
