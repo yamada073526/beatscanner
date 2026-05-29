@@ -22,6 +22,7 @@
  *   - feedback_cls_envelope_pattern.md (root minHeight envelope)
  */
 import { useEffect, useMemo, useState } from 'react';
+import { Target } from 'lucide-react';
 import { fetchTechnical } from '../api.js';
 import { BUY_ZONE_LABEL_JP, BUY_ZONE_DESC_JP, BUY_ZONE_FOOTER, CUP_SELL_ZONE_DESC_JP, classifyBuyZone } from '../lib/buyZoneLabels.js';
 import Chip from './ui/Chip.jsx';
@@ -124,10 +125,18 @@ export default function CupPivotCard({ ticker }) {
       data-spotlight="card"
       style={{ minHeight: 128 }}
     >
+      {/* v132 P1-C (ui-designer verdict APPROVE、 2026-05-30 user dogfood):
+          株価 hero の上に「買いゾーン」 category chip を独立行で配置、 メンタルモデル先出し。 */}
+      <div className="card-zone-context" data-testid="cup-pivot-card-zone-context">
+        <Chip variant="display" size="xs" tone="accent">
+          <Target size={11} strokeWidth={2} className="card-zone-context__icon" aria-hidden="true" />
+          買いゾーン
+        </Chip>
+      </div>
       {/* v130 P1 #5 (3 体合議): 株価 hero を header 上に独立挿入、 user dogfood
           「一番読みたいのは株価」 を 2 秒判読 hierarchy で実現。 narration は 2 番目以降に配置。 */}
       <div className="card-price-hero" data-testid="cup-pivot-card-price-hero">
-        <span className="card-price-hero__label">pivot</span>
+        <span className="card-price-hero__label">買い目安</span>
         <span className="card-price-hero__value" aria-label={`pivot price ${fmtUsd(pivotPrice)}`}>
           {fmtUsd(pivotPrice)}
         </span>

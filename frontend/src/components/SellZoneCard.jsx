@@ -15,6 +15,7 @@
  *   - feedback_chart_overlay_safety.md (Recharts 不使用のため対象外)
  */
 import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, TrendingUp } from 'lucide-react';
 import { fetchPriceHistory, fetchTechnical } from '../api.js';
 import { SELL_ZONE_LABEL_JP, SELL_ZONE_DESC_JP, SELL_ZONE_FOOTER, classifyZone } from '../lib/sellZoneLabels.js';
 // v125 P8-5 R5 hotfix (3 体合議統合推奨案): zone value を Chip primitive 化、 header に配置で
@@ -199,6 +200,27 @@ export default function SellZoneCard({ ticker }) {
       data-spotlight="card"
       style={{ minHeight: 128 }}
     >
+      {/* v132 P1-C (ui-designer verdict): hero 上に「売りゾーン」 / 「注意ゾーン」 / 「危険ゾーン」 chip を tone 連動。 */}
+      <div className="card-zone-context" data-testid="sell-zone-card-zone-context">
+        <Chip variant="display" size="xs" tone={chipTone}>
+          {chipTone === 'loss' ? (
+            <>
+              <AlertTriangle size={11} strokeWidth={2} className="card-zone-context__icon" aria-hidden="true" />
+              危険ゾーン
+            </>
+          ) : chipTone === 'warning' ? (
+            <>
+              <AlertTriangle size={11} strokeWidth={2} className="card-zone-context__icon" aria-hidden="true" />
+              注意ゾーン
+            </>
+          ) : (
+            <>
+              <TrendingUp size={11} strokeWidth={2} className="card-zone-context__icon" aria-hidden="true" />
+              売りゾーン
+            </>
+          )}
+        </Chip>
+      </div>
       {/* v130 P1 #5: 現在価格 hero + 50DMA からの extension % を sub に。 dogfood「一番読みたいのは株価」 を 2 秒判読 hierarchy で実現。 */}
       <div className="card-price-hero" data-testid="sell-zone-card-price-hero">
         <span className="card-price-hero__label">現在</span>

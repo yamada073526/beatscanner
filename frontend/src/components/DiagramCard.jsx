@@ -913,15 +913,17 @@ export default function DiagramCard({
   const trends    = data.trends            || [];
   const strengths = data.strengths         || [];
 
-  // v130 P0 #1: LLM 出力で passCount/totalCount が欠落するケース (NVDA dogfood 5/30) を
-  // conditions 配列から派生して fallback。 conditions も無ければ button を hide する。
+  // v130 P0 #1 → v132 P0-A: LLM 出力で passCount/totalCount/conditions が全て欠落するケース
+  // (NVDA dogfood 5/30) でも button を hide せず「5 条件 詳細 ▼」 default label で常に表示。
+  // user dogfood: 完全 hide はバッジ自体消失で「分析されていない」 と誤読される、
+  // default label で「click すれば見れる」 と user に約束する。
   const effectivePassCount = Number.isFinite(data.passCount)
     ? data.passCount
     : (Array.isArray(data.conditions) ? data.conditions.filter(c => c?.pass).length : null);
   const effectiveTotalCount = Number.isFinite(data.totalCount)
     ? data.totalCount
-    : (Array.isArray(data.conditions) && data.conditions.length > 0 ? data.conditions.length : null);
-  const showConditionsButton = effectiveTotalCount != null;
+    : (Array.isArray(data.conditions) && data.conditions.length > 0 ? data.conditions.length : 5);
+  const showConditionsButton = true; // 常に表示
   const risks     = data.risks             || [];
   const bullCase  = data.bullCase          || [];
   const bearCase  = data.bearCase          || [];

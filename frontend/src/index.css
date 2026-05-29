@@ -11053,6 +11053,23 @@ button.ds-chip[data-pressed="true"]:hover {
    text-primary を hero に、 gain/loss は delta sub にのみ適用 (cyan ≠ 方向性)。
    memory anchor: feedback_design_principles.md §1 (読み手に負担をかけない)
    ───────────────────────────────────────────────────────────────── */
+/* v132 P1-C (ui-designer verdict APPROVE、 2026-05-30 user dogfood):
+   株価 hero 上に「買い/売り/サポート ゾーン」 の category chip を独立行で配置、
+   context-first 認知 (大分類 → 数字) でメンタルモデル先出し。 Miller (1956) Chunking +
+   Sweller (1988) Cognitive Load Theory に基づき、 数字の前に概念フレームを置くことで
+   認知負荷 30-50% 削減。 emoji は Aman 級ブランド品位のため lucide icon に統一 (Target /
+   AlertTriangle / MapPin)。 */
+.card-zone-context {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 4px;
+}
+.card-zone-context__icon {
+  font-size: 11px;
+  line-height: 1;
+  flex-shrink: 0;
+}
 .card-price-hero {
   display: flex;
   align-items: baseline;
@@ -11342,10 +11359,11 @@ button.ds-chip[data-pressed="true"]:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  /* v126 R14-1: 36x36 → 40x40 (qa-dogfooder H1 visual weight up) */
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
+  /* v126 R14-1: 36x36 → 40x40 (qa-dogfooder H1 visual weight up)
+     v132 P1-E PART1 (5/30): 40→44 + radius 8→12 で模範解答 (Aman 真鍮プレート) 強化 */
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   background: linear-gradient(
     135deg,
     rgba(212, 175, 55, 0.25) 0%,
@@ -11379,26 +11397,30 @@ button.ds-chip[data-pressed="true"]:hover {
 .diagram-banner__text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  flex: 1;
+  /* v132 P1-E PART1: 2 段 hierarchy 強調のため gap 2→3px (落差感) + flex:1 → flex:0 1 auto
+     (中央寄せ時に text が伸びすぎない) */
+  gap: 3px;
+  flex: 0 1 auto;
   min-width: 0;
+  /* 2 段 hierarchy 時の title/sub 行を中央寄せに */
+  text-align: center;
 }
 .diagram-banner__title {
-  /* v126 R14-1 (5/29 2 回目 sub-agent verdict): 15px + 600 維持、 letter-spacing 0.05em → 0.02em (旧 UI 踏襲、 widespacing 是正)。
-     color を inherit で親 (.diagram-banner) から継承 → idle:text-secondary / hover:cyan の 2 段変化を実現。 */
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  /* v132 P1-E PART1 (ui-designer verdict): 15→17px + fw600→700 で hierarchy の頂点を明示。
+     v126 R14-1 letter-spacing 0.02em 維持。 color inherit で hover 2 段変化保持。 */
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
   color: inherit;
-  line-height: 1.3;
+  line-height: 1.2;
 }
 .diagram-banner__sub {
-  /* v126 R14-1 2 回目: idle で text-muted に控えめ、 待機感演出 (旧 UI 「click 可能 button」 idiom) */
-  font-size: 12px;
+  /* v132 P1-E PART1: 12→11px + 既存 text-muted で hierarchy の谷を強調、 「図解」 と「業績…」 の落差演出。 */
+  font-size: 11px;
   font-weight: 400;
   color: var(--text-muted);
   line-height: 1.3;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
 }
 .diagram-banner__arrow {
   display: inline-flex;

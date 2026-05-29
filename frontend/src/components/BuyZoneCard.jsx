@@ -21,6 +21,7 @@
  *   - feedback_cls_envelope_pattern.md (root minHeight envelope)
  */
 import { useEffect, useMemo, useState } from 'react';
+import { MapPin } from 'lucide-react';
 import { fetchTechnical, fetchPriceHistory } from '../api.js';
 import { BUY_ZONE_LABEL_JP, BUY_ZONE_DESC_JP, BUY_ZONE_FOOTER, classifyBuyZone } from '../lib/buyZoneLabels.js';
 import Chip from './ui/Chip.jsx';
@@ -134,6 +135,13 @@ export default function BuyZoneCard({ ticker }) {
       data-spotlight="card"
       style={{ minHeight: 128 }}
     >
+      {/* v132 P1-C (ui-designer verdict): hero 上に「サポートゾーン」 chip を gain tone で配置。 */}
+      <div className="card-zone-context" data-testid="buy-zone-card-zone-context">
+        <Chip variant="display" size="xs" tone="gain">
+          <MapPin size={11} strokeWidth={2} className="card-zone-context__icon" aria-hidden="true" />
+          サポートゾーン
+        </Chip>
+      </div>
       {/* v130 P1 #5: 支持線/breakout 価格 hero + 現在価格 distance sub。 dogfood「一番読みたいのは株価」 を 2 秒判読 hierarchy で実現。 */}
       <div className="card-price-hero" data-testid="buy-zone-card-price-hero">
         <span className="card-price-hero__label">{heroLabel}</span>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { BookOpen, ArrowRight, Sparkles, X } from 'lucide-react';
 import { generateVisualization } from '../../../../../api.js';
 
@@ -8,12 +8,33 @@ const DiagramCard = lazy(() => import('../../../../../components/DiagramCard.jsx
 
 // v130 P0 #4: vizState loading 中 + Suspense fallback (lazy chunk 未 load 中) の双方で同一
 // skeleton を共有することで「skeleton → 旧"読み込み中…" → DiagramCard」 の flicker を排除。
+// v132 P1-B (user dogfood 5/30 「ずっと変わらない」): 3 段階 narration で「もう少しです」 感を演出。
+//   0-3s: 「決算データを集めています…」 / 3-7s: 「AI が分析中…」 / 7s+: 「最終チェック中、 もう少しです」
+const DIAGRAM_LOADING_STAGES = [
+  { threshold: 0,    text: '決算データを集めています…' },
+  { threshold: 3000, text: 'AI が業績ストーリーを分析中…' },
+  { threshold: 7000, text: '最終チェック中、 もう少しです' },
+];
+
 function DiagramSkeleton() {
+  const [stageIdx, setStageIdx] = useState(0);
+  const startRef = useRef(null);
+  useEffect(() => {
+    startRef.current = Date.now();
+    const id = setInterval(() => {
+      const elapsed = Date.now() - startRef.current;
+      const next = DIAGRAM_LOADING_STAGES.findIndex(
+        (s, i) => elapsed >= s.threshold && (i === DIAGRAM_LOADING_STAGES.length - 1 || elapsed < DIAGRAM_LOADING_STAGES[i + 1].threshold)
+      );
+      if (next >= 0) setStageIdx(next);
+    }, 500);
+    return () => clearInterval(id);
+  }, []);
   return (
     <div className="diagram-skel" aria-busy="true" aria-label="図解を生成中">
       <div className="diagram-skel__caption">
         <span className="diagram-skel__spinner" aria-hidden="true" />
-        図解を生成中…
+        {DIAGRAM_LOADING_STAGES[stageIdx].text}
       </div>
       <div className="skel-base diagram-skel__headline" />
       <div className="diagram-skel__cond-grid">
@@ -151,14 +172,16 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
         aria-label={expanded ? '図解を閉じる' : '図解を見る'}
       >
         <span className="diagram-banner__icon-wrap" aria-hidden="true">
-          <BookOpen size={18} strokeWidth={1.5} />
-          <Sparkles size={10} strokeWidth={1.5} className="diagram-banner__sparkle" />
+          {/* v132 P1-E PART1 (ui-designer verdict APPROVE、 5/30 user dogfood「模範解答準拠」):
+              18→22 大型化 + Aman 真鍮プレート icon-wrap 40→44 + radius 8→12 で「凝った作り」 強化 */}
+          <BookOpen size={22} strokeWidth={1.4} />
+          <Sparkles size={11} strokeWidth={1.5} className="diagram-banner__sparkle" />
         </span>
-        {/* v130 P1 #8 (user dogfood 5/30): 旧 2 行 (title「業績・ビジネス・強みを図解」 +
-            sub「7 セクションで銘柄の全体像を視覚化」) は冗長。 5 原則 §3「シンプルかつリッチ」
-            準拠で 1 行に統合、 sub 撤去で「シンプル」 を全面化。 */}
+        {/* v132 P1-E PART1: 2 段 hierarchy 復活、 「図解」 大 (17px fw700) + sub 小・薄 (11px text-muted)
+            で視線の落差を演出。 v130 P1 #8 の 1 行統合は cognitive context 不足 (user dogfood)。 */}
         <span className="diagram-banner__text">
-          <span className="diagram-banner__title">図解 業績・ビジネス・強みを視覚化</span>
+          <span className="diagram-banner__title">図解</span>
+          <span className="diagram-banner__sub">業績・ビジネス・強みを視覚化</span>
         </span>
         <span className="diagram-banner__arrow" aria-hidden="true">
           {expanded ? <X size={14} strokeWidth={1.5} /> : <ArrowRight size={14} strokeWidth={1.5} />}

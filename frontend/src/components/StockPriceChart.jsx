@@ -192,7 +192,12 @@ function surpriseLabel(e) {
 function EarningsTooltip({ active, payload, label, earningsMap, pillar2Markers, cupHandle }) {
   if (!active || !payload?.length) return null;
 
-  const price = payload.find((p) => p.dataKey === 'close')?.value;
+  // v132 P0-B (user dogfood 5/30、 candle mode で価格表示されない bug fix):
+  // line mode は <Line dataKey="close"> なので payload に dataKey='close' entry が含まれるが、
+  // candle mode は <Bar dataKey={(entry)=>[lo,hi]}> で関数 dataKey、 `=== 'close'` が永久 false。
+  // → payload[0].payload.close (entry raw data) を fallback、 line/candle 両対応。
+  const price = payload.find((p) => p.dataKey === 'close')?.value
+    ?? payload[0]?.payload?.close;
   const e = earningsMap?.[label];
 
   // v130 方針 #13: actionable な 1-2 本の reference line 距離 % を動的算出。
@@ -860,7 +865,23 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                 <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
                 <XAxis
                   dataKey="date"
-                  tickFormatter={(d) => d.slice(0, 7)}
+                  /* v132 P0-C (user dogfood 5/30): 旧 tickFormatter `d.slice(0, 7)` は全 tick で
+                     YYYY-MM 冗長表示、 1ヶ月モードで「2026-05 2026-05」 重複 bug + 1年モードで
+                     「2026-04 2026-05」 と毎月年付き冗長。 period 別 + 月境/年境で表示変える。
+                     - 1m: DD のみ (日表示)
+                     - 3m / 6m: MM/DD
+                     - 1y / 3y: 月の数字、 1 月のみ YYYY/MM で年境マーク */
+                  tickFormatter={(d) => {
+                    const s = String(d);
+                    if (period === '1m') return s.slice(8, 10); // DD
+                    if (period === '3m' || period === '6m') {
+                      return `${parseInt(s.slice(5, 7), 10)}/${parseInt(s.slice(8, 10), 10)}`;
+                    }
+                    // 1y / 3y / 5y: 月のみ表示、 1 月 (年境) のみ YYYY/MM
+                    const mm = s.slice(5, 7);
+                    if (mm === '01') return `${s.slice(0, 4)}/${mm}`;
+                    return `${parseInt(mm, 10)}月`;
+                  }}
                   interval="preserveStartEnd"
                   stroke={CHART_AXIS}
                   tick={{ fontSize: 11 }}
