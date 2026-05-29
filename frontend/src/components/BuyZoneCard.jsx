@@ -62,7 +62,10 @@ export default function BuyZoneCard({ ticker }) {
   const lastBreakout = cupHandle?.last_breakout || null;
   const breakoutPrice = Number.isFinite(lastBreakout?.price) ? lastBreakout.price : null;
   // v127 R16-3 (NVDA $200): box_support (複数回 test された長期ボックス支持線) を優先、 last_breakout は fallback。
-  const boxSupport = (cupHandle?.box_support && Number.isFinite(cupHandle.box_support.level))
+  // role='overhead_resistance' (現在価格が box の下 = box は抵抗線) は「支持線」 と呼べないため除外 (correctness)。
+  const boxSupport = (cupHandle?.box_support
+      && Number.isFinite(cupHandle.box_support.level)
+      && cupHandle.box_support.role !== 'overhead_resistance')
     ? cupHandle.box_support : null;
   // support 基準値: box_support 優先、 なければ last_breakout pivot
   const refPrice = boxSupport ? boxSupport.level : breakoutPrice;

@@ -1008,7 +1008,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     を cyan ReferenceArea (帯) で表示。 独自プロトコル「直前 breakout 抵抗線 = 新支持線 / 長期ボックス上限」。
                     chart-overlay-safety 4 層: conditional render + Number.isFinite + isAnimationActive=false + ifOverflow。
                     color: SMA200 と衝突する purple を避け cyan (= ブランド色、 方向でなく水準なので投資業界色ルール非抵触)。 */}
-                {Number.isFinite(cupHandle?.box_support?.band_low) && Number.isFinite(cupHandle?.box_support?.band_high) && (
+                {Number.isFinite(cupHandle?.box_support?.band_low) && Number.isFinite(cupHandle?.box_support?.band_high) && cupHandle?.box_support?.role !== 'overhead_resistance' && (
                   <ReferenceArea
                     y1={cupHandle.box_support.band_low}
                     y2={cupHandle.box_support.band_high}
