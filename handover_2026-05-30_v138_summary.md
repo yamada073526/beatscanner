@@ -284,13 +284,26 @@ frontend (`DiagramCard.jsx`):
 | 🟢 | 改善 C: 5条件 hover affordance | 1.5-2 人日 | 後 |
 | 🟢 | プラン管理 UI full (Stripe 統合) | 2-3 人日 | 後 |
 
-### v138.6 + R1 + R2 + R3 hotfix commit
+### v138.6 + R1 + R2 + R3 + R4 hotfix commit
 | ver | commit | bundle | 内容 |
 |---|---|---|---|
 | v138.6 | 1a8118e | `index-usR8f65Q.js` | 物理層分離 SSOT 復活 + sparkline 窓統一 + AI 要約 sec_guidance 配線 |
 | v138.6 R1 hotfix | 0f459bf | `index-CQ1gC-IA.js` | payload key naming mismatch / ③ 復旧 / CFPS-EPS adaptive threshold |
 | v138.6 R2 hotfix | 63173ca | `index-DrerytzW.js` | SummaryBrief 2-phase race / EPS BEAT FMP 未来 entry skip / 5条件 click affordance |
 | v138.6 R3 hotfix | 724ddc8 | `index-CPAUQHb9.js` | EPS BEAT frontend 配線 (epsBeatPct → guidance.eps.surprise_pct) + hover 強化 |
+| v138.6 R4 hotfix | 896c069 | `index-Bkdw-Vz3.js` | 「この条件の解説」 ボタンを cyan accent chip 風に強化 |
+
+## v138.6 R4 改善 (user dogfood 2026-05-30 5 巡目)
+
+### 改善 C 続: 「この条件の解説」 affordance 強化
+- 要望: user dogfood「位置と色が目立たない、 「?」 チップのように cyan で目立たせて」
+- 旧 style: subtle text link (灰色 / 透明背景 / border なし、 2026-05-12 commit で modern style に修正済だったが
+  「重要な解説なのに発見されない」 課題が残った)
+- 新 style: FiveConditionsCard 「?」 chip と同 cyan accent pill:
+  - background rgba(34,211,238,0.15) / border rgba(34,211,238,0.40) / color rgb(56,189,248)
+  - font 11px / weight 600 / radius-pill / padding 4px 10px
+  - hover: background 0.30 + border 0.65 で深まる
+- 統一感: セクション title 右の「?」 chip と同色味、 user の視線移動時に自然に発見
 
 ## v138.6 R3 hotfix 真因 (user dogfood 2026-05-30 4 巡目)
 
