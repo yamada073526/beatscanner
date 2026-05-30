@@ -298,6 +298,23 @@ frontend (`DiagramCard.jsx`):
 | v138.6 R7-A2+C2 | 6685db6 | `index-KrDrSd9e.js` | LogOut → ?layout=classic 強制 + ProfileCard 2 箇所目 listener 復旧 |
 | v138.6 R7-D+R7-E | fe689a7 | `index-MyCqygyQ.js` | 永遠ローディング honest 表現 + 🔒 emoji → Lock icon |
 | v138.6 R7-A3 | 0fb8bab | `index-N2aJhBlu.js` | re-login 後 ?layout=classic 自動 clear で workspace 復帰 |
+| v138.6 R7-F+G | 8d94d93 | `index-Dap-2cwr.js` | LP 銘柄 click → workspace 強制 + 図解 Pro 限定化 |
+
+## v138.6 R7-F + R7-G 着地
+
+### 🟠 R7-F P1: LP 銘柄 click が classic SPA で完結する regression
+- 真因: LP は logout 後の `?layout=classic` で表示されるため、 handleLPTickerClick がそのまま
+  classic SPA mode で analyze 実行、 user は workspace UI に戻れず「旧 UI の銘柄分析へ飛ぶ」 認識
+- 修正: useJudgmentResult.js handleLPTickerClick で classic URL 検知時に
+  `?ticker=<sym>` で workspace mode へ full reload、 demo 分析を workspace で実行
+- 元の UX 復元、 銘柄 URL に乗せて useUrlSync で picked up
+
+### 🟡 R7-G P2: 図解 (DiagramCard) Pro 限定化
+- user 要望「図解生成も、 未ログインだと見えないように」
+- LP 訴求「PRO: AI 詳細レポート」 と整合 (図解 = AI 詳細レポート、 ¥980/月、 Trust Cliff 防止)
+- 修正: JudgmentDetail.jsx isV4 branch で `(plan === 'pro' || plan === 'premium')` の時のみ
+  StickyDiagramAccordion render、 free user は完全非表示
+- legacy mode (isV4=false) には元々 StickyDiagramAccordion なし、 v4 mode のみ gate で完了
 
 ## v138.6 R7-A3 着地 (R7-A2 副作用 fix)
 
