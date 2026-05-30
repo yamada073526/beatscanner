@@ -678,15 +678,16 @@ function UserFooter() {
       <button
         type="button"
         onClick={async () => {
-          // v138.6 R7-A 🔴 P0 (2026-05-30): LogOut 後に LP へ自動遷移しないと user は workspace に
-          // 留まり「ログインボタンなし → 再ログイン不可」 state に陥る (user dogfood 6 巡目で報告)。
-          // signOut() 完了後に window.location.href = "/" で LP 強制遷移、 workspace state も
-          // フル reload で clear (URL params / cached state 全 reset)。
+          // v138.6 R7-A2 🔴 P0 (2026-05-30): LogOut 後に LP (Hero + Google ログイン CTA) を表示する。
+          // 旧 R7-A は window.location.href = '/' だけだが、 PC default = workspace mode のため
+          // '/' で workspace 表示が続き、 LP Hero 非表示 (App.jsx line 920 useWorkspaceLayout)。
+          // → `?layout=classic` を明示で classic SPA mode 強制、 LP Hero + Google ログインボタン表示。
+          // login 後は user 操作で workspace に切替可 (Cmd+K cmd palette / nav)。
           try {
             await signOut();
           } finally {
             if (typeof window !== 'undefined') {
-              window.location.href = '/';
+              window.location.href = '/?layout=classic';
             }
           }
         }}

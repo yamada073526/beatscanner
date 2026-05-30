@@ -1492,7 +1492,7 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
                 <a
                   href="#login"
                   style={{ color: 'var(--color-accent)', textDecoration: 'underline' }}
-                  onClick={(e) => { e.preventDefault(); window.dispatchEvent(new CustomEvent('bs:open-login')); }}
+                  onClick={(e) => { e.preventDefault(); signInWithGoogle(); }}
                 >
                   Google ログインで無制限
                 </a>
