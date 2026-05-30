@@ -32,6 +32,8 @@ import { supabase } from '../lib/supabase.js';
 import { sanitizeText } from '../lib/blocklist.js';
 import { aggregateWithTransactions } from '../lib/holdings.js';
 import Chip from './ui/Chip.jsx';
+// v138.6 R7-C (2026-05-30): NoSessionHint click で直接 signInWithGoogle、 plain text 廃止
+import { useAuth } from '../hooks/useAuth.js';
 
 const PASS_COUNT_THRESHOLD = 5; // 「他 N 件」 の閾値 (PASS 5/5)
 
@@ -174,12 +176,26 @@ function NoSessionHint({ frameClass = '' }) {
   // v86 R3 → revert (color_hierarchy -6 の主因が triage-banner-cta bg accent 8% tint)
   //  - bg/border は R2 concierge (左 cyan→transparent 4% gradient) に戻す
   //  - 「ログイン →」 affordance は Vision が肯定的だったので残置 (accent-cyan fw600)
+  // v138.6 R7-C 🟠 P1 (2026-05-30): user dogfood「クリックできない」 → button 化 + 直接 signInWithGoogle 接続。
+  const { signInWithGoogle } = useAuth();
   return (
-    <div className={`triage-banner triage-banner-muted triage-banner-concierge ${frameClass}`.trim()}>
+    <button
+      type="button"
+      onClick={() => { signInWithGoogle(); }}
+      className={`triage-banner triage-banner-muted triage-banner-concierge ${frameClass}`.trim()}
+      style={{
+        width: '100%',
+        textAlign: 'left',
+        cursor: 'pointer',
+        font: 'inherit',
+        color: 'inherit',
+      }}
+      aria-label="Googleでログインして全機能を解放"
+    >
       <span className="triage-pulse-dot" aria-hidden="true" />
       <span style={{ flex: 1 }}>ログインすると、 保有銘柄の 5 条件 / Cup-Handle 状態を確認できます</span>
       <span className="triage-cta-affordance" aria-hidden="true">ログイン →</span>
-    </div>
+    </button>
   );
 }
 

@@ -3,6 +3,9 @@ import Card from '../../primitives/Card.jsx';
 import SectionHeader from '../../primitives/SectionHeader.jsx';
 import CompanyLogo from '../../../../components/CompanyLogo.jsx';
 import Chip from '../../../../components/ui/Chip.jsx';
+// v138.6 R7-C (2026-05-30): 「Google ログインで無制限」 link を直接 signInWithGoogle 接続、
+// 旧 window.dispatchEvent('bs:open-login') は listener なしで click 無反応 (user dogfood 報告)
+import { useAuth } from '../../../../hooks/useAuth.js';
 import { Building2, MapPin, Users, Briefcase, Sparkles, RefreshCw, Scale } from 'lucide-react';
 import { fetchProfileExtended, fetchProfileSummary, fetchProfilePeers } from '../../../../api.js';
 import { sanitizeText } from '../../../../lib/blocklist.js';
@@ -1066,6 +1069,8 @@ function buildLocation(city, state, country) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function ProfileCard({ ticker, companyName, dataSource, latestPeriod, latestDate, onNavigateTicker }) {
+  // v138.6 R7-C: signInWithGoogle を ProfileCard 内で直接利用 (event dispatch listener なし問題の修正)
+  const { signInWithGoogle } = useAuth();
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
 
@@ -1303,7 +1308,7 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
                   <a
                     href="#login"
                     style={{ color: 'var(--color-accent)', textDecoration: 'underline' }}
-                    onClick={(e) => { e.preventDefault(); window.dispatchEvent(new CustomEvent('bs:open-login')); }}
+                    onClick={(e) => { e.preventDefault(); signInWithGoogle(); }}
                   >
                     Google ログインで無制限
                   </a>

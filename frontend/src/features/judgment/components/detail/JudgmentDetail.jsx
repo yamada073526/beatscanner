@@ -866,16 +866,19 @@ export default function JudgmentDetail({
           <SectionFade key="target-zone" id="sec-target-and-zone" staggerIndex={3}>
             <div className="atc-szc-grid">
               <AnalystTargetCard ticker={selectedTicker} />
-              <SellZoneCard ticker={selectedTicker} />
+              {/* v138.6 R7-B 🔴 P0 Trust Cliff (2026-05-30): SellZoneCard は Premium 限定 (50DMA
+                  extension narration、 「機関の売却圧力」 sign)。 user dogfood で非ログイン demo
+                  で leak 露出 → CLAUDE.md「Trust Cliff (信頼の崖) は最重要バグカテゴリ」 違反。
+                  plan === 'premium' でのみ render、 free/未ログインは非表示。 */}
+              {plan === 'premium' && <SellZoneCard ticker={selectedTicker} />}
             </div>
-            {/* v126 R8-3 Phase 2+3: Cup-Handle pivot + 直近 breakout support narration。
-                各々 non-display 条件 (検出なし / last_breakout なし) で null return、 Pane 3 ノイズゼロ設計。
-                Phase 4 で AnalystTargetCard + SellZoneCard と共に 3-4 card grid 統合予定。 */}
-            <CupPivotCard ticker={selectedTicker} />
-            <BuyZoneCard ticker={selectedTicker} />
-            {/* v127 R16-3 (R12-1 Phase 1 R2): Distribution Days = 機関の売り圧力目安 (full-width)。
-                SellZone (価格 vs MA) / Cup-Handle (買い目安) と相補的な volume ベース sell-side シグナル。 */}
-            <DistributionDaysCard ticker={selectedTicker} />
+            {/* v138.6 R7-B 🔴 P0 Trust Cliff: 以下 3 card は全て Premium 限定 (Cup-Handle pivot
+                narration / 損切り目安 / Distribution Days)。 非 premium 露出は Trust Cliff 重大違反、
+                conditional render で完全 gate。 marketing 配慮の ProTeaser placeholder は
+                R7 後続 sprint で個別追加 (今は P0 leak 止めを優先)。 */}
+            {plan === 'premium' && <CupPivotCard ticker={selectedTicker} />}
+            {plan === 'premium' && <BuyZoneCard ticker={selectedTicker} />}
+            {plan === 'premium' && <DistributionDaysCard ticker={selectedTicker} />}
           </SectionFade>
         ) : null;
 

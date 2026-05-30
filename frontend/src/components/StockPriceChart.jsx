@@ -938,9 +938,16 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                   width={58}
                 />
 
-                {/* Custom tooltip with earnings hover info */}
+                {/* Custom tooltip with earnings hover info
+                    v138.6 R7-B 🔴 P0 Trust Cliff (2026-05-30): cupRequiresPro (= 非 Premium で
+                    Cup-Handle 検出済) の場合は cupHandle / pillar2Markers を tooltip に渡さない、
+                    hover で pivot 価格 + 損切り目安が露出する leak を防ぐ。 */}
                 <Tooltip
-                  content={<EarningsTooltip earningsMap={earningsMap} pillar2Markers={pillar2Markers} cupHandle={cupHandle} />}
+                  content={<EarningsTooltip
+                    earningsMap={earningsMap}
+                    pillar2Markers={cupRequiresPro ? null : pillar2Markers}
+                    cupHandle={cupRequiresPro ? null : cupHandle}
+                  />}
                   cursor={{ stroke: CHART_CURSOR, strokeWidth: 1, strokeDasharray: '4 2' }}
                 />
 

@@ -677,7 +677,19 @@ function UserFooter() {
       </span>
       <button
         type="button"
-        onClick={signOut}
+        onClick={async () => {
+          // v138.6 R7-A 🔴 P0 (2026-05-30): LogOut 後に LP へ自動遷移しないと user は workspace に
+          // 留まり「ログインボタンなし → 再ログイン不可」 state に陥る (user dogfood 6 巡目で報告)。
+          // signOut() 完了後に window.location.href = "/" で LP 強制遷移、 workspace state も
+          // フル reload で clear (URL params / cached state 全 reset)。
+          try {
+            await signOut();
+          } finally {
+            if (typeof window !== 'undefined') {
+              window.location.href = '/';
+            }
+          }
+        }}
         onMouseEnter={(e) => {
           e.currentTarget.style.opacity = '1';
         }}
