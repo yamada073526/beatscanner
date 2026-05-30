@@ -31,6 +31,18 @@
 > Premium 列が必須 (dead-end funnel 回避)。 Premium checkout (Stripe) は未配線 = App.jsx は Pro のみ。
 > → Phase 2 の 1+2+3 はセットで着地が安全。
 
+### 🆕 v138.7 Phase 1.5 — チャート Premium CTA fix (user dogfood 13 巡目、 commit `0d5c0a4`)
+> user 指摘: ①図解 modal は「図解」 Pro 表示で正常 ✅。 ②**Cup-Handle 等 Premium はチャート上の
+> 「Premium で全データ解放」 バナーが click 不可** + 「形成中 🔒」 chip click は素の `window.alert`
+> (¥1,800 hardcode) で Aman 級 brand 不適合。 真因 = Phase 1 で UpgradeModal を tier-aware 化したが
+> チャート側だけ旧 alert のまま取り残されていた。
+- `StockPriceChart.jsx`: `onUpgrade` prop 追加。 ①chip onClick の `window.alert` 廃止 → tier-aware
+  UpgradeModal (`cup_handle_detection`=Premium、 「近日公開予定」 正直表示) を起動。 ②overlay バナーを
+  静的 div → `<button>` 化で click 可能 (outer pointer-events-none 維持で chart hover 残す)。 文言「全データ解放」 → 「解放」。
+- `JudgmentDetail.jsx`: `<StockPriceChart ... onUpgrade={detailContext.onUpgrade} />` 配線。
+- bundle `index-7C3ZzqiN.js` → **`index-C01LQ0kn.js`** (deploy 投入済、 反映待ち時点では未 grep 検証)。
+- 残る ¥1,800 (CustomScreenerPanel 別 chunk + StockPriceChart の他テキスト) は Premium 機能の Premium 価格 = 正当 (ねじれ無し)。
+
 ---
 
 
