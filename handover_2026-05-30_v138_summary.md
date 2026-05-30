@@ -77,6 +77,17 @@
 3. **UpgradeModal 本格リデザイン** (SPEC seed A「凄い！」 Aman 級 + Premium 3 列 + Premium CTA を本物の
    checkout に接続)。 ui-designer 主導 3 体合議。
 4. LP Premium teaser を「近日公開」 → 実 CTA に昇格 (Stripe 配線後)。
+
+### 🟡 Phase 2 dogfood backlog (user 指摘 2026-05-30、 優先度低だが Phase 3 LP 作業と同時が効率的)
+- **[優先度やや高] LP 3 カードが並列にならず Premium だけ下段に折り返す**: Phase 2 で `gridTemplateColumns:
+  repeat(auto-fit, minmax(260px,1fr))` + maxWidth 1080 にしたが、 本番では Free/Pro 上段 + Premium 下段で
+  半端に表示 (user スクショで確認)。 真因候補: 画面幅が 3×260+gap=812px に届かず auto-fit が 2 列に落ちる /
+  Premium カードが何かに潜り込む。 → minmax 幅を下げる or grid-template-columns を明示 3 列 (狭幅は媒体 query で
+  1 列) 等。 user 感覚「3 列横並びが良い」 + funnel 観点も「Premium だけ下」 は格落ち感で価値毀損 = 同意。
+  `LandingPage.jsx` PricingSection。
+- **[優先度低] 「市場の声 (Pro で解禁)」 カード (ProTeaser) に発光演出なし**: scroll/hover で arrival/hover 発光が
+  他 panel-card と不揃い (user 指摘)。 `components/ui/ProTeaser.jsx` が `panel-card` クラス未使用の可能性。
+  他カードと発光を揃える (発光系は v54-v59 高リスク領域、 design_recipes §C-1〜C-4 遵守で慎重に)。
 - ⚠️ 残: `ContextSection.jsx:173,221` の PremiumLock bullets「Premium は Claude Opus 多面分析 (月 20 銘柄)」
   も同種文言。 図解 Pro 開放後の `claude_opus_report` 扱いと併せ Phase 2 で整理 (今回 scope 外)。
 - 既存 token 発見: `--amber-bg/title/body` は既に light/dark 両定義あり (今回は color-warning + text 系で対応)。
