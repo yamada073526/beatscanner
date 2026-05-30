@@ -730,7 +730,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
               data-cup-state={cupHandle.state}
               title={
                 cupRequiresPro
-                  ? `取っ手付きカップ (Cup-with-Handle)\n${cupChipLabel}\n深さ ${cupHandle.cup.depth_pct}% / ${cupHandle.cup.weeks}週\n［Premium で全データ解放］`
+                  ? `取っ手付きカップ (Cup-with-Handle)\n${cupChipLabel}\n深さ ${cupHandle.cup.depth_pct}% / ${cupHandle.cup.weeks}週\n［Premium で解放］`
                   : `取っ手付きカップ (Cup-with-Handle)\n${cupChipLabel}\n深さ ${cupHandle.cup.depth_pct}% / ${cupHandle.cup.weeks}週\nPivot $${cupHandle.pivot.price.toFixed(2)}`
               }
               // v138.7 Phase 1.5 (2026-05-30): 素の window.alert (¥1,800 hardcode、 Aman 級 brand 不適合) を

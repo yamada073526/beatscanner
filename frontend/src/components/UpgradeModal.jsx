@@ -31,11 +31,13 @@ const PLAN_ROWS = [
 ];
 
 // Premium 機能の価値訴求 (Phase 1 は近日公開、 Phase 2 で checkout 配線)。
+// v138.7 Phase 1.6 (user dogfood): 「Claude Opus 多面分析レポート」 は ① 実装 (DetailReport.jsx =
+// 強気材料 / 弱気材料 / 総合判断 の両論併記レポート) と乖離、 ② Claude Opus は訴求不要、 で改名。
 const PREMIUM_HIGHLIGHTS = [
   'カップ・ウィズ・ハンドル検出（強力な買いシグナル）',
   '売り／買いゾーン・支持線・抵抗線',
   'Insider 取引（Form 4）・13F 機関保有',
-  'Claude Opus 多面分析レポート',
+  'AI 詳細分析レポート（強気・弱気の両論を併記）',
 ];
 
 function PlanCol({ heading, price, active, children }) {
@@ -149,19 +151,40 @@ export default function UpgradeModal({ isOpen, onClose, featureName, onCheckout,
           /* ===== Premium 機能 — Phase 1 は checkout 未配線のため近日公開を正直に表示 ===== */
           <>
             <div className="px-6 py-4">
-              <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white px-[18px] py-5">
-                <p className="text-sm font-semibold text-slate-900">
+              {/* v138.7 Phase 1.6 (2026-05-30、 dark-mode skill): 旧 Tailwind の amber gradient
+                  (from-amber-50 to-white) は dark mode で bg が light のまま残り text と同化して
+                  読めなかった (user dogfood)。 semantic token (var(--text-*)) + 半透明 amber overlay に
+                  書き換えて両モード対応 ([data-theme] 自動追従)。 amber は #f59e0b (--color-warning、 両モード共通)。 */}
+              <div
+                style={{
+                  borderRadius: 14,
+                  padding: '20px 18px',
+                  background: 'linear-gradient(135deg, rgba(245,158,11,0.14), rgba(245,158,11,0.04))',
+                  border: '1px solid rgba(245,158,11,0.40)',
+                }}
+              >
+                <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
                   Premium プラン — テクニカル分析 + 銘柄発見
                 </p>
-                <ul className="mt-3 space-y-1.5 text-xs text-slate-600">
+                <ul style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {PREMIUM_HIGHLIGHTS.map((h) => (
-                    <li key={h} className="flex items-start gap-2">
-                      <span className="mt-0.5 shrink-0 text-amber-500">◆</span>
-                      <span className="leading-snug">{h}</span>
+                    <li
+                      key={h}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 8,
+                        fontSize: 12,
+                        lineHeight: 1.5,
+                        color: 'var(--text-secondary)',
+                      }}
+                    >
+                      <span style={{ flexShrink: 0, marginTop: 1, color: 'var(--color-warning)' }}>◆</span>
+                      <span>{h}</span>
                     </li>
                   ))}
                 </ul>
-                <p className="mt-4 text-xs font-medium text-amber-600">
+                <p style={{ marginTop: 16, fontSize: 12, fontWeight: 600, color: 'var(--color-warning)' }}>
                   Premium プランは近日公開予定です。
                 </p>
               </div>
