@@ -53,6 +53,29 @@
   DetailReport.jsx 実装 (強気材料/弱気材料/総合判断 の両論併記) と一致 + Opus 実装詳細訴求を撤去。
 - 付随: Cup-Handle chip hover tooltip「Premium で全データ解放」 → 「Premium で解放」 統一。
 - bundle `index-BtgM2YZB.js` → **`index-BJJb_Iiv.js`** (本番反映 + grep 検証済: 新ラベル 1 / 旧 Opus ラベル 0 / color-warning 9 / 旧 tooltip 0)。
+
+### 🆕 v138.7 Phase 2 着地 (commit `8d2ea53`、 user 判断: Stripe 不要の準備のみ + AI詳細レポート Pro 統一)
+> ⚠️ **スクリーナー実 Premium gate は意図的に未実施**。 Premium が Stripe 未配線で買えない以上、 gate を
+> 強めると dead-end funnel (Trust Cliff)。 スクリーナー gate 強化 + Stripe Premium checkout 配線は
+> **Phase 3 (Premium 販売開始) でセット**。 Phase 2 は「買える Pro の矛盾解消」 + 「Premium の存在告知」 のみ。
+- **AI詳細レポート Pro 統一**: `planGating.js` の `claude_opus_report` を PREMIUM → **PRO** に移動 (key 名維持で
+  drift 回避)。 LP/modal が既に「PRO: AI 詳細レポート ¥980」 訴求済なのに実装 gate のみ Premium だった
+  Trust Cliff を解消。 `ContextSection.jsx` PremiumLock bullets 2 箇所「Premium は Claude Opus 多面分析」
+  → 「強気材料・弱気材料・総合判断を両論併記」 (前 section の「⚠️ 残」 は本 Phase で解決済)。
+- **LP Premium「近日公開」teaser 列**: `LandingPage.jsx` PricingSection に 3 列目追加 (Free/Pro/Premium)。
+  Pro (おすすめ+cyan) の主役性維持で Premium は amber 控えめ。 CTA は disabled「近日公開予定」 で
+  「まだ買えない」 明示 (Trust Cliff 回避)。 grid maxWidth 720 → 1080 で 3 列横並び。 `Crown` icon 追加。
+  panel-card 流用 + color-mix(var(--color-warning)) のみ (design-system-check PASS、 発光 host 増やさず)。
+- bundle `index-BJJb_Iiv.js` → (deploy 投入済、 反映待ち)。
+
+### 🔴 Phase 3 残タスク (Premium 販売開始、 次セッション)
+1. **Stripe Premium checkout 配線** (App.jsx は現状 Pro monthly/yearly のみ)。 Premium price ID を Stripe
+   ダッシュボードで作成 + Railway env 設定 = **user 作業あり**。 money-stakes のため慎重に検証。
+2. **スクリーナー section 別 Premium gate**: `ScreenerPane.jsx` の `demoMode` を Cup-Handle 系=
+   `canUse('cup_handle_detection', plan)` / RS・注目銘柄=Pro に分離 (件数見せ + blur)。
+3. **UpgradeModal 本格リデザイン** (SPEC seed A「凄い！」 Aman 級 + Premium 3 列 + Premium CTA を本物の
+   checkout に接続)。 ui-designer 主導 3 体合議。
+4. LP Premium teaser を「近日公開」 → 実 CTA に昇格 (Stripe 配線後)。
 - ⚠️ 残: `ContextSection.jsx:173,221` の PremiumLock bullets「Premium は Claude Opus 多面分析 (月 20 銘柄)」
   も同種文言。 図解 Pro 開放後の `claude_opus_report` 扱いと併せ Phase 2 で整理 (今回 scope 外)。
 - 既存 token 発見: `--amber-bg/title/body` は既に light/dark 両定義あり (今回は color-warning + text 系で対応)。
