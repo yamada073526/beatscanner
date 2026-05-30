@@ -253,6 +253,219 @@ function CapitalReturnSection({ capitalReturn }) {
   );
 }
 
+// ── v138 Phase 2D Sprint 2b: 次 Q ガイダンス (SEC 8-K LLM 抽出) ──────────────
+// backend `parsed["guidanceExtracted"]` (visualizer/sec_guidance.extract_guidance) を render。
+// raw fact のみ表示、 「確実」 「必ず」 等の §38 断定 / §5 最上級は backend NEGATIVES + frontend
+// BLOCKLIST_REGEX (blocklist.js) で 2 重 sanitize 済。
+// extraction_confidence: high=緑 chip / medium=muted chip / low=warning banner (出典確認誘導)。
+const MARGIN_TYPE_LABEL = { gross: '粗利率', operating: '営業利益率', net: '純利益率' };
+
+function formatRevenueRange(rev) {
+  if (!rev) return null;
+  const lo = rev.low_b;
+  const hi = rev.high_b;
+  if (lo == null && hi == null) return null;
+  const fmt = (v) => `$${(typeof v === 'number' ? v : 0).toFixed(1)}B`;
+  if (lo != null && hi != null && lo !== hi) return `${fmt(lo)} - ${fmt(hi)}`;
+  return fmt(lo ?? hi);
+}
+
+function formatMarginRange(mg) {
+  if (!mg) return null;
+  const lo = mg.low_pct;
+  const hi = mg.high_pct;
+  if (lo == null && hi == null) return null;
+  const fmt = (v) => `${(typeof v === 'number' ? v : 0).toFixed(1)}%`;
+  if (lo != null && hi != null && lo !== hi) return `${fmt(lo)} - ${fmt(hi)}`;
+  return fmt(lo ?? hi);
+}
+
+function GuidanceRow({ icon, label, primary, secondaryChip, consensusDiffPct }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '8px 10px',
+      borderRadius: '6px',
+      background: 'var(--bg-subtle)',
+      border: '1px solid var(--border)',
+      gap: '8px',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '8px',
+        flex: '1 1 0', minWidth: 0,
+      }}>
+        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }} aria-hidden="true">{icon}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <div style={{
+            fontSize: '11px', color: 'var(--text-muted)',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>{label}</div>
+          {consensusDiffPct != null && (
+            <div style={{
+              fontSize: '10px',
+              color: consensusDiffPct > 0 ? 'var(--color-gain)' : consensusDiffPct < 0 ? 'var(--color-loss)' : 'var(--text-muted)',
+              opacity: 0.85,
+              whiteSpace: 'nowrap',
+            }}>
+              consensus 比 {consensusDiffPct > 0 ? '+' : ''}{consensusDiffPct.toFixed(1)}%
+            </div>
+          )}
+        </div>
+      </div>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '8px',
+        flexShrink: 0,
+      }}>
+        <div style={{
+          fontSize: '13px', fontWeight: 700,
+          color: 'var(--text-primary)',
+        }}>{primary}</div>
+        {secondaryChip}
+      </div>
+    </div>
+  );
+}
+
+function GuidanceSection({ guidance }) {
+  if (!guidance) return null;
+  const narrative = guidance.narrative_jp || '';
+  const sourceUrl = guidance.source_url || '';
+  const confidence = guidance.extraction_confidence || 'low';
+  const qRev = formatRevenueRange(guidance.q_revenue);
+  const qMg = formatMarginRange(guidance.q_margin);
+  const fyRev = formatRevenueRange(guidance.fy_revenue);
+  const fyMg = formatMarginRange(guidance.fy_margin);
+  const hasAnyStructured = qRev || qMg || fyRev || fyMg;
+  if (!narrative && !hasAnyStructured) return null;
+
+  const confidenceCfg = {
+    high: { label: '精度: 高', color: 'var(--color-gain)', bg: 'rgba(34,197,94,0.14)' },
+    medium: { label: '精度: 中', color: 'var(--text-muted)', bg: 'rgba(148,163,184,0.12)' },
+    low: { label: '精度: 低', color: 'var(--color-warning)', bg: 'rgba(245,158,11,0.14)' },
+  }[confidence] || null;
+  const confidenceChip = confidenceCfg ? (
+    <div style={{
+      fontSize: '10px', fontWeight: 700,
+      color: confidenceCfg.color,
+      background: confidenceCfg.bg,
+      padding: '2px 7px', borderRadius: '4px',
+      whiteSpace: 'nowrap',
+    }}>
+      {confidenceCfg.label}
+    </div>
+  ) : null;
+
+  const marginTypeChip = (mg) => {
+    if (!mg?.type) return null;
+    const tyLabel = MARGIN_TYPE_LABEL[mg.type];
+    if (!tyLabel) return null;
+    return (
+      <div style={{
+        fontSize: '10px', fontWeight: 600,
+        color: 'var(--text-muted)',
+        background: 'rgba(148,163,184,0.12)',
+        padding: '2px 7px', borderRadius: '4px',
+        whiteSpace: 'nowrap',
+      }}>
+        {tyLabel}
+      </div>
+    );
+  };
+
+  return (
+    <>
+      <VizSectionLabel text="次 Q ガイダンス（経営陣の見通し）" />
+      <div style={{
+        fontSize: '10px', color: 'var(--text-muted)',
+        marginBottom: '8px',
+        display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap',
+      }}>
+        <span>SEC 8-K プレスリリース / 決算 transcript から抽出</span>
+        {confidenceChip}
+      </div>
+
+      {confidence === 'low' && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: '8px',
+          padding: '8px 10px', borderRadius: '6px',
+          background: 'rgba(245,158,11,0.08)',
+          border: '1px solid rgba(245,158,11,0.32)',
+          marginBottom: '8px',
+        }}>
+          <AlertTriangle size={14} strokeWidth={2} color="var(--color-warning)" style={{ flexShrink: 0, marginTop: '1px' }} aria-hidden="true" />
+          <div style={{ fontSize: '11px', color: 'var(--text-primary)', lineHeight: 1.5 }}>
+            抽出精度が不足しています。 原文 (出典 link) で確認してください。
+          </div>
+        </div>
+      )}
+
+      {narrative && (
+        <div style={{
+          fontSize: '12px', color: 'var(--text-primary)', lineHeight: 1.6,
+          marginBottom: hasAnyStructured ? '10px' : '0',
+          whiteSpace: 'pre-line',
+        }}>
+          {narrative}
+        </div>
+      )}
+
+      {hasAnyStructured && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {qRev && (
+            <GuidanceRow
+              icon="◆"
+              label="次 Q 売上高"
+              primary={qRev}
+              consensusDiffPct={guidance.q_revenue?.consensus_diff_pct}
+            />
+          )}
+          {qMg && (
+            <GuidanceRow
+              icon="◆"
+              label="次 Q マージン"
+              primary={qMg}
+              secondaryChip={marginTypeChip(guidance.q_margin)}
+            />
+          )}
+          {fyRev && (
+            <GuidanceRow
+              icon="◇"
+              label="通期 売上高"
+              primary={fyRev}
+              consensusDiffPct={guidance.fy_revenue?.consensus_diff_pct}
+            />
+          )}
+          {fyMg && (
+            <GuidanceRow
+              icon="◇"
+              label="通期 マージン"
+              primary={fyMg}
+              secondaryChip={marginTypeChip(guidance.fy_margin)}
+            />
+          )}
+        </div>
+      )}
+
+      {sourceUrl && (
+        <div style={{
+          marginTop: '10px',
+          fontSize: '10px', color: 'var(--text-muted)',
+        }}>
+          出典: <a
+            href={sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: 'var(--color-accent)', textDecoration: 'underline' }}
+          >
+            原文を開く
+          </a>
+        </div>
+      )}
+    </>
+  );
+}
+
 function BarChartPanel({ trend, operatingMargins }) {
   const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, value: null, period: null, yoy: null, beat: null, beatMargin: null });
 
@@ -1689,6 +1902,13 @@ export default function DiagramCard({
         {data.capitalReturnDataAvailable && (
           <div data-testid="diagram-section-capital-return" style={{ marginTop: '16px' }}>
             <CapitalReturnSection capitalReturn={data.capitalReturn} />
+          </div>
+        )}
+
+        {/* ── Section 3.7: 次 Q ガイダンス (SEC 8-K LLM 抽出) v138 Phase 2D Sprint 2b ── */}
+        {data.guidanceExtractedAvailable && (
+          <div data-testid="diagram-section-guidance" style={{ marginTop: '16px' }}>
+            <GuidanceSection guidance={data.guidanceExtracted} />
           </div>
         )}
 

@@ -239,6 +239,16 @@ export function sanitizeDiagramData(data) {
       };
     });
   }
+  if (next.guidanceExtracted && typeof next.guidanceExtracted === 'object') {
+    const g = next.guidanceExtracted;
+    if (typeof g.narrative_jp === 'string') {
+      const sanitized = sanitizeText(g.narrative_jp);
+      if (sanitized !== g.narrative_jp) {
+        next._sanitized = true;
+        next.guidanceExtracted = { ...g, narrative_jp: sanitized || g.narrative_jp };
+      }
+    }
+  }
 
   if (wasViolated) {
     next._sanitized = true;
