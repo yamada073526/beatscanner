@@ -96,6 +96,7 @@ export default function CupPivotCard({ ticker }) {
   //   + 'cup_completing' (カップ完成間近・未突破、 LLY 型) の 4 state catch。
   // AAPL/NVDA: formation or breakout_pending、 LLY: cup_completing、 GE/META 等真の ATH 更新: breakout_extended。
   // breakout_confirmed のみ別 BuyZoneCard 担当 (重複回避)。
+  // v134 P2 Phase 2: pullback_to_support は BuyZoneCard が「押し目接近中」 として表示するため CupPivot 非表示 (重複回避)。
   const showCupPivot = cupHandle?.detected
     && ['formation', 'breakout_pending', 'breakout_extended', 'cup_completing'].includes(state)
     && pivotPrice != null

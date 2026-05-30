@@ -106,15 +106,30 @@ export default function BuyZoneCard({ ticker }) {
   }
 
   // v127 R16-3 (NVDA $200): box_support 優先表示、 なければ last_breakout fallback。
+  // v134 P2 Phase 2 (SPEC v2): pullback_to_support state は box_support 上に「押し目接近中」 narrative を出す。
   const useBox = !!boxSupport;
-  const zoneKey = useBox ? 'box_support' : classifyBuyZone('breakout_confirmed');
+  const cupState = cupHandle?.state;
+  const isPullback = cupState === 'pullback_to_support';
+  const zoneKey = isPullback
+    ? 'pullback_to_support'
+    : (useBox ? 'box_support' : classifyBuyZone('breakout_confirmed'));
   const label = BUY_ZONE_LABEL_JP[zoneKey];
   const desc = BUY_ZONE_DESC_JP[zoneKey];
-  const cardTitle = useBox ? '長期ボックス支持線' : '直近 breakout support';
+  const cardTitle = isPullback
+    ? '押し目接近中 (支持線テスト)'
+    : (useBox ? '長期ボックス支持線' : '直近 breakout support');
 
   // narration placeholder inject (数値は backend 計算、 JS は文字列置換のみ)
   let detailText;
-  if (useBox) {
+  let conclusionText = desc.conclusion;
+  if (isPullback) {
+    // {DIST_PCT} を backend の dist_to_band_pct で inject、 absolute value で表示
+    const distPct = Number.isFinite(cupHandle?.dist_to_band_pct)
+      ? Math.abs(cupHandle.dist_to_band_pct).toFixed(1)
+      : '—';
+    conclusionText = desc.conclusion.replace('{DIST_PCT}', distPct);
+    detailText = desc.detail;
+  } else if (useBox) {
     const months = Math.max(1, Math.round((boxSupport.lookback_weeks || 0) / 4.3));
     detailText = desc.detail
       .replace('{N}', String(months))
@@ -135,11 +150,11 @@ export default function BuyZoneCard({ ticker }) {
       data-spotlight="card"
       style={{ minHeight: 128 }}
     >
-      {/* v132 P1-G: chip + hero 1 row 統合、 hero label 削除 (chip が context 代替)。 */}
-      <div className="card-price-hero" data-testid="buy-zone-card-price-hero">
-        <Chip variant="display" size="xs" tone="gain" className="card-price-hero__chip">
+      {/* v132 P1-G + v134 P2 Phase 2: chip + hero 1 row 統合、 pullback 状態は「押し目接近中」 chip (warning) で区別。 */}
+      <div className="card-price-hero" data-testid={isPullback ? 'buy-zone-card-pullback-to-support' : 'buy-zone-card-price-hero'}>
+        <Chip variant="display" size="xs" tone={isPullback ? 'warning' : 'gain'} className="card-price-hero__chip">
           <MapPin size={11} strokeWidth={2} className="card-zone-context__icon" aria-hidden="true" />
-          サポートゾーン
+          {isPullback ? '押し目接近中' : 'サポートゾーン'}
         </Chip>
         <span className="card-price-hero__value" aria-label={`${heroLabel} ${fmtUsd(refPrice)}`}>
           {fmtUsd(refPrice)}
@@ -159,7 +174,7 @@ export default function BuyZoneCard({ ticker }) {
 
       <div className="bzc-body">
         <div className="bzc-narration">
-          <p className="bzc-desc bzc-desc--conclusion">{desc.conclusion}</p>
+          <p className="bzc-desc bzc-desc--conclusion">{conclusionText}</p>
           <p className="bzc-desc bzc-desc--detail">{detailText}</p>
         </div>
 

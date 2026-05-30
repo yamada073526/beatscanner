@@ -31,6 +31,8 @@ export const BUY_ZONE_LABEL_JP = {
   cup_completing:    'Cup 完成間近 pivot 目安',
   // v127 R16-3 (5/29 user dogfood、 NVDA $200): 長期ボックスレンジ支持線 (複数回 test された水平帯) 用 label
   box_support:       '長期ボックス支持線目安',
+  // v134 P2 Phase 2 (SPEC v2 §6、 user gate 2 release 前着手承認): 押し目接近中の局面 label
+  pullback_to_support: '押し目接近中',
   unknown:           '判定不可',
 };
 
@@ -66,6 +68,18 @@ export const BUY_ZONE_DESC_JP = {
     conclusion: '長期の揉み合い (ボックスレンジ) 上限が support の目安とされる水準です。',
     detail: 'テクニカル分析では、 複数回 test された水平価格帯 (ボックスレンジ上限) が、 上抜け後に support level の目安として知られています。 この水準は過去 {N} ヶ月で {M} 回 test された価格帯です。 ただし下抜けは trend 転換の signal にもなり得るため、 終値 + 出来高ベースの確認が必要とされています。',
   },
+  // v134 P2 Phase 2 (SPEC v2 §6、 6 体合議 verdict 反映、 user gate 2 確定 §4 閾値 7%/+5%/-3%):
+  // 押し目接近中 = 過去 pivot 上抜け済 + 直近高値から 7%+ 押し戻し + box_support band +5% 以内接近 +
+  // band_low 未割れ (3% buffer) の局面。
+  // narration は金融 Opus + qa-dogfooder verdict 反映:
+  //   - 「entries を取る」 (アクション推奨) → 「観察する」 (金商法 §38 safe)
+  //   - 「目安」 重複削除 → 「参考水準」 + 「事例」 idiom で出典化
+  //   - 末尾 免責文 必須 (qa-dogfooder verdict 4 件目)
+  // {DIST_PCT} placeholder は BuyZoneCard で frontend inject (数値計算 frontend、 narration 静的)。
+  pullback_to_support: {
+    conclusion: '直近高値から押し戻し、 長期支持線まで残り {DIST_PCT}% の局面です。',
+    detail: '「How to Make Money in Stocks」 では breakout 後の押し目で支持線が機能するかを観察する手法が紹介されています。 band low を明確に下抜けた場合は pattern failure の signal として、 参考水準に band low -3% 前後が言及される事例があります。 投資判断はご自身でご確認ください。',
+  },
   unknown: {
     conclusion: 'pivot / support の判定を保留しています。',
     detail: 'Cup-Handle pattern が検出されていない、 または pivot price が取得できません。',
@@ -88,6 +102,8 @@ export function classifyBuyZone(state) {
   if (state === 'breakout_extended') return 'breakout_extended';
   // v127 R16-3 (5/29): cup_completing (カップ完成間近・未突破) を独立 buy zone type として返す
   if (state === 'cup_completing') return 'cup_completing';
+  // v134 P2 Phase 2 (SPEC v2): pullback_to_support (押し目接近中) を独立 buy zone type として返す
+  if (state === 'pullback_to_support') return 'pullback_to_support';
   return 'unknown';
 }
 

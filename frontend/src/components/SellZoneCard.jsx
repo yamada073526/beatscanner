@@ -216,7 +216,7 @@ export default function SellZoneCard({ ticker }) {
           ) : (
             <>
               <TrendingUp size={11} strokeWidth={2} className="card-zone-context__icon" aria-hidden="true" />
-              売りゾーン
+              通常レンジ
             </>
           )}
         </Chip>
