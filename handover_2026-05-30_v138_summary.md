@@ -52,7 +52,7 @@
 - 機能名: 「Claude Opus 多面分析レポート」 → **「AI 詳細分析レポート（強気・弱気の両論を併記）」**。
   DetailReport.jsx 実装 (強気材料/弱気材料/総合判断 の両論併記) と一致 + Opus 実装詳細訴求を撤去。
 - 付随: Cup-Handle chip hover tooltip「Premium で全データ解放」 → 「Premium で解放」 統一。
-- bundle `index-BtgM2YZB.js` → (deploy 投入済、 反映待ち)。
+- bundle `index-BtgM2YZB.js` → **`index-BJJb_Iiv.js`** (本番反映 + grep 検証済: 新ラベル 1 / 旧 Opus ラベル 0 / color-warning 9 / 旧 tooltip 0)。
 - ⚠️ 残: `ContextSection.jsx:173,221` の PremiumLock bullets「Premium は Claude Opus 多面分析 (月 20 銘柄)」
   も同種文言。 図解 Pro 開放後の `claude_opus_report` 扱いと併せ Phase 2 で整理 (今回 scope 外)。
 - 既存 token 発見: `--amber-bg/title/body` は既に light/dark 両定義あり (今回は color-warning + text 系で対応)。
