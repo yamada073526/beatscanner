@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Zap, MessageSquare, BarChart3, Flame, AlertTriangle, Eye, Clock, LineChart, Sparkles, Gift, Lock, Tag } from 'lucide-react';
+import { Zap, MessageSquare, BarChart3, Flame, AlertTriangle, Eye, Clock, LineChart, Sparkles, Gift, Lock, Tag, Crown } from 'lucide-react';
 import { useBacktest } from '../hooks/useBacktest.js';
 import ProTeaser from './ui/ProTeaser.jsx';
 
@@ -1631,6 +1631,111 @@ function PricingSection({ onFreeStart, onProCheckout }) {
                 <Tag size={12} strokeWidth={2.2} />
                 年払いで2ヶ月分お得（¥1,960節約）
               </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Premium プラン — v138.7 Phase 2 (2026-05-30): 「近日公開」 teaser 列。
+            背景: アプリ内で Cup-Handle / 売り買いゾーン等を Premium gate しているのに LP に Premium の
+            説明がなく、 lock を踏んだ user が解除手段を見つけられない dead-end funnel を解消。
+            funnel-cro 判断: Pro (おすすめ + cyan) の主役性を保つため Premium は cyan/おすすめバッジを
+            使わず amber 控えめ差別化。 CTA は disabled「近日公開」 で「まだ買えない」 を明示 (Trust Cliff 回避)。
+            Stripe Premium checkout 配線 + スクリーナー実 gate 強化は販売開始時 (別 sprint)。 既存 panel-card
+            流用で新規 glow host を作らない (CLAUDE.md「触ると危険な箇所」 発光系)。 */}
+        <div
+          className="panel-card"
+          style={{
+            position: 'relative',
+            padding: '28px 22px',
+            borderRadius: 12,
+            background: 'var(--bg-card)',
+            border: '1px solid color-mix(in srgb, var(--color-warning) 30%, var(--border))',
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+          }}
+        >
+          {/* 「近日公開」 バッジ (amber、 Pro の cyan「おすすめ」 と差別化) */}
+          <div style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            padding: '3px 10px',
+            borderRadius: 9999,
+            background: 'color-mix(in srgb, var(--color-warning) 16%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--color-warning) 40%, transparent)',
+            color: 'var(--color-warning)',
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: '0.05em',
+            zIndex: 2,
+          }}>
+            近日公開
+          </div>
+          {/* 上部エリア: Free/Pro と minHeight 揃え */}
+          <div>
+            <div style={{
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              background: 'color-mix(in srgb, var(--color-warning) 10%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--color-warning) 30%, transparent)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 8,
+              color: 'var(--color-warning)',
+            }}>
+              <Crown size={18} strokeWidth={2} />
+            </div>
+            <h3 className="section-heading" style={{ fontSize: 16, marginBottom: 4 }}>
+              Premium
+            </h3>
+            <div style={{
+              fontSize: 26, fontWeight: 700,
+              color: 'var(--text-primary)', marginBottom: 4,
+            }}>
+              ¥1,800<span style={{
+                fontSize: 13, fontWeight: 400, color: 'var(--text-muted)',
+              }}>/月</span>
+            </div>
+            <div style={{
+              fontSize: 12,
+              color: 'var(--text-secondary)',
+              marginTop: 8,
+              marginBottom: 0,
+              lineHeight: 1.5,
+            }}>
+              Pro のすべて + テクニカル分析で<br />
+              「買うタイミング」 まで掴む。
+            </div>
+          </div>
+          {/* 中部: ✓ リスト — Free/Pro と水平揃え */}
+          <ul style={{
+            listStyle: 'none', padding: 0, margin: '12px 0 22px',
+            fontSize: 13, lineHeight: 2, color: 'var(--text-secondary)',
+          }}>
+            <li>✓ Pro のすべての機能</li>
+            <li>✓ <strong style={{ color: 'var(--color-warning)' }}>カップ・ウィズ・ハンドル</strong> 検出</li>
+            <li>✓ 売り／買いゾーン・支持線・抵抗線</li>
+            <li>✓ Insider 取引・13F 機関保有</li>
+          </ul>
+          {/* 下部: disabled CTA で「まだ買えない」 を明示 (Trust Cliff 回避) */}
+          <div style={{ marginTop: 'auto' }}>
+            <div style={{
+              padding: '12px',
+              borderRadius: 8,
+              textAlign: 'center',
+              fontSize: 14,
+              fontWeight: 700,
+              color: 'var(--color-warning)',
+              border: '1px solid color-mix(in srgb, var(--color-warning) 35%, transparent)',
+              background: 'color-mix(in srgb, var(--color-warning) 8%, transparent)',
+              cursor: 'default',
+            }}
+            aria-disabled="true"
+            >
+              近日公開予定
             </div>
           </div>
         </div>

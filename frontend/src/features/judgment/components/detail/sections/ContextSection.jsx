@@ -170,7 +170,7 @@ export default function ContextSection({
             bullets={[
               '5 条件 + ガイダンスをまとめた決算サマリー',
               '直近ニュース/業績との相関分析',
-              'Premium は Claude Opus 多面分析 (月 20 銘柄)',
+              '強気材料・弱気材料・総合判断を両論併記',
             ]}
             onUpgrade={detailContext.onUpgrade}
           >
@@ -218,7 +218,7 @@ export default function ContextSection({
                   bullets={[
                     '5 条件 + ガイダンスをまとめた決算サマリー',
                     '直近ニュース/業績との相関分析',
-                    'Premium は Claude Opus 多面分析 (月 20 銘柄)',
+                    '強気材料・弱気材料・総合判断を両論併記',
                   ]}
                   onUpgrade={detailContext.onUpgrade}
                 >

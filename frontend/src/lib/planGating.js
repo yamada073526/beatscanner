@@ -56,6 +56,10 @@ export const FEATURE_GATES = Object.freeze({
   // 旧実装は free placeholder が earnings_8q を流用していたため UpgradeModal が
   // 「過去 8Q 決算反応」 と誤表示する bug があった (user dogfood 12 巡目)。 専用 key で解消。
   ai_diagram:             PLAN.PRO,    // 図解 (5 条件・ビジネスを 2 秒で理解する AI 図解)
+  // v138.7 Phase 2 (2026-05-30、 user 判断): AI 詳細レポート (DetailReport = 強気/弱気/総合判断の
+  // 両論併記) を Premium → Pro に移動。 LP/modal が既に「PRO: AI 詳細レポート ¥980」 と訴求済で、
+  // 実装 gate のみ Premium だった矛盾 (Trust Cliff) を解消。 key 名は drift 回避で維持。
+  claude_opus_report:     PLAN.PRO,    // AI 詳細レポート (強気・弱気の両論併記、 旧 Premium → Pro)
   // handover v82 Phase 5 (multi-review 6 体合議 verdict、 マーケ A 案):
   // 三層トリアージ「保有 × 5 条件 × Cup-Handle」 は最強訴求素材 → 最安 tier Pro に配置。
   // earnings_countdown_ring は LP 訴求素材として Free 全開放 (マーケ verdict)。
@@ -80,6 +84,7 @@ export const FEATURE_GATES = Object.freeze({
   backtest_advanced:      PLAN.PREMIUM,  // バックテスト高機能 (銘柄別貢献度 / カスタム期間 / PDF / 10y)
   sector_threshold:       PLAN.PREMIUM,  // セクター別閾値カスタム
   risk_analysis:          PLAN.PREMIUM,  // β / Sharpe / Max Drawdown
+  // (claude_opus_report は v138.7 Phase 2 で Pro ブロックへ移動済)
   // v138.7 (2026-05-30、 3 体合議 verdict): テクニカル系 gate キー。 従来は JudgmentDetail.jsx で
   // plan==='premium' を hardcode + FEATURE_LABEL_JP に label のみ存在し対応 gate キーが無い
   // 「孤児 label」 状態だった。 planGating を SSOT 化して解消。 Cup-Handle は自動売買 investor も
@@ -89,7 +94,6 @@ export const FEATURE_GATES = Object.freeze({
   sell_zone_50dma:        PLAN.PREMIUM,  // 売りゾーン (50DMA extension)
   distribution_days:      PLAN.PREMIUM,  // Distribution Days (機関売り圧)
   technical_overlay:      PLAN.PREMIUM,  // チャート テクニカルオーバーレイ (Cup-Handle / zone)
-  claude_opus_report:     PLAN.PREMIUM,  // Claude Opus 多面分析レポート (月 20 銘柄)
   ai_chat_ticker:         PLAN.PREMIUM,  // AI チャット (銘柄について質問)
   line_morning_530am:     PLAN.PREMIUM,  // LINE 朝 5:30 配信 (Pro より 30 分先行)
   gold_ui_theme:          PLAN.PREMIUM,  // Gold UI + Premium バッジ
