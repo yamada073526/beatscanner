@@ -284,7 +284,7 @@ frontend (`DiagramCard.jsx`):
 | 🟢 | 改善 C: 5条件 hover affordance | 1.5-2 人日 | 後 |
 | 🟢 | プラン管理 UI full (Stripe 統合) | 2-3 人日 | 後 |
 
-### v138.6 + R1 + R2 + R3 + R4 hotfix commit
+### v138.6 + R1 + R2 + R3 + R4 + R5 + R6 hotfix commit
 | ver | commit | bundle | 内容 |
 |---|---|---|---|
 | v138.6 | 1a8118e | `index-usR8f65Q.js` | 物理層分離 SSOT 復活 + sparkline 窓統一 + AI 要約 sec_guidance 配線 |
@@ -292,6 +292,26 @@ frontend (`DiagramCard.jsx`):
 | v138.6 R2 hotfix | 63173ca | `index-DrerytzW.js` | SummaryBrief 2-phase race / EPS BEAT FMP 未来 entry skip / 5条件 click affordance |
 | v138.6 R3 hotfix | 724ddc8 | `index-CPAUQHb9.js` | EPS BEAT frontend 配線 (epsBeatPct → guidance.eps.surprise_pct) + hover 強化 |
 | v138.6 R4 hotfix | 896c069 | `index-Bkdw-Vz3.js` | 「この条件の解説」 ボタンを cyan accent chip 風に強化 |
+| v138.6 R5 hotfix | ccbdeb3 | `index-BQWDGn3B.js` | 3 体合議 verdict → 「この条件の解説」 icon-only ⓘ minimal 統一 |
+| v138.6 R6 feat | 4f3a092 | (deploy 中) | workspace Pane 1 nav 末尾 UserFooter + LogOut button 追加 |
+
+## v138.6 R5 改善 (3 体合議 verdict、 user dogfood 6 巡目)
+- user feedback「現状 cyan pill chip は自己主張が強い、 ?だけで十分意味は伝わる」 要望
+- 3 体合議: ui-designer + frontend-architect + qa-dogfooder (3 体推奨 = LLM/schema 不変 + frontend 局所修正)
+- verdict: 2/3 vote for Option D (Info icon-only)、 階層差別化 (section title「?」 ↔ row「ⓘ」) で
+  「?」 = 全体解説、 「ⓘ」 = 個別解説 を記号で表現、 user 認知ヒエラルキー保つ
+- 実装: Info icon 14px + opacity 0.55 (休止) → hover 100% (立ち上がり) + scale 0.92 press feedback
+- Aman 級「主張せず必要な時だけ存在感」 質感、 chip primitive 外 inline 例外で正当
+
+## v138.6 R6 ログアウト最小 MVP
+- 背景: user dogfood「現 UI ログアウトできず LP 確認困難」 (R0 backlog top)
+- 既存 logout は App.jsx mobile drawer line 2192-2236 のみで workspace UI からアクセス不可
+- 実装: Workspace.jsx Pane1Nav 末尾に UserFooter (sticky 下 marginTop:auto):
+  - avatar 28x28 (Google profile or initial 円) + email truncate + LogOut icon button
+  - useAuth().signOut() 経由 (既存 hook 再利用)、 確認 dialog なし (1 クリック減らせ)
+  - R5 と同 minimal style: opacity 0.55 → hover 100% + scale 0.92 press
+- 未ログイン非表示 (LP に Google CTA 既存)、 a11y aria-label + title 完備
+- 残: Pane1NavRail (collapsed mode) / Stripe customer portal / プラン管理 UI 全体は別 sprint
 
 ## v138.6 R4 改善 (user dogfood 2026-05-30 5 巡目)
 
