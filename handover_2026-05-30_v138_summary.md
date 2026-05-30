@@ -70,9 +70,10 @@
   「近日公開予定」 1 / 「カップ・ウィズ・ハンドル」 1 / 「¥1,800」 1 / 「Premium」 1)。
 
 ### ✅ Phase 2.1 着地 (commit `a8db6aa` ProTeaser + `b53bd25` grid 真因 fix、 user dogfood 2 件解決、 bundle **`index-DsulPc7R.js`** / LP chunk `LandingPage-Dq9LW9SL.js` 本番反映 + grep 検証済: panel-card 1 / minmax200 1 / 近日公開予定 1)
-> ⚠️ deploy 連続で本番 hash が DHQIM0C8 → Bz1aINzw → DsulPc7R と推移。 中間 hash の curl は transient 失敗が
-> 出る (bytes 不足)。 最終的に local dist の LP chunk 名 (`Dq9LW9SL`) = 本番 LP chunk 名で content-hash 一致を
-> 確認 = 全変更反映済。 「同一 chunk 名 = 同一内容」 が最も確実な検証 (curl が途中切れても判定可)。
+> ⚠️ 検証の落とし穴: **ProTeaser は共有 component で独立 chunk (`ProTeaser-Cl2y_iWi.js`) にバンドルされる**
+> ため、 LP chunk (`LandingPage-Dq9LW9SL.js`) を grep しても panel-card は出ない (別 chunk)。 grid 系 (minmax)
+> は LP 本体 chunk、 ProTeaser 系は ProTeaser chunk と分けて検証すること。 本番確認: ProTeaser chunk に
+> panel-card 1 件 ✅ + LP chunk に minmax(200)/近日公開予定 ✅。 local dist と本番で **両 chunk とも同一 content-hash 名** = 全変更反映済。
 - **LP 3 カード並列化**: pricing grid `minmax(260px → 200px, 1fr)` + `maxWidth 720 → 1080`。 真因 = Phase 2 の
   maxWidth edit が pricing grid でなく FeaturesSection grid (別 section、 line 1360) に当たっており、 pricing grid
   (Free/Pro/Premium、 line 1400) は 720+minmax260 のままで 3×260+2×16=812 > 720 → Premium だけ折り返していた。
