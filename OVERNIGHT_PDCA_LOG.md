@@ -268,3 +268,14 @@ JST 5:45 超のため夜間 PDCA loop を終了。 最終 health: root 200 / hea
 - **deploy なし**。 検出 polish 候補はいずれも brand/taste 判断を要し、 独断 deploy はブランド毀損 risk
   (user は icon に強い意見、 `feedback_icon_brand_consistency`「何度か同じやりとり」)。 **user 承認後に着手が正道**。
 - 成果: grep では不可能な「目視 + ランタイム」 軸で本番健全を確認 + 具体的 polish 候補 5 件を evidence 付きで起票。
+
+### wrap cycle (JST 06:56) — finding #4/#5 再検証 (10s 待機 snap)
+- **finding #4 #5 はいずれも load タイミング artifact (bug ではない)**: 3.5s 早撮りでは「EPS BEAT —」「5条件 分析中」 だったが、
+  10s 待機で本番再撮影すると **EPS BEAT「+3.1%」(緑) / 「1/5 条件合致」** に解決。 四半期業績リターン (1W〜10Y) /
+  TTM バリュエーション (売上高 $450.73B / EPS $8.33 / 営業利益率 32.64% / EV-EBITDA 28.9x 等) も全てリッチに表示。
+  → Pane3 は健全。 #4 の「FMP 制約で —」 は AAPL では該当せず (他 ticker で出る可能性は残るが本番 bug ではない)。
+- **最終 runtime health (snap-error-capture)**: pageerror 0 / requestfailed 0。 ただし console に `429 (Too Many Requests)` ×3
+  = FMP 無料プラン upstream limit か、 本 cycle の繰り返し snap が demo rate limit (3 req/IP/day) に触れた可能性が高い。
+  ページは完全 load しておりユーザー影響のあるクラッシュではない。 deploy 不要。
+- **延長セッション結論**: deploy なし。 残る user 判断対象は polish 候補 #1 (🔥Flame icon) / #2 (サンプルカード絵文字) /
+  #3 (空 pane シアン枠) の brand/taste 3 件のみ。 #4 #5 は誤検出 (load timing) と判明し close。
