@@ -242,3 +242,29 @@ JST 5:45 超のため夜間 PDCA loop を終了。 最終 health: root 200 / hea
 - **起点 = Stripe Premium 配線** (Premium price ID 作成 + Railway env、 user 作業 + money-stakes)。 これが完了するまで
   スクリーナー Premium gate / UpgradeModal Premium CTA は dead-end funnel になるため着手不可 (sequencing 制約)。
 - 中優先 backlog: 改善 D Pane 2 redesign (user 最優先) / EPS BEAT 真因 fix / pricing 決定。
+
+---
+
+## 延長セッション (user 06:27 起床後依頼「追加で 30 分 PDCA」) — 視覚監査 cycle
+
+夜間 grep audit が未カバーの **「実レンダリング目視 + ランタイム」 軸**。 本番 3 画面を headless screenshot
+(`snap-morning-audit.mjs` 使い捨て、 撮影後削除) + runtime error capture (`snap-runtime-errors` / `snap-error-capture`)。
+
+### ランタイム健全性 (新軸、 全 PASS)
+- LP root / Pane2 indices / Pane3 AAPL の 3 画面: **pageerror 0 / console.error 0 / requestfailed 0 / 正常レンダリング**
+  (rootHtml 27k〜55k chars)。 真っ白事故なし。 本番ランタイム健全を evidence 付きで確認。
+
+### 目視で検出した polish 候補 (いずれも brand/taste 判断 → 独断 deploy せず user 判断推奨)
+1. **🔥 Flame アイコン「今日の注目」** (`LandingPage.jsx:426`): raw 絵文字でなく lucide `Flame` (amber) だが、
+   memory `feedback_icon_brand_consistency` のロジックでは 🔥 の SVG 等価 = TrendingUp/Trophy/Crown へ置換対象。 user taste 判断。
+2. **residual 絵文字 in サンプル分析カード**: 📄 (`:1091` CTA button) / ⚡ (`:1248` badge) / 📌 (`:1281`) /
+   🟢🔴 (`:1221-23` 市場の声 bullets)。 `:1133` で ⚡/📊/📈 を SVG 化した際の取り残し。 lucide 化候補、 置換アイコン選定は user 判断。
+3. **空 detail pane のシアン枠** (LP desktop 右): 「左のリストから銘柄を選択してください」 placeholder に cyan border。
+   `feedback_no_baseline_cyan` の baseline neutral 原則と要確認 (選択先アフォーダンスとして意図的の可能性も)。 user 判断。
+4. **EPS BEAT「—」** (Pane3 AAPL): 既知の FMP 無料プラン制約 (scope 外、 handover/CLAUDE.md 記載済)。
+5. **ファンダメンタル5条件「分析中...」** (Pane3 AAPL, load 後 3.5s): 非同期 load 中の可能性大。 stuck か要再確認 (低優先)。
+
+### 判断
+- **deploy なし**。 検出 polish 候補はいずれも brand/taste 判断を要し、 独断 deploy はブランド毀損 risk
+  (user は icon に強い意見、 `feedback_icon_brand_consistency`「何度か同じやりとり」)。 **user 承認後に着手が正道**。
+- 成果: grep では不可能な「目視 + ランタイム」 軸で本番健全を確認 + 具体的 polish 候補 5 件を evidence 付きで起票。
