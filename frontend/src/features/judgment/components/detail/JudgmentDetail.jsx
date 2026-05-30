@@ -760,7 +760,13 @@ export default function JudgmentDetail({
 
       {/* P0-1/P0-3: 分析する button は auto runAnalyze (P0-2) が失敗した場合の fallback。
           result が取得できず、かつ loading でもない場合のみ retry link を表示。
-          auto runAnalyze が fire 中 (loading) は非表示。 */}
+          auto runAnalyze が fire 中 (loading) は非表示。
+          v138.6 R7-D (2026-05-30): user dogfood「分析データを取得中... が永遠に表示」 → 真因は
+          loading=false + result=null の「取得失敗 / rate limit」 状態を「取得中」 と現在進行表現で
+          誤誘導していた。 detail.error (rate limit 等) を読んで honest 表現に切替:
+            - error あり → 「分析データの取得に失敗しました」 + error 内容を small hint
+            - error なし (cold start / cache miss) → 「分析データを取得中...」 維持 (legitimate progress)。
+          retry button は両 case で残置 (1 クリック復旧)。 */}
       {!result && onAnalyze && !(detailFor ? detailFor(selectedTicker)?.isLoading : false) && (
         <div
           style={{
@@ -773,8 +779,21 @@ export default function JudgmentDetail({
             gap: 'var(--space-3, 12px)',
           }}
         >
-          <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-            分析データを取得中...
+          <span style={{
+            color: detail?.error ? 'var(--color-loss)' : 'var(--text-muted)',
+            fontSize: 13,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+          }}>
+            <span>
+              {detail?.error ? '分析データの取得に失敗しました' : '分析データを取得中...'}
+            </span>
+            {detail?.error && (
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>
+                {String(detail.error).slice(0, 120)}
+              </span>
+            )}
           </span>
           <button
             type="button"
@@ -796,6 +815,7 @@ export default function JudgmentDetail({
               border: '1px solid var(--border)',
               borderRadius: 'var(--radius-sm)',
               cursor: 'pointer',
+              flexShrink: 0,
             }}
           >
             再試行

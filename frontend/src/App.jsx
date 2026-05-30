@@ -1027,6 +1027,11 @@ export default function App() {
         changePct: px?.change_pct != null ? px.change_pct / 100 : null,
         lastAnalyzedAt: cache?.ts ?? 0,
         isLoading: loading && ticker === t,
+        // v138.6 R7-D (2026-05-30): error を per-ticker shape に surface。 JudgmentDetail の
+        // 「分析データを取得中...」 banner が rate limit / fetch fail 時に永遠表示される regression、
+        // detail.error 検出で「分析データの取得に失敗しました」 honest 表現 + error 内容表示。
+        // ticker 一致時のみ error surface (異なる ticker の error を晒さない)。
+        error: ticker === t ? (error || null) : null,
         // handover v82 Phase 5: EarningsRing 用 (Hero 内 mount、 4 段階 pulse cadence)
         nextEarningsDate: earn?.date ?? null,
         nextEarningsDays: earn?.daysUntil ?? null,
@@ -1580,6 +1585,8 @@ export default function App() {
               lastAnalyzedAt: cache?.ts ?? 0,
               // 現在分析中の銘柄なら loading 状態を伝える (Detail 側 Skeleton 表示)
               isLoading: loading && ticker === t,
+              // v138.6 R7-D: error surface (rate limit / fetch fail 検出用、 ticker 一致時のみ)
+              error: ticker === t ? (error || null) : null,
             };
           };
           return (

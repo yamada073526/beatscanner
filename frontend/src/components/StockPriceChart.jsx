@@ -895,9 +895,16 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     color: 'rgb(241, 245, 249)',
                     border: '1px solid rgba(56, 189, 248, 0.45)',
                     backdropFilter: 'blur(4px)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
                   }}
                 >
-                  🔒 Cup-Handle overlay は Premium で全データ解放
+                  {/* v138.6 R7-E (2026-05-30): user dogfood「🔒 emoji 汎用的でダサい」
+                      → lucide-react Lock icon (stroke 細線 + cyan brand accent) で Aman 級品格に統一。
+                      memory feedback_icon_brand_consistency.md 準拠。 */}
+                  <Lock size={12} strokeWidth={1.75} color="rgb(56, 189, 248)" aria-hidden="true" />
+                  Cup-Handle overlay は Premium で全データ解放
                 </div>
               </div>
             )}
@@ -1415,7 +1422,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                           opacity: 0.5,
                         }}
                       />
-                      取っ手付きカップ 🔒 (Premium で pivot 価格解放)
+                      取っ手付きカップ <Lock size={10} strokeWidth={1.75} color="rgb(56, 189, 248)" style={{ display: 'inline', verticalAlign: '-1px', marginLeft: 2, marginRight: 2 }} aria-hidden="true" /> (Premium で pivot 価格解放)
                     </span>
                   )}
                 </div>
