@@ -296,6 +296,26 @@ frontend (`DiagramCard.jsx`):
 | v138.6 R6 feat | 4f3a092 | `index-ifwCUlr6.js` | workspace Pane 1 nav 末尾 UserFooter + LogOut button 追加 |
 | v138.6 R7 P0+P1 | 423a642 | `index-BVL8weEE.js` | LogOut redirect + Trust Cliff data leak gate + login button 復旧 |
 | v138.6 R7-A2+C2 | 6685db6 | `index-KrDrSd9e.js` | LogOut → ?layout=classic 強制 + ProfileCard 2 箇所目 listener 復旧 |
+| v138.6 R7-D+R7-E | fe689a7 | `index-MyCqygyQ.js` | 永遠ローディング honest 表現 + 🔒 emoji → Lock icon |
+
+## v138.6 R7-D + R7-E 着地
+
+### 🟡 R7-D P2: 「分析データを取得中...」 永遠ローディング
+- 真因: JudgmentDetail.jsx retry banner が `!result && !isLoading` で表示、 rate limit /
+  fetch fail 状態 (loading=false + result=null) でも「取得中」 現在進行表現で「永遠ローディング」 誤認
+- 修正:
+  - App.jsx `_detailForWS` / `detailFor` で `error` を per-ticker shape に surface
+    (ticker 一致時のみ、 異 ticker error の露出回避)
+  - JudgmentDetail.jsx `detail.error` 検出時:
+    - 「分析データの取得に失敗しました」 honest 表現 (color-loss tint)
+    - error 内容を 120 字 hint で表示 ("本日のお試し回数 (3 銘柄) を超えました" 等)
+    - retry button 維持で 1 クリック復旧
+
+### 🟢 R7-E P3: Cup-Handle 🔒 emoji 「ダサい」
+- 真因: 「🔒 Cup-Handle overlay は Premium」 banner + 「取っ手付きカップ 🔒」 凡例の emoji が
+  Aman 級品格 brand に不適合 ([[feedback-icon-brand-consistency]] 違反、 大衆的 emoji 禁止)
+- 修正: lucide-react `Lock` icon (stroke 1.75 + cyan brand accent + size 10-12px) で 2 箇所統一
+- 「主張せず洗練」 質感、 細線 outline で Aman ロビー的品格
 
 ## v138.6 R7-A2 + R7-C2 真因確定 (user dogfood 8 巡目)
 
