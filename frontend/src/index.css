@@ -4992,6 +4992,34 @@ body {
 .qh-gain .qh-surprise { color: var(--color-gain); }
 .qh-loss .qh-surprise { color: var(--color-loss); }
 
+/* D3 条件3: 売上実績セル内の YoY (前年同期比) sub-badge。 サプライズが主役・YoY は副情報なので
+   muted トーン + 小サイズ。 投資色ルール: 上昇=gain / 下落=loss (token のみ、 raw hex なし)。 */
+.qh-rev-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  line-height: 1.2;
+}
+.qh-rev-yoy {
+  font-size: 9.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+.qh-rev-yoy.qh-yoy-up { color: color-mix(in srgb, var(--color-gain) 70%, var(--text-muted)); }
+.qh-rev-yoy.qh-yoy-down { color: color-mix(in srgb, var(--color-loss) 70%, var(--text-muted)); }
+
+/* D3 条件3: summary 帯の売上 YoY トレンド注記。 加速=gain / 減速=amber 警告
+   (減速は赤=損失でなく amber=警告: 「成長は継続だが鈍化」 のニュアンス、 金融 verdict)。 */
+.qh-yoy-trend {
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 2px;
+}
+.qh-yoy-trend-accel { color: var(--color-gain); }
+.qh-yoy-trend-decel { color: var(--color-warning); }
+
 .qhistory-empty {
   margin: 0;
   padding: 24px 12px;

@@ -97,7 +97,27 @@ const COLUMN_DEFS = {
     // #7-a: qh-rev-start で EPS group との境界に 1px 縦罫を付与
     headerClass: 'qh-num qh-rev-start qh-hide-mobile',
     cellClass: 'qh-num qh-rev-start qh-hide-mobile',
-    render: (r) => fmtRevenue(r.revenue_actual),
+    // D3 条件3 (じっちゃまプロトコル四半期 3 条件): 売上実績の下に前年同期比 (YoY) を
+    // muted sub-badge で重畳。 列を足さず文字壁を回避 (D3 6 体合議 UI verdict)。 8Q 縦並びで
+    // 成長の加速/減速トレンドが一目でわかる。 数値は backend (Python) 計算済 (revenue_yoy_pct)。
+    render: (r) => {
+      const yoy = r.revenue_yoy_pct;
+      const hasYoy = yoy != null && Number.isFinite(Number(yoy));
+      const up = hasYoy && Number(yoy) >= 0;
+      return (
+        <div className="qh-rev-cell">
+          <span>{fmtRevenue(r.revenue_actual)}</span>
+          {hasYoy && (
+            <span
+              className={`qh-rev-yoy ${up ? 'qh-yoy-up' : 'qh-yoy-down'}`}
+              title="前年同期比 (売上高成長率 YoY)"
+            >
+              YoY {up ? '↑' : '↓'}{Math.abs(Number(yoy)).toFixed(1)}%
+            </span>
+          )}
+        </div>
+      );
+    },
   },
   revenue_estimated: {
     header: '売上 予想',
@@ -306,6 +326,17 @@ export default function QuarterlyHistoryTable({ ticker, limit = 8, columns, halo
   const beatCount = rows.filter((r) => r.eps_verdict === 'beat').length;
   const missCount = rows.filter((r) => r.eps_verdict === 'miss').length;
 
+  // D3 条件3 (じっちゃまプロトコル四半期 3 条件): 売上 YoY (直近四半期) + 加速/減速トレンド。
+  // 金融 verdict: 「売上成長率の水準」 でなく 「減速の検知」 が本質 (WMT は +7.4% でも減速ガイダンスでパス)。
+  // rows は date 降順 (newest first) なので rows[0]=直近 / rows[1]=前四半期。
+  const latestYoy = rows[0]?.revenue_yoy_pct;
+  const prevYoy = rows[1]?.revenue_yoy_pct;
+  const hasLatestYoy = latestYoy != null && Number.isFinite(Number(latestYoy));
+  const yoyTrend = (hasLatestYoy && prevYoy != null && Number.isFinite(Number(prevYoy)))
+    ? (Number(latestYoy) - Number(prevYoy) > 1 ? 'accel'
+      : Number(latestYoy) - Number(prevYoy) < -1 ? 'decel' : 'flat')
+    : null;
+
   // handover v82 Phase 5: 8Q streak visual (multi-review 6 体合議 verdict)。
   // 各 Q の EPS Beat + Revenue Beat の組合せで 4 段階 strength を判定:
   //   strong = EPS Beat + Revenue Beat (2 軸両方)
@@ -358,6 +389,21 @@ export default function QuarterlyHistoryTable({ ticker, limit = 8, columns, halo
             <span className="qhistory-stat-label">連続 Beat</span>
             <span className="qhistory-stat-value qhistory-stat-gain">
               {beatStreak} 期
+            </span>
+          </div>
+        )}
+        {/* D3 条件3: 売上 YoY (直近) + 加速/減速。 数値は backend 計算済 (revenue_yoy_pct)、 事実ベース表示 */}
+        {hasLatestYoy && (
+          <div className="qhistory-stat">
+            <span className="qhistory-stat-label">売上 YoY</span>
+            <span className={`qhistory-stat-value ${Number(latestYoy) >= 0 ? 'qhistory-stat-gain' : 'qhistory-stat-loss'}`}>
+              {Number(latestYoy) >= 0 ? '+' : ''}{Number(latestYoy).toFixed(1)}%
+              {yoyTrend === 'accel' && (
+                <span className="qh-yoy-trend qh-yoy-trend-accel" title="前四半期比で成長が加速"> ↑加速</span>
+              )}
+              {yoyTrend === 'decel' && (
+                <span className="qh-yoy-trend qh-yoy-trend-decel" title="前四半期比で成長が減速"> ↓減速</span>
+              )}
             </span>
           </div>
         )}

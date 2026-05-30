@@ -5957,8 +5957,9 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
     fmp_key = _get_fmp_key(request)
     client = FMPClient(api_key=fmp_key)
 
-    # 並行 fetch (各 12-24 件取得して history 構築用の余裕を持たせる)
-    fetch_n = max(n + 4, 12)
+    # 並行 fetch (各 13-24 件取得して history 構築用の余裕を持たせる)
+    # D3: 条件3 売上 YoY は最古行でも「4 四半期前」 が要るため n+4 では境界ギリ。 n+5 で 1Q 余裕を確保。
+    fetch_n = max(n + 5, 13)
     surprises_task = asyncio.create_task(client.earnings_surprises(sym, limit=fetch_n))
     income_task = asyncio.create_task(client.income_statement(sym, limit=fetch_n, period="quarter"))
     estimates_task = asyncio.create_task(client.analyst_estimates(sym, period="quarter", limit=24))
@@ -6087,6 +6088,25 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
             if est_match:
                 revenue_estimated = _safe_eps_float(_pick(est_match, "revenueAvg", "estimatedRevenueAvg"))
 
+        # 条件3 (じっちゃまプロトコル四半期 3 条件): 売上高成長率 YoY (前年同期比)。
+        # 数値物理層 = Python 計算のみ (HG 4 層: LLM に計算させない、 BAD-3 数値捏造防止)。
+        # 前年同期 = entry date の約 365 日前の income_q を date 照合で取得。
+        # index (rows[i+4]) 方式は決算期変更/欠落四半期で前年同期がズレるため不可 (D3 6 体合議 verdict)。
+        revenue_yoy_pct = None
+        if date_str and revenue_actual is not None:
+            _cur_d = _parse_date(date_str)
+            if _cur_d is not None:
+                from datetime import timedelta as _timedelta
+                _prev_target = (_cur_d - _timedelta(days=365)).isoformat()
+                prev_inc = _nearest(_prev_target, income_q)  # _nearest は 60 日窓で前年同期を照合
+                if prev_inc:
+                    prev_rev = _safe_eps_float(_pick(prev_inc, "revenue"))
+                    _prev_d = _parse_date(_pick(prev_inc, "date"))
+                    # 同一四半期の誤マッチ防止 (date 差 > 180 日) + 0 除算/負 base 回避 (BAD-3)
+                    if (prev_rev is not None and prev_rev != 0 and _prev_d is not None
+                            and abs((_cur_d - _prev_d).days) > 180):
+                        revenue_yoy_pct = round((revenue_actual - prev_rev) / abs(prev_rev) * 100, 1)
+
         eps_label, eps_pct, _ = _verdict(eps_actual, eps_estimated)
         rev_label, rev_pct, _ = _verdict(revenue_actual, revenue_estimated)
 
@@ -6101,6 +6121,8 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
             "revenue_estimated": revenue_estimated,
             "revenue_surprise_pct": rev_pct,
             "revenue_verdict": rev_label,
+            # 条件3: 売上高成長率 YoY (前年同期比、 Python 計算済、 前年同期欠落時は None → '—')
+            "revenue_yoy_pct": revenue_yoy_pct,
             # Sprint A: grouped bars per-share view 統一用 (SPS = revenue / diluted_shares)
             "sps_actual": sps_actual,
             # Phase 2.9 Sprint D #8q-history-phase1: 5 条件 #1/#3/#5 を 8Q で trace
