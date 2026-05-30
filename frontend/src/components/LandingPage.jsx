@@ -1360,7 +1360,9 @@ function FeaturesSection() {
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
         gap: 16,
-        maxWidth: 720,
+        // v138.7 Phase 2.1c: FeaturesSection は元々 maxWidth 1080 (v38「3 カード同高」)。 Phase 2.1b の
+        // grid revert で誤って 720 に下げ、 3×260+2×16=812 > 720 で 3 カードが 2 行折り返していた (user dogfood)。 原状回復。
+        maxWidth: 1080,
         margin: '0 auto',
         alignItems: 'stretch',  // v38: 3 カード同高
       }}>
