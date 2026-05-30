@@ -128,3 +128,34 @@ frontend (`DiagramCard.jsx`):
 | release 後 sprint 合計 | 3.5-4 人日 | **2-2.5 人日** |
 
 **累計 v130-v138.1**: 11 commit、 「audit-first SPEC 圧縮」 + 「Phase 2C raw fact 路線で Trust Cliff 回避」 の 2 SSOT 確立。
+
+## v138.2 Phase 2D Sprint 1 着地 (本 session 追加)
+
+### audit 発見
+- 既存 `_fetch_sec_guidance` (main.py:5165) は Haiku call、 **prompt cache 未適用**
+- SPEC v1 月 cost +$5-10/月 → cache 適用で **+$1-2/月** に圧縮可 (cache hit 80% 前提、 [[feedback-prompt-cache-pattern]] 準拠)
+
+### 着地物
+- `docs/specs/SPEC_2026-05-30_phase2d-sec-guidance-llm.md` 新規 SPEC
+- `backend/app/visualizer/sec_guidance.py` 新規 module 作成
+  - `GUIDANCE_EXTRACT_TOOL_SCHEMA`: structured output (q_revenue / q_margin / fy_revenue / fy_margin / narrative_jp / source_url / extraction_confidence)
+  - `_SYSTEM_STATIC`: 厳格ルール 8 件 (raw 数値 / §38 断定禁止 / §5 最上級禁止 / マージン種別 / consensus 比較 / source 必須 / 記載なし時の null 化)
+  - `_NEGATIVES_GUIDANCE`: BAD-5 / BAD-6 各 2 件 + GOOD-1 (ephemeral cache breakpoint 2)
+  - `_FEW_SHOT_GUIDANCE`: NVDA / AAPL / MSFT 実例 3 件 (ephemeral cache breakpoint 1)
+  - `extract_guidance(text, source_url)` async function
+    - prompt cache 3 段 (static + few-shot + negatives)
+    - source_url 一致 self-check + mismatch 時 confidence 1 段降格
+    - cache_read/creation_input_tokens metric 同梱
+
+### 次セッション着手 (Phase 2D Sprint 2、 1.5 人日)
+1. main.py の既存 `_fetch_sec_guidance` を sec_guidance.extract_guidance() call に置換 (SEC 8-K text 渡し)
+2. visualize endpoint の asyncio.gather に `_guidance_task` 追加 + `parsed["guidanceExtracted"]` attach
+3. DiagramCard.jsx に `GuidanceSection` (Section 3.7) 追加、 source_url link + extraction_confidence chip
+4. dogfood (NVDA / AAPL / MSFT / GOOGL 4 銘柄) で精度 60-70% 確認
+5. release-check + commit + deploy
+6. LP 訴求 update: 「部門別売上や予想比較まで」 → 「次 Q ガイダンス + 部門別売上 + 予想比較 + 資本政策まで日本語で」 unlock
+
+### 注意 (Sprint 2 着手前)
+- ANTHROPIC_API_KEY 環境変数が Railway / local 両方に設定済か確認
+- cache hit 率実測値が 80% 未満なら few-shot 5→3 件削減 ([[feedback-prompt-cache-pattern]])
+- extraction_confidence=low 時の frontend banner 設計 ([[feedback-citation-required]])
