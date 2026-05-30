@@ -91,13 +91,29 @@ function TrendChip({ series, passed, conditionIndex, conditionName }) {
   // percent change 計算 (直近 3 点 window)
   const trendPct = ((lastVal - firstVal) / Math.abs(firstVal)) * 100;
 
+  // v138.6 R1 Fix 2 (2026-05-30): adaptive threshold で「near-zero baseline」 系列を絶対変化表示に。
+  // 真因 user dogfood: 「CFPS > EPS (直近期)」 condition の series = CFPS-EPS delta、 値は [-0.06, -0.36, -0.71]。
+  // 直近 3 点 window でも |firstVal|=0.06 が分母で爆発 (-1083% → ">-999%" cap)。
+  // delta-base condition (=0近傍 baseline) は % 表示が意味不明、 絶対変化値で読ませる方が user に親切。
+  // reliability ratio = |firstVal| / max(|series|)。 0.2 未満なら series が「zero-crossing 系」 と判定、
+  // 絶対変化 (lastVal - firstVal) を表示する。 NVDA EPS [1.2,2.9,4.9] では ratio=0.245 で従来通り % 表示。
+  const absMax = Math.max(...recentValid.map((v) => Math.abs(v)));
+  const reliabilityRatio = Math.abs(firstVal) / Math.max(absMax, EPSILON);
+  const _useAbsoluteFallback = reliabilityRatio < 0.2 && Math.abs(trendPct) > 100;
+
   // Number.isFinite の最終 guard
   if (!Number.isFinite(trendPct)) return null;
 
   // 表示文字列: 整数表示、1000% 超は >999% で打ち切り
+  // v138.6 R1: near-zero baseline (delta-base condition 等) は絶対変化値で fallback。
   const absTrend = Math.abs(trendPct);
   let displayText;
-  if (absTrend > 999) {
+  if (_useAbsoluteFallback) {
+    // 絶対変化 (例: CFPS-EPS [-0.06, -0.36, -0.71] → "−0.65")。 桁数 2 桁固定。
+    const absChange = lastVal - firstVal;
+    const signStr = absChange >= 0 ? '+' : '';
+    displayText = `${signStr}${absChange.toFixed(2)}`;
+  } else if (absTrend > 999) {
     displayText = trendPct > 0 ? '>+999%' : '>-999%';
   } else {
     displayText = (trendPct >= 0 ? '+' : '') + Math.round(trendPct) + '%';

@@ -10595,26 +10595,51 @@ async def generate_visualization(
     except Exception as _e_gv2:
         print(f"[GUIDANCE_V2] attach failed for {ticker}: {_e_gv2}")
 
-    # ── v138.6 Bug 1 Fix 1-B: aggregator result で 5 条件判定を上書き ──
-    # LLM (visualizer/prompt.py) は v138.6 で passCount/totalCount/overallPass/conditions を
-    # schema から削除済 (Fix 1-A、 CLAUDE.md SSOT 復活)。
-    # 残った旧出力 (cache hit や互換 cache) でも frontend に渡る値は必ず analysis_data 経由とする。
-    # analysis_data は /api/analyze の result そのものなので、 passedCount / totalCount /
-    # overallPass / conditions は Python aggregator (judgment.py) の値 = SSOT。
+    # ── v138.6 Bug 1 Fix 1-B (R1 修正 2026-05-30): aggregator result で 5 条件判定を上書き ──
+    # frontend StickyDiagramAccordion.jsx の buildEnriched() は以下 key で送信する:
+    #   - passed_conditions: int (snake_case)
+    #   - verdict: 'PASS' / 'FAIL' (string)
+    #   - conditions_detail: JSON 文字列化された conditions 配列
+    # 旧 Fix 1-B (R0) で passedCount / overallPass / conditions の camelCase 直 key 読みをしていたため
+    # frontend payload と mismatch で override 不発、 LLM 値 (4/5 等) がそのまま表示されていた。
+    # R1: 両方の key naming に対応 (snake_case priority、 backward compat で camelCase も check)。
+    # analysis_data は /api/analyze の result そのものなので、 これらの値は
+    # Python aggregator (judgment.py) = SSOT。
     try:
-        _agg_passed = analysis_data.get("passedCount")
-        _agg_total = analysis_data.get("totalCount")
-        _agg_overall = analysis_data.get("overallPass")
-        _agg_conditions = analysis_data.get("conditions") or []
+        # passedCount: 新 snake_case > 旧 camelCase
+        _agg_passed = analysis_data.get("passed_conditions")
+        if _agg_passed is None:
+            _agg_passed = analysis_data.get("passedCount")
+        # totalCount: frontend は送らないので default 5
+        _agg_total = analysis_data.get("totalCount") or 5
+        # overallPass: verdict string > 旧 boolean
+        _agg_verdict_str = analysis_data.get("verdict")
+        if _agg_verdict_str == "PASS":
+            _agg_overall = True
+        elif _agg_verdict_str == "FAIL":
+            _agg_overall = False
+        else:
+            _agg_overall = analysis_data.get("overallPass")
+        # conditions: 'conditions_detail' JSON 文字列 > 'conditions' 直配列
+        _agg_conditions_raw = analysis_data.get("conditions_detail")
+        _agg_conditions = []
+        if isinstance(_agg_conditions_raw, str) and _agg_conditions_raw.strip():
+            try:
+                _agg_conditions = json.loads(_agg_conditions_raw)
+                if not isinstance(_agg_conditions, list):
+                    _agg_conditions = []
+            except json.JSONDecodeError:
+                _agg_conditions = []
+        if not _agg_conditions:
+            _agg_conditions = analysis_data.get("conditions") or []
+
         if _agg_passed is not None:
             parsed["passCount"] = int(_agg_passed)
-        if _agg_total is not None:
-            parsed["totalCount"] = int(_agg_total)
+        parsed["totalCount"] = int(_agg_total)
         if _agg_overall is not None:
             parsed["overallPass"] = bool(_agg_overall)
-        # aggregator の conditions は {name, passed, value, detail} 構造、 LLM 旧 schema は
-        # {name, pass, value, detail} で key 名差異あり (passed → pass)。 frontend が期待する
-        # key (DiagramCard.jsx line 1707 `c.pass`) に合わせて正規化。
+        # aggregator conditions は {name, passed, value, detail} 構造、 frontend (DiagramCard
+        # line 1707) は c.pass を読むため正規化。
         if _agg_conditions:
             parsed["conditions"] = [
                 {
@@ -10625,6 +10650,7 @@ async def generate_visualization(
                 }
                 for c in _agg_conditions
             ]
+        print(f"[AGG OVERRIDE] {ticker}: passCount={parsed.get('passCount')} overallPass={parsed.get('overallPass')} cond_count={len(parsed.get('conditions') or [])}")
     except Exception as _e_agg:
         print(f"[AGG OVERRIDE] failed for {ticker}: {_e_agg}")
 

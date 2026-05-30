@@ -204,21 +204,15 @@ function SummaryInfoModal({ onClose }) {
   );
 }
 
-// v138.6 Bug 1 Fix 3-B: AI 要約の value-less bullet (「非開示」 「情報なし」 「—」 のみの行) を
-// suppress。 user dogfood (2026-05-30): 「他の銘柄でも取得できないものが多い、 載せること自体やめる検討」 要望。
-// Fix 3-A で backend に sec_guidance_text を配線済のため、 取得可能な ticker (NVDA 等) では
-// 「③ ガイダンス: 次 Q 売上 $89.2-92.8B」 等の具体的 narrative が出るはず。 残り「非開示」 のみ表示する
-// ticker (MSFT/GOOGL 等) で本 filter が発火する。
-function isEmptyBullet(line) {
-  const text = line.replace(/^\[(POS|NEG|NEU)\]/, '').trim();
-  // 番号 prefix + キーワード + 「非開示 / 情報なし / 発表なし / 取得できず / —」 のみで構成される行
-  const VALUE_LESS_PATTERNS = [
-    /^[①②③④⑤⑥⑦⑧⑨⑩]\s*ガイダンス\s*[：:]\s*(非開示|情報なし|発表なし|記載なし|データなし)\s*[。.]?\s*$/,
-    /^[①②③④⑤⑥⑦⑧⑨⑩][^：:]*[：:]\s*[—–\-ー]\s*$/,
-    /^[①②③④⑤⑥⑦⑧⑨⑩][^：:]*[：:]\s*(取得できず|データ取得失敗|N\/A)\s*[。.]?\s*$/,
-  ];
-  return VALUE_LESS_PATTERNS.some((p) => p.test(text));
-}
+// v138.6 R1 Fix (2026-05-30): isEmptyBullet filter は撤去。
+// user dogfood で「③ が消える」 regression 発生。
+// 真因: Fix 3-A (sec_guidance_text を LLM 文脈に渡す) で NVDA/AAPL/MSFT/GOOGL の全 ticker で
+// ③ に具体的 narrative が入るようになった (例: NVDA「[NEU]③ ガイダンス: 非開示。次期 FY2027 Q2 売上
+// 91.0B 見通し...」)。 これは「非開示」 keyword で始まるが内容は具体的。 旧 isEmptyBullet が
+// bare「[NEU]③ ガイダンス: 非開示」 ケース (LLM 出力 ブレ) で発火、 結果 ③ 全削除 → 「番号 skip」
+// regression が user の信頼を損なう (「missing data」 認識)。
+// 方針: ③ は常時表示 (Fix 3-A で具体 narrative 取得済が default、 LLM が bare「非開示」 出した時は
+// それを honest に表示)。
 
 // prefers-reduced-motion の取得 (JS 側で制御、CSS !important 不使用)
 // memo: 同パターンは StockPriceChart.jsx / EarningsHistoryChart.jsx でも使用
@@ -357,7 +351,6 @@ function SummaryBriefInner({ analysis, guidance, frameless = false }) {
           <div>
             {lines.map((line, i) => {
               if (!line.trim()) return null;
-              if (isEmptyBullet(line)) return null;
               return (
                 <div key={i} className="summary-line-enter">
                   <SummaryLine line={line} />
