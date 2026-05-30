@@ -1,10 +1,11 @@
-# SPEC: じっちゃま記事レベル達成 (FMP Ultimate + SEC 8-K LLM)
+# SPEC v2: 独自プロトコル決算分析レベル達成 (既存実装 audit + SEC 8-K LLM)
 
-**起票日**: 2026-05-30 v135 セッション
-**起票元 user 要望**: 「じっちゃま (広瀬隆雄) の決算記事レベル」 を BeatScanner で再現
-**status**: 🟡 draft (user gate 1 承認待ち = 課金タイミング確定後 implementation 着手)
-**前段 verdict**: P1-H 2 体合議 (金融 + backend-architect、 v133 sub-agent) = **PARTIAL** — FMP Ultimate $99/月 + SEC 8-K LLM で **70% 達成可能** (工数 6 人日)
-**user 確定**: **release 前に課金開始** (v135 user 帰宅後判断)
+**起票日**: 2026-05-30 v135 セッション (v138 audit で v2 全面改訂)
+**起票元 user 要望**: 「独自プロトコル (旧称: じっちゃま) の決算記事レベル」 を BeatScanner で再現
+**status**: 🟢 **Phase 2B already done** (v138 audit 判明、 課金不要)、 Phase 2C/2D/2E は release 後 sprint
+**v138 audit 結果**: FMP Premium key で `/stable/revenue-product-segmentation` は全銘柄取得可能、 既存 `get_segment_data()` + `build_segment_summary()` + ProfileCard SegmentSection + DiagramCard セグメント別売上 section で完全実装済。 NVDA Data Center +92% / AAPL iPhone +21% / GOOGL Cloud +63% / MSFT Server Products +31% 確認済 → SPEC v1 の「FMP Ultimate 課金必須 5-6 人日」 は **誤った前提**、 課金不要
+**前段 verdict**: P1-H 2 体合議 (金融 + backend-architect、 v133 sub-agent) = **PARTIAL** → v138 audit で覆り
+**user 確定**: **課金中止 + bug fix なし + LP 訴求拡張で release 進行** (v138 user 判断)
 
 ---
 
@@ -40,20 +41,21 @@ NVDA Q1 決算記事 + AAPL Q2 決算記事レベルの 4 軸 (部門別売上 /
 
 ## 4. Phase 区切り (Phase 2 = release 前必須、 Phase 3 = release 後 long-term)
 
-### Phase 2 (release 前 着手、 4-6 人日)
+### Phase 2 (release 前必須 = Phase 2B のみ、 既に着地済)
 
-#### 2A. FMP Ultimate Plan upgrade (0.25 人日)
-- FMP dashboard で $99/月 Ultimate plan upgrade
-- Railway env `FMP_API_KEY` を Ultimate key で値更新 (新規変数追加なし)
-- 既存 endpoint (earnings-surprises, income-statement, cash-flow-statement) は そのまま動作確認 (key 互換性)
+#### 2A. ~~FMP Ultimate Plan upgrade~~ **削除** (v138 audit 後)
+- 旧 SPEC で「$99/月 Ultimate 課金必須」 としていたが、 **Premium key で全銘柄取得可能** と判明
+- v138 dogfood (NVDA / AAPL / GOOGL / MSFT) で「Data Center +92%」 等を確認、 課金 ROI なし
+- Ultimate 課金は Phase 3 (earnings call transcript LLM) で再検討
 
-#### 2B. backend: segment revenue 取得 (1.5-2 人日)
-- 新 helper `_fetch_segment_revenue(ticker)` 追加
-  - FMP endpoint: `/stable/income-statement/segments/{symbol}?period=quarter&limit=4`
-  - response: `{symbol, fiscalYear, period, date, data: {segment1: revenue1, ...}}`
-- 直近 Q + 1 年前 Q を取得、 YoY% 計算 (segment 別)
-- `analysis_data["segments"] = [{"name": "Data Center", "revenue_q": ..., "yoy_pct": ...}, ...]` で response に attach
-- 既存 `/api/visualize/{ticker}` の `instant_result` + LLM input に渡す
+#### 2B. ~~backend: segment revenue 取得~~ **既に着地済** (v138 audit 判明、 工数 0)
+- `backend/app/main.py:521` `get_segment_data(ticker, fmp_key)` 完全実装
+  - FMP endpoint: `/stable/revenue-product-segmentation?symbol=X&period=quarter` (v3 → stable 移行済)
+  - 8 四半期取得 + selected_idx で「2+ segments 揃った最新四半期」 選択 (v97 真因 fix)
+- `backend/app/main.py:553` `build_segment_summary(segment_data)` で 直近 Q + 1 年前 Q の YoY% 計算
+- `parsed["segmentSummary"]` + `parsed["segmentDataAvailable"]` で `/api/visualize/{ticker}` response に attach (line 10272)
+- frontend: ProfileCard.jsx:404 (SegmentSection) + DiagramCard.jsx:1559 (セグメント別売上 section) で描画
+- v138 動作確認: NVDA / AAPL / GOOGL / MSFT で じっちゃま記事核心数字一致
 
 #### 2C. backend: 配当 + 自社株買い取得 (1 人日)
 - 新 helper `_fetch_capital_return(ticker)` 追加
@@ -113,17 +115,20 @@ NVDA Q1 決算記事 + AAPL Q2 決算記事レベルの 4 軸 (部門別売上 /
 - [ ] dogfood で「**じっちゃま記事と同等**」 と user 主観 PASS
 - [ ] 6 体合議 verdict 3+ APPROVE
 
-## 8. 工数 + cost 集約
+## 8. 工数 + cost 集約 (v2 改訂)
 
-| 項目 | 工数 | 月 cost |
-|---|---|---|
-| 2A: FMP Ultimate upgrade | 0.25 人日 | +$99/月 (FMP) |
-| 2B: segment revenue backend | 1.5-2 人日 | — |
-| 2C: 配当 + 自社株買い backend | 1 人日 | — |
-| 2D: SEC 8-K LLM 強化 | 1.5-2 人日 | +$5-10/月 (Anthropic) |
-| 2E: frontend section + card | 1 人日 | — |
-| **Phase 2 合計** | **5.25-6.25 人日** | **+$104-109/月** |
-| Phase 3 (transcript LLM) | 15-20 人日 | +$15-25/月 |
+| 項目 | 工数 | 月 cost | status |
+|---|---|---|---|
+| 2A: ~~FMP Ultimate upgrade~~ | ~~0.25 人日~~ | ~~+$99/月~~ | ❌ **削除** (audit で不要判明) |
+| 2B: segment revenue backend | 0 人日 | — | ✅ **既に着地済** (v97 で実装、 v138 audit で発見) |
+| 2C: 配当 + 自社株買い backend | 1 人日 | — | 🟡 release 後 sprint |
+| 2D: SEC 8-K LLM 強化 | 1.5-2 人日 | +$5-10/月 (Anthropic) | 🟡 release 後 sprint |
+| 2E: frontend section + card | 1 人日 | — | 🟡 release 後 sprint (2C/2D 後) |
+| **release 前 必須** | **0 人日** | **$0** | ✅ |
+| **release 後 sprint (合計)** | **3.5-4 人日** | **+$5-10/月** | — |
+| Phase 3 (transcript LLM) | 15-20 人日 | +$15-25/月 | — |
+
+**SPEC v1 → v2 圧縮**: 5.25-6.25 人日 + $99/月 → 0 人日 + $0 (release 前)、 残 release 後 sprint 3.5-4 人日。
 
 ## 9. release 前 着手順序 (推奨)
 

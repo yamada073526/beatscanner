@@ -226,9 +226,7 @@ function HeroSection({ onFreeStart }) {
         勝てる決算、 2 秒で。
       </h1>
 
-      {/* v125 P8-5 Task 4-A (3 体合議推奨案 A3 改、 マーケター 法務修正): pillar 2 訴求の subtitle。
-          Hero タイトル (確立 brand DNA) は維持しつつ、 「決算 + テクニカル 2 本柱」 pillar 2 launch 訴求を補強。
-          元案「米国株の買い時と売り時」 は §38 断定的判断 risk → 「2 本柱で日本語チェック」 に修正。 */}
+      {/* v138 Phase 2B audit 後: 既存 segment data (NVDA Data Center YoY +92%、 AAPL iPhone YoY +21%、 GOOGL Cloud YoY +63%、 MSFT Azure 系 YoY +31%) と「予想 vs 実績」 verdict (bm_data → DiagramCard / SegmentSection) は backend で動作確認済。 LP 訴求を「2 本柱日本語チェック」 から「部門別売上・予想比較まで日本語で」 に拡張、 機能事実訴求で Trust Cliff Risk なし。 「ガイダンス」 は SEC 8-K 抽出精度 20-35% で Trust Cliff Risk のため不使用 (release 後 Phase 2D で 60-70% 達成後再考)。 「機関投資家級」 等の主観言葉は §38 断定 risk 回避で見送り。 */}
       <p
         className="hero-subtitle"
         style={{
@@ -243,7 +241,7 @@ function HeroSection({ onFreeStart }) {
           letterSpacing: '-0.005em',
         }}
       >
-        決算 quarterly + テクニカル daily、 米国株を 2 本柱で日本語チェック。
+        決算 quarterly + テクニカル daily、 部門別売上や予想比較まで日本語で。
       </p>
 
       {/* Phase 3 Sub-1: 実証データブロック (過去 5 年バックテスト結果)
