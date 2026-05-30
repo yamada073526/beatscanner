@@ -301,7 +301,7 @@ frontend (`DiagramCard.jsx`):
 | v138.6 R7-F+G | 8d94d93 | `index-Dap-2cwr.js` | LP 銘柄 click → workspace 強制 + 図解 Pro 限定化 |
 | v138.6 R7-H/I/J/K/L | dc6b9bf | `index-CeRYgb3V.js` | PremiumLock Option D refactor + 過去 8Q gate + AI 詳細レポート 重複削除 |
 | v138.6 R7-I2+M | a7e51c5 | `index-DmLBSeor.js` | workspace UpgradeModal mount 追加 + 図解 Premium→Pro 色統一 |
-| v138.6 R7-N | 361bde4 | (deploy 中) | UpgradeModal featureName → 日本語 label dict 変換 |
+| v138.6 R7-N | 361bde4 | `index-Hht9JD80.js` | UpgradeModal featureName → 日本語 label dict 変換 |
 
 ## v138.6 R7-N 着地
 
