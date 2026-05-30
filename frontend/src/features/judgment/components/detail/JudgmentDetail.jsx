@@ -492,12 +492,25 @@ export default function JudgmentDetail({
   // v99 dogfood feedback C (2 巡目): 旧 hint「予想は更新待ち」 が EPS BEAT cell のみ表示で
   // 他 3 cell との height 不揃い + grid stretch → 「下半分空欄」 体感の主因。 hint 削除で
   // 全 cell 均一 height、 「—」 が「データ無し」 を honest に語る (Bloomberg idiom)。
+  // v138.6 R3 (2026-05-30): 旧 code は result.epsBeatPct を読んでいたが、 backend には
+  // この field が存在せず常に undefined → EPS BEAT 全銘柄「—」 regression。
+  // R2 backend fix で guidance.eps.surprise_pct (= +6.3% beat 等) は取得済のため、
+  // guidance 経由に source 切替。 guidance.eps.actual/estimated 両方ある時のみ表示。
+  const _eps_surprise = guidance?.eps?.surprise_pct;
+  const _eps_actual = guidance?.eps?.actual;
+  const _eps_est = guidance?.eps?.estimated;
+  const _eps_beat_available = (
+    _eps_surprise != null && Number.isFinite(_eps_surprise) &&
+    _eps_actual != null && _eps_est != null
+  );
   kpis.push({
-    value: result?.epsBeatPct != null
-      ? `${result.epsBeatPct > 0 ? '+' : ''}${(result.epsBeatPct * 100).toFixed(1)}%`
+    value: _eps_beat_available
+      ? `${_eps_surprise > 0 ? '+' : ''}${_eps_surprise.toFixed(1)}%`
       : '—',
     label: 'EPS Beat',
-    verdict: result?.epsBeatPct == null ? 'unknown' : result.epsBeatPct > 0 ? 'beat' : 'miss',
+    verdict: !_eps_beat_available
+      ? 'unknown'
+      : (_eps_surprise > 0 ? 'beat' : 'miss'),
     // hint: 削除 (全 cell 均一 height のため)
   });
 

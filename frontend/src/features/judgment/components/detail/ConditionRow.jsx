@@ -74,17 +74,25 @@ export default function ConditionRow({
       onMouseLeave={() => setIsHovered(false)}
       style={{
         listStyle: 'none',
+        // v138.6 R3 (2026-05-30): user 「もう少し強くしてもよい」 要望で affordance 強化:
+        //   tint 0.06 → hover 0.18 (1 段強い)、 border opacity 0.20 → 0.55 (はっきり)
         background: passed
-          ? (isHovered ? 'rgba(52, 239, 129, 0.12)' : bgPass)
-          : (isHovered ? 'rgba(248, 113, 113, 0.12)' : bgFail),
+          ? (isHovered ? 'rgba(52, 239, 129, 0.18)' : bgPass)
+          : (isHovered ? 'rgba(248, 113, 113, 0.18)' : bgFail),
         border: '1px solid',
         borderColor: passed
-          ? (isHovered ? 'rgba(52, 239, 129, 0.40)' : borderPass)
-          : (isHovered ? 'rgba(248, 113, 113, 0.40)' : borderFail),
+          ? (isHovered ? 'rgba(52, 239, 129, 0.55)' : borderPass)
+          : (isHovered ? 'rgba(248, 113, 113, 0.55)' : borderFail),
         borderRadius: 'var(--radius-sm)',
         overflow: 'hidden',
-        transform: isHovered && !expanded ? 'translateY(-1px)' : 'translateY(0)',
-        transition: 'background var(--motion-fast) ease, border-color var(--motion-fast) ease, transform var(--motion-fast) ease',
+        // translateY -3px (was -1) で elevation を 3 倍に体感強化、 shadow も追加
+        transform: isHovered && !expanded ? 'translateY(-3px)' : 'translateY(0)',
+        boxShadow: isHovered && !expanded
+          ? (passed
+              ? '0 6px 16px rgba(52, 239, 129, 0.18), 0 2px 4px rgba(52, 239, 129, 0.10)'
+              : '0 6px 16px rgba(248, 113, 113, 0.18), 0 2px 4px rgba(248, 113, 113, 0.10)')
+          : 'none',
+        transition: 'background var(--motion-fast) ease, border-color var(--motion-fast) ease, transform var(--motion-fast) ease, box-shadow var(--motion-fast) ease',
       }}
     >
       {/* ── Summary row (always visible) ────────────────────────────── */}
@@ -211,15 +219,19 @@ export default function ConditionRow({
         <span
           aria-hidden="true"
           style={{
-            fontSize: 12,
-            color: isHovered || expanded ? 'var(--text-secondary)' : 'var(--text-muted)',
+            // v138.6 R3: chevron は default 12px / hover で 16px に拡大、 右移動も 2px → 5px に強化、
+            // 色も muted → primary (accent ではなく文字色強)、 文字を bolder に。 expanded 中は rotate 90°。
+            fontSize: isHovered && !expanded ? 16 : 12,
+            color: expanded
+              ? 'var(--text-primary)'
+              : (isHovered ? 'var(--text-primary)' : 'var(--text-muted)'),
             transition: 'transform var(--motion-fast) var(--ease-out-cubic), color var(--motion-fast) ease, font-size var(--motion-fast) ease',
             transform: expanded
               ? 'rotate(90deg)'
-              : (isHovered ? 'rotate(0deg) translateX(2px)' : 'rotate(0deg)'),
+              : (isHovered ? 'rotate(0deg) translateX(5px) scale(1.1)' : 'rotate(0deg)'),
             display: 'inline-block',
             lineHeight: 1,
-            fontWeight: 600,
+            fontWeight: 700,
           }}
         >
           ▸
