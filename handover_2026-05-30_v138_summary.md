@@ -182,6 +182,50 @@ frontend (`DiagramCard.jsx`):
 
 ### Phase 2D 全体進捗 (v138 audit 起点)
 - Sprint 1 (sec_guidance.py module) ✅ 着地 (commit 41c9e01)
-- Sprint 2a (backend 統合) ✅ 着地 (本 commit)
-- Sprint 2b (frontend GuidanceSection) 🟡 次 session
-- Sprint 2c (dogfood + deploy + LP unlock) 🟡 次 session
+- Sprint 2a (backend 統合) ✅ 着地 (commit 81306ba)
+- Sprint 2b (frontend GuidanceSection) ✅ 着地 (commit c4ff41b)
+- Sprint 2c (dogfood + deploy) ✅ 着地 + LP unlock 見送り (v138.5)
+
+## v138.5 Phase 2D Sprint 2c 着地 (本 session 追加)
+
+### deploy
+- `railway up --detach` → bundle hash `index-CXk8clXz.js` → `index-DCJVgYs2.js` (CSS 不変 = frontend のみ)
+- backend `_fetch_sec_guidance_structured` + frontend GuidanceSection 本番稼働
+
+### dogfood 結果 (4 銘柄、 SEC 8-K EX-99.1 only)
+| ticker | confidence | structured | 真因 |
+|---|---|---|---|
+| NVDA | **high** | q_revenue $89.18-92.82B + q_margin 74.4-75.5% gross | 8-K に数値ガイダンス明示掲載 |
+| AAPL | medium | 全 None (narrative のみ) | 数値ガイダンス非開示方針、 hardcoded fallback |
+| MSFT | **low** | 全 None | 8-K は historical only、 ガイダンスは決算 call で提供 |
+| GOOGL | **low** | 全 None | GOOGL も同様、 press release では historical only |
+
+### cache hit 観測 ([GUIDANCE_V2 CACHE] from railway logs)
+- NVDA: cold MISS (4160 token cache create)
+- MSFT: hit=**100%** (read=4160)
+- GOOGL: hit=**100%** (read=4160)
+- steady-state cache hit ≥ 80% target **達成** ✅
+
+### LP 訴求 update **見送り** (重要 verdict)
+- precision: high+medium = 2/4 = **50%** (target 60-70% 未達)
+- 真因切り分け: MSFT/GOOGL low は **bug ではなく source side limit** (8-K に情報なし)
+- prompt 改善では precision は上がらない、 Phase 3 (call transcript LLM、 15-20 人日) で補完が必要
+- LP「次 Q ガイダンス + 部門別売上 + 予想比較 + 資本政策まで日本語で」 → **Phase 3 完了まで保留**
+- 現 LP「決算 quarterly + テクニカル daily、 部門別売上や予想比較まで日本語で」 を維持
+
+### 新規 SSOT memory
+- `feedback_sec_guidance_8k_coverage_limit.md` — 8-K only でガイダンス抽出は MSFT/GOOGL 等 call 提供企業で「記載なし」 が正解、 LP unlock 判定の構造的理解
+
+### Phase 2D 完了 + 次セッション展望
+- Phase 2D 全 Sprint (1 / 2a / 2b / 2c) ✅ 着地、 課金回避 ($99/月 節約) + 機能完成
+- 次 priority candidates:
+  1. **Phase 3 (earnings call transcript LLM、 15-20 人日)** — MSFT/GOOGL 等 8-K coverage 外を補完 → LP「ガイダンス」 unlock 解禁可能に
+  2. Phase 2E (frontend 統合 + DiagramCard refactor、 残 0.5 人日)
+  3. P1-D chart overlay preset 3 mode (2-3 時間)
+  4. SellZone chip 重複削減 (minor)
+
+### 本日 v138.5 commit (Sprint 2b + Sprint 2c)
+| ver | commit | 内容 |
+|---|---|---|
+| v138.4 (Phase 2D Sprint 2b) | c4ff41b | DiagramCard GuidanceSection (Section 3.7) + sanitize 拡張 |
+| v138.5 (Phase 2D Sprint 2c) | (deploy only、 code 不変) | bundle `index-DCJVgYs2.js` 本番展開 + dogfood + LP unlock 見送り verdict |
