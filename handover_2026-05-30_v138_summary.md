@@ -54,7 +54,7 @@
 - 付随: Cup-Handle chip hover tooltip「Premium で全データ解放」 → 「Premium で解放」 統一。
 - bundle `index-BtgM2YZB.js` → **`index-BJJb_Iiv.js`** (本番反映 + grep 検証済: 新ラベル 1 / 旧 Opus ラベル 0 / color-warning 9 / 旧 tooltip 0)。
 
-### 🆕 v138.7 Phase 2 着地 (commit `8d2ea53`、 user 判断: Stripe 不要の準備のみ + AI詳細レポート Pro 統一)
+### 🆕 v138.7 Phase 2 着地 (commit `04ffbd1`、 user 判断: Stripe 不要の準備のみ + AI詳細レポート Pro 統一)
 > ⚠️ **スクリーナー実 Premium gate は意図的に未実施**。 Premium が Stripe 未配線で買えない以上、 gate を
 > 強めると dead-end funnel (Trust Cliff)。 スクリーナー gate 強化 + Stripe Premium checkout 配線は
 > **Phase 3 (Premium 販売開始) でセット**。 Phase 2 は「買える Pro の矛盾解消」 + 「Premium の存在告知」 のみ。
