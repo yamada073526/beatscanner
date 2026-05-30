@@ -69,16 +69,22 @@
 - bundle `index-BJJb_Iiv.js` → **`index-DHQIM0C8.js`** (本番反映 + grep 検証済: LP chunk `LandingPage-CyemTkqZ.js` に
   「近日公開予定」 1 / 「カップ・ウィズ・ハンドル」 1 / 「¥1,800」 1 / 「Premium」 1)。
 
-### ✅ Phase 2.1 着地 (commit `a8db6aa` ProTeaser + `b53bd25` grid 真因 fix、 user dogfood 2 件解決、 bundle `index-Bz1aINzw.js` 本番反映 + grep 検証済)
-- **LP 3 カード並列化**: pricing grid `minmax(260px → 200px, 1fr)`。 260 だと 3 列に 812px 必要で ~794px
-  (laptop window) が 2 列折り返し → Premium だけ下段だった。 200 で 632px から 3 列横並び。 `LandingPage.jsx`。
+### ✅ Phase 2.1 着地 (commit `a8db6aa` ProTeaser + `b53bd25` grid 真因 fix、 user dogfood 2 件解決、 bundle **`index-DsulPc7R.js`** / LP chunk `LandingPage-Dq9LW9SL.js` 本番反映 + grep 検証済: panel-card 1 / minmax200 1 / 近日公開予定 1)
+> ⚠️ deploy 連続で本番 hash が DHQIM0C8 → Bz1aINzw → DsulPc7R と推移。 中間 hash の curl は transient 失敗が
+> 出る (bytes 不足)。 最終的に local dist の LP chunk 名 (`Dq9LW9SL`) = 本番 LP chunk 名で content-hash 一致を
+> 確認 = 全変更反映済。 「同一 chunk 名 = 同一内容」 が最も確実な検証 (curl が途中切れても判定可)。
+- **LP 3 カード並列化**: pricing grid `minmax(260px → 200px, 1fr)` + `maxWidth 720 → 1080`。 真因 = Phase 2 の
+  maxWidth edit が pricing grid でなく FeaturesSection grid (別 section、 line 1360) に当たっており、 pricing grid
+  (Free/Pro/Premium、 line 1400) は 720+minmax260 のままで 3×260+2×16=812 > 720 → Premium だけ折り返していた。
+  Python context マッチ (「Free プラン」 コメント直前の grid を特定) で pricing grid を修正 + 誤変更した
+  FeaturesSection grid を 720 に revert。 `LandingPage.jsx`。
 - **ProTeaser 発光統一**: 「市場の声 (Pro で解禁)」 カードに `className="panel-card"` 追加で arrival/hover glow を
   他 pricing カードと統一。 glow host の overflow:hidden を撤去し、 内部 ambient gradient を専用 clip 層 (子 div) で
   角丸内に収めて両立 (design_recipes §C 遵守)。 `.bs-pro-teaser` は CSS 定義なし dead class で conflict なし。
   `components/ui/ProTeaser.jsx`。 build PASS + design-system-check (contain / raw hex / !important / glow host
   overflow すべて clean)。
-- bundle `index-DHQIM0C8.js` → (deploy 投入済、 反映待ち)。 ⚠️ ProTeaser は発光系 (高リスク領域) 変更のため
-  user dogfood で「市場の声」 カードの scroll/hover 発光 + gradient bleed なしを最終確認推奨。
+- bundle `index-DHQIM0C8.js` → **`index-DsulPc7R.js`** (本番反映 + grep 検証済)。 ⚠️ ProTeaser は発光系
+  (高リスク領域) 変更のため user dogfood で「市場の声」 カードの scroll/hover 発光 + gradient bleed なしを最終確認推奨。
 
 ### 🔴 Phase 3 残タスク (Premium 販売開始、 次セッション)
 1. **Stripe Premium checkout 配線** (App.jsx は現状 Pro monthly/yearly のみ)。 Premium price ID を Stripe
