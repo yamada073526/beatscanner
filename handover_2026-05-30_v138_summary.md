@@ -309,6 +309,21 @@ frontend (`DiagramCard.jsx`):
 - 修正: FEATURE_LABEL_JP dict (20 key + 日本語 label) + resolveFeatureLabel helper、
   modal 表示を `displayName` 経由で user-facing 日本語に変換、 未登録 key は raw fallback
 
+## 🐛 既知 bug (次セッションで処理、 user dogfood 12 巡目で発見)
+
+### Bug: 図解 banner「Pro で解放」 click 時 modal 表示が「過去 8Q 決算反応」 になる
+- 真因: R7-M で図解 placeholder の feature を `claude_opus_report` (Premium=orange) →
+  `earnings_8q` (Pro=cyan) に変更で色統一したが、 副作用として modal 表示が「過去 8Q 決算反応」
+- user dogfood 直接 quote: 「図解生成 の Pro で解放 ボタンを押したときにも、 過去 8Q 決算反応 は
+  Pro プランでご利用いただけます と表示されます」
+- 対応案 (user 提案で 3 体合議):
+  - 案 A: 図解専用の feature key 新設 (例: `ai_diagram` / `figure_generation`) を planGating.js に
+    追加、 Pro tier 登録、 FEATURE_LABEL_JP dict に「図解」 or 「AI 詳細レポート」 追加
+  - 案 B: PremiumLock に `displayLabel` prop を追加し、 feature key と表示名を分離
+  - 案 C: feature key と表示名を最初から分離する schema 変更 (planGating refactor 規模)
+- 関連: 下記 next session SPEC seed の B (Pro vs Premium tier 再構築) と同時 refactor で着地が
+  効率的 (tier 体系 confirm + planGating refactor + 図解 key 新設 を 1 commit でまとめ)
+
 ## 次セッション着手 SPEC seed (user 直接要望、 2 件)
 
 ### A. UpgradeModal リデザイン (「凄い！ぜひ使ってみたい！」 感覚出す)
@@ -340,9 +355,20 @@ frontend (`DiagramCard.jsx`):
   - planner (planGating.js refactor + LP 訴求整合)
 - 参考 SSOT: lib/planGating.js + components/LandingPage.jsx + memory project_logout_plan_management_ui.md
 
+### C. 図解 → 「過去 8Q 決算反応」 表示 bug (user dogfood 12 巡目)
+- 上記 既知 bug の対応、 案 A (図解専用 feature key 新設) が現実的
+- 表示名は「図解」 or 「AI 詳細レポート」 の 2 案を 3 体合議 (ui-designer 主、 funnel-cro 副) で決定
+  - 「図解」 = banner UI 上の語と一致、 user 認知連続性
+  - 「AI 詳細レポート」 = LP 訴求語と一致、 funnel 整合性
+- B (Pro/Premium tier 再構築) と **同時 commit** が効率的、 planGating.js refactor + key 新設を 1 sprint
+- 工数: 0.5-1 人日 (B と統合で +0.5 人日)
+
 ### 次セッション開始 SOP
 1. `/fetch-handover` で本 file 圧縮 summary 取得
-2. 上記 A + B の SPEC seed を見て、 user に着手順 (A→B or B→A) を確認
+2. 上記 A + B + C の SPEC seed を見て、 user に着手順を確認:
+   - 推奨順: **B + C 統合先行** (tier 体系 + key 新設、 0.5-1.5 人日)
+   - → A (UpgradeModal リデザイン、 1-2 人日)
+   - → D (改善 D Pane 2 redesign、 3-7 人日)
 3. 3 体合議 並列起動 → verdict 集約 → 実装 → deploy → user dogfood
 
 ### release status (本日 v138.6 終了時点)
