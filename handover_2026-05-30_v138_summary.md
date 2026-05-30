@@ -66,7 +66,8 @@
   Pro (おすすめ+cyan) の主役性維持で Premium は amber 控えめ。 CTA は disabled「近日公開予定」 で
   「まだ買えない」 明示 (Trust Cliff 回避)。 grid maxWidth 720 → 1080 で 3 列横並び。 `Crown` icon 追加。
   panel-card 流用 + color-mix(var(--color-warning)) のみ (design-system-check PASS、 発光 host 増やさず)。
-- bundle `index-BJJb_Iiv.js` → (deploy 投入済、 反映待ち)。
+- bundle `index-BJJb_Iiv.js` → **`index-DHQIM0C8.js`** (本番反映 + grep 検証済: LP chunk `LandingPage-CyemTkqZ.js` に
+  「近日公開予定」 1 / 「カップ・ウィズ・ハンドル」 1 / 「¥1,800」 1 / 「Premium」 1)。
 
 ### 🔴 Phase 3 残タスク (Premium 販売開始、 次セッション)
 1. **Stripe Premium checkout 配線** (App.jsx は現状 Pro monthly/yearly のみ)。 Premium price ID を Stripe
