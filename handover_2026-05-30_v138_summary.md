@@ -295,6 +295,24 @@ frontend (`DiagramCard.jsx`):
 | v138.6 R5 hotfix | ccbdeb3 | `index-BQWDGn3B.js` | 3 体合議 verdict → 「この条件の解説」 icon-only ⓘ minimal 統一 |
 | v138.6 R6 feat | 4f3a092 | `index-ifwCUlr6.js` | workspace Pane 1 nav 末尾 UserFooter + LogOut button 追加 |
 | v138.6 R7 P0+P1 | 423a642 | `index-BVL8weEE.js` | LogOut redirect + Trust Cliff data leak gate + login button 復旧 |
+| v138.6 R7-A2+C2 | 6685db6 | `index-KrDrSd9e.js` | LogOut → ?layout=classic 強制 + ProfileCard 2 箇所目 listener 復旧 |
+
+## v138.6 R7-A2 + R7-C2 真因確定 (user dogfood 8 巡目)
+
+### R7-A2: LogOut redirect が不発 (R7-A regression)
+- 真因: R7-A の `window.location.href = '/'` は LP に行かず workspace のまま、 user「BeatScanner の
+  無料ユーザーの画面になる」 報告
+- 深掘: App.jsx line 920 `useWorkspaceLayout = !isMobileForWorkspace && !urlWantsClassic` で
+  **PC default = workspace mode**、 `/` でも workspace 表示。 LP Hero (showLP = activeTab='home'
+  && !result && !user && !loading) は classic SPA mode でのみ render
+- 修正: `window.location.href = '/?layout=classic'` 強制で classic SPA mode → LP Hero render
+- 副作用: login 後も classic mode 残るが、 user 操作で Cmd+K palette / nav から workspace 切替可
+
+### R7-C2: ProfileCard 2 箇所目 link が残っていた regression
+- 真因: R7-C で `replace_all` を使ったが、 git diff 確認漏れで line 1311 のみ修正、 line 1495 は
+  古い `window.dispatchEvent('bs:open-login')` (listener なし) のまま残存
+- user「日本語要約を表示できませんでした」 box 内 link が無反応 dogfood 報告
+- 修正: line 1495 を `signInWithGoogle()` 直接接続に修正、 全 2 箇所統一
 
 ## v138.6 R7 緊急 hotfix (user dogfood 7 巡目、 P0+P1)
 
