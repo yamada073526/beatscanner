@@ -97,10 +97,34 @@ get_segment_data() を v135 SPEC 起票時点で見落とした。
 - 「じっちゃま」 文字列 → 「独自プロトコル」
 - JSX 属性間コメント不可
 
-## 本日 v138 commit (1 commit)
+## 本日 v138 commit (2 commit、 同一 session 内)
 
 | ver | commit | 内容 |
 |---|---|---|
-| v138 | (本 commit) | Phase 2 SPEC v2 ($99/月 課金回避) + LP subtitle「部門別売上や予想比較まで日本語で」 + handover v138 |
+| v138 | 107de65 | Phase 2 SPEC v2 ($99/月 課金回避) + LP subtitle「部門別売上や予想比較まで日本語で」 + handover v138 |
+| v138.1 (Phase 2C) | 6260dbd | 配当 + 自社株買い 実行額 raw fact attach + CapitalReturnSection (Section 3.6) 統合 |
 
-**累計 v130-v138**: 10 commit、 v138 で「過大見積もり SPEC を audit で実態に修正 + 既存実装活用」 の運用 SSOT 確立。
+### v138.1 Phase 2C 詳細
+
+backend (`main.py:619` 周辺):
+- 新 helper `get_capital_return_data(ticker, fmp_key)` — cash-flow-statement (8Q) + `_fetch_dividends_for_ticker` (limit=8) 並列 fetch
+- dividend trend 判定: 直近 4 件平均 vs 前 4 件平均 (≥5% 差で increase/decrease、 それ以外 stable)
+- buyback: 直近 Q 実行額 (絶対値、 負値 = 買い戻し) + TTM 累計 (4Q sum)
+- visualize endpoint asyncio.gather に `_cap_task` 追加、 `parsed["capitalReturn"]` + `parsed["capitalReturnDataAvailable"]` attach
+
+frontend (`DiagramCard.jsx`):
+- 新 `CapitalReturnSection` + `CapitalReturnRow` 追加 (Section 3.6 = セグメント別売上 直後)
+- trend chip 色: 増配=緑 / 横ばい=muted / 減配=赤 (CLAUDE.md 投資業界色ルール準拠)
+- raw fact のみ表示 (「announcement」 strong words は Phase 2D SEC 8-K 完了後 unlock)
+- description: 「直近四半期 実績ベース（出典: FMP cash-flow / dividend-history）」
+
+### Phase 2C で SPEC v2 工数表 update
+
+| Phase | v138 audit 直後 | v138.1 commit 後 |
+|---|---|---|
+| 2C 配当/自社株買い backend + frontend | 1 人日 | ✅ **着地済** |
+| 2D SEC 8-K LLM 強化 (+$5-10/月) | 1.5-2 人日 | 🟡 remaining |
+| 2E frontend 統合 | 1 人日 | 🟢 Phase 2C で 大半 完遂 (資本政策 section)、 残 0.5 人日 (guidance card は Phase 2D 後) |
+| release 後 sprint 合計 | 3.5-4 人日 | **2-2.5 人日** |
+
+**累計 v130-v138.1**: 11 commit、 「audit-first SPEC 圧縮」 + 「Phase 2C raw fact 路線で Trust Cliff 回避」 の 2 SSOT 確立。
