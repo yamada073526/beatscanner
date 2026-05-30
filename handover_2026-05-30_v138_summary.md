@@ -43,6 +43,20 @@
 - bundle `index-7C3ZzqiN.js` → **`index-C01LQ0kn.js`** (deploy 投入済、 反映待ち時点では未 grep 検証)。
 - 残る ¥1,800 (CustomScreenerPanel 別 chunk + StockPriceChart の他テキスト) は Premium 機能の Premium 価格 = 正当 (ねじれ無し)。
 
+### 🆕 v138.7 Phase 1.6 — UpgradeModal dark mode + 機能名是正 (user dogfood 14 巡目、 commit `ba326a1`)
+> user 指摘: ①Premium パネル (amber) が **dark mode で文字が背景と同化して読めない**。 ②「Claude Opus 多面分析
+> レポート」 は何の機能か不明 + Claude Opus 訴求不要 + 具体的に書くべき。
+- `UpgradeModal.jsx`: Premium パネルの Tailwind `from-amber-50 to-white` gradient + `text-slate-*` は
+  dark mode で bg が light 固定のまま残り text と同化 → **semantic token** (`var(--text-primary/secondary)`
+  + `var(--color-warning)` + 半透明 amber rgba) に書き換えて両モード自動対応 (dark-mode skill)。
+- 機能名: 「Claude Opus 多面分析レポート」 → **「AI 詳細分析レポート（強気・弱気の両論を併記）」**。
+  DetailReport.jsx 実装 (強気材料/弱気材料/総合判断 の両論併記) と一致 + Opus 実装詳細訴求を撤去。
+- 付随: Cup-Handle chip hover tooltip「Premium で全データ解放」 → 「Premium で解放」 統一。
+- bundle `index-BtgM2YZB.js` → (deploy 投入済、 反映待ち)。
+- ⚠️ 残: `ContextSection.jsx:173,221` の PremiumLock bullets「Premium は Claude Opus 多面分析 (月 20 銘柄)」
+  も同種文言。 図解 Pro 開放後の `claude_opus_report` 扱いと併せ Phase 2 で整理 (今回 scope 外)。
+- 既存 token 発見: `--amber-bg/title/body` は既に light/dark 両定義あり (今回は color-warning + text 系で対応)。
+
 ---
 
 
