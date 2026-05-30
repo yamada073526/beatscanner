@@ -347,6 +347,25 @@ export default function App() {
   // 自動的に Stripe Checkout にリダイレクトする
   useEffect(() => {
     if (!user) return;
+    // v138.6 R7-A3 (2026-05-30): logout で sessionStorage flag が set されている時のみ、
+    // ?layout=classic を clear して workspace mode に戻る (PC default = workspace、 元の UX 復元)。
+    // 手動 ?layout=classic bookmark の user は影響なし (flag set されないため)。
+    try {
+      const flag = sessionStorage.getItem('bs:return_to_workspace_after_login');
+      if (flag === '1' && typeof window !== 'undefined') {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get('layout') === 'classic') {
+          sessionStorage.removeItem('bs:return_to_workspace_after_login');
+          // full reload で useWorkspaceLayout 再評価、 workspace 表示
+          window.location.href = '/';
+          return;
+        } else {
+          // flag だけ残っていた場合 (layout なしで login 完了等) は安全に clear
+          sessionStorage.removeItem('bs:return_to_workspace_after_login');
+        }
+      }
+    } catch { /* sessionStorage 例外は無視 */ }
+
     let intent = null;
     try { intent = localStorage.getItem('bs_post_login_intent'); } catch {}
     if (intent === 'checkout_monthly') {

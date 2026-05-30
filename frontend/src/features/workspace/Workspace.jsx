@@ -678,15 +678,15 @@ function UserFooter() {
       <button
         type="button"
         onClick={async () => {
-          // v138.6 R7-A2 🔴 P0 (2026-05-30): LogOut 後に LP (Hero + Google ログイン CTA) を表示する。
-          // 旧 R7-A は window.location.href = '/' だけだが、 PC default = workspace mode のため
-          // '/' で workspace 表示が続き、 LP Hero 非表示 (App.jsx line 920 useWorkspaceLayout)。
-          // → `?layout=classic` を明示で classic SPA mode 強制、 LP Hero + Google ログインボタン表示。
-          // login 後は user 操作で workspace に切替可 (Cmd+K cmd palette / nav)。
+          // v138.6 R7-A3 🟠 P1 (2026-05-30): LogOut → LP 表示 + 再ログイン後 workspace 自動復帰。
+          // R7-A2 (?layout=classic 強制) 副作用: re-login 後 URL に classic 残り user が
+          // 元の workspace mode に戻れない。 sessionStorage flag で「logout 経由の classic だ」 と
+          // 区別、 App.jsx 側 user truthy で flag 検出時に `/` (= workspace default) リダイレクト。
           try {
             await signOut();
           } finally {
             if (typeof window !== 'undefined') {
+              try { sessionStorage.setItem('bs:return_to_workspace_after_login', '1'); } catch {}
               window.location.href = '/?layout=classic';
             }
           }
