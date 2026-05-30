@@ -34,7 +34,12 @@ export default function ProTeaser({
 
   return (
     <section
-      className="bs-pro-teaser"
+      // v138.7 Phase 2.1 (user dogfood): scroll/hover 発光が他 pricing カード (panel-card) と不揃い
+      // だった。 panel-card クラスを追加して arrival spotlight + hover glow を統一。
+      // glow host (= panel-card) には overflow:hidden を付けられない (box-shadow glow が clip される、
+      // design_recipes §C / CLAUDE.md「発光系」)。 旧 overflow:hidden は内部 ambient gradient を角丸内に
+      // 収めるためだったので、 gradient を専用 clip 層 (子 div、 glow host ではない) で囲って両立させる。
+      className="panel-card bs-pro-teaser"
       style={{
         marginTop: 24,
         padding: '24px 28px',
@@ -42,25 +47,34 @@ export default function ProTeaser({
         borderRadius: 14,
         background: `rgba(${baseColor}, 0.04)`,
         position: 'relative',
-        overflow: 'hidden',
       }}
     >
-      {/* 微 ambient gradient (LP hero と同 pattern、 Aman luxury) */}
+      {/* ambient gradient 専用 clip 層 (borderRadius + overflow hidden を子側に持たせ、 glow host を汚さない) */}
       <div
         aria-hidden="true"
         style={{
           position: 'absolute',
-          top: '50%',
-          right: '-10%',
-          width: '320px',
-          height: '180px',
-          transform: 'translateY(-50%)',
-          background: `radial-gradient(ellipse, rgba(${baseColor}, 0.06) 0%, transparent 70%)`,
+          inset: 0,
+          borderRadius: 14,
+          overflow: 'hidden',
           pointerEvents: 'none',
-          WebkitMaskImage: 'radial-gradient(ellipse, black 30%, transparent 70%)',
-          maskImage: 'radial-gradient(ellipse, black 30%, transparent 70%)',
         }}
-      />
+      >
+        {/* 微 ambient gradient (LP hero と同 pattern、 Aman luxury) */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            right: '-10%',
+            width: '320px',
+            height: '180px',
+            transform: 'translateY(-50%)',
+            background: `radial-gradient(ellipse, rgba(${baseColor}, 0.06) 0%, transparent 70%)`,
+            WebkitMaskImage: 'radial-gradient(ellipse, black 30%, transparent 70%)',
+            maskImage: 'radial-gradient(ellipse, black 30%, transparent 70%)',
+          }}
+        />
+      </div>
 
       <div style={{ position: 'relative', zIndex: 1 }}>
         {/* eyebrow: PRO 限定 (v100 LP Trust Cliff 監査 fix: 「Premium」 → 「Pro」 統一) */}
