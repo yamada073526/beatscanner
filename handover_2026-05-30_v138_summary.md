@@ -284,11 +284,37 @@ frontend (`DiagramCard.jsx`):
 | 🟢 | 改善 C: 5条件 hover affordance | 1.5-2 人日 | 後 |
 | 🟢 | プラン管理 UI full (Stripe 統合) | 2-3 人日 | 後 |
 
-### v138.6 + R1 hotfix commit
+### v138.6 + R1 + R2 hotfix commit
 | ver | commit | bundle | 内容 |
 |---|---|---|---|
 | v138.6 | 1a8118e | `index-usR8f65Q.js` | 物理層分離 SSOT 復活 + sparkline 窓統一 + AI 要約 sec_guidance 配線 |
 | v138.6 R1 hotfix | 0f459bf | `index-CQ1gC-IA.js` | payload key naming mismatch / ③ 復旧 / CFPS-EPS adaptive threshold |
+| v138.6 R2 hotfix | 63173ca | `index-DrerytzW.js` | SummaryBrief 2-phase race / EPS BEAT FMP 未来 entry skip / 5条件 click affordance |
+
+## v138.6 R2 hotfix 真因 (user dogfood 2026-05-30 3 巡目)
+
+### Bug B-1: ③ ガイダンス「非開示」 残存 (frontend race condition)
+- **真因**: `useJudgmentResult.js` の 2-phase guidance fetch:
+  1. Phase 1: `fetchGuidanceBasic` (EPS/revenue のみ、 sec_guidance_text なし)
+  2. Phase 2: `fetchGuidance` (sec_guidance_text 含む full)
+  SummaryBrief useEffect deps = `[ticker, latestDate]` のみで、 Phase 2 完了時に AI 要約再生成せず
+  Phase 1 (空 guidance) の出力「[NEU]③ ガイダンス：非開示」 が cache されたまま
+- **R2 修正**: useEffect deps に `Boolean(guidance?.sec_guidance_text)` 追加。
+  undefined → 文字列 の boolean 変化で dep 更新 → 再 fetch。 文字列内容差では cache 維持 (cost ↓)
+
+### Bug B-2: EPS BEAT 「—」 真因 fix (FMP /stable/earnings 未来 entry)
+- **真因**: FMP `/stable/earnings?symbol=NVDA&limit=1` は date DESC で **未来の earnings call** を
+  surprises[0] に返す (NVDA で「次回 2026-08-26 Q1 2027」 + actual=null)。
+  `_fetch_eps_data` は先頭取得で `eps_actual=null` → EPS BEAT「—」
+- **R2 修正**: limit 1→8 拡張、 配列順走査で actual EPS を持つ最直近過去報告分を pick。
+  検証: `/api/guidance/NVDA/basic` で actual=$1.87 / estimated=$1.76 / surprise +6.3% beat 取得確認
+
+### 改善 C: 5条件カード click affordance
+- **要望**: user dogfood「クリックして展開できることがわかるよう、 演出を追加頂きたい」
+- **R2 修正**: ConditionRow.jsx に isHovered state 追加:
+  - row hover: background tint (0.06→0.12) + border (0.20→0.40) + translateY -1px elevation
+  - chevron (▸): text-muted → text-secondary + translateX 2px (PASS/FAIL に応じた hover ring)
+  - transition `--motion-fast` で aman 質感、 expanded 中は translateY なし (jitter 防止)
 
 ## v138.6 R1 hotfix 真因 (user dogfood 2026-05-30 2 巡目)
 
