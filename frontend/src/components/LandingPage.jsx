@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Zap, MessageSquare, BarChart3, Flame, AlertTriangle, Eye, Clock, LineChart, Sparkles, Gift, Lock, Tag, Crown } from 'lucide-react';
+import { Zap, MessageSquare, BarChart3, TrendingUp, AlertTriangle, Eye, Clock, LineChart, Sparkles, Gift, Lock, Tag, Crown } from 'lucide-react';
 import { useBacktest } from '../hooks/useBacktest.js';
 import ProTeaser from './ui/ProTeaser.jsx';
 
@@ -423,7 +423,7 @@ function TodayHotSection({ onTickerClick }) {
         gap: 6,
         width: '100%',
       }}>
-        <Flame size={14} strokeWidth={2.2} style={{ color: 'rgb(245, 158, 11)' }} />
+        <TrendingUp size={14} strokeWidth={2.2} style={{ color: 'rgb(245, 158, 11)' }} />
         今日の注目
       </div>
       {/* v40: クリック可能シグナル — モバイルで hover が効かないため明示 */}
