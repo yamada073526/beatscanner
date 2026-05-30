@@ -299,6 +299,36 @@ frontend (`DiagramCard.jsx`):
 | v138.6 R7-D+R7-E | fe689a7 | `index-MyCqygyQ.js` | 永遠ローディング honest 表現 + 🔒 emoji → Lock icon |
 | v138.6 R7-A3 | 0fb8bab | `index-N2aJhBlu.js` | re-login 後 ?layout=classic 自動 clear で workspace 復帰 |
 | v138.6 R7-F+G | 8d94d93 | `index-Dap-2cwr.js` | LP 銘柄 click → workspace 強制 + 図解 Pro 限定化 |
+| v138.6 R7-H/I/J/K/L | dc6b9bf | `index-CeRYgb3V.js` | PremiumLock Option D refactor + 過去 8Q gate + AI 詳細レポート 重複削除 |
+
+## v138.6 R7-H/I/J/K/L 着地 (3 体合議 verdict 反映、 user dogfood 10 巡目)
+
+### 🟠 R7-J + R7-L: 3 体合議 verdict (ui-designer + funnel-cro + qa-dogfooder) 全 3 体一致 D 案
+- 旧 PremiumLock: ✦ PRO 限定 chip + label + 3 bullets + 大 CTA button (user dogfood「しつこい、 品格損なう」)
+- 新 Option D: label (1 行) + 小 pill CTA「Pro で解放 →」 (Aman 級「主張せず存在感」 質感)
+- chip / bullets / 大ボタン全削除、 blur 8px 維持、 padding 24→20、 minHeight 200→160
+- PRO badge は caller (AccordionSection label) で render、 PremiumLock は CTA に集中
+
+### 🟠 R7-I P1: 「Pro で解放」 button 不発 真因 fix
+- 真因: `onClick={onUpgrade}` で SyntheticEvent が upgrade.open に渡され featureName が event obj、
+  modal が壊れる
+- 修正: `onClick={() => { try { onUpgrade(feature); } catch { onUpgrade(); } }}` で feature string
+  明示 pass + 例外 fallback。 検証: free user で「Pro で解放」 click → upgrade modal 起動
+
+### 🟠 R7-H P1: 過去 8Q 決算反応 (EarningsReactionPanel) Pro 限定化
+- 真因: ガイダンス進捗 直近8Q は gated 済、 過去 8Q 決算反応 は free 露出 = Trust Cliff inconsistency
+- 修正: JudgmentDetail.jsx earningsReactionBlock を `feature="earnings_8q"` PremiumLock で wrap、
+  isScrollV1 / accordion 両 branch 対応
+
+### 🟡 R7-K P2: ペイン3末尾 AI 詳細レポート 重複削除
+- 真因: v4 mode で図解 (StickyDiagramAccordion) が Pane 3 上部 mount 済、 末尾 AI 詳細レポート は重複
+- 修正: ContextSection.jsx に `isV4` prop 追加、 `result && !isV4` で AI 詳細レポート skip
+- legacy mode (isV4=false) は従来通り render (BC 担保)
+
+### 🟡 R7-L: 図解 R7-G 完全 hide → minimal D 案 placeholder upgrade
+- 旧 R7-G: 図解 を free で完全非表示 (LP 訴求と整合だが「upsell 機会失う」 funnel-cro 指摘)
+- 新 R7-L: free user に PremiumLock minimal placeholder (label「図解で 5 条件・ビジネスを 2 秒で理解」 +
+  小 CTA + 64px ghost banner) で「存在を匂わせるが押し付けない」 Aman 級品格
 
 ## v138.6 R7-F + R7-G 着地
 
