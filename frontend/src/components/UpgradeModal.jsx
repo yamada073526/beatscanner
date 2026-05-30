@@ -59,8 +59,41 @@ function FeatureRow({ label, val, active }) {
   );
 }
 
+// v138.6 R7-N (2026-05-30): feature key (内部 identifier) を user-facing 日本語 label に変換。
+// 旧: 「earnings_8q」 「claude_opus_report」 等の internal key が modal にそのまま露出 (user dogfood
+// 「figure click したのに earnings_8q と出る、 直したほうが」 報告)。
+// 新: dict で internal key → 日本語 label に変換、 dict 未登録 key は raw を fallback で表示。
+const FEATURE_LABEL_JP = {
+  earnings_8q: '過去 8Q 決算反応',
+  claude_opus_report: 'AI 詳細レポート',
+  insider_trades: 'Insider 取引 (Form 4 / 13F)',
+  cup_handle_detection: 'カップ・ウィズ・ハンドル検出',
+  technical_overlay: 'チャート テクニカル オーバーレイ',
+  guidance_full: 'ガイダンス AI 要約',
+  search_unlimited: '銘柄分析 無制限',
+  screener_custom: 'カスタム スクリーナー',
+  csv_export: 'CSV エクスポート',
+  earnings_alert: '決算アラート (メール)',
+  movers_top_5: 'Movers Top 5',
+  news_archive_full: '過去ニュース 全期間',
+  line_morning_6am: 'LINE 朝 6:00 配信',
+  analyst_estimates: 'アナリスト予想',
+  distribution_days: 'Distribution Days',
+  sell_zone_50dma: '売りゾーン (50DMA)',
+  buy_zone_pivot: '買いゾーン (Pivot)',
+  segment_revenue: 'セグメント別売上',
+  capital_return: '配当 / 自社株買い',
+  sec_guidance: 'SEC ガイダンス 構造化',
+};
+
+function resolveFeatureLabel(name) {
+  if (!name || typeof name !== 'string') return name || '';
+  return FEATURE_LABEL_JP[name] || name;
+}
+
 export default function UpgradeModal({ isOpen, onClose, featureName, onCheckout, checkoutLoading, user }) {
   if (!isOpen) return null;
+  const displayName = resolveFeatureLabel(featureName);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
@@ -85,7 +118,7 @@ export default function UpgradeModal({ isOpen, onClose, featureName, onCheckout,
         {/* Feature name */}
         <div className="px-6 pt-4 pb-2">
           <p className="text-sm text-slate-600">
-            <span className="font-semibold text-slate-900">「{featureName}」</span>
+            <span className="font-semibold text-slate-900">「{displayName}」</span>
             はProプランでご利用いただけます。
           </p>
         </div>
