@@ -11123,6 +11123,43 @@ def _detect_cup_handle(
             # LLY (今 $1126 < pivot $1149 = 未突破) を extended と誤分類していた (user dogfood 真因)。
             if today_close >= high_252 * 0.95 and today_close > extended_candidate["ext_pivot"]:
                 pivot_price = round(extended_candidate["ext_pivot"], 2)
+
+                # v133 P2 Phase 1 (SPEC v2 §4、 6 体合議 verdict 反映、 user gate 2 承認):
+                # pullback_to_support 判定: 過去 pivot 突破済 (= extended_candidate あり) +
+                # 直近 high_252 から 7%+ 押し + box_support band +5% 以内接近 + band_low 未割れ。
+                # breakout_extended に進む前に評価、 4 条件 AND 成立で pullback_to_support を return。
+                pullback_pct = (high_252 - today_close) / high_252 if high_252 > 0 else 0.0
+                if pullback_pct >= 0.07:
+                    box_sup_pb = _detect_horizontal_support(times, highs, lows, closes)
+                    if (box_sup_pb is not None
+                            and box_sup_pb.get("level") is not None
+                            and box_sup_pb.get("role") == "resistance_turned_support"
+                            and (box_sup_pb.get("touch_count") or 0) >= 5):
+                        band_level = float(box_sup_pb["level"])
+                        dist_to_band = (today_close - band_level) / band_level if band_level > 0 else 999.0
+                        # 条件 ③: band +5% 以内接近 (= 現在価格が band の +5% 範囲内)
+                        # 条件 ④: band_low 未割れ (current >= band * 0.97、 3% buffer)
+                        if (-0.03 <= dist_to_band <= 0.05):
+                            return {
+                                "detected": True,
+                                "state": "pullback_to_support",
+                                "market_context": market_context,
+                                "cup": None,
+                                "handle": None,
+                                "pivot": {
+                                    "price": pivot_price,
+                                    "offset": 0.0,
+                                    "note": "過去 pivot (押し目接近中、 SPEC v2)",
+                                },
+                                "breakout": None,
+                                "box_support": box_sup_pb,
+                                "reason": "pullback_to_support",
+                                "reject_stats": reject_stats,
+                                "ath_252w_high": round(high_252, 2),
+                                "pullback_pct": round(pullback_pct * 100, 2),
+                                "dist_to_band_pct": round(dist_to_band * 100, 2),
+                            }
+
                 # extended は cup data なし (handle ATH 更新で classical pattern 外)、 pivot のみ確定
                 extended_result = {
                     "detected": True,
@@ -14415,7 +14452,21 @@ async def cron_rs_scan(
 
     today = date.today()
     raw_rs: list[dict] = []  # [{ticker, rs_vs_spy_pct, self_percentile}]
+    raw_gc: list[dict] = []  # v133 方針 #12: [{ticker, cross_date, days_ago}] 直近 60 日内 golden cross
     failed: list[dict] = []
+
+    def _detect_gc_inline(t_closes: list[float], t_times: list[str]) -> dict | None:
+        """v133 方針 #12 Option A: closes/times から sma_50/200 計算 + _detect_dma_cross 呼出 helper。
+        既存 helper を再利用、 closes は 252 日以上必要 (200DMA 計算のため)。"""
+        if len(t_closes) < 200 or len(t_times) != len(t_closes):
+            return None
+        try:
+            sma_50 = _compute_sma(t_closes, 50)
+            sma_200 = _compute_sma(t_closes, 200)
+            gc = _detect_dma_cross(t_times, sma_50, sma_200, lookback_days=60)
+            return gc if gc.get("detected") else None
+        except Exception:
+            return None
 
     # v124 Russell 3000 Phase 1: worker_count > 1 で並列化
     if worker_count > 1:
@@ -14425,17 +14476,18 @@ async def cron_rs_scan(
             async with sem:
                 ohlcv = await asyncio.to_thread(_fetch_ohlcv_3y, ticker)
                 if ohlcv is None:
-                    return ticker, None, "ohlcv_fetch_failed"
-                _, _, _, t_closes, _ = ohlcv
+                    return ticker, None, None, "ohlcv_fetch_failed"
+                t_times, _, _, t_closes, _ = ohlcv
                 if not t_closes:
-                    return ticker, None, "empty_closes"
+                    return ticker, None, None, "empty_closes"
                 result = _compute_rs(t_closes, spy_closes)
                 if result.get("rs_vs_spy_pct") is None:
-                    return ticker, None, "compute_rs_returned_none"
-                return ticker, result, None
+                    return ticker, None, None, "compute_rs_returned_none"
+                gc = _detect_gc_inline(t_closes, t_times)
+                return ticker, result, gc, None
 
         results = await asyncio.gather(*[_score_one(t) for t in tickers], return_exceptions=False)
-        for ticker, result, err in results:
+        for ticker, result, gc, err in results:
             if err:
                 failed.append({"ticker": ticker, "reason": err})
                 continue
@@ -14444,6 +14496,8 @@ async def cron_rs_scan(
                 "rs_vs_spy_pct": float(result["rs_vs_spy_pct"]),
                 "self_percentile": result.get("self_percentile"),
             })
+            if gc:
+                raw_gc.append({"ticker": ticker, "cross_date": gc["cross_date"], "days_ago": gc["days_ago"]})
     else:
         # 既存 sequential path、 既存挙動維持
         for ticker in tickers:
@@ -14451,7 +14505,7 @@ async def cron_rs_scan(
             if ohlcv is None:
                 failed.append({"ticker": ticker, "reason": "ohlcv_fetch_failed"})
                 continue
-            _, _, _, t_closes, _ = ohlcv
+            t_times, _, _, t_closes, _ = ohlcv
             if not t_closes:
                 failed.append({"ticker": ticker, "reason": "empty_closes"})
                 continue
@@ -14464,6 +14518,9 @@ async def cron_rs_scan(
                 "rs_vs_spy_pct": float(result["rs_vs_spy_pct"]),
                 "self_percentile": result.get("self_percentile"),
             })
+            gc = _detect_gc_inline(t_closes, t_times)
+            if gc:
+                raw_gc.append({"ticker": ticker, "cross_date": gc["cross_date"], "days_ago": gc["days_ago"]})
 
     # universe_percentile rank (1-99): rs_vs_spy_pct 昇順で順位 → 上位ほど high percentile
     raw_rs.sort(key=lambda r: r["rs_vs_spy_pct"])
@@ -14540,12 +14597,39 @@ async def cron_rs_scan(
             print(f"[cron_rs_scan] upsert failed: {e}")
             raise HTTPException(status_code=500, detail=f"upsert_failed: {e}")
 
+    # v133 方針 #12 Option A: 検出 GC を pattern_signals (pattern_type='dma_cross') に保存。
+    # /api/scanner/cup-handle が join で gc_confirmed: bool を付与する data source。
+    gc_upserted = 0
+    if not dry_run and raw_gc:
+        sb_gc = _get_supabase_service()
+        if sb_gc is not None:
+            gc_rows = [
+                {
+                    "ticker": g["ticker"],
+                    "pattern_type": "dma_cross",
+                    "signal_date": g["cross_date"],
+                    "state": "golden",
+                    "payload": {"days_ago": g["days_ago"], "lookback_days": 60},
+                }
+                for g in raw_gc
+            ]
+            try:
+                sb_gc.table("pattern_signals").upsert(
+                    gc_rows, on_conflict="ticker,pattern_type,signal_date"
+                ).execute()
+                gc_upserted = len(gc_rows)
+            except Exception as e:
+                # GC upsert 失敗は RS scan 全体を fail させない (graceful、 next nightly で再試行)
+                print(f"[cron_rs_scan] gc pattern_signals upsert failed (continue without GC): {e}")
+
     # top 10 by universe_percentile (response 用)
     top10 = sorted(raw_rs, key=lambda r: -r["universe_percentile"])[:10]
     return {
         "processed_count": len(tickers),
         "scored_count": len(raw_rs),
         "upserted_count": upserted,
+        "gc_detected_count": len(raw_gc),  # v133 方針 #12
+        "gc_upserted_count": gc_upserted,  # v133 方針 #12
         "failed_count": len(failed),
         "top10": top10,
         "calc_date": today.isoformat(),
@@ -14813,6 +14897,19 @@ async def api_unsubscribe_get(user_id: str = Query(...), token: str = Query(...)
 
 _SCANNER_CUP_FREE_LIMIT = 5  # Free user は top N ticker name のみ visible
 
+# v133 P2 Phase 1 (SPEC v2 §5.7、 Anthropic engineer verdict): scanner endpoint 用 state_priority
+# を module-level に一元化。 旧版は scanner_cup_handle 内 dict で cup_completing / breakout_extended
+# が欠落 (= priority 99 扱いで末尾に落ちる) bug あり、 ここで全 state 一括明示。
+_STATE_PRIORITY: dict[str, int] = {
+    "breakout_confirmed": 0,   # 最重要 (pivot 上抜け + volume 達成)
+    "breakout_pending": 1,     # 上抜け済、 volume 未達
+    "pullback_to_support": 2,  # 押し目接近中 (SPEC v2 新規、 release 前着手確定)
+    "formation": 3,
+    "cup_completing": 4,
+    "breakout_extended": 5,
+    "formation_market_weak": 6,
+}
+
 
 def _mask_signal_for_free(item: dict) -> dict:
     """Free user 向けに pivot/state 詳細を除外。 ticker と社名のみ残す。
@@ -14934,13 +15031,31 @@ async def scanner_cup_handle(
     else:  # 'all'
         matched_tickers = funda_tickers | set(cup_signals.keys())
 
-    # ── items 構築 (state priority: confirmed > pending > formation) ──
-    state_priority = {
-        "breakout_confirmed": 0,
-        "breakout_pending": 1,
-        "formation": 2,
-        "formation_market_weak": 3,
-    }
+    # ── items 構築 (state priority、 v133 P2 Phase 1 で一元化) ──
+    # SPEC v2 §5.7 Anthropic engineer verdict: 既存欠落 2 state (cup_completing / breakout_extended)
+    # + 新 pullback_to_support を同時追加、 module-level 化推奨だが scanner endpoint 内に集約。
+    state_priority = _STATE_PRIORITY
+
+    # v133 方針 #12 Option A: matched_tickers 全体の最新 dma_cross signal を一括 fetch (1 query)、
+    # 各 item に gc_confirmed: bool を付与。 nightly RS scan で保存された pattern_signals を join。
+    gc_confirmed_set: set[str] = set()
+    if matched_tickers:
+        try:
+            gc_cutoff = (today - timedelta(days=60)).isoformat()
+            gc_res = (
+                sb.table("pattern_signals")
+                .select("ticker")
+                .eq("pattern_type", "dma_cross")
+                .eq("state", "golden")
+                .gte("signal_date", gc_cutoff)
+                .in_("ticker", list(matched_tickers))
+                .execute()
+            )
+            for r in (gc_res.data or []):
+                if r.get("ticker"):
+                    gc_confirmed_set.add(r["ticker"])
+        except Exception as e:
+            print(f"[scanner] gc fetch failed (continue without GC badge): {e}")
 
     full_items: list[dict] = []
     for ticker in sorted(matched_tickers):
@@ -14952,6 +15067,7 @@ async def scanner_cup_handle(
             "state": signal.get("state") if signal else None,
             "payload": signal.get("payload") if signal else None,
             "signal_date": signal.get("signal_date") if signal else None,
+            "gc_confirmed": ticker in gc_confirmed_set,  # v133 方針 #12 Option A
         }
         full_items.append(item)
 

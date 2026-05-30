@@ -200,9 +200,10 @@ function EarningsTooltip({ active, payload, label, earningsMap, pillar2Markers, 
     ?? payload[0]?.payload?.close;
   const e = earningsMap?.[label];
 
-  // v130 方針 #13: actionable な 1-2 本の reference line 距離 % を動的算出。
-  // v132 P1-F (ui-designer verdict APPROVE、 user dogfood 5/30「Pivot+3.2% / 損切り+2.7% 同方向%混乱」):
-  // 旧 signed pct (+/-) は初心者が方向誤読する risk → ↑↓ 矢印 + 絶対値で表示、 一目で方向判定可能。
+  // v130 方針 #13 → v132 P1-F (↑↓ 矢印) → v133 P1-F2 (損切り下抜け状態の status narrative):
+  // 旧版「損切り目安 ↑2.7%」 (= 現在価格が IBD 8% trailing stop を下抜けている重大 signal) は
+  // 「損切り = 下にある守るべき線」 のスキーマと ↑ 矢印が衝突して逆意味に誤読される認知欠陥。
+  // 修正: 下抜け状態は「8%ライン 下抜け中」 status narrative + warning pill 強調、 通常時は ↓ 矢印維持。
   const distLines = [];
   if (Number.isFinite(price) && price > 0) {
     const pivot = cupHandle?.pivot?.price;
@@ -216,7 +217,10 @@ function EarningsTooltip({ active, payload, label, earningsMap, pillar2Markers, 
     if (Number.isFinite(stop)) {
       const pct = ((stop - price) / price) * 100;
       if (Math.abs(pct) < 50) {
-        distLines.push({ label: '損切り目安', pct, arrow: pct < 0 ? '↓' : '↑', color: 'var(--color-loss)' });
+        const stopBroken = price < stop; // 現在価格 < stop = 8% trailing 下抜け中
+        distLines.push(stopBroken
+          ? { label: '8%ライン 下抜け中', pct, arrow: '', color: 'var(--color-loss)', broken: true }
+          : { label: '損切り目安', pct, arrow: '↓', color: 'var(--color-loss)', broken: false });
       }
     }
   }
@@ -235,8 +239,17 @@ function EarningsTooltip({ active, payload, label, earningsMap, pillar2Markers, 
       )}
 
       {distLines.map((d) => (
-        <p key={d.label} style={{ color: d.color, marginTop: 2 }}>
-          {d.label}: <strong>{d.arrow}{Math.abs(d.pct).toFixed(1)}%</strong>
+        <p key={d.label} style={{ color: d.color, marginTop: 2, ...(d.broken ? { fontWeight: 700 } : {}) }}>
+          {d.broken ? (
+            <>
+              <strong>{d.label}</strong>
+              <span style={{ fontWeight: 500, marginLeft: 4 }}>(現在より ↑{Math.abs(d.pct).toFixed(1)}%)</span>
+            </>
+          ) : (
+            <>
+              {d.label}: <strong>{d.arrow}{Math.abs(d.pct).toFixed(1)}%</strong>
+            </>
+          )}
         </p>
       ))}
 

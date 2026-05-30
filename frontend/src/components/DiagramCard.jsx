@@ -1264,7 +1264,7 @@ export default function DiagramCard({
                     cursor: 'help', userSelect: 'none',
                   }}
                 >
-                  判定不可
+                  推定値なし
                 </span>
                 {showUnknownTip && (
                   <div

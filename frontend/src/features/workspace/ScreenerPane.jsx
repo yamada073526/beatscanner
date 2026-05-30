@@ -308,13 +308,19 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
       const cupFailed = !!cup.error;
 
       // section 1: Leader + Breakout + CWH 交差 = RS >= 80 ∩ Cup-Handle 検出
+      // v133 方針 #12 Option A: cup item の gc_confirmed lookup map で Cup-Handle カードに GC badge 強化
       const cupTickers = new Set((cup.items || []).map((c) => c.ticker));
+      const gcByTicker = new Map();
+      for (const c of (cup.items || [])) {
+        if (c.gc_confirmed) gcByTicker.set(c.ticker, true);
+      }
       const intersection = [];
       for (const item of (rsLeader.items || [])) {
         if (cupTickers.has(item.ticker)) {
+          const gc = gcByTicker.get(item.ticker);
           intersection.push({
             ticker: item.ticker,
-            badge: `RS ${item.universe_percentile}`,
+            badge: gc ? `RS ${item.universe_percentile} ✦ GC` : `RS ${item.universe_percentile}`,
           });
           if (intersection.length >= 5) break;
         }
@@ -347,13 +353,14 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
       });
 
       // section 3: 新規 Cup-Handle 検出 (last 24h は signal_date でなく state=breakout_confirmed/pending を優先)
-      // section 1/2 で使われた ticker を除外
+      // section 1/2 で使われた ticker を除外、 v133 方針 #12: GC 確認済 ticker は badge に ✦ GC を追加
       const newCwhItems = [];
       for (const item of (cup.items || [])) {
         if (usedTickers.has(item.ticker)) continue;
+        const baseBadge = item.state || '形成中';
         newCwhItems.push({
           ticker: item.ticker,
-          badge: item.state || '形成中',
+          badge: item.gc_confirmed ? `${baseBadge} ✦ GC` : baseBadge,
         });
         usedTickers.add(item.ticker);
         if (newCwhItems.length >= 5) break;
