@@ -616,6 +616,126 @@ def build_segment_summary(segment_data: list[dict]) -> dict | None:
     }
 
 
+# ── v138 Phase 2C: 配当 + 自社株買い (capital return) 直近 Q 実行データ ─────────
+# 独自プロトコル決算記事の核心 4 軸の 1 つ「資本政策」 を visualize endpoint に
+# 取り込む。 announcement (会社発表値) は SEC 8-K LLM (Phase 2D) で取得するため、
+# 本 helper は **実行額 raw fact** のみ取得し、 narrative 組み立ては frontend に委譲。
+#
+# Trust Cliff 防御:
+# - dividend は最新 4 件で trend 判定 (1 Q 比較は pay-date ずれで誤検出 risk)
+# - buyback は直近 Q 実行額の絶対値のみ (前 Q 比較 narrative は backend で組まない)
+# - 全 narrative は frontend (CapitalReturnCard) で組み立て、 LLM 一切関与なし
+# - source citation: FMP cash-flow-statement + dividend-history、 sources field で明示
+async def get_capital_return_data(ticker: str, fmp_key: str | None) -> dict:
+    """配当 + 自社株買いの直近 Q raw fact を取得。
+
+    Returns:
+        {
+            "dividend": {
+                "latestAmount": float,   # 直近 ex-div amount (per share)
+                "latestDate": str,       # YYYY-MM-DD
+                "trend": "increase"|"stable"|"decrease"|None,  # 4 件で判定
+                "trendDetail": {"recent4Avg": float, "previous4Avg": float}|None,
+            } | None,
+            "buyback": {
+                "latestQAmountB": float,  # 直近 Q 実行額 (B$ 単位、 絶対値)
+                "latestQDate": str,        # YYYY-MM-DD
+                "trailingTTMAmountB": float|None,  # 4Q 累計
+            } | None,
+            "sources": {"dividend": "ok"|"empty"|"error", "buyback": "ok"|"empty"|"error"},
+        }
+    """
+    if not fmp_key:
+        fmp_key = os.getenv("FMP_API_KEY", "")
+    if not fmp_key:
+        return {"dividend": None, "buyback": None, "sources": {"dividend": "empty", "buyback": "empty"}}
+
+    t = ticker.upper()
+    cf_url = (
+        f"https://financialmodelingprep.com/stable/cash-flow-statement"
+        f"?symbol={t}&limit=8&period=quarter&apikey={fmp_key}"
+    )
+    # dividend は既存 helper を流用 (v3 endpoint + yfinance fallback)、 limit=8 で trend 判定可
+    cf_task = safe_fmp_get(cf_url, f"capret-cf::{t}", ttl=60 * 60 * 24)
+    div_task = _fetch_dividends_for_ticker(t, fmp_key, limit=8)
+
+    cf_data, div_data = await asyncio.gather(cf_task, div_task, return_exceptions=True)
+    sources = {"dividend": "ok", "buyback": "ok"}
+    if isinstance(cf_data, Exception):
+        cf_data = []
+        sources["buyback"] = "error"
+    if isinstance(div_data, Exception):
+        div_data = []
+        sources["dividend"] = "error"
+
+    # ── dividend 部 ────────────────────────────────────────────────────────
+    dividend_out: dict | None = None
+    if isinstance(div_data, list) and div_data:
+        # _fetch_dividends_for_ticker は新→古順、 amount/date 形式
+        rows = [r for r in div_data if isinstance(r, dict) and r.get("amount") is not None]
+        if rows:
+            latest = rows[0]
+            dividend_out = {
+                "latestAmount": float(latest["amount"]),
+                "latestDate": latest.get("date"),
+                "trend": None,
+                "trendDetail": None,
+            }
+            # 4 件比較: 直近 4 件平均 vs その前 4 件平均
+            if len(rows) >= 8:
+                recent4 = [float(r["amount"]) for r in rows[:4]]
+                prev4 = [float(r["amount"]) for r in rows[4:8]]
+                recent_avg = sum(recent4) / 4
+                prev_avg = sum(prev4) / 4
+                if prev_avg > 0:
+                    change_pct = (recent_avg - prev_avg) / prev_avg * 100
+                    if change_pct >= 5.0:
+                        trend = "increase"
+                    elif change_pct <= -5.0:
+                        trend = "decrease"
+                    else:
+                        trend = "stable"
+                    dividend_out["trend"] = trend
+                    dividend_out["trendDetail"] = {
+                        "recent4Avg": round(recent_avg, 4),
+                        "previous4Avg": round(prev_avg, 4),
+                    }
+    else:
+        sources["dividend"] = "empty"
+
+    # ── buyback 部 (cash-flow-statement の commonStockRepurchased、 負値 = 自社株買い) ──
+    buyback_out: dict | None = None
+    if isinstance(cf_data, list) and cf_data:
+        latest_q = cf_data[0] if isinstance(cf_data[0], dict) else {}
+        v_latest = _pick(latest_q, "commonStockRepurchased", "netCommonStockRepurchased")
+        if v_latest is not None:
+            try:
+                v_f = float(v_latest)
+                # 負値 = 買い戻し、 正値 = 発行 (新規発行で株主還元でない)
+                if v_f < 0:
+                    buyback_out = {
+                        "latestQAmountB": round(abs(v_f) / 1e9, 2),
+                        "latestQDate": latest_q.get("date"),
+                        "trailingTTMAmountB": None,
+                    }
+                    # TTM 累計 (最新 4Q)
+                    ttm_values = []
+                    for q in cf_data[:4]:
+                        if not isinstance(q, dict):
+                            continue
+                        v = _pick(q, "commonStockRepurchased", "netCommonStockRepurchased")
+                        if v is not None and float(v) < 0:
+                            ttm_values.append(abs(float(v)))
+                    if ttm_values:
+                        buyback_out["trailingTTMAmountB"] = round(sum(ttm_values) / 1e9, 2)
+            except (TypeError, ValueError):
+                pass
+    else:
+        sources["buyback"] = "empty"
+
+    return {"dividend": dividend_out, "buyback": buyback_out, "sources": sources}
+
+
 # ── v97 Phase 3: 競合比較 (peer metrics 並列 fetch) ────────────────────────────
 # 金融 sub-agent verdict (2026-05-23): Tab 2「競合比較」 で 4 指標 (株価 YTD + Gross Margin
 # + FCF Margin + R&D%) を peer 5 銘柄 + 自社 で並列 fetch。 Bloomberg Terminal 差別化。
@@ -9922,9 +10042,11 @@ async def generate_visualization(
     _seg_task  = asyncio.create_task(get_segment_data(ticker, _fmp_key_post))
     _fcf_task  = asyncio.create_task(get_fcf_capex_trends(ticker, _fmp_key_post))
     _mcap_task = asyncio.create_task(get_market_cap(ticker, _fmp_key_post))
+    # v138 Phase 2C: 配当 + 自社株買い raw fact 並列 fetch (実行額のみ、 narrative は frontend)
+    _cap_task  = asyncio.create_task(get_capital_return_data(ticker, _fmp_key_post))
 
-    message, _real_val_pre, _seg_raw_pre, _fcf_capex_pre, _mcap_pre = await asyncio.gather(
-        _llm_task, _val_task, _seg_task, _fcf_task, _mcap_task,
+    message, _real_val_pre, _seg_raw_pre, _fcf_capex_pre, _mcap_pre, _cap_pre = await asyncio.gather(
+        _llm_task, _val_task, _seg_task, _fcf_task, _mcap_task, _cap_task,
         return_exceptions=True,
     )
 
@@ -9934,6 +10056,7 @@ async def generate_visualization(
     if isinstance(_seg_raw_pre,   Exception): _seg_raw_pre   = []
     if isinstance(_fcf_capex_pre, Exception): _fcf_capex_pre = ([], [])
     if isinstance(_mcap_pre,      Exception): _mcap_pre      = None
+    if isinstance(_cap_pre,       Exception): _cap_pre       = None
 
     _fcf_pre, _capex_pre = _fcf_capex_pre if isinstance(_fcf_capex_pre, tuple) else ([], [])
     # ─────────────────────────────────────────────────────────────────────
@@ -10280,6 +10403,20 @@ async def generate_visualization(
             parsed["segmentDataAvailable"] = True
     except Exception as _e_seg:
         print(f"[SEGMENT] failed for {ticker}: {_e_seg}")
+
+    # ── v138 Phase 2C: capital return (配当 + 自社株買い 実行額) attach ──
+    # raw fact のみ (announcement は Phase 2D SEC 8-K LLM 担当)、 frontend で narrative 組立。
+    # dividend/buyback どちらか取れていれば available=True、 両方 empty なら False。
+    parsed["capitalReturnDataAvailable"] = False
+    try:
+        if isinstance(_cap_pre, dict):
+            _has_div = _cap_pre.get("dividend") is not None
+            _has_bb = _cap_pre.get("buyback") is not None
+            if _has_div or _has_bb:
+                parsed["capitalReturn"] = _cap_pre
+                parsed["capitalReturnDataAvailable"] = True
+    except Exception as _e_cap:
+        print(f"[CAPITAL_RETURN] failed for {ticker}: {_e_cap}")
 
     # ── FCF / CapEx を付加（直近3期の年次データ） ──
     # 取得成否を fcfDataAvailable フラグで明示。フロントで N/A 表示を可能にする。

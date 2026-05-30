@@ -142,6 +142,117 @@ function SegmentBar({ seg }) {
   );
 }
 
+// ── v138 Phase 2C: 資本政策 (配当 + 自社株買い 実行額) ───────────────────────
+// backend `parsed["capitalReturn"]` (helper: get_capital_return_data) を render。
+// raw fact のみ表示、 「announcement」 等の strong words は使わない (Phase 2D SEC 8-K 完了後 unlock)。
+// trend chip: increase/decrease = 投資業界色ルール (緑/赤)、 stable = 中立 muted。
+function CapitalReturnRow({ icon, label, primary, secondary, trendChip }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '8px 10px',
+      borderRadius: '6px',
+      background: 'var(--bg-subtle)',
+      border: '1px solid var(--border)',
+      gap: '8px',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '8px',
+        flex: '1 1 0', minWidth: 0,
+      }}>
+        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }} aria-hidden="true">{icon}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <div style={{
+            fontSize: '11px', color: 'var(--text-muted)',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>{label}</div>
+          {secondary && (
+            <div style={{
+              fontSize: '10px', color: 'var(--text-muted)',
+              opacity: 0.7,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>{secondary}</div>
+          )}
+        </div>
+      </div>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '8px',
+        flexShrink: 0,
+      }}>
+        <div style={{
+          fontSize: '13px', fontWeight: 700,
+          color: 'var(--text-primary)',
+        }}>{primary}</div>
+        {trendChip}
+      </div>
+    </div>
+  );
+}
+
+function CapitalReturnSection({ capitalReturn }) {
+  if (!capitalReturn) return null;
+  const div = capitalReturn.dividend || null;
+  const bb = capitalReturn.buyback || null;
+  if (!div && !bb) return null;
+
+  // trend chip: increase (緑) / decrease (赤) / stable (中立)
+  let divTrendChip = null;
+  if (div?.trend) {
+    const trendMap = {
+      increase: { label: '増配傾向', color: 'var(--color-gain)' },
+      decrease: { label: '減配傾向', color: 'var(--color-loss)' },
+      stable: { label: '横ばい', color: 'var(--text-muted)' },
+    };
+    const cfg = trendMap[div.trend];
+    if (cfg) {
+      divTrendChip = (
+        <div style={{
+          fontSize: '10px', fontWeight: 700,
+          color: cfg.color,
+          background: `${cfg.color === 'var(--text-muted)' ? 'rgba(148,163,184,0.12)' : (cfg.color === 'var(--color-gain)' ? 'rgba(34,197,94,0.14)' : 'rgba(239,68,68,0.14)')}`,
+          padding: '2px 7px', borderRadius: '4px',
+          whiteSpace: 'nowrap',
+        }}>
+          {cfg.label}
+        </div>
+      );
+    }
+  }
+
+  return (
+    <>
+      <VizSectionLabel text="資本政策（配当・自社株買い 実行額）" />
+      <div style={{
+        fontSize: '10px', color: 'var(--text-muted)',
+        marginBottom: '8px',
+      }}>
+        直近四半期 実績ベース（出典: FMP cash-flow / dividend-history）
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {div && (
+          <CapitalReturnRow
+            icon="◆"
+            label="四半期配当（1 株あたり）"
+            secondary={div.latestDate ? `直近 ex-div: ${div.latestDate}` : null}
+            primary={`$${div.latestAmount.toFixed(4)}`}
+            trendChip={divTrendChip}
+          />
+        )}
+        {bb && (
+          <CapitalReturnRow
+            icon="◇"
+            label="自社株買い 直近 Q 実行"
+            secondary={bb.latestQDate ? `Q 末: ${bb.latestQDate}${bb.trailingTTMAmountB != null ? ` ／ TTM 累計 $${bb.trailingTTMAmountB}B` : ''}` : null}
+            primary={`$${bb.latestQAmountB}B`}
+            trendChip={null}
+          />
+        )}
+      </div>
+    </>
+  );
+}
+
 function BarChartPanel({ trend, operatingMargins }) {
   const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, value: null, period: null, yoy: null, beat: null, beatMargin: null });
 
@@ -1572,6 +1683,13 @@ export default function DiagramCard({
               ))}
             </div>
           </>
+        )}
+
+        {/* ── Section 3.6: 資本政策 (配当 + 自社株買い 実行額) v138 Phase 2C ── */}
+        {data.capitalReturnDataAvailable && (
+          <div data-testid="diagram-section-capital-return" style={{ marginTop: '16px' }}>
+            <CapitalReturnSection capitalReturn={data.capitalReturn} />
+          </div>
         )}
 
         {/* ── Section 4: Growth Story (yearly) ── */}
