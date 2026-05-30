@@ -205,3 +205,40 @@ Phase 3 で最も設計判断が多い「UpgradeModal 本格リデザイン (han
 ## Cycle 15 (JST 05:21) — holding、 deploy なし
 - 本番 health: root 200 / health 200、 index hash `index-BYOpiuZP.js` (変化なし)。 健全。
 - holding pattern 継続。 deploy なし (15 cycle 連続)。 次 cycle (05:51 頃 = 5:45 超) で完了サマリ予定。
+
+## Cycle 16 (JST 05:52) — loop 終了
+
+JST 5:45 超のため夜間 PDCA loop を終了。 最終 health: root 200 / health 200、 本番 `index-BYOpiuZP.js` (変化なし)。 健全。
+
+---
+
+# 🌙 夜間 PDCA 完了サマリ (2026-05-30 21:50 〜 翌 05:52 JST)
+
+- **実施 cycle 数**: 16 (Cycle 0 kickoff + Cycle 1-15)
+- **deploy 数**: **0** (健全な本番を壊さない判断を貫いた)
+- **本番最終 hash**: `index-BYOpiuZP.js` (curl 実確認、 前 session Phase 2.1c から不変で安定)
+- **working tree**: clean / **origin/main と同期済** (未 push 0、 夜間 commit も全 push 済)
+
+## 成果
+1. **前 session 成果の本番反映を確認**: Phase 2.1c FeaturesSection fix (commit `6d96fd2`、 grid maxWidth 720→1080) が
+   本番 LP chunk `LandingPage-rYloqJIr.js` に live (maxWidth 1080×2 grep 確認)。 3 列カードの折り返しは解消済。
+2. **健全性を機械 audit で確認** (Cycle 1-2): LP / Pane 3 表層 + Pane 3 他 component (StockPriceChart / DiagramCard /
+   TriageBanner) の dark-mode raw Tailwind / raw hex / typo / 発光バグ兆候 / chip 違反 = すべて健全。 唯一の候補
+   (FiveConditionsOverviewModal / EarningsTooltip) も index.css dark override 済で修正不要と検証で却下。
+3. **Phase 3 の 3 大項目すべてに実装ポイント付き SPEC seed を用意** (Cycle 3 + 5):
+   - スクリーナー section 別 gate: `ScreenerPane.jsx` の単一 `demoMode` を section 別に分離する具体案
+   - UpgradeModal リデザイン: 2 箇所 mount / requiredPlan tier 判定 / Premium 3 列化の足場と参照 SSOT
+   - (Stripe Premium 配線は user 作業 + money-stakes のため調査のみ)
+4. **本番 health を定期確認** (Cycle 4 + holding 各 cycle): /health status:ok + 全 env + 主要 endpoint 200 を維持。
+5. **user 判断推奨 backlog 3 件整理** (本ログ上部): tier 訴求語の表記統一 / 機能色の token 化 vs whitelist 追記 / Phase 3 本体。
+
+## 結論
+「健全な本番を壊さず維持 + Phase 3 着手の足場を完成」 が夜間の成果。 機械 audit で拾える安全 polish は 2 cycle で出尽くし、
+以降は過剰 polish を避けて (feedback_polish_iteration_roi_decay) backlog 充実 + health 監視に徹した。 deploy 0 は
+「直すべき bug がなかった」 ことの裏返しで、 健全実績そのものが成果。
+
+## 起床後 user の動線
+- handover v139 + 本ログ + memory `project_tier_pro_premium_restructure` で **Phase 3 に即着手可**。
+- **起点 = Stripe Premium 配線** (Premium price ID 作成 + Railway env、 user 作業 + money-stakes)。 これが完了するまで
+  スクリーナー Premium gate / UpgradeModal Premium CTA は dead-end funnel になるため着手不可 (sequencing 制約)。
+- 中優先 backlog: 改善 D Pane 2 redesign (user 最優先) / EPS BEAT 真因 fix / pricing 決定。
