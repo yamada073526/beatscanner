@@ -300,6 +300,24 @@ frontend (`DiagramCard.jsx`):
 | v138.6 R7-A3 | 0fb8bab | `index-N2aJhBlu.js` | re-login 後 ?layout=classic 自動 clear で workspace 復帰 |
 | v138.6 R7-F+G | 8d94d93 | `index-Dap-2cwr.js` | LP 銘柄 click → workspace 強制 + 図解 Pro 限定化 |
 | v138.6 R7-H/I/J/K/L | dc6b9bf | `index-CeRYgb3V.js` | PremiumLock Option D refactor + 過去 8Q gate + AI 詳細レポート 重複削除 |
+| v138.6 R7-I2+M | a7e51c5 | `index-DmLBSeor.js` | workspace UpgradeModal mount 追加 + 図解 Premium→Pro 色統一 |
+
+## v138.6 R7-I2 + R7-M 着地 (user dogfood 11 巡目)
+
+### 🟠 R7-I2 P1: 「Pro で解放」 click 反応なし 真因確定
+- 真因: workspace mode の return block で **`<UpgradeModal />` が mount されていなかった**、
+  upgrade.open() で state 更新するが modal component が render tree に不在 → 無反応
+- 旧: UpgradeModal は classic SPA mode (line 2581) のみ mount で workspace path に未配置
+- 修正: workspace mode return block にも UpgradeModal 追加、 props は upgrade.props spread
+- 検証: free user で「Pro で解放」 click → modal 起動 期待
+
+### 🟡 R7-M P2: 図解 Premium→Pro 色統一
+- 真因: 図解 placeholder feature="claude_opus_report" (PREMIUM tier) で orange、
+  Cup-Handle / 過去 8Q は Pro tier で cyan、 色不統一 + LP は Pro 訴求のみで Premium 未公開
+  → user dogfood「色不統一、 統一したほうがいい?」 相談
+- 修正: 図解 placeholder feature を `earnings_8q` (Pro tier) に変更で **cyan 統一**
+- 機能本体は依然 Pro/Premium 限定 render (R7-G/L) で動作変更なし、 **色のみ統一**
+- Premium tier 差別化は将来 LP に Premium 追加後に再導入
 
 ## v138.6 R7-H/I/J/K/L 着地 (3 体合議 verdict 反映、 user dogfood 10 巡目)
 
