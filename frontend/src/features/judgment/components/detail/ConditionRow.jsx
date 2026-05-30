@@ -279,8 +279,11 @@ export default function ConditionRow({
             onUpgradeClick={onUpgrade}
           />
 
-          {/* 説明モーダル trigger — Stripe / Linear / Notion 流の subtle text link.
-              旧 pill button は user dogfood で「ダサい」評価のため modern style に修正 (2026-05-12)。 */}
+          {/* 説明モーダル trigger
+              v138.6 R4 (2026-05-30): user dogfood 「位置と色が目立たない、 ?チップのように cyan で目立たせて」 要望。
+              FiveConditionsCard 「?」 chip と同 cyan accent pill (background rgba(34,211,238,0.15) +
+              border rgba(34,211,238,0.4) + color rgb(56,189,248)) で統一感のある親しみやすい affordance に。
+              旧 subtle text link は「重要な解説なのに発見されない」 dogfood 課題を解消。 */}
           {detailContent && (
             <button
               type="button"
@@ -289,10 +292,12 @@ export default function ConditionRow({
                 setShowModal(true);
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.color = 'rgb(56, 189, 248)';
+                e.currentTarget.style.background = 'rgba(34, 211, 238, 0.30)';
+                e.currentTarget.style.borderColor = 'rgba(34, 211, 238, 0.65)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.color = 'var(--text-muted)';
+                e.currentTarget.style.background = 'rgba(34, 211, 238, 0.15)';
+                e.currentTarget.style.borderColor = 'rgba(34, 211, 238, 0.40)';
               }}
               style={{
                 justifySelf: 'start',
@@ -300,18 +305,19 @@ export default function ConditionRow({
                 alignItems: 'center',
                 gap: 'var(--space-1, 4px)',
                 fontSize: 11,
-                fontWeight: 500,
-                color: 'var(--text-muted)',
-                background: 'transparent',
-                border: 'none',
-                padding: '2px 0',
+                fontWeight: 600,
+                color: 'rgb(56, 189, 248)',
+                background: 'rgba(34, 211, 238, 0.15)',
+                border: '1px solid rgba(34, 211, 238, 0.40)',
+                borderRadius: 'var(--radius-pill, 9999px)',
+                padding: '4px 10px',
                 cursor: 'pointer',
-                transition: 'color var(--motion-fast) ease',
-                marginTop: 2,
+                transition: 'background var(--motion-fast) ease, border-color var(--motion-fast) ease',
+                marginTop: 4,
               }}
               aria-label={`${condition.name}の詳しい解説を表示`}
             >
-              <Info size={12} strokeWidth={2} />
+              <Info size={12} strokeWidth={2.2} />
               <span>この条件の解説</span>
             </button>
           )}
