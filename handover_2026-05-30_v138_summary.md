@@ -229,3 +229,62 @@ frontend (`DiagramCard.jsx`):
 |---|---|---|
 | v138.4 (Phase 2D Sprint 2b) | c4ff41b | DiagramCard GuidanceSection (Section 3.7) + sanitize 拡張 |
 | v138.5 (Phase 2D Sprint 2c) | (deploy only、 code 不変) | bundle `index-DCJVgYs2.js` 本番展開 + dogfood + LP unlock 見送り verdict |
+
+## v138.6 Bug 1+2 + 追加 1+2 着地 (本 session 追加)
+
+### 真因 (user dogfood NVDA 2026-05-30 で発見)
+- **Bug 1**: 5条件カード (4/5 合致) ↔ 図解 ビジュアル分析 (0/5 FAIL) 食い違い
+  → 真因: visualizer/prompt.py が schema に `passCount/totalCount/overallPass/conditions` を含み、
+    LLM が四半期データ見えない時「四半期比較不可 → 0/5」 と誤判定。 CLAUDE.md「数値は Python」 SSOT 違反
+- **Bug 2**: 5条件 chip 「>+999%」 「>-999%」 表示が異常見える
+  → 真因: ConditionSparkline.jsx が series 全体 (5 年 5 点) で trendPct 計算、 5 年前 EPS ≈ 0.x が分母で爆発
+- **追加 1**: AI 要約 ③ ガイダンス「非開示」 多発 + EPS BEAT 「—」 多発
+  → 真因: `_format_context` が `sec_guidance_text` を LLM 文脈に含めず、 LLM は情報 0 で「非開示」 hallucinate
+- **追加 2**: 図解 Hero「データ不足で判定不可」
+  → Bug 1 の同根 (LLM headline + FAIL badge + 0/5 button が aggregator と矛盾)
+
+### Fix 1 (commit 1a8118e、 bundle `index-usR8f65Q.js`)
+- backend visualizer/prompt.py: `overallPass/passCount/totalCount/conditions` schema 削除、
+  headline RULES に「データ不足 / 判定不可 等 fallback 文言 BAN」 追加
+- backend main.py visualize endpoint: aggregator (analysis_data) の値で `parsed["passCount/totalCount/overallPass/conditions"]` 上書き、 LLM 旧 cache hit でも frontend は SSOT 値を受信
+- frontend DiagramCard.jsx: `isFallbackHeadline` guard 追加 (stale cache 対応 + 二重防御)
+
+### Fix 2 (同 commit)
+- frontend ConditionSparkline.jsx: trendPct 計算窓を **直近 3 点** に統一、 text 表示「1.2→2.9→4.9」 と一致
+
+### Fix 3 (同 commit)
+- backend `_format_context`: `sec_guidance_text` を `【次期ガイダンス（経営陣発表 / SEC 8-K より抽出）】` セクションで LLM 文脈に追加
+- frontend SummaryBrief.jsx: `isEmptyBullet` filter、 「非開示」 等の value-less bullet を render 前 suppress
+
+### dogfood verify (4 銘柄、 本番)
+| ticker | Fix 1 passCount | Fix 1-C headline | Fix 3-A ③ ガイダンス |
+|---|---|---|---|
+| NVDA | **4** (was 0) | 「年間売上2倍超、利益率も急速改善」 | 🔴 修正あり。第2四半期売上 **$91.0B**、 GAAP マージン **74.9%** |
+| AAPL | (PASS sample) | — | Apple は数値ガイダンス非開示の方針。 定性: Services 二桁、 GM 47.5-48.5% |
+| MSFT | (PASS sample) | — | 次期売上高予想 **$147.4B**（レンジ：$145.4B〜$150.4B）、 EPS 予想 **$3.65** |
+| GOOGL | (要 dogfood) | — | sec_guidance_text あり (2025 CapEx $91-93B) |
+
+→ **全 4 銘柄で「非開示」 のみの bullet は消失**、 user 要望「載せること自体やめる検討」 は **不要に**
+
+### EPS BEAT 「—」 真因 (Fix 対象外、 backlog)
+- `/api/guidance/NVDA/basic` の `eps.actual = null` (FMP earnings-surprises endpoint で取得失敗)
+- fiscal_period が「Q1 2027 / 2026-08-26」 と次期 reporting date を返している
+- 真因: 旧 `_fetch_eps_data` の date 抽出ロジック (要 backend 再 grep)
+- Fix 案: surprises 配列から直近 quarter (Q1 FY2027 = 2026-05-21 報告) の actual を pick する別 logic
+- 工数: 0.5-1 人日 (別 sprint で着手推奨、 user 要否確認)
+
+### 残バックログ更新 (v138.6 完了後)
+| 優先 | タスク | 工数 | release 前後 |
+|---|---|---|---|
+| 🟠 P1 | ログアウトボタン (最小 MVP) | 0.5 人日 | 前 |
+| 🟠 P1 | 改善 D: Pane 2 redesign | 3-7 人日 | 前 (user 最優先) |
+| 🟡 P2 | EPS BEAT 「—」 真因 fix (FMP earnings-surprises date pick) | 0.5-1 人日 | 前 |
+| 🟡 P2 | pricing 決定 (¥980/¥4,980/¥10,000) | 1 人日 | 前 |
+| 🟢 | Phase 3 (call transcript LLM) | 15-20 人日 | 後 |
+| 🟢 | 改善 C: 5条件 hover affordance | 1.5-2 人日 | 後 |
+| 🟢 | プラン管理 UI full (Stripe 統合) | 2-3 人日 | 後 |
+
+### v138.6 commit
+| ver | commit | bundle | 内容 |
+|---|---|---|---|
+| v138.6 | 1a8118e | `index-usR8f65Q.js` | 物理層分離 SSOT 復活 + sparkline 窓統一 + AI 要約 sec_guidance 配線 |
