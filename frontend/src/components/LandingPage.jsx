@@ -1360,7 +1360,7 @@ function FeaturesSection() {
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
         gap: 16,
-        maxWidth: 1080,
+        maxWidth: 720,
         margin: '0 auto',
         alignItems: 'stretch',  // v38: 3 カード同高
       }}>
@@ -1396,11 +1396,13 @@ function PricingSection({ onFreeStart, onProCheckout }) {
       borderBottom: '1px solid var(--border)',
     }}>
       {/* v40: 見出し削除 — 「シンプルな料金体系」は当たり前すぎて情報価値ゼロ */}
-      <div style={{
+            {/* v138.7 Phase 2.1: Free/Pro/Premium 3 列。 minmax 200px + maxWidth 1080 で
+          3×200+2×16=632px から 3 列横並び (laptop も確実に 3 up、 phone は 1 列 reflow)。 */}
+<div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
         gap: 16,
-        maxWidth: 720,
+        maxWidth: 1080,
         margin: '0 auto',
       }}>
         {/* Free プラン — panel-card / v39: 上部エリアを div ラップ + minHeight で
