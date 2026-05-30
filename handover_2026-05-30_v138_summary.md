@@ -69,6 +69,17 @@
 - bundle `index-BJJb_Iiv.js` → **`index-DHQIM0C8.js`** (本番反映 + grep 検証済: LP chunk `LandingPage-CyemTkqZ.js` に
   「近日公開予定」 1 / 「カップ・ウィズ・ハンドル」 1 / 「¥1,800」 1 / 「Premium」 1)。
 
+### ✅ Phase 2.1 着地 (commit `cf80726`、 user dogfood 2 件解決)
+- **LP 3 カード並列化**: pricing grid `minmax(260px → 200px, 1fr)`。 260 だと 3 列に 812px 必要で ~794px
+  (laptop window) が 2 列折り返し → Premium だけ下段だった。 200 で 632px から 3 列横並び。 `LandingPage.jsx`。
+- **ProTeaser 発光統一**: 「市場の声 (Pro で解禁)」 カードに `className="panel-card"` 追加で arrival/hover glow を
+  他 pricing カードと統一。 glow host の overflow:hidden を撤去し、 内部 ambient gradient を専用 clip 層 (子 div) で
+  角丸内に収めて両立 (design_recipes §C 遵守)。 `.bs-pro-teaser` は CSS 定義なし dead class で conflict なし。
+  `components/ui/ProTeaser.jsx`。 build PASS + design-system-check (contain / raw hex / !important / glow host
+  overflow すべて clean)。
+- bundle `index-DHQIM0C8.js` → (deploy 投入済、 反映待ち)。 ⚠️ ProTeaser は発光系 (高リスク領域) 変更のため
+  user dogfood で「市場の声」 カードの scroll/hover 発光 + gradient bleed なしを最終確認推奨。
+
 ### 🔴 Phase 3 残タスク (Premium 販売開始、 次セッション)
 1. **Stripe Premium checkout 配線** (App.jsx は現状 Pro monthly/yearly のみ)。 Premium price ID を Stripe
    ダッシュボードで作成 + Railway env 設定 = **user 作業あり**。 money-stakes のため慎重に検証。
