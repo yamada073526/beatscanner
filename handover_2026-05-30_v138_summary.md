@@ -1,5 +1,39 @@
 # BeatScanner Handover v138 — Phase 2 SPEC v2 改訂 ($99/月 課金回避) + LP 訴求拡張 + release
 
+---
+
+## 🆕 v138.7 Phase 1 着地 (最新、 2026-05-30) — Pro/Premium tier 再構築 Phase 1
+
+> handover v138 SPEC seed B+C を 3 体合議 (マーケ Opus + 金融 Opus + PM Sonnet、 全員高一致) で精査し、
+> **Phase 1 (bug 修正 + tier SSOT 基盤) を着地・deploy・commit 完了**。 commit `2d706bc`、
+> bundle `index-Hht9JD80.js` → **`index-7C3ZzqiN.js`** (本番反映 + grep 検証済)。
+
+### 3 体合議 verdict (永続化済: memory `project_tier_pro_premium_restructure.md`)
+- **Cup-Handle 系 = Premium 確定** (user 強い意向「月 1 万でも安い」+ 金融「再現困難 = pricing power」)
+- **RS 急上昇 / 注目銘柄・急騰 / カスタム条件 screener = Pro** (daily hook を最安 tier、 5 原則 #2)
+- **図解 = Pro、 専用 key `ai_diagram`、 命名「図解」** (claude_opus_report=「AI詳細レポート」 との用語衝突回避)
+- **section 丸ごと Premium は NG**: 件数見せ + 銘柄名 blur の行レベル gate で飢餓感 → CVR
+- **pricing ¥980/¥1,800 据え置き**、 Cup-Handle を Premium 看板に。 値上げ (¥2,980) は post-release PMF 後
+
+### Phase 1 で着地したもの (commit 2d706bc、 4 ファイル)
+- `lib/planGating.js`: `ai_diagram`(Pro) + テクニカル 5 key (Premium) を FEATURE_GATES に追加 (孤児 label 解消、 SSOT 化)
+- `JudgmentDetail.jsx`: 図解 placeholder `feature="earnings_8q"` → `"ai_diagram"` (**bug C 真因修正**)
+- `UpgradeModal.jsx`: `requiredPlan()` で tier-aware 化 (Pro/Premium 文言出し分け、 Premium 機能の "Pro" 誤表示解消)。 Premium は checkout 未配線のため「近日公開予定」 正直表示
+- `ui/ProTeaser.jsx`: eyebrow「Pro 限定」 ↔ ボタン「¥1,800/月」(Premium 価格) ねじれを ¥980/月 に修正 (council 発見の既存 Trust Cliff)
+
+### 🔴 Phase 2 残タスク (次セッション、 user 確認済の進め方)
+1. **スクリーナー section 別 Premium gate**: `ScreenerPane.jsx` の `demoMode` を Cup-Handle 系=`canUse('cup_handle_detection', plan)` / RS・注目銘柄=Pro に分離
+2. **LP に Premium 列追加** (`LandingPage.jsx`、 funnel-cro 7 項目)。 LP「AI詳細レポート」(Pro) → 「図解」 rename で用語統一
+3. **UpgradeModal 本格リデザイン** (SPEC seed A「凄い！」 Aman 級 + Premium 3 列 + Stripe Premium checkout 配線)。 ui-designer 主導 3 体合議
+4. JudgmentDetail テクニカル系 hardcode `plan==='premium'` → `canUse()` 移行 (behavior-preserving、 Phase 1 で risk 回避のため deferred)
+
+> ⚠️ **Trust Cliff sequencing 制約**: スクリーナーを実際に Premium gate する前に、 UpgradeModal + LP に
+> Premium 列が必須 (dead-end funnel 回避)。 Premium checkout (Stripe) は未配線 = App.jsx は Pro のみ。
+> → Phase 2 の 1+2+3 はセットで着地が安全。
+
+---
+
+
 > v137 で「Option A: 今晩課金 + Phase 2B skeleton 先行」 と決定したが、 audit 着手直後に
 > **既存実装 `get_segment_data()` + `build_segment_summary()` + ProfileCard SegmentSection** が
 > 既に完成しており Premium key で全銘柄 segment data 取得可能と判明。 課金回避 + Phase 2B 工数 0
