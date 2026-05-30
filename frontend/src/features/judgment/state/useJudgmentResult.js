@@ -206,6 +206,19 @@ export function useJudgmentResult({
     async (t) => {
       const sym = (t || '').toUpperCase();
       if (!sym) return;
+      // v138.6 R7-F (2026-05-30): LP は logout 後の `?layout=classic` で表示されるため、
+      // 銘柄 click 時 classic SPA で分析が完結する regression。 user dogfood「銘柄リンクをクリックすると、
+      // 旧 UI の銘柄分析へ飛びます」 要望。 修正: classic URL を検知したら ?ticker=<sym> で workspace
+      // mode へ full reload、 demo 銘柄選択を workspace で実行 (元の UX 復元)。
+      if (typeof window !== 'undefined') {
+        try {
+          const url = new URL(window.location.href);
+          if (url.searchParams.get('layout') === 'classic') {
+            window.location.href = `/?ticker=${encodeURIComponent(sym)}`;
+            return;
+          }
+        } catch { /* URL parse 例外時は通常経路 */ }
+      }
       setTicker(sym);
       setActiveTab?.('judgment');
       setLoading(true);

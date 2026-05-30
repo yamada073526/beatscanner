@@ -992,7 +992,7 @@ export default function JudgmentDetail({
         if (isV4) {
           // === 案 B 新順序 (v125 P8-3 Sprint B、 user gate 3 確定) ===
           // 階層 1 (判定 + 5 条件) は既に上で render 済 → 続く順序:
-          // 1. StickyDiagramAccordion (default OFF、 sticky top:0)
+          // 1. StickyDiagramAccordion (default OFF、 sticky top:0) — v138.6 R7-G Pro 限定
           // 2. Chart (技術 header なしで直接 chart、 案 B シンプル化)
           // 3. 目標 + 売り card 並列
           // 4. ファンダ accordion (FundamentalsAccordion 旧 章 ①)
@@ -1001,12 +1001,18 @@ export default function JudgmentDetail({
           // 7. リファレンス (ContextSection 旧 章 ③)
           return (
             <>
-              <StickyDiagramAccordion
-                key="sticky-diagram"
-                ticker={selectedTicker}
-                analysis={result}
-                guidance={guidance}
-              />
+              {/* v138.6 R7-G 🟡 P2 (2026-05-30): 図解 = AI 詳細レポート は Pro 機能 (¥980/月)、
+                  user dogfood 「未ログインだと見えないように」 要望。 plan === 'free' で
+                  完全非表示 (LP 訴求と整合、 Trust Cliff 防止)。 user state ===
+                  非 Pro なら detailContext.user の有無を問わず hide、 Pro / Premium のみ render。 */}
+              {(plan === 'pro' || plan === 'premium') && (
+                <StickyDiagramAccordion
+                  key="sticky-diagram"
+                  ticker={selectedTicker}
+                  analysis={result}
+                  guidance={guidance}
+                />
+              )}
               {chartBlock}
               {targetZoneBlock}
               {fundamentalsBlock}
