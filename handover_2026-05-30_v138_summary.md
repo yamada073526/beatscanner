@@ -301,6 +301,54 @@ frontend (`DiagramCard.jsx`):
 | v138.6 R7-F+G | 8d94d93 | `index-Dap-2cwr.js` | LP 銘柄 click → workspace 強制 + 図解 Pro 限定化 |
 | v138.6 R7-H/I/J/K/L | dc6b9bf | `index-CeRYgb3V.js` | PremiumLock Option D refactor + 過去 8Q gate + AI 詳細レポート 重複削除 |
 | v138.6 R7-I2+M | a7e51c5 | `index-DmLBSeor.js` | workspace UpgradeModal mount 追加 + 図解 Premium→Pro 色統一 |
+| v138.6 R7-N | 361bde4 | (deploy 中) | UpgradeModal featureName → 日本語 label dict 変換 |
+
+## v138.6 R7-N 着地
+
+- 真因: 「earnings_8q」 「claude_opus_report」 等 internal feature key が modal にそのまま露出
+- 修正: FEATURE_LABEL_JP dict (20 key + 日本語 label) + resolveFeatureLabel helper、
+  modal 表示を `displayName` 経由で user-facing 日本語に変換、 未登録 key は raw fallback
+
+## 次セッション着手 SPEC seed (user 直接要望、 2 件)
+
+### A. UpgradeModal リデザイン (「凄い！ぜひ使ってみたい！」 感覚出す)
+- user dogfood「機能列挙について、 なんとなく "凄い！ ぜひ使ってみたい！" 感がない」
+- 現状 UpgradeModal (line 62-): Plan 比較 grid (Free vs Pro) + Stripe CTA、 静的 plain 表
+- design 課題:
+  - Aman 級「驚き・豪華さ・興奮」 (ブランド世界観 §-1) を modal で再現
+  - 5 原則 #2「毎日開きたくなる」 を sign up trigger と整合
+  - 「7日間 完全無料」 訴求 vs LP 整合 (Trust Cliff 防止)
+- 着手手順 (3 体合議推奨、 frontend 局所修正なので 6 体は不要):
+  - ui-designer (Aman 級 visual / 5 原則整合)
+  - funnel-cro (CVR + Trust Cliff)
+  - qa-dogfooder (体感「凄い！」 vs 「うざい」 balance)
+- 参考 SSOT: docs/references/design_system.md §-1-A + memory feedback_brand_aspiration.md + feedback_minimalism_over_additive.md
+
+### B. Pro vs Premium tier 構造 user 想定 confirm
+- user 直接 quote: 「Pro = ファンダメンタル分析だけ (調べたい銘柄が決まっている)、 Premium = Pro + テクニカル
+  分析 (カップ・ウィズ・ハンドル、 売り買いゾーン、 支持線・抵抗線) + スクリーナー の感覚」
+- 現状 planGating.js では:
+  - **Pro tier**: earnings_8q / search_unlimited / screener_custom / csv_export / earnings_alert / 等
+  - **Premium tier**: claude_opus_report (Claude Opus 多面分析) / cup_handle_detection 等
+- user 想定 vs 現状の **mismatch**:
+  - スクリーナー = user は Premium 想定だが現 planGating では Pro
+  - Cup-Handle / 売り買いゾーン / 抵抗線 = user は Premium 想定で planGating も Premium ✅
+  - ファンダ 5 条件 / 図解 = user は Pro 想定だが、 図解 (claude_opus_report) は現 Premium
+- 着手手順 (3 体合議):
+  - 金融 reviewer (機能群 categorize 整合性)
+  - funnel-cro (各 tier pricing 訴求)
+  - planner (planGating.js refactor + LP 訴求整合)
+- 参考 SSOT: lib/planGating.js + components/LandingPage.jsx + memory project_logout_plan_management_ui.md
+
+### 次セッション開始 SOP
+1. `/fetch-handover` で本 file 圧縮 summary 取得
+2. 上記 A + B の SPEC seed を見て、 user に着手順 (A→B or B→A) を確認
+3. 3 体合議 並列起動 → verdict 集約 → 実装 → deploy → user dogfood
+
+### release status (本日 v138.6 終了時点)
+- pre-release、 dogfood 11 巡 + 15 hotfix bundle で安定化進行中
+- LP 訴求は Pro tier (¥980/月) のみ、 Premium tier は LP 未追加
+- 重要 backlog: 改善 D Pane 2 redesign (user 最優先、 3-7 人日) は依然 pending
 
 ## v138.6 R7-I2 + R7-M 着地 (user dogfood 11 巡目)
 
