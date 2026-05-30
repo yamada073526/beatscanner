@@ -284,7 +284,32 @@ frontend (`DiagramCard.jsx`):
 | 🟢 | 改善 C: 5条件 hover affordance | 1.5-2 人日 | 後 |
 | 🟢 | プラン管理 UI full (Stripe 統合) | 2-3 人日 | 後 |
 
-### v138.6 commit
+### v138.6 + R1 hotfix commit
 | ver | commit | bundle | 内容 |
 |---|---|---|---|
 | v138.6 | 1a8118e | `index-usR8f65Q.js` | 物理層分離 SSOT 復活 + sparkline 窓統一 + AI 要約 sec_guidance 配線 |
+| v138.6 R1 hotfix | 0f459bf | `index-CQ1gC-IA.js` | payload key naming mismatch / ③ 復旧 / CFPS-EPS adaptive threshold |
+
+## v138.6 R1 hotfix 真因 (user dogfood 2026-05-30 2 巡目)
+
+### Bug A: 物理層分離 override 不発 (passedCount=4 → 2 → でも図解 4/5 残存)
+- **真因**: frontend `buildEnriched()` は snake_case (passed_conditions / verdict 'PASS'/'FAIL' string /
+  conditions_detail JSON string) で送るのに、 backend Fix 1-B (R0) は camelCase
+  (passedCount / overallPass / conditions 直配列) で読んでいた → key mismatch で override 不発
+- **R1 修正**: 両 key 対応 (snake_case priority + camelCase fallback)、 verdict 文字列 → bool 変換、
+  conditions_detail JSON.parse 対応、 `[AGG OVERRIDE] {ticker}` log で観測可能化
+- **検証**: curl POST `/api/visualize/NVDA` で `passCount=2 / overallPass=False / conditions 5 件 (2 PASS)` 確認
+
+### Bug B: ③ ガイダンス missing (filter regression)
+- **真因**: SummaryBrief.jsx `isEmptyBullet` filter が「③ ガイダンス：非開示」 で始まる行 (LLM 出力 ブレ) を suppress、
+  ①②④ のみ表示で「番号 skip」 regression。 user dogfood「復旧願います」 要望
+- **R1 修正**: isEmptyBullet 撤去、 ③ 常時表示。 Fix 3-A (sec_guidance_text 配線) で多くの ticker は
+  具体 narrative、 bare「非開示」 は honest 表示 (信頼維持)
+- **検証**: curl `/api/summary/brief` で ③「[NEU]③ ガイダンス: 非開示。次期 Q2 FY2027 売上 **$91.0B**...」 確認
+
+### Bug C: CFPS-EPS chip >-999% 残存 (near-zero baseline)
+- **真因**: CFPS-EPS delta 値 [-0.06, -0.36, -0.71] で |firstVal|=0.06 が分母で -1083% → cap 発火。
+  直近 3 点 window でも解消せず (delta-base condition は本質的に zero-crossing 系列)
+- **R1 修正**: adaptive threshold = reliabilityRatio (|firstVal|/max(|series|)) < 0.2 かつ |trendPct| > 100
+  の場合は絶対変化値 (例: "-0.65") を表示、 NVDA EPS は ratio=0.245 で従来通り % 表示維持
+- **検証**: bundle `index-CQ1gC-IA.js` 反映、 user 側 browser refresh で chip 「-0.65」 確認
