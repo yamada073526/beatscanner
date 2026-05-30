@@ -301,7 +301,7 @@ function EarningsTooltip({ active, payload, label, earningsMap, pillar2Markers, 
   );
 }
 
-function StockPriceChartInner({ ticker, isPremiumUser = false }) {
+function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
   const [period, setPeriod] = useState('1y');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -733,9 +733,9 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                   ? `取っ手付きカップ (Cup-with-Handle)\n${cupChipLabel}\n深さ ${cupHandle.cup.depth_pct}% / ${cupHandle.cup.weeks}週\n［Premium で全データ解放］`
                   : `取っ手付きカップ (Cup-with-Handle)\n${cupChipLabel}\n深さ ${cupHandle.cup.depth_pct}% / ${cupHandle.cup.weeks}週\nPivot $${cupHandle.pivot.price.toFixed(2)}`
               }
-              onClick={cupRequiresPro ? () => {
-                window.alert('「取っ手付きカップ」 形状検出は Premium 限定機能です。\n\n・ファンダ 5 条件 PASS × Cup-Handle 形成 の AND スキャナー\n・全 500-1000 銘柄の nightly スキャン\n・形成 → breakout 確定の push 通知\n\nPremium tier (¥1,800/月) で全データ解放されます。');
-              } : undefined}
+              // v138.7 Phase 1.5 (2026-05-30): 素の window.alert (¥1,800 hardcode、 Aman 級 brand 不適合) を
+              // 廃止し tier-aware UpgradeModal を起動 (cup_handle_detection = Premium、 modal が「近日公開予定」 を正直表示)。
+              onClick={cupRequiresPro ? () => { try { onUpgrade?.('cup_handle_detection'); } catch { onUpgrade?.(); } } : undefined}
             >
               {/* v127 (5/29 user dogfood): Mountain → ChartCandlestick (サブエージェントレビュー verdict)。
                   user 「山形アイコンが Cup-with-Handle とパッと見で関連づかない」。Cup-Handle は
@@ -884,11 +884,16 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                 blur 強度 4px = 「形だけ見える、 詳細は不明」 演出 (8px は強すぎ、 業界標準 4-6px)。 */}
             {cupRequiresPro && (
               <div
-                aria-hidden="true"
                 className="absolute inset-0 z-10 flex items-end justify-center pointer-events-none"
                 style={{ paddingBottom: 'var(--space-3, 12px)' }}
               >
-                <div
+                {/* v138.7 Phase 1.5 (2026-05-30): user dogfood「バナーが click できない」 → button 化で
+                    tier-aware UpgradeModal を起動 (cup_handle_detection = Premium)。 outer は
+                    pointer-events-none で chart hover を残し、 inner pill のみ pointerEvents:auto。
+                    Lock icon は R7-E で emoji 撤去済 (feedback_icon_brand_consistency.md 準拠)。 */}
+                <button
+                  type="button"
+                  onClick={() => { try { onUpgrade?.('cup_handle_detection'); } catch { onUpgrade?.(); } }}
                   className="rounded-full px-3 py-1 text-[11px] font-medium"
                   style={{
                     background: 'rgba(15, 23, 42, 0.72)',
@@ -898,14 +903,13 @@ function StockPriceChartInner({ ticker, isPremiumUser = false }) {
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 6,
+                    pointerEvents: 'auto',
+                    cursor: 'pointer',
                   }}
                 >
-                  {/* v138.6 R7-E (2026-05-30): user dogfood「🔒 emoji 汎用的でダサい」
-                      → lucide-react Lock icon (stroke 細線 + cyan brand accent) で Aman 級品格に統一。
-                      memory feedback_icon_brand_consistency.md 準拠。 */}
                   <Lock size={12} strokeWidth={1.75} color="rgb(56, 189, 248)" aria-hidden="true" />
-                  Cup-Handle overlay は Premium で全データ解放
-                </div>
+                  Cup-Handle overlay は Premium で解放
+                </button>
               </div>
             )}
             <ResponsiveContainer width="100%" height="100%">

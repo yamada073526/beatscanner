@@ -878,7 +878,7 @@ export default function JudgmentDetail({
 
         const chartBlock = selectedTicker ? (
           <SectionFade key="chart" id="sec-chart" staggerIndex={3}>
-            <StockPriceChart ticker={selectedTicker} isPremiumUser={plan === 'premium'} />
+            <StockPriceChart ticker={selectedTicker} isPremiumUser={plan === 'premium'} onUpgrade={detailContext.onUpgrade} />
           </SectionFade>
         ) : null;
 
