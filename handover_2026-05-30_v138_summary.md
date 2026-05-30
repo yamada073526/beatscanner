@@ -69,7 +69,7 @@
 - bundle `index-BJJb_Iiv.js` → **`index-DHQIM0C8.js`** (本番反映 + grep 検証済: LP chunk `LandingPage-CyemTkqZ.js` に
   「近日公開予定」 1 / 「カップ・ウィズ・ハンドル」 1 / 「¥1,800」 1 / 「Premium」 1)。
 
-### ✅ Phase 2.1 着地 (commit `cf80726`、 user dogfood 2 件解決)
+### ✅ Phase 2.1 着地 (commit `a8db6aa` ProTeaser + `b53bd25` grid 真因 fix、 user dogfood 2 件解決、 bundle `index-Bz1aINzw.js` 本番反映 + grep 検証済)
 - **LP 3 カード並列化**: pricing grid `minmax(260px → 200px, 1fr)`。 260 だと 3 列に 812px 必要で ~794px
   (laptop window) が 2 列折り返し → Premium だけ下段だった。 200 で 632px から 3 列横並び。 `LandingPage.jsx`。
 - **ProTeaser 発光統一**: 「市場の声 (Pro で解禁)」 カードに `className="panel-card"` 追加で arrival/hover glow を
