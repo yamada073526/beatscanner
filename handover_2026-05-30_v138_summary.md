@@ -284,12 +284,30 @@ frontend (`DiagramCard.jsx`):
 | 🟢 | 改善 C: 5条件 hover affordance | 1.5-2 人日 | 後 |
 | 🟢 | プラン管理 UI full (Stripe 統合) | 2-3 人日 | 後 |
 
-### v138.6 + R1 + R2 hotfix commit
+### v138.6 + R1 + R2 + R3 hotfix commit
 | ver | commit | bundle | 内容 |
 |---|---|---|---|
 | v138.6 | 1a8118e | `index-usR8f65Q.js` | 物理層分離 SSOT 復活 + sparkline 窓統一 + AI 要約 sec_guidance 配線 |
 | v138.6 R1 hotfix | 0f459bf | `index-CQ1gC-IA.js` | payload key naming mismatch / ③ 復旧 / CFPS-EPS adaptive threshold |
 | v138.6 R2 hotfix | 63173ca | `index-DrerytzW.js` | SummaryBrief 2-phase race / EPS BEAT FMP 未来 entry skip / 5条件 click affordance |
+| v138.6 R3 hotfix | 724ddc8 | `index-CPAUQHb9.js` | EPS BEAT frontend 配線 (epsBeatPct → guidance.eps.surprise_pct) + hover 強化 |
+
+## v138.6 R3 hotfix 真因 (user dogfood 2026-05-30 4 巡目)
+
+### Bug B-2 (続): EPS BEAT「—」 まだ残る
+- **真因 (R3 で確定)**: R2 で backend `guidance.eps.surprise_pct = +6.3 beat` は取得済だったが、
+  frontend KPI strip は `result.epsBeatPct` を読んでおり、 これは backend が **一切返さない
+  frontend-only undefined key** → 全 ticker 「—」 regression (R3 で発見)
+- **R3 修正**: JudgmentDetail.jsx の KPI logic を `guidance.eps.surprise_pct` 経由に切替、
+  guidance.eps.actual + estimated + surprise_pct の 3 値全揃い時のみ表示、 欠損時「—」 fallback。
+  検証: `/api/guidance/NVDA` で actual=1.87 / estimated=1.76 / surprise=+6.3% / verdict=beat 取得確認
+
+### 改善 C 強化 (user 「もう少し強く」)
+- background tint 0.12 → 0.18
+- border opacity 0.40 → 0.55
+- translateY -1px → -3px (3 倍体感強化)
+- box-shadow 追加 (passed=緑 glow / failed=赤 glow)
+- chevron font 12 → 16px (hover 中拡大) + color secondary → primary + translateX 2 → 5px + scale 1.1
 
 ## v138.6 R2 hotfix 真因 (user dogfood 2026-05-30 3 巡目)
 
