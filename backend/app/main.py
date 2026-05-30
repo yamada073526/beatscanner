@@ -5689,10 +5689,16 @@ def _fmp_consensus_eps_nearest(
 
 
 async def _fetch_eps_data(ticker: str, fmp_key: str) -> dict:
-    """FMP→AV→yfinance EPS fallback chain. Returns EPS fields + raw lists for revenue matching."""
+    """FMP→AV→yfinance EPS fallback chain. Returns EPS fields + raw lists for revenue matching.
+
+    v138.6 R2 (2026-05-30): limit=1 は FMP /stable/earnings の未来 earnings call (actual=null) を
+    返す pattern に弱い (NVDA で「次回 2026-08-26 Q1 2027」 だけ取り actual=null → EPS BEAT「—」)。
+    limit=8 に拡張 + actual を持つ最直近過去報告分を pick することで実績取得を安定化。
+    """
     client = FMPClient(api_key=fmp_key)
 
-    surprise_task = asyncio.create_task(client.earnings_surprises(ticker, limit=1))
+    # v138.6 R2: limit=1 → limit=8 (未来 earnings call で actual=null になる pattern 回避用)
+    surprise_task = asyncio.create_task(client.earnings_surprises(ticker, limit=8))
     est_task = asyncio.create_task(client.analyst_estimates(ticker, period="quarter", limit=12))
     income_task = asyncio.create_task(client.income_statement(ticker, limit=1, period="quarter"))
 
@@ -5717,7 +5723,7 @@ async def _fetch_eps_data(ticker: str, fmp_key: str) -> dict:
 
     if not surprises:
         try:
-            surprises = await alpha_vantage_source.fetch_earnings_history(ticker, limit=1)
+            surprises = await alpha_vantage_source.fetch_earnings_history(ticker, limit=8)
             if surprises:
                 source = "alphavantage"
         except Exception:
@@ -5725,7 +5731,7 @@ async def _fetch_eps_data(ticker: str, fmp_key: str) -> dict:
 
     if not surprises:
         try:
-            surprises = await yfinance_source.fetch_earnings_surprises(ticker, limit=1)
+            surprises = await yfinance_source.fetch_earnings_surprises(ticker, limit=8)
             if surprises:
                 source = "yfinance"
         except Exception:
@@ -5736,7 +5742,18 @@ async def _fetch_eps_data(ticker: str, fmp_key: str) -> dict:
     surprise_date: str | None = None
     fiscal_period: str | None = None
     if surprises:
-        latest = surprises[0]
+        # v138.6 R2: actual EPS を持つ entry を pick (未来 earnings call は actual=null で skip)。
+        # FMP /stable/earnings は date DESC 返却なので、 配列順走査で最直近過去報告分を取得。
+        latest = None
+        for entry in surprises:
+            _candidate_actual = _pick(entry, "eps", "epsActual", "actualEarningResult", "actualEps")
+            if _candidate_actual is not None:
+                latest = entry
+                break
+        # fallback: 過去報告 0 件 (=新規 IPO 等) なら配列先頭で従来通り (actual=null だが endpoint 動作維持)
+        if latest is None:
+            latest = surprises[0]
+
         eps_actual = _pick(latest, "eps", "epsActual", "actualEarningResult", "actualEps")
         eps_estimated = _pick(latest, "epsEstimated", "estimatedEarning", "estimatedEps")
         surprise_date = _pick(latest, "date")

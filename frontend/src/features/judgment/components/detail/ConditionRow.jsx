@@ -43,6 +43,12 @@ export default function ConditionRow({
   onConditionPulse,
 }) {
   const [showModal, setShowModal] = useState(false);
+  // v138.6 R2 改善 C (2026-05-30): row hover で click affordance を可視化。
+  // user dogfood「クリックして展開できることがわかるよう、 演出を追加」 要望。
+  // hover で (a) background tint 強化 (b) translateY -1px の subtle elevation
+  // (c) chevron 色 muted → secondary、 軽い scale up。
+  // Aman/Ritz-Carlton 級「触れたらすっと反応する」 感、 過剰なアニメは避ける (5 原則: シンプル)。
+  const [isHovered, setIsHovered] = useState(false);
   const passed = condition.passed;
   const detailContent = CONDITION_DETAILS[index];
   const valueColor = passed ? 'var(--color-gain)' : 'var(--color-loss)';
@@ -64,14 +70,21 @@ export default function ConditionRow({
   return (
     <li
       data-testid={`condition-row-${index - 1}`}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       style={{
         listStyle: 'none',
-        background: passed ? bgPass : bgFail,
+        background: passed
+          ? (isHovered ? 'rgba(52, 239, 129, 0.12)' : bgPass)
+          : (isHovered ? 'rgba(248, 113, 113, 0.12)' : bgFail),
         border: '1px solid',
-        borderColor: passed ? borderPass : borderFail,
+        borderColor: passed
+          ? (isHovered ? 'rgba(52, 239, 129, 0.40)' : borderPass)
+          : (isHovered ? 'rgba(248, 113, 113, 0.40)' : borderFail),
         borderRadius: 'var(--radius-sm)',
         overflow: 'hidden',
-        transition: 'background var(--motion-fast) ease',
+        transform: isHovered && !expanded ? 'translateY(-1px)' : 'translateY(0)',
+        transition: 'background var(--motion-fast) ease, border-color var(--motion-fast) ease, transform var(--motion-fast) ease',
       }}
     >
       {/* ── Summary row (always visible) ────────────────────────────── */}
@@ -198,12 +211,15 @@ export default function ConditionRow({
         <span
           aria-hidden="true"
           style={{
-            fontSize: 10,
-            color: 'var(--text-muted)',
-            transition: 'transform var(--motion-fast) var(--ease-out-cubic)',
-            transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
+            fontSize: 12,
+            color: isHovered || expanded ? 'var(--text-secondary)' : 'var(--text-muted)',
+            transition: 'transform var(--motion-fast) var(--ease-out-cubic), color var(--motion-fast) ease, font-size var(--motion-fast) ease',
+            transform: expanded
+              ? 'rotate(90deg)'
+              : (isHovered ? 'rotate(0deg) translateX(2px)' : 'rotate(0deg)'),
             display: 'inline-block',
             lineHeight: 1,
+            fontWeight: 600,
           }}
         >
           ▸

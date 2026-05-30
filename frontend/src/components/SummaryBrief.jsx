@@ -275,7 +275,15 @@ function SummaryBriefInner({ analysis, guidance, frameless = false }) {
       });
 
     return () => controller.abort();
-  }, [analysis?.ticker, analysis?.latestDate]); // eslint-disable-line react-hooks/exhaustive-deps
+    // v138.6 R2 (2026-05-30): guidance?.sec_guidance_text を deps に追加。
+    // 真因 user dogfood: useJudgmentResult.js は 2-phase fetch (Phase 1 fetchGuidanceBasic →
+    // Phase 2 fetchGuidance で sec_guidance_text 取得)。 旧 deps は ticker / latestDate のみで
+    // Phase 2 完了時に再 fetch せず、 Phase 1 (空 guidance) の AI 要約が cache されて
+    // 「[NEU]③ ガイダンス：非開示」 だけ表示される regression。
+    // Boolean(...) で真偽値化することで、 sec_guidance_text が undefined → 文字列 へ変化した
+    // タイミングで dep が true へ更新、 useEffect 再実行 → AI 要約再生成。
+    // sec_guidance_text の文字列内容差分では再生成しない (cache 維持で cost ↓)。
+  }, [analysis?.ticker, analysis?.latestDate, Boolean(guidance?.sec_guidance_text)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lines = text.split('\n');
 
