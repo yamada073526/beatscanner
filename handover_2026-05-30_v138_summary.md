@@ -147,15 +147,41 @@ frontend (`DiagramCard.jsx`):
     - source_url 一致 self-check + mismatch 時 confidence 1 段降格
     - cache_read/creation_input_tokens metric 同梱
 
-### 次セッション着手 (Phase 2D Sprint 2、 1.5 人日)
-1. main.py の既存 `_fetch_sec_guidance` を sec_guidance.extract_guidance() call に置換 (SEC 8-K text 渡し)
-2. visualize endpoint の asyncio.gather に `_guidance_task` 追加 + `parsed["guidanceExtracted"]` attach
-3. DiagramCard.jsx に `GuidanceSection` (Section 3.7) 追加、 source_url link + extraction_confidence chip
-4. dogfood (NVDA / AAPL / MSFT / GOOGL 4 銘柄) で精度 60-70% 確認
-5. release-check + commit + deploy
-6. LP 訴求 update: 「部門別売上や予想比較まで」 → 「次 Q ガイダンス + 部門別売上 + 予想比較 + 資本政策まで日本語で」 unlock
+## v138.3 Phase 2D Sprint 2a 着地 (本 session 追加)
 
-### 注意 (Sprint 2 着手前)
-- ANTHROPIC_API_KEY 環境変数が Railway / local 両方に設定済か確認
-- cache hit 率実測値が 80% 未満なら few-shot 5→3 件削減 ([[feedback-prompt-cache-pattern]])
-- extraction_confidence=low 時の frontend banner 設計 ([[feedback-citation-required]])
+### 着地物 (backend 統合、 frontend 未着手のため deploy なし = regression なし)
+- `main.py` 新規 helper:
+  - `_fetch_sec_guidance_structured(ticker) -> dict | None` (line 5165 周辺、 既存 _fetch_sec_guidance の 90 行 SEC EDGAR fetch part を copy + LLM call のみ `visualizer/sec_guidance.extract_guidance()` 経由に置換)
+  - `_fetch_sec_guidance_structured_cached(ticker)` 6h in-memory cache wrapper (`_guidance_v2_cache`)
+  - AAPL は数値ガイダンス非開示方針のため hardcoded fallback
+- `main.py` visualize endpoint (line 10046 周辺):
+  - `asyncio.gather` に `_guidance_task` 追加 (7 並列)
+  - `parsed["guidanceExtracted"]` + `parsed["guidanceExtractedAvailable"]` attach
+  - cache hit 率実測 console log (`[GUIDANCE_V2 CACHE] {ticker} hit={X}%`)
+- 既存 `_fetch_sec_guidance` + `_fetch_sec_guidance_cached` は **不変** (line 163 warmup + line 6114 visualization prompt 用、 backward compat 維持)
+- syntax check PASS (`py_compile`)、 frontend 未統合のため deploy 不要
+
+### 次セッション着手 (Phase 2D Sprint 2b/2c、 1.0-1.5 人日)
+1. **Sprint 2b frontend** (0.5-1 人日):
+   - DiagramCard.jsx に `GuidanceSection` (Section 3.7) 追加
+   - 表示: 「次 Q ガイダンス: 売上 $X-Y B、 マージン X-Y%」 + source_url link
+   - extraction_confidence chip: high=緑 / medium=muted / **low** = warning banner「精度不足、 出典確認」
+   - q_revenue/q_margin/fy_revenue/fy_margin のうち欠落 field は graceful skip
+2. **Sprint 2c dogfood + deploy** (0.5 人日):
+   - 本番 deploy 後 NVDA/AAPL/MSFT/GOOGL 4 銘柄で精度確認
+   - 60-70% 達成 + cache hit 80%+ 維持を target
+   - cache hit < 80% なら few-shot 5→3 件削減 ([[feedback-prompt-cache-pattern]])
+   - release-check + commit + deploy
+3. **LP 訴求 update**: 「部門別売上や予想比較まで日本語で」 → 「**次 Q ガイダンス** + 部門別売上 + 予想比較 + 資本政策まで日本語で」 unlock (dogfood で precision 60%+ 確認後のみ)
+
+### 注意 (Sprint 2b 着手前)
+- ANTHROPIC_API_KEY が Railway env vars に設定済 (既存 LLM endpoint で使用中、 OK)
+- visualize endpoint で 7 並列 fetch = タイムアウト risk 微増 (実測必要)
+- `_guidance_v2_cache` は process-local、 multi-worker 環境では worker 単位 cache (warmup cron で温める設計検討余地)
+- GuidanceSection の design system check: 既存 CapitalReturnSection / SegmentBar pattern 流用、 raw hex / shadow / !important 不可
+
+### Phase 2D 全体進捗 (v138 audit 起点)
+- Sprint 1 (sec_guidance.py module) ✅ 着地 (commit 41c9e01)
+- Sprint 2a (backend 統合) ✅ 着地 (本 commit)
+- Sprint 2b (frontend GuidanceSection) 🟡 次 session
+- Sprint 2c (dogfood + deploy + LP unlock) 🟡 次 session

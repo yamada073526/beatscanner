@@ -5162,6 +5162,151 @@ class _HTMLTextExtractor(_HTMLParser):
         return re.sub(r'\s+', ' ', ''.join(self._parts)).strip()
 
 
+async def _fetch_sec_guidance_structured(ticker: str) -> dict | None:
+    """v138 Phase 2D Sprint 2a: SEC 8-K text を取得し sec_guidance.extract_guidance() で structured JSON 抽出.
+
+    既存 `_fetch_sec_guidance` と並列に動作する v2 wrapper。 SEC EDGAR fetch part は
+    重複コピー (refactor は別 PR)、 LLM 呼出のみ visualizer/sec_guidance.py の
+    prompt cache + tool use + Hallucination Guard 4 重防御 path に置換。
+
+    既存 caller (warmup / visualize endpoint の free-text guidance) は不変、
+    新 visualize endpoint で parsed["guidanceExtracted"] attach 用 (Phase 2D Sprint 2b 着手予定)。
+
+    Returns:
+        dict (sec_guidance.extract_guidance schema) or None (取得不能 / API 失敗)
+    """
+    # Apple は数値ガイダンス公式に非開示、 directional commentary のみ
+    if ticker.upper() == "AAPL":
+        return {
+            "q_revenue": None, "q_margin": None, "fy_revenue": None, "fy_margin": None,
+            "narrative_jp": (
+                "Apple は売上高・利益の数値ガイダンスを公式に開示しない方針。\n"
+                "決算説明会では Services 売上の二桁成長・ gross margin 47-48% レンジ等の定性コメントのみ提供。"
+            ),
+            "source_url": "https://www.apple.com/investor/",
+            "extraction_confidence": "medium",
+        }
+
+    import httpx as _httpx_sec
+    headers = {"User-Agent": "beatscanner research@example.com", "Accept-Encoding": "gzip, deflate"}
+    try:
+        # 1. company_tickers.json から CIK 取得
+        ct_r = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: _httpx_sec.get(
+                "https://www.sec.gov/files/company_tickers.json",
+                headers=headers, timeout=10,
+            )
+        )
+        ct = ct_r.json()
+        cik_str = None
+        for entry in ct.values():
+            if entry.get("ticker", "").upper() == ticker.upper():
+                cik_str = str(entry["cik_str"]).zfill(10)
+                break
+        if not cik_str:
+            return None
+
+        # 2. submissions.json から items:2.02 を含む 8-K 最大 3 件
+        sub_r = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: _httpx_sec.get(
+                f"https://data.sec.gov/submissions/CIK{cik_str}.json",
+                headers=headers, timeout=10,
+            )
+        )
+        sub = sub_r.json()
+        filings = sub.get("filings", {}).get("recent", {})
+        forms = filings.get("form", [])
+        accessions = filings.get("accessionNumber", [])
+        items_field = filings.get("items", [])
+
+        checked = 0
+        for idx_i, (form, acc) in enumerate(zip(forms, accessions)):
+            if form != "8-K":
+                continue
+            filing_items = items_field[idx_i] if idx_i < len(items_field) else ""
+            if "2.02" not in str(filing_items):
+                continue
+            checked += 1
+            if checked > 3:
+                break
+            acc_clean = acc.replace("-", "")
+
+            # 3. index.html → EX-99.1 URL
+            idx_r = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda a=acc_clean, orig=acc: _httpx_sec.get(
+                    f"https://www.sec.gov/Archives/edgar/data/{int(cik_str)}/{a}/{orig}-index.html",
+                    headers=headers, timeout=10, follow_redirects=True,
+                )
+            )
+            if idx_r.status_code != 200:
+                continue
+            ex99_match = re.search(
+                r'EX-99\.1[^<]*</td>\s*<td[^>]*>\s*<a href="(/Archives/edgar/data/[^"]+\.html?)"',
+                idx_r.text, re.IGNORECASE
+            )
+            if not ex99_match:
+                ex99_match = re.search(
+                    r'<a href="(/Archives/edgar/data/[^"]+\.html?)"[^>]*>[^<]*EX-99',
+                    idx_r.text, re.IGNORECASE
+                )
+            if not ex99_match:
+                ex99_match = re.search(
+                    r'href="(/Archives/edgar/data/[^"]+ex[-_]?99[^"]*\.html?)"',
+                    idx_r.text, re.IGNORECASE
+                )
+            if not ex99_match:
+                continue
+            exhibit_url = f"https://www.sec.gov{ex99_match.group(1)}"
+
+            # 4. HTML → text
+            htm_r = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda u=exhibit_url: _httpx_sec.get(u, headers=headers, timeout=15, follow_redirects=True)
+            )
+            if htm_r.status_code != 200:
+                continue
+            extractor = _HTMLTextExtractor()
+            extractor.feed(htm_r.text)
+            raw_text = extractor.get_text()
+            if len(raw_text) < 200:
+                continue
+
+            text_snippet = raw_text[:10000]
+
+            # 5. v138 Phase 2D: structured JSON 抽出 (prompt cache + tool use)
+            from .visualizer.sec_guidance import extract_guidance
+            result = await extract_guidance(text_snippet, source_url=exhibit_url)
+            if result and result.get("narrative_jp") and result.get("narrative_jp") != "ガイダンスの記載なし":
+                return result
+
+    except Exception as e_sec:
+        print(f"[GUIDANCE_V2] SEC EDGAR structured fetch failed for {ticker}: {e_sec}")
+
+    return None
+
+
+# in-memory cache for guidance v2 (Phase 2D Sprint 2a)
+_guidance_v2_cache: dict = {}
+
+
+async def _fetch_sec_guidance_structured_cached(ticker: str) -> dict | None:
+    """v138 Phase 2D: structured guidance の 6h in-memory cache wrapper."""
+    now = _time.time()
+    cache_key = ticker.upper()
+    if cache_key in _guidance_v2_cache:
+        ts, cached = _guidance_v2_cache[cache_key]
+        if now - ts < GUIDANCE_CACHE_TTL:
+            print(f"[GUIDANCE_V2 CACHE HIT] {ticker}")
+            return cached
+    print(f"[GUIDANCE_V2 CACHE MISS] {ticker}")
+    result = await _fetch_sec_guidance_structured(ticker)
+    _guidance_v2_cache[cache_key] = (now, result)
+    return result
+
+
 async def _fetch_sec_guidance(ticker: str) -> tuple[str, str] | None:
     """SEC 8-K または Seeking Alpha transcript からガイダンスを抽出して (text, source) を返す。"""
     # Apple は売上高・利益の数値ガイダンスを公式に開示しない方針
@@ -10044,9 +10189,11 @@ async def generate_visualization(
     _mcap_task = asyncio.create_task(get_market_cap(ticker, _fmp_key_post))
     # v138 Phase 2C: 配当 + 自社株買い raw fact 並列 fetch (実行額のみ、 narrative は frontend)
     _cap_task  = asyncio.create_task(get_capital_return_data(ticker, _fmp_key_post))
+    # v138 Phase 2D Sprint 2a: SEC 8-K structured guidance (prompt cache + tool use)
+    _guidance_task = asyncio.create_task(_fetch_sec_guidance_structured_cached(ticker))
 
-    message, _real_val_pre, _seg_raw_pre, _fcf_capex_pre, _mcap_pre, _cap_pre = await asyncio.gather(
-        _llm_task, _val_task, _seg_task, _fcf_task, _mcap_task, _cap_task,
+    message, _real_val_pre, _seg_raw_pre, _fcf_capex_pre, _mcap_pre, _cap_pre, _guidance_pre = await asyncio.gather(
+        _llm_task, _val_task, _seg_task, _fcf_task, _mcap_task, _cap_task, _guidance_task,
         return_exceptions=True,
     )
 
@@ -10057,6 +10204,7 @@ async def generate_visualization(
     if isinstance(_fcf_capex_pre, Exception): _fcf_capex_pre = ([], [])
     if isinstance(_mcap_pre,      Exception): _mcap_pre      = None
     if isinstance(_cap_pre,       Exception): _cap_pre       = None
+    if isinstance(_guidance_pre,  Exception): _guidance_pre  = None
 
     _fcf_pre, _capex_pre = _fcf_capex_pre if isinstance(_fcf_capex_pre, tuple) else ([], [])
     # ─────────────────────────────────────────────────────────────────────
@@ -10417,6 +10565,25 @@ async def generate_visualization(
                 parsed["capitalReturnDataAvailable"] = True
     except Exception as _e_cap:
         print(f"[CAPITAL_RETURN] failed for {ticker}: {_e_cap}")
+
+    # ── v138 Phase 2D Sprint 2a: SEC 8-K structured guidance attach ──
+    # extract_guidance() の output (q_revenue / q_margin / fy_revenue / fy_margin / narrative_jp /
+    # source_url / extraction_confidence) を frontend GuidanceSection (Sprint 2b 着手予定) に渡す。
+    # cache hit 率実測値 (_cache_metrics) は別途 console log で観測、 80% 未満なら few-shot 削減。
+    parsed["guidanceExtractedAvailable"] = False
+    try:
+        if isinstance(_guidance_pre, dict) and _guidance_pre.get("narrative_jp"):
+            parsed["guidanceExtracted"] = _guidance_pre
+            parsed["guidanceExtractedAvailable"] = True
+            # cache hit 観測 ([[feedback-prompt-cache-pattern]] 80% target)
+            _cm = _guidance_pre.get("_cache_metrics") or {}
+            _cr = _cm.get("cache_read_input_tokens", 0)
+            _cc = _cm.get("cache_creation_input_tokens", 0)
+            if _cr + _cc > 0:
+                _hit_rate = _cr / (_cr + _cc) * 100
+                print(f"[GUIDANCE_V2 CACHE] {ticker} hit={_hit_rate:.1f}% (read={_cr} create={_cc})")
+    except Exception as _e_gv2:
+        print(f"[GUIDANCE_V2] attach failed for {ticker}: {_e_gv2}")
 
     # ── FCF / CapEx を付加（直近3期の年次データ） ──
     # 取得成否を fcfDataAvailable フラグで明示。フロントで N/A 表示を可能にする。
