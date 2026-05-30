@@ -19,7 +19,12 @@ import {
   CandlestickChart,
   Activity,
   SlidersHorizontal,
+  LogOut,
 } from 'lucide-react';
+// v138.6 R6 (2026-05-30): Pane1Nav 末尾に user footer + logout button (user dogfood 要望
+// 「ログアウトできない、 LP 確認できない」 解消)。 useAuth は App.jsx で既に利用、 hook 再呼出で OK。
+import { useAuth } from '../../hooks/useAuth.js';
+import { isSupabaseConfigured } from '../../lib/supabase.js';
 import WorkspaceShell from './WorkspaceShell.jsx';
 import WorkspaceHeader from './WorkspaceHeader.jsx';
 import { useUrlSync } from './useUrlSync.js';
@@ -585,6 +590,128 @@ function Pane1Nav({ items = [] }) {
           全 22 指標は「指数」tab に統合 (Tier 1 + 世界市場 の 2 group)、
           row click で Pane 3 の過去値動きを確認可。Phase 2 で Header カスタマイズ実装時に
           選択肢のソースとして再利用予定。 */}
+
+      {/* v138.6 R6: ユーザーフッター (sticky 下) — ログイン時のみ表示。 nav の他要素と
+          視覚的に分離するため marginTop:'auto' + 上 border、 logout アイコンは R5 Option D
+          (icon-only opacity 0.55→1) と同 minimal style で統一感。 */}
+      <UserFooter />
+    </div>
+  );
+}
+
+/**
+ * v138.6 R6 UserFooter — Pane1Nav 末尾に固定表示。
+ * - 未ログイン: 非表示 (LP に Google ログイン CTA があるため重複回避)
+ * - ログイン中: avatar + email (truncate) + LogOut icon-only button
+ * Aman 級「主張せず、 必要な時に立ち上がる」 質感、 R5 と同 minimal style。
+ */
+function UserFooter() {
+  const { user, ready, signOut } = useAuth();
+  if (!isSupabaseConfigured || !ready || !user) return null;
+
+  const avatarUrl = user.user_metadata?.avatar_url;
+  const email = user.email || 'ログイン中';
+  const initial = (user.email?.[0] || 'U').toUpperCase();
+
+  return (
+    <div
+      data-testid="ws-pane1-user-footer"
+      style={{
+        marginTop: 'auto',
+        paddingTop: 10,
+        paddingBottom: 4,
+        borderTop: '1px solid var(--border)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        minWidth: 0,
+      }}
+    >
+      {avatarUrl ? (
+        <img
+          src={avatarUrl}
+          alt={email}
+          referrerPolicy="no-referrer"
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: '50%',
+            border: '1px solid var(--border)',
+            flexShrink: 0,
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: '50%',
+            background: 'var(--color-accent)',
+            color: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 11,
+            fontWeight: 700,
+            border: '1px solid var(--border)',
+            flexShrink: 0,
+          }}
+          aria-hidden="true"
+        >
+          {initial}
+        </div>
+      )}
+      <span
+        style={{
+          flex: 1,
+          minWidth: 0,
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+        title={email}
+      >
+        {email}
+      </span>
+      <button
+        type="button"
+        onClick={signOut}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.opacity = '1';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.opacity = '0.55';
+          e.currentTarget.style.transform = 'scale(1)';
+        }}
+        onMouseDown={(e) => {
+          e.currentTarget.style.transform = 'scale(0.92)';
+        }}
+        onMouseUp={(e) => {
+          e.currentTarget.style.transform = 'scale(1)';
+        }}
+        aria-label="ログアウト"
+        title="ログアウト"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 28,
+          height: 28,
+          padding: 6,
+          border: 'none',
+          background: 'transparent',
+          color: 'var(--text-secondary)',
+          opacity: 0.55,
+          borderRadius: 'var(--radius-pill, 9999px)',
+          cursor: 'pointer',
+          transition: 'opacity var(--motion-fast) ease, transform var(--motion-fast) ease',
+          flexShrink: 0,
+        }}
+      >
+        <LogOut size={14} strokeWidth={2.0} aria-hidden="true" />
+      </button>
     </div>
   );
 }
