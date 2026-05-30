@@ -280,10 +280,12 @@ export default function ConditionRow({
           />
 
           {/* 説明モーダル trigger
-              v138.6 R4 (2026-05-30): user dogfood 「位置と色が目立たない、 ?チップのように cyan で目立たせて」 要望。
-              FiveConditionsCard 「?」 chip と同 cyan accent pill (background rgba(34,211,238,0.15) +
-              border rgba(34,211,238,0.4) + color rgb(56,189,248)) で統一感のある親しみやすい affordance に。
-              旧 subtle text link は「重要な解説なのに発見されない」 dogfood 課題を解消。 */}
+              v138.6 R5 (2026-05-30): 3 体合議 verdict (ui-designer + frontend-architect + qa-dogfooder、
+              2/3 vote for Option D)。 user dogfood「自己主張が強い、 ?だけで十分意味は伝わる」 要望から
+              旧 R4 cyan pill (text + icon) → icon-only ⓘ に minimal 化。
+              階層差別化: section title「?」 (5 条件全体解説) ↔ row「ⓘ」 (個別条件解説) で記号差で階層保つ。
+              Aman 級「主張せず必要な時だけ存在感が立ち上がる」 = opacity 0.55 → hover 100%、 padding 6px で
+              touch target 確保、 onMouseDown scale 0.92 で press feedback ([[feedback-press-feedback-delta]])。 */}
           {detailContent && (
             <button
               type="button"
@@ -292,33 +294,40 @@ export default function ConditionRow({
                 setShowModal(true);
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(34, 211, 238, 0.30)';
-                e.currentTarget.style.borderColor = 'rgba(34, 211, 238, 0.65)';
+                e.currentTarget.style.opacity = '1';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(34, 211, 238, 0.15)';
-                e.currentTarget.style.borderColor = 'rgba(34, 211, 238, 0.40)';
+                e.currentTarget.style.opacity = '0.55';
+                e.currentTarget.style.transform = 'scale(1)';
+              }}
+              onMouseDown={(e) => {
+                e.currentTarget.style.transform = 'scale(0.92)';
+              }}
+              onMouseUp={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
               }}
               style={{
                 justifySelf: 'start',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 'var(--space-1, 4px)',
-                fontSize: 11,
-                fontWeight: 600,
-                color: 'rgb(56, 189, 248)',
-                background: 'rgba(34, 211, 238, 0.15)',
-                border: '1px solid rgba(34, 211, 238, 0.40)',
+                justifyContent: 'center',
+                width: 28,
+                height: 28,
+                padding: 6,
+                color: 'var(--color-accent)',
+                opacity: 0.55,
+                background: 'transparent',
+                border: 'none',
                 borderRadius: 'var(--radius-pill, 9999px)',
-                padding: '4px 10px',
                 cursor: 'pointer',
-                transition: 'background var(--motion-fast) ease, border-color var(--motion-fast) ease',
+                transition: 'opacity var(--motion-fast) ease, transform var(--motion-fast) ease',
                 marginTop: 4,
               }}
               aria-label={`${condition.name}の詳しい解説を表示`}
+              aria-haspopup="dialog"
+              title="この条件の詳しい解説を見る"
             >
-              <Info size={12} strokeWidth={2.2} />
-              <span>この条件の解説</span>
+              <Info size={14} strokeWidth={2.0} aria-hidden="true" />
             </button>
           )}
         </div>
