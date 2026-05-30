@@ -297,6 +297,27 @@ frontend (`DiagramCard.jsx`):
 | v138.6 R7 P0+P1 | 423a642 | `index-BVL8weEE.js` | LogOut redirect + Trust Cliff data leak gate + login button 復旧 |
 | v138.6 R7-A2+C2 | 6685db6 | `index-KrDrSd9e.js` | LogOut → ?layout=classic 強制 + ProfileCard 2 箇所目 listener 復旧 |
 | v138.6 R7-D+R7-E | fe689a7 | `index-MyCqygyQ.js` | 永遠ローディング honest 表現 + 🔒 emoji → Lock icon |
+| v138.6 R7-A3 | 0fb8bab | `index-N2aJhBlu.js` | re-login 後 ?layout=classic 自動 clear で workspace 復帰 |
+
+## v138.6 R7-A3 着地 (R7-A2 副作用 fix)
+
+### 真因
+- R7-A2 で logout → `?layout=classic` 強制したが、 re-login 後も URL に classic 残り、
+  user は元の workspace mode に戻れず classic SPA に閉じ込められる regression
+- user dogfood「LP から銘柄リンクをクリックすると旧 UI へ遷移」 報告 = 再ログイン後 classic SPA 表示が続いていた
+
+### 修正
+- Workspace.jsx LogOut: `sessionStorage.setItem('bs:return_to_workspace_after_login', '1')` set + classic 遷移
+- App.jsx post-login useEffect: user truthy で flag 検出時 → flag clear + `/` リダイレクト (full reload で
+  useWorkspaceLayout 再評価、 PC default workspace 復元)
+- 手動 ?layout=classic bookmark の user は影響なし (flag set されないため)
+
+### 動線 (R7-A3 完成後)
+1. workspace で LogOut click → `/?layout=classic` + flag set
+2. LP Hero (Google ログイン CTA) 表示
+3. Google ログイン → user state 変化
+4. post-login useEffect 発火 → flag 検出 → `/` リダイレクト
+5. PC default workspace mode で復帰 ← 元の UX 完全復元
 
 ## v138.6 R7-D + R7-E 着地
 
