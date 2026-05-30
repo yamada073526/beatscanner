@@ -69,25 +69,26 @@ function TrendChip({ series, passed, conditionIndex, conditionName }) {
   const validValues = series.filter((v) => v != null && Number.isFinite(v));
   if (validValues.length < 2) return null;
 
-  // first / last の有効値を取得
-  const firstIdx = series.findIndex((v) => v != null && Number.isFinite(v));
-  const lastIdx = series.map((v, i) => (v != null && Number.isFinite(v) ? i : -1))
-    .filter((i) => i >= 0)
-    .at(-1);
+  // v138.6 Bug 2 Fix 2 (2026-05-30): 計算窓を「直近 3 点」 に統一 (text 表示「1.2 → 2.9 → 4.9」 と一致)。
+  // 旧 logic は series 全体 (5 年 5 点) で first→last 比較していたため、 5 年前 EPS ≈ 0.x が分母になり
+  // 直近値 4.9 で +1000%+ → ">+999%" cap 発火が頻発。 user は text 表示 (直近 3 点) しか見えないので
+  // 「+999% は計算誤り」 と認識する gap が問題化 (user dogfood 2026-05-30、 NVDA EPS / CFPS 等)。
+  // 直近 3 点の有効値で window 計算することで「2 期前 1.2 → 直近 4.9 = +308%」 等の妥当値に補正。
+  const RECENT_WINDOW = 3;
+  const recentValid = validValues.slice(-RECENT_WINDOW);
+  if (recentValid.length < 2) return null;
 
-  if (firstIdx === lastIdx || firstIdx < 0 || lastIdx == null) return null;
-
-  const firstVal = series[firstIdx];
-  const lastVal = series[lastIdx];
+  const firstVal = recentValid[0];
+  const lastVal = recentValid[recentValid.length - 1];
 
   // Number.isFinite による追加 guard
   if (!Number.isFinite(firstVal) || !Number.isFinite(lastVal)) return null;
 
-  // series[0] が 0 に近い場合は除算不能 → 非 render (epsilon = 1e-9)
+  // first 値が 0 に近い場合は除算不能 → 非 render (epsilon = 1e-9)
   const EPSILON = 1e-9;
   if (Math.abs(firstVal) < EPSILON) return null;
 
-  // percent change 計算
+  // percent change 計算 (直近 3 点 window)
   const trendPct = ((lastVal - firstVal) / Math.abs(firstVal)) * 100;
 
   // Number.isFinite の最終 guard

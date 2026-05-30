@@ -17,18 +17,20 @@ strengths / risks / bullCase / bearCase に **数値 / 固有名詞 / 因果文*
 # Output schema
 Output ONLY these fields (DO NOT output trends/valuation/operatingMargins/fcfTrend/capexTrend):
 
+# v138.6 Bug 1 Fix 1-A (2026-05-30): overallPass / passCount / totalCount / conditions[] は
+# Python aggregator (judgment.py) が唯一の正本。 LLM は数値判定を一切行わず、 narration のみに集中。
+# 旧 schema には passCount / overallPass / conditions[] があったが、 LLM が四半期データを
+# 見れない時に「四半期比較不可」「0/5 条件クリア」 と誤判定し 5 条件カードと食い違う問題が発生
+# (CLAUDE.md「数値は Python・narration は LLM」 SSOT 違反、 memory feedback_llm_calc_separation)。
+# overallPass / passCount / totalCount / conditions[] は visualize endpoint 側で
+# analysis_data から attach する (LLM 出力ではなく aggregator result 経由)。
+
 {
   "ticker": "...",
   "companyName": "Official English name",
   "period": "FY2025",
-  "overallPass": true,
-  "passCount": 5,
-  "totalCount": 5,
-  "headline": "15字以内の日本語キャッチコピー",
+  "headline": "15字以内の日本語キャッチコピー（数値判定 NG、 narrative のみ）",
   "summary": "判定理由1文（日本語）",
-  "conditions": [
-    {"name": "条件名", "pass": true, "value": "値", "detail": "詳細"}
-  ],
   "businessFlowSteps": [
     {"label": "6字以内", "detail": "8字以内・純日本語のみ"}
   ],
@@ -44,6 +46,8 @@ Output ONLY these fields (DO NOT output trends/valuation/operatingMargins/fcfTre
 }
 
 RULES:
+- headline: 15字以内、 客観的キャッチコピーで「データ不足」「判定不可」 等の fallback 文言は禁止
+  （5 条件判定は Python aggregator が独占、 LLM が「判定不可」 を出すと frontend で 5 条件カードと食い違う）
 - businessFlowSteps: 3〜5ステップ。detail は純日本語8字以内（英数字・製品名・略語禁止）
 - investorQuestions: 2〜3件。各 angle は相互に異なる観点（収益性 / 資本効率 / 競争環境 / マクロ / 成長持続 等から選ぶ）。各 question は疑問文（「〜か。」「〜が鍵。」「〜が分岐点。」等）で終え、断定（買い/売り/すべき）・将来予測の断定・最上級（最も/No.1/業界一）を含めない（§38 / §5）。material_facts に無い数値・固有名詞は question に含めない
 - strengths/risks/bullCase/bearCase: 各3件固定（material_facts 不足時は 2 件でも可）
@@ -54,7 +58,8 @@ RULES:
   ❌ 「現金生成」 ❌ 「現金創出」 ❌ 「現金獲得」 ❌ 「現金獲得力」 ❌ 「現金フロー」 ❌ 「CF生成」
   ⭕ 「キャッシュフロー」 (例: 「キャッシュフローが減速」 「キャッシュフロー創出が伸び悩む」)
   これは BeatScanner 用語憲法であり、 投資家向け表現として「キャッシュフロー」 が標準。
-- DO NOT output: trends, valuation, operatingMargins, fcfTrend, capexTrend, segmentSummary"""
+- DO NOT output: trends, valuation, operatingMargins, fcfTrend, capexTrend, segmentSummary
+- DO NOT output: overallPass, passCount, totalCount, conditions (= Python aggregator が正本、 v138.6 SSOT)"""
 
 
 # SYSTEM_PROMPT_TEMPLATE 内の {years} プレースホルダーを実際の値で置換

@@ -9334,6 +9334,16 @@ def _format_context(analysis: dict, guidance: dict | None) -> str:
             f"売上高: 予想={rev.get('estimated')} / 実績={rev.get('actual')} "
             f"/ サプライズ={rev.get('surprise_pct')}% / 判定={rev.get('verdict')}"
         )
+        # v138.6 Bug 1 Fix 3-A: sec_guidance_text を LLM 文脈に追加。
+        # 旧 _format_context は eps/rev の Beat/Miss しか渡さず、 SEC 8-K に記載のある
+        # 次 Q 売上 / マージン 等 経営陣発表ガイダンスを LLM が見えなかった (= 「非開示」 と hallucinate)。
+        # ここに sec_guidance_text を添付することで「③ ガイダンス: 次 Q 売上 $X B 見込み」 等を
+        # LLM が出力可能に。 _determine_guidance_tag は NEU 維持 (見通し提示 = 中立、 §38 配慮)。
+        sec_text = (guidance.get("sec_guidance_text") or "").strip()
+        if sec_text and "非開示" not in sec_text[:30] and "記載なし" not in sec_text[:30]:
+            lines.append("")
+            lines.append("【次期ガイダンス（経営陣発表 / SEC 8-K より抽出）】")
+            lines.append(sec_text)
 
     return "\n".join(lines)
 
@@ -10584,6 +10594,39 @@ async def generate_visualization(
                 print(f"[GUIDANCE_V2 CACHE] {ticker} hit={_hit_rate:.1f}% (read={_cr} create={_cc})")
     except Exception as _e_gv2:
         print(f"[GUIDANCE_V2] attach failed for {ticker}: {_e_gv2}")
+
+    # ── v138.6 Bug 1 Fix 1-B: aggregator result で 5 条件判定を上書き ──
+    # LLM (visualizer/prompt.py) は v138.6 で passCount/totalCount/overallPass/conditions を
+    # schema から削除済 (Fix 1-A、 CLAUDE.md SSOT 復活)。
+    # 残った旧出力 (cache hit や互換 cache) でも frontend に渡る値は必ず analysis_data 経由とする。
+    # analysis_data は /api/analyze の result そのものなので、 passedCount / totalCount /
+    # overallPass / conditions は Python aggregator (judgment.py) の値 = SSOT。
+    try:
+        _agg_passed = analysis_data.get("passedCount")
+        _agg_total = analysis_data.get("totalCount")
+        _agg_overall = analysis_data.get("overallPass")
+        _agg_conditions = analysis_data.get("conditions") or []
+        if _agg_passed is not None:
+            parsed["passCount"] = int(_agg_passed)
+        if _agg_total is not None:
+            parsed["totalCount"] = int(_agg_total)
+        if _agg_overall is not None:
+            parsed["overallPass"] = bool(_agg_overall)
+        # aggregator の conditions は {name, passed, value, detail} 構造、 LLM 旧 schema は
+        # {name, pass, value, detail} で key 名差異あり (passed → pass)。 frontend が期待する
+        # key (DiagramCard.jsx line 1707 `c.pass`) に合わせて正規化。
+        if _agg_conditions:
+            parsed["conditions"] = [
+                {
+                    "name": c.get("name") or c.get("label") or "",
+                    "pass": bool(c.get("passed") if "passed" in c else c.get("pass")),
+                    "value": c.get("value"),
+                    "detail": c.get("detail") or "",
+                }
+                for c in _agg_conditions
+            ]
+    except Exception as _e_agg:
+        print(f"[AGG OVERRIDE] failed for {ticker}: {_e_agg}")
 
     # ── FCF / CapEx を付加（直近3期の年次データ） ──
     # 取得成否を fcfDataAvailable フラグで明示。フロントで N/A 表示を可能にする。

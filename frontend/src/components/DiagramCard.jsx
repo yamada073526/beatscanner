@@ -22,6 +22,27 @@ import Toast from './Toast.jsx';
 import { m, useReducedMotion } from 'framer-motion';
 import MotionProvider from './MotionProvider.jsx';
 
+// v138.6 Bug 1 Fix 1-C: LLM が headline に「データ不足で判定不可」 等の fallback 文言を返すと、
+// 5 条件カード (Python aggregator 4/5 PASS) と食い違う UX を生む。 これらは headline ではなく
+// 状況説明 (= narrative ではない) なので、 frontend で render 時に suppress する。
+// 「キャッチコピー」 として意味のある headline は通す。 backend で対応すべきだが stale cache 対応で
+// frontend にも guard。 完全な suppress (headline 文字列で構成された全 fallback pattern を網羅) は
+// 不可能なので、 明白な fallback 句のみ対象とする。
+function isFallbackHeadline(headline) {
+  if (typeof headline !== 'string') return true;
+  const text = headline.trim();
+  if (!text) return true;
+  const FALLBACK_PATTERNS = [
+    /データ不足/,
+    /判定不可/,
+    /生成中/,
+    /分析中/,
+    /^N\/A$/i,
+    /情報なし/,
+  ];
+  return FALLBACK_PATTERNS.some((p) => p.test(text));
+}
+
 function VizSectionLabel({ text, first = false }) {
   return (
     <>
@@ -1561,7 +1582,11 @@ export default function DiagramCard({
           {isGenerating ? (
             <div className="skeleton" style={{ height: '28px', width: '55%', margin: '0 auto 12px' }} />
           ) : (
-            data.headline && (
+            // v138.6 Bug 1 Fix 1-C: LLM が「データ不足」「判定不可」 等 fallback 文言を返した場合は
+            // headline を suppress。 5 条件判定は aggregator が独占 (Fix 1-A/B)、 LLM の「データ不足」
+            // 文言は 5 条件カード (4/5) と食い違う UX を生む。 backend で suppress すべきだが、 stale cache
+            // 対応で frontend にも guard を入れる。 「キャッチコピー」 でなく状況説明文字列は suppress。
+            data.headline && !isFallbackHeadline(data.headline) && (
               <div className="narrative-appear" style={{
                 fontSize: 'clamp(18px, 5vw, 28px)',
                 fontWeight: 600,
