@@ -902,23 +902,42 @@ export default function JudgmentDetail({
           </SectionFade>
         ) : null;
 
+        // v138.6 R7-H 🟠 P1 (2026-05-30): 過去 8Q 決算反応 (EarningsReactionPanel) を Pro 限定化。
+        // user dogfood「ガイダンス進捗 直近8Q は Pro 限定なのに、 過去 8Q 決算反応 は未ログインで見える、
+        // Trust Cliff 整合性なし」。 PremiumLock で wrap、 free user は blur + minimal CTA D 案表示。
         const earningsReactionBlock = selectedTicker ? (
           isScrollV1 ? (
-            <div key="earnings-reaction" id="sec-earnings-reaction">
-              <EarningsReactionPanel ticker={selectedTicker} />
-            </div>
+            <PremiumLock
+              key="earnings-reaction"
+              feature="earnings_8q"
+              plan={plan}
+              label="過去 8Q の決算 → 5 営業日累積リターンを一覧で"
+              onUpgrade={detailContext.onUpgrade}
+            >
+              <div id="sec-earnings-reaction">
+                <EarningsReactionPanel ticker={selectedTicker} />
+              </div>
+            </PremiumLock>
           ) : (
             <AccordionSection
               key="earnings-reaction"
               id="sec-earnings-reaction"
               title="過去 8Q 決算反応"
+              label="PRO"
               tier={2}
               defaultOpen={false}
               controlledOpen={expandedSections.has('earnings-reaction') || undefined}
             >
-              <div id="sec-earnings-reaction-inner">
-                <EarningsReactionPanel ticker={selectedTicker} />
-              </div>
+              <PremiumLock
+                feature="earnings_8q"
+                plan={plan}
+                label="過去 8Q の決算 → 5 営業日累積リターンを一覧で"
+                onUpgrade={detailContext.onUpgrade}
+              >
+                <div id="sec-earnings-reaction-inner">
+                  <EarningsReactionPanel ticker={selectedTicker} />
+                </div>
+              </PremiumLock>
             </AccordionSection>
           )
         ) : null;
@@ -986,6 +1005,10 @@ export default function JudgmentDetail({
             isScrollV1={isScrollV1}
             useWorkspaceReader={useWorkspaceReader}
             expandedSections={expandedSections}
+            // v138.6 R7-K (2026-05-30): v4 mode で 図解 (StickyDiagramAccordion) を Pane 3 上部に
+            // mount したため、 末尾 AI 詳細レポート (DetailReport) は重複。 isV4 を渡し ContextSection
+            // で AI 詳細レポート の render を skip (legacy mode のみ表示維持で BC 担保)。
+            isV4={isV4}
           />
         );
 
@@ -1001,17 +1024,39 @@ export default function JudgmentDetail({
           // 7. リファレンス (ContextSection 旧 章 ③)
           return (
             <>
-              {/* v138.6 R7-G 🟡 P2 (2026-05-30): 図解 = AI 詳細レポート は Pro 機能 (¥980/月)、
-                  user dogfood 「未ログインだと見えないように」 要望。 plan === 'free' で
-                  完全非表示 (LP 訴求と整合、 Trust Cliff 防止)。 user state ===
-                  非 Pro なら detailContext.user の有無を問わず hide、 Pro / Premium のみ render。 */}
-              {(plan === 'pro' || plan === 'premium') && (
+              {/* v138.6 R7-L (2026-05-30): 図解 = Pro 機能。
+                  R7-G で完全 hide だったが、 user dogfood「以前の AI 詳細レポート は未ログインでも消さず
+                  Premium 解放の課金画面を表示していた、 今の図解 button でも同じほうが良いか?」 + 3 体合議
+                  D 案 (header に PRO badge 1 個 + 小 CTA) で「存在を匂わせるが押し付けない」 質感確定。
+                  Pro/Premium は render、 free は PremiumLock (minimal D 案、 blur preview なしで小 CTA のみ)。
+                  StickyDiagramAccordion は banner click で展開 = それ自体が affordance、 banner だけ
+                  blur で見せて click 時に CTA modal が起動する pattern。 */}
+              {(plan === 'pro' || plan === 'premium') ? (
                 <StickyDiagramAccordion
                   key="sticky-diagram"
                   ticker={selectedTicker}
                   analysis={result}
                   guidance={guidance}
                 />
+              ) : (
+                <PremiumLock
+                  key="sticky-diagram-locked"
+                  feature="claude_opus_report"
+                  plan={plan}
+                  label="図解で 5 条件・ビジネスを 2 秒で理解"
+                  onUpgrade={detailContext.onUpgrade}
+                >
+                  {/* placeholder: 高さ確保のための ghost banner、 中身は blur で「何かある」 だけ伝える */}
+                  <div
+                    aria-hidden="true"
+                    style={{
+                      height: 64,
+                      borderRadius: 'var(--radius-md)',
+                      background: 'rgba(56, 189, 248, 0.04)',
+                      border: '1px solid rgba(56, 189, 248, 0.10)',
+                    }}
+                  />
+                </PremiumLock>
               )}
               {chartBlock}
               {targetZoneBlock}

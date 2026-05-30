@@ -41,6 +41,12 @@ export default function PremiumLock({
     ? 'rgba(245, 158, 11, 0.08) 0%, rgba(var(--page-bg-rgb), 0.85) 60%'
     : 'rgba(56, 189, 248, 0.08) 0%, rgba(var(--page-bg-rgb), 0.85) 60%';
 
+  // v138.6 R7-J + R7-L (2026-05-30): 3 体合議 verdict (ui-designer + funnel-cro + qa-dogfooder
+  // 全 3 体一致で Option D = header に PRO badge 1 個 + 小 CTA、 「PRO 限定」 chip + bullets 削除)
+  // → 旧「chip 上 + 説明文 + 大 CTA」 三重表記 (user dogfood「しつこい、 品格損なう」) を minimal 化。
+  // header の PRO badge は section header (caller 側) に配置、 PremiumLock は blur preview +
+  // 小 CTA chip のみ render。 R7-I fix: onClick が event object を upgrade.open に渡す bug を
+  // arrow wrap で阻止 (string featureName のみ受け付け)。
   return (
     <div
       className="ds-premium-lock"
@@ -48,13 +54,12 @@ export default function PremiumLock({
         position: 'relative',
         borderRadius: 'var(--radius-md)',
         overflow: 'hidden',
-        minHeight: 200,
+        minHeight: 160,
       }}
     >
       {/* 背景: blur した children. inert で内部要素を tab order からも除外 (a11y) */}
       <div
         aria-hidden="true"
-        // @ts-ignore: HTML inert は React 19+ で標準対応、それ以前は属性として有効
         inert=""
         style={{
           filter: 'blur(8px)',
@@ -66,7 +71,7 @@ export default function PremiumLock({
         {children}
       </div>
 
-      {/* 前面: glass CTA */}
+      {/* 前面: minimal CTA (D 案) — header badge は caller 側で render */}
       <div
         style={{
           position: 'absolute',
@@ -75,107 +80,58 @@ export default function PremiumLock({
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 'var(--space-3, 12px)',
-          padding: 'var(--space-6, 24px)',
-          background: `radial-gradient(ellipse at top, ${gradientStops})`,
-          backdropFilter: 'saturate(160%) blur(3px)',
-          WebkitBackdropFilter: 'saturate(160%) blur(3px)',
+          gap: 'var(--space-2, 8px)',
+          padding: 'var(--space-5, 20px)',
+          background: `radial-gradient(ellipse at center, ${gradientStops})`,
+          backdropFilter: 'saturate(160%) blur(2px)',
+          WebkitBackdropFilter: 'saturate(160%) blur(2px)',
         }}
       >
-        {/* Tier badge with sparkle */}
-        <div
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 'var(--space-2, 8px)',
-            padding: '4px 12px',
-            borderRadius: 'var(--radius-pill)',
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: '0.06em',
-            textTransform: 'uppercase',
-            color: tierColor,
-            background: isPremium
-              ? 'rgba(245, 158, 11, 0.12)'
-              : 'rgba(56, 189, 248, 0.12)',
-            border: `1px solid ${tierColor}`,
-          }}
-        >
-          <span aria-hidden>✦</span>
-          {tierLabel} 限定
-        </div>
-
         {label && (
           <div
             style={{
-              fontSize: 16,
-              fontWeight: 600,
+              fontSize: 13,
+              fontWeight: 500,
               letterSpacing: '-0.01em',
-              lineHeight: 1.3,
-              color: 'var(--text-primary)',
+              lineHeight: 1.4,
+              color: 'var(--text-secondary)',
               textAlign: 'center',
-              maxWidth: 340,
+              maxWidth: 280,
             }}
           >
             {label}
           </div>
         )}
 
-        {bullets.length > 0 && (
-          <ul
-            style={{
-              listStyle: 'none',
-              padding: 0,
-              margin: 0,
-              display: 'grid',
-              gap: 4,
-              maxWidth: 320,
-            }}
-          >
-            {bullets.slice(0, 3).map((b, i) => (
-              <li
-                key={i}
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 'var(--space-2, 8px)',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  lineHeight: 1.4,
-                  color: 'var(--text-secondary)',
-                }}
-              >
-                <span aria-hidden style={{ color: tierColor, flexShrink: 0 }}>
-                  ✓
-                </span>
-                <span>{b}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-
+        {/* 小 CTA chip (pill、 button でなく link 感、 Aman 級「主張せず存在感」) */}
         {onUpgrade ? (
           <button
             type="button"
-            onClick={onUpgrade}
-            style={{
-              padding: 'var(--space-2, 8px) var(--space-5, 20px)',
-              fontSize: 13,
-              fontWeight: 600,
-              color: '#fff',
-              background: tierColor,
-              border: 'none',
-              borderRadius: 'var(--radius-pill)',
-              cursor: 'pointer',
-              transition: 'transform var(--motion-fast, 120ms) var(--ease-out-expo), box-shadow var(--motion-fast, 120ms) var(--ease-out-expo)',
-              boxShadow: isPremium
-                ? '0 4px 12px rgba(245, 158, 11, 0.3)'
-                : '0 4px 12px rgba(56, 189, 248, 0.3)',
+            onClick={() => {
+              try { onUpgrade(feature); } catch { onUpgrade(); }
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
+            style={{
+              padding: '4px 14px',
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: '0.02em',
+              color: tierColor,
+              background: 'transparent',
+              border: `1px solid ${tierColor}`,
+              borderRadius: 'var(--radius-pill, 9999px)',
+              cursor: 'pointer',
+              transition: 'background var(--motion-fast, 120ms) ease, color var(--motion-fast, 120ms) ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = tierColor;
+              e.currentTarget.style.color = '#fff';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = tierColor;
+            }}
           >
-            {ctaText}
+            {ctaText} →
           </button>
         ) : (
           <div

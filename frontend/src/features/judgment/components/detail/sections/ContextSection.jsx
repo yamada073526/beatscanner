@@ -82,6 +82,10 @@ export default function ContextSection({
   isScrollV1,
   useWorkspaceReader,
   expandedSections,
+  // v138.6 R7-K (2026-05-30): v4 mode 時に末尾 AI 詳細レポート (DetailReport) を hide。
+  // 図解 (StickyDiagramAccordion) が Pane 3 上部に mount 済で重複、 user dogfood「消して良い」 要望。
+  // legacy mode (isV4=false) では従来通り render (BC 担保)。
+  isV4 = false,
 }) {
   return (
     <>
@@ -155,8 +159,9 @@ export default function ContextSection({
         </div>
       )}
 
-      {/* === Sprint 3: DetailReport → AccordionSection wrap + useIntersectionLazy 連動 === */}
-      {result && (
+      {/* === Sprint 3: DetailReport → AccordionSection wrap + useIntersectionLazy 連動 ===
+          v138.6 R7-K (2026-05-30): isV4 で 図解 が上部 mount 済の場合は重複 hide。 */}
+      {result && !isV4 && (
         isScrollV1 ? (
           <PremiumLock
             feature="claude_opus_report"
