@@ -1039,9 +1039,15 @@ export default function JudgmentDetail({
                   guidance={guidance}
                 />
               ) : (
+                // v138.6 R7-M (2026-05-30): 図解 placeholder の feature を claude_opus_report (Premium)
+                // から earnings_8q (Pro) に変更で色統一 (Cup-Handle と同 cyan)。
+                // 真因: LP は Pro tier のみ訴求 (¥980/月)、 Premium tier は未公開。 図解 banner に
+                // 「Premium で解放」 orange が出ると user は LP にない tier を見て混乱。 全 Pro 統一で
+                // tier 体系の見え方を release LP と整合。 Premium tier は将来別途 LP に追加してから差別化。
+                // 機能本体は依然 Pro 限定 render なので変更なし、 色のみ統一目的。
                 <PremiumLock
                   key="sticky-diagram-locked"
-                  feature="claude_opus_report"
+                  feature="earnings_8q"
                   plan={plan}
                   label="図解で 5 条件・ビジネスを 2 秒で理解"
                   onUpgrade={detailContext.onUpgrade}

@@ -1110,6 +1110,16 @@ export default function App() {
         {/* Phase 2.5 hotfix #6: Pane 3 単独表示時でも「新規買付」 chip から modal を開けるよう
             App.jsx root に TransactionEntryModal を常駐 mount。
             IndicesView.PortfolioActions の listener / modal は維持 (Pane 2 portfolio view 用)。 */}
+        {/* v138.6 R7-I2 (2026-05-30): workspace mode でも UpgradeModal を mount。
+            旧: 「Pro で解放」 click で upgrade.open() は呼ばれるが、 modal component が
+            workspace 側 render tree に存在せず無反応 (classic SPA mode の line 2581 のみ mount)。
+            workspace path にも mount で free user の upgrade flow 復元。 */}
+        <UpgradeModal
+          {...upgrade.props}
+          onCheckout={startCheckout}
+          checkoutLoading={checkoutLoading}
+          user={user}
+        />
         <TransactionEntryModal
           open={rootAddTxOpen}
           onClose={() => { setRootAddTxOpen(false); setRootAddTxTicker(''); }}
