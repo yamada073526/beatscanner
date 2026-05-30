@@ -10,7 +10,7 @@
  * - Premium tier の amber/gold ではなく、 cyan brand 色で統一 (Premium tier の
  *   gold UI 完全実装は別タスク、 現状は brand 色で十分訴求)
  * - 「気になる銘柄を 5 条件チェック」 と同様のシンプル outlined CTA pattern
- * - 価格 (¥1,800/月) は CTA hover で表示 (情報の階層化)
+ * - 価格 (¥980/月) は CTA hover で表示 (情報の階層化、 Pro 限定 eyebrow と整合)
  *
  * Props:
  *   title       string  - 訴求機能名 (例: 「銘柄別 α 貢献度」)
@@ -178,7 +178,7 @@ export default function ProTeaser({
                 marginLeft: 4,
               }}
             >
-              ¥1,800/月
+              ¥980/月
             </span>
             <span style={{ fontSize: 14, lineHeight: 1 }}>→</span>
           </button>
