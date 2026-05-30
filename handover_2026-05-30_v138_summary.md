@@ -293,7 +293,33 @@ frontend (`DiagramCard.jsx`):
 | v138.6 R3 hotfix | 724ddc8 | `index-CPAUQHb9.js` | EPS BEAT frontend 配線 (epsBeatPct → guidance.eps.surprise_pct) + hover 強化 |
 | v138.6 R4 hotfix | 896c069 | `index-Bkdw-Vz3.js` | 「この条件の解説」 ボタンを cyan accent chip 風に強化 |
 | v138.6 R5 hotfix | ccbdeb3 | `index-BQWDGn3B.js` | 3 体合議 verdict → 「この条件の解説」 icon-only ⓘ minimal 統一 |
-| v138.6 R6 feat | 4f3a092 | (deploy 中) | workspace Pane 1 nav 末尾 UserFooter + LogOut button 追加 |
+| v138.6 R6 feat | 4f3a092 | `index-ifwCUlr6.js` | workspace Pane 1 nav 末尾 UserFooter + LogOut button 追加 |
+| v138.6 R7 P0+P1 | 423a642 | `index-BVL8weEE.js` | LogOut redirect + Trust Cliff data leak gate + login button 復旧 |
+
+## v138.6 R7 緊急 hotfix (user dogfood 7 巡目、 P0+P1)
+
+### 🔴 R7-A P0: LogOut → LP 自動 navigate
+- 真因: R6 では signOut() のみで URL 留まり、 user は workspace の非ログイン状態に陥り再ログイン不可
+- 修正: UserFooter logout に `window.location.href = '/'` 追加、 LP 強制遷移 + workspace state full reload
+
+### 🔴 R7-B P0 (最重要 Trust Cliff): 非ログインで Premium データ leak
+- 真因: CupPivotCard / BuyZoneCard / SellZoneCard / DistributionDaysCard が ticker prop だけで isPro
+  / isPremiumUser を無視、 demo mode で pivot $217.90 / 損切 $200.47 / サポート $195.06 / Dist Days 5/25
+  等 Premium データを露出。 CLAUDE.md「Trust Cliff (信頼の崖) は最重要バグカテゴリ」 重大違反
+- JudgmentDetail.jsx: 4 cards 全てに `plan === 'premium'` conditional render 追加、 非 premium 完全非表示
+- StockPriceChart.jsx: `cupRequiresPro` 時に EarningsTooltip へ cupHandle / pillar2Markers を null で渡す、
+  hover tooltip での pivot/損切り目安露出を gate
+- ProTeaser placeholder (marketing 配慮) は P0 leak 止めを優先で後続 sprint、 まず露出停止
+- 残 leak 候補: TriageBanner 三層 / 図解 内 Cup-Handle 言及 等は user feedback 待ち
+
+### 🟠 R7-C P1: 非ログインで「ログイン」 text click 不可
+- 真因: window.dispatchEvent('bs:open-login') を listener なしで dispatch、 click 無反応
+- TriageBanner.jsx NoSessionHint: span → button + useAuth().signInWithGoogle() 直接接続
+- ProfileCard.jsx「Google ログインで無制限」 link 2 箇所: event dispatch → signInWithGoogle 直接接続
+
+### 後続 sprint (R7-D + R7-E)
+- 🟡 R7-D 「分析データを取得中...」 永遠ローディング
+- 🟢 R7-E Cup-Handle 鍵 icon 改修 (Aman 級 brand 合わない、 lucide-react 品格 icon 候補)
 
 ## v138.6 R5 改善 (3 体合議 verdict、 user dogfood 6 巡目)
 - user feedback「現状 cyan pill chip は自己主張が強い、 ?だけで十分意味は伝わる」 要望
