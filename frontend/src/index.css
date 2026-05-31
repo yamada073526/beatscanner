@@ -5041,6 +5041,11 @@ body {
   align-items: center;
   height: 18px;
 }
+/* user dogfood: skeleton が見えない真因 = .ghost-bar に height 指定が無く 0px だった。
+   qhistory-ghost 配下に限定して height を付与 (LockedSection 等の他 ghost-bar には影響させない)。 */
+.qhistory-ghost .ghost-bar {
+  height: 11px;
+}
 
 /* #7-c: mobile breakpoint sm→md 変更 (売上 Beat/Miss fallback 確保)
    600px → 640px: iPhone SE (375px) では revenue_surprise は既表示のまま維持
@@ -5194,10 +5199,7 @@ body {
   align-items: center;
 }
 .qh-tip {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
+  /* position/left/top/transform は InfoTip が inline (position:fixed) で付与 → 親 overflow を escape */
   z-index: 60;
   width: max-content;
   max-width: 260px;
@@ -5212,11 +5214,11 @@ body {
   line-height: 1.6;             /* 読みやすい行間 */
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
   pointer-events: none;
-  animation: qh-tip-in 0.12s ease-out;  /* 即時にふわっと (1 秒待ち解消) */
+  animation: qh-tip-in 0.12s ease-out;  /* opacity のみ fade (transform は inline 位置決め用) */
 }
 @keyframes qh-tip-in {
-  from { opacity: 0; transform: translateX(-50%) translateY(3px); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 /* hover できると気付かせる affordance: 健全性ラベル/ヘッダーは点線下線、 hover で発光・明度up */
 .qh-health-label,

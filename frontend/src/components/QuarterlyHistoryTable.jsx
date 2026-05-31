@@ -39,16 +39,44 @@ function verdictLabel(verdict) {
 // を解消 (user dogfood)。 CitationChip の popover パターン踏襲 (onMouseEnter で即 open)。
 // 親 .qh-tip-wrap:hover で trigger 側に発光/拡大の affordance を付与 (CSS 側)。
 function InfoTip({ children, content }) {
-  const [tipOpen, setTipOpen] = useState(false);
+  const ref = useRef(null);
+  const [pos, setPos] = useState(null); // null=非表示 | { left, top, placement }
   if (!content) return children;
+  // position: fixed + viewport 座標で描画 → 親の overflow:auto/hidden を escape (上端クリップ解消)。
+  // viewport 上部に余白が無ければ下方向に flip。
+  const openTip = () => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const placement = r.top > 140 ? 'above' : 'below';
+    setPos({
+      left: Math.round(r.left + r.width / 2),
+      top: Math.round(placement === 'above' ? r.top - 8 : r.bottom + 8),
+      placement,
+    });
+  };
   return (
     <span
+      ref={ref}
       className="qh-tip-wrap"
-      onMouseEnter={() => setTipOpen(true)}
-      onMouseLeave={() => setTipOpen(false)}
+      onMouseEnter={openTip}
+      onMouseLeave={() => setPos(null)}
     >
       {children}
-      {tipOpen && <span role="tooltip" className="qh-tip">{content}</span>}
+      {pos && (
+        <span
+          role="tooltip"
+          className="qh-tip"
+          style={{
+            position: 'fixed',
+            left: pos.left,
+            top: pos.top,
+            transform: pos.placement === 'above' ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
+          }}
+        >
+          {content}
+        </span>
+      )}
     </span>
   );
 }
@@ -208,7 +236,7 @@ const COLUMN_DEFS = {
   //   - bold + 短ラベル「CF良好 / 要確認」 で 2 秒理解
   cfps_gt_eps: {
     header: (
-      <InfoTip content="営業CFPS が EPS を上回るか（利益が現金で裏付けられているか）を判定します。じっちゃま5条件#5（営業CFPS > EPS）。各行のラベルにマウスを乗せると四半期ごとの根拠が出ます。">
+      <InfoTip content="営業CFPS が EPS を上回るか（利益が現金で裏付けられているか）を判定します。ファンダメンタル5条件#5（営業CFPS > EPS）。各行のラベルにマウスを乗せると四半期ごとの根拠が出ます。">
         <span className="qh-health-header">
           <span style={{ fontSize: 11, color: 'var(--color-accent)', fontWeight: 700 }}>★</span>
           健全性
@@ -238,8 +266,8 @@ const COLUMN_DEFS = {
         ? `営業CFPS $${cfps.toFixed(2)} ${r.cfps_gt_eps ? '≥' : '<'} EPS $${eps.toFixed(2)}`
         : '';
       const content = r.cfps_gt_eps
-        ? `${cmp}${cmp ? ' — ' : ''}利益が営業キャッシュフローで裏付けられています（健全）。判定基準: 営業CFPS > EPS（じっちゃま5条件#5）`
-        : `${cmp}${cmp ? ' — ' : ''}利益に対し営業キャッシュフローの裏付けが弱い四半期です（EPS は良くても現金化が伴っていない）。判定基準: 営業CFPS > EPS（じっちゃま5条件#5）`;
+        ? `${cmp}${cmp ? ' — ' : ''}利益が営業キャッシュフローで裏付けられています（健全）。判定基準: 営業CFPS > EPS（ファンダメンタル5条件#5）`
+        : `${cmp}${cmp ? ' — ' : ''}利益に対し営業キャッシュフローの裏付けが弱い四半期です（EPS は良くても現金化が伴っていない）。判定基準: 営業CFPS > EPS（ファンダメンタル5条件#5）`;
       return (
         <InfoTip content={content}>
           <span className="qh-health-label" style={{ color: colorVar }}>
