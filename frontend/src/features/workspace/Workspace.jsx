@@ -45,6 +45,8 @@ import PaneDetailView from './PaneDetailView.jsx';
 import { FtdChipRow, FtdRailDots } from './Pane1MacroSection.jsx';
 // v120 hotfix (user dogfood req): rail mode の銘柄 tile を 2 文字 monogram → CompanyLogo (TV/FMP/頭文字 fallback) へ
 import CompanyLogo from '../../components/CompanyLogo.jsx';
+// v146: pane render throw (特に lazy ScreenerPane の stale chunk) で全画面真っ白になる穴を塞ぐ。
+import PaneErrorBoundary from '../../components/PaneErrorBoundary.jsx';
 // v120 Sprint 3 (Frontend verdict mandatory fix 2): WorkspaceScreenerModal を lazy 化
 // (modal は Pro user が screener button 押下時のみ open、 chunk reuse + 初期 bundle 軽量化)
 const WorkspaceScreenerModal = lazy(() => import('./WorkspaceScreenerModal.jsx'));
@@ -941,7 +943,8 @@ export default function Workspace({
         headerHeight={headerHeight}
         pane1={pane1Collapsed ? <Pane1NavRail items={items} /> : <Pane1Nav items={items} />}
         pane2={
-          isIndices ? (
+          <PaneErrorBoundary label="pane2" key={isIndices ? 'pane2-indices' : 'pane2-list'}>
+          {isIndices ? (
             <IndicesList
               holdings={holdings}
               portfolioPrices={portfolioPrices}
@@ -969,10 +972,12 @@ export default function Workspace({
                 />
               </div>
             </div>
-          )
+          )}
+          </PaneErrorBoundary>
         }
         pane3={
-          isScreener ? (
+          <PaneErrorBoundary label="pane3" key={`pane3-${activeTab}`}>
+          {isScreener ? (
             // v125 Phase 4-A Sprint 4-A-2 (stub): ScreenerPane.jsx に lifting。 Hero + Explorer の
             // 完全 layout は Sprint 4-A-3 (user gate 3 通過後) で fetch 実装予定。
             <Suspense fallback={<div style={{ padding: 16, color: 'var(--text-muted)' }}>Loading screener…</div>}>
@@ -997,7 +1002,8 @@ export default function Workspace({
               detailContext={detailContext}
               useWorkspaceReader
             />
-          )
+          )}
+          </PaneErrorBoundary>
         }
       />
       {/* v120 Sprint 3: 銘柄スクリーナー modal (workspace mode から CustomScreenerPanel access 復活).

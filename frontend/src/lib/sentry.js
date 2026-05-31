@@ -56,6 +56,25 @@ export async function initSentry() {
   }
 }
 
+/**
+ * 任意のエラーを Sentry に送る (ErrorBoundary 等から呼ぶ).
+ *
+ * 旧 ArticleErrorBoundary は `window.Sentry?.captureException` を使っていたが、
+ * `@sentry/react` は `window.Sentry` を生やさないため実質 no-op だった。
+ * ここで init 済 SDK module (`_sentry`) 経由で確実に送る。
+ *
+ * @param {unknown} error
+ * @param {{ tags?: Record<string,string>, extra?: Record<string,unknown> }} [context]
+ */
+export function captureException(error, context) {
+  if (!_sentry) return;  // DSN 未設定 / init 失敗時は silent skip (アプリ機能維持)
+  try {
+    _sentry.captureException(error, context);
+  } catch {
+    // reporter failure を握り潰す (UI 表示優先)
+  }
+}
+
 // handover v68 §2 #6: 選択中の口座 id を Sentry tag に固定。
 // 複数口座 user で error が発生したときに「どの口座経路で起きたか」を即特定するための
 // observability 拡張。id=null は tag を削除して baseline (全口座 rollup) 扱いに戻す。

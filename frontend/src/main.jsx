@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
+import PaneErrorBoundary from './components/PaneErrorBoundary.jsx';
 import './index.css';
 
 // 広告ブロッカーが analytics.js をブロックする (ERR_BLOCKED_BY_CLIENT) と
@@ -27,6 +28,10 @@ import('./lib/sentry.js').then(async (m) => {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    {/* v146: 最終ネット。 pane 個別の boundary を抜けた render throw / chunk error でも
+        全画面真っ白 (silent unmount) にせず、 branded fallback + 再読み込み誘導に落とす。 */}
+    <PaneErrorBoundary label="app-root">
+      <App />
+    </PaneErrorBoundary>
   </React.StrictMode>,
 );
