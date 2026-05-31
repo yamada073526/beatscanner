@@ -5052,36 +5052,39 @@ def _verdict(actual: float | None, estimated: float | None) -> tuple[str, float 
 _REV_BASIS_MISMATCH_PCT = 40.0
 
 
-def _is_bank_like(sector: str | None, industry: str | None) -> bool:
-    """銀行・与信業 (グロス金利収入で revenue 総収益 vs 純収益 が構造的に乖離) か判定。
-    FMP industry: 'Banks - Diversified/Regional', 'Credit Services', 'Mortgage Finance' 等。
-    保険 (Insurance) / 決済 (Financial - Data & Stock Exchanges 等) / 資産運用 は対象外 (売上信頼可)。"""
+def _rev_surprise_threshold(sector: str | None, industry: str | None) -> float:
+    """売上サプライズを保留する |%| 閾値を industry 別に返す (FMP industry 文字列で判定)。
+    - 銀行 ('Banks - Diversified/Regional' 等): **0 = 無条件保留**。 revenue=総収益 (グロス金利込み)
+      vs estimate=純収益 が常に乖離し、 サプライズは常に無意味。
+    - 与信/モーゲージ ('Financial - Credit Services' / 'Mortgage'): **18**。 COF/AXP 等の lender は
+      乖離しやすいが、 FMP が同 industry に混ぜている payment network (V/MA、 実測 ±11%) を巻き込まない閾値。
+    - その他 (保険/証券/資産運用/非金融): **40** (明らかな非現実のみ)。"""
     ind = (industry or "").strip().lower()
-    if not ind:
-        return False
     if "bank" in ind:
-        return True
-    return ind in ("credit services", "mortgage finance", "financial - mortgages")
+        return 0.0
+    if "credit services" in ind or "mortgage" in ind:
+        return 18.0
+    return 40.0
 
 
 def _guard_revenue_basis_mismatch(
     rev_label: str, rev_pct: float | None, rev_reason: str | None,
-    signal_quality: dict | None = None, is_bank: bool = False,
+    signal_quality: dict | None = None, threshold: float = 40.0,
 ) -> tuple[str, float | None, str | None, str | None]:
-    """売上サプライズが信頼できない場合に判定保留にする。
-    - is_bank=True: 銀行・与信業は基準相違が常態なので magnitude 無関係に無条件保留。
-    - それ以外: |surprise| > 40% (明らかな非現実) のみ保留。
+    """売上サプライズが信頼できない (集計基準ミスマッチ疑い) なら判定保留にする。
+    - threshold <= 0 (銀行): magnitude 無関係に無条件保留。
+    - それ以外: |surprise| > threshold (与信18 / 通常40) で保留。
     Returns: (rev_label, rev_pct, rev_reason, rev_note)。 signal_quality dict があれば in-place で confidence 降格。"""
-    if is_bank or (rev_pct is not None and abs(rev_pct) > _REV_BASIS_MISMATCH_PCT):
+    if threshold <= 0 or (rev_pct is not None and abs(rev_pct) > threshold):
         if isinstance(signal_quality, dict):
             signal_quality["confidence"] = "low"
             signal_quality["basis_mismatch"] = True
-        if is_bank:
+        if threshold < 40.0:  # 金融 (銀行・与信)
             return (
                 "unknown",
                 None,
-                "銀行・与信業は売上の集計基準 (総収益と純収益) が異なり、サプライズ比較を保留しています",
-                "銀行・与信業は売上の集計基準が異なるため、サプライズ比較は無効です",
+                "金融機関 (銀行・与信) は売上の集計基準 (総収益と純収益) が異なり、サプライズ比較を保留しています",
+                "金融機関は売上の集計基準が異なるため、サプライズ比較は無効です",
             )
         return (
             "unknown",
@@ -6414,7 +6417,7 @@ async def _guidance_impl(ticker: str, request: Request) -> dict:
         sec_result = None
     if not isinstance(_sector_industry, tuple):
         _sector_industry = (None, None)
-    _is_bank = _is_bank_like(_sector_industry[0], _sector_industry[1])
+    _rev_threshold = _rev_surprise_threshold(_sector_industry[0], _sector_industry[1])
 
     surprises: list[dict] = eps_result.get("surprises", [])
     income_q: list[dict] = eps_result.get("income_q", [])
@@ -6482,9 +6485,9 @@ async def _guidance_impl(ticker: str, request: Request) -> dict:
         float(revenue_estimated) if revenue_estimated is not None else None,
     )
     # v144 content-quality guard: 売上の集計基準ミスマッチを判定保留。
-    #   v144-10: 銀行・与信業 (_is_bank) は magnitude 無関係に無条件保留 (総収益 vs 純収益 が常に乖離)。
+    #   v144-10: industry 別閾値 (_rev_threshold) — 銀行=0(無条件) / 与信=18 / その他=40。
     rev_label, rev_pct, rev_reason, _rev_mismatch_note = _guard_revenue_basis_mismatch(
-        rev_label, rev_pct, rev_reason, is_bank=_is_bank
+        rev_label, rev_pct, rev_reason, threshold=_rev_threshold
     )
     # consumers (GuidanceCard 再計算 / 図解 trends) が読む抑止フラグ。
     _rev_compare_unreliable = (rev_label == "unknown" and _rev_mismatch_note is not None)
