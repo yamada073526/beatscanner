@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { trackEvent } from './analytics.js';
 
 /**
  * Centralised upgrade-modal state.
@@ -16,6 +17,9 @@ export function useUpgradeModal() {
   function open(name) {
     setFeatureName(name);
     setIsOpen(true);
+    // v142 計測: どの機能 lock が paywall を呼ぶか (= tier 配分の答え合わせ、 CRO verdict)。
+    // 全 UpgradeModal 表示の単一集約点。 env 未設定なら no-op。
+    trackEvent('paywall_view', { feature_name: name || '' });
   }
 
   function close() {

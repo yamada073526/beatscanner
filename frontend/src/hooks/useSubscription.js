@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase.js';
+import { trackEvent } from '../lib/analytics.js';
 
 const ACTIVE_STATUSES = ['active', 'trialing'];
 
@@ -62,6 +63,8 @@ export function useSubscription(user) {
   // 'premium' を指定すると Premium tier (¥1,800/月) checkout に進む。
   const startCheckout = useCallback(async (plan = 'monthly', tier = 'pro') => {
     if (!supabase || !user) return;
+    // v142 計測: tier × plan 別の checkout 着火 (paywall→課金 funnel、 CRO verdict)。 env 未設定なら no-op。
+    trackEvent('checkout_start', { tier, plan });
     setCheckoutLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();

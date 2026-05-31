@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase.js';
+import { trackEvent } from '../lib/analytics.js';
 
 export function useAuth() {
   const [user, setUser] = useState(null);
@@ -28,6 +29,8 @@ export function useAuth() {
 
   async function signInWithGoogle() {
     if (!supabase) return;
+    // v142 計測: Google ログイン click (conversion intent)。 env 未設定なら no-op。
+    trackEvent('login_start', {});
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin },

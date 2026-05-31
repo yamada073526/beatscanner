@@ -16,6 +16,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { analyze, demoAnalyze, fetchEtfInfo, fetchGuidance, fetchGuidanceBasic } from '../../../api.js';
 import { useWorkspaceStore } from '../../../state/workspaceStore.js';
+import { trackEvent } from '../../../lib/analytics.js';
 
 /** 同銘柄の再訪を 0 秒化する result キャッシュ TTL (10 分)。F5 で消えるメモリキャッシュ。 */
 const RESULT_CACHE_TTL = 10 * 60 * 1000;
@@ -78,6 +79,8 @@ export function useJudgmentResult({
       const t = normalizeTicker(sym || ticker);
       if (!t) return;
       setTicker(t);
+      // v142 計測: 銘柄分析の着火 (core engagement、 demo/pro 別)。 env 未設定なら no-op。
+      trackEvent('analyze_run', { ticker: t, is_demo: useDemo });
       // 2026-05-12 fix: Cmd+K → Enter で Pane 3 詳細が開かない問題の修正。
       // workspace mode では Pane 3 detail は workspaceStore.activeTicker (→ JudgmentContext.selectedTicker
       // via TickerBridge) で駆動される。runAnalyze は legacy ticker state しか更新していなかったため、
@@ -206,6 +209,8 @@ export function useJudgmentResult({
     async (t) => {
       const sym = (t || '').toUpperCase();
       if (!sym) return;
+      // v142 計測: LP からの demo 銘柄 click (funnel 入口、 LP→demo 転換)。 env 未設定なら no-op。
+      trackEvent('lp_ticker_click', { ticker: sym });
       // v138.6 R7-F (2026-05-30): LP は logout 後の `?layout=classic` で表示されるため、
       // 銘柄 click 時 classic SPA で分析が完結する regression。 user dogfood「銘柄リンクをクリックすると、
       // 旧 UI の銘柄分析へ飛びます」 要望。 修正: classic URL を検知したら ?ticker=<sym> で workspace
