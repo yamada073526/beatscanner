@@ -34,6 +34,25 @@ function verdictLabel(verdict) {
   return '—';
 }
 
+// 即時表示・複数行可・hover で気付かせるカスタムツールチップ。
+// native title の「1 秒待たないと出ない / 枠が窮屈 / hover できると気付けない / ? カーソルがストレス」
+// を解消 (user dogfood)。 CitationChip の popover パターン踏襲 (onMouseEnter で即 open)。
+// 親 .qh-tip-wrap:hover で trigger 側に発光/拡大の affordance を付与 (CSS 側)。
+function InfoTip({ children, content }) {
+  const [tipOpen, setTipOpen] = useState(false);
+  if (!content) return children;
+  return (
+    <span
+      className="qh-tip-wrap"
+      onMouseEnter={() => setTipOpen(true)}
+      onMouseLeave={() => setTipOpen(false)}
+    >
+      {children}
+      {tipOpen && <span role="tooltip" className="qh-tip">{content}</span>}
+    </span>
+  );
+}
+
 // ── ロード中 / 非 Pro 用のゴースト行 ─────────────────────
 export function QuarterlyHistoryGhost() {
   return (
@@ -189,13 +208,12 @@ const COLUMN_DEFS = {
   //   - bold + 短ラベル「CF良好 / 要確認」 で 2 秒理解
   cfps_gt_eps: {
     header: (
-      <span
-        title="営業CFPS が EPS を上回るか（利益が現金で裏付けられているか）を判定。じっちゃま5条件#5（CFPS > EPS）。各セルにマウスを乗せると四半期ごとの根拠が出ます。"
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'help' }}
-      >
-        <span style={{ fontSize: 11, color: 'var(--color-accent)', fontWeight: 700 }}>★</span>
-        健全性
-      </span>
+      <InfoTip content="営業CFPS が EPS を上回るか（利益が現金で裏付けられているか）を判定します。じっちゃま5条件#5（営業CFPS > EPS）。各行のラベルにマウスを乗せると四半期ごとの根拠が出ます。">
+        <span className="qh-health-header">
+          <span style={{ fontSize: 11, color: 'var(--color-accent)', fontWeight: 700 }}>★</span>
+          健全性
+        </span>
+      </InfoTip>
     ),
     headerClass: 'qh-num',
     cellClass: (r) => {
@@ -204,7 +222,11 @@ const COLUMN_DEFS = {
     },
     render: (r) => {
       if (r.cfps_gt_eps === null || r.cfps_gt_eps === undefined) {
-        return <span style={{ color: 'var(--text-muted)', cursor: 'help' }} title="営業CFPS または EPS が取得できず、健全性を判定できません">—</span>;
+        return (
+          <InfoTip content="営業CFPS または EPS が取得できず、健全性を判定できません">
+            <span className="qh-health-label" style={{ color: 'var(--text-muted)' }}>—</span>
+          </InfoTip>
+        );
       }
       const Icon = r.cfps_gt_eps ? CheckCircle2 : XCircle;
       const label = r.cfps_gt_eps ? 'CF良好' : '要確認';
@@ -215,24 +237,16 @@ const COLUMN_DEFS = {
       const cmp = (Number.isFinite(cfps) && Number.isFinite(eps))
         ? `営業CFPS $${cfps.toFixed(2)} ${r.cfps_gt_eps ? '≥' : '<'} EPS $${eps.toFixed(2)}`
         : '';
-      const title = r.cfps_gt_eps
-        ? `${cmp} — 利益が営業キャッシュフローで裏付けられています（健全）。判定基準: 営業CFPS > EPS（じっちゃま5条件#5）`
-        : `${cmp} — 利益に対し営業キャッシュフローの裏付けが弱い四半期です（EPS は良くても現金化が伴っていない）。判定基準: 営業CFPS > EPS（じっちゃま5条件#5）`;
+      const content = r.cfps_gt_eps
+        ? `${cmp}${cmp ? ' — ' : ''}利益が営業キャッシュフローで裏付けられています（健全）。判定基準: 営業CFPS > EPS（じっちゃま5条件#5）`
+        : `${cmp}${cmp ? ' — ' : ''}利益に対し営業キャッシュフローの裏付けが弱い四半期です（EPS は良くても現金化が伴っていない）。判定基準: 営業CFPS > EPS（じっちゃま5条件#5）`;
       return (
-        <span
-          title={title}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-            fontWeight: 600,
-            color: colorVar,
-            cursor: 'help',
-          }}
-        >
-          <Icon size={14} strokeWidth={2} />
-          <span>{label}</span>
-        </span>
+        <InfoTip content={content}>
+          <span className="qh-health-label" style={{ color: colorVar }}>
+            <Icon size={14} strokeWidth={2} />
+            <span>{label}</span>
+          </span>
+        </InfoTip>
       );
     },
   },
@@ -262,6 +276,9 @@ export default function QuarterlyHistoryTable({ ticker, limit = 8, columns, halo
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // user dogfood: cache 済 ticker は即 load で skeleton が知覚できない → 最小 280ms は skeleton を表示し
+  // 「読み込み中」 を必ず伝える (空白で「止まった?」 と不安にさせない)。 ticker ごとにリセット。
+  const [minElapsed, setMinElapsed] = useState(false);
   // Phase 2.7 Sprint 1 #1': Tier M halo sweep ref (1 回限り)
   const haloRef = useRef(null);
   // Phase 2.9 Sprint 2 #Bug2: haloTriggerRef あり (accordion-controlled) なら IO skip
@@ -284,11 +301,19 @@ export default function QuarterlyHistoryTable({ ticker, limit = 8, columns, halo
   //         useEffect 再発火 → trigger 呼出で halo 発火。
   //   data-halo-fired guard で 2 回目発火防止 (既存 hook の仕様)。
   useEffect(() => {
-    if (triggerOnMount && data) {
+    // data + minElapsed 両方揃って table が実描画された後に halo を発火 (skeleton 中は ref が null)。
+    if (triggerOnMount && data && minElapsed) {
       triggerOnAccordionOpen?.();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [triggerOnMount, data]);
+  }, [triggerOnMount, data, minElapsed]);
+
+  // skeleton 最小表示タイマー (ticker ごとにリセット)
+  useEffect(() => {
+    setMinElapsed(false);
+    const t = setTimeout(() => setMinElapsed(true), 280);
+    return () => clearTimeout(t);
+  }, [ticker]);
 
   useEffect(() => {
     if (!ticker) return;
@@ -329,7 +354,8 @@ export default function QuarterlyHistoryTable({ ticker, limit = 8, columns, halo
       </p>
     );
   }
-  if (!data) return <div data-testid="quarterly-history-table-wrapper"><QuarterlyHistoryGhost /></div>;
+  // data 未取得、 または最小表示時間 (280ms) 未経過 → skeleton。 cache 即 load でも skeleton を必ず一瞬見せる。
+  if (!data || !minElapsed) return <div data-testid="quarterly-history-table-wrapper"><QuarterlyHistoryGhost /></div>;
 
   const rows = data.history;
 
@@ -447,17 +473,17 @@ export default function QuarterlyHistoryTable({ ticker, limit = 8, columns, halo
           </div>
           <div className="qhistory-streak-grid" role="img" aria-label={`直近 ${totalCells} 四半期の Beat/Miss strength`}>
             {streakCells.map((c, i) => (
-              <span
+              <InfoTip
                 key={`${c.period}-${i}`}
-                className={`qh-streak-cell qh-streak-${c.strength}`}
-                style={{ cursor: 'help' }}
-                title={`${c.period}｜EPS ${verdictLabel(c.epsV)}・売上 ${verdictLabel(c.revV)}｜${
+                content={`${c.period}｜EPS ${verdictLabel(c.epsV)}・売上 ${verdictLabel(c.revV)}｜${
                   c.strength === 'strong' ? 'EPS+売上 両方 Beat（最強）'
                   : c.strength === 'medium' ? '片方のみ Beat'
                   : c.strength === 'miss' ? 'いずれか Miss'
                   : '両方 In-line（予想どおり・中立、 マイナス要素ではありません）'
                 }`}
-              />
+              >
+                <span className={`qh-streak-cell qh-streak-${c.strength}`} />
+              </InfoTip>
             ))}
           </div>
         </div>
