@@ -6251,8 +6251,6 @@ def _compute_forward_outlook(
     last_reported_date: str | None,
     sector: str | None,
     industry: str | None,
-    recent_actual_rev: float | None = None,
-    recent_est_rev: float | None = None,
 ) -> dict | None:
     """来期コンセンサス (EPS/売上) と前年同期実績との YoY を計算。 全て Python 数値層 (HG aggregator 分離準拠)。
 
@@ -6323,32 +6321,20 @@ def _compute_forward_outlook(
     )
 
     # ── 売上 YoY: 基準ミスマッチガード横展開 (§4) ──
-    # 金融 (threshold < 40 = 銀行0/与信18/モーゲージ) は actual=総収益 vs consensus=純収益 の基準ミスマッチが
-    #   起こりうる。 per-ticker 検出: **直近報告四半期の FMP actual vs analyst consensus の乖離**で基準一致を判定。
-    #   (直近四半期の actual+consensus は scorecard コアで必ず存在 = year-ago consensus より data 可用性が高い。
-    #    基準=総/純 の別は構造的で四半期不変なので直近で判定可)。
-    #   - 銀行 (threshold 0): 無条件で基準相違扱い → 抑止。
-    #   - 与信 (threshold 18): 直近 actual vs consensus が 18% 超乖離 = 別基準 (COF: 総 vs 純) → 抑止。
-    #     乖離が小さければ同基準 (V/MA: 純 vs 純) → YoY 表示。 magnitude を YoY 自体に当てると COF の小さな
-    #     artifact (-4.1%) を見逃すため、 「actual vs consensus 乖離」 で判定するのが正 (content-audit FAIL 教訓)。
+    # 金融 (threshold < 40 = 銀行/与信/モーゲージ) は FMP revenue=総収益 (グロス金利込み) vs
+    #   analyst consensus=純収益 の基準ミスマッチが構造的に起こりうる。 来期売上 YoY は
+    #   「consensus(純, 来期) vs year-ago actual(総)」 の比較になり artifact が出る (AXP -1.6% / COF 等)。
+    #   per-ticker の乖離検出 (直近 actual vs consensus) を試みたが、 V/MA(real +11%) と AXP(artifact)
+    #   の recent 乖離が 8-13% で重複し閾値分離不能 (content-audit dogfood で確認)。
+    #   → **金融セクターの来期売上 YoY は一律抑止** (rev_compare_unreliable=true)。 説明可能で安全な不変条件:
+    #     「金融は売上の集計基準が曖昧なため来期売上比較は出さない、 EPS は基準問題が無いので出す」。
     # 非金融 (threshold == 40) は基準ミスマッチ非該当 + 高成長で YoY 大もありうる (NVDA +50%) ため cap なし。
     rev_yoy = None
     rev_unreliable = False
     threshold = _rev_surprise_threshold(sector, industry)
     if consensus_rev is not None and ya_rev is not None and ya_rev > 0:
-        basis_mismatch = False
         if threshold < 40.0:
-            if threshold <= 0:
-                basis_mismatch = True  # 銀行は無条件
-            elif (recent_actual_rev is not None and recent_est_rev is not None
-                  and recent_actual_rev != 0
-                  and abs((recent_est_rev - recent_actual_rev) / abs(recent_actual_rev) * 100) > threshold):
-                basis_mismatch = True  # 直近 actual(総) vs consensus(純) 乖離 = 別基準 (COF 等)
-            # 直近 actual vs consensus 乖離が threshold 以内 (V/MA: 純 vs 純) → 同基準 → 表示。
-            # 直近データ欠落時は判定不能だが、 与信は乖離が出やすいので「乖離未検出=同基準」 とみなし表示
-            #   (V/MA を誤抑止しない方を優先、 銀行は threshold 0 で別途無条件抑止済)。
-        if basis_mismatch:
-            rev_unreliable = True
+            rev_unreliable = True  # 金融は来期売上 YoY を一律抑止 (EPS YoY は別途表示)
         else:
             rev_yoy = round((consensus_rev - ya_rev) / abs(ya_rev) * 100, 1)
 
@@ -6520,9 +6506,6 @@ async def guidance_basic(ticker: str, request: Request) -> dict:
                 last_reported_date=surprise_date or income_date,
                 sector=sector_fwd,
                 industry=industry_fwd,
-                # 直近報告四半期の actual + consensus (基準ミスマッチ検出用、 scorecard と同値)
-                recent_actual_rev=float(revenue_actual) if revenue_actual is not None else None,
-                recent_est_rev=float(revenue_estimated) if revenue_estimated is not None else None,
             )
         except Exception as _fwd_e:
             print(f"[WARN] forward outlook compute failed for {ticker}: {_fwd_e}")

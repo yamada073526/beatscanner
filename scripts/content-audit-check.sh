@@ -50,14 +50,23 @@ for T in JPM USB COF; do
     echo "  FAIL: $T 銀行・与信なのに来期売上 YoY=$yoy を露出 (forward guard 回帰)"; FAIL=1
   fi
 done
-#   1d (v146 前方視界): 決済 network (V/MA) の来期売上は誤抑止しない (rev_compare_unreliable != true)。
-echo "[1d] forward: payment-network NOT over-suppressed (V/MA)"
-for T in V MA; do
-  unrel=$(curl -s --max-time 15 "$BASE/api/guidance/$T/basic" | jq -r '.forward.next_q.rev_compare_unreliable // false' 2>/dev/null)
-  if [ "$unrel" = "true" ]; then
-    echo "  FAIL: $T (決済) の来期売上が誤抑止 (forward over-suppress 回帰)"; FAIL=1
+#   1d (v146 前方視界): 金融セクター (与信 AXP/V/MA 含む) の来期"売上"YoY は一律抑止だが、
+#       "EPS"YoY は基準問題が無いので保持されること (graceful: 売上隠す/EPS出す)。
+#       V/MA/AXP の recent 乖離が 8-13% で重複し real(V/MA) と artifact(AXP) を閾値分離不能のため一律抑止。
+echo "[1d] forward: financial rev suppressed but EPS preserved (V/MA/AXP)"
+for T in V MA AXP; do
+  resp=$(curl -s --max-time 15 "$BASE/api/guidance/$T/basic")
+  rev=$(echo "$resp" | jq -r '.forward.next_q.rev_yoy_pct // "null"' 2>/dev/null)
+  eps=$(echo "$resp" | jq -r '.forward.next_q.eps_yoy_pct // "null"' 2>/dev/null)
+  fwd=$(echo "$resp" | jq -r 'if .forward then "yes" else "no" end' 2>/dev/null)
+  if [ "$fwd" = "no" ]; then
+    echo "  skip: $T no forward block (coverage)"
+  elif [ "$rev" != "null" ]; then
+    echo "  FAIL: $T 金融なのに来期売上 YoY=$rev を露出 (AXP artifact 回帰)"; FAIL=1
+  elif [ "$eps" = "null" ]; then
+    echo "  WARN: $T 来期 EPS YoY も null (赤字/カバレッジ起因なら可、 financial guard 過剰でなければOK)"
   else
-    echo "  ok: $T forward not over-suppressed"
+    echo "  ok: $T 売上抑止 + EPS YoY=$eps 保持 (graceful)"
   fi
 done
 
