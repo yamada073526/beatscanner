@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { fetchInsights, invalidateInsightsCache } from "../api.js";
 import InfoModal from "./InfoModal.jsx";
 import LockedSection, { InsightsGhost } from "./LockedSection.jsx";
 import { BarChart3, Search, TrendingUp, TrendingDown } from "lucide-react";
@@ -496,35 +497,49 @@ export default function InsightsPanel({ ticker, user, isPro, onUpgradeClick, onS
     setLoading(true);
     setData(null);
     setError(null);
-    // AbortController で 75 秒タイムアウト（BE は 60 秒で found:false 返却するが念のため）
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 75000);
-    const url = refetchKey > 0
-      ? `/api/insights/${ticker}?refresh=1`
-      : `/api/insights/${ticker}`;
-    fetch(url, { signal: controller.signal })
-      .then((r) => {
-        if (!r.ok) throw new Error(String(r.status));
-        return r.json();
-      })
+
+    // v144 #Pane3-perf: 「もう一度分析する」(refetchKey>0) は全 cache 層 (frontend coalesce + BE)
+    //   をバイパスする必要があるため、 専用 AbortController で raw fetch (?refresh=1)。
+    if (refetchKey > 0) {
+      // coalesce cache の stale entry を破棄 (refresh 後の再ナビで古い insights を返さない)
+      invalidateInsightsCache(ticker);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 75000);
+      fetch(`/api/insights/${ticker}?refresh=1`, { signal: controller.signal })
+        .then((r) => {
+          if (!r.ok) throw new Error(String(r.status));
+          return r.json();
+        })
+        .then((d) => { if (!cancelled) setData(d); })
+        .catch((err) => {
+          if (cancelled) return;
+          setError(err && err.name === "AbortError"
+            ? "分析に時間がかかっています。しばらくしてから再度お試しください"
+            : "取得に失敗しました");
+        })
+        .finally(() => {
+          clearTimeout(timeoutId);
+          if (!cancelled) setLoading(false);
+        });
+      return () => {
+        cancelled = true;
+        controller.abort();
+        clearTimeout(timeoutId);
+      };
+    }
+
+    // 通常 mount: fetchInsights (dedupGet 経由) で prefetchAll と coalesce。
+    //   二重 LLM call を防ぎ、 prefetch 済なら即取得。 75s hard timeout は fetchInsights 内蔵。
+    fetchInsights(ticker)
       .then((d) => { if (!cancelled) setData(d); })
       .catch((err) => {
         if (cancelled) return;
-        if (err && err.name === "AbortError") {
-          setError("分析に時間がかかっています。しばらくしてから再度お試しください");
-        } else {
-          setError("取得に失敗しました");
-        }
+        setError(err && String(err.message || "").includes("タイムアウト")
+          ? "分析に時間がかかっています。しばらくしてから再度お試しください"
+          : "取得に失敗しました");
       })
-      .finally(() => {
-        clearTimeout(timeoutId);
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-      controller.abort();
-      clearTimeout(timeoutId);
-    };
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [ticker, user, refetchKey]);
 
   // Pro CTA: App.jsx から渡された UpgradeModal オープナーを呼ぶ

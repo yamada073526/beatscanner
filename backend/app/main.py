@@ -6145,9 +6145,21 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
     return result
 
 
+# v144 #Pane3-perf: guidance/basic は Pane 3 の loading gate (= 初期描画を律速)。
+#   従来 cache 無しで毎回 FMP 2 本 (~2.5s)。 EPS/売上 actual + estimates は四半期更新のため
+#   6h in-memory cache は安全。 warm hit は ~0ms。 数値は変えず同一 computed verdict を返すだけで
+#   Hallucination Guard 非該当 (full /api/guidance と同じ 6h cache pattern)。
+_GUIDANCE_BASIC_CACHE: dict = {}  # ticker -> (ts, response dict)
+
+
 @app.get("/api/guidance/{ticker}/basic")
 async def guidance_basic(ticker: str, request: Request) -> dict:
     """EPS・売上高のみ高速返却（SEC/Claude APIなし）."""
+    _gb_key = ticker.upper().strip()
+    _gb_now = _time.time()
+    _gb_hit = _GUIDANCE_BASIC_CACHE.get(_gb_key)
+    if _gb_hit and _gb_now - _gb_hit[0] < GUIDANCE_CACHE_TTL:
+        return _gb_hit[1]
     fmp_key = _get_fmp_key(request)
     try:
         eps_result, rev_result = await asyncio.gather(
@@ -6222,7 +6234,7 @@ async def guidance_basic(ticker: str, request: Request) -> dict:
             isinstance(eps_result, dict) and eps_result.get("revenue_actual_fmp") is not None
         ) else ("yfinance" if revenue_actual is not None else "none")
 
-        return {
+        resp = {
             "ticker": ticker.upper(),
             "fiscal_period": fiscal_period,
             "date": surprise_date or income_date,
@@ -6256,6 +6268,9 @@ async def guidance_basic(ticker: str, request: Request) -> dict:
             "revenue_estimated": float(revenue_estimated) if revenue_estimated is not None else None,
             "revenue_data_note": None if revenue_estimated is not None else "企業が次期ガイダンスを公式に開示していません",
         }
+        # v144 #Pane3-perf: 成功 response のみ 6h cache (404 / error fallback は transient なので cache しない)
+        _GUIDANCE_BASIC_CACHE[_gb_key] = (_gb_now, resp)
+        return resp
     except HTTPException:
         raise
     except Exception as e:

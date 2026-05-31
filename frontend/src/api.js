@@ -23,6 +23,55 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
   }
 }
 
+/**
+ * v144 #Pane3-perf: GET coalescing layer.
+ * 真因: prefetchAll と各 panel の component fetch が同一 URL を二重〜三重に叩いていた
+ *   (guidance/basic 2x / analyst 3x / insights 2x / price-history 2x / news 2x / ir-links 2x)。
+ *   frontend に in-flight / 短期 TTL の dedup が無く、 prefetch が後続 mount を加速できていなかった。
+ * 修正: URL key の in-flight + 60s TTL micro-cache で 1 本化。
+ *   prefetch(t=0) の結果を panel mount(t≈2-3s) が即取得 → 体感 load 短縮 + backend 負荷/FMP quota 削減。
+ * 注意:
+ *   - 成功時のみ cache。 失敗 (!r.ok / network) は即削除して retry 可能に保つ
+ *   - consumer 間の参照共有による in-place mutation 事故を防ぐため返却時に必ず clone
+ *   - timeoutMs 指定で hard timeout (insights の長時間 LLM 用に 75s 等)
+ */
+const _getCache = new Map(); // url -> { ts, promise(raw json) }
+const _GET_COALESCE_TTL = 60_000; // 60s: prefetch → panel mount の race を確実に coalesce
+
+function _cloneJson(d) {
+  if (d == null || typeof d !== 'object') return d;
+  try {
+    return typeof structuredClone === 'function' ? structuredClone(d) : JSON.parse(JSON.stringify(d));
+  } catch {
+    return JSON.parse(JSON.stringify(d));
+  }
+}
+
+function dedupGet(url, { headers, ttl = _GET_COALESCE_TTL, timeoutMs = 0 } = {}) {
+  const now = Date.now();
+  const hit = _getCache.get(url);
+  if (hit && now - hit.ts < ttl) {
+    return hit.promise.then(_cloneJson);
+  }
+  const promise = (timeoutMs > 0
+    ? fetchWithTimeout(url, { headers }, timeoutMs)
+    : fetch(url, { headers })
+  ).then((r) => {
+    if (!r.ok) {
+      const e = new Error(`HTTP ${r.status}`);
+      e.status = r.status;
+      throw e;
+    }
+    return r.json();
+  });
+  // 失敗した entry は cache から外して retry 可能にする (identity guard で新しい entry を clobber しない)
+  promise.catch(() => {
+    if (_getCache.get(url)?.promise === promise) _getCache.delete(url);
+  });
+  _getCache.set(url, { ts: now, promise });
+  return promise.then(_cloneJson);
+}
+
 export async function analyze(ticker) {
   // Phase 2.9 Sprint 3 #Pane3-perf: 30s timeout で永遠分析中を撲滅
   const r = await fetchWithTimeout(`/api/analyze/${encodeURIComponent(ticker)}`, {
@@ -57,19 +106,33 @@ export async function searchTickers(q) {
 }
 
 export async function fetchGuidance(ticker) {
-  const r = await fetch(`/api/guidance/${encodeURIComponent(ticker)}`, {
-    headers: fmpHeaders(),
-  });
-  if (!r.ok) return null;
-  return r.json();
+  // v144 #Pane3-perf: dedupGet 経由 (prefetch と coalesce)
+  try {
+    return await dedupGet(`/api/guidance/${encodeURIComponent(ticker)}`, { headers: fmpHeaders() });
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchGuidanceBasic(ticker) {
-  const r = await fetch(`/api/guidance/${encodeURIComponent(ticker)}/basic`, {
-    headers: fmpHeaders(),
-  });
-  if (!r.ok) return null;
-  return r.json();
+  // v144 #Pane3-perf: dedupGet 経由。 prefetchAll と runAnalyze の二重発火 (= loading gate) を 1 本化
+  try {
+    return await dedupGet(`/api/guidance/${encodeURIComponent(ticker)}/basic`, { headers: fmpHeaders() });
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchInsights(ticker) {
+  // v144 #Pane3-perf: insights は cold で 24-60s (KB→Claude or on-demand RSS)。
+  //   prefetchAll と InsightsPanel の二重 LLM call を coalesce + 75s hard timeout で安全網。
+  return dedupGet(`/api/insights/${encodeURIComponent(ticker)}`, { timeoutMs: 75000 });
+}
+
+// v144 #Pane3-perf: 「もう一度分析する」(refresh) 時に coalesce cache の stale entry を破棄し、
+//   refresh 後の再ナビで古い insights が返らないようにする。
+export function invalidateInsightsCache(ticker) {
+  _getCache.delete(`/api/insights/${encodeURIComponent(ticker)}`);
 }
 
 export function prefetchGuidance(ticker) {
@@ -80,19 +143,22 @@ export function prefetchGuidance(ticker) {
 
 export function prefetchAll(ticker) {
   const t = encodeURIComponent(ticker);
-  // Judgment タブ上部 (analyze + ガイダンス用)
-  fetch(`/api/guidance/${t}/basic`, { headers: fmpHeaders() }).catch(() => {});
+  // v144 #Pane3-perf: 各 helper (dedupGet 経由) を呼ぶことで、 後続の panel mount fetch と
+  //   frontend cache を共有する。 これにより prefetch が「backend cache を温める」 だけでなく
+  //   「component の mount fetch を 0ms 化」 する (= 二重〜三重 fetch 解消 + 体感 load 短縮)。
+  // Judgment タブ上部 (analyze + ガイダンス用) — loading gate
+  fetchGuidanceBasic(ticker).catch(() => {});
   // チャート系
-  fetch(`/api/chart/${t}/summary`).catch(() => {});
-  fetch(`/api/price-history/${t}?period=1y`, { headers: fmpHeaders() }).catch(() => {});
-  // 市場の声 (cold 時 60 秒かかるため最優先)
-  fetch(`/api/insights/${t}`).catch(() => {});
-  // v40+: Judgment タブの残りパネル用 (news / ir-links / analyst) を先取り。
-  //   各 panel が mount 後に個別 fetch していたものを並列化。
-  //   合計プリフェッチ 7 endpoints — fire-and-forget なので帯域以外のコストなし。
-  fetch(`/api/news/${t}?limit=10`, { headers: fmpHeaders() }).catch(() => {});
-  fetch(`/api/ir-links/${t}`, { headers: fmpHeaders() }).catch(() => {});
-  fetch(`/api/analyst/${t}`).catch(() => {});
+  fetch(`/api/chart/${t}/summary`).catch(() => {}); // classic ChartTab 用 (Pane 3 未使用、 据置)
+  fetchPriceHistory(ticker, '1y').catch(() => {});
+  // v144: Pane 3 chart の technical overlay も先取り (StockPriceChart と同一 patterns 文字列で URL 一致)
+  fetchTechnical(ticker, 'cup_handle,sma_50,sma_200,rs,dma_cross').catch(() => {});
+  // 市場の声 (cold 時 24-60 秒かかるため最優先、 InsightsPanel と coalesce)
+  fetchInsights(ticker).catch(() => {});
+  // v40+: 残りパネル用 (news / ir-links / analyst)。 各 panel mount fetch と coalesce。
+  fetchNews(ticker, 10).catch(() => {});
+  fetchIRLinks(ticker).catch(() => {});
+  fetchAnalyst(ticker).catch(() => {});
 }
 
 export async function fetchScreener(category = 'gainers') {
@@ -107,20 +173,24 @@ export async function fetchScreener(category = 'gainers') {
 }
 
 export async function fetchPriceHistory(ticker, period = '1y') {
-  const r = await fetch(`/api/price-history/${encodeURIComponent(ticker)}?period=${period}`, {
-    headers: fmpHeaders(),
-  });
-  if (!r.ok) return { prices: [], earnings: [] };
-  return r.json();
+  // v144 #Pane3-perf: dedupGet 経由 (prefetch '1y' と StockPriceChart の mount fetch を coalesce)
+  try {
+    return await dedupGet(`/api/price-history/${encodeURIComponent(ticker)}?period=${period}`, { headers: fmpHeaders() });
+  } catch {
+    return { prices: [], earnings: [] };
+  }
 }
 
 // Cup-with-Handle Phase 1 (handover v75、 6 体合議 2026-05-17 B 案):
 // テクニカル指標 (Cup-Handle / SMA 50/200 / RS) bulk 取得。
 // 失敗時は空 overlays を返してチャート描画は継続 (graceful degrade)。
 export async function fetchTechnical(ticker, patterns = 'cup_handle,sma_50,sma_200') {
-  const r = await fetch(`/api/technical/${encodeURIComponent(ticker)}?patterns=${patterns}&period=1y`);
-  if (!r.ok) return { overlays: [], patterns: {} };
-  return r.json();
+  // v144 #Pane3-perf: dedupGet 経由 (prefetch と StockPriceChart の mount fetch を coalesce)
+  try {
+    return await dedupGet(`/api/technical/${encodeURIComponent(ticker)}?patterns=${patterns}&period=1y`);
+  } catch {
+    return { overlays: [], patterns: {} };
+  }
 }
 
 // v65 §4-B-3: 1D sparkline 用の intraday (5 分足) 取得.
@@ -249,11 +319,12 @@ export async function fetchCalendar(days = 90, watchlist = '') {
 }
 
 export async function fetchNews(ticker, limit = 10) {
-  const r = await fetch(`/api/news/${encodeURIComponent(ticker)}?limit=${limit}`, {
-    headers: fmpHeaders(),
-  });
-  if (!r.ok) return [];
-  return r.json();
+  // v144 #Pane3-perf: dedupGet 経由 (prefetch と NewsPanel の mount fetch を coalesce)
+  try {
+    return await dedupGet(`/api/news/${encodeURIComponent(ticker)}?limit=${limit}`, { headers: fmpHeaders() });
+  } catch {
+    return [];
+  }
 }
 
 // v41 Phase 3: マクロ・地政学的なマーケット全体ニュース (Today's Brief)
@@ -626,11 +697,12 @@ export async function fetchPortfolioEvents(tickers, opts = {}) {
 }
 
 export async function fetchIRLinks(ticker) {
-  const r = await fetch(`/api/ir-links/${encodeURIComponent(ticker)}`, {
-    headers: fmpHeaders(),
-  });
-  if (!r.ok) return null;
-  return r.json();
+  // v144 #Pane3-perf: dedupGet 経由 (prefetch と IRLinksPanel の mount fetch を coalesce)
+  try {
+    return await dedupGet(`/api/ir-links/${encodeURIComponent(ticker)}`, { headers: fmpHeaders() });
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -938,9 +1010,10 @@ export async function fetchTriage(ticker, supabaseClient, minPass = 5) {
  * 旧 `fetchAnalystData` は deprecate (削除は別 PR で安全に)。 新 component は本 fetcher を使う。
  */
 export async function fetchAnalyst(ticker) {
-  const r = await fetch(`/api/analyst/${encodeURIComponent(ticker)}`, {
-    headers: fmpHeaders(),
-  });
-  if (!r.ok) return null;
-  return r.json();
+  // v144 #Pane3-perf: dedupGet 経由。 prefetch + AnalystPanel + StockPriceChart の三重 fetch を 1 本化
+  try {
+    return await dedupGet(`/api/analyst/${encodeURIComponent(ticker)}`, { headers: fmpHeaders() });
+  } catch {
+    return null;
+  }
 }
