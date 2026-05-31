@@ -818,6 +818,27 @@ export async function validateFmpKey(apiKey) {
   return r.json();
 }
 
+// v142 フィードバック収集 (動画教訓 #2、 pre-release ユーザーの声)。
+// ログイン時は Authorization header を付与 → backend が user_id + email を解決。
+export async function submitFeedback({ category = 'other', body, page_path = null, email = null }) {
+  const headers = { 'Content-Type': 'application/json' };
+  try {
+    const { supabase } = await import('./lib/supabase.js');
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+  } catch { /* 未ログイン時は Authorization 無し = 匿名扱い */ }
+  const r = await fetch('/api/feedback', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ category, body, page_path, email }),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || `HTTP ${r.status}`);
+  }
+  return r.json();
+}
+
 export async function demoAnalyze(ticker) {
   // Phase 2.9 Sprint 3 #Pane3-perf: demoAnalyze にも 30s timeout (analyze と同 SOP)
   const r = await fetchWithTimeout(`/api/demo/analyze/${encodeURIComponent(ticker)}`, {}, 30000);

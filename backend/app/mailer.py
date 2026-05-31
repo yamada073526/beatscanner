@@ -373,3 +373,80 @@ def send_article_digest(to_email: str, articles: list[dict], user_id: str | None
         return {"status": "sent", "detail": "ok", "id": msg_id}
     except Exception as e:
         return {"status": "failed", "detail": str(e)[:200], "id": None}
+
+
+# ─── v142 feedback notification (動画教訓 #2、 pre-release ユーザーの声) ──────────
+
+_FEEDBACK_CATEGORY_LABEL = {
+    "bug": "不具合報告",
+    "feature": "機能要望",
+    "other": "その他",
+}
+
+
+def _esc(s: str | None) -> str:
+    """user 入力を HTML メールに埋め込む前に最小 escape (injection 回避)。"""
+    if not s:
+        return ""
+    return (
+        str(s)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
+def send_feedback_notification(
+    category: str,
+    body: str,
+    email: str | None = None,
+    page_path: str | None = None,
+) -> dict:
+    """新規フィードバック着信を開発者へ通知 (FEEDBACK_NOTIFY_EMAIL 宛)。
+
+    動画教訓 #2 の「毎日改善依頼メールが来て改善駆動する」 loop を作るための通知。
+    FEEDBACK_NOTIFY_EMAIL 未設定 or resend 未設定なら skip (feedback 保存自体は別途成功済)。
+    best-effort: 失敗しても呼び出し側の 200 を妨げない。
+
+    Returns: {"status": "sent"|"failed"|"skipped", "detail": str, "id": str|None}
+    """
+    to_email = os.environ.get("FEEDBACK_NOTIFY_EMAIL", "").strip()
+    if not to_email:
+        return {"status": "skipped", "detail": "no FEEDBACK_NOTIFY_EMAIL", "id": None}
+
+    client = _get_resend_client()
+    if client is None:
+        return {"status": "skipped", "detail": "resend not configured", "id": None}
+
+    cat_label = _FEEDBACK_CATEGORY_LABEL.get(category, category)
+    mail_from = os.environ.get("MAIL_FROM", MAIL_FROM_DEFAULT)
+    body_html = _esc(body).replace("\n", "<br>")
+
+    html = (
+        f'<div style="font-family:sans-serif;max-width:560px">'
+        f'<p style="color:#64748b;font-size:13px;margin:0 0 4px">BeatScanner フィードバック</p>'
+        f'<p style="font-size:16px;font-weight:600;margin:0 0 12px">{_esc(cat_label)}</p>'
+        f'<div style="background:#f1f5f9;border-radius:8px;padding:12px 14px;'
+        f'font-size:14px;line-height:1.6;color:#0f172a">{body_html}</div>'
+        f'<p style="color:#64748b;font-size:12px;margin:12px 0 0">'
+        f'返信先: {_esc(email) or "(なし・匿名)"}<br>'
+        f'送信元画面: {_esc(page_path) or "(不明)"}</p>'
+        f'</div>'
+    )
+    text = f"[{cat_label}] {body}\n\n返信先: {email or '(なし)'}\n画面: {page_path or '(不明)'}"
+
+    try:
+        params = {
+            "from": mail_from,
+            "to": [to_email],
+            "subject": f"[フィードバック] {cat_label}",
+            "html": html,
+            "text": text,
+        }
+        if email:
+            params["reply_to"] = email
+        res = client.Emails.send(params)
+        msg_id = res.get("id") if isinstance(res, dict) else None
+        return {"status": "sent", "detail": "ok", "id": msg_id}
+    except Exception as e:
+        return {"status": "failed", "detail": str(e)[:200], "id": None}

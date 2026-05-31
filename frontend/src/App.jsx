@@ -58,6 +58,7 @@ import InsightsPanel from './components/InsightsPanel.jsx';
 import QuickAddHoldingModal from './components/QuickAddHoldingModal.jsx';
 import TransactionEntryModal from './components/TransactionEntryModal.jsx';
 import UpgradeModal from './components/UpgradeModal.jsx';
+import FeedbackWidget from './components/FeedbackWidget.jsx';
 import PlanComparisonBanner from './components/PlanComparisonBanner.jsx';
 import DemoTicker from './components/DemoTicker.jsx';
 import CompanyLogo from './components/CompanyLogo.jsx';
@@ -1142,6 +1143,8 @@ export default function App() {
           }}
           accountsError={rootAccountsError}
         />
+        {/* v142 フィードバック収集 (動画教訓 #2): workspace mode でも常駐 mount */}
+        <FeedbackWidget user={user} />
       </>
     );
   }
@@ -2712,6 +2715,8 @@ export default function App() {
         }}
         accountsError={rootAccountsError}
       />
+      {/* v142 フィードバック収集 (動画教訓 #2): classic/LP mode でも常駐 mount */}
+      <FeedbackWidget user={user} />
     </div>
   );
 }

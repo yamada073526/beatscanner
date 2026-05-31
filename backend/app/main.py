@@ -15509,6 +15509,77 @@ async def scanner_cup_handle(
     }
 
 
+# ── フィードバック収集 (v142、 動画教訓 #2、 pre-release ユーザーの声) ──────────
+# 3体合議推奨 #1: 最初のユーザーの生声を集めて改善駆動する。
+# backend 集約 (service_role insert + Resend 通知)、 anon/authenticated の直接 DB 面は作らない。
+
+class _FeedbackBody(BaseModel):
+    category: str = "other"        # 'bug' | 'feature' | 'other'
+    body: str                      # 本文 (必須)
+    page_path: str | None = None   # 送信元画面
+    email: str | None = None       # 匿名ユーザーの任意返信先 (ログイン時は auth email を優先)
+
+
+@app.post("/api/feedback")
+async def submit_feedback(
+    payload: _FeedbackBody,
+    authorization: str | None = Header(None),
+    user_agent: str | None = Header(None),
+):
+    """ユーザーフィードバックを保存 + 開発者へ通知。
+
+    - 本文は必須 (空は 400)、 2000 字で truncate。
+    - category は 'bug'/'feature'/'other' のみ許可 (それ以外は 'other')。
+    - ログイン時は auth header から user_id + email を解決 (email は本文 email より優先)。
+    - 未ログインでも受付 (user_id=null、 email は任意入力)。
+    - Resend 通知は best-effort (失敗しても 200、 feedback 保存が主目的)。
+    """
+    msg = (payload.body or "").strip()
+    if not msg:
+        raise HTTPException(status_code=400, detail="本文を入力してください")
+    if len(msg) > 2000:
+        msg = msg[:2000]
+    category = payload.category if payload.category in ("bug", "feature", "other") else "other"
+
+    user_id: str | None = None
+    email = (payload.email or "").strip() or None
+    if authorization:
+        try:
+            u = await _verify_supabase_jwt(authorization)
+            user_id = u.get("id")
+            email = u.get("email") or email   # auth email を優先
+        except Exception:
+            pass  # token 不正/期限切れでも未ログイン扱いで受付続行
+
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    page_path = (payload.page_path or "")[:300] or None
+    row = {
+        "user_id": user_id,
+        "email": email,
+        "category": category,
+        "body": msg,
+        "page_path": page_path,
+        "user_agent": (user_agent or "")[:300] or None,
+    }
+    try:
+        sb.table("feedback").insert(row).execute()
+    except Exception as e:
+        print(f"[feedback] insert failed: {e}")
+        raise HTTPException(status_code=500, detail="送信に失敗しました。時間をおいて再試行してください")
+
+    # 開発者通知 (best-effort、 動画教訓 #2 の「毎日改善依頼が来る」 loop)
+    try:
+        from .mailer import send_feedback_notification
+        send_feedback_notification(category, msg, email, page_path)
+    except Exception as e:
+        print(f"[feedback] notify failed (non-fatal): {e}")
+
+    return {"status": "ok"}
+
+
 # ── Stripe 決済 ──────────────────────────────────────────────────────────────
 # checkout: フロントから呼ばれ Stripe Checkout Session URL を返す
 # webhook: Stripe からの非同期イベントを受信してサブスク状態を更新する
