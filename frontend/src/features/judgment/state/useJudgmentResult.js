@@ -190,9 +190,12 @@ export function useJudgmentResult({
           clearTimeout(secTimeoutId);
           if (searchIdRef.current !== searchId) return;
           if (full) {
-            setGuidance(full);
+            // v146 前方視界: forward は guidance/basic にのみ載るため、 full (=/api/guidance) で
+            //   置換する際に basic 由来の forward を引き継ぐ (full が持っていればそちら優先)。
+            const merged = { ...full, forward: full.forward ?? basicData?.forward ?? null };
+            setGuidance(merged);
             const prev = resultCacheRef.current.get(t) || {};
-            resultCacheRef.current.set(t, { ...prev, guidance: full, ts: Date.now() });
+            resultCacheRef.current.set(t, { ...prev, guidance: merged, ts: Date.now() });
           }
           setGuidanceSecLoading(false);
         })

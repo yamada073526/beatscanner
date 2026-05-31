@@ -6230,6 +6230,159 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
     return result
 
 
+# v146 前方視界 (Forward Visibility): 来期 (next quarter) のアナリストコンセンサスと前年同期実績の YoY。
+# じっちゃまプロトコル条件4「来期コンセンサスが前年同期比を超えているか / 前方は視界良好か」を補う。
+# 6 体合議 (2026-06-01) verdict 反映: 全て Python 数値層 (LLM 不使用)、 §38 で verdict ラベル非生成、
+# 売上基準ミスマッチガード横展開、 fiscal date 照合、 EPS 赤字/ゼロ近傍ガード、 アナリスト数 3 社未満抑止。
+async def _fetch_income_history(ticker: str, fmp_key: str, limit: int = 6) -> list[dict]:
+    """前年同期 revenue 照合用に income-statement (quarter) を limit 件取得。 失敗時 []。"""
+    try:
+        client = FMPClient(api_key=fmp_key)
+        return await client.income_statement(ticker, limit=limit, period="quarter") or []
+    except Exception:
+        return []
+
+
+def _compute_forward_outlook(
+    estimates: list[dict],
+    surprises: list[dict],
+    income_history: list[dict],
+    last_reported_date: str | None,
+    sector: str | None,
+    industry: str | None,
+) -> dict | None:
+    """来期コンセンサス (EPS/売上) と前年同期実績との YoY を計算。 全て Python 数値層 (HG aggregator 分離準拠)。
+
+    §38: 「強気/弱気/視界良好」 等の verdict ラベルは一切生成しない (事実数値のみ)。
+    返り値 None = コンセンサス取得不可 → static gate で前方視界ブロックを物理的に出力しない (silent bug 防止)。
+    """
+    from datetime import datetime as _dtf, timedelta as _tdf
+
+    def _pd(s):
+        if not s:
+            return None
+        try:
+            return _dtf.fromisoformat(str(s)[:10])
+        except Exception:
+            return None
+
+    if not estimates:
+        return None
+
+    today = _dtf.now()
+    floor_d = _pd(last_reported_date) or today
+    # 「来期」 = 最終報告済四半期より後 (未発表) の最も近い estimate entry。
+    # QA verdict: 発表済 Q の誤認回避 = date > 最終報告日 で filter (報告日は period end + ~45日)。
+    future = []
+    for e in estimates:
+        d = _pd(e.get("date"))
+        if d is not None and d > floor_d:
+            future.append((d, e))
+    if not future:
+        return None
+    future.sort(key=lambda x: x[0])
+    next_d, next_e = future[0]
+
+    consensus_eps = _safe_eps_float(_pick(next_e, "estimatedEpsAvg", "epsAvg"))
+    consensus_rev = _safe_eps_float(_pick(next_e, "estimatedRevenueAvg", "revenueAvg"))
+    if consensus_eps is None and consensus_rev is None:
+        return None
+
+    _ce = next_e.get("numberAnalystEstimatedEps")
+    _cr = next_e.get("numberAnalystEstimatedRevenue")
+    cnt_eps = int(_ce) if isinstance(_ce, (int, float)) else None
+    cnt_rev = int(_cr) if isinstance(_cr, (int, float)) else None
+
+    # 前年同期 = next_d の約 365 日前。 date 照合 (60 日窓)。 index offset (rows[i+4]) は
+    # 非暦年決算/欠落四半期でズレるため不可 (D3 6 体合議 + QA verdict)。
+    ya_target = next_d - _tdf(days=365)
+
+    def _nearest_rec(target, items):
+        best, best_diff = None, None
+        for it in items:
+            d = _pd(it.get("date"))
+            if d is None:
+                continue
+            diff = abs((d - target).days)
+            if best_diff is None or diff < best_diff:
+                best, best_diff = it, diff
+        if best_diff is not None and best_diff > 60:
+            return None
+        return best
+
+    ya_inc = _nearest_rec(ya_target, income_history)
+    ya_rev = _safe_eps_float(_pick(ya_inc, "revenue")) if ya_inc else None
+    ya_eps_rec = _nearest_rec(ya_target, surprises)
+    ya_eps = (
+        _safe_eps_float(_pick(ya_eps_rec, "eps", "epsActual", "actualEarningResult", "actualEps"))
+        if ya_eps_rec else None
+    )
+
+    # ── 売上 YoY: 基準ミスマッチガード横展開 (§4) ──
+    # 金融 (threshold < 40 = 銀行0/与信18/モーゲージ) は actual=総収益 vs consensus=純収益 の
+    #   基準ミスマッチが起こりうる → magnitude 抑止 (銀行は無条件、 与信は |YoY|>18 で抑止 = V/MA の +11% は保護)。
+    # 非金融 (threshold == 40) は高成長で YoY が大きくなりうる (NVDA +50% 等) ため magnitude cap を当てない。
+    rev_yoy = None
+    rev_unreliable = False
+    threshold = _rev_surprise_threshold(sector, industry)
+    if consensus_rev is not None and ya_rev is not None and ya_rev > 0:
+        _raw = round((consensus_rev - ya_rev) / abs(ya_rev) * 100, 1)
+        if threshold < 40.0:
+            if threshold <= 0 or abs(_raw) > threshold:
+                rev_unreliable = True
+            else:
+                rev_yoy = _raw
+        else:
+            rev_yoy = _raw
+
+    # ── EPS YoY: 赤字/ゼロ近傍ガード (QA verdict) ──
+    eps_yoy = None
+    eps_turnaround = False
+    if consensus_eps is not None and ya_eps is not None:
+        if ya_eps < 0 and consensus_eps > 0:
+            eps_turnaround = True  # 前年赤字 → 来期黒字予想 (% は無意味なので算出しない)
+        elif ya_eps > 0 and abs(ya_eps) >= 0.05:
+            eps_yoy = round((consensus_eps - ya_eps) / abs(ya_eps) * 100, 1)
+        # ya_eps < 0 & consensus <= 0 (赤字継続) / |ya_eps| < 0.05 (near-zero) → None
+
+    # period_label: fiscal 安全のため estimate の period/calendarYear を優先、 無ければ period-end 月を事実表記。
+    _p = next_e.get("period")
+    _y = next_e.get("calendarYear") or next_e.get("fiscalYear")
+    period_label = f"{_y} {_p}" if (_p and _y) else f"{next_d.year}年{next_d.month}月期"
+
+    # アナリスト数 3 社未満は平均値の誤認を生むため YoY 抑止 (金融 verdict)。
+    MIN_ANALYSTS = 3
+    if cnt_eps is not None and cnt_eps < MIN_ANALYSTS:
+        eps_yoy = None
+        eps_turnaround = False
+    if cnt_rev is not None and cnt_rev < MIN_ANALYSTS:
+        rev_yoy = None
+
+    return {
+        "next_q": {
+            "period_label": period_label,
+            "period_end_date": next_d.date().isoformat(),
+            "consensus_eps": consensus_eps,
+            "consensus_revenue": consensus_rev,
+            "eps_yoy_pct": eps_yoy,
+            "rev_yoy_pct": rev_yoy,
+            "eps_turnaround": eps_turnaround,
+            "rev_compare_unreliable": rev_unreliable,
+            "year_ago_eps": ya_eps,
+            "year_ago_revenue": ya_rev,
+            "year_ago_date": ya_target.date().isoformat(),
+            "analyst_count_eps": cnt_eps,
+            "analyst_count_revenue": cnt_rev,
+        },
+        # per-指標 namespace (Anthropic verdict: partial_failure で片方表示を許容)
+        "sources": {
+            "next_q_eps": "ok" if consensus_eps is not None else "empty",
+            "next_q_rev": "ok" if consensus_rev is not None else "empty",
+        },
+        "source": "FMP analyst-estimates",
+    }
+
+
 # v144 #Pane3-perf: guidance/basic は Pane 3 の loading gate (= 初期描画を律速)。
 #   従来 cache 無しで毎回 FMP 2 本 (~2.5s)。 EPS/売上 actual + estimates は四半期更新のため
 #   6h in-memory cache は安全。 warm hit は ~0ms。 数値は変えず同一 computed verdict を返すだけで
@@ -6247,15 +6400,21 @@ async def guidance_basic(ticker: str, request: Request) -> dict:
         return _gb_hit[1]
     fmp_key = _get_fmp_key(request)
     try:
-        eps_result, rev_result = await asyncio.gather(
+        # v146 前方視界: income_history (前年同期 revenue 照合用 limit=6) と sector/industry
+        #   (売上ミスマッチガード用、 profile 24h cache 共有でほぼ無コスト) を並列追加 fetch。
+        eps_result, rev_result, income_hist_result, si_result = await asyncio.gather(
             _fetch_eps_data(ticker, fmp_key),
             _fetch_revenue_data(ticker),
+            _fetch_income_history(ticker, fmp_key),
+            _fetch_sector_industry(ticker, fmp_key),
             return_exceptions=True,
         )
         if isinstance(eps_result, Exception):
             eps_result = {}
         if isinstance(rev_result, Exception):
             rev_result = {}
+        income_hist: list[dict] = income_hist_result if isinstance(income_hist_result, list) else []
+        sector_fwd, industry_fwd = si_result if isinstance(si_result, tuple) else (None, None)
 
         surprises: list[dict] = eps_result.get("surprises", [])
         income_q: list[dict] = eps_result.get("income_q", [])
@@ -6333,6 +6492,22 @@ async def guidance_basic(ticker: str, request: Request) -> dict:
             None if revenue_estimated is not None else "企業が次期ガイダンスを公式に開示していません"
         )
 
+        # v146 前方視界: 来期コンセンサス YoY (Python 数値層、 §38 verdict ラベル非生成、
+        #   売上ミスマッチ/赤字EPS/アナリスト数ガード適用済)。 取得不可なら None → frontend 非表示。
+        forward = None
+        try:
+            forward = _compute_forward_outlook(
+                estimates=estimates,
+                surprises=surprises,
+                income_history=income_hist,
+                last_reported_date=surprise_date or income_date,
+                sector=sector_fwd,
+                industry=industry_fwd,
+            )
+        except Exception as _fwd_e:
+            print(f"[WARN] forward outlook compute failed for {ticker}: {_fwd_e}")
+            forward = None
+
         resp = {
             "ticker": ticker.upper(),
             "fiscal_period": fiscal_period,
@@ -6362,6 +6537,8 @@ async def guidance_basic(ticker: str, request: Request) -> dict:
             "revenue_actual": float(revenue_actual) if revenue_actual is not None else None,
             "revenue_estimated": float(revenue_estimated) if revenue_estimated is not None else None,
             "revenue_data_note": rev_note,
+            # v146 前方視界 (来期コンセンサス YoY)。 None = コンセンサス取得不可で非表示。
+            "forward": forward,
         }
         # v144 #Pane3-perf: 成功 response のみ 6h cache (404 / error fallback は transient なので cache しない)
         _GUIDANCE_BASIC_CACHE[_gb_key] = (_gb_now, resp)

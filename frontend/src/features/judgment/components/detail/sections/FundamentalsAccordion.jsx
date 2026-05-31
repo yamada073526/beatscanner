@@ -4,6 +4,7 @@ import SectionDivider from '../SectionDivider.jsx';
 import ChapterSection from '../ChapterSection.jsx';
 import { ChapterHeader } from '../JudgmentDetail.jsx';
 import GuidanceCard from '../../../../../components/GuidanceCard.jsx';
+import ForwardOutlookSection from '../../../../../components/ForwardOutlookSection.jsx';
 import EarningsHistoryChart from '../../../../../components/EarningsHistoryChart.jsx';
 import QuarterlyHistoryTable from '../../../../../components/QuarterlyHistoryTable.jsx';
 import PremiumLock from '../../shared/PremiumLock.jsx';
@@ -111,12 +112,16 @@ export default function FundamentalsAccordion({
               >
                 {{
                   guidance: (
-                    <GuidanceCard
-                      guidance={guidance}
-                      isLoading={!guidance && detail?.isLoading !== false}
-                      isSecLoading={false}
-                      nextEarningsDays={detail?.nextEarningsDays ?? null}
-                    />
+                    <>
+                      <GuidanceCard
+                        guidance={guidance}
+                        isLoading={!guidance && detail?.isLoading !== false}
+                        isSecLoading={false}
+                        nextEarningsDays={detail?.nextEarningsDays ?? null}
+                      />
+                      {/* v146 前方視界: 「今期/来期」 タブの「来期」 = 来期コンセンサス YoY */}
+                      <ForwardOutlookSection forward={guidance?.forward} currency={result?.currency} />
+                    </>
                   ),
                   history: (
                     <EarningsHistoryChart
@@ -162,6 +167,8 @@ export default function FundamentalsAccordion({
               isSecLoading={false}
               nextEarningsDays={detail?.nextEarningsDays ?? null}
             />
+            {/* v146 前方視界: 来期コンセンサス YoY (過去 → 未来の視線誘導) */}
+            <ForwardOutlookSection forward={guidance?.forward} currency={result?.currency} />
           </SectionFade>
 
           {/* === Sprint 3: EarningsHistoryChart (旧 EarningsBars + HistoryChart 統合) === */}
