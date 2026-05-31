@@ -1,8 +1,7 @@
 import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { FileBarChart2, FileText } from 'lucide-react';
-// P3.7: Pane 3 → 関連記事 link 用 hook + Chip primitive
+// P3.7: Pane 3 → 関連記事 link 用 hook
 import { useRelatedArticle } from '../../../articles/useRelatedArticle.js';
-import Chip from '../../../../components/ui/Chip.jsx';
 import { useJudgment } from '../../state/JudgmentContext.jsx';
 // handover v82 Phase 5.5: ConditionRow click → DiagramCard pulse 連携 (multi-review 6 体合議 verdict、 2026-05-17)。
 // pulsingConditionIndex は workspaceStore (non-persist) で管理、 store setter は pure、
@@ -98,6 +97,23 @@ import ContextSection from './sections/ContextSection.jsx';
 // DiagramCard 物理 mount 維持は本 sprint では deferred (DetailReport.jsx vizData lift up が必要)、
 // wrapper のみ実装で AI 詳細レポートへの anchor link を提供 ([[feedback-diagram-card-remount-cache]] は次 phase)。
 import StickyDiagramAccordion from './sections/StickyDiagramAccordion.jsx';
+
+// v144 Task B: 解説記事 link の相対日付 (「いつのニュースか」 をクリック前に提示)。
+// 「最終更新 X 分前」 と同系の鮮度表示 (CLAUDE.md「動的データには最終更新を併記」)。
+function formatRelativeDate(iso) {
+  if (!iso) return '';
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return '';
+  const diffMs = Date.now() - then;
+  if (diffMs < 0) return '';
+  const day = 86400000;
+  if (diffMs < day) return '今日';
+  const days = Math.floor(diffMs / day);
+  if (days < 7) return `${days}日前`;
+  if (days < 30) return `${Math.floor(days / 7)}週間前`;
+  if (days < 365) return `${Math.floor(days / 30)}ヶ月前`;
+  return `${Math.floor(days / 365)}年前`;
+}
 
 // v97 G-2 sub-agent verdict 案 B 軽量版: 章境界 軽量強化
 // user dogfood「H2 Chapter Break は subtle すぎる、 言われないと気付かない」
@@ -1094,12 +1110,12 @@ export default function JudgmentDetail({
         );
       })()}
 
-      {/* P3.7: Pane 3 → 関連記事 link (conditional render — 記事がある時だけ表示)
-          5 原則 §4「1 クリックを減らせ」: 記事存在時に 1 タップで /articles/<slug> に到達。
-          5 原則 §1「2 秒でわかる」: 末尾 Chip 1 個、Pane 3 構造を阻害しない最小配置。
-          chip primitive ([[chip-primitive-canonical]]) 流用。variant='display' でクリッカブル。
-          inline style 禁止 (CLAUDE.md §Chip primitive canonical)、className 経由で spacing。
-          isScrollV1 (classic SPA mode) でも表示する (Pane 3 link は workspace/SPA 両方で有効)。 */}
+      {/* P3.7 / v144 Task B: Pane 3 → 関連記事 link (conditional render — 記事がある時だけ表示)。
+          user dogfood (2026-05-31): ① 新タブで開く ② クリック前に「いつ・何の記事か」 がわかるよう
+          記事タイトル + 相対日付 (鮮度) を提示。 デイリーニュース由来で鮮度が落ちるため、 日付可視化で
+          user 自身が clicking 前に判断できるようにする (撤去は 1 行 revert で可能)。
+          外部リンク慣習 (IRLinksPanel / TenK と統一): target=_blank + rel=noopener + ↗ arrow。
+          token のみ使用 (raw hex 禁止)、 isScrollV1 (classic SPA) でも表示。 */}
       {relatedArticle && (
         <div
           className="pane3-related-article"
@@ -1107,17 +1123,26 @@ export default function JudgmentDetail({
         >
           <a
             href={`/articles/${relatedArticle.slug}`}
-            className="pane3-related-article__link"
-            aria-label={`${selectedTicker} の解説記事を読む — ${relatedArticle.title || ''}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="pane3-related-article__card"
+            aria-label={`${selectedTicker} の解説記事を新しいタブで開く${relatedArticle.title ? ` — ${relatedArticle.title}` : ''}`}
           >
-            <Chip
-              variant="display"
-              tone="accent"
-              size="sm"
-              icon={<FileText size={13} strokeWidth={1.5} />}
-            >
-              {selectedTicker} の解説記事を読む
-            </Chip>
+            <span className="pane3-related-article__icon" aria-hidden="true">
+              <FileText size={15} strokeWidth={1.5} />
+            </span>
+            <span className="pane3-related-article__body">
+              <span className="pane3-related-article__title">
+                {relatedArticle.title || `${selectedTicker} の解説記事`}
+              </span>
+              <span className="pane3-related-article__meta">
+                {(() => {
+                  const rel = formatRelativeDate(relatedArticle.published_at);
+                  return rel ? `解説記事 · ${rel}` : '解説記事';
+                })()}
+              </span>
+            </span>
+            <span className="pane3-related-article__arrow" aria-hidden="true">↗</span>
           </a>
         </div>
       )}

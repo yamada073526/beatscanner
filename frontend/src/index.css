@@ -11208,14 +11208,65 @@ button.ds-chip[data-pressed="true"]:hover {
   justify-content: flex-start;
 }
 
-.pane3-related-article__link {
+/* v144 Task B: 記事 preview card (title + 相対日付 + 新タブ ↗)。 IRLinksPanel link item と同系。 */
+.pane3-related-article__card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  min-width: 0;
+  max-width: 100%;
   text-decoration: none;
-  color: inherit;
-  display: inline-flex;
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 10px);
+  padding: 10px 14px;
+  background: transparent;
+  transition: border-color 160ms ease, background 160ms ease;
 }
 
-.pane3-related-article__link:hover .ds-chip {
-  opacity: 0.85;
+.pane3-related-article__card:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, var(--border));
+  background: var(--bg-hover);
+}
+
+.pane3-related-article__icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--color-accent);
+}
+
+.pane3-related-article__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pane3-related-article__title {
+  font-size: var(--font-size-sm, 14px);
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane3-related-article__meta {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.pane3-related-article__arrow {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-muted);
+  transition: transform 160ms ease, color 160ms ease;
+}
+
+.pane3-related-article__card:hover .pane3-related-article__arrow {
+  color: var(--color-accent);
+  transform: translate(2px, -2px);
 }
 
 /* ── dark mode 対応 ─────────────────────────────────────────────────────── */
