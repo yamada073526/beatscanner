@@ -14,14 +14,18 @@ export default defineConfig({
       output: {
         // v40+ / §11-E v51 Phase 1 拡張: 重い deps を独立 chunk に分離
         // 初回ロードに乗らない (lazy import 経由で訪問時のみ) + 再訪時 HTTP cache HIT
-        // - lightweight-charts (~200KB): PortfolioHistoryChart / ChartTab で使用
-        // - recharts: 一部チャートで使用 (将来 lightweight-charts に統一予定)
+        // - lightweight-charts (~200KB): PortfolioHistoryChart / ChartTab (classic SPA) で使用、 Pane 3 不使用
+        // - recharts: Pane 3 StockPriceChart 等で使用
         // - @dnd-kit: ChartTab のウォッチリスト並び替えで使用
         // - react-markdown: DetailReport で使用
+        // v144 Tier3 #Pane3-perf: 旧 'charts' は両ライブラリを 1 chunk (774KB) に束ね、 Pane 3 (recharts のみ)
+        //   読込時に未使用の lightweight-charts ~200KB も巻き込んでいた。 別 chunk に分離して Pane 3 初回
+        //   ロードから lightweight-charts を外す (config のみ・ component 不変 = chart 描画は完全同一)。
         manualChunks: {
           'react-vendor': ['react', 'react-dom'],
           'supabase': ['@supabase/supabase-js'],
-          'charts': ['lightweight-charts', 'recharts'],
+          'recharts': ['recharts'],
+          'lightweight-charts': ['lightweight-charts'],
           'dnd': ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
           'markdown': ['react-markdown'],
           // Sprint 0 (Phase 2): framer-motion を react-vendor から分離。
