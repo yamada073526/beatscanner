@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import { useJudgment } from '../../state/JudgmentContext.jsx';
 import JudgmentSearchBar from './JudgmentSearchBar.jsx';
-import JudgmentFilters from './JudgmentFilters.jsx';
 import JudgmentGroupHeader from './JudgmentGroupHeader.jsx';
 import JudgmentRow from './JudgmentRow.jsx';
 import WatchlistAddButton from './WatchlistAddButton.jsx';
@@ -117,8 +116,9 @@ export default function JudgmentList({ items = [], showFilters = true, onAnalyze
         padding: 0,
       }}
     >
+      {/* v143: sort は JudgmentSearchBar 右端に統合済 (2 行→1 行)。 JudgmentFilters は廃止。
+          showFilters prop は後方互換で残置 (現状 sort は常時 search bar に表示)。 */}
       <JudgmentSearchBar />
-      {showFilters && <JudgmentFilters />}
       <div
         style={{
           flex: 1,

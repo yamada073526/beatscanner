@@ -153,21 +153,32 @@ function formatRelativeJa(dateStr) {
 }
 
 /**
- * v143: 個別 article 行 (横 1 行、 multi-review 3 体一致で card → row 化)。
- * [lead: format badge or ticker+verdict] / title (truncate) / 相対日付 / →
+ * v143: 個別 article 行 (横 1 行、 multi-review 3 体一致)。 click で新規タブ (user 要望、 workspace 維持)。
+ * lead: [verdict dot (●緑/赤/amber)] + [ticker chip (ポートフォリオ色: 保有=gold/観察=cyan/未登録=neutral)]。
+ *   verdict は文字ラベル → dot 圧縮 (3 体一致: 信号維持しつつ title 拡張)。
+ * @param {Set<string>} holdingTickers  - 保有 ticker (大文字)
+ * @param {Set<string>} watchlistTickers - 観察 ticker (大文字)
  */
-function DigestCard({ article }) {
+function DigestCard({ article, holdingTickers, watchlistTickers }) {
   const { slug, title, ticker, format, verdict, published_at, generated_at } = article;
   const v = normalizeVerdict(verdict);
   const formatBadge = getFormatLabel(format);
   const dateLabel = formatRelativeJa(published_at || generated_at);
+  const tk = String(ticker || '').toUpperCase();
+  const portfolioStatus = holdingTickers?.has?.(tk)
+    ? 'holding'
+    : watchlistTickers?.has?.(tk)
+      ? 'watching'
+      : 'none';
   return (
     <a
       href={`/articles/${encodeURIComponent(slug)}`}
+      target="_blank"
+      rel="noopener noreferrer"
       className="daily-digest__row"
       data-testid={`daily-digest-card-${slug}`}
       data-format={format || 'deep_dive'}
-      aria-label={`記事を読む: ${title}`}
+      aria-label={`記事を新しいタブで読む: ${title}`}
     >
       <span className="daily-digest__row-lead">
         {formatBadge ? (
@@ -178,12 +189,18 @@ function DigestCard({ article }) {
           </span>
         ) : (
           <>
-            {ticker && <span className="daily-digest__ticker">{ticker}</span>}
-            <span className={`daily-digest__verdict daily-digest__verdict--${v.tone}`}>{v.label}</span>
+            <span
+              className={`daily-digest__verdict-dot daily-digest__verdict-dot--${v.tone}`}
+              title={`判定: ${v.label}`}
+              aria-label={`判定: ${v.label}`}
+            />
+            {ticker && (
+              <span className={`daily-digest__ticker daily-digest__ticker--${portfolioStatus}`}>{ticker}</span>
+            )}
           </>
         )}
       </span>
-      <span className="daily-digest__row-title">{truncate(title, 40)}</span>
+      <span className="daily-digest__row-title">{truncate(title, 44)}</span>
       {dateLabel && <span className="daily-digest__row-date">{dateLabel}</span>}
       <span className="daily-digest__arrow" aria-hidden="true">→</span>
     </a>
@@ -217,7 +234,7 @@ function DigestLoadingState() {
   );
 }
 
-export default function DailyDigestSection() {
+export default function DailyDigestSection({ holdingTickers, watchlistTickers } = {}) {
   const { articles, loading, error } = useDailyDigest();
   const { user } = useAuth();
 
@@ -269,7 +286,12 @@ export default function DailyDigestSection() {
         {!loading && !showEmpty && (
           <div className="daily-digest__list">
             {articles.map((article) => (
-              <DigestCard key={article.slug} article={article} />
+              <DigestCard
+                key={article.slug}
+                article={article}
+                holdingTickers={holdingTickers}
+                watchlistTickers={watchlistTickers}
+              />
             ))}
           </div>
         )}

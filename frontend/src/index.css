@@ -10439,12 +10439,34 @@ button.ds-chip[data-pressed="true"]:hover {
   display: inline-flex;
   padding: 2px 8px;
   border-radius: var(--radius-pill, 999px);
-  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
-  color: var(--color-accent);
   font-size: var(--text-caption, 11px);
   font-weight: 700;
   letter-spacing: 0.06em;
+  /* v143: default = 未登録 (neutral)。 保有/観察 は variant で上書き (WatchlistRow の accent 慣習に整合)。 */
+  background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+  color: var(--text-secondary);
 }
+/* v143: ticker chip をポートフォリオ状態で色分け (保有=gold / 観察=cyan / 未登録=neutral)。
+   投資の色ルール遵守: 緑/赤/amber は方向性 signal 専用なので status には使わない。 */
+.daily-digest__ticker--holding {
+  background: color-mix(in srgb, var(--color-gold) 14%, transparent);
+  color: var(--color-gold);
+}
+.daily-digest__ticker--watching {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-accent);
+}
+
+/* v143: verdict (BEAT/MISS/WATCH) を文字ラベル → 8px dot に圧縮 (信号維持 + title 拡張、 3 体一致) */
+.daily-digest__verdict-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.daily-digest__verdict-dot--gain { background: var(--color-gain); }
+.daily-digest__verdict-dot--loss { background: var(--color-loss); }
+.daily-digest__verdict-dot--warning { background: var(--color-warning); }
 
 .daily-digest__verdict {
   display: inline-flex;

@@ -10,7 +10,7 @@
  *
  * Pane 1 nav は WS-5 で実装。WS-4 では暫定 dummy tab toggle を維持.
  */
-import { useEffect, useCallback, useState, lazy, Suspense } from 'react';
+import { useEffect, useCallback, useMemo, useState, lazy, Suspense } from 'react';
 import {
   ChevronRight,
   Home,
@@ -893,6 +893,21 @@ export default function Workspace({
   // URL ↔ Zustand 同期 (Linear 流 SSOT)
   useUrlSync();
 
+  // v143: DailyDigest の ticker chip をポートフォリオ状態 (保有=gold / 観察=cyan / 未登録=neutral)
+  //   で色分けするため、 items の isHolding / isWatchlist から ticker Set を作って DailyDigestSection に渡す
+  //   (multi-review 3 体一致: 「自分ごと化」 フィルタとして高価値)。
+  const digestPortfolioSets = useMemo(() => {
+    const holding = new Set();
+    const watching = new Set();
+    for (const it of items) {
+      const t = String(it?.ticker || '').toUpperCase();
+      if (!t) continue;
+      if (it.isHolding) holding.add(t);
+      else if (it.isWatchlist) watching.add(t);
+    }
+    return { holding, watching };
+  }, [items]);
+
   // 改善希望①: Tier 1 折りたたみで shell の header height も縮小し、下ペインを広げる
   // v108 multi-review verdict: 指標バー折りたたみ button 削除 + 常時展開固定で headerCollapsed を ignore
   const headerCollapsed = false;
@@ -962,7 +977,10 @@ export default function Workspace({
                   - 旧: DailyDigestSection が auto height で残量を食いつぶし JudgmentList が overflow:hidden で切れていた */}
               <div style={{ flexShrink: 0 }}>
                 {/* v120 Sprint 1: Pane2MetaToggle 削除 (chip 9 個圧縮、 multi-review 6 体合議 verdict 反映) */}
-                <DailyDigestSection />
+                <DailyDigestSection
+                  holdingTickers={digestPortfolioSets.holding}
+                  watchlistTickers={digestPortfolioSets.watching}
+                />
               </div>
               <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
                 <JudgmentList
