@@ -27,6 +27,8 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { ChevronDown } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase.js';
 import { useAuth } from '../../hooks/useAuth.js';
 
@@ -153,9 +155,18 @@ function formatRelativeJa(dateStr) {
 }
 
 /**
+ * v143: verdict (BEAT/MISS/WATCH) の説明文 (dot hover tooltip 用、 multi-review 3 体 verdict)
+ */
+function verdictExplain(label) {
+  if (label === 'BEAT') return 'BEAT — 予想を上回る決算';
+  if (label === 'MISS') return 'MISS — 予想を下回る決算';
+  return 'WATCH — 予想未確定・要確認';
+}
+
+/**
  * v143: 個別 article 行 (横 1 行、 multi-review 3 体一致)。 click で新規タブ (user 要望、 workspace 維持)。
- * lead: [verdict dot (●緑/赤/amber)] + [ticker chip (ポートフォリオ色: 保有=gold/観察=cyan/未登録=neutral)]。
- *   verdict は文字ラベル → dot 圧縮 (3 体一致: 信号維持しつつ title 拡張)。
+ * lead: [verdict 固定幅スロット (dot ●緑/赤/amber、 まとめ行は空で左端揃え)] + [ticker chip (ポートフォリオ色)]。
+ *   verdict は文字ラベル → dot 圧縮 + hover tooltip で説明 (3 体一致: 信号維持しつつ title 拡張)。
  * @param {Set<string>} holdingTickers  - 保有 ticker (大文字)
  * @param {Set<string>} watchlistTickers - 観察 ticker (大文字)
  */
@@ -170,6 +181,17 @@ function DigestCard({ article, holdingTickers, watchlistTickers }) {
     : watchlistTickers?.has?.(tk)
       ? 'watching'
       : 'none';
+
+  // v143 (#3b): verdict dot hover tooltip (portal + fixed + getBoundingClientRect、 feedback_tooltip_portal_pattern)。
+  //   8px dot は overflow 親 (digest body の overflow-y:auto) で切れるため portal 必須。
+  const dotRef = useRef(null);
+  const [tip, setTip] = useState(null);
+  const showTip = () => {
+    const r = dotRef.current?.getBoundingClientRect?.();
+    if (r) setTip({ x: r.left + r.width / 2, y: r.top });
+  };
+  const hideTip = () => setTip(null);
+
   return (
     <a
       href={`/articles/${encodeURIComponent(slug)}`}
@@ -181,6 +203,18 @@ function DigestCard({ article, holdingTickers, watchlistTickers }) {
       aria-label={`記事を新しいタブで読む: ${title}`}
     >
       <span className="daily-digest__row-lead">
+        {/* Q2: verdict 用固定幅スロット — まとめ行も同幅を確保して ticker/badge 左端を揃える */}
+        <span className="daily-digest__verdict-slot">
+          {!formatBadge && (
+            <span
+              ref={dotRef}
+              className={`daily-digest__verdict-dot daily-digest__verdict-dot--${v.tone}`}
+              aria-label={verdictExplain(v.label)}
+              onMouseEnter={showTip}
+              onMouseLeave={hideTip}
+            />
+          )}
+        </span>
         {formatBadge ? (
           <span
             className={`daily-digest__format-badge daily-digest__format-badge--${formatBadge.tone}`}
@@ -188,21 +222,20 @@ function DigestCard({ article, holdingTickers, watchlistTickers }) {
             {formatBadge.label}
           </span>
         ) : (
-          <>
-            <span
-              className={`daily-digest__verdict-dot daily-digest__verdict-dot--${v.tone}`}
-              title={`判定: ${v.label}`}
-              aria-label={`判定: ${v.label}`}
-            />
-            {ticker && (
-              <span className={`daily-digest__ticker daily-digest__ticker--${portfolioStatus}`}>{ticker}</span>
-            )}
-          </>
+          ticker && (
+            <span className={`daily-digest__ticker daily-digest__ticker--${portfolioStatus}`}>{ticker}</span>
+          )
         )}
       </span>
-      <span className="daily-digest__row-title">{truncate(title, 44)}</span>
+      <span className="daily-digest__row-title">{truncate(title, 46)}</span>
       {dateLabel && <span className="daily-digest__row-date">{dateLabel}</span>}
       <span className="daily-digest__arrow" aria-hidden="true">→</span>
+      {tip && createPortal(
+        <div className="daily-digest__verdict-tip" style={{ left: tip.x, top: tip.y }} role="tooltip">
+          {verdictExplain(v.label)}
+        </div>,
+        document.body,
+      )}
     </a>
   );
 }
@@ -274,12 +307,21 @@ export default function DailyDigestSection({ holdingTickers, watchlistTickers } 
       aria-label="本日の Daily Digest"
       open={open}
     >
-      {/* v143: 1 行ヘッダー (副題削除 + 改名「今日の決算レポート」)。 chevron は ::after で行末 inline。 */}
+      {/* v143: 1 行ヘッダー (副題削除 + 改名「今日の決算レポート」)。
+          chevron は lucide ChevronDown (18px、 open で回転) — 旧 ::after の 10px ▾ は
+          「小さくてバグに見える」 (user dogfood) ため、 明確な開閉コントロールに変更。 */}
       <summary className="daily-digest__summary" onClick={handleSummaryClick}>
         <h2 className="daily-digest__heading">今日の決算レポート</h2>
         <span className="daily-digest__count" aria-hidden="true">
           {loading ? '' : count > 0 ? `${count} 件` : ''}
         </span>
+        <ChevronDown
+          size={18}
+          strokeWidth={2}
+          className="daily-digest__chevron"
+          aria-hidden="true"
+          style={{ transform: open ? 'rotate(0deg)' : 'rotate(-90deg)' }}
+        />
       </summary>
       <div className="daily-digest__body">
         {loading && <DigestLoadingState />}

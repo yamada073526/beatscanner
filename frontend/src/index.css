@@ -10346,16 +10346,16 @@ button.ds-chip[data-pressed="true"]:hover {
 }
 
 /* details[open]::after は collapse / expand chevron 表示用 */
-.daily-digest__summary::after {
-  content: '▾';
+/* v143: chevron を lucide ChevronDown (18px) に変更。 旧 ::after の 10px ▾ は
+   「小さくてバグに見える」 (user dogfood)。 rotation は JSX の open state で制御 (inline transform)。 */
+.daily-digest__chevron {
   margin-left: var(--space-2, 8px);
-  color: var(--color-gold);
-  font-size: 10px;
-  transition: transform var(--motion-base, 200ms) ease;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: transform var(--motion-base, 200ms) var(--ease-out-expo, ease), color var(--motion-fast, 120ms) ease;
 }
-
-.daily-digest:not([open]) .daily-digest__summary::after {
-  transform: rotate(-90deg);
+.daily-digest__summary:hover .daily-digest__chevron {
+  color: var(--color-gold);
 }
 
 .daily-digest__body {
@@ -10388,12 +10388,13 @@ button.ds-chip[data-pressed="true"]:hover {
 
 .daily-digest__heading {
   font-family: 'Noto Sans JP', system-ui, sans-serif;
-  font-size: var(--text-body-lg, 16px);
-  font-weight: 700;
-  color: var(--text-primary);
+  /* v143 (user dogfood): 「内容=記事が主役」 のため見出しは控えめに。 group header (11px/fw500) より
+     1 段だけ上 (12px/fw600) でセクション階層を最小限保つ (multi-review 3 体、 完全同一は階層潰れ回避)。 */
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
   margin: 0;
-  letter-spacing: 0.01em;
-  /* v143: 1 行ヘッダー化で直接 flex 子に。 count + chevron(::after) を右へ押す。 */
+  letter-spacing: 0.04em;
   flex: 1;
   min-width: 0;
 }
@@ -10457,16 +10458,46 @@ button.ds-chip[data-pressed="true"]:hover {
   color: var(--color-accent);
 }
 
-/* v143: verdict (BEAT/MISS/WATCH) を文字ラベル → 8px dot に圧縮 (信号維持 + title 拡張、 3 体一致) */
+/* v143 (Q2): verdict 用固定幅スロット — まとめ行も同幅を確保し ticker/badge の左端を全行で揃える
+   (multi-review 3 体一致: 左端不揃いは毎日の認知コスト)。 */
+.daily-digest__verdict-slot {
+  width: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* v143: verdict (BEAT/MISS/WATCH) を文字ラベル → 8px dot に圧縮 (信号維持 + title 拡張、 3 体一致)。
+   hover で説明 tooltip を出すため cursor:help。 */
 .daily-digest__verdict-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
+  cursor: help;
 }
 .daily-digest__verdict-dot--gain { background: var(--color-gain); }
 .daily-digest__verdict-dot--loss { background: var(--color-loss); }
 .daily-digest__verdict-dot--warning { background: var(--color-warning); }
+
+/* v143 (Q3 #3b): verdict dot hover tooltip (portal + position:fixed、 inline left/top で配置)。
+   feedback_tooltip_portal_pattern 準拠 (overflow 親で切れないよう portal + fixed)。 */
+.daily-digest__verdict-tip {
+  position: fixed;
+  transform: translate(-50%, calc(-100% - 8px));
+  z-index: var(--z-tooltip, 1000);
+  padding: 5px 9px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 8px);
+  box-shadow: var(--shadow-3);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+}
 
 .daily-digest__verdict {
   display: inline-flex;
@@ -10511,8 +10542,9 @@ button.ds-chip[data-pressed="true"]:hover {
   flex: 1;
   min-width: 0;
   font-family: 'Noto Sans JP', system-ui, sans-serif;
-  font-size: var(--text-body, 14px);
-  font-weight: 600;
+  /* v143 (user dogfood): 14→13px / fw600→500 で軽量化 → title を長く表示 (≥13px で可読性維持、 multi-review 3 体) */
+  font-size: 13px;
+  font-weight: 500;
   line-height: 1.35;
   color: var(--text-primary);
   overflow: hidden;
