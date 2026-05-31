@@ -17,15 +17,26 @@ gt40() { python3 -c "import sys; v=sys.argv[1]; sys.exit(0 if (v not in ('','nul
 
 echo "[content-audit] target: $BASE"
 
-# ── Pitfall 1: 売上サプライズの集計基準ミスマッチ (銀行 JPM/WFC/C で |%|>40 が再発していないか) ──
-#   SSOT: memory/feedback_revenue_basis_mismatch.md (v144-8/9)。 runtime guard = _guard_revenue_basis_mismatch。
-echo "[1] revenue basis-mismatch guard (banks JPM/WFC/C)"
-for T in JPM WFC C; do
-  sp=$(curl -s --max-time 15 "$BASE/api/guidance/$T" | jq -r '.revenue.surprise_pct // empty' 2>/dev/null)
-  if gt40 "$sp"; then
-    echo "  FAIL: $T revenue surprise=${sp}% (>40 = guard 回帰、 集計基準ミスマッチ未抑止)"; FAIL=1
+# ── Pitfall 1: 売上の集計基準ミスマッチ — セクター連動抑止 (v144-8〜11) ──
+#   SSOT: memory/feedback_revenue_basis_mismatch.md。 runtime guard = _rev_surprise_threshold + _guard_revenue_basis_mismatch。
+#   1a: 銀行・与信 (JPM/WFC/C/USB/COF) は抑止済 (revenue_compare_unreliable=true) のはず → false なら回帰。
+echo "[1a] bank/credit revenue suppression (JPM/WFC/C/USB/COF)"
+for T in JPM WFC C USB COF; do
+  unrel=$(curl -s --max-time 15 "$BASE/api/guidance/$T" | jq -r '.revenue_compare_unreliable // false' 2>/dev/null)
+  if [ "$unrel" = "true" ]; then
+    echo "  ok: $T suppressed (compare_unreliable=true)"
   else
-    echo "  ok: $T revenue surprise=${sp:-null}"
+    echo "  FAIL: $T 銀行・与信なのに未抑止 (sector検出/抑止が回帰)"; FAIL=1
+  fi
+done
+#   1b: 決済 network (V/MA) は同 FMP industry='Credit Services' だが売上信頼可 → 誤抑止 (over-suppress) 回帰検出。
+echo "[1b] payment-network NOT over-suppressed (V/MA)"
+for T in V MA; do
+  unrel=$(curl -s --max-time 15 "$BASE/api/guidance/$T" | jq -r '.revenue_compare_unreliable // false' 2>/dev/null)
+  if [ "$unrel" = "true" ]; then
+    echo "  FAIL: $T (決済) が誤抑止 (V/MA の信頼できる売上を巻き込む over-suppress 回帰)"; FAIL=1
+  else
+    echo "  ok: $T not suppressed"
   fi
 done
 

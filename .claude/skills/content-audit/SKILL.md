@@ -55,7 +55,7 @@ backend endpoint (`/api/visualize` `/api/summary/detail/stream` `/api/conference
 ### 3. known-pitfall checklist (発見のたび追記、 これが「過去の修正を記録し再発を防ぐ」 価値)
 | 症状 | 検出方法 | 修正 SSOT |
 |---|---|---|
-| 売上サプライズ +45〜87% (一部銀行) | guidance/summary/visualize trends の rev surprise が非現実的 | [[feedback_revenue_basis_mismatch]] (v144-8/9、 \|surprise\|>40 で保留) |
+| 売上サプライズが銀行・与信で偽 beat | guidance/summary/visualize trends。 industry 別閾値 (銀行0/与信18/他40) | [[feedback_revenue_basis_mismatch]] (v144-8〜11、 sector連動。 ⚠️FMP は V/MA を与信に混在) |
 | 年次 EPS と四半期サプライズ混在 | 要約②で「EPS $20 (予想$5 を +8% Beat)」 等の桁不一致 | 要約 prompt が「四半期ベース」 明示 (v144-8 で改善) |
 | 次期ガイダンスに遠い未来期 (例 2028年) | 要約③に実 fiscal_period と乖離した期 | guidance guard + 注記で context 改善 (v144-8) |
 | 個人名 (じっちゃま/氏/アナリスト主語) | insights/要約に [[feedback_diagram_quality_guard]] BAD-1〜6 | hallucination-guard (sanitize layer) |
