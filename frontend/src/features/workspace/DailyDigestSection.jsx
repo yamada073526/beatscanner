@@ -28,7 +28,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase.js';
-import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { useAuth } from '../../hooks/useAuth.js';
 
 const FETCH_LIMIT = 3;
@@ -132,21 +131,45 @@ function getFormatLabel(format) {
 }
 
 /**
- * 個別 article card
+ * v143: 相対時刻フォーマット (デイリー配信の鮮度訴求、 multi-review 3 体一致で相対表示推奨)。
+ * timestamptz (ISO 文字列) 前提。 24h 以内は「N 時間前」、 以降は「昨日 / N 日前」、 7 日超は M/D。
+ */
+function formatRelativeJa(dateStr) {
+  if (!dateStr) return '';
+  const t = new Date(dateStr).getTime();
+  if (!Number.isFinite(t)) return '';
+  const diffMs = Date.now() - t;
+  if (diffMs < 0) return '';
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return 'たった今';
+  if (min < 60) return `${min}分前`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}時間前`;
+  const day = Math.floor(hr / 24);
+  if (day === 1) return '昨日';
+  if (day < 7) return `${day}日前`;
+  const d = new Date(t);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+/**
+ * v143: 個別 article 行 (横 1 行、 multi-review 3 体一致で card → row 化)。
+ * [lead: format badge or ticker+verdict] / title (truncate) / 相対日付 / →
  */
 function DigestCard({ article }) {
-  const { slug, title, subtitle, ticker, format, verdict } = article;
+  const { slug, title, ticker, format, verdict, published_at, generated_at } = article;
   const v = normalizeVerdict(verdict);
   const formatBadge = getFormatLabel(format);
+  const dateLabel = formatRelativeJa(published_at || generated_at);
   return (
     <a
       href={`/articles/${encodeURIComponent(slug)}`}
-      className="daily-digest__card"
+      className="daily-digest__row"
       data-testid={`daily-digest-card-${slug}`}
       data-format={format || 'deep_dive'}
       aria-label={`記事を読む: ${title}`}
     >
-      <div className="daily-digest__card-badges">
+      <span className="daily-digest__row-lead">
         {formatBadge ? (
           <span
             className={`daily-digest__format-badge daily-digest__format-badge--${formatBadge.tone}`}
@@ -154,19 +177,15 @@ function DigestCard({ article }) {
             {formatBadge.label}
           </span>
         ) : (
-          ticker && <span className="daily-digest__ticker">{ticker}</span>
+          <>
+            {ticker && <span className="daily-digest__ticker">{ticker}</span>}
+            <span className={`daily-digest__verdict daily-digest__verdict--${v.tone}`}>{v.label}</span>
+          </>
         )}
-        {!formatBadge && (
-          <span className={`daily-digest__verdict daily-digest__verdict--${v.tone}`}>{v.label}</span>
-        )}
-      </div>
-      <h3 className="daily-digest__title">{truncate(title, 28)}</h3>
-      {subtitle && (
-        <p className="daily-digest__subtitle">{truncate(subtitle, 70)}</p>
-      )}
-      <div className="daily-digest__read-more" aria-hidden="true">
-        詳細を読む <span className="daily-digest__arrow">→</span>
-      </div>
+      </span>
+      <span className="daily-digest__row-title">{truncate(title, 40)}</span>
+      {dateLabel && <span className="daily-digest__row-date">{dateLabel}</span>}
+      <span className="daily-digest__arrow" aria-hidden="true">→</span>
     </a>
   );
 }
@@ -187,12 +206,11 @@ function DigestEmptyState() {
  */
 function DigestLoadingState() {
   return (
-    <div className="daily-digest__grid" data-testid="daily-digest-loading" aria-busy="true">
+    <div className="daily-digest__list" data-testid="daily-digest-loading" aria-busy="true">
       {[0, 1, 2].map((i) => (
-        <div key={i} className="daily-digest__card daily-digest__card--skeleton" aria-hidden="true">
+        <div key={i} className="daily-digest__row daily-digest__row--skeleton" aria-hidden="true">
           <div className="daily-digest__skeleton-line daily-digest__skeleton-line--short" />
           <div className="daily-digest__skeleton-line daily-digest__skeleton-line--long" />
-          <div className="daily-digest__skeleton-line" />
         </div>
       ))}
     </div>
@@ -201,7 +219,6 @@ function DigestLoadingState() {
 
 export default function DailyDigestSection() {
   const { articles, loading, error } = useDailyDigest();
-  const setDigestTickers = useWorkspaceStore((s) => s.setDigestTickers);
   const { user } = useAuth();
 
   // v143: open/collapse は controlled。 明示 pref 優先、 無ければ初期は open (no-flash)、
@@ -227,15 +244,6 @@ export default function DailyDigestSection() {
     });
   };
 
-  // v117 R8 g3: DailyDigest が表示している ticker 一覧を workspace store に push
-  //   → JudgmentRow で「DIGEST」 badge を表示できるように連携
-  useEffect(() => {
-    const tickers = articles
-      .map((a) => (a.ticker || '').toUpperCase())
-      .filter(Boolean);
-    setDigestTickers(tickers);
-  }, [articles, setDigestTickers]);
-
   // Supabase 未設定 / error / 0 件 全て 「準備中」 fallback (Trust Cliff 防止)
   const showEmpty = !loading && (error || articles.length === 0);
 
@@ -249,23 +257,17 @@ export default function DailyDigestSection() {
       aria-label="本日の Daily Digest"
       open={open}
     >
+      {/* v143: 1 行ヘッダー (副題削除 + 改名「今日の決算レポート」)。 chevron は ::after で行末 inline。 */}
       <summary className="daily-digest__summary" onClick={handleSummaryClick}>
-        <div className="daily-digest__summary-inner">
-          <div>
-            <div className="daily-digest__label">DAILY DIGEST</div>
-            <h2 className="daily-digest__heading">本日の決算分析記事</h2>
-          </div>
-          <span className="daily-digest__count" aria-hidden="true">
-            {loading ? '' : count > 0 ? `${count} 件` : ''}
-          </span>
-        </div>
+        <h2 className="daily-digest__heading">今日の決算レポート</h2>
+        <span className="daily-digest__count" aria-hidden="true">
+          {loading ? '' : count > 0 ? `${count} 件` : ''}
+        </span>
       </summary>
       <div className="daily-digest__body">
         {loading && <DigestLoadingState />}
         {!loading && !showEmpty && (
-          <div
-            className={`daily-digest__grid daily-digest__grid--count-${Math.min(count, 3)}`}
-          >
+          <div className="daily-digest__list">
             {articles.map((article) => (
               <DigestCard key={article.slug} article={article} />
             ))}

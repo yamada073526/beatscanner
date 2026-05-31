@@ -1,9 +1,7 @@
 import React, { useMemo } from 'react';
-import { GripVertical } from 'lucide-react';
 import ConditionDots from '../../primitives/ConditionDots.jsx';
 import { useRowSparkline } from './RowSparkline.jsx';
 import CompanyLogo from '../../../../components/CompanyLogo.jsx';
-import { useWorkspaceStore } from '../../../../state/workspaceStore.js';
 
 /**
  * JudgmentRow — Pane 2 / Pane 1 watchlist で使用する銘柄行.
@@ -24,18 +22,16 @@ import { useWorkspaceStore } from '../../../../state/workspaceStore.js';
  * @param {object} props.item - { ticker, companyName?, price?, changePct?, judgment?, isHolding, isWatchlist, nextEarningsDays? }
  * @param {boolean} props.selected
  * @param {(ticker: string) => void} props.onClick
+ * @param {'condition'|'earnings'} [props.metaMode='condition'] - 右端 meta cell。 v143: sort='決算近' のとき
+ *   JudgmentList から 'earnings' を渡し、 5 条件 dot の代わりに決算カウントダウンを表示。
  */
-export default function JudgmentRow({ item, selected, onClick }) {
+export default function JudgmentRow({ item, selected, onClick, metaMode = 'condition' }) {
   const { ticker, companyName, price, changePct, judgment, isHolding } = item;
   const conditions = (judgment?.conditions || []).map((c) => Boolean(c?.passed));
   while (conditions.length < 5) conditions.push(false);
 
-  // v120 Sprint 1: pane2Meta は store 維持、 default 'condition' 固定 (UI 切替廃止)
-  const pane2Meta = useWorkspaceStore((s) => s.pane2Meta);
-  // v117 R8 g3: DailyDigest 掲載中の ticker か判定 → 「DIGEST」 mini badge 表示
-  const digestTickers = useWorkspaceStore((s) => s.digestTickers);
-  const isInDigest = Array.isArray(digestTickers) && digestTickers.includes(String(ticker || '').toUpperCase());
-
+  // v143: 右端 meta は metaMode prop で制御 (旧 pane2Meta store 参照を廃止、 sort 連動に変更)
+  const pane2Meta = metaMode;
   // v120 Sprint 2: 1Y trend % を sparkline cache 経由で取得 (削除した sparkline 列の代替)
   // useRowSparkline は module-level cache + dedupe 済、 watchlist 5-20 ticker 同時参照でも 1 fetch
   const prices1y = useRowSparkline(ticker, '1y');
@@ -143,14 +139,8 @@ export default function JudgmentRow({ item, selected, onClick }) {
       className={className}
       data-testid="ws-judgment-row"
     >
-      {/* Col 0: drag handle (hover で出現) */}
-      <span
-        className="ws-row-handle"
-        aria-hidden
-        title="ドラッグで並び替え"
-      >
-        <GripVertical size={12} />
-      </span>
+      {/* v143: drag handle 撤去 (multi-review 3 体一致 — 動かないハンドルは「壊れたアプリ」 印象。
+          DnD フル実装は post-release backlog)。 */}
 
       {/* Col 1: Logo + Ticker + Co.Name */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -174,26 +164,6 @@ export default function JudgmentRow({ item, selected, onClick }) {
             >
               {ticker}
             </span>
-            {isInDigest && (
-              <span
-                title="本日の Daily Digest に掲載中"
-                style={{
-                  fontSize: 9,
-                  fontWeight: 700,
-                  letterSpacing: '0.1em',
-                  color: 'var(--color-gold)',
-                  padding: '1px 6px',
-                  borderRadius: 999,
-                  background: 'color-mix(in srgb, var(--color-gold) 12%, transparent)',
-                  border: '1px solid color-mix(in srgb, var(--color-gold) 30%, transparent)',
-                  textTransform: 'uppercase',
-                  flexShrink: 0,
-                  lineHeight: 1.4,
-                }}
-              >
-                DIGEST
-              </span>
-            )}
           </span>
           {/* v120 hotfix (user dogfood Bug 2): 「未分析」 文字は冗長
               (右端の 5 条件 dot が全消し = 未分析 を visual で既に示している)。

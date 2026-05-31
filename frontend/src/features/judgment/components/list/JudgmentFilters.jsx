@@ -1,23 +1,18 @@
 import React from 'react';
 import { ArrowUpDown } from 'lucide-react';
-import Chip from '../../../../components/ui/Chip.jsx';
 import { useJudgment } from '../../state/JudgmentContext.jsx';
 
-const GROUP_OPTIONS = [
-  { key: 'all',       label: 'すべて' },
-  { key: 'holdings',  label: '保有' },
-  { key: 'watchlist', label: '観察銘柄' },
-  { key: 'all-pass',  label: '5 条件合致' },
-];
-
-// §12-C-8 + §dogfood-pane2: chip group 4 個 (5 → 4)。
-// 「直近分析」は dogfood 検証で利用想定が薄い (= ウォッチリスト未登録の銘柄を再訪する用途のみ) ため削除。
-// 「ティッカー順」は同様に dogfood 未利用で削除済。
+// v143 (user dogfood + multi-review 3 体合議): group chip (すべて/保有/観察/5条件合致) を全撤去。
+//   - 保有/観察 は SmartGroup の section header で既に仕切り済 → chip 冗長
+//   - 5 条件合致 は合致銘柄が極少 (本日 2 件) で絞り込み価値が低い → 行の dot を目視で十分
+//   group は常に 'all' (SmartGroup 表示)。 sort のみ残す。
+// sort: 騰落順 (change-pct) は使用頻度低で撤去。
+// 「タグ順」(tag-order) は v143 cluster 3 (タグ CRUD を workspace に配線) 完了まで一旦除外。
+//   タグ作成/付与 UI が無い状態で sort だけ出すと「壊れた機能」 になるため (multi-review 3 体一致)。
+//   cluster 3 着地時に再追加する。
 const SORT_OPTIONS = [
   { key: 'pass-count',    label: 'デフォルト' }, // = 条件合致数 desc
-  { key: 'tag-order',     label: 'タグ順' },
   { key: 'earnings-near', label: '決算近' },
-  { key: 'change-pct',    label: '騰落順' },
 ];
 
 export default function JudgmentFilters() {
@@ -27,33 +22,14 @@ export default function JudgmentFilters() {
       className="ds-judgment-filters"
       style={{
         display: 'flex',
-        flexWrap: 'wrap',
         alignItems: 'center',
         gap: 8,
         padding: '8px 12px',
         borderBottom: '1px solid var(--border)',
       }}
     >
-      {/* round 7: 新 Chip primitive (md filter variant) に migrate。
-          tone は accent でなく pressed prop で表現、変換テーブル不要に。
-          v143: group は chip 維持 (頻繁に切替・3-4 個で密度問題なし)。 */}
-      <div style={{ display: 'flex', gap: 4 }} role="group" aria-label="グループ">
-        {GROUP_OPTIONS.map((opt) => (
-          <Chip
-            key={opt.key}
-            size="md"
-            variant="filter"
-            pressed={filters.group === opt.key}
-            onClick={() => setFilters({ ...filters, group: opt.key })}
-          >
-            {opt.label}
-          </Chip>
-        ))}
-      </div>
-      <div style={{ flex: 1 }} />
-      {/* v143 (user dogfood): sort 4 chip → compact select に集約。 chip 密度を下げ
-          「どれを押すか」 の認知負荷を軽減 (原則 1 + 原則 3)。 select styling は
-          IndicesView の token pattern に準拠。 ArrowUpDown で並び替え affordance を明示。 */}
+      {/* v143: group chip 撤去で sort select のみ。 ArrowUpDown で並び替え affordance を明示。
+          select styling は IndicesView の token pattern に準拠。 */}
       <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)' }}>
         <ArrowUpDown size={13} aria-hidden style={{ flexShrink: 0 }} />
         <select

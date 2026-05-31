@@ -21,6 +21,9 @@ const QUICK_PICKS = ['AAPL', 'NVDA', 'TSLA', 'MSFT'];
 export default function JudgmentList({ items = [], showFilters = true, onAnalyze, onAddToWatchlist, isPro = false }) {
   const { selectedTicker, selectTicker, filters } = useJudgment();
 
+  // v143: sort='決算近' のとき右端 meta を 5 条件 dot → 決算カウントダウンに切替 (user dogfood 要望)
+  const metaMode = filters.sort === 'earnings-near' ? 'earnings' : 'condition';
+
   // ── filter + sort + group ────────────────────────────────────
   const view = useMemo(() => {
     const q = filters.query.trim().toUpperCase();
@@ -242,6 +245,7 @@ export default function JudgmentList({ items = [], showFilters = true, onAnalyze
                     item={it}
                     selected={selectedTicker === it.ticker}
                     onClick={selectTicker}
+                    metaMode={metaMode}
                   />
                 ))}
               </section>
@@ -254,6 +258,7 @@ export default function JudgmentList({ items = [], showFilters = true, onAnalyze
               item={it}
               selected={selectedTicker === it.ticker}
               onClick={selectTicker}
+              metaMode={metaMode}
             />
           ))
         )}
