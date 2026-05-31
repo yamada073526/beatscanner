@@ -62,6 +62,18 @@ const TIER1 = [
   { sym: 'JPY=X', label: 'USD/JPY', desc: 'ドル円為替レート' },
 ];
 const TIER1_SYMS = new Set(TIER1.map((t) => t.sym));
+// v146 D: 指数/先物/為替シンボル (^GSPC 等) はニュース API が空を返す → fetch 用に news-able な
+//   proxy ETF へ振り替える (表示は指数ラベルのまま)。 TIER2 は実 ETF なので mapping 不要。
+const INDEX_NEWS_PROXY = {
+  '^GSPC': 'SPY',     // S&P 500 → SPY
+  '^IXIC': 'QQQ',     // NASDAQ → QQQ
+  '^DJI': 'DIA',      // DOW → DIA
+  '^VIX': 'SPY',      // VIX (S&P ボラ) → 市場全体ニュースで代替
+  'DX-Y.NYB': 'UUP',  // ドル指数 → ドル ETF
+  '^TNX': 'TLT',      // 米 10Y 利回り → 米国債 ETF
+  'CL=F': 'USO',      // WTI 原油 → 原油 ETF
+  'JPY=X': 'FXY',     // USD/JPY → 円 ETF
+};
 // §dogfood-世界市場: Tier 1 以外の 22 指標 (= 旧「世界市場」) も同 endpoint から取得し
 // この tab で Tier 1 + 世界市場 の 2 group 表示.
 // §dogfood-round12: Tier 2 順序は frontend で明示制御 (backend 順は QQQ→SPY だが、
@@ -2678,7 +2690,8 @@ export function IndicesDetailView() {
 
       {/* §dogfood-1: 指数 detail にニュースセクションを追加 (個別銘柄分析と同じ NewsPanel) */}
       {/* §v66 §2: workspace 経由なので必ず Pane 5 Reading Room を開く */}
-      <NewsPanel ticker={ticker} useWorkspaceReader />
+      {/* v146 D: 指数シンボルは proxy ETF でニュース fetch (^GSPC→SPY 等)、 表示ラベルは指数のまま */}
+      <NewsPanel ticker={ticker} newsTicker={INDEX_NEWS_PROXY[ticker] || null} useWorkspaceReader />
     </div>
   );
 }

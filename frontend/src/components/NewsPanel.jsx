@@ -32,7 +32,10 @@ const MAX_FETCH = 50;
 
 // Phase 2.7 Sprint 1 #2': hideHeading prop — workspace mode では大見出し/小見出し重複を解消
 // default = false で SPA classic mode 維持
-export default function NewsPanel({ ticker, useWorkspaceReader = false, hideHeading = false }) {
+export default function NewsPanel({ ticker, newsTicker = null, useWorkspaceReader = false, hideHeading = false }) {
+  // v146 D: 指数 (^GSPC 等) はニュース API が空を返すため、 fetch だけ proxy ETF (SPY 等) に振り替える。
+  //   表示ラベルは ticker のまま (index 文脈維持)、 fetch のみ newsTicker を使う。
+  const fetchKey = newsTicker || ticker;
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -158,12 +161,12 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false, hideHead
   }, [news]);
 
   function load() {
-    if (!ticker) return;
+    if (!fetchKey) return;
     setLoading(true);
     setError(null);
     setNews([]);
     setVisibleCount(INITIAL_VISIBLE);
-    fetchNews(ticker, MAX_FETCH)
+    fetchNews(fetchKey, MAX_FETCH)
       .then(setNews)
       .catch(() => setError('ニュースの取得に失敗しました'))
       .finally(() => setLoading(false));
@@ -186,7 +189,7 @@ export default function NewsPanel({ ticker, useWorkspaceReader = false, hideHead
     if (!articleModal) setSelectedIdx(null);
   }, [articleModal, selectedIdx]);
 
-  useEffect(() => { load(); }, [ticker]);
+  useEffect(() => { load(); }, [ticker, newsTicker]);
 
   if (!ticker) return null;
 
