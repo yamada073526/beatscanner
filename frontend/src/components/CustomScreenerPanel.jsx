@@ -13,6 +13,9 @@ const CONDITION_SHORT = ['CF率', 'EPS', 'CFPS', '売上', 'CF>EPS'];
 //   実装は frontend intersection (backend は 'both' + 'rs' 既存 endpoint 流用、 cost ゼロ)
 const SCANNER_FILTERS = [
   { key: 'cup',   label: 'カップ' },
+  // v141 D4 Sprint2 (3体合議 QA verdict、 #1 Trust Cliff リスク): cup scan を frontend で breakout_confirmed のみ抽出。
+  // state machine 流れ (形成中 → ブレイクアウト確定) で 'cup' の直後に配置。 premium 限定 (理由は runCupFilter / CupScannerResults 参照)。
+  { key: 'breakout', label: 'ブレイクアウト', premium: true, fullLabel: 'Cup-Handle ブレイクアウト確定 (Pivot 上抜け + 出来高確認)', titleExtra: "O'Neil 打診買いゾーン: Pivot 価格を出来高を伴って上抜けた確定銘柄のみ。 ATH 追いかけ買い (extended) は除外" },
   { key: 'rs',    label: 'RS強', titleExtra: 'Relative Strength ≥ 80 (CAN SLIM L 条件、 SP500 universe で上位 20%)' },
   { key: 'both',  label: 'ファンダ&カップ', premium: true, fullLabel: 'ファンダ AND Cup-Handle 複合検索' },
   { key: 'oneill', label: "O'Neil 完全", premium: true, fullLabel: "ファンダ AND Cup-Handle AND RS≥80 (William O'Neil CAN SLIM 完全)", titleExtra: '打診買い 3 点セット (ファンダメンタル5条件 × Cup-Handle × Relative Strength)' },
@@ -230,7 +233,34 @@ function CupScannerResults({ data, onSelect, onUpgrade, filterKey }) {
   const totalCount = data.total_count || 0;
   const visibleCount = data.visible_count || items.length;
   const isPremium = !!data.is_premium;
-  const filterLabel = filterKey === 'both' ? 'ファンダ ∩ Cup-Handle' : 'Cup-Handle';
+  const filterLabel = filterKey === 'breakout'
+    ? 'ブレイクアウト確定'
+    : filterKey === 'both'
+      ? 'ファンダ ∩ Cup-Handle'
+      : 'Cup-Handle';
+
+  // v141 D4 Sprint2: breakout は Premium 限定。 free user は cup endpoint で state が mask され抽出不可なので、
+  // misleading な cup 総数を見せず clean teaser を出す (空表示=「動かないアプリ」回避、 Trust Cliff #1 対策)。
+  if (filterKey === 'breakout' && !isPremium) {
+    return (
+      <div className="rounded-xl border border-[color-mix(in_srgb,var(--color-warning)_35%,transparent)] bg-[color-mix(in_srgb,var(--color-warning)_8%,transparent)] p-4">
+        <p className="text-sm font-semibold text-[var(--text-primary)]">
+          ブレイクアウト確定銘柄は Premium 限定です
+        </p>
+        <p className="mt-1 text-xs text-[var(--text-secondary)]">
+          Pivot 価格を出来高を伴って上抜けた確定銘柄を Premium ¥1,800/月 で全件解放 (ATH 追いかけ買いは除外、 毎営業日 email 通知付)。
+        </p>
+        {onUpgrade && (
+          <button
+            onClick={onUpgrade}
+            className="mt-3 inline-flex items-center rounded-lg bg-[var(--color-warning)] px-3 py-1.5 text-xs font-semibold text-[var(--bg-card)] hover:bg-[color-mix(in_srgb,var(--color-warning)_85%,black)]"
+          >
+            Premium にアップグレード
+          </button>
+        )}
+      </div>
+    );
+  }
 
   if (totalCount === 0) {
     return (
@@ -503,7 +533,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
   const [cupData, setCupData] = useState(null);
   const [rsData, setRsData] = useState(null); // v120 RS Screener
   const [oneillData, setOneillData] = useState(null); // v122 O'Neil 完全 (frontend intersection)
-  const [activeFilter, setActiveFilter] = useState(null); // null | 'funda' | 'cup' | 'rs' | 'both' | 'oneill'
+  const [activeFilter, setActiveFilter] = useState(null); // null | 'funda' | 'cup' | 'breakout' | 'rs' | 'both' | 'oneill'
   const [error, setError] = useState(null);
 
   async function run() {
@@ -575,6 +605,38 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
         });
       } catch (e) {
         setOneillData({ error: e.message, items: [], total_count: 0, is_premium: false });
+      }
+      return;
+    }
+    if (filterKey === 'breakout') {
+      // v141 D4 Sprint2 (3体合議 QA verdict、 #1 Trust Cliff リスク): cup scan を frontend intersection で抽出。
+      // backend 増設ゼロ ('oneill' 前例)。 QA Trust Cliff 4 条件:
+      //   ① breakout_extended (ATH 追いかけ買い) を物理除外 → state !== 'breakout_confirmed' で全 state 除外。
+      //   ② pivot 乖離率 +8% guard: scanner item payload に現在価格が無い (backend _detect_cup_handle 戻り値=保存 payload で
+      //      verify 済、 today_close/current_price フィールドなし) ため frontend 計算不可。
+      //      → backend の breakout_extended 分類 (today_close >= 252週高値95%) が over-extension を構造的に除外、 ① と同一除外でカバー。
+      //   ③ state==null + Number.isFinite(pivot) guard。
+      //   ④ premium 限定: cup endpoint が free user の state/payload を mask → 抽出不可 + misleading count 回避。
+      try {
+        const result = await fetchCupHandleScanner('cup');
+        if (!result.is_premium) {
+          // Free: state mask 済で breakout 抽出不可 → CupScannerResults の breakout teaser で訴求 (count 主張なし)
+          setCupData(result);
+          return;
+        }
+        const filtered = (result.items || []).filter((it) => {
+          if (!it || it._masked || !it.state) return false; // ③ state==null guard
+          if (it.state !== 'breakout_confirmed') return false; // ①/② extended 含む他 state 物理除外
+          return Number.isFinite(it?.payload?.pivot?.price); // ③ pivot guard
+        });
+        setCupData({
+          ...result,
+          items: filtered,
+          total_count: filtered.length,
+          visible_count: filtered.length,
+        });
+      } catch (e) {
+        setCupData({ error: e.message, items: [], total_count: 0, visible_count: 0, is_premium: false });
       }
       return;
     }

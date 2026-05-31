@@ -420,8 +420,14 @@ export default function JudgmentDetail({
 
   if (!selectedTicker) {
     return (
+      // B3 (handover v141、 user 判定 2026-05-31): 空 placeholder は bs-panel だが
+      // useArrivalSpotlight が全 .bs-panel を監視 → 短くスクロールしない pane center が常時 band 内に入り
+      // is-arriving (cyan glow 中段) が固定点灯していた (= no-baseline-cyan が禁じる「常時強発光」症状)。
+      // data-spotlight-skip="1" で spotlight 監視対象外にして baseline neutral (gray border / no glow) に戻す。
+      // glow CSS (高リスク zone) は無改変、 hook の既存 opt-out 機構のみ利用。
       <div
         className="bs-panel"
+        data-spotlight-skip="1"
         style={{
           padding: 'var(--space-12, 48px) var(--space-6, 24px)',
           textAlign: 'center',
