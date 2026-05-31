@@ -591,10 +591,15 @@ function Pane1Nav({ items = [] }) {
           row click で Pane 3 の過去値動きを確認可。Phase 2 で Header カスタマイズ実装時に
           選択肢のソースとして再利用予定。 */}
 
-      {/* v138.6 R6: ユーザーフッター (sticky 下) — ログイン時のみ表示。 nav の他要素と
-          視覚的に分離するため marginTop:'auto' + 上 border、 logout アイコンは R5 Option D
-          (icon-only opacity 0.55→1) と同 minimal style で統一感。 */}
-      <UserFooter />
+      {/* v138.6 R6: ユーザーフッター (sticky 下) — ログイン時のみ表示。 logout アイコンは
+          R5 Option D (icon-only opacity 0.55→1) と同 minimal style で統一感。
+          v143: marginTop:'auto' を bottom wrapper に移し、 UserFooter (login時) + privacy
+          リンク (常時) を nav 末尾に沈める。 PC default = workspace のため GA4/Clarity
+          外部送信規律の privacy 導線を workspace でも可視化 (従来は classic footer のみ)。 */}
+      <div style={{ marginTop: 'auto' }}>
+        <UserFooter />
+        <Pane1LegalFooter />
+      </div>
     </div>
   );
 }
@@ -725,6 +730,44 @@ function UserFooter() {
       >
         <LogOut size={14} strokeWidth={2.0} aria-hidden="true" />
       </button>
+    </div>
+  );
+}
+
+/**
+ * v143 Pane1LegalFooter — workspace mode の privacy 導線 (ログイン状態に関わらず常時表示)。
+ * GA4/Clarity が全 visitor のデータを送信するため、 改正電気通信事業法 外部送信規律の
+ * プライバシーポリシー導線を PC default の workspace でも可視化する (従来は classic footer のみ)。
+ * UserFooter (login時のみ) の有無で border を出し分け、 二重 border / 浮き を回避。
+ * Aman 級「主張せず、 必要な時に立ち上がる」 質感: muted + opacity 0.7、 hover で 1。
+ */
+function Pane1LegalFooter() {
+  const { user, ready } = useAuth();
+  const userFooterShown = isSupabaseConfigured && ready && !!user;
+  return (
+    <div
+      data-testid="ws-pane1-legal-footer"
+      style={{
+        paddingTop: userFooterShown ? 6 : 10,
+        paddingBottom: 2,
+        borderTop: userFooterShown ? 'none' : '1px solid var(--border)',
+      }}
+    >
+      <a
+        href="/privacy"
+        data-testid="ws-pane1-privacy-link"
+        style={{
+          fontSize: 10,
+          color: 'var(--text-muted)',
+          textDecoration: 'none',
+          opacity: 0.7,
+          transition: 'opacity var(--motion-fast) ease',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.7'; }}
+      >
+        プライバシーポリシー
+      </a>
     </div>
   );
 }
