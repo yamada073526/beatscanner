@@ -140,7 +140,7 @@ const COLUMN_DEFS = {
     render: (r) => fmtEPS(r.eps_estimated),
   },
   eps_surprise: {
-    header: 'サプライズ',
+    header: 'EPS サプライズ',
     headerClass: 'qh-num',
     // #7-b: qh-cell-surprise で fw600 + accent tint 縦帯強調
     cellClass: (r) => `qh-num qh-cell-surprise qh-${statusFromVerdict(r.eps_verdict)}`,
