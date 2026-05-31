@@ -20,6 +20,8 @@ import {
   Activity,
   SlidersHorizontal,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 // v138.6 R6 (2026-05-30): Pane1Nav 末尾に user footer + logout button (user dogfood 要望
 // 「ログアウトできない、 LP 確認できない」 解消)。 useAuth は App.jsx で既に利用、 hook 再呼出で OK。
@@ -290,6 +292,37 @@ function Pane1NavRail({ items = [] }) {
         overflowX: 'hidden',
       }}
     >
+      {/* v143 (user dogfood): rail からワンクリックで展開するボタン (collapse の対) */}
+      <button
+        type="button"
+        onClick={() => {
+          try { useWorkspaceStore.getState().setPane1Collapsed(false); } catch { /* noop */ }
+        }}
+        aria-label="サイドバーを展開"
+        title="サイドバーを展開"
+        onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.55'; e.currentTarget.style.transform = 'scale(1)'; }}
+        onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.92)'; }}
+        onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 28,
+          height: 28,
+          padding: 5,
+          marginBottom: 4,
+          border: 'none',
+          background: 'transparent',
+          color: 'var(--text-secondary)',
+          opacity: 0.55,
+          borderRadius: 'var(--radius-pill, 9999px)',
+          cursor: 'pointer',
+          transition: 'opacity var(--motion-fast) ease, transform var(--motion-fast) ease',
+        }}
+      >
+        <PanelLeftOpen size={16} strokeWidth={1.75} aria-hidden="true" />
+      </button>
       {/* nav tabs (アイコンのみ) — workspace は 2 タブのみ (3 タブ削除済、6 体合議) */}
       {WORKSPACE_NAV_TABS.map((t) => {
         const active = activeTab === t.key;
@@ -458,6 +491,40 @@ function Pane1Nav({ items = [] }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: 8, overflowY: 'auto', minHeight: 0 }}>
+      {/* v143 (user dogfood): サイドバーを最小幅 (rail) へワンクリックで畳むボタン。
+          従来は resize handle を minSize 未満までドラッグする必要があり面倒だった。
+          VS Code / Linear 流に上部右寄せ、 logout と同 minimal style (opacity 0.55→1)。 */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', paddingBottom: 2 }}>
+        <button
+          type="button"
+          onClick={() => {
+            try { useWorkspaceStore.getState().setPane1Collapsed(true); } catch { /* noop */ }
+          }}
+          aria-label="サイドバーを最小化"
+          title="サイドバーを最小化"
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.55'; e.currentTarget.style.transform = 'scale(1)'; }}
+          onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.92)'; }}
+          onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 26,
+            height: 26,
+            padding: 5,
+            border: 'none',
+            background: 'transparent',
+            color: 'var(--text-secondary)',
+            opacity: 0.55,
+            borderRadius: 'var(--radius-pill, 9999px)',
+            cursor: 'pointer',
+            transition: 'opacity var(--motion-fast) ease, transform var(--motion-fast) ease',
+          }}
+        >
+          <PanelLeftClose size={15} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+      </div>
       {/* ── ナビゲーション (collapsible) ──────────────────────────── */}
       <SectionHeader
         collapsed={navCollapsed}
