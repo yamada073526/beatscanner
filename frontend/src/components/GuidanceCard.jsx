@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import InfoModal from './InfoModal.jsx';
 import Chip from './ui/Chip.jsx';
-import { BarChart3, Calendar, CalendarRange, EyeOff } from 'lucide-react';
+import { BarChart3, Calendar, CalendarRange, EyeOff, Scale } from 'lucide-react';
 // v100 (handover §100点 UI/UX verdict C): GuidanceCard 達成率 / サプライズ % に count-up animation
 import { useCountUp } from '../hooks/useCountUp.js';
 
@@ -344,7 +344,7 @@ function ArcProgress({ value, color = 'var(--color-accent)', size = 56, strokeWi
   );
 }
 
-function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatter, signalQuality, nextEarningsDays, isAwaitingEarnings }) {
+function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatter, signalQuality, nextEarningsDays, isAwaitingEarnings, basisMismatch = false }) {
   const style = verdict ? VERDICT_STYLE[verdict] : null;
   const isUnknown = verdict === 'unknown' || verdict === '不明';
   // v97 sub-agent verdict: 「不明」 = ガイダンス未公開 (バグではなく企業の意図的非開示) を明示。
@@ -418,7 +418,9 @@ function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatt
           padding: 'var(--space-3, 12px) 0',
           opacity: 0.85,
         }}>
-          <EyeOff size={20} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--text-muted)' }} />
+          {basisMismatch
+            ? <Scale size={20} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--text-muted)' }} />
+            : <EyeOff size={20} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--text-muted)' }} />}
           <span style={{
             fontSize: 13,
             fontWeight: 600,
@@ -426,7 +428,7 @@ function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatt
             letterSpacing: '0.04em',
             textAlign: 'center',
           }}>
-            ガイダンス非公開
+            {basisMismatch ? '比較基準が相違' : 'ガイダンス非公開'}
           </span>
           <span style={{
             fontSize: 10,
@@ -434,7 +436,7 @@ function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatt
             textAlign: 'center',
             lineHeight: 1.4,
           }}>
-            当四半期は業績見通し未発表
+            {basisMismatch ? '実績と予想で集計基準が異なるため判定保留' : '当四半期は業績見通し未発表'}
           </span>
         </div>
       ) : (
@@ -816,6 +818,16 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
   const revenueSignalQuality = revenue?.signal_quality || null;
   const subtitle = fiscal_period || date || '直近決算';
 
+  // v144 content-quality guard (mirror of backend _REV_BASIS_MISMATCH_PCT=40):
+  //   一部の銀行 (JPM/WFC/C 等) は FMP の revenue_actual=総収益 (グロス金利込み) vs analyst
+  //   estimate=純収益 の集計基準ミスマッチで非現実的な売上サプライズ (+45〜87%) が出る (Trust Cliff)。
+  //   ScorecardCell はフロントで surprise/verdict を再計算するため、 backend guard だけでは効かない。
+  //   |surprise| > 40% は比較不能として判定保留 (unknown) + 「比較基準相違」 表記。 backend と同閾値 (要同期)。
+  const _revRawPct = (Number.isFinite(revenue_actual) && Number.isFinite(revenue_estimated) && Math.abs(revenue_estimated) > 0)
+    ? ((revenue_actual - revenue_estimated) / Math.abs(revenue_estimated)) * 100
+    : null;
+  const revBasisMismatch = _revRawPct != null && Math.abs(_revRawPct) > 40;
+
   return (
     // Phase 2.6 5-1: tier-m-glow wrapper — halo sweep の IO observe 対象
     // v99 dogfood D: 全 state (skeleton / no-data / loaded content) で minHeight 360 統一、
@@ -874,19 +886,16 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
           label="売上高"
           estimated={revenue_estimated}
           actual={revenue_actual}
-          surprisePct={
-            (Number.isFinite(revenue_actual) && Number.isFinite(revenue_estimated) && Math.abs(revenue_estimated) > 0)
-              ? ((revenue_actual - revenue_estimated) / Math.abs(revenue_estimated)) * 100
-              : null
-          }
+          surprisePct={revBasisMismatch ? null : _revRawPct}
           verdict={(() => {
             if (!Number.isFinite(revenue_actual) || !Number.isFinite(revenue_estimated)) return 'unknown';
             if (Math.abs(revenue_estimated) === 0) return 'in-line';
-            const p = ((revenue_actual - revenue_estimated) / Math.abs(revenue_estimated)) * 100;
-            if (p >= 3) return 'beat';
-            if (p <= -3) return 'miss';
+            if (revBasisMismatch) return 'unknown';  // 集計基準ミスマッチ → 判定保留
+            if (_revRawPct >= 3) return 'beat';
+            if (_revRawPct <= -3) return 'miss';
             return 'in-line';
           })()}
+          basisMismatch={revBasisMismatch}
           formatter={formatRevenue}
           signalQuality={revenueSignalQuality}
           nextEarningsDays={nextEarningsDays}

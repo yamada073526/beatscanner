@@ -5040,6 +5040,34 @@ def _verdict(actual: float | None, estimated: float | None) -> tuple[str, float 
     return label, pct, None
 
 
+# v144 content-quality guard (Trust Cliff 防止): 一部の銀行 (JPM/WFC/C 等) は FMP の
+# revenue_actual=総収益 (グロス金利収入込み) vs analyst estimate=純収益 (net revenue) の
+# 集計基準ミスマッチで非現実的な売上サプライズ (+45〜87%) が出る。 finance リテラシーの高い user
+# には即「誤り」 と判り Trust Cliff 直撃。 大型株の実 revenue beat は通常 ±20% 以内なので、
+# |surprise| > 閾値 (40%) は data 不整合と判断し、 verdict/surprise を保留 (unknown) + 注記。
+# 5 条件 PASS/FAIL は年次データ使用で本 guard の影響を受けない。 EPS は小型株で % が暴れる
+# (near-zero estimate) ため対象外、 revenue surprise のみ適用。
+_REV_BASIS_MISMATCH_PCT = 40.0
+
+
+def _guard_revenue_basis_mismatch(
+    rev_label: str, rev_pct: float | None, rev_reason: str | None, signal_quality: dict | None = None
+) -> tuple[str, float | None, str | None, str | None]:
+    """売上サプライズが非現実的に大きい (集計基準ミスマッチ疑い) なら判定保留にする。
+    Returns: (rev_label, rev_pct, rev_reason, rev_note)。 signal_quality dict があれば in-place で confidence 降格。"""
+    if rev_pct is not None and abs(rev_pct) > _REV_BASIS_MISMATCH_PCT:
+        if isinstance(signal_quality, dict):
+            signal_quality["confidence"] = "low"
+            signal_quality["basis_mismatch"] = True
+        return (
+            "unknown",
+            None,
+            "実績と予想で売上の集計基準が異なる可能性があり、サプライズ判定を保留しています",
+            "実績と予想で売上の集計基準が異なる可能性があるため、サプライズ比較は参考値です",
+        )
+    return rev_label, rev_pct, rev_reason, None
+
+
 def _safe_eps_float(val) -> float | None:
     """EPS 専用: None・"None"・空文字を安全にfloatへ変換。0.0はestimated未設定の可能性があるため除外。
 
@@ -6120,6 +6148,8 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
 
         eps_label, eps_pct, _ = _verdict(eps_actual, eps_estimated)
         rev_label, rev_pct, _ = _verdict(revenue_actual, revenue_estimated)
+        # v144 content-quality guard: 売上の集計基準ミスマッチ (一部銀行) の非現実的 surprise を判定保留。
+        rev_label, rev_pct, _, _ = _guard_revenue_basis_mismatch(rev_label, rev_pct, None)
 
         history.append({
             "date": date_str,
@@ -6245,6 +6275,20 @@ async def guidance_basic(ticker: str, request: Request) -> dict:
             isinstance(eps_result, dict) and eps_result.get("revenue_actual_fmp") is not None
         ) else ("yfinance" if revenue_actual is not None else "none")
 
+        # v144 content-quality guard: 売上の集計基準ミスマッチ (一部銀行) で非現実的な surprise が
+        #   出るケースを判定保留 + signal_quality 降格。 詳細は _guard_revenue_basis_mismatch 参照。
+        rev_signal_quality = _build_signal_quality(
+            source=rev_source,
+            date_str=income_date or surprise_date,
+            consensus_count=eps_result.get("revenue_consensus_count") if isinstance(eps_result, dict) else None,
+        )
+        rev_label, rev_pct, rev_reason, _rev_mismatch_note = _guard_revenue_basis_mismatch(
+            rev_label, rev_pct, rev_reason, rev_signal_quality
+        )
+        rev_note = _rev_mismatch_note or (
+            None if revenue_estimated is not None else "企業が次期ガイダンスを公式に開示していません"
+        )
+
         resp = {
             "ticker": ticker.upper(),
             "fiscal_period": fiscal_period,
@@ -6269,15 +6313,11 @@ async def guidance_basic(ticker: str, request: Request) -> dict:
                 "verdict": rev_label,
                 "verdict_reason": rev_reason,
                 "source": rev_source,
-                "signal_quality": _build_signal_quality(
-                    source=rev_source,
-                    date_str=income_date or surprise_date,
-                    consensus_count=eps_result.get("revenue_consensus_count") if isinstance(eps_result, dict) else None,
-                ),
+                "signal_quality": rev_signal_quality,
             },
             "revenue_actual": float(revenue_actual) if revenue_actual is not None else None,
             "revenue_estimated": float(revenue_estimated) if revenue_estimated is not None else None,
-            "revenue_data_note": None if revenue_estimated is not None else "企業が次期ガイダンスを公式に開示していません",
+            "revenue_data_note": rev_note,
         }
         # v144 #Pane3-perf: 成功 response のみ 6h cache (404 / error fallback は transient なので cache しない)
         _GUIDANCE_BASIC_CACHE[_gb_key] = (_gb_now, resp)
@@ -6395,6 +6435,10 @@ async def _guidance_impl(ticker: str, request: Request) -> dict:
         float(revenue_actual) if revenue_actual is not None else None,
         float(revenue_estimated) if revenue_estimated is not None else None,
     )
+    # v144 content-quality guard: 売上の集計基準ミスマッチ (一部銀行) の非現実的 surprise を判定保留。
+    rev_label, rev_pct, rev_reason, _rev_mismatch_note = _guard_revenue_basis_mismatch(
+        rev_label, rev_pct, rev_reason
+    )
 
     result: dict = {
         "ticker": ticker.upper(),
@@ -6417,7 +6461,9 @@ async def _guidance_impl(ticker: str, request: Request) -> dict:
         },
         "revenue_actual": float(revenue_actual) if revenue_actual is not None else None,
         "revenue_estimated": float(revenue_estimated) if revenue_estimated is not None else None,
-        "revenue_data_note": None if revenue_estimated is not None else "企業が次期ガイダンスを公式に開示していません",
+        "revenue_data_note": _rev_mismatch_note or (
+            None if revenue_estimated is not None else "企業が次期ガイダンスを公式に開示していません"
+        ),
     }
 
     if sec_result:
@@ -9399,6 +9445,14 @@ def _format_context(analysis: dict, guidance: dict | None) -> str:
             f"売上高: 予想={rev.get('estimated')} / 実績={rev.get('actual')} "
             f"/ サプライズ={rev.get('surprise_pct')}% / 判定={rev.get('verdict')}"
         )
+        # v144 content-quality guard: 売上の集計基準ミスマッチ (一部銀行) 時は予想/実績の比較が
+        #   無効なので、 LLM に「サプライズ%や Beat/Miss を述べない」 と明示 (Trust Cliff 防止)。
+        _rev_note = guidance.get("revenue_data_note")
+        if _rev_note and "集計基準" in str(_rev_note):
+            lines.append(
+                "  ※売上の予想と実績は集計基準が異なる可能性があり、サプライズ比較は無効です。"
+                "売上の Beat/Miss・サプライズ%・「予想を上回る/下回る」 は述べないこと。"
+            )
         # v138.6 Bug 1 Fix 3-A: sec_guidance_text を LLM 文脈に追加。
         # 旧 _format_context は eps/rev の Beat/Miss しか渡さず、 SEC 8-K に記載のある
         # 次 Q 売上 / マージン 等 経営陣発表ガイダンスを LLM が見えなかった (= 「非開示」 と hallucinate)。
