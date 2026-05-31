@@ -5889,8 +5889,9 @@ async def _fetch_eps_data(ticker: str, fmp_key: str) -> dict:
                     except ValueError:
                         return 1e12
                 _best_cc = min(estimates, key=_dist_cc)
-                _cc_e = _best_cc.get("numberAnalystEstimatedEps")
-                _cc_r = _best_cc.get("numberAnalystEstimatedRevenue")
+                # FMP /stable は numAnalystsEps/Revenue (旧 /v3 の numberAnalystEstimated* は返らず null だった)。
+                _cc_e = _best_cc.get("numAnalystsEps") or _best_cc.get("numberAnalystEstimatedEps")
+                _cc_r = _best_cc.get("numAnalystsRevenue") or _best_cc.get("numberAnalystEstimatedRevenue")
                 if isinstance(_cc_e, (int, float)):
                     consensus_count_eps = int(_cc_e)
                 if isinstance(_cc_r, (int, float)):
@@ -6288,8 +6289,9 @@ def _compute_forward_outlook(
     if consensus_eps is None and consensus_rev is None:
         return None
 
-    _ce = next_e.get("numberAnalystEstimatedEps")
-    _cr = next_e.get("numberAnalystEstimatedRevenue")
+    # FMP /stable/analyst-estimates は numAnalystsEps/Revenue (旧 /v3 は numberAnalystEstimated*)。
+    _ce = next_e.get("numAnalystsEps") or next_e.get("numberAnalystEstimatedEps")
+    _cr = next_e.get("numAnalystsRevenue") or next_e.get("numberAnalystEstimatedRevenue")
     cnt_eps = int(_ce) if isinstance(_ce, (int, float)) else None
     cnt_rev = int(_cr) if isinstance(_cr, (int, float)) else None
 
@@ -6319,21 +6321,33 @@ def _compute_forward_outlook(
     )
 
     # ── 売上 YoY: 基準ミスマッチガード横展開 (§4) ──
-    # 金融 (threshold < 40 = 銀行0/与信18/モーゲージ) は actual=総収益 vs consensus=純収益 の
-    #   基準ミスマッチが起こりうる → magnitude 抑止 (銀行は無条件、 与信は |YoY|>18 で抑止 = V/MA の +11% は保護)。
-    # 非金融 (threshold == 40) は高成長で YoY が大きくなりうる (NVDA +50% 等) ため magnitude cap を当てない。
+    # 金融 (threshold < 40 = 銀行0/与信18/モーゲージ) は actual=総収益 vs consensus=純収益 の基準ミスマッチが
+    #   起こりうる。 per-ticker 検出: **前年同期の FMP actual vs analyst consensus の乖離**で基準一致を直接判定。
+    #   - 銀行 (threshold 0): 無条件で基準相違扱い → 抑止。
+    #   - 与信 (threshold 18): 前年同期 actual と consensus が 18% 超乖離 = 別基準 (COF: 総 vs 純) → 抑止。
+    #     乖離が小さければ同基準 (V/MA: 純 vs 純) → YoY 表示。 magnitude を YoY 自体に当てると COF の小さな
+    #     artifact (-4.1%) を見逃すため、 「actual vs consensus 乖離」 で判定するのが正 (content-audit FAIL 教訓)。
+    # 非金融 (threshold == 40) は基準ミスマッチ非該当 + 高成長で YoY 大もありうる (NVDA +50%) ため cap なし。
     rev_yoy = None
     rev_unreliable = False
     threshold = _rev_surprise_threshold(sector, industry)
     if consensus_rev is not None and ya_rev is not None and ya_rev > 0:
-        _raw = round((consensus_rev - ya_rev) / abs(ya_rev) * 100, 1)
+        basis_mismatch = False
         if threshold < 40.0:
-            if threshold <= 0 or abs(_raw) > threshold:
-                rev_unreliable = True
+            if threshold <= 0:
+                basis_mismatch = True  # 銀行は無条件
             else:
-                rev_yoy = _raw
+                # 与信/モーゲージ: 同基準を **positively 確認できた時のみ** 表示 (検証不能なら保守的に抑止)。
+                #   前年同期 actual vs consensus の乖離が threshold 以内 = 同基準 (V/MA: 純 vs 純) → 表示。
+                #   乖離大 (COF: 総 vs 純) or consensus 欠落で検証不能 → 抑止 (artifact 露出を防ぐ)。
+                ya_est = _nearest_rec(ya_target, estimates)
+                ya_est_rev = _safe_eps_float(_pick(ya_est, "estimatedRevenueAvg", "revenueAvg")) if ya_est else None
+                if ya_est_rev is None or abs((ya_est_rev - ya_rev) / abs(ya_rev) * 100) > threshold:
+                    basis_mismatch = True
+        if basis_mismatch:
+            rev_unreliable = True
         else:
-            rev_yoy = _raw
+            rev_yoy = round((consensus_rev - ya_rev) / abs(ya_rev) * 100, 1)
 
     # ── EPS YoY: 赤字/ゼロ近傍ガード (QA verdict) ──
     eps_yoy = None

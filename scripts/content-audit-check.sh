@@ -39,6 +39,27 @@ for T in V MA; do
     echo "  ok: $T not suppressed"
   fi
 done
+#   1c (v146 前方視界): 来期コンセンサス売上 YoY にも同ガード横展開。 銀行・与信は forward rev YoY を
+#       露出しない (rev_yoy_pct=null) はず → 非 null なら偽の前方売上成長を露出する回帰。
+echo "[1c] forward: bank/credit rev YoY suppressed (JPM/USB/COF)"
+for T in JPM USB COF; do
+  yoy=$(curl -s --max-time 15 "$BASE/api/guidance/$T/basic" | jq -r '.forward.next_q.rev_yoy_pct // "null"' 2>/dev/null)
+  if [ "$yoy" = "null" ]; then
+    echo "  ok: $T forward rev YoY not exposed"
+  else
+    echo "  FAIL: $T 銀行・与信なのに来期売上 YoY=$yoy を露出 (forward guard 回帰)"; FAIL=1
+  fi
+done
+#   1d (v146 前方視界): 決済 network (V/MA) の来期売上は誤抑止しない (rev_compare_unreliable != true)。
+echo "[1d] forward: payment-network NOT over-suppressed (V/MA)"
+for T in V MA; do
+  unrel=$(curl -s --max-time 15 "$BASE/api/guidance/$T/basic" | jq -r '.forward.next_q.rev_compare_unreliable // false' 2>/dev/null)
+  if [ "$unrel" = "true" ]; then
+    echo "  FAIL: $T (決済) の来期売上が誤抑止 (forward over-suppress 回帰)"; FAIL=1
+  else
+    echo "  ok: $T forward not over-suppressed"
+  fi
+done
 
 # ── Pitfall 2: insights の個人名ガード (氏/アナリスト/じっちゃま 等が leak していないか) ──
 #   SSOT: hallucination-guard (sanitize layer / _sanitize_insights_data)。
