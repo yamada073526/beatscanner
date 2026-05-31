@@ -10935,6 +10935,19 @@ async def generate_visualization(
     _return_pts = [len(t.get("data", [])) for t in parsed.get("trends", [])]
     print(f"[RETURN] trends data lengths: {_return_pts} for {ticker} (years={years})")
 
+    # v144 content-quality guard: trends の売上 beatMargin に集計基準ミスマッチ (一部銀行で FMP
+    #   revenue_actual=総収益 vs estimate=純収益) の非現実的 beat (|%|>40) が _mk_beat 再計算 /
+    #   LLM 出力 のどちらの経路でも混入しうる。 guidance guard と同閾値で最終 null 化 (Trust Cliff 防止、
+    #   JPM/WFC/C の決算ビート図に偽 +45〜87% が出るのを解消)。 単一 choke point で全経路を cover。
+    for _vt in parsed.get("trends", []):
+        if isinstance(_vt, dict) and "売上" in str(_vt.get("metric", "")):
+            for _vd in _vt.get("data", []):
+                _vbm = _vd.get("beatMargin") if isinstance(_vd, dict) else None
+                if isinstance(_vbm, (int, float)) and abs(_vbm) > _REV_BASIS_MISMATCH_PCT:
+                    _vd["beatMargin"] = None
+                    _vd["beat"] = None
+                    _vd["beatAbsolute"] = None
+
     # キャッシュ保存（次回同一銘柄・years で即返却される）
     # v126 R15-1 (5/29): trends が空の「失敗 response」 は cache しない。
     # FMP fetch 失敗 + frontend periods 未送信のレガシー request で trends=[] になった response を 6h cache すると、
