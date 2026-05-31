@@ -5047,18 +5047,42 @@ def _verdict(actual: float | None, estimated: float | None) -> tuple[str, float 
 # |surprise| > 閾値 (40%) は data 不整合と判断し、 verdict/surprise を保留 (unknown) + 注記。
 # 5 条件 PASS/FAIL は年次データ使用で本 guard の影響を受けない。 EPS は小型株で % が暴れる
 # (near-zero estimate) ため対象外、 revenue surprise のみ適用。
+# v144-10 セクター連動: 銀行・与信業は売上 actual(総収益) vs estimate(純収益) が「常に」基準相違なので、
+#   industry 検出して **magnitude 無関係に無条件保留**。 保険/決済/証券/REIT は売上が信頼でき (実測 ±11%) 据え置き。
 _REV_BASIS_MISMATCH_PCT = 40.0
 
 
+def _is_bank_like(sector: str | None, industry: str | None) -> bool:
+    """銀行・与信業 (グロス金利収入で revenue 総収益 vs 純収益 が構造的に乖離) か判定。
+    FMP industry: 'Banks - Diversified/Regional', 'Credit Services', 'Mortgage Finance' 等。
+    保険 (Insurance) / 決済 (Financial - Data & Stock Exchanges 等) / 資産運用 は対象外 (売上信頼可)。"""
+    ind = (industry or "").strip().lower()
+    if not ind:
+        return False
+    if "bank" in ind:
+        return True
+    return ind in ("credit services", "mortgage finance", "financial - mortgages")
+
+
 def _guard_revenue_basis_mismatch(
-    rev_label: str, rev_pct: float | None, rev_reason: str | None, signal_quality: dict | None = None
+    rev_label: str, rev_pct: float | None, rev_reason: str | None,
+    signal_quality: dict | None = None, is_bank: bool = False,
 ) -> tuple[str, float | None, str | None, str | None]:
-    """売上サプライズが非現実的に大きい (集計基準ミスマッチ疑い) なら判定保留にする。
+    """売上サプライズが信頼できない場合に判定保留にする。
+    - is_bank=True: 銀行・与信業は基準相違が常態なので magnitude 無関係に無条件保留。
+    - それ以外: |surprise| > 40% (明らかな非現実) のみ保留。
     Returns: (rev_label, rev_pct, rev_reason, rev_note)。 signal_quality dict があれば in-place で confidence 降格。"""
-    if rev_pct is not None and abs(rev_pct) > _REV_BASIS_MISMATCH_PCT:
+    if is_bank or (rev_pct is not None and abs(rev_pct) > _REV_BASIS_MISMATCH_PCT):
         if isinstance(signal_quality, dict):
             signal_quality["confidence"] = "low"
             signal_quality["basis_mismatch"] = True
+        if is_bank:
+            return (
+                "unknown",
+                None,
+                "銀行・与信業は売上の集計基準 (総収益と純収益) が異なり、サプライズ比較を保留しています",
+                "銀行・与信業は売上の集計基準が異なるため、サプライズ比較は無効です",
+            )
         return (
             "unknown",
             None,
@@ -5066,6 +5090,23 @@ def _guard_revenue_basis_mismatch(
             "実績と予想で売上の集計基準が異なる可能性があるため、サプライズ比較は参考値です",
         )
     return rev_label, rev_pct, rev_reason, None
+
+
+async def _fetch_sector_industry(ticker: str, fmp_key: str | None) -> tuple[str | None, str | None]:
+    """FMP /profile の (sector, industry) を取得。 safe_fmp_get の `profile::TICKER` cache (24h) を共有するため
+    ProfileCard 等と重複 fetch しない。 失敗時は (None, None)。 _guidance_impl で銀行判定に使う。"""
+    key = fmp_key or os.getenv("FMP_API_KEY", "")
+    if not key:
+        return None, None
+    try:
+        url = f"https://financialmodelingprep.com/stable/profile?symbol={ticker.upper()}&apikey={key}"
+        data = await safe_fmp_get(url, f"profile::{ticker.upper()}", ttl=CACHE_TTL_PROFILE)
+        rec = (data[0] if isinstance(data, list) and data else data if isinstance(data, dict) else None)
+        if not rec:
+            return None, None
+        return rec.get("sector"), rec.get("industry")
+    except Exception:
+        return None, None
 
 
 def _safe_eps_float(val) -> float | None:
@@ -6359,9 +6400,11 @@ async def _guidance_impl(ticker: str, request: Request) -> dict:
     fmp_key = _get_fmp_key(request)
 
     # EPS chain と SEC fetch を並列実行（SEC EDGAR+Claude が ~5s のボトルネック）
-    eps_result, sec_result = await asyncio.gather(
+    # v144-10: sector/industry も並列 fetch (profile は 24h cache 共有でほぼ無コスト) → 銀行判定。
+    eps_result, sec_result, _sector_industry = await asyncio.gather(
         _fetch_eps_data(ticker, fmp_key),
         _fetch_sec_guidance_cached(ticker),
+        _fetch_sector_industry(ticker, fmp_key),
         return_exceptions=True,
     )
 
@@ -6369,6 +6412,9 @@ async def _guidance_impl(ticker: str, request: Request) -> dict:
         eps_result = {}
     if isinstance(sec_result, Exception):
         sec_result = None
+    if not isinstance(_sector_industry, tuple):
+        _sector_industry = (None, None)
+    _is_bank = _is_bank_like(_sector_industry[0], _sector_industry[1])
 
     surprises: list[dict] = eps_result.get("surprises", [])
     income_q: list[dict] = eps_result.get("income_q", [])
@@ -6435,10 +6481,13 @@ async def _guidance_impl(ticker: str, request: Request) -> dict:
         float(revenue_actual) if revenue_actual is not None else None,
         float(revenue_estimated) if revenue_estimated is not None else None,
     )
-    # v144 content-quality guard: 売上の集計基準ミスマッチ (一部銀行) の非現実的 surprise を判定保留。
+    # v144 content-quality guard: 売上の集計基準ミスマッチを判定保留。
+    #   v144-10: 銀行・与信業 (_is_bank) は magnitude 無関係に無条件保留 (総収益 vs 純収益 が常に乖離)。
     rev_label, rev_pct, rev_reason, _rev_mismatch_note = _guard_revenue_basis_mismatch(
-        rev_label, rev_pct, rev_reason
+        rev_label, rev_pct, rev_reason, is_bank=_is_bank
     )
+    # consumers (GuidanceCard 再計算 / 図解 trends) が読む抑止フラグ。
+    _rev_compare_unreliable = (rev_label == "unknown" and _rev_mismatch_note is not None)
 
     result: dict = {
         "ticker": ticker.upper(),
@@ -6458,12 +6507,14 @@ async def _guidance_impl(ticker: str, request: Request) -> dict:
             "surprise_pct": rev_pct,
             "verdict": rev_label,
             "verdict_reason": rev_reason,
+            "compare_unreliable": _rev_compare_unreliable,
         },
         "revenue_actual": float(revenue_actual) if revenue_actual is not None else None,
         "revenue_estimated": float(revenue_estimated) if revenue_estimated is not None else None,
         "revenue_data_note": _rev_mismatch_note or (
             None if revenue_estimated is not None else "企業が次期ガイダンスを公式に開示していません"
         ),
+        "revenue_compare_unreliable": _rev_compare_unreliable,
     }
 
     if sec_result:
@@ -10029,6 +10080,10 @@ async def generate_visualization(
                 bm_data = {"eps": g.get("eps") or {}, "revenue": g.get("revenue") or {}}
             except Exception:
                 pass
+    # v144-10: backend が銀行・与信業の売上を無条件抑止 (revenue.verdict=unknown / compare_unreliable)。
+    #   trends の beatMargin 再計算 (magnitude 下の銀行 COF 25.9% 等) も最終 choke point で null 化する。
+    _viz_rev = (bm_data.get("revenue") or {}) if isinstance(bm_data, dict) else {}
+    _rev_unreliable = (_viz_rev.get("verdict") == "unknown") or (_viz_rev.get("compare_unreliable") is True)
     if bm_data:
         eps = bm_data.get("eps") or {}
         rev = bm_data.get("revenue") or {}
@@ -10943,7 +10998,10 @@ async def generate_visualization(
         if isinstance(_vt, dict) and "売上" in str(_vt.get("metric", "")):
             for _vd in _vt.get("data", []):
                 _vbm = _vd.get("beatMargin") if isinstance(_vd, dict) else None
-                if isinstance(_vbm, (int, float)) and abs(_vbm) > _REV_BASIS_MISMATCH_PCT:
+                # v144-10: |%|>40 (非現実) OR backend が銀行・与信業を無条件抑止 (_rev_unreliable) なら null。
+                if isinstance(_vd, dict) and (
+                    _rev_unreliable or (isinstance(_vbm, (int, float)) and abs(_vbm) > _REV_BASIS_MISMATCH_PCT)
+                ):
                     _vd["beatMargin"] = None
                     _vd["beat"] = None
                     _vd["beatAbsolute"] = None

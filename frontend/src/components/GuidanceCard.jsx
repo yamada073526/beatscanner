@@ -826,7 +826,10 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
   const _revRawPct = (Number.isFinite(revenue_actual) && Number.isFinite(revenue_estimated) && Math.abs(revenue_estimated) > 0)
     ? ((revenue_actual - revenue_estimated) / Math.abs(revenue_estimated)) * 100
     : null;
-  const revBasisMismatch = _revRawPct != null && Math.abs(_revRawPct) > 40;
+  // v144-10: backend が銀行・与信業を sector 判定で無条件抑止 (revenue.compare_unreliable)。
+  //   フロント再計算の 40% mirror に OR して、 magnitude 下の銀行 (COF 25.9% 等) も「比較基準が相違」 表示。
+  const revBasisMismatch = (_revRawPct != null && Math.abs(_revRawPct) > 40)
+    || revenue?.compare_unreliable === true;
 
   return (
     // Phase 2.6 5-1: tier-m-glow wrapper — halo sweep の IO observe 対象
