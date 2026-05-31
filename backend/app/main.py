@@ -16258,11 +16258,23 @@ async def serve_article_html(slug: str) -> HTMLResponse:
     raise HTTPException(status_code=404, detail="Article not found")
 
 
+# v142: プライバシーポリシーページ。 client-side pathname router (App.jsx) が /privacy を
+# 検知して PrivacyPolicy component を render するため、 SPA shell (dist/index.html) を返す。
+# StaticFiles(html=True) は未知 path で 404 を返す (実測確認済) ため、 article route と同様に
+# 明示 route が必要。 将来 /terms 等を足す場合も同パターンで追加する。
+@app.get("/privacy", response_class=HTMLResponse)
+async def serve_privacy_html() -> HTMLResponse:
+    spa_shell = _STATIC_DIR / "index.html"
+    if spa_shell.exists():
+        return HTMLResponse(content=spa_shell.read_text(encoding="utf-8"))
+    raise HTTPException(status_code=404, detail="Not found")
+
+
 # ── Static file serving (must be LAST — after all /api/* routes) ─────────────
 # Only mounted when frontend/dist exists (i.e. production build is present).
-# StaticFiles(html=True) serves index.html as SPA fallback for any unknown path,
-# which keeps client-side navigation working without a separate reverse proxy.
-# 注: `/` は上の @app.get("/") で OGP 専用ハンドリング。/assets/* 等のみここでヒット。
+# 注: StaticFiles(html=True) は `/` で index.html を返すが、 任意の未知 path には 404 を返す
+# (SPA fallback ではない、 v142 実測確認)。 client-side route (/privacy 等) は上の明示 route で SPA shell を返す。
+# `/` は上の @app.get("/") で OGP 専用ハンドリング。/assets/* 等のみここでヒット。
 if _STATIC_DIR.exists():
     app.mount(
         "/",

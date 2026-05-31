@@ -23,6 +23,8 @@ const JudgmentTabV2 = lazy(() => import('./features/judgment/index.js').then((m)
 // P3.2: /articles/:slug route — react-markdown を含む ArticlePage を lazy load
 // (markdown chunk から分離、 初期 bundle 影響ゼロ)
 const ArticlePage = lazy(() => import('./features/articles/ArticlePage.jsx'));
+// v142: /privacy route — プライバシーポリシー全画面ページ (lazy、 初期 bundle 影響ゼロ)
+const PrivacyPolicy = lazy(() => import('./components/PrivacyPolicy.jsx'));
 // v62 WS-3: 画面全体 workspace top-level (useUrlSync + Tier 1 + Pane 1-3、`?layout=workspace` で起動)
 const Workspace = lazy(() =>
   import('./features/workspace/index.js').then((m) => ({ default: m.Workspace }))
@@ -974,6 +976,19 @@ export default function App() {
     return (
       <Suspense fallback={<div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>読み込み中...</div>}>
         <ArticlePage slug={articlesSlug} />
+      </Suspense>
+    );
+  }
+
+  // v142: /privacy route — pathname が /privacy を含めば PrivacyPolicy を全画面表示。
+  // articles と同パターン (pathname は reload なしで変わらないため hooks 順序は安定)。
+  // backend @app.get("/privacy") が SPA shell を返す前提。
+  const isPrivacyRoute = typeof window !== 'undefined'
+    && /\/privacy(\/|$|\?|#)/.test(window.location.pathname);
+  if (isPrivacyRoute) {
+    return (
+      <Suspense fallback={<div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>読み込み中...</div>}>
+        <PrivacyPolicy />
       </Suspense>
     );
   }
@@ -2130,6 +2145,10 @@ export default function App() {
           本サービスは投資助言を行うものではありません。表示される情報は投資判断の参考情報であり、
           実際の投資は必ずご自身の判断と責任で行ってください。
           データはFinancial Modeling Prep / Yahoo Financeより取得しており、正確性を保証するものではありません。
+        </p>
+        {/* v142: プライバシーポリシーリンク (GA4/Clarity 稼働中のため常時アクセス可能に) */}
+        <p className="mt-3 text-xs text-slate-400">
+          <a href="/privacy" className="hover:text-slate-600 transition-colors">プライバシーポリシー</a>
         </p>
       </footer>
 
