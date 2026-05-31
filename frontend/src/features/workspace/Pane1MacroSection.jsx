@@ -226,11 +226,11 @@ export function FtdChipRow() {
         display: 'flex',
         flexDirection: 'column',
         gap: 2,
-        padding: '4px 8px 6px 4px',
+        // v143b: 左 padding を 4→10px (nav タブ / 今週の決算 と indent 揃え、 user dogfood「子項目に見える」)。
+        padding: '4px 10px 6px 10px',
         fontSize: 10,
         color: 'var(--text-muted)',
       }}
-      title="Follow-Through Day (William O'Neil 理論): 上昇局面入りの確認指標"
       data-testid="ftd-chip-row"
     >
       {/* v143 (multi-review 3 体): 「FTD」 略語 → 「市場トレンド」。 専門用語の説明は ⓘ tooltip で提供。

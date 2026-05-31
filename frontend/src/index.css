@@ -7744,26 +7744,41 @@ button.ds-chip[data-pressed="true"]:hover {
   );
 }
 
-/* v143 cluster 3: 旧 drag handle 跡地の「タグ・保有編集」 button (hover-reveal)。
-   row hover で薄く出現、 button 自体の hover で accent。 specificity (0,2,1) で row-hover (0,2,0) に勝つ (!important 不使用)。 */
+/* v143 cluster 3 + v143b: 左 slot の「タグ・保有編集」 button。
+   v143b (multi-review 3 体一致): container は常時表示。 tagged 時は tag色 dot を常時 (accent bar 右で
+   「保有/観察=粗 → タグ=細」 の左→右階層)、 row hover で編集 icon に swap (opacity、 レイアウトシフト無し)。 */
 .ws-judgment-row .ws-row-tag-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  position: relative;
   width: 18px;
   height: 18px;
-  color: var(--text-muted);
-  opacity: 0;
   cursor: pointer;
   border-radius: var(--radius-sm, 6px);
-  transition: opacity var(--motion-fast, 120ms) ease, color var(--motion-fast, 120ms) ease, background var(--motion-fast, 120ms) ease;
+  transition: background var(--motion-fast, 120ms) ease;
 }
-.ws-judgment-row:hover .ws-row-tag-btn { opacity: 0.5; }
-.ws-judgment-row .ws-row-tag-btn:hover {
-  opacity: 1;
-  color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+/* tag色 dot: tagged 時 常時表示。 row hover で fade out (編集 icon に swap)。 background は inline (tagColor)。 */
+.ws-row-tag-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  transition: opacity var(--motion-fast, 120ms) ease;
 }
+.ws-judgment-row:hover .ws-row-tag-dot { opacity: 0; }
+/* 編集 icon (Tag): 通常 hidden、 row hover で出現 (untagged は hover-reveal、 tagged は dot から swap)。 */
+.ws-row-tag-icon {
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity var(--motion-fast, 120ms) ease, color var(--motion-fast, 120ms) ease;
+}
+.ws-judgment-row:hover .ws-row-tag-icon { opacity: 0.55; }
+.ws-judgment-row .ws-row-tag-btn:hover { background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
+.ws-judgment-row .ws-row-tag-btn:hover .ws-row-tag-icon { opacity: 1; color: var(--color-accent); }
 
 /* logo wrap: 32px 円形 + 極薄シアンリング (Apple Wallet 風) */
 .ws-judgment-row .ws-row-logo {

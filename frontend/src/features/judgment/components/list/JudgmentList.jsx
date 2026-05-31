@@ -20,12 +20,9 @@ const QUICK_PICKS = ['AAPL', 'NVDA', 'TSLA', 'MSFT'];
 export default function JudgmentList({ items = [], showFilters = true, onAnalyze, onAddToWatchlist, isPro = false }) {
   const { selectedTicker, selectTicker, filters } = useJudgment();
 
-  // v143: 右端 meta を sort 連動で切替 (user dogfood)。
-  //   決算近 → 決算カウントダウン / タグ順 → tag chip (付与タグ可視化) / それ以外 → 5 条件 dot。
-  const metaMode =
-    filters.sort === 'earnings-near' ? 'earnings'
-    : filters.sort === 'tag-order' ? 'tag'
-    : 'condition';
+  // v143: 右端 meta を sort 連動で切替 (決算近 → カウントダウン / それ以外 → 5 条件 dot)。
+  // v143b (multi-review 3 体一致): タグは右 chip でなく行左の常時 dot で表示 (株価列ズレ根絶) → 'tag' 分岐撤去。
+  const metaMode = filters.sort === 'earnings-near' ? 'earnings' : 'condition';
 
   // ── filter + sort + group ────────────────────────────────────
   const view = useMemo(() => {

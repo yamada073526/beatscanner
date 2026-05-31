@@ -86,43 +86,9 @@ export default function JudgmentRow({ item, selected, onClick, metaMode = 'condi
         {daysUntil === 0 ? '本日' : `あと${daysUntil}日`}
       </span>
     );
-  } else if (pane2Meta === 'tag') {
-    const { tagName, tagColor } = item;
-    metaCell = !tagName ? null : (
-      <span
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 4,
-          fontSize: 11,
-          fontWeight: 600,
-          color: 'var(--text-secondary)',
-          padding: '2px 8px',
-          borderRadius: 'var(--radius-pill, 9999px)',
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border)',
-          maxWidth: 100,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-        title={`タグ: ${tagName}`}
-      >
-        <span
-          aria-hidden
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            background: tagColor || 'var(--color-accent)',
-            flexShrink: 0,
-          }}
-        />
-        {tagName}
-      </span>
-    );
   } else {
     // default: ファンダメンタル 5 条件 dot
+    // v143b: 旧 'tag' meta 分岐は撤去 (タグは行左の常時 dot で表示、 multi-review 3 体一致)。
     metaCell = <ConditionDots conditions={conditions} size={7} gap={3} />;
   }
 
@@ -140,14 +106,16 @@ export default function JudgmentRow({ item, selected, onClick, metaMode = 'condi
       className={className}
       data-testid="ws-judgment-row"
     >
-      {/* Col 0: v143 cluster 3 — 旧 drag handle slot を「タグ・保有編集」 button に置換 (hover-reveal)。
+      {/* Col 0: v143 cluster 3 — 旧 drag handle slot を「タグ・保有編集」 button に置換。
+          v143b (multi-review 3 体一致): tagged 時は tag色 dot を常時表示 (accent bar 右で「保有/観察=粗、 タグ=細」
+          の左→右階層)、 row hover で編集 icon に swap。 dot↔icon は opacity で切替 (レイアウトシフト無し)。
           row は <button> なので role=button span + stopPropagation で nested button 回避。
           bs:open:tagassign で App root の TagAssignSheet を起動 (bs:open:addtx と同 CustomEvent pattern)。 */}
       <span
         className="ws-row-tag-btn"
         role="button"
         aria-label="タグ・保有を編集"
-        title="タグ・保有を編集"
+        title={item.tagName ? `タグ: ${item.tagName} (クリックで編集)` : 'タグ・保有を編集'}
         data-testid="ws-row-tag-btn"
         onClick={(e) => {
           e.stopPropagation();
@@ -157,7 +125,10 @@ export default function JudgmentRow({ item, selected, onClick, metaMode = 'condi
           } catch { /* noop */ }
         }}
       >
-        <Tag size={13} strokeWidth={1.75} aria-hidden />
+        {item.tagColor && (
+          <span className="ws-row-tag-dot" aria-hidden style={{ background: item.tagColor }} />
+        )}
+        <Tag className="ws-row-tag-icon" size={13} strokeWidth={1.75} aria-hidden />
       </span>
 
       {/* Col 1: Logo + Ticker + Co.Name */}
