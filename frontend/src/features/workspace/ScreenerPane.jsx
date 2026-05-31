@@ -491,7 +491,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
         <HeroSection
           title="新規 Cup-Handle 検出"
           testId="screener-hero-new-cup-handle"
-          description="Cup-Handle pattern 検出済 (IBD MarketSmith 流の breakout candidate)"
+          description="Cup-Handle pattern 検出済 (IBD MarketSmith 流のブレイクアウト候補)"
           tickers={newCwh.tickers}
           loading={newCwh.loading}
           error={newCwh.error}

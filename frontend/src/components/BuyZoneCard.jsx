@@ -91,7 +91,7 @@ export default function BuyZoneCard({ ticker }) {
     return (
       <section className="panel-card bzc-card" data-testid="buy-zone-card" aria-busy style={{ minHeight: 128 }}>
         <header className="bzc-head">
-          <h3 className="bzc-title">直近 breakout support</h3>
+          <h3 className="bzc-title">直近ブレイクアウト支持線</h3>
         </header>
         <div className="bzc-state-empty">
           <p className="bzc-state-sub">読み込み中…</p>
@@ -117,7 +117,7 @@ export default function BuyZoneCard({ ticker }) {
   const desc = BUY_ZONE_DESC_JP[zoneKey];
   const cardTitle = isPullback
     ? '押し目接近中 (支持線テスト)'
-    : (useBox ? '長期ボックス支持線' : '直近 breakout support');
+    : (useBox ? '長期ボックス支持線' : '直近ブレイクアウト支持線');
 
   // narration placeholder inject (数値は backend 計算、 JS は文字列置換のみ)
   let detailText;
@@ -135,12 +135,12 @@ export default function BuyZoneCard({ ticker }) {
       .replace('{N}', String(months))
       .replace('{M}', String(boxSupport.touch_count ?? '—'));
   } else {
-    detailText = desc.detail.replace(/breakout price/, `breakout price (${fmtUsd(breakoutPrice)})`);
+    detailText = desc.detail.replace(/ブレイクアウト価格/, `ブレイクアウト価格 (${fmtUsd(breakoutPrice)})`);
   }
 
   // v130 P1 #5 (3 体合議): 支持線/breakout 価格 を hero に、 現在価格との distance を delta sub に。
   // 「これが割れたら撤退」 の閾値が hero として最重要 (qa-dogfooder verdict)。
-  const heroLabel = useBox ? '支持線' : 'breakout';
+  const heroLabel = useBox ? '支持線' : 'ブレイクアウト';
   const deltaTone = distancePct == null ? 'muted' : (distancePct >= 0 ? 'gain' : 'loss');
 
   return (
@@ -193,12 +193,12 @@ export default function BuyZoneCard({ ticker }) {
             </>
           ) : (
             <span>
-              breakout price <span className="bzc-meta-value">{fmtUsd(breakoutPrice)}</span>
+              ブレイクアウト価格 <span className="bzc-meta-value">{fmtUsd(breakoutPrice)}</span>
             </span>
           )}
           {distancePct != null && (
             <span>
-              {useBox ? 'vs 支持線' : 'vs breakout'} <span className="bzc-meta-value">{fmtPct(distancePct)}</span>
+              {useBox ? 'vs 支持線' : 'vs ブレイクアウト'} <span className="bzc-meta-value">{fmtPct(distancePct)}</span>
             </span>
           )}
         </div>

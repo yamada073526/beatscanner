@@ -200,6 +200,36 @@ function EarningsTooltip({ active, payload, label, earningsMap, pillar2Markers, 
     ?? payload[0]?.payload?.close;
   const e = earningsMap?.[label];
 
+  // 2b (v141 user dogfood): チャート上の ◯ マーカー (breakout 確定点 / 取っ手の底) を hover した日に、
+  // そのマーカーが「何か」 を tooltip 内で説明 (現状は他点と同じ終値/距離% のみで意味不明との指摘)。
+  // SVG dot への直接 hover (二重 tooltip + overlay 増 = 真っ白事故リスク) を避け既存 tooltip 拡張で実装
+  // (feedback_chart_overlay_safety)。 照合は date キー (feedback_price_date_overlay_time_key)。
+  // LLM 非経由の静的 narration、 過去事実のみ記述で金商法 §38 (断定的将来予測) 非抵触。
+  // cupRequiresPro 時は呼び元 (line 960) で cupHandle=null 渡しのため markerNote も発火せず Pro leak なし。
+  let markerNote = null;
+  if (label && cupHandle) {
+    if (
+      cupHandle.state === 'breakout_confirmed'
+      && label === cupHandle.breakout?.confirmed_date
+      && Number.isFinite(cupHandle.pivot?.price)
+    ) {
+      markerNote = {
+        color: BREAKOUT_COLOR,
+        title: 'ブレイクアウト確定点',
+        body: `Pivot $${cupHandle.pivot.price.toFixed(2)} を上抜けたポイント`,
+      };
+    } else if (
+      label === cupHandle.handle?.low_date
+      && Number.isFinite(cupHandle.handle?.low_price)
+    ) {
+      markerNote = {
+        color: SMA_50_COLOR,
+        title: '取っ手の底',
+        body: '取っ手付きカップの第4点（押し目の底）',
+      };
+    }
+  }
+
   // v130 方針 #13 → v132 P1-F (↑↓ 矢印) → v133 P1-F2 (損切り下抜け状態の status narrative):
   // 旧版「損切り目安 ↑2.7%」 (= 現在価格が IBD 8% trailing stop を下抜けている重大 signal) は
   // 「損切り = 下にある守るべき線」 のスキーマと ↑ 矢印が衝突して逆意味に誤読される認知欠陥。
@@ -228,6 +258,17 @@ function EarningsTooltip({ active, payload, label, earningsMap, pillar2Markers, 
   return (
     <div className="min-w-[180px] rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs shadow-lg">
       <p className="mb-1 font-medium text-slate-500">{label}</p>
+
+      {/* 2b (v141): ◯ マーカーの意味説明 (breakout 確定点 / 取っ手の底)。 色帯 + ドットで which marker か即視認 */}
+      {markerNote && (
+        <div className="mb-1.5" style={{ borderLeft: `2px solid ${markerNote.color}`, paddingLeft: 6 }}>
+          <p style={{ display: 'flex', alignItems: 'center', gap: 5, fontWeight: 700, color: 'var(--text-primary)' }}>
+            <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: markerNote.color, flexShrink: 0 }} />
+            {markerNote.title}
+          </p>
+          <p style={{ marginTop: 1, color: 'var(--text-secondary)' }}>{markerNote.body}</p>
+        </div>
+      )}
 
       {price != null && (
         <p style={{ color: 'var(--text-secondary)' }}>
@@ -560,8 +601,8 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
   const cupChipLabel = useMemo(() => {
     if (!hasCup) return '';
     switch (cupHandle.state) {
-      case 'breakout_confirmed': return 'breakout 確定';
-      case 'breakout_pending':   return 'breakout 待ち';
+      case 'breakout_confirmed': return 'ブレイクアウト確定';
+      case 'breakout_pending':   return 'ブレイクアウト待機';
       case 'cup_completing':     return 'カップ完成間近';
       case 'formation_market_weak': return '形成中 ・市場待機';
       case 'formation':

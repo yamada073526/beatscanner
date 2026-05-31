@@ -6666,6 +6666,25 @@ button.ds-chip { cursor: pointer; }
     box-shadow: 0 0 8px rgba(245, 158, 11, 0.25); /* a11y 縮退時も glow は維持 */
   }
 }
+/* D4 (v141 3体合議): breakout_confirmed chip も green slow glow で強調。
+   色ルール整合: 達成/上昇=緑 (--color-gain)。 pending(amber 2s pulse) より「静かに長く輝く」 2.8s 周期で
+   confirmed > pending の格を表現 (Linear「done>doing」 原則、 UI/UX reviewer verdict)。
+   animation 罠回避: transform 非干渉 / animation-fill-mode 未指定 / infinite (getAnimations().finish() 不使用)。
+   shadow は ALLOWED-SHADOW 登録済 (green 0.22 idle / 0.48 peak)。 */
+@keyframes ds-chip-breakout-confirmed {
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px rgba(34, 197, 94, 0.22); }
+  50%      { opacity: 0.86; box-shadow: 0 0 16px rgba(34, 197, 94, 0.48); }
+}
+.ds-chip[data-cup-state="breakout_confirmed"] {
+  animation: ds-chip-breakout-confirmed 2.8s ease-in-out infinite;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.22);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-chip[data-cup-state="breakout_confirmed"] {
+    animation: none;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.22); /* a11y 縮退時も glow は維持 */
+  }
+}
 
 /* variant base styling */
 .ds-chip[data-variant="display"] {

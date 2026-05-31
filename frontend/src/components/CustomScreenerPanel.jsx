@@ -319,7 +319,7 @@ function CupResultCard({ item, onSelect, masked = false }) {
           </div>
           {!masked && state && (
             <div className="mt-1.5">
-              <Chip size="xs" variant="display" tone={stateTone}>
+              <Chip size="xs" variant="display" tone={stateTone} data-cup-state={state}>
                 {/* v127 (5/29): Mountain → ChartCandlestick (StockPriceChart と SSOT 統一、 Cup-Handle = チャート形状を直伝) */}
                 <ChartCandlestick size={11} strokeWidth={1.75} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 3 }} />
                 {stateLabel}
@@ -464,7 +464,7 @@ function OneillResultCard({ item, onSelect, masked = false }) {
           </div>
           {!masked && state && (
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              <Chip size="xs" variant="display" tone={stateTone}>
+              <Chip size="xs" variant="display" tone={stateTone} data-cup-state={state}>
                 {/* v127: Mountain → ChartCandlestick (StockPriceChart と SSOT 統一) */}
                 <ChartCandlestick size={11} strokeWidth={1.75} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 3 }} />
                 {stateLabel}

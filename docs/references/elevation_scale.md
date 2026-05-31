@@ -97,6 +97,12 @@ ALLOWED-SHADOW: 0 0 8px rgba(245, 158, 11, 0.25)
 
 # v126 R14-4 「breakout 待ち」 chip pulse glow (animation 50% peak)
 ALLOWED-SHADOW: 0 0 16px rgba(245, 158, 11, 0.45)
+
+# v141 D4 「ブレイクアウト確定」 chip green slow glow (idle / animation 0% & 100%)
+ALLOWED-SHADOW: 0 0 8px rgba(34, 197, 94, 0.22)
+
+# v141 D4 「ブレイクアウト確定」 chip green slow glow (animation 50% peak)
+ALLOWED-SHADOW: 0 0 16px rgba(34, 197, 94, 0.48)
 ```
 
 ---

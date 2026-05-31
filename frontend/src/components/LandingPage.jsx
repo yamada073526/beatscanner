@@ -1084,11 +1084,16 @@ function SampleAnalysisSection({ onTickerClick, onProCheckout }) {
             cursor: 'pointer',
             boxShadow: '0 0 12px rgba(34,211,238,0.30)',
             transition: 'background 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 7,
           }}
           onMouseEnter={(e) => { e.currentTarget.style.background = 'rgb(14, 165, 233)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'rgb(56, 189, 248)'; }}
         >
-          📄 {ticker} の完全な分析を見る →
+          {/* A2 (v141): 旧 📄 絵文字 → lucide Eye (「分析を見る」 の意味、 OS 依存 glyph 排除) */}
+          <Eye size={15} strokeWidth={2.2} aria-hidden="true" /> {ticker} の完全な分析を見る →
         </button>
       </div>
 
@@ -1217,10 +1222,12 @@ function FiveConditionsMockup() {
 // v39: 市場の声カード用 UI モックアップ (拡充版)
 // — センチメントバッジ + 要約引用 + 強気/弱気材料 + キー指標フッター
 function MarketVoiceMockup() {
+  // A2 (v141): 旧 🟢🔴 絵文字 → 方向ドット (user 採択 hybrid)。
+  // 色は投資業界ルール厳守: bull=緑 (--color-gain) / bear=赤 (--color-loss)。
   const items = [
-    { icon: '🟢', text: 'AI需要が継続拡大' },
-    { icon: '🔴', text: '競合AMDが猛追中' },
-    { icon: '🔴', text: 'バリュエーション割高懸念' },
+    { tone: 'bull', text: 'AI需要が継続拡大' },
+    { tone: 'bear', text: '競合AMDが猛追中' },
+    { tone: 'bear', text: 'バリュエーション割高懸念' },
   ];
   return (
     <div style={{
@@ -1245,7 +1252,7 @@ function MarketVoiceMockup() {
           borderRadius: 4,
           fontSize: 10,
           fontWeight: 700,
-        }}>⚡ 強弱混在</span>
+        }}>強弱混在</span>
       </div>
       {/* 要約引用 (cyan 縦線で引用感を出す) */}
       <div style={{
@@ -1262,15 +1269,28 @@ function MarketVoiceMockup() {
       {/* 強気・弱気材料 */}
       {items.map((it, i) => (
         <div key={i} style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
           fontSize: 10,
           color: 'var(--text-muted)',
           marginBottom: 3,
         }}>
-          {it.icon} {it.text}
+          <span aria-hidden="true" style={{
+            width: 6,
+            height: 6,
+            borderRadius: '50%',
+            flexShrink: 0,
+            background: it.tone === 'bull' ? 'var(--color-gain)' : 'var(--color-loss)',
+          }} />
+          <span>{it.text}</span>
         </div>
       ))}
       {/* キー指標フッター */}
       <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
         marginTop: 8,
         padding: '4px 8px',
         background: 'rgba(34,211,238,0.06)',
@@ -1278,7 +1298,9 @@ function MarketVoiceMockup() {
         fontSize: 10,
         color: 'var(--text-muted)',
       }}>
-        📌 次回決算: EPS $0.89予想 / 毎朝4時更新
+        {/* A2 (v141): 旧 📌 絵文字 → lucide Clock (「毎朝4時更新」 の更新性を示唆) */}
+        <Clock size={11} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0 }} />
+        <span>次回決算: EPS $0.89予想 / 毎朝4時更新</span>
       </div>
     </div>
   );
@@ -1721,7 +1743,7 @@ function PricingSection({ onFreeStart, onProCheckout }) {
           }}>
             <li>✓ Pro のすべての機能</li>
             <li>✓ <strong style={{ color: 'var(--color-warning)' }}>カップ・ウィズ・ハンドル</strong> 検出</li>
-            <li>✓ 売り／買いゾーン・支持線・抵抗線</li>
+            <li>✓ 売り／買いゾーン・支持線・ピボット価格</li>
             <li>✓ Insider 取引・13F 機関保有</li>
           </ul>
           {/* 下部: disabled CTA で「まだ買えない」 を明示 (Trust Cliff 回避) */}
