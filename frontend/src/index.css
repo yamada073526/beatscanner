@@ -50,6 +50,9 @@
      `var(--color-accent)` を使った CSS が transparent 描画される問題を解消。
      用途: ブランド emphasis / フィルタ active / watchlist / hover ring。 上昇/下落の方向性には使わない。 */
   --color-accent:  #38bdf8;  /* cyan (light/dark 共通) — ブランド色 (elevation_scale.md ALLOWED-HEX) */
+  /* v143: 濃いめ accent (sky-500)。 暗背景で --color-accent(#38bdf8) が飛ぶ active/pressed 状態用。
+     旧 var(--color-accent-strong) 直書き 12 箇所を本 token に集約 (elevation_scale.md ALLOWED-HEX)。 */
+  --color-accent-strong: #0ea5e9;
 
   /* AccordionSection badgeColor 用 chip background tokens (v100 hotfix、 raw hex 直書き解消)。
      cyan (--color-accent) は「ブランド色」専用、 上昇 / 下落 / AI / PRO の意味分離を維持するため
@@ -2973,7 +2976,7 @@ body {
 }
 .wl-mode-seg-btn.is-active {
   background: var(--bg-card, #fff);
-  color: rgb(14,165,233);
+  color: var(--color-accent-strong);
   box-shadow: 0 1px 2px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.04);
 }
 [data-theme="dark"] .wl-mode-seg-btn.is-active {
@@ -3015,7 +3018,7 @@ body {
   border-radius: 8px;
   border: 1px solid rgba(56, 189, 248, 0.40);
   background: transparent;
-  color: rgb(14, 165, 233);
+  color: var(--color-accent-strong);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -3082,7 +3085,7 @@ body {
     border-color: rgba(56,189,248,0.7);
   }
   .wl-chip:hover .wl-chip-ticker {
-    color: rgb(14,165,233);
+    color: var(--color-accent-strong);
   }
 }
 [data-theme="dark"] .wl-chip:hover {
@@ -3494,7 +3497,7 @@ body {
 .tag-create-trigger:hover:not(:disabled) {
   background: rgba(56,189,248,0.08);
   border-color: rgb(56, 189, 248);
-  color: rgb(14, 165, 233);
+  color: var(--color-accent-strong);
 }
 .tag-create-trigger:disabled { opacity: 0.5; cursor: not-allowed; }
 .tag-error {
@@ -3578,12 +3581,12 @@ body {
 .tag-filter-pill:hover {
   background: rgba(56,189,248,0.1);
   border-color: rgba(56,189,248,0.4);
-  color: rgb(14, 165, 233);
+  color: var(--color-accent-strong);
 }
 .tag-filter-pill.selected {
   background: rgba(56,189,248,0.18);
   border-color: rgb(56, 189, 248);
-  color: rgb(14, 165, 233);
+  color: var(--color-accent-strong);
 }
 [data-theme="dark"] .tag-filter-pill.selected {
   color: rgb(56, 189, 248);
@@ -3601,7 +3604,7 @@ body {
   border: 1px dashed rgba(56,189,248,0.5);
   border-radius: 9999px;
   background: transparent;
-  color: rgb(14, 165, 233);
+  color: var(--color-accent-strong);
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
@@ -3699,7 +3702,7 @@ body {
   font-weight: 500;
 }
 .tag-assign-check {
-  color: rgb(14, 165, 233);
+  color: var(--color-accent-strong);
   font-weight: 700;
 }
 [data-theme="dark"] .tag-assign-check { color: rgb(56, 189, 248); }
@@ -3717,7 +3720,7 @@ body {
   border: 1px dashed rgba(56,189,248,0.5);
   border-radius: 10px;
   background: transparent;
-  color: rgb(14, 165, 233);
+  color: var(--color-accent-strong);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -3959,7 +3962,7 @@ body {
 .lot-row-btn:hover {
   background: rgba(56, 189, 248, 0.08);
   border-color: rgb(56, 189, 248);
-  color: rgb(14, 165, 233);
+  color: var(--color-accent-strong);
 }
 [data-theme="dark"] .lot-row-btn:hover { color: rgb(56, 189, 248); }
 .lot-row-btn-danger:hover {
@@ -4230,7 +4233,7 @@ body {
 .tag-login-cta:hover {
   background: rgba(56,189,248,0.08);
   border-color: rgb(56, 189, 248);
-  color: rgb(14, 165, 233);
+  color: var(--color-accent-strong);
 }
 [data-theme="dark"] .tag-login-cta:hover { color: rgb(56, 189, 248); }
 
@@ -6525,7 +6528,7 @@ button.ds-chip:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 10px -2px rgba(15, 23, 42, 0.18);
   background: rgba(56, 189, 248, 0.18) !important;
-  color: rgb(14, 165, 233) !important;
+  color: var(--color-accent-strong) !important;
 }
 [data-theme="dark"] button.ds-chip:hover {
   box-shadow: 0 4px 10px -2px rgba(0, 0, 0, 0.55);
@@ -6762,7 +6765,7 @@ button.ds-chip[data-variant="add"]:hover {
   border-style: solid !important;
   border-color: rgba(56, 189, 248, 0.50) !important;
   background: rgba(56, 189, 248, 0.08) !important;
-  color: rgb(14, 165, 233) !important;
+  color: var(--color-accent-strong) !important;
 }
 [data-theme="dark"] button.ds-chip[data-variant="add"]:hover {
   background: rgba(56, 189, 248, 0.14) !important;
@@ -6774,7 +6777,7 @@ button.ds-chip[data-variant="add"]:hover {
   font-weight: 600;
   border-color: rgba(56, 189, 248, 0.70);
   background: rgba(56, 189, 248, 0.12);
-  color: rgb(14, 165, 233);
+  color: var(--color-accent-strong);
 }
 .ds-chip[data-variant="filter"][data-pressed="true"] {
   background: rgba(56, 189, 248, 0.18);
@@ -6792,7 +6795,7 @@ button.ds-chip[data-variant="add"]:hover {
 /* hover override for pressed: pressed は cyan のまま、hover で背景濃く. */
 button.ds-chip[data-pressed="true"]:hover {
   background: rgba(56, 189, 248, 0.22) !important;
-  color: rgb(14, 165, 233) !important;
+  color: var(--color-accent-strong) !important;
 }
 [data-theme="dark"] button.ds-chip[data-pressed="true"]:hover {
   background: rgba(56, 189, 248, 0.30) !important;
@@ -7325,7 +7328,7 @@ button.ds-chip[data-pressed="true"]:hover {
 }
 .ws-pane4-jp-segmented button.is-active {
   background: rgba(56, 189, 248, 0.18);
-  color: rgb(14, 165, 233);
+  color: var(--color-accent-strong);
 }
 [data-theme="dark"] .ws-pane4-jp-segmented button.is-active {
   background: rgba(56, 189, 248, 0.22);
@@ -7497,7 +7500,7 @@ button.ds-chip[data-pressed="true"]:hover {
 }
 .ws-pane1-rail-tile:hover {
   background: rgba(56, 189, 248, 0.18);
-  color: rgb(14, 165, 233);
+  color: var(--color-accent-strong);
 }
 [data-theme="dark"] .ws-pane1-rail-tile:hover {
   background: rgba(56, 189, 248, 0.24);
@@ -7518,7 +7521,7 @@ button.ds-chip[data-pressed="true"]:hover {
 }
 .ws-pane1-rail-tile.is-active {
   background: rgba(56, 189, 248, 0.14);
-  color: rgb(14, 165, 233);
+  color: var(--color-accent-strong);
   box-shadow: inset 0 0 0 1.5px rgba(56, 189, 248, 0.65);
 }
 [data-theme="dark"] .ws-pane1-rail-tile.is-active {
@@ -7532,16 +7535,19 @@ button.ds-chip[data-pressed="true"]:hover {
    - active 位置はテキストすぐ左 (= 1 階層目より左に飛び出さない) */
 .ws-pane1-tab,
 .ws-pane1-section-header,
-.ws-pane1-watchlist-row {
+.ws-pane1-watchlist-row,
+.ws-pane1-earnings-row {
   transition: background var(--motion-fast, 120ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
 }
 /* §dogfood-round7: hover の cyan tint を強化 (Pane 2 観察銘柄 chip と同等の視認性).
-   light/dark 両モードで「マウスオーバーしている」が 2 秒で識別できる強度に */
+   light/dark 両モードで「マウスオーバーしている」が 2 秒で識別できる強度に
+   v143: ws-pane1-earnings-row (今週の決算 row) も同 hover treatment */
 .ws-pane1-tab:hover,
 .ws-pane1-section-header:hover,
-.ws-pane1-watchlist-row:hover:not(.is-active) {
+.ws-pane1-watchlist-row:hover:not(.is-active),
+.ws-pane1-earnings-row:hover {
   background: rgba(56, 189, 248, 0.18);
-  color: rgb(14, 165, 233);
+  color: var(--color-accent-strong);
 }
 [data-theme="dark"] .ws-pane1-tab:hover,
 [data-theme="dark"] .ws-pane1-section-header:hover,

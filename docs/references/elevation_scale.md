@@ -121,7 +121,7 @@ ALLOWED-HEX: #dc2626   # --color-loss (light)
 ALLOWED-HEX: #f59e0b   # --color-warning
 ALLOWED-HEX: #34ef81   # --color-gain (dark)
 ALLOWED-HEX: #f87171   # --color-loss (dark)
-ALLOWED-HEX: #0ea5e9   # --color-accent (light) — lightweight-charts palette neutral 系 (PortfolioHistoryChart / PortfolioAreaChartSlot)
+ALLOWED-HEX: #0ea5e9   # --color-accent-strong (sky-500、 active/pressed 濃いめ accent) + lightweight-charts palette (PortfolioHistoryChart / PortfolioAreaChartSlot)
 ALLOWED-HEX: #38bdf8   # --color-accent (dark) — lightweight-charts palette neutral 系 (PortfolioHistoryChart / PortfolioAreaChartSlot)
 ALLOWED-HEX: #d4af37   # 保有銘柄ゴールドアクセント + --color-gold (Aman 真鍮 base、 SectionHeader gold hairline / verdict gold foil)
 ALLOWED-HEX: #f4cd5d   # 保有銘柄ゴールドアクセント highlight + --color-gold-mid (gradient mid)

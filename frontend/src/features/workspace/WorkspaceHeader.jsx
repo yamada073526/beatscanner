@@ -261,7 +261,7 @@ export default function WorkspaceHeader({ isPro = false, onOpenScreener, onUpgra
           onMouseEnter={(e) => {
             e.currentTarget.style.background = 'rgba(56,189,248,0.08)';
             e.currentTarget.style.borderColor = 'rgba(56,189,248,0.30)';
-            e.currentTarget.style.color = 'rgb(14,165,233)';
+            e.currentTarget.style.color = 'var(--color-accent-strong)';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.background = 'var(--bg-card)';

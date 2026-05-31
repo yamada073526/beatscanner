@@ -51,7 +51,7 @@ function PrimaryCTA({ children, onClick, fullWidth = false }) {
         gap: 10,
         padding: '14px 28px',
         borderRadius: 10,
-        background: hover ? 'rgb(14, 165, 233)' : 'rgb(56, 189, 248)',
+        background: hover ? 'var(--color-accent-strong)' : 'rgb(56, 189, 248)',
         color: '#0f172a',
         border: 'none',
         fontWeight: 700,
@@ -1089,7 +1089,7 @@ function SampleAnalysisSection({ onTickerClick, onProCheckout }) {
             justifyContent: 'center',
             gap: 7,
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgb(14, 165, 233)'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-accent-strong)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'rgb(56, 189, 248)'; }}
         >
           {/* A2 (v141): 旧 📄 絵文字 → lucide Eye (「分析を見る」 の意味、 OS 依存 glyph 排除) */}

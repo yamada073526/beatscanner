@@ -191,7 +191,7 @@ export default function PlanComparisonBanner({ onStartCheckout }) {
               boxShadow: '0 0 12px rgba(34,211,238,0.30)',
               transition: 'background 0.2s',
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgb(14, 165, 233)'; }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-accent-strong)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'rgb(56, 189, 248)'; }}
           >
             7日間無料で試す →

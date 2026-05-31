@@ -1578,7 +1578,7 @@ export default function App() {
                   borderRadius: 'var(--radius-pill, 9999px)',
                   border: '1px solid rgba(56,189,248,0.50)',
                   background: 'rgba(56,189,248,0.10)',
-                  color: 'rgb(14,165,233)',
+                  color: 'var(--color-accent-strong)',
                   cursor: reportStreaming ? 'not-allowed' : 'pointer',
                   opacity: reportStreaming ? 0.5 : 1,
                   transition: 'background 0.15s, border-color 0.15s',
@@ -1791,7 +1791,7 @@ export default function App() {
                     if (!isActive && !loading) {
                       e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.18)';
                       e.currentTarget.style.borderColor = 'rgba(56,189,248,0.70)';
-                      e.currentTarget.style.color = 'rgb(14,165,233)';
+                      e.currentTarget.style.color = 'var(--color-accent-strong)';
                       e.currentTarget.style.transform = 'translateY(-2px) scale(1.03)';
                     }
                   }}
@@ -1816,7 +1816,7 @@ export default function App() {
                     background: isActive
                       ? 'rgba(56,189,248,0.15)'
                       : 'var(--bg-card)',
-                    color: isActive ? 'rgb(14,165,233)' : 'var(--text-secondary)',
+                    color: isActive ? 'var(--color-accent-strong)' : 'var(--text-secondary)',
                     fontSize: '13px',
                     fontWeight: isActive ? 700 : 400,
                     cursor: loading ? 'not-allowed' : 'pointer',
@@ -2069,7 +2069,7 @@ export default function App() {
                     if (!isActive && !loading) {
                       e.currentTarget.style.backgroundColor = 'rgba(56,189,248,0.18)';
                       e.currentTarget.style.borderColor = 'rgba(56,189,248,0.70)';
-                      e.currentTarget.style.color = 'rgb(14,165,233)';
+                      e.currentTarget.style.color = 'var(--color-accent-strong)';
                       e.currentTarget.style.transform = 'translateY(-2px) scale(1.03)';
                     }
                   }}
@@ -2094,7 +2094,7 @@ export default function App() {
                     background: isActive
                       ? 'rgba(56,189,248,0.15)'
                       : 'var(--bg-card)',
-                    color: isActive ? 'rgb(14,165,233)' : 'var(--text-secondary)',
+                    color: isActive ? 'var(--color-accent-strong)' : 'var(--text-secondary)',
                     fontSize: '13px',
                     fontWeight: isActive ? 700 : 400,
                     cursor: loading ? 'not-allowed' : 'pointer',

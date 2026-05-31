@@ -228,7 +228,7 @@ function WatchlistRow({ it, active, onClick, indent = false }) {
         fontWeight: active ? 600 : 400,
         borderRadius: 'var(--radius-sm, 8px)',
         background: 'transparent',
-        color: active ? 'rgb(14,165,233)' : 'var(--text-primary)',
+        color: active ? 'var(--color-accent-strong)' : 'var(--text-primary)',
         border: 'none',
         cursor: 'pointer',
         textAlign: 'left',
@@ -344,7 +344,7 @@ function Pane1NavRail({ items = [] }) {
               padding: 0,
               border: 'none',
               background: 'transparent',
-              color: active ? 'rgb(14,165,233)' : 'var(--text-secondary)',
+              color: active ? 'var(--color-accent-strong)' : 'var(--text-secondary)',
               cursor: 'pointer',
               borderRadius: 'var(--radius-sm, 8px)',
               position: 'relative',
@@ -474,20 +474,14 @@ function Pane1Nav({ items = [] }) {
   const setActiveTab = useWorkspaceStore((s) => s.setActiveTab);
   const activeTicker = useWorkspaceStore((s) => s.activeTicker);
   const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
-  const navCollapsed = useWorkspaceStore((s) => s.navCollapsed);
-  const toggleNav = useWorkspaceStore((s) => s.toggleNav);
-  const watchlistCollapsed = useWorkspaceStore((s) => s.watchlistCollapsed);
-  const toggleWatchlist = useWorkspaceStore((s) => s.toggleWatchlist);
-  const holdingsCollapsed = useWorkspaceStore((s) => s.holdingsCollapsed);
-  const toggleHoldings = useWorkspaceStore((s) => s.toggleHoldings);
-  const observingCollapsed = useWorkspaceStore((s) => s.observingCollapsed);
-  const toggleObserving = useWorkspaceStore((s) => s.toggleObserving);
 
-  // §12-B-5: ウォッチリスト全体から isHolding / 観察 (= !isHolding) に分割
-  const holdings = items.filter((it) => it.isHolding);
-  const observing = items.filter((it) => !it.isHolding);
-  // 両方とも分類対象なし (= ウォッチリスト全体が空) かつ items 0 のときは fallback hint
-  const hasNoItems = items.length === 0;
+  // v143 (multi-review 3 体): watchlist は Pane 2 に一本化 (重複解消) + nav は常時展開 (折りたたみ廃止)。
+  //   折りたたみ state key (navCollapsed/watchlistCollapsed/holdings/observing) は store に温存 (persist migration 回避)。
+  //   代わりに「今週の決算」 (ウォッチ銘柄の決算 7 日以内) を curated 表示 = 追加機能 3 体一致 #1 (既存 nextEarningsDays)。
+  const upcomingEarnings = items
+    .filter((it) => it.nextEarningsDays != null && it.nextEarningsDays >= 0 && it.nextEarningsDays <= 7)
+    .sort((a, b) => (a.nextEarningsDays ?? 99) - (b.nextEarningsDays ?? 99))
+    .slice(0, 6);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: 8, overflowY: 'auto', minHeight: 0 }}>
@@ -525,52 +519,45 @@ function Pane1Nav({ items = [] }) {
           <PanelLeftClose size={15} strokeWidth={1.75} aria-hidden="true" />
         </button>
       </div>
-      {/* ── ナビゲーション (collapsible) ──────────────────────────── */}
-      <SectionHeader
-        collapsed={navCollapsed}
-        onToggle={toggleNav}
-        label="ナビゲーション"
-      />
-      {!navCollapsed && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {/* workspace は 2 タブのみ (3 タブ削除済、6 体合議) */}
-          {WORKSPACE_NAV_TABS.map((t) => {
-            const active = activeTab === t.key;
-            return (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => withViewTransition(() => setActiveTab(t.key))}
-                aria-pressed={active}
-                className={`ws-pane1-tab${active ? ' is-active' : ''}`}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '6px 10px',
-                  fontSize: 13,
-                  fontWeight: active ? 600 : 400,
-                  borderRadius: 'var(--radius-sm, 8px)',
-                  border: 'none',
-                  background: 'transparent',
-                  color: active ? 'rgb(14,165,233)' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  position: 'relative',
-                }}
-              >
-                <t.Icon
-                  size={14}
-                  strokeWidth={active ? 1.75 : 1.5}
-                  aria-hidden
-                  style={{ flexShrink: 0 }}
-                />
-                <span>{t.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {/* v143: ナビゲーション常時展開 (トグル廃止、 3 タブのみで折りたたむ意味薄、 multi-review 3 体一致)。
+          active タブは pill 背景 + 濃いめ accent で視認性強化 (旧 subtle すぎ + raw rgb 解消)。 */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {WORKSPACE_NAV_TABS.map((t) => {
+          const active = activeTab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => withViewTransition(() => setActiveTab(t.key))}
+              aria-pressed={active}
+              className={`ws-pane1-tab${active ? ' is-active' : ''}`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '6px 10px',
+                fontSize: 13,
+                fontWeight: active ? 600 : 400,
+                borderRadius: 'var(--radius-sm, 8px)',
+                border: 'none',
+                background: active ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)' : 'transparent',
+                color: active ? 'var(--color-accent-strong)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                textAlign: 'left',
+                position: 'relative',
+              }}
+            >
+              <t.Icon
+                size={14}
+                strokeWidth={active ? 1.75 : 1.5}
+                aria-hidden
+                style={{ flexShrink: 0 }}
+              />
+              <span>{t.label}</span>
+            </button>
+          );
+        })}
+      </div>
 
       {/* v120 Task 3 hotfix: FTD (Follow-Through Day) section — Pane1MacroSection は v63 で
           撤去済 dead code だったため、 Pane1Nav に直接 mount。 ナビ section 直下 + watchlist 上に配置。
@@ -579,77 +566,66 @@ function Pane1Nav({ items = [] }) {
         <FtdChipRow />
       </div>
 
-      {/* ── ウォッチリスト (collapsible、§12-B-4) — 中身は §12-B-5 で 2 階層化 ── */}
-      <div style={{ marginTop: 12 }}>
-        <SectionHeader
-          collapsed={watchlistCollapsed}
-          onToggle={toggleWatchlist}
-          label="ウォッチリスト"
-          count={items.length}
-        />
-      </div>
-      {!watchlistCollapsed && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flex: '0 1 auto' }}>
-          {hasNoItems ? (
-            <div style={{ padding: '8px 10px', fontSize: 11, color: 'var(--text-muted)' }}>
-              (空) 銘柄を分析して ☆ で追加
-            </div>
-          ) : (
-            <>
-              {/* §12-B-5: 保有 sub-section (空ならセクションごと隠す = レビュー結論) */}
-              {holdings.length > 0 && (
-                <>
-                  {/* 観察も同時にあるときだけ階層 header を出す。
-                      保有のみのときは初心者に 2 階層概念を強制しないためフラット表示。 */}
-                  {observing.length > 0 && (
-                    <SectionHeader
-                      collapsed={holdingsCollapsed}
-                      onToggle={toggleHoldings}
-                      label="保有"
-                      count={holdings.length}
-                      accent="gold"
-                      indent
-                    />
-                  )}
-                  {(observing.length === 0 || !holdingsCollapsed) &&
-                    holdings.map((it) => (
-                      <WatchlistRow
-                        key={it.ticker}
-                        it={it}
-                        active={activeTicker === it.ticker}
-                        onClick={(t) => withViewTransition(() => setActiveTicker(t))}
-                        indent={observing.length > 0}
-                      />
-                    ))}
-                </>
-              )}
-              {/* §12-B-5: 観察 sub-section (空ならセクションごと隠す) */}
-              {observing.length > 0 && (
-                <>
-                  {holdings.length > 0 && (
-                    <SectionHeader
-                      collapsed={observingCollapsed}
-                      onToggle={toggleObserving}
-                      label="観察"
-                      count={observing.length}
-                      accent="cyan"
-                      indent
-                    />
-                  )}
-                  {(holdings.length === 0 || !observingCollapsed) &&
-                    observing.map((it) => (
-                      <WatchlistRow
-                        key={it.ticker}
-                        it={it}
-                        active={activeTicker === it.ticker}
-                        onClick={(t) => withViewTransition(() => setActiveTicker(t))}
-                        indent={holdings.length > 0}
-                      />
-                    ))}
-                </>
-              )}
-            </>
-          )}
+      {/* v143 (multi-review 3 体 追加機能 #1): watchlist は Pane 2 に一本化し、 Pane 1 は
+          「今週の決算」 (ウォッチ銘柄の決算 7 日以内、 既存 nextEarningsDays) を curated 表示。
+          毎朝「今週どの銘柄が動くか」 が一目 + click で Pane 3 detail へジャンプ (nav shortcut 価値も維持)。
+          決算予定が無ければ section ごと非表示。 */}
+      {upcomingEarnings.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div
+            style={{
+              padding: '6px 10px 4px',
+              fontSize: 11,
+              fontWeight: 500,
+              letterSpacing: '0.06em',
+              color: 'var(--text-muted)',
+            }}
+          >
+            今週の決算
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {upcomingEarnings.map((it) => {
+              const d = it.nextEarningsDays;
+              const urgent = d != null && d <= 2;
+              const active = activeTicker === it.ticker;
+              return (
+                <button
+                  key={it.ticker}
+                  type="button"
+                  onClick={() => withViewTransition(() => setActiveTicker(it.ticker))}
+                  className="ws-pane1-earnings-row"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '5px 10px',
+                    width: '100%',
+                    border: 'none',
+                    background: active ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'transparent',
+                    borderRadius: 'var(--radius-sm, 8px)',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                >
+                  <CompanyLogo ticker={it.ticker} size={20} />
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {it.ticker}
+                  </span>
+                  <span
+                    style={{
+                      marginLeft: 'auto',
+                      flexShrink: 0,
+                      fontSize: 11,
+                      fontWeight: urgent ? 700 : 500,
+                      color: urgent ? 'var(--color-warning)' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {d === 0 ? '本日' : `あと${d}日`}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 

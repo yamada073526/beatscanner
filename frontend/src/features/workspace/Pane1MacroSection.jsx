@@ -169,7 +169,7 @@ export function FtdChipRow() {
           opacity: 0.6,
         }}
       >
-        FTD 計算中...
+        市場トレンド 計算中...
       </div>
     );
   }
@@ -187,8 +187,10 @@ export function FtdChipRow() {
       title="Follow-Through Day (William O'Neil 理論): 上昇局面入りの確認指標"
       data-testid="ftd-chip-row"
     >
-      <div style={{ fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-        FTD
+      {/* v143 (multi-review 3 体): 「FTD」 略語は初見で伝わらない → 「市場トレンド」 に。
+          専門用語の説明は title tooltip (Follow-Through Day / William O'Neil) で維持。 */}
+      <div style={{ fontWeight: 600, letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
+        市場トレンド
       </div>
       {FTD_INDICES.map((idx) => {
         const ftd = ftdMap[idx];

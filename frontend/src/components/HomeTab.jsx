@@ -215,7 +215,7 @@ export default function HomeTab({
             onMouseEnter={e => {
               e.currentTarget.style.background = 'rgba(56,189,248,0.15)';
               e.currentTarget.style.borderColor = 'rgba(56,189,248,0.70)';
-              e.currentTarget.style.color = 'rgb(14,165,233)';
+              e.currentTarget.style.color = 'var(--color-accent-strong)';
             }}
             onMouseLeave={e => {
               e.currentTarget.style.background = 'transparent';
