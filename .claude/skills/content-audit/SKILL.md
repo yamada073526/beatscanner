@@ -79,6 +79,27 @@ backend endpoint (`/api/visualize` `/api/summary/detail/stream` `/api/conference
 - frontend: `?layout=workspace&ticker=JPM` 直 URL + snap で表示確認 ([[feedback_deploy_verify_discipline]])
 - in-memory cache (`_viz_cache` 等) は `/api/insights/cache/clear` 系 or deploy reset で warm-path も確認
 
+## 自動化 — 「誤った出力を 100% ゼロ」 の正しい仕組み (3 層)
+
+スキルは agent/user が呼ぶもので本番リクエスト経路には居られない。 「100% ゼロ」 を実現するのは
+**本番コードの runtime guard** であり、 スキル自動発動ではない。 正しい三層:
+
+1. **runtime guard (本命・毎リクエスト 100%)**: 発見した pitfall を本番コードに埋め込む
+   (例 `_guard_revenue_basis_mismatch` / hallucination-guard sanitize layer)。 既知パターンは
+   人も skill も介さず毎リクエストで抑止される。 **これが唯一の「100% ゼロ」 機構**。
+2. **自動回帰ネット (機械検出)**: `scripts/content-audit-check.sh` が known-pitfall を本番に対し assert。
+   - **release-check の Step 3.3** (deploy 前ゲート): exit 1 ならブロック
+   - **nightly cron** (任意、 data drift 監視): railway.toml から定期実行 + 失敗時 alert
+   guard が壊れた / data source が drift した瞬間に機械検出 (silent 通過ゼロ)。
+3. **発見 (本 skill)**: agent が定期的に LLM 判断で**未知の新パターン**を発掘 → ①②へ落とす。
+
+**正直な限界**: 既知パターンは①で 100% ゼロ。 **未知の新パターンは機械的 100% 保証は不可能**
+(未知だから)。 ③で発見するたび①に落とし網が狭まる。 「修正」 は判断を要するコード変更なので
+全自動化しない (検出は完全機械化、 修正は agent/human)。
+
+**pitfall 追加時の同期**: 新 pitfall 発見 → ① runtime guard 追加 → ② `content-audit-check.sh` に
+assert 1 件追加 → 本 skill の known-pitfall レジストリに 1 行追加。 3 点セットで同期。
+
 ## 関連 skill / memory
 - `hallucination-guard` — PREVENTIVE 双子 (prompt/sanitize 4 重防御)
 - `release-check` — 本 skill を content 軸として内包推奨
