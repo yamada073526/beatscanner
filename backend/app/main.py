@@ -9546,6 +9546,7 @@ except Exception as _e:
 #   cold も first line ~0.5-1s 表示、 ③ system_cache で大きい system prompt を ephemeral cache。
 #   出力は apply_deterministic_rules を行単位で適用し従来と同一 (Hallucination Guard / Trust Cliff 不変)。
 _SUMMARY_BRIEF_CACHE: dict = {}  # cache_key -> {ts, text}
+_SUMMARY_DETAIL_CACHE: dict = {}  # cache_key -> {ts, text} (AI 詳細レポート、 同 key 設計)
 _SUMMARY_BRIEF_TTL = 6 * 3600.0  # 6h (決算は四半期更新、 同一 context は同一要約)
 
 
@@ -9665,11 +9666,21 @@ async def summary_detail(req: SummaryRequest) -> dict:
 
 @app.post("/api/summary/detail/stream")
 async def summary_detail_stream(req: SummaryRequest):
-    """AIによる決算詳報をストリーミングで返す."""
+    """AIによる決算詳報をストリーミングで返す（v144: 結果 cache で再オープン即時）."""
     context = _format_context(req.analysis, req.guidance)
     ticker = req.analysis.get("ticker", "")
     name = req.analysis.get("companyName") or ticker
     prompt = _build_summary_detail_prompt(context, ticker, name)
+    cache_key = _summary_brief_cache_key(ticker, context)
+
+    # v144 #Pane3-perf: 詳細レポート (Sonnet 900 tokens, ~10-15s) は既に true streaming だが
+    #   cache が無く、 accordion 再オープン / ticker 再訪のたびに再生成していた。 結果 cache で
+    #   再オープンを即時化。 出力内容・model は不変。
+    cached = _SUMMARY_DETAIL_CACHE.get(cache_key)
+    if cached and _time.time() - cached["ts"] < _SUMMARY_BRIEF_TTL:
+        async def generate_cached():
+            yield cached["text"]
+        return StreamingResponse(generate_cached(), media_type="text/plain; charset=utf-8")
 
     try:
         client = ClaudeClient()
@@ -9677,13 +9688,18 @@ async def summary_detail_stream(req: SummaryRequest):
         raise HTTPException(status_code=503, detail=str(e))
 
     async def generate():
+        chunks: list[str] = []
         try:
             async for chunk in client.stream_complete(
                 prompt, model="claude-sonnet-4-5", max_tokens=900
             ):
+                chunks.append(chunk)
                 yield chunk
         except Exception:
             return
+        full = "".join(chunks)
+        if full.strip():
+            _SUMMARY_DETAIL_CACHE[cache_key] = {"ts": _time.time(), "text": full}
 
     return StreamingResponse(generate(), media_type="text/plain; charset=utf-8")
 
