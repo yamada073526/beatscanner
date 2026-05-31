@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { fetchQuarterlyHistory } from '../api.js';
@@ -41,9 +41,21 @@ function verdictLabel(verdict) {
 // 親 .qh-tip-wrap:hover で trigger 側に発光/拡大の affordance を付与 (CSS 側)。
 function InfoTip({ children, content }) {
   const ref = useRef(null);
+  const tipRef = useRef(null);
   const [pos, setPos] = useState(null); // null=非表示 | { left, top, placement }
+  // 描画後に tooltip 幅を測り viewport 左右にはみ出していたら内側へ補正 (信号ランプが右端だと右切れするため)。
+  // createPortal + position:fixed なので親 overflow/transform は escape 済、 残るは viewport 端のみ。
+  useLayoutEffect(() => {
+    if (!pos || !tipRef.current) return;
+    const tr = tipRef.current.getBoundingClientRect();
+    const m = 8;
+    let dx = 0;
+    if (tr.right > window.innerWidth - m) dx = (window.innerWidth - m) - tr.right;
+    if (tr.left + dx < m) dx = m - tr.left;
+    tipRef.current.style.left = `${pos.left + dx}px`;
+  }, [pos]);
   if (!content) return children;
-  // position: fixed + viewport 座標で描画 → 親の overflow:auto/hidden を escape (上端クリップ解消)。
+  // position: fixed + viewport 座標で描画 → 親の overflow:auto/hidden / transform 祖先を escape。
   // viewport 上部に余白が無ければ下方向に flip。
   const openTip = () => {
     const el = ref.current;
@@ -66,6 +78,7 @@ function InfoTip({ children, content }) {
       {children}
       {pos && createPortal(
         <span
+          ref={tipRef}
           role="tooltip"
           className="qh-tip"
           style={{
