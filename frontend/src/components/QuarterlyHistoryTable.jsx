@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { fetchQuarterlyHistory } from '../api.js';
 // Phase 2.7 Sprint 1 #1': Tier M halo sweep (1 回限り) — useHaloSweepOnce 共通 hook
@@ -63,7 +64,7 @@ function InfoTip({ children, content }) {
       onMouseLeave={() => setPos(null)}
     >
       {children}
-      {pos && (
+      {pos && createPortal(
         <span
           role="tooltip"
           className="qh-tip"
@@ -75,7 +76,8 @@ function InfoTip({ children, content }) {
           }}
         >
           {content}
-        </span>
+        </span>,
+        document.body
       )}
     </span>
   );
