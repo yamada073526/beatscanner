@@ -6685,6 +6685,17 @@ button.ds-chip { cursor: pointer; }
     box-shadow: 0 0 8px rgba(34, 197, 94, 0.22); /* a11y 縮退時も glow は維持 */
   }
 }
+/* D4+ (v141 3体合議、 user 提案「形成中も要観察シグナル」): formation (カップ形成中・pivot 未突破) chip を
+   faint static cyan で「監視候補」 として控えめに明示。
+   3体合議 verdict: 緑/amber 不可 (色ルール: 形成中は非方向・未確認)、 pulse 不可 (breakout の event signal と競合・
+   形成中は即時性なし → 静的 tint のみ)。 muted tone は維持 (DRY)、 CSS layer で cyan border + 静的 glow のみ。
+   金商法 §38: ラベルは事実「形成中」 維持 (煽り文言なし)、 cyan=ブランド情報色で「断定示唆」 を避ける。
+   free user は chart=Pro-lock / screener=masking (state剥奪) で info-asymmetry 回避済。
+   shadow は ALLOWED-SHADOW 登録済 (cyan 0.18)、 animation なしで reduced-motion 影響なし。 */
+.ds-chip[data-cup-state="formation"] {
+  border-color: color-mix(in srgb, var(--color-accent) 32%, transparent);
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.18);
+}
 
 /* variant base styling */
 .ds-chip[data-variant="display"] {

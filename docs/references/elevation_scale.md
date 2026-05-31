@@ -103,6 +103,9 @@ ALLOWED-SHADOW: 0 0 8px rgba(34, 197, 94, 0.22)
 
 # v141 D4 「ブレイクアウト確定」 chip green slow glow (animation 50% peak)
 ALLOWED-SHADOW: 0 0 16px rgba(34, 197, 94, 0.48)
+
+# v141 D4+ 「形成中」 chip faint static cyan glow (監視候補、 pulse なし・非方向 info)
+ALLOWED-SHADOW: 0 0 6px rgba(56, 189, 248, 0.18)
 ```
 
 ---
