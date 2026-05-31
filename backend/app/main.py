@@ -13419,7 +13419,7 @@ def _sanitize_insights_data(data: dict) -> dict:
     return data
 
 
-async def _analyze_text_to_insights(tkr: str, combined_text: str) -> dict:
+async def _analyze_text_to_insights(tkr: str, combined_text: str, cache_kb: bool = False) -> dict:
     """与えられた combined_text を Claude Sonnet 4.5 で JSON 構造に分析する内部ヘルパー。
     /api/insights/{ticker}（ナレッジベース版）と /api/insights/refresh/{ticker}（RSS版）の両方で使う。"""
     try:
@@ -13427,26 +13427,59 @@ async def _analyze_text_to_insights(tkr: str, combined_text: str) -> dict:
     except ClaudeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    user_prompt = (
-        f"以下の <knowledge_base> 内のテキストは参考資料です。"
-        f"このテキストの内容をそのまま返してはいけません。\n\n"
-        f"<knowledge_base>\n{combined_text}\n</knowledge_base>\n\n"
-        f"上記の参考資料を読み、ticker symbol が **{tkr}** と完全一致する言及のみを対象に、"
-        f"複数の見解を統合し、システム指示の JSON 形式で結果のみを返してください。\n\n"
-        f"【厳守】 ticker {tkr} の完全一致言及が無ければ found: false (社名・通称・事業内容での連想は禁止)。\n"
-        f"【厳守】 「じっちゃま」「じっちゃまライブ」「広瀬」等の特定個人を示唆する語は一切出力に含めないこと。\n\n"
-        f"再確認: 出力は必ず `{{` で始まる JSON オブジェクトのみとし、"
-        f"マークダウン・前置き・コードフェンス・参考資料の echo back を一切含めないこと。"
-    )
-
     try:
-        raw = await client.complete(
-            user_prompt,
-            model="claude-sonnet-4-5",
-            max_tokens=4000,
-            system=_INSIGHTS_SYSTEM_PROMPT,
-            prefill="{",
-        )
+        if cache_kb:
+            # v144 #Pane3-perf: KB path 専用 prompt cache 構造。
+            #   combined_text は全 ticker 共通の ~135K KB (不変) なので、 instructions + KB を
+            #   cached system block (ephemeral) に配置し、 user message は ticker 固有 instruction のみ。
+            #   → nightly batch (~50 銘柄逐次) が 2 件目以降 cache read で ~92% 高速/安価 = batch 完走安定化。
+            #   出力品質に影響する指示・KB 内容・model・temperature は不変 (Hallucination Guard 非該当)。
+            #   sanitize 後処理 (_sanitize_insights_data) も従来通り適用。
+            system_blocks = [
+                {"type": "text", "text": _INSIGHTS_SYSTEM_PROMPT},
+                {
+                    "type": "text",
+                    "text": f"<knowledge_base>\n{combined_text}\n</knowledge_base>",
+                    "cache_control": {"type": "ephemeral"},
+                },
+            ]
+            kb_user_prompt = (
+                f"system に与えられた <knowledge_base> 内のテキストは参考資料です。"
+                f"このテキストの内容をそのまま返してはいけません。\n\n"
+                f"参考資料を読み、ticker symbol が **{tkr}** と完全一致する言及のみを対象に、"
+                f"複数の見解を統合し、システム指示の JSON 形式で結果のみを返してください。\n\n"
+                f"【厳守】 ticker {tkr} の完全一致言及が無ければ found: false (社名・通称・事業内容での連想は禁止)。\n"
+                f"【厳守】 「じっちゃま」「じっちゃまライブ」「広瀬」等の特定個人を示唆する語は一切出力に含めないこと。\n\n"
+                f"再確認: 出力は必ず `{{` で始まる JSON オブジェクトのみとし、"
+                f"マークダウン・前置き・コードフェンス・参考資料の echo back を一切含めないこと。"
+            )
+            raw = await client.complete(
+                kb_user_prompt,
+                model="claude-sonnet-4-5",
+                max_tokens=4000,
+                system=system_blocks,
+                prefill="{",
+            )
+        else:
+            # RSS refresh path: combined_text は per-ticker RSS で変動するため cache 不可。 従来通り user inline。
+            user_prompt = (
+                f"以下の <knowledge_base> 内のテキストは参考資料です。"
+                f"このテキストの内容をそのまま返してはいけません。\n\n"
+                f"<knowledge_base>\n{combined_text}\n</knowledge_base>\n\n"
+                f"上記の参考資料を読み、ticker symbol が **{tkr}** と完全一致する言及のみを対象に、"
+                f"複数の見解を統合し、システム指示の JSON 形式で結果のみを返してください。\n\n"
+                f"【厳守】 ticker {tkr} の完全一致言及が無ければ found: false (社名・通称・事業内容での連想は禁止)。\n"
+                f"【厳守】 「じっちゃま」「じっちゃまライブ」「広瀬」等の特定個人を示唆する語は一切出力に含めないこと。\n\n"
+                f"再確認: 出力は必ず `{{` で始まる JSON オブジェクトのみとし、"
+                f"マークダウン・前置き・コードフェンス・参考資料の echo back を一切含めないこと。"
+            )
+            raw = await client.complete(
+                user_prompt,
+                model="claude-sonnet-4-5",
+                max_tokens=4000,
+                system=_INSIGHTS_SYSTEM_PROMPT,
+                prefill="{",
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {e}")
 
@@ -13663,7 +13696,7 @@ async def get_insights(ticker: str, refresh: int = Query(0)):
     combined_text = None if force_refresh else await asyncio.to_thread(_load_knowledge_base)
     if combined_text:
         try:
-            kb_result = await _analyze_text_to_insights(tkr, combined_text)
+            kb_result = await _analyze_text_to_insights(tkr, combined_text, cache_kb=True)
         except HTTPException:
             kb_result = None
         if kb_result and kb_result.get("found"):
