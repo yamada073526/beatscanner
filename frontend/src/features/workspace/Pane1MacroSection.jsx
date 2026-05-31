@@ -14,8 +14,9 @@
  * 注意: 現状 14 - 8 = 6 指標 (QQQ/SPY/IWM/GLD/TLT/HYG)。
  *   handover §15-1 推奨の 22 指標完全版は backend `_INDICES_SOURCE` 拡張が必要.
  */
-import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, GripVertical } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { ChevronDown, ChevronRight, GripVertical, Info } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -152,6 +153,51 @@ export function FtdRailDots() {
   );
 }
 
+// v143b (multi-review 3 体): 「市場トレンド」 概念 (Follow-Through Day) の初心者向け説明。
+//   じっちゃま解説の要旨を簡潔化。 状態 (上昇トレンド入り/シグナル待ち/安定) も併記。
+const FTD_CONCEPT =
+  '市場トレンド (Follow-Through Day): 下落相場が底打ちし、新たな上昇トレンド入りを確認する買いシグナルです。'
+  + ' 上昇試行の起点 (急反発した日) から 4〜7 営業日以内に「大きな出来高を伴う大幅上昇」 が出ると確定し、'
+  + ' 一時的な反発 (ダマシ) を排除できます。\n\n'
+  + '・上昇トレンド入り = 確定 (弱気から強気へ転換の目安)\n'
+  + '・シグナル待ち = 上昇試行中だが未確定\n'
+  + '・安定 = 大きな調整局面なし (上昇試行イベント無し)';
+
+/** v143b: 「市場トレンド」 見出し横の ⓘ。 hover/focus で FTD 概念 tooltip (portal、 feedback_tooltip_portal_pattern)。 */
+function FtdInfoTip() {
+  const ref = useRef(null);
+  const [tip, setTip] = useState(null);
+  const show = () => {
+    const r = ref.current?.getBoundingClientRect?.();
+    if (r) setTip({ x: r.left, y: r.bottom });
+  };
+  const hide = () => setTip(null);
+  return (
+    <>
+      <span
+        ref={ref}
+        className="ftd-info-tip"
+        role="button"
+        tabIndex={0}
+        aria-label="市場トレンド (Follow-Through Day) の説明を表示"
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onFocus={show}
+        onBlur={hide}
+        style={{ display: 'inline-flex', alignItems: 'center', cursor: 'help', color: 'var(--text-muted)' }}
+      >
+        <Info size={11} aria-hidden />
+      </span>
+      {tip && createPortal(
+        <div className="ftd-info-tip__pop" style={{ left: tip.x, top: tip.y }} role="tooltip">
+          {FTD_CONCEPT}
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
 /** FTD 行: 3 indices を inline 横並びで表示 (Pane 1 幅 280px 程度を想定).
  *  v120 Task 3 hotfix: Pane1MacroSection は v63 で Pane 1 から撤去済 dead code のため、
  *  本 component を named export して Workspace.jsx の Pane1Nav 内に mount し直す。
@@ -187,10 +233,21 @@ export function FtdChipRow() {
       title="Follow-Through Day (William O'Neil 理論): 上昇局面入りの確認指標"
       data-testid="ftd-chip-row"
     >
-      {/* v143 (multi-review 3 体): 「FTD」 略語は初見で伝わらない → 「市場トレンド」 に。
-          専門用語の説明は title tooltip (Follow-Through Day / William O'Neil) で維持。 */}
-      <div style={{ fontWeight: 600, letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
+      {/* v143 (multi-review 3 体): 「FTD」 略語 → 「市場トレンド」。 専門用語の説明は ⓘ tooltip で提供。
+          v143b: font を「今週の決算」 と揃える (11px/fw500/0.06em、 user dogfood「市場トレンドが小さい」)。 */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          fontSize: 11,
+          fontWeight: 500,
+          letterSpacing: '0.06em',
+          color: 'var(--text-muted)',
+        }}
+      >
         市場トレンド
+        <FtdInfoTip />
       </div>
       {FTD_INDICES.map((idx) => {
         const ftd = ftdMap[idx];

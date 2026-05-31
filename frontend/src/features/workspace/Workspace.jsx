@@ -487,8 +487,9 @@ function Pane1Nav({ items = [] }) {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: 8, overflowY: 'auto', minHeight: 0 }}>
       {/* v143 (user dogfood): サイドバーを最小幅 (rail) へワンクリックで畳むボタン。
           従来は resize handle を minSize 未満までドラッグする必要があり面倒だった。
-          VS Code / Linear 流に上部右寄せ、 logout と同 minimal style (opacity 0.55→1)。 */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', paddingBottom: 2 }}>
+          v143b (multi-review 3 体): 配置を右上→左上 (VS Code/Linear/Notion のサイドバー collapse 慣習)。
+          押下アニメ (scale 0.92) は既存 onMouseDown/Up で実装済。 logout と同 minimal style。 */}
+      <div style={{ display: 'flex', justifyContent: 'flex-start', paddingBottom: 4 }}>
         <button
           type="button"
           onClick={() => {
