@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { Tag } from 'lucide-react';
 import ConditionDots from '../../primitives/ConditionDots.jsx';
 import { useRowSparkline } from './RowSparkline.jsx';
 import CompanyLogo from '../../../../components/CompanyLogo.jsx';
@@ -139,8 +140,25 @@ export default function JudgmentRow({ item, selected, onClick, metaMode = 'condi
       className={className}
       data-testid="ws-judgment-row"
     >
-      {/* v143: drag handle 撤去 (multi-review 3 体一致 — 動かないハンドルは「壊れたアプリ」 印象。
-          DnD フル実装は post-release backlog)。 */}
+      {/* Col 0: v143 cluster 3 — 旧 drag handle slot を「タグ・保有編集」 button に置換 (hover-reveal)。
+          row は <button> なので role=button span + stopPropagation で nested button 回避。
+          bs:open:tagassign で App root の TagAssignSheet を起動 (bs:open:addtx と同 CustomEvent pattern)。 */}
+      <span
+        className="ws-row-tag-btn"
+        role="button"
+        aria-label="タグ・保有を編集"
+        title="タグ・保有を編集"
+        data-testid="ws-row-tag-btn"
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          try {
+            window.dispatchEvent(new CustomEvent('bs:open:tagassign', { detail: { ticker } }));
+          } catch { /* noop */ }
+        }}
+      >
+        <Tag size={13} strokeWidth={1.75} aria-hidden />
+      </span>
 
       {/* Col 1: Logo + Ticker + Co.Name */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>

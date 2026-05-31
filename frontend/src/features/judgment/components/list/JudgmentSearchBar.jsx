@@ -4,9 +4,10 @@ import { Search, ArrowUpDown } from 'lucide-react';
 
 // v143 (user dogfood + multi-review 3 体一致): sort control を検索バー右端に統合 (2 行→1 行集約)。
 //   group chip 撤去でフィルタ行が sort のみ + 右側空白だったため。 JudgmentFilters は廃止。
-// 「タグ順」(tag-order) は cluster 3 (タグ CRUD 配線) 完了まで一旦除外。
+// v143 cluster 3: タグ CRUD を workspace に配線済 → 「タグ順」(tag-order) 復活。
 const SORT_OPTIONS = [
   { key: 'pass-count',    label: 'デフォルト' }, // = 条件合致数 desc
+  { key: 'tag-order',     label: 'タグ順' },
   { key: 'earnings-near', label: '決算近' },
 ];
 

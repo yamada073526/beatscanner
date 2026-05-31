@@ -157,6 +157,18 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rootAddTxOpen]);
 
+  // v143 cluster 3: workspace mode の銘柄行「タグ」 button → 'bs:open:tagassign' で TagAssignSheet 起動。
+  //   modals は workspace early-return 外なので、 bs:open:addtx と同じ CustomEvent decoupling で App root に届ける。
+  //   tagModalsEl (workspace fragment + SPA 両 return に render) が tagAssignTicker truthy で sheet 表示。
+  useEffect(() => {
+    const handler = (e) => {
+      const t = String(e?.detail?.ticker || '').trim().toUpperCase();
+      if (t) setTagAssignTicker(t);
+    };
+    window.addEventListener('bs:open:tagassign', handler);
+    return () => window.removeEventListener('bs:open:tagassign', handler);
+  }, []);
+
   // v62 WS-6: dark mode 状態を React state に reactive 化.
   // toggleDarkMode は document.documentElement の data-theme を書換えるが React 状態を
   // 更新しないため、MutationObserver で attribute 変化を監視して state 同期.
@@ -1007,6 +1019,81 @@ export default function App() {
     }
   }, [urlWantsWorkspace, isMobileForWorkspace]);
 
+  // v143 cluster 3: タグモーダル群を変数化し workspace / SPA 両 return で共有 (workspace early-return より後の
+  //   SPA return にしか無く、 workspace から到達不能だった問題を解消)。 両 return は排他なので二重 render 無し。
+  const tagModalsEl = (
+    <Suspense fallback={null}>
+      {tagManagerOpen && (
+        <TagManagerModal
+          isOpen={tagManagerOpen}
+          onClose={() => setTagManagerOpen(false)}
+          tags={tagStore.tags}
+          onCreate={tagStore.createTag}
+          onUpdate={tagStore.updateTag}
+          onDelete={tagStore.deleteTag}
+        />
+      )}
+      {tagAssignTicker && (
+        <TagAssignSheet
+          isOpen={!!tagAssignTicker}
+          ticker={tagAssignTicker}
+          tags={tagStore.tags}
+          currentTagId={tagStore.assignments[tagAssignTicker]}
+          currentHolding={holdingStore.getHolding(tagAssignTicker)}
+          currentLots={holdingStore.getLots(tagAssignTicker)}
+          onClose={() => setTagAssignTicker(null)}
+          onAssign={async (tagId) => {
+            try {
+              await tagStore.assignTag(tagAssignTicker, tagId);
+            } catch (e) {
+              showToast(e?.message || 'タグの設定に失敗しました');
+            }
+          }}
+          onUnassign={async () => {
+            try {
+              await tagStore.unassignTag(tagAssignTicker);
+            } catch (e) {
+              showToast(e?.message || 'タグ解除に失敗しました');
+            }
+          }}
+          onOpenManager={() => setTagManagerOpen(true)}
+          onAddLot={user ? async ({ shares, price, tradeDate }) => {
+            try {
+              await holdingStore.addLot(tagAssignTicker, { shares, price, tradeDate });
+            } catch (e) {
+              showToast(e?.message || 'ロットの保存に失敗しました');
+              throw e;
+            }
+          } : undefined}
+          onUpdateLot={user ? async (lotId, patch) => {
+            try {
+              await holdingStore.updateLot(lotId, patch);
+            } catch (e) {
+              showToast(e?.message || 'ロットの更新に失敗しました');
+              throw e;
+            }
+          } : undefined}
+          onDeleteLot={user ? async (lotId) => {
+            try {
+              await holdingStore.removeLot(lotId);
+            } catch (e) {
+              showToast(e?.message || 'ロットの削除に失敗しました');
+              throw e;
+            }
+          } : undefined}
+          onDeleteAllHolding={user ? async () => {
+            try {
+              await holdingStore.removeHolding(tagAssignTicker);
+            } catch (e) {
+              showToast(e?.message || '保有の削除に失敗しました');
+              throw e;
+            }
+          } : undefined}
+        />
+      )}
+    </Suspense>
+  );
+
   if (useWorkspaceLayout) {
     // v62 WS-4: workspace の Pane 2 / Pane 3 で既存 JudgmentList / JudgmentDetail を再利用するため
     // SPA v2 path と同じ items / detailFor を構築 (App.jsx:1172 と同形)
@@ -1166,6 +1253,8 @@ export default function App() {
         />
         {/* v142 フィードバック収集 (動画教訓 #2): workspace mode でも常駐 mount */}
         <FeedbackWidget user={user} />
+        {/* v143 cluster 3: タグ作成/付与モーダル (workspace でも到達可能に。 bs:open:tagassign で起動) */}
+        {tagModalsEl}
       </>
     );
   }
@@ -2625,76 +2714,10 @@ export default function App() {
         user={user}
       />
 
-      {/* タグ機能 (X-1) のモーダル群 */}
+      {/* v143 cluster 3: タグモーダルは tagModalsEl 変数に抽出 (workspace early-return より前で定義、
+          workspace / SPA 両 return で共有)。 SPA path もこの変数を render する。 */}
+      {tagModalsEl}
       <Suspense fallback={null}>
-        {tagManagerOpen && (
-          <TagManagerModal
-            isOpen={tagManagerOpen}
-            onClose={() => setTagManagerOpen(false)}
-            tags={tagStore.tags}
-            onCreate={tagStore.createTag}
-            onUpdate={tagStore.updateTag}
-            onDelete={tagStore.deleteTag}
-          />
-        )}
-        {tagAssignTicker && (
-          <TagAssignSheet
-            isOpen={!!tagAssignTicker}
-            ticker={tagAssignTicker}
-            tags={tagStore.tags}
-            currentTagId={tagStore.assignments[tagAssignTicker]}
-            currentHolding={holdingStore.getHolding(tagAssignTicker)}
-            currentLots={holdingStore.getLots(tagAssignTicker)}
-            onClose={() => setTagAssignTicker(null)}
-            onAssign={async (tagId) => {
-              try {
-                await tagStore.assignTag(tagAssignTicker, tagId);
-              } catch (e) {
-                showToast(e?.message || 'タグの設定に失敗しました');
-              }
-            }}
-            onUnassign={async () => {
-              try {
-                await tagStore.unassignTag(tagAssignTicker);
-              } catch (e) {
-                showToast(e?.message || 'タグ解除に失敗しました');
-              }
-            }}
-            onOpenManager={() => setTagManagerOpen(true)}
-            onAddLot={user ? async ({ shares, price, tradeDate }) => {
-              try {
-                await holdingStore.addLot(tagAssignTicker, { shares, price, tradeDate });
-              } catch (e) {
-                showToast(e?.message || 'ロットの保存に失敗しました');
-                throw e;
-              }
-            } : undefined}
-            onUpdateLot={user ? async (lotId, patch) => {
-              try {
-                await holdingStore.updateLot(lotId, patch);
-              } catch (e) {
-                showToast(e?.message || 'ロットの更新に失敗しました');
-                throw e;
-              }
-            } : undefined}
-            onDeleteLot={user ? async (lotId) => {
-              try {
-                await holdingStore.removeLot(lotId);
-              } catch (e) {
-                showToast(e?.message || 'ロットの削除に失敗しました');
-                throw e;
-              }
-            } : undefined}
-            onDeleteAllHolding={user ? async () => {
-              try {
-                await holdingStore.removeHolding(tagAssignTicker);
-              } catch (e) {
-                showToast(e?.message || '保有の削除に失敗しました');
-                throw e;
-              }
-            } : undefined}
-          />
-        )}
         {/* Y-3 Phase A: 通知設定モーダル */}
         {showNotifModal && user && (
           <NotificationSettingsModal

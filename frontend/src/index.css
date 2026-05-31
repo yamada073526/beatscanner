@@ -6490,14 +6490,15 @@ body {
   display: grid;
   /* v120 Sprint 2: sparkline 列削除 (auto 1 つ減、 multi-review 6 体合議 verdict 反映)
      handle / [logo+ticker+name] / [price+change+1Y] / meta / chevron */
-  /* v143: drag handle 列 (18px) 撤去 → logo/ticker / price / meta / chevron の 4 列。 */
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  /* v143 cluster 3: leading 18px 列を「タグ」 button slot として復活 (旧 drag handle 跡地)。
+     tag(18px) / logo+ticker(1fr) / price / meta / chevron の 5 列。 */
+  grid-template-columns: 18px minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 8px;
   width: 100%;
   /* v143 (user dogfood): 数十件登録時の網羅性向上のため行高を圧縮 (64→52px、 padding 10→6px)。
      価格 3 行ブロック (~40px) が行高を規定するため padding 削減で実効短縮。 */
-  padding: 6px 12px 6px 10px;
+  padding: 6px 12px 6px 6px;
   min-height: 52px;
   background: transparent;
   border: none;
@@ -7737,7 +7738,26 @@ button.ds-chip[data-pressed="true"]:hover {
   );
 }
 
-/* v143: drag handle (.ws-row-handle) は撤去 (DnD 未実装で「壊れた」 印象を与えるため、 multi-review 3 体一致)。 */
+/* v143 cluster 3: 旧 drag handle 跡地の「タグ・保有編集」 button (hover-reveal)。
+   row hover で薄く出現、 button 自体の hover で accent。 specificity (0,2,1) で row-hover (0,2,0) に勝つ (!important 不使用)。 */
+.ws-judgment-row .ws-row-tag-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+  opacity: 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm, 6px);
+  transition: opacity var(--motion-fast, 120ms) ease, color var(--motion-fast, 120ms) ease, background var(--motion-fast, 120ms) ease;
+}
+.ws-judgment-row:hover .ws-row-tag-btn { opacity: 0.5; }
+.ws-judgment-row .ws-row-tag-btn:hover {
+  opacity: 1;
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
 
 /* logo wrap: 32px 円形 + 極薄シアンリング (Apple Wallet 風) */
 .ws-judgment-row .ws-row-logo {
