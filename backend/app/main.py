@@ -13723,6 +13723,26 @@ async def get_insights(ticker: str, refresh: int = Query(0)):
                 "source": "knowledge_base",
             }
             _INSIGHTS_CACHE[tkr] = {"ts": _time.time(), "data": response}
+            # v144 #Pane3-perf: KB path 結果を Supabase にも永続化する (従来は in-memory のみ →
+            #   24h TTL 失効 / deploy で in-memory reset のたびに 24s KB 再生成していた)。
+            #   これで「初回 KB 生成後 24h は全 user が Supabase hit (~0.8s)」 になり、 cold 24s が
+            #   ticker あたり 24h に 1 回だけに減る。 best-effort: upsert 失敗は response を妨げない
+            #   (RSS path _refresh_one と同じ upsert pattern / column 構成)。
+            if sb is not None:
+                try:
+                    from datetime import datetime as _dt_kb, timezone as _tz_kb
+                    sb.table("market_insights").upsert({
+                        "ticker": tkr,
+                        "overall_sentiment": response["overall_sentiment"],
+                        "summary": response["summary"],
+                        "bull_points": response["bull_points"],
+                        "bear_points": response["bear_points"],
+                        "key_metrics": response["key_metrics"],
+                        "sources": [],
+                        "updated_at": _dt_kb.now(_tz_kb.utc).isoformat(),
+                    }, on_conflict="ticker").execute()
+                except Exception as _e_kb:
+                    print(f"[insights] KB-path Supabase upsert failed for {tkr}: {_e_kb}")
             return response
 
     # 4. オンデマンド RSS 収集 → Claude 分析 → Supabase upsert（60s タイムアウト）
