@@ -1307,9 +1307,20 @@ def _is_bypassed(request: Request) -> bool:
 
 @app.get("/health")
 async def health() -> dict:
-    """Liveness check + env-var presence (values are never exposed)."""
+    """Liveness check + env-var presence (values are never exposed).
+
+    v144: `commit` に Railway が注入する git SHA を出す。 backend-only deploy は frontend
+    bundle hash が変わらず反映検知できなかった (deploy-verify-discipline の既知の痛点)。
+    `curl /health | jq -r .commit` で push 済 commit の反映を一意に確認できる。
+    """
     return {
         "status": "ok",
+        "commit": (
+            os.getenv("RAILWAY_GIT_COMMIT_SHA")
+            or os.getenv("RAILWAY_GIT_COMMIT")
+            or os.getenv("GIT_COMMIT")
+            or "unknown"
+        )[:12],
         "env": {
             "FMP_API_KEY":       bool(os.getenv("FMP_API_KEY")),
             "FMP_DEMO_API_KEY":  bool(os.getenv("FMP_DEMO_API_KEY")),
