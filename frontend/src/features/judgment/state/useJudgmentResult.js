@@ -17,6 +17,7 @@ import { useCallback, useRef, useState } from 'react';
 import { analyze, demoAnalyze, fetchEtfInfo, fetchGuidance, fetchGuidanceBasic } from '../../../api.js';
 import { useWorkspaceStore } from '../../../state/workspaceStore.js';
 import { trackEvent } from '../../../lib/analytics.js';
+import { saveConditionSummary } from '../../../lib/conditionCache.js';
 
 /** 同銘柄の再訪を 0 秒化する result キャッシュ TTL (10 分)。F5 で消えるメモリキャッシュ。 */
 const RESULT_CACHE_TTL = 10 * 60 * 1000;
@@ -126,6 +127,8 @@ export function useJudgmentResult({
             setResult(data);
             const prev = resultCacheRef.current.get(t) || {};
             resultCacheRef.current.set(t, { ...prev, result: data, ts: Date.now() });
+            // v143: 5 条件サマリを localStorage に永続化 → reload 後も Pane 2 で dot 即表示
+            saveConditionSummary(t, data);
           }
         })
         .catch((e) => {

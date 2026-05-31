@@ -117,7 +117,7 @@ export default function JudgmentRow({ item, selected, onClick }) {
             width: 6,
             height: 6,
             borderRadius: '50%',
-            background: tagColor || 'rgb(56, 189, 248)',
+            background: tagColor || 'var(--color-accent)',
             flexShrink: 0,
           }}
         />
@@ -275,7 +275,7 @@ export default function JudgmentRow({ item, selected, onClick }) {
         aria-hidden
         style={{
           fontSize: 14,
-          color: selected ? 'rgb(56, 189, 248)' : 'var(--text-muted)',
+          color: selected ? 'var(--color-accent)' : 'var(--text-muted)',
         }}
       >
         ›

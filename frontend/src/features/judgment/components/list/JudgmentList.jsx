@@ -195,18 +195,18 @@ export default function JudgmentList({ items = [], showFilters = true, onAnalyze
                         padding: '6px 14px',
                         fontSize: 12,
                         fontWeight: 600,
-                        color: 'rgb(56, 189, 248)',
-                        background: 'rgba(56, 189, 248, 0.10)',
-                        border: '1px solid rgba(56, 189, 248, 0.30)',
+                        color: 'var(--color-accent)',
+                        background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
+                        border: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)',
                         borderRadius: 'var(--radius-pill)',
                         cursor: 'pointer',
                         transition: 'background var(--motion-fast, 120ms) var(--ease-out-expo)',
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(56, 189, 248, 0.18)';
+                        e.currentTarget.style.background = 'color-mix(in srgb, var(--color-accent) 18%, transparent)';
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'rgba(56, 189, 248, 0.10)';
+                        e.currentTarget.style.background = 'color-mix(in srgb, var(--color-accent) 10%, transparent)';
                       }}
                     >
                       {t}

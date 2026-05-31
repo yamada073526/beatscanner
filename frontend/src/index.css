@@ -6494,8 +6494,10 @@ body {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 10px 12px 10px 6px;
-  min-height: 64px;
+  /* v143 (user dogfood): 数十件登録時の網羅性向上のため行高を圧縮 (64→52px、 padding 10→6px)。
+     価格 3 行ブロック (~40px) が行高を規定するため padding 削減で実効短縮。 */
+  padding: 6px 12px 6px 6px;
+  min-height: 52px;
   background: transparent;
   border: none;
   border-bottom: 1px solid var(--border-subtle, rgba(148,163,184,0.18));
@@ -10320,6 +10322,11 @@ button.ds-chip[data-pressed="true"]:hover {
   outline: none;
   border-radius: var(--radius-sm, 8px);
   transition: background var(--motion-base, 200ms) ease;
+  /* v143 bug fix: summary を flex 化。 旧 block では ::after chevron が
+     summary-inner (block-level flex) の次行へ回り込み、 見出し下に金色「・」 として
+     浮いて見えた (v117 R9 で fix 済の回帰)。 flex 化で chevron を count 右隣の inline へ。 */
+  display: flex;
+  align-items: center;
 }
 
 .daily-digest__summary::-webkit-details-marker {
@@ -10331,6 +10338,8 @@ button.ds-chip[data-pressed="true"]:hover {
 }
 
 .daily-digest__summary-inner {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;

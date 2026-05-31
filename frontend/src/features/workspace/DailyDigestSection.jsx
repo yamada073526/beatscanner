@@ -26,11 +26,33 @@
  *   - feedback_supabase_grant_bug.md (RLS published only fetch、 anon で十分)
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase.js';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
+import { useAuth } from '../../hooks/useAuth.js';
 
 const FETCH_LIMIT = 3;
+
+// v143: DailyDigest の open/collapse 状態を localStorage に永続化 (毎回 open に戻る問題の解消)。
+// 明示 pref があればそれを優先、 無ければ login state で default を出し分け:
+//   - ログイン時 = collapse (自分の銘柄 = watchlist を Pane 2 上部優先、 user dogfood Q1)
+//   - 未ログイン時 = open (記事 discovery / marketing)
+const DIGEST_PREF_KEY = 'bs:digestOpen:v1';
+function readDigestPref() {
+  try {
+    const v = localStorage.getItem(DIGEST_PREF_KEY);
+    return v === 'open' ? true : v === 'closed' ? false : null;
+  } catch {
+    return null;
+  }
+}
+function writeDigestPref(isOpen) {
+  try {
+    localStorage.setItem(DIGEST_PREF_KEY, isOpen ? 'open' : 'closed');
+  } catch {
+    /* private mode 等は無視 */
+  }
+}
 
 /**
  * Supabase から 最新 published article を fetch する hook.
@@ -180,6 +202,30 @@ function DigestLoadingState() {
 export default function DailyDigestSection() {
   const { articles, loading, error } = useDailyDigest();
   const setDigestTickers = useWorkspaceStore((s) => s.setDigestTickers);
+  const { user } = useAuth();
+
+  // v143: open/collapse は controlled。 明示 pref 優先、 無ければ初期は open (no-flash)、
+  //   login state 確定後に login-based default を適用 (user 未操作のときのみ)。
+  const [open, setOpen] = useState(() => {
+    const pref = readDigestPref();
+    return pref == null ? true : pref;
+  });
+  const interactedRef = useRef(false);
+  useEffect(() => {
+    if (readDigestPref() == null && !interactedRef.current) {
+      setOpen(!user); // login=collapse / guest=open
+    }
+  }, [user]);
+  // summary click を自前制御 (native toggle は preventDefault、 open は state で deterministic に管理)。
+  const handleSummaryClick = (e) => {
+    e.preventDefault();
+    interactedRef.current = true;
+    setOpen((prev) => {
+      const next = !prev;
+      writeDigestPref(next);
+      return next;
+    });
+  };
 
   // v117 R8 g3: DailyDigest が表示している ticker 一覧を workspace store に push
   //   → JudgmentRow で「DIGEST」 badge を表示できるように連携
@@ -201,9 +247,9 @@ export default function DailyDigestSection() {
       className="daily-digest"
       data-testid="daily-digest-section"
       aria-label="本日の Daily Digest"
-      open
+      open={open}
     >
-      <summary className="daily-digest__summary">
+      <summary className="daily-digest__summary" onClick={handleSummaryClick}>
         <div className="daily-digest__summary-inner">
           <div>
             <div className="daily-digest__label">DAILY DIGEST</div>

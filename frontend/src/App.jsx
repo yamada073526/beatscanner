@@ -66,6 +66,8 @@ import DemoTicker from './components/DemoTicker.jsx';
 import CompanyLogo from './components/CompanyLogo.jsx';
 // v120 hotfix Q3 案 A: companyName localStorage cache (デバイス内永続、 静的データなので version 不要)
 import { getCompanyName, setCompanyName } from './lib/companyNameCache.js';
+// v143: 5 条件サマリの localStorage 永続 cache (reload 後も Pane 2 dot を保持)
+import { getConditionSummary } from './lib/conditionCache.js';
 const TagManagerModal = lazy(() => import('./components/TagManagerModal.jsx'));
 const TagAssignSheet = lazy(() => import('./components/TagAssignSheet.jsx'));
 const NotificationSettingsModal = lazy(() => import('./components/NotificationSettingsModal.jsx'));
@@ -1024,6 +1026,10 @@ export default function App() {
       const cachedName = getCompanyName(t);
       const liveName = r?.companyName;
       if (liveName && liveName !== cachedName) setCompanyName(t, liveName);
+      // v143: result cache miss (reload / 未再分析) は localStorage の 5 条件サマリで補完。
+      // 行の dot / グループ分け (overallPass / passedCount) が reload で消えないようにする。
+      // 詳細 pane は _detailForWS が resultCacheRef を直読するため lite 補完の影響を受けない。
+      const liteJudgment = r || getConditionSummary(t);
       return {
         ticker: t,
         companyName: liveName || cachedName,
@@ -1031,7 +1037,7 @@ export default function App() {
         // v120 Sprint 4 (QA verdict F1): backend は change_pct (snake_case、 percent unit) で返す。
         // frontend は fraction (0.0234 = 2.34%) 想定なので /100 で変換 (既存 changePct camelCase は常に undefined → 1日% 永続非表示バグ)。
         changePct: px?.change_pct != null ? px.change_pct / 100 : null,
-        judgment: r,
+        judgment: liteJudgment,
         isHolding: _holdingTickers.includes(t),
         isWatchlist: watchlist.includes(t),
         lastAnalyzedAt: cache?.ts ?? 0,
@@ -1605,6 +1611,8 @@ export default function App() {
             const cachedNameV2 = getCompanyName(t);
             const liveNameV2 = r?.companyName;
             if (liveNameV2 && liveNameV2 !== cachedNameV2) setCompanyName(t, liveNameV2);
+            // v143: classic SPA mode も同様に result cache miss を localStorage サマリで補完
+            const liteJudgmentV2 = r || getConditionSummary(t);
             return {
               ticker: t,
               companyName: liveNameV2 || cachedNameV2,
@@ -1612,7 +1620,7 @@ export default function App() {
               // v120 Sprint 4 (QA verdict F1): backend は change_pct (snake_case、 percent unit) で返す。
         // frontend は fraction (0.0234 = 2.34%) 想定なので /100 で変換 (既存 changePct camelCase は常に undefined → 1日% 永続非表示バグ)。
         changePct: px?.change_pct != null ? px.change_pct / 100 : null,
-              judgment: r,
+              judgment: liteJudgmentV2,
               isHolding: holdingTickers.includes(t),
               isWatchlist: watchlist.includes(t),
               lastAnalyzedAt: cache?.ts ?? 0,
