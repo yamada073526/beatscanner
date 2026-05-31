@@ -9539,6 +9539,20 @@ try:
 except Exception as _e:
     print(f"[style_constitution] inject failed for _SUMMARY_SYSTEM_PROMPT: {_e}")
 
+# v144 #Pane3-perf Task A: AI 要約 (冒頭) の高速化。
+#   従来 stream endpoint は全 chunk を buffer → post-process → 一括 yield で、 ユーザーは生成完了
+#   (~5s) まで何も見えない「見かけ streaming」 だった。 さらに ticker 再訪のたびに Haiku 再生成。
+#   対策: ① 結果 cache (ticker + context hash, 6h) で再訪/別 user 即時、 ② true line streaming で
+#   cold も first line ~0.5-1s 表示、 ③ system_cache で大きい system prompt を ephemeral cache。
+#   出力は apply_deterministic_rules を行単位で適用し従来と同一 (Hallucination Guard / Trust Cliff 不変)。
+_SUMMARY_BRIEF_CACHE: dict = {}  # cache_key -> {ts, text}
+_SUMMARY_BRIEF_TTL = 6 * 3600.0  # 6h (決算は四半期更新、 同一 context は同一要約)
+
+
+def _summary_brief_cache_key(ticker: str, context: str) -> str:
+    import hashlib as _hl
+    return f"{ticker.upper()}:{_hl.md5(context.encode('utf-8')).hexdigest()[:16]}"
+
 
 def _build_summary_brief_prompt(context: str, ticker: str, name: str) -> str:
     return (
@@ -9573,11 +9587,20 @@ async def summary_brief(req: SummaryRequest) -> dict:
 
 @app.post("/api/summary/brief/stream")
 async def summary_brief_stream(req: SummaryRequest):
-    """AI要約をストリーミングで返す（全チャンク結合後に後処理適用）."""
+    """AI要約をストリーミングで返す（v144: cache hit 即時 / true line streaming + 行単位後処理）."""
     context = _format_context(req.analysis, req.guidance)
     ticker = req.analysis.get("ticker", "")
     name = req.analysis.get("companyName") or ticker
     prompt = _build_summary_brief_prompt(context, ticker, name)
+    cache_key = _summary_brief_cache_key(ticker, context)
+
+    # cache hit: 生成済の要約を即時 yield (Haiku 再生成なし)
+    cached = _SUMMARY_BRIEF_CACHE.get(cache_key)
+    if cached and _time.time() - cached["ts"] < _SUMMARY_BRIEF_TTL:
+        async def generate_cached():
+            for line in cached["text"].splitlines(keepends=True):
+                yield line
+        return StreamingResponse(generate_cached(), media_type="text/plain; charset=utf-8")
 
     try:
         client = ClaudeClient()
@@ -9585,22 +9608,37 @@ async def summary_brief_stream(req: SummaryRequest):
         raise HTTPException(status_code=503, detail=str(e))
 
     async def generate():
-        chunks: list[str] = []
+        # v144: true line streaming — 行が完成 (改行到達) するたびに後処理を「その行だけ」適用して
+        #   即 yield。 ユーザーは ①→②→③→④ が順次出現する progressive 表示になり、 cold でも
+        #   first line ~0.5-1s。 apply_deterministic_rules は ③ 行のタグ補正のみなので行単位適用で
+        #   従来と同一結果 (Trust Cliff guard 不変)。 全文は最後に cache する。
+        buffer = ""
+        out_lines: list[str] = []
         try:
             async for chunk in client.stream_complete(
                 prompt,
                 model="claude-haiku-4-5-20251001",
                 max_tokens=512,
                 system=_SUMMARY_SYSTEM_PROMPT,
+                system_cache=True,  # v144: 大きい system prompt を ephemeral cache (cold input 短縮)
             ):
-                chunks.append(chunk)
+                buffer += chunk
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    corrected = apply_deterministic_rules(line + "\n", req.guidance)
+                    out_lines.append(corrected)
+                    yield corrected
         except Exception:
             pass
-        full = "".join(chunks)
-        corrected = apply_deterministic_rules(full, req.guidance)
-        # 行ごとに分割して逐次 yield（UIのストリーミング表示を維持）
-        for line in corrected.splitlines(keepends=True):
-            yield line
+        # 末尾 (改行なしで終わった最終行) を flush
+        if buffer:
+            corrected = apply_deterministic_rules(buffer, req.guidance)
+            out_lines.append(corrected)
+            yield corrected
+        # 全文を cache (次回 ticker 再訪 / 別 user は即時)
+        full_text = "".join(out_lines)
+        if full_text.strip():
+            _SUMMARY_BRIEF_CACHE[cache_key] = {"ts": _time.time(), "text": full_text}
 
     return StreamingResponse(generate(), media_type="text/plain; charset=utf-8")
 
