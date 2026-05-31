@@ -1,4 +1,5 @@
 import React from 'react';
+import { ArrowUpDown } from 'lucide-react';
 import Chip from '../../../../components/ui/Chip.jsx';
 import { useJudgment } from '../../state/JudgmentContext.jsx';
 
@@ -27,13 +28,15 @@ export default function JudgmentFilters() {
       style={{
         display: 'flex',
         flexWrap: 'wrap',
+        alignItems: 'center',
         gap: 8,
         padding: '8px 12px',
         borderBottom: '1px solid var(--border)',
       }}
     >
       {/* round 7: 新 Chip primitive (md filter variant) に migrate。
-          tone は accent でなく pressed prop で表現、変換テーブル不要に。 */}
+          tone は accent でなく pressed prop で表現、変換テーブル不要に。
+          v143: group は chip 維持 (頻繁に切替・3-4 個で密度問題なし)。 */}
       <div style={{ display: 'flex', gap: 4 }} role="group" aria-label="グループ">
         {GROUP_OPTIONS.map((opt) => (
           <Chip
@@ -48,19 +51,31 @@ export default function JudgmentFilters() {
         ))}
       </div>
       <div style={{ flex: 1 }} />
-      <div style={{ display: 'flex', gap: 4 }} role="group" aria-label="並び替え">
-        {SORT_OPTIONS.map((opt) => (
-          <Chip
-            key={opt.key}
-            size="md"
-            variant="filter"
-            pressed={filters.sort === opt.key}
-            onClick={() => setFilters({ ...filters, sort: opt.key })}
-          >
-            {opt.label}
-          </Chip>
-        ))}
-      </div>
+      {/* v143 (user dogfood): sort 4 chip → compact select に集約。 chip 密度を下げ
+          「どれを押すか」 の認知負荷を軽減 (原則 1 + 原則 3)。 select styling は
+          IndicesView の token pattern に準拠。 ArrowUpDown で並び替え affordance を明示。 */}
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)' }}>
+        <ArrowUpDown size={13} aria-hidden style={{ flexShrink: 0 }} />
+        <select
+          aria-label="並び替え"
+          value={filters.sort}
+          onChange={(e) => setFilters({ ...filters, sort: e.target.value })}
+          style={{
+            padding: '4px 8px',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            color: 'var(--text-primary)',
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          {SORT_OPTIONS.map((opt) => (
+            <option key={opt.key} value={opt.key}>{opt.label}</option>
+          ))}
+        </select>
+      </label>
     </div>
   );
 }
