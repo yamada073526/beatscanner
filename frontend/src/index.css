@@ -5177,7 +5177,10 @@ body {
 }
 .qh-streak-strong { background: var(--color-gain); }
 .qh-streak-medium { background: color-mix(in srgb, var(--color-gain) 50%, transparent); }
-.qh-streak-weak { background: var(--color-warning); }
+/* weak = EPS/売上 両方 In-line (予想どおり)。 In-line は中立であって警告ではないため、
+   amber(警告色) でなく中立グレーに (user 指摘: 3 連続 amber が「何がダメか」 と誤読された)。
+   投資色ルール: amber は警告・緊急のみ。 */
+.qh-streak-weak { background: color-mix(in srgb, var(--text-muted) 55%, transparent); }
 .qh-streak-miss { background: var(--color-loss); }
 @media (max-width: 600px) {
   .qh-streak-cell { width: 12px; height: 12px; }

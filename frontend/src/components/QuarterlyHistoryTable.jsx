@@ -189,7 +189,10 @@ const COLUMN_DEFS = {
   //   - bold + 短ラベル「CF良好 / 要確認」 で 2 秒理解
   cfps_gt_eps: {
     header: (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      <span
+        title="営業CFPS が EPS を上回るか（利益が現金で裏付けられているか）を判定。じっちゃま5条件#5（CFPS > EPS）。各セルにマウスを乗せると四半期ごとの根拠が出ます。"
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'help' }}
+      >
         <span style={{ fontSize: 11, color: 'var(--color-accent)', fontWeight: 700 }}>★</span>
         健全性
       </span>
@@ -201,19 +204,32 @@ const COLUMN_DEFS = {
     },
     render: (r) => {
       if (r.cfps_gt_eps === null || r.cfps_gt_eps === undefined) {
-        return <span style={{ color: 'var(--text-muted)' }}>—</span>;
+        return <span style={{ color: 'var(--text-muted)', cursor: 'help' }} title="営業CFPS または EPS が取得できず、健全性を判定できません">—</span>;
       }
       const Icon = r.cfps_gt_eps ? CheckCircle2 : XCircle;
       const label = r.cfps_gt_eps ? 'CF良好' : '要確認';
       const colorVar = r.cfps_gt_eps ? 'var(--color-gain)' : 'var(--color-loss)';
+      // 判定根拠を tooltip で明示 (user 指摘: なぜ要確認かわからない)。 営業CFPS vs EPS の事実比較。
+      const cfps = r.cfps_actual;
+      const eps = r.eps_actual;
+      const cmp = (Number.isFinite(cfps) && Number.isFinite(eps))
+        ? `営業CFPS $${cfps.toFixed(2)} ${r.cfps_gt_eps ? '≥' : '<'} EPS $${eps.toFixed(2)}`
+        : '';
+      const title = r.cfps_gt_eps
+        ? `${cmp} — 利益が営業キャッシュフローで裏付けられています（健全）。判定基準: 営業CFPS > EPS（じっちゃま5条件#5）`
+        : `${cmp} — 利益に対し営業キャッシュフローの裏付けが弱い四半期です（EPS は良くても現金化が伴っていない）。判定基準: 営業CFPS > EPS（じっちゃま5条件#5）`;
       return (
-        <span style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 4,
-          fontWeight: 600,
-          color: colorVar,
-        }}>
+        <span
+          title={title}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            fontWeight: 600,
+            color: colorVar,
+            cursor: 'help',
+          }}
+        >
           <Icon size={14} strokeWidth={2} />
           <span>{label}</span>
         </span>
@@ -303,14 +319,17 @@ export default function QuarterlyHistoryTable({ ticker, limit = 8, columns, halo
 
   // v125 R3 hotfix lesson: data-testid を全 render path に付与
   // (loading は QuarterlyHistoryGhost、 error は <p>、 main は <div> でそれぞれ wrapper 異なる)
-  if (loading && !data) return <div data-testid="quarterly-history-table-wrapper"><QuarterlyHistoryGhost /></div>;
-  if (error || !data) {
+  // error は文言、 それ以外で data 未取得 (loading 中 + mount 直後) は必ず skeleton を表示。
+  // 旧実装は初期 loading=false のため tab 切替 mount 直後の 1 フレームで空メッセージが出て
+  // 「画面が一瞬空白」 に見えていた (user 指摘)。 data も error も無い = 読込中 → ghost に倒す。
+  if (error) {
     return (
       <p className="qhistory-empty" data-testid="quarterly-history-table-wrapper">
-        {error || '履歴データはまだありません'}
+        {error}
       </p>
     );
   }
+  if (!data) return <div data-testid="quarterly-history-table-wrapper"><QuarterlyHistoryGhost /></div>;
 
   const rows = data.history;
 
@@ -357,6 +376,9 @@ export default function QuarterlyHistoryTable({ ticker, limit = 8, columns, halo
   const streakCells = rows.slice(0, 8).map((r) => ({
     period: r.fiscal_period || (r.date || '').slice(0, 7),
     strength: streakStrength(r),
+    // user 指摘: ランプ単体では「いつ・何が」 わからない。 tooltip 用に EPS/売上 verdict を保持
+    epsV: r.eps_verdict,
+    revV: r.revenue_verdict,
   }));
   const strongCount = streakCells.filter((c) => c.strength === 'strong').length;
   const totalCells = streakCells.length;
@@ -428,7 +450,13 @@ export default function QuarterlyHistoryTable({ ticker, limit = 8, columns, halo
               <span
                 key={`${c.period}-${i}`}
                 className={`qh-streak-cell qh-streak-${c.strength}`}
-                title={`${c.period}: ${c.strength === 'strong' ? 'EPS + 売上 両方 Beat' : c.strength === 'medium' ? '片方 Beat' : c.strength === 'miss' ? 'Miss' : '中立'}`}
+                style={{ cursor: 'help' }}
+                title={`${c.period}｜EPS ${verdictLabel(c.epsV)}・売上 ${verdictLabel(c.revV)}｜${
+                  c.strength === 'strong' ? 'EPS+売上 両方 Beat（最強）'
+                  : c.strength === 'medium' ? '片方のみ Beat'
+                  : c.strength === 'miss' ? 'いずれか Miss'
+                  : '両方 In-line（予想どおり・中立、 マイナス要素ではありません）'
+                }`}
               />
             ))}
           </div>
