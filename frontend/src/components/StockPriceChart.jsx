@@ -3,7 +3,7 @@ import {
   ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot, ReferenceArea,
 } from 'recharts';
-import { LineChart as LineChartIcon, CandlestickChart as CandlestickChartIcon, ChartCandlestick, Lock } from 'lucide-react';
+import { LineChart as LineChartIcon, CandlestickChart as CandlestickChartIcon, ChartCandlestick, Lock, TrendingUp } from 'lucide-react';
 import { fetchPriceHistory, fetchTechnical, fetchAnalyst } from '../api.js';
 import Chip from './ui/Chip.jsx';
 
@@ -814,6 +814,23 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
               {cupRequiresPro && (
                 <Lock size={11} strokeWidth={1.75} style={{ display: 'inline', verticalAlign: '-1px', marginLeft: 4, opacity: 0.7 }} />
               )}
+            </Chip>
+          )}
+          {/* v147 (user dogfood AAPL + 3 体合議): backend が breakout_extended に再分類したケースを正直表示。
+              cup/handle=None で上の cup chip (hasCup) は出ないため、 代わりに中立 tone で「高値圏ブレイク・過延伸」 を表示。
+              「ATH 直進 (handle 未形成) を Cup-with-Handle と誤ラベルしない」 ための honest label。
+              §38 回避: 将来予測でなく現在の事実 (基準点を既に上抜け・取っ手未形成) の客観記述に留める。
+              非株式 (指数/先物/為替) では非表示。 */}
+          {!isNonEquity && cupHandle?.state === 'breakout_extended' && (
+            <Chip
+              size="xs"
+              variant="display"
+              tone="muted"
+              data-cup-state="breakout_extended"
+              title={`高値圏ブレイク後 (extended)\n基準点 (左リム水準) を既に上抜け、 取っ手 (handle) は未形成。\nCup-with-Handle の新規エントリー基準としては過延伸。${Number.isFinite(cupHandle?.pivot?.price) ? `\n節目目安 $${Number(cupHandle.pivot.price).toFixed(2)}` : ''}`}
+            >
+              <TrendingUp size={12} strokeWidth={1.75} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 4 }} />
+              高値圏ブレイク・過延伸
             </Chip>
           )}
           {/* Session 3: DMA Cross chip (golden cross 直近 60 日内検出時のみ、 Free 表示)

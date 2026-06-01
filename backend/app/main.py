@@ -11981,6 +11981,45 @@ def _detect_cup_handle(
                 return extended_result
         return {**not_detected, "reason": "no_pattern", "reject_stats": reject_stats}
 
+    # ── v147 (user dogfood AAPL + 3 体合議): 正統 Cup-with-Handle 品質ガード ──
+    # 価格が ATH まで強く伸びると early の right_rim 候補が後続高値に overshoot で reject され、
+    # right_rim が直近 ATH に貼り付く → handle が極小 (AAPL: 1.2%/0.8週) になり、
+    # 「ATH 直進 (extended)」 を正統 C&H と誤ラベルしてしまう (= 教科書と乖離した破線描画 + §5 優良誤認)。
+    # 採用要件 (AND) を満たさず現値が 52 週高値圏なら、 既存の breakout_extended に再分類して
+    # cup/handle=None (= frontend で破線・cup chip 非描画) + 正直な note を返す。
+    # ※ v126 で救った ATH 主導株 (LLY/GE/META/NVDA) は reject せず extended 側で維持 (緩和目的は保つ)。
+    _cup_g = best_result.get("cup") or {}
+    _hdl_g = best_result.get("handle") or {}
+    _lr = _cup_g.get("left_rim_price")
+    _rr = _cup_g.get("right_rim_price")
+    _hd = _hdl_g.get("depth_pct")
+    _hw = _hdl_g.get("weeks")
+    _valid_cwh = (
+        isinstance(_hd, (int, float)) and _hd >= 3.0          # handle が体をなす最小押し 3%
+        and isinstance(_hw, (int, float)) and _hw >= 1.0       # handle 最低 1 週 (0.8 週等は弾く)
+        and isinstance(_lr, (int, float)) and isinstance(_rr, (int, float))
+        and _lr > 0 and _rr <= _lr * 1.05                      # 右リムが左リムを 5% 超で超過しない (対称性)
+    )
+    _high_252 = max(highs[-252:]) if n >= 252 else (max(highs) if highs else 0)
+    if not _valid_cwh and _high_252 > 0 and today_close >= _high_252 * 0.95:
+        _ext_pivot = (best_result.get("pivot") or {}).get("price")
+        return {
+            "detected": True,
+            "state": "breakout_extended",
+            "market_context": best_result.get("market_context", market_context),
+            "cup": None,       # cup なし → frontend は破線・cup chip を描かない
+            "handle": None,
+            "pivot": {
+                "price": _ext_pivot,
+                "offset": 0.0,
+                "note": "高値圏ブレイク後で正統 Cup-Handle 形状の要件未達 (取っ手が極小/右リムが左リムを超過)。extended 扱い。",
+            },
+            "breakout": None,
+            "reason": "reclassified_extended_weak_handle",
+            "reject_stats": reject_stats,
+            "ath_252w_high": round(_high_252, 2),
+        }
+
     best_result.pop("_handle_len", None)
     best_result["reject_stats"] = reject_stats
     return best_result
