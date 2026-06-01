@@ -192,7 +192,7 @@ function surpriseLabel(e) {
 //   1. ErrorBoundary 内 (既存)、 2. distLines 空配列 default で conditional render、
 //   3. Number.isFinite + Math.abs(pct) < 50 で異常値排除、 4. static element で isAnimationActive 不要
 // ---------------------------------------------------------------------------
-function EarningsTooltip({ active, payload, label, earningsMap, pillar2Markers, cupHandle }) {
+function EarningsTooltip({ active, payload, label, earningsMap, pillar2Markers, cupHandle, breakoutCrossPoint }) {
   if (!active || !payload?.length) return null;
 
   // v132 P0-B (user dogfood 5/30、 candle mode で価格表示されない bug fix):
@@ -229,6 +229,18 @@ function EarningsTooltip({ active, payload, label, earningsMap, pillar2Markers, 
         color: SMA_50_COLOR,
         title: '取っ手の底',
         body: '取っ手付きカップの第4点（押し目の底）',
+      };
+    } else if (
+      // v147 R4 (user dogfood): breakout_pending の中空リング (pivot 上抜け点) にも説明 tooltip。
+      //   §38: 過去事実のみ記述 (価格が pivot を上抜け・出来高確認待ち)、 将来予測なし。
+      breakoutCrossPoint
+      && label === breakoutCrossPoint.date
+      && Number.isFinite(cupHandle.pivot?.price)
+    ) {
+      markerNote = {
+        color: CUP_LINE_COLOR,
+        title: 'pivot 上抜け点',
+        body: `Pivot $${cupHandle.pivot.price.toFixed(2)} を価格が上抜け（出来高の確認待ち）`,
       };
     }
   }
@@ -1066,6 +1078,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
                     earningsMap={earningsMap}
                     pillar2Markers={cupRequiresPro ? null : pillar2Markers}
                     cupHandle={cupRequiresPro ? null : cupHandle}
+                    breakoutCrossPoint={cupRequiresPro ? null : breakoutCrossPoint}
                   />}
                   cursor={{ stroke: CHART_CURSOR, strokeWidth: 1, strokeDasharray: '4 2' }}
                 />
