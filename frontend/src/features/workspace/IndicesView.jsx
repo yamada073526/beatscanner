@@ -19,6 +19,9 @@ import Chip, { ChipBar, ChipGroup, ChipSeparator } from '../../components/ui/Chi
 import PortfolioAreaChartSlot from './PortfolioAreaChartSlot.jsx';
 import StockPriceChart from '../../components/StockPriceChart.jsx';
 import NewsPanel from '../../components/NewsPanel.jsx';
+// v146 fix: 指数 detail は MotionProvider(LazyMotion) scope の外だったため NewsPanel の m.div が
+//   animation feature 無しで initial(hidden) 固着 → ニュース恒久不可視。 scope を self-contained に wrap。
+import MotionProvider from '../../components/MotionProvider.jsx';
 import CompanyLogo from '../../components/CompanyLogo.jsx';
 import TickerBadge from '../../components/ui/TickerBadge.jsx';
 import { useSpyHistory } from '../../hooks/useSpyHistory.js';
@@ -2749,18 +2752,22 @@ export function IndicesDetailView() {
   const displayLabel = tier1Meta?.label ?? ticker;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 4 }}>
-      {/* v146 D P1-B/P2-C: 「指数詳細」 placeholder → 価格ヒーロー (現在値 + 当日変化 + 52週レンジ + 意味) */}
-      <IndexHero ticker={ticker} label={displayLabel} desc={tier1Meta?.desc} />
+    // v146 fix: NewsPanel (SectionFadeSubtle = m.div) が animation feature を得るため LazyMotion scope で wrap。
+    //   これが無いと scope 外で m.div が initial(hidden) 固着 → ニュース恒久不可視 (root cause)。
+    <MotionProvider>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 4 }}>
+        {/* v146 D P1-B/P2-C: 「指数詳細」 placeholder → 価格ヒーロー (現在値 + 当日変化 + 52週レンジ + 意味) */}
+        <IndexHero ticker={ticker} label={displayLabel} desc={tier1Meta?.desc} />
 
-      <PeriodTable ticker={ticker} />
+        <PeriodTable ticker={ticker} />
 
-      <StockPriceChart ticker={ticker} />
+        <StockPriceChart ticker={ticker} />
 
-      {/* §dogfood-1: 指数 detail にニュースセクションを追加 (個別銘柄分析と同じ NewsPanel) */}
-      {/* §v66 §2: workspace 経由なので必ず Pane 5 Reading Room を開く */}
-      {/* v146 D: 指数シンボルは proxy ETF でニュース fetch (^GSPC→SPY 等)、 表示ラベルは指数のまま */}
-      <NewsPanel ticker={ticker} newsTicker={INDEX_NEWS_PROXY[ticker] || null} useWorkspaceReader />
-    </div>
+        {/* §dogfood-1: 指数 detail にニュースセクションを追加 (個別銘柄分析と同じ NewsPanel) */}
+        {/* §v66 §2: workspace 経由なので必ず Pane 5 Reading Room を開く */}
+        {/* v146 D: 指数シンボルは proxy ETF でニュース fetch (^GSPC→SPY 等)、 表示ラベルは指数のまま */}
+        <NewsPanel ticker={ticker} newsTicker={INDEX_NEWS_PROXY[ticker] || null} useWorkspaceReader />
+      </div>
+    </MotionProvider>
   );
 }
