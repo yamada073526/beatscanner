@@ -58,6 +58,43 @@ transcript 全文 (1-3 万字) から **guidance/outlook 言及段落のみ Pyth
 - 順序: gate-1 (本 SPEC・済) → 6 体合議 (design stress-test) → Phase 0 (FMP key・実測) → **user gate-2** → LLM path deploy。
 - **無監視 ship 不可**: pure-Python 土台 (段落抽出 + cache helper) は feature branch で実装 + unit test 可だが、 LLM 抽出 path の deploy は gate-2 まで保留。
 
+## 6 体合議 verdict synthesis (2026-06-02、 §38重 6 体) — 総合 GO-with-changes
+
+feature 方向 (A案 / 共有キャッシュ / 段落抽出 / 色なし citation / dogfood後LP) は健全。 だが「既存抽出器流用で 3-5 人日」 は楽観的で、 transcript 固有の §38/品質ガードで **+2-3 人日上振れ**。 deploy 前 DoD:
+
+### ✅ Phase 1-A 実装済 (feat/transcript-guidance-phase1、 純Python・deploy保留)
+`backend/app/transcript_source.py` + `tests/test_transcript_source.py` (15 PASS):
+- §38 ガード2: `extract_guidance_paragraphs` が operator/analyst の Q&A を除外、 management prepared remarks のみ + speaker tag 保持
+- LLM品質 BLOCK 解消: safe-harbor 除去 + キーワード/数値 ±window 窓 merge + 0-hit signal (`basis`)
+- §38 ガード4: `verify_numbers_in_text` 逐語 grep 存在チェック ($35.0B vs "35 billion" 許容)
+- `should_fallback_to_transcript` 8-K low 判定 (数値全 None + conf low/medium、 high全Noneは尊重)
+
+### 🔴 LLM path DoD (gate-2 まで deploy 保留)
+1. **transcript 専用 few-shot 3件** (口語数値化GOOD / Q&A混入BAD / 過去実績混同BAD) + system に **BAD-7「modality発言(confident/believe/could/hope to)を数値化しない」** + 「analyst質問内の数値は抽出しない」 明示 (金融§38 + LLM品質、 BLOCK級)
+2. **schema に `source_quote` (逐語1-2文) 追加** + frontend blockquote 表示 (URLだけでは長文transcript検証不能、 金融§38+LLM品質+ui BLOCK)
+3. **transcript由来 confidence 機械的1段降格 + medium未満は数値field強制null** + `verify_numbers_in_text` を post-hoc 適用。 「low 15%再生成」 は⑩不適用 → 0-hit full-text fallback に置換
+4. **model 確定**: `sec_guidance.py:291` は `claude-haiku-4-5` 固定、 SPECはSonnet。 Phase 0 で Haiku vs Sonnet 精度実測して確定 (口語数値抽出 + modality判定の精度)
+5. **配線は visualize endpoint の `_fetch_sec_guidance_structured_cached` に閉じる** (guidance/basic は Pane3 loading gate、 +6-12s latency 破壊・不可触)。 transcript 結果を guidance/basic 6h cache に汚染させない (frontend BLOCK)
+6. **cache key = `ticker::year::quarter` + per-key asyncio.Lock** stampede guard ([[feedback_viz_cache_key_flaw]] 再発防止)。 最新 quarter 特定は `income_statement(limit=1, period=quarter)` の date (plan非依存) + unit test
+7. **SEC EDGAR CIK 解決を 24h 共有 cache** (v1/v2/transcript で三重 fetch → User-Agent ban 回避)
+
+### 🔴 frontend DoD (gate-2 後)
+- ⚠️ **既存バグ先行修正可**: `GuidanceCard.jsx` の「次期見通し (SEC 文書由来)」 はハードコードで、 FMP アナリスト予想 fallback 時も「SEC文書由来」 表示 = **現状すでに Trust Cliff** (qa+frontend 指摘)。 source 種別分岐 (8-K / 決算call / アナリスト集計) へ
+- source enum + icon + Chip / `source_url` CitationChip化 / blockquote逐語 / confidence chip / raw hex `rgb(96,165,250)`→token / conference カードに「財務データを基にした要点整理 (逐語引用でない)」免責1行 (Phase2まで) / 免責2段レイヤー (header増やさず展開末尾)
+
+### 🔴 Phase 0 (FMP key 必須)
+- FMP `/earning-call-transcript` coverage (MSFT/GOOGL/AMZN/META 何Q遡れる + 決算後何日で入る) / 話者ラベル実フォーマット calibrate (transcript_source の regex 調整)
+- 段落抽出 hit/miss 実測 (miss>10%なら窓幅調整) / Haiku vs Sonnet 精度比較 / 実 input token総量(non-cache) × 頻度 → 月cost ($10超でHaiku前段gate再検討)
+- §38 実測: modality数値抑止 / Q&A数値誤抽出 / ガイダンス無し銘柄で「記載なし」捏造ゼロ / 8-K vs call 乖離頻度 / AAPL は transcript 呼ばない (unit test)
+
+### 🔴 LP (dogfood gate 後、 Premium 限定)
+- dogfood gate: **5銘柄 (NVDA/MSFT/GOOGL/META/AMZN) × 直近2Q、 3+銘柄で confidence≥medium + source_url(citation)付き**。 NVDA=transcript fallback 発火しないこと確認。 不在銘柄は空欄でなく「callから抽出できませんでした」 明示
+- LP 文言 (事実訴求案): **「CEO が決算 call で語った数字を、 発言原文リンク付きで確認」**。 「業界唯一/競合にない」 不使用 (§5)、 条件明示「call でガイダンス開示する銘柄について」。 **Premium 限定** (Pro¥980 に入れない) + ProTeaser、 Hero には出さない。 "準備中(Beta)" 1行は今可
+
+### 工数 (revised)
+Phase 1 = 段落抽出土台(済) + LLM path (few-shot/source_quote/confidence/配線/cache) **5-7 人日** / Phase 2 (conference実引用) 2-4人日 + 別gate / Phase 3 LP unlock。
+
 ## 関連
-- [[feedback_sec_guidance_8k_coverage_limit]] / [[project_forward_visibility]] / [[feedback_citation_required]] / [[feedback_diagram_quality_guard]] / [[feedback_prompt_cache_pattern]]
+- [[feedback_sec_guidance_8k_coverage_limit]] / [[project_forward_visibility]] / [[feedback_citation_required]] / [[feedback_diagram_quality_guard]] / [[feedback_prompt_cache_pattern]] / [[feedback_viz_cache_key_flaw]]
 - 既存 module: `backend/app/visualizer/sec_guidance.py` / `backend/app/fmp_client.py:147` / `main.py:_fetch_sec_guidance_structured` / `_build_conference_context`
+- Phase 1-A 実装: `backend/app/transcript_source.py` + `tests/test_transcript_source.py` (branch feat/transcript-guidance-phase1)
