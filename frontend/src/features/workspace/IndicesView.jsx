@@ -95,6 +95,29 @@ const TIER2_ORDER = [
   'IBIT',                        // 仮想通貨 (現物 BTC ETF)
 ];
 
+// v147 (P2-A、 user 承認): 指数/ETF を資産クラスで色 dot 分類 (Pane 2)。 色は CSS token (--cat-*、 予約色不使用)。
+const INDEX_CATEGORY_TOKEN = {
+  // 株式 (指数/セクター/海外) = slate
+  '^GSPC': '--cat-equity', '^IXIC': '--cat-equity', '^DJI': '--cat-equity',
+  'SPY': '--cat-equity', 'QQQ': '--cat-equity', 'IWM': '--cat-equity',
+  'XLK': '--cat-equity', 'XLF': '--cat-equity', 'XLE': '--cat-equity', 'XLV': '--cat-equity',
+  'SOXX': '--cat-equity', 'EEM': '--cat-equity', 'EFA': '--cat-equity',
+  // 金利/債券/クレジット = indigo
+  '^TNX': '--cat-rate', 'TLT': '--cat-rate', 'IEF': '--cat-rate', 'TIP': '--cat-rate',
+  'HYG': '--cat-rate', 'LQD': '--cat-rate',
+  // 為替 = teal
+  'DX-Y.NYB': '--cat-fx', 'JPY=X': '--cat-fx',
+  // 商品/金 = terracotta
+  'CL=F': '--cat-commodity', 'GLD': '--cat-commodity', 'GDX': '--cat-commodity',
+  // ボラ = mauve / 暗号資産 = steel
+  '^VIX': '--cat-volatility',
+  'IBIT': '--cat-crypto',
+};
+function categoryColorVar(sym) {
+  const token = INDEX_CATEGORY_TOKEN[sym];
+  return token ? `var(${token})` : null;
+}
+
 // Phase A v69 §2: 期間連動 portfolio performance 用 period selector.
 // SPARKLINE_PERIOD_OPTIONS と内容は同形だが、用途を分離するため別定数として持つ。
 // (チャート用 sparklinePeriod と portfolio P/L 用 portfolioPeriod は workspaceStore で独立)
@@ -2084,16 +2107,25 @@ function IndicesRow({ item, label, sym, desc, active, onClick, period = '1d' }) 
           gap: 1,
         }}
       >
-        <span
-          style={{
-            fontWeight: 600,
-            color: 'var(--text-primary)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {label}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          {/* v147 P2-A: 資産クラス色 dot (株式=slate / 金利=indigo / 為替=teal / 商品=terracotta / ボラ=mauve / 暗号=steel) */}
+          {categoryColorVar(sym) && (
+            <span
+              aria-hidden="true"
+              style={{ width: 7, height: 7, borderRadius: '50%', background: categoryColorVar(sym), flexShrink: 0 }}
+            />
+          )}
+          <span
+            style={{
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {label}
+          </span>
         </span>
         {desc && (
           <span

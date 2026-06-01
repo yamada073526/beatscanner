@@ -144,7 +144,14 @@ ALLOWED-HEX: #334155   # text-secondary (light) / border (dark)
 ALLOWED-HEX: #64748b   # text-muted (light)
 ALLOWED-HEX: #f1f5f9   # text-primary (dark)
 ALLOWED-HEX: #cbd5e1   # text-secondary (dark)
-ALLOWED-HEX: #94a3b8   # text-muted (dark)
+ALLOWED-HEX: #94a3b8   # text-muted (dark) + --cat-equity (P2-A 資産クラス色 dot: 株式)
+
+# v147 P2-A: 指数/ETF 資産クラス色 dot tokens (--cat-*、 予約色を避けた muted 中間色、 light/dark 共通)
+ALLOWED-HEX: #7c83db   # --cat-rate (金利/債券/クレジット = indigo)
+ALLOWED-HEX: #5eb3b3   # --cat-fx (為替 = teal)
+ALLOWED-HEX: #c08552   # --cat-commodity (商品/金 = terracotta)
+ALLOWED-HEX: #b07aa1   # --cat-volatility (ボラティリティ = mauve)
+ALLOWED-HEX: #6b8cae   # --cat-crypto (暗号資産 = steel-blue)
 
 # NEU block
 ALLOWED-HEX: #2d3748   # neu-bg (dark)

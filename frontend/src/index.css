@@ -60,6 +60,16 @@
   --badge-ai-bg:   #2563eb;  /* AI分析 chip background (blue-600、 cyan brand と区別) */
   --badge-pro-bg:  #0e7490;  /* PRO tier chip background (teal-700、 cyan brand と区別) */
 
+  /* v147 (P2-A、 user 承認): 指数/ETF の資産クラス色 dot tokens (Pane 2 sector dot)。
+     予約色 (緑/赤/amber/gold/cyan/SMA200 purple) 不使用の muted 中間色、 light/dark 共通。
+     elevation_scale.md ALLOWED-HEX 登録。 */
+  --cat-equity:     #94a3b8;  /* 株式 (指数/セクター/海外) = slate */
+  --cat-rate:       #7c83db;  /* 金利/債券/クレジット = indigo */
+  --cat-fx:         #5eb3b3;  /* 為替 = teal */
+  --cat-commodity:  #c08552;  /* 商品/金 = terracotta */
+  --cat-volatility: #b07aa1;  /* ボラティリティ = mauve */
+  --cat-crypto:     #6b8cae;  /* 暗号資産 = steel-blue */
+
   /* ─── §11-E v51 Phase 1 Week 1: デザイントークン体系 ─────────────
      Stripe Dashboard の --space-* + Linear の --motion-* + Vercel Geist の --radius-* ハイブリッド命名。
      Aman Resorts の照明モデル (天井/壁/床) に倣った 4 階層 shadow + cyan glow。
