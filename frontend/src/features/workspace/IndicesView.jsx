@@ -2586,6 +2586,13 @@ function PeriodTable({ ticker }) {
     });
   }, [fullPrices]);
 
+  // v146 D P1-C: 期間別 % の方向バー用。 各セルの数値下に |pct|/maxAbs 幅の細バーを置き、
+  //   数値を読まずに「どの期間が最も動いたか」 を視覚化 (5 原則 §5 図解で認知コスト↓)。
+  const maxAbs = useMemo(() => {
+    const vals = rows.map((r) => (r.pct == null ? 0 : Math.abs(r.pct)));
+    return Math.max(...vals, 0.01);
+  }, [rows]);
+
   return (
     <div
       style={{
@@ -2641,9 +2648,92 @@ function PeriodTable({ ticker }) {
                 ? '—'
                 : `${up ? '+' : ''}${r.pct.toFixed(2)}%`}
             </div>
+            {/* v146 D P1-C: 方向バー (|pct|/maxAbs 幅、 中央寄せ fill、 gain/loss 色) */}
+            {r.pct != null && (
+              <div style={{ marginTop: 6, height: 3, background: 'var(--bg-subtle)', borderRadius: 'var(--radius-pill, 999px)' }}>
+                <div
+                  style={{
+                    width: `${Math.min(100, (Math.abs(r.pct) / maxAbs) * 100)}%`,
+                    height: '100%',
+                    margin: '0 auto',
+                    background: color,
+                    borderRadius: 'var(--radius-pill, 999px)',
+                    transition: 'width 0.4s ease',
+                  }}
+                />
+              </div>
+            )}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** v146 D P1-B/P2-C: 指数の価格ヒーロー (現在値 + 当日変化率 + 52週レンジ + 意味の1行)。
+ *  「指数詳細」 placeholder label を廃止し、 「この指数の今の立ち位置」 を 2 秒で掴める hero に置換。
+ *  data: market-indices (price/change_pct/type/desc_ja、 backend cache) + useRowSparkline 1y (52週高安)。
+ *  当日変化率は実績データなので gain/loss 色 OK (前方視界 §38 の色なし制約とは別文脈)。 */
+function IndexHero({ ticker, label, desc }) {
+  const yearPrices = useRowSparkline(ticker, '1y');
+  const [mkt, setMkt] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchMarketIndices()
+      .then((d) => {
+        if (cancelled) return;
+        const items = Array.isArray(d) ? d : (d?.items || d?.indices || []);
+        setMkt(items.find((x) => x.symbol === ticker) || null);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [ticker]);
+
+  const { high52, low52, posPct } = useMemo(() => {
+    if (!Array.isArray(yearPrices) || yearPrices.length < 2) return { high52: null, low52: null, posPct: null };
+    const hi = Math.max(...yearPrices);
+    const lo = Math.min(...yearPrices);
+    const cur = yearPrices[yearPrices.length - 1];
+    const pos = hi > lo ? ((cur - lo) / (hi - lo)) * 100 : 50;
+    return { high52: hi, low52: lo, posPct: Math.max(0, Math.min(100, pos)) };
+  }, [yearPrices]);
+
+  const type = mkt?.type;
+  const price = mkt?.price ?? (Array.isArray(yearPrices) && yearPrices.length ? yearPrices[yearPrices.length - 1] : null);
+  const changePct = mkt?.change_pct;
+  const contextText = desc || mkt?.desc_ja || null;
+  const fmt = (v) => formatPrice({ price: v, type });
+  const hasChange = Number.isFinite(changePct);
+  const up = hasChange && changePct >= 0;
+  const changeColor = !hasChange ? 'var(--text-muted)' : up ? 'var(--color-gain)' : 'var(--color-loss)';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{label}</span>
+        {price != null && (
+          <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{fmt(price)}</span>
+        )}
+        {hasChange && (
+          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 3, fontSize: 14, fontWeight: 700, color: changeColor, fontVariantNumeric: 'tabular-nums' }}>
+            <span aria-hidden style={{ fontSize: 11 }}>{up ? '▲' : '▼'}</span>
+            {up ? '+' : ''}{changePct.toFixed(2)}%
+          </span>
+        )}
+      </div>
+      {contextText && (
+        <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>{contextText}</p>
+      )}
+      {high52 != null && low52 != null && high52 > low52 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>52週</span>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{fmt(low52)}</span>
+          <div style={{ position: 'relative', flex: 1, height: 4, background: 'var(--bg-subtle)', borderRadius: 'var(--radius-pill, 999px)' }}>
+            <div style={{ position: 'absolute', left: `${posPct}%`, top: '50%', width: 8, height: 8, marginLeft: -4, marginTop: -4, borderRadius: '50%', background: 'var(--color-accent)' }} />
+          </div>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{fmt(high52)}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -2660,29 +2750,8 @@ export function IndicesDetailView() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 4 }}>
-      <div>
-        <div
-          style={{
-            fontSize: 10,
-            fontWeight: 600,
-            color: 'var(--text-muted)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-          }}
-        >
-          指数詳細
-        </div>
-        <div
-          style={{
-            marginTop: 2,
-            fontSize: 18,
-            fontWeight: 700,
-            color: 'var(--text-primary)',
-          }}
-        >
-          {displayLabel}
-        </div>
-      </div>
+      {/* v146 D P1-B/P2-C: 「指数詳細」 placeholder → 価格ヒーロー (現在値 + 当日変化 + 52週レンジ + 意味) */}
+      <IndexHero ticker={ticker} label={displayLabel} desc={tier1Meta?.desc} />
 
       <PeriodTable ticker={ticker} />
 
