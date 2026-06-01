@@ -10625,9 +10625,14 @@ body.is-digest-resizing {
   letter-spacing: 0.08em;
 }
 
-.daily-digest__format-badge--accent {
-  background: color-mix(in srgb, var(--color-gold) 14%, transparent);
-  color: var(--color-gold);
+/* v147 (user dogfood): まとめ/テーマ の content-type バッジを gold → 中立 slate に。
+   gold は「保有銘柄」ticker chip (.daily-digest__ticker--holding) のポートフォリオ信号専用で、
+   同色だと「保有の記事か / まとめ記事か」 がパッと見で判別不能だった。
+   緑/赤/amber は方向性 signal、 cyan は watching ticker で予約済みのため中立 slate を採用
+   (chip 役割分離: content-type=中立)。 */
+.daily-digest__format-badge--neutral {
+  background: color-mix(in srgb, var(--text-muted) 18%, transparent);
+  color: var(--text-secondary);
 }
 
 /* v143: 行タイトル (1 行 truncate、 flex:1 で残り幅を占有) */

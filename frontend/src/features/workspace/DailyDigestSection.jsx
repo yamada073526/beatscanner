@@ -156,10 +156,15 @@ function truncate(s, maxLen) {
  * - deep_dive: ticker chip + verdict (BEAT/MISS/WATCH)
  * - daily_digest: 「まとめ」 badge (ticker は null のため verdict 不要)
  * - theme_horizon: 「テーマ」 badge
+ *
+ * v147 (user dogfood): tone 'accent'(gold) → 'neutral'。 gold は「保有銘柄」 ticker chip
+ *   (.daily-digest__ticker--holding) のポートフォリオ信号専用で、 content-type バッジと
+ *   同色だと「保有の記事か / まとめ記事か」 がパッと見で判別不能だった。
+ *   content-type は中立 tone に分離 (feedback_chip_role_separation)。
  */
 function getFormatLabel(format) {
-  if (format === 'daily_digest') return { label: 'まとめ', tone: 'accent' };
-  if (format === 'theme_horizon') return { label: 'テーマ', tone: 'accent' };
+  if (format === 'daily_digest') return { label: 'まとめ', tone: 'neutral' };
+  if (format === 'theme_horizon') return { label: 'テーマ', tone: 'neutral' };
   return null;
 }
 
