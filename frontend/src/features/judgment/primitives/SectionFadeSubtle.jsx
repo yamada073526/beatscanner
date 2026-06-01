@@ -18,7 +18,7 @@
  *   - infinite animation 禁止: 1 回 (once:true) のみ → OK
  *   - ESM top-level return 禁止: 本ファイルに top-level return なし → OK
  */
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { m, useReducedMotion } from 'framer-motion';
 
 // EASE_OUT_220: Tier L は Tier M よりも素速く、控えめな演出
@@ -47,27 +47,19 @@ export default function SectionFadeSubtle({ children, className, style, id }) {
   const reduce = useReducedMotion();
   const variants = reduce ? noMotionVariants : subtleVariants;
 
-  // v146 fix: scroll container (workspace Pane 3 等) 内では framer-motion の whileInView
-  //   (IntersectionObserver、 viewport root 基準) が発火せず、 fold より下の要素 (例: 指数 detail の
-  //   NewsPanel) が opacity:0 で恒久不可視になる (user dogfood)。 ⚠️whileInView と animate を併用すると
-  //   whileInView が優先され animate が無視されるため、 whileInView を撤去し state 駆動の animate に統一:
-  //     - onViewportEnter (= whileInView と同じ IO) で通常の scroll-in fade を発火
-  //     - 加えて mount 後 700ms の timeout で必ず表示 (IO 未発火の scroll container でも恒久不可視を防ぐ)
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setShown(true), 700);
-    return () => clearTimeout(t);
-  }, []);
-
+  // v146 fix R3: scroll container (workspace Pane 3 等) 内では whileInView / viewport の
+  //   IntersectionObserver が viewport root 基準で発火せず、 fold より下の NewsPanel が opacity:0 で
+  //   恒久不可視になる (user dogfood 指数ニュース)。 ⚠️viewport prop が在ると framer は "in-view モード" に入り
+  //   never-in-view 状態に固着 (animate 併用しても無視) — R1/R2 が不発だった真因。
+  //   → viewport / whileInView / onViewportEnter を全撤去し、 mount 時 initial→animate で 1 回だけ
+  //   無条件フェードイン (IO 非依存で確実に表示)。 scroll-in タイミング演出は失うが可視性を最優先。
   return (
     <m.div
       id={id}
       className={className}
       style={style}
       initial="hidden"
-      animate={shown ? 'visible' : 'hidden'}
-      onViewportEnter={() => setShown(true)}
-      viewport={{ once: true, amount: 0.15 }}
+      animate="visible"
       variants={variants}
       transition={EASE_OUT_220}
     >
