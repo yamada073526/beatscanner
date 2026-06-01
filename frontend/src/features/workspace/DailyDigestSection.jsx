@@ -32,7 +32,9 @@ import { ChevronDown } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase.js';
 import { useAuth } from '../../hooks/useAuth.js';
 
-const FETCH_LIMIT = 3;
+// v146 (user dogfood): 3 → 20。 過去記事も遡れるよう scroll で表示 (.daily-digest__body は max-height 280px +
+//   overflow-y:auto を既に持つため、 件数を増やすだけで scroll が有効化)。 20 件 ≒ 1-2 週間分で鮮度 vs DOM 量のバランス。
+const FETCH_LIMIT = 20;
 
 // v143: DailyDigest の open/collapse 状態を localStorage に永続化 (毎回 open に戻る問題の解消)。
 // 明示 pref があればそれを優先、 無ければ login state で default を出し分け:

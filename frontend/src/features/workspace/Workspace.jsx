@@ -325,6 +325,8 @@ function Pane1NavRail({ items = [] }) {
       >
         <PanelLeftOpen size={16} strokeWidth={1.75} aria-hidden="true" />
       </button>
+      {/* v146 (user dogfood): panel-toggle と Pane2 接続 nav (ホーム/指数/スクリーナー) を仕切り線で区別 (NotebookLM 流) */}
+      <div style={{ width: 20, height: 1, background: 'var(--border)', margin: '2px 0 6px', flexShrink: 0 }} aria-hidden="true" />
       {/* nav tabs (アイコンのみ) — workspace は 2 タブのみ (3 タブ削除済、6 体合議) */}
       {WORKSPACE_NAV_TABS.map((t) => {
         const active = activeTab === t.key;
@@ -522,6 +524,8 @@ function Pane1Nav({ items = [] }) {
           <PanelLeftClose size={15} strokeWidth={1.75} aria-hidden="true" />
         </button>
       </div>
+      {/* v146 (user dogfood): panel-toggle と Pane2 接続 nav (ホーム/指数/スクリーナー) を仕切り線で区別 (NotebookLM 流) */}
+      <div style={{ height: 1, background: 'var(--border)', margin: '2px 8px 8px' }} aria-hidden="true" />
       {/* v143: ナビゲーション常時展開 (トグル廃止、 3 タブのみで折りたたむ意味薄、 multi-review 3 体一致)。
           active タブは pill 背景 + 濃いめ accent で視認性強化 (旧 subtle すぎ + raw rgb 解消)。 */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
