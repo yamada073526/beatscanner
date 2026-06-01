@@ -7670,6 +7670,26 @@ button.ds-chip[data-pressed="true"]:hover {
   box-shadow: 0 6px 18px -4px rgba(0, 0, 0, 0.55);
 }
 
+/* v147 (P2-B、 user 承認): 選択中(今 Pane 3 で開いている)行を強調。
+   hover の cyan 左バーを persistent + full opacity 化して「ここを開いている」 を示す。
+   IndicesRow / watchlist 行 共有。 holding は gold ::before バー維持 + gold 背景強調 (cyan は出さない、 hover 同方針で色衝突回避)。 */
+.ws-judgment-row.is-active {
+  background: rgba(56, 189, 248, 0.10);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+[data-theme="dark"] .ws-judgment-row.is-active {
+  background: rgba(56, 189, 248, 0.13);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+.ws-judgment-row.is-holding.is-active {
+  background: rgba(212, 175, 55, 0.13);
+  box-shadow: none;
+}
+[data-theme="dark"] .ws-judgment-row.is-holding.is-active {
+  background: rgba(212, 175, 55, 0.15);
+  box-shadow: none;
+}
+
 /* selected (active ticker) — 微背景 */
 .ws-judgment-row.is-active {
   background: rgba(56, 189, 248, 0.05);
