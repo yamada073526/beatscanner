@@ -30,6 +30,20 @@ import Chip from '../../components/ui/Chip.jsx';
 // CustomScreenerPanel を lazy 化 (既存 modal lazy chunk と reuse、 Workspace.jsx と統一)
 const CustomScreenerPanel = lazy(() => import('../../components/CustomScreenerPanel.jsx'));
 
+// v147 (user dogfood AAPL): cup-handle scanner の state badge を日本語ラベルに。
+//   旧版は raw state 文字列 (例「breakout_extended」) をそのまま表示していた (英語混在 + 意味不明)。
+//   StockPriceChart の cupChipLabel + extended chip と文言を一致させる。
+//   breakout_extended (= AAPL 型「定義通りでない高値圏ブレイク」) も識別可能に。§38 回避で事実記述。
+const CUP_STATE_LABEL_JP = {
+  breakout_confirmed: 'ブレイク確定',
+  breakout_pending: 'ブレイク待機',
+  pullback_to_support: '押し目接近',
+  formation: '形成中',
+  cup_completing: 'カップ完成間近',
+  breakout_extended: '高値圏ブレイク・過延伸',
+  formation_market_weak: '形成中・市場待機',
+};
+
 // ── fetcher: backend /api/scanner/rs (Leader + delta sort 両用) ──
 async function fetchRsLeader({ limit = 20 } = {}) {
   try {
@@ -357,7 +371,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
       const newCwhItems = [];
       for (const item of (cup.items || [])) {
         if (usedTickers.has(item.ticker)) continue;
-        const baseBadge = item.state || '形成中';
+        const baseBadge = CUP_STATE_LABEL_JP[item.state] || item.state || '形成中';
         newCwhItems.push({
           ticker: item.ticker,
           badge: item.gc_confirmed ? `${baseBadge} ✦ GC` : baseBadge,
