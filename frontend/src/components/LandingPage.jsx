@@ -226,7 +226,10 @@ function HeroSection({ onFreeStart }) {
         勝てる決算、 2 秒で。
       </h1>
 
-      {/* v138 Phase 2B audit 後: 既存 segment data (NVDA Data Center YoY +92%、 AAPL iPhone YoY +21%、 GOOGL Cloud YoY +63%、 MSFT Azure 系 YoY +31%) と「予想 vs 実績」 verdict (bm_data → DiagramCard / SegmentSection) は backend で動作確認済。 LP 訴求を「2 本柱日本語チェック」 から「部門別売上・予想比較まで日本語で」 に拡張、 機能事実訴求で Trust Cliff Risk なし。 「ガイダンス」 は SEC 8-K 抽出精度 20-35% で Trust Cliff Risk のため不使用 (release 後 Phase 2D で 60-70% 達成後再考)。 「機関投資家級」 等の主観言葉は §38 断定 risk 回避で見送り。 */}
+      {/* v138 Phase 2B audit 後: 既存 segment data (NVDA Data Center YoY +92%、 AAPL iPhone YoY +21%、 GOOGL Cloud YoY +63%、 MSFT Azure 系 YoY +31%) と「予想 vs 実績」 verdict (bm_data → DiagramCard / SegmentSection) は backend で動作確認済。 LP 訴求を「2 本柱日本語チェック」 から「部門別売上・予想比較まで日本語で」 に拡張、 機能事実訴求で Trust Cliff Risk なし。 v146: 「来期見通し」 を追加 = アナリストコンセンサス YoY (FMP analyst-estimates、 高 coverage・検証済) で
+          実装 (前方視界、 アプリの「来期見通し」 label と完全一致 → Trust Cliff #1 OK)。 ⚠️会社開示「ガイダンス」 (SEC 8-K、
+          抽出精度 20-35%) とは別物・別訴求なので「ガイダンス」 表記は引き続き不使用 (8-K は Phase 2D で 60-70% 達成後再考)。
+          「機関投資家級」 等の主観言葉は §38 断定 risk 回避で見送り。 */}
       <p
         className="hero-subtitle"
         style={{
@@ -241,7 +244,7 @@ function HeroSection({ onFreeStart }) {
           letterSpacing: '-0.005em',
         }}
       >
-        決算 quarterly + テクニカル daily、 部門別売上や予想比較まで日本語で。
+        決算 quarterly + テクニカル daily、 部門別売上・予想比較・来期見通しまで日本語で。
       </p>
 
       {/* Phase 3 Sub-1: 実証データブロック (過去 5 年バックテスト結果)
