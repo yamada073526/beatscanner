@@ -343,8 +343,12 @@ function EarningsTooltip({ active, payload, label, earningsMap, pillar2Markers, 
 }
 
 // v147 (handover v146 最優先・user 指摘 content バグ): 指数 / 先物 / 為替 / DXY 等の「非株式」 判定。
-//   RS (= 個別株の対 SPY 相対強度) は非株式では無意味 (指数自身は ≈0%、 VIX/金利/原油/為替は概念的に不成立)
-//   なので、 これらでは RS chip を非表示にする (finance リテラシー高 user の Trust Cliff 回避)。
+//   非株式は「個別株を売買・保有する前提」 の指標が全て無意味 (指数はポジションとして損切り/利確しない、
+//   対 SPY 相対強度 ≈0%、 アナリスト目標株価なし)。 そのため非株式チャートでは以下を一括非表示にし、
+//   「価格 + SMA50/200 + ローソク足」 のクリーン構成にする (finance リテラシー高 user の Trust Cliff 回避):
+//     - RS chip
+//     - 損切り -8% / 50DMA +15%・+25% 売りゾーン / +20% 利確 / アナリスト目標 (pillar2Markers)
+//     - Cup-with-Handle pattern (chip / area / pivot / cup line) + 支持線目安 (box_support/last_breakout)
 //   構造マーカー: 指数 (^GSPC/^VIX/^TNX) = '^' 始まり / 先物 (CL=F) = '=F' / 為替 (JPY=X) = '=X'。
 //   '.' を含む class share (BRK.B 等) を誤検知しないため '.' は使わず、 DXY (DX-Y.NYB) のみ明示 set。
 const NON_EQUITY_TICKERS = new Set(['^GSPC', '^IXIC', '^DJI', '^VIX', '^TNX', 'DX-Y.NYB', 'CL=F', 'JPY=X']);
@@ -357,6 +361,8 @@ function isNonEquityTicker(ticker) {
 
 function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
   const [period, setPeriod] = useState('1y');
+  // v147: 非株式 (指数/先物/為替/DXY) では「個別株前提」 の売買・pattern オーバーレイを一括非表示にする gate。
+  const isNonEquity = isNonEquityTicker(ticker);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   // SMA overlay state (handover v75 Phase 1 Session 1 safer 再追加)
@@ -472,6 +478,8 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
   //   - analyst consensus (cyan brand、 solid thin)
   // chart-overlay-safety 4 層防御: Number.isFinite guard + conditional render + isAnimationActive=false
   const pillar2Markers = useMemo(() => {
+    // v147: 非株式 (指数/先物/為替) では損切り/売りゾーン/利確/アナリスト目標 は無意味 → 全て null。
+    if (isNonEquity) return {};
     // sma50 latest = smaMap.sma_50 で最新の date を取り出す
     const dates = Object.keys(smaMap.sma_50);
     let sma50Latest = null;
@@ -511,13 +519,15 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
       consensus:  sourceOk && Number.isFinite(consensus) ? consensus : null,
       profitTake20: Number.isFinite(baseLow52w) ? baseLow52w * 1.20 : null,
     };
-  }, [smaMap, data, analystData]);
+  }, [smaMap, data, analystData, isNonEquity]);
 
   // Cup-with-Handle pattern 抽出 + 4 層防御 (handover v75 真っ白事故 SSOT 継承)
   // 1) ErrorBoundary wrap (default export 側)、 2) conditional render (hasCup gate)、
   // 3) Number.isFinite guard、 4) isAnimationActive={false}
   const cupHandle = technical?.patterns?.cup_handle || null;
   const hasCup = useMemo(() => {
+    // v147: 非株式 (指数/先物/為替) では Cup-with-Handle (個別株の chart pattern) を非表示。
+    if (isNonEquity) return false;
     if (!cupHandle?.detected) return false;
     if (!cupHandle.cup || !cupHandle.pivot) return false;
     const pivotPrice = cupHandle.pivot.price;
@@ -527,7 +537,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
     return [pivotPrice, leftRim, cupLow, rightRim].every(
       (v) => typeof v === 'number' && Number.isFinite(v)
     );
-  }, [cupHandle]);
+  }, [cupHandle, isNonEquity]);
 
   // Cup の 3-4 点 (left rim → cup low → right rim [→ handle low]) を date → value lookup map で保持。
   // chartData merge 時に cup_value field を該当 date のみ埋め、 connectNulls で結ぶ。
@@ -649,7 +659,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
   }, [hasRs, rsData, rsIsElite]);
   // v147 (handover v146 最優先): 非株式 (指数/先物/為替/DXY) では RS が無意味なので chip を非表示。
   //   表示抑止のみ — backend の technical 値は触らない (DMA cross は self-referential で指数にも意味があり保持)。
-  const showRs = hasRs && !isNonEquityTicker(ticker);
+  const showRs = hasRs && !isNonEquity;
 
   // Session 3: DMA Cross (golden cross 直近 60 日内)
   const dmaCross = technical?.patterns?.dma_cross || null;
@@ -1179,7 +1189,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
                     を cyan ReferenceArea (帯) で表示。 独自プロトコル「直前 breakout 抵抗線 = 新支持線 / 長期ボックス上限」。
                     chart-overlay-safety 4 層: conditional render + Number.isFinite + isAnimationActive=false + ifOverflow。
                     color: SMA200 と衝突する purple を避け cyan (= ブランド色、 方向でなく水準なので投資業界色ルール非抵触)。 */}
-                {Number.isFinite(cupHandle?.box_support?.band_low) && Number.isFinite(cupHandle?.box_support?.band_high) && cupHandle?.box_support?.role !== 'overhead_resistance' && (
+                {!isNonEquity && Number.isFinite(cupHandle?.box_support?.band_low) && Number.isFinite(cupHandle?.box_support?.band_high) && cupHandle?.box_support?.role !== 'overhead_resistance' && (
                   <ReferenceArea
                     y1={cupHandle.box_support.band_low}
                     y2={cupHandle.box_support.band_high}
@@ -1199,7 +1209,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
                   />
                 )}
                 {/* box_support が無いとき last_breakout (単発 pivot ±5%) を fallback 表示 (cyan に統一)。 */}
-                {!cupHandle?.box_support && Number.isFinite(cupHandle?.last_breakout?.price) && cupHandle.last_breakout.price > 0 && (
+                {!isNonEquity && !cupHandle?.box_support && Number.isFinite(cupHandle?.last_breakout?.price) && cupHandle.last_breakout.price > 0 && (
                   <ReferenceLine
                     y={cupHandle.last_breakout.price * 1.05}
                     stroke="var(--color-accent)"
@@ -1218,7 +1228,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
                     isAnimationActive={false}
                   />
                 )}
-                {!cupHandle?.box_support && Number.isFinite(cupHandle?.last_breakout?.price) && cupHandle.last_breakout.price > 0 && (
+                {!isNonEquity && !cupHandle?.box_support && Number.isFinite(cupHandle?.last_breakout?.price) && cupHandle.last_breakout.price > 0 && (
                   <ReferenceLine
                     y={cupHandle.last_breakout.price * 0.95}
                     stroke="var(--color-accent)"
