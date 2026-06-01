@@ -18,7 +18,7 @@
  *   - infinite animation 禁止: 1 回 (once:true) のみ → OK
  *   - ESM top-level return 禁止: 本ファイルに top-level return なし → OK
  */
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { m, useReducedMotion } from 'framer-motion';
 
 // EASE_OUT_220: Tier L は Tier M よりも素速く、控えめな演出
@@ -47,12 +47,23 @@ export default function SectionFadeSubtle({ children, className, style, id }) {
   const reduce = useReducedMotion();
   const variants = reduce ? noMotionVariants : subtleVariants;
 
+  // v146 fix: scroll container (workspace Pane 3 等) 内では whileInView の IntersectionObserver が
+  //   viewport root 基準で発火せず、 fold より下の要素 (例: 指数 detail の NewsPanel) が opacity:0 で
+  //   恒久的に不可視になる (user dogfood 指数ニュースで判明)。 fallback: mount 後一定時間 IO 未発火なら
+  //   animate='visible' で強制表示。 通常の viewport scroll-in fade は whileInView 側で維持。
+  const [forceVisible, setForceVisible] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setForceVisible(true), 700);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <m.div
       id={id}
       className={className}
       style={style}
       initial="hidden"
+      animate={forceVisible ? 'visible' : undefined}
       whileInView="visible"
       viewport={{ once: true, amount: 0.15 }}
       variants={variants}
