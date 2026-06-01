@@ -11564,6 +11564,37 @@ def _detect_horizontal_support(
     }
 
 
+def _extended_numeric_fields(
+    closes: list[float],
+    today_close: float,
+    pivot_price: float | None,
+    spy_uptrend: bool | None,
+) -> dict:
+    """v148 ⑦ (SPEC extended_screener_2026-06-02): breakout_extended の screener 露出ゲート
+    入力となる純数値 3 種を算出 (LLM 不使用、 数値捏造 risk なし)。
+
+    - sma50_deviation_pct: (today_close - SMA50)/SMA50 × 100 — 50DMA 乖離 (climax/blow-off 判定)
+    - base_rise_pct: (today_close - pivot)/pivot × 100 — 直近ベース (pivot) からの上昇率 (chase 判定)
+    - market_uptrend: SPY 200DMA 上 bool (gate ③ market 条件、 cron で slope と AND)
+
+    ゲート閾値・判定は cron `_compute_extended_gate` 側 (時価総額 source が必要なため)。
+    閾値 SSOT: memory feedback_cup_handle_thresholds.md「v148 ⑦」。
+    """
+    sma50_list = _compute_sma(closes, 50)
+    sma50 = sma50_list[-1] if sma50_list else None
+    return {
+        "sma50_deviation_pct": (
+            round((today_close - sma50) / sma50 * 100, 2)
+            if isinstance(sma50, (int, float)) and sma50 > 0 else None
+        ),
+        "base_rise_pct": (
+            round((today_close - pivot_price) / pivot_price * 100, 2)
+            if isinstance(pivot_price, (int, float)) and pivot_price > 0 else None
+        ),
+        "market_uptrend": spy_uptrend,  # True/False/None をそのまま保持 (None=SPY fetch 失敗)
+    }
+
+
 def _detect_cup_handle(
     times: list[str],
     highs: list[float],
@@ -11977,6 +12008,8 @@ def _detect_cup_handle(
                     "reject_stats": reject_stats,
                     "ath_252w_high": round(high_252, 2),
                     "extended_overshoot_pct": extended_candidate["handle_max_overshoot_pct"],
+                    # v148 ⑦: screener 露出ゲート入力 (50DMA乖離 / ベース上昇 / market)
+                    **_extended_numeric_fields(closes, today_close, pivot_price, spy_uptrend),
                 }
                 return extended_result
         return {**not_detected, "reason": "no_pattern", "reject_stats": reject_stats}
@@ -12018,6 +12051,8 @@ def _detect_cup_handle(
             "reason": "reclassified_extended_weak_handle",
             "reject_stats": reject_stats,
             "ath_252w_high": round(_high_252, 2),
+            # v148 ⑦: screener 露出ゲート入力 (50DMA乖離 / ベース上昇 / market)
+            **_extended_numeric_fields(closes, today_close, _ext_pivot, spy_uptrend),
         }
 
     best_result.pop("_handle_len", None)
@@ -14595,6 +14630,75 @@ def _fetch_ohlcv_3y(ticker: str) -> tuple[list[str], list[float], list[float], l
         return None
 
 
+def _spy_market_uptrend_ok(spy_history: dict | None) -> bool | None:
+    """v148 ⑦ gate ③: SPY が 200DMA 上 **かつ** 200DMA が上向き (上昇 slope)。
+
+    SPEC「SPY > SMA200 かつ 上向き」 を既存 `_spy_uptrend` (200DMA 上) + slope で体現。
+    slope は SMA200 が直近 ~1 ヶ月 (21 営業日) で上昇しているか。
+    Return: True (上昇相場) / False (条件不成立) / None (SPY fetch 失敗 = 判定不能)。
+    """
+    above = _spy_uptrend(spy_history)
+    if above is None:
+        return None
+    if above is False:
+        return False
+    closes = (spy_history or {}).get("closes") or []
+    if len(closes) < 221:
+        return True  # slope 算出不能だが 200DMA 上は確認済 → 上昇とみなす (graceful)
+    sma200 = _compute_sma(closes, 200)
+    if sma200[-1] is None or sma200[-21] is None:
+        return True
+    return sma200[-1] > sma200[-21]
+
+
+async def _compute_extended_gate(
+    ticker: str,
+    result: dict,
+    spy_market_ok: bool | None,
+) -> dict:
+    """v148 ⑦ (SPEC extended_screener_2026-06-02、 3 体合議): breakout_extended の
+    screener 露出ゲート。 「初動 (乗れる)」 と「過延伸末期 (climax top)」 を 3 数値 AND で機械区別。
+
+    純数値・LLM 不使用 (Hallucination Guard: aggregator と同じ数値物理層)。 閾値 SSOT は
+    memory feedback_cup_handle_thresholds.md「v148 ⑦」。
+
+    - ① 50DMA 乖離率: 大型 (時価総額 > $50B) ≤ +30% / 中小 ≤ +50%
+    - ② 直近ベースからの上昇率: ≤ +25%
+    - ③ market gate: SPY > SMA200 かつ 上向き (spy_market_ok)
+
+    Returns: extended_gate dict (result['extended_gate'] に格納 → payload に保存)。
+    """
+    sma_dev = result.get("sma50_deviation_pct")
+    base_rise = result.get("base_rise_pct")
+    market_cap = await get_market_cap(ticker, None)
+    is_large = isinstance(market_cap, (int, float)) and market_cap > 50e9
+    sma_threshold = 30.0 if is_large else 50.0
+
+    gate1 = isinstance(sma_dev, (int, float)) and sma_dev <= sma_threshold
+    gate2 = isinstance(base_rise, (int, float)) and base_rise <= 25.0
+    gate3 = spy_market_ok is True
+
+    failed: list[str] = []
+    if not gate1:
+        failed.append("sma50_deviation")
+    if not gate2:
+        failed.append("base_rise")
+    if not gate3:
+        failed.append("market_uptrend")
+
+    return {
+        "passed": gate1 and gate2 and gate3,
+        "is_large_cap": is_large,
+        "market_cap_b": round(market_cap / 1e9, 1) if isinstance(market_cap, (int, float)) and market_cap > 0 else None,
+        "sma50_deviation_pct": sma_dev,
+        "sma50_threshold_pct": sma_threshold,
+        "base_rise_pct": base_rise,
+        "base_rise_threshold_pct": 25.0,
+        "market_uptrend_ok": spy_market_ok,
+        "failed_gates": failed,
+    }
+
+
 @app.post("/api/cron/cup-scan")
 async def cron_cup_scan(
     body: dict | None = None,
@@ -14651,12 +14755,17 @@ async def cron_cup_scan(
     # SPY 200DMA filter (B 案) は 1 回 fetch して全 ticker で共有
     spy_history = _get_spy_history()
     spy_up = _spy_uptrend(spy_history)
+    # v148 ⑦: breakout_extended gate ③ (SPY > SMA200 かつ 上向き)、 市場全体で 1 回算出
+    spy_market_ok = _spy_market_uptrend_ok(spy_history)
 
     today = date.today()
     detected = 0
     state_counts: dict[str, int] = {}
     failed: list[dict] = []
     upserted = 0
+    # v148 ⑦: breakout_extended ゲート観測 (SPY fetch 失敗で全 extended が silent drop する事故の可視化)
+    ext_gate_passed = 0
+    ext_gate_failed = 0
 
     # v124 Russell 3000 Phase 1: worker_count > 1 で並列化 (asyncio.Semaphore で rate limit)
     if worker_count > 1:
@@ -14690,6 +14799,15 @@ async def cron_cup_scan(
             state = result.get("state") or "not_detected"
             state_counts[state] = state_counts.get(state, 0) + 1
             if not dry_run and result.get("detected"):
+                # v148 ⑦: breakout_extended は誤シグナル抑制ゲート verdict を payload に付与
+                if state == "breakout_extended":
+                    result["extended_gate"] = await _compute_extended_gate(
+                        ticker, result, spy_market_ok
+                    )
+                    if result["extended_gate"].get("passed"):
+                        ext_gate_passed += 1
+                    else:
+                        ext_gate_failed += 1
                 ok = await asyncio.to_thread(
                     _upsert_pattern_signal, ticker, "cup_handle", today, state, result
                 )
@@ -14715,6 +14833,15 @@ async def cron_cup_scan(
             state = result.get("state") or "not_detected"
             state_counts[state] = state_counts.get(state, 0) + 1
             if not dry_run and result.get("detected"):
+                # v148 ⑦: breakout_extended は誤シグナル抑制ゲート verdict を payload に付与
+                if state == "breakout_extended":
+                    result["extended_gate"] = await _compute_extended_gate(
+                        ticker, result, spy_market_ok
+                    )
+                    if result["extended_gate"].get("passed"):
+                        ext_gate_passed += 1
+                    else:
+                        ext_gate_failed += 1
                 ok = await asyncio.to_thread(
                     _upsert_pattern_signal, ticker, "cup_handle", today, state, result
                 )
@@ -14733,6 +14860,10 @@ async def cron_cup_scan(
         "universe_size": len(tickers),
         "worker_count": worker_count,
         "dry_run": dry_run,
+        # v148 ⑦: extended ゲート観測 (spy_market_ok=None/False で extended_gate_failed が膨れる = SPY fetch 異常検知)
+        "spy_market_ok": spy_market_ok,
+        "extended_gate_passed": ext_gate_passed,
+        "extended_gate_failed": ext_gate_failed,
     }
 
 
@@ -15804,17 +15935,30 @@ _STATE_PRIORITY: dict[str, int] = {
 
 
 def _mask_signal_for_free(item: dict) -> dict:
-    """Free user 向けに pivot/state 詳細を除外。 ticker と社名のみ残す。
+    """Free user 向けに pivot/payload 詳細を除外。 ticker + state badge ラベルのみ残す。
 
     Security verdict: blur は CSS でなく backend response 段階で payload を削る。
+    v148 ⑦ (SPEC extended_screener): section ③ の種別 badge (高値圏突破 / カップ 等) 表示のため
+    state ラベル + extended の 50DMA 乖離数値は残す (price-action 分類、 §38/§5 safe)。
+    pivot 価格 / buy zone / 全 payload 等 Premium 中核値は引き続き除外 (Free は top N ticker のみ)。
     """
-    return {
+    masked = {
         "ticker": item.get("ticker"),
         "company_name": item.get("company_name"),
         "passed_count": item.get("passed_count"),
-        # state / pivot / payload は意図的に含めない (Premium 価値情報)
+        "state": item.get("state"),  # v148 ⑦: badge ラベル用 (pivot/payload は除外維持)
+        # pivot / payload は意図的に含めない (Premium 価値情報)
         "_masked": True,
     }
+    # v148 ⑦: breakout_extended は §38/§5 で乖離数値併記が必須のため sma50 乖離のみ残す
+    if item.get("state") == "breakout_extended":
+        payload = item.get("payload") if isinstance(item.get("payload"), dict) else {}
+        dev = payload.get("sma50_deviation_pct")
+        if dev is None:
+            dev = (payload.get("extended_gate") or {}).get("sma50_deviation_pct")
+        if dev is not None:
+            masked["sma50_deviation_pct"] = dev
+    return masked
 
 
 async def _fetch_premium_status_from_auth(
@@ -15912,6 +16056,21 @@ async def scanner_cup_handle(
                 cup_signals[ticker] = r
         except Exception as e:
             print(f"[scanner] cup fetch failed: {e}")
+
+    # v148 ⑦ (SPEC extended_screener_2026-06-02、 3 体合議): breakout_extended は誤シグナル抑制
+    # ゲート (50DMA乖離 大型≤+30%/中小≤+50% / ベース上昇≤+25% / SPY uptrend) 通過時のみ screener 露出。
+    # 過延伸末期 (climax top、 O'Neil don't chase) を drop し finance-literate user の Trust Cliff を防ぐ。
+    # 後方互換: extended_gate 欠落 (旧 signal / 次 nightly cup-scan 反映前) は show で regression 回避、
+    # gate が明示的に passed=False の時のみ除外。 閾値 SSOT: feedback_cup_handle_thresholds.md「v148 ⑦」。
+    if cup_signals:
+        _kept: dict[str, dict] = {}
+        for _t, _r in cup_signals.items():
+            if _r.get("state") == "breakout_extended":
+                _gate = (_r.get("payload") or {}).get("extended_gate")
+                if isinstance(_gate, dict) and _gate.get("passed") is False:
+                    continue  # ゲート不通過 → 露出から除外 (過延伸末期)
+            _kept[_t] = _r
+        cup_signals = _kept
 
     # ── filter 適用 → 集計 ──
     if filter == "funda":

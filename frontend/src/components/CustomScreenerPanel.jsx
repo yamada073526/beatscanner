@@ -587,6 +587,9 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
         const rsPctByTicker = new Map((rsResult.items || []).map((r) => [(r.ticker || '').toUpperCase(), r]));
         const intersected = (bothResult.items || []).filter((it) => {
           const t = (it.ticker || '').toUpperCase();
+          // v148 ⑦ (3 体合議): breakout_extended は正統 cup-handle でないため O'Neil 打診買い
+          // 3 点交差からも除外 (高値圏突破は section ③ のみで露出、 §5 優良誤認回避)。
+          if (it.state === 'breakout_extended') return false;
           return t && rsTickers.has(t);
         }).map((it) => ({
           ...it,

@@ -40,9 +40,24 @@ const CUP_STATE_LABEL_JP = {
   pullback_to_support: '押し目接近',
   formation: '形成中',
   cup_completing: 'カップ完成間近',
-  breakout_extended: '高値圏ブレイク・過延伸',
+  // v148 ⑦ (SPEC extended_screener): screener badge は「高値圏突破」 (2 秒理解・和語的)。
+  // chart chip は「高値圏ブレイク・過延伸」 のまま使い分け (StockPriceChart.jsx)。
+  breakout_extended: '高値圏突破',
   formation_market_weak: '形成中・市場待機',
 };
+
+// v148 ⑦: extended badge に 50DMA 乖離数値を併記 (§38/§5: price action 記述 + 乖離数値、 action 断定禁止)。
+// masked item は top-level sma50_deviation_pct、 premium item は payload.sma50_deviation_pct。
+function extendedBadge(item) {
+  // masked item は top-level sma50_deviation_pct、 premium item は payload.sma50_deviation_pct
+  // (旧 signal 互換で payload.extended_gate.sma50_deviation_pct も fallback、 backend mask と対称)。
+  const dev = item?.sma50_deviation_pct
+    ?? item?.payload?.sma50_deviation_pct
+    ?? item?.payload?.extended_gate?.sma50_deviation_pct;
+  if (dev == null || Number.isNaN(Number(dev))) return '高値圏突破';
+  const n = Number(dev);
+  return `高値圏突破 · 50DMA ${n >= 0 ? '+' : ''}${n}%`;
+}
 
 // ── fetcher: backend /api/scanner/rs (Leader + delta sort 両用) ──
 async function fetchRsLeader({ limit = 20 } = {}) {
@@ -140,7 +155,7 @@ function HeroSection({ title, testId, description, tickers, loading, emptyMessag
         {description}
       </p>
       {loading ? (
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--space-3, 12px)' }}>
+        <div data-testid={`${testId}-loading`} style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--space-3, 12px)' }}>
           読み込み中…
         </div>
       ) : error ? (
@@ -181,7 +196,7 @@ function HeroSection({ title, testId, description, tickers, loading, emptyMessag
           )}
         </div>
       ) : tickers.length === 0 ? (
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--space-3, 12px)' }}>
+        <div data-testid={`${testId}-empty`} style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--space-3, 12px)' }}>
           {emptyMessage || '該当銘柄なし'}
         </div>
       ) : (
@@ -323,9 +338,13 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
 
       // section 1: Leader + Breakout + CWH 交差 = RS >= 80 ∩ Cup-Handle 検出
       // v133 方針 #12 Option A: cup item の gc_confirmed lookup map で Cup-Handle カードに GC badge 強化
-      const cupTickers = new Set((cup.items || []).map((c) => c.ticker));
+      // v148 ⑦ (3 体合議 qa-dogfooder MAJOR-A / frontend MINOR): breakout_extended は正統 cup-handle
+      // ではないため section ① (disclaimer なし) から除外。 extended は section ③ (高値圏突破 badge +
+      // disclaimer) のみで露出させ、 §5 優良誤認 (extended を「CWH 交差」 と誤認) を防ぐ。
+      const cupItemsForSection1 = (cup.items || []).filter((c) => c.state !== 'breakout_extended');
+      const cupTickers = new Set(cupItemsForSection1.map((c) => c.ticker));
       const gcByTicker = new Map();
-      for (const c of (cup.items || [])) {
+      for (const c of cupItemsForSection1) {
         if (c.gc_confirmed) gcByTicker.set(c.ticker, true);
       }
       const intersection = [];
@@ -371,7 +390,10 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
       const newCwhItems = [];
       for (const item of (cup.items || [])) {
         if (usedTickers.has(item.ticker)) continue;
-        const baseBadge = CUP_STATE_LABEL_JP[item.state] || item.state || '形成中';
+        // v148 ⑦: extended は「高値圏突破 · 50DMA +X%」、 cup 系は既存ラベル
+        const baseBadge = item.state === 'breakout_extended'
+          ? extendedBadge(item)
+          : (CUP_STATE_LABEL_JP[item.state] || item.state || '形成中');
         newCwhItems.push({
           ticker: item.ticker,
           badge: item.gc_confirmed ? `${baseBadge} ✦ GC` : baseBadge,
@@ -505,7 +527,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
         <HeroSection
           title="新規 Cup-Handle 検出"
           testId="screener-hero-new-cup-handle"
-          description="Cup-Handle pattern 検出済 (IBD MarketSmith 流のブレイクアウト候補)"
+          description="Cup-Handle pattern 検出済 (IBD MarketSmith 流のブレイクアウト候補)。高値圏突破は正統 cup-with-handle とは形成過程が異なります。投資の推奨ではありません。"
           tickers={newCwh.tickers}
           loading={newCwh.loading}
           error={newCwh.error}

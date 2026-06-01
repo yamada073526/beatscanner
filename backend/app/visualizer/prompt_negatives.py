@@ -157,6 +157,15 @@ BLOCKLIST_REGEX: list[re.Pattern] = [
     # 過剰削除するため除外。 frontend lib/blocklist.js と 1:1 mirror。
     re.compile(r"追い風となる|追い風が吹く"),
     re.compile(r"中長期的に有望|中長期的な成長|長期的に有望"),
+    # ─── v148 ⑦ (SPEC extended_screener): extended 文脈の chase / 天井 action 語 (§38/§5) ───
+    # breakout_extended の badge/warning は静的辞書だが、 AI 図解等が high-flyer を描く際の防御層。
+    # frontend lib/blocklist.js と 1:1 mirror。 過剰削除回避のため tight に (v124「追い風」教訓)。
+    re.compile(r"青天井"),
+    re.compile(r"天井(知らず|なし|を知らない)"),
+    re.compile(r"まだ(上がる|上がります|伸びる|伸びます|間に合う|間に合います)"),
+    re.compile(r"もっと(上がる|上がります|伸びる|伸びます)"),
+    re.compile(r"乗り遅れ(るな|ないで|注意)"),
+    re.compile(r"(?:高値圏|過延伸).{0,8}(?:でも)?買い"),
 ]
 
 
