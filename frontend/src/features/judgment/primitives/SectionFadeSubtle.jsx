@@ -47,13 +47,15 @@ export default function SectionFadeSubtle({ children, className, style, id }) {
   const reduce = useReducedMotion();
   const variants = reduce ? noMotionVariants : subtleVariants;
 
-  // v146 fix: scroll container (workspace Pane 3 等) 内では whileInView の IntersectionObserver が
-  //   viewport root 基準で発火せず、 fold より下の要素 (例: 指数 detail の NewsPanel) が opacity:0 で
-  //   恒久的に不可視になる (user dogfood 指数ニュースで判明)。 fallback: mount 後一定時間 IO 未発火なら
-  //   animate='visible' で強制表示。 通常の viewport scroll-in fade は whileInView 側で維持。
-  const [forceVisible, setForceVisible] = useState(false);
+  // v146 fix: scroll container (workspace Pane 3 等) 内では framer-motion の whileInView
+  //   (IntersectionObserver、 viewport root 基準) が発火せず、 fold より下の要素 (例: 指数 detail の
+  //   NewsPanel) が opacity:0 で恒久不可視になる (user dogfood)。 ⚠️whileInView と animate を併用すると
+  //   whileInView が優先され animate が無視されるため、 whileInView を撤去し state 駆動の animate に統一:
+  //     - onViewportEnter (= whileInView と同じ IO) で通常の scroll-in fade を発火
+  //     - 加えて mount 後 700ms の timeout で必ず表示 (IO 未発火の scroll container でも恒久不可視を防ぐ)
+  const [shown, setShown] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => setForceVisible(true), 700);
+    const t = setTimeout(() => setShown(true), 700);
     return () => clearTimeout(t);
   }, []);
 
@@ -63,8 +65,8 @@ export default function SectionFadeSubtle({ children, className, style, id }) {
       className={className}
       style={style}
       initial="hidden"
-      animate={forceVisible ? 'visible' : undefined}
-      whileInView="visible"
+      animate={shown ? 'visible' : 'hidden'}
+      onViewportEnter={() => setShown(true)}
       viewport={{ once: true, amount: 0.15 }}
       variants={variants}
       transition={EASE_OUT_220}
