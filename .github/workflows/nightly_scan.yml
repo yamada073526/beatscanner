@@ -1,0 +1,89 @@
+name: Nightly Scan (RS + Cup-Handle)
+
+# v146: 夜間スクリーニング (RS / Cup-with-Handle) を GitHub Actions で確実に実行する。
+#
+# 背景 (2026-06-01 user dogfood + 診断):
+#   - railway.toml [[crons]] の rs-scan / cup-scan が **2026-05-26 以降 発火しておらず** データが stale 化。
+#   - 原因は Railway cron scheduler 側 (endpoint は正常: russell3000/1000 を rs=62s / cup=97s で完走確認)。
+#   - Railway cron は CLI から状態確認・修復が困難なため、 version 管理できて確実な GitHub Actions に移行。
+#   - scans は ~1-2 分で完了するため GH Actions の短時間ジョブに適合 (旧「GHは long-running用」 制約は
+#     Railway cron が機能する前提だった。 機能しないので reliability を優先)。
+#
+# 順序: cup-scan (23:00 相当) → rs-scan (gc データ source) → cup-notify (scan 完了後に digest 配信)。
+#   3 本を 1 workflow で直列実行 (合計 ~3 分)。 idempotent upsert なので Railway cron が復活しても無害。
+#
+# ⚠️ 有効化には GitHub repo secret `CRON_SECRET` (Railway production と同値) が必要:
+#     railway variables --json | python3 -c "import sys,json;print(json.load(sys.stdin)['CRON_SECRET'])" | gh secret set CRON_SECRET
+#   (未設定だと cron endpoint が 401 を返し scan は実行されない)
+#
+# memory anchor: feedback_railway_native_cron.md (移行の経緯) / project_signature_tier_10k_strategy.md (push 看板)
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 23:07 UTC = 08:07 JST。 米国市場 close (20-21 UTC) 後、 hourly boundary (:00) の高負荷帯を回避。
+    - cron: '7 23 * * *'
+
+jobs:
+  scan:
+    name: Nightly RS + Cup-Handle scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BASE: https://beatscanner-production.up.railway.app
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      BODY: '{"universe_source":"russell3000","universe_size":1000,"worker_count":3}'
+    steps:
+      - name: Setup tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq jq curl
+
+      - name: Guard — CRON_SECRET present
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET secret 未設定。 README の gh secret set コマンドで追加してください。"
+            exit 1
+          fi
+
+      - name: Cup-with-Handle scan
+        id: cup
+        continue-on-error: true
+        run: |
+          echo "=== cup-scan ==="
+          resp=$(curl -s --max-time 1200 -w '\nHTTP:%{http_code}' -X POST \
+            -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
+            -d "$BODY" "$BASE/api/cron/cup-scan")
+          echo "$resp" | tail -1
+          echo "$resp" | sed '$d' | jq '{processed_count,detected_count,upserted_count,failed_count}' 2>/dev/null || true
+
+      - name: RS scan
+        id: rs
+        continue-on-error: true
+        run: |
+          echo "=== rs-scan ==="
+          resp=$(curl -s --max-time 1200 -w '\nHTTP:%{http_code}' -X POST \
+            -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
+            -d "$BODY" "$BASE/api/cron/rs-scan")
+          echo "$resp" | tail -1
+          echo "$resp" | sed '$d' | jq '{calc_date,scored_count,upserted_count,failed_count,gc_upserted_count}' 2>/dev/null || true
+
+      - name: Cup-Handle digest notify
+        id: notify
+        continue-on-error: true
+        run: |
+          echo "=== cup-notify ==="
+          curl -s --max-time 120 -w '\nHTTP:%{http_code}' -X POST \
+            -H "X-Cron-Secret: $CRON_SECRET" "$BASE/api/cron/cup-notify" | tail -5
+
+      - name: Verify freshness
+        run: |
+          echo "### Nightly Scan ($(date -u +'%Y-%m-%d %H:%M UTC'))" >> "$GITHUB_STEP_SUMMARY"
+          rs_date=$(curl -s --max-time 20 "$BASE/api/scanner/rs?min_percentile=80&limit=1" | jq -r '.calc_date // "?"')
+          cup_total=$(curl -s --max-time 20 "$BASE/api/scanner/cup-handle?filter=cup" | jq -r '.total_count // 0')
+          today=$(date -u +%Y-%m-%d)
+          echo "- RS calc_date: \`$rs_date\` (today: \`$today\`)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Cup-Handle total: \`$cup_total\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$rs_date" != "$today" ]; then
+            echo "::warning::RS calc_date ($rs_date) != today ($today) — scan が反映されていない可能性"
+          fi
