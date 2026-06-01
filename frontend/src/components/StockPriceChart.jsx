@@ -342,6 +342,19 @@ function EarningsTooltip({ active, payload, label, earningsMap, pillar2Markers, 
   );
 }
 
+// v147 (handover v146 最優先・user 指摘 content バグ): 指数 / 先物 / 為替 / DXY 等の「非株式」 判定。
+//   RS (= 個別株の対 SPY 相対強度) は非株式では無意味 (指数自身は ≈0%、 VIX/金利/原油/為替は概念的に不成立)
+//   なので、 これらでは RS chip を非表示にする (finance リテラシー高 user の Trust Cliff 回避)。
+//   構造マーカー: 指数 (^GSPC/^VIX/^TNX) = '^' 始まり / 先物 (CL=F) = '=F' / 為替 (JPY=X) = '=X'。
+//   '.' を含む class share (BRK.B 等) を誤検知しないため '.' は使わず、 DXY (DX-Y.NYB) のみ明示 set。
+const NON_EQUITY_TICKERS = new Set(['^GSPC', '^IXIC', '^DJI', '^VIX', '^TNX', 'DX-Y.NYB', 'CL=F', 'JPY=X']);
+function isNonEquityTicker(ticker) {
+  if (!ticker) return false;
+  const t = String(ticker).toUpperCase();
+  if (NON_EQUITY_TICKERS.has(t)) return true;
+  return t.startsWith('^') || t.endsWith('=F') || t.endsWith('=X');
+}
+
 function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
   const [period, setPeriod] = useState('1y');
   const [data, setData] = useState(null);
@@ -634,6 +647,9 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
     if (pct <= 25) return 'loss';
     return 'muted';
   }, [hasRs, rsData, rsIsElite]);
+  // v147 (handover v146 最優先): 非株式 (指数/先物/為替/DXY) では RS が無意味なので chip を非表示。
+  //   表示抑止のみ — backend の technical 値は触らない (DMA cross は self-referential で指数にも意味があり保持)。
+  const showRs = hasRs && !isNonEquityTicker(ticker);
 
   // Session 3: DMA Cross (golden cross 直近 60 日内)
   const dmaCross = technical?.patterns?.dma_cross || null;
@@ -804,8 +820,9 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
             </Chip>
           )}
           {/* Session 3: RS chip (vs SPY 6 ヶ月 + 自己 252 日 percentile、 Free 表示)
-              handover v79: extreme value (percentile ≥95 / ≤5) は elite tone (gold) + percentile 先頭 strong */}
-          {hasRs && (
+              handover v79: extreme value (percentile ≥95 / ≤5) は elite tone (gold) + percentile 先頭 strong
+              v147: 非株式 (指数/先物/為替/DXY) では RS 無意味のため showRs で非表示 (IndicesView 経由 ^GSPC 等) */}
+          {showRs && (
             <Chip
               size="xs"
               variant="display"
