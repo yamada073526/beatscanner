@@ -582,19 +582,20 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
     return { x1: right_rim_date, x2: lastDate, y1: low_price, y2: pivotPrice };
   }, [hasCup, cupHandle, data]);
 
-  // v147 R2 (user dogfood NVDA): breakout_pending (pivot 価格は上抜けたが出来高未確認) の
-  //   「pivot 上抜け点」 を中空リングで marker (2 体合議: 現状 dot なしは不適切、 pending=中空リング/confirmed=塗りgreen)。
-  //   backend は crossing date を返さないため、 right_rim 以降で最初に close >= pivot を満たす日を frontend 算出。
+  // v147 R3 (user dogfood NVDA): breakout_pending (pivot 価格は上抜けたが出来高未確認) の
+  //   「直近の pivot 上抜け点」 を中空リングで marker (2 体合議: pending=中空リング/confirmed=塗りgreen)。
+  //   ★R3 修正: handle.low_date 以降で最初に close>=pivot を取る (= 直近ブレイク。 R2 は right_rim 起点で
+  //   ハンドル前の古い上抜け = right_rim dot と重なり見えなかった)。 handle 無ければ right_rim 起点に fallback。
   //   chart-overlay-safety: conditional render + Number.isFinite + isAnimationActive=false。
   const breakoutCrossPoint = useMemo(() => {
     if (!hasCup || cupHandle.state !== 'breakout_pending') return null;
     const pivotPrice = cupHandle?.pivot?.price;
-    const rightRimDate = cupHandle?.cup?.right_rim_date;
+    const fromDate = cupHandle?.handle?.low_date || cupHandle?.cup?.right_rim_date;
     const prices = data?.prices;
     if (!Number.isFinite(pivotPrice) || !Array.isArray(prices) || !prices.length) return null;
-    let started = !rightRimDate;
+    let started = !fromDate;
     for (const p of prices) {
-      if (!started) { if (p.date === rightRimDate) started = true; continue; }
+      if (!started) { if (p.date === fromDate) started = true; continue; }
       const c = Number(p?.close);
       if (Number.isFinite(c) && c >= pivotPrice) return { date: p.date, price: pivotPrice };
     }
@@ -1235,10 +1236,10 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
                   <ReferenceDot
                     x={breakoutCrossPoint.date}
                     y={breakoutCrossPoint.price}
-                    r={5}
+                    r={6}
                     fill="none"
                     stroke={CUP_LINE_COLOR}
-                    strokeWidth={2}
+                    strokeWidth={2.5}
                     isFront
                     isAnimationActive={false}
                   />
