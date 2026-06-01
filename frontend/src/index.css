@@ -10418,6 +10418,37 @@ button.ds-chip[data-pressed="true"]:hover {
   .daily-digest[open] .daily-digest__body { animation: none; }
 }
 
+/* v147 (user dogfood): 決算レポート欄 ⇄ ティッカー検索 の境界ドラッグ仕切り。
+   body の max-height を JS で px override し、 仕切りを上下に動かすとレポート欄が伸縮 →
+   下の検索バー+保有銘柄リスト (flex:1) が連動して縮む/伸びる。 grip は hover/ドラッグ中に gold。 */
+.daily-digest__resize {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 14px;
+  margin: 2px var(--space-3, 12px) 4px;
+  cursor: ns-resize;
+  touch-action: none; /* touch でも scroll でなく drag に */
+  border-radius: 999px;
+}
+.daily-digest__resize-grip {
+  width: 40px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border, rgba(148, 163, 184, 0.3));
+  transition: background var(--motion-fast, 120ms) ease, width var(--motion-fast, 120ms) ease;
+}
+.daily-digest__resize:hover .daily-digest__resize-grip,
+.daily-digest__resize.is-resizing .daily-digest__resize-grip {
+  background: var(--color-gold);
+  width: 52px;
+}
+/* ドラッグ中はページ全体の text 選択を抑止 (DailyDigestSection が body に付与) */
+body.is-digest-resizing {
+  cursor: ns-resize;
+  user-select: none;
+}
+
 .daily-digest__label {
   font-family: 'Noto Sans JP', system-ui, sans-serif;
   font-size: var(--text-caption, 11px);

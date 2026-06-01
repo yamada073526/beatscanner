@@ -57,6 +57,35 @@ function writeDigestPref(isOpen) {
   }
 }
 
+// v147 (user dogfood): 決算レポート欄の高さをドラッグ仕切りで可変に。
+//   「ウォッチリストを広く取りたい人もいる」 ため、 .daily-digest__body の表示高さ (px) を
+//   localStorage に永続化。 null = 既定 (CSS の max-height:280px)。
+//   仕切りを下げる → レポート欄が伸び、 下の検索バー+保有銘柄リスト (flex:1) が縮む / 上げると逆。
+const DIGEST_H_KEY = 'bs:digestBodyH:v1';
+const DIGEST_H_MIN = 88; // 検索バーへ寄せても 2〜3 行は残す下限
+function readDigestHeightPref() {
+  try {
+    const v = parseInt(localStorage.getItem(DIGEST_H_KEY) ?? '', 10);
+    return Number.isFinite(v) && v >= DIGEST_H_MIN ? v : null;
+  } catch {
+    return null;
+  }
+}
+function writeDigestHeightPref(h) {
+  try {
+    if (Number.isFinite(h)) localStorage.setItem(DIGEST_H_KEY, String(Math.round(h)));
+  } catch {
+    /* private mode 等は無視 */
+  }
+}
+function clearDigestHeightPref() {
+  try {
+    localStorage.removeItem(DIGEST_H_KEY);
+  } catch {
+    /* noop */
+  }
+}
+
 /**
  * Supabase から 最新 published article を fetch する hook.
  * @returns {{ articles: Array, loading: boolean, error: Error|null }}
@@ -285,6 +314,71 @@ export default function DailyDigestSection({ holdingTickers, watchlistTickers } 
       setOpen(!user); // login=collapse / guest=open
     }
   }, [user]);
+
+  // v147 (user dogfood): 決算レポート欄の高さをドラッグ仕切りで可変に。
+  //   rootRef = <details> → 親 = flexShrink:0 wrapper → 祖父 = pane2 flex column (height:100%)。
+  //   仕切りを下げると body が伸び、 下の検索バー+保有銘柄リスト (flex:1) が縮む / 上げると逆。
+  const rootRef = useRef(null);
+  const bodyRef = useRef(null);
+  const dragRef = useRef(null);
+  const [bodyHeight, setBodyHeight] = useState(() => readDigestHeightPref());
+  const bodyHeightRef = useRef(bodyHeight);
+  const [resizing, setResizing] = useState(false);
+
+  // ドラッグ中はページ全体の text 選択を抑止 (handle 外へカーソルが出ても誤選択しない)。
+  useEffect(() => {
+    if (!resizing) return undefined;
+    document.body.classList.add('is-digest-resizing');
+    return () => document.body.classList.remove('is-digest-resizing');
+  }, [resizing]);
+
+  const handleResizeStart = (e) => {
+    const bodyEl = bodyRef.current;
+    const rootEl = rootRef.current;
+    if (!bodyEl || !rootEl) return;
+    e.preventDefault();
+    const wrapperEl = rootEl.parentElement; // flexShrink:0 div
+    const paneEl = wrapperEl?.parentElement; // pane2 flex column
+    const paneH = paneEl?.clientHeight || window.innerHeight;
+    // overhead = summary + handle + border (= body 以外で wrapper が占める高さ)
+    const overhead = (wrapperEl?.offsetHeight || bodyEl.offsetHeight) - bodyEl.offsetHeight;
+    const LIST_RESERVE = 160; // 下の検索バー+数行は必ず残す
+    const maxH = Math.max(120, paneH - overhead - LIST_RESERVE);
+    dragRef.current = {
+      startY: e.clientY,
+      startH: bodyEl.offsetHeight,
+      maxH,
+      pointerId: e.pointerId,
+    };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    setResizing(true);
+  };
+
+  const handleResizeMove = (e) => {
+    const d = dragRef.current;
+    if (!d) return;
+    const next = Math.min(d.maxH, Math.max(DIGEST_H_MIN, d.startH + (e.clientY - d.startY)));
+    bodyHeightRef.current = next;
+    setBodyHeight(next);
+  };
+
+  const handleResizeEnd = (e) => {
+    if (!dragRef.current) return;
+    e.currentTarget.releasePointerCapture?.(dragRef.current.pointerId);
+    dragRef.current = null;
+    setResizing(false);
+    writeDigestHeightPref(bodyHeightRef.current);
+  };
+
+  // ダブルクリックで既定の高さ (CSS max-height:280px) に戻す
+  const handleResizeReset = () => {
+    dragRef.current = null;
+    setResizing(false);
+    bodyHeightRef.current = null;
+    setBodyHeight(null);
+    clearDigestHeightPref();
+  };
+
   // summary click を自前制御 (native toggle は preventDefault、 open は state で deterministic に管理)。
   const handleSummaryClick = (e) => {
     e.preventDefault();
@@ -306,14 +400,16 @@ export default function DailyDigestSection({ holdingTickers, watchlistTickers } 
     <details
       className="daily-digest"
       data-testid="daily-digest-section"
-      aria-label="本日の Daily Digest"
+      aria-label="最新レポート"
       open={open}
+      ref={rootRef}
     >
-      {/* v143: 1 行ヘッダー (副題削除 + 改名「今日の決算レポート」)。
-          chevron は lucide ChevronDown (18px、 open で回転) — 旧 ::after の 10px ▾ は
-          「小さくてバグに見える」 (user dogfood) ため、 明確な開閉コントロールに変更。 */}
+      {/* v143: 1 行ヘッダー (副題削除)。 v147 改名「今日の決算レポート」→「最新レポート」
+          (3 体合議 2/3 推奨): 過去記事も遡れる (直近20件) ため「今日の=当日限定」誤解を解消、
+          決算ディープダイブ + まとめ + テーマ の混合フィードを「最新」で包含。 chevron は
+          lucide ChevronDown (18px、 open で回転)。 */}
       <summary className="daily-digest__summary" onClick={handleSummaryClick}>
-        <h2 className="daily-digest__heading">今日の決算レポート</h2>
+        <h2 className="daily-digest__heading">最新レポート</h2>
         <span className="daily-digest__count" aria-hidden="true">
           {loading ? '' : count > 0 ? `${count} 件` : ''}
         </span>
@@ -325,7 +421,11 @@ export default function DailyDigestSection({ holdingTickers, watchlistTickers } 
           style={{ transform: open ? 'rotate(0deg)' : 'rotate(-90deg)' }}
         />
       </summary>
-      <div className="daily-digest__body">
+      <div
+        className="daily-digest__body"
+        ref={bodyRef}
+        style={bodyHeight != null ? { maxHeight: `${bodyHeight}px` } : undefined}
+      >
         {loading && <DigestLoadingState />}
         {!loading && !showEmpty && (
           <div className="daily-digest__list">
@@ -341,6 +441,25 @@ export default function DailyDigestSection({ holdingTickers, watchlistTickers } 
         )}
         {showEmpty && <DigestEmptyState />}
       </div>
+      {/* v147: 決算レポート欄 ⇄ ティッカー検索 の境界をドラッグで上下に伸縮する仕切り。
+          <details> 内に置くため collapse 時は自動で非表示。 ダブルクリックで既定値に戻す。 */}
+      {!loading && !showEmpty && (
+        <div
+          className={`daily-digest__resize${resizing ? ' is-resizing' : ''}`}
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="最新レポート欄の高さを調整。ドラッグで伸縮、ダブルクリックで既定値に戻す"
+          title="ドラッグで高さ調整 / ダブルクリックで既定値に戻す"
+          data-testid="daily-digest-resize"
+          onPointerDown={handleResizeStart}
+          onPointerMove={handleResizeMove}
+          onPointerUp={handleResizeEnd}
+          onPointerCancel={handleResizeEnd}
+          onDoubleClick={handleResizeReset}
+        >
+          <span className="daily-digest__resize-grip" aria-hidden="true" />
+        </div>
+      )}
     </details>
   );
 }
