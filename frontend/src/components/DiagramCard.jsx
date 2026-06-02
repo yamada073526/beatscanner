@@ -435,7 +435,7 @@ function GuidanceSection({ guidance }) {
         }}>
           <Info size={14} strokeWidth={2} color="var(--text-muted)" style={{ flexShrink: 0, marginTop: '1px' }} aria-hidden="true" />
           <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-            売上高・マージンの数値レンジは開示されていません。 以下は経営陣が決算 call で述べた見通しの引用です（当社の予測ではありません）。
+            売上高・マージンの公式ガイダンスは公開されていません。 代わりに、 経営陣が決算カンファレンスコールで述べた見通しを引用します（当社の予測ではありません）。
           </div>
         </div>
       ) : confidence === 'low' && (
