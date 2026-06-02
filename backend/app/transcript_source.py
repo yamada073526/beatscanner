@@ -4,17 +4,19 @@
 # LLM 抽出は visualizer/sec_guidance.py 側。 本 module は前処理 + post-hoc 検証のみ。
 
 6 体合議 (2026-06-02、 §38重) verdict 反映 (SPEC: docs/specs/transcript_guidance_2026-06-02.md):
-- 金融§38 ガード2 (BLOCK級): operator/analyst の Q&A を除外、 management prepared remarks のみ抽出
-  (analyst が質問で口にした数値を会社ガイダンスと誤認する §38 リスク回避)。 speaker tag を保持して
-  下流 LLM が「Analyst 発言の数値は無視」 を物理的に判断できるようにする。
-- LLM品質 (BLOCK): 既存ラッチ実装 (一方向 capture → 以降 40 行無条件) でなく、 キーワード hit の
-  ±window 段落を窓抽出して merge + safe-harbor 定型文除去 + 0-hit 時 full-text fallback signal。
+- 金融§38 ガード2 (BLOCK級): operator/analyst の Q&A を除外、 management 発言のみ抽出
+  (analyst が質問で口にした数値を会社ガイダンスと誤認する §38 リスク回避)。
+- LLM品質 (BLOCK): 既存ラッチ実装でなく、 guidance キーワード hit の ±window 文を窓抽出して merge
+  + safe-harbor 定型文を文単位で除去 + 0-hit signal (basis)。
 - 金融§38 ガード4 / LLM品質 論点4: 抽出数値の逐語 grep 存在チェック (text に無い数値は信頼降格)。
-- frontend/qa: should_fallback_to_transcript() で 8-K low 判定 (全 None かつ confidence low) を明示関数化。
+- frontend/qa: should_fallback_to_transcript() で 8-K low 判定 (全 None かつ confidence low/medium) を明示関数化。
 
-⚠️ FMP `/earning-call-transcript` の実フォーマット (話者ラベルの書式) は **Phase 0 (FMP key 必要) で
-実測して calibrate** すること。 本 module は一般的書式 (「Name -- Title」「Name - Title:」「Operator」)
-への best-effort + graceful fallback で、 Phase 0 後に正規表現を実データへ合わせる。
+⚠️ Phase 0 (2026-06-02 FMP Ultimate 実測) で確定した FMP `/stable/earning-call-transcript` の実フォーマット:
+  - content は 1 行 = 1 発言 "話者名: 本文" (肩書なし)。 turn 間は単一 `\n`。 例:
+    "Operator: Greetings...\nSatya Nadella: ...\nAmy Hood: ...\n<Q&A>\nMark Moerdler: <質問>\nAmy Hood: <回答>"
+  - 肩書が無いため role は **prepared remarks (Q&A 境界より前) で話した非 Operator = management、
+    Q&A でしか登場しない話者 = analyst (質問者)** という構造で分類。 analyst は質問でしか発言しない
+    → 質問内の数値を会社ガイダンスと混同しない (§38 ガード2 を肩書非依存で実現)。
 """
 from __future__ import annotations
 
@@ -30,7 +32,7 @@ _GUIDANCE_KEYWORDS: tuple[str, ...] = (
     "for fiscal", "full-year", "full year", "next quarter", "going forward",
     "in the range of", "to be in the range", "to be approximately",
     "we estimate", "turning to guidance", "our outlook", "we see revenue",
-    "expect revenue", "expect q", "we anticipate revenue",
+    "expect revenue", "expect q", "we anticipate revenue", "we expect to grow",
 )
 
 # キーワード無しで数値だけ言うケース ($35 billion / 50% margin 等) も guidance 候補に
@@ -40,135 +42,112 @@ _GUIDANCE_NUMBER_RE = re.compile(
     re.IGNORECASE,
 )
 
-# ── safe-harbor / forward-looking 定型文マーカー (キーワード密度汚染源、 除去対象) ──
+# ── safe-harbor / forward-looking 定型文マーカー (文単位で除外) ──
 _SAFE_HARBOR_MARKERS: tuple[str, ...] = (
     "forward-looking statement", "safe harbor", "private securities litigation",
     "reform act", "actual results may differ", "actual results could differ",
     "risks and uncertainties described", "we undertake no obligation",
+    "reconciliation of differences between gaap",
 )
 
-# ── 話者ロール判定 ──
-_MGMT_TITLE_RE = re.compile(
-    r"\b(chief executive|chief financial|chief operating|ceo|cfo|coo|"
-    r"president|founder|chair(?:man|woman|person)?|head of|"
-    r"investor relations|treasurer|general counsel)\b",
-    re.IGNORECASE,
-)
+# Operator 判定 (話者名 or 自己紹介文)
 _OPERATOR_RE = re.compile(r"\boperator\b", re.IGNORECASE)
-_ANALYST_RE = re.compile(r"\banalyst\b", re.IGNORECASE)
+_OPERATOR_SELFINTRO_RE = re.compile(r"your (?:conference )?operator", re.IGNORECASE)
+
 # Q&A セクション開始マーカー (以降は質疑応答)
 _QA_SECTION_RE = re.compile(
     r"question[- ]and[- ]answer|q\s*&\s*a\b|"
-    r"we(?:'ll| will) now (?:begin|take|open).{0,20}question|"
-    r"(?:begin|open).{0,10}the q\s*&\s*a",
+    r"we(?:'ll| will) now (?:begin|take|open|move).{0,30}question|"
+    r"(?:begin|open).{0,10}the q\s*&\s*a|first question (?:comes|today)",
     re.IGNORECASE,
 )
 
-# 話者ヘッダー行: 「Name -- Title」「Name - Title:」 等、 行全体が短いヘッダーの形。
-# カンマは「John, we think...」 等の本文を誤検出するため delimiter から除外 (誤検出 < 取りこぼし)。
-# bare「Operator」 (delimiter なし) は parse_speaker_segments 側で別途処理。
-_SPEAKER_HEADER_RE = re.compile(
-    r"^\s*(?P<name>[A-Z][A-Za-z.''\-]+(?:\s+[A-Z][A-Za-z.''\-]+){0,3})"
-    r"\s*(?:--|—|–|-{1,2}|:)\s*(?P<title>[^\n]{1,80})\s*$"
+# FMP 形式の話者行: 行頭「Name: body」 (Name = 先頭大文字 1-4 語、 最初の colon まで)
+_SPEAKER_LINE_RE = re.compile(
+    r"^\s*(?P<name>[A-Z][A-Za-z.''\-]+(?:\s+[A-Z][A-Za-z.''\-&]+){0,3})\s*:\s+(?P<body>.+)$"
 )
 
-
-def strip_safe_harbor(text: str) -> str:
-    """先頭の safe-harbor / forward-looking 定型文ブロックを除去する。
-
-    定型文はキーワード密度を汚染し段落抽出の hit を歪める (LLM品質 verdict)。
-    マーカーを含む段落のみ落とす (全文走査、 該当段落だけ除去) ことで本文を保持。
-    """
-    if not text or not isinstance(text, str):
-        return ""
-    paras = re.split(r"\n\s*\n|\r\n\r\n", text)
-    kept = []
-    for p in paras:
-        low = p.lower()
-        if any(m in low for m in _SAFE_HARBOR_MARKERS):
-            continue
-        kept.append(p)
-    return "\n\n".join(kept).strip()
+# 文分割 (FMP turn は長文 1 行なので文単位分割が必須)
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z\$\[])")
 
 
-def _classify_role(header_title: str) -> str:
-    """話者ヘッダー (Name + Title) から role を返す: management/operator/analyst/unknown。"""
-    t = header_title or ""
-    if _OPERATOR_RE.search(t):
-        return "operator"
-    if _MGMT_TITLE_RE.search(t):
-        return "management"
-    if _ANALYST_RE.search(t):
-        return "analyst"
-    return "unknown"
+def _is_operator_turn(speaker: str, text: str) -> bool:
+    """話者が operator か (名前に operator、 or 自己紹介に「your operator」)。"""
+    if _OPERATOR_RE.search(speaker or ""):
+        return True
+    return bool(_OPERATOR_SELFINTRO_RE.search((text or "")[:200]))
 
 
 def parse_speaker_segments(text: str) -> list[dict]:
-    """transcript を話者セグメントに分割し role / in_qa を付与する。
+    """transcript を話者セグメントに分割し role / in_qa を付与 (FMP「Name: body」 format)。
 
-    Returns: [{"speaker": str, "role": str, "in_qa": bool, "text": str}, ...]
-    話者ラベルが検出できない blob は単一 unknown セグメントで返す (graceful)。
-    role: management / operator / analyst / unknown。
-    in_qa: Q&A セクションマーカー以降か (analyst 質問が混じる領域)。
+    Phase 0 (2026-06-02) calibration: FMP は 1 行 = "話者名: 本文" (肩書なし)。 肩書が無いため
+    role は **prepared remarks (Q&A 境界前) で話した非 Operator = management、 Q&A のみ登場 = analyst**
+    で分類 (analyst は質問でしか発言しない → 質問内の数値を会社ガイダンスと誤認しない §38 ガード2)。
+
+    Returns: [{"speaker", "role"(management/operator/analyst/unknown), "in_qa", "text"}, ...]
+    話者行が 1 つも無い blob は単一 unknown セグメント (graceful)。
     """
     if not text or not isinstance(text, str):
         return []
-    lines = text.splitlines()
-    segments: list[dict] = []
-    cur = {"speaker": "", "role": "unknown", "text_lines": []}
-    in_qa = False
-    cur["in_qa"] = False
-    found_header = False
+    # 行ごとに "Name: body" を検出、 非該当行は直前 turn の継続として連結
+    turns: list[dict] = []
+    cur: dict | None = None
+    offset = 0
+    for line in text.split("\n"):
+        m = _SPEAKER_LINE_RE.match(line)
+        if m:
+            if cur:
+                turns.append(cur)
+            cur = {"speaker": m.group("name").strip(), "text": m.group("body") or "", "start": offset}
+        elif cur is not None:
+            cur["text"] += "\n" + line
+        offset += len(line) + 1
+    if cur:
+        turns.append(cur)
 
-    def _flush():
-        body = "\n".join(cur["text_lines"]).strip()
-        if body:
-            segments.append({
-                "speaker": cur["speaker"],
-                "role": cur["role"],
-                "in_qa": cur["in_qa"],
-                "text": body,
-            })
-
-    for line in lines:
-        stripped = line.strip()
-        if _QA_SECTION_RE.search(line):
-            in_qa = True
-        # bare「Operator」 行 (delimiter なし) を先に拾う
-        if stripped and _OPERATOR_RE.fullmatch(stripped):
-            found_header = True
-            _flush()
-            cur = {"speaker": "Operator", "role": "operator", "in_qa": in_qa, "text_lines": []}
-            continue
-        m = _SPEAKER_HEADER_RE.match(line)
-        if m and m.group("title"):
-            # 「Name -- Title」 形式の話者ヘッダー → 直前セグメントを flush
-            found_header = True
-            _flush()
-            name = (m.group("name") or "").strip()
-            title = (m.group("title") or "").strip()
-            cur = {"speaker": name, "role": _classify_role(f"{name} {title}"),
-                   "in_qa": in_qa, "text_lines": []}
-            continue
-        cur["in_qa"] = in_qa
-        cur["text_lines"].append(line)
-    _flush()
-
-    if not found_header:
-        # 話者ラベル検出不能 → blob 全体を 1 セグメント (Phase 0 で format calibrate)
+    if not turns:
         body = text.strip()
         return [{"speaker": "", "role": "unknown", "in_qa": False, "text": body}] if body else []
-    return segments
+
+    # Q&A 境界: **≥1 の非 operator turn の後に** Q&A-begin マーカーを含む最初の turn の start。
+    # (operator の intro が「there will be a question and answer session」 と将来形で言及するため、
+    #  全文 search だと境界が冒頭に誤検出される — NVDA で実測。 turn 順 + 非op先行 guard で堅牢化)
+    qa_off = len(text)
+    seen_nonop = False
+    for t in turns:
+        if seen_nonop and _QA_SECTION_RE.search(t["text"]):
+            qa_off = t["start"]
+            break
+        if not _is_operator_turn(t["speaker"], t["text"]):
+            seen_nonop = True
+
+    # management = prepared remarks (start < qa_off) で話した非 operator 話者の集合
+    mgmt_speakers = {
+        t["speaker"] for t in turns
+        if t["start"] < qa_off and not _is_operator_turn(t["speaker"], t["text"])
+    }
+
+    segs: list[dict] = []
+    for t in turns:
+        if _is_operator_turn(t["speaker"], t["text"]):
+            role = "operator"
+        elif t["speaker"] in mgmt_speakers:
+            role = "management"   # prepared remarks 発言者 (Q&A の回答も会社の公式発言)
+        else:
+            role = "analyst"      # Q&A でのみ登場 = 質問者
+        segs.append({
+            "speaker": t["speaker"],
+            "role": role,
+            "in_qa": t["start"] >= qa_off,
+            "text": (t["text"] or "").strip(),
+        })
+    return segs
 
 
 def _is_management_segment(seg: dict) -> bool:
     """§38 ガード2: management 発言のみ keep。 operator/analyst は除外。
-
-    - role==management → keep (prepared remarks も Q&A 回答も会社の公式発言)
-    - role==operator/analyst → 除外
-    - role==unknown かつ in_qa==False → keep (prepared remarks は話者 title 不明でも経営陣)
-    - role==unknown かつ in_qa==True → 除外 (Q&A の unknown は analyst 質問の可能性)
-    """
+    role==unknown (話者行検出不能の blob fallback) かつ pre-QA は keep (best effort)。"""
     role = seg.get("role")
     if role == "management":
         return True
@@ -177,75 +156,86 @@ def _is_management_segment(seg: dict) -> bool:
     return not seg.get("in_qa", False)
 
 
+def _is_safe_harbor(sentence: str) -> bool:
+    low = sentence.lower()
+    return any(m in low for m in _SAFE_HARBOR_MARKERS)
+
+
 def extract_guidance_paragraphs(
     transcript_text: str,
     *,
     max_chars: int = 6000,
     window: int = 2,
 ) -> dict:
-    """transcript から guidance/outlook 言及段落のみを窓抽出する (§38 + cost 圧縮)。
+    """transcript から guidance/outlook 言及部分のみを文単位窓抽出する (§38 + cost 圧縮)。
 
-    手順 (6 体合議 verdict 反映):
-      1. safe-harbor 定型文除去 (キーワード密度汚染回避)
-      2. 話者分割 → management 発言のみ keep (operator/analyst 除外、 §38 ガード2)
-      3. management text を段落分割し、 guidance キーワード/数値 hit 段落の ±window を窓抽出 → merge
-      4. speaker tag を付けて返す (下流 LLM が話者を判別可能に)
-      5. max_chars で cap
+    手順 (6 体合議 verdict + Phase 0 FMP format calibration 反映):
+      1. 話者分割 → management 発言のみ keep (operator/analyst 除外、 §38 ガード2)
+      2. management text を文単位に分割 (FMP turn は長文 1 行のため文分割が必須)
+      3. safe-harbor 定型文の文を除外 (キーワード密度汚染回避)
+      4. guidance キーワード/数値 hit 文の ±window を窓抽出 → 順序保持で merge
+      5. 話者が変わる箇所に [speaker] tag を付与 (下流 LLM が発話者を判別可能に)
+      6. max_chars で cap
 
     Returns: {
-      "text": str,            # 抽出済 (speaker tag 付き)。 hit 無しなら ""
-      "hit_count": int,       # guidance 言及段落数
+      "text": str,            # 抽出済。 hit 無しなら ""
+      "hit_count": int,       # guidance 言及文数
       "basis": str,           # "paragraphs" (hit あり) / "no_hit" (hit ゼロ → caller は full-text fallback)
-      "management_chars": int # management text の総文字数 (デバッグ/calibrate 用)
+      "management_chars": int # management 文の総文字数 (デバッグ/calibrate 用)
     }
     """
     if not transcript_text or not isinstance(transcript_text, str):
         return {"text": "", "hit_count": 0, "basis": "no_hit", "management_chars": 0}
 
-    cleaned = strip_safe_harbor(transcript_text)
-    segments = parse_speaker_segments(cleaned)
+    segments = parse_speaker_segments(transcript_text)
     mgmt_segments = [s for s in segments if _is_management_segment(s)]
-    mgmt_text = "\n\n".join(
-        (f"[{s['speaker']}] {s['text']}" if s.get("speaker") else s["text"])
-        for s in mgmt_segments
-    ).strip()
-    management_chars = len(mgmt_text)
-    if not mgmt_text:
+
+    # management turn を文単位の (speaker, sentence) unit に展開
+    units: list[tuple[str, str]] = []
+    for s in mgmt_segments:
+        sp = s.get("speaker") or ""
+        for sent in _SENTENCE_SPLIT_RE.split(s.get("text") or ""):
+            sent = sent.strip()
+            if sent:
+                units.append((sp, sent))
+
+    management_chars = sum(len(sent) for _, sent in units)
+    if not units:
         return {"text": "", "hit_count": 0, "basis": "no_hit", "management_chars": 0}
 
-    # 段落分割 (改行 2 つ優先、 無ければ文単位)
-    paras = [p.strip() for p in re.split(r"\n\s*\n|\r\n\r\n", mgmt_text) if p.strip()]
-    if len(paras) <= 1:
-        paras = [s.strip() for s in re.split(r"(?<=[.!?])\s+(?=[A-Z\[])", mgmt_text) if s.strip()]
-    if not paras:
+    # safe-harbor 文を除外
+    units = [(sp, sent) for (sp, sent) in units if not _is_safe_harbor(sent)]
+    if not units:
         return {"text": "", "hit_count": 0, "basis": "no_hit", "management_chars": management_chars}
 
-    lowered = [p.lower() for p in paras]
-    hit_idx: list[int] = []
-    for i, lp in enumerate(lowered):
-        if any(kw in lp for kw in _GUIDANCE_KEYWORDS) or _GUIDANCE_NUMBER_RE.search(paras[i]):
-            hit_idx.append(i)
-
+    lowered = [sent.lower() for _, sent in units]
+    hit_idx = [
+        i for i, lp in enumerate(lowered)
+        if any(kw in lp for kw in _GUIDANCE_KEYWORDS) or _GUIDANCE_NUMBER_RE.search(units[i][1])
+    ]
     if not hit_idx:
         return {"text": "", "hit_count": 0, "basis": "no_hit", "management_chars": management_chars}
 
     # ±window を窓として keep (merge は set で自然に)
     keep: set[int] = set()
     for i in hit_idx:
-        for j in range(max(0, i - window), min(len(paras), i + window + 1)):
+        for j in range(max(0, i - window), min(len(units), i + window + 1)):
             keep.add(j)
 
     out: list[str] = []
     total = 0
+    last_speaker: str | None = None
     for idx in sorted(keep):
-        p = paras[idx]
-        if total + len(p) + 2 > max_chars:
+        sp, sent = units[idx]
+        piece = f"[{sp}] {sent}" if (sp and sp != last_speaker) else sent
+        last_speaker = sp
+        if total + len(piece) + 1 > max_chars:
             break
-        out.append(p)
-        total += len(p) + 2
+        out.append(piece)
+        total += len(piece) + 1
 
     return {
-        "text": "\n\n".join(out),
+        "text": " ".join(out),
         "hit_count": len(hit_idx),
         "basis": "paragraphs",
         "management_chars": management_chars,
@@ -268,9 +258,7 @@ def _number_variants(value) -> list[str]:
         s = str(value).strip()
         return [s] if s else []
     variants: set[str] = set()
-    # 小数表記
     variants.add(f"{f:g}")
-    # 整数なら整数表記、 小数なら .0 付きも
     if f == int(f):
         variants.add(str(int(f)))
         variants.add(f"{int(f)}.0")
@@ -324,7 +312,7 @@ def should_fallback_to_transcript(guidance_result: dict | None) -> bool:
     True を返す条件 (OR):
       - guidance_result is None (8-K 取得失敗)
       - 数値 field (q_revenue/q_margin/fy_revenue/fy_margin) が全 None
-        かつ extraction_confidence in {low, medium} (high で全 None は「明確に記載なし」 と尊重して fallback しない)
+        かつ extraction_confidence in {low, medium, ""} (high で全 None は「明確に記載なし」 と尊重して fallback しない)
     """
     if guidance_result is None:
         return True
