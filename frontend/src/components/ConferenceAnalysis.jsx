@@ -134,6 +134,14 @@ function ConferenceCard({ ticker, onStreamingChange }) {
       {error && <p className="text-sm text-red-500">データ取得に失敗しました: {error}</p>}
       {streaming && text && <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{text}</p>}
       {done && text && <ReactMarkdown components={mdComponents}>{text}</ReactMarkdown>}
+      {/* v150 B-4 bug2: 本 section は財務諸表・コンセンサスを基に LLM が要約生成しており、
+          決算 call transcript の逐語ではない (6体合議 qa 指摘の Trust Cliff 予備軍を明示)。
+          Phase 2 で transcript 実引用裏付け化したら本免責を削除。 */}
+      {done && text && (
+        <p style={{ marginTop: 'var(--space-3, 12px)', fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+          ※ 四半期業績・コンセンサス乖離を基にした要約です（決算カンファレンスコールの逐語引用ではありません）。
+        </p>
+      )}
     </>
   );
 }
