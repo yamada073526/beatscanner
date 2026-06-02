@@ -1,8 +1,13 @@
 # SPEC: 決算 call transcript から会社自身のガイダンス数値抽出 (⑩) — 2026-06-02
 
-> **gate-1 決定済** (grill 2026-06-02、 user 承認)。 本 SPEC は 6 体合議 (§38 重) で stress-test 中。
-> 実装は **deploy 保留** (§38 無監視 ship 不可 + FMP Premium key ローカル不在で transcript live fetch 不可)。
-> 6 体合議 verdict + Phase 0 (FMP coverage/cost 実測、 key 要) + user gate-2 で deploy 解禁。
+> ⛔ **Phase 0 BLOCKER (2026-06-02 実測)**: FMP `/stable/earning-call-transcript` は現プランで **HTTP 402 Restricted**
+> (key 有効・profile/income は 200)。 transcript データ源が現 FMP Premium に**無い**。 [[project_fmp_ultimate_deferred]] と整合
+> (transcript は FMP Ultimate $99/月 upgrade 後の Phase 3 計画)。 → **gate-2 で transcript 源を決定**:
+> (A) FMP Ultimate upgrade ($99/月) / (B) Motley Fool scrape (無料・fragile) / (C) Phase 3 まで保留。
+> ✅ pure-Python 土台 (transcript_source.py + test 15 PASS) は**源に依存せず完成済**、 transcript text 取得でき次第接続可。
+>
+> **gate-1 決定済** (grill 2026-06-02、 user 承認)。 6 体合議 (§38 重) GO-with-changes (DoD 8 ガード)。
+> 実装 (LLM path) は **deploy 保留** (§38 無監視 ship 不可 + transcript 源 未確保)。
 
 ## 背景
 
