@@ -100,6 +100,100 @@ feature 方向 (A案 / 共有キャッシュ / 段落抽出 / 色なし citation
 ### 工数 (revised)
 Phase 1 = 段落抽出土台(済) + LLM path (few-shot/source_quote/confidence/配線/cache) **5-7 人日** / Phase 2 (conference実引用) 2-4人日 + 別gate / Phase 3 LP unlock。
 
+## ✅ Phase 1 LLM path 実装 + dogfood 完了 (2026-06-02、 deploy 保留・gate-3 待ち)
+
+branch `feat/transcript-guidance-phase1`。 DoD 8 ガード全実装 + 実 FMP Ultimate + Sonnet で 5 銘柄 dogfood。
+
+### 実装サマリ (①〜④)
+- **① sec_guidance.py**: `source_type="transcript"` 分岐 (model=Sonnet)、 transcript 専用 few-shot 3 件、
+  BAD-7 (modality/Q&A/過去実績/±%計算/margin=income÷sales 計算) negatives、 `source_quote` schema 追加、
+  transcript 由来 confidence 機械的 1 段降格 + medium 未満で数値 null。
+- **② main.py**: `TRANSCRIPT_GUIDANCE_ENABLED` env flag (default OFF = 無監視 ship 物理防止)、
+  `_fetch_sec_guidance_structured` を A案 (8-K low → transcript fallback) に再構築、
+  `_fetch_transcript_cached` (key=ticker::year::quarter + per-key Lock)、 `_latest_fiscal_quarter`
+  (income_statement(quarter) → parse_fiscal_quarter)、 post-hoc **per-field 逐語 verify** + source_quote 文単位救済。
+- **③ frontend DiagramCard GuidanceSection**: source_type 分岐 (transcript は外部 link 出さず source_label
+  テキスト + 発言原文 blockquote)、 narrative に sanitizeText 再適用 (§38 3 層目)。
+- **④ dogfood**: `backend/scripts/dogfood_transcript_guidance.py` (transcript path) +
+  `dogfood_8k_presence.py` (8-K guidance 有無)。 test 27 PASS、 frontend build OK。
+
+### 🔴 真因修正: §38 over-correction bug (Phase 0 土台の Q&A 境界検出)
+Phase 0 の `parse_speaker_segments` は弱い "q&a"/"question-and-answer" マーカー + turn-start 境界を使い、
+**CFO の prepared remarks 末尾 "let's go to Q&A" / IR の forward-ref** に誤マッチして境界が guidance より
+前に発火 → **CFO (Amy Hood) が analyst 誤分類 → セグメント guidance が丸ごと消失** (MSFT 実測の真因)。
+修正: 境界を「operator が最初の analyst を導入する強マーカー (`first question comes/...`) の **文字位置**」に変更
+(`_QA_START_RE`)。 + guidance 段落抽出を **数値密度優先選択** に変更 (前半の散発 keyword hit で budget が
+埋まり後半の guidance cluster が truncate される問題、 MSFT pos 46% で実測)。 + number regex に USD/裸 billion 追加。
+
+### dogfood 結果 (5 銘柄 × 直近 1Q、 Sonnet、 FMP Ultimate 実測)
+| ticker | transcript 抽出 | confidence | source_quote | §38 検証 |
+|---|---|---|---|---|
+| **META** | q_rev $58-61B | medium | 逐語 OK | clean |
+| **AMZN** | q_rev $194-199B (q_margin は income÷sales 計算→per-field null) | medium | 逐語 OK | prompt fix で計算消滅 |
+| **NVDA** | q_rev $91B (±2% 掛けず点推定)・q_margin 74.9-75.0% gross (fy_margin "mid-70s"→null) | medium | 逐語 OK | prompt fix で ±% 計算消滅 |
+| MSFT | opex $19.3-19.4B/capex $40B+/margin +1pt (= **総売上/margin schema 非適合**) | low | 逐語 OK | narrative-only |
+| GOOGL | 定量 guidance なし → 記載なし | low | none | 捏造ゼロ (正しい) |
+
+→ **§38 4 重防御は実証的に機能** (analyst 除外 / modality 抑止 / ±%・margin 計算を per-field 逐語 verify で検出 null)。
+DoD dogfood gate「3+ 銘柄 confidence≥medium + citation」 = **META/AMZN/NVDA で達成**。
+
+### 🔴🔴 gate-3 戦略的発見 (user 判断必須)
+A案 (8-K low 時のみ transcript fallback + 構造化数値を要求) は **mega-cap で構造化ガイダンスの純増がほぼゼロ**:
+- **META/AMZN/NVDA は 8-K に既にガイダンスあり** (`dogfood_8k_presence.py` で確認: guidance_near_range=True)
+  → 本番では transcript fallback が **発火しない** (設計通り、 8-K 優先で数値食い違い回避)。
+- **本番で transcript が発火するのは MSFT/GOOGL (8-K 空)** だが、 MSFT は opex/capex/segment (総売上/margin
+  schema 非適合)、 GOOGL は定量 guidance なし → 現 gating では **破棄** (best_8k = 記載なし に戻る)。
+
+→ ⑩ の当初目的「MSFT/GOOGL の ガイダンス LP 穴埋め」 は、 現 schema (総売上/margin) のままでは満たせない。
+**選択肢**:
+- **A. narrative-only 表示**: MSFT 型の opex/capex/margin-direction を low-confidence narrative + 逐語 quote で表示
+  (gating を「逐語 source_quote があれば narrative-only でも表示」 に緩和)。 要 narrative 数値 §38 verify (+0.5 人日)。 **最小工数で当初目的達成**。
+- **B. schema 拡張**: opex/capex/EPS/segment を構造化 (+2-3 人日)。 じっちゃまは rev/EPS/margin 重視なので over-engineering 寄り。
+- **C. 構造化のみで ship**: mega-cap では稀発火。 中型株 (call でだけ rev guidance) で効く可能性 → 要広範 dogfood。
+- **D. trigger 拡張** (8-K guidance 不完全でも発火): 数値食い違い risk。
+
+→ **推奨 = A** (当初目的を最小工数で達成、 §38 は narrative verbatim verify で担保)。 deploy は gate-3 まで保留継続。
+
+## ✅ Option A 実装 + 3 体合議 (2026-06-02 夜、 user gate-3 で Option A 承認)
+
+user が Option A を承認 → 実装 + dogfood + 3 体合議完了。 **deploy は引き続き保留** (env flag OFF、 branch 完結)。
+
+### Option A 実装
+- backend: `_fetch_guidance_from_transcript` に presentability 判定 (構造化数値あり → 提示 / narrative-only は
+  逐語 source_quote + narrative 全数値逐語 verify を満たせば `narrative_only=True` で提示 / でなければ破棄)。
+  `unverified_narrative_figures` (transcript_source) で narrative 数値の §38 backstop。
+- frontend: `narrative_only` 中立注記 (「数値レンジ未開示・経営陣の見通しの引用・当社の予測ではありません」) +
+  発言原文 blockquote。 narrative-only 時は精度 chip 非表示。
+
+### dogfood 全 8 銘柄 (content-audit DoD set: mega 5 + 業種代表 3)
+| ticker | 結果 | 備考 |
+|---|---|---|
+| META/AMZN/NVDA | STRUCTURED (q_rev medium) | 本番は 8-K にあるため transcript 非発火 |
+| NOW | STRUCTURED (Q2 サブスク $3.815-3.82B + margin) | b2b saas、 構造化成功 |
+| **MSFT** | NARRATIVE-ONLY (opex/capex/margin-dir) | **本番発火 = ⑩ の本命穴埋め** |
+| **JPM** | NARRATIVE-ONLY (NII/経費/NCO率) | 銀行、 **q_revenue 誤マップなし** (revenue-basis 懸念回避) |
+| GOOGL/COST | 破棄 → 記載なし | forward guidance の逐語 quote なし (正しい) |
+
+### 3 体合議 verdict (2026-06-02、 §38 重) — 全員 **GO-with-changes** (BLOCK なし)
+- **金融§38 (Opus)**: 引用+出典+中立トーン+逐語 grep の四重で「当社の断定的判断」 を構造的に回避、 §38/§5 抵触リスク極小。
+  推奨: ①原文 hedge (roughly/about) を narrative で保持 ②call の FY/Q 視認性 ③disclaimer 一句 ④UI 文脈中立性監査。
+- **frontend (Sonnet)**: クラッシュ/Trust Cliff バグなし。 必須: ①注記「発言原文併記」 を quote 有無で分岐
+  ②narrative-only 時 精度 chip 非表示 ③blockquote 二重引用修正。
+- **QA (Sonnet)**: 必須: ①negative cache TTL 短縮 (None 24h 塩漬け回避) ②blob/Q&A マーカー無し時の §38 risk
+  ③ticker whitelist。 追加 dogfood: 金融/中型株/2Q。
+
+### 反映済み change (3 体合議 → 即実装)
+- §38 prompt に hedge 保持ルール (I) 追加 / disclaimer「当社の予測ではありません」 を中立注記に追加
+- frontend: narrative-only 時 精度 chip 非表示 / blockquote を `<q>` (CSS quotes) 化 / 注記文を引用主体に簡潔化
+- backend: `TRANSCRIPT_NEG_CACHE_TTL=1h` (None 短 TTL) / blob (全 unknown 話者) は `basis=no_speakers` で §38 スキップ /
+  `TRANSCRIPT_GUIDANCE_TICKERS` env whitelist (段階 rollout)
+
+### 🔴 gate-3 で user 判断が残る点 (deploy 前)
+1. **本番 enable 範囲**: `TRANSCRIPT_GUIDANCE_ENABLED=1` + `TRANSCRIPT_GUIDANCE_TICKERS` を mega-cap 限定で始めるか全銘柄か。
+2. **LP「ガイダンス」 訴求 unlock**: MSFT/JPM 型 narrative-only も「ガイダンス」 として LP 訴求に含めるか (Premium 限定 + funnel-cro 文言精査)。
+3. **UI 文脈中立性**: narrative guidance が 5 条件 PASS と同一カード内に並ぶ Trust Cliff を content-audit で 1 回 dogfood (Opus 推奨)。
+4. **残 §38 残リスク** (機械検出外): 翻訳での hedge 喪失・modality 意味すり抜けは LLM prompt 依存 (blocklist が最終防波堤)。
+
 ## 関連
 - [[feedback_sec_guidance_8k_coverage_limit]] / [[project_forward_visibility]] / [[feedback_citation_required]] / [[feedback_diagram_quality_guard]] / [[feedback_prompt_cache_pattern]] / [[feedback_viz_cache_key_flaw]]
 - 既存 module: `backend/app/visualizer/sec_guidance.py` / `backend/app/fmp_client.py:147` / `main.py:_fetch_sec_guidance_structured` / `_build_conference_context`

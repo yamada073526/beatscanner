@@ -215,6 +215,22 @@ _guidance_cache: dict = {}
 # 決算ガイダンスはSEC 8-K発表後ほぼ変わらない → 6時間に延長（FMPレート上限緩和）
 GUIDANCE_CACHE_TTL = 60 * 60 * 6  # 6時間
 
+# ── ⑩ Phase 1: 決算 call transcript guidance fallback ──────────────────────
+# §38 重防御のため env flag default OFF (「無監視 ship 不可」 を物理保証、 dogfood / gate-3 まで)。
+# 有効化は TRANSCRIPT_GUIDANCE_ENABLED=1 (本番は gate-3 後)。
+TRANSCRIPT_GUIDANCE_ENABLED = os.getenv("TRANSCRIPT_GUIDANCE_ENABLED", "0") == "1"
+# 段階 rollout 用 ticker whitelist (3体合議 QA verdict)。 空なら制限なし、 設定時はその ticker のみ
+# transcript fallback 発火 (例: TRANSCRIPT_GUIDANCE_TICKERS="MSFT,META,AMZN" で mega-cap に限定)。
+_TRANSCRIPT_TICKER_WHITELIST = {
+    t.strip().upper() for t in os.getenv("TRANSCRIPT_GUIDANCE_TICKERS", "").split(",") if t.strip()
+}
+# transcript は四半期確定後ほぼ不変 → 24h cache。 key=ticker::year::quarter (viz_cache_key_flaw 再発防止)。
+TRANSCRIPT_CACHE_TTL = 60 * 60 * 24
+# 取得失敗/空 (None) は短 TTL でキャッシュ (3体合議 QA: 決算翌日に transcript 未投入 → None 24h 塩漬け回避)。
+TRANSCRIPT_NEG_CACHE_TTL = 60 * 60  # 1h
+_transcript_cache: dict[str, tuple[float, "str | None"]] = {}
+_transcript_locks: dict[str, asyncio.Lock] = {}  # per-key stampede guard (DoD #6)
+
 # ── FMP API キャッシュTTL（用途別に細分化） ────────────────────────────────
 # 株価系（リアルタイム性重視）
 CACHE_TTL_QUOTE    = 60 * 15            # 15分
@@ -5268,7 +5284,13 @@ async def _fetch_sec_guidance_structured(ticker: str) -> dict | None:
             ),
             "source_url": "https://www.apple.com/investor/",
             "extraction_confidence": "medium",
+            "source_type": "policy",
         }
+
+    from .transcript_source import should_fallback_to_transcript
+    # 8-K で数値ガイダンスが取れなかった場合の「最良の 8-K 結果」 (記載なし narrative 等) を保持。
+    # transcript fallback が空振りしたらこれを返す。
+    best_8k: dict | None = None
 
     import httpx as _httpx_sec
     headers = {"User-Agent": "beatscanner research@example.com", "Accept-Encoding": "gzip, deflate"}
@@ -5361,14 +5383,36 @@ async def _fetch_sec_guidance_structured(ticker: str) -> dict | None:
 
             # 5. v138 Phase 2D: structured JSON 抽出 (prompt cache + tool use)
             from .visualizer.sec_guidance import extract_guidance
-            result = await extract_guidance(text_snippet, source_url=exhibit_url)
-            if result and result.get("narrative_jp") and result.get("narrative_jp") != "ガイダンスの記載なし":
-                return result
+            result = await extract_guidance(text_snippet, source_url=exhibit_url, source_type="8k")
+            if result:
+                # 数値ガイダンスあり (NVDA 型) or high-conf「明確に記載なし」 → 8-K を採用して即返す
+                if not should_fallback_to_transcript(result):
+                    if result.get("narrative_jp") and result.get("narrative_jp") != "ガイダンスの記載なし":
+                        return result
+                # 数値なし low/medium (MSFT/GOOGL 型) → transcript fallback 候補として最初の 1 件を保持
+                if best_8k is None and result.get("narrative_jp"):
+                    best_8k = result
 
     except Exception as e_sec:
         print(f"[GUIDANCE_V2] SEC EDGAR structured fetch failed for {ticker}: {e_sec}")
 
-    return None
+    # ── ⑩ Phase 1 (A案): 8-K に数値ガイダンスなし → 決算 call transcript fallback ──
+    # MSFT/GOOGL 等「ガイダンスは call で提供」 型企業の穴埋め。 §38 重防御:
+    #   transcript_source (management-only + modality除外 + safe-harbor除去)
+    #   + sec_guidance (BAD-7 + source_quote + Sonnet + confidence 降格)
+    #   + post-hoc verify_numbers_in_text (逐語 grep)。
+    # env flag default OFF + AAPL は上で policy return 済 (transcript 呼ばない)。
+    if TRANSCRIPT_GUIDANCE_ENABLED and should_fallback_to_transcript(best_8k):
+        try:
+            # presentability (構造化 / narrative-only-safe / 破棄) は _fetch_guidance_from_transcript
+            # 内で §38 判定済。 非 None なら提示可。
+            transcript_result = await _fetch_guidance_from_transcript(ticker)
+            if transcript_result:
+                return transcript_result
+        except Exception as e_tr:
+            print(f"[GUIDANCE_V2] transcript fallback failed for {ticker}: {e_tr}")
+
+    return best_8k
 
 
 # in-memory cache for guidance v2 (Phase 2D Sprint 2a)
@@ -5387,6 +5431,162 @@ async def _fetch_sec_guidance_structured_cached(ticker: str) -> dict | None:
     print(f"[GUIDANCE_V2 CACHE MISS] {ticker}")
     result = await _fetch_sec_guidance_structured(ticker)
     _guidance_v2_cache[cache_key] = (now, result)
+    return result
+
+
+# ── ⑩ Phase 1: 決算 call transcript guidance fallback helpers ────────────────
+async def _latest_fiscal_quarter(ticker: str, client: "FMPClient") -> "tuple[int, int] | None":
+    """FMP /stable/income-statement(period=quarter) の最新行から (fiscal_year, quarter) を導出。
+
+    Phase 0 実測: /stable は calendarYear=null で fiscalYear を持つ (transcript_source.parse_fiscal_quarter
+    に解析委譲、 plan 非依存 + unit test 済)。
+    """
+    from .transcript_source import parse_fiscal_quarter
+    try:
+        rows = await client.income_statement(ticker, limit=1, period="quarter")
+    except Exception as e:
+        print(f"[TRANSCRIPT] income_statement(quarter) failed {ticker}: {e}")
+        return None
+    if not isinstance(rows, list) or not rows:
+        return None
+    return parse_fiscal_quarter(rows[0])
+
+
+async def _fetch_transcript_cached(ticker: str, year: int, quarter: int) -> "str | None":
+    """決算 call transcript の content を 24h cache + per-key Lock 付きで取得 (DoD #6 stampede guard)。
+
+    cache key = ticker::year::quarter ([[feedback_viz_cache_key_flaw]] 再発防止で quarter 必須)。
+    取得失敗 / 空は None を cache (negative cache で連打抑止)。
+    """
+    key = f"{ticker.upper()}::{year}::{quarter}"
+    now = _time.time()
+
+    def _fresh(entry) -> bool:
+        if not entry:
+            return False
+        ts, val = entry
+        ttl = TRANSCRIPT_CACHE_TTL if val else TRANSCRIPT_NEG_CACHE_TTL
+        return (_time.time() - ts) < ttl
+
+    cached = _transcript_cache.get(key)
+    if _fresh(cached):
+        return cached[1]
+    lock = _transcript_locks.setdefault(key, asyncio.Lock())
+    async with lock:
+        # double-check (lock 取得待ちの間に別 coroutine が埋めた可能性)
+        cached = _transcript_cache.get(key)
+        if _fresh(cached):
+            return cached[1]
+        text: "str | None" = None
+        fmp_key = os.getenv("FMP_API_KEY", "")
+        if fmp_key:
+            try:
+                client = FMPClient(api_key=fmp_key)
+                rows = await client.earnings_transcript(ticker, year, quarter)
+                if isinstance(rows, list) and rows:
+                    content = rows[0].get("content")
+                    if isinstance(content, str) and content.strip():
+                        text = content
+            except Exception as e:
+                print(f"[TRANSCRIPT] fetch failed {ticker} {year}Q{quarter}: {e}")
+        _transcript_cache[key] = (_time.time(), text)
+        return text
+
+
+async def _fetch_guidance_from_transcript(ticker: str) -> "dict | None":
+    """8-K low 時の transcript fallback 本体 (A案)。 §38 重防御を全段適用。
+
+    1. 最新 fiscal quarter 特定 (income_statement) 2. transcript fetch (24h cache+lock)
+    3. management-only + modality除外 + safe-harbor除去で guidance 段落抽出 (transcript_source)
+    4. Sonnet で structured 抽出 (BAD-7 + source_quote + confidence 1 段降格)
+    5. post-hoc: 抽出数値の逐語 grep verify + source_quote 逐語 verify (捏造 null 化)。
+    """
+    if not TRANSCRIPT_GUIDANCE_ENABLED:
+        return None
+    # 段階 rollout: whitelist 設定時は対象 ticker のみ (3体合議 QA: blob/小型株の §38 risk を初期は mega-cap に限定)
+    if _TRANSCRIPT_TICKER_WHITELIST and ticker.upper() not in _TRANSCRIPT_TICKER_WHITELIST:
+        return None
+    fmp_key = os.getenv("FMP_API_KEY", "")
+    if not fmp_key:
+        return None
+    from .transcript_source import (
+        extract_guidance_paragraphs,
+        null_unverified_number_fields,
+        verify_quote_verbatim,
+        unverified_narrative_figures,
+    )
+
+    try:
+        client = FMPClient(api_key=fmp_key)
+    except Exception:
+        return None
+    yq = await _latest_fiscal_quarter(ticker, client)
+    if not yq:
+        return None
+    year, quarter = yq
+
+    transcript_text = await _fetch_transcript_cached(ticker, year, quarter)
+    if not transcript_text or len(transcript_text) < 500:
+        return None
+
+    para = extract_guidance_paragraphs(transcript_text)
+    # 0-hit (guidance 言及なし) は無理に LLM へ投げない = 「記載なし」 扱い (§38 で full-text fallback は危険)
+    if para.get("basis") == "no_hit" or not para.get("text"):
+        print(f"[TRANSCRIPT] {ticker} FY{year}Q{quarter}: no guidance paragraph (basis=no_hit)")
+        return None
+    snippet = para["text"]
+
+    source_label = f"決算カンファレンスコール（FY{year} Q{quarter}）"
+    source_ref = f"FMP earning-call-transcript {ticker.upper()} FY{year} Q{quarter}"
+
+    from .visualizer.sec_guidance import extract_guidance
+    result = await extract_guidance(snippet, source_url=source_ref, source_type="transcript")
+    if not result:
+        return None
+
+    # ── post-hoc §38 (per-field): 各数値 field を逐語照合し、 計算/捏造された field のみ null ──
+    # all-or-nothing でなく field 単位 (AMZN: 明示売上は残し、 計算マージンだけ落とす)。
+    nulled = null_unverified_number_fields(result, transcript_text)
+    if nulled:
+        print(f"[TRANSCRIPT] {ticker} unverified fields nulled: {nulled}")
+
+    # ── post-hoc: source_quote を逐語照合 (全文 → 文単位救済)、 1 文も残らなければ drop ──
+    sq_clean = verify_quote_verbatim(result.get("source_quote"), transcript_text)
+    if result.get("source_quote") and not sq_clean:
+        print(f"[TRANSCRIPT] {ticker} source_quote not verbatim → dropped")
+    result["source_quote"] = sq_clean
+
+    result["source_type"] = "transcript"
+    result["source_label"] = source_label
+
+    has_structured = any(
+        result.get(f) is not None for f in ("q_revenue", "q_margin", "fy_revenue", "fy_margin")
+    )
+
+    if has_structured:
+        # 構造化数値あり (META/AMZN/NVDA 型): per-field verify 済 → そのまま提示
+        result["narrative_only"] = False
+        print(f"[TRANSCRIPT] {ticker} FY{year}Q{quarter} STRUCTURED "
+              f"(conf={result.get('extraction_confidence')} hits={para.get('hit_count')} "
+              f"nulled={nulled} quote={'kept' if sq_clean else 'none'})")
+        return result
+
+    # ── Option A (user gate-3 承認 2026-06-02): 構造化数値なし narrative-only の §38-safe 提示 ──
+    # MSFT 型 (opex/capex/margin-direction = 総売上/margin schema 非適合) を捨てず、 low-confidence
+    # narrative + 逐語 quote で出す。 ただし §38 のため (a) 逐語 source_quote 必須、
+    # (b) narrative 中の全数値が transcript に逐語存在、 の両方を満たす時のみ。 でなければ破棄 (best_8k へ)。
+    if not sq_clean:
+        print(f"[TRANSCRIPT] {ticker} narrative-only だが逐語 quote なし → 破棄 (§38)")
+        return None
+    unverified = unverified_narrative_figures(result.get("narrative_jp"), transcript_text)
+    if unverified:
+        print(f"[TRANSCRIPT] {ticker} narrative に未照合数値 {unverified} → 破棄 (§38 捏造疑い)")
+        return None
+
+    result["narrative_only"] = True
+    result["extraction_confidence"] = "low"  # narrative-only は常に low (構造化レンジなし)
+    print(f"[TRANSCRIPT] {ticker} FY{year}Q{quarter} NARRATIVE-ONLY "
+          f"(hits={para.get('hit_count')} quote=kept narrative_figs=verified)")
     return result
 
 

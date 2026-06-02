@@ -7,10 +7,10 @@
  * (multi-review 6 体合議 verdict、 局所介入 +5 行で 2,027 → 2,033 行)。
  */
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { FileBarChart2, Banknote, Calendar, CheckCircle2, XCircle, AlertTriangle, Shield, TrendingUp, TrendingDown } from 'lucide-react';
+import { FileBarChart2, Banknote, Calendar, CheckCircle2, XCircle, AlertTriangle, Shield, TrendingUp, TrendingDown, Info } from 'lucide-react';
 import DiagramCitation from './DiagramCitation.jsx';
 import Chip from './ui/Chip.jsx';
-import { sanitizeDiagramData, findBlocklistHits } from '../lib/blocklist.js';
+import { sanitizeDiagramData, findBlocklistHits, sanitizeText } from '../lib/blocklist.js';
 // handover v82 Phase 5.5: ConditionRow click → DiagramCard pulse 連携 (multi-review 6 体合議 verdict)。
 import { useWorkspaceStore } from '../state/workspaceStore.js';
 import { isStepPulsingForCondition } from '../lib/condition-mapping.js';
@@ -350,9 +350,20 @@ function GuidanceRow({ icon, label, primary, secondaryChip, consensusDiffPct }) 
 
 function GuidanceSection({ guidance }) {
   if (!guidance) return null;
-  const narrative = guidance.narrative_jp || '';
+  // §38 belt-and-suspenders: narrative は backend NEGATIVES + sanitize 済だが、 transcript 由来は
+  // hallucination risk が高いため frontend でも BLOCKLIST sentence-drop を再適用 (3 層目防御)。
+  const narrative = sanitizeText(guidance.narrative_jp || '');
   const sourceUrl = guidance.source_url || '';
   const confidence = guidance.extraction_confidence || 'low';
+  // ⑩ Phase 1: source 種別 (8k / transcript / policy)。 transcript は FMP 非公開 URL のため
+  // 外部 link を出さず、 source_label + 発言原文 (source_quote) を citation 主体にする (Trust Cliff 回避)。
+  const sourceType = guidance.source_type || '8k';
+  const isTranscript = sourceType === 'transcript';
+  const sourceLabel = guidance.source_label || '';
+  const sourceQuote = isTranscript ? (guidance.source_quote || '') : '';
+  // Option A: 構造化レンジなし narrative-only (MSFT 型 opex/capex/margin-direction)。
+  // 「精度不足」 でなく「総売上/margin の数値レンジは未開示・経営陣の言及は以下」 と中立に伝える。
+  const narrativeOnly = guidance.narrative_only === true;
   const qRev = formatRevenueRange(guidance.q_revenue);
   const qMg = formatMarginRange(guidance.q_margin);
   const fyRev = formatRevenueRange(guidance.fy_revenue);
@@ -402,11 +413,32 @@ function GuidanceSection({ guidance }) {
         marginBottom: '8px',
         display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap',
       }}>
-        <span>SEC 8-K プレスリリース / 決算 transcript から抽出</span>
-        {confidenceChip}
+        <span>
+          {isTranscript
+            ? (sourceLabel ? `${sourceLabel}の経営陣発言から抽出` : '決算カンファレンスコールの経営陣発言から抽出')
+            : 'SEC 8-K プレスリリースから抽出'}
+        </span>
+        {/* narrative-only は「数値レンジ未開示」 が仕様であって精度不足ではない → 精度 chip を出さない
+            (3体合議 frontend verdict: 中立注記と amber「精度:低」 chip の併存は誤読を招く) */}
+        {!narrativeOnly && confidenceChip}
       </div>
 
-      {confidence === 'low' && (
+      {/* narrative-only (構造化レンジなし): 中立トーンで「数値レンジ未開示・経営陣の言及は以下」 を案内。
+          通常の low (構造化試行したが精度不足) はアンバー警告で原文確認を促す。 */}
+      {narrativeOnly ? (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: '8px',
+          padding: '8px 10px', borderRadius: '6px',
+          background: 'var(--bg-subtle)',
+          border: '1px solid var(--border)',
+          marginBottom: '8px',
+        }}>
+          <Info size={14} strokeWidth={2} color="var(--text-muted)" style={{ flexShrink: 0, marginTop: '1px' }} aria-hidden="true" />
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+            売上高・マージンの数値レンジは開示されていません。 以下は経営陣が決算 call で述べた見通しの引用です（当社の予測ではありません）。
+          </div>
+        </div>
+      ) : confidence === 'low' && (
         <div style={{
           display: 'flex', alignItems: 'flex-start', gap: '8px',
           padding: '8px 10px', borderRadius: '6px',
@@ -416,7 +448,9 @@ function GuidanceSection({ guidance }) {
         }}>
           <AlertTriangle size={14} strokeWidth={2} color="var(--color-warning)" style={{ flexShrink: 0, marginTop: '1px' }} aria-hidden="true" />
           <div style={{ fontSize: '11px', color: 'var(--text-primary)', lineHeight: 1.5 }}>
-            抽出精度が不足しています。 原文 (出典 link) で確認してください。
+            {isTranscript
+              ? '抽出精度が不足しています。 下記の発言原文でご確認ください。'
+              : '抽出精度が不足しています。 原文 (出典 link) で確認してください。'}
           </div>
         </div>
       )}
@@ -424,11 +458,39 @@ function GuidanceSection({ guidance }) {
       {narrative && (
         <div style={{
           fontSize: '12px', color: 'var(--text-primary)', lineHeight: 1.6,
-          marginBottom: hasAnyStructured ? '10px' : '0',
+          marginBottom: (hasAnyStructured || sourceQuote) ? '10px' : '0',
           whiteSpace: 'pre-line',
         }}>
           {narrative}
         </div>
+      )}
+
+      {/* ⑩ Phase 1: 発言原文 (source_quote) — 数値の根拠となる経営陣の英語発言を逐語引用。
+          FMP transcript は非公開 URL のため、 この blockquote が citation の検証主体になる。 */}
+      {sourceQuote && (
+        <blockquote style={{
+          margin: '0 0 10px 0',
+          padding: '8px 12px',
+          borderLeft: '3px solid var(--color-accent)',
+          background: 'var(--bg-subtle)',
+          borderRadius: '0 6px 6px 0',
+        }}>
+          <div style={{
+            fontSize: '9px', fontWeight: 700, letterSpacing: '0.06em',
+            textTransform: 'uppercase', color: 'var(--text-muted)',
+            marginBottom: '3px',
+          }}>
+            発言原文
+          </div>
+          {/* 引用符はハードコードせず CSS quotes で付与 (source_quote 内に " が含まれる二重引用回避、
+              3体合議 frontend verdict)。 */}
+          <q style={{
+            fontSize: '11px', color: 'var(--text-secondary)',
+            lineHeight: 1.55, fontStyle: 'italic',
+          }}>
+            {sourceQuote}
+          </q>
+        </blockquote>
       )}
 
       {hasAnyStructured && (
@@ -468,7 +530,16 @@ function GuidanceSection({ guidance }) {
         </div>
       )}
 
-      {sourceUrl && (
+      {/* 出典: 8-K は SEC filing への外部 link。 transcript は FMP 非公開 URL のため
+          link 化せず source_label をテキスト表示 (壊れた link を出さない = Trust Cliff 回避)。 */}
+      {isTranscript ? (
+        <div style={{
+          marginTop: '10px',
+          fontSize: '10px', color: 'var(--text-muted)',
+        }}>
+          出典: {sourceLabel || '決算カンファレンスコール（経営陣発言）'}
+        </div>
+      ) : sourceUrl ? (
         <div style={{
           marginTop: '10px',
           fontSize: '10px', color: 'var(--text-muted)',
@@ -482,7 +553,7 @@ function GuidanceSection({ guidance }) {
             原文を開く
           </a>
         </div>
-      )}
+      ) : null}
     </>
   );
 }

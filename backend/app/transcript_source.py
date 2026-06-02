@@ -35,12 +35,19 @@ _GUIDANCE_KEYWORDS: tuple[str, ...] = (
     "expect revenue", "expect q", "we anticipate revenue", "we expect to grow",
 )
 
-# キーワード無しで数値だけ言うケース ($35 billion / 50% margin 等) も guidance 候補に
+# キーワード無しで数値だけ言うケース ($35 billion / USD 37 billion / 50% margin 等) も guidance 候補に。
+# ⚠️Phase 1 dogfood: FMP transcript は "USD 37 billion" (=$ なし) 表記が頻出 (MSFT 実測) のため
+# $ / US$ / USD prefix + 裸の "37 billion" も拾う。
 _GUIDANCE_NUMBER_RE = re.compile(
-    r"\$\s?\d[\d.,]*\s?(?:billion|million|b\b)"
+    r"(?:\$|us\$|usd)\s?\d[\d.,]*\s?(?:billion|million|b\b)"
+    r"|\b\d[\d.,]*\s?(?:billion|million)\b"
     r"|\b\d{1,3}(?:\.\d+)?\s?%",
     re.IGNORECASE,
 )
+
+# guidance hit の局所密度を測る窓幅 (文単位)。 実 transcript の guidance は "Now to guidance ..."
+# の密集 cluster で出るため、 cluster を char budget の優先配分対象にする (truncate 防止)。
+_DENSITY_W = 6
 
 # ── safe-harbor / forward-looking 定型文マーカー (文単位で除外) ──
 _SAFE_HARBOR_MARKERS: tuple[str, ...] = (
@@ -54,11 +61,19 @@ _SAFE_HARBOR_MARKERS: tuple[str, ...] = (
 _OPERATOR_RE = re.compile(r"\boperator\b", re.IGNORECASE)
 _OPERATOR_SELFINTRO_RE = re.compile(r"your (?:conference )?operator", re.IGNORECASE)
 
-# Q&A セクション開始マーカー (以降は質疑応答)
-_QA_SECTION_RE = re.compile(
-    r"question[- ]and[- ]answer|q\s*&\s*a\b|"
-    r"we(?:'ll| will) now (?:begin|take|open|move).{0,30}question|"
-    r"(?:begin|open).{0,10}the q\s*&\s*a|first question (?:comes|today)",
+# Q&A セクション開始の **強** マーカー (以降は質疑応答)。
+# ⚠️Phase 1 dogfood 真因 (MSFT FY2026 Q3): 弱い "q&a" / "question-and-answer" を境界に使うと、
+#   - CFO の prepared remarks 末尾 "let's go to Q&A, Jonathan" (handoff)
+#   - IR の forward-ref "we'll now move over to Q&A"
+#   - operator intro "there will be a question-and-answer session" / "[Operator Instructions]"
+# に誤マッチして境界が **guidance より前** に発火し、 CFO のセグメント guidance が analyst 誤分類
+# → §38 over-correction で guidance が丸ごと消えていた。
+# operator が最初の analyst を導入する "first question comes/today/is from ..." と、 明示的な
+# "(we will) now begin/open the question-and-answer" のみを境界に採用する (forward-ref は不一致)。
+_QA_START_RE = re.compile(
+    r"(?:our |the )?first question\s+(?:comes|today|is\b|will\b|goes|from)"
+    r"|now (?:begin|open)(?:ning)?\b[^.]{0,20}question[- ]and[- ]answer"
+    r"|we(?:'ll| will) now (?:begin|open|take)\b[^.]{0,25}question",
     re.IGNORECASE,
 )
 
@@ -110,17 +125,11 @@ def parse_speaker_segments(text: str) -> list[dict]:
         body = text.strip()
         return [{"speaker": "", "role": "unknown", "in_qa": False, "text": body}] if body else []
 
-    # Q&A 境界: **≥1 の非 operator turn の後に** Q&A-begin マーカーを含む最初の turn の start。
-    # (operator の intro が「there will be a question and answer session」 と将来形で言及するため、
-    #  全文 search だと境界が冒頭に誤検出される — NVDA で実測。 turn 順 + 非op先行 guard で堅牢化)
-    qa_off = len(text)
-    seen_nonop = False
-    for t in turns:
-        if seen_nonop and _QA_SECTION_RE.search(t["text"]):
-            qa_off = t["start"]
-            break
-        if not _is_operator_turn(t["speaker"], t["text"]):
-            seen_nonop = True
+    # Q&A 境界 = 強マーカー (_QA_START_RE) の **文字位置**。 turn start でなく marker 位置を使うのは、
+    # CFO の長い 1 turn の末尾に "let's go to Q&A" が来ると turn start を境界にして turn 全体 (= guidance
+    # 含む) が Q&A 誤判定されるため (MSFT 実測の真因)。 forward-ref は _QA_START_RE に一致しない。
+    m_qa = _QA_START_RE.search(text)
+    qa_off = m_qa.start() if m_qa else len(text)
 
     # management = prepared remarks (start < qa_off) で話した非 operator 話者の集合
     mgmt_speakers = {
@@ -164,7 +173,7 @@ def _is_safe_harbor(sentence: str) -> bool:
 def extract_guidance_paragraphs(
     transcript_text: str,
     *,
-    max_chars: int = 6000,
+    max_chars: int = 8000,
     window: int = 2,
 ) -> dict:
     """transcript から guidance/outlook 言及部分のみを文単位窓抽出する (§38 + cost 圧縮)。
@@ -188,6 +197,10 @@ def extract_guidance_paragraphs(
         return {"text": "", "hit_count": 0, "basis": "no_hit", "management_chars": 0}
 
     segments = parse_speaker_segments(transcript_text)
+    # §38 ガード (3体合議 QA): 話者構造が全く検出できない blob (全 unknown) は analyst 除外が
+    # できない → guidance 抽出をスキップ (management/analyst を区別できない text から数値を取らない)。
+    if segments and all(s.get("role") == "unknown" for s in segments):
+        return {"text": "", "hit_count": 0, "basis": "no_speakers", "management_chars": 0}
     mgmt_segments = [s for s in segments if _is_management_segment(s)]
 
     # management turn を文単位の (speaker, sentence) unit に展開
@@ -216,23 +229,48 @@ def extract_guidance_paragraphs(
     if not hit_idx:
         return {"text": "", "hit_count": 0, "basis": "no_hit", "management_chars": management_chars}
 
-    # ±window を窓として keep (merge は set で自然に)
-    keep: set[int] = set()
-    for i in hit_idx:
-        for j in range(max(0, i - window), min(len(units), i + window + 1)):
-            keep.add(j)
+    # ── 数値密度 優先選択 (長尺 transcript で guidance cluster の truncate を防ぐ) ──
+    # 実 transcript (MSFT FY2026 Q3 等) では guidance は "Now to segment guidance. ... we expect
+    # revenue of USD 37 billion to USD 37.3 billion ..." の **数値密集 cluster** で出る (実測 pos 46%)。
+    # 文書順 + char cap だと前半の散発 hit ("we expect to ship ..." 等の keyword-only) で budget が
+    # 埋まり cluster が落ちる。 guidance を一般の "we expect" から識別する signal は **数値の密度**
+    # なので、 (1) 数値を含む hit を最優先、 (2) 近傍に数値 hit が多い順 で budget を割り当てる。
+    numeric_flag = [bool(_GUIDANCE_NUMBER_RE.search(sent)) for _, sent in units]
+    numeric_hits = [i for i in hit_idx if numeric_flag[i]]
+    keyword_hits = [i for i in hit_idx if not numeric_flag[i]]
+    num_density = {
+        i: sum(1 for j in numeric_hits if abs(j - i) <= _DENSITY_W)
+        for i in hit_idx
+    }
+    # 数値 hit を先に (数値密度 desc, 文書順)、 次に keyword-only hit (同基準) を context として
+    priority = (
+        sorted(numeric_hits, key=lambda i: (-num_density[i], i))
+        + sorted(keyword_hits, key=lambda i: (-num_density[i], i))
+    )
+
+    selected: set[int] = set()
+    running = 0
+    for i in priority:
+        # window 内を hit 文 → 近い順 で考慮 (hit 文に budget を優先配分)。
+        window_idx = range(max(0, i - window), min(len(units), i + window + 1))
+        for j in sorted(window_idx, key=lambda x: (abs(x - i), x)):
+            if j in selected:
+                continue
+            ln = len(units[j][1]) + 1
+            # selected が空 (= 最優先 hit 文) は budget 超過でも必ず 1 つ入れる (空返り防止)。
+            if not selected or running + ln <= max_chars:
+                selected.add(j)
+                running += ln
+        if running >= max_chars:
+            break
 
     out: list[str] = []
-    total = 0
     last_speaker: str | None = None
-    for idx in sorted(keep):
+    for idx in sorted(selected):
         sp, sent = units[idx]
         piece = f"[{sp}] {sent}" if (sp and sp != last_speaker) else sent
         last_speaker = sp
-        if total + len(piece) + 1 > max_chars:
-            break
         out.append(piece)
-        total += len(piece) + 1
 
     return {
         "text": " ".join(out),
@@ -297,6 +335,123 @@ def verify_numbers_in_text(numbers: list, text: str) -> dict:
     result["_total"] = total
     result["_all_verified"] = (verified == total)
     return result
+
+
+# ── per-field 逐語照合 / source_quote 逐語照合 (Phase 1 dogfood で必要性確定) ──
+_FIELD_NUM_KEYS = {
+    "q_revenue": ("low_b", "high_b"),
+    "fy_revenue": ("low_b", "high_b"),
+    "q_margin": ("low_pct", "high_pct"),
+    "fy_margin": ("low_pct", "high_pct"),
+}
+
+
+def null_unverified_number_fields(result: dict, transcript_text: str) -> list:
+    """各 guidance 数値 field を **per-field** で逐語照合し、 未検証の field のみ None 化する。
+
+    ⚠️Phase 1 dogfood 真因 (AMZN): LLM が明示レンジ売上 ($194-199B、 逐語 OK) に加えて
+    マージン% を income÷sales で **計算** (逐語 NG)。 all-or-nothing で全 field を null すると
+    良い売上まで消える。 → field 単位で照合し、 計算された field だけ落として明示数値は残す。
+
+    Returns: None 化した field 名の list (空なら全 field 検証 OK)。 result は in-place 変更。
+    """
+    nulled: list = []
+    if not isinstance(result, dict):
+        return nulled
+    for f, keys in _FIELD_NUM_KEYS.items():
+        obj = result.get(f)
+        if not isinstance(obj, dict):
+            continue
+        nums = [obj.get(k) for k in keys if obj.get(k) is not None]
+        if nums and not verify_numbers_in_text(nums, transcript_text).get("_all_verified", True):
+            result[f] = None
+            nulled.append(f)
+    return nulled
+
+
+_NARRATIVE_NUM_TOKEN_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+
+def unverified_narrative_figures(narrative, transcript_text) -> list:
+    """narrative_jp 中の数値 token を抽出し、 transcript に逐語存在しないものを返す (§38 backstop)。
+
+    Option A (narrative-only 表示) で narrative を出す前の最終ガード。 LLM が計算/捏造した数値
+    (例: 営業利益額÷売上高で算出したマージン%) は transcript 原文に無いため検出される。
+    実績数値・確定ガイダンス数値・年度参照 (2026 等) は transcript に存在するため通る (lenient)。
+    部分一致のため小さい数 ("1"/"2") は誤検出回避で常に通る = 安全側 (捏造の大きい固有値のみ落とす)。
+
+    Returns: 逐語照合に失敗した token の list (空なら narrative の全数値が transcript 由来)。
+    """
+    if not isinstance(narrative, str) or not narrative.strip():
+        return []
+    toks: list = []
+    for raw in _NARRATIVE_NUM_TOKEN_RE.findall(narrative):
+        t = raw.replace(",", "").rstrip(".")
+        if t and t not in toks:
+            toks.append(t)
+    if not toks:
+        return []
+    vr = verify_numbers_in_text(toks, transcript_text)
+    return [t for t in toks if vr.get(t) is False]
+
+
+def verify_quote_verbatim(quote, transcript_text) -> "str | None":
+    """source_quote を transcript と逐語照合する。 全文一致しなければ **文単位** で照合し、
+
+    逐語一致した文だけを残して rejoin する (LLM が複数文を連結した quote を救済)。 1 文も
+    残らなければ None (citation として提示不可)。 空白は正規化して比較。
+    """
+    if not isinstance(quote, str) or not quote.strip():
+        return None
+    if not isinstance(transcript_text, str) or not transcript_text:
+        return None
+    norm_t = re.sub(r"\s+", " ", transcript_text).lower()
+
+    def _norm(s: str) -> str:
+        return re.sub(r"\s+", " ", s).strip().lower()
+
+    whole = _norm(quote)
+    if whole and whole in norm_t:
+        return quote.strip()
+    kept = [s.strip() for s in _SENTENCE_SPLIT_RE.split(quote)
+            if s.strip() and _norm(s) in norm_t]
+    return " ".join(kept) if kept else None
+
+
+# ── 最新 fiscal quarter 導出 (DoD #6: plan 非依存・unit test 可能化) ──
+_FISCAL_QUARTER_RE = re.compile(r"Q\s*([1-4])")
+
+
+def parse_fiscal_quarter(income_row: dict | None) -> tuple[int, int] | None:
+    """FMP /stable/income-statement (period=quarter) の 1 行から (fiscal_year, quarter) を導出。
+
+    Phase 0 実測 (2026-06-02 FMP Ultimate): /stable は **calendarYear=null** で `fiscalYear` を持つ。
+    `period` は "Q1".."Q4" (非暦年度企業 = MSFT FY6月末 / AAPL FY9月末 でも会計四半期で返る)。
+    transcript endpoint の year/quarter は会計年度ベースで一致する (MSFT FY2026 Q3 = 実測 OK)。
+
+    フォールバック順: fiscalYear → calendarYear → date 先頭4桁 / period "QN" → date 月から四半期。
+    導出不能なら None。
+    """
+    if not isinstance(income_row, dict):
+        return None
+    fy = income_row.get("fiscalYear") or income_row.get("calendarYear") or str(income_row.get("date", ""))[:4]
+    try:
+        year = int(str(fy)[:4])
+    except (TypeError, ValueError):
+        return None
+    if not (1990 <= year <= 2100):
+        return None
+    period = str(income_row.get("period") or "").upper()
+    m = _FISCAL_QUARTER_RE.search(period)
+    if m:
+        return (year, int(m.group(1)))
+    # period が "FY"/空 等 → date の月から暦四半期を best-effort 導出
+    date = str(income_row.get("date") or "")
+    if len(date) >= 7 and date[5:7].isdigit():
+        month = int(date[5:7])
+        if 1 <= month <= 12:
+            return (year, (month - 1) // 3 + 1)
+    return None
 
 
 # ── 8-K low 判定 → transcript fallback トリガー (frontend/qa verdict: 明示関数化) ──

@@ -15,6 +15,10 @@ from app.transcript_source import (  # noqa: E402
     extract_guidance_paragraphs,
     verify_numbers_in_text,
     should_fallback_to_transcript,
+    parse_fiscal_quarter,
+    null_unverified_number_fields,
+    verify_quote_verbatim,
+    unverified_narrative_figures,
 )
 
 
@@ -73,6 +77,14 @@ def test_extract_drops_safe_harbor_sentence():
     assert "63" in res["text"]
 
 
+def test_extract_blob_no_speakers_skipped_38_guard():
+    # 話者ラベルなしの blob (FMP format でない) は §38 で抽出スキップ (management/analyst 区別不能)
+    blob = "We expect second quarter revenue of 50 billion dollars and operating margin of 40%."
+    res = extract_guidance_paragraphs(blob)
+    assert res["basis"] == "no_speakers"
+    assert res["text"] == ""
+
+
 def test_extract_no_hit():
     no_guidance = (
         "Operator: Welcome to the call. It is now my pleasure to introduce the CEO.\n"
@@ -84,8 +96,28 @@ def test_extract_no_hit():
 
 
 def test_extract_respects_max_chars():
-    res = extract_guidance_paragraphs(SAMPLE_TRANSCRIPT, max_chars=60)
-    assert len(res["text"]) <= 90  # cap 付近 (文単位で打ち切るため厳密 60 ではない)
+    # density 優先採用に変更後: 小 cap でも最優先 guidance 文を 1 つは必ず採用 (空返り防止)、
+    # かつ cap + 1 tagged-sentence 程度の overflow に収まる (runaway 防止 guard)。
+    res = extract_guidance_paragraphs(SAMPLE_TRANSCRIPT, max_chars=80)
+    assert "63" in res["text"]            # guidance 文が優先採用される (前は intro 文で truncate)
+    assert len(res["text"]) <= 160        # cap + 1 tagged sentence overflow 以内
+
+
+def test_extract_density_priority_captures_late_cluster():
+    """前半に散発 hit、 後半に guidance cluster がある長尺で、 cap が小さくても cluster を捕捉する。"""
+    intro_filler = " ".join(
+        f"We expect continued momentum in area {k}." for k in range(40)
+    )  # 散発 "we expect" hit を 40 文 (前半に配置)
+    transcript = (
+        "Operator: Welcome. I now introduce the CFO.\n"
+        f"Amy Hood: Thank you. {intro_filler} "
+        "Now to segment guidance. For the second quarter we expect revenue of 73 to 74 billion dollars "
+        "and operating margin of approximately 45%."
+    )
+    res = extract_guidance_paragraphs(transcript, max_chars=400)
+    # 後半 cluster の具体数値が cap 内に確実に入る (density 優先のおかげ)
+    assert "73" in res["text"] and "74" in res["text"]
+    assert "45%" in res["text"]
 
 
 def test_extract_empty_input():
@@ -145,3 +177,113 @@ def test_should_not_fallback_high_confidence_explicit_no_guidance():
     r = {"q_revenue": None, "q_margin": None, "fy_revenue": None, "fy_margin": None,
          "extraction_confidence": "high", "narrative_jp": "数値ガイダンス非開示方針"}
     assert should_fallback_to_transcript(r) is False
+
+
+# ── DoD #6: parse_fiscal_quarter (FMP /stable income-statement quarter 行 → year/quarter) ──
+def test_parse_fiscal_quarter_stable_format_msft():
+    # Phase 0 実測の MSFT 最新行 (calendarYear=null, fiscalYear="2026", period="Q3")
+    row = {"date": "2026-03-31", "period": "Q3", "calendarYear": None, "fiscalYear": "2026"}
+    assert parse_fiscal_quarter(row) == (2026, 3)
+
+
+def test_parse_fiscal_quarter_calendar_year_fallback():
+    # 旧 /api/v3 形式 (calendarYear あり、 fiscalYear なし)
+    row = {"date": "2025-12-31", "period": "Q2", "calendarYear": "2026"}
+    assert parse_fiscal_quarter(row) == (2026, 2)
+
+
+def test_parse_fiscal_quarter_derive_from_date_month_when_period_missing():
+    # period が "FY"/空 等で QN が読めない → date の月から暦四半期を導出
+    row = {"date": "2026-09-30", "period": "FY", "fiscalYear": "2026"}
+    assert parse_fiscal_quarter(row) == (2026, 3)  # 9月 → Q3
+
+
+def test_parse_fiscal_quarter_year_from_date_when_no_year_field():
+    row = {"date": "2024-06-30", "period": "Q4"}
+    assert parse_fiscal_quarter(row) == (2024, 4)
+
+
+def test_parse_fiscal_quarter_invalid_returns_none():
+    assert parse_fiscal_quarter(None) is None
+    assert parse_fiscal_quarter({}) is None
+    assert parse_fiscal_quarter("not a dict") is None
+    assert parse_fiscal_quarter({"period": "Q1"}) is None  # 年が一切取れない
+    assert parse_fiscal_quarter({"fiscalYear": "1800", "period": "Q1"}) is None  # 年が範囲外
+
+
+# ── per-field 逐語照合 (AMZN dogfood: 明示売上は残し計算マージンだけ落とす) ──
+def test_null_unverified_keeps_explicit_revenue_drops_calculated_margin():
+    transcript = (
+        "Amy Hood: Q2 net sales are expected to be between $194 billion and $199 billion. "
+        "Q2 operating income is expected to be between $20 billion and $24 billion."
+    )
+    result = {
+        "q_revenue": {"low_b": 194, "high_b": 199},          # 明示レンジ (逐語 OK)
+        "q_margin": {"low_pct": 10.3, "high_pct": 12.4, "type": "operating"},  # 計算 (逐語 NG)
+        "fy_revenue": None, "fy_margin": None,
+    }
+    nulled = null_unverified_number_fields(result, transcript)
+    assert result["q_revenue"] == {"low_b": 194, "high_b": 199}  # 残る
+    assert result["q_margin"] is None                            # 計算マージンは落ちる
+    assert nulled == ["q_margin"]
+
+
+def test_null_unverified_drops_computed_pm2pct_range():
+    # "$91 billion ±2%" を 89.18/92.82 に計算した field は逐語照合で落ちる
+    transcript = "Total revenue is expected to be $91 billion, plus or minus 2%."
+    result = {"q_revenue": {"low_b": 89.18, "high_b": 92.82}, "q_margin": None,
+              "fy_revenue": None, "fy_margin": None}
+    nulled = null_unverified_number_fields(result, transcript)
+    assert result["q_revenue"] is None
+    assert nulled == ["q_revenue"]
+
+
+def test_verify_quote_whole_verbatim_kept():
+    t = "Amy Hood: We expect second quarter total revenue of $58 billion to $61 billion. Thanks."
+    q = "We expect second quarter total revenue of $58 billion to $61 billion."
+    assert verify_quote_verbatim(q, t) == q
+
+
+def test_verify_quote_per_sentence_salvage():
+    # LLM が 2 文を連結 (間に別 turn を挟む) → 文単位で逐語のものだけ残す
+    t = ("Amy Hood: Net sales are expected to be $194 billion to $199 billion. "
+         "Operator: next question. Brian: Operating income is expected to be $20 billion to $24 billion.")
+    q = ("Net sales are expected to be $194 billion to $199 billion. "
+         "Operating income is expected to be $20 billion to $24 billion.")
+    kept = verify_quote_verbatim(q, t)
+    assert "Net sales are expected to be $194 billion to $199 billion." in kept
+    assert "Operating income is expected to be $20 billion to $24 billion." in kept
+
+
+def test_verify_quote_none_when_fabricated():
+    t = "We are excited about the quarter ahead."
+    assert verify_quote_verbatim("We expect $50 billion in revenue next quarter.", t) is None
+    assert verify_quote_verbatim(None, t) is None
+    assert verify_quote_verbatim("", t) is None
+
+
+# ── Option A: narrative 数値の §38 backstop (MSFT 型 narrative-only 表示の最終ガード) ──
+def test_narrative_figures_all_verbatim_pass():
+    # MSFT 型: opex/capex/margin の数値が全て transcript に逐語存在 → 未照合ゼロ
+    transcript = ("Amy Hood: operating expense of USD 19.3 billion to USD 19.4 billion or growth of "
+                  "approximately 7%, including roughly $550 million. We expect CapEx to increase to "
+                  "over $40 billion. Operating margins to be up about 1 point year-over-year.")
+    narrative = ("次 Q の営業費用は $19.3-19.4B (約 7% 増)、 退職費用 約 $550M を含む。 "
+                 "設備投資は $40B 超。 営業利益率は 1 ポイント上昇の見込み。")
+    assert unverified_narrative_figures(narrative, transcript) == []
+
+
+def test_narrative_figures_flags_computed_number():
+    # LLM が income÷sales で算出した 10.3% は transcript に無い → 未照合として検出
+    transcript = "Net sales are expected to be $194 billion to $199 billion. Operating income $20 to $24 billion."
+    narrative = "売上高 $194-199B、 営業利益 $20-24B、 営業利益率は約 10.3% に相当。"
+    flagged = unverified_narrative_figures(narrative, transcript)
+    assert "10.3" in flagged
+    # 逐語存在する 194/199/20/24 は検出されない
+    assert "194" not in flagged and "199" not in flagged
+
+
+def test_narrative_figures_empty_for_blank():
+    assert unverified_narrative_figures("", "anything") == []
+    assert unverified_narrative_figures(None, "anything") == []
+    assert unverified_narrative_figures("ガイダンスの記載なし。", "anything") == []
