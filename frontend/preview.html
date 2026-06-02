@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ja" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DiagramCard Visual Harness — BeatScanner</title>
+    <!-- index.html と同じフォント配信 (typography 目視検証の忠実度のため) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@600;700&family=IBM+Plex+Mono:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <!-- AI 図解 (DiagramCard) 単体レンダー用ハーネス。 本番 SPA とは無関係。
+         CLAUDE.md「Visual Diagnostic Harness Exception」準拠 — preview server は起動せず、
+         vite build (vite.preview.config.mjs) → .preview-dist/preview.html を file:// で開く。 -->
+    <div id="preview-root"></div>
+    <script type="module" src="/src/preview-main.jsx"></script>
+  </body>
+</html>

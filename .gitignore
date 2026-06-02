@@ -66,3 +66,9 @@ frontend/playwright-report/
 frontend/.playwright-output/
 frontend/test-results/
 .visual/
+
+# AI 図解 視覚検証ハーネス (handover v152 Step 1): preview ビルド出力。 使い捨て、Git 追跡しない
+# (entry の preview.html / src/preview-main.jsx / src/preview-fixture.js / vite.preview.config.mjs /
+#  scripts/snap-diagram.mjs は tracked。 build 出力の .preview-dist/ のみ ignore)
+frontend/.preview-dist/
+.preview-dist/
