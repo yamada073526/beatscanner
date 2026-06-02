@@ -1864,76 +1864,6 @@ export default function DiagramCard({
           )}
         </div>
 
-        {/* ── Section 2: Valuation + Dividend ── */}
-        {(valuation || dividend) ? (
-          <div data-testid="diagram-section-valuation">
-            {/* Sprint 3: Saga-like section divider */}
-            <div style={{ height: '1px', background: 'var(--border)', marginTop: '20px', opacity: 0.5 }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '16px', marginBottom: '10px' }}>
-              <span style={{ fontSize: '13px', fontWeight: '700', letterSpacing: '0.5px', color: '#38BDF8' }}>
-                バリュエーション
-              </span>
-              {valuation?.dataSource && (() => {
-                const isFmp = valuation.dataSource === 'FMP TTM';
-                return (
-                  <span style={{
-                    fontSize: '9px',
-                    fontWeight: '600',
-                    color: isFmp ? '#10b981' : '#94a3b8',
-                    background: isFmp ? 'rgba(16,185,129,0.10)' : 'rgba(148,163,184,0.12)',
-                    border: isFmp
-                      ? '1px solid rgba(16,185,129,0.25)'
-                      : '1px solid rgba(148,163,184,0.25)',
-                    padding: '1px 6px',
-                    borderRadius: '4px',
-                    letterSpacing: '0.02em',
-                  }}>
-                    {isFmp ? 'FMP実データ' : 'LLM推定'}
-                  </span>
-                );
-              })()}
-            </div>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {valuation && [
-                { label: 'PER',       value: valuation.per,       judge: valuation.perJudge },
-                { label: 'PBR',       value: valuation.pbr,       judge: valuation.pbrJudge },
-                { label: 'PSR',       value: valuation.psr,       judge: valuation.psrJudge },
-                { label: 'EV/EBITDA', value: valuation.evEbitda,  judge: valuation.evEbitdaJudge },
-                {
-                  label: 'PEG',
-                  value: valuation.peg,
-                  judge: valuation.pegJudge,
-                  // PEG = PER ÷ EPS成長率 → 実数表示で算出根拠を明示
-                  dynamicBasis: (valuation.per != null && valuation.peg)
-                    ? `PER(${valuation.per}x) ÷ EPS成長率(${(valuation.per / valuation.peg).toFixed(1)}%)`
-                    : null,
-                },
-              ].filter(item => item.value != null).map(item => (
-                <ValuationCard key={item.label} {...item} />
-              ))}
-              {dividend?.yield != null && (
-                <DividendCard dividend={dividend} />
-              )}
-            </div>
-          </div>
-        ) : (
-          /* valuation データなし — empty state */
-          <div
-            data-testid="diagram-section-valuation"
-            style={{
-              marginTop: '16px', padding: '10px 14px',
-              borderRadius: '8px',
-              border: '1px dashed var(--border)',
-              background: 'var(--bg-subtle)',
-              fontSize: '12px', color: 'var(--text-muted)',
-              display: 'flex', alignItems: 'center', gap: '6px',
-            }}
-          >
-            <span style={{ fontSize: '13px' }}>📊</span>
-            <span>バリュエーション情報は次回開示でお届けします</span>
-          </div>
-        )}
-
         {/* ── Section 3: Business Model ── */}
         {isGenerating ? (
           <div data-testid="diagram-section-business-flow">
@@ -2025,20 +1955,6 @@ export default function DiagramCard({
               ))}
             </div>
           </>
-        )}
-
-        {/* ── Section 3.6: 資本政策 (配当 + 自社株買い 実行額) v138 Phase 2C ── */}
-        {data.capitalReturnDataAvailable && (
-          <div data-testid="diagram-section-capital-return" style={{ marginTop: '16px' }}>
-            <CapitalReturnSection capitalReturn={data.capitalReturn} />
-          </div>
-        )}
-
-        {/* ── Section 3.7: 次 Q ガイダンス (SEC 8-K LLM 抽出) v138 Phase 2D Sprint 2b ── */}
-        {data.guidanceExtractedAvailable && (
-          <div data-testid="diagram-section-guidance" style={{ marginTop: '16px' }}>
-            <GuidanceSection guidance={data.guidanceExtracted} />
-          </div>
         )}
 
         {/* ── Section 4: Growth Story (yearly) ── */}
@@ -2546,6 +2462,94 @@ export default function DiagramCard({
           </div>
         )}
 
+        {/* ══ v153 Round 2-A: IA 順序入替 (事業理解→実績→株価→将来→論点→締め) ══
+            バリュエーション(株価) / 資本政策(還元) / ガイダンス(将来) を 実績(成長+FCF) の
+            「後ろ」 に移動。 旧位置 = 判定直後 / セグメント直後。 logic 不変、 JSX ブロック移動のみ。 */}
+
+        {/* ── 株価: バリュエーション + 配当 (v153 で実績の後ろへ移動) ── */}
+        {(valuation || dividend) ? (
+          <div data-testid="diagram-section-valuation">
+            {/* Sprint 3: Saga-like section divider */}
+            <div style={{ height: '1px', background: 'var(--border)', marginTop: '20px', opacity: 0.5 }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '16px', marginBottom: '10px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '700', letterSpacing: '0.5px', color: '#38BDF8' }}>
+                バリュエーション
+              </span>
+              {valuation?.dataSource && (() => {
+                const isFmp = valuation.dataSource === 'FMP TTM';
+                return (
+                  <span style={{
+                    fontSize: '9px',
+                    fontWeight: '600',
+                    color: isFmp ? '#10b981' : '#94a3b8',
+                    background: isFmp ? 'rgba(16,185,129,0.10)' : 'rgba(148,163,184,0.12)',
+                    border: isFmp
+                      ? '1px solid rgba(16,185,129,0.25)'
+                      : '1px solid rgba(148,163,184,0.25)',
+                    padding: '1px 6px',
+                    borderRadius: '4px',
+                    letterSpacing: '0.02em',
+                  }}>
+                    {isFmp ? 'FMP実データ' : 'LLM推定'}
+                  </span>
+                );
+              })()}
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {valuation && [
+                { label: 'PER',       value: valuation.per,       judge: valuation.perJudge },
+                { label: 'PBR',       value: valuation.pbr,       judge: valuation.pbrJudge },
+                { label: 'PSR',       value: valuation.psr,       judge: valuation.psrJudge },
+                { label: 'EV/EBITDA', value: valuation.evEbitda,  judge: valuation.evEbitdaJudge },
+                {
+                  label: 'PEG',
+                  value: valuation.peg,
+                  judge: valuation.pegJudge,
+                  // PEG = PER ÷ EPS成長率 → 実数表示で算出根拠を明示
+                  dynamicBasis: (valuation.per != null && valuation.peg)
+                    ? `PER(${valuation.per}x) ÷ EPS成長率(${(valuation.per / valuation.peg).toFixed(1)}%)`
+                    : null,
+                },
+              ].filter(item => item.value != null).map(item => (
+                <ValuationCard key={item.label} {...item} />
+              ))}
+              {dividend?.yield != null && (
+                <DividendCard dividend={dividend} />
+              )}
+            </div>
+          </div>
+        ) : (
+          /* valuation データなし — empty state */
+          <div
+            data-testid="diagram-section-valuation"
+            style={{
+              marginTop: '16px', padding: '10px 14px',
+              borderRadius: '8px',
+              border: '1px dashed var(--border)',
+              background: 'var(--bg-subtle)',
+              fontSize: '12px', color: 'var(--text-muted)',
+              display: 'flex', alignItems: 'center', gap: '6px',
+            }}
+          >
+            <span style={{ fontSize: '13px' }}>📊</span>
+            <span>バリュエーション情報は次回開示でお届けします</span>
+          </div>
+        )}
+
+        {/* ── 還元: 資本政策 (配当 + 自社株買い 実行額) v138 Phase 2C / v153 で株価の後ろへ ── */}
+        {data.capitalReturnDataAvailable && (
+          <div data-testid="diagram-section-capital-return" style={{ marginTop: '16px' }}>
+            <CapitalReturnSection capitalReturn={data.capitalReturn} />
+          </div>
+        )}
+
+        {/* ── 将来: 次 Q ガイダンス (SEC 8-K LLM 抽出) v138 Phase 2D / v153 で還元の後ろへ ── */}
+        {data.guidanceExtractedAvailable && (
+          <div data-testid="diagram-section-guidance" style={{ marginTop: '16px' }}>
+            <GuidanceSection guidance={data.guidanceExtracted} />
+          </div>
+        )}
+
         {/* ── Section 5: Strengths / Risks ── */}
         {isGenerating ? (
           <div data-testid="diagram-section-strengths-risks">
@@ -2598,7 +2602,7 @@ export default function DiagramCard({
                 }}>
                   {/* Round 2-D (handover v152): 見出しを Chip primitive の pill に統一 (chip_primitive_canonical)。 */}
                   <div style={{ marginBottom: '8px' }}>
-                    <Chip variant="display" size="xs" tone="gain" icon={<Shield size={11} strokeWidth={2.2} aria-hidden="true" />}>強み</Chip>
+                    <Chip variant="solid" size="xs" tone="gain" icon={<Shield size={11} strokeWidth={2.2} aria-hidden="true" />}>強み</Chip>
                   </div>
                   {strengths.map((s, i) => (
                     <div
@@ -2619,7 +2623,7 @@ export default function DiagramCard({
                   border: '1px solid rgba(239,68,68,0.30)', padding: '12px',
                 }}>
                   <div style={{ marginBottom: '8px' }}>
-                    <Chip variant="display" size="xs" tone="loss" icon={<AlertTriangle size={11} strokeWidth={2.2} aria-hidden="true" />}>リスク</Chip>
+                    <Chip variant="solid" size="xs" tone="loss" icon={<AlertTriangle size={11} strokeWidth={2.2} aria-hidden="true" />}>リスク</Chip>
                   </div>
                   {risks.map((r, i) => (
                     <div
@@ -2656,9 +2660,73 @@ export default function DiagramCard({
           </div>
         )}
 
-        {/* ── Section 6: Investor Question + Bull/Bear (highlights) ── */}
+        {/* ── 論点: ブル・ベア対比 (v153 で Section 6 から分離、 強み・リスクと隣接) ──
+            旧 Section 6 は「投資家への問い + ブル/ベア」 を 1 ブロック同居。 v153 IA reorder で
+            ブル・ベア (論点) を 強み・リスクの直後へ、 投資家への問い (締め) を末尾 §38 カードの直前へ分離。 */}
+        {!isGenerating && (bullCase.length > 0 || bearCase.length > 0) && (
+          <div className="narrative-appear" data-testid="diagram-section-bullbear">
+            <VizSectionLabel text="ブル・ベア対比" icon={TrendingUp} sub="強気・弱気それぞれの見立て" />
+            <AccordionHeader
+              label={`ブル ${bullCase.length}件 / ベア ${bearCase.length}件`}
+              isOpen={openSections.bullbear}
+              onToggle={() => toggleSection('bullbear')}
+            />
+            {openSections.bullbear && (
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '10px' }}>
+                {bullCase.length > 0 && (
+                  <div style={{
+                    borderRadius: '8px', background: 'rgba(34,197,94,0.12)',
+                    border: '1px solid rgba(34,197,94,0.30)', padding: '12px',
+                  }}>
+                    <div style={{ marginBottom: '8px' }}>
+                      <Chip variant="solid" size="xs" tone="gain" icon={<TrendingUp size={11} strokeWidth={2.2} aria-hidden="true" />}>ブル派の根拠</Chip>
+                    </div>
+                    {bullCase.map((s, i) => (
+                      <div
+                        key={`bull-${openSections.bullbear}-${i}`}
+                        style={{
+                          fontSize: '12px', color: 'var(--text-primary)',
+                          lineHeight: 1.6, display: 'flex', gap: '5px',
+                          ...fadeInStyle(i),
+                        }}
+                      >
+                        <span style={{ color: 'var(--color-gain)', flexShrink: 0 }}>•</span>
+                        <span>{s}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {bearCase.length > 0 && (
+                  <div style={{
+                    borderRadius: '8px', background: 'rgba(239,68,68,0.12)',
+                    border: '1px solid rgba(239,68,68,0.30)', padding: '12px',
+                  }}>
+                    <div style={{ marginBottom: '8px' }}>
+                      <Chip variant="solid" size="xs" tone="loss" icon={<TrendingDown size={11} strokeWidth={2.2} aria-hidden="true" />}>ベア派の根拠</Chip>
+                    </div>
+                    {bearCase.map((r, i) => (
+                      <div
+                        key={`bear-${openSections.bullbear}-${i}`}
+                        style={{
+                          fontSize: '12px', color: 'var(--text-primary)',
+                          lineHeight: 1.6, display: 'flex', gap: '5px',
+                          ...fadeInStyle(i),
+                        }}
+                      >
+                        <span style={{ color: 'var(--color-loss)', flexShrink: 0 }}>•</span>
+                        <span>{r}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── 締め前: 投資家への問い (v153 で Section 6 から分離して末尾へ、 §38 締めカードの直前) ── */}
         {isGenerating ? (
-          <div data-testid="diagram-section-highlights">
+          <div data-testid="diagram-section-investor-questions">
             <VizSectionLabel text="投資家への問い" icon={HelpCircle} sub="次の決算までに見ておきたい着眼点" />
             <div style={{
               borderRadius: '8px', padding: '14px 16px',
@@ -2673,109 +2741,30 @@ export default function DiagramCard({
               ))}
             </div>
           </div>
-        ) : (investorQuestions.length > 0 || bullCase.length > 0 || bearCase.length > 0) ? (
-          <div className="narrative-appear" data-testid="diagram-section-highlights">
+        ) : investorQuestions.length > 0 ? (
+          <div className="narrative-appear" data-testid="diagram-section-investor-questions">
             <VizSectionLabel text="投資家への問い" icon={HelpCircle} sub="次の決算までに見ておきたい着眼点" />
-            {investorQuestions.length > 0 && (
-              <div style={{
-                display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px',
-              }}>
-                {/* v127: 角度タグ (収益性 / 資本効率 / マクロ 等) + 非断定の問い。各問いは §38/§5 safe。 */}
-                {investorQuestions.map((q, i) => (
-                  <div key={i} style={{
-                    borderRadius: '8px', background: 'var(--bg-subtle)',
-                    border: '1px solid var(--border)',
-                    borderLeft: '3px solid var(--color-accent)',
-                    padding: '12px 14px',
-                    display: 'flex', alignItems: 'flex-start', gap: '10px',
-                  }}>
-                    {q.angle ? (
-                      <Chip variant="display" size="xs" tone="accent">{q.angle}</Chip>
-                    ) : null}
-                    <span style={{
-                      fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.7,
-                    }}>{q.question}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            {(bullCase.length > 0 || bearCase.length > 0) && (
-              <>
-                <AccordionHeader
-                  label={`ブル/ベア対比（ブル ${bullCase.length}件 / ベア ${bearCase.length}件）`}
-                  isOpen={openSections.bullbear}
-                  onToggle={() => toggleSection('bullbear')}
-                />
-                {openSections.bullbear && (
-                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '10px' }}>
-                    {bullCase.length > 0 && (
-                      <div style={{
-                        borderRadius: '8px', background: 'rgba(34,197,94,0.12)',
-                        border: '1px solid rgba(34,197,94,0.30)', padding: '12px',
-                      }}>
-                        <div style={{ marginBottom: '8px' }}>
-                          <Chip variant="display" size="xs" tone="gain" icon={<TrendingUp size={11} strokeWidth={2.2} aria-hidden="true" />}>ブル派の根拠</Chip>
-                        </div>
-                        {bullCase.map((s, i) => (
-                          <div
-                            key={`bull-${openSections.bullbear}-${i}`}
-                            style={{
-                              fontSize: '12px', color: 'var(--text-primary)',
-                              lineHeight: 1.6, display: 'flex', gap: '5px',
-                              ...fadeInStyle(i),
-                            }}
-                          >
-                            <span style={{ color: '#22c55e', flexShrink: 0 }}>•</span>
-                            <span>{s}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {bearCase.length > 0 && (
-                      <div style={{
-                        borderRadius: '8px', background: 'rgba(239,68,68,0.12)',
-                        border: '1px solid rgba(239,68,68,0.30)', padding: '12px',
-                      }}>
-                        <div style={{ marginBottom: '8px' }}>
-                          <Chip variant="display" size="xs" tone="loss" icon={<TrendingDown size={11} strokeWidth={2.2} aria-hidden="true" />}>ベア派の根拠</Chip>
-                        </div>
-                        {bearCase.map((r, i) => (
-                          <div
-                            key={`bear-${openSections.bullbear}-${i}`}
-                            style={{
-                              fontSize: '12px', color: 'var(--text-primary)',
-                              lineHeight: 1.6, display: 'flex', gap: '5px',
-                              ...fadeInStyle(i),
-                            }}
-                          >
-                            <span style={{ color: '#ef4444', flexShrink: 0 }}>•</span>
-                            <span>{r}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {/* v127: 角度タグ (収益性 / 資本効率 / マクロ 等) + 非断定の問い。各問いは §38/§5 safe。 */}
+              {investorQuestions.map((q, i) => (
+                <div key={i} style={{
+                  borderRadius: '8px', background: 'var(--bg-subtle)',
+                  border: '1px solid var(--border)',
+                  borderLeft: '3px solid var(--color-accent)',
+                  padding: '12px 14px',
+                  display: 'flex', alignItems: 'flex-start', gap: '10px',
+                }}>
+                  {q.angle ? (
+                    <Chip variant="display" size="xs" tone="accent">{q.angle}</Chip>
+                  ) : null}
+                  <span style={{
+                    fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.7,
+                  }}>{q.question}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        ) : (
-          /* highlights なし — empty state */
-          <div
-            data-testid="diagram-section-highlights"
-            style={{
-              marginTop: '16px', padding: '10px 14px',
-              borderRadius: '8px',
-              border: '1px dashed var(--border)',
-              background: 'var(--bg-subtle)',
-              fontSize: '12px', color: 'var(--text-muted)',
-              display: 'flex', alignItems: 'center', gap: '6px',
-            }}
-          >
-            <span style={{ fontSize: '13px' }}>💬</span>
-            <span>ストーリー要点を抽出しています</span>
-          </div>
-        )}
+        ) : null}
 
         {/* ── 締め: この決算のチェックポイント (Round 2-C, handover v152) ──
             模範解答 (Surprise Stories) の「結論 + 今日やること」 相当の締めカード。

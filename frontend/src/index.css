@@ -6738,6 +6738,24 @@ button.ds-chip { cursor: pointer; }
   border-color: rgba(245, 158, 11, 0.50);
   color: rgba(245, 158, 11, 0.96);
 }
+/* v153 Round 2-D 強化: solid variant = tinted card 上で「浮く」 高コントラスト badge。
+   強み/リスク/ブル/ベア 見出し用。 display は border 0.50 alpha で 同系色 card (薄緑/薄赤) に
+   溶ける指摘 (UIレビュー verdict) → border/text を全不透明の theme token (var(--color-gain/loss)) に、
+   bg tint を 0.16→0.22 に濃く、 font-weight 700 で輪郭を立てる。 投資業界色ルール遵守 (緑/赤)。 */
+.ds-chip[data-variant="solid"] {
+  cursor: default;
+  font-weight: 700;
+}
+.ds-chip[data-variant="solid"][data-tone="gain"] {
+  background: rgba(52, 239, 129, 0.22);
+  border-color: var(--color-gain);
+  color: var(--color-gain);
+}
+.ds-chip[data-variant="solid"][data-tone="loss"] {
+  background: rgba(248, 113, 113, 0.22);
+  border-color: var(--color-loss);
+  color: var(--color-loss);
+}
 .ds-chip[data-variant="switcher"] {
   /* switcher = AccountSwitcher 用 large pill、border ベース */
   border-color: var(--border);

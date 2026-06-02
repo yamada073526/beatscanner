@@ -37,7 +37,9 @@ const VALID_SIZES = ['xs', 'sm', 'md'];
 // 'add' = round 8 (6 体合議): add-action trigger 用 variant。
 //   dashed border + Plus icon (children あり=label / なし=icon-only circular)。
 //   AccountSwitcher 「+ 口座を追加」 + WatchlistAddButton trigger を同 variant で吸収。
-const VALID_VARIANTS = ['segmented', 'filter', 'display', 'switcher', 'add'];
+// v153 Round 2-D: 'solid' = tinted card 上で「浮く」 高コントラスト badge (display の border 0.50 が
+//   同系色 card に溶ける問題の解、 border/text を全不透明 theme token に)。 index.css §Chip 参照。
+const VALID_VARIANTS = ['segmented', 'filter', 'display', 'switcher', 'add', 'solid'];
 // handover v79 (2026-05-17、 UI/UX + マーケ subagent verdict): 'elite' tone を新設。
 //   gold #d4af37 (ALLOWED-HEX 登録済、 handover v69 保有銘柄ゴールド) で hue 流用。
 //   RS percentile ≥ 95 / ≤ 5 等の extreme value で「希少性視認」 を演出 (5 原則 #1 #3 整合)。
