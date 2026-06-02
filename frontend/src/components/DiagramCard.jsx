@@ -6,7 +6,7 @@
  * handover v82 Phase 4: 出典 footer + degraded_mode banner を DiagramCitation で attach
  * (multi-review 6 体合議 verdict、 局所介入 +5 行で 2,027 → 2,033 行)。
  */
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, createContext, useContext } from 'react';
 import { FileBarChart2, Banknote, Calendar, CheckCircle2, XCircle, AlertTriangle, Shield, TrendingUp, TrendingDown, Info, Layers, PieChart, HelpCircle, RefreshCw, Building2, Scale } from 'lucide-react';
 import DiagramCitation from './DiagramCitation.jsx';
 import Chip from './ui/Chip.jsx';
@@ -29,6 +29,19 @@ import MotionProvider from './MotionProvider.jsx';
 // 「キャッチコピー」 として意味のある headline は通す。 backend で対応すべきだが stale cache 対応で
 // frontend にも guard。 完全な suppress (headline 文字列で構成された全 fallback pattern を網羅) は
 // 不可能なので、 明白な fallback 句のみ対象とする。
+// v154 図解 vibe 提案システム: figure のデザイン「気分」 (見出しフォント / 余白 / accent) を切替えて
+// vision-eval スコア向上候補を比較するための仕組み。 production は vibe={} (= 現状の見た目で完全不変)、
+// preview ハーネスのみ 案 A 等を渡して「現状 vs 案」 を並べる。 VizSectionLabel / headline が context で読む。
+const VibeContext = createContext({});
+function useVibe() { return useContext(VibeContext) || {}; }
+function vibeHeadingFont(vibe) {
+  return vibe && vibe.headingFont === 'serif' ? "'Noto Serif JP', serif" : undefined;
+}
+function vibeAccent(vibe) {
+  // #d4af37 = gold (ALLOWED-HEX, Chip elite tone)、 #38BDF8 = cyan (ALLOWED-HEX, --color-accent dark)
+  return vibe && vibe.accent === 'gold' ? '#d4af37' : '#38BDF8';
+}
+
 function isFallbackHeadline(headline) {
   if (typeof headline !== 'string') return true;
   const text = headline.trim();
@@ -45,6 +58,11 @@ function isFallbackHeadline(headline) {
 }
 
 function VizSectionLabel({ text, first = false, icon: Icon = null, sub = null }) {
+  // v154 vibe: 見出しフォント (serif) / 余白 (loose) / accent (gold) を context から読む。 default = 現状不変。
+  const vibe = useVibe();
+  const loose = vibe.spacing === 'loose';
+  const headingFont = vibeHeadingFont(vibe);
+  const accentColor = vibeAccent(vibe);
   // デザインレビュー (4体合議 2026-06-03): section 間を広げ「ここで切れる」を明示 (20→28px)、
   // 見出し→中身は詰める (16→14px) で強弱コントラストを作る (模範解答の「呼吸」)。
   // icon prop で見出しにアイコンを添え「記事図解 → アプリ」の品格差を埋める (brand verdict D①)。
@@ -58,15 +76,19 @@ function VizSectionLabel({ text, first = false, icon: Icon = null, sub = null })
         <div style={{
           height: '1px',
           background: 'var(--border)',
-          marginTop: '28px',
+          marginTop: loose ? '44px' : '28px',
           marginBottom: '0',
           opacity: 0.5,
         }} />
       )}
       <div style={{
         display: 'flex', alignItems: 'center', gap: '7px',
-        fontSize: '13px', fontWeight: '700', letterSpacing: '0.5px',
-        color: '#38BDF8', marginBottom: sub ? '3px' : '10px', marginTop: first ? '32px' : '14px',
+        fontSize: loose ? '14px' : '13px', fontWeight: '700',
+        letterSpacing: headingFont ? '0.01em' : '0.5px',
+        fontFamily: headingFont,
+        color: accentColor,
+        marginBottom: sub ? '3px' : (loose ? '14px' : '10px'),
+        marginTop: first ? (loose ? '40px' : '32px') : (loose ? '22px' : '14px'),
       }}>
         {Icon && <Icon size={15} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0 }} />}
         <span>{text}</span>
@@ -76,7 +98,7 @@ function VizSectionLabel({ text, first = false, icon: Icon = null, sub = null })
           fontSize: '11px',
           color: 'var(--text-muted)',
           lineHeight: 1.55,
-          marginBottom: '11px',
+          marginBottom: loose ? '15px' : '11px',
         }}>
           {sub}
         </div>
@@ -1352,6 +1374,7 @@ export default function DiagramCard({
   data: rawData, ticker, onDownload, onYearsChange, selectedYears = 3,
   showCoach = false,         // R2v3: 年セレクター直上の吹き出し表示 ON/OFF（HomeTab 制御・初回のみ）
   onSelectorVisible,         // R2v2: 年セレクターが80%可視になった時に1度だけ呼ばれる
+  vibe = {},                 // v154: figure デザイン提案の切替 ({} = 現状不変、 preview ハーネスのみ案を渡す)
 }) {
   // handover v82 Phase 4.5: frontend BLOCKLIST sanitize 適用 (BAD-5 / BAD-6 表示前削除)。
   // NEGATIVE_EXAMPLES + few-shot で 87.5% 抑制、 残 12.5% を frontend で sentence 単位削除。
@@ -1559,9 +1582,10 @@ export default function DiagramCard({
   };
 
   return (
-    // v125 P4-1: data-testid="diagram-card-wrapper" を outer wrapper に追加。
-    // 既存 diagram-section-* testid (内部 7 section) は変更なし、 outer は単独 QA selector 用。
-    // L895 の `if (!data) return null` は null return のため testid 不可 (component 不在 = absent)。
+    // v154: vibe (デザイン提案切替) を context で配下の VizSectionLabel / headline に供給。 default = 現状不変。
+    <VibeContext.Provider value={vibe}>
+    {/* v125 P4-1: data-testid="diagram-card-wrapper" を outer wrapper に追加。
+        既存 diagram-section-* testid (内部 7 section) は変更なし、 outer は単独 QA selector 用。 */}
     <div
       data-testid="diagram-card-wrapper"
       style={{
@@ -1750,11 +1774,13 @@ export default function DiagramCard({
             // 対応で frontend にも guard を入れる。 「キャッチコピー」 でなく状況説明文字列は suppress。
             data.headline && !isFallbackHeadline(data.headline) && (
               <div className="narrative-appear" style={{
-                fontSize: 'clamp(18px, 5vw, 28px)',
-                fontWeight: 600,
+                // v154 vibe: serif 案では headline を Noto Serif JP + やや大きく (editorial hero)。 default 不変。
+                fontSize: vibe.headingFont === 'serif' ? 'clamp(20px, 5.5vw, 32px)' : 'clamp(18px, 5vw, 28px)',
+                fontWeight: vibe.headingFont === 'serif' ? 700 : 600,
+                fontFamily: vibeHeadingFont(vibe),
                 letterSpacing: '-0.02em',
                 color: 'var(--text-primary)',
-                lineHeight: 1.2,
+                lineHeight: 1.25,
                 marginBottom: '8px',
               }}>
                 {data.headline}
@@ -2960,5 +2986,6 @@ export default function DiagramCard({
         onDismiss={() => setToastMessage(null)}
       />
     </div>
+    </VibeContext.Provider>
   );
 }

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/build-articles.mjs",
+    "build": "vite build && vite build --config vite.preview.config.mjs --base /diagram-preview/ --outDir dist/diagram-preview && node scripts/build-articles.mjs",
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "test:visual": "node scripts/snap-active.mjs"
