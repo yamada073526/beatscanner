@@ -7,7 +7,7 @@
  * (multi-review 6 体合議 verdict、 局所介入 +5 行で 2,027 → 2,033 行)。
  */
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { FileBarChart2, Banknote, Calendar, CheckCircle2, XCircle, AlertTriangle, Shield, TrendingUp, TrendingDown, Info } from 'lucide-react';
+import { FileBarChart2, Banknote, Calendar, CheckCircle2, XCircle, AlertTriangle, Shield, TrendingUp, TrendingDown, Info, Layers, PieChart, HelpCircle } from 'lucide-react';
 import DiagramCitation from './DiagramCitation.jsx';
 import Chip from './ui/Chip.jsx';
 import { sanitizeDiagramData, findBlocklistHits, sanitizeText } from '../lib/blocklist.js';
@@ -44,7 +44,10 @@ function isFallbackHeadline(headline) {
   return FALLBACK_PATTERNS.some((p) => p.test(text));
 }
 
-function VizSectionLabel({ text, first = false }) {
+function VizSectionLabel({ text, first = false, icon: Icon = null }) {
+  // デザインレビュー (4体合議 2026-06-03): section 間を広げ「ここで切れる」を明示 (20→28px)、
+  // 見出し→中身は詰める (16→14px) で強弱コントラストを作る (模範解答の「呼吸」)。
+  // icon prop で見出しにアイコンを添え「記事図解 → アプリ」の品格差を埋める (brand verdict D①)。
   return (
     <>
       {/* Sprint 3: Saga-like scroll narrative — section 間 1px hairline divider (Linear 流) */}
@@ -52,16 +55,18 @@ function VizSectionLabel({ text, first = false }) {
         <div style={{
           height: '1px',
           background: 'var(--border)',
-          marginTop: '20px',
+          marginTop: '28px',
           marginBottom: '0',
           opacity: 0.5,
         }} />
       )}
       <div style={{
+        display: 'flex', alignItems: 'center', gap: '7px',
         fontSize: '13px', fontWeight: '700', letterSpacing: '0.5px',
-        color: '#38BDF8', marginBottom: '10px', marginTop: first ? '32px' : '16px',
+        color: '#38BDF8', marginBottom: '10px', marginTop: first ? '32px' : '14px',
       }}>
-        {text}
+        {Icon && <Icon size={15} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0 }} />}
+        <span>{text}</span>
       </div>
     </>
   );
@@ -247,7 +252,7 @@ function CapitalReturnSection({ capitalReturn }) {
 
   return (
     <>
-      <VizSectionLabel text="資本政策（配当・自社株買い 実行額）" />
+      <VizSectionLabel text="資本政策（配当・自社株買い 実行額）" icon={Banknote} />
       <div style={{
         fontSize: '10px', color: 'var(--text-muted)',
         marginBottom: '8px',
@@ -411,7 +416,7 @@ function GuidanceSection({ guidance }) {
 
   return (
     <>
-      <VizSectionLabel text="次 Q ガイダンス（経営陣の見通し）" />
+      <VizSectionLabel text="次 Q ガイダンス（経営陣の見通し）" icon={Calendar} />
       <div style={{
         fontSize: '10px', color: 'var(--text-muted)',
         marginBottom: '8px',
@@ -460,10 +465,18 @@ function GuidanceSection({ guidance }) {
       )}
 
       {narrative && (
+        // デザインレビュー (4体合議 2026-06-03、 user 指摘1): 本文がプレーンテキストだと「どの section の
+        // 内容か」 が曖昧 → 他 section と同じく枠に格納 (bg-subtle + border + 左 accent)。 glow host は
+        // 増やさず inline style のみ (design_recipes §C-1 入れ子 surface-card 禁止 遵守)。
         <div style={{
           fontSize: '12px', color: 'var(--text-primary)', lineHeight: 1.6,
           marginBottom: (hasAnyStructured || sourceQuote) ? '10px' : '0',
           whiteSpace: 'pre-line',
+          background: 'var(--bg-subtle)',
+          border: '1px solid var(--border)',
+          borderLeft: '3px solid var(--color-accent)',
+          borderRadius: '0 6px 6px 0',
+          padding: '10px 14px',
         }}>
           {narrative}
         </div>
@@ -1393,11 +1406,14 @@ export default function DiagramCard({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const [openSections, setOpenSections] = useState({ strengths: false, bullbear: false });
+  // デザインレビュー (4体合議 2026-06-03): 核心データはデフォルト展開で「click 不要」(user 指摘3)。
+  // strengths(強み・リスク)=展開 / bullbear(ブル・ベア)=折りたたみ維持 (強み・リスクと意味的に冗長なため)。
+  const [openSections, setOpenSections] = useState({ strengths: true, bullbear: false });
   const toggleSection = (key) =>
     setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
 
-  const [showConditions, setShowConditions] = useState(false);
+  // じっちゃま5条件 = 図解の主役データ → デフォルト展開 (HERO FAIL バッジ直下、 2秒原則)。 toggle は残す。
+  const [showConditions, setShowConditions] = useState(true);
   const [showUnknownTip, setShowUnknownTip] = useState(false);  // R4: 判定不可バッジのツールチップ
 
   // R3拡張: アコーディオン展開時の共通フェードインスタイル
@@ -1908,7 +1924,7 @@ export default function DiagramCard({
         {/* ── Section 3: Business Model ── */}
         {isGenerating ? (
           <div data-testid="diagram-section-business-flow">
-            <VizSectionLabel text="ビジネスモデル" />
+            <VizSectionLabel text="ビジネスモデル" icon={Layers} />
             <div style={{
               display: 'flex', gap: '8px', padding: '14px 12px',
               background: 'var(--bg-subtle)', borderRadius: '8px',
@@ -1932,7 +1948,7 @@ export default function DiagramCard({
           </div>
         ) : flowItems.length > 0 ? (
           <div className="narrative-appear" data-testid="diagram-section-business-flow">
-            <VizSectionLabel text="ビジネスモデル" />
+            <VizSectionLabel text="ビジネスモデル" icon={Layers} />
             {isMobile && (
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>
                 ← スクロールして全体を確認
@@ -1983,7 +1999,7 @@ export default function DiagramCard({
         {/* ── Section 3.5: セグメント別売上 ── */}
         {data.segmentSummary?.segments?.length > 0 && (
           <>
-            <VizSectionLabel text="セグメント別売上" />
+            <VizSectionLabel text="セグメント別売上" icon={PieChart} />
             <div style={{
               fontSize: '10px', color: 'var(--text-muted)',
               marginBottom: '8px',
@@ -2015,11 +2031,14 @@ export default function DiagramCard({
         {/* ── Section 4: Growth Story (yearly) ── */}
         {trends.length > 0 ? (
           <div ref={flashRef} data-testid="diagram-section-yearly">
-            {/* レンジセレクター（カード右上から移動：操作と結果を視覚的に近接させる）*/}
+            {/* user 指摘2: 見出し (hairline) を期間トグルの前に置き、 ガイダンスと本 section を明確に分離。
+                旧構造はトグルがガイダンス直下に浮き、 hairline がトグルの下に来ていた (所属が曖昧)。 */}
+            <VizSectionLabel text="数字で見る成長ストーリー" icon={TrendingUp} />
+            {/* レンジセレクター（見出し直下：操作と結果を視覚的に近接させる）*/}
             <div style={{
               display: 'flex', alignItems: 'center',
               justifyContent: 'space-between', flexWrap: 'wrap',
-              gap: '8px', marginTop: '24px', marginBottom: '6px',
+              gap: '8px', marginTop: '4px', marginBottom: '6px',
             }}>
               <div style={{
                 display: 'inline-flex', alignItems: 'center', gap: '6px',
@@ -2118,7 +2137,6 @@ export default function DiagramCard({
                 </div>
               </div>
             </div>
-            <VizSectionLabel text="数字で見る成長ストーリー" />
             {data.partialPeriod && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: '6px',
@@ -2390,7 +2408,7 @@ export default function DiagramCard({
         {/* データあり → 表示 / フラグだけある（false）→ N/A表示 / どちらもなし → 非表示 */}
         {(data.fcfTrend?.length > 0 || data.capexTrend?.length > 0 || data.fcfDataAvailable === false) ? (
           <div data-testid="diagram-section-fcf">
-            <VizSectionLabel text="FCF・設備投資（CapEx）" />
+            <VizSectionLabel text="FCF・設備投資（CapEx）" icon={Banknote} />
             {!(data.fcfTrend?.length > 0 || data.capexTrend?.length > 0) ? (
               <div style={{
                 padding: '12px 14px',
@@ -2518,7 +2536,7 @@ export default function DiagramCard({
         {/* ── Section 5: Strengths / Risks ── */}
         {isGenerating ? (
           <div data-testid="diagram-section-strengths-risks">
-            <VizSectionLabel text="強み・リスク対比" />
+            <VizSectionLabel text="強み・リスク対比" icon={Shield} />
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '10px' }}>
               {[
                 { color: 'rgba(34,197,94,0.08)', border: 'rgba(34,197,94,0.15)', label: '強み',   widths: [85, 70, 78], dot: 'rgba(34,197,94,0.25)', text: 'rgba(34,197,94,0.5)' },
@@ -2553,7 +2571,7 @@ export default function DiagramCard({
           </div>
         ) : (strengths.length > 0 || risks.length > 0) ? (
           <div className="narrative-appear" data-testid="diagram-section-strengths-risks">
-            <VizSectionLabel text="強み・リスク対比" />
+            <VizSectionLabel text="強み・リスク対比" icon={Shield} />
             <AccordionHeader
               label={`強み ${strengths.length}件 / リスク ${risks.length}件`}
               isOpen={openSections.strengths}
@@ -2627,7 +2645,7 @@ export default function DiagramCard({
         {/* ── Section 6: Investor Question + Bull/Bear (highlights) ── */}
         {isGenerating ? (
           <div data-testid="diagram-section-highlights">
-            <VizSectionLabel text="投資家への問い" />
+            <VizSectionLabel text="投資家への問い" icon={HelpCircle} />
             <div style={{
               borderRadius: '8px', padding: '14px 16px',
               background: 'var(--bg-subtle)', border: '1px solid var(--border)',
@@ -2643,7 +2661,7 @@ export default function DiagramCard({
           </div>
         ) : (investorQuestions.length > 0 || bullCase.length > 0 || bearCase.length > 0) ? (
           <div className="narrative-appear" data-testid="diagram-section-highlights">
-            <VizSectionLabel text="投資家への問い" />
+            <VizSectionLabel text="投資家への問い" icon={HelpCircle} />
             {investorQuestions.length > 0 && (
               <div style={{
                 display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px',
