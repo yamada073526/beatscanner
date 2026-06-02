@@ -1,10 +1,11 @@
 # SPEC: 決算 call transcript から会社自身のガイダンス数値抽出 (⑩) — 2026-06-02
 
-> ⛔ **Phase 0 BLOCKER (2026-06-02 実測)**: FMP `/stable/earning-call-transcript` は現プランで **HTTP 402 Restricted**
-> (key 有効・profile/income は 200)。 transcript データ源が現 FMP Premium に**無い**。 [[project_fmp_ultimate_deferred]] と整合
-> (transcript は FMP Ultimate $99/月 upgrade 後の Phase 3 計画)。 → **gate-2 で transcript 源を決定**:
-> (A) FMP Ultimate upgrade ($99/月) / (B) Motley Fool scrape (無料・fragile) / (C) Phase 3 まで保留。
+> ✅ **gate-2 決定 = (A) FMP Ultimate $149/月 契約** (2026-06-02 user 確定)。 transcript は **Ultimate 限定**
+> (現 Premium $59/月 では HTTP 402 Restricted、 Phase 0 実測)。 価格は memory の $99 → **現行 $149/月** に訂正済。
+> ⏳ user が FMP dashboard で upgrade 実施 → 同一 key 自動昇格 (新 key なら Railway env + backend/.env 更新)。
+> upgrade 後の手順: **transcript 200 再確認 → Phase 0 実測 (coverage/cost/話者format calibrate) → Phase 1 LLM path (DoD 8ガード)**。
 > ✅ pure-Python 土台 (transcript_source.py + test 15 PASS) は**源に依存せず完成済**、 transcript text 取得でき次第接続可。
+> (B) Motley Fool = 検索404で実質死・salvage は ToS/Railway risk で非推奨 / (C) 保留 は不採用。
 >
 > **gate-1 決定済** (grill 2026-06-02、 user 承認)。 6 体合議 (§38 重) GO-with-changes (DoD 8 ガード)。
 > 実装 (LLM path) は **deploy 保留** (§38 無監視 ship 不可 + transcript 源 未確保)。
