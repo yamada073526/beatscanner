@@ -9,6 +9,7 @@ import { useAuth } from '../../../../hooks/useAuth.js';
 import { Building2, MapPin, Users, Briefcase, Sparkles, RefreshCw, Scale } from 'lucide-react';
 import { fetchProfileExtended, fetchProfileSummary, fetchProfilePeers } from '../../../../api.js';
 import { sanitizeText } from '../../../../lib/blocklist.js';
+import { translateSegmentName } from '../../../../lib/segmentNames.js';
 
 /**
  * Phase B 会社概要 LLM 和文化 (SPEC_2026-05-22 §5 Sprint B.1)
@@ -525,114 +526,6 @@ function SegmentSection({ segmentSummary }) {
   );
 }
 
-// v97 segment 和文化 dictionary (主要 Tech 企業の segment 名を日本語表示)
-// user dogfood「日本人ユーザー向けに和文で表示してほしい」 への対策。
-// 既知名のみ翻訳、 未登録は英語のままで graceful (機械翻訳禁止 = brand 一貫性)。
-const SEGMENT_NAME_JP = {
-  // NVDA
-  'Data Center': 'データセンター',
-  'Gaming': 'ゲーミング',
-  'Professional Visualization': 'プロフェッショナル映像',
-  'Automotive': '自動運転',
-  'OEM And Other': 'OEM・その他',
-  // MSFT
-  'Intelligent Cloud': 'クラウド (Azure)',
-  'Productivity and Business Processes': '業務生産性 (Office 365 等)',
-  'Productivity And Business Processes': '業務生産性 (Office 365 等)',
-  'More Personal Computing': 'PC・デバイス',
-  'Server Products And Cloud Services': 'サーバ・クラウド',
-  'Microsoft Three Six Five Commercial Products And Cloud Services': 'M365 法人',
-  'Microsoft Office Products And Cloud Services': 'Office 製品',
-  'Microsoft Three Six Five Consumer Products And Cloud Services': 'M365 個人',
-  'Office Consumer Products And Cloud Services': 'Office 個人',
-  'Windows': 'Windows OS',
-  'Linked In Corporation': 'LinkedIn',
-  'LinkedIn Corporation': 'LinkedIn',
-  'Search And News Advertising': '広告 (検索・ニュース)',
-  'Search Advertising': '検索広告',
-  'Gaming Xbox Hardware And Software And Services': 'Xbox ハード・ソフト',
-  'Gaming Xbox Content And Services': 'Xbox コンテンツ・サービス',
-  'Enterprise Services': 'エンタープライズサービス',
-  'Devices': 'デバイス',
-  'Surface': 'Surface',
-  'Dynamics': 'Dynamics (法人向け業務 SaaS)',
-  'Server Products': 'サーバ製品',
-  'Office Products': 'Office 製品',
-  // AMZN
-  'AWS': 'AWS クラウド',
-  'Online Stores': 'オンラインストア',
-  'Online stores': 'オンラインストア',
-  'Physical Stores': '実店舗',
-  'Physical stores': '実店舗',
-  'Third Party Seller Services': 'マーケットプレイス',
-  'Third-party Seller Services': 'マーケットプレイス',
-  'Third-party seller services': 'マーケットプレイス',
-  'Subscription Services': 'Prime サブスク',
-  'Subscription services': 'Prime サブスク',
-  'Advertising Services': '広告事業',
-  'Advertising services': '広告事業',
-  'Other Services': 'その他サービス',
-  // AAPL
-  'iPhone': 'iPhone',
-  'Mac': 'Mac',
-  'iPad': 'iPad',
-  'Wearables Home And Accessories': 'ウェアラブル・周辺機器',
-  'Wearables, Home and Accessories': 'ウェアラブル・周辺機器',
-  'Services': 'サービス事業',
-  // GOOGL — user dogfood 由来追加
-  'Google Services': 'Google サービス',
-  'Google Cloud': 'Google Cloud',
-  'Other Bets': 'その他事業',
-  'YouTube Advertising': 'YouTube 広告',
-  'YouTube Advertising Revenue': 'YouTube 広告',
-  'YouTube Ads Revenue': 'YouTube 広告',
-  'Google Network': 'Google ネットワーク',
-  'Google Network Revenue': 'Google ネットワーク',
-  'Google Network Members Properties': 'Google パートナー広告',
-  'Google Search And Other': 'Google 検索 等',
-  'Google Search & Other': 'Google 検索 等',
-  'Google Advertising': 'Google 広告',
-  'Google Advertising Revenue': 'Google 広告',
-  'Subscriptions Platforms And Devices': 'サブスク・プラットフォーム・端末',
-  'Subscriptions Platforms And Devices Revenue': 'サブスク・プラットフォーム・端末',
-  'Subscriptions, Platforms, and Devices': 'サブスク・プラットフォーム・端末',
-  'Subscriptions, Platforms, And Devices Revenue': 'サブスク・プラットフォーム・端末',
-  'Hardware': 'ハードウェア',
-  'Google Other': 'Google その他',
-  'Google Other Revenue': 'Google その他',
-  // META
-  'Family Of Apps': 'アプリ群 (Facebook/IG/WhatsApp)',
-  'Family of Apps': 'アプリ群 (Facebook/IG/WhatsApp)',
-  'Reality Labs': 'Reality Labs (VR/AR)',
-  // TSLA
-  'Automotive Sales': '自動車販売',
-  'Automotive Leasing': '自動車リース',
-  'Energy Generation And Storage': 'エネルギー事業',
-  'Energy Generation and Storage': 'エネルギー事業',
-  'Services And Other': 'サービス・その他',
-  'Services and Other': 'サービス・その他',
-  // 汎用 (Other / Misc 系を統一表記、 user dogfood で「英語残」 と感じる箇所を解消)
-  'Other': 'その他',
-  'Other Segment': 'その他セグメント',
-  'Other Segments': 'その他セグメント',
-  'Other Revenue': 'その他収益',
-  'Total Revenue': '総収益',
-  // BAC / JPM 等 金融
-  'Consumer Banking': '個人向け銀行',
-  'Global Wealth And Investment Management': '富裕層・資産運用',
-  'Global Banking': '法人銀行',
-  'Global Markets': 'マーケット (トレーディング)',
-  'Investment Banking': '投資銀行',
-  'Asset And Wealth Management': '資産運用',
-  'Commercial Banking': '商業銀行',
-  'Consumer And Community Banking': 'リテール銀行',
-  'Corporate And Investment Bank': '法人・投資銀行',
-};
-
-function translateSegmentName(name) {
-  if (typeof name !== 'string') return name;
-  return SEGMENT_NAME_JP[name] || name;
-}
 
 // ─── v97 Phase 3 (金融 sub-agent verdict): 競合比較 Tab ───────────────────────
 // 自社 + peer 5 銘柄の 4 指標 (株価 YTD / Gross Margin / FCF Margin / R&D%) を fetch、

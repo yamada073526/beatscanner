@@ -11,6 +11,7 @@ import { FileBarChart2, Banknote, Calendar, CheckCircle2, XCircle, AlertTriangle
 import DiagramCitation from './DiagramCitation.jsx';
 import Chip from './ui/Chip.jsx';
 import { sanitizeDiagramData, findBlocklistHits, sanitizeText } from '../lib/blocklist.js';
+import { translateSegmentName } from '../lib/segmentNames.js';
 // handover v82 Phase 5.5: ConditionRow click → DiagramCard pulse 連携 (multi-review 6 体合議 verdict)。
 import { useWorkspaceStore } from '../state/workspaceStore.js';
 import { isStepPulsingForCondition } from '../lib/condition-mapping.js';
@@ -121,10 +122,10 @@ function FlowBox({ step, stepIndex, isPulsing }) {
 // ── Segment row (e.g. Intelligent Cloud / P&BP / MPC) ─────────────────────
 function SegmentBar({ seg }) {
   const yoyColor = (seg.yoy_pct ?? 0) >= 0 ? '#10B981' : '#ef4444';
-  // v97 Phase F emoji audit: ☁️ / 📊 / 💻 emoji prepend を削除 (Aman 級、 OS 依存 glyph 解消)
-  // 名前の短縮は維持 (横幅節約)
-  const displayName = String(seg.name || '')
-    .replace('Productivity and Business Processes', 'Productivity & BP');
+  // segment 名を和文化 (会社概要 ProfileCard と共有 dictionary、 user dogfood「英文でなく和文に」)。
+  // 未登録は英語のまま graceful。 翻訳された場合は title で原文を併記。
+  const rawName = String(seg.name || '');
+  const displayName = translateSegmentName(rawName);
   return (
     <div style={{
       display: 'flex', alignItems: 'center',
@@ -135,11 +136,14 @@ function SegmentBar({ seg }) {
       border: '1px solid var(--border)',
       gap: '8px',
     }}>
-      <div style={{
-        fontSize: '11px', color: 'var(--text-muted)',
-        flex: '1 1 0', minWidth: 0,
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>
+      <div
+        style={{
+          fontSize: '11px', color: 'var(--text-muted)',
+          flex: '1 1 0', minWidth: 0,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}
+        title={displayName !== rawName ? `原文: ${rawName}` : undefined}
+      >
         {displayName}
       </div>
       <div style={{
