@@ -85,6 +85,61 @@ function VizSectionLabel({ text, first = false, icon: Icon = null, sub = null })
   );
 }
 
+// v153 Round 2 模範解答レベル化 (design review verdict 62→目標78+): 物語の接続と事実要約。
+// 模範解答「Surprise Stories」 の核心 = 「節と節の間に『だから?』 (因果の接続)」 + 「黒い結論バーで折り畳む」。
+// ⚠️ §38/§5: NarrativeBridge は静的 dict、 SectionConclusion は backend 数値の JS 算数のみ (LLM 非経由)。
+//    断定的将来予測・投資勧誘・最上級は含めない。 事実の整理に限定。
+
+// セクション間の「だから次を読む」 動線。 中央寄せ転換句 (静的) + 下向き矢印。
+function NarrativeBridge({ text }) {
+  if (!text) return null;
+  return (
+    <div
+      aria-hidden="true"
+      data-testid="diagram-bridge"
+      style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
+        margin: '18px 0 2px', userSelect: 'none', pointerEvents: 'none',
+      }}
+    >
+      <span style={{
+        fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500,
+        letterSpacing: '0.02em', textAlign: 'center', lineHeight: 1.4,
+      }}>
+        {text}
+      </span>
+      <span style={{ color: 'var(--text-muted)', opacity: 0.5, fontSize: '13px', lineHeight: 1 }}>↓</span>
+    </div>
+  );
+}
+
+// 各セクション末尾の「事実要約バー」。 模範解答の黒い結論バー相当だが、 §38 のため断定・将来予測・
+// 推奨・最上級は禁止、 過去の数値の事実要約のみ。 text は呼出側で backend data から JS で算出した
+// 事実文字列を渡す (LLM 非経由)。 cyan 左 accent で「ここが要点」 を明示。
+function SectionConclusion({ text }) {
+  if (!text) return null;
+  return (
+    <div data-testid="diagram-conclusion" style={{
+      marginTop: '10px', padding: '9px 12px', borderRadius: '8px',
+      background: 'var(--bg-subtle)', border: '1px solid var(--border)',
+      borderLeft: '3px solid var(--color-accent)',
+      display: 'flex', alignItems: 'center', gap: '9px',
+    }}>
+      <span style={{
+        flexShrink: 0, fontSize: '9px', fontWeight: 800, letterSpacing: '0.05em',
+        color: 'var(--color-accent)', background: 'rgba(56,189,248,0.10)',
+        border: '1px solid rgba(56,189,248,0.25)', padding: '2px 8px', borderRadius: '20px',
+        whiteSpace: 'nowrap',
+      }}>
+        要点
+      </span>
+      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.45 }}>
+        {text}
+      </span>
+    </div>
+  );
+}
+
 // Sprint 4 案8: stagger variants (feedback_motion_timing_recipes.md §stagger 80ms upper bound)
 // expanded 時のみ発火 (DiagramCard mount = expanded 後に render)
 const STEP_CONTAINER_VARIANTS = {
@@ -1857,7 +1912,12 @@ export default function DiagramCard({
             <div className="skeleton" style={{ height: '12px', width: '75%', margin: '8px auto 0' }} />
           ) : (
             data.summary && (
-              <div className="narrative-appear" style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '8px' }}>
+              // v153 模範解答化: headline 直下の summary を「サブタイトル」格に格上げ
+              // (12px/secondary → 14px/primary/500 + 中央カラム)、 hero の「宙に浮く」 感を解消。
+              <div className="narrative-appear" style={{
+                fontSize: '14px', color: 'var(--text-primary)', fontWeight: 500,
+                lineHeight: 1.55, maxWidth: '480px', margin: '10px auto 0', padding: '0 8px',
+              }}>
                 {data.summary}
               </div>
             )
@@ -1939,6 +1999,11 @@ export default function DiagramCard({
           </div>
         )}
 
+        {/* v153 模範解答化: NarrativeBridge (因果の接続)。 下の section に content がある時のみ表示。 */}
+        {!isGenerating && data.segmentSummary?.segments?.length > 0 && (
+          <NarrativeBridge text="ではどの事業が今期を牽引したか" />
+        )}
+
         {/* ── Section 3.5: セグメント別売上 ── */}
         {data.segmentSummary?.segments?.length > 0 && (
           <>
@@ -1955,6 +2020,10 @@ export default function DiagramCard({
               ))}
             </div>
           </>
+        )}
+
+        {!isGenerating && trends.length > 0 && (
+          <NarrativeBridge text="数年の推移で全体像を見ると" />
         )}
 
         {/* ── Section 4: Growth Story (yearly) ── */}
@@ -2333,6 +2402,16 @@ export default function DiagramCard({
           </div>
         )}
 
+        {/* v153 模範解答化: SectionConclusion (事実要約バー)。 backend data から JS 算数のみ、 LLM 非経由。 */}
+        {!isGenerating && trends.length > 0 && (() => {
+          const rev = trends.find(t => t.metric === '売上高') || trends[0];
+          const pts = (rev?.data || []).filter(d => d.value != null);
+          if (pts.length < 2) return null;
+          const first = pts[0], last = pts[pts.length - 1];
+          const unit = rev.unit || '';
+          return <SectionConclusion text={`売上高は${first.period}の${first.value}${unit}から${last.period}の${last.value}${unit}へ推移`} />;
+        })()}
+
         {/* ── Section 4.5: FCF・CapEx ── */}
         {/* データあり → 表示 / フラグだけある（false）→ N/A表示 / どちらもなし → 非表示 */}
         {(data.fcfTrend?.length > 0 || data.capexTrend?.length > 0 || data.fcfDataAvailable === false) ? (
@@ -2462,6 +2541,19 @@ export default function DiagramCard({
           </div>
         )}
 
+        {/* v153 模範解答化: FCF 事実要約 + 株価への転換 bridge */}
+        {!isGenerating && data.fcfTrend?.length > 0 && (() => {
+          const latest = data.fcfTrend[data.fcfTrend.length - 1]?.value;
+          const rev = data.trends?.find(t => t.metric === '売上高')?.data?.filter(d => d.value != null).slice(-1)[0]?.value;
+          const margin = (latest != null && rev) ? ((latest / rev) * 100).toFixed(1) : null;
+          let text = `直近FCFは$${latest}B`;
+          if (margin) text += `、FCFマージンは${margin}%`;
+          return <SectionConclusion text={text} />;
+        })()}
+        {!isGenerating && (valuation || dividend) && (
+          <NarrativeBridge text="この稼ぐ力に対し、株価はどう評価されているか" />
+        )}
+
         {/* ══ v153 Round 2-A: IA 順序入替 (事業理解→実績→株価→将来→論点→締め) ══
             バリュエーション(株価) / 資本政策(還元) / ガイダンス(将来) を 実績(成長+FCF) の
             「後ろ」 に移動。 旧位置 = 判定直後 / セグメント直後。 logic 不変、 JSX ブロック移動のみ。 */}
@@ -2535,6 +2627,16 @@ export default function DiagramCard({
             <span>バリュエーション情報は次回開示でお届けします</span>
           </div>
         )}
+
+        {/* v153 模範解答化: バリュエーション 事実要約 (数値のみ、 割高/割安 等の判断語は含めず §38-safe) */}
+        {!isGenerating && valuation && (() => {
+          const parts = [];
+          if (valuation.per != null) parts.push(`PER ${valuation.per}倍`);
+          if (valuation.peg != null) parts.push(`PEG ${valuation.peg}`);
+          if (dividend?.yield != null) parts.push(`配当利回り ${dividend.yield}%`);
+          if (parts.length === 0) return null;
+          return <SectionConclusion text={parts.join(' ・ ')} />;
+        })()}
 
         {/* ── 還元: 資本政策 (配当 + 自社株買い 実行額) v138 Phase 2C / v153 で株価の後ろへ ── */}
         {data.capitalReturnDataAvailable && (
@@ -2660,6 +2762,10 @@ export default function DiagramCard({
           </div>
         )}
 
+        {!isGenerating && (bullCase.length > 0 || bearCase.length > 0) && (
+          <NarrativeBridge text="この事実を市場参加者はどう見ているか" />
+        )}
+
         {/* ── 論点: ブル・ベア対比 (v153 で Section 6 から分離、 強み・リスクと隣接) ──
             旧 Section 6 は「投資家への問い + ブル/ベア」 を 1 ブロック同居。 v153 IA reorder で
             ブル・ベア (論点) を 強み・リスクの直後へ、 投資家への問い (締め) を末尾 §38 カードの直前へ分離。 */}
@@ -2779,9 +2885,11 @@ export default function DiagramCard({
               icon={CheckCircle2}
               sub="投資判断の前に、自分の視点で確かめておきたい観点"
             />
+            {/* v153 模範解答化: 締めカードは cyan accent border で「ここが結び」 を 1 段強調
+                ([[feedback_minimalism_over_additive]] 遵守で強調は本 section のみ、 過剰適用しない)。 */}
             <div style={{
               borderRadius: '10px',
-              border: '1px solid var(--border)',
+              border: '1px solid rgba(56,189,248,0.22)',
               background: 'var(--bg-subtle)',
               padding: '14px 16px',
             }}>
