@@ -5481,7 +5481,8 @@ async def _fetch_transcript_cached(ticker: str, year: int, quarter: int) -> "str
         fmp_key = os.getenv("FMP_API_KEY", "")
         if fmp_key:
             try:
-                client = FMPClient(api_key=fmp_key)
+                # transcript は ~55k 字の大 payload → timeout 余裕 (default 15s だと稀に None→8-K fallback)
+                client = FMPClient(api_key=fmp_key, timeout=30.0)
                 rows = await client.earnings_transcript(ticker, year, quarter)
                 if isinstance(rows, list) and rows:
                     content = rows[0].get("content")
@@ -5491,6 +5492,19 @@ async def _fetch_transcript_cached(ticker: str, year: int, quarter: int) -> "str
                 print(f"[TRANSCRIPT] fetch failed {ticker} {year}Q{quarter}: {e}")
         _transcript_cache[key] = (_time.time(), text)
         return text
+
+
+def _safe_generic_narrative(result: dict, source_label: str) -> str:
+    """narrative が §38 逐語検証を通らない時の安全な定性 narrative (数値を新たに作らない)。
+
+    構造化数値があれば別途 row 表示されるので、 ここでは発言原文 (blockquote) への誘導のみ。
+    LLM の narrative variance で稀に派生数値が混入しても、 8-K に戻さず引用ベースで安全に出す。
+    """
+    return (
+        "経営陣が決算カンファレンスコールで次期の見通しについて言及しています。\n"
+        "具体的な数値は下記の発言原文（英語）をご参照ください。\n"
+        f"出典: {source_label}（経営陣発言）。"
+    )
 
 
 async def _fetch_guidance_from_transcript(ticker: str) -> "dict | None":
@@ -5540,26 +5554,42 @@ async def _fetch_guidance_from_transcript(ticker: str) -> "dict | None":
     source_ref = f"FMP earning-call-transcript {ticker.upper()} FY{year} Q{quarter}"
 
     from .visualizer.sec_guidance import extract_guidance
+
+    def _postprocess(r: dict) -> dict:
+        """1 抽出結果に post-hoc §38 を適用: source_quote 逐語確定 + 構造化数値を citation に紐付け。
+        nulled list を r['_nulled'] に格納。 r を返す (in-place)。"""
+        sq = verify_quote_verbatim(r.get("source_quote"), transcript_text)
+        r["source_quote"] = sq
+        # 構造化数値は citation (source_quote) に逐語存在するものだけ残す (過去実績の誤混入防止、 production 検出)
+        r["_nulled"] = null_unverified_number_fields(r, sq or "")
+        r["source_type"] = "transcript"
+        r["source_label"] = source_label
+        return r
+
     result = await extract_guidance(snippet, source_url=source_ref, source_type="transcript")
     if not result:
         return None
+    _postprocess(result)
 
-    # ── post-hoc: source_quote を先に逐語照合 (全文 → 文単位救済)、 これが citation 確定 ──
-    sq_clean = verify_quote_verbatim(result.get("source_quote"), transcript_text)
-    if result.get("source_quote") and not sq_clean:
-        print(f"[TRANSCRIPT] {ticker} source_quote not verbatim → dropped")
-    result["source_quote"] = sq_clean
+    # ── narrative §38 backstop (graceful): 未照合数値があれば 1 回再生成、 それでも駄目なら ──
+    # 定性 narrative に置換 (破棄して 8-K に戻さない)。 全 transcript 照合で原文に無い数値 (LLM の
+    # 派生/概算/捏造) を検出。 全 discard は LLM の narrative variance で feature を flaky にする
+    # (production: MSFT が稀に '5.5' 等で discard → 6h 8-K cache)。
+    if unverified_narrative_figures(result.get("narrative_jp"), transcript_text):
+        retry = await extract_guidance(snippet, source_url=source_ref, source_type="transcript")
+        if retry:
+            _postprocess(retry)
+            if not unverified_narrative_figures(retry.get("narrative_jp"), transcript_text):
+                print(f"[TRANSCRIPT] {ticker} narrative 未照合 → 再生成で clean 採用")
+                result = retry
+        if unverified_narrative_figures(result.get("narrative_jp"), transcript_text):
+            unv = unverified_narrative_figures(result.get("narrative_jp"), transcript_text)
+            print(f"[TRANSCRIPT] {ticker} narrative 未照合 {unv} → 定性 narrative に置換 (§38)")
+            result["narrative_jp"] = _safe_generic_narrative(result, source_label)
 
-    # ── post-hoc §38 (per-field): 構造化数値は **citation (source_quote) に逐語存在** するものだけ残す ──
-    # ⚠️production で検出: full-transcript 照合だと過去実績の数値 (MSFT「Operating margins ... to 46%」
-    # = Q3 実績) が将来 margin guidance に誤混入する (verify_numbers が別文脈の "46" に部分一致)。
-    # citation に無い数値は null → 表示する数値は必ず「我々が見せる引用文」 に裏付けられる (§38 整合)。
-    nulled = null_unverified_number_fields(result, sq_clean or "")
-    if nulled:
-        print(f"[TRANSCRIPT] {ticker} fields not substantiated by citation → nulled: {nulled}")
-
-    result["source_type"] = "transcript"
-    result["source_label"] = source_label
+    nulled = result.get("_nulled") or []
+    sq_clean = result.get("source_quote")
+    result.pop("_nulled", None)
 
     has_structured = any(
         result.get(f) is not None for f in ("q_revenue", "q_margin", "fy_revenue", "fy_margin")
@@ -5573,22 +5603,16 @@ async def _fetch_guidance_from_transcript(ticker: str) -> "dict | None":
               f"nulled={nulled} quote={'kept' if sq_clean else 'none'})")
         return result
 
-    # ── Option A (user gate-3 承認 2026-06-02): 構造化数値なし narrative-only の §38-safe 提示 ──
-    # MSFT 型 (opex/capex/margin-direction = 総売上/margin schema 非適合) を捨てず、 low-confidence
-    # narrative + 逐語 quote で出す。 ただし §38 のため (a) 逐語 source_quote 必須、
-    # (b) narrative 中の全数値が transcript に逐語存在、 の両方を満たす時のみ。 でなければ破棄 (best_8k へ)。
+    # ── Option A (user gate-3 承認): 構造化数値なし narrative-only。 逐語 source_quote が citation の
+    # 主体なので必須 (無ければ guidance の裏付けが無い → 破棄)。 narrative は上で §38-safe 化済。
     if not sq_clean:
         print(f"[TRANSCRIPT] {ticker} narrative-only だが逐語 quote なし → 破棄 (§38)")
-        return None
-    unverified = unverified_narrative_figures(result.get("narrative_jp"), transcript_text)
-    if unverified:
-        print(f"[TRANSCRIPT] {ticker} narrative に未照合数値 {unverified} → 破棄 (§38 捏造疑い)")
         return None
 
     result["narrative_only"] = True
     result["extraction_confidence"] = "low"  # narrative-only は常に low (構造化レンジなし)
     print(f"[TRANSCRIPT] {ticker} FY{year}Q{quarter} NARRATIVE-ONLY "
-          f"(hits={para.get('hit_count')} quote=kept narrative_figs=verified)")
+          f"(hits={para.get('hit_count')} quote=kept)")
     return result
 
 

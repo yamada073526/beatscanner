@@ -264,6 +264,10 @@ I. **原文の hedge 表現を保持する** (金融§38、 3体合議 verdict):
    approximately / around / in the range of" は narrative でも「約」「おおむね」「〜のレンジ」 で
    保持し、 **断定方向に丸めない** (例: "up roughly a point" → 「約1ポイント上昇の見通し」 は可、
    「1ポイント上昇する」 と言い切らない)。
+J. **narrative_jp に書く数値は source_quote に逐語で現れる数値のみ**。 前年比成長率・実効税率・
+   四捨五入した概算など、 source_quote に存在しない数値を narrative に **新たに作り出さない** (§38)。
+   source_quote に無い情報は数値でなく定性表現で述べる (例「成長を見込む」)。 transcript 原文に
+   逐語で無い数値を含む narrative は機械的に破棄され、 表示されなくなるため無駄。
 """
 
 # ─── transcript 専用 NEGATIVE_EXAMPLES (BAD-7) ───────────────────────────────
