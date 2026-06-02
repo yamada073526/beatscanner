@@ -44,10 +44,13 @@ function isFallbackHeadline(headline) {
   return FALLBACK_PATTERNS.some((p) => p.test(text));
 }
 
-function VizSectionLabel({ text, first = false, icon: Icon = null }) {
+function VizSectionLabel({ text, first = false, icon: Icon = null, sub = null }) {
   // デザインレビュー (4体合議 2026-06-03): section 間を広げ「ここで切れる」を明示 (20→28px)、
   // 見出し→中身は詰める (16→14px) で強弱コントラストを作る (模範解答の「呼吸」)。
   // icon prop で見出しにアイコンを添え「記事図解 → アプリ」の品格差を埋める (brand verdict D①)。
+  // Round 2-B (handover v152): sub prop で見出し直下に 1 行 sub-caption を添える。
+  //   模範解答 (Surprise Stories) の編集的「導入文」相当で、 各 section が何を語るかを 2 秒で示す。
+  //   ⚠️ 静的文言のみ (LLM 非経由 = 景表法/§38 risk なし)。 断定的将来予測・最上級は含めない定性記述に限定。
   return (
     <>
       {/* Sprint 3: Saga-like scroll narrative — section 間 1px hairline divider (Linear 流) */}
@@ -63,11 +66,21 @@ function VizSectionLabel({ text, first = false, icon: Icon = null }) {
       <div style={{
         display: 'flex', alignItems: 'center', gap: '7px',
         fontSize: '13px', fontWeight: '700', letterSpacing: '0.5px',
-        color: '#38BDF8', marginBottom: '10px', marginTop: first ? '32px' : '14px',
+        color: '#38BDF8', marginBottom: sub ? '3px' : '10px', marginTop: first ? '32px' : '14px',
       }}>
         {Icon && <Icon size={15} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0 }} />}
         <span>{text}</span>
       </div>
+      {sub && (
+        <div style={{
+          fontSize: '11px',
+          color: 'var(--text-muted)',
+          lineHeight: 1.55,
+          marginBottom: '11px',
+        }}>
+          {sub}
+        </div>
+      )}
     </>
   );
 }
@@ -252,7 +265,7 @@ function CapitalReturnSection({ capitalReturn }) {
 
   return (
     <>
-      <VizSectionLabel text="資本政策（配当・自社株買い 実行額）" icon={Banknote} />
+      <VizSectionLabel text="資本政策（配当・自社株買い 実行額）" icon={Banknote} sub="配当と自社株買いによる株主への還元状況" />
       <div style={{
         fontSize: '10px', color: 'var(--text-muted)',
         marginBottom: '8px',
@@ -416,7 +429,7 @@ function GuidanceSection({ guidance }) {
 
   return (
     <>
-      <VizSectionLabel text="次 Q ガイダンス（経営陣の見通し）" icon={Calendar} />
+      <VizSectionLabel text="次 Q ガイダンス（経営陣の見通し）" icon={Calendar} sub="経営陣が決算説明会・開示で示した次の期間の見通し" />
       <div style={{
         fontSize: '10px', color: 'var(--text-muted)',
         marginBottom: '8px',
@@ -1924,7 +1937,7 @@ export default function DiagramCard({
         {/* ── Section 3: Business Model ── */}
         {isGenerating ? (
           <div data-testid="diagram-section-business-flow">
-            <VizSectionLabel text="ビジネスモデル" icon={Layers} />
+            <VizSectionLabel text="ビジネスモデル" icon={Layers} sub="この企業がどこで稼いでいるかの全体像" />
             <div style={{
               display: 'flex', gap: '8px', padding: '14px 12px',
               background: 'var(--bg-subtle)', borderRadius: '8px',
@@ -1948,7 +1961,7 @@ export default function DiagramCard({
           </div>
         ) : flowItems.length > 0 ? (
           <div className="narrative-appear" data-testid="diagram-section-business-flow">
-            <VizSectionLabel text="ビジネスモデル" icon={Layers} />
+            <VizSectionLabel text="ビジネスモデル" icon={Layers} sub="この企業がどこで稼いでいるかの全体像" />
             {isMobile && (
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>
                 ← スクロールして全体を確認
@@ -1999,7 +2012,7 @@ export default function DiagramCard({
         {/* ── Section 3.5: セグメント別売上 ── */}
         {data.segmentSummary?.segments?.length > 0 && (
           <>
-            <VizSectionLabel text="セグメント別売上" icon={PieChart} />
+            <VizSectionLabel text="セグメント別売上" icon={PieChart} sub="今期を牽引した事業の構成" />
             <div style={{
               fontSize: '10px', color: 'var(--text-muted)',
               marginBottom: '8px',
@@ -2033,7 +2046,7 @@ export default function DiagramCard({
           <div ref={flashRef} data-testid="diagram-section-yearly">
             {/* user 指摘2: 見出し (hairline) を期間トグルの前に置き、 ガイダンスと本 section を明確に分離。
                 旧構造はトグルがガイダンス直下に浮き、 hairline がトグルの下に来ていた (所属が曖昧)。 */}
-            <VizSectionLabel text="数字で見る成長ストーリー" icon={TrendingUp} />
+            <VizSectionLabel text="数字で見る成長ストーリー" icon={TrendingUp} sub="売上・利益・キャッシュフローの数年の推移" />
             {/* レンジセレクター（見出し直下：操作と結果を視覚的に近接させる）*/}
             <div style={{
               display: 'flex', alignItems: 'center',
@@ -2408,7 +2421,7 @@ export default function DiagramCard({
         {/* データあり → 表示 / フラグだけある（false）→ N/A表示 / どちらもなし → 非表示 */}
         {(data.fcfTrend?.length > 0 || data.capexTrend?.length > 0 || data.fcfDataAvailable === false) ? (
           <div data-testid="diagram-section-fcf">
-            <VizSectionLabel text="FCF・設備投資（CapEx）" icon={Banknote} />
+            <VizSectionLabel text="FCF・設備投資（CapEx）" icon={Banknote} sub="長期の競争力を左右する現金の使い道" />
             {!(data.fcfTrend?.length > 0 || data.capexTrend?.length > 0) ? (
               <div style={{
                 padding: '12px 14px',
@@ -2536,7 +2549,7 @@ export default function DiagramCard({
         {/* ── Section 5: Strengths / Risks ── */}
         {isGenerating ? (
           <div data-testid="diagram-section-strengths-risks">
-            <VizSectionLabel text="強み・リスク対比" icon={Shield} />
+            <VizSectionLabel text="強み・リスク対比" icon={Shield} sub="今回の決算で確認できた事実ベースの優位と懸念" />
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '10px' }}>
               {[
                 { color: 'rgba(34,197,94,0.08)', border: 'rgba(34,197,94,0.15)', label: '強み',   widths: [85, 70, 78], dot: 'rgba(34,197,94,0.25)', text: 'rgba(34,197,94,0.5)' },
@@ -2571,7 +2584,7 @@ export default function DiagramCard({
           </div>
         ) : (strengths.length > 0 || risks.length > 0) ? (
           <div className="narrative-appear" data-testid="diagram-section-strengths-risks">
-            <VizSectionLabel text="強み・リスク対比" icon={Shield} />
+            <VizSectionLabel text="強み・リスク対比" icon={Shield} sub="今回の決算で確認できた事実ベースの優位と懸念" />
             <AccordionHeader
               label={`強み ${strengths.length}件 / リスク ${risks.length}件`}
               isOpen={openSections.strengths}
@@ -2583,8 +2596,9 @@ export default function DiagramCard({
                   borderRadius: '8px', background: 'rgba(34,197,94,0.12)',
                   border: '1px solid rgba(34,197,94,0.30)', padding: '12px',
                 }}>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '700', color: '#16a34a', marginBottom: '8px' }}>
-                    <Shield size={12} strokeWidth={2.2} aria-hidden="true" /> 強み
+                  {/* Round 2-D (handover v152): 見出しを Chip primitive の pill に統一 (chip_primitive_canonical)。 */}
+                  <div style={{ marginBottom: '8px' }}>
+                    <Chip variant="display" size="xs" tone="gain" icon={<Shield size={11} strokeWidth={2.2} aria-hidden="true" />}>強み</Chip>
                   </div>
                   {strengths.map((s, i) => (
                     <div
@@ -2604,8 +2618,8 @@ export default function DiagramCard({
                   borderRadius: '8px', background: 'rgba(239,68,68,0.12)',
                   border: '1px solid rgba(239,68,68,0.30)', padding: '12px',
                 }}>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '700', color: '#dc2626', marginBottom: '8px' }}>
-                    <AlertTriangle size={12} strokeWidth={2.2} aria-hidden="true" /> リスク
+                  <div style={{ marginBottom: '8px' }}>
+                    <Chip variant="display" size="xs" tone="loss" icon={<AlertTriangle size={11} strokeWidth={2.2} aria-hidden="true" />}>リスク</Chip>
                   </div>
                   {risks.map((r, i) => (
                     <div
@@ -2645,7 +2659,7 @@ export default function DiagramCard({
         {/* ── Section 6: Investor Question + Bull/Bear (highlights) ── */}
         {isGenerating ? (
           <div data-testid="diagram-section-highlights">
-            <VizSectionLabel text="投資家への問い" icon={HelpCircle} />
+            <VizSectionLabel text="投資家への問い" icon={HelpCircle} sub="次の決算までに見ておきたい着眼点" />
             <div style={{
               borderRadius: '8px', padding: '14px 16px',
               background: 'var(--bg-subtle)', border: '1px solid var(--border)',
@@ -2661,7 +2675,7 @@ export default function DiagramCard({
           </div>
         ) : (investorQuestions.length > 0 || bullCase.length > 0 || bearCase.length > 0) ? (
           <div className="narrative-appear" data-testid="diagram-section-highlights">
-            <VizSectionLabel text="投資家への問い" icon={HelpCircle} />
+            <VizSectionLabel text="投資家への問い" icon={HelpCircle} sub="次の決算までに見ておきたい着眼点" />
             {investorQuestions.length > 0 && (
               <div style={{
                 display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px',
@@ -2699,9 +2713,8 @@ export default function DiagramCard({
                         borderRadius: '8px', background: 'rgba(34,197,94,0.12)',
                         border: '1px solid rgba(34,197,94,0.30)', padding: '12px',
                       }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '700', color: '#16a34a', marginBottom: '8px' }}>
-                          <TrendingUp size={12} strokeWidth={2.2} aria-hidden="true" />
-                          ブル派の根拠
+                        <div style={{ marginBottom: '8px' }}>
+                          <Chip variant="display" size="xs" tone="gain" icon={<TrendingUp size={11} strokeWidth={2.2} aria-hidden="true" />}>ブル派の根拠</Chip>
                         </div>
                         {bullCase.map((s, i) => (
                           <div
@@ -2723,9 +2736,8 @@ export default function DiagramCard({
                         borderRadius: '8px', background: 'rgba(239,68,68,0.12)',
                         border: '1px solid rgba(239,68,68,0.30)', padding: '12px',
                       }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '700', color: '#dc2626', marginBottom: '8px' }}>
-                          <TrendingDown size={12} strokeWidth={2.2} aria-hidden="true" />
-                          ベア派の根拠
+                        <div style={{ marginBottom: '8px' }}>
+                          <Chip variant="display" size="xs" tone="loss" icon={<TrendingDown size={11} strokeWidth={2.2} aria-hidden="true" />}>ベア派の根拠</Chip>
                         </div>
                         {bearCase.map((r, i) => (
                           <div
@@ -2762,6 +2774,75 @@ export default function DiagramCard({
           >
             <span style={{ fontSize: '13px' }}>💬</span>
             <span>ストーリー要点を抽出しています</span>
+          </div>
+        )}
+
+        {/* ── 締め: この決算のチェックポイント (Round 2-C, handover v152) ──
+            模範解答 (Surprise Stories) の「結論 + 今日やること」 相当の締めカード。
+            ⚠️ 「結論」 を断定すると金商法 §38 (断定的判断の提供)、 最上級は景表法 §5 抵触のため、
+            「自問形式の確認観点 + 免責」 に限定する。 全文 静的 dictionary (LLM 非経由) で
+            Trust Cliff を物理層回避 ([[feedback_diagram_quality_guard]] / [[feedback_sell_zone_static_dict]])。
+            銘柄非依存の汎用観点なので全 ticker で同一文言。 */}
+        {!isGenerating && (
+          <div data-testid="diagram-section-checkpoint">
+            <VizSectionLabel
+              text="この決算のチェックポイント"
+              icon={CheckCircle2}
+              sub="投資判断の前に、自分の視点で確かめておきたい観点"
+            />
+            <div style={{
+              borderRadius: '10px',
+              border: '1px solid var(--border)',
+              background: 'var(--bg-subtle)',
+              padding: '14px 16px',
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {[
+                  // §38 法務レビュー (2026-06-03): 「上回ったか」 は暗に「上回る=良い」 を含意し 4 項目中
+                  // 最も誘導寄り → 「市場予想と比べてどうか」 で中立化 (疑問文のまま §38-safe を強化)。
+                  '来期ガイダンスは市場予想と比べてどうか',
+                  'FCF マージンは前年から改善しているか',
+                  '強みは一時的でなく構造的か',
+                  '株価バリュエーションは過去レンジ内か',
+                ].map((q, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                    {/* チェックボックス風の □ (装飾、 操作不可)。 raw hex は使わず token 由来。 */}
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        flexShrink: 0,
+                        width: '15px',
+                        height: '15px',
+                        marginTop: '2px',
+                        borderRadius: '4px',
+                        border: '1.5px solid var(--color-accent)',
+                        opacity: 0.7,
+                      }}
+                    />
+                    <span style={{ fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.6 }}>
+                      {q}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {/* 免責 (§38/§5 物理回避の明示)。 上に hairline で区切る。 */}
+              <div style={{
+                marginTop: '12px',
+                paddingTop: '10px',
+                borderTop: '1px solid var(--border)',
+                fontSize: '11px',
+                color: 'var(--text-muted)',
+                lineHeight: 1.6,
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '6px',
+              }}>
+                <Info size={12} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0, marginTop: '2px' }} />
+                <span>
+                  表示内容は公開情報の整理であり、特定銘柄の売買を推奨するものではありません。過去の実績は将来の成果を保証しません。最終的な投資判断はご自身の責任で行ってください。
+                </span>
+              </div>
+            </div>
           </div>
         )}
 
