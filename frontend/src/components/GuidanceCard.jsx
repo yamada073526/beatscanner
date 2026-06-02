@@ -938,10 +938,13 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
           >
             <CalendarRange size={13} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
             <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-              次期見通し (SEC 文書由来)
+              次期見通し
             </span>
+            {/* v150 B-4 bug1: 出典を「SEC 文書由来」 固定でなく実 source (sec_guidance_source) で表示。
+                FMP アナリスト予想 fallback 等を SEC と誤表示する Trust Cliff を解消 (6体合議 qa/frontend 指摘)。
+                raw hex rgb(96,165,250) → design token (elevation_scale 準拠)。 */}
             {sec_guidance_source && (
-              <span className="text-[10px]" style={{ color: 'rgb(96, 165, 250)' }}>{sec_guidance_source}</span>
+              <span className="text-[10px]" style={{ color: 'var(--color-accent)' }}>{sec_guidance_source}</span>
             )}
             <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
               展開で全文 ›
