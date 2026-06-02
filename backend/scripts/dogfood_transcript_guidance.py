@@ -75,9 +75,10 @@ async def run_one(client: FMPClient, ticker: str):
 
     # 本番 _fetch_guidance_from_transcript と同じ post-hoc + Option A presentability を再現
     sq_raw = result.get("source_quote")
-    nulled = null_unverified_number_fields(result, content)
     sq_clean = verify_quote_verbatim(sq_raw, content)
     result["source_quote"] = sq_clean
+    # §38: 構造化数値は citation (source_quote) に逐語存在するものだけ残す (過去実績の混入防止)
+    nulled = null_unverified_number_fields(result, sq_clean or "")
     has_structured = any(result.get(f) is not None for f in ("q_revenue", "q_margin", "fy_revenue", "fy_margin"))
 
     if has_structured:

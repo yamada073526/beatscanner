@@ -5544,17 +5544,19 @@ async def _fetch_guidance_from_transcript(ticker: str) -> "dict | None":
     if not result:
         return None
 
-    # ── post-hoc §38 (per-field): 各数値 field を逐語照合し、 計算/捏造された field のみ null ──
-    # all-or-nothing でなく field 単位 (AMZN: 明示売上は残し、 計算マージンだけ落とす)。
-    nulled = null_unverified_number_fields(result, transcript_text)
-    if nulled:
-        print(f"[TRANSCRIPT] {ticker} unverified fields nulled: {nulled}")
-
-    # ── post-hoc: source_quote を逐語照合 (全文 → 文単位救済)、 1 文も残らなければ drop ──
+    # ── post-hoc: source_quote を先に逐語照合 (全文 → 文単位救済)、 これが citation 確定 ──
     sq_clean = verify_quote_verbatim(result.get("source_quote"), transcript_text)
     if result.get("source_quote") and not sq_clean:
         print(f"[TRANSCRIPT] {ticker} source_quote not verbatim → dropped")
     result["source_quote"] = sq_clean
+
+    # ── post-hoc §38 (per-field): 構造化数値は **citation (source_quote) に逐語存在** するものだけ残す ──
+    # ⚠️production で検出: full-transcript 照合だと過去実績の数値 (MSFT「Operating margins ... to 46%」
+    # = Q3 実績) が将来 margin guidance に誤混入する (verify_numbers が別文脈の "46" に部分一致)。
+    # citation に無い数値は null → 表示する数値は必ず「我々が見せる引用文」 に裏付けられる (§38 整合)。
+    nulled = null_unverified_number_fields(result, sq_clean or "")
+    if nulled:
+        print(f"[TRANSCRIPT] {ticker} fields not substantiated by citation → nulled: {nulled}")
 
     result["source_type"] = "transcript"
     result["source_label"] = source_label

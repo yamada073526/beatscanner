@@ -228,6 +228,18 @@ def test_null_unverified_keeps_explicit_revenue_drops_calculated_margin():
     assert nulled == ["q_margin"]
 
 
+def test_null_unverified_against_citation_drops_past_actual():
+    # production 検出 (MSFT): 過去実績 margin "to 46%" は transcript には逐語存在するが
+    # guidance citation (source_quote) には無い → citation で照合すれば null 化される。
+    citation = ("We expect full year FY '26 operating margins to be up about 1 point year-over-year. "
+                "We expect CapEx spend to increase to over $40 billion.")
+    result = {"q_revenue": None, "q_margin": {"low_pct": 46.0, "high_pct": 46.0, "type": "operating"},
+              "fy_revenue": None, "fy_margin": None}
+    nulled = null_unverified_number_fields(result, citation)
+    assert result["q_margin"] is None        # 46% は citation に無い → null
+    assert nulled == ["q_margin"]
+
+
 def test_null_unverified_drops_computed_pm2pct_range():
     # "$91 billion ±2%" を 89.18/92.82 に計算した field は逐語照合で落ちる
     transcript = "Total revenue is expected to be $91 billion, plus or minus 2%."

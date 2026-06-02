@@ -101,12 +101,13 @@ GUIDANCE_EXTRACT_TOOL_SCHEMA: dict = {
             },
             "source_quote": {
                 "type": ["string", "null"],
-                "maxLength": 360,
+                "maxLength": 700,
                 "description": (
-                    "決算 call transcript からの抽出時のみ: 数値ガイダンスの根拠となる経営陣の発言を"
-                    "**原文 (英語) のまま逐語で 1-2 文** 引用する。 要約・翻訳・改変は禁止"
-                    "(frontend が原文照合に使うため)。 逐語引用できない数値は抽出しないこと。"
-                    "8-K プレスリリースからの抽出時は null で良い。"
+                    "決算 call transcript からの抽出時のみ: **抽出した全ての数値 (q_revenue/q_margin/"
+                    "fy_revenue/fy_margin) の根拠** となる経営陣の発言を **原文 (英語) のまま逐語** で引用する"
+                    "(必要なら複数文)。 要約・翻訳・改変は禁止。 ⚠️**source_quote に逐語で現れない数値は"
+                    "表示前に機械削除される** ため、 抽出した各数値の根拠文を必ず含めること"
+                    "(過去実績の数値を guidance として citation に混ぜない)。 8-K の場合は null で良い。"
                 ),
             },
             "extraction_confidence": {
