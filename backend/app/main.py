@@ -11415,6 +11415,49 @@ async def generate_visualization(
                     _vd["beat"] = None
                     _vd["beatAbsolute"] = None
 
+    # ── v154 FMP②: アナリスト予想レンジ + rating を figure に attach ──
+    # 金融アナリスト review verdict: build_analyst_view が §38-safe に計算済 (target_range /
+    # rating_distribution / recent_changes)。 数値は Python 計算 (LLM 非経由) なので Phase 5.5
+    # 「静的 dictionary」 path で図解に流すだけ (operatingMargins / capitalReturn attach と同型)。
+    # ⚠️ §38: target_upside_pct (上昇余地%) は煽りになるため frontend に渡さない。 best-effort、
+    #    失敗しても figure は不変 (parsed["analystConsensus"] が無ければ frontend は section 非表示)。
+    try:
+        from .aggregator.analyst import build_analyst_view as _build_av
+        _av_client = FMPClient(api_key=_get_fmp_key(request))
+        _av_price: float | None = None
+        try:
+            _qs = await _av_client.batch_quotes([ticker.upper()])
+            if isinstance(_qs, list) and _qs and isinstance(_qs[0], dict):
+                _p = _qs[0].get("price")
+                if _p is not None:
+                    _av_price = float(_p)
+        except Exception:
+            pass
+        _av = await _build_av(ticker.upper(), client=_av_client, current_price=_av_price)
+        _pm = (_av.get("precomputed_metrics") or {}) if isinstance(_av, dict) else {}
+        _tr = _pm.get("target_range") or {}
+        _rd = _pm.get("rating_distribution") or {}
+        _has_target = isinstance(_tr, dict) and _tr.get("count")
+        _has_rating = isinstance(_rd, dict) and _rd.get("total")
+        if _has_target or _has_rating:
+            parsed["analystConsensus"] = {
+                "currentPrice": _av_price,
+                "targetRange": ({
+                    "median": _tr.get("median"), "high": _tr.get("high"),
+                    "low": _tr.get("low"), "mean": _tr.get("mean"), "count": _tr.get("count"),
+                } if _has_target else None),
+                "ratingConsensus": _pm.get("rating_consensus"),
+                "ratingDistribution": ({
+                    "buy": _rd.get("buy"), "hold": _rd.get("hold"),
+                    "sell": _rd.get("sell"), "total": _rd.get("total"),
+                } if _has_rating else None),
+                "recentChanges": _pm.get("recent_changes"),
+                "sources": (_av.get("sources") or {}) if isinstance(_av, dict) else {},
+            }
+            print(f"[VIZ analyst] attached for {ticker} (target={bool(_has_target)}, rating={bool(_has_rating)})")
+    except Exception as _av_e:
+        print(f"[VIZ analyst] skip for {ticker}: {_av_e}")
+
     # キャッシュ保存（次回同一銘柄・years で即返却される）
     # v126 R15-1 (5/29): trends が空の「失敗 response」 は cache しない。
     # FMP fetch 失敗 + frontend periods 未送信のレガシー request で trends=[] になった response を 6h cache すると、

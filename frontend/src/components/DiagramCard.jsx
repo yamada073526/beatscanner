@@ -7,7 +7,7 @@
  * (multi-review 6 体合議 verdict、 局所介入 +5 行で 2,027 → 2,033 行)。
  */
 import { useState, useEffect, useRef, useMemo, createContext, useContext } from 'react';
-import { FileBarChart2, Banknote, Calendar, CheckCircle2, XCircle, AlertTriangle, Shield, TrendingUp, TrendingDown, Info, Layers, PieChart, HelpCircle, RefreshCw, Building2, Scale } from 'lucide-react';
+import { FileBarChart2, Banknote, Calendar, CheckCircle2, XCircle, AlertTriangle, Shield, TrendingUp, TrendingDown, Info, Layers, PieChart, HelpCircle, RefreshCw, Building2, Scale, Target } from 'lucide-react';
 import DiagramCitation from './DiagramCitation.jsx';
 import Chip from './ui/Chip.jsx';
 import { sanitizeDiagramData, findBlocklistHits, sanitizeText } from '../lib/blocklist.js';
@@ -158,6 +158,91 @@ function SectionConclusion({ text }) {
       <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.45 }}>
         {text}
       </span>
+    </div>
+  );
+}
+
+// v154 FMP②: アナリスト予想 section (金融アナリスト review verdict)。 backend build_analyst_view の
+// §38-safe 数値 (target_range / rating_distribution / recent_changes) を表示。 数値は Python 計算 (LLM 非経由)。
+// ⚠️ §38/§5: 上昇余地% は出さない (煽り)、 個別 firm の "Strong Buy" バッジも出さない (最上級)。
+//    レンジ・分布・修正件数の「事実」 + 免責のみ。
+function AnalystConsensusSection({ analyst }) {
+  if (!analyst) return null;
+  const tr = analyst.targetRange;
+  const rd = analyst.ratingDistribution;
+  const rc = analyst.recentChanges;
+  const cur = analyst.currentPrice;
+  const hasTarget = tr && tr.median != null && tr.high != null && tr.low != null;
+  const hasRating = rd && rd.total;
+  if (!hasTarget && !hasRating) return null;
+
+  const fmtUsd = (v) => (v == null ? '—' : `$${Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}`);
+  let medianPos = null, curPos = null;
+  if (hasTarget && tr.high > tr.low) {
+    medianPos = Math.min(1, Math.max(0, (tr.median - tr.low) / (tr.high - tr.low)));
+    if (cur != null) curPos = Math.min(1, Math.max(0, (cur - tr.low) / (tr.high - tr.low)));
+  }
+
+  return (
+    <div data-testid="diagram-section-analyst" style={{ marginTop: '16px' }}>
+      <VizSectionLabel text="アナリスト予想" icon={Target} sub="市場（アナリスト）が見込む水準" />
+      {hasTarget && (
+        <div style={{ marginBottom: '14px' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+            目標株価レンジ{tr.count != null ? `（n=${tr.count}社）` : ''}
+          </div>
+          {/* レンジバー: 各マーカー (中央値=上 / 現在値=下) に直接ラベルを置き位置と一致させる。
+              §38: レンジ・現在値の位置は事実、 上昇余地% は出さない。 */}
+          <div style={{ position: 'relative', height: '42px' }}>
+            <div style={{ position: 'absolute', top: '22px', left: 0, right: 0, height: '4px', borderRadius: '2px', background: 'var(--bg-muted)' }} />
+            {medianPos != null && (
+              <div style={{ position: 'absolute', top: 0, left: `${medianPos * 100}%`, transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <span style={{ fontSize: '10px', color: 'var(--color-accent)', fontWeight: 700, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>中央 {fmtUsd(tr.median)}</span>
+                <div style={{ width: '3px', height: '14px', borderRadius: '2px', background: 'var(--color-accent)', marginTop: '3px' }} />
+              </div>
+            )}
+            {curPos != null && (
+              <div style={{ position: 'absolute', top: '17px', left: `${curPos * 100}%`, transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ width: '2px', height: '14px', background: 'var(--text-secondary)' }} />
+                <span style={{ fontSize: '10px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', marginTop: '2px' }}>現在 {fmtUsd(cur)}</span>
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+            <span>安値 {fmtUsd(tr.low)}</span>
+            <span>高値 {fmtUsd(tr.high)}</span>
+          </div>
+        </div>
+      )}
+      {hasRating && (() => {
+        const buy = rd.buy || 0, hold = rd.hold || 0, sell = rd.sell || 0;
+        const total = rd.total || (buy + hold + sell) || 1;
+        const pct = (n) => (n / total) * 100;
+        return (
+          <div style={{ marginBottom: rc ? '10px' : '8px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '5px' }}>アナリスト評価の分布</div>
+            <div style={{ display: 'flex', height: '8px', borderRadius: '4px', overflow: 'hidden', background: 'var(--bg-muted)' }}>
+              {buy > 0 && <div style={{ width: `${pct(buy)}%`, background: 'var(--color-gain)' }} />}
+              {hold > 0 && <div style={{ width: `${pct(hold)}%`, background: 'var(--text-muted)' }} />}
+              {sell > 0 && <div style={{ width: `${pct(sell)}%`, background: 'var(--color-loss)' }} />}
+            </div>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '5px', fontSize: '11px', fontVariantNumeric: 'tabular-nums' }}>
+              <span style={{ color: 'var(--color-gain)' }}>強気 {buy}</span>
+              <span style={{ color: 'var(--text-muted)' }}>中立 {hold}</span>
+              <span style={{ color: 'var(--color-loss)' }}>弱気 {sell}</span>
+            </div>
+          </div>
+        );
+      })()}
+      {rc && (rc.upgrades != null || rc.downgrades != null) && (
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px', fontVariantNumeric: 'tabular-nums' }}>
+          直近{rc.window_days || 90}日: 上方修正 {rc.upgrades || 0}件 ・ 下方修正 {rc.downgrades || 0}件
+        </div>
+      )}
+      <div style={{ fontSize: '10px', color: 'var(--text-muted)', lineHeight: 1.5, display: 'flex', gap: '5px', alignItems: 'flex-start' }}>
+        <Info size={11} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0, marginTop: '1px' }} />
+        <span>アナリスト予想の中央値であり、株価や将来の成果を保証するものではありません。</span>
+      </div>
     </div>
   );
 }
@@ -2679,6 +2764,11 @@ export default function DiagramCard({
           <div data-testid="diagram-section-guidance" style={{ marginTop: '16px' }}>
             <GuidanceSection guidance={data.guidanceExtracted} />
           </div>
+        )}
+
+        {/* ── 将来: アナリスト予想 (v154 FMP②、 会社見通し=ガイダンスの隣に市場見通しを置く) ── */}
+        {!isGenerating && data.analystConsensus && (
+          <AnalystConsensusSection analyst={data.analystConsensus} />
         )}
 
         {/* ── Section 5: Strengths / Risks ── */}
