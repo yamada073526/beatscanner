@@ -7,7 +7,7 @@
  * (multi-review 6 体合議 verdict、 局所介入 +5 行で 2,027 → 2,033 行)。
  */
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { FileBarChart2, Banknote, Calendar, CheckCircle2, XCircle, AlertTriangle, Shield, TrendingUp, TrendingDown, Info, Layers, PieChart, HelpCircle } from 'lucide-react';
+import { FileBarChart2, Banknote, Calendar, CheckCircle2, XCircle, AlertTriangle, Shield, TrendingUp, TrendingDown, Info, Layers, PieChart, HelpCircle, RefreshCw, Building2, Scale } from 'lucide-react';
 import DiagramCitation from './DiagramCitation.jsx';
 import Chip from './ui/Chip.jsx';
 import { sanitizeDiagramData, findBlocklistHits, sanitizeText } from '../lib/blocklist.js';
@@ -1272,7 +1272,10 @@ function DividendCard({ dividend }) {
         {dividend.yield}%
       </div>
       {dividend.buyback && (
-        <div style={{ fontSize: '10px', color: '#38BDF8' }}>🔄 自社株買い</div>
+        // v153 aman: emoji 🔄 → lucide RefreshCw (icon_brand_consistency: Aman 級品格、 emoji 禁止)
+        <div style={{ fontSize: '10px', color: '#38BDF8', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+          <RefreshCw size={10} strokeWidth={2.2} aria-hidden="true" />自社株買い
+        </div>
       )}
       {showTip && (
         <div style={{
@@ -1994,7 +1997,7 @@ export default function DiagramCard({
               display: 'flex', alignItems: 'center', gap: '6px',
             }}
           >
-            <span style={{ fontSize: '13px' }}>🏢</span>
+            <Building2 size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} aria-hidden="true" />
             <span>事業フローを精査しています</span>
           </div>
         )}
@@ -2623,7 +2626,7 @@ export default function DiagramCard({
               display: 'flex', alignItems: 'center', gap: '6px',
             }}
           >
-            <span style={{ fontSize: '13px' }}>📊</span>
+            <FileBarChart2 size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} aria-hidden="true" />
             <span>バリュエーション情報は次回開示でお届けします</span>
           </div>
         )}
@@ -2757,7 +2760,7 @@ export default function DiagramCard({
               display: 'flex', alignItems: 'center', gap: '6px',
             }}
           >
-            <span style={{ fontSize: '13px' }}>⚖️</span>
+            <Scale size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} aria-hidden="true" />
             <span>強み・リスク要因を整理しています</span>
           </div>
         )}
