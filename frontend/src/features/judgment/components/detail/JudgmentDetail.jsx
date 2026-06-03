@@ -654,6 +654,9 @@ export default function JudgmentDetail({
              との二重表示防止 (v2 mode 時) */
           hideEyebrow={v2}
           hideCountdownChip={v2}
+          /* v160 D2 Sprint 2: ウォッチ追加ボタン用に detailContext から watchlist + addToWatchlist を pass。 */
+          watchlist={detailContext?.watchlist}
+          onAddToWatchlist={detailContext?.onAddToWatchlist}
         />
 
         {/* Sprint 6: SummaryBrief (AI 要約) — Hero と KpiStrip の間に mount。

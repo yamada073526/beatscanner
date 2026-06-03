@@ -1,5 +1,6 @@
 import React from 'react';
 import Card from '../../primitives/Card.jsx';
+import { Check } from 'lucide-react';
 import Chip from '../../../../components/ui/Chip.jsx';
 import EarningsRing from '../../../../components/EarningsRing.jsx';
 import CompanyLogo from '../../../../components/CompanyLogo.jsx';
@@ -57,7 +58,13 @@ export default function Hero({
    */
   hideEyebrow = false,
   hideCountdownChip = false,
+  // v160 D2 Sprint 2: ウォッチ追加ボタン (screener master-detail で Pane 3 詳細から直接追加)。
+  //   onAddToWatchlist は App.jsx addToWatchlist (重複ガード + 無料 3 件制限 + 未ログイン同期 toast)。
+  //   未配線 (legacy path) では onAddToWatchlist=undefined で button 自体を非表示 = 安全。
+  watchlist,
+  onAddToWatchlist,
 }) {
+  const inWatchlist = Array.isArray(watchlist) && !!ticker && watchlist.includes(ticker);
   const tone =
     verdict === 'beat' ? 'gain' : verdict === 'miss' ? 'loss' : verdict === 'in-line' ? 'muted' : 'muted';
   const verdictLabel =
@@ -211,6 +218,33 @@ export default function Hero({
           >
             {verdictLabel}
           </Chip>
+          {/* v160 D2 Sprint 2: ウォッチ追加ボタン。 onAddToWatchlist 未配線時は非表示。
+              accent (ブランド色 = 中立 action、 緑赤の投資色を使わない)、 追加済は muted + チェック。 */}
+          {onAddToWatchlist && ticker && (
+            inWatchlist ? (
+              <Chip
+                size="md"
+                variant="display"
+                tone="muted"
+                title="ウォッチリストに追加済み"
+                data-testid="hero-watchlist-added"
+              >
+                <Check size={12} strokeWidth={2.5} aria-hidden style={{ marginRight: 4, verticalAlign: '-1px' }} />
+                追加済
+              </Chip>
+            ) : (
+              <Chip
+                size="md"
+                variant="add"
+                tone="accent"
+                onClick={() => onAddToWatchlist(ticker)}
+                ariaLabel={`${ticker} をウォッチリストに追加`}
+                data-testid="hero-watchlist-add"
+              >
+                ウォッチ追加
+              </Chip>
+            )
+          )}
         </div>
       </div>
     </Card>

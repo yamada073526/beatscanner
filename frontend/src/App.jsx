@@ -1194,6 +1194,11 @@ export default function App() {
             detailContext={{
               user,
               isPro: isSubscribed,
+              // v160 D2 Sprint 2: Pane 3 詳細から直接ウォッチ追加 (screener master-detail で Pane 2 が
+              //   Explorer になり既存のウォッチ追加導線が消えるため)。 addToWatchlist 経由で重複ガード +
+              //   無料 3 件制限 toast + 未ログイン同期 toast を継承 (Trust Cliff、 制限バイパス禁止)。
+              watchlist,
+              onAddToWatchlist: addToWatchlist,
               // v120 Sprint 3: featureName 引数追加 (backward compat 維持、 default 「詳細分析（強気/弱気）」)
               onUpgrade: (featureName) => upgrade.open(featureName || '詳細分析（強気/弱気）'),
               onSignIn: signInWithGoogle,
@@ -1754,6 +1759,9 @@ export default function App() {
                 detailContext={{
                   user,
                   isPro: isSubscribed,
+                  // v160 D2 Sprint 2: Pane 3 詳細から直接ウォッチ追加 (Workspace 側と同一配線)。
+                  watchlist,
+                  onAddToWatchlist: addToWatchlist,
                   onUpgrade: () => upgrade.open('詳細分析（強気/弱気）'),
                   onSignIn: signInWithGoogle,
                   // Sprint 5: TriageBanner 「新規買付」 button 対応 (Workspace 側と同一)
