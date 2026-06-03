@@ -1314,7 +1314,7 @@ function ValuationCard({ label, value, judge, dynamicBasis }) {
           cursor: 'help',
         }}>ⓘ</span>
       </div>
-      <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '4px' }}>
+      <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '4px', fontVariantNumeric: 'tabular-nums' }}>
         {value}x
       </div>
       <div style={{
@@ -1426,7 +1426,7 @@ function DividendCard({ dividend }) {
           cursor: 'help',
         }}>ⓘ</span>
       </div>
-      <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '4px' }}>
+      <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '4px', fontVariantNumeric: 'tabular-nums' }}>
         {dividend.yield}%
       </div>
       {dividend.buyback && (
@@ -2627,7 +2627,7 @@ export default function DiagramCard({
                       <span style={{ color: 'var(--text-muted)' }}>
                         {String(d.period).replace('FY', '')}
                       </span>
-                      <span style={{ fontWeight: '700' }}>${d.value}B</span>
+                      <span style={{ fontWeight: '700', fontVariantNumeric: 'tabular-nums' }}>${d.value}B</span>
                     </div>
                   ))}
                 </div>
@@ -2652,7 +2652,7 @@ export default function DiagramCard({
                       <span style={{ color: 'var(--text-muted)' }}>
                         {String(d.period).replace('FY', '')}
                       </span>
-                      <span style={{ fontWeight: '700', color: '#fb923c' }}>${d.value}B</span>
+                      <span style={{ fontWeight: '700', color: '#fb923c', fontVariantNumeric: 'tabular-nums' }}>${d.value}B</span>
                     </div>
                   ))}
                 </div>
