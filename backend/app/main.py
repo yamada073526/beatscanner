@@ -11425,21 +11425,27 @@ async def generate_visualization(
         from .aggregator.analyst import build_analyst_view as _build_av
         from .aggregator.earnings_reaction import compute_reaction as _compute_rx, date_range_for_quarters as _drfq
         from .aggregator.institutional import candidate_quarters as _inst_qs, summarize as _inst_sum
+        from .aggregator.congress import summarize as _congress_sum
         _T = ticker.upper()
         _av_client = FMPClient(api_key=_get_fmp_key(request))
         _rx_from, _rx_to = _drfq(quarters_back=8)
         # ①13F: 直近 5 候補 Q を並列 fetch (最新 Q は 45日遅延で未提出 → 空 → 確定 4Q が残る)。
-        # ②③ の fetch と同じ gather に載せて latency をフラットに保つ。
+        # ⑤議員取引: senate/house を同 gather 末尾に。 ②③ の fetch と同じ gather に載せて latency をフラットに保つ。
         _inst_cands = _inst_qs(5)
+        _n_inst = len(_inst_cands)
         _gathered = await asyncio.gather(
             _av_client.batch_quotes([_T]),
             _av_client.earnings_surprises(_T, limit=16),
             _av_client.historical_price(_T, _rx_from, _rx_to),
             *[_av_client.institutional_holder(_T, limit=1, year=_y, quarter=_q) for (_y, _q) in _inst_cands],
+            _av_client.senate_trades(_T),
+            _av_client.house_trades(_T),
             return_exceptions=True,
         )
         _qs, _es, _ph = _gathered[0], _gathered[1], _gathered[2]
-        _inst_raw = _gathered[3:]
+        _inst_raw = _gathered[3:3 + _n_inst]
+        _senate_raw = _gathered[3 + _n_inst]
+        _house_raw = _gathered[4 + _n_inst]
         _av_price: float | None = None
         if isinstance(_qs, list) and _qs and isinstance(_qs[0], dict):
             _p = _qs[0].get("price")
@@ -11513,6 +11519,22 @@ async def generate_visualization(
                 print(f"[VIZ 13F] attached for {ticker} (quarters={len(_inst['trend'])})")
         except Exception as _inst_e:
             print(f"[VIZ 13F] skip for {ticker}: {_inst_e}")
+        # ── ⑤ 議員取引 (summarize は純 Python、 開示事実の整形のみ) ──
+        # §38: 「議員が買った=買いシグナル」 因果断定なし・話題枠。 議員名は公開開示で表示可。 45日遅延注記。
+        try:
+            _sen = _senate_raw if isinstance(_senate_raw, list) else []
+            _hou = _house_raw if isinstance(_house_raw, list) else []
+            _cg = _congress_sum(_sen, _hou, max_recent=6, window_months=12)
+            if _cg.get("recent"):
+                parsed["congressTrades"] = {
+                    "recent": _cg["recent"],
+                    "summary": _cg.get("summary"),
+                    "source": _cg.get("source"),
+                    "delayDays": _cg.get("delayDays"),
+                }
+                print(f"[VIZ congress] attached for {ticker} (recent={len(_cg['recent'])})")
+        except Exception as _cg_e:
+            print(f"[VIZ congress] skip for {ticker}: {_cg_e}")
     except Exception as _av_e:
         print(f"[VIZ analyst/reaction] skip for {ticker}: {_av_e}")
 

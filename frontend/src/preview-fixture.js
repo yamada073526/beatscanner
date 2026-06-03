@@ -120,6 +120,21 @@ export const DIAGRAM_FIXTURE = {
     delayDays: 45,
   },
 
+  // ── Section: ⑤ 議員取引 (Round 3-B、 話題枠 / engagement、 実 NVDA 開示 shape) ──
+  congressTrades: {
+    recent: [
+      { name: 'Sheldon Whitehouse', chamber: 'senate', type: 'sell', typeLabel: '売却', amount: '$100,001 - $250,000', transactionDate: '2026-05-08', disclosureDate: '2026-06-02' },
+      { name: 'Daniel Meuser', chamber: 'house', type: 'sell', typeLabel: '売却', amount: '$1,001 - $15,000', transactionDate: '2026-04-24', disclosureDate: '2026-05-21' },
+      { name: 'John McGuire', chamber: 'house', type: 'buy', typeLabel: '購入', amount: '$1,001 - $15,000', transactionDate: '2026-04-30', disclosureDate: '2026-05-14' },
+      { name: 'Marjorie Taylor Greene', chamber: 'house', type: 'buy', typeLabel: '購入', amount: '$15,001 - $50,000', transactionDate: '2026-04-12', disclosureDate: '2026-05-02' },
+      { name: 'Mark Warner', chamber: 'senate', type: 'buy', typeLabel: '購入', amount: '$1,001 - $15,000', transactionDate: '2026-04-08', disclosureDate: '2026-04-28' },
+      { name: 'Ro Khanna', chamber: 'house', type: 'buy', typeLabel: '購入', amount: '$1,001 - $15,000', transactionDate: '2026-03-30', disclosureDate: '2026-04-15' },
+    ],
+    summary: { buyCount: 74, sellCount: 29, totalCount: 103, windowMonths: 12 },
+    source: 'FMP 議員取引開示',
+    delayDays: 45,
+  },
+
   // ── Section: 次Qガイダンス (transcript narrative-only, MSFT canary style) ──
   guidanceExtractedAvailable: true,
   guidanceExtracted: {

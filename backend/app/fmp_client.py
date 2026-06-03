@@ -318,3 +318,26 @@ class FMPClient:
             return data if isinstance(data, list) else []
         except Exception:
             return []
+
+    async def senate_trades(self, ticker: str) -> list[dict]:
+        """⑤ 米上院議員の株取引開示 (Senate Stock Watcher / FMP)。
+
+        現キー (Ultimate) で `?symbol=` のみで動作 (param 不足なし、 13F とは別パターン)。
+        fields: firstName/lastName/office/district/owner/assetType/type
+                (Purchase/Sale/Sale (Partial)/Sale (Full))/amount(範囲文字列)/
+                transactionDate/disclosureDate/link。
+        ⚠️ 公開開示の事実データ。 投資シグナルではない (§38: 因果断定禁止・話題枠)。
+        """
+        try:
+            data = await self._get("/senate-trades", {"symbol": ticker.upper()})
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []
+
+    async def house_trades(self, ticker: str) -> list[dict]:
+        """⑤ 米下院議員の株取引開示。 senate_trades と同 schema・同方針。"""
+        try:
+            data = await self._get("/house-trades", {"symbol": ticker.upper()})
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []

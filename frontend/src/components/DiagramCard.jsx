@@ -7,7 +7,7 @@
  * (multi-review 6 体合議 verdict、 局所介入 +5 行で 2,027 → 2,033 行)。
  */
 import { useState, useEffect, useRef, useMemo, createContext, useContext } from 'react';
-import { FileBarChart2, Banknote, Calendar, CheckCircle2, XCircle, AlertTriangle, Shield, TrendingUp, TrendingDown, Info, Layers, PieChart, HelpCircle, RefreshCw, Building2, Scale, Target } from 'lucide-react';
+import { FileBarChart2, Banknote, Calendar, CheckCircle2, XCircle, AlertTriangle, Shield, TrendingUp, TrendingDown, Info, Layers, PieChart, HelpCircle, RefreshCw, Building2, Scale, Target, Landmark } from 'lucide-react';
 import DiagramCitation from './DiagramCitation.jsx';
 import Chip from './ui/Chip.jsx';
 import { sanitizeDiagramData, findBlocklistHits, sanitizeText } from '../lib/blocklist.js';
@@ -652,6 +652,79 @@ function InstitutionalSection({ institutional }) {
       <div style={{ fontSize: '10px', color: 'var(--text-muted)', lineHeight: 1.5, display: 'flex', gap: '5px', alignItems: 'flex-start' }}>
         <Info size={11} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0, marginTop: '1px' }} />
         <span>13F報告は提出に最大45日の遅れがあり、過去の保有状況を示すものです。個別の保有機関や将来の値動きを示すものではありません。（出典: FMP 13F）</span>
+      </div>
+    </div>
+  );
+}
+
+// ── ⑤ 議員取引 (Round 3-B FMP Ultimate、 話題枠 / engagement) ───────────────────
+// backend parsed["congressTrades"] = {recent:[{name, chamber('senate'|'house'), type('buy'|'sell'),
+//   typeLabel('購入'|'売却'), amount, transactionDate, disclosureDate}], summary:{buyCount, sellCount,
+//   totalCount, windowMonths}, source, delayDays}
+// 数値/事実は backend 純 Python 整形 (LLM 非経由)、 narration は静的。
+// ⚠️ §38 / §5 厳守 (user 決定 2026-06-03): これは engagement / 話題枠。
+//   「議員が買った=買いシグナル」 の因果断定は **しない**。 議員名は公開開示で表示可。
+//   買い/売りは投資業界色 (緑/赤) を使わず neutral 表記 (signal を匂わせない)。 45日遅延を明記。
+function CongressTradesSection({ congress }) {
+  if (!congress) return null;
+  const recent = Array.isArray(congress.recent) ? congress.recent : [];
+  const summary = congress.summary || null;
+  if (recent.length === 0) return null;
+
+  const chamberLabel = (c) => (c === 'senate' ? '上院' : c === 'house' ? '下院' : '議会');
+  const fmtDate = (d) => {
+    if (typeof d !== 'string') return '';
+    const m = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[1]}/${m[2]}/${m[3]}` : d;
+  };
+
+  return (
+    <div data-testid="diagram-section-congress" style={{ marginTop: '16px' }}>
+      <VizSectionLabel
+        text="話題: 議員の開示取引"
+        icon={Landmark}
+        sub="米議会議員による株式売買の公開開示（提出に最大45日の遅れ）"
+      />
+
+      {/* 過去12ヶ月の集計 (neutral 表記、 §38: 緑/赤の投資色は使わない) */}
+      {summary && (Number.isFinite(Number(summary.buyCount)) || Number.isFinite(Number(summary.sellCount))) && (
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '14px', flexWrap: 'wrap', marginBottom: '10px', fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>過去{summary.windowMonths || 12}ヶ月の開示</span>
+          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>購入 <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{summary.buyCount ?? 0}</strong>件</span>
+          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>売却 <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{summary.sellCount ?? 0}</strong>件</span>
+        </div>
+      )}
+
+      {/* 直近の開示取引 (議員名 + 院 + 購入/売却 + 金額レンジ + 開示日) */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {recent.map((t, i) => (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap',
+            padding: '7px 10px', borderRadius: '6px',
+            background: 'var(--bg-subtle)', border: '1px solid var(--border)',
+          }}>
+            {/* 院 chip (neutral) */}
+            <span style={{
+              flexShrink: 0, fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)',
+              background: 'var(--bg-muted)', padding: '2px 7px', borderRadius: '4px',
+            }}>{chamberLabel(t.chamber)}</span>
+            {/* 購入/売却 (neutral、 投資色なし) */}
+            <span style={{ flexShrink: 0, fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>{t.typeLabel || (t.type === 'buy' ? '購入' : '売却')}</span>
+            {/* 金額レンジ */}
+            {t.amount && <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{t.amount}</span>}
+            {/* 議員名 + 開示日 (右寄せ) */}
+            <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'baseline', gap: '8px', minWidth: 0 }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
+              <span style={{ flexShrink: 0, fontSize: '10px', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{fmtDate(t.disclosureDate)}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* §38 免責 */}
+      <div style={{ fontSize: '10px', color: 'var(--text-muted)', lineHeight: 1.5, display: 'flex', gap: '5px', alignItems: 'flex-start', marginTop: '8px' }}>
+        <Info size={11} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0, marginTop: '1px' }} />
+        <span>議員による株式売買の公開開示情報です。最大45日の遅れがあり、投資判断のシグナルや売買の推奨を示すものではありません。（出典: FMP 議員取引開示）</span>
       </div>
     </div>
   );
@@ -3202,6 +3275,11 @@ export default function DiagramCard({
             </div>
           </div>
         ) : null}
+
+        {/* ── 話題: ⑤ 議員の開示取引 (Round 3-B、 締めカードの手前、 engagement 枠) ── */}
+        {!isGenerating && data.congressTrades && (
+          <CongressTradesSection congress={data.congressTrades} />
+        )}
 
         {/* ── 締め: この決算のチェックポイント (Round 2-C, handover v152) ──
             模範解答 (Surprise Stories) の「結論 + 今日やること」 相当の締めカード。
