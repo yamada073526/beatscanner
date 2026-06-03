@@ -1,5 +1,6 @@
 # SPEC 2026-06-04: スクリーナーのペイン2移設 + ペイン3分析ページへのウォッチリスト追加ボタン
 
+> **status**: user gate 通過 (案B + Hero placement「任せる」) → **Sprint 1 (master-detail) + Sprint 2 (ウォッチ追加ボタン) ship 済** (v161、 3体合議 ui/frontend/qa 全員 SHIP-WITH-MINOR、 commit 129c17b/211e75c)。 Sprint 4 (modal 整理) は default「触らない」。 残 minor: deselect 導線の Pane3 breadcrumb 化 (現状 Pane2 上部ボタン) / Hero refetch flicker (display:none cache) / CustomScreenerPanel user・isPro prop 未宣言 (frontend gating)。
 > Planner 起票 (設計のみ、 実装は user 承認後)。 D2 dogfood 2026-06-04 起点。
 > 関連 memory: [[feedback_pane3_detail_view]] / [[project_pane3_abstraction_consensus]] / [[feedback_screener_hero_3sections]] / [[feedback_chip_role_separation]] / [[chip_primitive_canonical]] / [[feedback_pane_error_boundary]]
 > 必読 skill: `designing-workspace-ui` (Pane 責務変更), `screener`, `funnel-cro` (ウォッチ追加 = 無料 3 件制限 Trust Cliff)
