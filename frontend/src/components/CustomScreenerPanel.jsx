@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { ChartCandlestick, Crown, TrendingUp } from 'lucide-react';
 import { fetchCustomScreener, fetchCupHandleScanner, fetchRsScanner } from '../api.js';
 import Chip, { ChipGroup } from './ui/Chip.jsx';
@@ -118,10 +118,25 @@ function ResultCard({ item, onSelect }) {
 
 /**
  * v120 RS Screener Phase 1: William O'Neil CAN SLIM L 条件 (RS≥80) results.
- * 既存 _compute_rs() を SP500 universe で集約、 nightly batch + Supabase 永続化。
- * Trust Cliff 防止: universe 範囲 (SP500 N 銘柄 / 6 ヶ月 / calc_date) を明示。
+ * 既存 _compute_rs() を 米国主要銘柄 universe で集約、 nightly batch + Supabase 永続化。
+ * Trust Cliff 防止: universe 範囲 (主要約N銘柄 / 6 ヶ月 / calc_date) を明示。
+ * v158 (3体合議): 結果の並び替え dropdown 追加 (RSスコア順 default / SPY比順 / RS変化順)。
  */
 function RsScannerResults({ data, onSelect }) {
+  // ⚠️ hooks は早期 return より前に呼ぶ (Rules of Hooks)。
+  const [sortKey, setSortKey] = useState('percentile');
+  const rawItems = data?.items || [];
+  const hasDelta = rawItems.some((x) => x.delta_1d_percentile != null);
+  const sortedItems = useMemo(() => {
+    const getters = {
+      percentile: (x) => Number(x.universe_percentile ?? -Infinity),
+      spy: (x) => Number(x.rs_vs_spy_pct ?? -Infinity),
+      delta: (x) => Number(x.delta_1d_percentile ?? -Infinity),
+    };
+    const get = getters[sortKey] || getters.percentile;
+    return [...rawItems].sort((a, b) => get(b) - get(a));
+  }, [rawItems, sortKey]);
+
   if (!data) {
     return (
       <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-3 text-xs text-[var(--text-muted)]">
@@ -136,8 +151,7 @@ function RsScannerResults({ data, onSelect }) {
       </div>
     );
   }
-  const items = data.items || [];
-  if (items.length === 0) {
+  if (rawItems.length === 0) {
     return (
       <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-3 text-xs text-[var(--text-muted)]">
         {data.note || `RS ≥ ${data.min_percentile ?? 80} の銘柄なし (nightly batch 未実行の可能性、 明朝確認)`}
@@ -151,10 +165,25 @@ function RsScannerResults({ data, onSelect }) {
         <span>universe: 米国主要 約{data.universe_size}銘柄〈ETF・ファンド除く〉 / 6 ヶ月 RS / {data.calc_date} 計算</span>
         <span className="ml-auto">CAN SLIM の L = RS ≥ {data.min_percentile} (上位 {100 - data.min_percentile}%)</span>
       </div>
+      {/* v158 (3体合議): 並び替え dropdown。 §38 中立ラベル + 「投資推奨でない」 旨を併記。 */}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-[var(--text-muted)]">並び替え</span>
+        <select
+          value={sortKey}
+          onChange={(e) => setSortKey(e.target.value)}
+          aria-label="RS スクリーナーの並び替え"
+          className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] px-2 py-1 text-xs text-[var(--text-primary)]"
+        >
+          <option value="percentile">RS スコア順</option>
+          <option value="spy">SPY 比順</option>
+          {hasDelta && <option value="delta">RS 変化順</option>}
+        </select>
+        <span className="text-[var(--text-muted)] opacity-80">※ 表示順の変更であり、投資判断の推奨ではありません</span>
+      </div>
       {/* v120 hotfix v3 (user dogfood): 3 列 grid → 1 列縦並び + ランキング番号で順位を即視認.
           各 row は左端 #順位 / 中央 ticker + SPY 比 / 右端 RS percentile badge の 3 column layout. */}
       <div className="flex flex-col gap-1.5">
-        {items.map((item, idx) => {
+        {sortedItems.map((item, idx) => {
           const pct = Number(item.universe_percentile ?? 0);
           const rsDiff = Number(item.rs_vs_spy_pct ?? 0);
           const rank = idx + 1;
