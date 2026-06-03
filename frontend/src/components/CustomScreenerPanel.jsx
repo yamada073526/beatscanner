@@ -1,7 +1,55 @@
 import { useEffect, useState, useMemo } from 'react';
-import { ChartCandlestick, Crown, TrendingUp } from 'lucide-react';
-import { fetchCustomScreener, fetchCupHandleScanner, fetchRsScanner } from '../api.js';
+import { ChartCandlestick, Crown, TrendingUp, SlidersHorizontal, ChevronDown } from 'lucide-react';
+import { fetchCustomScreener, fetchCupHandleScanner, fetchRsScanner, fetchUniverseMeta } from '../api.js';
 import Chip, { ChipGroup } from './ui/Chip.jsx';
+
+// v159 SPEC_2026-06-03 Part B: RS スクリーナ結果の セクター / 時価総額 絞り込み (client-side)。
+// universe-meta endpoint (純データ、 §38/景表法 risk なし) を起動時 1 回 fetch → ticker join。
+// FMP /stable/company-screener の sector (英語) → 日本語表示ラベル。
+const SECTOR_LABEL_JP = {
+  'Technology': 'テクノロジー',
+  'Healthcare': 'ヘルスケア',
+  'Financial Services': '金融',
+  'Consumer Cyclical': '一般消費財',
+  'Communication Services': '通信',
+  'Industrials': '資本財',
+  'Consumer Defensive': '生活必需品',
+  'Energy': 'エネルギー',
+  'Basic Materials': '素材',
+  'Real Estate': '不動産',
+  'Utilities': '公益',
+};
+const SECTOR_OTHER = 'その他';
+function sectorLabelJp(sector) {
+  if (!sector) return SECTOR_OTHER;
+  return SECTOR_LABEL_JP[sector] || SECTOR_OTHER;
+}
+
+// 時価総額帯 (backend _mcap_band と 1:1 mirror)。 hint は数値 tooltip (finance verdict)。
+const MCAP_BANDS = [
+  { key: 'mega', label: '大型', hint: '時価総額 $10B 以上' },
+  { key: 'mid', label: '中型', hint: '時価総額 $2B〜$10B' },
+  { key: 'small', label: '小型', hint: '時価総額 $2B 未満' },
+];
+
+// universe-meta の module-scope cache。 tab 切替で RsScannerResults が unmount/remount しても
+// 再 fetch しない (DiagramCard remount cache 教訓と同 pattern、 24h backend cache と二重防御)。
+let _universeMetaCache = null; // { asOf, count, meta }
+let _universeMetaPromise = null;
+function loadUniverseMeta() {
+  if (_universeMetaCache) return Promise.resolve(_universeMetaCache);
+  if (_universeMetaPromise) return _universeMetaPromise;
+  _universeMetaPromise = fetchUniverseMeta()
+    .then((res) => {
+      _universeMetaCache = res && res.meta ? res : { asOf: 0, count: 0, meta: {} };
+      return _universeMetaCache;
+    })
+    .catch(() => {
+      _universeMetaPromise = null; // 失敗時は次回 retry を許可
+      return { asOf: 0, count: 0, meta: {} };
+    });
+  return _universeMetaPromise;
+}
 
 const CONDITION_SHORT = ['CF率', 'EPS', 'CFPS', '売上', 'CF>EPS'];
 
@@ -122,11 +170,76 @@ function ResultCard({ item, onSelect }) {
  * Trust Cliff 防止: universe 範囲 (主要約N銘柄 / 6 ヶ月 / calc_date) を明示。
  * v158 (3体合議): 結果の並び替え dropdown 追加 (RSスコア順 default / SPY比順 / RS変化順)。
  */
-function RsScannerResults({ data, onSelect }) {
+function RsScannerResults({ data, onSelect, universeMeta }) {
   // ⚠️ hooks は早期 return より前に呼ぶ (Rules of Hooks)。
   const [sortKey, setSortKey] = useState('percentile');
+  // v159 SPEC Part B: セクター / 時価総額 絞り込み。 state は本 component local =
+  //   tab 切替で unmount/remount → 自動 reset (frontend verdict「activeFilter 切替で reset」 を充足)。
+  //   ⚠️ この reset 戦略は「RsScannerResults が activeFilter==='rs' のときだけ条件付き render される」
+  //      前提に依存。 常時 mount に変更する場合は activeFilter 依存の明示 useEffect reset に切替が必要。
+  const [sectorFilter, setSectorFilter] = useState([]); // [] = 全セクター
+  const [mcapFilter, setMcapFilter] = useState([]); // [] = 全帯
+  const [filterOpen, setFilterOpen] = useState(false); // UX verdict: 折りたたみ default 閉
   const rawItems = data?.items || [];
   const hasDelta = rawItems.some((x) => x.delta_1d_percentile != null);
+  const metaMap = universeMeta?.meta || {};
+
+  // セクター facet: 現結果に存在する sector を count 集計 → 実セクター top 6 + その他 に畳む
+  // (固定 5 リストが GOOGL/AMZN 等を埋もれさせる問題を回避、 chip 数は ≤7 で UX verdict の compact 整合)。
+  const sectorFacets = useMemo(() => {
+    const counts = new Map();
+    for (const it of rawItems) {
+      const m = metaMap[(it.ticker || '').toUpperCase()];
+      // 3体合議 (qa verdict): メタ未取得 ticker は絞り込み時に除外される (filteredItems の `if (!m) return false`)。
+      // facet count も同様に除外して「chip の数字 = 絞り込み後の件数」 を厳密一致させる (Trust Cliff: count ズレ防止)。
+      if (!m) continue;
+      const label = sectorLabelJp(m.sector);
+      counts.set(label, (counts.get(label) || 0) + 1);
+    }
+    const realEntries = [...counts.entries()]
+      .filter(([k]) => k !== SECTOR_OTHER)
+      .sort((a, b) => b[1] - a[1]);
+    const top = realEntries.slice(0, 6);
+    const restCount =
+      realEntries.slice(6).reduce((s, [, c]) => s + c, 0) + (counts.get(SECTOR_OTHER) || 0);
+    const facets = top.map(([label, count]) => ({ label, count }));
+    if (restCount > 0) facets.push({ label: SECTOR_OTHER, count: restCount });
+    return facets;
+  }, [rawItems, metaMap]);
+  const topSectorLabels = useMemo(
+    () => sectorFacets.filter((f) => f.label !== SECTOR_OTHER).map((f) => f.label),
+    [sectorFacets],
+  );
+  // 時価総額帯ごとの count
+  const mcapFacets = useMemo(() => {
+    const counts = { mega: 0, mid: 0, small: 0 };
+    for (const it of rawItems) {
+      const m = metaMap[(it.ticker || '').toUpperCase()];
+      if (m?.mcapBand && counts[m.mcapBand] != null) counts[m.mcapBand] += 1;
+    }
+    return counts;
+  }, [rawItems, metaMap]);
+  // メタが実セクターを 1 つ以上含むときだけ filter panel を出す (fetch 失敗/pending 時は従来 list)
+  const metaReady = sectorFacets.some((f) => f.label !== SECTOR_OTHER);
+
+  // 絞り込み適用 (sector AND mcap、 各 dimension 内は OR)
+  const filteredItems = useMemo(() => {
+    if (!sectorFilter.length && !mcapFilter.length) return rawItems;
+    return rawItems.filter((it) => {
+      const m = metaMap[(it.ticker || '').toUpperCase()];
+      if (!m) return false; // メタ未知は一致を確認できないため絞り込み中は除外
+      if (sectorFilter.length) {
+        const label = sectorLabelJp(m.sector);
+        const effective = topSectorLabels.includes(label) ? label : SECTOR_OTHER;
+        if (!sectorFilter.includes(effective)) return false;
+      }
+      if (mcapFilter.length) {
+        if (!m.mcapBand || !mcapFilter.includes(m.mcapBand)) return false;
+      }
+      return true;
+    });
+  }, [rawItems, metaMap, sectorFilter, mcapFilter, topSectorLabels]);
+
   const sortedItems = useMemo(() => {
     const getters = {
       percentile: (x) => Number(x.universe_percentile ?? -Infinity),
@@ -134,8 +247,20 @@ function RsScannerResults({ data, onSelect }) {
       delta: (x) => Number(x.delta_1d_percentile ?? -Infinity),
     };
     const get = getters[sortKey] || getters.percentile;
-    return [...rawItems].sort((a, b) => get(b) - get(a));
-  }, [rawItems, sortKey]);
+    return [...filteredItems].sort((a, b) => get(b) - get(a));
+  }, [filteredItems, sortKey]);
+
+  const activeFilterCount = sectorFilter.length + mcapFilter.length;
+  const toggleSector = (label) =>
+    setSectorFilter((prev) => (prev.includes(label) ? prev.filter((x) => x !== label) : [...prev, label]));
+  const toggleMcap = (key) =>
+    setMcapFilter((prev) => (prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]));
+  const clearFilters = () => {
+    setSectorFilter([]);
+    setMcapFilter([]);
+  };
+  const asOfStr =
+    universeMeta?.asOf > 0 ? new Date(universeMeta.asOf * 1000).toLocaleDateString('ja-JP') : null;
 
   if (!data) {
     return (
@@ -179,11 +304,110 @@ function RsScannerResults({ data, onSelect }) {
           {hasDelta && <option value="delta">RS 変化順</option>}
         </select>
         <span className="text-[var(--text-muted)] opacity-80">※ 表示順の変更であり、投資判断の推奨ではありません</span>
+        {activeFilterCount > 0 && (
+          <span className="ml-auto text-[var(--text-secondary)] tabular-nums">
+            {sortedItems.length} / {rawItems.length} 件
+          </span>
+        )}
       </div>
+
+      {/* v159 SPEC Part B (3体合議): セクター / 時価総額 絞り込み (折りたたみ、 default 閉)。
+          中立操作 (§38/景表法 risk なし)、 緑赤の投資色は使わず accent (ブランド色) で active 表現。 */}
+      {metaReady && (
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)]">
+          <button
+            type="button"
+            onClick={() => setFilterOpen((o) => !o)}
+            aria-expanded={filterOpen}
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-[var(--text-secondary)]"
+          >
+            <SlidersHorizontal size={13} strokeWidth={2} aria-hidden style={{ color: 'var(--text-muted)' }} />
+            <span>セクター・時価総額で絞り込み</span>
+            {activeFilterCount > 0 && (
+              <span className="rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums"
+                style={{ background: 'color-mix(in srgb, var(--color-accent) 18%, transparent)', color: 'var(--color-accent)' }}>
+                {activeFilterCount}
+              </span>
+            )}
+            <ChevronDown
+              size={14}
+              aria-hidden
+              className={`ml-auto transition-transform duration-150 ${filterOpen ? 'rotate-180' : ''}`}
+              style={{ color: 'var(--text-muted)' }}
+            />
+          </button>
+          {filterOpen && (
+            <div className="space-y-3 border-t border-[var(--border)] px-3 py-3">
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold text-[var(--text-muted)]">セクター</p>
+                <ChipGroup gap="tight" ariaLabel="セクター絞り込み">
+                  {sectorFacets.map((f) => (
+                    <Chip
+                      key={f.label}
+                      size="xs"
+                      variant="filter"
+                      tone={sectorFilter.includes(f.label) ? 'accent' : 'muted'}
+                      pressed={sectorFilter.includes(f.label)}
+                      onClick={() => toggleSector(f.label)}
+                    >
+                      {f.label} <span className="opacity-60 tabular-nums">{f.count}</span>
+                    </Chip>
+                  ))}
+                </ChipGroup>
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold text-[var(--text-muted)]">
+                  時価総額
+                  {asOfStr && (
+                    <span className="ml-1 font-normal opacity-70" title={`時価総額は ${asOfStr} 時点のデータ`}>
+                      （{asOfStr} 時点）
+                    </span>
+                  )}
+                </p>
+                <ChipGroup gap="tight" ariaLabel="時価総額絞り込み">
+                  {MCAP_BANDS.map((b) => {
+                    // 3体合議 (ui verdict): 該当 0 件の帯は non-interactive + dim で「押しても何も出ない」 誤操作を防ぐ。
+                    const count = mcapFacets[b.key];
+                    const disabled = count === 0;
+                    return (
+                      <Chip
+                        key={b.key}
+                        size="xs"
+                        variant="filter"
+                        tone={mcapFilter.includes(b.key) ? 'accent' : 'muted'}
+                        pressed={mcapFilter.includes(b.key)}
+                        onClick={disabled ? undefined : () => toggleMcap(b.key)}
+                        title={disabled ? `${b.hint}（該当なし）` : b.hint}
+                        className={disabled ? 'opacity-40' : ''}
+                      >
+                        {b.label} <span className="opacity-60 tabular-nums">{count}</span>
+                      </Chip>
+                    );
+                  })}
+                </ChipGroup>
+              </div>
+              {activeFilterCount > 0 && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="text-[11px] text-[var(--text-muted)] underline underline-offset-2 hover:text-[var(--text-secondary)]"
+                >
+                  絞り込みを解除
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* v120 hotfix v3 (user dogfood): 3 列 grid → 1 列縦並び + ランキング番号で順位を即視認.
           各 row は左端 #順位 / 中央 ticker + SPY 比 / 右端 RS percentile badge の 3 column layout. */}
       <div className="flex flex-col gap-1.5">
-        {sortedItems.map((item, idx) => {
+        {sortedItems.length === 0 ? (
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-3 text-xs text-[var(--text-muted)]">
+            選択した条件に一致する銘柄がありません（絞り込みを変更してください）
+          </div>
+        ) : sortedItems.map((item, idx) => {
           const pct = Number(item.universe_percentile ?? 0);
           const rsDiff = Number(item.rs_vs_spy_pct ?? 0);
           const rank = idx + 1;
@@ -564,6 +788,8 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
   const [oneillData, setOneillData] = useState(null); // v122 O'Neil 完全 (frontend intersection)
   const [activeFilter, setActiveFilter] = useState(null); // null | 'funda' | 'cup' | 'breakout' | 'rs' | 'both' | 'oneill'
   const [error, setError] = useState(null);
+  // v159 SPEC Part B: universe-meta (sector/mcap) を起動時 1 回 fetch (module cache 経由、 24h backend cache)。
+  const [universeMeta, setUniverseMeta] = useState(_universeMetaCache);
 
   async function run() {
     setPhase('loading');
@@ -588,6 +814,19 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
   useEffect(() => {
     run();
   }, []);
+
+  // v159 SPEC Part B: universe-meta を起動時 1 回 fetch (RS スクリーナの sector/mcap 絞り込み材料)。
+  // module cache 済なら即返るので再 fetch なし。 失敗時は空 meta = 絞り込み panel 非表示 (graceful)。
+  useEffect(() => {
+    if (universeMeta) return; // 既に cache から hydrate 済
+    let alive = true;
+    loadUniverseMeta().then((res) => {
+      if (alive) setUniverseMeta(res);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [universeMeta]);
 
   async function runCupFilter(filterKey) {
     setActiveFilter(filterKey);
@@ -831,7 +1070,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
 
           {/* v120 RS Screener results (activeFilter === 'rs' のとき表示) */}
           {activeFilter === 'rs' && (
-            <RsScannerResults data={rsData} onSelect={onSelect} />
+            <RsScannerResults data={rsData} onSelect={onSelect} universeMeta={universeMeta} />
           )}
 
           {/* v122 O'Neil 完全 results (activeFilter === 'oneill' のとき表示) */}

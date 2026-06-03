@@ -1,6 +1,12 @@
 # SPEC 2026-06-03: スクリーナ結果の 並び替え + 絞り込み
 
-> **status**: autopilot 起票 (v158 夜)。 user 就寝中の自律実装用。 3体合議 → SAFE 部分 ship。
+> **status**: 3体合議 (UX/frontend/finance §38 全員 条件付き賛成) → **Phase 1 = RS スクリーナ並び替え ship 済** (v158, commit 1468986)、 **Phase 2 = sector/時価総額 絞り込み ship 済** (v159, autopilot 3体合議 SHIP-WITH-MINOR)。
+> **Phase 1b = 見送り継続** (下記 §3)。
+> 実装状況:
+> - ✅ **Phase 1 (RS sort)**: RsScannerResults に並び替え dropdown (RSスコア順/SPY比順/RS変化順) + §38 中立 disclaimer。 deploy 済。
+> - ⏸ **Phase 1b (他画面 sort)**: O'Neil (月5-15件&masked で値薄) / ファンダ passing (全5/5 で passedCount sort 無意味) / Cup (masked) は ROI 低く **見送り** → user が「全タブに欲しい」 なら別途。
+> - ✅ **Phase 2 (sector/時価総額 filter)**: `/api/screener/universe-meta` endpoint 新設 (純データ・24h cache・LLM 非経由) + RS スクリーナに折りたたみ filter panel + sector chip (結果存在 sector の top6 data-driven + その他) + mcap帯 chip (大型≥$10B/中型$2-10B/小型<$2B, 各 count + 数値 tooltip + 基準日表記)。 3体 verdict 反映済 (UX: 折りたたみ default 閉 / finance: 0件明示 + 時価総額基準日 tooltip + 中立色 / frontend: module-scope memory cache + tab 切替 unmount reset)。 autopilot 3体合議 SHIP-WITH-MINOR で minor 3件 (count整合/0件chip非活性/reset comment) 反映後 ship。
+>   - **scope 判断**: 絞り込みは RS スクリーナ限定 (~600件で navigability 最大課題)。 Cup/O'Neil は Premium mask で ticker 不可視 → 絞り込み不可、 ファンダは~15件で不要。 全タブ展開は user 希望時に別途。
 > **trigger**: user 要望「スクリーナ機能拡張 (絞り込み/並び替え)」 + 当日の russell3000 universe 拡大
 > (3000銘柄・小型株24%) で結果を navigable にする必要が顕在化。
 > **対象**: `frontend/src/components/CustomScreenerPanel.jsx` (+ backend 軽量 endpoint 1 本)。

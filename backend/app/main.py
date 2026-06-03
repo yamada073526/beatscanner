@@ -16037,6 +16037,101 @@ async def cron_rs_scan(
     }
 
 
+# --- Screener universe-meta (v159 SPEC_2026-06-03 Part B: sector/mcap client-side filter 供給) ---
+# 純データ endpoint: schema 変更なし・LLM 非経由・景表法/§38 risk なし (中立メタ)。
+# universe fetch (_fetch_market_cap_top_n) と同じ FMP /stable/company-screener を叩き、
+# 破棄していた sector / marketCap を保持して 24h cache。 frontend が起動時 1 回 fetch し、
+# RS スクリーナ結果の ticker に join → セクター / 時価総額帯で client-side 絞り込みする。
+_UNIVERSE_META_CACHE: dict[str, object] = {"ts": 0.0, "meta": {}}
+_UNIVERSE_META_TTL = 24 * 3600  # 24h (時価総額の変動は緩やか、 nightly batch と整合)
+
+
+def _mcap_band(market_cap) -> str | None:
+    """時価総額を 大型/中型/小型 帯 (mega/mid/small) に分類 (SPEC §2 閾値)。
+
+    mega  ≥ $10B / mid $2-10B / small < $2B。
+    universe は marketCapMoreThan=500M 済なので small は実質 $0.5-2B。
+    """
+    if market_cap is None:
+        return None
+    try:
+        mc = float(market_cap)
+    except (TypeError, ValueError):
+        return None
+    if mc >= 10_000_000_000:
+        return "mega"
+    if mc >= 2_000_000_000:
+        return "mid"
+    return "small"
+
+
+@app.get("/api/screener/universe-meta")
+async def screener_universe_meta(request: Request) -> dict:
+    """スクリーナ結果の client-side 絞り込み用に universe 全銘柄の sector / 時価総額帯を返す。
+
+    SPEC_2026-06-03_screener-sort-filter.md Part B (Phase 2):
+      - FMP /stable/company-screener (_fetch_market_cap_top_n と同 query) の sector / marketCap を流用
+      - LLM 非経由・schema 変更なし・純データ (中立メタ、 §38/景表法 risk なし)
+      - 24h cache。 frontend は起動時 1 回 fetch → map 化 → 結果 ticker に join
+
+    Returns:
+      { "asOf": <epoch>, "count": N, "meta": { "AAPL": {"sector": "Technology", "mcapBand": "mega"}, ... } }
+    """
+    now = _time.time()
+    cached_meta = _UNIVERSE_META_CACHE.get("meta") or {}
+    if cached_meta and (now - float(_UNIVERSE_META_CACHE.get("ts", 0) or 0)) < _UNIVERSE_META_TTL:
+        return {"asOf": int(_UNIVERSE_META_CACHE["ts"]), "count": len(cached_meta), "meta": cached_meta}
+
+    api_key = os.environ.get("FMP_API_KEY", "")
+    if not api_key:
+        print("[universe-meta] FMP_API_KEY not set, returning empty")
+        return {"asOf": int(now), "count": 0, "meta": {}}
+
+    try:
+        import httpx as _httpx_um  # 関数 scope local import (他の universe helper と同 pattern)
+        url = (
+            f"https://financialmodelingprep.com/stable/company-screener"
+            f"?marketCapMoreThan=500000000"
+            f"&priceMoreThan=5&volumeMoreThan=200000"
+            f"&isActivelyTrading=true&isEtf=false&isFund=false"
+            f"&exchange=NASDAQ,NYSE&limit=3000&apikey={api_key}"
+        )
+        async with _httpx_um.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            data = resp.json()
+        if not isinstance(data, list):
+            print("[universe-meta] FMP response not list")
+            if cached_meta:
+                return {"asOf": int(_UNIVERSE_META_CACHE["ts"]), "count": len(cached_meta), "meta": cached_meta}
+            return {"asOf": int(now), "count": 0, "meta": {}}
+        meta: dict[str, dict] = {}
+        for r in data:
+            if not isinstance(r, dict):
+                continue
+            sym = str(r.get("symbol") or "").upper().strip()
+            if not sym:
+                continue
+            meta[sym] = {
+                "sector": (r.get("sector") or None),
+                "mcapBand": _mcap_band(r.get("marketCap")),
+            }
+        if not meta:
+            print("[universe-meta] 0 valid entries")
+            if cached_meta:
+                return {"asOf": int(_UNIVERSE_META_CACHE["ts"]), "count": len(cached_meta), "meta": cached_meta}
+            return {"asOf": int(now), "count": 0, "meta": {}}
+        _UNIVERSE_META_CACHE["meta"] = meta
+        _UNIVERSE_META_CACHE["ts"] = now
+        print(f"[universe-meta] fetched {len(meta)} tickers (sample: {list(meta.items())[:2]})")
+        return {"asOf": int(now), "count": len(meta), "meta": meta}
+    except Exception as e:
+        print(f"[universe-meta] failed ({e})")
+        if cached_meta:  # stale cache fallback (旧データでも空より良い)
+            return {"asOf": int(_UNIVERSE_META_CACHE["ts"]), "count": len(cached_meta), "meta": cached_meta}
+        return {"asOf": int(now), "count": 0, "meta": {}}
+
+
 @app.get("/api/scanner/rs")
 async def scanner_rs(
     min_percentile: int = 80,

@@ -637,6 +637,15 @@ export async function fetchRsScanner(minPercentile = 80, limit = 50) {
   return r.json();
 }
 
+// v159 SPEC_2026-06-03 Part B: スクリーナ結果の client-side 絞り込み (セクター / 時価総額) 用メタ。
+// universe 全銘柄の { sector, mcapBand } を 24h cache backend から 1 回取得 → map 化して ticker join。
+// 返り値: { asOf: epoch, count, meta: { TICKER: { sector, mcapBand: 'mega'|'mid'|'small' } } }
+export async function fetchUniverseMeta() {
+  const r = await fetch('/api/screener/universe-meta');
+  if (!r.ok) return { asOf: 0, count: 0, meta: {} };
+  return r.json();
+}
+
 /**
  * v120 Task 3: Follow-Through Day (William O'Neil 理論) を主要 index で検出.
  * Phase 1: 主要 3 index (^GSPC / ^NDX / ^DJI)、 Pane 1 マクロ section に chip 表示.
