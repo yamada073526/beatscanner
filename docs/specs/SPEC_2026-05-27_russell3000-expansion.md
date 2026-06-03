@@ -1,6 +1,16 @@
 # SPEC 2026-05-27: Russell 3000 universe 拡張 (段階展開: top 1000 → top 3000)
 
-> **status**: Planner draft / **gate 1 (user 承認)** 待ち
+> **status**: ✅ **実装済・本番拡大完了 (v158, 2026-06-03, commit f043263)**。
+> Phase 1 (helper + universe_source param + GH Actions cron) は別セッションで着地済 (universe_size=1000 で稼働)。
+> v158 で 3体合議 (金融§5/sre/frontend 全員 条件付き賛成) → **universe_size 1000→3000 + 流動性フィルタ
+> (priceMoreThan=5 & volumeMoreThan=200000) + Trust Cliff「SP500」表記修正 + RS cap 200→600** を実装。
+> ⚠️ §3-1 の endpoint は `stock-screener` でなく **`company-screener`** が正 (実装は既に正しい)。
+> ⚠️ 段階展開 (Phase1=1000) は **不採用** (Ultimate で rate-limit 消失 + 1000 は底$9.4B で小型株 alpha 未達、
+> 3体合議 verdict)。 marketing 表記は「Russell 3000」 でなく「米国主要 約3000銘柄」 (景表法§5)。
+> **残**: 効果は本日 UTC23:07 nightly scan から (翌朝 dogfood で小型株登場・業種分散を確認)。 Supabase 実容量
+> SQL 計測 (Phase 0) は未実施 (sre 推定 166MB/500MB)。 rs_ratings chunk upsert は resilience nice-to-have で未対応。
+
+> **(旧) status**: Planner draft / gate 1 (user 承認) 待ち
 > **対象 deliverable**: nightly batch (cup_scan / rs_scan) の universe を現状の **SP500 top 500** から **Russell 3000 相当 (market_cap top 3000)** に段階拡張。 独自プロトコル小型株重要性への適合。
 > **想定工数**: **1.0 人日** (細分化は §4 参照、 段階展開で Phase 1 = 0.5 人日 / Phase 2 = 0.5 人日)
 > **multi-review**: **3 体合議推奨** (金融-verdict + sre / 基盤 + frontend-architect)、 §6 参照
