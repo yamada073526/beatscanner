@@ -11424,15 +11424,22 @@ async def generate_visualization(
     try:
         from .aggregator.analyst import build_analyst_view as _build_av
         from .aggregator.earnings_reaction import compute_reaction as _compute_rx, date_range_for_quarters as _drfq
+        from .aggregator.institutional import candidate_quarters as _inst_qs, summarize as _inst_sum
         _T = ticker.upper()
         _av_client = FMPClient(api_key=_get_fmp_key(request))
         _rx_from, _rx_to = _drfq(quarters_back=8)
-        _qs, _es, _ph = await asyncio.gather(
+        # ①13F: 直近 5 候補 Q を並列 fetch (最新 Q は 45日遅延で未提出 → 空 → 確定 4Q が残る)。
+        # ②③ の fetch と同じ gather に載せて latency をフラットに保つ。
+        _inst_cands = _inst_qs(5)
+        _gathered = await asyncio.gather(
             _av_client.batch_quotes([_T]),
             _av_client.earnings_surprises(_T, limit=16),
             _av_client.historical_price(_T, _rx_from, _rx_to),
+            *[_av_client.institutional_holder(_T, limit=1, year=_y, quarter=_q) for (_y, _q) in _inst_cands],
             return_exceptions=True,
         )
+        _qs, _es, _ph = _gathered[0], _gathered[1], _gathered[2]
+        _inst_raw = _gathered[3:]
         _av_price: float | None = None
         if isinstance(_qs, list) and _qs and isinstance(_qs[0], dict):
             _p = _qs[0].get("price")
@@ -11488,6 +11495,24 @@ async def generate_visualization(
                 print(f"[VIZ reaction] attached for {ticker} (beat={_bc}, miss={_mc})")
         except Exception as _rx_e:
             print(f"[VIZ reaction] skip for {ticker}: {_rx_e}")
+        # ── ① 13F 機関保有 (summarize は純 Python、 fetch 済 4-5Q row で集計) ──
+        # §38: 個社名なし・上昇余地%なし。 比率の方向 + 増減社数のみ。 45日遅延を frontend で注記。
+        try:
+            _inst_rows = [
+                r[0] for r in _inst_raw
+                if isinstance(r, list) and r and isinstance(r[0], dict)
+            ]
+            _inst = _inst_sum(_inst_rows, max_quarters=4)
+            if _inst.get("trend"):
+                parsed["institutionalOwnership"] = {
+                    "trend": _inst["trend"],
+                    "latest": _inst.get("latest"),
+                    "source": "FMP 13F",
+                    "delayDays": 45,
+                }
+                print(f"[VIZ 13F] attached for {ticker} (quarters={len(_inst['trend'])})")
+        except Exception as _inst_e:
+            print(f"[VIZ 13F] skip for {ticker}: {_inst_e}")
     except Exception as _av_e:
         print(f"[VIZ analyst/reaction] skip for {ticker}: {_av_e}")
 

@@ -509,6 +509,149 @@ function CapitalReturnSection({ capitalReturn }) {
   );
 }
 
+// ── ①13F 機関投資家の動き (Round 3-B FMP Ultimate、 O'Neil "I" / 機関スポンサー) ──────
+// backend parsed["institutionalOwnership"] = {trend:[{date, ownershipPercent, investorsHolding}],
+//   latest:{date, ownershipPercent, prevOwnershipPercent, ownershipDeltaPt, investorsHolding,
+//           newPositions, closedPositions, increasedPositions, reducedPositions}, source, delayDays}
+// 数値は backend 純 Python 集計 (LLM 非経由)、 narration は静的 (Phase 5.5 path)。
+// ⚠️ §38 / §5 厳守: 個社名なし・上昇余地%なし・最上級なし・断定将来予測なし。
+//    保有比率の方向 (sign color) + 増減社数の事実集計のみ。 45日遅延を明記。
+// sparkline は overflow safety (Number.isFinite guard) + SVG は presentation でなく style で var() 解決。
+function InstitutionalSection({ institutional }) {
+  if (!institutional) return null;
+  const trendRaw = Array.isArray(institutional.trend) ? institutional.trend : [];
+  const latest = institutional.latest || null;
+  const pts = trendRaw.filter((t) => t && Number.isFinite(Number(t.ownershipPercent)));
+  if (pts.length < 1 && !latest) return null;
+
+  const fmtPct1 = (v) => (Number.isFinite(Number(v)) ? `${Number(v).toFixed(1)}%` : '—');
+  const fmtInt = (v) => (Number.isFinite(Number(v)) ? Number(v).toLocaleString('en-US') : '—');
+  // 四半期短縮ラベル "26Q1" (FMP の date は四半期末日: 03/06/09/12)
+  const qLabel = (dateStr) => {
+    if (typeof dateStr !== 'string') return '';
+    const m = dateStr.match(/^(\d{4})-(\d{2})/);
+    if (!m) return '';
+    const q = { '03': 1, '06': 2, '09': 3, '12': 4 }[m[2]] || Math.ceil(parseInt(m[2], 10) / 3);
+    return `${m[1].slice(2)}Q${q}`;
+  };
+
+  // 直近の方向 (投資業界色ルール: 増=緑 / 減=赤 / 横ばい=中立)。 事実の符号のみ、 判定語は付けない。
+  const deltaPt = latest && Number.isFinite(Number(latest.ownershipDeltaPt)) ? Number(latest.ownershipDeltaPt) : null;
+  const deltaColor = deltaPt == null ? 'var(--text-muted)' : deltaPt > 0 ? 'var(--color-gain)' : deltaPt < 0 ? 'var(--color-loss)' : 'var(--text-muted)';
+  const deltaBg = deltaPt == null ? 'rgba(148,163,184,0.12)' : deltaPt > 0 ? 'rgba(34,197,94,0.14)' : deltaPt < 0 ? 'rgba(239,68,68,0.14)' : 'rgba(148,163,184,0.12)';
+  const accumColor = 'var(--color-gain)'; // 新規建て / 増やした = 買い手側 (集計事実)
+  const distColor = 'var(--color-loss)';  // 解消 / 減らした = 売り手側 (集計事実)
+
+  // sparkline geometry: viewBox 0..100 + preserveAspectRatio none で HTML 重ね合わせと座標一致。
+  const vals = pts.map((t) => Number(t.ownershipPercent));
+  const vmin = vals.length ? Math.min(...vals) : 0;
+  const vmax = vals.length ? Math.max(...vals) : 1;
+  const span = vmax - vmin || 1;
+  const leftPct = (i) => (pts.length <= 1 ? 50 : 6 + (i / (pts.length - 1)) * 88); // 6%..94% (端の dot/label clip 回避)
+  const topPct = (v) => 22 + (1 - (Number(v) - vmin) / span) * 60; // 22%..82% (上に % label 余白)
+  const polyPoints = pts.map((t, i) => `${leftPct(i).toFixed(1)},${topPct(t.ownershipPercent).toFixed(1)}`).join(' ');
+
+  const hasCounts = latest && (
+    Number.isFinite(Number(latest.newPositions)) || Number.isFinite(Number(latest.increasedPositions))
+  );
+
+  return (
+    <div data-testid="diagram-section-institutional" style={{ marginTop: '16px' }}>
+      <VizSectionLabel text="機関投資家の動き" icon={Building2} sub="13F報告に基づく機関投資家の保有状況（提出に最大45日の遅れ）" />
+
+      {/* 直近の保有比率 + 前期比 */}
+      {latest && (
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap', marginBottom: pts.length >= 2 ? '12px' : '10px' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>機関保有比率</span>
+          <span style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+            {fmtPct1(latest.ownershipPercent)}
+          </span>
+          {deltaPt != null && (
+            <span style={{ fontSize: '11px', fontWeight: 700, color: deltaColor, background: deltaBg, padding: '2px 7px', borderRadius: '4px', fontVariantNumeric: 'tabular-nums' }}>
+              前期比 {deltaPt > 0 ? '+' : ''}{deltaPt.toFixed(1)}pt
+            </span>
+          )}
+          {latest.date && (
+            <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+              {qLabel(latest.date)} 報告 ・ 報告機関 {fmtInt(latest.investorsHolding)}社
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* 保有比率の推移 (sparkline) — 2Q 以上で表示 */}
+      {pts.length >= 2 && (
+        <div style={{ marginBottom: '14px' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '2px' }}>
+            保有比率の推移（直近{pts.length}四半期）
+          </div>
+          <div style={{ position: 'relative', height: '56px' }}>
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible' }}>
+              <polyline points={polyPoints} vectorEffect="non-scaling-stroke" strokeWidth="2"
+                strokeLinejoin="round" strokeLinecap="round"
+                style={{ fill: 'none', stroke: 'var(--color-accent)' }} />
+            </svg>
+            {pts.map((t, i) => {
+              const isLast = i === pts.length - 1;
+              const l = leftPct(i), tp = topPct(t.ownershipPercent);
+              return (
+                <div key={i}>
+                  <span style={{
+                    position: 'absolute', left: `${l}%`, top: `${tp}%`,
+                    transform: 'translate(-50%, -150%)', whiteSpace: 'nowrap',
+                    fontSize: '9px', fontWeight: isLast ? 700 : 500,
+                    color: isLast ? 'var(--color-accent)' : 'var(--text-muted)',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>{Number(t.ownershipPercent).toFixed(1)}</span>
+                  <span style={{
+                    position: 'absolute', left: `${l}%`, top: `${tp}%`,
+                    transform: 'translate(-50%, -50%)',
+                    width: isLast ? '9px' : '7px', height: isLast ? '9px' : '7px',
+                    borderRadius: '50%', boxSizing: 'border-box',
+                    background: isLast ? 'var(--color-accent)' : 'var(--bg-subtle)',
+                    border: '1.5px solid var(--color-accent)',
+                  }} />
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ position: 'relative', height: '12px' }}>
+            {pts.map((t, i) => (
+              <span key={i} style={{
+                position: 'absolute', left: `${leftPct(i)}%`, top: 0,
+                transform: 'translateX(-50%)', whiteSpace: 'nowrap',
+                fontSize: '8.5px', color: 'var(--text-muted)',
+              }}>{qLabel(t.date)}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 直近四半期に動いた機関の数 (事実集計、 sign color) */}
+      {hasCounts && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>直近四半期に動いた機関の数</div>
+          <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap', fontSize: '12px', fontVariantNumeric: 'tabular-nums' }}>
+            <span><span style={{ color: 'var(--text-muted)' }}>新規建て </span><span style={{ color: accumColor, fontWeight: 700 }}>{fmtInt(latest.newPositions)}社</span></span>
+            <span><span style={{ color: 'var(--text-muted)' }}>解消 </span><span style={{ color: distColor, fontWeight: 700 }}>{fmtInt(latest.closedPositions)}社</span></span>
+          </div>
+          <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap', fontSize: '12px', fontVariantNumeric: 'tabular-nums' }}>
+            <span><span style={{ color: 'var(--text-muted)' }}>保有を増やした </span><span style={{ color: accumColor, fontWeight: 700 }}>{fmtInt(latest.increasedPositions)}社</span></span>
+            <span><span style={{ color: 'var(--text-muted)' }}>減らした </span><span style={{ color: distColor, fontWeight: 700 }}>{fmtInt(latest.reducedPositions)}社</span></span>
+          </div>
+        </div>
+      )}
+
+      {/* §38 免責 */}
+      <div style={{ fontSize: '10px', color: 'var(--text-muted)', lineHeight: 1.5, display: 'flex', gap: '5px', alignItems: 'flex-start' }}>
+        <Info size={11} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0, marginTop: '1px' }} />
+        <span>13F報告は提出に最大45日の遅れがあり、過去の保有状況を示すものです。個別の保有機関や将来の値動きを示すものではありません。（出典: FMP 13F）</span>
+      </div>
+    </div>
+  );
+}
+
 // ── v138 Phase 2D Sprint 2b: 次 Q ガイダンス (SEC 8-K LLM 抽出) ──────────────
 // backend `parsed["guidanceExtracted"]` (visualizer/sec_guidance.extract_guidance) を render。
 // raw fact のみ表示、 「確実」 「必ず」 等の §38 断定 / §5 最上級は backend NEGATIVES + frontend
@@ -2813,6 +2956,11 @@ export default function DiagramCard({
           <div data-testid="diagram-section-capital-return" style={{ marginTop: '16px' }}>
             <CapitalReturnSection capitalReturn={data.capitalReturn} />
           </div>
+        )}
+
+        {/* ── 実績: ①13F 機関投資家の動き (Round 3-B、 資本政策の直後・将来ブロックの手前) ── */}
+        {!isGenerating && data.institutionalOwnership && (
+          <InstitutionalSection institutional={data.institutionalOwnership} />
         )}
 
         {/* ── 将来: 次 Q ガイダンス (SEC 8-K LLM 抽出) v138 Phase 2D / v153 で還元の後ろへ ── */}

@@ -97,6 +97,29 @@ export const DIAGRAM_FIXTURE = {
     },
   },
 
+  // ── Section: ①13F 機関投資家の動き (Round 3-B、 実 AAPL 2025Q2→2026Q1) ──
+  institutionalOwnership: {
+    trend: [
+      { date: '2025-06-30', ownershipPercent: 63.13, investorsHolding: 5863 },
+      { date: '2025-09-30', ownershipPercent: 61.59, investorsHolding: 5866 },
+      { date: '2025-12-31', ownershipPercent: 64.41, investorsHolding: 6344 },
+      { date: '2026-03-31', ownershipPercent: 63.43, investorsHolding: 6305 },
+    ],
+    latest: {
+      date: '2026-03-31',
+      ownershipPercent: 63.43,
+      prevOwnershipPercent: 64.41,
+      ownershipDeltaPt: -0.98,
+      investorsHolding: 6305,
+      newPositions: 199,
+      closedPositions: 249,
+      increasedPositions: 2556,
+      reducedPositions: 3067,
+    },
+    source: 'FMP 13F',
+    delayDays: 45,
+  },
+
   // ── Section: 次Qガイダンス (transcript narrative-only, MSFT canary style) ──
   guidanceExtractedAvailable: true,
   guidanceExtracted: {

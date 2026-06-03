@@ -286,18 +286,34 @@ class FMPClient:
         )
         return data if isinstance(data, list) else []
 
-    async def institutional_holder(self, ticker: str, limit: int = 50) -> list[dict]:
-        """13F 機関投資家保有比率の variation tracking。
+    async def institutional_holder(
+        self,
+        ticker: str,
+        limit: int = 50,
+        year: int | None = None,
+        quarter: int | None = None,
+    ) -> list[dict]:
+        """13F 機関投資家保有サマリー (symbol-positions-summary)。
 
-        ⚠️ FMP **Ultimate plan ($79/月)** で利用可能、 Premium ($39/月) では Restricted。
-        現状 Premium 加入のため、 backend で呼ぶと「Restricted Endpoint」 エラー文字列が返る。
-        try/except + isinstance チェックで silent fail、 frontend では sources=restricted 表示。
-        Ultimate アップグレード時に sources=ok で復活。
+        ⚠️ v157 真因判明 (2026-06-03): 過去「Restricted」 と誤認していたが、 実際は
+        FMP が必須 query param `year` / `quarter` を要求していた (未指定だと 200 で
+        "Invalid or missing query parameter - year" を返し、 _get が非 JSON / Error 扱い
+        → 空配列になっていた)。 現キー (Ultimate) で year/quarter を渡せば 1 四半期 1 row の
+        集計が返る:
+          ownershipPercent / lastOwnershipPercent / investorsHolding /
+          newPositions / closedPositions / increasedPositions / reducedPositions ...
+        year/quarter 未指定の呼出 (旧 /api/insider holders 経路) は従来通り空を返すため
+        後方互換 (回帰なし)。 直近 4Q 推移は呼出側で year/quarter を変えて並列 fetch する。
         """
+        params: dict[str, Any] = {"symbol": ticker.upper(), "limit": limit}
+        if year is not None:
+            params["year"] = year
+        if quarter is not None:
+            params["quarter"] = quarter
         try:
             data = await self._get(
                 "/institutional-ownership/symbol-positions-summary",
-                {"symbol": ticker.upper(), "limit": limit},
+                params,
             )
             return data if isinstance(data, list) else []
         except Exception:
