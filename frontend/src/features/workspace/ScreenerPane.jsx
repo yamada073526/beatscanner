@@ -24,8 +24,9 @@
  * memory anchor: [[feedback-screener-hero-3sections]] / [[feedback-oneill-screener-frontend-intersection]]
  */
 import { useEffect, useRef, useState } from 'react';
+import { Crown } from 'lucide-react';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
-import Chip from '../../components/ui/Chip.jsx';
+import Chip, { ChipGroup } from '../../components/ui/Chip.jsx';
 
 
 // v147 (user dogfood AAPL): cup-handle scanner の state badge を日本語ラベルに。
@@ -94,6 +95,7 @@ async function fetchCupHandle({ limit = 20 } = {}) {
 /**
  * Hero section card (実 fetch result 表示)
  * @param {object} props
+ * @param {string} props.eyebrow - A-1: 連番 eyebrow (例 "01")
  * @param {string} props.title
  * @param {string} props.testId
  * @param {string} props.description - 「推奨ではありません」 含む objective 説明
@@ -107,8 +109,10 @@ async function fetchCupHandle({ limit = 20 } = {}) {
  * @param {Function} props.onUpgrade - ProTeaser CTA で呼び出し (Pro 訴求 modal 起動)
  * @param {string|null} props.error - P6-2: per-source partial failure 文言 (null なら error UI 非表示)
  * @param {Function} props.onRetry - P6-2: retry button click handler
+ * @param {boolean} props.featured - A-4: 最希少 setup (交差) のみ主役化 (padding↑ + Crown gold)
+ * @param {number} props.revealBaseDelay - A-3: stagger 入場の section base delay (ms)
  */
-function HeroSection({ title, testId, description, tickers, loading, emptyMessage, onSelect, sectionRef, active = false, demoMode = false, onUpgrade, error = null, onRetry }) {
+function HeroSection({ eyebrow, title, testId, description, tickers, loading, emptyMessage, onSelect, sectionRef, active = false, demoMode = false, onUpgrade, error = null, onRetry, featured = false, revealBaseDelay = 0 }) {
   // v125 P5-2: demo モード時は top 1 visible + 残り blur (marketer 6 体合議 verdict)
   const visibleCount = demoMode ? 1 : tickers.length;
   const blurredCount = demoMode ? Math.max(0, tickers.length - 1) : 0;
@@ -120,7 +124,8 @@ function HeroSection({ title, testId, description, tickers, loading, emptyMessag
       style={{
         flex: 1,
         minHeight: 220,
-        padding: 'var(--space-4, 16px)',
+        // A-4: 交差 section (featured) のみ padding を一段上げて「ご褒美の間」 を作る (--space-4→--space-5)。
+        padding: featured ? 'var(--space-5, 20px)' : 'var(--space-4, 16px)',
         border: active
           ? '1px solid var(--color-accent)'
           : '1px solid var(--border)',
@@ -132,34 +137,79 @@ function HeroSection({ title, testId, description, tickers, loading, emptyMessag
         transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
       }}
     >
-      <h4
-        style={{
-          fontSize: 13,
-          fontWeight: 600,
-          margin: '0 0 4px',
-          color: 'var(--text-primary)',
-        }}
-      >
-        {title}
-      </h4>
-      <p
-        title={description}
-        style={{
-          fontSize: 10,
-          color: 'var(--text-muted)',
-          margin: '0 0 12px',
-          lineHeight: 1.4,
-          // v159 user dogfood: 3 列で description 行数が異なり chip 開始 y がズレる (CNH vs CCJ 不揃い)。
-          // 2 行に clamp + min-height で全列のヘッダ高さを揃え、 銘柄チップを左右水平に整列。 全文は title hover。
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
-          minHeight: 28,
-        }}
-      >
-        {description}
-      </p>
+      {/* A-1: 見出しに格 — 連番 eyebrow + 18px/fw500 見出し + gold hairline。 A-3 stagger は heading block 単位。 */}
+      <div className="screener-reveal" style={{ animationDelay: `${revealBaseDelay}ms` }}>
+        {eyebrow && (
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 500,
+              letterSpacing: '0.08em',
+              color: 'var(--text-muted)',
+              fontVariantNumeric: 'tabular-nums',
+              marginBottom: 2,
+            }}
+          >
+            {eyebrow}
+          </div>
+        )}
+        <h4
+          title={title}
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 'var(--space-2, 8px)',
+            fontSize: 'var(--text-h2, 18px)',
+            fontWeight: 500,
+            lineHeight: 1.25,
+            letterSpacing: '-0.01em',
+            margin: '0 0 var(--space-2, 8px)',
+            paddingBottom: 'var(--space-2, 8px)',
+            // 3体合議 (qa #2 + ui): 見出し未 clamp だと長い title (交差) が narrow 列で 2-3 行折返し → 3 列の
+            //   row 開始 Y がズレて「波打ち」。 2 行分の min-height で全列の hairline / row 開始位置を揃える。
+            minHeight: '2.5em',
+            // A-1: gold hairline (SectionHeader idiom 流用)。 3体合議 (ui P1): 既存 ds-section-header 40%/35% に対し
+            //   18% は「ほぼ見えず」 vision-eval 不検知 → 32% に引上げて Aman 真鍮感を揃える。 raw hex なし。
+            borderBottom: '1px solid color-mix(in srgb, var(--color-gold) 32%, transparent)',
+            color: 'var(--text-primary)',
+          }}
+        >
+          {/* A-4: featured (交差) のみ Crown gold で「最希少」 を格調シンボルで明示 ([[feedback_icon_brand_consistency]])。 */}
+          {featured && (
+            <Crown size={16} strokeWidth={1.75} aria-hidden style={{ color: 'var(--color-gold)', flexShrink: 0, marginTop: 2 }} />
+          )}
+          {/* 2 行 clamp (それ以上は ellipsis + title hover で全文)。 全列の見出し高さを揃える。 */}
+          <span
+            style={{
+              minWidth: 0,
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+            }}
+          >
+            {title}
+          </span>
+        </h4>
+        <p
+          title={description}
+          style={{
+            fontSize: 10,
+            color: 'var(--text-muted)',
+            margin: '0 0 12px',
+            lineHeight: 1.4,
+            // v159 user dogfood: 3 列で description 行数が異なり chip 開始 y がズレる (CNH vs CCJ 不揃い)。
+            // 2 行に clamp + min-height で全列のヘッダ高さを揃え、 銘柄チップを左右水平に整列。 全文は title hover。
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            minHeight: 28,
+          }}
+        >
+          {description}
+        </p>
+      </div>
       {loading ? (
         <div data-testid={`${testId}-loading`} style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--space-3, 12px)' }}>
           読み込み中…
@@ -206,14 +256,27 @@ function HeroSection({ title, testId, description, tickers, loading, emptyMessag
           {emptyMessage || '該当銘柄なし'}
         </div>
       ) : (
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <ul data-testid={`${testId}-results`} style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-1, 4px)' }}>
           {tickers.map((t, idx) => {
             // v125 P5-2: demo モード時は idx === 0 のみ visible、 残りは blur
             const isBlurred = demoMode && idx >= visibleCount;
+            const rank = idx + 1;
+            // A-2: ランク circle = 上位 3 gold / 4-5 accent (RsScannerResults idiom 移植)。 希少性の gold pop。
+            const rankBg = rank <= 3
+              ? 'color-mix(in srgb, var(--color-gold) 18%, transparent)'
+              : 'color-mix(in srgb, var(--color-accent) 14%, transparent)';
+            const rankColor = rank <= 3 ? 'var(--color-gold)' : 'var(--color-accent)';
             return (
-              <li key={t.ticker}>
+              <li
+                key={t.ticker}
+                // A-3: 銘柄 row の stagger 入場 (section base + 40ms × index)。 wrapper に置くことで
+                //   button の hover transform と forwards fill が干渉しない。
+                className="screener-reveal"
+                style={{ animationDelay: `${revealBaseDelay + (idx + 1) * 40}ms` }}
+              >
                 <button
                   type="button"
+                  className="screener-hero-row"
                   onClick={isBlurred ? onUpgrade : () => onSelect(t.ticker)}
                   data-testid={`screener-hero-ticker-${isBlurred ? 'blurred' : t.ticker}`}
                   data-blurred={isBlurred ? 'true' : 'false'}
@@ -221,26 +284,50 @@ function HeroSection({ title, testId, description, tickers, loading, emptyMessag
                   style={{
                     width: '100%',
                     padding: '6px 8px',
-                    fontSize: 12,
-                    fontWeight: 600,
                     textAlign: 'left',
                     border: '1px solid var(--border)',
                     borderRadius: 'var(--radius-sm, 4px)',
                     background: 'var(--bg-subtle)',
-                    color: 'var(--text-primary)',
                     cursor: 'pointer',
                     display: 'flex',
-                    justifyContent: 'space-between',
                     alignItems: 'center',
-                    gap: 8,
+                    gap: 'var(--space-2, 8px)',
                     filter: isBlurred ? 'blur(4px)' : 'none',
                     opacity: isBlurred ? 0.5 : 1,
                     pointerEvents: isBlurred ? 'none' : 'auto',
                   }}
                 >
-                  <span style={{ fontFamily: 'var(--font-mono, monospace)' }}>{t.ticker}</span>
+                  {/* A-2 左: ランク circle (順位を 2 秒視認、 上位 gold で希少性 pop) */}
+                  <span
+                    aria-hidden
+                    style={{
+                      flexShrink: 0,
+                      width: 24,
+                      height: 24,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '50%',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      fontVariantNumeric: 'tabular-nums',
+                      background: rankBg,
+                      color: rankColor,
+                    }}
+                  >
+                    {rank}
+                  </span>
+                  {/* A-2 中央: ticker (mono / fw700 = 視線 anchor) */}
+                  <span style={{ flex: 1, minWidth: 0, fontFamily: 'var(--font-mono, monospace)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {t.ticker}
+                  </span>
+                  {/* A-2 右: stat badge を fw400 muted → fw700 secondary に格上げ (数値主役化、 §7-B Stat contrast)。
+                      3体合議 (qa #1 + ui): 長い state label (例「高値圏突破 · 50DMA +X% ✦ GC」) が narrow 列で
+                      折返すと row 高さが不揃いになるため nowrap + ellipsis、 全文は title hover。 主役の state 名は先頭で生存。 */}
                   {t.badge && (
-                    <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 400 }}>{t.badge}</span>
+                    <span title={t.badge} style={{ flexShrink: 0, maxWidth: '56%', textAlign: 'right', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {t.badge}
+                    </span>
                   )}
                 </button>
               </li>
@@ -430,46 +517,41 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
       {/* v160 D2: master-detail 化で WIP banner 撤去 (user gate 通過、 本実装が gate 後の正式版)。
           Hero (今注目 3 セクション) は Pane 3 の idle 状態、 銘柄選択で JudgmentDetail に切替。 */}
 
-      {/* chip filter (Hero 3 section の jump + active highlight) */}
-      <div
-        data-testid="screener-chip-filter"
-        style={{
-          display: 'flex',
-          gap: 'var(--space-2, 8px)',
-          marginBottom: 'var(--space-3, 12px)',
-          flexWrap: 'wrap',
-        }}
-      >
-        <Chip
-          variant="filter"
-          size="sm"
-          tone="accent"
-          pressed={activeChip === 'leader'}
-          onClick={() => handleChipClick('leader')}
-          ariaLabel="Leader + Breakout + Cup-Handle 交差 section に jump"
-        >
-          Leader + Breakout + CWH
-        </Chip>
-        <Chip
-          variant="filter"
-          size="sm"
-          tone="accent"
-          pressed={activeChip === 'rising'}
-          onClick={() => handleChipClick('rising')}
-          ariaLabel="RS 急上昇 section に jump"
-        >
-          RS 急上昇
-        </Chip>
-        <Chip
-          variant="filter"
-          size="sm"
-          tone="accent"
-          pressed={activeChip === 'new-cwh'}
-          onClick={() => handleChipClick('new-cwh')}
-          ariaLabel="新規 Cup-Handle 検出 section に jump"
-        >
-          新規 Cup-Handle
-        </Chip>
+      {/* A-6: chip filter を「探索メニュー」 化 (ChipGroup prefix=探索)。 active のみ accent
+          ([[feedback_no_baseline_cyan]]: 非 active は muted で baseline cyan を出さない)。 */}
+      <div data-testid="screener-chip-filter" style={{ marginBottom: 'var(--space-3, 12px)' }}>
+        <ChipGroup prefix="探索" gap="normal" ariaLabel="スクリーナー section へ jump">
+          <Chip
+            variant="filter"
+            size="sm"
+            tone={activeChip === 'leader' ? 'accent' : 'muted'}
+            pressed={activeChip === 'leader'}
+            onClick={() => handleChipClick('leader')}
+            ariaLabel="Leader + Breakout + Cup-Handle 交差 section に jump"
+          >
+            Leader + Breakout + CWH
+          </Chip>
+          <Chip
+            variant="filter"
+            size="sm"
+            tone={activeChip === 'rising' ? 'accent' : 'muted'}
+            pressed={activeChip === 'rising'}
+            onClick={() => handleChipClick('rising')}
+            ariaLabel="RS 急上昇 section に jump"
+          >
+            RS 急上昇
+          </Chip>
+          <Chip
+            variant="filter"
+            size="sm"
+            tone={activeChip === 'new-cwh' ? 'accent' : 'muted'}
+            pressed={activeChip === 'new-cwh'}
+            onClick={() => handleChipClick('new-cwh')}
+            ariaLabel="新規 Cup-Handle 検出 section に jump"
+          >
+            新規 Cup-Handle
+          </Chip>
+        </ChipGroup>
       </div>
 
       {/* Hero: 3 セクション × top 5 */}
@@ -483,6 +565,9 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
         }}
       >
         <HeroSection
+          eyebrow="01"
+          featured
+          revealBaseDelay={0}
           title="Leader + Breakout + Cup-Handle 交差"
           testId="screener-hero-leader-breakout-cwh"
           description="RS percentile ≥ 80 ∩ Cup-Handle 検出済 (推奨ではありません)"
@@ -498,6 +583,8 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           onRetry={handleRetry}
         />
         <HeroSection
+          eyebrow="02"
+          revealBaseDelay={80}
           title="RS 急上昇"
           testId="screener-hero-rs-rising"
           description={
@@ -517,6 +604,8 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           onRetry={handleRetry}
         />
         <HeroSection
+          eyebrow="03"
+          revealBaseDelay={160}
           title="新規 Cup-Handle 検出"
           testId="screener-hero-new-cup-handle"
           description="Cup-Handle 検出済（高値圏ブレイクの追随買いは除く）。投資の推奨ではありません。"

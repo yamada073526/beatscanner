@@ -6882,6 +6882,76 @@ button.ds-chip[data-pressed="true"]:hover {
   gap: 4px;
 }
 
+/* ── SPEC 2026-06-04 スクリーナーデザイン刷新 A-3: stagger reveal ──
+   Hero section 見出し / 銘柄 row の初回入場演出 (「お宝発見の旅」 の上質な間)。
+   fade-up (translateY 8px→0 + opacity)、 finite 1 回 (infinite finish 罠回避 [[feedback_pge_loop_pitfalls]])。
+   forwards fill は wrapper (heading block / li) のみに適用 → hover transform (button 側) と
+   transform を奪い合わない ([[feedback_press_feedback_delta]] running forwards fill 罠回避)。
+   prefers-reduced-motion: reduce で即時表示 (animation 無効 = opacity 1 / transform none)。
+   発火は row が mount する初回 fetch 完了時のみ (chip 切替は refetch しないため再生しない)。 */
+@keyframes screenerRevealUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.screener-reveal {
+  animation: screenerRevealUp var(--motion-slow, 360ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .screener-reveal { animation: none; }
+}
+
+/* A-2: Hero 銘柄 row の hover lift。 reveal wrapper (li) の子 = button に置くことで
+   .screener-reveal の forwards fill (li の transform) と非干渉。 新 glow host / box-shadow なし。 */
+.screener-hero-row {
+  transition:
+    transform var(--motion-base, 200ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    border-color var(--motion-base, 200ms) ease;
+}
+.screener-hero-row:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--color-accent) 40%, var(--border));
+}
+@media (prefers-reduced-motion: reduce) {
+  .screener-hero-row:hover { transform: none; }
+}
+
+/* ── SPEC 2026-06-04 B: Hero ウォッチ★ボタン (gold ownership) ──
+   add variant は primitive 既定で cyan hover だが、 ウォッチ action のみ gold に上書き
+   (★が金色に灯る = 所有の喜び、 緑/cyan でなく gold で「上昇」 と意味衝突回避)。
+   この block は add variant hover (上方で定義) より後に置き、 同 specificity で source order 勝ち。
+   新 glow host / box-shadow なし (border + transform + color のみ)。 */
+.hero-watch-add {
+  transition:
+    transform var(--motion-base, 200ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    border-color var(--motion-base, 200ms) ease,
+    background var(--motion-base, 200ms) ease,
+    color var(--motion-base, 200ms) ease;
+}
+button.ds-chip.hero-watch-add:hover {
+  transform: translateY(-1px);
+  border-style: solid !important;
+  border-color: color-mix(in srgb, var(--color-gold) 55%, transparent) !important;
+  background: color-mix(in srgb, var(--color-gold) 8%, transparent) !important;
+  color: var(--color-gold) !important;
+}
+/* hover で Star outline → gold fill (lucide svg を塗る) */
+button.ds-chip.hero-watch-add:hover svg {
+  color: var(--color-gold);
+  fill: var(--color-gold);
+}
+/* 3体合議 (frontend-architect #4 + ui P2): dark mode の add variant hover
+   `[data-theme="dark"] button.ds-chip[data-variant="add"]:hover` は specificity (0,4,1) で
+   `.hero-watch-add:hover` (0,3,1) に勝つため、 dark mode 専用 override を同 specificity 以上で再宣言。
+   これが無いと dark mode で cyan に戻り gold ownership 演出が無効化される。 */
+[data-theme="dark"] button.ds-chip.hero-watch-add:hover {
+  border-color: color-mix(in srgb, var(--color-gold) 55%, transparent) !important;
+  background: color-mix(in srgb, var(--color-gold) 13%, transparent) !important;
+  color: var(--color-gold) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  button.ds-chip.hero-watch-add:hover { transform: none; }
+}
+
 /* Phase B (handover v70 §2-C): Pane 2 AreaChart slot.
    PortfolioSummaryRow の 3-col grid と PortfolioPeriodPerformanceRow の間に
    挟まる薄い chart 帯 (高さ ~190px = chart 160 + callout 30)。 */

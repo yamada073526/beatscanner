@@ -290,7 +290,7 @@ function MetaFilterPanel({ filter }) {
                   pressed={sectorFilter.includes(f.label)}
                   onClick={() => toggleSector(f.label)}
                 >
-                  {f.label} <span className="opacity-60 tabular-nums">{f.count}</span>
+                  {f.label} <span className="font-semibold tabular-nums opacity-70">{f.count}</span>
                 </Chip>
               ))}
             </ChipGroup>
@@ -320,7 +320,7 @@ function MetaFilterPanel({ filter }) {
                     title={disabled ? `${b.hint}（該当なし）` : b.hint}
                     className={disabled ? 'opacity-40' : ''}
                   >
-                    {b.label} <span className="opacity-60 tabular-nums">{count}</span>
+                    {b.label} <span className="font-semibold tabular-nums opacity-70">{count}</span>
                   </Chip>
                 );
               })}
@@ -1059,7 +1059,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
 
           {/* Cup-Handle filter chips (Phase 2.4、 multi-review verdict D + 7) */}
           <div className="flex flex-wrap items-center gap-2">
-            <ChipGroup prefix="絞り込み:" gap="normal" ariaLabel="スキャナー絞り込み">
+            <ChipGroup prefix="探索" gap="normal" ariaLabel="スキャナー絞り込み">
               <Chip
                 size="sm"
                 variant="filter"
@@ -1136,12 +1136,19 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
             ))}
           </div>
 
-          {/* PASS */}
+          {/* A-5 (SPEC 2026-06-04): PASS 銘柄を「ご褒美」 章扉化 (Crown gold + text-h2 見出し + 件数 fw700 stat)。
+              「お宝発見の旅」 の到達点として格を上げる。 PASS=緑 は ResultCard の gain ring で維持
+              (投資業界色ルール正、 章扉 icon は希少性の gold)。 */}
           {data.passing.length > 0 ? (
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-gain)]">
-                PASS 銘柄 — 5条件すべてクリア
-              </p>
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <Crown size={18} strokeWidth={1.75} aria-hidden style={{ color: 'var(--color-gold)', flexShrink: 0 }} />
+                <h4 className="pane3-section-heading">PASS 銘柄</h4>
+                <span className="text-xs text-[var(--text-muted)]">5条件すべてクリア</span>
+                <span className="ml-auto text-base font-bold tabular-nums" style={{ color: 'var(--color-gain)' }}>
+                  {data.passing.length}銘柄
+                </span>
+              </div>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {data.passing.map((item) => (
                   <ResultCard key={item.ticker} item={item} onSelect={onSelect} />

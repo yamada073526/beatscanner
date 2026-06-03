@@ -1,6 +1,6 @@
 import React from 'react';
 import Card from '../../primitives/Card.jsx';
-import { Check } from 'lucide-react';
+import { Check, Star } from 'lucide-react';
 import Chip from '../../../../components/ui/Chip.jsx';
 import EarningsRing from '../../../../components/EarningsRing.jsx';
 import CompanyLogo from '../../../../components/CompanyLogo.jsx';
@@ -218,8 +218,11 @@ export default function Hero({
           >
             {verdictLabel}
           </Chip>
-          {/* v160 D2 Sprint 2: ウォッチ追加ボタン。 onAddToWatchlist 未配線時は非表示。
-              accent (ブランド色 = 中立 action、 緑赤の投資色を使わない)、 追加済は muted + チェック。 */}
+          {/* v160 D2 Sprint 2 → SPEC 2026-06-04 B: ウォッチ★ボタン。 onAddToWatchlist 未配線時は非表示。
+              icon = Star ★ (user gate 確定、 格調シンボル [[feedback_icon_brand_consistency]])。
+              未追加 = Star outline + 「ウォッチ追加」 (icon-only は初見離脱回避)。
+              hover = 浮上 + Star→gold fill + border gold (.hero-watch-add CSS、 cyan でなく gold)。
+              追加済 = Star を --color-gold 点灯 (所有の喜び) + 「追加済」 + Check。 緑不使用 (色変化は gold)。 */}
           {onAddToWatchlist && ticker && (
             inWatchlist ? (
               <Chip
@@ -228,18 +231,21 @@ export default function Hero({
                 tone="muted"
                 title="ウォッチリストに追加済み"
                 data-testid="hero-watchlist-added"
+                icon={<Star size={13} strokeWidth={2} aria-hidden style={{ color: 'var(--color-gold)', fill: 'var(--color-gold)', marginRight: 4, verticalAlign: '-1px' }} />}
               >
-                <Check size={12} strokeWidth={2.5} aria-hidden style={{ marginRight: 4, verticalAlign: '-1px' }} />
                 追加済
+                <Check size={12} strokeWidth={2.5} aria-hidden style={{ marginLeft: 4, verticalAlign: '-1px' }} />
               </Chip>
             ) : (
               <Chip
                 size="md"
                 variant="add"
                 tone="accent"
+                className="hero-watch-add"
                 onClick={() => onAddToWatchlist(ticker)}
                 ariaLabel={`${ticker} をウォッチリストに追加`}
                 data-testid="hero-watchlist-add"
+                icon={<Star size={13} strokeWidth={2} aria-hidden style={{ marginRight: 4, verticalAlign: '-1px' }} />}
               >
                 ウォッチ追加
               </Chip>
