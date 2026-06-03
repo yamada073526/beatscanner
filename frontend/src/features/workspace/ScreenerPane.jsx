@@ -145,11 +145,19 @@ function HeroSection({ title, testId, description, tickers, loading, emptyMessag
         {title}
       </h4>
       <p
+        title={description}
         style={{
           fontSize: 10,
           color: 'var(--text-muted)',
           margin: '0 0 12px',
           lineHeight: 1.4,
+          // v159 user dogfood: 3 列で description 行数が異なり chip 開始 y がズレる (CNH vs CCJ 不揃い)。
+          // 2 行に clamp + min-height で全列のヘッダ高さを揃え、 銘柄チップを左右水平に整列。 全文は title hover。
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+          minHeight: 28,
         }}
       >
         {description}
@@ -527,7 +535,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
         <HeroSection
           title="新規 Cup-Handle 検出"
           testId="screener-hero-new-cup-handle"
-          description="Cup-Handle pattern 検出済 (IBD MarketSmith 流のブレイクアウト候補)。高値圏突破は正統 cup-with-handle とは形成過程が異なります。投資の推奨ではありません。"
+          description="Cup-Handle 検出済（高値圏ブレイクの追随買いは除く）。投資の推奨ではありません。"
           tickers={newCwh.tickers}
           loading={newCwh.loading}
           error={newCwh.error}

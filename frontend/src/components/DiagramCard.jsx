@@ -975,13 +975,16 @@ function GuidanceSection({ guidance }) {
             ? (sourceLabel ? `${sourceLabel}の経営陣発言から抽出` : '決算カンファレンスコールの経営陣発言から抽出')
             : 'SEC 8-K プレスリリースから抽出'}
         </span>
-        {/* narrative-only は「数値レンジ未開示」 が仕様であって精度不足ではない → 精度 chip を出さない
-            (3体合議 frontend verdict: 中立注記と amber「精度:低」 chip の併存は誤読を招く) */}
-        {!narrativeOnly && confidenceChip}
+        {/* 精度 chip は「構造化数値を抽出できた」 時だけ。 数値ゼロ (= ソースに数値ガイダンスなし) や
+            narrative_only で「精度: 低」 を出すと「アプリの抽出失敗」 と誤読される (user dogfood NKE 2026-06-04) */}
+        {!narrativeOnly && hasAnyStructured && confidenceChip}
       </div>
 
-      {/* narrative-only (構造化レンジなし): 中立トーンで「数値レンジ未開示・経営陣の言及は以下」 を案内。
-          通常の low (構造化試行したが精度不足) はアンバー警告で原文確認を促す。 */}
+      {/* ガイダンス注記の 3 分岐 (user dogfood NKE 2026-06-04 Trust Cliff fix):
+          ① narrative_only: 数値レンジ未開示だが経営陣が定性的に言及 (MSFT 型) → 中立 info。
+          ② 構造化数値ゼロ (hasAnyStructured=false): ソースに数値ガイダンスの記載なし (NKE 型) →
+             中立 info。 「抽出精度が不足」=アプリ不具合 の誤読を排除し、「決算で開示されない場合もある」 と明示。
+          ③ 数値あり + confidence=low: 抽出した数値の確度が低い → amber で原文確認を促す (数値の caveat)。 */}
       {narrativeOnly ? (
         <div style={{
           display: 'flex', alignItems: 'flex-start', gap: '8px',
@@ -995,7 +998,22 @@ function GuidanceSection({ guidance }) {
             売上高・マージンの公式ガイダンスは公開されていません。 代わりに、 経営陣が決算カンファレンスコールで述べた見通しを引用します（当社の予測ではありません）。
           </div>
         </div>
-      ) : confidence === 'low' && (
+      ) : !hasAnyStructured ? (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: '8px',
+          padding: '8px 10px', borderRadius: '6px',
+          background: 'var(--bg-subtle)',
+          border: '1px solid var(--border)',
+          marginBottom: '8px',
+        }}>
+          <Info size={14} strokeWidth={2} color="var(--text-muted)" style={{ flexShrink: 0, marginTop: '1px' }} aria-hidden="true" />
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+            {isTranscript
+              ? 'この決算説明会では、次期の具体的な数値ガイダンスは確認できませんでした。 企業が次期の数値見通しを非開示とする場合があります。 経営陣の発言は下記をご確認ください。'
+              : 'このリリースには次期の数値ガイダンスの記載が見当たりませんでした。 企業が次期の数値見通しを非開示とする場合があります。 原文（出典）でご確認ください。'}
+          </div>
+        </div>
+      ) : confidence === 'low' ? (
         <div style={{
           display: 'flex', alignItems: 'flex-start', gap: '8px',
           padding: '8px 10px', borderRadius: '6px',
@@ -1006,11 +1024,11 @@ function GuidanceSection({ guidance }) {
           <AlertTriangle size={14} strokeWidth={2} color="var(--color-warning)" style={{ flexShrink: 0, marginTop: '1px' }} aria-hidden="true" />
           <div style={{ fontSize: '11px', color: 'var(--text-primary)', lineHeight: 1.5 }}>
             {isTranscript
-              ? '抽出精度が不足しています。 下記の発言原文でご確認ください。'
-              : '抽出精度が不足しています。 原文 (出典 link) で確認してください。'}
+              ? '抽出した数値は確度が低い可能性があります。 下記の発言原文でご確認ください。'
+              : '抽出した数値は確度が低い可能性があります。 原文（出典）でご確認ください。'}
           </div>
         </div>
-      )}
+      ) : null}
 
       {narrative && (
         // デザインレビュー (4体合議 2026-06-03、 user 指摘1): 本文がプレーンテキストだと「どの section の

@@ -16,20 +16,25 @@ const DIAGRAM_LOADING_STAGES = [
   { threshold: 7000, text: '最終チェック中、 もう少しです' },
 ];
 
-function DiagramSkeleton() {
+function DiagramSkeleton({ startedAt = null }) {
+  // v159 user dogfood: loading-state skeleton と Suspense fallback skeleton は別 instance で、
+  // loading→done 遷移で後者が fresh mount → narration が stage0「決算データを集めています」 に巻き戻る違和感。
+  // 親から共有の開始時刻 (startedAt) を受け取り、 両 instance が同一基準で elapsed 算出 = 連続・単調進行。
   const [stageIdx, setStageIdx] = useState(0);
-  const startRef = useRef(null);
+  const startRef = useRef(startedAt ?? Date.now());
   useEffect(() => {
-    startRef.current = Date.now();
-    const id = setInterval(() => {
+    if (startedAt != null) startRef.current = startedAt;
+    const compute = () => {
       const elapsed = Date.now() - startRef.current;
       const next = DIAGRAM_LOADING_STAGES.findIndex(
         (s, i) => elapsed >= s.threshold && (i === DIAGRAM_LOADING_STAGES.length - 1 || elapsed < DIAGRAM_LOADING_STAGES[i + 1].threshold)
       );
       if (next >= 0) setStageIdx(next);
-    }, 500);
+    };
+    compute(); // remount 時 (elapsed>=7000) は即 stage2 に追従し、 stage0 への巻き戻しを防ぐ
+    const id = setInterval(compute, 500);
     return () => clearInterval(id);
-  }, []);
+  }, [startedAt]);
   return (
     <div className="diagram-skel" aria-busy="true" aria-label="図解を生成中">
       <div className="diagram-skel__caption">
@@ -77,6 +82,8 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
   const [vizState, setVizState] = useState('idle'); // 'idle' | 'loading' | 'done' | 'error'
   const [vizError, setVizError] = useState(null);
   const [vizTicker, setVizTicker] = useState(null);
+  // v159 user dogfood: skeleton narration の開始時刻 (loading skeleton と Suspense fallback で共有)。
+  const [vizStartedAt, setVizStartedAt] = useState(null);
   // v127 R16 (user dogfood): 表示期間 1Y/3Y/5Y toggle と連動。旧版は selectedYears=3 ハードコード +
   // onYearsChange 未配線で toggle が no-op だった (trends が年切替で変わらない bug)。
   const [selectedYears, setSelectedYears] = useState(3);
@@ -88,6 +95,7 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
       setVizState('idle');
       setVizError(null);
       setVizTicker(ticker);
+      setVizStartedAt(null); // 別銘柄では narration 開始時刻を reset
       setSelectedYears(3); // 別銘柄では default 3 に戻す
     }
   }, [ticker, vizTicker]);
@@ -124,6 +132,7 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
   const fetchViz = useCallback((years) => {
     if (!ticker || !analysis) return;
     setVizState('loading');
+    setVizStartedAt(Date.now()); // narration の単調進行用に開始時刻を記録 (両 skeleton instance で共有)
     generateVisualization(ticker, buildEnriched(), years)
       .then((json) => { setVizData(json); setVizState('done'); setVizError(null); })
       .catch((err) => { setVizState('error'); setVizError(err?.message || String(err)); });
@@ -207,7 +216,7 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
                 v130 P0 #4 (user dogfood 5/30): vizState loading→done 遷移で Suspense fallback
                 の旧「読み込み中…」 が一瞬挟まる flicker を skeleton 共通化で解消。 */}
             {(vizState === 'loading' || (vizState === 'done' && !vizData)) && (
-              <DiagramSkeleton />
+              <DiagramSkeleton startedAt={vizStartedAt} />
             )}
             {vizState === 'error' && (
               <div className="diagram-banner-error">
@@ -223,7 +232,7 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
               </div>
             )}
             {vizState === 'done' && vizData && (
-              <Suspense fallback={<DiagramSkeleton />}>
+              <Suspense fallback={<DiagramSkeleton startedAt={vizStartedAt} />}>
                 <DiagramCard
                   data={vizData}
                   ticker={ticker}
