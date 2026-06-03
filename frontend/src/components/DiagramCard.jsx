@@ -117,8 +117,13 @@ function VizSectionLabel({ text, first = false, icon: Icon = null, sub = null })
 //    断定的将来予測・投資勧誘・最上級は含めない。 事実の整理に限定。
 
 // セクション間の「だから次を読む」 動線。 中央寄せ転換句 (静的) + 下向き矢印。
-function NarrativeBridge({ text }) {
+function NarrativeBridge({ text, isMobile = false }) {
   if (!text) return null;
+  // 3体合議 3/3 (v158): PC の 760px 幅では 11px が sub 見出しと同化し「つなぎ」 が読み飛ばされる
+  // (体感 9px 相当)。 PC は 13px / 矢印 14px に引き上げ、 mobile は 11px / 13px を維持。
+  // 色は var(--text-muted) のままで「つなぎが主役 (section) を食わない」 を担保。
+  const textSize = isMobile ? '11px' : '13px';
+  const arrowSize = isMobile ? '13px' : '14px';
   return (
     <div
       aria-hidden="true"
@@ -129,12 +134,12 @@ function NarrativeBridge({ text }) {
       }}
     >
       <span style={{
-        fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500,
+        fontSize: textSize, color: 'var(--text-muted)', fontWeight: 500,
         letterSpacing: '0.02em', textAlign: 'center', lineHeight: 1.4,
       }}>
         {text}
       </span>
-      <span style={{ color: 'var(--text-muted)', opacity: 0.5, fontSize: '13px', lineHeight: 1 }}>↓</span>
+      <span style={{ color: 'var(--text-muted)', opacity: 0.5, fontSize: arrowSize, lineHeight: 1 }}>↓</span>
     </div>
   );
 }
@@ -1780,8 +1785,11 @@ export default function DiagramCard({
   }, []);
 
   // デザインレビュー (4体合議 2026-06-03): 核心データはデフォルト展開で「click 不要」(user 指摘3)。
-  // strengths(強み・リスク)=展開 / bullbear(ブル・ベア)=折りたたみ維持 (強み・リスクと意味的に冗長なため)。
-  const [openSections, setOpenSections] = useState({ strengths: true, bullbear: false });
+  // strengths(強み・リスク)=展開。 bullbear(ブル・ベア) も v158 で default 展開に統一。
+  // 3体合議 3/3 (2026-06-03): 隣接する同型 accordion の非対称は「壊れてる/見なくていい」 誤シグナル
+  // + 認知コスト。 かつ 強み・リスク=事実ベース / ブル・ベア=投資判断の枠組み で内容は冗長でなく別物
+  // (旧コメントの「冗長だから畳む」 前提が弱い)。 CLS はむしろ改善方向。
+  const [openSections, setOpenSections] = useState({ strengths: true, bullbear: true });
   const toggleSection = (key) =>
     setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
 
@@ -2309,7 +2317,7 @@ export default function DiagramCard({
 
         {/* v153 模範解答化: NarrativeBridge (因果の接続)。 下の section に content がある時のみ表示。 */}
         {!isGenerating && data.segmentSummary?.segments?.length > 0 && (
-          <NarrativeBridge text="ではどの事業が今期を牽引したか" />
+          <NarrativeBridge text="ではどの事業が今期を牽引したか" isMobile={isMobile} />
         )}
 
         {/* ── Section 3.5: セグメント別売上 ── */}
@@ -2331,7 +2339,7 @@ export default function DiagramCard({
         )}
 
         {!isGenerating && trends.length > 0 && (
-          <NarrativeBridge text="数年の推移で全体像を見ると" />
+          <NarrativeBridge text="数年の推移で全体像を見ると" isMobile={isMobile} />
         )}
 
         {/* ── Section 4: Growth Story (yearly) ── */}
@@ -2864,7 +2872,7 @@ export default function DiagramCard({
           return <SectionConclusion text={text} />;
         })()}
         {!isGenerating && (valuation || dividend) && (
-          <NarrativeBridge text="この稼ぐ力に対し、株価はどう評価されているか" />
+          <NarrativeBridge text="この稼ぐ力に対し、株価はどう評価されているか" isMobile={isMobile} />
         )}
 
         {/* ══ v153 Round 2-A: IA 順序入替 (事業理解→実績→株価→将来→論点→締め) ══
@@ -3086,7 +3094,7 @@ export default function DiagramCard({
         )}
 
         {!isGenerating && (bullCase.length > 0 || bearCase.length > 0) && (
-          <NarrativeBridge text="この事実を市場参加者はどう見ているか" />
+          <NarrativeBridge text="この事実を市場参加者はどう見ているか" isMobile={isMobile} />
         )}
 
         {/* ── 論点: ブル・ベア対比 (v153 で Section 6 から分離、 強み・リスクと隣接) ──
