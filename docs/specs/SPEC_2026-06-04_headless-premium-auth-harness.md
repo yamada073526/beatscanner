@@ -1,7 +1,7 @@
 # SPEC 2026-06-04: Premium/login gate コンテンツの headless 視覚検証ハーネス (autopilot 完全自律化)
 
-> **status**: 提案。 user 要望 (autopilot が Premium gate を視覚検証 → 改善起案 → 修正 → 2 周目検証 を人手 dogfood なしで連鎖したい)。
-> **一回限りの human 前提タスクあり** (テスト Premium アカウント作成 + env 投入)。 それ以降は完全自律。
+> **status**: ✅ **実装 + 疎通検証 完了 (2026-06-04)**。 `auth-helper.mjs` + `snap-premium-auth-check.mjs` 実装済 (commit d636d78)、 テスト Premium アカウント (`beatscanner.app@gmail.com`、 subscriptions active/premium) 作成済、 `frontend/.env` に creds 投入済。 **疎通テスト PASS**: `PREMIUM_VISIBLE ✅` (visible 10 / blurred 0 / proteaser 0、 master-detail スクリーナー全件描画を screenshot 確認)。 → autopilot は認証付き vision-eval / snap-pdca で Premium gate を検証可能。
+> user 要望 (autopilot が Premium gate を視覚検証 → 改善起案 → 修正 → 2 周目検証 を人手 dogfood なしで連鎖) を達成。
 > **対象**: `frontend/scripts/lib/auth-helper.mjs` (新規) + 既存 `snap-*.mjs` / `snap-pdca-loop.mjs` / `snap-vision-eval.mjs` への組込。 **production app は不変** (既存の Supabase auth + Pillar2 flag を流用)。
 
 ## 1. 真因 / 現状把握 (調査済)
