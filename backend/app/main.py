@@ -11426,6 +11426,7 @@ async def generate_visualization(
         from .aggregator.earnings_reaction import compute_reaction as _compute_rx, date_range_for_quarters as _drfq
         from .aggregator.institutional import candidate_quarters as _inst_qs, summarize as _inst_sum
         from .aggregator.congress import summarize as _congress_sum
+        from .aggregator.insider import summarize as _insider_sum
         _T = ticker.upper()
         _av_client = FMPClient(api_key=_get_fmp_key(request))
         _rx_from, _rx_to = _drfq(quarters_back=8)
@@ -11440,12 +11441,14 @@ async def generate_visualization(
             *[_av_client.institutional_holder(_T, limit=1, year=_y, quarter=_q) for (_y, _q) in _inst_cands],
             _av_client.senate_trades(_T),
             _av_client.house_trades(_T),
+            _av_client.insider_trading(_T, limit=80),
             return_exceptions=True,
         )
         _qs, _es, _ph = _gathered[0], _gathered[1], _gathered[2]
         _inst_raw = _gathered[3:3 + _n_inst]
         _senate_raw = _gathered[3 + _n_inst]
         _house_raw = _gathered[4 + _n_inst]
+        _insider_raw = _gathered[5 + _n_inst]
         _av_price: float | None = None
         if isinstance(_qs, list) and _qs and isinstance(_qs[0], dict):
             _p = _qs[0].get("price")
@@ -11535,6 +11538,21 @@ async def generate_visualization(
                 print(f"[VIZ congress] attached for {ticker} (recent={len(_cg['recent'])})")
         except Exception as _cg_e:
             print(f"[VIZ congress] skip for {ticker}: {_cg_e}")
+        # ── ④ インサイダー Form4 買い (summarize は純 Python、 P=open-market 購入のみ) ──
+        # §38: P のみ・「買いシグナル」 因果断定なし・買いが無ければ非表示 (大型株は通常 0)。
+        try:
+            _f4 = _insider_raw if isinstance(_insider_raw, list) else []
+            _ib = _insider_sum(_f4, max_recent=5, window_months=12)
+            if _ib.get("recent"):
+                parsed["insiderBuys"] = {
+                    "recent": _ib["recent"],
+                    "summary": _ib.get("summary"),
+                    "source": _ib.get("source"),
+                    "delayDays": _ib.get("delayDays"),
+                }
+                print(f"[VIZ insider] attached for {ticker} (buys={len(_ib['recent'])})")
+        except Exception as _ib_e:
+            print(f"[VIZ insider] skip for {ticker}: {_ib_e}")
     except Exception as _av_e:
         print(f"[VIZ analyst/reaction] skip for {ticker}: {_av_e}")
 

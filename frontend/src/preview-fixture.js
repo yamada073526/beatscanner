@@ -97,6 +97,20 @@ export const DIAGRAM_FIXTURE = {
     },
   },
 
+  // ── Section: ④ 経営陣の自社株買い (Round 3-B、 実 NKE Form4 P=open-market) ──
+  insiderBuys: {
+    recent: [
+      { name: 'Hill Elliott', roleLabel: 'CEO', shares: 23660, price: 42.27, value: 1000118, date: '2026-04-13' },
+      { name: 'COOK TIMOTHY D', roleLabel: '取締役', shares: 25000, price: 42.43, value: 1060750, date: '2026-04-10' },
+      { name: 'ROGERS JOHN W JR', roleLabel: '取締役', shares: 4000, price: 43.34, value: 173360, date: '2026-04-09' },
+      { name: 'SWAN ROBERT HOLMES', roleLabel: '取締役', shares: 11781, price: 42.44, value: 500002, date: '2026-04-07' },
+      { name: 'Hill Elliott', roleLabel: 'CEO', shares: 23660, price: 42.26, value: 999900, date: '2026-04-06' },
+    ],
+    summary: { purchaseCount: 9, totalValue: 9186868, buyerCount: 5, windowMonths: 12 },
+    source: 'FMP インサイダー (Form 4)',
+    delayDays: 2,
+  },
+
   // ── Section: ①13F 機関投資家の動き (Round 3-B、 実 AAPL 2025Q2→2026Q1) ──
   institutionalOwnership: {
     trend: [

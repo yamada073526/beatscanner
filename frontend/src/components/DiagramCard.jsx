@@ -7,7 +7,7 @@
  * (multi-review 6 体合議 verdict、 局所介入 +5 行で 2,027 → 2,033 行)。
  */
 import { useState, useEffect, useRef, useMemo, createContext, useContext } from 'react';
-import { FileBarChart2, Banknote, Calendar, CheckCircle2, XCircle, AlertTriangle, Shield, TrendingUp, TrendingDown, Info, Layers, PieChart, HelpCircle, RefreshCw, Building2, Scale, Target, Landmark } from 'lucide-react';
+import { FileBarChart2, Banknote, Calendar, CheckCircle2, XCircle, AlertTriangle, Shield, TrendingUp, TrendingDown, Info, Layers, PieChart, HelpCircle, RefreshCw, Building2, Scale, Target, Landmark, UserCheck } from 'lucide-react';
 import DiagramCitation from './DiagramCitation.jsx';
 import Chip from './ui/Chip.jsx';
 import { sanitizeDiagramData, findBlocklistHits, sanitizeText } from '../lib/blocklist.js';
@@ -668,6 +668,91 @@ function InstitutionalSection({ institutional }) {
       <div style={{ fontSize: '10px', color: 'var(--text-muted)', lineHeight: 1.5, display: 'flex', gap: '5px', alignItems: 'flex-start' }}>
         <Info size={11} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0, marginTop: '1px' }} />
         <span>13F報告は提出に最大45日の遅れがあり、過去の保有状況を示すものです。個別の保有機関や将来の値動きを示すものではありません。（出典: FMP 13F）</span>
+      </div>
+    </div>
+  );
+}
+
+// ── ④ インサイダー Form4 買い (Round 3-B FMP Ultimate、 経営陣の自社株買い) ──────────
+// backend parsed["insiderBuys"] = {recent:[{name, roleLabel, shares, price, value, date}],
+//   summary:{purchaseCount, totalValue, buyerCount, windowMonths}, source, delayDays}
+// 数値/事実は backend 純 Python 整形 (LLM 非経由)、 narration は静的。
+// ⚠️ §38 / §5 厳守 (user 決定 2026-06-03): P (open-market 購入) のみ・売却/権利行使は混ぜない。
+//   「経営陣が買った=買いシグナル / 買い時」 の因果断定・推奨は **しない** (事実の提示のみ)。
+//   買いが無ければ非表示 (大型株は通常 0) = 稀少 = 出た時だけ高シグナルを断定せず surface。
+function InsiderBuysSection({ insider }) {
+  if (!insider) return null;
+  const recent = Array.isArray(insider.recent) ? insider.recent : [];
+  const summary = insider.summary || null;
+  if (recent.length === 0) return null;
+
+  const fmtUsdC = (v) => {
+    if (!Number.isFinite(Number(v))) return '—';
+    const n = Number(v);
+    // $995k 以上は M 表記に丸める ($1000k のような崩れを回避)
+    if (n >= 995000) return `$${(n / 1e6).toFixed(1)}M`;
+    if (n >= 1e3) return `$${Math.round(n / 1e3)}k`;
+    return `$${Math.round(n)}`;
+  };
+  const fmtShares = (v) => (Number.isFinite(Number(v)) ? Number(v).toLocaleString('en-US') : '—');
+  const fmtDate = (d) => {
+    if (typeof d !== 'string') return '';
+    const m = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[1]}/${m[2]}/${m[3]}` : d;
+  };
+
+  return (
+    <div data-testid="diagram-section-insider" style={{ marginTop: '16px' }}>
+      <VizSectionLabel
+        text="経営陣の自社株買い"
+        icon={UserCheck}
+        sub="経営陣・取締役によるオープンマーケットでの自社株購入（Form 4・取引後2営業日以内に開示）"
+      />
+
+      {/* 過去window集計 (neutral 表記、 §38: 緑の投資色を使わず事実として提示) */}
+      {summary && Number.isFinite(Number(summary.purchaseCount)) && (
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '14px', flexWrap: 'wrap', marginBottom: '10px', fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>過去{summary.windowMonths || 12}ヶ月</span>
+          {Number.isFinite(Number(summary.buyerCount)) && (
+            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>買い手 <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{summary.buyerCount}</strong>名</span>
+          )}
+          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>計 <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{summary.purchaseCount}</strong>件</span>
+          {Number.isFinite(Number(summary.totalValue)) && summary.totalValue > 0 && (
+            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>総額 <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{fmtUsdC(summary.totalValue)}</strong></span>
+          )}
+        </div>
+      )}
+
+      {/* 直近の買い (役職 + 取得額 + 株数 + 氏名 + 日付) */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {recent.map((t, i) => (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap',
+            padding: '7px 10px', borderRadius: '6px',
+            background: 'var(--bg-subtle)', border: '1px solid var(--border)',
+          }}>
+            <span style={{
+              flexShrink: 0, fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)',
+              background: 'var(--bg-muted)', padding: '2px 7px', borderRadius: '4px',
+            }}>{t.roleLabel || '関係者'}</span>
+            {Number.isFinite(Number(t.value)) && t.value > 0 && (
+              <span style={{ flexShrink: 0, fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{fmtUsdC(t.value)}</span>
+            )}
+            {Number.isFinite(Number(t.shares)) && (
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{fmtShares(t.shares)}株</span>
+            )}
+            <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'baseline', gap: '8px', minWidth: 0 }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
+              <span style={{ flexShrink: 0, fontSize: '10px', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{fmtDate(t.date)}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* §38 免責 */}
+      <div style={{ fontSize: '10px', color: 'var(--text-muted)', lineHeight: 1.5, display: 'flex', gap: '5px', alignItems: 'flex-start', marginTop: '8px' }}>
+        <Info size={11} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0, marginTop: '1px' }} />
+        <span>経営陣・取締役による自社株購入（オープンマーケット）の公開開示情報です。投資判断のシグナルや売買の推奨を示すものではありません。（出典: FMP Form 4）</span>
       </div>
     </div>
   );
@@ -3058,6 +3143,11 @@ export default function DiagramCard({
         {/* ── 実績: ①13F 機関投資家の動き (Round 3-B、 資本政策の直後・将来ブロックの手前) ── */}
         {!isGenerating && data.institutionalOwnership && (
           <InstitutionalSection institutional={data.institutionalOwnership} />
+        )}
+
+        {/* ── 実績: ④ 経営陣の自社株買い (Round 3-B、 機関投資家の直後・買いがある時のみ) ── */}
+        {!isGenerating && data.insiderBuys && (
+          <InsiderBuysSection insider={data.insiderBuys} />
         )}
 
         {/* ── 将来: 次 Q ガイダンス (SEC 8-K LLM 抽出) v138 Phase 2D / v153 で還元の後ろへ ── */}
