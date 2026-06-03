@@ -34,6 +34,10 @@ import MotionProvider from './MotionProvider.jsx';
 // preview ハーネスのみ 案 A 等を渡して「現状 vs 案」 を並べる。 VizSectionLabel / headline が context で読む。
 const VibeContext = createContext({});
 function useVibe() { return useContext(VibeContext) || {}; }
+// v155: user が案A を採択 (2026-06-03) → 本番デフォルトを「編集的」 (Noto Serif JP 見出し + ゆとり余白、
+// ブランド色 cyan 維持) に。 production の全 caller (DetailReport / HomeTab / StickyDiagramAccordion) は
+// vibe を渡さない → この既定が適用される。 preview ハーネスのみ各案を明示的に渡して比較する。
+const DEFAULT_VIBE = { headingFont: 'serif', spacing: 'loose' };
 function vibeHeadingFont(vibe) {
   return vibe && vibe.headingFont === 'serif' ? "'Noto Serif JP', serif" : undefined;
 }
@@ -1459,7 +1463,7 @@ export default function DiagramCard({
   data: rawData, ticker, onDownload, onYearsChange, selectedYears = 3,
   showCoach = false,         // R2v3: 年セレクター直上の吹き出し表示 ON/OFF（HomeTab 制御・初回のみ）
   onSelectorVisible,         // R2v2: 年セレクターが80%可視になった時に1度だけ呼ばれる
-  vibe = {},                 // v154: figure デザイン提案の切替 ({} = 現状不変、 preview ハーネスのみ案を渡す)
+  vibe = DEFAULT_VIBE,       // v155: 既定=案A (serif見出し+ゆとり余白)。 preview のみ各案を明示的に上書き
 }) {
   // handover v82 Phase 4.5: frontend BLOCKLIST sanitize 適用 (BAD-5 / BAD-6 表示前削除)。
   // NEGATIVE_EXAMPLES + few-shot で 87.5% 抑制、 残 12.5% を frontend で sentence 単位削除。

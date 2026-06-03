@@ -23,9 +23,9 @@ import './index.css';
 
 // 比較する提案 (vibe)。 現状を先頭に、 以降が向上候補。
 const VARIANTS = [
-  { key: 'current', label: '現状', desc: 'cyan accent / サンセリフ / 標準余白', vibe: {} },
-  { key: 'serif-loose', label: '案A: 編集的 (推奨)', desc: 'Noto Serif JP 見出し + ゆとり余白 (ブランド色は cyan 維持)', vibe: { headingFont: 'serif', spacing: 'loose' } },
-  { key: 'serif-gold', label: '案B: 案A + gold accent', desc: '案A に加え見出しを gold (真鍮) に。 ※ブランド色 cyan からの逸脱に注意', vibe: { headingFont: 'serif', spacing: 'loose', accent: 'gold' } },
+  { key: 'serif-loose', label: '案A: 編集的 ✓ 採用・本番反映済', desc: 'Noto Serif JP 見出し + ゆとり余白 (ブランド色は cyan 維持)。 v155 で本番デフォルト化', vibe: { headingFont: 'serif', spacing: 'loose' } },
+  { key: 'current', label: '旧デザイン (採用前の参考)', desc: 'cyan accent / サンセリフ / 標準余白', vibe: {} },
+  { key: 'serif-gold', label: '案B: 案A + gold accent (未採用の代替)', desc: '案A に加え見出しを gold (真鍮) に。 ※ブランド色 cyan からの逸脱に注意', vibe: { headingFont: 'serif', spacing: 'loose', accent: 'gold' } },
 ];
 
 function VariantBlock({ v }) {
