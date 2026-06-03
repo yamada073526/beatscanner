@@ -10,7 +10,7 @@
  *
  * Pane 1 nav は WS-5 で実装。WS-4 では暫定 dummy tab toggle を維持.
  */
-import { useEffect, useCallback, useMemo, useState, lazy, Suspense } from 'react';
+import { useEffect, useCallback, useMemo, useState, useRef, lazy, Suspense } from 'react';
 import {
   ChevronRight,
   Home,
@@ -896,6 +896,8 @@ export default function Workspace({
   const headerCollapsed = false;
   // v118 P6: pane4Expanded 削除 (Pane4Inspector 廃止により不要)
   const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
+  // v160 D2 (master-detail): screener tab で銘柄選択中か判定 → Pane 3 を Hero / 詳細 で出し分け。
+  const activeTicker = useWorkspaceStore((s) => s.activeTicker);
   // §12-A-1: 指数 tab のとき Pane 2 / Pane 3 の中身を IndicesView に切替
   const activeTab = useWorkspaceStore((s) => s.activeTab);
   const isIndices = activeTab === 'indices';
@@ -925,6 +927,18 @@ export default function Workspace({
     }
   }, [activeTab, setActiveTab]);
 
+  // v160 D2 (master-detail、 3体合議 frontend-architect verdict [必須]): screener tab に「切り替えた」
+  //   瞬間だけ activeTicker を null にして Hero (今注目 idle) から始める。 home で AAPL 分析中に screener
+  //   へ切替えると Pane 3 が AAPL 詳細のままになる問題の解消。 mount / deep-link (?detail=) は prev===current
+  //   で reset せず維持。 screener 内の銘柄 click は activeTab 不変なので reset されない (drilling 維持)。
+  const prevTabRef = useRef(activeTab);
+  useEffect(() => {
+    if (activeTab === 'screener' && prevTabRef.current !== 'screener') {
+      setActiveTicker(null);
+    }
+    prevTabRef.current = activeTab;
+  }, [activeTab, setActiveTicker]);
+
   // v120 Sprint 3: 銘柄スクリーナー modal の open/close 制御。
   // WorkspaceHeader「スクリーナー」 button → Pro user は modal open、 非 Pro は ProTeaser。
   const [screenerOpen, setScreenerOpen] = useState(false);
@@ -947,13 +961,52 @@ export default function Workspace({
         headerHeight={headerHeight}
         pane1={pane1Collapsed ? <Pane1NavRail items={items} /> : <Pane1Nav items={items} />}
         pane2={
-          <PaneErrorBoundary label="pane2" key={isIndices ? 'pane2-indices' : 'pane2-list'}>
+          <PaneErrorBoundary label="pane2" key={isIndices ? 'pane2-indices' : isScreener ? 'pane2-screener' : 'pane2-list'}>
           {isIndices ? (
             <IndicesList
               holdings={holdings}
               portfolioPrices={portfolioPrices}
               user={detailContext?.user}
             />
+          ) : isScreener ? (
+            // v160 D2 (master-detail): screener tab は Pane 2 に Explorer (絞り込み結果) を常駐。
+            // 結果クリックは setActiveTicker のみ (tab 離脱しない) → Pane 3 だけ詳細に切替、
+            // ここの絞り込み filter / sort / scroll は保持される (master-detail の master 面)。
+            <div style={{ height: '100%', overflowY: 'auto', padding: 'var(--space-3, 12px)' }}>
+              {/* v160 D2 (3体合議 ui+architect verdict 推奨): 詳細表示中に「今注目 (Hero) に戻る」 導線。
+                  Pane 2 は常時可視で discoverable、 JudgmentDetail の layout を触らず低リスクに deselect を提供。 */}
+              {activeTicker && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTicker(null)}
+                  data-testid="screener-back-to-hero"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    marginBottom: 'var(--space-2, 8px)',
+                    padding: '4px 10px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm, 4px)',
+                    background: 'var(--bg-subtle)',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  ← 今注目に戻る
+                </button>
+              )}
+              <Suspense fallback={<div style={{ padding: 16, color: 'var(--text-muted)' }}>Loading screener…</div>}>
+                <CustomScreenerPanel
+                  user={detailContext?.user}
+                  isPro={isProUser}
+                  onUpgrade={handleUpgradeRequest}
+                  onSelect={setActiveTicker}
+                />
+              </Suspense>
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
               {/* v117 R7 scroll bug fix (3 体合議 frontend architect verdict 案 C):
@@ -982,15 +1035,25 @@ export default function Workspace({
         pane3={
           <PaneErrorBoundary label="pane3" key={`pane3-${activeTab}`}>
           {isScreener ? (
-            // v125 Phase 4-A Sprint 4-A-2 (stub): ScreenerPane.jsx に lifting。 Hero + Explorer の
-            // 完全 layout は Sprint 4-A-3 (user gate 3 通過後) で fetch 実装予定。
-            <Suspense fallback={<div style={{ padding: 16, color: 'var(--text-muted)' }}>Loading screener…</div>}>
-              <ScreenerPane
+            // v160 D2 (master-detail): 銘柄選択中は詳細 (JudgmentDetail)、 未選択なら Hero (今注目 3 セクション)。
+            // Explorer は Pane 2 に常駐するため、 結果を保ったまま Pane 3 で 1 件ずつ精査できる。
+            activeTicker ? (
+              <JudgmentDetail
+                plan={plan}
+                detailFor={detailFor}
+                onAnalyze={onAnalyze}
                 detailContext={detailContext}
-                isProUser={isProUser}
-                handleUpgradeRequest={handleUpgradeRequest}
+                useWorkspaceReader
               />
-            </Suspense>
+            ) : (
+              <Suspense fallback={<div style={{ padding: 16, color: 'var(--text-muted)' }}>Loading screener…</div>}>
+                <ScreenerPane
+                  detailContext={detailContext}
+                  isProUser={isProUser}
+                  handleUpgradeRequest={handleUpgradeRequest}
+                />
+              </Suspense>
+            )
           ) : isIndices && !pane3JudgmentOverride ? (
             <PaneDetailView
               detailFor={detailFor}

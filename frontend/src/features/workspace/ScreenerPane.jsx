@@ -23,12 +23,10 @@
  *
  * memory anchor: [[feedback-screener-hero-3sections]] / [[feedback-oneill-screener-frontend-intersection]]
  */
-import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import Chip from '../../components/ui/Chip.jsx';
 
-// CustomScreenerPanel を lazy 化 (既存 modal lazy chunk と reuse、 Workspace.jsx と統一)
-const CustomScreenerPanel = lazy(() => import('../../components/CustomScreenerPanel.jsx'));
 
 // v147 (user dogfood AAPL): cup-handle scanner の state badge を日本語ラベルに。
 //   旧版は raw state 文字列 (例「breakout_extended」) をそのまま表示していた (英語混在 + 意味不明)。
@@ -289,7 +287,6 @@ function HeroSection({ title, testId, description, tickers, loading, emptyMessag
  */
 export default function ScreenerPane({ detailContext = {}, isProUser = false, handleUpgradeRequest }) {
   const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
-  const setActiveTab = useWorkspaceStore((s) => s.setActiveTab);
 
   // v125 P5-2: demo モード判定 (未ログイン + 非 Pro)。
   // marketer 6 体合議 verdict: demo user に「top 1 visible + 残り blur」 で訴求、
@@ -420,9 +417,9 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
   }, [retryNonce]);
 
   const handleSelect = (sym) => {
+    // v160 D2 (master-detail): tab を離脱せず activeTicker のみ更新。
+    // → Pane 3 が Hero → JudgmentDetail に切替、 Pane 2 の Explorer (絞り込み結果) は残る。
     setActiveTicker(sym);
-    // screener から click 後は home へ自動遷移 (Pane 3 で詳細表示)
-    setActiveTab('home');
   };
 
   return (
@@ -430,23 +427,10 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
       data-testid="screener-pane"
       style={{ padding: 'var(--space-4, 16px)', height: '100%', overflowY: 'auto' }}
     >
-      {/* WIP banner (Phase 4-A Sprint 4-A-4 chip filter 着地、 demo blur + WorkspaceHeader 既存 button 削除は残作業) */}
-      <div
-        data-testid="screener-wip-banner"
-        style={{
-          padding: '8px 12px',
-          marginBottom: 16,
-          borderRadius: 'var(--radius-sm, 4px)',
-          background: 'color-mix(in srgb, var(--color-warning) 10%, transparent)',
-          border: '1px solid color-mix(in srgb, var(--color-warning) 30%, transparent)',
-          fontSize: 11,
-          color: 'var(--color-warning)',
-        }}
-      >
-        Phase 4-A Sprint 4-A-4 (feature flag preview)。 Hero 3 セクション fetch + chip filter active highlight + demo blur + ProTeaser overlay 実装済、 WorkspaceHeader 既存 button 削除は user gate 3 通過後。
-      </div>
+      {/* v160 D2: master-detail 化で WIP banner 撤去 (user gate 通過、 本実装が gate 後の正式版)。
+          Hero (今注目 3 セクション) は Pane 3 の idle 状態、 銘柄選択で JudgmentDetail に切替。 */}
 
-      {/* Sprint 4-A-4: chip filter (Hero 3 section の jump + active highlight、 ui-designer 6 体合議 verdict) */}
+      {/* chip filter (Hero 3 section の jump + active highlight) */}
       <div
         data-testid="screener-chip-filter"
         style={{
@@ -549,29 +533,8 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
         />
       </section>
 
-      {/* Explorer: 既存 CustomScreenerPanel embedded */}
-      <section data-testid="screener-explorer" style={{ marginTop: 'var(--space-4, 16px)' }}>
-        <h3
-          style={{
-            fontSize: 12,
-            fontWeight: 600,
-            margin: '0 0 12px',
-            color: 'var(--text-muted)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-          }}
-        >
-          Explorer
-        </h3>
-        <Suspense fallback={<div style={{ padding: 16, color: 'var(--text-muted)' }}>Loading…</div>}>
-          <CustomScreenerPanel
-            user={detailContext.user}
-            isPro={isProUser}
-            onUpgrade={handleUpgradeRequest}
-            onSelect={handleSelect}
-          />
-        </Suspense>
-      </section>
+      {/* v160 D2: Explorer (CustomScreenerPanel) は Pane 2 に移設 (master-detail)。
+          本コンポーネントは Pane 3 の idle 時 Hero (今注目) を担う。 */}
     </div>
   );
 }
