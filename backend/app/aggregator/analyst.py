@@ -283,6 +283,17 @@ async def build_analyst_view(
             except (TypeError, ValueError):
                 pass
     target_range = compute_target_range(pseudo_prices)
+    # ⚠️ v156 content-audit: target_range["count"] は pseudo_prices (high/low/median/mean の最大4) の
+    # 個数であり「アナリスト人数」 ではない (全 ticker で count=4 になる)。 figure で「n=4社」 と誤表示
+    # していた Trust Cliff を解消するため、 price_target_consensus の numberOfAnalysts (実人数) を別 field
+    # で公開する。 欠損なら None (frontend は人数表示を omit)。
+    if analyst_count is not None:
+        try:
+            target_range["analyst_count"] = int(analyst_count)
+        except (TypeError, ValueError):
+            target_range["analyst_count"] = None
+    else:
+        target_range["analyst_count"] = None
 
     upside = compute_target_upside_pct(
         _as_float(target_median),

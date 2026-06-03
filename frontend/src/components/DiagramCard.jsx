@@ -193,7 +193,8 @@ function AnalystConsensusSection({ analyst }) {
       {hasTarget && (
         <div style={{ marginBottom: '14px' }}>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-            目標株価レンジ{tr.count != null ? `（n=${tr.count}社）` : ''}
+            {/* v156 content-audit: count(=擬似4field数) でなく analystCount(実人数) のみ表示。 欠損なら人数省略。 */}
+            目標株価レンジ{tr.analystCount != null ? `（アナリスト${tr.analystCount}名）` : ''}
           </div>
           {/* レンジバー: 各マーカー (中央値=上 / 現在値=下) に直接ラベルを置き位置と一致させる。
               §38: レンジ・現在値の位置は事実、 上昇余地% は出さない。 */}

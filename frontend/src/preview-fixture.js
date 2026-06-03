@@ -128,7 +128,9 @@ export const DIAGRAM_FIXTURE = {
   // ── Section: アナリスト予想 (v154 FMP②、 build_analyst_view の §38-safe 数値) ──
   analystConsensus: {
     currentPrice: 430,
-    targetRange: { median: 480, high: 560, low: 400, mean: 482, count: 32 },
+    // analystCount: FMP price_target_consensus は numberOfAnalysts を持たないため production では null。
+    // → 「目標株価レンジ」 のみ表示 (誤 n=4 を避ける、 v156 content-audit)。 count 取得は将来 price-target-summary で。
+    targetRange: { median: 480, high: 560, low: 400, mean: 482, analystCount: null },
     ratingConsensus: 'bullish',
     ratingDistribution: { buy: 24, hold: 7, sell: 1, total: 32 },
     recentChanges: { upgrades: 5, downgrades: 1, window_days: 90 },

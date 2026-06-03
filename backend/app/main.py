@@ -11454,7 +11454,9 @@ async def generate_visualization(
                     "currentPrice": _av_price,
                     "targetRange": ({
                         "median": _tr.get("median"), "high": _tr.get("high"),
-                        "low": _tr.get("low"), "mean": _tr.get("mean"), "count": _tr.get("count"),
+                        "low": _tr.get("low"), "mean": _tr.get("mean"),
+                        # count(=擬似4field数)でなく実アナリスト数を渡す (v156 content-audit、 誤 n=4 解消)
+                        "analystCount": _tr.get("analyst_count"),
                     } if _has_target else None),
                     "ratingConsensus": _pm.get("rating_consensus"),
                     "ratingDistribution": ({
