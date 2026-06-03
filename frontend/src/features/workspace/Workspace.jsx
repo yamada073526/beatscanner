@@ -974,30 +974,34 @@ export default function Workspace({
             // ここの絞り込み filter / sort / scroll は保持される (master-detail の master 面)。
             <div style={{ height: '100%', overflowY: 'auto', padding: 'var(--space-3, 12px)' }}>
               {/* v160 D2 (3体合議 ui+architect verdict 推奨): 詳細表示中に「今注目 (Hero) に戻る」 導線。
-                  Pane 2 は常時可視で discoverable、 JudgmentDetail の layout を触らず低リスクに deselect を提供。 */}
-              {activeTicker && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTicker(null)}
-                  data-testid="screener-back-to-hero"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    marginBottom: 'var(--space-2, 8px)',
-                    padding: '4px 10px',
-                    fontSize: 11,
-                    fontWeight: 600,
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-sm, 4px)',
-                    background: 'var(--bg-subtle)',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  ← 今注目に戻る
-                </button>
-              )}
+                  Pane 2 は常時可視で discoverable、 JudgmentDetail の layout を触らず低リスクに deselect を提供。
+                  v161 hotfix (user dogfood): 条件 render だと button 出現で Pane2 が縦に伸縮しカクつくため、
+                  常に slot を DOM に確保し visibility / pointerEvents で出し分け (高さ固定)。 */}
+              <button
+                type="button"
+                onClick={() => setActiveTicker(null)}
+                data-testid="screener-back-to-hero"
+                aria-hidden={!activeTicker}
+                tabIndex={activeTicker ? 0 : -1}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  marginBottom: 'var(--space-2, 8px)',
+                  padding: '4px 10px',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm, 4px)',
+                  background: 'var(--bg-subtle)',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  visibility: activeTicker ? 'visible' : 'hidden',
+                  pointerEvents: activeTicker ? 'auto' : 'none',
+                }}
+              >
+                ← 今注目に戻る
+              </button>
               <Suspense fallback={<div style={{ padding: 16, color: 'var(--text-muted)' }}>Loading screener…</div>}>
                 <CustomScreenerPanel
                   user={detailContext?.user}
