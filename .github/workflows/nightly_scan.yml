@@ -32,7 +32,11 @@ jobs:
     env:
       BASE: https://beatscanner-production.up.railway.app
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
-      BODY: '{"universe_source":"russell3000","universe_size":1000,"worker_count":3}'
+      # v158 3体合議 (sre verdict): universe_size 1000→3000。 1000 は底$9.4B=大型株のみで
+      # 小型株 alpha (russell3000 拡張の主目的) 未達。 3000 で底$0.5B・小型株31% (流動性フィルタ後24%)。
+      # cron 時間: 3000@worker3 で rs~3.1min/cup~4.8min/GH sequential~8min (timeout 30min 内)。
+      # Supabase ~166MB/500MB=33%。 段階展開不要 (Ultimate で rate-limit リスク消失)。
+      BODY: '{"universe_source":"russell3000","universe_size":3000,"worker_count":3}'
     steps:
       - name: Setup tools
         run: |

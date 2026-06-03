@@ -3852,12 +3852,17 @@ async def _fetch_market_cap_top_n(n: int = 1000) -> list[str]:
         return []
 
     try:
-        # FMP /stable/company-screener (公式 endpoint、 /stock-screener は alias)
-        # mutual fund / share class (JNSXX / PRNHX 等) を除外するため isEtf=false&isFund=false
+        # FMP /stable/company-screener (公式 endpoint、 /stock-screener は 404)
+        # mutual fund / share class (JNSXX / PRNHX 等) を除外するため isEtf=false&isFund=false。
+        # v158 3体合議 (金融 verdict): small-cap universe 拡大時、 薄商い・ペニー株は RS 分母汚染 /
+        # Cup-Handle vol_ratio 偽陽性 / 幾何ノイズで §38 リスクが SP500 時より悪化する。
+        # → universe 段階で priceMoreThan=5 (ペニー除外) + volumeMoreThan=200000 (薄商い除外) を物理適用。
+        # 追加 req コストゼロ。 検証: limit=3000+本フィルタ → 2449件 (小型株 24% 維持で alpha 保持)。
         import httpx as _httpx_mc  # 関数 scope local import (他の helper と同 pattern)
         url = (
             f"https://financialmodelingprep.com/stable/company-screener"
             f"?marketCapMoreThan=500000000"
+            f"&priceMoreThan=5&volumeMoreThan=200000"
             f"&isActivelyTrading=true&isEtf=false&isFund=false"
             f"&exchange=NASDAQ,NYSE&limit={n}&apikey={api_key}"
         )
@@ -15071,11 +15076,13 @@ async def cron_cup_scan(
     body: dict | None = None,
     x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
 ):
-    """Nightly Cup-with-Handle scan: SP500 全 500 銘柄 iterate → _detect_cup_handle → upsert。
+    """Nightly Cup-with-Handle scan: universe iterate → _detect_cup_handle → upsert。
 
-    v120 Phase 1 universe 拡大 (user 承認、 2026-05-27):
-      200 銘柄 (hardcode) → **SP500 全 500 銘柄** (FMP Premium dynamic fetch、 24h cache 共有)。
-      じっちゃまプロトコル「小型株重要」 への第一歩、 Phase 2 で Russell 3000 拡張予定。
+    universe は POST body の universe_source / universe_size で決定 (後方互換: default = SP500)。
+    本番 nightly (.github/workflows/nightly_scan.yml) は v158 3体合議で
+      universe_source=russell3000 / universe_size=3000 (米国主要 約3000銘柄、 ETF・ファンド除く +
+      流動性フィルタ price>$5 & vol>20万) に拡大。 じっちゃまプロトコル「小型株重要」 を達成
+      (底$0.5B・小型株 ~24%)。 worker_count=3 並列で ~5min 完了。
       Premium plan 750 req/min で nightly batch 実行時間 16 分以内見込み。
 
     Body (任意):
@@ -16053,7 +16060,10 @@ async def scanner_rs(
         raise HTTPException(status_code=503, detail="Supabase service not configured")
 
     min_percentile = max(1, min(99, int(min_percentile)))
-    limit = max(1, min(200, int(limit)))
+    # v158 3体合議 (frontend P1): universe 3000 拡張で RS≥80 (上位20%) は最大 ~600 銘柄。
+    # O'Neil 完全 (frontend fetchRsScanner(80, 500) の intersection 材料) が top200 で切られると
+    # RS≥80 の rank 201-600 を取りこぼすため、 cap を 600 に引き上げ (payload は ticker+数値で軽量)。
+    limit = max(1, min(600, int(limit)))
 
     try:
         # 直近 1 週間で最新の calc_date を取得 (nightly batch が稀に skip しても fallback)

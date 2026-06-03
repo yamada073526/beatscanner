@@ -16,7 +16,7 @@ const SCANNER_FILTERS = [
   // v141 D4 Sprint2 (3体合議 QA verdict、 #1 Trust Cliff リスク): cup scan を frontend で breakout_confirmed のみ抽出。
   // state machine 流れ (形成中 → ブレイクアウト確定) で 'cup' の直後に配置。 premium 限定 (理由は runCupFilter / CupScannerResults 参照)。
   { key: 'breakout', label: 'ブレイクアウト', premium: true, fullLabel: 'Cup-Handle ブレイクアウト確定 (Pivot 上抜け + 出来高確認)', titleExtra: "O'Neil 打診買いゾーン: Pivot 価格を出来高を伴って上抜けた確定銘柄のみ。 ATH 追いかけ買い (extended) は除外" },
-  { key: 'rs',    label: 'RS強', titleExtra: 'Relative Strength ≥ 80 (CAN SLIM L 条件、 SP500 universe で上位 20%)' },
+  { key: 'rs',    label: 'RS強', titleExtra: 'Relative Strength ≥ 80 (CAN SLIM L 条件、 米国主要銘柄〈ETF・ファンド除く〉 universe で上位 20%)' },
   { key: 'both',  label: 'ファンダ&カップ', premium: true, fullLabel: 'ファンダ AND Cup-Handle 複合検索' },
   { key: 'oneill', label: "O'Neil 完全", premium: true, fullLabel: "ファンダ AND Cup-Handle AND RS≥80 (William O'Neil CAN SLIM 完全)", titleExtra: '打診買い 3 点セット (ファンダメンタル5条件 × Cup-Handle × Relative Strength)' },
 ];
@@ -148,7 +148,7 @@ function RsScannerResults({ data, onSelect }) {
     <div className="space-y-3">
       {/* Trust Cliff 防止: universe 範囲を 1 行で明示 */}
       <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--text-muted)]">
-        <span>universe: SP500 {data.universe_size}銘柄 / 6 ヶ月 RS / {data.calc_date} 計算</span>
+        <span>universe: 米国主要 約{data.universe_size}銘柄〈ETF・ファンド除く〉 / 6 ヶ月 RS / {data.calc_date} 計算</span>
         <span className="ml-auto">CAN SLIM の L = RS ≥ {data.min_percentile} (上位 {100 - data.min_percentile}%)</span>
       </div>
       {/* v120 hotfix v3 (user dogfood): 3 列 grid → 1 列縦並び + ランキング番号で順位を即視認.
@@ -168,7 +168,7 @@ function RsScannerResults({ data, onSelect }) {
                   ? 'color-mix(in srgb, var(--color-gain) 10%, transparent)'
                   : 'color-mix(in srgb, var(--color-gain) 4%, transparent)',
               }}
-              title={`#${rank} / SP500 universe 内 上位 ${100 - pct}% / SPY 比 ${rsDiff > 0 ? '+' : ''}${rsDiff.toFixed(1)}pt (6 ヶ月)`}
+              title={`#${rank} / 主要銘柄 universe 内 上位 ${100 - pct}% / SPY 比 ${rsDiff > 0 ? '+' : ''}${rsDiff.toFixed(1)}pt (6 ヶ月)`}
             >
               {/* 左端: ランキング番号 (上位 3 は gold、 4-10 は accent、 残り muted) */}
               <span
