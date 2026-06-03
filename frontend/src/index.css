@@ -11845,7 +11845,11 @@ body.is-digest-resizing {
   background: var(--bg-elevated, var(--bg-subtle));
 }
 .diagram-banner-content--expanded {
-  max-height: 6000px; /* DiagramCard が高くても収まる envelope */
+  /* v158: ①13F + ⑤議員取引 section 追加で図解が縦に伸び、 旧 6000px envelope を超過 → 末尾
+     (締めカード/citation) がクリップされる dogfood bug。 視覚ハーネス実測で mobile 幅 1 図解
+     ≈ 7443px。 余裕を持って 11000px に拡張 (close 動画 lag は許容内)。
+     ⚠️ 新 section を図解に足したら本値の再確認が必要 (overflow:hidden + max-height clip のため)。 */
+  max-height: 11000px; /* DiagramCard が高くても収まる envelope (mobile 実測 7443px + headroom) */
   opacity: 1;
   padding: var(--space-4, 16px) var(--space-4, 16px) var(--space-5, 20px);
 }

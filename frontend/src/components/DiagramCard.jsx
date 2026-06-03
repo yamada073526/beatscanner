@@ -633,20 +633,36 @@ function InstitutionalSection({ institutional }) {
         </div>
       )}
 
-      {/* 直近四半期に動いた機関の数 (事実集計、 sign color) */}
-      {hasCounts && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>直近四半期に動いた機関の数</div>
-          <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap', fontSize: '12px', fontVariantNumeric: 'tabular-nums' }}>
-            <span><span style={{ color: 'var(--text-muted)' }}>新規建て </span><span style={{ color: accumColor, fontWeight: 700 }}>{fmtInt(latest.newPositions)}社</span></span>
-            <span><span style={{ color: 'var(--text-muted)' }}>解消 </span><span style={{ color: distColor, fontWeight: 700 }}>{fmtInt(latest.closedPositions)}社</span></span>
+      {/* 直近四半期に動いた機関の数。 v158 dogfood: 文字列の羅列が「文字壁」 に見えるため
+          2×2 スタットタイル (ラベル小 + 数値大、 方向で緑/赤) に再設計し 2 秒で scan 可能に。 */}
+      {hasCounts && (() => {
+        const tiles = [
+          { label: '新規建て', value: latest.newPositions, color: accumColor },
+          { label: '解消', value: latest.closedPositions, color: distColor },
+          { label: '保有を増やした', value: latest.increasedPositions, color: accumColor },
+          { label: '減らした', value: latest.reducedPositions, color: distColor },
+        ].filter((t) => Number.isFinite(Number(t.value)));
+        if (tiles.length === 0) return null;
+        return (
+          <div style={{ marginBottom: '12px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>直近四半期に動いた機関の数</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              {tiles.map((t, i) => (
+                <div key={i} style={{
+                  display: 'flex', flexDirection: 'column', gap: '2px',
+                  padding: '8px 10px', borderRadius: '8px',
+                  background: 'var(--bg-subtle)', border: '1px solid var(--border)',
+                }}>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>{t.label}</span>
+                  <span style={{ fontSize: '17px', fontWeight: 800, color: t.color, fontVariantNumeric: 'tabular-nums', lineHeight: 1.15 }}>
+                    {fmtInt(t.value)}<span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginLeft: '2px' }}>社</span>
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap', fontSize: '12px', fontVariantNumeric: 'tabular-nums' }}>
-            <span><span style={{ color: 'var(--text-muted)' }}>保有を増やした </span><span style={{ color: accumColor, fontWeight: 700 }}>{fmtInt(latest.increasedPositions)}社</span></span>
-            <span><span style={{ color: 'var(--text-muted)' }}>減らした </span><span style={{ color: distColor, fontWeight: 700 }}>{fmtInt(latest.reducedPositions)}社</span></span>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* §38 免責 */}
       <div style={{ fontSize: '10px', color: 'var(--text-muted)', lineHeight: 1.5, display: 'flex', gap: '5px', alignItems: 'flex-start' }}>
