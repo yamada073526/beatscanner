@@ -263,6 +263,10 @@ function EarningsReactionBar({ reaction }) {
   const mc = reaction.missCount || 0;
   if (beat == null && miss == null) return null;
   const fmtPct = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v}%`);
+  // v156 content-audit: 投資業界の色ルールは「値の符号」 で決まる。 Beat/Miss は category label に
+  // すぎず、 NVDA のように Beat時でもマイナス (good news が効かない) があるため、 値が負なら必ず赤。
+  // (旧実装は Beat=緑固定で「Beat時 -5.14%」 を緑表示 = 色ルール違反だった)
+  const signColor = (v) => (v == null ? 'var(--text-muted)' : v > 0 ? 'var(--color-gain)' : v < 0 ? 'var(--color-loss)' : 'var(--text-muted)');
   return (
     <div data-testid="diagram-earnings-reaction" style={{
       marginTop: '10px', padding: '10px 12px', borderRadius: '8px',
@@ -275,14 +279,14 @@ function EarningsReactionBar({ reaction }) {
         {beat != null && (
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
             <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Beat時 平均</span>
-            <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-gain)', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(beat)}</span>
+            <span style={{ fontSize: '15px', fontWeight: 700, color: signColor(beat), fontVariantNumeric: 'tabular-nums' }}>{fmtPct(beat)}</span>
             <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>n={bc}</span>
           </div>
         )}
         {miss != null && (
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
             <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Miss時 平均</span>
-            <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-loss)', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(miss)}</span>
+            <span style={{ fontSize: '15px', fontWeight: 700, color: signColor(miss), fontVariantNumeric: 'tabular-nums' }}>{fmtPct(miss)}</span>
             <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>n={mc}</span>
           </div>
         )}
