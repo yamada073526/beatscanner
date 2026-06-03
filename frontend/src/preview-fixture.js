@@ -116,6 +116,15 @@ export const DIAGRAM_FIXTURE = {
   },
   consensusSource: 'アナリスト予想: FMP コンセンサス',
 
+  // ── Section: 決算後株価反応 (v154 FMP③、 compute_reaction の過去8Q event study) ──
+  earningsReaction: {
+    avgBeatReturnPct: 2.1,
+    avgMissReturnPct: -6.4,
+    avgInlineReturnPct: -0.3,
+    beatCount: 5,
+    missCount: 2,
+  },
+
   // ── Section: アナリスト予想 (v154 FMP②、 build_analyst_view の §38-safe 数値) ──
   analystConsensus: {
     currentPrice: 430,

@@ -251,6 +251,48 @@ function AnalystConsensusSection({ analyst }) {
   );
 }
 
+// v154 FMP③: 決算後株価反応 (金融アナリスト review verdict、 じっちゃま「決算は中身より反応を見ろ」)。
+// backend compute_reaction の過去 8Q event study (Beat時/Miss時の決算後±5営業日 平均リターン)。
+// ⚠️ §38: 過去実績の集計のみ、 将来予測でない。 免責付き。 数値は Python 計算 (LLM 非経由)。
+function EarningsReactionBar({ reaction }) {
+  if (!reaction) return null;
+  const beat = reaction.avgBeatReturnPct;
+  const miss = reaction.avgMissReturnPct;
+  const bc = reaction.beatCount || 0;
+  const mc = reaction.missCount || 0;
+  if (beat == null && miss == null) return null;
+  const fmtPct = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v}%`);
+  return (
+    <div data-testid="diagram-earnings-reaction" style={{
+      marginTop: '10px', padding: '10px 12px', borderRadius: '8px',
+      background: 'var(--bg-subtle)', border: '1px solid var(--border)',
+    }}>
+      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '7px' }}>
+        決算後 ±5営業日の株価反応（過去実績）
+      </div>
+      <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap' }}>
+        {beat != null && (
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Beat時 平均</span>
+            <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-gain)', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(beat)}</span>
+            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>n={bc}</span>
+          </div>
+        )}
+        {miss != null && (
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Miss時 平均</span>
+            <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-loss)', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(miss)}</span>
+            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>n={mc}</span>
+          </div>
+        )}
+      </div>
+      <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.5 }}>
+        過去の決算後の株価変化の集計であり、将来の値動きを示すものではありません。
+      </div>
+    </div>
+  );
+}
+
 // Sprint 4 案8: stagger variants (feedback_motion_timing_recipes.md §stagger 80ms upper bound)
 // expanded 時のみ発火 (DiagramCard mount = expanded 後に render)
 const STEP_CONTAINER_VARIANTS = {
@@ -2529,6 +2571,11 @@ export default function DiagramCard({
           const unit = rev.unit || '';
           return <SectionConclusion text={`売上高は${first.period}の${first.value}${unit}から${last.period}の${last.value}${unit}へ推移`} />;
         })()}
+
+        {/* v154 FMP③: 決算後株価反応 (成長ストーリーの下、 「決算は中身より反応を見ろ」) */}
+        {!isGenerating && data.earningsReaction && (
+          <EarningsReactionBar reaction={data.earningsReaction} />
+        )}
 
         {/* ── Section 4.5: FCF・CapEx ── */}
         {/* データあり → 表示 / フラグだけある（false）→ N/A表示 / どちらもなし → 非表示 */}
