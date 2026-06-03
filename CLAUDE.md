@@ -29,6 +29,15 @@
 
 ## 必ず守るルール（永続）
 
+### Claude の作業過程・出力の言語（和文厳守・最重要 UX ルール）
+- **Claude が出力する全てのユーザー可視テキストは日本語**。 user は「作業過程」 を和文で review したい。
+- 特に **ツール呼び出しの `description` フィールド** (Bash / Agent / Task 等、 user の画面に作業過程として表示される) を必ず和文にする。 chapter title / 地の文ナレーション / status 更新 / end-of-turn 完了報告 も同様。
+  - ✗ `"Build frontend to check syntax"` → ✓ `"frontend を build して構文確認"`
+  - ✗ `"Find latest handover file"` → ✓ `"最新 handover ファイルを探す"`
+  - ✗ `"Deploy to Railway"` → ✓ `"Railway に deploy"`
+- **コード / file path / 技術用語 (Trust Cliff / cache / JWT / commit hash / railway up 等) は英語のまま** で OK (BeatScanner 日本語ドキュメントと一貫)。
+- ⚠️ 長い実装セッション中に英文へ drift しやすく、 **2026-05-15 / 06-02 / 06-04 の 3 回**再指摘された。 memory [[feedback_japanese_output]] と double anchor。 サブエージェントへの prompt 言語は別ルール ([[feedback_subagent_japanese]]) 参照。
+
 ### デプロイ運用
 - **デプロイは `railway up` のみ**。preview server / `npm run dev` は使用しない
 - ローカルでの構文チェックは `cd frontend && npm run build` で実施
