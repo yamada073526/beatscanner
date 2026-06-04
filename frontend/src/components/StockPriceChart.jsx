@@ -1126,6 +1126,16 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
                     dot={false}
                     activeDot={{ r: 4, fill: CHART_PRICE }}
                     name="終値"
+                    /* SPEC screener-animation 案6: price line の左→右 draw-on を「意図的・上質」 に。
+                       Recharts default で既に isAnimationActive=true だが暗黙のため明示し、 brand motion 言語の
+                       ease-out (終端で滑らかに settle) + 1100ms に揃える (default 'ease'/1500ms → 上質方向)。
+                       ★安全: close は data.prices に常在 = null transition crash なし → chart-overlay-safety の
+                       isAnimationActive=false 規律は overlay line (SMA/cup、 後追い null→値) 専用で price line は対象外
+                       ([[feedback_chart_overlay_safety]] 4 層防御 #4 の射程確認済)。 reduced-motion は OS 設定で
+                       Recharts が縮退しないため、 過度な再 draw を避ける意味でも duration は控えめに保持。 */
+                    isAnimationActive={true}
+                    animationDuration={1100}
+                    animationEasing="ease-out"
                   />
                 ) : (
                   <Bar
