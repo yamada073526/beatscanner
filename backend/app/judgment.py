@@ -111,12 +111,35 @@ def build_periods(
     cash_flows: list[dict],
     needed: int = 3,
 ) -> list[PeriodData]:
-    """FMP/yfinance のデータから直近 N 期分の PeriodData を構築する（古い→新しい順）."""
-    cf_by_date = {c["date"]: c for c in cash_flows}
+    """FMP/yfinance のデータから直近 N 期分の PeriodData を構築する（古い→新しい順）.
+
+    v166 fix (user dogfood ASO 422 真因): income と cash flow を fiscalYear で join する。
+    旧版は date 文字列の完全一致 join だったが、 52/53 週決算の小売 (ASO/COST/TGT 等) は
+    FMP の income (Jan 31 に正規化) と cash-flow (実期末 Feb 1 / Feb 3 等) で date が数日ズレ、
+    inner join が 1 期に激減 → 「Need at least 3 annual periods, got 1」 で 422 になっていた。
+    fiscalYear が揃えば date がズレても join できる (AAPL 等 date 一致銘柄も fiscalYear 一致のため回帰なし)。
+    fiscalYear 欠落時は従来どおり date 一致で fallback。
+    """
+    def _fy_key(stmt):
+        fy = stmt.get("fiscalYear") or stmt.get("calendarYear")
+        return str(fy) if fy not in (None, "", "null") else None
+
+    cf_by_fy: dict = {}
+    cf_by_date: dict = {}
+    for c in cash_flows:
+        fy = _fy_key(c)
+        if fy is not None and fy not in cf_by_fy:
+            cf_by_fy[fy] = c
+        if c.get("date"):
+            cf_by_date[c["date"]] = c
+
     merged: list[PeriodData] = []
     for inc in income_statements:
         date = inc.get("date")
-        cf = cf_by_date.get(date)
+        fy = _fy_key(inc)
+        cf = cf_by_fy.get(fy) if fy is not None else None
+        if cf is None:
+            cf = cf_by_date.get(date)  # fiscalYear 欠落 / 不一致時の fallback
         if not cf:
             continue
         revenue = float(inc.get("revenue") or 0)

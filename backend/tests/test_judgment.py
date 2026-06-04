@@ -115,3 +115,32 @@ def test_cfps_uses_diluted_shares():
     result = judge("TEST", income, cash)
     # 直近 CFPS = 600 / 200 = 3.0
     assert result.periods[-1].cfps == pytest.approx(3.0)
+
+
+def test_fiscal_year_join_with_mismatched_dates():
+    """v166 fix: 52/53週決算 (ASO 等) で income/cash の date が数日ズレても fiscalYear で join できる.
+
+    旧 date 完全一致 join は 1 期に激減し「Need at least 3 annual periods, got 1」 422 になっていた。
+    income は Jan 31 に正規化、 cash flow は実期末 (Feb 1 / Feb 3 / Jan 28) で date がズレるが
+    calendarYear/fiscalYear が揃うため 3 期 join できることを検証する。
+    """
+    income = [
+        _mk_income("2025-01-31", 2024, revenue=1000.0, eps=5.0, shares=100.0),
+        _mk_income("2024-01-31", 2023, revenue=900.0, eps=4.0, shares=100.0),
+        _mk_income("2023-01-31", 2022, revenue=800.0, eps=3.0, shares=100.0),
+    ]
+    # cash flow は date が income と数日ズレる (52/53 週決算) が calendarYear は一致
+    cash = [
+        {"date": "2025-02-01", "calendarYear": "2024", "operatingCashFlow": 600.0},
+        {"date": "2024-02-03", "calendarYear": "2023", "operatingCashFlow": 500.0},
+        {"date": "2023-01-28", "calendarYear": "2022", "operatingCashFlow": 400.0},
+    ]
+    periods = build_periods(income, cash)
+    # 旧実装では 0〜1 期。 fix 後は 3 期 join できる (date は income 側を採用)
+    assert len(periods) == 3
+    assert [p.date for p in periods] == ["2023-01-31", "2024-01-31", "2025-01-31"]
+    # cash flow が正しく fiscalYear で紐付いた証跡 (op_cf 由来の CFPS が期待値)
+    assert periods[-1].operating_cf == pytest.approx(600.0)
+    # judge() も 422 を投げず通ること
+    result = judge("ASO", income, cash, company_name="Academy Sports")
+    assert result.passed_count >= 0  # raise しないことが主眼
