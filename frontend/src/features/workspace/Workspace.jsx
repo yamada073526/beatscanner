@@ -1042,13 +1042,60 @@ export default function Workspace({
             // v160 D2 (master-detail): 銘柄選択中は詳細 (JudgmentDetail)、 未選択なら Hero (今注目 3 セクション)。
             // Explorer は Pane 2 に常駐するため、 結果を保ったまま Pane 3 で 1 件ずつ精査できる。
             activeTicker ? (
-              <JudgmentDetail
-                plan={plan}
-                detailFor={detailFor}
-                onAnalyze={onAnalyze}
-                detailContext={detailContext}
-                useWorkspaceReader
-              />
+              // D-1 (user 承認 2026-06-04): screener mode の Pane3 詳細上部に breadcrumb deselect 導線。
+              // JudgmentDetail 内部は不触 (心臓部回避)、 flex column で wrap し breadcrumb を上に積む。
+              // 内側 div は overflow:hidden で JudgmentDetail の内部 scroll (height:100%) を維持。
+              // Pane2 の「← 今注目に戻る」 button は discoverable な fallback として併存。
+              <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+                <nav
+                  data-testid="screener-breadcrumb"
+                  aria-label="スクリーナー breadcrumb"
+                  style={{
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-1, 4px)',
+                    padding: 'var(--space-2, 8px) var(--space-4, 16px)',
+                    borderBottom: '1px solid var(--border)',
+                    background: 'var(--bg-card)',
+                    fontSize: 12,
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setActiveTicker(null)}
+                    data-testid="screener-breadcrumb-back"
+                    aria-label="スクリーナー (今注目) に戻る"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      padding: '2px 6px',
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'var(--color-accent)',
+                      fontWeight: 600,
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      borderRadius: 'var(--radius-sm, 4px)',
+                    }}
+                  >
+                    スクリーナー
+                  </button>
+                  <ChevronRight size={13} aria-hidden style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                  <span style={{ fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {activeTicker}
+                  </span>
+                </nav>
+                <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                  <JudgmentDetail
+                    plan={plan}
+                    detailFor={detailFor}
+                    onAnalyze={onAnalyze}
+                    detailContext={detailContext}
+                    useWorkspaceReader
+                  />
+                </div>
+              </div>
             ) : (
               <Suspense fallback={<div style={{ padding: 16, color: 'var(--text-muted)' }}>Loading screener…</div>}>
                 <ScreenerPane
