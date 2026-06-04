@@ -1024,7 +1024,12 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
         <>
           <div
             ref={chartWrapRef}
-            className={`h-72 relative${chartInView && !prefersReducedMotion ? ' chart-draw-reveal' : ''}`}
+            // 案6 v3: flash 解消 — 入場前は chart-draw-pending で常時クリップ (全表示の一瞬を消す)、
+            //   IO で viewport 入場 (chartInView) したら chart-draw-reveal で左→右 wipe。
+            //   reduced-motion はどちらも付けず全表示 (クリップなし)。
+            className={`h-72 relative${
+              prefersReducedMotion ? '' : (chartInView ? ' chart-draw-reveal' : ' chart-draw-pending')
+            }`}
             data-cup-locked={cupRequiresPro ? 'true' : undefined}
           >
             {/* Pro tier teaser: Cup-Handle 検出済 + Free user 時に chart 全体を軽く blur + CTA overlay。
