@@ -6938,6 +6938,15 @@ button.ds-chip[data-pressed="true"]:hover {
     background-color: rgba(56, 189, 248, 0.08);
   }
 }
+/* hover accent (user dogfood「もう少しアクセント」): ticker 文字を cyan にシフト (Linear「1つだけ動かす」/
+   .news-list-card の title color shift と同 idiom)。 hover の border/bg/glow に加え「主役の ticker が灯る」。 */
+.screener-hero-ticker {
+  transition: color 150ms var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
+}
+@media (hover: hover) and (pointer: fine) {
+  .screener-hero-row:hover .screener-hero-ticker { color: rgb(186, 230, 253); } /* sky-200 (dark) */
+  [data-theme="light"] .screener-hero-row:hover .screener-hero-ticker { color: rgb(2, 132, 199); } /* sky-700 (light) */
+}
 /* press: Stripe/HIG 流の沈み込み (Δy + Δscale で press feedback delta 充足 [[feedback_press_feedback_delta]]) */
 .screener-hero-row:active {
   transform: translateY(0) scale(0.97);

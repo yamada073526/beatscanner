@@ -380,8 +380,9 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
                   >
                     {rank}
                   </span>
-                  {/* A-2 中央: ticker (mono / fw700 = 視線 anchor) */}
-                  <span style={{ flex: 1, minWidth: 0, fontFamily: 'var(--font-mono, monospace)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {/* A-2 中央: ticker (mono / fw700 = 視線 anchor)。 hover accent (user dogfood「もう少し
+                      アクセント」): .screener-hero-row:hover で ticker を cyan にシフト (news-list-card idiom)。 */}
+                  <span className="screener-hero-ticker" style={{ flex: 1, minWidth: 0, fontFamily: 'var(--font-mono, monospace)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
                     {t.ticker}
                   </span>
                   {/* A-2 右: stat badge を fw400 muted → fw700 secondary に格上げ (数値主役化、 §7-B Stat contrast)。
