@@ -169,9 +169,11 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
             letterSpacing: '-0.01em',
             margin: '0 0 var(--space-2, 8px)',
             paddingBottom: 'var(--space-2, 8px)',
-            // 3体合議 (qa #2 + ui): 見出し未 clamp だと長い title (交差) が narrow 列で 2-3 行折返し → 3 列の
-            //   row 開始 Y がズレて「波打ち」。 2 行分の min-height で全列の hairline / row 開始位置を揃える。
-            minHeight: '2.5em',
+            // 3体合議 (qa #2 + ui) + dogfood 2回目 (実測): 見出し未 clamp だと長い title (交差) が 2 行折返し →
+            //   3 列の hairline がズレる。 ★box-sizing: border-box のため minHeight は padding-bottom(8px)+
+            //   border(1px) を含む → 旧 2.5em(45px) では 2 行 heading(content 45px) が 54px に成長し 1 行(45px)
+            //   と 9px ズレた。 2 行の総高 = 2.5em + 8px + 1px = 54px に min-height を合わせ、 全行数で総高を統一。
+            minHeight: 'calc(2.5em + var(--space-2, 8px) + 1px)',
             // A-1: gold hairline (SectionHeader idiom 流用)。 3体合議 (ui P1): 既存 ds-section-header 40%/35% に対し
             //   18% は「ほぼ見えず」 vision-eval 不検知 → 32% に引上げて Aman 真鍮感を揃える。 raw hex なし。
             borderBottom: '1px solid color-mix(in srgb, var(--color-gold) 32%, transparent)',
