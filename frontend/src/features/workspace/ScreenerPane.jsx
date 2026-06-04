@@ -26,6 +26,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Crown } from 'lucide-react';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
+import { useHaloSweepOnce } from '../../hooks/useHaloSweepOnce.js';
 import Chip, { ChipGroup } from '../../components/ui/Chip.jsx';
 
 
@@ -116,9 +117,18 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
   // v125 P5-2: demo モード時は top 1 visible + 残り blur (marketer 6 体合議 verdict)
   const visibleCount = demoMode ? 1 : tickers.length;
   const blurredCount = demoMode ? Math.max(0, tickers.length - 1) : 0;
+  // 案1 (SPEC screener-richness-v2): home Pane3 と同じ tier-m-glow halo sweep を section カードに 1 回流す。
+  //   useHaloSweepOnce が IO 進入で data-halo-ready→fired を制御 (proven pattern、 loop 禁止・二度発火 guard)。
+  const haloRef = useRef(null);
+  useHaloSweepOnce(haloRef);
   return (
     <div
-      ref={sectionRef}
+      // sectionRef (chip scroll-to) と haloRef (halo) を同一要素に merge
+      ref={(el) => {
+        if (sectionRef) sectionRef.current = el;
+        haloRef.current = el;
+      }}
+      className="tier-m-glow"
       data-testid={testId}
       data-active={active ? 'true' : 'false'}
       style={{
@@ -133,16 +143,22 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
         border: active
           ? '1px solid var(--color-accent)'
           : '1px solid var(--border)',
+        // inline radius (8px) が tier-m-glow class の 16px に勝つ。 halo ::after は border-radius:inherit で 8px 追従。
         borderRadius: 'var(--radius-md, 8px)',
         background: 'var(--bg-card)',
+        // 案1: active 時のみ accent ring を inline 指定。 非 active は undefined にして
+        //   tier-m-glow[data-halo-fired] の ambient glow (class) を効かせる (inline:none だと class を潰すため)。
         boxShadow: active
           ? '0 0 0 2px color-mix(in srgb, var(--color-accent) 25%, transparent)'
-          : 'none',
+          : undefined,
         transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
       }}
     >
       {/* A-1: 見出しに格 — 連番 eyebrow + 18px/fw500 見出し + gold hairline。 A-3 stagger は heading block 単位。 */}
       <div className="screener-reveal" style={{ animationDelay: `${revealBaseDelay}ms` }}>
+        {/* 案2 (SPEC screener-richness): home ds-section-header と同じ L字 gold frame (左 3px gold bar + 下 hairline)。
+            eyebrow + h4 を枠内に入れ section に「格」 を付与 (description / rows は枠外 full-width = home 同様)。 raw hex なし。 */}
+        <div style={{ borderLeft: '3px solid var(--color-gold)', paddingLeft: 'var(--space-3, 12px)', marginBottom: 'var(--space-3, 12px)' }}>
         {eyebrow && (
           <div
             style={{
@@ -167,7 +183,7 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
             fontWeight: 500,
             lineHeight: 1.25,
             letterSpacing: '-0.01em',
-            margin: '0 0 var(--space-2, 8px)',
+            margin: 0, /* 案2: 下 margin は L字 frame div の marginBottom が担う */
             paddingBottom: 'var(--space-2, 8px)',
             // 3体合議 (qa #2 + ui) + dogfood 2回目 (実測): 見出し未 clamp だと長い title (交差) が 2 行折返し →
             //   3 列の hairline がズレる。 ★box-sizing: border-box のため minHeight は padding-bottom(8px)+
@@ -197,6 +213,7 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
             {title}
           </span>
         </h4>
+        </div>{/* end 案2 L字 gold frame */}
         <p
           title={description}
           style={{
