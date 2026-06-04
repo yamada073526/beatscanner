@@ -7026,28 +7026,31 @@ button.ds-chip[data-pressed="true"]:hover {
 .screener-pane-ambient::before {
   content: '';
   position: absolute;
-  top: 30%;
+  /* ③-a v3 (user dogfood「知って注意して見ても違いが分からない」): 真因 = radial が上部に居て
+     opaque な hero card 背面に隠れ、 breathe が card に覆われて見えない。 → 中心を下方 (42%) の
+     空きスペース (user 指摘「うら寂しい空き」) へ移し、 card に隠れない可視領域で息づかせる。
+     これで「明滅が見える」 + 「空き spaceに atmosphere が宿る」 を両取り。 */
+  top: 42%;
   left: 50%;
-  width: 1100px;
-  height: 540px;
+  width: 1200px;
+  height: 640px;
   transform: translate(-50%, -50%);
-  /* ③-a v2 (user dogfood「12s では全然気付かない」): base 明度 0.11→0.16 で glow 自体を視認域へ。 */
-  background: radial-gradient(ellipse, rgba(56, 189, 248, 0.16) 0%, transparent 62%);
-  -webkit-mask-image: radial-gradient(ellipse, black 20%, transparent 60%);
-          mask-image: radial-gradient(ellipse, black 20%, transparent 60%);
+  /* ③-a v3: base 明度 0.16→0.22 + mask peak 帯 20%→26% に拡げ、 lit area と輝度を上げる。 */
+  background: radial-gradient(ellipse, rgba(56, 189, 248, 0.22) 0%, transparent 62%);
+  -webkit-mask-image: radial-gradient(ellipse, black 26%, transparent 62%);
+          mask-image: radial-gradient(ellipse, black 26%, transparent 62%);
   pointer-events: none;
   z-index: 0;
-  /* ③-a v2 (user dogfood「12s では全然気付かない、 ユーザ操作はもっとキビキビ」): 周期 12s→8s に
-     さらに短縮。 ユーザ操作 (220ms) とは別 timescale だが「眺めた時に息づきが分かる」 知覚域へ。
-     base 明度 (0.16) + 振幅 (opacity 0.45-1.0 / scale 1.10) と合わせて「気付く」 強度に引上げ。 */
-  animation: screenerAmbientBreathe 8s ease-in-out infinite;
+  /* ③-a v3 (user dogfood「もっと発光を強めて間隔を短く」): 周期 8s→5s にさらに短縮。
+     base 明度 (0.22) + 振幅 (opacity 0.4-1.0 / scale 1.13) + 下方配置と合わせ「はっきり明滅する」 強度に。 */
+  animation: screenerAmbientBreathe 5s ease-in-out infinite;
 }
 .screener-pane-ambient > * { position: relative; z-index: 1; }
 @keyframes screenerAmbientBreathe {
-  /* ③-a v2: opacity 0.5/1.0→0.45/1.0 (trough を下げ swing 拡大)、 scale 1.08→1.10 で size pulse を
-     はっきり視認可能に。 transform/opacity のみ = CLS 0 (reflow しない)。 */
-  0%, 100% { opacity: 0.45; transform: translate(-50%, -50%) scale(1); }
-  50%      { opacity: 1;    transform: translate(-50%, -50%) scale(1.10); }
+  /* ③-a v3: opacity 0.45/1.0→0.4/1.0 (trough をさらに下げ swing 拡大)、 scale 1.10→1.13 で size pulse を
+     明確に。 transform/opacity のみ = CLS 0 (reflow しない)。 */
+  0%, 100% { opacity: 0.4; transform: translate(-50%, -50%) scale(1); }
+  50%      { opacity: 1;   transform: translate(-50%, -50%) scale(1.13); }
 }
 @media (prefers-reduced-motion: reduce) {
   .screener-pane-ambient::before { animation: none; }
@@ -10020,17 +10023,18 @@ button.ds-chip.hero-watch-add:hover svg {
    fired ambient と同 idiom)。 tier-m-glow は is-arriving 非対象なので compound 4-set 不要 (design_recipes §C-2)。
    inline transition (border-color/box-shadow 0.3s ease) が glow fade を担当。 raw hex/shadow なし、 overflow:visible 維持。 */
 @media (hover: hover) and (pointer: fine) {
-  /* ③-b v2 (user dogfood「地味 → 上げる」): inset ring + drop glow を一段強化。 */
+  /* ③-b v3 (user dogfood「もっと強く、 Pane3 の hover 発光をそのまま流用してもいいのでは」):
+     inset-only を Pane3 .panel-card:hover と同じ「外側 halo (0 0 22-28px) + drop + outer ring 2px」 に
+     置換 = 「カードが発光する」 体感を Pane3 と統一。 box-shadow 値は elevation_scale ALLOWED-SHADOW
+     登録済 (Hover 不在 / bs-panel-surface-card 用 whitelist 行) を流用 = design-system-check 適合。
+     ★lift (translateY) は付けない: screener section card は内部に hover する row を含むため、 card lift と
+     row lift が compound すると jumpy。 glow のみで「発光」 を担う。 scope は screener 限定維持。 */
   .screener-pane-ambient .tier-m-glow:hover {
-    box-shadow:
-      inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 34%, transparent),
-      0 6px 24px -4px color-mix(in srgb, var(--color-accent) 28%, transparent);
+    box-shadow: 0 0 22px rgba(56, 189, 248, 0.26), 0 10px 28px rgba(56, 189, 248, 0.18), 0 0 0 2px rgba(56, 189, 248, 0.55);
   }
-  /* dark: 暗背景で埋もれないよう強化 (Pane4 / fired-ambient の dark 比と同水準) */
+  /* dark: 暗背景で埋もれないよう強化 (Pane3 .panel-card:hover dark と同 whitelist 値) */
   [data-theme="dark"] .screener-pane-ambient .tier-m-glow:hover {
-    box-shadow:
-      inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 52%, transparent),
-      0 8px 30px -4px color-mix(in srgb, var(--color-accent) 40%, transparent);
+    box-shadow: 0 0 28px rgba(56, 189, 248, 0.34), 0 12px 32px rgba(56, 189, 248, 0.22), 0 0 0 2px rgba(99, 179, 237, 0.75);
   }
 }
 

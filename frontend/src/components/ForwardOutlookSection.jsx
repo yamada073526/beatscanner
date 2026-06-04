@@ -134,6 +134,13 @@ export default function ForwardOutlookSection({ forward, currency = 'USD' }) {
   return (
     <section
       data-testid="forward-outlook"
+      // dogfood (2026-06-05): GuidanceCard (直上 sibling) は .panel-card で scroll arrival 発光 + hover 発光が
+      // 効くが、 本 section は v146 で「発光系 card を新規追加しない」 方針で素 div だったため演出が欠落し
+      // 「ここだけ後付け感」 と user 指摘。 → .panel-card 化で Pane3 標準の発光 idiom (useArrivalSpotlight が
+      // .panel-card を自動 observe → .is-arriving scroll glow + .panel-card:hover glow) に統一。 §38/citation 等の
+      // content ロジックは無改変 (発光は CSS class のみ、 数値・narration は触らない)。 design_recipes §C-1 準拠
+      // (自前 border-radius 所有・overflow:hidden なし・入れ子 glow host なし)。
+      className="panel-card"
       style={{
         marginTop: 'var(--space-3, 12px)',
         padding: 'var(--space-4, 16px)',
