@@ -1142,7 +1142,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
                        ([[feedback_chart_overlay_safety]] 4 層防御 #4 の射程確認済)。
                        P1 fix (multi-review frontend): Recharts は prefers-reduced-motion を見ないため手動で縮退。 */
                     isAnimationActive={!prefersReducedMotion}
-                    animationDuration={prefersReducedMotion ? 0 : 1100}
+                    animationDuration={prefersReducedMotion ? 0 : 2000}
                     animationEasing="ease-out"
                   />
                 ) : (
