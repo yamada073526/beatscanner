@@ -6915,6 +6915,26 @@ button.ds-chip[data-pressed="true"]:hover {
   .screener-hero-row:hover { transform: none; }
 }
 
+/* ── SPEC 2026-06-04 screener-animation 案2: ランク circle の spring pop ──
+   row reveal (.screener-reveal の fade-up) と同期で rank circle が scale 0.55→overshoot 1.1→1 と
+   「弾んで着地」。 stagger delay を inline で揃えるとセクション内で circle が次々 pop する cascade に。
+   ★安全性: rank span は aria-hidden 装飾で hover transform を持たない → forwards fill (both) が
+   hover を独占する罠 ([[feedback_press_feedback_delta]]) と無縁。 transform のみ = reflow なしで CLS 0。
+   finite 1 回 (infinite finish 罠回避 [[feedback_pge_loop_pitfalls]])。 新 glow host / box-shadow なし。
+   count-up が data 空でも rank は全 row に出るため「常時可視」 motion の保険になる (handover v165)。
+   prefers-reduced-motion: reduce で即時 scale(1) (animation 無効)。 */
+@keyframes screenerRankPop {
+  0%   { transform: scale(0.55); }
+  60%  { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+.screener-rank-pop {
+  animation: screenerRankPop var(--motion-slow, 360ms) var(--ease-out-cubic, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .screener-rank-pop { animation: none; }
+}
+
 /* ── SPEC 2026-06-04 B: Hero ウォッチ★ボタン (gold ownership) ──
    add variant は primitive 既定で cyan hover だが、 ウォッチ action のみ gold に上書き
    (★が金色に灯る = 所有の喜び、 緑/cyan でなく gold で「上昇」 と意味衝突回避)。

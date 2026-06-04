@@ -344,8 +344,12 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
                   }}
                 >
                   {/* A-2 左: ランク circle (順位を 2 秒視認、 上位 gold で希少性 pop) */}
+                  {/* SPEC screener-animation 案2: row stagger と同 delay で circle が spring pop
+                      (scale 0.55→1.1→1)。 .screener-rank-pop は transform のみ = CLS 0、 hover transform を
+                      持たない装飾要素なので forwards fill 罠と無縁 ([[feedback_press_feedback_delta]])。 */}
                   <span
                     aria-hidden
+                    className="screener-rank-pop"
                     style={{
                       flexShrink: 0,
                       width: 24,
@@ -359,6 +363,7 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
                       fontVariantNumeric: 'tabular-nums',
                       background: rankBg,
                       color: rankColor,
+                      animationDelay: `${revealBaseDelay + (idx + 1) * 40}ms`,
                     }}
                   >
                     {rank}
