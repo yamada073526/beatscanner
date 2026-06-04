@@ -118,21 +118,42 @@ function CountUpStat({ prefix, num, suffix }) {
 // rotateX/Y (max ±3deg 弱 = Aman の節度) を算出し CSS 変数に書込む。 .screener-hero-row:hover が
 // pointer-fine 限定で var を使用 (reduced-motion / coarse pointer では CSS が var を無視するため JS gate 不要)。
 // 描画は transform のみ = reflow なしで CLS 0。 module-scope で render 毎の関数再生成を回避。
+// ★洗練 polish (multi-review frontend P1): mousemove 毎の getBoundingClientRect + setProperty は
+//   forced reflow を起こすため rAF で frame に間引く。 React synthetic event は rAF 後に currentTarget が
+//   null 化するため el / clientX/Y を先にキャプチャしてクロージャへ渡す。 leave 時は pending rAF を cancel。
 const TILT_MAX_Y = 3;   // deg (左右 = row は横長なので少し強め)
 const TILT_MAX_X = 1.5; // deg (上下 = row は薄いので控えめ)
+let _tiltRaf = null;
 function handleRowTilt(e) {
   const el = e.currentTarget;
-  const r = el.getBoundingClientRect();
-  if (!r.width || !r.height) return;
-  const nx = (e.clientX - r.left) / r.width - 0.5;
-  const ny = (e.clientY - r.top) / r.height - 0.5;
-  el.style.setProperty('--tilt-y', `${(nx * 2 * TILT_MAX_Y).toFixed(2)}deg`);
-  el.style.setProperty('--tilt-x', `${(-ny * 2 * TILT_MAX_X).toFixed(2)}deg`);
+  const cx = e.clientX;
+  const cy = e.clientY;
+  if (_tiltRaf) cancelAnimationFrame(_tiltRaf);
+  _tiltRaf = requestAnimationFrame(() => {
+    _tiltRaf = null;
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const nx = (cx - r.left) / r.width - 0.5;
+    const ny = (cy - r.top) / r.height - 0.5;
+    el.style.setProperty('--tilt-y', `${(nx * 2 * TILT_MAX_Y).toFixed(2)}deg`);
+    el.style.setProperty('--tilt-x', `${(-ny * 2 * TILT_MAX_X).toFixed(2)}deg`);
+  });
 }
 function handleRowTiltReset(e) {
   const el = e.currentTarget;
+  if (_tiltRaf) { cancelAnimationFrame(_tiltRaf); _tiltRaf = null; }
   el.style.setProperty('--tilt-y', '0deg');
   el.style.setProperty('--tilt-x', '0deg');
+}
+
+// SPEC screener-animation 洗練 polish (multi-review ui-designer #1 lever): choreography 時間軸。
+// section 見出し (revealBaseDelay) が着地し始めてから row が cascade する「先頭 anchor → 連鎖」 で、
+// 「全要素 mount 時同時発火」 (= 動いてるが洗練に見えない) を一本の物語に変える。 rank pop も同 delay 同期。
+// ROW_REVEAL_LEAD/STEP は体感で tune 可 (lead↑ で more deliberate、 step↑ で cascade ゆっくり)。
+const ROW_REVEAL_LEAD = 200; // ms: 見出し着地を待って row 入場を開始
+const ROW_REVEAL_STEP = 48;  // ms: row 間 stagger
+function rowRevealDelay(baseDelay, idx) {
+  return baseDelay + ROW_REVEAL_LEAD + idx * ROW_REVEAL_STEP;
 }
 
 /**
@@ -340,7 +361,7 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
                 // A-3: 銘柄 row の stagger 入場 (section base + 40ms × index)。 wrapper に置くことで
                 //   button の hover transform と forwards fill が干渉しない。
                 className="screener-reveal"
-                style={{ animationDelay: `${revealBaseDelay + (idx + 1) * 40}ms` }}
+                style={{ animationDelay: `${rowRevealDelay(revealBaseDelay, idx)}ms` }}
               >
                 <button
                   type="button"
@@ -374,7 +395,9 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
                       持たない装飾要素なので forwards fill 罠と無縁 ([[feedback_press_feedback_delta]])。 */}
                   <span
                     aria-hidden
-                    className="screener-rank-pop"
+                    // P1 fix (multi-review qa): blur row (demo) は pop させない。 ぼかした行が弾くと
+                    //   pointerEvents:none と相まって「ちぐはぐ」 (Aman の細部一貫性に反する)。
+                    className={isBlurred ? undefined : 'screener-rank-pop'}
                     style={{
                       flexShrink: 0,
                       width: 24,
@@ -388,7 +411,7 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
                       fontVariantNumeric: 'tabular-nums',
                       background: rankBg,
                       color: rankColor,
-                      animationDelay: `${revealBaseDelay + (idx + 1) * 40}ms`,
+                      animationDelay: `${rowRevealDelay(revealBaseDelay, idx)}ms`,
                     }}
                   >
                     {rank}
@@ -403,8 +426,11 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
                   {t.badge && (
                     <span title={t.badge} style={{ flexShrink: 0, maxWidth: '56%', textAlign: 'right', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {(() => {
-                        // 案1: 数値バッジ (RS NN / +Npt) は count-up、 state ラベルは静的。
-                        const p = parseCountableBadge(t.badge);
+                        // 案1 + 洗練 polish (multi-review ui-designer #2 lever): count-up は featured (section1
+                        //   = 最希少の交差 hero) のみに集中。 全 section で数字が同時に動くと視線が定まらず
+                        //   「静寂 → 動」 のコントラストが消える ([[feedback_minimalism_over_additive]])。
+                        //   section2/3 のバッジは静的表示にして hero の数字だけを主役の motion に。
+                        const p = featured ? parseCountableBadge(t.badge) : null;
                         return p ? <CountUpStat prefix={p.prefix} num={p.num} suffix={p.suffix} /> : t.badge;
                       })()}
                     </span>

@@ -6895,8 +6895,10 @@ button.ds-chip[data-pressed="true"]:hover {
    row 本体と rank circle が一体で弾む統一 choreography に (積み増しでなく既存 motion の質向上)。
    transform のみ = CLS 0。 finite 1 回。 reduced-motion は下の @media で animation:none (即時表示)。 */
 @keyframes screenerRevealUp {
+  /* 洗練 polish (multi-review ui-designer #4): overshoot peak を 60%→80% に後ろ倒し。
+     ease-out-cubic (後半減速) と相まって「行き過ぎ → ゆっくり沈んで着地」 の settle 感が増す。 */
   0%   { opacity: 0; transform: translateY(10px); }
-  60%  { opacity: 1; transform: translateY(-2px); }
+  80%  { opacity: 1; transform: translateY(-2px); }
   100% { opacity: 1; transform: translateY(0); }
 }
 .screener-reveal {
@@ -6914,8 +6916,10 @@ button.ds-chip[data-pressed="true"]:hover {
    --tilt-x/--tilt-y に書込む (max ±3deg 弱 = Aman の節度、 「触ると応える」 上質さ)。 transform のみ = CLS 0。 */
 .screener-hero-row {
   transform: perspective(640px) translateY(0) rotateX(0deg) rotateY(0deg);
+  /* 洗練 polish (multi-review ui-designer #2 + frontend): easing を app の hover idiom (ease-out-expo) に
+     統一 + enter/leave 非対称。 base = leave/return 用に 300ms でゆっくり settle (上質な余韻)。 */
   transition:
-    transform 160ms var(--ease-out-cubic, cubic-bezier(0.22, 1, 0.36, 1)),
+    transform 300ms var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
     border-color var(--motion-base, 200ms) ease;
 }
 /* pointer-fine 限定: touch では tilt しない (mousemove も発火しないが二重防御で gate)。 */
@@ -6923,6 +6927,8 @@ button.ds-chip[data-pressed="true"]:hover {
   .screener-hero-row:hover {
     transform: perspective(640px) translateY(-2px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
     border-color: color-mix(in srgb, var(--color-accent) 40%, var(--border));
+    /* enter / cursor 追従は速い (140ms = 「触ると即応える」)、 leave は base 300ms でゆっくり戻る非対称。 */
+    transition-duration: 140ms;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -6939,8 +6945,10 @@ button.ds-chip[data-pressed="true"]:hover {
    count-up が data 空でも rank は全 row に出るため「常時可視」 motion の保険になる (handover v165)。
    prefers-reduced-motion: reduce で即時 scale(1) (animation 無効)。 */
 @keyframes screenerRankPop {
+  /* 洗練 polish (multi-review ui-designer #4): overshoot 1.1→1.06 に圧縮。 24px circle が 1.1 だと
+     隣の ticker と干渉感 (Stripe/Linear の badge pop は 1.05 止まりが標準)。 上質な「軽い弾み」 に。 */
   0%   { transform: scale(0.55); }
-  60%  { transform: scale(1.1); }
+  60%  { transform: scale(1.06); }
   100% { transform: scale(1); }
 }
 .screener-rank-pop {

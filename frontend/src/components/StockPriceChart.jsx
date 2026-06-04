@@ -378,6 +378,10 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
   const [period, setPeriod] = useState('1y');
   // v147: 非株式 (指数/先物/為替/DXY) では「個別株前提」 の売買・pattern オーバーレイを一括非表示にする gate。
   const isNonEquity = isNonEquityTicker(ticker);
+  // 洗練 polish (multi-review frontend P1): Recharts は prefers-reduced-motion を内部参照しないため、
+  //   price line draw-on (案6) を a11y 設定に合わせて手動縮退する。 OS 設定は session 中不変前提で 1 回読み。
+  const prefersReducedMotion = typeof window !== 'undefined'
+    && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   // SMA overlay state (handover v75 Phase 1 Session 1 safer 再追加)
@@ -1119,6 +1123,10 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
                     v86 chart hybrid Sprint 2 (Webull 戦略、 デフォルト折れ線維持) */}
                 {chartStyle === 'line' ? (
                   <Line
+                    /* P1 fix (multi-review frontend): key を ticker+period に固定。 ticker/period 変更時のみ
+                       remount → 新規 draw-on。 technical (SMA/cup) が後追い load して chartData が再計算されても
+                       同 key + close 値不変なので price line の再 draw flash を抑止 (qa P1 「チカッ」 対策)。 */
+                    key={`price-${ticker}-${period}`}
                     type="monotone"
                     dataKey="close"
                     stroke={CHART_PRICE}
@@ -1131,10 +1139,10 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
                        ease-out (終端で滑らかに settle) + 1100ms に揃える (default 'ease'/1500ms → 上質方向)。
                        ★安全: close は data.prices に常在 = null transition crash なし → chart-overlay-safety の
                        isAnimationActive=false 規律は overlay line (SMA/cup、 後追い null→値) 専用で price line は対象外
-                       ([[feedback_chart_overlay_safety]] 4 層防御 #4 の射程確認済)。 reduced-motion は OS 設定で
-                       Recharts が縮退しないため、 過度な再 draw を避ける意味でも duration は控えめに保持。 */
-                    isAnimationActive={true}
-                    animationDuration={1100}
+                       ([[feedback_chart_overlay_safety]] 4 層防御 #4 の射程確認済)。
+                       P1 fix (multi-review frontend): Recharts は prefers-reduced-motion を見ないため手動で縮退。 */
+                    isAnimationActive={!prefersReducedMotion}
+                    animationDuration={prefersReducedMotion ? 0 : 1100}
                     animationEasing="ease-out"
                   />
                 ) : (
