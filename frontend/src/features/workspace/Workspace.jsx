@@ -1044,7 +1044,11 @@ export default function Workspace({
             activeTicker ? (
               // D-1 (user 承認 2026-06-04): screener mode の Pane3 詳細上部に breadcrumb deselect 導線。
               // JudgmentDetail 内部は不触 (心臓部回避)、 flex column で wrap し breadcrumb を上に積む。
-              // 内側 div は overflow:hidden で JudgmentDetail の内部 scroll (height:100%) を維持。
+              // ★scroll lock fix (user dogfood v166): JudgmentDetail root は display:grid のみで内部 scroll を
+              //   持たない (height:100%/overflow なし) = 親 scroll 依存。 normal mode は pane3 slot の
+              //   overflowY:auto が供給するが、 breadcrumb wrap で内側 div が overflow:hidden だと tall な
+              //   JudgmentDetail が clip されて「下にスクロールできない」 P0 になる (v165 は screenshot 検証で
+              //   scroll を試さず見逃した)。 → 内側 div を overflowY:auto にして slot 同等の scroll を供給する。
               // Pane2 の「← 今注目に戻る」 button は discoverable な fallback として併存。
               <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
                 <nav
@@ -1086,7 +1090,7 @@ export default function Workspace({
                     {activeTicker}
                   </span>
                 </nav>
-                <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
                   <JudgmentDetail
                     plan={plan}
                     detailFor={detailFor}
