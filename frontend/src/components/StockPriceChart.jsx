@@ -382,6 +382,12 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
   //   price line draw-on (案6) を a11y 設定に合わせて手動縮退する。 OS 設定は session 中不変前提で 1 回読み。
   const prefersReducedMotion = typeof window !== 'undefined'
     && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  // 案6 fix (user dogfood「一気に全描画」 真因): price line の draw-on は mount 時に再生されるが、
+  //   チャートは詳細ページ下部 = 初期 mount 時は画面外 → 2s draw が user の scroll 到達前に完了し
+  //   「最初から全部描かれている」 ように見えていた。 IntersectionObserver で viewport 入場時に
+  //   line を remount (key 切替) して draw-on を「見ている前で」 再生する。 一度 latch したら再発火しない。
+  const chartWrapRef = useRef(null);
+  const [chartInView, setChartInView] = useState(false);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   // SMA overlay state (handover v75 Phase 1 Session 1 safer 再追加)
@@ -470,6 +476,23 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
       .catch(() => { /* graceful */ });
     return () => { cancelled = true; };
   }, [ticker]);
+
+  // 案6 fix: chart が viewport に入った瞬間に draw-on を再生する (off-screen mount で描画完了する問題の解消)。
+  //   data 到達で chart wrapper が mount → ref が付くので deps に data/loading。 一度 in-view で latch。
+  useEffect(() => {
+    if (chartInView) return;
+    const el = chartWrapRef.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === 'undefined') { setChartInView(true); return; }
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        setChartInView(true);
+        io.disconnect();
+      }
+    }, { threshold: 0.25 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [chartInView, data, loading]);
 
   // SMA date → value lookup (technical が null なら全 empty)
   const smaMap = useMemo(() => {
@@ -1000,6 +1023,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
       {!loading && data && data.prices.length > 0 && (
         <>
           <div
+            ref={chartWrapRef}
             className="h-72 relative"
             data-cup-locked={cupRequiresPro ? 'true' : undefined}
           >
@@ -1126,7 +1150,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
                     /* P1 fix (multi-review frontend): key を ticker+period に固定。 ticker/period 変更時のみ
                        remount → 新規 draw-on。 technical (SMA/cup) が後追い load して chartData が再計算されても
                        同 key + close 値不変なので price line の再 draw flash を抑止 (qa P1 「チカッ」 対策)。 */
-                    key={`price-${ticker}-${period}`}
+                    key={`price-${ticker}-${period}-${chartInView ? 'v' : 'h'}`}
                     type="monotone"
                     dataKey="close"
                     stroke={CHART_PRICE}
@@ -1141,7 +1165,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
                        isAnimationActive=false 規律は overlay line (SMA/cup、 後追い null→値) 専用で price line は対象外
                        ([[feedback_chart_overlay_safety]] 4 層防御 #4 の射程確認済)。
                        P1 fix (multi-review frontend): Recharts は prefers-reduced-motion を見ないため手動で縮退。 */
-                    isAnimationActive={!prefersReducedMotion}
+                    isAnimationActive={chartInView && !prefersReducedMotion}
                     animationDuration={prefersReducedMotion ? 0 : 2000}
                     animationEasing="ease-out"
                   />
