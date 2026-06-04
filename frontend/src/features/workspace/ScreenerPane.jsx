@@ -24,7 +24,7 @@
  * memory anchor: [[feedback-screener-hero-3sections]] / [[feedback-oneill-screener-frontend-intersection]]
  */
 import { useEffect, useRef, useState } from 'react';
-import { Crown } from 'lucide-react';
+import { Crown, Hourglass } from 'lucide-react';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { useHaloSweepOnce } from '../../hooks/useHaloSweepOnce.js';
 import Chip, { ChipGroup } from '../../components/ui/Chip.jsx';
@@ -275,8 +275,11 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
           )}
         </div>
       ) : tickers.length === 0 ? (
-        <div data-testid={`${testId}-empty`} style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--space-3, 12px)' }}>
-          {emptyMessage || '該当銘柄なし'}
+        // 案3 (SPEC screener-richness): 空 section を「設計された沈黙」 に。 Hourglass (格調シンボル、 待機の間) +
+        //   事実文言 (emptyMessage 不変、 §38 safe) + breathing room で「壊れてる?」 でなく「本日は条件外・待機中」 と伝える。
+        <div data-testid={`${testId}-empty`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-2, 8px)', color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--space-5, 20px) var(--space-3, 12px)' }}>
+          <Hourglass size={18} strokeWidth={1.5} aria-hidden style={{ opacity: 0.55 }} />
+          <span style={{ fontSize: 11, lineHeight: 1.5 }}>{emptyMessage || '該当銘柄なし'}</span>
         </div>
       ) : (
         <ul data-testid={`${testId}-results`} style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-1, 4px)' }}>
@@ -632,7 +635,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
         />
         <HeroSection
           eyebrow="02"
-          revealBaseDelay={80}
+          revealBaseDelay={120}
           title="RS 急上昇"
           testId="screener-hero-rs-rising"
           description={
@@ -653,7 +656,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
         />
         <HeroSection
           eyebrow="03"
-          revealBaseDelay={160}
+          revealBaseDelay={240}
           title="新規 Cup-Handle 検出"
           testId="screener-hero-new-cup-handle"
           description="Cup-Handle 検出済（高値圏ブレイクの追随買いは除く）。投資の推奨ではありません。"
