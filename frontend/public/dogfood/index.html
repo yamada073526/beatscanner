@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>スクリーナー刷新 dogfood (2026-06-04)</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #0a0f1a; color: #e5e9f0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    line-height: 1.65; -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 20px 14px 64px; }
+  h1 { font-size: 20px; font-weight: 700; margin: 8px 0 4px; }
+  .sub { color: #93a0b5; font-size: 13px; margin: 0 0 20px; }
+  section { margin: 0 0 36px; }
+  h2 {
+    font-size: 16px; font-weight: 700; margin: 0 0 6px;
+    padding-bottom: 6px; border-bottom: 1px solid color-mix(in srgb, #d4af37 32%, transparent);
+  }
+  .eyebrow { font-size: 11px; letter-spacing: 0.08em; color: #93a0b5; font-weight: 600; }
+  p.cap { color: #aab4c5; font-size: 13px; margin: 6px 0 12px; }
+  img {
+    width: 100%; height: auto; display: block; border-radius: 10px;
+    border: 1px solid #1e2738; background: #0d1422;
+  }
+  .pair img { margin-bottom: 10px; }
+  .tag { display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; margin-bottom:6px; }
+  .tag.before { color:#93a0b5; background: rgba(147,160,181,.15); }
+  .tag.after { color:#34ef81; background: rgba(52,239,129,.15); }
+  .tag.gold { color:#d4af37; background: rgba(212,175,55,.15); }
+  .note { font-size: 12px; color: #7e8aa0; margin-top: 8px; }
+  .delta { font-size: 13px; color:#aab4c5; background:#0d1422; border:1px solid #1e2738; border-radius:8px; padding:10px 12px; margin-top:10px; }
+  .delta b { color:#34ef81; }
+  code { background:#0d1422; border:1px solid #1e2738; border-radius:4px; padding:1px 5px; font-size:12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>スクリーナー刷新 dogfood</h1>
+  <p class="sub">2026-06-04 / 本番 index-Dl1UqBKm.js / スマホ確認用（このページは noindex・あとで削除します）</p>
+
+  <section>
+    <h2><span class="eyebrow">01</span><br>Before → After（のっぺり → お宝発見の旅）</h2>
+    <p class="cap">真因は装飾不足ではなく <b>3つの階層欠落</b>（全要素が同格 / 数値が脇役 / 入場演出ゼロ）。それを「見出しの格 + 数値主役化 + 入場の間」で解消しました。</p>
+    <div class="pair">
+      <span class="tag before">BEFORE（旧）</span>
+      <img src="before.png" alt="旧スクリーナー">
+      <span class="tag after">AFTER（刷新）</span>
+      <img src="after.png" alt="刷新スクリーナー">
+    </div>
+    <div class="delta">
+      vision-eval（Premium全件・3回平均）<b>総合 68.6 → 74.5（+5.9）</b><br>
+      aman +8.7 / typography +6.7 / hierarchy +6.6（全5軸プラス）
+    </div>
+    <p class="note">見るポイント: 「探索」chip / 01-02-03 連番 + gold hairline / 18px見出し / 👑Crown（交差）/ ランクcircle（上位3=金）+ ticker太字 + 数値badge。<br>※今日のデータは 01交差・02RS急上昇 が0件、03のみ銘柄あり。全部埋まる日はもっと賑やかになります。</p>
+  </section>
+
+  <section>
+    <h2><span class="eyebrow">02</span><br>ウォッチ★ボタン（所有の喜びを gold で）</h2>
+    <p class="cap">スマホでは触っても見えない hover の動きを再現。左から: 未追加 → hover → 追加済。<b>緑は使わず、色変化はすべて gold</b>。</p>
+    <span class="tag">① 未追加</span>
+    <img src="watch-1.png" alt="未追加">
+    <span class="tag gold">② hover（★金点灯 + 浮上 + border金）</span>
+    <img src="watch-2.png" alt="hover">
+    <span class="tag gold">③ 追加済（★金点灯 + 「追加済」 + ✓）</span>
+    <img src="watch-3.png" alt="追加済">
+  </section>
+
+  <section>
+    <h2><span class="eyebrow">03</span><br>Pane2 PASS銘柄 章扉化</h2>
+    <p class="cap">左の「ファンダ5条件スクリーナー」の PASS 銘柄を「ご褒美」化。👑Crown + 18px見出し + 件数stat「2銘柄」。PASS=緑のリングは維持、FAIL は折りたたみ。</p>
+    <img src="pass.png" alt="PASS章扉">
+  </section>
+
+  <section>
+    <h2><span class="eyebrow">04</span><br>参考: スマホ「デスクトップ表示」だとこう見える</h2>
+    <p class="cap">幅980pxを3分割すると各列140-186pxで窮屈。交差の長い見出しは2行+…で省略（崩れはなし）。本領は1440pxのPC。</p>
+    <img src="desktopsite.png" alt="デスクトップ表示980px">
+    <p class="note">スマホ実機で workspace を開く手段は実質ありません（768px未満は SPA 強制 + <code>?layout=workspace</code> を URL から自動削除）。モバイル専用スクリーナーUIが要るかは別途判断。</p>
+  </section>
+</div>
+</body>
+</html>
