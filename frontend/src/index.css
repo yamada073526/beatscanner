@@ -6908,32 +6908,53 @@ button.ds-chip[data-pressed="true"]:hover {
   .screener-reveal { animation: none; }
 }
 
-/* A-2 / SPEC screener-animation 案3: Hero 銘柄 row の hover lift + pointer 追従 micro-tilt。
-   reveal wrapper (li) の子 = button に置くことで .screener-reveal の forwards fill (li の transform)
-   と非干渉 ([[feedback_press_feedback_delta]])。 新 glow host / box-shadow なし (rank と同様 transform のみ)。
-   ★base に identity transform (perspective + translateY(0) + rotate 0deg) を置く: hover の rotate と
-   smooth 補間するため (transform:none ↔ matrix は補間不可)。 rotateX/Y は JS が cursor 相対位置から
-   --tilt-x/--tilt-y に書込む (max ±3deg 弱 = Aman の節度、 「触ると応える」 上質さ)。 transform のみ = CLS 0。 */
+/* SPEC screener-animation 案3 (redesign — user dogfood「傾きはいらない、 色変化/発光の方がリッチ。
+   ホーム Pane3 に参考が豊富」): pointer 追従 tilt を撤回し、 home Pane3/4 の proven row hover
+   (.news-list-card) と同 idiom に統一 = cyan border + bg + --ws-shadow-row-hover の発光 + lift + press。
+   ★安全: 新 glow host (.panel-card/.bs-panel/.surface-card) 追加なし、 box-shadow は Pane4 row hover で
+   実証済の --ws-shadow-row-hover / --ws-shadow-row-active token 流用 (生 box-shadow なし)。
+   .screener-hero-row は .is-arriving 非対象のため compound 4-set 不要 (.news-list-card と同条件)。
+   base の bg / border は inline から class に移譲済 (:hover override を効かせるため)。 transform/glow = CLS 0。 */
 .screener-hero-row {
-  transform: perspective(640px) translateY(0) rotateX(0deg) rotateY(0deg);
-  /* 洗練 polish (multi-review ui-designer #2 + frontend): easing を app の hover idiom (ease-out-expo) に
-     統一 + enter/leave 非対称。 base = leave/return 用に 300ms でゆっくり settle (上質な余韻)。 */
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
   transition:
-    transform 300ms var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
-    border-color var(--motion-base, 200ms) ease;
+    transform var(--ws-hover-duration, 220ms) var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
+    border-color var(--ws-hover-duration, 220ms) var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
+    box-shadow var(--ws-hover-duration, 220ms) var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
+    background-color var(--ws-hover-duration, 220ms) var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
 }
-/* pointer-fine 限定: touch では tilt しない (mousemove も発火しないが二重防御で gate)。 */
 @media (hover: hover) and (pointer: fine) {
   .screener-hero-row:hover {
-    transform: perspective(640px) translateY(-2px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
-    border-color: color-mix(in srgb, var(--color-accent) 40%, var(--border));
-    /* enter / cursor 追従は速い (140ms = 「触ると即応える」)、 leave は base 300ms でゆっくり戻る非対称。 */
-    transition-duration: 140ms;
+    transform: translateY(var(--ws-hover-lift, -3px)) scale(1.008);
+    border-color: rgba(56, 189, 248, 0.45);
+    background-color: rgba(56, 189, 248, 0.04);
+    box-shadow: var(--ws-shadow-row-hover);
+  }
+  /* dark mode: cyan glow 強化 (Pane 4 / .news-list-card と同) */
+  [data-theme="dark"] .screener-hero-row:hover {
+    border-color: rgba(56, 189, 248, 0.65);
+    background-color: rgba(56, 189, 248, 0.08);
   }
 }
+/* press: Stripe/HIG 流の沈み込み (Δy + Δscale で press feedback delta 充足 [[feedback_press_feedback_delta]]) */
+.screener-hero-row:active {
+  transform: translateY(0) scale(0.97);
+  box-shadow: var(--ws-shadow-row-active);
+  transition:
+    transform 140ms var(--ws-ease-sink, cubic-bezier(0.4, 0, 1, 1)),
+    box-shadow 140ms var(--ws-ease-sink, cubic-bezier(0.4, 0, 1, 1));
+}
 @media (prefers-reduced-motion: reduce) {
-  .screener-hero-row { transform: none; transition: border-color var(--motion-base, 200ms) ease; }
-  .screener-hero-row:hover { transform: none; }
+  .screener-hero-row,
+  .screener-hero-row:hover,
+  .screener-hero-row:active {
+    transform: none;
+    transition:
+      border-color var(--ws-hover-duration, 220ms) ease,
+      background-color var(--ws-hover-duration, 220ms) ease,
+      box-shadow var(--ws-hover-duration, 220ms) ease;
+  }
 }
 
 /* ── SPEC 2026-06-04 screener-animation 案2: ランク circle の spring pop ──

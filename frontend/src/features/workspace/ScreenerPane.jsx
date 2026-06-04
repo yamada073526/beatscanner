@@ -28,7 +28,6 @@ import { Crown, Hourglass } from 'lucide-react';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { useHaloSweepOnce } from '../../hooks/useHaloSweepOnce.js';
 import { useCountUp } from '../../hooks/useCountUp.js';
-import { withViewTransition } from '../../utils/viewTransition.js';
 import Chip, { ChipGroup } from '../../components/ui/Chip.jsx';
 
 
@@ -112,38 +111,6 @@ function parseCountableBadge(badge) {
 function CountUpStat({ prefix, num, suffix }) {
   const v = useCountUp(num, { duration: 800, digits: 0, forceFromZero: true });
   return <>{prefix}{v == null ? num : v}{suffix}</>;
-}
-
-// SPEC screener-animation 案3: pointer 追従の micro-tilt。 cursor の row 内相対位置 (-0.5..0.5) から
-// rotateX/Y (max ±3deg 弱 = Aman の節度) を算出し CSS 変数に書込む。 .screener-hero-row:hover が
-// pointer-fine 限定で var を使用 (reduced-motion / coarse pointer では CSS が var を無視するため JS gate 不要)。
-// 描画は transform のみ = reflow なしで CLS 0。 module-scope で render 毎の関数再生成を回避。
-// ★洗練 polish (multi-review frontend P1): mousemove 毎の getBoundingClientRect + setProperty は
-//   forced reflow を起こすため rAF で frame に間引く。 React synthetic event は rAF 後に currentTarget が
-//   null 化するため el / clientX/Y を先にキャプチャしてクロージャへ渡す。 leave 時は pending rAF を cancel。
-const TILT_MAX_Y = 3;   // deg (左右 = row は横長なので少し強め)
-const TILT_MAX_X = 1.5; // deg (上下 = row は薄いので控えめ)
-let _tiltRaf = null;
-function handleRowTilt(e) {
-  const el = e.currentTarget;
-  const cx = e.clientX;
-  const cy = e.clientY;
-  if (_tiltRaf) cancelAnimationFrame(_tiltRaf);
-  _tiltRaf = requestAnimationFrame(() => {
-    _tiltRaf = null;
-    const r = el.getBoundingClientRect();
-    if (!r.width || !r.height) return;
-    const nx = (cx - r.left) / r.width - 0.5;
-    const ny = (cy - r.top) / r.height - 0.5;
-    el.style.setProperty('--tilt-y', `${(nx * 2 * TILT_MAX_Y).toFixed(2)}deg`);
-    el.style.setProperty('--tilt-x', `${(-ny * 2 * TILT_MAX_X).toFixed(2)}deg`);
-  });
-}
-function handleRowTiltReset(e) {
-  const el = e.currentTarget;
-  if (_tiltRaf) { cancelAnimationFrame(_tiltRaf); _tiltRaf = null; }
-  el.style.setProperty('--tilt-y', '0deg');
-  el.style.setProperty('--tilt-x', '0deg');
 }
 
 // SPEC screener-animation 洗練 polish (multi-review ui-designer #1 lever): choreography 時間軸。
@@ -367,9 +334,6 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
                   type="button"
                   className="screener-hero-row"
                   onClick={isBlurred ? onUpgrade : () => onSelect(t.ticker)}
-                  // 案3: blurred row (pointerEvents:none) では発火しない。 通常 row のみ pointer 追従 tilt。
-                  onMouseMove={isBlurred ? undefined : handleRowTilt}
-                  onMouseLeave={isBlurred ? undefined : handleRowTiltReset}
                   data-testid={`screener-hero-ticker-${isBlurred ? 'blurred' : t.ticker}`}
                   data-blurred={isBlurred ? 'true' : 'false'}
                   aria-label={isBlurred ? 'Premium プランで全銘柄を解放' : `${t.ticker} の詳細を表示`}
@@ -377,9 +341,9 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
                     width: '100%',
                     padding: '6px 8px',
                     textAlign: 'left',
-                    border: '1px solid var(--border)',
+                    // 案3 redesign: base の bg / border は .screener-hero-row class に移譲 (inline だと
+                    //   :hover の bg / border / glow を override できないため)。 borderRadius は inline 維持。
                     borderRadius: 'var(--radius-sm, 4px)',
-                    background: 'var(--bg-subtle)',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -637,14 +601,11 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
   const handleSelect = (sym) => {
     // v160 D2 (master-detail): tab を離脱せず activeTicker のみ更新。
     // → Pane 3 が Hero → JudgmentDetail に切替、 Pane 2 の Explorer (絞り込み結果) は残る。
-    // SPEC screener-animation 案7 (安全版): app 全体の nav (App.jsx setActiveTab / JudgmentContext
-    //   setSelectedTicker) と同じ withViewTransition で screener Hero → detail を cross-fade。
-    //   instant swap だった唯一の nav 経路を app 標準の上質遷移に統一する。 helper が
-    //   reduced-motion skip + 非対応ブラウザ即時実行を内包 (proven pattern、 master-detail の
-    //   render ロジックは不触で setter 呼出を wrap するのみ = 低リスク)。
-    //   ⚠️row→Hero の morph (transient VT 名) は master-detail 心臓部 + VT 名一意管理の高リスクのため
-    //   本 batch では見送り、 multi-review 3体で設計 vet 後に判断。
-    withViewTransition(() => setActiveTicker(sym));
+    // ⚠️案7 (withViewTransition cross-fade) は user dogfood で「銘柄分析ページの scroll が固まる」 P0 回帰を
+    //   誘発したため revert。 master-detail swap + View Transition + PaneDetailView の contain:layout の
+    //   相互作用が scroll lock の疑い。 加えて cross-fade の体感差は「わからない」 で benefit ゼロ。
+    //   → v160 までの proven な直接 setActiveTicker に戻す。
+    setActiveTicker(sym);
   };
 
   return (
