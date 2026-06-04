@@ -369,6 +369,18 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
   );
 }
 
+// D2 残 minor (handover v163): 銘柄選択→deselect で Pane3 が JudgmentDetail↔ScreenerPane を
+// 切替え、 ScreenerPane が unmount→remount すると Hero 3 fetch が再走し loading flicker が出る。
+// module-scope cache (TTL 5 分、 RS/Cup scanner は nightly batch で intra-day 不変) に最後の結果を
+// 保持し、 remount 時は即 hydrate + refetch skip で flicker を解消。 ([[feedback_diagram_card_remount_cache]]
+// と同 pattern。 Workspace の isScreener 分岐=master-detail 心臓部 は触らず ScreenerPane 内に閉じる安全策。
+// retry / TTL 超過時は通常どおり fetch。)
+const HERO_CACHE_TTL_MS = 5 * 60 * 1000;
+let _heroCache = null; // { ts, leaderCwh, rsRising, newCwh }
+function heroCacheFresh() {
+  return !!_heroCache && (Date.now() - _heroCache.ts) < HERO_CACHE_TTL_MS;
+}
+
 /**
  * ScreenerPane
  * @param {object} props
@@ -385,9 +397,10 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
   const demoMode = !detailContext?.user || !isProUser;
 
   // 3 Hero section の state (P6-2: error flag を追加で「該当銘柄なし」 vs「データ取得失敗」 区別)
-  const [leaderCwh, setLeaderCwh] = useState({ tickers: [], loading: true, error: null });
-  const [rsRising, setRsRising] = useState({ tickers: [], loading: true, migrationPending: false, error: null });
-  const [newCwh, setNewCwh] = useState({ tickers: [], loading: true, error: null });
+  // D2 flicker fix: remount 時 cache fresh なら即 hydrate (loading flicker 回避)、 stale/初回は loading から。
+  const [leaderCwh, setLeaderCwh] = useState(() => (heroCacheFresh() ? _heroCache.leaderCwh : { tickers: [], loading: true, error: null }));
+  const [rsRising, setRsRising] = useState(() => (heroCacheFresh() ? _heroCache.rsRising : { tickers: [], loading: true, migrationPending: false, error: null }));
+  const [newCwh, setNewCwh] = useState(() => (heroCacheFresh() ? _heroCache.newCwh : { tickers: [], loading: true, error: null }));
   // P6-2: fetch retry trigger
   const [retryNonce, setRetryNonce] = useState(0);
   const handleRetry = () => setRetryNonce((n) => n + 1);
@@ -412,6 +425,12 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
 
   useEffect(() => {
     let cancelled = false;
+
+    // D2 flicker fix: remount かつ cache fresh かつ retry でない → state は cache から hydrate 済 →
+    // refetch を skip して loading flicker を回避。 retry / 初回 / TTL 超過時のみ下の fetch に進む。
+    if (retryNonce === 0 && heroCacheFresh()) {
+      return;
+    }
 
     // P6-2: retry 時の loading state 初期化
     setLeaderCwh({ tickers: [], loading: true, error: null });
@@ -455,11 +474,12 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
         }
       }
       // section 1 は RS + Cup 両方が必要、 どちらか失敗で error 表示
-      setLeaderCwh({
+      const leaderResult = {
         tickers: intersection,
         loading: false,
         error: (rsLeaderFailed || cupFailed) ? (rsLeaderFailed && cupFailed ? '両 source 取得失敗' : rsLeaderFailed ? 'RS 取得失敗' : 'Cup-Handle 取得失敗') : null,
-      });
+      };
+      setLeaderCwh(leaderResult);
 
       // section 2: RS 急上昇 = sort=delta items (section 1 で使われた ticker は除外、 qa-dogfooder verdict)
       const usedTickers = new Set(intersection.map((t) => t.ticker));
@@ -474,12 +494,13 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
         usedTickers.add(item.ticker);
         if (risingItems.length >= 5) break;
       }
-      setRsRising({
+      const risingResult = {
         tickers: risingItems,
         loading: false,
         migrationPending,
         error: rsDeltaFailed ? 'RS scanner 取得失敗' : null,
-      });
+      };
+      setRsRising(risingResult);
 
       // section 3: 新規 Cup-Handle 検出 (last 24h は signal_date でなく state=breakout_confirmed/pending を優先)
       // section 1/2 で使われた ticker を除外、 v133 方針 #12: GC 確認済 ticker は badge に ✦ GC を追加
@@ -497,11 +518,15 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
         usedTickers.add(item.ticker);
         if (newCwhItems.length >= 5) break;
       }
-      setNewCwh({
+      const newResult = {
         tickers: newCwhItems,
         loading: false,
         error: cupFailed ? 'Cup-Handle scanner 取得失敗' : null,
-      });
+      };
+      setNewCwh(newResult);
+
+      // D2 flicker fix: 結果を module cache に保存 → 次の remount (deselect 復帰) で hydrate して flicker 回避。
+      _heroCache = { ts: Date.now(), leaderCwh: leaderResult, rsRising: risingResult, newCwh: newResult };
     })();
 
     return () => { cancelled = true; };
