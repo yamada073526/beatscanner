@@ -113,6 +113,27 @@ function CountUpStat({ prefix, num, suffix }) {
   return <>{prefix}{v == null ? num : v}{suffix}</>;
 }
 
+// SPEC screener-animation 案3: pointer 追従の micro-tilt。 cursor の row 内相対位置 (-0.5..0.5) から
+// rotateX/Y (max ±3deg 弱 = Aman の節度) を算出し CSS 変数に書込む。 .screener-hero-row:hover が
+// pointer-fine 限定で var を使用 (reduced-motion / coarse pointer では CSS が var を無視するため JS gate 不要)。
+// 描画は transform のみ = reflow なしで CLS 0。 module-scope で render 毎の関数再生成を回避。
+const TILT_MAX_Y = 3;   // deg (左右 = row は横長なので少し強め)
+const TILT_MAX_X = 1.5; // deg (上下 = row は薄いので控えめ)
+function handleRowTilt(e) {
+  const el = e.currentTarget;
+  const r = el.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const nx = (e.clientX - r.left) / r.width - 0.5;
+  const ny = (e.clientY - r.top) / r.height - 0.5;
+  el.style.setProperty('--tilt-y', `${(nx * 2 * TILT_MAX_Y).toFixed(2)}deg`);
+  el.style.setProperty('--tilt-x', `${(-ny * 2 * TILT_MAX_X).toFixed(2)}deg`);
+}
+function handleRowTiltReset(e) {
+  const el = e.currentTarget;
+  el.style.setProperty('--tilt-y', '0deg');
+  el.style.setProperty('--tilt-x', '0deg');
+}
+
 /**
  * Hero section card (実 fetch result 表示)
  * @param {object} props
@@ -324,6 +345,9 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
                   type="button"
                   className="screener-hero-row"
                   onClick={isBlurred ? onUpgrade : () => onSelect(t.ticker)}
+                  // 案3: blurred row (pointerEvents:none) では発火しない。 通常 row のみ pointer 追従 tilt。
+                  onMouseMove={isBlurred ? undefined : handleRowTilt}
+                  onMouseLeave={isBlurred ? undefined : handleRowTiltReset}
                   data-testid={`screener-hero-ticker-${isBlurred ? 'blurred' : t.ticker}`}
                   data-blurred={isBlurred ? 'true' : 'false'}
                   aria-label={isBlurred ? 'Premium プランで全銘柄を解放' : `${t.ticker} の詳細を表示`}

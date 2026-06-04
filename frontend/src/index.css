@@ -6900,18 +6900,27 @@ button.ds-chip[data-pressed="true"]:hover {
   .screener-reveal { animation: none; }
 }
 
-/* A-2: Hero 銘柄 row の hover lift。 reveal wrapper (li) の子 = button に置くことで
-   .screener-reveal の forwards fill (li の transform) と非干渉。 新 glow host / box-shadow なし。 */
+/* A-2 / SPEC screener-animation 案3: Hero 銘柄 row の hover lift + pointer 追従 micro-tilt。
+   reveal wrapper (li) の子 = button に置くことで .screener-reveal の forwards fill (li の transform)
+   と非干渉 ([[feedback_press_feedback_delta]])。 新 glow host / box-shadow なし (rank と同様 transform のみ)。
+   ★base に identity transform (perspective + translateY(0) + rotate 0deg) を置く: hover の rotate と
+   smooth 補間するため (transform:none ↔ matrix は補間不可)。 rotateX/Y は JS が cursor 相対位置から
+   --tilt-x/--tilt-y に書込む (max ±3deg 弱 = Aman の節度、 「触ると応える」 上質さ)。 transform のみ = CLS 0。 */
 .screener-hero-row {
+  transform: perspective(640px) translateY(0) rotateX(0deg) rotateY(0deg);
   transition:
-    transform var(--motion-base, 200ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    transform 160ms var(--ease-out-cubic, cubic-bezier(0.22, 1, 0.36, 1)),
     border-color var(--motion-base, 200ms) ease;
 }
-.screener-hero-row:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--color-accent) 40%, var(--border));
+/* pointer-fine 限定: touch では tilt しない (mousemove も発火しないが二重防御で gate)。 */
+@media (hover: hover) and (pointer: fine) {
+  .screener-hero-row:hover {
+    transform: perspective(640px) translateY(-2px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
+    border-color: color-mix(in srgb, var(--color-accent) 40%, var(--border));
+  }
 }
 @media (prefers-reduced-motion: reduce) {
+  .screener-hero-row { transform: none; transition: border-color var(--motion-base, 200ms) ease; }
   .screener-hero-row:hover { transform: none; }
 }
 
