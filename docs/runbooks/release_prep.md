@@ -57,13 +57,15 @@ user が実行する release-blocker タスクの手順書。 **朗報: Stripe P
 
 ---
 
-## 4. 価格の最終決定 (funnel-CRO Opus review 2026-06-04)
+## 4. 価格 = ✅確定 (user 承認 2026-06-04)
 
-user 案 ¥980 / ¥4,980 / ¥10,000 に対する専門家 verdict:
-
-- **推奨: 過去 3 体合議で承認済の Free / ¥980 / ¥3,980(hero) / ¥9,800 に戻す。**
-  - 理由①: 中間 ¥3,980 の方が Signature(¥9,800) を相対的に安く見せる anchoring/decoy が効く。 ¥4,980→¥10,000 は gap が約2倍に縮まり中間が「終着点」化して上位転換が鈍る。
-  - 理由②: **¥9,800 vs ¥10,000** は「1万円の壁」 (左桁効果)。 ¥9,800 表記が心理的に有利。
+**Free / Pro ¥980 / Premium ¥3,980 / Signature ¥9,800** で確定 (funnel-CRO Opus review 推奨案 = 過去合議案に user 承認)。
+- 採用理由: ¥3,980(中間) が Signature(¥9,800) の anchoring/decoy を効かせる + ¥9,800 は「1万円の壁」回避 (左桁効果)。
+- **反映状況 (autopilot)**:
+  - ✅ LP Premium 列表示 ¥1,800 → **¥3,980** 是正済 (「近日公開予定」 disabled のまま、 購入路なし=Trust Cliff 安全)。
+  - ✅ planGating.js コメント更新済。
+  - ⏳ Stripe Premium price は ¥3,980/月 で作成 (§1 手順)。 yearly は 2ヶ月 free なら **¥39,800/年** (user 確認推奨)。
+  - ⏳ Signature ¥9,800 列は LP 未新設 (§2、 招待制 waitlist 推奨。 4列レイアウト + tier 実装は別 sprint)。
 - **価格論より優先すべき CVR 本丸**: ①Free 内で AI図解を1回体験させる Aha 前倒し (現状 trial 弱点) ②件数表示+銘柄名 blur の飢餓感 gate (但し買える状態が前提=Stripe 先)。
 - 詳細は handover v165 「価格/集客 review」 section 参照。
 

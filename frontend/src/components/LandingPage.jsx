@@ -1724,7 +1724,7 @@ function PricingSection({ onFreeStart, onProCheckout }) {
               fontSize: 26, fontWeight: 700,
               color: 'var(--text-primary)', marginBottom: 4,
             }}>
-              ¥1,800<span style={{
+              ¥3,980<span style={{
                 fontSize: 13, fontWeight: 400, color: 'var(--text-muted)',
               }}>/月</span>
             </div>

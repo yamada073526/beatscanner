@@ -4,7 +4,8 @@
  * Plans:
  *   - free       : 無料 (3 銘柄/日 + 基本機能のみ)
  *   - pro        : ¥980/月 (スクリーナーカスタム / CSV / アラート / Movers Top 5 全表示 / LINE 朝 6:00)
- *   - premium    : ¥1,800/月 (Pro + Insider/13F + Claude Opus 月 20 銘柄 + LINE 5:30 + Gold UI 等)
+ *   - premium    : ¥3,980/月 (Pro + Insider/13F + Claude Opus 月 20 銘柄 + LINE 5:30 + Gold UI 等)
+ *     ※価格確定 2026-06-04: user 承認 4 tier = Free/¥980/¥3,980/¥9,800。 Signature(¥9,800) は未実装 (招待制待ち)。
  *
  * 課金状態は subscriptions テーブルの tier カラム (free/pro/premium) で判定。
  *
