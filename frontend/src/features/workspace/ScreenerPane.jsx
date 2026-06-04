@@ -124,8 +124,12 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
       style={{
         flex: 1,
         minHeight: 220,
-        // A-4: 交差 section (featured) のみ padding を一段上げて「ご褒美の間」 を作る (--space-4→--space-5)。
-        padding: featured ? 'var(--space-5, 20px)' : 'var(--space-4, 16px)',
+        // A-4: featured (交差) のみ padding を一段広げて「ご褒美の間」。 ただし dogfood 指摘 (01 のみ
+        //   仕切り線がズレる) 対策で top は他列と同じ --space-4 に固定し、 横/下のみ広げる。
+        //   → 3 列の eyebrow / 見出し / gold hairline の y が一致する。
+        padding: featured
+          ? 'var(--space-4, 16px) var(--space-5, 20px) var(--space-5, 20px)'
+          : 'var(--space-4, 16px)',
         border: active
           ? '1px solid var(--color-accent)'
           : '1px solid var(--border)',

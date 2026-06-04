@@ -574,7 +574,7 @@ function CupScannerResults({ data, onSelect, onUpgrade, filterKey, universeMeta 
           選択した条件に一致する銘柄がありません（絞り込みを変更してください）
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
           {filteredCupItems.map((item, i) => (
             <CupResultCard
               key={`${item.ticker || 'masked'}-${i}`}
@@ -718,7 +718,7 @@ function OneillScannerResults({ data, onSelect, onUpgrade }) {
         </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
         {items.map((item, i) => (
           <OneillResultCard
             key={`${item.ticker || 'masked'}-${i}`}
@@ -989,7 +989,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
             <p className="text-sm font-medium text-[var(--text-secondary)]">スクリーニング中...</p>
             <p className="mt-1 text-xs text-[var(--text-muted)]">財務データを取得・分析しています（約 30 秒）</p>
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
             {Array.from({ length: 6 }).map((_, i) => (
               <div
                 key={i}
@@ -1149,7 +1149,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
                   {data.passing.length}銘柄
                 </span>
               </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
                 {data.passing.map((item) => (
                   <ResultCard key={item.ticker} item={item} onSelect={onSelect} />
                 ))}
@@ -1165,7 +1165,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
               <summary className="cursor-pointer list-none text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition">
                 FAIL銘柄を表示 ({data.failing.length}件) ▼
               </summary>
-              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="mt-2 grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
                 {data.failing.map((item) => (
                   <ResultCard key={item.ticker} item={item} onSelect={onSelect} />
                 ))}

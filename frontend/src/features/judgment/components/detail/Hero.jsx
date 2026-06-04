@@ -1,6 +1,6 @@
 import React from 'react';
 import Card from '../../primitives/Card.jsx';
-import { Check, Star } from 'lucide-react';
+import { Star } from 'lucide-react';
 import Chip from '../../../../components/ui/Chip.jsx';
 import EarningsRing from '../../../../components/EarningsRing.jsx';
 import CompanyLogo from '../../../../components/CompanyLogo.jsx';
@@ -222,7 +222,8 @@ export default function Hero({
               icon = Star ★ (user gate 確定、 格調シンボル [[feedback_icon_brand_consistency]])。
               未追加 = Star outline + 「ウォッチ追加」 (icon-only は初見離脱回避)。
               hover = 浮上 + Star→gold fill + border gold (.hero-watch-add CSS、 cyan でなく gold)。
-              追加済 = Star を --color-gold 点灯 (所有の喜び) + 「追加済」 + Check。 緑不使用 (色変化は gold)。 */}
+              追加済 = Star を --color-gold 点灯 (所有の喜び) + 「追加済」。 緑不使用 (色変化は gold)。
+              ✓ Check は dogfood 指摘 (2 行目に短い ✓ が回り込みバランス悪) で撤去、 ★ + 「追加済」 で簡潔に。 */}
           {onAddToWatchlist && ticker && (
             inWatchlist ? (
               <Chip
@@ -234,7 +235,6 @@ export default function Hero({
                 icon={<Star size={13} strokeWidth={2} aria-hidden style={{ color: 'var(--color-gold)', fill: 'var(--color-gold)', marginRight: 4, verticalAlign: '-1px' }} />}
               >
                 追加済
-                <Check size={12} strokeWidth={2.5} aria-hidden style={{ marginLeft: 4, verticalAlign: '-1px' }} />
               </Chip>
             ) : (
               <Chip
