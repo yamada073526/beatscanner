@@ -117,8 +117,8 @@ function CountUpStat({ prefix, num, suffix }) {
 // section 見出し (revealBaseDelay) が着地し始めてから row が cascade する「先頭 anchor → 連鎖」 で、
 // 「全要素 mount 時同時発火」 (= 動いてるが洗練に見えない) を一本の物語に変える。 rank pop も同 delay 同期。
 // ROW_REVEAL_LEAD/STEP は体感で tune 可 (lead↑ で more deliberate、 step↑ で cascade ゆっくり)。
-const ROW_REVEAL_LEAD = 200; // ms: 見出し着地を待って row 入場を開始
-const ROW_REVEAL_STEP = 48;  // ms: row 間 stagger
+const ROW_REVEAL_LEAD = 240; // ms: 見出し着地を待って row 入場を開始 (v166 印象強化で +40)
+const ROW_REVEAL_STEP = 64;  // ms: row 間 stagger (v166: 48→64 で順次感を明確に)
 function rowRevealDelay(baseDelay, idx) {
   return baseDelay + ROW_REVEAL_LEAD + idx * ROW_REVEAL_STEP;
 }
