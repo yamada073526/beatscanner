@@ -8341,6 +8341,20 @@ async def profile_summary(
     try:
         segment_summary = build_segment_summary(segment_raw if isinstance(segment_raw, list) else [])
         if segment_summary:
+            # user dogfood 2026-06-05: segment 名の英文 fall-through を構造的に解消。
+            # 汎用辞書 → 永続 cache → Haiku → sanitize で name_jp を付与 (graceful、 失敗時は英語維持)。
+            # frontend は curated 辞書優先・name_jp は dict miss 時のみ使用。
+            try:
+                from .visualizer.segment_translate import translate_segment_names
+                _seg_names = [s.get("name") for s in segment_summary.get("segments", []) if s.get("name")]
+                if _seg_names:
+                    _jp = await translate_segment_names(_seg_names, os.getenv("ANTHROPIC_API_KEY"))
+                    for s in segment_summary.get("segments", []):
+                        nm = s.get("name")
+                        if nm and _jp.get(nm) and _jp[nm] != nm:
+                            s["name_jp"] = _jp[nm]
+            except Exception:
+                pass  # name_jp 無しでも frontend が translateSegmentName で fallback (壊さない)
             result["segmentSummary"] = segment_summary
             result["sources"]["segment"] = "ok"
         else:
@@ -11199,6 +11213,18 @@ async def generate_visualization(
     try:
         _seg_summary = build_segment_summary(_seg_raw_pre)
         if _seg_summary:
+            # user dogfood 2026-06-05: 図解の segment 名も和文化 (profile-summary と同経路)。
+            try:
+                from .visualizer.segment_translate import translate_segment_names
+                _seg_names = [s.get("name") for s in _seg_summary.get("segments", []) if s.get("name")]
+                if _seg_names:
+                    _jp = await translate_segment_names(_seg_names, os.getenv("ANTHROPIC_API_KEY"))
+                    for s in _seg_summary.get("segments", []):
+                        nm = s.get("name")
+                        if nm and _jp.get(nm) and _jp[nm] != nm:
+                            s["name_jp"] = _jp[nm]
+            except Exception:
+                pass  # graceful: name_jp 無しでも frontend が fallback
             parsed["segmentSummary"] = _seg_summary
             parsed["segmentDataAvailable"] = True
     except Exception as _e_seg:

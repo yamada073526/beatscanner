@@ -123,3 +123,20 @@ export function translateSegmentName(name) {
   const norm = name.toLowerCase().replace(/\s+/g, ' ').trim();
   return _NORM[norm] || name;
 }
+
+/**
+ * 表示用 segment 名 (v166+ 構造的和文化)。 優先順:
+ *   1. curated 辞書 (translateSegmentName が hit) — big-tech 等の整合訳を最優先
+ *   2. backend name_jp (Haiku 翻訳 + sanitize、 segment 名単位 cache) — 辞書 miss の long-tail
+ *   3. 英語原文 — 全て解決できないとき graceful
+ * seg は {name, name_jp?} object か string を受ける。
+ */
+export function displaySegmentName(seg) {
+  const name = typeof seg === 'string' ? seg : seg?.name;
+  if (typeof name !== 'string') return name ?? '';
+  const dictJp = translateSegmentName(name);
+  if (dictJp !== name) return dictJp;
+  const jp = typeof seg === 'object' ? seg?.name_jp : null;
+  if (typeof jp === 'string' && jp && jp !== name) return jp;
+  return name;
+}

@@ -9,7 +9,7 @@ import { useAuth } from '../../../../hooks/useAuth.js';
 import { Building2, MapPin, Users, Briefcase, Sparkles, RefreshCw, Scale } from 'lucide-react';
 import { fetchProfileExtended, fetchProfileSummary, fetchProfilePeers } from '../../../../api.js';
 import { sanitizeText } from '../../../../lib/blocklist.js';
-import { translateSegmentName } from '../../../../lib/segmentNames.js';
+import { displaySegmentName } from '../../../../lib/segmentNames.js';
 
 /**
  * Phase B 会社概要 LLM 和文化 (SPEC_2026-05-22 §5 Sprint B.1)
@@ -454,9 +454,9 @@ function SegmentSection({ segmentSummary }) {
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
                 }}
-                title={seg.name !== translateSegmentName(seg.name) ? `原文: ${seg.name}` : undefined}
+                title={seg.name !== displaySegmentName(seg) ? `原文: ${seg.name}` : undefined}
               >
-                {translateSegmentName(seg.name)}
+                {displaySegmentName(seg)}
               </div>
 
               {/* share% (構成比) */}
