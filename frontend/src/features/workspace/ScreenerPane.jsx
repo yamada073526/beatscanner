@@ -143,7 +143,7 @@ function rowRevealDelay(baseDelay, idx) {
  * @param {boolean} props.featured - A-4: 最希少 setup (交差) のみ主役化 (padding↑ + Crown gold)
  * @param {number} props.revealBaseDelay - A-3: stagger 入場の section base delay (ms)
  */
-function HeroSection({ eyebrow, title, testId, description, tickers, loading, emptyMessage, onSelect, sectionRef, active = false, demoMode = false, onUpgrade, error = null, onRetry, featured = false, revealBaseDelay = 0 }) {
+function HeroSection({ eyebrow, title, testId, description, tickers, loading, emptyMessage, onSelect, sectionRef, active = false, demoMode = false, onUpgrade, error = null, onRetry, featured = false, revealBaseDelay = 0, columns = false }) {
   // v125 P5-2: demo モード時は top 1 visible + 残り blur (marketer 6 体合議 verdict)
   const visibleCount = demoMode ? 1 : tickers.length;
   const blurredCount = demoMode ? Math.max(0, tickers.length - 1) : 0;
@@ -312,7 +312,15 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
           <span style={{ fontSize: 11, lineHeight: 1.5 }}>{emptyMessage || '該当銘柄なし'}</span>
         </div>
       ) : (
-        <ul data-testid={`${testId}-results`} style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-1, 4px)' }}>
+        <ul
+          data-testid={`${testId}-results`}
+          style={
+            columns
+              // full-width 版 (相対強度ランキング): void を埋めるため auto-fill 多列 grid。 row 順 (rank 1,2,3 …) で flow。
+              ? { listStyle: 'none', margin: 0, padding: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 'var(--space-1, 4px) var(--space-3, 12px)' }
+              : { listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-1, 4px)' }
+          }
+        >
           {tickers.map((t, idx) => {
             // v125 P5-2: demo モード時は idx === 0 のみ visible、 残りは blur
             const isBlurred = demoMode && idx >= visibleCount;
@@ -468,6 +476,9 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
   const [leaderCwh, setLeaderCwh] = useState(() => (heroCacheFresh() ? _heroCache.leaderCwh : { tickers: [], loading: true, error: null }));
   const [rsRising, setRsRising] = useState(() => (heroCacheFresh() ? _heroCache.rsRising : { tickers: [], loading: true, migrationPending: false, error: null }));
   const [newCwh, setNewCwh] = useState(() => (heroCacheFresh() ? _heroCache.newCwh : { tickers: [], loading: true, error: null }));
+  // dogfood 2026-06-05「Pane3 下部 60% が空」: 3 section 下の void を RS≥80 leaders ランキングで埋める。
+  //   rsLeader.items は section1 (交差) の fetch 元として既に取得済 = 追加 fetch ゼロの副産物。
+  const [rsLeaders, setRsLeaders] = useState(() => (heroCacheFresh() && _heroCache.rsLeaders ? _heroCache.rsLeaders : { tickers: [], loading: true, error: null }));
   // P6-2: fetch retry trigger
   const [retryNonce, setRetryNonce] = useState(0);
   const handleRetry = () => setRetryNonce((n) => n + 1);
@@ -503,6 +514,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
     setLeaderCwh({ tickers: [], loading: true, error: null });
     setRsRising({ tickers: [], loading: true, migrationPending: false, error: null });
     setNewCwh({ tickers: [], loading: true, error: null });
+    setRsLeaders({ tickers: [], loading: true, error: null });
 
     (async () => {
       // 3 fetch 並列起動
@@ -592,8 +604,22 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
       };
       setNewCwh(newResult);
 
+      // dogfood「Pane3 下部 void」: RS≥80 leaders ランキング (上位 15)。 rsLeader.items を流用 (追加 fetch なし)。
+      //   section1 (交差) は top5 のみ使い残りを破棄していた full list を ranking として surface。
+      //   badge は RS percentile (数値=Python 物理層、 §38 中立)。 demo は HeroSection 側で top1+blur。
+      const leaderRankItems = (rsLeader.items || []).slice(0, 15).map((item) => ({
+        ticker: item.ticker,
+        badge: item.universe_percentile != null ? `RS ${item.universe_percentile}` : 'RS',
+      }));
+      const rsLeadersResult = {
+        tickers: leaderRankItems,
+        loading: false,
+        error: rsLeaderFailed ? 'RS 取得失敗' : null,
+      };
+      setRsLeaders(rsLeadersResult);
+
       // D2 flicker fix: 結果を module cache に保存 → 次の remount (deselect 復帰) で hydrate して flicker 回避。
-      _heroCache = { ts: Date.now(), leaderCwh: leaderResult, rsRising: risingResult, newCwh: newResult };
+      _heroCache = { ts: Date.now(), leaderCwh: leaderResult, rsRising: risingResult, newCwh: newResult, rsLeaders: rsLeadersResult };
     })();
 
     return () => { cancelled = true; };
@@ -724,6 +750,27 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           onRetry={handleRetry}
         />
       </section>
+
+      {/* dogfood 2026-06-05「Pane3 下部 60% がうら寂しい空き」: 3 section (curated 交差、 本日 0/0/5 と data-sparse)
+          の下の大きな void を、 常時 data がある RS≥80 leaders ランキング (full-width 多列) で埋める。
+          ★追加 fetch ゼロ (rsLeader.items 流用)。 §38 中立 (RS percentile = 事実値、 description に免責)。 */}
+      <div style={{ marginTop: 'var(--space-4, 16px)' }}>
+        <HeroSection
+          eyebrow="04"
+          title="相対強度ランキング"
+          testId="screener-hero-rs-leaders"
+          description="RS percentile ≥ 80 の上位銘柄（CAN SLIM の L）。投資の推奨ではありません。"
+          tickers={rsLeaders.tickers}
+          loading={rsLeaders.loading}
+          error={rsLeaders.error}
+          emptyMessage="RS ≥ 80 の銘柄なし（nightly batch 未実行の可能性、明朝確認）"
+          onSelect={handleSelect}
+          demoMode={demoMode}
+          onUpgrade={handleUpgradeRequest}
+          onRetry={handleRetry}
+          columns
+        />
+      </div>
 
       {/* v160 D2: Explorer (CustomScreenerPanel) は Pane 2 に移設 (master-detail)。
           本コンポーネントは Pane 3 の idle 時 Hero (今注目) を担う。 */}
