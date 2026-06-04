@@ -6917,6 +6917,8 @@ button.ds-chip[data-pressed="true"]:hover {
    .screener-hero-row は .is-arriving 非対象のため compound 4-set 不要 (.news-list-card と同条件)。
    base の bg / border は inline から class に移譲済 (:hover override を効かせるため)。 transform/glow = CLS 0。 */
 .screener-hero-row {
+  /* ④ (user dogfood「hover accent もっと」): ::before 左アクセントバーの absolute 基準。 */
+  position: relative;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   transition:
@@ -6947,6 +6949,28 @@ button.ds-chip[data-pressed="true"]:hover {
   .screener-hero-row:hover .screener-hero-ticker { color: rgb(186, 230, 253); } /* sky-200 (dark) */
   [data-theme="light"] .screener-hero-row:hover .screener-hero-ticker { color: rgb(2, 132, 199); } /* sky-700 (light) */
 }
+/* ④ (user dogfood「hover accent もっと」、 ③ ticker cyan shift への積み増し): 最新ニュース
+   (.news-list-card::before) と同 idiom の左アクセントバー。 row 左端で scaleY(0)→hover scaleY(1) と
+   center から上下に slide-in。 ★rank circle は padding-left 8px の内側に居り、 bar は padding 領域の
+   最左 (left:0 / width:3px) に出るため circle と非干渉 (handover v168「row 左端は rank circle」 配慮)。
+   top/bottom 15% inset で borderRadius(4px) の丸角を避ける。 transform のみ = CLS 0、 raw hex なし。 */
+.screener-hero-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 15%;
+  bottom: 15%;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: color-mix(in srgb, var(--color-accent) 75%, transparent);
+  pointer-events: none;
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform var(--ws-hover-duration, 220ms) var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
+}
+@media (hover: hover) and (pointer: fine) {
+  .screener-hero-row:hover::before { transform: scaleY(1); }
+}
 /* press: Stripe/HIG 流の沈み込み (Δy + Δscale で press feedback delta 充足 [[feedback_press_feedback_delta]]) */
 .screener-hero-row:active {
   transform: translateY(0) scale(0.97);
@@ -6965,6 +6989,8 @@ button.ds-chip[data-pressed="true"]:hover {
       background-color var(--ws-hover-duration, 220ms) ease,
       box-shadow var(--ws-hover-duration, 220ms) ease;
   }
+  /* ④: アクセントバーは hover で可視のまま (scaleY) だが transition を切り即時表示 (酔い系 churn なし)。 */
+  .screener-hero-row::before { transition: none; }
 }
 
 /* ── SPEC 2026-06-04 screener-animation 案2: ランク circle の spring pop ──
@@ -7005,17 +7031,23 @@ button.ds-chip[data-pressed="true"]:hover {
   width: 1100px;
   height: 540px;
   transform: translate(-50%, -50%);
-  background: radial-gradient(ellipse, rgba(56, 189, 248, 0.11) 0%, transparent 62%);
+  /* ③-a v2 (user dogfood「12s では全然気付かない」): base 明度 0.11→0.16 で glow 自体を視認域へ。 */
+  background: radial-gradient(ellipse, rgba(56, 189, 248, 0.16) 0%, transparent 62%);
   -webkit-mask-image: radial-gradient(ellipse, black 20%, transparent 60%);
           mask-image: radial-gradient(ellipse, black 20%, transparent 60%);
   pointer-events: none;
   z-index: 0;
-  animation: screenerAmbientBreathe 16s ease-in-out infinite;
+  /* ③-a v2 (user dogfood「12s では全然気付かない、 ユーザ操作はもっとキビキビ」): 周期 12s→8s に
+     さらに短縮。 ユーザ操作 (220ms) とは別 timescale だが「眺めた時に息づきが分かる」 知覚域へ。
+     base 明度 (0.16) + 振幅 (opacity 0.45-1.0 / scale 1.10) と合わせて「気付く」 強度に引上げ。 */
+  animation: screenerAmbientBreathe 8s ease-in-out infinite;
 }
 .screener-pane-ambient > * { position: relative; z-index: 1; }
 @keyframes screenerAmbientBreathe {
-  0%, 100% { opacity: 0.6;  transform: translate(-50%, -50%) scale(1); }
-  50%      { opacity: 0.95; transform: translate(-50%, -50%) scale(1.05); }
+  /* ③-a v2: opacity 0.5/1.0→0.45/1.0 (trough を下げ swing 拡大)、 scale 1.08→1.10 で size pulse を
+     はっきり視認可能に。 transform/opacity のみ = CLS 0 (reflow しない)。 */
+  0%, 100% { opacity: 0.45; transform: translate(-50%, -50%) scale(1); }
+  50%      { opacity: 1;    transform: translate(-50%, -50%) scale(1.10); }
 }
 @media (prefers-reduced-motion: reduce) {
   .screener-pane-ambient::before { animation: none; }
@@ -9977,6 +10009,29 @@ button.ds-chip.hero-watch-add:hover svg {
     color-mix(in srgb, var(--color-accent) 55%, transparent) 60%,
     transparent 100%
   );
+}
+
+/* ── ③-b (user 提案「カードに LP 風 hover 発光」): screener の section card を hover で ambient glow boost ──
+   ★必ず .screener-pane-ambient scope に閉じる: tier-m-glow は FiveConditions / Analyst / Earnings /
+   Quarterly と共有のため、 global に :hover を足すと Pane3 詳細の全 card が hover 発光してしまう。
+   ::after は halo-sweep が占有しているため本体 box-shadow で実装 (sweep と非干渉)。 fire 後 ambient
+   (accent 14%/10%) を hover で accent 24%/18% に強化 = 「カードが灯る」。 border は inline (var(--border))
+   のままで inset ring (box-shadow) が「枠が光る」 を担う ([[glow_elevation_postmortem]] v55 inline-border 回避、
+   fired ambient と同 idiom)。 tier-m-glow は is-arriving 非対象なので compound 4-set 不要 (design_recipes §C-2)。
+   inline transition (border-color/box-shadow 0.3s ease) が glow fade を担当。 raw hex/shadow なし、 overflow:visible 維持。 */
+@media (hover: hover) and (pointer: fine) {
+  /* ③-b v2 (user dogfood「地味 → 上げる」): inset ring + drop glow を一段強化。 */
+  .screener-pane-ambient .tier-m-glow:hover {
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 34%, transparent),
+      0 6px 24px -4px color-mix(in srgb, var(--color-accent) 28%, transparent);
+  }
+  /* dark: 暗背景で埋もれないよう強化 (Pane4 / fired-ambient の dark 比と同水準) */
+  [data-theme="dark"] .screener-pane-ambient .tier-m-glow:hover {
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 52%, transparent),
+      0 8px 30px -4px color-mix(in srgb, var(--color-accent) 40%, transparent);
+  }
 }
 
 /* ── Tier L: tier-l-glow (Library section — NewsPanel / IRLinksPanel) ──────
