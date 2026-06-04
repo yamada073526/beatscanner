@@ -27,6 +27,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Crown, Hourglass } from 'lucide-react';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { useHaloSweepOnce } from '../../hooks/useHaloSweepOnce.js';
+import { useCountUp } from '../../hooks/useCountUp.js';
 import Chip, { ChipGroup } from '../../components/ui/Chip.jsx';
 
 
@@ -91,6 +92,25 @@ async function fetchCupHandle({ limit = 20 } = {}) {
   } catch (e) {
     return { items: [], error: String(e) };
   }
+}
+
+// SPEC screener-animation 案1: 数値カウントアップ。 clean な数値バッジ (section1「RS NN」/ section2「+Npt」)
+// のみ count-up 対象に抽出 (section3 の state ラベル「ブレイク確定」「高値圏突破 · 50DMA +X%」 等は静的)。
+// 50DMA 等の「ラベル内数字」 を誤 count-up しないよう pattern 厳密 match に限定。
+function parseCountableBadge(badge) {
+  // section1: "RS 88" / "RS 88 ✦ GC"
+  let m = badge.match(/^(RS )(\d+)( ✦ GC)?$/);
+  if (m) return { prefix: m[1], num: Number(m[2]), suffix: m[3] || '' };
+  // section2: "+12pt"
+  m = badge.match(/^\+(\d+)pt$/);
+  if (m) return { prefix: '+', num: Number(m[1]), suffix: 'pt' };
+  return null; // それ以外 (state ラベル等) は count-up しない
+}
+
+// 数値部のみ rAF count-up (useCountUp、 reduced-motion 即値・forceFromZero で 0→target)。 prefix/suffix は静的。
+function CountUpStat({ prefix, num, suffix }) {
+  const v = useCountUp(num, { duration: 800, digits: 0, forceFromZero: true });
+  return <>{prefix}{v == null ? num : v}{suffix}</>;
 }
 
 /**
@@ -352,7 +372,11 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
                       折返すと row 高さが不揃いになるため nowrap + ellipsis、 全文は title hover。 主役の state 名は先頭で生存。 */}
                   {t.badge && (
                     <span title={t.badge} style={{ flexShrink: 0, maxWidth: '56%', textAlign: 'right', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {t.badge}
+                      {(() => {
+                        // 案1: 数値バッジ (RS NN / +Npt) は count-up、 state ラベルは静的。
+                        const p = parseCountableBadge(t.badge);
+                        return p ? <CountUpStat prefix={p.prefix} num={p.num} suffix={p.suffix} /> : t.badge;
+                      })()}
                     </span>
                   )}
                 </button>
