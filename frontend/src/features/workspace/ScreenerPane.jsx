@@ -28,6 +28,7 @@ import { Crown, Hourglass } from 'lucide-react';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { useHaloSweepOnce } from '../../hooks/useHaloSweepOnce.js';
 import { useCountUp } from '../../hooks/useCountUp.js';
+import { withViewTransition } from '../../utils/viewTransition.js';
 import Chip, { ChipGroup } from '../../components/ui/Chip.jsx';
 
 
@@ -610,7 +611,14 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
   const handleSelect = (sym) => {
     // v160 D2 (master-detail): tab を離脱せず activeTicker のみ更新。
     // → Pane 3 が Hero → JudgmentDetail に切替、 Pane 2 の Explorer (絞り込み結果) は残る。
-    setActiveTicker(sym);
+    // SPEC screener-animation 案7 (安全版): app 全体の nav (App.jsx setActiveTab / JudgmentContext
+    //   setSelectedTicker) と同じ withViewTransition で screener Hero → detail を cross-fade。
+    //   instant swap だった唯一の nav 経路を app 標準の上質遷移に統一する。 helper が
+    //   reduced-motion skip + 非対応ブラウザ即時実行を内包 (proven pattern、 master-detail の
+    //   render ロジックは不触で setter 呼出を wrap するのみ = 低リスク)。
+    //   ⚠️row→Hero の morph (transient VT 名) は master-detail 心臓部 + VT 名一意管理の高リスクのため
+    //   本 batch では見送り、 multi-review 3体で設計 vet 後に判断。
+    withViewTransition(() => setActiveTicker(sym));
   };
 
   return (
