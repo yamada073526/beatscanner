@@ -6889,12 +6889,18 @@ button.ds-chip[data-pressed="true"]:hover {
    transform を奪い合わない ([[feedback_press_feedback_delta]] running forwards fill 罠回避)。
    prefers-reduced-motion: reduce で即時表示 (animation 無効 = opacity 1 / transform none)。
    発火は row が mount する初回 fetch 完了時のみ (chip 切替は refetch しないため再生しない)。 */
+/* SPEC screener-animation 案4: 入場 stagger を spring 物理に。 旧 linear fade-up (8px→0) を
+   overshoot 付き (10px→ -2px 行き過ぎ →0 着地) に変え、 row が「重みを持って滑り込んで着地」 する。
+   rank pop (案2) と同 duration (--motion-slow) / 同 easing (ease-out-cubic) / 同 60% peak に揃えて、
+   row 本体と rank circle が一体で弾む統一 choreography に (積み増しでなく既存 motion の質向上)。
+   transform のみ = CLS 0。 finite 1 回。 reduced-motion は下の @media で animation:none (即時表示)。 */
 @keyframes screenerRevealUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  0%   { opacity: 0; transform: translateY(10px); }
+  60%  { opacity: 1; transform: translateY(-2px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
 .screener-reveal {
-  animation: screenerRevealUp var(--motion-slow, 360ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) both;
+  animation: screenerRevealUp var(--motion-slow, 360ms) var(--ease-out-cubic, cubic-bezier(0.22, 1, 0.36, 1)) both;
 }
 @media (prefers-reduced-motion: reduce) {
   .screener-reveal { animation: none; }
