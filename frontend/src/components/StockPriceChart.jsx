@@ -1024,7 +1024,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
         <>
           <div
             ref={chartWrapRef}
-            className="h-72 relative"
+            className={`h-72 relative${chartInView && !prefersReducedMotion ? ' chart-draw-reveal' : ''}`}
             data-cup-locked={cupRequiresPro ? 'true' : undefined}
           >
             {/* Pro tier teaser: Cup-Handle 検出済 + Free user 時に chart 全体を軽く blur + CTA overlay。
@@ -1150,7 +1150,6 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
                     /* P1 fix (multi-review frontend): key を ticker+period に固定。 ticker/period 変更時のみ
                        remount → 新規 draw-on。 technical (SMA/cup) が後追い load して chartData が再計算されても
                        同 key + close 値不変なので price line の再 draw flash を抑止 (qa P1 「チカッ」 対策)。 */
-                    key={`price-${ticker}-${period}-${chartInView ? 'v' : 'h'}`}
                     type="monotone"
                     dataKey="close"
                     stroke={CHART_PRICE}
@@ -1165,9 +1164,11 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
                        isAnimationActive=false 規律は overlay line (SMA/cup、 後追い null→値) 専用で price line は対象外
                        ([[feedback_chart_overlay_safety]] 4 層防御 #4 の射程確認済)。
                        P1 fix (multi-review frontend): Recharts は prefers-reduced-motion を見ないため手動で縮退。 */
-                    isAnimationActive={chartInView && !prefersReducedMotion}
-                    animationDuration={prefersReducedMotion ? 0 : 2000}
-                    animationEasing="ease-out"
+                    /* 案6 v3: Recharts 内部 draw アニメは詳細ページの多段非同期ロード (price→technical→
+                       analyst→valuation…) の再レンダリングで中断・最終状態へジャンプし「描画が見えない」 真因。
+                       → Recharts アニメは無効化し、 chart wrapper の CSS clip-path wipe (再レンダリング非依存)
+                       で「左→右に描画」 を表現する (chart-draw-reveal class、 IntersectionObserver で view 入場時)。 */
+                    isAnimationActive={false}
                   />
                 ) : (
                   <Bar

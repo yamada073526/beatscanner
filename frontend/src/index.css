@@ -7021,6 +7021,23 @@ button.ds-chip[data-pressed="true"]:hover {
   .screener-pane-ambient::before { animation: none; }
 }
 
+/* ── 案6 v3 (user dogfood「チャートが左→右に描画されない」): chart の左→右 wipe-reveal ──
+   Recharts 内部 draw アニメは詳細ページの多段非同期ロードで再レンダリング中断されて見えなかったため、
+   再レンダリング非依存の CSS clip-path wipe に切替。 chart wrapper (.h-72) が viewport 入場時 (IO で
+   chartInView=true) に .chart-draw-reveal が付与され、 左→右に拭き出すように chart 全体が現れる。
+   both fill で開始時 clip(右100%) → 終了 clip なし。 IO 不発でも class 無し = 全表示 (安全)。
+   reduced-motion で wipe 無効 (即全表示)。 */
+@keyframes chartWipeIn {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+.chart-draw-reveal {
+  animation: chartWipeIn 1.4s var(--ease-out-cubic, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chart-draw-reveal { animation: none; }
+}
+
 /* ── SPEC 2026-06-04 B: Hero ウォッチ★ボタン (gold ownership) ──
    add variant は primitive 既定で cyan hover だが、 ウォッチ action のみ gold に上書き
    (★が金色に灯る = 所有の喜び、 緑/cyan でなく gold で「上昇」 と意味衝突回避)。
