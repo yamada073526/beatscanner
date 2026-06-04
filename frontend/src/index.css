@@ -7031,6 +7031,10 @@ button.ds-chip[data-pressed="true"]:hover {
   from { clip-path: inset(0 100% 0 0); }
   to   { clip-path: inset(0 0 0 0); }
 }
+/* 案6 v4: clip+wipe は内側ラッパーに適用 (IO 対象の外側 .h-72 は clip しない)。 */
+.chart-draw-inner { width: 100%; height: 100%; }
+/* 初回 render から clip (mount 時の全 paint flash を防ぐ。 IO 対象は外側のため内側 clip は IO を壊さない)。 */
+.chart-draw-pending { clip-path: inset(0 100% 0 0); }
 .chart-draw-reveal {
   /* user dogfood「ノロノロ → キビキビ感を」: 1.6s/ease-in-out (定速で長い) → 0.85s/ease-out (出だし速く
      スッと収まる) に。 短尺 + 強い decel で「サッと描かれて止まる」 brisk な sweep。 */

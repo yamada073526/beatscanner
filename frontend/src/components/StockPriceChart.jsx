@@ -484,14 +484,14 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
     const el = chartWrapRef.current;
     if (!el) return;
     if (typeof IntersectionObserver === 'undefined') { setChartInView(true); return; }
-    // rootMargin bottom +220px: chart が viewport に入る「少し手前」 で発火させ、 reveal の clip from-state
-    //   (右クリップ) を入場前に適用 → 全表示 flash を消す。 threshold 0 で交差した瞬間に発火。
+    // flash は内側 chart-draw-pending (初回から clip) が防ぐため rootMargin 不要。 chart が viewport に
+    //   入ったら wipe 発火 (user の見ている前で再生)。 IO 対象は clip しない外側 .h-72 なので確実発火。
     const io = new IntersectionObserver((entries) => {
       if (entries.some((e) => e.isIntersecting)) {
         setChartInView(true);
         io.disconnect();
       }
-    }, { threshold: 0, rootMargin: '0px 0px 220px 0px' });
+    }, { threshold: 0.15 });
     io.observe(el);
     return () => io.disconnect();
   }, [chartInView, data, loading]);
@@ -1026,10 +1026,10 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
         <>
           <div
             ref={chartWrapRef}
-            // 案6 v3: flash 解消は IO の rootMargin で「見える手前」 に発火 → reveal の clip from-state を
-            //   入場前に適用 (chart-draw-pending で常時 clip すると clip-path:inset(100%) が IntersectionObserver
-            //   の交差判定を 0 にして IO 不発=永久非表示になるため不採用)。 IO 不発でも class 無し=全表示で安全。
-            className={`h-72 relative${chartInView && !prefersReducedMotion ? ' chart-draw-reveal' : ''}`}
+            // 案6 v4 (flash 真因 = mount 時の初回 full paint): IO 対象の外側 .h-72 は clip しない
+            //   (clip-path:inset(100%) は IO の交差判定を 0 にするため)。 clip+wipe は内側ラッパーに分離し、
+            //   初回 render から pending で clip → full paint させない (flash 解消)。 IO は外側で確実発火。
+            className="h-72 relative"
             data-cup-locked={cupRequiresPro ? 'true' : undefined}
           >
             {/* Pro tier teaser: Cup-Handle 検出済 + Free user 時に chart 全体を軽く blur + CTA overlay。
@@ -1065,6 +1065,9 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
                 </button>
               </div>
             )}
+            <div
+              className={`chart-draw-inner${prefersReducedMotion ? '' : (chartInView ? ' chart-draw-reveal' : ' chart-draw-pending')}`}
+            >
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart
                 data={chartData}
@@ -1535,6 +1538,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
                 })}
               </ComposedChart>
             </ResponsiveContainer>
+            </div>
           </div>
 
           {/* Legend — 2 行構造 (テクニカル / 決算判定) + 末尾 ⓘ tooltip 縮約
