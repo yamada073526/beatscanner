@@ -6980,6 +6980,38 @@ button.ds-chip[data-pressed="true"]:hover {
   .screener-rank-pop { animation: none; }
 }
 
+/* ── SPEC screener-animation 案A (user dogfood「全体感で寂しい」): Pane3 idle に ambient depth layer ──
+   .backtest-hero::before の proven pattern (radial cyan + mask、 glow host 不触の静的擬似要素装飾) を流用。
+   入場演出 (一過性) の後も「空間が静かに息づく」 持続感を超低速 breathe で付与 (Aman 節度、 ~16s)。
+   ★安全: 新 glow host (.panel-card/.bs-panel/.surface-card) でなく純背景 ::before。 host は overflowY:auto の
+   まま (overflow:hidden を足さない = card 系 halo を clip しない)、 mask で端を fade させ はみ出し回避。
+   pointer-events:none / z-index 0 で content 背面、 raw hex なし (rgba は .news-list-card と同 cyan 系)。
+   reduced-motion で breathe 停止 (静止 ambient 維持)。 transform/opacity のみ = CLS 0。 */
+.screener-pane-ambient { position: relative; }
+.screener-pane-ambient::before {
+  content: '';
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  width: 1100px;
+  height: 540px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(ellipse, rgba(56, 189, 248, 0.07) 0%, transparent 62%);
+  -webkit-mask-image: radial-gradient(ellipse, black 16%, transparent 58%);
+          mask-image: radial-gradient(ellipse, black 16%, transparent 58%);
+  pointer-events: none;
+  z-index: 0;
+  animation: screenerAmbientBreathe 16s ease-in-out infinite;
+}
+.screener-pane-ambient > * { position: relative; z-index: 1; }
+@keyframes screenerAmbientBreathe {
+  0%, 100% { opacity: 0.6;  transform: translate(-50%, -50%) scale(1); }
+  50%      { opacity: 0.95; transform: translate(-50%, -50%) scale(1.05); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .screener-pane-ambient::before { animation: none; }
+}
+
 /* ── SPEC 2026-06-04 B: Hero ウォッチ★ボタン (gold ownership) ──
    add variant は primitive 既定で cyan hover だが、 ウォッチ action のみ gold に上書き
    (★が金色に灯る = 所有の喜び、 緑/cyan でなく gold で「上昇」 と意味衝突回避)。

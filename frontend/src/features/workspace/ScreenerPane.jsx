@@ -611,6 +611,9 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
   return (
     <div
       data-testid="screener-pane"
+      // 案A (user dogfood「全体感で寂しい」): ambient depth layer (.screener-pane-ambient::before)。
+      //   position:relative + content を z-index:1 に持ち上げ、 背面に超低速 breathe の radial cyan。
+      className="screener-pane-ambient"
       style={{ padding: 'var(--space-4, 16px)', height: '100%', overflowY: 'auto' }}
     >
       {/* v160 D2: master-detail 化で WIP banner 撤去 (user gate 通過、 本実装が gate 後の正式版)。
