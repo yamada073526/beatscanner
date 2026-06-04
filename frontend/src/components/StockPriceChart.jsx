@@ -484,12 +484,14 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
     const el = chartWrapRef.current;
     if (!el) return;
     if (typeof IntersectionObserver === 'undefined') { setChartInView(true); return; }
+    // rootMargin bottom +220px: chart が viewport に入る「少し手前」 で発火させ、 reveal の clip from-state
+    //   (右クリップ) を入場前に適用 → 全表示 flash を消す。 threshold 0 で交差した瞬間に発火。
     const io = new IntersectionObserver((entries) => {
       if (entries.some((e) => e.isIntersecting)) {
         setChartInView(true);
         io.disconnect();
       }
-    }, { threshold: 0.25 });
+    }, { threshold: 0, rootMargin: '0px 0px 220px 0px' });
     io.observe(el);
     return () => io.disconnect();
   }, [chartInView, data, loading]);
@@ -1024,12 +1026,10 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
         <>
           <div
             ref={chartWrapRef}
-            // 案6 v3: flash 解消 — 入場前は chart-draw-pending で常時クリップ (全表示の一瞬を消す)、
-            //   IO で viewport 入場 (chartInView) したら chart-draw-reveal で左→右 wipe。
-            //   reduced-motion はどちらも付けず全表示 (クリップなし)。
-            className={`h-72 relative${
-              prefersReducedMotion ? '' : (chartInView ? ' chart-draw-reveal' : ' chart-draw-pending')
-            }`}
+            // 案6 v3: flash 解消は IO の rootMargin で「見える手前」 に発火 → reveal の clip from-state を
+            //   入場前に適用 (chart-draw-pending で常時 clip すると clip-path:inset(100%) が IntersectionObserver
+            //   の交差判定を 0 にして IO 不発=永久非表示になるため不採用)。 IO 不発でも class 無し=全表示で安全。
+            className={`h-72 relative${chartInView && !prefersReducedMotion ? ' chart-draw-reveal' : ''}`}
             data-cup-locked={cupRequiresPro ? 'true' : undefined}
           >
             {/* Pro tier teaser: Cup-Handle 検出済 + Free user 時に chart 全体を軽く blur + CTA overlay。

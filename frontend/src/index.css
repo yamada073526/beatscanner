@@ -7031,11 +7031,6 @@ button.ds-chip[data-pressed="true"]:hover {
   from { clip-path: inset(0 100% 0 0); }
   to   { clip-path: inset(0 0 0 0); }
 }
-/* 入場前: 常時クリップ (右 100% = 非表示)。 viewport 入場前に全表示される flash を防ぐ
-   (user dogfood「wipe 前に一瞬チャート全体が見える」 真因)。 */
-.chart-draw-pending {
-  clip-path: inset(0 100% 0 0);
-}
 .chart-draw-reveal {
   /* user dogfood「ノロノロ → キビキビ感を」: 1.6s/ease-in-out (定速で長い) → 0.85s/ease-out (出だし速く
      スッと収まる) に。 短尺 + 強い decel で「サッと描かれて止まる」 brisk な sweep。 */
