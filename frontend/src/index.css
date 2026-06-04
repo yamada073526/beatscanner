@@ -7032,7 +7032,9 @@ button.ds-chip[data-pressed="true"]:hover {
   to   { clip-path: inset(0 0 0 0); }
 }
 .chart-draw-reveal {
-  animation: chartWipeIn 1.4s var(--ease-out-cubic, cubic-bezier(0.22, 1, 0.36, 1)) both;
+  /* ease-in-out (定速寄り) + 1.6s で「左→右に描かれていく」 sweep を知覚しやすく (ease-out は前半で
+     一気に開いて draw 感が薄いため、 user dogfood「描画が見えない」 を踏まえ steady sweep に)。 */
+  animation: chartWipeIn 1.6s var(--ease-in-out-quad, cubic-bezier(0.45, 0, 0.55, 1)) both;
 }
 @media (prefers-reduced-motion: reduce) {
   .chart-draw-reveal { animation: none; }
