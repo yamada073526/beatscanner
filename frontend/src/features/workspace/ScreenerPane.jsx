@@ -94,6 +94,32 @@ async function fetchCupHandle({ limit = 20 } = {}) {
   }
 }
 
+// ── fetcher: backend /api/holdings-meta (B-Top1: RS leaders の次回決算日を交差、 追加 backend なし) ──
+async function fetchEarningsMeta(symbols) {
+  if (!symbols || symbols.length === 0) return { meta: {} };
+  try {
+    const q = encodeURIComponent(symbols.join(','));
+    const r = await fetch(`/api/holdings-meta?symbols=${q}`);
+    if (!r.ok) return { meta: {} };
+    return await r.json();
+  } catch {
+    return { meta: {} };
+  }
+}
+
+// 決算日 badge: 本日/明日/M/D 決算 (§38 中立 = 日付は事実値)
+function fmtEarnDay(dateStr, days) {
+  if (days === 0) return '本日決算';
+  if (days === 1) return '明日決算';
+  try {
+    const d = new Date(`${dateStr}T00:00:00`);
+    if (!Number.isNaN(d.getTime())) return `${d.getMonth() + 1}/${d.getDate()} 決算`;
+  } catch {
+    /* noop */
+  }
+  return `${days}日後決算`;
+}
+
 // SPEC screener-animation 案1: 数値カウントアップ。 clean な数値バッジ (section1「RS NN」/ section2「+Npt」)
 // のみ count-up 対象に抽出 (section3 の state ラベル「ブレイク確定」「高値圏突破 · 50DMA +X%」 等は静的)。
 // 50DMA 等の「ラベル内数字」 を誤 count-up しないよう pattern 厳密 match に限定。
@@ -485,6 +511,8 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
   // dogfood 2026-06-05「Pane3 下部 60% が空」: 3 section 下の void を RS≥80 leaders ランキングで埋める。
   //   rsLeader.items は section1 (交差) の fetch 元として既に取得済 = 追加 fetch ゼロの副産物。
   const [rsLeaders, setRsLeaders] = useState(() => (heroCacheFresh() && _heroCache.rsLeaders ? _heroCache.rsLeaders : { tickers: [], loading: true, error: null }));
+  // B-Top1: RS≥80 leaders の今週決算予定 (rsLeader.items × holdings-meta 交差)
+  const [earningsThisWeek, setEarningsThisWeek] = useState(() => (heroCacheFresh() && _heroCache.earningsThisWeek ? _heroCache.earningsThisWeek : { tickers: [], loading: true, error: null }));
   // P6-2: fetch retry trigger
   const [retryNonce, setRetryNonce] = useState(0);
   const handleRetry = () => setRetryNonce((n) => n + 1);
@@ -521,6 +549,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
     setRsRising({ tickers: [], loading: true, migrationPending: false, error: null });
     setNewCwh({ tickers: [], loading: true, error: null });
     setRsLeaders({ tickers: [], loading: true, error: null });
+    setEarningsThisWeek({ tickers: [], loading: true, error: null });
 
     (async () => {
       // 3 fetch 並列起動
@@ -624,8 +653,45 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
       };
       setRsLeaders(rsLeadersResult);
 
+      // B-Top1: RS≥80 leaders の今週決算 (days_to_earnings 0-7) を holdings-meta で交差 (追加 backend なし)。
+      //   「RS が強い銘柄で今週決算」 = 投資家が毎日人力でやる『今週の決算チェック』を代替 (原則4 人力代替)。
+      let earningsThisWeekResult = { tickers: [], loading: false, error: null };
+      try {
+        const leaderTickers = (rsLeader.items || []).slice(0, 30).map((i) => i.ticker);
+        if (leaderTickers.length > 0 && !rsLeaderFailed) {
+          const hm = await fetchEarningsMeta(leaderTickers);
+          if (!cancelled) {
+            const meta = hm?.meta || {};
+            const raw = [];
+            for (const item of (rsLeader.items || [])) {
+              const m = meta[item.ticker];
+              if (m && m.days_to_earnings != null && m.days_to_earnings >= 0 && m.days_to_earnings <= 90) {
+                raw.push({
+                  ticker: item.ticker,
+                  days: m.days_to_earnings,
+                  date: m.next_earnings_date,
+                  rs: item.universe_percentile,
+                });
+              }
+            }
+            raw.sort((a, b) => a.days - b.days); // 直近決算順
+            earningsThisWeekResult = {
+              tickers: raw.slice(0, 10).map((x) => ({
+                ticker: x.ticker,
+                badge: `${fmtEarnDay(x.date, x.days)} · RS ${x.rs}`,
+              })),
+              loading: false,
+              error: null,
+            };
+          }
+        }
+      } catch {
+        earningsThisWeekResult = { tickers: [], loading: false, error: null };
+      }
+      if (!cancelled) setEarningsThisWeek(earningsThisWeekResult);
+
       // D2 flicker fix: 結果を module cache に保存 → 次の remount (deselect 復帰) で hydrate して flicker 回避。
-      _heroCache = { ts: Date.now(), leaderCwh: leaderResult, rsRising: risingResult, newCwh: newResult, rsLeaders: rsLeadersResult };
+      _heroCache = { ts: Date.now(), leaderCwh: leaderResult, rsRising: risingResult, newCwh: newResult, rsLeaders: rsLeadersResult, earningsThisWeek: earningsThisWeekResult };
     })();
 
     return () => { cancelled = true; };
@@ -770,6 +836,27 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           loading={rsLeaders.loading}
           error={rsLeaders.error}
           emptyMessage="RS ≥ 80 の銘柄なし（nightly batch 未実行の可能性、明朝確認）"
+          onSelect={handleSelect}
+          demoMode={demoMode}
+          onUpgrade={handleUpgradeRequest}
+          onRetry={handleRetry}
+          columns
+        />
+      </div>
+
+      {/* B-Top1: 今週決算 × 相対強度上位 (rsLeader.items × holdings-meta 交差、 追加 backend なし)。
+          「RS が強い銘柄で今週決算予定」 = 投資家が毎日人力でやる『今週の決算チェック』を BeatScanner が代替 (原則4)。
+          §38 中立 (RS percentile + 決算日は事実値、 description に投資推奨でない旨)。 相対強度ランキングの直下。 */}
+      <div style={{ marginTop: 'var(--space-4, 16px)' }}>
+        <HeroSection
+          eyebrow="05"
+          title="今後の決算 × 相対強度上位"
+          testId="screener-hero-earnings-upcoming"
+          description="RS percentile ≥ 80 で決算が近い順の銘柄（約3ヶ月以内）。投資の推奨ではありません。"
+          tickers={earningsThisWeek.tickers}
+          loading={earningsThisWeek.loading}
+          error={earningsThisWeek.error}
+          emptyMessage="直近の決算予定銘柄なし"
           onSelect={handleSelect}
           demoMode={demoMode}
           onUpgrade={handleUpgradeRequest}
