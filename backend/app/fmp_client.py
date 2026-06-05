@@ -257,10 +257,26 @@ class FMPClient:
         return pool
 
     async def batch_quotes(self, symbols: list[str]) -> list[dict]:
-        # ⚠️ /stable/quote は単一 symbol 仕様で、 カンマ区切り複数は 0 件を返す
-        # (2026-06-05 確認)。 複数銘柄を 1 call で取るなら batch_quote (/batch-quote) を使う。
-        joined = ",".join(s.upper() for s in symbols)
-        return await self._get("/quote", {"symbol": joined})
+        """複数銘柄 quote を 1 call で取得する compat shim (実体は /stable/batch-quote)。
+
+        ⚠️ 旧実装は /stable/quote にカンマ区切り複数 symbol を渡していたが、 /quote は
+        単一 symbol 仕様で複数渡すと 0 件を返す (2026-06-05 curl 確認)。 結果、 複数銘柄
+        fetch が常に空 → yfinance への silent fallback が発火し、 FMP Premium quote が
+        複数取得時に一切使われず yfinance の rate limit / 精度問題を踏んでいた。
+
+        本 method は batch_quote (/batch-quote) に委譲し、 旧 /quote schema 互換のため
+        `changesPercentage` (s 有) を `changePercentage` (s 無) から alias する。 これで
+        既存呼出側 (main.py /api/quotes・market-indices・portfolio・universe・analyst) は
+        無変更で動く。 他 field (price / change / previousClose / marketCap / symbol) は
+        両 schema で同名のため alias 不要。 単一 symbol ([sym]) でも /batch-quote で動作。
+        """
+        rows = await self.batch_quote(symbols)
+        for r in rows:
+            if isinstance(r, dict) and "changesPercentage" not in r:
+                cp = r.get("changePercentage")
+                if isinstance(cp, (int, float)):
+                    r["changesPercentage"] = cp
+        return rows
 
     async def batch_quote(self, symbols: list[str]) -> list[dict]:
         """複数銘柄の quote を 1 call で取得 (/stable/batch-quote)。
