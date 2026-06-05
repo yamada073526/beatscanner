@@ -344,8 +344,9 @@ class FMPClient:
         (recent は「直近 1000 件 or 直近 1 年の多い方」 を返し、 銀行は直近 1 年まるごと入るので
         8-K が 10-36 件取れる。 実測 JPM 2→24 / BAC 1→14 / GS 0→17、 historical files 不要)。
         本 method を直叩きする daily_digest 内部ランキング (article_pipeline/sources.py の
-        sec_8k_count) は §38 で非表示 + cap_term 支配で影響限定的なため未対応 (循環 import 回避に
-        EDGAR helper の shared module 化が要るため別タスク)。
+        sec_8k_count) も v173 後続で対応済: EDGAR helper を sec_edgar.py に切り出し (循環 import 回避)、
+        _fetch_event_signals が FMP limit 未満時のみ EDGAR で補完する (普通株は未発火 = 回帰なし)。
+        なお sec_8k_count は §38 で非表示 + cap_term 支配で影響限定的。
         """
         t = ticker.upper()
         today = _dt.date.today()

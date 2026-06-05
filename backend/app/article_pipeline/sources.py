@@ -25,6 +25,7 @@ import math
 
 from ..fmp_client import FMPClient, FMPError
 from ..rss_collector import collect_ticker_news
+from ..sec_edgar import _fetch_8k_from_sec_edgar
 
 log = logging.getLogger(__name__)
 
@@ -270,6 +271,23 @@ async def _fetch_event_signals(
                 return_exceptions=True,
             )
             sec_list = sec if isinstance(sec, list) else []
+            # v173 後続 (2026-06-06): 大型銀行 (JPM/BAC/GS 等) は 424B2 を超高頻度発行するため
+            # FMP /sec-filings-search の limit=1000 cap が直近数日で埋まり、 8-K が 0-2 件に
+            # 過少化する (実測 JPM 2 / BAC 1 / GS 0)。 FMP が limit(5) 未満しか返せない時のみ
+            # SEC EDGAR submissions.json で件数を補完 (実測 JPM 24 / BAC 14 / GS 17)。
+            # ⚠️ 普通株は FMP が 5 件返すため未発火 = 回帰なし。 この条件分岐が「pool 全銘柄で
+            # EDGAR を叩かない」 rate-limit 安全装置 (EDGAR は 10 req/s + submissions.json が
+            # 銀行で数 MB)。 main.py _fetch_8k_for_ticker:3676 の top-up grammar と同一。
+            # sec_8k_count は _compute_impact_score の内部ランキング専用で §38 により記事 UI 非表示。
+            if len(sec_list) < 5:
+                try:
+                    edgar_8k = await _fetch_8k_from_sec_edgar(sym, limit=5)
+                    if len(edgar_8k) > len(sec_list):
+                        sec_list = edgar_8k
+                except Exception as e:
+                    log.warning(
+                        "article_pipeline.sources: EDGAR 8-K top-up failed for %s: %s", sym, e
+                    )
             pr_list = pr if isinstance(pr, list) else []
             news_list = news if isinstance(news, list) else []
             return sym, {
