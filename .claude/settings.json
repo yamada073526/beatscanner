@@ -24,6 +24,12 @@
             "command": "bash .claude/hooks/session_start_worktree_cleanup.sh",
             "timeout": 5,
             "statusMessage": "古い worktree を確認中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/memory_health_check.sh",
+            "timeout": 8,
+            "statusMessage": "メモリ衛生を確認中..."
           }
         ]
       }

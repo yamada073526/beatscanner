@@ -200,6 +200,16 @@ handover v94 で「過去 30 日 $407 消費、 大半は dev session の Opus 4
 
 詳細: handover_2026-05-22_v94.md / Phase 2.10 cost reduction sub-agent verdict 参照
 
+## メモリ衛生 (定期棚卸し、 v173 確立)
+
+永続メモリ (`~/.claude/projects/.../memory/`) は放置で陳腐化・重複・index↔ファイル乖離 (orphan/dangling) が溜まり、 想起ノイズで出力品質を鈍らせる。 2 段で機械化:
+
+1. **軽量チェック (毎セッション・全自動)**: SessionStart hook [`memory_health_check.sh`](.claude/hooks/memory_health_check.sh) が MEMORY.md size / orphan / dangling / 進捗語 / 前回深掘りからの日数を冒頭表示。 ⚠️ が出たら段 2 を起動。
+2. **深掘り監査 (月次 or hook が flag 時)**: read-only サブエージェント (Sonnet) で重複/陳腐化/矛盾を棚卸し → **非破壊修正 (UPDATE/再index/MERGE) は即適用、 削除は必ず user 承認**。 完了後 `.last_deep_audit` を当日更新。
+
+- index は「1 行ポインタ (<200 字)」、 詳細は topic ファイル (index に内容を詰めない)。
+- 「メモリ棚卸し」 で段 2 起動。 rubric + 適用ポリシー + 削除 gating の SSOT: [`docs/references/memory_maintenance.md`](docs/references/memory_maintenance.md)。
+
 ## デザインルール
 - **トークン (色 / spacing / radius / elevation / motion)**: [`docs/references/design_system.md`](docs/references/design_system.md) が Single Source of Truth
 - **適用パターン (card layering / glow host / shadcn 統合 / staleness UI / 数値表示)**: [`docs/references/design_recipes.md`](docs/references/design_recipes.md)
