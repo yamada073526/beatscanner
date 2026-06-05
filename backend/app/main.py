@@ -3624,7 +3624,7 @@ async def _fetch_8k_for_ticker(
 ) -> list[dict]:
     """SEC 8-K filings を返す per-ticker helper (v71 Phase 3-c events lane)。
 
-    FMPClient.sec_filings → empty なら SEC EDGAR submissions.json fallback (handover v71 4 体合議推奨)。
+    FMPClient.sec_filings → limit 未満なら SEC EDGAR submissions.json で補完 (handover v71 4 体合議推奨)。
     12h cache。 返却: [{date, title, url}, ...] (新→古順)、 該当なしは []。
     """
     if not sym or len(sym) > 12:
@@ -3663,12 +3663,20 @@ async def _fetch_8k_for_ticker(
     except Exception as e:
         print(f"[FMP] sec_filings 8-K failed for {sym}: {e}")
 
-    # 第 2 候補 (fallback): SEC EDGAR submissions.json (無料、 認証不要、 10 req/s)
+    # 第 2 候補 (fallback / top-up): SEC EDGAR submissions.json (無料、 認証不要、 10 req/s)
     # 4 体合議 (handover v71 §11) で「FMP 空時の確実な fallback として推奨」 と確定。
-    if not out:
+    # v173 追記: 大型銀行 (JPM/BAC/GS 等) は 424B2 (債券目論見書) を超高頻度発行するため、
+    # FMP の per-symbol /sec-filings-search は limit=1000 cap が直近数日で埋まり 8-K が
+    # 0-2 件に過少化する (実測 JPM 2 / BAC 1 / GS 0)。 旧 `if not out` だと完全空の GS のみ
+    # 救済され、 1-2 件返す JPM/BAC が取り残された。 EDGAR submissions.json の recent は
+    # 「直近 1000 件 or 直近 1 年の多い方」 を返し、 銀行では直近 1 年まるごと (JPM 24823 件)
+    # が入るので 8-K が 10-36 件取れる (実測 JPM 24 / BAC 14 / GS 17、 historical files 不要)。
+    # FMP が limit 未満しか返せず、 かつ EDGAR が FMP より多く返した時のみ EDGAR を採用する
+    # (普通株は FMP が limit 件返すため EDGAR 未発火 = 回帰なし)。
+    if len(out) < limit:
         try:
             edgar_out = await _fetch_8k_from_sec_edgar(sym, limit=limit)
-            if edgar_out:
+            if len(edgar_out) > len(out):
                 out = edgar_out
         except Exception as e:
             print(f"[SEC EDGAR] fallback failed for {sym}: {e}")
@@ -8119,17 +8127,22 @@ async def fetch_news_article(body: dict) -> StreamingResponse:
 @app.get("/api/ir-links/{ticker}")
 async def ir_links(ticker: str, request: Request) -> dict:
     """決算発表・カンファレンスコール関連リンクを返す."""
-    client = FMPClient(api_key=_get_fmp_key(request))
+    fmp_key = _get_fmp_key(request)
+    client = FMPClient(api_key=fmp_key)
     t = ticker.upper()
 
-    # FMP からプレスリリース・SECファイリング・プロフィール を並列取得
+    # FMP からプレスリリース・SECファイリング・プロフィール を並列取得。
+    # 8-K は _fetch_8k_for_ticker 経由 (FMP → EDGAR top-up + 12h cache)。 大型銀行は
+    # FMP per-symbol /sec-filings-search が 424B2 で埋まり 8-K が 0-2 件に過少化するため
+    # (実測 JPM 2 / BAC 1 / GS 0)、 EDGAR submissions.json で補完する (v173、 helper docstring 参照)。
+    # 返却 schema は {title, date, url} で従来 (client.sec_filings 直叩き) と同一 = frontend 無変更。
     press: list[dict] = []
     filings: list[dict] = []
     website: str | None = None
     try:
         press_raw, filings_raw, profile = await asyncio.gather(
             client.press_releases(t, limit=5),
-            client.sec_filings(t, limit=5, filing_type="8-K"),
+            _fetch_8k_for_ticker(t, fmp_key, limit=5),
             client.profile(t),
             return_exceptions=True,
         )
@@ -8141,9 +8154,9 @@ async def ir_links(ticker: str, request: Request) -> dict:
             ]
         if isinstance(filings_raw, list):
             filings = [
-                {"title": f.get("type", "8-K"), "date": f.get("fillingDate", f.get("date", ""))[:10], "url": f.get("finalLink") or f.get("link", "")}
+                {"title": f.get("title", "8-K"), "date": str(f.get("date", ""))[:10], "url": f.get("url", "")}
                 for f in filings_raw
-                if f.get("finalLink") or f.get("link")
+                if f.get("url")
             ]
         if isinstance(profile, list) and profile:
             website = profile[0].get("website") or None
