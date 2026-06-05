@@ -1159,19 +1159,48 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
             <p className="text-sm text-[var(--text-muted)]">現時点でPASS銘柄はありません。</p>
           )}
 
-          {/* FAIL (collapsible) */}
-          {data.failing.length > 0 && (
-            <details className="group">
-              <summary className="cursor-pointer list-none text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition">
-                FAIL銘柄を表示 ({data.failing.length}件) ▼
-              </summary>
-              <div className="mt-2 grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
-                {data.failing.map((item) => (
-                  <ResultCard key={item.ticker} item={item} onSelect={onSelect} />
-                ))}
-              </div>
-            </details>
-          )}
+          {/* ⑦ 案D (北極星「投資家が毎日人力でやる『next PASS 候補探し』を代替」): あと 1 条件で PASS の
+              「惜しい」 銘柄 (4/5 達成) を FAIL collapsible から引き出して可視 section 化。 PASS が少ない日の
+              下部 void を「次に注目すべき銘柄」 で埋める。 zero fetch (既存 data.failing の conditions/passedCount)。
+              §38 中立 (「4/5 達成」 = 事実)、 色は neutral (amber=警告 専用ルール遵守、 near-miss は警告でない)。 */}
+          {(() => {
+            const passCnt = (it) => it.passedCount ?? it.conditions?.filter((c) => c.passed).length ?? 0;
+            const nearMiss = data.failing.filter((it) => passCnt(it) === 4);
+            const rest = data.failing.filter((it) => passCnt(it) !== 4);
+            return (
+              <>
+                {nearMiss.length > 0 && (
+                  <div data-testid="screener-near-miss">
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
+                      <h4 className="pane3-section-heading">あと1条件でPASS</h4>
+                      <span className="text-xs text-[var(--text-muted)]">5条件中 4 つ達成 — 次の PASS 候補（推奨ではありません）</span>
+                      <span className="ml-auto text-base font-bold tabular-nums text-[var(--text-secondary)]">
+                        {nearMiss.length}銘柄
+                      </span>
+                    </div>
+                    <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
+                      {nearMiss.map((item) => (
+                        <ResultCard key={item.ticker} item={item} onSelect={onSelect} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* FAIL (collapsible) — 4/5 以外 (≤3/5) を折りたたみ */}
+                {rest.length > 0 && (
+                  <details className="group">
+                    <summary className="cursor-pointer list-none text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition">
+                      その他の FAIL 銘柄を表示 ({rest.length}件) ▼
+                    </summary>
+                    <div className="mt-2 grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
+                      {rest.map((item) => (
+                        <ResultCard key={item.ticker} item={item} onSelect={onSelect} />
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </>
+            );
+          })()}
 
           {/* Skipped */}
           {data.skipped.length > 0 && (
