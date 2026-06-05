@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import InfoModal from './InfoModal.jsx';
 import Chip from './ui/Chip.jsx';
-import { BarChart3, Calendar, CalendarRange, EyeOff, Scale } from 'lucide-react';
+import { BarChart3, Calendar, CalendarRange, ChevronRight, EyeOff, Scale } from 'lucide-react';
 // v100 (handover §100点 UI/UX verdict C): GuidanceCard 達成率 / サプライズ % に count-up animation
 import { useCountUp } from '../hooks/useCountUp.js';
 
@@ -726,6 +726,9 @@ const renderGuidanceText = (text) => {
 
 export default function GuidanceCard({ guidance, isLoading = false, isSecLoading = false, nextEarningsDays = null }) {
   const [showModal, setShowModal] = useState(false);
+  // dogfood 2026-06-05: 「次期見通し」 折りたたみを native <details> (瞬時 toggle = カクカク) から
+  //   controlled + grid-rows 0fr→1fr アニメに変更するための open state。
+  const [secOpen, setSecOpen] = useState(false);
   // Phase 2.6 5-1: Tier M halo sweep (FiveConditionsCard と同一パターン)
   // IntersectionObserver で初入場時に 1 回限り halo-sweep animation を発火
   const cardRef = useRef(null);
@@ -917,7 +920,7 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
         // v99 dogfood feedback H (5 巡目): user 体感「下部分が二重ダブり」 真因確定。
         //   <details> 要素の border: 0.5px が Card の outer border と近接して二重に見えていた。
         //   修正: border 削除、 bg-subtle のみで differentiation 担保 (Stripe / Linear idiom)。
-        <details
+        <div
           className="mt-4"
           style={{
             background: 'var(--bg-subtle)',
@@ -925,45 +928,74 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
             padding: 'var(--space-3, 12px) var(--space-4, 16px)',
           }}
         >
-          <summary
+          {/* dogfood 2026-06-05: native <details> は open/close が瞬時 toggle でカクカク →
+              controlled button + grid-rows 0fr→1fr の smooth animation に置換。 */}
+          <button
+            type="button"
+            onClick={() => setSecOpen((v) => !v)}
+            aria-expanded={secOpen}
+            data-testid="sec-guidance-summary"
             style={{
               cursor: 'pointer',
-              listStyle: 'none',
+              width: '100%',
+              background: 'none',
+              border: 'none',
+              padding: 0,
               display: 'flex',
               alignItems: 'center',
               gap: 'var(--space-2, 8px)',
               userSelect: 'none',
+              textAlign: 'left',
             }}
-            data-testid="sec-guidance-summary"
           >
             <CalendarRange size={13} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
             <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
               次期見通し
             </span>
             {/* v150 B-4 bug1: 出典を「SEC 文書由来」 固定でなく実 source (sec_guidance_source) で表示。
-                FMP アナリスト予想 fallback 等を SEC と誤表示する Trust Cliff を解消 (6体合議 qa/frontend 指摘)。
-                raw hex rgb(96,165,250) → design token (elevation_scale 準拠)。 */}
+                FMP アナリスト予想 fallback 等を SEC と誤表示する Trust Cliff を解消 (6体合議 qa/frontend 指摘)。 */}
             {sec_guidance_source && (
               <span className="text-[10px]" style={{ color: 'var(--color-accent)' }}>{sec_guidance_source}</span>
             )}
-            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
-              展開で全文 ›
+            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              {secOpen ? '閉じる' : '展開で全文'}
+              <ChevronRight
+                size={13}
+                strokeWidth={2}
+                aria-hidden="true"
+                style={{
+                  transition: 'transform 0.3s var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1))',
+                  transform: secOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                }}
+              />
             </span>
-          </summary>
+          </button>
+          {/* grid-rows 0fr→1fr で smooth expand/collapse。 中間 div overflow:hidden で clip、
+              内側に従来の maxHeight:280 + scroll を維持 (長文ガイダンス対応)。 */}
           <div
-            className="text-sm leading-relaxed"
             style={{
-              color: 'var(--text-secondary)',
-              marginTop: 'var(--space-3, 12px)',
-              maxHeight: 280,
-              overflowY: 'auto',
+              display: 'grid',
+              gridTemplateRows: secOpen ? '1fr' : '0fr',
+              transition: 'grid-template-rows 0.32s var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1))',
             }}
           >
-            <ul style={{ paddingLeft: '0', margin: '0' }}>
-              {renderGuidanceText(sec_guidance_text)}
-            </ul>
+            <div style={{ overflow: 'hidden' }}>
+              <div
+                className="text-sm leading-relaxed"
+                style={{
+                  color: 'var(--text-secondary)',
+                  paddingTop: 'var(--space-3, 12px)',
+                  maxHeight: 280,
+                  overflowY: 'auto',
+                }}
+              >
+                <ul style={{ paddingLeft: '0', margin: '0' }}>
+                  {renderGuidanceText(sec_guidance_text)}
+                </ul>
+              </div>
+            </div>
           </div>
-        </details>
+        </div>
       ) : null}
     </section>
     </div>

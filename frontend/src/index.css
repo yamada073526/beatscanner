@@ -7035,21 +7035,21 @@ button.ds-chip[data-pressed="true"]:hover {
   width: 1400px;
   height: 720px;
   transform: translate(-50%, -50%);
-  /* ③-a v4 (user dogfood「言われると気づくレベル、もう少し強く」): base 明度 0.22→0.30 + radial 拡大で
-     可視領域を広げ、 さらに「気づく」 強度へ。 */
-  background: radial-gradient(ellipse, rgba(56, 189, 248, 0.30) 0%, transparent 64%);
-  -webkit-mask-image: radial-gradient(ellipse, black 30%, transparent 64%);
-          mask-image: radial-gradient(ellipse, black 30%, transparent 64%);
+  /* ③-a v5 (user dogfood「操作止めてじっと見てようやく分かる、もっと強く」): base 明度 0.30→0.38。
+     ⚠️ ambient は本質的に subtle (Aman 節度) + 下方に RS ランキングが乗り一部隠れるため、 強度で勝負。 */
+  background: radial-gradient(ellipse, rgba(56, 189, 248, 0.38) 0%, transparent 64%);
+  -webkit-mask-image: radial-gradient(ellipse, black 32%, transparent 64%);
+          mask-image: radial-gradient(ellipse, black 32%, transparent 64%);
   pointer-events: none;
   z-index: 0;
-  /* ③-a v4: 周期 5s→4s + 振幅 (opacity 0.32-1.0 / scale 1.16) で明滅をさらに体感可能に。 */
-  animation: screenerAmbientBreathe 4s ease-in-out infinite;
+  /* ③-a v5: 周期 4s→3.5s + 振幅 (opacity 0.25-1.0 / scale 1.20) で明滅をさらに強く。 */
+  animation: screenerAmbientBreathe 3.5s ease-in-out infinite;
 }
 .screener-pane-ambient > * { position: relative; z-index: 1; }
 @keyframes screenerAmbientBreathe {
-  /* ③-a v4: opacity 0.4/1.0→0.32/1.0 (swing 拡大)、 scale 1.13→1.16。 transform/opacity のみ = CLS 0。 */
-  0%, 100% { opacity: 0.32; transform: translate(-50%, -50%) scale(1); }
-  50%      { opacity: 1;   transform: translate(-50%, -50%) scale(1.16); }
+  /* ③-a v5: opacity 0.32/1.0→0.25/1.0 (swing 拡大)、 scale 1.16→1.20。 transform/opacity のみ = CLS 0。 */
+  0%, 100% { opacity: 0.25; transform: translate(-50%, -50%) scale(1); }
+  50%      { opacity: 1;    transform: translate(-50%, -50%) scale(1.20); }
 }
 @media (prefers-reduced-motion: reduce) {
   .screener-pane-ambient::before { animation: none; }
