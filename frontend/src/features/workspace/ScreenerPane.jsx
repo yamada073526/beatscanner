@@ -175,13 +175,17 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
           : '1px solid var(--border)',
         // inline radius (8px) が tier-m-glow class の 16px に勝つ。 halo ::after は border-radius:inherit で 8px 追従。
         borderRadius: 'var(--radius-md, 8px)',
-        background: 'var(--bg-card)',
+        // ③-b polish (user dogfood「Pane3 と同じく中身が白みがかる発光感を」): base bg は CSS
+        //   (.screener-pane-ambient .tier-m-glow) に移譲し、 :hover で background-color を lighten 可能に
+        //   (inline bg だと :hover の bg 変化を潰すため)。
         // 案1: active 時のみ accent ring を inline 指定。 非 active は undefined にして
         //   tier-m-glow[data-halo-fired] の ambient glow (class) を効かせる (inline:none だと class を潰すため)。
         boxShadow: active
           ? '0 0 0 2px color-mix(in srgb, var(--color-accent) 25%, transparent)'
           : undefined,
-        transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
+        // ③-b polish: 「一瞬で光量マックス/カクカク」 解消 → transform(lift) + bg を 0.4s ease-standard で
+        //   ゆっくり (Pane3 .panel-card:hover の「ふわっと」 に揃える)。 border/box-shadow も同 timing。
+        transition: 'transform 0.4s var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1)), border-color 0.3s ease, box-shadow 0.4s var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1)), background-color 0.3s ease',
       }}
     >
       {/* A-1: 見出しに格 — 連番 eyebrow + 18px/fw500 見出し + gold hairline。 A-3 stagger は heading block 単位。 */}
@@ -316,8 +320,10 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
           data-testid={`${testId}-results`}
           style={
             columns
-              // full-width 版 (相対強度ランキング): void を埋めるため auto-fill 多列 grid。 row 順 (rank 1,2,3 …) で flow。
-              ? { listStyle: 'none', margin: 0, padding: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 'var(--space-1, 4px) var(--space-3, 12px)' }
+              // full-width 版 (相対強度ランキング): user dogfood「横並びが違和感、上の section と同じ縦並びに」
+              //   → column-flow + 5 行固定 = rank 1-5 が縦に積まれた列を 3 つ横に並べる (各列が上の section と同じ縦リスト)。
+              //   row 順 (1,2,3 横) でなく column 順 (1,2,3,4,5 縦→次列) で読める。
+              ? { listStyle: 'none', margin: 0, padding: 0, display: 'grid', gridTemplateRows: 'repeat(5, auto)', gridAutoFlow: 'column', gridAutoColumns: 'minmax(0, 1fr)', gap: 'var(--space-1, 4px) var(--space-4, 16px)' }
               : { listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-1, 4px)' }
           }
         >

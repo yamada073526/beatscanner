@@ -7032,25 +7032,24 @@ button.ds-chip[data-pressed="true"]:hover {
      これで「明滅が見える」 + 「空き spaceに atmosphere が宿る」 を両取り。 */
   top: 42%;
   left: 50%;
-  width: 1200px;
-  height: 640px;
+  width: 1400px;
+  height: 720px;
   transform: translate(-50%, -50%);
-  /* ③-a v3: base 明度 0.16→0.22 + mask peak 帯 20%→26% に拡げ、 lit area と輝度を上げる。 */
-  background: radial-gradient(ellipse, rgba(56, 189, 248, 0.22) 0%, transparent 62%);
-  -webkit-mask-image: radial-gradient(ellipse, black 26%, transparent 62%);
-          mask-image: radial-gradient(ellipse, black 26%, transparent 62%);
+  /* ③-a v4 (user dogfood「言われると気づくレベル、もう少し強く」): base 明度 0.22→0.30 + radial 拡大で
+     可視領域を広げ、 さらに「気づく」 強度へ。 */
+  background: radial-gradient(ellipse, rgba(56, 189, 248, 0.30) 0%, transparent 64%);
+  -webkit-mask-image: radial-gradient(ellipse, black 30%, transparent 64%);
+          mask-image: radial-gradient(ellipse, black 30%, transparent 64%);
   pointer-events: none;
   z-index: 0;
-  /* ③-a v3 (user dogfood「もっと発光を強めて間隔を短く」): 周期 8s→5s にさらに短縮。
-     base 明度 (0.22) + 振幅 (opacity 0.4-1.0 / scale 1.13) + 下方配置と合わせ「はっきり明滅する」 強度に。 */
-  animation: screenerAmbientBreathe 5s ease-in-out infinite;
+  /* ③-a v4: 周期 5s→4s + 振幅 (opacity 0.32-1.0 / scale 1.16) で明滅をさらに体感可能に。 */
+  animation: screenerAmbientBreathe 4s ease-in-out infinite;
 }
 .screener-pane-ambient > * { position: relative; z-index: 1; }
 @keyframes screenerAmbientBreathe {
-  /* ③-a v3: opacity 0.45/1.0→0.4/1.0 (trough をさらに下げ swing 拡大)、 scale 1.10→1.13 で size pulse を
-     明確に。 transform/opacity のみ = CLS 0 (reflow しない)。 */
-  0%, 100% { opacity: 0.4; transform: translate(-50%, -50%) scale(1); }
-  50%      { opacity: 1;   transform: translate(-50%, -50%) scale(1.13); }
+  /* ③-a v4: opacity 0.4/1.0→0.32/1.0 (swing 拡大)、 scale 1.13→1.16。 transform/opacity のみ = CLS 0。 */
+  0%, 100% { opacity: 0.32; transform: translate(-50%, -50%) scale(1); }
+  50%      { opacity: 1;   transform: translate(-50%, -50%) scale(1.16); }
 }
 @media (prefers-reduced-motion: reduce) {
   .screener-pane-ambient::before { animation: none; }
@@ -10022,20 +10021,29 @@ button.ds-chip.hero-watch-add:hover svg {
    のままで inset ring (box-shadow) が「枠が光る」 を担う ([[glow_elevation_postmortem]] v55 inline-border 回避、
    fired ambient と同 idiom)。 tier-m-glow は is-arriving 非対象なので compound 4-set 不要 (design_recipes §C-2)。
    inline transition (border-color/box-shadow 0.3s ease) が glow fade を担当。 raw hex/shadow なし、 overflow:visible 維持。 */
+/* ③-b v4: base bg を inline から CSS に移譲 (:hover で bg-lighten を効かせるため、 inline bg は :hover を潰す)。 */
+.screener-pane-ambient .tier-m-glow { background: var(--bg-card); }
 @media (hover: hover) and (pointer: fine) {
-  /* ③-b v3 (user dogfood「もっと強く、 Pane3 の hover 発光をそのまま流用してもいいのでは」):
-     inset-only を Pane3 .panel-card:hover と同じ「外側 halo (0 0 22-28px) + drop + outer ring 2px」 に
-     置換 = 「カードが発光する」 体感を Pane3 と統一。 box-shadow 値は elevation_scale ALLOWED-SHADOW
-     登録済 (Hover 不在 / bs-panel-surface-card 用 whitelist 行) を流用 = design-system-check 適合。
-     ★lift (translateY) は付けない: screener section card は内部に hover する row を含むため、 card lift と
-     row lift が compound すると jumpy。 glow のみで「発光」 を担う。 scope は screener 限定維持。 */
+  /* ③-b v4 (user dogfood「一瞬で光量マックス/カクカク。 Pane3 は ふわっと上がる + 中身が白む発光感」):
+     Pane3 .panel-card:hover の 3 要素を screener card に揃える —
+       ① ゆっくり: transition を inline で 0.4s ease-standard に変更済 (一瞬マックス解消)。
+       ② ふわっと: translateY(-3px) で lift。
+       ③ 発光感: background-color を cyan-tint lighten = 「中身が灯る」。
+     box-shadow は panel-card 級の外側 halo (whitelist 値)。 scope は screener 限定維持。 */
   .screener-pane-ambient .tier-m-glow:hover {
+    transform: translateY(-3px);
+    background-color: color-mix(in srgb, var(--color-accent) 6%, var(--bg-card));
     box-shadow: 0 0 22px rgba(56, 189, 248, 0.26), 0 10px 28px rgba(56, 189, 248, 0.18), 0 0 0 2px rgba(56, 189, 248, 0.55);
   }
-  /* dark: 暗背景で埋もれないよう強化 (Pane3 .panel-card:hover dark と同 whitelist 値) */
+  /* dark: 暗背景で埋もれないよう bg-lighten + glow を強化 (Pane3 .panel-card:hover dark と同系) */
   [data-theme="dark"] .screener-pane-ambient .tier-m-glow:hover {
+    background-color: color-mix(in srgb, var(--color-accent) 10%, var(--bg-card));
     box-shadow: 0 0 28px rgba(56, 189, 248, 0.34), 0 12px 32px rgba(56, 189, 248, 0.22), 0 0 0 2px rgba(99, 179, 237, 0.75);
   }
+}
+/* reduced-motion: lift を無効化 (発光/bg は残す) */
+@media (prefers-reduced-motion: reduce) {
+  .screener-pane-ambient .tier-m-glow:hover { transform: none; }
 }
 
 /* ── Tier L: tier-l-glow (Library section — NewsPanel / IRLinksPanel) ──────
