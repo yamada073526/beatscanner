@@ -6013,7 +6013,12 @@ async def _fetch_eps_data(ticker: str, fmp_key: str) -> dict:
 
     # v138.6 R2: limit=1 → limit=8 (未来 earnings call で actual=null になる pattern 回避用)
     surprise_task = asyncio.create_task(client.earnings_surprises(ticker, limit=8))
-    est_task = asyncio.create_task(client.analyst_estimates(ticker, period="quarter", limit=12))
+    # v169 ⑥ period bug fix: FMP /stable/analyst-estimates は date 降順 (最も遠い未来が先頭) で返すため、
+    #   limit=12 だと META/TSLA 等 long-horizon 銘柄で near-term (2026-2027) が truncate され、
+    #   forward outlook が「来期」 に 2028 (2 年後) を拾う Trust Cliff bug が発生していた。
+    #   limit=40 で過去〜near-term〜遠未来を全カバー → _compute_forward_outlook の「最も近い未来」 選択が正しく機能。
+    #   (META 実測: 遠未来 quarter は 2030 まで、 near-term は降順 position ~17 → limit=40 で確実に内包)
+    est_task = asyncio.create_task(client.analyst_estimates(ticker, period="quarter", limit=40))
     income_task = asyncio.create_task(client.income_statement(ticker, limit=1, period="quarter"))
 
     surprises: list[dict] = []
@@ -6514,6 +6519,12 @@ def _compute_forward_outlook(
         return None
     future.sort(key=lambda x: x[0])
     next_d, next_e = future[0]
+
+    # v169 ⑥ defense-in-depth: 「来期」 が today から 370 日超 = near-term estimate 欠落の兆候
+    #   (上流 limit=40 fix で通常起こらないが、 FMP データ異常時に 2028 等の誤期を表示しない最終 guard)。
+    #   全米国上場企業は四半期報告のため正しい来期は常に today+~150 日以内、 370 日は安全な閾値。
+    if (next_d - today).days > 370:
+        return None
 
     consensus_eps = _safe_eps_float(_pick(next_e, "estimatedEpsAvg", "epsAvg"))
     consensus_rev = _safe_eps_float(_pick(next_e, "estimatedRevenueAvg", "revenueAvg"))
