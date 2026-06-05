@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 
 from ..fmp_client import FMPClient, FMPError
 from ..rss_collector import collect_ticker_news
@@ -125,16 +126,39 @@ async def _select_digest_candidates(
         return []
 
     healthy = [q for q in quotes if isinstance(q, dict) and _is_healthy_gainer(q)]
-    # 健全銘柄の中で急騰率 降順 (= 最も話題性が高い順)
-    healthy.sort(key=lambda q: (q.get("changePercentage") or 0), reverse=True)
+
+    ranking = "急騰率"
+    if _USE_EVENT_IMPACT_RANKING and healthy:
+        # 健全銘柄にイベント信号を付与し、 市場インパクトスコア降順に並べ替え。
+        # イベント fetch が全滅しても score は cap/news/change で算出され digest は止まらない
+        # (= Phase 0 の急騰率順に近い degrade)。
+        healthy_syms = [(q.get("symbol") or "").upper() for q in healthy if q.get("symbol")]
+        try:
+            signals = await _fetch_event_signals(client, healthy_syms)
+        except Exception as e:
+            log.warning(
+                "article_pipeline.sources: event signals 取得失敗、 急騰率順に degrade: %s", e
+            )
+            signals = {}
+        healthy.sort(
+            key=lambda q: _compute_impact_score(
+                q, signals.get((q.get("symbol") or "").upper())
+            ),
+            reverse=True,
+        )
+        ranking = "市場インパクト"
+    else:
+        # Phase 0 動作: 急騰率 降順 (feature flag off、 または健全 0 件)
+        healthy.sort(key=lambda q: (q.get("changePercentage") or 0), reverse=True)
+
     selected = [
         (q.get("symbol") or "").upper() for q in healthy[:max_tickers] if q.get("symbol")
     ]
 
     log.info(
         "article_pipeline.sources: digest candidates %d 件 "
-        "(gainers pool %d → healthy %d → top %d)",
-        len(selected), len(pool_syms), len(healthy), max_tickers,
+        "(gainers pool %d → healthy %d → top %d、 ranking=%s)",
+        len(selected), len(pool_syms), len(healthy), max_tickers, ranking,
     )
     return selected
 
@@ -265,6 +289,50 @@ async def _fetch_event_signals(
         len(signals), len(capped),
     )
     return signals
+
+
+# ── WS1 Sprint 2: 市場インパクトスコア (Python 物理層、 定数化) ────────────────
+# daily_digest 選別を急騰率順 → 「市場インパクト (大型 × 実イベント × 開示活発)」 順へ。
+# 急騰率は 1 シグナルに格下げ (係数小)。 全て Python 計算、 LLM 不使用。
+# スコアは内部選別用で記事 UI には出さない (§38、 「期待度ランキング」 化を回避)。
+# 係数は実データ dogfood で調整可。 feature flag で急騰率順に即 revert。
+_USE_EVENT_IMPACT_RANKING = True   # False で Phase 0 (急騰率順) に即 revert
+
+_W_CAP = 1.0        # log10(marketCap): $1B=9 / $10B=10 / $100B=11 / $1T=12
+_W_SEC_8K = 0.3     # 8-K 開示 1 件あたり (cap で頭打ち)
+_SEC_8K_CAP = 5     # 8-K 件数の寄与上限
+_W_NEWS = 0.5       # log1p(news_count): 10 件 ≈ +1.2
+_W_CHANGE = 1.0     # |change_pct|/100: +100%=1.0 (大型 cap_term 9-12 より小 = 格下げ)
+# イベント種別重み (_classify_event_type の出力 key、 大型増資/M&A/IPO申請/ガイダンス)。
+_EVENT_TYPE_WEIGHT: dict[str, float] = {
+    "ma": 5.0,        # 大型 M&A = 最大インパクト
+    "ipo": 4.0,       # IPO 申請
+    "offering": 3.0,  # 公募増資
+    "guidance": 2.0,  # ガイダンス改定
+}
+
+
+def _compute_impact_score(quote: dict, signals: dict | None) -> float:
+    """市場インパクトスコアを算出 (Python 物理層、 LLM 不使用).
+
+    大型 (時価総額) × 実イベント (増資/M&A/IPO/ガイダンス) × 開示活発 (8-K/news) を
+    高評価し、 急騰率は格下げ。 戻り値は内部選別用 float (記事 UI に出さない、 §38)。
+    signals は _fetch_event_signals の 1 銘柄分 (None 可、 その場合イベント寄与 0)。
+    """
+    sig = signals or {}
+    market_cap = quote.get("marketCap") or 0
+    change_pct = quote.get("changePercentage") or 0
+    event_type = sig.get("latest_event_type")
+    sec_8k = sig.get("sec_8k_count") or 0
+    news = sig.get("news_count") or 0
+
+    cap_term = _W_CAP * math.log10(max(float(market_cap), 1.0))
+    event_term = _EVENT_TYPE_WEIGHT.get(event_type, 0.0)
+    sec_term = _W_SEC_8K * min(sec_8k, _SEC_8K_CAP)
+    news_term = _W_NEWS * math.log1p(max(news, 0))
+    change_term = _W_CHANGE * (abs(change_pct) / 100.0)
+
+    return cap_term + event_term + sec_term + news_term + change_term
 
 
 def _map_rss_item_to_raw_source(item: dict) -> dict:
