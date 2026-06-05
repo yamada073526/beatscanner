@@ -350,7 +350,14 @@ def _compute_impact_score(quote: dict, signals: dict | None) -> float:
     event_term = _EVENT_TYPE_WEIGHT.get(event_type, 0.0)
     sec_term = _W_SEC_8K * min(sec_8k, _SEC_8K_CAP)
     news_term = _W_NEWS * math.log1p(max(news, 0))
-    change_term = _W_CHANGE * (abs(change_pct) / 100.0)
+    # change_term: 通常は絶対値 (急騰の話題性を加点)。 ただし公募増資 (offering) は
+    # 希薄化・需給悪化で短期下落要因のことが多いため、 実符号で扱う (下落なら減点)。
+    # 増資で下落した銘柄を「市場インパクト上位」 に押し上げない安全装置 (multi-review
+    # 金融 C-1)。 将来 pool に losers が入った時に特に効く。 増資でも上昇時は加点のまま。
+    if event_type == "offering":
+        change_term = _W_CHANGE * (change_pct / 100.0)
+    else:
+        change_term = _W_CHANGE * (abs(change_pct) / 100.0)
 
     return cap_term + event_term + sec_term + news_term + change_term
 
