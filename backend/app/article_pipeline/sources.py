@@ -256,14 +256,17 @@ async def _fetch_event_signals(
 
     async def _one(sym: str) -> tuple[str, dict]:
         async with sem:
-            # ⚠️ fmp_client.sec_filings/press_releases/stock_news は FMP stable で 404
-            # (v3 path のまま未更新、 2026-06-06 確認。 batch_quotes と同じ移行漏れ)。
-            # 正しい stable path を直接 _get で叩く。 本 SPEC §6 で fmp_client は非改変
-            # (method の path 修正は別タスク)。 news 系は symbols (複数形) param に注意。
+            # v173 (2026-06-06): fmp_client の 3 method を stable path へ移行修正済のため
+            # public method に差し替え (旧 SPEC §6 の _get 直叩き迂回を解消)。
+            # ⚠️ 旧迂回の client._get("/sec-filings-8k", {"symbol": ...}) は symbol param を
+            # 無視する市場全体 feed (symbol=AAPL でも他社 8-K) で、 sec_8k_count が全銘柄
+            # ほぼ一定 = ランキングに効かない死信号だった。 sec_filings は per-symbol
+            # /sec-filings-search/symbol + 8-K filter に修正済なので、 これで per-ticker の
+            # 実 8-K 件数が入り「8-K 開示活発を高評価」 が設計通り機能する。
             sec, pr, news = await asyncio.gather(
-                client._get("/sec-filings-8k", {"symbol": sym, "limit": 5}),
-                client._get("/news/press-releases", {"symbols": sym, "limit": 5}),
-                client._get("/news/stock", {"symbols": sym, "limit": 10}),
+                client.sec_filings(sym, limit=5, filing_type="8-K"),
+                client.press_releases(sym, limit=5),
+                client.stock_news(sym, limit=10),
                 return_exceptions=True,
             )
             sec_list = sec if isinstance(sec, list) else []

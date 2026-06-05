@@ -167,13 +167,15 @@ export default function IRLinksPanel({ ticker, hideHeading = false }) {
         <div className="grid gap-5 md:grid-cols-2">
           {/* 左列: 決算発表 */}
           <div className="space-y-4 md:pr-6">
-            {/* 最新プレスリリース (FMP動的データ) — feedback_data_completeness_guard.md 3 段階分岐 UI */}
+            {/* 銘柄関連 PR (FMP動的データ) — feedback_data_completeness_guard.md 3 段階分岐 UI
+                v173: FMP /news/press-releases は「銘柄に言及した PR feed」(自社公式 PR 限定でない)
+                ため、 公式 PR を騙らないよう「銘柄関連 PR」表記に (mention ベースを明示) */}
             {pressReleases.length > 0 ? (
-              <Section title="最新プレスリリース" icon={<FileText size={14} strokeWidth={1.5} />}>
+              <Section title="銘柄関連 PR" icon={<FileText size={14} strokeWidth={1.5} />}>
                 {pressReleases.map((pr, i) => (
                   <LinkItem
                     key={i}
-                    label={pr.title || `プレスリリース ${pr.date}`}
+                    label={pr.title || `銘柄関連 PR ${pr.date}`}
                     url={pr.url}
                     desc={pr.date}
                   />
@@ -196,7 +198,7 @@ export default function IRLinksPanel({ ticker, hideHeading = false }) {
                     ? 'IR データ取得失敗 (一時的)'
                     : data === null
                       ? 'IR リソース取得中...'
-                      : '公開プレスリリース 0 件'}
+                      : '銘柄関連 PR 0 件'}
                 </span>
               </div>
             )}

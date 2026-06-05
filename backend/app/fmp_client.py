@@ -1,6 +1,7 @@
 """Financial Modeling Prep API client (stable endpoints)."""
 from __future__ import annotations
 
+import datetime as _dt
 import os
 from typing import Any
 
@@ -220,10 +221,18 @@ class FMPClient:
         return []
 
     async def stock_news(self, ticker: str, limit: int = 20) -> list[dict]:
-        return await self._get(
-            "/stock-news",
-            {"symbol": ticker.upper(), "limit": limit},
+        """単一銘柄ニュース (/stable/news/stock)。
+
+        ⚠️ v173 stable 移行 (2026-06-06): 旧 /stock-news (v3) は 404。 後継は /news/stock で
+        param は symbols (複数形・カンマ区切り、 単一 symbol でも可)。 返却 schema は旧
+        /stock-news と同一 (title/url/publishedDate/site/text/image) のため呼出側
+        (_fetch_news_for_ticker / general_news) は無変更で動く。
+        """
+        data = await self._get(
+            "/news/stock",
+            {"symbols": ticker.upper(), "limit": limit},
         )
+        return data if isinstance(data, list) else []
 
     async def general_news(self, limit: int = 50) -> list[dict]:
         """マクロ・マーケット全体ニュース。
@@ -293,16 +302,79 @@ class FMPClient:
         return data if isinstance(data, list) else []
 
     async def press_releases(self, ticker: str, limit: int = 5) -> list[dict]:
-        return await self._get(
-            "/press-releases",
-            {"symbol": ticker.upper(), "limit": limit},
+        """企業プレスリリース (/stable/news/press-releases)。
+
+        ⚠️ v173 stable 移行 (2026-06-06): 旧 /press-releases (v3) は 404。 後継は
+        /news/press-releases で param は symbols (複数形)。 返却 schema は
+        symbol/publishedDate/publisher/title/image/site/text/url。 旧 /press-releases の
+        date field は新 schema に無く publishedDate に改名されたため、 呼出側 (ir_links が
+        p.get("date") を参照) 互換のため date を publishedDate から alias する。
+        """
+        data = await self._get(
+            "/news/press-releases",
+            {"symbols": ticker.upper(), "limit": limit},
         )
+        if not isinstance(data, list):
+            return []
+        for p in data:
+            if isinstance(p, dict) and "date" not in p and p.get("publishedDate"):
+                p["date"] = p["publishedDate"]
+        return data
 
     async def sec_filings(self, ticker: str, limit: int = 5, filing_type: str = "8-K") -> list[dict]:
-        return await self._get(
-            "/sec-filings",
-            {"symbol": ticker.upper(), "limit": limit, "type": filing_type},
-        )
+        """SEC filings を per-symbol で返す (/stable/sec-filings-search/symbol)。
+
+        ⚠️ v173 stable 移行 (2026-06-06): 旧 /sec-filings (v3) は 404。 task が後継候補とした
+        /sec-filings-8k は symbol param を無視する市場全体 feed (symbol=AAPL でも SUNE 等
+        他社 8-K が返る) のため per-ticker には使えない。 正しい per-symbol endpoint は
+        /sec-filings-search/symbol で、 以下 2 つの癖がある:
+          1. from/to が必須 (無いと "Query Error: Invalid or missing query parameter - from")
+          2. type/formType query は無視され全 form type (4/SD/10-Q/8-K...) が返るため、
+             formType==filing_type の filter は client 側で行う
+        返却 schema: symbol/cik/filingDate/acceptedDate/formType/link/finalLink (newest-first)。
+        旧呼出側 (_fetch_8k_for_ticker / ir_links) が参照する fillingDate(旧 typo・複 l) と
+        type(旧名) を、 新 filingDate(単 l)/formType から alias して main.py 無変更で動かす。
+        8-K は Form 4 等に埋もれるため 2 年窓 + limit=1000 で全件取得→filter→上位 limit 件。
+        ⚠️ 既知の限界 (v173 R3 dogfood): 大型銀行 (JPM/BAC/GS 等) は 424B2 (債券目論見書) を
+        超高頻度発行するため (JPM は 2 年で 827 件)、 limit=1000 cap が直近数日で埋まり 8-K が
+        0-2 件に過少化する (FMP に per-symbol+formType を同時指定できる endpoint が無く回避不能、
+        /sec-filings-8k は symbol 無視の市場 feed)。
+        対策 (v173 後続): 8-K を user に見せる経路 (ir_links / portfolio events lane) は main.py の
+        _fetch_8k_for_ticker 経由にし、 FMP が limit 未満の時 SEC EDGAR submissions.json で補完する
+        (recent は「直近 1000 件 or 直近 1 年の多い方」 を返し、 銀行は直近 1 年まるごと入るので
+        8-K が 10-36 件取れる。 実測 JPM 2→24 / BAC 1→14 / GS 0→17、 historical files 不要)。
+        本 method を直叩きする daily_digest 内部ランキング (article_pipeline/sources.py の
+        sec_8k_count) は §38 で非表示 + cap_term 支配で影響限定的なため未対応 (循環 import 回避に
+        EDGAR helper の shared module 化が要るため別タスク)。
+        """
+        t = ticker.upper()
+        today = _dt.date.today()
+        params: dict[str, Any] = {
+            "symbol": t,
+            "from": (today - _dt.timedelta(days=730)).isoformat(),
+            "to": (today + _dt.timedelta(days=2)).isoformat(),
+            "limit": 1000,
+        }
+        data = await self._get("/sec-filings-search/symbol", params)
+        if not isinstance(data, list):
+            return []
+        want = (filing_type or "").upper()
+        out: list[dict] = []
+        for f in data:
+            if not isinstance(f, dict):
+                continue
+            form = str(f.get("formType") or "")
+            if want and form.upper() != want:
+                continue
+            # 旧 schema 互換 alias (呼出側 main.py を無変更で動かす)
+            if "type" not in f:
+                f["type"] = f.get("formType")
+            if "fillingDate" not in f:
+                f["fillingDate"] = f.get("filingDate")
+            out.append(f)
+            if len(out) >= limit:
+                break
+        return out
 
     async def sp500_constituent(self) -> list[dict]:
         return await self._get("/sp500-constituent")
