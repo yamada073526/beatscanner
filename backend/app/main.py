@@ -1560,67 +1560,63 @@ async def get_holdings_meta(symbols: str, request: Request) -> dict:
     if len(syms) > 50:
         syms = syms[:50]
 
-    # Phase 1 v68 拡張: 過去 90 日 (last verdict) + 未来 120 日 (next earnings) を
-    # 別 query / 別 cache key で取得。FMP /earning_calendar は range が長いと空応答に
-    # なるケースがあるため (210 日 → empty 観測済)、最大 ~120 日に分割。
-    # 「保有 × じっちゃまプロトコル」差別化機能の Phase 1 cheap path
-    # (じっちゃま 5 条件は Phase 1.5、本 endpoint は EPS beat/miss verdict のみ提供)。
+    # Phase 1 v68 拡張: 過去 (last verdict) + 未来 (next earnings) を per-ticker で取得。
+    # ⚠️ v172 真因修正: FMP /earnings-calendar (range fetch) は ~4000 件/range の上限で、 決算ピーク期
+    #   (7-8月) は 30日 chunk でも単一 chunk が溢れ、 日付後半の銘柄 (NVDA 8/26 等) が欠落して
+    #   next_earnings_date=null 化していた。 → per-ticker /stable/earnings (earnings_surprises) に置換。
+    #   各 ticker は未来1+過去N件を返し universe-wide な件数上限と無関係なため欠落が原理的に起きない
+    #   (実測 2026-06-05: NVDA=2026-08-26 / AAPL=2026-07-30 / MSFT=2026-07-29 / CRWD=2026-09-01)。
+    #   「保有 × じっちゃまプロトコル」差別化機能 + B-Top1 (今後決算 × RS) の前提。
     today = _dt.date.today()
-    date_from_past = (today - _dt.timedelta(days=90)).isoformat()
     date_from = today.isoformat()
-    date_to = (today + _dt.timedelta(days=120)).isoformat()
-    range_key_future = f"{date_from}~{date_to}"
-    range_key_past = f"{date_from_past}~{date_from}"
 
     now = _time.monotonic()
     api_key = _get_fmp_key(request)
+    client = FMPClient(api_key=api_key)
 
-    async def _fetch_range(rkey: str, dfrom: str, dto: str) -> list[dict]:
-        cached_local = _EARNINGS_RANGE_CACHE.get(rkey)
-        if cached_local and now - cached_local["ts"] < _EARNINGS_RANGE_TTL:
-            return cached_local["data"]
+    async def _fetch_ticker_earnings(sym: str) -> tuple[str, list[dict]]:
+        # per-ticker 6h cache (key namespace "tkr:" で従来 range cache と分離、 warm hit ~0ms)。
+        ckey = f"tkr:{sym}"
+        cl = _EARNINGS_RANGE_CACHE.get(ckey)
+        if cl and now - cl["ts"] < _EARNINGS_RANGE_TTL:
+            return sym, cl["data"]
         try:
-            client = FMPClient(api_key=api_key)
-            data = await client.earning_calendar(dfrom, dto) or []
+            data = await client.earnings_surprises(sym, limit=12) or []
         except Exception:
             data = []
-        _EARNINGS_RANGE_CACHE[rkey] = {"data": data, "ts": now}
-        return data
+        _EARNINGS_RANGE_CACHE[ckey] = {"data": data, "ts": now}
+        return sym, data
 
-    rows_future, rows_past = await asyncio.gather(
-        _fetch_range(range_key_future, date_from, date_to),
-        _fetch_range(range_key_past,   date_from_past, date_from),
-    )
-    rows = rows_future + rows_past
+    ticker_results = await asyncio.gather(*[_fetch_ticker_earnings(s) for s in syms])
 
     # symbol → 直近未来 (next_earnings) + 直近過去 (last earnings + verdict)
     by_sym_next: dict[str, str] = {}
     by_sym_last: dict[str, dict] = {}  # {date, eps_actual, eps_estimated}
-    for r in rows:
-        if not isinstance(r, dict):
-            continue
-        sym = r.get("symbol")
-        d = r.get("date")
-        if not sym or not d or sym not in seen:
-            continue
-        try:
-            d_iso = str(d)[:10]
-            if d_iso >= date_from:
-                # 未来: 最も今日に近い 1 件
-                cur = by_sym_next.get(sym)
-                if cur is None or d_iso < cur:
-                    by_sym_next[sym] = d_iso
-            else:
-                # 過去: 最も今日に近い 1 件 (= 直近決算)
-                cur = by_sym_last.get(sym)
-                if cur is None or d_iso > cur.get("date", ""):
-                    by_sym_last[sym] = {
-                        "date": d_iso,
-                        "eps_actual": r.get("epsActual") or r.get("eps"),
-                        "eps_estimated": r.get("epsEstimated") or r.get("estimatedEps"),
-                    }
-        except Exception:
-            continue
+    for sym, ticker_rows in ticker_results:
+        for r in ticker_rows:
+            if not isinstance(r, dict):
+                continue
+            d = r.get("date")
+            if not d:
+                continue
+            try:
+                d_iso = str(d)[:10]
+                if d_iso >= date_from:
+                    # 未来: 最も今日に近い 1 件
+                    cur = by_sym_next.get(sym)
+                    if cur is None or d_iso < cur:
+                        by_sym_next[sym] = d_iso
+                else:
+                    # 過去: 最も今日に近い 1 件 (= 直近決算)
+                    cur = by_sym_last.get(sym)
+                    if cur is None or d_iso > cur.get("date", ""):
+                        by_sym_last[sym] = {
+                            "date": d_iso,
+                            "eps_actual": r.get("epsActual") or r.get("eps"),
+                            "eps_estimated": r.get("epsEstimated") or r.get("estimatedEps"),
+                        }
+            except Exception:
+                continue
 
     meta: dict[str, dict] = {}
     for s in syms:
