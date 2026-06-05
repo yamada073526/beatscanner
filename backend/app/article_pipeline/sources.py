@@ -139,6 +139,134 @@ async def _select_digest_candidates(
     return selected
 
 
+# ── WS1 Sprint 1: イベント信号フェッチ層 (Python 物理層、LLM 不使用) ───────────
+# 目的: 健全銘柄 pool に対し「市場インパクトの大きいイベント」(大型増資/M&A/IPO申請/
+# 主要 8-K) の信号を付与する。 急騰率% だけの選別を脱却し、 投資家が人力で見回る
+# 「注目イベント」 を AI で代替する (CLAUDE.md 原則4 = 人力の代替)。
+# 設計: FMP の sec_filings/press_releases/stock_news は全て symbol 必須 (市場横断
+# フィードは FMP に無い) のため pool-first。 fan-out を Semaphore で絞り、
+# return_exceptions で 1 銘柄の失敗を全体に波及させない。
+_EVENT_FETCH_SEMAPHORE = 4    # 同時 fetch 数 (fmp_client._get は semaphore/cache 無し)
+_EVENT_FETCH_POOL_CAP = 12    # イベント enrich する pool 上限 (×3 endpoint の fan-out 抑制)
+
+# 大型イベント検知キーワード (press_release / 8-K タイトルの静的 substring match)。
+# タイトルを小文字化して部分一致。 LLM は一切使わない (数値・分類は Python 物理層)。
+_EVENT_TYPE_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "ma": (
+        "merger", "to acquire", "acquires ", "acquisition of",
+        "definitive agreement", "to be acquired", "buyout", "takeover",
+    ),
+    "ipo": (
+        "initial public offering", "files for ipo", "prices ipo",
+        "s-1 registration", "files registration statement",
+    ),
+    "offering": (
+        "public offering", "prices public offering", "registered direct",
+        "private placement", "atm offering", "common stock offering",
+        "secondary offering", "convertible notes offering", "convertible senior notes",
+    ),
+    "guidance": (
+        "raises guidance", "lowers guidance", "updates guidance",
+        "preliminary results", "guidance update", "raises outlook", "cuts outlook",
+    ),
+}
+# 複数カテゴリ該当時、 市場インパクトの大きい順に 1 つ選ぶ優先度。
+_EVENT_TYPE_PRIORITY = ("ma", "ipo", "offering", "guidance")
+
+
+def _classify_event_type(pr_items: list | None, sec_items: list | None) -> str | None:
+    """press_release / 8-K のタイトルを静的キーワード辞書で分類 (LLM 不使用)。
+
+    複数該当時は _EVENT_TYPE_PRIORITY 順で最重要 1 つを返す。 該当なしは None。
+    8-K は title が無いことがあるため form type 文字列も対象に含める。
+    """
+    titles: list[str] = []
+    for it in (pr_items or []):
+        if isinstance(it, dict):
+            titles.append((it.get("title") or "").lower())
+    for it in (sec_items or []):
+        if isinstance(it, dict):
+            titles.append((it.get("title") or it.get("form") or "").lower())
+
+    matched: set[str] = set()
+    for t in titles:
+        if not t:
+            continue
+        for etype, kws in _EVENT_TYPE_KEYWORDS.items():
+            if any(kw in t for kw in kws):
+                matched.add(etype)
+
+    for etype in _EVENT_TYPE_PRIORITY:
+        if etype in matched:
+            return etype
+    return None
+
+
+async def _fetch_event_signals(
+    client: FMPClient, symbols: list[str]
+) -> dict[str, dict]:
+    """各銘柄のイベント信号 (8-K / press_release / news 件数 + 種別) を制限並列取得.
+
+    pool-first 設計 (symbol 必須 endpoint のため)。 fan-out は Semaphore で絞り、
+    return_exceptions で 1 銘柄の失敗を全体に波及させない。 取得失敗した信号は
+    0 / None 扱い (イベント不明 ≠ 重要でない) で、 銘柄は pool から落とさない。
+
+    Returns:
+        {symbol: {sec_8k_count, press_release_count, news_count, latest_event_type}}
+        全銘柄分。 全 fetch 失敗時も空 dict でなく各銘柄を 0 信号で返す。
+    """
+    capped = list(symbols)[:_EVENT_FETCH_POOL_CAP]
+    if not capped:
+        return {}
+
+    sem = asyncio.Semaphore(_EVENT_FETCH_SEMAPHORE)
+
+    async def _one(sym: str) -> tuple[str, dict]:
+        async with sem:
+            # ⚠️ fmp_client.sec_filings/press_releases/stock_news は FMP stable で 404
+            # (v3 path のまま未更新、 2026-06-06 確認。 batch_quotes と同じ移行漏れ)。
+            # 正しい stable path を直接 _get で叩く。 本 SPEC §6 で fmp_client は非改変
+            # (method の path 修正は別タスク)。 news 系は symbols (複数形) param に注意。
+            sec, pr, news = await asyncio.gather(
+                client._get("/sec-filings-8k", {"symbol": sym, "limit": 5}),
+                client._get("/news/press-releases", {"symbols": sym, "limit": 5}),
+                client._get("/news/stock", {"symbols": sym, "limit": 10}),
+                return_exceptions=True,
+            )
+            sec_list = sec if isinstance(sec, list) else []
+            pr_list = pr if isinstance(pr, list) else []
+            news_list = news if isinstance(news, list) else []
+            return sym, {
+                "sec_8k_count": len(sec_list),
+                "press_release_count": len(pr_list),
+                "news_count": len(news_list),
+                "latest_event_type": _classify_event_type(pr_list, sec_list),
+            }
+
+    results = await asyncio.gather(
+        *[_one(s) for s in capped], return_exceptions=True
+    )
+
+    signals: dict[str, dict] = {}
+    for r in results:
+        if isinstance(r, tuple) and len(r) == 2:
+            signals[r[0]] = r[1]
+    # fetch 自体が例外で落ちた銘柄は 0 信号で補完 (銘柄を消さない)
+    for sym in capped:
+        signals.setdefault(sym, {
+            "sec_8k_count": 0,
+            "press_release_count": 0,
+            "news_count": 0,
+            "latest_event_type": None,
+        })
+
+    log.info(
+        "article_pipeline.sources: event signals fetched for %d/%d symbols",
+        len(signals), len(capped),
+    )
+    return signals
+
+
 def _map_rss_item_to_raw_source(item: dict) -> dict:
     """rss_collector の item dict を article_pipeline の raw_sources schema にマップ."""
     source_type = item.get("source", "unknown")
