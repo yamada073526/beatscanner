@@ -1,5 +1,5 @@
 /**
- * ForwardOutlookSection.jsx — 前方視界 (来期コンセンサス YoY) v146
+ * ForwardOutlookSection.jsx — 前方視界 (来期コンセンサス YoY) v146 + ガイダンスサプライズ v172
  *
  * じっちゃまプロトコル条件4「来期コンセンサスが前年同期比を超えているか / 前方は視界良好か」を補う。
  * 「ガイダンス進捗 (直近=過去のバックミラー)」の直下に置き、過去 → 未来の視線誘導をする。
@@ -12,10 +12,18 @@
  *   - §5 免責文言を常時表示 + 出典 (FMP analyst-estimates) + アナリスト数を明示 (citation)。
  *   - coverage 欠落・near-zero・赤字ベースは backend で None 化済 → 「—」/ 注記で graceful。
  *
+ * 案B v172 ガイダンスサプライズ (会社ガイダンス vs consensus、 じっちゃま速報の主役 = 来期 EPS):
+ *   - 会社 8-K ガイダンス (q_eps/q_revenue) は SEC fetch (cold 5-15s) を含むため guidance/basic を律速しない。
+ *     → ticker 指定時に `?with_guidance=1` を **非ブロック lazy fetch** し、surprise 行を後追い描画。
+ *   - §38: above/inline/below を **色なし** ▲—▼ + 静的 dict (LLM narration ゼロ)。差分 % は出さない。
+ *   - 会社 guidance basis=GAAP は consensus(non-GAAP baseline) と基準ミスマッチで backend が unknown 抑止済。
+ *   - 金融セクターの売上比較は backend で抑止 (総収益 vs 純収益ミスマッチ、 v146 gate 流用)。
+ *
  * 独立 component (GuidanceCard 無改変、 発光系 card を新規追加しない = frontend verdict)。
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { fetchGuidanceSurprise } from '../api.js';
 
 // ── 数値フォーマッタ (Python backend の数値をそのまま表示、 再計算しない) ──
 function fmtMoney(v, currency = 'USD') {
@@ -81,7 +89,45 @@ function ForecastBars({ yearAgo, consensus, yearAgoLabel, consensusLabel }) {
   );
 }
 
-function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unreliable, turnaround, count }) {
+// ── 案B v172: 会社ガイダンスサプライズ行 (§38 色なし中立、 静的 dict、 LLM narration ゼロ) ──
+// 「上方修正/上振れ/強気/視界良好」 は NO-GO (A=vs consensus では会社は consensus を修正していない = 事実誤り)。
+const GUIDANCE_STATE_JP = {
+  above: { sym: '▲', label: '会社ガイダンスはコンセンサスを上回る水準' },
+  inline: { sym: '—', label: '会社ガイダンスはコンセンサスとおおむね同水準' },
+  below: { sym: '▼', label: '会社ガイダンスはコンセンサスを下回る水準' },
+};
+
+function GuidanceSurpriseRow({ state, companyLow, companyHigh, consensus, fmt, currency }) {
+  const meta = GUIDANCE_STATE_JP[state];
+  if (!meta) return null; // unknown / null / undefined (lazy fetch 未達 or 抑止) → 非表示
+  const hasRange =
+    companyLow != null && Number.isFinite(companyLow) && companyHigh != null && Number.isFinite(companyHigh);
+  const companyStr = hasRange
+    ? companyLow === companyHigh
+      ? fmt(companyLow, currency)
+      : `${fmt(companyLow, currency)}〜${fmt(companyHigh, currency)}`
+    : null;
+  const consensusStr = consensus != null && Number.isFinite(consensus) ? fmt(consensus, currency) : null;
+  return (
+    <div
+      data-testid="guidance-surprise-row"
+      style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--border)', display: 'flex', alignItems: 'baseline', gap: 6 }}
+    >
+      {/* ▲—▼ は方向記号のみ (色なし: neutral ink、 緑/赤/amber/cyan を将来予測に塗らない = §38) */}
+      <span aria-hidden style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{meta.sym}</span>
+      <span style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+        {meta.label}
+        {companyStr && consensusStr && (
+          <span style={{ color: 'var(--text-muted)', marginLeft: 5, fontVariantNumeric: 'tabular-nums' }}>
+            (会社 {companyStr} / 予想 {consensusStr})
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}
+
+function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unreliable, turnaround, count, guidanceState, companyLow, companyHigh }) {
   const fmt = isMoney ? fmtMoney : fmtEps;
   const hasConsensus = consensus != null && Number.isFinite(consensus);
   return (
@@ -111,6 +157,18 @@ function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unr
           consensusLabel={fmt(consensus, currency)}
         />
       )}
+      {/* 案B v172: 会社ガイダンスサプライズ (ForecastBars 直後、 独立行・破線 separator)。
+          guidanceState が above/inline/below の時のみ表示 (unknown/抑止/lazy 未達は GuidanceSurpriseRow が null) */}
+      {hasConsensus && (
+        <GuidanceSurpriseRow
+          state={guidanceState}
+          companyLow={companyLow}
+          companyHigh={companyHigh}
+          consensus={consensus}
+          fmt={fmt}
+          currency={currency}
+        />
+      )}
       {hasConsensus && Number.isFinite(count) && (
         <div style={{ marginTop: 4, fontSize: 9, color: 'var(--text-muted)' }}>アナリスト {count} 社平均</div>
       )}
@@ -122,14 +180,45 @@ function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unr
  * @param {object} props
  * @param {object|null} props.forward - guidance.forward (backend 計算済、 frontend 再計算しない)
  * @param {string} [props.currency]
+ * @param {string} [props.ticker] - 案B: 会社ガイダンスサプライズの lazy fetch 用 (未指定なら surprise 非表示)
  */
-export default function ForwardOutlookSection({ forward, currency = 'USD' }) {
+export default function ForwardOutlookSection({ forward, currency = 'USD', ticker }) {
+  // 案B v172: 会社ガイダンスサプライズ (with_guidance=1) を非ブロック lazy fetch。
+  //   forward (consensus) は即描画、 surprise 行は会社 8-K guidance 到着後に後追いで現れる。
+  const [surpriseNq, setSurpriseNq] = useState(null);
+  const periodEnd = forward?.next_q?.period_end_date;
+  useEffect(() => {
+    if (!ticker || !periodEnd) {
+      setSurpriseNq(null);
+      return;
+    }
+    let cancelled = false;
+    fetchGuidanceSurprise(ticker)
+      .then((g) => {
+        if (cancelled) return;
+        const nq = g?.forward?.next_q;
+        // period が一致する時のみ採用 (lazy fetch 中の ticker / 期 切替えによる stale 表示を防止)
+        if (nq && nq.period_end_date === periodEnd) setSurpriseNq(nq);
+        else setSurpriseNq(null);
+      })
+      .catch(() => {
+        if (!cancelled) setSurpriseNq(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ticker, periodEnd]);
+
   // static gate: backend が forward=null を返したら (コンセンサス取得不可) 何も描画しない。
   if (!forward || !forward.next_q) return null;
   const nq = forward.next_q;
   const period = nq.period_label || '来期';
   const countEps = nq.analyst_count_eps;
   const countRev = nq.analyst_count_revenue;
+  // 会社ガイダンスサプライズが 1 つでも出ている時のみ citation に SEC 8-K を追記 (出ない時は誤出典回避)
+  const hasGuidanceSurprise =
+    surpriseNq &&
+    (GUIDANCE_STATE_JP[surpriseNq.guidance_vs_consensus_eps] || GUIDANCE_STATE_JP[surpriseNq.guidance_vs_consensus_rev]);
 
   return (
     <section
@@ -168,6 +257,9 @@ export default function ForwardOutlookSection({ forward, currency = 'USD' }) {
         unreliable={nq.rev_compare_unreliable}
         turnaround={false}
         count={countRev}
+        guidanceState={surpriseNq?.guidance_vs_consensus_rev}
+        companyLow={surpriseNq?.company_q_rev_low}
+        companyHigh={surpriseNq?.company_q_rev_high}
       />
       <MetricBlock
         label="EPS"
@@ -179,12 +271,16 @@ export default function ForwardOutlookSection({ forward, currency = 'USD' }) {
         unreliable={false}
         turnaround={nq.eps_turnaround}
         count={countEps}
+        guidanceState={surpriseNq?.guidance_vs_consensus_eps}
+        companyLow={surpriseNq?.company_q_eps_low}
+        companyHigh={surpriseNq?.company_q_eps_high}
       />
 
       {/* 出典 (citation) + §5 免責 (常時表示・折りたたみ不可) */}
       <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)', display: 'grid', gap: 4 }}>
         <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>
           出典: {forward.source || 'FMP analyst-estimates'}
+          {hasGuidanceSurprise ? ' / 会社ガイダンス: SEC 8-K (EX-99.1)' : ''}
         </span>
         <span style={{ fontSize: 9, color: 'var(--text-muted)', lineHeight: 1.5 }}>
           ※来期予想はアナリスト各社の見通しの平均値であり、当社の予測ではありません。実績と乖離する場合があります。投資判断はご自身の責任で行ってください。

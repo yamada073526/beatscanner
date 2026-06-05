@@ -5384,11 +5384,11 @@ async def _fetch_sec_guidance_structured(ticker: str) -> dict | None:
             if len(raw_text) < 200:
                 continue
 
-            text_snippet = raw_text[:10000]
-
+            # extract_guidance 内で guidance section anchor を見て truncate するため full text を渡す
+            #   (旧 raw_text[:10000] は CRWD 等 long press release の guidance 数値 table を切っていた真因)。
             # 5. v138 Phase 2D: structured JSON 抽出 (prompt cache + tool use)
             from .visualizer.sec_guidance import extract_guidance
-            result = await extract_guidance(text_snippet, source_url=exhibit_url, source_type="8k")
+            result = await extract_guidance(raw_text, source_url=exhibit_url, source_type="8k")
             if result:
                 # 数値ガイダンスあり (NVDA 型) or high-conf「明確に記載なし」 → 8-K を採用して即返す
                 if not should_fallback_to_transcript(result):
@@ -6487,6 +6487,7 @@ def _compute_forward_outlook(
     last_reported_date: str | None,
     sector: str | None,
     industry: str | None,
+    company_guidance: dict | None = None,
 ) -> dict | None:
     """来期コンセンサス (EPS/売上) と前年同期実績との YoY を計算。 全て Python 数値層 (HG aggregator 分離準拠)。
 
@@ -6603,6 +6604,40 @@ def _compute_forward_outlook(
     if cnt_rev is not None and cnt_rev < MIN_ANALYSTS:
         rev_yoy = None
 
+    # ── 案B v172: 会社ガイダンス vs consensus サプライズ (Python 数値層、 §38 flag のみ) ──
+    # 会社 8-K guidance (q_eps/q_revenue) の mid と 来期 consensus を classify_guidance_vs_consensus
+    # (above/inline/below/unknown、 tolerance 3%) で比較。 ラベル文言は frontend 静的 dict で中立表示。
+    g_eps_label = "unknown"
+    g_rev_label = "unknown"
+    company_q_eps_low = company_q_eps_high = None
+    company_q_eps_basis = None
+    company_q_rev_low = company_q_rev_high = None
+    if company_guidance:
+        from .visualizer.calc import classify_guidance_vs_consensus
+        _cg_eps = company_guidance.get("q_eps")
+        if isinstance(_cg_eps, dict):
+            _el = _safe_eps_float(_cg_eps.get("low"))
+            _eh = _safe_eps_float(_cg_eps.get("high"))
+            _basis = _cg_eps.get("basis")
+            # consensus (FMP analyst-estimates) は通常 non-GAAP/adjusted baseline。 会社 guidance が
+            # GAAP 明示だと GAAP<non-GAAP で「下回る」 誤判定 → 基準ミスマッチ抑止 (revenue 銀行ガード横展開)。
+            if _el is not None and _eh is not None and _basis != "gaap":
+                company_q_eps_low, company_q_eps_high = _el, _eh
+                company_q_eps_basis = _basis
+                g_eps_label = classify_guidance_vs_consensus((_el + _eh) / 2, consensus_eps)
+        _cg_rev = company_guidance.get("q_revenue")
+        # 金融セクター (rev_unreliable) は来期売上比較を一律抑止 (総収益 vs 純収益ミスマッチ)。
+        if isinstance(_cg_rev, dict) and not rev_unreliable:
+            _rl = _safe_eps_float(_cg_rev.get("low_b"))
+            _rh = _safe_eps_float(_cg_rev.get("high_b"))
+            if _rl is not None and _rh is not None:
+                # 8-K revenue は B$ → consensus_rev は $ 絶対値、 *1e9 で単位を揃えて比較。
+                company_q_rev_low = _rl * 1e9
+                company_q_rev_high = _rh * 1e9
+                g_rev_label = classify_guidance_vs_consensus(
+                    (company_q_rev_low + company_q_rev_high) / 2, consensus_rev
+                )
+
     return {
         "next_q": {
             "period_label": period_label,
@@ -6618,11 +6653,21 @@ def _compute_forward_outlook(
             "year_ago_date": ya_target.date().isoformat(),
             "analyst_count_eps": cnt_eps,
             "analyst_count_revenue": cnt_rev,
+            # 案B v172: 会社ガイダンスサプライズ (above/inline/below/unknown、 §38 色なし中立表示)
+            "guidance_vs_consensus_eps": g_eps_label,
+            "guidance_vs_consensus_rev": g_rev_label,
+            "company_q_eps_low": company_q_eps_low,
+            "company_q_eps_high": company_q_eps_high,
+            "company_q_eps_basis": company_q_eps_basis,
+            "company_q_rev_low": company_q_rev_low,
+            "company_q_rev_high": company_q_rev_high,
         },
         # per-指標 namespace (Anthropic verdict: partial_failure で片方表示を許容)
         "sources": {
             "next_q_eps": "ok" if consensus_eps is not None else "empty",
             "next_q_rev": "ok" if consensus_rev is not None else "empty",
+            "guidance_eps": "ok" if g_eps_label != "unknown" else "empty",
+            "guidance_rev": "ok" if g_rev_label != "unknown" else "empty",
         },
         "source": "FMP analyst-estimates",
     }
@@ -6636,9 +6681,15 @@ _GUIDANCE_BASIC_CACHE: dict = {}  # ticker -> (ts, response dict)
 
 
 @app.get("/api/guidance/{ticker}/basic")
-async def guidance_basic(ticker: str, request: Request) -> dict:
-    """EPS・売上高のみ高速返却（SEC/Claude APIなし）."""
-    _gb_key = ticker.upper().strip()
+async def guidance_basic(ticker: str, request: Request, with_guidance: bool = False) -> dict:
+    """EPS・売上高のみ高速返却（SEC/Claude APIなし）。
+
+    with_guidance=True (案B lazy): 会社 8-K ガイダンス (q_eps/q_revenue) を追加 fetch し、 forward に
+    「会社ガイダンス vs consensus」 サプライズ flag を載せる。 SEC fetch (cold 5-15s) を含むため
+    prefetch では使わず、 ForwardOutlookSection mount 後に非ブロックで lazy fetch する設計
+    (Pane3 loading gate を律速しない)。 cache key は with_guidance で分離。
+    """
+    _gb_key = f"{ticker.upper().strip()}:g{int(with_guidance)}"
     _gb_now = _time.time()
     _gb_hit = _GUIDANCE_BASIC_CACHE.get(_gb_key)
     if _gb_hit and _gb_now - _gb_hit[0] < GUIDANCE_CACHE_TTL:
@@ -6647,13 +6698,20 @@ async def guidance_basic(ticker: str, request: Request) -> dict:
     try:
         # v146 前方視界: income_history (前年同期 revenue 照合用 limit=6) と sector/industry
         #   (売上ミスマッチガード用、 profile 24h cache 共有でほぼ無コスト) を並列追加 fetch。
-        eps_result, rev_result, income_hist_result, si_result = await asyncio.gather(
+        # 案B: with_guidance 時のみ会社 8-K ガイダンスを並列 fetch (6h cache、 visualize endpoint と共有)。
+        _gb_tasks = [
             _fetch_eps_data(ticker, fmp_key),
             _fetch_revenue_data(ticker),
             _fetch_income_history(ticker, fmp_key),
             _fetch_sector_industry(ticker, fmp_key),
-            return_exceptions=True,
-        )
+        ]
+        if with_guidance:
+            _gb_tasks.append(_fetch_sec_guidance_structured_cached(ticker))
+        _gb_results = await asyncio.gather(*_gb_tasks, return_exceptions=True)
+        eps_result, rev_result, income_hist_result, si_result = _gb_results[:4]
+        company_guidance = _gb_results[4] if with_guidance else None
+        if isinstance(company_guidance, Exception):
+            company_guidance = None
         if isinstance(eps_result, Exception):
             eps_result = {}
         if isinstance(rev_result, Exception):
@@ -6748,6 +6806,7 @@ async def guidance_basic(ticker: str, request: Request) -> dict:
                 last_reported_date=surprise_date or income_date,
                 sector=sector_fwd,
                 industry=industry_fwd,
+                company_guidance=company_guidance,
             )
         except Exception as _fwd_e:
             print(f"[WARN] forward outlook compute failed for {ticker}: {_fwd_e}")

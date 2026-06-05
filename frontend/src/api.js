@@ -123,6 +123,20 @@ export async function fetchGuidanceBasic(ticker) {
   }
 }
 
+export async function fetchGuidanceSurprise(ticker) {
+  // 案B v172: 会社 8-K ガイダンス vs consensus サプライズ (`with_guidance=1`)。 SEC fetch (cold 5-15s) を
+  //   含むため prefetch せず、 ForwardOutlookSection mount 後に非ブロックで lazy fetch (loading gate 非律速)。
+  //   URL が basic と異なるため dedupGet の cache key も分離される。
+  try {
+    return await dedupGet(`/api/guidance/${encodeURIComponent(ticker)}/basic?with_guidance=1`, {
+      headers: fmpHeaders(),
+      timeoutMs: 30000,
+    });
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchInsights(ticker) {
   // v144 #Pane3-perf: insights は cold で 24-60s (KB→Claude or on-demand RSS)。
   //   prefetchAll と InsightsPanel の二重 LLM call を coalesce + 75s hard timeout で安全網。

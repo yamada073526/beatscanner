@@ -35,7 +35,7 @@ GUIDANCE_EXTRACT_TOOL_SCHEMA: dict = {
     "name": "extract_guidance",
     "description": (
         "SEC 8-K プレスリリース or 決算 call transcript から、 企業が発表した"
-        "「次 Q + 通期」 のガイダンス (売上高 / マージン) を構造化抽出する。"
+        "「次 Q + 通期」 のガイダンス (売上高 / EPS / マージン) を構造化抽出する。"
         "ガイダンス記載なしの場合は全 field None で narrative_jp=「ガイダンスの記載なし」 を返す。"
     ),
     "input_schema": {
@@ -53,6 +53,23 @@ GUIDANCE_EXTRACT_TOOL_SCHEMA: dict = {
                     },
                 },
                 "description": "次 Q 売上高ガイダンス。 記載なしなら null。",
+            },
+            "q_eps": {
+                "type": ["object", "null"],
+                "properties": {
+                    "low": {"type": ["number", "null"], "description": "下限 ($/share)"},
+                    "high": {"type": ["number", "null"], "description": "上限 ($/share)、 単一値なら low と同値"},
+                    "basis": {
+                        "type": ["string", "null"],
+                        "enum": ["gaap", "non_gaap", None],
+                        "description": "EPS 基準。 text 中に non-GAAP/adjusted 明示なら non_gaap、 GAAP 明示なら gaap、 不明なら null。",
+                    },
+                    "consensus_diff_pct": {
+                        "type": ["number", "null"],
+                        "description": "consensus 比 % (text 中に明示記載あれば raw 数値のみ、 LLM 計算禁止)",
+                    },
+                },
+                "description": "次 Q EPS (1株利益) ガイダンス ($/share)。 SaaS/テックは non-GAAP 主流。 記載なしなら null。",
             },
             "q_margin": {
                 "type": ["object", "null"],
@@ -75,6 +92,20 @@ GUIDANCE_EXTRACT_TOOL_SCHEMA: dict = {
                     "consensus_diff_pct": {"type": ["number", "null"]},
                 },
                 "description": "通期売上高ガイダンス。 記載なしなら null。",
+            },
+            "fy_eps": {
+                "type": ["object", "null"],
+                "properties": {
+                    "low": {"type": ["number", "null"]},
+                    "high": {"type": ["number", "null"]},
+                    "basis": {
+                        "type": ["string", "null"],
+                        "enum": ["gaap", "non_gaap", None],
+                        "description": "EPS 基準。 non-GAAP/adjusted 明示なら non_gaap、 GAAP 明示なら gaap、 不明なら null。",
+                    },
+                    "consensus_diff_pct": {"type": ["number", "null"]},
+                },
+                "description": "通期 EPS ガイダンス ($/share)。 記載なしなら null。",
             },
             "fy_margin": {
                 "type": ["object", "null"],
@@ -103,8 +134,8 @@ GUIDANCE_EXTRACT_TOOL_SCHEMA: dict = {
                 "type": ["string", "null"],
                 "maxLength": 700,
                 "description": (
-                    "決算 call transcript からの抽出時のみ: **抽出した全ての数値 (q_revenue/q_margin/"
-                    "fy_revenue/fy_margin) の根拠** となる経営陣の発言を **原文 (英語) のまま逐語** で引用する"
+                    "決算 call transcript からの抽出時のみ: **抽出した全ての数値 (q_revenue/q_eps/q_margin/"
+                    "fy_revenue/fy_eps/fy_margin) の根拠** となる経営陣の発言を **原文 (英語) のまま逐語** で引用する"
                     "(必要なら複数文)。 要約・翻訳・改変は禁止。 ⚠️**source_quote に逐語で現れない数値は"
                     "表示前に機械削除される** ため、 抽出した各数値の根拠文を必ず含めること"
                     "(過去実績の数値を guidance として citation に混ぜない)。 8-K の場合は null で良い。"
@@ -126,7 +157,7 @@ GUIDANCE_EXTRACT_TOOL_SCHEMA: dict = {
 
 # ─── System prompt (static、{ticker} 埋め込み禁止) ────────────────────────────
 _SYSTEM_STATIC = """あなたは米国株企業の SEC 8-K プレスリリース or 決算 call transcript から、
-「次 Q + 通期」 のガイダンス (売上高 / マージン) を **structured JSON** で抽出する narration AI です。
+「次 Q + 通期」 のガイダンス (売上高 / EPS / マージン) を **structured JSON** で抽出する narration AI です。
 
 # 厳格ルール (Hallucination Guard 4 重防御 準拠)
 
@@ -135,12 +166,18 @@ _SYSTEM_STATIC = """あなたは米国株企業の SEC 8-K プレスリリース
 3. **最上級表現 (§5 違反 BAD-6)**: 「**史上最高**」 「**最大の**」 等の言葉禁止。
 4. **マージン種別判定**: text 中に「gross margin」 「operating margin」 「net margin」 と明示なら採用、
    不明なら type=null で記述。
-5. **consensus 比較**: text 中に「consensus 比 +X%」 等の明示があれば raw で抽出、
+5. **EPS 抽出 (q_eps / fy_eps)**: 経営陣が明示した「次 Q / 通期 の 1 株利益 (EPS / earnings per share /
+   net income per share) ガイダンス」 を $/share の **raw レンジ** で抽出。
+   - **純利益 ÷ 株数 で EPS を算出してはいけない** (§38 LLM 計算禁止)。 EPS の数値が明示された時のみ。
+   - **basis 判定**: text 中に「non-GAAP」 「adjusted」 明示なら basis="non_gaap"、 「GAAP」 明示なら "gaap"、
+     不明なら null。 SaaS / テックは non-GAAP EPS guidance が主流。
+   - 単一値 (例「EPS $1.16」) は low=high=1.16。 想定株数 (例「257M shares」) は EPS でないので q_eps に入れない。
+6. **consensus 比較**: text 中に「consensus 比 +X%」 等の明示があれば raw で抽出、
    LLM が計算した数値は **禁止**。
-6. **source_url 必須**: tool input の source_url field に必ず元 URL を含めること。
-7. **narrative_jp**: 4-6 行で和文サマリー、 数値は text 由来のみ、 「予想」 「見通し」 「ガイダンス」 等の
+7. **source_url 必須**: tool input の source_url field に必ず元 URL を含めること。
+8. **narrative_jp**: 4-6 行で和文サマリー、 数値は text 由来のみ、 「予想」 「見通し」 「ガイダンス」 等の
    factual な言葉のみ使用 (「確実」 「必ず」 等の断定 NG)。
-8. **記載なし時**: 全 ガイダンス field を null、 narrative_jp=「ガイダンスの記載なし」、
+9. **記載なし時**: 全 ガイダンス field を null、 narrative_jp=「ガイダンスの記載なし」、
    extraction_confidence="low" で返す。
 """
 
@@ -181,8 +218,10 @@ GAAP and non-GAAP operating expenses are expected to be approximately $4.8 billi
 <output>
 {
   "q_revenue": {"low_b": 34.3, "high_b": 35.7, "consensus_diff_pct": null},
+  "q_eps": null,
   "q_margin": {"low_pct": 72.5, "high_pct": 74.0, "type": "gross"},
   "fy_revenue": null,
+  "fy_eps": null,
   "fy_margin": null,
   "narrative_jp": "次 Q 売上高 $34.3-35.7B (±2%) を提示。\\nGAAP マージン 72.5-74.0% (non-GAAP は 73.0-74.0%) のガイダンス。\\n通期ガイダンスは本 release では未提示。\\n出典: SEC 8-K EX-99.1。",
   "source_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000123/nvda-20260221_ex99d1.htm",
@@ -200,8 +239,10 @@ and gross margin to remain in the 47.5-48.5% range.
 <output>
 {
   "q_revenue": null,
+  "q_eps": null,
   "q_margin": {"low_pct": 47.5, "high_pct": 48.5, "type": "gross"},
   "fy_revenue": null,
+  "fy_eps": null,
   "fy_margin": null,
   "narrative_jp": "Apple は売上高の数値ガイダンスを公式に開示しない方針。\\nCFO Luca Maestri が定性コメントで Services 売上は二桁成長、 gross margin は 47.5-48.5% レンジを示唆。\\n出典: SEC 8-K EX-99.1。",
   "source_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000089/aapl-20260330_ex99d1.htm",
@@ -218,12 +259,35 @@ This release contains historical financial data only.
 <output>
 {
   "q_revenue": null,
+  "q_eps": null,
   "q_margin": null,
   "fy_revenue": null,
+  "fy_eps": null,
   "fy_margin": null,
   "narrative_jp": "ガイダンスの記載なし。",
   "source_url": "https://www.sec.gov/.../8k-no-guidance.htm",
   "extraction_confidence": "low"
+}
+</output>
+</example>
+
+<example id="EX-4-CRWD" source_url="https://www.sec.gov/Archives/edgar/data/1535527/000153552725000033/crwd-ex991.htm">
+<input_text>
+For the second quarter of fiscal 2026, we currently expect total revenue in the range of
+$1.14 billion to $1.15 billion, and non-GAAP net income per share of $1.16 to $1.17.
+For the full fiscal year 2026, we expect non-GAAP net income per share of $4.40 to $4.46.
+</input_text>
+<output>
+{
+  "q_revenue": {"low_b": 1.14, "high_b": 1.15, "consensus_diff_pct": null},
+  "q_eps": {"low": 1.16, "high": 1.17, "basis": "non_gaap", "consensus_diff_pct": null},
+  "q_margin": null,
+  "fy_revenue": null,
+  "fy_eps": {"low": 4.40, "high": 4.46, "basis": "non_gaap", "consensus_diff_pct": null},
+  "fy_margin": null,
+  "narrative_jp": "次 Q 売上高 $1.14-1.15B を提示。\\n非 GAAP EPS は次 Q $1.16-1.17、 通期 $4.40-4.46/株のガイダンス。\\n出典: SEC 8-K EX-99.1。",
+  "source_url": "https://www.sec.gov/Archives/edgar/data/1535527/000153552725000033/crwd-ex991.htm",
+  "extraction_confidence": "high"
 }
 </output>
 </example>
@@ -318,8 +382,10 @@ $73.0 to $74.2 billion. We expect operating margin to be roughly flat at approxi
 <output>
 {
   "q_revenue": {"low_b": 73.0, "high_b": 74.2, "consensus_diff_pct": null},
+  "q_eps": null,
   "q_margin": {"low_pct": 45.0, "high_pct": 45.0, "type": "operating"},
   "fy_revenue": null,
+  "fy_eps": null,
   "fy_margin": null,
   "narrative_jp": "次 Q 売上高は $73.0-74.2B のレンジを提示。\\n営業利益率は約 45% でほぼ横ばいの見通し。\\n出典: 決算カンファレンスコール (経営陣発言)。",
   "source_url": "TRANSCRIPT_REF",
@@ -337,8 +403,10 @@ $73.0 to $74.2 billion. We expect operating margin to be roughly flat at approxi
 <output>
 {
   "q_revenue": null,
+  "q_eps": null,
   "q_margin": null,
   "fy_revenue": null,
+  "fy_eps": null,
   "fy_margin": null,
   "narrative_jp": "決算 call ではガイダンス数値の言及なし。\\n(質問者が $80B 前後と推測したが、 経営陣は具体的な数値を提示せず。)",
   "source_url": "TRANSCRIPT_REF",
@@ -355,8 +423,10 @@ $73.0 to $74.2 billion. We expect operating margin to be roughly flat at approxi
 <output>
 {
   "q_revenue": null,
+  "q_eps": null,
   "q_margin": null,
   "fy_revenue": null,
+  "fy_eps": null,
   "fy_margin": null,
   "narrative_jp": "次 Q (第4四半期) は売上成長率が低い二桁台へ鈍化する見通しと言及。\\n具体的な金額レンジの提示はなし (第3四半期 $88.3B は過去実績のため除外)。\\n出典: 決算カンファレンスコール (経営陣発言)。",
   "source_url": "TRANSCRIPT_REF",
@@ -404,7 +474,7 @@ def _build_system_blocks(source_type: str = "8k") -> list[dict]:
 # transcript = 口語数値抽出 + modality 判定で §38 精度を優先し Sonnet。 コスト差は段落抽出で僅少。
 _MODEL_8K = "claude-haiku-4-5-20251001"
 _MODEL_TRANSCRIPT = "claude-sonnet-4-5"
-_GUIDANCE_VALUE_FIELDS = ("q_revenue", "q_margin", "fy_revenue", "fy_margin")
+_GUIDANCE_VALUE_FIELDS = ("q_revenue", "q_eps", "q_margin", "fy_revenue", "fy_eps", "fy_margin")
 
 
 async def extract_guidance(
@@ -444,8 +514,27 @@ async def extract_guidance(
     is_transcript = source_type == "transcript"
     model = _MODEL_TRANSCRIPT if is_transcript else _MODEL_8K
 
-    # text truncate (10000 文字、 既存 _fetch_sec_guidance と整合)
-    text_snippet = text[:10000]
+    # text truncate: 長い press release (CRWD ~45k 文字等) は Financial Outlook / guidance 数値 table が
+    #   後半にあり、 単純 head truncate (10k) だと guidance が欠落する (CRWD Q2 非GAAP EPS $1.16-1.17 が
+    #   10k 境界で切れ「記載なし」 誤判定 → ガイダンスサプライズ unknown)。 guidance section の anchor を探し、
+    #   前半サマリ + Outlook 以降を結合して数値 table を確実に含める (transcript は anchor 無で従来 head)。
+    _MAX_CHARS = 14000
+    if len(text) <= _MAX_CHARS:
+        text_snippet = text
+    else:
+        _low = text.lower()
+        _anchor = -1
+        for _kw in ("financial outlook", "business outlook", "is providing the following guidance",
+                    "we currently expect", "outlook for"):
+            _i = _low.find(_kw)
+            if _i >= 4000:  # 前半サマリ (会社名/期/実績) より後の guidance section 見出しのみ採用
+                _anchor = _i
+                break
+        if _anchor >= 4000:
+            # 前半 5000 (会社名/期/実績ヘッドライン) + Outlook 以降 9000 を結合 (guidance 数値 table を確保)
+            text_snippet = text[:5000] + "\n[... 中略 ...]\n" + text[_anchor:_anchor + 9000]
+        else:
+            text_snippet = text[:_MAX_CHARS]
 
     client = AsyncAnthropic(api_key=api_key)
     system_blocks = _build_system_blocks(source_type)
