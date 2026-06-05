@@ -317,11 +317,41 @@ def _make_draft(body_md: str) -> ArticleDraft:
     )
 
 
+# v123 Phase 34 で fact_checker.check() の冒頭に structural gate (validate_structure) が
+# 追加され、 deep_dive は ## TL;DR + 第 1-3 幕 + ## 投資家への含意 + ### 強気/弱気/推奨 を
+# 必須化した (writer.py:224-266 の HARD CONSTRAINT テンプレを enforce)。 旧 _PAD は第 1 幕
+# 見出しのみで gate を通過できず、 citation 整合ロジックに到達する前に structure_missing で
+# fail-fast していた。 fixture を writer の実テンプレ構造に準拠させ、 本来検証したい check() の
+# citation 整合経路に到達させる。
+#
+#   _PAD  = 冒頭 padding + ## TL;DR + 第 1 幕見出し (prefix)
+#   _TAIL = 第 2-3 幕 + 投資家への含意 + ### 強気/弱気/推奨 (suffix)
+#
+# ※ _PAD / _TAIL は citation [N] を一切含めない。 fact_check の判定対象を各 test の core
+#   sentence のみに限定し、 (a) test_check_passes の「interpretive 非混入」 assert と
+#   (b) no_citations の「fake.calls == []」 assert を壊さないため。
 _PAD = (
     "市場は NVDA の Q1 結果をまたビートと片付けたが、 数字の裏には供給制約の構造変化が潜んでおり、 "
     "投資家は短期 reaction だけでなく中期 thesis の再点検が必要となる局面に入っている。 "
     "本記事では Q1 売上 / Q2 ガイダンス / 自社株買い / forward PEG / TSMC CoWoS 増設の 5 軸で "
-    "構造変化を整理し、 強気・弱気両シナリオの含意を併記する。\n\n## 第 1 幕: 数字 timeline\n"
+    "構造変化を整理し、 強気・弱気両シナリオの含意を併記する。\n\n"
+    "## TL;DR\n"
+    "NVDA は Q1 でビートし、 供給制約の構造変化が中期 thesis を補強する展開となった。\n\n"
+    "## 第 1 幕: 数字 timeline\n"
+)
+
+_TAIL = (
+    "\n\n## 第 2 幕: 業界 context\n"
+    "TSMC の CoWoS-S 増産は AI ASIC 各社の需要を取り込む業界再編の動きである。\n\n"
+    "## 第 3 幕: 法的 / 競合\n"
+    "米国輸出規制の強化が中国向け販売を制約する地政学リスクとして残る。\n\n"
+    "## 投資家への含意\n"
+    "### 強気シナリオ\n"
+    "供給制約の緩和で販売数量の上振れが進む。\n"
+    "### 弱気シナリオ\n"
+    "Data Center 集中度の高さが競合台頭で揺らぐ。\n"
+    "### 推奨アクション\n"
+    "次の四半期決算までウォッチリスト保有を継続する。\n"
 )
 
 
@@ -334,6 +364,7 @@ async def test_check_passes_with_mock_ok_response():
         + "Q1 売上 $81.6B (+12% YoY) を達成 [1]。\n"
         + "forward PEG 0.57 倍と割安水準 [2]。\n"
         + "TSMC が CoWoS-S 生産能力を拡張表明 [3]。"
+        + _TAIL
     )
     draft = _make_draft(body_md)
 
@@ -370,6 +401,7 @@ async def test_check_includes_interpretive_classification():
         _PAD
         + "Q1 売上 $81.6B [1]。\n"
         + "強気シナリオでは PEG 0.57 倍の割安感が修正される可能性がある [2]。"
+        + _TAIL
     )
     draft = _make_draft(body_md)
 
@@ -398,7 +430,7 @@ async def test_check_includes_interpretive_classification():
 async def test_check_returns_passed_for_no_citations():
     """body_md に [N] が 1 つも無い → passed=True (writer.py で raise されるはずだが defense)."""
     researcher_output = _make_researcher_output()
-    body_md = _PAD + "citation を 1 つも含まない padding sentence。\n更に追加 sentence で 200 字を超えさせる。"
+    body_md = _PAD + "citation を 1 つも含まない padding sentence。\n更に追加 sentence で 200 字を超えさせる。" + _TAIL
     draft = _make_draft(body_md)
     # client は呼ばれない想定だが安全側で fake を渡す
     fake = _FakeClient("{}")
