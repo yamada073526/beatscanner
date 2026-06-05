@@ -257,8 +257,24 @@ class FMPClient:
         return pool
 
     async def batch_quotes(self, symbols: list[str]) -> list[dict]:
+        # ⚠️ /stable/quote は単一 symbol 仕様で、 カンマ区切り複数は 0 件を返す
+        # (2026-06-05 確認)。 複数銘柄を 1 call で取るなら batch_quote (/batch-quote) を使う。
         joined = ",".join(s.upper() for s in symbols)
         return await self._get("/quote", {"symbol": joined})
+
+    async def batch_quote(self, symbols: list[str]) -> list[dict]:
+        """複数銘柄の quote を 1 call で取得 (/stable/batch-quote)。
+
+        返却 item keys: symbol, name, price, marketCap, changePercentage,
+                       change, volume, exchange, dayHigh/Low, yearHigh/Low, ...
+        daily_digest の銘柄選別 (時価総額/株価フィルタ) 等、 多数銘柄の
+        基礎指標をまとめて引くケースで使う。 空 list は取得失敗を意味する。
+        """
+        if not symbols:
+            return []
+        joined = ",".join(s.upper() for s in symbols)
+        data = await self._get("/batch-quote", {"symbols": joined})
+        return data if isinstance(data, list) else []
 
     async def press_releases(self, ticker: str, limit: int = 5) -> list[dict]:
         return await self._get(

@@ -41,6 +41,104 @@ _SOURCE_TYPE_DEFAULT_CONFIDENCE: dict[str, float] = {
 }
 
 
+# ── daily_digest 銘柄選別フィルタ (v172 ボロ株除外) ──────────────────────────
+# 真因: 旧実装は biggest-gainers Top10 を無フィルタ採用 → 急騰率% ソートは
+# 時価総額が小さくボラの高い小型株・仕手株・SPAC Rights・レバレッジ ETF が
+# 上位を独占し、 daily_digest が「STI +500% / 株式併合 3 連発」 等ボロ株まみれ化。
+# ブランド世界観 (Aman/Ritz-Carlton 級) と正面衝突する Trust Cliff。
+# 対策: 時価総額 / 株価 / 急騰率上限 / 名称パターンの複合フィルタで「健全な急騰」
+# のみ通す。 閾値は実データ (gainers 50 件分布、 2026-06-05) 基準。 調整可能。
+_DIGEST_MIN_MARKET_CAP = 300_000_000   # $300M 未満 = 投機株として除外
+_DIGEST_MIN_PRICE = 1.0                # $1 未満 = ペニー株として除外
+_DIGEST_MAX_CHANGE_PCT = 100.0         # 1 日 +100% 超 = 仕手/思惑として除外
+_DIGEST_GAINERS_POOL = 50              # 急騰率上位を広く取り、 フィルタ後に絞る
+# 非・普通株 (SPAC Rights/Warrant、 レバレッジ/一般 ETF) の名称パターン。
+# 先頭スペース付きは "Wright"/"copyright" 等の誤爆回避目的。
+_DIGEST_SPECULATIVE_NAME_PATTERNS = (
+    "acquisition corp",  # SPAC
+    " right",            # Rights / Series A Right (前スペースで Wright 回避)
+    "warrant",
+    "daily etf", " etf",  # レバレッジ ETF / 一般 ETF (個別株まとめには載せない)
+    "2x long", "2x short", "-1x", "leverage",
+)
+
+
+def _is_healthy_gainer(quote: dict) -> bool:
+    """daily_digest に載せてよい「健全な急騰銘柄」 か判定 (ボロ株/仕手/SPAC 除外).
+
+    quote は FMP /batch-quote の 1 item (marketCap / price / changePercentage / name)。
+    AND 条件: 全て満たした銘柄のみ True。 1 つでも該当すれば投機株として弾く。
+    """
+    market_cap = quote.get("marketCap") or 0
+    price = quote.get("price") or 0
+    change_pct = quote.get("changePercentage")
+    name = (quote.get("name") or "").lower()
+
+    if market_cap < _DIGEST_MIN_MARKET_CAP:
+        return False
+    if price < _DIGEST_MIN_PRICE:
+        return False
+    # changePercentage 欠損時は上限チェックを skip (除外しない)
+    if change_pct is not None and abs(change_pct) > _DIGEST_MAX_CHANGE_PCT:
+        return False
+    if any(pat in name for pat in _DIGEST_SPECULATIVE_NAME_PATTERNS):
+        return False
+    return True
+
+
+async def _select_digest_candidates(
+    client: FMPClient, *, max_tickers: int
+) -> list[str]:
+    """biggest-gainers を広く取り、 健全銘柄フィルタを通して上位 max_tickers を返す.
+
+    フィルタ不能時 (FMP gainers / batch-quote 失敗) は空 list を返す。
+    「フィルタできないならボロ株混入を避けるため載せない」 (Trust Cliff 回避) 方針。
+    """
+    try:
+        gainers = await client.market_movers("biggest-gainers")
+    except FMPError as e:
+        log.warning("article_pipeline.sources: FMP gainers 取得失敗: %s", e)
+        return []
+    except Exception as e:
+        log.warning("article_pipeline.sources: gainers 例外: %s", e)
+        return []
+
+    if not isinstance(gainers, list) or not gainers:
+        return []
+
+    pool_syms = [
+        (item.get("symbol") or "").upper()
+        for item in gainers[:_DIGEST_GAINERS_POOL]
+        if item.get("symbol")
+    ]
+    if not pool_syms:
+        return []
+
+    try:
+        quotes = await client.batch_quote(pool_syms)
+    except Exception as e:
+        # batch-quote 失敗 = フィルタ不能。 無フィルタ採用はボロ株復活 (Trust Cliff)
+        # のため、 空返し → digest skip が安全。
+        log.warning(
+            "article_pipeline.sources: batch_quote 失敗、 フィルタ不能のため digest skip: %s", e
+        )
+        return []
+
+    healthy = [q for q in quotes if isinstance(q, dict) and _is_healthy_gainer(q)]
+    # 健全銘柄の中で急騰率 降順 (= 最も話題性が高い順)
+    healthy.sort(key=lambda q: (q.get("changePercentage") or 0), reverse=True)
+    selected = [
+        (q.get("symbol") or "").upper() for q in healthy[:max_tickers] if q.get("symbol")
+    ]
+
+    log.info(
+        "article_pipeline.sources: digest candidates %d 件 "
+        "(gainers pool %d → healthy %d → top %d)",
+        len(selected), len(pool_syms), len(healthy), max_tickers,
+    )
+    return selected
+
+
 def _map_rss_item_to_raw_source(item: dict) -> dict:
     """rss_collector の item dict を article_pipeline の raw_sources schema にマップ."""
     source_type = item.get("source", "unknown")
@@ -115,23 +213,12 @@ async def collect_raw_sources_for_daily_digest(
     """
     client = FMPClient(api_key=api_key)
 
-    candidates: list[str] = []
-    try:
-        gainers = await client.market_movers("biggest-gainers")
-        if isinstance(gainers, list):
-            for item in gainers[:max_tickers]:
-                sym = item.get("symbol", "")
-                if sym:
-                    candidates.append(sym.upper())
-    except FMPError as e:
-        log.warning("article_pipeline.sources: FMP gainers 取得失敗: %s", e)
-        return []
-    except Exception as e:
-        log.warning("article_pipeline.sources: gainers 例外: %s", e)
-        return []
-
+    candidates = await _select_digest_candidates(client, max_tickers=max_tickers)
     if not candidates:
-        log.info("article_pipeline.sources: gainers 0 件、 daily_digest skip")
+        log.info(
+            "article_pipeline.sources: 健全な急騰銘柄 0 件 "
+            "(全件がボロ株/仕手/SPAC でフィルタ除外、 または FMP 失敗)、 daily_digest skip"
+        )
         return []
 
     async def _fetch_one(t: str) -> list[dict]:
