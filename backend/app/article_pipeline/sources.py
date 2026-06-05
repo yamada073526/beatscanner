@@ -155,12 +155,21 @@ async def _select_digest_candidates(
         (q.get("symbol") or "").upper() for q in healthy[:max_tickers] if q.get("symbol")
     ]
 
+    # イベント駆動選定時、 各銘柄の中立イベントラベルを map 化して呼出側に渡す
+    # (raw_source → writer の選定基準で「公募増資の公表」 等を中立表示、 multi-review C-2)。
+    event_label_map: dict[str, str] = {}
+    if ranking == "市場インパクト":
+        for sym in selected:
+            et = (signals.get(sym) or {}).get("latest_event_type")
+            if et and et in _EVENT_LABEL_JP:
+                event_label_map[sym] = _EVENT_LABEL_JP[et]
+
     log.info(
         "article_pipeline.sources: digest candidates %d 件 "
-        "(gainers pool %d → healthy %d → top %d、 ranking=%s)",
-        len(selected), len(pool_syms), len(healthy), max_tickers, ranking,
+        "(gainers pool %d → healthy %d → top %d、 ranking=%s、 labeled=%d)",
+        len(selected), len(pool_syms), len(healthy), max_tickers, ranking, len(event_label_map),
     )
-    return selected
+    return selected, event_label_map
 
 
 # ── WS1 Sprint 1: イベント信号フェッチ層 (Python 物理層、LLM 不使用) ───────────
@@ -311,6 +320,17 @@ _EVENT_TYPE_WEIGHT: dict[str, float] = {
     "guidance": 2.0,  # ガイダンス改定
 }
 
+# イベント種別 → 記事用の中立日本語ラベル (Sprint 3、 multi-review C-2 で実装)。
+# 「期待」「上昇」「買い」 等の将来予測語を含めない (§38)。 増資は「下落要因のことも
+# ある」 中立事実として表示し、 読者が「急騰銘柄」 と「イベントで動いた銘柄」 を区別できる
+# ようにする (金融 reviewer C-1 の誤読防止)。 raw_source 経由で writer の選定基準に渡る。
+_EVENT_LABEL_JP: dict[str, str] = {
+    "ma": "M&A 関連報道",
+    "ipo": "IPO 申請",
+    "offering": "公募増資の公表",
+    "guidance": "ガイダンス改定",
+}
+
 
 def _compute_impact_score(quote: dict, signals: dict | None) -> float:
     """市場インパクトスコアを算出 (Python 物理層、 LLM 不使用).
@@ -409,7 +429,10 @@ async def collect_raw_sources_for_daily_digest(
     """
     client = FMPClient(api_key=api_key)
 
-    candidates = await _select_digest_candidates(client, max_tickers=max_tickers)
+    result = await _select_digest_candidates(client, max_tickers=max_tickers)
+    # _select は (candidates, event_labels) を返す。 早期 return [] (フィルタ不能) は
+    # tuple でないため空 dict で吸収 (collect の戻り値 signature list[dict] は不変)。
+    candidates, event_labels = result if isinstance(result, tuple) else (result, {})
     if not candidates:
         log.info(
             "article_pipeline.sources: 健全な急騰銘柄 0 件 "
@@ -431,6 +454,12 @@ async def collect_raw_sources_for_daily_digest(
                 continue
             row = _map_rss_item_to_raw_source(item)
             row["source_ticker"] = t
+            label = event_labels.get(t)
+            if label:
+                row["event_label"] = label
+                # researcher が source_fact に拾えるよう content 先頭に中立ラベルを前置。
+                # ラベルは静的 dictionary 由来 (LLM 捏造でない)、 §38 で将来予測語を含めない。
+                row["content"] = f"[{label}] {row.get('content') or ''}".strip()
             mapped.append(row)
         return mapped
 
