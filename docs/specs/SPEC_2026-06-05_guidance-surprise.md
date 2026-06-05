@@ -3,6 +3,11 @@
 > user 要望（2026-06-05 出勤前）: 銘柄分析「前方視界 — 来期見通し」に**ガイダンスサプライズ**（来期ガイダンスが consensus を上回ったか）を追加したい。じっちゃま速報は今期サマリーだけでなく**来期データ**を重視（添付 CRWD 速報: Q2 EPS 予想 $1.16 に対し新ガイダンス $1.16〜1.17 等）。現状 BeatScanner は今期サプライズは出すがガイダンスサプライズが無い。
 >
 > **autopilot 判定: DEFER-SPEC**（user scope 判断が必要なため無監視 ship せず本 SPEC を起案）。サブエージェント 3 体合議済（データ可用性 / 金融・§38 / 表示）。
+>
+> ### 🟢 2026-06-05 夕 user 判断: **案 B（EPS まで）確定**
+> user「案B でお願いします。じっちゃまの決算速報と同レベルの体験が目標。できる改善は全て挑戦したい」。
+> - ✅ **前提の period バグ（来期=2028）は修正済** (commit 8f2cb8e、 _fetch_eps_data limit 12→40 + 370日 guard)。
+> - ⚠️ **実装は supervised session 推奨**（理由: ①§38 の表示出力は実 ticker (CRWD/NVDA) で目視 review 必須 ②8-K q_eps 抽出は LLM 層変更で hallucination-guard + 実 8-K での抽出精度確認が要 ③latency architecture 判断（後述）が要）。 autopilot 残時間では完遂+検証不可のため未着手、 本 SPEC の「実行計画」 セクションを完成させた。 次回 user 在席時に `/generator` 等で着手可能な状態。
 
 ## 結論サマリー（3 体 converged）
 
@@ -61,7 +66,34 @@ unknown （非表示 return null）              —          —
 
 **推奨**: まず ① period バグを単独修正（独立の Trust Cliff、低リスク）→ user が案 A/B を選択 → `/planner` で本 SPEC を詳細化 → `/generator`。§38 設計は確定済なので、scope（売上のみ / EPS まで）の判断さえ頂ければ実装着手可能。
 
-## 関連
+## 実行計画（案B 確定、次回 supervised session 用）
+
+調査で確定した正確な改修ステップ。 各 step に検証方法を併記。
+
+### Step 1: 8-K 抽出 schema に EPS を追加 (`backend/app/visualizer/sec_guidance.py`)
+- `GUIDANCE_EXTRACT_TOOL_SCHEMA.input_schema.properties` に **`q_eps`** と **`fy_eps`** を追加（`q_revenue` を mirror: `{low, high, consensus_diff_pct}`、単位は $/share）。description「次 Q / 通期 の EPS ガイダンス。記載なしなら null」。
+- `_SYSTEM_STATIC` の抽出対象に「EPS（1株利益）ガイダンス」 を追記（売上/マージンと同列、 raw 抽出のみ・計算禁止 の既存ルール適用）。
+- `_FEW_SHOT_GUIDANCE` に **EPS を含む実例 1 件追加**（CRWD 型: input「Q2 EPS expected to be $1.16 to $1.17」→ output `q_eps:{low:1.16, high:1.17}`）。⚠️ AAPL 例（EPS 非開示）も `q_eps:null` で graceful を示す。
+- 既存 `q_revenue` の抽出ロジック・narrative_jp・source_quote 逐語ガードは無改変。
+- **検証**: throwaway script で CRWD の 8-K EX-99.1 を `extract_guidance` に通し、 `q_eps.low/high` が $1.16/$1.17 に一致するか目視（hallucination-guard: source_quote に EPS の根拠文が逐語で出るか確認）。NVDA/AAPL でも回し過抽出/誤抽出がないか。
+
+### Step 2: 会社 guidance vs consensus を forward に wiring (`backend/app/main.py`)
+- `_compute_forward_outlook(...)` に引数 `company_guidance: dict | None = None` を追加。 `next_q` dict に:
+  - `guidance_vs_consensus_eps`: `classify_guidance_vs_consensus(eps_mid, consensus_eps)`（eps_mid = (q_eps.low+high)/2）。
+  - `guidance_vs_consensus_rev`: 同様（**非金融のみ**、 `_rev_surprise_threshold(sector,industry) < 40` は `rev_compare_unreliable` で抑止 = v146 gate 再利用）。
+  - `company_q_eps_low/high`、`company_q_rev_low/high`（表示用、 8-K の B$ → $ は `*1e9`）。
+- ⚠️ **fiscal period 照合**: 8-K guidance の対象期 = forward.next_q の period か確認（会社が「来 Q」 ガイダンスを出す前提だが、 通期のみ開示の企業は q_eps=null → guidance surprise 非表示）。
+- **latency architecture（要判断）**: `guidance_basic` は Pane3 loading gate。 8-K guidance (`_fetch_sec_guidance_structured_cached`, 6h cache) を gather に足すと cold 時 +5-15s。 ✅推奨 = **同 cache を visualize endpoint と共有** している前提なら、 通常 analyze で visualize が先に warm するので guidance/basic は cache hit。 ただし prefetch 順序を確認し、 cold-path が gate を律速しないか計測（最悪 forward だけ後追い fetch で非ブロック化）。
+- **検証**: analyze flow（playwright auth + CRWD 分析）で `forward.next_q.guidance_vs_consensus_eps` が出るか。複数 ticker で coverage（NVDA=above/inline?, AAPL=null）。
+
+### Step 3: 表示 (`frontend/src/components/ForwardOutlookSection.jsx`)
+- 表示 agent 設計の `GuidanceSurpriseRow` を `MetricBlock` 内 `ForecastBars` 直後に挿入（独立行・破線 separator）。
+- 4 state: above「会社ガイダンスはコンセンサスを上回る水準 ▲」/ inline「〜おおむね同水準 —」/ below「〜下回る水準 ▼」/ unknown→`return null`。**全 state 色なし**（`--text-secondary`）。差分%なし。会社レンジ + consensus 数値併記。
+- 静的 dict（`STATE_LABEL_JP` パターン、 LLM narration ゼロ）。 citation に「会社ガイダンス: SEC 8-K」 追加 + §5 免責。
+- **禁止**: 「上方修正/上振れ/強気」（A では事実誤り）/ 緑赤 amber cyan / ARR / 金融売上。
+- **検証**: analyze flow で CRWD の前方視界に EPS guidance surprise 行が中立表示されるか目視（§38: 色・断定語なし確認）。当期 Beat/Miss と混同しないか。
+
+### 関連
 - backend: `app/visualizer/calc.py:189 classify_guidance_vs_consensus`（再利用可）/ `app/main.py:6478 _compute_forward_outlook`（consensus 保持、ここに会社 guidance 比較追加）/ `app/visualizer/sec_guidance.py`（8-K 抽出 schema、q_eps 追加対象）/ `app/main.py guidance_basic`(6628)
 - frontend: `frontend/src/components/ForwardOutlookSection.jsx`（backend flag を読むだけ、再計算禁止）
 - memory: `project_forward_visibility.md`（v146 6体合議、本要望は同 memory の **Phase 2 候補そのもの**）/ `feedback_sell_zone_static_dict.md`（静的 dict）/ `feedback_revenue_basis_mismatch.md`（金融売上抑止）/ `feedback_sec_guidance_8k_coverage_limit.md`（8-K coverage 限界）
