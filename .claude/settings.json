@@ -70,6 +70,12 @@
             "asyncRewake": true,
             "rewakeMessage": "ビルドエラーが検出されました。以下のエラーを修正してください:",
             "statusMessage": "フロントエンドビルドチェック中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/post_write_handover_carryforward.sh",
+            "timeout": 10,
+            "statusMessage": "handover 引き継ぎ漏れチェック中..."
           }
         ]
       }
