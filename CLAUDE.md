@@ -44,7 +44,9 @@
 - ⚠️ 長い実装セッション中に英文へ drift しやすく、 **2026-05-15 / 06-02 / 06-04 の 3 回**再指摘された。 memory [[feedback_japanese_output]] と double anchor。 サブエージェントへの prompt 言語は別ルール ([[feedback_subagent_japanese]]) 参照。
 
 ### デプロイ運用
-- **デプロイは `railway up` のみ**。preview server / `npm run dev` は使用しない
+- **デプロイ経路は `git push origin main`（Railway が auto-deploy）を基本とする**。2026-06-06 実証: push 後 ~30s で本番反映、`/health` の `commit`（RAILWAY_GIT_COMMIT_SHA）で確認可（memory `railway_auto_deploy_on_push.md`）
+  - `railway up`（ローカルファイル直送）も機能するが、**未 commit を直送すると git⇔本番が乖離する**（2026-06-07 RS hotfix で実際に発生 → 後追い commit で解消）。緊急時以外は使わず、必ず **commit → push** で deploy する
+  - preview server / `npm run dev` は使用しない（visual harness 例外は別記）
 - ローカルでの構文チェックは `cd frontend && npm run build` で実施
 - デプロイ後の検証は本番バンドル（`/assets/index-*.js` または `*.css`）を `curl` で取得して `grep` で文字列確認
 - 反映完了の判定はバンドルハッシュの変更で行う
