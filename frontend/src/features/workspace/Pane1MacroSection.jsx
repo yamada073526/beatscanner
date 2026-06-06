@@ -33,73 +33,14 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { fetchMarketIndices, fetchFollowThroughDay } from '../../api.js';
+import { fetchMarketIndices } from '../../api.js';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import RowSparkline from '../judgment/components/list/RowSparkline.jsx';
+import { FTD_INDICES, ftdLabel, ftdToneColor, useFtdMap } from './ftd.js';
 
-// v120 Task 3: FTD Phase 1 — William O'Neil Follow-Through Day chip
-// v120 hotfix: ^NDX は FMP Premium 限定 → ^IXIC (NASDAQ Composite) に切替
-const FTD_INDICES = ['^GSPC', '^IXIC', '^DJI'];
-
-/** v120 hotfix v3 (user dogfood): FTD status を user 視点 4 段階 label に改善.
- *  「監視中」 / 「—」 だけだと「機能していない」 と誤解される (user feedback)。
- *  William O'Neil 理論の 4 段階 (上昇 / シグナル待ち / 安定 / データ不足) を明示。 */
-function ftdLabel(ftd) {
-  if (!ftd) return { text: '—', tone: 'muted', tip: 'データ未取得' };
-  switch (ftd.status) {
-    case 'ftd_confirmed':
-      return {
-        text: `Day ${ftd.ftd_day_number} ✓ ${ftd.ftd_pct != null ? `+${ftd.ftd_pct.toFixed(1)}%` : ''}`.trim(),
-        tone: 'gain',
-        tip: `上昇トレンド入り確認 (Day ${ftd.ftd_day_number} で +${ftd.ftd_pct?.toFixed(1)}% 上昇 + 出来高増加)`,
-      };
-    case 'watching':
-      return {
-        text: 'シグナル待ち',
-        tone: 'warning',
-        tip: `上昇試行 ${ftd.rally_attempt_date} 開始、 Day 4-7 内に +1.7% 以上 + 出来高増加で FTD 確定`,
-      };
-    case 'no_attempt':
-      return {
-        text: '安定',
-        tone: 'muted',
-        tip: '直近 21 営業日内に 3 日連続下落 event なし (= 大きな調整局面なし、 上昇試行イベント無し)',
-      };
-    case 'insufficient_data':
-      return { text: '—', tone: 'muted', tip: 'データ不足 (21 営業日未満)' };
-    case 'error':
-    default:
-      return { text: '—', tone: 'muted', tip: 'データ取得エラー (FMP API)' };
-  }
-}
-
-/** tone → CSS color token mapping (FtdRailDots / FtdChipRow 共有) */
-function ftdToneColor(tone) {
-  return tone === 'gain' ? 'var(--color-gain)'
-       : tone === 'warning' ? 'var(--color-warning)'
-       : 'var(--text-muted)';
-}
-
-/** v120 hotfix: FTD fetch logic を hook 化、 full mode + rail mode で共有 (fetch 重複防止) */
-function useFtdMap() {
-  const [ftdMap, setFtdMap] = useState({});
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all(FTD_INDICES.map((idx) => fetchFollowThroughDay(idx).catch(() => null)))
-      .then((results) => {
-        if (cancelled) return;
-        const map = {};
-        results.forEach((r, i) => { if (r) map[FTD_INDICES[i]] = r; });
-        setFtdMap(map);
-        setLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, []);
-
-  return { ftdMap, loading };
-}
+// v120 Task 3 / v175 共有 refactor: FTD (William O'Neil Follow-Through Day) のロジックは
+// features/workspace/ftd.js に切り出し済 (ScreenerPane 市場局面バナーと共有)。
+// FTD_INDICES / ftdLabel / ftdToneColor / useFtdMap はそこから import する。
 
 /** v120 hotfix (3 体合議 verdict UI/UX 案 B): rail mode 用 FTD 3 点 dot indicator.
  *  幅 36px の rail に収まる、 色のみで FTD 状態を 0.3 秒で判別。 tooltip で詳細。 */

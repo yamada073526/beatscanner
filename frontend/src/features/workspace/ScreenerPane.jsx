@@ -29,6 +29,7 @@ import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { useHaloSweepOnce } from '../../hooks/useHaloSweepOnce.js';
 import { useCountUp } from '../../hooks/useCountUp.js';
 import Chip, { ChipGroup } from '../../components/ui/Chip.jsx';
+import { useFtdMap, ftdRegime, ftdToneColor } from './ftd.js';
 
 
 // v147 (user dogfood AAPL): cup-handle scanner の state badge を日本語ラベルに。
@@ -46,6 +47,48 @@ const CUP_STATE_LABEL_JP = {
   breakout_extended: '高値圏突破',
   formation_market_weak: '形成中・市場待機',
 };
+
+// v175 B-Top2: ScreenerPane 最上部の「市場局面」 バナー。 useFtdMap (3 指数) を ftdRegime で 1 行に集約
+//   (最強 status を代表)。 文言は ftd.js の静的 dict (§38 断定回避、 price action の事実 + O'Neil 出典のみ、
+//   「今買え/スキャンしろ」 等 action 断定なし)。 inline 関数 component は remount で再生成されるため
+//   必ず module-level に置く ([[feedback_pane_error_boundary]] / ForecastBarRow hoist の教訓系)。
+function FtdRegimeBanner() {
+  const { ftdMap, loading } = useFtdMap();
+  const bannerStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-2, 8px)',
+    padding: 'var(--space-2, 8px) var(--space-3, 12px)',
+    marginBottom: 'var(--space-3, 12px)',
+    borderRadius: 'var(--radius-md, 12px)',
+    border: '1px solid var(--border)',
+    background: 'var(--bg-card)',
+  };
+  if (loading) {
+    return (
+      <div data-testid="ftd-regime-banner" style={bannerStyle}>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>市場局面を計算中…</span>
+      </div>
+    );
+  }
+  const regime = ftdRegime(ftdMap);
+  if (regime.status === 'none') return null; // 全指数データ無し → banner 非表示 (ノイズ回避)
+  const color = ftdToneColor(regime.tone);
+  return (
+    <div
+      data-testid="ftd-regime-banner"
+      title={"市場局面 (Follow-Through Day, William O'Neil): 下落相場の底打ち → 新規上昇トレンド入りを確認する指標。 主要 3 指数 (S&P500 / NASDAQ / DJIA) のうち最も進んだ局面を表示しています。"}
+      style={bannerStyle}
+    >
+      <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+      <span style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.04em', flexShrink: 0 }}>市場局面</span>
+      <span style={{ fontSize: 12, fontWeight: 700, color, whiteSpace: 'nowrap', flexShrink: 0 }}>{regime.label}</span>
+      <span style={{ fontSize: 11, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {regime.detail}
+      </span>
+    </div>
+  );
+}
 
 // v148 ⑦: extended badge に 50DMA 乖離数値を併記 (§38/§5: price action 記述 + 乖離数値、 action 断定禁止)。
 // masked item は top-level sma50_deviation_pct、 premium item は payload.sma50_deviation_pct。
@@ -717,6 +760,9 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
     >
       {/* v160 D2: master-detail 化で WIP banner 撤去 (user gate 通過、 本実装が gate 後の正式版)。
           Hero (今注目 3 セクション) は Pane 3 の idle 状態、 銘柄選択で JudgmentDetail に切替。 */}
+
+      {/* v175 B-Top2: 市場局面 FTD バナー (ScreenerPane 最上部 = 最初に地合いを見せる)。 */}
+      <FtdRegimeBanner />
 
       {/* A-6: chip filter を「探索メニュー」 化 (ChipGroup prefix=探索)。 active のみ accent
           ([[feedback_no_baseline_cyan]]: 非 active は muted で baseline cyan を出さない)。 */}
