@@ -13,6 +13,8 @@ import {
 } from '../../../primitives/index.js';
 import SectionFade from '../../../primitives/SectionFade.jsx';
 import ChapterTabs from '../../../primitives/ChapterTabs.jsx';
+// Sprint 2 (CAN-SLIM Phase 1 UX): ライター憲法サマリーブロック
+import FundamentalsChapterSummary from './FundamentalsChapterSummary.jsx';
 
 /**
  * v125 P8-2 Sprint A: 章 ① 数値 (FundamentalsAccordion) 抽出。
@@ -41,20 +43,35 @@ export default function FundamentalsAccordion({
   setCh2Tab,
   onAnalyze,
 }) {
+  const isFundaLoading = !result && detail?.isLoading !== false;
   return (
-    <>
-      {/* === 章 2: 基本財務 (H2 Chapter Break + v97 G-2 軽量強化) ===
+    // Sprint 2: funda-section wrapper — feedback_testid_all_render_paths に準拠。
+    // loading/errored/empty/main 全 state で testid を取得可能にする。
+    // クラスなしで始める (発光バグ §C-1〜C-4 回避)。
+    <div
+      data-testid="funda-section"
+      data-state={isFundaLoading ? 'loading' : result ? 'main' : 'empty'}
+    >
+      {/* === 章 2: ファンダメンタル (Sprint 2: chapterTitle「数値」→「ファンダメンタル」)
           v97 G-2 sub-agent verdict: SectionDivider expandedLabel を「数値の根拠」 に変更。
           Phase G Phase 3 + v99 dogfood 3 体合議 verdict (2+3 構成):
-          - v2 mode: 副柱 (II. 数値) = sans 13px + muted (主柱 III と差別化)
+          - v2 mode: 副柱 (ファンダメンタル) = sans 13px + muted (主柱 III と差別化)
           - default: 既存 SectionDivider「数値の根拠」 維持 (revert 安全) */}
       {isV2 ? (
-        <ChapterSection chapterNumber="①" chapterTitle="数値" headerOnly tier="sub" />
+        <ChapterSection chapterNumber="①" chapterTitle="ファンダメンタル" headerOnly tier="sub" />
       ) : (
         <div data-chapter-start="true">
           <SectionDivider expandedLabel="数値の根拠" />
         </div>
       )}
+
+      {/* Sprint 2: ライター憲法サマリーブロック (章扉直後) */}
+      <FundamentalsChapterSummary
+        result={result}
+        guidance={guidance}
+        isLoading={isFundaLoading}
+        hasError={false}
+      />
 
       {/* === Sprint 3: ProfileCard → AccordionSection wrap (collapsed) ===
           v104 Phase G Phase 4: ProfileCard は tab 外 (会社概要 anchor 維持)、 isV3 でも常時表示 */}
@@ -181,6 +198,6 @@ export default function FundamentalsAccordion({
           </SectionFade>
         </>
       )}
-    </>
+    </div>
   );
 }

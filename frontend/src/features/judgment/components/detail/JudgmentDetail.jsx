@@ -93,6 +93,8 @@ import EtfOverviewPanel from '../../../../components/EtfOverviewPanel.jsx';
 import FundamentalsAccordion from './sections/FundamentalsAccordion.jsx';
 import MarketEvalSection from './sections/MarketEvalSection.jsx';
 import ContextSection from './sections/ContextSection.jsx';
+// Sprint 2 (CAN-SLIM Phase 1 UX): テクニカル章のライター憲法サマリーブロック
+import TechnicalChapterSummary from './sections/TechnicalChapterSummary.jsx';
 // v125 P8-3 Sprint B: 図解 sticky accordion (default OFF、 案 B 新順序の section 2)。
 // DiagramCard 物理 mount 維持は本 sprint では deferred (DetailReport.jsx vizData lift up が必要)、
 // wrapper のみ実装で AI 詳細レポートへの anchor link を提供 ([[feedback-diagram-card-remount-cache]] は次 phase)。
@@ -897,10 +899,27 @@ export default function JudgmentDetail({
         );
 
         // 章 ② テクニカル の header (legacy 順では Chart の前に配置、 isV4 では削除)
-        const technicalHeader = isV2 ? (
-          <ChapterSection key="tech-header" chapterNumber="②" chapterTitle="テクニカル" headerOnly tier="sub" />
-        ) : (
-          <ChapterHeader key="tech-header" label="テクニカル" isChapterStart />
+        // Sprint 2: technicalHeader + TechnicalChapterSummary + testid wrapper を 1 block に統合。
+        // technical-section wrapper は feedback_testid_all_render_paths に準拠、
+        // loading/errored/empty/main 全 state でも testid 取得可能。
+        const technicalHeader = (
+          <div
+            key="technical-section-wrapper"
+            data-testid="technical-section"
+            data-state={selectedTicker ? 'main' : 'empty'}
+          >
+            {isV2 ? (
+              <ChapterSection chapterNumber="②" chapterTitle="テクニカル" headerOnly tier="sub" />
+            ) : (
+              <ChapterHeader label="テクニカル" isChapterStart />
+            )}
+            {/* Sprint 2: ライター憲法サマリーブロック (章扉直後) */}
+            <TechnicalChapterSummary
+              selectedTicker={selectedTicker}
+              isLoading={!selectedTicker}
+              hasError={false}
+            />
+          </div>
         );
 
         const chartBlock = selectedTicker ? (
