@@ -43,24 +43,24 @@ export const BUY_ZONE_LABEL_JP = {
  */
 export const BUY_ZONE_DESC_JP = {
   cup_pivot: {
-    conclusion: 'IBD ルールの pivot price 目安です。',
-    detail: 'IBD ルールでは Cup-with-Handle の pivot price (= カップ完成水準) 上抜けが新たなブレイクアウトの目安として紹介されています。 出来高 40%+ 増加を伴う上抜けが confirmation 条件とされています。',
+    conclusion: '一般的なルールでの pivot price 目安です。',
+    detail: '一般的なルールでは Cup-with-Handle の pivot price (= カップ完成水準) 上抜けが新たなブレイクアウトの目安として紹介されています。 出来高 40%+ 増加を伴う上抜けが confirmation 条件とされています。',
   },
   breakout_support: {
     conclusion: '直前のブレイクアウト価格の支持線目安です。',
-    detail: 'IBD ルールでは前回のブレイクアウト価格が次回の支持線水準の目安として知られています。 ただし支持線割れは pattern failure の signal にもなり得るため、 出来高 + 終値ベースの確認が必要とされています。',
+    detail: '一般的なルールでは前回のブレイクアウト価格が次回の支持線水準の目安として知られています。 ただし支持線割れは pattern failure の signal にもなり得るため、 出来高 + 終値ベースの確認が必要とされています。',
   },
   // v126 R13-5 案 A (5/29): ATH 大幅更新中銘柄 (GE/META 型: pivot を実際に上抜けて extended) 用 narration。
   // classical Cup-Handle pattern から外れているため「目安」 + IBD extended buy point 概念引用で表現。
   breakout_extended: {
     conclusion: 'ATH付近での高値更新局面です。',
-    detail: 'classical Cup-with-Handle pattern からは外れていますが、 IBD ルールでは既存 pivot から大きく上昇 (extended buy point 目安超過) した銘柄として知られています。 新規 entry より段階利確 / 押し目待ち検討の局面とされる事例が紹介されています。',
+    detail: 'classical Cup-with-Handle pattern からは外れていますが、 一般的なルールでは既存 pivot から大きく上昇 (extended buy point 目安超過) した銘柄として知られています。 新規 entry より段階利確 / 押し目待ち検討の局面とされる事例が紹介されています。',
   },
   // v127 R16-3 (5/29 user dogfood、 LLY): 深い調整からカップ左側の高値 (pivot 目安) 付近まで回復・未突破の局面。
   // 旧実装は LLY を breakout_extended (= 既に上抜けた) と誤分類していたが、 現在価格は pivot 未満 = カップ完成間近が正。
   cup_completing: {
     conclusion: 'カップ右側が完成に近づいている局面です。',
-    detail: 'IBD ルールでは、 深い調整からカップ左側の高値水準 (pivot price 目安) 付近まで回復した段階を base 完成間近として紹介しています。 この pivot 水準の上抜けが新たなブレイクアウトの目安とされ、 出来高 40%+ 増加を伴う確認が条件とされています。 現時点では pivot 未突破の段階です。',
+    detail: '一般的なルールでは、 深い調整からカップ左側の高値水準 (pivot price 目安) 付近まで回復した段階を base 完成間近として紹介しています。 この pivot 水準の上抜けが新たなブレイクアウトの目安とされ、 出来高 40%+ 増加を伴う確認が条件とされています。 現時点では pivot 未突破の段階です。',
   },
   // v127 R16-3 (5/29 user dogfood、 NVDA $200): 長期ボックスレンジ上限 = 支持線目安。
   // {M}=touch_count / {N}=lookback_months は BuyZoneCard で数値 inject (Python 計算・JS は文字列置換のみ)。
@@ -78,7 +78,7 @@ export const BUY_ZONE_DESC_JP = {
   // {DIST_PCT} placeholder は BuyZoneCard で frontend inject (数値計算 frontend、 narration 静的)。
   pullback_to_support: {
     conclusion: '直近高値から押し戻し、 長期支持線まで残り {DIST_PCT}% の局面です。',
-    detail: '「How to Make Money in Stocks」 ではブレイクアウト後の押し目で支持線が機能するかを観察する手法が紹介されています。 band low を明確に下抜けた場合は pattern failure の signal として、 参考水準に band low -3% 前後が言及される事例があります。 投資判断はご自身でご確認ください。',
+    detail: '米国成長株投資では、 ブレイクアウト後の押し目で支持線が機能するかを観察する手法が紹介されています。 band low を明確に下抜けた場合は pattern failure の signal として、 参考水準に band low -3% 前後が言及される事例があります。 投資判断はご自身でご確認ください。',
   },
   unknown: {
     conclusion: 'pivot / support の判定を保留しています。',
@@ -127,24 +127,24 @@ export const BUY_ZONE_FOOTER = {
  */
 export const CUP_SELL_ZONE_DESC_JP = {
   formation: {
-    label: '売り目安 (IBD)',
+    label: '売り目安',
     conclusion: 'pivot price から -8% の水準が損切り目安として紹介されています。',
-    detail: 'IBD ルールでは base 形成中に pivot 下 -8% を下回った場合、 pattern failure の signal とされる事例があります。',
+    detail: '一般的なルールでは base 形成中に pivot 下 -8% を下回った場合、 pattern failure の signal とされる事例があります。',
   },
   breakout_pending: {
-    label: '売り目安 (IBD)',
+    label: '売り目安',
     conclusion: 'pivot 上抜け後 +20-25% 水準が段階利確の目安として紹介されています。',
-    detail: 'IBD ルールではブレイクアウト後に +20-25% に到達した場合、 少なくとも一部の利確を検討する目安として知られています (S2 Profit Take rule)。',
+    detail: '一般的なルールではブレイクアウト後に +20-25% に到達した場合、 少なくとも一部の利確を検討する目安として知られています (段階利確の目安)。',
   },
   breakout_extended: {
-    label: '売り目安 (IBD)',
+    label: '売り目安',
     conclusion: '50DMA 下抜けが pattern failure の signal とされる事例があります。',
-    detail: 'extended 局面では -8% stop に加え、 50DMA を高出来高で下抜けた場合に保有継続を再検討する目安として紹介されています (IBD S5 50DMA Break rule)。',
+    detail: 'extended 局面では -8% stop に加え、 50DMA を高出来高で下抜けた場合に保有継続を再検討する目安として紹介されています (50DMA 割れの目安)。',
   },
   // v127 R16-3 (5/29): カップ完成間近。base 形成中なので formation と同じ pivot -8% stop idiom。
   cup_completing: {
-    label: '売り目安 (IBD)',
+    label: '売り目安',
     conclusion: 'pivot price から -8% の水準が損切り目安として紹介されています。',
-    detail: 'IBD ルールでは base 形成中に pivot 下 -8% を下回った場合、 pattern failure の signal とされる事例があります。',
+    detail: '一般的なルールでは base 形成中に pivot 下 -8% を下回った場合、 pattern failure の signal とされる事例があります。',
   },
 };

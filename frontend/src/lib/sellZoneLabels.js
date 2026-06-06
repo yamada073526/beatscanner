@@ -44,31 +44,31 @@ export const SELL_ZONE_LABEL_JP = {
 export const SELL_ZONE_DESC_JP = {
   normal: {
     conclusion: '急いだ利確は不要とされる範囲です。',
-    detail: '50DMA から +15% 未満 (IBD ルール)。',
+    detail: '50DMA から +15% 未満 (一般的な売買ルール)。',
   },
   extended: {
     conclusion: '段階利確を検討する領域です。',
-    detail: '50DMA から +15% 以上 +25% 未満、 IBD ルールでは過熱の目安。',
+    detail: '50DMA から +15% 以上 +25% 未満、 一般的なルールでは過熱の目安。',
   },
   climax: {
     conclusion: '短期 reversion 事例が報告されています (将来保証なし)。',
-    detail: '50DMA から +25% 以上、 IBD の climax top criteria に該当。',
+    detail: '50DMA から +25% 以上、 過熱 (climax) の目安に該当。',
   },
   stop_hit: {
     conclusion: '保有銘柄の利確検討の参考表示です。',
-    detail: '過去最高値から -8% (Chandelier Exit 方式)、 IBD の universal stop loss とは別指標。',
+    detail: '過去最高値から -8% (Chandelier Exit 方式)、 一般的な損切り基準とは別指標。',
   },
   // v126 R13-4 R1 (5/29 sub-agent verdict、 user 承認): 50DMA Break + Heavy Volume detection。
   // IBD/O'Neil 7 sell rules の S5 (50DMA Break with Heavy Volume) 目安。 frontend で動的 inject。
   dma_break: {
     conclusion: '50DMA 下抜けが報告されています。',
-    detail: '50DMA を高出来高で下抜けると pattern failure の signal とされる事例があります (IBD ルール)。 再奪取で持ち直すケースも紹介されています。',
+    detail: '50DMA を高出来高で下抜けると pattern failure の signal とされる事例があります (一般的な売買ルール)。 再奪取で持ち直すケースも紹介されています。',
   },
   // v127 R16-3 (R6): 200DMA Break。長期 (約 1 年) 移動平均割れ = 長期トレンド転換の目安。
   // 50DMA break より重大とされるため classifyZone で最優先。 非断定 (§38) / IBD 出典。
   dma200_break: {
     conclusion: '長期トレンドの目安 200DMA を下抜けています。',
-    detail: '200DMA (長期移動平均) 割れは長期上昇トレンドの転換目安とされる事例があります (IBD ルール)。 再び上抜けて持ち直すケースも紹介されています。',
+    detail: '200DMA (長期移動平均) 割れは長期上昇トレンドの転換目安とされる事例があります (一般的な売買ルール)。 再び上抜けて持ち直すケースも紹介されています。',
   },
   unknown: {
     conclusion: 'zone 判定を保留しています。',
