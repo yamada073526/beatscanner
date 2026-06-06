@@ -63,10 +63,10 @@ const SCANNER_FILTERS = [
   { key: 'cup',   label: 'カップ' },
   // v141 D4 Sprint2 (3体合議 QA verdict、 #1 Trust Cliff リスク): cup scan を frontend で breakout_confirmed のみ抽出。
   // state machine 流れ (形成中 → ブレイクアウト確定) で 'cup' の直後に配置。 premium 限定 (理由は runCupFilter / CupScannerResults 参照)。
-  { key: 'breakout', label: 'ブレイクアウト', premium: true, fullLabel: 'Cup-Handle ブレイクアウト確定 (Pivot 上抜け + 出来高確認)', titleExtra: "O'Neil 打診買いゾーン: Pivot 価格を出来高を伴って上抜けた確定銘柄のみ。 ATH 追いかけ買い (extended) は除外" },
-  { key: 'rs',    label: 'RS強', titleExtra: 'Relative Strength ≥ 80 (CAN SLIM L 条件、 米国主要銘柄〈ETF・ファンド除く〉 universe で上位 20%)' },
+  { key: 'breakout', label: 'ブレイクアウト', premium: true, fullLabel: 'Cup-Handle ブレイクアウト確定 (Pivot 上抜け + 出来高確認)', titleExtra: '打診買いゾーン: Pivot 価格を出来高を伴って上抜けた確定銘柄のみ。 ATH 追いかけ買い (extended) は除外' },
+  { key: 'rs',    label: 'RS上位', titleExtra: '相対強度 ≥ 80 — 米国主要銘柄〈ETF・ファンド除く〉 universe で上位 20%' },
   { key: 'both',  label: 'ファンダ&カップ', premium: true, fullLabel: 'ファンダ AND Cup-Handle 複合検索' },
-  { key: 'oneill', label: "O'Neil 完全", premium: true, fullLabel: "ファンダ AND Cup-Handle AND RS≥80 (William O'Neil CAN SLIM 完全)", titleExtra: '打診買い 3 点セット (ファンダメンタル5条件 × Cup-Handle × Relative Strength)' },
+  { key: 'oneill', label: '全条件クリア', premium: true, fullLabel: 'ファンダ AND Cup-Handle AND RS≥80 (3条件 全クリア)', titleExtra: '打診買い 3 点セット (ファンダメンタル5条件 × Cup-Handle × Relative Strength)' },
 ];
 
 const CUP_STATE_LABEL = {
@@ -137,11 +137,12 @@ function ResultCard({ item, onSelect }) {
           </div>
         </button>
 
-        {/* Pass count badge */}
+        {/* 条件クリア数 badge — 分母「5条件中 N クリア」で明示 (Sprint 1 Trust Cliff 対応) */}
         <span
           className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold ${
             item.overallPass ? 'bg-[color-mix(in_srgb,var(--color-gain)_18%,transparent)] text-[var(--color-gain)]' : 'bg-[var(--bg-subtle)] text-[var(--text-muted)]'
           }`}
+          title={`5条件中 ${passCount} 条件クリア`}
         >
           {passCount}/5
         </span>
@@ -394,7 +395,7 @@ function RsScannerResults({ data, onSelect, universeMeta }) {
       {/* Trust Cliff 防止: universe 範囲を 1 行で明示 */}
       <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--text-muted)]">
         <span>universe: 米国主要 約{data.universe_size}銘柄〈ETF・ファンド除く〉 / 6 ヶ月 RS / {data.calc_date} 計算</span>
-        <span className="ml-auto">CAN SLIM の L = RS ≥ {data.min_percentile} (上位 {100 - data.min_percentile}%)</span>
+        <span className="ml-auto">RS ≥ {data.min_percentile} (上位 {100 - data.min_percentile}%)</span>
       </div>
       {/* v158 (3体合議): 並び替え dropdown。 §38 中立ラベル + 「投資推奨でない」 旨を併記。 */}
       <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -468,15 +469,16 @@ function RsScannerResults({ data, onSelect, universeMeta }) {
                   SPY 比 {rsDiff > 0 ? '+' : ''}{rsDiff.toFixed(1)}pt (6 ヶ月)
                 </span>
               </div>
-              {/* 右端: RS percentile badge */}
+              {/* 右端: RS percentile badge — 「RS {score} / 上位 {percentile}%」形式で表示 (Sprint 1 ラベル明確化) */}
               <span
                 className="shrink-0 rounded-full px-2.5 py-1 text-xs font-bold tabular-nums"
                 style={{
                   color: 'var(--color-gain)',
                   background: 'color-mix(in srgb, var(--color-gain) 18%, transparent)',
                 }}
+                title={`RS ${pct} / 上位 ${100 - pct}%`}
               >
-                RS {pct}
+                RS {pct} / 上位{100 - pct}%
               </span>
             </button>
           );
@@ -653,7 +655,10 @@ function CupResultCard({ item, onSelect, masked = false }) {
           )}
         </button>
         {item.passed_count != null && (
-          <span className="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold bg-[color-mix(in_srgb,var(--color-gain)_18%,transparent)] text-[var(--color-gain)]">
+          <span
+            className="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold bg-[color-mix(in_srgb,var(--color-gain)_18%,transparent)] text-[var(--color-gain)]"
+            title={`5条件中 ${item.passed_count} 条件クリア`}
+          >
             {item.passed_count}/5
           </span>
         )}
@@ -692,7 +697,7 @@ function OneillScannerResults({ data, onSelect, onUpgrade }) {
         <div className="flex items-center gap-2 mb-2">
           <Crown size={14} strokeWidth={1.75} style={{ color: 'var(--color-gold)' }} aria-hidden />
           <p className="text-sm font-semibold text-[var(--text-primary)]">
-            現在 O'Neil 完全 該当銘柄はありません
+            現在 全条件クリア 該当銘柄はありません
           </p>
         </div>
         <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
@@ -711,7 +716,7 @@ function OneillScannerResults({ data, onSelect, onUpgrade }) {
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Crown size={14} strokeWidth={1.75} style={{ color: 'var(--color-gold)' }} aria-hidden />
         <span className="font-semibold text-[var(--text-primary)]">
-          O'Neil 完全: 全 {items.length} 件
+          全条件クリア: 全 {items.length} 件
         </span>
         <span className="text-[10px] text-[var(--text-muted)] tabular-nums ml-auto">
           ファンダ∩Cup {data.both_total} / RS≥80 {data.rs_total}
@@ -732,7 +737,7 @@ function OneillScannerResults({ data, onSelect, onUpgrade }) {
       {!isPremium && (
         <div className="rounded-xl border border-[color-mix(in_srgb,var(--color-warning)_35%,transparent)] bg-[color-mix(in_srgb,var(--color-warning)_8%,transparent)] p-4">
           <p className="text-sm font-semibold text-[var(--text-primary)]">
-            Premium ¥1,800/月 で O'Neil 完全 + 毎営業日 email 通知
+            Premium ¥1,800/月 で 全条件クリア + 毎営業日 email 通知
           </p>
           <p className="mt-1 text-xs text-[var(--text-secondary)]">
             打診買い 3 点セット (ファンダ × Cup-Handle × RS≥80) を全銘柄解放。
@@ -801,15 +806,19 @@ function OneillResultCard({ item, onSelect, masked = false }) {
                     color: 'var(--color-gain)',
                     background: 'color-mix(in srgb, var(--color-gain) 16%, transparent)',
                   }}
+                  title={`RS ${rsPct} / 上位 ${100 - rsPct}%`}
                 >
-                  RS {rsPct}
+                  RS {rsPct} / 上位{100 - rsPct}%
                 </span>
               )}
             </div>
           )}
         </button>
         {item.passed_count != null && (
-          <span className="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold bg-[color-mix(in_srgb,var(--color-gain)_18%,transparent)] text-[var(--color-gain)]">
+          <span
+            className="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold bg-[color-mix(in_srgb,var(--color-gain)_18%,transparent)] text-[var(--color-gain)]"
+            title={`5条件中 ${item.passed_count} 条件クリア`}
+          >
             {item.passed_count}/5
           </span>
         )}
@@ -1144,7 +1153,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <Crown size={18} strokeWidth={1.75} aria-hidden style={{ color: 'var(--color-gold)', flexShrink: 0 }} />
                 <h4 className="pane3-section-heading">PASS 銘柄</h4>
-                <span className="text-xs text-[var(--text-muted)]">5条件すべてクリア</span>
+                <span className="text-xs text-[var(--text-muted)]">5条件中 5 クリア</span>
                 <span className="ml-auto text-base font-bold tabular-nums" style={{ color: 'var(--color-gain)' }}>
                   {data.passing.length}銘柄
                 </span>
@@ -1173,7 +1182,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
                   <div data-testid="screener-near-miss">
                     <div className="mb-3 flex flex-wrap items-center gap-2">
                       <h4 className="pane3-section-heading">あと1条件でPASS</h4>
-                      <span className="text-xs text-[var(--text-muted)]">5条件中 4 つ達成 — 次の PASS 候補（推奨ではありません）</span>
+                      <span className="text-xs text-[var(--text-muted)]">5条件中 4 クリア — 次の候補（推奨ではありません）</span>
                       <span className="ml-auto text-base font-bold tabular-nums text-[var(--text-secondary)]">
                         {nearMiss.length}銘柄
                       </span>
@@ -1189,7 +1198,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
                 {rest.length > 0 && (
                   <details className="group">
                     <summary className="cursor-pointer list-none text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition">
-                      その他の FAIL 銘柄を表示 ({rest.length}件) ▼
+                      条件未達の銘柄を表示 ({rest.length}件) ▼
                     </summary>
                     <div className="mt-2 grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
                       {rest.map((item) => (

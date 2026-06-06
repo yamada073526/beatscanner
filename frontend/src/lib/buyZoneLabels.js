@@ -44,7 +44,7 @@ export const BUY_ZONE_LABEL_JP = {
 export const BUY_ZONE_DESC_JP = {
   cup_pivot: {
     conclusion: 'IBD ルールの pivot price 目安です。',
-    detail: 'O\'Neil 著では Cup-with-Handle の pivot price (= カップ完成水準) 上抜けが新たなブレイクアウトの目安として紹介されています。 出来高 40%+ 増加を伴う上抜けが confirmation 条件とされています。',
+    detail: 'IBD ルールでは Cup-with-Handle の pivot price (= カップ完成水準) 上抜けが新たなブレイクアウトの目安として紹介されています。 出来高 40%+ 増加を伴う上抜けが confirmation 条件とされています。',
   },
   breakout_support: {
     conclusion: '直前のブレイクアウト価格の支持線目安です。',
@@ -60,7 +60,7 @@ export const BUY_ZONE_DESC_JP = {
   // 旧実装は LLY を breakout_extended (= 既に上抜けた) と誤分類していたが、 現在価格は pivot 未満 = カップ完成間近が正。
   cup_completing: {
     conclusion: 'カップ右側が完成に近づいている局面です。',
-    detail: 'O\'Neil 著では、 深い調整からカップ左側の高値水準 (pivot price 目安) 付近まで回復した段階を base 完成間近として紹介しています。 この pivot 水準の上抜けが新たなブレイクアウトの目安とされ、 出来高 40%+ 増加を伴う確認が条件とされています。 現時点では pivot 未突破の段階です。',
+    detail: 'IBD ルールでは、 深い調整からカップ左側の高値水準 (pivot price 目安) 付近まで回復した段階を base 完成間近として紹介しています。 この pivot 水準の上抜けが新たなブレイクアウトの目安とされ、 出来高 40%+ 増加を伴う確認が条件とされています。 現時点では pivot 未突破の段階です。',
   },
   // v127 R16-3 (5/29 user dogfood、 NVDA $200): 長期ボックスレンジ上限 = 支持線目安。
   // {M}=touch_count / {N}=lookback_months は BuyZoneCard で数値 inject (Python 計算・JS は文字列置換のみ)。
@@ -129,7 +129,7 @@ export const CUP_SELL_ZONE_DESC_JP = {
   formation: {
     label: '売り目安 (IBD)',
     conclusion: 'pivot price から -8% の水準が損切り目安として紹介されています。',
-    detail: 'O\'Neil 著では base 形成中に pivot 下 -8% を下回った場合、 pattern failure の signal とされる事例があります。',
+    detail: 'IBD ルールでは base 形成中に pivot 下 -8% を下回った場合、 pattern failure の signal とされる事例があります。',
   },
   breakout_pending: {
     label: '売り目安 (IBD)',
@@ -145,6 +145,6 @@ export const CUP_SELL_ZONE_DESC_JP = {
   cup_completing: {
     label: '売り目安 (IBD)',
     conclusion: 'pivot price から -8% の水準が損切り目安として紹介されています。',
-    detail: 'O\'Neil 著では base 形成中に pivot 下 -8% を下回った場合、 pattern failure の signal とされる事例があります。',
+    detail: 'IBD ルールでは base 形成中に pivot 下 -8% を下回った場合、 pattern failure の signal とされる事例があります。',
   },
 };

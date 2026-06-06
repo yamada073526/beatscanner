@@ -69,7 +69,7 @@ export function FtdRailDots() {
   }).join('\n');
   return (
     <div
-      title={`FTD = Follow-Through Day (William O'Neil 理論、 上昇局面入り確認指標)\n\n${tooltip}\n\n緑=上昇トレンド入り / 黄=シグナル待ち / 灰=安定`}
+      title={`FTD = Follow-Through Day (上昇局面入り確認指標)\n\n${tooltip}\n\n緑=上昇トレンド入り / 黄=シグナル待ち / 灰=安定`}
       aria-label={`FTD 状態 - ${tooltip}`}
       data-testid="ftd-rail-dots"
       style={{ display: 'flex', gap: 3, padding: '4px 0', justifyContent: 'center' }}
