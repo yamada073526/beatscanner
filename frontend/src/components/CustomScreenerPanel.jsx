@@ -2,6 +2,8 @@ import { useEffect, useState, useMemo } from 'react';
 import { ChartCandlestick, Crown, TrendingUp, SlidersHorizontal, ChevronDown } from 'lucide-react';
 import { fetchCustomScreener, fetchCupHandleScanner, fetchRsScanner, fetchUniverseMeta } from '../api.js';
 import Chip, { ChipGroup } from './ui/Chip.jsx';
+// Sprint 3: 市場局面バナーを ScreenerPane と共有 (FtdRegimeBanner.jsx が SSOT、二重定義なし)
+import FtdRegimeBanner from '../features/workspace/FtdRegimeBanner.jsx';
 
 // v159 SPEC_2026-06-03 Part B: RS スクリーナ結果の セクター / 時価総額 絞り込み (client-side)。
 // universe-meta endpoint (純データ、 §38/景表法 risk なし) を起動時 1 回 fetch → ticker join。
@@ -969,6 +971,12 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
 
   return (
     <section className="rounded-2xl bg-[var(--bg-card)] p-6 shadow-[var(--shadow-sm)]">
+      {/* Sprint 3: 市場局面バナー (FtdRegimeBanner.jsx 共有 module)。
+          ScreenerPane (Hero) と CustomScreenerPanel (探索チップ UI) は別 view なので両方に表示する。
+          fetch は api.js dedupGet で 1 本化されるため API 重複コールなし。
+          data-testid="ftd-regime-banner" は FtdRegimeBanner 内に付与済 (loading / main 両 state)。 */}
+      <FtdRegimeBanner />
+
       <div className="mb-4">
         <h3 className="section-label">ファンダメンタル5条件スクリーナー</h3>
         <p className="mt-0.5 text-xs text-[var(--text-muted)]">

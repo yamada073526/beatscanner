@@ -112,7 +112,7 @@ export function classifyBuyZone(state) {
  * BuyZoneCard 内で 必ず render する。
  */
 export const BUY_ZONE_FOOTER = {
-  source: '出典: IBD / William O\'Neil 著 "How to Make Money in Stocks"',
+  source: '出典: 米国成長株投資の標準的な売買ルール',
   disclaimer: '※ テクニカル分析は将来の値動きを保証するものではありません',
 };
 
