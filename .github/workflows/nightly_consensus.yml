@@ -1,0 +1,97 @@
+name: Nightly Consensus Snapshot (案B drift 素材)
+
+# 案B「コンセンサス修正トレンド」Sprint 3: アナリストコンセンサス (EPS/売上予想) を毎晩 snapshot 蓄積する。
+#
+# 背景:
+#   - Railway native cron は 2026-05-26 以降 発火停止 → 夜間 batch は GitHub Actions に統一
+#     (feedback_railway_native_cron.md)。
+#   - endpoint: POST /api/cron/consensus-snapshot (X-Cron-Secret 認証)。
+#     universe = 保有 ∪ WL ∪ RS≥90 ∪ Cup-Handle検出 の和集合 (~500 ticker、 backend が動的構築)。
+#     FMP analyst-estimates を forward-only (near-term quarter4 + annual2) で取得し upsert + retention 90日。
+#
+# 時刻: 23:40 UTC = 08:40 JST。 既存 nightly_scan.yml (23:07、 cup→rs→notify で ~8分) の完了後に起動。
+#   consensus universe は rs_ratings / pattern_signals を読むため rs/cup scan 完了に依存する
+#   (6 体合議 engineer verdict: 23:20 は rs-scan 完了に際どい → 23:40 で余裕を確保)。
+#   nightly_scan とは独立 workflow (障害切り分け + revert 容易、 6 体合議 SRE verdict)。
+#
+# ⚠️ 有効化には GitHub repo secret CRON_SECRET (Railway production と同値) が必要:
+#     railway variables --json | python3 -c "import sys,json;print(json.load(sys.stdin)['CRON_SECRET'])" | gh secret set CRON_SECRET
+#   (nightly_scan.yml と同じ secret を共用。 未設定だと endpoint が 401)
+#
+# ⚠️ データ蓄積の性質: drift は同一会計期の snapshot が 2 点以上揃って初めて出る。 cron が 2 晩以上
+#   回るまで全銘柄 insufficient (=「蓄積中」表示が正常)。 初回実行は return の is_first_run=true。
+#
+# memory anchor: feedback_railway_native_cron.md / project_signature_tier_10k_strategy.md
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (universe 構築のみ確認、 DB write を skip)'
+        required: false
+        default: 'false'
+  schedule:
+    - cron: '40 23 * * *'   # 23:40 UTC = 08:40 JST (nightly_scan の rs/cup 完了後)
+
+concurrency:
+  group: nightly-consensus
+  cancel-in-progress: false   # 実行中を kill せず二重発火は待機 (snapshot の競合 upsert を避ける)
+
+jobs:
+  snapshot:
+    name: Consensus snapshot batch
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BASE: https://beatscanner-production.up.railway.app
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      BODY: '{"dry_run": ${{ github.event.inputs.dry_run || false }}}'
+    steps:
+      - name: Setup tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq jq curl
+
+      - name: Guard — CRON_SECRET present
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET secret 未設定。 README の gh secret set コマンドで追加してください。"
+            exit 1
+          fi
+
+      - name: Consensus snapshot
+        id: snap
+        run: |
+          echo "=== consensus-snapshot (body=$BODY) ==="
+          resp=$(curl -s --max-time 1200 -w '\nHTTP:%{http_code}' -X POST \
+            -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
+            -d "$BODY" "$BASE/api/cron/consensus-snapshot")
+          http=$(echo "$resp" | tail -1)
+          body=$(echo "$resp" | sed '$d')
+          echo "$http"
+          echo "$body" | jq '{snapshot_date,processed,upserted,universe_size,by_source,source_errors,skipped_count,error_count,retention_deleted,is_first_run,universe_degrade_warning,latest_snapshot_date}' 2>/dev/null || echo "$body"
+          {
+            echo "### Consensus Snapshot ($(date -u +'%Y-%m-%d %H:%M UTC'))"
+            echo "- HTTP: \`$http\`"
+            echo "- snapshot_date: \`$(echo "$body" | jq -r '.snapshot_date // "?"')\` / latest: \`$(echo "$body" | jq -r '.latest_snapshot_date // "?"')\`"
+            echo "- universe_size: \`$(echo "$body" | jq -r '.universe_size // "?"')\` / processed: \`$(echo "$body" | jq -r '.processed // "?"')\` / upserted: \`$(echo "$body" | jq -r '.upserted // "?"')\`"
+            echo "- by_source: \`$(echo "$body" | jq -c '.by_source // {}' 2>/dev/null)\`"
+            echo "- skipped: \`$(echo "$body" | jq -r '.skipped_count // "?"')\` / error: \`$(echo "$body" | jq -r '.error_count // "?"')\` / retention_deleted: \`$(echo "$body" | jq -r '.retention_deleted // "?"')\`"
+            echo "- is_first_run: \`$(echo "$body" | jq -r '.is_first_run // "?"')\` (true = 蓄積初日、 drift は「蓄積中」が正常)"
+            echo "- universe_degrade_warning: \`$(echo "$body" | jq -r '.universe_degrade_warning // "?"')\` / source_errors: \`$(echo "$body" | jq -c '.source_errors // []')\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          # 非 2xx は失敗扱い (workflow を赤にする)
+          echo "$http" | grep -q "HTTP:2" || { echo "::error::consensus-snapshot non-2xx response"; exit 1; }
+          # universe 縮小警告 (source silent fail 検知)
+          if [ "$(echo "$body" | jq -r '.universe_degrade_warning // false')" = "true" ]; then
+            echo "::warning::universe_degrade_warning=true — いずれかの source が空/縮小 (source_errors を確認)"
+          fi
+          # freshness: dry_run でなければ latest_snapshot_date == today を確認
+          dryrun=$(echo "$BODY" | jq -r '.dry_run // false')
+          if [ "$dryrun" != "true" ]; then
+            today=$(date -u +%Y-%m-%d)
+            latest=$(echo "$body" | jq -r '.latest_snapshot_date // "?"')
+            if [ "$latest" != "$today" ]; then
+              echo "::warning::latest_snapshot_date ($latest) != today ($today) — snapshot 未反映の可能性"
+            fi
+          fi

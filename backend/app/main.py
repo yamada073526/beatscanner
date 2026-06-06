@@ -16159,6 +16159,300 @@ async def cron_rs_scan(
     }
 
 
+# ════════════════════════════════════════════════════════════════════════
+# 案B Sprint 3: アナリストコンセンサス修正トレンド nightly snapshot cron
+#   - universe = 保有 ∪ WL ∪ RS≥90 ∪ Cup-Handle検出 の和集合 (4 source 独立 fetch)
+#   - FMP analyst-estimates を forward-only (near-term) で蓄積 (consensus_history)
+#   - retention 90 日 cleanup、 §38 narration なし (数値物理層のみ)
+#   - GitHub Actions nightly_consensus.yml から X-Cron-Secret で起動
+#   SPEC: docs/specs/SPEC_2026-06-06_consensus-revision-trend.md (Sprint 3)
+# ════════════════════════════════════════════════════════════════════════
+
+# cup_handle universe に含める state。 breakout 後に伸びた銘柄 (breakout_extended) も
+# コンセンサス修正を追う主役なので含める (6 体合議 engineer verdict)。
+_CONSENSUS_CUP_STATES = ("breakout_pending", "breakout_confirmed", "breakout_extended")
+
+
+def _select_all_column(sb, table: str, column: str) -> list[dict]:
+    """PostgREST デフォルト 1000 行 cap を range pagination で回避し、 指定 column を全件取得。
+
+    watchlist / transactions の全 user 横断 SELECT が 1000 行超で silent truncate して
+    保有 / WL 銘柄が歯抜けになる事故を防ぐ (6 体合議 engineer/backend verdict)。
+    """
+    out: list[dict] = []
+    step = 1000
+    off = 0
+    while True:
+        res = sb.table(table).select(column).range(off, off + step - 1).execute()
+        rows = res.data or []
+        out.extend(rows)
+        if len(rows) < step:
+            break
+        off += step
+    return out
+
+
+def _build_consensus_universe(sb) -> tuple[set[str], dict[str, int], list[str]]:
+    """consensus snapshot の対象 universe を 4 source の和集合で構築する (同期、 to_thread で呼ぶ)。
+
+    返り値: (tickers, source_counts, source_errors)。
+    各 source は独立 try/except で、 1 source が落ちても他 source で継続する
+    (1 source の Supabase エラーで universe 全滅 = silent 歯抜けを防ぐ、 6 体合議 backend verdict)。
+    RS / Cup は「最新 calc_date / signal_date」 を使うため、 当日 scan 未実行でも前日分で graceful degrade。
+    """
+    tickers: set[str] = set()
+    source_counts: dict[str, int] = {}
+    source_errors: list[str] = []
+
+    # 1. watchlist (全 user 横断、 全件 pagination)
+    try:
+        rows = _select_all_column(sb, "watchlist", "ticker")
+        s = {str(r["ticker"]).upper() for r in rows if r.get("ticker")}
+        source_counts["watchlist"] = len(s)
+        tickers |= s
+    except Exception as e:
+        source_counts["watchlist"] = 0
+        source_errors.append(f"watchlist: {type(e).__name__}")
+
+    # 2. 保有 (transactions distinct ticker、 全 user、 全件 pagination)
+    try:
+        rows = _select_all_column(sb, "transactions", "ticker")
+        s = {str(r["ticker"]).upper() for r in rows if r.get("ticker")}
+        source_counts["holdings"] = len(s)
+        tickers |= s
+    except Exception as e:
+        source_counts["holdings"] = 0
+        source_errors.append(f"holdings: {type(e).__name__}")
+
+    # 3. RS 上位 (最新 calc_date の universe_percentile >= 90)
+    try:
+        latest = (
+            sb.table("rs_ratings").select("calc_date")
+            .order("calc_date", desc=True).limit(1).execute()
+        )
+        rows0 = latest.data or []
+        s = set()
+        if rows0:
+            calc_date = rows0[0]["calc_date"]
+            res = (
+                sb.table("rs_ratings").select("ticker")
+                .eq("calc_date", calc_date)
+                .gte("universe_percentile", 90)
+                .execute()
+            )
+            s = {str(r["ticker"]).upper() for r in (res.data or []) if r.get("ticker")}
+        source_counts["rs_top"] = len(s)
+        tickers |= s
+    except Exception as e:
+        source_counts["rs_top"] = 0
+        source_errors.append(f"rs_top: {type(e).__name__}")
+
+    # 4. Cup-Handle 検出 (最新 signal_date の state ∈ 監視対象)
+    try:
+        latest = (
+            sb.table("pattern_signals").select("signal_date")
+            .eq("pattern_type", "cup_handle")
+            .order("signal_date", desc=True).limit(1).execute()
+        )
+        rows0 = latest.data or []
+        s = set()
+        if rows0:
+            signal_date = rows0[0]["signal_date"]
+            res = (
+                sb.table("pattern_signals").select("ticker,state")
+                .eq("pattern_type", "cup_handle")
+                .eq("signal_date", signal_date)
+                .in_("state", list(_CONSENSUS_CUP_STATES))
+                .execute()
+            )
+            s = {str(r["ticker"]).upper() for r in (res.data or []) if r.get("ticker")}
+        source_counts["cup_handle"] = len(s)
+        tickers |= s
+    except Exception as e:
+        source_counts["cup_handle"] = 0
+        source_errors.append(f"cup_handle: {type(e).__name__}")
+
+    return tickers, source_counts, source_errors
+
+
+def _delete_consensus_snapshots_before(cutoff_date: date) -> int:
+    """retention: cutoff_date より古い snapshot を削除。 返却は削除行数 (失敗時 -1)。
+    _delete_pattern_signals_before と同方針 (Supabase Free 500MB 圧迫回避)。"""
+    sb = _get_supabase_service()
+    if sb is None:
+        return -1
+    try:
+        res = (
+            sb.table("consensus_snapshots")
+            .delete()
+            .lt("snapshot_date", cutoff_date.isoformat())
+            .execute()
+        )
+        return len(res.data) if hasattr(res, "data") and res.data else 0
+    except Exception as e:
+        print(f"[consensus_snapshots] delete_before failed: {e}")
+        return -1
+
+
+@app.post("/api/cron/consensus-snapshot")
+async def cron_consensus_snapshot(
+    request: Request,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """案B Sprint 3: アナリストコンセンサスを nightly snapshot 蓄積する cron。
+
+    universe = 保有 ∪ WL ∪ RS≥90 ∪ Cup-Handle検出 の和集合 (_build_consensus_universe)。
+    各 ticker の FMP analyst-estimates を quarter(near-term 4 期) + annual(near-term 2 期) で
+    forward-only に取得 (consensus_history.fetch_and_build_snapshot) し consensus_snapshots へ upsert。
+    retention 90 日 cleanup は upsert の前に実行 (古いものを掃除 → 新しいものを書く)。
+
+    認証: X-Cron-Secret (既存 _check_cron_secret 再利用)。GitHub Actions nightly_consensus.yml が
+    23:40 UTC に起動 (Railway native cron は発火停止済 → feedback_railway_native_cron.md)。
+
+    body (任意):
+      - {"tickers": ["AAPL", ...]}: universe を override (手動再実行・デバッグ用)
+      - {"dry_run": true}: universe 構築のみ実施し upsert/delete を skip (安全確認用)
+
+    ⚠️ §38: snapshot は「予想 avg/high/low + アナリスト数」 の検証可能な事実のみ蓄積する。
+      action 示唆・将来予測・最上級表現を一切持たせない (narration は別 layer の静的 dict)。
+    """
+    _check_cron_secret(x_cron_secret)
+
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    from .aggregator import consensus_history  # 数値物理層 (LLM import なし)
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    override_tickers = body.get("tickers")
+    dry_run = bool(body.get("dry_run", False))
+
+    today = date.today()
+    today_iso = today.isoformat()
+
+    # 1. universe 構築 (override or 4 source 和集合)
+    if isinstance(override_tickers, list) and override_tickers:
+        universe = {str(t).upper() for t in override_tickers if t}
+        source_counts: dict[str, int] = {"override": len(universe)}
+        source_errors: list[str] = []
+    else:
+        universe, source_counts, source_errors = await asyncio.to_thread(
+            _build_consensus_universe, sb
+        )
+    universe_list = sorted(universe)
+    universe_size = len(universe_list)
+
+    # universe が空 / 縮小の警告 (source silent fail 検知、 6 体合議 qa verdict)
+    universe_degrade_warning = (not override_tickers) and (
+        universe_size < 50 or source_counts.get("rs_top", 0) == 0
+    )
+
+    if dry_run:
+        return {
+            "dry_run": True,
+            "snapshot_date": today_iso,
+            "universe_size": universe_size,
+            "by_source": source_counts,
+            "source_errors": source_errors,
+            "universe_degrade_warning": universe_degrade_warning,
+        }
+
+    # 2. retention cleanup (upsert の前に: 古いものを掃除 → 新しいものを書く)
+    retention_cutoff = today - timedelta(days=90)
+    retention_deleted = await asyncio.to_thread(
+        _delete_consensus_snapshots_before, retention_cutoff
+    )
+
+    # 3. per-ticker fetch (Semaphore で FMP burst 抑制、 quarter 4 + annual 2、 forward-only)
+    fmp_key = _get_fmp_key(request) or os.getenv("FMP_API_KEY")
+    if not fmp_key:
+        raise HTTPException(status_code=500, detail="FMP_API_KEY not configured")
+    client = FMPClient(api_key=fmp_key)
+
+    sem = asyncio.Semaphore(10)
+
+    async def _one(t: str) -> list[dict]:
+        async with sem:
+            q = await consensus_history.fetch_and_build_snapshot(
+                client, t, today_iso, period_type="quarter", limit=40, keep_nearest=4
+            )
+            a = await consensus_history.fetch_and_build_snapshot(
+                client, t, today_iso, period_type="annual", limit=15, keep_nearest=2
+            )
+            return q + a
+
+    results = await asyncio.gather(
+        *[_one(t) for t in universe_list], return_exceptions=True
+    )
+
+    skipped_count = 0   # FMP 正常応答だが forward estimates なし (上場前 / 小型株)
+    error_count = 0     # 例外 (FMP / 整形)
+    failed_tickers: list[dict] = []
+    all_rows: list[dict] = []
+    for t, res in zip(universe_list, results):
+        if isinstance(res, Exception):
+            error_count += 1
+            if len(failed_tickers) < 20:
+                failed_tickers.append({"ticker": t, "reason": type(res).__name__})
+        elif not res:
+            skipped_count += 1
+        else:
+            all_rows.extend(res)
+
+    # 4. upsert (500 行 chunk、 同期 client を to_thread でラップ)
+    def _upsert_chunks(rows: list[dict]) -> int:
+        n = 0
+        for i in range(0, len(rows), 500):
+            chunk = rows[i : i + 500]
+            sb.table("consensus_snapshots").upsert(
+                chunk, on_conflict=consensus_history.SNAPSHOT_CONFLICT_KEYS
+            ).execute()
+            n += len(chunk)
+        return n
+
+    upserted = await asyncio.to_thread(_upsert_chunks, all_rows) if all_rows else 0
+
+    # 5. freshness / 蓄積状況 (初回 2 晩は drift insufficient = 正常。 翌朝 verify で判別できるよう返す)
+    def _first_snapshot_date() -> str | None:
+        try:
+            mn = (
+                sb.table("consensus_snapshots").select("snapshot_date")
+                .order("snapshot_date", desc=False).limit(1).execute()
+            )
+            return (mn.data or [{}])[0].get("snapshot_date")
+        except Exception:
+            return None
+
+    first_snapshot_date = await asyncio.to_thread(_first_snapshot_date)
+    # 過去 snapshot が無い (= 今日が最初の蓄積日) なら初回運用 → drift は数日後から (蓄積中が正常)
+    is_first_run = bool(first_snapshot_date == today_iso)
+
+    return {
+        "snapshot_date": today_iso,
+        "processed": universe_size,
+        "upserted": upserted,
+        "universe_size": universe_size,
+        "by_source": source_counts,
+        "source_errors": source_errors,
+        "skipped_count": skipped_count,    # forward estimates なしで空だった ticker
+        "error_count": error_count,        # 例外で fetch 失敗した ticker
+        "failed_tickers": failed_tickers,  # 上位 20 件 (reason 付)
+        "retention_deleted": retention_deleted,
+        "first_snapshot_date": first_snapshot_date,
+        "latest_snapshot_date": today_iso if upserted > 0 else None,
+        "is_first_run": is_first_run,      # true = 蓄積初日 (drift は「蓄積中」が正常)
+        "universe_degrade_warning": universe_degrade_warning,
+        "override": bool(override_tickers),
+        "dry_run": False,
+    }
+
+
 # --- Screener universe-meta (v159 SPEC_2026-06-03 Part B: sector/mcap client-side filter 供給) ---
 # 純データ endpoint: schema 変更なし・LLM 非経由・景表法/§38 risk なし (中立メタ)。
 # universe fetch (_fetch_market_cap_top_n) と同じ FMP /stable/company-screener を叩き、

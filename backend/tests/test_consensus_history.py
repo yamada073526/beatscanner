@@ -217,9 +217,11 @@ def test_snapshot_conflict_keys_matches_migration_unique():
 async def test_fetch_and_build_snapshot_happy():
     client = AsyncMock()
     client.analyst_estimates.return_value = FMP_ESTIMATES_STABLE
+    # fixture の 2 期 (2026-12-31 / 2027-03-31) は共に snapshot_date 以降 = forward なので両方残る。
     rows = await fetch_and_build_snapshot(client, "AAPL", "2026-06-06", "quarter")
     assert len(rows) == 2
-    client.analyst_estimates.assert_awaited_once_with("AAPL", period="quarter", limit=8)
+    # default limit は 40 (FMP date 降順で near-term を取りこぼさないため、 main.py v169 と同方針)。
+    client.analyst_estimates.assert_awaited_once_with("AAPL", period="quarter", limit=40)
 
 
 @pytest.mark.asyncio
@@ -229,3 +231,64 @@ async def test_fetch_and_build_snapshot_fetch_error_returns_empty():
     client.analyst_estimates.side_effect = RuntimeError("FMP 503")
     rows = await fetch_and_build_snapshot(client, "AAPL", "2026-06-06", "quarter")
     assert rows == []
+
+
+# ─── fetch_and_build_snapshot: forward-only + keep_nearest (Sprint 3 near-term 抜け対策) ─
+
+# FMP /stable analyst-estimates は date 降順 (遠未来が先頭) で返る。 過去確定期 + near-term +
+# 遠未来が混在するレスポンスを模す (snapshot_date = 2026-06-06 を境に過去 2 期 / 未来 3 期)。
+FMP_ESTIMATES_MIXED = [
+    {"date": "2030-12-31", "estimatedEpsAvg": 5.0, "estimatedRevenueAvg": 2.0e11},  # 遠未来
+    {"date": "2027-03-31", "estimatedEpsAvg": 3.0, "estimatedRevenueAvg": 1.6e11},  # 未来
+    {"date": "2026-09-30", "estimatedEpsAvg": 2.5, "estimatedRevenueAvg": 1.5e11},  # near-term
+    {"date": "2026-03-31", "estimatedEpsAvg": 2.0, "estimatedRevenueAvg": 1.4e11},  # 過去確定期
+    {"date": "2025-12-31", "estimatedEpsAvg": 1.8, "estimatedRevenueAvg": 1.3e11},  # 過去確定期
+]
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_build_snapshot_filters_past_fiscal_dates():
+    """過去確定期 (fiscal_date < snapshot_date) を除外し、 未来期だけを昇順で残す."""
+    client = AsyncMock()
+    client.analyst_estimates.return_value = FMP_ESTIMATES_MIXED
+    rows = await fetch_and_build_snapshot(
+        client, "AAPL", "2026-06-06", "quarter", keep_nearest=10
+    )
+    fds = [r["fiscal_date"] for r in rows]
+    # 過去 2 期 (2026-03-31 / 2025-12-31) は除外、 未来 3 期のみ、 昇順 (near-term 先頭)
+    assert fds == ["2026-09-30", "2027-03-31", "2030-12-31"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_build_snapshot_keep_nearest_limits_count():
+    """keep_nearest で最も近い N 期だけに絞る (容量節約 + drift の主役 = near-term)."""
+    client = AsyncMock()
+    client.analyst_estimates.return_value = FMP_ESTIMATES_MIXED
+    rows = await fetch_and_build_snapshot(
+        client, "AAPL", "2026-06-06", "quarter", keep_nearest=2
+    )
+    fds = [r["fiscal_date"] for r in rows]
+    assert fds == ["2026-09-30", "2027-03-31"]  # 最も近い 2 期のみ
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_build_snapshot_boundary_includes_snapshot_date():
+    """fiscal_date == snapshot_date は残す (>= 境界)、 1 日前は除外."""
+    client = AsyncMock()
+    client.analyst_estimates.return_value = [
+        {"date": "2026-06-06", "estimatedEpsAvg": 2.0},  # == snapshot_date → 残す
+        {"date": "2026-06-05", "estimatedEpsAvg": 1.9},  # < snapshot_date → 除外
+    ]
+    rows = await fetch_and_build_snapshot(client, "AAPL", "2026-06-06", "quarter")
+    assert [r["fiscal_date"] for r in rows] == ["2026-06-06"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_build_snapshot_passes_period_and_limit():
+    """annual で limit / keep_nearest を明示指定すると FMP 呼び出しに伝播する."""
+    client = AsyncMock()
+    client.analyst_estimates.return_value = []
+    await fetch_and_build_snapshot(
+        client, "AAPL", "2026-06-06", "annual", limit=15, keep_nearest=2
+    )
+    client.analyst_estimates.assert_awaited_once_with("AAPL", period="annual", limit=15)

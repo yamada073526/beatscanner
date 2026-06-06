@@ -140,17 +140,41 @@ async def fetch_and_build_snapshot(
     ticker: str,
     snapshot_date: str,
     period_type: str = "quarter",
-    limit: int = 8,
+    limit: int = 40,
+    keep_nearest: int = 4,
 ) -> list[dict]:
-    """Sprint 3 nightly cron 用の足場: FMP から estimates を fetch して row dict に整形する。
+    """Sprint 3 nightly cron 用の足場: FMP から estimates を fetch し、 forward (未到来) の
+    near-term 期だけに絞って row dict に整形する。
+
+    ⚠️ FMP /stable/analyst-estimates は **date 降順 (最も遠い未来が先頭) で返す**
+    (main.py v169 `_fetch_eps_data` 参照、 META 実測で near-term は降順 position ~17)。
+    そのため limit を小さくすると遠未来期 (例 2030) だけを掴み、 ユーザーが見たい near-term
+    (次の決算) が抜ける。 よって limit=40 で過去〜near-term〜遠未来を全カバーした上で、 ここで
+    **snapshot_date 以降の fiscal_date (= まだ到来していない forward 期) に限定** し、 最も近い
+    keep_nearest 期だけを残す。 この forward-only 蓄積により:
+      1. drift の主役 = near-term forward 期の予想修正を確実に追える。
+      2. 過去確定期 (決算後ほぼ動かない) を蓄積せず容量を節約する。
+      3. calc.py の `min(fiscal_date)` が自動的に「最も近い未来期」 を指す (calc 無改修)。
 
     Supabase upsert は呼び出し側 (cron) が `SNAPSHOT_CONFLICT_KEYS` を使って行う。
     client は `FMPClient` 互換 (`analyst_estimates(ticker, period, limit)` を持つ) を想定し、
     循環 import / LLM 物理層汚染を避けるため依存性注入で受け取る (import しない)。
+
+    ※ §38: 返す row は「予想 avg/high/low + アナリスト数」 の検証可能な事実のみ。 この snapshot や
+      後段 drift を「買い / 上昇するだろう / 今が好機」 等の action 示唆・将来予測に変換しては
+      ならない (narration は別 layer の静的 dict で「過去 X 日: 上方修正 N 回 (事実、 出典 FMP)」
+      に限定する)。
     """
     try:
         estimates = await client.analyst_estimates(ticker, period=period_type, limit=limit)
     except Exception:
         # fetch 失敗は空 snapshot 扱い (cron 側で per-ticker graceful skip、 捏造しない)
         return []
-    return build_snapshot_rows(ticker, snapshot_date, estimates, period_type)
+    rows = build_snapshot_rows(ticker, snapshot_date, estimates, period_type)
+    # forward-only: snapshot_date 以降の fiscal_date (未到来の forward 期) のみ残す。
+    # fiscal_date / snapshot_date は共に ISO "YYYY-MM-DD" なので文字列比較で日付順序が正しい。
+    forward = [r for r in rows if r.get("fiscal_date") and r["fiscal_date"] >= snapshot_date]
+    forward.sort(key=lambda r: r["fiscal_date"])  # 昇順 = near-term が先頭
+    if keep_nearest and keep_nearest > 0:
+        forward = forward[:keep_nearest]
+    return forward
