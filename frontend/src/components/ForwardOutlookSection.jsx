@@ -22,7 +22,7 @@
  * 独立 component (GuidanceCard 無改変、 発光系 card を新規追加しない = frontend verdict)。
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronRight, CalendarRange } from 'lucide-react';
 import { fetchGuidanceSurprise } from '../api.js';
 import { useCountUp } from '../hooks/useCountUp.js';
@@ -279,8 +279,8 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
   const [surpriseFy, setSurpriseFy] = useState(null); // v173 通期の会社ガイダンスサプライズ (lazy)
   // カウントアップ view 内発火 (dogfood 2026-06-06: mount 時発火だと scroll 前に完了して見えない → IO で入場時発火)
   const [inView, setInView] = useState(false);
-  const sectionRef = useRef(null);
   const countFiredRef = useRef(false);
+  const ioRef = useRef(null);
   const periodEnd = forward?.next_q?.period_end_date;
   const fyPeriodEnd = forward?.next_fy?.period_end_date;
   useEffect(() => {
@@ -313,11 +313,17 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
     };
   }, [ticker, periodEnd, fyPeriodEnd]);
 
-  // カウントアップ view 内発火 (IntersectionObserver、 1 回のみ、 threshold 0.15)。 これがないと
-  //   ForwardOutlookSection が scroll 下にあり mount 時 (Pane3 open 時) に count-up 完了 → scroll で見える頃には終了。
-  useEffect(() => {
-    const el = sectionRef.current;
-    if (!el || countFiredRef.current) return;
+  // カウントアップ view 内発火 — callback ref で section が DOM に attach された瞬間に IO を observe する。
+  //   v173.5 bug 真因: 旧実装は useEffect([]) が mount 時 1 回のみ実行だが、 その時点で forward (guidance/basic の
+  //   非同期 fetch 結果) が未到着 → 早期 return で section 未描画 → sectionRef.current=null → IO が一度も observe
+  //   されず inView が永久 false → count-up 不発 (acd0484 で IO を足しても効かなかった理由)。 callback ref なら
+  //   forward 到着後に section が描画された瞬間に必ず発火し確実に attach、 tab 再 mount でも re-arm される。
+  const sectionRef = useCallback((node) => {
+    if (ioRef.current) {
+      ioRef.current.disconnect();
+      ioRef.current = null;
+    }
+    if (!node || countFiredRef.current) return;
     const io = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting && !countFiredRef.current) {
@@ -326,10 +332,10 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
           io.disconnect();
         }
       },
-      { threshold: 0.15 }
+      { threshold: 0.2, rootMargin: '0px 0px -10% 0px' }
     );
-    io.observe(el);
-    return () => io.disconnect();
+    io.observe(node);
+    ioRef.current = io;
   }, []);
 
   // static gate: backend が forward=null を返したら (コンセンサス取得不可) 何も描画しない。
