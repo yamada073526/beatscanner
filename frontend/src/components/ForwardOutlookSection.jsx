@@ -22,7 +22,7 @@
  * 独立 component (GuidanceCard 無改変、 発光系 card を新規追加しない = frontend verdict)。
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ChevronRight, CalendarRange } from 'lucide-react';
 import { fetchGuidanceSurprise } from '../api.js';
 import { useCountUp } from '../hooks/useCountUp.js';
@@ -208,14 +208,14 @@ function GuidanceSurpriseRow({ state, companyLow, companyHigh, consensus, fmt, f
   );
 }
 
-function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unreliable, turnaround, count, guidanceState, companyLow, companyHigh, yearAgoEstimate }) {
+function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unreliable, turnaround, count, guidanceState, companyLow, companyHigh, yearAgoEstimate, inView }) {
   const fmt = isMoney ? fmtMoney : fmtEps;
   // 会社ガイダンスのレンジは Money のみ 2 桁 (14.36〜14.42億ドル)。 EPS は fmtEps が既に 2 桁。
   const fmtRange = isMoney ? fmtMoneyRange : fmtEps;
   // カウントアップ (3体合議 2026-06-06): 来期 consensus メイン数値のみ。 §38 で来期=将来予測のため
   //   duration 400ms (今期ゲージ 700ms より短く「現れる」 寄りの演出)、 中立色維持。 前年比%・会社ガイダンス・
   //   予測棒ラベルは静的 (二次情報のうるささ回避 + マイナス値/null 点滅回避 = ui/qa verdict)。 null は即固定。
-  const animConsensus = useCountUp(consensus, { duration: 400, digits: isMoney ? 0 : 2, forceFromZero: true });
+  const animConsensus = useCountUp(inView ? consensus : null, { duration: 400, digits: isMoney ? 0 : 2, forceFromZero: true });
   const hasConsensus = consensus != null && Number.isFinite(consensus);
   return (
     <div data-testid={`forward-metric-${isMoney ? 'revenue' : 'eps'}`} style={{ padding: '10px 0', borderTop: '1px solid var(--border)' }}>
@@ -225,7 +225,7 @@ function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unr
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>アナリストカバレッジなし</span>
         ) : (
           <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10 }}>
-            <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{fmt(animConsensus, currency)}</span>
+            <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{fmt(inView ? animConsensus : consensus, currency)}</span>
             {turnaround ? (
               <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>前年赤字 → 来期黒字予想</span>
             ) : unreliable ? (
@@ -277,6 +277,10 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
   const [surpriseNq, setSurpriseNq] = useState(null);
   const [secOpen, setSecOpen] = useState(false); // 改善3: 会社の次期見通し (sec_guidance_text) 折りたたみ
   const [surpriseFy, setSurpriseFy] = useState(null); // v173 通期の会社ガイダンスサプライズ (lazy)
+  // カウントアップ view 内発火 (dogfood 2026-06-06: mount 時発火だと scroll 前に完了して見えない → IO で入場時発火)
+  const [inView, setInView] = useState(false);
+  const sectionRef = useRef(null);
+  const countFiredRef = useRef(false);
   const periodEnd = forward?.next_q?.period_end_date;
   const fyPeriodEnd = forward?.next_fy?.period_end_date;
   useEffect(() => {
@@ -309,6 +313,25 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
     };
   }, [ticker, periodEnd, fyPeriodEnd]);
 
+  // カウントアップ view 内発火 (IntersectionObserver、 1 回のみ、 threshold 0.15)。 これがないと
+  //   ForwardOutlookSection が scroll 下にあり mount 時 (Pane3 open 時) に count-up 完了 → scroll で見える頃には終了。
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el || countFiredRef.current) return;
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !countFiredRef.current) {
+          countFiredRef.current = true;
+          setInView(true);
+          io.disconnect();
+        }
+      },
+      { threshold: 0.15 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   // static gate: backend が forward=null を返したら (コンセンサス取得不可) 何も描画しない。
   if (!forward || !forward.next_q) return null;
   const nq = forward.next_q;
@@ -324,6 +347,7 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
 
   return (
     <section
+      ref={sectionRef}
       data-testid="forward-outlook"
       // dogfood (2026-06-05): GuidanceCard (直上 sibling) は .panel-card で scroll arrival 発光 + hover 発光が
       // 効くが、 本 section は v146 で「発光系 card を新規追加しない」 方針で素 div だったため演出が欠落し
@@ -369,6 +393,7 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
           guidanceState={surpriseNq?.guidance_vs_consensus_rev}
           companyLow={surpriseNq?.company_q_rev_low}
           companyHigh={surpriseNq?.company_q_rev_high}
+          inView={inView}
         />
         <MetricBlock
           label="EPS"
@@ -383,6 +408,7 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
           guidanceState={surpriseNq?.guidance_vs_consensus_eps}
           companyLow={surpriseNq?.company_q_eps_low}
           companyHigh={surpriseNq?.company_q_eps_high}
+          inView={inView}
         />
       </div>
 
@@ -409,6 +435,7 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
               guidanceState={surpriseFy?.guidance_vs_consensus_rev}
               companyLow={surpriseFy?.company_q_rev_low}
               companyHigh={surpriseFy?.company_q_rev_high}
+              inView={inView}
             />
             <MetricBlock
               label="EPS"
@@ -424,6 +451,7 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
               companyLow={surpriseFy?.company_q_eps_low}
               companyHigh={surpriseFy?.company_q_eps_high}
               yearAgoEstimate={nfy.year_ago_eps_is_estimate}
+              inView={inView}
             />
           </div>
         </div>
