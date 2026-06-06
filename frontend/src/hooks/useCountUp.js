@@ -11,6 +11,10 @@
  */
 import { useEffect, useRef, useState } from 'react';
 
+// user (2026-06-06): count-up が速すぎて scroll で見る頃には終わっている → 既定をゆっくり 1000ms に。
+//   view-trigger (useInViewOnce) と併用して「入場時にゆっくり数字が伸びる」 を実現する共通値。
+export const COUNT_UP_MS = 1000;
+
 const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
 
 export function useCountUp(target, { duration = 800, digits = 2, forceFromZero = false } = {}) {
@@ -61,5 +65,10 @@ export function useCountUp(target, { duration = 800, digits = 2, forceFromZero =
 
   // 小数桁を制御 (digits) しつつ Number として返す
   if (target == null) return null;
-  return Number(val.toFixed(digits));
+  // user (2026-06-06): マイナス点滅防止。 val は 0→target の補間なので通常 target と同符号 or 0 だが、
+  //   起動直後フレームの浮動小数で target と逆符号の値が一瞬出ないよう防御的に clamp (負の EPS 等 target<0 は維持)。
+  let out = val;
+  if (target >= 0 && out < 0) out = 0;
+  else if (target < 0 && out > 0) out = 0;
+  return Number(out.toFixed(digits));
 }

@@ -23,7 +23,8 @@ import { fetchAnalyst } from '../api.js';
 import { canUse } from '../lib/planGating.js';
 import Chip from './ui/Chip.jsx';
 // v100 UI/UX verdict C: 目標株価 low/median/high に count-up animation 適用
-import { useCountUp as _useCountUpHook } from '../hooks/useCountUp.js';
+import { useCountUp as _useCountUpHook, COUNT_UP_MS } from '../hooks/useCountUp.js';
+import { useInViewOnce } from '../hooks/useInViewOnce.js';
 // Phase 2.7 Sprint 1 #1': Tier M halo sweep (1 回限り) — useHaloSweepOnce 共通 hook
 import { useHaloSweepOnce } from '../hooks/useHaloSweepOnce.js';
 
@@ -79,15 +80,15 @@ function actionTone(action) {
 }
 
 // ── pure CSS Target Price Range Bar (Recharts 不使用) ──────────────
-function TargetPriceRangeBar({ targetRange, currentPrice }) {
+function TargetPriceRangeBar({ targetRange, currentPrice, inView }) {
   const { high, low, mean, median } = targetRange || {};
-  // v100 (handover §100点 UI/UX verdict C): low / median / high に count-up animation 適用
+  // v100: low/median/high に count-up。 v173.6 (user): view 内入場で発火 (inView) + ゆっくり (COUNT_UP_MS) + 0 から。
   const lowSafe = Number.isFinite(low) ? low : null;
   const medianSafe = Number.isFinite(median) ? median : null;
   const highSafe = Number.isFinite(high) ? high : null;
-  const animatedLow = _useCountUpHook(lowSafe, { duration: 700, digits: 2 });
-  const animatedMedian = _useCountUpHook(medianSafe, { duration: 700, digits: 2 });
-  const animatedHigh = _useCountUpHook(highSafe, { duration: 700, digits: 2 });
+  const animatedLow = _useCountUpHook(inView ? lowSafe : null, { duration: COUNT_UP_MS, digits: 2, forceFromZero: true });
+  const animatedMedian = _useCountUpHook(inView ? medianSafe : null, { duration: COUNT_UP_MS, digits: 2, forceFromZero: true });
+  const animatedHigh = _useCountUpHook(inView ? highSafe : null, { duration: COUNT_UP_MS, digits: 2, forceFromZero: true });
   if (!Number.isFinite(high) || !Number.isFinite(low) || high === low) {
     return <div className="anp-empty">目標株価分布データなし</div>;
   }
@@ -126,22 +127,22 @@ function TargetPriceRangeBar({ targetRange, currentPrice }) {
         )}
       </div>
       <div className="anp-range-legend">
-        <span>{fmtUsd(animatedLow)}</span>
-        <span className="anp-range-mid">中央 {fmtUsd(animatedMedian)}</span>
-        <span>{fmtUsd(animatedHigh)}</span>
+        <span>{fmtUsd(inView ? animatedLow : lowSafe)}</span>
+        <span className="anp-range-mid">中央 {fmtUsd(inView ? animatedMedian : medianSafe)}</span>
+        <span>{fmtUsd(inView ? animatedHigh : highSafe)}</span>
       </div>
     </div>
   );
 }
 
 // ── pure CSS Recommendation Stacked Bar ────────────────────────────
-function RecommendationStackedBar({ distribution }) {
+function RecommendationStackedBar({ distribution, inView }) {
   const { buy = 0, hold = 0, sell = 0, total = 0 } = distribution || {};
-  // カウントアップ (3体合議 2026-06-06): Buy/Hold/Sell 件数を count-up (目標株価 RangeBar と同 700ms)。
-  //   Hooks rule のため早期 return より前に呼ぶ。 total=0 は null で即固定。
-  const animBuy = _useCountUpHook(total ? buy : null, { duration: 700, digits: 0, forceFromZero: true });
-  const animHold = _useCountUpHook(total ? hold : null, { duration: 700, digits: 0, forceFromZero: true });
-  const animSell = _useCountUpHook(total ? sell : null, { duration: 700, digits: 0, forceFromZero: true });
+  // Buy/Hold/Sell 件数を count-up。 v173.6 (user): view 内入場で発火 (inView) + ゆっくり (COUNT_UP_MS)。
+  //   Hooks rule のため早期 return より前に呼ぶ。 total=0 / 未入場は null で即固定。
+  const animBuy = _useCountUpHook(inView && total ? buy : null, { duration: COUNT_UP_MS, digits: 0, forceFromZero: true });
+  const animHold = _useCountUpHook(inView && total ? hold : null, { duration: COUNT_UP_MS, digits: 0, forceFromZero: true });
+  const animSell = _useCountUpHook(inView && total ? sell : null, { duration: COUNT_UP_MS, digits: 0, forceFromZero: true });
   if (!total) {
     return <div className="anp-empty">推奨分布データなし</div>;
   }
@@ -155,21 +156,21 @@ function RecommendationStackedBar({ distribution }) {
         {buyPct > 0 && (
           <div
             className="anp-stack-seg anp-stack-buy"
-            style={{ width: `${buyPct}%` }}
+            style={{ width: inView ? `${buyPct}%` : '0%', transition: 'width 0.9s cubic-bezier(0.22, 1, 0.36, 1)', transitionDelay: '0ms' }}
             title={`Buy ${buy} 人 (${buyPct}%)`}
           />
         )}
         {holdPct > 0 && (
           <div
             className="anp-stack-seg anp-stack-hold"
-            style={{ width: `${holdPct}%` }}
+            style={{ width: inView ? `${holdPct}%` : '0%', transition: 'width 0.9s cubic-bezier(0.22, 1, 0.36, 1)', transitionDelay: '120ms' }}
             title={`Hold ${hold} 人 (${holdPct}%)`}
           />
         )}
         {sellPct > 0 && (
           <div
             className="anp-stack-seg anp-stack-sell"
-            style={{ width: `${sellPct}%` }}
+            style={{ width: inView ? `${sellPct}%` : '0%', transition: 'width 0.9s cubic-bezier(0.22, 1, 0.36, 1)', transitionDelay: '240ms' }}
             title={`Sell ${sell} 人 (${sellPct}%)`}
           />
         )}
@@ -324,6 +325,8 @@ export default function AnalystPanel({ ticker, plan = 'free', currentPrice = nul
   // Phase 2.9 Sprint 2 #Bug2: haloTriggerRef 経由 (accordion-controlled) なら IO observe を skip、
   // parent (JudgmentDetail) の haloFiredSetRef が 1 回限り保証 (re-mount でも persist)。
   const { triggerOnAccordionOpen } = useHaloSweepOnce(haloRef, { skipIO: !!haloTriggerRef });
+  // v173.6 (user): count-up / バー grow を view 内入場で発火させる共通トリガー (本体描画時のみ使用)
+  const [viewRef, inView] = useInViewOnce();
 
   // Phase 2.8 Sprint 1 #3: haloTriggerRef に trigger 関数を register
   // (mount 時 1 回のみ、親が AccordionSection の onOpenChange から呼ぶ)
@@ -417,7 +420,7 @@ export default function AnalystPanel({ ticker, plan = 'free', currentPrice = nul
       data-testid="analyst-panel-wrapper"
       data-spotlight="card"
     >
-    <section className="panel-card anp-panel">
+    <section ref={viewRef} className="panel-card anp-panel">
       <header className="anp-head">
         <h3 className="anp-title">アナリスト視点</h3>
         {upsideAvailable && (
@@ -436,11 +439,11 @@ export default function AnalystPanel({ ticker, plan = 'free', currentPrice = nul
       <div className="anp-grid">
         <div className="anp-cell">
           <h4 className="anp-subhead">目標株価レンジ</h4>
-          <TargetPriceRangeBar targetRange={targetRange} currentPrice={currentPrice} />
+          <TargetPriceRangeBar targetRange={targetRange} currentPrice={currentPrice} inView={inView} />
         </div>
         <div className="anp-cell">
           <h4 className="anp-subhead">推奨分布</h4>
-          <RecommendationStackedBar distribution={distribution} />
+          <RecommendationStackedBar distribution={distribution} inView={inView} />
         </div>
         <div className="anp-cell">
           <h4 className="anp-subhead">直近 90 日のモメンタム</h4>

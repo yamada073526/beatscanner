@@ -22,10 +22,11 @@
  * 独立 component (GuidanceCard 無改変、 発光系 card を新規追加しない = frontend verdict)。
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronRight, CalendarRange } from 'lucide-react';
 import { fetchGuidanceSurprise } from '../api.js';
-import { useCountUp } from '../hooks/useCountUp.js';
+import { useCountUp, COUNT_UP_MS } from '../hooks/useCountUp.js';
+import { useInViewOnce } from '../hooks/useInViewOnce.js';
 
 // ── 会社の次期見通し (sec_guidance_text) の md → JSX レンダラ。 改善3 (2026-06-06) で GuidanceCard から移植。
 //    sec_guidance_text は SEC 8-K の会社ガイダンスを Hallucination Guard 4 層 (BAD-5/6 + source_quote 逐語 +
@@ -134,24 +135,27 @@ function YoYInline({ pct }) {
 }
 
 // 予測棒: 前年同期 (baseline) と 来期予想 を中立トーンで対比 (色なし、 長さの差で成長を視覚化)
-function ForecastBars({ yearAgo, consensus, yearAgoLabel, consensusLabel, yearAgoRowLabel = '前年同期' }) {
+function ForecastBars({ yearAgo, consensus, yearAgoLabel, consensusLabel, yearAgoRowLabel = '前年同期', inView }) {
   if (yearAgo == null || consensus == null || !Number.isFinite(yearAgo) || !Number.isFinite(consensus)) return null;
   const maxv = Math.max(Math.abs(yearAgo), Math.abs(consensus)) || 1;
   const wYa = Math.max(2, (Math.abs(yearAgo) / maxv) * 100);
   const wCon = Math.max(2, (Math.abs(consensus) / maxv) * 100);
-  const Row = ({ label, value, w, strong }) => (
+  const Row = ({ label, value, w, strong, delay = 0 }) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <span style={{ width: 64, flexShrink: 0, fontSize: 10, color: 'var(--text-muted)' }}>{label}</span>
       <div style={{ flex: 1, height: 8, background: 'var(--bg-subtle)', borderRadius: 'var(--radius-pill, 999px)', overflow: 'hidden' }}>
         <div
           style={{
-            width: `${w}%`,
+            // user (2026-06-06): view 内入場でバーが 0 → 最終幅へ「伸びる」 アニメ (グラフが伸びるのが面白い)。
+            //   §38: 色は付けず neutral ink のまま (緑/赤/シアン不使用)。 reduced-motion は index.css の
+            //   global transition 抑止 (§11-E v51) で自動吸収。 来期予想バーは 140ms stagger で前年同期の後に伸びる。
+            width: inView ? `${w}%` : '0%',
             height: '100%',
-            // 色なし: 緑/赤/シアンを使わず neutral ink tone (来期予想をやや強めに)
             background: strong ? 'var(--text-secondary)' : 'var(--text-muted)',
             opacity: strong ? 0.85 : 0.45,
             borderRadius: 'var(--radius-pill, 999px)',
-            transition: 'width 0.5s ease',
+            transition: 'width 1s cubic-bezier(0.22, 1, 0.36, 1)',
+            transitionDelay: `${delay}ms`,
           }}
         />
       </div>
@@ -160,8 +164,8 @@ function ForecastBars({ yearAgo, consensus, yearAgoLabel, consensusLabel, yearAg
   );
   return (
     <div style={{ display: 'grid', gap: 5, marginTop: 8 }}>
-      <Row label={yearAgoRowLabel} value={yearAgoLabel} w={wYa} strong={false} />
-      <Row label="来期予想" value={consensusLabel} w={wCon} strong={true} />
+      <Row label={yearAgoRowLabel} value={yearAgoLabel} w={wYa} strong={false} delay={0} />
+      <Row label="来期予想" value={consensusLabel} w={wCon} strong={true} delay={140} />
     </div>
   );
 }
@@ -215,7 +219,7 @@ function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unr
   // カウントアップ (3体合議 2026-06-06): 来期 consensus メイン数値のみ。 §38 で来期=将来予測のため
   //   duration 400ms (今期ゲージ 700ms より短く「現れる」 寄りの演出)、 中立色維持。 前年比%・会社ガイダンス・
   //   予測棒ラベルは静的 (二次情報のうるささ回避 + マイナス値/null 点滅回避 = ui/qa verdict)。 null は即固定。
-  const animConsensus = useCountUp(inView ? consensus : null, { duration: 400, digits: isMoney ? 0 : 2, forceFromZero: true });
+  const animConsensus = useCountUp(inView ? consensus : null, { duration: COUNT_UP_MS, digits: isMoney ? 0 : 2, forceFromZero: true });
   const hasConsensus = consensus != null && Number.isFinite(consensus);
   return (
     <div data-testid={`forward-metric-${isMoney ? 'revenue' : 'eps'}`} style={{ padding: '10px 0', borderTop: '1px solid var(--border)' }}>
@@ -243,6 +247,7 @@ function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unr
           yearAgoLabel={fmt(yearAgo, currency)}
           consensusLabel={fmt(consensus, currency)}
           yearAgoRowLabel={yearAgoEstimate ? '前年(予想)' : '前年同期'}
+          inView={inView}
         />
       )}
       {/* 案B v172: 会社ガイダンスサプライズ (ForecastBars 直後、 独立行・破線 separator)。
@@ -278,9 +283,8 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
   const [secOpen, setSecOpen] = useState(false); // 改善3: 会社の次期見通し (sec_guidance_text) 折りたたみ
   const [surpriseFy, setSurpriseFy] = useState(null); // v173 通期の会社ガイダンスサプライズ (lazy)
   // カウントアップ view 内発火 (dogfood 2026-06-06: mount 時発火だと scroll 前に完了して見えない → IO で入場時発火)
-  const [inView, setInView] = useState(false);
-  const countFiredRef = useRef(false);
-  const ioRef = useRef(null);
+  // count-up / バー grow の view 内入場トリガー (v173.5 検証済 callback ref パターンを共通 hook 化)
+  const [sectionRef, inView] = useInViewOnce();
   const periodEnd = forward?.next_q?.period_end_date;
   const fyPeriodEnd = forward?.next_fy?.period_end_date;
   useEffect(() => {
@@ -312,31 +316,6 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
       cancelled = true;
     };
   }, [ticker, periodEnd, fyPeriodEnd]);
-
-  // カウントアップ view 内発火 — callback ref で section が DOM に attach された瞬間に IO を observe する。
-  //   v173.5 bug 真因: 旧実装は useEffect([]) が mount 時 1 回のみ実行だが、 その時点で forward (guidance/basic の
-  //   非同期 fetch 結果) が未到着 → 早期 return で section 未描画 → sectionRef.current=null → IO が一度も observe
-  //   されず inView が永久 false → count-up 不発 (acd0484 で IO を足しても効かなかった理由)。 callback ref なら
-  //   forward 到着後に section が描画された瞬間に必ず発火し確実に attach、 tab 再 mount でも re-arm される。
-  const sectionRef = useCallback((node) => {
-    if (ioRef.current) {
-      ioRef.current.disconnect();
-      ioRef.current = null;
-    }
-    if (!node || countFiredRef.current) return;
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !countFiredRef.current) {
-          countFiredRef.current = true;
-          setInView(true);
-          io.disconnect();
-        }
-      },
-      { threshold: 0.2, rootMargin: '0px 0px -10% 0px' }
-    );
-    io.observe(node);
-    ioRef.current = io;
-  }, []);
 
   // static gate: backend が forward=null を返したら (コンセンサス取得不可) 何も描画しない。
   if (!forward || !forward.next_q) return null;
