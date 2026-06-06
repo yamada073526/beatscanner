@@ -12,6 +12,7 @@ memory anchors:
 
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta
 from typing import Any
 
 
@@ -301,4 +302,199 @@ def build_precomputed_metrics(
         "trend_8q_revenue": classify_trend_8q(revenue_yoy_series),
         "trend_8q_eps": classify_trend_8q(eps_yoy_series),
         "consensus_count": consensus_count,
+    }
+
+
+# ─── コンセンサス修正トレンド (案B / Sprint 2) ────────────────────────────
+# consensus_snapshots テーブル (aggregator/consensus_history.py が populate) の時系列から
+# 「アナリスト予想が上方/下方に修正された回数」を数える純粋数値層。
+# narration は frontend の静的 dict のみ (§38 断定回避)。 LLM 一切不使用。
+
+_DRIFT_THRESHOLD_PCT = 0.5   # noise floor: ±0.5% 以内の micro-revision は「据え置き」扱い
+_DRIFT_WINDOW_DAYS = 30      # 既定の集計窓 (月次でアナリストが見直す慣行 + nightly snapshot)
+
+
+def _to_date(value: Any) -> date | None:
+    """snapshot_date / fiscal_date を date に正規化 (ISO 文字列 / date / datetime を許容)。"""
+    if value is None:
+        return None
+    if isinstance(value, datetime):  # datetime は date のサブクラスなので先に判定
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        s = value.strip()[:10]  # "2026-12-31T00:00:00" → "2026-12-31"
+        if not s:
+            return None
+        try:
+            return date.fromisoformat(s)
+        except ValueError:
+            return None
+    return None
+
+
+def _count_revisions(values: list[Any], threshold_pct: float) -> dict:
+    """昇順に並んだ値列の隣接 (有効) ペアで修正方向を数える純粋関数。
+
+    None / NaN は skip し、 次の有効値と比較する (欠測をまたいで連続観測扱い)。
+    直前値が 0 のペアは % を計算できないため count しない。
+
+    Returns:
+        {"up": int, "down": int, "flat": int, "direction": str, "comparable_pairs": int}
+        direction: "up" (上方のみ) | "down" (下方のみ) | "mixed" (両方) | "flat" (全て据え置き)
+                   | "insufficient" (比較可能ペアが 0)
+    """
+    up = down = flat = pairs = 0
+    prev: float | None = None
+    for raw in values:
+        cur = _to_float(raw)
+        if cur is None:
+            continue
+        if prev is not None and prev != 0:
+            pct = (cur - prev) / abs(prev) * 100
+            pairs += 1
+            if pct > threshold_pct:
+                up += 1
+            elif pct < -threshold_pct:
+                down += 1
+            else:
+                flat += 1
+        prev = cur
+
+    if pairs == 0:
+        direction = "insufficient"
+    elif up > 0 and down == 0:
+        direction = "up"
+    elif down > 0 and up == 0:
+        direction = "down"
+    elif up > 0 and down > 0:
+        direction = "mixed"
+    else:
+        direction = "flat"
+    return {"up": up, "down": down, "flat": flat, "direction": direction, "comparable_pairs": pairs}
+
+
+def _insufficient_drift(
+    window_days: int,
+    *,
+    snapshot_count: int = 0,
+    latest: str | None = None,
+    fiscal_date: str | None = None,
+    period_type: str | None = None,
+) -> dict:
+    """snapshot 不足時の drift shell (捏造せず insufficient を正直に返す)。"""
+    shell = {"up": 0, "down": 0, "flat": 0, "direction": "insufficient", "comparable_pairs": 0}
+    return {
+        "eps": dict(shell),
+        "revenue": dict(shell),
+        "window_days": window_days,
+        "snapshot_count": snapshot_count,
+        "latest_snapshot_date": latest,
+        "target_fiscal_date": fiscal_date,
+        "period_type": period_type,
+    }
+
+
+def classify_consensus_drift(
+    snapshots: list[dict] | None,
+    window_days: int = _DRIFT_WINDOW_DAYS,
+    threshold_pct: float = _DRIFT_THRESHOLD_PCT,
+) -> dict:
+    """consensus_snapshots 時系列から「コンセンサス修正方向 (drift)」を算出する純粋関数。
+
+    1 銘柄分の snapshot list (aggregator/consensus_history.build_snapshot_rows と同 shape:
+    `snapshot_date` / `fiscal_date` / `period_type` / `estimated_eps_avg` /
+    `estimated_revenue_avg` を持つ dict) を受け取り、 **直近の会計期 (nearest fiscal_date)**
+    の estimated_eps_avg / estimated_revenue_avg が snapshot_date を追うごとに上方/下方へ
+    修正された回数を数える。
+
+    Args:
+        snapshots: 1 銘柄分の consensus snapshot dict の list (順不同で可)。
+                   複数 ticker を混ぜないこと (呼び出し側 = drift API が ticker で絞る責務)。
+        window_days: 集計窓 (日)。 最新 snapshot_date から遡って何日分を見るか (既定 30)。
+        threshold_pct: 修正と見なす最小変化率 (既定 0.5%)。 これ以内は「据え置き」。
+
+    Returns:
+        {
+          "eps":     {"up": n, "down": m, "flat": k, "direction": str, "comparable_pairs": int},
+          "revenue": {"up": n, "down": m, "flat": k, "direction": str, "comparable_pairs": int},
+          "window_days": int,
+          "snapshot_count": int,         # 対象会計期の窓内 snapshot 数 (< 2 で insufficient)
+          "latest_snapshot_date": str | None,   # 直近観測日 (ISO "YYYY-MM-DD")
+          "target_fiscal_date": str | None,     # 集計対象に選んだ会計期末日
+          "period_type": str | None,            # "quarter" | "annual"
+        }
+        direction は "up"|"down"|"mixed"|"flat"|"insufficient"。 snapshot 2 点未満は全て
+        insufficient (捏造で 0 回と詐称しない = Trust Cliff 回避)。
+
+    数値物理層 (feedback_llm_calc_separation.md): narration はここでは生成しない。 frontend が
+    direction → 静的 dict ("up"→"上方修正" 等) で表示する。 §38 断定 (買い/上昇示唆) は出さない。
+    """
+    win = window_days if isinstance(window_days, int) and window_days > 0 else _DRIFT_WINDOW_DAYS
+    thr = threshold_pct if isinstance(threshold_pct, (int, float)) and threshold_pct >= 0 else _DRIFT_THRESHOLD_PCT
+
+    if not isinstance(snapshots, list):
+        return _insufficient_drift(win)
+
+    # 1. clean: snapshot_date / fiscal_date が parse でき、 eps/revenue avg の片方でもある行のみ
+    cleaned: list[dict] = []
+    for s in snapshots:
+        if not isinstance(s, dict):
+            continue
+        sd = _to_date(s.get("snapshot_date"))
+        fd = _to_date(s.get("fiscal_date"))
+        if sd is None or fd is None:
+            continue
+        eps = _to_float(s.get("estimated_eps_avg"))
+        rev = _to_float(s.get("estimated_revenue_avg"))
+        if eps is None and rev is None:
+            continue
+        ptype = s.get("period_type") if isinstance(s.get("period_type"), str) else None
+        cleaned.append({"sd": sd, "fd": fd, "ptype": ptype, "eps": eps, "rev": rev})
+
+    if not cleaned:
+        return _insufficient_drift(win)
+
+    latest_date = max(c["sd"] for c in cleaned)
+    latest_iso = latest_date.isoformat()
+
+    # 2. 窓フィルタ: 最新 snapshot から window_days 日以内 (境界含む)
+    cutoff = latest_date - timedelta(days=win)
+    windowed = [c for c in cleaned if c["sd"] >= cutoff]
+    if not windowed:
+        return _insufficient_drift(win, latest=latest_iso)
+
+    # 3. (fiscal_date, period_type) でグルーピング → 直近会計期 (最小 fiscal_date) を集計対象に
+    #    複数の period_type が同じ fiscal_date を共有する稀ケースは quarter を優先 (決定的)。
+    target_fd = min(c["fd"] for c in windowed)
+    same_fd = [c for c in windowed if c["fd"] == target_fd]
+    ptypes = {c["ptype"] for c in same_fd}
+    target_ptype = "quarter" if "quarter" in ptypes else sorted(p for p in ptypes if p)[0] if any(ptypes) else None
+    series = [c for c in same_fd if c["ptype"] == target_ptype] if target_ptype else same_fd
+
+    # 4. snapshot_date 昇順に並べて修正方向を数える
+    series.sort(key=lambda c: c["sd"])
+    snapshot_count = len(series)
+    fiscal_iso = target_fd.isoformat()
+
+    if snapshot_count < 2:
+        return _insufficient_drift(
+            win,
+            snapshot_count=snapshot_count,
+            latest=latest_iso,
+            fiscal_date=fiscal_iso,
+            period_type=target_ptype,
+        )
+
+    eps_drift = _count_revisions([c["eps"] for c in series], thr)
+    rev_drift = _count_revisions([c["rev"] for c in series], thr)
+
+    return {
+        "eps": eps_drift,
+        "revenue": rev_drift,
+        "window_days": win,
+        "snapshot_count": snapshot_count,
+        "latest_snapshot_date": latest_iso,
+        "target_fiscal_date": fiscal_iso,
+        "period_type": target_ptype,
     }
