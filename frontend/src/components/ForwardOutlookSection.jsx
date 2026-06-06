@@ -135,20 +135,17 @@ function YoYInline({ pct }) {
 }
 
 // 予測棒: 前年同期 (baseline) と 来期予想 を中立トーンで対比 (色なし、 長さの差で成長を視覚化)
-function ForecastBars({ yearAgo, consensus, yearAgoLabel, consensusLabel, yearAgoRowLabel = '前年同期', inView }) {
-  if (yearAgo == null || consensus == null || !Number.isFinite(yearAgo) || !Number.isFinite(consensus)) return null;
-  const maxv = Math.max(Math.abs(yearAgo), Math.abs(consensus)) || 1;
-  const wYa = Math.max(2, (Math.abs(yearAgo) / maxv) * 100);
-  const wCon = Math.max(2, (Math.abs(consensus) / maxv) * 100);
-  const Row = ({ label, value, w, strong, delay = 0 }) => (
+// 予測棒の 1 行 (module-level)。 ★inline 関数にすると ForecastBars 再 render 毎に React が remount し、
+//   width transition (0→w%) が走らず grow しない (v173.6 dogfood で発覚)。 必ず module-level に置くこと。
+function ForecastBarRow({ label, value, w, strong, delay = 0, inView }) {
+  return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <span style={{ width: 64, flexShrink: 0, fontSize: 10, color: 'var(--text-muted)' }}>{label}</span>
       <div style={{ flex: 1, height: 8, background: 'var(--bg-subtle)', borderRadius: 'var(--radius-pill, 999px)', overflow: 'hidden' }}>
         <div
           style={{
             // user (2026-06-06): view 内入場でバーが 0 → 最終幅へ「伸びる」 アニメ (グラフが伸びるのが面白い)。
-            //   §38: 色は付けず neutral ink のまま (緑/赤/シアン不使用)。 reduced-motion は index.css の
-            //   global transition 抑止 (§11-E v51) で自動吸収。 来期予想バーは 140ms stagger で前年同期の後に伸びる。
+            //   §38: 色なし neutral ink のまま。 reduced-motion は index.css global 抑止 (§11-E v51) で吸収。
             width: inView ? `${w}%` : '0%',
             height: '100%',
             background: strong ? 'var(--text-secondary)' : 'var(--text-muted)',
@@ -162,10 +159,17 @@ function ForecastBars({ yearAgo, consensus, yearAgoLabel, consensusLabel, yearAg
       <span style={{ width: 64, flexShrink: 0, fontSize: 11, fontWeight: 600, textAlign: 'right', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{value}</span>
     </div>
   );
+}
+
+function ForecastBars({ yearAgo, consensus, yearAgoLabel, consensusLabel, yearAgoRowLabel = '前年同期', inView }) {
+  if (yearAgo == null || consensus == null || !Number.isFinite(yearAgo) || !Number.isFinite(consensus)) return null;
+  const maxv = Math.max(Math.abs(yearAgo), Math.abs(consensus)) || 1;
+  const wYa = Math.max(2, (Math.abs(yearAgo) / maxv) * 100);
+  const wCon = Math.max(2, (Math.abs(consensus) / maxv) * 100);
   return (
     <div style={{ display: 'grid', gap: 5, marginTop: 8 }}>
-      <Row label={yearAgoRowLabel} value={yearAgoLabel} w={wYa} strong={false} delay={0} />
-      <Row label="来期予想" value={consensusLabel} w={wCon} strong={true} delay={140} />
+      <ForecastBarRow label={yearAgoRowLabel} value={yearAgoLabel} w={wYa} strong={false} delay={0} inView={inView} />
+      <ForecastBarRow label="来期予想" value={consensusLabel} w={wCon} strong={true} delay={140} inView={inView} />
     </div>
   );
 }
