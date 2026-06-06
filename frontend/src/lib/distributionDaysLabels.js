@@ -28,15 +28,15 @@ export const DIST_DAYS_LABEL_JP = {
 export const DIST_DAYS_DESC_JP = {
   healthy: {
     conclusion: '機関の売り圧力は限定的とされる範囲です。',
-    detail: '直近25営業日の distribution day が 0-2 日 (IBD/O\'Neil 著の健全圏目安)。',
+    detail: '直近25営業日の distribution day が 0-2 日 (IBD ルールの健全圏目安)。',
   },
   caution: {
     conclusion: '機関の売り圧力が増えつつある目安です。',
-    detail: 'distribution day 3-4 日は IBD ルールで注意の目安とされます (W. O\'Neil 著)。',
+    detail: 'distribution day 3-4 日は IBD ルールで注意の目安とされます。',
   },
   pressure: {
     conclusion: '機関の売り圧力が高い目安です (将来保証なし)。',
-    detail: 'distribution day 5 日以上は IBD/O\'Neil 著で market/銘柄が under pressure とされる criteria に該当。',
+    detail: 'distribution day 5 日以上は IBD ルールで market/銘柄が under pressure とされる criteria に該当。',
   },
   unknown: {
     conclusion: 'distribution day 判定を保留しています。',

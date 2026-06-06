@@ -216,14 +216,14 @@ export default function PortfolioDetailBody({ scopeId = 'all' }) {
         </div>
         <div className="pane3-portfolio-judgsummary">
           {passFailCount.pass > 0 && (
-            <Chip size="sm" variant="display" tone="gain" title="保有上位 8 銘柄の 5 条件 全 PASS 件数">
-              ✓ PASS&nbsp;
+            <Chip size="sm" variant="display" tone="gain" title={`保有上位銘柄のうち 5条件クリア: ${passFailCount.pass}銘柄`}>
+              ✓ 条件クリア&nbsp;
               <span style={{ color: 'var(--color-gain)', fontWeight: 700 }}>{passFailCount.pass}</span>
             </Chip>
           )}
           {passFailCount.fail > 0 && (
-            <Chip size="sm" variant="display" tone="loss" title="保有上位 8 銘柄の 5 条件 FAIL 件数">
-              ✗ FAIL&nbsp;
+            <Chip size="sm" variant="display" tone="loss" title={`保有上位銘柄のうち 条件未達: ${passFailCount.fail}銘柄`}>
+              ✗ 条件未達&nbsp;
               <span style={{ color: 'var(--color-loss)', fontWeight: 700 }}>{passFailCount.fail}</span>
             </Chip>
           )}

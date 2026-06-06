@@ -106,7 +106,7 @@ export function ftdRegime(ftdMap) {
   const { tone } = ftdLabel(best); // Pane1 と色を一貫 (gain / warning / muted)
   let detail = '';
   if (best.status === 'ftd_confirmed') {
-    detail = `${indexName} で Follow-Through Day 確定 (Day ${best.ftd_day_number})。 O'Neil 理論では下落相場の底打ち・新規上昇局面入りの確認シグナルです。`;
+    detail = `${indexName} で Follow-Through Day 確定 (Day ${best.ftd_day_number})。 下落相場の底打ち・新規上昇局面入りの確認シグナルです。`;
   } else if (best.status === 'watching') {
     detail = `${indexName} が上昇試行中。 Follow-Through Day はまだ確定していません。`;
   } else if (best.status === 'no_attempt') {

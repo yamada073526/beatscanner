@@ -77,7 +77,7 @@ function FtdRegimeBanner() {
   return (
     <div
       data-testid="ftd-regime-banner"
-      title={"市場局面 (Follow-Through Day, William O'Neil): 下落相場の底打ち → 新規上昇トレンド入りを確認する指標。 主要 3 指数 (S&P500 / NASDAQ / DJIA) のうち最も進んだ局面を表示しています。"}
+      title={"市場局面 (Follow-Through Day): 下落相場の底打ち → 新規上昇トレンド入りを確認する指標。 主要 3 指数 (S&P500 / NASDAQ / DJIA) のうち最も進んだ局面を表示しています。"}
       style={bannerStyle}
     >
       <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
@@ -625,7 +625,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           const gc = gcByTicker.get(item.ticker);
           intersection.push({
             ticker: item.ticker,
-            badge: gc ? `RS ${item.universe_percentile} ✦ GC` : `RS ${item.universe_percentile}`,
+            badge: gc ? `RS ${item.universe_percentile} / 上位${100 - item.universe_percentile}% ✦ GC` : `RS ${item.universe_percentile} / 上位${100 - item.universe_percentile}%`,
           });
           if (intersection.length >= 5) break;
         }
@@ -687,7 +687,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
       //   badge は RS percentile (数値=Python 物理層、 §38 中立)。 demo は HeroSection 側で top1+blur。
       const leaderRankItems = (rsLeader.items || []).slice(0, 15).map((item) => ({
         ticker: item.ticker,
-        badge: item.universe_percentile != null ? `RS ${item.universe_percentile}` : 'RS',
+        badge: item.universe_percentile != null ? `RS ${item.universe_percentile} / 上位${100 - item.universe_percentile}%` : 'RS',
       }));
       const rsLeadersResult = {
         tickers: leaderRankItems,
@@ -774,9 +774,9 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
             tone={activeChip === 'leader' ? 'accent' : 'muted'}
             pressed={activeChip === 'leader'}
             onClick={() => handleChipClick('leader')}
-            ariaLabel="Leader + Breakout + Cup-Handle 交差 section に jump"
+            ariaLabel="RS上位 + ブレイクアウト + Cup-Handle 交差 section に jump"
           >
-            Leader + Breakout + CWH
+            RS上位 + ブレイクアウト + CWH
           </Chip>
           <Chip
             variant="filter"
@@ -815,7 +815,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           eyebrow="01"
           featured
           revealBaseDelay={0}
-          title="Leader + Breakout + Cup-Handle 交差"
+          title="RS上位 + ブレイクアウト + Cup-Handle 交差"
           testId="screener-hero-leader-breakout-cwh"
           description="RS percentile ≥ 80 ∩ Cup-Handle 検出済 (推奨ではありません)"
           tickers={leaderCwh.tickers}
@@ -877,7 +877,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           eyebrow="04"
           title="相対強度ランキング"
           testId="screener-hero-rs-leaders"
-          description="RS percentile ≥ 80 の上位銘柄（CAN SLIM の L）。投資の推奨ではありません。"
+          description="RS percentile ≥ 80 の上位銘柄。投資の推奨ではありません。"
           tickers={rsLeaders.tickers}
           loading={rsLeaders.loading}
           error={rsLeaders.error}
