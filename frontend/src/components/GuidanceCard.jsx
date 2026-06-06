@@ -163,7 +163,7 @@ const GUIDANCE_SECTION_STYLE = {
 const GuidanceSkeleton = () => (
   <section
     className="panel-card rounded-2xl p-5 shadow-sm"
-    style={{ ...GUIDANCE_SECTION_STYLE, minHeight: 360 }}
+    style={{ ...GUIDANCE_SECTION_STYLE, minHeight: 300 }}
     data-testid="guidance-skeleton"
   >
     <style>{`
@@ -718,8 +718,8 @@ export default function GuidanceCard({ guidance, isLoading = false, nextEarnings
       //   旧 minHeight 160 だと skeleton (360) → no-data (160) で 200px 縮小 = scroll 中 CLS 主因。
       //   全 state (skeleton / no-data / content) を minHeight 360 で統一、 「Aman ホテルロビーで
       //   壁が突然伸びることはない」 idiom — 枠を先に建てて中身を静かに点灯。
-      <div ref={cardRef} className="tier-m-glow" data-testid="guidance-card-wrapper" style={{ minHeight: 360 }}>
-        <section className="panel-card rounded-2xl p-5 shadow-sm" style={{ ...GUIDANCE_SECTION_STYLE, minHeight: 360 }}>
+      <div ref={cardRef} className="tier-m-glow" data-testid="guidance-card-wrapper" style={{ minHeight: 300 }}>
+        <section className="panel-card rounded-2xl p-5 shadow-sm" style={{ ...GUIDANCE_SECTION_STYLE, minHeight: 300 }}>
           <div className="flex items-center justify-between">
             <h3 className="section-label flex items-center gap-1.5" style={{ marginBottom: 0 }}>
               <span className="section-header-icon" aria-hidden="true">
@@ -781,14 +781,14 @@ export default function GuidanceCard({ guidance, isLoading = false, nextEarnings
     // Phase 2.6 5-1: tier-m-glow wrapper — halo sweep の IO observe 対象
     // v99 dogfood D: 全 state (skeleton / no-data / loaded content) で minHeight 360 統一、
     // scroll 中 ガクツキ防止 (subagent verdict 案 A 流儀)
-    <div ref={cardRef} className="tier-m-glow" data-testid="guidance-card-wrapper" style={{ minHeight: 360 }}>
-    <section className="panel-card rounded-2xl p-5 shadow-sm" style={{ ...GUIDANCE_SECTION_STYLE, minHeight: 360 }}>
+    <div ref={cardRef} className="tier-m-glow" data-testid="guidance-card-wrapper" style={{ minHeight: 300 }}>
+    <section className="panel-card rounded-2xl p-5 shadow-sm" style={{ ...GUIDANCE_SECTION_STYLE, minHeight: 300 }}>
       <div className="flex items-center justify-between">
         <h3 className="section-label flex items-center gap-1.5" style={{ marginBottom: 0 }}>
           <span className="section-header-icon" aria-hidden="true">
             <BarChart3 size={18} strokeWidth={1.5} />
           </span>
-          ガイダンス進捗
+          今期 決算結果
           <button
             onClick={() => setShowModal(true)}
             className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
