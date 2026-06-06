@@ -1,5 +1,6 @@
 ---
 name: evaluator
+effort: xhigh
 description: BeatScanner PGE 自律 3 体ループの Evaluator。 Generator が worktree で実装した sprint 成果を 4 層 (L1 機械 / L2 視覚 / L3 機能 / L4 主観) で検査し、 PASS/FAIL を JSON でフィードバックする。 L4 主観 gate は multi-review 3 体合議 (ui-designer + frontend-architect + qa-dogfooder) を内部から呼び出す。 v84 dogfood 6 hotfix 教訓を L1-L3 で個別 cover。
 tools: Read, Grep, Glob, Bash, Write, Skill, Agent
 model: sonnet

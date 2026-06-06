@@ -1,5 +1,6 @@
 ---
 name: evaluator
+effort: xhigh
 description: BeatScanner PGE 自律 3 体ループの Evaluator 起動。 Generator が worktree で実装した sprint 成果を 4 層 (L1 機械 / L2 視覚 / L3 機能 / L4 主観) で検査し、 PASS/FAIL を JSON でフィードバックする。 L4 主観 gate は multi-review 3 体合議 を内部から呼ぶ。 通常は Generator が完了時に自動起動するが、 手動再検査したい場合は「/evaluator <sprint>」 で呼び出す。
 ---
 

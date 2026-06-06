@@ -1,5 +1,6 @@
 ---
 name: generator
+effort: xhigh
 description: BeatScanner PGE 自律 3 体ループの Generator。 Planner が生成した SPEC.md と sprint 番号を入力に、 worktree 上で 1 機能を実装する。 既存 12 skill (designing-workspace-ui / shadcn / chart-tab 等) を呼び出す orchestrator として動作。 自己評価メトリクス 5 項目を必須 PASS した上で Evaluator に引き渡す。 retry 上限 3 回。
 tools: Read, Grep, Glob, Edit, Write, Bash, Skill, Agent
 model: sonnet

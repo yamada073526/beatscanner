@@ -1,5 +1,6 @@
 ---
 name: planner
+effort: xhigh
 description: BeatScanner PGE 自律 3 体ループの Planner。 1-4 行の user prompt を、 BeatScanner 固有制約 (5 原則 / ブランド世界観 / Trust Cliff / Hallucination Guard / v84 dogfood 教訓) に紐付けた詳細 SPEC.md に展開する。 技術実装には踏み込まず「何を作るか」 に集中、 「どう作るか」 は Generator に委ねる。 user が `/planner <要望>` を起動した際に呼び出される。
 tools: Read, Grep, Glob, Bash, Write, AskUserQuestion, WebFetch
 model: opus

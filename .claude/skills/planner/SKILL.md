@@ -1,5 +1,6 @@
 ---
 name: planner
+effort: xhigh
 description: BeatScanner PGE 自律 3 体ループの Planner 起動。 user が 1-4 行の要望 (例「scroll 5500px+ visual hierarchy 整理」「ウォッチリストに sector フィルター追加」) を打ったときに使用する。 詳細 SPEC.md を `docs/specs/` に生成し、 user 承認 (gate 1) を取得した後 Generator に引き渡す。 「/planner」「planner で SPEC 起こして」「planner 起動」 と依頼された際に呼び出す。
 ---
 

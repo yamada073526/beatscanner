@@ -189,6 +189,16 @@ LLM (Claude API) を呼ぶ endpoint は **4 層防御** を必ず通すこと。
 handover v94 で「過去 30 日 $407 消費、 大半は dev session の Opus 4.7 sub-agent」 と真因確定。 以下ルールで速度を維持しつつ cost 50%+ 削減:
 
 1. **main session**: **Opus 4.8 (1M context) + effort `high` 既定** 維持 — 複雑 reasoning / multi-step debugging で速度確保。 effort は `high` をベースラインとし、 **常時 `max`/`xhigh` は非推奨** (過剰思考 + token 跳ねで月コスト目標に逆行)。 `xhigh`/`max` は重要設計 Phase gate / 難 root-cause debug の **タスク単位の一時引き上げ** に限定 (現セッションのみ)。 単純作業 (typo / doc 編集 / 文言調整) は sub-agent (Sonnet) 委譲 or effort `medium`。 ※ Opus 4.8 の `high` は 4.7 の既定 `xhigh` より 1 段下 = 同作業で token 効率が良く、 4.8 化自体が cost 削減に寄与
+
+   > **effort 自動化 3 層 (v174 確立)** — 「常時 max」 でなく「必要な時だけ上げる」 を自動化:
+   > 1. **日常デフォルト = `high`** (上記 baseline、 手動変更不要)
+   > 2. **重い判断 skill = 自動 `xhigh`** — `planner` / `generator` / `evaluator` / `multi-review` の SKILL.md + `.claude/agents/{planner,generator,evaluator}.md` frontmatter に `effort: xhigh` を設定済。 当該 skill / subagent の **実行中のみ自動上書き**、 終了で `high` に戻る (手動操作不要)。
+   > 3. **真の難所 = `max` (Claude 事前通知制)** — 以下に**着手する前**、 Claude が「この作業は effort `max` 推奨です。 `/effort max` で引き上げますか (作業後 `/effort high` で戻す)」 と **proactive 通知**する。 user が手動で切替:
+   >    - **重要設計の Phase gate**: 新 backend endpoint + RLS / 認証境界、 LP 訴求 vs 実装の Trust Cliff 判断、 Hallucination Guard 4 層の新規設計
+   >    - **難 root-cause debug**: 再現条件不明 / 複数層にまたがる / 既に 2 セッション以上空回りした bug
+   >    - **大規模 refactor の設計判断**: migration / framework 移行など blast radius が大きい変更
+   > ※ skill 自動化 (層2) と通知 (層3) で「上げ忘れ」 と「上げっぱなしコスト」 の両方を防ぐ。 詳細 memory: [[feedback_cost_efficient_operation]]
+
 2. **sub-agent default**: **Sonnet 4.6/4.7** — Agent tool 呼出時に必ず `model: "sonnet"` を指定。 single-shot review / file ops / grep 主体の sub-agent は Sonnet で十分 (Opus 90-95% の精度、 5x 安い)
 3. **例外で Opus sub-agent**: 以下のみ Opus 指定
    - `planner` subagent (SPEC 起票、 multi-step 推論主体)

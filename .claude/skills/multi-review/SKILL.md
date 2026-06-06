@@ -1,5 +1,6 @@
 ---
 name: multi-review
+effort: xhigh
 description: BeatScanner の Phase gate / 重要設計判断で 6 体専門家サブエージェントを並列起動して並列レビューを実行する。「サブエージェント 6 人で並列レビュー」「マルチレビューして」「Phase gate review」「6 体一致確認」と依頼された際、または重要設計の意思決定前に使用する。
 ---
 

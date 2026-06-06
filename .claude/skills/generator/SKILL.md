@@ -1,5 +1,6 @@
 ---
 name: generator
+effort: xhigh
 description: BeatScanner PGE 自律 3 体ループの Generator 起動。 Planner が SPEC.md を生成して user 承認 (gate 1) を取得した後、 該当 sprint 1 機能を worktree 上で実装する。 既存 skill 群 (designing-workspace-ui / shadcn / chart-tab 等) を呼び出す orchestrator。 自己評価項目 PASS 後に Evaluator へ引き渡し。 「/generator <SPEC_PATH> <sprint>」「generator で sprint N 実装」 と依頼された際に呼び出す。
 ---
 
