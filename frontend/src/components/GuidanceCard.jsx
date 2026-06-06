@@ -3,7 +3,8 @@ import InfoModal from './InfoModal.jsx';
 import Chip from './ui/Chip.jsx';
 import { BarChart3, Calendar, EyeOff, Scale } from 'lucide-react';
 // v100 (handover §100点 UI/UX verdict C): GuidanceCard 達成率 / サプライズ % に count-up animation
-import { useCountUp } from '../hooks/useCountUp.js';
+import { useCountUp, COUNT_UP_MS } from '../hooks/useCountUp.js';
+import { useInViewOnce } from '../hooks/useInViewOnce.js';
 
 // ── signal_quality envelope (handover v82 Phase 0) を 3-tier badge に変換 ──
 // confidence 別に tone / label / tooltip を decide。 「ガイダンス: 非開示」 を
@@ -346,9 +347,12 @@ function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatt
   if (Number.isFinite(actual) && Number.isFinite(estimated) && Math.abs(estimated) > 0.01) {
     achievementPct = (actual / Math.abs(estimated)) * 100;
   }
-  // v100 (UI/UX verdict C): 達成率 % + サプライズ % に count-up animation 適用、 motion +5-8pt 期待
-  const animatedAchievement = useCountUp(achievementPct, { duration: 700, digits: 0 });
-  const animatedSurprise = useCountUp(surprisePct, { duration: 700, digits: 1 });
+  // v100: 達成率 % + サプライズ % に count-up。 v173.6 (user): view 内入場で発火 (inView) + ゆっくり (COUNT_UP_MS)
+  //   + 0 から (forceFromZero)。 ArcProgress にも animatedAchievement を渡してゲージを 0→達成率 へ「伸ばす」。
+  //   今期=過去実績なので §38 対象外 (色・verdict は不変)。
+  const [cellRef, inView] = useInViewOnce();
+  const animatedAchievement = useCountUp(inView ? achievementPct : null, { duration: COUNT_UP_MS, digits: 0, forceFromZero: true });
+  const animatedSurprise = useCountUp(inView ? surprisePct : null, { duration: COUNT_UP_MS, digits: 1, forceFromZero: true });
   // verdict 由来の arc color
   const arcColor = verdict === 'beat' ? 'var(--color-gain)' :
                    verdict === 'miss' ? 'var(--color-loss)' :
@@ -356,6 +360,7 @@ function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatt
                    'var(--text-muted)';
   return (
     <div
+      ref={cellRef}
       style={{
         flex: '1 1 0',
         minWidth: 0,
@@ -443,7 +448,7 @@ function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatt
                 color: arcColor,
               }}
             >
-              {Math.round(animatedAchievement)}<span style={{ fontSize: 18, fontWeight: 600 }}>%</span>
+              {Math.round(inView ? animatedAchievement : achievementPct)}<span style={{ fontSize: 18, fontWeight: 600 }}>%</span>
             </span>
           ) : isAwaitingEarnings ? (
             <span style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-muted)' }}>
@@ -456,7 +461,7 @@ function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatt
             達成率
           </span>
         </div>
-        <ArcProgress value={achievementPct} color={arcColor} size={56} strokeWidth={5} />
+        <ArcProgress value={inView ? animatedAchievement : achievementPct} color={arcColor} size={56} strokeWidth={5} />
       </div>
       )}
 
@@ -486,7 +491,7 @@ function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatt
             color: arcColor,
             fontVariantNumeric: 'tabular-nums',
           }}>
-            ({animatedSurprise > 0 ? '+' : ''}{animatedSurprise.toFixed(1)}% vs 予想)
+            ({(inView ? animatedSurprise : surprisePct) > 0 ? '+' : ''}{(inView ? animatedSurprise : surprisePct).toFixed(1)}% vs 予想)
           </span>
         )}
       </div>
