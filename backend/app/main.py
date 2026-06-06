@@ -6547,7 +6547,14 @@ def _compute_forward_outlook(
                         if _best_diff is not None and _best_diff <= 90:
                             fy_ya_inc = _best
                     fy_ya_rev = _safe_eps_float(_pick(fy_ya_inc, "revenue")) if fy_ya_inc else None
-                    fy_ya_eps = _safe_eps_float(_pick(fy_ya_inc, "eps", "epsDiluted")) if fy_ya_inc else None
+                    # 通期 EPS YoY は抑止 (basis mismatch、 本番検証 2026-06-06): 通期 consensus は
+                    # non-GAAP/adjusted baseline だが annual income の actual EPS は GAAP。 SaaS は
+                    # GAAP≪non-GAAP (株式報酬) で artifact / 誤 turnaround になる (SNOW: GAAP actual -3.95 vs
+                    # non-GAAP consensus +1.93 → 誤「前年赤字→来期黒字」判定)。 前年 non-GAAP actual の信頼
+                    # source が無いため、 通期 EPS は consensus + 会社 FY ガイダンスのみ表示し YoY は売上のみ
+                    # (next_q は non-GAAP surprises で整合するので EPS YoY 維持、 next_fy のみ抑止)。 売上は
+                    # GAAP/non-GAAP 差が小さいため rev_yoy は維持。
+                    fy_ya_eps = None
                     # 売上 YoY (金融セクター抑止 + 基準ミスマッチ横展開、 next_q と同条件)
                     fy_rev_yoy = None
                     fy_rev_unreliable = False
