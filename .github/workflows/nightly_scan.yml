@@ -59,7 +59,14 @@ jobs:
             -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
             -d "$BODY" "$BASE/api/cron/cup-scan")
           echo "$resp" | tail -1
-          echo "$resp" | sed '$d' | jq '{processed_count,detected_count,upserted_count,failed_count}' 2>/dev/null || true
+          body=$(echo "$resp" | sed '$d')
+          echo "$body" | jq '{processed_count,detected_count,upserted_count,failed_count}' 2>/dev/null || true
+          # v176: OHLCV fetch 大量失敗の検知 (FMP 移行効果の監視)。 failed が processed の半数超なら warning。
+          proc=$(echo "$body" | jq -r '.processed_count // 0' 2>/dev/null || echo 0)
+          fail=$(echo "$body" | jq -r '.failed_count // 0' 2>/dev/null || echo 0)
+          if [ "${proc:-0}" -gt 0 ] && [ "${fail:-0}" -gt $((proc / 2)) ]; then
+            echo "::warning::Cup scan の OHLCV fetch 失敗多数 (failed=$fail / processed=$proc) — FMP fetch を確認。"
+          fi
 
       - name: RS scan
         id: rs
@@ -70,7 +77,14 @@ jobs:
             -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
             -d "$BODY" "$BASE/api/cron/rs-scan")
           echo "$resp" | tail -1
-          echo "$resp" | sed '$d' | jq '{calc_date,scored_count,upserted_count,failed_count,gc_upserted_count}' 2>/dev/null || true
+          body=$(echo "$resp" | sed '$d')
+          echo "$body" | jq '{calc_date,scored_count,upserted_count,failed_count,gc_upserted_count}' 2>/dev/null || true
+          # v176: partial-scan 検知。 2026-06-06 は scored=3 で本番 RS スクリーナーが PANW 1 件のみ
+          # = Trust Cliff になった。 read 側 guard で前日 full に fallback するが scan health を明示。
+          scored=$(echo "$body" | jq -r '.scored_count // 0' 2>/dev/null || echo 0)
+          if [ "${scored:-0}" -lt 500 ]; then
+            echo "::warning::RS scan partial (scored_count=$scored < 500) — FMP OHLCV fetch を確認。 read 側は前日 full に fallback 済。"
+          fi
 
       - name: Cup-Handle digest notify
         id: notify

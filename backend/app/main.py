@@ -11939,6 +11939,11 @@ def _get_spy_history() -> dict | None:
 
     Cup-Handle SPY 200DMA filter (Confirmed Uptrend 代替) + Session 3 RS 計算で共有。
     fetch 失敗時は None を返し、 caller 側で graceful degrade。
+
+    v176 hotfix: 主データ源を yfinance → FMP に移行 (_fetch_ohlcv_3y と同方針)。 SPY が Railway
+    IP で block されると rs-scan が SPY fetch 失敗で 503 (全 ticker fail) になるため、 安定 source の
+    FMP を primary に。 本関数は同期 (複数 sync helper から呼ばれる) なので httpx.Client (sync) で
+    直接叩き、 呼び出し側は不変。 yfinance は一時回復時 / ローカル用 fallback として残置。
     """
     now = _time.monotonic()
     cached_ts = _SPY_HISTORY_CACHE.get("ts", 0.0)
@@ -11947,6 +11952,38 @@ def _get_spy_history() -> dict | None:
             "closes": _SPY_HISTORY_CACHE["closes"],
             "times": _SPY_HISTORY_CACHE.get("times", []),
         }
+
+    # FMP (primary): Railway IP で block されない安定 source
+    try:
+        fmp_key = os.getenv("FMP_API_KEY")
+        if fmp_key:
+            import httpx
+            from_date = (date.today() - timedelta(days=1095)).isoformat()
+            to_date = date.today().isoformat()
+            r = httpx.get(
+                "https://financialmodelingprep.com/stable/historical-price-eod/full",
+                params={"symbol": "SPY", "from": from_date, "to": to_date, "apikey": fmp_key},
+                timeout=15.0,
+            )
+            if r.status_code == 200:
+                data = r.json()
+                raw = data.get("historical") if isinstance(data, dict) else data
+                # FMP は新→旧 順 → reversed で旧→新
+                rows = [
+                    p for p in reversed(raw or [])
+                    if p.get("date") and p.get("close") is not None
+                ]
+                if rows:
+                    closes = [round(float(p["close"]), 4) for p in rows]
+                    times = [p["date"] for p in rows]
+                    _SPY_HISTORY_CACHE["closes"] = closes
+                    _SPY_HISTORY_CACHE["times"] = times
+                    _SPY_HISTORY_CACHE["ts"] = now
+                    return {"closes": closes, "times": times}
+    except Exception as e:
+        print(f"[spy] FMP fetch failed: {e}")
+
+    # yfinance fallback (Railway では block されるが一時回復時 / ローカル用に残置)
     try:
         import yfinance as yf
         stock = yf.Ticker("SPY")
@@ -15101,12 +15138,44 @@ async def av_cache_clear(ticker: str | None = Query(None)):
 # ============================================================================
 
 
-def _fetch_ohlcv_3y(ticker: str) -> tuple[list[str], list[float], list[float], list[float], list[float]] | None:
-    """3 年 OHLCV history を yfinance で取得。 失敗時 None (caller で skip)。
+async def _fetch_ohlcv_3y(ticker: str) -> tuple[list[str], list[float], list[float], list[float], list[float]] | None:
+    """3 年 OHLCV history を取得。 失敗時 None (caller で skip)。
 
-    返却 tuple: (times, highs, lows, closes, volumes)。
-    既存 /api/technical/{ticker} (main.py:9560) と同 pattern。
+    返却 tuple: (times, highs, lows, closes, volumes)、 times は旧→新 昇順。
+
+    v176 hotfix: 主データ源を yfinance → FMP に移行。 yfinance の .history() は Railway
+    クラウド IP から Yahoo に block され、 nightly scan (rs/cup) が断続的に大量 fail していた
+    (2026-06-06: russell3000 中 scored=3 の壊滅、 partial calc_date が full をマスク)。 FMP
+    /stable/historical-price-eod/full は user-facing /api/price-history と同 source で安定。
+    yfinance は一時回復時 / ローカル用 fallback として残置 (Railway では実質効かない)。
     """
+    from_date = (date.today() - timedelta(days=1095)).isoformat()
+    to_date = date.today().isoformat()
+
+    # FMP (primary): Railway IP で block されない安定 source
+    try:
+        fmp_key = os.getenv("FMP_API_KEY")
+        if fmp_key:
+            raw = await FMPClient(api_key=fmp_key).historical_price(ticker, from_date, to_date)
+            # FMP は新→旧 順 → reversed で旧→新 (既存 /api/price-history L7348 と同変換)
+            rows = [
+                p for p in reversed(raw or [])
+                if p.get("date") is not None
+                and p.get("close") is not None
+                and p.get("high") is not None
+                and p.get("low") is not None
+            ]
+            if rows:
+                times = [p["date"] for p in rows]
+                closes = [round(float(p["close"]), 4) for p in rows]
+                highs = [round(float(p["high"]), 4) for p in rows]
+                lows = [round(float(p["low"]), 4) for p in rows]
+                volumes = [float(p.get("volume") or 0) for p in rows]
+                return times, highs, lows, closes, volumes
+    except Exception as e:
+        print(f"[ohlcv] FMP fetch failed for {ticker}: {e}")
+
+    # yfinance fallback (Railway では block されるが一時回復時 / ローカル用に残置)
     try:
         import yfinance as yf
         stock = yf.Ticker(ticker)
@@ -15120,7 +15189,7 @@ def _fetch_ohlcv_3y(ticker: str) -> tuple[list[str], list[float], list[float], l
         volumes = [float(v) for v in hist["Volume"].tolist()]
         return times, highs, lows, closes, volumes
     except Exception as e:
-        print(f"[ohlcv] yfinance fetch failed for {ticker}: {e}")
+        print(f"[ohlcv] yfinance fallback failed for {ticker}: {e}")
         return None
 
 
@@ -15272,7 +15341,7 @@ async def cron_cup_scan(
                 # chunk 境界で sleep (FMP/yfinance rate limit 緩和、 並列時も維持)
                 if idx > 0 and idx % chunk_size == 0:
                     await asyncio.sleep(1.0)
-                ohlcv = await asyncio.to_thread(_fetch_ohlcv_3y, ticker)
+                ohlcv = await _fetch_ohlcv_3y(ticker)
                 if ohlcv is None:
                     return ticker, None, "ohlcv_fetch_failed"
                 times, highs, lows, closes, volumes = ohlcv
@@ -15314,7 +15383,7 @@ async def cron_cup_scan(
         for i, ticker in enumerate(tickers):
             if i > 0 and i % chunk_size == 0:
                 await asyncio.sleep(1.0)
-            ohlcv = await asyncio.to_thread(_fetch_ohlcv_3y, ticker)
+            ohlcv = await _fetch_ohlcv_3y(ticker)
             if ohlcv is None:
                 failed.append({"ticker": ticker, "reason": "ohlcv_fetch_failed"})
                 continue
@@ -15993,7 +16062,7 @@ async def cron_rs_scan(
 
         async def _score_one(ticker: str):
             async with sem:
-                ohlcv = await asyncio.to_thread(_fetch_ohlcv_3y, ticker)
+                ohlcv = await _fetch_ohlcv_3y(ticker)
                 if ohlcv is None:
                     return ticker, None, None, "ohlcv_fetch_failed"
                 t_times, _, _, t_closes, _ = ohlcv
@@ -16020,7 +16089,7 @@ async def cron_rs_scan(
     else:
         # 既存 sequential path、 既存挙動維持
         for ticker in tickers:
-            ohlcv = await asyncio.to_thread(_fetch_ohlcv_3y, ticker)
+            ohlcv = await _fetch_ohlcv_3y(ticker)
             if ohlcv is None:
                 failed.append({"ticker": ticker, "reason": "ohlcv_fetch_failed"})
                 continue
@@ -16192,6 +16261,43 @@ def _select_all_column(sb, table: str, column: str) -> list[dict]:
     return out
 
 
+# v176 hotfix: partial-scan が latest をマスクする事故の安全網。 nightly OHLCV fetch が
+# 大量 fail した日 (2026-06-06: 3 行) に partial calc_date が生成され、 read 系の
+# `order(date desc).limit(1)` がそれを採用して前日 full (2373 行) をマスクした
+# (RS スクリーナーが PANW 1 件のみ = Trust Cliff)。 FMP 移行で fetch は安定したが、
+# 将来の一時障害でも前日 full に自動 fallback するため guard を恒久化。
+_MIN_VALID_RS_ROWS = 200  # full(989-2414) と partial(3) を明確に分ける床
+
+
+def _latest_valid_calc_date(
+    sb, table: str, date_col: str, min_rows: int, max_lookback: int = 10
+) -> tuple[str | None, int]:
+    """date_col 降順で、 行数 >= min_rows を満たす最新の date を返す (最大 max_lookback 日遡及)。
+
+    partial batch (OHLCV fetch 大量失敗で行数極少の date) を skip し、 直近の full な date に
+    フォールバックする。 通常 (full が最新) は 1 回目で確定。
+
+    Returns: (date or None, row_count)。 全 lookback が閾値未満なら (None, 0)。
+    """
+    exclude: list[str] = []
+    for _ in range(max_lookback):
+        q = sb.table(table).select(date_col).order(date_col, desc=True)
+        for ed in exclude:
+            q = q.neq(date_col, ed)
+        rows = (q.limit(1).execute().data) or []
+        if not rows:
+            break
+        cd = rows[0][date_col]
+        cnt = (
+            sb.table(table).select(date_col, count="exact")
+            .eq(date_col, cd).limit(1).execute().count
+        ) or 0
+        if cnt >= min_rows:
+            return cd, cnt
+        exclude.append(cd)
+    return None, 0
+
+
 def _build_consensus_universe(sb) -> tuple[set[str], dict[str, int], list[str]]:
     """consensus snapshot の対象 universe を 4 source の和集合で構築する (同期、 to_thread で呼ぶ)。
 
@@ -16224,16 +16330,12 @@ def _build_consensus_universe(sb) -> tuple[set[str], dict[str, int], list[str]]:
         source_counts["holdings"] = 0
         source_errors.append(f"holdings: {type(e).__name__}")
 
-    # 3. RS 上位 (最新 calc_date の universe_percentile >= 90)
+    # 3. RS 上位 (最新 full calc_date の universe_percentile >= 90)
+    # v176 hotfix: partial scan を skip し full calc_date にフォールバック (scanner_rs と同 guard)
     try:
-        latest = (
-            sb.table("rs_ratings").select("calc_date")
-            .order("calc_date", desc=True).limit(1).execute()
-        )
-        rows0 = latest.data or []
+        calc_date, _cnt = _latest_valid_calc_date(sb, "rs_ratings", "calc_date", _MIN_VALID_RS_ROWS)
         s = set()
-        if rows0:
-            calc_date = rows0[0]["calc_date"]
+        if calc_date:
             res = (
                 sb.table("rs_ratings").select("ticker")
                 .eq("calc_date", calc_date)
@@ -16577,33 +16679,19 @@ async def scanner_rs(
     limit = max(1, min(600, int(limit)))
 
     try:
-        # 直近 1 週間で最新の calc_date を取得 (nightly batch が稀に skip しても fallback)
-        latest = (
-            sb.table("rs_ratings")
-            .select("calc_date")
-            .order("calc_date", desc=True)
-            .limit(1)
-            .execute()
+        # v176 hotfix: partial scan (OHLCV fetch 大量失敗で行数極少の calc_date) が latest を
+        # マスクするのを防ぐ。 行数 >= _MIN_VALID_RS_ROWS の最新 calc_date を採用 (前日 full に fallback)。
+        calc_date, universe_size = _latest_valid_calc_date(
+            sb, "rs_ratings", "calc_date", _MIN_VALID_RS_ROWS
         )
-        rows = latest.data or []
-        if not rows:
+        if calc_date is None:
             return {
                 "universe_size": 0,
                 "calc_date": None,
                 "min_percentile": min_percentile,
                 "items": [],
-                "note": "rs_ratings empty - nightly batch (cron_rs_scan) 未実行",
+                "note": "rs_ratings empty / 全 calc_date が partial (>=200 行なし) - nightly batch 未実行 or OHLCV fetch 失敗",
             }
-        calc_date = rows[0]["calc_date"]
-
-        # universe size = その日の全レコード件数
-        all_today = (
-            sb.table("rs_ratings")
-            .select("ticker", count="exact")
-            .eq("calc_date", calc_date)
-            .execute()
-        )
-        universe_size = all_today.count or 0
 
         # v125 Sprint 2.5: sort/min_delta param で「RS 急上昇」 (Pane 1 Hero) も同 endpoint で対応
         # migration 未適用時 (delta_1d_percentile column 不在) は fallback で従来 columns のみ select
