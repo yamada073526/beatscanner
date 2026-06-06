@@ -298,77 +298,84 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
       {/* 文字壁改善 (2026-06-06): サブタイトル「アナリストコンセンサスと前年同期実績の比較」 は削除。
           各 YoYInline の「前年比」 ラベル + ForecastBars の「前年同期/来期予想」 ラベル + 末尾の出典/免責で
           文脈は十分担保される (qa verdict: 削除可テキスト)。 */}
-      {/* 次の四半期 (period をサブ見出しに移動。 通期が下に続く時の主従を明確化) */}
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginTop: 4 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>次の四半期</span>
+      {/* 次の四半期 (改善4 2026-06-06、 4体合議): グループ見出しを 13px/700/primary に強調
+          (現状 11px/700/secondary がコンテンツ「売上/EPS」12px/600/primary より小さい逆転を修正)
+          + コンテンツを paddingLeft 10 でインデント → 通期との 2 グループが「1x4 でなく 2x2」 に見える。 */}
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginTop: 8, marginBottom: 1 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>次の四半期</span>
         <span style={{ fontSize: 10, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{period}</span>
       </div>
-      <MetricBlock
-        label="売上"
-        consensus={nq.consensus_revenue}
-        yoyPct={nq.rev_yoy_pct}
-        yearAgo={nq.year_ago_revenue}
-        isMoney
-        currency={currency}
-        unreliable={nq.rev_compare_unreliable}
-        turnaround={false}
-        count={countRev}
-        guidanceState={surpriseNq?.guidance_vs_consensus_rev}
-        companyLow={surpriseNq?.company_q_rev_low}
-        companyHigh={surpriseNq?.company_q_rev_high}
-      />
-      <MetricBlock
-        label="EPS"
-        consensus={nq.consensus_eps}
-        yoyPct={nq.eps_yoy_pct}
-        yearAgo={nq.year_ago_eps}
-        isMoney={false}
-        currency={currency}
-        unreliable={false}
-        turnaround={nq.eps_turnaround}
-        count={countEps}
-        guidanceState={surpriseNq?.guidance_vs_consensus_eps}
-        companyLow={surpriseNq?.company_q_eps_low}
-        companyHigh={surpriseNq?.company_q_eps_high}
-      />
+      <div style={{ paddingLeft: 10 }}>
+        <MetricBlock
+          label="売上"
+          consensus={nq.consensus_revenue}
+          yoyPct={nq.rev_yoy_pct}
+          yearAgo={nq.year_ago_revenue}
+          isMoney
+          currency={currency}
+          unreliable={nq.rev_compare_unreliable}
+          turnaround={false}
+          count={countRev}
+          guidanceState={surpriseNq?.guidance_vs_consensus_rev}
+          companyLow={surpriseNq?.company_q_rev_low}
+          companyHigh={surpriseNq?.company_q_rev_high}
+        />
+        <MetricBlock
+          label="EPS"
+          consensus={nq.consensus_eps}
+          yoyPct={nq.eps_yoy_pct}
+          yearAgo={nq.year_ago_eps}
+          isMoney={false}
+          currency={currency}
+          unreliable={false}
+          turnaround={nq.eps_turnaround}
+          count={countEps}
+          guidanceState={surpriseNq?.guidance_vs_consensus_eps}
+          companyLow={surpriseNq?.company_q_eps_low}
+          companyHigh={surpriseNq?.company_q_eps_high}
+        />
+      </div>
 
-      {/* v173: 通期 FY 見通し (next_fy がある時のみ、 next_q と同じ MetricBlock + 会社ガイダンス行を流用)。
-          §38 ガード (色なし / 静的 dict / basis mismatch / 金融抑止 / アナリスト数) は backend で next_q と同条件適用済み。 */}
+      {/* v173: 通期 FY 見通し (next_fy がある時のみ)。 改善4: グループ間を marginTop 18 + 1px border で
+          分離 (太さでなく空白で区別 = Aman 調)、 見出しを 13px/700/primary で次Qと対称に。 §38 ガード
+          (色なし / 静的 dict / basis mismatch / 金融抑止 / アナリスト数) は backend で next_q と同条件適用済み。 */}
       {hasFyData && (
-        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '2px solid var(--border)' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{nfy.period_label || '通期'}</span>
+        <div style={{ marginTop: 18, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 1 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{nfy.period_label || '通期'}</span>
             <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>通期見通し</span>
           </div>
-          <MetricBlock
-            label="売上"
-            consensus={nfy.consensus_revenue}
-            yoyPct={nfy.rev_yoy_pct}
-            yearAgo={nfy.year_ago_revenue}
-            isMoney
-            currency={currency}
-            unreliable={nfy.rev_compare_unreliable}
-            turnaround={false}
-            count={nfy.analyst_count_revenue}
-            guidanceState={surpriseFy?.guidance_vs_consensus_rev}
-            companyLow={surpriseFy?.company_q_rev_low}
-            companyHigh={surpriseFy?.company_q_rev_high}
-          />
-          <MetricBlock
-            label="EPS"
-            consensus={nfy.consensus_eps}
-            yoyPct={nfy.eps_yoy_pct}
-            yearAgo={nfy.year_ago_eps}
-            isMoney={false}
-            currency={currency}
-            unreliable={false}
-            turnaround={nfy.eps_turnaround}
-            count={nfy.analyst_count_eps}
-            guidanceState={surpriseFy?.guidance_vs_consensus_eps}
-            companyLow={surpriseFy?.company_q_eps_low}
-            companyHigh={surpriseFy?.company_q_eps_high}
-            yearAgoEstimate={nfy.year_ago_eps_is_estimate}
-          />
+          <div style={{ paddingLeft: 10 }}>
+            <MetricBlock
+              label="売上"
+              consensus={nfy.consensus_revenue}
+              yoyPct={nfy.rev_yoy_pct}
+              yearAgo={nfy.year_ago_revenue}
+              isMoney
+              currency={currency}
+              unreliable={nfy.rev_compare_unreliable}
+              turnaround={false}
+              count={nfy.analyst_count_revenue}
+              guidanceState={surpriseFy?.guidance_vs_consensus_rev}
+              companyLow={surpriseFy?.company_q_rev_low}
+              companyHigh={surpriseFy?.company_q_rev_high}
+            />
+            <MetricBlock
+              label="EPS"
+              consensus={nfy.consensus_eps}
+              yoyPct={nfy.eps_yoy_pct}
+              yearAgo={nfy.year_ago_eps}
+              isMoney={false}
+              currency={currency}
+              unreliable={false}
+              turnaround={nfy.eps_turnaround}
+              count={nfy.analyst_count_eps}
+              guidanceState={surpriseFy?.guidance_vs_consensus_eps}
+              companyLow={surpriseFy?.company_q_eps_low}
+              companyHigh={surpriseFy?.company_q_eps_high}
+              yearAgoEstimate={nfy.year_ago_eps_is_estimate}
+            />
+          </div>
         </div>
       )}
 
