@@ -71,21 +71,25 @@ function fmtEps(v, currency = 'USD') {
   return `${v < 0 ? '-' : ''}${sym}${Math.abs(v).toFixed(2)}`;
 }
 
-// 前年同期比バッジ — ▲▼ + 絶対値 (色なし: 緑/赤を使わず neutral 単色、 §38)
+// 前年同期比バッジ — ▲▼ + 絶対値 (色なし: 緑/赤を使わず neutral 単色、 §38)。
+// user dogfood (2026-06-06):「前年比 % がこのセクションで一番重要 (CRWD/SNOW が買われた理由 = 来期成長率)」
+// → 4 体合議で前年比を主役化。 §38 で色は使えないため size + weight + neutral ink のみで強調
+// (% を 19px/800 + neutral primary)。 qa verdict: 独立行昇格はせず inline 強調に留める
+// (抑止箇所 = 金融売上 / 通期EPS / 低カバレッジ で pct=null → null return される既存挙動を維持し空欄崩れを防ぐ)。
 function YoYInline({ pct }) {
   if (pct == null || !Number.isFinite(pct)) return null;
   const up = pct >= 0;
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
-      <span aria-hidden style={{ fontSize: 10 }}>{up ? '▲' : '▼'}</span>
-      <strong style={{ fontSize: 13, fontWeight: 700 }}>{Math.abs(pct).toFixed(1)}%</strong>
-      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>前年同期比</span>
+    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 3, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+      <span aria-hidden style={{ fontSize: 13, fontWeight: 700 }}>{up ? '▲' : '▼'}</span>
+      <strong style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.02em' }}>{Math.abs(pct).toFixed(1)}%</strong>
+      <span style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 400 }}>前年比</span>
     </span>
   );
 }
 
 // 予測棒: 前年同期 (baseline) と 来期予想 を中立トーンで対比 (色なし、 長さの差で成長を視覚化)
-function ForecastBars({ yearAgo, consensus, yearAgoLabel, consensusLabel }) {
+function ForecastBars({ yearAgo, consensus, yearAgoLabel, consensusLabel, yearAgoRowLabel = '前年同期' }) {
   if (yearAgo == null || consensus == null || !Number.isFinite(yearAgo) || !Number.isFinite(consensus)) return null;
   const maxv = Math.max(Math.abs(yearAgo), Math.abs(consensus)) || 1;
   const wYa = Math.max(2, (Math.abs(yearAgo) / maxv) * 100);
@@ -111,7 +115,7 @@ function ForecastBars({ yearAgo, consensus, yearAgoLabel, consensusLabel }) {
   );
   return (
     <div style={{ display: 'grid', gap: 5, marginTop: 8 }}>
-      <Row label="前年同期" value={yearAgoLabel} w={wYa} strong={false} />
+      <Row label={yearAgoRowLabel} value={yearAgoLabel} w={wYa} strong={false} />
       <Row label="来期予想" value={consensusLabel} w={wCon} strong={true} />
     </div>
   );
@@ -119,10 +123,12 @@ function ForecastBars({ yearAgo, consensus, yearAgoLabel, consensusLabel }) {
 
 // ── 案B v172: 会社ガイダンスサプライズ行 (§38 色なし中立、 静的 dict、 LLM narration ゼロ) ──
 // 「上方修正/上振れ/強気/視界良好」 は NO-GO (A=vs consensus では会社は consensus を修正していない = 事実誤り)。
+// 文字壁改善 (2026-06-06、 4体合議): 「コンセンサスを上回る水準」→「予想を上回る」 に圧縮。 金融 verdict
+// 「会社ガイダンスは一次情報なので削除不可・圧縮のみ可」 を踏襲し、 意味 (会社 vs 市場予想の方向) は保持。
 const GUIDANCE_STATE_JP = {
-  above: { sym: '▲', label: '会社ガイダンスはコンセンサスを上回る水準' },
-  inline: { sym: '—', label: '会社ガイダンスはコンセンサスとおおむね同水準' },
-  below: { sym: '▼', label: '会社ガイダンスはコンセンサスを下回る水準' },
+  above: { sym: '▲', label: '会社ガイダンスは予想を上回る' },
+  inline: { sym: '—', label: '会社ガイダンスは予想と同水準' },
+  below: { sym: '▼', label: '会社ガイダンスは予想を下回る' },
 };
 
 function GuidanceSurpriseRow({ state, companyLow, companyHigh, consensus, fmt, fmtRange, currency }) {
@@ -157,7 +163,7 @@ function GuidanceSurpriseRow({ state, companyLow, companyHigh, consensus, fmt, f
   );
 }
 
-function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unreliable, turnaround, count, guidanceState, companyLow, companyHigh }) {
+function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unreliable, turnaround, count, guidanceState, companyLow, companyHigh, yearAgoEstimate }) {
   const fmt = isMoney ? fmtMoney : fmtEps;
   // 会社ガイダンスのレンジは Money のみ 2 桁 (14.36〜14.42億ドル)。 EPS は fmtEps が既に 2 桁。
   const fmtRange = isMoney ? fmtMoneyRange : fmtEps;
@@ -187,6 +193,7 @@ function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unr
           consensus={consensus}
           yearAgoLabel={fmt(yearAgo, currency)}
           consensusLabel={fmt(consensus, currency)}
+          yearAgoRowLabel={yearAgoEstimate ? '前年(予想)' : '前年同期'}
         />
       )}
       {/* 案B v172: 会社ガイダンスサプライズ (ForecastBars 直後、 独立行・破線 separator)。
@@ -288,10 +295,9 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
         <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>前方視界 — 見通し</h4>
         {hasFyData && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>次の四半期 + 通期</span>}
       </div>
-      <p style={{ margin: '0 0 4px', fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.4 }}>
-        アナリストコンセンサスと前年同期実績の比較 (事実値)
-      </p>
-
+      {/* 文字壁改善 (2026-06-06): サブタイトル「アナリストコンセンサスと前年同期実績の比較」 は削除。
+          各 YoYInline の「前年比」 ラベル + ForecastBars の「前年同期/来期予想」 ラベル + 末尾の出典/免責で
+          文脈は十分担保される (qa verdict: 削除可テキスト)。 */}
       {/* 次の四半期 (period をサブ見出しに移動。 通期が下に続く時の主従を明確化) */}
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginTop: 4 }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>次の四半期</span>
@@ -361,6 +367,7 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
             guidanceState={surpriseFy?.guidance_vs_consensus_eps}
             companyLow={surpriseFy?.company_q_eps_low}
             companyHigh={surpriseFy?.company_q_eps_high}
+            yearAgoEstimate={nfy.year_ago_eps_is_estimate}
           />
         </div>
       )}
@@ -371,6 +378,11 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
           出典: {forward.source || 'FMP analyst-estimates'}
           {hasGuidanceSurprise ? ' / 会社ガイダンス: SEC 8-K (EX-99.1)' : ''}
         </span>
+        {nfy?.year_ago_eps_is_estimate && (
+          <span style={{ fontSize: 9, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            ※通期EPSの「前年(予想)」はアナリストコンセンサス (実績収束値) で、 報告 EPS とは確定状況が異なります。
+          </span>
+        )}
         <span style={{ fontSize: 9, color: 'var(--text-muted)', lineHeight: 1.5 }}>
           ※来期予想はアナリスト各社の見通しの平均値であり、当社の予測ではありません。実績と乖離する場合があります。投資判断はご自身の責任で行ってください。
         </span>

@@ -6547,14 +6547,25 @@ def _compute_forward_outlook(
                         if _best_diff is not None and _best_diff <= 90:
                             fy_ya_inc = _best
                     fy_ya_rev = _safe_eps_float(_pick(fy_ya_inc, "revenue")) if fy_ya_inc else None
-                    # 通期 EPS YoY は抑止 (basis mismatch、 本番検証 2026-06-06): 通期 consensus は
-                    # non-GAAP/adjusted baseline だが annual income の actual EPS は GAAP。 SaaS は
-                    # GAAP≪non-GAAP (株式報酬) で artifact / 誤 turnaround になる (SNOW: GAAP actual -3.95 vs
-                    # non-GAAP consensus +1.93 → 誤「前年赤字→来期黒字」判定)。 前年 non-GAAP actual の信頼
-                    # source が無いため、 通期 EPS は consensus + 会社 FY ガイダンスのみ表示し YoY は売上のみ
-                    # (next_q は non-GAAP surprises で整合するので EPS YoY 維持、 next_fy のみ抑止)。 売上は
-                    # GAAP/non-GAAP 差が小さいため rev_yoy は維持。
+                    # 通期 EPS の前年値 (v173.1、 4体合議 2026-06-06): annual income の actual EPS は GAAP で、
+                    # 通期 consensus(non-GAAP) と basis mismatch (SNOW: GAAP -3.95 vs non-GAAP +1.93 で誤
+                    # turnaround) のため使わない。 代わりに annual_estimates の過去 FY エントリ (来期 FY より
+                    # 過去で fy_ya_target に最も近い1件) の estimatedEpsAvg を使う。 これは「過去 FY のアナリスト
+                    # コンセンサス (決算後は actual に収束する non-GAAP baseline)」 で、 来期 FY consensus と
+                    # 同一 baseline のため比較が整合し SNOW 型 artifact を解消する (金融 verdict)。
+                    # ⚠️ actual と厳密一致しない (FMP 更新ラグ) ため frontend で「前年(予想ベース)」注記必須。
                     fy_ya_eps = None
+                    if annual_estimates:
+                        _bp, _bp_diff = None, None
+                        for _pe in annual_estimates:
+                            _ped = _pd(_pe.get("date"))
+                            if _ped is None or _ped >= fy_d:  # 来期 FY 自身・未来を除外 (過去 FY のみ採用)
+                                continue
+                            _pdiff = abs((_ped - fy_ya_target).days)
+                            if _bp_diff is None or _pdiff < _bp_diff:
+                                _bp, _bp_diff = _pe, _pdiff
+                        if _bp is not None and _bp_diff is not None and _bp_diff <= 120:
+                            fy_ya_eps = _safe_eps_float(_pick(_bp, "estimatedEpsAvg", "epsAvg"))
                     # 売上 YoY (金融セクター抑止 + 基準ミスマッチ横展開、 next_q と同条件)
                     fy_rev_yoy = None
                     fy_rev_unreliable = False
@@ -6619,6 +6630,8 @@ def _compute_forward_outlook(
                         "eps_turnaround": fy_eps_turnaround,
                         "rev_compare_unreliable": fy_rev_unreliable,
                         "year_ago_eps": fy_ya_eps,
+                        # 通期EPSの前年はコンセンサス予想ベース (actual でない) → frontend で「前年(予想ベース)」注記
+                        "year_ago_eps_is_estimate": fy_ya_eps is not None,
                         "year_ago_revenue": fy_ya_rev,
                         "year_ago_date": fy_ya_target.date().isoformat(),
                         "analyst_count_eps": fy_cnt_eps,
