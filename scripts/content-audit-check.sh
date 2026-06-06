@@ -69,6 +69,23 @@ for T in V MA AXP; do
     echo "  ok: $T 売上抑止 + EPS YoY=$eps 保持 (graceful)"
   fi
 done
+#   1e (v173 通期見通し): 通期 next_fy EPS の前年値は annual income の GAAP actual でなく過去FYコンセンサス
+#       (non-GAAP, actual 収束値) を使う。 GAAP actual だと SNOW (GAAP -3.95 vs non-GAAP +1.93) で誤
+#       turnaround になる回帰 → turnaround=true なら basis mismatch 再発。 ya_est=true (予想ベース注記) も確認。
+echo "[1e] forward: 通期EPS は過去FYコンセンサスベース (SNOW 誤turnaround 非再発)"
+for T in SNOW NVDA; do
+  resp=$(curl -s --max-time 20 "$BASE/api/guidance/$T/basic")
+  fy_turn=$(echo "$resp" | jq -r '.forward.next_fy.eps_turnaround // "null"' 2>/dev/null)
+  fy_est=$(echo "$resp" | jq -r '.forward.next_fy.year_ago_eps_is_estimate // "null"' 2>/dev/null)
+  fy_yoy=$(echo "$resp" | jq -r '.forward.next_fy.eps_yoy_pct // "null"' 2>/dev/null)
+  if [ "$fy_turn" = "true" ]; then
+    echo "  FAIL: $T 通期EPS turnaround=true (GAAP actual basis mismatch 再発)"; FAIL=1
+  elif [ "$fy_yoy" != "null" ] && [ "$fy_est" != "true" ]; then
+    echo "  FAIL: $T 通期EPS YoY=$fy_yoy だが ya_est≠true (予想ベース注記が落ちている)"; FAIL=1
+  else
+    echo "  ok: $T 通期EPS turnaround=false / YoY=$fy_yoy / 予想ベース=$fy_est"
+  fi
+done
 
 # ── Pitfall 2: insights の個人名ガード (氏/アナリスト/じっちゃま 等が leak していないか) ──
 #   SSOT: hallucination-guard (sanitize layer / _sanitize_insights_data)。
