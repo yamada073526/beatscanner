@@ -238,51 +238,69 @@ function SummaryBriefInner({ analysis, guidance, frameless = false }) {
   // fade-in: prefers-reduced-motion の場合は最初から visible
   const [visible, setVisible] = useState(() => prefersReducedMotion());
   const controllerRef = useRef(null);
+  // #3 フリッカー対策 (v173.7): 既に要約を表示したか + 銘柄/期 key。 Phase2 guidance 到着の再生成で
+  //   skeleton に戻さず、 旧 text を保持して完成時に一括 swap するための制御。
+  const shownRef = useRef(false);
+  const keyRef = useRef(null);
 
   useEffect(() => {
     // Hallucination Guard 第 3 層: analysis が null なら fetch しない
     if (!analysis) return;
 
+    // 銘柄 / 期 が変わったら skeleton から (別物の要約)。 同一 key の再 fetch (= Phase2 guidance 到着) は
+    //   「再生成」 扱いで旧 text を保持する。
+    const key = `${analysis.ticker}::${analysis.latestDate}`;
+    if (keyRef.current !== key) {
+      keyRef.current = key;
+      shownRef.current = false;
+    }
+
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
-
-    setStreaming(true);
     setError(null);
-    setText('');
-    // v86 hotfix: skeleton も表示するため visible は streaming 開始時に true 化。
-    // 旧 logic は「first chunk 到着で visible=true」 だったが、 LLM streaming 3-5 秒間
-    // section 全体 opacity:0 で「壊れている」 見え方になっていた (user dogfood feedback)。
-    // fade-in は skeleton 表示時に発火、 text 到着時は skeleton → text の自然な置換で十分。
-    setVisible(true);
+
+    // #3 (v173.7): isRefetch = 同一銘柄+期で既に要約表示済 (= Phase2 guidance 到着の再生成)。
+    //   true の時は skeleton に戻さず (setText('') しない)、 旧 text を表示し続けて裏で buffer に貯め、
+    //   完成時に一括 swap する → 「表示 → skeleton → 再表示」 のフリッカー (#3) を解消。
+    //   同時に二重ストリームの体感遅延 (#2) も軽減 (初回 text は即出たまま、 裏で静かに更新)。
+    //   false (初回) は従来通り skeleton → streaming 逐次表示。
+    const isRefetch = shownRef.current;
+    let buf = '';
+    if (!isRefetch) {
+      setStreaming(true);
+      setText('');
+      // skeleton 表示で fade-in 発火 (section opacity:0 のまま放置を防ぐ、 v86 hotfix 踏襲)
+      setVisible(true);
+    }
 
     streamSummaryBrief(analysis, guidance, (chunk) => {
-      if (!controller.signal.aborted) {
-        setText((prev) => prev + chunk);
-      }
+      if (controller.signal.aborted) return;
+      buf += chunk;
+      if (!isRefetch) setText(buf); // 初回のみ逐次表示 (streaming 体感)
     }, controller.signal)
+      .then(() => {
+        if (controller.signal.aborted) return;
+        if (isRefetch && buf.trim()) setText(buf); // 再生成は完成時に一括 swap (旧 text → 新、 skeleton 無し)
+        if (buf.trim()) shownRef.current = true;
+      })
       .catch((e) => {
-        if (!controller.signal.aborted) {
+        // 再生成 (isRefetch) の失敗は旧 text を維持して silent に (既存要約は有効なため error 表示しない)
+        if (!controller.signal.aborted && !isRefetch) {
           setError(e.message);
-          setVisible(true); // error 表示は即座に
+          setVisible(true);
         }
       })
       .finally(() => {
         if (!controller.signal.aborted) {
           setStreaming(false);
-          setVisible(true); // 完了後も確実に visible
+          setVisible(true);
         }
       });
 
     return () => controller.abort();
-    // v138.6 R2 (2026-05-30): guidance?.sec_guidance_text を deps に追加。
-    // 真因 user dogfood: useJudgmentResult.js は 2-phase fetch (Phase 1 fetchGuidanceBasic →
-    // Phase 2 fetchGuidance で sec_guidance_text 取得)。 旧 deps は ticker / latestDate のみで
-    // Phase 2 完了時に再 fetch せず、 Phase 1 (空 guidance) の AI 要約が cache されて
-    // 「[NEU]③ ガイダンス：非開示」 だけ表示される regression。
-    // Boolean(...) で真偽値化することで、 sec_guidance_text が undefined → 文字列 へ変化した
-    // タイミングで dep が true へ更新、 useEffect 再実行 → AI 要約再生成。
-    // sec_guidance_text の文字列内容差分では再生成しない (cache 維持で cost ↓)。
+    // v138.6 R2 deps 維持 (Phase2 8-K 到着で ③ を正確化する再生成): ただし上記 isRefetch で
+    //   再生成時のフリッカーのみ解消。 sec_guidance_text の文字列差分では再生成しない (Boolean 化、 cost ↓)。
   }, [analysis?.ticker, analysis?.latestDate, Boolean(guidance?.sec_guidance_text)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lines = text.split('\n');
