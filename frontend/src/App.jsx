@@ -1147,6 +1147,7 @@ export default function App() {
       return {
         result: cache?.result || null,
         guidance: cache?.guidance || null,
+        guidanceSecLoading,
         // v118 ETF MVP: ETF 入力時は 5 条件 result 不在 + etfInfo を Pane 3 で render
         etfInfo: cache?.etfInfo || null,
         price: px?.price ?? null,
@@ -1620,7 +1621,7 @@ export default function App() {
             )}
           </div>
 
-          <SummaryBrief analysis={result} guidance={guidance} />
+          <SummaryBrief analysis={result} guidance={guidance} guidanceSecLoading={guidanceSecLoading} />
         </div>
       )}
 
@@ -1727,6 +1728,7 @@ export default function App() {
             return {
               result: cache?.result || null,
               guidance: cache?.guidance || null,
+              guidanceSecLoading,
               price: px?.price ?? null,
               // v120 Sprint 4 (QA verdict F1): backend は change_pct (snake_case、 percent unit) で返す。
         // frontend は fraction (0.0234 = 2.34%) 想定なので /100 で変換 (既存 changePct camelCase は常に undefined → 1日% 永続非表示バグ)。

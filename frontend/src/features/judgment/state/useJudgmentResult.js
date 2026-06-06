@@ -98,6 +98,7 @@ export function useJudgmentResult({
         setIsDemoResult(false);
         setResult(cached.result);
         if (cached.guidance) setGuidance(cached.guidance);
+        setGuidanceSecLoading(false); // #3 (v173.8): cache hit はガイダンス確定済 → AI要約は待たず即生成
         setLoading(false);
         return;
       }
@@ -111,7 +112,9 @@ export function useJudgmentResult({
       setError(null);
       setResult(null);
       setGuidance(null);
-      setGuidanceSecLoading(false);
+      // #3 (v173.8): ガイダンス fetch 開始 = 確定 (Phase2 完了/失敗/15s timeout) まで AI要約 生成を待たせる。
+      //   これにより Phase1 の不正確な要約 (③非開示) を出してから ▲上方修正 に差し替える二度生成を防ぐ。
+      setGuidanceSecLoading(true);
       setActiveTab?.('judgment');
       setIsDemoResult(useDemo);
       if (setForceCloseSuggestions) {

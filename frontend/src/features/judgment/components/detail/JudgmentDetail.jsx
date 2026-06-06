@@ -462,6 +462,7 @@ export default function JudgmentDetail({
   const detail = detailFor ? detailFor(selectedTicker) : null;
   const result = detail?.result || null;
   const guidance = detail?.guidance || null;
+  const guidanceSecLoading = detail?.guidanceSecLoading ?? false;
   const conditions = result?.conditions || [];
 
   // ticker は選択されたが結果まだ無 → skeleton 表示 (loading 中の体感改善)
@@ -673,6 +674,7 @@ export default function JudgmentDetail({
           <SummaryBrief
             analysis={result}
             guidance={guidance}
+            guidanceSecLoading={guidanceSecLoading}
             frameless={v2Frameless}
           />
         )}

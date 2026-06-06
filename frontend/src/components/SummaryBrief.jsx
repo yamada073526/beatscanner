@@ -230,7 +230,7 @@ function prefersReducedMotion() {
 //   第 2 層: sanitizeText を SummaryLine 内 per-line で適用 (BAD-5/6 sentence 削除)
 //   第 3 層: conditional render — analysis が null なら何も表示しない
 //   第 4 層: Number.isFinite — SummaryBrief は string-only LLM 出力のため数値バリデーション対象外
-function SummaryBriefInner({ analysis, guidance, frameless = false }) {
+function SummaryBriefInner({ analysis, guidance, guidanceSecLoading = false, frameless = false }) {
   const [text, setText] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState(null);
@@ -246,6 +246,10 @@ function SummaryBriefInner({ analysis, guidance, frameless = false }) {
   useEffect(() => {
     // Hallucination Guard 第 3 層: analysis が null なら fetch しない
     if (!analysis) return;
+    // #3 (v173.8): ガイダンス (8-K Phase2) が確定するまで生成を待つ → Phase1 の不正確な要約 (③非開示) を
+    //   出して後から ▲上方修正 に差し替える「二度生成」 を根絶。 guidanceSecLoading=false (確定/失敗/15s
+    //   timeout) で初めて 1 度だけ生成。 >15s 超過の極端ケースのみ既存 buffer で silent swap (フォールバック)。
+    if (guidanceSecLoading) return;
 
     // 銘柄 / 期 が変わったら skeleton から (別物の要約)。 同一 key の再 fetch (= Phase2 guidance 到着) は
     //   「再生成」 扱いで旧 text を保持する。
@@ -301,7 +305,7 @@ function SummaryBriefInner({ analysis, guidance, frameless = false }) {
     return () => controller.abort();
     // v138.6 R2 deps 維持 (Phase2 8-K 到着で ③ を正確化する再生成): ただし上記 isRefetch で
     //   再生成時のフリッカーのみ解消。 sec_guidance_text の文字列差分では再生成しない (Boolean 化、 cost ↓)。
-  }, [analysis?.ticker, analysis?.latestDate, Boolean(guidance?.sec_guidance_text)]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [analysis?.ticker, analysis?.latestDate, guidanceSecLoading, Boolean(guidance?.sec_guidance_text)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lines = text.split('\n');
 
@@ -404,10 +408,10 @@ function SummaryBriefInner({ analysis, guidance, frameless = false }) {
  * @param {object|null} props.analysis - /api/analyze result
  * @param {object|null} props.guidance - /api/guidance result (optional)
  */
-export default function SummaryBrief({ analysis, guidance, frameless = false }) {
+export default function SummaryBrief({ analysis, guidance, guidanceSecLoading = false, frameless = false }) {
   return (
     <SummaryBriefErrorBoundary>
-      <SummaryBriefInner analysis={analysis} guidance={guidance} frameless={frameless} />
+      <SummaryBriefInner analysis={analysis} guidance={guidance} guidanceSecLoading={guidanceSecLoading} frameless={frameless} />
     </SummaryBriefErrorBoundary>
   );
 }
