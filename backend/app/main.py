@@ -11700,6 +11700,85 @@ async def generate_visualization(
     return parsed
 
 
+# ── 案B Sprint 4: アナリストコンセンサス修正トレンド drift API ──────────────────
+# ⚠️ この static route は下の `/api/analyst/{ticker}` (path param) より **前** に定義する。
+# FastAPI は登録順マッチなので、 逆順だと "consensus-drift" が ticker として吸われる。
+_CONSENSUS_DRIFT_CACHE: dict[str, tuple[float, dict]] = {}
+_CONSENSUS_DRIFT_TTL = 6 * 3600.0       # snapshot は nightly 更新 → 日内変化なし、 6h cache で十分
+_CONSENSUS_DRIFT_LOCK = asyncio.Lock()  # cache stampede 防止 (analyst endpoint と同パターン)
+_CONSENSUS_DRIFT_FETCH_DAYS = 90        # fetch 範囲 = retention と一致 (window<=90 を必ずカバー)
+
+
+def _fetch_consensus_snapshots(ticker: str, since_iso: str) -> list[dict]:
+    """consensus_snapshots を ticker で取得する同期ヘルパ (endpoint が to_thread で包む)。
+
+    service client 経由 (テーブルは RLS=service_role only)。 since_iso (= today - 90d) 以降を
+    snapshot_date 降順 limit 1000 で取得。 retention 90 日 × 最大 6 period/日 = 540 行 < 1000 で
+    全件取得可能。 window 絞りは calc.classify_consensus_drift が latest snapshot 基準で行う。
+    sb 未設定 / 例外時は空 list (drift は graceful に「蓄積中」表示 = 捏造しない)。
+    """
+    sb = _get_supabase_service()
+    if sb is None:
+        return []
+    try:
+        res = (
+            sb.table("consensus_snapshots")
+            .select(
+                "snapshot_date,fiscal_date,period_type,estimated_eps_avg,"
+                "estimated_revenue_avg,analyst_count_eps,analyst_count_revenue"
+            )
+            .eq("ticker", ticker)
+            .gte("snapshot_date", since_iso)
+            .order("snapshot_date", desc=True)
+            .limit(1000)
+            .execute()
+        )
+        return res.data or []
+    except Exception as e:
+        print(f"[consensus-drift] snapshot fetch failed for {ticker}: {e}")
+        return []
+
+
+@app.get("/api/analyst/consensus-drift")
+async def get_consensus_drift(
+    ticker: str = Query(..., min_length=1),
+    window_days: int = Query(30, ge=1, le=90),
+):
+    """案B Sprint 4: アナリストコンセンサス修正トレンド (drift) API。
+
+    consensus_snapshots (nightly 蓄積) から「直近 N 日でアナリスト予想 (EPS / 売上) が
+    上方/下方に何回修正されたか」を **事実** として返す。 数値は calc.classify_consensus_drift
+    (純粋数値層)、 narration は持たない (§38: 買い/上昇示唆・将来予測を一切出さない。 frontend が
+    direction → 静的 dict で表示)。 snapshot 不足は捏造せず insufficient/empty を正直に返す。
+
+    schema: {ticker, sources:{consensus_snapshots}, drift:{eps,revenue,...,analyst_count_*}, signal_quality}
+    cache: 6h in-process (key=ticker::window_days)。 prefetch は analyst に相乗り (Sprint 5)。
+    """
+    from .aggregator import consensus_history  # 数値物理層 (LLM import なし)
+
+    sym = (ticker or "").upper().strip()
+    if not sym:
+        raise HTTPException(status_code=400, detail="ticker is required")
+
+    cache_key = f"{sym}::{window_days}"
+    now = _time.time()
+    cached = _CONSENSUS_DRIFT_CACHE.get(cache_key)
+    if cached and now - cached[0] < _CONSENSUS_DRIFT_TTL:
+        return cached[1]
+
+    async with _CONSENSUS_DRIFT_LOCK:
+        now2 = _time.time()
+        cached2 = _CONSENSUS_DRIFT_CACHE.get(cache_key)
+        if cached2 and now2 - cached2[0] < _CONSENSUS_DRIFT_TTL:
+            return cached2[1]
+
+        since_iso = (date.today() - timedelta(days=_CONSENSUS_DRIFT_FETCH_DAYS)).isoformat()
+        snapshots = await asyncio.to_thread(_fetch_consensus_snapshots, sym, since_iso)
+        result = consensus_history.build_drift_result(sym, snapshots, window_days=window_days)
+        _CONSENSUS_DRIFT_CACHE[cache_key] = (now2, result)
+        return result
+
+
 @app.get("/api/analyst/{ticker}")
 async def get_analyst_data(ticker: str, request: Request):
     """handover v82 Phase 3 (analyst-view) 新 aggregator 実装.

@@ -13,6 +13,9 @@ import pytest
 
 from app.aggregator.consensus_history import (
     SNAPSHOT_CONFLICT_KEYS,
+    _FEW_ANALYSTS_THRESHOLD,
+    _latest_analyst_counts,
+    build_drift_result,
     build_snapshot_rows,
     fetch_and_build_snapshot,
     _to_int,
@@ -292,3 +295,119 @@ async def test_fetch_and_build_snapshot_passes_period_and_limit():
         client, "AAPL", "2026-06-06", "annual", limit=15, keep_nearest=2
     )
     client.analyst_estimates.assert_awaited_once_with("AAPL", period="annual", limit=15)
+
+
+# ─── Sprint 4: build_drift_result の組み立て層 ──────────────────────────────
+# (drift 方向そのものの数え方は test_calc.py が検証済。 ここでは sources / signal_quality /
+#  analyst_count 付与 = 6 体合議 qa 申し送りの「1〜2 人の修正を市場の総意と誤読させない」を検証。)
+
+# 同一会計期 (2026-09-30 quarter) を snapshot_date 順に上方修正していく 3 点 (アナリスト数 十分)。
+DRIFT_SNAPSHOTS_UP = [
+    {"snapshot_date": "2026-06-01", "fiscal_date": "2026-09-30", "period_type": "quarter",
+     "estimated_eps_avg": 2.00, "estimated_revenue_avg": 1.00e11,
+     "analyst_count_eps": 20, "analyst_count_revenue": 18},
+    {"snapshot_date": "2026-06-05", "fiscal_date": "2026-09-30", "period_type": "quarter",
+     "estimated_eps_avg": 2.10, "estimated_revenue_avg": 1.05e11,
+     "analyst_count_eps": 21, "analyst_count_revenue": 19},
+    {"snapshot_date": "2026-06-09", "fiscal_date": "2026-09-30", "period_type": "quarter",
+     "estimated_eps_avg": 2.25, "estimated_revenue_avg": 1.10e11,
+     "analyst_count_eps": 22, "analyst_count_revenue": 20},
+]
+
+
+def test_build_drift_result_up_ok_high_confidence():
+    out = build_drift_result("aapl", DRIFT_SNAPSHOTS_UP, window_days=30)
+    assert out["ticker"] == "AAPL"                              # upper 正規化
+    assert out["sources"]["consensus_snapshots"] == "ok"
+    assert out["drift"]["eps"]["direction"] == "up"
+    assert out["drift"]["eps"]["up"] == 2                       # 2.00→2.10→2.25 = 上方 2 回
+    assert out["drift"]["snapshot_count"] == 3
+    # analyst_count は対象期 (2026-09-30) の最新 snapshot (2026-06-09) 由来
+    assert out["drift"]["analyst_count_eps"] == 22
+    assert out["drift"]["analyst_count_revenue"] == 20
+    sq = out["signal_quality"]
+    assert sq["confidence"] == "high"                           # 3 点 + アナリスト十分
+    assert sq["degraded"] is False
+    assert sq["reason"] is None
+    assert sq["analyst_count_eps"] == 22
+
+
+def test_build_drift_result_few_analysts_degrades_even_when_drift_exists():
+    """drift は算出できても、 対象期のアナリストが薄い (< 3) と degraded=few_analysts で降格。"""
+    few = [dict(s, analyst_count_eps=2, analyst_count_revenue=2) for s in DRIFT_SNAPSHOTS_UP]
+    out = build_drift_result("AAPL", few, window_days=30)
+    assert out["sources"]["consensus_snapshots"] == "ok"        # drift 自体は算出できている
+    assert out["drift"]["eps"]["direction"] == "up"
+    sq = out["signal_quality"]
+    assert sq["confidence"] == "low"
+    assert sq["degraded"] is True
+    assert sq["reason"] == "few_analysts"
+    assert sq["analyst_count_eps"] == 2
+
+
+def test_build_drift_result_all_flat_marks_reason_not_degraded():
+    """3 体合議 qa 懸念 A: 全期間 据え置き (±0.5% 以内) は high 品質だが「方向シグナル」と
+    誤読させないよう reason='all_flat' を付与 (degraded=False のまま = エラーでも降格でもない)。"""
+    flat = [
+        dict(s, estimated_eps_avg=v, estimated_revenue_avg=r)
+        for s, v, r in zip(DRIFT_SNAPSHOTS_UP, (2.00, 2.001, 2.002), (1.00e11, 1.0001e11, 1.0002e11))
+    ]
+    out = build_drift_result("AAPL", flat, window_days=30)
+    assert out["sources"]["consensus_snapshots"] == "ok"
+    assert out["drift"]["eps"]["direction"] == "flat"
+    sq = out["signal_quality"]
+    assert sq["reason"] == "all_flat"
+    assert sq["degraded"] is False
+    assert sq["confidence"] == "high"        # 3 点 + アナリスト十分 = データ品質は高い
+
+
+def test_build_drift_result_two_snapshots_medium_confidence():
+    out = build_drift_result("AAPL", DRIFT_SNAPSHOTS_UP[:2], window_days=30)
+    assert out["sources"]["consensus_snapshots"] == "ok"
+    assert out["drift"]["snapshot_count"] == 2
+    assert out["signal_quality"]["confidence"] == "medium"      # 2 点はまだ medium
+    assert out["signal_quality"]["degraded"] is False
+
+
+def test_build_drift_result_insufficient_is_accumulating_not_degraded():
+    """snapshot 1 点 = 蓄積中。 エラーでなく正常な蓄積初期なので degraded=False (逆 Trust Cliff 回避)。"""
+    out = build_drift_result("AAPL", DRIFT_SNAPSHOTS_UP[:1], window_days=30)
+    assert out["sources"]["consensus_snapshots"] == "insufficient"
+    assert out["drift"]["eps"]["direction"] == "insufficient"
+    sq = out["signal_quality"]
+    assert sq["confidence"] == "low"
+    assert sq["degraded"] is False                              # 蓄積中は banner 誤発火させない
+    assert sq["reason"] == "accumulating"
+
+
+def test_build_drift_result_empty_snapshots():
+    out = build_drift_result("AAPL", [], window_days=30)
+    assert out["sources"]["consensus_snapshots"] == "empty"
+    assert out["drift"]["analyst_count_eps"] is None
+    assert out["signal_quality"]["degraded"] is False
+    assert out["signal_quality"]["reason"] == "accumulating"
+
+
+@pytest.mark.parametrize("bad", [None, "junk", 42, {}])
+def test_build_drift_result_non_list_snapshots_graceful(bad):
+    out = build_drift_result("AAPL", bad, window_days=30)
+    assert out["sources"]["consensus_snapshots"] == "empty"
+    assert out["drift"]["eps"]["direction"] == "insufficient"
+
+
+def test_few_analysts_threshold_boundary():
+    """閾値ちょうど (= 3) は降格しない、 1 人下 (= 2) は降格する。"""
+    at_thr = [dict(s, analyst_count_eps=_FEW_ANALYSTS_THRESHOLD) for s in DRIFT_SNAPSHOTS_UP]
+    below = [dict(s, analyst_count_eps=_FEW_ANALYSTS_THRESHOLD - 1) for s in DRIFT_SNAPSHOTS_UP]
+    assert build_drift_result("AAPL", at_thr)["signal_quality"]["degraded"] is False
+    assert build_drift_result("AAPL", below)["signal_quality"]["degraded"] is True
+
+
+def test_latest_analyst_counts_picks_newest_snapshot():
+    """対象期に複数 snapshot がある場合、 最新 snapshot_date の analyst_count を返す。"""
+    eps, rev = _latest_analyst_counts(DRIFT_SNAPSHOTS_UP, "2026-09-30", "quarter")
+    assert eps == 22 and rev == 20            # 2026-06-09 (最新) 由来
+    # 対象期が無い (insufficient) なら (None, None)
+    assert _latest_analyst_counts(DRIFT_SNAPSHOTS_UP, None, "quarter") == (None, None)
+    # period_type が一致しないと拾わない
+    assert _latest_analyst_counts(DRIFT_SNAPSHOTS_UP, "2026-09-30", "annual") == (None, None)
