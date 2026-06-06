@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import InfoModal from './InfoModal.jsx';
 import Chip from './ui/Chip.jsx';
-import { BarChart3, Calendar, CalendarRange, ChevronRight, EyeOff, Scale } from 'lucide-react';
+import { BarChart3, Calendar, EyeOff, Scale } from 'lucide-react';
 // v100 (handover §100点 UI/UX verdict C): GuidanceCard 達成率 / サプライズ % に count-up animation
 import { useCountUp } from '../hooks/useCountUp.js';
 
@@ -226,16 +226,7 @@ const GuidanceSkeleton = () => (
   </section>
 );
 
-const SecSkeleton = () => (
-  <div className="mt-4 rounded-lg p-4" style={{ background: 'var(--bg-subtle)', border: '0.5px solid var(--border)' }}>
-    <div className="mb-3 h-3 w-20 rounded bg-slate-200" style={{animation:'pulse 1.5s infinite'}} />
-    {[140, 200, 170, 190, 155].map((w, i) => (
-      <div key={i} className="mb-2.5 h-3 rounded bg-slate-200"
-        style={{width:`${w}px`, animation:'pulse 1.5s infinite', animationDelay:`${i * 0.1}s`}} />
-    ))}
-    <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
-  </div>
-);
+// SecSkeleton は「次期見通し」(ForwardOutlookSection に移植) の loading skeleton だったため削除 (改善3 2026-06-06)。
 
 // v97 Phase F emoji audit: ✅ 🟡 ❌ ❓ (full-width OS emoji glyph、 Aman 級ではない) を
 // unicode 半角記号 (✓ – ✕ ·) に置換。 OS 依存 glyph 解消 + 「最高級ホテル」 タイポ品格。
@@ -676,59 +667,11 @@ function RevenueRow({ revenueActual, revenueEstimated, signalQuality }) {
   );
 }
 
-const renderBold = (line) => {
-  const parts = line.split(/(\*\*[^*]+\*\*)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return (
-        <strong key={i} className="font-semibold" style={{ color: 'var(--text-primary)' }}>
-          {part.slice(2, -2)}
-        </strong>
-      );
-    }
-    return part;
-  });
-};
+// 改善3 (2026-06-06): renderBold/renderGuidanceText + 「次期見通し」 折りたたみは ForwardOutlookSection に
+//   移植・集約 (前方視界の会社ガイダンス行と同じ SEC 8-K で重複していたため)。 GuidanceCard は今期 Beat/Miss に専念。
 
-const renderGuidanceText = (text) => {
-  return text.split('\n').map((line, i) => {
-    if (!line.trim()) return null;
-    if (/^[・•\-]/.test(line.trim())) {
-      return (
-        <li key={i} style={{
-          marginBottom: '6px',
-          lineHeight: '1.6',
-          fontSize: '0.9em',
-          listStyle: 'none',
-          paddingLeft: '0',
-          display: 'flex',
-          gap: '6px'
-        }}>
-          <span style={{color:'var(--color-text-secondary)', flexShrink:0}}>・</span>
-          <span>{renderBold(line.replace(/^[・•\-]\s*/, ''))}</span>
-        </li>
-      );
-    }
-    if (/[：:]\s*$/.test(line.trim())) {
-      return (
-        <p key={i} style={{ fontWeight: 'bold', marginTop: '10px', marginBottom: '4px', fontSize: '0.9em' }}>
-          {renderBold(line)}
-        </p>
-      );
-    }
-    return (
-      <p key={i} style={{ fontSize: '0.9em', lineHeight: '1.6' }}>
-        {renderBold(line)}
-      </p>
-    );
-  }).filter(Boolean);
-};
-
-export default function GuidanceCard({ guidance, isLoading = false, isSecLoading = false, nextEarningsDays = null }) {
+export default function GuidanceCard({ guidance, isLoading = false, nextEarningsDays = null }) {
   const [showModal, setShowModal] = useState(false);
-  // dogfood 2026-06-05: 「次期見通し」 折りたたみを native <details> (瞬時 toggle = カクカク) から
-  //   controlled + grid-rows 0fr→1fr アニメに変更するための open state。
-  const [secOpen, setSecOpen] = useState(false);
   // Phase 2.6 5-1: Tier M halo sweep (FiveConditionsCard と同一パターン)
   // IntersectionObserver で初入場時に 1 回限り halo-sweep animation を発火
   const cardRef = useRef(null);
@@ -782,7 +725,7 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
               <span className="section-header-icon" aria-hidden="true">
                 <BarChart3 size={18} strokeWidth={1.5} />
               </span>
-              ガイダンス進捗
+              今期 決算結果
               <button
                 onClick={() => setShowModal(true)}
                 className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
@@ -814,7 +757,7 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
     );
   }
 
-  const { fiscal_period, date, eps, revenue, revenue_actual, revenue_estimated, sec_guidance_text, sec_guidance_source } = guidance;
+  const { fiscal_period, date, eps, revenue, revenue_actual, revenue_estimated } = guidance;
   // handover v82 Phase 0 で eps.signal_quality / revenue.signal_quality envelope を backend 追加。
   // 旧 guidance には存在しないので optional chaining で安全に取得。
   const epsSignalQuality = eps?.signal_quality || null;
@@ -911,92 +854,6 @@ export default function GuidanceCard({ guidance, isLoading = false, isSecLoading
           }
         />
       </div>
-      {isSecLoading && !sec_guidance_text ? (
-        <SecSkeleton />
-      ) : sec_guidance_text ? (
-        // v97 G-1 sub-agent verdict: 文字壁解消のため <details> で default collapse。
-        // summary をユーザーが「読みたい時だけ展開」、 panel 全体の認知負荷を 60% 削減。
-        // R1-b CLS fix も維持 (open 時 minHeight 140 + maxHeight 280 + overflow auto)。
-        // v99 dogfood feedback H (5 巡目): user 体感「下部分が二重ダブり」 真因確定。
-        //   <details> 要素の border: 0.5px が Card の outer border と近接して二重に見えていた。
-        //   修正: border 削除、 bg-subtle のみで differentiation 担保 (Stripe / Linear idiom)。
-        <div
-          className="mt-4"
-          style={{
-            background: 'var(--bg-subtle)',
-            borderRadius: '8px',
-            padding: 'var(--space-3, 12px) var(--space-4, 16px)',
-          }}
-        >
-          {/* dogfood 2026-06-05: native <details> は open/close が瞬時 toggle でカクカク →
-              controlled button + grid-rows 0fr→1fr の smooth animation に置換。 */}
-          <button
-            type="button"
-            onClick={() => setSecOpen((v) => !v)}
-            aria-expanded={secOpen}
-            data-testid="sec-guidance-summary"
-            style={{
-              cursor: 'pointer',
-              width: '100%',
-              background: 'none',
-              border: 'none',
-              padding: 0,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--space-2, 8px)',
-              userSelect: 'none',
-              textAlign: 'left',
-            }}
-          >
-            <CalendarRange size={13} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
-            <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-              次期見通し
-            </span>
-            {/* v150 B-4 bug1: 出典を「SEC 文書由来」 固定でなく実 source (sec_guidance_source) で表示。
-                FMP アナリスト予想 fallback 等を SEC と誤表示する Trust Cliff を解消 (6体合議 qa/frontend 指摘)。 */}
-            {sec_guidance_source && (
-              <span className="text-[10px]" style={{ color: 'var(--color-accent)' }}>{sec_guidance_source}</span>
-            )}
-            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              {secOpen ? '閉じる' : '展開で全文'}
-              <ChevronRight
-                size={13}
-                strokeWidth={2}
-                aria-hidden="true"
-                style={{
-                  transition: 'transform 0.3s var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1))',
-                  transform: secOpen ? 'rotate(90deg)' : 'rotate(0deg)',
-                }}
-              />
-            </span>
-          </button>
-          {/* grid-rows 0fr→1fr で smooth expand/collapse。 中間 div overflow:hidden で clip、
-              内側に従来の maxHeight:280 + scroll を維持 (長文ガイダンス対応)。 */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateRows: secOpen ? '1fr' : '0fr',
-              transition: 'grid-template-rows 0.32s var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1))',
-            }}
-          >
-            <div style={{ overflow: 'hidden' }}>
-              <div
-                className="text-sm leading-relaxed"
-                style={{
-                  color: 'var(--text-secondary)',
-                  paddingTop: 'var(--space-3, 12px)',
-                  maxHeight: 280,
-                  overflowY: 'auto',
-                }}
-              >
-                <ul style={{ paddingLeft: '0', margin: '0' }}>
-                  {renderGuidanceText(sec_guidance_text)}
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </section>
     </div>
   );

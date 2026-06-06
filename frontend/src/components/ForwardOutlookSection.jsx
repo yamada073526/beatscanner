@@ -23,7 +23,51 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { ChevronRight, CalendarRange } from 'lucide-react';
 import { fetchGuidanceSurprise } from '../api.js';
+
+// ── 会社の次期見通し (sec_guidance_text) の md → JSX レンダラ。 改善3 (2026-06-06) で GuidanceCard から移植。
+//    sec_guidance_text は SEC 8-K の会社ガイダンスを Hallucination Guard 4 層 (BAD-5/6 + source_quote 逐語 +
+//    blocklist sanitize) で通した安全テキスト。 重複していた GuidanceCard「次期見通し」 を前方視界に集約。 ──
+const renderBold = (line) => {
+  const parts = line.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <strong key={i} className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return part;
+  });
+};
+
+const renderGuidanceText = (text) => {
+  return text.split('\n').map((line, i) => {
+    if (!line.trim()) return null;
+    if (/^[・•\-]/.test(line.trim())) {
+      return (
+        <li key={i} style={{ marginBottom: '6px', lineHeight: '1.6', fontSize: '0.9em', listStyle: 'none', paddingLeft: '0', display: 'flex', gap: '6px' }}>
+          <span style={{ color: 'var(--text-secondary)', flexShrink: 0 }}>・</span>
+          <span>{renderBold(line.replace(/^[・•\-]\s*/, ''))}</span>
+        </li>
+      );
+    }
+    if (/[：:]\s*$/.test(line.trim())) {
+      return (
+        <p key={i} style={{ fontWeight: 'bold', marginTop: '10px', marginBottom: '4px', fontSize: '0.9em' }}>
+          {renderBold(line)}
+        </p>
+      );
+    }
+    return (
+      <p key={i} style={{ fontSize: '0.9em', lineHeight: '1.6' }}>
+        {renderBold(line)}
+      </p>
+    );
+  }).filter(Boolean);
+};
 
 // ── 数値フォーマッタ (Python backend の数値をそのまま表示、 再計算しない) ──
 // 売上は「億ドル」表記 (じっちゃま速報準拠、 2026-06-06 user 要望)。 旧 $1.4B (B 単位 1 桁) では
@@ -222,10 +266,11 @@ function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unr
  * @param {string} [props.currency]
  * @param {string} [props.ticker] - 案B: 会社ガイダンスサプライズの lazy fetch 用 (未指定なら surprise 非表示)
  */
-export default function ForwardOutlookSection({ forward, currency = 'USD', ticker }) {
+export default function ForwardOutlookSection({ forward, currency = 'USD', ticker, secNarrativeText, secNarrativeSource }) {
   // 案B v172: 会社ガイダンスサプライズ (with_guidance=1) を非ブロック lazy fetch。
   //   forward (consensus) は即描画、 surprise 行は会社 8-K guidance 到着後に後追いで現れる。
   const [surpriseNq, setSurpriseNq] = useState(null);
+  const [secOpen, setSecOpen] = useState(false); // 改善3: 会社の次期見通し (sec_guidance_text) 折りたたみ
   const [surpriseFy, setSurpriseFy] = useState(null); // v173 通期の会社ガイダンスサプライズ (lazy)
   const periodEnd = forward?.next_q?.period_end_date;
   const fyPeriodEnd = forward?.next_fy?.period_end_date;
@@ -292,7 +337,7 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
       }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
-        <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>前方視界 — 見通し</h4>
+        <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>来期 コンセンサス</h4>
         {hasFyData && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>次の四半期 + 通期</span>}
       </div>
       {/* 文字壁改善 (2026-06-06): サブタイトル「アナリストコンセンサスと前年同期実績の比較」 は削除。
@@ -375,6 +420,42 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
               companyHigh={surpriseFy?.company_q_eps_high}
               yearAgoEstimate={nfy.year_ago_eps_is_estimate}
             />
+          </div>
+        </div>
+      )}
+
+      {/* 改善3 (2026-06-06): 会社の次期見通し (SEC 8-K 自然文) を GuidanceCard から移植・集約 (重複解消)。
+          sec_guidance_text は HG 4 層通過済みで §38 安全。 折りたたみで「会社が何と言ったか」 全文を保持
+          (マージン/ARR 等 構造化されていない情報も含む)。 GuidanceCard 側の重複「次期見通し」 は削除。 */}
+      {secNarrativeText && (
+        <div style={{ marginTop: 14, background: 'var(--bg-subtle)', borderRadius: 8, padding: '12px 16px' }}>
+          <button
+            type="button"
+            onClick={() => setSecOpen((v) => !v)}
+            aria-expanded={secOpen}
+            data-testid="sec-guidance-summary"
+            style={{ cursor: 'pointer', width: '100%', background: 'none', border: 'none', padding: 0, display: 'flex', alignItems: 'center', gap: 8, userSelect: 'none', textAlign: 'left' }}
+          >
+            <CalendarRange size={13} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
+            <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              会社の次期見通し
+            </span>
+            {secNarrativeSource && (
+              <span className="text-[10px]" style={{ color: 'var(--color-accent)' }}>{secNarrativeSource}</span>
+            )}
+            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              {secOpen ? '閉じる' : '展開で全文'}
+              <ChevronRight size={13} strokeWidth={2} aria-hidden="true" style={{ transition: 'transform 0.3s var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1))', transform: secOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} />
+            </span>
+          </button>
+          <div style={{ display: 'grid', gridTemplateRows: secOpen ? '1fr' : '0fr', transition: 'grid-template-rows 0.32s var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1))' }}>
+            <div style={{ overflow: 'hidden' }}>
+              <div className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)', paddingTop: 12, maxHeight: 280, overflowY: 'auto' }}>
+                <ul style={{ paddingLeft: 0, margin: 0 }}>
+                  {renderGuidanceText(secNarrativeText)}
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
       )}
