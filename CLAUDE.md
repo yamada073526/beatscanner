@@ -188,7 +188,7 @@ LLM (Claude API) を呼ぶ endpoint は **4 層防御** を必ず通すこと。
 
 handover v94 で「過去 30 日 $407 消費、 大半は dev session の Opus 4.7 sub-agent」 と真因確定。 以下ルールで速度を維持しつつ cost 50%+ 削減:
 
-1. **main session**: Opus 4.7 (1M context) 維持 — 複雑 reasoning / multi-step debugging で速度確保
+1. **main session**: **Opus 4.8 (1M context) + effort `high` 既定** 維持 — 複雑 reasoning / multi-step debugging で速度確保。 effort は `high` をベースラインとし、 **常時 `max`/`xhigh` は非推奨** (過剰思考 + token 跳ねで月コスト目標に逆行)。 `xhigh`/`max` は重要設計 Phase gate / 難 root-cause debug の **タスク単位の一時引き上げ** に限定 (現セッションのみ)。 単純作業 (typo / doc 編集 / 文言調整) は sub-agent (Sonnet) 委譲 or effort `medium`。 ※ Opus 4.8 の `high` は 4.7 の既定 `xhigh` より 1 段下 = 同作業で token 効率が良く、 4.8 化自体が cost 削減に寄与
 2. **sub-agent default**: **Sonnet 4.6/4.7** — Agent tool 呼出時に必ず `model: "sonnet"` を指定。 single-shot review / file ops / grep 主体の sub-agent は Sonnet で十分 (Opus 90-95% の精度、 5x 安い)
 3. **例外で Opus sub-agent**: 以下のみ Opus 指定
    - `planner` subagent (SPEC 起票、 multi-step 推論主体)
