@@ -90,7 +90,7 @@ def _is_healthy_gainer(quote: dict) -> bool:
 
 async def _select_digest_candidates(
     client: FMPClient, *, max_tickers: int
-) -> list[str]:
+) -> tuple[list[str], dict[str, str]]:
     """biggest-gainers を広く取り、 健全銘柄フィルタを通して上位 max_tickers を返す.
 
     フィルタ不能時 (FMP gainers / batch-quote 失敗) は空 list を返す。
