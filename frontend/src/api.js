@@ -162,6 +162,10 @@ export function prefetchAll(ticker) {
   //   「component の mount fetch を 0ms 化」 する (= 二重〜三重 fetch 解消 + 体感 load 短縮)。
   // Judgment タブ上部 (analyze + ガイダンス用) — loading gate
   fetchGuidanceBasic(ticker).catch(() => {});
+  // v173.9 (#2): full guidance (8-K = sec_guidance_text) も先取り。 AI要約は #3 修正でガイダンス確定まで
+  //   生成を待つため、 8-K を ticker 選択時に analyze と並列開始 (旧: Phase1 完了後に逐次) → useJudgmentResult
+  //   の fetchGuidance(Phase2) が dedupGet で coalesce → Phase2 確定が前倒し → AI要約 skeleton 待ち短縮。
+  fetchGuidance(ticker).catch(() => {});
   // チャート系
   fetch(`/api/chart/${t}/summary`).catch(() => {}); // classic ChartTab 用 (Pane 3 未使用、 据置)
   fetchPriceHistory(ticker, '1y').catch(() => {});
