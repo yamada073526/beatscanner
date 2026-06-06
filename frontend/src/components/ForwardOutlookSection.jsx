@@ -26,15 +26,43 @@ import React, { useState, useEffect } from 'react';
 import { fetchGuidanceSurprise } from '../api.js';
 
 // ── 数値フォーマッタ (Python backend の数値をそのまま表示、 再計算しない) ──
-function fmtMoney(v, currency = 'USD') {
+// 売上は「億ドル」表記 (じっちゃま速報準拠、 2026-06-06 user 要望)。 旧 $1.4B (B 単位 1 桁) では
+// 会社ガイダンスのレンジ ($1.436B〜$1.442B) が「$1.4B〜$1.4B」 と潰れて情報量ゼロになるため、
+// USD は億ドル単位 (1 億ドル = 1e8) で出してレンジを分離する。 粒度はじっちゃま速報と一致させる:
+//   - メイン数値・予測棒 (fmtMoney): 小数点 1 桁 (14.3億ドル) … コンセンサスは概数なので 1 桁
+//   - 会社ガイダンスのレンジ (fmtMoneyRange): 小数点 2 桁 (14.36〜14.42億ドル) … レンジを潰さない
+//   - $10B 以上 (500億ドル〜) は整数、 $1T 以上は兆ドルで冗長な .00 を回避
+// 非 USD (日本株等) は従来の $B/M 表記を維持 (億ドルは USD 専用表記)。
+function fmtOkuUsd(abs, sign, digits) {
+  const oku = abs / 1e8; // 1 億ドル = 1e8
+  if (oku >= 10000) return `${sign}${(oku / 10000).toFixed(2)}兆ドル`; // $1T 以上
+  if (oku >= 100) return `${sign}${oku.toFixed(0)}億ドル`; // $10B 以上は整数 (500億ドル)
+  return `${sign}${oku.toFixed(digits)}億ドル`; // $10B 未満は digits 桁 (14.36億ドル)
+}
+
+function fmtMoneyImpl(v, currency, digits) {
   if (v == null || !Number.isFinite(v)) return '—';
-  const sym = currency === 'USD' || !currency ? '$' : '';
   const abs = Math.abs(v);
   const sign = v < 0 ? '-' : '';
-  if (abs >= 1e12) return `${sign}${sym}${(abs / 1e12).toFixed(2)}T`;
-  if (abs >= 1e9) return `${sign}${sym}${(abs / 1e9).toFixed(1)}B`;
-  if (abs >= 1e6) return `${sign}${sym}${(abs / 1e6).toFixed(0)}M`;
-  return `${sign}${sym}${Math.round(abs).toLocaleString()}`;
+  if (currency === 'USD' || !currency) {
+    if (abs >= 1e8) return fmtOkuUsd(abs, sign, digits); // 1 億ドル以上は億ドル/兆ドル表記
+    return `${sign}$${(abs / 1e6).toFixed(0)}M`; // 1 億ドル未満は百万ドル ($340M 等)
+  }
+  // 非 USD は従来 $B/M 表記 (レンジ用は 2 桁、 メインは 1 桁)
+  if (abs >= 1e12) return `${sign}${(abs / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(digits >= 2 ? 2 : 1)}B`;
+  if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(0)}M`;
+  return `${sign}${Math.round(abs).toLocaleString()}`;
+}
+
+// メイン数値・予測棒用 (1 桁): 14.3億ドル
+function fmtMoney(v, currency = 'USD') {
+  return fmtMoneyImpl(v, currency, 1);
+}
+
+// 会社ガイダンスのレンジ用 (2 桁): 14.36〜14.42億ドル (レンジを潰さない)
+function fmtMoneyRange(v, currency = 'USD') {
+  return fmtMoneyImpl(v, currency, 2);
 }
 
 function fmtEps(v, currency = 'USD') {
@@ -97,17 +125,19 @@ const GUIDANCE_STATE_JP = {
   below: { sym: '▼', label: '会社ガイダンスはコンセンサスを下回る水準' },
 };
 
-function GuidanceSurpriseRow({ state, companyLow, companyHigh, consensus, fmt, currency }) {
+function GuidanceSurpriseRow({ state, companyLow, companyHigh, consensus, fmt, fmtRange, currency }) {
   const meta = GUIDANCE_STATE_JP[state];
   if (!meta) return null; // unknown / null / undefined (lazy fetch 未達 or 抑止) → 非表示
+  // レンジ・予想は 2 桁フォーマッタで揃える (14.36〜14.42 / 予想 14.30 が同粒度で並ぶ)。 fmtRange 未指定なら fmt fallback。
+  const fmtR = fmtRange || fmt;
   const hasRange =
     companyLow != null && Number.isFinite(companyLow) && companyHigh != null && Number.isFinite(companyHigh);
   const companyStr = hasRange
     ? companyLow === companyHigh
-      ? fmt(companyLow, currency)
-      : `${fmt(companyLow, currency)}〜${fmt(companyHigh, currency)}`
+      ? fmtR(companyLow, currency)
+      : `${fmtR(companyLow, currency)}〜${fmtR(companyHigh, currency)}`
     : null;
-  const consensusStr = consensus != null && Number.isFinite(consensus) ? fmt(consensus, currency) : null;
+  const consensusStr = consensus != null && Number.isFinite(consensus) ? fmtR(consensus, currency) : null;
   return (
     <div
       data-testid="guidance-surprise-row"
@@ -129,6 +159,8 @@ function GuidanceSurpriseRow({ state, companyLow, companyHigh, consensus, fmt, c
 
 function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unreliable, turnaround, count, guidanceState, companyLow, companyHigh }) {
   const fmt = isMoney ? fmtMoney : fmtEps;
+  // 会社ガイダンスのレンジは Money のみ 2 桁 (14.36〜14.42億ドル)。 EPS は fmtEps が既に 2 桁。
+  const fmtRange = isMoney ? fmtMoneyRange : fmtEps;
   const hasConsensus = consensus != null && Number.isFinite(consensus);
   return (
     <div data-testid={`forward-metric-${isMoney ? 'revenue' : 'eps'}`} style={{ padding: '10px 0', borderTop: '1px solid var(--border)' }}>
@@ -166,6 +198,7 @@ function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unr
           companyHigh={companyHigh}
           consensus={consensus}
           fmt={fmt}
+          fmtRange={fmtRange}
           currency={currency}
         />
       )}
@@ -186,10 +219,13 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
   // 案B v172: 会社ガイダンスサプライズ (with_guidance=1) を非ブロック lazy fetch。
   //   forward (consensus) は即描画、 surprise 行は会社 8-K guidance 到着後に後追いで現れる。
   const [surpriseNq, setSurpriseNq] = useState(null);
+  const [surpriseFy, setSurpriseFy] = useState(null); // v173 通期の会社ガイダンスサプライズ (lazy)
   const periodEnd = forward?.next_q?.period_end_date;
+  const fyPeriodEnd = forward?.next_fy?.period_end_date;
   useEffect(() => {
-    if (!ticker || !periodEnd) {
+    if (!ticker || (!periodEnd && !fyPeriodEnd)) {
       setSurpriseNq(null);
+      setSurpriseFy(null);
       return;
     }
     let cancelled = false;
@@ -198,27 +234,36 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
         if (cancelled) return;
         const nq = g?.forward?.next_q;
         // period が一致する時のみ採用 (lazy fetch 中の ticker / 期 切替えによる stale 表示を防止)
-        if (nq && nq.period_end_date === periodEnd) setSurpriseNq(nq);
+        if (nq && periodEnd && nq.period_end_date === periodEnd) setSurpriseNq(nq);
         else setSurpriseNq(null);
+        // v173: 通期も同一 fetch から period 一致で採用 (next_fy の会社 FY ガイダンス)
+        const nfy = g?.forward?.next_fy;
+        if (nfy && fyPeriodEnd && nfy.period_end_date === fyPeriodEnd) setSurpriseFy(nfy);
+        else setSurpriseFy(null);
       })
       .catch(() => {
-        if (!cancelled) setSurpriseNq(null);
+        if (!cancelled) {
+          setSurpriseNq(null);
+          setSurpriseFy(null);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [ticker, periodEnd]);
+  }, [ticker, periodEnd, fyPeriodEnd]);
 
   // static gate: backend が forward=null を返したら (コンセンサス取得不可) 何も描画しない。
   if (!forward || !forward.next_q) return null;
   const nq = forward.next_q;
+  const nfy = forward.next_fy; // v173 通期 (null = 通期コンセンサス取得不可で非表示)
   const period = nq.period_label || '来期';
   const countEps = nq.analyst_count_eps;
   const countRev = nq.analyst_count_revenue;
+  const hasFyData = nfy && (nfy.consensus_revenue != null || nfy.consensus_eps != null);
   // 会社ガイダンスサプライズが 1 つでも出ている時のみ citation に SEC 8-K を追記 (出ない時は誤出典回避)
-  const hasGuidanceSurprise =
-    surpriseNq &&
-    (GUIDANCE_STATE_JP[surpriseNq.guidance_vs_consensus_eps] || GUIDANCE_STATE_JP[surpriseNq.guidance_vs_consensus_rev]);
+  const _surpriseHasGuidance = (s) =>
+    s && (GUIDANCE_STATE_JP[s.guidance_vs_consensus_eps] || GUIDANCE_STATE_JP[s.guidance_vs_consensus_rev]);
+  const hasGuidanceSurprise = _surpriseHasGuidance(surpriseNq) || _surpriseHasGuidance(surpriseFy);
 
   return (
     <section
@@ -240,13 +285,18 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
       }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
-        <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>前方視界 — 来期見通し</h4>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{period}</span>
+        <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>前方視界 — 見通し</h4>
+        {hasFyData && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>次の四半期 + 通期</span>}
       </div>
       <p style={{ margin: '0 0 4px', fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.4 }}>
-        来期のアナリストコンセンサスと前年同期実績の比較 (事実値)
+        アナリストコンセンサスと前年同期実績の比較 (事実値)
       </p>
 
+      {/* 次の四半期 (period をサブ見出しに移動。 通期が下に続く時の主従を明確化) */}
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginTop: 4 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>次の四半期</span>
+        <span style={{ fontSize: 10, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{period}</span>
+      </div>
       <MetricBlock
         label="売上"
         consensus={nq.consensus_revenue}
@@ -275,6 +325,45 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
         companyLow={surpriseNq?.company_q_eps_low}
         companyHigh={surpriseNq?.company_q_eps_high}
       />
+
+      {/* v173: 通期 FY 見通し (next_fy がある時のみ、 next_q と同じ MetricBlock + 会社ガイダンス行を流用)。
+          §38 ガード (色なし / 静的 dict / basis mismatch / 金融抑止 / アナリスト数) は backend で next_q と同条件適用済み。 */}
+      {hasFyData && (
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '2px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{nfy.period_label || '通期'}</span>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>通期見通し</span>
+          </div>
+          <MetricBlock
+            label="売上"
+            consensus={nfy.consensus_revenue}
+            yoyPct={nfy.rev_yoy_pct}
+            yearAgo={nfy.year_ago_revenue}
+            isMoney
+            currency={currency}
+            unreliable={nfy.rev_compare_unreliable}
+            turnaround={false}
+            count={nfy.analyst_count_revenue}
+            guidanceState={surpriseFy?.guidance_vs_consensus_rev}
+            companyLow={surpriseFy?.company_q_rev_low}
+            companyHigh={surpriseFy?.company_q_rev_high}
+          />
+          <MetricBlock
+            label="EPS"
+            consensus={nfy.consensus_eps}
+            yoyPct={nfy.eps_yoy_pct}
+            yearAgo={nfy.year_ago_eps}
+            isMoney={false}
+            currency={currency}
+            unreliable={false}
+            turnaround={nfy.eps_turnaround}
+            count={nfy.analyst_count_eps}
+            guidanceState={surpriseFy?.guidance_vs_consensus_eps}
+            companyLow={surpriseFy?.company_q_eps_low}
+            companyHigh={surpriseFy?.company_q_eps_high}
+          />
+        </div>
+      )}
 
       {/* 出典 (citation) + §5 免責 (常時表示・折りたたみ不可) */}
       <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)', display: 'grid', gap: 4 }}>

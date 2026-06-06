@@ -6331,6 +6331,24 @@ async def _fetch_income_history(ticker: str, fmp_key: str, limit: int = 6) -> li
         return []
 
 
+async def _fetch_annual_for_fy(ticker: str, fmp_key: str) -> tuple[list[dict], list[dict]]:
+    """next_fy (通期見通し v173) 用に annual analyst-estimates と annual income statement を並列 fetch。
+
+    estimates = 通期コンセンサス (来期 FY の EPS/売上予想)、 income = 前年通期実績 (YoY 分母)。
+    失敗時は ([], []) で graceful (next_fy は static gate で非表示)。 6h cache は呼出側 guidance_basic が担う。
+    """
+    try:
+        client = FMPClient(api_key=fmp_key)
+        est, inc = await asyncio.gather(
+            client.analyst_estimates(ticker, period="annual", limit=6),
+            client.income_statement(ticker, limit=3, period="annual"),
+            return_exceptions=True,
+        )
+        return (est if isinstance(est, list) else []), (inc if isinstance(inc, list) else [])
+    except Exception:
+        return [], []
+
+
 def _compute_forward_outlook(
     estimates: list[dict],
     surprises: list[dict],
@@ -6339,6 +6357,8 @@ def _compute_forward_outlook(
     sector: str | None,
     industry: str | None,
     company_guidance: dict | None = None,
+    annual_estimates: list[dict] | None = None,
+    annual_income: list[dict] | None = None,
 ) -> dict | None:
     """来期コンセンサス (EPS/売上) と前年同期実績との YoY を計算。 全て Python 数値層 (HG aggregator 分離準拠)。
 
@@ -6489,6 +6509,126 @@ def _compute_forward_outlook(
                     (company_q_rev_low + company_q_rev_high) / 2, consensus_rev
                 )
 
+    # ── 通期 (next_fy) ブロック (v173、 next_q と同型を annual estimates に適用) ──
+    # 会社 FY ガイダンス vs 通期コンセンサス + 通期 YoY。 ガード (500日/前年通期照合±90日窓/basis mismatch
+    # GAAP抑止/金融 rev 抑止/アナリスト数 3) は next_q と同一不変条件を踏襲。 取得不可は next_fy=None (static gate)。
+    next_fy = None
+    fy_sources = {"next_fy_eps": "empty", "next_fy_rev": "empty", "guidance_fy_eps": "empty", "guidance_fy_rev": "empty"}
+    if annual_estimates:
+        fy_future = []
+        for e in annual_estimates:
+            d = _pd(e.get("date"))
+            if d is not None and d > floor_d:
+                fy_future.append((d, e))
+        if fy_future:
+            fy_future.sort(key=lambda x: x[0])
+            fy_d, fy_e = fy_future[0]
+            # 通期 FY end は最大 today + ~365 日 + α。 500 日 guard (非暦年決算 MSFT 6月末期等で来期 FY が遠い場合に対応)
+            if (fy_d - today).days <= 500:
+                fy_consensus_eps = _safe_eps_float(_pick(fy_e, "estimatedEpsAvg", "epsAvg"))
+                fy_consensus_rev = _safe_eps_float(_pick(fy_e, "estimatedRevenueAvg", "revenueAvg"))
+                if fy_consensus_eps is not None or fy_consensus_rev is not None:
+                    _fce = fy_e.get("numAnalystsEps") or fy_e.get("numberAnalystEstimatedEps")
+                    _fcr = fy_e.get("numAnalystsRevenue") or fy_e.get("numberAnalystEstimatedRevenue")
+                    fy_cnt_eps = int(_fce) if isinstance(_fce, (int, float)) else None
+                    fy_cnt_rev = int(_fcr) if isinstance(_fcr, (int, float)) else None
+                    # 前年通期実績 (YoY 分母): annual_income の最も近い前年 FY (±90 日窓、 非暦年決算でもマッチ)
+                    fy_ya_target = fy_d - _tdf(days=365)
+                    fy_ya_inc = None
+                    if annual_income:
+                        _best, _best_diff = None, None
+                        for it in annual_income:
+                            d = _pd(it.get("date"))
+                            if d is None:
+                                continue
+                            diff = abs((d - fy_ya_target).days)
+                            if _best_diff is None or diff < _best_diff:
+                                _best, _best_diff = it, diff
+                        if _best_diff is not None and _best_diff <= 90:
+                            fy_ya_inc = _best
+                    fy_ya_rev = _safe_eps_float(_pick(fy_ya_inc, "revenue")) if fy_ya_inc else None
+                    fy_ya_eps = _safe_eps_float(_pick(fy_ya_inc, "eps", "epsDiluted")) if fy_ya_inc else None
+                    # 売上 YoY (金融セクター抑止 + 基準ミスマッチ横展開、 next_q と同条件)
+                    fy_rev_yoy = None
+                    fy_rev_unreliable = False
+                    if fy_consensus_rev is not None and fy_ya_rev is not None and fy_ya_rev > 0:
+                        if threshold < 40.0:
+                            fy_rev_unreliable = True
+                        else:
+                            fy_rev_yoy = round((fy_consensus_rev - fy_ya_rev) / abs(fy_ya_rev) * 100, 1)
+                    # EPS YoY (赤字/near-zero ガード、 next_q と同条件)
+                    fy_eps_yoy = None
+                    fy_eps_turnaround = False
+                    if fy_consensus_eps is not None and fy_ya_eps is not None:
+                        if fy_ya_eps < 0 and fy_consensus_eps > 0:
+                            fy_eps_turnaround = True
+                        elif fy_ya_eps > 0 and abs(fy_ya_eps) >= 0.05:
+                            fy_eps_yoy = round((fy_consensus_eps - fy_ya_eps) / abs(fy_ya_eps) * 100, 1)
+                    # アナリスト数 3 社未満は平均誤認のため YoY 抑止 (next_q と同条件)
+                    if fy_cnt_eps is not None and fy_cnt_eps < MIN_ANALYSTS:
+                        fy_eps_yoy = None
+                        fy_eps_turnaround = False
+                    if fy_cnt_rev is not None and fy_cnt_rev < MIN_ANALYSTS:
+                        fy_rev_yoy = None
+                    # period_label (通期表記): calendarYear 優先、 無ければ FY end 年
+                    _fp_y = fy_e.get("calendarYear") or fy_e.get("fiscalYear")
+                    fy_period_label = f"通期 FY{_fp_y}" if _fp_y else f"{fy_d.year}年通期"
+                    # 会社 FY ガイダンス vs 通期コンセンサス (案D を通期にも、 basis mismatch + 金融ガード)
+                    g_fy_eps_label = "unknown"
+                    g_fy_rev_label = "unknown"
+                    company_fy_eps_low = company_fy_eps_high = None
+                    company_fy_eps_basis = None
+                    company_fy_rev_low = company_fy_rev_high = None
+                    if company_guidance:
+                        from .visualizer.calc import classify_guidance_vs_consensus
+                        _cgfe = company_guidance.get("fy_eps")
+                        if isinstance(_cgfe, dict) and fy_consensus_eps is not None:
+                            _fel = _safe_eps_float(_cgfe.get("low"))
+                            _feh = _safe_eps_float(_cgfe.get("high"))
+                            _fbasis = _cgfe.get("basis")
+                            # GAAP 明示 guidance は non-GAAP consensus と基準ミスマッチで誤判定 → 抑止 (next_q と同条件)
+                            if _fel is not None and _feh is not None and _fbasis != "gaap":
+                                company_fy_eps_low, company_fy_eps_high = _fel, _feh
+                                company_fy_eps_basis = _fbasis
+                                g_fy_eps_label = classify_guidance_vs_consensus((_fel + _feh) / 2, fy_consensus_eps)
+                        _cgfr = company_guidance.get("fy_revenue")
+                        if isinstance(_cgfr, dict) and not fy_rev_unreliable and fy_consensus_rev is not None:
+                            _frl = _safe_eps_float(_cgfr.get("low_b"))
+                            _frh = _safe_eps_float(_cgfr.get("high_b"))
+                            if _frl is not None and _frh is not None:
+                                company_fy_rev_low = _frl * 1e9
+                                company_fy_rev_high = _frh * 1e9
+                                g_fy_rev_label = classify_guidance_vs_consensus(
+                                    (company_fy_rev_low + company_fy_rev_high) / 2, fy_consensus_rev
+                                )
+                    # frontend は同じ MetricBlock を流用するため company_q_* key 名を踏襲 (q/fy は文脈で決まる)
+                    next_fy = {
+                        "period_label": fy_period_label,
+                        "period_end_date": fy_d.date().isoformat(),
+                        "consensus_eps": fy_consensus_eps,
+                        "consensus_revenue": fy_consensus_rev,
+                        "eps_yoy_pct": fy_eps_yoy,
+                        "rev_yoy_pct": fy_rev_yoy,
+                        "eps_turnaround": fy_eps_turnaround,
+                        "rev_compare_unreliable": fy_rev_unreliable,
+                        "year_ago_eps": fy_ya_eps,
+                        "year_ago_revenue": fy_ya_rev,
+                        "year_ago_date": fy_ya_target.date().isoformat(),
+                        "analyst_count_eps": fy_cnt_eps,
+                        "analyst_count_revenue": fy_cnt_rev,
+                        "guidance_vs_consensus_eps": g_fy_eps_label,
+                        "guidance_vs_consensus_rev": g_fy_rev_label,
+                        "company_q_eps_low": company_fy_eps_low,
+                        "company_q_eps_high": company_fy_eps_high,
+                        "company_q_eps_basis": company_fy_eps_basis,
+                        "company_q_rev_low": company_fy_rev_low,
+                        "company_q_rev_high": company_fy_rev_high,
+                    }
+                    fy_sources["next_fy_eps"] = "ok" if fy_consensus_eps is not None else "empty"
+                    fy_sources["next_fy_rev"] = "ok" if fy_consensus_rev is not None else "empty"
+                    fy_sources["guidance_fy_eps"] = "ok" if g_fy_eps_label != "unknown" else "empty"
+                    fy_sources["guidance_fy_rev"] = "ok" if g_fy_rev_label != "unknown" else "empty"
+
     return {
         "next_q": {
             "period_label": period_label,
@@ -6513,12 +6653,15 @@ def _compute_forward_outlook(
             "company_q_rev_low": company_q_rev_low,
             "company_q_rev_high": company_q_rev_high,
         },
+        # v173 通期見通し (None = 通期コンセンサス取得不可 → frontend static gate で非表示)
+        "next_fy": next_fy,
         # per-指標 namespace (Anthropic verdict: partial_failure で片方表示を許容)
         "sources": {
             "next_q_eps": "ok" if consensus_eps is not None else "empty",
             "next_q_rev": "ok" if consensus_rev is not None else "empty",
             "guidance_eps": "ok" if g_eps_label != "unknown" else "empty",
             "guidance_rev": "ok" if g_rev_label != "unknown" else "empty",
+            **fy_sources,
         },
         "source": "FMP analyst-estimates",
     }
@@ -6555,12 +6698,17 @@ async def guidance_basic(ticker: str, request: Request, with_guidance: bool = Fa
             _fetch_revenue_data(ticker),
             _fetch_income_history(ticker, fmp_key),
             _fetch_sector_industry(ticker, fmp_key),
+            _fetch_annual_for_fy(ticker, fmp_key),  # v173: next_fy (通期見通し) 用
         ]
         if with_guidance:
             _gb_tasks.append(_fetch_sec_guidance_structured_cached(ticker))
         _gb_results = await asyncio.gather(*_gb_tasks, return_exceptions=True)
         eps_result, rev_result, income_hist_result, si_result = _gb_results[:4]
-        company_guidance = _gb_results[4] if with_guidance else None
+        _annual_result = _gb_results[4]
+        annual_estimates_fy, annual_income_fy = (
+            _annual_result if isinstance(_annual_result, tuple) else ([], [])
+        )
+        company_guidance = _gb_results[5] if with_guidance else None
         if isinstance(company_guidance, Exception):
             company_guidance = None
         if isinstance(eps_result, Exception):
@@ -6658,6 +6806,8 @@ async def guidance_basic(ticker: str, request: Request, with_guidance: bool = Fa
                 sector=sector_fwd,
                 industry=industry_fwd,
                 company_guidance=company_guidance,
+                annual_estimates=annual_estimates_fy,
+                annual_income=annual_income_fy,
             )
         except Exception as _fwd_e:
             print(f"[WARN] forward outlook compute failed for {ticker}: {_fwd_e}")
