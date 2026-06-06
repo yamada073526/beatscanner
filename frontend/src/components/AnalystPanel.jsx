@@ -127,9 +127,9 @@ function TargetPriceRangeBar({ targetRange, currentPrice, inView }) {
         )}
       </div>
       <div className="anp-range-legend">
-        <span>{fmtUsd(inView ? animatedLow : lowSafe)}</span>
-        <span className="anp-range-mid">中央 {fmtUsd(inView ? animatedMedian : medianSafe)}</span>
-        <span>{fmtUsd(inView ? animatedHigh : highSafe)}</span>
+        <span>{fmtUsd(inView ? animatedLow : 0)}</span>
+        <span className="anp-range-mid">中央 {fmtUsd(inView ? animatedMedian : 0)}</span>
+        <span>{fmtUsd(inView ? animatedHigh : 0)}</span>
       </div>
     </div>
   );
@@ -176,9 +176,9 @@ function RecommendationStackedBar({ distribution, inView }) {
         )}
       </div>
       <div className="anp-stack-legend">
-        <span className="anp-stack-label-buy">Buy {animBuy ?? buy}</span>
-        <span className="anp-stack-label-hold">Hold {animHold ?? hold}</span>
-        <span className="anp-stack-label-sell">Sell {animSell ?? sell}</span>
+        <span className="anp-stack-label-buy">Buy {inView ? (animBuy ?? 0) : 0}</span>
+        <span className="anp-stack-label-hold">Hold {inView ? (animHold ?? 0) : 0}</span>
+        <span className="anp-stack-label-sell">Sell {inView ? (animSell ?? 0) : 0}</span>
       </div>
     </div>
   );

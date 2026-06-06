@@ -233,7 +233,7 @@ function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unr
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>アナリストカバレッジなし</span>
         ) : (
           <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10 }}>
-            <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{fmt(inView ? animConsensus : consensus, currency)}</span>
+            <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{fmt(inView ? animConsensus : 0, currency)}</span>
             {turnaround ? (
               <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>前年赤字 → 来期黒字予想</span>
             ) : unreliable ? (

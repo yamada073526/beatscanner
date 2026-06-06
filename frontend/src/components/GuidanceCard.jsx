@@ -448,7 +448,7 @@ function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatt
                 color: arcColor,
               }}
             >
-              {Math.round(inView ? animatedAchievement : achievementPct)}<span style={{ fontSize: 18, fontWeight: 600 }}>%</span>
+              {Math.round(inView ? animatedAchievement : 0)}<span style={{ fontSize: 18, fontWeight: 600 }}>%</span>
             </span>
           ) : isAwaitingEarnings ? (
             <span style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-muted)' }}>
@@ -461,7 +461,7 @@ function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatt
             達成率
           </span>
         </div>
-        <ArcProgress value={inView ? animatedAchievement : achievementPct} color={arcColor} size={56} strokeWidth={5} />
+        <ArcProgress value={inView ? animatedAchievement : 0} color={arcColor} size={56} strokeWidth={5} />
       </div>
       )}
 
@@ -491,7 +491,7 @@ function ScorecardCell({ label, estimated, actual, surprisePct, verdict, formatt
             color: arcColor,
             fontVariantNumeric: 'tabular-nums',
           }}>
-            ({(inView ? animatedSurprise : surprisePct) > 0 ? '+' : ''}{(inView ? animatedSurprise : surprisePct).toFixed(1)}% vs 予想)
+            ({(inView ? animatedSurprise : 0) > 0 ? '+' : ''}{(inView ? animatedSurprise : 0).toFixed(1)}% vs 予想)
           </span>
         )}
       </div>
