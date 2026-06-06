@@ -137,6 +137,11 @@ function TargetPriceRangeBar({ targetRange, currentPrice }) {
 // ── pure CSS Recommendation Stacked Bar ────────────────────────────
 function RecommendationStackedBar({ distribution }) {
   const { buy = 0, hold = 0, sell = 0, total = 0 } = distribution || {};
+  // カウントアップ (3体合議 2026-06-06): Buy/Hold/Sell 件数を count-up (目標株価 RangeBar と同 700ms)。
+  //   Hooks rule のため早期 return より前に呼ぶ。 total=0 は null で即固定。
+  const animBuy = _useCountUpHook(total ? buy : null, { duration: 700, digits: 0, forceFromZero: true });
+  const animHold = _useCountUpHook(total ? hold : null, { duration: 700, digits: 0, forceFromZero: true });
+  const animSell = _useCountUpHook(total ? sell : null, { duration: 700, digits: 0, forceFromZero: true });
   if (!total) {
     return <div className="anp-empty">推奨分布データなし</div>;
   }
@@ -170,9 +175,9 @@ function RecommendationStackedBar({ distribution }) {
         )}
       </div>
       <div className="anp-stack-legend">
-        <span className="anp-stack-label-buy">Buy {buy}</span>
-        <span className="anp-stack-label-hold">Hold {hold}</span>
-        <span className="anp-stack-label-sell">Sell {sell}</span>
+        <span className="anp-stack-label-buy">Buy {animBuy ?? buy}</span>
+        <span className="anp-stack-label-hold">Hold {animHold ?? hold}</span>
+        <span className="anp-stack-label-sell">Sell {animSell ?? sell}</span>
       </div>
     </div>
   );

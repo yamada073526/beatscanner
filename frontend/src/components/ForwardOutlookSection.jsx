@@ -25,6 +25,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronRight, CalendarRange } from 'lucide-react';
 import { fetchGuidanceSurprise } from '../api.js';
+import { useCountUp } from '../hooks/useCountUp.js';
 
 // ── 会社の次期見通し (sec_guidance_text) の md → JSX レンダラ。 改善3 (2026-06-06) で GuidanceCard から移植。
 //    sec_guidance_text は SEC 8-K の会社ガイダンスを Hallucination Guard 4 層 (BAD-5/6 + source_quote 逐語 +
@@ -211,6 +212,10 @@ function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unr
   const fmt = isMoney ? fmtMoney : fmtEps;
   // 会社ガイダンスのレンジは Money のみ 2 桁 (14.36〜14.42億ドル)。 EPS は fmtEps が既に 2 桁。
   const fmtRange = isMoney ? fmtMoneyRange : fmtEps;
+  // カウントアップ (3体合議 2026-06-06): 来期 consensus メイン数値のみ。 §38 で来期=将来予測のため
+  //   duration 400ms (今期ゲージ 700ms より短く「現れる」 寄りの演出)、 中立色維持。 前年比%・会社ガイダンス・
+  //   予測棒ラベルは静的 (二次情報のうるささ回避 + マイナス値/null 点滅回避 = ui/qa verdict)。 null は即固定。
+  const animConsensus = useCountUp(consensus, { duration: 400, digits: isMoney ? 0 : 2, forceFromZero: true });
   const hasConsensus = consensus != null && Number.isFinite(consensus);
   return (
     <div data-testid={`forward-metric-${isMoney ? 'revenue' : 'eps'}`} style={{ padding: '10px 0', borderTop: '1px solid var(--border)' }}>
@@ -220,7 +225,7 @@ function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unr
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>アナリストカバレッジなし</span>
         ) : (
           <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10 }}>
-            <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{fmt(consensus, currency)}</span>
+            <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{fmt(animConsensus, currency)}</span>
             {turnaround ? (
               <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>前年赤字 → 来期黒字予想</span>
             ) : unreliable ? (
