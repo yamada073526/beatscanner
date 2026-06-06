@@ -167,9 +167,13 @@ export function useJudgmentResult({
                 .catch(() => {
                   setError(`${t} は ETF / 投資信託のため、 ファンダメンタル 5 条件の判定対象外です。 個別株 (例: NVDA / AAPL / MSFT) をお試しください。`);
                 });
-            } else if (msg.includes('データが見つかりません') || msg.includes('Need at least') || msg.includes('annual periods')) {
-              // 上場廃止 / IPO 直後 / SPAC / 財務 3 期未満
-              setError(`${t} の財務データが取得できません。 上場廃止・IPO 直後・SPAC・取引停止などの可能性があります。 別のティッカーをお試しください。`);
+            } else if (msg.includes('Need at least') || msg.includes('annual periods')) {
+              // IPO 直後 / 年次 3 期未満: 5 条件は年次 3 期が必須。 否定列挙 (上場廃止/取引停止) で
+              //   IPO 直後の優良株を断罪しない = Trust Cliff / brand 品格。 中立な「評価留保」 framing に。
+              setError(`${t} はまだ年次決算が 3 期分そろっていないため、 ファンダメンタル 5 条件の判定を留保します。 IPO 直後などで年次データが不足している可能性があります。`);
+            } else if (msg.includes('データが見つかりません')) {
+              // 上場廃止 / ティッカー不存在 / SPAC / 取引停止
+              setError(`${t} の財務データが取得できません。 上場廃止・SPAC・取引停止などの可能性があります。 別のティッカーをお試しください。`);
             } else if (msg.includes('404')) {
               setError(`${t} が見つかりません。 ティッカーの綴りをご確認ください (例: GOOGL、 NVDA、 BRK.B)。`);
             } else {
