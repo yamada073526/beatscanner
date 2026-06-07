@@ -1,0 +1,77 @@
+name: Monthly Screener Fundamentals Cleanup
+
+# CAN-SLIM Phase 2 Sprint 1: screener_fundamentals の retention cleanup (月次)。
+#
+# 背景:
+#   - Railway native cron は 2026-05-26 以降 発火停止 → 夜間/月次 batch は GitHub Actions に統一
+#     (feedback_railway_native_cron.md)。
+#   - endpoint: POST /api/cron/screener-fundamentals-cleanup (X-Cron-Secret 認証)。
+#   - retention 30 日: screener 用途は直近 30 日分のみ有意 (Supabase 500MB 圧迫回避)。
+#
+# 実行タイミング: 毎月 1 日 00:30 UTC = 09:30 JST。
+#   月次なので nightly_scan.yml とは独立 (干渉しない時刻を選択)。
+#   冪等 DELETE (calc_date < cutoff) なので二重発火でも安全。
+#
+# ⚠️ 有効化には GitHub repo secret `CRON_SECRET` (Railway production と同値) が必要:
+#     railway variables --json | python3 -c "import sys,json;print(json.load(sys.stdin)['CRON_SECRET'])" | gh secret set CRON_SECRET
+#   (nightly_scan.yml と同じ secret を共用)
+#
+# ⚠️ Sprint 2 (canslim-scan populate) の前は deleted_count=0 が正常。
+#    Sprint 1 の migration 適用完了後に初回手動実行で動作確認できる。
+#
+# memory anchor: feedback_railway_native_cron.md / feedback_supabase_grant_bug.md
+
+on:
+  workflow_dispatch:
+    inputs:
+      retention_days:
+        description: '削除保持日数 (default: 30)'
+        required: false
+        default: '30'
+  schedule:
+    # 毎月 1 日 00:30 UTC = 09:30 JST
+    - cron: '30 0 1 * *'
+
+jobs:
+  cleanup:
+    name: screener_fundamentals retention cleanup
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BASE: https://beatscanner-production.up.railway.app
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Setup tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq jq curl
+
+      - name: Guard — CRON_SECRET present
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET secret 未設定。 nightly_scan.yml の gh secret set コマンドで追加してください。"
+            exit 1
+          fi
+
+      - name: screener-fundamentals-cleanup
+        id: cleanup
+        run: |
+          RETENTION="${{ github.event.inputs.retention_days || '30' }}"
+          BODY="{\"retention_days\": $RETENTION}"
+          echo "=== screener-fundamentals-cleanup (retention_days=$RETENTION) ==="
+          resp=$(curl -s --max-time 60 -w '\nHTTP:%{http_code}' -X POST \
+            -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
+            -d "$BODY" "$BASE/api/cron/screener-fundamentals-cleanup")
+          http=$(echo "$resp" | tail -1)
+          body=$(echo "$resp" | sed '$d')
+          echo "$http"
+          echo "$body" | jq '{cutoff_date,retention_days,deleted_count,note}' 2>/dev/null || echo "$body"
+          {
+            echo "### Screener Fundamentals Cleanup ($(date -u +'%Y-%m-%d %H:%M UTC'))"
+            echo "- HTTP: \`$http\`"
+            echo "- cutoff_date: \`$(echo "$body" | jq -r '.cutoff_date // "?"')\`"
+            echo "- retention_days: \`$(echo "$body" | jq -r '.retention_days // "?"')\`"
+            echo "- deleted_count: \`$(echo "$body" | jq -r '.deleted_count // "?"')\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          # 非 2xx は失敗扱い
+          echo "$http" | grep -q "HTTP:2" || { echo "::error::screener-fundamentals-cleanup non-2xx response"; exit 1; }
