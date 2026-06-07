@@ -129,7 +129,7 @@ class TestColMapResolvesScaledColumns:
             _row("MSFT", near_high_pct_scaled=80.0, near_high_pct=0.80),
         ]
         sb = _FakeSupabase(rows)
-        items, *_rest, total = _fetch_screener_fundamentals_by_condition(
+        items, _exc, _fail, _u, _un, total, _nrc = _fetch_screener_fundamentals_by_condition(
             sb, "near_high", 95.0, "2026-06-07"
         )
         # scaled カラムを引いていれば AAPL(97>=95) のみヒット。
@@ -144,7 +144,7 @@ class TestColMapResolvesScaledColumns:
             _row("KO", buyback_yield_pct=0.5, buyback_yield=0.005),
         ]
         sb = _FakeSupabase(rows)
-        items, *_rest, total = _fetch_screener_fundamentals_by_condition(
+        items, _exc, _fail, _u, _un, total, _nrc = _fetch_screener_fundamentals_by_condition(
             sb, "buyback", 2.0, "2026-06-07"
         )
         assert total == 1, f"buyback>=2 は pct 参照で 1 件、実際: {total}"
@@ -158,7 +158,7 @@ class TestColMapResolvesScaledColumns:
         ]
         sb = _FakeSupabase(rows)
         for cond, mn in (("eps_cagr", 25.0), ("roe", 17.0), ("volume_surge", 40.0)):
-            items, *_rest, total = _fetch_screener_fundamentals_by_condition(
+            items, _exc, _fail, _u, _un, total, _nrc = _fetch_screener_fundamentals_by_condition(
                 sb, cond, mn, "2026-06-07"
             )
             assert total == 1, f"{cond}>={mn} は NVDA 1 件、実際: {total}"
@@ -171,7 +171,7 @@ class TestColMapResolvesScaledColumns:
             _row("XOM", eps_yoy_pct=5.0),
         ]
         sb = _FakeSupabase(rows)
-        items, *_rest, total = _fetch_screener_fundamentals_by_condition(
+        items, _exc, _fail, _u, _un, total, _nrc = _fetch_screener_fundamentals_by_condition(
             sb, "eps_yoy", 18.0, "2026-06-07"
         )
         assert total == 1
@@ -181,21 +181,21 @@ class TestColMapResolvesScaledColumns:
 # ─── 2. 未知 condition の安全な空返却 (arity 6) ────────────────────────────────
 
 class TestUnknownConditionArity:
-    def test_unknown_condition_returns_six_tuple_empty(self):
-        """未知 condition は ([], 0, 0, 0, 0, 0) の 6-tuple を返す (arity 確認)"""
+    def test_unknown_condition_returns_seven_tuple_empty(self):
+        """未知 condition は ([], 0, 0, 0, 0, 0, {}) の 7-tuple を返す (S5a で arity 6→7)"""
         sb = _FakeSupabase([_row("AAPL", eps_yoy_pct=20.0)])
         result = _fetch_screener_fundamentals_by_condition(
             sb, "bogus_condition", 18.0, "2026-06-07"
         )
-        assert result == ([], 0, 0, 0, 0, 0), f"未知 condition は空 6-tuple、実際: {result}"
+        assert result == ([], 0, 0, 0, 0, 0, {}), f"未知 condition は空 7-tuple、実際: {result}"
 
-    def test_valid_condition_returns_six_tuple(self):
-        """正常 condition も 6 要素を返す (unpack 整合)"""
+    def test_valid_condition_returns_seven_tuple(self):
+        """正常 condition も 7 要素を返す (S5a で null_reason_counts 追加、unpack 整合)"""
         sb = _FakeSupabase([_row("AAPL", eps_yoy_pct=20.0)])
         result = _fetch_screener_fundamentals_by_condition(
             sb, "eps_yoy", 18.0, "2026-06-07"
         )
-        assert len(result) == 6, f"6 要素であるべき、実際: {len(result)}"
+        assert len(result) == 7, f"7 要素であるべき (S5a)、実際: {len(result)}"
 
 
 # ─── 3. excluded 分割の不変条件 (後方互換 §3-5) ────────────────────────────────
@@ -214,7 +214,7 @@ class TestExcludedSplitInvariant:
             _row("F", eps_yoy_pct=None, turnaround=False),    # unavailable
         ]
         sb = _FakeSupabase(rows)
-        (items, excluded, failed, uncomputable, unavailable, total
+        (items, excluded, failed, uncomputable, unavailable, total, _nrc
          ) = _fetch_screener_fundamentals_by_condition(sb, "eps_yoy", 18.0, "2026-06-07")
         assert excluded == 5, f"NULL は 5 件、実際: {excluded}"
         assert uncomputable == 2, f"turnaround=true NULL は 2 件、実際: {uncomputable}"
@@ -230,7 +230,7 @@ class TestExcludedSplitInvariant:
             _row("C", eps_yoy_pct=None, turnaround=False),
         ]
         sb = _FakeSupabase(rows)
-        (_i, excluded, _f, uncomputable, unavailable, _t
+        (_i, excluded, _f, uncomputable, unavailable, _t, _nrc
          ) = _fetch_screener_fundamentals_by_condition(sb, "eps_yoy", 18.0, "2026-06-07")
         assert uncomputable == 0
         assert unavailable == excluded == 2
@@ -250,7 +250,7 @@ class TestCountIntegrity:
             _row("D", roe=None),    # データなし
         ]
         sb = _FakeSupabase(rows)
-        (items, excluded, failed, _u, _un, total
+        (items, excluded, failed, _u, _un, total, _nrc
          ) = _fetch_screener_fundamentals_by_condition(sb, "roe", 17.0, "2026-06-07")
         assert total == 2, f"roe>=17 は 2 件、実際: {total}"
         assert excluded == 1, f"NULL は 1 件、実際: {excluded}"

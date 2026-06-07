@@ -16993,7 +16993,7 @@ def _fetch_screener_fundamentals_by_condition(
     condition: str,
     min_pct: float,
     calc_date: str,
-) -> tuple[list[dict], int, int, int, int, int]:
+) -> tuple[list[dict], int, int, int, int, int, dict]:
     """screener_fundamentals から指定 condition の ticker list を DB SELECT only で取得。
 
     CAN-SLIM Phase 2 Sprint 3: /api/scanner/rs の _fetch_rs_top_n に相当する helper。
@@ -17006,7 +17006,9 @@ def _fetch_screener_fundamentals_by_condition(
       calc_date: 対象の calc_date (最新の valid date)
 
     Returns:
-      (items, excluded_count, failed_count, uncomputable_count, unavailable_count, total_count_exact)
+      (items, excluded_count, failed_count, uncomputable_count, unavailable_count,
+       total_count_exact, null_reason_counts)
+      null_reason_counts: {reason_code: count} (NULL 行の原因内訳、S5a。合計 == excluded_count)
       items: [{ticker, <col>, calc_date}, ...]  (<col> IS NOT NULL かつ >= min_pct、降順)
       excluded_count: 同 calc_date で <col> IS NULL の行数 (= uncomputable + unavailable、後方互換 key)
       failed_count: universe - total_count_exact - excluded_count (count="exact" で 1000 行上限を回避)
@@ -17040,7 +17042,7 @@ def _fetch_screener_fundamentals_by_condition(
     col = col_map.get(condition)
     if col is None:
         # 未知の condition は空を返す (500 にしない)
-        return [], 0, 0, 0, 0, 0
+        return [], 0, 0, 0, 0, 0, {}
 
     try:
         # 達成銘柄 list (NULL は自動除外、降順)。表示用 — 件数は下の count="exact" を正本にする。
@@ -17121,6 +17123,37 @@ def _fetch_screener_fundamentals_by_condition(
         print(f"[canslim_scanner] fetch_failed_count failed: {e}")
         failed_count = 0
 
+    # ── S5a: null_reason 内訳 count (NULL 行の null_reasons[condition] を Python 集計) ──
+    # JSONB WHERE filter の構文不確実性を避け、NULL 行の null_reasons を fetch して数える。
+    # 不変条件: sum(null_reason_counts.values()) == excluded_count
+    #   (1000 行上限 / S4b 以前で null_reasons 未保存の行は "uncounted" で reconcile)。
+    # condition 名 (eps_yoy/eps_cagr/roe/near_high/buyback/volume_surge) は populate の
+    # null_reasons dict のキーと 1:1 (同じ公開名を使用)。
+    null_reason_counts: dict[str, int] = {}
+    try:
+        nr_rows = (
+            sb.table("screener_fundamentals")
+            .select("null_reasons")
+            .eq("calc_date", calc_date)
+            .is_(col, "null")
+            .execute()
+        )
+        counted = 0
+        for r in (nr_rows.data or []):
+            nr = r.get("null_reasons")
+            reason = nr.get(condition) if isinstance(nr, dict) else None
+            reason = reason or "unknown"  # null_reasons 未保存 (S4b 以前) / 当該条件キー欠落
+            null_reason_counts[reason] = null_reason_counts.get(reason, 0) + 1
+            counted += 1
+        # 合計を excluded_count に一致させる (1000 行上限の取りこぼし分を reconcile)
+        if excluded_count > counted:
+            null_reason_counts["uncounted"] = (
+                null_reason_counts.get("uncounted", 0) + (excluded_count - counted)
+            )
+    except Exception as e:
+        print(f"[canslim_scanner] fetch_null_reason_counts failed: {e}")
+        null_reason_counts = {}
+
     return (
         items,
         excluded_count,
@@ -17128,6 +17161,7 @@ def _fetch_screener_fundamentals_by_condition(
         uncomputable_count,
         unavailable_count,
         total_count_exact,
+        null_reason_counts,
     )
 
 
@@ -17191,6 +17225,7 @@ async def scanner_canslim(
         "excluded_count": 0,
         "uncomputable_count": 0,
         "unavailable_count": 0,
+        "null_reason_counts": {},
         "condition": condition,
         "min_pct": min_pct,
         "items": [],
@@ -17235,6 +17270,7 @@ async def scanner_canslim(
             uncomputable_count,
             unavailable_count,
             total_count_exact,
+            null_reason_counts,
         ) = _fetch_screener_fundamentals_by_condition(
             sb, condition, min_pct, calc_date
         )
@@ -17248,6 +17284,8 @@ async def scanner_canslim(
             "excluded_count": excluded_count,
             "uncomputable_count": uncomputable_count,
             "unavailable_count": unavailable_count,
+            # S5a: NULL 原因コードの内訳 count (合計 == excluded_count)。frontend が UI ラベル化。
+            "null_reason_counts": null_reason_counts,
             "condition": condition,
             "min_pct": min_pct,
             "items": items,
@@ -18873,6 +18911,7 @@ def _upsert_screener_fundamental(
     volume_surge_pct: "float | None" = None,
     near_high_pct_scaled: "float | None" = None,
     buyback_yield_pct: "float | None" = None,
+    null_reasons: "dict | None" = None,
 ) -> bool:
     """screener_fundamentals テーブルに各指標を upsert。
 
@@ -18933,6 +18972,11 @@ def _upsert_screener_fundamental(
     # buyback_yield_pct: buyback_yield × 100 の pct 表記 (migration 未適用時に graceful fallback)
     if buyback_yield_pct is not None:
         row["buyback_yield_pct"] = buyback_yield_pct
+    # ── S5a: null_reasons JSONB (各条件が NULL の原因コード dict) ──────────────
+    # 非空時のみ payload に追加 (None-preserve: 全条件 computed の行は書き込まない)。
+    # migration 未適用時は graceful fallback (optional_cols) で外して再 upsert。
+    if null_reasons:
+        row["null_reasons"] = null_reasons
 
     try:
         sb.table("screener_fundamentals").upsert(
@@ -18948,7 +18992,7 @@ def _upsert_screener_fundamental(
         optional_cols = [
             c for c in (
                 "turnaround", "near_high_pct", "volume_surge_pct",
-                "near_high_pct_scaled", "buyback_yield_pct",
+                "near_high_pct_scaled", "buyback_yield_pct", "null_reasons",
             )
             if c in err_str and c in row
         ]
@@ -19133,28 +19177,31 @@ async def cron_canslim_scan(
         ★ S 条件 buyback は cash-flow-statement (per-ticker) + market_cap (pre-fetch) から計算。
         ★ S 条件 volume_surge は profile の averageVolume (24h cache) から計算。
 
-        ★★ tuple arity: 全 return 文が 9 要素であること (feedback_pge_loop_pitfalls ルール 1)。
-        return ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, err
+        ★★ tuple arity: 全 return 文が 10 要素であること (S5a で null_reasons を末尾追加、
+           feedback_pge_loop_pitfalls ルール 1)。
+        return (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct,
+                buyback_yield, volume_surge_pct, err, null_reasons)
+        ※ error path は null_reasons={} (upsert されないため空でよい)、success path のみ実 dict。
         """
         try:
             # ── C 条件: EPS YoY% ─────────────────────────────────────────────
             try:
                 surprises_raw = await client.earnings_surprises(ticker, limit=8)
             except Exception:
-                return ticker, None, None, None, None, None, None, None, "earnings_surprises_failed"
+                return ticker, None, None, None, None, None, None, None, "earnings_surprises_failed", {}
             if not surprises_raw:
-                return ticker, None, None, None, None, None, None, None, "earnings_surprises_empty"
+                return ticker, None, None, None, None, None, None, None, "earnings_surprises_empty", {}
 
             surprises_past = [s for s in surprises_raw if _has_eps_actual(s)]
             if not surprises_past:
-                return ticker, None, None, None, None, None, None, None, "no_eps_actual_in_surprises"
+                return ticker, None, None, None, None, None, None, None, "no_eps_actual_in_surprises", {}
 
             latest = sorted(
                 surprises_past, key=lambda d: d.get("date") or "", reverse=True
             )[0]
             entry_date_str = latest.get("date") or ""
             if not entry_date_str:
-                return ticker, None, None, None, None, None, None, None, "no_entry_date"
+                return ticker, None, None, None, None, None, None, None, "no_entry_date", {}
             eps_actual = _safe_eps_float(
                 latest.get("eps")
                 or latest.get("epsActual")
@@ -19191,21 +19238,33 @@ async def cron_canslim_scan(
 
             # ── A 条件: 3 年 EPS CAGR ────────────────────────────────────────
             eps_cagr_3y: float | None = None
+            cagr_null_reason: str | None = None  # S5a: NULL 原因コード (frontend で UI ラベル化)
             try:
                 annual_recs = await client.income_statement(ticker, limit=4, period="annual")
                 if isinstance(annual_recs, list) and annual_recs:
                     eps_cagr_3y = _calc_eps_cagr_3y(annual_recs)
+                    if eps_cagr_3y is None:
+                        # S5a: 原因区別 (annual_recs は取得済 = 追加 fetch ゼロ)。
+                        # records<4 → 上場3年未満、それ以外 → 赤字 base / EPS 欠損。
+                        cagr_null_reason = (
+                            "insufficient_history" if len(annual_recs) < 4 else "loss_base"
+                        )
+                else:
+                    cagr_null_reason = "data_missing"  # annual_recs 空 / 非 list
             except Exception:
                 eps_cagr_3y = None  # fetch 失敗 → NULL (欠損ガード)
+                cagr_null_reason = "data_missing"
 
             # ── A 条件: ROE (sector ガード付き) ─────────────────────────────
             roe: float | None = None
+            roe_null_reason: str | None = None  # S5a: NULL 原因コード (frontend で UI ラベル化)
             try:
                 # sector/industry を _fetch_sector_industry 経由で取得 (24h cache 相乗り)
                 sector, industry = await _fetch_sector_industry(ticker, fmp_key)
                 if _roe_sector_guard(sector, industry):
                     # sector ガード該当 → roe = None (比較保留、§5 誤選別回避)
                     roe = None
+                    roe_null_reason = "sector_guard"
                 else:
                     # ROE は key-metrics-ttm の returnOnEquityTTM を使用。
                     # ★ /stable/ratios-ttm には ROE field が無く (margin/per-share/valuation のみ、
@@ -19246,7 +19305,9 @@ async def cron_canslim_scan(
                             #   AAPL (146.7) / NVDA (111.7) は fetch されるが equity 正で保持。
                             #   AAPL 型の高 ROE 表示問題は S5 display 補完 (金融 option b)。
                             roe = roe_candidate
-                            if roe_candidate is not None and (roe_candidate > 50.0 or roe_candidate < 0.0):
+                            if roe_candidate is None:
+                                roe_null_reason = "data_missing"  # float 変換失敗
+                            elif roe_candidate > 50.0 or roe_candidate < 0.0:
                                 try:
                                     eq_data = await safe_fmp_get(
                                         f"https://financialmodelingprep.com/stable/ratios-ttm"
@@ -19260,10 +19321,18 @@ async def cron_canslim_scan(
                                     roe = _roe_equity_guard(
                                         roe_candidate, eq_rec.get("shareholdersEquityPerShareTTM")
                                     )
+                                    if roe is None:
+                                        # S5a: 負 equity で guard が NULL 化 (MCD/PM 型)
+                                        roe_null_reason = "negative_equity"
                                 except Exception:
                                     pass  # equity 確認失敗時は roe_candidate 保持 (過剰 NULL 化回避)
+                        else:
+                            roe_null_reason = "data_missing"  # roe_raw (returnOnEquityTTM) 欠損
+                    else:
+                        roe_null_reason = "data_missing"  # ratios_data (key-metrics-ttm) 欠損
             except Exception:
                 roe = None  # fetch / ガード判定失敗 → NULL (欠損ガード)
+                roe_null_reason = "data_missing"
 
             # ── N 条件: 52週高値近接率 (near_high_pct = price / yearHigh) ──
             # yearHigh と price は outer scope の pre-fetch map から参照 (追加 FMP call ゼロ)。
@@ -19337,10 +19406,31 @@ async def cron_canslim_scan(
             except Exception:
                 volume_surge_pct = None  # fetch 失敗 → NULL (欠損ガード)
 
-            # ★★ tuple arity 9 要素確認 (feedback_pge_loop_pitfalls ルール 1)
-            return ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, None
+            # ── S5a: null_reason per-cause を組み立て (静的コード、LLM 不使用) ──
+            #   success path のみ upsert される (error path は err を立てて post-gather で continue)。
+            #   原因コードは frontend (S5b) が静的 dict で UI ラベル化。§38/§5: 予測語/最上級なし。
+            null_reasons: dict[str, str] = {}
+            if eps_yoy_pct is None:
+                # turnaround=true (黒字転換) か、前年同期データなし (IPO<1yr 等)
+                null_reasons["eps_yoy"] = "turnaround" if turnaround else "no_prior_year"
+            if eps_cagr_3y is None:
+                null_reasons["eps_cagr"] = cagr_null_reason or "data_missing"
+            if roe is None:
+                null_reasons["roe"] = roe_null_reason or "data_missing"
+            if near_high_pct is None:
+                null_reasons["near_high"] = "data_missing"
+            if buyback_yield is None:
+                null_reasons["buyback"] = "data_missing"
+            if volume_surge_pct is None:
+                null_reasons["volume_surge"] = "data_missing"
+
+            # ★★ tuple arity 10 要素 (S5a で null_reasons 追加、feedback_pge_loop_pitfalls ルール 1)
+            return (
+                ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround,
+                near_high_pct, buyback_yield, volume_surge_pct, None, null_reasons,
+            )
         except Exception as e:
-            return ticker, None, None, None, None, None, None, None, f"unexpected: {e}"
+            return ticker, None, None, None, None, None, None, None, f"unexpected: {e}", {}
 
     # fetch + 計算: worker_count>1 で並列 (asyncio.Semaphore)、 =1 で逐次。
     # ★ 6体合議 critical 対応: 旧実装は完全逐次で full universe (3000) で GHA timeout (30min) 超過
@@ -19367,20 +19457,20 @@ async def cron_canslim_scan(
             results.append(await _compute_one(ticker))
 
     # count + upsert (post-gather 逐次、 cup-scan と同型)
-    # Phase 3 Sprint 3: result tuple が 9 要素 (arity を 9 のまま維持)
+    # Phase 3 Sprint 5a: result tuple が 10 要素 (末尾に null_reasons dict)
     # (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct,
-    #  buyback_yield, volume_surge_pct, err)
+    #  buyback_yield, volume_surge_pct, err, null_reasons)
     # Phase 3 Sprint 4a: post-gather で ×100 して pct 新カラム値を生成
     #   near_high_pct_scaled = near_high_pct × 100 (例 0.97 → 97.0)
     #   buyback_yield_pct    = buyback_yield  × 100 (例 0.0173 → 1.73)
-    #   tuple arity は 9 のまま増やさない (feedback_pge_loop_pitfalls ルール 1)
+    #   tuple arity は 10 (S5a で null_reasons 追加、feedback_pge_loop_pitfalls ルール 1)
     a_computed = 0           # CAGR が算出できた件数
     roe_computed = 0         # ROE が取得できた件数
     near_high_computed = 0   # near_high_pct が算出できた件数
     buyback_computed = 0     # buyback_yield が算出できた件数 (S 条件)
     volume_surge_computed = 0  # volume_surge_pct が算出できた件数 (S 条件)
     for result in results:
-        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, err = result
+        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, err, null_reasons = result
         if err:
             failed.append({"ticker": ticker, "reason": err})
             continue
@@ -19426,6 +19516,7 @@ async def cron_canslim_scan(
                 volume_surge_pct,
                 near_high_pct_scaled,  # S4a 新 pct カラム
                 buyback_yield_pct,     # S4a 新 pct カラム
+                null_reasons=null_reasons,  # S5a: NULL 原因コード dict (JSONB)
             )
             if ok:
                 upserted += 1
