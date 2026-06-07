@@ -1,0 +1,62 @@
+-- ========================================================================
+-- screener_fundamentals_unit_unify マイグレーション (2026-06-07)
+-- セッション: CAN-SLIM Phase 3 Sprint 4a (PGE Generator + main)
+--
+-- 目的: read endpoint (S4b) の `>= min_pct` フィルタが全カラムで一貫して効くよう、
+--       単位 (scale) を pct に統一する。gate1 確定 = **方式B (pct 新カラム adding-only)**。
+--
+--       背景 (6体合議 BLOCK①、設計エキスパートの唯一の blocking):
+--         read endpoint `_fetch_screener_fundamentals_by_condition` は `.gte(col, min_pct)` で
+--         DB カラム値と min_pct を直接比較する。現状カラムは単位が不統一:
+--           - eps_yoy_pct / eps_cagr_3y / roe / volume_surge_pct = pct 表記 (例 40.0)
+--           - near_high_pct = ratio 0-1 (例 0.97)  ← 名前は _pct だが ratio (S2 で誤命名)
+--           - buyback_yield = ratio 0-0.1 (例 0.0173)
+--         → col_map に near_high_pct/buyback_yield を足すと `near_high_pct >= 95` が
+--           0.97 に対して全除外され、A/N/S が「公開されたのに常に空」のサイレントバグ確定。
+--
+--       方式B (本 migration): ratio カラムを温存したまま **pct 新カラムを adding-only で追加**。
+--         canslim-scan は新 pct カラムに ×100 した値を書き込む。read endpoint (S4b) の
+--         col_map は新 pct カラムを指す。旧 ratio カラム (near_high_pct / buyback_yield) は
+--         vestigial となる (read しない) が温存 = revert 容易・per-ticker 波及ゼロ。
+--         ※ per-ticker `valuation-extras` の buybackYield は helper で都度計算し DB を read
+--           しないため、本 migration / scale 変更は per-ticker 表示に一切影響しない (main 確認済)。
+--
+-- 追加カラム:
+--   near_high_pct_scaled  — N 条件: 52週高値比を % 表記 (= near_high_pct × 100、例 97.0)
+--   buyback_yield_pct     — S 条件: 自社株買い利回りを % 表記 (= buyback_yield × 100、例 1.73)
+--   ※ volume_surge_pct (S3) / eps_yoy_pct / eps_cagr_3y / roe は既に pct 表記のため追加不要。
+--
+-- 設計:
+--   - adding-only (既存カラムの型・制約は一切変更しない、旧 ratio カラムも DROP しない)
+--   - "if not exists" で冪等実行可能
+--   - GRANT 追加不要: 既存テーブルへの column 追加は table 単位の service_role GRANT に包含
+--     (feedback_supabase_grant_bug.md 確認)
+--
+-- 適用方法 (user 承認のうえ MCP apply_migration or Supabase SQL Editor):
+--   1. 本ファイル全体を実行
+--   2. 完了確認: 下記 SELECT で 2 カラムの存在を確認
+--
+-- 完了確認 SQL:
+--   select column_name, data_type from information_schema.columns
+--    where table_name = 'screener_fundamentals'
+--      and column_name in ('near_high_pct_scaled','buyback_yield_pct');
+--   -- 期待結果: 2 行 (両方 numeric)
+--
+-- S4a 着地後の canslim-scan はこの新カラムに pct 値を書き込む。read endpoint (S4b) の
+-- col_map は `near_high`→near_high_pct_scaled / `buyback`→buyback_yield_pct を指す。
+-- 未適用のままデプロイしても他カラムは影響なし — 新カラムのみ "column not found" で
+-- upsert skip されるが backend は graceful fallback する (volume_surge_pct と同パターン)。
+--
+-- revert: 本 migration は adding-only のため `alter table screener_fundamentals
+--   drop column if exists near_high_pct_scaled, drop column if exists buyback_yield_pct;`
+--   で完全復帰 (旧 ratio カラムは無傷)。
+-- ========================================================================
+
+alter table screener_fundamentals
+  add column if not exists near_high_pct_scaled numeric,
+  add column if not exists buyback_yield_pct    numeric;
+
+-- 完了確認:
+-- select column_name, data_type from information_schema.columns
+--  where table_name = 'screener_fundamentals'
+--    and column_name in ('near_high_pct_scaled','buyback_yield_pct');
