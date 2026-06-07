@@ -665,9 +665,11 @@ export async function fetchRsScanner(minPercentile = 80, limit = 50) {
  * - `note` フィールドは開発者向け内部文言のため frontend では使用しない。
  * - null 返却時: 達成 0 件 / 未達 0 件 / データなし 0 件 として graceful degradation。
  *
- * @param {number} [minPct=18] - EPS YoY% の下限閾値 (整数)
- * @param {string} [condition='eps_yoy'] - 条件キー (現在は eps_yoy のみ)
- * @returns {Promise<{as_of, total_count, failed_count, excluded_count, condition, min_pct, items}|null>}
+ * @param {number} [minPct=18] - 閾値の下限 (整数)
+ * @param {string} [condition='eps_yoy'] - 条件キー。S4b で backend が全条件を read 公開:
+ *        eps_yoy(C) / eps_cagr(A) / roe(A) / near_high(N) / buyback(S) / volume_surge(S)。
+ *        frontend は現状 eps_yoy のみ配線 (A/N/S の UI は S5 で追加予定)。
+ * @returns {Promise<{as_of, total_count, failed_count, excluded_count, uncomputable_count, unavailable_count, condition, min_pct, items}|null>}
  */
 export async function fetchCanslimScanner(minPct = 18, condition = 'eps_yoy') {
   const url = `/api/scanner/canslim?condition=${encodeURIComponent(condition)}&min_pct=${Math.round(minPct)}`;

@@ -16993,44 +16993,57 @@ def _fetch_screener_fundamentals_by_condition(
     condition: str,
     min_pct: float,
     calc_date: str,
-) -> tuple[list[dict], int]:
+) -> tuple[list[dict], int, int, int, int, int]:
     """screener_fundamentals から指定 condition の ticker list を DB SELECT only で取得。
 
     CAN-SLIM Phase 2 Sprint 3: /api/scanner/rs の _fetch_rs_top_n に相当する helper。
+    Phase 3 Sprint 4b: C(eps_yoy) のみ → A/N/S 全条件を read 公開 + count integrity 堅牢化。
 
     Args:
       sb: supabase service client
-      condition: "eps_yoy" のみ (将来 A/N/S 拡張時にカラムを切り替える)
-      min_pct: eps_yoy_pct >= この値の ticker を返す (default 18.0)
+      condition: 公開条件名 (eps_yoy / eps_cagr / roe / near_high / buyback / volume_surge)
+      min_pct: 対象カラム >= この値の ticker を返す (S4a 単位統一済のため全カラム % 表記で直接比較可)
       calc_date: 対象の calc_date (最新の valid date)
 
     Returns:
-      (items, excluded_count)
-      items: [{ticker, eps_yoy_pct, calc_date}, ...]  (eps_yoy_pct IS NOT NULL のもの)
-      excluded_count: 同 calc_date で eps_yoy_pct IS NULL の行数 (欠損銘柄数)
+      (items, excluded_count, failed_count, uncomputable_count, unavailable_count, total_count_exact)
+      items: [{ticker, <col>, calc_date}, ...]  (<col> IS NOT NULL かつ >= min_pct、降順)
+      excluded_count: 同 calc_date で <col> IS NULL の行数 (= uncomputable + unavailable、後方互換 key)
+      failed_count: universe - total_count_exact - excluded_count (count="exact" で 1000 行上限を回避)
+      uncomputable_count: <col> IS NULL かつ turnaround=true の行数 (黒字転換で算出不可、S5 で amber 表示の素地)
+      unavailable_count: excluded_count - uncomputable_count (データ欠損、S5 で gray 表示の素地)
+      total_count_exact: <col> >= min_pct の正確な件数 (count="exact"、items list が 1000 上限で頭打ちしても正確)
 
-    NULL の取り扱い:
-      SQL の WHERE eps_yoy_pct >= min_pct は NULL を自動除外する (SQL NULL semantics)。
-      「達成扱いも未達扱いもしない」 SPEC §38/§5 欠損ガードは DB 層で自動保証。
+    NULL の取り扱い (§38/§5 欠損ガード):
+      SQL の WHERE <col> >= min_pct は NULL を自動除外する (SQL NULL semantics)。
+      「達成扱いも未達扱いもしない」 欠損ガードは DB 層で自動保証。
 
-    将来拡張 (Phase 3):
-      condition == "roe" → WHERE roe >= min_pct
-      condition == "buyback_yield" → WHERE buyback_yield >= min_pct
-      (各カラムは schema 先行済、Sprint 1 migration で null のまま)
+    BLOCK④ count integrity (feedback_facet_filter_count_integrity):
+      達成件数 total_count を len(items) でなく count="exact" の値で返す。Supabase Python client の
+      .execute() は 1000 行上限のため、Russell3000 で達成数 >1000 になると len(items) が頭打ちし
+      failed_count が水増しされる (達成を未達に誤計上 = Trust Cliff)。count クエリを分離して防ぐ。
+
+    単位 (S4a 単位統一、方式B):
+      near_high → near_high_pct_scaled (×100 済 pct カラム、旧 near_high_pct ratio は vestigial)
+      buyback   → buyback_yield_pct    (×100 済 pct カラム、旧 buyback_yield ratio は vestigial)
+      その他は populate 時点で % 表記 (eps_yoy_pct / eps_cagr_3y / roe / volume_surge_pct)。
     """
-    # condition → カラム名マッピング (Phase 3 拡張時にここを追加)
+    # condition → カラム名マッピング (S4a 方式B の pct 統一済カラムを参照)
     col_map = {
         "eps_yoy": "eps_yoy_pct",
-        # "roe": "roe",
-        # "buyback_yield": "buyback_yield",
+        "eps_cagr": "eps_cagr_3y",
+        "roe": "roe",
+        "near_high": "near_high_pct_scaled",
+        "buyback": "buyback_yield_pct",
+        "volume_surge": "volume_surge_pct",
     }
     col = col_map.get(condition)
     if col is None:
         # 未知の condition は空を返す (500 にしない)
-        return [], 0, 0
+        return [], 0, 0, 0, 0, 0
 
     try:
-        # 達成銘柄 (NULL は自動除外)
+        # 達成銘柄 list (NULL は自動除外、降順)。表示用 — 件数は下の count="exact" を正本にする。
         result = (
             sb.table("screener_fundamentals")
             .select(f"ticker,{col},calc_date")
@@ -17045,7 +17058,21 @@ def _fetch_screener_fundamentals_by_condition(
         items = []
 
     try:
-        # 欠損銘柄数 (eps_yoy_pct IS NULL の行数)
+        # BLOCK④: 達成件数を count="exact" で取得 (1000 行上限で items が頭打ちしても正確)。
+        achieved_result = (
+            sb.table("screener_fundamentals")
+            .select("ticker", count="exact")
+            .eq("calc_date", calc_date)
+            .gte(col, min_pct)
+            .execute()
+        )
+        total_count_exact = achieved_result.count or 0
+    except Exception as e:
+        print(f"[canslim_scanner] fetch_total_count failed: {e}")
+        total_count_exact = len(items)
+
+    try:
+        # 欠損銘柄数 (<col> IS NULL の行数)
         # Supabase Python client: is_() で IS NULL を表現 (v1.x / v2.x 互換)
         null_result = (
             sb.table("screener_fundamentals")
@@ -17060,7 +17087,25 @@ def _fetch_screener_fundamentals_by_condition(
         excluded_count = 0
 
     try:
-        # 未達銘柄数 = 同 calc_date の全行数 - 達成(items) - データなし(NULL)。
+        # MINOR (excluded 分割): NULL のうち turnaround=true は「算出不可 (uncomputable)」、
+        # それ以外は「データなし (unavailable)」。S5 frontend で amber/gray 色分けの素地。
+        # 不変条件: uncomputable + unavailable == excluded_count (後方互換 §3-5)。
+        uncomputable_result = (
+            sb.table("screener_fundamentals")
+            .select("ticker", count="exact")
+            .eq("calc_date", calc_date)
+            .is_(col, "null")
+            .eq("turnaround", True)
+            .execute()
+        )
+        uncomputable_count = uncomputable_result.count or 0
+    except Exception as e:
+        print(f"[canslim_scanner] fetch_uncomputable_count failed: {e}")
+        uncomputable_count = 0
+    unavailable_count = max(0, excluded_count - uncomputable_count)
+
+    try:
+        # 未達銘柄数 = 同 calc_date の全行数 - 達成(exact) - データなし(NULL)。
         # 6体合議 (ui-designer/qa): 達成/未達/データなし の 3 状態を frontend が正確に内訳表示
         # できるようにする (facet count integrity = Trust Cliff)。全行 count の単純 query で
         # 算出 (.not_.is_().lt() の複雑 chaining を避け robust に)。
@@ -17071,12 +17116,19 @@ def _fetch_screener_fundamentals_by_condition(
             .execute()
         )
         universe_count = total_result.count or 0
-        failed_count = max(0, universe_count - len(items) - excluded_count)
+        failed_count = max(0, universe_count - total_count_exact - excluded_count)
     except Exception as e:
         print(f"[canslim_scanner] fetch_failed_count failed: {e}")
         failed_count = 0
 
-    return items, excluded_count, failed_count
+    return (
+        items,
+        excluded_count,
+        failed_count,
+        uncomputable_count,
+        unavailable_count,
+        total_count_exact,
+    )
 
 
 @app.get("/api/scanner/canslim")
@@ -17089,19 +17141,23 @@ async def scanner_canslim(
     CAN-SLIM Phase 2 Sprint 3 — /api/scanner/rs の DB SELECT only パターンを踏襲。
 
     Query params:
-      condition: str (default "eps_yoy" = 四半期 EPS 前年同期比)
-                 将来 Phase 3 で "roe" / "buyback_yield" 等を追加予定
-      min_pct: float (default 18.0 = gate 1 確定値、四半期 EPS YoY% の目安閾値)
+      condition: str (default "eps_yoy")。S4b で A/N/S 全条件を公開:
+                 eps_yoy(C 四半期EPS YoY) / eps_cagr(A 3年EPS CAGR) / roe(A) /
+                 near_high(N 52週高値圏%) / buyback(S 自社株買い利回り%) / volume_surge(S 出来高急増%)
+      min_pct: float (default 18.0 = C の gate1 確定値)。S4a 単位統一済のため全条件で % 表記の直接比較。
 
     Returns:
       {
-        "as_of": calc_date (str) | null,  -- §38 時点明記。canslim-scan 未実行時は null
-        "total_count": int,               -- eps_yoy_pct >= min_pct の銘柄数
-        "excluded_count": int,            -- eps_yoy_pct IS NULL の銘柄数 (データなし)
-        "condition": str,                 -- echo back
-        "min_pct": float,                 -- echo back
-        "tickers": [                      -- 達成銘柄リスト (eps_yoy_pct 降順)
-          {"ticker": str, "eps_yoy_pct": float, "calc_date": str},
+        "as_of": calc_date (str) | null,    -- §38 時点明記。canslim-scan 未実行時は null
+        "total_count": int,                 -- <col> >= min_pct の銘柄数 (count="exact"、1000 行上限を回避)
+        "failed_count": int,                -- universe - total_count - excluded_count
+        "excluded_count": int,              -- <col> IS NULL の銘柄数 (= uncomputable + unavailable、後方互換)
+        "uncomputable_count": int,          -- NULL かつ turnaround=true (黒字転換で算出不可)
+        "unavailable_count": int,           -- NULL かつ turnaround≠true (データ欠損)
+        "condition": str,                   -- echo back
+        "min_pct": float,                   -- echo back
+        "items": [                          -- 達成銘柄リスト (<col> 降順)
+          {"ticker": str, "<col>": float, "calc_date": str},
           ...
         ],
       }
@@ -17133,6 +17189,8 @@ async def scanner_canslim(
         "total_count": 0,
         "failed_count": 0,
         "excluded_count": 0,
+        "uncomputable_count": 0,
+        "unavailable_count": 0,
         "condition": condition,
         "min_pct": min_pct,
         "items": [],
@@ -17170,15 +17228,26 @@ async def scanner_canslim(
             except Exception:
                 return empty_response
 
-        items, excluded_count, failed_count = _fetch_screener_fundamentals_by_condition(
+        (
+            items,
+            excluded_count,
+            failed_count,
+            uncomputable_count,
+            unavailable_count,
+            total_count_exact,
+        ) = _fetch_screener_fundamentals_by_condition(
             sb, condition, min_pct, calc_date
         )
 
         return {
             "as_of": calc_date,
-            "total_count": len(items),
+            # BLOCK④: 達成件数は count="exact" の正本 (len(items) は 1000 行上限で頭打ちする)
+            "total_count": total_count_exact,
             "failed_count": failed_count,
+            # 後方互換 (§3-5): excluded_count == uncomputable_count + unavailable_count
             "excluded_count": excluded_count,
+            "uncomputable_count": uncomputable_count,
+            "unavailable_count": unavailable_count,
             "condition": condition,
             "min_pct": min_pct,
             "items": items,
