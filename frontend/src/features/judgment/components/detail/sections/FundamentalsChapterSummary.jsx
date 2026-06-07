@@ -108,15 +108,14 @@ export default function FundamentalsChapterSummary({ result, guidance, isLoading
     guidance?.revenue_actual,
     guidance?.revenue_estimated
   );
-  const failedNote = formatFailedConditions(conditions);
-
-  // 条件サマリー文を組み立てる
+  // 条件サマリー文を組み立てる (user dogfood 2026-06-08: 「唯一の未達は4項目未達」の矛盾を解消。
+  // 未達が複数のとき「唯一の」が破綻するため、件数のみのシンプル表記に統一。条件名内訳は5条件カードで参照可)。
   const conditionLine = (() => {
     if (passedCount === totalCount) {
       return `${totalCount} 条件すべてクリア。`;
     }
-    const base = `${totalCount} 条件中 ${passedCount} クリア。`;
-    return failedNote ? `${base} 唯一の未達は${failedNote}。` : base;
+    const failedCount = totalCount - passedCount;
+    return `${totalCount} 条件中 ${passedCount} クリア (${failedCount} 項目未達)。`;
   })();
 
   // EPS / 売上サマリー文を組み立てる

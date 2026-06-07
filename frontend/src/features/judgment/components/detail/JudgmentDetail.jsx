@@ -1199,17 +1199,16 @@ export default function JudgmentDetail({
               </>
             );
             // ④ テクニカル章 (章扉② + チャート + 期間別リターン + 分析[目標/売り/Cup/買い/Distribution])
-            // v5 polish (user dogfood 2026-06-08「積み木バラバラ」): targetZoneBlock の不揃いな配置
-            // (アナリスト目標+売り=2列 → Cup/サポート/Distribution=全幅縦積み) を解消。
-            // auto-fit grid (幅に応じ列数自動、狭いと1列折返し) + align-items:start で「並列だが窮屈にならない」。
+            // v5 polish (user dogfood 2026-06-08): 売買目安カードの配置。auto-fit grid は card の情報量差
+            // (narration 多寡) で高さがバラバラになり「めちゃくちゃ」(user 2巡目) → 1列全幅 (flex column) で
+            // 縦に整列させ高さ不揃いを解消。横並び並列は各 card のコンパクト統一フォーマット化が前提のため別途。
             // 各 card 内部は不変 (共有 component、v4 不変)。SectionFade / premium gate は targetZoneBlock 踏襲。
             const technicalTargetGrid = selectedTicker ? (
               <SectionFade id="sec-target-and-zone-v5" staggerIndex={3}>
                 <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                  display: 'flex',
+                  flexDirection: 'column',
                   gap: 'var(--space-4, 16px)',
-                  alignItems: 'start',
                 }}>
                   <AnalystTargetCard ticker={selectedTicker} />
                   {plan === 'premium' && <SellZoneCard ticker={selectedTicker} />}
