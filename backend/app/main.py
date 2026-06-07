@@ -16896,7 +16896,7 @@ def _fetch_screener_fundamentals_by_condition(
     col = col_map.get(condition)
     if col is None:
         # 未知の condition は空を返す (500 にしない)
-        return [], 0
+        return [], 0, 0
 
     try:
         # 達成銘柄 (NULL は自動除外)
@@ -16928,7 +16928,24 @@ def _fetch_screener_fundamentals_by_condition(
         print(f"[canslim_scanner] fetch_excluded_count failed: {e}")
         excluded_count = 0
 
-    return items, excluded_count
+    try:
+        # 未達銘柄数 = 同 calc_date の全行数 - 達成(items) - データなし(NULL)。
+        # 6体合議 (ui-designer/qa): 達成/未達/データなし の 3 状態を frontend が正確に内訳表示
+        # できるようにする (facet count integrity = Trust Cliff)。全行 count の単純 query で
+        # 算出 (.not_.is_().lt() の複雑 chaining を避け robust に)。
+        total_result = (
+            sb.table("screener_fundamentals")
+            .select("ticker", count="exact")
+            .eq("calc_date", calc_date)
+            .execute()
+        )
+        universe_count = total_result.count or 0
+        failed_count = max(0, universe_count - len(items) - excluded_count)
+    except Exception as e:
+        print(f"[canslim_scanner] fetch_failed_count failed: {e}")
+        failed_count = 0
+
+    return items, excluded_count, failed_count
 
 
 @app.get("/api/scanner/canslim")
@@ -16983,10 +17000,11 @@ async def scanner_canslim(
     empty_response = {
         "as_of": None,
         "total_count": 0,
+        "failed_count": 0,
         "excluded_count": 0,
         "condition": condition,
         "min_pct": min_pct,
-        "tickers": [],
+        "items": [],
         "note": "screener_fundamentals 空 (canslim-scan 未実行 or 実行中)",
     }
 
@@ -17021,17 +17039,18 @@ async def scanner_canslim(
             except Exception:
                 return empty_response
 
-        items, excluded_count = _fetch_screener_fundamentals_by_condition(
+        items, excluded_count, failed_count = _fetch_screener_fundamentals_by_condition(
             sb, condition, min_pct, calc_date
         )
 
         return {
             "as_of": calc_date,
             "total_count": len(items),
+            "failed_count": failed_count,
             "excluded_count": excluded_count,
             "condition": condition,
             "min_pct": min_pct,
-            "tickers": items,
+            "items": items,
         }
 
     except Exception as e:
@@ -18490,9 +18509,14 @@ async def cron_canslim_scan(
 
     chunk_size = int(body.get("chunk_size", 10))
     chunk_size = max(1, min(50, chunk_size))
+    worker_count = int(body.get("worker_count", 1))
+    worker_count = max(1, min(5, worker_count))  # safety cap (cup-scan と同、 6体合議 critical 対応)
     dry_run = bool(body.get("dry_run", False))
 
     fmp_key = os.getenv("FMP_API_KEY", "")
+    # FMPClient は thin wrapper (httpx client は _get 内で per-request 生成) のため、
+    # ループ外で 1 回生成して並列 worker 間で共有して安全 (6体合議 Anthropic-eng 指摘)。
+    client = FMPClient(api_key=fmp_key)
 
     today = date.today()
     eps_computed = 0   # YoY% が算出できた件数
@@ -18500,96 +18524,97 @@ async def cron_canslim_scan(
     failed: list[dict] = []
     upserted = 0
 
-    for i, ticker in enumerate(tickers):
-        # chunk 境界で sleep (FMP rate limit 緩和、 cup-scan / rs-scan と同パターン)
-        if i > 0 and i % chunk_size == 0:
-            await asyncio.sleep(1.0)
+    def _has_eps_actual(d: dict) -> bool:
+        v = (
+            d.get("eps")
+            or d.get("epsActual")
+            or d.get("actualEarningResult")
+            or d.get("actualEps")
+        )
+        return v is not None
 
+    async def _compute_one(ticker: str):
+        """1 ticker の EPS YoY% を計算して (ticker, eps_yoy_pct, err) を返す。
+
+        fetch + 計算のみ (upsert / counter 更新はしない = post-gather で逐次)。
+        cup-scan の _scan_one と同型 (並列 fetch、 逐次 upsert)。
+
+        ★ current/prev とも earnings_surprises を source に統一 (quarterly-history 表示と
+        同一 source = 二重表示乖離=Trust Cliff 回避。income_statement の GAAP EPS は乖離するため不使用)。
+        limit=8 = 過去約2年 = 前年同期 (4Q 前) を内包。FMP call 1 本/ticker。
+        """
         try:
-            client = FMPClient(api_key=fmp_key)
-
-            # earnings_surprises: eps_actual 取得 (最新 + 前年同期照合用)。
-            # ★ current/prev とも earnings_surprises を source にする (quarterly-history の
-            #   表示 eps_actual と同一 source = 二重表示乖離を防ぐ Trust Cliff 対策)。
-            #   income_statement は EPS 定義が異なり (GAAP diluted vs 報告 EPS) 乖離するため使わない
-            #   (実測: DIS 符号反転 / CRM 50→141% / AMD 43→211% の乖離を確認)。
-            #   limit=8 = 過去約2年 = 前年同期 (4Q 前) を内包。FMP call も 1 本に削減 (rate limit 改善)。
             try:
                 surprises_raw = await client.earnings_surprises(ticker, limit=8)
             except Exception:
-                failed.append({"ticker": ticker, "reason": "earnings_surprises_failed"})
-                continue
+                return ticker, None, "earnings_surprises_failed"
             if not surprises_raw:
-                failed.append({"ticker": ticker, "reason": "earnings_surprises_empty"})
-                continue
+                return ticker, None, "earnings_surprises_empty"
 
-            surprises: list[dict] = surprises_raw or []
-
-            # eps_actual がある entry のみ (future earnings は除外)
-            def _has_eps_actual(d: dict) -> bool:
-                v = (
-                    d.get("eps")
-                    or d.get("epsActual")
-                    or d.get("actualEarningResult")
-                    or d.get("actualEps")
-                )
-                return v is not None
-
-            surprises_past = [s for s in surprises if _has_eps_actual(s)]
+            surprises_past = [s for s in surprises_raw if _has_eps_actual(s)]
             if not surprises_past:
-                failed.append({"ticker": ticker, "reason": "no_eps_actual_in_surprises"})
-                continue
+                return ticker, None, "no_eps_actual_in_surprises"
 
-            # 最新四半期 (date 降順の先頭)
-            surprises_sorted = sorted(
-                surprises_past,
-                key=lambda d: d.get("date") or "",
-                reverse=True,
-            )
-            latest = surprises_sorted[0]
+            latest = sorted(
+                surprises_past, key=lambda d: d.get("date") or "", reverse=True
+            )[0]
             entry_date_str = latest.get("date") or ""
+            if not entry_date_str:
+                return ticker, None, "no_entry_date"
             eps_actual = _safe_eps_float(
                 latest.get("eps")
                 or latest.get("epsActual")
                 or latest.get("actualEarningResult")
                 or latest.get("actualEps")
             )
-
-            if not entry_date_str:
-                failed.append({"ticker": ticker, "reason": "no_entry_date"})
-                continue
-
-            # EPS YoY% 計算 (純 Python、 LLM 不使用)
-            # _calc_eps_yoy_pct_from_surprises は:
-            #   - 前年同期 eps を surprises_past から date 照合 (current と同一 source)
-            #   - 赤字 base / 前年同期欠損 → None
-            #   - 0 除算回避
             eps_yoy_pct = _calc_eps_yoy_pct_from_surprises(
-                entry_date_str,
-                eps_actual,
-                surprises_past,
+                entry_date_str, eps_actual, surprises_past
             )
-
-            if eps_yoy_pct is not None:
-                eps_computed += 1
-            else:
-                eps_null += 1
-
-            # DB upsert (dry_run=True の場合はスキップ)
-            if not dry_run:
-                ok = await asyncio.to_thread(
-                    _upsert_screener_fundamental,
-                    ticker,
-                    today,
-                    eps_yoy_pct,
-                )
-                if ok:
-                    upserted += 1
-                else:
-                    failed.append({"ticker": ticker, "reason": "upsert_failed"})
-
+            return ticker, eps_yoy_pct, None
         except Exception as e:
-            failed.append({"ticker": ticker, "reason": f"unexpected: {e}"})
+            return ticker, None, f"unexpected: {e}"
+
+    # fetch + 計算: worker_count>1 で並列 (asyncio.Semaphore)、 =1 で逐次。
+    # ★ 6体合議 critical 対応: 旧実装は完全逐次で full universe (3000) で GHA timeout (30min) 超過
+    #   → 毎晩 partial scan → 本番空。cup-scan と同じ並列パターンを移植 (GHA は worker_count:3 送信済)。
+    if worker_count > 1:
+        sem = asyncio.Semaphore(worker_count)
+
+        async def _compute_one_sem(idx: int, ticker: str):
+            async with sem:
+                # chunk 境界で sleep (FMP rate limit 緩和、 並列時も維持)
+                if idx > 0 and idx % chunk_size == 0:
+                    await asyncio.sleep(1.0)
+                return await _compute_one(ticker)
+
+        results = await asyncio.gather(
+            *[_compute_one_sem(i, t) for i, t in enumerate(tickers)],
+            return_exceptions=False,
+        )
+    else:
+        results = []
+        for i, ticker in enumerate(tickers):
+            if i > 0 and i % chunk_size == 0:
+                await asyncio.sleep(1.0)
+            results.append(await _compute_one(ticker))
+
+    # count + upsert (post-gather 逐次、 cup-scan と同型)
+    for ticker, eps_yoy_pct, err in results:
+        if err:
+            failed.append({"ticker": ticker, "reason": err})
+            continue
+        if eps_yoy_pct is not None:
+            eps_computed += 1
+        else:
+            eps_null += 1
+        if not dry_run:
+            ok = await asyncio.to_thread(
+                _upsert_screener_fundamental, ticker, today, eps_yoy_pct
+            )
+            if ok:
+                upserted += 1
+            else:
+                failed.append({"ticker": ticker, "reason": "upsert_failed"})
 
     return {
         "processed_count": len(tickers),
@@ -18601,6 +18626,7 @@ async def cron_canslim_scan(
         "calc_date": today.isoformat(),
         "universe_source": universe_source,
         "universe_size": len(tickers),
+        "worker_count": worker_count,
         "dry_run": dry_run,
         "note": "CAN-SLIM Phase 2 Sprint 2: eps_yoy_pct nightly scan",
     }

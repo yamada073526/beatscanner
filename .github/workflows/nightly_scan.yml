@@ -26,9 +26,11 @@ on:
 
 jobs:
   scan:
-    name: Nightly RS + Cup-Handle scan
+    name: Nightly RS + Cup-Handle + CAN-SLIM scan
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 6体合議 qa P0: cup(~97s)+rs(~62s)+canslim(wc=3 並列、3000銘柄) を直列実行する余裕。
+    # canslim は新規・初回未実測のため 30→45min に margin (timeout で partial scan 化を防ぐ)。
+    timeout-minutes: 45
     env:
       BASE: https://beatscanner-production.up.railway.app
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
