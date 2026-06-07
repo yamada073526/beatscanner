@@ -52,7 +52,9 @@ function fmtPct(v) {
   return `${sign}${v.toFixed(1)}%`;
 }
 
-export default function AnalystTargetCard({ ticker, currentPrice = null }) {
+// v185 B (2026-06-08): compact=true で 2 次情報 (footer の最終更新 / grade jump link) を抑制し、
+//   v5 テクニカル章「価格目安」 横並び grid で card 高さを近づける。免責 (disclaimer) は保持 (景表法 §5)。
+export default function AnalystTargetCard({ ticker, currentPrice = null, compact = false }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errored, setErrored] = useState(false);
@@ -235,19 +237,21 @@ export default function AnalystTargetCard({ ticker, currentPrice = null }) {
         <span className="atc-disclaimer">
           コンセンサスは目安。 アナリスト予想は外れることがあります。
         </span>
-        <div className="atc-footer-row2">
-          {fetchedAt && (
-            <span className="atc-updated">最終更新 {fmtRelativeMin(fetchedAt)}</span>
-          )}
-          <button
-            type="button"
-            className="atc-jump-analyst"
-            onClick={handleJumpToAnalyst}
-            data-testid="analyst-target-card-jump-link"
-          >
-            直近の grade 変更を見る →
-          </button>
-        </div>
+        {!compact && (
+          <div className="atc-footer-row2">
+            {fetchedAt && (
+              <span className="atc-updated">最終更新 {fmtRelativeMin(fetchedAt)}</span>
+            )}
+            <button
+              type="button"
+              className="atc-jump-analyst"
+              onClick={handleJumpToAnalyst}
+              data-testid="analyst-target-card-jump-link"
+            >
+              直近の grade 変更を見る →
+            </button>
+          </div>
+        )}
       </footer>
     </section>
   );

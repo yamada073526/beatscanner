@@ -17,7 +17,8 @@ import { fetchPriceHistory } from '../api.js';
 import { DIST_DAYS_LABEL_JP, DIST_DAYS_DESC_JP, DIST_DAYS_FOOTER, classifyDistDays } from '../lib/distributionDaysLabels.js';
 import Chip from './ui/Chip.jsx';
 
-export default function DistributionDaysCard({ ticker }) {
+// v185 B (2026-06-08): compact=true で narration detail を抑制 (count + conclusion + 免責は保持)。
+export default function DistributionDaysCard({ ticker, compact = false }) {
   const [priceData, setPriceData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errored, setErrored] = useState(false);
@@ -107,7 +108,7 @@ export default function DistributionDaysCard({ ticker }) {
           </div>
           <div className="ddc-narration">
             <p className="ddc-desc ddc-desc--conclusion">{zoneDesc.conclusion}</p>
-            <p className="ddc-desc ddc-desc--detail">{zoneDesc.detail}</p>
+            {!compact && <p className="ddc-desc ddc-desc--detail">{zoneDesc.detail}</p>}
           </div>
         </div>
       </div>

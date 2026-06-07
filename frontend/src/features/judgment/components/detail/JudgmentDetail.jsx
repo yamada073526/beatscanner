@@ -1185,36 +1185,91 @@ export default function JudgmentDetail({
               </div>
             ) : null;
             // EPS Beat Streak は決算タブ「今期」と内容重複のため v5 ファンダ章から除外 (user dogfood 2026-06-08)。
+            // v185 E (2026-06-08): v5 テクニカル章では短期/長期を hairline 区切りで 2 段表示 (splitByTerm)。
             const returnGridNode = (result && selectedTicker) ? (
-              <ReturnGrid ticker={selectedTicker} frameless={true} testId="judgment-return-grid" />
+              <ReturnGrid ticker={selectedTicker} frameless={true} testId="judgment-return-grid" splitByTerm />
             ) : null;
 
-            // ③ ファンダ章 (章扉① + 5条件 + TTM + EPS + FundamentalsAccordion[hideChapterHeader])
+            // ③ ファンダ章 (章扉① + 5条件 + 決算 + TTM + 会社概要)
+            // v185 A (2026-06-08、 user 確定): 章内順序を「5条件 → 決算 → TTM → 会社概要」 に再配置。
+            //   FundamentalsAccordion を renderSection で 2 分割 (earnings=章サマリー+決算 / profile=会社概要)、
+            //   間に ttmNode (バリュエーション) を挟む。EPS Beat は v5 で除外済 (決算「今期」 と重複、 user dogfood 2026-06-08)。
+            //   各 FundamentalsAccordion は共有 component を prop で制御 (v4/legacy は renderSection 省略で不変)。
             const fundamentalsChapterBlock = (
               <>
                 <ChapterSection chapterNumber="①" chapterTitle="ファンダメンタル" headerOnly tier="sub" />
                 {fiveConditionsNode}
+                <FundamentalsAccordion
+                  key="funda-earnings"
+                  renderSection="earnings"
+                  hideChapterHeader
+                  selectedTicker={selectedTicker}
+                  result={result}
+                  guidance={guidance}
+                  plan={plan}
+                  detail={detail}
+                  detailContext={detailContext}
+                  isV2={isV2}
+                  isV3={isV3}
+                  isScrollV1={isScrollV1}
+                  expandedSections={expandedSections}
+                  ch2Tab={ch2Tab}
+                  setCh2Tab={setCh2Tab}
+                  onAnalyze={onAnalyze}
+                />
                 {ttmNode}
-                {fundamentalsBlock}
+                <FundamentalsAccordion
+                  key="funda-profile"
+                  renderSection="profile"
+                  selectedTicker={selectedTicker}
+                  result={result}
+                  guidance={guidance}
+                  plan={plan}
+                  detail={detail}
+                  detailContext={detailContext}
+                  isV2={isV2}
+                  isV3={isV3}
+                  isScrollV1={isScrollV1}
+                  expandedSections={expandedSections}
+                  ch2Tab={ch2Tab}
+                  setCh2Tab={setCh2Tab}
+                  onAnalyze={onAnalyze}
+                />
               </>
             );
-            // ④ テクニカル章 (章扉② + チャート + 期間別リターン + 分析[目標/売り/Cup/買い/Distribution])
-            // v5 polish (user dogfood 2026-06-08): 売買目安カードの配置。auto-fit grid は card の情報量差
-            // (narration 多寡) で高さがバラバラになり「めちゃくちゃ」(user 2巡目) → 1列全幅 (flex column) で
-            // 縦に整列させ高さ不揃いを解消。横並び並列は各 card のコンパクト統一フォーマット化が前提のため別途。
-            // 各 card 内部は不変 (共有 component、v4 不変)。SectionFade / premium gate は targetZoneBlock 踏襲。
+            // ④ テクニカル章 (章扉② + チャート + 期間別リターン + 売買目安)
+            // v185 B (2026-06-08、3体レビュー設計): 売買目安カードを 2 グループに整理し横並び並列化。
+            //   グループA = 価格目安 3 枚 (アナリスト目標 / 買い [CupPivot] / サポート [BuyZone]) を
+            //     auto-fit grid + grid-auto-rows:1fr + align-items:stretch で高さ揃え横並び。
+            //   グループB = 状態 2 枚 (通常レンジ [SellZone 50DMA] / Distribution) を hairline 区切りの別 grid。
+            //   各 card は compact prop で narration detail / meta を抑制 → 情報量差を縮め高さを近づける (免責は保持)。
+            //   経緯: v185 polish #4 で「auto-fit は情報量差で高さガタガタ」 のため一旦 flex column 1 列に戻したが、
+            //         本 sprint は compact 統一 + グループ分割 + stretch で「めちゃくちゃ」 の根因 (情報量差) を潰した上で再び横並び化。
+            //   ⚠️ card は v4/v5 共有 component。compact / grid は v5 のみ (v4 targetZoneBlock は不変)。
+            //      発光系 .panel-card の .is-arriving:hover 4 セット (CSS) には触れず JSX 構成のみ変更 (band 化済で横並び発光は安全)。
+            const groupGridStyle = {
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+              gridAutoRows: '1fr',
+              alignItems: 'stretch',
+              gap: 'var(--space-4, 16px)',
+            };
             const technicalTargetGrid = selectedTicker ? (
               <SectionFade id="sec-target-and-zone-v5" staggerIndex={3}>
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 'var(--space-4, 16px)',
-                }}>
-                  <AnalystTargetCard ticker={selectedTicker} />
-                  {plan === 'premium' && <SellZoneCard ticker={selectedTicker} />}
-                  {plan === 'premium' && <CupPivotCard ticker={selectedTicker} />}
-                  {plan === 'premium' && <BuyZoneCard ticker={selectedTicker} />}
-                  {plan === 'premium' && <DistributionDaysCard ticker={selectedTicker} />}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4, 16px)' }}>
+                  {/* グループA: 価格目安 (目標 / 買い / サポート) */}
+                  <div style={groupGridStyle}>
+                    <AnalystTargetCard ticker={selectedTicker} compact />
+                    {plan === 'premium' && <CupPivotCard ticker={selectedTicker} compact />}
+                    {plan === 'premium' && <BuyZoneCard ticker={selectedTicker} compact />}
+                  </div>
+                  {/* グループB: 状態 (通常レンジ / Distribution)、hairline で区切り */}
+                  {plan === 'premium' && (
+                    <div style={{ ...groupGridStyle, borderTop: '1px solid var(--border)', paddingTop: 'var(--space-4, 16px)' }}>
+                      <SellZoneCard ticker={selectedTicker} compact />
+                      <DistributionDaysCard ticker={selectedTicker} compact />
+                    </div>
+                  )}
                 </div>
               </SectionFade>
             ) : null;

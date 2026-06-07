@@ -45,14 +45,24 @@ export default function FundamentalsAccordion({
   // v184 grill-me: v5 (入れ子章再編) では章扉を JudgmentDetail 側の ChapterSection で統一する
   // ため、本 component の内包章扉 (ChapterSection / SectionDivider) を非表示にする。
   hideChapterHeader = false,
+  // v185 A (2026-06-08、 user 確定): v5 章内順序「5条件→決算→TTM→会社概要」 のため章内 section を分割描画。
+  //   'earnings' = 章サマリー + 決算 (ChapterTabs / 縦並び)、 'profile' = 会社概要 (ProfileCard) のみ。
+  //   null (= v4/legacy) は従来順 (章サマリー → 会社概要 → 決算) で全 section 描画 (BC 担保)。
+  renderSection = null,
 }) {
   const isFundaLoading = !result && detail?.isLoading !== false;
+  // v185 A: renderSection で表示 section を選択。null は全 section (v4 不変)。
+  const showSummaryEarnings = renderSection == null || renderSection === 'earnings';
+  const showProfile = renderSection == null || renderSection === 'profile';
+  // v5 で本 component を 2 回 mount するため testid を section 別に分け重複回避。
+  // v4 (renderSection=null) は従来 'funda-section' を維持 (snap script / 既存参照 BC)。
+  const testId = renderSection ? `funda-section-${renderSection}` : 'funda-section';
   return (
     // Sprint 2: funda-section wrapper — feedback_testid_all_render_paths に準拠。
     // loading/errored/empty/main 全 state で testid を取得可能にする。
     // クラスなしで始める (発光バグ §C-1〜C-4 回避)。
     <div
-      data-testid="funda-section"
+      data-testid={testId}
       data-state={isFundaLoading ? 'loading' : result ? 'main' : 'empty'}
     >
       {/* === 章 2: ファンダメンタル (Sprint 2: chapterTitle「数値」→「ファンダメンタル」)
@@ -60,25 +70,30 @@ export default function FundamentalsAccordion({
           Phase G Phase 3 + v99 dogfood 3 体合議 verdict (2+3 構成):
           - v2 mode: 副柱 (ファンダメンタル) = sans 13px + muted (主柱 III と差別化)
           - default: 既存 SectionDivider「数値の根拠」 維持 (revert 安全) */}
-      {hideChapterHeader ? null : isV2 ? (
-        <ChapterSection chapterNumber="①" chapterTitle="ファンダメンタル" headerOnly tier="sub" />
-      ) : (
-        <div data-chapter-start="true">
-          <SectionDivider expandedLabel="数値の根拠" />
-        </div>
+      {(!hideChapterHeader && renderSection !== 'profile') ? (
+        isV2 ? (
+          <ChapterSection chapterNumber="①" chapterTitle="ファンダメンタル" headerOnly tier="sub" />
+        ) : (
+          <div data-chapter-start="true">
+            <SectionDivider expandedLabel="数値の根拠" />
+          </div>
+        )
+      ) : null}
+
+      {/* Sprint 2: ライター憲法サマリーブロック (章扉直後)。v185 A: earnings section に含める。 */}
+      {showSummaryEarnings && (
+        <FundamentalsChapterSummary
+          result={result}
+          guidance={guidance}
+          isLoading={isFundaLoading}
+          hasError={false}
+        />
       )}
 
-      {/* Sprint 2: ライター憲法サマリーブロック (章扉直後) */}
-      <FundamentalsChapterSummary
-        result={result}
-        guidance={guidance}
-        isLoading={isFundaLoading}
-        hasError={false}
-      />
-
       {/* === Sprint 3: ProfileCard → AccordionSection wrap (collapsed) ===
-          v104 Phase G Phase 4: ProfileCard は tab 外 (会社概要 anchor 維持)、 isV3 でも常時表示 */}
-      {isScrollV1 ? (
+          v104 Phase G Phase 4: ProfileCard は tab 外 (会社概要 anchor 維持)、 isV3 でも常時表示。
+          v185 A: profile section (v5 では章末「会社概要」) として分離。 */}
+      {showProfile && (isScrollV1 ? (
         <ProfileCard
           ticker={selectedTicker}
           companyName={result?.companyName}
@@ -104,11 +119,12 @@ export default function FundamentalsAccordion({
             onNavigateTicker={onAnalyze}
           />
         </AccordionSection>
-      )}
+      ))}
 
       {/* v104 Phase G Phase 4: Guidance + 過去 5 年 EarningsHistory + 直近 8Q を 1 tab interface に統合 (isV3 ON)。
-          isV3 OFF 時は既存 縦並びを維持 (dogfood revert 安全)。 */}
-      {isV3 ? (
+          isV3 OFF 時は既存 縦並びを維持 (dogfood revert 安全)。
+          v185 A: 決算 (今期/来期 + 過去業績 + 直近 8Q) は earnings section に含める。 */}
+      {showSummaryEarnings && (isV3 ? (
         (() => {
           // v115 user feedback: 過去 5 年 タブが 3 年分しか表示されない → label を data 件数で動的化
           const periodYears = new Set(
@@ -200,7 +216,7 @@ export default function FundamentalsAccordion({
             />
           </SectionFade>
         </>
-      )}
+      ))}
     </div>
   );
 }

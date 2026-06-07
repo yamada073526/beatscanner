@@ -33,7 +33,8 @@ function fmtPct(v) {
   return `${sign}${v.toFixed(1)}%`;
 }
 
-export default function SellZoneCard({ ticker }) {
+// v185 B (2026-06-08): compact=true で narration detail / meta / legend を抑制 (conclusion + 免責は保持)。
+export default function SellZoneCard({ ticker, compact = false }) {
   const [priceData, setPriceData] = useState(null);
   const [technical, setTechnical] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -244,9 +245,10 @@ export default function SellZoneCard({ ticker }) {
             detail は muted text-secondary 11px で 1 行に圧縮 (qa-dogfooder 段数縮小)。 */}
         <div className="szc-narration">
           <p className="szc-desc szc-desc--conclusion">{zoneDesc.conclusion}</p>
-          <p className="szc-desc szc-desc--detail">{zoneDesc.detail}</p>
+          {!compact && <p className="szc-desc szc-desc--detail">{zoneDesc.detail}</p>}
         </div>
 
+        {!compact && (
         <div className="szc-meta">
           <span>
             現在 <span className="szc-meta-value">{fmtUsd(currentPrice)}</span>
@@ -258,10 +260,13 @@ export default function SellZoneCard({ ticker }) {
             extension <span className="szc-meta-value">{fmtPct(extensionPct)}</span>
           </span>
         </div>
+        )}
 
         {/* v127 (5/29 user dogfood): チャート右端の extended / climax ラインの意味を併記。
             user「extended +15% の意味が記載ない」+ 「pivot 上抜け後 +20-25%」(S2 Profit Take、 別基準) との混同防止。
-            投資業界色ルール: amber=過熱警告 / red=climax 危険。 */}
+            投資業界色ルール: amber=過熱警告 / red=climax 危険。
+            v185 B: compact (横並び grid) では legend を抑制し card 高さを圧縮。 */}
+        {!compact && (
         <div
           className="szc-legend"
           style={{
@@ -281,6 +286,7 @@ export default function SellZoneCard({ ticker }) {
             ※「pivot 上抜け後 +20-25%」（S2 Profit Take）とは基準点が異なります
           </span>
         </div>
+        )}
 
         {/* 3 体合議 verdict M6: partial failure を visible に */}
         {(priceFailed || techFailed) && (

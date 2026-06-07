@@ -38,7 +38,8 @@ function fmtPct(v) {
   return `${sign}${v.toFixed(1)}%`;
 }
 
-export default function CupPivotCard({ ticker }) {
+// v185 B (2026-06-08): compact=true で narration detail / meta / sell 詳細を抑制 (conclusion + 損切り目安 + 免責は保持)。
+export default function CupPivotCard({ ticker, compact = false }) {
   const [technical, setTechnical] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errored, setErrored] = useState(false);
@@ -157,9 +158,10 @@ export default function CupPivotCard({ ticker }) {
       <div className="cpc-body">
         <div className="cpc-narration">
           <p className="cpc-desc cpc-desc--conclusion">{desc.conclusion}</p>
-          <p className="cpc-desc cpc-desc--detail">{detailWithPrice}</p>
+          {!compact && <p className="cpc-desc cpc-desc--detail">{detailWithPrice}</p>}
         </div>
 
+        {!compact && (
         <div className="cpc-meta">
           <span>
             pivot <span className="cpc-meta-value">{fmtUsd(pivotPrice)}</span>
@@ -196,6 +198,7 @@ export default function CupPivotCard({ ticker }) {
             </>
           )}
         </div>
+        )}
 
         {/* v126 R14-6 (5/29 user 要望、 金融アナリスト Sonnet verdict 案 A):
             CupPivotCard 内に sell section 併記。 buy narration の下に divider + sell zone narration。
@@ -206,7 +209,7 @@ export default function CupPivotCard({ ticker }) {
               <span className="cpc-section-label">{CUP_SELL_ZONE_DESC_JP[state].label}</span>
             </div>
             <p className="cpc-desc cpc-desc--conclusion cpc-desc--sell">{CUP_SELL_ZONE_DESC_JP[state].conclusion}</p>
-            <p className="cpc-desc cpc-desc--detail">{CUP_SELL_ZONE_DESC_JP[state].detail}</p>
+            {!compact && <p className="cpc-desc cpc-desc--detail">{CUP_SELL_ZONE_DESC_JP[state].detail}</p>}
             {/* v130 P1 #6 (3 体合議): 損切り具体価格を pill 形式で表示 (静的 dictionary は不変、
                 frontend inject)。 投資業界 赤 tone、 pivot との関係を hint で明示。 */}
             {stopLoss != null && (

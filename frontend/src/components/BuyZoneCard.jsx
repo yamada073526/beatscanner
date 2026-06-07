@@ -37,7 +37,8 @@ function fmtPct(v) {
   return `${sign}${v.toFixed(1)}%`;
 }
 
-export default function BuyZoneCard({ ticker }) {
+// v185 B (2026-06-08): compact=true で narration detail / meta を抑制 (conclusion + 免責は保持)。
+export default function BuyZoneCard({ ticker, compact = false }) {
   const [technical, setTechnical] = useState(null);
   const [priceData, setPriceData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -175,9 +176,10 @@ export default function BuyZoneCard({ ticker }) {
       <div className="bzc-body">
         <div className="bzc-narration">
           <p className="bzc-desc bzc-desc--conclusion">{conclusionText}</p>
-          <p className="bzc-desc bzc-desc--detail">{detailText}</p>
+          {!compact && <p className="bzc-desc bzc-desc--detail">{detailText}</p>}
         </div>
 
+        {!compact && (
         <div className="bzc-meta">
           <span>
             現在 <span className="bzc-meta-value">{fmtUsd(currentPrice)}</span>
@@ -202,6 +204,7 @@ export default function BuyZoneCard({ ticker }) {
             </span>
           )}
         </div>
+        )}
 
         {/* 強制 footer (citation + disclaimer) */}
         <footer className="bzc-footer">

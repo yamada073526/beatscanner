@@ -154,6 +154,69 @@ function SkeletonChip() {
 }
 
 /**
+ * v185 E (2026-06-08): 4 期間を 1 grid に並べる helper。loading=true で SkeletonChip。
+ */
+function PeriodGrid({ periods, periodsData, loading }) {
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: 'var(--space-4, 16px)',
+      }}
+    >
+      {periods.map((p) =>
+        loading ? (
+          <SkeletonChip key={p.key} />
+        ) : (
+          <PeriodChip key={p.key} periodDef={p} periodData={periodsData?.[p.key]} />
+        )
+      )}
+    </div>
+  );
+}
+
+/**
+ * v185 E: 短期 (1W〜6M) / 長期 (1Y〜10Y) を hairline + ラベルで 2 段に分割表示。
+ * user dogfood「期間別リターンの違和感」 = ①桁不揃い ②緑一色 ③短期/長期区切りなし のうち
+ * ③ を解消 (短期=値動き / 長期=トレンド の視線分離)。①桁揃えは ds-stat__value の
+ * tabular-nums + center 揃えで既に担保、②緑一色は投資業界色ルール (上昇=緑) のため不変。
+ */
+function TermLabel({ text }) {
+  return (
+    <div
+      style={{
+        fontSize: 10.5,
+        fontWeight: 600,
+        letterSpacing: '0.08em',
+        color: 'var(--text-muted)',
+        textTransform: 'uppercase',
+        marginBottom: 'var(--space-1, 4px)',
+      }}
+    >
+      {text}
+    </div>
+  );
+}
+
+function TermSplitGrid({ periodsData, loading }) {
+  const short = PERIODS.slice(0, 4); // 1W / 1M / 3M / 6M
+  const long = PERIODS.slice(4);     // 1Y / 3Y / 5Y / 10Y
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3, 12px)' }}>
+      <div>
+        <TermLabel text="短期" />
+        <PeriodGrid periods={short} periodsData={periodsData} loading={loading} />
+      </div>
+      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--space-3, 12px)' }}>
+        <TermLabel text="長期" />
+        <PeriodGrid periods={long} periodsData={periodsData} loading={loading} />
+      </div>
+    </div>
+  );
+}
+
+/**
  * SectionLabel — Sprint 6 multi-review fix で導入。
  *
  * UI/UX agent + qa-dogfooder 共通指摘: 上下の KpiStrip / MetricChip 群と視覚的に
@@ -195,6 +258,9 @@ export default function ReturnGrid({
   frameless = true,
   testId = 'return-grid',
   sectionLabel = '期間別累積リターン',
+  // v185 E (2026-06-08): v5 のみ短期 (1W〜6M) / 長期 (1Y〜10Y) を hairline + ラベルで 2 段に分割。
+  //   default false = 従来 4×2 一括 grid (v4 / ETF パネル不変、 共有 component の BC 担保)。
+  splitByTerm = false,
 }) {
   const { data, loading } = usePeriodReturns(ticker);
 
@@ -210,17 +276,11 @@ export default function ReturnGrid({
         }}
       >
         <SectionLabel text={sectionLabel} />
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: 'var(--space-4, 16px)',
-          }}
-        >
-          {PERIODS.map((p) => (
-            <SkeletonChip key={p.key} />
-          ))}
-        </div>
+        {splitByTerm ? (
+          <TermSplitGrid loading />
+        ) : (
+          <PeriodGrid periods={PERIODS} loading />
+        )}
       </div>
     );
   }
@@ -248,21 +308,11 @@ export default function ReturnGrid({
       }}
     >
       <SectionLabel text={sectionLabel} />
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 'var(--space-4, 16px)',
-        }}
-      >
-        {PERIODS.map((p) => (
-          <PeriodChip
-            key={p.key}
-            periodDef={p}
-            periodData={data.periods[p.key]}
-          />
-        ))}
-      </div>
+      {splitByTerm ? (
+        <TermSplitGrid periodsData={data.periods} />
+      ) : (
+        <PeriodGrid periods={PERIODS} periodsData={data.periods} />
+      )}
     </div>
   );
 }
