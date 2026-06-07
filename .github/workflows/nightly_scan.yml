@@ -97,10 +97,11 @@ jobs:
             -H "X-Cron-Secret: $CRON_SECRET" "$BASE/api/cron/cup-notify" | tail -5
 
       # CAN-SLIM Phase 2 Sprint 2: C 条件 (EPS YoY%) nightly scan
+      # Phase 3 Sprint 3 拡張: S 条件 (buyback_yield / volume_surge_pct) 追加 + upsert 失敗率 warning
       # gate 1 確定: cup-scan への piggyback なし、独立 cron として追加。
       # cup-scan / rs-scan の後に直列実行 (FMP rate limit の重複を避ける)。
       # feedback_railway_native_cron: Railway native cron は発火停止 → GHA 必須。
-      - name: CAN-SLIM C 条件 scan (EPS YoY%)
+      - name: CAN-SLIM C/A/N/S 条件 scan
         id: canslim
         continue-on-error: true
         run: |
@@ -110,12 +111,21 @@ jobs:
             -d "$BODY" "$BASE/api/cron/canslim-scan")
           echo "$resp" | tail -1
           body=$(echo "$resp" | sed '$d')
-          echo "$body" | jq '{processed_count,eps_computed_count,eps_null_count,upserted_count,failed_count,calc_date}' 2>/dev/null || true
+          echo "$body" | jq '{processed_count,eps_computed_count,eps_null_count,upserted_count,failed_count,buyback_computed_count,volume_surge_computed_count,calc_date}' 2>/dev/null || true
           # eps_computed_count が processed の 30% 未満なら警告 (EPS data 取得不良の検知)
           proc=$(echo "$body" | jq -r '.processed_count // 0' 2>/dev/null || echo 0)
           eps_ok=$(echo "$body" | jq -r '.eps_computed_count // 0' 2>/dev/null || echo 0)
           if [ "${proc:-0}" -gt 0 ] && [ "${eps_ok:-0}" -lt $((proc * 30 / 100)) ]; then
             echo "::warning::CAN-SLIM scan の eps_computed が少ない (computed=$eps_ok / processed=$proc) — FMP earnings_surprises を確認。"
+          fi
+          # MINOR (SPEC §S3-b): upsert 失敗率 warning (GRANT 漏れ silent fail 検知)
+          # eps_computed の 50% 未満しか upsert できていない場合は Supabase GRANT を確認。
+          upserted=$(echo "$body" | jq -r '.upserted_count // 0' 2>/dev/null || echo 0)
+          if [ "${eps_ok:-0}" -gt 0 ] && [ "${upserted:-0}" -lt $((eps_ok / 2)) ]; then
+            echo "::warning::CAN-SLIM scan の upsert 失敗率が高い (upserted=$upserted / eps_computed=$eps_ok)。Supabase screener_fundamentals テーブルの service_role GRANT を確認してください (feedback_supabase_grant_bug)。"
+            echo "### ⚠️ CAN-SLIM upsert 失敗率警告" >> "$GITHUB_STEP_SUMMARY"
+            echo "- upserted: \`$upserted\` / eps_computed: \`$eps_ok\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- 対処: Supabase SQL Editor で \`grant select, insert, update, delete on public.screener_fundamentals to service_role;\` を実行" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Verify freshness

@@ -1,0 +1,59 @@
+-- ========================================================================
+-- screener_fundamentals_volume_surge マイグレーション (2026-06-07)
+-- セッション: CAN-SLIM Phase 3 Sprint 3 (PGE Generator + main)
+--
+-- 目的: screener_fundamentals テーブルに volume_surge_pct numeric カラムを追加。
+--       S 条件 (Supply/Demand = 需給) のうち「出来高急増」を独立カラムとして持つ。
+--       gate 1 確定: 出来高急増は +40% を閾値とする独立カラム (Cup-Handle 従属でなく独立)。
+--
+--       値の定義 (純 Python 計算、 §38/§5 欠損ガード):
+--         volume_surge_pct = (volume / averageVolume - 1) * 100
+--           例: 当日出来高が 50 日平均の 1.40 倍 → +40.0 (= 40.0 を格納)
+--           +40% 閾値 = cup-scan の breakout_volume_multiplier=1.40 と同基準感覚で整合。
+--         data source: FMP /stable/profile の volume + averageVolume
+--           (canslim-scan が sector ガード用に既に fetch している profile を相乗り、
+--            追加 FMP call ゼロ。 batch-quote には averageVolume が無いため profile を使う)
+--         欠損ガード: averageVolume 欠損/0 / volume 欠損 → NULL (0 除算 + 誤値の回避)
+--
+--       read endpoint (Sprint 4) は condition=volume_surge&min_pct=40 を
+--       `>= min_pct` (NULL 自動除外) で直接フィルタできる (pct-above-average 格納のため)。
+--
+-- なぜ独立カラムが必要か:
+--   - FMP /stable/batch-quote / quote には averageVolume field が無い (実測 2026-06-07、
+--     batch-quote の keys に avgVolume 不在、 priceAvg50/200 は価格 MA であって出来高ではない)。
+--   - averageVolume は /stable/profile にのみ存在 (averageVolume + volume を同梱)。
+--   - near_high_pct (Sprint 2) のように batch-quote から導出できないため、
+--     profile fetch (sector ガードで既に発生) から計算して独立カラムに永続化する。
+--
+-- 設計:
+--   - adding-only (既存カラムの型・制約は一切変更しない)
+--   - "if not exists" で冪等実行可能
+--   - GRANT 追加不要: 既存テーブルへの column 追加は table 単位の service_role
+--     GRANT (2026-06-07_screener_fundamentals_grants.sql) に包含される
+--     (feedback_supabase_grant_bug.md 確認: column 単位 GRANT は table GRANT に包含)
+--
+-- 適用方法 (user が Supabase SQL Editor で実行):
+--   1. 本ファイル全体を Supabase SQL Editor に貼り付けて実行
+--   2. 完了確認: 下記 SELECT で volume_surge_pct カラムの存在を確認
+--
+-- 完了確認 SQL:
+--   select column_name, data_type
+--     from information_schema.columns
+--    where table_name = 'screener_fundamentals'
+--      and column_name = 'volume_surge_pct';
+--   -- 期待結果: 1 行 (column_name=volume_surge_pct, data_type=numeric)
+--
+-- Phase 3 Sprint 3 着地後の canslim-scan はこのカラムに書き込む。
+-- 未適用のままデプロイしても eps_yoy_pct (C) / eps_cagr_3y / roe (A) / near_high_pct (N) /
+-- buyback_yield (S) は影響なし — volume_surge_pct のみ "column not found" で upsert skip
+-- されるが backend は graceful に fallback する (turnaround / near_high_pct と同パターン)。
+-- ========================================================================
+
+alter table screener_fundamentals
+  add column if not exists volume_surge_pct numeric;
+
+-- 完了確認:
+-- select column_name, data_type
+--   from information_schema.columns
+--  where table_name = 'screener_fundamentals'
+--    and column_name = 'volume_surge_pct';

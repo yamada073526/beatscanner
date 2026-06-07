@@ -1064,31 +1064,11 @@ async def get_valuation_extras(ticker: str, request: Request):
     # を 4Q 合計して TTM 算出する。
     # FMP /stable/key-metrics-ttm の marketCap field は TTM 後置なし (NVDA 確認済)。
     market_cap = _pick(m_rec, "marketCap", "marketCapTTM", "enterpriseValueTTM")
-    net_repurchase_ttm: float | None = None
-    if isinstance(cf_data, list) and cf_data:
-        repurchase_values: list[float] = []
-        for q in cf_data[:4]:  # 最新 4Q
-            if not isinstance(q, dict):
-                continue
-            v = _pick(q, "commonStockRepurchased", "netCommonStockRepurchased",
-                      "commonStockRepurchasedTTM")
-            if v is not None:
-                repurchase_values.append(v)
-        if repurchase_values:
-            net_repurchase_ttm = sum(repurchase_values)
-
-    buyback_yield: float | None = None
-    if market_cap and market_cap > 0 and net_repurchase_ttm is not None:
-        # 負値 (買い戻し) → 正の利回り、 正値 (発行) → 0 (株主還元として扱わない)
-        if net_repurchase_ttm < 0:
-            buyback_yield = abs(net_repurchase_ttm) / market_cap
-        else:
-            buyback_yield = 0.0
-    # alt: shareholderYieldTTM が直接利回り化されている場合 (FMP plan 差異対応)
-    if buyback_yield is None:
-        shareholder_yield = _pick(m_rec, "shareholderYieldTTM")
-        if shareholder_yield is not None and dividend_yield is not None:
-            buyback_yield = max(0.0, shareholder_yield - dividend_yield)
+    # buyback_yield は共有 helper _calc_buyback_yield に委譲 (canslim-scan と二重実装禁止、
+    # feedback_edit_replace_all_drift)。helper は本来この per-ticker ブロックにあった
+    # 計算式 (commonStockRepurchased 4Q 合計 / marketCap、 負値=買い戻し、 alt=shareholderYield-dividend)
+    # を finite-float-first で 1:1 再現しており数値は不変。
+    buyback_yield: float | None = _calc_buyback_yield(cf_data, market_cap, dividend_yield, m_rec)
 
     # ── dividendBuybackRatio = div / (div + buyback) ────────────────────────
     dividend_buyback_ratio: float | None = None
@@ -18360,18 +18340,65 @@ async def serve_privacy_html() -> HTMLResponse:
 
 def _delete_screener_fundamentals_before(cutoff_date: date) -> int:
     """retention: cutoff_date より古い screener_fundamentals を削除。 返却は削除行数 (失敗時 -1)。
-    _delete_pattern_signals_before と同方針 (Supabase Free 500MB 圧迫回避)。"""
+    _delete_pattern_signals_before と同方針 (Supabase Free 500MB 圧迫回避)。
+
+    MINOR (SPEC §S3-d): 最新 calc_date 保護ガード。
+    nightly 連続障害で 30 日超 stale になった場合でも、最新の calc_date を持つ行は
+    常に保持する (全行削除 → screener 空化を防止)。
+    実装: cutoff より古い行のうち、calc_date が現在の最大値でない行のみ削除。
+    Supabase Python SDK は複合条件 DELETE を複数 filter の chain で表現する。
+    """
     sb = _get_supabase_service()
     if sb is None:
         return -1
     try:
-        res = (
+        # ── STEP 1: 現在の最大 calc_date を取得 (保護対象) ──
+        max_res = (
             sb.table("screener_fundamentals")
-            .delete()
+            .select("calc_date")
+            .order("calc_date", desc=True)
+            .limit(1)
+            .execute()
+        )
+        max_date_str: "str | None" = None
+        if hasattr(max_res, "data") and max_res.data:
+            max_date_str = max_res.data[0].get("calc_date")
+
+        # ── STEP 2: cutoff より古い行を取得して最大 calc_date を除外して削除 ──
+        # Supabase client では「< cutoff かつ != max_date」を直接 DELETE できないため、
+        # cutoff より古い行の calc_date 値を収集し、max_date を除いて削除する。
+        old_dates_res = (
+            sb.table("screener_fundamentals")
+            .select("calc_date")
             .lt("calc_date", cutoff_date.isoformat())
             .execute()
         )
-        return len(res.data) if hasattr(res, "data") and res.data else 0
+        if not (hasattr(old_dates_res, "data") and old_dates_res.data):
+            return 0  # 削除対象なし
+
+        # 削除対象 calc_date 集合 (max_date を除外 = 最新保護)
+        old_dates = {row["calc_date"] for row in old_dates_res.data if "calc_date" in row}
+        if max_date_str and max_date_str in old_dates:
+            old_dates.discard(max_date_str)
+            print(f"[screener_fundamentals] 最新 calc_date={max_date_str} を保護 (30日超 stale だが最新のため削除しない)")
+
+        if not old_dates:
+            return 0  # 保護後に削除対象なし
+
+        # calc_date in old_dates でまとめて削除 (Supabase は in_ filter をサポート)
+        deleted_total = 0
+        for d_str in old_dates:
+            try:
+                res = (
+                    sb.table("screener_fundamentals")
+                    .delete()
+                    .eq("calc_date", d_str)
+                    .execute()
+                )
+                deleted_total += len(res.data) if hasattr(res, "data") and res.data else 0
+            except Exception as e_inner:
+                print(f"[screener_fundamentals] delete for calc_date={d_str} failed: {e_inner}")
+        return deleted_total
     except Exception as e:
         print(f"[screener_fundamentals] delete_before failed: {e}")
         return -1
@@ -18571,6 +18598,17 @@ def _calc_eps_yoy_pct_from_surprises(
         return None
 
     yoy = (eps_actual - eps_prev) / eps_prev * 100
+
+    # ── MINOR (SPEC §S3-c): 巨大 YoY clip (§5 誇張表示ガード) ──────────────
+    # prev ≈ 0.001 で 9999% 等の near-zero-base アーティファクトを抑制。
+    # cap = 999.9: genuine 高成長 (MU+682% / MCHP+418%) は保持、
+    #   非現実的アーティファクト (9999%+) のみ除去。
+    # 下限 -100.0: EPS は -100% 未満になり得ない (§38 安全ガード)。
+    # ⚠️ 最終 cap 値は S3 着地後の 6 体合議で §5 観点 review 予定 (docstring 明記)。
+    _EPS_YOY_CAP_MAX = 999.9
+    _EPS_YOY_CAP_MIN = -100.0
+    yoy = max(_EPS_YOY_CAP_MIN, min(_EPS_YOY_CAP_MAX, yoy))
+
     return round(yoy, 1)
 
 
@@ -18604,6 +18642,111 @@ def _calc_near_high_pct(
         return None
 
 
+def _calc_volume_surge_pct(
+    volume: "float | None",
+    average_volume: "float | None",
+) -> "float | None":
+    """S 条件: 出来高急増率を計算する (モジュールレベル helper、 純 Python)。
+
+    volume_surge_pct = (volume / averageVolume - 1) * 100
+    例: 当日出来高が 50 日平均の 1.40 倍 → +40.0
+
+    欠損ガード (§38/§5 / 0 除算回避):
+      - volume が None または 0 以下 → None
+      - average_volume が None または 0 以下 → None (0 除算回避)
+      - 計算例外 → None
+
+    返却: round(surge_pct, 1) or None
+
+    ⚠️ データソース注記: averageVolume は FMP /stable/profile にのみ存在し、
+    /stable/batch-quote には含まれない (2026-06-07 実測確認)。
+    _compute_one 内で profile を別途 fetch して取得する。
+    """
+    if volume is None or average_volume is None:
+        return None
+    try:
+        v = float(volume)
+        av = float(average_volume)
+    except (ValueError, TypeError):
+        return None
+    if v <= 0 or av <= 0:
+        return None
+    try:
+        return round((v / av - 1.0) * 100.0, 1)
+    except (ZeroDivisionError, OverflowError):
+        return None
+
+
+def _calc_buyback_yield(
+    cf_data: "list[dict]",
+    market_cap: "float | None",
+    dividend_yield: "float | None",
+    m_rec: "dict",
+) -> "float | None":
+    """S 条件: 自社株買い利回りを計算する (モジュールレベル helper、 純 Python)。
+
+    計算: -commonStockRepurchased 4Q 合計 / marketCap
+    FMP convention: 自社株買いは負値 (cash outflow)。 正値は株式発行。
+
+    alt 経路: shareholderYieldTTM - dividendYield (FMP plan 差異対応、 primary が失敗時)。
+
+    欠損ガード:
+      - cf_data が空 / market_cap が None / 0 以下 → primary None
+      - net_repurchase_ttm が正値 (株式発行) → 0.0
+      - alt 経路の dividendYield が None → alt 不可
+
+    返却: buyback_yield (0.0 以上の float) or None
+
+    ⚠️ per-ticker 表示用 buybackYield と計算ロジックを 1:1 共有するため、
+    この helper は main.py:1060-1091 の計算式を忠実に再現している。
+    数値変化が発生しないこと (feedback_edit_replace_all_drift)。
+    """
+    # ── primary: cash-flow-statement の commonStockRepurchased 4Q 合計 ──
+    # ★ per-ticker 側 (_pick: 「最初に見つかった finite float」) と 1:1 mirror。
+    #   `or` チェーンだと 0.0 (falsy) を skip して挙動が乖離するため、
+    #   finite-float-first 選択で _pick semantics を厳密再現 (feedback_edit_replace_all_drift)。
+    def _first_finite(src: dict, *keys) -> "float | None":
+        for k in keys:
+            raw = src.get(k) if isinstance(src, dict) else None
+            if isinstance(raw, (int, float)) and math.isfinite(float(raw)):
+                return float(raw)
+        return None
+
+    net_repurchase_ttm: "float | None" = None
+    if isinstance(cf_data, list) and cf_data:
+        repurchase_values: list = []
+        for q in cf_data[:4]:  # 最新 4Q
+            if not isinstance(q, dict):
+                continue
+            v = _first_finite(
+                q, "commonStockRepurchased", "netCommonStockRepurchased",
+                "commonStockRepurchasedTTM",
+            )
+            if v is not None:
+                repurchase_values.append(v)
+        if repurchase_values:
+            net_repurchase_ttm = sum(repurchase_values)
+
+    buyback_yield: "float | None" = None
+    if market_cap is not None and market_cap > 0 and net_repurchase_ttm is not None:
+        if net_repurchase_ttm < 0:
+            buyback_yield = abs(net_repurchase_ttm) / market_cap
+        else:
+            buyback_yield = 0.0
+
+    # ── alt: shareholderYieldTTM - dividendYield (FMP plan 差異対応) ──
+    # per-ticker 側 `_pick(m_rec, "shareholderYieldTTM")` (finite float) と 1:1 mirror。
+    if buyback_yield is None:
+        shareholder_yield = _first_finite(m_rec, "shareholderYieldTTM")
+        if shareholder_yield is not None and dividend_yield is not None:
+            try:
+                buyback_yield = max(0.0, shareholder_yield - float(dividend_yield))
+            except (ValueError, TypeError):
+                pass
+
+    return buyback_yield
+
+
 def _upsert_screener_fundamental(
     ticker: str,
     calc_date: date,
@@ -18612,11 +18755,14 @@ def _upsert_screener_fundamental(
     roe: "float | None" = None,
     turnaround: "bool | None" = None,
     near_high_pct: "float | None" = None,
+    buyback_yield: "float | None" = None,
+    volume_surge_pct: "float | None" = None,
 ) -> bool:
     """screener_fundamentals テーブルに各指標を upsert。
 
     Phase 3 Sprint 1 対応: eps_cagr_3y / roe / turnaround 引数を追加。
     Phase 3 Sprint 2 対応: near_high_pct 引数を追加 (N 条件 = price / yearHigh)。
+    Phase 3 Sprint 3 対応: buyback_yield / volume_surge_pct 引数を追加 (S 条件)。
     None 値のカラムは payload に含めない = 既存 DB 値を上書きしない (後方互換)。
     C 条件 (eps_yoy_pct) は引数デフォルト None → payload に含まれないため
     既存値が上書きされず Phase 2 の C 計算が回帰しない。
@@ -18624,7 +18770,8 @@ def _upsert_screener_fundamental(
     turnaround カラムが DB に未作成 (migration 未適用) の場合、
     Supabase が "column not found" エラーを返す可能性がある。
     このケースでは turnaround のみ省いて再 upsert し C/A 値を保護する (graceful fallback)。
-    同様に near_high_pct カラムが未作成の場合も graceful fallback。
+    同様に near_high_pct / volume_surge_pct カラムが未作成の場合も graceful fallback。
+    buyback_yield は Phase 2 で schema 先行済 (optional 不要、通常 upsert)。
 
     upsert on_conflict=ticker,calc_date。失敗時 False (呼び出し側でログ)。
     """
@@ -18647,6 +18794,12 @@ def _upsert_screener_fundamental(
         row["turnaround"] = turnaround
     if near_high_pct is not None:
         row["near_high_pct"] = near_high_pct
+    # buyback_yield は schema 先行済 (Phase 2 migration で追加済)。optional 不要。
+    if buyback_yield is not None:
+        row["buyback_yield"] = round(buyback_yield, 6)
+    # volume_surge_pct は Phase 3 Sprint 3 で migration 追加。migration 未適用時に graceful fallback。
+    if volume_surge_pct is not None:
+        row["volume_surge_pct"] = volume_surge_pct
 
     try:
         sb.table("screener_fundamentals").upsert(
@@ -18656,9 +18809,12 @@ def _upsert_screener_fundamental(
         return True
     except Exception as e:
         err_str = str(e)
-        # turnaround / near_high_pct カラム未作成時の graceful fallback:
-        # 問題カラムを外して再 upsert (C/A/N 値を保護)
-        optional_cols = [c for c in ("turnaround", "near_high_pct") if c in err_str and c in row]
+        # turnaround / near_high_pct / volume_surge_pct カラム未作成時の graceful fallback:
+        # 問題カラムを外して再 upsert (C/A/N/S buyback 値を保護)
+        optional_cols = [
+            c for c in ("turnaround", "near_high_pct", "volume_surge_pct")
+            if c in err_str and c in row
+        ]
         if optional_cols:
             row_reduced = {k: v for k, v in row.items() if k not in optional_cols}
             try:
@@ -18755,13 +18911,21 @@ async def cron_canslim_scan(
         )
         return v is not None
 
-    # ── N 条件: yearHigh + price 一括 pre-fetch (FMP /stable/batch-quote) ──────
-    # universe 全銘柄の yearHigh と price を事前に一括取得して map 化。
+    # ── N 条件 + S 条件: batch-quote 一括 pre-fetch (FMP /stable/batch-quote) ──────
+    # universe 全銘柄の yearHigh / price / marketCap を事前に一括取得して map 化。
+    # - N 条件: yearHigh + price → near_high_pct = price / yearHigh
+    # - S 条件 buyback: marketCap → _calc_buyback_yield で利回り計算
     # _compute_one 内で per-ticker quote fetch せず map から参照することで FMP rate limit 増を最小化。
     # (SPEC §5 Sprint 2 完了基準 e: batch-quote 一括 pre-fetch 推奨)
     # 100 銘柄ずつ chunk して取得 (batch-quote は large list でも 1 call、 FMP Ultimate 対応)。
+    #
+    # ⚠️ S 条件 volume_surge: averageVolume は batch-quote に存在しない (2026-06-07 実測確認)。
+    # averageVolume は /stable/profile にのみ存在するため、_compute_one 内で profile を
+    # per-ticker fetch する (profile は _fetch_sector_industry が 24h cache で温めているため
+    # 多くは cache hit = 追加ネットワーク call ゼロに近い)。
     year_high_map: dict[str, float | None] = {}    # {ticker_upper: yearHigh_float_or_None}
     _near_high_price_map: dict[str, float | None] = {}  # {ticker_upper: price_float_or_None}
+    _market_cap_map: dict[str, float | None] = {}  # {ticker_upper: marketCap_float_or_None} (S 条件 buyback 用)
     try:
         _yh_chunk_size = 100
         for _yh_i in range(0, len(tickers), _yh_chunk_size):
@@ -18789,6 +18953,13 @@ async def cron_canslim_scan(
                     except (ValueError, TypeError):
                         _price_val = None
                     _near_high_price_map[_sym_upper] = _price_val if (_price_val and _price_val > 0) else None
+                    # marketCap: S 条件 buyback 利回り計算用 (実測確認: batch-quote は marketCap を持つ)
+                    _mc_raw = _yh_row.get("marketCap")
+                    try:
+                        _mc_val = float(_mc_raw) if _mc_raw is not None else None
+                    except (ValueError, TypeError):
+                        _mc_val = None
+                    _market_cap_map[_sym_upper] = _mc_val if (_mc_val and _mc_val > 0) else None
             except Exception as _yh_chunk_err:
                 print(f"[canslim-scan] batch_quotes chunk failed (idx={_yh_i}): {_yh_chunk_err}")
                 # chunk 取得失敗は map に追加せず → _compute_one で None 扱い (graceful)
@@ -18797,13 +18968,21 @@ async def cron_canslim_scan(
         # 全 chunk 失敗でも near_high_pct=None で upsert を続行 (C/A 値は影響なし)
 
     async def _compute_one(ticker: str):
-        """1 ticker の C/A/N 指標を計算して
-        (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, err) を返す。
+        """1 ticker の C/A/N/S 指標を計算して
+        (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct,
+         buyback_yield, volume_surge_pct, err) を返す。
 
         Phase 3 Sprint 1 拡張: A 条件 (eps_cagr_3y / roe / turnaround) を追加。
         Phase 3 Sprint 2 拡張: N 条件 (near_high_pct = price / yearHigh) を追加。
           - yearHigh は outer scope の year_high_map から取得 (batch-quote 一括 pre-fetch)。
           - 追加 FMP call ゼロ (yearHigh は pre-fetch 済)。
+        Phase 3 Sprint 3 拡張: S 条件 (buyback_yield / volume_surge_pct) を追加。
+          - buyback_yield: _calc_buyback_yield helper (per-ticker 既存計算と 1:1 共有)。
+            cf_data = cash-flow-statement(period=quarter, limit=4) を per-ticker fetch。
+            market_cap は _market_cap_map (batch-quote pre-fetch 済) から参照。
+          - volume_surge_pct: _calc_volume_surge_pct helper。
+            averageVolume は /stable/profile から取得 (batch-quote には含まれない)。
+            profile は _fetch_sector_industry が 24h cache で温めているため多くは cache hit。
         C 条件 (eps_yoy_pct) の計算ロジックは変更なし (後方互換)。
 
         fetch + 計算のみ (upsert / counter 更新はしない = post-gather で逐次)。
@@ -18814,29 +18993,31 @@ async def cron_canslim_scan(
         ★ ROE は key-metrics-ttm の returnOnEquityTTM を使用 (直近 TTM が最も安定)。
         ★ sector ガードは _fetch_sector_industry を相乗り (24h cache 共有)。
         ★ N 条件 near_high_pct は yearHigh map (pre-fetch) から price/yearHigh で計算。
+        ★ S 条件 buyback は cash-flow-statement (per-ticker) + market_cap (pre-fetch) から計算。
+        ★ S 条件 volume_surge は profile の averageVolume (24h cache) から計算。
 
-        ★★ tuple arity: 全 return 文が 7 要素であること (feedback_pge_loop_pitfalls ルール 1)。
-        return ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, err
+        ★★ tuple arity: 全 return 文が 9 要素であること (feedback_pge_loop_pitfalls ルール 1)。
+        return ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, err
         """
         try:
             # ── C 条件: EPS YoY% ─────────────────────────────────────────────
             try:
                 surprises_raw = await client.earnings_surprises(ticker, limit=8)
             except Exception:
-                return ticker, None, None, None, None, None, "earnings_surprises_failed"
+                return ticker, None, None, None, None, None, None, None, "earnings_surprises_failed"
             if not surprises_raw:
-                return ticker, None, None, None, None, None, "earnings_surprises_empty"
+                return ticker, None, None, None, None, None, None, None, "earnings_surprises_empty"
 
             surprises_past = [s for s in surprises_raw if _has_eps_actual(s)]
             if not surprises_past:
-                return ticker, None, None, None, None, None, "no_eps_actual_in_surprises"
+                return ticker, None, None, None, None, None, None, None, "no_eps_actual_in_surprises"
 
             latest = sorted(
                 surprises_past, key=lambda d: d.get("date") or "", reverse=True
             )[0]
             entry_date_str = latest.get("date") or ""
             if not entry_date_str:
-                return ticker, None, None, None, None, None, "no_entry_date"
+                return ticker, None, None, None, None, None, None, None, "no_entry_date"
             eps_actual = _safe_eps_float(
                 latest.get("eps")
                 or latest.get("epsActual")
@@ -18928,9 +19109,67 @@ async def cron_canslim_scan(
             except Exception:
                 near_high_pct = None  # 計算失敗 → NULL (欠損ガード)
 
-            return ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, None
+            # ── S 条件: 自社株買い利回り (buyback_yield) ─────────────────────
+            # cash-flow-statement(period=quarter, limit=4) を per-ticker fetch。
+            # S 条件唯一の追加 FMP call/ticker (profile は sector ガードで 24h cache 共有)。
+            buyback_yield: float | None = None
+            try:
+                cf_url = (
+                    f"https://financialmodelingprep.com/stable/cash-flow-statement"
+                    f"?symbol={ticker.upper()}&period=quarter&limit=4&apikey={fmp_key}"
+                )
+                cf_cache_key = f"cf-q::{ticker.upper()}"
+                cf_data = await safe_fmp_get(cf_url, cf_cache_key, ttl=CACHE_TTL_PROFILE)
+                if isinstance(cf_data, list) and cf_data:
+                    # m_rec: shareholderYieldTTM alt 経路用 (key-metrics-ttm、ROE fetch 済なら再利用)
+                    # ここでは {} で alt なしでも primary 経路で十分
+                    buyback_yield = _calc_buyback_yield(
+                        cf_data,
+                        _market_cap_map.get(ticker.upper()),
+                        dividend_yield=None,  # alt 経路は key-metrics-ttm 未 fetch の場合は省略
+                        m_rec={},
+                    )
+            except Exception:
+                buyback_yield = None  # fetch 失敗 → NULL (欠損ガード)
+
+            # ── S 条件: 出来高急増率 (volume_surge_pct) ─────────────────────
+            # averageVolume は /stable/profile にのみ存在 (batch-quote には含まれない)。
+            # profile は _fetch_sector_industry が 24h cache 共有 → safe_fmp_get で cache hit 期待。
+            volume_surge_pct: float | None = None
+            try:
+                profile_url = (
+                    f"https://financialmodelingprep.com/stable/profile"
+                    f"?symbol={ticker.upper()}&apikey={fmp_key}"
+                )
+                profile_cache_key = f"profile::{ticker.upper()}"
+                profile_data = await safe_fmp_get(
+                    profile_url, profile_cache_key, ttl=CACHE_TTL_PROFILE
+                )
+                if profile_data is not None:
+                    p_rec = (
+                        profile_data[0] if isinstance(profile_data, list) and profile_data
+                        else (profile_data if isinstance(profile_data, dict) else {})
+                    )
+                    avg_vol_raw = p_rec.get("averageVolume")
+                    vol_raw = p_rec.get("volume")
+                    avg_vol: float | None = None
+                    vol: float | None = None
+                    try:
+                        avg_vol = float(avg_vol_raw) if avg_vol_raw is not None else None
+                    except (ValueError, TypeError):
+                        avg_vol = None
+                    try:
+                        vol = float(vol_raw) if vol_raw is not None else None
+                    except (ValueError, TypeError):
+                        vol = None
+                    volume_surge_pct = _calc_volume_surge_pct(vol, avg_vol)
+            except Exception:
+                volume_surge_pct = None  # fetch 失敗 → NULL (欠損ガード)
+
+            # ★★ tuple arity 9 要素確認 (feedback_pge_loop_pitfalls ルール 1)
+            return ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, None
         except Exception as e:
-            return ticker, None, None, None, None, None, f"unexpected: {e}"
+            return ticker, None, None, None, None, None, None, None, f"unexpected: {e}"
 
     # fetch + 計算: worker_count>1 で並列 (asyncio.Semaphore)、 =1 で逐次。
     # ★ 6体合議 critical 対応: 旧実装は完全逐次で full universe (3000) で GHA timeout (30min) 超過
@@ -18957,13 +19196,16 @@ async def cron_canslim_scan(
             results.append(await _compute_one(ticker))
 
     # count + upsert (post-gather 逐次、 cup-scan と同型)
-    # Phase 3 Sprint 2: result tuple が 7 要素
-    # (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, err)
-    a_computed = 0       # CAGR が算出できた件数
-    roe_computed = 0     # ROE が取得できた件数
-    near_high_computed = 0  # near_high_pct が算出できた件数
+    # Phase 3 Sprint 3: result tuple が 9 要素
+    # (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct,
+    #  buyback_yield, volume_surge_pct, err)
+    a_computed = 0           # CAGR が算出できた件数
+    roe_computed = 0         # ROE が取得できた件数
+    near_high_computed = 0   # near_high_pct が算出できた件数
+    buyback_computed = 0     # buyback_yield が算出できた件数 (S 条件)
+    volume_surge_computed = 0  # volume_surge_pct が算出できた件数 (S 条件)
     for result in results:
-        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, err = result
+        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, err = result
         if err:
             failed.append({"ticker": ticker, "reason": err})
             continue
@@ -18977,12 +19219,18 @@ async def cron_canslim_scan(
             roe_computed += 1
         if near_high_pct is not None:
             near_high_computed += 1
+        if buyback_yield is not None:
+            buyback_computed += 1
+        if volume_surge_pct is not None:
+            volume_surge_computed += 1
         if not dry_run:
             ok = await asyncio.to_thread(
                 _upsert_screener_fundamental,
                 ticker, today, eps_yoy_pct, eps_cagr_3y, roe,
                 turnaround if turnaround else None,
                 near_high_pct,
+                buyback_yield,
+                volume_surge_pct,
             )
             if ok:
                 upserted += 1
@@ -18996,6 +19244,8 @@ async def cron_canslim_scan(
         "a_cagr_computed_count": a_computed,
         "roe_computed_count": roe_computed,
         "near_high_computed_count": near_high_computed,
+        "buyback_computed_count": buyback_computed,
+        "volume_surge_computed_count": volume_surge_computed,
         "upserted_count": upserted,
         "failed_count": len(failed),
         "failed_tickers": failed[:20],
@@ -19004,7 +19254,7 @@ async def cron_canslim_scan(
         "universe_size": len(tickers),
         "worker_count": worker_count,
         "dry_run": dry_run,
-        "note": "CAN-SLIM Phase 3 Sprint 2: eps_yoy_pct + eps_cagr_3y + roe + turnaround + near_high_pct nightly scan",
+        "note": "CAN-SLIM Phase 3 Sprint 3: C/A/N/S 全条件 populate (buyback_yield + volume_surge_pct 追加)",
     }
 
 
