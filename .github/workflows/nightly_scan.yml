@@ -94,6 +94,28 @@ jobs:
           curl -s --max-time 120 -w '\nHTTP:%{http_code}' -X POST \
             -H "X-Cron-Secret: $CRON_SECRET" "$BASE/api/cron/cup-notify" | tail -5
 
+      # CAN-SLIM Phase 2 Sprint 2: C 条件 (EPS YoY%) nightly scan
+      # gate 1 確定: cup-scan への piggyback なし、独立 cron として追加。
+      # cup-scan / rs-scan の後に直列実行 (FMP rate limit の重複を避ける)。
+      # feedback_railway_native_cron: Railway native cron は発火停止 → GHA 必須。
+      - name: CAN-SLIM C 条件 scan (EPS YoY%)
+        id: canslim
+        continue-on-error: true
+        run: |
+          echo "=== canslim-scan ==="
+          resp=$(curl -s --max-time 1200 -w '\nHTTP:%{http_code}' -X POST \
+            -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
+            -d "$BODY" "$BASE/api/cron/canslim-scan")
+          echo "$resp" | tail -1
+          body=$(echo "$resp" | sed '$d')
+          echo "$body" | jq '{processed_count,eps_computed_count,eps_null_count,upserted_count,failed_count,calc_date}' 2>/dev/null || true
+          # eps_computed_count が processed の 30% 未満なら警告 (EPS data 取得不良の検知)
+          proc=$(echo "$body" | jq -r '.processed_count // 0' 2>/dev/null || echo 0)
+          eps_ok=$(echo "$body" | jq -r '.eps_computed_count // 0' 2>/dev/null || echo 0)
+          if [ "${proc:-0}" -gt 0 ] && [ "${eps_ok:-0}" -lt $((proc * 30 / 100)) ]; then
+            echo "::warning::CAN-SLIM scan の eps_computed が少ない (computed=$eps_ok / processed=$proc) — FMP earnings_surprises を確認。"
+          fi
+
       - name: Verify freshness
         run: |
           echo "### Nightly Scan ($(date -u +'%Y-%m-%d %H:%M UTC'))" >> "$GITHUB_STEP_SUMMARY"

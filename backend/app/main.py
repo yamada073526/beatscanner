@@ -18037,6 +18037,366 @@ async def cron_screener_fundamentals_cleanup(
     }
 
 
+# ============================================================================
+# CAN-SLIM Phase 2 Sprint 2: canslim-scan nightly cron
+# (2026-06-07、 PGE Generator)
+#
+# 設計方針:
+#   - gate 1 確定: 独立 cron /api/cron/canslim-scan (cup-scan への piggyback なし)
+#     → cup-scan の既存ロジックを一切変更せず C 条件を追加できる
+#   - universe source: cup-scan / rs-scan と同じ _fetch_market_cap_top_n / _fetch_sp500_top_n を再利用
+#   - EPS YoY% 計算: _calc_eps_yoy_pct_from_income_q() モジュールレベル helper
+#     quarterly-history の revenue_yoy_pct ロジック (:6266-6279) を EPS 版に流用
+#     (同じ date 照合式 = 前年同期 entry date の約365日前、 date差>180日必須)
+#     → quarterly-history との数値一致を保証 (合議 §87 二重表示回避)
+#   - 欠損ガード (§38/§5): 赤字 base / IPO 1年未満 / 前年同期欠損 → eps_yoy_pct = NULL
+#     前年同期が負 (赤字 base) は abs(prev) で割らず NULL (符号反転バグ回避)
+#   - DB 書き込み: _upsert_screener_fundamental() (eps_yoy_pct のみ更新、 A/N/S は NULL 維持)
+#   - 認証: X-Cron-Secret (_check_cron_secret 再利用)
+#   - dry_run param: 件数確認用 (DB 書き込みなしで対象数を返す)
+#   - GHA workflow: nightly_scan.yml に step 追加 (cup/rs と同じ workflow で直列実行)
+#
+# ⚠️ aggregator/ へのファイル追加なし、 LLM SDK import ゼロ (pre-commit Check 3 準拠)
+# ============================================================================
+
+
+# ── EPS YoY% 計算 helper (モジュールレベル、 純 Python 数値物理層) ──
+# quarterly-history の revenue_yoy_pct 計算 (:6266-6279) と同じ date 照合ロジックを
+# EPS 版に流用。 canslim-scan cron から呼ぶためモジュールレベルに hoist。
+#
+# 引数:
+#   entry_date_str: 対象四半期の決算発表日 (e.g. "2024-10-31")
+#   eps_actual:     対象四半期の EPS 実績 (float、 0.0 は eps_yoy_pct=None 扱い)
+#   income_q:       FMP income_statement(quarter) の list[dict]
+#     ※ _nearest_by_date() で前年同期 (365日前) を date 照合
+#
+# 返却: eps_yoy_pct (float, 小数1桁) or None (欠損・算出不可・赤字 base)
+#
+# HG 4層遵守:
+#   - 純 Python 計算のみ (LLM 不使用)
+#   - 前年同期が負 (赤字 base) → None (abs() 割り算で符号反転バグを生まない)
+#   - date 差 > 180 日 (前年同期 window) + date 差 <= 60 日 (最近接マッチ) の 2 重チェック
+#   - 0 除算回避 (eps_actual_prev == 0.0 → None)
+
+def _parse_date_str(s: str | None):
+    """ISO date string を datetime.date に変換。 失敗時 None。"""
+    if not s:
+        return None
+    from datetime import datetime as _dt_local
+    try:
+        return _dt_local.fromisoformat(str(s)[:10]).date()
+    except Exception:
+        return None
+
+
+def _nearest_by_date(
+    target_date_str: str,
+    items: list[dict],
+    max_diff_days: int = 60,
+) -> "dict | None":
+    """items の中から target_date_str に最も近い date の entry を返す。
+
+    max_diff_days 以内の entry が存在しない場合 None。
+    quarterly-history の _nearest() と同じロジックをモジュールレベルに hoist。
+    """
+    from datetime import datetime as _dt_local
+    try:
+        td = _dt_local.fromisoformat(str(target_date_str)[:10]).date()
+    except Exception:
+        return None
+    if not items:
+        return None
+    best = None
+    best_diff = None
+    for it in items:
+        d_str = it.get("date") or it.get("calendarYear")
+        if not d_str:
+            continue
+        try:
+            d = _dt_local.fromisoformat(str(d_str)[:10]).date()
+        except Exception:
+            continue
+        diff = abs((d - td).days)
+        if best_diff is None or diff < best_diff:
+            best = it
+            best_diff = diff
+    if best_diff is not None and best_diff <= max_diff_days:
+        return best
+    return None
+
+
+def _calc_eps_yoy_pct_from_surprises(
+    entry_date_str: str,
+    eps_actual: "float | None",
+    surprises_past: list[dict],
+) -> "float | None":
+    """四半期 EPS YoY% を date 照合で計算する。
+
+    ★ current (eps_actual) と prev (前年同期) を **共に earnings_surprises** から取る。
+    quarterly-history が表示する eps_actual も earnings_surprises 由来のため、同一 source に
+    統一することで「表示 8Q から手計算した YoY」 と screener の YoY が一致する。
+    (income_statement の EPS は GAAP diluted で定義が異なり乖離 = 二重表示 Trust Cliff を生む。
+     実測 2026-06-07: DIS 符号反転 +8.3%→-13.3% / CRM 50.4→141.0% / AMD 42.7→211.4% / INTC 123→None)
+
+    date 照合方針 (quarterly-history の revenue_yoy_pct :6266-6279 と同じ):
+    - 前年同期 = entry_date の約365日前を surprises_past で date 照合 (max_diff 60 日)
+    - date 差 <= 180 日: 同一四半期への誤マッチ → 棄却
+    - 前年同期 eps が None または 0.0 → None (0 除算回避)
+    - 前年同期 eps が負 (赤字 base) → None (abs() 割り算で符号反転バグを生まない)
+      例: prev=-1.0, cur=0.5 → abs(prev) で割ると +150% (黒字転換なのに「成長率」誤表示)
+
+    返却: round(yoy_pct, 1) or None
+    """
+    from datetime import timedelta as _td_local
+
+    if eps_actual is None:
+        return None
+
+    cur_d = _parse_date_str(entry_date_str)
+    if cur_d is None:
+        return None
+
+    # 前年同期 target = entry_date の 365 日前を surprises_past から date 照合
+    prev_target = (cur_d - _td_local(days=365)).isoformat()
+    prev_row = _nearest_by_date(prev_target, surprises_past, max_diff_days=60)
+    if prev_row is None:
+        return None
+
+    prev_d = _parse_date_str(prev_row.get("date"))
+    if prev_d is None:
+        return None
+
+    # date 差 <= 180 日: 同一四半期への誤マッチ → 棄却 (quarterly-history と同一条件)
+    if abs((cur_d - prev_d).days) <= 180:
+        return None
+
+    # 前年同期 EPS を surprises から取得 (current と同一 accessor = 同一 source で乖離ゼロ)
+    prev_eps_raw = (
+        prev_row.get("eps")
+        or prev_row.get("epsActual")
+        or prev_row.get("actualEarningResult")
+        or prev_row.get("actualEps")
+    )
+    if prev_eps_raw is None:
+        return None
+    try:
+        eps_prev = float(prev_eps_raw)
+    except (ValueError, TypeError):
+        return None
+
+    # 0 除算回避
+    if eps_prev == 0.0:
+        return None
+
+    # 前年同期が負 (赤字 base) → None (符号反転バグ回避、 §38/§5 欠損ガード)
+    if eps_prev < 0:
+        return None
+
+    yoy = (eps_actual - eps_prev) / eps_prev * 100
+    return round(yoy, 1)
+
+
+def _upsert_screener_fundamental(
+    ticker: str,
+    calc_date: date,
+    eps_yoy_pct: "float | None" = None,
+) -> bool:
+    """screener_fundamentals テーブルに eps_yoy_pct を upsert。
+
+    A/N/S カラム (eps_cagr_3y, roe, buyback_yield, near_high_pct) は Phase 3 用に
+    schema 先行済のため触らず NULL 維持。 upsert on_conflict=ticker,calc_date。
+    失敗時 False (呼び出し側でログ)。
+    """
+    sb = _get_supabase_service()
+    if sb is None:
+        return False
+    try:
+        sb.table("screener_fundamentals").upsert(
+            {
+                "ticker": ticker,
+                "calc_date": calc_date.isoformat(),
+                "eps_yoy_pct": eps_yoy_pct,
+            },
+            on_conflict="ticker,calc_date",
+        ).execute()
+        return True
+    except Exception as e:
+        print(f"[screener_fundamentals] upsert failed for {ticker}: {e}")
+        return False
+
+
+@app.post("/api/cron/canslim-scan")
+async def cron_canslim_scan(
+    body: dict | None = None,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """Nightly CAN-SLIM scan: universe iterate → EPS YoY% 計算 → screener_fundamentals upsert。
+
+    gate 1 確定: 独立 cron (cup-scan への piggyback なし)。
+    cup-scan の既存ロジック (_detect_cup_handle / _scan_one / _upsert_pattern_signal) は
+    一切変更しない。 独立した cron として universe を iterate し eps_yoy_pct を計算・upsert。
+
+    universe source は cup-scan / rs-scan と同じ _fetch_market_cap_top_n / _fetch_sp500_top_n を再利用。
+
+    EPS YoY% 計算:
+      - FMP earnings_surprises (eps_actual) + income_statement(period=quarter) を per-ticker fetch
+      - 最新四半期の eps_actual + income_q を _calc_eps_yoy_pct_from_income_q() に渡す
+      - quarterly-history と同じ date 照合式 → 数値一致を保証 (合議 §87 二重表示回避)
+
+    欠損ガード (§38/§5 Trust Cliff):
+      - 前年同期欠損 / IPO 1年未満 / 赤字 base → eps_yoy_pct = NULL で upsert
+      - 「達成扱いも未達扱いもしない」設計 (Sprint 3 read endpoint で NULL は除外)
+
+    Body (任意):
+      tickers: list[str] — 対象銘柄、 未指定なら universe_source / universe_size で動的 fetch
+      universe_source: "sp500" | "russell3000" — default "sp500"
+      universe_size: int — sp500: 500 cap, russell3000: 3000 cap
+      chunk_size: int — FMP rate limit 対応 (default 10、 sleep 1s between chunks)
+      dry_run: bool — True なら DB 書き込み skip (件数確認用)
+
+    Returns:
+      processed_count, eps_computed_count, eps_null_count, upserted_count,
+      failed_count, failed_tickers (上位 20)、 calc_date, universe_source, universe_size, dry_run
+    """
+    _check_cron_secret(x_cron_secret)
+
+    body = body or {}
+    raw_tickers = body.get("tickers")
+    universe_source = body.get("universe_source", "sp500")
+    universe_size_arg = body.get("universe_size")
+
+    # universe 取得 (cup-scan / rs-scan と同じ loader を再利用)
+    if isinstance(raw_tickers, list) and raw_tickers:
+        tickers = [str(t).upper().strip() for t in raw_tickers if t][:3000]
+    elif universe_source == "russell3000":
+        n = int(universe_size_arg) if universe_size_arg else 1000
+        tickers = await _fetch_market_cap_top_n(n)
+        if not tickers:
+            print("[canslim-scan] russell3000 fetch failed, falling back to sp500")
+            tickers = await _fetch_sp500_top_n(500)
+            universe_source = "sp500_fallback"
+    else:
+        n = int(universe_size_arg) if universe_size_arg else 500
+        tickers = await _fetch_sp500_top_n(n)
+
+    chunk_size = int(body.get("chunk_size", 10))
+    chunk_size = max(1, min(50, chunk_size))
+    dry_run = bool(body.get("dry_run", False))
+
+    fmp_key = os.getenv("FMP_API_KEY", "")
+
+    today = date.today()
+    eps_computed = 0   # YoY% が算出できた件数
+    eps_null = 0       # NULL (欠損/赤字 base/IPO) で upsert した件数
+    failed: list[dict] = []
+    upserted = 0
+
+    for i, ticker in enumerate(tickers):
+        # chunk 境界で sleep (FMP rate limit 緩和、 cup-scan / rs-scan と同パターン)
+        if i > 0 and i % chunk_size == 0:
+            await asyncio.sleep(1.0)
+
+        try:
+            client = FMPClient(api_key=fmp_key)
+
+            # earnings_surprises: eps_actual 取得 (最新 + 前年同期照合用)。
+            # ★ current/prev とも earnings_surprises を source にする (quarterly-history の
+            #   表示 eps_actual と同一 source = 二重表示乖離を防ぐ Trust Cliff 対策)。
+            #   income_statement は EPS 定義が異なり (GAAP diluted vs 報告 EPS) 乖離するため使わない
+            #   (実測: DIS 符号反転 / CRM 50→141% / AMD 43→211% の乖離を確認)。
+            #   limit=8 = 過去約2年 = 前年同期 (4Q 前) を内包。FMP call も 1 本に削減 (rate limit 改善)。
+            try:
+                surprises_raw = await client.earnings_surprises(ticker, limit=8)
+            except Exception:
+                failed.append({"ticker": ticker, "reason": "earnings_surprises_failed"})
+                continue
+            if not surprises_raw:
+                failed.append({"ticker": ticker, "reason": "earnings_surprises_empty"})
+                continue
+
+            surprises: list[dict] = surprises_raw or []
+
+            # eps_actual がある entry のみ (future earnings は除外)
+            def _has_eps_actual(d: dict) -> bool:
+                v = (
+                    d.get("eps")
+                    or d.get("epsActual")
+                    or d.get("actualEarningResult")
+                    or d.get("actualEps")
+                )
+                return v is not None
+
+            surprises_past = [s for s in surprises if _has_eps_actual(s)]
+            if not surprises_past:
+                failed.append({"ticker": ticker, "reason": "no_eps_actual_in_surprises"})
+                continue
+
+            # 最新四半期 (date 降順の先頭)
+            surprises_sorted = sorted(
+                surprises_past,
+                key=lambda d: d.get("date") or "",
+                reverse=True,
+            )
+            latest = surprises_sorted[0]
+            entry_date_str = latest.get("date") or ""
+            eps_actual = _safe_eps_float(
+                latest.get("eps")
+                or latest.get("epsActual")
+                or latest.get("actualEarningResult")
+                or latest.get("actualEps")
+            )
+
+            if not entry_date_str:
+                failed.append({"ticker": ticker, "reason": "no_entry_date"})
+                continue
+
+            # EPS YoY% 計算 (純 Python、 LLM 不使用)
+            # _calc_eps_yoy_pct_from_surprises は:
+            #   - 前年同期 eps を surprises_past から date 照合 (current と同一 source)
+            #   - 赤字 base / 前年同期欠損 → None
+            #   - 0 除算回避
+            eps_yoy_pct = _calc_eps_yoy_pct_from_surprises(
+                entry_date_str,
+                eps_actual,
+                surprises_past,
+            )
+
+            if eps_yoy_pct is not None:
+                eps_computed += 1
+            else:
+                eps_null += 1
+
+            # DB upsert (dry_run=True の場合はスキップ)
+            if not dry_run:
+                ok = await asyncio.to_thread(
+                    _upsert_screener_fundamental,
+                    ticker,
+                    today,
+                    eps_yoy_pct,
+                )
+                if ok:
+                    upserted += 1
+                else:
+                    failed.append({"ticker": ticker, "reason": "upsert_failed"})
+
+        except Exception as e:
+            failed.append({"ticker": ticker, "reason": f"unexpected: {e}"})
+
+    return {
+        "processed_count": len(tickers),
+        "eps_computed_count": eps_computed,
+        "eps_null_count": eps_null,
+        "upserted_count": upserted,
+        "failed_count": len(failed),
+        "failed_tickers": failed[:20],
+        "calc_date": today.isoformat(),
+        "universe_source": universe_source,
+        "universe_size": len(tickers),
+        "dry_run": dry_run,
+        "note": "CAN-SLIM Phase 2 Sprint 2: eps_yoy_pct nightly scan",
+    }
+
+
 # ── Static file serving (must be LAST — after all /api/* routes) ─────────────
 # Only mounted when frontend/dist exists (i.e. production build is present).
 # 注: StaticFiles(html=True) は `/` で index.html を返すが、 任意の未知 path には 404 を返す
