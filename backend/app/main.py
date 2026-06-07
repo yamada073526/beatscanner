@@ -17296,6 +17296,91 @@ async def scanner_canslim(
         raise HTTPException(status_code=500, detail=f"fetch_failed: {e}")
 
 
+@app.get("/api/scanner/canslim/rows")
+async def scanner_canslim_rows(tickers: str = ""):
+    """指定 ticker 群の C/A/N/S 全値 + null_reasons を返す (DB SELECT only、S5b)。
+
+    結果行内バッジ列 (S5b frontend) 用。screener の frontend intersection で確定した
+    ticker 群について、各条件の値 (達成/未達問わず) と null の原因 (null_reasons) を
+    1 回の fetch で取得する。単一条件 read endpoint (/api/scanner/canslim) は「達成銘柄」
+    のみ返すため per-ticker の null 理由を引けない問題を解消 (gate1=rows endpoint、user 確定)。
+
+    Query params:
+      tickers: カンマ区切り ticker (例 "AAPL,MSFT,NVDA")、最大 200 (結果行は通常数十件)。
+
+    Returns:
+      {
+        "as_of": calc_date | null,
+        "rows": {
+          "AAPL": {eps_yoy_pct, eps_cagr_3y, roe, near_high_pct_scaled,
+                   buyback_yield_pct, volume_surge_pct, turnaround, null_reasons}, ...
+        },
+      }
+    DB に無い ticker は rows に含まれない (frontend は optional chaining で graceful)。
+    LLM 不使用。null_reasons (condition→reason_code) の UI ラベル化は frontend 静的 dict (S5b)。
+    既存 /api/scanner/canslim は不変 (additive な別 endpoint、RLS/GRANT は screener_fundamentals 継承)。
+    """
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    ticker_list = [t.strip().upper() for t in (tickers or "").split(",") if t.strip()][:200]
+    empty = {"as_of": None, "rows": {}}
+    if not ticker_list:
+        return empty
+
+    try:
+        calc_date, _row_count = _latest_valid_calc_date(
+            sb, "screener_fundamentals", "calc_date", _MIN_VALID_CANSLIM_ROWS
+        )
+        if calc_date is None:
+            # partial guard で None の場合も最新 date を試す (graceful、scanner_canslim と同型)
+            try:
+                any_rows = (
+                    sb.table("screener_fundamentals")
+                    .select("calc_date")
+                    .order("calc_date", desc=True)
+                    .limit(1)
+                    .execute()
+                )
+                any_data = any_rows.data or []
+                if not any_data:
+                    return empty
+                calc_date = any_data[0]["calc_date"]
+            except Exception:
+                return empty
+
+        result = (
+            sb.table("screener_fundamentals")
+            .select(
+                "ticker,eps_yoy_pct,eps_cagr_3y,roe,near_high_pct_scaled,"
+                "buyback_yield_pct,volume_surge_pct,turnaround,null_reasons"
+            )
+            .eq("calc_date", calc_date)
+            .in_("ticker", ticker_list)
+            .execute()
+        )
+        rows: dict = {}
+        for r in (result.data or []):
+            t = (r.get("ticker") or "").upper()
+            if not t:
+                continue
+            rows[t] = {
+                "eps_yoy_pct": r.get("eps_yoy_pct"),
+                "eps_cagr_3y": r.get("eps_cagr_3y"),
+                "roe": r.get("roe"),
+                "near_high_pct_scaled": r.get("near_high_pct_scaled"),
+                "buyback_yield_pct": r.get("buyback_yield_pct"),
+                "volume_surge_pct": r.get("volume_surge_pct"),
+                "turnaround": r.get("turnaround"),
+                "null_reasons": r.get("null_reasons"),
+            }
+        return {"as_of": calc_date, "rows": rows}
+    except Exception as e:
+        print(f"[scanner_canslim_rows] fetch failed: {e}")
+        raise HTTPException(status_code=500, detail=f"fetch_failed: {e}")
+
+
 # Cup-Handle Phase 2.3 cron: nightly cup-notify (cup-scan の 5 分後に発火)
 # scan 完了後の transition を翌朝 JST 8:05 に digest mail 送信
 
