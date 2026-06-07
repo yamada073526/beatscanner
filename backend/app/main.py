@@ -16981,10 +16981,11 @@ async def scanner_rs(
 # ============================================================================
 
 # screener_fundamentals: partial scan guard の閾値
-# full scan が ~500 銘柄、partial (dry_run 等) は極少になるため 50 を床として使う。
+# full scan が ~500 銘柄、partial (dry_run 等) は極少になるため 200 を床として使う。
+# (S4a: 50→200 に引き上げ — S&P500 以上の universe で partial scan を確実に検出)
 # ただし canslim-scan が nightly でまだ走っていない場合は空テーブルになるため、
 # _latest_valid_canslim_date は行数 0 の場合も graceful (None 返却) にする。
-_MIN_VALID_CANSLIM_ROWS = 50
+_MIN_VALID_CANSLIM_ROWS = 200
 
 
 def _fetch_screener_fundamentals_by_condition(
@@ -18597,14 +18598,22 @@ def _calc_eps_yoy_pct_from_surprises(
     if eps_prev < 0:
         return None
 
+    # ── S4a BLOCK③: near-zero base NULL 化 (§5 誇張アーティファクト排除) ───────
+    # |prev_eps| < 0.05 の銘柄は 9999%+ 等の非現実的 YoY が生じる near-zero base。
+    # cap=999.9 の backstop より先に NULL 化して「算出不可 (uncomputable)」扱いにする。
+    # 判断根拠: 6 体合議 BLOCK③ gate1 = near-zero base NULL 化が最も誠実 (景表法 §5)。
+    # genuine 高成長 (MU prev≈0.25/+682%、MCHP prev≈0.193/+418%) は |prev|>0.05 で保持。
+    # low-base 銘柄は S4b read で「算出不可」分類の素地となる (本 sprint でフラグカラム不要)。
+    if abs(eps_prev) < 0.05:
+        return None
+
     yoy = (eps_actual - eps_prev) / eps_prev * 100
 
     # ── MINOR (SPEC §S3-c): 巨大 YoY clip (§5 誇張表示ガード) ──────────────
-    # prev ≈ 0.001 で 9999% 等の near-zero-base アーティファクトを抑制。
+    # near-zero base NULL 化が主機構、cap は防御の二重化 (backstop)。
     # cap = 999.9: genuine 高成長 (MU+682% / MCHP+418%) は保持、
-    #   非現実的アーティファクト (9999%+) のみ除去。
+    #   non-realistic アーティファクト (9999%+) のみ除去。
     # 下限 -100.0: EPS は -100% 未満になり得ない (§38 安全ガード)。
-    # ⚠️ 最終 cap 値は S3 着地後の 6 体合議で §5 観点 review 予定 (docstring 明記)。
     _EPS_YOY_CAP_MAX = 999.9
     _EPS_YOY_CAP_MIN = -100.0
     yoy = max(_EPS_YOY_CAP_MIN, min(_EPS_YOY_CAP_MAX, yoy))
@@ -18718,6 +18727,10 @@ def _calc_buyback_yield(
         for q in cf_data[:4]:  # 最新 4Q
             if not isinstance(q, dict):
                 continue
+            # ★ S4a 実測確認 (2026-06-07 AAPL FMP /stable/cash-flow-statement?period=quarter):
+            #   四半期 entry に "commonStockRepurchasedTTM" は存在しない (TTM field は未混在)。
+            #   各 Q entry は "commonStockRepurchased" のみ。4Q 合計で TTM 近似する設計は正しい。
+            #   フォールバックとして "commonStockRepurchasedTTM" を accessor に残すが実運用では未使用。
             v = _first_finite(
                 q, "commonStockRepurchased", "netCommonStockRepurchased",
                 "commonStockRepurchasedTTM",
@@ -18757,12 +18770,21 @@ def _upsert_screener_fundamental(
     near_high_pct: "float | None" = None,
     buyback_yield: "float | None" = None,
     volume_surge_pct: "float | None" = None,
+    near_high_pct_scaled: "float | None" = None,
+    buyback_yield_pct: "float | None" = None,
 ) -> bool:
     """screener_fundamentals テーブルに各指標を upsert。
 
     Phase 3 Sprint 1 対応: eps_cagr_3y / roe / turnaround 引数を追加。
     Phase 3 Sprint 2 対応: near_high_pct 引数を追加 (N 条件 = price / yearHigh)。
     Phase 3 Sprint 3 対応: buyback_yield / volume_surge_pct 引数を追加 (S 条件)。
+    Phase 3 Sprint 4a 対応: near_high_pct_scaled / buyback_yield_pct 引数を追加。
+      - near_high_pct_scaled: near_high_pct × 100 の pct 表記 (例 97.0)。
+        gate1 方式B = migration で新カラム adding-only、read endpoint (S4b) はこちらを参照。
+      - buyback_yield_pct: buyback_yield × 100 の pct 表記 (例 1.73)。
+        同上。旧 ratio カラム (near_high_pct / buyback_yield) は vestigial 化
+        (新 row では None を渡して書き込みを止める)。
+
     None 値のカラムは payload に含めない = 既存 DB 値を上書きしない (後方互換)。
     C 条件 (eps_yoy_pct) は引数デフォルト None → payload に含まれないため
     既存値が上書きされず Phase 2 の C 計算が回帰しない。
@@ -18770,7 +18792,8 @@ def _upsert_screener_fundamental(
     turnaround カラムが DB に未作成 (migration 未適用) の場合、
     Supabase が "column not found" エラーを返す可能性がある。
     このケースでは turnaround のみ省いて再 upsert し C/A 値を保護する (graceful fallback)。
-    同様に near_high_pct / volume_surge_pct カラムが未作成の場合も graceful fallback。
+    同様に near_high_pct / volume_surge_pct / near_high_pct_scaled / buyback_yield_pct
+    カラムが未作成の場合も graceful fallback。
     buyback_yield は Phase 2 で schema 先行済 (optional 不要、通常 upsert)。
 
     upsert on_conflict=ticker,calc_date。失敗時 False (呼び出し側でログ)。
@@ -18792,14 +18815,23 @@ def _upsert_screener_fundamental(
         row["roe"] = roe
     if turnaround is not None:
         row["turnaround"] = turnaround
+    # near_high_pct (旧 ratio カラム): S4a 以降は None を渡して書き込みを止める
+    # (vestigial 化。read endpoint S4b は near_high_pct_scaled を参照)。
     if near_high_pct is not None:
         row["near_high_pct"] = near_high_pct
-    # buyback_yield は schema 先行済 (Phase 2 migration で追加済)。optional 不要。
+    # buyback_yield (旧 ratio カラム): S4a 以降は None を渡す (vestigial 化)。
     if buyback_yield is not None:
         row["buyback_yield"] = round(buyback_yield, 6)
     # volume_surge_pct は Phase 3 Sprint 3 で migration 追加。migration 未適用時に graceful fallback。
     if volume_surge_pct is not None:
         row["volume_surge_pct"] = volume_surge_pct
+    # ── S4a 追加: 方式B pct 新カラム ──────────────────────────────────────────
+    # near_high_pct_scaled: near_high_pct × 100 の pct 表記 (migration 未適用時に graceful fallback)
+    if near_high_pct_scaled is not None:
+        row["near_high_pct_scaled"] = near_high_pct_scaled
+    # buyback_yield_pct: buyback_yield × 100 の pct 表記 (migration 未適用時に graceful fallback)
+    if buyback_yield_pct is not None:
+        row["buyback_yield_pct"] = buyback_yield_pct
 
     try:
         sb.table("screener_fundamentals").upsert(
@@ -18809,10 +18841,14 @@ def _upsert_screener_fundamental(
         return True
     except Exception as e:
         err_str = str(e)
-        # turnaround / near_high_pct / volume_surge_pct カラム未作成時の graceful fallback:
+        # turnaround / near_high_pct / volume_surge_pct / near_high_pct_scaled /
+        # buyback_yield_pct カラム未作成時の graceful fallback:
         # 問題カラムを外して再 upsert (C/A/N/S buyback 値を保護)
         optional_cols = [
-            c for c in ("turnaround", "near_high_pct", "volume_surge_pct")
+            c for c in (
+                "turnaround", "near_high_pct", "volume_surge_pct",
+                "near_high_pct_scaled", "buyback_yield_pct",
+            )
             if c in err_str and c in row
         ]
         if optional_cols:
@@ -19092,9 +19128,35 @@ async def cron_canslim_scan(
                                 roe_f = float(roe_raw)
                                 # FMP returnOnEquityTTM は 0-1 スケール (小数点)
                                 # → % 換算して DB 保存 (例: 0.172 → 17.2)
-                                roe = round(roe_f * 100.0, 2)
+                                roe_candidate = round(roe_f * 100.0, 2)
                             except (ValueError, TypeError):
-                                roe = None
+                                roe_candidate = None
+                            # ── S4a BLOCK② ROE individual guard (負 equity 検出) ────────
+                            # debtToEquityTTM が負値 = 分母の stockholders equity が負
+                            # (D/E = debt/equity で equity<0 → D/E<0)。
+                            # 負 equity 銘柄の ROE は「負 equity ÷ 正 profit → 負 ROE」また
+                            # は「負 equity ÷ 負 loss → 正 ROE (壊れた高 ROE)」になり
+                            # §5 誤選別の原因となる。debtToEquityTTM < 0 を negative equity の
+                            # 代理シグナルとして使い roe を NULL 化する (追加 FMP call ゼロ)。
+                            #
+                            # ⚠️ AAPL 型は捕捉外: AAPL の equity は正 (小さいだけ)、
+                            # debtToEquity は正値 (高め) → このガードでは弾かれない。
+                            # AAPL の高 ROE (146.7%) は genuine として保持される。
+                            # AAPL 型の「正小資本→高 ROE 表示問題」は S5 display 補完で対処予定
+                            # (ROE 単独を優良ラベルにしない、金融 option b、本 sprint scope 外)。
+                            #
+                            # NVDA 相当 (ROE 111.7%、正 equity): 捕捉外 → 保持 (正しい挙動)。
+                            dte_raw = r_rec.get("debtToEquityTTM")
+                            negative_equity = False
+                            if dte_raw is not None:
+                                try:
+                                    negative_equity = float(dte_raw) < 0
+                                except (ValueError, TypeError):
+                                    pass
+                            if negative_equity:
+                                roe = None  # 負 equity → roe NULL 化 (§5 誤選別回避)
+                            else:
+                                roe = roe_candidate
             except Exception:
                 roe = None  # fetch / ガード判定失敗 → NULL (欠損ガード)
 
@@ -19121,13 +19183,17 @@ async def cron_canslim_scan(
                 cf_cache_key = f"cf-q::{ticker.upper()}"
                 cf_data = await safe_fmp_get(cf_url, cf_cache_key, ttl=CACHE_TTL_PROFILE)
                 if isinstance(cf_data, list) and cf_data:
-                    # m_rec: shareholderYieldTTM alt 経路用 (key-metrics-ttm、ROE fetch 済なら再利用)
-                    # ここでは {} で alt なしでも primary 経路で十分
+                    # ★ canslim-scan は alt 経路無効 (primary のみ):
+                    #   dividend_yield=None → shareholderYieldTTM - dividendYield の alt 計算不可。
+                    #   m_rec={} → key-metrics-ttm を別途 fetch しないため alt キーが空。
+                    #   結果: cash-flow-statement の commonStockRepurchased 4Q 合計 / marketCap のみ。
+                    #   per-ticker 表示 (valuation-extras) は m_rec に key-metrics-ttm を渡すため
+                    #   alt 経路が有効になるが、canslim-scan では primary で十分 (S4a comment 明記)。
                     buyback_yield = _calc_buyback_yield(
                         cf_data,
                         _market_cap_map.get(ticker.upper()),
-                        dividend_yield=None,  # alt 経路は key-metrics-ttm 未 fetch の場合は省略
-                        m_rec={},
+                        dividend_yield=None,  # alt 経路は canslim-scan では無効
+                        m_rec={},             # canslim-scan では key-metrics-ttm を渡さない (primary のみ)
                     )
             except Exception:
                 buyback_yield = None  # fetch 失敗 → NULL (欠損ガード)
@@ -19196,9 +19262,13 @@ async def cron_canslim_scan(
             results.append(await _compute_one(ticker))
 
     # count + upsert (post-gather 逐次、 cup-scan と同型)
-    # Phase 3 Sprint 3: result tuple が 9 要素
+    # Phase 3 Sprint 3: result tuple が 9 要素 (arity を 9 のまま維持)
     # (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct,
     #  buyback_yield, volume_surge_pct, err)
+    # Phase 3 Sprint 4a: post-gather で ×100 して pct 新カラム値を生成
+    #   near_high_pct_scaled = near_high_pct × 100 (例 0.97 → 97.0)
+    #   buyback_yield_pct    = buyback_yield  × 100 (例 0.0173 → 1.73)
+    #   tuple arity は 9 のまま増やさない (feedback_pge_loop_pitfalls ルール 1)
     a_computed = 0           # CAGR が算出できた件数
     roe_computed = 0         # ROE が取得できた件数
     near_high_computed = 0   # near_high_pct が算出できた件数
@@ -19224,13 +19294,33 @@ async def cron_canslim_scan(
         if volume_surge_pct is not None:
             volume_surge_computed += 1
         if not dry_run:
+            # ── S4a BLOCK①: pct 新カラム値を post-gather で生成 (tuple arity 9 維持) ──
+            # near_high_pct (ratio 0-1) を pct 表記に変換。read endpoint が >= min_pct で比較可能。
+            near_high_pct_scaled = (
+                round(near_high_pct * 100, 1) if near_high_pct is not None else None
+            )
+            # buyback_yield (ratio 0-0.1) を pct 表記に変換。
+            buyback_yield_pct = (
+                round(buyback_yield * 100, 4) if buyback_yield is not None else None
+            )
+            # ── S4a 即修正可①: turnaround call-site 修正 ────────────────────────
+            # 旧: turnaround if turnaround else None — False が None に変換され
+            #     同日 re-scan で true→false flip が DB に反映されなかった。
+            # 新: turnaround をそのまま渡す (False も正値として upsert)。
+            #     _compute_one の error 早期 return は turnaround=None で upsert omit 維持。
+            # ── S4a BLOCK①: 旧 ratio カラムに None を渡す (vestigial 化) ──────
+            # near_high_pct / buyback_yield は新 pct カラムへ移行したため None を渡す。
+            # upsert の None-not-in-payload パターンにより DB の既存 ratio 値は上書きされないが、
+            # 新 calc_date 行では NULL になる (read endpoint S4b は新 pct カラムを参照)。
             ok = await asyncio.to_thread(
                 _upsert_screener_fundamental,
                 ticker, today, eps_yoy_pct, eps_cagr_3y, roe,
-                turnaround if turnaround else None,
-                near_high_pct,
-                buyback_yield,
+                turnaround,          # 即修正可①: False をそのまま渡す
+                None,                # near_high_pct: vestigial 化 (None = payload に含まれない)
+                None,                # buyback_yield: vestigial 化 (None = payload に含まれない)
                 volume_surge_pct,
+                near_high_pct_scaled,  # S4a 新 pct カラム
+                buyback_yield_pct,     # S4a 新 pct カラム
             )
             if ok:
                 upserted += 1

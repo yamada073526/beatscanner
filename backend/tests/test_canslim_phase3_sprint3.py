@@ -196,16 +196,23 @@ class TestEpsYoyClip:
         assert result is not None
         assert result < 999.9
 
-    def test_huge_yoy_clipped_to_max(self):
-        """超巨大 YoY (prev≈0.001) → 999.9 にクリップ"""
+    def test_huge_yoy_near_zero_base_returns_none(self):
+        """超巨大 YoY (prev≈0.001) → S4a near-zero base NULL 化で None を返す。
+
+        S3 時点の設計 (cap=999.9) は S4a BLOCK③ gate1 で「near-zero base NULL 化が最も誠実」
+        と確定し、|prev_eps| < 0.05 で None を返すよう変更された (景表法 §5)。
+        prev=0.001 は near-zero base に該当するため None が正しい挙動。
+        cap=999.9 は backstop として残るが、near-zero NULL 化が先に適用される。
+        """
         surprises = self._make_surprises(
             "2025-03-15", 10.00,  # cur
-            "2024-03-15", 0.001,   # prev ≈ 0.001 (near-zero base)
+            "2024-03-15", 0.001,   # prev ≈ 0.001 (near-zero base = |prev|<0.05)
         )
         result = _calc_eps_yoy_pct_from_surprises("2025-03-15", 10.00, surprises)
-        # (10.00 - 0.001) / 0.001 * 100 = 999900% → clip → 999.9
-        assert result is not None
-        assert result == 999.9
+        # S4a: near-zero base → None (S3 の clip→999.9 ではなく欠損扱い)
+        assert result is None, (
+            f"prev=0.001 の near-zero base は None であるべき (S4a BLOCK③)、実際: {result}"
+        )
 
     def test_large_but_genuine_growth_418pct(self):
         """MCHP 相当 +418%: clip されず保持"""
