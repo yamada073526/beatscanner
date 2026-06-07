@@ -336,12 +336,12 @@ function resolveCanslimMetric(canslim, m) {
 function CanslimBadgeRow({ canslim }) {
   if (!canslim) return null;
   return (
-    <div className="mt-2 flex flex-col gap-1" data-testid="canslim-badge-row">
+    <div className="flex flex-col gap-1" data-testid="canslim-badge-row">
       {CANSLIM_PILLARS.map((p) => (
         <div key={p.letter} className="flex items-baseline gap-1.5 text-[10px] leading-tight">
           <span
             className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold"
-            style={{ background: 'color-mix(in srgb, var(--text-muted) 14%, transparent)', color: 'var(--text-secondary)' }}
+            style={{ background: 'color-mix(in srgb, var(--text-muted) 14%, transparent)', color: 'var(--text-muted)' }}
             aria-hidden
           >
             {p.letter}
@@ -1184,9 +1184,10 @@ function OneillResultCard({ item, onSelect, masked = false }) {
           </span>
         )}
       </div>
-      {/* S5b: CAN-SLIM C/A/N/S バッジ列 (値 + null 理由ラベル)。masked / 未取得は非表示 (graceful)。 */}
+      {/* S5b: CAN-SLIM C/A/N/S バッジ列 (値 + null 理由ラベル)。masked / 未取得は非表示 (graceful)。
+          border-t で「真鍮プレート」のメタ section を視覚的に分離 (3体合議 ui-designer M-1)。 */}
       {!masked && item.canslim && (
-        <div className="px-3 pb-3">
+        <div className="border-t border-[var(--border)] px-3 pt-2 pb-3">
           <CanslimBadgeRow canslim={item.canslim} />
         </div>
       )}
@@ -1598,7 +1599,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
           {/* S5c: N(新高値圏) = Pro ロック面 (activeFilter === 'near_high' のとき scan せず ProTeaser) */}
           {activeFilter === 'near_high' && (
             <NearHighProLock
-              onUpgrade={onProUpgrade}
+              onUpgrade={onProUpgrade || onUpgrade /* Pro 配線がなければ既存 upgrade flow に fallback (CTA を死活させない) */}
               onExitToFree={() => {
                 // 副リンク「無料の3条件で今すぐ絞り込む」= near_high を外して「全て」(ファンダ5条件 PASS) へ即復帰
                 setActiveFilter(null);

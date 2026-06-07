@@ -1007,6 +1007,7 @@ export default function Workspace({
                   user={detailContext?.user}
                   isPro={isProUser}
                   onUpgrade={handleUpgradeRequest}
+                  onProUpgrade={() => handleUpgradeRequest('新高値圏フィルター (Pro)')}
                   onSelect={setActiveTicker}
                 />
               </Suspense>
@@ -1136,6 +1137,8 @@ export default function Workspace({
           <WorkspaceScreenerModal
             isOpen={screenerOpen}
             onClose={() => setScreenerOpen(false)}
+            onUpgrade={handleUpgradeRequest}
+            onProUpgrade={() => handleUpgradeRequest('新高値圏フィルター (Pro)')}
           />
         </Suspense>
       )}

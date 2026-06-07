@@ -23,7 +23,7 @@ import { useArrivalSpotlight } from '../../hooks/useArrivalSpotlight.js';
 // App.jsx で既に lazy 化済の同モジュール、 chunk reuse される (Vite モジュールキャッシュ)
 const CustomScreenerPanel = lazy(() => import('../../components/CustomScreenerPanel.jsx'));
 
-export default function WorkspaceScreenerModal({ isOpen, onClose }) {
+export default function WorkspaceScreenerModal({ isOpen, onClose, onUpgrade, onProUpgrade }) {
   const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
   const setPane3JudgmentOverride = useWorkspaceStore((s) => s.setPane3JudgmentOverride);
   const closeBtnRef = useRef(null);
@@ -220,6 +220,8 @@ export default function WorkspaceScreenerModal({ isOpen, onClose }) {
             <CustomScreenerPanel
               data-testid="workspace-screener-panel"
               onSelect={handleSelect}
+              onUpgrade={onUpgrade}
+              onProUpgrade={onProUpgrade}
             />
           </Suspense>
         </div>
