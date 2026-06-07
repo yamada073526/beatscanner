@@ -37,6 +37,7 @@ import { useUpgradeModal } from './lib/useUpgradeModal.js';
 import { useSubscription } from './hooks/useSubscription.js';
 import InfoModal from './components/InfoModal.jsx';
 import ResultBadge from './components/ResultBadge.jsx';
+import BrandPulse from './components/ui/BrandPulse.jsx';
 import ConditionCard from './components/ConditionCard.jsx';
 import GuidanceCard from './components/GuidanceCard.jsx';
 import HistoryChart from './components/HistoryChart.jsx';
@@ -1173,6 +1174,7 @@ export default function App() {
             /* v127 R16 (user dogfood「開発中感がある、 今風に」): branded wordmark + pulse + 3-dot loader。
                Aman ロビー入場の第一印象。既存 keyframe (pulse-subtle) 再利用 + ws-boot-dot 1 個追加。 */
             <div className="ws-boot-loader" aria-label="Workspace を読み込み中" aria-busy="true">
+              <BrandPulse size={64} className="ws-boot-loader__mark" />
               <div className="ws-boot-loader__brand">
                 <span className="ws-boot-loader__wordmark">BeatScanner</span>
                 <span className="ws-boot-loader__tagline">LOADING WORKSPACE</span>

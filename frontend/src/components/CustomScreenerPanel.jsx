@@ -1477,14 +1477,14 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
                 borderColor: 'color-mix(in srgb, var(--color-gain) 25%, transparent)',
               }}
             >
-              <span className="text-xs font-medium" style={{ color: 'var(--color-gain)' }}>PASS</span>
+              <span className="text-xs font-medium" style={{ color: 'var(--color-gain)' }}>条件クリア</span>
               <span className="text-xl font-bold tabular-nums" style={{ color: 'var(--color-gain)' }}>
                 {data.passing.length}
               </span>
               <span className="text-xs opacity-70" style={{ color: 'var(--color-gain)' }}>銘柄</span>
             </div>
             <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-3 py-1.5">
-              <span className="text-xs font-medium text-[var(--text-muted)]">FAIL</span>
+              <span className="text-xs font-medium text-[var(--text-muted)]">未達</span>
               <span className="text-base font-semibold tabular-nums text-[var(--text-secondary)]">
                 {data.failing.length}
               </span>

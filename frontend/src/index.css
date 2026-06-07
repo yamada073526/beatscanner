@@ -12244,6 +12244,51 @@ body.is-digest-resizing {
   .ws-boot-loader__wordmark,
   .ws-boot-loader__dots span { animation: none; }
 }
+/* v183 (user「ロード表示に絵を、 テキストだけで寂しい」): BeatScanner ブランドマーク
+   (EKG 心拍波形 + シグナルアーク = favicon 意匠) の component (BrandPulse.jsx) 用アニメーション。
+   波形が左から描かれ → 終端からシグナルが発信される静かなループ。 raw hex 不使用 (currentColor)。 */
+.brand-pulse {
+  color: var(--color-accent);
+  display: block;
+}
+.brand-pulse__wave {
+  stroke-dasharray: 160;
+  stroke-dashoffset: 0;
+}
+.brand-pulse--animated .brand-pulse__wave {
+  stroke-dashoffset: 160;
+  animation: brand-pulse-draw 2.4s var(--ease-out-cubic, cubic-bezier(0.22, 1, 0.36, 1)) infinite;
+}
+.brand-pulse--animated .brand-pulse__dot { animation: brand-pulse-emit 2.4s ease-in-out infinite; }
+.brand-pulse--animated .brand-pulse__arc--inner { animation: brand-pulse-emit 2.4s ease-in-out 0.12s infinite; }
+.brand-pulse--animated .brand-pulse__arc--outer { animation: brand-pulse-emit-soft 2.4s ease-in-out 0.24s infinite; }
+/* 非アニメ時 (reduced-motion / animated=false) の静止見え: 外側アークだけ減衰 opacity を保つ */
+.brand-pulse__arc--outer { opacity: 0.5; }
+@keyframes brand-pulse-draw {
+  0%   { stroke-dashoffset: 160; }
+  55%  { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; }
+}
+@keyframes brand-pulse-emit {
+  0%, 42% { opacity: 0; }
+  60%     { opacity: 1; }
+  100%    { opacity: 1; }
+}
+@keyframes brand-pulse-emit-soft {
+  0%, 42% { opacity: 0; }
+  60%     { opacity: 0.5; }
+  100%    { opacity: 0.5; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand-pulse--animated .brand-pulse__wave {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .brand-pulse--animated .brand-pulse__dot,
+  .brand-pulse--animated .brand-pulse__arc--inner,
+  .brand-pulse--animated .brand-pulse__arc--outer { animation: none; opacity: 1; }
+  .brand-pulse--animated .brand-pulse__arc--outer { opacity: 0.5; }
+}
 .diagram-banner-error {
   padding: var(--space-4, 16px);
   color: var(--text-secondary);

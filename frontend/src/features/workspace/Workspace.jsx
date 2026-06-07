@@ -45,6 +45,7 @@ import PaneDetailView from './PaneDetailView.jsx';
 import { FtdChipRow, FtdRailDots } from './Pane1MacroSection.jsx';
 // v120 hotfix (user dogfood req): rail mode の銘柄 tile を 2 文字 monogram → CompanyLogo (TV/FMP/頭文字 fallback) へ
 import CompanyLogo from '../../components/CompanyLogo.jsx';
+import BrandPulse from '../../components/ui/BrandPulse.jsx';
 // v146: pane render throw (特に lazy ScreenerPane の stale chunk) で全画面真っ白になる穴を塞ぐ。
 import PaneErrorBoundary from '../../components/PaneErrorBoundary.jsx';
 // v120 Sprint 3 (Frontend verdict mandatory fix 2): WorkspaceScreenerModal を lazy 化
@@ -1002,7 +1003,7 @@ export default function Workspace({
               >
                 ← 今注目に戻る
               </button>
-              <Suspense fallback={<div style={{ padding: 16, color: 'var(--text-muted)' }}>Loading screener…</div>}>
+              <Suspense fallback={<div style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-muted)', fontSize: 13 }}><BrandPulse size={22} /><span>スクリーナーを準備中…</span></div>}>
                 <CustomScreenerPanel
                   user={detailContext?.user}
                   isPro={isProUser}
@@ -1102,7 +1103,7 @@ export default function Workspace({
                 </div>
               </div>
             ) : (
-              <Suspense fallback={<div style={{ padding: 16, color: 'var(--text-muted)' }}>Loading screener…</div>}>
+              <Suspense fallback={<div style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-muted)', fontSize: 13 }}><BrandPulse size={22} /><span>スクリーナーを準備中…</span></div>}>
                 <ScreenerPane
                   detailContext={detailContext}
                   isProUser={isProUser}
