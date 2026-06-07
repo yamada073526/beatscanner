@@ -54,7 +54,10 @@ function fmtPct(v) {
 
 // v185 B (2026-06-08): compact=true で 2 次情報 (footer の最終更新 / grade jump link) を抑制し、
 //   v5 テクニカル章「価格目安」 横並び grid で card 高さを近づける。免責 (disclaimer) は保持 (景表法 §5)。
-export default function AnalystTargetCard({ ticker, currentPrice = null, compact = false }) {
+// v185 dogfood (3体合議): variant='unified' で card-price-hero パターン (chip+大価格+delta を先頭) に揃え、
+//   CupPivot/BuyZone と縦構成統一 (hero→header→body→footer)。v4 (variant='default') は従来描画で不変。
+export default function AnalystTargetCard({ ticker, currentPrice = null, compact = false, variant = 'default' }) {
+  const isUnified = variant === 'unified';
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errored, setErrored] = useState(false);
@@ -197,6 +200,24 @@ export default function AnalystTargetCard({ ticker, currentPrice = null, compact
       data-spotlight="card"
       style={{ minHeight: 128 }}
     >
+      {/* v185 dogfood (3体合議): v5 unified は card-price-hero (chip+大価格+delta) を先頭に置き、
+          CupPivot/BuyZone と縦構成 (hero→header→body→footer) を揃える。v4 は従来描画 (下の !isUnified ブロック)。 */}
+      {isUnified && (
+        <div className="card-price-hero" data-testid="analyst-target-card-price-hero">
+          <Chip variant="display" size="xs" tone="muted" className="card-price-hero__chip">
+            コンセンサス
+          </Chip>
+          <span className="card-price-hero__value" aria-label={`コンセンサス ${fmtUsd(consensus)}`}>
+            {fmtUsd(consensus)}
+          </span>
+          {upsidePct != null && (
+            <span className={`card-price-hero__delta card-price-hero__delta--${upsideTone}`}>
+              現在価格から {fmtPct(upsidePct)}
+            </span>
+          )}
+        </div>
+      )}
+
       <header className="atc-head">
         <h3 className="atc-title">アナリスト目標株価</h3>
         {count != null && (
@@ -206,29 +227,49 @@ export default function AnalystTargetCard({ ticker, currentPrice = null, compact
         )}
       </header>
 
-      <div className="atc-body">
-        <div className="atc-hero">
-          <div className="atc-consensus-label">コンセンサス (目安)</div>
-          <div className="atc-consensus-value">{fmtUsd(consensus)}</div>
-          {upsidePct != null && (
-            <div className={`atc-upside atc-upside--${upsideTone}`}>
-              現在価格から {fmtPct(upsidePct)}
-            </div>
-          )}
-        </div>
+      {/* v4 (default): 従来の atc-body (hero + range)。v5 unified では hero を上の card-price-hero に移譲。 */}
+      {!isUnified && (
+        <div className="atc-body">
+          <div className="atc-hero">
+            <div className="atc-consensus-label">コンセンサス (目安)</div>
+            <div className="atc-consensus-value">{fmtUsd(consensus)}</div>
+            {upsidePct != null && (
+              <div className={`atc-upside atc-upside--${upsideTone}`}>
+                現在価格から {fmtPct(upsidePct)}
+              </div>
+            )}
+          </div>
 
-        <div className="atc-range">
-          <div className="atc-range-cell">
-            <div className="atc-range-label">Low</div>
-            <div className="atc-range-value">{fmtUsd(low)}</div>
-          </div>
-          <div className="atc-range-divider" />
-          <div className="atc-range-cell">
-            <div className="atc-range-label">High</div>
-            <div className="atc-range-value">{fmtUsd(high)}</div>
+          <div className="atc-range">
+            <div className="atc-range-cell">
+              <div className="atc-range-label">Low</div>
+              <div className="atc-range-value">{fmtUsd(low)}</div>
+            </div>
+            <div className="atc-range-divider" />
+            <div className="atc-range-cell">
+              <div className="atc-range-label">High</div>
+              <div className="atc-range-value">{fmtUsd(high)}</div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* v5 unified + 非 compact: Low/High range のみ残す (compact では delta で代替し省略=横並び高さ圧縮)。 */}
+      {isUnified && !compact && (
+        <div className="atc-body">
+          <div className="atc-range">
+            <div className="atc-range-cell">
+              <div className="atc-range-label">Low</div>
+              <div className="atc-range-value">{fmtUsd(low)}</div>
+            </div>
+            <div className="atc-range-divider" />
+            <div className="atc-range-cell">
+              <div className="atc-range-label">High</div>
+              <div className="atc-range-value">{fmtUsd(high)}</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* v130 P1 #7 (3 体合議 2026-05-30 user dogfood): footer を 2-row grid 化、
           disclaimer 単独行 + 最終更新/jump link を 2 行目で左右分離。 旧 1-row flex で

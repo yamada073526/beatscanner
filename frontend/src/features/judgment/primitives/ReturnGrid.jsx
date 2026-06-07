@@ -191,7 +191,7 @@ function TermLabel({ text }) {
         letterSpacing: '0.08em',
         color: 'var(--text-muted)',
         textTransform: 'uppercase',
-        marginBottom: 'var(--space-1, 4px)',
+        marginBottom: 'var(--space-3, 12px)',
       }}
     >
       {text}
@@ -202,13 +202,15 @@ function TermLabel({ text }) {
 function TermSplitGrid({ periodsData, loading }) {
   const short = PERIODS.slice(0, 4); // 1W / 1M / 3M / 6M
   const long = PERIODS.slice(4);     // 1Y / 3Y / 5Y / 10Y
+  // v185 dogfood (2026-06-08): user「上下の余白が詰まって非常に見づらい」 → セクション間 gap /
+  //   区切り線の上下 padding / ラベル下 margin を拡大し、短期/長期 の呼吸 (breathing room) を確保。
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3, 12px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-8, 32px)' }}>
       <div>
         <TermLabel text="短期" />
         <PeriodGrid periods={short} periodsData={periodsData} loading={loading} />
       </div>
-      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--space-3, 12px)' }}>
+      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--space-8, 32px)' }}>
         <TermLabel text="長期" />
         <PeriodGrid periods={long} periodsData={periodsData} loading={loading} />
       </div>

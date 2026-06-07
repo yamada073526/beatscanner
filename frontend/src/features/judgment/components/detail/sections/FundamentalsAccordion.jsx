@@ -87,6 +87,8 @@ export default function FundamentalsAccordion({
           guidance={guidance}
           isLoading={isFundaLoading}
           hasError={false}
+          /* v185 dogfood: v5 (renderSection 指定時) は EPS/売上 surprise を決算ダブり回避で抑制 */
+          hideFinancialLines={renderSection != null}
         />
       )}
 

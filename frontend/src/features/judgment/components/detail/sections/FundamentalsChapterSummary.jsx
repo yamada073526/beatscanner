@@ -69,7 +69,9 @@ function formatFailedConditions(conditions) {
  * @param {boolean} [props.isLoading=false] - データ取得中フラグ
  * @param {boolean} [props.hasError=false] - データ取得失敗フラグ
  */
-export default function FundamentalsChapterSummary({ result, guidance, isLoading = false, hasError = false }) {
+// v185 dogfood (2026-06-08): hideFinancialLines=true で EPS/売上 surprise 行を抑制
+//   (v5 では決算タブ「今期 決算結果」 と内容がダブるため、条件サマリー文 N/5 のみ残す)。v4 は false で従来表示。
+export default function FundamentalsChapterSummary({ result, guidance, isLoading = false, hasError = false, hideFinancialLines = false }) {
   // loading state
   if (isLoading && !result) {
     return (
@@ -119,16 +121,20 @@ export default function FundamentalsChapterSummary({ result, guidance, isLoading
   })();
 
   // EPS / 売上サマリー文を組み立てる
+  // v185 dogfood (2026-06-08): v5 (hideFinancialLines) では EPS/売上 surprise が決算タブ
+  //   「今期 決算結果」 とダブる (user feedback) ため抑制し、条件サマリー文 (N/5) のみ残す。
   const financialLines = [];
-  if (epsSurprise) {
-    financialLines.push(`EPS: ${epsSurprise}。`);
-  }
-  if (revSurprise) {
-    financialLines.push(`売上: ${revSurprise}。`);
-  }
-  // どちらもデータなしの場合 (Bloomberg idiom: 「—(データなし)」)
-  if (financialLines.length === 0) {
-    financialLines.push('—(データなし)');
+  if (!hideFinancialLines) {
+    if (epsSurprise) {
+      financialLines.push(`EPS: ${epsSurprise}。`);
+    }
+    if (revSurprise) {
+      financialLines.push(`売上: ${revSurprise}。`);
+    }
+    // どちらもデータなしの場合 (Bloomberg idiom: 「—(データなし)」)
+    if (financialLines.length === 0) {
+      financialLines.push('—(データなし)');
+    }
   }
 
   return (

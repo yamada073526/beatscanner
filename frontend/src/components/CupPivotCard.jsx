@@ -38,8 +38,11 @@ function fmtPct(v) {
   return `${sign}${v.toFixed(1)}%`;
 }
 
-// v185 B (2026-06-08): compact=true で narration detail / meta / sell 詳細を抑制 (conclusion + 損切り目安 + 免責は保持)。
-export default function CupPivotCard({ ticker, compact = false }) {
+// v185 B (2026-06-08): compact=true で narration detail / meta を抑制 (conclusion + 免責は保持)。
+// v185 dogfood (3体合議): variant='unified' で「売り目安」 section を隠し、横並び 3 枚を footer border-top の
+//   1 本に統一 (損切り目安はチャートの「損切り -8%」 ラインで補完)。v4 (variant='default') は従来描画。
+export default function CupPivotCard({ ticker, compact = false, variant = 'default' }) {
+  const isUnified = variant === 'unified';
   const [technical, setTechnical] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errored, setErrored] = useState(false);
@@ -203,7 +206,7 @@ export default function CupPivotCard({ ticker, compact = false }) {
         {/* v126 R14-6 (5/29 user 要望、 金融アナリスト Sonnet verdict 案 A):
             CupPivotCard 内に sell section 併記。 buy narration の下に divider + sell zone narration。
             既存 SellZoneCard (50DMA absolute) との役割分担: pivot 相対値 (S1 -8% / S2 +20-25% / S5 50DMA break) を担当。 */}
-        {CUP_SELL_ZONE_DESC_JP[state] && (
+        {CUP_SELL_ZONE_DESC_JP[state] && !isUnified && (
           <div className="cpc-section cpc-section--sell">
             <div className="cpc-section-header">
               <span className="cpc-section-label">{CUP_SELL_ZONE_DESC_JP[state].label}</span>

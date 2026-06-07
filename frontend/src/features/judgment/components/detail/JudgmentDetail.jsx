@@ -1257,11 +1257,13 @@ export default function JudgmentDetail({
             const technicalTargetGrid = selectedTicker ? (
               <SectionFade id="sec-target-and-zone-v5" staggerIndex={3}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4, 16px)' }}>
-                  {/* グループA: 価格目安 (目標 / 買い / サポート) */}
+                  {/* グループA: 価格目安 (目標 / 買い / サポート) — v185 dogfood (3体合議):
+                      variant="unified" で 3 枚を card-price-hero パターンに統一 (chip+大価格+delta 先頭 →
+                      h3 タイトル → body → footer)。hero の価格 baseline を横一直線に揃え「揃った感」を出す。 */}
                   <div style={groupGridStyle}>
-                    <AnalystTargetCard ticker={selectedTicker} compact />
-                    {plan === 'premium' && <CupPivotCard ticker={selectedTicker} compact />}
-                    {plan === 'premium' && <BuyZoneCard ticker={selectedTicker} compact />}
+                    <AnalystTargetCard ticker={selectedTicker} compact variant="unified" />
+                    {plan === 'premium' && <CupPivotCard ticker={selectedTicker} compact variant="unified" />}
+                    {plan === 'premium' && <BuyZoneCard ticker={selectedTicker} compact variant="unified" />}
                   </div>
                   {/* グループB: 状態 (通常レンジ / Distribution)、hairline で区切り */}
                   {plan === 'premium' && (
