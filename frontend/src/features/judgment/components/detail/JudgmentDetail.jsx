@@ -1199,12 +1199,32 @@ export default function JudgmentDetail({
               </>
             );
             // ④ テクニカル章 (章扉② + チャート + 期間別リターン + 分析[目標/売り/Cup/買い/Distribution])
+            // v5 polish (user dogfood 2026-06-08「積み木バラバラ」): targetZoneBlock の不揃いな配置
+            // (アナリスト目標+売り=2列 → Cup/サポート/Distribution=全幅縦積み) を解消。
+            // auto-fit grid (幅に応じ列数自動、狭いと1列折返し) + align-items:start で「並列だが窮屈にならない」。
+            // 各 card 内部は不変 (共有 component、v4 不変)。SectionFade / premium gate は targetZoneBlock 踏襲。
+            const technicalTargetGrid = selectedTicker ? (
+              <SectionFade id="sec-target-and-zone-v5" staggerIndex={3}>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                  gap: 'var(--space-4, 16px)',
+                  alignItems: 'start',
+                }}>
+                  <AnalystTargetCard ticker={selectedTicker} />
+                  {plan === 'premium' && <SellZoneCard ticker={selectedTicker} />}
+                  {plan === 'premium' && <CupPivotCard ticker={selectedTicker} />}
+                  {plan === 'premium' && <BuyZoneCard ticker={selectedTicker} />}
+                  {plan === 'premium' && <DistributionDaysCard ticker={selectedTicker} />}
+                </div>
+              </SectionFade>
+            ) : null;
             const technicalChapterBlock = (
               <>
                 <ChapterSection chapterNumber="②" chapterTitle="テクニカル" headerOnly tier="sub" />
                 {chartBlock}
                 {returnGridNode}
-                {targetZoneBlock}
+                {technicalTargetGrid}
               </>
             );
             // ⑤ その他 (市場評価 + 8Q決算反応 + Insider + リファレンス)
