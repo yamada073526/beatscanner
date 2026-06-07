@@ -42,6 +42,9 @@ export default function FundamentalsAccordion({
   ch2Tab,
   setCh2Tab,
   onAnalyze,
+  // v184 grill-me: v5 (入れ子章再編) では章扉を JudgmentDetail 側の ChapterSection で統一する
+  // ため、本 component の内包章扉 (ChapterSection / SectionDivider) を非表示にする。
+  hideChapterHeader = false,
 }) {
   const isFundaLoading = !result && detail?.isLoading !== false;
   return (
@@ -57,7 +60,7 @@ export default function FundamentalsAccordion({
           Phase G Phase 3 + v99 dogfood 3 体合議 verdict (2+3 構成):
           - v2 mode: 副柱 (ファンダメンタル) = sans 13px + muted (主柱 III と差別化)
           - default: 既存 SectionDivider「数値の根拠」 維持 (revert 安全) */}
-      {isV2 ? (
+      {hideChapterHeader ? null : isV2 ? (
         <ChapterSection chapterNumber="①" chapterTitle="ファンダメンタル" headerOnly tier="sub" />
       ) : (
         <div data-chapter-start="true">

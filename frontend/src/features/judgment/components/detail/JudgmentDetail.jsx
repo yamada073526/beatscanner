@@ -235,6 +235,23 @@ function isPane3V4() {
   }
 }
 
+// v184 grill-me (2026-06-07): Pane3 入れ子章再編 (ファンダ/テクニカル親章化 + 新 5 ブロック構成)。
+// 6 体合議 (全員条件付賛成) verdict で「新 flag default OFF → user 朝 dogfood → default ON 昇格」 確定
+// (isV4 が v125→v126 で辿った経路。無監視 autopilot で全 PC ユーザーの主画面を即時変更するのを回避し、
+//  isV4 全体を切り戻す ?pane3_v4=0 より細い切り戻し粒度を確保する)。
+// isV4 が true のときのみ上位 opt-in として評価。?pane3_v5=1 / =0 or localStorage 'pane3_v5'='1'。
+function isPane3V5() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('pane3_v5');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('pane3_v5') === '1';
+  } catch {
+    return false;
+  }
+}
+
 function isPane3V2Frameless() {
   try {
     if (typeof window === 'undefined') return false;
@@ -606,6 +623,8 @@ export default function JudgmentDetail({
   const isV3 = isPane3V3();
   // v125 P8-3 Sprint B: Pane 3 案 B 新順序 flag (default OFF、 URL ?pane3_v4=1 で先行 dogfood)。
   const isV4 = isPane3V4();
+  // v184 grill-me: 入れ子章再編。isV4 上位の opt-in、default OFF (?pane3_v5=1 で試用)。
+  const isV5 = isV4 && isPane3V5();
   // ch2Tab / ch3Tab の useState は v107 hotfix で early return より前 (L320 周辺) に移動済。
   // 本位置に置くと Rules of Hooks 違反 (React #310 Rendered more hooks than during the previous render)。
 
@@ -634,7 +653,9 @@ export default function JudgmentDetail({
           isPane3V2() の場合、 Hero + SummaryBrief + KpiStrip + TriageBanner +
           FiveConditionsCard 4 ブロックを UnifiedJudgmentSection で「章 1 判定」 として
           1 つの unified section に統合する (default off、 ?pane3_v2=1 で試用可)。 */}
-      {(() => {
+      {/* v184 grill-me: v5 (入れ子章再編) では階層1を独立 render せず、下の block IIFE で
+          ①ティッカー章にまとめて再配置する。!isV5 (既存 v4/v2/legacy) は従来どおり常時 render。 */}
+      {!isV5 && (() => {
         const v2 = isV2; // hoisted from component scope (Phase G Phase 3)
         const v2Frameless = v2 && isPane3V2Frameless(); // Phase 2 は v2 mode 内で opt-in
         const innerVerdictBlock = (
@@ -862,6 +883,7 @@ export default function JudgmentDetail({
         const fundamentalsBlock = (
           <FundamentalsAccordion
             key="fundamentals"
+            hideChapterHeader={isV5}
             selectedTicker={selectedTicker}
             result={result}
             guidance={guidance}
@@ -1059,6 +1081,150 @@ export default function JudgmentDetail({
         );
 
         if (isV4) {
+          if (isV5) {
+            // === v184 grill-me: 入れ子章再編 (新 5 ブロック構成、6 体合議 verdict 反映) ===
+            // ①ティッカー ②図解 ③ファンダ章 ④テクニカル章 ⑤その他。
+            // 階層1要素 (hero/summary/kpi/triage/5条件/ttm/eps) は !isV5 階層1 とは別記述で
+            // ①③に再配置 (既存 v4/v2/legacy を不変に保つための複製。DRY 化は default ON 昇格後)。
+            // ⚠️ Sprint 1 は骨格のみ: 章サマリー静的拡張 (Sprint 3) と 3軸3段階判定 (Sprint 4, §38 gate)
+            // は別 sprint。章内の厳密順序 (会社概要↔5条件) は Sprint 3 で FundamentalsAccordion と調整。
+            const tickerHeaderBlock = (
+              <>
+                <VerdictHero verdict={verdict}>
+                  <Hero
+                    ticker={selectedTicker}
+                    companyName={result?.companyName}
+                    verdict={verdict}
+                    period={result?.latestPeriod ? `FY${result.latestPeriod}` : null}
+                    nextEarningsDays={detail?.nextEarningsDays}
+                    nextEarningsDate={detail?.nextEarningsDate}
+                    watchlist={detailContext?.watchlist}
+                    onAddToWatchlist={detailContext?.onAddToWatchlist}
+                  />
+                  {/* v184 Sprint 1: SummaryBrief は本 sprint では残置 (廃止は Sprint 3 で各章サマリーへ一本化)。 */}
+                  {result && (
+                    <SummaryBrief
+                      analysis={result}
+                      guidance={guidance}
+                      guidanceSecLoading={guidanceSecLoading}
+                    />
+                  )}
+                </VerdictHero>
+                <KpiStrip stats={kpis} />
+                {/* grill 決定 2: トリアージは保有時のみ最上位 (非保有は TriageBanner 内部で非表示)。 */}
+                {selectedTicker && (
+                  <SectionFade staggerIndex={0}>
+                    <TriageBanner
+                      ticker={selectedTicker}
+                      user={detailContext.user}
+                      plan={plan}
+                      onUpgrade={detailContext.onUpgrade}
+                      onJumpToScanner={detailContext.onJumpToScanner}
+                      currentPrice={Number.isFinite(detail?.price) ? Number(detail.price) : null}
+                      onOpenAddTransaction={detailContext.onOpenAddTransaction}
+                    />
+                  </SectionFade>
+                )}
+              </>
+            );
+
+            // ② 図解 (free = ぼかしプレビュー化は Sprint 2 で funnel-cro 委譲、本 sprint は既存 Pro/free 分岐を流用)
+            const diagramNode = (plan === 'pro' || plan === 'premium') ? (
+              <StickyDiagramAccordion
+                ticker={selectedTicker}
+                analysis={result}
+                guidance={guidance}
+              />
+            ) : (
+              <PremiumLock
+                feature="ai_diagram"
+                plan={plan}
+                label="図解で 5 条件・ビジネスを 2 秒で理解"
+                onUpgrade={detailContext.onUpgrade}
+              >
+                <div
+                  aria-hidden="true"
+                  style={{
+                    height: 64,
+                    borderRadius: 'var(--radius-md)',
+                    background: 'rgba(56, 189, 248, 0.04)',
+                    border: '1px solid rgba(56, 189, 248, 0.10)',
+                  }}
+                />
+              </PremiumLock>
+            );
+
+            const fiveConditionsNode = (
+              <FiveConditionsCard
+                conditions={conditions}
+                passedCount={result?.passedCount}
+                totalCount={result?.totalCount}
+                isPro={detailContext.isPro}
+                onUpgrade={detailContext.onUpgrade}
+                onConditionPulse={(idx) => {
+                  setPulsingConditionIndex(idx === 4 ? 'all_steps' : idx);
+                }}
+              />
+            );
+            const ttmNode = (result && selectedTicker && valuationExtras) ? (
+              <TtmValuationPanel
+                ticker={selectedTicker}
+                valuationExtras={valuationExtras}
+                sectionLabel="TTM バリュエーション"
+              />
+            ) : null;
+            const epsNode = selectedTicker ? <EpsBeatStreakChip ticker={selectedTicker} /> : null;
+            const returnGridNode = (result && selectedTicker) ? (
+              <ReturnGrid ticker={selectedTicker} frameless={true} testId="judgment-return-grid" />
+            ) : null;
+
+            // ③ ファンダ章 (章扉① + 5条件 + TTM + EPS + FundamentalsAccordion[hideChapterHeader])
+            const fundamentalsChapterBlock = (
+              <>
+                <ChapterSection chapterNumber="①" chapterTitle="ファンダメンタル" headerOnly tier="sub" />
+                {fiveConditionsNode}
+                {ttmNode}
+                {epsNode}
+                {fundamentalsBlock}
+              </>
+            );
+            // ④ テクニカル章 (章扉② + チャート + 期間別リターン + 分析[目標/売り/Cup/買い/Distribution])
+            const technicalChapterBlock = (
+              <>
+                <ChapterSection chapterNumber="②" chapterTitle="テクニカル" headerOnly tier="sub" />
+                {chartBlock}
+                {returnGridNode}
+                {targetZoneBlock}
+              </>
+            );
+            // ⑤ その他 (市場評価 + 8Q決算反応 + Insider + リファレンス)
+            const miscChapterBlock = (
+              <>
+                {marketEvalBlock}
+                {earningsReactionBlock}
+                {insiderBlock}
+                {contextBlock}
+              </>
+            );
+
+            // 並び順は宣言的 config 配列で定義 (frontend-architect verdict: key は安定文字列、index 禁止)。
+            const BLOCK_ORDER_V5 = [
+              { id: 'ticker', testid: 'pane3-ch-ticker', node: tickerHeaderBlock },
+              { id: 'diagram', testid: 'pane3-ch-diagram', node: diagramNode },
+              { id: 'fundamentals', testid: 'pane3-ch-fundamentals', node: fundamentalsChapterBlock },
+              { id: 'technical', testid: 'pane3-ch-technical', node: technicalChapterBlock },
+              { id: 'misc', testid: 'pane3-ch-misc', node: miscChapterBlock },
+            ];
+            return (
+              <>
+                {BLOCK_ORDER_V5.filter((b) => b.node != null).map(({ id, testid, node }) => (
+                  <div key={id} data-testid={testid} data-state={selectedTicker ? 'main' : 'empty'}>
+                    {node}
+                  </div>
+                ))}
+              </>
+            );
+          }
           // === 案 B 新順序 (v125 P8-3 Sprint B、 user gate 3 確定) ===
           // 階層 1 (判定 + 5 条件) は既に上で render 済 → 続く順序:
           // 1. StickyDiagramAccordion (default OFF、 sticky top:0) — v138.6 R7-G Pro 限定
