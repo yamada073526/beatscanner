@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { ChartCandlestick, Crown, TrendingUp, SlidersHorizontal, ChevronDown } from 'lucide-react';
-import { fetchCustomScreener, fetchCupHandleScanner, fetchRsScanner, fetchUniverseMeta } from '../api.js';
+import { fetchCustomScreener, fetchCupHandleScanner, fetchRsScanner, fetchUniverseMeta, fetchCanslimScanner } from '../api.js';
 import Chip, { ChipGroup } from './ui/Chip.jsx';
 // Sprint 3: 市場局面バナーを ScreenerPane と共有 (FtdRegimeBanner.jsx が SSOT、二重定義なし)
 import FtdRegimeBanner from '../features/workspace/FtdRegimeBanner.jsx';
@@ -68,7 +68,7 @@ const SCANNER_FILTERS = [
   { key: 'breakout', label: 'ブレイクアウト', premium: true, fullLabel: 'Cup-Handle ブレイクアウト確定 (Pivot 上抜け + 出来高確認)', titleExtra: '打診買いゾーン: Pivot 価格を出来高を伴って上抜けた確定銘柄のみ。 ATH 追いかけ買い (extended) は除外' },
   { key: 'rs',    label: 'RS上位', titleExtra: '相対強度 ≥ 80 — 米国主要銘柄〈ETF・ファンド除く〉 universe で上位 20%' },
   { key: 'both',  label: 'ファンダ&カップ', premium: true, fullLabel: 'ファンダ AND Cup-Handle 複合検索' },
-  { key: 'oneill', label: '全条件クリア', premium: true, fullLabel: 'ファンダ AND Cup-Handle AND RS≥80 (3条件 全クリア)', titleExtra: '打診買い 3 点セット (ファンダメンタル5条件 × Cup-Handle × Relative Strength)' },
+  { key: 'oneill', label: '全条件クリア', premium: true, fullLabel: 'ファンダ AND Cup-Handle AND RS≥80 AND 四半期EPS成長 (主要条件 全クリア)', titleExtra: '打診買い 主要条件セット (ファンダメンタル5条件 × Cup-Handle × Relative Strength × 四半期EPS成長 +18%以上)' },
 ];
 
 const CUP_STATE_LABEL = {
@@ -754,11 +754,15 @@ function OneillScannerResults({ data, onSelect, onUpgrade }) {
           </p>
         </div>
         <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-          ファンダメンタル5条件 PASS かつ Cup-Handle 形成中 かつ RS ≥ 80 を全て満たす銘柄は希少です
+          ファンダメンタル5条件 PASS かつ Cup-Handle 形成中 かつ RS ≥ 80
+          {data.canslim_ready ? ' かつ 四半期EPS成長 +18%以上' : ''} を全て満たす銘柄は希少です
           (月 5-15 銘柄目安)。 nightly scan (JST 8:00-8:30) の翌朝に再 check 推奨。
         </p>
         <p className="text-[10px] text-[var(--text-muted)] mt-2 tabular-nums">
           内訳: ファンダ∩Cup {data.both_total} 件 / RS≥80 {data.rs_total} 件
+          {data.canslim_ready
+            ? ` / 四半期EPS成長 達成 ${data.canslim_total} 件・未達 ${data.canslim_failed} 件・データなし ${data.canslim_excluded} 件`
+            : ' / 四半期EPS成長 集計前'}
         </p>
       </div>
     );
@@ -773,6 +777,7 @@ function OneillScannerResults({ data, onSelect, onUpgrade }) {
         </span>
         <span className="text-[10px] text-[var(--text-muted)] tabular-nums ml-auto">
           ファンダ∩Cup {data.both_total} / RS≥80 {data.rs_total}
+          {data.canslim_ready ? ` / EPS成長 達成 ${data.canslim_total}` : ' / EPS成長 集計前'}
         </span>
       </div>
 
@@ -946,24 +951,37 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
       return;
     }
     if (filterKey === 'oneill') {
-      // v122 O'Neil 完全: 'both' (ファンダ ∩ カップ) と RS≥80 を並列 fetch して frontend intersection
+      // v122 → Phase2 S4: 'both' (ファンダ∩カップ) ∩ RS≥80 ∩ C(四半期EPS YoY≥18%) の交差。
+      // C 条件 (/api/scanner/canslim) は backend が単一条件 read、 交差は frontend で行う
+      // (feedback_oneill_screener_frontend_intersection)。
       try {
-        const [bothResult, rsResult] = await Promise.all([
+        const [bothResult, rsResult, canslimResult] = await Promise.all([
           fetchCupHandleScanner('both').catch((e) => ({ error: e.message, items: [], total_count: 0, visible_count: 0, is_premium: false })),
           fetchRsScanner(80, 500).catch((e) => ({ error: e.message, items: [], universe_size: 0 })),
+          fetchCanslimScanner(18).catch((e) => ({ error: e.message, items: [], total_count: 0, failed_count: 0, excluded_count: 0, as_of: null })),
         ]);
         const rsTickers = new Set((rsResult.items || []).map((r) => (r.ticker || '').toUpperCase()));
         const rsPctByTicker = new Map((rsResult.items || []).map((r) => [(r.ticker || '').toUpperCase(), r]));
+        const canslimByTicker = new Map((canslimResult.items || []).map((r) => [(r.ticker || '').toUpperCase(), r]));
+        const canslimTickers = new Set(canslimByTicker.keys());
+        // C 条件 populate 済 (as_of あり + 3状態 count 合計 > 0) の時のみ交差に適用。
+        // 未 populate (nightly 前) は oneill を 3 条件に graceful degrade し「集計前」表示
+        // (空テーブルで AND すると oneill が常に 0 件化する regression を回避)。
+        const canslimReady = !!canslimResult.as_of &&
+          ((canslimResult.total_count || 0) + (canslimResult.failed_count || 0) + (canslimResult.excluded_count || 0)) > 0;
         const intersected = (bothResult.items || []).filter((it) => {
           const t = (it.ticker || '').toUpperCase();
-          // v148 ⑦ (3 体合議): breakout_extended は正統 cup-handle でないため O'Neil 打診買い
-          // 3 点交差からも除外 (高値圏突破は section ③ のみで露出、 §5 優良誤認回避)。
+          // v148 ⑦ (3 体合議): breakout_extended は正統 cup-handle でないため打診買い
+          // 交差からも除外 (高値圏突破は section ③ のみで露出、 §5 優良誤認回避)。
           if (it.state === 'breakout_extended') return false;
-          return t && rsTickers.has(t);
+          if (!(t && rsTickers.has(t))) return false;
+          if (canslimReady && !canslimTickers.has(t)) return false; // C 条件 (populate 済時のみ)
+          return true;
         }).map((it) => ({
           ...it,
           rs_universe_percentile: rsPctByTicker.get((it.ticker || '').toUpperCase())?.universe_percentile,
           rs_vs_spy_pct: rsPctByTicker.get((it.ticker || '').toUpperCase())?.rs_vs_spy_pct,
+          eps_yoy_pct: canslimByTicker.get((it.ticker || '').toUpperCase())?.eps_yoy_pct,
         }));
         setOneillData({
           items: intersected,
@@ -973,6 +991,12 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
           rs_total: (rsResult.items || []).length,
           rs_universe_size: rsResult.universe_size || 0,
           rs_calc_date: rsResult.calc_date,
+          // C 条件 3 状態 (達成/未達/データなし) — 6体合議 facet count integrity
+          canslim_ready: canslimReady,
+          canslim_total: canslimResult.total_count || 0,
+          canslim_failed: canslimResult.failed_count || 0,
+          canslim_excluded: canslimResult.excluded_count || 0,
+          canslim_as_of: canslimResult.as_of || null,
           error: bothResult.error || rsResult.error || null,
         });
       } catch (e) {
