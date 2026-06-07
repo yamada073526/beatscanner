@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { ChartCandlestick, Crown, TrendingUp, SlidersHorizontal, ChevronDown } from 'lucide-react';
+import { ChartCandlestick, Crown, TrendingUp, SlidersHorizontal, ChevronDown, BarChart2 } from 'lucide-react';
 import { fetchCustomScreener, fetchCupHandleScanner, fetchRsScanner, fetchUniverseMeta, fetchCanslimScanner } from '../api.js';
 import Chip, { ChipGroup } from './ui/Chip.jsx';
 // Sprint 3: 市場局面バナーを ScreenerPane と共有 (FtdRegimeBanner.jsx が SSOT、二重定義なし)
@@ -70,6 +70,171 @@ const SCANNER_FILTERS = [
   { key: 'both',  label: 'ファンダ&カップ', premium: true, fullLabel: 'ファンダ AND Cup-Handle 複合検索' },
   { key: 'oneill', label: '全条件クリア', premium: true, fullLabel: 'ファンダ AND Cup-Handle AND RS≥80 AND 四半期EPS成長 (主要条件 全クリア)', titleExtra: '打診買い 主要条件セット (ファンダメンタル5条件 × Cup-Handle × Relative Strength × 四半期EPS成長 +18%以上)' },
 ];
+
+// Sprint 5: 2本柱トグル UI 設計データ。
+// chip key は SCANNER_FILTERS と完全一致 (key は維持、見た目グルーピングのみ再編)。
+// ファンダメンタル柱 = 「全て」 (default ファンダ5条件 PASS 表示)。
+// テクニカル柱 = cup / breakout / rs。
+// 複合おすすめ = both / oneill (2柱の上で headline 的に扱う)。
+const PILLAR_TECHNICAL = [
+  {
+    key: 'cup',
+    label: 'カップ形成中',
+    badge: '形成中',
+    badgeTone: 'accent',
+    hint: 'Cup-Handle パターン形成中の銘柄',
+  },
+  {
+    key: 'breakout',
+    label: 'ブレイクアウト',
+    badge: 'Pivot 上抜け確定',
+    badgeTone: 'gain',
+    premium: true,
+    fullLabel: 'Cup-Handle ブレイクアウト確定 (Pivot 上抜け + 出来高確認)',
+    hint: '打診買いゾーン: Pivot 価格を出来高を伴って上抜けた確定銘柄のみ。ATH 追いかけ買い (extended) は除外',
+  },
+  {
+    key: 'rs',
+    label: 'RS 上位',
+    badge: 'RS ≥ 80',
+    badgeTone: 'gain',
+    hint: '相対強度 ≥ 80 — 米国主要銘柄〈ETF・ファンド除く〉universe で上位 20%',
+  },
+];
+const PILLAR_COMBO = [
+  {
+    key: 'both',
+    label: 'ファンダ&カップ',
+    badge: '複合',
+    badgeTone: 'accent',
+    premium: true,
+    fullLabel: 'ファンダ AND Cup-Handle 複合検索',
+    hint: 'ファンダメンタル5条件 PASS かつ Cup-Handle 形成中の銘柄',
+  },
+  {
+    key: 'oneill',
+    label: '主要条件クリア',
+    badge: '全4条件',
+    badgeTone: 'elite',
+    premium: true,
+    fullLabel: 'ファンダ AND Cup-Handle AND RS≥80 AND 四半期EPS成長 (主要条件 全クリア)',
+    hint: '打診買い 主要条件セット (ファンダメンタル5条件 × Cup-Handle × RS上位 × 四半期EPS成長 +18%以上)',
+  },
+];
+
+/**
+ * Sprint 5: 2本柱のピラーセクション (折りたたみ)。
+ * 既存 Chip.jsx primitive + token 色のみ使用。新規 glow host 禁止。
+ * loading / errored / empty / main の testid 全 render path 付与 (feedback_testid_all_render_paths)。
+ */
+function FilterPillarSection({ title, icon, chips, activeFilter, onSelect, defaultOpen = false, 'data-testid': testId }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const hasActive = chips.some((c) => c.key === activeFilter);
+  // active chip があれば自動展開 (UX: 選択中の柱が閉じたまま = 混乱)
+  const isOpen = open || hasActive;
+
+  return (
+    <div
+      className="rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)]"
+      data-testid={testId || 'filter-pillar-section'}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={isOpen}
+        className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-[var(--text-secondary)]"
+        data-testid={testId ? `${testId}-toggle` : 'filter-pillar-toggle'}
+      >
+        {icon}
+        <span>{title}</span>
+        {hasActive && (
+          <span
+            className="rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums"
+            style={{
+              background: 'color-mix(in srgb, var(--color-accent) 18%, transparent)',
+              color: 'var(--color-accent)',
+            }}
+          >
+            選択中
+          </span>
+        )}
+        <ChevronDown
+          size={13}
+          aria-hidden
+          className={`ml-auto transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}
+          style={{ color: 'var(--text-muted)' }}
+        />
+      </button>
+      {isOpen && (
+        <div
+          className="border-t border-[var(--border)] px-3 py-3 flex flex-wrap gap-2"
+          data-testid={testId ? `${testId}-content` : 'filter-pillar-content'}
+        >
+          {chips.map((f) => {
+            const isActive = activeFilter === f.key;
+            return (
+              <div key={f.key} className="flex flex-col gap-1">
+                <Chip
+                  size="sm"
+                  variant="filter"
+                  tone={isActive ? 'accent' : 'muted'}
+                  pressed={isActive}
+                  onClick={() => onSelect(f.key)}
+                  title={f.fullLabel
+                    ? `${f.fullLabel}${f.hint ? `\n\n${f.hint}` : ''}${f.premium ? '\n\nPremium ¥1,800/月 限定' : ''}`
+                    : f.hint}
+                  data-testid={`filter-chip-${f.key}`}
+                >
+                  {f.premium && (
+                    <Crown
+                      size={11}
+                      strokeWidth={1.75}
+                      aria-hidden
+                      style={{ color: 'var(--color-gold)', marginRight: 4, verticalAlign: '-1px' }}
+                    />
+                  )}
+                  {f.key === 'rs' && (
+                    <TrendingUp
+                      size={11}
+                      strokeWidth={2}
+                      aria-hidden
+                      style={{ color: 'var(--color-gain)', marginRight: 4, verticalAlign: '-1px' }}
+                    />
+                  )}
+                  {f.label}
+                </Chip>
+                {/* 折りたたみ詳細: range/段階 badge (SPEC §5 Sprint5 完了判定 b) */}
+                {f.badge && (
+                  <span
+                    className="inline-flex items-center self-start rounded-full px-1.5 py-0.5 text-[9px] font-semibold tabular-nums"
+                    style={{
+                      background: f.badgeTone === 'gain'
+                        ? 'color-mix(in srgb, var(--color-gain) 14%, transparent)'
+                        : f.badgeTone === 'elite'
+                        ? 'color-mix(in srgb, var(--color-gold) 16%, transparent)'
+                        : f.badgeTone === 'accent'
+                        ? 'color-mix(in srgb, var(--color-accent) 14%, transparent)'
+                        : 'color-mix(in srgb, var(--text-muted) 14%, transparent)',
+                      color: f.badgeTone === 'gain'
+                        ? 'var(--color-gain)'
+                        : f.badgeTone === 'elite'
+                        ? 'var(--color-gold)'
+                        : f.badgeTone === 'accent'
+                        ? 'var(--color-accent)'
+                        : 'var(--text-muted)',
+                    }}
+                  >
+                    {f.badge}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const CUP_STATE_LABEL = {
   formation: '形成中',
@@ -1149,54 +1314,89 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
             <span className="ml-auto text-xs text-[var(--text-muted)]">{data.screenedAt} 実行</span>
           </div>
 
-          {/* Cup-Handle filter chips (Phase 2.4、 multi-review verdict D + 7) */}
-          <div className="flex flex-wrap items-center gap-2">
-            <ChipGroup prefix="探索" gap="normal" ariaLabel="スキャナー絞り込み">
+          {/* Sprint 5: 2本柱検索 UI (chip 増殖防止 / カラフル過多回避 / SPEC §5 S5)。
+              平坦な chip 列挙を「ファンダメンタル柱 / テクニカル柱 + 複合おすすめ」へ整理。
+              chip key (funda/cup/breakout/rs/both/oneill) と active 動作は完全維持。
+              data-testid: loading/errored/empty/main 全 render path 付与済
+                (feedback_testid_all_render_paths) */}
+          <div
+            className="space-y-2"
+            data-testid="screener-filter-pillars"
+            aria-label="スキャナー絞り込み"
+          >
+            {/* 「全て」: ファンダメンタル5条件 PASS 結果をデフォルト表示 */}
+            <div className="flex items-center gap-2" data-testid="screener-filter-all-row">
               <Chip
                 size="sm"
                 variant="filter"
                 tone={activeFilter === null ? 'accent' : 'muted'}
                 pressed={activeFilter === null}
                 onClick={() => { setActiveFilter(null); setCupData(null); }}
+                data-testid="filter-chip-all"
               >
                 全て
               </Chip>
-              {SCANNER_FILTERS.map((f) => {
-                const isActive = activeFilter === f.key;
-                return (
-                  <Chip
-                    key={f.key}
-                    size="sm"
-                    variant="filter"
-                    tone={isActive ? 'accent' : 'muted'}
-                    pressed={isActive}
-                    onClick={() => runCupFilter(f.key)}
-                    title={f.premium ? `${f.fullLabel || 'Premium 限定'}\nPremium ¥1,800/月 限定 (Pro tier はファンダのみ / カップのみ 個別 scan 可)${f.titleExtra ? `\n\n${f.titleExtra}` : ''}` : f.titleExtra}
-                  >
-                    {/* v120 hotfix (user dogfood + icon-brand-consistency): 🔒 emoji の安っぽさを Crown 格調シンボルへ。
-                        Aman 級ブランド世界観整合、 Pro 限定 = 「王冠 = 王者の選別」 メタファー */}
-                    {f.premium && (
-                      <Crown
-                        size={11}
-                        strokeWidth={1.75}
-                        aria-hidden
-                        style={{ color: 'var(--color-gold)', marginRight: 4, verticalAlign: '-1px' }}
-                      />
-                    )}
-                    {/* v120 RS Screener: 'rs' chip に TrendingUp icon で「相対強度」 視覚化 */}
-                    {f.key === 'rs' && (
-                      <TrendingUp
-                        size={11}
-                        strokeWidth={2}
-                        aria-hidden
-                        style={{ color: 'var(--color-gain)', marginRight: 4, verticalAlign: '-1px' }}
-                      />
-                    )}
-                    {f.label}
-                  </Chip>
-                );
-              })}
-            </ChipGroup>
+              <span className="text-xs text-[var(--text-muted)]">ファンダメンタル5条件 PASS 銘柄</span>
+            </div>
+
+            {/* 複合おすすめ (2柱の上で headline 的に配置 — 希少性で最も価値が高いため先出し) */}
+            <div
+              className="rounded-xl border border-[color-mix(in_srgb,var(--color-gold)_28%,transparent)] bg-[color-mix(in_srgb,var(--color-gold)_5%,transparent)] px-3 py-2.5"
+              data-testid="screener-filter-combo-section"
+            >
+              <div className="mb-2 flex items-center gap-1.5">
+                <Crown size={12} strokeWidth={1.75} aria-hidden style={{ color: 'var(--color-gold)', flexShrink: 0 }} />
+                <span className="text-[11px] font-semibold" style={{ color: 'var(--color-gold)' }}>複合条件</span>
+              </div>
+              <div className="flex flex-wrap gap-2" data-testid="screener-filter-combo-chips">
+                {PILLAR_COMBO.map((f) => {
+                  const isActive = activeFilter === f.key;
+                  return (
+                    <div key={f.key} className="flex flex-col gap-1">
+                      <Chip
+                        size="sm"
+                        variant="filter"
+                        tone={isActive ? 'accent' : 'muted'}
+                        pressed={isActive}
+                        onClick={() => runCupFilter(f.key)}
+                        title={f.fullLabel ? `${f.fullLabel}\n\n${f.hint || ''}${f.premium ? '\n\nPremium ¥1,800/月 限定' : ''}` : f.hint}
+                        data-testid={`filter-chip-${f.key}`}
+                      >
+                        <Crown
+                          size={11}
+                          strokeWidth={1.75}
+                          aria-hidden
+                          style={{ color: 'var(--color-gold)', marginRight: 4, verticalAlign: '-1px' }}
+                        />
+                        {f.label}
+                      </Chip>
+                      {f.badge && (
+                        <span
+                          className="inline-flex items-center self-start rounded-full px-1.5 py-0.5 text-[9px] font-semibold tabular-nums"
+                          style={{
+                            background: 'color-mix(in srgb, var(--color-gold) 16%, transparent)',
+                            color: 'var(--color-gold)',
+                          }}
+                        >
+                          {f.badge}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* テクニカル柱 (折りたたみ、デフォルト閉) — カップ / ブレイクアウト / RS上位 */}
+            <FilterPillarSection
+              title="テクニカル条件 (カップ / RS上位など)"
+              icon={<BarChart2 size={13} strokeWidth={2} aria-hidden style={{ color: 'var(--text-muted)', flexShrink: 0 }} />}
+              chips={PILLAR_TECHNICAL}
+              activeFilter={activeFilter}
+              onSelect={runCupFilter}
+              defaultOpen={false}
+              data-testid="screener-filter-technical"
+            />
           </div>
 
           {/* v120 RS Screener results (activeFilter === 'rs' のとき表示) */}
