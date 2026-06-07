@@ -374,7 +374,7 @@ function isNonEquityTicker(ticker) {
   return t.startsWith('^') || t.endsWith('=F') || t.endsWith('=X');
 }
 
-function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
+function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTitle = false }) {
   const [period, setPeriod] = useState('1y');
   // v147: 非株式 (指数/先物/為替/DXY) では「個別株前提」 の売買・pattern オーバーレイを一括非表示にする gate。
   const isNonEquity = isNonEquityTicker(ticker);
@@ -839,7 +839,8 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade }) {
       {/* Header */}
       <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-wrap">
-          <h3 className="section-heading" style={{ marginBottom: 0 }}>株価チャート</h3>
+          {/* v5 (入れ子章再編): テクニカル章扉「②テクニカル」の直下で冗長なため hideTitle で非表示 (user dogfood 2026-06-08)。default false で既存 v4 は不変。 */}
+          {!hideTitle && <h3 className="section-heading" style={{ marginBottom: 0 }}>株価チャート</h3>}
           {/* v126 R14-7 (user dogfood「Chart に現在株価表示」): chart title 隣に直近終値を大型表示。
               既存 axis label のみだと「今いくらか」 即視認難、 retail 「2 秒判定」 (5 原則 #1) 整合。 */}
           {Number.isFinite(currentPrice) && (

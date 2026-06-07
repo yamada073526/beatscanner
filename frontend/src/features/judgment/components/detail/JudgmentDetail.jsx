@@ -946,7 +946,7 @@ export default function JudgmentDetail({
 
         const chartBlock = selectedTicker ? (
           <SectionFade key="chart" id="sec-chart" staggerIndex={3}>
-            <StockPriceChart ticker={selectedTicker} isPremiumUser={plan === 'premium'} onUpgrade={detailContext.onUpgrade} />
+            <StockPriceChart ticker={selectedTicker} isPremiumUser={plan === 'premium'} onUpgrade={detailContext.onUpgrade} hideTitle={isV5} />
           </SectionFade>
         ) : null;
 
@@ -1166,14 +1166,17 @@ export default function JudgmentDetail({
                 }}
               />
             );
+            // v5 polish (user dogfood 2026-06-08): 仕切りを付け (frameless=false) 章内の見出しレベルを
+            // 他セクションと統一。名称は専門用語「TTM」を外し「バリュエーション」へ (sub に「直近4四半期合算」が残る)。
             const ttmNode = (result && selectedTicker && valuationExtras) ? (
               <TtmValuationPanel
                 ticker={selectedTicker}
                 valuationExtras={valuationExtras}
-                sectionLabel="TTM バリュエーション"
+                frameless={false}
+                sectionLabel="バリュエーション"
               />
             ) : null;
-            const epsNode = selectedTicker ? <EpsBeatStreakChip ticker={selectedTicker} /> : null;
+            // EPS Beat Streak は決算タブ「今期」と内容重複のため v5 ファンダ章から除外 (user dogfood 2026-06-08)。
             const returnGridNode = (result && selectedTicker) ? (
               <ReturnGrid ticker={selectedTicker} frameless={true} testId="judgment-return-grid" />
             ) : null;
@@ -1184,7 +1187,6 @@ export default function JudgmentDetail({
                 <ChapterSection chapterNumber="①" chapterTitle="ファンダメンタル" headerOnly tier="sub" />
                 {fiveConditionsNode}
                 {ttmNode}
-                {epsNode}
                 {fundamentalsBlock}
               </>
             );
