@@ -1166,15 +1166,23 @@ export default function JudgmentDetail({
                 }}
               />
             );
-            // v5 polish (user dogfood 2026-06-08): 仕切りを付け (frameless=false) 章内の見出しレベルを
-            // 他セクションと統一。名称は専門用語「TTM」を外し「バリュエーション」へ (sub に「直近4四半期合算」が残る)。
+            // v5 polish (user dogfood 2026-06-08): 名称は専門用語「TTM」を外し「バリュエーション」へ (sub に「直近4四半期合算」が残る)。
+            // ⚠️ TtmValuationPanel の frameless=false は class 'ds-card-frameless' (= border:none の枠なし) を付けるだけで
+            // 枠が出ない (user「仕切り確認できない」)。→ frameless=true (内部 padding 0) のまま wrapper div で枠 (border+radius+bg)
+            // を付与し他セクション (会社概要 card) と見出しレベルを統一。発光系 .panel-card は不使用 (inline token、低リスク)。
             const ttmNode = (result && selectedTicker && valuationExtras) ? (
-              <TtmValuationPanel
-                ticker={selectedTicker}
-                valuationExtras={valuationExtras}
-                frameless={false}
-                sectionLabel="バリュエーション"
-              />
+              <div style={{
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-lg, 16px)',
+                padding: 'var(--space-4, 16px)',
+                background: 'var(--bg-card)',
+              }}>
+                <TtmValuationPanel
+                  ticker={selectedTicker}
+                  valuationExtras={valuationExtras}
+                  sectionLabel="バリュエーション"
+                />
+              </div>
             ) : null;
             // EPS Beat Streak は決算タブ「今期」と内容重複のため v5 ファンダ章から除外 (user dogfood 2026-06-08)。
             const returnGridNode = (result && selectedTicker) ? (
