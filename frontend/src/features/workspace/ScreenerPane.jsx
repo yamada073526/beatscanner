@@ -299,8 +299,18 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
         </p>
       </div>
       {loading ? (
-        <div data-testid={`${testId}-loading`} style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--space-3, 12px)' }}>
-          読み込み中…
+        /* Sprint4 skeleton: 読み込み中テキストを形状一致 shimmer に置換 (feedback_cls_envelope_pattern)
+           既存 skel-base + skel-text-line を流用、新規 keyframe なし、background-position アニメで CLS 安全 */
+        <div
+          data-testid={`${testId}-loading`}
+          style={{ padding: 'var(--space-3, 12px)', minHeight: 96 }}
+          aria-busy="true"
+          aria-label="読み込み中"
+        >
+          <div className="skel-base skel-text-line" style={{ width: '75%', marginBottom: 8 }} />
+          <div className="skel-base skel-text-line" style={{ width: '55%', marginBottom: 8 }} />
+          <div className="skel-base skel-text-line" style={{ width: '65%', marginBottom: 8 }} />
+          <div className="skel-base skel-text-line" style={{ width: '45%' }} />
         </div>
       ) : error ? (
         // P6-2: per-source partial failure UI (「該当銘柄なし」 vs「データ取得失敗」 を明示)

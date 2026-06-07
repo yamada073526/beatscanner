@@ -372,28 +372,45 @@ function RsScannerResults({ data, onSelect, universeMeta }) {
   }, [filter.filteredItems, sortKey]);
 
   if (!data) {
+    /* Sprint4 skeleton: スキャン中テキストを形状一致 shimmer に置換
+       skel-base + skel-text-line 流用 (既存 keyframe)、minHeight で CLS 防止 */
     return (
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-3 text-xs text-[var(--text-muted)]">
-        スキャン中...
+      <div
+        className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-3"
+        data-testid="rs-scanner-loading"
+        style={{ minHeight: 96 }}
+        aria-busy="true"
+        aria-label="RSスキャン中"
+      >
+        <div className="skel-base skel-text-line" style={{ width: '70%', marginBottom: 8 }} />
+        <div className="skel-base skel-text-line" style={{ width: '50%', marginBottom: 8 }} />
+        <div className="skel-base skel-text-line" style={{ width: '60%', marginBottom: 8 }} />
+        <div className="skel-base skel-text-line" style={{ width: '40%' }} />
       </div>
     );
   }
   if (data.error) {
     return (
-      <div className="rounded-lg border border-[var(--color-loss)] bg-[var(--bg-subtle)] p-3 text-xs text-[var(--color-loss)]">
+      <div
+        className="rounded-lg border border-[var(--color-loss)] bg-[var(--bg-subtle)] p-3 text-xs text-[var(--color-loss)]"
+        data-testid="rs-scanner-error"
+      >
         RS スキャン失敗: {data.error}
       </div>
     );
   }
   if (rawItems.length === 0) {
     return (
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-3 text-xs text-[var(--text-muted)]">
+      <div
+        className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-3 text-xs text-[var(--text-muted)]"
+        data-testid="rs-scanner-empty"
+      >
         {data.note || `RS ≥ ${data.min_percentile ?? 80} の銘柄なし (nightly batch 未実行の可能性、 明朝確認)`}
       </div>
     );
   }
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-testid="rs-scanner-results">
       {/* Trust Cliff 防止: universe 範囲を 1 行で明示 */}
       <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--text-muted)]">
         <span>universe: 米国主要 約{data.universe_size}銘柄〈ETF・ファンド除く〉 / 6 ヶ月 RS / {data.calc_date} 計算</span>
@@ -494,15 +511,29 @@ function CupScannerResults({ data, onSelect, onUpgrade, filterKey, universeMeta 
   // ⚠️ hooks は早期 return より前 (Rules of Hooks)。 RS と同一の共有 sector/mcap 絞り込み hook。
   const filter = useMetaFilter(data?.items || [], universeMeta);
   if (!data) {
+    /* Sprint4 skeleton: スキャン中テキストを形状一致 shimmer に置換
+       skel-base + skel-text-line 流用 (既存 keyframe)、minHeight で CLS 防止 */
     return (
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-3 text-xs text-[var(--text-muted)]">
-        スキャン中...
+      <div
+        className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-3"
+        data-testid="cup-scanner-loading"
+        style={{ minHeight: 96 }}
+        aria-busy="true"
+        aria-label="Cupスキャン中"
+      >
+        <div className="skel-base skel-text-line" style={{ width: '65%', marginBottom: 8 }} />
+        <div className="skel-base skel-text-line" style={{ width: '50%', marginBottom: 8 }} />
+        <div className="skel-base skel-text-line" style={{ width: '70%', marginBottom: 8 }} />
+        <div className="skel-base skel-text-line" style={{ width: '45%' }} />
       </div>
     );
   }
   if (data.error) {
     return (
-      <div className="rounded-lg border border-[color-mix(in_srgb,var(--color-loss)_25%,transparent)] bg-[color-mix(in_srgb,var(--color-loss)_8%,transparent)] p-3 text-xs text-[var(--color-loss)]">
+      <div
+        className="rounded-lg border border-[color-mix(in_srgb,var(--color-loss)_25%,transparent)] bg-[color-mix(in_srgb,var(--color-loss)_8%,transparent)] p-3 text-xs text-[var(--color-loss)]"
+        data-testid="cup-scanner-error"
+      >
         スキャン失敗: {data.error}
       </div>
     );
@@ -545,14 +576,17 @@ function CupScannerResults({ data, onSelect, onUpgrade, filterKey, universeMeta 
 
   if (totalCount === 0) {
     return (
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-3 text-sm text-[var(--text-muted)]">
+      <div
+        className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-3 text-sm text-[var(--text-muted)]"
+        data-testid="cup-scanner-empty"
+      >
         現在 {filterLabel} 該当銘柄はありません (nightly scan は UTC 23:00 = JST 8:00 に実行)
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-testid="cup-scanner-results">
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <span className="font-semibold text-[var(--text-primary)]">
           {filterLabel}: 全 {totalCount} 件
@@ -676,15 +710,29 @@ function CupResultCard({ item, onSelect, masked = false }) {
  */
 function OneillScannerResults({ data, onSelect, onUpgrade }) {
   if (!data) {
+    /* Sprint4 skeleton: 3条件並列スキャン中テキストを形状一致 shimmer に置換
+       skel-base + skel-text-line 流用 (既存 keyframe)、minHeight で CLS 防止 */
     return (
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-3 text-xs text-[var(--text-muted)]">
-        3 条件 (ファンダ × Cup × RS) 並列スキャン中...
+      <div
+        className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-3"
+        data-testid="oneill-scanner-loading"
+        style={{ minHeight: 96 }}
+        aria-busy="true"
+        aria-label="3条件スキャン中"
+      >
+        <div className="skel-base skel-text-line" style={{ width: '60%', marginBottom: 8 }} />
+        <div className="skel-base skel-text-line" style={{ width: '45%', marginBottom: 8 }} />
+        <div className="skel-base skel-text-line" style={{ width: '55%', marginBottom: 8 }} />
+        <div className="skel-base skel-text-line" style={{ width: '35%' }} />
       </div>
     );
   }
   if (data.error) {
     return (
-      <div className="rounded-lg border border-[color-mix(in_srgb,var(--color-loss)_25%,transparent)] bg-[color-mix(in_srgb,var(--color-loss)_8%,transparent)] p-3 text-xs text-[var(--color-loss)]">
+      <div
+        className="rounded-lg border border-[color-mix(in_srgb,var(--color-loss)_25%,transparent)] bg-[color-mix(in_srgb,var(--color-loss)_8%,transparent)] p-3 text-xs text-[var(--color-loss)]"
+        data-testid="oneill-scanner-error"
+      >
         スキャン失敗: {data.error}
       </div>
     );
@@ -695,7 +743,10 @@ function OneillScannerResults({ data, onSelect, onUpgrade }) {
 
   if (items.length === 0) {
     return (
-      <div className="rounded-xl border border-[color-mix(in_srgb,var(--color-gold)_25%,transparent)] bg-[color-mix(in_srgb,var(--color-gold)_6%,transparent)] p-4">
+      <div
+        className="rounded-xl border border-[color-mix(in_srgb,var(--color-gold)_25%,transparent)] bg-[color-mix(in_srgb,var(--color-gold)_6%,transparent)] p-4"
+        data-testid="oneill-scanner-empty"
+      >
         <div className="flex items-center gap-2 mb-2">
           <Crown size={14} strokeWidth={1.75} style={{ color: 'var(--color-gold)' }} aria-hidden />
           <p className="text-sm font-semibold text-[var(--text-primary)]">
@@ -714,7 +765,7 @@ function OneillScannerResults({ data, onSelect, onUpgrade }) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-testid="oneill-scanner-results">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Crown size={14} strokeWidth={1.75} style={{ color: 'var(--color-gold)' }} aria-hidden />
         <span className="font-semibold text-[var(--text-primary)]">
