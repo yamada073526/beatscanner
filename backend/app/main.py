@@ -18760,6 +18760,38 @@ def _calc_buyback_yield(
     return buyback_yield
 
 
+def _roe_equity_guard(
+    roe_candidate: "float | None",
+    equity_per_share: "float | None",
+) -> "float | None":
+    """A 条件 ROE individual guard (モジュールレベル helper、 純 Python)。
+
+    stockholders equity が負の銘柄 (MCD/PM 等、 自社株買いで自己資本が負) の ROE は
+      - 正 NI ÷ 負 equity → 負 ROE (例 MCD -434%)
+      - 負 NI ÷ 負 equity → 正の壊れた高 ROE
+    となり §5 誤選別の原因になるため roe を NULL 化 (比較保留)。
+
+    equity_per_share = FMP /stable/ratios-ttm の shareholdersEquityPerShareTTM。
+    負 = 負 stockholders equity の直接シグナル (実測: MCD -1.81 / PM -5.94 / AAPL +7.24)。
+
+    ★ key-metrics-ttm には equity / debtToEquity field が無い (実測) ため、
+      旧 S4a の debtToEquityTTM ガードは非機能だった (main 再検証で発見・修正)。
+    ★ AAPL (roe 146.7、 equity 正 7.24) は equity 正のため保持される。
+      AAPL 型の「正小資本→高 ROE 表示問題」は S5 display 補完 (金融 option b)。
+
+    返却: equity が負なら None、 それ以外は roe_candidate (equity 不明時も保持 = 過剰 NULL 化回避)。
+    """
+    if roe_candidate is None:
+        return None
+    if equity_per_share is not None:
+        try:
+            if float(equity_per_share) < 0:
+                return None
+        except (ValueError, TypeError):
+            pass
+    return roe_candidate
+
+
 def _upsert_screener_fundamental(
     ticker: str,
     calc_date: date,
@@ -19131,32 +19163,36 @@ async def cron_canslim_scan(
                                 roe_candidate = round(roe_f * 100.0, 2)
                             except (ValueError, TypeError):
                                 roe_candidate = None
-                            # ── S4a BLOCK② ROE individual guard (負 equity 検出) ────────
-                            # debtToEquityTTM が負値 = 分母の stockholders equity が負
-                            # (D/E = debt/equity で equity<0 → D/E<0)。
-                            # 負 equity 銘柄の ROE は「負 equity ÷ 正 profit → 負 ROE」また
-                            # は「負 equity ÷ 負 loss → 正 ROE (壊れた高 ROE)」になり
-                            # §5 誤選別の原因となる。debtToEquityTTM < 0 を negative equity の
-                            # 代理シグナルとして使い roe を NULL 化する (追加 FMP call ゼロ)。
-                            #
-                            # ⚠️ AAPL 型は捕捉外: AAPL の equity は正 (小さいだけ)、
-                            # debtToEquity は正値 (高め) → このガードでは弾かれない。
-                            # AAPL の高 ROE (146.7%) は genuine として保持される。
-                            # AAPL 型の「正小資本→高 ROE 表示問題」は S5 display 補完で対処予定
-                            # (ROE 単独を優良ラベルにしない、金融 option b、本 sprint scope 外)。
-                            #
-                            # NVDA 相当 (ROE 111.7%、正 equity): 捕捉外 → 保持 (正しい挙動)。
-                            dte_raw = r_rec.get("debtToEquityTTM")
-                            negative_equity = False
-                            if dte_raw is not None:
+                            # ── S4a BLOCK② ROE individual guard (負 equity 検出、main hotfix) ──
+                            # 負 stockholders equity 銘柄 (MCD/PM 等、 自社株買いで equity 負) の
+                            # ROE は -434% 等の無意味な値 / 正の壊れた高 ROE になり §5 誤選別の原因。
+                            # equity 符号は ratios-ttm の shareholdersEquityPerShareTTM で判定
+                            # (_roe_equity_guard helper)。
+                            # ★ 旧実装は key-metrics-ttm の debtToEquityTTM を読んでいたが、
+                            #   このカラムは key-metrics-ttm にも ratios-ttm にも存在せず (実測、
+                            #   ratios-ttm の正名は debtToEquityRatioTTM) ガードが非機能だった
+                            #   (main 再検証で MCD roe=-434/PM roe=-105 が NULL 化されず発見・修正)。
+                            # ★ コスト最適化: ratios-ttm 追加 fetch は roe が疑わしい時のみ
+                            #   (roe>50% or roe<0)。正常 ROE (0-50%) は正 equity 前提で fetch skip。
+                            #   AAPL (146.7) / NVDA (111.7) は fetch されるが equity 正で保持。
+                            #   AAPL 型の高 ROE 表示問題は S5 display 補完 (金融 option b)。
+                            roe = roe_candidate
+                            if roe_candidate is not None and (roe_candidate > 50.0 or roe_candidate < 0.0):
                                 try:
-                                    negative_equity = float(dte_raw) < 0
-                                except (ValueError, TypeError):
-                                    pass
-                            if negative_equity:
-                                roe = None  # 負 equity → roe NULL 化 (§5 誤選別回避)
-                            else:
-                                roe = roe_candidate
+                                    eq_data = await safe_fmp_get(
+                                        f"https://financialmodelingprep.com/stable/ratios-ttm"
+                                        f"?symbol={ticker.upper()}&apikey={fmp_key}",
+                                        f"ratios-ttm::{ticker.upper()}",
+                                        ttl=CACHE_TTL_PROFILE,
+                                    )
+                                    eq_rec = eq_data[0] if isinstance(eq_data, list) and eq_data else (
+                                        eq_data if isinstance(eq_data, dict) else {}
+                                    )
+                                    roe = _roe_equity_guard(
+                                        roe_candidate, eq_rec.get("shareholdersEquityPerShareTTM")
+                                    )
+                                except Exception:
+                                    pass  # equity 確認失敗時は roe_candidate 保持 (過剰 NULL 化回避)
             except Exception:
                 roe = None  # fetch / ガード判定失敗 → NULL (欠損ガード)
 

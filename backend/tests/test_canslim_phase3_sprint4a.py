@@ -27,6 +27,7 @@ import pytest
 from app.main import (
     _calc_eps_yoy_pct_from_surprises,
     _upsert_screener_fundamental,
+    _roe_equity_guard,
     _MIN_VALID_CANSLIM_ROWS,
 )
 
@@ -108,76 +109,46 @@ class TestNearZeroBaseNullification:
         assert abs(result - 100.0) < 0.1, f"(2-1)/1*100 = 100.0 であるべき、実際: {result}"
 
 
-# ─── ROE individual guard テスト (BLOCK②) ──────────────────────────────────
-# ROE individual guard はコードレベルで r_rec から debtToEquityTTM を取得して判定する。
-# _compute_one は async endpoint 内部にあるため unit test は代替パターンで検証する。
+# ─── ROE individual guard テスト (BLOCK②、main hotfix で実 helper 化) ──────────
+# guard は _roe_equity_guard(roe_candidate, equity_per_share) helper を実コードが呼ぶ。
+# equity_per_share = ratios-ttm の shareholdersEquityPerShareTTM (負 = 負 stockholders equity)。
+# ★ 旧テストは debtToEquityTTM ベースのロジックを test 内で再実装していたため、
+#   実コードの guard 非機能 (key-metrics-ttm に debtToEquityTTM 不在) を検出できなかった。
+#   本テストは実 helper _roe_equity_guard を直接呼んで実コードパスを検証する。
 
-class TestRoeIndividualGuardConcept:
-    """ROE individual guard の概念検証 (debtToEquityTTM の判定ロジック)"""
-
-    def _apply_roe_guard(self, debtToEquity_ttm, roe_raw_value):
-        """
-        ROE individual guard の Python ロジックを模倣。
-        実装 (main.py:19092-19124 付近) と同一条件で検証する。
-        """
-        # debtToEquityTTM < 0 → 負 equity (代理シグナル) → roe = None
-        negative_equity = False
-        if debtToEquity_ttm is not None:
-            try:
-                negative_equity = float(debtToEquity_ttm) < 0
-            except (ValueError, TypeError):
-                pass
-
-        if negative_equity:
-            return None  # 負 equity → NULL 化
-
-        # 正 equity → ROE 計算 (FMP returnOnEquityTTM は 0-1 スケール)
-        if roe_raw_value is None:
-            return None
-        try:
-            roe_f = float(roe_raw_value)
-            return round(roe_f * 100.0, 2)
-        except (ValueError, TypeError):
-            return None
+class TestRoeEquityGuard:
+    """ROE individual guard の実 helper _roe_equity_guard を直接検証"""
 
     def test_negative_equity_roe_nullified(self):
-        """負 equity (debtToEquity < 0) → roe = None (BLOCK② guard 動作)"""
-        result = self._apply_roe_guard(debtToEquity_ttm=-2.5, roe_raw_value=0.5)
-        assert result is None, f"負 equity の ROE は None であるべき、実際: {result}"
+        """負 equity (shareholdersEquityPerShareTTM < 0) → roe = None (MCD/PM 相当)"""
+        # MCD: equity_per_share = -1.81、roe_candidate = -434.0 → None
+        assert _roe_equity_guard(-434.0, -1.81) is None
+        # PM: equity_per_share = -5.94、roe_candidate = -105.3 → None
+        assert _roe_equity_guard(-105.3, -5.94) is None
 
-    def test_nvda_like_high_roe_preserved(self):
-        """NVDA 相当 (正 equity、ROE ≈ 111.7%): 保持される"""
-        # returnOnEquityTTM ≈ 1.117 (0-1 スケール)、debtToEquity > 0
-        result = self._apply_roe_guard(debtToEquity_ttm=0.42, roe_raw_value=1.117)
-        assert result is not None, "NVDA 相当の高 ROE は None であってはいけない"
-        assert abs(result - 111.7) < 0.1, f"NVDA ROE ≈ 111.7% であるべき、実際: {result}"
+    def test_positive_equity_high_roe_preserved(self):
+        """正 equity の高 ROE (NVDA 111.7 / AAPL 146.7) は保持 (AAPL 型は S5 display 補完)"""
+        # NVDA: equity_per_share = +8.05、roe = 111.7 → 保持
+        assert _roe_equity_guard(111.7, 8.05) == 111.7
+        # AAPL: equity_per_share = +7.24、roe = 146.7 → 保持 (正 equity、S5 で表示補完)
+        assert _roe_equity_guard(146.7, 7.24) == 146.7
 
-    def test_aapl_type_not_caught(self):
-        """AAPL 型 (正小資本→高 ROE): このガードでは捕捉されない (正しい挙動)。
-        AAPL の debtToEquity は正値 (高め) → 負 equity guard は非適用 → ROE 保持。
-        AAPL 型の問題は S5 display 補完で対処予定 (scope 外)。
-        """
-        # AAPL debtToEquity ≈ +2.0 (正値), returnOnEquityTTM ≈ 1.467
-        result = self._apply_roe_guard(debtToEquity_ttm=2.0, roe_raw_value=1.467)
-        assert result is not None, "AAPL 型 (正 equity) は保持されるべき"
-        assert abs(result - 146.7) < 0.1, f"AAPL ROE ≈ 146.7% であるべき、実際: {result}"
+    def test_none_equity_roe_preserved(self):
+        """equity_per_share が None (取得不可) → guard 非適用、roe 保持 (過剰 NULL 化回避)"""
+        assert _roe_equity_guard(17.0, None) == 17.0
 
-    def test_zero_equity_edge_case(self):
-        """debtToEquity = 0 (equity ゼロに近い) → 正値なのでガード非適用"""
-        result = self._apply_roe_guard(debtToEquity_ttm=0.0, roe_raw_value=0.5)
-        # 0.0 は負でないため roe は保持される
-        assert result is not None
+    def test_none_roe_candidate(self):
+        """roe_candidate が None → None"""
+        assert _roe_equity_guard(None, 7.24) is None
+        assert _roe_equity_guard(None, -1.81) is None
 
-    def test_none_debttoequity_roe_preserved(self):
-        """debtToEquity が None (取得不可) → guard 非適用、ROE は保持される"""
-        result = self._apply_roe_guard(debtToEquity_ttm=None, roe_raw_value=0.17)
-        assert result is not None
-        assert abs(result - 17.0) < 0.1
+    def test_zero_equity_preserved(self):
+        """equity_per_share = 0 (負でない) → guard 非適用、roe 保持"""
+        assert _roe_equity_guard(50.0, 0.0) == 50.0
 
-    def test_highly_negative_equity(self):
-        """大きく負の debtToEquity (−10 等) → roe = None"""
-        result = self._apply_roe_guard(debtToEquity_ttm=-10.0, roe_raw_value=0.8)
-        assert result is None
+    def test_invalid_equity_value_preserved(self):
+        """equity_per_share が型不正 → 例外を握りつぶし roe 保持"""
+        assert _roe_equity_guard(50.0, "bad") == 50.0
 
 
 # ─── pct 新カラム変換テスト (BLOCK①) ─────────────────────────────────────────
