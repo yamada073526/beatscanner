@@ -16830,6 +16830,215 @@ async def scanner_rs(
         raise HTTPException(status_code=500, detail=f"fetch_failed: {e}")
 
 
+# ============================================================================
+# CAN-SLIM Phase 2 Sprint 3: C 条件 read endpoint
+# (2026-06-07、 handover v176 / SPEC_2026-06-07_canslim-phase2-conditions.md §5 S3)
+#
+# Why:
+#   screener_fundamentals (Sprint 1 migration 済) に Sprint 2 nightly scan で
+#   eps_yoy_pct が populate されるようになった。 このデータを frontend の条件交差
+#   (Promise.all パターン = feedback_oneill_screener_frontend_intersection) に
+#   提供するための DB SELECT only read endpoint。
+#
+# 設計方針:
+#   - /api/scanner/rs (行 16732) の DB SELECT only パターンを踏襲
+#   - backend は単一条件 read に徹する (交差は frontend)
+#   - NULL (欠損) は SQL WHERE eps_yoy_pct >= min_pct で自動除外 (達成扱い禁止)
+#   - excluded_count (NULL 件数) を返して frontend が「データなし N 件」を表示可能にする
+#   - as_of (最新 calc_date) を返して §38 時点明記を担保
+#   - free gate: C 条件単独は free (§3-1 整合)、課金 gate を新規追加しない
+#   - LLM 不要: response に narration フィールドなし (Python 計算 + ticker list のみ)
+# ============================================================================
+
+# screener_fundamentals: partial scan guard の閾値
+# full scan が ~500 銘柄、partial (dry_run 等) は極少になるため 50 を床として使う。
+# ただし canslim-scan が nightly でまだ走っていない場合は空テーブルになるため、
+# _latest_valid_canslim_date は行数 0 の場合も graceful (None 返却) にする。
+_MIN_VALID_CANSLIM_ROWS = 50
+
+
+def _fetch_screener_fundamentals_by_condition(
+    sb,
+    condition: str,
+    min_pct: float,
+    calc_date: str,
+) -> tuple[list[dict], int]:
+    """screener_fundamentals から指定 condition の ticker list を DB SELECT only で取得。
+
+    CAN-SLIM Phase 2 Sprint 3: /api/scanner/rs の _fetch_rs_top_n に相当する helper。
+
+    Args:
+      sb: supabase service client
+      condition: "eps_yoy" のみ (将来 A/N/S 拡張時にカラムを切り替える)
+      min_pct: eps_yoy_pct >= この値の ticker を返す (default 18.0)
+      calc_date: 対象の calc_date (最新の valid date)
+
+    Returns:
+      (items, excluded_count)
+      items: [{ticker, eps_yoy_pct, calc_date}, ...]  (eps_yoy_pct IS NOT NULL のもの)
+      excluded_count: 同 calc_date で eps_yoy_pct IS NULL の行数 (欠損銘柄数)
+
+    NULL の取り扱い:
+      SQL の WHERE eps_yoy_pct >= min_pct は NULL を自動除外する (SQL NULL semantics)。
+      「達成扱いも未達扱いもしない」 SPEC §38/§5 欠損ガードは DB 層で自動保証。
+
+    将来拡張 (Phase 3):
+      condition == "roe" → WHERE roe >= min_pct
+      condition == "buyback_yield" → WHERE buyback_yield >= min_pct
+      (各カラムは schema 先行済、Sprint 1 migration で null のまま)
+    """
+    # condition → カラム名マッピング (Phase 3 拡張時にここを追加)
+    col_map = {
+        "eps_yoy": "eps_yoy_pct",
+        # "roe": "roe",
+        # "buyback_yield": "buyback_yield",
+    }
+    col = col_map.get(condition)
+    if col is None:
+        # 未知の condition は空を返す (500 にしない)
+        return [], 0
+
+    try:
+        # 達成銘柄 (NULL は自動除外)
+        result = (
+            sb.table("screener_fundamentals")
+            .select(f"ticker,{col},calc_date")
+            .eq("calc_date", calc_date)
+            .gte(col, min_pct)
+            .order(col, desc=True)
+            .execute()
+        )
+        items = result.data or []
+    except Exception as e:
+        print(f"[canslim_scanner] fetch_items failed: {e}")
+        items = []
+
+    try:
+        # 欠損銘柄数 (eps_yoy_pct IS NULL の行数)
+        # Supabase Python client: is_() で IS NULL を表現 (v1.x / v2.x 互換)
+        null_result = (
+            sb.table("screener_fundamentals")
+            .select("ticker", count="exact")
+            .eq("calc_date", calc_date)
+            .is_(col, "null")
+            .execute()
+        )
+        excluded_count = null_result.count or 0
+    except Exception as e:
+        print(f"[canslim_scanner] fetch_excluded_count failed: {e}")
+        excluded_count = 0
+
+    return items, excluded_count
+
+
+@app.get("/api/scanner/canslim")
+async def scanner_canslim(
+    condition: str = "eps_yoy",
+    min_pct: float = 18.0,
+):
+    """CAN-SLIM C 条件 Screener: eps_yoy_pct >= min_pct の銘柄を返す (DB SELECT only)。
+
+    CAN-SLIM Phase 2 Sprint 3 — /api/scanner/rs の DB SELECT only パターンを踏襲。
+
+    Query params:
+      condition: str (default "eps_yoy" = 四半期 EPS 前年同期比)
+                 将来 Phase 3 で "roe" / "buyback_yield" 等を追加予定
+      min_pct: float (default 18.0 = gate 1 確定値、四半期 EPS YoY% の目安閾値)
+
+    Returns:
+      {
+        "as_of": calc_date (str) | null,  -- §38 時点明記。canslim-scan 未実行時は null
+        "total_count": int,               -- eps_yoy_pct >= min_pct の銘柄数
+        "excluded_count": int,            -- eps_yoy_pct IS NULL の銘柄数 (データなし)
+        "condition": str,                 -- echo back
+        "min_pct": float,                 -- echo back
+        "tickers": [                      -- 達成銘柄リスト (eps_yoy_pct 降順)
+          {"ticker": str, "eps_yoy_pct": float, "calc_date": str},
+          ...
+        ],
+      }
+
+    空テーブル (canslim-scan 未実行) の場合:
+      {"tickers": [], "as_of": null, "total_count": 0, "excluded_count": 0, ...}  (200)
+
+    NULL の取り扱い (§38/§5 欠損ガード):
+      screener_fundamentals.eps_yoy_pct IS NULL の銘柄は tickers に含まれない。
+      SQL WHERE eps_yoy_pct >= min_pct は NULL を自動除外する (SQL NULL semantics)。
+      「達成扱いも未達扱いもしない」= excluded_count に計上し frontend が「データなし N 件」を表示する。
+
+    free/Premium gate:
+      C 条件単独は free (SPEC §3-1)。新規 gate を C のために増やさない。
+      既存 /api/scanner/rs / cup-handle の gate 方針 (gate なし) に合わせる。
+
+    LLM:
+      不使用。response に narration フィールドなし (hallucination-guard Sprint 3 確認済)。
+    """
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    min_pct = float(min_pct)
+
+    # 空テーブル graceful: screener_fundamentals に行が無い場合は空構造を返す (500 にしない)
+    empty_response = {
+        "as_of": None,
+        "total_count": 0,
+        "excluded_count": 0,
+        "condition": condition,
+        "min_pct": min_pct,
+        "tickers": [],
+        "note": "screener_fundamentals 空 (canslim-scan 未実行 or 実行中)",
+    }
+
+    try:
+        # 最新の valid calc_date を取得
+        # _MIN_VALID_CANSLIM_ROWS 未満の場合は partial scan として skip、
+        # それでも空なら None を返して graceful 空 response を返す。
+        calc_date, row_count = _latest_valid_calc_date(
+            sb, "screener_fundamentals", "calc_date", _MIN_VALID_CANSLIM_ROWS
+        )
+
+        # canslim-scan が一度も実行されていない場合 (または全 calc_date が partial)
+        if calc_date is None:
+            # 行数 0 の場合も含めて graceful に空を返す
+            # (partial guard で None になった場合も同様)
+            try:
+                # テーブル自体に行があるか確認 (partial guard を bypass して最新 date を試みる)
+                any_rows = (
+                    sb.table("screener_fundamentals")
+                    .select("calc_date")
+                    .order("calc_date", desc=True)
+                    .limit(1)
+                    .execute()
+                )
+                any_data = any_rows.data or []
+                if not any_data:
+                    # 完全に空テーブル
+                    return empty_response
+                # partial scan の date でも行が存在する → その date を使う (graceful degrade)
+                calc_date = any_data[0]["calc_date"]
+                row_count = 0  # partial だが使う
+            except Exception:
+                return empty_response
+
+        items, excluded_count = _fetch_screener_fundamentals_by_condition(
+            sb, condition, min_pct, calc_date
+        )
+
+        return {
+            "as_of": calc_date,
+            "total_count": len(items),
+            "excluded_count": excluded_count,
+            "condition": condition,
+            "min_pct": min_pct,
+            "tickers": items,
+        }
+
+    except Exception as e:
+        print(f"[scanner_canslim] fetch failed: {e}")
+        raise HTTPException(status_code=500, detail=f"fetch_failed: {e}")
+
+
 # Cup-Handle Phase 2.3 cron: nightly cup-notify (cup-scan の 5 分後に発火)
 # scan 完了後の transition を翌朝 JST 8:05 に digest mail 送信
 
