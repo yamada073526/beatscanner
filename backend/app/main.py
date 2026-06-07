@@ -17964,6 +17964,79 @@ async def serve_privacy_html() -> HTMLResponse:
     raise HTTPException(status_code=404, detail="Not found")
 
 
+# ============================================================================
+# CAN-SLIM Phase 2 Sprint 1: screener_fundamentals retention cleanup
+# (2026-06-07、 PGE Generator)
+#
+# 設計方針:
+#   - pattern-signals-cleanup と同パターン (monthly retention DELETE)
+#   - retention 30 日 (rs_ratings の 90 日より短い; スクリーナー用途は直近のみ有意)
+#   - 認証: X-Cron-Secret (既存 _check_cron_secret 再利用)
+#   - GHA 月次 schedule: .github/workflows/monthly_screener_cleanup.yml
+#     (feedback_railway_native_cron: Railway native cron は発火停止 → GHA 必須)
+#
+# ⚠️ 注意: nightly populate cron (/api/cron/canslim-scan) は Sprint 2 で追加する。
+#         本 Sprint では retention cleanup のみ。
+# ============================================================================
+
+
+def _delete_screener_fundamentals_before(cutoff_date: date) -> int:
+    """retention: cutoff_date より古い screener_fundamentals を削除。 返却は削除行数 (失敗時 -1)。
+    _delete_pattern_signals_before と同方針 (Supabase Free 500MB 圧迫回避)。"""
+    sb = _get_supabase_service()
+    if sb is None:
+        return -1
+    try:
+        res = (
+            sb.table("screener_fundamentals")
+            .delete()
+            .lt("calc_date", cutoff_date.isoformat())
+            .execute()
+        )
+        return len(res.data) if hasattr(res, "data") and res.data else 0
+    except Exception as e:
+        print(f"[screener_fundamentals] delete_before failed: {e}")
+        return -1
+
+
+@app.post("/api/cron/screener-fundamentals-cleanup")
+async def cron_screener_fundamentals_cleanup(
+    body: dict | None = None,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """retention cron: 30 日より古い screener_fundamentals を削除 (月次実行)。
+
+    screener_fundamentals は CAN-SLIM 条件 (C/A/N/S) のスクリーナー用途であり、
+    直近 30 日分のみ有意 (rs_ratings の 90 日より短い)。
+    Supabase Free 500MB 逼迫回避のため月次 DELETE を実行する。
+
+    Body (任意):
+      retention_days: int — default 30 (最小 7、最大 365)
+
+    認証: X-Cron-Secret (既存 _check_cron_secret 再利用)。
+    GitHub Actions monthly_screener_cleanup.yml が月次に起動
+    (feedback_railway_native_cron: Railway native cron は発火停止 → GHA 必須)。
+
+    ⚠️ migration 適用後 (Sprint 1 user 手順完了後) に初回実行可能。
+       Sprint 2 の canslim-scan populate が動く前は 0 件削除で正常。
+    """
+    _check_cron_secret(x_cron_secret)
+
+    body = body or {}
+    retention_days = int(body.get("retention_days", 30))
+    retention_days = max(7, min(365, retention_days))
+
+    cutoff = date.today() - timedelta(days=retention_days)
+    deleted = await asyncio.to_thread(_delete_screener_fundamentals_before, cutoff)
+
+    return {
+        "cutoff_date": cutoff.isoformat(),
+        "retention_days": retention_days,
+        "deleted_count": deleted,
+        "note": "screener_fundamentals retention cleanup (CAN-SLIM Phase 2)",
+    }
+
+
 # ── Static file serving (must be LAST — after all /api/* routes) ─────────────
 # Only mounted when frontend/dist exists (i.e. production build is present).
 # 注: StaticFiles(html=True) は `/` で index.html を返すが、 任意の未知 path には 404 を返す
