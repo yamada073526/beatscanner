@@ -1,0 +1,41 @@
+-- ========================================================================
+-- screener_fundamentals_turnaround マイグレーション (2026-06-07)
+-- セッション: CAN-SLIM Phase 3 Sprint 1 (PGE Generator)
+--
+-- 目的: screener_fundamentals テーブルに turnaround boolean カラムを追加。
+--       黒字転換バッジ用 — 前年同期 EPS が赤字 (負) かつ当期 EPS が正 の場合 true。
+--       C 条件で eps_yoy_pct = NULL (赤字 base) になる銘柄のうち、
+--       「赤字から黒字に転換した」という最重要セットアップを事実バッジとして救い上げる。
+--       金商法 §38: 率は出さず boolean 事実のみ (断定的将来予測 / 過大表示 禁止)。
+--
+-- 設計:
+--   - adding-only (既存カラムの型・制約は一切変更しない)
+--   - "if not exists" で冪等実行可能
+--   - GRANT 追加不要: 既存テーブルへの column 追加は table 単位の service_role
+--     GRANT (2026-06-07_screener_fundamentals_grants.sql) に包含される
+--     (feedback_supabase_grant_bug.md 確認: column 単位 GRANT は table GRANT に包含)
+--
+-- 適用方法 (user が Supabase SQL Editor で実行):
+--   1. 本ファイル全体を Supabase SQL Editor に貼り付けて実行
+--   2. 完了確認: 下記 SELECT で turnaround カラムの存在を確認
+--
+-- 完了確認 SQL:
+--   select column_name, data_type, column_default
+--     from information_schema.columns
+--    where table_name = 'screener_fundamentals'
+--      and column_name = 'turnaround';
+--   -- 期待結果: 1 行 (column_name=turnaround, data_type=boolean, column_default=false)
+--
+-- Phase 3 Sprint 1 着地後の canslim-scan はこのカラムに書き込む。
+-- 未適用のままデプロイしても eps_yoy_pct (C 条件) は影響なし — turnaround のみ
+-- "column not found" で upsert skip されるが backend は graceful に fallback する。
+-- ========================================================================
+
+alter table screener_fundamentals
+  add column if not exists turnaround boolean default false;
+
+-- 完了確認:
+-- select column_name, data_type, column_default
+--   from information_schema.columns
+--  where table_name = 'screener_fundamentals'
+--    and column_name = 'turnaround';

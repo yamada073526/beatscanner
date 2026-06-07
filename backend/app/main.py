@@ -4939,6 +4939,156 @@ def _rev_surprise_threshold(sector: str | None, industry: str | None) -> float:
     return 40.0
 
 
+# ── CAN-SLIM Phase 3 Sprint 1: A 条件 helper ─────────────────────────────
+# _rev_surprise_threshold の dict pattern (industry → 閾値) と同流儀で実装。
+# LLM 不使用・全 Python・静的 dict (SPEC §4 / feedback_sell_zone_static_dict)。
+
+# ROE 比較を保留する sector/industry の set (小文字 keyword 判定)。
+# 銀行: レバレッジ構造上 ROE が恒常的に高く、 自己資本が制度上圧縮される → 誤選別 §5。
+# 保険/証券/公益/REIT: 同様に構造的高 ROE または規制資本構造で ROE 比較が無意味。
+# gate 1 確定: 「広め除外」(銀行/REIT/保険/証券/公益)。
+_ROE_GUARD_KEYWORDS = (
+    "bank",            # Banks - Diversified / Banks - Regional
+    "reit",            # REIT - Diversified / REIT - Mortgage 等
+    "insurance",       # Insurance - Life / Insurance - P&C / Insurance - Reinsurance
+    "asset management",# Asset Management (金融系)
+    "brokerage",       # Capital Markets / Brokerage
+    "capital markets", # Goldman Sachs / Morgan Stanley 等
+    "financial services",  # Financial Services (広義)
+    "credit services", # Financial - Credit Services (与信業: COF / AXP 等)
+    "mortgage",        # Mortgage Finance
+    "utilities",       # Utilities - Regulated Electric / Gas / Water 等 (公益)
+)
+
+
+def _roe_sector_guard(sector: str | None, industry: str | None) -> bool:
+    """ROE 比較を保留すべき sector/industry なら True を返す。
+
+    True = ROE を NULL で upsert (比較保留 = 誤選別回避 §5)。
+    False = ROE 値を採用する。
+
+    判定ロジック:
+      - industry を優先 (より詳細、 _rev_surprise_threshold と同パターン)。
+      - industry が None の場合は sector を fallback 判定。
+      - "_ROE_GUARD_KEYWORDS" の keyword が industry (小文字) に含まれれば True。
+      - sector が "Financial Services" / "Utilities" なら True (industry 非取得時の広域ガード)。
+
+    (SPEC Sprint 1 §6 gate 1 確定事項: 銀行/REIT/保険/証券/公益 を除外)
+    """
+    ind = (industry or "").strip().lower()
+    if ind:
+        for kw in _ROE_GUARD_KEYWORDS:
+            if kw in ind:
+                return True
+        return False
+    # industry 非取得時は sector で広域ガード
+    sec = (sector or "").strip().lower()
+    if "financial" in sec or "utilities" in sec:
+        return True
+    return False
+
+
+def _calc_eps_cagr_3y(annual_eps_records: list[dict]) -> float | None:
+    """年次 EPS レコードから 3 年年率 CAGR (%) を計算する。
+
+    Args:
+        annual_eps_records: FMP income-statement(period=annual) の list。
+                            date (fiscal year end) / eps (or netIncome/sharesOutstanding) 等を含む。
+                            FMP は newest-first で返す (date 降順)。
+
+    Returns:
+        float: 3 年 CAGR (%)。例: 25.0 = 25%。
+        None: 以下のいずれかの場合 (欠損ガード、達成/未達に混ぜない)
+          - レコードが 3 年分 (4 件) 未満 (IPO 等 <3 年データ不足)
+          - base 年 (3 年前) の EPS が 0 または負 (赤字 base / 0 除算回避)
+          - EPS 値が取得できない (NULL / 欠損)
+          - 算出結果が math 的に無効 (符号反転で虚数等)
+
+    設計方針:
+      - date 照合 (index 方式禁止: project_quarterly_3conditions SSOT 踏襲)。
+        FMP annual は fiscal year end date ("2024-09-28" 等) を返す。
+      - CAGR = (base_end / base_start) ^ (1/3) - 1。
+        base_start = 3 年前 (oldest of 4 records)、 base_end = 最新。
+      - 赤字年が「途中」に挟まる場合は赤字 base ガード外 (CAGR は base/末端のみ見る)。
+        ただし base 年 EPS が負なら無条件 NULL (符号反転で虚数になる)。
+      - LLM 不使用・全 Python (aggregator 物理層相当)。
+
+    EPS field 優先順位 (FMP income-statement annual の実測):
+      eps > epsPerShareBasic > epsPerShareDiluted > netIncome (per-share 換算不可) の順。
+      netIncome は shares 非取得のため per-share 換算せず除外。
+    """
+    if not isinstance(annual_eps_records, list) or len(annual_eps_records) < 4:
+        return None
+
+    def _extract_eps(rec: dict) -> float | None:
+        for field in ("eps", "epsPerShareBasic", "epsPerShareDiluted"):
+            v = rec.get(field)
+            if v is not None:
+                try:
+                    f = float(v)
+                    # 0.0 は「未設定」の可能性が高い (quarterly-history の safe_eps_float と同流儀)
+                    if f != 0.0:
+                        return f
+                except (ValueError, TypeError):
+                    continue
+        return None
+
+    # newest-first なので date 降順 sort を保証 (FMP 通常 newest-first だが念のため)
+    sorted_recs = sorted(
+        annual_eps_records,
+        key=lambda r: r.get("date") or "",
+        reverse=True,  # newest first
+    )
+
+    # 最新 (year 0) と 3 年前 (year -3) を date 照合で取得
+    # 少なくとも 4 件必要 (year 0, -1, -2, -3 に対応)
+    if len(sorted_recs) < 4:
+        return None
+
+    newest_eps = _extract_eps(sorted_recs[0])
+    oldest_eps = _extract_eps(sorted_recs[3])  # 3 年前
+
+    if newest_eps is None or oldest_eps is None:
+        return None
+
+    # base (3 年前) が 0 または負 → CAGR 算出不可 (赤字 base / 0 除算)
+    if oldest_eps <= 0:
+        return None
+
+    # newest が負 → 3 年かけて赤字化 (成長なし、CAGR 算出自体は可能だが負値になる)
+    # 負 CAGR は「未達」として扱えるが、 ±が混在する中間年は無視するため
+    # base 健全 (正) / 末端 (負) の場合は NULL ではなく負値として返す
+    # ※ 符号反転 (赤字base) は oldest<=0 でガード済み
+    # CAGR = (newest / oldest)^(1/3) - 1
+    try:
+        ratio = newest_eps / oldest_eps
+        if ratio <= 0:
+            # 末端が負 = 3 年後に赤字転落、達成不能として NULL 返却
+            return None
+        cagr = (ratio ** (1.0 / 3.0) - 1.0) * 100.0
+        return round(cagr, 1)
+    except (ZeroDivisionError, ValueError, OverflowError):
+        return None
+
+
+# ── turnaround 判定 helper ──────────────────────────────────────────────────
+
+
+def _calc_turnaround(prev_eps: float | None, current_eps: float | None) -> bool:
+    """前年同期赤字 (prev_eps < 0) かつ当期黒字 (current_eps > 0) なら True。
+
+    C 条件の _calc_eps_yoy_pct_from_surprises が赤字 base で None を返す際に対応する
+    ブール値のみの判定 (率は出さない、金商法 §38 safe)。
+
+    Args:
+        prev_eps: 前年同期の EPS (float)。None = 情報なし → False 返却。
+        current_eps: 当期の EPS (float)。None = 情報なし → False 返却。
+    """
+    if prev_eps is None or current_eps is None:
+        return False
+    return prev_eps < 0 and current_eps > 0
+
+
 def _guard_revenue_basis_mismatch(
     rev_label: str, rev_pct: float | None, rev_reason: str | None,
     signal_quality: dict | None = None, threshold: float = 40.0,
@@ -18428,27 +18578,63 @@ def _upsert_screener_fundamental(
     ticker: str,
     calc_date: date,
     eps_yoy_pct: "float | None" = None,
+    eps_cagr_3y: "float | None" = None,
+    roe: "float | None" = None,
+    turnaround: "bool | None" = None,
 ) -> bool:
-    """screener_fundamentals テーブルに eps_yoy_pct を upsert。
+    """screener_fundamentals テーブルに各指標を upsert。
 
-    A/N/S カラム (eps_cagr_3y, roe, buyback_yield, near_high_pct) は Phase 3 用に
-    schema 先行済のため触らず NULL 維持。 upsert on_conflict=ticker,calc_date。
-    失敗時 False (呼び出し側でログ)。
+    Phase 3 Sprint 1 対応: eps_cagr_3y / roe / turnaround 引数を追加。
+    None 値のカラムは payload に含めない = 既存 DB 値を上書きしない (後方互換)。
+    C 条件 (eps_yoy_pct) は引数デフォルト None → payload に含まれないため
+    既存値が上書きされず Phase 2 の C 計算が回帰しない。
+
+    turnaround カラムが DB に未作成 (migration 未適用) の場合、
+    Supabase が "column not found" エラーを返す可能性がある。
+    このケースでは turnaround のみ省いて再 upsert し C/A 値を保護する (graceful fallback)。
+
+    upsert on_conflict=ticker,calc_date。失敗時 False (呼び出し側でログ)。
     """
     sb = _get_supabase_service()
     if sb is None:
         return False
+
+    row: dict = {
+        "ticker": ticker,
+        "calc_date": calc_date.isoformat(),
+    }
+    # None 以外の値のみ payload に追加 (NULL 上書き禁止 = 後方互換)
+    if eps_yoy_pct is not None:
+        row["eps_yoy_pct"] = eps_yoy_pct
+    if eps_cagr_3y is not None:
+        row["eps_cagr_3y"] = eps_cagr_3y
+    if roe is not None:
+        row["roe"] = roe
+    if turnaround is not None:
+        row["turnaround"] = turnaround
+
     try:
         sb.table("screener_fundamentals").upsert(
-            {
-                "ticker": ticker,
-                "calc_date": calc_date.isoformat(),
-                "eps_yoy_pct": eps_yoy_pct,
-            },
+            row,
             on_conflict="ticker,calc_date",
         ).execute()
         return True
     except Exception as e:
+        err_str = str(e)
+        # turnaround カラム未作成時の graceful fallback:
+        # "column" + "turnaround" エラーなら turnaround を外して再 upsert
+        if "turnaround" in err_str and turnaround is not None:
+            row_without_turnaround = {k: v for k, v in row.items() if k != "turnaround"}
+            try:
+                sb.table("screener_fundamentals").upsert(
+                    row_without_turnaround,
+                    on_conflict="ticker,calc_date",
+                ).execute()
+                print(f"[screener_fundamentals] turnaround column not found, upserted without turnaround for {ticker}")
+                return True
+            except Exception as e2:
+                print(f"[screener_fundamentals] upsert failed for {ticker}: {e2}")
+                return False
         print(f"[screener_fundamentals] upsert failed for {ticker}: {e}")
         return False
 
@@ -18534,33 +18720,38 @@ async def cron_canslim_scan(
         return v is not None
 
     async def _compute_one(ticker: str):
-        """1 ticker の EPS YoY% を計算して (ticker, eps_yoy_pct, err) を返す。
+        """1 ticker の C/A 指標を計算して (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, err) を返す。
+
+        Phase 3 Sprint 1 拡張: A 条件 (eps_cagr_3y / roe / turnaround) を追加。
+        C 条件 (eps_yoy_pct) の計算ロジックは変更なし (後方互換)。
 
         fetch + 計算のみ (upsert / counter 更新はしない = post-gather で逐次)。
         cup-scan の _scan_one と同型 (並列 fetch、 逐次 upsert)。
 
-        ★ current/prev とも earnings_surprises を source に統一 (quarterly-history 表示と
-        同一 source = 二重表示乖離=Trust Cliff 回避。income_statement の GAAP EPS は乖離するため不使用)。
-        limit=8 = 過去約2年 = 前年同期 (4Q 前) を内包。FMP call 1 本/ticker。
+        ★ EPS YoY% は current/prev とも earnings_surprises を source に統一。
+        ★ A 条件 (3 年 CAGR) は income-statement(annual, limit=4) を fetch。
+        ★ ROE は ratios-ttm の returnOnEquityTTM を使用 (直近 TTM が最も安定)。
+        ★ sector ガードは _fetch_sector_industry を相乗り (24h cache 共有)。
         """
         try:
+            # ── C 条件: EPS YoY% ─────────────────────────────────────────────
             try:
                 surprises_raw = await client.earnings_surprises(ticker, limit=8)
             except Exception:
-                return ticker, None, "earnings_surprises_failed"
+                return ticker, None, None, None, None, "earnings_surprises_failed"
             if not surprises_raw:
-                return ticker, None, "earnings_surprises_empty"
+                return ticker, None, None, None, None, "earnings_surprises_empty"
 
             surprises_past = [s for s in surprises_raw if _has_eps_actual(s)]
             if not surprises_past:
-                return ticker, None, "no_eps_actual_in_surprises"
+                return ticker, None, None, None, None, "no_eps_actual_in_surprises"
 
             latest = sorted(
                 surprises_past, key=lambda d: d.get("date") or "", reverse=True
             )[0]
             entry_date_str = latest.get("date") or ""
             if not entry_date_str:
-                return ticker, None, "no_entry_date"
+                return ticker, None, None, None, None, "no_entry_date"
             eps_actual = _safe_eps_float(
                 latest.get("eps")
                 or latest.get("epsActual")
@@ -18570,9 +18761,80 @@ async def cron_canslim_scan(
             eps_yoy_pct = _calc_eps_yoy_pct_from_surprises(
                 entry_date_str, eps_actual, surprises_past
             )
-            return ticker, eps_yoy_pct, None
+
+            # ── turnaround 判定 (C の負 base = None のケースを救済) ────────
+            # 前年同期 EPS を surprises_past から取得して判定
+            turnaround = False
+            try:
+                cur_d_for_turn = _parse_date_str(entry_date_str)
+                if cur_d_for_turn is not None:
+                    prev_target_turn = (cur_d_for_turn - _td_local(days=365)).isoformat()
+                    prev_row_turn = _nearest_by_date(prev_target_turn, surprises_past, max_diff_days=60)
+                    if prev_row_turn is not None:
+                        prev_eps_raw = (
+                            prev_row_turn.get("eps")
+                            or prev_row_turn.get("epsActual")
+                            or prev_row_turn.get("actualEarningResult")
+                            or prev_row_turn.get("actualEps")
+                        )
+                        if prev_eps_raw is not None:
+                            try:
+                                prev_eps_f = float(prev_eps_raw)
+                                turnaround = _calc_turnaround(prev_eps_f, eps_actual)
+                            except (ValueError, TypeError):
+                                pass
+            except Exception:
+                pass  # turnaround 判定失敗は False のまま継続
+
+            # ── A 条件: 3 年 EPS CAGR ────────────────────────────────────────
+            eps_cagr_3y: float | None = None
+            try:
+                annual_recs = await client.income_statement(ticker, limit=4, period="annual")
+                if isinstance(annual_recs, list) and annual_recs:
+                    eps_cagr_3y = _calc_eps_cagr_3y(annual_recs)
+            except Exception:
+                eps_cagr_3y = None  # fetch 失敗 → NULL (欠損ガード)
+
+            # ── A 条件: ROE (sector ガード付き) ─────────────────────────────
+            roe: float | None = None
+            try:
+                # sector/industry を _fetch_sector_industry 経由で取得 (24h cache 相乗り)
+                sector, industry = await _fetch_sector_industry(ticker, fmp_key)
+                if _roe_sector_guard(sector, industry):
+                    # sector ガード該当 → roe = None (比較保留、§5 誤選別回避)
+                    roe = None
+                else:
+                    # ROE は key-metrics-ttm の returnOnEquityTTM を使用。
+                    # ★ /stable/ratios-ttm には ROE field が無く (margin/per-share/valuation のみ、
+                    #   実測確認)、returnOnEquityTTM は /stable/key-metrics-ttm にある
+                    #   (feedback_fmp_ttm_field_map: key-metrics=absolute/yield 系)。
+                    ratios_url = (
+                        f"https://financialmodelingprep.com/stable/key-metrics-ttm"
+                        f"?symbol={ticker.upper()}&apikey={fmp_key}"
+                    )
+                    ratios_cache_key = f"key-metrics-ttm::{ticker.upper()}"
+                    ratios_data = await safe_fmp_get(
+                        ratios_url, ratios_cache_key, ttl=CACHE_TTL_PROFILE
+                    )
+                    if ratios_data is not None:
+                        r_rec = ratios_data[0] if isinstance(ratios_data, list) and ratios_data else (
+                            ratios_data if isinstance(ratios_data, dict) else {}
+                        )
+                        roe_raw = r_rec.get("returnOnEquityTTM")
+                        if roe_raw is not None:
+                            try:
+                                roe_f = float(roe_raw)
+                                # FMP returnOnEquityTTM は 0-1 スケール (小数点)
+                                # → % 換算して DB 保存 (例: 0.172 → 17.2)
+                                roe = round(roe_f * 100.0, 2)
+                            except (ValueError, TypeError):
+                                roe = None
+            except Exception:
+                roe = None  # fetch / ガード判定失敗 → NULL (欠損ガード)
+
+            return ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, None
         except Exception as e:
-            return ticker, None, f"unexpected: {e}"
+            return ticker, None, None, None, None, f"unexpected: {e}"
 
     # fetch + 計算: worker_count>1 で並列 (asyncio.Semaphore)、 =1 で逐次。
     # ★ 6体合議 critical 対応: 旧実装は完全逐次で full universe (3000) で GHA timeout (30min) 超過
@@ -18599,7 +18861,11 @@ async def cron_canslim_scan(
             results.append(await _compute_one(ticker))
 
     # count + upsert (post-gather 逐次、 cup-scan と同型)
-    for ticker, eps_yoy_pct, err in results:
+    # Phase 3 Sprint 1: result tuple が 6 要素 (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, err)
+    a_computed = 0   # CAGR が算出できた件数
+    roe_computed = 0 # ROE が取得できた件数
+    for result in results:
+        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, err = result
         if err:
             failed.append({"ticker": ticker, "reason": err})
             continue
@@ -18607,9 +18873,15 @@ async def cron_canslim_scan(
             eps_computed += 1
         else:
             eps_null += 1
+        if eps_cagr_3y is not None:
+            a_computed += 1
+        if roe is not None:
+            roe_computed += 1
         if not dry_run:
             ok = await asyncio.to_thread(
-                _upsert_screener_fundamental, ticker, today, eps_yoy_pct
+                _upsert_screener_fundamental,
+                ticker, today, eps_yoy_pct, eps_cagr_3y, roe,
+                turnaround if turnaround else None,
             )
             if ok:
                 upserted += 1
@@ -18620,6 +18892,8 @@ async def cron_canslim_scan(
         "processed_count": len(tickers),
         "eps_computed_count": eps_computed,
         "eps_null_count": eps_null,
+        "a_cagr_computed_count": a_computed,
+        "roe_computed_count": roe_computed,
         "upserted_count": upserted,
         "failed_count": len(failed),
         "failed_tickers": failed[:20],
@@ -18628,7 +18902,7 @@ async def cron_canslim_scan(
         "universe_size": len(tickers),
         "worker_count": worker_count,
         "dry_run": dry_run,
-        "note": "CAN-SLIM Phase 2 Sprint 2: eps_yoy_pct nightly scan",
+        "note": "CAN-SLIM Phase 3 Sprint 1: eps_yoy_pct + eps_cagr_3y + roe + turnaround nightly scan",
     }
 
 
