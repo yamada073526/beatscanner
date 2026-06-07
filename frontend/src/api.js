@@ -655,6 +655,27 @@ export async function fetchRsScanner(minPercentile = 80, limit = 50) {
   return r.json();
 }
 
+/**
+ * Phase 2 Sprint 4: C 条件 (四半期 EPS YoY%) スキャナー fetch。
+ * backend `/api/scanner/canslim` (DB SELECT only、 認証なし = free) を叩き、
+ * 達成銘柄 `items` と 3 状態 count を返す。
+ *
+ * - min_pct は整数で渡す (cache key 安定: ?min_pct=18 で固定)。
+ * - `items` key (cup/rs と統一済)。
+ * - `note` フィールドは開発者向け内部文言のため frontend では使用しない。
+ * - null 返却時: 達成 0 件 / 未達 0 件 / データなし 0 件 として graceful degradation。
+ *
+ * @param {number} [minPct=18] - EPS YoY% の下限閾値 (整数)
+ * @param {string} [condition='eps_yoy'] - 条件キー (現在は eps_yoy のみ)
+ * @returns {Promise<{as_of, total_count, failed_count, excluded_count, condition, min_pct, items}|null>}
+ */
+export async function fetchCanslimScanner(minPct = 18, condition = 'eps_yoy') {
+  const url = `/api/scanner/canslim?condition=${encodeURIComponent(condition)}&min_pct=${Math.round(minPct)}`;
+  const r = await fetch(url);
+  if (!r.ok) return null;
+  return r.json();
+}
+
 // v159 SPEC_2026-06-03 Part B: スクリーナ結果の client-side 絞り込み (セクター / 時価総額) 用メタ。
 // universe 全銘柄の { sector, mcapBand } を 24h cache backend から 1 回取得 → map 化して ticker join。
 // 返り値: { asOf: epoch, count, meta: { TICKER: { sector, mcapBand: 'mega'|'mid'|'small' } } }
