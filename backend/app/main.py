@@ -18574,6 +18574,36 @@ def _calc_eps_yoy_pct_from_surprises(
     return round(yoy, 1)
 
 
+def _calc_near_high_pct(
+    price: "float | None",
+    year_high: "float | None",
+) -> "float | None":
+    """N 条件: 52週高値近接率を計算する (モジュールレベル helper、 純 Python)。
+
+    near_high_pct = price / yearHigh (0.0 ~ 1.0+、 ATH 超えなら >1.0)
+
+    欠損ガード (§38/§5):
+      - price が None または 0 以下 → None
+      - year_high が None または 0 以下 → None (0 除算回避)
+      - 計算例外 → None
+
+    返却: round(price / yearHigh, 4) or None
+    """
+    if price is None or year_high is None:
+        return None
+    try:
+        p = float(price)
+        yh = float(year_high)
+    except (ValueError, TypeError):
+        return None
+    if p <= 0 or yh <= 0:
+        return None
+    try:
+        return round(p / yh, 4)
+    except ZeroDivisionError:
+        return None
+
+
 def _upsert_screener_fundamental(
     ticker: str,
     calc_date: date,
@@ -18581,10 +18611,12 @@ def _upsert_screener_fundamental(
     eps_cagr_3y: "float | None" = None,
     roe: "float | None" = None,
     turnaround: "bool | None" = None,
+    near_high_pct: "float | None" = None,
 ) -> bool:
     """screener_fundamentals テーブルに各指標を upsert。
 
     Phase 3 Sprint 1 対応: eps_cagr_3y / roe / turnaround 引数を追加。
+    Phase 3 Sprint 2 対応: near_high_pct 引数を追加 (N 条件 = price / yearHigh)。
     None 値のカラムは payload に含めない = 既存 DB 値を上書きしない (後方互換)。
     C 条件 (eps_yoy_pct) は引数デフォルト None → payload に含まれないため
     既存値が上書きされず Phase 2 の C 計算が回帰しない。
@@ -18592,6 +18624,7 @@ def _upsert_screener_fundamental(
     turnaround カラムが DB に未作成 (migration 未適用) の場合、
     Supabase が "column not found" エラーを返す可能性がある。
     このケースでは turnaround のみ省いて再 upsert し C/A 値を保護する (graceful fallback)。
+    同様に near_high_pct カラムが未作成の場合も graceful fallback。
 
     upsert on_conflict=ticker,calc_date。失敗時 False (呼び出し側でログ)。
     """
@@ -18612,6 +18645,8 @@ def _upsert_screener_fundamental(
         row["roe"] = roe
     if turnaround is not None:
         row["turnaround"] = turnaround
+    if near_high_pct is not None:
+        row["near_high_pct"] = near_high_pct
 
     try:
         sb.table("screener_fundamentals").upsert(
@@ -18621,16 +18656,17 @@ def _upsert_screener_fundamental(
         return True
     except Exception as e:
         err_str = str(e)
-        # turnaround カラム未作成時の graceful fallback:
-        # "column" + "turnaround" エラーなら turnaround を外して再 upsert
-        if "turnaround" in err_str and turnaround is not None:
-            row_without_turnaround = {k: v for k, v in row.items() if k != "turnaround"}
+        # turnaround / near_high_pct カラム未作成時の graceful fallback:
+        # 問題カラムを外して再 upsert (C/A/N 値を保護)
+        optional_cols = [c for c in ("turnaround", "near_high_pct") if c in err_str and c in row]
+        if optional_cols:
+            row_reduced = {k: v for k, v in row.items() if k not in optional_cols}
             try:
                 sb.table("screener_fundamentals").upsert(
-                    row_without_turnaround,
+                    row_reduced,
                     on_conflict="ticker,calc_date",
                 ).execute()
-                print(f"[screener_fundamentals] turnaround column not found, upserted without turnaround for {ticker}")
+                print(f"[screener_fundamentals] optional cols {optional_cols} not found, upserted without them for {ticker}")
                 return True
             except Exception as e2:
                 print(f"[screener_fundamentals] upsert failed for {ticker}: {e2}")
@@ -18719,10 +18755,55 @@ async def cron_canslim_scan(
         )
         return v is not None
 
+    # ── N 条件: yearHigh + price 一括 pre-fetch (FMP /stable/batch-quote) ──────
+    # universe 全銘柄の yearHigh と price を事前に一括取得して map 化。
+    # _compute_one 内で per-ticker quote fetch せず map から参照することで FMP rate limit 増を最小化。
+    # (SPEC §5 Sprint 2 完了基準 e: batch-quote 一括 pre-fetch 推奨)
+    # 100 銘柄ずつ chunk して取得 (batch-quote は large list でも 1 call、 FMP Ultimate 対応)。
+    year_high_map: dict[str, float | None] = {}    # {ticker_upper: yearHigh_float_or_None}
+    _near_high_price_map: dict[str, float | None] = {}  # {ticker_upper: price_float_or_None}
+    try:
+        _yh_chunk_size = 100
+        for _yh_i in range(0, len(tickers), _yh_chunk_size):
+            _yh_chunk = tickers[_yh_i : _yh_i + _yh_chunk_size]
+            try:
+                _yh_rows = await client.batch_quotes(_yh_chunk) or []
+                for _yh_row in _yh_rows:
+                    if not isinstance(_yh_row, dict):
+                        continue
+                    _sym = _yh_row.get("symbol") or ""
+                    if not _sym:
+                        continue
+                    _sym_upper = _sym.upper()
+                    # yearHigh: 0 は欠損扱い (0除算防止、§38/§5 欠損ガード)
+                    _yh_raw = _yh_row.get("yearHigh")
+                    try:
+                        _yh_val = float(_yh_raw) if _yh_raw is not None else None
+                    except (ValueError, TypeError):
+                        _yh_val = None
+                    year_high_map[_sym_upper] = _yh_val if (_yh_val and _yh_val > 0) else None
+                    # price: 0 は欠損扱い
+                    _price_raw = _yh_row.get("price")
+                    try:
+                        _price_val = float(_price_raw) if _price_raw is not None else None
+                    except (ValueError, TypeError):
+                        _price_val = None
+                    _near_high_price_map[_sym_upper] = _price_val if (_price_val and _price_val > 0) else None
+            except Exception as _yh_chunk_err:
+                print(f"[canslim-scan] batch_quotes chunk failed (idx={_yh_i}): {_yh_chunk_err}")
+                # chunk 取得失敗は map に追加せず → _compute_one で None 扱い (graceful)
+    except Exception as _yh_outer_err:
+        print(f"[canslim-scan] yearHigh pre-fetch failed: {_yh_outer_err}")
+        # 全 chunk 失敗でも near_high_pct=None で upsert を続行 (C/A 値は影響なし)
+
     async def _compute_one(ticker: str):
-        """1 ticker の C/A 指標を計算して (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, err) を返す。
+        """1 ticker の C/A/N 指標を計算して
+        (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, err) を返す。
 
         Phase 3 Sprint 1 拡張: A 条件 (eps_cagr_3y / roe / turnaround) を追加。
+        Phase 3 Sprint 2 拡張: N 条件 (near_high_pct = price / yearHigh) を追加。
+          - yearHigh は outer scope の year_high_map から取得 (batch-quote 一括 pre-fetch)。
+          - 追加 FMP call ゼロ (yearHigh は pre-fetch 済)。
         C 条件 (eps_yoy_pct) の計算ロジックは変更なし (後方互換)。
 
         fetch + 計算のみ (upsert / counter 更新はしない = post-gather で逐次)。
@@ -18730,28 +18811,32 @@ async def cron_canslim_scan(
 
         ★ EPS YoY% は current/prev とも earnings_surprises を source に統一。
         ★ A 条件 (3 年 CAGR) は income-statement(annual, limit=4) を fetch。
-        ★ ROE は ratios-ttm の returnOnEquityTTM を使用 (直近 TTM が最も安定)。
+        ★ ROE は key-metrics-ttm の returnOnEquityTTM を使用 (直近 TTM が最も安定)。
         ★ sector ガードは _fetch_sector_industry を相乗り (24h cache 共有)。
+        ★ N 条件 near_high_pct は yearHigh map (pre-fetch) から price/yearHigh で計算。
+
+        ★★ tuple arity: 全 return 文が 7 要素であること (feedback_pge_loop_pitfalls ルール 1)。
+        return ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, err
         """
         try:
             # ── C 条件: EPS YoY% ─────────────────────────────────────────────
             try:
                 surprises_raw = await client.earnings_surprises(ticker, limit=8)
             except Exception:
-                return ticker, None, None, None, None, "earnings_surprises_failed"
+                return ticker, None, None, None, None, None, "earnings_surprises_failed"
             if not surprises_raw:
-                return ticker, None, None, None, None, "earnings_surprises_empty"
+                return ticker, None, None, None, None, None, "earnings_surprises_empty"
 
             surprises_past = [s for s in surprises_raw if _has_eps_actual(s)]
             if not surprises_past:
-                return ticker, None, None, None, None, "no_eps_actual_in_surprises"
+                return ticker, None, None, None, None, None, "no_eps_actual_in_surprises"
 
             latest = sorted(
                 surprises_past, key=lambda d: d.get("date") or "", reverse=True
             )[0]
             entry_date_str = latest.get("date") or ""
             if not entry_date_str:
-                return ticker, None, None, None, None, "no_entry_date"
+                return ticker, None, None, None, None, None, "no_entry_date"
             eps_actual = _safe_eps_float(
                 latest.get("eps")
                 or latest.get("epsActual")
@@ -18832,9 +18917,20 @@ async def cron_canslim_scan(
             except Exception:
                 roe = None  # fetch / ガード判定失敗 → NULL (欠損ガード)
 
-            return ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, None
+            # ── N 条件: 52週高値近接率 (near_high_pct = price / yearHigh) ──
+            # yearHigh と price は outer scope の pre-fetch map から参照 (追加 FMP call ゼロ)。
+            # 欠損ガード は _calc_near_high_pct helper に委譲 (yearHigh 欠損/0 / price 欠損 → None)。
+            try:
+                near_high_pct = _calc_near_high_pct(
+                    _near_high_price_map.get(ticker.upper()),
+                    year_high_map.get(ticker.upper()),
+                )
+            except Exception:
+                near_high_pct = None  # 計算失敗 → NULL (欠損ガード)
+
+            return ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, None
         except Exception as e:
-            return ticker, None, None, None, None, f"unexpected: {e}"
+            return ticker, None, None, None, None, None, f"unexpected: {e}"
 
     # fetch + 計算: worker_count>1 で並列 (asyncio.Semaphore)、 =1 で逐次。
     # ★ 6体合議 critical 対応: 旧実装は完全逐次で full universe (3000) で GHA timeout (30min) 超過
@@ -18861,11 +18957,13 @@ async def cron_canslim_scan(
             results.append(await _compute_one(ticker))
 
     # count + upsert (post-gather 逐次、 cup-scan と同型)
-    # Phase 3 Sprint 1: result tuple が 6 要素 (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, err)
-    a_computed = 0   # CAGR が算出できた件数
-    roe_computed = 0 # ROE が取得できた件数
+    # Phase 3 Sprint 2: result tuple が 7 要素
+    # (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, err)
+    a_computed = 0       # CAGR が算出できた件数
+    roe_computed = 0     # ROE が取得できた件数
+    near_high_computed = 0  # near_high_pct が算出できた件数
     for result in results:
-        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, err = result
+        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, err = result
         if err:
             failed.append({"ticker": ticker, "reason": err})
             continue
@@ -18877,11 +18975,14 @@ async def cron_canslim_scan(
             a_computed += 1
         if roe is not None:
             roe_computed += 1
+        if near_high_pct is not None:
+            near_high_computed += 1
         if not dry_run:
             ok = await asyncio.to_thread(
                 _upsert_screener_fundamental,
                 ticker, today, eps_yoy_pct, eps_cagr_3y, roe,
                 turnaround if turnaround else None,
+                near_high_pct,
             )
             if ok:
                 upserted += 1
@@ -18894,6 +18995,7 @@ async def cron_canslim_scan(
         "eps_null_count": eps_null,
         "a_cagr_computed_count": a_computed,
         "roe_computed_count": roe_computed,
+        "near_high_computed_count": near_high_computed,
         "upserted_count": upserted,
         "failed_count": len(failed),
         "failed_tickers": failed[:20],
@@ -18902,7 +19004,7 @@ async def cron_canslim_scan(
         "universe_size": len(tickers),
         "worker_count": worker_count,
         "dry_run": dry_run,
-        "note": "CAN-SLIM Phase 3 Sprint 1: eps_yoy_pct + eps_cagr_3y + roe + turnaround nightly scan",
+        "note": "CAN-SLIM Phase 3 Sprint 2: eps_yoy_pct + eps_cagr_3y + roe + turnaround + near_high_pct nightly scan",
     }
 
 
