@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo } from 'react';
-import { ChartCandlestick, Crown, TrendingUp, SlidersHorizontal, ChevronDown, BarChart2 } from 'lucide-react';
-import { fetchCustomScreener, fetchCupHandleScanner, fetchRsScanner, fetchUniverseMeta, fetchCanslimScanner } from '../api.js';
+import { ChartCandlestick, Crown, TrendingUp, SlidersHorizontal, ChevronDown, BarChart2, Lock } from 'lucide-react';
+import { fetchCustomScreener, fetchCupHandleScanner, fetchRsScanner, fetchUniverseMeta, fetchCanslimScanner, fetchCanslimRows } from '../api.js';
 import Chip, { ChipGroup } from './ui/Chip.jsx';
+import ProTeaser from './ui/ProTeaser.jsx';
 // Sprint 3: 市場局面バナーを ScreenerPane と共有 (FtdRegimeBanner.jsx が SSOT、二重定義なし)
 import FtdRegimeBanner from '../features/workspace/FtdRegimeBanner.jsx';
 
@@ -254,6 +255,115 @@ const CUP_STATE_TONE = {
   cup_completing: 'accent',
   breakout_extended: 'muted',
 };
+
+// ── Phase 3 Sprint 5b: CAN-SLIM C/A/N/S バッジ列 ────────────────────────────
+// null_reason code → UI ラベル (静的 dict、SPEC §4 / hallucination-guard 適合)。
+// 全て過去事実 / 現在状態の記述に限定 = §38 (断定的将来予測) / §5 (最上級) clean。
+// backend null_reasons の reason_code (main.py _compute_one 19494-19510) と 1:1 mirror。
+const NULL_REASON_LABEL = {
+  sector_guard: '業種特性のため対象外',
+  negative_equity: '自己資本マイナスのため算出対象外',
+  data_missing: 'データ取得中',
+  loss_base: '赤字決算を含むため対象外',
+  insufficient_history: '上場3年未満',
+  turnaround: '黒字転換のため前年比なし',
+  no_prior_year: '前年同期データなし',
+};
+
+// CAN-SLIM C/A/N/S の柱 → 表示メトリクス定義。各柱 max4 (chip 増殖防止、合議🟡)。
+// reasonKey は rows endpoint の null_reasons dict キー (eps_yoy/eps_cagr/roe/near_high/buyback/volume_surge)。
+// fmt: 'signed' = 成長率 (符号付 %)、'plain' = 水準値 (%)、'roe' = ROE (異常値ガード付)。
+const CANSLIM_PILLARS = [
+  { letter: 'C', metrics: [{ valueKey: 'eps_yoy_pct', reasonKey: 'eps_yoy', label: '四半期EPS', fmt: 'signed' }] },
+  { letter: 'A', metrics: [
+    { valueKey: 'eps_cagr_3y', reasonKey: 'eps_cagr', label: '年EPS成長', fmt: 'signed' },
+    { valueKey: 'roe', reasonKey: 'roe', label: 'ROE', fmt: 'roe' },
+  ] },
+  { letter: 'N', metrics: [{ valueKey: 'near_high_pct_scaled', reasonKey: 'near_high', label: '52週高値', fmt: 'plain' }] },
+  { letter: 'S', metrics: [
+    { valueKey: 'buyback_yield_pct', reasonKey: 'buyback', label: '自社株買い', fmt: 'plain' },
+    { valueKey: 'volume_surge_pct', reasonKey: 'volume_surge', label: '出来高', fmt: 'signed' },
+  ] },
+];
+
+// 数値 → 表示文字列 (§38/§5 clean、純データ表記)。
+function fmtCanslimValue(v, fmt) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  if (fmt === 'signed') return `${n > 0 ? '+' : ''}${n.toFixed(1)}%`;
+  return `${n.toFixed(1)}%`; // plain / roe
+}
+
+// 値 / null 理由を解決。異常値ガード (handover §5、AAPL型ROE §5 補完=金融 option b):
+//   roe<0 は stale な負 equity アーティファクト → negative_equity ラベルに振る (「優良」 等の最上級は付けない)。
+function resolveCanslimMetric(canslim, m) {
+  const raw = canslim?.[m.valueKey];
+  // ROE 異常値ガード: 負値は自己資本マイナス由来の stale 値 → 値を出さず理由ラベル化。
+  if (m.fmt === 'roe' && Number.isFinite(Number(raw)) && Number(raw) < 0) {
+    return { display: NULL_REASON_LABEL.negative_equity, isReason: true };
+  }
+  const text = raw == null ? null : fmtCanslimValue(raw, m.fmt);
+  if (text != null) return { display: text, isReason: false };
+  // null: null_reasons[reasonKey] → UI ラベル (未 populate / 欠落時は data_missing にフォールバック)。
+  const code = canslim?.null_reasons?.[m.reasonKey] || 'data_missing';
+  return { display: NULL_REASON_LABEL[code] || NULL_REASON_LABEL.data_missing, isReason: true };
+}
+
+/**
+ * S5b: 結果行内 CAN-SLIM C/A/N/S バッジ列。
+ * 値は neutral 表示 (カラフル過多回避、minimalism_over_additive)、null は理由ラベルを
+ * --text-muted gray で併記 (amber 不使用、[Unknown]=gray idiom 流用、新 token なし)。
+ */
+function CanslimBadgeRow({ canslim }) {
+  if (!canslim) return null;
+  return (
+    <div className="mt-2 flex flex-col gap-1" data-testid="canslim-badge-row">
+      {CANSLIM_PILLARS.map((p) => (
+        <div key={p.letter} className="flex items-baseline gap-1.5 text-[10px] leading-tight">
+          <span
+            className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold"
+            style={{ background: 'color-mix(in srgb, var(--text-muted) 14%, transparent)', color: 'var(--text-secondary)' }}
+            aria-hidden
+          >
+            {p.letter}
+          </span>
+          <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+            {p.metrics.map((m) => {
+              const { display, isReason } = resolveCanslimMetric(canslim, m);
+              return (
+                <span key={m.valueKey} className="text-[var(--text-muted)]">
+                  {m.label}{' '}
+                  <span
+                    className={isReason ? 'text-[var(--text-muted)]' : 'font-semibold tabular-nums text-[var(--text-secondary)]'}
+                  >
+                    {display}
+                  </span>
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// as_of (date 文字列 "YYYY-MM-DD" or epoch) → 「X日前」timeAgo。calc_date は日次なので分更新不要。
+function daysAgoLabel(asOf) {
+  if (asOf == null) return null;
+  let ms;
+  if (typeof asOf === 'number') {
+    ms = asOf < 1e12 ? asOf * 1000 : asOf; // epoch 秒/ms 自動判定
+  } else {
+    const t = Date.parse(asOf);
+    if (Number.isNaN(t)) return null;
+    ms = t;
+  }
+  const diff = Math.floor((Date.now() - ms) / 86400000);
+  if (diff <= 0) return '今日';
+  if (diff === 1) return '昨日';
+  return `${diff}日前`;
+}
 
 function ConditionDots({ conditions = [], showLabels = false }) {
   return (
@@ -940,6 +1050,15 @@ function OneillScannerResults({ data, onSelect, onUpgrade }) {
         <span className="font-semibold text-[var(--text-primary)]">
           全条件クリア: 全 {items.length} 件
         </span>
+        {/* S5b: CAN-SLIM データの as_of「X日前」(rows endpoint 優先、calc_date は日次) */}
+        {(() => {
+          const ago = daysAgoLabel(data.canslim_rows_as_of || data.canslim_as_of);
+          return ago ? (
+            <span className="text-[10px] text-[var(--text-muted)]" title="CAN-SLIM 指標の計算日">
+              CAN-SLIM 更新 {ago}
+            </span>
+          ) : null;
+        })()}
         <span className="text-[10px] text-[var(--text-muted)] tabular-nums ml-auto">
           ファンダ∩Cup {data.both_total} / RS≥80 {data.rs_total}
           {data.canslim_ready ? ` / EPS成長 達成 ${data.canslim_total}` : ' / EPS成長 集計前'}
@@ -1046,6 +1165,12 @@ function OneillResultCard({ item, onSelect, masked = false }) {
           </span>
         )}
       </div>
+      {/* S5b: CAN-SLIM C/A/N/S バッジ列 (値 + null 理由ラベル)。masked / 未取得は非表示 (graceful)。 */}
+      {!masked && item.canslim && (
+        <div className="px-3 pb-3">
+          <CanslimBadgeRow canslim={item.canslim} />
+        </div>
+      )}
     </div>
   );
 }
@@ -1148,9 +1273,22 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
           rs_vs_spy_pct: rsPctByTicker.get((it.ticker || '').toUpperCase())?.rs_vs_spy_pct,
           eps_yoy_pct: canslimByTicker.get((it.ticker || '').toUpperCase())?.eps_yoy_pct,
         }));
+        // S5b: rows endpoint で結果 ticker 群の C/A/N/S 全値 + null_reasons を 1 回取得し各 item に merge。
+        // DB に無い ticker は rows に含まれない → optional chaining で graceful (バッジ非表示)。
+        let canslimRows = { as_of: null, rows: {} };
+        try {
+          canslimRows = await fetchCanslimRows(intersected.map((it) => it.ticker));
+        } catch {
+          /* graceful: canslim 未付与 = バッジ非表示で C/A/N/S 以外は従来どおり表示 */
+        }
+        const intersectedWithRows = intersected.map((it) => {
+          const row = canslimRows.rows?.[(it.ticker || '').toUpperCase()];
+          return row ? { ...it, canslim: row } : it;
+        });
         setOneillData({
-          items: intersected,
-          total_count: intersected.length,
+          items: intersectedWithRows,
+          total_count: intersectedWithRows.length,
+          canslim_rows_as_of: canslimRows.as_of || null,
           is_premium: !!bothResult.is_premium,
           both_total: bothResult.total_count || 0,
           rs_total: (rsResult.items || []).length,

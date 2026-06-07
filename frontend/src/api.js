@@ -678,6 +678,25 @@ export async function fetchCanslimScanner(minPct = 18, condition = 'eps_yoy') {
   return r.json();
 }
 
+/**
+ * Phase 3 Sprint 5b: rows endpoint — 結果セット ticker 群の C/A/N/S 全値 + null_reasons を 1 回で取得。
+ * 単一条件 read (fetchCanslimScanner) は「達成銘柄」しか返さず per-ticker の null 理由を引けない問題を解消。
+ * DB SELECT only (認証なし = free)、ticker 最大 200 件。DB に無い ticker は rows に含まれない
+ * (frontend は optional chaining で graceful)。null_reasons は nightly populate 後に実値
+ * (それまで null → frontend 側で「データ取得中」fallback)。
+ *
+ * @param {string[]} tickers - 対象 ticker 群。空配列なら fetch せず空を返す。
+ * @returns {Promise<{as_of: string|null, rows: { [TICKER]: { eps_yoy_pct, eps_cagr_3y, roe, near_high_pct_scaled, buyback_yield_pct, volume_surge_pct, turnaround, null_reasons } }}>}
+ */
+export async function fetchCanslimRows(tickers) {
+  const list = Array.isArray(tickers) ? tickers.filter(Boolean).slice(0, 200) : [];
+  if (list.length === 0) return { as_of: null, rows: {} };
+  const url = `/api/scanner/canslim/rows?tickers=${encodeURIComponent(list.join(','))}`;
+  const r = await fetch(url);
+  if (!r.ok) return { as_of: null, rows: {} };
+  return r.json();
+}
+
 // v159 SPEC_2026-06-03 Part B: スクリーナ結果の client-side 絞り込み (セクター / 時価総額) 用メタ。
 // universe 全銘柄の { sector, mcapBand } を 24h cache backend から 1 回取得 → map 化して ticker join。
 // 返り値: { asOf: epoch, count, meta: { TICKER: { sector, mcapBand: 'mega'|'mid'|'small' } } }
