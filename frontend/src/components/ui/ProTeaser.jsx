@@ -18,6 +18,8 @@
  *   features    string[] - 含まれる機能のリスト (3-5 件まで、 一行で短く)
  *   onUpgrade   () => void - CTA クリック (Stripe checkout) 通常 useSubscription.startCheckout
  *   variant     'cyan' | 'gold' - 視覚的差別化 (default 'cyan'、 gold は将来 Premium tier UI 用)
+ *   icon        ReactNode - title 左に添える lucide アイコン (任意、 S5c near_high Pro ロックの Lock 等)
+ *   secondaryAction { label, onClick } - 主 CTA 下の控えめ副リンク (「横の出口」、 Trust Cliff の行き止まり回避)
  */
 import { useState } from 'react';
 
@@ -27,6 +29,8 @@ export default function ProTeaser({
   features = [],
   onUpgrade,
   variant = 'cyan',
+  icon = null,
+  secondaryAction = null,
 }) {
   const [hover, setHover] = useState(false);
 
@@ -102,8 +106,12 @@ export default function ProTeaser({
             fontWeight: 700,
             color: 'var(--text-primary)',
             letterSpacing: '0.01em',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
           }}
         >
+          {icon}
           {title}
         </h3>
 
@@ -196,6 +204,28 @@ export default function ProTeaser({
             </span>
             <span style={{ fontSize: 14, lineHeight: 1 }}>→</span>
           </button>
+        )}
+
+        {/* 副リンク (「横の出口」): 主 CTA を選ばないユーザーに無料の道を必ず残す = Trust Cliff の行き止まり回避 */}
+        {secondaryAction && (
+          <div style={{ marginTop: onUpgrade ? 12 : 0 }}>
+            <button
+              type="button"
+              onClick={secondaryAction.onClick}
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                color: 'var(--text-muted)',
+                fontSize: 12,
+                textDecoration: 'underline',
+                textUnderlineOffset: 2,
+              }}
+            >
+              {secondaryAction.label}
+            </button>
+          </div>
         )}
       </div>
     </section>

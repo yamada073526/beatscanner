@@ -2169,6 +2169,7 @@ export default function App() {
           <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>読込中...</div>}>
             <CustomScreenerPanel
               onSelect={(sym) => { runAnalyze(sym); setShowCustomScreener(false); }}
+              onProUpgrade={() => startCheckout('monthly', 'pro')}
             />
           </Suspense>
         </div>

@@ -101,6 +101,17 @@ const PILLAR_TECHNICAL = [
     badgeTone: 'gain',
     hint: '相対強度 ≥ 80 — 米国主要銘柄〈ETF・ファンド除く〉universe で上位 20%',
   },
+  // S5c: N(新高値圏 / 52週高値接近度) = Pro(¥980) ロック。選択で scan せず ProTeaser を表示。
+  // Premium(¥1,800 gold Crown) と区別するため Pro は accent + lucide Lock。
+  {
+    key: 'near_high',
+    label: '新高値圏',
+    badge: 'Pro',
+    badgeTone: 'accent',
+    pro: true,
+    fullLabel: '52週高値への接近度 (CAN-SLIM N 条件)',
+    hint: 'EPS成長・自社株買い・出来高は無料のまま。これに52週高値への接近度を掛け合わせた絞り込みが Pro で開きます。',
+  },
 ];
 const PILLAR_COMBO = [
   {
@@ -182,7 +193,7 @@ function FilterPillarSection({ title, icon, chips, activeFilter, onSelect, defau
                   pressed={isActive}
                   onClick={() => onSelect(f.key)}
                   title={f.fullLabel
-                    ? `${f.fullLabel}${f.hint ? `\n\n${f.hint}` : ''}${f.premium ? '\n\nPremium ¥1,800/月 限定' : ''}`
+                    ? `${f.fullLabel}${f.hint ? `\n\n${f.hint}` : ''}${f.premium ? '\n\nPremium ¥1,800/月 限定' : ''}${f.pro ? '\n\nPro ¥980/月 限定' : ''}`
                     : f.hint}
                   data-testid={`filter-chip-${f.key}`}
                 >
@@ -192,6 +203,14 @@ function FilterPillarSection({ title, icon, chips, activeFilter, onSelect, defau
                       strokeWidth={1.75}
                       aria-hidden
                       style={{ color: 'var(--color-gold)', marginRight: 4, verticalAlign: '-1px' }}
+                    />
+                  )}
+                  {f.pro && (
+                    <Lock
+                      size={11}
+                      strokeWidth={1.75}
+                      aria-hidden
+                      style={{ color: 'var(--color-accent)', marginRight: 4, verticalAlign: '-1px' }}
                     />
                   )}
                   {f.key === 'rs' && (
@@ -1176,7 +1195,35 @@ function OneillResultCard({ item, onSelect, masked = false }) {
 }
 
 
-export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
+/**
+ * S5c: N(near_high / 新高値圏) = Pro(¥980) ロック面。
+ * 塗り潰し blur (PremiumLock) でなく非 blur ProTeaser で「無料はそのまま、1 つ掛け合わせると景色が変わる」を
+ * 上品にアップセル (Trust Cliff の「塗り潰された」感を回避、funnel-cro 7 項目通過)。
+ * 確定コピー (user 確定、再 litigate しない) + 副リンク (横の出口=「全て」へ即復帰) で行き止まりにしない。
+ */
+function NearHighProLock({ onUpgrade, onExitToFree }) {
+  return (
+    <div data-testid="near-high-pro-lock">
+      <ProTeaser
+        variant="cyan"
+        icon={<Lock size={18} strokeWidth={1.75} aria-hidden style={{ color: 'var(--color-accent)' }} />}
+        title="新高値圏フィルター"
+        description={
+          <>
+            <strong style={{ color: 'var(--text-secondary)', fontWeight: 700 }}>
+              EPS成長・自社株買い・出来高の条件は無料のまま。
+            </strong>
+            これに「52週高値への接近度」を掛け合わせた絞り込みが Pro で開きます。
+          </>
+        }
+        onUpgrade={onUpgrade}
+        secondaryAction={{ label: '無料の3条件で今すぐ絞り込む', onClick: onExitToFree }}
+      />
+    </div>
+  );
+}
+
+export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade }) {
   const [phase, setPhase] = useState('idle'); // idle | loading | done | error
   const [data, setData] = useState(null);
   const [cupData, setCupData] = useState(null);
@@ -1230,6 +1277,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
     setRsData(null);
     setOneillData(null);
     if (filterKey === 'funda') return; // 既存 data でカバー、 cup endpoint 呼ばない
+    if (filterKey === 'near_high') return; // S5c: N=Pro ロック。scan せず render 側で ProTeaser を出す
     if (filterKey === 'rs') {
       // v120 RS Screener: 別 endpoint (Supabase DB SELECT only、 高速)
       try {
@@ -1547,8 +1595,22 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade }) {
             <OneillScannerResults data={oneillData} onSelect={onSelect} onUpgrade={onUpgrade} />
           )}
 
+          {/* S5c: N(新高値圏) = Pro ロック面 (activeFilter === 'near_high' のとき scan せず ProTeaser) */}
+          {activeFilter === 'near_high' && (
+            <NearHighProLock
+              onUpgrade={onProUpgrade}
+              onExitToFree={() => {
+                // 副リンク「無料の3条件で今すぐ絞り込む」= near_high を外して「全て」(ファンダ5条件 PASS) へ即復帰
+                setActiveFilter(null);
+                setCupData(null);
+                setRsData(null);
+                setOneillData(null);
+              }}
+            />
+          )}
+
           {/* Cup-Handle scanner results (activeFilter が cup / both のとき表示) */}
-          {activeFilter && activeFilter !== 'funda' && activeFilter !== 'rs' && activeFilter !== 'oneill' && (
+          {activeFilter && activeFilter !== 'funda' && activeFilter !== 'rs' && activeFilter !== 'oneill' && activeFilter !== 'near_high' && (
             <CupScannerResults
               data={cupData}
               onSelect={onSelect}
