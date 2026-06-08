@@ -116,6 +116,8 @@ export default function FundamentalsAccordion({
           /* v190 (3体合議): v5 では会社概要 title を L2 セクション冠の外観 (決算/バリュエーションと同 token) に統一。
              v4/legacy (sectionHeadingStyle 未指定) は AccordionSection 既定の title スタイル。 */
           titleStyle={renderSection === 'profile' ? sectionHeadingStyle : undefined}
+          /* v191 (3体合議 A1): v5 会社概要のみ chevron を右端へ (L2 冠と左端整列、design_recipes §C-11)。 */
+          chevronPosition={renderSection === 'profile' ? 'right' : 'left'}
           /* v189 (3体合議 qa verdict): v5 (renderSection==='profile') では会社概要を defaultOpen=false で
              畳む (毎日見る情報ではない、 原則① 読み手に負担をかけない)。v4/legacy (renderSection=null) は true 維持。 */
           defaultOpen={renderSection === 'profile' ? false : true}
@@ -165,9 +167,11 @@ export default function FundamentalsAccordion({
                         isLoading={!guidance && detail?.isLoading !== false}
                         isSecLoading={false}
                         nextEarningsDays={detail?.nextEarningsDays ?? null}
+                        /* v191 (3体合議 B): v5 (renderSection 指定時) は「今期 決算結果」 を L3 サブ見出しに降格 */
+                        headingVariant={renderSection != null ? 'l3' : 'l2'}
                       />
                       {/* v146 前方視界: 「今期/来期」 タブの「来期」 = 来期コンセンサス YoY */}
-                      <ForwardOutlookSection forward={guidance?.forward} currency={result?.currency} ticker={selectedTicker} secNarrativeText={guidance?.sec_guidance_text} secNarrativeSource={guidance?.sec_guidance_source} />
+                      <ForwardOutlookSection forward={guidance?.forward} currency={result?.currency} ticker={selectedTicker} secNarrativeText={guidance?.sec_guidance_text} secNarrativeSource={guidance?.sec_guidance_source} headingVariant={renderSection != null ? 'l3' : 'l2'} />
                     </>
                   ),
                   history: (
@@ -213,9 +217,11 @@ export default function FundamentalsAccordion({
               isLoading={!guidance && detail?.isLoading !== false}
               isSecLoading={false}
               nextEarningsDays={detail?.nextEarningsDays ?? null}
+              /* v191 (3体合議 B): v5 (renderSection 指定時) は「今期 決算結果」 を L3 サブ見出しに降格 */
+              headingVariant={renderSection != null ? 'l3' : 'l2'}
             />
             {/* v146 前方視界: 来期コンセンサス YoY (過去 → 未来の視線誘導) */}
-            <ForwardOutlookSection forward={guidance?.forward} currency={result?.currency} ticker={selectedTicker} secNarrativeText={guidance?.sec_guidance_text} secNarrativeSource={guidance?.sec_guidance_source} />
+            <ForwardOutlookSection forward={guidance?.forward} currency={result?.currency} ticker={selectedTicker} secNarrativeText={guidance?.sec_guidance_text} secNarrativeSource={guidance?.sec_guidance_source} headingVariant={renderSection != null ? 'l3' : 'l2'} />
           </SectionFade>
 
           {/* === Sprint 3: EarningsHistoryChart (旧 EarningsBars + HistoryChart 統合) === */}

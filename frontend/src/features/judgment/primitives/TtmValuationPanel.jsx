@@ -147,7 +147,8 @@ function buildMetrics(d) {
 function SectionLabel({ main, sub }) {
   if (!main) return null;
   return (
-    <div style={{ marginBottom: 'var(--space-2, 8px)' }}>
+    // v191 (3体合議 A2/A3): 親 L2 冠と子 metric grid の距離を拡大 (近接原則: 親子間 < セクション間、design_recipes §C-11)。
+    <div style={{ marginBottom: 'var(--space-4, 16px)' }}>
       <div
         style={{
           fontSize: 13,
@@ -293,12 +294,15 @@ export default function TtmValuationPanel({
         sub="直近 4 四半期合算、 数値のみ表示"
       />
 
-      {/* 3×2 metric grid */}
+      {/* 3×2 metric grid。v191 (3体合議 A2/A3): 軽インデント + gold left accent で「バリュエーション傘下の子」 を
+          整列・近接で示す (引用ブロック idiom、 密閉感を避け left border のみ。design_recipes §C-11、 gold は elevation whitelist)。 */}
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(3, 1fr)',
           gap: 'var(--space-4, 16px)',
+          paddingLeft: 'var(--space-3, 12px)',
+          borderLeft: '2px solid color-mix(in srgb, var(--color-gold) 30%, transparent)',
         }}
       >
         {metrics.map((m) => (

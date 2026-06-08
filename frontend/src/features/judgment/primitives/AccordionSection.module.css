@@ -131,6 +131,19 @@
   transform: rotate(180deg);
 }
 
+/* v191 (3体合議 A1): chevronPosition='right' で title 左端を L2 セクション冠と整列 (design_recipes §C-11)。
+   ghost (opacity 0.4) で「畳める」 を密やかに示し、 header hover/focus で 1.0。
+   transition に opacity を足す (.chevron の transform rotate は維持)。 */
+.chevronRight {
+  margin-left: var(--space-2, 8px);
+  opacity: 0.4;
+  transition: transform var(--motion-slow, 360ms) ease-out, opacity 160ms ease;
+}
+.header:hover .chevronRight,
+.header:focus-visible .chevronRight {
+  opacity: 1;
+}
+
 /* ===== Title typography (SectionHeader mimic、import/継承禁止) ===== */
 /* design_system.md §B-2 Heading tier: 18px / fw500 / -0.015em / lh1.2 を踏襲 */
 .title {

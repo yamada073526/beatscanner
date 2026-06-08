@@ -280,7 +280,10 @@ function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unr
  * @param {string} [props.currency]
  * @param {string} [props.ticker] - 案B: 会社ガイダンスサプライズの lazy fetch 用 (未指定なら surprise 非表示)
  */
-export default function ForwardOutlookSection({ forward, currency = 'USD', ticker, secNarrativeText, secNarrativeSource }) {
+export default function ForwardOutlookSection({ forward, currency = 'USD', ticker, secNarrativeText, secNarrativeSource, headingVariant = 'l2' }) {
+  // v191 (3体合議 B): v5 ファンダ章「決算」 L2 冠の傘下で「来期 コンセンサス」 を L3 サブ見出しに降格 (今期と同格、反復原則 design_recipes §C-11)。
+  //   §38 免責・将来予測ガード・数値ロジックは不触。headingVariant 省略時 'l2' で v4/legacy 完全不変。
+  const isL3 = headingVariant === 'l3';
   // 案B v172: 会社ガイダンスサプライズ (with_guidance=1) を非ブロック lazy fetch。
   //   forward (consensus) は即描画、 surprise 行は会社 8-K guidance 到着後に後追いで現れる。
   const [surpriseNq, setSurpriseNq] = useState(null);
@@ -355,7 +358,7 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
       }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
-        <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>来期 コンセンサス</h4>
+        <h4 style={isL3 ? { margin: 0, fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' } : { margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>来期 コンセンサス</h4>
         {hasFyData && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>次の四半期 + 通期</span>}
       </div>
       {/* 文字壁改善 (2026-06-06): サブタイトル「アナリストコンセンサスと前年同期実績の比較」 は削除。

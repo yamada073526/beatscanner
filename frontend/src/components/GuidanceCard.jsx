@@ -675,7 +675,12 @@ function RevenueRow({ revenueActual, revenueEstimated, signalQuality }) {
 // 改善3 (2026-06-06): renderBold/renderGuidanceText + 「次期見通し」 折りたたみは ForwardOutlookSection に
 //   移植・集約 (前方視界の会社ガイダンス行と同じ SEC 8-K で重複していたため)。 GuidanceCard は今期 Beat/Miss に専念。
 
-export default function GuidanceCard({ guidance, isLoading = false, nextEarningsDays = null }) {
+export default function GuidanceCard({ guidance, isLoading = false, nextEarningsDays = null, headingVariant = 'l2' }) {
+  // v191 (3体合議 B): v5 ファンダ章「決算」 L2 冠の傘下で「今期 決算結果」 を L3 サブ見出しに降格
+  //   (lucide 除去 + small/muted/uppercase)。来期コンセンサスと L3 同格に揃える (反復原則、design_recipes §C-11)。
+  //   ⚠️ panel-card 枠・tier-m-glow・GUIDANCE_SECTION_STYLE・？モーダルボタン・ScorecardCell(Beat/Miss値=L4)・§38免責は不触。
+  //   headingVariant 省略時 'l2' で v4/v2/legacy/App.jsx 完全不変。
+  const isL3 = headingVariant === 'l3';
   const [showModal, setShowModal] = useState(false);
   // Phase 2.6 5-1: Tier M halo sweep (FiveConditionsCard と同一パターン)
   // IntersectionObserver で初入場時に 1 回限り halo-sweep animation を発火
@@ -726,10 +731,15 @@ export default function GuidanceCard({ guidance, isLoading = false, nextEarnings
       <div ref={cardRef} className="tier-m-glow" data-testid="guidance-card-wrapper" style={{ minHeight: 300 }}>
         <section className="panel-card rounded-2xl p-5 shadow-sm" style={{ ...GUIDANCE_SECTION_STYLE, minHeight: 300 }}>
           <div className="flex items-center justify-between">
-            <h3 className="section-label flex items-center gap-1.5" style={{ marginBottom: 0 }}>
-              <span className="section-header-icon" aria-hidden="true">
-                <BarChart3 size={18} strokeWidth={1.5} />
-              </span>
+            <h3
+              className={isL3 ? 'flex items-center gap-1.5' : 'section-label flex items-center gap-1.5'}
+              style={isL3 ? { marginBottom: 0, fontSize: 12, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' } : { marginBottom: 0 }}
+            >
+              {!isL3 && (
+                <span className="section-header-icon" aria-hidden="true">
+                  <BarChart3 size={18} strokeWidth={1.5} />
+                </span>
+              )}
               今期 決算結果
               <button
                 onClick={() => setShowModal(true)}
@@ -789,10 +799,15 @@ export default function GuidanceCard({ guidance, isLoading = false, nextEarnings
     <div ref={cardRef} className="tier-m-glow" data-testid="guidance-card-wrapper" style={{ minHeight: 300 }}>
     <section className="panel-card rounded-2xl p-5 shadow-sm" style={{ ...GUIDANCE_SECTION_STYLE, minHeight: 300 }}>
       <div className="flex items-center justify-between">
-        <h3 className="section-label flex items-center gap-1.5" style={{ marginBottom: 0 }}>
-          <span className="section-header-icon" aria-hidden="true">
-            <BarChart3 size={18} strokeWidth={1.5} />
-          </span>
+        <h3
+          className={isL3 ? 'flex items-center gap-1.5' : 'section-label flex items-center gap-1.5'}
+          style={isL3 ? { marginBottom: 0, fontSize: 12, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' } : { marginBottom: 0 }}
+        >
+          {!isL3 && (
+            <span className="section-header-icon" aria-hidden="true">
+              <BarChart3 size={18} strokeWidth={1.5} />
+            </span>
+          )}
           今期 決算結果
           <button
             onClick={() => setShowModal(true)}

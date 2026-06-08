@@ -381,6 +381,48 @@ dark mode の warm cream overlay は light mode で「紙の黄ばみ」化し q
 
 ---
 
+## C-11. 見出し階層 + デザインの 4 原則 (v189-191、user dogfood 2 巡で確立)
+
+枠 (card border) を減らして「hairline + 余白」で情報を区切る連続面では、階層を **タイポグラフィと配置** で語る必要がある。ノンデザイナーズ・デザインブックの 4 原則 (近接 / 整列 / 反復 / コントラスト) を BeatScanner に適用した SSOT。ファンダ章 (Pane3 v5) が初適用、 他章へ横展開予定。
+
+### 見出し 4 階層 (ファンダ章)
+
+| 階層 | 対象例 | font-size | weight | color | uppercase |
+|---|---|---|---|---|---|
+| **L1 章扉** | 「ファンダメンタル」 | 13px | 600 | `--text-secondary` | ✓ + gold accent / 扉レイアウト |
+| **L2 セクション冠** | 決算 / バリュエーション / 会社概要 | 13px | 700 | `--text-primary` | ✓ (装飾なし) |
+| **L3 サブ見出し** | 今期 / 来期コンセンサス / TTM 売上高 | 12px | 500 | `--text-muted` | ✗ (小文字) |
+| **L4 値** | 数値 | 20-36px | 700 | `--text-primary` | — |
+
+- L2 vs L3 の差別化の核は **「uppercase 有無 × 色 (primary/muted) × weight (700/500)」**。サイズ差は最小でよい (枠なし連続面では色・大文字の対比が数倍効く = Linear/Stripe 方式)。
+- L1 > L2 は gold accent / 扉レイアウトの有無で付ける (L2 は強い文字でも装飾を足さない → 章が乱立して見えない)。
+
+### 近接 (Proximity)
+
+- 親 (L2 冠) と子 (metric grid 等) は `--space-2`〜`--space-3` で密着、 隣接セクション間は `--space-6`〜`--space-8` を確保。 **親子間距離 < セクション間距離** が公式。
+- 子 grid を 4-12px インデントすると「どこまでが親の領分か」が空間で伝わる。
+
+### 整列 (Alignment)
+
+- L1 / L2 / L3 の見出しは全て **左端を揃える**。
+- AccordionSection の chevron は **右端** に置き (`chevronPosition='right'`)、 title 左端を他 L2 冠と揃える。 左端 chevron は整列を崩す。
+
+### 反復 (Repetition)
+
+- L2 冠は全セクション共通 token (13 / 700 / 0.08em / uppercase / `--text-primary`) を反復。
+- 同格カードは外形を揃える (今期 GuidanceCard と来期 ForwardOutlookSection は両方 `panel-card` のまま見出しだけ L3 で揃える = 反復)。
+
+### コントラスト (Contrast)
+
+- L2 冠 (13 / 700 / uppercase) ↔ L4 値 (20-36 / 700) で 2-3 段の大小コントラスト。
+- 投資業界の色ルール (緑=上昇 / 赤=下落 / amber=警告) はコントラストの最重要軸。 装飾目的にこの色を使うと色コントラストが崩壊する ([[feedback_no_baseline_cyan]])。
+
+### 発光カードとの両立
+
+- `panel-card` (発光カード) を hairline 連続面に混ぜる場合、 枠は **外さず** 見出しだけ階層化する (外すと `useArrivalSpotlight` observe 消失 + skeleton 崩壊、 `glow_elevation_postmortem.md §v62`)。 主役 (5条件 / 今期決算 Beat) は発光で序列を担保。
+
+---
+
 ## 関連ファイル
 
 - `design_system.md` — トークン値の Single Source of Truth

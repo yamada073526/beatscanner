@@ -69,6 +69,9 @@ export default function AccordionSection({
   // v190 (3体合議): title を呼び出し側で上書きする style (例: v5 会社概要を L2 セクション冠の外観に統一)。
   //   省略時 undefined → AccordionSection.module.css の既定 .title スタイル (他 accordion 不変)。
   titleStyle = undefined,
+  // v191 (3体合議 A1): 折りたたみ chevron の配置。'right' で headerRight に寄せ title 左端を L2 冠と揃える
+  //   (整列原則、design_recipes §C-11)。ghost 表示で「畳める」 を密やかに伝える。省略時 'left' で他章 accordion 完全不変。
+  chevronPosition = 'left',
   children,
   ...rest
 }) {
@@ -162,21 +165,24 @@ export default function AccordionSection({
       >
         {/* Left: title + badge */}
         <span className={styles.headerLeft}>
-          {/* Chevron icon — CSS rotate で open/close アニメーション */}
-          <span className={styles.chevron} aria-hidden="true">
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 12 12"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polyline points="2 4 6 8 10 4" />
-            </svg>
-          </span>
+          {/* Chevron icon — CSS rotate で open/close アニメーション。
+              v191 (A1): chevronPosition='right' 時は headerRight へ移動し title 左端を L2 冠と整列。 */}
+          {chevronPosition !== 'right' && (
+            <span className={styles.chevron} aria-hidden="true">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="2 4 6 8 10 4" />
+              </svg>
+            </span>
+          )}
           <span className={styles.title} style={titleStyle}>{title}</span>
           {badge && (
             badgeColor ? (
@@ -200,6 +206,23 @@ export default function AccordionSection({
             </span>
           )}
           {label && <span className={styles.label}>{label}</span>}
+          {/* v191 (A1): chevronPosition='right' は chevron をここに ghost 表示 (L2 冠と左端整列)。 */}
+          {chevronPosition === 'right' && (
+            <span className={`${styles.chevron} ${styles.chevronRight}`} aria-hidden="true">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="2 4 6 8 10 4" />
+              </svg>
+            </span>
+          )}
         </span>
       </button>
 
