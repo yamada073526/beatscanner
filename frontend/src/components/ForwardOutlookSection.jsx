@@ -365,11 +365,12 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
       {/* 文字壁改善 (2026-06-06): サブタイトル「アナリストコンセンサスと前年同期実績の比較」 は削除。
           各 YoYInline の「前年比」 ラベル + ForecastBars の「前年同期/来期予想」 ラベル + 末尾の出典/免責で
           文脈は十分担保される (qa verdict: 削除可テキスト)。 */}
-      {/* 次の四半期 (改善4 2026-06-06、 4体合議): グループ見出しを 13px/700/primary に強調
-          (現状 11px/700/secondary がコンテンツ「売上/EPS」12px/600/primary より小さい逆転を修正)
-          + コンテンツを paddingLeft 10 でインデント → 通期との 2 グループが「1x4 でなく 2x2」 に見える。 */}
+      {/* v192 (B-1a): 次の四半期/通期 の中間見出しを 11px/600/muted/uppercase のキャプションに格下げ
+          (今期ラベルと文字語彙統一、構成の非対称解消)。
+          v193 fix: v192 の replace_all がインデント差で「次の四半期」 側を取りこぼし「2027年通期」 のみ格下げ済の
+          非対称になっていた (user dogfood 2026-06-09) → 両者を同一スタイルに揃え対称化。 */}
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginTop: 8, marginBottom: 1 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>次の四半期</span>
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>次の四半期</span>
         <span style={{ fontSize: 10, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{period}</span>
       </div>
       <div>
