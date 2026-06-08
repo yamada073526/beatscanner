@@ -6545,6 +6545,16 @@ button.ds-chip:hover {
   background: rgba(56, 189, 248, 0.24) !important;
   color: rgb(56, 189, 248) !important;
 }
+/* v194 (user dogfood 2026-06-09): 会社概要末尾の競合ナビ chip (.peer-nav-chip = filter+accent) は
+   グローバル hover の「cyan bg + cyan text」だと accent base の文字が背景シアンと同化して読めない。
+   この chip 限定で hover 文字色を text-primary に引き上げ視認性を確保 (lift / cyan tint は維持)。
+   specificity (0,3,1)/(0,4,1) でグローバル hover に勝つ。blast radius = .peer-nav-chip のみ、他 chip 不変。 */
+button.ds-chip.peer-nav-chip:hover {
+  color: var(--text-primary) !important;
+}
+[data-theme="dark"] button.ds-chip.peer-nav-chip:hover {
+  color: var(--text-primary) !important;
+}
 button.ds-chip:active {
   transform: translateY(0);
   transition:

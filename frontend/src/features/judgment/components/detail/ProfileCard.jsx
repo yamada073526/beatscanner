@@ -6,7 +6,7 @@ import Chip from '../../../../components/ui/Chip.jsx';
 // v138.6 R7-C (2026-05-30): 「Google ログインで無制限」 link を直接 signInWithGoogle 接続、
 // 旧 window.dispatchEvent('bs:open-login') は listener なしで click 無反応 (user dogfood 報告)
 import { useAuth } from '../../../../hooks/useAuth.js';
-import { Building2, MapPin, Users, Briefcase, Sparkles, RefreshCw, Scale } from 'lucide-react';
+import { Building2, MapPin, Users, Briefcase, RefreshCw, Scale } from 'lucide-react';
 import { fetchProfileExtended, fetchProfileSummary, fetchProfilePeers } from '../../../../api.js';
 import { sanitizeText } from '../../../../lib/blocklist.js';
 import { displaySegmentName } from '../../../../lib/segmentNames.js';
@@ -277,11 +277,9 @@ function SummaryShimmer() {
   );
 }
 
-// ─── Citation 定数 (must-fix #1, #10, #11) ───────────────────────────────────
-const CITATION_TEXT_SHORT = 'AI 要約 (SEC 由来)';
-const CITATION_TOOLTIP =
-  '※ FMP 提供の企業概要 (SEC 提出書類より作成) を AI が日本語要約。' +
-  '一次資料は SEC EDGAR 10-K を参照推奨。';
+// ─── Citation 定数 (must-fix #11: section footnote) ──────────────────────────
+// v192 で header の citation chip を撤去 (出典は末尾 SECTION_FOOTNOTE に一本化) したため、
+// CITATION_TEXT_SHORT / CITATION_TOOLTIP は不要になり削除。
 const SECTION_FOOTNOTE = '※ FMP description 記載時点';
 
 // ─── Phase 2.9 Sprint H5 #会社概要 UI/UX 改善 (UI/UX sub-agent verdict、 +27 pt 期待) ────
@@ -1115,7 +1113,7 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
 
           {/* v192 (user dogfood 2026-06-09): 右端「AI 要約 (SEC 由来)」 citation chip を削除。
               生成中スケルトン + 末尾の出典文 (「FMP 提供の企業概要を AI が日本語要約」) で AI 要約である旨が
-              二重表示だったため、 citation は末尾に一本化 (§38 出典明記は末尾で担保)。CITATION_* 定数は末尾で継続使用。 */}
+              二重表示だったため、 citation は末尾に一本化 (§38 出典明記は末尾の SECTION_FOOTNOTE で担保)。 */}
         </div>
 
         {/* === ロゴ + 会社名 + サブテキスト === */}
@@ -1596,7 +1594,8 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
                   key={peer}
                   variant="filter"
                   tone="accent"
-                  size="sm"
+                  size="md"
+                  className="peer-nav-chip"
                   icon={<CompanyLogo ticker={peer} size={16} variant="badge" />}
                   onClick={onNavigateTicker ? () => onNavigateTicker(peer) : undefined}
                   ariaLabel={`${peer} の分析を表示`}
