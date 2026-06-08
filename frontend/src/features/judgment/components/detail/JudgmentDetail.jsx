@@ -29,6 +29,8 @@ import InsightsPanel from '../../../../components/InsightsPanel.jsx';
 import StockPriceChart from '../../../../components/StockPriceChart.jsx';
 // SPEC 2026-05-28 Sprint 4 + 6 (pillar 2 technical): Chart 直下に hero card 2 つを並列配置
 import AnalystTargetCard from '../../../../components/AnalystTargetCard.jsx';
+// v187 (3体合議 ui/金融/qa 全員一致): テクニカル章の横並び売買目安カードを統合する価格 ladder (縦の数直線)。
+import PriceLadder from '../../../../components/PriceLadder.jsx';
 import SellZoneCard from '../../../../components/SellZoneCard.jsx';
 // v127 R16-3 (R12-1 Phase 1 R2): IBD Distribution Day カウンター (機関の売り圧力目安)
 import DistributionDaysCard from '../../../../components/DistributionDaysCard.jsx';
@@ -1237,42 +1239,25 @@ export default function JudgmentDetail({
                 />
               </>
             );
-            // ④ テクニカル章 (章扉② + チャート + 期間別リターン + 売買目安)
-            // v185 B (2026-06-08、3体レビュー設計): 売買目安カードを 2 グループに整理し横並び並列化。
-            //   グループA = 価格目安 3 枚 (アナリスト目標 / 買い [CupPivot] / サポート [BuyZone]) を
-            //     auto-fit grid + grid-auto-rows:1fr + align-items:stretch で高さ揃え横並び。
-            //   グループB = 状態 2 枚 (通常レンジ [SellZone 50DMA] / Distribution) を hairline 区切りの別 grid。
-            //   各 card は compact prop で narration detail / meta を抑制 → 情報量差を縮め高さを近づける (免責は保持)。
-            //   経緯: v185 polish #4 で「auto-fit は情報量差で高さガタガタ」 のため一旦 flex column 1 列に戻したが、
-            //         本 sprint は compact 統一 + グループ分割 + stretch で「めちゃくちゃ」 の根因 (情報量差) を潰した上で再び横並び化。
-            //   ⚠️ card は v4/v5 共有 component。compact / grid は v5 のみ (v4 targetZoneBlock は不変)。
-            //      発光系 .panel-card の .is-arriving:hover 4 セット (CSS) には触れず JSX 構成のみ変更 (band 化済で横並び発光は安全)。
-            const groupGridStyle = {
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-              gridAutoRows: '1fr',
-              alignItems: 'stretch',
-              gap: 'var(--space-4, 16px)',
-            };
+            // ④ テクニカル章の売買目安 — v187 (2026-06-08、3体合議 ui/金融/qa 全員一致):
+            //   横並び売買目安カード5枚 (アナリスト目標/CupPivot/BuyZone/SellZone/Distribution) の「並列が見辛い」 を根治。
+            //   PriceLadder (価格6レベルを現在価格中心の縦の数直線) に統合。チャート水平ラインと同一 API・同一値で 1:1 mirror、
+            //   二重表示 (チャートのライン群とカードの数値) を ladder に一本化。
+            //   premium = PriceLadder。free = AnalystTargetCard のみ (pivot/支持/損切りは premium 情報のため ladder は gate)。
+            //   Distribution Days は地合い指標 (市場全体) で価格 ladder と性質が違うため当面 ladder 下に残す
+            //     (Phase 2 で章ヘッダーの地合いバッジに格下げ + §38 状態サマリー1行を予定)。
+            //   §38: ladder は価格+現在価格からの距離%のみ (行動指示・将来予測・矢印なし)、色は中立 gray + 現在価格行 hero (緑/赤なし)。
+            //   ⚠️ CupPivot/BuyZone/SellZone は v5 で render されなくなるが、v4 (targetZoneBlock) で使用継続のため import 維持。
             const technicalTargetGrid = selectedTicker ? (
               <SectionFade id="sec-target-and-zone-v5" staggerIndex={3}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4, 16px)' }}>
-                  {/* グループA: 価格目安 (目標 / 買い / サポート) — v185 dogfood (3体合議):
-                      variant="unified" で 3 枚を card-price-hero パターンに統一 (chip+大価格+delta 先頭 →
-                      h3 タイトル → body → footer)。hero の価格 baseline を横一直線に揃え「揃った感」を出す。 */}
-                  <div style={groupGridStyle}>
-                    <AnalystTargetCard ticker={selectedTicker} compact variant="unified" />
-                    {plan === 'premium' && <CupPivotCard ticker={selectedTicker} compact variant="unified" />}
-                    {plan === 'premium' && <BuyZoneCard ticker={selectedTicker} compact variant="unified" />}
+                {plan === 'premium' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4, 16px)' }}>
+                    <PriceLadder ticker={selectedTicker} />
+                    <DistributionDaysCard ticker={selectedTicker} compact />
                   </div>
-                  {/* グループB: 状態 (通常レンジ / Distribution)、hairline で区切り */}
-                  {plan === 'premium' && (
-                    <div style={{ ...groupGridStyle, borderTop: '1px solid var(--border)', paddingTop: 'var(--space-4, 16px)' }}>
-                      <SellZoneCard ticker={selectedTicker} compact />
-                      <DistributionDaysCard ticker={selectedTicker} compact />
-                    </div>
-                  )}
-                </div>
+                ) : (
+                  <AnalystTargetCard ticker={selectedTicker} compact variant="unified" />
+                )}
               </SectionFade>
             ) : null;
             const technicalChapterBlock = (
