@@ -39,9 +39,9 @@ function fmtPct(v) {
 
 // v185 B (2026-06-08): compact=true で narration detail / meta を抑制 (conclusion + 免責は保持)。
 // v185 dogfood (3体合議): variant='unified' は横並び統一の signal。BuyZone は既に card-price-hero パターン
-//   (chip+価格+現在価格delta を先頭) のため描画は不変、prop は呼出側の一貫性のため受理する。
-// eslint-disable-next-line no-unused-vars
+//   (chip+価格+現在価格delta を先頭) のため hero/構成は不変。Step3 で is-card-unified class のみ付与。
 export default function BuyZoneCard({ ticker, compact = false, variant = 'default' }) {
+  const isUnified = variant === 'unified';
   const [technical, setTechnical] = useState(null);
   const [priceData, setPriceData] = useState(null);
   const [loading, setLoading] = useState(false);
