@@ -31,6 +31,9 @@ export default function ChapterSection({
   headerOnly = false,
   tier = 'main',
   frameless = false,
+  // v192 (3体合議 B-2): true で章扉 (L1) を強調 (gold hairline 60% + title primary/700、 サイズ不変)。
+  //   v5 章扉を L2 セクション冠と区別するため。省略時 false で他章扉 完全不変。
+  emphasized = false,
 }) {
   const headingId = `chapter-heading-${String(chapterNumber).toLowerCase()}`;
   const tierClass = tier === 'sub' ? 'judgment-chapter-heading--sub' : 'judgment-chapter-heading';
@@ -54,9 +57,10 @@ export default function ChapterSection({
     // 章扉のみ mode: section/article wrap せず、 inline で章扉を出す。
     // 既存 section content (Guidance / EarningsHistory 等) はそのまま、 上に章扉を追加する形。
     const tierModifier = tier === 'sub' ? 'chapter-section--sub' : '';
+    const emphasizedModifier = emphasized ? 'chapter-section--emphasized' : '';
     return (
       <div
-        className={`chapter-section chapter-section--header-only ${tierModifier}`.trim()}
+        className={`chapter-section chapter-section--header-only ${tierModifier} ${emphasizedModifier}`.trim()}
         data-chapter-number={chapterNumber}
         data-chapter-tier={tier}
         data-testid={`chapter-section-${String(chapterNumber).toLowerCase()}-header`}

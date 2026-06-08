@@ -10344,6 +10344,26 @@ button.ds-chip.hero-watch-add:hover svg {
   margin: 0;
 }
 
+/* v192 (3体合議 B-2、 user dogfood 2026-06-09): v5 章扉 (L1) を L2 セクション冠 (決算/バリュエーション/会社概要) と
+   区別するため強調。 サイズは不変 (user「テキストが大きいと画面がうっとうしい」)、 gold hairline 強度 (30%→60%) と
+   title の色/weight (secondary/600 → primary/700) で「L1 は hairline あり、 L2 は hairline なし」 の差を作る
+   (design_recipes §C-11 コントラスト/整列原則、 左端は不変で整列維持)。 emphasized prop 未指定の章扉は完全不変。 */
+.chapter-section--emphasized.chapter-section--sub::before {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--color-gold) 60%, transparent) 50%,
+    transparent 100%
+  );
+}
+.chapter-section--emphasized .judgment-chapter-heading--sub {
+  border-bottom-color: color-mix(in srgb, var(--color-gold) 22%, transparent);
+}
+.chapter-section--emphasized .judgment-chapter-heading--sub .judgment-chapter-title {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
 .chapter-section--header-only::before {
   content: '';
   position: absolute;

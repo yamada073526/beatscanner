@@ -226,7 +226,7 @@ function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unr
   const animConsensus = useCountUp(inView ? consensus : null, { duration: COUNT_UP_MS, digits: isMoney ? 0 : 2, forceFromZero: true });
   const hasConsensus = consensus != null && Number.isFinite(consensus);
   return (
-    <div data-testid={`forward-metric-${isMoney ? 'revenue' : 'eps'}`} style={{ padding: '10px 0', borderTop: '1px solid var(--border)' }}>
+    <div data-testid={`forward-metric-${isMoney ? 'revenue' : 'eps'}`} style={{ padding: '10px 0 10px 10px', borderTop: '1px solid var(--border)', borderLeft: '3px solid color-mix(in srgb, var(--color-gold) 35%, var(--border))' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{label}</span>
         {!hasConsensus ? (
@@ -288,6 +288,7 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
   //   forward (consensus) は即描画、 surprise 行は会社 8-K guidance 到着後に後追いで現れる。
   const [surpriseNq, setSurpriseNq] = useState(null);
   const [secOpen, setSecOpen] = useState(false); // 改善3: 会社の次期見通し (sec_guidance_text) 折りたたみ
+  const [secHover, setSecHover] = useState(false); // v192 (A-2 user dogfood): 次期見通しトグルの hover feedback (クリック可を示す)
   const [surpriseFy, setSurpriseFy] = useState(null); // v173 通期の会社ガイダンスサプライズ (lazy)
   // カウントアップ view 内発火 (dogfood 2026-06-06: mount 時発火だと scroll 前に完了して見えない → IO で入場時発火)
   // count-up / バー grow の view 内入場トリガー (v173.5 検証済 callback ref パターンを共通 hook 化)
@@ -371,7 +372,7 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
         <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>次の四半期</span>
         <span style={{ fontSize: 10, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{period}</span>
       </div>
-      <div style={{ paddingLeft: 10 }}>
+      <div>
         <MetricBlock
           label="売上"
           consensus={nq.consensus_revenue}
@@ -408,12 +409,12 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
           分離 (太さでなく空白で区別 = Aman 調)、 見出しを 13px/700/primary で次Qと対称に。 §38 ガード
           (色なし / 静的 dict / basis mismatch / 金融抑止 / アナリスト数) は backend で next_q と同条件適用済み。 */}
       {hasFyData && (
-        <div style={{ marginTop: 18, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+        <div style={{ marginTop: 28 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 1 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{nfy.period_label || '通期'}</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{nfy.period_label || '通期'}</span>
             <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>通期見通し</span>
           </div>
-          <div style={{ paddingLeft: 10 }}>
+          <div>
             <MetricBlock
               label="売上"
               consensus={nfy.consensus_revenue}
@@ -453,7 +454,11 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
           sec_guidance_text は HG 4 層通過済みで §38 安全。 折りたたみで「会社が何と言ったか」 全文を保持
           (マージン/ARR 等 構造化されていない情報も含む)。 GuidanceCard 側の重複「次期見通し」 は削除。 */}
       {secNarrativeText && (
-        <div style={{ marginTop: 14, background: 'var(--bg-subtle)', borderRadius: 8, padding: '12px 16px' }}>
+        <div
+          onMouseEnter={() => setSecHover(true)}
+          onMouseLeave={() => setSecHover(false)}
+          style={{ marginTop: 14, background: secHover ? 'var(--bg-hover, var(--bg-card))' : 'var(--bg-subtle)', borderRadius: 8, padding: '12px 16px', transition: 'background 160ms ease' }}
+        >
           <button
             type="button"
             onClick={() => setSecOpen((v) => !v)}

@@ -1211,7 +1211,8 @@ export default function JudgmentDetail({
             };
             const fundamentalsChapterBlock = (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <ChapterSection chapterNumber="①" chapterTitle="ファンダメンタル" headerOnly tier="sub" />
+                {/* v192 (3体合議 B-2): v5 章扉 (L1) を emphasized で強調し L2 セクション冠と区別 (gold hairline 60% + primary/700)。 */}
+                <ChapterSection chapterNumber="①" chapterTitle="ファンダメンタル" headerOnly tier="sub" emphasized />
                 {fiveConditionsNode}
                 <div style={hairlineSectionStyle}>
                   {/* v190: 「決算」 L2 セクション冠 (今期/来期コンセンサスを傘下に束ねる、user dogfood ②)。

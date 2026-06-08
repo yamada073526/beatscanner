@@ -1113,19 +1113,9 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
         >
           <SectionHeader id="sec-profile" icon={<Building2 size={18} strokeWidth={1.5} />} title="プロフィール" label="COMPANY" />
 
-          {/* must-fix #10: citation chip (card header 右端、 Sparkles icon) */}
-          {summaryOk && (
-            <Chip
-              variant="display"
-              tone="muted"
-              size="xs"
-              icon={<Sparkles size={12} strokeWidth={1.5} />}
-              title={CITATION_TOOLTIP}
-              data-testid="profile-summary-citation"
-            >
-              {CITATION_TEXT_SHORT}
-            </Chip>
-          )}
+          {/* v192 (user dogfood 2026-06-09): 右端「AI 要約 (SEC 由来)」 citation chip を削除。
+              生成中スケルトン + 末尾の出典文 (「FMP 提供の企業概要を AI が日本語要約」) で AI 要約である旨が
+              二重表示だったため、 citation は末尾に一本化 (§38 出典明記は末尾で担保)。CITATION_* 定数は末尾で継続使用。 */}
         </div>
 
         {/* === ロゴ + 会社名 + サブテキスト === */}

@@ -177,6 +177,11 @@ export function prefetchAll(ticker) {
   fetchNews(ticker, 10).catch(() => {});
   fetchIRLinks(ticker).catch(() => {});
   fetchAnalyst(ticker).catch(() => {});
+  // v192 (user dogfood 2026-06-09): 会社概要 AI要約 を prefetch に追加 (旧 must-fix #4「prefetchAll 不含」 を覆す)。
+  //   会社概要 accordion は v5 で defaultOpen=false のため、 クリック時に初めて LLM fetch → 5秒待ち
+  //   (user「読み飛ばしたくなる」)。 銘柄選択時に backend cache を温め、 開いた時 cache hit で即表示化。
+  //   コスト: backend cache で 2回目以降無料 + 会社概要はファンダ分析の基本情報で閲覧率が高いため許容。
+  fetchProfileSummary(ticker).catch(() => {});
 }
 
 export async function fetchScreener(category = 'gainers') {
