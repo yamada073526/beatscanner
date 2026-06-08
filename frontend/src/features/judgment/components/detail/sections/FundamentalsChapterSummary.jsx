@@ -71,11 +71,18 @@ function formatFailedConditions(conditions) {
  */
 // v185 dogfood (2026-06-08): hideFinancialLines=true で EPS/売上 surprise 行を抑制
 //   (v5 では決算タブ「今期 決算結果」 と内容がダブるため、条件サマリー文 N/5 のみ残す)。v4 は false で従来表示。
-export default function FundamentalsChapterSummary({ result, guidance, isLoading = false, hasError = false, hideFinancialLines = false }) {
+export default function FundamentalsChapterSummary({ result, guidance, isLoading = false, hasError = false, hideFinancialLines = false, emphasized = false }) {
+  // v189 (3体合議 qa verdict): v5 ファンダ章「枠なし hairline」 で章サマリーが他セクションと
+  //   均質化しないよう、 emphasized (v5) で bg-subtle の軽い面 + radius を足し「結論」 感を保持。
+  //   borderLeft accent は維持 (引用ブロック idiom)。emphasized 省略時 = v4 不変。
+  const resolvedContainerStyle = emphasized
+    ? { ...containerStyle, background: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)' }
+    : containerStyle;
+
   // loading state
   if (isLoading && !result) {
     return (
-      <div data-testid={TESTID} data-state="loading" aria-busy="true" style={containerStyle}>
+      <div data-testid={TESTID} data-state="loading" aria-busy="true" style={resolvedContainerStyle}>
         <div style={skeletonLineStyle(160)} />
         <div style={skeletonLineStyle(120)} />
       </div>
@@ -85,7 +92,7 @@ export default function FundamentalsChapterSummary({ result, guidance, isLoading
   // error state
   if (hasError && !result) {
     return (
-      <div data-testid={TESTID} data-state="errored" style={containerStyle}>
+      <div data-testid={TESTID} data-state="errored" style={resolvedContainerStyle}>
         <p style={textStyle}>—(データなし)</p>
       </div>
     );
@@ -94,7 +101,7 @@ export default function FundamentalsChapterSummary({ result, guidance, isLoading
   // empty state (result は来たが条件データが空)
   if (!result) {
     return (
-      <div data-testid={TESTID} data-state="empty" style={containerStyle}>
+      <div data-testid={TESTID} data-state="empty" style={resolvedContainerStyle}>
         <p style={textStyle}>—(データなし)</p>
       </div>
     );
@@ -138,7 +145,7 @@ export default function FundamentalsChapterSummary({ result, guidance, isLoading
   }
 
   return (
-    <div data-testid={TESTID} data-state="main" style={containerStyle}>
+    <div data-testid={TESTID} data-state="main" style={resolvedContainerStyle}>
       <p style={summaryStyle}>{conditionLine}</p>
       {financialLines.map((line, i) => (
         <p key={i} style={textStyle}>{line}</p>

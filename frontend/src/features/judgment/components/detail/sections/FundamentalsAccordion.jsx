@@ -89,6 +89,8 @@ export default function FundamentalsAccordion({
           hasError={false}
           /* v185 dogfood: v5 (renderSection 指定時) は EPS/売上 surprise を決算ダブり回避で抑制 */
           hideFinancialLines={renderSection != null}
+          /* v189 (3体合議): v5 (renderSection 指定時) は bg-subtle の軽い面で「結論」 感を保持 */
+          emphasized={renderSection != null}
         />
       )}
 
@@ -109,7 +111,9 @@ export default function FundamentalsAccordion({
           id="sec-profile"
           title="会社概要"
           tier={2}
-          defaultOpen={true}
+          /* v189 (3体合議 qa verdict): v5 (renderSection==='profile') では会社概要を defaultOpen=false で
+             畳む (毎日見る情報ではない、 原則① 読み手に負担をかけない)。v4/legacy (renderSection=null) は true 維持。 */
+          defaultOpen={renderSection === 'profile' ? false : true}
           controlledOpen={expandedSections.has('profile') || undefined}
         >
           <ProfileCard

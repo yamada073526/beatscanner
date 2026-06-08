@@ -1169,22 +1169,14 @@ export default function JudgmentDetail({
               />
             );
             // v5 polish (user dogfood 2026-06-08): 名称は専門用語「TTM」を外し「バリュエーション」へ (sub に「直近4四半期合算」が残る)。
-            // ⚠️ TtmValuationPanel の frameless=false は class 'ds-card-frameless' (= border:none の枠なし) を付けるだけで
-            // 枠が出ない (user「仕切り確認できない」)。→ frameless=true (内部 padding 0) のまま wrapper div で枠 (border+radius+bg)
-            // を付与し他セクション (会社概要 card) と見出しレベルを統一。発光系 .panel-card は不使用 (inline token、低リスク)。
+            // v189 (3体合議 ui/frontend/qa): ファンダ章「枠なし hairline」 pilot のため inline 枠 (border+radius+bg) を撤去し、
+            //   frameless のまま下の fundamentalsChapterBlock の hairline セクションに載せる。frameless でも出典 footer は保持。
             const ttmNode = (result && selectedTicker && valuationExtras) ? (
-              <div style={{
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-lg, 16px)',
-                padding: 'var(--space-4, 16px)',
-                background: 'var(--bg-card)',
-              }}>
-                <TtmValuationPanel
-                  ticker={selectedTicker}
-                  valuationExtras={valuationExtras}
-                  sectionLabel="バリュエーション"
-                />
-              </div>
+              <TtmValuationPanel
+                ticker={selectedTicker}
+                valuationExtras={valuationExtras}
+                sectionLabel="バリュエーション"
+              />
             ) : null;
             // EPS Beat Streak は決算タブ「今期」と内容重複のため v5 ファンダ章から除外 (user dogfood 2026-06-08)。
             // v185 E (2026-06-08): v5 テクニカル章では短期/長期を hairline 区切りで 2 段表示 (splitByTerm)。
@@ -1192,52 +1184,64 @@ export default function JudgmentDetail({
               <ReturnGrid ticker={selectedTicker} frameless={true} testId="judgment-return-grid" splitByTerm />
             ) : null;
 
-            // ③ ファンダ章 (章扉① + 5条件 + 決算 + TTM + 会社概要)
+            // ③ ファンダ章 (章扉① + 5条件 + 決算 + バリュエーション + 会社概要)
             // v185 A (2026-06-08、 user 確定): 章内順序を「5条件 → 決算 → TTM → 会社概要」 に再配置。
-            //   FundamentalsAccordion を renderSection で 2 分割 (earnings=章サマリー+決算 / profile=会社概要)、
-            //   間に ttmNode (バリュエーション) を挟む。EPS Beat は v5 で除外済 (決算「今期」 と重複、 user dogfood 2026-06-08)。
-            //   各 FundamentalsAccordion は共有 component を prop で制御 (v4/legacy は renderSection 省略で不変)。
+            // v189 (2026-06-08、 3体合議 ui/frontend/qa 全員賛成): 「枠なし hairline + 余白」 pilot。
+            //   不満 = 継ぎ接ぎ・バラバラ感 (枠 4-5 種混在) + 密度高い・圧迫 → 解は枠を減らして連続面化。
+            //   面の引き算: コンテナは背景なし、 5条件カード (fiveConditionsNode) のみ発光カードのまま「主役」 として浮かせ、
+            //   従属3セクション (決算/バリュエーション/会社概要) を border-top 1px var(--border) の hairline + space-8 余白で区切る。
+            //   発光系 class (.panel-card/.surface-card) は新規追加ゼロ、 wrapper は inline token のみ (glow バグ領域回避)。
+            //   各 FundamentalsAccordion は共有 component を prop で制御 (v4/legacy は renderSection 省略で完全不変)。
+            const hairlineSectionStyle = {
+              marginTop: 'var(--space-8)',
+              borderTop: '1px solid var(--border)',
+              paddingTop: 'var(--space-8)',
+            };
             const fundamentalsChapterBlock = (
-              <>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <ChapterSection chapterNumber="①" chapterTitle="ファンダメンタル" headerOnly tier="sub" />
                 {fiveConditionsNode}
-                <FundamentalsAccordion
-                  key="funda-earnings"
-                  renderSection="earnings"
-                  hideChapterHeader
-                  selectedTicker={selectedTicker}
-                  result={result}
-                  guidance={guidance}
-                  plan={plan}
-                  detail={detail}
-                  detailContext={detailContext}
-                  isV2={isV2}
-                  isV3={isV3}
-                  isScrollV1={isScrollV1}
-                  expandedSections={expandedSections}
-                  ch2Tab={ch2Tab}
-                  setCh2Tab={setCh2Tab}
-                  onAnalyze={onAnalyze}
-                />
-                {ttmNode}
-                <FundamentalsAccordion
-                  key="funda-profile"
-                  renderSection="profile"
-                  selectedTicker={selectedTicker}
-                  result={result}
-                  guidance={guidance}
-                  plan={plan}
-                  detail={detail}
-                  detailContext={detailContext}
-                  isV2={isV2}
-                  isV3={isV3}
-                  isScrollV1={isScrollV1}
-                  expandedSections={expandedSections}
-                  ch2Tab={ch2Tab}
-                  setCh2Tab={setCh2Tab}
-                  onAnalyze={onAnalyze}
-                />
-              </>
+                <div style={hairlineSectionStyle}>
+                  <FundamentalsAccordion
+                    key="funda-earnings"
+                    renderSection="earnings"
+                    hideChapterHeader
+                    selectedTicker={selectedTicker}
+                    result={result}
+                    guidance={guidance}
+                    plan={plan}
+                    detail={detail}
+                    detailContext={detailContext}
+                    isV2={isV2}
+                    isV3={isV3}
+                    isScrollV1={isScrollV1}
+                    expandedSections={expandedSections}
+                    ch2Tab={ch2Tab}
+                    setCh2Tab={setCh2Tab}
+                    onAnalyze={onAnalyze}
+                  />
+                </div>
+                {ttmNode && <div style={hairlineSectionStyle}>{ttmNode}</div>}
+                <div style={hairlineSectionStyle}>
+                  <FundamentalsAccordion
+                    key="funda-profile"
+                    renderSection="profile"
+                    selectedTicker={selectedTicker}
+                    result={result}
+                    guidance={guidance}
+                    plan={plan}
+                    detail={detail}
+                    detailContext={detailContext}
+                    isV2={isV2}
+                    isV3={isV3}
+                    isScrollV1={isScrollV1}
+                    expandedSections={expandedSections}
+                    ch2Tab={ch2Tab}
+                    setCh2Tab={setCh2Tab}
+                    onAnalyze={onAnalyze}
+                  />
+                </div>
+              </div>
             );
             // ④ テクニカル章の売買目安 — v187 (2026-06-08、3体合議 ui/金融/qa 全員一致):
             //   横並び売買目安カード5枚 (アナリスト目標/CupPivot/BuyZone/SellZone/Distribution) の「並列が見辛い」 を根治。
