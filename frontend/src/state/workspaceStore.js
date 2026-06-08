@@ -16,6 +16,8 @@
  */
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+// C-3 競合ナビ: push ガード用 (非株式 ticker を履歴に積まない)
+import { isNonEquityTicker } from '../lib/tickerUtils.js';
 
 const STORAGE_KEY = 'bs:ws:store:v1';
 
@@ -27,6 +29,28 @@ const STORAGE_KEY = 'bs:ws:store:v1';
  * @property {string}  activeTab         - 'home' | 'judgment' | 'report' | 'チャート' (URL 同期、CLAUDE.md「内部値の混在」遵守)
  * @property {string|null} activeTicker  - 現在選択中の銘柄コード (URL 同期)
  */
+
+// C-3 競合ナビ: detailHistory stack への push を計算する純関数 (single source)。
+// pushDetailHistory と setActiveTicker の双方から使い、ガード/dedup ロジックの divergence を防ぐ。
+//   ガード: (1) falsy / 空文字 → 据え置き、(2) 非株式 (^GSPC / =F / =X 等) → 据え置き。
+//   dedup: 直前と同じ → 据え置き / stack 内既出 → その位置まで truncate (巻き戻し) /
+//          新規 → 末尾 push (最大 10 件で先頭 shift)。
+// 変化なしのときは prev をそのまま返す (参照同一 → 不要な再 render を抑制)。
+const MAX_DETAIL_HISTORY = 10;
+function computeNextDetailHistory(prev, ticker) {
+  if (!ticker) return prev;
+  const t = String(ticker).toUpperCase().trim();
+  if (!t || isNonEquityTicker(t)) return prev;
+  // 直前と同じ → 据え置き
+  if (prev.length > 0 && prev[prev.length - 1] === t) return prev;
+  // stack 内既出 → 既出位置まで truncate (巻き戻し)
+  const existingIdx = prev.indexOf(t);
+  if (existingIdx !== -1) return [...prev.slice(0, existingIdx), t];
+  // 新規 push (最大件数で先頭 shift)
+  const next = [...prev, t];
+  if (next.length > MAX_DETAIL_HISTORY) next.shift();
+  return next;
+}
 
 export const useWorkspaceStore = create(
   persist(
@@ -120,6 +144,11 @@ export const useWorkspaceStore = create(
       // setter: expandSection / collapseSection / toggleSection
       expandedSections: new Set(),
       // v143: digestTickers / DIGEST chip は撤去 (multi-review 3 体一致でノイズ判定)。
+      // C-3 競合ナビ (SPEC 2026-06-09): 銘柄閲覧履歴 stack (ticker 文字列配列)。
+      // - 最大 10 件 (超過時は先頭 shift)。
+      // - persist 除外 (partialize に含めない): F5 で消える session-only 設計、幽霊パンくず防止。
+      // - 非株式 (^GSPC / =F / =X 等) は push しない (pushDetailHistory で事前ガード)。
+      detailHistory: [],
 
       toggleHeader: () => set((s) => ({ headerCollapsed: !s.headerCollapsed })),
       togglePane1: () => set((s) => ({ pane1Collapsed: !s.pane1Collapsed })),
@@ -160,7 +189,20 @@ export const useWorkspaceStore = create(
       })),
       // tab 切替時は pane3JudgmentOverride を自動リセット (連続分析モードを解除)
       setActiveTab: (t) => set(() => ({ activeTab: t, pane3JudgmentOverride: false })),
-      setActiveTicker: (s) => set(() => ({ activeTicker: s })),
+
+      // C-3 競合ナビ: 履歴 stack への push (冪等・重複排除)。ロジックは computeNextDetailHistory に集約。
+      // ※ 現状の遷移は setActiveTicker 経由で push されるため本 setter は外部 API 用 (直接呼び出しはなし)。
+      pushDetailHistory: (ticker) => set((s) => ({
+        detailHistory: computeNextDetailHistory(s.detailHistory, ticker),
+      })),
+
+      // C-3 競合ナビ: setActiveTicker に履歴 push を結線 (収束点への集約)。
+      // 18 箇所から呼ばれるが、computeNextDetailHistory のガードが falsy / 非株式 を弾くため安全。
+      // パンくずクリックの再 push も「既出 → truncate」で吸収 (無限増殖しない)。
+      setActiveTicker: (s) => set((state) => ({
+        activeTicker: s,
+        detailHistory: computeNextDetailHistory(state.detailHistory, s),
+      })),
       // 指数 row click は chart 表示モードに戻る (override 解除)。
       // v71 抽象化: selectedTarget も同期 (Phase 1 dispatcher が読む正本)。
       setActiveIndexSymbol: (s) => set(() => ({

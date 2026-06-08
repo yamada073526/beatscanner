@@ -12669,3 +12669,25 @@ body.is-digest-resizing {
   .ddc-count-row { gap: 14px; }
   .ddc-count-num { font-size: 28px; }
 }
+
+/* ============================================================
+   C-3 競合ナビ — DetailBreadcrumb (SPEC 2026-06-09)
+   28px 独立バー、発光系 class 不使用、raw hex 禁止
+   ============================================================ */
+/* 祖先 ticker ボタンの hover: 下線 + テキスト色強調 */
+.detail-breadcrumb-ancestor:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+/* ⌂ Home ボタンの hover: アイコンなので下線なし、色のみ強調 (3 体合議 ui/qa verdict) */
+.detail-breadcrumb-home:hover {
+  color: var(--text-primary);
+}
+/* prefers-reduced-motion: reduce のユーザーには transition を付けない (no-preference 時のみ付与) */
+@media (prefers-reduced-motion: no-preference) {
+  .detail-breadcrumb-ancestor,
+  .detail-breadcrumb-home {
+    transition: color 0.15s ease;
+  }
+}

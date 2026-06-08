@@ -89,6 +89,10 @@ import ChapterTabs from '../../primitives/ChapterTabs.jsx';
 import ChapterSection from './ChapterSection.jsx';
 // v118 ETF MVP: ETF 入力時は 5 条件適用外 → EtfOverviewPanel を render (Trust Cliff 防止)。
 import EtfOverviewPanel from '../../../../components/EtfOverviewPanel.jsx';
+// C-3 競合ナビ (SPEC 2026-06-09): パンくずバー — 発光系 class 不使用の 28px 独立バー。
+import DetailBreadcrumb from '../../../workspace/DetailBreadcrumb.jsx';
+// C-3 Sprint 1b: スクロール位置 + accordion 開閉復元 hook (sessionStorage ベース)。
+import { useDetailScrollRestore } from './useDetailScrollRestore.js';
 
 // v125 P8-2 Sprint A: section 3 component 抽出 (描画順序不変)。
 // Sprint B で順序入替時にこれら component を新位置に移動するだけで diff 「移動」 のみ。
@@ -316,6 +320,16 @@ export default function JudgmentDetail({
   useWorkspaceReader = false,
 }) {
   const { selectedTicker } = useJudgment();
+
+  // C-3 Sprint 1b: .ds-judgment-detail への DOM ref (scroll container 特定に使用)。
+  // Rules of Hooks: early return より前に宣言 (v107 hotfix と同カテゴリ)。
+  const detailDivRef = useRef(null);
+
+  // C-3 Sprint 1b: スクロール位置復元 hook (side-effect のみ、戻り値なし)。
+  // 祖先 ticker に戻ったとき cache hit 描画後に scroll 位置を復元する。
+  // accordion 開閉復元は本 Phase では DEFER (autopilot v194 判断、handover DEFER-SPEC 参照)。
+  useDetailScrollRestore(selectedTicker, detailDivRef);
+
   // handover v82 Phase 5.5: ConditionRow click → workspaceStore.pulsingConditionIndex set。
   // DiagramCard 側 useEffect で 2800ms 後 auto-unset (Web 設計 + 開発 reviewer 一致 verdict)。
   const setPulsingConditionIndex = useWorkspaceStore((s) => s.setPulsingConditionIndex);
@@ -637,6 +651,7 @@ export default function JudgmentDetail({
     // prefers-reduced-motion 対応は index.css @media ブロックで全体カバー済。
     <MotionProvider>
     <div
+      ref={detailDivRef}
       className="ds-judgment-detail"
       style={{
         // v86 R5 A: gap を --space-4 (16px) → --space-6 (24px) に拡大、 Aman 級 breathing room
@@ -646,6 +661,13 @@ export default function JudgmentDetail({
         gap: 'var(--space-6, 24px)',
       }}
     >
+      {/* C-3 競合ナビ: パンくずバー (SPEC 2026-06-09)
+          - ds-judgment-detail の first child として配置 (SPEC §5 確定設計)
+          - detailHistory が 2 件以上のときのみ表示 (DetailBreadcrumb 内部で判定)
+          - Hero の上に独立配置 (Hero 内部は変更しない)
+          - 発光系 class 不使用、28px 独立バー */}
+      <DetailBreadcrumb />
+
       {/* === 階層 1: Verdict (expanded 固定) ===
           Sprint 4: tier=1 SectionDivider を削除。
           accordion header が既に「階層 chrome」を提供するため冗長。
