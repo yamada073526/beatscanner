@@ -12322,6 +12322,29 @@ body.is-digest-resizing {
   .atc-szc-grid { grid-template-columns: 1fr; }
 }
 
+/* v185 dogfood Step3 (2026-06-08): v5 売買目安カードの footer 水平揃え。
+   card を flex column 化し、grid stretch (align-items:stretch + grid-auto-rows:1fr) で揃った
+   card 高さの下端に footer を固定 (margin-top:auto)。footer の DOM 位置が card で違う
+   (atc-footer=section 直下 / cpc-bzc-footer=body 内) ため両対応。
+   variant="unified" 時のみ is-card-unified を付与、v4 (class なし) は不変。
+   発光 .panel-card の box-shadow は display:flex で不変 (layout のみ、shadow は別レイヤ)。 */
+.panel-card.is-card-unified {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.is-card-unified > .cpc-body,
+.is-card-unified > .bzc-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+.is-card-unified > .atc-footer,
+.is-card-unified > .cpc-body > .cpc-footer,
+.is-card-unified > .bzc-body > .bzc-footer {
+  margin-top: auto;
+}
+
 
 /* ─────────────────────────────────────────────────────────────────
    SellZoneCard (SPEC 2026-05-28 Sprint 6、 pillar 2 technical)

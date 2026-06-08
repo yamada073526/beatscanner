@@ -149,7 +149,7 @@ export default function BuyZoneCard({ ticker, compact = false, variant = 'defaul
 
   return (
     <section
-      className="panel-card bzc-card"
+      className={`panel-card bzc-card${isUnified ? ' is-card-unified' : ''}`}
       data-testid="buy-zone-card"
       data-spotlight="card"
       style={{ minHeight: 128 }}

@@ -195,7 +195,7 @@ export default function AnalystTargetCard({ ticker, currentPrice = null, compact
 
   return (
     <section
-      className="panel-card atc-card"
+      className={`panel-card atc-card${isUnified ? ' is-card-unified' : ''}`}
       data-testid="analyst-target-card"
       data-spotlight="card"
       style={{ minHeight: 128 }}

@@ -125,7 +125,7 @@ export default function CupPivotCard({ ticker, compact = false, variant = 'defau
 
   return (
     <section
-      className="panel-card cpc-card"
+      className={`panel-card cpc-card${isUnified ? ' is-card-unified' : ''}`}
       data-testid="cup-pivot-card"
       data-spotlight="card"
       style={{ minHeight: 128 }}
