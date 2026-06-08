@@ -49,6 +49,9 @@ export default function FundamentalsAccordion({
   //   'earnings' = 章サマリー + 決算 (ChapterTabs / 縦並び)、 'profile' = 会社概要 (ProfileCard) のみ。
   //   null (= v4/legacy) は従来順 (章サマリー → 会社概要 → 決算) で全 section 描画 (BC 担保)。
   renderSection = null,
+  // v190 (3体合議): v5 会社概要 AccordionSection title を L2 セクション冠の外観に揃える style。
+  //   JudgmentDetail から sectionHeadingL2Style を受け取る。省略時 (v4/legacy) は AccordionSection 既定。
+  sectionHeadingStyle = undefined,
 }) {
   const isFundaLoading = !result && detail?.isLoading !== false;
   // v185 A: renderSection で表示 section を選択。null は全 section (v4 不変)。
@@ -80,17 +83,16 @@ export default function FundamentalsAccordion({
         )
       ) : null}
 
-      {/* Sprint 2: ライター憲法サマリーブロック (章扉直後)。v185 A: earnings section に含める。 */}
-      {showSummaryEarnings && (
+      {/* Sprint 2: ライター憲法サマリーブロック (章扉直後)。v185 A: earnings section に含める。
+          v190 (user dogfood ①): 「N 条件中 M クリア」 は直上の5条件カード (N/5) と重複し冗長 → v5 で非表示。
+          速報スタイル (EPS/売上/セグメント/ガイダンス要点) への作り替えは別タスク
+          (memory project_chapter_summary_jitchama_style、§38 6体gate)。v4/legacy (renderSection=null) は従来表示。 */}
+      {showSummaryEarnings && renderSection == null && (
         <FundamentalsChapterSummary
           result={result}
           guidance={guidance}
           isLoading={isFundaLoading}
           hasError={false}
-          /* v185 dogfood: v5 (renderSection 指定時) は EPS/売上 surprise を決算ダブり回避で抑制 */
-          hideFinancialLines={renderSection != null}
-          /* v189 (3体合議): v5 (renderSection 指定時) は bg-subtle の軽い面で「結論」 感を保持 */
-          emphasized={renderSection != null}
         />
       )}
 
@@ -111,6 +113,9 @@ export default function FundamentalsAccordion({
           id="sec-profile"
           title="会社概要"
           tier={2}
+          /* v190 (3体合議): v5 では会社概要 title を L2 セクション冠の外観 (決算/バリュエーションと同 token) に統一。
+             v4/legacy (sectionHeadingStyle 未指定) は AccordionSection 既定の title スタイル。 */
+          titleStyle={renderSection === 'profile' ? sectionHeadingStyle : undefined}
           /* v189 (3体合議 qa verdict): v5 (renderSection==='profile') では会社概要を defaultOpen=false で
              畳む (毎日見る情報ではない、 原則① 読み手に負担をかけない)。v4/legacy (renderSection=null) は true 維持。 */
           defaultOpen={renderSection === 'profile' ? false : true}

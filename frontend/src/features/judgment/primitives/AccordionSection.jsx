@@ -66,6 +66,9 @@ export default function AccordionSection({
   controlledOpen,
   onOpenChange,
   tier = 2,
+  // v190 (3体合議): title を呼び出し側で上書きする style (例: v5 会社概要を L2 セクション冠の外観に統一)。
+  //   省略時 undefined → AccordionSection.module.css の既定 .title スタイル (他 accordion 不変)。
+  titleStyle = undefined,
   children,
   ...rest
 }) {
@@ -174,7 +177,7 @@ export default function AccordionSection({
               <polyline points="2 4 6 8 10 4" />
             </svg>
           </span>
-          <span className={styles.title}>{title}</span>
+          <span className={styles.title} style={titleStyle}>{title}</span>
           {badge && (
             badgeColor ? (
               <span

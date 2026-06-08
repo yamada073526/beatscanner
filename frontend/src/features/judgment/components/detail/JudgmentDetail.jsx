@@ -1197,11 +1197,26 @@ export default function JudgmentDetail({
               borderTop: '1px solid var(--border)',
               paddingTop: 'var(--space-8)',
             };
+            // v190 (3体合議 ui/frontend/qa、user dogfood 受け): セクション L2 見出しの統一外観。
+            //   L1 章扉(gold/扉) > L2 セクション冠(これ) > L3 サブ > L4 値。装飾は付けず、
+            //   色(primary)・weight(700)・uppercase で L3(muted/500/小文字) と階層を出す (枠なし面で最も効く)。
+            //   TtmValuationPanel の SectionLabel(13/700/0.08em/uppercase/primary) と同 token = 3セクション冠が揃う。
+            const sectionHeadingL2Style = {
+              fontSize: 13,
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'var(--text-primary)',
+              marginBottom: 'var(--space-2)',
+            };
             const fundamentalsChapterBlock = (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <ChapterSection chapterNumber="①" chapterTitle="ファンダメンタル" headerOnly tier="sub" />
                 {fiveConditionsNode}
                 <div style={hairlineSectionStyle}>
+                  {/* v190: 「決算」 L2 セクション冠 (今期/来期コンセンサスを傘下に束ねる、user dogfood ②)。
+                      外観は下のバリュエーション/会社概要と統一。 */}
+                  <div style={sectionHeadingL2Style}>決算</div>
                   <FundamentalsAccordion
                     key="funda-earnings"
                     renderSection="earnings"
@@ -1226,6 +1241,7 @@ export default function JudgmentDetail({
                   <FundamentalsAccordion
                     key="funda-profile"
                     renderSection="profile"
+                    sectionHeadingStyle={sectionHeadingL2Style}
                     selectedTicker={selectedTicker}
                     result={result}
                     guidance={guidance}

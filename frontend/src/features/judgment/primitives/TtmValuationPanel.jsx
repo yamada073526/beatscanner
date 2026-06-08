@@ -160,11 +160,18 @@ function SectionLabel({ main, sub }) {
         {main}
       </div>
       {sub && (
+        // v190 (3体合議 ui/qa、user dogfood ③): L2 見出し直下の「注釈」。 metric の L3 label
+        //   (ds-stat__label = 12px uppercase muted) と混同しないよう、 lowercase + 通常 tracking +
+        //   opacity 0.7 + 軽インデントで「冠の小さな添え書き」 に差別化。 opacity は 0.7 死守 (免責視認性 = qa)。
         <div
           style={{
             fontSize: 11,
+            fontWeight: 400,
             color: 'var(--text-muted)',
+            opacity: 0.7,
             marginTop: 2,
+            paddingLeft: 2,
+            letterSpacing: 'normal',
           }}
         >
           {sub}
