@@ -88,9 +88,6 @@ export default function PriceLadder({ ticker }) {
     const prices = priceData?.prices;
     const current = (prices?.length && Number.isFinite(prices[prices.length - 1]?.close))
       ? prices[prices.length - 1].close : null;
-    const maxClose = prices?.length
-      ? Math.max(...prices.map((p) => p.close).filter(Number.isFinite))
-      : null;
     // analyst consensus (per-source namespace: price_target === 'ok' のときのみ)
     const consensus = analyst?.sources?.price_target === 'ok'
       ? (Number.isFinite(analyst?.precomputed_metrics?.target_range?.mean)
@@ -106,7 +103,10 @@ export default function PriceLadder({ ticker }) {
       const last = ov?.data?.[ov.data.length - 1];
       return Number.isFinite(last?.value) ? last.value : null;
     })();
-    const stop = Number.isFinite(maxClose) ? maxClose * 0.92 : null;
+    // 損切り目安 = 現在価格 × 0.92 (8% ルール、今エントリー想定で常に現在価格の下値に置く)。
+    // チャートの stop8 (高値×0.92=高値トレイル) は別概念で、 ladder に出すと「損切りが現在より上」 と
+    // 混乱する (高値から 8% 超下落した銘柄)。 ladder は現在基準で下値に統一。
+    const stop = Number.isFinite(current) ? current * 0.92 : null;
 
     const raw = [
       { key: 'target', label: 'アナリスト目標', price: consensus },
@@ -114,7 +114,7 @@ export default function PriceLadder({ ticker }) {
       { key: 'current', label: '現在価格', price: current, isCurrent: true },
       { key: 'sma50', label: '50日移動平均', price: sma50 },
       { key: 'support', label: 'サポート', price: support },
-      { key: 'stop', label: '損切り目安 (高値 −8%)', price: stop },
+      { key: 'stop', label: '損切り目安 (−8%)', price: stop },
     ].filter((l) => Number.isFinite(l.price));
     raw.sort((a, b) => b.price - a.price);
 
