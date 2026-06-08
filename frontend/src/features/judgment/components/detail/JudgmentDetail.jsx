@@ -1251,10 +1251,7 @@ export default function JudgmentDetail({
             const technicalTargetGrid = selectedTicker ? (
               <SectionFade id="sec-target-and-zone-v5" staggerIndex={3}>
                 {plan === 'premium' ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4, 16px)' }}>
-                    <PriceLadder ticker={selectedTicker} />
-                    <DistributionDaysCard ticker={selectedTicker} compact />
-                  </div>
+                  <PriceLadder ticker={selectedTicker} />
                 ) : (
                   <AnalystTargetCard ticker={selectedTicker} compact variant="unified" />
                 )}

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchAnalyst, fetchTechnical, fetchPriceHistory } from '../api.js';
+import { DIST_DAYS_LABEL_JP, classifyDistDays } from '../lib/distributionDaysLabels.js';
+import Chip from './ui/Chip.jsx';
 
 /**
  * PriceLadder — テクニカル章の価格指標を「現在価格を中心とした縦の数直線」 に統合する component。
@@ -32,6 +34,31 @@ function fmtPct(v) {
   if (!Number.isFinite(v)) return '—';
   const s = v > 0 ? '+' : '';
   return `${s}${v.toFixed(1)}%`;
+}
+
+/**
+ * §38 セーフな状態サマリー: 現在価格と各テクニカルレベルの位置関係を「事実記述」 のみで返す。
+ * LLM 不使用 (機械判定 + 静的文)。「買い」「反発期待」「上昇トレンド」 等の行動指示・将来予測・
+ * 最上級は一切含めない ([[feedback_condition_pulse_pattern]] の STATE_LABEL_JP と同じ静的 dict パターン)。
+ */
+function buildTechnicalState({ current, sma50, pivot, support, sma50Dist }) {
+  if (!Number.isFinite(current)) return null;
+  const parts = [];
+  if (Number.isFinite(sma50)) {
+    parts.push(current >= sma50 ? '50日移動平均の上' : '50日移動平均の下');
+  }
+  // 過熱 (50DMA から大きく伸びた) を優先、 なければ pivot との位置関係
+  if (Number.isFinite(sma50Dist) && sma50Dist >= 15) {
+    parts.push('50日線から伸びた位置 (過熱目安)');
+  } else if (Number.isFinite(pivot)) {
+    parts.push(current < pivot ? '買い目安 (pivot) の手前' : '買い目安 (pivot) を上回る位置');
+  }
+  if (Number.isFinite(support)) {
+    const d = (current / support - 1) * 100;
+    if (Math.abs(d) <= 2) parts.push('サポート目安の近辺');
+  }
+  if (parts.length === 0) return null;
+  return `${parts.join('・')} にあります。`;
 }
 
 function SectionLabel() {
@@ -84,7 +111,7 @@ export default function PriceLadder({ ticker }) {
     return () => { cancelled = true; };
   }, [ticker]);
 
-  const { levels, current, sma50Dist } = useMemo(() => {
+  const { levels, current, sma50Dist, distCount, stateText } = useMemo(() => {
     const prices = priceData?.prices;
     const current = (prices?.length && Number.isFinite(prices[prices.length - 1]?.close))
       ? prices[prices.length - 1].close : null;
@@ -121,7 +148,25 @@ export default function PriceLadder({ ticker }) {
     const sma50Dist = (Number.isFinite(current) && Number.isFinite(sma50) && sma50 > 0)
       ? (current / sma50 - 1) * 100 : null;
 
-    return { levels: raw, current, sma50Dist };
+    // 地合い (Distribution Days): 前日比 -0.2% 以下 かつ 出来高前日超 を直近 25 営業日でカウント (IBD)。
+    const distCount = (() => {
+      if (!Array.isArray(prices) || prices.length < 7) return null;
+      const win = prices.slice(-26);
+      let count = 0;
+      let valid = 0;
+      for (let i = 1; i < win.length; i++) {
+        const t = win[i];
+        const y = win[i - 1];
+        if (!Number.isFinite(t?.close) || !Number.isFinite(y?.close) || y.close <= 0) continue;
+        if (!Number.isFinite(t?.volume) || !Number.isFinite(y?.volume)) continue;
+        valid++;
+        if ((t.close / y.close - 1) * 100 <= -0.2 && t.volume > y.volume) count++;
+      }
+      return valid < 5 ? null : count;
+    })();
+    const stateText = buildTechnicalState({ current, sma50, pivot, support, sma50Dist });
+
+    return { levels: raw, current, sma50Dist, distCount, stateText };
   }, [analyst, technical, priceData]);
 
   // loading: CLS envelope (minHeight) + skeleton
@@ -154,6 +199,38 @@ export default function PriceLadder({ ticker }) {
   return (
     <div data-testid="price-ladder" data-state="main" style={{ minHeight: 220 }}>
       <SectionLabel />
+      {/* §38 状態サマリー (位置の事実記述、LLM 不使用) + 地合いバッジ (Distribution Days、市場全体の指標)。
+          地合いは価格 ladder と性質が違うため、 同じ数直線でなく上部の 1 行に分離して提示。 */}
+      {(stateText || Number.isFinite(distCount)) && (
+        <div
+          data-testid="price-ladder-summary"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 'var(--space-2, 8px)',
+            marginBottom: 'var(--space-2, 8px)',
+            flexWrap: 'wrap',
+          }}
+        >
+          {stateText ? (
+            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              {stateText}
+            </span>
+          ) : <span />}
+          {Number.isFinite(distCount) && (() => {
+            const zone = classifyDistDays(distCount);
+            const tone = zone === 'pressure' ? 'loss'
+              : zone === 'caution' ? 'warning'
+              : zone === 'healthy' ? 'gain' : 'muted';
+            return (
+              <Chip variant="display" size="xs" tone={tone}>
+                地合い: {DIST_DAYS_LABEL_JP[zone] || '—'} ({distCount}日/25)
+              </Chip>
+            );
+          })()}
+        </div>
+      )}
       <div style={{
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-lg, 16px)',
