@@ -94,6 +94,16 @@ try {
     const clip = clipX ? { x: clipX.x, y: 0, width: Math.min(clipX.width, 1500 - clipX.x), height: 1400 } : undefined;
     await page.screenshot({ path: `${OUT}v5-${TICKER}-${String(i).padStart(2, '0')}.png`, clip, fullPage: false });
   }
+  // 値検証: price ladder summary (状態サマリー + 地合いバッジ) と ladder 本体のテキスト抽出
+  const ladderText = await page.evaluate(() => {
+    const s = document.querySelector('[data-testid="price-ladder-summary"]');
+    const l = document.querySelector('[data-testid="price-ladder"]');
+    return {
+      summary: s?.textContent?.replace(/\s+/g, ' ').trim() || null,
+      ladder: l?.textContent?.replace(/\s+/g, ' ').trim().slice(0, 600) || null,
+    };
+  });
+  console.error('[LADDER TEXT]', JSON.stringify(ladderText, null, 2));
   console.log(JSON.stringify({ done: true, shots: positions.length, ticker: TICKER, auth: !!auth, out: OUT }, null, 2));
 } catch (e) {
   console.error('[snap-v5-dogfood] error:', e?.message || e);
