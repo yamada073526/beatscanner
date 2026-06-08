@@ -1568,8 +1568,16 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
         )}
 
         {/* === 競合 ticker chips (3-5 件) === */}
+        {/* v192 (C-2 user dogfood): 競合を枠でグルーピングし「補足情報の島」 と明示 → テキストを少し大きくしても
+            補足と分かる。 各 chip に企業ロゴ併記 (CompanyLogo) で視認性 up。 発光系不使用の素 div + bg-subtle。 */}
         {!profileLoading && peers.length > 0 && (
-          <div style={{ marginTop: summaryOk ? 'var(--space-4, 16px)' : 0 }}>
+          <div style={{
+            marginTop: summaryOk ? 'var(--space-4, 16px)' : 0,
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md, 12px)',
+            padding: 'var(--space-3, 12px)',
+            background: 'var(--bg-subtle)',
+          }}>
             <div
               style={{
                 fontSize: 11,
@@ -1588,7 +1596,8 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
                   key={peer}
                   variant="filter"
                   tone="accent"
-                  size="xs"
+                  size="sm"
+                  icon={<CompanyLogo ticker={peer} size={16} variant="badge" />}
                   onClick={onNavigateTicker ? () => onNavigateTicker(peer) : undefined}
                   ariaLabel={`${peer} の分析を表示`}
                   data-testid={`profile-peer-chip-${peer}`}
