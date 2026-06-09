@@ -86,11 +86,16 @@ export default function ContextSection({
   // 図解 (StickyDiagramAccordion) が Pane 3 上部に mount 済で重複、 user dogfood「消して良い」 要望。
   // legacy mode (isV4=false) では従来通り render (BC 担保)。
   isV4 = false,
+  // §C-11 D (v195): v5 では 市場評価=③ に続く「④」 へ renumber + emphasized で ①②③ と同形に。
+  // v4/legacy は従来「③」 のまま (BC)。
+  isV5 = false,
 }) {
   return (
     <>
       {/* === 章 5: リファレンス (H2 Chapter Break + v97 G-2 軽量強化) === */}
-      {isV2 ? (
+      {isV5 ? (
+        <ChapterSection chapterNumber="④" chapterTitle="リファレンス" headerOnly tier="sub" emphasized />
+      ) : isV2 ? (
         <ChapterSection chapterNumber="③" chapterTitle="リファレンス" headerOnly tier="sub" />
       ) : (
         <ChapterHeader label="リファレンス" isChapterStart />

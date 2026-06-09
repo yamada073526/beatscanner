@@ -313,6 +313,17 @@ function isPane3V2Frameless() {
  * @param {object} [props.detailContext] - 既存 panel 用 props bundle
  *   { user, isPro, onUpgrade, onSignIn }
  */
+// §C-11 A (v195 autopilot): L2 セクション冠の共通 token。 v5 IIFE 内 sectionHeadingL2Style と同値だが、
+// AccordionSection (8Q決算反応/Insider) の titleStyle 用に marginBottom なし (title は flex header 内 inline span)。
+// module-level なのは earningsReactionBlock (L1011) が IIFE 内定義 (L1237) より前にあるため (TDZ 回避)。
+const ACCORDION_L2_TITLE_STYLE = {
+  fontSize: 13,
+  fontWeight: 700,
+  letterSpacing: '0.08em',
+  textTransform: 'uppercase',
+  color: 'var(--text-primary)',
+};
+
 export default function JudgmentDetail({
   plan = 'free',
   detailFor,
@@ -945,6 +956,7 @@ export default function JudgmentDetail({
             detailContext={detailContext}
             isV2={isV2}
             isV3={isV3}
+            isV5={isV5}
             isScrollV1={isScrollV1}
             expandedSections={expandedSections}
             ch3Tab={ch3Tab}
@@ -1018,7 +1030,7 @@ export default function JudgmentDetail({
               onUpgrade={detailContext.onUpgrade}
             >
               <div id="sec-earnings-reaction">
-                <EarningsReactionPanel ticker={selectedTicker} />
+                <EarningsReactionPanel ticker={selectedTicker} l3Headings={isV5} />
               </div>
             </PremiumLock>
           ) : (
@@ -1030,6 +1042,10 @@ export default function JudgmentDetail({
               tier={2}
               defaultOpen={false}
               controlledOpen={expandedSections.has('earnings-reaction') || undefined}
+              /* §C-11 A (v195): v5 のみ title を L2 冠 token に統一 (default 18px/500 が他 L2 と不一致)。
+                 chevron 右置きで title 左端を他 L2 冠と整列 (§C-11 整列)。 v4/legacy は不変 (BC)。 */
+              titleStyle={isV5 ? ACCORDION_L2_TITLE_STYLE : undefined}
+              chevronPosition={isV5 ? 'right' : 'left'}
             >
               <PremiumLock
                 feature="earnings_8q"
@@ -1038,7 +1054,7 @@ export default function JudgmentDetail({
                 onUpgrade={detailContext.onUpgrade}
               >
                 <div id="sec-earnings-reaction-inner">
-                  <EarningsReactionPanel ticker={selectedTicker} />
+                  <EarningsReactionPanel ticker={selectedTicker} l3Headings={isV5} />
                 </div>
               </PremiumLock>
             </AccordionSection>
@@ -1064,7 +1080,7 @@ export default function JudgmentDetail({
                 title="Insider 取引"
                 label="FORM 4 / 13F"
               >
-                <InsiderPanel ticker={selectedTicker} />
+                <InsiderPanel ticker={selectedTicker} l3Headings={isV5} />
               </SimpleSection>
             </PremiumLock>
           ) : (
@@ -1076,6 +1092,9 @@ export default function JudgmentDetail({
               tier={2}
               defaultOpen={false}
               controlledOpen={expandedSections.has('insider') || undefined}
+              /* §C-11 A (v195): v5 のみ L2 冠 token + chevron 右 (8Q と同様、 v4/legacy 不変)。 */
+              titleStyle={isV5 ? ACCORDION_L2_TITLE_STYLE : undefined}
+              chevronPosition={isV5 ? 'right' : 'left'}
             >
               <PremiumLock
                 feature="insider_trades"
@@ -1089,7 +1108,7 @@ export default function JudgmentDetail({
                 onUpgrade={detailContext.onUpgrade}
               >
                 <div id="sec-insider-inner">
-                  <InsiderPanel ticker={selectedTicker} />
+                  <InsiderPanel ticker={selectedTicker} l3Headings={isV5} />
                 </div>
               </PremiumLock>
             </AccordionSection>
@@ -1112,6 +1131,7 @@ export default function JudgmentDetail({
             // mount したため、 末尾 AI 詳細レポート (DetailReport) は重複。 isV4 を渡し ContextSection
             // で AI 詳細レポート の render を skip (legacy mode のみ表示維持で BC 担保)。
             isV4={isV4}
+            isV5={isV5}
           />
         );
 

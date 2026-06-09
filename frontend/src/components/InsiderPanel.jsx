@@ -81,7 +81,13 @@ function translateTxType(type) {
   }
 }
 
-export default function InsiderPanel({ ticker }) {
+// §C-11 A (v195): v5 では AccordionSection title「Insider 取引」が L2 冠のため、 内部 h3 はその傘下の
+// サブ見出し = L3 (12/500/muted) に降格する。 v4/classic は従来 (13/700/primary) のまま (BC)。
+const INNER_HEADING_DEFAULT = { fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 };
+const INNER_HEADING_L3 = { fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', margin: 0 };
+
+export default function InsiderPanel({ ticker, l3Headings = false }) {
+  const innerHeading = l3Headings ? INNER_HEADING_L3 : INNER_HEADING_DEFAULT;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -126,7 +132,7 @@ export default function InsiderPanel({ ticker }) {
       {/* Form 4 (経営者株式売買) */}
       <section>
         <header style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+          <h3 style={innerHeading}>
             Form 4 経営者売買
           </h3>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
@@ -233,7 +239,7 @@ export default function InsiderPanel({ ticker }) {
       {/* 13F 機関投資家保有 */}
       <section>
         <header style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+          <h3 style={innerHeading}>
             13F 機関投資家保有
           </h3>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>

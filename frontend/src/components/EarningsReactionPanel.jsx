@@ -31,7 +31,13 @@ const fmtPct = (v) => {
   return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
 };
 
-export default function EarningsReactionPanel({ ticker }) {
+// §C-11 A (v195): v5 では AccordionSection title「過去 8Q 決算反応」が L2 冠のため、 内部 h3 は
+// その傘下のサブ見出し = L3 (12/500/muted) に降格する。 v4/classic は従来 (13/700/primary) のまま (BC)。
+const INNER_HEADING_DEFAULT = { fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 };
+const INNER_HEADING_L3 = { fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', margin: 0 };
+
+export default function EarningsReactionPanel({ ticker, l3Headings = false }) {
+  const innerHeading = l3Headings ? INNER_HEADING_L3 : INNER_HEADING_DEFAULT;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -82,7 +88,7 @@ export default function EarningsReactionPanel({ ticker }) {
       {/* Summary: Beat / Miss 平均リターン */}
       <section>
         <header style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+          <h3 style={innerHeading}>
             過去 8Q 決算反応サマリー
           </h3>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
@@ -127,7 +133,7 @@ export default function EarningsReactionPanel({ ticker }) {
       {/* Quarter list */}
       <section>
         <header style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+          <h3 style={innerHeading}>
             各 Q の反応
           </h3>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>

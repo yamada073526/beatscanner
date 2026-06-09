@@ -35,11 +35,16 @@ export default function MarketEvalSection({
   analystHaloTriggerRef,
   qhistoryHaloTriggerRef,
   haloFiredSetRef,
+  // §C-11 D (v195): v5 では章番号を ①ファンダ ②テクニカル に続く「③」 へ統一 (旧「II.」 はローマ数字混在)。
+  // tier="sub" + emphasized で ①② の章扉と同形に。 v4/legacy は従来「II./main」 のまま (BC)。
+  isV5 = false,
 }) {
   return (
     <>
       {/* === 章 3: 市場評価 (H2 Chapter Break + v97 G-2 軽量強化) === */}
-      {isV2 ? (
+      {isV5 ? (
+        <ChapterSection chapterNumber="③" chapterTitle="市場評価" headerOnly tier="sub" emphasized />
+      ) : isV2 ? (
         <ChapterSection chapterNumber="II" chapterTitle="市場評価" headerOnly tier="main" />
       ) : (
         <ChapterHeader label="市場評価" isChapterStart />

@@ -447,14 +447,16 @@ function EarningsHistoryChartInner({ periods = [], currency = 'USD', isLoading =
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)' }}>
+          {/* §C-11 B (v195): L2 冠 token に統一 (letterSpacing 0.06→0.08em / secondary→primary)。
+              他 L2 冠 (決算/バリュエーション/アナリスト視点) と反復一致。 */}
           <h3
             style={{
               margin: 0,
               fontSize: 13,
               fontWeight: 700,
-              letterSpacing: '0.06em',
+              letterSpacing: '0.08em',
               textTransform: 'uppercase',
-              color: 'var(--text-secondary)',
+              color: 'var(--text-primary)',
             }}
           >
             過去業績推移 (per-share)
