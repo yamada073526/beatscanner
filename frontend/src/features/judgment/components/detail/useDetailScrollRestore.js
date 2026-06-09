@@ -80,52 +80,72 @@ function findScrollContainer(detailEl) {
 
 export function useDetailScrollRestore(ticker, detailRef) {
   useEffect(() => {
-    if (!ticker || !detailRef.current) return undefined;
+    if (!ticker) return undefined;
 
     const currentTicker = ticker;
-    const container = findScrollContainer(detailRef.current);
     const savedScrollTop = loadSavedScrollTop(currentTicker);
 
     let cancelled = false;
     let rafId;
+    let mountRafId;
     let saveTimer;
+    let container = null;
+    let onScroll = null;
     // 復元中は scroll 保存を抑制 (復元途中の partial 値で正解を上書きしないため)。
     let restoring = typeof savedScrollTop === 'number' && savedScrollTop > 0;
 
-    // --- 継続保存: 在席中に scroll するたび現在位置を保存 (debounce) ---
-    const onScroll = () => {
-      if (restoring) return;
-      clearTimeout(saveTimer);
-      saveTimer = setTimeout(() => saveScrollTop(currentTicker, container.scrollTop), SAVE_DEBOUNCE_MS);
-    };
-    container.addEventListener('scroll', onScroll, { passive: true });
+    // ★ effect は selectedTicker 変化の瞬間に走るが、その時点では loading skeleton で
+    //   .ds-judgment-detail (detailRef) が未 mount のことがある。mount するまで rAF で待ってから
+    //   listener を attach する (即 early-return すると listener が一生 attach されず save されない、
+    //   user dogfood 2026-06-09 3rd の真因)。
+    let mountFrames = 0;
+    const MOUNT_MAX_FRAMES = 300; // ~5s。これを超えて div が出ない (恒久エラー等) なら諦める。
 
-    // --- 復元: 遅延ロードで height が伸びる過程を追従し savedScrollTop に届くまで再補正 ---
-    if (restoring) {
-      let frames = 0;
-      const correct = () => {
-        if (cancelled) return;
-        const maxScroll = container.scrollHeight - container.clientHeight;
-        const target = Math.min(savedScrollTop, Math.max(0, maxScroll));
-        if (Math.abs(container.scrollTop - target) > 2) {
-          container.scrollTo({ top: target, behavior: 'instant' });
-        }
-        frames += 1;
-        if (frames < RESTORE_MAX_FRAMES && maxScroll < savedScrollTop) {
-          rafId = requestAnimationFrame(correct);
-        } else {
-          restoring = false; // 復元完了 (or 上限) → 以後の user scroll を保存再開
-        }
+    const start = () => {
+      if (cancelled) return;
+      if (!detailRef.current) {
+        if (mountFrames++ < MOUNT_MAX_FRAMES) mountRafId = requestAnimationFrame(start);
+        return;
+      }
+      container = findScrollContainer(detailRef.current);
+
+      // --- 継続保存: 在席中に scroll するたび現在位置を保存 (debounce) ---
+      onScroll = () => {
+        if (restoring) return;
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => saveScrollTop(currentTicker, container.scrollTop), SAVE_DEBOUNCE_MS);
       };
-      rafId = requestAnimationFrame(correct);
-    }
+      container.addEventListener('scroll', onScroll, { passive: true });
+
+      // --- 復元: 遅延ロードで height が伸びる過程を追従し savedScrollTop に届くまで再補正 ---
+      if (restoring) {
+        let frames = 0;
+        const correct = () => {
+          if (cancelled) return;
+          const maxScroll = container.scrollHeight - container.clientHeight;
+          const target = Math.min(savedScrollTop, Math.max(0, maxScroll));
+          if (Math.abs(container.scrollTop - target) > 2) {
+            container.scrollTo({ top: target, behavior: 'instant' });
+          }
+          frames += 1;
+          if (frames < RESTORE_MAX_FRAMES && maxScroll < savedScrollTop) {
+            rafId = requestAnimationFrame(correct);
+          } else {
+            restoring = false; // 復元完了 (or 上限) → 以後の user scroll を保存再開
+          }
+        };
+        rafId = requestAnimationFrame(correct);
+      }
+    };
+    start();
 
     // cleanup: listener 除去 + pending 保存 cancel (ナビ時のトップ scroll(0) を保存させない) + rAF 停止
     return () => {
       cancelled = true;
       cancelAnimationFrame(rafId);
+      cancelAnimationFrame(mountRafId);
       clearTimeout(saveTimer);
-      container.removeEventListener('scroll', onScroll);
+      if (container && onScroll) container.removeEventListener('scroll', onScroll);
     };
   }, [ticker, detailRef]);
 }
