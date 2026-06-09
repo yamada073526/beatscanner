@@ -36,7 +36,15 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
  *   - timeoutMs 指定で hard timeout (insights の長時間 LLM 用に 75s 等)
  */
 const _getCache = new Map(); // url -> { ts, promise(raw json) }
-const _GET_COALESCE_TTL = 60_000; // 60s: prefetch → panel mount の race を確実に coalesce
+// v195 (C-3 competitor nav, user dogfood 2026-06-09「戻る時に毎回ロードが発生」):
+//   60s → 10min に延長。 元々の目的 (prefetch t=0 → panel mount t≈2-3s の race coalesce) は 60s で足りるが、
+//   パンくず back-nav (A→競合B→A に戻る) では A の panel が unmount→remount するため、 競合を読んでいる
+//   間に 60s 経過すると _getCache が失効し全 panel が再 fetch (= user の言う「ロード」)。
+//   判定 result は resultCacheRef (10min TTL) で既に瞬時表示されるので、 panel 側 GET cache も 10min に
+//   揃えて「競合へ遷移する前の状態へロードなしで一瞬で戻る」 を実現する (両 cache の TTL 対称化)。
+//   鮮度が要る explicit refresh は自前 invalidate 済 (insights=invalidateInsightsCache / profile=forceRegenerate)、
+//   judgment analyze は dedupGet 非経由のため本 TTL の影響を受けない。 price hero (現在値) も別 live 経路。
+const _GET_COALESCE_TTL = 600_000; // 10min: coalesce + 競合 back-nav の panel 瞬時復元 (resultCacheRef と対称)
 
 function _cloneJson(d) {
   if (d == null || typeof d !== 'object') return d;
