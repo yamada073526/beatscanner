@@ -231,15 +231,31 @@ export default function PriceLadder({ ticker }) {
           })()}
         </div>
       )}
-      <div style={{
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-lg, 16px)',
-        overflow: 'hidden',
-        background: 'var(--bg-card)',
-      }}>
-        {levels.map((l, i) => {
-          const dist = (Number.isFinite(l.price) && Number.isFinite(current))
-            ? (l.price / current - 1) * 100 : null;
+      {/* 案A (v195 dogfood 2026-06-10、 ui-designer 提案): 「縦軸(spine) + tick」 ladder。
+          旧 border 箱 + 均等行リストが「数直線に見えない」(user「ダサい」) ため撤廃。 左に連続した spine
+          (border-left) を引き、 現在価格を accent tick + 20px 値でアンカー、 上値/下値を L3 hairline ラベルで
+          グループ化 (§C-11 面の引き算)。 §38: 方向は空間配置(現在価格の上/下)+ラベルのみ、 緑/赤の方向色は不使用。
+          発光 host 化しない (.panel-card 不使用、 border-left は box-shadow でないため glow 危険ゾーン外)。 */}
+      {(() => {
+        const curIdx = levels.findIndex((l) => l.isCurrent);
+        const upper = curIdx > 0 ? levels.slice(0, curIdx) : [];
+        const lower = (curIdx >= 0 && curIdx < levels.length - 1) ? levels.slice(curIdx + 1) : [];
+        const cur = curIdx >= 0 ? levels[curIdx] : null;
+
+        const groupLabel = (text) => (
+          <div style={{
+            fontSize: 11,
+            fontWeight: 500,
+            letterSpacing: '0.08em',
+            color: 'var(--text-muted)',
+            margin: 'var(--space-3, 12px) 0 var(--space-2, 8px)',
+          }}>
+            {text}
+          </div>
+        );
+
+        const levelRow = (l) => {
+          const dist = (Number.isFinite(l.price) && Number.isFinite(current)) ? (l.price / current - 1) * 100 : null;
           return (
             <div
               key={l.key}
@@ -249,47 +265,68 @@ export default function PriceLadder({ ticker }) {
                 alignItems: 'baseline',
                 justifyContent: 'space-between',
                 gap: 'var(--space-3, 12px)',
-                padding: l.isCurrent
-                  ? 'var(--space-3, 12px) var(--space-4, 16px)'
-                  : 'var(--space-2, 8px) var(--space-4, 16px)',
-                borderTop: i === 0 ? 'none' : '1px solid var(--border)',
-                background: l.isCurrent ? 'var(--bg-subtle)' : 'transparent',
-                borderLeft: l.isCurrent ? '3px solid var(--color-accent)' : '3px solid transparent',
+                padding: 'var(--space-2, 8px) 0',
               }}
             >
-              <span style={{
-                fontSize: l.isCurrent ? 13 : 12,
-                fontWeight: l.isCurrent ? 600 : 500,
-                color: l.isCurrent ? 'var(--text-primary)' : 'var(--text-secondary)',
-              }}>
-                {l.label}
-              </span>
+              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>{l.label}</span>
               <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3, 12px)' }}>
-                <span style={{
-                  fontSize: l.isCurrent ? 20 : 15,
-                  fontWeight: 700,
-                  letterSpacing: '-0.01em',
-                  fontVariantNumeric: 'tabular-nums',
-                  color: l.isCurrent ? 'var(--text-primary)' : 'var(--text-secondary)',
-                }}>
-                  {fmtUsd(l.price)}
-                </span>
-                <span style={{
-                  fontSize: 11,
-                  fontVariantNumeric: 'tabular-nums',
-                  color: 'var(--text-muted)',
-                  minWidth: 64,
-                  textAlign: 'right',
-                }}>
-                  {l.isCurrent
-                    ? (Number.isFinite(sma50Dist) ? `50DMA ${fmtPct(sma50Dist)}` : '基準')
-                    : (dist != null ? `現在から ${fmtPct(dist)}` : '—')}
+                <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{fmtUsd(l.price)}</span>
+                <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', minWidth: 72, textAlign: 'right' }}>
+                  {dist != null ? `現在から ${fmtPct(dist)}` : '—'}
                 </span>
               </span>
             </div>
           );
-        })}
-      </div>
+        };
+
+        const currentRow = (l) => (
+          <div
+            key={l.key}
+            data-testid={`price-ladder-row-${l.key}`}
+            style={{
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'baseline',
+              justifyContent: 'space-between',
+              gap: 'var(--space-3, 12px)',
+              padding: 'var(--space-3, 12px) 0',
+            }}
+          >
+            {/* spine 上の accent tick (現在価格アンカー、 §38 中立ブランド色) */}
+            <span aria-hidden="true" style={{
+              position: 'absolute',
+              left: 'calc(-1 * var(--space-4, 16px) - 1px)',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              width: 11,
+              height: 3,
+              borderRadius: 2,
+              background: 'var(--color-accent)',
+            }} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{l.label}</span>
+            <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3, 12px)' }}>
+              <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{fmtUsd(l.price)}</span>
+              <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', minWidth: 72, textAlign: 'right' }}>
+                {Number.isFinite(sma50Dist) ? `50DMA ${fmtPct(sma50Dist)}` : '基準'}
+              </span>
+            </span>
+          </div>
+        );
+
+        return (
+          <div style={{
+            position: 'relative',
+            borderLeft: '2px solid var(--border)',
+            paddingLeft: 'var(--space-4, 16px)',
+          }}>
+            {upper.length > 0 && groupLabel('上値')}
+            {upper.map(levelRow)}
+            {cur && currentRow(cur)}
+            {lower.length > 0 && groupLabel('下値')}
+            {lower.map(levelRow)}
+          </div>
+        );
+      })()}
       <p style={{
         fontSize: 10,
         color: 'var(--text-muted)',
