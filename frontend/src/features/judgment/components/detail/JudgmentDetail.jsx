@@ -69,6 +69,7 @@ import SectionFade from '../../primitives/SectionFade.jsx';
 // Pane 3 全体を wrap することで Sprint 4 以降の m.* motion component を有効化する。
 // framer-motion chunk は vite.config.js manualChunks で react-vendor から分離済 (20KB 以下目標)。
 import MotionProvider from '../../../../components/MotionProvider.jsx';
+import { DetailInstanceTickerContext } from '../../primitives/DetailInstanceTickerContext.js';
 // Phase G Phase 1 (handover v98 §0-B): UnifiedJudgmentSection — 章 1「判定」 4 components 統合 wrapper。
 // feature flag `pane3_v2=1` で URL parameter / localStorage 切替 (default off)。
 import UnifiedJudgmentSection from './UnifiedJudgmentSection.jsx';
@@ -656,6 +657,9 @@ export default function JudgmentDetail({
     // LazyMotion + domAnimation features (framer-motion subset) を有効化。
     // Sprint 4 以降の m.section / m.div / useMotionValue 等はこの scope 内で動作する。
     // prefers-reduced-motion 対応は index.css @media ブロックで全体カバー済。
+    // C-3 keep-mounted (v198): 自 instance の固定 ticker を配下の AccordionSection に伝え、
+    // global activeTicker への依存を断つ (別 ticker 遷移で hidden 側 accordion が閉じ→戻りで clip するバグの真因)。
+    <DetailInstanceTickerContext.Provider value={selectedTicker}>
     <MotionProvider>
     <div
       ref={detailDivRef}
@@ -1463,5 +1467,6 @@ export default function JudgmentDetail({
       )}
     </div>
     </MotionProvider>
+    </DetailInstanceTickerContext.Provider>
   );
 }

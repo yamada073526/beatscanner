@@ -11,10 +11,11 @@
  *     { type: 'spring', stiffness: 220, damping: 28 }
  *   PGE 落とし穴 4: infinite animation 禁止 → open/close で完結 → OK
  */
-import React, { useState, useCallback, useEffect, useId, useRef } from 'react';
+import React, { useState, useCallback, useContext, useEffect, useId, useRef } from 'react';
 import { m, AnimatePresence, useReducedMotion } from 'framer-motion';
 import styles from './AccordionSection.module.css';
 import { useWorkspaceStore } from '../../../state/workspaceStore.js';
+import { DetailInstanceTickerContext } from './DetailInstanceTickerContext.js';
 
 // ─── C-3 競合ナビ scroll 復元: accordion 開閉状態を ticker 別に保持 (user dogfood 2026-06-09) ───
 //   祖先 ticker に戻った時に accordion が defaultOpen に戻り、height が変わって scroll がズレる問題の解消。
@@ -117,20 +118,27 @@ export default function AccordionSection({
 
   // isControlled: Sprint 5 で workspaceStore が controlledOpen を渡す想定
   const isControlled = typeof controlledOpen === 'boolean';
-  // C-3: 現在 ticker (persisted 開閉状態の key)。
+  // C-3: 開閉永続化の key となる ticker。 keep-mounted (DetailStack) では各 instance の固定 ticker を
+  //   DetailInstanceTickerContext から受け取り、 global activeTicker への依存を断つ。 これにより別 ticker
+  //   (競合 B) へ遷移しても hidden 側 instance (元銘柄 A) の accordion 永続 effect が発火せず、 accordion が
+  //   閉じない → 戻り時の reopen による framer-motion height 誤測定 clip (= 会社概要が縮みチャートを押し出す
+  //   バグ) が消える。 context 未提供 (単一 JudgmentDetail path) では activeTicker に fallback (無回帰)。
   const activeTicker = useWorkspaceStore((s) => s.activeTicker);
+  const instanceTicker = useContext(DetailInstanceTickerContext);
+  const accTicker = instanceTicker ?? activeTicker;
   // C-3: 初期開閉は persisted 値があればそれを、なければ defaultOpen を採用 (uncontrolled のみ)。
   const [internalOpen, setInternalOpen] = useState(() => {
-    const p = loadAccOpen(activeTicker, id);
+    const p = loadAccOpen(accTicker, id);
     return p == null ? defaultOpen : p;
   });
-  // C-3: ticker が変わったら persisted 開閉状態を読み直す (同 instance が別 ticker を表示する場合に追従)。
+  // C-3: accTicker が変わったら persisted 開閉状態を読み直す (同 instance が別 ticker を表示する単一 path 用)。
+  //   keep-mounted では accTicker が instance 固定なので別 ticker 遷移では発火しない (= accordion が閉じない)。
   useEffect(() => {
     if (isControlled) return;
-    const p = loadAccOpen(activeTicker, id);
+    const p = loadAccOpen(accTicker, id);
     setInternalOpen(p == null ? defaultOpen : p);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTicker]);
+  }, [accTicker]);
   const isOpen = isControlled ? controlledOpen : internalOpen;
 
   // Phase 2.7 Sprint 1 #3: state-aware overflow — animate 中は 'hidden' を維持し jump-cut を排除
@@ -154,10 +162,10 @@ export default function AccordionSection({
     const next = !isOpen;
     if (!isControlled) {
       setInternalOpen(next);
-      saveAccOpen(activeTicker, id, next); // C-3: 開閉を ticker 別に保持 (scroll 復元の前提)
+      saveAccOpen(accTicker, id, next); // C-3: 開閉を ticker 別に保持 (scroll 復元の前提)
     }
     if (onOpenChange) onOpenChange(id, next);
-  }, [isOpen, isControlled, onOpenChange, id, activeTicker]);
+  }, [isOpen, isControlled, onOpenChange, id, accTicker]);
 
   // a11y: Enter / Space で toggle
   const handleKeyDown = useCallback(
