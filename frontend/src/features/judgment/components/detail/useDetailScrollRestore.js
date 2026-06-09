@@ -29,6 +29,7 @@
 import { useEffect } from 'react';
 
 const STORAGE_PREFIX = 'bs:c3:detail:';
+const SAVE_DEBOUNCE_MS = 120;
 const RESTORE_MAX_FRAMES = 110; // ~1.8s @60fps (遅延ロード完了を待つ上限、無限ループ防止)
 const STABLE_FRAMES = 8;        // diff~0 がこの frame 数続いたら復元完了とみなす
 
@@ -97,17 +98,13 @@ export function useDetailScrollRestore(ticker, detailRef) {
     let cancelled = false;
     let rafId;
     let mountRafId;
-    let saveInterval;
-    // 復元中は保存を抑制 (復元途中の partial 値で正解を上書きしないため)。
+    let saveTimer;
+    let container = null;
+    let onScroll = null;
+    // 復元中は scroll 保存を抑制 (復元途中の partial 値で正解を上書きしないため)。
     let restoring = !!saved && (saved.scrollTop > 0 || !!saved.anchorId);
-    let lastSavedTop = -1;
 
-    // container は「掴んだ後に遅延ロードで scrollable 化する / 別要素になる」flakiness があるため
-    // 毎回 detailRef から解決し直す (mount 時 1 回 capture だと listener が別要素に付き保存ゼロになる、
-    // user dogfood 2026-06-09 4th で headless 実測した真因)。
-    const getContainer = () => (detailRef.current ? findScrollContainer(detailRef.current) : null);
-
-    // div が mount するまで rAF で待つ (loading skeleton 中は detailRef 未mount、上限 ~5s)
+    // div が mount するまで rAF で待ってから listener を attach (v2 真因対策、上限 ~5s)
     let mountFrames = 0;
     const MOUNT_MAX_FRAMES = 300;
 
@@ -117,17 +114,17 @@ export function useDetailScrollRestore(ticker, detailRef) {
         if (mountFrames++ < MOUNT_MAX_FRAMES) mountRafId = requestAnimationFrame(start);
         return;
       }
+      container = findScrollContainer(detailRef.current);
 
-      // --- 継続保存: scroll イベント依存をやめ interval で container を解決し直して保存 (堅牢化) ---
-      saveInterval = setInterval(() => {
-        if (restoring || cancelled) return;
-        const c = getContainer();
-        if (!c) return;
-        const st = c.scrollTop;
-        if (st === lastSavedTop) return; // 変化なしは skip
-        lastSavedTop = st;
-        saveState(currentTicker, { scrollTop: st, ...captureAnchor(c) });
-      }, 250);
+      // --- 継続保存: 在席中に scroll するたび {scrollTop, anchor} を保存 (debounce) ---
+      onScroll = () => {
+        if (restoring) return;
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => {
+          saveState(currentTicker, { scrollTop: container.scrollTop, ...captureAnchor(container) });
+        }, SAVE_DEBOUNCE_MS);
+      };
+      container.addEventListener('scroll', onScroll, { passive: true });
 
       // --- 復元: アンカーを同じ offset に合わせ続ける (遅延ロードで上が伸びる過程を追従) ---
       if (restoring) {
@@ -135,8 +132,6 @@ export function useDetailScrollRestore(ticker, detailRef) {
         let stable = 0;
         const correct = () => {
           if (cancelled) return;
-          const container = getContainer();
-          if (!container) { rafId = requestAnimationFrame(correct); return; }
           let diff = null;
           // アンカー優先: 保存した sec-* が同じ viewport offset に来るよう合わせる
           if (saved.anchorId) {
@@ -157,10 +152,11 @@ export function useDetailScrollRestore(ticker, detailRef) {
           }
           frames += 1;
           stable = Math.abs(diff) <= 2 ? stable + 1 : 0;
+          // 安定が STABLE_FRAMES 続く or 上限で停止 (= 復元完了 → user scroll の保存を再開)
           if (stable < STABLE_FRAMES && frames < RESTORE_MAX_FRAMES) {
             rafId = requestAnimationFrame(correct);
           } else {
-            restoring = false; // 復元完了 (or 上限) → 以後 interval 保存を再開
+            restoring = false;
           }
         };
         rafId = requestAnimationFrame(correct);
@@ -168,11 +164,13 @@ export function useDetailScrollRestore(ticker, detailRef) {
     };
     start();
 
+    // cleanup: listener 除去 + pending 保存 cancel (ナビ時のトップ scroll(0) を保存させない) + rAF 停止
     return () => {
       cancelled = true;
       cancelAnimationFrame(rafId);
       cancelAnimationFrame(mountRafId);
-      clearInterval(saveInterval);
+      clearTimeout(saveTimer);
+      if (container && onScroll) container.removeEventListener('scroll', onScroll);
     };
   }, [ticker, detailRef]);
 }
