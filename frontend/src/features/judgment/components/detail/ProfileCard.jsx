@@ -6,7 +6,7 @@ import Chip from '../../../../components/ui/Chip.jsx';
 // v138.6 R7-C (2026-05-30): 「Google ログインで無制限」 link を直接 signInWithGoogle 接続、
 // 旧 window.dispatchEvent('bs:open-login') は listener なしで click 無反応 (user dogfood 報告)
 import { useAuth } from '../../../../hooks/useAuth.js';
-import { Building2, MapPin, Users, Briefcase, RefreshCw, Scale } from 'lucide-react';
+import { Building2, MapPin, Users, Briefcase, RefreshCw } from 'lucide-react';
 import { fetchProfileExtended, fetchProfileSummary, fetchProfilePeers } from '../../../../api.js';
 import { sanitizeText } from '../../../../lib/blocklist.js';
 import { displaySegmentName } from '../../../../lib/segmentNames.js';
@@ -1261,58 +1261,55 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
             ticker 切替時は overview tab にリセット (useEffect)、 user が同じ ticker で
             Tab 切替する場合は維持。
             Tab Header: 下線 active state + gold accent (Aman 級)、 inline button 2 個。 */}
+        {/* v194-2 (user dogfood 2026-06-09): 旧 underline-only タブが背景と同化して見づらかったため、
+            決算セクションと同じ segmented (塗りピル) UI に統一。会社概要は gold anchor なので is-gold variant
+            で active を gold 塗り。icon は 22px ピルでは窮屈なため省略 (決算セグメントと同じ text-only)。
+            hover/active 色は CSS (.ws-pane4-jp-segmented) に委譲し inline ハンドラを撤去。 */}
         <div
           role="tablist"
           aria-label="会社概要表示モード"
+          className="ws-pane4-jp-segmented is-gold"
           style={{
-            display: 'flex',
-            gap: 0,
             marginTop: 'var(--space-3, 12px)',
             marginBottom: 'var(--space-4, 16px)',
-            borderBottom: '1px solid var(--border)',
+          }}
+          // 3体合議 frontend must-fix: ARIA tablist の keyboard nav (矢印で切替、roving tabIndex)。
+          // ChapterTabs と同 idiom。これがないと Tab で両タブが focus され ARIA パターン違反。
+          onKeyDown={(e) => {
+            const keys = ['overview', 'compare'];
+            const i = keys.indexOf(activeTab);
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+              e.preventDefault();
+              setActiveTab(keys[(i + 1) % keys.length]);
+            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+              e.preventDefault();
+              setActiveTab(keys[(i - 1 + keys.length) % keys.length]);
+            } else if (e.key === 'Home') {
+              e.preventDefault();
+              setActiveTab(keys[0]);
+            } else if (e.key === 'End') {
+              e.preventDefault();
+              setActiveTab(keys[keys.length - 1]);
+            }
           }}
         >
           {[
-            { key: 'overview', label: '概要', icon: Building2 },
-            { key: 'compare', label: '競合比較', icon: Scale },
+            { key: 'overview', label: '概要' },
+            { key: 'compare', label: '競合比較' },
           ].map((tab) => {
             const isActive = activeTab === tab.key;
-            const Icon = tab.icon;
             return (
               <button
                 key={tab.key}
                 type="button"
                 role="tab"
                 aria-selected={isActive}
+                tabIndex={isActive ? 0 : -1}
                 onClick={() => setActiveTab(tab.key)}
                 data-testid={`profile-tab-${tab.key}`}
                 data-no-press="true"
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  borderBottom: isActive
-                    ? '2px solid var(--color-gold)'
-                    : '2px solid transparent',
-                  marginBottom: -1,
-                  padding: 'var(--space-2, 8px) var(--space-4, 16px)',
-                  fontSize: 13,
-                  fontWeight: isActive ? 700 : 500,
-                  letterSpacing: '0.06em',
-                  color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 'var(--space-2, 8px)',
-                  transition: 'color 120ms ease-out, border-color 120ms ease-out',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) e.currentTarget.style.color = 'var(--text-secondary)';
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) e.currentTarget.style.color = 'var(--text-muted)';
-                }}
+                className={isActive ? 'is-active' : ''}
               >
-                <Icon size={14} strokeWidth={1.5} aria-hidden="true" />
                 {tab.label}
               </button>
             );

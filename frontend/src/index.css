@@ -7599,6 +7599,18 @@ button.ds-chip.hero-watch-add:hover svg {
   background: rgba(56, 189, 248, 0.22);
   color: rgb(56, 189, 248);
 }
+/* v194-2 (user dogfood 2026-06-09): 会社概要「概要 / 競合比較」タブ用の gold accent variant。
+   旧 underline-only タブが背景と同化して見づらかったため、決算セクションと同じ segmented(塗りピル)に統一。
+   ただし会社概要は gold anchor のため active を cyan でなく gold で塗る (cyan は他セクションのブランド色)。 */
+.ws-pane4-jp-segmented.is-gold button.is-active {
+  background: color-mix(in srgb, var(--color-gold) 16%, transparent);
+  /* 3体合議 ui must-fix: gold 78% は light で 2.73:1 と AA 未達 → 55% (暗いブラスゴールド) で 4.52:1 確保 */
+  color: color-mix(in srgb, var(--color-gold) 55%, var(--text-primary));
+}
+[data-theme="dark"] .ws-pane4-jp-segmented.is-gold button.is-active {
+  background: color-mix(in srgb, var(--color-gold) 24%, transparent);
+  color: color-mix(in srgb, var(--color-gold) 88%, white);
+}
 
 /* §round22 (3 体レビュー収束) long-form タイポグラフィ token + 旧 UI 同等の品位
    将来 Pane 3 詳細レポートでも使い回す前提で --longform-* 名前空間 */
