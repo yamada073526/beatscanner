@@ -11,9 +11,33 @@
  *     { type: 'spring', stiffness: 220, damping: 28 }
  *   PGE 落とし穴 4: infinite animation 禁止 → open/close で完結 → OK
  */
-import React, { useState, useCallback, useId, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useId, useRef } from 'react';
 import { m, AnimatePresence, useReducedMotion } from 'framer-motion';
 import styles from './AccordionSection.module.css';
+import { useWorkspaceStore } from '../../../state/workspaceStore.js';
+
+// ─── C-3 競合ナビ scroll 復元: accordion 開閉状態を ticker 別に保持 (user dogfood 2026-06-09) ───
+//   祖先 ticker に戻った時に accordion が defaultOpen に戻り、height が変わって scroll がズレる問題の解消。
+//   uncontrolled な accordion のみ対象 (controlledOpen=Sprint 5 condition-click は外部管理で不干渉)。
+//   sessionStorage (F5 で残り、タブ閉じで消える)。キー: bs:c3:acc:<TICKER>:<id>。
+const ACC_PREFIX = 'bs:c3:acc:';
+function loadAccOpen(ticker, id) {
+  if (!ticker || !id) return null;
+  try {
+    const v = sessionStorage.getItem(`${ACC_PREFIX}${String(ticker).toUpperCase()}:${id}`);
+    return v === null ? null : v === 'true';
+  } catch {
+    return null;
+  }
+}
+function saveAccOpen(ticker, id, open) {
+  if (!ticker || !id) return;
+  try {
+    sessionStorage.setItem(`${ACC_PREFIX}${String(ticker).toUpperCase()}:${id}`, open ? 'true' : 'false');
+  } catch {
+    // private mode 等はサイレント無視
+  }
+}
 
 /**
  * AccordionSection primitive
@@ -93,7 +117,20 @@ export default function AccordionSection({
 
   // isControlled: Sprint 5 で workspaceStore が controlledOpen を渡す想定
   const isControlled = typeof controlledOpen === 'boolean';
-  const [internalOpen, setInternalOpen] = useState(defaultOpen);
+  // C-3: 現在 ticker (persisted 開閉状態の key)。
+  const activeTicker = useWorkspaceStore((s) => s.activeTicker);
+  // C-3: 初期開閉は persisted 値があればそれを、なければ defaultOpen を採用 (uncontrolled のみ)。
+  const [internalOpen, setInternalOpen] = useState(() => {
+    const p = loadAccOpen(activeTicker, id);
+    return p == null ? defaultOpen : p;
+  });
+  // C-3: ticker が変わったら persisted 開閉状態を読み直す (同 instance が別 ticker を表示する場合に追従)。
+  useEffect(() => {
+    if (isControlled) return;
+    const p = loadAccOpen(activeTicker, id);
+    setInternalOpen(p == null ? defaultOpen : p);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTicker]);
   const isOpen = isControlled ? controlledOpen : internalOpen;
 
   // Phase 2.7 Sprint 1 #3: state-aware overflow — animate 中は 'hidden' を維持し jump-cut を排除
@@ -115,9 +152,12 @@ export default function AccordionSection({
   // height + opacity の同時 spring で十分 Aman 級の motion を実現)
   const toggle = useCallback(() => {
     const next = !isOpen;
-    if (!isControlled) setInternalOpen(next);
+    if (!isControlled) {
+      setInternalOpen(next);
+      saveAccOpen(activeTicker, id, next); // C-3: 開閉を ticker 別に保持 (scroll 復元の前提)
+    }
     if (onOpenChange) onOpenChange(id, next);
-  }, [isOpen, isControlled, onOpenChange, id]);
+  }, [isOpen, isControlled, onOpenChange, id, activeTicker]);
 
   // a11y: Enter / Space で toggle
   const handleKeyDown = useCallback(
