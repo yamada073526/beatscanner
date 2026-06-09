@@ -318,8 +318,15 @@ export default function JudgmentDetail({
   onAnalyze,
   detailContext = {},
   useWorkspaceReader = false,
+  // C-3 keep-mounted (v195、 user dogfood「戻る時に毎回ロード」): DetailStack が銘柄別に
+  // JudgmentDetail を mount し続け、 visibility で表示切替するため、 各 instance の ticker を
+  // context 経由でなく明示 prop で固定する。 undefined = 従来どおり context (selectedTicker) を使用、
+  // null を含む明示値 = その ticker で固定 (null は空 state)。 これにより A→競合B→A 戻りで A の
+  // instance は unmount されず、 全 panel が再 fetch せず DOM ごと瞬時復元される。
+  tickerOverride = undefined,
 }) {
-  const { selectedTicker } = useJudgment();
+  const { selectedTicker: ctxSelectedTicker } = useJudgment();
+  const selectedTicker = tickerOverride === undefined ? ctxSelectedTicker : tickerOverride;
 
   // C-3 Sprint 1b: .ds-judgment-detail への DOM ref (scroll container 特定に使用)。
   // Rules of Hooks: early return より前に宣言 (v107 hotfix と同カテゴリ)。

@@ -37,6 +37,9 @@ import { withViewTransition } from '../../utils/viewTransition.js';
 import { JudgmentProvider, useJudgment } from '../judgment/state/JudgmentContext.jsx';
 import { JudgmentList } from '../judgment/components/list/index.js';
 import { JudgmentDetail } from '../judgment/components/detail/index.js';
+// C-3 keep-mounted (v195): normal (home) detail path のみ DetailStack で銘柄別 instance を mount 維持し、
+// 競合 back-nav を再 fetch なしで瞬時復元。 screener/indices path は単一 JudgmentDetail のまま。
+import DetailStack from './DetailStack.jsx';
 import { IndicesList } from './IndicesView.jsx';
 import DailyDigestSection from './DailyDigestSection.jsx';
 import PaneDetailView from './PaneDetailView.jsx';
@@ -1119,12 +1122,13 @@ export default function Workspace({
               detailContext={detailContext}
             />
           ) : (
-            <JudgmentDetail
+            // C-3 keep-mounted (v195): 銘柄別に JudgmentDetail を mount 維持 → 競合 back-nav で再 fetch せず瞬時復元。
+            <DetailStack
               plan={plan}
               detailFor={detailFor}
               onAnalyze={onAnalyze}
               detailContext={detailContext}
-              useWorkspaceReader
+              useWorkspaceReader={true}
             />
           )}
           </PaneErrorBoundary>
