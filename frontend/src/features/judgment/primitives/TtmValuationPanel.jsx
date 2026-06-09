@@ -197,14 +197,15 @@ function MetricChip({ label, value, sub }) {
       style={{
         opacity: isMissing ? 0.5 : 1,
         minWidth: 0, // grid auto-fit でオーバーフロー防止
-        alignItems: 'flex-start', // ReturnGrid との差別化: left-align (3 col 広め)
+        // v195 dogfood (2026-06-10): user「バリュエーションを期間別累積リターンに合わせて中央揃えに」。
+        //   旧 left-align を撤回し ReturnGrid PeriodChip と揃える (gold left accent でグルーピングは維持)。
+        alignItems: 'center',
       }}
     >
-      {/* label: 12px muted uppercase (ds-stat__label から inherit するが
-          text-align: center を left に override) */}
+      {/* label: 12px muted uppercase (ds-stat__label の center を継承) */}
       <div
         className="ds-stat__label"
-        style={{ textAlign: 'left', letterSpacing: '0.04em' }}
+        style={{ textAlign: 'center', letterSpacing: '0.04em' }}
       >
         {label}
       </div>
@@ -215,7 +216,7 @@ function MetricChip({ label, value, sub }) {
         className="ds-stat__value"
         style={{
           fontSize: 20,
-          textAlign: 'left',
+          textAlign: 'center',
           lineHeight: 1.15,
           letterSpacing: '-0.01em',
           color: 'var(--text-primary)',
@@ -232,7 +233,7 @@ function MetricChip({ label, value, sub }) {
         style={{
           fontSize: 11,
           opacity: 0.75,
-          textAlign: 'left',
+          textAlign: 'center',
         }}
       >
         {sub}

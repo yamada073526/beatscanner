@@ -1318,12 +1318,13 @@ export default function JudgmentDetail({
                     §C-11 見出し階層を一貫適用。v4/legacy は別 render path のため emphasized 不付与で不変 (BC)。 */}
                 <ChapterSection chapterNumber="②" chapterTitle="テクニカル" headerOnly tier="sub" emphasized />
                 {chartBlock}
-                {/* v194-2 (user dogfood): チャート⇔リターン⇔売買目安 が詰まっていたため、ファンダの
-                    「5条件→決算」と同じ hairline + space-8 でサブセクションを区切る。チャートは章扉直後の
-                    メインなので separator なし、後続 (リターン/売買目安) に hairlineSectionStyle を付与。
-                    null ガードで空 separator を防ぐ。 */}
-                {returnGridNode && <div style={hairlineSectionStyle}>{returnGridNode}</div>}
+                {/* v194-2: チャート⇔価格目安⇔リターン を hairline + space-8 で区切る。チャートは章扉直後の
+                    メインなので separator なし、後続 (価格目安/リターン) に hairlineSectionStyle を付与。
+                    v195 dogfood (2026-06-10): 価格目安(PriceLadder)はチャートの水平ライン群と同一値の 1:1 mirror
+                    のため、 チャート直下に移動 (旧: リターン→価格目安)。 価格はチャートとセットで読む user
+                    mental model に整合。 null ガードで空 separator を防ぐ。 */}
                 {technicalTargetGrid && <div style={hairlineSectionStyle}>{technicalTargetGrid}</div>}
+                {returnGridNode && <div style={hairlineSectionStyle}>{returnGridNode}</div>}
               </>
             );
             // ⑤ その他 (市場評価 + 8Q決算反応 + Insider + リファレンス)
