@@ -1302,7 +1302,10 @@ export default function JudgmentDetail({
             ) : null;
             const technicalChapterBlock = (
               <>
-                <ChapterSection chapterNumber="②" chapterTitle="テクニカル" headerOnly tier="sub" />
+                {/* v194 (テクニカル章 横展開): ファンダ章扉 (L1237) と同じく emphasized で L1 章扉を強調
+                    (gold hairline 60% + primary/700)。① ファンダと ② テクニカルの章扉トーンを対称化し
+                    §C-11 見出し階層を一貫適用。v4/legacy は別 render path のため emphasized 不付与で不変 (BC)。 */}
+                <ChapterSection chapterNumber="②" chapterTitle="テクニカル" headerOnly tier="sub" emphasized />
                 {chartBlock}
                 {returnGridNode}
                 {technicalTargetGrid}
