@@ -1351,6 +1351,21 @@ body {
   contain-intrinsic-size: 0 360px;
 }
 
+/* §11-E v196 (C-3 keep-mounted scroll ズレ修正、 user dogfood 2026-06-09):
+   DetailStack の keep-mounted instance 配下のカードだけ contain-intrinsic-size に `auto` を付け、
+   ブラウザに「最後に描画した実高さ」を記憶させる (width=0 は据置、 height のみ auto 360px)。
+   `0 360px` だと画面外カードが skip 時に常に 360px へ復帰し、 back-nav 後に会社概要 (実高さ >> 360px) を
+   scroll-in した瞬間 360px→実高さへ jump して下のコンテンツが押し出される (keep-mounted では instance が
+   remount されず useDetailScrollRestore の anchor 再補正が再発火しないため吸収されない)。 `auto` で一度
+   描画済みのカードは実高さで予約され jump が消える。 content-visibility:auto の paint-skip perf 利得は維持。
+   scope を [data-detail-instance] 配下に限定し、 他 pane / 単一 JudgmentDetail path (anchor 補正が効く) への
+   影響を遮断 (blast radius 最小)。 specificity 0,2,0 で global 0,1,0 に勝つ。 */
+[data-detail-instance] .panel-card,
+[data-detail-instance] .bs-panel,
+[data-detail-instance] .surface-card {
+  contain-intrinsic-size: 0 auto 360px;
+}
+
 /* §11-E v54: WatchlistRow 展開時の発光強化 (specificity を上げて既存スタイルに勝つ)
    transform は付けない (展開中の chart レイアウト揺れ + scrollIntoView との競合を回避) */
 .ticker-row-v2.is-expanded.is-arriving {
