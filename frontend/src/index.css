@@ -5706,9 +5706,13 @@ body {
   justify-content: space-between;
 }
 .anp-title {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  /* §C-11 L2 セクション冠 token に統一 (13/700/0.08em/uppercase/primary)。 旧 14/600/0.02 は他 L2 冠
+     (決算/バリュエーション/会社概要) と非対称だった (v195 §C-11 一貫性点検)。 .anp-panel は発光 host だが
+     見出し token のみ変更で枠/border-radius は不触。 */
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-primary);
   margin: 0;
 }
@@ -11807,9 +11811,12 @@ body.is-digest-resizing {
   justify-content: space-between;
 }
 .atc-title {
+  /* §C-11 L2 セクション冠 token に統一 (13/700/0.08em/uppercase/primary)。 旧 600/0.02 を他 L2 冠と対称化
+     (v195 §C-11 一貫性点検)。 .atc-card は発光 host だが見出し token のみ変更で枠は不触。 */
   font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-primary);
   margin: 0;
 }
