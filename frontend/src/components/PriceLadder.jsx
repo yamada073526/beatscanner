@@ -7,6 +7,11 @@ import Chip from './ui/Chip.jsx';
 // (アナリスト目標=accent / SMA50 / SMA200) に限定し、 損切り/サポート/pivot は中立
 // (行全体の色塗りや 損切り=赤 は「売れ」の行動示唆に読まれ §38/§5 抵触のため BAN)。
 import { SMA_50_COLOR, SMA_200_COLOR } from './StockPriceChart.jsx';
+// v195 round3: stagger を「視界に入った瞬間」 に発火 (mount 時は画面外で再生済 = user「一気に表示される」 の真因)。
+// useInViewOnce は ForwardOutlookSection で本番検証済。 count-up も同 hook 群 (進捗係数 0→1 を 1 本だけ回し、
+// 各行は dist×係数 を表示 — 行ごとの hook 不要)。
+import { useInViewOnce } from '../hooks/useInViewOnce.js';
+import { useCountUp } from '../hooks/useCountUp.js';
 
 /**
  * PriceLadder — テクニカル章の価格指標を「現在価格を中心とした縦の数直線」 に統合する component。
@@ -100,6 +105,12 @@ export default function PriceLadder({ ticker }) {
   const [priceData, setPriceData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errored, setErrored] = useState(false);
+  // v195 round3: ladder が視界に入った瞬間に stagger + count-up を発火 (once)。
+  const [ladderRef, ladderInView] = useInViewOnce({ threshold: 0.1, rootMargin: '0px' });
+  // 距離% の count-up 進捗係数 (0→1)。 reduced-motion は hook 内で即 1。 inView 前は係数 1 で実値表示
+  // (motion 環境では行自体が opacity 0 のため見えない / reduced-motion 環境では最初から実値 = §38 セーフ)。
+  const countProgress = useCountUp(ladderInView ? 1 : null, { duration: 450, digits: 3, forceFromZero: true });
+  const pf = ladderInView ? countProgress : 1;
 
   useEffect(() => {
     if (!ticker) return;
@@ -247,10 +258,12 @@ export default function PriceLadder({ ticker }) {
             flexWrap: 'wrap',
           }}
         >
+          {/* v195 round3 (user 不満1「サマリーが説明文と同属性に見える」): 静的キャプションと区別するため
+              Chip primitive に昇格。 右の地合いバッジと同じ視覚語彙 = 「これは銘柄固有のデータポイント」 と伝わる。 */}
           {stateText ? (
-            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+            <Chip variant="display" size="xs" tone="muted">
               {stateText}
-            </span>
+            </Chip>
           ) : <span />}
           {Number.isFinite(distCount) && (() => {
             const zone = classifyDistDays(distCount);
@@ -280,15 +293,21 @@ export default function PriceLadder({ ticker }) {
         let seq = 0;
         const stagger = () => ({ animationDelay: `${(seq++) * 40}ms` });
 
-        // グループ冠「上値/下値」: v195 round2 (user 不満 a「傘下項目と並列に見える」) — 13/600/primary に
-        // 昇格し、 傘下行 (12/500/secondary + インデント) と階層差を明確化 (§C-11 L2相当 vs L3)。
+        // グループ冠「上値/下値」: v195 round3 (user「ファンダ章の来期コンセンサスと親戚に見えると統一感」) —
+        // ForwardOutlookSection の L3 idiom (11/600/muted/uppercase 0.08em) + MetricBlock と同じ
+        // gold 35% の borderLeft 3px に揃え、 ファンダ章と視覚語彙を共有。 gold は装飾 accent で
+        // 上値=gold の意味付けではない (§38 方向色に非抵触、 elevation whitelist 内 color-mix)。
         const groupLabel = (text) => (
           <div
             className="pl-row"
             style={{
-              fontSize: 13,
+              fontSize: 11,
               fontWeight: 600,
-              color: 'var(--text-primary)',
+              color: 'var(--text-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              borderLeft: '3px solid color-mix(in srgb, var(--color-gold) 35%, var(--border))',
+              paddingLeft: 'var(--space-2, 8px)',
               margin: 'var(--space-3, 12px) 0 var(--space-1, 4px)',
               ...stagger(),
             }}
@@ -310,8 +329,8 @@ export default function PriceLadder({ ticker }) {
                 justifyContent: 'space-between',
                 gap: 'var(--space-3, 12px)',
                 padding: 'var(--space-2, 8px) 0',
-                // 傘下行はインデントで「冠の領分」 を空間で示す (§C-11 子 grid 4-12px インデント)
-                paddingLeft: 'var(--space-3, 12px)',
+                // 傘下行は冠 (gold accent + pad 8px) より深いインデントで「冠の庇の下」 を空間で示す
+                paddingLeft: 'var(--space-5, 20px)',
                 ...stagger(),
               }}
             >
@@ -334,7 +353,8 @@ export default function PriceLadder({ ticker }) {
               <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3, 12px)' }}>
                 <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{fmtUsd(l.price)}</span>
                 <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', minWidth: 72, textAlign: 'right' }}>
-                  {dist != null ? `現在から ${fmtPct(dist)}` : '—'}
+                  {/* v195 round3: 視界進入時に 0→実値の count-up (係数 pf)。 距離% は事実記述 (§38 OK 判定済 idiom) */}
+                  {dist != null ? `現在から ${fmtPct(dist * pf)}` : '—'}
                 </span>
               </span>
             </div>
@@ -371,18 +391,24 @@ export default function PriceLadder({ ticker }) {
             <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3, 12px)' }}>
               <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{fmtUsd(l.price)}</span>
               <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', minWidth: 72, textAlign: 'right' }}>
-                {Number.isFinite(sma50Dist) ? `50DMA ${fmtPct(sma50Dist)}` : '基準'}
+                {Number.isFinite(sma50Dist) ? `50DMA ${fmtPct(sma50Dist * pf)}` : '基準'}
               </span>
             </span>
           </div>
         );
 
         return (
-          <div style={{
-            position: 'relative',
-            borderLeft: '2px solid var(--border)',
-            paddingLeft: 'var(--space-4, 16px)',
-          }}>
+          <div
+            // v195 round3: 視界進入で data-pl-inview が付き、 index.css 側で .pl-row/.pl-tick の
+            // animation が arming される (mount 起点だと画面外で再生済になる真因の修正)。
+            ref={ladderRef}
+            data-pl-inview={ladderInView ? 'true' : undefined}
+            style={{
+              position: 'relative',
+              borderLeft: '2px solid var(--border)',
+              paddingLeft: 'var(--space-4, 16px)',
+            }}
+          >
             {upper.length > 0 && groupLabel('上値')}
             {upper.map(levelRow)}
             {cur && currentRow(cur)}

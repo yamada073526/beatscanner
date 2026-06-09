@@ -12720,12 +12720,22 @@ body.is-digest-resizing {
   from { transform: translateY(-50%) scaleX(0); }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .pl-row {
+  /* v195 round3: animation は [data-pl-inview="true"] (視界進入、 useInViewOnce) が付くまで arming しない。
+     mount 起点だと テクニカル章が画面外のうちに再生済になり user に見えない (round2 の真因)。
+     属性が付いた瞬間に CSS が再評価され、 inline animationDelay (stagger 40ms 刻み) を起点に着地が走る。 */
+  [data-pl-inview="true"] .pl-row {
     animation: pl-row-in 360ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
   }
-  .pl-tick {
+  [data-pl-inview="true"] .pl-tick {
     transform-origin: left center;
     animation: pl-tick-in 200ms ease-out 240ms backwards;
+  }
+  /* arming 前は不可視 (進入時に opacity 0 から着地させるため)。 reduced-motion はこの media 外なので常時可視 */
+  .pl-row {
+    opacity: 0;
+  }
+  [data-pl-inview="true"] .pl-row {
+    opacity: 1;
   }
   .pl-swatch {
     transition: transform 120ms ease-out;
