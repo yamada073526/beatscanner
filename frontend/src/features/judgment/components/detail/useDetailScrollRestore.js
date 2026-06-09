@@ -6,11 +6,13 @@
  *   - scroll container 特定: .ds-judgment-detail の parentElement を辿り
  *     overflowY === 'auto' | 'scroll' かつ scrollHeight > clientHeight の最初の祖先。
  *   - 保存タイミング: ticker を離れる直前 (= useEffect の cleanup)。
- *   - 復元タイミング: cache hit で detail が描画された後 (rAF 2 回で gate)。
+ *   - 復元タイミング: rAF ループで container 高さが savedScrollTop に届くまで毎フレーム再補正 (最大 ~1.8s)。
  *   - sessionStorage キー: `bs:c3:detail:<TICKER>` (ticker 別に分離)。
  *   - スクロール復元は behavior:'instant' (smooth は酔い防止のため不使用)。
  *
- * Trust Cliff 防止: 描画完了前の scrollTo は 0 に戻る罠 → rAF 2 回で gate (SPEC §8 リスク)。
+ * Trust Cliff 防止: authed 詳細は遅延ロード (チャート/Premium/lazy section) で描画後も height が伸びる。
+ *   rAF 2 回 gate では「まだ低い」段階で scrollTo して先頭に飛ぶ (user dogfood 2026-06-09)。
+ *   → height が届くまで再補正し続ける rAF ループで追従する (上限 110 frames で無限ループ防止)。
  *
  * ⚠️ accordion 開閉復元は本 Phase では DEFER (autopilot v194 判断):
  *   AccordionSection の controlledOpen/onOpenChange を detail 全 section (ChapterSection /
@@ -83,28 +85,37 @@ export function useDetailScrollRestore(ticker, detailRef) {
     const currentTicker = ticker;
     const savedScrollTop = loadSavedScrollTop(currentTicker);
 
-    // スクロール復元 (rAF 2 回 gate: 描画完了後に scrollTo)
-    let raf1, raf2;
+    // スクロール復元: authed 詳細は遅延ロード (株価チャート / Premium card / lazy section) で
+    // 描画完了後も container の高さが伸び続ける。rAF 2 回 gate だと「まだ低い」段階で scrollTo して
+    // 先頭に飛ぶ (user dogfood 2026-06-09)。→ rAF ループで「高さが savedScrollTop に届くまで / 最大 ~1.8s」
+    // 毎フレーム scrollTo を再補正し続け、届いたら停止する (遅延ロードで height が伸びる過程を追従)。
+    let rafId;
+    let cancelled = false;
     if (typeof savedScrollTop === 'number' && savedScrollTop > 0) {
-      raf1 = requestAnimationFrame(() => {
-        raf2 = requestAnimationFrame(() => {
-          if (!detailRef.current) return;
-          const container = findScrollContainer(detailRef.current);
-          // cache miss (10分 TTL 切れ) 時は skeleton 描画段階で本 effect が発火し、
-          // 本体高さに満たない container へ scrollTo すると先頭付近に飛ぶ (3 体合議 frontend/qa 指摘)。
-          // savedScrollTop に到達可能な高さがある (= 本体描画済み = ほぼ cache hit) ときのみ復元する。
-          const maxScroll = container.scrollHeight - container.clientHeight;
-          if (maxScroll >= savedScrollTop) {
-            container.scrollTo({ top: savedScrollTop, behavior: 'instant' });
-          }
-        });
-      });
+      let frames = 0;
+      const MAX_FRAMES = 110; // ~1.8s @60fps (遅延ロード完了を待つ上限、無限ループ防止)
+      const correct = () => {
+        if (cancelled || !detailRef.current) return;
+        const container = findScrollContainer(detailRef.current);
+        const maxScroll = container.scrollHeight - container.clientHeight;
+        const target = Math.min(savedScrollTop, Math.max(0, maxScroll));
+        if (Math.abs(container.scrollTop - target) > 2) {
+          container.scrollTo({ top: target, behavior: 'instant' });
+        }
+        frames += 1;
+        // 本体がまだ savedScrollTop に届いていない (= 遅延ロード中) なら次フレームで再補正。
+        // 届いた or 上限到達で停止。
+        if (frames < MAX_FRAMES && maxScroll < savedScrollTop) {
+          rafId = requestAnimationFrame(correct);
+        }
+      };
+      rafId = requestAnimationFrame(correct);
     }
 
     // cleanup: 次の ticker に移る直前に現在スクロール位置を保存
     return () => {
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
+      cancelled = true;
+      cancelAnimationFrame(rafId);
       if (currentTicker && detailRef.current) {
         const container = findScrollContainer(detailRef.current);
         saveScrollTop(currentTicker, container.scrollTop);
