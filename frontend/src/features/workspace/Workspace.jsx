@@ -935,13 +935,20 @@ export default function Workspace({
   //   瞬間だけ activeTicker を null にして Hero (今注目 idle) から始める。 home で AAPL 分析中に screener
   //   へ切替えると Pane 3 が AAPL 詳細のままになる問題の解消。 mount / deep-link (?detail=) は prev===current
   //   で reset せず維持。 screener 内の銘柄 click は activeTab 不変なので reset されない (drilling 維持)。
+  const resetDetailHistoryToCurrent = useWorkspaceStore((s) => s.resetDetailHistoryToCurrent);
   const prevTabRef = useRef(activeTab);
   useEffect(() => {
-    if (activeTab === 'screener' && prevTabRef.current !== 'screener') {
-      setActiveTicker(null);
+    if (activeTab !== prevTabRef.current) {
+      if (activeTab === 'screener') {
+        setActiveTicker(null);
+      }
+      // C-3 keep-mounted (v195、 qa review): tab を跨いだら detailHistory を現在地のみに reset。
+      //   screener 等で見た銘柄が home の breadcrumb に混入する cross-tab 汚染 + DetailStack の
+      //   stale instance を防ぐ。 home 内 (tab 不変) の競合 back-nav には一切影響しない。
+      resetDetailHistoryToCurrent();
     }
     prevTabRef.current = activeTab;
-  }, [activeTab, setActiveTicker]);
+  }, [activeTab, setActiveTicker, resetDetailHistoryToCurrent]);
 
   // v120 Sprint 3: 銘柄スクリーナー modal の open/close 制御。
   // WorkspaceHeader「スクリーナー」 button → Pro user は modal open、 非 Pro は ProTeaser。

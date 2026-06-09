@@ -196,6 +196,14 @@ export const useWorkspaceStore = create(
         detailHistory: computeNextDetailHistory(s.detailHistory, ticker),
       })),
 
+      // C-3 keep-mounted (v195、 qa review): tab を跨いだら detailHistory を「現在の activeTicker のみ」に
+      //   reset する。 home↔screener↔indices を行き来したとき、 screener で選んだ銘柄が home の breadcrumb に
+      //   混入する cross-tab 汚染 (Trust Cliff) と、 DetailStack に別 context の stale instance が残るのを防ぐ。
+      //   activeTicker が null (Hero/未選択) なら空に。 現在地を base に残すことで tab 復帰後の back-nav も成立。
+      resetDetailHistoryToCurrent: () => set((s) => ({
+        detailHistory: s.activeTicker ? [String(s.activeTicker).toUpperCase().trim()] : [],
+      })),
+
       // C-3 競合ナビ: setActiveTicker に履歴 push を結線 (収束点への集約)。
       // 18 箇所から呼ばれるが、computeNextDetailHistory のガードが falsy / 非株式 を弾くため安全。
       // パンくずクリックの再 push も「既出 → truncate」で吸収 (無限増殖しない)。

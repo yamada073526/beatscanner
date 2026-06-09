@@ -50,7 +50,13 @@ const DetailStack = memo(function DetailStack({ plan, detailFor, onAnalyze, deta
           <div
             key={t == null ? EMPTY_KEY : t}
             data-detail-instance={t == null ? '' : t}
+            // active な instance だけ data-detail-active を持つ。 重複 id (acc-header-*) の query を
+            // active instance に絞るための marker (FiveConditionsCard の section scroll 等が利用)。
+            {...(isActive ? { 'data-detail-active': 'true' } : {})}
             aria-hidden={isActive ? undefined : true}
+            // hidden instance は inert で focus / pointer / AT を一括無効化 (qa review: Tab focus 迷子防止、
+            // WCAG 2.1.1)。 inert 対応ブラウザ (Chrome102+/Safari15.5+) でフォーカス可能子要素を全て封じる。
+            {...(isActive ? {} : { inert: '' })}
             style={{
               position: 'absolute',
               inset: 0,

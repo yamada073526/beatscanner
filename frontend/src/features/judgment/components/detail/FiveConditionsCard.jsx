@@ -218,8 +218,17 @@ export default function FiveConditionsCard({
                     const domId = SECTION_ID_MAP[targetSectionId] || `sec-${targetSectionId}`;
                     setTimeout(() => {
                       try {
-                        // header button を scroll target に (開いた section の先頭が viewport に来る)
-                        const headerEl = document.getElementById(`acc-header-${domId}`);
+                        // header button を scroll target に (開いた section の先頭が viewport に来る)。
+                        // C-3 keep-mounted (v195): DetailStack で複数 instance が mount され同 id
+                        //   (acc-header-sec-*) が重複するため、 getElementById では hidden instance の
+                        //   header に当たり scroll が空振りする。 inert (= hidden instance) 配下を除外し
+                        //   active instance の header を選ぶ。 単一 instance path では [inert] 祖先が無く
+                        //   従来どおり唯一の header に当たる (後方互換)。
+                        const cands = document.querySelectorAll(`[id="acc-header-${domId}"]`);
+                        const headerEl =
+                          [...cands].find((el) => !el.closest('[data-detail-instance][inert]')) ||
+                          cands[0] ||
+                          null;
                         if (headerEl) {
                           headerEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
                         }
