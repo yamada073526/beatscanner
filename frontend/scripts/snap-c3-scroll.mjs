@@ -53,6 +53,24 @@ async function scrollContainer(page, top) {
   }, top);
 }
 
+// viewport 上端に最も近い sec-* アンカーの {id, delta} を返す (hook と同ロジック)
+async function anchorAtTop(page) {
+  return page.evaluate(() => {
+    const el = document.querySelector('.ds-judgment-detail'); if (!el) return null;
+    let c = el.parentElement, first = null;
+    while (c && c !== document.documentElement) { const oy = getComputedStyle(c).overflowY; if (oy === 'auto' || oy === 'scroll') { if (!first) first = c; if (c.scrollHeight > c.clientHeight) break; } c = c.parentElement; }
+    const cont = (c && c !== document.documentElement) ? c : (first || document.documentElement);
+    const containerTop = cont.getBoundingClientRect().top;
+    let best = null;
+    cont.querySelectorAll('[id^="sec-"]').forEach((e) => {
+      const top = e.getBoundingClientRect().top - containerTop;
+      const s = Math.abs(top);
+      if (!best || s < best.s) best = { id: e.id, delta: Math.round(top), s };
+    });
+    return best ? { id: best.id, delta: best.delta } : null;
+  });
+}
+
 let browser;
 try {
   browser = await chromium.launch({ headless: true });
@@ -64,14 +82,15 @@ try {
   await page.goto(PROD, { waitUntil: 'networkidle', timeout: 30_000 });
   await page.waitForTimeout(2500);
 
-  // ① A をナビ → scroll → SAVE 検証
+  // ① A をナビ → scroll → SAVE + アンカー検証
   await navTo(page, T1);
   const info1 = await containerInfo(page);
   const actualScroll = await scrollContainer(page, SCROLL_TO);
   await page.waitForTimeout(500); // debounce(120ms) + 余裕
   const savedAfterScroll = await page.evaluate((k) => sessionStorage.getItem(k), `bs:c3:detail:${T1}`);
+  const anchorBefore = await anchorAtTop(page); // 離れる前に viewport 上端にあった section
 
-  // ② B へ → パンくずで A に戻り → RESTORE 検証
+  // ② B へ → パンくずで A に戻り → RESTORE 検証 (同じ section が同じ位置に戻るか)
   let restore = { tested: false };
   const ok2 = await navTo(page, T2);
   if (ok2) {
@@ -80,15 +99,29 @@ try {
       await ancestor.click();
       await page.waitForTimeout(3000); // 復元 rAF ループ完了待ち
       const info3 = await containerInfo(page);
-      restore = { tested: true, scrollTopAfterBack: info3.scrollTop, containerHeight: info3.scrollHeight };
+      const anchorAfter = anchorBefore ? await page.evaluate((id) => {
+        const el = document.querySelector('.ds-judgment-detail'); if (!el) return null;
+        let c = el.parentElement, first = null;
+        while (c && c !== document.documentElement) { const oy = getComputedStyle(c).overflowY; if (oy === 'auto' || oy === 'scroll') { if (!first) first = c; if (c.scrollHeight > c.clientHeight) break; } c = c.parentElement; }
+        const cont = (c && c !== document.documentElement) ? c : (first || document.documentElement);
+        const e = document.getElementById(id); if (!e) return { found: false };
+        return { found: true, delta: Math.round(e.getBoundingClientRect().top - cont.getBoundingClientRect().top) };
+      }, anchorBefore.id) : null;
+      restore = {
+        tested: true,
+        scrollTopAfterBack: info3.scrollTop,
+        anchorBefore,                                  // { id, delta } 離れる前
+        anchorAfter,                                   // { found, delta } 戻った後の同 id の位置
+        anchorDriftPx: (anchorBefore && anchorAfter?.found) ? Math.abs(anchorAfter.delta - anchorBefore.delta) : null,
+      };
     }
   }
 
   console.log(JSON.stringify({
     container: info1,
     scroll_set_to: actualScroll,
-    SAVE_sessionStorage: savedAfterScroll,  // ← {"scrollTop":~1400} なら SAVE 正常 (真因修正の核)
-    RESTORE: restore,                        // ← scrollTopAfterBack が ~1400 付近なら RESTORE も OK
+    SAVE_sessionStorage: savedAfterScroll,  // {"scrollTop":..,"anchorId":"sec-..","anchorDelta":..} なら SAVE 正常
+    RESTORE: restore,                        // anchorDriftPx が小さい(~0-10px)ほど「同じ section が同じ位置」= 成功
     pageErrors: errs,
   }, null, 2));
 } catch (e) {
