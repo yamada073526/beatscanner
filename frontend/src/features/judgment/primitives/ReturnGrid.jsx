@@ -207,8 +207,21 @@ function TermSplitGrid({ periodsData, loading }) {
   const long = PERIODS.slice(4);     // 1Y / 3Y / 5Y / 10Y
   // v185 dogfood (2026-06-08): user「上下の余白が詰まって非常に見づらい」 → セクション間 gap /
   //   区切り線の上下 padding / ラベル下 margin を拡大し、短期/長期 の呼吸 (breathing room) を確保。
+  // v195 dogfood (2026-06-10): user「バリュエーションは gold left accent でグルーピングを示すが
+  //   期間別累積リターンには無い」→ TtmValuationPanel と同じ「§C-11 引用ブロック idiom」(gold left
+  //   border + 軽インデント) を傘下の短期/長期 grid 全体に付与し、 ファンダ章のメトリクスグリッドと一貫化。
+  //   数値の中央揃え (PeriodChip) は user 希望どおり維持 (バリュエーションは左寄せ、 リターンは中央 = いいとこ取り)。
+  //   gold 30% は elevation whitelist (TtmValuationPanel と同値)。 splitByTerm=v5 のみ、 v4/ETF は PeriodGrid 直で不変。
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-8, 32px)' }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-8, 32px)',
+        paddingLeft: 'var(--space-3, 12px)',
+        borderLeft: '2px solid color-mix(in srgb, var(--color-gold) 30%, transparent)',
+      }}
+    >
       <div>
         <TermLabel text="短期" />
         <PeriodGrid periods={short} periodsData={periodsData} loading={loading} />
