@@ -183,14 +183,17 @@ function PeriodGrid({ periods, periodsData, loading }) {
  * tabular-nums + center 揃えで既に担保、②緑一色は投資業界色ルール (上昇=緑) のため不変。
  */
 function TermLabel({ text }) {
+  // §C-11 L3 サブ見出し (12 / 500 / muted / 非 uppercase)。 SPEC テクニカル章 Sprint 3 横展開:
+  //   L2 冠「期間別累積リターン」(SectionLabel = 13/700/uppercase/primary) の傘下に短期/長期を
+  //   L3 として置き、 ファンダ章の L3 (今期/来期コンセンサス/TTM) と typography を一致させる。
+  //   差別化の核は「uppercase 有無 × 色 (primary/muted) × weight (700/500)」(§C-11)、 サイズ差は最小。
+  //   splitByTerm 経由のため v5 のみ適用、 v4/ETF (PeriodGrid 直) は不変。
   return (
     <div
       style={{
-        fontSize: 10.5,
-        fontWeight: 600,
-        letterSpacing: '0.08em',
+        fontSize: 12,
+        fontWeight: 500,
         color: 'var(--text-muted)',
-        textTransform: 'uppercase',
         marginBottom: 'var(--space-3, 12px)',
       }}
     >
