@@ -202,16 +202,10 @@ function MetricChip({ label, value, sub }) {
         alignItems: 'center',
       }}
     >
-      {/* label: 12px muted uppercase (ds-stat__label の center を継承) */}
-      <div
-        className="ds-stat__label"
-        style={{ textAlign: 'center', letterSpacing: '0.04em' }}
-      >
-        {label}
-      </div>
-
-      {/* value: 20px fw700 tabular-nums (ds-stat__value の 36px を 20px に縮小)
-          SPEC: value 20px fw700 — KpiStrip (36px) と ReturnGrid (22px) の中間階層 */}
+      {/* v195 round2 (user dogfood 2026-06-10「数字の上下に説明があって見づらい」):
+          旧 3 行 (label上/value中/sub下) → value(上) + 「label · sub」1 行(下) の 2 行に。
+          視線がまず数字に先着 (Bloomberg/Stripe の value 先行)、 ReturnGrid (value上/label下) と順序一致。 */}
+      {/* value: 20px fw700 tabular-nums — KpiStrip (36px) と ReturnGrid (20px) と整合する階層 */}
       <div
         className="ds-stat__value"
         style={{
@@ -220,23 +214,20 @@ function MetricChip({ label, value, sub }) {
           lineHeight: 1.15,
           letterSpacing: '-0.01em',
           color: 'var(--text-primary)',
-          marginTop: 'var(--space-1, 4px)',
         }}
       >
         {value}
       </div>
 
-      {/* sub-text: 11px muted opacity 0.75
-          全 chip 同一高さ確保のため全 chip に sub を配置 (SPEC: 高さ均一) */}
+      {/* label + sub を 1 行に: label は uppercase のまま、 sub (和文説明) は textTransform 無効 + 控えめに */}
       <div
-        className="ds-stat__hint"
-        style={{
-          fontSize: 11,
-          opacity: 0.75,
-          textAlign: 'center',
-        }}
+        className="ds-stat__label"
+        style={{ textAlign: 'center', letterSpacing: '0.04em', marginTop: 'var(--space-1, 4px)' }}
       >
-        {sub}
+        {label}
+        {sub && (
+          <span style={{ textTransform: 'none', opacity: 0.7, marginLeft: 6 }}>· {sub}</span>
+        )}
       </div>
     </div>
   );

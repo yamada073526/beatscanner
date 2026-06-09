@@ -93,10 +93,11 @@ function PeriodChip({ periodDef, periodData }) {
       }}
     >
       {/* 値: tabular-nums + fw700 (ds-stat__value class が担当)。
-          font-size 22px override で KpiStrip (36px) と視覚ヒエラルキー分離 (Sprint 6 multi-review fix)。 */}
+          v195 round2: 22→20px でバリュエーション MetricChip (20px) と一致 (高さ/ヒエラルキー統一)。
+          KpiStrip (36px) との階層分離は維持。 */}
       <div
         className="ds-stat__value"
-        style={{ color, fontSize: 22, lineHeight: 1.2 }}
+        style={{ color, fontSize: 20, lineHeight: 1.2 }}
       >
         {displayValue}
       </div>
@@ -194,7 +195,7 @@ function TermLabel({ text }) {
         fontSize: 12,
         fontWeight: 500,
         color: 'var(--text-muted)',
-        marginBottom: 'var(--space-3, 12px)',
+        marginBottom: 'var(--space-2, 8px)',
       }}
     >
       {text}
@@ -212,12 +213,14 @@ function TermSplitGrid({ periodsData, loading }) {
   //   border + 軽インデント) を傘下の短期/長期 grid 全体に付与し、 ファンダ章のメトリクスグリッドと一貫化。
   //   数値の中央揃え (PeriodChip) は user 希望どおり維持 (バリュエーションは左寄せ、 リターンは中央 = いいとこ取り)。
   //   gold 30% は elevation whitelist (TtmValuationPanel と同値)。 splitByTerm=v5 のみ、 v4/ETF は PeriodGrid 直で不変。
+  // v195 round2 (user dogfood 2026-06-10「上下の高さが大きすぎ」): gap/paddingTop を space-8(32px)→
+  //   space-4(16px) に圧縮しバリュエーションと同程度の高さに。 短期/長期の分離は borderTop + TermLabel で担保済。
   return (
     <div
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 'var(--space-8, 32px)',
+        gap: 'var(--space-4, 16px)',
         paddingLeft: 'var(--space-3, 12px)',
         borderLeft: '2px solid color-mix(in srgb, var(--color-gold) 30%, transparent)',
       }}
@@ -226,7 +229,7 @@ function TermSplitGrid({ periodsData, loading }) {
         <TermLabel text="短期" />
         <PeriodGrid periods={short} periodsData={periodsData} loading={loading} />
       </div>
-      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--space-8, 32px)' }}>
+      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--space-4, 16px)' }}>
         <TermLabel text="長期" />
         <PeriodGrid periods={long} periodsData={periodsData} loading={loading} />
       </div>

@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { fetchAnalyst, fetchTechnical, fetchPriceHistory } from '../api.js';
 import { DIST_DAYS_LABEL_JP, classifyDistDays } from '../lib/distributionDaysLabels.js';
 import Chip from './ui/Chip.jsx';
+// v195 round2 (§38 verdict 条件付き OK): チャート線と 1:1 mirror の「線サンプル swatch」用 identity 色。
+// hex の定義は StockPriceChart に集約 (ここで raw hex を複製しない)。 identity 色は 3 つ
+// (アナリスト目標=accent / SMA50 / SMA200) に限定し、 損切り/サポート/pivot は中立
+// (行全体の色塗りや 損切り=赤 は「売れ」の行動示唆に読まれ §38/§5 抵触のため BAN)。
+import { SMA_50_COLOR, SMA_200_COLOR } from './StockPriceChart.jsx';
 
 /**
  * PriceLadder — テクニカル章の価格指標を「現在価格を中心とした縦の数直線」 に統合する component。
@@ -26,6 +31,15 @@ import Chip from './ui/Chip.jsx';
  *   [[feedback_testid_all_render_paths]] (data-testid 全 state)。
  *   発光バグ回避: card (.panel-card) でなく chart 付随のレベル表 (token inline、発光 host にしない)。
  */
+
+// v195 round2: チャート線 identity 色の swatch map (§38 条件付き OK の 3 つのみ)。
+// その他 (損切り/サポート/pivot/52週) は中立 — 赤/青の行塗りは「売れ/買え」 の行動示唆に読まれ §38/§5 抵触。
+const LEVEL_SWATCH = {
+  target: 'var(--color-accent)',
+  sma50: SMA_50_COLOR,
+  sma200: SMA_200_COLOR,
+};
+const NEUTRAL_SWATCH = 'color-mix(in srgb, var(--text-muted) 60%, transparent)';
 
 function fmtUsd(v) {
   return Number.isFinite(v) ? `$${v.toFixed(2)}` : '—';
@@ -94,7 +108,9 @@ export default function PriceLadder({ ticker }) {
     setErrored(false);
     Promise.allSettled([
       fetchAnalyst(ticker),
-      fetchTechnical(ticker, 'cup_handle,sma_50'),
+      // v195 round2: チャート/prefetchAll と同一 patterns 文字列に統一。 dedupGet は URL key cache のため
+      // 文字列が違うと coalesce が効かず二重 fetch になっていた (+ sma_200 が ladder に届かず 1:1 mirror が破れていた)。
+      fetchTechnical(ticker, 'cup_handle,sma_50,sma_200,rs,dma_cross'),
       fetchPriceHistory(ticker, '1y'),
     ])
       .then(([a, t, p]) => {
@@ -122,26 +138,44 @@ export default function PriceLadder({ ticker }) {
       : null;
     const cup = technical?.patterns?.cup_handle || null;
     const pivot = Number.isFinite(cup?.pivot?.price) ? cup.pivot.price : null;
-    const support = Number.isFinite(cup?.box_support?.level)
+    // v195 round2 (金融レビュー): breakout_extended (ATH 過延伸再分類) の pivot は「もう乗れない節目」。
+    // 「買い目安」 と確定的に呼ぶと Trust Cliff のためラベルを中立化。
+    const pivotLabel = cup?.state === 'breakout_extended' ? '節目 (pivot・ブレイク済)' : '買い目安 (pivot)';
+    // v195 round2 (金融レビュー): box_support (底値帯) と last_breakout (突破点) は性質が違う。
+    // fallback 時に「サポート」 と呼ぶのは厳密には誤り → ラベル分岐で honest に。
+    const supportFromBox = Number.isFinite(cup?.box_support?.level);
+    const support = supportFromBox
       ? cup.box_support.level
       : (Number.isFinite(cup?.last_breakout?.price) ? cup.last_breakout.price : null);
-    const sma50 = (() => {
-      const ov = technical?.overlays?.find((o) => o.key === 'sma_50');
+    const supportLabel = supportFromBox ? 'サポート' : '直近ブレイク水準';
+    const lastOverlay = (key) => {
+      const ov = technical?.overlays?.find((o) => o.key === key);
       const last = ov?.data?.[ov.data.length - 1];
       return Number.isFinite(last?.value) ? last.value : null;
-    })();
+    };
+    const sma50 = lastOverlay('sma_50');
+    // v195 round2 (金融レビュー最優先): SMA200 はチャートに描画済なのに ladder に無い = 1:1 mirror の破れ。
+    const sma200 = lastOverlay('sma_200');
+    // v195 round2 (金融レビュー): 52週高値/安値 (O'Neil 式「新高値ブレイク」の核)。 1y prices から算出、追加 fetch ゼロ。
+    const closes = Array.isArray(prices) ? prices.map((p) => p?.close).filter(Number.isFinite) : [];
+    const high52 = closes.length ? Math.max(...closes) : null;
+    const low52 = closes.length ? Math.min(...closes) : null;
     // 損切り目安 = 現在価格 × 0.92 (8% ルール、今エントリー想定で常に現在価格の下値に置く)。
     // チャートの stop8 (高値×0.92=高値トレイル) は別概念で、 ladder に出すと「損切りが現在より上」 と
-    // 混乱する (高値から 8% 超下落した銘柄)。 ladder は現在基準で下値に統一。
+    // 混乱する (高値から 8% 超下落した銘柄)。 ladder は現在基準で下値に統一し、 ラベルでも基準を明示
+    // (チャートが「(高値比)」 と明示しているのと対称。 同名「-8%」 が別価格を指す Trust Cliff の解消)。
     const stop = Number.isFinite(current) ? current * 0.92 : null;
 
     const raw = [
+      { key: 'high52', label: '52週高値', price: high52 },
       { key: 'target', label: 'アナリスト目標', price: consensus },
-      { key: 'pivot', label: '買い目安 (pivot)', price: pivot },
+      { key: 'pivot', label: pivotLabel, price: pivot },
       { key: 'current', label: '現在価格', price: current, isCurrent: true },
       { key: 'sma50', label: '50日移動平均', price: sma50 },
-      { key: 'support', label: 'サポート', price: support },
-      { key: 'stop', label: '損切り目安 (−8%)', price: stop },
+      { key: 'sma200', label: '200日移動平均', price: sma200 },
+      { key: 'support', label: supportLabel, price: support },
+      { key: 'low52', label: '52週安値', price: low52 },
+      { key: 'stop', label: '損切り目安 (現在−8%)', price: stop },
     ].filter((l) => Number.isFinite(l.price));
     raw.sort((a, b) => b.price - a.price);
 
@@ -241,15 +275,24 @@ export default function PriceLadder({ ticker }) {
         const upper = curIdx > 0 ? levels.slice(0, curIdx) : [];
         const lower = (curIdx >= 0 && curIdx < levels.length - 1) ? levels.slice(curIdx + 1) : [];
         const cur = curIdx >= 0 ? levels[curIdx] : null;
+        // mount stagger: 描画順に 40ms 刻みの animationDelay (index.css §PriceLadder の .pl-row と対、
+        // ホテルのメニューが一品ずつ供される所作。 reduced-motion は CSS 側で一括無効)。
+        let seq = 0;
+        const stagger = () => ({ animationDelay: `${(seq++) * 40}ms` });
 
+        // グループ冠「上値/下値」: v195 round2 (user 不満 a「傘下項目と並列に見える」) — 13/600/primary に
+        // 昇格し、 傘下行 (12/500/secondary + インデント) と階層差を明確化 (§C-11 L2相当 vs L3)。
         const groupLabel = (text) => (
-          <div style={{
-            fontSize: 11,
-            fontWeight: 500,
-            letterSpacing: '0.08em',
-            color: 'var(--text-muted)',
-            margin: 'var(--space-3, 12px) 0 var(--space-2, 8px)',
-          }}>
+          <div
+            className="pl-row"
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+              margin: 'var(--space-3, 12px) 0 var(--space-1, 4px)',
+              ...stagger(),
+            }}
+          >
             {text}
           </div>
         );
@@ -260,15 +303,34 @@ export default function PriceLadder({ ticker }) {
             <div
               key={l.key}
               data-testid={`price-ladder-row-${l.key}`}
+              className="pl-row"
               style={{
                 display: 'flex',
-                alignItems: 'baseline',
+                alignItems: 'center',
                 justifyContent: 'space-between',
                 gap: 'var(--space-3, 12px)',
                 padding: 'var(--space-2, 8px) 0',
+                // 傘下行はインデントで「冠の領分」 を空間で示す (§C-11 子 grid 4-12px インデント)
+                paddingLeft: 'var(--space-3, 12px)',
+                ...stagger(),
               }}
             >
-              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>{l.label}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)', minWidth: 0 }}>
+                {/* 線サンプル swatch: チャート凡例と同 idiom でチャートの線と 1:1 対応を示す
+                    (identity 色 3 つのみ、 他は中立 — §38 verdict)。 hover で僅かに膨らむ (.pl-swatch) */}
+                <span
+                  className="pl-swatch"
+                  aria-hidden="true"
+                  style={{
+                    width: 14,
+                    height: 2.5,
+                    borderRadius: 2,
+                    flexShrink: 0,
+                    background: LEVEL_SWATCH[l.key] || NEUTRAL_SWATCH,
+                  }}
+                />
+                <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>{l.label}</span>
+              </span>
               <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3, 12px)' }}>
                 <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{fmtUsd(l.price)}</span>
                 <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', minWidth: 72, textAlign: 'right' }}>
@@ -283,6 +345,7 @@ export default function PriceLadder({ ticker }) {
           <div
             key={l.key}
             data-testid={`price-ladder-row-${l.key}`}
+            className="pl-row"
             style={{
               position: 'relative',
               display: 'flex',
@@ -290,10 +353,11 @@ export default function PriceLadder({ ticker }) {
               justifyContent: 'space-between',
               gap: 'var(--space-3, 12px)',
               padding: 'var(--space-3, 12px) 0',
+              ...stagger(),
             }}
           >
-            {/* spine 上の accent tick (現在価格アンカー、 §38 中立ブランド色) */}
-            <span aria-hidden="true" style={{
+            {/* spine 上の accent tick (現在価格アンカー、 §38 中立ブランド色)。 .pl-tick = scaleX 0→1 入場 */}
+            <span aria-hidden="true" className="pl-tick" style={{
               position: 'absolute',
               left: 'calc(-1 * var(--space-4, 16px) - 1px)',
               top: '50%',

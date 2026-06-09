@@ -12704,3 +12704,33 @@ body.is-digest-resizing {
     transition: color 0.15s ease;
   }
 }
+
+/* ============================================================
+   §PriceLadder (v195 round2) — 価格目安の入場 stagger + 現在価格 tick + hover micro-delight。
+   - mount: 行が下から順に「着地」 (opacity+6px、 stagger は JSX 側 animationDelay 40ms 刻み)。
+     fill は backwards (delay 中は初期状態、 終了後は自然 style — forwards 罠回避
+     [[feedback_press_feedback_delta]])。 単発・360ms・decorative 過剰なし (Aman 級 motion 規律)。
+   - §38 ガード: 演出は中立 (儲け額/勝敗/確率の表現なし)。 box-shadow/発光 なし (glow host 化しない)。
+   ============================================================ */
+@keyframes pl-row-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+@keyframes pl-tick-in {
+  /* tick は inline transform translateY(-50%) を持つため from にも含める (上書き事故防止) */
+  from { transform: translateY(-50%) scaleX(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pl-row {
+    animation: pl-row-in 360ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+  .pl-tick {
+    transform-origin: left center;
+    animation: pl-tick-in 200ms ease-out 240ms backwards;
+  }
+  .pl-swatch {
+    transition: transform 120ms ease-out;
+  }
+  .pl-row:hover .pl-swatch {
+    transform: scale(1.35);
+  }
+}

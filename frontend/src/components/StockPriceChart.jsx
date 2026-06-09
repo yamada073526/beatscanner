@@ -58,8 +58,10 @@ function CandleShape(props) {
 }
 
 // SMA overlay 色 (design_system.md §1-A2 で token 登録済、 ALLOWED-HEX whitelist 適合)
-const SMA_50_COLOR  = '#f59e0b'; // amber (短期 trend)
-const SMA_200_COLOR = '#a78bfa'; // purple (長期 trend、 ファンダ協調指標 #1)
+// v195 round2: PriceLadder が線サンプル swatch でチャートと 1:1 mirror するため export
+// (§38 verdict: 線 identity 色の swatch は条件付き OK。 hex の定義はこのファイルに集約、 他所で raw hex 複製しない)
+export const SMA_50_COLOR  = '#f59e0b'; // amber (短期 trend)
+export const SMA_200_COLOR = '#a78bfa'; // purple (長期 trend、 ファンダ協調指標 #1)
 // Cup overlay 色: v76 dogfood で price line cyan と同化 → UI/UX subagent verdict で neutral slate に変更。
 // 哲学的整合: cup は「形成中 = neutral / 未確定」、 投資業界色ルール (緑=上昇/赤=下落/amber=警告/cyan=ブランド)
 // のどれにも属さない観察対象 → 彩色 hue を持たない。 breakout 確定時に green ReferenceDot が前面で対比演出。
