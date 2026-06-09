@@ -41,15 +41,31 @@ try {
   await navTo(page, T1);
   await page.waitForTimeout(1200);
 
-  // ① 価格目安 (price-ladder) screenshot
+  // ① 価格目安 (price-ladder) screenshot (+ round2: 行数/swatch/グループ冠の実測)
   let ladderFound = false;
+  let ladderInfo = null;
   const ladder = page.locator('[data-testid="price-ladder"]').first();
   if (await ladder.count()) {
     await ladder.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(900); // stagger アニメ完了待ち
     ladderFound = true;
+    ladderInfo = await ladder.evaluate((el) => {
+      const rows = [...el.querySelectorAll('[data-testid^="price-ladder-row-"]')].map((r) => r.getAttribute('data-testid').replace('price-ladder-row-', ''));
+      const swatches = [...el.querySelectorAll('.pl-swatch')].map((s) => getComputedStyle(s).backgroundColor);
+      const groupLabels = [...el.querySelectorAll('.pl-row')].filter((r) => /^(上値|下値)$/.test((r.textContent || '').trim())).map((r) => {
+        const cs = getComputedStyle(r);
+        return { text: r.textContent.trim(), fontSize: cs.fontSize, fontWeight: cs.fontWeight, color: cs.color };
+      });
+      return { rowKeys: rows, swatchColors: [...new Set(swatches)], groupLabels };
+    });
     await ladder.screenshot({ path: OUT + 'priceladder-A.png' });
   }
+
+  // ①b 期間別累積リターン + バリュエーション screenshot (高さ統一の目視比較用)
+  const rg = page.locator('[data-testid="judgment-return-grid"]').first();
+  if (await rg.count()) { await rg.scrollIntoViewIfNeeded(); await page.waitForTimeout(500); await rg.screenshot({ path: OUT + 'returngrid-slim.png' }); }
+  const ttm = page.locator('[data-testid="ttm-valuation-panel"]').first();
+  if (await ttm.count()) { await ttm.scrollIntoViewIfNeeded(); await page.waitForTimeout(500); await ttm.screenshot({ path: OUT + 'valuation-2line.png' }); }
 
   // ② テクニカル章の並び (チャート→価格目安→リターン): 章全体を縦に撮る代わりに、 順序を DOM 上で確認
   const order = await page.evaluate(() => {
