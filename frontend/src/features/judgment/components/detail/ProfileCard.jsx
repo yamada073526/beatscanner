@@ -56,6 +56,28 @@ function setCachedSummary(ticker, data) {
   _SUMMARY_CACHE_MAP.set(ticker, { ts: Date.now(), data });
 }
 
+// C-3 keep-mounted reflow fix (v197、 user dogfood 2026-06-10): profile-extended にも summary 同様の
+// module cache を付ける。 真因 = 競合ナビ back-nav で ProfileCard が remount/再 effect されると、 Phase A
+// (profile-extended) だけ cache が無く必ず setProfileLoading(true)→skeleton に落ち、 会社概要が ~431px へ
+// 縮んでから full (~1205px) へ再 load する過程で下のコンテンツ (チャート等) が 774px 押し出される
+// (= user 報告「チャートが伸びる」)。 cache hit 時は skeleton を出さず即時 full 描画し reflow を消す。
+const _PROFILE_CACHE_MAP = new Map();
+const _PROFILE_CACHE_TTL_MS = 10 * 60 * 1000;
+
+function getCachedProfile(ticker) {
+  const entry = _PROFILE_CACHE_MAP.get(ticker);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > _PROFILE_CACHE_TTL_MS) {
+    _PROFILE_CACHE_MAP.delete(ticker);
+    return null;
+  }
+  return entry.data;
+}
+
+function setCachedProfile(ticker, data) {
+  _PROFILE_CACHE_MAP.set(ticker, { ts: Date.now(), data });
+}
+
 // ─── Sanitize helper (Layer 3: BLOCKLIST_REGEX sentence 単位削除) ─────────────
 function sanitizeSummaryData(data) {
   if (!data || typeof data !== 'object') return data;
@@ -962,11 +984,13 @@ function buildLocation(city, state, country) {
 export default function ProfileCard({ ticker, companyName, dataSource, latestPeriod, latestDate, onNavigateTicker }) {
   // v138.6 R7-C: signInWithGoogle を ProfileCard 内で直接利用 (event dispatch listener なし問題の修正)
   const { signInWithGoogle } = useAuth();
-  const [profile, setProfile] = useState(null);
+  // C-3 keep-mounted reflow fix (v197): remount 時も初回 render から cache の full data を出して
+  // skeleton flash → height collapse を防ぐ (lazy init で mount 1 回だけ cache 参照)。
+  const [profile, setProfile] = useState(() => getCachedProfile(ticker));
   const [profileLoading, setProfileLoading] = useState(false);
 
   // Phase B: LLM 和文要約 state (must-fix #5: 3 state UI)
-  const [summary, setSummary] = useState(null);
+  const [summary, setSummary] = useState(() => getCachedSummary(ticker));
   const [summaryLoading, setSummaryLoading] = useState(false);
   const summaryAbortRef = useRef(null);
 
@@ -980,11 +1004,23 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
   // Phase A: profile-extended fetch (AbortController で race condition 防止)
   useEffect(() => {
     if (!ticker) return;
+
+    // C-3 keep-mounted reflow fix (v197): cache hit なら skeleton を出さず即時描画 (Phase B summary と同型)。
+    // これで back-nav remount でも 会社概要 が full 高さのまま → 下のチャート等を押し出さない。
+    const cached = getCachedProfile(ticker);
+    if (cached) {
+      setProfile(cached);
+      return;
+    }
+
     const ac = new AbortController();
     setProfileLoading(true);
     fetchProfileExtended(ticker, { signal: ac.signal })
       .then((d) => {
-        if (!ac.signal.aborted) setProfile(d);
+        if (!ac.signal.aborted) {
+          setProfile(d);
+          if (d) setCachedProfile(ticker, d); // 成功 data のみ cache (error/null は cache しない)
+        }
       })
       .catch((err) => {
         if (err?.name === 'AbortError') return;
