@@ -35,9 +35,51 @@ import {
   fmtSurprisePct,
   fmtYoyPct,
   fmtGuidanceRevLine,
+  GUIDANCE_REVISION_JP,
+  GUIDANCE_PIT_CONSENSUS_JP,
 } from '../../../constants/earningsFlashTemplates.js';
 
 const TESTID = 'earnings-flash-summary';
+
+// ガイダンス履歴基盤 Sprint 4 (6体合議 §10 条件9): 判定バッジは default OFF、
+// ?guidance_pit=1 / localStorage 'guidance_pit'='1' で opt-in → user dogfood 後に default ON 昇格。
+function isGuidanceHistoryEnabled() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('guidance_pit');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('guidance_pit') === '1';
+  } catch {
+    return false;
+  }
+}
+
+// 判定バッジ (10px neutral、色なし — §38。サイズで前方視界の主役 19px と階層差別化、ui verdict)
+function GuidanceBadge({ scope, sym, label, testid }) {
+  return (
+    <span
+      data-testid={testid}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'baseline',
+        gap: 4,
+        fontSize: 10,
+        fontWeight: 500,
+        color: 'var(--text-secondary)',
+        background: 'var(--bg-subtle)',
+        border: '1px solid var(--border)',
+        borderRadius: 4,
+        padding: '1px 6px',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {scope && <span style={{ color: 'var(--text-muted)' }}>{scope}</span>}
+      <span aria-hidden>{sym}</span>
+      {label}
+    </span>
+  );
+}
 
 // ── 行プリミティブ (module-level、ノーラベル直出しブロックの 1 行) ──
 // typography (6体合議 ui-designer 案): label 11px/500/secondary/uppercase、数値 tabular-nums、
@@ -143,14 +185,14 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
   // 会社 8-K ガイダンス込みの forward を lazy 取得。 ?with_guidance=1 は dedupGet 済 URL のため
   // ForwardOutlookSection の既存 lazy fetch と coalesce され実 fetch は増えない (金融条件「二重 fetch
   // しない」 適合)。 cold (SEC 5-15s) では行が後追い描画される progressive enhancement。
-  const [lazyNextQ, setLazyNextQ] = useState(null);
+  const [lazyForward, setLazyForward] = useState(null);
   useEffect(() => {
-    setLazyNextQ(null);
+    setLazyForward(null);
     if (!ticker) return undefined;
     let cancelled = false;
     fetchGuidanceSurprise(ticker)
       .then((d) => {
-        if (!cancelled && d?.forward?.next_q) setLazyNextQ(d.forward.next_q);
+        if (!cancelled && d?.forward) setLazyForward(d.forward);
       })
       .catch(() => { /* graceful: consensus のみ表示 */ });
     return () => { cancelled = true; };
@@ -209,7 +251,8 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
   // v200: 会社売上ガイダンス YoY レンジ (backend 計算済) があれば決算速報 note 形式の並置行
   // 「売上: コンセンサス +9.3% に対し会社ガイダンス +14.0〜17.0%」 を表示 (この時 単独 YoY は重複のため省略)。
   // 無ければ従来表示 (consensus + YoY + GUIDANCE_STATE_JP)。dict に無い state は自動非表示。
-  const nq = lazyNextQ || guidance?.forward?.next_q;
+  const nq = lazyForward?.next_q || guidance?.forward?.next_q;
+  const nfy = lazyForward?.next_fy || guidance?.forward?.next_fy;
   const nqEps = Number.isFinite(nq?.consensus_eps) ? fmtEps(nq.consensus_eps) : null;
   const nqRev = Number.isFinite(nq?.consensus_revenue) ? fmtMoney(nq.consensus_revenue) : null;
   if (nqEps != null || nqRev != null) {
@@ -246,6 +289,48 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
         )}
       </FlashRow>
     );
+  }
+
+  // ガイダンス履歴基盤 Sprint 4 (§10 条件15、 ?guidance_pit=1 opt-in): 判定バッジ行 + 材料への導線。
+  // 前回比 = 通期 (next_fy) — 修正判定の主戦場は四半期ごとに更新される通期ガイダンス
+  // (四半期ガイダンスは期ごと新規発番で同一期の再修正が稀 = 金融 verdict)。表示語は
+  // GUIDANCE_REVISION_JP dict (earningsFlashTemplates.js) のみ — 本 file に修正語を直書きしない。
+  // 発表時比 = 来期 (next_q)。 scope ラベル (通期/来期) で 2 判定の帰属を明示 (混同防止、 ui verdict)。
+  // available=false (蓄積不足) / stale (発表から 10 日超の snapshot) はバッジごと非表示 (捏造しない)。
+  if (isGuidanceHistoryEnabled()) {
+    const fyRev = nfy?.guidance_revision;
+    const revState = fyRev?.available
+      ? (GUIDANCE_REVISION_JP[fyRev.rev?.state] || GUIDANCE_REVISION_JP[fyRev.eps?.state] || null)
+      : null;
+    const nqPit = nq?.guidance_pit_consensus;
+    const pitState = (nqPit?.available && !nqPit.stale)
+      ? (GUIDANCE_PIT_CONSENSUS_JP[nqPit.rev] || GUIDANCE_PIT_CONSENSUS_JP[nqPit.eps] || null)
+      : null;
+    if (revState || pitState) {
+      rows.push(
+        <div
+          key="gh-badges"
+          data-testid={`${TESTID}-gh-badges`}
+          style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap', paddingLeft: 64 }}
+        >
+          {revState && <GuidanceBadge scope="通期" sym={revState.sym} label={revState.label} testid={`${TESTID}-badge-revision`} />}
+          {pitState && <GuidanceBadge scope="来期" sym={pitState.sym} label={pitState.label} testid={`${TESTID}-badge-pit`} />}
+          {/* 材料への導線 (§10 条件2: LLM 生成なしの (b) 案。 instance 局所 = closest、PriceLadder idiom) */}
+          <span
+            data-testid={`${TESTID}-gh-link`}
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              const root = e.currentTarget.closest('.ds-judgment-detail') || document;
+              root.querySelector('[data-testid="forward-outlook"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
+            style={{ fontSize: 10, color: 'var(--text-muted)', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
+          >
+            ↗ ガイダンス詳細へ
+          </span>
+        </div>
+      );
+    }
   }
 
   if (rows.length === 0) {

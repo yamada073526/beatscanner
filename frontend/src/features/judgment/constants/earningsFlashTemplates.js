@@ -58,6 +58,29 @@ export function fmtYoyPct(yoyPct) {
 }
 
 /**
+ * ガイダンス履歴基盤 Sprint 4 (6体合議 §10 条件1/15): 前回会社ガイダンス比の修正判定バッジ。
+ * 「会社が自らガイダンス数値を変更した客観的事実」 の分類のみ — §38 はこの文脈に限り
+ * 修正語を許可 (pre-commit Check 7 の行末注釈ホワイトリスト)。
+ * ⚠️ この dict を現コンセンサス比 (GUIDANCE_STATE_JP) の表示に流用してはならない (事実誤りになる)。
+ */
+export const GUIDANCE_REVISION_JP = {
+  raised: { sym: '↑', label: '前回比 上方修正' }, // @company-guidance-revision
+  maintained: { sym: '—', label: '前回比 据え置き' }, // @company-guidance-revision
+  lowered: { sym: '↓', label: '前回比 下方修正' }, // @company-guidance-revision
+};
+
+/**
+ * 発表時点コンセンサス比サプライズ (snapshot join、時点ミックス誤読の根治)。
+ * 語彙は GUIDANCE_STATE_JP (上回る/同水準/下回る) と統一、「修正」 語は使わない (会社は
+ * consensus を修正していない)。stale snapshot (発表から 10 日超) は backend flag で非表示。
+ */
+export const GUIDANCE_PIT_CONSENSUS_JP = {
+  above: { sym: '↑', label: '発表時予想を上回る' },
+  inline: { sym: '—', label: '発表時予想と同水準' },
+  below: { sym: '↓', label: '発表時予想を下回る' },
+};
+
+/**
  * 来期売上ガイダンスの並置行 (決算速報 note 形式: 「現コンセンサス +9.3% に対し会社ガイダンス +14.0〜17.0% (発表時)」)。
  * 全て backend 計算済値 (rev_yoy_pct / company_q_rev_yoy_low_pct / high) を読むだけ。
  * §38: コンセンサスと会社提示の事実並置のみ。「上方修正」 等の評価語は使わない
