@@ -405,6 +405,22 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
     root.addEventListener('pl-hover-price', onHover);
     return () => root.removeEventListener('pl-hover-price', onHover);
   }, []);
+  // round11 B (逆連動): チャートの pl-chartline-* (線/帯/ラベル) を hover すると ladder 側の対応行が
+  // 強調される (pl-chart-hover event)。 線は細く hit が難しいためラベル text も拾える best-effort。
+  const emitChartHover = (key) => {
+    const root = chartRootRef.current?.closest('.ds-judgment-detail');
+    try { root?.dispatchEvent(new CustomEvent('pl-chart-hover', { detail: { key } })); } catch { /* noop */ }
+  };
+  const handleChartLineHover = (e) => {
+    const g = e.target?.closest?.('[class*="pl-chartline-"]');
+    if (!g) return;
+    const cls = typeof g.className === 'string' ? g.className : (g.className?.baseVal || g.getAttribute('class') || '');
+    const m = cls.match(/pl-chartline-([a-z0-9]+)/);
+    if (m) emitChartHover(m[1]);
+  };
+  const handleChartLineHoverEnd = (e) => {
+    if (e.target?.closest?.('[class*="pl-chartline-"]')) emitChartHover(null);
+  };
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   // SMA overlay state (handover v75 Phase 1 Session 1 safer 再追加)
@@ -852,7 +868,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
     // 旧: loading 中 h-64 (256px) + header (60px) = ~316px、 data 到達で h-72 (288px) + buttons + footer = ~440px
     //     → 124px 高さブレで上下 section が押し下げ (user 「scroll 中ガクつき」 主因の 1)。
     // 新: minHeight 480px で常に 480px 確保、 data 到達時の 440px は wrapper 内で flex で center 配置。
-    <section ref={chartRootRef} className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', minHeight: 480 }}>
+    <section ref={chartRootRef} onMouseOver={handleChartLineHover} onMouseOut={handleChartLineHoverEnd} className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', minHeight: 480 }}>
       {/* Header */}
       <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-wrap">

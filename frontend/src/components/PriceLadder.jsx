@@ -12,6 +12,9 @@ import { SMA_50_COLOR, SMA_200_COLOR } from './StockPriceChart.jsx';
 // 各行は dist×係数 を表示 — 行ごとの hook 不要)。
 import { useInViewOnce } from '../hooks/useInViewOnce.js';
 import { useCountUp } from '../hooks/useCountUp.js';
+// round11 D: 現在価格行の当日ミニスパークライン (既存 primitive 流用、 module cache 内蔵。
+// 色は当日実績の gain/loss = 業界ルール本来用途で §38 非該当)。
+import RowSparkline from '../features/judgment/components/list/RowSparkline.jsx';
 
 /**
  * PriceLadder — テクニカル章の価格指標を「現在価格を中心とした縦の数直線」 に統合する component。
@@ -191,6 +194,18 @@ export default function PriceLadder({ ticker }) {
   }, [hoverKey]);
   // round8 #4 (前回比): state はここ、 effect は current (useMemo) 宣言後に置く (TDZ 回避)。
   const [prevSeen, setPrevSeen] = useState(null);
+  // round11 A: 縮尺モード (行間を実際の価格差に比例させる「本物の数直線」 表示)。 session 内のみ保持。
+  const [scaleMode, setScaleMode] = useState(false);
+  // round11 B (逆連動): チャートの pl-chartline-* hover → ladder 行を強調 (CustomEvent 受信)。
+  const [chartHoverKey, setChartHoverKey] = useState(null);
+  useEffect(() => {
+    const r = containerRef.current?.closest('.ds-judgment-detail');
+    if (!r) return undefined;
+    const on = (e) => setChartHoverKey(e?.detail?.key || null);
+    r.addEventListener('pl-chart-hover', on);
+    return () => r.removeEventListener('pl-chart-hover', on);
+    // loading 解除後に container が mount されるため dep に loading (mount 前の attach 空振り回避)
+  }, [loading]);
 
   useEffect(() => {
     if (!ticker) return;
@@ -239,10 +254,17 @@ export default function PriceLadder({ ticker }) {
       ? cup.box_support.level
       : (Number.isFinite(cup?.last_breakout?.price) ? cup.last_breakout.price : null);
     const supportLabel = supportFromBox ? 'サポート' : '直近ブレイク水準';
+    // round11 fix (user「50DMA+15/25 が出ない」 真因): overlay 配列の末尾が null のことがある
+    // (直近日の SMA 未計算等)。 旧実装は末尾 1 点だけ読んで null → 行ごと消えていた。
+    // 末尾から遡って最後の有限値を採用する (チャートは connectNulls で描けるため不一致が起きていた)。
     const lastOverlay = (key) => {
-      const ov = technical?.overlays?.find((o) => o.key === key);
-      const last = ov?.data?.[ov.data.length - 1];
-      return Number.isFinite(last?.value) ? last.value : null;
+      const data = technical?.overlays?.find((o) => o.key === key)?.data;
+      if (!Array.isArray(data)) return null;
+      for (let i = data.length - 1; i >= 0; i--) {
+        const v = data[i]?.value;
+        if (Number.isFinite(v)) return v;
+      }
+      return null;
     };
     const sma50 = lastOverlay('sma_50');
     // v195 round2 (金融レビュー最優先): SMA200 はチャートに描画済なのに ladder に無い = 1:1 mirror の破れ。
@@ -419,7 +441,7 @@ export default function PriceLadder({ ticker }) {
           </div>
         );
 
-        const levelRow = (l) => {
+        const levelRow = (l, extra = null) => {
           const dist = (Number.isFinite(l.price) && Number.isFinite(current)) ? (l.price / current - 1) * 100 : null;
           return (
             <div
@@ -427,7 +449,8 @@ export default function PriceLadder({ ticker }) {
               data-testid={`price-ladder-row-${l.key}`}
               // round4: .pl-level = hover インタラクション scope (行 lift + bg sweep + label/price 増光 +
               //   micro-bar)。 冠 (.pl-row のみ) には効かせない。 §38: 全て中立色、 方向/行動の示唆なし。
-              className="pl-row pl-level"
+              // round11 B: chartHoverKey 一致 (チャート線 hover の逆連動) でも同じ強調 (.pl-level-hl)。
+              className={`pl-row pl-level${chartHoverKey === l.key ? ' pl-level-hl' : ''}`}
               // round8 #2: spine 区間ハイライト / #1: チャート対応線の強調 + 価格ガイド / #3: click でチャートへ
               onMouseEnter={() => { setHoverKey(l.key); setChartHl(l.key, l.price); }}
               onMouseLeave={() => { setHoverKey(null); setChartHl(null, null); }}
@@ -438,6 +461,7 @@ export default function PriceLadder({ ticker }) {
               style={{
                 cursor: CHART_LINKED.has(l.key) ? 'pointer' : undefined,
                 ...stagger(),
+                ...(extra || {}),
               }}
             >
               {/* round10 (user「帯が狭くなった」): padding を外側→内側へ移し、 板 (inner bg) が行の
@@ -496,7 +520,7 @@ export default function PriceLadder({ ticker }) {
           );
         };
 
-        const currentRow = (l) => (
+        const currentRow = (l, extra = null) => (
           <div
             key={l.key}
             data-testid={`price-ladder-row-${l.key}`}
@@ -504,6 +528,7 @@ export default function PriceLadder({ ticker }) {
             style={{
               position: 'relative',
               ...stagger(),
+              ...(extra || {}),
             }}
           >
             {/* spine 上の accent tick (現在価格アンカー、 §38 中立ブランド色)。 .pl-tick = scaleX 0→1 入場 */}
@@ -521,6 +546,10 @@ export default function PriceLadder({ ticker }) {
             <div className="pl-level-inner" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-3, 12px)', padding: 'var(--space-3, 12px) 0', paddingRight: 'var(--space-3, 12px)' }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{l.label}</span>
               <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3, 12px)' }}>
+                {/* round11 D: 当日のミニスパークライン (intraday 5分足、 「生きている価格」 の説得力) */}
+                <span style={{ alignSelf: 'center', display: 'inline-flex' }} aria-hidden="true">
+                  <RowSparkline ticker={ticker} period="1d" width={64} height={18} />
+                </span>
                 <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{fmtUsd(l.price * pf)}</span>
                 <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', minWidth: 72, textAlign: 'right' }}>
                   {Number.isFinite(sma50Dist) ? `50DMA ${fmtPct(sma50Dist * pf)}` : '基準'}
@@ -531,6 +560,14 @@ export default function PriceLadder({ ticker }) {
         );
 
         return (
+          <>
+          {/* round11 A: 等間隔 ⇄ 縮尺 (行間=実際の価格差に比例) の表示モード切替 */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 'var(--space-1, 4px)' }}>
+            <div className="pl-scale-toggle" role="group" aria-label="価格目安の表示モード">
+              <button type="button" className={scaleMode ? '' : 'is-active'} onClick={() => setScaleMode(false)}>等間隔</button>
+              <button type="button" className={scaleMode ? 'is-active' : ''} onClick={() => setScaleMode(true)}>縮尺</button>
+            </div>
+          </div>
           <div
             // v195 round3: 視界進入で data-pl-inview が付き、 index.css 側で .pl-row/.pl-tick の
             // animation が arming される (mount 起点だと画面外で再生済になる真因の修正)。
@@ -553,9 +590,29 @@ export default function PriceLadder({ ticker }) {
             {rangeBox && (
               <span className="pl-spine-range" aria-hidden="true" style={{ top: rangeBox.top, height: rangeBox.height }} />
             )}
-            {upper.length > 0 && groupLabel('上値')}
-            {upper.map(levelRow)}
-            {cur && currentRow(cur)}
+            {scaleMode ? (
+              // round11 A: 縮尺モード — 行間を実際の価格差に比例 (min4/max110px)。 冠/ゾーンは出さず
+              // 空間そのものに語らせる (本物の数直線)。 前回比行は等間隔モードのみ表示 (図の純度優先)。
+              (() => {
+                const range = Math.max(1e-9, levels[0].price - levels[levels.length - 1].price);
+                const SCALE_PX = 340;
+                return levels.map((l, i) => {
+                  const extra = i === 0 ? null : {
+                    marginTop: Math.round(Math.min(110, Math.max(4, ((levels[i - 1].price - l.price) / range) * SCALE_PX))),
+                  };
+                  return l.isCurrent ? currentRow(l, extra) : levelRow(l, extra);
+                });
+              })()
+            ) : (
+              <>
+                {upper.length > 0 && (
+                  // round11 C: ゾーンの極薄グラデ (中立 accent 3%、 現在価格から離れるほど僅かに深い「静かな奥行き」)
+                  <div className="pl-zone-upper">
+                    {groupLabel('上値')}
+                    {upper.map((l) => levelRow(l))}
+                  </div>
+                )}
+                {cur && currentRow(cur)}
             {/* round8 #4: 前回チェック時からの実績変化 (10 分以上ぶりの再訪時のみ)。 過去事実の記述で
                 色は業界ルール本来用途 (実績の上昇=緑/下落=赤)。 §38 (将来予測) には該当しない。 */}
             {cur && prevSeen && (() => {
@@ -575,9 +632,16 @@ export default function PriceLadder({ ticker }) {
                 </div>
               );
             })()}
-            {lower.length > 0 && groupLabel('下値')}
-            {lower.map(levelRow)}
+                {lower.length > 0 && (
+                  <div className="pl-zone-lower">
+                    {groupLabel('下値')}
+                    {lower.map((l) => levelRow(l))}
+                  </div>
+                )}
+              </>
+            )}
           </div>
+          </>
         );
       })()}
       <p style={{
