@@ -431,6 +431,9 @@ export default function PriceLadder({ ticker }) {
             style={{
               position: 'relative',
               paddingLeft: 'var(--space-4, 16px)',
+              // round7: hover 拡大 (scale 1.012、 center 基準) のはみ出し ~8px/側 の逃げ場。
+              // 全行一律なので右端整列は保たれる (pane 外への見切れ解消)。
+              paddingRight: 'var(--space-3, 12px)',
             }}
           >
             <span className="pl-spine" aria-hidden="true" />

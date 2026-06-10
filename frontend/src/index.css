@@ -12814,7 +12814,9 @@ body.is-digest-resizing {
      「ゲージを回すように選択行が手前に来る」 (user 案)。 box-shadow 不使用 = 発光 host 化しない */
   .pl-level {
     border-radius: var(--radius-sm, 6px);
-    transform-origin: left center;
+    /* round7 (user「右端が見切れる」): origin left だと拡大分が全て右へ伸び pane 外で clip される。
+       center 基準 + 拡大率 1.012 に調整し、 はみ出し (~8px/側) は ladder コンテナの左右余白で吸収。 */
+    transform-origin: center center;
     /* sweep は background-size 方式 (::before だと stacking/z-index 管理が要る)。 accent の薄塗りが左→右に流れる
        (round5: 7%→14%、 user「もっと目立たせて」) */
     background-image: linear-gradient(
@@ -12833,7 +12835,8 @@ body.is-digest-resizing {
      新規生 shadow なし)。 bg-subtle を下に敷いて不透明の「板」 にし、 影が活きるようにする。
      発光 host 化ではない (panel-card/arrival glow 系 class 不使用、 spotlight 監視対象外)。 */
   .pl-level:hover {
-    transform: translateX(2px) translateY(-2px) scale(1.015);
+    /* translateX は撤去 (横ズレも右はみ出しの一因。 滑り込みは入場アニメが担当済) */
+    transform: translateY(-2px) scale(1.012);
     background-color: var(--bg-subtle);
     background-size: 100% 100%;
     box-shadow: var(--shadow-3);
