@@ -34,6 +34,7 @@ import {
   FLASH_TERMS,
   fmtSurprisePct,
   fmtYoyPct,
+  fmtGrossMargin,
   fmtGuidanceRevLine,
   GUIDANCE_REVISION_JP,
   GUIDANCE_PIT_CONSENSUS_JP,
@@ -50,6 +51,23 @@ function isGuidanceHistoryEnabled() {
     if (urlParam === '1') return true;
     if (urlParam === '0') return false;
     return window.localStorage?.getItem('guidance_pit') === '1';
+  } catch {
+    return false;
+  }
+}
+
+// 決算ハイライト Phase2 (四半期グロスマージン): ?flash_gm=1 / localStorage 'flash_gm'='1' で opt-in。
+// default OFF (本番挙動不変)。粗利率は DiagramCard(推移図)/ProfileCard(年次) に既出のため、
+// 「章冒頭の当四半期実値」 の追加価値を user dogfood で確認後 default ON 昇格 (isGuidanceHistoryEnabled と同パターン)。
+// ※ セグメント別売上行は既存 2 箇所 (DiagramCard SegmentBar / ProfileCard SegmentSection、 同一四半期粒度) と
+//   重複するため本 Phase では追加せず、 集約 vs アンカー導線の設計判断を保留 (6体合議 マーケ verdict)。
+function isGrossMarginEnabled() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('flash_gm');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('flash_gm') === '1';
   } catch {
     return false;
   }
@@ -245,6 +263,21 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
         )}
       </FlashRow>
     );
+  }
+
+  // 粗利率行 (Phase2、?flash_gm=1 opt-in): 当四半期の採算実値。backend で sector/妥当域 gate 済を読むだけ
+  // (frontend 再計算禁止)。判断語なし・色なし中立 (§38/§5、5 条件カードに色エネルギー集中)。
+  // EPS/売上の後・来期の前 = 決算速報 note 順 (EPS → 売上 → 粗利率 → 来期)。section 上部の「直近四半期」
+  // caption が期を明示するため row 内の四半期表記は省略 (DiagramCard 推移図 / ProfileCard 年次 と粒度差別化)。
+  if (isGrossMarginEnabled()) {
+    const gmStr = fmtGrossMargin(latestQ?.gross_margin_pct);
+    if (gmStr != null) {
+      rows.push(
+        <FlashRow key="grossmargin" label={FLASH_LABELS.grossMargin} testid={`${TESTID}-gross-margin`}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{gmStr}</span>
+        </FlashRow>
+      );
+    }
   }
 
   // 来期行: lazy (会社 8-K guidance 込み、coalesce 済) があれば優先、無ければ prop の consensus のみ。

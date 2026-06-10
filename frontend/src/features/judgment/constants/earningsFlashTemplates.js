@@ -20,6 +20,7 @@
 export const FLASH_LABELS = {
   eps: 'EPS',
   revenue: '売上高',
+  grossMargin: '粗利率',
   nextQ: '来期',
 };
 
@@ -55,6 +56,18 @@ export function fmtYoyPct(yoyPct) {
   if (yoyPct == null || !Number.isFinite(yoyPct)) return null;
   const sign = yoyPct > 0 ? '+' : '';
   return `${FLASH_TERMS.yoy} ${sign}${yoyPct.toFixed(1)}%`;
+}
+
+/**
+ * 四半期グロスマージン (粗利率) の表示文字列 (backend 計算済 gross_margin_pct を読むだけ)。
+ * backend で sector gate (金融/REIT/保険) + 妥当域 0<ratio<1.0 済 → ここは整形のみ (frontend 再計算禁止)。
+ * 決算ハイライト Phase2 (?flash_gm=1 opt-in)。事実の実値のみ (判断語なし、§38/§5)。
+ * @param {number|null} pct
+ * @returns {string|null}
+ */
+export function fmtGrossMargin(pct) {
+  if (pct == null || !Number.isFinite(pct)) return null;
+  return `${pct.toFixed(1)}%`;
 }
 
 /**

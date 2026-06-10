@@ -6267,6 +6267,10 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
     # Phase 2.9 Sprint D #8q-history-phase1: cash_flow quarterly 追加 fetch
     # 5 条件 #1 (営業 CF margin) / #3 (CFPS) / #5 (CFPS > EPS 健全性) を 8Q 推移で trace
     cash_flow_task = asyncio.create_task(client.cash_flow(sym, limit=fetch_n, period="quarter"))
+    # 決算ハイライト Phase2 (四半期グロスマージン、?flash_gm=1 opt-in): sector gate 用に
+    # sector/industry を取得 (profile 24h cache 共有でほぼ無コスト)。 銀行/REIT/保険は
+    # grossProfit≈revenue で粗利率が 100% 異常値になるため _roe_sector_guard で保留 (6体合議 金融 verdict)。
+    sector_task = asyncio.create_task(_fetch_sector_industry(sym, fmp_key))
 
     surprises: list[dict] = []
     income_q: list[dict] = []
@@ -6288,6 +6292,13 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
         cash_flow_q = await cash_flow_task or []
     except Exception:
         cash_flow_q = []
+    # 粗利率 sector gate (?flash_gm=1 opt-in): 金融/REIT/保険/証券/公益は粗利率が無意味 → 全行保留。
+    try:
+        _si_q = await sector_task
+        _sector_q, _industry_q = _si_q if isinstance(_si_q, tuple) else (None, None)
+    except Exception:
+        _sector_q, _industry_q = None, None
+    _gm_blocked = _roe_sector_guard(_sector_q, _industry_q)
 
     # handover v83 P1 fix (2026-05-18): /stable/earnings は upcoming earnings (eps actual 未確定)
     # も返すため、 eps actual が無い entry は historical view から除外。 旧 /earnings-calendar
@@ -6408,6 +6419,20 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
                             and abs((_cur_d - _prev_d).days) > 180):
                         revenue_yoy_pct = round((revenue_actual - prev_rev) / abs(prev_rev) * 100, 1)
 
+        # 決算ハイライト Phase2: 四半期グロスマージン (粗利率)。数値物理層 = Python 計算のみ (LLM 不使用)。
+        # FMP grossProfitRatio (0-1) ×100。 欠落時は grossProfit/revenue で補完 (ProfileCard 系 main.py:804 と同流儀)。
+        # ガード: sector gate (金融/REIT/保険、 _gm_blocked) + 妥当域 0<ratio<1.0 (銀行は grossProfit≈revenue=1.0 で
+        # 除外、 FMP の >1.0 誤値も除外) → Trust Cliff (「粗利率 100%」 桁違い表示) を backend で根治 (6体合議 金融 verdict)。
+        gross_margin_pct = None
+        if not _gm_blocked and inc:
+            _gp_ratio = _safe_eps_float(_pick(inc, "grossProfitRatio"))
+            if _gp_ratio is None:
+                _gp_abs = _safe_eps_float(_pick(inc, "grossProfit"))
+                if _gp_abs is not None and revenue_actual and revenue_actual > 0:
+                    _gp_ratio = _gp_abs / revenue_actual
+            if _gp_ratio is not None and 0 < _gp_ratio < 1.0:
+                gross_margin_pct = round(_gp_ratio * 100, 1)
+
         eps_label, eps_pct, _ = _verdict(eps_actual, eps_estimated)
         rev_label, rev_pct, _ = _verdict(revenue_actual, revenue_estimated)
         # v144 content-quality guard: 売上の集計基準ミスマッチ (一部銀行) の非現実的 surprise を判定保留。
@@ -6426,6 +6451,8 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
             "revenue_verdict": rev_label,
             # 条件3: 売上高成長率 YoY (前年同期比、 Python 計算済、 前年同期欠落時は None → '—')
             "revenue_yoy_pct": revenue_yoy_pct,
+            # 決算ハイライト Phase2: 四半期グロスマージン (%、 sector/妥当域 gate 済、 保留は None → 行非表示)
+            "gross_margin_pct": gross_margin_pct,
             # Sprint A: grouped bars per-share view 統一用 (SPS = revenue / diluted_shares)
             "sps_actual": sps_actual,
             # Phase 2.9 Sprint D #8q-history-phase1: 5 条件 #1/#3/#5 を 8Q で trace
