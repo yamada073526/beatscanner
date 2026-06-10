@@ -30,7 +30,7 @@ async function navTo(page, ticker) {
   return true;
 }
 
-async function grabFlash(page) {
+async function grabFlash(page, retry = 1) {
   // keep-mounted 複数 instance 対策: active detail スコープを優先し、 無ければ素の testid。
   // 旧: comma selector の .first() が DOM 順で hidden な旧銘柄 instance を掴んでいた (検証誤り)。
   let el = page.locator('[data-detail-active] [data-testid="earnings-flash-summary"]').first();
@@ -38,6 +38,15 @@ async function grabFlash(page) {
   if (await el.count() === 0) return { present: false };
   await el.scrollIntoViewIfNeeded();
   await page.waitForTimeout(900);
+  // cold backend では analyze 完了後に guidance/basic が遅れて届き、 一瞬 empty を経由する
+  // (timing flake)。 empty を掴んだら 5s 待って 1 回だけ再測定。
+  if (retry > 0) {
+    const state = await el.getAttribute('data-state');
+    if (state === 'empty') {
+      await page.waitForTimeout(5000);
+      return grabFlash(page, retry - 1);
+    }
+  }
   return el.evaluate((node, banSrc) => {
     const text = (node.textContent || '').trim();
     const ban = new RegExp(banSrc);
