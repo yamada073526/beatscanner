@@ -30,7 +30,10 @@ async function navTo(page, ticker) {
 }
 
 async function grabFlash(page) {
-  const el = page.locator('[data-detail-active] [data-testid="earnings-flash-summary"], [data-testid="earnings-flash-summary"]').first();
+  // keep-mounted 複数 instance 対策: active detail スコープを優先し、 無ければ素の testid。
+  // 旧: comma selector の .first() が DOM 順で hidden な旧銘柄 instance を掴んでいた (検証誤り)。
+  let el = page.locator('[data-detail-active] [data-testid="earnings-flash-summary"]').first();
+  if (await el.count() === 0) el = page.locator('[data-testid="earnings-flash-summary"]').last();
   if (await el.count() === 0) return { present: false };
   await el.scrollIntoViewIfNeeded();
   await page.waitForTimeout(900);
@@ -65,33 +68,38 @@ try {
     localStorage.removeItem('flash'); // URL param のみで opt-in (D の対照実験を汚さない)
   }, auth);
 
-  // --- (A)-(C): AAPL × flash=1 ---
-  await page.goto(PROD, { waitUntil: 'networkidle', timeout: 30_000 });
-  await page.waitForTimeout(2200);
-  await navTo(page, 'AAPL');
-  const aapl = await grabFlash(page);
-  if (aapl.present) {
-    const el = page.locator('[data-testid="earnings-flash-summary"]').first();
-    await el.screenshot({ path: OUT + 'flash-aapl.png' }).catch(() => {});
+  // 58s 制限内に収めるため 2 モード分割 (FLASH_MODE=on: AAPL+SMCI / off: default OFF 確認)
+  const mode = process.env.FLASH_MODE === 'off' ? 'off' : 'on';
+
+  if (mode === 'on') {
+    // --- (A)-(C): AAPL × flash=1 ---
+    await page.goto(PROD, { waitUntil: 'networkidle', timeout: 30_000 });
+    await page.waitForTimeout(2200);
+    await navTo(page, 'AAPL');
+    const aapl = await grabFlash(page);
+    if (aapl.present) {
+      const el = page.locator('[data-testid="earnings-flash-summary"]').first();
+      await el.screenshot({ path: OUT + 'flash-aapl.png' }).catch(() => {});
+    }
+    // --- (E): SMCI (estimate 欠損系 edge) ---
+    await navTo(page, 'SMCI');
+    const smci = await grabFlash(page);
+    const verdict =
+      aapl.present && aapl.state === 'main' && aapl.hasDollar && aapl.hasUnit && !aapl.banHit &&
+      (smci.present ? !smci.banHit : true) && errs.length === 0
+        ? 'pass' : 'fail';
+    console.log(JSON.stringify({ verdict, mode, aapl, smci, pageErrors: errs }, null, 2));
+    process.exitCode = verdict === 'pass' ? 0 : 1;
+  } else {
+    // --- (D): flag なしで出ないこと (default OFF) ---
+    await page.goto(PROD_NOFLAG, { waitUntil: 'networkidle', timeout: 30_000 });
+    await page.waitForTimeout(2200);
+    await navTo(page, 'AAPL');
+    const offCount = await page.locator('[data-testid="earnings-flash-summary"]').count();
+    const verdict = offCount === 0 && errs.length === 0 ? 'pass' : 'fail';
+    console.log(JSON.stringify({ verdict, mode, defaultOffHidden: offCount === 0, pageErrors: errs }, null, 2));
+    process.exitCode = verdict === 'pass' ? 0 : 1;
   }
-
-  // --- (E): SMCI (estimate 欠損系 edge) ---
-  await navTo(page, 'SMCI');
-  const smci = await grabFlash(page);
-
-  // --- (D): flag なしで出ないこと (default OFF) ---
-  await page.goto(PROD_NOFLAG, { waitUntil: 'networkidle', timeout: 30_000 });
-  await page.waitForTimeout(2200);
-  await navTo(page, 'AAPL');
-  const offCount = await page.locator('[data-testid="earnings-flash-summary"]').count();
-
-  const verdict =
-    aapl.present && aapl.state === 'main' && aapl.hasDollar && aapl.hasUnit && !aapl.banHit &&
-    (smci.present ? !smci.banHit : true) &&
-    offCount === 0 && errs.length === 0
-      ? 'pass' : 'fail';
-  console.log(JSON.stringify({ verdict, aapl, smci, defaultOffHidden: offCount === 0, pageErrors: errs }, null, 2));
-  process.exitCode = verdict === 'pass' ? 0 : 1;
 } catch (e) {
   console.log(JSON.stringify({ error: String(e?.message || e) }, null, 2));
   process.exitCode = 1;
