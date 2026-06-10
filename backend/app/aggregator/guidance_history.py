@@ -154,6 +154,7 @@ def build_guidance_rows(
     company_guidance: dict | None,
     q_period_end: str | None,
     fy_period_end: str | None,
+    filed_at: str | None = None,
 ) -> list[dict]:
     """8-K 抽出済 company_guidance を guidance_snapshots upsert 用の row dict list に整形する純粋関数。
 
@@ -164,6 +165,7 @@ def build_guidance_rows(
               source_url, ...} or None)。
         q_period_end: 四半期ガイダンスの対象会計期末日 (resolve_next_period_end で解決済)。
         fy_period_end: 通期ガイダンスの対象会計期末日。
+        filed_at: 8-K filing 日 ISO (Sprint 2 backfill で設定。 nightly は None = 不明のまま保存)。
 
     Returns:
         upsert 可能な row dict の list (最大 2 行: quarter / annual)。 以下は行を作らない (捏造禁止):
@@ -201,6 +203,7 @@ def build_guidance_rows(
             "rev_basis": rev_basis,
             "source_url": source_url,
             "source_accession": accession,
+            "filed_at": filed_at,
         })
 
     _one_row("q_eps", "q_revenue", q_period_end, "quarter")

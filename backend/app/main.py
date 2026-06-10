@@ -16947,6 +16947,234 @@ async def cron_guidance_snapshot(
     }
 
 
+@app.post("/api/cron/guidance-backfill")
+async def cron_guidance_backfill(
+    request: Request,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """ガイダンス履歴基盤 Sprint 2: 過去 8-K から会社ガイダンスを backfill する手動 batch endpoint。
+
+    SPEC: docs/specs/SPEC_2026-06-11_guidance-history-foundation.md Sprint 2 (6体合議 §10 反映)。
+    SPEC 原案は backend/scripts/ の standalone script だったが、 env (SUPABASE_SERVICE_ROLE_KEY /
+    ANTHROPIC_API_KEY) が本番にのみ完備のため CRON_SECRET 認証 endpoint に設計変更 (運用が楽 +
+    GitHub Actions から再実行可)。 schedule には載せない (手動 1 回 + 必要時再実行)。
+
+    flow (per ticker、 SEC EDGAR rate limit 10 req/s 厳守のため ticker 並列 2 + 内部 sequential):
+      1. EDGAR submissions JSON → 8-K (items 2.02) を filingDate 降順で最大 max_filings 件収集
+      2. **古い順に** EX-99.1 → text → extract_guidance (既存 4 層通過 path、 Haiku + prompt cache)
+      3. 対象会計期は **filing 日基準** で resolve_next_period_end (§10 条件7 の backfill 版:
+         「filing 日より未来で最も近い estimate 期末日」 = その 8-K が指す次期)
+      4. 古→新の順で upsert → 同一 period key は新しい filing が上書き (amend 8-K / 再ガイダンス
+         対応、 §10 条件6。 filed_at 列で新旧が監査可能)
+
+    body:
+      - {"tickers": ["SNOW", ...]}: 対象 override (省略時 保有 ∪ WL)
+      - {"max_filings": 8}: ticker あたり遡る 8-K 件数 (default 8 ≈ 直近 8 四半期)
+      - {"dry_run": true}: EDGAR walk のみ (LLM 抽出 / upsert を skip、 対象 filing list を返す)
+
+    §38 / cost: 抽出は既存 extract_guidance (新規 prompt なし、 BAD pattern 継承)。 Haiku +
+    ephemeral cache で system block を反復 → WL 規模 (数十 ticker × 8 filings) で $1 未満。
+    """
+    _check_cron_secret(x_cron_secret)
+
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    from .aggregator import guidance_history  # 数値物理層 (LLM import なし)
+    from .visualizer.sec_guidance import extract_guidance
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    override_tickers = body.get("tickers")
+    dry_run = bool(body.get("dry_run", False))
+    try:
+        max_filings = max(1, min(16, int(body.get("max_filings", 8))))
+    except (TypeError, ValueError):
+        max_filings = 8
+
+    # universe: override or 保有 ∪ WL (Sprint 1 cron と同 builder 思想)
+    source_counts: dict[str, int] = {}
+    source_errors: list[str] = []
+    if isinstance(override_tickers, list) and override_tickers:
+        universe = {str(t).upper() for t in override_tickers if t}
+        source_counts = {"override": len(universe)}
+    else:
+        def _build_universe() -> set[str]:
+            tickers: set[str] = set()
+            for table, label in (("watchlist", "watchlist"), ("transactions", "holdings")):
+                try:
+                    rows = _select_all_column(sb, table, "ticker")
+                    s = {str(r["ticker"]).upper() for r in rows if r.get("ticker")}
+                    source_counts[label] = len(s)
+                    tickers |= s
+                except Exception as e:
+                    source_counts[label] = 0
+                    source_errors.append(f"{label}: {type(e).__name__}")
+            return tickers
+
+        universe = await asyncio.to_thread(_build_universe)
+    universe_list = sorted(universe)
+
+    fmp_key = _get_fmp_key(request) or os.getenv("FMP_API_KEY")
+    if not fmp_key:
+        raise HTTPException(status_code=500, detail="FMP_API_KEY not configured")
+    client = FMPClient(api_key=fmp_key)
+
+    import httpx as _httpx_sec
+    headers = {"User-Agent": "beatscanner research@example.com", "Accept-Encoding": "gzip, deflate"}
+    loop = asyncio.get_event_loop()
+
+    async def _sec_get(url: str, timeout: int = 15):
+        # SEC EDGAR 10 req/s 厳守: 各 fetch 後に 0.15s 空ける (ticker 並列 2 × ~6.7req/s 上限)
+        r = await loop.run_in_executor(
+            None, lambda: _httpx_sec.get(url, headers=headers, timeout=timeout, follow_redirects=True)
+        )
+        await asyncio.sleep(0.15)
+        return r
+
+    async def _walk_8k_filings(t: str) -> list[dict]:
+        """EDGAR submissions から items 2.02 の 8-K を filingDate 降順で最大 max_filings 件返す。"""
+        ct_r = await _sec_get("https://www.sec.gov/files/company_tickers.json", timeout=10)
+        cik_str = None
+        for entry in ct_r.json().values():
+            if entry.get("ticker", "").upper() == t:
+                cik_str = str(entry["cik_str"]).zfill(10)
+                break
+        if not cik_str:
+            return []
+        sub_r = await _sec_get(f"https://data.sec.gov/submissions/CIK{cik_str}.json", timeout=10)
+        filings = sub_r.json().get("filings", {}).get("recent", {})
+        forms = filings.get("form", [])
+        accessions = filings.get("accessionNumber", [])
+        dates = filings.get("filingDate", [])
+        items_field = filings.get("items", [])
+        out: list[dict] = []
+        for i, (form, acc) in enumerate(zip(forms, accessions)):
+            if form not in ("8-K", "8-K/A"):
+                continue
+            if "2.02" not in str(items_field[i] if i < len(items_field) else ""):
+                continue
+            out.append({
+                "cik": cik_str,
+                "accession": acc,
+                "filed_at": (dates[i] if i < len(dates) else None),
+            })
+            if len(out) >= max_filings:
+                break
+        return out
+
+    async def _exhibit_text(cik_str: str, acc: str) -> tuple[str | None, str | None]:
+        """8-K index → EX-99.1 URL → text (既存 _fetch_sec_guidance_structured と同 regex)。"""
+        acc_clean = acc.replace("-", "")
+        idx_r = await _sec_get(
+            f"https://www.sec.gov/Archives/edgar/data/{int(cik_str)}/{acc_clean}/{acc}-index.html",
+            timeout=10,
+        )
+        if idx_r.status_code != 200:
+            return None, None
+        ex99_match = (
+            re.search(r'EX-99\.1[^<]*</td>\s*<td[^>]*>\s*<a href="(/Archives/edgar/data/[^"]+\.html?)"', idx_r.text, re.IGNORECASE)
+            or re.search(r'<a href="(/Archives/edgar/data/[^"]+\.html?)"[^>]*>[^<]*EX-99', idx_r.text, re.IGNORECASE)
+            or re.search(r'href="(/Archives/edgar/data/[^"]+ex[-_]?99[^"]*\.html?)"', idx_r.text, re.IGNORECASE)
+        )
+        if not ex99_match:
+            return None, None
+        exhibit_url = f"https://www.sec.gov{ex99_match.group(1)}"
+        htm_r = await _sec_get(exhibit_url, timeout=15)
+        if htm_r.status_code != 200:
+            return None, exhibit_url
+        extractor = _HTMLTextExtractor()
+        extractor.feed(htm_r.text)
+        raw_text = extractor.get_text()
+        return (raw_text if len(raw_text) >= 200 else None), exhibit_url
+
+    sem = asyncio.Semaphore(2)
+
+    async def _one(t: str) -> dict:
+        async with sem:
+            summary = {"ticker": t, "filings": 0, "extracted": 0, "rows": [], "skipped": 0}
+            # AAPL 型 (数値ガイダンス非開示 policy) は LLM cost 節約のため walk 自体を skip
+            if t == "AAPL":
+                summary["policy_skip"] = True
+                return summary
+            filings = await _walk_8k_filings(t)
+            summary["filings"] = len(filings)
+            if dry_run or not filings:
+                summary["filing_list"] = [
+                    {"accession": f["accession"], "filed_at": f["filed_at"]} for f in filings
+                ]
+                return summary
+            # FMP estimates は ticker につき 1 回 (過去〜未来の期末日 list、 filing 日基準解決に使う)
+            est_q = await client.analyst_estimates(t, period="quarter", limit=40)
+            est_a = await client.analyst_estimates(t, period="annual", limit=15)
+            # 古い順に処理 → 同一 period key は新しい filing が最後に upsert され上書き (§10 条件6)
+            for f in sorted(filings, key=lambda x: str(x.get("filed_at") or "")):
+                filed_at = f.get("filed_at")
+                if not filed_at:
+                    summary["skipped"] += 1
+                    continue
+                raw_text, exhibit_url = await _exhibit_text(f["cik"], f["accession"])
+                if not raw_text:
+                    summary["skipped"] += 1
+                    continue
+                result = await extract_guidance(raw_text, source_url=exhibit_url, source_type="8k")
+                if not isinstance(result, dict):
+                    summary["skipped"] += 1
+                    continue
+                summary["extracted"] += 1
+                q_end = guidance_history.resolve_next_period_end(est_q, filed_at, period_type="quarter")
+                fy_end = guidance_history.resolve_next_period_end(est_a, filed_at, period_type="annual")
+                rows = guidance_history.build_guidance_rows(t, result, q_end, fy_end, filed_at=filed_at)
+                summary["rows"].extend(rows)
+            return summary
+
+    results = await asyncio.gather(*[_one(t) for t in universe_list], return_exceptions=True)
+
+    per_ticker: list[dict] = []
+    all_rows: list[dict] = []
+    error_count = 0
+    for t, res in zip(universe_list, results):
+        if isinstance(res, Exception):
+            error_count += 1
+            per_ticker.append({"ticker": t, "error": type(res).__name__})
+        else:
+            rows = res.pop("rows", [])
+            res["row_count"] = len(rows)
+            all_rows.extend(rows)
+            per_ticker.append(res)
+
+    upserted = 0
+    if not dry_run and all_rows:
+        # 古→新の順序を保ったまま 1 行ずつ upsert (同一 batch 内の同キー重複は PostgREST が
+        # 拒否するため、 ON CONFLICT 上書きを filing 順に直列適用する)
+        def _upsert_sequential(rows: list[dict]) -> int:
+            n = 0
+            for row in rows:
+                sb.table("guidance_snapshots").upsert(
+                    row, on_conflict=guidance_history.GUIDANCE_CONFLICT_KEYS
+                ).execute()
+                n += 1
+            return n
+
+        upserted = await asyncio.to_thread(_upsert_sequential, all_rows)
+
+    return {
+        "dry_run": dry_run,
+        "max_filings": max_filings,
+        "universe_size": len(universe_list),
+        "by_source": source_counts,
+        "source_errors": source_errors,
+        "error_count": error_count,
+        "upserted": upserted,
+        "per_ticker": per_ticker,
+    }
+
+
 # --- Screener universe-meta (v159 SPEC_2026-06-03 Part B: sector/mcap client-side filter 供給) ---
 # 純データ endpoint: schema 変更なし・LLM 非経由・景表法/§38 risk なし (中立メタ)。
 # universe fetch (_fetch_market_cap_top_n) と同じ FMP /stable/company-screener を叩き、
