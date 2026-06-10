@@ -544,12 +544,17 @@ export default function PriceLadder({ ticker }) {
               background: 'var(--color-accent)',
             }} />
             <div className="pl-level-inner" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-3, 12px)', padding: 'var(--space-3, 12px) 0', paddingRight: 'var(--space-3, 12px)' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{l.label}</span>
-              <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3, 12px)' }}>
-                {/* round11 D: 当日のミニスパークライン (intraday 5分足、 「生きている価格」 の説得力) */}
-                <span style={{ alignSelf: 'center', display: 'inline-flex' }} aria-hidden="true">
-                  <RowSparkline ticker={ticker} period="1d" width={64} height={18} />
+              {/* round12 (user 採用①+③): 当日スパークライン (round11 D) を価格の隣 → ラベル横へ一体化。
+                  価格側に置くと「どの期間の波形か」 の帰属が浮いて見えた → ラベルと同じ視線グループに移し、
+                  小さな「当日」 キャプションで帰属を明示 (intraday 5分足、 gain/loss 色は実績の本来用途 = §38 OK)。 */}
+              <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)', minWidth: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{l.label}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} aria-hidden="true">
+                  <RowSparkline ticker={ticker} period="1d" width={52} height={16} />
+                  <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', color: 'var(--text-muted)' }}>当日</span>
                 </span>
+              </span>
+              <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3, 12px)' }}>
                 <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{fmtUsd(l.price * pf)}</span>
                 <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', minWidth: 72, textAlign: 'right' }}>
                   {Number.isFinite(sma50Dist) ? `50DMA ${fmtPct(sma50Dist * pf)}` : '基準'}
@@ -591,14 +596,20 @@ export default function PriceLadder({ ticker }) {
               <span className="pl-spine-range" aria-hidden="true" style={{ top: rangeBox.top, height: rangeBox.height }} />
             )}
             {scaleMode ? (
-              // round11 A: 縮尺モード — 行間を実際の価格差に比例 (min4/max110px)。 冠/ゾーンは出さず
-              // 空間そのものに語らせる (本物の数直線)。 前回比行は等間隔モードのみ表示 (図の純度優先)。
+              // round11 A: 縮尺モード — 冠/ゾーンは出さず空間そのものに語らせる (本物の数直線)。
+              // 前回比行は等間隔モードのみ表示 (図の純度優先)。
+              // round12 (user 採用③): 行間 = 価格差の sqrt に比例 + 上限 cap。 旧線形比例は遠い水準
+              // (52週高値/安値等) が行間をほぼ独占し、 近接水準が下限 4px に張り付く「スカスカ」 が真因。
+              // sqrt で遠距離を圧縮しつつ近距離の差は知覚可能に保ち、 合計を SCALE_PX へ正規化した上で
+              // 1 区間の突出を CAP_PX で頭打ちにする。
               (() => {
-                const range = Math.max(1e-9, levels[0].price - levels[levels.length - 1].price);
+                const sqrtGaps = levels.map((l, i) => (i === 0 ? 0 : Math.sqrt(Math.max(0, levels[i - 1].price - l.price))));
+                const totalSqrt = sqrtGaps.reduce((a, b) => a + b, 0) || 1;
                 const SCALE_PX = 340;
+                const CAP_PX = 72;
                 return levels.map((l, i) => {
                   const extra = i === 0 ? null : {
-                    marginTop: Math.round(Math.min(110, Math.max(4, ((levels[i - 1].price - l.price) / range) * SCALE_PX))),
+                    marginTop: Math.round(Math.min(CAP_PX, Math.max(4, (sqrtGaps[i] / totalSqrt) * SCALE_PX))),
                   };
                   return l.isCurrent ? currentRow(l, extra) : levelRow(l, extra);
                 });

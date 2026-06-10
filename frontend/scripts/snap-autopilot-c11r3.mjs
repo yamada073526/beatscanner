@@ -1,6 +1,7 @@
 // snap-autopilot-c11r3.mjs (使い捨て、 §C-11 A/B/D + 価格目安 round3 の authed 一括検証)
 // 検証: ①8Q/Insider accordion title が L2冠 (13/700/uppercase/primary) ②章扉 ③市場評価/④リファレンス
 //   ③過去業績推移 h3 primary/0.08em ④ladder: data-pl-inview arming + Chip サマリー + 冠 L3+gold + 距離% 実値着地
+// round12 追加: ⑤当日 sparkline がラベル横 + 「当日」 caption ⑥縮尺モード margin = sqrt 比例 + cap72/min4
 // visual harness 4 条件遵守: headless / 58s timeout + finally close / .visual のみ / 本番 URL のみ。
 import { chromium } from 'playwright';
 import { mkdirSync } from 'fs';
@@ -103,12 +104,44 @@ try {
       out.distbars = el.querySelectorAll('.pl-distbar').length;
       out.levelRows = el.querySelectorAll('.pl-level').length;
       out.summaryIsDot = !![...el.querySelectorAll('[data-testid="price-ladder-summary"] span')].find((n) => getComputedStyle(n).borderRadius === '50%');
+      // round12 ⑤: 当日 sparkline が現在価格ラベルと同じ左側グループに居て「当日」 caption を持つか
+      const curInner = el.querySelector('[data-testid="price-ladder-row-current"] .pl-level-inner');
+      const leftGroup = curInner ? curInner.children[0] : null;
+      out.sparkInLabelGroup = !!leftGroup?.querySelector('svg');
+      out.sparkTodayCaption = (leftGroup?.textContent || '').includes('当日');
+      out.sparkOnPriceSide = !!(curInner && curInner.children[1]?.querySelector('svg'));
       return out;
     });
     await ladder.screenshot({ path: OUT + 'c11r3-ladder.png' });
   }
 
-  console.log(JSON.stringify({ auth: true, c11, r3, pageErrors: errs }, null, 2));
+  // --- round12 ⑥: 縮尺モード (sqrt + cap) ---
+  let r12scale = null;
+  if (await ladder.count()) {
+    const scaleBtn = ladder.locator('.pl-scale-toggle button', { hasText: '縮尺' });
+    if (await scaleBtn.count()) {
+      await scaleBtn.click();
+      await page.waitForTimeout(700); // margin-top transition 280ms + 余裕
+      r12scale = await ladder.evaluate((el) => {
+        const rows = [...el.querySelectorAll('.pl-level')];
+        const items = rows.map((r) => ({
+          key: (r.getAttribute('data-testid') || '').replace('price-ladder-row-', ''),
+          price: (r.textContent || '').match(/\$([\d,]+\.\d{2})/)?.[1] || null,
+          marginTop: parseFloat(getComputedStyle(r).marginTop),
+        }));
+        const margins = items.slice(1).map((i) => i.marginTop);
+        return {
+          items,
+          capOk: margins.every((m) => m <= 73),
+          minOk: margins.every((m) => m >= 3.5),
+          distinctGaps: new Set(margins.map(Math.round)).size, // sqrt 比例なら gap が複数段階に分布
+        };
+      });
+      await ladder.screenshot({ path: OUT + 'c11r3-ladder-scale.png' });
+    }
+  }
+
+  console.log(JSON.stringify({ auth: true, c11, r3, r12scale, pageErrors: errs }, null, 2));
 } catch (e) {
   console.log(JSON.stringify({ error: String(e?.message || e) }, null, 2));
   process.exitCode = 1;
