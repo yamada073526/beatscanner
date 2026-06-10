@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { fetchAnalyst, fetchTechnical, fetchPriceHistory } from '../api.js';
 import { DIST_DAYS_LABEL_JP, classifyDistDays } from '../lib/distributionDaysLabels.js';
 import Chip from './ui/Chip.jsx';
@@ -45,6 +45,30 @@ const LEVEL_SWATCH = {
   sma200: SMA_200_COLOR,
 };
 const NEUTRAL_SWATCH = 'color-mix(in srgb, var(--text-muted) 60%, transparent)';
+
+// round8 #4 (前回比): per-ticker の「前回見た価格」 を localStorage に記録し、 10 分以上ぶりの再訪で
+// 「前回チェック時から ±$X (±Y%)」 を表示する (過去の実績変化 = 事実記述、 §38 OK。 色も業界ルールの
+// 本来用途 = 実績の上昇緑/下落赤)。 10 分未満の再訪では表示も更新もしない (連続リロードで「前回」 が
+// 消えるのを防ぐ)。
+const LASTSEEN_PREFIX = 'bs:pl:lastseen:';
+function loadLastSeen(t) {
+  try {
+    const r = localStorage.getItem(LASTSEEN_PREFIX + t);
+    if (!r) return null;
+    const p = JSON.parse(r);
+    return Number.isFinite(p?.price) && Number.isFinite(p?.ts) ? p : null;
+  } catch { return null; }
+}
+function saveLastSeen(t, price) {
+  try { localStorage.setItem(LASTSEEN_PREFIX + t, JSON.stringify({ price, ts: Date.now() })); } catch { /* noop */ }
+}
+function relTime(ts) {
+  const m = Math.floor((Date.now() - ts) / 60000);
+  if (m < 60) return `${m}分前`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}時間前`;
+  return `${Math.floor(h / 24)}日前`;
+}
 
 function fmtUsd(v) {
   return Number.isFinite(v) ? `$${v.toFixed(2)}` : '—';
@@ -113,6 +137,27 @@ export default function PriceLadder({ ticker }) {
   // スコアボードがゆっくり回り切る感覚 (行は ~700ms で出揃うので残り 1.3s はカウントだけが動く)。
   const countProgress = useCountUp(ladderInView ? 1 : null, { duration: 2000, digits: 3, forceFromZero: true });
   const pf = ladderInView ? countProgress : 1;
+  // round8 #2 (spine 区間ハイライト): hover 行 ⇄ 現在価格行 の間を spine 上で accent ハイライト。
+  // useInViewOnce の callback ref と DOM 測定用 ref を merge して同じ要素に付ける。
+  const containerRef = useRef(null);
+  const [hoverKey, setHoverKey] = useState(null);
+  const [rangeBox, setRangeBox] = useState(null);
+  useLayoutEffect(() => {
+    if (!hoverKey) { setRangeBox(null); return; }
+    const c = containerRef.current;
+    if (!c) return;
+    const hov = c.querySelector(`[data-testid="price-ladder-row-${hoverKey}"]`);
+    const cur = c.querySelector('[data-testid="price-ladder-row-current"]');
+    if (!hov || !cur || hov === cur) { setRangeBox(null); return; }
+    const cr = c.getBoundingClientRect();
+    const hc = hov.getBoundingClientRect();
+    const uc = cur.getBoundingClientRect();
+    const hMid = hc.top + hc.height / 2 - cr.top;
+    const uMid = uc.top + uc.height / 2 - cr.top;
+    setRangeBox({ top: Math.min(hMid, uMid), height: Math.max(2, Math.abs(uMid - hMid)) });
+  }, [hoverKey]);
+  // round8 #4 (前回比): state はここ、 effect は current (useMemo) 宣言後に置く (TDZ 回避)。
+  const [prevSeen, setPrevSeen] = useState(null);
 
   useEffect(() => {
     if (!ticker) return;
@@ -215,6 +260,19 @@ export default function PriceLadder({ ticker }) {
 
     return { levels: raw, current, sma50Dist, distCount, stateText };
   }, [analyst, technical, priceData]);
+
+  // round8 #4 (前回比): 10 分以上ぶりの再訪なら前回値を表示し、 今回値で更新 (current は上の useMemo 産)。
+  useEffect(() => {
+    setPrevSeen(null); // ticker 切替時に他銘柄の残骸を出さない
+    if (!ticker || !Number.isFinite(current)) return;
+    const prev = loadLastSeen(ticker);
+    if (prev && prev.price > 0 && Date.now() - prev.ts > 10 * 60 * 1000) {
+      setPrevSeen(prev);
+      saveLastSeen(ticker, current);
+    } else if (!prev) {
+      saveLastSeen(ticker, current);
+    }
+  }, [ticker, current]);
 
   // loading: CLS envelope (minHeight) + skeleton
   if (loading && !priceData) {
@@ -333,14 +391,19 @@ export default function PriceLadder({ ticker }) {
               // round4: .pl-level = hover インタラクション scope (行 lift + bg sweep + label/price 増光 +
               //   micro-bar)。 冠 (.pl-row のみ) には効かせない。 §38: 全て中立色、 方向/行動の示唆なし。
               className="pl-row pl-level"
+              // round8 #2: hover 行 ⇄ 現在価格 の spine 区間ハイライト用
+              onMouseEnter={() => setHoverKey(l.key)}
+              onMouseLeave={() => setHoverKey(null)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 gap: 'var(--space-3, 12px)',
                 padding: 'var(--space-2, 8px) 0',
-                // 傘下行は冠 (gold accent + pad 8px) より深いインデントで「冠の庇の下」 を空間で示す
+                // 傘下行は冠 (gold accent + pad 8px) より深いインデントで「冠の庇の下」 を空間で示す。
+                // round7: 右にも余白 (hover 板がテキスト右端で切れず「呼吸」 を持つ)
                 paddingLeft: 'var(--space-5, 20px)',
+                paddingRight: 'var(--space-3, 12px)',
                 ...stagger(),
               }}
             >
@@ -395,6 +458,7 @@ export default function PriceLadder({ ticker }) {
               justifyContent: 'space-between',
               gap: 'var(--space-3, 12px)',
               padding: 'var(--space-3, 12px) 0',
+              paddingRight: 'var(--space-3, 12px)',
               ...stagger(),
             }}
           >
@@ -426,7 +490,8 @@ export default function PriceLadder({ ticker }) {
             // animation が arming される (mount 起点だと画面外で再生済になる真因の修正)。
             // round4: spine を borderLeft → 子要素 .pl-spine に変更 (視界進入時に上→下へ描画される
             // draw アニメ用。 「軸が先に降りて、 目盛りが乗る」 演出順)。
-            ref={ladderRef}
+            // useInViewOnce (callback ref) と DOM 測定用 ref を同じ要素へ merge
+            ref={(el) => { ladderRef(el); containerRef.current = el; }}
             data-pl-inview={ladderInView ? 'true' : undefined}
             style={{
               position: 'relative',
@@ -437,9 +502,33 @@ export default function PriceLadder({ ticker }) {
             }}
           >
             <span className="pl-spine" aria-hidden="true" />
+            {/* round8 #2: hover 行 ⇄ 現在価格 の「距離レンジ」 を spine 上に accent 表示 (数直線メタファ強化、
+                §38: 中立ブランド色 + 距離の事実可視化のみ) */}
+            {rangeBox && (
+              <span className="pl-spine-range" aria-hidden="true" style={{ top: rangeBox.top, height: rangeBox.height }} />
+            )}
             {upper.length > 0 && groupLabel('上値')}
             {upper.map(levelRow)}
             {cur && currentRow(cur)}
+            {/* round8 #4: 前回チェック時からの実績変化 (10 分以上ぶりの再訪時のみ)。 過去事実の記述で
+                色は業界ルール本来用途 (実績の上昇=緑/下落=赤)。 §38 (将来予測) には該当しない。 */}
+            {cur && prevSeen && (() => {
+              const d = current - prevSeen.price;
+              const pct = prevSeen.price > 0 ? (d / prevSeen.price) * 100 : null;
+              const color = d === 0 ? 'var(--text-muted)' : d > 0 ? 'var(--color-gain)' : 'var(--color-loss)';
+              return (
+                <div
+                  className="pl-row"
+                  data-testid="price-ladder-lastseen"
+                  style={{ paddingLeft: 'var(--space-5, 20px)', marginTop: -6, paddingBottom: 'var(--space-1, 4px)', fontSize: 11, color: 'var(--text-muted)', ...stagger() }}
+                >
+                  前回チェック時 ({relTime(prevSeen.ts)} · {fmtUsd(prevSeen.price)}) から{' '}
+                  <span style={{ color, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                    {d >= 0 ? '+' : '−'}${Math.abs(d).toFixed(2)}{pct != null ? ` (${fmtPct(pct)})` : ''}
+                  </span>
+                </div>
+              );
+            })()}
             {lower.length > 0 && groupLabel('下値')}
             {lower.map(levelRow)}
           </div>
