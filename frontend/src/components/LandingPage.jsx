@@ -1362,7 +1362,7 @@ function ChartLinkMockup() {
         fontSize: 10,
         color: 'var(--text-muted)',
       }}>
-        ▲ Beat / ▼ Miss を株価に重ねて表示
+        ↑ Beat / ↓ Miss を株価に重ねて表示
       </div>
       {/* 遡及訴求 */}
       <div style={{

@@ -250,7 +250,7 @@ export default function PortfolioDetailBody({ scopeId = 'all' }) {
               tone={m.pct >= 0 ? 'gain' : 'loss'}
               title={`${m.ticker} は直近で ${m.pct >= 0 ? '+' : ''}${m.pct.toFixed(2)}% 変動`}
             >
-              <span aria-hidden="true">{m.pct >= 0 ? '▲' : '▼'}</span>
+              <span aria-hidden="true">{m.pct >= 0 ? '↑' : '↓'}</span>
               &nbsp;{m.ticker}&nbsp;
               <span style={{ color: m.pct >= 0 ? 'var(--color-gain)' : 'var(--color-loss)', fontWeight: 600 }}>
                 {m.pct >= 0 ? '+' : ''}{m.pct.toFixed(2)}%

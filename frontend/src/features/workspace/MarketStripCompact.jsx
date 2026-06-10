@@ -150,7 +150,7 @@ function IndicatorCellCompact({ item, sparklinePeriod, onSelect }) {
           gap: 2,
         }}
       >
-        {hasPct && (up ? <span aria-hidden>▲</span> : <span aria-hidden>▼</span>)}
+        {hasPct && (up ? <span aria-hidden>↑</span> : <span aria-hidden>↓</span>)}
         {pctLabel}
       </span>
       {/* v62 WS-Phase2: 各 Tier 1 cell に mini sparkline (40×14、1Y デフォルト)

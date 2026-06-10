@@ -1242,7 +1242,7 @@ function BarChartPanel({ trend, operatingMargins }) {
 
         const prev      = i > 0 ? pts[i - 1] : null;
         const yoy       = prev?.value ? ((d.value - prev.value) / Math.abs(prev.value) * 100) : null;
-        const beatLabel = d.beat === true ? '▲BEAT' : d.beat === false ? '▼MISS' : null;
+        const beatLabel = d.beat === true ? '↑BEAT' : d.beat === false ? '↓MISS' : null;
         const beatFill  = d.beat === true ? '#10B981' : '#ef4444';
 
         // ── YoY label placement (常にバー外側上部・BarChartWithMargin と統一) ──
@@ -1325,7 +1325,7 @@ function BarChartPanel({ trend, operatingMargins }) {
             )}
             {tooltip.beatMargin != null && (
               <div style={{ color: tooltip.beat ? '#10B981' : '#ef4444', fontSize: '10px' }}>
-                {tooltip.beat ? '▲BEAT' : '▼MISS'} {tooltip.beatMargin > 0 ? '+' : ''}{tooltip.beatMargin.toFixed(1)}% vs Est
+                {tooltip.beat ? '↑BEAT' : '↓MISS'} {tooltip.beatMargin > 0 ? '+' : ''}{tooltip.beatMargin.toFixed(1)}% vs Est
               </div>
             )}
           </div>
@@ -1492,7 +1492,7 @@ function BarChartWithMargin({ trend, operatingMargins }) {
 
         const prev      = i > 0 ? pts[i - 1] : null;
         const yoy       = prev?.value ? ((d.value - prev.value) / Math.abs(prev.value) * 100) : null;
-        const beatLabel = d.beat === true ? '▲BEAT' : d.beat === false ? '▼MISS' : null;
+        const beatLabel = d.beat === true ? '↑BEAT' : d.beat === false ? '↓MISS' : null;
         const beatFill  = d.beat === true ? '#10B981' : '#ef4444';
 
         // ── YoY label placement (mobile-safe) ──
@@ -1575,7 +1575,7 @@ function BarChartWithMargin({ trend, operatingMargins }) {
             )}
             {tooltip.beatMargin != null && (
               <div style={{ color: tooltip.beat ? '#10B981' : '#ef4444', fontSize: '10px' }}>
-                {tooltip.beat ? '▲BEAT' : '▼MISS'} {tooltip.beatMargin > 0 ? '+' : ''}{tooltip.beatMargin.toFixed(1)}% vs Est
+                {tooltip.beat ? '↑BEAT' : '↓MISS'} {tooltip.beatMargin > 0 ? '+' : ''}{tooltip.beatMargin.toFixed(1)}% vs Est
               </div>
             )}
           </div>
@@ -2660,9 +2660,9 @@ export default function DiagramCard({
               </div>
             )}
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-              <span style={{ color: '#10B981', fontWeight: '700' }}>▲BEAT</span>
+              <span style={{ color: '#10B981', fontWeight: '700' }}>↑BEAT</span>
               {' / '}
-              <span style={{ color: '#ef4444', fontWeight: '700' }}>▼MISS</span>
+              <span style={{ color: '#ef4444', fontWeight: '700' }}>↓MISS</span>
               {' = Wall Street アナリスト予想比'}
               {data.consensusSource && (
                 <span style={{
@@ -2725,7 +2725,7 @@ export default function DiagramCard({
                       {/* Beat/Miss */}
                       {beatColor && latest.beatMargin != null && (
                         <div style={{ fontSize: '11px', fontWeight: '700', color: beatColor, marginTop: '4px' }}>
-                          {latest.beat ? '▲BEAT' : '▼MISS'} {latest.beatMargin > 0 ? '+' : ''}{latest.beatMargin.toFixed(1)}%
+                          {latest.beat ? '↑BEAT' : '↓MISS'} {latest.beatMargin > 0 ? '+' : ''}{latest.beatMargin.toFixed(1)}%
                         </div>
                       )}
                     </div>

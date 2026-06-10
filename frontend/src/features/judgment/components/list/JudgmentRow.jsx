@@ -221,7 +221,7 @@ export default function JudgmentRow({ item, selected, onClick, metaMode = 'condi
             }}
             title="1 年トレンド (期初比)"
           >
-            {`1Y ${trend1yPct > 0 ? '▲' : trend1yPct < 0 ? '▼' : '—'}${Math.abs(trend1yPct).toFixed(1)}%`}
+            {`1Y ${trend1yPct > 0 ? '↑' : trend1yPct < 0 ? '↓' : '—'}${Math.abs(trend1yPct).toFixed(1)}%`}
           </span>
         )}
       </div>

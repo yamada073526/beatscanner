@@ -357,7 +357,7 @@ export default function MoversCard({ onSelect }) {
                 background: moversTab === 'gainers' ? 'rgba(34, 197, 94, 0.14)' : 'var(--bg-secondary)',
                 color: moversTab === 'gainers' ? 'var(--color-gain)' : 'var(--text-muted)',
               }}
-            >▲ 急騰 Top 5</button>
+            >↑ 急騰 Top 5</button>
             <button
               onClick={() => setMoversTab('losers')}
               style={{
@@ -367,7 +367,7 @@ export default function MoversCard({ onSelect }) {
                 background: moversTab === 'losers' ? 'rgba(248, 113, 113, 0.14)' : 'var(--bg-secondary)',
                 color: moversTab === 'losers' ? 'var(--color-loss)' : 'var(--text-muted)',
               }}
-            >▼ 急落 Top 5</button>
+            >↓ 急落 Top 5</button>
           </div>
 
           {/* 選択中タブのリスト */}
@@ -400,7 +400,7 @@ export default function MoversCard({ onSelect }) {
         >
           {/* 左列: gainers */}
           <div ref={gainersRef}>
-            <div style={{ ...labelBase, background: "rgba(34, 197, 94, 0.14)", color: "var(--color-gain)" }}>▲ 急騰 Top 5</div>
+            <div style={{ ...labelBase, background: "rgba(34, 197, 94, 0.14)", color: "var(--color-gain)" }}>↑ 急騰 Top 5</div>
             {isLoading
               ? Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={`gs-${i}`} />)
               : gainers.map((m, i) => <Card key={m.ticker} m={m} onSelect={onSelect} onArticleClick={openArticle} index={i} />)
@@ -410,7 +410,7 @@ export default function MoversCard({ onSelect }) {
 
           {/* 右列: losers */}
           <div ref={losersRef}>
-            <div style={{ ...labelBase, background: "rgba(248, 113, 113, 0.14)", color: "var(--color-loss)" }}>▼ 急落 Top 5</div>
+            <div style={{ ...labelBase, background: "rgba(248, 113, 113, 0.14)", color: "var(--color-loss)" }}>↓ 急落 Top 5</div>
             {isLoading
               ? Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={`ls-${i}`} />)
               : losers.map((m, i) => <Card key={m.ticker} m={m} onSelect={onSelect} onArticleClick={openArticle} index={i} />)

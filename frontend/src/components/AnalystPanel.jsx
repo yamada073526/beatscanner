@@ -188,7 +188,7 @@ function RecommendationStackedBar({ distribution, inView }) {
 function MomentumKpi({ recentChanges, ratingConsensus }) {
   const { upgrades = 0, downgrades = 0, window_days = 90 } = recentChanges || {};
   const net = upgrades - downgrades;
-  const arrow = net > 0 ? '▲' : net < 0 ? '▼' : '—';
+  const arrow = net > 0 ? '↑' : net < 0 ? '↓' : '—';
   const tone = net > 0 ? 'gain' : net < 0 ? 'loss' : 'muted';
   return (
     <div className="anp-kpi">

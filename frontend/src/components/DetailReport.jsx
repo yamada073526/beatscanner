@@ -214,7 +214,7 @@ function buildDownloadSVG(data, ticker) {
         const bx = px + BAR_X + i * spacing + (spacing - barW) / 2;
         const by = axisY - barH;
         const fill = i === tdata.length - 1 ? '#38BDF8' : '#cbd5e1';
-        const beatLabel = d.beat === true ? '▲BEAT' : d.beat === false ? '▼MISS' : '';
+        const beatLabel = d.beat === true ? '↑BEAT' : d.beat === false ? '↓MISS' : '';
         const beatFill = d.beat === true ? '#22c55e' : '#ef4444';
         parts.push(`
           <rect x="${bx}" y="${by}" width="${barW}" height="${barH}" rx="3" fill="${fill}"/>

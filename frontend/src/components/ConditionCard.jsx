@@ -41,7 +41,7 @@ export function DeltaRow({ index, series, isPro, onUpgradeClick }) {
         <span className="delta-locked-label">{label}</span>
         <span className="delta-locked-value">
           {placeholder}
-          <span style={{ opacity: 0.7 }}>▲</span>
+          <span style={{ opacity: 0.7 }}>↑</span>
         </span>
         <span className="delta-locked-lock">PRO</span>
       </div>
@@ -61,7 +61,7 @@ export function DeltaRow({ index, series, isPro, onUpgradeClick }) {
       >
         {positive ? '+' : ''}{delta.toFixed(1)}%
         <span className="ml-1 font-normal opacity-70">
-          {positive ? '▲' : '▼'}
+          {positive ? '↑' : '↓'}
         </span>
       </span>
     </div>

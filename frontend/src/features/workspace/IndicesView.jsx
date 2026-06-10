@@ -1398,7 +1398,7 @@ function SPYAlphaChip({ alphaPct }) {
       size="sm"
       variant="display"
       tone={tone}
-      icon={<span aria-hidden="true" style={{ color, fontSize: 10 }}>{up ? '▲' : '▼'}</span>}
+      icon={<span aria-hidden="true" style={{ color, fontSize: 10 }}>{up ? '↑' : '↓'}</span>}
     >
       vs SPY (1Y)&nbsp;
       <span style={{ color, fontWeight: 600, marginLeft: 4 }}>
@@ -1514,7 +1514,7 @@ function HoldingRowCompact({ item, onClick, displayCurrency = 'USD', forexRate =
       : 'var(--text-primary)';
   // v71 Phase 3-d round 8 (4 体合議 / per-ticker P/L MVP):
   // 金額が primary (Robinhood 流)、 % は sub muted、 2 行 stack で右寄せ。
-  // ▲/▼ glyph + 緑/赤 token の色覚二重冗長性。 a11y は aria-label で意味補完。
+  // ↑/↓ glyph + 緑/赤 token の色覚二重冗長性。 a11y は aria-label で意味補完。
   const pnlVisible = Number.isFinite(pnl) && Math.abs(pnl) > 0.005;
   const pnlAriaLabel = pnlVisible
     ? `含み損益 ${pnl >= 0 ? 'プラス' : 'マイナス'} ${Math.abs(pnl).toFixed(0)} ドル${
@@ -1543,7 +1543,7 @@ function HoldingRowCompact({ item, onClick, displayCurrency = 'USD', forexRate =
           : '—'}
       </span>
       {/* v71 Phase 3-d round 8: per-ticker P/L 列 (4 体合議 / 4/4 一致)。
-          金額 (primary 12px) + % (sub 10px muted) の 2 行 stack、 右寄せ、 ▲▼ glyph。
+          金額 (primary 12px) + % (sub 10px muted) の 2 行 stack、 右寄せ、 ↑↓ glyph。
           Robinhood iOS 業界標準。 「自分の目利き力」 を可視化 (user proposal)。 */}
       <span
         aria-label={pnlAriaLabel}
@@ -1559,7 +1559,7 @@ function HoldingRowCompact({ item, onClick, displayCurrency = 'USD', forexRate =
         {pnlVisible ? (
           <>
             <span style={{ fontSize: 12, fontWeight: 600, color: valueColor }}>
-              <span aria-hidden="true">{pnl >= 0 ? '▲' : '▼'}</span>
+              <span aria-hidden="true">{pnl >= 0 ? '↑' : '↓'}</span>
               {' '}
               {formatSignedCompactCurrency(pnl, displayCurrency, forexRate)}
             </span>
@@ -2751,7 +2751,7 @@ function IndexHero({ ticker, label, desc }) {
         )}
         {hasChange && (
           <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 3, fontSize: 14, fontWeight: 700, color: changeColor, fontVariantNumeric: 'tabular-nums' }}>
-            <span aria-hidden style={{ fontSize: 11 }}>{up ? '▲' : '▼'}</span>
+            <span aria-hidden style={{ fontSize: 11 }}>{up ? '↑' : '↓'}</span>
             {up ? '+' : ''}{changePct.toFixed(2)}%
           </span>
         )}

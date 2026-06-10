@@ -16,7 +16,7 @@ function formatPrice(item) {
 
 function Arrow({ pct }) {
   if (pct === null || pct === undefined) return null;
-  return pct >= 0 ? <span aria-hidden>▲</span> : <span aria-hidden>▼</span>;
+  return pct >= 0 ? <span aria-hidden>↑</span> : <span aria-hidden>↓</span>;
 }
 
 // セル: ラベル / 価格 / 変動率を縦中央寄せで均等配置

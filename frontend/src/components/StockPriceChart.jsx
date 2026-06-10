@@ -147,8 +147,8 @@ const CHART_CURSOR = 'rgba(148, 163, 184, 0.5)';
 const CHART_PRICE  = 'rgb(56, 189, 248)'; // brand cyan (sky-400)
 
 const VERDICT_LABEL = {
-  beat:    '▲ Beat',
-  miss:    '▼ Miss',
+  beat:    '↑ Beat',
+  miss:    '↓ Miss',
   inline:  '▬ In-line',
   unknown: '— 不明',
 };
@@ -180,7 +180,7 @@ function quarterLabel(dateStr) {
 
 /** Marker label shown above the reference line. */
 function surpriseLabel(e) {
-  const sym = e.verdict === 'beat' ? '▲' : e.verdict === 'miss' ? '▼' : '▬';
+  const sym = e.verdict === 'beat' ? '↑' : e.verdict === 'miss' ? '↓' : '▬';
   if (e.surprise_pct === null || e.surprise_pct === undefined) return sym;
   const sign = e.surprise_pct > 0 ? '+' : '';
   return `${sym} ${sign}${e.surprise_pct}%`;
@@ -1688,7 +1688,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                     決算判定
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <span className="font-bold" style={{ color: VERDICT_COLOR.beat }}>▲</span>
+                    <span className="font-bold" style={{ color: VERDICT_COLOR.beat }}>↑</span>
                     Beat（+3%超）
                   </span>
                   <span className="flex items-center gap-1.5">
@@ -1696,7 +1696,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                     In-line（±3%以内）
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <span className="font-bold" style={{ color: VERDICT_COLOR.miss }}>▼</span>
+                    <span className="font-bold" style={{ color: VERDICT_COLOR.miss }}>↓</span>
                     Miss（−3%超）
                   </span>
                   <span ref={chartInfoRef} className="ml-auto" style={{ position: 'relative' }}>

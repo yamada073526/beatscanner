@@ -6,7 +6,7 @@
  *
  * 6 体合議 (2026-06-01) verdict 反映:
  *   - §38: verdict ラベル (強気/弱気/視界良好) を一切出さない。来期 YoY は **色なし** (緑/赤を塗らない、
- *     将来への着色 = 我々の評価 = 断定的判断とみなされうる)。方向は ▲▼ + 中立トーンの予測棒のみ。
+ *     将来への着色 = 我々の評価 = 断定的判断とみなされうる)。方向は ↑↓ + 中立トーンの予測棒のみ (v200 で ▲▼→↑↓)。
  *   - backend (guidance/basic の `forward`) の数値・flag を **読むだけ** (frontend 再計算禁止、
  *     売上ミスマッチガードすり抜け防止 = Anthropic/frontend verdict)。
  *   - §5 免責文言を常時表示 + 出典 (FMP analyst-estimates) + アナリスト数を明示 (citation)。
@@ -15,7 +15,7 @@
  * 案B v172 ガイダンスサプライズ (会社ガイダンス vs consensus、 じっちゃま速報の主役 = 来期 EPS):
  *   - 会社 8-K ガイダンス (q_eps/q_revenue) は SEC fetch (cold 5-15s) を含むため guidance/basic を律速しない。
  *     → ticker 指定時に `?with_guidance=1` を **非ブロック lazy fetch** し、surprise 行を後追い描画。
- *   - §38: above/inline/below を **色なし** ▲—▼ + 静的 dict (LLM narration ゼロ)。差分 % は出さない。
+ *   - §38: above/inline/below を **色なし** ↑—↓ + 静的 dict (LLM narration ゼロ)。差分 % は出さない。
  *   - 会社 guidance basis=GAAP は consensus(non-GAAP baseline) と基準ミスマッチで backend が unknown 抑止済。
  *   - 金融セクターの売上比較は backend で抑止 (総収益 vs 純収益ミスマッチ、 v146 gate 流用)。
  *
@@ -212,7 +212,7 @@ function GuidanceSurpriseRow({ state, companyLow, companyHigh, consensus, fmt, f
       data-testid="guidance-surprise-row"
       style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--border)', display: 'flex', alignItems: 'baseline', gap: 6 }}
     >
-      {/* ▲—▼ は方向記号のみ (色なし: neutral ink、 緑/赤/amber/cyan を将来予測に塗らない = §38) */}
+      {/* ↑—↓ は方向記号のみ (色なし: neutral ink、 緑/赤/amber/cyan を将来予測に塗らない = §38) */}
       <span aria-hidden style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{meta.sym}</span>
       <span style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.45 }}>
         {meta.label}

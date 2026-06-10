@@ -486,7 +486,7 @@ export default function PortfolioHistoryChart({ lots = [], exDivByTicker = null 
               title={`Alpha = あなたのリターン − 同期間 S&P500 ETF のリターン\nあなた: ${fmtSignedPct(spyAlpha.portfolioPct)} / SPY: ${fmtSignedPct(spyAlpha.spyPct)}\nプラスなら市場平均より優位、 マイナスなら劣位`}
             >
               <span className="bs-spy-badge-arrow">
-                {spyAlpha.alphaPct > 0.5 ? '▲' : spyAlpha.alphaPct < -0.5 ? '▼' : '＝'}
+                {spyAlpha.alphaPct > 0.5 ? '↑' : spyAlpha.alphaPct < -0.5 ? '↓' : '＝'}
               </span>
               vs SPY ({period.toUpperCase()}) {fmtSignedPct(spyAlpha.alphaPct)}
               <span className="bs-spy-badge-suffix"> α</span>
