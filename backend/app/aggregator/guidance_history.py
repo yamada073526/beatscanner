@@ -215,3 +215,179 @@ def build_guidance_rows(
     _one_row("q_eps", "q_revenue", q_period_end, "quarter")
     _one_row("fy_eps", "fy_revenue", fy_period_end, "annual")
     return rows
+
+
+# ─── Sprint 3: 比較判定 (前回会社ガイダンス比 raised/maintained/lowered + 発表時比) ──────────
+#
+# I/O (Supabase からの row fetch / pit snapshot 選択 SQL) は呼び出し側 (main.py) が行い、
+# 本層は row dict を受け取る純粋関数のみ (consensus_history.build_drift_result と同構造)。
+#
+# §38: raised/lowered は「会社が自らガイダンス数値を変更した客観的事実」 の分類のみ。
+# 「上方修正 = 買い」 等の action 示唆へ変換してはならない (narration は frontend 静的 dict)。
+
+# §10 条件13 (金融): tolerance = 相対 ±2% かつ 絶対額フロア の AND。
+# EPS は ±$0.01、 売上は ±$1M (丸め誤差 / 表記揺れを「修正」 と誤検出しない下限)。
+_REVISION_REL_TOL = 0.02
+_EPS_ABS_FLOOR = 0.01
+_REV_ABS_FLOOR = 1_000_000.0
+
+
+def _mid(low: Any, high: Any) -> float | None:
+    lo, hi = _to_num(low), _to_num(high)
+    if lo is None or hi is None:
+        return None
+    return (lo + hi) / 2.0
+
+
+def _classify_metric_revision(
+    prev_low: Any, prev_high: Any, prev_basis: str | None,
+    cur_low: Any, cur_high: Any, cur_basis: str | None,
+    abs_floor: float,
+) -> dict:
+    """単一 metric (eps or rev) の前回比修正判定。
+
+    Returns: {"state": "raised"|"maintained"|"lowered"|"unknown",
+              "edges": "both"|"low_only"|"high_only"|None}  (edges = 両端移動の補助 flag、条件13)
+    判定不能 (basis 不一致 / 値欠落) は state="unknown" (方向を捏造しない、条件3)。
+    """
+    prev_mid = _mid(prev_low, prev_high)
+    cur_mid = _mid(cur_low, cur_high)
+    if prev_mid is None or cur_mid is None:
+        return {"state": "unknown", "edges": None}
+    # basis 不一致 (non_gaap → gaap 等) は見かけ修正の artifact → unknown (条件3)。
+    # 片方 None (8-K に basis 記載なし) は同一 basis 継続とみなす (8-K の慣行)。
+    if prev_basis and cur_basis and prev_basis != cur_basis:
+        return {"state": "unknown", "edges": None}
+
+    delta = cur_mid - prev_mid
+    threshold = max(abs(prev_mid) * _REVISION_REL_TOL, abs_floor)
+    if abs(delta) <= threshold:
+        state = "maintained"
+    else:
+        state = "raised" if delta > 0 else "lowered"
+
+    # 両端移動の補助 flag (mid 据え置きでも下限引き上げ = de-risk を拾う材料、表示は tooltip 想定)
+    edges = None
+    pl, ph, cl, ch = _to_num(prev_low), _to_num(prev_high), _to_num(cur_low), _to_num(cur_high)
+    if None not in (pl, ph, cl, ch):
+        low_up, high_up = cl > pl, ch > ph
+        low_down, high_down = cl < pl, ch < ph
+        if (low_up and high_up) or (low_down and high_down):
+            edges = "both"
+        elif low_up or low_down:
+            edges = "low_only"
+        elif high_up or high_down:
+            edges = "high_only"
+    return {"state": state, "edges": edges}
+
+
+def classify_guidance_revision(rows: list[dict] | None) -> dict:
+    """同一 (ticker, period_end_date, period_type) の per-filing rows から前回比修正判定を組む純粋関数。
+
+    Args:
+        rows: guidance_snapshots の同一会計期 rows (順不同可)。 filed_at 昇順に並べ、
+              **filed_at が distinct な最新 2 filing** を比較する (同日 filing = amend/再抽出は
+              新しい captured_at を採用し比較ペアにしない)。
+
+    Returns:
+        {
+          "eps": {"state": ..., "edges": ...}, "rev": {"state": ..., "edges": ...},
+          "prev_filed_at": str|None, "latest_filed_at": str|None,
+          "latest_source_url": str|None,
+          "available": bool,   # False = filing が 2 点未満 (蓄積中 / backfill 未完) → 判定行を出さない
+        }
+    """
+    empty = {
+        "eps": {"state": "unknown", "edges": None},
+        "rev": {"state": "unknown", "edges": None},
+        "prev_filed_at": None, "latest_filed_at": None, "latest_source_url": None,
+        "available": False,
+    }
+    if not isinstance(rows, list):
+        return empty
+    dated = [r for r in rows if isinstance(r, dict) and r.get("filed_at")]
+    if len(dated) < 2:
+        return empty
+    # filed_at ごとに最新 captured_at の row を採用 (同日 re-extract / amend の重複を畳む)
+    by_date: dict[str, dict] = {}
+    for r in dated:
+        d = str(r["filed_at"])[:10]
+        prev = by_date.get(d)
+        if prev is None or str(r.get("captured_at") or "") > str(prev.get("captured_at") or ""):
+            by_date[d] = r
+    if len(by_date) < 2:
+        return empty
+    ordered_dates = sorted(by_date.keys())
+    prev_row = by_date[ordered_dates[-2]]
+    latest_row = by_date[ordered_dates[-1]]
+
+    return {
+        "eps": _classify_metric_revision(
+            prev_row.get("eps_low"), prev_row.get("eps_high"), prev_row.get("eps_basis"),
+            latest_row.get("eps_low"), latest_row.get("eps_high"), latest_row.get("eps_basis"),
+            _EPS_ABS_FLOOR,
+        ),
+        "rev": _classify_metric_revision(
+            prev_row.get("rev_low"), prev_row.get("rev_high"), prev_row.get("rev_basis"),
+            latest_row.get("rev_low"), latest_row.get("rev_high"), latest_row.get("rev_basis"),
+            _REV_ABS_FLOOR,
+        ),
+        "prev_filed_at": ordered_dates[-2],
+        "latest_filed_at": ordered_dates[-1],
+        "latest_source_url": latest_row.get("source_url"),
+        "available": True,
+    }
+
+
+def classify_pit_consensus(guidance_row: dict | None, pit_snapshot: dict | None) -> dict:
+    """発表時点コンセンサス比サプライズ判定 (純粋関数)。
+
+    Args:
+        guidance_row: 当該会計期の最新ガイダンス row (filed_at 必須)。
+        pit_snapshot: consensus_snapshots の **発表日 (filed_at) より前で最新** の snapshot row
+                      (選択 SQL は main.py 側。 §10 条件5: snapshot_date < filed_at、未来側絶対不可)。
+
+    Returns:
+        {"eps": "above"|"inline"|"below"|"unknown", "rev": ...,
+         "pit_snapshot_date": str|None, "available": bool,
+         "stale": bool}  # snapshot が発表日から 10 日超古い (≈7営業日、§10 条件5 の降格 flag)
+    """
+    empty = {"eps": "unknown", "rev": "unknown", "pit_snapshot_date": None, "available": False, "stale": False}
+    if not isinstance(guidance_row, dict) or not isinstance(pit_snapshot, dict):
+        return empty
+    filed = str(guidance_row.get("filed_at") or "")[:10]
+    snap_date = str(pit_snapshot.get("snapshot_date") or "")[:10]
+    # 事前条件の防衛: 未来側 snapshot を絶対に採らない (§10 条件5、SQL 側 bug の二重防御)
+    if not filed or not snap_date or snap_date >= filed:
+        return empty
+
+    # 既存 classify_guidance_vs_consensus (visualizer.calc、 tolerance 3%) を流用して
+    # 現コンセンサス比 (forward block) と同じ分類規律にする (1:1 mirror)。
+    from ..visualizer.calc import classify_guidance_vs_consensus
+
+    eps_mid = _mid(guidance_row.get("eps_low"), guidance_row.get("eps_high"))
+    rev_mid = _mid(guidance_row.get("rev_low"), guidance_row.get("rev_high"))
+    pit_eps = _to_num(pit_snapshot.get("estimated_eps_avg"))
+    pit_rev = _to_num(pit_snapshot.get("estimated_revenue_avg"))
+
+    eps_state = classify_guidance_vs_consensus(eps_mid, pit_eps) if (eps_mid is not None and pit_eps is not None) else "unknown"
+    rev_state = classify_guidance_vs_consensus(rev_mid, pit_rev) if (rev_mid is not None and pit_rev is not None) else "unknown"
+    available = eps_state != "unknown" or rev_state != "unknown"
+    # stale 降格 (§10 条件5): snapshot が発表日から 10 日超 (≈7営業日) 古い場合は「発表時」 と
+    # 呼ぶには遠すぎる → flag を立て frontend は判定記号を弱める/出さない。
+    stale = False
+    try:
+        from datetime import date
+
+        y1, m1, d1 = (int(x) for x in snap_date.split("-"))
+        y2, m2, d2 = (int(x) for x in filed.split("-"))
+        stale = (date(y2, m2, d2) - date(y1, m1, d1)).days > 10
+    except (ValueError, TypeError):
+        stale = True
+    return {
+        "eps": eps_state,
+        "rev": rev_state,
+        "pit_snapshot_date": snap_date if available else None,
+        "available": available,
+        "stale": stale,
+    }

@@ -6983,6 +6983,14 @@ async def guidance_basic(ticker: str, request: Request, with_guidance: bool = Fa
             print(f"[WARN] forward outlook compute failed for {ticker}: {_fwd_e}")
             forward = None
 
+        # ガイダンス履歴基盤 Sprint 3: 前回比修正判定 + 発表時比サプライズを forward に同梱
+        # (点 lookup 2 query / ticker、 response は既存 6h cache に同乗。 失敗は graceful skip)
+        if forward:
+            try:
+                await asyncio.to_thread(_enrich_forward_guidance_history, ticker.upper(), forward)
+            except Exception as _gh_e:
+                print(f"[WARN] guidance history enrich failed for {ticker}: {_gh_e}")
+
         resp = {
             "ticker": ticker.upper(),
             "fiscal_period": fiscal_period,
@@ -16782,6 +16790,63 @@ async def cron_consensus_snapshot(
         "override": bool(override_tickers),
         "dry_run": False,
     }
+
+
+def _enrich_forward_guidance_history(ticker: str, forward: dict) -> None:
+    """ガイダンス履歴基盤 Sprint 3: forward.next_q / next_fy に
+    ①前回会社ガイダンス比 (guidance_revision: raised/maintained/lowered、 §10 条件4 = 同一会計期のみ)
+    ②発表時点コンセンサス比 (guidance_pit_consensus: above/inline/below、 §10 条件5)
+    を同梱する (in-place mutate)。
+
+    データ源: guidance_snapshots (per-filing 履歴) + consensus_snapshots (発表日以前で最新 —
+    SQL の .lt() で「snapshot_date < filed_at」 を強制 + 純粋関数側でも二重防御、未来側絶対不可)。
+    sb 不在 / 例外 / 蓄積不足は available=False (graceful、 判定を捏造しない)。
+    分類は aggregator/guidance_history.py の純粋関数 (LLM 不使用、 §38 は事実分類のみ)。
+    """
+    sb = _get_supabase_service()
+    if sb is None or not isinstance(forward, dict):
+        return
+    from .aggregator import guidance_history
+
+    for key, ptype in (("next_q", "quarter"), ("next_fy", "annual")):
+        blk = forward.get(key)
+        if not isinstance(blk, dict):
+            continue
+        ped = blk.get("period_end_date")
+        if not ped:
+            continue
+        try:
+            res = (
+                sb.table("guidance_snapshots").select(
+                    "filed_at,captured_at,eps_low,eps_high,eps_basis,rev_low,rev_high,rev_basis,source_url"
+                )
+                .eq("ticker", ticker).eq("period_end_date", ped).eq("period_type", ptype)
+                .execute()
+            )
+            rows = res.data or []
+        except Exception:
+            rows = []
+        blk["guidance_revision"] = guidance_history.classify_guidance_revision(rows)
+
+        pit = {"eps": "unknown", "rev": "unknown", "pit_snapshot_date": None, "available": False, "stale": False}
+        dated = [r for r in rows if r.get("filed_at")]
+        if dated:
+            latest = max(dated, key=lambda r: (str(r.get("filed_at")), str(r.get("captured_at") or "")))
+            try:
+                pres = (
+                    sb.table("consensus_snapshots").select(
+                        "snapshot_date,estimated_eps_avg,estimated_revenue_avg"
+                    )
+                    .eq("ticker", ticker).eq("fiscal_date", ped).eq("period_type", ptype)
+                    .lt("snapshot_date", str(latest.get("filed_at"))[:10])
+                    .order("snapshot_date", desc=True).limit(1).execute()
+                )
+                prow = (pres.data or [None])[0]
+            except Exception:
+                prow = None
+            if prow:
+                pit = guidance_history.classify_pit_consensus(latest, prow)
+        blk["guidance_pit_consensus"] = pit
 
 
 @app.post("/api/cron/guidance-snapshot")
