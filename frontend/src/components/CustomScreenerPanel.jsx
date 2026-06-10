@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { ChartCandlestick, Crown, TrendingUp, SlidersHorizontal, ChevronDown, BarChart2, Lock } from 'lucide-react';
 import { fetchCustomScreener, fetchCupHandleScanner, fetchRsScanner, fetchUniverseMeta, fetchCanslimScanner, fetchCanslimRows } from '../api.js';
 import Chip, { ChipGroup } from './ui/Chip.jsx';
@@ -305,6 +305,13 @@ const CANSLIM_PILLARS = [
   ] },
 ];
 
+// S5b funda (3体合議 qa mitigation): nightly populate 未完 / DB に値が無い銘柄は
+// 「データ取得中」×6 行の壁 (Trust Cliff) を出さず、バッジ行ごと非表示にするための判定。
+const CANSLIM_VALUE_KEYS = ['eps_yoy_pct', 'eps_cagr_3y', 'roe', 'near_high_pct_scaled', 'buyback_yield_pct', 'volume_surge_pct'];
+function hasAnyCanslimValue(canslim) {
+  return !!canslim && CANSLIM_VALUE_KEYS.some((k) => Number.isFinite(Number(canslim[k])));
+}
+
 // 数値 → 表示文字列 (§38/§5 clean、純データ表記)。
 function fmtCanslimValue(v, fmt) {
   const n = Number(v);
@@ -457,6 +464,16 @@ function ResultCard({ item, onSelect }) {
       <div className={`px-3 pb-3 ${expanded ? 'block' : 'hidden sm:block'}`}>
         <ConditionDots conditions={item.conditions} showLabels />
       </div>
+
+      {/* S5b funda (3体合議 2026-06-10: ui C′/frontend C/qa D→C 条件付 OK の収束案):
+          C/A/N/S バッジは PASS + near-miss (4/5) のみ常時表示 (signal 限定、minimalism_over_additive)。
+          ≤3/5 は出さない。populate 未完 (全値 null) は行ごと非表示 (qa の「データ取得中×6 の壁」 mitigation)。
+          oneill と同じ border-t 分離 idiom。 */}
+      {item.canslim && passCount >= 4 && hasAnyCanslimValue(item.canslim) && (
+        <div className={`border-t border-[var(--border)] px-3 pt-2 pb-3 ${expanded ? 'block' : 'hidden sm:block'}`}>
+          <CanslimBadgeRow canslim={item.canslim} />
+        </div>
+      )}
     </div>
   );
 }
@@ -1235,6 +1252,10 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
   // v159 SPEC Part B: universe-meta (sector/mcap) を起動時 1 回 fetch (module cache 経由、 24h backend cache)。
   const [universeMeta, setUniverseMeta] = useState(_universeMetaCache);
 
+  // S5b funda (3体合議 frontend 必須): run() 連打時に古い rows fetch が新 data を上書きする
+  // stale merge を runId で遮断。
+  const runIdRef = useRef(0);
+
   async function run() {
     setPhase('loading');
     setError(null);
@@ -1242,10 +1263,32 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
     setRsData(null);
     setOneillData(null);
     setActiveFilter(null);
+    const runId = ++runIdRef.current;
     try {
       const result = await fetchCustomScreener();
       setData(result);
       setPhase('done');
+      // S5b funda (3体合議 C 案): C/A/N/S rows を非ブロックで後乗せ merge
+      // (await 直列だと初回結果の体感が rows fetch 分遅れる。 feedback_price_fetch_merge_pattern idiom)。
+      // 失敗 / DB 不在 ticker は canslim 未付与のまま = バッジ非表示で従来表示 (graceful)。
+      const allTickers = [...(result.passing || []), ...(result.failing || [])]
+        .map((it) => it.ticker)
+        .filter(Boolean);
+      if (allTickers.length > 0) {
+        fetchCanslimRows(allTickers)
+          .then((cr) => {
+            if (runId !== runIdRef.current || !cr?.rows) return;
+            setData((prev) => {
+              if (!prev) return prev;
+              const attach = (arr) => (arr || []).map((it) => {
+                const row = cr.rows?.[(it.ticker || '').toUpperCase()];
+                return row ? { ...it, canslim: row } : it;
+              });
+              return { ...prev, passing: attach(prev.passing), failing: attach(prev.failing), canslim_rows_as_of: cr.as_of || null };
+            });
+          })
+          .catch(() => { /* graceful: バッジ非表示のまま */ });
+      }
     } catch (e) {
       setError(e.message);
       setPhase('error');
@@ -1627,6 +1670,13 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
             {['①CF率≥15%', '②EPS成長', '③CFPS成長', '④売上成長', '⑤CFPS>EPS'].map((l, i) => (
               <span key={i}>{l}</span>
             ))}
+            {/* S5b funda: C/A/N/S バッジの鮮度を一覧で 1 回だけ明示 (CLAUDE.md 動的データ最終更新ルール、
+                per-card 重複は noise のため legend 行に集約)。 rows 未 merge / as_of null は非表示。 */}
+            {data?.canslim_rows_as_of && (
+              <span className="ml-auto" data-testid="canslim-rows-asof">
+                C/A/N/S 指標: {daysAgoLabel(data.canslim_rows_as_of)}時点
+              </span>
+            )}
           </div>
 
           {/* A-5 (SPEC 2026-06-04): PASS 銘柄を「ご褒美」 章扉化 (Crown gold + text-h2 見出し + 件数 fw700 stat)。
