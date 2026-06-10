@@ -32,8 +32,12 @@ import re
 from typing import Any
 
 # guidance_snapshots テーブルの upsert 競合キー (migration の unique 制約と 1:1)
-# 6体合議 §10 条件6: 「期ごと最新 1 行」 model (snapshot_date を含めない idempotent upsert)
-GUIDANCE_CONFLICT_KEYS = "ticker,period_end_date,period_type"
+# v2 (Sprint 2 検証で設計修正): 「期ごと最新 1 行」 では FY ガイダンスの四半期ごと更新で前回値が
+# 上書き消失し raised/lowered (同一会計期の前回比、 §10 条件4) が成立しない → **per-filing 履歴保持**
+# (source_accession を key に含める、 Anthropic reviewer 条件3 の原案) に変更。
+# 同一 filing の再抽出は同キー上書き = idempotent。 「最新ガイダンス」 は filed_at/captured_at の
+# 降順で選ぶ (Sprint 3)。 amend 8-K/A は別 accession の新行になる (Sprint 3 比較で supersede 扱い)。
+GUIDANCE_CONFLICT_KEYS = "ticker,period_end_date,period_type,source_accession"
 
 # 対象会計期解決の forward 窓 (forward block と同思想: 四半期は ~200 日 / 通期は 500 日 guard)
 _QUARTER_MAX_DAYS = 200
@@ -179,7 +183,9 @@ def build_guidance_rows(
     if not isinstance(source_url, str) or not source_url.strip():
         return []  # 出典なしの数値は保存しない (層4)
     source_url = source_url.strip()
-    accession = extract_accession(source_url)
+    # accession は unique key の一部 (per-filing 履歴)。 抽出不能時は source_url を fallback 値に
+    # して NULL を作らない (Postgres は NULL 同士を distinct 扱いし重複行が溜まるため)。
+    accession = extract_accession(source_url) or source_url
     tkr = ticker.upper()
 
     rows: list[dict] = []

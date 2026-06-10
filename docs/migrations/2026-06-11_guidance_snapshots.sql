@@ -11,9 +11,10 @@
 -- 設計方針 (6体合議 §10 必須条件を反映):
 --  - 条件4: join key = (ticker, period_end_date[date], period_type)。fiscal_period 文字列
 --    ラベル ("Q1" 等) に頼らない (AAPL 型会計ズレ対策、consensus_snapshots.fiscal_date と同思想)。
---  - 条件6: unique = (ticker, period_end_date, period_type) の「期ごと最新 1 行」 idempotent
---    upsert model (snapshot_date を含めない。amend 8-K / 再抽出は同キー上書き)。
---    ※ 毎晩 snapshot を積む consensus_snapshots (4 列 unique) とは責務が違う。
+--  - 条件6 v2 (Sprint 2 検証で設計修正): unique = (ticker, period_end_date, period_type,
+--    source_accession) の **per-filing 履歴保持**。 旧「期ごと最新 1 行」 では FY ガイダンスの
+--    四半期ごと更新で前回値が上書き消失し raised/lowered (同一会計期の前回比) が成立しなかった。
+--    同一 filing の再抽出は同キー上書き = idempotent。 「最新」 は filed_at 降順で選ぶ (Sprint 3)。
 --  - 条件3: basis (gaap/non_gaap) を metric 別に必須保持 — 前回↔今回の basis 不一致は
 --    Sprint 3 判定で unknown (見かけ修正 artifact 防止)。
 --  - source_url 必須 (Hallucination Guard 層4: 出典欠落 row は作らせない)。
@@ -41,10 +42,10 @@ create table if not exists guidance_snapshots (
   rev_high           numeric,
   rev_basis          text,
   source_url         text not null,             -- 8-K EX-99.1 URL (出典必須)
-  source_accession   text,                      -- EDGAR accession (amend -A 判定 / Sprint 2 idempotency)
+  source_accession   text not null,             -- EDGAR accession (per-filing key。抽出不能時は code が source_url を fallback)
   filed_at           date,                      -- 8-K filing 日 (Sprint 2 backfill で設定。nightly は null 可)
   captured_at        timestamptz not null default now(),
-  unique (ticker, period_end_date, period_type)
+  unique (ticker, period_end_date, period_type, source_accession)
 );
 
 -- 検索性能:
