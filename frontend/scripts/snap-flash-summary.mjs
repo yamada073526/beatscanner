@@ -50,6 +50,11 @@ async function grabFlash(page, retry = 1) {
   return el.evaluate((node, banSrc) => {
     const text = (node.textContent || '').trim();
     const ban = new RegExp(banSrc);
+    // BAN 検査はバッジ (修正語の §38 許可文脈 = GUIDANCE_REVISION_JP) を除外した本文に対して行う。
+    // = 「修正語がバッジ以外に漏れていない」 ことの検証 (Check 7 の runtime 版)。
+    const clone = node.cloneNode(true);
+    clone.querySelectorAll('[data-testid="earnings-flash-summary-gh-badges"]').forEach((n) => n.remove());
+    const guardText = (clone.textContent || '').trim();
     return {
       present: true,
       state: node.getAttribute('data-state'),
@@ -57,8 +62,10 @@ async function grabFlash(page, retry = 1) {
       hasDollar: /\$[\d.]+/.test(text),
       hasUnit: /億ドル|兆ドル|\d+(\.\d+)?[BM]\b/.test(text),
       hasArrow: text.includes('→'),
-      banHit: ban.test(text) ? (text.match(ban) || [])[0] : null,
-      sample: text.slice(0, 140),
+      banHit: ban.test(guardText) ? (guardText.match(ban) || [])[0] : null,
+      ghBadges: [...node.querySelectorAll('[data-testid^="earnings-flash-summary-badge-"]')].map((b) => (b.textContent || '').trim()),
+      ghLink: !!node.querySelector('[data-testid="earnings-flash-summary-gh-link"]'),
+      sample: text.slice(0, 160),
     };
   }, BAN.source);
 }
@@ -83,9 +90,11 @@ try {
 
   if (mode === 'on') {
     // ticker は env で差替可 (v200: ガイダンス並置行の検証に SNOW 等の 8-K guidance 保有銘柄を使う)
+    // FLASH_PIT=1 でガイダンス履歴バッジ (Sprint 4、?guidance_pit=1 opt-in) も検証
     const T1 = process.env.FLASH_T1 || 'AAPL';
     const T2 = process.env.FLASH_T2 || 'SMCI';
-    await page.goto(PROD, { waitUntil: 'networkidle', timeout: 30_000 });
+    const url = process.env.FLASH_PIT === '1' ? `${PROD}&guidance_pit=1` : PROD;
+    await page.goto(url, { waitUntil: 'networkidle', timeout: 30_000 });
     await page.waitForTimeout(2200);
     await navTo(page, T1);
     const aapl = await grabFlash(page);
