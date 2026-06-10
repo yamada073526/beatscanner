@@ -1,0 +1,82 @@
+name: Nightly Guidance Snapshot (ガイダンス履歴基盤 Sprint 1)
+
+# 会社ガイダンス (SEC 8-K 抽出値) を毎晩 会計期ごとに永続化する。
+# SPEC: docs/specs/SPEC_2026-06-11_guidance-history-foundation.md (6体合議 §10 反映)
+#
+# 背景:
+#   - Railway native cron は発火停止 → 夜間 batch は GitHub Actions に統一 (feedback_railway_native_cron.md)。
+#   - endpoint: POST /api/cron/guidance-snapshot (X-Cron-Secret 認証、 nightly_consensus.yml と同 pattern)。
+#     universe = 保有 ∪ WL (Sprint 1 cost guard: 8-K 抽出は SEC fetch + Haiku LLM を伴う)。
+#     guidance_snapshots へ「期ごと最新 1 行」 idempotent upsert (amend/再抽出は同キー上書き)。
+#
+# 時刻: 00:10 UTC = 09:10 JST (nightly_consensus 23:40 UTC の後。 同一 backend への cron 集中を避ける)。
+#
+# ⚠️ 有効化には GitHub repo secret CRON_SECRET (nightly_scan / nightly_consensus と共用) が必要。
+# ⚠️ データ蓄積の性質: raised/lowered (前回比修正判定) は同一会計期の前後 2 つのガイダンスが
+#   揃って初めて出る (= 次の決算サイクルから)。 蓄積初期は unknown が正常。
+#   発表時比サプライズは consensus_snapshots (稼働済) との join (Sprint 3)。
+#
+# memory anchor: feedback_railway_native_cron.md / feedback_sec_guidance_8k_coverage_limit.md
+#   (AAPL 型 8-K 非開示企業は skipped が正常) / project_signature_tier_10k_strategy.md
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (universe 構築のみ確認、 DB write / LLM 抽出を skip)'
+        required: false
+        default: 'false'
+  schedule:
+    - cron: '10 0 * * *'   # 00:10 UTC = 09:10 JST
+
+concurrency:
+  group: nightly-guidance
+  cancel-in-progress: false   # 実行中を kill せず二重発火は待機 (upsert 競合回避)
+
+jobs:
+  snapshot:
+    name: Guidance snapshot batch
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BASE: https://beatscanner-production.up.railway.app
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      BODY: '{"dry_run": ${{ github.event.inputs.dry_run || false }}}'
+    steps:
+      - name: Setup tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq jq curl
+
+      - name: Guard — CRON_SECRET present
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET secret 未設定。 nightly_consensus.yml と同じ secret を共用してください。"
+            exit 1
+          fi
+
+      - name: Guidance snapshot
+        id: snap
+        run: |
+          echo "=== guidance-snapshot (body=$BODY) ==="
+          resp=$(curl -s --max-time 1200 -w '\nHTTP:%{http_code}' -X POST \
+            -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
+            -d "$BODY" "$BASE/api/cron/guidance-snapshot")
+          http=$(echo "$resp" | tail -1)
+          body=$(echo "$resp" | sed '$d')
+          echo "$http"
+          echo "$body" | jq '{snapshot_date,processed,upserted,universe_size,by_source,source_errors,skipped_count,error_count,retention_deleted,is_first_run,universe_degrade_warning,latest_snapshot_date}' 2>/dev/null || echo "$body"
+          {
+            echo "### Guidance Snapshot ($(date -u +'%Y-%m-%d %H:%M UTC'))"
+            echo "- HTTP: \`$http\`"
+            echo "- snapshot_date: \`$(echo "$body" | jq -r '.snapshot_date // "?"')\` / latest: \`$(echo "$body" | jq -r '.latest_snapshot_date // "?"')\`"
+            echo "- universe_size: \`$(echo "$body" | jq -r '.universe_size // "?"')\` / processed: \`$(echo "$body" | jq -r '.processed // "?"')\` / upserted: \`$(echo "$body" | jq -r '.upserted // "?"')\`"
+            echo "- by_source: \`$(echo "$body" | jq -c '.by_source // {}' 2>/dev/null)\`"
+            echo "- skipped: \`$(echo "$body" | jq -r '.skipped_count // "?"')\` (8-K 非開示/対象期未解決 = 正常) / error: \`$(echo "$body" | jq -r '.error_count // "?"')\`"
+            echo "- is_first_run: \`$(echo "$body" | jq -r '.is_first_run // "?"')\` (true = 蓄積初日、 raised/lowered は次決算サイクルから)"
+            echo "- universe_degrade_warning: \`$(echo "$body" | jq -r '.universe_degrade_warning // "?"')\` / source_errors: \`$(echo "$body" | jq -c '.source_errors // []')\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "$http" | grep -q "HTTP:2" || { echo "::error::guidance-snapshot non-2xx response"; exit 1; }
+          if [ "$(echo "$body" | jq -r '.universe_degrade_warning // false')" = "true" ]; then
+            echo "::warning::universe_degrade_warning=true — WL/保有 source が空 (source_errors を確認)"
+          fi

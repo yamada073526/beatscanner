@@ -16784,6 +16784,169 @@ async def cron_consensus_snapshot(
     }
 
 
+@app.post("/api/cron/guidance-snapshot")
+async def cron_guidance_snapshot(
+    request: Request,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """ガイダンス履歴基盤 Sprint 1: 会社ガイダンス (8-K 抽出値) を nightly で会計期ごとに永続化する cron。
+
+    SPEC: docs/specs/SPEC_2026-06-11_guidance-history-foundation.md (6体合議 §10 反映)。
+    consensus-snapshot cron の sibling — return schema は 1:1 mirror (§10 条件8、 GitHub Actions の
+    jq summary を共用するため)。
+
+    universe = 保有 ∪ WL のみ (Sprint 1 cost guard: 8-K 抽出は SEC fetch + Haiku LLM を伴うため
+    consensus の ~500 universe には広げない。 拡張は Sprint 2 の accession-skip 最適化とセット)。
+
+    flow (per ticker):
+      1. _fetch_sec_guidance_structured (既存 Hallucination Guard 4 層通過 path) で会社ガイダンス取得
+      2. FMP analyst-estimates から対象会計期 (次 Q / 次 FY の期末日) を解決
+         (aggregator/guidance_history.resolve_next_period_end、 §10 条件7 の nightly 版)
+      3. build_guidance_rows で整形 → guidance_snapshots へ idempotent upsert
+         (unique (ticker, period_end_date, period_type) = 「期ごと最新 1 行」、 §10 条件6)
+
+    §38: row は「会社が提示したレンジ + 出典 URL」 の事実のみ (出典欠落 row は作らない = 層4)。
+    AAPL 型 (8-K 数値ガイダンスなし) は row 0 件 = skipped が正 (coverage limit)。
+    """
+    _check_cron_secret(x_cron_secret)
+
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    from .aggregator import guidance_history  # 数値物理層 (LLM import なし)
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    override_tickers = body.get("tickers")
+    dry_run = bool(body.get("dry_run", False))
+
+    today_iso = date.today().isoformat()
+
+    # 1. universe 構築 (override or 保有 ∪ WL)
+    source_counts: dict[str, int] = {}
+    source_errors: list[str] = []
+    if isinstance(override_tickers, list) and override_tickers:
+        universe = {str(t).upper() for t in override_tickers if t}
+        source_counts = {"override": len(universe)}
+    else:
+        def _build_guidance_universe() -> set[str]:
+            tickers: set[str] = set()
+            for table, label in (("watchlist", "watchlist"), ("transactions", "holdings")):
+                try:
+                    rows = _select_all_column(sb, table, "ticker")
+                    s = {str(r["ticker"]).upper() for r in rows if r.get("ticker")}
+                    source_counts[label] = len(s)
+                    tickers |= s
+                except Exception as e:
+                    source_counts[label] = 0
+                    source_errors.append(f"{label}: {type(e).__name__}")
+            return tickers
+
+        universe = await asyncio.to_thread(_build_guidance_universe)
+    universe_list = sorted(universe)
+    universe_size = len(universe_list)
+    universe_degrade_warning = (not override_tickers) and universe_size == 0
+
+    if dry_run:
+        return {
+            "dry_run": True,
+            "snapshot_date": today_iso,
+            "universe_size": universe_size,
+            "by_source": source_counts,
+            "source_errors": source_errors,
+            "universe_degrade_warning": universe_degrade_warning,
+        }
+
+    # 2. per-ticker 取得 (SEC EDGAR 配慮で並列 3。 8-K 抽出 cold ~5-15s/ticker)
+    fmp_key = _get_fmp_key(request) or os.getenv("FMP_API_KEY")
+    if not fmp_key:
+        raise HTTPException(status_code=500, detail="FMP_API_KEY not configured")
+    client = FMPClient(api_key=fmp_key)
+
+    sem = asyncio.Semaphore(3)
+
+    async def _one(t: str) -> list[dict]:
+        async with sem:
+            cg = await _fetch_sec_guidance_structured(t)
+            if not isinstance(cg, dict):
+                return []
+            est_q = await client.analyst_estimates(t, period="quarter", limit=40)
+            est_a = await client.analyst_estimates(t, period="annual", limit=15)
+            q_end = guidance_history.resolve_next_period_end(est_q, today_iso, period_type="quarter")
+            fy_end = guidance_history.resolve_next_period_end(est_a, today_iso, period_type="annual")
+            return guidance_history.build_guidance_rows(t, cg, q_end, fy_end)
+
+    results = await asyncio.gather(
+        *[_one(t) for t in universe_list], return_exceptions=True
+    )
+
+    skipped_count = 0   # ガイダンス記載なし (AAPL 型) / 対象期未解決 → row 0 件 (正常)
+    error_count = 0
+    failed_tickers: list[dict] = []
+    all_rows: list[dict] = []
+    for t, res in zip(universe_list, results):
+        if isinstance(res, Exception):
+            error_count += 1
+            if len(failed_tickers) < 20:
+                failed_tickers.append({"ticker": t, "reason": type(res).__name__})
+        elif not res:
+            skipped_count += 1
+        else:
+            all_rows.extend(res)
+
+    # 3. idempotent upsert (期ごと最新 1 行 model、 amend/再抽出は同キー上書き)
+    def _upsert_chunks(rows: list[dict]) -> int:
+        n = 0
+        for i in range(0, len(rows), 500):
+            chunk = rows[i : i + 500]
+            sb.table("guidance_snapshots").upsert(
+                chunk, on_conflict=guidance_history.GUIDANCE_CONFLICT_KEYS
+            ).execute()
+            n += len(chunk)
+        return n
+
+    upserted = await asyncio.to_thread(_upsert_chunks, all_rows) if all_rows else 0
+
+    # 4. 蓄積状況 (consensus cron と同 mirror schema)
+    def _first_captured_date() -> str | None:
+        try:
+            mn = (
+                sb.table("guidance_snapshots").select("captured_at")
+                .order("captured_at", desc=False).limit(1).execute()
+            )
+            v = (mn.data or [{}])[0].get("captured_at")
+            return str(v)[:10] if v else None
+        except Exception:
+            return None
+
+    first_snapshot_date = await asyncio.to_thread(_first_captured_date)
+    is_first_run = bool(first_snapshot_date == today_iso)
+
+    return {
+        "snapshot_date": today_iso,
+        "processed": universe_size,
+        "upserted": upserted,
+        "universe_size": universe_size,
+        "by_source": source_counts,
+        "source_errors": source_errors,
+        "skipped_count": skipped_count,    # ガイダンス記載なし / 対象期未解決 (AAPL 型は正常 skip)
+        "error_count": error_count,
+        "failed_tickers": failed_tickers,
+        "retention_deleted": 0,            # 期ごと最新 1 行 model のため retention 不要 (mirror 用に 0 固定)
+        "first_snapshot_date": first_snapshot_date,
+        "latest_snapshot_date": today_iso if upserted > 0 else None,
+        "is_first_run": is_first_run,
+        "universe_degrade_warning": universe_degrade_warning,
+        "override": bool(override_tickers),
+        "dry_run": False,
+    }
+
+
 # --- Screener universe-meta (v159 SPEC_2026-06-03 Part B: sector/mcap client-side filter 供給) ---
 # 純データ endpoint: schema 変更なし・LLM 非経由・景表法/§38 risk なし (中立メタ)。
 # universe fetch (_fetch_market_cap_top_n) と同じ FMP /stable/company-screener を叩き、
