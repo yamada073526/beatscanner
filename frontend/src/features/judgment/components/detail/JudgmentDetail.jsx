@@ -262,17 +262,17 @@ function isPane3V5() {
 }
 
 // v199 (SPEC_2026-06-10_earnings-flash-summary、6体合議 6/6 条件付賛成): ファンダ章冒頭の決算ハイライト。
-// autopilot 無監視 ship のため default OFF (?flash=1 / localStorage 'flash'='1' で opt-in)。
-// user 朝 dogfood → OK なら default ON 昇格 (isV4 / pane3_v5 と同じ昇格経路)。
+// autopilot 無監視 ship 時は default OFF → user 朝 dogfood OK (2026-06-11) で **default ON に昇格**
+// (pillar2_pane1 と同じ昇格経路)。?flash=0 / localStorage 'flash'='0' が kill switch (revert 容易性のため残置)。
 function isEarningsFlashEnabled() {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   try {
     const urlParam = new URLSearchParams(window.location.search).get('flash');
     if (urlParam === '1') return true;
     if (urlParam === '0') return false;
-    return window.localStorage?.getItem('flash') === '1';
+    return window.localStorage?.getItem('flash') !== '0';
   } catch {
-    return false;
+    return true;
   }
 }
 

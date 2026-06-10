@@ -10,8 +10,9 @@ import { chromium } from 'playwright';
 import { mkdirSync } from 'fs';
 import { getAuthInjection } from './lib/auth-helper.mjs';
 
-const PROD = 'https://beatscanner-production.up.railway.app/?layout=workspace&pane3_v5=1&flash=1';
-const PROD_NOFLAG = 'https://beatscanner-production.up.railway.app/?layout=workspace&pane3_v5=1';
+// flag ON 昇格後 (2026-06-11): default URL (param なし) で表示、 ?flash=0 が kill switch。
+const PROD = 'https://beatscanner-production.up.railway.app/?layout=workspace&pane3_v5=1';
+const PROD_KILL = 'https://beatscanner-production.up.railway.app/?layout=workspace&pane3_v5=1&flash=0';
 const OUT = new URL('../.visual/', import.meta.url).pathname;
 mkdirSync(OUT, { recursive: true });
 const BAN = /強い|買い|絶好調|最高値?更新|過去最|上方修正|視界良好|広瀬|じっちゃま|隆雄/;
@@ -91,13 +92,13 @@ try {
     console.log(JSON.stringify({ verdict, mode, aapl, smci, pageErrors: errs }, null, 2));
     process.exitCode = verdict === 'pass' ? 0 : 1;
   } else {
-    // --- (D): flag なしで出ないこと (default OFF) ---
-    await page.goto(PROD_NOFLAG, { waitUntil: 'networkidle', timeout: 30_000 });
+    // --- (D): ?flash=0 kill switch で出ないこと (default ON 昇格後の切り戻し経路検証) ---
+    await page.goto(PROD_KILL, { waitUntil: 'networkidle', timeout: 30_000 });
     await page.waitForTimeout(2200);
     await navTo(page, 'AAPL');
     const offCount = await page.locator('[data-testid="earnings-flash-summary"]').count();
     const verdict = offCount === 0 && errs.length === 0 ? 'pass' : 'fail';
-    console.log(JSON.stringify({ verdict, mode, defaultOffHidden: offCount === 0, pageErrors: errs }, null, 2));
+    console.log(JSON.stringify({ verdict, mode, killSwitchHidden: offCount === 0, pageErrors: errs }, null, 2));
     process.exitCode = verdict === 'pass' ? 0 : 1;
   }
 } catch (e) {
