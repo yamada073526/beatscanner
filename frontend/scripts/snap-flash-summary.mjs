@@ -73,18 +73,21 @@ try {
   const mode = process.env.FLASH_MODE === 'off' ? 'off' : 'on';
 
   if (mode === 'on') {
-    // --- (A)-(C): AAPL × flash=1 ---
+    // ticker は env で差替可 (v200: ガイダンス並置行の検証に SNOW 等の 8-K guidance 保有銘柄を使う)
+    const T1 = process.env.FLASH_T1 || 'AAPL';
+    const T2 = process.env.FLASH_T2 || 'SMCI';
     await page.goto(PROD, { waitUntil: 'networkidle', timeout: 30_000 });
     await page.waitForTimeout(2200);
-    await navTo(page, 'AAPL');
+    await navTo(page, T1);
     const aapl = await grabFlash(page);
     if (aapl.present) {
-      const el = page.locator('[data-testid="earnings-flash-summary"]').first();
-      await el.screenshot({ path: OUT + 'flash-aapl.png' }).catch(() => {});
+      const el = page.locator('[data-detail-active] [data-testid="earnings-flash-summary"], [data-testid="earnings-flash-summary"]').first();
+      await el.screenshot({ path: OUT + `flash-${T1.toLowerCase()}.png` }).catch(() => {});
     }
-    // --- (E): SMCI (estimate 欠損系 edge) ---
-    await navTo(page, 'SMCI');
+    await navTo(page, T2);
     const smci = await grabFlash(page);
+    const el2 = page.locator('[data-detail-active] [data-testid="earnings-flash-summary"]').first();
+    if (await el2.count()) await el2.screenshot({ path: OUT + `flash-${T2.toLowerCase()}.png` }).catch(() => {});
     const verdict =
       aapl.present && aapl.state === 'main' && aapl.hasDollar && aapl.hasUnit && !aapl.banHit &&
       (smci.present ? !smci.banHit : true) && errs.length === 0
