@@ -9560,6 +9560,16 @@ button.ds-chip.hero-watch-add:hover svg {
   border-bottom-color: color-mix(in srgb, var(--color-gold) 35%, var(--border));
   border-left-color: color-mix(in srgb, var(--color-gold) 80%, transparent);
 }
+/* §C-11 C (v195): v5 hairline 連続面では L字 gold frame が「章扉級」 に強く、 L2 位置で階層ノイズ
+   (user dogfood)。 plain modifier で gold 装飾を全て外す (5条件/会社概要 の v5 のみ、 v4/legacy 不変)。 */
+.ds-section-header--plain,
+[data-theme="dark"] .ds-section-header--plain {
+  border-bottom: none;
+  border-left: none;
+  padding-left: 0;
+  padding-bottom: 0;
+  margin-left: 0;
+}
 
 /* ── Phase 2.9 Sprint H3 #Gold Foil verdict badge (Aman 級 100 点 verdict、 案 1) ──
    Beat (PASS) verdict のみ gold metallic gradient で「最高級ホテルの真鍮プレート」 表現。
@@ -12719,6 +12729,48 @@ body.is-digest-resizing {
   /* tick は inline transform translateY(-50%) を持つため from にも含める (上書き事故防止) */
   from { transform: translateY(-50%) scaleX(0); }
 }
+/* round4 (user 4案 全採用): spine draw / tick 呼吸 pulse */
+@keyframes pl-spine-in {
+  from { transform: scaleY(0); }
+}
+@keyframes pl-tick-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* ── 静的 base (reduced-motion でも適用される土台) ── */
+/* spine: borderLeft → 子要素化 (draw アニメ用)。 静的には従来と同じ 2px 縦線 */
+.pl-spine {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border);
+}
+/* label/price の base 色 (inline から移動 — hover 増光を CSS で上書きするため) */
+.pl-level-label,
+.pl-level-price {
+  color: var(--text-secondary);
+}
+.pl-level:hover .pl-level-label,
+.pl-level:hover .pl-level-price {
+  color: var(--text-primary);
+}
+/* hover micro-bar: 距離|%| に比例した中立バー (JSX が --pl-bar を行ごとに供給)。 方向色なし = §38 セーフ */
+.pl-distbar {
+  position: absolute;
+  right: 0;
+  bottom: -3px;
+  height: 2px;
+  width: 0;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--text-muted) 45%, transparent);
+}
+.pl-level:hover .pl-distbar {
+  width: var(--pl-bar, 0px);
+}
+
 @media (prefers-reduced-motion: no-preference) {
   /* v195 round3: animation は [data-pl-inview="true"] (視界進入、 useInViewOnce) が付くまで arming しない。
      mount 起点だと テクニカル章が画面外のうちに再生済になり user に見えない (round2 の真因)。
@@ -12726,9 +12778,17 @@ body.is-digest-resizing {
   [data-pl-inview="true"] .pl-row {
     animation: pl-row-in 360ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
   }
+  /* tick: 入場 (scaleX) → 1.4s 後からゆっくり呼吸 (3s 周期、 ライブ感)。 §38 中立 accent のまま */
   [data-pl-inview="true"] .pl-tick {
     transform-origin: left center;
-    animation: pl-tick-in 200ms ease-out 240ms backwards;
+    animation:
+      pl-tick-in 200ms ease-out 240ms backwards,
+      pl-tick-pulse 3s ease-in-out 1400ms infinite;
+  }
+  /* spine: 視界進入時に上→下へ描画 (「軸が先に降りて、 目盛りが乗る」)。 行 stagger より先に走る */
+  [data-pl-inview="true"] .pl-spine {
+    transform-origin: top center;
+    animation: pl-spine-in 500ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
   }
   /* arming 前は不可視 (進入時に opacity 0 から着地させるため)。 reduced-motion はこの media 外なので常時可視 */
   .pl-row {
@@ -12737,10 +12797,37 @@ body.is-digest-resizing {
   [data-pl-inview="true"] .pl-row {
     opacity: 1;
   }
-  .pl-swatch {
-    transition: transform 120ms ease-out;
+  /* ── hover 合成 (ui-designer round4): 行 lift + bg sweep + swatch spring + 増光 + micro-bar ──
+     「ゲージを回すように選択行が手前に来る」 (user 案)。 box-shadow 不使用 = 発光 host 化しない */
+  .pl-level {
+    border-radius: var(--radius-sm, 6px);
+    transform-origin: left center;
+    /* sweep は background-size 方式 (::before だと stacking/z-index 管理が要る)。 accent 7% の薄塗りが左→右に流れる */
+    background-image: linear-gradient(
+      color-mix(in srgb, var(--color-accent) 7%, transparent),
+      color-mix(in srgb, var(--color-accent) 7%, transparent)
+    );
+    background-repeat: no-repeat;
+    background-size: 0% 100%;
+    transition:
+      transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1),
+      background-size 220ms ease-out;
   }
-  .pl-row:hover .pl-swatch {
-    transform: scale(1.35);
+  .pl-level:hover {
+    transform: translateX(2px) translateY(-1px);
+    background-size: 100% 100%;
+  }
+  .pl-level-label,
+  .pl-level-price {
+    transition: color 160ms ease-out;
+  }
+  .pl-swatch {
+    transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .pl-level:hover .pl-swatch {
+    transform: scaleX(1.6) scaleY(1.8);
+  }
+  .pl-distbar {
+    transition: width 220ms ease-out;
   }
 }

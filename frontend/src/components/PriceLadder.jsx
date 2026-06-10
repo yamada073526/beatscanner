@@ -109,7 +109,9 @@ export default function PriceLadder({ ticker }) {
   const [ladderRef, ladderInView] = useInViewOnce({ threshold: 0.1, rootMargin: '0px' });
   // 距離% の count-up 進捗係数 (0→1)。 reduced-motion は hook 内で即 1。 inView 前は係数 1 で実値表示
   // (motion 環境では行自体が opacity 0 のため見えない / reduced-motion 環境では最初から実値 = §38 セーフ)。
-  const countProgress = useCountUp(ladderInView ? 1 : null, { duration: 450, digits: 3, forceFromZero: true });
+  // round4: 450ms だと行の stagger 着地 (opacity 0 区間) と重なり user に見えない → 1100ms に延長
+  // (行が見え始めた後もカウントが続き「数字がめくれる」 のが知覚できる)。
+  const countProgress = useCountUp(ladderInView ? 1 : null, { duration: 1100, digits: 3, forceFromZero: true });
   const pf = ladderInView ? countProgress : 1;
 
   useEffect(() => {
@@ -258,12 +260,14 @@ export default function PriceLadder({ ticker }) {
             flexWrap: 'wrap',
           }}
         >
-          {/* v195 round3 (user 不満1「サマリーが説明文と同属性に見える」): 静的キャプションと区別するため
-              Chip primitive に昇格。 右の地合いバッジと同じ視覚語彙 = 「これは銘柄固有のデータポイント」 と伝わる。 */}
+          {/* v195 round4 (user「pill は窮屈」): Chip 撤回 → 状態 dot ● + テキスト。 枠なしで開放感を保ちつつ、
+              dot が「動的な状態表示」 の記号として静的キャプションと区別する (右の地合い Chip とは種類が違う
+              情報というコントラストも生まれる、 ui-designer 案B)。 */}
           {stateText ? (
-            <Chip variant="display" size="xs" tone="muted">
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)' }}>
+              <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: 'var(--text-muted)' }} />
               {stateText}
-            </Chip>
+            </span>
           ) : <span />}
           {Number.isFinite(distCount) && (() => {
             const zone = classifyDistDays(distCount);
@@ -297,18 +301,20 @@ export default function PriceLadder({ ticker }) {
         // ForwardOutlookSection の L3 idiom (11/600/muted/uppercase 0.08em) + MetricBlock と同じ
         // gold 35% の borderLeft 3px に揃え、 ファンダ章と視覚語彙を共有。 gold は装飾 accent で
         // 上値=gold の意味付けではない (§38 方向色に非抵触、 elevation whitelist 内 color-mix)。
+        // round4 (ui-designer 微調整): 10/700/0.10em + secondary 寄り色 + gold 50% で視認性を一段上げる
+        // (user「まだ見づらい」)。 L3 の控えめさは維持しつつ weight/bar 濃度でくっきりさせる。
         const groupLabel = (text) => (
           <div
             className="pl-row"
             style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: 'var(--text-muted)',
+              fontSize: 10,
+              fontWeight: 700,
+              color: 'color-mix(in srgb, var(--text-secondary) 70%, var(--text-muted))',
               textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              borderLeft: '3px solid color-mix(in srgb, var(--color-gold) 35%, var(--border))',
+              letterSpacing: '0.10em',
+              borderLeft: '3px solid color-mix(in srgb, var(--color-gold) 50%, var(--border))',
               paddingLeft: 'var(--space-2, 8px)',
-              margin: 'var(--space-3, 12px) 0 var(--space-1, 4px)',
+              margin: 'var(--space-4, 16px) 0 var(--space-1, 4px)',
               ...stagger(),
             }}
           >
@@ -322,7 +328,9 @@ export default function PriceLadder({ ticker }) {
             <div
               key={l.key}
               data-testid={`price-ladder-row-${l.key}`}
-              className="pl-row"
+              // round4: .pl-level = hover インタラクション scope (行 lift + bg sweep + label/price 増光 +
+              //   micro-bar)。 冠 (.pl-row のみ) には効かせない。 §38: 全て中立色、 方向/行動の示唆なし。
+              className="pl-row pl-level"
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -336,7 +344,7 @@ export default function PriceLadder({ ticker }) {
             >
               <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)', minWidth: 0 }}>
                 {/* 線サンプル swatch: チャート凡例と同 idiom でチャートの線と 1:1 対応を示す
-                    (identity 色 3 つのみ、 他は中立 — §38 verdict)。 hover で僅かに膨らむ (.pl-swatch) */}
+                    (identity 色 3 つのみ、 他は中立 — §38 verdict)。 hover でふわっと膨らむ (.pl-swatch) */}
                 <span
                   className="pl-swatch"
                   aria-hidden="true"
@@ -348,14 +356,24 @@ export default function PriceLadder({ ticker }) {
                     background: LEVEL_SWATCH[l.key] || NEUTRAL_SWATCH,
                   }}
                 />
-                <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>{l.label}</span>
+                {/* label/price の色は hover 増光のため CSS class へ (inline だと :hover で上書きできない) */}
+                <span className="pl-level-label" style={{ fontSize: 12, fontWeight: 500 }}>{l.label}</span>
               </span>
-              <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3, 12px)' }}>
-                <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{fmtUsd(l.price)}</span>
+              <span style={{ position: 'relative', display: 'flex', alignItems: 'baseline', gap: 'var(--space-3, 12px)' }}>
+                <span className="pl-level-price" style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>{fmtUsd(l.price)}</span>
                 <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', minWidth: 72, textAlign: 'right' }}>
                   {/* v195 round3: 視界進入時に 0→実値の count-up (係数 pf)。 距離% は事実記述 (§38 OK 判定済 idiom) */}
                   {dist != null ? `現在から ${fmtPct(dist * pf)}` : '—'}
                 </span>
+                {/* round4 (hover micro-bar): 距離の絶対値に比例した中立バーが hover で右から伸びる。
+                    色は muted 45% (方向色なし)、 情報は距離%の重複可視化 = §38 セーフ */}
+                {dist != null && (
+                  <span
+                    className="pl-distbar"
+                    aria-hidden="true"
+                    style={{ '--pl-bar': `${Math.round(Math.min(Math.abs(dist), 60) * 1.4)}px` }}
+                  />
+                )}
               </span>
             </div>
           );
@@ -365,7 +383,7 @@ export default function PriceLadder({ ticker }) {
           <div
             key={l.key}
             data-testid={`price-ladder-row-${l.key}`}
-            className="pl-row"
+            className="pl-row pl-level"
             style={{
               position: 'relative',
               display: 'flex',
@@ -401,14 +419,16 @@ export default function PriceLadder({ ticker }) {
           <div
             // v195 round3: 視界進入で data-pl-inview が付き、 index.css 側で .pl-row/.pl-tick の
             // animation が arming される (mount 起点だと画面外で再生済になる真因の修正)。
+            // round4: spine を borderLeft → 子要素 .pl-spine に変更 (視界進入時に上→下へ描画される
+            // draw アニメ用。 「軸が先に降りて、 目盛りが乗る」 演出順)。
             ref={ladderRef}
             data-pl-inview={ladderInView ? 'true' : undefined}
             style={{
               position: 'relative',
-              borderLeft: '2px solid var(--border)',
               paddingLeft: 'var(--space-4, 16px)',
             }}
           >
+            <span className="pl-spine" aria-hidden="true" />
             {upper.length > 0 && groupLabel('上値')}
             {upper.map(levelRow)}
             {cur && currentRow(cur)}
