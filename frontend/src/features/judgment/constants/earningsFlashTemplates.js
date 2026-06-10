@@ -56,3 +56,17 @@ export function fmtYoyPct(yoyPct) {
   const sign = yoyPct > 0 ? '+' : '';
   return `${FLASH_TERMS.yoy} ${sign}${yoyPct.toFixed(1)}%`;
 }
+
+/**
+ * 来期売上ガイダンスの並置行 (決算速報 note 形式: 「コンセンサス +9.3% に対し会社ガイダンス +14.0〜17.0%」)。
+ * 全て backend 計算済値 (rev_yoy_pct / company_q_rev_yoy_low_pct / high) を読むだけ。
+ * §38: コンセンサスと会社提示の事実並置のみ。「上方修正」 等の評価語は使わない
+ * (consensus 比は会社が consensus を修正した事実ではない、ForwardOutlookSection NO-GO 判定踏襲)。
+ * @returns {string|null} 3 値のいずれか欠落で null (行ごと非表示、捏造しない)
+ */
+export function fmtGuidanceRevLine(consYoyPct, lowPct, highPct) {
+  if ([consYoyPct, lowPct, highPct].some((v) => v == null || !Number.isFinite(v))) return null;
+  const s = (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}%`;
+  const range = lowPct === highPct ? s(lowPct) : `${s(lowPct)}〜${s(highPct)}`;
+  return `売上: コンセンサス ${s(consYoyPct)} に対し会社ガイダンス ${range}`;
+}

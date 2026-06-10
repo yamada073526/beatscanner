@@ -165,8 +165,9 @@ for f in $STAGED_FLASH; do
         exit 1
     fi
     # --- Check 7: 同 file への判断語 / 最上級 / 個人名の混入検出 (§38/§5 + 表示テキストポリシー) ---
+    # negation 文脈 (「〜は使わない」 等の規律 comment) は除外 (v200 で「使わない」 追加、 自家発火の実績あり)
     if echo "$ADDED" \
-        | grep -vE '(禁止|含めない|出さない|BAN|NO-GO)' \
+        | grep -vE '(禁止|含めない|出さない|使わない|BAN|NO-GO)' \
         | grep -E '(強い決算|好決算|絶好調|買い時|上方修正|過去最高|過去最大|視界良好|広瀬|じっちゃま|隆雄)' > /dev/null; then
         echo "[pre-commit] BLOCKED: $f に判断語/最上級/個人名が含まれています"
         echo "  ↳ §38 (断定的判断) / §5 (優良誤認) / 表示テキストポリシー (個人名) 違反の可能性"

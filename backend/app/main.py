@@ -6749,6 +6749,12 @@ def _compute_forward_outlook(
                                 g_fy_rev_label = classify_guidance_vs_consensus(
                                     (company_fy_rev_low + company_fy_rev_high) / 2, fy_consensus_rev
                                 )
+                    # v200: FY 版の会社売上ガイダンス YoY % レンジ (next_q と同条件・同一分母 fy_ya_rev)
+                    company_fy_rev_yoy_low_pct = company_fy_rev_yoy_high_pct = None
+                    if (company_fy_rev_low is not None and company_fy_rev_high is not None
+                            and fy_ya_rev is not None and fy_ya_rev > 0):
+                        company_fy_rev_yoy_low_pct = round((company_fy_rev_low - fy_ya_rev) / fy_ya_rev * 100, 1)
+                        company_fy_rev_yoy_high_pct = round((company_fy_rev_high - fy_ya_rev) / fy_ya_rev * 100, 1)
                     # frontend は同じ MetricBlock を流用するため company_q_* key 名を踏襲 (q/fy は文脈で決まる)
                     next_fy = {
                         "period_label": fy_period_label,
@@ -6773,11 +6779,23 @@ def _compute_forward_outlook(
                         "company_q_eps_basis": company_fy_eps_basis,
                         "company_q_rev_low": company_fy_rev_low,
                         "company_q_rev_high": company_fy_rev_high,
+                        "company_q_rev_yoy_low_pct": company_fy_rev_yoy_low_pct,
+                        "company_q_rev_yoy_high_pct": company_fy_rev_yoy_high_pct,
                     }
                     fy_sources["next_fy_eps"] = "ok" if fy_consensus_eps is not None else "empty"
                     fy_sources["next_fy_rev"] = "ok" if fy_consensus_rev is not None else "empty"
                     fy_sources["guidance_fy_eps"] = "ok" if g_fy_eps_label != "unknown" else "empty"
                     fy_sources["guidance_fy_rev"] = "ok" if g_fy_rev_label != "unknown" else "empty"
+
+    # v200 (user 要望 2026-06-11、決算速報 note 形式): 会社売上ガイダンスの YoY % レンジ
+    # 「コンセンサス +9.3% に対し新ガイダンス +14〜17%」 の並置用。 分母は consensus rev_yoy と
+    # 同一の ya_rev (前年同期実績) — 同一分母で初めて並置比較が成立する (Python 数値層、 LLM 不使用)。
+    # 金融セクター (rev_unreliable) は company_q_rev_low 自体が None のため自動抑止。
+    company_q_rev_yoy_low_pct = company_q_rev_yoy_high_pct = None
+    if (company_q_rev_low is not None and company_q_rev_high is not None
+            and ya_rev is not None and ya_rev > 0):
+        company_q_rev_yoy_low_pct = round((company_q_rev_low - ya_rev) / ya_rev * 100, 1)
+        company_q_rev_yoy_high_pct = round((company_q_rev_high - ya_rev) / ya_rev * 100, 1)
 
     return {
         "next_q": {
@@ -6802,6 +6820,8 @@ def _compute_forward_outlook(
             "company_q_eps_basis": company_q_eps_basis,
             "company_q_rev_low": company_q_rev_low,
             "company_q_rev_high": company_q_rev_high,
+            "company_q_rev_yoy_low_pct": company_q_rev_yoy_low_pct,
+            "company_q_rev_yoy_high_pct": company_q_rev_yoy_high_pct,
         },
         # v173 通期見通し (None = 通期コンセンサス取得不可 → frontend static gate で非表示)
         "next_fy": next_fy,

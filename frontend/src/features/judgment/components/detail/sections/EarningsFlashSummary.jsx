@@ -27,13 +27,14 @@
  * loading/errored/empty/main 全 render path に data-testid (feedback_testid_all_render_paths)。
  */
 import React, { useEffect, useState } from 'react';
-import { fetchQuarterlyHistory } from '../../../../../api.js';
+import { fetchQuarterlyHistory, fetchGuidanceSurprise } from '../../../../../api.js';
 import { fmtMoney, fmtEps, GUIDANCE_STATE_JP } from '../../../../../components/ForwardOutlookSection.jsx';
 import {
   FLASH_LABELS,
   FLASH_TERMS,
   fmtSurprisePct,
   fmtYoyPct,
+  fmtGuidanceRevLine,
 } from '../../../constants/earningsFlashTemplates.js';
 
 const TESTID = 'earnings-flash-summary';
@@ -138,6 +139,23 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
     return () => { cancelled = true; };
   }, [ticker]);
 
+  // v200 (user 要望: 決算速報 note の「コンセンサス +9.3% に対し新ガイダンス +14〜17%」):
+  // 会社 8-K ガイダンス込みの forward を lazy 取得。 ?with_guidance=1 は dedupGet 済 URL のため
+  // ForwardOutlookSection の既存 lazy fetch と coalesce され実 fetch は増えない (金融条件「二重 fetch
+  // しない」 適合)。 cold (SEC 5-15s) では行が後追い描画される progressive enhancement。
+  const [lazyNextQ, setLazyNextQ] = useState(null);
+  useEffect(() => {
+    setLazyNextQ(null);
+    if (!ticker) return undefined;
+    let cancelled = false;
+    fetchGuidanceSurprise(ticker)
+      .then((d) => {
+        if (!cancelled && d?.forward?.next_q) setLazyNextQ(d.forward.next_q);
+      })
+      .catch(() => { /* graceful: consensus のみ表示 */ });
+    return () => { cancelled = true; };
+  }, [ticker]);
+
   if (isLoading && !guidance) {
     return (
       <div data-testid={TESTID} data-state="loading" aria-busy="true" style={containerStyle}>
@@ -187,15 +205,18 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
     );
   }
 
-  // 来期行: next_q のコンセンサスのみ (会社 8-K guidance の lazy fetch は ForwardOutlookSection の
-  // 責務 — 二重 fetch しない、金融必須条件)。guidance_vs_consensus が prop に来ていれば
-  // GUIDANCE_STATE_JP の静的 dict で 1 行併記 (dict に無い state は自動非表示)。
-  const nq = guidance?.forward?.next_q;
+  // 来期行: lazy (会社 8-K guidance 込み、coalesce 済) があれば優先、無ければ prop の consensus のみ。
+  // v200: 会社売上ガイダンス YoY レンジ (backend 計算済) があれば決算速報 note 形式の並置行
+  // 「売上: コンセンサス +9.3% に対し会社ガイダンス +14.0〜17.0%」 を表示 (この時 単独 YoY は重複のため省略)。
+  // 無ければ従来表示 (consensus + YoY + GUIDANCE_STATE_JP)。dict に無い state は自動非表示。
+  const nq = lazyNextQ || guidance?.forward?.next_q;
   const nqEps = Number.isFinite(nq?.consensus_eps) ? fmtEps(nq.consensus_eps) : null;
   const nqRev = Number.isFinite(nq?.consensus_revenue) ? fmtMoney(nq.consensus_revenue) : null;
   if (nqEps != null || nqRev != null) {
     const yoyStr = fmtYoyPct(nq?.rev_yoy_pct);
+    const revLine = fmtGuidanceRevLine(nq?.rev_yoy_pct, nq?.company_q_rev_yoy_low_pct, nq?.company_q_rev_yoy_high_pct);
     const gState = GUIDANCE_STATE_JP[nq?.guidance_vs_consensus_eps] || GUIDANCE_STATE_JP[nq?.guidance_vs_consensus_rev] || null;
+    const gStateRev = GUIDANCE_STATE_JP[nq?.guidance_vs_consensus_rev] || null;
     rows.push(
       <FlashRow key="nextq" label={FLASH_LABELS.nextQ} testid={`${TESTID}-nextq`}>
         {nqEps != null && (
@@ -210,10 +231,15 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
             <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{nqRev}</span>
           </>
         )}
-        {yoyStr != null && (
+        {yoyStr != null && revLine == null && (
           <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>({yoyStr})</span>
         )}
-        {gState && (
+        {revLine != null ? (
+          <span data-testid={`${TESTID}-guidance-rev`} style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>
+            {gStateRev && <span aria-hidden style={{ fontSize: 10 }}>{gStateRev.sym} </span>}
+            {revLine}
+          </span>
+        ) : gState && (
           <span style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
             <span aria-hidden style={{ fontSize: 10 }}>{gState.sym}</span> {gState.label}
           </span>

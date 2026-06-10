@@ -82,7 +82,9 @@ const renderGuidanceText = (text) => {
 function fmtOkuUsd(abs, sign, digits) {
   const oku = abs / 1e8; // 1 億ドル = 1e8
   if (oku >= 10000) return `${sign}${(oku / 10000).toFixed(2)}兆ドル`; // $1T 以上
-  if (oku >= 100) return `${sign}${oku.toFixed(0)}億ドル`; // $10B 以上は整数 (500億ドル)
+  // v200 (user 要望 2026-06-11): $10B 以上も小数 1 桁 (1094.6億ドル)。 旧整数丸め (1095億ドル) は
+  // 決算速報 note の粒度 (1094.6) と不一致だった。 大型株のレンジ分離にも 1 桁で十分。
+  if (oku >= 100) return `${sign}${oku.toFixed(1)}億ドル`;
   return `${sign}${oku.toFixed(digits)}億ドル`; // $10B 未満は digits 桁 (14.36億ドル)
 }
 
