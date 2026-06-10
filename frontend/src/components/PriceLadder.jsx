@@ -362,7 +362,9 @@ export default function PriceLadder({ ticker }) {
                 <span className="pl-level-label" style={{ fontSize: 12, fontWeight: 500 }}>{l.label}</span>
               </span>
               <span style={{ position: 'relative', display: 'flex', alignItems: 'baseline', gap: 'var(--space-3, 12px)' }}>
-                <span className="pl-level-price" style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>{fmtUsd(l.price)}</span>
+                {/* round6 (user「株価の数字もカウントアップして」): 距離% と同じ pf 係数で 0→実値。
+                    0 起点は方向を示唆しない中立演出 (現値→目標の遷移は §38 予測示唆になるため不可)。 */}
+                <span className="pl-level-price" style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>{fmtUsd(l.price * pf)}</span>
                 <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', minWidth: 72, textAlign: 'right' }}>
                   {/* v195 round3: 視界進入時に 0→実値の count-up (係数 pf)。 距離% は事実記述 (§38 OK 判定済 idiom) */}
                   {dist != null ? `現在から ${fmtPct(dist * pf)}` : '—'}
@@ -400,7 +402,8 @@ export default function PriceLadder({ ticker }) {
             <span aria-hidden="true" className="pl-tick" style={{
               position: 'absolute',
               left: 'calc(-1 * var(--space-4, 16px) - 1px)',
-              top: '50%',
+              // round6 (user「●が文字中心より若干上」): baseline 行内の視覚中心に合わせ +2px 下げ
+              top: 'calc(50% + 2px)',
               transform: 'translateY(-50%)',
               width: 11,
               height: 3,
@@ -409,7 +412,7 @@ export default function PriceLadder({ ticker }) {
             }} />
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{l.label}</span>
             <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3, 12px)' }}>
-              <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{fmtUsd(l.price)}</span>
+              <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{fmtUsd(l.price * pf)}</span>
               <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', minWidth: 72, textAlign: 'right' }}>
                 {Number.isFinite(sma50Dist) ? `50DMA ${fmtPct(sma50Dist * pf)}` : '基準'}
               </span>
