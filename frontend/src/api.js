@@ -508,11 +508,16 @@ export async function fetchQuarterlyHistory(ticker, limit = 8) {
   const t = (ticker || '').toUpperCase();
   if (!t) return null;
   const params = new URLSearchParams({ limit: String(limit) });
-  const r = await fetch(`/api/guidance/${encodeURIComponent(t)}/quarterly-history?${params.toString()}`, {
-    headers: fmpHeaders(),
-  });
-  if (!r.ok) return null;
-  return r.json();
+  // v199 flash summary (6体合議 設計/qa 条件): dedupGet 経由。 useEpsBeatStreak / QuarterlyHistoryTable /
+  // EarningsFlashSummary の同 URL fetch を coalesce (旧: 素 fetch で同 view 内 二〜三重 fetch)。
+  // 失敗時 null の旧シグネチャは維持 (呼出側の !res 分岐を壊さない)。
+  try {
+    return await dedupGet(`/api/guidance/${encodeURIComponent(t)}/quarterly-history?${params.toString()}`, {
+      headers: fmpHeaders(),
+    });
+  } catch {
+    return null;
+  }
 }
 
 // ロット履歴から日次ポートフォリオ評価額の時系列を取得 (X-2-5-C HistoryChart)。

@@ -98,6 +98,8 @@ import { useDetailScrollRestore } from './useDetailScrollRestore.js';
 // v125 P8-2 Sprint A: section 3 component 抽出 (描画順序不変)。
 // Sprint B で順序入替時にこれら component を新位置に移動するだけで diff 「移動」 のみ。
 import FundamentalsAccordion from './sections/FundamentalsAccordion.jsx';
+// v199: ファンダ章冒頭の決算ハイライト (flag opt-in、SPEC_2026-06-10_earnings-flash-summary + 6体合議)
+import EarningsFlashSummary from './sections/EarningsFlashSummary.jsx';
 import MarketEvalSection from './sections/MarketEvalSection.jsx';
 import ContextSection from './sections/ContextSection.jsx';
 // Sprint 2 (CAN-SLIM Phase 1 UX): テクニカル章のライター憲法サマリーブロック
@@ -254,6 +256,21 @@ function isPane3V5() {
     if (urlParam === '1') return true;
     if (urlParam === '0') return false;
     return window.localStorage?.getItem('pane3_v5') === '1';
+  } catch {
+    return false;
+  }
+}
+
+// v199 (SPEC_2026-06-10_earnings-flash-summary、6体合議 6/6 条件付賛成): ファンダ章冒頭の決算ハイライト。
+// autopilot 無監視 ship のため default OFF (?flash=1 / localStorage 'flash'='1' で opt-in)。
+// user 朝 dogfood → OK なら default ON 昇格 (isV4 / pane3_v5 と同じ昇格経路)。
+function isEarningsFlashEnabled() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('flash');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('flash') === '1';
   } catch {
     return false;
   }
@@ -1260,6 +1277,15 @@ export default function JudgmentDetail({
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {/* v192 (3体合議 B-2): v5 章扉 (L1) を emphasized で強調し L2 セクション冠と区別 (gold hairline 60% + primary/700)。 */}
                 <ChapterSection chapterNumber="①" chapterTitle="ファンダメンタル" headerOnly tier="sub" emphasized />
+                {/* v199: 決算ハイライト (章扉直後・5条件カード前 = 事実 → 評価の視線順、ui-designer verdict)。
+                    ノーラベル直出し (章扉直下の本文第 1 段落 idiom)。5条件カードは不変 (user 確定済制約)。 */}
+                {isEarningsFlashEnabled() && (
+                  <EarningsFlashSummary
+                    ticker={selectedTicker}
+                    guidance={guidance}
+                    isLoading={!guidance && (detail?.isLoading ?? false)}
+                  />
+                )}
                 {fiveConditionsNode}
                 <div style={hairlineSectionStyle}>
                   {/* v190: 「決算」 L2 セクション冠 (今期/来期コンセンサスを傘下に束ねる、user dogfood ②)。

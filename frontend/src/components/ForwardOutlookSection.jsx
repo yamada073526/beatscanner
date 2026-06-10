@@ -102,7 +102,9 @@ function fmtMoneyImpl(v, currency, digits) {
 }
 
 // メイン数値・予測棒用 (1 桁): 14.3億ドル
-function fmtMoney(v, currency = 'USD') {
+// v199 flash summary (6体合議 金融/マーケ条件): EarningsFlashSummary が import 流用 (同一 formatter =
+// サマリーと決算タブの数値表記が構造的に一致する single source、 Trust Cliff 防止)。
+export function fmtMoney(v, currency = 'USD') {
   return fmtMoneyImpl(v, currency, 1);
 }
 
@@ -111,7 +113,8 @@ function fmtMoneyRange(v, currency = 'USD') {
   return fmtMoneyImpl(v, currency, 2);
 }
 
-function fmtEps(v, currency = 'USD') {
+// v199 flash summary: fmtMoney と同じく export (EarningsFlashSummary と 1:1 mirror)。
+export function fmtEps(v, currency = 'USD') {
   if (v == null || !Number.isFinite(v)) return '—';
   const sym = currency === 'USD' || !currency ? '$' : '';
   return `${v < 0 ? '-' : ''}${sym}${Math.abs(v).toFixed(2)}`;
@@ -178,7 +181,9 @@ function ForecastBars({ yearAgo, consensus, yearAgoLabel, consensusLabel, yearAg
 // 「上方修正/上振れ/強気/視界良好」 は NO-GO (A=vs consensus では会社は consensus を修正していない = 事実誤り)。
 // 文字壁改善 (2026-06-06、 4体合議): 「コンセンサスを上回る水準」→「予想を上回る」 に圧縮。 金融 verdict
 // 「会社ガイダンスは一次情報なので削除不可・圧縮のみ可」 を踏襲し、 意味 (会社 vs 市場予想の方向) は保持。
-const GUIDANCE_STATE_JP = {
+// v199 flash summary (6体合議 金融必須条件): export して EarningsFlashSummary が import 流用。
+// 文言を 2 箇所で別管理すると drift して「同じ状態に別の言い回し」 = Trust Cliff になるため dict を single source 化。
+export const GUIDANCE_STATE_JP = {
   above: { sym: '▲', label: '会社ガイダンスは予想を上回る' },
   inline: { sym: '—', label: '会社ガイダンスは予想と同水準' },
   below: { sym: '▼', label: '会社ガイダンスは予想を下回る' },

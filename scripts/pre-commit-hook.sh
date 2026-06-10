@@ -143,4 +143,37 @@ if [ -n "$STAGED_BLOCKLIST" ] && [ -f "$BLOCKLIST_FILE" ] && [ -f "$SSG_FILE" ];
     fi
 fi
 
+# --- Check 6: EarningsFlashSummary / earningsFlashTemplates への LLM 呼び出し検出 (v199) ---
+# 決算ハイライトは「静的テンプレート整形専用」 宣言 (SPEC_2026-06-10 §4 + 6体合議 Anthropic verdict)。
+# 「ちょっとだけ LLM に要約させる」 drift を import 行レベルで BLOCK する (Refinitiv 教訓)。
+STAGED_FLASH=$(git diff --cached --name-only | grep -E '(EarningsFlashSummary|earningsFlashTemplates)' || true)
+for f in $STAGED_FLASH; do
+    if [ ! -f "$f" ]; then
+        continue
+    fi
+    ADDED=$(git diff --cached "$f" | grep -E '^\+' || true)
+    if [ -z "$ADDED" ]; then
+        continue
+    fi
+    if echo "$ADDED" \
+        | grep -E '^\+\s*(import|from)\b' \
+        | grep -E '\b(anthropic|claude|llm|insights|fetchInsights|visualize|fetchVisualize)\b' > /dev/null; then
+        echo "[pre-commit] BLOCKED: $f に LLM 系 import が含まれています"
+        echo "  ↳ 決算ハイライトは静的テンプレート整形専用 (@no-llm 宣言、SPEC_2026-06-10 §4)"
+        echo "  ↳ LLM narration が必要なら別 component + Hallucination Guard 4 層で設計してください。"
+        echo "  ↳ 検証用の意図的混入なら --no-verify で迂回可。"
+        exit 1
+    fi
+    # --- Check 7: 同 file への判断語 / 最上級 / 個人名の混入検出 (§38/§5 + 表示テキストポリシー) ---
+    if echo "$ADDED" \
+        | grep -vE '(禁止|含めない|出さない|BAN|NO-GO)' \
+        | grep -E '(強い決算|好決算|絶好調|買い時|上方修正|過去最高|過去最大|視界良好|広瀬|じっちゃま|隆雄)' > /dev/null; then
+        echo "[pre-commit] BLOCKED: $f に判断語/最上級/個人名が含まれています"
+        echo "  ↳ §38 (断定的判断) / §5 (優良誤認) / 表示テキストポリシー (個人名) 違反の可能性"
+        echo "  ↳ 事実の枠 (予想 → 結果 / 前年比) のみで構成してください (earningsFlashTemplates.js SSOT)。"
+        echo "  ↳ 検証用の意図的混入なら --no-verify で迂回可。"
+        exit 1
+    fi
+done
+
 exit 0
