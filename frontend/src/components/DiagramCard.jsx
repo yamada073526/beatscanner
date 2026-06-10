@@ -7,7 +7,7 @@
  * (multi-review 6 体合議 verdict、 局所介入 +5 行で 2,027 → 2,033 行)。
  */
 import { useState, useEffect, useRef, useMemo, createContext, useContext } from 'react';
-import { FileBarChart2, Banknote, Calendar, CheckCircle2, XCircle, AlertTriangle, Shield, TrendingUp, TrendingDown, Info, Layers, PieChart, HelpCircle, RefreshCw, Building2, Scale, Target, Landmark, UserCheck } from 'lucide-react';
+import { FileBarChart2, Banknote, Calendar, CheckCircle2, XCircle, AlertTriangle, Shield, TrendingUp, TrendingDown, Info, Layers, PieChart, HelpCircle, RefreshCw, Building2, Scale, Target, Landmark, UserCheck, ChevronDown } from 'lucide-react';
 import DiagramCitation from './DiagramCitation.jsx';
 import Chip from './ui/Chip.jsx';
 import { sanitizeDiagramData, findBlocklistHits, sanitizeText } from '../lib/blocklist.js';
@@ -1834,14 +1834,15 @@ function AccordionHeader({ label, isOpen, onToggle }) {
       <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)' }}>
         {label}
       </span>
-      <span style={{
-        fontSize: '11px', color: 'var(--text-muted)',
-        transition: 'transform 0.2s',
-        display: 'inline-block',
-        transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-      }}>
-        ▼
-      </span>
+      <ChevronDown
+        size={14}
+        aria-hidden
+        style={{
+          color: 'var(--text-muted)',
+          transition: 'transform 0.2s',
+          transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+        }}
+      />
     </div>
   );
 }
@@ -1917,7 +1918,7 @@ export default function DiagramCard({
   const strengths = data.strengths         || [];
 
   // v130 P0 #1 → v132 P0-A: LLM 出力で passCount/totalCount/conditions が全て欠落するケース
-  // (NVDA dogfood 5/30) でも button を hide せず「5 条件 詳細 ▼」 default label で常に表示。
+  // (NVDA dogfood 5/30) でも button を hide せず「5 条件 詳細」+ chevron default label で常に表示。
   // user dogfood: 完全 hide はバッジ自体消失で「分析されていない」 と誤読される、
   // default label で「click すれば見れる」 と user に約束する。
   const effectivePassCount = Number.isFinite(data.passCount)
@@ -2362,12 +2363,14 @@ export default function DiagramCard({
                 {effectivePassCount != null
                   ? `${effectivePassCount}/${effectiveTotalCount} 条件クリア`
                   : `${effectiveTotalCount} 条件 詳細`}
-                <span style={{
-                  fontSize: '10px',
-                  transition: 'transform 0.2s',
-                  display: 'inline-block',
-                  transform: showConditions ? 'rotate(180deg)' : 'rotate(0deg)',
-                }}>▼</span>
+                <ChevronDown
+                  size={12}
+                  aria-hidden
+                  style={{
+                    transition: 'transform 0.2s',
+                    transform: showConditions ? 'rotate(180deg)' : 'rotate(0deg)',
+                  }}
+                />
               </button>
             )}
           </div>

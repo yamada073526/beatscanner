@@ -456,7 +456,11 @@ function ResultCard({ item, onSelect }) {
           className="shrink-0 rounded p-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] sm:hidden"
           aria-label="条件詳細を展開"
         >
-          {expanded ? '▲' : '▼'}
+          <ChevronDown
+            size={14}
+            aria-hidden
+            className={`transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`}
+          />
         </button>
       </div>
 
@@ -1731,8 +1735,14 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
                 {/* FAIL (collapsible) — 4/5 以外 (≤3/5) を折りたたみ */}
                 {rest.length > 0 && (
                   <details className="group">
-                    <summary className="cursor-pointer list-none text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition">
-                      条件未達の銘柄を表示 ({rest.length}件) ▼
+                    {/* summary は flex 化必須 (feedback_daily_digest_summary_chevron: block だと chevron 回り込み) */}
+                    <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition">
+                      条件未達の銘柄を表示 ({rest.length}件)
+                      <ChevronDown
+                        size={13}
+                        aria-hidden
+                        className="transition-transform duration-150 group-open:rotate-180"
+                      />
                     </summary>
                     <div className="mt-2 grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
                       {rest.map((item) => (

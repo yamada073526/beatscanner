@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { flushSync } from 'react-dom';
-import { Sun, Moon, Home, BarChart3, FileText, TrendingUp } from 'lucide-react';
+import { Sun, Moon, Home, BarChart3, FileText, TrendingUp, ChevronDown } from 'lucide-react';
 import { analyze, demoAnalyze, fetchGuidance, fetchGuidanceBasic, prefetchAll } from './api.js';
 import { useWorkspaceStore } from './state/workspaceStore.js';
 import { useJsonLd } from './hooks/useJsonLd.js';
@@ -2241,9 +2241,14 @@ export default function App() {
       <footer className="mt-12 text-center">
         <button
           onClick={() => setFooterOpen((v) => !v)}
-          className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+          className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"
         >
-          データソースについて {footerOpen ? '▲' : '▼'}
+          データソースについて
+          <ChevronDown
+            size={12}
+            aria-hidden
+            className={`transition-transform duration-150 ${footerOpen ? 'rotate-180' : ''}`}
+          />
         </button>
         {footerOpen && (
           <div className="mt-2 space-y-1 text-xs text-slate-400">

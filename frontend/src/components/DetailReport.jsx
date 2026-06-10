@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { streamSummaryDetail, generateVisualization, generateVisualizationInstant } from '../api.js';
 import ConferenceAnalysis from './ConferenceAnalysis.jsx';
@@ -372,7 +373,7 @@ function AccordionSection({ title, badge, badgeColor = '#1e293b', children, stre
 //
 // Splits a completed markdown blob by H2 (`## `) headers and renders each
 // section. Long sections (>200 chars or >3 lines) get truncated with a
-// "▼ 続きを読む" / "▲ 閉じる" toggle. Short sections render inline.
+// "続きを読む" / "閉じる" toggle (lucide ChevronDown 回転). Short sections render inline.
 //
 // Only used after streaming completes — during streaming the live text is
 // shown as a single ReactMarkdown blob so users see real-time progress.
@@ -456,9 +457,18 @@ function CollapsibleMarkdownSection({ title, body, expanded, onToggle }) {
             fontWeight: '600',
             padding: '4px 0', marginTop: '2px',
             transition: 'color 0.15s',
+            display: 'inline-flex', alignItems: 'center', gap: '4px',
           }}
         >
-          {expanded ? '▲ 閉じる' : '▼ 続きを読む'}
+          <ChevronDown
+            size={14}
+            aria-hidden
+            style={{
+              transition: 'transform 0.2s',
+              transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+            }}
+          />
+          {expanded ? '閉じる' : '続きを読む'}
         </button>
       )}
     </div>
@@ -934,7 +944,7 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
 
       {/* While streaming: render the live blob so users see real-time progress.
           Once done: split by H2 and render each section as a collapsible block
-          with a "▼ 続きを読む" toggle for long bodies. */}
+          with a "続きを読む" toggle for long bodies. */}
       {streaming && !done && text && (
         <ReactMarkdown components={mdComponents}>{text}</ReactMarkdown>
       )}
