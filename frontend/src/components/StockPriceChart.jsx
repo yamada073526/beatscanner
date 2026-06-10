@@ -390,6 +390,21 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
   //   line を remount (key 切替) して draw-on を「見ている前で」 再生する。 一度 latch したら再発火しない。
   const chartWrapRef = useRef(null);
   const [chartInView, setChartInView] = useState(false);
+  // round9 (#1 全行対応): PriceLadder の hover 行価格を点線ガイドとして表示。 連携は同一 detail instance の
+  // .ds-judgment-detail 上の CustomEvent (pl-hover-price) — store 経由だと keep-mounted 複数 instance に
+  // 波及するため DOM スコープで局所化。 52週高値/安値・損切り等「固有の線が無い」 level も反応できる。
+  const chartRootRef = useRef(null);
+  const [ladderHoverPrice, setLadderHoverPrice] = useState(null);
+  useEffect(() => {
+    const root = chartRootRef.current?.closest('.ds-judgment-detail');
+    if (!root) return undefined;
+    const onHover = (e) => {
+      const p = e?.detail?.price;
+      setLadderHoverPrice(Number.isFinite(p) ? p : null);
+    };
+    root.addEventListener('pl-hover-price', onHover);
+    return () => root.removeEventListener('pl-hover-price', onHover);
+  }, []);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   // SMA overlay state (handover v75 Phase 1 Session 1 safer 再追加)
@@ -837,7 +852,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
     // 旧: loading 中 h-64 (256px) + header (60px) = ~316px、 data 到達で h-72 (288px) + buttons + footer = ~440px
     //     → 124px 高さブレで上下 section が押し下げ (user 「scroll 中ガクつき」 主因の 1)。
     // 新: minHeight 480px で常に 480px 確保、 data 到達時の 440px は wrapper 内で flex で center 配置。
-    <section className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', minHeight: 480 }}>
+    <section ref={chartRootRef} className="panel-card rounded-2xl p-6 shadow-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', minHeight: 480 }}>
       {/* Header */}
       <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-wrap">
@@ -1499,6 +1514,20 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                     }}
                     ifOverflow="extendDomain"
                     isFront={false}
+                    isAnimationActive={false}
+                  />
+                )}
+                {/* round9: ladder 行 hover の価格ガイド (全行対応の点線。 label なし中立 accent、 §38: 位置表示のみ)。
+                    chart-overlay-safety: Number.isFinite gate + isAnimationActive=false */}
+                {Number.isFinite(ladderHoverPrice) && (
+                  <ReferenceLine
+                    key="ladder_hover_guide"
+                    y={ladderHoverPrice}
+                    stroke="var(--color-accent)"
+                    strokeWidth={1.5}
+                    strokeDasharray="3 3"
+                    strokeOpacity={0.85}
+                    isFront
                     isAnimationActive={false}
                   />
                 )}

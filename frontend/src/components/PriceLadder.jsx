@@ -147,20 +147,30 @@ export default function PriceLadder({ ticker }) {
   const containerRef = useRef(null);
   const [hoverKey, setHoverKey] = useState(null);
   const [rangeBox, setRangeBox] = useState(null);
-  // round8 #1: hover 中の level に対応するチャート線を強調 (data-pl-hl 属性、 CSS 駆動)
+  // round8 #1: hover 中の level に対応するチャート線を強調 (data-pl-hl 属性、 CSS 駆動)。
+  // round9: あわせて hover 価格を CustomEvent で通知 → チャートが点線ガイドを表示 (52週/損切り等、
+  // 固有の線が無い level も全行反応)。
   const detailRoot = () => containerRef.current?.closest('.ds-judgment-detail') || null;
-  const setChartHl = (key) => {
+  const setChartHl = (key, price) => {
     const r = detailRoot();
     if (!r) return;
     if (key && CHART_LINKED.has(key)) r.setAttribute('data-pl-hl', key);
     else r.removeAttribute('data-pl-hl');
+    try {
+      r.dispatchEvent(new CustomEvent('pl-hover-price', { detail: { price: Number.isFinite(price) ? price : null } }));
+    } catch { /* noop */ }
   };
-  // round8 #3: click でチャートへ smooth scroll + 対応線を 1.8s フラッシュ
+  // round8 #3: click でチャートへ smooth scroll + 対応線を 1.8s フラッシュ。
+  // round9 fix: 旧 querySelector('.recharts-wrapper') は detail 内の最初の recharts (過去業績推移等) に
+  // 当たり上にスクロールしすぎた → 価格チャート固有の marker class から閉包する section を特定。
   const flashChart = (key) => {
     const r = detailRoot();
     if (!r || !CHART_LINKED.has(key)) return;
+    const marker = r.querySelector('.pl-chartline-target, .pl-chartline-pivot, .pl-chartline-support, .pl-chartline-sma50, .pl-chartline-sma200');
+    const chart = marker?.closest('section') || marker?.closest('.recharts-wrapper');
+    if (!chart) return;
     const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    r.querySelector('.recharts-wrapper')?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' });
+    chart.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' });
     r.setAttribute('data-pl-flash', key);
     window.setTimeout(() => r.removeAttribute('data-pl-flash'), 1800);
   };
@@ -414,15 +424,14 @@ export default function PriceLadder({ ticker }) {
               // round4: .pl-level = hover インタラクション scope (行 lift + bg sweep + label/price 増光 +
               //   micro-bar)。 冠 (.pl-row のみ) には効かせない。 §38: 全て中立色、 方向/行動の示唆なし。
               className="pl-row pl-level"
-              // round8 #2: spine 区間ハイライト / #1: チャート対応線の強調 / #3: click でチャートへ
-              onMouseEnter={() => { setHoverKey(l.key); setChartHl(l.key); }}
-              onMouseLeave={() => { setHoverKey(null); setChartHl(null); }}
+              // round8 #2: spine 区間ハイライト / #1: チャート対応線の強調 + 価格ガイド / #3: click でチャートへ
+              onMouseEnter={() => { setHoverKey(l.key); setChartHl(l.key, l.price); }}
+              onMouseLeave={() => { setHoverKey(null); setChartHl(null, null); }}
               onClick={CHART_LINKED.has(l.key) ? () => flashChart(l.key) : undefined}
+              // round9 (user「なぞるとカクカク」): hover の拡大/浮き上がりは内側 .pl-level-inner に適用し、
+              // 外側 (当たり判定) の geometry を固定する。 旧: 行自体が scale して当たり判定が動き、
+              // 行境界で hover が揺れていた (transform-on-hover jitter)。
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 'var(--space-3, 12px)',
                 padding: 'var(--space-2, 8px) 0',
                 // 傘下行は冠 (gold accent + pad 8px) より深いインデントで「冠の庇の下」 を空間で示す。
                 // round7: 右にも余白 (hover 板がテキスト右端で切れず「呼吸」 を持つ)
@@ -432,6 +441,7 @@ export default function PriceLadder({ ticker }) {
                 ...stagger(),
               }}
             >
+              <div className="pl-level-inner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-3, 12px)' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)', minWidth: 0 }}>
                 {/* 線サンプル swatch: チャート凡例と同 idiom でチャートの線と 1:1 対応を示す
                     (identity 色 3 つのみ、 他は中立 — §38 verdict)。 hover でふわっと膨らむ (.pl-swatch) */}
@@ -467,6 +477,7 @@ export default function PriceLadder({ ticker }) {
                   />
                 )}
               </span>
+              </div>
             </div>
           );
         };
@@ -478,10 +489,6 @@ export default function PriceLadder({ ticker }) {
             className="pl-row pl-level"
             style={{
               position: 'relative',
-              display: 'flex',
-              alignItems: 'baseline',
-              justifyContent: 'space-between',
-              gap: 'var(--space-3, 12px)',
               padding: 'var(--space-3, 12px) 0',
               paddingRight: 'var(--space-3, 12px)',
               ...stagger(),
@@ -499,13 +506,15 @@ export default function PriceLadder({ ticker }) {
               borderRadius: 2,
               background: 'var(--color-accent)',
             }} />
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{l.label}</span>
-            <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3, 12px)' }}>
-              <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{fmtUsd(l.price * pf)}</span>
-              <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', minWidth: 72, textAlign: 'right' }}>
-                {Number.isFinite(sma50Dist) ? `50DMA ${fmtPct(sma50Dist * pf)}` : '基準'}
+            <div className="pl-level-inner" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-3, 12px)' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{l.label}</span>
+              <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3, 12px)' }}>
+                <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{fmtUsd(l.price * pf)}</span>
+                <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', minWidth: 72, textAlign: 'right' }}>
+                  {Number.isFinite(sma50Dist) ? `50DMA ${fmtPct(sma50Dist * pf)}` : '基準'}
+                </span>
               </span>
-            </span>
+            </div>
           </div>
         );
 

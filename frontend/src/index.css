@@ -12769,8 +12769,12 @@ body.is-digest-resizing {
   stroke-width: 2.75px;
   stroke-opacity: 1;
 }
+/* round9 fix: recharts の ReferenceArea は rect でなく path (Rectangle component) で描画されるため
+   path も対象に (rect は将来の recharts 変更に備え残置) */
 [data-pl-hl="support"] .pl-chartline-support rect,
-[data-pl-flash="support"] .pl-chartline-support rect {
+[data-pl-flash="support"] .pl-chartline-support rect,
+[data-pl-hl="support"] .pl-chartline-support path,
+[data-pl-flash="support"] .pl-chartline-support path {
   fill-opacity: 0.22;
   stroke-opacity: 0.8;
 }
@@ -12849,13 +12853,14 @@ body.is-digest-resizing {
   }
   /* ── hover 合成 (ui-designer round4): 行 lift + bg sweep + swatch spring + 増光 + micro-bar ──
      「ゲージを回すように選択行が手前に来る」 (user 案)。 box-shadow 不使用 = 発光 host 化しない */
-  .pl-level {
+  /* round9 (user「なぞるとカクカク」): 拡大/浮き上がりは内側 .pl-level-inner に適用し、 外側 (hover 当たり判定)
+     の geometry を固定 — 旧: 行自体が scale して境界で hover が揺れる transform-on-hover jitter が真因。
+     transform の easing も overshoot → ease-out にして連続なぞりを滑らかに (swatch の spring は維持)。 */
+  .pl-level-inner {
     border-radius: var(--radius-sm, 6px);
-    /* round7 (user「右端が見切れる」): origin left だと拡大分が全て右へ伸び pane 外で clip される。
-       center 基準 + 拡大率 1.012 に調整し、 はみ出し (~8px/側) は ladder コンテナの左右余白で吸収。 */
+    /* round7: center 基準 + 1.012 (origin left だと拡大分が全て右へ伸び pane 外で clip) */
     transform-origin: center center;
-    /* sweep は background-size 方式 (::before だと stacking/z-index 管理が要る)。 accent の薄塗りが左→右に流れる
-       (round5: 7%→14%、 user「もっと目立たせて」) */
+    /* sweep は background-size 方式 (round5: accent 14%)。 accent の薄塗りが左→右に流れる */
     background-image: linear-gradient(
       color-mix(in srgb, var(--color-accent) 14%, transparent),
       color-mix(in srgb, var(--color-accent) 14%, transparent)
@@ -12863,16 +12868,14 @@ body.is-digest-resizing {
     background-repeat: no-repeat;
     background-size: 0% 100%;
     transition:
-      transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1),
-      background-size 220ms ease-out,
-      background-color 200ms ease-out,
+      transform 150ms ease-out,
+      background-size 200ms ease-out,
+      background-color 180ms ease-out,
       box-shadow 180ms ease-out;
   }
-  /* round6 (user「手前に来る・浮き上がる」): scale + lift + token shadow (--shadow-3 = whitelist 済、
-     新規生 shadow なし)。 bg-subtle を下に敷いて不透明の「板」 にし、 影が活きるようにする。
+  /* round6: scale + lift + token shadow (--shadow-3 = whitelist 済)。 bg-subtle 板で影を活かす。
      発光 host 化ではない (panel-card/arrival glow 系 class 不使用、 spotlight 監視対象外)。 */
-  .pl-level:hover {
-    /* translateX は撤去 (横ズレも右はみ出しの一因。 滑り込みは入場アニメが担当済) */
+  .pl-level:hover .pl-level-inner {
     transform: translateY(-2px) scale(1.012);
     background-color: var(--bg-subtle);
     background-size: 100% 100%;
@@ -12900,6 +12903,7 @@ body.is-digest-resizing {
   .pl-chartline-pivot line,
   .pl-chartline-support line,
   .pl-chartline-support rect,
+  .pl-chartline-support path,
   .pl-chartline-sma50 path,
   .pl-chartline-sma200 path {
     transition: stroke-width 150ms ease-out, stroke-opacity 150ms ease-out, fill-opacity 150ms ease-out;
