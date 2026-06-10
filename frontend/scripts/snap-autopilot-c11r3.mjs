@@ -65,6 +65,16 @@ try {
     const h3s = [...active.querySelectorAll('h3')];
     const hist = h3s.find((h) => (h.textContent || '').includes('過去業績推移'));
     out.histHeading = hist ? grab(hist) : null;
+    // round4 §C-11 C: 5条件 title「5 条件」 短縮 + SectionHeader plain (gold frame 除去)
+    const fiveHeader = active.querySelector('#judgment-conditions')?.closest('.ds-section-header');
+    out.fiveCond = fiveHeader ? {
+      plain: fiveHeader.className.includes('ds-section-header--plain'),
+      titleShort: (fiveHeader.textContent || '').includes('5 条件') && !(fiveHeader.textContent || '').includes('ファンダメンタル 5 条件'),
+      borderLeftWidth: getComputedStyle(fiveHeader).borderLeftWidth,
+    } : null;
+    // round4: リファレンス内 accordion title (最新ニュース) の L2 化
+    const news = findTitle('最新ニュース');
+    out.titleNews = news ? grab(news) : null;
     return out;
   });
 
@@ -88,6 +98,11 @@ try {
       const distTexts = [...el.querySelectorAll('[data-testid^="price-ladder-row-"]')].map((r) => (r.textContent || '').match(/現在から\s*([+\-−]?[\d.]+)%/)?.[1]).filter(Boolean);
       out.distSamples = distTexts.slice(0, 4);
       out.rowOpacity = getComputedStyle(el.querySelector('.pl-row')).opacity;
+      // round4: spine 子要素 / distbar / dot サマリー (Chip 撤回) / pl-level 行数
+      out.spine = !!el.querySelector('.pl-spine');
+      out.distbars = el.querySelectorAll('.pl-distbar').length;
+      out.levelRows = el.querySelectorAll('.pl-level').length;
+      out.summaryIsDot = !![...el.querySelectorAll('[data-testid="price-ladder-summary"] span')].find((n) => getComputedStyle(n).borderRadius === '50%');
       return out;
     });
     await ladder.screenshot({ path: OUT + 'c11r3-ladder.png' });
