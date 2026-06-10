@@ -72,5 +72,8 @@ export function fmtGuidanceRevLine(consYoyPct, lowPct, highPct) {
   if ([consYoyPct, lowPct, highPct].some((v) => v == null || !Number.isFinite(v))) return null;
   const s = (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}%`;
   const range = lowPct === highPct ? s(lowPct) : `${s(lowPct)}〜${s(highPct)}`;
-  return `売上: 現コンセンサス ${s(consYoyPct)} に対し会社ガイダンス ${range} (発表時)`;
+  // v200 round3 (user 指摘「時系列がパッと見でわかりづらい」): 時系列順 (発表時 → 現在) に並べ、
+  // 「→」 で時間の流れを示す (上段の「予想 → 結果」 と同じ読み方)。 本格的な時系列表現は
+  // ガイダンス履歴基盤 Sprint 4 で再設計 (6体合議 gate)。
+  return `売上ガイダンス ${range} (発表時) → 現コンセンサス ${s(consYoyPct)}`;
 }
