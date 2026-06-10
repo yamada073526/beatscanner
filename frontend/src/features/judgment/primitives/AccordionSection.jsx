@@ -17,6 +17,17 @@ import styles from './AccordionSection.module.css';
 import { useWorkspaceStore } from '../../../state/workspaceStore.js';
 import { DetailInstanceTickerContext } from './DetailInstanceTickerContext.js';
 
+// §C-11 L2 セクション冠の共通 token (v195 §C-11 統一の SSOT)。 AccordionSection の titleStyle 用
+// (title は flex header 内 inline span のため marginBottom なし)。 8Q/Insider (JudgmentDetail) と
+// 最新ニュース/IR/10-K (ContextSection) が v5 で共用。
+export const ACCORDION_L2_TITLE_STYLE = {
+  fontSize: 13,
+  fontWeight: 700,
+  letterSpacing: '0.08em',
+  textTransform: 'uppercase',
+  color: 'var(--text-primary)',
+};
+
 // ─── C-3 競合ナビ scroll 復元: accordion 開閉状態を ticker 別に保持 (user dogfood 2026-06-09) ───
 //   祖先 ticker に戻った時に accordion が defaultOpen に戻り、height が変わって scroll がズレる問題の解消。
 //   uncontrolled な accordion のみ対象 (controlledOpen=Sprint 5 condition-click は外部管理で不干渉)。

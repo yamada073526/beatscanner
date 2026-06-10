@@ -130,6 +130,9 @@ export default function FundamentalsAccordion({
             latestPeriod={result?.latestPeriod}
             latestDate={result?.latestDate}
             onNavigateTicker={onAnalyze}
+            /* §C-11 C (v195): v5 (= renderSection 'profile' + sectionHeadingStyle 供給) では内部
+               SectionHeader「プロフィール」 の gold frame を plain 化 (会社概要 L2 冠の傘下のため)。 */
+            plainHeader={renderSection === 'profile' && !!sectionHeadingStyle}
           />
         </AccordionSection>
       ))}

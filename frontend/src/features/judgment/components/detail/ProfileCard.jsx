@@ -981,7 +981,9 @@ function buildLocation(city, state, country) {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function ProfileCard({ ticker, companyName, dataSource, latestPeriod, latestDate, onNavigateTicker }) {
+// §C-11 C (v195): plainHeader=true (v5) で内部 SectionHeader「プロフィール」 の L字 gold frame を外す
+// (会社概要 L2 冠の傘下で「章扉級」 装飾は階層ノイズ、 user dogfood)。 v4/legacy は従来どおり (BC)。
+export default function ProfileCard({ ticker, companyName, dataSource, latestPeriod, latestDate, onNavigateTicker, plainHeader = false }) {
   // v138.6 R7-C: signInWithGoogle を ProfileCard 内で直接利用 (event dispatch listener なし問題の修正)
   const { signInWithGoogle } = useAuth();
   // C-3 keep-mounted reflow fix (v197): remount 時も初回 render から cache の full data を出して
@@ -1145,7 +1147,7 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
             marginBottom: 'var(--space-4, 16px)',
           }}
         >
-          <SectionHeader id="sec-profile" icon={<Building2 size={18} strokeWidth={1.5} />} title="プロフィール" label="COMPANY" />
+          <SectionHeader id="sec-profile" plain={plainHeader} icon={<Building2 size={18} strokeWidth={1.5} />} title="プロフィール" label="COMPANY" />
 
           {/* v192 (user dogfood 2026-06-09): 右端「AI 要約 (SEC 由来)」 citation chip を削除。
               生成中スケルトン + 末尾の出典文 (「FMP 提供の企業概要を AI が日本語要約」) で AI 要約である旨が

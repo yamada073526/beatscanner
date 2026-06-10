@@ -62,7 +62,7 @@ import SummaryBrief from '../../../../components/SummaryBrief.jsx';
 // Sprint 2: AccordionSection primitive + useIntersectionLazy hook
 // Sprint 3 (return-grid-primitive): ReturnGrid を primitives/index.js から追加
 // institutional-ttm-panel Sprint 3: TtmValuationPanel を primitives/index.js から追加
-import { AccordionSection, useIntersectionLazy, ReturnGrid, TtmValuationPanel } from '../../primitives/index.js';
+import { AccordionSection, ACCORDION_L2_TITLE_STYLE, useIntersectionLazy, ReturnGrid, TtmValuationPanel } from '../../primitives/index.js';
 // Sprint 4 (Phase 2): 案1 section in-view fade-in — 主要セクション wrapper
 import SectionFade from '../../primitives/SectionFade.jsx';
 // Sprint 0 (Phase 2): MotionProvider — LazyMotion + domAnimation (framer-motion subset)。
@@ -313,16 +313,8 @@ function isPane3V2Frameless() {
  * @param {object} [props.detailContext] - 既存 panel 用 props bundle
  *   { user, isPro, onUpgrade, onSignIn }
  */
-// §C-11 A (v195 autopilot): L2 セクション冠の共通 token。 v5 IIFE 内 sectionHeadingL2Style と同値だが、
-// AccordionSection (8Q決算反応/Insider) の titleStyle 用に marginBottom なし (title は flex header 内 inline span)。
-// module-level なのは earningsReactionBlock (L1011) が IIFE 内定義 (L1237) より前にあるため (TDZ 回避)。
-const ACCORDION_L2_TITLE_STYLE = {
-  fontSize: 13,
-  fontWeight: 700,
-  letterSpacing: '0.08em',
-  textTransform: 'uppercase',
-  color: 'var(--text-primary)',
-};
+// §C-11 A (v195): ACCORDION_L2_TITLE_STYLE は primitives/AccordionSection.jsx に SSOT 化
+// (ContextSection の 最新ニュース/IR/10-K と共用するため移動)。
 
 export default function JudgmentDetail({
   plan = 'free',
@@ -1216,6 +1208,8 @@ export default function JudgmentDetail({
                 totalCount={result?.totalCount}
                 isPro={detailContext.isPro}
                 onUpgrade={detailContext.onUpgrade}
+                /* §C-11 C (v195): v5 では gold frame plain 化 + title「5 条件」 (章扉と重複解消) */
+                v5Header={isV5}
                 onConditionPulse={(idx) => {
                   setPulsingConditionIndex(idx === 4 ? 'all_steps' : idx);
                 }}

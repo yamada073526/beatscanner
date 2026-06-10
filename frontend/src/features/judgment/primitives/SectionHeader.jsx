@@ -11,7 +11,10 @@ import React from 'react';
  * - ReactNode (lucide-react SVG 等) を渡した場合 → .section-header-icon class で token 化
  * - brand-aspiration verdict: baseline は neutral (var(--text-secondary))、hover/active 時のみ cyan
  */
-export default function SectionHeader({ id, title, label, action, icon }) {
+// §C-11 C (v195 user dogfood): v5 hairline 連続面では .ds-section-header の L字 gold frame
+// (border-bottom + border-left 3px) が「章扉級」 に強く階層ノイズ。 plain=true で装飾を外す
+// (.ds-section-header--plain、 index.css)。 v4/legacy は従来どおり gold frame (BC)。
+export default function SectionHeader({ id, title, label, action, icon, plain = false }) {
   const iconNode = icon
     ? typeof icon === 'string'
       // legacy: string emoji は <span> で後方互換
@@ -22,7 +25,7 @@ export default function SectionHeader({ id, title, label, action, icon }) {
 
   return (
     <header
-      className="ds-section-header"
+      className={`ds-section-header${plain ? ' ds-section-header--plain' : ''}`}
       style={{
         display: 'flex',
         alignItems: 'center',

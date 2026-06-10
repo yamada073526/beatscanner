@@ -3,8 +3,8 @@ export { default as Stat } from './Stat.jsx';
 export { default as Chip } from './Chip.jsx';
 export { default as SectionHeader } from './SectionHeader.jsx';
 export { default as ConditionDots } from './ConditionDots.jsx';
-// Sprint 2: accordion primitive + lazy-load hook
-export { default as AccordionSection } from './AccordionSection.jsx';
+// Sprint 2: accordion primitive + lazy-load hook (+ v195: §C-11 L2 冠 token の SSOT)
+export { default as AccordionSection, ACCORDION_L2_TITLE_STYLE } from './AccordionSection.jsx';
 export { useIntersectionLazy } from './useIntersectionLazy.js';
 // Phase 2.5 Sprint 2: SectionFadeSubtle (Tier L 入場 fade、 y:6 subtle variant)
 export { default as SectionFadeSubtle } from './SectionFadeSubtle.jsx';

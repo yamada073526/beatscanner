@@ -10,6 +10,7 @@ import Card from '../../../primitives/Card.jsx';
 import SectionHeader from '../../../primitives/SectionHeader.jsx';
 import {
   AccordionSection,
+  ACCORDION_L2_TITLE_STYLE,
   useIntersectionLazy,
 } from '../../../primitives/index.js';
 
@@ -114,6 +115,9 @@ export default function ContextSection({
               tier={2}
               defaultOpen={false}
               controlledOpen={expandedSections.has('news') || undefined}
+              /* §C-11 (v195 user dogfood「リファレンス内の見出しがデカい」): v5 のみ L2 冠 token + chevron 右。 */
+              titleStyle={isV5 ? ACCORDION_L2_TITLE_STYLE : undefined}
+              chevronPosition={isV5 ? 'right' : 'left'}
             >
               {/* v100 hover halo クリッピング fix: inner padding で breathing room 担保 */}
               <div id="sec-news-inner" style={{ padding: '0 var(--space-3, 12px)' }}>
@@ -138,6 +142,8 @@ export default function ContextSection({
               tier={2}
               defaultOpen={false}
               controlledOpen={expandedSections.has('ir-links') || undefined}
+              titleStyle={isV5 ? ACCORDION_L2_TITLE_STYLE : undefined}
+              chevronPosition={isV5 ? 'right' : 'left'}
             >
               <div id="sec-ir-inner" style={{ padding: '0 var(--space-3, 12px)' }}>
                 <IRLinksPanel ticker={selectedTicker} hideHeading={!isScrollV1} />
@@ -156,6 +162,8 @@ export default function ContextSection({
             tier={2}
             defaultOpen={false}
             controlledOpen={expandedSections.has('ten-k') || undefined}
+            titleStyle={isV5 ? ACCORDION_L2_TITLE_STYLE : undefined}
+            chevronPosition={isV5 ? 'right' : 'left'}
           >
             <div id="sec-10k-inner" style={{ padding: '0 var(--space-3, 12px)' }}>
               <TenKLinksPanel ticker={selectedTicker} hideHeading />

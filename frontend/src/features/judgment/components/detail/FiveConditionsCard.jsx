@@ -50,6 +50,9 @@ export default function FiveConditionsCard({
   onUpgrade,
   onConditionPulse,
   frameless = false,
+  // §C-11 C (v195): v5 では ①章扉「ファンダメンタル」 の直下のため、 SectionHeader の L字 gold frame を
+  // plain 化 + title を「5 条件」 に短縮 (「ファンダメンタル 5 条件」 は章扉と重複して冗長、 user dogfood)。
+  v5Header = false,
 }) {
   // null = どれも展開されていない (default)
   // index = その index のみ展開 (Linear 流「同時に 1 つだけ」)
@@ -70,7 +73,7 @@ export default function FiveConditionsCard({
   // user 元提案 + UI/UX 推奨案 1 で converge、整合性最優先
   const titleWithHelp = (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2, 8px)' }}>
-      ファンダメンタル 5 条件
+      {v5Header ? '5 条件' : 'ファンダメンタル 5 条件'}
       <button
         type="button"
         onClick={() => setShowOverview(true)}
@@ -123,6 +126,7 @@ export default function FiveConditionsCard({
       <div style={{ padding: 'var(--space-6, 24px)' }}>
         <SectionHeader
           id="judgment-conditions"
+          plain={v5Header}
           icon={<BarChart3 size={18} strokeWidth={1.5} />}
           title={titleWithHelp}
           label={
