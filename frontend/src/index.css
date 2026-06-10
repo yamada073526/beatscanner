@@ -12765,7 +12765,11 @@ body.is-digest-resizing {
 [data-pl-hl="pivot"] .pl-chartline-pivot line,
 [data-pl-flash="pivot"] .pl-chartline-pivot line,
 [data-pl-hl="support"] .pl-chartline-support line,
-[data-pl-flash="support"] .pl-chartline-support line {
+[data-pl-flash="support"] .pl-chartline-support line,
+[data-pl-hl="ext15"] .pl-chartline-ext15 line,
+[data-pl-flash="ext15"] .pl-chartline-ext15 line,
+[data-pl-hl="ext25"] .pl-chartline-ext25 line,
+[data-pl-flash="ext25"] .pl-chartline-ext25 line {
   stroke-width: 2.75px;
   stroke-opacity: 1;
 }
@@ -12904,6 +12908,8 @@ body.is-digest-resizing {
   .pl-chartline-support line,
   .pl-chartline-support rect,
   .pl-chartline-support path,
+  .pl-chartline-ext15 line,
+  .pl-chartline-ext25 line,
   .pl-chartline-sma50 path,
   .pl-chartline-sma200 path {
     transition: stroke-width 150ms ease-out, stroke-opacity 150ms ease-out, fill-opacity 150ms ease-out;
@@ -12912,6 +12918,8 @@ body.is-digest-resizing {
   [data-pl-flash="target"] .pl-chartline-target,
   [data-pl-flash="pivot"] .pl-chartline-pivot,
   [data-pl-flash="support"] .pl-chartline-support,
+  [data-pl-flash="ext15"] .pl-chartline-ext15,
+  [data-pl-flash="ext25"] .pl-chartline-ext25,
   [data-pl-flash="sma50"] .pl-chartline-sma50,
   [data-pl-flash="sma200"] .pl-chartline-sma200 {
     animation: pl-line-flash 600ms ease-in-out 2;

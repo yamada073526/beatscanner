@@ -1427,6 +1427,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                 {pillar2Markers.extended15 != null && (
                   <ReferenceLine
                     key="pillar2_ext15"
+                    className="pl-chartline-ext15"
                     y={pillar2Markers.extended15}
                     stroke="var(--color-warning)"
                     strokeWidth={1}
@@ -1441,6 +1442,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                 {pillar2Markers.extended25 != null && (
                   <ReferenceLine
                     key="pillar2_ext25"
+                    className="pl-chartline-ext25"
                     y={pillar2Markers.extended25}
                     stroke="var(--color-loss)"
                     strokeWidth={1.25}

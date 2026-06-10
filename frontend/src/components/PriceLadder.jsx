@@ -49,7 +49,7 @@ const NEUTRAL_SWATCH = 'color-mix(in srgb, var(--text-muted) 60%, transparent)';
 // round8 #1/#3 (ladder ⇄ チャート連動): チャートに対応線がある level のみ hover 強調 / click ジャンプ可。
 // 連動は React 再レンダーでなく「.ds-judgment-detail への data 属性 + CSS」 で行う (recharts の再描画コスト
 // 回避 + keep-mounted 複数 instance でも closest() でインスタンス局所)。 52週/損切りは対応線なし。
-const CHART_LINKED = new Set(['target', 'pivot', 'support', 'sma50', 'sma200']);
+const CHART_LINKED = new Set(['target', 'pivot', 'support', 'sma50', 'sma200', 'ext15', 'ext25']);
 
 // round8 #4 (前回比): per-ticker の「前回見た価格」 を localStorage に記録し、 10 分以上ぶりの再訪で
 // 「前回チェック時から ±$X (±Y%)」 を表示する (過去の実績変化 = 事実記述、 §38 OK。 色も業界ルールの
@@ -260,6 +260,10 @@ export default function PriceLadder({ ticker }) {
     const raw = [
       { key: 'high52', label: '52週高値', price: high52 },
       { key: 'target', label: 'アナリスト目標', price: consensus },
+      // round10 (user「チャートの 50DMA+15%/+25% がいくらか ladder に無い」): チャートと同表記で追加
+      // (IBD extended の過熱水準。 §38: 計算式どおりの事実値、 チャート既出ラベルの 1:1 mirror)。
+      { key: 'ext25', label: '50DMA +25%', price: Number.isFinite(sma50) ? sma50 * 1.25 : null },
+      { key: 'ext15', label: '50DMA +15%', price: Number.isFinite(sma50) ? sma50 * 1.15 : null },
       { key: 'pivot', label: pivotLabel, price: pivot },
       { key: 'current', label: '現在価格', price: current, isCurrent: true },
       { key: 'sma50', label: '50日移動平均', price: sma50 },
@@ -432,16 +436,26 @@ export default function PriceLadder({ ticker }) {
               // 外側 (当たり判定) の geometry を固定する。 旧: 行自体が scale して当たり判定が動き、
               // 行境界で hover が揺れていた (transform-on-hover jitter)。
               style={{
-                padding: 'var(--space-2, 8px) 0',
-                // 傘下行は冠 (gold accent + pad 8px) より深いインデントで「冠の庇の下」 を空間で示す。
-                // round7: 右にも余白 (hover 板がテキスト右端で切れず「呼吸」 を持つ)
-                paddingLeft: 'var(--space-5, 20px)',
-                paddingRight: 'var(--space-3, 12px)',
                 cursor: CHART_LINKED.has(l.key) ? 'pointer' : undefined,
                 ...stagger(),
               }}
             >
-              <div className="pl-level-inner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-3, 12px)' }}>
+              {/* round10 (user「帯が狭くなった」): padding を外側→内側へ移し、 板 (inner bg) が行の
+                  全領域 (上下 8px + インデント込み) を覆う round8 までの太さに戻す。 hover 判定は外側 =
+                  geometry 固定のままなのでカクつき対策は維持 (transform は hit-test に影響するが、 判定は
+                  parent の :hover / onMouseEnter で行うため inner の変形は無関係)。 */}
+              <div
+                className="pl-level-inner"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 'var(--space-3, 12px)',
+                  padding: 'var(--space-2, 8px) 0',
+                  paddingLeft: 'var(--space-5, 20px)',
+                  paddingRight: 'var(--space-3, 12px)',
+                }}
+              >
               <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)', minWidth: 0 }}>
                 {/* 線サンプル swatch: チャート凡例と同 idiom でチャートの線と 1:1 対応を示す
                     (identity 色 3 つのみ、 他は中立 — §38 verdict)。 hover でふわっと膨らむ (.pl-swatch) */}
@@ -489,8 +503,6 @@ export default function PriceLadder({ ticker }) {
             className="pl-row pl-level"
             style={{
               position: 'relative',
-              padding: 'var(--space-3, 12px) 0',
-              paddingRight: 'var(--space-3, 12px)',
               ...stagger(),
             }}
           >
@@ -506,7 +518,7 @@ export default function PriceLadder({ ticker }) {
               borderRadius: 2,
               background: 'var(--color-accent)',
             }} />
-            <div className="pl-level-inner" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-3, 12px)' }}>
+            <div className="pl-level-inner" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-3, 12px)', padding: 'var(--space-3, 12px) 0', paddingRight: 'var(--space-3, 12px)' }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{l.label}</span>
               <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3, 12px)' }}>
                 <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{fmtUsd(l.price * pf)}</span>
