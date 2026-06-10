@@ -122,7 +122,9 @@ export function fmtEps(v, currency = 'USD') {
   return `${v < 0 ? '-' : ''}${sym}${Math.abs(v).toFixed(2)}`;
 }
 
-// 前年同期比バッジ — ▲▼ + 絶対値 (色なし: 緑/赤を使わず neutral 単色、 §38)。
+// 前年同期比バッジ — ↑↓ + 絶対値 (色なし: 緑/赤を使わず neutral 単色、 §38)。
+// v200 (user 指摘 2026-06-11): ▲▼ → ↑↓ に変更。日本の会計表記では ▲=マイナスのため、決算文脈で
+// ▲=上 として使うと誤読リスク (Trust Cliff)。チャート tooltip の ↑↓ idiom と統一。
 // user dogfood (2026-06-06):「前年比 % がこのセクションで一番重要 (CRWD/SNOW が買われた理由 = 来期成長率)」
 // → 4 体合議で前年比を主役化。 §38 で色は使えないため size + weight + neutral ink のみで強調
 // (% を 19px/800 + neutral primary)。 qa verdict: 独立行昇格はせず inline 強調に留める
@@ -132,7 +134,7 @@ function YoYInline({ pct }) {
   const up = pct >= 0;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 3, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
-      <span aria-hidden style={{ fontSize: 13, fontWeight: 700 }}>{up ? '▲' : '▼'}</span>
+      <span aria-hidden style={{ fontSize: 13, fontWeight: 700 }}>{up ? '↑' : '↓'}</span>
       <strong style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.02em' }}>{Math.abs(pct).toFixed(1)}%</strong>
       <span style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 400 }}>前年比</span>
     </span>
@@ -185,10 +187,11 @@ function ForecastBars({ yearAgo, consensus, yearAgoLabel, consensusLabel, yearAg
 // 「会社ガイダンスは一次情報なので削除不可・圧縮のみ可」 を踏襲し、 意味 (会社 vs 市場予想の方向) は保持。
 // v199 flash summary (6体合議 金融必須条件): export して EarningsFlashSummary が import 流用。
 // 文言を 2 箇所で別管理すると drift して「同じ状態に別の言い回し」 = Trust Cliff になるため dict を single source 化。
+// v200 (user 指摘 2026-06-11): sym を ▲▼ → ↑↓ に変更 (会計表記の ▲=マイナスとの衝突回避)。
 export const GUIDANCE_STATE_JP = {
-  above: { sym: '▲', label: '会社ガイダンスは予想を上回る' },
+  above: { sym: '↑', label: '会社ガイダンスは予想を上回る' },
   inline: { sym: '—', label: '会社ガイダンスは予想と同水準' },
-  below: { sym: '▼', label: '会社ガイダンスは予想を下回る' },
+  below: { sym: '↓', label: '会社ガイダンスは予想を下回る' },
 };
 
 function GuidanceSurpriseRow({ state, companyLow, companyHigh, consensus, fmt, fmtRange, currency }) {

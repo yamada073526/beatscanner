@@ -58,15 +58,19 @@ export function fmtYoyPct(yoyPct) {
 }
 
 /**
- * 来期売上ガイダンスの並置行 (決算速報 note 形式: 「コンセンサス +9.3% に対し会社ガイダンス +14.0〜17.0%」)。
+ * 来期売上ガイダンスの並置行 (決算速報 note 形式: 「現コンセンサス +9.3% に対し会社ガイダンス +14.0〜17.0% (発表時)」)。
  * 全て backend 計算済値 (rev_yoy_pct / company_q_rev_yoy_low_pct / high) を読むだけ。
  * §38: コンセンサスと会社提示の事実並置のみ。「上方修正」 等の評価語は使わない
  * (consensus 比は会社が consensus を修正した事実ではない、ForwardOutlookSection NO-GO 判定踏襲)。
+ * v200 時点明示 (user 確定 2026-06-11): FMP コンセンサスは現在値・会社ガイダンスは発表時点の値で
+ * **時点が異なる** (決算後にアナリストが引き上げると会社側が低く見える、SNOW で実例)。
+ * 「現コンセンサス」「(発表時)」 で時点を明示し、上回る/下回るの判定記号は付けない
+ * (発表時点コンセンサスの snapshot 蓄積基盤が完成したら正確な「発表時比」 で判定を復活させる)。
  * @returns {string|null} 3 値のいずれか欠落で null (行ごと非表示、捏造しない)
  */
 export function fmtGuidanceRevLine(consYoyPct, lowPct, highPct) {
   if ([consYoyPct, lowPct, highPct].some((v) => v == null || !Number.isFinite(v))) return null;
   const s = (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}%`;
   const range = lowPct === highPct ? s(lowPct) : `${s(lowPct)}〜${s(highPct)}`;
-  return `売上: コンセンサス ${s(consYoyPct)} に対し会社ガイダンス ${range}`;
+  return `売上: 現コンセンサス ${s(consYoyPct)} に対し会社ガイダンス ${range} (発表時)`;
 }

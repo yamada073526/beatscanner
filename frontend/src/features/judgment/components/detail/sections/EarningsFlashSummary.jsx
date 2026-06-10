@@ -216,7 +216,6 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
     const yoyStr = fmtYoyPct(nq?.rev_yoy_pct);
     const revLine = fmtGuidanceRevLine(nq?.rev_yoy_pct, nq?.company_q_rev_yoy_low_pct, nq?.company_q_rev_yoy_high_pct);
     const gState = GUIDANCE_STATE_JP[nq?.guidance_vs_consensus_eps] || GUIDANCE_STATE_JP[nq?.guidance_vs_consensus_rev] || null;
-    const gStateRev = GUIDANCE_STATE_JP[nq?.guidance_vs_consensus_rev] || null;
     rows.push(
       <FlashRow key="nextq" label={FLASH_LABELS.nextQ} testid={`${TESTID}-nextq`}>
         {nqEps != null && (
@@ -234,9 +233,10 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
         {yoyStr != null && revLine == null && (
           <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>({yoyStr})</span>
         )}
+        {/* v200 round2 (user 確定): 並置行は判定記号なし (FMP 現コンセンサス vs 発表時ガイダンスの
+            時点ミックスで「下方」 に誤読される、SNOW 実例)。時点は文言で明示。 */}
         {revLine != null ? (
           <span data-testid={`${TESTID}-guidance-rev`} style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>
-            {gStateRev && <span aria-hidden style={{ fontSize: 10 }}>{gStateRev.sym} </span>}
             {revLine}
           </span>
         ) : gState && (
