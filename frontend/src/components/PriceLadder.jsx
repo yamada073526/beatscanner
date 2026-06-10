@@ -46,6 +46,11 @@ const LEVEL_SWATCH = {
 };
 const NEUTRAL_SWATCH = 'color-mix(in srgb, var(--text-muted) 60%, transparent)';
 
+// round8 #1/#3 (ladder ⇄ チャート連動): チャートに対応線がある level のみ hover 強調 / click ジャンプ可。
+// 連動は React 再レンダーでなく「.ds-judgment-detail への data 属性 + CSS」 で行う (recharts の再描画コスト
+// 回避 + keep-mounted 複数 instance でも closest() でインスタンス局所)。 52週/損切りは対応線なし。
+const CHART_LINKED = new Set(['target', 'pivot', 'support', 'sma50', 'sma200']);
+
 // round8 #4 (前回比): per-ticker の「前回見た価格」 を localStorage に記録し、 10 分以上ぶりの再訪で
 // 「前回チェック時から ±$X (±Y%)」 を表示する (過去の実績変化 = 事実記述、 §38 OK。 色も業界ルールの
 // 本来用途 = 実績の上昇緑/下落赤)。 10 分未満の再訪では表示も更新もしない (連続リロードで「前回」 が
@@ -142,6 +147,24 @@ export default function PriceLadder({ ticker }) {
   const containerRef = useRef(null);
   const [hoverKey, setHoverKey] = useState(null);
   const [rangeBox, setRangeBox] = useState(null);
+  // round8 #1: hover 中の level に対応するチャート線を強調 (data-pl-hl 属性、 CSS 駆動)
+  const detailRoot = () => containerRef.current?.closest('.ds-judgment-detail') || null;
+  const setChartHl = (key) => {
+    const r = detailRoot();
+    if (!r) return;
+    if (key && CHART_LINKED.has(key)) r.setAttribute('data-pl-hl', key);
+    else r.removeAttribute('data-pl-hl');
+  };
+  // round8 #3: click でチャートへ smooth scroll + 対応線を 1.8s フラッシュ
+  const flashChart = (key) => {
+    const r = detailRoot();
+    if (!r || !CHART_LINKED.has(key)) return;
+    const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    r.querySelector('.recharts-wrapper')?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' });
+    r.setAttribute('data-pl-flash', key);
+    window.setTimeout(() => r.removeAttribute('data-pl-flash'), 1800);
+  };
+
   useLayoutEffect(() => {
     if (!hoverKey) { setRangeBox(null); return; }
     const c = containerRef.current;
@@ -391,9 +414,10 @@ export default function PriceLadder({ ticker }) {
               // round4: .pl-level = hover インタラクション scope (行 lift + bg sweep + label/price 増光 +
               //   micro-bar)。 冠 (.pl-row のみ) には効かせない。 §38: 全て中立色、 方向/行動の示唆なし。
               className="pl-row pl-level"
-              // round8 #2: hover 行 ⇄ 現在価格 の spine 区間ハイライト用
-              onMouseEnter={() => setHoverKey(l.key)}
-              onMouseLeave={() => setHoverKey(null)}
+              // round8 #2: spine 区間ハイライト / #1: チャート対応線の強調 / #3: click でチャートへ
+              onMouseEnter={() => { setHoverKey(l.key); setChartHl(l.key); }}
+              onMouseLeave={() => { setHoverKey(null); setChartHl(null); }}
+              onClick={CHART_LINKED.has(l.key) ? () => flashChart(l.key) : undefined}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -404,6 +428,7 @@ export default function PriceLadder({ ticker }) {
                 // round7: 右にも余白 (hover 板がテキスト右端で切れず「呼吸」 を持つ)
                 paddingLeft: 'var(--space-5, 20px)',
                 paddingRight: 'var(--space-3, 12px)',
+                cursor: CHART_LINKED.has(l.key) ? 'pointer' : undefined,
                 ...stagger(),
               }}
             >

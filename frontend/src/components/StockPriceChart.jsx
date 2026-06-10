@@ -1126,6 +1126,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                 {hasSma200 && (
                   <Line
                     key="sma_200"
+                    className="pl-chartline-sma200"
                     type="monotone"
                     dataKey="sma_200"
                     stroke={SMA_200_COLOR}
@@ -1142,6 +1143,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                 {hasSma50 && (
                   <Line
                     key="sma_50"
+                    className="pl-chartline-sma50"
                     type="monotone"
                     dataKey="sma_50"
                     stroke={SMA_50_COLOR}
@@ -1274,6 +1276,8 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                     v127: pivot は 50DMA+15% と y 近接で重なるため makeEdgeLabel dy +11 で下方向に stagger。 */}
                 {hasCup && !cupRequiresPro && (
                   <ReferenceLine
+                    /* round8 #1/#3: PriceLadder hover/click 連動の強調 target (CSS [data-pl-hl] 駆動、 logic 不変) */
+                    className="pl-chartline-pivot"
                     y={cupHandle.pivot.price}
                     stroke={CUP_COLOR}
                     strokeWidth={1.25}
@@ -1317,6 +1321,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                     color: SMA200 と衝突する purple を避け cyan (= ブランド色、 方向でなく水準なので投資業界色ルール非抵触)。 */}
                 {!isNonEquity && Number.isFinite(cupHandle?.box_support?.band_low) && Number.isFinite(cupHandle?.box_support?.band_high) && cupHandle?.box_support?.role !== 'overhead_resistance' && (
                   <ReferenceArea
+                    className="pl-chartline-support"
                     y1={cupHandle.box_support.band_low}
                     y2={cupHandle.box_support.band_high}
                     fill="var(--color-accent)"
@@ -1337,6 +1342,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                 {/* box_support が無いとき last_breakout (単発 pivot ±5%) を fallback 表示 (cyan に統一)。 */}
                 {!isNonEquity && !cupHandle?.box_support && Number.isFinite(cupHandle?.last_breakout?.price) && cupHandle.last_breakout.price > 0 && (
                   <ReferenceLine
+                    className="pl-chartline-support"
                     y={cupHandle.last_breakout.price * 1.05}
                     stroke="var(--color-accent)"
                     strokeWidth={1}
@@ -1356,6 +1362,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                 )}
                 {!isNonEquity && !cupHandle?.box_support && Number.isFinite(cupHandle?.last_breakout?.price) && cupHandle.last_breakout.price > 0 && (
                   <ReferenceLine
+                    className="pl-chartline-support"
                     y={cupHandle.last_breakout.price * 0.95}
                     stroke="var(--color-accent)"
                     strokeWidth={1}
@@ -1498,6 +1505,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                 {pillar2Markers.consensus != null && (
                   <ReferenceLine
                     key="pillar2_consensus"
+                    className="pl-chartline-target"
                     y={pillar2Markers.consensus}
                     stroke="var(--color-accent)"
                     strokeWidth={1.25}
