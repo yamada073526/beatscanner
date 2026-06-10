@@ -109,9 +109,9 @@ export default function PriceLadder({ ticker }) {
   const [ladderRef, ladderInView] = useInViewOnce({ threshold: 0.1, rootMargin: '0px' });
   // 距離% の count-up 進捗係数 (0→1)。 reduced-motion は hook 内で即 1。 inView 前は係数 1 で実値表示
   // (motion 環境では行自体が opacity 0 のため見えない / reduced-motion 環境では最初から実値 = §38 セーフ)。
-  // round4: 450ms だと行の stagger 着地 (opacity 0 区間) と重なり user に見えない → 1100ms に延長
-  // (行が見え始めた後もカウントが続き「数字がめくれる」 のが知覚できる)。
-  const countProgress = useCountUp(ladderInView ? 1 : null, { duration: 1100, digits: 3, forceFromZero: true });
+  // round4: 450ms だと行の stagger 着地と重なり知覚不能 → round5 (user「一瞬で完了」): 2000ms に再延長。
+  // スコアボードがゆっくり回り切る感覚 (行は ~700ms で出揃うので残り 1.3s はカウントだけが動く)。
+  const countProgress = useCountUp(ladderInView ? 1 : null, { duration: 2000, digits: 3, forceFromZero: true });
   const pf = ladderInView ? countProgress : 1;
 
   useEffect(() => {
@@ -263,9 +263,11 @@ export default function PriceLadder({ ticker }) {
           {/* v195 round4 (user「pill は窮屈」): Chip 撤回 → 状態 dot ● + テキスト。 枠なしで開放感を保ちつつ、
               dot が「動的な状態表示」 の記号として静的キャプションと区別する (右の地合い Chip とは種類が違う
               情報というコントラストも生まれる、 ui-designer 案B)。 */}
+          {/* round5 (user「自己主張がない」): dot を中立 muted → ブランド accent + ゆっくり点滅 (pl-status-dot)
+              に変更し「ライブな状態表示」 の記号性を強化。 文字も 12px に。 accent は方向色でない (§38 OK)。 */}
           {stateText ? (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)' }}>
-              <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: 'var(--text-muted)' }} />
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>
+              <span className="pl-status-dot" aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: 'var(--color-accent)' }} />
               {stateText}
             </span>
           ) : <span />}
@@ -371,7 +373,7 @@ export default function PriceLadder({ ticker }) {
                   <span
                     className="pl-distbar"
                     aria-hidden="true"
-                    style={{ '--pl-bar': `${Math.round(Math.min(Math.abs(dist), 60) * 1.4)}px` }}
+                    style={{ '--pl-bar': `${Math.round(Math.min(Math.abs(dist), 50) * 2.4)}px` }}
                   />
                 )}
               </span>
