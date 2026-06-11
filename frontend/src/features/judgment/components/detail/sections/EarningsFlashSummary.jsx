@@ -108,19 +108,18 @@ function isFlashV2Enabled() {
   }
 }
 
-// 決算ハイライト v3 polish (?flash_v3=1 opt-in、default OFF): 3体 design review (ui-designer 最効 2 案)。
+// 決算ハイライト v3 polish (default ON = user 承認 2026-06-11、?flash_v3=0 が kill switch): 3体 design review。
 // ① S-1 単位従属化 (数値本体を主役化、$/%/億ドル を 0.62em muted) ② H-1 行 hover reading-lamp (極薄 bg
-// tint + 1px 寄り、CSS class、影/glow 不使用)。§38 (hover でも判断色なし)。
-// user 承認後 default ON。 prefers-reduced-motion は index.css 側 @media で尊重。
+// tint + 1px 寄り、CSS class、影/glow 不使用)。prefers-reduced-motion は index.css 側 @media で尊重。
 function isFlashV3Enabled() {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   try {
     const urlParam = new URLSearchParams(window.location.search).get('flash_v3');
-    if (urlParam === '1') return true;
     if (urlParam === '0') return false;
-    return window.localStorage?.getItem('flash_v3') === '1';
+    if (urlParam === '1') return true;
+    return window.localStorage?.getItem('flash_v3') !== '0';
   } catch {
-    return false;
+    return true;
   }
 }
 
