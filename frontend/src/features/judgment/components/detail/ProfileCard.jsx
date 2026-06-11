@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import Card from '../../primitives/Card.jsx';
 import SectionHeader from '../../primitives/SectionHeader.jsx';
 import CompanyLogo from '../../../../components/CompanyLogo.jsx';
+// v203 (2026-06-12 user 指定): 主要 ETF への組入 panel をプロフィール内へ移設 (旧 v202 はバリュエーション隣)。
+import EtfExposurePanel, { isEtfExposureEnabled } from './EtfExposurePanel.jsx';
 import Chip from '../../../../components/ui/Chip.jsx';
 // v138.6 R7-C (2026-05-30): 「Google ログインで無制限」 link を直接 signInWithGoogle 接続、
 // 旧 window.dispatchEvent('bs:open-login') は listener なしで click 無反応 (user dogfood 報告)
@@ -1642,6 +1644,13 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
               ))}
             </div>
           </div>
+        )}
+
+        {/* v203 (2026-06-12 user 指定): 「主要 ETF への組入」 — 常時表示面はファンダ/テクニカルに絞る方針の
+            ためプロフィール (会社概要) 内へ移設。競合チップの直後 = 「会社理解 → 機関投資家の保有文脈」 の読み順。
+            非該当銘柄 (主要 ETF 未組入/小型) は panel 内で自動非表示。default ON (?etf_exposure=0 kill)。 */}
+        {isEtfExposureEnabled() && (
+          <EtfExposurePanel ticker={ticker} onNavigateTicker={onNavigateTicker} />
         )}
           </>
         )}

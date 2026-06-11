@@ -134,6 +134,14 @@ class FMPClient:
         """
         return await self._get("/etf/sector-weightings", {"symbol": ticker.upper()})
 
+    async def stock_price_change(self, ticker: str) -> list[dict]:
+        """期間別の株価変化率 % (1D/5D/1M/3M/6M/ytd/1Y/3Y/5Y/10Y/max)。
+
+        /stable/stock-price-change?symbol=QQQ (Ultimate 動作確認 2026-06-12)。ETF にも使える。
+        返却: [{"symbol": "QQQ", "1D": 3.27, ..., "1Y": 34.56, ...}] (過去実績、§38 射程外)。
+        """
+        return await self._get("/stock-price-change", {"symbol": ticker.upper()})
+
     async def etf_asset_exposure(self, ticker: str) -> list[dict]:
         """個別銘柄を組み入れている ETF 一覧 (逆引き = stock → 組入 ETF)。
 

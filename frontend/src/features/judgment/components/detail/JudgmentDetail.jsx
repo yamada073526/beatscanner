@@ -76,8 +76,6 @@ import UnifiedJudgmentSection from './UnifiedJudgmentSection.jsx';
 // v104 release MVP: EPS Beat Streak chip — 章 1 verdict anchor、 過去 N 期 Beat の retention 訴求。
 //   QuarterlyHistoryTable が accordion collapsed default で見えない問題を chip 前出しで解消。
 import EpsBeatStreakChip from './EpsBeatStreakChip.jsx';
-// v202 dogfood feature (?etf_exposure=1 opt-in、default OFF): 主要 US ETF への組入比率 panel。
-import EtfExposurePanel, { isEtfExposureEnabled } from './EtfExposurePanel.jsx';
 // v108 議題 5A (multi-review 5/5 verdict「release 前 mandatory」):
 // Forward P/E / PEG / 配当性向 / Buyback比率 を KpiStrip に追加するための fetcher。
 // 金商法 §38 / 景表法 §5 配慮で narration / 警告 chip なし、 数値のみ。
@@ -776,13 +774,6 @@ export default function JudgmentDetail({
         />
       )}
 
-      {/* v202 dogfood (?etf_exposure=1 opt-in、default OFF): 主要 US ETF への組入比率。
-          TtmValuationPanel 直後 = 「市場での位置づけ」 文脈で隣接。非該当銘柄は panel 内で自動非表示
-          (Trust Cliff)。配置・default ON は user 判断待ち (prototype、handover 朝サマリー記載)。 */}
-      {result && selectedTicker && isEtfExposureEnabled() && (
-        <EtfExposurePanel ticker={selectedTicker} />
-      )}
-
       {/* v104 release MVP: EPS Beat Streak chip — 章 1 verdict anchor、 streak >= 2 のみ表示。
           QuarterlyHistoryTable (章 3 accordion collapsed default) の streak 情報を前出しで anchor 強化。 */}
       {selectedTicker && <EpsBeatStreakChip ticker={selectedTicker} />}
@@ -1230,12 +1221,7 @@ export default function JudgmentDetail({
                 sectionLabel="バリュエーション"
               />
             ) : null;
-            // v202 dogfood (?etf_exposure=1 opt-in、default OFF): 主要 US ETF への組入比率。
-            //   バリュエーション (ttmNode) 直後の hairline セクションに配置 (「市場での位置づけ」 文脈)。
-            //   非該当銘柄は panel 内で自動非表示 (Trust Cliff)。配置・default ON は user 判断待ち。
-            const etfNode = (result && selectedTicker && isEtfExposureEnabled()) ? (
-              <EtfExposurePanel ticker={selectedTicker} />
-            ) : null;
+            // ETF 組入 panel は ProfileCard (会社概要) 内へ移設済 (v203、2026-06-12 user 指定)。
             // EPS Beat Streak は決算タブ「今期」と内容重複のため v5 ファンダ章から除外 (user dogfood 2026-06-08)。
             // v185 E (2026-06-08): v5 テクニカル章では短期/長期を hairline 区切りで 2 段表示 (splitByTerm)。
             const returnGridNode = (result && selectedTicker) ? (
@@ -1305,7 +1291,6 @@ export default function JudgmentDetail({
                   />
                 </div>
                 {ttmNode && <div style={hairlineSectionStyle}>{ttmNode}</div>}
-                {etfNode && <div style={hairlineSectionStyle}>{etfNode}</div>}
                 <div style={hairlineSectionStyle}>
                   <FundamentalsAccordion
                     key="funda-profile"

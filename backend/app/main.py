@@ -2804,6 +2804,59 @@ _MAJOR_US_ETFS: dict[str, str] = {
 }
 _ETF_EXPOSURE_CACHE: dict[str, dict] = {}  # key: ticker, value: {"data": {...}, "ts": float}
 _ETF_EXPOSURE_TTL = 60 * 60 * 24  # 24h (組入は日次更新程度)
+# ETF ごとの holdings (rank 算出用) / 1Y リターン。ticker 横断で共有されるため別 cache (SPY holdings は
+# 大型株全銘柄で再利用)。slim 化して保持 (asset, weight) のみ — VTI ~3600 行でもメモリ軽量。
+_ETF_HOLDINGS_CACHE: dict[str, dict] = {}  # key: ETF symbol, value: {"rows": [(asset, weight)...], "ts": float}
+_ETF_PERF_CACHE: dict[str, dict] = {}      # key: ETF symbol, value: {"perf_1y": float|None, "ts": float}
+
+
+async def _etf_rank_of(client: "FMPClient", etf_sym: str, asset_sym: str) -> tuple[int | None, int | None]:
+    """ETF の構成銘柄中で asset が weight 何位か (1-based) + 構成銘柄数。取得失敗は (None, None)。"""
+    now = _time.time()
+    cached = _ETF_HOLDINGS_CACHE.get(etf_sym)
+    if not cached or (now - cached["ts"]) >= _ETF_EXPOSURE_TTL:
+        try:
+            rows = await client.etf_holdings(etf_sym)
+            if not isinstance(rows, list):
+                rows = []
+            slim = sorted(
+                (
+                    (str(r.get("asset", "")).upper(), float(r["weightPercentage"]))
+                    for r in rows
+                    if isinstance(r.get("weightPercentage"), (int, float))
+                ),
+                key=lambda t: -t[1],
+            )
+            cached = {"rows": slim, "ts": now}
+            _ETF_HOLDINGS_CACHE[etf_sym] = cached
+        except (FMPError, ValueError, TypeError) as e:
+            print(f"[etf-exposure] holdings error for {etf_sym}: {e}")
+            return None, None
+    rows = cached["rows"]
+    count = len(rows) or None
+    for i, (asset, _w) in enumerate(rows):
+        if asset == asset_sym:
+            return i + 1, count
+    return None, count
+
+
+async def _etf_perf_1y(client: "FMPClient", etf_sym: str) -> float | None:
+    """ETF の過去 1 年リターン % (確定した過去実績、§38 射程外)。取得失敗は None。"""
+    now = _time.time()
+    cached = _ETF_PERF_CACHE.get(etf_sym)
+    if cached and (now - cached["ts"]) < _ETF_EXPOSURE_TTL:
+        return cached["perf_1y"]
+    perf = None
+    try:
+        rows = await client.stock_price_change(etf_sym)
+        if isinstance(rows, list) and rows:
+            v = rows[0].get("1Y")
+            if isinstance(v, (int, float)):
+                perf = round(float(v), 1)
+    except FMPError as e:
+        print(f"[etf-exposure] price-change error for {etf_sym}: {e}")
+    _ETF_PERF_CACHE[etf_sym] = {"perf_1y": perf, "ts": now}
+    return perf
 
 
 @app.get("/api/etf-exposure/{ticker}")
@@ -2861,9 +2914,21 @@ async def etf_exposure_endpoint(ticker: str, request: Request) -> dict:
             continue
         if etf_sym not in best or w > best[etf_sym]:
             best[etf_sym] = float(w)
+    ordered = sorted(best.items(), key=lambda kv: -kv[1])[:8]  # enrich は上位 8 まで (latency 抑制)
+    # v2 enrichment (2026-06-12 user 要望「順位・ETF のリターンも」): 組入順位 + 構成銘柄数 + 1Y リターン。
+    # ETF 単位 cache (24h、ticker 横断共有) のため初回のみ実 fetch。失敗は None (frontend が graceful 表示)。
+    ranks = await asyncio.gather(*(_etf_rank_of(client, s, sym) for s, _ in ordered))
+    perfs = await asyncio.gather(*(_etf_perf_1y(client, s) for s, _ in ordered))
     etfs = [
-        {"symbol": s, "name": _MAJOR_US_ETFS[s], "weight_pct": round(w, 2)}
-        for s, w in sorted(best.items(), key=lambda kv: -kv[1])
+        {
+            "symbol": s,
+            "name": _MAJOR_US_ETFS[s],
+            "weight_pct": round(w, 2),
+            "rank": ranks[i][0],
+            "holdings_count": ranks[i][1],
+            "perf_1y_pct": perfs[i],
+        }
+        for i, (s, w) in enumerate(ordered)
     ]
 
     result = {
