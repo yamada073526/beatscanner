@@ -108,6 +108,46 @@ function isFlashV2Enabled() {
   }
 }
 
+// 決算ハイライト v3 polish (?flash_v3=1 opt-in、default OFF): 3体 design review (ui-designer 最効 2 案)。
+// ① S-1 単位従属化 (数値本体を主役化、$/%/億ドル を 0.62em muted) ② H-1 行 hover reading-lamp (極薄 bg
+// tint + 1px 寄り、CSS class、影/glow 不使用)。§38 (hover でも判断色なし)。
+// user 承認後 default ON。 prefers-reduced-motion は index.css 側 @media で尊重。
+function isFlashV3Enabled() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('flash_v3');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('flash_v3') === '1';
+  } catch {
+    return false;
+  }
+}
+
+// S-1 (v3): 数値本体を主役化し、 単位/記号 ($ / % / 億ドル / 兆ドル 等) を従属サイズ (0.62em) + muted に。
+// v3 OFF では従来通りプレーンな span。 backend 値の整形済文字列を split するだけ (再計算なし、§38)。
+function splitNumUnit(str) {
+  if (typeof str !== 'string') return { pre: '', num: str || '', post: '' };
+  const m = str.match(/^([+\-]?\$?)([\d.,]+)(.*)$/);
+  if (!m) return { pre: '', num: str, post: '' };
+  return { pre: m[1] || '', num: m[2] || '', post: m[3] || '' };
+}
+function NumUnit({ str, size, weight, color, letterSpacing }) {
+  const baseStyle = { fontSize: size, fontWeight: weight, color, whiteSpace: 'nowrap', ...(letterSpacing ? { letterSpacing } : {}) };
+  if (!isFlashV3Enabled() || str == null) {
+    return <span style={baseStyle}>{str}</span>;
+  }
+  const { pre, num, post } = splitNumUnit(str);
+  const unitStyle = { fontSize: '0.62em', fontWeight: 500, color: 'var(--text-muted)' };
+  return (
+    <span style={baseStyle}>
+      {pre && <span style={unitStyle}>{pre}</span>}
+      {num}
+      {post && <span style={{ ...unitStyle, marginLeft: 1 }}>{post}</span>}
+    </span>
+  );
+}
+
 // セグメント 1 件の表示文字列部品 (名称 + 実額億ドル + 前年比 ↑↓、中立色、§38)。
 // backend build_segment_summary の value_b($B)/yoy_pct を読むだけ (frontend 再計算しない)。
 function SegmentItem({ seg }) {
@@ -157,9 +197,11 @@ function GuidanceBadge({ scope, sym, label, testid }) {
 // 予想 = muted (過去情報)、結果 = primary 15px/700 (主役)、→ = muted (中立の橋渡し、色なし)。
 function FlashRow({ label, children, testid, dividerAfter }) {
   const v2 = isFlashV2Enabled();
+  const v3 = isFlashV3Enabled();
   return (
     <div
       data-testid={testid}
+      className={v3 ? 'ds-flash-row-v3' : undefined}
       style={{
         display: 'flex',
         alignItems: 'baseline',
@@ -205,7 +247,7 @@ function EstimateToActual({ estStr, actStr, surpriseStr, hero }) {
           <span aria-hidden style={{ fontSize: v2 ? 12 : 13, color: 'var(--text-muted)' }}>→</span>
         </>
       )}
-      <span style={{ fontSize: actSize, fontWeight: v2 && hero ? 800 : 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', ...(v2 && hero ? { letterSpacing: '-0.01em' } : {}) }}>{actStr}</span>
+      <NumUnit str={actStr} size={actSize} weight={v2 && hero ? 800 : 700} color={'var(--text-primary)'} letterSpacing={v2 && hero ? '-0.01em' : undefined} />
       {/* 予実差 % は中立色 (緑/赤を塗らない、§38 保守側 + 色は 5 条件カードに集中) */}
       {surpriseStr != null && (
         <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>({surpriseStr})</span>
@@ -389,7 +431,7 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
     if (gmStr != null) {
       rows.push(
         <FlashRow key="grossmargin" label={FLASH_LABELS.grossMargin} testid={`${TESTID}-gross-margin`}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{gmStr}</span>
+          <NumUnit str={gmStr} size={15} weight={600} color={'var(--text-primary)'} />
         </FlashRow>
       );
     }
@@ -412,13 +454,13 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
         {nqEps != null && (
           <>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{FLASH_TERMS.consensusEps}</span>
-            <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{nqEps}</span>
+            <NumUnit str={nqEps} size={15} weight={600} color={'var(--text-primary)'} />
           </>
         )}
         {nqRev != null && (
           <>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{nqEps != null ? `・${FLASH_TERMS.consensusRev}` : FLASH_TERMS.consensusRev}</span>
-            <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{nqRev}</span>
+            <NumUnit str={nqRev} size={15} weight={600} color={'var(--text-primary)'} />
           </>
         )}
         {yoyStr != null && revLine == null && (

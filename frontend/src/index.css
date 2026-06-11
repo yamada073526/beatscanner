@@ -12974,3 +12974,19 @@ body.is-digest-resizing {
 @keyframes pl-line-flash {
   50% { opacity: 0.2; }
 }
+
+/* 決算ハイライト v3 polish (?flash_v3=1 opt-in): hover reading-lamp + 導線格上げ (3体 design review)。
+   発光バグ回避のため 影 (shadow) / glow は一切使わず、bg tint + 1px 寄り のみ (frontend-motion verdict)。
+   prefers-reduced-motion はグローバル一括 (本 file §11-E) で transition 無効化されるため per-class @media 不要。
+   §38: hover で判断色 (緑/赤) は出さない。中立 bg のみ。 */
+.ds-flash-row-v3 {
+  transition: background-color 160ms cubic-bezier(0.4, 0, 0.2, 1), transform 160ms cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: var(--radius-sm, 8px);
+  /* 行 hover の bg を罫線ブロック左端まで届かせるための負 margin + padding (はみ出し防止) */
+  margin-inline: -6px;
+  padding-inline: 6px;
+}
+.ds-flash-row-v3:hover {
+  background-color: var(--bg-subtle);
+  transform: translateX(1px);
+}
