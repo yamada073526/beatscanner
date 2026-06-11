@@ -56,20 +56,20 @@ function isGuidanceHistoryEnabled() {
   }
 }
 
-// 決算ハイライト Phase2 (四半期グロスマージン): ?flash_gm=1 / localStorage 'flash_gm'='1' で opt-in。
-// default OFF (本番挙動不変)。粗利率は DiagramCard(推移図)/ProfileCard(年次) に既出のため、
-// 「章冒頭の当四半期実値」 の追加価値を user dogfood で確認後 default ON 昇格 (isGuidanceHistoryEnabled と同パターン)。
+// 決算ハイライト Phase2 (四半期グロスマージン): default ON (user 承認 2026-06-11、 headless dogfood で
+// AAPL=49.3%[模範一致]/NVDA=74.9% + 中立色 + 銀行 gate + production 不変まで検証済)。?flash_gm=0 が kill switch。
+// 粗利率は DiagramCard(推移図)/ProfileCard(年次) と粒度差別化 (本行=直近四半期実値)。Phase1 の flash と同パターン。
 // ※ セグメント別売上行は既存 2 箇所 (DiagramCard SegmentBar / ProfileCard SegmentSection、 同一四半期粒度) と
-//   重複するため本 Phase では追加せず、 集約 vs アンカー導線の設計判断を保留 (6体合議 マーケ verdict)。
+//   重複するため、 アンカー導線 (案a) を opt-in (?flash_seg=1) で別途検証中 (6体合議 マーケ verdict)。
 function isGrossMarginEnabled() {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   try {
     const urlParam = new URLSearchParams(window.location.search).get('flash_gm');
-    if (urlParam === '1') return true;
     if (urlParam === '0') return false;
-    return window.localStorage?.getItem('flash_gm') === '1';
+    if (urlParam === '1') return true;
+    return window.localStorage?.getItem('flash_gm') !== '0';
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -154,8 +154,10 @@ function EstimateToActual({ estStr, actStr, surpriseStr }) {
 }
 
 const containerStyle = {
-  // CLS envelope: 3 行分の概算高 (feedback_cls_envelope_pattern)。main/loading 共通で章の伸縮を抑止
-  minHeight: 96,
+  // CLS envelope (feedback_cls_envelope_pattern): 粗利率 default ON で 4 行が基本 (EPS/売上/粗利率/来期)。
+  // 実計測 (headless snap): AAPL 4 行=132px / NVDA 5 行=162px。common 4 行に合わせ 132 で loading→loaded の
+  // 章ジャンプを抑止 (3 行の銀行系は下に小幅余白だが jump より優先、 UI verdict)。
+  minHeight: 132,
   display: 'flex',
   flexDirection: 'column',
   gap: 'var(--space-2, 8px)',
