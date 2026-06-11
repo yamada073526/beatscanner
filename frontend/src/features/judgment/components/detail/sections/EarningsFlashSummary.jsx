@@ -123,6 +123,30 @@ function isFlashV3Enabled() {
   }
 }
 
+// 決算ハイライト v4 color (?flash_v4=1 opt-in、default OFF): 過去確定実績の方向に muted 緑/赤。
+// §38/§5 verdict (金融+マーケ+ui 3体合議 2026-06-11): 過去の確定事実 (予実差 beat/miss・前年比) の着色は
+// 「陽線=緑」 同型の事実の色分けで §38 射程外。来期=未来予想・粗利率=水準 は中立維持 (色 NG)。色は数値本体でなく
+// 「予実差 + 主要前年比」 の差分にだけ投下 (ui-designer 案、画面に緑 2-3 点)。5条件カードの面の緑(verdict) と
+// ハイライトの線の緑(事実) の格を muted (color-mix) で分離。投資色: 上昇緑/下落赤、評価語と併用しない。
+function isFlashV4Enabled() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('flash_v4');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('flash_v4') === '1';
+  } catch {
+    return false;
+  }
+}
+// 過去確定実績の方向 % → 色。v4 OFF / 0 / 欠損 は中立 (--text-secondary)。muted gain/loss を token から color-mix。
+function deltaColor(pct) {
+  if (!isFlashV4Enabled() || !Number.isFinite(pct) || pct === 0) return 'var(--text-secondary)';
+  return pct > 0
+    ? 'color-mix(in oklab, var(--color-gain) 80%, var(--text-primary))'
+    : 'color-mix(in oklab, var(--color-loss) 80%, var(--text-primary))';
+}
+
 // S-1 (v3): 数値本体を主役化し、 単位/記号 ($ / % / 億ドル / 兆ドル 等) を従属サイズ (0.62em) + muted に。
 // v3 OFF では従来通りプレーンな span。 backend 値の整形済文字列を split するだけ (再計算なし、§38)。
 function splitNumUnit(str) {
@@ -233,7 +257,7 @@ function FlashRow({ label, children, testid, dividerAfter }) {
 }
 
 // 「予想 X → 結果 Y (予想比 ±Z%)」 の値部分。est が null (basis mismatch 抑止等) なら結果のみ。
-function EstimateToActual({ estStr, actStr, surpriseStr, hero }) {
+function EstimateToActual({ estStr, actStr, surpriseStr, surpriseColor, hero }) {
   const v2 = isFlashV2Enabled();
   // v2 再設計 (3体合議 round2): 焦点は EPS hero ただ1点 (26px/800)。 他行は v1 並み (15px) に静かに従属。
   // 「全数値 18px」 で焦点分散・文字壁になった失敗の是正 = 1 点だけ突出、 残りは退かせる引き算。
@@ -248,9 +272,9 @@ function EstimateToActual({ estStr, actStr, surpriseStr, hero }) {
         </>
       )}
       <NumUnit str={actStr} size={actSize} weight={v2 && hero ? 800 : 700} color={'var(--text-primary)'} letterSpacing={v2 && hero ? '-0.01em' : undefined} />
-      {/* 予実差 % は中立色 (緑/赤を塗らない、§38 保守側 + 色は 5 条件カードに集中) */}
+      {/* 予実差 % : v4 で過去確定の beat/miss を muted 緑/赤 (deltaColor)、それ以外は中立。§38: 過去確定事実のみ */}
       {surpriseStr != null && (
-        <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>({surpriseStr})</span>
+        <span style={{ fontSize: 12, fontWeight: 500, color: surpriseColor || 'var(--text-secondary)', whiteSpace: 'nowrap' }}>({surpriseStr})</span>
       )}
     </>
   );
@@ -374,6 +398,7 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
           estStr={hasEst ? fmtEps(eps.estimated) : null}
           actStr={fmtEps(eps.actual)}
           surpriseStr={hasEst ? fmtSurprisePct(eps.surprise_pct) : null}
+          surpriseColor={deltaColor(eps.surprise_pct)}
         />
       </FlashRow>
     );
@@ -392,9 +417,10 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
           estStr={showEst ? fmtMoney(rev.estimated) : null}
           actStr={fmtMoney(rev.actual)}
           surpriseStr={showEst ? revSurprise : null}
+          surpriseColor={deltaColor(rev?.surprise_pct)}
         />
         {yoyStr != null && (
-          <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>・{yoyStr}</span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: deltaColor(latestQ?.revenue_yoy_pct), whiteSpace: 'nowrap' }}>・{yoyStr}</span>
         )}
       </FlashRow>
     );
