@@ -503,19 +503,22 @@ const FLASH_GRID_COLUMNS = '52px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minma
 const lowerLabelCell = (txt) => (
   <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>{txt}</span>
 );
+// v5.7.1 (user「↑% が前年比/予想比どちらか不明 → 列移設」、design review): セグメントを 1 行 1 件に展開し、
+// 名称+金額は結果列(col3)、前年比 yoy は前年比列(col5)へ分離。yoy が前年比列に縦整列し、上段 EPS/売上の
+// 前年比と目線が揃って「= 前年比」 が自明になる。SegStack は col3 の「名称(9px muted)+金額」 だけを担う。
 function SegStack({ seg }) {
-  const yoy = seg?.yoy_pct;
-  const sym = Number.isFinite(yoy) ? (yoy > 0 ? '↑' : yoy < 0 ? '↓' : '') : null;
-  // v5.7: 右寄せ縦積み (上段の右寄せ数値列と寄せ方向を統一)
   return (
     <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, minWidth: 0, justifySelf: 'end', textAlign: 'right' }}>
-      <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{displaySegmentName(seg)}</span>
+      <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{displaySegmentName(seg)}</span>
       <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{fmtMoney((seg?.value_b || 0) * 1e9)}</span>
-      {sym != null && (
-        <span style={{ fontSize: 11, fontWeight: 500, color: deltaColor(yoy), fontVariantNumeric: 'tabular-nums' }}>{sym}{Math.abs(yoy).toFixed(1)}%</span>
-      )}
     </span>
   );
+}
+// 前年比 yoy セル (col5 用、右寄せ + deltaColor=過去確定の方向)。欠損は空。
+function SegYoyCell({ yoy }) {
+  if (!Number.isFinite(yoy)) return <span />;
+  const sym = yoy > 0 ? '↑' : yoy < 0 ? '↓' : '';
+  return <span style={{ justifySelf: 'end', fontSize: 12, fontWeight: 600, color: deltaColor(yoy), fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{sym}{Math.abs(yoy).toFixed(1)}%</span>;
 }
 function LowerGrid({ segs, restCount, gmStr, gmPp, onDetailClick }) {
   const gmPpStr = Number.isFinite(gmPp) ? `${gmPp > 0 ? '↑' : gmPp < 0 ? '↓' : ''}${Math.abs(gmPp).toFixed(1)}pt` : null;
@@ -538,34 +541,50 @@ function LowerGrid({ segs, restCount, gmStr, gmPp, onDetailClick }) {
         cursor: onDetailClick ? 'pointer' : undefined,
       }}
     >
-      {segs && segs.length > 0 && (
+      {/* 部門別: 1 行 1 セグメント (design review)。col3=名称+金額(結果列)、col5=前年比 yoy。col2/col4 空。
+          各 yoy が前年比列に縦整列し、上段 EPS/売上の前年比と目線が揃って「= 前年比」 が自明になる。 */}
+      {segs && segs.slice(0, 2).map((seg, i) => (
+        <React.Fragment key={`seg-${i}`}>
+          {i === 0 ? lowerLabelCell(FLASH_LABELS.segment) : <span />}
+          <span />
+          <SegStack seg={seg} />
+          <span />
+          <SegYoyCell yoy={seg?.yoy_pct} />
+        </React.Fragment>
+      ))}
+      {segs && segs.length > 0 && restCount > 0 && (
         <>
-          {lowerLabelCell(FLASH_LABELS.segment)}
-          <SegStack seg={segs[0]} />
-          {segs[1] ? <SegStack seg={segs[1]} /> : <span />}
-          {restCount > 0 ? <span style={{ justifySelf: 'end', fontSize: 12, color: 'var(--text-muted)', alignSelf: 'center', whiteSpace: 'nowrap' }}>他 {restCount} 部門</span> : <span />}
+          <span />
+          <span />
+          <span style={{ justifySelf: 'end', fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>他 {restCount} 部門</span>
+          <span />
           <span />
         </>
       )}
       {gmStr != null && (
         <>
           {lowerLabelCell(FLASH_LABELS.grossMargin)}
-          {/* v5.7: span をやめ col2=値 / col3=前年比Δ に分割 (縦ガイドライン維持、design review NG 事項) */}
+          {/* v5.7.1 (user「↑% が前年比か予想比か不明 → 列に移設」): 値を結果列(col3)、前年比Δを前年比列(col5)へ
+              配置し、列見出しから「前年比 ↑2.2pt」 と自明にする。予想/予想比 列(col2/col4)は粗利率に無いため空。 */}
+          <span />
           <span style={{ justifySelf: 'end' }}>
             <NumUnit str={gmStr} size={14} weight={600} color={'var(--text-primary)'} unitScale={'0.75em'} />
           </span>
+          <span />
           <span style={{ justifySelf: 'end', whiteSpace: 'nowrap' }}>
             {gmPpStr != null ? (
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                前年比 <span style={{ fontWeight: 600, color: deltaColor(gmPp), fontVariantNumeric: 'tabular-nums' }}>{gmPpStr}</span>
-              </span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: deltaColor(gmPp), fontVariantNumeric: 'tabular-nums' }}>{gmPpStr}</span>
             ) : null}
           </span>
-          <span /><span />
         </>
       )}
     </div>
   );
+}
+
+// fmtYoyPct は「前年比 ↑X%」 を返すが、前年比列(col5)に置くときは列見出しで自明なので prefix を除く。
+function stripYoyPrefix(str) {
+  return typeof str === 'string' ? str.replace(/^前年比\s*/, '') : str;
 }
 
 // ── 来期帯 = FutureGrid (v5.7、user「来期単体ではまだ雑然 (読み飛ばすレベル)」) ──
@@ -611,16 +630,12 @@ function FutureGrid({ nqEps, nqRev, yoyStr, revLine, gState }) {
         {head(FLASH_TERMS.consensusEps)}
         {nqEps != null ? <NumUnit str={nqEps} size={13} weight={600} color={'var(--text-primary)'} unitScale={'0.75em'} /> : <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</span>}
       </span>
-      {/* コンセンサス売上 (縦積み: ヘッダ + 値 + 前年比、全て中立) */}
+      {/* コンセンサス売上 (縦積み: ヘッダ + 値。前年比 yoy は col5 へ移設、design review) */}
       <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, justifySelf: 'end', textAlign: 'right' }}>
         {head(FLASH_TERMS.consensusRev)}
         {nqRev != null ? <NumUnit str={nqRev} size={13} weight={600} color={'var(--text-primary)'} unitScale={'0.75em'} /> : <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</span>}
-        {/* yoyStr は fmtYoyPct 出力で既に「前年比 ↑X%」 を含む (prefix 二重付け禁止) */}
-        {yoyStr != null && revLine == null && (
-          <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{yoyStr}</span>
-        )}
       </span>
-      {/* 会社見通し (8-K guidance の状態語、 dict のみ。無ければ空セル = 列線維持) */}
+      {/* col4 (予想比 位置): 会社見通し (8-K guidance の状態語、dict のみ)。無ければ空セル = 列線維持 */}
       {gState && revLine == null ? (
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, justifySelf: 'end', textAlign: 'right' }}>
           {head('会社見通し')}
@@ -629,7 +644,11 @@ function FutureGrid({ nqEps, nqRev, yoyStr, revLine, gState }) {
           </span>
         </span>
       ) : <span />}
-      <span />
+      {/* col5 (前年比 位置): 売上の前年比 yoy。§38: 来期=将来予想のため中立色固定 (deltaColor 不使用)。
+          yoyStr は fmtYoyPct 出力で「前年比 ↑X%」 を含むが、前年比列に整列するので prefix を除いた数値のみ表示。 */}
+      {yoyStr != null && revLine == null ? (
+        <span style={{ justifySelf: 'end', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{stripYoyPrefix(yoyStr)}</span>
+      ) : <span />}
       {/* 会社売上ガイダンス レンジ並置 (v200 形式、長文のため 2 行目に col2-5 span。中立色) */}
       {revLine != null && (
         <>

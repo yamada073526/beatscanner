@@ -13031,34 +13031,15 @@ body.is-digest-resizing {
   .ds-flash-chip { animation: none; }
   .ds-flash-copy { opacity: 1; }
 }
-/* v5.6 (user「行クリックでスクロールできると外観から察しにくい」): 上段 grid を clickable と分かる affordance。
-   hover で極薄 bg tint + 右端に「→」 ヒントが立ち上がる (clickable を視覚宣言)。クリックで決算詳細へ scroll。 */
+/* v5.6 (user「行クリックでスクロールできると外観から察しにくい」): 上段/下段 grid を clickable と分かる affordance。
+   hover で極薄 bg tint。クリックで決算詳細へ scroll。
+   v5.7.1 (user「hover の『詳細へ →』 がコンテンツ(前年比列見出し)と被る」): ::after の浮き出しラベルは
+   削除 (ヘッダーの「↗ 詳細は決算セクションへ」 リンク + hover bg + title tooltip で affordance 十分、
+   grid 内右上に重ねると列見出しと衝突するため)。hover bg + cursor:pointer のみで clickable を示す。 */
 .ds-flash-grid {
-  position: relative;
   transition: background-color 160ms ease;
   border-radius: 6px;
 }
 .ds-flash-grid:hover {
   background-color: color-mix(in oklab, var(--text-muted) 5%, transparent);
-}
-.ds-flash-grid::after {
-  content: '詳細へ →';
-  position: absolute;
-  right: 2px;
-  top: -2px;
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--color-accent);
-  opacity: 0;
-  transform: translateX(-3px);
-  transition: opacity 160ms ease, transform 160ms ease;
-  pointer-events: none;
-}
-.ds-flash-grid:hover::after {
-  opacity: 0.9;
-  transform: translateX(0);
-}
-@media (prefers-reduced-motion: reduce) {
-  .ds-flash-grid::after { transition: none; }
 }
