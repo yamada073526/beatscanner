@@ -574,31 +574,10 @@ export default function JudgmentDetail({
       trend: result.overallPass ? 'up' : 'neutral',
     });
   }
-  // EPS Beat: 実績はあるが予想欠損 → Unknown を honest に表示 (recipes §C-9)
-  // v99 dogfood feedback C (2 巡目): 旧 hint「予想は更新待ち」 が EPS BEAT cell のみ表示で
-  // 他 3 cell との height 不揃い + grid stretch → 「下半分空欄」 体感の主因。 hint 削除で
-  // 全 cell 均一 height、 「—」 が「データ無し」 を honest に語る (Bloomberg idiom)。
-  // v138.6 R3 (2026-05-30): 旧 code は result.epsBeatPct を読んでいたが、 backend には
-  // この field が存在せず常に undefined → EPS BEAT 全銘柄「—」 regression。
-  // R2 backend fix で guidance.eps.surprise_pct (= +6.3% beat 等) は取得済のため、
-  // guidance 経由に source 切替。 guidance.eps.actual/estimated 両方ある時のみ表示。
-  const _eps_surprise = guidance?.eps?.surprise_pct;
-  const _eps_actual = guidance?.eps?.actual;
-  const _eps_est = guidance?.eps?.estimated;
-  const _eps_beat_available = (
-    _eps_surprise != null && Number.isFinite(_eps_surprise) &&
-    _eps_actual != null && _eps_est != null
-  );
-  kpis.push({
-    value: _eps_beat_available
-      ? `${_eps_surprise > 0 ? '+' : ''}${_eps_surprise.toFixed(1)}%`
-      : '—',
-    label: 'EPS Beat',
-    verdict: !_eps_beat_available
-      ? 'unknown'
-      : (_eps_surprise > 0 ? 'beat' : 'miss'),
-    // hint: 削除 (全 cell 均一 height のため)
-  });
+  // EPS Beat KPI は撤去 (2026-06-11 user feedback: ファンダ章の「今期 決算結果」 (GuidanceCard
+  //   ScorecardCell) + 決算ハイライト (EarningsFlashSummary EPS 行) と同一 guidance.eps.surprise_pct
+  //   を重複表示していたため)。KpiStrip grid は auto-fit のため残 chip が自然に再配置される。
+  //   復元したい場合はこのブロックに kpis.push({ value/label:'EPS Beat'/verdict }) を戻す。
 
   // v108 議題 5A (multi-review 5/5 verdict「release 前 mandatory」):
   //   じっちゃまプロトコル「配当増 = 成長余力低下 sign」 を 4 数値で提示。

@@ -97,44 +97,48 @@ function Tooltip({ text, children }) {
 
 // ── Guidance explanation modal ────────────────────────────────────────────────
 
+// 「今期 決算結果」 = 過去確定した最新四半期の EPS/売上 実績 vs アナリストコンセンサス予想 (Beat/Miss)。
+// このモーダルは「過去実績の予実差の見方」 を説明する (将来ガイダンスの説明は ForwardOutlookSection 側)。
+// §38/§5: 株価上昇を断定する表現・最上級は使わない (過去の事実の説明に徹する)。Beat/Miss 閾値は
+// backend _verdict (main.py) の ±3% / |est|<0.05 は差額判定 と 1:1 mirror (捏造しない)。
+// verdict 色は light box (slate-50) 上で読める rgb() を inline 指定 (既存 rgb(56,189,248) と同 idiom、
+// theme 切替 token は dark で淡色化し light box で読めないため使わない)。投資色: gain緑/warning琥珀/loss赤。
 function GuidanceInfoModal({ onClose }) {
   return (
-    <InfoModal title="ガイダンス達成状況とは" onClose={onClose}>
+    <InfoModal title="今期 決算結果の見方" onClose={onClose}>
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
         <p className="text-sm leading-relaxed text-slate-700">
-          「ガイダンス」が事前のコンセンサス予想を上回ること（ガイダンス達成）は、<strong style={{ color: 'rgb(56, 189, 248)' }}>株価の上昇を決定づける極めて重要な要素</strong>です。
+          このカードは、<strong style={{ color: 'rgb(56, 189, 248)' }}>最新四半期に発表された EPS（一株当たり利益）と売上高の「実績」</strong>を、発表前の<strong>アナリストコンセンサス予想</strong>と比較した結果を示します。過去に確定した事実であり、将来の予測ではありません。
         </p>
       </div>
 
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📖 ガイダンスとは何か？</p>
-        <p className="text-sm leading-relaxed text-slate-700">
-          ガイダンスとは、企業側（特に財務部長）が公式に示す、来期や今年度通年の「売上高」および「EPS（一株当たり利益）」の業績見通しのことです。財務部長は誰よりも自社の業績見通しについて精密な予想を立てられる立場にあり、通常、ガイダンスは「これなら達成できるだろう」という控えめな努力目標として提示されます。
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📖 Beat / In-line / Miss の判定</p>
+        <p className="mb-2 text-sm leading-relaxed text-slate-700">
+          実績が予想からどれだけ離れたか（予実差 %）で 3 段階に分類します。
         </p>
-      </div>
-
-      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 なぜガイダンス達成が重要か</p>
-        <div className="space-y-3 text-sm leading-relaxed text-slate-700">
-          <div>
-            <p className="font-semibold text-slate-900">・アナリストの「コンセンサス予想」を動かす決定的な要因だから</p>
-            <p className="mt-1">証券会社のアナリストたちが業績予想を立てる際、最も参考にするのが会社側から示されるガイダンスです。決算発表で新しいガイダンスが示されると、アナリストたちはそれを基に一斉に予想数字を変更します。ガイダンスがコンセンサス予想を上回れば（上方修正）アナリスト予想も引き上げられ、<strong style={{ color: 'rgb(56, 189, 248)' }}>市場全体のコンセンサス予想がジワジワと上昇します。</strong>逆に下回れば、予想もすぐに下がり始めます。</p>
-          </div>
-          <div>
-            <p className="font-semibold text-slate-900">・予想の上方修正が「株価上昇」に直結するから</p>
-            <p className="mt-1">株価はアナリストのコンセンサス予想がスルスルと上昇しているときに上がりやすく、逆に下がっているときには下がる傾向があります。ガイダンスがコンセンサスを上回って予想が上方修正されることは、「おのずと今後株価が上昇する理由を含んでいる」と考えるのが自然です。</p>
-          </div>
+        <div className="space-y-1.5 text-sm leading-relaxed text-slate-700">
+          <p><strong style={{ color: 'rgb(22, 163, 74)' }}>Beat（上振れ）</strong> … 実績が予想を <strong>+3% 以上</strong> 上回る</p>
+          <p><strong style={{ color: 'rgb(202, 138, 4)' }}>In-line（概ね一致）</strong> … 予想との差が <strong>±3% 以内</strong></p>
+          <p><strong style={{ color: 'rgb(220, 38, 38)' }}>Miss（下振れ）</strong> … 実績が予想を <strong>−3% 以上</strong> 下回る</p>
         </div>
+        <p className="mt-2 text-xs leading-relaxed text-slate-500">
+          ※ 予想が 0 に近い（極端に小さい）場合は、% でなく実額の差で判定します。
+        </p>
       </div>
 
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="text-xs font-semibold text-slate-500">📋 まとめ</p>
-        <p className="mt-1 text-sm leading-relaxed text-slate-700">
-          過去の「実績（直近のEPSと売上高）」がどれだけ良くても、未来の「見通し（ガイダンス）」が弱ければ、投資家は失望し株価は売られてしまいます。企業が強気な未来を示すこと（ガイダンス達成）こそが、アナリストの予想を引き上げ、株価を持続的に押し上げる最大の原動力です。
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 なぜ予実差を見るのか</p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          決算が市場の予想に対してどうだったかは、その四半期に企業がどれだけ期待に応えたかを測る基本的な指標です。EPS・売上高の<strong>両方が予想を上回った四半期</strong>は、足元のファンダメンタルの強さを示す直接的な事実として読み取れます。
         </p>
-        <p className="mt-2 text-sm leading-relaxed text-slate-700">
-          だからこそ<strong>「EPS」「売上高」「ガイダンス」の3つすべてがコンセンサス予想を上回ることを、「良い決算」の絶対条件</strong>としています。
+      </div>
+
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">⚠️ ガイダンス（来期見通し）との違い</p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          ここで比較する「予想」は<strong>アナリストの平均値</strong>であり、企業自身が示す将来の業績見通し（ガイダンス）とは別物です。来期・通期の見通しについては「<strong>来期 コンセンサス</strong>」セクションをご覧ください。なお EPS は報告ベース（GAAP / Non-GAAP）により数値が異なる場合があります。
         </p>
       </div>
     </InfoModal>
@@ -751,7 +755,7 @@ export default function GuidanceCard({ guidance, isLoading = false, nextEarnings
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.30)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.15)'; }}
-                aria-label="ガイダンス達成状況の説明を表示"
+                aria-label="今期決算結果の説明を表示"
               >
                 ？
               </button>
