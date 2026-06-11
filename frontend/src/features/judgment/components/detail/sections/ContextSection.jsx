@@ -189,9 +189,9 @@ export default function ContextSection({
           >
             <Card>
               <div style={{ padding: 'var(--space-6, 24px)' }}>
+                {/* icon 規則 (2026-06-12): 装飾タイトルアイコン撤去 (FileBarChart2 は関連記事 chip の機能用で残存)。 */}
                 <SectionHeader
                   id="sec-report"
-                  icon={<FileBarChart2 size={18} strokeWidth={1.5} />}
                   title="AI 詳細レポート"
                   label="DETAIL REPORT"
                 />

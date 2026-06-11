@@ -4,7 +4,6 @@ import SectionHeader from '../../primitives/SectionHeader.jsx';
 import ConditionRow from './ConditionRow.jsx';
 import FiveConditionsOverviewModal from './FiveConditionsOverviewModal.jsx';
 import { useWorkspaceStore } from '../../../../state/workspaceStore.js';
-import { BarChart3 } from 'lucide-react';
 // Sprint 4 (Phase 2): 案1 section in-view fade-in
 import SectionFade from '../../primitives/SectionFade.jsx';
 // Phase 2.7 Sprint 1 #1' (step H): 既存 inline IO 実装を共通 hook に置換 (DRY)
@@ -124,10 +123,10 @@ export default function FiveConditionsCard({
     >
     <Card data-testid="five-conditions-card" frameless={frameless}>
       <div style={{ padding: 'var(--space-6, 24px)' }}>
+        {/* icon 規則 (2026-06-12 user 承認): 装飾タイトルアイコンは全廃 — 階層はタイポ+gold で表現。 */}
         <SectionHeader
           id="judgment-conditions"
           plain={v5Header}
-          icon={<BarChart3 size={18} strokeWidth={1.5} />}
           title={titleWithHelp}
           label={
             passedCount != null && totalCount != null

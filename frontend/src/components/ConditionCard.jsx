@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { AlertTriangle, BarChart3, BookOpen, ClipboardList, Info, Lightbulb, Ruler } from 'lucide-react';
 import InfoModal from './InfoModal.jsx';
 import FormulaDisplay from './FormulaDisplay.jsx';
 import Sparkline from './Sparkline.jsx';
@@ -273,16 +274,32 @@ function renderBold(text) {
   );
 }
 
+// モーダル小見出しの絵文字 prefix → lucide outline (icon 規則 2026-06-12 user 承認: OS 絵文字 glyph は
+// 環境依存 + Aman 級でない。CONDITION_DETAILS の label 文字列は不変のまま、表示時にだけ変換する)。
+const LABEL_EMOJI_ICON = {
+  '📌': Info, '📖': BookOpen, '💡': Lightbulb, '📊': BarChart3, '📋': ClipboardList, '📐': Ruler, '⚠️': AlertTriangle,
+};
+export function ModalSectionLabel({ label }) {
+  const m = typeof label === 'string' ? label.match(/^(\S+)\s+(.*)$/) : null;
+  const Icon = m ? LABEL_EMOJI_ICON[m[1]] : null;
+  return (
+    <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold tracking-wider text-slate-400">
+      {Icon && <Icon size={13} strokeWidth={2} aria-hidden="true" />}
+      {Icon ? m[2] : label}
+    </p>
+  );
+}
+
 export function ConditionModal({ detail, onClose }) {
   return (
     <InfoModal title={detail.title} onClose={onClose}>
       {detail.sections ? (
         detail.sections.map((s, i) => (
           <div key={i} className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="mb-1 text-xs font-semibold tracking-wider text-slate-400">{s.label}</p>
+            <ModalSectionLabel label={s.label} />
             {s.warning && (
               <div className="mb-3 rounded-r-lg border-l-4 border-amber-400 bg-amber-50 p-3">
-                <p className="text-sm font-bold text-amber-800">⚠️ {s.warning.title}</p>
+                <p className="flex items-center gap-1.5 text-sm font-bold text-amber-800"><AlertTriangle size={14} strokeWidth={2} aria-hidden="true" /> {s.warning.title}</p>
                 <p className="mt-1 text-sm text-amber-700">{s.warning.desc}</p>
               </div>
             )}

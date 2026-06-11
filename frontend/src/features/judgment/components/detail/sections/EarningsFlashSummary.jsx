@@ -33,6 +33,8 @@ import { displaySegmentName } from '../../../../../lib/segmentNames.js';
 import {
   FLASH_LABELS,
   FLASH_TERMS,
+  SURPRISE_VERDICT_JP,
+  classifySurprise,
   fmtSurprisePct,
   fmtYoyPct,
   fmtGrossMargin,
@@ -42,6 +44,9 @@ import {
   CONSENSUS_DRIFT_JP,
   aggregateConsensusDrift,
 } from '../../../constants/earningsFlashTemplates.js';
+// v5.4 motion (3体 persona review 推奨案A): 予想比 hero を 0→target の count-up で登場させ
+// 「ここが重要」 の視線誘導に。useCountUp は prefers-reduced-motion 内蔵 (即 final 値)。
+import { useCountUp } from '../../../../../hooks/useCountUp.js';
 
 const TESTID = 'earnings-flash-summary';
 
@@ -140,11 +145,22 @@ function isFlashV4Enabled() {
   }
 }
 // 過去確定実績の方向 % → 色。v4 OFF / 0 / 欠損 は中立 (--text-secondary)。muted gain/loss を token から color-mix。
+// 用途 = 前年比 (YoY、方向のみの事実)。予想比 (サプライズ) は surpriseColor (±3% verdict) を使う。
 function deltaColor(pct) {
   if (!isFlashV4Enabled() || !Number.isFinite(pct) || pct === 0) return 'var(--text-secondary)';
   return pct > 0
     ? 'color-mix(in oklab, var(--color-gain) 80%, var(--text-primary))'
     : 'color-mix(in oklab, var(--color-loss) 80%, var(--text-primary))';
+}
+// 予想比 (サプライズ%) の色: backend _verdict (±3%) と 1:1 mirror — Beat ≥+3% 緑 / Miss ≤−3% 赤 /
+// In-line (±3% 未満) は琥珀 (「今期 決算結果」 ScorecardCell の In-line 黄と整合、user 指摘 2026-06-12
+// 「+1.6% が緑なのは他セクションの色定義と不一致」)。|pct|<0.05 は表示が "0.0%" に丸まるため中立
+// (表示と色の乖離防止、上級者 review P3)。muted color-mix は deltaColor と同 idiom。
+function surpriseColor(pct) {
+  if (!isFlashV4Enabled() || !Number.isFinite(pct) || Math.abs(pct) < 0.05) return 'var(--text-secondary)';
+  if (pct >= 3.0) return 'color-mix(in oklab, var(--color-gain) 80%, var(--text-primary))';
+  if (pct <= -3.0) return 'color-mix(in oklab, var(--color-loss) 80%, var(--text-primary))';
+  return 'color-mix(in oklab, var(--color-warning) 85%, var(--text-primary))';
 }
 
 // S-1 (v3): 数値本体を主役化し、 単位/記号 ($ / % / 億ドル / 兆ドル 等) を従属サイズ (0.62em) + muted に。
@@ -173,22 +189,20 @@ function NumUnit({ str, size, weight, color, letterSpacing, unitScale = '0.62em'
   );
 }
 
-// 決算ハイライト v5 (?flash_v5=1 opt-in、default OFF): headline (EPS+売上) を列揃え grid に。
-// 3体 design review (列揃え=scannability の王道、財務 table)。右揃え + tabular-nums で桁が縦に揃い
-// 「結果列を縦に一筆書き」 で 2 秒理解 (user 指摘「エクセルのように整列」)。罫線ゼロ・余白で列分離 (Aman、
-// エクセル業務臭回避)、 列見出し (予想/結果/予実差/前年比) を薄 muted 1 行 (word prefix を見出しに昇格)。
-// v5.1 フォント穏当化 (user feedback 2026-06-11「文字サイズが極端」): 結果を TtmValuationPanel 基準
-// (主数値 20px/700・補助 13px・ラベル 11px) に揃え、EPS/売上 とも結果列を一律 20px/700 で縦整合。
-// 強調はサイズでなく色 (v4 緑/赤) に委譲 = 予実差/前年比を 13px/700 + deltaColor。単位は 0.8em に緩和。
+// 決算ハイライト v5 (default ON = user 承認 2026-06-12、?flash_v5=0 が kill switch):
+// headline (EPS+売上) を列揃え grid に。3体 design review (列揃え=scannability の王道、財務 table)。
+// 右揃え + tabular-nums で桁が縦に揃い「予想比列を縦に一筆書き」 で 2 秒理解。罫線ゼロ・余白で列分離。
+// v5.1 フォント穏当化 (26px extreme 解消) → v5.3 Beat/Miss hero (予想比 20px 色 hero、3体 review 反映)
+// → default ON 昇格 (user 起床 dogfood「良くなった」 2026-06-12)。
 function isFlashV5Enabled() {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   try {
     const urlParam = new URLSearchParams(window.location.search).get('flash_v5');
-    if (urlParam === '1') return true;
     if (urlParam === '0') return false;
-    return window.localStorage?.getItem('flash_v5') === '1';
+    if (urlParam === '1') return true;
+    return window.localStorage?.getItem('flash_v5') !== '0';
   } catch {
-    return false;
+    return true;
   }
 }
 // 列揃え用の bare な方向 % ("↑3.1%"、prefix なし。予想比/前年比 の語は列見出しが担う)。
@@ -197,6 +211,28 @@ function barePct(pct) {
   const sym = pct > 0 ? '↑' : pct < 0 ? '↓' : '';
   return `${sym}${Math.abs(pct).toFixed(1)}%`;
 }
+// 予想比 hero セル (module-level component — useCountUp は hook のため closure 不可)。
+// 20px/700 + surpriseColor (±3% verdict 緑/琥珀/赤) + 分類語 (Beat/予想並み/Miss、静的 dict) 併記
+// (色だけだと In-line 琥珀を初心者が「注意?」 と誤読、persona review A案。§38=過去確定の事実分類)。
+// count-up (0→target 800ms、motion review 推奨案A): ticker 切替時は前値→新値へ滑らかに遷移
+// (useCountUp fromRef)。prefers-reduced-motion は hook 内蔵で即 final 値。
+function HeroPct({ pct }) {
+  const animated = useCountUp(Number.isFinite(pct) ? Math.abs(pct) : null, { duration: 800, digits: 1, forceFromZero: true });
+  if (!Number.isFinite(pct)) return null;
+  const cls = classifySurprise(pct);
+  const color = surpriseColor(pct);
+  const sym = pct > 0 ? '↑' : pct < 0 ? '↓' : '';
+  const shown = animated ?? Math.abs(pct);
+  return (
+    <span style={{ justifySelf: 'end', display: 'inline-flex', alignItems: 'baseline', gap: 5, whiteSpace: 'nowrap' }}>
+      <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em', color, fontVariantNumeric: 'tabular-nums' }}>
+        {sym}{shown.toFixed(1)}%
+      </span>
+      {cls && <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', color }}>{SURPRISE_VERDICT_JP[cls]}</span>}
+    </span>
+  );
+}
+
 // headline (EPS + 売上) の列揃え grid。整形済 str + raw pct を受け、 セル単位に配置 (列が縦に揃う)。
 // v5.3 Beat/Miss hero (user feedback 2026-06-11「EPS/売上の絶対値より、何%のサプライズかが最重要」+
 //   3体 design review 2026-06-11):
@@ -212,27 +248,25 @@ function HeadlineGrid({ eps, rev }) {
   const emCell = () => (
     <span style={{ justifySelf: 'end', fontSize: 14, fontWeight: 500, color: 'var(--text-muted)' }}>—</span>
   );
+  // ラベル (EPS/売上高) = 視覚優先 2 位 (user 方針 2026-06-12「①予想比 ②ラベル ③結果は目立たせない」)。
+  // 11/500 → 12/600 で立てる (初心者+上級者 persona review 収束)。色は secondary 維持 (hero と競合しない)。
   const labelCell = (txt) => (
-    <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>{txt}</span>
+    <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>{txt}</span>
   );
-  // 予想 = de-emphasize (13px/500 muted)。% の基準として残すが控えめ (review P0: 基準ゼロは初心者が混乱)。
+  // 予想 = 最弱 (12px/500 muted)。% の基準として残すのみ (review P0: 基準ゼロは初心者が混乱)。
   const estCell = (str) => (
-    <span style={{ justifySelf: 'end' }}>{str != null ? <NumUnit str={str} size={13} weight={500} color={'var(--text-muted)'} unitScale={'0.8em'} /> : emCell()}</span>
+    <span style={{ justifySelf: 'end' }}>{str != null ? <NumUnit str={str} size={12} weight={500} color={'var(--text-muted)'} unitScale={'0.8em'} /> : emCell()}</span>
   );
-  // 結果 (実績) = 補助。15px/600 primary、単位 0.8em。
+  // 結果 (実績) = 降格 (15/600/primary → 13/500/secondary)。予想比が目立てば結果は読めれば十分 (user 方針)。
   const resultCell = (str) => (
-    <span style={{ justifySelf: 'end' }}>{str != null ? <NumUnit str={str} size={15} weight={600} color={'var(--text-primary)'} unitScale={'0.8em'} letterSpacing={'-0.01em'} /> : emCell()}</span>
+    <span style={{ justifySelf: 'end' }}>{str != null ? <NumUnit str={str} size={13} weight={500} color={'var(--text-secondary)'} unitScale={'0.8em'} /> : emCell()}</span>
   );
-  // 予想比 = hero。サプライズ % を最大 (20px/700) + deltaColor で焦点化。欠損は「—」(穴回避、UI review)。
-  const heroPct = (pct) => (
-    Number.isFinite(pct)
-      ? <span style={{ justifySelf: 'end', fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em', color: deltaColor(pct), whiteSpace: 'nowrap' }}>{barePct(pct)}</span>
-      : emCell()
-  );
-  // 前年比 = 色シグナル。14px/700 + deltaColor (hero より一段控えめ、色で過去確定の方向を示す)。欠損は「—」。
+  // 予想比 = hero (HeroPct component: 20px/700 + surpriseColor ±3% verdict + count-up + 分類語)。
+  const heroPct = (pct) => (Number.isFinite(pct) ? <HeroPct pct={pct} /> : emCell());
+  // 前年比 = 色シグナル (13px/600 + deltaColor=方向色)。hero と確実に 1 段差 (persona review)。欠損は「—」。
   const yoyCell = (pct) => (
     Number.isFinite(pct)
-      ? <span style={{ justifySelf: 'end', fontSize: 14, fontWeight: 700, color: deltaColor(pct), whiteSpace: 'nowrap' }}>{barePct(pct)}</span>
+      ? <span style={{ justifySelf: 'end', fontSize: 13, fontWeight: 600, color: deltaColor(pct), whiteSpace: 'nowrap' }}>{barePct(pct)}</span>
       : emCell()
   );
   return (
@@ -241,7 +275,7 @@ function HeadlineGrid({ eps, rev }) {
       style={{
         display: 'grid',
         // 全データ列 minmax(0,auto) (狭幅でも nowrap がはみ出さない、frontend review)。列: 予想/結果/予想比/前年比。
-        gridTemplateColumns: '44px minmax(0,auto) minmax(0,auto) minmax(0,auto) minmax(0,auto)',
+        gridTemplateColumns: '52px minmax(0,auto) minmax(0,auto) minmax(0,auto) minmax(0,auto)',
         alignItems: 'baseline',
         columnGap: 'var(--space-4, 16px)',
         rowGap: 'var(--space-3, 12px)',
@@ -518,7 +552,7 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
             estStr={epsHasEst ? fmtEps(eps.estimated) : null}
             actStr={fmtEps(eps.actual)}
             surpriseStr={epsHasEst ? fmtSurprisePct(eps.surprise_pct) : null}
-            surpriseColor={deltaColor(eps.surprise_pct)}
+            surpriseColor={surpriseColor(eps.surprise_pct)}
           />
         </FlashRow>
       );
@@ -532,7 +566,7 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
             estStr={revShowEst ? fmtMoney(rev.estimated) : null}
             actStr={fmtMoney(rev.actual)}
             surpriseStr={revShowEst ? revSurprise : null}
-            surpriseColor={deltaColor(rev?.surprise_pct)}
+            surpriseColor={surpriseColor(rev?.surprise_pct)}
           />
           {yoyStr != null && (
             <span style={{ fontSize: 12, fontWeight: 500, color: deltaColor(latestQ?.revenue_yoy_pct), whiteSpace: 'nowrap' }}>・{yoyStr}</span>
@@ -685,8 +719,9 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
 
   return (
     <div data-testid={TESTID} data-state="main" style={mainContainerStyle}>
+      {/* v5.4: 期の帰属は時制誤認防止の最重要 caption (上級者 review P1) — 10px は埋没するため 11px/700 へ。 */}
       {period && (
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.04em', ...(v2 ? { fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', paddingBottom: 'var(--space-1, 4px)' } : {}) }}>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.04em', ...(v2 ? { fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', paddingBottom: 'var(--space-1, 4px)' } : {}) }}>
           直近四半期 {period}
         </div>
       )}

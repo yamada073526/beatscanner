@@ -1,4 +1,5 @@
 import React from 'react';
+import { Info, Lightbulb, Ruler } from 'lucide-react';
 import InfoModal from '../../../../components/InfoModal.jsx';
 
 /**
@@ -13,7 +14,7 @@ export default function FiveConditionsOverviewModal({ onClose }) {
   return (
     <InfoModal title="ファンダメンタル 5 条件とは" onClose={onClose}>
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold tracking-wider text-slate-400">📌 概要</p>
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold tracking-wider text-slate-400"><Info size={13} strokeWidth={2} aria-hidden="true" /> 概要</p>
         <p className="text-sm leading-relaxed text-slate-700">
           独自プロトコルに基づく、米国株決算の質を見極めるための 5 つの基準です。
           <strong>「単年だけ良い銘柄」ではなく「持続的に稼ぐ力を持つ銘柄」</strong>を見抜くための足切りチェックリストとして使います。
@@ -21,7 +22,7 @@ export default function FiveConditionsOverviewModal({ onClose }) {
       </div>
 
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold tracking-wider text-slate-400">📐 5 条件の構成</p>
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold tracking-wider text-slate-400"><Ruler size={13} strokeWidth={2} aria-hidden="true" /> 5 条件の構成</p>
         <ul className="mt-1 space-y-2 text-sm text-slate-700">
           <li>
             <span className="font-semibold text-slate-900">・条件 1: 営業 CF マージン ≥ 15%</span>
@@ -52,7 +53,7 @@ export default function FiveConditionsOverviewModal({ onClose }) {
       </div>
 
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold tracking-wider text-slate-400">💡 5 条件すべて満たす意味</p>
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold tracking-wider text-slate-400"><Lightbulb size={13} strokeWidth={2} aria-hidden="true" /> 5 条件すべて満たす意味</p>
         <p className="text-sm leading-relaxed text-slate-700">
           5 条件すべて PASS の企業は、<strong>「持続的に現金を稼ぎ、会計操作に頼らず、規模も拡大している」</strong>という、
           投資対象として非常に厳しい足切りを通過した銘柄です。一つでも FAIL があれば、その背景を深掘り検討する材料になります。

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { m, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { Info } from 'lucide-react';
 import Sparkline from '../../../../components/Sparkline.jsx';
 import ConditionSparkline from './ConditionSparkline.jsx';
 import {
@@ -180,27 +181,39 @@ export default function ConditionRow({
             >
               {condition.label || condition.name || `条件 ${index}`}
             </span>
-            {/* v202: タイトル横「？」チップ (展開不要で個別条件モーダルを開く)。GuidanceCard ？ idiom 流用。
+            {/* v202.1 (user feedback 2026-06-12「行の？が section 見出しの？と同形で階層が並列に見える」):
+                行レベルは lucide ⓘ muted ghost に降格 — cyan「？」=セクション全体解説 (タイトル横) /
+                灰 ⓘ=個別条件解説 (行) の記号差で階層を表現。hover で cyan に立ち上がる (Aman「主張せず
+                必要な時だけ存在感」、旧 R5 展開内 ⓘ と同 idiom)。展開不要でモーダルが開く機能は維持。
                 content grid は pointer-events:none のため、この button だけ auto に戻す + stopPropagation。 */}
             {detailContent && (
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); setShowModal(true); }}
-                className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
                 style={{
                   pointerEvents: 'auto',
                   flexShrink: 0,
-                  background: 'rgba(34,211,238,0.15)',
-                  color: 'rgb(56, 189, 248)',
-                  border: '1px solid rgba(34,211,238,0.4)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 20,
+                  height: 20,
+                  padding: 3,
+                  color: 'var(--text-muted)',
+                  opacity: 0.6,
+                  background: 'transparent',
+                  border: 'none',
+                  borderRadius: 'var(--radius-pill, 9999px)',
+                  cursor: 'pointer',
+                  transition: 'opacity var(--motion-fast) ease, color var(--motion-fast) ease',
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.30)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.15)'; }}
+                onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--color-accent)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                 aria-label={`${condition.name || `条件 ${index}`}の詳しい解説を表示`}
                 aria-haspopup="dialog"
                 title="この条件の詳しい解説を見る"
               >
-                ？
+                <Info size={13} strokeWidth={2} aria-hidden="true" />
               </button>
             )}
           </div>

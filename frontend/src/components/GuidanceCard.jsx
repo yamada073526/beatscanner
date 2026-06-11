@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import InfoModal from './InfoModal.jsx';
 import Chip from './ui/Chip.jsx';
-import { BarChart3, Calendar, EyeOff, Scale } from 'lucide-react';
+import { AlertTriangle, BookOpen, Calendar, EyeOff, Info, Lightbulb, Scale } from 'lucide-react';
 // v100 (handover §100点 UI/UX verdict C): GuidanceCard 達成率 / サプライズ % に count-up animation
 import { useCountUp, COUNT_UP_MS } from '../hooks/useCountUp.js';
 import { useInViewOnce } from '../hooks/useInViewOnce.js';
@@ -107,14 +107,14 @@ function GuidanceInfoModal({ onClose }) {
   return (
     <InfoModal title="今期 決算結果の見方" onClose={onClose}>
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400"><Info size={13} strokeWidth={2} aria-hidden="true" /> 概要</p>
         <p className="text-sm leading-relaxed text-slate-700">
           このカードは、<strong style={{ color: 'rgb(56, 189, 248)' }}>最新四半期に発表された EPS（一株当たり利益）と売上高の「実績」</strong>を、発表前の<strong>アナリストコンセンサス予想</strong>と比較した結果を示します。過去に確定した事実であり、将来の予測ではありません。
         </p>
       </div>
 
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📖 Beat / In-line / Miss の判定</p>
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400"><BookOpen size={13} strokeWidth={2} aria-hidden="true" /> Beat / In-line / Miss の判定</p>
         <p className="mb-2 text-sm leading-relaxed text-slate-700">
           実績が予想からどれだけ離れたか（予実差 %）で 3 段階に分類します。
         </p>
@@ -129,14 +129,14 @@ function GuidanceInfoModal({ onClose }) {
       </div>
 
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 なぜ予実差を見るのか</p>
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400"><Lightbulb size={13} strokeWidth={2} aria-hidden="true" /> なぜ予実差を見るのか</p>
         <p className="text-sm leading-relaxed text-slate-700">
           決算が市場の予想に対してどうだったかは、その四半期に企業がどれだけ期待に応えたかを測る基本的な指標です。EPS・売上高の<strong>両方が予想を上回った四半期</strong>は、足元のファンダメンタルの強さを示す直接的な事実として読み取れます。
         </p>
       </div>
 
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">⚠️ ガイダンス（来期見通し）との違い</p>
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400"><AlertTriangle size={13} strokeWidth={2} aria-hidden="true" /> ガイダンス（来期見通し）との違い</p>
         <p className="text-sm leading-relaxed text-slate-700">
           ここで比較する「予想」は<strong>アナリストの平均値</strong>であり、企業自身が示す将来の業績見通し（ガイダンス）とは別物です。来期・通期の見通しについては「<strong>来期 コンセンサス</strong>」セクションをご覧ください。なお EPS は報告ベース（GAAP / Non-GAAP）により数値が異なる場合があります。
         </p>
@@ -739,11 +739,6 @@ export default function GuidanceCard({ guidance, isLoading = false, nextEarnings
               className={isL3 ? 'flex items-center gap-1.5' : 'section-label flex items-center gap-1.5'}
               style={isL3 ? { marginBottom: 0, fontSize: 12, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' } : { marginBottom: 0 }}
             >
-              {!isL3 && (
-                <span className="section-header-icon" aria-hidden="true">
-                  <BarChart3 size={18} strokeWidth={1.5} />
-                </span>
-              )}
               今期 決算結果
               <button
                 onClick={() => setShowModal(true)}
@@ -807,11 +802,6 @@ export default function GuidanceCard({ guidance, isLoading = false, nextEarnings
           className={isL3 ? 'flex items-center gap-1.5' : 'section-label flex items-center gap-1.5'}
           style={isL3 ? { marginBottom: 0, fontSize: 12, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' } : { marginBottom: 0 }}
         >
-          {!isL3 && (
-            <span className="section-header-icon" aria-hidden="true">
-              <BarChart3 size={18} strokeWidth={1.5} />
-            </span>
-          )}
           今期 決算結果
           <button
             onClick={() => setShowModal(true)}

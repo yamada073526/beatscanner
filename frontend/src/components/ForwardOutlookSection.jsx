@@ -23,10 +23,11 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { ChevronRight, CalendarRange } from 'lucide-react';
+import { ChevronRight, CalendarRange, Info, BookOpen, Lightbulb, AlertTriangle } from 'lucide-react';
 import { fetchGuidanceSurprise } from '../api.js';
 import { useCountUp, COUNT_UP_MS } from '../hooks/useCountUp.js';
 import { useInViewOnce } from '../hooks/useInViewOnce.js';
+import InfoModal from './InfoModal.jsx';
 
 // ── 会社の次期見通し (sec_guidance_text) の md → JSX レンダラ。 改善3 (2026-06-06) で GuidanceCard から移植。
 //    sec_guidance_text は SEC 8-K の会社ガイダンスを Hallucination Guard 4 層 (BAD-5/6 + source_quote 逐語 +
@@ -290,6 +291,47 @@ function MetricBlock({ label, consensus, yoyPct, yearAgo, isMoney, currency, unr
  * @param {string} [props.currency]
  * @param {string} [props.ticker] - 案B: 会社ガイダンスサプライズの lazy fetch 用 (未指定なら surprise 非表示)
  */
+// ── 「来期 コンセンサスとは」 説明モーダル (2026-06-12 user 要望: 旧 GuidanceInfoModal にあった
+//    「ガイダンスとは何か / なぜ注目されるか」 を将来見通しの本来の置き場であるこちらへ移設)。
+//    §38 ガード: 旧文言の断定 (「株価の上昇を決定づける」「株価上昇に直結」) は使わない —
+//    「〜することがあります / 〜と考えられています」 の事実・一般論 hedge + 免責で丸める。
+//    「上方修正/下方修正」 の語も使わない (consensus 文脈、CONSENSUS_DRIFT_JP と同じ「引き上げ/引き下げ」 語彙)。
+//    section marker は lucide outline (絵文字は使わない、icon 規則 2026-06-12)。
+function ForwardOutlookInfoModal({ onClose }) {
+  const headStyle = 'mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400';
+  return (
+    <InfoModal title="来期 コンセンサスとは" onClose={onClose}>
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <p className={headStyle}><Info size={13} strokeWidth={2} aria-hidden="true" /> 概要</p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          このセクションは、来四半期・来年通期について、<strong>アナリスト各社の予想の平均（コンセンサス）</strong>と、<strong style={{ color: 'rgb(56, 189, 248)' }}>会社自身が公表した業績見通し（ガイダンス）</strong>を表示します。いずれも将来に関する予想であり、確定した実績ではありません。
+        </p>
+      </div>
+
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <p className={headStyle}><BookOpen size={13} strokeWidth={2} aria-hidden="true" /> ガイダンスとは</p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          ガイダンスとは、企業が決算発表などの場で公式に示す、来期や通期の「売上高」「EPS（一株当たり利益）」の見通しです。自社の事業を最もよく知る経営陣が示す数字として、決算発表で特に注目される項目のひとつです。一般に、達成を見込める水準として保守的に提示される傾向があるとされます。
+        </p>
+      </div>
+
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <p className={headStyle}><Lightbulb size={13} strokeWidth={2} aria-hidden="true" /> なぜ注目されるか</p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          アナリストは、会社のガイダンスを重要な手がかりとして自らの予想を更新します。ガイダンスがコンセンサスを上回る（あるいは下回る）と、アナリスト予想の引き上げ・引き下げにつながることがあり、こうした<strong>コンセンサスの変化は株価の変動要因のひとつと考えられています</strong>。だからこそ、足元の実績（今期の Beat / Miss）とあわせて、来期の見通しを確認する価値があります。
+        </p>
+      </div>
+
+      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <p className={headStyle}><AlertTriangle size={13} strokeWidth={2} aria-hidden="true" /> ご注意</p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          表示される来期予想はアナリスト各社の見通しの平均値であり、当社の予測ではありません。実績と大きく乖離する場合があります。投資判断はご自身の責任で行ってください。
+        </p>
+      </div>
+    </InfoModal>
+  );
+}
+
 export default function ForwardOutlookSection({ forward, currency = 'USD', ticker, secNarrativeText, secNarrativeSource, headingVariant = 'l2' }) {
   // v191 (3体合議 B): v5 ファンダ章「決算」 L2 冠の傘下で「来期 コンセンサス」 を L3 サブ見出しに降格 (今期と同格、反復原則 design_recipes §C-11)。
   //   §38 免責・将来予測ガード・数値ロジックは不触。headingVariant 省略時 'l2' で v4/legacy 完全不変。
@@ -299,6 +341,7 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
   const [surpriseNq, setSurpriseNq] = useState(null);
   const [secOpen, setSecOpen] = useState(false); // 改善3: 会社の次期見通し (sec_guidance_text) 折りたたみ
   const [secHover, setSecHover] = useState(false); // v192 (A-2 user dogfood): 次期見通しトグルの hover feedback (クリック可を示す)
+  const [showInfo, setShowInfo] = useState(false); // 2026-06-12: 「来期 コンセンサスとは」 説明モーダル (？ボタン)
   const [surpriseFy, setSurpriseFy] = useState(null); // v173 通期の会社ガイダンスサプライズ (lazy)
   // カウントアップ view 内発火 (dogfood 2026-06-06: mount 時発火だと scroll 前に完了して見えない → IO で入場時発火)
   // count-up / バー grow の view 内入場トリガー (v173.5 検証済 callback ref パターンを共通 hook 化)
@@ -369,9 +412,27 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
       }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
-        <h4 style={isL3 ? { margin: 0, fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' } : { margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>来期 コンセンサス</h4>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <h4 style={isL3 ? { margin: 0, fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' } : { margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>来期 コンセンサス</h4>
+          {/* 「？」 = セクション解説モーダル (GuidanceCard ？ idiom 流用、2026-06-12 user 要望で新設) */}
+          <button
+            onClick={() => setShowInfo(true)}
+            className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
+            style={{
+              background: 'rgba(34,211,238,0.15)',
+              color: 'rgb(56, 189, 248)',
+              border: '1px solid rgba(34,211,238,0.4)',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.30)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.15)'; }}
+            aria-label="来期コンセンサスの説明を表示"
+          >
+            ？
+          </button>
+        </span>
         {hasFyData && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>次の四半期 + 通期</span>}
       </div>
+      {showInfo && <ForwardOutlookInfoModal onClose={() => setShowInfo(false)} />}
       {/* 文字壁改善 (2026-06-06): サブタイトル「アナリストコンセンサスと前年同期実績の比較」 は削除。
           各 YoYInline の「前年比」 ラベル + ForecastBars の「前年同期/来期予想」 ラベル + 末尾の出典/免責で
           文脈は十分担保される (qa verdict: 削除可テキスト)。 */}

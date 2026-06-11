@@ -6,7 +6,7 @@ import Chip from '../../../../components/ui/Chip.jsx';
 // v138.6 R7-C (2026-05-30): 「Google ログインで無制限」 link を直接 signInWithGoogle 接続、
 // 旧 window.dispatchEvent('bs:open-login') は listener なしで click 無反応 (user dogfood 報告)
 import { useAuth } from '../../../../hooks/useAuth.js';
-import { Building2, MapPin, Users, Briefcase, RefreshCw } from 'lucide-react';
+import { MapPin, Users, Briefcase, RefreshCw } from 'lucide-react';
 import { fetchProfileExtended, fetchProfileSummary, fetchProfilePeers } from '../../../../api.js';
 import { sanitizeText } from '../../../../lib/blocklist.js';
 import { displaySegmentName } from '../../../../lib/segmentNames.js';
@@ -1147,7 +1147,8 @@ export default function ProfileCard({ ticker, companyName, dataSource, latestPer
             marginBottom: 'var(--space-4, 16px)',
           }}
         >
-          <SectionHeader id="sec-profile" plain={plainHeader} icon={<Building2 size={18} strokeWidth={1.5} />} title="プロフィール" label="COMPANY" />
+          {/* icon 規則 (2026-06-12): 装飾タイトルアイコン (Building2) 撤去 — 階層はタイポ+gold で表現。 */}
+          <SectionHeader id="sec-profile" plain={plainHeader} title="プロフィール" label="COMPANY" />
 
           {/* v192 (user dogfood 2026-06-09): 右端「AI 要約 (SEC 由来)」 citation chip を削除。
               生成中スケルトン + 末尾の出典文 (「FMP 提供の企業概要を AI が日本語要約」) で AI 要約である旨が

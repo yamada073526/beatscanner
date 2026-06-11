@@ -36,6 +36,29 @@ export const FLASH_TERMS = {
   noData: '—(データなし)',
 };
 
+// 予想比 (サプライズ) の 3 値分類語 — backend _verdict (±3%) と 1:1 mirror の事実分類
+// (GuidanceCard VERDICT_STYLE「上振れ(Beat)/概ね一致(In-line)/下振れ(Miss)」 の短縮形)。
+// 用途: In-line が琥珀色になったとき初心者が「黄=注意?」 と誤読しないよう、色に語を併記する
+// (初心者 persona review 2026-06-12 A案)。判断語 (強い/買い) ではなく分類の事実 (§38/§5 OK)。
+export const SURPRISE_VERDICT_JP = {
+  beat: 'Beat',
+  inline: '予想並み',
+  miss: 'Miss',
+};
+
+/**
+ * surprise_pct → 3 値分類 (backend _verdict ±3% mirror)。|pct|<0.05 は表示が "0.0%" に
+ * 丸まるため inline (色も neutral に揃う)。欠損は null (語を出さない)。
+ * @param {number|null} pct
+ * @returns {'beat'|'inline'|'miss'|null}
+ */
+export function classifySurprise(pct) {
+  if (pct == null || !Number.isFinite(pct)) return null;
+  if (pct >= 3.0) return 'beat';
+  if (pct <= -3.0) return 'miss';
+  return 'inline';
+}
+
 /**
  * 予実差 % の表示文字列 (backend 計算済 surprise_pct を読むだけ、frontend 再計算禁止 =
  * 銀行/与信の revenue basis mismatch ガードすり抜け防止、feedback_revenue_basis_mismatch)。
