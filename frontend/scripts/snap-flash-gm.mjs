@@ -11,9 +11,9 @@ import { chromium } from 'playwright';
 import { mkdirSync } from 'fs';
 import { getAuthInjection } from './lib/auth-helper.mjs';
 
-// 部門別/粗利率は default ON 済 → 素の default URL で表示。GM_V2=1 でデザイン v2 (?flash_v2=1) を確認。
-const _v2flag = process.env.GM_V2 === '1' ? '&flash_v2=1' : '';
-const BASE = 'https://beatscanner-production.up.railway.app/?layout=workspace&pane3_v5=1' + _v2flag;
+// 部門別/粗利率/v2 は default ON 済。GM_V3=1 で v3 polish (?flash_v3=1、単位従属+hover) を確認。
+const _flag = process.env.GM_V3 === '1' ? '&flash_v3=1' : (process.env.GM_V2 === '1' ? '&flash_v2=1' : '');
+const BASE = 'https://beatscanner-production.up.railway.app/?layout=workspace&pane3_v5=1' + _flag;
 const OUT = new URL('../.visual/', import.meta.url).pathname;
 mkdirSync(OUT, { recursive: true });
 const BAN = /強い|買い|絶好調|最高値?更新|過去最|上方修正|視界良好|広瀬|じっちゃま|隆雄/;
@@ -106,6 +106,13 @@ try {
     if (r.present) {
       const el = page.locator('[data-detail-active] [data-testid="earnings-flash-summary"], [data-testid="earnings-flash-summary"]').first();
       await el.screenshot({ path: OUT + `flash-gm-${T.toLowerCase()}.png` }).catch(() => {});
+      // v3 hover (H-1 reading-lamp) を撮るため売上行を hover してから 2 枚目
+      if (process.env.GM_V3 === '1') {
+        const revRow = page.locator('[data-detail-active] [data-testid="earnings-flash-summary-revenue"], [data-testid="earnings-flash-summary-revenue"]').first();
+        await revRow.hover().catch(() => {});
+        await page.waitForTimeout(400);
+        await el.screenshot({ path: OUT + `flash-gm-${T.toLowerCase()}-hover.png` }).catch(() => {});
+      }
     }
     results[T] = r;
   }
