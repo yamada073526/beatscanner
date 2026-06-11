@@ -92,20 +92,19 @@ function isSegmentEnabled() {
   }
 }
 
-// 決算ハイライト デザイン v2 (3体 design review 収束案、?flash_v2=1 で opt-in、default OFF)。
-// user 指摘「淡白で素通り」 への対策 = 色を足さず ① typography コントラスト拡張 (結果数値 18px) +
-// ② 行間 hairline (台帳の質感) + ③ バッジ hairline 化。3体一致で root cause は「無階層/dynamic range 不足」。
-// §38 (判断色なし) / 5条件カードの色独占 / 発光バグ / gold 一貫性 いずれにも無抵触 (color 不変、typography/罫線のみ)。
-// dogfood → user 承認後 default ON。判断記号 ↑↓ や数値に緑/赤は塗らない (中立維持)。
+// 決算ハイライト デザイン v2 (再設計、default ON = user 承認 2026-06-11、?flash_v2=0 が kill switch)。
+// EPS のみ hero (26px/800 唯一の焦点) + 直後 1 hairline で主役/従属を分割 + 残りは 15px 以下に静かに従属。
+// 「全数値 18px」 が焦点分散・文字壁になった round1 の失敗を是正 (3体合議 round2、root cause=一律拡大で
+// コントラスト潰れ)。§38 (判断色なし) / 5条件カードの色独占 / 発光バグ / gold いずれにも無抵触 (色不変)。
 function isFlashV2Enabled() {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   try {
     const urlParam = new URLSearchParams(window.location.search).get('flash_v2');
-    if (urlParam === '1') return true;
     if (urlParam === '0') return false;
-    return window.localStorage?.getItem('flash_v2') === '1';
+    if (urlParam === '1') return true;
+    return window.localStorage?.getItem('flash_v2') !== '0';
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -115,17 +114,17 @@ function SegmentItem({ seg }) {
   const v2 = isFlashV2Enabled();
   const yoy = seg?.yoy_pct;
   const hasYoy = Number.isFinite(yoy);
-  const sym = hasYoy ? (yoy > 0 ? '↑' : yoy < 0 ? '↓' : '—') : null;
+  // 記号統一 (user 指摘 2026-06-11): 符号付き数値の増減は「+/−」 (予想比/前年比と同規約)。
+  // ↑↓ は語の状態ラベル (ガイダンス改定/引き上げ/上回る 等) 専用 → 部門別の前年比は売上「前年比 +N%」 と揃え + に統一。
+  const yoyStr = hasYoy ? `${yoy > 0 ? '+' : ''}${yoy.toFixed(1)}%` : null;
   // v2 再設計: 部門別は 2 次情報として静かに従属 (拡大しない、 むしろ 13px で退かせる)。
   const baseSize = v2 ? 13 : undefined;
   return (
     <span style={{ whiteSpace: 'nowrap', ...(baseSize ? { fontSize: baseSize } : {}) }}>
       <span style={{ color: 'var(--text-muted)' }}>{displaySegmentName(seg)}</span>
       <span style={{ fontWeight: 600, color: 'var(--text-secondary)', marginLeft: 4 }}>{fmtMoney((seg?.value_b || 0) * 1e9)}</span>
-      {hasYoy && (
-        <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>
-          <span aria-hidden>{sym}</span>{Math.abs(yoy).toFixed(1)}%
-        </span>
+      {yoyStr != null && (
+        <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>{yoyStr}</span>
       )}
     </span>
   );
@@ -216,10 +215,10 @@ function EstimateToActual({ estStr, actStr, surpriseStr, hero }) {
 }
 
 const containerStyle = {
-  // CLS envelope (feedback_cls_envelope_pattern): 部門別 + 粗利率 default ON で 5 行が基本
-  // (EPS/売上/部門別/粗利率/来期)。実計測 (headless snap): AAPL/MSFT 5 行=194px。common 5 行に合わせ
-  // 192 で loading→loaded の章ジャンプを抑止 (skeleton も 5 行に合わせる。少数行の銀行系は下に小幅余白)。
-  minHeight: 192,
+  // CLS envelope (feedback_cls_envelope_pattern): v2 default ON で EPS hero (26px) + 従属 5 行が基本。
+  // 実計測 (headless snap): v2 AAPL=231px / MU(badge+guidance-rev 込み)=284px。common 5 行に合わせ 232 で
+  // loading→loaded の章ジャンプを抑止 (skeleton も 5 行)。badge/guidance-rev 付き銘柄は lazy 後追いで微増。
+  minHeight: 232,
   display: 'flex',
   flexDirection: 'column',
   gap: 'var(--space-2, 8px)',
