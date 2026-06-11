@@ -598,8 +598,9 @@ function FutureGrid({ nqEps, nqRev, yoyStr, revLine, gState }) {
       <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, justifySelf: 'end', textAlign: 'right' }}>
         {head(FLASH_TERMS.consensusRev)}
         {nqRev != null ? <NumUnit str={nqRev} size={13} weight={600} color={'var(--text-primary)'} unitScale={'0.75em'} /> : <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</span>}
+        {/* yoyStr は fmtYoyPct 出力で既に「前年比 ↑X%」 を含む (prefix 二重付け禁止) */}
         {yoyStr != null && revLine == null && (
-          <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>前年比 {yoyStr}</span>
+          <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{yoyStr}</span>
         )}
       </span>
       {/* 会社見通し (8-K guidance の状態語、 dict のみ。無ければ空セル = 列線維持) */}
