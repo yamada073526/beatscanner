@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Info } from 'lucide-react';
+import { m, AnimatePresence, useReducedMotion } from 'framer-motion';
 import Sparkline from '../../../../components/Sparkline.jsx';
 import ConditionSparkline from './ConditionSparkline.jsx';
 import {
@@ -49,6 +49,7 @@ export default function ConditionRow({
   // (c) chevron 色 muted → secondary、 軽い scale up。
   // Aman/Ritz-Carlton 級「触れたらすっと反応する」 感、 過剰なアニメは避ける (5 原則: シンプル)。
   const [isHovered, setIsHovered] = useState(false);
+  const reduce = useReducedMotion();
   const passed = condition.passed;
   const detailContent = CONDITION_DETAILS[index];
   const valueColor = passed ? 'var(--color-gain)' : 'var(--color-loss)';
@@ -96,38 +97,56 @@ export default function ConditionRow({
       }}
     >
       {/* ── Summary row (always visible) ────────────────────────────── */}
-      <button
-        type="button"
-        onClick={() => {
-          onToggle();
-          // handover v82 Phase 5.5: DiagramCard 該当条件 + step を pulse highlight。
-          // index は 1-based、 mapping は 0-indexed なので変換。
-          if (typeof onConditionPulse === 'function') {
-            onConditionPulse(index - 1);
-          }
-        }}
-        title="※ 図解との関連を示すものであり、 因果関係を保証しません"
-        aria-expanded={expanded}
-        aria-controls={`condition-detail-${index}`}
-        style={{
-          width: '100%',
-          display: 'grid',
-          // v86 R3: 数値カラムを固定幅 80px に変更 (auto → 80px)、 行をまたいだ縦の桁揃えを担保
-          // Sprint 1: ミニスパークライン カラム (96px) を追加 → 5 カラム構成
-          // Sprint B: ConditionSparkline が sparkline + trend chip を flex row で内包するため
-          //           sparkline 列を 96px → auto に変更 (chip 幅分を自然に収容)。
-          //           overflow 防止のため列に minmax(96px, auto) を使用。
-          gridTemplateColumns: '24px 1fr 80px minmax(96px, auto) 16px',
-          alignItems: 'center',
-          gap: 'var(--space-3, 12px)',
-          padding: 'var(--space-3, 12px) var(--space-3, 12px)',
-          background: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
-          textAlign: 'left',
-          color: 'inherit',
-        }}
-      >
+      {/* v202 (2026-06-11 user feedback): タイトル横に「？」チップを置き、カードを展開せず
+          個別条件モーダルを開けるようにする。<button> 入れ子 (invalid HTML + a11y) を避けるため、
+          行全体のトグルは絶対配置の透明 button (inset:0、背面) とし、content grid を pointer-events:none
+          で被せる (クリックは背面トグルへ透過)。「？」 だけ pointer-events:auto + stopPropagation。 */}
+      <div style={{ position: 'relative' }}>
+        <button
+          type="button"
+          onClick={() => {
+            onToggle();
+            // handover v82 Phase 5.5: DiagramCard 該当条件 + step を pulse highlight。
+            // index は 1-based、 mapping は 0-indexed なので変換。
+            if (typeof onConditionPulse === 'function') {
+              onConditionPulse(index - 1);
+            }
+          }}
+          title="※ 図解との関連を示すものであり、 因果関係を保証しません"
+          aria-expanded={expanded}
+          aria-controls={`condition-detail-${index}`}
+          aria-label={`${condition.label || condition.name || `条件 ${index}`} ${passed ? 'PASS' : 'FAIL'} — クリックで詳細を${expanded ? '閉じる' : '展開'}`}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            padding: 0,
+            margin: 0,
+          }}
+        />
+        <div
+          style={{
+            position: 'relative',
+            pointerEvents: 'none',
+            width: '100%',
+            display: 'grid',
+            // v86 R3: 数値カラムを固定幅 80px に変更 (auto → 80px)、 行をまたいだ縦の桁揃えを担保
+            // Sprint 1: ミニスパークライン カラム (96px) を追加 → 5 カラム構成
+            // Sprint B: ConditionSparkline が sparkline + trend chip を flex row で内包するため
+            //           sparkline 列を 96px → auto に変更 (chip 幅分を自然に収容)。
+            //           overflow 防止のため列に minmax(96px, auto) を使用。
+            gridTemplateColumns: '24px 1fr 80px minmax(96px, auto) 16px',
+            alignItems: 'center',
+            gap: 'var(--space-3, 12px)',
+            padding: 'var(--space-3, 12px) var(--space-3, 12px)',
+            textAlign: 'left',
+            color: 'inherit',
+          }}
+        >
         <span
           aria-label={passed ? 'PASS' : 'FAIL'}
           style={{
@@ -146,18 +165,44 @@ export default function ConditionRow({
           {passed ? '✓' : '✕'}
         </span>
         <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 13,
-              fontWeight: 500,
-              color: 'var(--text-primary)',
-              lineHeight: 1.3,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            {condition.label || condition.name || `条件 ${index}`}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 500,
+                color: 'var(--text-primary)',
+                lineHeight: 1.3,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                minWidth: 0,
+              }}
+            >
+              {condition.label || condition.name || `条件 ${index}`}
+            </span>
+            {/* v202: タイトル横「？」チップ (展開不要で個別条件モーダルを開く)。GuidanceCard ？ idiom 流用。
+                content grid は pointer-events:none のため、この button だけ auto に戻す + stopPropagation。 */}
+            {detailContent && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setShowModal(true); }}
+                className="inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[9px] font-bold transition-colors"
+                style={{
+                  pointerEvents: 'auto',
+                  flexShrink: 0,
+                  background: 'rgba(34,211,238,0.15)',
+                  color: 'rgb(56, 189, 248)',
+                  border: '1px solid rgba(34,211,238,0.4)',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.30)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.15)'; }}
+                aria-label={`${condition.name || `条件 ${index}`}の詳しい解説を表示`}
+                aria-haspopup="dialog"
+                title="この条件の詳しい解説を見る"
+              >
+                ？
+              </button>
+            )}
           </div>
           {condition.threshold && (
             <div
@@ -236,102 +281,68 @@ export default function ConditionRow({
         >
           ▸
         </span>
-      </button>
+        </div>
+      </div>
 
-      {/* ── Detail (expandable) ─────────────────────────────────────── */}
-      {expanded && (
-        <div
-          id={`condition-detail-${index}`}
-          style={{
-            padding: 'var(--space-1, 4px) var(--space-3, 12px) var(--space-3, 12px) 44px',
-            display: 'grid',
-            gap: 'var(--space-3, 12px)',
-            borderTop: '1px solid rgba(148, 163, 184, 0.12)',
-          }}
-        >
-          {/* 3 期 detail テキスト */}
-          {condition.detail && (
+      {/* ── Detail (expandable, height spring animation) ─────────────── */}
+      {/* v202 (2026-06-11 user feedback): 旧・即時 mount/unmount → AnimatePresence + m.div で
+          height 0↔auto を spring animate。AccordionSection と同 idiom (overflow:hidden で children を
+          clip、residual なし)。reduce で duration 0。MotionProvider (LazyMotion+domAnimation) 配下のため m 安全。 */}
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <m.div
+            id={`condition-detail-${index}`}
+            key={`condition-detail-${index}`}
+            initial={{ height: 0 }}
+            animate={{ height: 'auto' }}
+            exit={{ height: 0 }}
+            transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 32 }}
+            style={{ overflow: 'hidden' }}
+          >
             <div
               style={{
-                fontSize: 12,
-                fontWeight: 500,
-                color: 'var(--text-secondary)',
-                fontVariantNumeric: 'tabular-nums',
-                lineHeight: 1.5,
+                padding: 'var(--space-1, 4px) var(--space-3, 12px) var(--space-3, 12px) 44px',
+                display: 'grid',
+                gap: 'var(--space-3, 12px)',
+                borderTop: '1px solid rgba(148, 163, 184, 0.12)',
               }}
             >
-              {compactDetail(condition.detail)}
+              {/* 3 期 detail テキスト */}
+              {condition.detail && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: 'var(--text-secondary)',
+                    fontVariantNumeric: 'tabular-nums',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {compactDetail(condition.detail)}
+                </div>
+              )}
+
+              {/* Sparkline */}
+              {Array.isArray(condition.series) && condition.series.some((v) => v != null) && (
+                <div style={{ height: 56, minHeight: 56 }}>
+                  <Sparkline data={condition.series} color={sparkColor} />
+                </div>
+              )}
+
+              {/* DeltaRow (前期比) — Pro lock 内蔵 */}
+              <DeltaRow
+                index={index}
+                series={condition.series}
+                isPro={isPro}
+                onUpgradeClick={onUpgrade}
+              />
+
+              {/* v202: 個別条件の解説モーダルは title 横「？」 チップに統合 (展開不要で開ける)。
+                  旧・展開内 ⓘ ボタンは撤去 (同一 ConditionModal を二重 trigger していたため)。 */}
             </div>
-          )}
-
-          {/* Sparkline */}
-          {Array.isArray(condition.series) && condition.series.some((v) => v != null) && (
-            <div style={{ height: 56, minHeight: 56 }}>
-              <Sparkline data={condition.series} color={sparkColor} />
-            </div>
-          )}
-
-          {/* DeltaRow (前期比) — Pro lock 内蔵 */}
-          <DeltaRow
-            index={index}
-            series={condition.series}
-            isPro={isPro}
-            onUpgradeClick={onUpgrade}
-          />
-
-          {/* 説明モーダル trigger
-              v138.6 R5 (2026-05-30): 3 体合議 verdict (ui-designer + frontend-architect + qa-dogfooder、
-              2/3 vote for Option D)。 user dogfood「自己主張が強い、 ?だけで十分意味は伝わる」 要望から
-              旧 R4 cyan pill (text + icon) → icon-only ⓘ に minimal 化。
-              階層差別化: section title「?」 (5 条件全体解説) ↔ row「ⓘ」 (個別条件解説) で記号差で階層保つ。
-              Aman 級「主張せず必要な時だけ存在感が立ち上がる」 = opacity 0.55 → hover 100%、 padding 6px で
-              touch target 確保、 onMouseDown scale 0.92 で press feedback ([[feedback-press-feedback-delta]])。 */}
-          {detailContent && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowModal(true);
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.opacity = '1';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.opacity = '0.55';
-                e.currentTarget.style.transform = 'scale(1)';
-              }}
-              onMouseDown={(e) => {
-                e.currentTarget.style.transform = 'scale(0.92)';
-              }}
-              onMouseUp={(e) => {
-                e.currentTarget.style.transform = 'scale(1)';
-              }}
-              style={{
-                justifySelf: 'start',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 28,
-                height: 28,
-                padding: 6,
-                color: 'var(--color-accent)',
-                opacity: 0.55,
-                background: 'transparent',
-                border: 'none',
-                borderRadius: 'var(--radius-pill, 9999px)',
-                cursor: 'pointer',
-                transition: 'opacity var(--motion-fast) ease, transform var(--motion-fast) ease',
-                marginTop: 4,
-              }}
-              aria-label={`${condition.name}の詳しい解説を表示`}
-              aria-haspopup="dialog"
-              title="この条件の詳しい解説を見る"
-            >
-              <Info size={14} strokeWidth={2.0} aria-hidden="true" />
-            </button>
-          )}
-        </div>
-      )}
+          </m.div>
+        )}
+      </AnimatePresence>
 
       {showModal && detailContent && (
         <ConditionModal detail={detailContent} onClose={() => setShowModal(false)} />
