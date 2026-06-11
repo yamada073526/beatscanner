@@ -11,11 +11,9 @@ import { chromium } from 'playwright';
 import { mkdirSync } from 'fs';
 import { getAuthInjection } from './lib/auth-helper.mjs';
 
-// GM_OFF=1 で flag なし URL (粗利率 default ON 後は実ユーザー表示の確認用)。
-// 通常は flash_seg=1 で部門別行 (opt-in) も dogfood する。
-const BASE = process.env.GM_OFF === '1'
-  ? 'https://beatscanner-production.up.railway.app/?layout=workspace&pane3_v5=1'
-  : 'https://beatscanner-production.up.railway.app/?layout=workspace&pane3_v5=1&flash_seg=1';
+// 部門別/粗利率は default ON 済 → 素の default URL で表示。GM_V2=1 でデザイン v2 (?flash_v2=1) を確認。
+const _v2flag = process.env.GM_V2 === '1' ? '&flash_v2=1' : '';
+const BASE = 'https://beatscanner-production.up.railway.app/?layout=workspace&pane3_v5=1' + _v2flag;
 const OUT = new URL('../.visual/', import.meta.url).pathname;
 mkdirSync(OUT, { recursive: true });
 const BAN = /強い|買い|絶好調|最高値?更新|過去最|上方修正|視界良好|広瀬|じっちゃま|隆雄/;
@@ -53,6 +51,10 @@ async function grabFlash(page, retry = 1) {
     const gmText = gm ? (gm.textContent || '').trim() : null;
     const segEl = node.querySelector('[data-testid="earnings-flash-summary-segment"]');
     const segText = segEl ? (segEl.textContent || '').trim() : null;
+    const driftEl = node.querySelector('[data-testid="earnings-flash-summary-badge-drift"]');
+    const driftText = driftEl ? (driftEl.textContent || '').trim() : null;
+    const ghBadgesEl = node.querySelector('[data-testid="earnings-flash-summary-gh-badges"]');
+    const ghBadgesText = ghBadgesEl ? (ghBadgesEl.textContent || '').trim() : null;
     // 中立色検査: 粗利率 value span の color を EPS value span の color と比較
     const colorOf = (rowTestid) => {
       const row = node.querySelector(`[data-testid="${rowTestid}"]`);
@@ -68,6 +70,8 @@ async function grabFlash(page, retry = 1) {
       gmText,
       hasSegRow: !!segEl,
       segText,
+      driftText,
+      ghBadgesText,
       segColor: colorOf('earnings-flash-summary-segment'),
       gmColor: colorOf('earnings-flash-summary-gross-margin'),
       epsColor: colorOf('earnings-flash-summary-eps'),
