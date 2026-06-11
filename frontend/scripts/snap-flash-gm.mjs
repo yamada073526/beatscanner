@@ -11,8 +11,9 @@ import { chromium } from 'playwright';
 import { mkdirSync } from 'fs';
 import { getAuthInjection } from './lib/auth-helper.mjs';
 
-// 部門別/粗利率/v2/v3 は default ON 済。GM_V4=1 で v4 色 (?flash_v4=1、過去確定の予実差/前年比に緑/赤) を確認。
-const _flag = process.env.GM_V4 === '1' ? '&flash_v4=1'
+// 部門別/粗利率/v2/v3/v4 は default ON 済。GM_V5=1 で v5 列揃え grid (?flash_v5=1) を確認。
+const _flag = process.env.GM_V5 === '1' ? '&flash_v5=1'
+  : process.env.GM_V4 === '1' ? '&flash_v4=1'
   : process.env.GM_V3 === '1' ? '&flash_v3=1'
   : process.env.GM_V2 === '1' ? '&flash_v2=1' : '';
 const BASE = 'https://beatscanner-production.up.railway.app/?layout=workspace&pane3_v5=1' + _flag;
@@ -114,8 +115,8 @@ try {
   const results = {};
   for (const T of (process.env.GM_TICKERS || 'AAPL,NVDA').split(',')) {
     await navTo(page, T);
-    // guidance prop (EPS/売上) の load race 対策: eps 行が出るまで最大 8s 待つ (完全 render を撮る)
-    await page.locator('[data-detail-active] [data-testid="earnings-flash-summary-eps"], [data-testid="earnings-flash-summary-eps"]').first().waitFor({ state: 'attached', timeout: 8000 }).catch(() => {});
+    // guidance prop (EPS/売上) の load race 対策: eps 行 or v5 grid が出るまで最大 8s 待つ
+    await page.locator('[data-testid="earnings-flash-summary-eps"], [data-testid="earnings-flash-summary-headline-grid"]').first().waitFor({ state: 'attached', timeout: 8000 }).catch(() => {});
     await page.waitForTimeout(500);
     const r = await grabFlash(page);
     if (r.present) {
