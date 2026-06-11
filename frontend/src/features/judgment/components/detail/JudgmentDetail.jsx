@@ -1268,7 +1268,9 @@ export default function JudgmentDetail({
                   />
                 )}
                 {fiveConditionsNode}
-                <div style={hairlineSectionStyle}>
+                {/* data-testid: 決算サマリーの「↗ 詳細は決算セクションへ」 の scroll 着地点 (2026-06-12 user bug 修正:
+                    旧 guidance-card-wrapper だと flash と同内容の「今期決算結果」 に飛び誤認 → 「決算」 L2 冠へ)。 */}
+                <div style={hairlineSectionStyle} data-testid="fundamentals-earnings-section">
                   {/* v190: 「決算」 L2 セクション冠 (今期/来期コンセンサスを傘下に束ねる、user dogfood ②)。
                       外観は下のバリュエーション/会社概要と統一。 */}
                   <div style={sectionHeadingL2Style}>決算</div>

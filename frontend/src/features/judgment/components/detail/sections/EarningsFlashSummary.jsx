@@ -324,8 +324,9 @@ function HeadlineGrid({ eps, rev, onDetailClick }) {
       title={onDetailClick ? 'クリックで決算セクションの詳細へ' : undefined}
       style={{
         display: 'grid',
-        // 全データ列 minmax(0,auto) (狭幅でも nowrap がはみ出さない、frontend review)。列: 予想/結果/予想比/前年比。
-        gridTemplateColumns: '52px minmax(0,auto) minmax(0,auto) minmax(0,auto) minmax(0,auto)',
+        // v5.7: 列テンプレを FLASH_GRID_COLUMNS (1fr 等幅) に統一 — 下段 LowerGrid / 来期 FutureGrid と
+        // 別 grid でも列線が完全一致し、縦のガイドラインがカード全体を貫通する (design review)。
+        gridTemplateColumns: FLASH_GRID_COLUMNS,
         alignItems: 'baseline',
         columnGap: 'var(--space-5, 20px)',
         rowGap: 'var(--space-3, 12px)',
@@ -494,19 +495,21 @@ function skeletonLineStyle(width) {
   };
 }
 
-// ── 下段 (部門別 + 粗利率) = LowerGrid (v5.6 文字壁解消、design review A案 2026-06-12) ──
-// FlashRow の自由流し (「iPhone … ・ Service … ・他N部門」 1 行詰め込み) が「カオスな文字壁」 だった主因。
-// 上段 HeadlineGrid と同じ 52px label 列で整列し、各部門を「名称 / 金額 / 前年比」 縦積みセルに。
-// 視線が上段から下段まで列で縦断でき、雑然感が消える。来期 (将来) は別の future-strip に分離。
+// ── 下段 (部門別 + 粗利率) = LowerGrid (v5.6 文字壁解消 → v5.7 縦列整列、design review 2026-06-12) ──
+// v5.7 (user「上段=右寄せ/下段=左寄せで縦列が揃っていない」): 上段 HeadlineGrid と**同一の列テンプレ
+// (52px + 1fr×4) + 右寄せ** に統一し、列のガイドラインを上段から下段まで貫通させる (1fr 等幅なので
+// 別 grid でも列線が一致する)。hover + click (決算詳細へ) も上段と同じ ds-flash-grid で反応統一。
+const FLASH_GRID_COLUMNS = '52px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)';
 const lowerLabelCell = (txt) => (
   <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>{txt}</span>
 );
 function SegStack({ seg }) {
   const yoy = seg?.yoy_pct;
   const sym = Number.isFinite(yoy) ? (yoy > 0 ? '↑' : yoy < 0 ? '↓' : '') : null;
+  // v5.7: 右寄せ縦積み (上段の右寄せ数値列と寄せ方向を統一)
   return (
-    <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-      <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displaySegmentName(seg)}</span>
+    <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, minWidth: 0, justifySelf: 'end', textAlign: 'right' }}>
+      <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{displaySegmentName(seg)}</span>
       <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{fmtMoney((seg?.value_b || 0) * 1e9)}</span>
       {sym != null && (
         <span style={{ fontSize: 11, fontWeight: 500, color: deltaColor(yoy), fontVariantNumeric: 'tabular-nums' }}>{sym}{Math.abs(yoy).toFixed(1)}%</span>
@@ -514,18 +517,25 @@ function SegStack({ seg }) {
     </span>
   );
 }
-function LowerGrid({ segs, restCount, gmStr, gmPp }) {
+function LowerGrid({ segs, restCount, gmStr, gmPp, onDetailClick }) {
   const gmPpStr = Number.isFinite(gmPp) ? `${gmPp > 0 ? '↑' : gmPp < 0 ? '↓' : ''}${Math.abs(gmPp).toFixed(1)}pt` : null;
   return (
     <div
       data-testid={`${TESTID}-lower-grid`}
+      className={onDetailClick ? 'ds-flash-grid' : undefined}
+      onClick={onDetailClick}
+      role={onDetailClick ? 'button' : undefined}
+      tabIndex={onDetailClick ? 0 : undefined}
+      onKeyDown={onDetailClick ? (e) => { if (e.key === 'Enter') onDetailClick(e); } : undefined}
+      title={onDetailClick ? 'クリックで決算セクションの詳細へ' : undefined}
       style={{
         display: 'grid',
-        gridTemplateColumns: '52px 1fr 1fr 1fr',
+        gridTemplateColumns: FLASH_GRID_COLUMNS,
         columnGap: 'var(--space-5, 20px)',
         rowGap: 'var(--space-3, 12px)',
         alignItems: 'start',
         fontVariantNumeric: 'tabular-nums',
+        cursor: onDetailClick ? 'pointer' : undefined,
       }}
     >
       {segs && segs.length > 0 && (
@@ -533,19 +543,81 @@ function LowerGrid({ segs, restCount, gmStr, gmPp }) {
           {lowerLabelCell(FLASH_LABELS.segment)}
           <SegStack seg={segs[0]} />
           {segs[1] ? <SegStack seg={segs[1]} /> : <span />}
-          {restCount > 0 ? <span style={{ fontSize: 12, color: 'var(--text-muted)', alignSelf: 'center', whiteSpace: 'nowrap' }}>他 {restCount} 部門</span> : <span />}
+          {restCount > 0 ? <span style={{ justifySelf: 'end', fontSize: 12, color: 'var(--text-muted)', alignSelf: 'center', whiteSpace: 'nowrap' }}>他 {restCount} 部門</span> : <span />}
+          <span />
         </>
       )}
       {gmStr != null && (
         <>
           {lowerLabelCell(FLASH_LABELS.grossMargin)}
-          <span style={{ gridColumn: '2 / 5', display: 'inline-flex', alignItems: 'baseline', gap: 10 }}>
+          {/* v5.7: span をやめ col2=値 / col3=前年比Δ に分割 (縦ガイドライン維持、design review NG 事項) */}
+          <span style={{ justifySelf: 'end' }}>
             <NumUnit str={gmStr} size={14} weight={600} color={'var(--text-primary)'} unitScale={'0.75em'} />
-            {gmPpStr != null && (
+          </span>
+          <span style={{ justifySelf: 'end', whiteSpace: 'nowrap' }}>
+            {gmPpStr != null ? (
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                 前年比 <span style={{ fontWeight: 600, color: deltaColor(gmPp), fontVariantNumeric: 'tabular-nums' }}>{gmPpStr}</span>
               </span>
-            )}
+            ) : null}
+          </span>
+          <span /><span />
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── 来期帯 = FutureGrid (v5.7、user「来期単体ではまだ雑然 (読み飛ばすレベル)」) ──
+// FlashRow の自由流し「コンセンサス EPS $1.89 ・売上 1084.0億ドル (前年比 ↑15.3%)」 を、上下段と同じ
+// 列テンプレの grid に整列 (列線が future-strip まで貫通)。各値は「ヘッダ (10px uppercase muted) + 値」 の
+// 縦積みセル。§38: 来期=将来予想のため全て中立色 (deltaColor/緑/赤を使わない)。
+function FutureGrid({ nqEps, nqRev, yoyStr, revLine, gState }) {
+  const head = (txt) => (
+    <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{txt}</span>
+  );
+  return (
+    <div
+      data-testid={`${TESTID}-nextq`}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: FLASH_GRID_COLUMNS,
+        columnGap: 'var(--space-5, 20px)',
+        rowGap: 'var(--space-2, 8px)',
+        alignItems: 'start',
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      {lowerLabelCell(FLASH_LABELS.nextQ)}
+      {/* コンセンサス EPS (縦積み: ヘッダ + 値) */}
+      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, justifySelf: 'end', textAlign: 'right' }}>
+        {head(FLASH_TERMS.consensusEps)}
+        {nqEps != null ? <NumUnit str={nqEps} size={13} weight={600} color={'var(--text-primary)'} unitScale={'0.75em'} /> : <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</span>}
+      </span>
+      {/* コンセンサス売上 (縦積み: ヘッダ + 値 + 前年比、全て中立) */}
+      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, justifySelf: 'end', textAlign: 'right' }}>
+        {head(FLASH_TERMS.consensusRev)}
+        {nqRev != null ? <NumUnit str={nqRev} size={13} weight={600} color={'var(--text-primary)'} unitScale={'0.75em'} /> : <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</span>}
+        {yoyStr != null && revLine == null && (
+          <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>前年比 {yoyStr}</span>
+        )}
+      </span>
+      {/* 会社見通し (8-K guidance の状態語、 dict のみ。無ければ空セル = 列線維持) */}
+      {gState && revLine == null ? (
+        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, justifySelf: 'end', textAlign: 'right' }}>
+          {head('会社見通し')}
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+            <span aria-hidden style={{ fontSize: 10 }}>{gState.sym}</span> {gState.label}
+          </span>
+        </span>
+      ) : <span />}
+      <span />
+      {/* 会社売上ガイダンス レンジ並置 (v200 形式、長文のため 2 行目に col2-5 span。中立色) */}
+      {revLine != null && (
+        <>
+          <span />
+          <span data-testid={`${TESTID}-guidance-rev`} style={{ gridColumn: '2 / 6', justifySelf: 'end', fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)', textAlign: 'right' }}>
+            {revLine}
           </span>
         </>
       )}
@@ -641,9 +713,12 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
   // instance 局所 = closest (gh-link / PriceLadder idiom)。grid click とヘッダーの「詳細」 リンクで共用。
   const scrollToEarnings = (e) => {
     const root = e?.currentTarget?.closest?.('.ds-judgment-detail') || document;
-    // 決算カード (今期 決算結果 = GuidanceCard) を優先、無ければ figure (DiagramCard) に fallback。
-    const target = root.querySelector('[data-testid="guidance-card-wrapper"]')
-      || document.querySelector('[data-testid="guidance-card-wrapper"]')
+    // 「決算」 L2 セクション冠 (5条件の下) を着地点に (2026-06-12 user bug 修正: guidance-card-wrapper だと
+    // flash と同内容の「今期決算結果」 サマリーに飛び「別の四半期サマリーに飛んだ」 と誤認した)。
+    // fallback: 決算 section が無い layout (v4 等) は guidance-card-wrapper → diagram。
+    const target = root.querySelector('[data-testid="fundamentals-earnings-section"]')
+      || root.querySelector('[data-testid="guidance-card-wrapper"]')
+      || document.querySelector('[data-testid="fundamentals-earnings-section"]')
       || root.querySelector('[data-testid="sticky-diagram-accordion"]');
     target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -730,35 +805,10 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
     const yoyStr = fmtYoyPct(nq?.rev_yoy_pct);
     const revLine = fmtGuidanceRevLine(nq?.rev_yoy_pct, nq?.company_q_rev_yoy_low_pct, nq?.company_q_rev_yoy_high_pct);
     const gState = GUIDANCE_STATE_JP[nq?.guidance_vs_consensus_eps] || GUIDANCE_STATE_JP[nq?.guidance_vs_consensus_rev] || null;
+    // v5.7: FlashRow 自由流し → FutureGrid (上下段と同じ列テンプレ、縦積みヘッダ+値、全中立色)。
+    // v200 round2 (user 確定): 並置行 (revLine) は判定記号なし — 時点ミックスの誤読防止、文言で明示。
     futureNodes.push(
-      <FlashRow key="nextq" label={FLASH_LABELS.nextQ} testid={`${TESTID}-nextq`}>
-        {nqEps != null && (
-          <>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{FLASH_TERMS.consensusEps}</span>
-            <NumUnit str={nqEps} size={15} weight={600} color={'var(--text-primary)'} />
-          </>
-        )}
-        {nqRev != null && (
-          <>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{nqEps != null ? `・${FLASH_TERMS.consensusRev}` : FLASH_TERMS.consensusRev}</span>
-            <NumUnit str={nqRev} size={15} weight={600} color={'var(--text-primary)'} />
-          </>
-        )}
-        {yoyStr != null && revLine == null && (
-          <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>({yoyStr})</span>
-        )}
-        {/* v200 round2 (user 確定): 並置行は判定記号なし (FMP 現コンセンサス vs 発表時ガイダンスの
-            時点ミックスで「下方」 に誤読される、SNOW 実例)。時点は文言で明示。 */}
-        {revLine != null ? (
-          <span data-testid={`${TESTID}-guidance-rev`} style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>
-            {revLine}
-          </span>
-        ) : gState && (
-          <span style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-            <span aria-hidden style={{ fontSize: 10 }}>{gState.sym}</span> {gState.label}
-          </span>
-        )}
-      </FlashRow>
+      <FutureGrid key="nextq" nqEps={nqEps} nqRev={nqRev} yoyStr={yoyStr} revLine={revLine} gState={gState} />
     );
   }
 
@@ -785,7 +835,7 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
         <div
           key="gh-badges"
           data-testid={`${TESTID}-gh-badges`}
-          style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap', paddingLeft: 64 }}
+          style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap', paddingLeft: 'calc(52px + var(--space-5, 20px))' }}
         >
           {revState && <GuidanceBadge scope="通期" sym={revState.sym} label={revState.label} testid={`${TESTID}-badge-revision`} />}
           {pitState && <GuidanceBadge scope="来期" sym={pitState.sym} label={pitState.label} testid={`${TESTID}-badge-pit`} />}
@@ -881,7 +931,7 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
       {/* body = 確定実績 (上段 EPS/売上 grid + 下段 部門別/粗利率 LowerGrid)。クリックで決算詳細へ scroll。 */}
       <div style={bodyStyle}>
         {rows}
-        {hasLower && <LowerGrid segs={lowerSegs} restCount={lowerRestCount} gmStr={lowerGmStr} gmPp={latestQ?.gross_margin_yoy_pp} />}
+        {hasLower && <LowerGrid segs={lowerSegs} restCount={lowerRestCount} gmStr={lowerGmStr} gmPp={latestQ?.gross_margin_yoy_pp} onDetailClick={scrollToEarnings} />}
       </div>
       {/* future-strip = 将来ゾーン (来期コンセンサス + ガイダンス判定)。border-top + 極薄 tint + 全 neutral 色で
           確定実績と視覚分離 (§38 の中立色 mandate を「将来は色が違う」 視覚言語に、design review A案)。 */}
