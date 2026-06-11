@@ -27,6 +27,7 @@
  * loading/errored/empty/main 全 render path に data-testid (feedback_testid_all_render_paths)。
  */
 import React, { useEffect, useState } from 'react';
+import { Copy, Check } from 'lucide-react';
 import { fetchQuarterlyHistory, fetchGuidanceSurprise, fetchConsensusDrift } from '../../../../../api.js';
 import { fmtMoney, fmtEps, GUIDANCE_STATE_JP } from '../../../../../components/ForwardOutlookSection.jsx';
 import { displaySegmentName } from '../../../../../lib/segmentNames.js';
@@ -46,7 +47,10 @@ import {
 } from '../../../constants/earningsFlashTemplates.js';
 // v5.4 motion (3体 persona review 推奨案A): 予想比 hero を 0→target の count-up で登場させ
 // 「ここが重要」 の視線誘導に。useCountUp は prefers-reduced-motion 内蔵 (即 final 値)。
+// v5.5 (user「気づいた時点で終わっている」): mount 発火 → useInViewOnce の入場発火に変更 + 1200ms
+// (画面外で走り終わる真因を解消。ForwardOutlookSection MetricBlock と同 idiom)。
 import { useCountUp } from '../../../../../hooks/useCountUp.js';
+import { useInViewOnce } from '../../../../../hooks/useInViewOnce.js';
 
 const TESTID = 'earnings-flash-summary';
 
@@ -216,15 +220,40 @@ function barePct(pct) {
 // (色だけだと In-line 琥珀を初心者が「注意?」 と誤読、persona review A案。§38=過去確定の事実分類)。
 // count-up (0→target 800ms、motion review 推奨案A): ticker 切替時は前値→新値へ滑らかに遷移
 // (useCountUp fromRef)。prefers-reduced-motion は hook 内蔵で即 final 値。
-function HeroPct({ pct }) {
-  const animated = useCountUp(Number.isFinite(pct) ? Math.abs(pct) : null, { duration: 800, digits: 1, forceFromZero: true });
+// chip 背景: verdict 色の 12% tint (案A 8% と案B 15% の中庸)。中立 (ゼロ近傍/v4 OFF) は bg-subtle。
+// 「面」 が強調を担うため hero サイズは 20px のまま据置 (案B の 13px 縮小は user 優先順位①と逆行のため不採用)。
+function heroChipBg(pct) {
+  if (!isFlashV4Enabled() || !Number.isFinite(pct) || Math.abs(pct) < 0.05) return 'var(--bg-subtle)';
+  if (pct >= 3.0) return 'color-mix(in oklab, var(--color-gain) 12%, transparent)';
+  if (pct <= -3.0) return 'color-mix(in oklab, var(--color-loss) 12%, transparent)';
+  return 'color-mix(in oklab, var(--color-warning) 12%, transparent)';
+}
+function HeroPct({ pct, inView = true, delay = '0s' }) {
+  // v5.5: 入場 (inView) で 0→target を 1200ms count-up (user「800ms mount 発火は気づく前に終わる」)。
+  const target = inView && Number.isFinite(pct) ? Math.abs(pct) : null;
+  const animated = useCountUp(target, { duration: 1200, digits: 1, forceFromZero: true });
   if (!Number.isFinite(pct)) return null;
   const cls = classifySurprise(pct);
   const color = surpriseColor(pct);
   const sym = pct > 0 ? '↑' : pct < 0 ? '↓' : '';
-  const shown = animated ?? Math.abs(pct);
+  const shown = animated ?? 0;
   return (
-    <span style={{ justifySelf: 'end', display: 'inline-flex', alignItems: 'baseline', gap: 5, whiteSpace: 'nowrap' }}>
+    // v5.5 chip 化 (design review 案B「Terminal 列美」): 色テキスト → 12% tint の色面 chip。
+    // pop-in 200ms (ds-flash-chip、EPS/売上 stagger ≤120ms)。reduced-motion は index.css 側で無効化。
+    <span
+      className="ds-flash-chip"
+      style={{
+        justifySelf: 'end',
+        display: 'inline-flex',
+        alignItems: 'baseline',
+        gap: 5,
+        whiteSpace: 'nowrap',
+        background: heroChipBg(pct),
+        padding: '3px 9px',
+        borderRadius: 6,
+        animationDelay: delay,
+      }}
+    >
       <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em', color, fontVariantNumeric: 'tabular-nums' }}>
         {sym}{shown.toFixed(1)}%
       </span>
@@ -240,7 +269,9 @@ function HeroPct({ pct }) {
 //   予想=de-emphasize (13px muted)、前年比=色シグナル (14px)。「強調は色に任せる」 を体現 (サイズ差は穏当、
 //   旧 26px extreme を回避し色で焦点化)。列順は 予想→結果→予想比(hero)→前年比 で自然な読み (予想 を残すのは
 //   review P0「% の基準が画面内に無いと初心者が混乱」)。見出しは「予想比」 (QA: 予実差 より初心者に明快)。
-function HeadlineGrid({ eps, rev }) {
+function HeadlineGrid({ eps, rev, onDetailClick }) {
+  // v5.5: count-up は grid の入場で発火 (IO 1 個を 2 つの HeroPct で共有)。
+  const [gridRef, gridInView] = useInViewOnce();
   const colHead = (txt) => (
     <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', justifySelf: 'end' }}>{txt}</span>
   );
@@ -261,8 +292,8 @@ function HeadlineGrid({ eps, rev }) {
   const resultCell = (str) => (
     <span style={{ justifySelf: 'end' }}>{str != null ? <NumUnit str={str} size={13} weight={500} color={'var(--text-secondary)'} unitScale={'0.8em'} /> : emCell()}</span>
   );
-  // 予想比 = hero (HeroPct component: 20px/700 + surpriseColor ±3% verdict + count-up + 分類語)。
-  const heroPct = (pct) => (Number.isFinite(pct) ? <HeroPct pct={pct} /> : emCell());
+  // 予想比 = hero (HeroPct component: 20px/700 chip + surpriseColor ±3% verdict + count-up + 分類語)。
+  const heroPct = (pct, delay) => (Number.isFinite(pct) ? <HeroPct pct={pct} inView={gridInView} delay={delay} /> : emCell());
   // 前年比 = 色シグナル (13px/600 + deltaColor=方向色)。hero と確実に 1 段差 (persona review)。欠損は「—」。
   const yoyCell = (pct) => (
     Number.isFinite(pct)
@@ -271,7 +302,10 @@ function HeadlineGrid({ eps, rev }) {
   );
   return (
     <div
+      ref={gridRef}
       data-testid={`${TESTID}-headline-grid`}
+      onClick={onDetailClick}
+      title={onDetailClick ? 'クリックで決算セクションの詳細へ' : undefined}
       style={{
         display: 'grid',
         // 全データ列 minmax(0,auto) (狭幅でも nowrap がはみ出さない、frontend review)。列: 予想/結果/予想比/前年比。
@@ -283,21 +317,22 @@ function HeadlineGrid({ eps, rev }) {
         borderBottom: '1px solid var(--border)',
         paddingBottom: 'var(--space-3, 12px)',
         marginBottom: 'var(--space-1, 4px)',
+        cursor: onDetailClick ? 'pointer' : undefined,
       }}
     >
       {/* 列見出し (予想 / 結果 / 予想比 hero / 前年比、薄 muted) */}
       {labelCell('')}{colHead('予想')}{colHead('結果')}{colHead('予想比')}{colHead('前年比')}
-      {/* EPS 行 (予想比 hero、前年比は EPS YoY を出さないため「—」) */}
+      {/* EPS 行 (予想比 hero chip + 前年比 = backend eps_yoy_pct、v5.5 で「—」解消) */}
       {labelCell(FLASH_LABELS.eps)}
       {estCell(eps.estStr)}
       {resultCell(eps.actStr)}
-      {heroPct(eps.surprisePct)}
-      {emCell()}
-      {/* 売上 行 (予想比 hero、前年比は色シグナル) */}
+      {heroPct(eps.surprisePct, '0.05s')}
+      {yoyCell(eps.yoyPct)}
+      {/* 売上 行 (予想比 hero chip、前年比は色シグナル) */}
       {rev ? labelCell(FLASH_LABELS.revenue) : null}
       {rev ? estCell(rev.estStr) : null}
       {rev ? resultCell(rev.actStr) : null}
-      {rev ? heroPct(rev.surprisePct) : null}
+      {rev ? heroPct(rev.surprisePct, '0.12s') : null}
       {rev ? yoyCell(rev.yoyPct) : null}
     </div>
   );
@@ -412,17 +447,43 @@ function EstimateToActual({ estStr, actStr, surpriseStr, surpriseColor, hero }) 
   );
 }
 
-const containerStyle = {
-  // CLS envelope (feedback_cls_envelope_pattern): v2 default ON で EPS hero (26px) + 従属 5 行が基本。
-  // 実計測 (headless snap): v2 AAPL=231px / MU(badge+guidance-rev 込み)=284px。common 5 行に合わせ 232 で
-  // loading→loaded の章ジャンプを抑止 (skeleton も 5 行)。badge/guidance-rev 付き銘柄は lazy 後追いで微増。
-  minHeight: 232,
+// v5.5 デザイン刷新 (2026-06-12、design review 2体統合): 旧 borderLeft 2px の素朴 wrapper →
+// ds-flash-card (1px 枠 + radius 10 + 左 3px gold hairline、index.css) + ヘッダー帯 + body の 3 層。
+// CLS envelope: 旧 232 + ヘッダー帯 (~36px) ≈ 268。
+const cardOuterStyle = {
+  minHeight: 268,
+  marginBottom: 'var(--space-4, 16px)',
+};
+// ヘッダー帯 (案A「ホテルのサイン板」): 決算サマリー label + 期 + 操作群。下 hairline で grid 面と分離。
+const headerBandStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 8,
+  padding: '9px 14px 9px 16px',
+  borderBottom: '1px solid var(--border)',
+};
+const headerTitleStyle = {
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: '0.1em',
+  textTransform: 'uppercase',
+  color: 'var(--text-primary)',
+  whiteSpace: 'nowrap',
+};
+const headerPeriodStyle = {
+  fontSize: 10,
+  fontWeight: 500,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  color: 'var(--text-muted)',
+  whiteSpace: 'nowrap',
+};
+const bodyStyle = {
   display: 'flex',
   flexDirection: 'column',
   gap: 'var(--space-2, 8px)',
   padding: 'var(--space-3, 12px) var(--space-4, 16px)',
-  borderLeft: '2px solid var(--border)',
-  marginBottom: 'var(--space-4, 16px)',
 };
 
 function skeletonLineStyle(width) {
@@ -500,24 +561,34 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
 
   // 決算ハイライト デザイン v2 再設計 (?flash_v2=1 opt-in、default OFF): EPS hero 1点 + 残り従属 + バッジ刷新。
   const v2 = isFlashV2Enabled();
-  // v2: hero EPS (26px) と従属行で階層化。container は v1 と同じ余白リズム (gap で行を分離、罫線は hero 後の1本のみ)。
-  const mainContainerStyle = containerStyle;
+  // v5.5 copy ボタン (card hover で出現): コピー完了 1.5s チェック表示。
+  const [copied, setCopied] = useState(false);
 
   if (isLoading && !guidance) {
     return (
-      <div data-testid={TESTID} data-state="loading" aria-busy="true" style={containerStyle}>
-        {/* 5 行分 (EPS/売上/部門別/粗利率/来期) の skeleton で loaded 高 ≈ loading 高 (CLS 抑止) */}
-        <div style={skeletonLineStyle(220)} />
-        <div style={skeletonLineStyle(260)} />
-        <div style={skeletonLineStyle(200)} />
-        <div style={skeletonLineStyle(150)} />
-        <div style={skeletonLineStyle(240)} />
+      <div data-testid={TESTID} data-state="loading" aria-busy="true" className="ds-flash-card" style={cardOuterStyle}>
+        <div style={headerBandStyle}><span style={headerTitleStyle}>決算サマリー</span></div>
+        <div style={bodyStyle}>
+          {/* 5 行分 (EPS/売上/部門別/粗利率/来期) の skeleton で loaded 高 ≈ loading 高 (CLS 抑止) */}
+          <div style={skeletonLineStyle(220)} />
+          <div style={skeletonLineStyle(260)} />
+          <div style={skeletonLineStyle(200)} />
+          <div style={skeletonLineStyle(150)} />
+          <div style={skeletonLineStyle(240)} />
+        </div>
       </div>
     );
   }
 
   // ── 行の構築 (compound check: 揃っている行だけ出す。捏造・空枠なし) ──
   const rows = [];
+
+  // v5.5 (user 要望「詳細はファンダ章の決算を見てほしい」): 決算セクション (今期 決算結果) へ smooth scroll。
+  // instance 局所 = closest (gh-link / PriceLadder idiom)。grid click とヘッダーの「詳細」 リンクで共用。
+  const scrollToEarnings = (e) => {
+    const root = e?.currentTarget?.closest?.('.ds-judgment-detail') || document;
+    root.querySelector('[data-testid="guidance-card-wrapper"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   // headline (EPS + 売上) の構築。v5 = 列揃え grid (重要3点を仕切り上に集約)、v4 以前 = 従来 FlashRow。
   const v5 = isFlashV5Enabled();
@@ -533,13 +604,14 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
     rows.push(
       <HeadlineGrid
         key="headline-grid"
-        eps={{ estStr: epsHasEst ? fmtEps(eps.estimated) : null, actStr: fmtEps(eps.actual), surprisePct: eps.surprise_pct }}
+        eps={{ estStr: epsHasEst ? fmtEps(eps.estimated) : null, actStr: fmtEps(eps.actual), surprisePct: eps.surprise_pct, yoyPct: latestQ?.eps_yoy_pct }}
         rev={Number.isFinite(rev?.actual) ? {
           estStr: revShowEst ? fmtMoney(rev.estimated) : null,
           actStr: fmtMoney(rev.actual),
           surprisePct: revShowEst ? rev.surprise_pct : null,
           yoyPct: latestQ?.revenue_yoy_pct,
         } : null}
+        onDetailClick={scrollToEarnings}
       />
     );
   } else {
@@ -605,9 +677,21 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
   if (isGrossMarginEnabled()) {
     const gmStr = fmtGrossMargin(latestQ?.gross_margin_pct);
     if (gmStr != null) {
+      // v5.5 (user「粗利率の前年比も — のまま」): 前年同期差 ±pt を併記。水準 (gmStr) は中立のまま、
+      // Δ は過去確定の方向事実なので deltaColor (§38 メモ「水準は色NG / 前期比 Δ なら可」)。
+      const gmPp = latestQ?.gross_margin_yoy_pp;
+      const gmPpStr = Number.isFinite(gmPp)
+        ? `${gmPp > 0 ? '↑' : gmPp < 0 ? '↓' : ''}${Math.abs(gmPp).toFixed(1)}pt`
+        : null;
       rows.push(
         <FlashRow key="grossmargin" label={FLASH_LABELS.grossMargin} testid={`${TESTID}-gross-margin`}>
           <NumUnit str={gmStr} size={15} weight={600} color={'var(--text-primary)'} />
+          {gmPpStr != null && (
+            <>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{FLASH_TERMS.yoy}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: deltaColor(gmPp), whiteSpace: 'nowrap' }}>{gmPpStr}</span>
+            </>
+          )}
         </FlashRow>
       );
     }
@@ -705,9 +789,9 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
   }
 
   if (rows.length === 0) {
-    // empty: 欠損を捏造しない。最小高で静かに非主張 (空枠/coming soon を出さない、マーケ条件)
+    // empty: 欠損を捏造しない。最小高で静かに非主張 (空枠/coming soon を出さない、マーケ条件。枠も付けない)
     return (
-      <div data-testid={TESTID} data-state="empty" style={{ ...containerStyle, minHeight: 0 }}>
+      <div data-testid={TESTID} data-state="empty" style={{ padding: 'var(--space-3, 12px) var(--space-4, 16px)', marginBottom: 'var(--space-4, 16px)' }}>
         <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>{FLASH_TERMS.noData}</p>
       </div>
     );
@@ -717,15 +801,65 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
   // リアルタイム性の誤認を防ぐ (6体合議マーケ条件 3 の趣旨を fiscal 帰属で充足)。
   const period = typeof latestQ?.fiscal_period === 'string' && latestQ.fiscal_period ? latestQ.fiscal_period : null;
 
+  // v5.5 copy (motion review 3-B): 表示中のサマリーを 1 click で Slack/X 共有できるテキストに整形。
+  // 表示値 (backend ガード済の整形文字列) からのみ構築 — 再計算なし、§38 文言なし、出典付き。
+  const handleCopy = () => {
+    const lines = [`${ticker} 決算サマリー${period ? `（${period}）` : ''} - BeatScanner`];
+    if (Number.isFinite(eps?.actual)) {
+      const c = classifySurprise(eps.surprise_pct);
+      let l = `EPS: ${epsHasEst ? `予想 ${fmtEps(eps.estimated)} → ` : ''}結果 ${fmtEps(eps.actual)}`;
+      if (Number.isFinite(eps.surprise_pct)) l += `（予想比 ${barePct(eps.surprise_pct)}${c ? ` ${SURPRISE_VERDICT_JP[c]}` : ''}）`;
+      lines.push(l);
+    }
+    if (Number.isFinite(rev?.actual)) {
+      const c = classifySurprise(revShowEst ? rev.surprise_pct : null);
+      let l = `売上高: ${revShowEst ? `予想 ${fmtMoney(rev.estimated)} → ` : ''}結果 ${fmtMoney(rev.actual)}`;
+      if (revShowEst && Number.isFinite(rev.surprise_pct)) l += `（予想比 ${barePct(rev.surprise_pct)}${c ? ` ${SURPRISE_VERDICT_JP[c]}` : ''}）`;
+      if (yoyStr != null) l += ` 前年比 ${yoyStr}`;
+      lines.push(l);
+    }
+    const gm = fmtGrossMargin(latestQ?.gross_margin_pct);
+    if (gm != null) lines.push(`粗利率: ${gm}`);
+    navigator.clipboard?.writeText(lines.join('\n')).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {});
+  };
+
   return (
-    <div data-testid={TESTID} data-state="main" style={mainContainerStyle}>
-      {/* v5.4: 期の帰属は時制誤認防止の最重要 caption (上級者 review P1) — 10px は埋没するため 11px/700 へ。 */}
-      {period && (
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.04em', ...(v2 ? { fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', paddingBottom: 'var(--space-1, 4px)' } : {}) }}>
-          直近四半期 {period}
-        </div>
-      )}
-      {rows}
+    <div data-testid={TESTID} data-state="main" className="ds-flash-card" style={cardOuterStyle}>
+      {/* ヘッダー帯 (v5.5 design 案A): 「決算サマリー」 を明記 — サマリーであり下に詳細があることを初見で宣言
+          (user 相談への推奨実装)。期の帰属も同帯に常設 (時制誤認防止)。右に詳細導線 + copy (hover 出現)。 */}
+      <div style={headerBandStyle}>
+        <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
+          <span style={headerTitleStyle}>決算サマリー</span>
+          {period && <span style={headerPeriodStyle}>直近四半期 {period}</span>}
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          <button
+            type="button"
+            data-testid={`${TESTID}-detail-link`}
+            onClick={scrollToEarnings}
+            style={{ fontSize: 10, color: 'var(--text-muted)', background: 'none', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', padding: 0, whiteSpace: 'nowrap' }}
+          >
+            ↗ 詳細は決算セクションへ
+          </button>
+          <button
+            type="button"
+            className="ds-flash-copy"
+            data-testid={`${TESTID}-copy`}
+            onClick={handleCopy}
+            aria-label="サマリーをコピー"
+            title="サマリーをコピー"
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, padding: 0, color: copied ? 'var(--color-gain)' : 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+          >
+            {copied ? <Check size={13} strokeWidth={2} aria-hidden="true" /> : <Copy size={13} strokeWidth={2} aria-hidden="true" />}
+          </button>
+        </span>
+      </div>
+      <div style={bodyStyle}>
+        {rows}
+      </div>
     </div>
   );
 }

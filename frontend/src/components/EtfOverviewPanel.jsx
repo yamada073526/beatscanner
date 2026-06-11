@@ -6,9 +6,10 @@
  *
  * data source: /api/etf-info/{ticker}
  *
- * 表示構成 (R9.3):
+ * 表示構成 (R9.3 → R9.5):
  *   Row 1: AUM / TER / 1Y Return / 設定日 / 籍
  *   Row 2: 運用会社 / 保有銘柄数 / 平均出来高 / 資産クラス
+ *   Section: 組入上位銘柄 (top_holdings、 weight 降順 top 10、 行クリックで銘柄分析へ)
  *   Section: セクター構成 (industry / exposure bars 降順)
  *
  * R9.3 修正 (user dogfood feedback):
@@ -16,14 +17,24 @@
  *   - 「構成銘柄データは取得できませんでした (FMP plan...)」 文言削除
  *     (機能不足アピールで Trust Cliff、 holdings 空時は section 自体を非表示)
  *
+ * R9.5 (2026-06-12): 組入上位銘柄 section 追加。
+ *   v118 当時 FMP Premium で /etf/holdings が 402 → top_holdings 常時空で非表示だった。
+ *   Ultimate 移行で開放済。EtfExposurePanel (銘柄→ETF の逆方向、v203) の行 idiom 鏡像:
+ *   logo + ticker + 名称 + 組入比率 + mini gold bar、 行クリックで onNavigateTicker(symbol)
+ *   → その銘柄の 5 条件分析へ (原則 4: ETF の中身を 1 銘柄ずつ検索する手間の代替)。
+ *   上位 5 常時 + 残り折りたたみ。 §38/§5: 確定事実 (比率) のみ、 判断語なし、 出典明記。
+ *
  * design grammar:
  *   - SectionHeader + 2 row metric grid + sector breakdown bars
  *   - design token のみ (raw hex 禁止、 design-system-check 通過)
+ *   - 発光系 class 不使用 (素 div + token、 EtfExposurePanel と同じ設計境界)
  */
-import React from 'react';
+import React, { useState } from 'react';
+import { ChevronRight } from 'lucide-react';
 import ReturnGrid from '../features/judgment/primitives/ReturnGrid.jsx';
 import SectorDonut from '../features/judgment/primitives/SectorDonut.jsx';
 import StockPriceChart from './StockPriceChart.jsx';
+import CompanyLogo from './CompanyLogo.jsx';
 
 function _formatAum(aum) {
   if (aum == null || !Number.isFinite(aum)) return '—';
@@ -147,16 +158,165 @@ function MetricChip({ label, value, hint }) {
 
 // v118 ETF Phase 2: SectorBar (横棒) は SectorDonut (PieChart) に置換、 本 file から削除。
 
+// ── 組入上位銘柄 (R9.5) ──
+// EtfExposurePanel の EtfRow 鏡像 (ETF→構成銘柄の順方向)。発光系不使用、token のみ。
+const HOLDINGS_TESTID = 'etf-top-holdings';
+const HOLDINGS_ALWAYS_VISIBLE = 5; // 常時表示は上位 5、残り (6-10 位) は折りたたみ
+
+function _fmtWeight(v) {
+  if (!Number.isFinite(v)) return '—';
+  return `${v.toFixed(2)}%`;
+}
+
+// 1 行 (行全体クリックでその銘柄の分析へ。spotlight = 組入 1 位の gold 6% tint)
+function HoldingRow({ holding, rank, maxWeight, spotlight, onNavigateTicker }) {
+  const [hover, setHover] = useState(false);
+  const barPct = Number.isFinite(holding.weight_pct) && maxWeight > 0
+    ? Math.max(4, Math.round((holding.weight_pct / maxWeight) * 100))
+    : 0;
+  const clickable = typeof onNavigateTicker === 'function';
+  return (
+    <div
+      data-testid={`${HOLDINGS_TESTID}-row`}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={clickable ? () => onNavigateTicker(holding.symbol) : undefined}
+      onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNavigateTicker(holding.symbol); } } : undefined}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      aria-label={clickable ? `${holding.symbol} の分析を表示` : undefined}
+      title={clickable ? `${holding.symbol} の分析を表示` : undefined}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '22px 84px minmax(0,1fr) 90px',
+        alignItems: 'center',
+        columnGap: 'var(--space-3, 12px)',
+        padding: '6px 8px',
+        borderRadius: 'var(--radius-sm, 8px)',
+        cursor: clickable ? 'pointer' : 'default',
+        background: hover
+          ? 'var(--bg-hover, var(--bg-card))'
+          : spotlight
+            ? 'color-mix(in srgb, var(--color-gold) 6%, transparent)'
+            : 'transparent',
+        transition: 'background var(--motion-fast, 160ms) ease',
+      }}
+    >
+      {/* 順位 (muted、リスト順 = weight 降順) */}
+      <span style={{ fontSize: 11, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', justifySelf: 'end' }}>{rank}</span>
+      {/* ticker (ロゴ + bold、競合チップと同じ「クリックで分析へ」 affordance) */}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        <CompanyLogo ticker={holding.symbol} size={16} variant="badge" />
+        <span style={{ fontSize: 13, fontWeight: 700, color: hover ? 'var(--color-accent)' : 'var(--text-primary)', letterSpacing: '0.02em', transition: 'color var(--motion-fast, 160ms) ease' }}>
+          {holding.symbol}
+        </span>
+      </span>
+      {/* 名称 (muted、読まなくていい補足) */}
+      <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{holding.name}</span>
+      {/* 組入比率 + mini gold bar (max 正規化で差が読まずに伝わる) */}
+      <span style={{ justifySelf: 'end', textAlign: 'right', width: '100%' }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{_fmtWeight(holding.weight_pct)}</span>
+        <span aria-hidden style={{ display: 'block', height: 3, marginTop: 3, borderRadius: 2, background: 'var(--bg-subtle)', overflow: 'hidden' }}>
+          <span style={{ display: 'block', height: '100%', width: `${barPct}%`, marginLeft: 'auto', borderRadius: 2, background: 'color-mix(in srgb, var(--color-gold) 55%, transparent)' }} />
+        </span>
+      </span>
+    </div>
+  );
+}
+
+// 組入上位銘柄 section (上位 5 常時 + 残り折りたたみ。holdings 空なら呼び出し側で非表示)
+function TopHoldingsSection({ holdings, onNavigateTicker }) {
+  const [showAll, setShowAll] = useState(false);
+  const maxWeight = holdings[0]?.weight_pct || 0; // backend が weight 降順 sort 済
+  const head = holdings.slice(0, HOLDINGS_ALWAYS_VISIBLE);
+  const rest = holdings.slice(HOLDINGS_ALWAYS_VISIBLE);
+
+  return (
+    <div data-testid={HOLDINGS_TESTID}>
+      {/* SectionLabel idiom (SectorDonut / ReturnGrid 踏襲) */}
+      <div style={{ marginBottom: 'var(--space-3, 12px)' }}>
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            letterSpacing: '0.08em',
+            color: 'var(--text-primary)',
+            textTransform: 'uppercase',
+          }}
+        >
+          組入上位銘柄
+        </div>
+      </div>
+
+      {/* 列見出し (組入比率のみ — 順位/ticker/名称は自明) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '22px 84px minmax(0,1fr) 90px', columnGap: 'var(--space-3, 12px)', padding: '0 8px', marginBottom: 2 }}>
+        <span /><span /><span />
+        <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', justifySelf: 'end' }}>組入比率</span>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {head.map((h, i) => (
+          <HoldingRow key={h.symbol} holding={h} rank={i + 1} maxWeight={maxWeight} spotlight={i === 0} onNavigateTicker={onNavigateTicker} />
+        ))}
+      </div>
+
+      {/* 残り 6-10 位 (折りたたみ、grid-rows transition = EtfExposurePanel と同 idiom) */}
+      {rest.length > 0 && (
+        <>
+          <div style={{ display: 'grid', gridTemplateRows: showAll ? '1fr' : '0fr', transition: 'grid-template-rows 0.28s var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1))' }}>
+            <div style={{ overflow: 'hidden' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 2 }}>
+                {rest.map((h, i) => (
+                  <HoldingRow key={h.symbol} holding={h} rank={HOLDINGS_ALWAYS_VISIBLE + i + 1} maxWeight={maxWeight} spotlight={false} onNavigateTicker={onNavigateTicker} />
+                ))}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            data-testid={`${HOLDINGS_TESTID}-toggle`}
+            onClick={() => setShowAll((v) => !v)}
+            aria-expanded={showAll}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              marginTop: 'var(--space-2, 8px)',
+              padding: '2px 8px 2px 4px',
+              fontSize: 11,
+              color: 'var(--text-muted)',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <ChevronRight size={12} strokeWidth={2} aria-hidden="true" style={{ transition: 'transform 0.28s var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1))', transform: showAll ? 'rotate(90deg)' : 'rotate(0deg)' }} />
+            {showAll ? '折りたたむ' : `他 ${rest.length} 銘柄を表示`}
+          </button>
+        </>
+      )}
+
+      <div style={{ marginTop: 'var(--space-2, 8px)', fontSize: 9, color: 'var(--text-muted)', opacity: 0.75, lineHeight: 1.5 }}>
+        出典: FMP ・ 組入比率 = ETF 純資産に占める各銘柄の比率。銘柄クリックでその銘柄の分析を表示します
+      </div>
+    </div>
+  );
+}
+
 /**
  * @param {object} props
  * @param {object} props.etfInfo - /api/etf-info response
+ * @param {(ticker: string) => void} [props.onNavigateTicker] - 組入銘柄クリック時の分析 navigate (JudgmentDetail の onAnalyze)
  */
-export default function EtfOverviewPanel({ etfInfo }) {
+export default function EtfOverviewPanel({ etfInfo, onNavigateTicker }) {
   if (!etfInfo || typeof etfInfo !== 'object') return null;
   const ticker = etfInfo.ticker || '';
   const companyName = etfInfo.companyName || '';
   const ov = etfInfo.overview || {};
   const sectors = Array.isArray(etfInfo.sectors) ? etfInfo.sectors : [];
+  // R9.5: symbol 欠落行は除外 (logo / navigate が成立しない)。空なら section ごと非表示 (R9.3 ルール)。
+  const topHoldings = (Array.isArray(etfInfo.top_holdings) ? etfInfo.top_holdings : [])
+    .filter((h) => h && typeof h.symbol === 'string' && h.symbol);
 
   return (
     <section
@@ -244,6 +404,13 @@ export default function EtfOverviewPanel({ etfInfo }) {
         <MetricChip label="平均出来高" value={_formatVolume(ov.avg_volume)} hint="日次平均株数" />
         <MetricChip label="資産クラス" value={_formatAssetClass(ov.asset_class)} hint="Asset Class" />
       </div>
+
+      {/* R9.5: 組入上位銘柄 (weight 降順 top 10、上位 5 常時 + 折りたたみ)。
+          「保有銘柄数」 chip (Row 2) → 具体的な top 10 → セクター構成 (抽象) の流れ。
+          空 (取得失敗 / 非該当) なら section ごと非表示 (R9.3 Trust Cliff ルール継承)。 */}
+      {topHoldings.length > 0 && (
+        <TopHoldingsSection holdings={topHoldings} onNavigateTicker={onNavigateTicker} />
+      )}
 
       {/* v118 ETF Phase 2: SectorBar 横棒 → SectorDonut PieChart 差替。
           11 sector の縦長 list が donut + legend で「2 秒理解」 強化、

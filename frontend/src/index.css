@@ -12990,3 +12990,44 @@ body.is-digest-resizing {
   background-color: var(--bg-subtle);
   transform: translateX(1px);
 }
+
+/* 決算ハイライト v5.5 デザイン刷新 (2026-06-12 user「初見で格好いいレベルへ」、design review 2体統合):
+   - wrapper = 案A (Aman): 1px 枠 + radius 10 + overflow hidden + 左端 3px gold 縦 hairline (::before)。
+     発光系 class / box-shadow 不使用 — 「塊感」 は border + radius + gold の引き算で出す。
+   - hero chip pop-in = 案B (Terminal): 200ms scale 0.88→1、stagger は EPS 50ms / 売上 120ms (≤300ms 規律)。
+   - copy ボタンは card hover / focus-within でのみ出現 (常時表示はターミナル感を崩す、案B NG list)。
+   gold は elevation whitelist の格調アクセント。raw hex / !important なし。 */
+.ds-flash-card {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.ds-flash-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--color-gold);
+}
+@keyframes ds-flash-chip-appear {
+  from { opacity: 0; transform: scale(0.88); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.ds-flash-chip {
+  animation: ds-flash-chip-appear 0.2s ease-out both;
+}
+.ds-flash-copy {
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+.ds-flash-card:hover .ds-flash-copy,
+.ds-flash-card:focus-within .ds-flash-copy {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-flash-chip { animation: none; }
+  .ds-flash-copy { opacity: 1; }
+}

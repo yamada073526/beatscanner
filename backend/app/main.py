@@ -2749,15 +2749,22 @@ async def etf_info_endpoint(ticker: str, request: Request) -> dict:
             if latest and oldest and oldest != 0:
                 one_year_return_pct = round((latest - oldest) / oldest * 100, 2)
 
+    # FMP /stable/etf/holdings は概ね weight 降順で返るが順序保証がないため明示 sort。
+    # v118 当時は Premium plan で 402 → 常に空だった。Ultimate 移行で開放済 (2026-06-12 確認)、top 10 に拡張。
     top_holdings: list[dict] = []
-    for h in holdings_rows[:5]:
+    for h in holdings_rows:
         if not isinstance(h, dict):
             continue
+        h_sym = h.get("asset") or h.get("symbol") or ""
+        if not h_sym:
+            continue
         top_holdings.append({
-            "symbol": h.get("asset") or h.get("symbol") or "",
+            "symbol": h_sym,
             "name": h.get("name") or "",
             "weight_pct": _as_float(h.get("weightPercentage") or h.get("weight")),
         })
+    top_holdings.sort(key=lambda x: x["weight_pct"] or 0.0, reverse=True)
+    top_holdings = top_holdings[:10]
 
     return {
         "ticker": sym,
@@ -6407,7 +6414,8 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
         raise HTTPException(status_code=400, detail="ticker required")
     n = max(1, min(int(limit or 8), 16))
 
-    cache_key = f"{sym}:{n}"
+    # :v2 = eps_yoy_pct / gross_margin_yoy_pp 追加 (2026-06-12) の cache bust — 旧 schema の 6h cache を即無効化
+    cache_key = f"{sym}:{n}:v2"
     now = _time.monotonic()
     cached = _QUARTERLY_HISTORY_CACHE.get(cache_key)
     if cached and now - cached["ts"] < _QUARTERLY_HISTORY_TTL:
@@ -6587,6 +6595,23 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
                             and abs((_cur_d - _prev_d).days) > 180):
                         revenue_yoy_pct = round((revenue_actual - prev_rev) / abs(prev_rev) * 100, 1)
 
+        # 決算ハイライト v5.5 (2026-06-12 user「EPS の前年比が — のまま」): EPS 前年比 (前年同期比)。
+        # revenue_yoy_pct と同じ date 照合方針 (365日前 ±60日窓 + >180日 同一四半期ガード)。前年同期 EPS は
+        # eps_actual と同一ソース (FMP earnings = surprises_past) から取得し基準混在を回避。赤字/ゼロ近傍
+        # base (|prev|<0.05) は % が無意味なため None (BAD-3 数値捏造防止、forward の EPS YoY ガードと同型)。
+        eps_yoy_pct = None
+        if date_str and eps_actual is not None:
+            _cur_de = _parse_date(date_str)
+            if _cur_de is not None:
+                from datetime import timedelta as _timedelta_e
+                prev_earn = _nearest((_cur_de - _timedelta_e(days=365)).isoformat(), surprises_past)
+                if prev_earn:
+                    prev_eps = _safe_eps_float(_pick(prev_earn, "eps", "epsActual", "actualEarningResult", "actualEps"))
+                    _prev_de = _parse_date(_pick(prev_earn, "date"))
+                    if (prev_eps is not None and abs(prev_eps) >= 0.05 and _prev_de is not None
+                            and abs((_cur_de - _prev_de).days) > 180):
+                        eps_yoy_pct = round((eps_actual - prev_eps) / abs(prev_eps) * 100, 1)
+
         # 決算ハイライト Phase2: 四半期グロスマージン (粗利率)。数値物理層 = Python 計算のみ (LLM 不使用)。
         # FMP grossProfitRatio (0-1) ×100。 欠落時は grossProfit/revenue で補完 (ProfileCard 系 main.py:804 と同流儀)。
         # ガード: sector gate (金融/REIT/保険、 _gm_blocked) + 妥当域 0<ratio<1.0 (銀行は grossProfit≈revenue=1.0 で
@@ -6600,6 +6625,26 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
                     _gp_ratio = _gp_abs / revenue_actual
             if _gp_ratio is not None and 0 < _gp_ratio < 1.0:
                 gross_margin_pct = round(_gp_ratio * 100, 1)
+
+        # v5.5 (2026-06-12 user): 粗利率の前年同期差 (±pt)。「水準」 でなく「方向の Δ」 = 過去確定の事実
+        # ([[feedback]] §38 メモ: 水準への色は NG だが前期比 Δ なら可)。前年同期 income を同じ date 照合で
+        # 取得し、当期と同一ロジック (grossProfitRatio → grossProfit/revenue 補完 + 妥当域 0<ratio<1) で算出。
+        gross_margin_yoy_pp = None
+        if gross_margin_pct is not None and date_str:
+            _cur_dg = _parse_date(date_str)
+            if _cur_dg is not None:
+                from datetime import timedelta as _timedelta_g
+                prev_inc_gm = _nearest((_cur_dg - _timedelta_g(days=365)).isoformat(), income_q)
+                _prev_dg = _parse_date(_pick(prev_inc_gm, "date")) if prev_inc_gm else None
+                if prev_inc_gm is not None and _prev_dg is not None and abs((_cur_dg - _prev_dg).days) > 180:
+                    _pgm = _safe_eps_float(_pick(prev_inc_gm, "grossProfitRatio"))
+                    if _pgm is None:
+                        _pgp = _safe_eps_float(_pick(prev_inc_gm, "grossProfit"))
+                        _prev_rev_gm = _safe_eps_float(_pick(prev_inc_gm, "revenue"))
+                        if _pgp is not None and _prev_rev_gm and _prev_rev_gm > 0:
+                            _pgm = _pgp / _prev_rev_gm
+                    if _pgm is not None and 0 < _pgm < 1.0:
+                        gross_margin_yoy_pp = round(gross_margin_pct - _pgm * 100, 1)
 
         eps_label, eps_pct, _ = _verdict(eps_actual, eps_estimated)
         rev_label, rev_pct, _ = _verdict(revenue_actual, revenue_estimated)
@@ -6619,8 +6664,12 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
             "revenue_verdict": rev_label,
             # 条件3: 売上高成長率 YoY (前年同期比、 Python 計算済、 前年同期欠落時は None → '—')
             "revenue_yoy_pct": revenue_yoy_pct,
+            # v5.5: EPS 前年比 (同一ソース date 照合、赤字/ゼロ近傍 base は None)
+            "eps_yoy_pct": eps_yoy_pct,
             # 決算ハイライト Phase2: 四半期グロスマージン (%、 sector/妥当域 gate 済、 保留は None → 行非表示)
             "gross_margin_pct": gross_margin_pct,
+            # v5.5: 粗利率の前年同期差 (±pt、方向 Δ = 過去確定の事実)
+            "gross_margin_yoy_pp": gross_margin_yoy_pp,
             # Sprint A: grouped bars per-share view 統一用 (SPS = revenue / diluted_shares)
             "sps_actual": sps_actual,
             # Phase 2.9 Sprint D #8q-history-phase1: 5 条件 #1/#3/#5 を 8Q で trace

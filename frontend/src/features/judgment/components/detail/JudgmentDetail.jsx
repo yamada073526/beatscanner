@@ -536,7 +536,8 @@ export default function JudgmentDetail({
   //   useJudgmentResult が ETF error catch 時に fetchEtfInfo して cache に保存、
   //   detailFor が cache.etfInfo を返す。 Trust Cliff 防止 (空白 / generic error 回避)。
   if (selectedTicker && !result && detail?.etfInfo) {
-    return <EtfOverviewPanel etfInfo={detail.etfInfo} />;
+    // R9.5: 組入上位銘柄クリック → その銘柄の分析へ (競合チップと同じ onAnalyze 経路)
+    return <EtfOverviewPanel etfInfo={detail.etfInfo} onNavigateTicker={onAnalyze} />;
   }
   const verdict = result
     ? result.overallPass
