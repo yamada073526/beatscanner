@@ -11,10 +11,11 @@ import { chromium } from 'playwright';
 import { mkdirSync } from 'fs';
 import { getAuthInjection } from './lib/auth-helper.mjs';
 
-// GM_OFF=1 で flag なし URL (default OFF = 実ユーザーに粗利率行が出ないことの確認用)
+// GM_OFF=1 で flag なし URL (粗利率 default ON 後は実ユーザー表示の確認用)。
+// 通常は flash_seg=1 で部門別行 (opt-in) も dogfood する。
 const BASE = process.env.GM_OFF === '1'
   ? 'https://beatscanner-production.up.railway.app/?layout=workspace&pane3_v5=1'
-  : 'https://beatscanner-production.up.railway.app/?layout=workspace&pane3_v5=1&flash_gm=1';
+  : 'https://beatscanner-production.up.railway.app/?layout=workspace&pane3_v5=1&flash_seg=1';
 const OUT = new URL('../.visual/', import.meta.url).pathname;
 mkdirSync(OUT, { recursive: true });
 const BAN = /強い|買い|絶好調|最高値?更新|過去最|上方修正|視界良好|広瀬|じっちゃま|隆雄/;
@@ -50,6 +51,8 @@ async function grabFlash(page, retry = 1) {
       .map((n) => n.getAttribute('data-testid').replace('earnings-flash-summary-', ''));
     const gm = node.querySelector('[data-testid="earnings-flash-summary-gross-margin"]');
     const gmText = gm ? (gm.textContent || '').trim() : null;
+    const segEl = node.querySelector('[data-testid="earnings-flash-summary-segment"]');
+    const segText = segEl ? (segEl.textContent || '').trim() : null;
     // 中立色検査: 粗利率 value span の color を EPS value span の color と比較
     const colorOf = (rowTestid) => {
       const row = node.querySelector(`[data-testid="${rowTestid}"]`);
@@ -63,6 +66,9 @@ async function grabFlash(page, retry = 1) {
       rowOrder,
       hasGmRow: !!gm,
       gmText,
+      hasSegRow: !!segEl,
+      segText,
+      segColor: colorOf('earnings-flash-summary-segment'),
       gmColor: colorOf('earnings-flash-summary-gross-margin'),
       epsColor: colorOf('earnings-flash-summary-eps'),
       banHit: ban.test(text) ? (text.match(ban) || [])[0] : null,
@@ -104,10 +110,12 @@ try {
   const pass = Object.values(results).every((r) => {
     if (!r.present || r.state !== 'main' || !r.hasGmRow || r.banHit) return false;
     const o = r.rowOrder || [];
-    const iRev = o.indexOf('revenue'), iGm = o.indexOf('gross-margin'), iNq = o.indexOf('nextq');
+    const iRev = o.indexOf('revenue'), iSeg = o.indexOf('segment'), iGm = o.indexOf('gross-margin'), iNq = o.indexOf('nextq');
     const orderOk = iGm > iRev && (iNq === -1 || iGm < iNq); // 来期は cold で遅延しうるので緩め
+    const segOrderOk = iSeg === -1 || (iSeg > iRev && iSeg < iGm); // segment があれば 売上→部門別→粗利率
     const colorOk = !r.gmColor || !r.epsColor || r.gmColor === r.epsColor; // 中立 = EPS と同色
-    return orderOk && colorOk;
+    const segColorOk = !r.segColor || !r.epsColor || r.segColor === r.epsColor;
+    return orderOk && segOrderOk && colorOk && segColorOk;
   }) && errs.length === 0;
 
   console.log(JSON.stringify({ verdict: pass ? 'pass' : 'fail', results, pageErrors: errs }, null, 2));
