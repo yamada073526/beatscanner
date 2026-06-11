@@ -41,6 +41,12 @@ try {
 
   const T = process.env.TICKER || 'AAPL';
   await navTo(page, T);
+  // v203: panel は ProfileCard (会社概要 accordion) 内へ移設 — 折りたたみなら開く
+  const profileToggle = page.locator('button:has-text("会社概要")').first();
+  if (await profileToggle.count()) {
+    const expanded = await profileToggle.getAttribute('aria-expanded').catch(() => null);
+    if (expanded !== 'true') { await profileToggle.click().catch(() => {}); await page.waitForTimeout(1200); }
+  }
   // 診断: any-state panel / flag 評価 / 隣接 panel
   await page.locator('[data-testid="etf-exposure-panel"]').first().waitFor({ state: 'attached', timeout: 9000 }).catch(() => {});
   await page.waitForTimeout(800);
