@@ -2783,6 +2783,95 @@ async def etf_info_endpoint(ticker: str, request: Request) -> dict:
     }
 
 
+# ── ETF 組入 (個別銘柄 → 主要 ETF への組入比率、 v202 dogfood feature、 ?etf_exposure=1 opt-in) ──
+# FMP /stable/etf/asset-exposure は全世界 ~3000+ ETF を返し、 leveraged/single-stock ETF (HEMI 29055% 等)
+# が weight 上位に混入するため、 主要 US ETF の allowlist で curation 必須。 カテゴリ別に重複を避けた
+# distinct set (S&P500/Nasdaq100/全米/グロース/バリュー/テック/ダウ/小型) を採用し、 present な中から
+# weight 降順 top N を表示。 ※ ETF 名は FMP response に無いため allowlist に静的同梱 (factual、 LLM 不使用)。
+_MAJOR_US_ETFS: dict[str, str] = {
+    "SPY": "S&P500 (SPDR)",
+    "QQQ": "ナスダック100 (Invesco)",
+    "VTI": "全米株式 (Vanguard)",
+    "VUG": "米大型グロース (Vanguard)",
+    "VTV": "米大型バリュー (Vanguard)",
+    "XLK": "テクノロジー (SPDR)",
+    "DIA": "ダウ30 (SPDR)",
+    "IWM": "米小型株 Russell2000 (iShares)",
+    "XLF": "金融 (SPDR)",
+    "XLV": "ヘルスケア (SPDR)",
+    "XLE": "エネルギー (SPDR)",
+    "XLY": "一般消費財 (SPDR)",
+}
+_ETF_EXPOSURE_CACHE: dict[str, dict] = {}  # key: ticker, value: {"data": {...}, "ts": float}
+_ETF_EXPOSURE_TTL = 60 * 60 * 24  # 24h (組入は日次更新程度)
+
+
+@app.get("/api/etf-exposure/{ticker}")
+async def etf_exposure_endpoint(ticker: str, request: Request) -> dict:
+    """個別銘柄 → 主要 US ETF への組入比率 (逆引き)。 v202 dogfood feature。
+
+    Returns:
+        {
+            "ticker": str,
+            "etfs": [{"symbol": str, "name": str, "weight_pct": float}, ...],  # weight 降順、主要 ETF のみ
+            "source": "FMP etf/asset-exposure",
+            "sources": {"etf_asset_exposure": "ok" | "empty" | "error"},
+        }
+    weight_pct = その ETF に占める当該銘柄の比率 % (= ETF の中でどれだけの比重か)。
+    数値は FMP 値をそのまま整形 (frontend 再計算しない)。欠損/非該当は etfs=[] (捏造しない)。
+    """
+    sym = (ticker or "").upper().strip()
+    if not sym:
+        raise HTTPException(status_code=400, detail="ticker is empty")
+
+    now = _time.time()
+    cached = _ETF_EXPOSURE_CACHE.get(sym)
+    if cached and (now - cached["ts"]) < _ETF_EXPOSURE_TTL:
+        return cached["data"]
+
+    api_key = _get_fmp_key(request)
+    try:
+        client = FMPClient(api_key=api_key)
+    except FMPError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    sources: dict[str, str] = {}
+    try:
+        rows = await client.etf_asset_exposure(sym)
+        sources["etf_asset_exposure"] = "ok" if rows else "empty"
+        if not isinstance(rows, list):
+            rows = []
+    except FMPError as e:
+        sources["etf_asset_exposure"] = "error"
+        print(f"[etf-exposure] error for {sym}: {e}")
+        rows = []
+
+    # 主要 US ETF のみ curation (allowlist)、 weight 降順、 同一 ETF 重複は最大 weight を採用。
+    best: dict[str, float] = {}
+    for r in rows:
+        etf_sym = str(r.get("symbol", "")).upper()
+        if etf_sym not in _MAJOR_US_ETFS:
+            continue
+        w = r.get("weightPercentage")
+        if not isinstance(w, (int, float)) or w <= 0 or w > 100:  # 異常値 (>100%) は除外
+            continue
+        if etf_sym not in best or w > best[etf_sym]:
+            best[etf_sym] = float(w)
+    etfs = [
+        {"symbol": s, "name": _MAJOR_US_ETFS[s], "weight_pct": round(w, 2)}
+        for s, w in sorted(best.items(), key=lambda kv: -kv[1])
+    ]
+
+    result = {
+        "ticker": sym,
+        "etfs": etfs,
+        "source": "FMP etf/asset-exposure",
+        "sources": sources,
+    }
+    _ETF_EXPOSURE_CACHE[sym] = {"data": result, "ts": now}
+    return result
+
+
 @app.get("/api/portfolio-judgment")
 async def portfolio_judgment(symbols: str, request: Request) -> dict:
     """保有銘柄の 5 条件 PASS/FAIL 一括取得 (Phase 1.5 v68 差別化機能)。

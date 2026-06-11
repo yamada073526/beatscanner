@@ -134,6 +134,17 @@ class FMPClient:
         """
         return await self._get("/etf/sector-weightings", {"symbol": ticker.upper()})
 
+    async def etf_asset_exposure(self, ticker: str) -> list[dict]:
+        """個別銘柄を組み入れている ETF 一覧 (逆引き = stock → 組入 ETF)。
+
+        /stable/etf/asset-exposure?symbol=AAPL (Ultimate plan で動作確認済 2026-06-11)。
+        返却 keys: symbol (ETF), asset (= 問い合わせた銘柄), sharesNumber,
+                  weightPercentage (= その ETF に占める当該銘柄の比率 %), marketValue。
+        ※ 全世界の ETF を数千件返す (leveraged/single-stock ETF も含むため weight だけで
+          上位抽出すると HEMI 29055% 等の異常値が混入)。呼出側で主要 ETF allowlist で curation 必須。
+        """
+        return await self._get("/etf/asset-exposure", {"symbol": ticker.upper()})
+
     async def historical_price(self, ticker: str, from_date: str, to_date: str) -> list[dict]:
         data = await self._get(
             "/historical-price-eod/full",

@@ -104,6 +104,15 @@ export async function fetchEtfInfo(ticker) {
   return r.json();
 }
 
+// ETF 組入 (個別銘柄 → 主要 US ETF への組入比率、 v202 dogfood feature ?etf_exposure=1)
+export async function fetchEtfExposure(ticker) {
+  const r = await fetchWithTimeout(`/api/etf-exposure/${encodeURIComponent(ticker)}`, {
+    headers: fmpHeaders(),
+  }, 15000);
+  if (!r.ok) return null;
+  return r.json();
+}
+
 export async function searchTickers(q) {
   if (!q.trim()) return [];
   const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
