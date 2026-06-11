@@ -171,6 +171,78 @@ function NumUnit({ str, size, weight, color, letterSpacing }) {
   );
 }
 
+// 決算ハイライト v5 (?flash_v5=1 opt-in、default OFF): headline (EPS+売上) を列揃え grid に。
+// 3体 design review (列揃え=scannability の王道、財務 table)。右揃え + tabular-nums で桁が縦に揃い
+// 「結果列を縦に一筆書き」 で 2 秒理解 (user 指摘「エクセルのように整列」)。罫線ゼロ・余白で列分離 (Aman、
+// エクセル業務臭回避)、 列見出し (予想/結果/予実差/前年比) を薄 muted 1 行 (word prefix を見出しに昇格)。
+// EPS 結果は hero (26px)、 baseline 揃えで大小混在でも列が揃う。重要 3 点 (EPS/売上/売上前年比) を仕切り上。
+function isFlashV5Enabled() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('flash_v5');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('flash_v5') === '1';
+  } catch {
+    return false;
+  }
+}
+// 列揃え用の bare な方向 % ("↑3.1%"、prefix なし。予想比/前年比 の語は列見出しが担う)。
+function barePct(pct) {
+  if (!Number.isFinite(pct)) return null;
+  const sym = pct > 0 ? '↑' : pct < 0 ? '↓' : '';
+  return `${sym}${Math.abs(pct).toFixed(1)}%`;
+}
+// headline (EPS + 売上) の列揃え grid。整形済 str + raw pct を受け、 セル単位に配置 (列が縦に揃う)。
+function HeadlineGrid({ eps, rev }) {
+  const colHead = (txt) => (
+    <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', justifySelf: 'end' }}>{txt}</span>
+  );
+  const labelCell = (txt) => (
+    <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>{txt}</span>
+  );
+  const numCell = (str, { size, weight = 700, color = 'var(--text-primary)' } = {}) => (
+    <span style={{ justifySelf: 'end' }}>{str != null ? <NumUnit str={str} size={size} weight={weight} color={color} /> : null}</span>
+  );
+  const pctCell = (pct) => (
+    <span style={{ justifySelf: 'end', fontSize: 12, fontWeight: 600, color: deltaColor(pct), whiteSpace: 'nowrap' }}>{barePct(pct)}</span>
+  );
+  const arrow = (show) => <span aria-hidden style={{ justifySelf: 'center', fontSize: 12, color: 'var(--text-muted)' }}>{show ? '→' : ''}</span>;
+  return (
+    <div
+      data-testid={`${TESTID}-headline-grid`}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '52px minmax(0,auto) 14px minmax(0,auto) auto auto',
+        alignItems: 'baseline',
+        columnGap: 'var(--space-3, 12px)',
+        rowGap: 'var(--space-2, 8px)',
+        fontVariantNumeric: 'tabular-nums',
+        borderBottom: '1px solid var(--border)',
+        paddingBottom: 'var(--space-3, 12px)',
+        marginBottom: 'var(--space-1, 4px)',
+      }}
+    >
+      {/* 列見出し (予想 / 結果 / 予実差 / 前年比、薄 muted) */}
+      <span />{colHead('予想')}<span />{colHead('結果')}{colHead('予実差')}{colHead('前年比')}
+      {/* EPS 行 (結果が hero 26px、前年比は空セル) */}
+      {labelCell(FLASH_LABELS.eps)}
+      {numCell(eps.estStr, { size: 13, weight: 500, color: 'var(--text-muted)' })}
+      {arrow(eps.estStr != null)}
+      {numCell(eps.actStr, { size: 26, weight: 800 })}
+      {pctCell(eps.surprisePct)}
+      <span />
+      {/* 売上 行 */}
+      {rev ? labelCell(FLASH_LABELS.revenue) : null}
+      {rev ? numCell(rev.estStr, { size: 13, weight: 500, color: 'var(--text-muted)' }) : null}
+      {rev ? arrow(rev.estStr != null) : null}
+      {rev ? numCell(rev.actStr, { size: 16, weight: 700 }) : null}
+      {rev ? pctCell(rev.surprisePct) : null}
+      {rev ? pctCell(rev.yoyPct) : null}
+    </div>
+  );
+}
+
 // セグメント 1 件の表示文字列部品 (名称 + 実額億ドル + 前年比 ↑↓、中立色、§38)。
 // backend build_segment_summary の value_b($B)/yoy_pct を読むだけ (frontend 再計算しない)。
 function SegmentItem({ seg }) {
@@ -387,43 +459,61 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
   // ── 行の構築 (compound check: 揃っている行だけ出す。捏造・空枠なし) ──
   const rows = [];
 
-  // EPS 行: estimated + actual が両方有限のときのみ。% は backend surprise_pct のみ (再計算禁止)
+  // headline (EPS + 売上) の構築。v5 = 列揃え grid (重要3点を仕切り上に集約)、v4 以前 = 従来 FlashRow。
+  const v5 = isFlashV5Enabled();
   const eps = guidance?.eps;
-  if (Number.isFinite(eps?.actual)) {
-    const hasEst = Number.isFinite(eps?.estimated);
-    rows.push(
-      <FlashRow key="eps" label={FLASH_LABELS.eps} testid={`${TESTID}-eps`} dividerAfter>
-        <EstimateToActual
-          hero
-          estStr={hasEst ? fmtEps(eps.estimated) : null}
-          actStr={fmtEps(eps.actual)}
-          surpriseStr={hasEst ? fmtSurprisePct(eps.surprise_pct) : null}
-          surpriseColor={deltaColor(eps.surprise_pct)}
-        />
-      </FlashRow>
-    );
-  }
-
-  // 売上行: backend ガード済 surprise_pct が null (銀行/与信 basis mismatch 抑止) なら
-  // 予想側ごと出さず実績 + YoY のみ (偽サプライズの並置自体を避ける、金融必須条件)。
   const rev = guidance?.revenue;
-  if (Number.isFinite(rev?.actual)) {
-    const revSurprise = fmtSurprisePct(rev?.surprise_pct);
-    const showEst = revSurprise != null && Number.isFinite(rev?.estimated);
-    const yoyStr = fmtYoyPct(latestQ?.revenue_yoy_pct);
+  const epsHasEst = Number.isFinite(eps?.estimated);
+  const revSurprise = fmtSurprisePct(rev?.surprise_pct);
+  const revShowEst = revSurprise != null && Number.isFinite(rev?.estimated);
+  const yoyStr = fmtYoyPct(latestQ?.revenue_yoy_pct);
+
+  if (v5 && Number.isFinite(eps?.actual)) {
+    // v5: EPS + 売上 を列揃え grid に (予想/結果/予実差/前年比 を縦に揃え 2 秒理解)。
     rows.push(
-      <FlashRow key="revenue" label={FLASH_LABELS.revenue} testid={`${TESTID}-revenue`}>
-        <EstimateToActual
-          estStr={showEst ? fmtMoney(rev.estimated) : null}
-          actStr={fmtMoney(rev.actual)}
-          surpriseStr={showEst ? revSurprise : null}
-          surpriseColor={deltaColor(rev?.surprise_pct)}
-        />
-        {yoyStr != null && (
-          <span style={{ fontSize: 12, fontWeight: 500, color: deltaColor(latestQ?.revenue_yoy_pct), whiteSpace: 'nowrap' }}>・{yoyStr}</span>
-        )}
-      </FlashRow>
+      <HeadlineGrid
+        key="headline-grid"
+        eps={{ estStr: epsHasEst ? fmtEps(eps.estimated) : null, actStr: fmtEps(eps.actual), surprisePct: eps.surprise_pct }}
+        rev={Number.isFinite(rev?.actual) ? {
+          estStr: revShowEst ? fmtMoney(rev.estimated) : null,
+          actStr: fmtMoney(rev.actual),
+          surprisePct: revShowEst ? rev.surprise_pct : null,
+          yoyPct: latestQ?.revenue_yoy_pct,
+        } : null}
+      />
     );
+  } else {
+    // v4 以前: EPS 行 (estimated + actual 両方有限のみ。% は backend surprise_pct のみ、再計算禁止)
+    if (Number.isFinite(eps?.actual)) {
+      rows.push(
+        <FlashRow key="eps" label={FLASH_LABELS.eps} testid={`${TESTID}-eps`} dividerAfter>
+          <EstimateToActual
+            hero
+            estStr={epsHasEst ? fmtEps(eps.estimated) : null}
+            actStr={fmtEps(eps.actual)}
+            surpriseStr={epsHasEst ? fmtSurprisePct(eps.surprise_pct) : null}
+            surpriseColor={deltaColor(eps.surprise_pct)}
+          />
+        </FlashRow>
+      );
+    }
+    // 売上行: backend ガード済 surprise_pct が null (銀行/与信 basis mismatch 抑止) なら予想側ごと出さず
+    // 実績 + YoY のみ (偽サプライズの並置自体を避ける、金融必須条件)。
+    if (Number.isFinite(rev?.actual)) {
+      rows.push(
+        <FlashRow key="revenue" label={FLASH_LABELS.revenue} testid={`${TESTID}-revenue`}>
+          <EstimateToActual
+            estStr={revShowEst ? fmtMoney(rev.estimated) : null}
+            actStr={fmtMoney(rev.actual)}
+            surpriseStr={revShowEst ? revSurprise : null}
+            surpriseColor={deltaColor(rev?.surprise_pct)}
+          />
+          {yoyStr != null && (
+            <span style={{ fontSize: 12, fontWeight: 500, color: deltaColor(latestQ?.revenue_yoy_pct), whiteSpace: 'nowrap' }}>・{yoyStr}</span>
+          )}
+        </FlashRow>
+      );
+    }
   }
 
   // 部門別行 (Phase2、?flash_seg=1 opt-in): 最新四半期の上位事業 + 前年比 ↑↓ (中立色)。backend 値を読むだけ。
