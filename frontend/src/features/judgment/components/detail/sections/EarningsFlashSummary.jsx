@@ -576,9 +576,22 @@ function FutureGrid({ nqEps, nqRev, yoyStr, revLine, gState }) {
   const head = (txt) => (
     <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{txt}</span>
   );
+  const [hover, setHover] = useState(false);
+  // hover+click 反応を上下段と統一 (反応の無い帯を残さない、user 第4R)。着地は来期の詳細 = ForwardOutlookSection。
+  const goForward = (e) => {
+    const root = e.currentTarget.closest('.ds-judgment-detail') || document;
+    root.querySelector('[data-testid="forward-outlook"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   return (
     <div
       data-testid={`${TESTID}-nextq`}
+      role="button"
+      tabIndex={0}
+      onClick={goForward}
+      onKeyDown={(e) => { if (e.key === 'Enter') goForward(e); }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title="クリックでガイダンス詳細へ"
       style={{
         display: 'grid',
         gridTemplateColumns: FLASH_GRID_COLUMNS,
@@ -586,6 +599,10 @@ function FutureGrid({ nqEps, nqRev, yoyStr, revLine, gState }) {
         rowGap: 'var(--space-2, 8px)',
         alignItems: 'start',
         fontVariantNumeric: 'tabular-nums',
+        cursor: 'pointer',
+        borderRadius: 6,
+        background: hover ? 'color-mix(in oklab, var(--text-muted) 5%, transparent)' : 'transparent',
+        transition: 'background-color 160ms ease',
       }}
     >
       {lowerLabelCell(FLASH_LABELS.nextQ)}
