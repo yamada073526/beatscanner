@@ -27,7 +27,7 @@
  * loading/errored/empty/main 全 render path に data-testid (feedback_testid_all_render_paths)。
  */
 import React, { useEffect, useState } from 'react';
-import { fetchQuarterlyHistory, fetchGuidanceSurprise } from '../../../../../api.js';
+import { fetchQuarterlyHistory, fetchGuidanceSurprise, fetchConsensusDrift } from '../../../../../api.js';
 import { fmtMoney, fmtEps, GUIDANCE_STATE_JP } from '../../../../../components/ForwardOutlookSection.jsx';
 import { displaySegmentName } from '../../../../../lib/segmentNames.js';
 import {
@@ -39,6 +39,8 @@ import {
   fmtGuidanceRevLine,
   GUIDANCE_REVISION_JP,
   GUIDANCE_PIT_CONSENSUS_JP,
+  CONSENSUS_DRIFT_JP,
+  aggregateConsensusDrift,
 } from '../../../constants/earningsFlashTemplates.js';
 
 const TESTID = 'earnings-flash-summary';
@@ -283,6 +285,22 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
     return () => { cancelled = true; };
   }, [ticker]);
 
+  // コンセンサス修正トレンド (user 要望「コンセンサス前回比 (上方/下方) 併記」、既存 backend `/api/analyst/consensus-drift`)。
+  // §38: backend は direction (up/down/mixed/flat) の事実のみ、narration は CONSENSUS_DRIFT_JP 静的 dict。
+  // sources.consensus_snapshots==='ok' の時だけ表示 (insufficient/empty=蓄積中は graceful 非表示、捏造しない)。
+  const [consensusDrift, setConsensusDrift] = useState(null);
+  useEffect(() => {
+    setConsensusDrift(null);
+    if (!ticker) return undefined;
+    let cancelled = false;
+    fetchConsensusDrift(ticker)
+      .then((d) => {
+        if (!cancelled && d?.sources?.consensus_snapshots === 'ok') setConsensusDrift(d.drift || null);
+      })
+      .catch(() => { /* graceful: 非表示 */ });
+    return () => { cancelled = true; };
+  }, [ticker]);
+
   // 決算ハイライト デザイン v2 再設計 (?flash_v2=1 opt-in、default OFF): EPS hero 1点 + 残り従属 + バッジ刷新。
   const v2 = isFlashV2Enabled();
   // v2: hero EPS (26px) と従属行で階層化。container は v1 と同じ余白リズム (gap で行を分離、罫線は hero 後の1本のみ)。
@@ -437,7 +455,10 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
     const pitState = (nqPit?.available && !nqPit.stale)
       ? (GUIDANCE_PIT_CONSENSUS_JP[nqPit.rev] || GUIDANCE_PIT_CONSENSUS_JP[nqPit.eps] || null)
       : null;
-    if (revState || pitState) {
+    // コンセンサス修正トレンド (user 要望): consensusDrift (sources ok のみ state 化済) を eps/revenue 集約。
+    const driftDir = consensusDrift ? aggregateConsensusDrift(consensusDrift.eps?.direction, consensusDrift.revenue?.direction) : null;
+    const driftState = driftDir ? CONSENSUS_DRIFT_JP[driftDir] : null;
+    if (revState || pitState || driftState) {
       rows.push(
         <div
           key="gh-badges"
@@ -446,6 +467,8 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
         >
           {revState && <GuidanceBadge scope="通期" sym={revState.sym} label={revState.label} testid={`${TESTID}-badge-revision`} />}
           {pitState && <GuidanceBadge scope="来期" sym={pitState.sym} label={pitState.label} testid={`${TESTID}-badge-pit`} />}
+          {/* consensus drift = アナリスト予想の直近引き上げ/引き下げ (中立、§38、label 自己完結のため scope なし) */}
+          {driftState && <GuidanceBadge sym={driftState.sym} label={driftState.label} testid={`${TESTID}-badge-drift`} />}
           {/* 材料への導線 (§10 条件2: LLM 生成なしの (b) 案。 instance 局所 = closest、PriceLadder idiom) */}
           <span
             data-testid={`${TESTID}-gh-link`}

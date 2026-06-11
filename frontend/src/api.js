@@ -151,6 +151,21 @@ export async function fetchInsights(ticker) {
   return dedupGet(`/api/insights/${encodeURIComponent(ticker)}`, { timeoutMs: 75000 });
 }
 
+// 決算ハイライト: アナリストコンセンサスの修正トレンド (drift)。consensus_snapshots (nightly 蓄積) から
+// 直近 N 日でアナリスト予想 (EPS/売上) が引き上げ/引き下げされたかを **事実** として返す既存 endpoint。
+// §38: backend は direction (up/down/mixed/flat) のみ、narration なし。snapshot 不足は insufficient/empty。
+// dedupGet で coalesce、失敗/未蓄積は graceful (frontend が行ごと非表示)。
+export async function fetchConsensusDrift(ticker) {
+  try {
+    return await dedupGet(`/api/analyst/consensus-drift?ticker=${encodeURIComponent(ticker)}&window_days=30`, {
+      headers: fmpHeaders(),
+      timeoutMs: 12000,
+    });
+  } catch {
+    return null;
+  }
+}
+
 // v144 #Pane3-perf: 「もう一度分析する」(refresh) 時に coalesce cache の stale entry を破棄し、
 //   refresh 後の再ナビで古い insights が返らないようにする。
 export function invalidateInsightsCache(ticker) {

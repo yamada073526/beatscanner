@@ -95,6 +95,33 @@ export const GUIDANCE_PIT_CONSENSUS_JP = {
 };
 
 /**
+ * アナリストコンセンサス修正トレンド (consensus drift、`/api/analyst/consensus-drift` 既存 backend)。
+ * 「アナリスト集団が直近 N 日で予想を引き上げ/引き下げた」 という**第三者の行動の事実**を中立提示。
+ * §38: 会社ガイダンス比 (GUIDANCE_REVISION_JP) とは別物 — 我々の予測でも会社による改定でもない。
+ *   会社ガイダンス専用の修正語 (pre-commit Check 7 が annotation でホワイトリスト) は流用せず、 中立な
+ *   「引き上げ/引き下げ」 + ↑↓ のみ。 買い/momentum/将来断定を一切含めない。色も塗らない。
+ * eps/revenue の direction を frontend で集約 (両 up→up / 両 down→down / 片方ずつ→mixed / flat→非表示)。
+ * insufficient/empty (蓄積中) は呼び出し側で非表示 (捏造しない)。
+ */
+export const CONSENSUS_DRIFT_JP = {
+  up: { sym: '↑', label: 'アナリスト予想 直近引き上げ' },
+  down: { sym: '↓', label: 'アナリスト予想 直近引き下げ' },
+  mixed: { sym: '—', label: 'アナリスト予想 まちまち' },
+};
+
+/**
+ * consensus drift の eps/revenue direction を 1 つに集約する純粋関数 (frontend 責務、physics 層は分解保持)。
+ * @returns {'up'|'down'|'mixed'|null} flat/欠落のみ → null (行ごと非表示)
+ */
+export function aggregateConsensusDrift(epsDir, revDir) {
+  const dirs = [epsDir, revDir].filter((d) => d === 'up' || d === 'down');
+  if (dirs.length === 0) return null;
+  if (dirs.every((d) => d === 'up')) return 'up';
+  if (dirs.every((d) => d === 'down')) return 'down';
+  return 'mixed';
+}
+
+/**
  * 来期売上ガイダンスの並置行 (決算速報 note 形式: 「現コンセンサス +9.3% に対し会社ガイダンス +14.0〜17.0% (発表時)」)。
  * 全て backend 計算済値 (rev_yoy_pct / company_q_rev_yoy_low_pct / high) を読むだけ。
  * §38: コンセンサスと会社提示の事実並置のみ。「上方修正」 等の評価語は使わない
