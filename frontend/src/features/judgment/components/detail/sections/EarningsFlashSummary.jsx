@@ -43,17 +43,17 @@ import {
 
 const TESTID = 'earnings-flash-summary';
 
-// ガイダンス履歴基盤 Sprint 4 (6体合議 §10 条件9): 判定バッジは default OFF、
-// ?guidance_pit=1 / localStorage 'guidance_pit'='1' で opt-in → user dogfood 後に default ON 昇格。
+// ガイダンス履歴基盤 Sprint 4 (6体合議 §10 条件9): 判定バッジ = default ON (user 承認 2026-06-11)。
+// ?guidance_pit=0 が kill switch。前回比修正 (会社ガイダンス比、§38 事実 OK) / 発表時比サプライズを表示。
 function isGuidanceHistoryEnabled() {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   try {
     const urlParam = new URLSearchParams(window.location.search).get('guidance_pit');
-    if (urlParam === '1') return true;
     if (urlParam === '0') return false;
-    return window.localStorage?.getItem('guidance_pit') === '1';
+    if (urlParam === '1') return true;
+    return window.localStorage?.getItem('guidance_pit') !== '0';
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -74,19 +74,19 @@ function isGrossMarginEnabled() {
   }
 }
 
-// 決算ハイライト Phase2 (セグメント別売上): ?flash_seg=1 で opt-in、default OFF。
-// 既存表示 (DiagramCard SegmentBar / ProfileCard SegmentSection) は折りたたみ/on-demand でデフォルト非表示の
-// ため、章冒頭インライン = EPS/売上と同じ summary+detail (実 DOM probe で 3 箇所同時表示でないことを確認、
-// 6体合議 マーケ verdict の再評価)。user dogfood 後 default ON 昇格 (粗利率と同手順)。
+// 決算ハイライト Phase2 (セグメント別売上): default ON (user 承認 2026-06-11、headless dogfood 済)。
+// ?flash_seg=0 が kill switch。既存表示 (DiagramCard SegmentBar / ProfileCard SegmentSection) は
+// 折りたたみ/on-demand でデフォルト非表示のため、章冒頭インライン = EPS/売上と同じ summary+detail
+// (実 DOM probe で 3 箇所同時表示でないことを確認、6体合議 マーケ verdict の再評価で inline 採用)。
 function isSegmentEnabled() {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   try {
     const urlParam = new URLSearchParams(window.location.search).get('flash_seg');
-    if (urlParam === '1') return true;
     if (urlParam === '0') return false;
-    return window.localStorage?.getItem('flash_seg') === '1';
+    if (urlParam === '1') return true;
+    return window.localStorage?.getItem('flash_seg') !== '0';
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -190,10 +190,10 @@ function EstimateToActual({ estStr, actStr, surpriseStr }) {
 }
 
 const containerStyle = {
-  // CLS envelope (feedback_cls_envelope_pattern): 粗利率 default ON で 4 行が基本 (EPS/売上/粗利率/来期)。
-  // 実計測 (headless snap): AAPL 4 行=132px / NVDA 5 行=162px。common 4 行に合わせ 132 で loading→loaded の
-  // 章ジャンプを抑止 (3 行の銀行系は下に小幅余白だが jump より優先、 UI verdict)。
-  minHeight: 132,
+  // CLS envelope (feedback_cls_envelope_pattern): 部門別 + 粗利率 default ON で 5 行が基本
+  // (EPS/売上/部門別/粗利率/来期)。実計測 (headless snap): AAPL/MSFT 5 行=194px。common 5 行に合わせ
+  // 192 で loading→loaded の章ジャンプを抑止 (skeleton も 5 行に合わせる。少数行の銀行系は下に小幅余白)。
+  minHeight: 192,
   display: 'flex',
   flexDirection: 'column',
   gap: 'var(--space-2, 8px)',
@@ -262,9 +262,12 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
   if (isLoading && !guidance) {
     return (
       <div data-testid={TESTID} data-state="loading" aria-busy="true" style={containerStyle}>
+        {/* 5 行分 (EPS/売上/部門別/粗利率/来期) の skeleton で loaded 高 ≈ loading 高 (CLS 抑止) */}
         <div style={skeletonLineStyle(220)} />
         <div style={skeletonLineStyle(260)} />
-        <div style={skeletonLineStyle(180)} />
+        <div style={skeletonLineStyle(200)} />
+        <div style={skeletonLineStyle(150)} />
+        <div style={skeletonLineStyle(240)} />
       </div>
     );
   }
