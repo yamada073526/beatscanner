@@ -240,24 +240,40 @@ function HeroPct({ pct, inView = true, delay = '0s' }) {
   return (
     // v5.5 chip 化 (design review 案B「Terminal 列美」): 色テキスト → 12% tint の色面 chip。
     // pop-in 200ms (ds-flash-chip、EPS/売上 stagger ≤120ms)。reduced-motion は index.css 側で無効化。
+    // v5.6 (typography review): hero 20→16px (Bloomberg/Koyfin の hero/本文比 1.23× に正常化、20px=1.54×
+    // が「素人感」 主因)、分類語 10→11px (chip 内 16/11=1.45× で一体タグ)、padding/radius/gap も微修正。
     <span
       className="ds-flash-chip"
       style={{
         justifySelf: 'end',
         display: 'inline-flex',
         alignItems: 'baseline',
-        gap: 5,
+        gap: 4,
         whiteSpace: 'nowrap',
         background: heroChipBg(pct),
-        padding: '3px 9px',
-        borderRadius: 6,
+        padding: '3px 8px',
+        borderRadius: 5,
         animationDelay: delay,
       }}
     >
-      <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em', color, fontVariantNumeric: 'tabular-nums' }}>
+      <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em', color, fontVariantNumeric: 'tabular-nums' }}>
         {sym}{shown.toFixed(1)}%
       </span>
-      {cls && <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', color }}>{SURPRISE_VERDICT_JP[cls]}</span>}
+      {cls && <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.04em', color }}>{SURPRISE_VERDICT_JP[cls]}</span>}
+    </span>
+  );
+}
+
+// 前年比セル (count-up 対応、v5.5 user「前年比もカウントアップを」)。入場 inView で 0→target。
+function YoyPct({ pct, inView = true }) {
+  const target = inView && Number.isFinite(pct) ? Math.abs(pct) : null;
+  const animated = useCountUp(target, { duration: 1200, digits: 1, forceFromZero: true });
+  if (!Number.isFinite(pct)) return <span style={{ justifySelf: 'end', fontSize: 13, fontWeight: 500, color: 'var(--text-muted)' }}>—</span>;
+  const sym = pct > 0 ? '↑' : pct < 0 ? '↓' : '';
+  // v5.6 (typography review): 12/500 で結果列より格を下げ「副次列」 を明確化 (weight 混在解消)。
+  return (
+    <span style={{ justifySelf: 'end', fontSize: 12, fontWeight: 500, color: deltaColor(pct), whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+      {sym}{(animated ?? 0).toFixed(1)}%
     </span>
   );
 }
@@ -284,34 +300,34 @@ function HeadlineGrid({ eps, rev, onDetailClick }) {
   const labelCell = (txt) => (
     <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>{txt}</span>
   );
-  // 予想 = 最弱 (12px/500 muted)。% の基準として残すのみ (review P0: 基準ゼロは初心者が混乱)。
+  // 予想 = 最弱 (12px/400 muted、weight 下げてさらに退かせる)。% の基準として残すのみ (review P0)。
   const estCell = (str) => (
-    <span style={{ justifySelf: 'end' }}>{str != null ? <NumUnit str={str} size={12} weight={500} color={'var(--text-muted)'} unitScale={'0.8em'} /> : emCell()}</span>
+    <span style={{ justifySelf: 'end' }}>{str != null ? <NumUnit str={str} size={12} weight={400} color={'var(--text-muted)'} unitScale={'0.75em'} /> : emCell()}</span>
   );
-  // 結果 (実績) = 降格 (15/600/primary → 13/500/secondary)。予想比が目立てば結果は読めれば十分 (user 方針)。
+  // 結果 (実績) = 13/500/secondary、単位 0.75em (hero 縮小後に相対適正化、typography review)。
   const resultCell = (str) => (
-    <span style={{ justifySelf: 'end' }}>{str != null ? <NumUnit str={str} size={13} weight={500} color={'var(--text-secondary)'} unitScale={'0.8em'} /> : emCell()}</span>
+    <span style={{ justifySelf: 'end' }}>{str != null ? <NumUnit str={str} size={13} weight={500} color={'var(--text-secondary)'} unitScale={'0.75em'} /> : emCell()}</span>
   );
   // 予想比 = hero (HeroPct component: 20px/700 chip + surpriseColor ±3% verdict + count-up + 分類語)。
   const heroPct = (pct, delay) => (Number.isFinite(pct) ? <HeroPct pct={pct} inView={gridInView} delay={delay} /> : emCell());
-  // 前年比 = 色シグナル (13px/600 + deltaColor=方向色)。hero と確実に 1 段差 (persona review)。欠損は「—」。
-  const yoyCell = (pct) => (
-    Number.isFinite(pct)
-      ? <span style={{ justifySelf: 'end', fontSize: 13, fontWeight: 600, color: deltaColor(pct), whiteSpace: 'nowrap' }}>{barePct(pct)}</span>
-      : emCell()
-  );
+  // 前年比 = 色シグナル (13px/600 + deltaColor=方向色 + count-up)。hero と確実に 1 段差 (persona review)。
+  const yoyCell = (pct) => <YoyPct pct={pct} inView={gridInView} />;
   return (
     <div
       ref={gridRef}
       data-testid={`${TESTID}-headline-grid`}
+      className={onDetailClick ? 'ds-flash-grid' : undefined}
       onClick={onDetailClick}
+      role={onDetailClick ? 'button' : undefined}
+      tabIndex={onDetailClick ? 0 : undefined}
+      onKeyDown={onDetailClick ? (e) => { if (e.key === 'Enter') onDetailClick(e); } : undefined}
       title={onDetailClick ? 'クリックで決算セクションの詳細へ' : undefined}
       style={{
         display: 'grid',
         // 全データ列 minmax(0,auto) (狭幅でも nowrap がはみ出さない、frontend review)。列: 予想/結果/予想比/前年比。
         gridTemplateColumns: '52px minmax(0,auto) minmax(0,auto) minmax(0,auto) minmax(0,auto)',
         alignItems: 'baseline',
-        columnGap: 'var(--space-4, 16px)',
+        columnGap: 'var(--space-5, 20px)',
         rowGap: 'var(--space-3, 12px)',
         fontVariantNumeric: 'tabular-nums',
         borderBottom: '1px solid var(--border)',
@@ -338,28 +354,7 @@ function HeadlineGrid({ eps, rev, onDetailClick }) {
   );
 }
 
-// セグメント 1 件の表示文字列部品 (名称 + 実額億ドル + 前年比 ↑↓、中立色、§38)。
-// backend build_segment_summary の value_b($B)/yoy_pct を読むだけ (frontend 再計算しない)。
-function SegmentItem({ seg }) {
-  const v2 = isFlashV2Enabled();
-  const yoy = seg?.yoy_pct;
-  const hasYoy = Number.isFinite(yoy);
-  // 方向記号 SSOT (feedback_chart_hover_direction_symbol、3体合議で確定): 方向は ↑↓ + 絶対値で統一
-  // (+/− 符号は初心者の絶対値混乱を招くため不可)。予想比/前年比/部門別前年比 全て ↑↓、ForwardOutlookSection と統一。
-  const sym = hasYoy ? (yoy > 0 ? '↑' : yoy < 0 ? '↓' : '') : null;
-  const yoyStr = hasYoy ? `${sym}${Math.abs(yoy).toFixed(1)}%` : null;
-  // v2 再設計: 部門別は 2 次情報として静かに従属 (拡大しない、 むしろ 13px で退かせる)。
-  const baseSize = v2 ? 13 : undefined;
-  return (
-    <span style={{ whiteSpace: 'nowrap', ...(baseSize ? { fontSize: baseSize } : {}) }}>
-      <span style={{ color: 'var(--text-muted)' }}>{displaySegmentName(seg)}</span>
-      <span style={{ fontWeight: 600, color: 'var(--text-secondary)', marginLeft: 4 }}>{fmtMoney((seg?.value_b || 0) * 1e9)}</span>
-      {yoyStr != null && (
-        <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>{yoyStr}</span>
-      )}
-    </span>
-  );
-}
+// (旧 SegmentItem = 1 行詰め込みの部門別部品は v5.6 で LowerGrid (SegStack 縦積み) に置換し削除。)
 
 // 判定バッジ (10px neutral、色なし — §38。サイズで前方視界の主役 19px と階層差別化、ui verdict)
 // v2 (?flash_v2=1): 塗り pill → 左 hairline タグ (灰塊を消し「組版された端末タグ」 の格調、ui-designer 案⑤)。
@@ -499,6 +494,65 @@ function skeletonLineStyle(width) {
   };
 }
 
+// ── 下段 (部門別 + 粗利率) = LowerGrid (v5.6 文字壁解消、design review A案 2026-06-12) ──
+// FlashRow の自由流し (「iPhone … ・ Service … ・他N部門」 1 行詰め込み) が「カオスな文字壁」 だった主因。
+// 上段 HeadlineGrid と同じ 52px label 列で整列し、各部門を「名称 / 金額 / 前年比」 縦積みセルに。
+// 視線が上段から下段まで列で縦断でき、雑然感が消える。来期 (将来) は別の future-strip に分離。
+const lowerLabelCell = (txt) => (
+  <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>{txt}</span>
+);
+function SegStack({ seg }) {
+  const yoy = seg?.yoy_pct;
+  const sym = Number.isFinite(yoy) ? (yoy > 0 ? '↑' : yoy < 0 ? '↓' : '') : null;
+  return (
+    <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+      <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displaySegmentName(seg)}</span>
+      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{fmtMoney((seg?.value_b || 0) * 1e9)}</span>
+      {sym != null && (
+        <span style={{ fontSize: 11, fontWeight: 500, color: deltaColor(yoy), fontVariantNumeric: 'tabular-nums' }}>{sym}{Math.abs(yoy).toFixed(1)}%</span>
+      )}
+    </span>
+  );
+}
+function LowerGrid({ segs, restCount, gmStr, gmPp }) {
+  const gmPpStr = Number.isFinite(gmPp) ? `${gmPp > 0 ? '↑' : gmPp < 0 ? '↓' : ''}${Math.abs(gmPp).toFixed(1)}pt` : null;
+  return (
+    <div
+      data-testid={`${TESTID}-lower-grid`}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '52px 1fr 1fr 1fr',
+        columnGap: 'var(--space-5, 20px)',
+        rowGap: 'var(--space-3, 12px)',
+        alignItems: 'start',
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      {segs && segs.length > 0 && (
+        <>
+          {lowerLabelCell(FLASH_LABELS.segment)}
+          <SegStack seg={segs[0]} />
+          {segs[1] ? <SegStack seg={segs[1]} /> : <span />}
+          {restCount > 0 ? <span style={{ fontSize: 12, color: 'var(--text-muted)', alignSelf: 'center', whiteSpace: 'nowrap' }}>他 {restCount} 部門</span> : <span />}
+        </>
+      )}
+      {gmStr != null && (
+        <>
+          {lowerLabelCell(FLASH_LABELS.grossMargin)}
+          <span style={{ gridColumn: '2 / 5', display: 'inline-flex', alignItems: 'baseline', gap: 10 }}>
+            <NumUnit str={gmStr} size={14} weight={600} color={'var(--text-primary)'} unitScale={'0.75em'} />
+            {gmPpStr != null && (
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                前年比 <span style={{ fontWeight: 600, color: deltaColor(gmPp), fontVariantNumeric: 'tabular-nums' }}>{gmPpStr}</span>
+              </span>
+            )}
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
+
 /**
  * @param {object} props
  * @param {string} props.ticker
@@ -587,7 +641,11 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
   // instance 局所 = closest (gh-link / PriceLadder idiom)。grid click とヘッダーの「詳細」 リンクで共用。
   const scrollToEarnings = (e) => {
     const root = e?.currentTarget?.closest?.('.ds-judgment-detail') || document;
-    root.querySelector('[data-testid="guidance-card-wrapper"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // 決算カード (今期 決算結果 = GuidanceCard) を優先、無ければ figure (DiagramCard) に fallback。
+    const target = root.querySelector('[data-testid="guidance-card-wrapper"]')
+      || document.querySelector('[data-testid="guidance-card-wrapper"]')
+      || root.querySelector('[data-testid="sticky-diagram-accordion"]');
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   // headline (EPS + 売上) の構築。v5 = 列揃え grid (重要3点を仕切り上に集約)、v4 以前 = 従来 FlashRow。
@@ -648,54 +706,17 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
     }
   }
 
-  // 部門別行 (Phase2、?flash_seg=1 opt-in): 最新四半期の上位事業 + 前年比 ↑↓ (中立色)。backend 値を読むだけ。
-  // EPS → 売上 → 部門別 → 粗利率 → 来期 (決算速報 note 順)。上位 2 件 + 「他N部門」(2秒理解優先、UI verdict)。
-  // 予想比は FMP セグメント consensus 未接続のため出さない (捏造回避、金融 verdict)。
-  if (isSegmentEnabled() && segmentSummary?.segments?.length > 0) {
-    const segs = segmentSummary.segments;
-    const top = segs.slice(0, 2);
-    const restCount = segs.length - top.length;
-    rows.push(
-      <FlashRow key="segment" label={FLASH_LABELS.segment} testid={`${TESTID}-segment`}>
-        {top.map((seg, i) => (
-          <React.Fragment key={i}>
-            {i > 0 && <span aria-hidden style={{ color: 'var(--text-muted)' }}>・</span>}
-            <SegmentItem seg={seg} />
-          </React.Fragment>
-        ))}
-        {restCount > 0 && (
-          <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>・他{restCount}部門</span>
-        )}
-      </FlashRow>
-    );
-  }
+  // 下段 (部門別 + 粗利率) = LowerGrid データ (v5.6 文字壁解消)。FlashRow 自由流し → 列整列グリッド。
+  // 部門別: 上位 2 件 + 「他N部門」(2秒理解、予想比は FMP segment consensus 未接続のため非表示=捏造回避)。
+  // 粗利率: 当四半期の採算実値 (backend sector/妥当域 gate 済) + 前年同期差 ±pt (Δ=過去確定の方向)。
+  const lowerSegs = (isSegmentEnabled() && segmentSummary?.segments?.length > 0) ? segmentSummary.segments : null;
+  const lowerRestCount = lowerSegs ? lowerSegs.length - Math.min(2, lowerSegs.length) : 0;
+  const lowerGmStr = isGrossMarginEnabled() ? fmtGrossMargin(latestQ?.gross_margin_pct) : null;
+  const hasLower = (lowerSegs && lowerSegs.length > 0) || lowerGmStr != null;
 
-  // 粗利率行 (Phase2、?flash_gm=1 opt-in): 当四半期の採算実値。backend で sector/妥当域 gate 済を読むだけ
-  // (frontend 再計算禁止)。判断語なし・色なし中立 (§38/§5、5 条件カードに色エネルギー集中)。
-  // EPS/売上の後・来期の前 = 決算速報 note 順 (EPS → 売上 → 粗利率 → 来期)。section 上部の「直近四半期」
-  // caption が期を明示するため row 内の四半期表記は省略 (DiagramCard 推移図 / ProfileCard 年次 と粒度差別化)。
-  if (isGrossMarginEnabled()) {
-    const gmStr = fmtGrossMargin(latestQ?.gross_margin_pct);
-    if (gmStr != null) {
-      // v5.5 (user「粗利率の前年比も — のまま」): 前年同期差 ±pt を併記。水準 (gmStr) は中立のまま、
-      // Δ は過去確定の方向事実なので deltaColor (§38 メモ「水準は色NG / 前期比 Δ なら可」)。
-      const gmPp = latestQ?.gross_margin_yoy_pp;
-      const gmPpStr = Number.isFinite(gmPp)
-        ? `${gmPp > 0 ? '↑' : gmPp < 0 ? '↓' : ''}${Math.abs(gmPp).toFixed(1)}pt`
-        : null;
-      rows.push(
-        <FlashRow key="grossmargin" label={FLASH_LABELS.grossMargin} testid={`${TESTID}-gross-margin`}>
-          <NumUnit str={gmStr} size={15} weight={600} color={'var(--text-primary)'} />
-          {gmPpStr != null && (
-            <>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{FLASH_TERMS.yoy}</span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: deltaColor(gmPp), whiteSpace: 'nowrap' }}>{gmPpStr}</span>
-            </>
-          )}
-        </FlashRow>
-      );
-    }
-  }
+  // 将来ゾーン (来期 + ガイダンスバッジ) = futureNodes。確定実績 (上段+下段) と分離し future-strip 帯に置く
+  // (§38 の中立色 mandate を「将来は色が違う」 視覚言語として活かす、design review A案)。
+  const futureNodes = [];
 
   // 来期行: lazy (会社 8-K guidance 込み、coalesce 済) があれば優先、無ければ prop の consensus のみ。
   // v200: 会社売上ガイダンス YoY レンジ (backend 計算済) があれば決算速報 note 形式の並置行
@@ -709,7 +730,7 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
     const yoyStr = fmtYoyPct(nq?.rev_yoy_pct);
     const revLine = fmtGuidanceRevLine(nq?.rev_yoy_pct, nq?.company_q_rev_yoy_low_pct, nq?.company_q_rev_yoy_high_pct);
     const gState = GUIDANCE_STATE_JP[nq?.guidance_vs_consensus_eps] || GUIDANCE_STATE_JP[nq?.guidance_vs_consensus_rev] || null;
-    rows.push(
+    futureNodes.push(
       <FlashRow key="nextq" label={FLASH_LABELS.nextQ} testid={`${TESTID}-nextq`}>
         {nqEps != null && (
           <>
@@ -760,7 +781,7 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
     const driftDir = consensusDrift ? aggregateConsensusDrift(consensusDrift.eps?.direction, consensusDrift.revenue?.direction) : null;
     const driftState = driftDir ? CONSENSUS_DRIFT_JP[driftDir] : null;
     if (revState || pitState || driftState) {
-      rows.push(
+      futureNodes.push(
         <div
           key="gh-badges"
           data-testid={`${TESTID}-gh-badges`}
@@ -857,9 +878,28 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
           </button>
         </span>
       </div>
+      {/* body = 確定実績 (上段 EPS/売上 grid + 下段 部門別/粗利率 LowerGrid)。クリックで決算詳細へ scroll。 */}
       <div style={bodyStyle}>
         {rows}
+        {hasLower && <LowerGrid segs={lowerSegs} restCount={lowerRestCount} gmStr={lowerGmStr} gmPp={latestQ?.gross_margin_yoy_pp} />}
       </div>
+      {/* future-strip = 将来ゾーン (来期コンセンサス + ガイダンス判定)。border-top + 極薄 tint + 全 neutral 色で
+          確定実績と視覚分離 (§38 の中立色 mandate を「将来は色が違う」 視覚言語に、design review A案)。 */}
+      {futureNodes.length > 0 && (
+        <div
+          data-testid={`${TESTID}-future-strip`}
+          style={{
+            borderTop: '1px solid var(--border)',
+            background: 'color-mix(in oklab, var(--text-muted) 5%, transparent)',
+            padding: 'var(--space-2, 8px) var(--space-4, 16px)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--space-1, 4px)',
+          }}
+        >
+          {futureNodes}
+        </div>
+      )}
     </div>
   );
 }
