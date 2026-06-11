@@ -44,8 +44,10 @@ export const FLASH_TERMS = {
  */
 export function fmtSurprisePct(surprisePct) {
   if (surprisePct == null || !Number.isFinite(surprisePct)) return null;
-  const sign = surprisePct > 0 ? '+' : '';
-  return `${FLASH_TERMS.vsEstimate} ${sign}${surprisePct.toFixed(1)}%`;
+  // 方向記号 SSOT (feedback_chart_hover_direction_symbol): 方向は ↑↓ + 絶対値 (+/− 符号は初心者の
+  // 絶対値混乱を招くため不可)。中立 (0) は記号なし。ForwardOutlookSection の前年比バッジと統一。
+  const sym = surprisePct > 0 ? '↑' : surprisePct < 0 ? '↓' : '';
+  return `${FLASH_TERMS.vsEstimate} ${sym}${Math.abs(surprisePct).toFixed(1)}%`;
 }
 
 /**
@@ -55,8 +57,9 @@ export function fmtSurprisePct(surprisePct) {
  */
 export function fmtYoyPct(yoyPct) {
   if (yoyPct == null || !Number.isFinite(yoyPct)) return null;
-  const sign = yoyPct > 0 ? '+' : '';
-  return `${FLASH_TERMS.yoy} ${sign}${yoyPct.toFixed(1)}%`;
+  // 方向記号 SSOT: ↑↓ + 絶対値 (符号 +/− 不可)。ForwardOutlookSection の前年比バッジと統一。
+  const sym = yoyPct > 0 ? '↑' : yoyPct < 0 ? '↓' : '';
+  return `${FLASH_TERMS.yoy} ${sym}${Math.abs(yoyPct).toFixed(1)}%`;
 }
 
 /**

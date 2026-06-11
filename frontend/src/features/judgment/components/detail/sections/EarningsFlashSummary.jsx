@@ -154,9 +154,10 @@ function SegmentItem({ seg }) {
   const v2 = isFlashV2Enabled();
   const yoy = seg?.yoy_pct;
   const hasYoy = Number.isFinite(yoy);
-  // 記号統一 (user 指摘 2026-06-11): 符号付き数値の増減は「+/−」 (予想比/前年比と同規約)。
-  // ↑↓ は語の状態ラベル (ガイダンス改定/引き上げ/上回る 等) 専用 → 部門別の前年比は売上「前年比 +N%」 と揃え + に統一。
-  const yoyStr = hasYoy ? `${yoy > 0 ? '+' : ''}${yoy.toFixed(1)}%` : null;
+  // 方向記号 SSOT (feedback_chart_hover_direction_symbol、3体合議で確定): 方向は ↑↓ + 絶対値で統一
+  // (+/− 符号は初心者の絶対値混乱を招くため不可)。予想比/前年比/部門別前年比 全て ↑↓、ForwardOutlookSection と統一。
+  const sym = hasYoy ? (yoy > 0 ? '↑' : yoy < 0 ? '↓' : '') : null;
+  const yoyStr = hasYoy ? `${sym}${Math.abs(yoy).toFixed(1)}%` : null;
   // v2 再設計: 部門別は 2 次情報として静かに従属 (拡大しない、 むしろ 13px で退かせる)。
   const baseSize = v2 ? 13 : undefined;
   return (
