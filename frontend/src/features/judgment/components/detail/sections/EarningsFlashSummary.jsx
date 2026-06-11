@@ -198,35 +198,50 @@ function barePct(pct) {
   return `${sym}${Math.abs(pct).toFixed(1)}%`;
 }
 // headline (EPS + 売上) の列揃え grid。整形済 str + raw pct を受け、 セル単位に配置 (列が縦に揃う)。
-// v5.2 Beat/Miss hero (user feedback 2026-06-11「EPS/売上の絶対値より、何%のサプライズかが最重要」):
-//   ヒエラルキーを反転 — 予実差 (サプライズ%) を hero (20px/700 + deltaColor 緑/赤) に、結果を補助 (15px)、
-//   前年比を色シグナル (14px)。「強調は色に任せる」 を体現 (サイズ差は穏当に保ち色で焦点)。予想列は drop
-//   (絶対値より % 重視 + 文字壁回避、全セル単行で列整列を維持。予想の詳細は決算タブ GuidanceCard にあり)。
+// v5.3 Beat/Miss hero (user feedback 2026-06-11「EPS/売上の絶対値より、何%のサプライズかが最重要」+
+//   3体 design review 2026-06-11):
+//   ヒエラルキーを反転 — 予想比 (サプライズ%) を hero (20px/700 + deltaColor 緑/赤) に。結果=補助 (15px)、
+//   予想=de-emphasize (13px muted)、前年比=色シグナル (14px)。「強調は色に任せる」 を体現 (サイズ差は穏当、
+//   旧 26px extreme を回避し色で焦点化)。列順は 予想→結果→予想比(hero)→前年比 で自然な読み (予想 を残すのは
+//   review P0「% の基準が画面内に無いと初心者が混乱」)。見出しは「予想比」 (QA: 予実差 より初心者に明快)。
 function HeadlineGrid({ eps, rev }) {
   const colHead = (txt) => (
-    <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', justifySelf: 'end' }}>{txt}</span>
+    <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', justifySelf: 'end' }}>{txt}</span>
+  );
+  // 該当データ無しの数値セル: honest な em-dash (recipes §C-9)。空セルの「穴/故障感」 を回避 (UI review)。
+  const emCell = () => (
+    <span style={{ justifySelf: 'end', fontSize: 14, fontWeight: 500, color: 'var(--text-muted)' }}>—</span>
   );
   const labelCell = (txt) => (
     <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>{txt}</span>
   );
-  // 予実差 = hero。サプライズ % を最大 (20px/700) + deltaColor で焦点化。欠損は空 (中立「—」を捏造しない)。
-  const heroPct = (pct) => (
-    <span style={{ justifySelf: 'end', fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em', color: deltaColor(pct), whiteSpace: 'nowrap' }}>{barePct(pct)}</span>
+  // 予想 = de-emphasize (13px/500 muted)。% の基準として残すが控えめ (review P0: 基準ゼロは初心者が混乱)。
+  const estCell = (str) => (
+    <span style={{ justifySelf: 'end' }}>{str != null ? <NumUnit str={str} size={13} weight={500} color={'var(--text-muted)'} unitScale={'0.8em'} /> : emCell()}</span>
   );
-  // 結果 (実績) = 補助。15px/600 primary、単位 0.8em。予想は本 grid から省略 (hero=%が基準を内包)。
+  // 結果 (実績) = 補助。15px/600 primary、単位 0.8em。
   const resultCell = (str) => (
-    <span style={{ justifySelf: 'end' }}>{str != null ? <NumUnit str={str} size={15} weight={600} color={'var(--text-primary)'} unitScale={'0.8em'} letterSpacing={'-0.01em'} /> : null}</span>
+    <span style={{ justifySelf: 'end' }}>{str != null ? <NumUnit str={str} size={15} weight={600} color={'var(--text-primary)'} unitScale={'0.8em'} letterSpacing={'-0.01em'} /> : emCell()}</span>
   );
-  // 前年比 = 色シグナル。14px/700 + deltaColor (hero より一段控えめ、色で過去確定の方向を示す)。
+  // 予想比 = hero。サプライズ % を最大 (20px/700) + deltaColor で焦点化。欠損は「—」(穴回避、UI review)。
+  const heroPct = (pct) => (
+    Number.isFinite(pct)
+      ? <span style={{ justifySelf: 'end', fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em', color: deltaColor(pct), whiteSpace: 'nowrap' }}>{barePct(pct)}</span>
+      : emCell()
+  );
+  // 前年比 = 色シグナル。14px/700 + deltaColor (hero より一段控えめ、色で過去確定の方向を示す)。欠損は「—」。
   const yoyCell = (pct) => (
-    <span style={{ justifySelf: 'end', fontSize: 14, fontWeight: 700, color: deltaColor(pct), whiteSpace: 'nowrap' }}>{barePct(pct)}</span>
+    Number.isFinite(pct)
+      ? <span style={{ justifySelf: 'end', fontSize: 14, fontWeight: 700, color: deltaColor(pct), whiteSpace: 'nowrap' }}>{barePct(pct)}</span>
+      : emCell()
   );
   return (
     <div
       data-testid={`${TESTID}-headline-grid`}
       style={{
         display: 'grid',
-        gridTemplateColumns: '44px minmax(0,auto) minmax(0,auto) auto',
+        // 全データ列 minmax(0,auto) (狭幅でも nowrap がはみ出さない、frontend review)。列: 予想/結果/予想比/前年比。
+        gridTemplateColumns: '44px minmax(0,auto) minmax(0,auto) minmax(0,auto) minmax(0,auto)',
         alignItems: 'baseline',
         columnGap: 'var(--space-4, 16px)',
         rowGap: 'var(--space-3, 12px)',
@@ -236,17 +251,19 @@ function HeadlineGrid({ eps, rev }) {
         marginBottom: 'var(--space-1, 4px)',
       }}
     >
-      {/* 列見出し (予実差 hero / 結果 / 前年比、薄 muted) */}
-      {labelCell('')}{colHead('予実差')}{colHead('結果')}{colHead('前年比')}
-      {/* EPS 行 (予実差 hero、前年比は空セル) */}
+      {/* 列見出し (予想 / 結果 / 予想比 hero / 前年比、薄 muted) */}
+      {labelCell('')}{colHead('予想')}{colHead('結果')}{colHead('予想比')}{colHead('前年比')}
+      {/* EPS 行 (予想比 hero、前年比は EPS YoY を出さないため「—」) */}
       {labelCell(FLASH_LABELS.eps)}
-      {heroPct(eps.surprisePct)}
+      {estCell(eps.estStr)}
       {resultCell(eps.actStr)}
-      <span />
-      {/* 売上 行 (予実差 hero、前年比は色シグナル) */}
+      {heroPct(eps.surprisePct)}
+      {emCell()}
+      {/* 売上 行 (予想比 hero、前年比は色シグナル) */}
       {rev ? labelCell(FLASH_LABELS.revenue) : null}
-      {rev ? heroPct(rev.surprisePct) : null}
+      {rev ? estCell(rev.estStr) : null}
       {rev ? resultCell(rev.actStr) : null}
+      {rev ? heroPct(rev.surprisePct) : null}
       {rev ? yoyCell(rev.yoyPct) : null}
     </div>
   );
