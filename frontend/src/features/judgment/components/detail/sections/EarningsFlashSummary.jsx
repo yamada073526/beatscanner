@@ -90,16 +90,34 @@ function isSegmentEnabled() {
   }
 }
 
+// 決算ハイライト デザイン v2 (3体 design review 収束案、?flash_v2=1 で opt-in、default OFF)。
+// user 指摘「淡白で素通り」 への対策 = 色を足さず ① typography コントラスト拡張 (結果数値 18px) +
+// ② 行間 hairline (台帳の質感) + ③ バッジ hairline 化。3体一致で root cause は「無階層/dynamic range 不足」。
+// §38 (判断色なし) / 5条件カードの色独占 / 発光バグ / gold 一貫性 いずれにも無抵触 (color 不変、typography/罫線のみ)。
+// dogfood → user 承認後 default ON。判断記号 ↑↓ や数値に緑/赤は塗らない (中立維持)。
+function isFlashV2Enabled() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('flash_v2');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('flash_v2') === '1';
+  } catch {
+    return false;
+  }
+}
+
 // セグメント 1 件の表示文字列部品 (名称 + 実額億ドル + 前年比 ↑↓、中立色、§38)。
 // backend build_segment_summary の value_b($B)/yoy_pct を読むだけ (frontend 再計算しない)。
 function SegmentItem({ seg }) {
+  const v2 = isFlashV2Enabled();
   const yoy = seg?.yoy_pct;
   const hasYoy = Number.isFinite(yoy);
   const sym = hasYoy ? (yoy > 0 ? '↑' : yoy < 0 ? '↓' : '—') : null;
   return (
     <span style={{ whiteSpace: 'nowrap' }}>
       <span style={{ color: 'var(--text-muted)' }}>{displaySegmentName(seg)}</span>
-      <span style={{ fontWeight: 700, color: 'var(--text-primary)', marginLeft: 4 }}>{fmtMoney((seg?.value_b || 0) * 1e9)}</span>
+      <span style={{ fontWeight: 700, color: 'var(--text-primary)', marginLeft: 4, ...(v2 ? { fontSize: 17 } : {}) }}>{fmtMoney((seg?.value_b || 0) * 1e9)}</span>
       {hasYoy && (
         <span style={{ color: 'var(--text-secondary)', marginLeft: 4 }}>
           <span aria-hidden>{sym}</span>{Math.abs(yoy).toFixed(1)}%
@@ -110,25 +128,21 @@ function SegmentItem({ seg }) {
 }
 
 // 判定バッジ (10px neutral、色なし — §38。サイズで前方視界の主役 19px と階層差別化、ui verdict)
+// v2 (?flash_v2=1): 塗り pill → 左 hairline タグ (灰塊を消し「組版された端末タグ」 の格調、ui-designer 案⑤)。
 function GuidanceBadge({ scope, sym, label, testid }) {
+  const v2 = isFlashV2Enabled();
+  const v2Style = {
+    display: 'inline-flex', alignItems: 'baseline', gap: 4, fontSize: 10, fontWeight: 500,
+    color: 'var(--text-secondary)', borderLeft: '2px solid var(--border)', paddingLeft: 6, whiteSpace: 'nowrap',
+  };
+  const v1Style = {
+    display: 'inline-flex', alignItems: 'baseline', gap: 4, fontSize: 10, fontWeight: 500,
+    color: 'var(--text-secondary)', background: 'var(--bg-subtle)', border: '1px solid var(--border)',
+    borderRadius: 4, padding: '1px 6px', whiteSpace: 'nowrap',
+  };
   return (
-    <span
-      data-testid={testid}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'baseline',
-        gap: 4,
-        fontSize: 10,
-        fontWeight: 500,
-        color: 'var(--text-secondary)',
-        background: 'var(--bg-subtle)',
-        border: '1px solid var(--border)',
-        borderRadius: 4,
-        padding: '1px 6px',
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {scope && <span style={{ color: 'var(--text-muted)' }}>{scope}</span>}
+    <span data-testid={testid} style={v2 ? v2Style : v1Style}>
+      {scope && <span style={{ color: 'var(--text-muted)', ...(v2 ? { fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase' } : {}) }}>{scope}</span>}
       <span aria-hidden>{sym}</span>
       {label}
     </span>
@@ -139,6 +153,7 @@ function GuidanceBadge({ scope, sym, label, testid }) {
 // typography (6体合議 ui-designer 案): label 11px/500/secondary/uppercase、数値 tabular-nums、
 // 予想 = muted (過去情報)、結果 = primary 15px/700 (主役)、→ = muted (中立の橋渡し、色なし)。
 function FlashRow({ label, children, testid }) {
+  const v2 = isFlashV2Enabled();
   return (
     <div
       data-testid={testid}
@@ -147,6 +162,8 @@ function FlashRow({ label, children, testid }) {
         alignItems: 'baseline',
         gap: 'var(--space-3, 12px)',
         flexWrap: 'wrap',
+        // v2: 行間 hairline + padding で「台帳 (ledger)」 の質感 (ui-designer 案③、色でなく組版で格調)
+        ...(v2 ? { borderTop: '1px solid var(--border)', paddingTop: 'var(--space-2, 8px)' } : {}),
       }}
     >
       <span
@@ -171,16 +188,18 @@ function FlashRow({ label, children, testid }) {
 
 // 「予想 X → 結果 Y (予想比 ±Z%)」 の値部分。est が null (basis mismatch 抑止等) なら結果のみ。
 function EstimateToActual({ estStr, actStr, surpriseStr }) {
+  const v2 = isFlashV2Enabled();
   return (
     <>
       {estStr != null && (
         <>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{FLASH_TERMS.estimate}</span>
-          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{estStr}</span>
-          <span aria-hidden style={{ fontSize: 13, color: 'var(--text-muted)' }}>→</span>
+          <span style={{ fontSize: v2 ? 11 : 12, color: 'var(--text-muted)' }}>{FLASH_TERMS.estimate}</span>
+          <span style={{ fontSize: v2 ? 12 : 13, fontWeight: 500, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{estStr}</span>
+          <span aria-hidden style={{ fontSize: v2 ? 12 : 13, color: 'var(--text-muted)' }}>→</span>
         </>
       )}
-      <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{actStr}</span>
+      {/* v2: 結果数値を 15→18px に拡大 = 「主役を突出、文脈を退かせる」 dynamic range 拡張 (3体一致の最推奨) */}
+      <span style={{ fontSize: v2 ? 18 : 15, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{actStr}</span>
       {/* 予実差 % は中立色 (緑/赤を塗らない、§38 保守側 + 色は 5 条件カードに集中) */}
       {surpriseStr != null && (
         <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>({surpriseStr})</span>
@@ -258,6 +277,11 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
       .catch(() => { /* graceful: consensus のみ表示 */ });
     return () => { cancelled = true; };
   }, [ticker]);
+
+  // 決算ハイライト デザイン v2 (?flash_v2=1 opt-in、default OFF): 結果数値拡大 + hairline + バッジ刷新。
+  const v2 = isFlashV2Enabled();
+  // v2 は行に hairline + paddingTop を持つため container gap を詰める (余白二重を回避)。
+  const mainContainerStyle = v2 ? { ...containerStyle, gap: 'var(--space-1, 4px)' } : containerStyle;
 
   if (isLoading && !guidance) {
     return (
@@ -342,7 +366,7 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
     if (gmStr != null) {
       rows.push(
         <FlashRow key="grossmargin" label={FLASH_LABELS.grossMargin} testid={`${TESTID}-gross-margin`}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{gmStr}</span>
+          <span style={{ fontSize: v2 ? 18 : 15, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{gmStr}</span>
         </FlashRow>
       );
     }
@@ -365,13 +389,13 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
         {nqEps != null && (
           <>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{FLASH_TERMS.consensusEps}</span>
-            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{nqEps}</span>
+            <span style={{ fontSize: v2 ? 18 : 15, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{nqEps}</span>
           </>
         )}
         {nqRev != null && (
           <>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{nqEps != null ? `・${FLASH_TERMS.consensusRev}` : FLASH_TERMS.consensusRev}</span>
-            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{nqRev}</span>
+            <span style={{ fontSize: v2 ? 18 : 15, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{nqRev}</span>
           </>
         )}
         {yoyStr != null && revLine == null && (
@@ -448,9 +472,9 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
   const period = typeof latestQ?.fiscal_period === 'string' && latestQ.fiscal_period ? latestQ.fiscal_period : null;
 
   return (
-    <div data-testid={TESTID} data-state="main" style={containerStyle}>
+    <div data-testid={TESTID} data-state="main" style={mainContainerStyle}>
       {period && (
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.04em', ...(v2 ? { fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', paddingBottom: 'var(--space-1, 4px)' } : {}) }}>
           直近四半期 {period}
         </div>
       )}
