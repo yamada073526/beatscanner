@@ -123,20 +123,20 @@ function isFlashV3Enabled() {
   }
 }
 
-// 決算ハイライト v4 color (?flash_v4=1 opt-in、default OFF): 過去確定実績の方向に muted 緑/赤。
+// 決算ハイライト v4 color (default ON = user 承認 2026-06-11、?flash_v4=0 が kill): 過去確定実績の方向に muted 緑/赤。
 // §38/§5 verdict (金融+マーケ+ui 3体合議 2026-06-11): 過去の確定事実 (予実差 beat/miss・前年比) の着色は
 // 「陽線=緑」 同型の事実の色分けで §38 射程外。来期=未来予想・粗利率=水準 は中立維持 (色 NG)。色は数値本体でなく
 // 「予実差 + 主要前年比」 の差分にだけ投下 (ui-designer 案、画面に緑 2-3 点)。5条件カードの面の緑(verdict) と
 // ハイライトの線の緑(事実) の格を muted (color-mix) で分離。投資色: 上昇緑/下落赤、評価語と併用しない。
 function isFlashV4Enabled() {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   try {
     const urlParam = new URLSearchParams(window.location.search).get('flash_v4');
-    if (urlParam === '1') return true;
     if (urlParam === '0') return false;
-    return window.localStorage?.getItem('flash_v4') === '1';
+    if (urlParam === '1') return true;
+    return window.localStorage?.getItem('flash_v4') !== '0';
   } catch {
-    return false;
+    return true;
   }
 }
 // 過去確定実績の方向 % → 色。v4 OFF / 0 / 欠損 は中立 (--text-secondary)。muted gain/loss を token から color-mix。
