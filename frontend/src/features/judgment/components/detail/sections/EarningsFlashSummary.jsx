@@ -29,6 +29,7 @@
 import React, { useEffect, useState } from 'react';
 import { fetchQuarterlyHistory, fetchGuidanceSurprise } from '../../../../../api.js';
 import { fmtMoney, fmtEps, GUIDANCE_STATE_JP } from '../../../../../components/ForwardOutlookSection.jsx';
+import { displaySegmentName } from '../../../../../lib/segmentNames.js';
 import {
   FLASH_LABELS,
   FLASH_TERMS,
@@ -71,6 +72,41 @@ function isGrossMarginEnabled() {
   } catch {
     return true;
   }
+}
+
+// 決算ハイライト Phase2 (セグメント別売上): ?flash_seg=1 で opt-in、default OFF。
+// 既存表示 (DiagramCard SegmentBar / ProfileCard SegmentSection) は折りたたみ/on-demand でデフォルト非表示の
+// ため、章冒頭インライン = EPS/売上と同じ summary+detail (実 DOM probe で 3 箇所同時表示でないことを確認、
+// 6体合議 マーケ verdict の再評価)。user dogfood 後 default ON 昇格 (粗利率と同手順)。
+function isSegmentEnabled() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('flash_seg');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('flash_seg') === '1';
+  } catch {
+    return false;
+  }
+}
+
+// セグメント 1 件の表示文字列部品 (名称 + 実額億ドル + 前年比 ↑↓、中立色、§38)。
+// backend build_segment_summary の value_b($B)/yoy_pct を読むだけ (frontend 再計算しない)。
+function SegmentItem({ seg }) {
+  const yoy = seg?.yoy_pct;
+  const hasYoy = Number.isFinite(yoy);
+  const sym = hasYoy ? (yoy > 0 ? '↑' : yoy < 0 ? '↓' : '—') : null;
+  return (
+    <span style={{ whiteSpace: 'nowrap' }}>
+      <span style={{ color: 'var(--text-muted)' }}>{displaySegmentName(seg)}</span>
+      <span style={{ fontWeight: 700, color: 'var(--text-primary)', marginLeft: 4 }}>{fmtMoney((seg?.value_b || 0) * 1e9)}</span>
+      {hasYoy && (
+        <span style={{ color: 'var(--text-secondary)', marginLeft: 4 }}>
+          <span aria-hidden>{sym}</span>{Math.abs(yoy).toFixed(1)}%
+        </span>
+      )}
+    </span>
+  );
 }
 
 // 判定バッジ (10px neutral、色なし — §38。サイズで前方視界の主役 19px と階層差別化、ui verdict)
@@ -189,14 +225,19 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
   // YoY (当期売上の前年比) のみ quarterly-history から補完。dedupGet 化済のため
   // useEpsBeatStreak (limit=8 同 URL) と coalesce され追加の実 fetch は発生しない (設計 verdict)。
   const [latestQ, setLatestQ] = useState(null);
+  // セグメント別売上 (Phase2、?flash_seg=1 opt-in): quarterly-history response 直下の segment_summary を保持。
+  // history[0] でなく res 直下なので別 state (同一 fetch に相乗り = 追加 fetch なし)。
+  const [segmentSummary, setSegmentSummary] = useState(null);
   useEffect(() => {
     setLatestQ(null); // ticker 切替時に他銘柄の残骸 YoY を出さない
+    setSegmentSummary(null); // 同上 (他銘柄のセグメントを出さない)
     if (!ticker) return undefined;
     let cancelled = false;
     fetchQuarterlyHistory(ticker, 8).then((res) => {
       if (cancelled) return;
       const h = Array.isArray(res?.history) ? res.history[0] : null;
       if (h) setLatestQ(h);
+      setSegmentSummary(res?.segment_summary ?? null);
     });
     return () => { cancelled = true; };
   }, [ticker]);
@@ -262,6 +303,28 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
         />
         {yoyStr != null && (
           <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>・{yoyStr}</span>
+        )}
+      </FlashRow>
+    );
+  }
+
+  // 部門別行 (Phase2、?flash_seg=1 opt-in): 最新四半期の上位事業 + 前年比 ↑↓ (中立色)。backend 値を読むだけ。
+  // EPS → 売上 → 部門別 → 粗利率 → 来期 (決算速報 note 順)。上位 2 件 + 「他N部門」(2秒理解優先、UI verdict)。
+  // 予想比は FMP セグメント consensus 未接続のため出さない (捏造回避、金融 verdict)。
+  if (isSegmentEnabled() && segmentSummary?.segments?.length > 0) {
+    const segs = segmentSummary.segments;
+    const top = segs.slice(0, 2);
+    const restCount = segs.length - top.length;
+    rows.push(
+      <FlashRow key="segment" label={FLASH_LABELS.segment} testid={`${TESTID}-segment`}>
+        {top.map((seg, i) => (
+          <React.Fragment key={i}>
+            {i > 0 && <span aria-hidden style={{ color: 'var(--text-muted)' }}>・</span>}
+            <SegmentItem seg={seg} />
+          </React.Fragment>
+        ))}
+        {restCount > 0 && (
+          <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>・他{restCount}部門</span>
         )}
       </FlashRow>
     );

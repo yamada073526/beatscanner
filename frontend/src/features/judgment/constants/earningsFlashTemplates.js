@@ -20,6 +20,7 @@
 export const FLASH_LABELS = {
   eps: 'EPS',
   revenue: '売上高',
+  segment: '部門別',
   grossMargin: '粗利率',
   nextQ: '来期',
 };

@@ -6271,6 +6271,10 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
     # sector/industry を取得 (profile 24h cache 共有でほぼ無コスト)。 銀行/REIT/保険は
     # grossProfit≈revenue で粗利率が 100% 異常値になるため _roe_sector_guard で保留 (6体合議 金融 verdict)。
     sector_task = asyncio.create_task(_fetch_sector_industry(sym, fmp_key))
+    # 決算ハイライト Phase2 (セグメント別売上、?flash_seg=1 opt-in): 最新四半期の事業別売上 + 前年比。
+    # build_segment_summary (純粋関数 main.py:570、改変禁止) を呼ぶだけ。get_segment_data は 24h inner cache
+    # (CACHE_TTL_SEGMENT) で守られ、quarterly-history cache_key {sym}:{n} に乗っても segment は n 非依存値。
+    segment_task = asyncio.create_task(get_segment_data(sym, fmp_key))
 
     surprises: list[dict] = []
     income_q: list[dict] = []
@@ -6299,6 +6303,12 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
     except Exception:
         _sector_q, _industry_q = None, None
     _gm_blocked = _roe_sector_guard(_sector_q, _industry_q)
+    # セグメント別売上 (純粋関数の結果のみ、失敗/非開示は None → frontend で行ごと非表示)
+    try:
+        _seg_raw_q = await segment_task
+        segment_summary = build_segment_summary(_seg_raw_q if isinstance(_seg_raw_q, list) else [])
+    except Exception:
+        segment_summary = None
 
     # handover v83 P1 fix (2026-05-18): /stable/earnings は upcoming earnings (eps actual 未確定)
     # も返すため、 eps actual が無い entry は historical view から除外。 旧 /earnings-calendar
@@ -6470,6 +6480,9 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
         "ticker": sym,
         "history": history,
         "limit": n,
+        # 決算ハイライト Phase2: 最新四半期セグメント別売上 (top-level、n 非依存、null=非開示/銀行 graceful)。
+        # frontend は ?flash_seg=1 opt-in で「上位 N 件 実額 + 前年比 ↑↓」 を読むだけ (再計算しない)。
+        "segment_summary": segment_summary,
     }
     _QUARTERLY_HISTORY_CACHE[cache_key] = {"data": result, "ts": now}
     return result
