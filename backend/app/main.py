@@ -2847,13 +2847,17 @@ async def etf_exposure_endpoint(ticker: str, request: Request) -> dict:
         rows = []
 
     # 主要 US ETF のみ curation (allowlist)、 weight 降順、 同一 ETF 重複は最大 weight を採用。
+    # 最小閾値 0.5%: それ未満 = ETF の中で negligible な構成比 → 「組入」 として無意味 + 「0.00%」 表示
+    #   (round で 0 になる微小値) が故障に見える Trust Cliff。小型株は全 row が閾値未満 → panel 自動非表示。
+    #   ※ 閾値は user 判断で調整余地 (handover DEFER)。
+    _MIN_WEIGHT_PCT = 0.5
     best: dict[str, float] = {}
     for r in rows:
         etf_sym = str(r.get("symbol", "")).upper()
         if etf_sym not in _MAJOR_US_ETFS:
             continue
         w = r.get("weightPercentage")
-        if not isinstance(w, (int, float)) or w <= 0 or w > 100:  # 異常値 (>100%) は除外
+        if not isinstance(w, (int, float)) or w < _MIN_WEIGHT_PCT or w > 100:  # 微小/異常値除外
             continue
         if etf_sym not in best or w > best[etf_sym]:
             best[etf_sym] = float(w)
