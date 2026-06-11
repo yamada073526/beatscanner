@@ -114,12 +114,14 @@ function SegmentItem({ seg }) {
   const yoy = seg?.yoy_pct;
   const hasYoy = Number.isFinite(yoy);
   const sym = hasYoy ? (yoy > 0 ? '↑' : yoy < 0 ? '↓' : '—') : null;
+  // v2 再設計: 部門別は 2 次情報として静かに従属 (拡大しない、 むしろ 13px で退かせる)。
+  const baseSize = v2 ? 13 : undefined;
   return (
-    <span style={{ whiteSpace: 'nowrap' }}>
+    <span style={{ whiteSpace: 'nowrap', ...(baseSize ? { fontSize: baseSize } : {}) }}>
       <span style={{ color: 'var(--text-muted)' }}>{displaySegmentName(seg)}</span>
-      <span style={{ fontWeight: 700, color: 'var(--text-primary)', marginLeft: 4, ...(v2 ? { fontSize: 17 } : {}) }}>{fmtMoney((seg?.value_b || 0) * 1e9)}</span>
+      <span style={{ fontWeight: 600, color: 'var(--text-secondary)', marginLeft: 4 }}>{fmtMoney((seg?.value_b || 0) * 1e9)}</span>
       {hasYoy && (
-        <span style={{ color: 'var(--text-secondary)', marginLeft: 4 }}>
+        <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>
           <span aria-hidden>{sym}</span>{Math.abs(yoy).toFixed(1)}%
         </span>
       )}
@@ -152,7 +154,7 @@ function GuidanceBadge({ scope, sym, label, testid }) {
 // ── 行プリミティブ (module-level、ノーラベル直出しブロックの 1 行) ──
 // typography (6体合議 ui-designer 案): label 11px/500/secondary/uppercase、数値 tabular-nums、
 // 予想 = muted (過去情報)、結果 = primary 15px/700 (主役)、→ = muted (中立の橋渡し、色なし)。
-function FlashRow({ label, children, testid }) {
+function FlashRow({ label, children, testid, dividerAfter }) {
   const v2 = isFlashV2Enabled();
   return (
     <div
@@ -162,8 +164,9 @@ function FlashRow({ label, children, testid }) {
         alignItems: 'baseline',
         gap: 'var(--space-3, 12px)',
         flexWrap: 'wrap',
-        // v2: 行間 hairline + padding で「台帳 (ledger)」 の質感 (ui-designer 案③、色でなく組版で格調)
-        ...(v2 ? { borderTop: '1px solid var(--border)', paddingTop: 'var(--space-2, 8px)' } : {}),
+        // v2 再設計: 全行 hairline は「表」化して焦点を均一化する失敗だったため廃止。
+        // hero (EPS) の直後にだけ 1 本 hairline を引き、「主役 / 従属」 を物理分割する (3体合議)。
+        ...(v2 && dividerAfter ? { borderBottom: '1px solid var(--border)', paddingBottom: 'var(--space-3, 12px)', marginBottom: 'var(--space-1, 4px)' } : {}),
       }}
     >
       <span
@@ -187,8 +190,11 @@ function FlashRow({ label, children, testid }) {
 }
 
 // 「予想 X → 結果 Y (予想比 ±Z%)」 の値部分。est が null (basis mismatch 抑止等) なら結果のみ。
-function EstimateToActual({ estStr, actStr, surpriseStr }) {
+function EstimateToActual({ estStr, actStr, surpriseStr, hero }) {
   const v2 = isFlashV2Enabled();
+  // v2 再設計 (3体合議 round2): 焦点は EPS hero ただ1点 (26px/800)。 他行は v1 並み (15px) に静かに従属。
+  // 「全数値 18px」 で焦点分散・文字壁になった失敗の是正 = 1 点だけ突出、 残りは退かせる引き算。
+  const actSize = v2 && hero ? 26 : 15;
   return (
     <>
       {estStr != null && (
@@ -198,8 +204,7 @@ function EstimateToActual({ estStr, actStr, surpriseStr }) {
           <span aria-hidden style={{ fontSize: v2 ? 12 : 13, color: 'var(--text-muted)' }}>→</span>
         </>
       )}
-      {/* v2: 結果数値を 15→18px に拡大 = 「主役を突出、文脈を退かせる」 dynamic range 拡張 (3体一致の最推奨) */}
-      <span style={{ fontSize: v2 ? 18 : 15, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{actStr}</span>
+      <span style={{ fontSize: actSize, fontWeight: v2 && hero ? 800 : 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', ...(v2 && hero ? { letterSpacing: '-0.01em' } : {}) }}>{actStr}</span>
       {/* 予実差 % は中立色 (緑/赤を塗らない、§38 保守側 + 色は 5 条件カードに集中) */}
       {surpriseStr != null && (
         <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>({surpriseStr})</span>
@@ -278,10 +283,10 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
     return () => { cancelled = true; };
   }, [ticker]);
 
-  // 決算ハイライト デザイン v2 (?flash_v2=1 opt-in、default OFF): 結果数値拡大 + hairline + バッジ刷新。
+  // 決算ハイライト デザイン v2 再設計 (?flash_v2=1 opt-in、default OFF): EPS hero 1点 + 残り従属 + バッジ刷新。
   const v2 = isFlashV2Enabled();
-  // v2 は行に hairline + paddingTop を持つため container gap を詰める (余白二重を回避)。
-  const mainContainerStyle = v2 ? { ...containerStyle, gap: 'var(--space-1, 4px)' } : containerStyle;
+  // v2: hero EPS (26px) と従属行で階層化。container は v1 と同じ余白リズム (gap で行を分離、罫線は hero 後の1本のみ)。
+  const mainContainerStyle = containerStyle;
 
   if (isLoading && !guidance) {
     return (
@@ -304,8 +309,9 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
   if (Number.isFinite(eps?.actual)) {
     const hasEst = Number.isFinite(eps?.estimated);
     rows.push(
-      <FlashRow key="eps" label={FLASH_LABELS.eps} testid={`${TESTID}-eps`}>
+      <FlashRow key="eps" label={FLASH_LABELS.eps} testid={`${TESTID}-eps`} dividerAfter>
         <EstimateToActual
+          hero
           estStr={hasEst ? fmtEps(eps.estimated) : null}
           actStr={fmtEps(eps.actual)}
           surpriseStr={hasEst ? fmtSurprisePct(eps.surprise_pct) : null}
@@ -366,7 +372,7 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
     if (gmStr != null) {
       rows.push(
         <FlashRow key="grossmargin" label={FLASH_LABELS.grossMargin} testid={`${TESTID}-gross-margin`}>
-          <span style={{ fontSize: v2 ? 18 : 15, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{gmStr}</span>
+          <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{gmStr}</span>
         </FlashRow>
       );
     }
@@ -389,13 +395,13 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
         {nqEps != null && (
           <>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{FLASH_TERMS.consensusEps}</span>
-            <span style={{ fontSize: v2 ? 18 : 15, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{nqEps}</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{nqEps}</span>
           </>
         )}
         {nqRev != null && (
           <>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{nqEps != null ? `・${FLASH_TERMS.consensusRev}` : FLASH_TERMS.consensusRev}</span>
-            <span style={{ fontSize: v2 ? 18 : 15, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{nqRev}</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{nqRev}</span>
           </>
         )}
         {yoyStr != null && revLine == null && (
