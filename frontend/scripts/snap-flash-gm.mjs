@@ -11,8 +11,10 @@ import { chromium } from 'playwright';
 import { mkdirSync } from 'fs';
 import { getAuthInjection } from './lib/auth-helper.mjs';
 
-// 部門別/粗利率/v2 は default ON 済。GM_V3=1 で v3 polish (?flash_v3=1、単位従属+hover) を確認。
-const _flag = process.env.GM_V3 === '1' ? '&flash_v3=1' : (process.env.GM_V2 === '1' ? '&flash_v2=1' : '');
+// 部門別/粗利率/v2/v3 は default ON 済。GM_V4=1 で v4 色 (?flash_v4=1、過去確定の予実差/前年比に緑/赤) を確認。
+const _flag = process.env.GM_V4 === '1' ? '&flash_v4=1'
+  : process.env.GM_V3 === '1' ? '&flash_v3=1'
+  : process.env.GM_V2 === '1' ? '&flash_v2=1' : '';
 const BASE = 'https://beatscanner-production.up.railway.app/?layout=workspace&pane3_v5=1' + _flag;
 const OUT = new URL('../.visual/', import.meta.url).pathname;
 mkdirSync(OUT, { recursive: true });
@@ -49,6 +51,15 @@ async function grabFlash(page, retry = 1) {
       .map((n) => n.getAttribute('data-testid').replace('earnings-flash-summary-', ''));
     const gm = node.querySelector('[data-testid="earnings-flash-summary-gross-margin"]');
     const gmText = gm ? (gm.textContent || '').trim() : null;
+    // v4 色検証: EPS 行の予実差 span の computed color (緑系=着色 OK、灰=未適用)
+    let epsSurpriseColor = null;
+    const epsRow = node.querySelector('[data-testid="earnings-flash-summary-eps"]');
+    if (epsRow) {
+      // 予想比を含む span のうち最短 textContent = leaf (親コンテナでなく着色対象の surprise span)
+      const cands = [...epsRow.querySelectorAll('span')].filter((s) => /予想比/.test(s.textContent || ''));
+      cands.sort((a, b) => (a.textContent || '').length - (b.textContent || '').length);
+      if (cands[0]) epsSurpriseColor = getComputedStyle(cands[0]).color;
+    }
     const segEl = node.querySelector('[data-testid="earnings-flash-summary-segment"]');
     const segText = segEl ? (segEl.textContent || '').trim() : null;
     const driftEl = node.querySelector('[data-testid="earnings-flash-summary-badge-drift"]');
@@ -68,6 +79,7 @@ async function grabFlash(page, retry = 1) {
       rowOrder,
       hasGmRow: !!gm,
       gmText,
+      epsSurpriseColor,
       hasSegRow: !!segEl,
       segText,
       driftText,
@@ -102,6 +114,9 @@ try {
   const results = {};
   for (const T of (process.env.GM_TICKERS || 'AAPL,NVDA').split(',')) {
     await navTo(page, T);
+    // guidance prop (EPS/売上) の load race 対策: eps 行が出るまで最大 8s 待つ (完全 render を撮る)
+    await page.locator('[data-detail-active] [data-testid="earnings-flash-summary-eps"], [data-testid="earnings-flash-summary-eps"]').first().waitFor({ state: 'attached', timeout: 8000 }).catch(() => {});
+    await page.waitForTimeout(500);
     const r = await grabFlash(page);
     if (r.present) {
       const el = page.locator('[data-detail-active] [data-testid="earnings-flash-summary"], [data-testid="earnings-flash-summary"]').first();
