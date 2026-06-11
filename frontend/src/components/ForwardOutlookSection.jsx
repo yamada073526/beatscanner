@@ -465,10 +465,21 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
           sec_guidance_text は HG 4 層通過済みで §38 安全。 折りたたみで「会社が何と言ったか」 全文を保持
           (マージン/ARR 等 構造化されていない情報も含む)。 GuidanceCard 側の重複「次期見通し」 は削除。 */}
       {secNarrativeText && (
+        // v202 (2026-06-11 user feedback): ① 主張強化 — bare bg だと素通りされるため 1px 枠で resting lift +
+        //   hover で bg-hover + cyan(brand=中立、§38) 枠を強め、クリック可を明確化。② 右端「展開で全文/閉じる」
+        //   テキストは chevron 回転と冗長のため削除。③ secNarrativeSource (SEC 8-K 出典) は常時表示が
+        //   やかましいため展開部内へ移設。④ 改名「会社の次期見通し」→「会社の見通し（原文）」(展開=原文 を予見)。
         <div
           onMouseEnter={() => setSecHover(true)}
           onMouseLeave={() => setSecHover(false)}
-          style={{ marginTop: 14, background: secHover ? 'var(--bg-hover, var(--bg-card))' : 'var(--bg-subtle)', borderRadius: 8, padding: '12px 16px', transition: 'background 160ms ease' }}
+          style={{
+            marginTop: 14,
+            background: secHover ? 'var(--bg-hover, var(--bg-card))' : 'var(--bg-subtle)',
+            border: `1px solid ${secHover ? 'color-mix(in srgb, var(--color-accent) 50%, var(--border))' : 'var(--border)'}`,
+            borderRadius: 8,
+            padding: '12px 16px',
+            transition: 'background 160ms ease, border-color 160ms ease',
+          }}
         >
           <button
             type="button"
@@ -477,17 +488,11 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
             data-testid="sec-guidance-summary"
             style={{ cursor: 'pointer', width: '100%', background: 'none', border: 'none', padding: 0, display: 'flex', alignItems: 'center', gap: 8, userSelect: 'none', textAlign: 'left' }}
           >
-            <CalendarRange size={13} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
-            <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-              会社の次期見通し
+            <CalendarRange size={14} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
+            <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              会社の見通し（原文）
             </span>
-            {secNarrativeSource && (
-              <span className="text-[10px]" style={{ color: 'var(--color-accent)' }}>{secNarrativeSource}</span>
-            )}
-            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              {secOpen ? '閉じる' : '展開で全文'}
-              <ChevronRight size={13} strokeWidth={2} aria-hidden="true" style={{ transition: 'transform 0.3s var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1))', transform: secOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} />
-            </span>
+            <ChevronRight size={14} strokeWidth={2} aria-hidden="true" style={{ marginLeft: 'auto', color: 'var(--text-muted)', flexShrink: 0, transition: 'transform 0.3s var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1))', transform: secOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} />
           </button>
           <div style={{ display: 'grid', gridTemplateRows: secOpen ? '1fr' : '0fr', transition: 'grid-template-rows 0.32s var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1))' }}>
             <div style={{ overflow: 'hidden' }}>
@@ -495,6 +500,9 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
                 <ul style={{ paddingLeft: 0, margin: 0 }}>
                   {renderGuidanceText(secNarrativeText)}
                 </ul>
+                {secNarrativeSource && (
+                  <div className="text-[10px]" style={{ color: 'var(--text-muted)', marginTop: 10, letterSpacing: '0.04em' }}>{secNarrativeSource}</div>
+                )}
               </div>
             </div>
           </div>
