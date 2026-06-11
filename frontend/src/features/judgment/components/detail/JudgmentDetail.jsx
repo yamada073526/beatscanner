@@ -1230,6 +1230,12 @@ export default function JudgmentDetail({
                 sectionLabel="バリュエーション"
               />
             ) : null;
+            // v202 dogfood (?etf_exposure=1 opt-in、default OFF): 主要 US ETF への組入比率。
+            //   バリュエーション (ttmNode) 直後の hairline セクションに配置 (「市場での位置づけ」 文脈)。
+            //   非該当銘柄は panel 内で自動非表示 (Trust Cliff)。配置・default ON は user 判断待ち。
+            const etfNode = (result && selectedTicker && isEtfExposureEnabled()) ? (
+              <EtfExposurePanel ticker={selectedTicker} />
+            ) : null;
             // EPS Beat Streak は決算タブ「今期」と内容重複のため v5 ファンダ章から除外 (user dogfood 2026-06-08)。
             // v185 E (2026-06-08): v5 テクニカル章では短期/長期を hairline 区切りで 2 段表示 (splitByTerm)。
             const returnGridNode = (result && selectedTicker) ? (
@@ -1299,6 +1305,7 @@ export default function JudgmentDetail({
                   />
                 </div>
                 {ttmNode && <div style={hairlineSectionStyle}>{ttmNode}</div>}
+                {etfNode && <div style={hairlineSectionStyle}>{etfNode}</div>}
                 <div style={hairlineSectionStyle}>
                   <FundamentalsAccordion
                     key="funda-profile"
