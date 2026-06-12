@@ -335,6 +335,17 @@ function ForwardOutlookInfoModal({ onClose }) {
 // Phase 1a (来期拡充 SPEC §7): 会社の粗利率ガイダンス行。会社公表値 (8-K 逐語 verify 済) の転記のみで
 // consensus 比較はせず、全中立色 (§38: 将来見通し)。type(gross/operating/net) → label は LLM 生成でなく
 // 静的 dict で和訳 (条件1: BAD-1 英語混在/§38 の新穴を塞ぐ)。欠損 (low/high なし) は非表示で捏造しない。
+// 会社見通しサブ行 (粗利率 / OpEx / capex) 共通スタイル。MetricBlock と同じ金の左アクセントバー + 左 padding 10px を
+//   継承し、上の 売上/EPS ブロックと左端の金スパインを連続させる → どの期 (次Q/通期) グループに属するかをパッと見で
+//   示す (user dogfood 2026-06-12: 金バー無しで期帰属が不明瞭との指摘、§7-8「gold 縦ライン継承」 を反映)。
+//   borderTop は dashed で consensus ブロック (solid border) と区別 (= 会社公表値の従属行であることを示す)。
+const GUIDANCE_SUBROW_STYLE = {
+  display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8,
+  padding: '8px 0 8px 10px',
+  borderTop: '1px dashed var(--border)',
+  borderLeft: '3px solid color-mix(in srgb, var(--color-gold) 35%, var(--border))',
+};
+
 const FORWARD_MARGIN_TYPE_JP = { gross: '粗利率', operating: '営業利益率', net: '純利益率' };
 function GuidanceMarginRow({ low, high, type }) {
   if (!Number.isFinite(low) || !Number.isFinite(high)) return null;
@@ -343,7 +354,7 @@ function GuidanceMarginRow({ low, high, type }) {
   return (
     <div
       data-testid="forward-margin-guidance"
-      style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--border)' }}
+      style={GUIDANCE_SUBROW_STYLE}
     >
       <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>
         {label} <span style={{ fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>会社見通し</span>
@@ -386,7 +397,7 @@ function GuidanceExtraRow({ item, currency }) {
   return (
     <div
       data-testid={`forward-extra-${item.field}-${item.basis || 'na'}`}
-      style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--border)' }}
+      style={GUIDANCE_SUBROW_STYLE}
     >
       <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>
         {label}
