@@ -250,6 +250,7 @@ function HeroSection({ onFreeStart }) {
       {/* Phase 3 Sub-1: 実証データブロック (過去 5 年バックテスト結果)
           数字は動的取得 (Trust Cliff 回避)、 取得失敗時は section ごと自動非表示で hero 健全性維持 */}
       {hasBacktest && (
+        <div style={{ position: 'relative', zIndex: 1, margin: '0 auto 24px', maxWidth: 420, textAlign: 'center' }}>
         <button
           type="button"
           onClick={goToBacktest}
@@ -260,7 +261,7 @@ function HeroSection({ onFreeStart }) {
             flexDirection: 'column',
             alignItems: 'center',
             gap: 6,
-            margin: '0 auto 24px',
+            margin: '0 auto 8px',
             padding: '14px 24px',
             background: 'rgba(34, 197, 94, 0.06)',
             border: '1px solid rgba(34, 197, 94, 0.22)',
@@ -325,6 +326,20 @@ function HeroSection({ onFreeStart }) {
             実証データを見る →
           </span>
         </button>
+        {/* §38 免責 inline 表示 (funnel-cro / Trust Cliff): payload の静的 disclaimer
+            (backend main.py:4746、 LLM 非生成) を hero 数値訴求の直下に明示。
+            倍増 headline + 免責 1-click 先の Trust Cliff を解消。 数値は n=20 preliminary。 */}
+        <p style={{
+          margin: 0,
+          fontSize: 10,
+          lineHeight: 1.5,
+          color: 'var(--text-muted)',
+          letterSpacing: '0.01em',
+          opacity: 0.85,
+        }}>
+          {bt?.disclaimer || '過去実績は将来を保証しません。 本機能は教育目的、 投資勧誘ではありません。'}
+        </p>
+        </div>
       )}
 
       {/* メインCTA + 1行補助テキスト (v40: 「登録不要で試せる」と「登録30秒」の
