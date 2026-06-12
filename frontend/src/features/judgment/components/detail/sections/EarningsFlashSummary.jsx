@@ -49,7 +49,11 @@ import {
 // 「ここが重要」 の視線誘導に。useCountUp は prefers-reduced-motion 内蔵 (即 final 値)。
 // v5.5 (user「気づいた時点で終わっている」): mount 発火 → useInViewOnce の入場発火に変更 + 1200ms
 // (画面外で走り終わる真因を解消。ForwardOutlookSection MetricBlock と同 idiom)。
-import { useCountUp } from '../../../../../hooks/useCountUp.js';
+// v5.7.2 (user recurring 3 回目、2026-06-12「まだ速い」): ① 発火を読書ゾーンまで遅延 (rootMargin
+// -25% + threshold 0.35、画面下端の覗き見では発火させない) ② duration 1200→2000ms ③ easing を
+// easeOutSine 化 (easeOutCubic は t=0.5 で 87.5% に達し「一気に → 静止」=体感が速い真因。sine は
+// 70.7% で最後まで視認速度を保つ)。reduced-motion は useCountUp 内蔵で即 final 値。
+import { useCountUp, easeOutSine } from '../../../../../hooks/useCountUp.js';
 import { useInViewOnce } from '../../../../../hooks/useInViewOnce.js';
 
 const TESTID = 'earnings-flash-summary';
@@ -218,7 +222,7 @@ function barePct(pct) {
 // 予想比 hero セル (module-level component — useCountUp は hook のため closure 不可)。
 // 20px/700 + surpriseColor (±3% verdict 緑/琥珀/赤) + 分類語 (Beat/予想並み/Miss、静的 dict) 併記
 // (色だけだと In-line 琥珀を初心者が「注意?」 と誤読、persona review A案。§38=過去確定の事実分類)。
-// count-up (0→target 800ms、motion review 推奨案A): ticker 切替時は前値→新値へ滑らかに遷移
+// count-up (0→target 2000ms / easeOutSine、v5.7.2): ticker 切替時は前値→新値へ滑らかに遷移
 // (useCountUp fromRef)。prefers-reduced-motion は hook 内蔵で即 final 値。
 // chip 背景: verdict 色の 12% tint (案A 8% と案B 15% の中庸)。中立 (ゼロ近傍/v4 OFF) は bg-subtle。
 // 「面」 が強調を担うため hero サイズは 20px のまま据置 (案B の 13px 縮小は user 優先順位①と逆行のため不採用)。
@@ -229,9 +233,10 @@ function heroChipBg(pct) {
   return 'color-mix(in oklab, var(--color-warning) 12%, transparent)';
 }
 function HeroPct({ pct, inView = true, delay = '0s' }) {
-  // v5.5: 入場 (inView) で 0→target を 1200ms count-up (user「800ms mount 発火は気づく前に終わる」)。
+  // v5.7.2: 入場 (inView=読書ゾーン到達) で 0→target を 2000ms / easeOutSine で count-up
+  // (user recurring「まだ速い」。1200ms easeOutCubic は前半偏重で「一気に → 静止」 に見えた)。
   const target = inView && Number.isFinite(pct) ? Math.abs(pct) : null;
-  const animated = useCountUp(target, { duration: 1200, digits: 1, forceFromZero: true });
+  const animated = useCountUp(target, { duration: 2000, digits: 1, forceFromZero: true, easing: easeOutSine });
   if (!Number.isFinite(pct)) return null;
   const cls = classifySurprise(pct);
   const color = surpriseColor(pct);
@@ -265,9 +270,10 @@ function HeroPct({ pct, inView = true, delay = '0s' }) {
 }
 
 // 前年比セル (count-up 対応、v5.5 user「前年比もカウントアップを」)。入場 inView で 0→target。
+// v5.7.2: hero と同じく 2000ms / easeOutSine (recurring「まだ速い」 への 3 軸対策の一部)。
 function YoyPct({ pct, inView = true }) {
   const target = inView && Number.isFinite(pct) ? Math.abs(pct) : null;
-  const animated = useCountUp(target, { duration: 1200, digits: 1, forceFromZero: true });
+  const animated = useCountUp(target, { duration: 2000, digits: 1, forceFromZero: true, easing: easeOutSine });
   if (!Number.isFinite(pct)) return <span style={{ justifySelf: 'end', fontSize: 13, fontWeight: 500, color: 'var(--text-muted)' }}>—</span>;
   const sym = pct > 0 ? '↑' : pct < 0 ? '↓' : '';
   // v5.6 (typography review): 12/500 で結果列より格を下げ「副次列」 を明確化 (weight 混在解消)。
@@ -287,7 +293,9 @@ function YoyPct({ pct, inView = true }) {
 //   review P0「% の基準が画面内に無いと初心者が混乱」)。見出しは「予想比」 (QA: 予実差 より初心者に明快)。
 function HeadlineGrid({ eps, rev, onDetailClick }) {
   // v5.5: count-up は grid の入場で発火 (IO 1 個を 2 つの HeroPct で共有)。
-  const [gridRef, gridInView] = useInViewOnce();
+  // v5.7.2 (user recurring「気づく前に終わる」): 画面下端の覗き見 (default -10%) では発火させず、
+  // grid が読書ゾーン (viewport 上 75%) に 35% 入るまで遅延 → user の視線が来てから数え始める。
+  const [gridRef, gridInView] = useInViewOnce({ threshold: 0.35, rootMargin: '0px 0px -25% 0px' });
   const colHead = (txt) => (
     <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', justifySelf: 'end' }}>{txt}</span>
   );

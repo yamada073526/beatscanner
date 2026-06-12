@@ -16,8 +16,13 @@ import { useEffect, useRef, useState } from 'react';
 export const COUNT_UP_MS = 1000;
 
 const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+// easeOutSine: easeOutCubic より前半に値が寄らない (t=0.5 で 70.7% vs cubic 87.5%) ため、
+//   count-up が「最初に一気に → あとは静止」 に見えず、視認できる速度で最後まで数える。
+//   EarningsFlashSummary の hero / 前年比 が「気づいた時に終わっている」 (user recurring 3 回目、
+//   2026-06-12) への対策。easeOutCubic を default に保つので既存 consumer (KpiStrip 等) は不変。
+export const easeOutSine = (t) => Math.sin((t * Math.PI) / 2);
 
-export function useCountUp(target, { duration = 800, digits = 2, forceFromZero = false } = {}) {
+export function useCountUp(target, { duration = 800, digits = 2, forceFromZero = false, easing = easeOutCubic } = {}) {
   // v111-2 fix: forceFromZero=true なら initial mount で必ず 0 → target の count-up 発火。
   //   user dogfood (2026-05-24): 「現在値だけ count-up しない」 真因 = stat.value が prefetched で
   //   initial mount 時に既に final 値 → fromRef = target → 同値判定で animation skip。
@@ -52,7 +57,7 @@ export function useCountUp(target, { duration = 800, digits = 2, forceFromZero =
     const start = performance.now();
     const step = (now) => {
       const t = Math.min(1, (now - start) / duration);
-      setVal(from + (target - from) * easeOutCubic(t));
+      setVal(from + (target - from) * easing(t));
       if (t < 1) {
         rafRef.current = requestAnimationFrame(step);
       } else {
