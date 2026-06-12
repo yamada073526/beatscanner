@@ -32,6 +32,7 @@ import { supabase } from '../lib/supabase.js';
 import { sanitizeText } from '../lib/blocklist.js';
 import { aggregateWithTransactions } from '../lib/holdings.js';
 import Chip from './ui/Chip.jsx';
+import { Lock } from 'lucide-react';
 // v138.6 R7-C (2026-05-30): NoSessionHint click で直接 signInWithGoogle、 plain text 廃止
 import { useAuth } from '../hooks/useAuth.js';
 
@@ -159,9 +160,15 @@ function isNoHolding(data) {
 function ProTeaser({ onUpgrade, frameClass = '' }) {
   return (
     <div className={`triage-banner triage-banner-locked ${frameClass}`.trim()}>
-      <span className="triage-locked-icon" aria-hidden="true">🔒</span>
+      {/* icon 規則 (feedback_icon_brand_consistency): 大衆 emoji 🔒 → lucide Lock (outline)。
+          text 修正 (funnel-cro / Trust Cliff): 「Cup-Handle」 は Premium 看板機能 (cup_handle_detection=
+          PLAN.PREMIUM) のため Pro teaser で名指しすると tier 不整合 (Pro?Premium?)。triage_banner 自体が
+          解放する「保有銘柄 × 5 条件 × トレンド状態の 1 画面統合」 を Premium 用語を使わず訴求する。 */}
+      <span className="triage-locked-icon" aria-hidden="true">
+        <Lock size={14} strokeWidth={1.75} />
+      </span>
       <span className="triage-locked-text">
-        Pro で「保有 × 5 条件 × Cup-Handle」 を 1 画面に統合
+        Pro で「保有 × 5 条件 × トレンド」 を 1 画面に統合
       </span>
       {onUpgrade && (
         <button type="button" className="triage-locked-cta" onClick={onUpgrade}>

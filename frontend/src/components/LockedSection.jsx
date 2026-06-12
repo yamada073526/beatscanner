@@ -14,6 +14,8 @@
  *   hint        string?     — オプション: 上部の 1 行説明 (例: "AI が決算を図解で解説")
  */
 
+import { Lock } from 'lucide-react';
+
 export default function LockedSection({ children, ctaLabel, onUpgrade, minHeight = 320, hint }) {
   return (
     <div className="locked-section" style={{ minHeight, padding: '14px 4px 4px' }}>
@@ -36,7 +38,7 @@ export default function LockedSection({ children, ctaLabel, onUpgrade, minHeight
       <div className="locked-veil" />
 
       <button type="button" className="locked-cta" onClick={onUpgrade}>
-        <span style={{ fontSize: 12 }}>🔒</span>
+        <Lock size={12} strokeWidth={1.75} aria-hidden="true" />
         <span>{ctaLabel}</span>
         <span style={{ opacity: 0.65, fontSize: 12, marginLeft: 2 }}>· Pro</span>
       </button>

@@ -8,6 +8,8 @@
  *   user            object | null — ログイン状態 (Pro CTA の挙動制御)
  */
 
+import { ShieldCheck } from 'lucide-react';
+
 export default function PlanComparisonBanner({ onStartCheckout }) {
   // user チェックは親 (App.jsx) 側で処理するため、ここでは単に呼ぶだけ
   return (
@@ -174,7 +176,10 @@ export default function PlanComparisonBanner({ onStartCheckout }) {
             textAlign: 'center',
             marginBottom: 8,
           }}>
-            🔒 Stripe で安全に決済 / いつでも解約可
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <ShieldCheck size={12} strokeWidth={1.75} aria-hidden="true" />
+              Stripe で安全に決済 / いつでも解約可
+            </span>
           </div>
           <button
             onClick={onStartCheckout}
