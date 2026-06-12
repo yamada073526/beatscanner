@@ -6924,14 +6924,16 @@ def _compute_forward_outlook(
                 _elabel = _EXTRA_LABEL_JP.get(_ef)
                 if not _elabel:  # enum 外 field は drop (LLM hallucination ガード、§7-1)
                     continue
-                # Trust Cliff guard (autopilot 2026-06-12 dogfood): field enum が [opex, capex] のみのため、
-                #   LLM が「total expenses(総費用)」 を opex(営業費用) に誤マップする (META FY 実例: total expenses
-                #   $162-169B を「営業費用」 と表示=事実誤認)。 source_quote に total expense / total costs and
-                #   expenses を含む opex は誤ラベルなので drop (総費用 enum 追加の正攻法は DEFER-SPEC、 §38 数値物理層の guard)。
-                if _ef == "opex":
-                    _sq = (_ex.get("source_quote") or "").lower()
-                    if "total expense" in _sq or "total costs and expenses" in _sq:
-                        continue
+                # Trust Cliff guard (autopilot 2026-06-12 dogfood、 allowlist 方式): field enum が [opex, capex]
+                #   のみのため LLM がガイダンス節の各種費用/利益指標を opex/capex に誤マップする (実例: META=total
+                #   expenses→opex / PINS=Adjusted EBITDA→opex / DASH=SBC・D&A expense→opex)。 → source_quote に
+                #   当該指標名を逐語で含む item のみ keep (allowlist)。 誤ラベルは数値物理層で物理 drop。
+                #   正攻法 (total_expenses/EBITDA 等の enum 拡張 or prompt 厳格化) は DEFER-SPEC (朝承認、LLM schema 変更)。
+                _sq = (_ex.get("source_quote") or "").lower()
+                if _ef == "opex" and "operating expense" not in _sq and "opex" not in _sq:
+                    continue
+                if _ef == "capex" and "capital expenditure" not in _sq and "capex" not in _sq:
+                    continue
                 _elo = _safe_eps_float(_ex.get("low"))
                 _ehi = _safe_eps_float(_ex.get("high"))
                 if _elo is None and _ehi is None:  # §7-6: low/high 両方 null の行は作らない
