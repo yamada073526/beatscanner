@@ -418,6 +418,19 @@ function GuidanceExtraList({ items, currency }) {
   ));
 }
 
+// 会社見通し (粗利率/OpEx 等) は with_guidance=1 の lazy fetch (SEC 8-K、 EPS/売上 より遅い) で後追い描画される。
+//   user dogfood 2026-06-12:「行が無い所に後から行が追加されて びっくり」 → 読込み中はスケルトン行を出して
+//   「ここに会社見通しが来る」 と心の準備をさせる (skel-base = 既存 shimmer idiom、design_recipes §C-7)。
+//   データ無しの銘柄 (AAPL/JPM 等) は fetch 完了で skeleton が消えるだけ (捏造はしない)。
+function GuidanceRowSkeleton() {
+  return (
+    <div data-testid="forward-guidance-skeleton" style={GUIDANCE_SUBROW_STYLE} aria-hidden="true">
+      <span className="skel-base" style={{ height: 11, width: 88, borderRadius: 4 }} />
+      <span className="skel-base" style={{ height: 11, width: 64, borderRadius: 4 }} />
+    </div>
+  );
+}
+
 export default function ForwardOutlookSection({ forward, currency = 'USD', ticker, secNarrativeText, secNarrativeSource, headingVariant = 'l2' }) {
   // v191 (3体合議 B): v5 ファンダ章「決算」 L2 冠の傘下で「来期 コンセンサス」 を L3 サブ見出しに降格 (今期と同格、反復原則 design_recipes §C-11)。
   //   §38 免責・将来予測ガード・数値ロジックは不触。headingVariant 省略時 'l2' で v4/legacy 完全不変。
@@ -429,6 +442,7 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
   const [secHover, setSecHover] = useState(false); // v192 (A-2 user dogfood): 次期見通しトグルの hover feedback (クリック可を示す)
   const [showInfo, setShowInfo] = useState(false); // 2026-06-12: 「来期 コンセンサスとは」 説明モーダル (？ボタン)
   const [surpriseFy, setSurpriseFy] = useState(null); // v173 通期の会社ガイダンスサプライズ (lazy)
+  const [guidanceLoading, setGuidanceLoading] = useState(false); // 会社見通し lazy fetch 中フラグ (skeleton 表示用)
   // カウントアップ view 内発火 (dogfood 2026-06-06: mount 時発火だと scroll 前に完了して見えない → IO で入場時発火)
   // count-up / バー grow の view 内入場トリガー (v173.5 検証済 callback ref パターンを共通 hook 化)
   const [sectionRef, inView] = useInViewOnce();
@@ -438,9 +452,14 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
     if (!ticker || (!periodEnd && !fyPeriodEnd)) {
       setSurpriseNq(null);
       setSurpriseFy(null);
+      setGuidanceLoading(false);
       return;
     }
     let cancelled = false;
+    // lazy fetch 開始: skeleton で「会社見通しが来る」 と予告 (前の surprise は ticker 切替で一旦クリア)
+    setSurpriseNq(null);
+    setSurpriseFy(null);
+    setGuidanceLoading(true);
     fetchGuidanceSurprise(ticker)
       .then((g) => {
         if (cancelled) return;
@@ -458,6 +477,9 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
           setSurpriseNq(null);
           setSurpriseFy(null);
         }
+      })
+      .finally(() => {
+        if (!cancelled) setGuidanceLoading(false);
       });
     return () => {
       cancelled = true;
@@ -568,14 +590,20 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
           companyHigh={surpriseNq?.company_q_eps_high}
           inView={inView}
         />
-        {/* Phase 1a: 会社の粗利率ガイダンス (lazy fetch の surpriseNq から、欠損は非表示)。§38 中立色。 */}
-        <GuidanceMarginRow
-          low={surpriseNq?.company_q_margin_low_pct}
-          high={surpriseNq?.company_q_margin_high_pct}
-          type={surpriseNq?.company_q_margin_type}
-        />
-        {/* Phase 1b: 会社の追加ガイダンス (次四半期 OpEx 等)。全中立色、空配列は非表示。 */}
-        <GuidanceExtraList items={surpriseNq?.company_guidance_extras} currency={currency} />
+        {/* Phase 1a/1b: 会社見通し (粗利率 + OpEx 等) は lazy fetch で後追い。読込み中は skeleton で予告し、
+            完了後に実データ行へ差し替える (空なら非表示)。surpriseNq 到着 or loading 完了で skeleton 消滅。 */}
+        {guidanceLoading && !surpriseNq ? (
+          <GuidanceRowSkeleton />
+        ) : (
+          <>
+            <GuidanceMarginRow
+              low={surpriseNq?.company_q_margin_low_pct}
+              high={surpriseNq?.company_q_margin_high_pct}
+              type={surpriseNq?.company_q_margin_type}
+            />
+            <GuidanceExtraList items={surpriseNq?.company_guidance_extras} currency={currency} />
+          </>
+        )}
       </div>
 
       {/* v173: 通期 FY 見通し (next_fy がある時のみ)。 改善4: グループ間を marginTop 18 + 1px border で
