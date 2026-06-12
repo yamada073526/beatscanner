@@ -132,15 +132,21 @@ function useTickerTransactionSummary({ ticker, user }) {
 }
 
 /**
- * bannerText: Cup-Handle signal label のみ残す (保有株数は 2 行 grid に移管)
+ * bannerText: トレンド signal label のみ残す (保有株数は 2 行 grid に移管)
  * v84 hasFatal 条件は不変 (絶対触らない)
+ *
+ * tier 整合 (funnel-cro / Trust Cliff): banner = triage_banner=PRO だが Cup-Handle 検出/overlay は
+ *   cup_handle_detection/technical_overlay=PREMIUM。 prefix を「Cup-Handle:」 にすると Pro user に
+ *   Premium 機能名を見せ「見せたのに詳細は Premium lock」 の Trust Cliff になる。 → prefix を「トレンド:」 に
+ *   統一 (ProTeaser の既承認方針と一致、 state_label は元々汎用語=形成中/ブレイク確認/出来高観測中)。
+ *   「Cup-Handle」 の固有名は Premium 詳細 (CupPivotCard / chart overlay / screener) でのみ使用する。
  */
 function buildSignalText(data) {
   if (!data) return null;
   const signal = data.data?.pattern_signals;
   if (signal?.state_label) {
     const label = sanitizeText(signal.state_label) || signal.state_label;
-    return `Cup-Handle: ${label}`;
+    return `トレンド: ${label}`;
   }
   return null;
 }
@@ -200,7 +206,7 @@ function NoSessionHint({ frameClass = '' }) {
       aria-label="Googleでログインして全機能を解放"
     >
       <span className="triage-pulse-dot" aria-hidden="true" />
-      <span style={{ flex: 1 }}>ログインすると、 保有銘柄の 5 条件 / Cup-Handle 状態を確認できます</span>
+      <span style={{ flex: 1 }}>ログインすると、 保有銘柄の 5 条件 / トレンド状態を確認できます</span>
       <span className="triage-cta-affordance" aria-hidden="true">ログイン →</span>
     </button>
   );
@@ -425,7 +431,7 @@ export default function TriageBanner({
         </div>
       )}
 
-      {/* Cup-Handle signal テキスト (保有 grid と横並び) */}
+      {/* トレンド signal テキスト (保有 grid と横並び)。tier 整合で「Cup-Handle:」→「トレンド:」 (buildSignalText 参照) */}
       {signalText && (
         <span className="triage-banner-body triage-signal-text">{signalText}</span>
       )}
