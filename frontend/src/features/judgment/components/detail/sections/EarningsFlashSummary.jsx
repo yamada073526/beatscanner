@@ -966,9 +966,10 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           <button
             type="button"
+            className="ds-flash-detail"
             data-testid={`${TESTID}-detail-link`}
             onClick={scrollToEarnings}
-            style={{ fontSize: 10, color: 'var(--text-muted)', background: 'none', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', padding: 0, whiteSpace: 'nowrap' }}
+            style={{ fontSize: 10, color: 'var(--color-accent)', background: 'none', border: 'none', borderBottom: '1px solid color-mix(in srgb, var(--color-accent) 45%, transparent)', cursor: 'pointer', padding: 0, whiteSpace: 'nowrap' }}
           >
             ↗ 詳細は決算セクションへ
           </button>

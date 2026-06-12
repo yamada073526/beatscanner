@@ -13027,9 +13027,20 @@ body.is-digest-resizing {
 .ds-flash-card:focus-within .ds-flash-copy {
   opacity: 1;
 }
+/* 詳細導線リンク (user 2026-06-13): 常時表示するほどの情報でないため copy アイコンと同じく
+   card hover/focus 時のみ表示。色は brand cyan で「目立つ」 (§38: 導線であり判断色でない)。 */
+.ds-flash-detail {
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+.ds-flash-card:hover .ds-flash-detail,
+.ds-flash-card:focus-within .ds-flash-detail {
+  opacity: 1;
+}
 @media (prefers-reduced-motion: reduce) {
   .ds-flash-chip { animation: none; }
   .ds-flash-copy { opacity: 1; }
+  .ds-flash-detail { opacity: 1; }
 }
 /* v5.6 (user「行クリックでスクロールできると外観から察しにくい」): 上段/下段 grid を clickable と分かる affordance。
    hover で極薄 bg tint。クリックで決算詳細へ scroll。

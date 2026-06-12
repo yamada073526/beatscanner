@@ -164,7 +164,7 @@ function ForecastBarRow({ label, value, w, strong, delay = 0, inView }) {
           }}
         />
       </div>
-      <span style={{ width: 64, flexShrink: 0, fontSize: 11, fontWeight: 600, textAlign: 'right', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+      <span style={{ minWidth: 64, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 600, textAlign: 'right', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{value}</span>
     </div>
   );
 }
