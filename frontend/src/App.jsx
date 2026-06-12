@@ -69,6 +69,7 @@ import CompanyLogo from './components/CompanyLogo.jsx';
 import { getCompanyName, setCompanyName } from './lib/companyNameCache.js';
 // v143: 5 条件サマリの localStorage 永続 cache (reload 後も Pane 2 dot を保持)
 import { getConditionSummary } from './lib/conditionCache.js';
+import { getPlan } from './lib/planGating.js';
 const TagManagerModal = lazy(() => import('./components/TagManagerModal.jsx'));
 const TagAssignSheet = lazy(() => import('./components/TagAssignSheet.jsx'));
 const NotificationSettingsModal = lazy(() => import('./components/NotificationSettingsModal.jsx'));
@@ -185,11 +186,14 @@ export default function App() {
   // ── Supabase Auth (useJudgmentResult が isProUser を受け取るため先に解決) ──
   const { user, ready: authReady, signInWithGoogle, signOut } = useAuth();
   const { subscription, isSubscribed, startCheckout, checkoutLoading, openPortal, refetch: refetchSub } = useSubscription(user);
-  // Stripe subscription のみで Pro 判定。
-  const isProUser = isSubscribed;
-  // handover v78 Session 4 (2026-05-17): Premium tier (¥1,800/月) 派生変数。
-  // Cup-Handle pivot 価格表示 + Phase 2 全銘柄 scan + push 通知 は Premium 限定。
-  const isPremiumUser = isSubscribed && subscription?.tier === 'premium';
+  // plan 解決の SSOT: getPlan(subscription) を単一の真実源にして isProUser / isPremiumUser / plan 文字列を全てここから導出する。
+  // 手組み (isSubscribed ベース) を複数箇所で書くと片方だけ Premium 対応が漏れる drift を生む
+  // (v203: planV2 が `isProUser ? 'pro' : 'free'` で Premium user を 'pro' に潰し Cup-Handle 系を誤ロックする Trust Cliff が発生した)。
+  // getPlan は status(active/trialing) + tier(pro/premium) を見て 'free'|'pro'|'premium' を返す (tier 欠損は安全側で 'free')。
+  const planTier = getPlan(subscription);          // 'free' | 'pro' | 'premium' — plan 解決の SSOT
+  const isProUser = planTier !== 'free';           // Pro 以上 (機能 gating: watchlist 無制限 / report / screener 等)
+  // handover v78 Session 4 (2026-05-17): Premium 限定 (Cup-Handle pivot 価格表示 + Phase 2 全銘柄 scan + push 通知)。
+  const isPremiumUser = planTier === 'premium';
   // v106 release-check audit: H4 diagnostic console.log 削除済 (真因確定済、 残置不要)
 
   // ── Judgment result (Step 4 で hook 抽出) ───────────────────────
@@ -1140,7 +1144,6 @@ export default function App() {
         tagPosition: tagObj?.position ?? Number.POSITIVE_INFINITY,
       };
     });
-    const _planWS = isPremiumUser ? 'premium' : (isProUser ? 'pro' : 'free');
     const _detailForWS = (t) => {
       const cache = resultCacheRef.current.get(t);
       const px = portfolioPrices?.prices?.[t] || null;
@@ -1189,7 +1192,7 @@ export default function App() {
             items={_itemsWS}
             detailFor={_detailForWS}
             onAnalyze={runAnalyze}
-            plan={_planWS}
+            plan={planTier}
             currentTicker={ticker || null}
             holdings={holdingStore?.holdings || {}}
             portfolioPrices={portfolioPrices?.prices || {}}
@@ -1723,7 +1726,6 @@ export default function App() {
               lastAnalyzedAt: cache?.ts ?? 0,
             };
           });
-          const planV2 = isPremiumUser ? 'premium' : (isProUser ? 'pro' : 'free');
           const detailFor = (t) => {
             const cache = resultCacheRef.current.get(t);
             const px = portfolioPrices?.[t] || null;
@@ -1755,7 +1757,7 @@ export default function App() {
               }
             >
               <JudgmentTabV2
-                plan={planV2}
+                plan={planTier}
                 items={itemsV2}
                 detailFor={detailFor}
                 onAnalyze={runAnalyze}
