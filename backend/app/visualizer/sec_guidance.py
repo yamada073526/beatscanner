@@ -35,8 +35,8 @@ GUIDANCE_EXTRACT_TOOL_SCHEMA: dict = {
     "name": "extract_guidance",
     "description": (
         "SEC 8-K プレスリリース or 決算 call transcript から、 企業が発表した"
-        "「次 Q + 通期」 のガイダンス (売上高 / EPS / マージン) を構造化抽出する。"
-        "ガイダンス記載なしの場合は全 field None で narrative_jp=「ガイダンスの記載なし」 を返す。"
+        "「次 Q + 通期」 のガイダンス (売上高 / EPS / マージン + 営業費用 OpEx / 設備投資 capex) を構造化抽出する。"
+        "ガイダンス記載なしの場合は全 field None / guidance_extras=[] で narrative_jp=「ガイダンスの記載なし」 を返す。"
     ),
     "input_schema": {
         "type": "object",
@@ -116,6 +116,61 @@ GUIDANCE_EXTRACT_TOOL_SCHEMA: dict = {
                 },
                 "description": "通期マージンガイダンス。 記載なしなら null。",
             },
+            "guidance_extras": {
+                "type": ["array", "null"],
+                "maxItems": 6,
+                "description": (
+                    "売上 / EPS / 粗利率 以外に **会社が公表した追加ガイダンス項目** (Phase 1b: 営業費用 OpEx / "
+                    "設備投資 capex の 2 種に限定)。 各 item は text に **明示記載** された数値のみ unit のまま raw 抽出。 "
+                    "label は出力しない (field enum から backend 静的 dict で和訳)。 派生計算 (利益÷売上 / 売上−利益 等) / "
+                    "Q&A のアナリスト発言 / 過去実績 は抽出禁止 (BAD-8)。 該当なしは空配列 []。"
+                ),
+                "items": {
+                    "type": "object",
+                    "required": ["field", "period_type", "basis", "source_quote"],
+                    "properties": {
+                        "field": {
+                            "type": "string",
+                            "enum": ["opex", "capex"],
+                            "description": "opex=営業費用 (operating expenses) / capex=設備投資 (capital expenditures)。 列挙以外は抽出しない。",
+                        },
+                        "period_type": {
+                            "type": "string",
+                            "enum": ["quarter", "annual"],
+                            "description": "次四半期 (next quarter) のガイダンスは quarter、 通期 (full year / fiscal year) は annual。",
+                        },
+                        "low": {
+                            "type": ["number", "null"],
+                            "description": "下限。 単一値なら high と同値。 text の数値を unit のまま raw 転記 (単位換算・割り算・四捨五入禁止)。",
+                        },
+                        "high": {
+                            "type": ["number", "null"],
+                            "description": "上限。 単一値なら low と同値。",
+                        },
+                        "unit": {
+                            "type": ["string", "null"],
+                            "enum": ["usd_b", "usd_m", "pct", None],
+                            "description": "数値の単位。 $X billion=usd_b、 $X million=usd_m、 %=pct。 換算せず text の単位をそのまま選ぶ。",
+                        },
+                        "basis": {
+                            "type": ["string", "null"],
+                            "enum": ["gaap", "non_gaap", None],
+                            "description": (
+                                "GAAP 明示=gaap、 non-GAAP/adjusted 明示=non_gaap、 不明/非該当 (capex 等)=null。 "
+                                "GAAP/non-GAAP 両方記載 (OpEx 等) は 2 つの item に分ける (1 item に混ぜない)。"
+                            ),
+                        },
+                        "source_quote": {
+                            "type": ["string", "null"],
+                            "maxLength": 250,
+                            "description": (
+                                "この item の数値の根拠となる原文 (英語) を **逐語** 引用 (要約/翻訳/改変禁止)。 "
+                                "逐語引用できない数値は抽出しない (機械照合で drop される)。"
+                            ),
+                        },
+                    },
+                },
+            },
             "narrative_jp": {
                 "type": "string",
                 "minLength": 10,
@@ -152,6 +207,15 @@ GUIDANCE_EXTRACT_TOOL_SCHEMA: dict = {
             },
         },
     },
+}
+
+
+# ─── guidance_extras: field enum → 和訳ラベル (LLM 生成禁止、 frontend/backend 共有 SSOT) ──
+# SPEC §7-1: label_jp を LLM に生成させず enum + 静的 dict で和訳 → BAD-1(英語混在)/§38 の新穴を構造的に塞ぐ。
+# frontend (ForwardOutlookSection.jsx の FIELD_LABEL_JP) と 1:1 mirror。 enum 外 field は surface 時に drop。
+FIELD_LABEL_JP: dict[str, str] = {
+    "opex": "営業費用",
+    "capex": "設備投資",
 }
 
 
@@ -438,6 +502,80 @@ $73.0 to $74.2 billion. We expect operating margin to be roughly flat at approxi
 """
 
 
+# ─── guidance_extras 抽出ルール + BAD-8 + few-shot (Phase 1b、 独立 ephemeral breakpoint bp3) ──
+# SPEC §7-4: 新 few-shot は **独立 block + 新 breakpoint** で追加し、 既存 bp1/bp2 (few-shot / negatives)
+#   の cache lineage を壊さない (hit 80% 死守)。 そのため _SYSTEM_STATIC / _FEW_SHOT_* / _NEGATIVES_* は
+#   無改変に保ち、 本ブロックを system 配列の **末尾に append** する (prefix が byte 一致 → 既存 cache 継続)。
+# BAD-8 は BAD-1〜6 の編集禁止ルール (§7-7) を守るため、 _NEGATIVES_GUIDANCE でなく本ブロックに追加する。
+_EXTRAS_BLOCK = """# guidance_extras 抽出ルール (営業費用 OpEx / 設備投資 capex、 Phase 1b)
+
+⚠️ **重要**: 上方の few-shot 例 (売上 / EPS / マージンのみ) は guidance_extras を省略しているが、
+それは「OpEx / capex を抽出しない」 という意味では **ない**。 input に OpEx / capex が記載されていれば、
+それらの例の有無に関わらず **必ず** 本配列に抽出すること (例: 売上の few-shot 例文中に
+"operating expenses are expected to be $4.8 billion" があれば guidance_extras に opex を必ず追加)。
+
+売上高 / EPS / マージン に加えて、 企業が公表した **OpEx (営業費用) と capex (設備投資)** の
+ガイダンスを guidance_extras 配列に抽出する。 以下を厳守:
+
+1. **対象は opex / capex の 2 種のみ** (field enum)。 それ以外 (税率・為替前提・FCF・セグメント別等) は
+   この配列に入れない (Phase 1b scope 外)。
+2. **数値は text に明示記載された raw 値**を unit のまま転記する。 **単位換算・割り算・引き算・四捨五入は禁止**
+   ($800 million を 0.8 billion に直さない → unit=usd_m, low=800)。 営業利益額や売上から OpEx/capex を
+   **逆算して作らない** (income ÷ sales や revenue − income 等の派生計算は §38 違反)。
+3. **basis 必須**: GAAP 明示=gaap、 non-GAAP/adjusted 明示=non_gaap、 capex 等で基準非該当=null。
+   GAAP と non-GAAP 両方の OpEx が記載されている場合は **2 つの item に分ける** (1 item に混ぜない)。
+4. **period_type**: 次四半期 (next quarter) のガイダンスは quarter、 通期 (full year / fiscal year /
+   通年) は annual。 capex は通期開示が多い。
+5. **source_quote 必須**: 各 item の数値の根拠となる原文 (英語) を逐語引用する。 逐語引用できない
+   (= 派生計算した) 数値は抽出しない (機械照合で必ず drop される)。
+6. **該当データが無ければ guidance_extras を空配列 [] にする** (null 行を作らない、 捏造しない)。
+
+# NEGATIVE_EXAMPLES — guidance_extras 専用 (BAD-8、 BAD-1〜6 とは独立・追加のみ)
+
+<bad_example id="BAD-8-1" reason="§38 派生計算 (OpEx を 売上 − 営業利益 で逆算)">
+input: "We expect revenue of $50 billion and operating income of $20 billion next quarter."
+WRONG output: guidance_extras: [{field:"opex", low:30, high:30, unit:"usd_b"}]  (= 50 − 20 の引き算)
+正: OpEx は経営陣が OpEx として明示した時のみ。 ここは guidance_extras: [] (引き算で作らない)。
+</bad_example>
+
+<bad_example id="BAD-8-2" reason="§38 派生計算 (マージン% を 営業利益 ÷ 売上 で算出し guidance 化、 AMZN 型)">
+input: "Net sales are expected to be $194 to $199 billion. Operating income is expected to be $20 to $24 billion."
+WRONG output: guidance_extras: [{field:"opex", ...}] や margin% の捏造  (= 20/194 等の割り算)
+正: 割り算で % や OpEx を作らない。 guidance_extras: [] (明示記載が無ければ抽出しない)。
+</bad_example>
+
+<bad_example id="BAD-8-3" reason="§38 Q&A のアナリスト発言を会社ガイダンスと誤認">
+input: "[Analyst] So capex should be around $35 billion for the year, correct?"
+WRONG output: guidance_extras: [{field:"capex", period_type:"annual", low:35, high:35}]
+正: analyst の推測値であり会社の明言でない → 抽出しない (guidance_extras: [])。
+</bad_example>
+
+<bad_example id="BAD-8-4" reason="過去実績を将来ガイダンスと誤抽出">
+input: "Capital expenditures in the prior year were $28 billion."
+WRONG output: guidance_extras: [{field:"capex", period_type:"annual", low:28, high:28}]
+正: 過去実績でありガイダンスでない → 抽出しない。
+</bad_example>
+
+<good_example id="GOOD-8-1" reason="OpEx を GAAP/non-GAAP の 2 item に分け、 逐語 source_quote 付き">
+input: "GAAP and non-GAAP operating expenses are expected to be approximately $4.8 billion and $3.4 billion."
+output: guidance_extras: [
+  {field:"opex", period_type:"quarter", low:4.8, high:4.8, unit:"usd_b", basis:"gaap",
+   source_quote:"GAAP and non-GAAP operating expenses are expected to be approximately $4.8 billion and $3.4 billion."},
+  {field:"opex", period_type:"quarter", low:3.4, high:3.4, unit:"usd_b", basis:"non_gaap",
+   source_quote:"GAAP and non-GAAP operating expenses are expected to be approximately $4.8 billion and $3.4 billion."}
+]
+</good_example>
+
+<good_example id="GOOD-8-2" reason="通期 capex (明示レンジ・basis 非該当)">
+input: "For fiscal 2026, we expect capital expenditures in the range of $30 to $35 billion."
+output: guidance_extras: [
+  {field:"capex", period_type:"annual", low:30, high:35, unit:"usd_b", basis:null,
+   source_quote:"For fiscal 2026, we expect capital expenditures in the range of $30 to $35 billion."}
+]
+</good_example>
+"""
+
+
 def _build_system_blocks(source_type: str = "8k") -> list[dict]:
     """system block 3 段 (static + few-shot + negatives) を ephemeral cache 適用で構築。
 
@@ -466,6 +604,14 @@ def _build_system_blocks(source_type: str = "8k") -> list[dict]:
             "type": "text",
             "text": negatives,
             "cache_control": {"type": "ephemeral"},  # breakpoint 2
+        },
+        {
+            # Phase 1b (SPEC §7-4): guidance_extras (OpEx/capex) 抽出ルール + BAD-8 + few-shot を
+            #   **末尾の独立 block + 新 breakpoint (bp3)** で追加。 上の static/few-shot/negatives は
+            #   無改変なので bp1/bp2 の cache prefix は byte 一致のまま継続 (hit 80% 死守)。
+            "type": "text",
+            "text": _EXTRAS_BLOCK,
+            "cache_control": {"type": "ephemeral"},  # breakpoint 3
         },
     ]
 
@@ -499,6 +645,7 @@ async def extract_guidance(
             "q_margin": {...}|None,
             "fy_revenue": {...}|None,
             "fy_margin": {...}|None,
+            "guidance_extras": [{field, period_type, low, high, unit, basis, source_quote}, ...],  # Phase 1b OpEx/capex
             "narrative_jp": str,
             "source_url": str,
             "source_quote": str|None,         # transcript の逐語引用 (8-K は通常 None)
@@ -561,7 +708,10 @@ async def extract_guidance(
     try:
         resp = await client.messages.create(
             model=model,
-            max_tokens=1024,
+            # Phase 1b (SPEC §7-3): guidance_extras の per-item source_quote が増えるため 1024→2048。
+            #   1024 のままだと OpEx/capex を持つ press release で JSON が truncate し silent「記載なし」
+            #   = Trust Cliff になる (tool_use input の途中切れ → tool_input パース不能で None 返却)。
+            max_tokens=2048,
             temperature=0.0,
             system=system_blocks,
             messages=[{"role": "user", "content": user_message}],

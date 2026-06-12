@@ -343,6 +343,11 @@ _FIELD_NUM_KEYS = {
     "fy_revenue": ("low_b", "high_b"),
     "q_margin": ("low_pct", "high_pct"),
     "fy_margin": ("low_pct", "high_pct"),
+    # Phase 1b (SPEC §7-5): guidance_extras は list-of-object で、 各 item の数値 key は ("low","high")。
+    #   null_unverified_number_fields は list 型を skip し (dict でないため)、 専用の
+    #   null_unverified_extras() が item 単位で逐語照合 + drop する。 ここへの登録は「新 field の
+    #   (low/high) key を漏れなく固定する」 ための SSOT (unit test test_field_num_keys_registers_extras で固定)。
+    "guidance_extras": ("low", "high"),
 }
 
 
@@ -367,6 +372,45 @@ def null_unverified_number_fields(result: dict, transcript_text: str) -> list:
             result[f] = None
             nulled.append(f)
     return nulled
+
+
+def null_unverified_extras(result: dict, source_text: str) -> list:
+    """guidance_extras (Phase 1b OpEx/capex) の各 item を §38 厳格 verify し、 fail item を list から除去。
+
+    SPEC §3 / §7-5: 各 item は (a) source_quote が原文に **逐語存在** し、 (b) その verified quote 内に
+    数値 (low/high) が逐語存在する、 の両方を満たす時のみ残す。 派生計算 (income÷sales 等) / 過去実績 /
+    Q&A 発言由来の数値は原文に逐語で無いため drop される (行ごと非表示 = 捏造しない)。
+
+    null_unverified_number_fields と分離する理由: 既存 8-K path は q_revenue/q_margin 等を verify しない
+    (Phase 1a の挙動を変えない blast radius 最小化) ため、 新 field の extras のみを focused に verify する。
+    8-K は source_text=raw_text、 transcript は source_text=transcript_text を渡す。
+
+    Returns: drop した field 名の list (空なら全 item 検証 OK)。 result["guidance_extras"] は in-place で kept のみに置換。
+    """
+    dropped: list = []
+    if not isinstance(result, dict):
+        return dropped
+    extras = result.get("guidance_extras")
+    if not isinstance(extras, list):
+        return dropped
+    keys = _FIELD_NUM_KEYS["guidance_extras"]  # ("low", "high")
+    kept: list = []
+    for item in extras:
+        if not isinstance(item, dict):
+            continue
+        # 1. source_quote が原文に逐語存在しなければ drop (citation 担保。 quote 無し item も drop)
+        vq = verify_quote_verbatim(item.get("source_quote"), source_text)
+        if not vq:
+            dropped.append(item.get("field"))
+            continue
+        # 2. 数値 (low/high) が **verified quote 内** に逐語存在しなければ drop (派生計算を物理 drop)
+        nums = [item.get(k) for k in keys if item.get(k) is not None]
+        if not nums or not verify_numbers_in_text(nums, vq).get("_all_verified", True):
+            dropped.append(item.get("field"))
+            continue
+        kept.append(item)
+    result["guidance_extras"] = kept
+    return dropped
 
 
 _NARRATIVE_NUM_TOKEN_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")

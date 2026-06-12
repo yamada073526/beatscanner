@@ -17,8 +17,10 @@ from app.transcript_source import (  # noqa: E402
     should_fallback_to_transcript,
     parse_fiscal_quarter,
     null_unverified_number_fields,
+    null_unverified_extras,
     verify_quote_verbatim,
     unverified_narrative_figures,
+    _FIELD_NUM_KEYS,
 )
 
 
@@ -248,6 +250,92 @@ def test_null_unverified_drops_computed_pm2pct_range():
     nulled = null_unverified_number_fields(result, transcript)
     assert result["q_revenue"] is None
     assert nulled == ["q_revenue"]
+
+
+# ── Phase 1b guidance_extras (OpEx/capex) の per-item §38 verify ──
+def test_field_num_keys_registers_extras():
+    # SPEC §7-5: 新 field の (low/high) key を _FIELD_NUM_KEYS に漏れなく登録 (unit test で固定)
+    assert _FIELD_NUM_KEYS["guidance_extras"] == ("low", "high")
+
+
+def test_null_unverified_extras_keeps_verbatim_opex():
+    # NVDA 型: GAAP/non-GAAP OpEx を 2 item に分割、 数値も source_quote も原文逐語 → 両方残る
+    text = ("GAAP and non-GAAP operating expenses are expected to be approximately "
+            "$4.8 billion and $3.4 billion.")
+    result = {"guidance_extras": [
+        {"field": "opex", "period_type": "quarter", "low": 4.8, "high": 4.8, "unit": "usd_b",
+         "basis": "gaap", "source_quote": text},
+        {"field": "opex", "period_type": "quarter", "low": 3.4, "high": 3.4, "unit": "usd_b",
+         "basis": "non_gaap", "source_quote": text},
+    ]}
+    dropped = null_unverified_extras(result, text)
+    assert dropped == []
+    assert len(result["guidance_extras"]) == 2
+
+
+def test_null_unverified_extras_keeps_verbatim_capex_range():
+    text = "For fiscal 2026, we expect capital expenditures in the range of $30 to $35 billion."
+    result = {"guidance_extras": [
+        {"field": "capex", "period_type": "annual", "low": 30, "high": 35, "unit": "usd_b",
+         "basis": None, "source_quote": text},
+    ]}
+    dropped = null_unverified_extras(result, text)
+    assert dropped == []
+    assert result["guidance_extras"][0]["high"] == 35
+
+
+def test_null_unverified_extras_drops_calculated_number():
+    # 派生計算 (revenue − operating income で OpEx を逆算) → 30 は原文に逐語存在しない → drop
+    text = "We expect revenue of $50 billion and operating income of $20 billion next quarter."
+    result = {"guidance_extras": [
+        {"field": "opex", "period_type": "quarter", "low": 30, "high": 30, "unit": "usd_b",
+         "basis": None, "source_quote": text},  # quote は原文だが 30 が quote 内に無い
+    ]}
+    dropped = null_unverified_extras(result, text)
+    assert dropped == ["opex"]
+    assert result["guidance_extras"] == []
+
+
+def test_null_unverified_extras_drops_missing_quote():
+    # source_quote が無い item は citation 不在 → drop (§38: 裏付けの無い数値は出さない)
+    text = "Operating expenses are expected to be approximately $4.8 billion."
+    result = {"guidance_extras": [
+        {"field": "opex", "period_type": "quarter", "low": 4.8, "high": 4.8, "unit": "usd_b",
+         "basis": "gaap", "source_quote": None},
+    ]}
+    dropped = null_unverified_extras(result, text)
+    assert dropped == ["opex"]
+    assert result["guidance_extras"] == []
+
+
+def test_null_unverified_extras_drops_fabricated_quote():
+    # source_quote が原文に逐語存在しない (LLM 捏造/言い換え) → drop
+    text = "Operating expenses are expected to be approximately $4.8 billion."
+    result = {"guidance_extras": [
+        {"field": "capex", "period_type": "annual", "low": 40, "high": 40, "unit": "usd_b",
+         "basis": None, "source_quote": "We expect capex of $40 billion this year."},  # 原文に無い
+    ]}
+    dropped = null_unverified_extras(result, text)
+    assert dropped == ["capex"]
+    assert result["guidance_extras"] == []
+
+
+def test_null_unverified_extras_no_list_is_noop():
+    # guidance_extras が無い既存 8-K 結果は触らない (後方互換)
+    result = {"q_revenue": {"low_b": 50, "high_b": 50}}
+    dropped = null_unverified_extras(result, "irrelevant text")
+    assert dropped == []
+    assert "guidance_extras" not in result
+
+
+def test_null_unverified_number_fields_skips_extras_list():
+    # _FIELD_NUM_KEYS に guidance_extras を追加しても、 list 型なので number-fields 側は安全に skip (crash しない)
+    text = "Net sales are expected to be $194 billion to $199 billion."
+    result = {"q_revenue": {"low_b": 194, "high_b": 199},
+              "guidance_extras": [{"field": "opex", "low": 4.8, "high": 4.8}]}
+    nulled = null_unverified_number_fields(result, text)
+    assert "guidance_extras" not in nulled        # list は number-fields の対象外
+    assert isinstance(result["guidance_extras"], list)  # 改変されない
 
 
 def test_verify_quote_whole_verbatim_kept():

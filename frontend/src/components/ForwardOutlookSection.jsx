@@ -353,6 +353,60 @@ function GuidanceMarginRow({ low, high, type }) {
   );
 }
 
+// Phase 1b (来期拡充 SPEC §7): 会社の追加ガイダンス (営業費用 OpEx / 設備投資 capex)。
+//   label_jp は LLM 生成でなく backend FIELD_LABEL_JP の 1:1 mirror (BAD-1 英語混在/§38 の新穴を構造的に塞ぐ、
+//   enum 外 field は描画しない)。数値は backend で逐語 verify 済 raw 値 + unit、frontend は決定論的に整形のみ
+//   (再計算しない)。consensus 比較せず全中立色 (§38: 将来見通し)。欠損 (空配列) は非表示で捏造しない。
+const FIELD_LABEL_JP = { opex: '営業費用', capex: '設備投資' };
+const EXTRA_BASIS_JP = { gaap: '(GAAP)', non_gaap: '(non-GAAP)' };
+
+// unit に応じて raw 値 (text 逐語) を表示用に整形。usd_b/usd_m は USD 絶対値に直して fmtMoney (億ドル表記)、
+// pct は %。単位換算は backend でなく表示層で行う決定論的整形 (会社公表値の見せ方であり §38 非該当)。
+function fmtExtraRange(low, high, unit, currency) {
+  const lo = Number.isFinite(low) ? low : high;
+  const hi = Number.isFinite(high) ? high : low;
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return null;
+  if (unit === 'pct') {
+    return lo === hi ? `${lo.toFixed(1)}%` : `${lo.toFixed(1)}〜${hi.toFixed(1)}%`;
+  }
+  // money: usd_m → *1e6、それ以外 (usd_b / 未指定の金額) → *1e9。fmtMoney が 億ドル/兆ドルへ整形。
+  const scale = unit === 'usd_m' ? 1e6 : 1e9;
+  const loStr = fmtMoney(lo * scale, currency);
+  const hiStr = fmtMoney(hi * scale, currency);
+  return lo === hi ? loStr : `${loStr}〜${hiStr}`;
+}
+
+function GuidanceExtraRow({ item, currency }) {
+  if (!item || typeof item !== 'object') return null;
+  const label = FIELD_LABEL_JP[item.field]; // enum 外 (backend で drop 済だが二重ガード) は非表示
+  if (!label) return null;
+  const rangeStr = fmtExtraRange(item.low, item.high, item.unit, currency);
+  if (!rangeStr) return null;
+  const basisNote = EXTRA_BASIS_JP[item.basis];
+  return (
+    <div
+      data-testid={`forward-extra-${item.field}-${item.basis || 'na'}`}
+      style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--border)' }}
+    >
+      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>
+        {label}
+        {basisNote && <span style={{ fontSize: 9, color: 'var(--text-muted)', marginLeft: 4, letterSpacing: '0.02em' }}>{basisNote}</span>}
+        {' '}
+        <span style={{ fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>会社見通し</span>
+      </span>
+      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{rangeStr}</span>
+    </div>
+  );
+}
+
+// 複数 item を順次描画。空配列 / null は非表示 (§7-6)。表示上限 4 件 (§7-9: 文字壁回避)。
+function GuidanceExtraList({ items, currency }) {
+  if (!Array.isArray(items) || items.length === 0) return null;
+  return items.slice(0, 4).map((item, i) => (
+    <GuidanceExtraRow key={`${item?.field}-${item?.basis}-${i}`} item={item} currency={currency} />
+  ));
+}
+
 export default function ForwardOutlookSection({ forward, currency = 'USD', ticker, secNarrativeText, secNarrativeSource, headingVariant = 'l2' }) {
   // v191 (3体合議 B): v5 ファンダ章「決算」 L2 冠の傘下で「来期 コンセンサス」 を L3 サブ見出しに降格 (今期と同格、反復原則 design_recipes §C-11)。
   //   §38 免責・将来予測ガード・数値ロジックは不触。headingVariant 省略時 'l2' で v4/legacy 完全不変。
@@ -407,9 +461,16 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
   const countEps = nq.analyst_count_eps;
   const countRev = nq.analyst_count_revenue;
   const hasFyData = nfy && (nfy.consensus_revenue != null || nfy.consensus_eps != null);
-  // 会社ガイダンスサプライズが 1 つでも出ている時のみ citation に SEC 8-K を追記 (出ない時は誤出典回避)
+  // 会社ガイダンス (EPS/売上 サプライズ・粗利率・OpEx/capex) が 1 つでも出ている時のみ citation に SEC 8-K を
+  //   追記 (出ない時は誤出典回避)。Phase 1b で粗利率 (company_q_margin) + 追加ガイダンス (company_guidance_extras)
+  //   も SEC 8-K 由来なので出典条件に含める (citation_required: 数値表示には出典を紐付ける)。
   const _surpriseHasGuidance = (s) =>
-    s && (GUIDANCE_STATE_JP[s.guidance_vs_consensus_eps] || GUIDANCE_STATE_JP[s.guidance_vs_consensus_rev]);
+    s && (
+      GUIDANCE_STATE_JP[s.guidance_vs_consensus_eps] ||
+      GUIDANCE_STATE_JP[s.guidance_vs_consensus_rev] ||
+      Number.isFinite(s.company_q_margin_low_pct) ||
+      (Array.isArray(s.company_guidance_extras) && s.company_guidance_extras.length > 0)
+    );
   const hasGuidanceSurprise = _surpriseHasGuidance(surpriseNq) || _surpriseHasGuidance(surpriseFy);
 
   return (
@@ -502,6 +563,8 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
           high={surpriseNq?.company_q_margin_high_pct}
           type={surpriseNq?.company_q_margin_type}
         />
+        {/* Phase 1b: 会社の追加ガイダンス (次四半期 OpEx 等)。全中立色、空配列は非表示。 */}
+        <GuidanceExtraList items={surpriseNq?.company_guidance_extras} currency={currency} />
       </div>
 
       {/* v173: 通期 FY 見通し (next_fy がある時のみ)。 改善4: グループ間を marginTop 18 + 1px border で
@@ -545,6 +608,8 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
               yearAgoEstimate={nfy.year_ago_eps_is_estimate}
               inView={inView}
             />
+            {/* Phase 1b: 通期の追加ガイダンス (capex 等)。全中立色、空配列は非表示。 */}
+            <GuidanceExtraList items={surpriseFy?.company_guidance_extras} currency={currency} />
           </div>
         </div>
       )}

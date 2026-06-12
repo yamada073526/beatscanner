@@ -5536,6 +5536,12 @@ async def _fetch_sec_guidance_structured(ticker: str) -> dict | None:
             from .visualizer.sec_guidance import extract_guidance
             result = await extract_guidance(raw_text, source_url=exhibit_url, source_type="8k")
             if result:
+                # Phase 1b (SPEC §7-5): guidance_extras を per-item §38 verify (source_quote 逐語 + 数値逐語)、
+                #   fail item は drop。 8-K 原文 (raw_text) と照合。 既存 q_revenue/q_margin は触らない (focused)。
+                from .transcript_source import null_unverified_extras
+                _dropped_ex = null_unverified_extras(result, raw_text)
+                if _dropped_ex:
+                    print(f"[GUIDANCE_V2] {ticker} 8-K dropped unverified extras: {_dropped_ex}")
                 # 数値ガイダンスあり (NVDA 型) or high-conf「明確に記載なし」 → 8-K を採用して即返す
                 if not should_fallback_to_transcript(result):
                     if result.get("narrative_jp") and result.get("narrative_jp") != "ガイダンスの記載なし":
@@ -5677,6 +5683,7 @@ async def _fetch_guidance_from_transcript(ticker: str) -> "dict | None":
     from .transcript_source import (
         extract_guidance_paragraphs,
         null_unverified_number_fields,
+        null_unverified_extras,
         verify_quote_verbatim,
         unverified_narrative_figures,
     )
@@ -5713,6 +5720,8 @@ async def _fetch_guidance_from_transcript(ticker: str) -> "dict | None":
         r["source_quote"] = sq
         # 構造化数値は citation (source_quote) に逐語存在するものだけ残す (過去実績の誤混入防止、 production 検出)
         r["_nulled"] = null_unverified_number_fields(r, sq or "")
+        # Phase 1b: guidance_extras は item ごとに独自 source_quote を持つため full transcript で逐語 verify
+        r["_nulled_extras"] = null_unverified_extras(r, transcript_text)
         r["source_type"] = "transcript"
         r["source_label"] = source_label
         return r
@@ -5741,6 +5750,7 @@ async def _fetch_guidance_from_transcript(ticker: str) -> "dict | None":
     nulled = result.get("_nulled") or []
     sq_clean = result.get("source_quote")
     result.pop("_nulled", None)
+    result.pop("_nulled_extras", None)
 
     has_structured = any(
         result.get(f) is not None for f in ("q_revenue", "q_margin", "fy_revenue", "fy_margin")
@@ -6865,6 +6875,11 @@ def _compute_forward_outlook(
     # type=gross/operating/net、全中立色 (§38: 将来見通し)。consensus 比較はしない (basis mismatch 構造回避)。
     company_q_margin_low = company_q_margin_high = None
     company_q_margin_type = None
+    # Phase 1b (SPEC §7): 会社の追加ガイダンス (OpEx/capex)。period_type で次Q (company_q_extras) と
+    #   通期 (company_fy_extras) に振り分け。label_jp は LLM 生成でなく FIELD_LABEL_JP 静的 dict で和訳
+    #   (enum 外 field は drop = §7-1)。数値は LLM 抽出 + 逐語 verify 済の raw 転記のみ (LLM 計算なし)、全中立色。
+    company_q_extras: list = []
+    company_fy_extras: list = []
     if company_guidance:
         from .visualizer.calc import classify_guidance_vs_consensus
         _cg_eps = company_guidance.get("q_eps")
@@ -6898,6 +6913,34 @@ def _compute_forward_outlook(
             if _ml is not None and _mh is not None:
                 company_q_margin_low, company_q_margin_high = _ml, _mh
                 company_q_margin_type = _cg_margin.get("type")
+        # Phase 1b: OpEx/capex 等の追加ガイダンス (逐語 verify 済の guidance_extras を period_type で振り分け)。
+        from .visualizer.sec_guidance import FIELD_LABEL_JP as _EXTRA_LABEL_JP
+        _extras = company_guidance.get("guidance_extras")
+        if isinstance(_extras, list):
+            for _ex in _extras:
+                if not isinstance(_ex, dict):
+                    continue
+                _ef = _ex.get("field")
+                _elabel = _EXTRA_LABEL_JP.get(_ef)
+                if not _elabel:  # enum 外 field は drop (LLM hallucination ガード、§7-1)
+                    continue
+                _elo = _safe_eps_float(_ex.get("low"))
+                _ehi = _safe_eps_float(_ex.get("high"))
+                if _elo is None and _ehi is None:  # §7-6: low/high 両方 null の行は作らない
+                    continue
+                _item = {
+                    "field": _ef,
+                    "label_jp": _elabel,
+                    "low": _elo,
+                    "high": _ehi,
+                    "unit": _ex.get("unit"),
+                    "basis": _ex.get("basis"),
+                }
+                # §7: 来四半期主・通期従属。annual は次Qブロックでなく通期 (next_fy) 側で表示。
+                if _ex.get("period_type") == "annual":
+                    company_fy_extras.append(_item)
+                else:
+                    company_q_extras.append(_item)
 
     # ── 通期 (next_fy) ブロック (v173、 next_q と同型を annual estimates に適用) ──
     # 会社 FY ガイダンス vs 通期コンセンサス + 通期 YoY。 ガード (500日/前年通期照合±90日窓/basis mismatch
@@ -7041,6 +7084,8 @@ def _compute_forward_outlook(
                         "company_q_rev_high": company_fy_rev_high,
                         "company_q_rev_yoy_low_pct": company_fy_rev_yoy_low_pct,
                         "company_q_rev_yoy_high_pct": company_fy_rev_yoy_high_pct,
+                        # Phase 1b: 通期の追加ガイダンス (capex 等、全中立色)。空配列なら frontend は非表示 (§7-6)。
+                        "company_guidance_extras": company_fy_extras,
                     }
                     fy_sources["next_fy_eps"] = "ok" if fy_consensus_eps is not None else "empty"
                     fy_sources["next_fy_rev"] = "ok" if fy_consensus_rev is not None else "empty"
@@ -7086,6 +7131,8 @@ def _compute_forward_outlook(
             "company_q_margin_low_pct": company_q_margin_low,
             "company_q_margin_high_pct": company_q_margin_high,
             "company_q_margin_type": company_q_margin_type,
+            # Phase 1b: 会社の追加ガイダンス (次四半期分の OpEx 等、全中立色)。空配列なら frontend は非表示 (§7-6)。
+            "company_guidance_extras": company_q_extras,
         },
         # v173 通期見通し (None = 通期コンセンサス取得不可 → frontend static gate で非表示)
         "next_fy": next_fy,
@@ -7096,6 +7143,7 @@ def _compute_forward_outlook(
             "guidance_eps": "ok" if g_eps_label != "unknown" else "empty",
             "guidance_rev": "ok" if g_rev_label != "unknown" else "empty",
             "guidance_margin": "ok" if company_q_margin_low is not None else "empty",
+            "guidance_extras": "ok" if (company_q_extras or company_fy_extras) else "empty",
             **fy_sources,
         },
         "source": "FMP analyst-estimates",
