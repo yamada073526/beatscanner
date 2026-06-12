@@ -1,8 +1,9 @@
 # SPEC: 来期コンセンサス/会社の見通し — 内容拡充 (売上・EPS 以外のガイダンス項目)
 
 - 起票: 2026-06-12 (user 起床 feedback「今は製品売上高のみ。他にも記載できる事項はないか」→「慎重に進めて」)
-- status: **🚧 Phase 1a 着地 (粗利率、`3bc291f` live) / Phase 1b (OpEx+capex) 残**。gate 1 承認済 (6体合議 6/6 + user)。詳細 verdict + 承認 scope は §7
-- 想定工数: Phase 1a 完了 / Phase 1b 残 2-4 人日 (backend 新規抽出 schema + few-shot + verify が主)
+- status: **✅ Phase 1a (粗利率、`3bc291f`) + Phase 1b (OpEx+capex、`497614d` live) 着地**。gate 1 承認済 (6体合議 6/6 + user)。詳細 verdict + 承認 scope は §7
+- 想定工数: Phase 1a 完了 / Phase 1b 完了 (backend 抽出 schema + bp3 few-shot + per-item verify + frontend GuidanceExtraRow)
+- **Phase 1b 着地 (2026-06-12, `497614d`)**: guidance_extras (OpEx/capex) を 8-K/transcript から抽出。schema に field enum(opex/capex)+period_type+low/high/unit/basis/source_quote 追加、label_jp は静的 FIELD_LABEL_JP (LLM 非生成、frontend 1:1 mirror)、few-shot+BAD-8 は独立 bp3 (bp1/bp2 cache lineage 不変)、max_tokens 2048、per-item §38 verify (`null_unverified_extras`: source_quote 逐語 + 数値逐語、fail は行 drop)。dogfood verify: **NVDA 8-K (Q1FY27) GAAP $8.5B/non-GAAP $8.3B opex を逐語確認・正抽出 (buyback/税率は誤抽出せず)、AAPL/CRM/SNOW/JPM は []→非表示 (正)**。全中立色 (§38)、consensus 方向比較は新 field 非拡張。⏳ frontend 実機 visual は user dogfood 待ち (DOGFOOD creds 要、`frontend/scripts/snap-forward-extras.mjs` で再現可)。
 - **Phase 1a 着地 (2026-06-12)**: 粗利率は既に `q_margin` で抽出済 + per-field verify 済だったため、LLM 不使用の Python 数値層で `next_q.company_q_margin_*` に surface + frontend `GuidanceMarginRow` 表示。dogfood verify: **NVDA gross 74.4〜75.5% / SNOW operating 12.5% 表示、AAPL/CRM/JPM は逐語 verify 未通過で非表示 (捏造せず正)**。frontend headless で「粗利率 会社見通し 74.4〜75.5%」表示確認。§38 完璧 (新規 LLM 面ゼロ)。
 
 ## 1. 目的
