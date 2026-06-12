@@ -6867,15 +6867,20 @@ def _compute_forward_outlook(
     #   「consensus(純, 来期) vs year-ago actual(総)」 の比較になり artifact が出る (AXP -1.6% / COF 等)。
     #   per-ticker の乖離検出 (直近 actual vs consensus) を試みたが、 V/MA(real +11%) と AXP(artifact)
     #   の recent 乖離が 8-13% で重複し閾値分離不能 (content-audit dogfood で確認)。
-    #   → **金融セクターの来期売上 YoY は一律抑止** (rev_compare_unreliable=true)。 説明可能で安全な不変条件:
-    #     「金融は売上の集計基準が曖昧なため来期売上比較は出さない、 EPS は基準問題が無いので出す」。
+    #   → content-audit 2026-06-13: 旧「金融一律抑止」 を **利息収入比で精緻化** (当期 verdict と同一基準)。
+    #     銀行 (threshold<=0) は常に抑止、 与信 industry は利息を総収益に gross 計上する貸金業 (AXP/COF、
+    #     _is_interest_heavy_revenue) のみ抑止、 決済ネットワーク (V/MA/PYPL、 利息≒0) は来期売上 YoY を残す
+    #     (revenue が clean で consensus(純) vs ya_actual(純) の比較が成立)。 income_history[0]=最新で lender 判定。
     # 非金融 (threshold == 40) は基準ミスマッチ非該当 + 高成長で YoY 大もありうる (NVDA +50%) ため cap なし。
     rev_yoy = None
     rev_unreliable = False
     threshold = _rev_surprise_threshold(sector, industry)
+    _fwd_rev_suppress = (threshold <= 0) or (
+        threshold < 40.0 and _is_interest_heavy_revenue(income_history[0] if income_history else None)
+    )
     if consensus_rev is not None and ya_rev is not None and ya_rev > 0:
-        if threshold < 40.0:
-            rev_unreliable = True  # 金融は来期売上 YoY を一律抑止 (EPS YoY は別途表示)
+        if _fwd_rev_suppress:
+            rev_unreliable = True  # 銀行・貸金業は来期売上 YoY を抑止 (EPS YoY は別途表示)
         else:
             rev_yoy = round((consensus_rev - ya_rev) / abs(ya_rev) * 100, 1)
 
@@ -7051,11 +7056,11 @@ def _compute_forward_outlook(
                                 _bp, _bp_diff = _pe, _pdiff
                         if _bp is not None and _bp_diff is not None and _bp_diff <= 120:
                             fy_ya_eps = _safe_eps_float(_pick(_bp, "estimatedEpsAvg", "epsAvg"))
-                    # 売上 YoY (金融セクター抑止 + 基準ミスマッチ横展開、 next_q と同条件)
+                    # 売上 YoY (銀行・貸金業のみ抑止 + 基準ミスマッチ横展開、 next_q と同条件 = _fwd_rev_suppress)
                     fy_rev_yoy = None
                     fy_rev_unreliable = False
                     if fy_consensus_rev is not None and fy_ya_rev is not None and fy_ya_rev > 0:
-                        if threshold < 40.0:
+                        if _fwd_rev_suppress:
                             fy_rev_unreliable = True
                         else:
                             fy_rev_yoy = round((fy_consensus_rev - fy_ya_rev) / abs(fy_ya_rev) * 100, 1)
