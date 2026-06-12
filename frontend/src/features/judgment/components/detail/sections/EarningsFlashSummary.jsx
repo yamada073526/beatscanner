@@ -284,6 +284,21 @@ function YoyPct({ pct, inView = true }) {
   );
 }
 
+// 前年比 / Δ 列の汎用 count-up セル (v5.7.3、user「前年比列は全行カウントアップが自然」)。
+// 0→|value| を 2000ms / easeOutSine で count-up。sym (↑↓) は符号で固定、unit は % か pt。
+// 色は呼び元指定 (部門別/粗利率=deltaColor 過去確定の方向、来期=中立 §38)。欠損は空セル (grid 列線を維持)。
+function CountUpDelta({ value, inView = true, unit = '%', color, fontWeight = 600 }) {
+  const target = inView && Number.isFinite(value) ? Math.abs(value) : null;
+  const animated = useCountUp(target, { duration: 2000, digits: 1, forceFromZero: true, easing: easeOutSine });
+  if (!Number.isFinite(value)) return <span style={{ justifySelf: 'end' }} />;
+  const sym = value > 0 ? '↑' : value < 0 ? '↓' : '';
+  return (
+    <span style={{ justifySelf: 'end', fontSize: 12, fontWeight, color, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+      {sym}{(animated ?? 0).toFixed(1)}{unit}
+    </span>
+  );
+}
+
 // headline (EPS + 売上) の列揃え grid。整形済 str + raw pct を受け、 セル単位に配置 (列が縦に揃う)。
 // v5.3 Beat/Miss hero (user feedback 2026-06-11「EPS/売上の絶対値より、何%のサプライズかが最重要」+
 //   3体 design review 2026-06-11):
@@ -523,15 +538,16 @@ function SegStack({ seg }) {
   );
 }
 // 前年比 yoy セル (col5 用、右寄せ + deltaColor=過去確定の方向)。欠損は空。
-function SegYoyCell({ yoy }) {
-  if (!Number.isFinite(yoy)) return <span />;
-  const sym = yoy > 0 ? '↑' : yoy < 0 ? '↓' : '';
-  return <span style={{ justifySelf: 'end', fontSize: 12, fontWeight: 600, color: deltaColor(yoy), fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{sym}{Math.abs(yoy).toFixed(1)}%</span>;
+// v5.7.3: count-up 統一 (user「前年比列は全行カウントアップが自然」) → CountUpDelta に委譲。
+function SegYoyCell({ yoy, inView = true }) {
+  return <CountUpDelta value={yoy} inView={inView} unit="%" color={deltaColor(yoy)} fontWeight={600} />;
 }
 function LowerGrid({ segs, restCount, gmStr, gmPp, onDetailClick }) {
-  const gmPpStr = Number.isFinite(gmPp) ? `${gmPp > 0 ? '↑' : gmPp < 0 ? '↓' : ''}${Math.abs(gmPp).toFixed(1)}pt` : null;
+  // v5.7.3: 下段の前年比列も count-up 統一 (部門別 yoy + 粗利率Δpt)。grid 入場で発火 (Headline と同 idiom)。
+  const [gridRef, gridInView] = useInViewOnce({ threshold: 0.35, rootMargin: '0px 0px -25% 0px' });
   return (
     <div
+      ref={gridRef}
       data-testid={`${TESTID}-lower-grid`}
       className={onDetailClick ? 'ds-flash-grid' : undefined}
       onClick={onDetailClick}
@@ -557,7 +573,7 @@ function LowerGrid({ segs, restCount, gmStr, gmPp, onDetailClick }) {
           <span />
           <SegStack seg={seg} />
           <span />
-          <SegYoyCell yoy={seg?.yoy_pct} />
+          <SegYoyCell yoy={seg?.yoy_pct} inView={gridInView} />
         </React.Fragment>
       ))}
       {segs && segs.length > 0 && restCount > 0 && (
@@ -579,27 +595,22 @@ function LowerGrid({ segs, restCount, gmStr, gmPp, onDetailClick }) {
             <NumUnit str={gmStr} size={14} weight={600} color={'var(--text-primary)'} unitScale={'0.75em'} />
           </span>
           <span />
-          <span style={{ justifySelf: 'end', whiteSpace: 'nowrap' }}>
-            {gmPpStr != null ? (
-              <span style={{ fontSize: 12, fontWeight: 600, color: deltaColor(gmPp), fontVariantNumeric: 'tabular-nums' }}>{gmPpStr}</span>
-            ) : null}
-          </span>
+          <CountUpDelta value={gmPp} inView={gridInView} unit="pt" color={deltaColor(gmPp)} fontWeight={600} />
         </>
       )}
     </div>
   );
 }
 
-// fmtYoyPct は「前年比 ↑X%」 を返すが、前年比列(col5)に置くときは列見出しで自明なので prefix を除く。
-function stripYoyPrefix(str) {
-  return typeof str === 'string' ? str.replace(/^前年比\s*/, '') : str;
-}
+// (旧 stripYoyPrefix は v5.7.3 で来期 yoy を CountUpDelta count-up 化したため不要になり削除。)
 
 // ── 来期帯 = FutureGrid (v5.7、user「来期単体ではまだ雑然 (読み飛ばすレベル)」) ──
 // FlashRow の自由流し「コンセンサス EPS $1.89 ・売上 1084.0億ドル (前年比 ↑15.3%)」 を、上下段と同じ
 // 列テンプレの grid に整列 (列線が future-strip まで貫通)。各値は「ヘッダ (10px uppercase muted) + 値」 の
 // 縦積みセル。§38: 来期=将来予想のため全て中立色 (deltaColor/緑/赤を使わない)。
-function FutureGrid({ nqEps, nqRev, yoyStr, revLine, gState }) {
+function FutureGrid({ nqEps, nqRev, yoyStr, yoyPct, revLine, gState }) {
+  // v5.7.3: 来期 yoy も count-up 統一 (§38: 来期は中立色を維持、deltaColor は使わない)。grid 入場で発火。
+  const [gridRef, gridInView] = useInViewOnce({ threshold: 0.35, rootMargin: '0px 0px -25% 0px' });
   const head = (txt) => (
     <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{txt}</span>
   );
@@ -611,6 +622,7 @@ function FutureGrid({ nqEps, nqRev, yoyStr, revLine, gState }) {
   };
   return (
     <div
+      ref={gridRef}
       data-testid={`${TESTID}-nextq`}
       role="button"
       tabIndex={0}
@@ -655,7 +667,7 @@ function FutureGrid({ nqEps, nqRev, yoyStr, revLine, gState }) {
       {/* col5 (前年比 位置): 売上の前年比 yoy。§38: 来期=将来予想のため中立色固定 (deltaColor 不使用)。
           yoyStr は fmtYoyPct 出力で「前年比 ↑X%」 を含むが、前年比列に整列するので prefix を除いた数値のみ表示。 */}
       {yoyStr != null && revLine == null ? (
-        <span style={{ justifySelf: 'end', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{stripYoyPrefix(yoyStr)}</span>
+        <CountUpDelta value={yoyPct} inView={gridInView} unit="%" color={'var(--text-secondary)'} fontWeight={500} />
       ) : <span />}
       {/* 会社売上ガイダンス レンジ並置 (v200 形式、長文のため 2 行目に col2-5 span。中立色) */}
       {revLine != null && (
@@ -853,7 +865,7 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
     // v5.7: FlashRow 自由流し → FutureGrid (上下段と同じ列テンプレ、縦積みヘッダ+値、全中立色)。
     // v200 round2 (user 確定): 並置行 (revLine) は判定記号なし — 時点ミックスの誤読防止、文言で明示。
     futureNodes.push(
-      <FutureGrid key="nextq" nqEps={nqEps} nqRev={nqRev} yoyStr={yoyStr} revLine={revLine} gState={gState} />
+      <FutureGrid key="nextq" nqEps={nqEps} nqRev={nqRev} yoyStr={yoyStr} yoyPct={nq?.rev_yoy_pct} revLine={revLine} gState={gState} />
     );
   }
 
