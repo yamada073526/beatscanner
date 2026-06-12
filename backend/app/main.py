@@ -6860,6 +6860,11 @@ def _compute_forward_outlook(
     company_q_eps_low = company_q_eps_high = None
     company_q_eps_basis = None
     company_q_rev_low = company_q_rev_high = None
+    # Phase 1a (来期拡充 SPEC §7): 会社 8-K の粗利率ガイダンスを surface。q_margin は extract_guidance で
+    # 抽出済 + per-field 逐語 verify 済 (_FIELD_NUM_KEYS) のため、ここは Python 数値層の転記のみ (LLM 不使用)。
+    # type=gross/operating/net、全中立色 (§38: 将来見通し)。consensus 比較はしない (basis mismatch 構造回避)。
+    company_q_margin_low = company_q_margin_high = None
+    company_q_margin_type = None
     if company_guidance:
         from .visualizer.calc import classify_guidance_vs_consensus
         _cg_eps = company_guidance.get("q_eps")
@@ -6885,6 +6890,14 @@ def _compute_forward_outlook(
                 g_rev_label = classify_guidance_vs_consensus(
                     (company_q_rev_low + company_q_rev_high) / 2, consensus_rev
                 )
+        # Phase 1a: 粗利率ガイダンス (会社公表値の転記のみ)。逐語 verify 済の low_pct/high_pct を採用。
+        _cg_margin = company_guidance.get("q_margin")
+        if isinstance(_cg_margin, dict):
+            _ml = _safe_eps_float(_cg_margin.get("low_pct"))
+            _mh = _safe_eps_float(_cg_margin.get("high_pct"))
+            if _ml is not None and _mh is not None:
+                company_q_margin_low, company_q_margin_high = _ml, _mh
+                company_q_margin_type = _cg_margin.get("type")
 
     # ── 通期 (next_fy) ブロック (v173、 next_q と同型を annual estimates に適用) ──
     # 会社 FY ガイダンス vs 通期コンセンサス + 通期 YoY。 ガード (500日/前年通期照合±90日窓/basis mismatch
@@ -7069,6 +7082,10 @@ def _compute_forward_outlook(
             "company_q_rev_high": company_q_rev_high,
             "company_q_rev_yoy_low_pct": company_q_rev_yoy_low_pct,
             "company_q_rev_yoy_high_pct": company_q_rev_yoy_high_pct,
+            # Phase 1a: 会社粗利率ガイダンス (来期、全中立色。type=gross/operating/net、欠損は None で frontend 非表示)
+            "company_q_margin_low_pct": company_q_margin_low,
+            "company_q_margin_high_pct": company_q_margin_high,
+            "company_q_margin_type": company_q_margin_type,
         },
         # v173 通期見通し (None = 通期コンセンサス取得不可 → frontend static gate で非表示)
         "next_fy": next_fy,
@@ -7078,6 +7095,7 @@ def _compute_forward_outlook(
             "next_q_rev": "ok" if consensus_rev is not None else "empty",
             "guidance_eps": "ok" if g_eps_label != "unknown" else "empty",
             "guidance_rev": "ok" if g_rev_label != "unknown" else "empty",
+            "guidance_margin": "ok" if company_q_margin_low is not None else "empty",
             **fy_sources,
         },
         "source": "FMP analyst-estimates",

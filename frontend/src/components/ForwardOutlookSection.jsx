@@ -332,6 +332,27 @@ function ForwardOutlookInfoModal({ onClose }) {
   );
 }
 
+// Phase 1a (来期拡充 SPEC §7): 会社の粗利率ガイダンス行。会社公表値 (8-K 逐語 verify 済) の転記のみで
+// consensus 比較はせず、全中立色 (§38: 将来見通し)。type(gross/operating/net) → label は LLM 生成でなく
+// 静的 dict で和訳 (条件1: BAD-1 英語混在/§38 の新穴を塞ぐ)。欠損 (low/high なし) は非表示で捏造しない。
+const FORWARD_MARGIN_TYPE_JP = { gross: '粗利率', operating: '営業利益率', net: '純利益率' };
+function GuidanceMarginRow({ low, high, type }) {
+  if (!Number.isFinite(low) || !Number.isFinite(high)) return null;
+  const label = FORWARD_MARGIN_TYPE_JP[type] || '粗利率';
+  const rangeStr = low === high ? `${low.toFixed(1)}%` : `${low.toFixed(1)}〜${high.toFixed(1)}%`;
+  return (
+    <div
+      data-testid="forward-margin-guidance"
+      style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--border)' }}
+    >
+      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>
+        {label} <span style={{ fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>会社見通し</span>
+      </span>
+      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{rangeStr}</span>
+    </div>
+  );
+}
+
 export default function ForwardOutlookSection({ forward, currency = 'USD', ticker, secNarrativeText, secNarrativeSource, headingVariant = 'l2' }) {
   // v191 (3体合議 B): v5 ファンダ章「決算」 L2 冠の傘下で「来期 コンセンサス」 を L3 サブ見出しに降格 (今期と同格、反復原則 design_recipes §C-11)。
   //   §38 免責・将来予測ガード・数値ロジックは不触。headingVariant 省略時 'l2' で v4/legacy 完全不変。
@@ -474,6 +495,12 @@ export default function ForwardOutlookSection({ forward, currency = 'USD', ticke
           companyLow={surpriseNq?.company_q_eps_low}
           companyHigh={surpriseNq?.company_q_eps_high}
           inView={inView}
+        />
+        {/* Phase 1a: 会社の粗利率ガイダンス (lazy fetch の surpriseNq から、欠損は非表示)。§38 中立色。 */}
+        <GuidanceMarginRow
+          low={surpriseNq?.company_q_margin_low_pct}
+          high={surpriseNq?.company_q_margin_high_pct}
+          type={surpriseNq?.company_q_margin_type}
         />
       </div>
 
