@@ -1,8 +1,8 @@
 # SPEC: 来期コンセンサス/会社の見通し — 内容拡充 (売上・EPS 以外のガイダンス項目)
 
 - 起票: 2026-06-12 (user 起床 feedback「今は製品売上高のみ。他にも記載できる事項はないか」→「慎重に進めて」)
-- status: **DRAFT — 6体合議 gate 前 (実装着手禁止)**
-- 想定工数: 3-5 人日 (backend 抽出 2-3 + frontend 1 + 検証 1)
+- status: **✅ gate 1 承認済 (2026-06-12: 6体合議 6/6 条件付賛成 + user 承認)。Phase 1 実装可。詳細 verdict + 承認 scope は §7**
+- 想定工数: 3-5 人日 (backend 抽出 2-3 + frontend 1 + 検証 1)。実装は ⑤ETF の後に dedicated 着手 (user 判断 2026-06-12)
 
 ## 1. 目的
 
@@ -47,8 +47,35 @@
   Anthropic engineer (抽出 prompt) / ui-designer (表示密度) / frontend / qa-dogfooder。
 - 合議後に user 承認 (gate 1) → 実装。
 
-## 6. 未決事項 (user 判断)
+## 6. 未決事項 (→ §7 で 6体合議 + user が確定)
 
-- 表示フィールドの優先順位 (粗利率を第一候補と仮置き)
-- 「会社の見通し（原文）」折りたたみとの関係 (構造化行が増えたら原文は格下げ?)
-- 通期/来四半期どちらを優先表示するか
+- 表示フィールドの優先順位 (粗利率を第一候補と仮置き) → **粗利率第一で確定**
+- 「会社の見通し（原文）」折りたたみとの関係 → **構造化行を上・原文は格下げ (撤去せず) で確定**
+- 通期/来四半期どちらを優先表示するか → **来四半期主・通期従属で確定**
+
+## 7. 6体合議 verdict + 承認 scope (2026-06-12、gate 1 承認済)
+
+**判定: 6/6 条件付賛成** (金融§38 / マーケ§5 / Anthropic eng / ui-designer / frontend-architect / qa-dogfooder)。反対ゼロ。
+
+### Phase 1 承認 scope (絞り込み)
+- **対象 = 粗利率 range / OpEx / 通期 capex の 3 種に限定**。営業/EBITDA/FCF マージンは Phase 2 (non-GAAP 注記コスト + 精度低)。**セグメント別・税率/為替前提は見送り** (前者=カバレッジ欠損が支配、後者=「前提」と「見通し」の混同で §5 risk)。
+- **来四半期を主表示・通期は従属**。`period_type: "quarter"|"annual"` を schema 追加し通期のみ開示 (capex 等) を区別、「来四半期: —」誤表示を防ぐ。
+- **原文折りたたみは格下げ (構造化行を上) するが撤去禁止** (§38 出典担保)。トグル文言を「詳細ガイダンス(原文)」等へ改名検討。
+
+### 必須実装条件 (合議で全員 or 多数が条件化)
+1. **`label_jp` を LLM 生成させず enum + frontend/backend 共有の静的 dict** (`FIELD_LABEL_JP`)、`field` も enum 制約。→ BAD-1(英語混在)/§38/Check 7 の新穴を構造的に塞ぐ (Anthropic eng)。
+2. **`basis` (gaap/non_gaap/null) を schema 必須化**。basis 不明は drop or「ベース不明」注記、`(non-GAAP)` 注記をラベル横 muted 9px。**consensus との方向比較 (above/below) を新フィールドに拡張しない** (basis mismatch 構造回避、金融)。
+3. **`max_tokens` 1024→2048** + 各 source_quote maxLength 200-250 で締め。→ JSON truncate → silent「記載なし」Trust Cliff 防止 (Anthropic eng / qa)。
+4. **新 few-shot は独立 block + 新 ephemeral breakpoint (bp3)**、既存 bp1/bp2 cache lineage 不変 (hit 80% 死守、Anthropic eng)。
+5. **per-field 逐語 verify は backend で厳格適用** (`null_unverified_number_fields` + `_FIELD_NUM_KEYS` に新 field の (low/high) key 登録、unit test で漏れ固定)。frontend は `source_quote` の presence check のみ。margin/FCF の派生計算はこれで物理 drop。
+6. **欠損は `guidance_extras: []` で返し行ごと非表示**。`{value:null}` の null 行を作らない (`low===null && high===null` AND チェック)。JPM/AAPL(8-K非開示)で `[]` が正常系であることを dogfood 合格条件に。
+7. **BAD-8 追加** (Q&A のアナリスト発言 / 派生計算 margin を guidance 誤抽出、AMZN income÷sales 実例)。BAD-1〜6 は編集禁止・追加のみ。
+8. **frontend: `GuidanceExtraRow` を module-level 新 component** (MetricBlock 簡易版、gold 縦ライン継承、ForecastBars なし)、**MetricBlock の外側 sibling** に配置 (snap-pdca selector 保護)。**FutureGrid (EarningsFlashSummary) は無改変**。fetch は `fetchGuidanceSurprise` lazy に相乗り (guidance/basic を律速しない)。data-testid を全 render path に。
+9. **表示上限 3-4 フィールド** (次Q+通期 合計最大6)、schema に `max_extras` 制約 (マーケ/ui の文字壁回避)。
+
+### 差別化提案 (採否は実装時 user 判断)
+- **sector 別優先順位テーブル** (ハイパースケーラー=capex hero / SaaS=OpEx 上位)。Phase 1 は固定順 (粗利率→OpEx→capex) で開始、sector 別は Phase 2 候補 (マーケ)。
+- **フィールド表示自体は Free 維持、gate は「時系列推移=Premium」「nightly push=Signature」に限定** (マーケ)。
+
+### dogfood 合格条件 (実装後)
+AAPL/NVDA/CRM/SNOW/JPM の 5 銘柄で per-field 抽出精度確認。JPM 等で `[]`→空行非表示。CRM/SNOW で basis 正しく付与。source_quote に抽出数値が逐語存在を手動確認。既存 来期 売上/EPS + guidance_pit バッジの回帰なし。
