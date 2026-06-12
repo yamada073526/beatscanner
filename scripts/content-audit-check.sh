@@ -86,6 +86,27 @@ for T in SNOW NVDA; do
     echo "  ok: $T 通期EPS turnaround=false / YoY=$fy_yoy / 予想ベース=$fy_est"
   fi
 done
+#   1f (content-audit 2026-06-13): 貸金業 (AXP/COF/SYF/DFS) は利息収入を総収益に gross 計上するため当期"売上"が
+#       偽 Beat になる (FMP revenue=総収益 vs analyst net)。 _is_interest_heavy_revenue (interestIncome/revenue≥20%)
+#       で当期 revenue verdict=unknown 抑止。 V/MA/PYPL (決済ネットワーク、利息≒0) は本物 Beat を保持 (誤抑止回帰検出)。
+#       SSOT: memory/feedback_revenue_basis_mismatch.md。 runtime guard = _guard_revenue_basis_mismatch(income_row=)。
+echo "[1f] lender current-Q revenue suppressed (AXP/COF/SYF/DFS) + network preserved (V/MA/PYPL)"
+for T in AXP COF SYF DFS; do
+  v=$(curl -s --max-time 15 "$BASE/api/guidance/$T" | jq -r '.revenue.verdict // "null"' 2>/dev/null)
+  if [ "$v" != "unknown" ]; then
+    echo "  FAIL: $T (貸金業) 当期売上 verdict=$v (利息gross artifact 抑止が回帰)"; FAIL=1
+  else
+    echo "  ok: $T 当期売上抑止 (unknown)"
+  fi
+done
+for T in V MA PYPL; do
+  v=$(curl -s --max-time 15 "$BASE/api/guidance/$T" | jq -r '.revenue.verdict // "null"' 2>/dev/null)
+  if [ "$v" = "unknown" ]; then
+    echo "  FAIL: $T (決済ネットワーク) 当期売上が誤抑止 (V/MA/PYPL 本物Beat 巻き込み回帰)"; FAIL=1
+  else
+    echo "  ok: $T 当期売上保持 ($v)"
+  fi
+done
 
 # ── Pitfall 2: insights の個人名ガード (氏/アナリスト/じっちゃま 等が leak していないか) ──
 #   SSOT: hallucination-guard (sanitize layer / _sanitize_insights_data)。
