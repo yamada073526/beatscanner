@@ -6924,6 +6924,14 @@ def _compute_forward_outlook(
                 _elabel = _EXTRA_LABEL_JP.get(_ef)
                 if not _elabel:  # enum 外 field は drop (LLM hallucination ガード、§7-1)
                     continue
+                # Trust Cliff guard (autopilot 2026-06-12 dogfood): field enum が [opex, capex] のみのため、
+                #   LLM が「total expenses(総費用)」 を opex(営業費用) に誤マップする (META FY 実例: total expenses
+                #   $162-169B を「営業費用」 と表示=事実誤認)。 source_quote に total expense / total costs and
+                #   expenses を含む opex は誤ラベルなので drop (総費用 enum 追加の正攻法は DEFER-SPEC、 §38 数値物理層の guard)。
+                if _ef == "opex":
+                    _sq = (_ex.get("source_quote") or "").lower()
+                    if "total expense" in _sq or "total costs and expenses" in _sq:
+                        continue
                 _elo = _safe_eps_float(_ex.get("low"))
                 _ehi = _safe_eps_float(_ex.get("high"))
                 if _elo is None and _ehi is None:  # §7-6: low/high 両方 null の行は作らない
