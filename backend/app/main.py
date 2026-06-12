@@ -5093,6 +5093,27 @@ def _rev_surprise_threshold(sector: str | None, industry: str | None) -> float:
     return 40.0
 
 
+def _is_interest_heavy_revenue(income_row: dict | None, ratio_threshold: float = 0.20) -> bool:
+    """income statement の interestIncome / revenue が高い (= 利息収入を総収益に gross 計上する貸金業/銀行) か判定。
+
+    content-audit 2026-06-13 (user 承認 Option A): FMP の revenue は AXP/COF/SYF/DFS/JPM/GS 等の貸金業/銀行で
+    総収益 (グロス金利込み) になり、 analyst の net 予想とミスマッチ → 売上サプライズが artifact (偽 Beat)。 一方
+    V/MA/PYPL の決済ネットワークは interestIncome ≒ 0 で revenue が clean → 本物の Beat。 実測比は貸金業 32-120%
+    / ネットワーク 0-1% と大きく分離するため 20% で頑健に判定 (与信 industry threshold=18 をすり抜ける
+    AXP +12% artifact を捕捉しつつ V/MA の本物 Beat を残す)。
+    """
+    if not isinstance(income_row, dict):
+        return False
+    try:
+        rev = float(income_row.get("revenue"))
+        ii = float(income_row.get("interestIncome"))
+    except (TypeError, ValueError):
+        return False
+    if rev <= 0:
+        return False
+    return (ii / rev) >= ratio_threshold
+
+
 # ── CAN-SLIM Phase 3 Sprint 1: A 条件 helper ─────────────────────────────
 # _rev_surprise_threshold の dict pattern (industry → 閾値) と同流儀で実装。
 # LLM 不使用・全 Python・静的 dict (SPEC §4 / feedback_sell_zone_static_dict)。
@@ -5246,11 +5267,17 @@ def _calc_turnaround(prev_eps: float | None, current_eps: float | None) -> bool:
 def _guard_revenue_basis_mismatch(
     rev_label: str, rev_pct: float | None, rev_reason: str | None,
     signal_quality: dict | None = None, threshold: float = 40.0,
+    income_row: dict | None = None,
 ) -> tuple[str, float | None, str | None, str | None]:
     """売上サプライズが信頼できない (集計基準ミスマッチ疑い) なら判定保留にする。
     - threshold <= 0 (銀行): magnitude 無関係に無条件保留。
     - それ以外: |surprise| > threshold (与信18 / 通常40) で保留。
+    - income_row が利息収入 gross 計上の貸金業 (AXP/COF 等、 _is_interest_heavy_revenue) なら threshold を 0 に
+      上書きし無条件保留 (content-audit 2026-06-13: 与信 threshold=18 をすり抜ける AXP +12% 偽 Beat を捕捉、
+      V/MA 等のネットワークは利息≒0 で対象外 = 本物 Beat を残す)。
     Returns: (rev_label, rev_pct, rev_reason, rev_note)。 signal_quality dict があれば in-place で confidence 降格。"""
+    if _is_interest_heavy_revenue(income_row):
+        threshold = 0.0
     if threshold <= 0 or (rev_pct is not None and abs(rev_pct) > threshold):
         if isinstance(signal_quality, dict):
             signal_quality["confidence"] = "low"
@@ -6668,7 +6695,11 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
         eps_label, eps_pct, _ = _verdict(eps_actual, eps_estimated)
         rev_label, rev_pct, _ = _verdict(revenue_actual, revenue_estimated)
         # v144 content-quality guard: 売上の集計基準ミスマッチ (一部銀行) の非現実的 surprise を判定保留。
-        rev_label, rev_pct, _, _ = _guard_revenue_basis_mismatch(rev_label, rev_pct, None)
+        #   content-audit 2026-06-13: income_row で貸金業 (AXP 等) の利息 gross 計上 artifact も捕捉 (lender 性は
+        #   安定なので各四半期に最新 income_q[0] を流用)。
+        rev_label, rev_pct, _, _ = _guard_revenue_basis_mismatch(
+            rev_label, rev_pct, None, income_row=income_q[0] if income_q else None
+        )
 
         history.append({
             "date": date_str,
@@ -7292,7 +7323,8 @@ async def guidance_basic(ticker: str, request: Request, with_guidance: bool = Fa
             consensus_count=eps_result.get("revenue_consensus_count") if isinstance(eps_result, dict) else None,
         )
         rev_label, rev_pct, rev_reason, _rev_mismatch_note = _guard_revenue_basis_mismatch(
-            rev_label, rev_pct, rev_reason, rev_signal_quality
+            rev_label, rev_pct, rev_reason, rev_signal_quality,
+            income_row=income_q[0] if income_q else None,
         )
         rev_note = _rev_mismatch_note or (
             None if revenue_estimated is not None else "企業が次期ガイダンスを公式に開示していません"
@@ -7481,7 +7513,8 @@ async def _guidance_impl(ticker: str, request: Request) -> dict:
     # v144 content-quality guard: 売上の集計基準ミスマッチを判定保留。
     #   v144-10: industry 別閾値 (_rev_threshold) — 銀行=0(無条件) / 与信=18 / その他=40。
     rev_label, rev_pct, rev_reason, _rev_mismatch_note = _guard_revenue_basis_mismatch(
-        rev_label, rev_pct, rev_reason, threshold=_rev_threshold
+        rev_label, rev_pct, rev_reason, threshold=_rev_threshold,
+        income_row=income_q[0] if income_q else None,
     )
     # consumers (GuidanceCard 再計算 / 図解 trends) が読む抑止フラグ。
     _rev_compare_unreliable = (rev_label == "unknown" and _rev_mismatch_note is not None)
