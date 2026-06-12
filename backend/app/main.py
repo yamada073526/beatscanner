@@ -6943,6 +6943,8 @@ def _compute_forward_outlook(
                     continue
                 if _ef == "capex" and "capital expenditure" not in _sq and "capex" not in _sq:
                     continue
+                if _ef == "total_expenses" and "total expense" not in _sq and "total costs and expenses" not in _sq:
+                    continue
                 _elo = _safe_eps_float(_ex.get("low"))
                 _ehi = _safe_eps_float(_ex.get("high"))
                 if _elo is None and _ehi is None:  # §7-6: low/high 両方 null の行は作らない

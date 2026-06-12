@@ -368,7 +368,7 @@ function GuidanceMarginRow({ low, high, type }) {
 //   label_jp は LLM 生成でなく backend FIELD_LABEL_JP の 1:1 mirror (BAD-1 英語混在/§38 の新穴を構造的に塞ぐ、
 //   enum 外 field は描画しない)。数値は backend で逐語 verify 済 raw 値 + unit、frontend は決定論的に整形のみ
 //   (再計算しない)。consensus 比較せず全中立色 (§38: 将来見通し)。欠損 (空配列) は非表示で捏造しない。
-const FIELD_LABEL_JP = { opex: '営業費用', capex: '設備投資' };
+const FIELD_LABEL_JP = { opex: '営業費用', capex: '設備投資', total_expenses: '総費用' };
 const EXTRA_BASIS_JP = { gaap: '(GAAP)', non_gaap: '(non-GAAP)' };
 
 // unit に応じて raw 値 (text 逐語) を表示用に整形。usd_b/usd_m は USD 絶対値に直して fmtMoney (億ドル表記)、

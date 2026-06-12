@@ -120,8 +120,8 @@ GUIDANCE_EXTRACT_TOOL_SCHEMA: dict = {
                 "type": ["array", "null"],
                 "maxItems": 6,
                 "description": (
-                    "売上 / EPS / 粗利率 以外に **会社が公表した追加ガイダンス項目** (Phase 1b: 営業費用 OpEx / "
-                    "設備投資 capex の 2 種に限定)。 各 item は text に **明示記載** された数値のみ unit のまま raw 抽出。 "
+                    "売上 / EPS / 粗利率 以外に **会社が公表した追加ガイダンス項目** (営業費用 OpEx / 設備投資 capex / "
+                    "総費用 total expenses の 3 種に限定)。 各 item は text に **明示記載** された数値のみ unit のまま raw 抽出。 "
                     "label は出力しない (field enum から backend 静的 dict で和訳)。 派生計算 (利益÷売上 / 売上−利益 等) / "
                     "Q&A のアナリスト発言 / 過去実績 は抽出禁止 (BAD-8)。 該当なしは空配列 []。"
                 ),
@@ -131,8 +131,13 @@ GUIDANCE_EXTRACT_TOOL_SCHEMA: dict = {
                     "properties": {
                         "field": {
                             "type": "string",
-                            "enum": ["opex", "capex"],
-                            "description": "opex=営業費用 (operating expenses) / capex=設備投資 (capital expenditures)。 列挙以外は抽出しない。",
+                            "enum": ["opex", "capex", "total_expenses"],
+                            "description": (
+                                "opex=営業費用 (operating expenses のみ) / capex=設備投資 (capital expenditures) / "
+                                "total_expenses=総費用 (total expenses / total costs and expenses = COGS 込みの総額)。 "
+                                "⚠️ total expenses は opex ではない (opex は営業費用の line のみ)。 列挙以外 (EBITDA / 利益 / SBC / "
+                                "D&A / 税率等) は抽出しない。"
+                            ),
                         },
                         "period_type": {
                             "type": "string",
@@ -216,6 +221,7 @@ GUIDANCE_EXTRACT_TOOL_SCHEMA: dict = {
 FIELD_LABEL_JP: dict[str, str] = {
     "opex": "営業費用",
     "capex": "設備投資",
+    "total_expenses": "総費用",
 }
 
 
@@ -507,28 +513,31 @@ $73.0 to $74.2 billion. We expect operating margin to be roughly flat at approxi
 #   の cache lineage を壊さない (hit 80% 死守)。 そのため _SYSTEM_STATIC / _FEW_SHOT_* / _NEGATIVES_* は
 #   無改変に保ち、 本ブロックを system 配列の **末尾に append** する (prefix が byte 一致 → 既存 cache 継続)。
 # BAD-8 は BAD-1〜6 の編集禁止ルール (§7-7) を守るため、 _NEGATIVES_GUIDANCE でなく本ブロックに追加する。
-_EXTRAS_BLOCK = """# guidance_extras 抽出ルール (営業費用 OpEx / 設備投資 capex、 Phase 1b)
+_EXTRAS_BLOCK = """# guidance_extras 抽出ルール (営業費用 OpEx / 設備投資 capex / 総費用 total_expenses)
 
 ⚠️ **重要**: 上方の few-shot 例 (売上 / EPS / マージンのみ) は guidance_extras を省略しているが、
-それは「OpEx / capex を抽出しない」 という意味では **ない**。 input に OpEx / capex が記載されていれば、
+それは「OpEx / capex / total_expenses を抽出しない」 という意味では **ない**。 input に該当項目が記載されていれば、
 それらの例の有無に関わらず **必ず** 本配列に抽出すること (例: 売上の few-shot 例文中に
 "operating expenses are expected to be $4.8 billion" があれば guidance_extras に opex を必ず追加)。
 
-売上高 / EPS / マージン に加えて、 企業が公表した **OpEx (営業費用) と capex (設備投資)** の
-ガイダンスを guidance_extras 配列に抽出する。 以下を厳守:
+売上高 / EPS / マージン に加えて、 企業が公表した **OpEx (営業費用) / capex (設備投資) / total_expenses (総費用)**
+のガイダンスを guidance_extras 配列に抽出する。 以下を厳守:
 
-1. **対象は opex / capex の 2 種のみ** (field enum)。 それ以外 (税率・為替前提・FCF・セグメント別等) は
-   この配列に入れない (Phase 1b scope 外)。
-2. **数値は text に明示記載された raw 値**を unit のまま転記する。 **単位換算・割り算・引き算・四捨五入は禁止**
-   ($800 million を 0.8 billion に直さない → unit=usd_m, low=800)。 営業利益額や売上から OpEx/capex を
-   **逆算して作らない** (income ÷ sales や revenue − income 等の派生計算は §38 違反)。
-3. **basis 必須**: GAAP 明示=gaap、 non-GAAP/adjusted 明示=non_gaap、 capex 等で基準非該当=null。
+1. **対象は opex / capex / total_expenses の 3 種のみ** (field enum)。 それ以外 (EBITDA・各種利益・税率・為替前提・
+   FCF・SBC・D&A・セグメント別等) は **抽出しない** (この配列に入れない)。
+2. **opex と total_expenses を厳密に区別する** (重要):
+   - **field=opex** は原文が「**operating expenses**」 と明示した時のみ (= 営業費用の line、 COGS を含まない)。
+   - **field=total_expenses** は原文が「**total expenses**」「**total costs and expenses**」 と明示した時 (= COGS 込みの総額)。
+   - "total expenses $162-169 billion" を opex(営業費用) として抽出するのは **誤り** (total expenses ≠ operating expenses)。
+3. **数値は text に明示記載された raw 値**を unit のまま転記する。 **単位換算・割り算・引き算・四捨五入は禁止**
+   ($800 million を 0.8 billion に直さない → unit=usd_m, low=800)。 営業利益額や売上から逆算して作らない (§38 違反)。
+4. **basis 必須**: GAAP 明示=gaap、 non-GAAP/adjusted 明示=non_gaap、 capex 等で基準非該当=null。
    GAAP と non-GAAP 両方の OpEx が記載されている場合は **2 つの item に分ける** (1 item に混ぜない)。
-4. **period_type**: 次四半期 (next quarter) のガイダンスは quarter、 通期 (full year / fiscal year /
-   通年) は annual。 capex は通期開示が多い。
-5. **source_quote 必須**: 各 item の数値の根拠となる原文 (英語) を逐語引用する。 逐語引用できない
+5. **period_type**: 次四半期 (next quarter) のガイダンスは quarter、 通期 (full year / fiscal year /
+   通年) は annual。 capex / total_expenses は通期開示が多い。
+6. **source_quote 必須**: 各 item の数値の根拠となる原文 (英語) を逐語引用する。 逐語引用できない
    (= 派生計算した) 数値は抽出しない (機械照合で必ず drop される)。
-6. **該当データが無ければ guidance_extras を空配列 [] にする** (null 行を作らない、 捏造しない)。
+7. **該当データが無ければ guidance_extras を空配列 [] にする** (null 行を作らない、 捏造しない)。
 
 # NEGATIVE_EXAMPLES — guidance_extras 専用 (BAD-8、 BAD-1〜6 とは独立・追加のみ)
 
@@ -555,6 +564,26 @@ input: "Capital expenditures in the prior year were $28 billion."
 WRONG output: guidance_extras: [{field:"capex", period_type:"annual", low:28, high:28}]
 正: 過去実績でありガイダンスでない → 抽出しない。
 </bad_example>
+
+<bad_example id="BAD-8-5" reason="total expenses(総費用) を opex(営業費用) と誤ラベル">
+input: "We expect full year 2026 total expenses to be in the range of $162-169 billion."
+WRONG output: guidance_extras: [{field:"opex", period_type:"annual", low:162, high:169, unit:"usd_b"}]
+正: total expenses は opex ではない。 field=total_expenses を使う (下記 GOOD-8-3)。
+</bad_example>
+
+<bad_example id="BAD-8-6" reason="EBITDA / SBC / D&A 等を enum 外なのに opex/total_expenses に押し込む">
+input: "We expect Q2 Adjusted EBITDA of $256-276 million, and full year SBC expense of $1.3-1.4 billion."
+WRONG output: guidance_extras: [{field:"opex", ...}] や {field:"total_expenses", ...}
+正: EBITDA も SBC も enum 外 (opex/capex/total_expenses のいずれでもない) → 抽出しない。 guidance_extras: []。
+</bad_example>
+
+<good_example id="GOOD-8-3" reason="total expenses(総費用) を field=total_expenses で抽出 (META 通期型)">
+input: "We expect full year 2026 total expenses to be in the range of $162-169 billion."
+output: guidance_extras: [
+  {field:"total_expenses", period_type:"annual", low:162, high:169, unit:"usd_b", basis:"gaap",
+   source_quote:"We expect full year 2026 total expenses to be in the range of $162-169 billion."}
+]
+</good_example>
 
 <good_example id="GOOD-8-1" reason="OpEx を GAAP/non-GAAP の 2 item に分け、 逐語 source_quote 付き">
 input: "GAAP and non-GAAP operating expenses are expected to be approximately $4.8 billion and $3.4 billion."
