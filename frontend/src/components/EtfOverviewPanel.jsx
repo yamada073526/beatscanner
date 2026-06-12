@@ -422,9 +422,10 @@ export default function EtfOverviewPanel({ etfInfo, onNavigateTicker }) {
 
       {/* StockPriceChart: セクター構成直後 (= panel 末尾) — Sprint 4 mount。
           ETF は Pro feature 不要のため isPremiumUser=false 固定。
-          既存 component を流用、 新規 logic なし。 */}
+          isEtf: O'Neil 個別グロース株の売買 overlay (損切り-8%/50DMA climax 売り/RS/アナリスト目標/Cup-Handle) を
+          非表示にし「価格+SMA50/200+ローソク足」 のクリーン構成にする (user dogfood 2026-06-12、v147 ガードを ETF へ拡張)。 */}
       {ticker && (
-        <StockPriceChart ticker={ticker} isPremiumUser={false} />
+        <StockPriceChart ticker={ticker} isPremiumUser={false} isEtf />
       )}
     </section>
   );

@@ -376,10 +376,13 @@ function isNonEquityTicker(ticker) {
   return t.startsWith('^') || t.endsWith('=F') || t.endsWith('=X');
 }
 
-function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTitle = false }) {
+function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTitle = false, isEtf = false }) {
   const [period, setPeriod] = useState('1y');
   // v147: 非株式 (指数/先物/為替/DXY) では「個別株前提」 の売買・pattern オーバーレイを一括非表示にする gate。
-  const isNonEquity = isNonEquityTicker(ticker);
+  //   user dogfood 2026-06-12: ETF (SPY/QQQ/VTI 等) も同じ理由で非株式扱いにする (O'Neil 個別グロース株の
+  //   損切り-8%/50DMA climax 売り/RS/アナリスト目標/Cup-Handle は ETF に適用不可)。 ETF は構造的 ticker
+  //   marker を持たないため、 ETF と確定済の EtfOverviewPanel から isEtf prop で明示注入する。
+  const isNonEquity = isNonEquityTicker(ticker) || isEtf;
   // 洗練 polish (multi-review frontend P1): Recharts は prefers-reduced-motion を内部参照しないため、
   //   price line draw-on (案6) を a11y 設定に合わせて手動縮退する。 OS 設定は session 中不変前提で 1 回読み。
   const prefersReducedMotion = typeof window !== 'undefined'
