@@ -1723,7 +1723,7 @@ export default function App() {
               lastAnalyzedAt: cache?.ts ?? 0,
             };
           });
-          const planV2 = isProUser ? 'pro' : 'free';
+          const planV2 = isPremiumUser ? 'premium' : (isProUser ? 'pro' : 'free');
           const detailFor = (t) => {
             const cache = resultCacheRef.current.get(t);
             const px = portfolioPrices?.[t] || null;
