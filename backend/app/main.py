@@ -2808,6 +2808,15 @@ _MAJOR_US_ETFS: dict[str, str] = {
     "XLV": "ヘルスケア (SPDR)",
     "XLE": "エネルギー (SPDR)",
     "XLY": "一般消費財 (SPDR)",
+    # autopilot 2026-06-12: GICS 11 セクター完成 (通信/資本財/生活必需品/公益/素材/不動産 を補完)。
+    #   従来 6 セクターのみで GOOGL/META(通信) や PG(生活必需品) 等が所属セクター ETF を表示できなかった。
+    #   ラベルは SectorDonut の和名と一致。 全て canonical な SPDR sector ETF (factual、 leveraged でない)。
+    "XLC": "通信 (SPDR)",
+    "XLI": "資本財 (SPDR)",
+    "XLP": "生活必需品 (SPDR)",
+    "XLU": "公益 (SPDR)",
+    "XLB": "素材 (SPDR)",
+    "XLRE": "不動産 (SPDR)",
 }
 _ETF_EXPOSURE_CACHE: dict[str, dict] = {}  # key: ticker, value: {"data": {...}, "ts": float}
 _ETF_EXPOSURE_TTL = 60 * 60 * 24  # 24h (組入は日次更新程度)
