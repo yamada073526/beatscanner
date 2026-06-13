@@ -521,8 +521,12 @@ async def test_aggregate_completeness_uses_real_sources():
     mock_client.income_statement = AsyncMock(return_value=[])                # 空 → na
     mock_client.cash_flow = AsyncMock(side_effect=Exception("fmp down"))     # 例外 → failed
 
+    # revenue/forward (Sprint 7) は test_earnings_mailer_sprint7 で検証。本テストは
+    #   completeness/verdict のみ対象なので guidance_basic/quarterly_history は無害化 (None)。
     with patch("app.main._analyze_core", new_callable=AsyncMock, return_value=mock_analyze), \
-         patch("app.main.FMPClient", return_value=mock_client):
+         patch("app.main.FMPClient", return_value=mock_client), \
+         patch("app.main.guidance_basic", new_callable=AsyncMock, return_value=None), \
+         patch("app.main.guidance_quarterly_history", new_callable=AsyncMock, return_value=None):
         agg = await _aggregate_ticker_data_for_push("AAPL", "fakekey", candidate)
 
     assert agg["completeness"]["earnings_surprises"] == "ok"
@@ -549,7 +553,9 @@ async def test_aggregate_verdict_normalizes_in_line_and_unknown():
         "eps_actual": 2.0, "eps_estimate": 2.0,
     }
     with patch("app.main._analyze_core", new_callable=AsyncMock, return_value=mock_analyze), \
-         patch("app.main.FMPClient", return_value=mock_client):
+         patch("app.main.FMPClient", return_value=mock_client), \
+         patch("app.main.guidance_basic", new_callable=AsyncMock, return_value=None), \
+         patch("app.main.guidance_quarterly_history", new_callable=AsyncMock, return_value=None):
         agg = await _aggregate_ticker_data_for_push("MSFT", "k", candidate_inline)
     assert agg["verdict"] == "inline"  # "in-line" でなく "inline"
 
@@ -559,6 +565,8 @@ async def test_aggregate_verdict_normalizes_in_line_and_unknown():
         "eps_actual": 1.5, "eps_estimate": None,
     }
     with patch("app.main._analyze_core", new_callable=AsyncMock, return_value=mock_analyze), \
-         patch("app.main.FMPClient", return_value=mock_client):
+         patch("app.main.FMPClient", return_value=mock_client), \
+         patch("app.main.guidance_basic", new_callable=AsyncMock, return_value=None), \
+         patch("app.main.guidance_quarterly_history", new_callable=AsyncMock, return_value=None):
         agg = await _aggregate_ticker_data_for_push("TSLA", "k", candidate_unknown)
     assert agg["verdict"] == "unknown"

@@ -121,7 +121,7 @@ class EarningsNotifyPayload(TypedDict):
     """
 
     ticker: str
-    verdict: str  # 'beat' | 'miss' | 'inline'
+    verdict: str  # 'beat' | 'miss' | 'inline' (EPS 予想比 verdict)
     surprise_pct: float | None  # EPS 予想比 % (backend _verdict 計算済)
     eps_actual: float | None
     eps_estimate: float | None
@@ -130,6 +130,19 @@ class EarningsNotifyPayload(TypedDict):
     completeness: dict[str, str]  # 取得状況 status (key=source名, value='ok'|'failed'|'na'|'unknown')
     url: str  # アプリリンク (?ticker=XXX&utm_source=email&utm_campaign=earnings_notify)
     snapshot_jst: str  # 送信時点 JST スナップショット (ISO 8601)
+    # ── 決算速報拡張 (速報スタイル。None = 取得不可 → 表示行を省略、捏造しない §38) ──
+    revenue_actual: float | None  # 売上高 実績 ($)
+    revenue_estimated: float | None  # 売上高 アナリスト予想 ($)
+    rev_surprise_pct: float | None  # 売上高 予想比 % (EPS と同じ事実分類、±3%)
+    rev_verdict: str | None  # 'beat'|'miss'|'inline'|'unknown'|None (売上高 予想比 verdict)
+    revenue_yoy_pct: float | None  # 売上高 前年同期比 %
+    # 来期見通し (forward。§38: 方向色を付けない・断定語なし・金融来期売上は backend で抑止済)
+    fwd_consensus_revenue: float | None  # 来期 アナリストコンセンサス売上 ($)
+    fwd_rev_yoy_pct: float | None  # 来期 コンセンサス売上 前年比 %
+    fwd_company_rev_low: float | None  # 来期 会社ガイダンス売上 下限 ($、8-K 開示時のみ)
+    fwd_company_rev_high: float | None  # 来期 会社ガイダンス売上 上限 ($)
+    fwd_company_rev_yoy_low_pct: float | None  # 来期 会社ガイダンス売上 前年比 下限 %
+    fwd_company_rev_yoy_high_pct: float | None  # 来期 会社ガイダンス売上 前年比 上限 %
 
 
 def build_earnings_payload(
@@ -142,6 +155,17 @@ def build_earnings_payload(
     conditions: dict[str, bool],
     completeness: dict[str, str],
     snapshot_jst: str | None = None,
+    revenue_actual: float | None = None,
+    revenue_estimated: float | None = None,
+    rev_surprise_pct: float | None = None,
+    rev_verdict: str | None = None,
+    revenue_yoy_pct: float | None = None,
+    fwd_consensus_revenue: float | None = None,
+    fwd_rev_yoy_pct: float | None = None,
+    fwd_company_rev_low: float | None = None,
+    fwd_company_rev_high: float | None = None,
+    fwd_company_rev_yoy_low_pct: float | None = None,
+    fwd_company_rev_yoy_high_pct: float | None = None,
 ) -> EarningsNotifyPayload:
     """channel 非依存ペイロードを組む純関数。データ取得は Sprint 5 の責務。
 
@@ -175,6 +199,17 @@ def build_earnings_payload(
         completeness=completeness,
         url=url,
         snapshot_jst=snapshot_jst,
+        revenue_actual=revenue_actual,
+        revenue_estimated=revenue_estimated,
+        rev_surprise_pct=rev_surprise_pct,
+        rev_verdict=rev_verdict,
+        revenue_yoy_pct=revenue_yoy_pct,
+        fwd_consensus_revenue=fwd_consensus_revenue,
+        fwd_rev_yoy_pct=fwd_rev_yoy_pct,
+        fwd_company_rev_low=fwd_company_rev_low,
+        fwd_company_rev_high=fwd_company_rev_high,
+        fwd_company_rev_yoy_low_pct=fwd_company_rev_yoy_low_pct,
+        fwd_company_rev_yoy_high_pct=fwd_company_rev_yoy_high_pct,
     )
 
 
@@ -189,11 +224,106 @@ def _fmt_eps(val: float | None) -> str:
 
 
 def _fmt_surprise_pct(pct: float | None) -> str:
-    """EPS 予想比 % を表示文字列化 (方向記号 ↑↓ + 絶対値、符号 +/− 使わない)。"""
+    """予想比 % を表示文字列化 (方向記号 ↑↓ + 絶対値、符号 +/− 使わない)。"""
     if pct is None:
         return "—"
     sym = "↑" if pct > 0 else "↓" if pct < 0 else ""
     return f"予想比 {sym}{abs(pct):.1f}%"
+
+
+def _fmt_money(val: float | None) -> str:
+    """大きな金額を「XXX.X億ドル」表記に (None → —)。1兆以上は兆ドル。"""
+    if val is None:
+        return "—"
+    oku = val / 1e8  # 1 億 = 1e8
+    if abs(oku) >= 10000:
+        return f"{oku / 10000:,.2f}兆ドル"
+    return f"{oku:,.1f}億ドル"
+
+
+def _fmt_yoy(pct: float | None) -> str:
+    """前年同期比 % を方向記号 ↑↓ + 絶対値で (None → —)。符号 ▲/+ は使わない (会計▲=負と衝突回避)。"""
+    if pct is None:
+        return "—"
+    sym = "↑" if pct > 0 else "↓" if pct < 0 else ""
+    return f"{sym}{abs(pct):.1f}%"
+
+
+def _render_flash_metrics_html(payload: EarningsNotifyPayload) -> str:
+    """今四半期 決算速報メトリクス (EPS / 売上高 予想比 / 売上 YoY / 来期見通し) の HTML。
+
+    §38: None のメトリクスは行を省略 (捏造しない)。来期見通し (forward) は方向色を付けず
+    neutral 固定 (将来予測に色で評価を付けない = project_forward_visibility 踏襲)。
+    予想比 (EPS / 売上高) は実績 vs 予想の事実分類なので Beat/Miss 色を踏襲。
+    """
+    rows: list[str] = []
+
+    # EPS 予想比 (常に表示。verdict 色は予想比部分のみ)
+    eps_hex, _ = get_surprise_color(payload["verdict"])
+    eps_e = _fmt_eps(payload.get("eps_estimate"))
+    eps_a = _fmt_eps(payload.get("eps_actual"))
+    eps_sp = _fmt_surprise_pct(payload.get("surprise_pct"))
+    rows.append(
+        f'<p style="margin:4px 0;font-size:13px;color:{TEXT_MUTED};">'
+        f'EPS: 予想 <span style="color:{TEXT_SECONDARY};">{eps_e}</span>'
+        f' → 実績 <strong style="color:{TEXT_PRIMARY};">{eps_a}</strong>'
+        f' <span style="color:{eps_hex};font-weight:600;">（{eps_sp}）</span>'
+        f"</p>"
+    )
+
+    # 売上高 予想比 (revenue データがあるときのみ。None なら省略)
+    rev_a = payload.get("revenue_actual")
+    rev_e = payload.get("revenue_estimated")
+    if rev_a is not None or rev_e is not None:
+        rev_hex, _ = get_surprise_color(payload.get("rev_verdict") or "unknown")
+        rev_sp = _fmt_surprise_pct(payload.get("rev_surprise_pct"))
+        rows.append(
+            f'<p style="margin:4px 0;font-size:13px;color:{TEXT_MUTED};">'
+            f'売上高: 予想 <span style="color:{TEXT_SECONDARY};">{_fmt_money(rev_e)}</span>'
+            f' → 実績 <strong style="color:{TEXT_PRIMARY};">{_fmt_money(rev_a)}</strong>'
+            f' <span style="color:{rev_hex};font-weight:600;">（{rev_sp}）</span>'
+            f"</p>"
+        )
+
+    # 売上高 前年同期比 (成長率の事実。予想比ではないので Beat/Miss 色は付けず neutral)
+    yoy = payload.get("revenue_yoy_pct")
+    if yoy is not None:
+        rows.append(
+            f'<p style="margin:4px 0;font-size:13px;color:{TEXT_MUTED};">'
+            f'売上高 前年同期比: <strong style="color:{TEXT_SECONDARY};">{_fmt_yoy(yoy)}</strong>'
+            f"</p>"
+        )
+
+    # 来四半期見通し (forward。§38: 方向色なし neutral、None 行は省略)
+    fwd_cons = payload.get("fwd_consensus_revenue")
+    fwd_cons_yoy = payload.get("fwd_rev_yoy_pct")
+    comp_low = payload.get("fwd_company_rev_low")
+    comp_high = payload.get("fwd_company_rev_high")
+    comp_yoy_low = payload.get("fwd_company_rev_yoy_low_pct")
+    comp_yoy_high = payload.get("fwd_company_rev_yoy_high_pct")
+    fwd_lines: list[str] = []
+    if fwd_cons is not None:
+        yoy_str = (
+            f"（前年比 {_fmt_yoy(fwd_cons_yoy)}）" if fwd_cons_yoy is not None else ""
+        )
+        fwd_lines.append(f"アナリストコンセンサス売上 {_fmt_money(fwd_cons)}{yoy_str}")
+    if comp_low is not None and comp_high is not None:
+        yoy_range = (
+            f"（前年比 {_fmt_yoy(comp_yoy_low)}〜{_fmt_yoy(comp_yoy_high)}）"
+            if (comp_yoy_low is not None and comp_yoy_high is not None)
+            else ""
+        )
+        fwd_lines.append(
+            f"会社ガイダンス売上 {_fmt_money(comp_low)}〜{_fmt_money(comp_high)}{yoy_range}"
+        )
+    if fwd_lines:
+        items = "".join(f'<li style="margin-bottom:2px;">{l}</li>' for l in fwd_lines)
+        rows.append(
+            f'<p style="margin:6px 0 2px;font-size:12px;color:{TEXT_SUBTLE};">来四半期見通し:</p>'
+            f'<ul style="margin:0 0 4px;padding-left:16px;font-size:12px;color:{TEXT_MUTED};">{items}</ul>'
+        )
+
+    return "\n".join(rows)
 
 
 def _render_conditions_html(conditions: dict[str, bool]) -> str:
@@ -236,7 +366,6 @@ def _render_single_ticker_block_html(payload: EarningsNotifyPayload) -> str:
     """
     ticker = payload["ticker"]
     verdict = payload["verdict"]
-    surprise_pct = payload["surprise_pct"]
     n_of_5 = payload["n_of_5"]
     conditions = payload["conditions"]
     completeness = payload["completeness"]
@@ -244,10 +373,7 @@ def _render_single_ticker_block_html(payload: EarningsNotifyPayload) -> str:
     snapshot_jst = payload["snapshot_jst"]
 
     hex_color, label = get_surprise_color(verdict)
-    surprise_str = _fmt_surprise_pct(surprise_pct)
-    eps_actual_str = _fmt_eps(payload.get("eps_actual"))
-    eps_estimate_str = _fmt_eps(payload.get("eps_estimate"))
-
+    flash_html = _render_flash_metrics_html(payload)
     conditions_html = _render_conditions_html(conditions)
     completeness_html = _render_completeness_html(completeness)
 
@@ -258,16 +384,21 @@ def _render_single_ticker_block_html(payload: EarningsNotifyPayload) -> str:
     # URL: ?ticker=XXX&utm_source=email&utm_campaign=earnings_notify
     cta_text = f"{ticker} の決算を確認する"
 
+    # セクション見出しスタイル (速報 vs 通期判定を視覚分離)
+    _section_label = (
+        f"margin:0 0 6px;font-size:11px;font-weight:700;color:{TEXT_SUBTLE};"
+        "letter-spacing:0.04em;"
+    )
+
     return f"""\
 <tr>
   <td style="padding:20px 0;border-bottom:1px solid {BORDER_SUBTLE};">
-    <!-- Hero: ticker + 予想比 -->
+    <!-- Hero: ticker + verdict (Beat/Miss/予想並み) + CTA -->
     <table width="100%" cellpadding="0" cellspacing="0">
       <tr>
         <td>
           <span style="font-size:22px;font-weight:700;color:{TEXT_PRIMARY};">{ticker}</span>
           <span style="margin-left:12px;font-size:16px;font-weight:600;color:{hex_color};">{label}</span>
-          <span style="margin-left:8px;font-size:14px;color:{hex_color};">{surprise_str}</span>
         </td>
         <td style="text-align:right;vertical-align:middle;">
           <!-- CTA: 銘柄あたり 1 本 -->
@@ -280,16 +411,13 @@ def _render_single_ticker_block_html(payload: EarningsNotifyPayload) -> str:
         </td>
       </tr>
     </table>
-    <!-- EPS 実績 / 予想 -->
-    <p style="margin:8px 0 4px;font-size:13px;color:{TEXT_MUTED};">
-      EPS: 実績 <strong style="color:{TEXT_PRIMARY};">{eps_actual_str}</strong>
-      &nbsp;/&nbsp;
-      予想 <span style="color:{TEXT_MUTED};">{eps_estimate_str}</span>
-    </p>
-    <!-- 5 条件 (N/5 は従属配置・hero 化しない) -->
-    <p style="margin:8px 0 2px;font-size:12px;color:{TEXT_SUBTLE};">
-      ファンダ 5 条件: {n_of_5}/5
-    </p>
+    <!-- ── セクション1: 今四半期 決算速報 ── -->
+    <p style="{_section_label}margin-top:14px;">今四半期 決算速報</p>
+    {flash_html}
+    <!-- ── 区切り + セクション2: ファンダ 5 条件 (通期スクリーニング) ── -->
+    <div style="border-top:1px solid {BORDER_SUBTLE};margin:14px 0 0;"></div>
+    <p style="{_section_label}margin-top:14px;">ファンダ 5 条件（通期スクリーニング）</p>
+    <p style="margin:0 0 2px;font-size:12px;color:{TEXT_SUBTLE};">該当: {n_of_5}/5</p>
     <table cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
       {conditions_html}
     </table>
@@ -368,18 +496,56 @@ def _render_single_ticker_block_text(payload: EarningsNotifyPayload) -> str:
     ticker = payload["ticker"]
     verdict = payload["verdict"]
     label = SURPRISE_VERDICT_JP.get(verdict, verdict)
-    surprise_str = _fmt_surprise_pct(payload["surprise_pct"])
     n_of_5 = payload["n_of_5"]
     conditions = payload["conditions"]
     completeness = payload["completeness"]
     url = payload["url"]
     snapshot_jst = payload["snapshot_jst"]
 
-    lines = [f"[{ticker}] {label} {surprise_str}"]
-    lines.append(f"  ファンダ 5 条件: {n_of_5}/5")
+    lines = [f"[{ticker}] {label}"]
+    # ── セクション1: 今四半期 決算速報 ──
+    lines.append("  ── 今四半期 決算速報 ──")
+    lines.append(
+        f"    EPS: 予想 {_fmt_eps(payload.get('eps_estimate'))}"
+        f" → 実績 {_fmt_eps(payload.get('eps_actual'))}"
+        f"（{_fmt_surprise_pct(payload.get('surprise_pct'))}）"
+    )
+    rev_a = payload.get("revenue_actual")
+    rev_e = payload.get("revenue_estimated")
+    if rev_a is not None or rev_e is not None:
+        lines.append(
+            f"    売上高: 予想 {_fmt_money(rev_e)}"
+            f" → 実績 {_fmt_money(rev_a)}"
+            f"（{_fmt_surprise_pct(payload.get('rev_surprise_pct'))}）"
+        )
+    yoy = payload.get("revenue_yoy_pct")
+    if yoy is not None:
+        lines.append(f"    売上高 前年同期比: {_fmt_yoy(yoy)}")
+    # 来四半期見通し (§38: 数値の事実のみ、断定語なし)
+    fwd_cons = payload.get("fwd_consensus_revenue")
+    if fwd_cons is not None:
+        _cy = payload.get("fwd_rev_yoy_pct")
+        _cy_str = f"（前年比 {_fmt_yoy(_cy)}）" if _cy is not None else ""
+        lines.append(f"    来期コンセンサス売上: {_fmt_money(fwd_cons)}{_cy_str}")
+    comp_low = payload.get("fwd_company_rev_low")
+    comp_high = payload.get("fwd_company_rev_high")
+    if comp_low is not None and comp_high is not None:
+        _cyl = payload.get("fwd_company_rev_yoy_low_pct")
+        _cyh = payload.get("fwd_company_rev_yoy_high_pct")
+        _r = (
+            f"（前年比 {_fmt_yoy(_cyl)}〜{_fmt_yoy(_cyh)}）"
+            if (_cyl is not None and _cyh is not None)
+            else ""
+        )
+        lines.append(
+            f"    会社ガイダンス売上: {_fmt_money(comp_low)}〜{_fmt_money(comp_high)}{_r}"
+        )
+    # ── セクション2: ファンダ 5 条件 (通期スクリーニング) ──
+    lines.append("  ── ファンダ 5 条件（通期スクリーニング） ──")
+    lines.append(f"    該当: {n_of_5}/5")
     for name, passed in conditions.items():
         mark = "PASS" if passed else "FAIL"
-        lines.append(f"    {name}: {mark}")
+        lines.append(f"      {name}: {mark}")
     lines.append("  データ取得状況:")
     for source_key, status in completeness.items():
         label_s = COMPLETENESS_STATUS_LABEL.get(status, status)

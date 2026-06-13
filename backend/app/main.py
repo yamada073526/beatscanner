@@ -21194,12 +21194,78 @@ async def _aggregate_ticker_data_for_push(
         k: _classify_src(r) for k, r in zip(_src_keys, _src_results)
     }
 
+    # ── 4. 売上高 (予想vs実績) / 売上YoY / 来期見通し ──────────────────────────
+    # じっちゃま決算速報スタイル: EPS だけでなく「売上高 予想比 + 売上 YoY + 来期コンセンサス /
+    #   会社ガイダンス」 も「良い決算か」 の判断材料として配信 (5原則4 人力の代替)。
+    # guidance_basic / guidance_quarterly_history endpoint ロジックを SSOT として流用 →
+    #   frontend EarningsFlashSummary と同一データ写像 (Trust Cliff なし・drift 回避)。
+    # cron context は HTTP Request が無いため header 無しの最小 Request を生成して endpoint を
+    #   直接 await する (両関数は request を _get_fmp_key (X-FMP-Api-Key header) にしか使わず、
+    #   空 header → FMPClient が env FMP_API_KEY を使用)。
+    from starlette.requests import Request as _StarletteRequest
+
+    _mock_req = _StarletteRequest({"type": "http", "headers": []})
+
+    revenue_actual = revenue_estimated = rev_surprise_pct = rev_verdict = None
+    revenue_yoy_pct = None
+    fwd_consensus_revenue = fwd_rev_yoy_pct = None
+    fwd_company_rev_low = fwd_company_rev_high = None
+    fwd_company_rev_yoy_low_pct = fwd_company_rev_yoy_high_pct = None
+
+    try:
+        gb = await guidance_basic(ticker, _mock_req, with_guidance=True)
+    except Exception as e:
+        # データ無し (404) / FMP 失敗等。EPS だけで送信継続 (revenue 欄は省略される)。
+        print(f"[earnings-push][agg] guidance_basic skip for {ticker}: {e}")
+        gb = None
+
+    if gb:
+        _rev = gb.get("revenue") or {}
+        revenue_actual = _rev.get("actual")
+        revenue_estimated = _rev.get("estimated")
+        rev_surprise_pct = _rev.get("surprise_pct")
+        _rev_verdict_raw = _rev.get("verdict")
+        # EPS と同じ正規化 ("in-line"→"inline"、None/"unknown" は mailer 側で "—" neutral)
+        rev_verdict = "inline" if _rev_verdict_raw == "in-line" else _rev_verdict_raw
+        _fwd = (gb.get("forward") or {}).get("next_q") or {}
+        fwd_consensus_revenue = _fwd.get("consensus_revenue")
+        fwd_rev_yoy_pct = _fwd.get("rev_yoy_pct")
+        fwd_company_rev_low = _fwd.get("company_q_rev_low")
+        fwd_company_rev_high = _fwd.get("company_q_rev_high")
+        fwd_company_rev_yoy_low_pct = _fwd.get("company_q_rev_yoy_low_pct")
+        fwd_company_rev_yoy_high_pct = _fwd.get("company_q_rev_yoy_high_pct")
+
+    try:
+        qh = await guidance_quarterly_history(ticker, _mock_req, limit=8)
+    except Exception as e:
+        print(f"[earnings-push][agg] quarterly_history skip for {ticker}: {e}")
+        qh = None
+
+    if qh:
+        _hist = qh.get("history") or []
+        if _hist:
+            revenue_yoy_pct = _hist[0].get("revenue_yoy_pct")
+
     return {
         "verdict": verdict,
         "surprise_pct": surprise_pct,
         "n_of_5": n_of_5,
         "conditions": conditions,
         "completeness": completeness,
+        # 売上高 (今四半期 予想比) — EPS と同じ Beat/Miss 色 (事実分類 ±3%)
+        "revenue_actual": revenue_actual,
+        "revenue_estimated": revenue_estimated,
+        "rev_surprise_pct": rev_surprise_pct,
+        "rev_verdict": rev_verdict,
+        # 売上高 前年同期比
+        "revenue_yoy_pct": revenue_yoy_pct,
+        # 来期見通し (forward、§38: 方向色なし・None は行省略・金融来期売上は backend で抑止済)
+        "fwd_consensus_revenue": fwd_consensus_revenue,
+        "fwd_rev_yoy_pct": fwd_rev_yoy_pct,
+        "fwd_company_rev_low": fwd_company_rev_low,
+        "fwd_company_rev_high": fwd_company_rev_high,
+        "fwd_company_rev_yoy_low_pct": fwd_company_rev_yoy_low_pct,
+        "fwd_company_rev_yoy_high_pct": fwd_company_rev_yoy_high_pct,
     }
 
 
@@ -21386,6 +21452,18 @@ async def cron_earnings_notify(
             n_of_5=agg["n_of_5"],
             conditions=agg["conditions"],
             completeness=agg["completeness"],
+            # 決算速報拡張 (売上高 予想比 / 売上 YoY / 来期見通し)
+            revenue_actual=agg.get("revenue_actual"),
+            revenue_estimated=agg.get("revenue_estimated"),
+            rev_surprise_pct=agg.get("rev_surprise_pct"),
+            rev_verdict=agg.get("rev_verdict"),
+            revenue_yoy_pct=agg.get("revenue_yoy_pct"),
+            fwd_consensus_revenue=agg.get("fwd_consensus_revenue"),
+            fwd_rev_yoy_pct=agg.get("fwd_rev_yoy_pct"),
+            fwd_company_rev_low=agg.get("fwd_company_rev_low"),
+            fwd_company_rev_high=agg.get("fwd_company_rev_high"),
+            fwd_company_rev_yoy_low_pct=agg.get("fwd_company_rev_yoy_low_pct"),
+            fwd_company_rev_yoy_high_pct=agg.get("fwd_company_rev_yoy_high_pct"),
         )
         fresh_candidates.append(candidate)
         payloads_map[ticker] = payload
