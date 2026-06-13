@@ -280,6 +280,22 @@ function isEarningsFlashEnabled() {
   }
 }
 
+// 2026-06-14 (D2 累進開示・第1手): v5 冒頭の描画順 v2。EarningsFlashSummary を ticker 章頭(Hero 直下)へ昇格し、
+// 冒頭で「5 条件のみで Beat/Miss 判定」する構成を脱却 (本物の決算サプライズ=予想比を最上部の実質 verdict に)。
+// default OFF・完全可逆 (?pane3_order_v2=1 / =0 or localStorage 'pane3_order_v2'='1')。
+// verdict badge/glow の二値→N/5 連続量化は第2手 (発光高リスク領域につき gated)。
+function isPane3OrderV2() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('pane3_order_v2');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('pane3_order_v2') === '1';
+  } catch {
+    return false;
+  }
+}
+
 function isPane3V2Frameless() {
   try {
     if (typeof window === 'undefined') return false;
@@ -1163,6 +1179,15 @@ export default function JudgmentDetail({
                     watchlist={detailContext?.watchlist}
                     onAddToWatchlist={detailContext?.onAddToWatchlist}
                   />
+                  {/* 2026-06-14 (D2 第1手・?pane3_order_v2=1): 決算ハイライト(本物の予想比サプライズ)を
+                      冒頭(Hero 直下)へ昇格。OFF 時は従来どおりファンダ章③に残る (二重描画は下の !isPane3OrderV2 gate で回避)。 */}
+                  {isPane3OrderV2() && isEarningsFlashEnabled() && (
+                    <EarningsFlashSummary
+                      ticker={selectedTicker}
+                      guidance={guidance}
+                      isLoading={!guidance && (detail?.isLoading ?? false)}
+                    />
+                  )}
                   {/* v184 Sprint 1: SummaryBrief は本 sprint では残置 (廃止は Sprint 3 で各章サマリーへ一本化)。 */}
                   {result && (
                     <SummaryBrief
@@ -1277,8 +1302,9 @@ export default function JudgmentDetail({
                 {/* v192 (3体合議 B-2): v5 章扉 (L1) を emphasized で強調し L2 セクション冠と区別 (gold hairline 60% + primary/700)。 */}
                 <ChapterSection chapterNumber="①" chapterTitle="ファンダメンタル" headerOnly tier="sub" emphasized />
                 {/* v199: 決算ハイライト (章扉直後・5条件カード前 = 事実 → 評価の視線順、ui-designer verdict)。
-                    ノーラベル直出し (章扉直下の本文第 1 段落 idiom)。5条件カードは不変 (user 確定済制約)。 */}
-                {isEarningsFlashEnabled() && (
+                    ノーラベル直出し (章扉直下の本文第 1 段落 idiom)。5条件カードは不変 (user 確定済制約)。
+                    2026-06-14 (D2 第1手): pane3_order_v2 ON 時は冒頭(ticker章頭)へ昇格済のため、ここでは出さない (二重描画回避)。 */}
+                {!isPane3OrderV2() && isEarningsFlashEnabled() && (
                   <EarningsFlashSummary
                     ticker={selectedTicker}
                     guidance={guidance}
