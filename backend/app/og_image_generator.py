@@ -589,7 +589,7 @@ def render_backtest_fallback() -> bytes:
 # PIL/Pillow の Image.save(format='PDF') で生成、 weasyprint/reportlab 追加 dep 不要。
 # 内容: header + hero + KPI + methodology + disclaimer + footer。
 # Trust Cliff 規律: 数値は backend が計算済の avg_return / win_rate / completed_trades を使用、
-# LP hero「100 万円 → 133 万円」 と完全一致。
+# LP hero「100 万円 → XXX 万円」 (動的 cum_return) と完全一致。
 
 _PDF_W = 1200
 _PDF_H = 1697  # A4 縦 (1200×1697 で 72dpi 相当の高解像度)
@@ -769,7 +769,7 @@ def generate_backtest_methodology_pdf(
     pct_color = _GREEN if avg_return_pct >= 0 else _RED
     draw.text((cx, 430), pct_text, font=font_hero_huge, fill=pct_color, anchor="mm")
     # 100 万円 → XXX 万円 (Round 3、 user dogfood):
-    # 矢印を Regular font 40pt + 透明グレーで「細く軽い区切り」、 100 万円は muted、 133 万円は緑強調。
+    # 矢印を Regular font 40pt + 透明グレーで「細く軽い区切り」、 100 万円は muted、 XXX 万円 (動的) は緑強調。
     if future_jpy is not None:
         future_text = _format_jpy_short(future_jpy)
         jpy_y = 610

@@ -14570,7 +14570,7 @@ async def og_image_backtest_regenerate():
 
 # ── Phase 2.4 Methodology PDF (handover v72、 2026-05-16) ────────
 # Bloomberg/Morningstar 級信頼性訴求 PDF。 1 page (A4 縦)、 PIL/Pillow で生成。
-# 内容: hero (+32.56% / 100 万円 → 133 万円) + KPI 3 tile + methodology 5 条件 + disclaimer。
+# 内容: hero (動的 cum_return / 100 万円 → XXX 万円) + KPI 3 tile + methodology 5 条件 + disclaimer。
 # Free 全開放 (LP 訴求と整合)、 ProTeaser の Premium 訴求は高機能版 (期間カスタム / 月次)。
 
 BACKTEST_PDF_CACHE: dict = {"pdf": None, "ts": 0.0}

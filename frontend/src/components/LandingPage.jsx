@@ -123,7 +123,7 @@ function SectionTitle({ children }) {
 // 既存 App.jsx の Hero (line 681-) と同じ hero-badge / hero-title クラスを使用
 //
 // Phase 3 Sub-1 (handover v72 §2-B、 2026-05-16): backtest 実証データを hero に統合。
-// 「決算を見ても買うべきか分からない」 → 「過去 5 年で 100 万円 → 133 万円」 という
+// 「決算を見ても買うべきか分からない」 → 「過去 5 年で 100 万円 → XXX 万円」 (動的取得) という
 // 痛み→ 解決→ 実証 の 3 段で説得力強化。 数字は useBacktest hook の動的取得値を使用
 // (Trust Cliff 回避: 訴求文言と本番 backtest 結果が常時一致)。
 
@@ -1496,7 +1496,7 @@ function PricingSection({ onFreeStart, onProCheckout }) {
           </div>
           {/* 中部: ✓ リスト (上部直後に通常フロー — Pro と水平揃え)
               Phase 3 Sub-3 (handover v72): バックテスト実証データを Free 訴求に明示。
-              LP hero 「過去 5 年で 100 万円 → 133 万円」 と Pricing が完全整合。 */}
+              LP hero 「過去 5 年で 100 万円 → XXX 万円」 (動的) と Pricing が完全整合。 */}
           <ul style={{
             listStyle: 'none', padding: 0, margin: '0 0 22px',
             fontSize: 13, lineHeight: 2, color: 'var(--text-secondary)',

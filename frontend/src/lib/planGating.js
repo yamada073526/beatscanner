@@ -38,7 +38,7 @@ export const FEATURE_GATES = Object.freeze({
   ir_links:               PLAN.FREE,   // IR リンク
   // Phase 3 Sub-3 (handover v72、 2026-05-16、 6 体合議不要): backtest 自体は LP 訴求の
   // 入口として Free 全開放を維持 (CLAUDE.md「Trust Cliff」 最重要バグカテゴリ、 LP hero に
-  // 「過去 5 年 +32.56%」 を訴求しながら Premium 限定にすると即離脱)。
+  // 「過去 5 年の実績」 を訴求しながら Premium 限定にすると即離脱)。
   // Premium 訴求は別 path: 銘柄別貢献度 / カスタム期間 / PDF / 10 年データ等。
   backtest_basic:         PLAN.FREE,   // バックテスト基本 (5y/3y/1y + 200 銘柄、 LP 訴求の数字)
 
