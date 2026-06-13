@@ -20717,6 +20717,181 @@ async def fetch_earnings_push_tickers() -> list[str]:
     return result
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint 2: 決算発表の差分検出ヘルパー
+#   SPEC §5 Sprint 2 「前方依存回避」: dispatch log (Sprint 3 未作成) に依存しない。
+#   since 日付窓を引数で受け取り「eps_actual != null かつ earnings_date が窓内」の
+#   候補リストを返す純粋ヘルパー。dedup は Sprint 3/5 の orchestrator が重ねる。
+#
+#   参照:
+#     - _fetch_eps_data() (line 6197): FMP earnings_surprises の field 名 SSOT
+#     - handover v83 P1 fix: upcoming (actual=null) を除外するパターン SSOT
+#     - fmp-api-retry skill: try/except FMPError + graceful degradation
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+async def _fetch_earnings_for_ticker(
+    ticker: str,
+    client: FMPClient,
+    since_date: date,
+    until_date: date,
+) -> dict | None:
+    """1 ticker の FMP earnings_surprises を取得し、窓内 + actual 有りの最直近 filing を返す。
+
+    Returns:
+        候補 dict ({ticker, earnings_date, fiscal_period, eps_actual, eps_estimate})
+        または None (窓外 / actual=null / FMP エラー)。
+
+    Notes:
+        - handover v83 P1 fix: upcoming (actual=null) は除外 (予定のみの行は skip)。
+        - limit=8: NVDA 等で future call (actual=null) が先頭に来る pattern 対策。
+          _fetch_eps_data() と同じ limit=8 を採用。
+        - FMP /stable/earnings は date DESC 返却 (最新が先頭)。
+    """
+    rows: list[dict] = []
+    try:
+        rows = await client.earnings_surprises(ticker, limit=8) or []
+    except FMPError as exc:
+        print(f"[earnings-push] FMPError for {ticker}: {exc}")
+        return None
+    except Exception as exc:
+        print(f"[earnings-push] unexpected error for {ticker}: {exc}")
+        return None
+
+    if not rows:
+        print(f"[earnings-push] {ticker}: FMP earnings_surprises が空 → 候補なし")
+        return None
+
+    # date DESC なので先頭から走査して「eps_actual 有り」の最直近を pick
+    # (handover v83 P1 / _fetch_eps_data() line 6256-6263 と同パターン)
+    for entry in rows:
+        # ── 1. actual EPS の有無チェック (upcoming 除外) ──────────────────────
+        raw_actual = _pick(entry, "eps", "epsActual", "actualEarningResult", "actualEps")
+        if raw_actual is None:
+            # actual=null → upcoming or 未発表 → skip (handover v83 P1 fix)
+            continue
+
+        actual_f = _safe_float(raw_actual)
+        if actual_f is None:
+            # NaN / Inf などの不正値 → skip
+            continue
+
+        # ── 2. 日付フィールド取得 & パース ────────────────────────────────────
+        raw_date = _pick(entry, "date")
+        if not raw_date:
+            continue
+        try:
+            earnings_dt = date.fromisoformat(str(raw_date)[:10])
+        except (ValueError, TypeError):
+            print(f"[earnings-push] {ticker}: earnings date パース失敗 ({raw_date!r}), skip")
+            continue
+
+        # ── 3. 日付窓フィルタ (since <= earnings_date <= until) ───────────────
+        if not (since_date <= earnings_dt <= until_date):
+            # 最新 actual が窓外 → 以降の行はさらに古いので break (date DESC 前提)
+            break
+
+        # ── 4. 候補として採用 ─────────────────────────────────────────────────
+        raw_estimate = _pick(entry, "epsEstimated", "estimatedEarning", "estimatedEps")
+        estimate_f = _safe_float(raw_estimate)
+
+        # fiscal_period: FMP "fiscalPeriod" or "period" (e.g. "Q1 2025")
+        fiscal_period = _pick(entry, "fiscalPeriod", "period")
+
+        return {
+            "ticker": ticker,
+            "earnings_date": str(earnings_dt),       # "YYYY-MM-DD"
+            "fiscal_period": fiscal_period,           # "Q1 2025" 等 or None
+            "eps_actual": actual_f,
+            "eps_estimate": estimate_f,               # Sprint 4 メール生成で Beat/Miss 判定に使用
+        }
+
+    return None
+
+
+async def _detect_new_earnings(
+    tickers: list[str],
+    since: date | None = None,
+    window_days: int = 3,
+) -> list[dict]:
+    """ticker リスト × FMP earnings で「窓内に決算を出した候補」を返す純粋ヘルパー。
+
+    SPEC Sprint 2 完了判定基準:
+      - 各 ticker の最直近 filing のうち「eps_actual != null かつ earnings_date が since 窓内」
+        を「新規決算候補」として返す。
+      - 戻り値は候補 list。各要素は最低限:
+          {ticker, earnings_date, fiscal_period, eps_actual, eps_estimate}
+      - upcoming (eps_actual=null) は必ず除外 (handover v83 P1 前例)。
+      - FMP 取得失敗の ticker は候補から除外しつつ、log に残す (per-source namespace 思想)。
+
+    前方依存回避 (SPEC §5 Sprint 2 注記):
+      dispatch log (Sprint 3 未作成) には **一切依存しない**。
+      dedup は Sprint 3/5 の orchestrator が重ねる設計。
+      本ヘルパーは「最近決算を出した候補」を返すところまでを責務とする。
+
+    Args:
+        tickers:     対象 ticker のリスト (fetch_earnings_push_tickers() の戻り値など)。
+        since:       検出窓の開始日 (inclusive)。None の場合は today - window_days。
+        window_days: since が None のときに使用する遡り日数 (デフォルト 3 日)。
+                     Sprint 5 の cron endpoint が適宜オーバーライドする
+                     (例: 毎朝 07:00 JST 発火なら window_days=1 で前夜分のみ取得)。
+
+    Returns:
+        新規決算候補の list[dict]。各要素:
+            {
+                "ticker":         str,           # e.g. "AAPL"
+                "earnings_date":  str,           # "YYYY-MM-DD"
+                "fiscal_period":  str | None,    # "Q1 2025" 等 (Sprint 4 dedup キー)
+                "eps_actual":     float,         # 実績 EPS
+                "eps_estimate":   float | None,  # コンセンサス予想 EPS (Beat/Miss 判定用)
+            }
+        空リストは「窓内に決算なし」または「全 ticker で FMP 取得失敗」を意味する。
+    """
+    fmp_key = os.getenv("FMP_API_KEY", "")
+    if not fmp_key:
+        print("[earnings-push] FMP_API_KEY 未設定 — _detect_new_earnings は空を返します")
+        return []
+
+    # 日付窓を決定
+    today = date.today()
+    if since is None:
+        since_date = today - timedelta(days=window_days)
+    else:
+        since_date = since
+    until_date = today
+
+    print(
+        f"[earnings-push] _detect_new_earnings: {len(tickers)} ticker,"
+        f" 窓 {since_date} ~ {until_date} (window_days={window_days})"
+    )
+
+    if not tickers:
+        return []
+
+    client = FMPClient(api_key=fmp_key)
+
+    # asyncio.gather で全 ticker を並列取得 (fmp-api-retry skill: 並列 gather パターン)
+    # 各 ticker は _fetch_earnings_for_ticker が try/except で個別エラーを吸収する
+    tasks = [
+        _fetch_earnings_for_ticker(ticker, client, since_date, until_date)
+        for ticker in tickers
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=False)
+
+    candidates: list[dict] = []
+    for ticker, result in zip(tickers, results):
+        if result is None:
+            # 窓外 / actual=null / FMP エラー → 除外 (log は _fetch_earnings_for_ticker 内)
+            continue
+        candidates.append(result)
+
+    print(
+        f"[earnings-push] _detect_new_earnings: {len(candidates)} 件の新規決算候補"
+        f" (/{len(tickers)} ticker)"
+    )
+    return candidates
+
+
 # ── Static file serving (must be LAST — after all /api/* routes) ─────────────
 # Only mounted when frontend/dist exists (i.e. production build is present).
 # 注: StaticFiles(html=True) は `/` で index.html を返すが、 任意の未知 path には 404 を返す
