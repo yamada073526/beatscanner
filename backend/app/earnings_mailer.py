@@ -100,6 +100,16 @@ COMPLETENESS_STATUS_LABEL: dict[str, str] = {
     "unknown": "確認中",
 }
 
+# ─── completeness SOURCE_LABEL (frontend completenessLedger.js EARNINGS_SOURCES と 1:1 mirror) ──
+# 内部 source key (earnings_surprises 等) を読み手に意味の通る人間語へ変換 (5 原則① 読み手に負担を
+# かけない: パッと見 2 秒でわかる)。in-app 完全性台帳 (CompletenessRollupBadge) と同一ラベルで 1:1 mirror。
+# 未知 key は fallback で生 key 表示 (drift 検知用、フェイルオープンしない)。
+COMPLETENESS_SOURCE_LABEL: dict[str, str] = {
+    "earnings_surprises": "EPS / 売上サプライズ",
+    "income_q": "四半期 損益",
+    "cash_flow_q": "四半期 キャッシュフロー",
+}
+
 
 # ─── payload TypedDict (channel 非依存) ────────────────────────────────────
 class EarningsNotifyPayload(TypedDict):
@@ -207,11 +217,12 @@ def _render_completeness_html(completeness: dict[str, str]) -> str:
     items = []
     for source_key, status in completeness.items():
         label = COMPLETENESS_STATUS_LABEL.get(status, status)
+        src_label = COMPLETENESS_SOURCE_LABEL.get(source_key, source_key)
         # mail_color_constants.py が SSOT — hex 直書き禁止
         color = BEAT_COLOR if status == "ok" else INLINE_COLOR
         items.append(
             f'<li style="color:{color};font-size:12px;margin-bottom:2px;">'
-            f'{source_key}: {label}'
+            f'{src_label}: {label}'
             f'</li>'
         )
     return "\n".join(items)
@@ -372,7 +383,8 @@ def _render_single_ticker_block_text(payload: EarningsNotifyPayload) -> str:
     lines.append("  データ取得状況:")
     for source_key, status in completeness.items():
         label_s = COMPLETENESS_STATUS_LABEL.get(status, status)
-        lines.append(f"    {source_key}: {label_s}")
+        src_label = COMPLETENESS_SOURCE_LABEL.get(source_key, source_key)
+        lines.append(f"    {src_label}: {label_s}")
     lines.append(f"  取得時刻: {snapshot_jst} JST")
     lines.append(f"  {EARNINGS_DISCLAIMER_INLINE}")
     lines.append(f"  {ticker} の決算を確認する: {url}")
