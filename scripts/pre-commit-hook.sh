@@ -143,10 +143,11 @@ if [ -n "$STAGED_BLOCKLIST" ] && [ -f "$BLOCKLIST_FILE" ] && [ -f "$SSG_FILE" ];
     fi
 fi
 
-# --- Check 6: EarningsFlashSummary / earningsFlashTemplates への LLM 呼び出し検出 (v199) ---
-# 決算ハイライトは「静的テンプレート整形専用」 宣言 (SPEC_2026-06-10 §4 + 6体合議 Anthropic verdict)。
+# --- Check 6: EarningsFlashSummary / earningsFlashTemplates / earnings_mailer への LLM 呼び出し検出 (v199 + Sprint 4) ---
+# 決算ハイライト・メールテンプレートは「静的テンプレート整形専用」 宣言 (SPEC_2026-06-10 §4 + 6体合議 Anthropic verdict)。
 # 「ちょっとだけ LLM に要約させる」 drift を import 行レベルで BLOCK する (Refinitiv 教訓)。
-STAGED_FLASH=$(git diff --cached --name-only | grep -E '(EarningsFlashSummary|earningsFlashTemplates)' || true)
+# Sprint 4 追加: backend/app/earnings_mailer.py / mail_color_constants.py も Check 7 の対象 (§9 outbound guard)。
+STAGED_FLASH=$(git diff --cached --name-only | grep -E '(EarningsFlashSummary|earningsFlashTemplates|earnings_mailer\.py|mail_color_constants\.py)' || true)
 for f in $STAGED_FLASH; do
     if [ ! -f "$f" ]; then
         continue
