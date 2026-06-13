@@ -1,6 +1,6 @@
 # SPEC 2026-06-13: 完全性台帳 (coverage manifest) — top2 先行 (quarterly-history sources + SPY 単一障害点表面化)
 
-> **Status**: 🧑 user gate1 **承認済 (2026-06-13 セッション3)**。**Sprint1-4 全 ✅ 着地** (top2 クラスタ完了)。Sprint4 eval = 沈黙の欠落 0件率 (unit 192 combos + 実データ curl 5 ticker、共に 0件)、dogfood 設問は §Sprint4 に記録 (user 回答待ち)。次は §別backlog (5条件/ガイダンス/機関の sources 拡張、配信再利用)。
+> **Status**: 🧑 user gate1 **承認済 (2026-06-13 セッション3)**。**Sprint1-4 全 ✅ 着地** (top2 クラスタ完了)。Sprint4 eval = ①沈黙の欠落 0件率 (unit 192 combos + 実データ curl 5 ticker、共に 0件) + ②dogfood **4軸全て狙い通り (PASS、2026-06-13 user 回答済: 裏取り不要=手放せた / §38誤読なし / 静かさちょうど良い / ドリルダウン腹落ち)**。次は §別backlog (5条件/ガイダンス/機関の sources 拡張、配信再利用)。
 > 進捗: Sprint1 (quarterly-history sources/field_sources, commit `af4289a`, AAPL/NVDA で sources=全ok 検証) / Sprint2 (SPY spy_unavailable を cup_handle・rs に付与, commit `547c5d9`, AAPL で spy_unavailable=false 検証) / **Sprint3 (frontend §38 badge + SPY 注記, commit `7279a87` + gate hotfix `3f16d39`, 本番 AAPL で badge=main・rollup「決算データ・地合いを自動取得」・ドリルダウン§38免責文・色中立を snap で確認)**。
 > Sprint3 の経緯: 未決4点を design 確定 (#1 最上部独立1行 / #2 限定・正直表現 / #3 無料面+具体数値は既存tier / #4 SPY=テクニカル章中立) → 3体 multi-review (金融§38 Opus + frontend + qa) → 実装 → 敵対的検証2巡 (4 lens→2 lens、blocker 2 + minor 多数を修正) → deploy → 本番 snap 検証。**次は Sprint4 (eval)** = 沈黙の欠落0件率 harness + dogfood「再チェックしたか」設問。
 > **由来**: grill-me 2026-06-13 (5問依存順) を起点とする user 由来。SSOT memory = `project_inner_quality_completeness_ledger.md` / `project_north_star.md`。
@@ -100,12 +100,14 @@ LP 訴求文言との整合 (3 項目以上):
 - **既知境界**: 実 equity は sources が概ね全 ok のため error/empty path は ETF/transient でしか実発火しない → 0件率の主証明は logic 層の網羅 unit test、curl harness は実データ補完という役割分担。technical 層が丸ごと停止すると地合いが unknown に落ち表面化しない (false alarm 回避の保守側、将来 sprint で techFetchEmpty を別状態化する案あり)。
 - **呼ぶ既存 skill**: `pge-loop-debugger` (harness の ESM top-level return / hard timeout 遵守済)。badge UI は Sprint3 から不変のため vision-eval は再実行不要。
 
-#### §dogfood 設問 (Sprint4 ②、user に併設記録を依頼)
-完全性 badge を本番で数銘柄触った上で、以下を記録する (台帳が「裏取り不要の信頼」 を生んでいるかの主観 proxy):
-1. badge / ドリルダウンを見て、**この銘柄を自分で決算を読み直す (裏取りする) 必要を感じたか?** (はい=台帳が信頼を生めていない / いいえ=狙い通り)
-2. 「データ取得状況」 の文言を「数値が正しい/買える」 と誤読しなかったか? (§38 の核心、誤読=Trust Cliff)
-3. 全 ok 時の badge は「静かすぎ / ちょうど良い / うるさい」 のどれか? (qa S-2 静かさの検証)
-4. ドリルダウンを実際に開く動機があったか? 開いて「裏取り不要」 と腹落ちしたか? (開かない=飾りに堕ちるリスク)
+#### §dogfood 設問 (Sprint4 ②) — ✅ 2026-06-13 user 回答済 (4軸全て狙い通り = PASS)
+完全性 badge を本番で触った上での主観 proxy (台帳が「裏取り不要の信頼」 を生んでいるか):
+1. **裏取り要否 (合格軸の核心)**: 「自分で決算を読み直す必要を感じたか?」 → **いいえ — 手放せた** ✅ (裏取り不要の信頼が効いた = 北極星「時間を返す」 に直結)
+2. **§38 誤読**: 「『数値が正しい/買える』 と誤読しなかったか?」 → **誤読しなかった** ✅ (「取得状況の記録」 と正しく理解、§38 ガード機能)
+3. **静かさ (qa S-2)**: 全 ok 時の存在感 → **ちょうど良い** ✅ (「枕元にたたんで置く」 質感達成、最上部でも判定を邪魔しない)
+4. **ドリルダウン動機**: 「開く動機があり腹落ちしたか?」 → **開く動機あり・腹落ちした** ✅ (飾りに堕ちず、内訳で安心を補完)
+
+→ **eval ② PASS**。①構造 proxy (沈黙の欠落 0件) + ②dogfood (4軸狙い通り) の両方で、完全性台帳 top2 クラスタが「裏取り不要の信頼」 を生んでいることを確認。台帳が "見る道具" に堕ちない歯止めが機能。
 
 ---
 
