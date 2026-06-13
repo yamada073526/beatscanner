@@ -205,10 +205,12 @@ function HeroSection({ onFreeStart }) {
           根拠 3 個 (subagent レビュー):
             (1) 5 原則 #1「読み手 2 秒で分かる」 体現: 12 字 1 行で reading time 0.8 秒
                 (旧版 1.4 秒から 43% 短縮)
-            (2) Aman / Ritz-Carlton 級 dark luxury 世界観と整合: 「勝てる」 能動語 +
-                体言止め+読点で Bloomberg Terminal × 茶室の余白を両立
-            (3) Trust Cliff / SEC/金商法回避: 「勝てる」 は能力訴求 (BeatScanner で判定可能の意)、
-                予測ではないので法的に安全。 数値訴求は実証 chip に閉じ込めて二段ロケット効果
+            (2) Aman / Ritz-Carlton 級 dark luxury 世界観と整合: 体言止め+読点で
+                Bloomberg Terminal × 茶室の余白を両立
+            (3) Trust Cliff / 景表法 §5 回避 (2026-06-13 user 判断、 funnel-cro 案2): 旧「勝てる決算」 は
+                利益示唆 (景表法 §5 優良誤認寄り) + 「淡々と・信頼」 ethos / Aman 抑制と不整合のため、
+                ツールの判定 (5 条件 PASS/FAIL = 買い候補か) を述べる「買える決算か」 に軟化。
+                数値訴求は実証 chip + §38 免責に閉じ込めて二段ロケット効果
           Typography: clamp 32-56px → 40-72px / weight 600 → 700 / letter-spacing -0.02em → -0.025em
           で「ロビーの天井高」 を演出。 */}
       <h1
@@ -223,7 +225,7 @@ function HeroSection({ onFreeStart }) {
           letterSpacing: '-0.025em',
         }}
       >
-        勝てる決算、 2 秒で。
+        買える決算か、 2 秒で。
       </h1>
 
       {/* v138 Phase 2B audit 後: 既存 segment data (NVDA Data Center YoY +92%、 AAPL iPhone YoY +21%、 GOOGL Cloud YoY +63%、 MSFT Azure 系 YoY +31%) と「予想 vs 実績」 verdict (bm_data → DiagramCard / SegmentSection) は backend で動作確認済。 LP 訴求を「2 本柱日本語チェック」 から「部門別売上・予想比較まで日本語で」 に拡張、 機能事実訴求で Trust Cliff Risk なし。 v146: 「来期見通し」 を追加 = アナリストコンセンサス YoY (FMP analyst-estimates、 高 coverage・検証済) で
