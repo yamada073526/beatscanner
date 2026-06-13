@@ -6460,8 +6460,10 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
         raise HTTPException(status_code=400, detail="ticker required")
     n = max(1, min(int(limit or 8), 16))
 
-    # :v2 = eps_yoy_pct / gross_margin_yoy_pp 追加 (2026-06-12) の cache bust — 旧 schema の 6h cache を即無効化
-    cache_key = f"{sym}:{n}:v2"
+    # :v3 = 完全性台帳 Sprint1 (2026-06-13) の sources / field_sources 追加 cache bust。
+    #       旧 schema (sources 無し) の 6h cache が返ると badge が「全部欠落」 誤表示するため即無効化必須。
+    #       :v2 = eps_yoy_pct / gross_margin_yoy_pp 追加 (2026-06-12)。
+    cache_key = f"{sym}:{n}:v3"
     now = _time.monotonic()
     cached = _QUARTERLY_HISTORY_CACHE.get(cache_key)
     if cached and now - cached["ts"] < _QUARTERLY_HISTORY_TTL:
@@ -6492,22 +6494,33 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
     income_q: list[dict] = []
     estimates: list[dict] = []
     cash_flow_q: list[dict] = []
+    # 完全性台帳 (coverage manifest) Sprint1: 3 source の取得成否を ok|empty|error で明示し、
+    # 沈黙の欠落 (fetch 失敗を [] で黙殺して frontend に成否が伝わらない) を構造的に潰す。
+    # feedback_data_completeness_guard の分類流儀 (本 endpoint は timeout を error に含める)。
+    # ※ estimates は補完用 source のため本 sprint の sources には含めない (top2 scope lock)。
+    src_status: dict[str, str] = {}
     try:
         surprises = await surprises_task or []
+        src_status["earnings_surprises"] = "ok" if surprises else "empty"
     except Exception:
         surprises = []
+        src_status["earnings_surprises"] = "error"
     try:
         income_q = await income_task or []
+        src_status["income_q"] = "ok" if income_q else "empty"
     except Exception:
         income_q = []
+        src_status["income_q"] = "error"
     try:
         estimates = await estimates_task or []
     except Exception:
         estimates = []
     try:
         cash_flow_q = await cash_flow_task or []
+        src_status["cash_flow_q"] = "ok" if cash_flow_q else "empty"
     except Exception:
         cash_flow_q = []
+        src_status["cash_flow_q"] = "error"
     # 粗利率 sector gate (?flash_gm=1 opt-in): 金融/REIT/保険/証券/公益は粗利率が無意味 → 全行保留。
     try:
         _si_q = await sector_task
@@ -6740,6 +6753,31 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
         # 決算ハイライト Phase2: 最新四半期セグメント別売上 (top-level、n 非依存、null=非開示/銀行 graceful)。
         # frontend は ?flash_seg=1 opt-in で「上位 N 件 実額 + 前年比 ↑↓」 を読むだけ (再計算しない)。
         "segment_summary": segment_summary,
+        # 完全性台帳 Sprint1 (2026-06-13): 3 source の取得成否。ok=取得成功 / empty=成功だが0件 / error=fetch 例外。
+        # 沈黙の欠落 (取得失敗の黙殺) を潰す「中身 (選ぶ目の質)」 第一手。LLM 不使用の数値物理層。
+        "sources": src_status,
+        # 各 history 行 field の由来 source map。frontend (Sprint3 ロールアップ/ドリルダウン) は
+        #   row[field] is None かつ sources[field_sources[field]] in (error, empty) → 「データ欠落」
+        #   row[field] is None かつ sources[field_sources[field]] == ok          → 「該当なし (この四半期は値なし)」
+        # で 沈黙の欠落 と 非該当 を区別する契約。§38: 状態の事実のみ、verdict に使わない。
+        "field_sources": {
+            "eps_actual": "earnings_surprises",
+            "eps_estimated": "earnings_surprises",
+            "eps_surprise_pct": "earnings_surprises",
+            "eps_verdict": "earnings_surprises",
+            "eps_yoy_pct": "earnings_surprises",
+            "revenue_actual": "income_q",
+            "revenue_surprise_pct": "income_q",
+            "revenue_verdict": "income_q",
+            "revenue_yoy_pct": "income_q",
+            "gross_margin_pct": "income_q",
+            "gross_margin_yoy_pp": "income_q",
+            "sps_actual": "income_q",
+            "operating_cf": "cash_flow_q",
+            "cfps_actual": "cash_flow_q",
+            "op_cf_margin": "cash_flow_q",
+            "cfps_gt_eps": "cash_flow_q",
+        },
     }
     _QUARTERLY_HISTORY_CACHE[cache_key] = {"data": result, "ts": now}
     return result
