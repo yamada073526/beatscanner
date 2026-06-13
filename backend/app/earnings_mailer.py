@@ -130,6 +130,7 @@ class EarningsNotifyPayload(TypedDict):
     completeness: dict[str, str]  # 取得状況 status (key=source名, value='ok'|'failed'|'na'|'unknown')
     url: str  # アプリリンク (?ticker=XXX&utm_source=email&utm_campaign=earnings_notify)
     snapshot_jst: str  # 送信時点 JST スナップショット (ISO 8601)
+    fiscal_period: str | None  # 期の帰属 (e.g. "Q1 2027")。「いつの決算か」 明示。None = 取得不可で省略
     # ── 決算速報拡張 (速報スタイル。None = 取得不可 → 表示行を省略、捏造しない §38) ──
     revenue_actual: float | None  # 売上高 実績 ($)
     revenue_estimated: float | None  # 売上高 アナリスト予想 ($)
@@ -155,6 +156,7 @@ def build_earnings_payload(
     conditions: dict[str, bool],
     completeness: dict[str, str],
     snapshot_jst: str | None = None,
+    fiscal_period: str | None = None,
     revenue_actual: float | None = None,
     revenue_estimated: float | None = None,
     rev_surprise_pct: float | None = None,
@@ -199,6 +201,7 @@ def build_earnings_payload(
         completeness=completeness,
         url=url,
         snapshot_jst=snapshot_jst,
+        fiscal_period=fiscal_period,
         revenue_actual=revenue_actual,
         revenue_estimated=revenue_estimated,
         rev_surprise_pct=rev_surprise_pct,
@@ -385,6 +388,15 @@ def _render_single_ticker_block_html(payload: EarningsNotifyPayload) -> str:
     # verdict ラベルは本文「（予想比）」と同じく全角括弧で囲み、銘柄の説明文ではなく
     # 注釈であることを一目で示す ("—" 不明時は括弧なし)。
     verdict_display = f"（{label}）" if label != "—" else label
+    # 期の帰属 caption (「いつの決算か」 明示)。in-app EarningsFlashSummary「直近四半期 {period}」
+    # と同形・同 source の 1:1 ミラー。None (取得不可) は省略 (捏造しない)。
+    period = payload.get("fiscal_period")
+    period_suffix_html = (
+        f'<span style="font-weight:400;font-size:12px;color:{TEXT_SUBTLE};margin-left:10px;">'
+        f"直近四半期 {period}</span>"
+        if period
+        else ""
+    )
     flash_html = _render_flash_metrics_html(payload)
     conditions_html = _render_conditions_html(conditions)
     completeness_html = _render_completeness_html(completeness)
@@ -426,7 +438,7 @@ def _render_single_ticker_block_html(payload: EarningsNotifyPayload) -> str:
       </tr>
     </table>
     <!-- ── セクション1: 今四半期 決算速報 ── -->
-    <p style="{_section_label}margin-top:14px;">今四半期 決算速報</p>
+    <p style="{_section_label}margin-top:14px;">今四半期 決算速報{period_suffix_html}</p>
     {flash_html}
     <!-- ── 区切り + セクション2: ファンダ 5 条件 (通期スクリーニング) ── -->
     <div style="border-top:1px solid {BORDER_SUBTLE};margin:14px 0 0;"></div>
@@ -518,8 +530,10 @@ def _render_single_ticker_block_text(payload: EarningsNotifyPayload) -> str:
 
     verdict_disp = f"（{label}）" if label != "—" else label
     lines = [f"[{ticker}] {verdict_disp}"]
-    # ── セクション1: 今四半期 決算速報 ──
-    lines.append("  ── 今四半期 決算速報 ──")
+    # ── セクション1: 今四半期 決算速報 (期の帰属を併記、「いつの決算か」 明示) ──
+    _period = payload.get("fiscal_period")
+    _flash_head = "今四半期 決算速報" + (f"（直近四半期 {_period}）" if _period else "")
+    lines.append(f"  ── {_flash_head} ──")
     lines.append(
         f"    EPS: 予想 {_fmt_eps(payload.get('eps_estimate'))}"
         f" → 実績 {_fmt_eps(payload.get('eps_actual'))}"

@@ -177,3 +177,28 @@ def test_rev_verdict_color_miss():
     )
     html = _build_earnings_html([p])
     assert MISS_COLOR in html
+
+
+# ── 7. 期の帰属 (fiscal_period、「いつの決算か」 明示) ──────────────────────
+def test_fiscal_period_in_html():
+    html = _build_earnings_html([_full_payload(fiscal_period="Q1 2027")])
+    assert "直近四半期 Q1 2027" in html
+
+
+def test_fiscal_period_in_text():
+    txt = _build_earnings_text([_full_payload(fiscal_period="Q1 2027")])
+    assert "直近四半期 Q1 2027" in txt
+
+
+def test_fiscal_period_omitted_when_none():
+    """取得不可 (None) なら期 caption を省略 (捏造しない §38)。見出し自体は残る。"""
+    p = _full_payload(fiscal_period=None)
+    assert "直近四半期" not in _build_earnings_html([p])
+    assert "直近四半期" not in _build_earnings_text([p])
+    assert "今四半期 決算速報" in _build_earnings_text([p])
+
+
+def test_fiscal_period_blocklist_clean():
+    p = _full_payload(fiscal_period="Q1 2027")
+    assert find_blocklist_hits(_build_earnings_html([p])) == []
+    assert find_blocklist_hits(_build_earnings_text([p])) == []

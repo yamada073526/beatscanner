@@ -21208,6 +21208,7 @@ async def _aggregate_ticker_data_for_push(
 
     revenue_actual = revenue_estimated = rev_surprise_pct = rev_verdict = None
     revenue_yoy_pct = None
+    fiscal_period = None  # "Q1 2027" 等。直近四半期=今回報告分の期の帰属 (「いつの決算か」 明示)
     fwd_consensus_revenue = fwd_rev_yoy_pct = None
     fwd_company_rev_low = fwd_company_rev_high = None
     fwd_company_rev_yoy_low_pct = fwd_company_rev_yoy_high_pct = None
@@ -21245,6 +21246,9 @@ async def _aggregate_ticker_data_for_push(
         _hist = qh.get("history") or []
         if _hist:
             revenue_yoy_pct = _hist[0].get("revenue_yoy_pct")
+            # 直近四半期=今回報告分の fiscal_period (in-app EarningsFlashSummary と同一 source、
+            # 1:1 ミラー)。FMP 由来で古い行は重複しうるが history[0] は今回報告分で正。
+            fiscal_period = _hist[0].get("fiscal_period")
 
     return {
         "verdict": verdict,
@@ -21252,6 +21256,8 @@ async def _aggregate_ticker_data_for_push(
         "n_of_5": n_of_5,
         "conditions": conditions,
         "completeness": completeness,
+        # 期の帰属 (直近四半期=今回報告分、「いつの決算か」 明示)
+        "fiscal_period": fiscal_period,
         # 売上高 (今四半期 予想比) — EPS と同じ Beat/Miss 色 (事実分類 ±3%)
         "revenue_actual": revenue_actual,
         "revenue_estimated": revenue_estimated,
@@ -21452,6 +21458,8 @@ async def cron_earnings_notify(
             n_of_5=agg["n_of_5"],
             conditions=agg["conditions"],
             completeness=agg["completeness"],
+            # 期の帰属 (直近四半期=今回報告分)
+            fiscal_period=agg.get("fiscal_period"),
             # 決算速報拡張 (売上高 予想比 / 売上 YoY / 来期見通し)
             revenue_actual=agg.get("revenue_actual"),
             revenue_estimated=agg.get("revenue_estimated"),
