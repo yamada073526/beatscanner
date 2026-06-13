@@ -1,0 +1,73 @@
+-- ========================================================================
+-- 決算 push MVP Sprint 3: 重複送信防止 dedup 設計ノート (2026-06-13)
+-- SPEC: docs/specs/SPEC_2026-06-13_earnings-push-mvp.md Sprint 3
+--
+-- 設計判断 (generator 記録):
+--   既存 notification_dispatch_log テーブルを流用するため、
+--   新規テーブルの CREATE は不要。
+--   (既存テーブル: 2026-05-17_pattern_signals_phase2.sql で作成済み)
+--   (既存 GRANT: 2026-05-17_pattern_signals_phase2_grants.sql で付与済み)
+--
+-- 流用理由:
+--   1. cup-notify が本番で使用中 = multi-review 通過済みの枯れたパターン。
+--   2. service_role に SELECT/INSERT/UPDATE/DELETE GRANT が付与済み
+--      (silent failure 回避。memory/feedback_supabase_grant_bug.md 参照)。
+--   3. blast radius 最小 (新規テーブル・新規 GRANT なし)。
+--
+-- 名前空間分離:
+--   pattern_type = 'earnings_push' で cup_handle / article と分離。
+--   既存の cup_handle dedup (_is_already_dispatched) には影響なし。
+--
+-- dedup キー設計:
+--   - ticker × fiscal_period (or earnings_date フォールバック)
+--   - transition_type フィールドに fiscal_period (e.g. "Q1 2025") を格納。
+--     fiscal_period=None の場合は earnings_date ("YYYY-MM-DD") で代替。
+--   - signal_date フィールドに earnings_date (date 型) を格納。
+--
+-- ヘルパー (backend/app/main.py 追加済み):
+--   - _make_earnings_dedup_key(fiscal_period, earnings_date) -> str
+--   - _is_earnings_already_dispatched(ticker, fiscal_period, earnings_date) -> bool
+--   - _record_earnings_dispatch(ticker, fiscal_period, earnings_date, ...) -> None
+--
+-- ========================================================================
+
+-- -------------------------------------------------------------------------
+-- GRANT 確認 SQL (Supabase SQL Editor で実行して GRANT 状況を確認):
+--
+--   select table_name, grantee, privilege_type
+--     from information_schema.role_table_grants
+--    where table_name = 'notification_dispatch_log'
+--      and grantee = 'service_role'
+--    order by privilege_type;
+--
+-- 期待結果 (4 行):
+--   notification_dispatch_log | service_role | DELETE
+--   notification_dispatch_log | service_role | INSERT
+--   notification_dispatch_log | service_role | SELECT
+--   notification_dispatch_log | service_role | UPDATE
+--
+-- 4 行未満の場合 → 2026-05-17_pattern_signals_phase2_grants.sql を再実行:
+--   grant select, insert, update, delete
+--     on public.notification_dispatch_log to service_role;
+-- -------------------------------------------------------------------------
+
+-- -------------------------------------------------------------------------
+-- 動作確認 SQL (sprint 3 dedup が正しく機能しているか確認):
+--
+-- (1) earnings_push の dispatch log を確認:
+--   select user_id, ticker, pattern_type, transition_type, signal_date, status, dispatched_at
+--     from notification_dispatch_log
+--    where pattern_type = 'earnings_push'
+--    order by dispatched_at desc
+--    limit 20;
+--
+-- (2) cup_handle との名前空間分離を確認 (互いに影響しない):
+--   select pattern_type, count(*) as cnt
+--     from notification_dispatch_log
+--    group by pattern_type
+--    order by pattern_type;
+-- -------------------------------------------------------------------------
+
+-- このファイルには DDL は含まれない (新規テーブル作成なし)。
+-- backend/app/main.py に Sprint 3 dedup ヘルパーが追加済み。
+-- GRANT は既存 migration (2026-05-17_pattern_signals_phase2_grants.sql) で付与済み。

@@ -20892,6 +20892,173 @@ async def _detect_new_earnings(
     return candidates
 
 
+# ============================================================================
+# 決算 push MVP Sprint 3: 重複送信防止 dedup ヘルパー (2026-06-13)
+#
+# 設計方針 (SPEC §5 Sprint 3 + generator設計判断):
+#   既存 notification_dispatch_log テーブルを流用 (新規テーブル不要)。
+#   - テーブル: notification_dispatch_log (2026-05-17_pattern_signals_phase2.sql で作成済み)
+#   - service_role GRANT: 2026-05-17_pattern_signals_phase2_grants.sql で付与済み
+#     (SELECT/INSERT/UPDATE/DELETE on notification_dispatch_log to service_role)
+#   - 名前空間分離: pattern_type='earnings_push' で cup_handle / article と分離。
+#     cup の dedup (pattern_type='cup_handle') には一切影響しない。
+#   - dedup キー: ticker × fiscal_period (fiscal_period=None 時は earnings_date で代替)
+#     - transition_type フィールドに fiscal_period 値 (e.g. "Q1 2025") を格納。
+#       None の場合は earnings_date 文字列 (e.g. "2025-01-30") を格納。
+#     - signal_date フィールドに earnings_date を格納 (date 型)。
+#
+# ヘルパー関数:
+#   1. _is_earnings_already_dispatched(ticker, fiscal_period, earnings_date) -> bool
+#      送信前チェック。同一 (ticker × fiscal_period_key) で status='sent' の記録があれば True。
+#   2. _record_earnings_dispatch(ticker, fiscal_period, earnings_date, ...) -> None
+#      送信後記録。dispatch_log に 1 行 insert。
+#
+# Sprint 5 の cron orchestrator 呼出し順:
+#   candidates = await _detect_new_earnings(tickers)
+#   for c in candidates:
+#       if _is_earnings_already_dispatched(c['ticker'], c['fiscal_period'], c['earnings_date']):
+#           continue  # skip 重複
+#       # … メール送信 …
+#       _record_earnings_dispatch(c['ticker'], c['fiscal_period'], c['earnings_date'], ...)
+# ============================================================================
+
+
+def _make_earnings_dedup_key(
+    fiscal_period: str | None,
+    earnings_date: str,
+) -> str:
+    """dedup キーとして transition_type フィールドに格納する文字列を生成する。
+
+    fiscal_period が取得できた場合 (e.g. "Q1 2025") はそれを使用。
+    fiscal_period=None の場合は earnings_date (e.g. "2025-01-30") にフォールバック。
+
+    Notes:
+        - FMP /stable/earnings の fiscalPeriod は銘柄・タイミングによって None になりうる
+          (_fetch_earnings_for_ticker の戻り値 fiscal_period=None を参照)。
+        - dedup キーは送信前チェックと記録で一貫して使用する必要がある。
+        - cup の transition_type (e.g. "formation_to_breakout_pending") とは
+          文字列形式が異なり衝突しない。
+    """
+    return fiscal_period if fiscal_period else earnings_date
+
+
+def _is_earnings_already_dispatched(
+    ticker: str,
+    fiscal_period: str | None,
+    earnings_date: str,
+) -> bool:
+    """同一決算 (ticker × fiscal_period/earnings_date) が既に送信済みか確認する。
+
+    送信前チェックとして Sprint 5 の cron orchestrator から呼ぶ。
+
+    Args:
+        ticker:         銘柄コード (e.g. "AAPL")。
+        fiscal_period:  FMP が返す fiscalPeriod 文字列 (e.g. "Q1 2025") or None。
+                        None の場合は earnings_date で代替 (docstring 参照)。
+        earnings_date:  決算日 "YYYY-MM-DD" 文字列。
+                        fiscal_period=None 時の dedup キーフォールバックに使用。
+
+    Returns:
+        True  = 送信済み (skip すべき)
+        False = 未送信 or dedup check 失敗 (送信を続行してよい)
+
+    Notes:
+        - service_role GRANT は 2026-05-17_pattern_signals_phase2_grants.sql で付与済み。
+        - check 失敗 (DB 接続エラー等) は False を返して送信を続行。
+          silent failure よりも重複送信リスクを取る設計 (cron 側で dry_run 確認を推奨)。
+        - dedup_key = fiscal_period or earnings_date で cup の transition_type と名前空間が異なる。
+        - TODO (Sprint 5 / 複数ユーザー展開時): user_id フィルタを追加すること。
+          現在は MVP 自分専用 (user_id 固定) のため user_id なし dedup でも問題ないが、
+          複数ユーザーに展開する際は「ユーザーAへの送信済みがユーザーBの dedup に効く」
+          問題が発生する。Sprint 5 cron endpoint で .eq("user_id", user_id) を追加する。
+          (multi-review 3 体合議 2026-06-13 verdict: Reviewer 1/3 が条件として指摘)
+    """
+    sb = _get_supabase_service()
+    if sb is None:
+        return False
+
+    dedup_key = _make_earnings_dedup_key(fiscal_period, earnings_date)
+
+    try:
+        res = (
+            sb.table("notification_dispatch_log")
+            .select("id")
+            .eq("ticker", ticker)
+            .eq("pattern_type", "earnings_push")
+            .eq("transition_type", dedup_key)
+            .eq("status", "sent")
+            .limit(1)
+            .execute()
+        )
+        already = bool(res.data)
+        print(
+            f"[earnings-push][dedup] {ticker} / {dedup_key}: "
+            f"{'already sent → skip' if already else 'not dispatched → proceed'}"
+        )
+        return already
+    except Exception as e:
+        print(f"[earnings-push][dedup] check failed for {ticker}/{dedup_key}: {e}")
+        return False
+
+
+def _record_earnings_dispatch(
+    ticker: str,
+    fiscal_period: str | None,
+    earnings_date: str,
+    user_id: str,
+    status: str = "sent",
+    error_detail: str | None = None,
+    channel: str = "email",
+) -> None:
+    """決算通知の送信記録を notification_dispatch_log に 1 行 insert する。
+
+    送信後に Sprint 5 の cron orchestrator から呼ぶ。
+
+    Args:
+        ticker:         銘柄コード。
+        fiscal_period:  FMP fiscalPeriod (e.g. "Q1 2025") or None。
+        earnings_date:  決算日 "YYYY-MM-DD"。dedup キーフォールバック兼 signal_date。
+        user_id:        送信先の auth.users(id) (UUID 文字列)。
+        status:         "sent" / "failed" / "skipped_dedup" (デフォルト "sent")。
+        error_detail:   失敗時のエラー文字列 (PII を含めないこと)。
+        channel:        通知 channel (デフォルト "email"、将来 "push" 等を追加予定)。
+
+    Notes:
+        - pattern_type='earnings_push' で cup_handle / article の dedup と名前空間を分離。
+          既存の _is_already_dispatched() (cup 用) には影響しない。
+        - transition_type フィールドに dedup_key (fiscal_period or earnings_date) を格納。
+        - signal_date フィールドに earnings_date を格納 (index 効率化)。
+        - insert 失敗は print で警告するが例外は raise しない (cron の送信結果に影響しない)。
+    """
+    sb = _get_supabase_service()
+    if sb is None:
+        print(f"[earnings-push][record] supabase service client 取得失敗 — 記録をスキップ ({ticker})")
+        return
+
+    dedup_key = _make_earnings_dedup_key(fiscal_period, earnings_date)
+
+    try:
+        # earnings_date を date 型 signal_date として使用 (index 効率化)
+        earnings_dt_str = earnings_date[:10]  # "YYYY-MM-DD" を安全に取り出す
+
+        sb.table("notification_dispatch_log").insert({
+            "user_id": user_id,
+            "ticker": ticker,
+            "pattern_type": "earnings_push",    # cup_handle / article と名前空間分離
+            "transition_type": dedup_key,        # fiscal_period or earnings_date
+            "signal_date": earnings_dt_str,      # 決算日を signal_date として格納
+            "channel": channel,
+            "status": status,
+            "error_detail": error_detail,
+        }).execute()
+        print(
+            f"[earnings-push][record] {ticker} / {dedup_key} → "
+            f"status={status} を dispatch_log に記録"
+        )
+    except Exception as e:
+        print(f"[earnings-push][record] insert failed for {ticker}/{dedup_key}: {e}")
+
+
 # ── Static file serving (must be LAST — after all /api/* routes) ─────────────
 # Only mounted when frontend/dist exists (i.e. production build is present).
 # 注: StaticFiles(html=True) は `/` で index.html を返すが、 任意の未知 path には 404 を返す
