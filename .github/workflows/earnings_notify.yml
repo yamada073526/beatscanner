@@ -1,0 +1,90 @@
+name: Earnings Push Notify
+
+# 決算 push MVP Sprint 6 (2026-06-13): 保有/WL 銘柄の新着決算を朝メールで push する。
+# 北極星「管=配信」第一手。endpoint POST /api/cron/earnings-notify を毎朝自動発火させる。
+# SSOT: docs/specs/SPEC_2026-06-13_earnings-push-mvp.md (§9 Sprint 6 条件)。
+#
+# 前提 env (点火条件):
+#   - GitHub secret CRON_SECRET (Railway production と同値、既存 nightly_scan と共用)
+#       railway variables --json | python3 -c "import sys,json;print(json.load(sys.stdin)['CRON_SECRET'])" | gh secret set CRON_SECRET
+#   - Railway env EARNINGS_PUSH_USER_ID (送信先 user UUID) / RESEND_API_KEY / FMP_API_KEY
+#   - Supabase user_notification_preferences (email_enabled=true + email_address)
+#
+# 安全弁 (SPEC §8 roll-back):
+#   - endpoint は CRON_SECRET fail-closed (未設定 503 / 不一致 401、hmac.compare_digest)
+#   - EARNINGS_PUSH_USER_ID 未設定なら 503 (誤爆しない)
+#   - dedup (notification_dispatch_log, pattern_type='earnings_push' × user_id × fiscal_period) で連投防止
+#   - 事故時 (§38 違反語混入 / 連投) は本 workflow を Actions タブで disable すれば即停止
+#       (コード revert より速い。SPEC §8「緊急 roll-back の最短手順」1)
+#
+# memory anchor: project_earnings_push_mvp / feedback_railway_native_cron (Railway native cron 停止→GHA 必須)
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'dry_run (true=実送信せず payload/blocklist 検証のみ・dedup 記録もしない)'
+        type: boolean
+        default: false
+  schedule:
+    # 22:13 UTC = 07:13 JST。 米国 after-hours 決算 (~20-21 UTC) 後の朝着信。
+    # :00 の GH 高負荷帯と既存 cron (nightly_scan 23:07 UTC) を回避する半端分 (SPEC §9 Sprint 6)。
+    - cron: '13 22 * * *'
+
+# 多重起動を 1 本化 (SPEC §9 Sprint 5: concurrency group)。
+# cancel-in-progress=false: 送信途中で kill しない (取りこぼし防止、dedup が overlap を無害化)。
+concurrency:
+  group: earnings-notify
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    name: Earnings push digest
+    runs-on: ubuntu-latest
+    # per-ticker で analyze を集約するが対象は保有∪WL の十数銘柄ゆえ数十秒で完了。margin で 15min。
+    timeout-minutes: 15
+    env:
+      BASE: https://beatscanner-production.up.railway.app
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      # workflow_dispatch の dry_run input。schedule 発火時は input が null → 'false' (本送信)。
+      DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+    steps:
+      - name: Setup tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq jq curl
+
+      - name: Guard — CRON_SECRET present
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET secret 未設定。 README の gh secret set コマンドで追加してください (未設定だと endpoint が 503/401)。"
+            exit 1
+          fi
+
+      - name: Earnings notify
+        id: notify
+        run: |
+          echo "=== earnings-notify (dry_run=$DRY_RUN) ==="
+          resp=$(curl -s --max-time 300 -w '\nHTTP:%{http_code}' -X POST \
+            -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
+            -d "{\"dry_run\": $DRY_RUN}" "$BASE/api/cron/earnings-notify")
+          code=$(echo "$resp" | tail -1 | sed 's/HTTP://')
+          body=$(echo "$resp" | sed '$d')
+          echo "--- response body ---"
+          echo "$body" | jq '{candidates,sent,skipped_dedup,failed,dropped,fmp_error_count,dry_run}' 2>/dev/null || echo "$body"
+          echo "HTTP: $code"
+          # GH Actions run summary
+          echo "### Earnings Push ($(date -u +'%Y-%m-%d %H:%M UTC'))" >> "$GITHUB_STEP_SUMMARY"
+          echo "- dry_run: \`$DRY_RUN\`  /  HTTP: \`$code\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- result: \`$(echo "$body" | jq -c '{candidates,sent,skipped_dedup,failed,fmp_error_count}' 2>/dev/null)\`" >> "$GITHUB_STEP_SUMMARY"
+          # fail-closed: 200 以外は赤 (secret 不一致 401 / env 未設定 503 を検知)
+          if [ "$code" != "200" ]; then
+            echo "::error::earnings-notify が HTTP $code を返しました (200 期待)。CRON_SECRET (401) / EARNINGS_PUSH_USER_ID (503) を確認してください。"
+            exit 1
+          fi
+          # FMP 取得失敗が candidates に対し多い場合は warning (送信は継続済)
+          fmp_err=$(echo "$body" | jq -r '.fmp_error_count // 0' 2>/dev/null || echo 0)
+          cand=$(echo "$body" | jq -r '.candidates // 0' 2>/dev/null || echo 0)
+          if [ "${cand:-0}" -gt 0 ] && [ "${fmp_err:-0}" -gt 0 ]; then
+            echo "::warning::earnings-notify で FMP 取得失敗あり (fmp_error_count=$fmp_err / candidates=$cand) — FMP fetch を確認。"
+          fi
