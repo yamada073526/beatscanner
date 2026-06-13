@@ -791,16 +791,7 @@ export default function App() {
         action: () => switchAppTab('home') });
       items.push({ id: 'tab:indices', group: 'action', label: '指数 (世界市場) へ', hint: 'G I',
         action: () => switchAppTab('indices') });
-      items.push({ id: 'layout:classic', group: 'action',
-        label: '旧 UI (Classic SPA) に切替',
-        description: '?layout=classic',
-        action: () => {
-          try {
-            const url = new URL(window.location.href);
-            url.searchParams.set('layout', 'classic');
-            window.location.href = url.toString();
-          } catch { /* noop */ }
-        } });
+      // v206 (2026-06-13): コマンドパレット「旧 UI (Classic SPA) に切替」 を撤去 (?layout=classic 封印 案C、 user 承認)。
     } else {
       items.push({ id: 'tab:home', group: 'action', label: 'ホームへ', hint: 'G H',
         action: () => switchAppTab('home') });

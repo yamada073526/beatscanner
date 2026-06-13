@@ -6,7 +6,7 @@
  *   - 検索を中央 Hero 化 (max-width 480px、placeholder 文言で意図明示)
  *     ※ input 実体は持たない (Linear 方式)。click → 既存 CmdPalette を開く
  *     ※ workspace mode では sticky-search-band は非表示なので二重化なし (App.jsx L720-802 確認済)
- *   - 「旧 UI」link を kebab dropdown (MoreHorizontal) に格納 (Trust Cliff 逆効果回避)
+ *   - 「旧 UI」link を kebab dropdown (MoreHorizontal) に格納 (Trust Cliff 逆効果回避) → v206 で kebab ごと撤去 (?layout=classic 封印 案C)
  *   - 下段 (24px、collapsible): MarketStripCompact (Tier 1 8 指標)
  *
  * 設計:
@@ -15,11 +15,11 @@
  *   - lucide-react icons / a11y: aria-expanded + aria-controls
  *   - 折りたたみ状態は Zustand workspaceStore で persist
  */
-import { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 // v118 P6: PanelRightOpen / PanelRightClose 削除 (Pane4 toggle 廃止)
 // v120 Sprint 3: SlidersHorizontal = 銘柄スクリーナー access point icon (multi-review 6 体合議 verdict 反映、 UI/UX R3 で Filter → SlidersHorizontal に格上げ品格維持)
-import { MoreHorizontal, Search, SlidersHorizontal } from 'lucide-react';
+// v206 (2026-06-13): kebab「旧 UI に戻す」抜け道撤去 (?layout=classic 封印 案C) に伴い、
+//   kebab 専用だった useState/useEffect/useLayoutEffect/useRef/createPortal/MoreHorizontal import を削除。
+import { Search, SlidersHorizontal } from 'lucide-react';
 import MarketStripCompact from './MarketStripCompact.jsx';
 import MarketStatusPill from './MarketStatusPill.jsx';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
@@ -51,38 +51,10 @@ export default function WorkspaceHeader({ isPro = false, onOpenScreener, onUpgra
   //   button 削除 + 常時展開固定で実質無効化。 toggleHeader も呼び出し箇所なくなる。
   // v118 P6: pane4Expanded / togglePane4 削除 (Pane4 廃止)
 
-  // v65 §4-B-2: kebab menu state (旧 UI / 将来 settings / help を集約)
-  // v65 fix: dropdown は createPortal で body 直下に描画 + position: fixed。
-  // 親 (ds-ws-header / ds-workspace-shell) の `overflow: hidden` で
-  // 56px 内にクリップされる問題を回避.
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
-  const kebabBtnRef = useRef(null);
-  const menuRef = useRef(null);
-  useLayoutEffect(() => {
-    if (!menuOpen || !kebabBtnRef.current) return;
-    const rect = kebabBtnRef.current.getBoundingClientRect();
-    setMenuPos({
-      top: Math.round(rect.bottom + 6),
-      right: Math.round(window.innerWidth - rect.right),
-    });
-  }, [menuOpen]);
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onDoc = (e) => {
-      // kebab button と menu 自身の click は除外
-      if (kebabBtnRef.current && kebabBtnRef.current.contains(e.target)) return;
-      if (menuRef.current && menuRef.current.contains(e.target)) return;
-      setMenuOpen(false);
-    };
-    const onEsc = (e) => { if (e.key === 'Escape') setMenuOpen(false); };
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onEsc);
-    return () => {
-      document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('keydown', onEsc);
-    };
-  }, [menuOpen]);
+  // v206 (2026-06-13): kebab menu (旧 UI 切替の抜け道) を撤去。 ?layout=classic 封印方針 (案C、
+  //   user 承認)。 旧 UI への唯一の menu item だったため kebab ごと削除。 将来 settings/help が
+  //   必要になったら再設置する。 手動 URL ?layout=classic の封印は workspace に詳細ポートフォリオ
+  //   画面 (ロット履歴/TWR/vs SPY、 現状 classic のみ) を移植後に実施予定 ([[project_logged_out_pc_lp_routing]])。
 
   // 検索 pill click → 既存 ⌘K palette を起動 (input 実体を持たず state 二重化を回避)
   const openSearch = () => {
@@ -293,84 +265,7 @@ export default function WorkspaceHeader({ isPro = false, onOpenScreener, onUpgra
         </button>
         )}
 
-        {/* v65 §4-B-2: kebab menu (旧 UI / 将来の settings / help を集約)
-            BETA 段階公開導線「旧 UI」を表に出さず Trust Cliff 逆効果を回避.
-            v65 fix: dropdown は createPortal で body 直下に描画
-            (header の overflow:hidden で 56px 内にクリップされる問題を回避). */}
-        <button
-          ref={kebabBtnRef}
-          type="button"
-          onClick={() => setMenuOpen((v) => !v)}
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          aria-label="その他のメニュー"
-          title="その他"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 24,
-            height: 24,
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm, 8px)',
-            background: menuOpen ? 'rgba(56,189,248,0.10)' : 'var(--bg-card)',
-            color: 'var(--text-secondary)',
-            cursor: 'pointer',
-            flexShrink: 0,
-            transition: 'background 0.15s, border-color 0.15s',
-          }}
-          onMouseEnter={(e) => {
-            if (!menuOpen) {
-              e.currentTarget.style.background = 'rgba(56,189,248,0.06)';
-              e.currentTarget.style.borderColor = 'rgba(56,189,248,0.30)';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!menuOpen) {
-              e.currentTarget.style.background = 'var(--bg-card)';
-              e.currentTarget.style.borderColor = 'var(--border)';
-            }
-          }}
-        >
-          <MoreHorizontal size={14} aria-hidden />
-        </button>
-        {menuOpen && typeof document !== 'undefined' && createPortal(
-          <div
-            ref={menuRef}
-            role="menu"
-            style={{
-              position: 'fixed',
-              top: menuPos.top,
-              right: menuPos.right,
-              minWidth: 200,
-              padding: 4,
-              background: 'var(--bg-card)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-md, 10px)',
-              boxShadow: 'var(--shadow-3)',
-              zIndex: 9999,
-            }}
-          >
-            <a
-              href="?layout=classic"
-              role="menuitem"
-              style={{
-                display: 'block',
-                padding: '8px 12px',
-                fontSize: 12,
-                color: 'var(--text-secondary)',
-                textDecoration: 'none',
-                borderRadius: 'var(--radius-sm, 8px)',
-                transition: 'background 0.12s',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(56,189,248,0.06)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-            >
-              旧 UI (Classic SPA) に戻す
-            </a>
-          </div>,
-          document.body
-        )}
+        {/* v206 (2026-06-13): kebab「旧 UI (Classic SPA) に戻す」 抜け道を撤去 (?layout=classic 封印 案C、 user 承認)。 */}
 
         {/* v108 multi-review 5 体合議 verdict (2026-05-24): 指標バー折りたたみ button 削除。
             UI/UX + Frontend + QA = 3/5 賛成 (chrome 清潔、 「2 秒理解」 5 原則整合)、
