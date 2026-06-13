@@ -13561,6 +13561,11 @@ async def get_technical(
             patterns_result["cup_handle"] = _detect_cup_handle(
                 times, highs, lows, closes, volumes, spy_up
             )
+            # 完全性台帳 Sprint2 (2026-06-13): SPY 単一障害点の表面化。spy_history is None = SPY fetch 失敗。
+            # market_context が "unknown" に潰れて「地合い中立/不明」 と「SPY 取得不可」 が区別できない沈黙の
+            # 欠落を、明示 flag で表面化。frontend は market_context=="unknown" かつ spy_unavailable==true で
+            # 「地合い判定不可 (SPY 取得失敗)」、market_context=="weak" で「地合い悪」 を区別。§38: 状態の事実のみ。
+            patterns_result["cup_handle"]["spy_unavailable"] = spy_history is None
             # v126 R8-3 Phase 3: NVDA 型「直近 breakout = support level」 narration 用に
             # 過去の breakout_confirmed signal の pivot price を inject。
             # data namespace: cup_handle.last_breakout = { price, date }
@@ -13633,6 +13638,8 @@ async def get_technical(
             spy_history_for_rs = _get_spy_history()  # 24h cache 流用
             if spy_history_for_rs and spy_history_for_rs.get("closes"):
                 patterns_result["rs"] = _compute_rs(closes, spy_history_for_rs["closes"])
+                # 完全性台帳 Sprint2: SPY 取得成否を cup_handle と同一 field 名で uniform に表面化。
+                patterns_result["rs"]["spy_unavailable"] = False
             else:
                 patterns_result["rs"] = {
                     "rs_vs_spy_pct": None,
@@ -13640,6 +13647,8 @@ async def get_technical(
                     "ranking_label": None,
                     "period_months": 6,
                     "error": "SPY history unavailable",
+                    # 完全性台帳 Sprint2: 既存 error に加え、cup_handle と同一 field で SPY 取得不可を明示。
+                    "spy_unavailable": True,
                 }
 
         # DMA Cross (Session 3 実装、 50DMA × 200DMA golden cross 直近 60 日内)
