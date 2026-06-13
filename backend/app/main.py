@@ -20524,6 +20524,199 @@ async def cron_canslim_scan(
     }
 
 
+# ── 決算 push MVP Sprint 1: 送信先 ticker 集合ヘルパー ──────────────────────────
+# SPEC: docs/specs/SPEC_2026-06-13_earnings-push-mvp.md Sprint 1
+# 目的: 大貴さん専用 user id (EARNINGS_PUSH_USER_ID 環境変数) で
+#       「net shares > 0 の保有銘柄 ∪ watchlist ticker」の sorted list を返す。
+# ⚠️ 空リストが返る場合は service_role GRANT を最初に疑うこと:
+#    docs/migrations/2026-06-13_earnings_push_grants.sql の確認 SQL で
+#    transactions / watchlist の service_role SELECT が 4 行 (SELECT/INSERT/UPDATE/DELETE) 揃っているか検証。
+#    (memory feedback_supabase_grant_bug.md: 過去 2 回 silent fail 実績あり)
+
+
+def _compute_net_holdings_tickers(transactions: list[dict]) -> set[str]:
+    """transactions リストから net shares > 0 の ticker 集合を計算する (純粋関数)。
+
+    aggregator/triage.py の _holdings_from_transactions と同じ移動平均ロジックを
+    「全 ticker サマリー」 版として実装。 LLM 呼び出しなし、数値物理層のみ。
+
+    Rules (memory portfolio_account_schema.md handover v68):
+      - buy  → shares 加算
+      - sell → shares 減算
+      - split → shares *= (shares / price)  (分子/分母方式)
+      - dividend / fee / deposit / withdraw → 持株数に影響なし
+      - ticker が NULL / 空文字の行は skip
+
+    Returns:
+        net shares > 0 の ticker 集合 (upper case)。
+    """
+    # ticker ごとの保有株数を集計
+    ticker_shares: dict[str, float] = {}
+
+    for tx in transactions:
+        if not isinstance(tx, dict):
+            continue
+        raw_ticker = (tx.get("ticker") or "").strip().upper()
+        if not raw_ticker:
+            continue  # deposit/withdraw 等で ticker が NULL の行はスキップ
+
+        tx_type = (tx.get("type") or "").lower()
+        qty = tx.get("shares") or 0
+        try:
+            qty_f = float(qty)
+        except (TypeError, ValueError):
+            qty_f = 0.0
+
+        cur = ticker_shares.get(raw_ticker, 0.0)
+
+        if tx_type == "buy":
+            ticker_shares[raw_ticker] = cur + qty_f
+        elif tx_type == "sell":
+            ticker_shares[raw_ticker] = cur - qty_f
+        elif tx_type == "split":
+            # schema v68: shares=分子, price=分母 → ratio = shares / price
+            try:
+                price_f = float(tx.get("price") or 0)
+                if price_f > 0 and qty_f > 0:
+                    ticker_shares[raw_ticker] = cur * (qty_f / price_f)
+                elif qty_f > 0:
+                    # 旧 schema fallback (ratio 直接)
+                    ticker_shares[raw_ticker] = cur * qty_f
+            except (TypeError, ValueError):
+                pass
+        # dividend / fee / deposit / withdraw は持株数に影響なし
+
+    # 浮動小数誤差吸収後に net shares > 0 の ticker のみ返す
+    return {t for t, s in ticker_shares.items() if round(s, 4) > 0}
+
+
+def _get_earnings_push_user_id() -> str | None:
+    """大貴さん専用 user_id を環境変数から取得する。
+
+    環境変数 EARNINGS_PUSH_USER_ID に user_id を設定する。
+    ハードコード回避: .env または Railway Service Variables で設定すること。
+    未設定の場合は None を返す (呼び出し側でエラーハンドリング必須)。
+    """
+    return os.environ.get("EARNINGS_PUSH_USER_ID") or None
+
+
+async def fetch_earnings_push_tickers() -> list[str]:
+    """大貴さん専用の「net holdings ∪ watchlist」ticker の sorted list を返す。
+
+    SPEC Sprint 1 の完了判定基準:
+      - target user の transactions を集計し net shares > 0 の ticker を取得
+      - watchlist ticker (同 user の WL) を取得
+      - 両者の和集合を返す (重複排除・upper case)
+      - 戻り値は sorted list (str のリスト)
+
+    ⚠️ 空リストが返った場合:
+      1. EARNINGS_PUSH_USER_ID 環境変数が正しく設定されているか確認
+      2. transactions / watchlist テーブルの service_role GRANT を確認:
+         docs/migrations/2026-06-13_earnings_push_grants.sql の確認 SQL を実行
+      3. backend log に 'permission denied' が出ていないか確認
+      (memory feedback_supabase_grant_bug.md: REFERENCES/TRIGGER/TRUNCATE のみで
+       SELECT が抜ける silent failure が過去 2 回発生)
+
+    Raises:
+        RuntimeError: EARNINGS_PUSH_USER_ID 未設定 / Supabase service client 未設定
+    """
+    user_id = _get_earnings_push_user_id()
+    if not user_id:
+        raise RuntimeError(
+            "EARNINGS_PUSH_USER_ID 環境変数が未設定です。"
+            " .env または Railway Service Variables に設定してください。"
+        )
+
+    sb = _get_supabase_service()
+    if sb is None:
+        raise RuntimeError(
+            "Supabase service client が初期化できませんでした。"
+            " SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY を確認してください。"
+        )
+
+    holdings_tickers: set[str] = set()
+    watchlist_tickers: set[str] = set()
+
+    # ── 1. transactions から net holdings 集計 ──────────────────────────
+    # user_id フィルタ付きで取得 (service_role で RLS バイパス + user 限定で最小権限)。
+    # LIMIT 1000 では足りない可能性があるため _select_all_column 相当の pagination を実装。
+    try:
+        tx_rows: list[dict] = []
+        step = 1000
+        offset = 0
+        while True:
+            res = (
+                sb.table("transactions")
+                .select("ticker,type,shares,price")
+                .eq("user_id", user_id)
+                .range(offset, offset + step - 1)
+                .execute()
+            )
+            chunk = res.data or []
+            tx_rows.extend(chunk)
+            if len(chunk) < step:
+                break
+            offset += step
+
+        holdings_tickers = _compute_net_holdings_tickers(tx_rows)
+        print(
+            f"[earnings-push] transactions fetch: {len(tx_rows)} 行"
+            f" → net holdings {len(holdings_tickers)} 銘柄"
+        )
+    except Exception as e:
+        # silent failure を防ぐため明示 log。空集合で継続 (watchlist は取得続行)。
+        print(f"[earnings-push] transactions fetch failed for user {user_id}: {e}")
+        # ⚠️ 'permission denied' が出る場合は docs/migrations/2026-06-13_earnings_push_grants.sql を適用
+
+    # ── 2. watchlist から ticker 取得 ────────────────────────────────────
+    try:
+        wl_rows: list[dict] = []
+        step = 1000
+        offset = 0
+        while True:
+            res = (
+                sb.table("watchlist")
+                .select("ticker")
+                .eq("user_id", user_id)
+                .range(offset, offset + step - 1)
+                .execute()
+            )
+            chunk = res.data or []
+            wl_rows.extend(chunk)
+            if len(chunk) < step:
+                break
+            offset += step
+
+        watchlist_tickers = {
+            str(r["ticker"]).upper() for r in wl_rows if r.get("ticker")
+        }
+        print(
+            f"[earnings-push] watchlist fetch: {len(wl_rows)} 行"
+            f" → {len(watchlist_tickers)} 銘柄"
+        )
+    except Exception as e:
+        print(f"[earnings-push] watchlist fetch failed for user {user_id}: {e}")
+        # ⚠️ 'permission denied' が出る場合は docs/migrations/2026-06-13_earnings_push_grants.sql を適用
+
+    # ── 3. 和集合・重複排除・ソート ────────────────────────────────────────
+    combined = holdings_tickers | watchlist_tickers
+    result = sorted(combined)
+
+    print(
+        f"[earnings-push] ticker union: holdings={len(holdings_tickers)}"
+        f" WL={len(watchlist_tickers)} union={len(result)}"
+    )
+    if not result:
+        print(
+            "[earnings-push] ⚠️ ticker union が空です。"
+            " 1) EARNINGS_PUSH_USER_ID が正しいか、"
+            " 2) transactions/watchlist の service_role GRANT が揃っているか確認:"
+            " docs/migrations/2026-06-13_earnings_push_grants.sql の確認 SQL を実行してください。"
+        )
+
+    return result
+
+
 # ── Static file serving (must be LAST — after all /api/* routes) ─────────────
 # Only mounted when frontend/dist exists (i.e. production build is present).
 # 注: StaticFiles(html=True) は `/` で index.html を返すが、 任意の未知 path には 404 を返す
