@@ -688,9 +688,11 @@ export default function JudgmentDetail({
           全 path に対し「最上部・独立1行」 を保証する (二重 mount 両 path の先頭に置くと isV4 で二重 render に
           なるのを回避、3体 review frontend-architect verdict)。badge 内部で取得状況に応じ
           empty/loading/errored/main を自己解決 (常時表示・色中立・取得失敗時のみ存在感)。
-          result gate: analyze 失敗 (result=null + retry block 表示中) のときは badge を出さない
-          = 「取得」 と「分析取得失敗」 が同一画面で矛盾するのを防ぐ (敵対的検証 Trust Cliff minor)。 */}
-      {result && <CompletenessRollupBadge ticker={selectedTicker} />}
+          gate: analyze エラー (detail.error = rate limit 等、 retry banner と同条件) のときだけ badge を
+          出さない = 「取得」 と「分析取得失敗」 が同一画面で矛盾するのを防ぐ (敵対的検証 Trust Cliff minor)。
+          ※ result gate は不可: 正常 demo フローでも result は null になりうる (hero/5条件は detail/verdict
+          から描画) ため badge が常に消えてしまう (本番 snap で判明)。analyze エラー時のみ抑止が正。 */}
+      {!detail?.error && <CompletenessRollupBadge ticker={selectedTicker} />}
 
       {/* === 階層 1: Verdict (expanded 固定) ===
           Sprint 4: tier=1 SectionDivider を削除。
