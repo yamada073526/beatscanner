@@ -5,6 +5,14 @@
 > **実装主体**: `frontend/src/features/judgment/components/detail/JudgmentDetail.jsx` の `isV4` return ブロック
 > **進行**: SPEC 化 → 6 体合議 (Sprint 4 着手前 gate) → PGE 3 体ループ実装
 
+> 🛑 **HOLD (2026-06-13 user 確認)** — **planner / generator / evaluator / autopilot は本 SPEC に着手禁止。**
+> user 本人に「この SPEC を体系的にレビュー・承認した記憶があるか」を確認 → **「覚えていない」**。
+> 本 SPEC は上の Status 行のとおり **autopilot (user 就寝中) で gate 1 (user 承認) を skip して推奨案で確定**したもの。
+> handover letter (2026-06-13)「過去 Claude が書いた企画書を、別 Claude が紙に書いてある理由だけで信じて実装する自己参照ループ」の典型に該当しうる。
+> **現状**: Sprint 1 (5 ブロック骨格) のみ着地。Sprint 2 (図解 free ぼかし) / Sprint 3 (章サマリー拡張 + SummaryBrief 廃止) / Sprint 4 (3 軸 §38 gate) は **未実装のまま保留**。`isPane3V5` は依然 default OFF (一度も昇格していない)。
+> **再開条件**: ① 北極星 (悪循環を断つ / 時間を返す / 経済的自由) に照らした v5 章再編の**優先度を grill-me で user と再評価** ② 依拠する「v184 grill-me 確定設計」(memory `project_canslim_screener_expansion.md` §🟢) の**起源を実物確認** (本当に user との grill-me 逐語か、Claude のまとめか) ③ user が gate 1 を**明示承認**。
+> **懸念 (再評価の論点)**: v5 章再編は「人間が見る道具 (Pane3) の磨き込み」寄りで、本丸 (中身の質 = 選別眼 / 配信) ではない疑い。letter「磨き込みに吸い寄せられるな」。
+
 ---
 
 ## 1. Context
