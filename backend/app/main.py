@@ -20883,14 +20883,28 @@ async def _detect_new_earnings(
         _fetch_earnings_for_ticker(ticker, client, since_date, until_date)
         for ticker in tickers
     ]
-    results = await asyncio.gather(*tasks, return_exceptions=False)
+    # §9 Sprint 5 条件: return_exceptions=True で 1 銘柄の例外が全滅を防ぐ
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
     candidates: list[dict] = []
+    fmp_error_count = 0
     for ticker, result in zip(tickers, results):
+        if isinstance(result, BaseException):
+            # asyncio.gather return_exceptions=True 時は例外インスタンスが返る
+            print(f"[earnings-push] _detect_new_earnings gather exception for {ticker}: {result}")
+            fmp_error_count += 1
+            continue
         if result is None:
             # 窓外 / actual=null / FMP エラー → 除外 (log は _fetch_earnings_for_ticker 内)
             continue
         candidates.append(result)
+
+    # fmp_error_count は orchestrator (Sprint 5 endpoint) に伝達できないため log に残す
+    if fmp_error_count > 0:
+        print(
+            f"[earnings-push] _detect_new_earnings: {fmp_error_count} ticker で FMP 取得失敗"
+            f" (return_exceptions=True で続行)"
+        )
 
     print(
         f"[earnings-push] _detect_new_earnings: {len(candidates)} 件の新規決算候補"
@@ -20953,8 +20967,9 @@ def _is_earnings_already_dispatched(
     ticker: str,
     fiscal_period: str | None,
     earnings_date: str,
+    user_id: str | None = None,
 ) -> bool:
-    """同一決算 (ticker × fiscal_period/earnings_date) が既に送信済みか確認する。
+    """同一決算 (ticker × fiscal_period/earnings_date × user_id) が既に送信済みか確認する。
 
     送信前チェックとして Sprint 5 の cron orchestrator から呼ぶ。
 
@@ -20964,6 +20979,9 @@ def _is_earnings_already_dispatched(
                         None の場合は earnings_date で代替 (docstring 参照)。
         earnings_date:  決算日 "YYYY-MM-DD" 文字列。
                         fiscal_period=None 時の dedup キーフォールバックに使用。
+        user_id:        §9 Sprint 5 条件: user_id を追加してフィルタ。
+                        将来の複数ユーザー展開時に「ユーザーAの送信済みがユーザーBのdedup
+                        に効く」誤爆を防止。None の場合は user_id フィルタなし (後方互換)。
 
     Returns:
         True  = 送信済み (skip すべき)
@@ -20974,11 +20992,6 @@ def _is_earnings_already_dispatched(
         - check 失敗 (DB 接続エラー等) は False を返して送信を続行。
           silent failure よりも重複送信リスクを取る設計 (cron 側で dry_run 確認を推奨)。
         - dedup_key = fiscal_period or earnings_date で cup の transition_type と名前空間が異なる。
-        - TODO (Sprint 5 / 複数ユーザー展開時): user_id フィルタを追加すること。
-          現在は MVP 自分専用 (user_id 固定) のため user_id なし dedup でも問題ないが、
-          複数ユーザーに展開する際は「ユーザーAへの送信済みがユーザーBの dedup に効く」
-          問題が発生する。Sprint 5 cron endpoint で .eq("user_id", user_id) を追加する。
-          (multi-review 3 体合議 2026-06-13 verdict: Reviewer 1/3 が条件として指摘)
     """
     sb = _get_supabase_service()
     if sb is None:
@@ -20987,16 +21000,18 @@ def _is_earnings_already_dispatched(
     dedup_key = _make_earnings_dedup_key(fiscal_period, earnings_date)
 
     try:
-        res = (
+        query = (
             sb.table("notification_dispatch_log")
             .select("id")
             .eq("ticker", ticker)
             .eq("pattern_type", "earnings_push")
             .eq("transition_type", dedup_key)
             .eq("status", "sent")
-            .limit(1)
-            .execute()
         )
+        # §9 Sprint 5 条件: user_id フィルタ追加で複数ユーザーの誤爆防止
+        if user_id:
+            query = query.eq("user_id", user_id)
+        res = query.limit(1).execute()
         already = bool(res.data)
         print(
             f"[earnings-push][dedup] {ticker} / {dedup_key}: "
@@ -21064,6 +21079,410 @@ def _record_earnings_dispatch(
         )
     except Exception as e:
         print(f"[earnings-push][record] insert failed for {ticker}/{dedup_key}: {e}")
+
+
+# ============================================================================
+# 決算 push MVP Sprint 5: 新規 cron endpoint `/api/cron/earnings-notify` (2026-06-13)
+#
+# 設計: Sprint 1-4 を orchestrate
+#   1. fetch_earnings_push_tickers() — holdings∪WL 集計
+#   2. _detect_new_earnings(tickers, window_days=2) — 決算差分検出
+#   3. per-ticker dedup (_is_earnings_already_dispatched w/ user_id)
+#   4. per-ticker 集約 — _analyze_core + _verdict を再利用して verdict/n_of_5/conditions/completeness 組み立て
+#   5. build_earnings_payload → send_earnings_digest
+#   6. 送信成功後に _record_earnings_dispatch(status="sent")、失敗時は status="failed"
+#
+# §9 Sprint 5 追加条件 (全て適用):
+#   - CRON_SECRET fail-closed: endpoint 専用厳格 guard (既存 _check_cron_secret は cup のまま不変)
+#   - window_days=2 (UTC ずれ + cron 未発火リカバリ、dedup が overlap 無害化)
+#   - _detect_new_earnings を return_exceptions=True 対応 (Sprint 2 の _detect_new_earnings を修正済)
+#   - _is_earnings_already_dispatched に .eq("user_id", user_id) 追加 (Sprint 3 TODO を解消済)
+#   - per-ticker try/except で部分失敗を隔離 (fmp_error_count カウント)
+#   - dry_run body param (True で実送信 skip)
+#   - 件数戻り値: {candidates, sent, skipped_dedup, failed, dropped, fmp_error_count, dry_run}
+#   - aggregator/ への LLM import 絶対禁止 (集約は既存 endpoint の数値結果を呼ぶだけ)
+# ============================================================================
+
+
+async def _aggregate_ticker_data_for_push(
+    ticker: str,
+    fmp_key: str,
+    candidate: dict,
+) -> dict:
+    """1 銘柄の集約データを取得して dict で返す。
+
+    既存の analyze / quarterly-history 内部関数を再利用。新規に計算ロジックを書き起こさない。
+    aggregator/ には LLM import しない (CLAUDE.md §4 Hallucination Guard)。
+
+    Args:
+        ticker:     銘柄シンボル (例: "AAPL")
+        fmp_key:    FMP API key
+        candidate:  _detect_new_earnings() が返した候補 dict
+                    {ticker, earnings_date, fiscal_period, eps_actual, eps_estimate}
+
+    Returns:
+        {
+            "verdict":      str,              # 'beat'|'miss'|'in-line'|'unknown'
+            "surprise_pct": float|None,
+            "n_of_5":       int,              # ファンダ 5 条件 PASS 数
+            "conditions":   dict[str, bool],  # {条件名: True/False}
+            "completeness": dict[str, str],   # {source_key: 'ok'|'failed'|'na'|'unknown'}
+        }
+
+    Notes:
+        - verdict/surprise_pct: candidate から eps_actual/eps_estimate を取り _verdict() で分類。
+          _verdict() は main.py:5034 の既存関数 (±3% threshold、 ±500% cap、 near-zero guard)。
+        - n_of_5/conditions: _analyze_core() で judgment.JudgmentResult を取得。
+          passedCount と conditions (list[dict]) を payload 用 dict に変換。
+        - completeness: FMP earnings_surprises + income_q + cash_flow_q の取得状況を軽量に組む。
+          quarterly-history の src_status と同じキー体系 (earnings_surprises/income_q/cash_flow_q)。
+          注: cron context では Request オブジェクトがないため fmp_key を直接渡す。
+        - 取得失敗 (FMP エラー等) は例外を raise → 呼出側 per-ticker try/except が隔離。
+    """
+    # ── 1. verdict / surprise_pct (既存 _verdict 再利用) ──────────────────────
+    eps_actual = candidate.get("eps_actual")
+    eps_estimate = candidate.get("eps_estimate")
+    verdict_raw, surprise_pct, _ = _verdict(eps_actual, eps_estimate)
+    # _verdict は "beat"/"miss"/"in-line"/"unknown" を返す (main.py:5037)。
+    # mailer の canonical key は "beat"/"miss"/"inline" なので "in-line" を "inline" に正規化する
+    # (正規化しないと sort order / SURPRISE_VERDICT_JP で raw 文字列が漏れる)。
+    # "unknown" (eps_estimate 欠如等) は mailer 側で "—" に neutral 表示 (予想並みと誤表示しない、§38)。
+    verdict = "inline" if verdict_raw == "in-line" else verdict_raw
+
+    # ── 2. n_of_5 / conditions (既存 _analyze_core 再利用) ───────────────────
+    n_of_5 = 0
+    conditions: dict[str, bool] = {}
+    try:
+        analyze_data = await _analyze_core(ticker, fmp_key, use_cache=True)
+        # JudgmentResult.to_dict() の camelCase キーを参照
+        # passedCount: int, conditions: list[{name, passed, value, detail, series}]
+        n_of_5 = int(analyze_data.get("passedCount", 0) or 0)
+        cond_list: list[dict] = analyze_data.get("conditions", []) or []
+        conditions = {c["name"]: bool(c.get("passed", False)) for c in cond_list}
+    except (_AnalyzeETFError, _AnalyzeNotFoundError) as e:
+        print(f"[earnings-push][agg] analyze skip for {ticker}: {e}")
+        # ETF / データなし は conditions 空 / n_of_5=0 で継続 (送信は続ける)
+    except Exception as e:
+        print(f"[earnings-push][agg] analyze failed for {ticker}: {e}")
+        # 取得失敗は raise して per-ticker try/except が隔離
+        raise
+
+    # ── 3. completeness (quarterly-history と同一の実 source 取得状況 + classify) ──
+    # ★ proxy ではなく実 fetch。guidance_quarterly_history (main.py:6451) と同じ 3 source を
+    #   並列取得し、completenessLedger.js classifyEarnings (frontend SSOT) と同一写像で
+    #   メール表示用 status に変換する → in-app の完全性台帳 badge と 1:1 (沈黙の欠落 0件を
+    #   メール面でも保証。proxy だと「実 quarterly が失敗でも取得済みと詐称」しうるため真値化)。
+    #   写像 (classifyEarnings:51-54): fetch 成功+行あり→ok / 成功+空→na(非該当) / 例外→failed。
+    # Sprint 6 確認事項: FMP /stable/earnings の `date` は US 基準 (ET)。UTC today との ±1 日ずれを
+    #   window_days=2 で吸収 (SPEC §9 Sprint 5)。
+    _agg_client = FMPClient(api_key=fmp_key)
+    _src_results = await asyncio.gather(
+        _agg_client.earnings_surprises(ticker, limit=8),
+        _agg_client.income_statement(ticker, limit=8, period="quarter"),
+        _agg_client.cash_flow(ticker, limit=8, period="quarter"),
+        return_exceptions=True,
+    )
+
+    def _classify_src(r) -> str:
+        # completenessLedger.js classifyEarnings と同一: error→failed / empty→na / ok→ok。
+        if isinstance(r, Exception):
+            return "failed"
+        return "ok" if r else "na"
+
+    _src_keys = ["earnings_surprises", "income_q", "cash_flow_q"]
+    completeness: dict[str, str] = {
+        k: _classify_src(r) for k, r in zip(_src_keys, _src_results)
+    }
+
+    return {
+        "verdict": verdict,
+        "surprise_pct": surprise_pct,
+        "n_of_5": n_of_5,
+        "conditions": conditions,
+        "completeness": completeness,
+    }
+
+
+@app.post("/api/cron/earnings-notify")
+async def cron_earnings_notify(
+    body: dict | None = None,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """保有・WL 銘柄の新着決算を集約してユーザーに 1 通 digest メールを送信する。
+
+    §9 Sprint 5 CRON_SECRET fail-closed 仕様 (既存 _check_cron_secret の共有挙動は変えない):
+      - 環境変数 CRON_SECRET 未設定 → 503 (Security: 未設定のまま送信系 cron が素通りするのを防ぐ)
+      - CRON_SECRET 設定済 + 不一致 → 401
+      - 比較は hmac.compare_digest (タイミング攻撃耐性)
+      ※ 既存の cup/article/scan の _check_cron_secret は「未設定時スキップ」のまま変更しない
+
+    Body (任意):
+      dry_run: bool — True で実送信 skip (payload 生成・blocklist 確認まで実施、record もしない)
+      window_days: int — 遡り日数 (デフォルト 2)
+
+    Returns:
+      {
+        "candidates": int,       # 決算差分検出件数
+        "sent": int,             # 実送信件数
+        "skipped_dedup": int,    # 重複送信 skip 件数
+        "failed": int,           # 送信失敗件数
+        "dropped": list[str],    # fail-closed sanitize で除外した ticker
+        "fmp_error_count": int,  # FMP 取得失敗 ticker 数
+        "dry_run": bool,
+      }
+
+    手動 POST 検証手順 (Sprint 6 end-to-end 前):
+      ① 決算ゼロ: curl -X POST .../api/cron/earnings-notify -H 'X-Cron-Secret: SECRET'
+         → {"candidates": 0, "sent": 0, ...}
+      ② 決算あり dry_run: body={"dry_run": true}
+         → payload 生成・blocklist 確認まで実施、sent=0
+      ③ 再 POST (① 後、同一 fiscal_period): skipped_dedup=1・sent=0
+    """
+    import hmac as _hmac
+
+    # §9 Sprint 5 fail-closed guard (endpoint 専用、_check_cron_secret とは独立)
+    _expected_secret = os.environ.get("CRON_SECRET")
+    if not _expected_secret:
+        # 未設定環境では送信系 cron は起動させない (cup は許容、earnings push は厳格)
+        raise HTTPException(
+            status_code=503,
+            detail="CRON_SECRET が設定されていません。環境変数を設定してから再試行してください。",
+        )
+    _provided = x_cron_secret or ""
+    if not _hmac.compare_digest(_provided, _expected_secret):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    body = body or {}
+    dry_run = bool(body.get("dry_run", False))
+    window_days = int(body.get("window_days", 2))  # §9: window_days=2 確定
+
+    # カウンタ初期化
+    sent_count = 0
+    failed_count = 0
+    skipped_dedup = 0
+    fmp_error_count = 0
+    all_dropped: list[str] = []
+
+    # ── Step 1: 送信先 user_id + tickers 取得 ──────────────────────────────────
+    user_id = _get_earnings_push_user_id()
+    if not user_id:
+        raise HTTPException(
+            status_code=503,
+            detail="EARNINGS_PUSH_USER_ID が設定されていません。",
+        )
+
+    try:
+        tickers = await fetch_earnings_push_tickers()
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    if not tickers:
+        print("[earnings-push][cron] ticker 集合が空 → 送信なし")
+        return {
+            "candidates": 0,
+            "sent": 0,
+            "skipped_dedup": 0,
+            "failed": 0,
+            "dropped": [],
+            "fmp_error_count": 0,
+            "dry_run": dry_run,
+        }
+
+    # ── Step 2: 決算差分検出 (_detect_new_earnings は return_exceptions=True 対応済) ──
+    try:
+        candidates = await _detect_new_earnings(tickers, window_days=window_days)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"_detect_new_earnings failed: {e}")
+
+    if not candidates:
+        return {
+            "candidates": 0,
+            "sent": 0,
+            "skipped_dedup": 0,
+            "failed": 0,
+            "dropped": [],
+            "fmp_error_count": 0,
+            "dry_run": dry_run,
+        }
+
+    # ── Step 3: 送信先 email 取得 (user_notification_preferences) ──────────────
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    to_email: str | None = None
+    try:
+        prefs_res = (
+            sb.table("user_notification_preferences")
+            .select("email_enabled,email_address")
+            .eq("user_id", user_id)
+            .eq("email_enabled", True)
+            .limit(1)
+            .execute()
+        )
+        prefs_data = prefs_res.data or []
+        if prefs_data and prefs_data[0].get("email_address"):
+            to_email = prefs_data[0]["email_address"]
+    except Exception as e:
+        print(f"[earnings-push][cron] user_notification_preferences 取得失敗: {e}")
+
+    if not to_email:
+        # email 未設定でも 200 を返す (設定は user 側の問題)
+        print(
+            f"[earnings-push][cron] user {user_id} の email 未設定 or email_enabled=false"
+            " → 送信スキップ"
+        )
+        return {
+            "candidates": len(candidates),
+            "sent": 0,
+            "skipped_dedup": 0,
+            "failed": 0,
+            "dropped": [],
+            "fmp_error_count": 0,
+            "dry_run": dry_run,
+            "detail": "email not configured",
+        }
+
+    # ── Step 4: FMP key 取得 (cron context では環境変数直取得) ─────────────────
+    fmp_key = os.getenv("FMP_API_KEY", "")
+
+    # ── Step 5: per-ticker dedup + 集約 ──────────────────────────────────────
+    from .earnings_mailer import build_earnings_payload
+
+    fresh_candidates: list[dict] = []
+    payloads_map: dict[str, any] = {}  # ticker → EarningsNotifyPayload
+
+    for candidate in candidates:
+        ticker = candidate["ticker"]
+
+        # dedup チェック (§9: user_id フィルタ追加)
+        already = await asyncio.to_thread(
+            _is_earnings_already_dispatched,
+            ticker,
+            candidate.get("fiscal_period"),
+            candidate["earnings_date"],
+            user_id,
+        )
+        if already:
+            skipped_dedup += 1
+            print(f"[earnings-push][cron] {ticker}: dedup skip")
+            continue
+
+        # per-ticker try/except で部分失敗を隔離 (§9 条件)
+        try:
+            agg = await _aggregate_ticker_data_for_push(ticker, fmp_key, candidate)
+        except Exception as e:
+            print(f"[earnings-push][cron] {ticker}: 集約失敗 → failed カウント: {e}")
+            fmp_error_count += 1
+            continue
+
+        # build_earnings_payload で channel 非依存 payload 生成
+        payload = build_earnings_payload(
+            ticker=ticker,
+            verdict=agg["verdict"],
+            surprise_pct=agg["surprise_pct"],
+            eps_actual=candidate.get("eps_actual"),
+            eps_estimate=candidate.get("eps_estimate"),
+            n_of_5=agg["n_of_5"],
+            conditions=agg["conditions"],
+            completeness=agg["completeness"],
+        )
+        fresh_candidates.append(candidate)
+        payloads_map[ticker] = payload
+
+    if not fresh_candidates:
+        # fresh なし (全 dedup または 全 fmp_error)
+        return {
+            "candidates": len(candidates),
+            "sent": 0,
+            "skipped_dedup": skipped_dedup,
+            "failed": failed_count,
+            "dropped": all_dropped,
+            "fmp_error_count": fmp_error_count,
+            "dry_run": dry_run,
+        }
+
+    payloads_list = [payloads_map[c["ticker"]] for c in fresh_candidates]
+
+    # ── Step 6: 送信 (dry_run なら skip) ──────────────────────────────────────
+    from .earnings_mailer import send_earnings_digest
+
+    if dry_run:
+        send_result = {
+            "status": "skipped",
+            "detail": "dry_run",
+            "id": None,
+            "dropped": [],
+        }
+        print(
+            f"[earnings-push][cron] dry_run=True → 実送信スキップ"
+            f" (payload {len(payloads_list)} 件)"
+        )
+    else:
+        send_result = await asyncio.to_thread(
+            send_earnings_digest, to_email, payloads_list, user_id
+        )
+
+    send_status = send_result.get("status", "failed")
+    all_dropped.extend(send_result.get("dropped") or [])
+
+    # ── Step 7: 送信成功後に record (§9: 送信→成功後 record の順、cup 踏襲) ───
+    if dry_run:
+        # dry_run は record しない (§9 条件)
+        pass
+    elif send_status == "sent":
+        for candidate in fresh_candidates:
+            ticker = candidate["ticker"]
+            # fail-closed で drop された ticker は sent ではなく record しない
+            if ticker in all_dropped:
+                continue
+            await asyncio.to_thread(
+                _record_earnings_dispatch,
+                ticker,
+                candidate.get("fiscal_period"),
+                candidate["earnings_date"],
+                user_id,
+                "sent",
+                None,
+                "email",
+            )
+        sent_count = 1  # 1 通 digest 送信成功
+    else:
+        # Resend 失敗時は status="failed" で記録 (§9: sent 禁止=翌日再試行)
+        for candidate in fresh_candidates:
+            ticker = candidate["ticker"]
+            if ticker in all_dropped:
+                continue
+            await asyncio.to_thread(
+                _record_earnings_dispatch,
+                ticker,
+                candidate.get("fiscal_period"),
+                candidate["earnings_date"],
+                user_id,
+                "failed",
+                send_result.get("detail", "")[:200],
+                "email",
+            )
+        failed_count = 1
+
+    # dropped ticker (fail-closed sanitize で除外) を failed_count にカウント
+    fmp_error_count += len(all_dropped)
+
+    print(
+        f"[earnings-push][cron] 完了: candidates={len(candidates)} sent={sent_count}"
+        f" skipped_dedup={skipped_dedup} failed={failed_count}"
+        f" dropped={all_dropped} fmp_error_count={fmp_error_count} dry_run={dry_run}"
+    )
+
+    return {
+        "candidates": len(candidates),
+        "sent": sent_count,
+        "skipped_dedup": skipped_dedup,
+        "failed": failed_count,
+        "dropped": all_dropped,
+        "fmp_error_count": fmp_error_count,
+        "dry_run": dry_run,
+    }
 
 
 # ── Static file serving (must be LAST — after all /api/* routes) ─────────────

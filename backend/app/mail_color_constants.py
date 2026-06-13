@@ -45,6 +45,11 @@ SURPRISE_VERDICT_JP: dict[str, str] = {
     "beat": "Beat",
     "inline": "予想並み",
     "miss": "Miss",
+    # _verdict() は eps_estimate 欠如等で "unknown" を返す (main.py:5037)。予想比が出ないので
+    # 「予想並み」と誤表示せず "—" で neutral 表示 (§38: 不確実を確実に見せない)。
+    # get_surprise_color は未知キーで (INLINE_COLOR, SURPRISE_VERDICT_JP.get(...)) を返すため、
+    # この dict 追加だけで "unknown" → (INLINE_COLOR=灰, "—") に解決される。
+    "unknown": "—",
 }
 
 # ─── surpriseColor マッピング ─────────────────────────────────────────────
