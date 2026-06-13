@@ -100,6 +100,10 @@ import { useDetailScrollRestore } from './useDetailScrollRestore.js';
 import FundamentalsAccordion from './sections/FundamentalsAccordion.jsx';
 // v199: ファンダ章冒頭の決算ハイライト (flag opt-in、SPEC_2026-06-10_earnings-flash-summary + 6体合議)
 import EarningsFlashSummary from './sections/EarningsFlashSummary.jsx';
+// 完全性台帳 (coverage manifest) Sprint3: 規律の元データ取得状況を最上部1行ロールアップ + ドリルダウン監査。
+import CompletenessRollupBadge from './sections/CompletenessRollupBadge.jsx';
+// 完全性台帳 #4: SPY 取得失敗時にテクニカル章で「地合いデータ未取得」 を中立注記 (chartBlock 内 = 全 path 到達)。
+import TechnicalSpyNote from './sections/TechnicalSpyNote.jsx';
 import MarketEvalSection from './sections/MarketEvalSection.jsx';
 import ContextSection from './sections/ContextSection.jsx';
 // Sprint 2 (CAN-SLIM Phase 1 UX): テクニカル章のライター憲法サマリーブロック
@@ -679,6 +683,15 @@ export default function JudgmentDetail({
           - 発光系 class 不使用、28px 独立バー */}
       <DetailBreadcrumb />
 
+      {/* 完全性台帳 Sprint3 (SPEC_2026-06-13): 規律の元データ取得状況の最上部ロールアップ badge。
+          ds-judgment-detail 直下・DetailBreadcrumb 直後の単一挿入で、isV5 / !isV5 / isV4&&!isV5 / legacy の
+          全 path に対し「最上部・独立1行」 を保証する (二重 mount 両 path の先頭に置くと isV4 で二重 render に
+          なるのを回避、3体 review frontend-architect verdict)。badge 内部で取得状況に応じ
+          empty/loading/errored/main を自己解決 (常時表示・色中立・取得失敗時のみ存在感)。
+          result gate: analyze 失敗 (result=null + retry block 表示中) のときは badge を出さない
+          = 「取得」 と「分析取得失敗」 が同一画面で矛盾するのを防ぐ (敵対的検証 Trust Cliff minor)。 */}
+      {result && <CompletenessRollupBadge ticker={selectedTicker} />}
+
       {/* === 階層 1: Verdict (expanded 固定) ===
           Sprint 4: tier=1 SectionDivider を削除。
           accordion header が既に「階層 chrome」を提供するため冗長。
@@ -983,6 +996,9 @@ export default function JudgmentDetail({
         const chartBlock = selectedTicker ? (
           <SectionFade key="chart" id="sec-chart" staggerIndex={3}>
             <StockPriceChart ticker={selectedTicker} isPremiumUser={plan === 'premium'} onUpgrade={detailContext.onUpgrade} hideTitle={isV5} />
+            {/* 完全性台帳 #4: SPY 取得失敗時のみ「地合いデータ未取得」 を中立注記。chartBlock は v5/isV4/legacy
+                全 path で使われるため、ここに1箇所置けば全テクニカル章に到達する (SPY 取得成功時は null)。 */}
+            <TechnicalSpyNote ticker={selectedTicker} />
           </SectionFade>
         ) : null;
 

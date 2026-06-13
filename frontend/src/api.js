@@ -1,3 +1,9 @@
+// テクニカル overlay (Cup-Handle / SMA 50/200 / RS / DMA cross) の canonical patterns 文字列。
+// prefetchAll / StockPriceChart / PriceLadder / 各 zone card / 完全性台帳 section が同一 URL を
+// 叩いて dedupGet で coalesce するための SSOT。 文字列 drift は cache key ずれ → 余分な FMP fetch
+// (cost / quota) を生むため、 全呼び出し箇所はこの定数を import して使う (リテラル直書き禁止)。
+export const TECHNICAL_CANONICAL_PATTERNS = 'cup_handle,sma_50,sma_200,rs,dma_cross';
+
 function fmpHeaders() {
   return {};
 }
@@ -202,7 +208,10 @@ export function prefetchAll(ticker) {
   fetch(`/api/chart/${t}/summary`).catch(() => {}); // classic ChartTab 用 (Pane 3 未使用、 据置)
   fetchPriceHistory(ticker, '1y').catch(() => {});
   // v144: Pane 3 chart の technical overlay も先取り (StockPriceChart と同一 patterns 文字列で URL 一致)
-  fetchTechnical(ticker, 'cup_handle,sma_50,sma_200,rs,dma_cross').catch(() => {});
+  fetchTechnical(ticker, TECHNICAL_CANONICAL_PATTERNS).catch(() => {});
+  // 完全性台帳 Sprint3: ロールアップ badge が quarterly-history `sources` を読むため先取り
+  //   (EarningsFlashSummary / useEpsBeatStreak と同一 URL で dedupGet coalesce、追加 fetch なし)。
+  fetchQuarterlyHistory(ticker, 8).catch(() => {});
   // 市場の声 (cold 時 24-60 秒かかるため最優先、 InsightsPanel と coalesce)
   fetchInsights(ticker).catch(() => {});
   // v40+: 残りパネル用 (news / ir-links / analyst)。 各 panel mount fetch と coalesce。
@@ -239,7 +248,9 @@ export async function fetchPriceHistory(ticker, period = '1y') {
 // Cup-with-Handle Phase 1 (handover v75、 6 体合議 2026-05-17 B 案):
 // テクニカル指標 (Cup-Handle / SMA 50/200 / RS) bulk 取得。
 // 失敗時は空 overlays を返してチャート描画は継続 (graceful degrade)。
-export async function fetchTechnical(ticker, patterns = 'cup_handle,sma_50,sma_200') {
+// 既定 patterns は canonical 文字列に揃える (省略呼び出しでも prefetchAll / StockPriceChart と
+// 同一 URL → dedupGet cache hit。 patterns drift による余分な FMP fetch を構造的に防ぐ)。
+export async function fetchTechnical(ticker, patterns = TECHNICAL_CANONICAL_PATTERNS) {
   // v144 #Pane3-perf: dedupGet 経由 (prefetch と StockPriceChart の mount fetch を coalesce)
   try {
     return await dedupGet(`/api/technical/${encodeURIComponent(ticker)}?patterns=${patterns}&period=1y`);
