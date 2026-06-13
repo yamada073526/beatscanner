@@ -1,6 +1,6 @@
 # SPEC 2026-06-13: 完全性台帳 (coverage manifest) — top2 先行 (quarterly-history sources + SPY 単一障害点表面化)
 
-> **Status**: 🧑 user gate1 **承認済 (2026-06-13 セッション3)**。**Sprint1 ✅ + Sprint2 ✅ + Sprint3 ✅ 本番検証済**、Sprint4 (eval) 残。
+> **Status**: 🧑 user gate1 **承認済 (2026-06-13 セッション3)**。**Sprint1-4 全 ✅ 着地** (top2 クラスタ完了)。Sprint4 eval = 沈黙の欠落 0件率 (unit 192 combos + 実データ curl 5 ticker、共に 0件)、dogfood 設問は §Sprint4 に記録 (user 回答待ち)。次は §別backlog (5条件/ガイダンス/機関の sources 拡張、配信再利用)。
 > 進捗: Sprint1 (quarterly-history sources/field_sources, commit `af4289a`, AAPL/NVDA で sources=全ok 検証) / Sprint2 (SPY spy_unavailable を cup_handle・rs に付与, commit `547c5d9`, AAPL で spy_unavailable=false 検証) / **Sprint3 (frontend §38 badge + SPY 注記, commit `7279a87` + gate hotfix `3f16d39`, 本番 AAPL で badge=main・rollup「決算データ・地合いを自動取得」・ドリルダウン§38免責文・色中立を snap で確認)**。
 > Sprint3 の経緯: 未決4点を design 確定 (#1 最上部独立1行 / #2 限定・正直表現 / #3 無料面+具体数値は既存tier / #4 SPY=テクニカル章中立) → 3体 multi-review (金融§38 Opus + frontend + qa) → 実装 → 敵対的検証2巡 (4 lens→2 lens、blocker 2 + minor 多数を修正) → deploy → 本番 snap 検証。**次は Sprint4 (eval)** = 沈黙の欠落0件率 harness + dogfood「再チェックしたか」設問。
 > **由来**: grill-me 2026-06-13 (5問依存順) を起点とする user 由来。SSOT memory = `project_inner_quality_completeness_ledger.md` / `project_north_star.md`。
@@ -90,11 +90,22 @@ LP 訴求文言との整合 (3 項目以上):
 - **呼ぶ既存 skill**: `designing-workspace-ui` (Pane3 配置・workspace path)、`shadcn` (必要時)、`design-system-check` (token/発光 enforcement)、`pge-loop-debugger` (selector 幻覚 / ESM return / infinite animation の予防)。
 - **完了判定**: `data-testid` が loading/errored/empty/main 全 render path に付与 (`feedback_testid_all_render_paths.md`)。primary selector は **data-testid** (text/class でなく。selector 幻覚予防)。`?pane3_v5=1` と非 v5 の両方で badge + ドリルダウンが描画される。banner は source が実際に `error`/`empty` のときのみ発火 (誤発火 0)。
 
-### Sprint 4 — eval (沈黙の欠落 0件率 構造 proxy + dogfood「再チェックしたか」) + 仕上げ
-- **目的**: 台帳が "見る道具" に堕ちない歯止めを eval として固定。① **構造 proxy**: 「データ取得失敗が必ず明示される (沈黙の欠落 0 件率)」 を検証する snap/curl harness。② **dogfood**: user が「この銘柄、自分で決算を読み直す必要を感じたか (= 再チェックしたか)」 を必ず併設記録。
-- **触るファイル**: `frontend/scripts/snap-*.mjs` (visual harness exception 4 条件遵守: headless / 60s timeout / `.visual/` 出力 / HTTP server なし)。eval 記録は handover/memory に残す。
-- **完了判定**: ① 3+ ticker (ok / partial / カバー外) で sources の `error`/`empty` が漏れなく badge に反映され「沈黙の素通り」 が 0 件であることを harness が verify。② dogfood で user の「再チェック要否」 が記録される設問が併設されている。
-- **呼ぶ既存 skill**: `vision-eval` (badge 表示の Haiku 採点、3 run mean / `feedback_vision_api_noise.md`)、`pge-loop-debugger`。
+### Sprint 4 ✅ (eval 着地、本番 commit は下記) — 沈黙の欠落 0件率 構造 proxy + dogfood「再チェックしたか」
+- **目的**: 台帳が "見る道具" に堕ちない歯止めを eval として固定。① **構造 proxy**: 「データ取得失敗が必ず明示される (沈黙の欠落 0 件率)」 を検証する harness。② **dogfood**: user が「この銘柄、自分で決算を読み直す必要を感じたか (= 再チェックしたか)」 を併設記録。
+- **着地 (①構造 proxy)**:
+  - 純粋ロジックを `frontend/src/features/judgment/constants/completenessLedger.js` に抽出 (classifyEarnings/classifyMarket/buildPresent/buildRollup + ラベル dict、React 非依存)。`CompletenessRollupBadge.jsx` はこれを import (= 描画と eval が同一コードを共有 → drift 防止)。
+  - **unit test** `constants/__tests__/completenessLedger.test.js` (Node 標準 assert、`node <path>` で実行): 全 sources 組合せ **192 combos (4^3 earnings × 3 spy)** を網羅し「error/empty が silently 'ok'/自動取得 に化けない」 を assert → **沈黙の欠落 0件 / 10 PASS**。敵対的検証の blocker (全 empty→ok 誤昇格) / minor (全滅→「一部」誤読) を named regression で固定。
+  - **curl harness** `frontend/scripts/snap-completeness-eval.mjs`: 実 backend を 5 ticker (AAPL/JPM/KO=全ok, GLD/SPY=ok/empty/empty) で取得し同ロジックに通す → **実データで沈黙の欠落 0件** (ETF の income_q/cash_flow_q=empty が na=非該当に漏れなく表面化、silently ok に化けない)。quarterly-history/technical は demo rate limit 対象外で連続 curl 可。
+- **dogfood 設問 (②、user 回答待ち)**: 下記「§dogfood 設問」 参照。handover/memory に記録。
+- **既知境界**: 実 equity は sources が概ね全 ok のため error/empty path は ETF/transient でしか実発火しない → 0件率の主証明は logic 層の網羅 unit test、curl harness は実データ補完という役割分担。technical 層が丸ごと停止すると地合いが unknown に落ち表面化しない (false alarm 回避の保守側、将来 sprint で techFetchEmpty を別状態化する案あり)。
+- **呼ぶ既存 skill**: `pge-loop-debugger` (harness の ESM top-level return / hard timeout 遵守済)。badge UI は Sprint3 から不変のため vision-eval は再実行不要。
+
+#### §dogfood 設問 (Sprint4 ②、user に併設記録を依頼)
+完全性 badge を本番で数銘柄触った上で、以下を記録する (台帳が「裏取り不要の信頼」 を生んでいるかの主観 proxy):
+1. badge / ドリルダウンを見て、**この銘柄を自分で決算を読み直す (裏取りする) 必要を感じたか?** (はい=台帳が信頼を生めていない / いいえ=狙い通り)
+2. 「データ取得状況」 の文言を「数値が正しい/買える」 と誤読しなかったか? (§38 の核心、誤読=Trust Cliff)
+3. 全 ok 時の badge は「静かすぎ / ちょうど良い / うるさい」 のどれか? (qa S-2 静かさの検証)
+4. ドリルダウンを実際に開く動機があったか? 開いて「裏取り不要」 と腹落ちしたか? (開かない=飾りに堕ちるリスク)
 
 ---
 
