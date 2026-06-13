@@ -16236,6 +16236,12 @@ def _is_already_dispatched(
     """過去 dedup_days 以内に同 (user, ticker, transition) が status='sent' で送信済か。
 
     Trust Cliff verdict: 狼少年化ガード = 同一通知の 7 日連投禁止。
+
+    名前空間: notification_dispatch_log は cup_handle / article / earnings_push が共有する。
+    本 cup dedup は pattern_type='cup_handle' を明示 filter し、他種 (earnings_push 等) の
+    行と混在しないことを「値の偶然」でなく「明示 filter」で保証する (article dedup と一貫、
+    複合 index (user_id, ticker, pattern_type, transition_type, signal_date) を完全活用)。
+    cup の insert は常に pattern_type='cup_handle' のため behavior-preserving。
     """
     sb = _get_supabase_service()
     if sb is None:
@@ -16247,6 +16253,7 @@ def _is_already_dispatched(
             .select("id")
             .eq("user_id", user_id)
             .eq("ticker", ticker)
+            .eq("pattern_type", "cup_handle")
             .eq("transition_type", transition_type)
             .gte("signal_date", cutoff)
             .eq("status", "sent")
