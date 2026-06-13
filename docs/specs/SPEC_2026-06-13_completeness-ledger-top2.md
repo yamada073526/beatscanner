@@ -1,8 +1,8 @@
 # SPEC 2026-06-13: 完全性台帳 (coverage manifest) — top2 先行 (quarterly-history sources + SPY 単一障害点表面化)
 
-> **Status**: 🧑 user gate1 **承認済 (2026-06-13 セッション3)**。**Sprint1 ✅ + Sprint2 ✅ 本番検証済**、Sprint3-4 残。
-> 進捗: Sprint1 (quarterly-history sources/field_sources, commit `af4289a`, AAPL/NVDA で sources=全ok 検証) / Sprint2 (SPY spy_unavailable を cup_handle・rs に付与, commit `547c5d9`, AAPL で spy_unavailable=false 検証)。
-> **次セッションは Sprint3 から** = frontend §38 badge。着手前に [3体 multi-review (ui-designer/frontend-architect/qa-dogfooder 相当 or 金融/§38+frontend+qa)] + 実装フェーズで effort `max` 昇格 (brand 信頼の核)。Sprint3 は design (下記 §未決4点) → review → 実装 → deploy → vision-eval の一連 Phase。
+> **Status**: 🧑 user gate1 **承認済 (2026-06-13 セッション3)**。**Sprint1 ✅ + Sprint2 ✅ + Sprint3 ✅ 本番検証済**、Sprint4 (eval) 残。
+> 進捗: Sprint1 (quarterly-history sources/field_sources, commit `af4289a`, AAPL/NVDA で sources=全ok 検証) / Sprint2 (SPY spy_unavailable を cup_handle・rs に付与, commit `547c5d9`, AAPL で spy_unavailable=false 検証) / **Sprint3 (frontend §38 badge + SPY 注記, commit `7279a87` + gate hotfix `3f16d39`, 本番 AAPL で badge=main・rollup「決算データ・地合いを自動取得」・ドリルダウン§38免責文・色中立を snap で確認)**。
+> Sprint3 の経緯: 未決4点を design 確定 (#1 最上部独立1行 / #2 限定・正直表現 / #3 無料面+具体数値は既存tier / #4 SPY=テクニカル章中立) → 3体 multi-review (金融§38 Opus + frontend + qa) → 実装 → 敵対的検証2巡 (4 lens→2 lens、blocker 2 + minor 多数を修正) → deploy → 本番 snap 検証。**次は Sprint4 (eval)** = 沈黙の欠落0件率 harness + dogfood「再チェックしたか」設問。
 > **由来**: grill-me 2026-06-13 (5問依存順) を起点とする user 由来。SSOT memory = `project_inner_quality_completeness_ledger.md` / `project_north_star.md`。
 > **PGE**: Planner → (gate1) → Generator。本 SPEC は仕様層のみ。「どう作るか」 は Generator subagent に委ねる。
 > **scope lock**: top2 クラスタのみ。残りは §5 末尾「別 backlog (本 SPEC では着手しない)」 に固定。膨らませない。
@@ -80,7 +80,8 @@ LP 訴求文言との整合 (3 項目以上):
 - **呼ぶ既存 skill**: `hallucination-guard`。
 - **完了判定**: SPY fetch 成功時は従来通り (`market_uptrend: true/false`)。SPY fetch を意図的に失敗させた状態で、依存 endpoint が `spy_unavailable` 相当の coverage status を返し、「地合い悪 (false)」 と「取得不可 (unavailable)」 が schema 上で区別される。
 
-### Sprint 3 — per-stock ロールアップ 1行 badge + ドリルダウン監査 (frontend、Pane3)
+### Sprint 3 ✅ (本番検証済 `7279a87` + hotfix `3f16d39`) — per-stock ロールアップ 1行 badge + ドリルダウン監査 (frontend、Pane3)
+> 着地: `CompletenessRollupBadge.jsx` (badge + `CompletenessAuditPanel` drilldown、§38静的dict・色中立・ok/取得失敗/非該当の3状態+全滅/一部区別・4 state・dedupGet coalesce) / `TechnicalSpyNote.jsx` (#4、chartBlock 内1箇所=isV5/isV4/legacy 全path到達) / `JudgmentDetail.jsx` (DetailBreadcrumb 直後に単一挿入=二重render回避、`!detail?.error` gate でanalyzeエラー時のみ抑止) / `api.js` (prefetch + `TECHNICAL_CANONICAL_PATTERNS` で dedup統一)。文言: 全ok「決算データ・地合いを自動取得」/失敗「…未取得」/全滅「決算データ未取得」/非該当「…は該当なし」。既知境界: technical 層が丸ごと停止すると地合いが unknown に落ち表面化しない (false alarm 回避の保守側、Sprint4+ 検討)。
 - **目的**: Sprint 1+2 の sources を統合し、per-stock で「規律 ◯項目を漏れなく評価 / △データ欠落 M 項目」 の **1行ロールアップ badge** を Pane3 (judgment detail) に置く。クリックで**ドリルダウン全監査** (既存 sources + signal_quality パターンの一般化、各規律の評価済/欠落/非該当を一覧)。
 - **触るファイル**: `frontend/src/features/judgment/components/detail/` 配下 (新規 component。`EarningsFlashSummary.jsx` の `sources.X === 'ok'` graceful 非表示 + `data-testid` 全 state パターンを手本に一般化)。`MarketEvalSection.jsx` に SPY coverage status を配線。`JudgmentDetail.jsx` (canonical mount)。
 - **二重 mount 注意** (`feedback_judgmentdetail_dual_mount_paths.md`): 新規 section は **!isV5 と v5 (pane3_v5) の両 path に置く**。検証は `?pane3_v5=1`。
