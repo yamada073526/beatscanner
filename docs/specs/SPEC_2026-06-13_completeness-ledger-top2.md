@@ -1,6 +1,8 @@
 # SPEC 2026-06-13: 完全性台帳 (coverage manifest) — top2 先行 (quarterly-history sources + SPY 単一障害点表面化)
 
-> **Status**: 🧑 user gate1 待ち (**未承認**)。autopilot で gate skip しない (SPEC_2026-06-07 v5 の轍を踏まない)。
+> **Status**: 🧑 user gate1 **承認済 (2026-06-13 セッション3)**。**Sprint1 ✅ + Sprint2 ✅ 本番検証済**、Sprint3-4 残。
+> 進捗: Sprint1 (quarterly-history sources/field_sources, commit `af4289a`, AAPL/NVDA で sources=全ok 検証) / Sprint2 (SPY spy_unavailable を cup_handle・rs に付与, commit `547c5d9`, AAPL で spy_unavailable=false 検証)。
+> **次セッションは Sprint3 から** = frontend §38 badge。着手前に [3体 multi-review (ui-designer/frontend-architect/qa-dogfooder 相当 or 金融/§38+frontend+qa)] + 実装フェーズで effort `max` 昇格 (brand 信頼の核)。Sprint3 は design (下記 §未決4点) → review → 実装 → deploy → vision-eval の一連 Phase。
 > **由来**: grill-me 2026-06-13 (5問依存順) を起点とする user 由来。SSOT memory = `project_inner_quality_completeness_ledger.md` / `project_north_star.md`。
 > **PGE**: Planner → (gate1) → Generator。本 SPEC は仕様層のみ。「どう作るか」 は Generator subagent に委ねる。
 > **scope lock**: top2 クラスタのみ。残りは §5 末尾「別 backlog (本 SPEC では着手しない)」 に固定。膨らませない。
@@ -64,14 +66,14 @@ LP 訴求文言との整合 (3 項目以上):
 
 > 各 sprint 末で commit (PGE 落とし穴: worktree は sprint 間で累積しない → sprint 完了ごとに commit)。Generator self-eval → main 側で build/grep/Evaluator 補完。
 
-### Sprint 1 — quarterly-history に sources dict 付与 (backend 物理層)
+### Sprint 1 ✅ (本番検証済 `af4289a`) — quarterly-history に sources dict 付与 (backend 物理層)
 - **目的**: `quarterly-history` の 3 source (`earnings_surprises` / `income_q` / `cash_flow_q`) の取得成否を `sources: {earnings_surprises, income_q, cash_flow_q} = ok|empty|error` で明示。各 history 行の Null (cf=None / 前年同期不在) が「データ欠落」 か「該当なし (非該当)」 か区別できるメタを付与。
 - **触るファイル**: `backend/app/main.py` (`guidance_quarterly_history` 6451-6745。return schema 6736 に `sources` を足す。既存 try/except 6495-6510 の結果を `_classify_result` 流儀で分類)。`feedback_data_completeness_guard.md` の 4 値分類 (`ok`/`empty`/`timeout`/`error`) を踏襲。
 - **cache 注意**: 6463 の `cache_key = f"{sym}:{n}:v2"` に schema bust が必要 (`:v3` 等)。旧 schema の 6h cache を即無効化しないと sources 欠落の旧レスポンスが返る (`feedback_viz_cache_key_flaw.md` 流儀)。
 - **呼ぶ既存 skill**: `hallucination-guard` (aggregator/物理層・§38 確認)。
 - **完了判定**: 本番でない局所 (構文 build) で `cd frontend && npm run build` 相当の backend 側は import/lint 通過。curl で `/api/guidance/{ticker}/quarterly-history` を叩き、`sources` 3 key が `ok|empty|error` のいずれかで返る。1 source を意図的に欠く ticker (カバー外/日本株等) で `empty`/`error` が立つことを確認 (沈黙の欠落 0 件率の構造 proxy)。
 
-### Sprint 2 — SPY 単一障害点を「SPY_unavailable」明示状態として表面化 (backend)
+### Sprint 2 ✅ (本番検証済 `547c5d9`) — SPY 単一障害点を「SPY_unavailable」明示状態として表面化 (backend)
 - **目的**: `_get_spy_history()` が None を返したとき (= SPY fetch 失敗) を `market_uptrend: None` の黙殺で終わらせず、**明示的な coverage status** (`spy_unavailable` 相当) として、依存シグナル (Cup-Handle / RS / 地合い) の coverage status に反映する。`market_context: "unknown"` が「中立」 なのか「SPY が取れていない」 なのかを区別可能にする。
 - **触るファイル**: `backend/app/main.py` (`_spy_uptrend` 12612 / `_pattern_market_*` 12711-12771 / RS 13595 / 地合い endpoint。`market_uptrend is None` を明示 status に昇格)。**`_get_spy_history()` 本体 (12546) のロジックは変えない** (fetch 戦略は安定領域)。N=None の伝播経路に status を1 つ足すのみ。
 - **§38**: 「SPY 取得不可」 は事実状態。verdict (地合い悪 = 売り) に読ませない。色中立。
@@ -92,6 +94,14 @@ LP 訴求文言との整合 (3 項目以上):
 - **触るファイル**: `frontend/scripts/snap-*.mjs` (visual harness exception 4 条件遵守: headless / 60s timeout / `.visual/` 出力 / HTTP server なし)。eval 記録は handover/memory に残す。
 - **完了判定**: ① 3+ ticker (ok / partial / カバー外) で sources の `error`/`empty` が漏れなく badge に反映され「沈黙の素通り」 が 0 件であることを harness が verify。② dogfood で user の「再チェック要否」 が記録される設問が併設されている。
 - **呼ぶ既存 skill**: `vision-eval` (badge 表示の Haiku 採点、3 run mean / `feedback_vision_api_noise.md`)、`pge-loop-debugger`。
+
+---
+
+### Sprint3 設計の未決4点 (次セッション着手前に design で詰める = 3体 review 対象)
+1. **badge の Pane3 配置位置**: 最上部ロールアップ単独 / 各 section header 併記 (designing-workspace-ui で確定)。
+2. **§38 badge 文言**: 「規律 N 項目を評価済 / M 項目データ欠落」 等、verdict 非読の件数事実のみ・色中立。**3体 review の主対象**。
+3. **「データ欠落」表示の Pro tier 境界**: ドリルダウン監査を Pro gate 内か無料面か (funnel-cro)。quarterly-history は Pro 同梱だが sources 追加は tier 不変と判断 (要 funnel-cro 確認)。
+4. **SPY 明示状態の frontend ラベル**: `spy_unavailable=true` 時の文言 (「地合い判定不可 (SPY 取得失敗)」 等、§38 中立)。backend は cup_handle/rs に `spy_unavailable` bool で提供済 (Sprint2)。
 
 ---
 
