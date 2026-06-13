@@ -382,6 +382,9 @@ def _render_single_ticker_block_html(payload: EarningsNotifyPayload) -> str:
     snapshot_jst = payload["snapshot_jst"]
 
     hex_color, label = get_surprise_color(verdict)
+    # verdict ラベルは本文「（予想比）」と同じく全角括弧で囲み、銘柄の説明文ではなく
+    # 注釈であることを一目で示す ("—" 不明時は括弧なし)。
+    verdict_display = f"（{label}）" if label != "—" else label
     flash_html = _render_flash_metrics_html(payload)
     conditions_html = _render_conditions_html(conditions)
     completeness_html = _render_completeness_html(completeness)
@@ -409,7 +412,7 @@ def _render_single_ticker_block_html(payload: EarningsNotifyPayload) -> str:
       <tr>
         <td>
           <span style="font-size:22px;font-weight:700;color:{TEXT_PRIMARY};">{ticker}</span>
-          <span style="margin-left:12px;font-size:16px;font-weight:600;color:{hex_color};">{label}</span>
+          <span style="margin-left:12px;font-size:14px;font-weight:600;color:{hex_color};">{verdict_display}</span>
         </td>
         <td style="text-align:right;vertical-align:middle;">
           <!-- CTA: 銘柄あたり 1 本 -->
@@ -513,7 +516,8 @@ def _render_single_ticker_block_text(payload: EarningsNotifyPayload) -> str:
     url = payload["url"]
     snapshot_jst = payload["snapshot_jst"]
 
-    lines = [f"[{ticker}] {label}"]
+    verdict_disp = f"（{label}）" if label != "—" else label
+    lines = [f"[{ticker}] {verdict_disp}"]
     # ── セクション1: 今四半期 決算速報 ──
     lines.append("  ── 今四半期 決算速報 ──")
     lines.append(
