@@ -958,7 +958,17 @@ export default function App() {
   const urlWantsBacktest = urlLayout === 'backtest';
   // PC default = workspace、 mobile は常に SPA (`?layout=workspace` でも mobile では SPA 強制 = 既存ロジック維持)。
   // `?layout=classic` 明示時のみ PC でも SPA mode (旧 UI 強制、 bookmark 互換)。
-  const useWorkspaceLayout = !isMobileForWorkspace && !urlWantsClassic;
+  //
+  // 2026-06-13 (user 承認、 案C): **未ログイン PC は classic LP を表示** する。
+  //   背景: backtest 信頼訴求 (hero「100万→213万」chip + §38 免責 + 料金 + features) は
+  //   classic LP にしか無いのに、 PC default = workspace で未ログイン訪問者がそれを通らず、
+  //   主要 launch 面で「信頼 → 登録」導線が欠落していた (Workspace.jsx:663「未ログインは LP 前提」
+  //   の invariant が PC default workspace 化で崩れていた → これを復元)。 ログインで workspace へ。
+  //   flash 回避: auth 解決前 (!authReady) は workspace を既定にして、 ログイン済 user に LP が
+  //   一瞬出るのを防ぐ (既存挙動と一致 = 回帰ゼロ)。 logged-out は auth 解決後に LP へ切替。
+  //   ?layout=workspace は未ログインでも workspace 強制 (dogfood / 検証用に維持)。
+  const useWorkspaceLayout = !isMobileForWorkspace && !urlWantsClassic
+    && (urlWantsWorkspace || !authReady || !!user);
 
   // v71 Phase 1 Day 5: `?layout=backtest` は最優先で full screen 表示
   // Phase 3 Sub-3 (2026-05-16): isSubscribed / startCheckout を渡し、 Premium teaser から
