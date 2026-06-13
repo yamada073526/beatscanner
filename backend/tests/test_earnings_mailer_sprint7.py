@@ -81,9 +81,9 @@ def test_revenue_in_html():
 
 def test_forward_in_html():
     html = _build_earnings_html([_full_payload()])
-    assert "アナリストコンセンサス売上" in html
+    assert "売上高予想（アナリスト）" in html
     assert "872.9億ドル" in html
-    assert "会社ガイダンス売上" in html
+    assert "売上高予想（会社ガイダンス）" in html
     assert "891.8億ドル" in html
     assert "928.2億ドル" in html
 
@@ -91,8 +91,8 @@ def test_forward_in_html():
 def test_revenue_in_text():
     txt = _build_earnings_text([_full_payload()])
     assert "売上高: 予想 789.1億ドル → 実績 816.1億ドル" in txt
-    assert "来期コンセンサス売上: 872.9億ドル" in txt
-    assert "会社ガイダンス売上: 891.8億ドル〜928.2億ドル" in txt
+    assert "売上高予想（アナリスト）: 872.9億ドル" in txt
+    assert "売上高予想（会社ガイダンス）: 891.8億ドル〜928.2億ドル" in txt
 
 
 # ── 3. None メトリクスは省略 (捏造しない §38) ───────────────────────────
@@ -111,8 +111,8 @@ def test_revenue_omitted_when_none():
 def test_company_guidance_omitted_when_none():
     p = _full_payload(fwd_company_rev_low=None, fwd_company_rev_high=None)
     txt = _build_earnings_text([p])
-    assert "会社ガイダンス売上" not in txt
-    assert "来期コンセンサス売上" in txt  # コンセンサスは出る
+    assert "売上高予想（会社ガイダンス）" not in txt
+    assert "売上高予想（アナリスト）" in txt  # コンセンサスは出る
 
 
 def test_yoy_omitted_when_none():
@@ -137,7 +137,7 @@ def test_all_optional_none_still_renders_eps():
     html = _build_earnings_html([p])
     assert "EPS: 予想" in txt
     assert "売上高:" not in txt
-    assert "会社ガイダンス売上" not in txt
+    assert "売上高予想（会社ガイダンス）" not in txt
     assert find_blocklist_hits(html) == []
 
 

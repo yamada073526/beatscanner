@@ -302,11 +302,18 @@ def _render_flash_metrics_html(payload: EarningsNotifyPayload) -> str:
     comp_yoy_low = payload.get("fwd_company_rev_yoy_low_pct")
     comp_yoy_high = payload.get("fwd_company_rev_yoy_high_pct")
     fwd_lines: list[str] = []
+    # ラベル (出し手) は muted、数値は brighter + bold で「ラベル：値」の境目を明確化。
+    # 命名: アナリストコンセンサスと会社ガイダンスは「旧→新の時系列」ではなく
+    # 「予想の出し手」が違う 2 つの来期予想 → 共通「売上高予想」+ 括弧で出し手を区別。
     if fwd_cons is not None:
         yoy_str = (
             f"（前年比 {_fmt_yoy(fwd_cons_yoy)}）" if fwd_cons_yoy is not None else ""
         )
-        fwd_lines.append(f"アナリストコンセンサス売上 {_fmt_money(fwd_cons)}{yoy_str}")
+        fwd_lines.append(
+            f'<span style="color:{TEXT_SUBTLE};">売上高予想（アナリスト）</span>'
+            f'：<strong style="color:{TEXT_SECONDARY};font-weight:600;">{_fmt_money(fwd_cons)}</strong>'
+            f"{yoy_str}"
+        )
     if comp_low is not None and comp_high is not None:
         yoy_range = (
             f"（前年比 {_fmt_yoy(comp_yoy_low)}〜{_fmt_yoy(comp_yoy_high)}）"
@@ -314,7 +321,9 @@ def _render_flash_metrics_html(payload: EarningsNotifyPayload) -> str:
             else ""
         )
         fwd_lines.append(
-            f"会社ガイダンス売上 {_fmt_money(comp_low)}〜{_fmt_money(comp_high)}{yoy_range}"
+            f'<span style="color:{TEXT_SUBTLE};">売上高予想（会社ガイダンス）</span>'
+            f'：<strong style="color:{TEXT_SECONDARY};font-weight:600;">'
+            f"{_fmt_money(comp_low)}〜{_fmt_money(comp_high)}</strong>{yoy_range}"
         )
     if fwd_lines:
         items = "".join(f'<li style="margin-bottom:2px;">{l}</li>' for l in fwd_lines)
@@ -384,10 +393,12 @@ def _render_single_ticker_block_html(payload: EarningsNotifyPayload) -> str:
     # URL: ?ticker=XXX&utm_source=email&utm_campaign=earnings_notify
     cta_text = f"{ticker} の決算を確認する"
 
-    # セクション見出しスタイル (速報 vs 通期判定を視覚分離)
+    # セクション見出しスタイル (速報 vs 通期判定を視覚分離)。
+    # 本文 (13px / TEXT_MUTED) より大きく明るく + 左アクセントバーで「見出し」と
+    # 一目でわかる階層に (旧: 11px / TEXT_SUBTLE で本文に埋もれていた)。
     _section_label = (
-        f"margin:0 0 6px;font-size:11px;font-weight:700;color:{TEXT_SUBTLE};"
-        "letter-spacing:0.04em;"
+        f"margin:0 0 8px;font-size:14px;font-weight:700;color:{TEXT_PRIMARY};"
+        f"letter-spacing:0.02em;border-left:3px solid {TEXT_FAINT};padding-left:8px;"
     )
 
     return f"""\
@@ -526,7 +537,7 @@ def _render_single_ticker_block_text(payload: EarningsNotifyPayload) -> str:
     if fwd_cons is not None:
         _cy = payload.get("fwd_rev_yoy_pct")
         _cy_str = f"（前年比 {_fmt_yoy(_cy)}）" if _cy is not None else ""
-        lines.append(f"    来期コンセンサス売上: {_fmt_money(fwd_cons)}{_cy_str}")
+        lines.append(f"    売上高予想（アナリスト）: {_fmt_money(fwd_cons)}{_cy_str}")
     comp_low = payload.get("fwd_company_rev_low")
     comp_high = payload.get("fwd_company_rev_high")
     if comp_low is not None and comp_high is not None:
@@ -538,7 +549,7 @@ def _render_single_ticker_block_text(payload: EarningsNotifyPayload) -> str:
             else ""
         )
         lines.append(
-            f"    会社ガイダンス売上: {_fmt_money(comp_low)}〜{_fmt_money(comp_high)}{_r}"
+            f"    売上高予想（会社ガイダンス）: {_fmt_money(comp_low)}〜{_fmt_money(comp_high)}{_r}"
         )
     # ── セクション2: ファンダ 5 条件 (通期スクリーニング) ──
     lines.append("  ── ファンダ 5 条件（通期スクリーニング） ──")
