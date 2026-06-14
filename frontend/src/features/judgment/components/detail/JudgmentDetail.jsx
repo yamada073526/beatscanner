@@ -1199,6 +1199,7 @@ export default function JudgmentDetail({
                     hideCountdownChip={isPane3Compass()}
                     hideNextEarningsChip={isPane3Compass()}
                     hideVerdictChip={isPane3Compass()}
+                    compactWatchlist={isPane3Compass()}
                   />
                   {/* 2026-06-14 (D2 第2手プロトタイプ・?pane3_compass=1): 状態コンパス。
                       決算/会社/価格の3事実で「今の状態」を2秒で。初心者の「で、買いですか?」に §38-safe に答える。

@@ -63,6 +63,9 @@ export default function Hero({
   // 2026-06-14 (D2 compass・第2手): 5条件由来の verdict チップ (Beat/Miss/判定待ち) を非表示。
   // 状態コンパスが本物の信号を持つため、冒頭の二値 verdict を撤去し Miss⇔Beat 矛盾を解消。
   hideVerdictChip = false,
+  // 2026-06-14 (D2 compass): ウォッチ追加済を「★」アイコンのみに簡素化 (compass の簡素な Hero で
+  // 「★追加済」が目立つ、user dogfood)。未追加時は discoverability のため「ウォッチ追加」テキスト維持。
+  compactWatchlist = false,
   // v160 D2 Sprint 2: ウォッチ追加ボタン (screener master-detail で Pane 3 詳細から直接追加)。
   //   onAddToWatchlist は App.jsx addToWatchlist (重複ガード + 無料 3 件制限 + 未ログイン同期 toast)。
   //   未配線 (legacy path) では onAddToWatchlist=undefined で button 自体を非表示 = 安全。
@@ -233,16 +236,26 @@ export default function Hero({
               ✓ Check は dogfood 指摘 (2 行目に短い ✓ が回り込みバランス悪) で撤去、 ★ + 「追加済」 で簡潔に。 */}
           {onAddToWatchlist && ticker && (
             inWatchlist ? (
-              <Chip
-                size="md"
-                variant="display"
-                tone="muted"
-                title="ウォッチリストに追加済み"
-                data-testid="hero-watchlist-added"
-                icon={<Star size={13} strokeWidth={2} aria-hidden style={{ color: 'var(--color-gold)', fill: 'var(--color-gold)', marginRight: 4, verticalAlign: '-1px' }} />}
-              >
-                追加済
-              </Chip>
+              compactWatchlist ? (
+                <span
+                  data-testid="hero-watchlist-added"
+                  title="ウォッチリストに追加済み"
+                  style={{ display: 'inline-flex', alignItems: 'center', padding: 2 }}
+                >
+                  <Star size={18} strokeWidth={2} aria-hidden style={{ color: 'var(--color-gold)', fill: 'var(--color-gold)' }} />
+                </span>
+              ) : (
+                <Chip
+                  size="md"
+                  variant="display"
+                  tone="muted"
+                  title="ウォッチリストに追加済み"
+                  data-testid="hero-watchlist-added"
+                  icon={<Star size={13} strokeWidth={2} aria-hidden style={{ color: 'var(--color-gold)', fill: 'var(--color-gold)', marginRight: 4, verticalAlign: '-1px' }} />}
+                >
+                  追加済
+                </Chip>
+              )
             ) : (
               <Chip
                 size="md"

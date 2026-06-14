@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { fetchAnalyst, fetchTechnical, fetchPriceHistory, TECHNICAL_CANONICAL_PATTERNS } from '../api.js';
 import { DIST_DAYS_LABEL_JP, classifyDistDays } from '../lib/distributionDaysLabels.js';
 import Chip from './ui/Chip.jsx';
+import CompassInfoButton from '../features/judgment/components/detail/sections/CompassInfoButton.jsx';
 // v195 round2 (§38 verdict 条件付き OK): チャート線と 1:1 mirror の「線サンプル swatch」用 identity 色。
 // hex の定義は StockPriceChart に集約 (ここで raw hex を複製しない)。 identity 色は 3 つ
 // (アナリスト目標=accent / SMA50 / SMA200) に限定し、 損切り/サポート/pivot は中立
@@ -121,8 +122,13 @@ function SectionLabel() {
         letterSpacing: '0.08em',
         color: 'var(--text-primary)',
         textTransform: 'uppercase',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 'var(--space-2, 8px)',
       }}>
         価格目安
+        {/* D2 compass Phase B: 状態コンパス「今の価格」と同じ §38-safe 解説モーダル (共有 ⓘ)。 */}
+        <CompassInfoButton modalKey="price" ariaLabel="今の価格(テクニカル)の見方" />
       </div>
       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
         現在価格を基準とした上値・下値の目安
