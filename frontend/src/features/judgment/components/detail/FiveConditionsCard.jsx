@@ -9,6 +9,7 @@ import SectionFade from '../../primitives/SectionFade.jsx';
 // Phase 2.7 Sprint 1 #1' (step H): 既存 inline IO 実装を共通 hook に置換 (DRY)
 // glow_elevation_postmortem.md / feedback_glow_active_pattern.md 安全パターン準拠
 import { useHaloSweepOnce } from '../../../../hooks/useHaloSweepOnce.js';
+import { smoothScrollToElement } from '../../../../lib/smoothScroll.js';
 
 /**
  * FiveConditionsCard — VerdictDetail と ConditionGrid を統合した unified card (PR-2)
@@ -233,7 +234,7 @@ export default function FiveConditionsCard({
                           cands[0] ||
                           null;
                         if (headerEl) {
-                          headerEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          smoothScrollToElement(headerEl, { offset: 72 });
                         }
                       } catch {
                         // scroll 失敗は silent

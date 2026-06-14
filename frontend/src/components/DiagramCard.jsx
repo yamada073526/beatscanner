@@ -18,6 +18,7 @@ import { isNonEquityTicker } from '../lib/tickerUtils.js';
 // handover v82 Phase 5.5: ConditionRow click → DiagramCard pulse 連携 (multi-review 6 体合議 verdict)。
 import { useWorkspaceStore } from '../state/workspaceStore.js';
 import { isStepPulsingForCondition } from '../lib/condition-mapping.js';
+import { smoothScrollToElement } from '../lib/smoothScroll.js';
 import Toast from './Toast.jsx';
 // Sprint 4 (Phase 2): 案8 DiagramCard step reveal — expanded 時 7 要素 80ms stagger fade-in
 // m.* (LazyMotion 経由)、motion.* (Eager) は禁止
@@ -1893,7 +1894,7 @@ export default function DiagramCard({
     if (typeof window !== 'undefined' && window.innerWidth <= 768) {
       const diagramEl = document.getElementById('sec-diagram');
       if (diagramEl) {
-        diagramEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        smoothScrollToElement(diagramEl, { offset: 72 });
       }
     }
     // 2800ms 後 auto-unset (UI/UX cadence 1.8s × 1.5 周期)。

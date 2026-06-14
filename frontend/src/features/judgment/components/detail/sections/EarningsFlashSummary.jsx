@@ -31,6 +31,7 @@ import { Copy, Check } from 'lucide-react';
 import { fetchQuarterlyHistory, fetchGuidanceSurprise, fetchConsensusDrift } from '../../../../../api.js';
 import { fmtMoney, fmtEps, GUIDANCE_STATE_JP } from '../../../../../components/ForwardOutlookSection.jsx';
 import { displaySegmentName } from '../../../../../lib/segmentNames.js';
+import { smoothScrollToSelector, smoothScrollToElement } from '../../../../../lib/smoothScroll.js';
 import {
   FLASH_LABELS,
   FLASH_TERMS,
@@ -621,7 +622,7 @@ function FutureGrid({ nqEps, nqRev, yoyStr, yoyPct, revLine, gState }) {
   // hover+click 反応を上下段と統一 (反応の無い帯を残さない、user 第4R)。着地は来期の詳細 = ForwardOutlookSection。
   const goForward = (e) => {
     const root = e.currentTarget.closest('.ds-judgment-detail') || document;
-    root.querySelector('[data-testid="forward-outlook"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    smoothScrollToSelector(root, '[data-testid="forward-outlook"]', { offset: 72 });
   };
   return (
     <div
@@ -785,7 +786,7 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
       || root.querySelector('[data-testid="guidance-card-wrapper"]')
       || document.querySelector('[data-testid="fundamentals-earnings-section"]')
       || root.querySelector('[data-testid="sticky-diagram-accordion"]');
-    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    smoothScrollToElement(target, { offset: 72 });
   };
 
   // headline (EPS + 売上) の構築。v5 = 列揃え grid (重要3点を仕切り上に集約)、v4 以前 = 従来 FlashRow。
@@ -913,7 +914,7 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
             tabIndex={0}
             onClick={(e) => {
               const root = e.currentTarget.closest('.ds-judgment-detail') || document;
-              root.querySelector('[data-testid="forward-outlook"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              smoothScrollToSelector(root, '[data-testid="forward-outlook"]', { offset: 72 });
             }}
             style={{ fontSize: 10, color: 'var(--text-muted)', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
           >

@@ -13,6 +13,7 @@ import { SMA_50_COLOR, SMA_200_COLOR } from './StockPriceChart.jsx';
 // 各行は dist×係数 を表示 — 行ごとの hook 不要)。
 import { useInViewOnce } from '../hooks/useInViewOnce.js';
 import { useCountUp } from '../hooks/useCountUp.js';
+import { smoothScrollToElement } from '../lib/smoothScroll.js';
 // round11 D: 現在価格行の当日ミニスパークライン (既存 primitive 流用、 module cache 内蔵。
 // 色は当日実績の gain/loss = 業界ルール本来用途で §38 非該当)。
 import RowSparkline from '../features/judgment/components/list/RowSparkline.jsx';
@@ -178,8 +179,7 @@ export default function PriceLadder({ ticker }) {
     const marker = r.querySelector('.pl-chartline-target, .pl-chartline-pivot, .pl-chartline-support, .pl-chartline-sma50, .pl-chartline-sma200');
     const chart = marker?.closest('section') || marker?.closest('.recharts-wrapper');
     if (!chart) return;
-    const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    chart.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' });
+    smoothScrollToElement(chart, { block: 'center' });
     r.setAttribute('data-pl-flash', key);
     window.setTimeout(() => r.removeAttribute('data-pl-flash'), 1800);
   };
