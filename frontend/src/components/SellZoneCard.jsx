@@ -16,7 +16,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, TrendingUp } from 'lucide-react';
-import { fetchPriceHistory, fetchTechnical } from '../api.js';
+import { fetchPriceHistory, fetchTechnical, TECHNICAL_CANONICAL_PATTERNS } from '../api.js';
 import { SELL_ZONE_LABEL_JP, SELL_ZONE_DESC_JP, SELL_ZONE_FOOTER, classifyZone } from '../lib/sellZoneLabels.js';
 // v125 P8-5 R5 hotfix (3 体合議統合推奨案): zone value を Chip primitive 化、 header に配置で
 // AnalystTargetCard と H 方向 visual rhythm 統一 (frontend-architect 案 A + ui-designer 案 B 集約)。
@@ -52,8 +52,10 @@ export default function SellZoneCard({ ticker, compact = false }) {
     setPriceFailed(false);
     Promise.allSettled([
       fetchPriceHistory(ticker, '1y'),
-      // v127 R16-3 (R6): 200DMA Break 判定のため sma_200 も取得
-      fetchTechnical(ticker, 'sma_50,sma_200'),
+      // v127 R16-3 (R6): 200DMA Break 判定のため sma_200 も取得。
+      // canonical patterns で統一 (prefetchAll / StockPriceChart と同一 URL → dedupGet cache hit、
+      // patterns 文字列 drift による余分な FMP fetch を回避)。 overlays に sma_50/sma_200 が含まれる。
+      fetchTechnical(ticker, TECHNICAL_CANONICAL_PATTERNS),
     ])
       .then(([priceRes, techRes]) => {
         if (cancelled) return;

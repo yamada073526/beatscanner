@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { fetchAnalyst, fetchTechnical, fetchPriceHistory } from '../api.js';
+import { fetchAnalyst, fetchTechnical, fetchPriceHistory, TECHNICAL_CANONICAL_PATTERNS } from '../api.js';
 import { DIST_DAYS_LABEL_JP, classifyDistDays } from '../lib/distributionDaysLabels.js';
 import Chip from './ui/Chip.jsx';
 // v195 round2 (§38 verdict 条件付き OK): チャート線と 1:1 mirror の「線サンプル swatch」用 identity 色。
@@ -216,7 +216,7 @@ export default function PriceLadder({ ticker }) {
       fetchAnalyst(ticker),
       // v195 round2: チャート/prefetchAll と同一 patterns 文字列に統一。 dedupGet は URL key cache のため
       // 文字列が違うと coalesce が効かず二重 fetch になっていた (+ sma_200 が ladder に届かず 1:1 mirror が破れていた)。
-      fetchTechnical(ticker, 'cup_handle,sma_50,sma_200,rs,dma_cross'),
+      fetchTechnical(ticker, TECHNICAL_CANONICAL_PATTERNS),
       fetchPriceHistory(ticker, '1y'),
     ])
       .then(([a, t, p]) => {

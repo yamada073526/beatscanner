@@ -22,7 +22,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { MapPin } from 'lucide-react';
-import { fetchTechnical, fetchPriceHistory } from '../api.js';
+import { fetchTechnical, fetchPriceHistory, TECHNICAL_CANONICAL_PATTERNS } from '../api.js';
 import { BUY_ZONE_LABEL_JP, BUY_ZONE_DESC_JP, BUY_ZONE_FOOTER, classifyBuyZone } from '../lib/buyZoneLabels.js';
 import Chip from './ui/Chip.jsx';
 
@@ -51,7 +51,8 @@ export default function BuyZoneCard({ ticker, compact = false, variant = 'defaul
     let cancelled = false;
     setLoading(true);
     Promise.allSettled([
-      fetchTechnical(ticker, 'cup_handle'),
+      // canonical patterns で統一 (prefetchAll / StockPriceChart と同一 URL → dedupGet cache hit)。
+      fetchTechnical(ticker, TECHNICAL_CANONICAL_PATTERNS),
       fetchPriceHistory(ticker, '1y'),
     ])
       .then(([techRes, priceRes]) => {

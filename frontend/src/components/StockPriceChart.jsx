@@ -4,7 +4,7 @@ import {
   Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot, ReferenceArea,
 } from 'recharts';
 import { LineChart as LineChartIcon, CandlestickChart as CandlestickChartIcon, ChartCandlestick, Lock, TrendingUp } from 'lucide-react';
-import { fetchPriceHistory, fetchTechnical, fetchAnalyst } from '../api.js';
+import { fetchPriceHistory, fetchTechnical, fetchAnalyst, TECHNICAL_CANONICAL_PATTERNS } from '../api.js';
 import Chip from './ui/Chip.jsx';
 
 // v86 chart hybrid Sprint 2: localStorage key for 折れ線/candle toggle persist
@@ -485,7 +485,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
     if (!ticker) return;
     let cancelled = false;
     setTechnical(null);  // ticker 切替時に古い state をクリア
-    fetchTechnical(ticker, 'cup_handle,sma_50,sma_200,rs,dma_cross')
+    fetchTechnical(ticker, TECHNICAL_CANONICAL_PATTERNS)
       .then((t) => {
         if (cancelled) return;
         const hasOverlay = t && Array.isArray(t.overlays) && t.overlays.length > 0;

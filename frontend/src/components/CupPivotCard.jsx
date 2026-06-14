@@ -23,7 +23,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Target } from 'lucide-react';
-import { fetchTechnical } from '../api.js';
+import { fetchTechnical, TECHNICAL_CANONICAL_PATTERNS } from '../api.js';
 import { BUY_ZONE_LABEL_JP, BUY_ZONE_DESC_JP, BUY_ZONE_FOOTER, CUP_SELL_ZONE_DESC_JP, classifyBuyZone } from '../lib/buyZoneLabels.js';
 import Chip from './ui/Chip.jsx';
 
@@ -52,7 +52,9 @@ export default function CupPivotCard({ ticker, compact = false, variant = 'defau
     let cancelled = false;
     setLoading(true);
     setErrored(false);
-    fetchTechnical(ticker, 'cup_handle')
+    // canonical patterns で統一 (prefetchAll / StockPriceChart と同一 URL → dedupGet cache hit、
+    // patterns 文字列 drift による余分な FMP fetch を回避)。 cup_handle はこの上位集合に含まれる。
+    fetchTechnical(ticker, TECHNICAL_CANONICAL_PATTERNS)
       .then((res) => {
         if (cancelled) return;
         if (!res) {
