@@ -37,7 +37,34 @@ function scrollToCellSection(e, key) {
   const sel = CELL_SCROLL_TARGET[key];
   if (!sel) return;
   const root = e.currentTarget.closest('.ds-judgment-detail') || document;
-  (root.querySelector(sel) || document.querySelector(sel))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const target = root.querySelector(sel) || document.querySelector(sel);
+  if (!target) return;
+  // Pane3 detail は nested DIV scroll。この container は scrollIntoView/scrollTo の behavior:'smooth' を
+  // 無視する (instant scrollTop 代入のみ動作) ため、最近接スクロール祖先を rAF で手動 easing する。
+  let sc = target.parentElement;
+  while (sc && sc !== document.body) {
+    const o = getComputedStyle(sc).overflowY;
+    if ((o === 'auto' || o === 'scroll') && sc.scrollHeight > sc.clientHeight + 5) break;
+    sc = sc.parentElement;
+  }
+  if (!sc || sc === document.body) { target.scrollIntoView({ block: 'start' }); return; }
+  // 着地は sticky 検索バー/KpiStrip の下に隠れないよう余白を確保 (≈56px sticky + 余白)。
+  const dest = Math.max(0, target.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 72);
+  const reduce = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) { sc.scrollTop = dest; return; }
+  const startTop = sc.scrollTop;
+  const dist = dest - startTop;
+  if (Math.abs(dist) < 2) return;
+  const duration = 420;
+  let t0 = null;
+  const ease = (t) => 1 - Math.pow(1 - t, 3); // easeOutCubic
+  const step = (ts) => {
+    if (t0 === null) t0 = ts;
+    const p = Math.min((ts - t0) / duration, 1);
+    sc.scrollTop = startTop + dist * ease(p);
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 // 信号 → semantic token 色 (投資業界色ルール: gain=緑/loss=赤/warning=amber/neutral=muted)
