@@ -61,13 +61,20 @@ export function smoothScrollToElement(target, opts = {}) {
   const dist = dest - startTop;
   if (Math.abs(dist) < 2) return;
   let t0 = null;
+  let done = false;
   const step = (ts) => {
     if (t0 === null) t0 = ts;
     const p = Math.min((ts - t0) / duration, 1);
     sc.scrollTop = startTop + dist * EASE_OUT_CUBIC(p);
     if (p < 1) requestAnimationFrame(step);
+    else done = true;
   };
   requestAnimationFrame(step);
+  // rAF は背面/非表示タブで throttle (= 0 frame) されるため、 完了しなければ最終位置を instant 保証する
+  // (背面タブの auto-scroll や rAF 停止環境でもリンクが機能する。 rAF 完了済なら done=true で no-op)。
+  setTimeout(() => {
+    if (!done && Math.abs(sc.scrollTop - dest) > 2) sc.scrollTop = dest;
+  }, duration + 200);
 }
 
 /**
