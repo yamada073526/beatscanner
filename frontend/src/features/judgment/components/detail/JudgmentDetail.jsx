@@ -1184,16 +1184,21 @@ export default function JudgmentDetail({
             // は別 sprint。章内の厳密順序 (会社概要↔5条件) は Sprint 3 で FundamentalsAccordion と調整。
             const tickerHeaderBlock = (
               <>
-                <VerdictHero verdict={verdict}>
+                <VerdictHero verdict={isPane3Compass() ? 'unknown' : verdict}>
                   <Hero
                     ticker={selectedTicker}
                     companyName={result?.companyName}
-                    verdict={verdict}
-                    period={result?.latestPeriod ? `FY${result.latestPeriod}` : null}
+                    verdict={isPane3Compass() ? 'unknown' : verdict}
+                    period={isPane3Compass() ? null : (result?.latestPeriod ? `FY${result.latestPeriod}` : null)}
                     nextEarningsDays={detail?.nextEarningsDays}
                     nextEarningsDate={detail?.nextEarningsDate}
                     watchlist={detailContext?.watchlist}
                     onAddToWatchlist={detailContext?.onAddToWatchlist}
+                    /* D2 compass・第2手: 5条件由来の verdict チップ撤去 + 発光中立化 (Miss⇔Beat 矛盾解消)、
+                       次回決算の3重表示を EarningsRing 1つに集約、FY2025 撤去 (確認事項2)。 */
+                    hideCountdownChip={isPane3Compass()}
+                    hideNextEarningsChip={isPane3Compass()}
+                    hideVerdictChip={isPane3Compass()}
                   />
                   {/* 2026-06-14 (D2 第2手プロトタイプ・?pane3_compass=1): 状態コンパス。
                       決算/会社/価格の3事実で「今の状態」を2秒で。初心者の「で、買いですか?」に §38-safe に答える。

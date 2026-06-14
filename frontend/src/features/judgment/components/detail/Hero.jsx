@@ -58,6 +58,11 @@ export default function Hero({
    */
   hideEyebrow = false,
   hideCountdownChip = false,
+  // 2026-06-14 (D2 compass): 次回決算 date chip を非表示 (EarningsRing と重複解消、確認事項2)。
+  hideNextEarningsChip = false,
+  // 2026-06-14 (D2 compass・第2手): 5条件由来の verdict チップ (Beat/Miss/判定待ち) を非表示。
+  // 状態コンパスが本物の信号を持つため、冒頭の二値 verdict を撤去し Miss⇔Beat 矛盾を解消。
+  hideVerdictChip = false,
   // v160 D2 Sprint 2: ウォッチ追加ボタン (screener master-detail で Pane 3 詳細から直接追加)。
   //   onAddToWatchlist は App.jsx addToWatchlist (重複ガード + 無料 3 件制限 + 未ログイン同期 toast)。
   //   未配線 (legacy path) では onAddToWatchlist=undefined で button 自体を非表示 = 安全。
@@ -167,7 +172,7 @@ export default function Hero({
           {/* v86 R4 #3: 補助情報行 — 中央空白帯を意味のある密度で埋める
               (Vision Round 2,3 共通指摘「中央の AAPL と右側 D-XX リングの間に空白帯」 解消)
               chip 形式で 3 fact (期間 / 次回決算日 / D-XX) を並べる */}
-          {(period || nextEarningsDate || Number.isFinite(nextEarningsDays)) && (
+          {(period || (nextEarningsDate && !hideNextEarningsChip) || (Number.isFinite(nextEarningsDays) && nextEarningsDays > 0 && !hideCountdownChip)) && (
             <div
               style={{
                 display: 'flex',
@@ -180,7 +185,7 @@ export default function Hero({
               {period && (
                 <span style={heroFactChipStyle}>{period}</span>
               )}
-              {nextEarningsDate && (
+              {!hideNextEarningsChip && nextEarningsDate && (
                 <span style={heroFactChipStyle}>
                   <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginRight: 4 }}>次回</span>
                   {nextEarningsDate}
@@ -209,15 +214,17 @@ export default function Hero({
               Beat 時に gold metallic gradient で「最高級ホテルの真鍮プレート」 idiom。
               他 verdict (Miss / In-line / 判定待ち) は既存 tone (loss / muted) 維持。
               CSS rule は index.css [data-verdict-gold="true"] で 1 箇所定義。 */}
-          <Chip
-            size="md"
-            variant="display"
-            tone={tone}
-            title={verdictTooltip}
-            data-verdict-gold={verdict === 'beat' ? 'true' : undefined}
-          >
-            {verdictLabel}
-          </Chip>
+          {!hideVerdictChip && (
+            <Chip
+              size="md"
+              variant="display"
+              tone={tone}
+              title={verdictTooltip}
+              data-verdict-gold={verdict === 'beat' ? 'true' : undefined}
+            >
+              {verdictLabel}
+            </Chip>
+          )}
           {/* v160 D2 Sprint 2 → SPEC 2026-06-04 B: ウォッチ★ボタン。 onAddToWatchlist 未配線時は非表示。
               icon = Star ★ (user gate 確定、 格調シンボル [[feedback_icon_brand_consistency]])。
               未追加 = Star outline + 「ウォッチ追加」 (icon-only は初見離脱回避)。
