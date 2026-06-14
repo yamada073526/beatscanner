@@ -314,6 +314,10 @@ function isPane3Compass() {
   }
 }
 
+// 2026-06-14: AI要約 (SummaryBrief) を封印。状態コンパス (信号機サマリー) が冒頭の要約機能を代替したため
+// 不要に (user 判断)。復活する場合は true に戻す (各章サマリーへの一本化は別 sprint)。
+const SHOW_AI_SUMMARY = false;
+
 function isPane3V2Frameless() {
   try {
     if (typeof window === 'undefined') return false;
@@ -777,7 +781,7 @@ export default function JudgmentDetail({
               第 4 層: 数値系 Number.isFinite — string-only LLM 出力のため非該当
             condition pulse 連動: Sprint 6 では deferred (FiveConditionsCard の CONDITION_SECTION_MAP と
             SummaryBrief の LLM 出力行は 1:1 対応が困難、SPEC §5 Sprint 6 末尾に deferred 注記)。 */}
-        {result && (
+        {SHOW_AI_SUMMARY && result && (
           <SummaryBrief
             analysis={result}
             guidance={guidance}
@@ -1222,8 +1226,8 @@ export default function JudgmentDetail({
                       isLoading={!guidance && (detail?.isLoading ?? false)}
                     />
                   )}
-                  {/* v184 Sprint 1: SummaryBrief は本 sprint では残置 (廃止は Sprint 3 で各章サマリーへ一本化)。 */}
-                  {result && (
+                  {/* SummaryBrief (AI要約) は SHOW_AI_SUMMARY で封印 (状態コンパスが代替、2026-06-14)。 */}
+                  {SHOW_AI_SUMMARY && result && (
                     <SummaryBrief
                       analysis={result}
                       guidance={guidance}

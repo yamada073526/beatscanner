@@ -236,20 +236,26 @@ export default function Hero({
               ✓ Check は dogfood 指摘 (2 行目に短い ✓ が回り込みバランス悪) で撤去、 ★ + 「追加済」 で簡潔に。 */}
           {onAddToWatchlist && ticker && (
             inWatchlist ? (
+              // 追加済 = クリックで解除 (onAddToWatchlist は App 側で追加⇔解除トグル化済、2026-06-14 bug fix)。
               compactWatchlist ? (
-                <span
+                <button
+                  type="button"
                   data-testid="hero-watchlist-added"
-                  title="ウォッチリストに追加済み"
-                  style={{ display: 'inline-flex', alignItems: 'center', padding: 2 }}
+                  title="クリックでウォッチリストから解除"
+                  aria-label={`${ticker} をウォッチリストから解除`}
+                  onClick={() => onAddToWatchlist(ticker)}
+                  style={{ display: 'inline-flex', alignItems: 'center', padding: 2, background: 'transparent', border: 'none', cursor: 'pointer' }}
                 >
                   <Star size={18} strokeWidth={2} aria-hidden style={{ color: 'var(--color-gold)', fill: 'var(--color-gold)' }} />
-                </span>
+                </button>
               ) : (
                 <Chip
                   size="md"
                   variant="display"
                   tone="muted"
-                  title="ウォッチリストに追加済み"
+                  title="クリックでウォッチリストから解除"
+                  ariaLabel={`${ticker} をウォッチリストから解除`}
+                  onClick={() => onAddToWatchlist(ticker)}
                   data-testid="hero-watchlist-added"
                   icon={<Star size={13} strokeWidth={2} aria-hidden style={{ color: 'var(--color-gold)', fill: 'var(--color-gold)', marginRight: 4, verticalAlign: '-1px' }} />}
                 >
