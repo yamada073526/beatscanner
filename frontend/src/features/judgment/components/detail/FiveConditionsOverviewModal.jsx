@@ -1,5 +1,5 @@
 import React from 'react';
-import { Info, Lightbulb, Ruler } from 'lucide-react';
+import { Info, Lightbulb, Ruler, FileText } from 'lucide-react';
 import InfoModal from '../../../../components/InfoModal.jsx';
 
 /**
@@ -64,7 +64,7 @@ export default function FiveConditionsOverviewModal({ onClose }) {
       </div>
 
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold tracking-wider text-slate-400">📝 まとめ</p>
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold tracking-wider text-slate-400"><FileText size={13} strokeWidth={2} aria-hidden="true" /> まとめ</p>
         <p className="text-sm leading-relaxed text-slate-700">
           5 条件は<strong>「大失敗を避ける」ためのリスク回避フィルター</strong>であり、上昇銘柄を保証するものではありません。
           ただし、このフィルターを通過した銘柄から選別することで、投資判断の精度を大きく上げることができます。

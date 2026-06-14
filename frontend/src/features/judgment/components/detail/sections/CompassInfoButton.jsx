@@ -39,12 +39,12 @@ function renderBullet(text, emphasis) {
   if (idx > 0 && idx <= 24) {
     return (
       <>
-        <span style={bulletLabelStyle}>{text.slice(0, idx + 1)}</span>
+        <span style={bulletLabelStyle}>・{text.slice(0, idx + 1)}</span>
         {withEmphasis(text.slice(idx + 1), emphasis)}
       </>
     );
   }
-  return withEmphasis(text, emphasis);
+  return <>・{withEmphasis(text, emphasis)}</>;
 }
 
 // モーダル本文: section ごとに枠カード + 薄い見出し + 冒頭アイコン + cyan 強調 (user 模範準拠)
@@ -98,6 +98,10 @@ export default function CompassInfoButton({ modalKey, size = 14, ariaLabel }) {
         type="button"
         style={btnStyle}
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-accent)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+        onMouseDown={(e) => { e.currentTarget.style.transform = 'translateY(1px)'; }}
+        onMouseUp={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
         aria-label={ariaLabel || `${data.modalTitle}を開く`}
         data-testid={`compass-info-${modalKey}`}
       >
@@ -113,17 +117,17 @@ export default function CompassInfoButton({ modalKey, size = 14, ariaLabel }) {
 }
 
 // --- styles (semantic CSS token のみ、raw hex / box-shadow 禁止) ---
-const btnStyle = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 2, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 0, verticalAlign: 'middle' };
+const btnStyle = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 2, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 0, verticalAlign: 'middle', transition: 'color var(--motion-fast) ease, transform var(--motion-fast) ease' };
 const bodyStyle = { display: 'flex', flexDirection: 'column', gap: 'var(--space-3, 12px)' };
-const introStyle = { margin: 0, fontSize: 13, fontWeight: 500, lineHeight: 1.7, color: 'var(--text-secondary)' };
+const introStyle = { margin: 0, fontSize: 14, fontWeight: 500, lineHeight: 1.7, color: 'var(--text-secondary)' };
 const cardStyle = { border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 12px)', padding: 'var(--space-4, 16px)', background: 'var(--bg-subtle)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2, 8px)' };
 const cardHeadStyle = { display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)', color: 'var(--text-muted)' };
 const cardHeadTextStyle = { fontSize: 12, fontWeight: 600, letterSpacing: '0.02em' };
-const paraStyle = { margin: 0, fontSize: 13, fontWeight: 500, lineHeight: 1.7, color: 'var(--text-secondary)' };
+const paraStyle = { margin: 0, fontSize: 14, fontWeight: 500, lineHeight: 1.7, color: 'var(--text-secondary)' };
 const bulletsStyle = { margin: 0, paddingLeft: '1.1em', display: 'flex', flexDirection: 'column', gap: 'var(--space-2, 8px)' };
-const bulletStyle = { fontSize: 13, fontWeight: 500, lineHeight: 1.65, color: 'var(--text-secondary)' };
+const bulletStyle = { fontSize: 14, fontWeight: 500, lineHeight: 1.65, color: 'var(--text-secondary)' };
 const bulletLabelStyle = { fontWeight: 700, color: 'var(--text-primary)' };
 const emphasisStyle = { color: 'var(--color-accent)', fontWeight: 700 };
 const summaryCardStyle = { border: '1px solid color-mix(in srgb, var(--color-accent) 25%, var(--border))', borderRadius: 'var(--radius-md, 12px)', padding: 'var(--space-4, 16px)', background: 'color-mix(in srgb, var(--color-accent) 5%, transparent)' };
-const summaryStyle = { margin: 0, fontSize: 13, fontWeight: 600, lineHeight: 1.7, color: 'var(--text-primary)' };
+const summaryStyle = { margin: 0, fontSize: 14, fontWeight: 600, lineHeight: 1.7, color: 'var(--text-primary)' };
 const disclaimerStyle = { margin: 0, fontSize: 11.5, fontWeight: 500, lineHeight: 1.6, color: 'var(--text-muted)' };
