@@ -222,7 +222,9 @@ export default function App() {
     handleLPTickerClick,
   } = useJudgmentResult({
     setActiveTab,
-    isProUser,
+    // 2026-06-14 fix: 分析の demo 振り分けは「Pro 判定」 でなく「ログイン判定」 (user 確定: ログイン=無制限)。
+    // 旧 isProUser だとログイン済み無料 user が demo(3/日) に落ち「ログインで無制限」 表記と矛盾 (Trust Cliff)。
+    isLoggedIn: !!user,
     setForceCloseSuggestions,
     prefetch,
   });

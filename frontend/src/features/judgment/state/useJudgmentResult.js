@@ -51,13 +51,16 @@ function normalizeTicker(raw) {
 /**
  * @param {object} deps
  * @param {(tab: string) => void} deps.setActiveTab - タブ切替 (runAnalyze は 'judgment' に切替)
- * @param {boolean} [deps.isProUser] - Pro subscriber は analyze (任意銘柄無制限)、非 Pro は demoAnalyze (3 req/IP/day)
+ * @param {boolean} [deps.isLoggedIn] - ログイン済み = analyze (無制限)、未ログイン = demoAnalyze (3 req/IP/day)。
+ *   2026-06-14 fix: 旧 isProUser 判定だとログイン済み無料 user が demo 経路 (3/日) に落ち、アプリ内
+ *   「Google ログインで無制限になります」 表記と矛盾する Trust Cliff だった (user 確定: ログイン=無制限)。
+ *   backend /api/analyze は認証/レート制限なし (FMP のみでコスト安全)、demo rate limit は未ログインのみ適用。
  * @param {(closing: boolean) => void} [deps.setForceCloseSuggestions] - 検索 suggestions 強制閉
  * @param {(ticker: string) => void} [deps.prefetch] - 全 panel データ先取り (api.prefetchAll wrapper)
  */
 export function useJudgmentResult({
   setActiveTab,
-  isProUser = false,
+  isLoggedIn = false,
   setForceCloseSuggestions,
   prefetch,
 }) {
@@ -75,8 +78,9 @@ export function useJudgmentResult({
   const runAnalyze = useCallback(
     async (sym) => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      // Pro subscriber → analyze (任意銘柄無制限)、 非 Pro → demoAnalyze (3 req/IP/day 制限)。
-      const useDemo = !isProUser;
+      // 2026-06-14 fix: ログイン済み → analyze (無制限)、 未ログイン → demoAnalyze (3 req/IP/day)。
+      // 旧 !isProUser だとログイン済み無料 user が demo 経路に落ち「ログインで無制限」 表記と矛盾 (Trust Cliff)。
+      const useDemo = !isLoggedIn;
       const t = normalizeTicker(sym || ticker);
       if (!t) return;
       setTicker(t);
@@ -122,7 +126,7 @@ export function useJudgmentResult({
         setTimeout(() => setForceCloseSuggestions(false), 500);
       }
 
-      // Pro subscriber → analyze (任意銘柄無制限)、 非 Pro → demoAnalyze (3 req/IP/day)
+      // ログイン済み → analyze (無制限)、 未ログイン → demoAnalyze (3 req/IP/day)
       const analyzeFn = useDemo ? demoAnalyze : analyze;
       analyzeFn(t)
         .then((data) => {
@@ -211,12 +215,12 @@ export function useJudgmentResult({
           if (searchIdRef.current === searchId) setGuidanceSecLoading(false);
         });
     },
-    [ticker, prefetch, setActiveTab, setForceCloseSuggestions, isProUser]
+    [ticker, prefetch, setActiveTab, setForceCloseSuggestions, isLoggedIn]
   );
 
   /**
    * LP からのクリック専用. 「登録不要で試せる」LP 訴求と整合させるため、
-   * 非 Pro user は必ず demo (3 req/IP/day) 経路で分析を実行する.
+   * 未ログイン user は demo (3 req/IP/day) 経路、ログイン済みは analyze (無制限) で実行する.
    */
   const handleLPTickerClick = useCallback(
     async (t) => {
@@ -248,7 +252,7 @@ export function useJudgmentResult({
       window.scrollTo({ top: 0, behavior: 'smooth' });
       recordAnalyzed(sym);
       try {
-        if (isProUser) {
+        if (isLoggedIn) {
           const data = await analyze(sym);
           setResult(data);
           setIsDemoResult(false);
@@ -270,7 +274,7 @@ export function useJudgmentResult({
         setLoading(false);
       }
     },
-    [prefetch, setActiveTab, isProUser]
+    [prefetch, setActiveTab, isLoggedIn]
   );
 
   const handleDemoResult = useCallback(
