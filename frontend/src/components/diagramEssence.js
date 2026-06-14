@@ -1,22 +1,15 @@
 /**
- * diagramEssence.js — Pane3 図解最上段「一言で言うと」L1 essence hero のデータ導出 + flag + style (B7 第一手)。
+ * diagramEssence.js — Pane3 図解の「詳しく見る」累進開示 flag。
  *
- * B7 図解方向性「(C) 累進開示」の第一手。初心者が図解を開いた瞬間に「この会社は何で稼ぐか + 今期の決算の
- * 出来」を 2 秒で掴ませる最上段ブロック。状態コンパス(?pane3_compass=1)の累進開示と同じ設計言語。
- *
- * @no-llm: 新規 LLM 呼び出しなし。既存確定フィールド (segmentSummary 首位 / businessFlowSteps[0] /
- *   guidance verdict) の静的 mirror のみ。状態コンパス stateCompassText.js と同型。
- *
- * §38/§5: 描写のみ (買い場/勝てる/有望/最高/絶対/必ず上がる 等の断定・最上級・売買示唆を入れない)。
- *   Beat/Miss は guidance の既存 verdict (±3% Python 判定) の mirror で独自再計算しない (5 条件 PASS/FAIL は
- *   流用しない = D2 状態コンパスの「名前負け」轍を踏まない)。色は投資業界ルール (beat=gain緑 / miss=loss赤 /
- *   それ以外=neutral)、シアンを上昇の意味で使わない。数値は frontend で再計算しない (% 算出もしない)。
+ * 経緯: 当初は図解最上段に「一言で言うと」essence hero を出す flag だったが、会社概要セクションと
+ * 内容が重複し劣化コピーになっていたため essence hero は撤去 (2026-06-14 user feedback)。
+ * 現在は flag `?diagram_essence=1` で「下層 L3 (成長トレンド/アナリスト予想/強み 等) を『詳しく見る』で畳む」
+ * 累進開示のみを制御する (DiagramCard.jsx の l3Enabled が本 flag を参照)。default OFF・完全可逆。
  */
 
-// flag: ?diagram_essence=1 で default OFF・完全可逆 (pane3_v2 と同型の URL→storage 永続化)。
-// URL param を最優先で読み、見たら localStorage に persist する。これで一度 ?diagram_essence=1 を踏めば、
-// 以後 app 内 navigation で param が書き換わっても (例: ?ticker=X&__r=1) flag が維持される。
-// =0 で即 OFF (storage も削除)、param 無しは storage 値を引き継ぐ。完全可逆。
+// flag: ?diagram_essence=1 で有効・default OFF (pane3_v2 と同型の URL→storage 永続化)。
+// URL param を最優先で読み、見たら localStorage に persist する (app 内 navigation で param が
+// 書き換わっても維持)。=0 で即 OFF (storage も削除)、param 無しは storage 値を引き継ぐ。完全可逆。
 export function isDiagramEssence() {
   if (typeof window === 'undefined') return false;
   try {
@@ -34,100 +27,3 @@ export function isDiagramEssence() {
     return false;
   }
 }
-
-// guidance verdict → essence chip の表示ラベル + 事実色 tone。
-// 'beat'/'miss' 以外 (in-line / unknown / 不明 / null) は neutral = 緑赤を出さない (誤発火防止)。
-const VERDICT_LABEL = { beat: 'Beat', miss: 'Miss', 'in-line': '概ね一致' };
-export function verdictTone(v) {
-  if (v === 'beat') return 'gain';
-  if (v === 'miss') return 'loss';
-  return 'neutral';
-}
-export function verdictLabel(v) {
-  return VERDICT_LABEL[v] || '判定材料待ち';
-}
-
-// tone → semantic token 色 (raw hex 禁止)。
-export function toneColor(t) {
-  if (t === 'gain') return 'var(--color-gain)';
-  if (t === 'loss') return 'var(--color-loss)';
-  return 'var(--text-muted)';
-}
-export function toneBg(t) {
-  if (t === 'gain') return 'color-mix(in srgb, var(--color-gain) 12%, transparent)';
-  if (t === 'loss') return 'color-mix(in srgb, var(--color-loss) 12%, transparent)';
-  return 'var(--bg-subtle)';
-}
-// 前年比 chip 等の border 色 (tone を accent/border に mix)。文字列結合を関数に閉じ込め可読性を上げる。
-export function toneBorderColor(t) {
-  if (t === 'gain') return 'color-mix(in srgb, var(--color-gain) 30%, var(--border))';
-  if (t === 'loss') return 'color-mix(in srgb, var(--color-loss) 30%, var(--border))';
-  return 'var(--border)';
-}
-
-// 首位セグメント (value_b 最大 = 主力事業)。displaySegmentName は呼び出し側 (DiagramCard) で適用。
-// businessFlowSteps は value-chain のステップ図で「主力事業」ではないため、segment を優先する。
-export function topSegment(data) {
-  const segs = data?.segmentSummary?.segments;
-  if (!Array.isArray(segs) || segs.length === 0) return null;
-  return segs.reduce(
-    (best, s) => ((s?.value_b ?? -Infinity) > (best?.value_b ?? -Infinity) ? s : best),
-    segs[0],
-  );
-}
-
-/**
- * buildEssence — essence hero の確定データを既存フィールドから導出 (LLM なし)。
- * @returns {{ segment: object|null, fallbackSubject: string|null,
- *             beatMiss: Array<{key:string,label:string,verdict:string}> }}
- */
-export function buildEssence(data, guidance) {
-  const segment = topSegment(data);
-  // segment が無い銘柄のみ businessFlowSteps[0] を弱い fallback に。無理に「誰に」を埋めない (§38)。
-  const fallbackSubject = (data?.businessFlowSteps?.[0]?.label || '').trim() || null;
-  const beatMiss = [];
-  if (guidance?.eps?.verdict != null) beatMiss.push({ key: 'eps', label: 'EPS', verdict: guidance.eps.verdict });
-  if (guidance?.revenue?.verdict != null) beatMiss.push({ key: 'rev', label: '売上', verdict: guidance.revenue.verdict });
-  return { segment, fallbackSubject, beatMiss };
-}
-
-// 数値 → 表示文字列 (Python/既存 field をそのまま整形、frontend で再計算しない)。
-export function fmtSegValue(v) {
-  if (!Number.isFinite(v)) return null;
-  return `$${Number.isInteger(v) ? v : v.toFixed(1)}B`;
-}
-export function fmtYoy(v) {
-  if (!Number.isFinite(v)) return null;
-  return `前年比 ${v >= 0 ? '+' : ''}${v}%`;
-}
-
-// essence hero の style (token のみ、新規 glow host を作らない inner ブロック)。
-// 総合改善 (2026-06-14 user feedback): 見出し格を明確化 (accent アイコン + hairline divider で本文と区別)、
-// 内容を richer に (主力事業に規模 $B + 前年比、今期決算に予想比 caption)。
-export const ESSENCE_STYLES = {
-  card: {
-    margin: '14px 0 14px', // 次セクションとの分離を明確に (3体監査 P1)
-    padding: '16px 18px',
-    borderRadius: 'var(--radius-md, 10px)',
-    border: '1px solid var(--border)',
-    background: 'var(--bg-subtle)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-  },
-  // 見出し格: accent アイコン + ラベル + hairline divider (本文 row と明確に区別 = user feedback ①、3体監査 P1)
-  headingWrap: { display: 'flex', alignItems: 'center', gap: '7px', paddingBottom: '10px', borderBottom: '1px solid var(--border)' },
-  headingIcon: { color: 'var(--color-accent)', flexShrink: 0 },
-  headingText: { fontSize: '13px', fontWeight: 700, letterSpacing: '0.07em', color: 'var(--text-secondary)' },
-  row: { display: 'flex', flexDirection: 'column', gap: '5px' },
-  rowLabel: { fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.02em' },
-  // caption「(アナリスト予想比)」を視認可能に強化 (3体監査 P0: Beat vs FAIL 誤読の Trust Cliff 緩和)
-  rowLabelCaption: { fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' },
-  subject: { fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3 },
-  chipRow: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' },
-  // 規模 ($B) chip = neutral、 前年比 chip = 事実色 (gain/loss)。12px に引き上げ (3体監査 P1)
-  metaChip: { fontSize: '12px', fontWeight: 600, padding: '2px 9px', borderRadius: '6px', lineHeight: 1.5, color: 'var(--text-secondary)', background: 'var(--bg-card)', border: '1px solid var(--border)' },
-  // Beat/Miss chip (事実色)
-  chip: { fontSize: '12px', fontWeight: 700, padding: '2px 10px', borderRadius: '999px', lineHeight: 1.5 },
-  chipWrap: { display: 'inline-flex', gap: '6px', flexWrap: 'wrap' },
-};

@@ -186,11 +186,10 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
           <BookOpen size={22} strokeWidth={1.4} />
           <Sparkles size={11} strokeWidth={1.5} className="diagram-banner__sparkle" />
         </span>
-        {/* v132 P1-E PART1: 2 段 hierarchy 復活、 「図解」 大 (17px fw700) + sub 小・薄 (11px text-muted)
-            で視線の落差を演出。 v130 P1 #8 の 1 行統合は cognitive context 不足 (user dogfood)。 */}
+        {/* 「図解」 title のみ (2026-06-14 user feedback: 副題「業績・ビジネス・強みを視覚化」は
+            「詳しく見る」累進開示で図解内が構造化されたため冗長 → 撤去)。 */}
         <span className="diagram-banner__text">
           <span className="diagram-banner__title">図解</span>
-          <span className="diagram-banner__sub">業績・ビジネス・強みを視覚化</span>
         </span>
         {/* v132 P0-D (user dogfood 5/30): expanded 時の X icon は冗長 (banner 自体が toggle)、
             ArrowRight (→) のみ表示し、 展開時は rotate で下向き (▽) を表現する代替も検討したが、

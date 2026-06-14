@@ -297,18 +297,20 @@ function isPane3OrderV2() {
   }
 }
 
-// 2026-06-14 (D2 累進開示・第2手プロトタイプ): 状態コンパス。冒頭に「決算/会社/価格」の3事実を並べ、
+// 2026-06-14: 状態コンパス。冒頭に「決算/会社/価格」の3事実 (ファンダ+テクニカル統合) を信号機で並べ、
 // 初心者の「で、買いですか?」に §38-safe に答える (3観点サブエージェントレビュー反映)。ON 時は EarningsFlash
-// をファンダ章③へ戻す (冒頭がファンダだけでないように)。default OFF・完全可逆 (?pane3_compass=1 / =0)。
+// をファンダ章③へ戻す (冒頭がファンダだけでないように)。
+// 2026-06-14 user 判断で **default ON (標準機能に格上げ)**。?pane3_compass=0 / localStorage 'pane3_compass'='0'
+// で revert 可 (完全可逆)。dogfood で品質確認済。
 function isPane3Compass() {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   try {
     const urlParam = new URLSearchParams(window.location.search).get('pane3_compass');
     if (urlParam === '1') return true;
     if (urlParam === '0') return false;
-    return window.localStorage?.getItem('pane3_compass') === '1';
+    return window.localStorage?.getItem('pane3_compass') !== '0'; // default ON、=0 で revert
   } catch {
-    return false;
+    return true;
   }
 }
 
