@@ -10061,6 +10061,39 @@ button.ds-chip.hero-watch-add:hover svg {
   border-color: var(--border) !important;
 }
 
+/* ── 2026-06-14 user feedback: データ取得状況 (CompletenessRollupBadge) の控えめ化 + 展開アニメ ──
+   user「ふだん気にしないので目立たないデザインで良い / 展開折りたたみアニメが欲しい」。
+   toggle = 枠/bg なしの quiet link (hover でのみ薄く反応)。展開は grid-rows 0fr→1fr で内容高さ不問の smooth。 */
+.completeness-toggle {
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  max-width: 100%;
+  padding: 3px 6px;
+  margin-left: -6px; /* テキスト左端を周囲と揃える */
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition: background 160ms ease;
+}
+.completeness-toggle:hover { background: var(--bg-subtle); }
+.completeness-toggle:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.completeness-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 240ms var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+}
+.completeness-collapse.is-open { grid-template-rows: 1fr; }
+.completeness-collapse__inner { overflow: hidden; min-height: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .completeness-toggle { transition: none; }
+  .completeness-collapse { transition: none; }
+}
+
 /* ── Phase 2.9 Sprint 3 #会社概要 visual 引き算 (発光階層 3 体合議 verdict) ────
    user dogfood: 「会社概要のみ、 5 条件より下なのに発光強い」 違和感解消。
    真因: ProfileCard は Card (bs-panel) 経由で is-arriving 時に full cyan shadow が発火、

@@ -171,12 +171,13 @@ export default function CompletenessRollupBadge({ ticker }) {
 
   return (
     <div data-testid={TESTID} data-state="main" style={mainWrapStyle}>
+      {/* 2026-06-14 user feedback: 目立たない quiet toggle に (枠/bg なし、hover でのみ薄く反応)。 */}
       <button
         type="button"
         data-testid={`${TESTID}-toggle`}
+        className="completeness-toggle"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        style={pillStyle}
         title="クリックでデータ取得状況の内訳"
       >
         <span style={eyebrowStyle}>データ取得</span>
@@ -187,12 +188,17 @@ export default function CompletenessRollupBadge({ ticker }) {
           style={{
             flexShrink: 0,
             color: 'var(--text-muted)',
-            transition: 'transform 160ms ease',
+            transition: 'transform 240ms ease',
             transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
           }}
         />
       </button>
-      {open && <CompletenessAuditPanel clusters={present} />}
+      {/* 2026-06-14 user feedback: 展開/折りたたみを grid-rows 0fr→1fr で smooth に (内容高さ不問)。 */}
+      <div className={`completeness-collapse${open ? ' is-open' : ''}`} aria-hidden={!open}>
+        <div className="completeness-collapse__inner">
+          <CompletenessAuditPanel clusters={present} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -209,20 +215,7 @@ const mainWrapStyle = {
   gap: 'var(--space-2, 8px)',
 };
 
-const pillStyle = {
-  alignSelf: 'start',
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 'var(--space-2, 8px)',
-  maxWidth: '100%',
-  padding: '5px 10px',
-  background: 'var(--bg-subtle)',
-  border: '1px solid var(--border)',
-  borderRadius: 8,
-  cursor: 'pointer',
-  textAlign: 'left',
-  font: 'inherit',
-};
+// (旧 pillStyle は index.css .completeness-toggle に移管: 枠/bg なしの quiet toggle + hover/focus。)
 
 const eyebrowStyle = {
   flexShrink: 0,
@@ -265,17 +258,22 @@ const auditCaptionStyle = {
   color: 'var(--text-muted)',
 };
 
+// 2026-06-14 user feedback: 見出し(グループ)と要素(行)の区別を明確化。
+//   グループ見出し = 小さい uppercase eyebrow (muted、「区分ラベル」 と分かる)。
 const auditGroupTitleStyle = {
-  fontSize: 11,
-  fontWeight: 600,
-  letterSpacing: '0.04em',
-  color: 'var(--text-secondary)',
-  marginBottom: 'var(--space-1, 4px)',
+  fontSize: 10,
+  fontWeight: 700,
+  letterSpacing: '0.08em',
+  textTransform: 'uppercase',
+  color: 'var(--text-muted)',
+  marginBottom: 'var(--space-2, 8px)',
 };
 
+// 行は左に hairline インデントを付け、グループ配下の「要素」 であることを視覚化。
 const auditRowStyle = {
-  padding: '4px 0',
-  borderTop: '1px solid var(--border)',
+  padding: '5px 0 5px var(--space-3, 12px)',
+  borderLeft: '1px solid var(--border)',
+  marginLeft: 2,
 };
 
 const auditRowMainStyle = {
@@ -286,9 +284,9 @@ const auditRowMainStyle = {
 };
 
 const auditRowLabelStyle = {
-  fontSize: 12,
+  fontSize: 12.5,
   fontWeight: 500,
-  color: 'var(--text-secondary)',
+  color: 'var(--text-primary)',
 };
 
 const auditRowStatusStyle = {
