@@ -100,6 +100,7 @@ import { useDetailScrollRestore } from './useDetailScrollRestore.js';
 import FundamentalsAccordion from './sections/FundamentalsAccordion.jsx';
 // v199: ファンダ章冒頭の決算ハイライト (flag opt-in、SPEC_2026-06-10_earnings-flash-summary + 6体合議)
 import EarningsFlashSummary from './sections/EarningsFlashSummary.jsx';
+import StateCompass from './sections/StateCompass.jsx';
 // 完全性台帳 (coverage manifest) Sprint3: 規律の元データ取得状況を最上部1行ロールアップ + ドリルダウン監査。
 import CompletenessRollupBadge from './sections/CompletenessRollupBadge.jsx';
 // 完全性台帳 #4: SPY 取得失敗時にテクニカル章で「地合いデータ未取得」 を中立注記 (chartBlock 内 = 全 path 到達)。
@@ -291,6 +292,21 @@ function isPane3OrderV2() {
     if (urlParam === '1') return true;
     if (urlParam === '0') return false;
     return window.localStorage?.getItem('pane3_order_v2') === '1';
+  } catch {
+    return false;
+  }
+}
+
+// 2026-06-14 (D2 累進開示・第2手プロトタイプ): 状態コンパス。冒頭に「決算/会社/価格」の3事実を並べ、
+// 初心者の「で、買いですか?」に §38-safe に答える (3観点サブエージェントレビュー反映)。ON 時は EarningsFlash
+// をファンダ章③へ戻す (冒頭がファンダだけでないように)。default OFF・完全可逆 (?pane3_compass=1 / =0)。
+function isPane3Compass() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('pane3_compass');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('pane3_compass') === '1';
   } catch {
     return false;
   }
@@ -1179,9 +1195,19 @@ export default function JudgmentDetail({
                     watchlist={detailContext?.watchlist}
                     onAddToWatchlist={detailContext?.onAddToWatchlist}
                   />
-                  {/* 2026-06-14 (D2 第1手・?pane3_order_v2=1): 決算ハイライト(本物の予想比サプライズ)を
-                      冒頭(Hero 直下)へ昇格。OFF 時は従来どおりファンダ章③に残る (二重描画は下の !isPane3OrderV2 gate で回避)。 */}
-                  {isPane3OrderV2() && isEarningsFlashEnabled() && (
+                  {/* 2026-06-14 (D2 第2手プロトタイプ・?pane3_compass=1): 状態コンパス。
+                      決算/会社/価格の3事実で「今の状態」を2秒で。初心者の「で、買いですか?」に §38-safe に答える。
+                      ON 時は EarningsFlash をファンダ章③へ戻す (下の gate)。 */}
+                  {isPane3Compass() && (
+                    <StateCompass
+                      selectedTicker={selectedTicker}
+                      result={result}
+                      guidance={guidance}
+                    />
+                  )}
+                  {/* 2026-06-14 (D2 第1手・?pane3_order_v2=1): 決算ハイライトを冒頭(Hero 直下)へ昇格。
+                      compass ON 時は冒頭に置かずファンダ章③へ戻すため除外。OFF 時は従来どおりファンダ章③に残る。 */}
+                  {isPane3OrderV2() && !isPane3Compass() && isEarningsFlashEnabled() && (
                     <EarningsFlashSummary
                       ticker={selectedTicker}
                       guidance={guidance}
@@ -1303,8 +1329,8 @@ export default function JudgmentDetail({
                 <ChapterSection chapterNumber="①" chapterTitle="ファンダメンタル" headerOnly tier="sub" emphasized />
                 {/* v199: 決算ハイライト (章扉直後・5条件カード前 = 事実 → 評価の視線順、ui-designer verdict)。
                     ノーラベル直出し (章扉直下の本文第 1 段落 idiom)。5条件カードは不変 (user 確定済制約)。
-                    2026-06-14 (D2 第1手): pane3_order_v2 ON 時は冒頭(ticker章頭)へ昇格済のため、ここでは出さない (二重描画回避)。 */}
-                {!isPane3OrderV2() && isEarningsFlashEnabled() && (
+                    2026-06-14 (D2): 第1手(order_v2 のみ ON)では冒頭へ昇格済のため非表示。compass ON 時はここに戻す。 */}
+                {(!isPane3OrderV2() || isPane3Compass()) && isEarningsFlashEnabled() && (
                   <EarningsFlashSummary
                     ticker={selectedTicker}
                     guidance={guidance}
