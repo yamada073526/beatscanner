@@ -13,13 +13,22 @@
  *   それ以外=neutral)、シアンを上昇の意味で使わない。数値は frontend で再計算しない (% 算出もしない)。
  */
 
-// flag: ?diagram_essence=1 で default OFF・完全可逆 (状態コンパス isPane3Compass と同型)。
+// flag: ?diagram_essence=1 で default OFF・完全可逆 (pane3_v2 と同型の URL→storage 永続化)。
+// URL param を最優先で読み、見たら localStorage に persist する。これで一度 ?diagram_essence=1 を踏めば、
+// 以後 app 内 navigation で param が書き換わっても (例: ?ticker=X&__r=1) flag が維持される。
+// =0 で即 OFF (storage も削除)、param 無しは storage 値を引き継ぐ。完全可逆。
 export function isDiagramEssence() {
   if (typeof window === 'undefined') return false;
   try {
     const urlParam = new URLSearchParams(window.location.search).get('diagram_essence');
-    if (urlParam === '1') return true;
-    if (urlParam === '0') return false;
+    if (urlParam === '1') {
+      try { window.localStorage.setItem('diagram_essence', '1'); } catch { /* private mode 等は silent */ }
+      return true;
+    }
+    if (urlParam === '0') {
+      try { window.localStorage.removeItem('diagram_essence'); } catch { /* silent */ }
+      return false;
+    }
     return window.localStorage?.getItem('diagram_essence') === '1';
   } catch {
     return false;
