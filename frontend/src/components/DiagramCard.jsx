@@ -12,6 +12,8 @@ import DiagramCitation from './DiagramCitation.jsx';
 import Chip from './ui/Chip.jsx';
 import { sanitizeDiagramData, findBlocklistHits, sanitizeText } from '../lib/blocklist.js';
 import { displaySegmentName } from '../lib/segmentNames.js';
+// B7 第一手 (2026-06-14): 図解最上段「一言で言うと」L1 essence hero (flag ?diagram_essence=1, default OFF)。
+import { isDiagramEssence, buildEssence, verdictTone, verdictLabel, toneColor, toneBg, ESSENCE_STYLES } from './diagramEssence.js';
 // handover v82 Phase 5.5: ConditionRow click → DiagramCard pulse 連携 (multi-review 6 体合議 verdict)。
 import { useWorkspaceStore } from '../state/workspaceStore.js';
 import { isStepPulsingForCondition } from '../lib/condition-mapping.js';
@@ -1852,6 +1854,7 @@ export default function DiagramCard({
   showCoach = false,         // R2v3: 年セレクター直上の吹き出し表示 ON/OFF（HomeTab 制御・初回のみ）
   onSelectorVisible,         // R2v2: 年セレクターが80%可視になった時に1度だけ呼ばれる
   vibe = DEFAULT_VIBE,       // v155: 既定=案A (serif見出し+ゆとり余白)。 preview のみ各案を明示的に上書き
+  guidance = null,           // B7 第一手: essence hero の今期 Beat/Miss 用 (既存 guidance verdict mirror、未渡し時は判定材料待ち)
 }) {
   // handover v82 Phase 4.5: frontend BLOCKLIST sanitize 適用 (BAD-5 / BAD-6 表示前削除)。
   // NEGATIVE_EXAMPLES + few-shot で 87.5% 抑制、 残 12.5% を frontend で sentence 単位削除。
@@ -2192,6 +2195,41 @@ export default function DiagramCard({
       </div>
 
       <div style={{ padding: '4px 16px 20px' }}>
+
+        {/* ── L1 essence hero「一言で言うと」(B7 第一手, flag ?diagram_essence=1, default OFF, add-only) ──
+            初心者が 2 秒で「何で稼ぐ会社か + 今期決算の出来」を掴む最上段ブロック。新規 LLM なし =
+            既存確定フィールド (segmentSummary 首位 / guidance verdict) の静的 mirror。§38: 描写のみ・事実色のみ。 */}
+        {isDiagramEssence() && (() => {
+          const essence = buildEssence(data, guidance);
+          const segName = essence.segment ? displaySegmentName(essence.segment) : null;
+          const subject = segName || essence.fallbackSubject; // segment 優先、無ければ flow step (無理に埋めない)
+          return (
+            <div data-testid="diagram-essence-hero" style={ESSENCE_STYLES.card}>
+              <div style={ESSENCE_STYLES.eyebrow}>一言で言うと</div>
+              <div style={ESSENCE_STYLES.row}>
+                <span style={ESSENCE_STYLES.key}>主力事業</span>
+                <span style={ESSENCE_STYLES.val}>{subject || '構成を精査中'}</span>
+              </div>
+              <div style={ESSENCE_STYLES.row}>
+                <span style={ESSENCE_STYLES.key}>今期の決算</span>
+                {essence.beatMiss.length > 0 ? (
+                  <span style={ESSENCE_STYLES.chipWrap}>
+                    {essence.beatMiss.map((bm) => {
+                      const tone = verdictTone(bm.verdict);
+                      return (
+                        <span key={bm.key} style={{ ...ESSENCE_STYLES.chip, color: toneColor(tone), background: toneBg(tone) }}>
+                          {bm.label} {verdictLabel(bm.verdict)}
+                        </span>
+                      );
+                    })}
+                  </span>
+                ) : (
+                  <span style={{ ...ESSENCE_STYLES.chip, color: 'var(--text-muted)', background: 'var(--bg-subtle)' }}>判定材料待ち</span>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── Section 1: Headline (story) ── */}
         <div

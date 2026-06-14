@@ -238,6 +238,7 @@ export default function StickyDiagramAccordion({ ticker, analysis, guidance }) {
                   ticker={ticker}
                   selectedYears={selectedYears}
                   onYearsChange={refetchTrendsForYear}
+                  guidance={guidance}
                 />
               </Suspense>
             )}
