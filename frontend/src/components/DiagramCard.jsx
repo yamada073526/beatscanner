@@ -13,7 +13,7 @@ import Chip from './ui/Chip.jsx';
 import { sanitizeDiagramData, findBlocklistHits, sanitizeText } from '../lib/blocklist.js';
 import { displaySegmentName } from '../lib/segmentNames.js';
 // B7 第一手 (2026-06-14): 図解最上段「一言で言うと」L1 essence hero (flag ?diagram_essence=1, default OFF)。
-import { isDiagramEssence, buildEssence, verdictTone, verdictLabel, toneColor, toneBg, ESSENCE_STYLES } from './diagramEssence.js';
+import { isDiagramEssence, buildEssence, verdictTone, verdictLabel, toneColor, toneBg, ESSENCE_STYLES, fmtSegValue, fmtYoy } from './diagramEssence.js';
 // handover v82 Phase 5.5: ConditionRow click → DiagramCard pulse 連携 (multi-review 6 体合議 verdict)。
 import { useWorkspaceStore } from '../state/workspaceStore.js';
 import { isStepPulsingForCondition } from '../lib/condition-mapping.js';
@@ -2112,9 +2112,18 @@ export default function DiagramCard({
           animation: section-flash 320ms ease-out;
           border-radius: 8px;
         }
-        /* B7 第二手 (C 累進開示): 下層 L3 を「詳しく見る」で畳む。display:none で完全非表示
-           (滑らかな展開アニメは総合改善で検討、まずは可逆な MVP)。flag OFF では本 class は付かない。 */
-        .diagram-l3-collapsed { display: none; }
+        /* B7 第二手 (C 累進開示): 下層 L3 を「詳しく見る」で畳む。grid 0fr/1fr で高さを滑らかにアニメ
+           (user feedback ③、display:none の瞬間消えを解消)。flag OFF では本 class は付かない (従来通り)。 */
+        .diagram-l3-anim {
+          display: grid;
+          grid-template-rows: 1fr;
+          transition: grid-template-rows 0.34s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .diagram-l3-anim.is-collapsed { grid-template-rows: 0fr; }
+        .diagram-l3-anim-inner { overflow: hidden; min-height: 0; }
+        @media (prefers-reduced-motion: reduce) {
+          .diagram-l3-anim { transition: none; }
+        }
         @keyframes btn-pulse {
           0%   { transform: scale(1); }
           40%  { transform: scale(1.18); }
@@ -2207,19 +2216,35 @@ export default function DiagramCard({
             既存確定フィールド (segmentSummary 首位 / guidance verdict) の静的 mirror。§38: 描写のみ・事実色のみ。 */}
         {isDiagramEssence() && (() => {
           const essence = buildEssence(data, guidance);
-          const segName = essence.segment ? displaySegmentName(essence.segment) : null;
+          const seg = essence.segment;
+          const segName = seg ? displaySegmentName(seg) : null;
           const subject = segName || essence.fallbackSubject; // segment 優先、無ければ flow step (無理に埋めない)
+          const segVal = seg ? fmtSegValue(seg.value_b) : null;
+          const yoyTxt = seg ? fmtYoy(seg.yoy_pct) : null;
+          const yoyTone = seg && Number.isFinite(seg.yoy_pct) ? (seg.yoy_pct >= 0 ? 'gain' : 'loss') : null;
           return (
             <div data-testid="diagram-essence-hero" style={ESSENCE_STYLES.card}>
-              <div style={ESSENCE_STYLES.eyebrow}>一言で言うと</div>
-              <div style={ESSENCE_STYLES.row}>
-                <span style={ESSENCE_STYLES.key}>主力事業</span>
-                <span style={ESSENCE_STYLES.val}>{subject || '構成を精査中'}</span>
+              {/* 見出し格 (accent アイコン + hairline divider で本文と区別) */}
+              <div style={ESSENCE_STYLES.headingWrap}>
+                <Sparkles size={13} strokeWidth={2} aria-hidden="true" style={ESSENCE_STYLES.headingIcon} />
+                <span style={ESSENCE_STYLES.headingText}>一言で言うと</span>
               </div>
+              {/* 主力事業: 名称 + 規模 ($B) + 前年比 (既存 segment field の mirror、再計算なし) */}
               <div style={ESSENCE_STYLES.row}>
-                <span style={ESSENCE_STYLES.key}>今期の決算</span>
+                <span style={ESSENCE_STYLES.rowLabel}>主力事業</span>
+                <div style={ESSENCE_STYLES.chipRow}>
+                  <span style={ESSENCE_STYLES.subject}>{subject || '構成を精査中'}</span>
+                  {segVal && <span style={ESSENCE_STYLES.metaChip}>{segVal}</span>}
+                  {yoyTxt && yoyTone && (
+                    <span style={{ ...ESSENCE_STYLES.metaChip, color: toneColor(yoyTone), borderColor: 'color-mix(in srgb, var(--color-' + (yoyTone === 'gain' ? 'gain' : 'loss') + ') 30%, var(--border))' }}>{yoyTxt}</span>
+                  )}
+                </div>
+              </div>
+              {/* 今期の決算: アナリスト予想比の Beat/Miss (既存 guidance verdict mirror、事実色) */}
+              <div style={ESSENCE_STYLES.row}>
+                <span style={ESSENCE_STYLES.rowLabel}>今期の決算 <span style={ESSENCE_STYLES.rowLabelCaption}>（アナリスト予想比）</span></span>
                 {essence.beatMiss.length > 0 ? (
-                  <span style={ESSENCE_STYLES.chipWrap}>
+                  <div style={ESSENCE_STYLES.chipRow}>
                     {essence.beatMiss.map((bm) => {
                       const tone = verdictTone(bm.verdict);
                       return (
@@ -2228,9 +2253,9 @@ export default function DiagramCard({
                         </span>
                       );
                     })}
-                  </span>
+                  </div>
                 ) : (
-                  <span style={{ ...ESSENCE_STYLES.chip, color: 'var(--text-muted)', background: 'var(--bg-subtle)' }}>判定材料待ち</span>
+                  <span style={{ ...ESSENCE_STYLES.chip, color: 'var(--text-muted)', background: 'var(--bg-card)' }}>判定材料待ち</span>
                 )}
               </div>
             </div>
@@ -2584,20 +2609,18 @@ export default function DiagramCard({
             onClick={() => setL3Open((v) => !v)}
             aria-expanded={l3Open}
             data-testid="diagram-l3-toggle"
-            style={{
-              width: '100%', marginTop: '16px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-              padding: '11px 14px', borderRadius: '10px',
-              border: '1px solid var(--border)', background: 'var(--bg-subtle)',
-              color: 'var(--text-secondary)', fontSize: '13px', fontWeight: 600,
-              cursor: 'pointer',
-            }}
+            style={ESSENCE_STYLES.toggleBtn}
+            onMouseEnter={(e) => { e.currentTarget.style.background = ESSENCE_STYLES.toggleBtnHoverBg; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = ESSENCE_STYLES.toggleBtnBg; }}
           >
+            <Layers size={15} strokeWidth={2} aria-hidden="true" />
             {l3Open ? '閉じる' : '詳しく見る（成長トレンド・アナリスト予想・強み / リスク ほか）'}
             <ChevronDown size={15} strokeWidth={2} aria-hidden="true" style={{ transform: l3Open ? 'rotate(180deg)' : 'none', transition: 'transform var(--motion-fast, 0.2s) ease' }} />
           </button>
         )}
-        <div data-testid="diagram-l3-group" className={isDiagramEssence() && !l3Open ? 'diagram-l3-collapsed' : undefined}>
+        {/* L3 group: grid 0fr/1fr で滑らかに展開 (user feedback ③)。flag OFF では class なし = 従来通り。 */}
+        <div data-testid="diagram-l3-group" className={isDiagramEssence() ? `diagram-l3-anim${l3Open ? '' : ' is-collapsed'}` : undefined}>
+        <div className={isDiagramEssence() ? 'diagram-l3-anim-inner' : undefined}>
 
         {!isGenerating && trends.length > 0 && (
           <NarrativeBridge text="数年の推移で全体像を見ると" isMobile={isMobile} />
@@ -3474,6 +3497,7 @@ export default function DiagramCard({
           <CongressTradesSection congress={data.congressTrades} />
         )}
 
+        </div>
         </div>
         {/* ── B7 第二手: 下層 L3 group ここまで (締めの「この決算のチェックポイント」は visible 維持) ── */}
 
