@@ -169,3 +169,30 @@ export const COMPASS_MODAL = {
     disclaimer: '※ 一般的な投資手法の解説であり、' + COMPASS_DISCLAIMER_SHORT,
   },
 };
+
+/**
+ * モーダル各 section の視覚メタ (icon キー + cyan 強調する1フレーズ)。COMPASS_MODAL[key].points と同 index 順。
+ * icon キーは StateCompass.jsx の SECTION_ICONS で lucide component に解決。
+ * emphasis は本文/bullet 内に実在する substring (cyan 強調)。本文の意味は変えず読みやすさのみ向上。
+ */
+export const COMPASS_MODAL_META = {
+  earnings: [
+    { icon: 'definition', emphasis: '3つすべてで予想を上回ること' },
+    { icon: 'eye', emphasis: '新しい材料' },
+    { icon: 'institution', emphasis: '売却が進む傾向' },
+    { icon: 'search', emphasis: '予想を継続的に上回る傾向' },
+    { icon: 'warn', emphasis: '下落幅が大きくなる傾向' },
+  ],
+  company: [
+    { icon: 'cash', emphasis: '稼ぐ力の純度' },
+    { icon: 'trend', emphasis: '成功の再現性' },
+    { icon: 'cash', emphasis: '現金が会社に積み上がっている' },
+    { icon: 'bars', emphasis: '本物の成長' },
+    { icon: 'shield', emphasis: '誤魔化しがききにくい' },
+  ],
+  price: [
+    { icon: 'target', emphasis: '値動きに反映されやすい' },
+    { icon: 'risk', emphasis: '守りのルール' },
+    { icon: 'ma', emphasis: 'デス・クロス' },
+  ],
+};

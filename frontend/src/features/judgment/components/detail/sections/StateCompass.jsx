@@ -5,22 +5,24 @@
  * 「信号機デザイン」で2秒スキャンできるように提示 (色と形で polarity → 文字は最小)。
  * 詳しい見方は各セルの ⓘ → モーダル (stateCompassText.js、§38-safe 静的テキスト)。
  *
- * v2 (user dogfood 2026-06-14): テキスト過多 → 信号機 (シグナルドット + Beat/Miss バッジ +
- *   N/5 ドットゲージ) + ⓘモーダルへ詳細退避。§38 短免責は近接1行で残す (景表法 打ち消し表示要件)。
+ * v3 (user dogfood 2026-06-14): モーダルを「文字壁」→ user 模範 (5条件モーダル) に合わせ、
+ *   section ごとに枠カード + 薄い見出し + 冒頭アイコン + cyan 強調 + bullet ラベル太字 で可読性向上。
  *
  * @no-llm: backend 計算済値の整形のみ。判断語・最上級・売買推奨なし (§38/§5)。
- *   決算=classifySurprise / 会社=passedCount/totalCount / 価格=fetchTechnical→classifyBuyZone。
  * 価格セルの色は amber 固定 (緑=「買い」暗示で §38 risk、金融 opus verdict)。
  * 設計境界: 新規 glow host を作らない / semantic token のみ / module-level component /
- *   全 render path に data-testid。
+ *   全 render path に data-testid。cyan は text 強調のみ (上昇の signal 色には使わない、投資業界色ルール)。
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { TrendingUp, TrendingDown, Minus, Layers, Crosshair, Info } from 'lucide-react';
+import {
+  TrendingUp, TrendingDown, Minus, Layers, Crosshair, Info,
+  ClipboardCheck, Eye, Building2, Search, AlertTriangle, Coins, BarChart3, ShieldCheck, Shield, Activity,
+} from 'lucide-react';
 import InfoModal from '../../../../../components/InfoModal.jsx';
 import { fetchTechnical, TECHNICAL_CANONICAL_PATTERNS } from '../../../../../api.js';
 import { classifySurprise, SURPRISE_VERDICT_JP, fmtSurprisePct } from '../../../constants/earningsFlashTemplates.js';
 import { classifyBuyZone, BUY_ZONE_LABEL_JP } from '../../../../../lib/buyZoneLabels.js';
-import { COMPASS_MODAL } from '../../../constants/stateCompassText.js';
+import { COMPASS_MODAL, COMPASS_MODAL_META } from '../../../constants/stateCompassText.js';
 
 const TESTID = 'state-compass';
 
@@ -30,6 +32,12 @@ const SIGNAL_COLOR = {
   warn: 'var(--color-warning)',
   bad: 'var(--color-loss)',
   neutral: 'var(--text-muted)',
+};
+
+// モーダル section の冒頭アイコン (COMPASS_MODAL_META の icon キー → lucide)
+const SECTION_ICONS = {
+  definition: ClipboardCheck, eye: Eye, institution: Building2, search: Search, warn: AlertTriangle,
+  cash: Coins, trend: TrendingUp, bars: BarChart3, shield: ShieldCheck, target: Crosshair, risk: Shield, ma: Activity,
 };
 
 // 決算セル: 予想比サプライズ (±3% 分類) を信号化
@@ -70,27 +78,62 @@ function DotGauge({ score, total, color }) {
   );
 }
 
-// モーダル本文 (intro / points[heading,body,bullets,after] / summary / disclaimer)
-function CompassModalBody({ data }) {
+// text 内の emphasis フレーズを cyan 強調して返す (見つからなければそのまま)
+function withEmphasis(text, emphasis) {
+  if (!emphasis || typeof text !== 'string' || !text.includes(emphasis)) return text;
+  const parts = text.split(emphasis);
+  const out = [];
+  parts.forEach((p, i) => {
+    if (i > 0) out.push(<span key={`em${i}`} style={emphasisStyle}>{emphasis}</span>);
+    if (p) out.push(p);
+  });
+  return out;
+}
+
+// bullet: 「ラベル：本文」 のラベル部を太字 (user 模範)。残りは emphasis 適用。
+function renderBullet(text, emphasis) {
+  const idx = text.indexOf('：');
+  if (idx > 0 && idx <= 24) {
+    return (
+      <>
+        <span style={bulletLabelStyle}>{text.slice(0, idx + 1)}</span>
+        {withEmphasis(text.slice(idx + 1), emphasis)}
+      </>
+    );
+  }
+  return withEmphasis(text, emphasis);
+}
+
+// モーダル本文: section ごとに枠カード + 薄い見出し + 冒頭アイコン + cyan 強調 (user 模範準拠)
+function CompassModalBody({ data, meta }) {
   if (!data) return null;
   return (
     <div style={modalBodyStyle}>
-      {data.intro && <p style={modalParaStyle}>{data.intro}</p>}
-      {(data.points || []).map((p, i) => (
-        <div key={i} style={modalPointStyle}>
-          <div style={modalHeadingStyle}>{p.heading}</div>
-          {p.body && <p style={modalParaStyle}>{p.body}</p>}
-          {Array.isArray(p.bullets) && (
-            <ul style={modalBulletsStyle}>
-              {p.bullets.map((b, j) => (
-                <li key={j} style={modalBulletStyle}>{b}</li>
-              ))}
-            </ul>
-          )}
-          {p.after && <p style={modalParaStyle}>{p.after}</p>}
+      {data.intro && <p style={modalIntroStyle}>{data.intro}</p>}
+      {(data.points || []).map((p, i) => {
+        const m = (meta && meta[i]) || {};
+        const Icon = SECTION_ICONS[m.icon] || Info;
+        return (
+          <div key={i} style={modalCardStyle}>
+            <div style={modalCardHeadStyle}>
+              <Icon size={14} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0 }} />
+              <span style={modalCardHeadTextStyle}>{p.heading}</span>
+            </div>
+            {p.body && <p style={modalParaStyle}>{withEmphasis(p.body, m.emphasis)}</p>}
+            {Array.isArray(p.bullets) && (
+              <ul style={modalBulletsStyle}>
+                {p.bullets.map((b, j) => <li key={j} style={modalBulletStyle}>{renderBullet(b, m.emphasis)}</li>)}
+              </ul>
+            )}
+            {p.after && <p style={modalParaStyle}>{withEmphasis(p.after, m.emphasis)}</p>}
+          </div>
+        );
+      })}
+      {data.summary && (
+        <div style={modalSummaryCardStyle}>
+          <p style={modalSummaryStyle}>{data.summary}</p>
         </div>
-      ))}
-      {data.summary && <p style={modalSummaryStyle}>{data.summary}</p>}
+      )}
       {data.disclaimer && <p style={modalDisclaimerStyle}>{data.disclaimer}</p>}
     </div>
   );
@@ -173,7 +216,7 @@ export default function StateCompass({ selectedTicker, result, guidance }) {
 
       {openKey && COMPASS_MODAL[openKey] && (
         <InfoModal title={COMPASS_MODAL[openKey].modalTitle} onClose={() => setOpenKey(null)}>
-          <CompassModalBody data={COMPASS_MODAL[openKey]} />
+          <CompassModalBody data={COMPASS_MODAL[openKey]} meta={COMPASS_MODAL_META[openKey]} />
         </InfoModal>
       )}
     </div>
@@ -198,12 +241,17 @@ const gaugeDotStyle = { width: 9, height: 9, borderRadius: '50%', display: 'inli
 const cellSubStyle = { fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', lineHeight: 1.4 };
 const shortDisclaimerStyle = { margin: 0, fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', lineHeight: 1.5 };
 
-// modal body
-const modalBodyStyle = { display: 'flex', flexDirection: 'column', gap: 'var(--space-4, 16px)' };
+// modal body — user 模範 (5条件モーダル) 準拠: section 枠カード + 薄い見出し + 冒頭アイコン + cyan 強調
+const modalBodyStyle = { display: 'flex', flexDirection: 'column', gap: 'var(--space-3, 12px)' };
+const modalIntroStyle = { margin: 0, fontSize: 13, fontWeight: 500, lineHeight: 1.7, color: 'var(--text-secondary)' };
+const modalCardStyle = { border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 12px)', padding: 'var(--space-4, 16px)', background: 'var(--bg-subtle)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2, 8px)' };
+const modalCardHeadStyle = { display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)', color: 'var(--text-muted)' };
+const modalCardHeadTextStyle = { fontSize: 12, fontWeight: 600, letterSpacing: '0.02em' };
 const modalParaStyle = { margin: 0, fontSize: 13, fontWeight: 500, lineHeight: 1.7, color: 'var(--text-secondary)' };
-const modalPointStyle = { display: 'flex', flexDirection: 'column', gap: 'var(--space-1, 4px)' };
-const modalHeadingStyle = { fontSize: 13.5, fontWeight: 700, lineHeight: 1.5, color: 'var(--text-primary)' };
-const modalBulletsStyle = { margin: 'var(--space-1, 4px) 0 0', paddingLeft: '1.2em', display: 'flex', flexDirection: 'column', gap: 'var(--space-2, 8px)' };
+const modalBulletsStyle = { margin: 0, paddingLeft: '1.1em', display: 'flex', flexDirection: 'column', gap: 'var(--space-2, 8px)' };
 const modalBulletStyle = { fontSize: 13, fontWeight: 500, lineHeight: 1.65, color: 'var(--text-secondary)' };
+const bulletLabelStyle = { fontWeight: 700, color: 'var(--text-primary)' };
+const emphasisStyle = { color: 'var(--color-accent)', fontWeight: 700 };
+const modalSummaryCardStyle = { border: '1px solid color-mix(in srgb, var(--color-accent) 25%, var(--border))', borderRadius: 'var(--radius-md, 12px)', padding: 'var(--space-4, 16px)', background: 'color-mix(in srgb, var(--color-accent) 5%, transparent)' };
 const modalSummaryStyle = { margin: 0, fontSize: 13, fontWeight: 600, lineHeight: 1.7, color: 'var(--text-primary)' };
 const modalDisclaimerStyle = { margin: 0, fontSize: 11.5, fontWeight: 500, lineHeight: 1.6, color: 'var(--text-muted)' };
