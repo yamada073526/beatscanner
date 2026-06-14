@@ -378,9 +378,9 @@ export default function EtfOverviewPanel({ etfInfo, onNavigateTicker }) {
           gap: 'var(--space-3, 12px)',
         }}
       >
-        <MetricChip label="AUM" value={_formatAum(ov.aum)} hint="運用資産総額" />
-        <MetricChip label="TER" value={_formatTer(ov.expense_ratio)} hint="経費率 (年率)" />
-        <MetricChip label="設定日" value={_formatDate(ov.inception_date)} hint="運用開始" />
+        <MetricChip label="運用資産総額" value={_formatAum(ov.aum)} />
+        <MetricChip label="経費率 (年率)" value={_formatTer(ov.expense_ratio)} />
+        <MetricChip label="設定日" value={_formatDate(ov.inception_date)} />
         {/* R9.4: 「籍」 chip 削除 (BeatScanner user は US 上場 ETF 前提で自明、 余白を活かす)。
             domicile データは backend response に残し、 将来 international ETF (FXI 等) で
             US 以外の値が頻出するなら再度表示検討。 */}
@@ -399,10 +399,10 @@ export default function EtfOverviewPanel({ etfInfo, onNavigateTicker }) {
           gap: 'var(--space-3, 12px)',
         }}
       >
-        <MetricChip label="運用会社" value={ov.etf_company || '—'} hint="ETF Issuer" />
-        <MetricChip label="保有銘柄数" value={_formatCount(ov.holdings_count)} hint="構成銘柄数" />
-        <MetricChip label="平均出来高" value={_formatVolume(ov.avg_volume)} hint="日次平均株数" />
-        <MetricChip label="資産クラス" value={_formatAssetClass(ov.asset_class)} hint="Asset Class" />
+        <MetricChip label="運用会社" value={ov.etf_company || '—'} />
+        <MetricChip label="保有銘柄数" value={_formatCount(ov.holdings_count)} />
+        <MetricChip label="平均出来高" value={_formatVolume(ov.avg_volume)} />
+        <MetricChip label="資産クラス" value={_formatAssetClass(ov.asset_class)} />
       </div>
 
       {/* R9.5: 組入上位銘柄 (weight 降順 top 10、上位 5 常時 + 折りたたみ)。

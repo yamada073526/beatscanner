@@ -1997,7 +1997,7 @@ export default function DiagramCard({
   // B7 第二手 (C 累進開示): essence flag ON 時、下層 (成長ストーリー以降) を「詳しく見る」で畳む。
   // default 閉 (初心者は L1 essence + L2 ビジネスモデルで 2 秒理解、上級者は展開で深掘り)。flag OFF では無効。
   const [l3Open, setL3Open] = useState(false);
-  // 「詳しく見る」累進開示 (下層 L3 を畳む) の有効判定。flag ?diagram_essence=1、default OFF・可逆。
+  // 「詳しく見る」累進開示 (下層 L3 を畳む) の有効判定。default ON (2026-06-15 user 要望)、?diagram_essence=0 で kill・可逆。
   // 1 度だけ評価 (render 毎の localStorage 重複読み解消)。非 equity (指数/ETF/為替) は従来のフラット表示。
   const l3Enabled = useMemo(() => isDiagramEssence() && !isNonEquityTicker(ticker), [ticker]);
 
