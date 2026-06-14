@@ -14040,12 +14040,39 @@ OGP_CACHE: dict = {}   # {ticker: (png_bytes, ts)}
 OGP_TTL = 3600         # 1h
 
 
-def _ogp_html(ticker: str) -> str:
+# OGP redirect に持ち越す flag param の allowlist 文字種 (XSS 防止: 厳格)。
+# key/value とも英数 + _ - のみ → <script> 内 JS 文字列に安全に注入できる ("/</バックスラッシュ/空白を含まない)。
+_SAFE_FLAG_KEY = re.compile(r"^[a-z0-9_]{1,40}$")
+_SAFE_FLAG_VAL = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
+_OGP_EXCLUDE_PARAMS = {"ticker", "t", "__r", "layout"}
+
+
+def _safe_flag_query(request: "Request") -> str:
+    """OGP redirect に持ち越す安全な flag param のみを再構築する。
+    ticker/t/__r/layout は別扱いなので除外。allowlist 文字種に合わない param は drop (XSS / 異常値防止)。
+    例: ?ticker=NVDA&diagram_essence=1 → "diagram_essence=1" を返す (frontend flag が OGP 経由でも消えない)。"""
+    parts = []
+    try:
+        for k, v in request.query_params.multi_items():
+            if k in _OGP_EXCLUDE_PARAMS:
+                continue
+            if _SAFE_FLAG_KEY.match(k) and _SAFE_FLAG_VAL.match(v):
+                parts.append(f"{k}={v}")
+    except Exception:
+        return ""
+    return "&".join(parts)
+
+
+def _ogp_html(ticker: str, extra_query: str = "") -> str:
     base = "https://beatscanner-production.up.railway.app"
     img = f"{base}/api/ogp/{ticker}"
     page = f"{base}/?ticker={ticker}"
     title = f"${ticker} | beatscanner 決算分析"
     desc = f"${ticker} の5条件判定結果を beatscanner で確認"
+    # ブラウザ訪問時に SPA 本体へ redirect する URL。flag param (diagram_essence 等) を __r=1 と共に保持。
+    redirect = f"/?ticker={ticker}&__r=1"
+    if extra_query:
+        redirect += f"&{extra_query}"
     return (
         '<!DOCTYPE html><html lang="ja"><head>'
         '<meta charset="utf-8">'
@@ -14060,13 +14087,14 @@ def _ogp_html(ticker: str) -> str:
         f'<meta name="twitter:description" content="{desc}">'
         f'<meta name="twitter:image" content="{img}">'
         # クローラーは <script> を実行しないが、ブラウザ訪問時にはSPA本体へリダイレクト
-        f'<script>location.replace("/?ticker={ticker}&__r=1")</script>'
+        f'<script>location.replace("{redirect}")</script>'
         '</head><body></body></html>'
     )
 
 
 @app.get("/", response_class=HTMLResponse)
 async def root(
+    request: Request,
     ticker: str | None = Query(None),
     t: str | None = Query(None),
     layout: str | None = Query(None),  # workspace 等の layout 指定 (handover v77 user feedback)
@@ -14086,8 +14114,8 @@ async def root(
         if index.exists():
             return FileResponse(index)
         return HTMLResponse("<h1>beatscanner</h1>", status_code=200)
-    # bot 用の OGP 専用 HTML（ブラウザはJSでSPA本体に遷移）
-    return HTMLResponse(_ogp_html(eff))
+    # bot 用の OGP 専用 HTML（ブラウザはJSでSPA本体に遷移）。flag param (diagram_essence 等) を redirect に保持。
+    return HTMLResponse(_ogp_html(eff, _safe_flag_query(request)))
 
 
 def _format_money_short(v: float | None, currency: str = "USD") -> str | None:
