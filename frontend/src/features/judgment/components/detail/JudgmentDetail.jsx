@@ -632,10 +632,11 @@ export default function JudgmentDetail({
     const rsPct = technicalRs.rs_vs_spy_pct;
     const months = Number.isFinite(technicalRs.period_months) ? technicalRs.period_months : 6;
     kpis.push({
+      // hint は他 KPI が subtext を持たず不揃いになるため出さない (Stat の hint は可視テキスト)。
+      // 期間/相対力の文脈は label「RS（対SPY）」 で自明、詳細はテクニカル章で確認できる。
       value: `${rsPct > 0 ? '+' : ''}${rsPct.toFixed(1)}%`,
-      label: 'RS（対SPY）',
+      label: `RS 対SPY ${months}M`,
       trend: 'neutral',
-      hint: `レラティブストレングス：直近${months}ヶ月の SPY に対する超過リターン${technicalRs.ranking_label ? `（${technicalRs.ranking_label}）` : ''}`,
     });
   } else if (result) {
     // RS 未取得時のみ placeholder で chip 数を維持 (cold start / ETF 等で RS なし)。
