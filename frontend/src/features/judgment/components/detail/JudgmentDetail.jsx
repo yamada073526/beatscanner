@@ -79,7 +79,7 @@ import EpsBeatStreakChip from './EpsBeatStreakChip.jsx';
 // v108 議題 5A (multi-review 5/5 verdict「release 前 mandatory」):
 // Forward P/E / PEG / 配当性向 / Buyback比率 を KpiStrip に追加するための fetcher。
 // 金商法 §38 / 景表法 §5 配慮で narration / 警告 chip なし、 数値のみ。
-import { fetchValuationExtras } from '../../../../api.js';
+import { fetchValuationExtras, fetchTechnical, TECHNICAL_CANONICAL_PATTERNS } from '../../../../api.js';
 // v104 release MVP: 10-K (年次報告書) — リファレンス章 5 で SEC EDGAR 直 fetch。
 import TenKLinksPanel from '../../../../components/TenKLinksPanel.jsx';
 // v104 Phase G Phase 4: 章 2 (基本財務) を 3 tab (Guidance / 過去業績 / 直近 8Q) に reorg。
@@ -492,6 +492,20 @@ export default function JudgmentDetail({
     return () => { cancelled = true; };
   }, [selectedTicker]);
 
+  // 2026-06-14 user feedback: KpiStrip の「条件合致 N/5」 を撤去し RS (レラティブストレングス) に置換。
+  //   technical endpoint は dedupGet coalesce 済 (StateCompass / prefetch / 各 zone card と同一 URL) のため
+  //   追加 fetch は発生しない。patterns.rs = { rs_vs_spy_pct, self_percentile, ranking_label, period_months }。
+  const [technicalRs, setTechnicalRs] = useState(null);
+  useEffect(() => {
+    setTechnicalRs(null); // ticker 切替時に他銘柄の RS 残骸を出さない
+    if (!selectedTicker) return undefined;
+    let cancelled = false;
+    fetchTechnical(selectedTicker, TECHNICAL_CANONICAL_PATTERNS)
+      .then((t) => { if (!cancelled) setTechnicalRs(t?.patterns?.rs || null); })
+      .catch(() => { if (!cancelled) setTechnicalRs(null); });
+    return () => { cancelled = true; };
+  }, [selectedTicker]);
+
   // v107 hotfix (React #310 fix): ch2Tab / ch3Tab useState は ALL early returns の前に置く必要。
   //   v105/v106 で JSX return 直前に置いていたが、 L338 `if (!selectedTicker)` early return より後ろのため
   //   初回 (selectedTicker=undefined) は hooks 2 個 skip、 2 回目 (set) で 2 個追加 → Rules of Hooks 違反。
@@ -610,12 +624,22 @@ export default function JudgmentDetail({
       trend: detail.changePct > 0 ? 'up' : detail.changePct < 0 ? 'down' : 'neutral',
     });
   }
-  if (result) {
+  // 2026-06-14 user feedback: 「条件合致 N/5」 は銘柄情報でなく判定で、下のファンダ章 + 状態コンパス
+  //   「会社の地力」 と三重になるため KpiStrip から撤去。 代わりに RS (レラティブストレングス) を表示。
+  //   RS = 直近 N ヶ月の SPY 超過リターン (相対力)。 §38 配慮で trend 色は付けず中立 (事実数値のみ)。
+  //   欠損 (spy_unavailable / データなし) は「—」 で honest fallback。
+  if (technicalRs && Number.isFinite(technicalRs.rs_vs_spy_pct) && !technicalRs.spy_unavailable) {
+    const rsPct = technicalRs.rs_vs_spy_pct;
+    const months = Number.isFinite(technicalRs.period_months) ? technicalRs.period_months : 6;
     kpis.push({
-      value: `${result.passedCount ?? 0}/${result.totalCount ?? 5}`,
-      label: '条件合致',
-      trend: result.overallPass ? 'up' : 'neutral',
+      value: `${rsPct > 0 ? '+' : ''}${rsPct.toFixed(1)}%`,
+      label: 'RS（対SPY）',
+      trend: 'neutral',
+      hint: `レラティブストレングス：直近${months}ヶ月の SPY に対する超過リターン${technicalRs.ranking_label ? `（${technicalRs.ranking_label}）` : ''}`,
     });
+  } else if (result) {
+    // RS 未取得時のみ placeholder で chip 数を維持 (cold start / ETF 等で RS なし)。
+    kpis.push({ value: '—', label: 'RS（対SPY）', trend: 'neutral' });
   }
   // EPS Beat KPI は撤去 (2026-06-11 user feedback: ファンダ章の「今期 決算結果」 (GuidanceCard
   //   ScorecardCell) + 決算ハイライト (EarningsFlashSummary EPS 行) と同一 guidance.eps.surprise_pct

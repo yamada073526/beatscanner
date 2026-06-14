@@ -1,6 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Card from '../../primitives/Card.jsx';
 import { Star } from 'lucide-react';
+
+// 2026-06-14 user feedback: ウォッチ登録時の「★のかけらが飛び散る」 演出の方向ベクトル (6 方位、px)。
+// Math 実行時計算を避け固定配列 (hexagon)。CSS は --bx/--by で各 particle の飛距離を受ける。
+const WATCH_BURST_DIRS = [
+  [0, -22], [19, -11], [19, 11], [0, 22], [-19, 11], [-19, -11],
+];
 import Chip from '../../../../components/ui/Chip.jsx';
 import EarningsRing from '../../../../components/EarningsRing.jsx';
 import CompanyLogo from '../../../../components/CompanyLogo.jsx';
@@ -73,6 +79,16 @@ export default function Hero({
   onAddToWatchlist,
 }) {
   const inWatchlist = Array.isArray(watchlist) && !!ticker && watchlist.includes(ticker);
+  // 2026-06-14 user feedback: 登録時の burst 演出 (追加方向のみ発火、解除では出さない)。一度きり 650ms。
+  const [watchBurst, setWatchBurst] = useState(false);
+  const handleWatchClick = () => {
+    if (!ticker || !onAddToWatchlist) return;
+    if (!inWatchlist) {
+      setWatchBurst(true);
+      setTimeout(() => setWatchBurst(false), 650);
+    }
+    onAddToWatchlist(ticker);
+  };
   const tone =
     verdict === 'beat' ? 'gain' : verdict === 'miss' ? 'loss' : verdict === 'in-line' ? 'muted' : 'muted';
   const verdictLabel =
@@ -229,26 +245,37 @@ export default function Hero({
             </Chip>
           )}
           {/* v160 D2 Sprint 2 → SPEC 2026-06-04 B: ウォッチ★ボタン。 onAddToWatchlist 未配線時は非表示。
-              icon = Star ★ (user gate 確定、 格調シンボル [[feedback_icon_brand_consistency]])。
-              未追加 = Star outline + 「ウォッチ追加」 (icon-only は初見離脱回避)。
-              hover = 浮上 + Star→gold fill + border gold (.hero-watch-add CSS、 cyan でなく gold)。
-              追加済 = Star を --color-gold 点灯 (所有の喜び) + 「追加済」。 緑不使用 (色変化は gold)。
-              ✓ Check は dogfood 指摘 (2 行目に短い ✓ が回り込みバランス悪) で撤去、 ★ + 「追加済」 で簡潔に。 */}
+              2026-06-14 user feedback (compass header = compactWatchlist):
+                - 登録前後でアイコン配置が変わり隣の EarningsRing がズレる → 両状態とも同サイズの pill ★ に統一。
+                - 枠付き「横長◯」 (pill) + 色を gold → cyan (brand) に変更。未追加=outline / 追加済=fill。
+                - :active へこみ演出 (.hero-watch-star CSS) + 登録時 burst (★のかけら飛散)。
+              非 compact モード (旧 Chip「ウォッチ追加 / 追加済」) は従来どおり維持。 */}
           {onAddToWatchlist && ticker && (
-            inWatchlist ? (
-              // 追加済 = クリックで解除 (onAddToWatchlist は App 側で追加⇔解除トグル化済、2026-06-14 bug fix)。
-              compactWatchlist ? (
-                <button
-                  type="button"
-                  data-testid="hero-watchlist-added"
-                  title="クリックでウォッチリストから解除"
-                  aria-label={`${ticker} をウォッチリストから解除`}
-                  onClick={() => onAddToWatchlist(ticker)}
-                  style={{ display: 'inline-flex', alignItems: 'center', padding: 2, background: 'transparent', border: 'none', cursor: 'pointer' }}
-                >
-                  <Star size={18} strokeWidth={2} aria-hidden style={{ color: 'var(--color-gold)', fill: 'var(--color-gold)' }} />
-                </button>
-              ) : (
+            compactWatchlist ? (
+              <button
+                type="button"
+                className={`hero-watch-star${inWatchlist ? ' is-active' : ''}${watchBurst ? ' is-bursting' : ''}`}
+                data-testid={inWatchlist ? 'hero-watchlist-added' : 'hero-watchlist-add'}
+                title={inWatchlist ? 'クリックでウォッチリストから解除' : `${ticker} をウォッチリストに追加`}
+                aria-label={inWatchlist ? `${ticker} をウォッチリストから解除` : `${ticker} をウォッチリストに追加`}
+                aria-pressed={inWatchlist}
+                onClick={handleWatchClick}
+              >
+                <Star size={16} strokeWidth={2} aria-hidden className="hero-watch-star__icon" />
+                {watchBurst && (
+                  <span className="watch-burst" aria-hidden="true">
+                    {WATCH_BURST_DIRS.map(([bx, by], i) => (
+                      <span
+                        key={i}
+                        className="watch-burst__p"
+                        style={{ '--bx': `${bx}px`, '--by': `${by}px` }}
+                      />
+                    ))}
+                  </span>
+                )}
+              </button>
+            ) : (
+              inWatchlist ? (
                 <Chip
                   size="md"
                   variant="display"
@@ -261,20 +288,20 @@ export default function Hero({
                 >
                   追加済
                 </Chip>
+              ) : (
+                <Chip
+                  size="md"
+                  variant="add"
+                  tone="accent"
+                  className="hero-watch-add"
+                  onClick={() => onAddToWatchlist(ticker)}
+                  ariaLabel={`${ticker} をウォッチリストに追加`}
+                  data-testid="hero-watchlist-add"
+                  icon={<Star size={13} strokeWidth={2} aria-hidden style={{ marginRight: 4, verticalAlign: '-1px' }} />}
+                >
+                  ウォッチ追加
+                </Chip>
               )
-            ) : (
-              <Chip
-                size="md"
-                variant="add"
-                tone="accent"
-                className="hero-watch-add"
-                onClick={() => onAddToWatchlist(ticker)}
-                ariaLabel={`${ticker} をウォッチリストに追加`}
-                data-testid="hero-watchlist-add"
-                icon={<Star size={13} strokeWidth={2} aria-hidden style={{ marginRight: 4, verticalAlign: '-1px' }} />}
-              >
-                ウォッチ追加
-              </Chip>
             )
           )}
         </div>

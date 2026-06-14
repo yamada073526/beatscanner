@@ -11,7 +11,7 @@
  *   全 render path に data-testid。
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { TrendingUp, TrendingDown, Minus, Layers, Crosshair, Info } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Layers, Crosshair, Info, Compass } from 'lucide-react';
 import { fetchTechnical, TECHNICAL_CANONICAL_PATTERNS } from '../../../../../api.js';
 import { classifySurprise, fmtSurprisePct } from '../../../constants/earningsFlashTemplates.js';
 import { classifyBuyZone } from '../../../../../lib/buyZoneLabels.js';
@@ -106,15 +106,22 @@ export default function StateCompass({ selectedTicker, result, guidance, embedde
     return <div data-testid={TESTID} data-state="empty" aria-hidden="true" />;
   }
 
+  // 2026-06-14 user feedback: ラベルを短縮 (決算の出来→決算 / 会社の地力→地力 / 今の価格→価格)。
   const cells = [
-    { key: 'earnings', label: '決算の出来', ...earningsCell(guidance) },
-    { key: 'company', label: '会社の地力', ...companyCell(result) },
-    { key: 'price', label: '今の価格', ...priceCell },
+    { key: 'earnings', label: '決算', ...earningsCell(guidance) },
+    { key: 'company', label: '地力', ...companyCell(result) },
+    { key: 'price', label: '価格', ...priceCell },
   ];
 
   return (
     <div data-testid={TESTID} data-state="main" style={embedded ? wrapperEmbeddedStyle : wrapperStyle}>
-      <div style={headingStyle}>今の状態 — 3つの事実</div>
+      {/* 2026-06-14 user feedback (模範解答 図解): 見出し前にアイコン (本機能=状態コンパスの Compass)。 */}
+      <div style={headingRowStyle}>
+        <span style={headingIconWrapStyle}>
+          <Compass size={14} strokeWidth={2.2} color="var(--color-accent)" aria-hidden="true" />
+        </span>
+        <span style={headingStyle}>今の状態</span>
+      </div>
       <div style={cellsRowStyle}>
         {cells.map((c) => {
           const color = SIGNAL_COLOR[c.signal];
@@ -155,10 +162,27 @@ const wrapperEmbeddedStyle = {
   borderTop: '1px solid var(--border)',
   padding: 'var(--space-5, 20px) var(--space-8, 32px) var(--space-7, 28px)',
 };
+// 見出し: アイコン (tinted square) + テキスト (模範解答 図解の section header idiom)。
+const headingRowStyle = { display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)' };
+const headingIconWrapStyle = {
+  flexShrink: 0, width: 24, height: 24, borderRadius: 'var(--radius-sm, 6px)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
+};
 const headingStyle = { fontSize: 13, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-primary)' };
 // 密度向上 (user: スペースが狭い) — cell 最小幅 200→160px で 3-up が narrow pane でも収まる。
-const cellsRowStyle = { display: 'flex', flexWrap: 'wrap', gap: 'var(--space-4, 16px)' };
-const cellStyle = { flex: '1 1 160px', minWidth: 0, display: 'flex', gap: 'var(--space-3, 12px)', alignItems: 'flex-start' };
+const cellsRowStyle = { display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3, 12px)' };
+// 2026-06-14 user feedback (模範解答 図解): 各セルを card-in-card 化 (bg-subtle + hairline + radius)。
+// ⚠️ glow host (.panel-card/.bs-panel/.surface-card) では「ない」 plain div → 入れ子 surface-card 違反なし
+//   (design_recipes §C-1)。is-arriving 非対象なので compound 4-set も不要。
+const cellStyle = {
+  flex: '1 1 160px', minWidth: 0,
+  display: 'flex', gap: 'var(--space-3, 12px)', alignItems: 'flex-start',
+  background: 'var(--bg-subtle)',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-md, 12px)',
+  padding: 'var(--space-4, 16px)',
+};
 const signalDotStyle = { flexShrink: 0, width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 const cellTextColStyle = { minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 'var(--space-1, 4px)' };
 const cellLabelRowStyle = { display: 'flex', alignItems: 'center', gap: 'var(--space-1, 4px)' };
