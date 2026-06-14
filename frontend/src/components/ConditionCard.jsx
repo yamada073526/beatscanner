@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { AlertTriangle, BarChart3, BookOpen, ClipboardList, Info, Lightbulb, Ruler } from 'lucide-react';
+import { AlertTriangle, Award, BarChart3, BookOpen, ClipboardList, FileText, Info, Lightbulb, Ruler } from 'lucide-react';
 import InfoModal from './InfoModal.jsx';
+import { ModalSummaryCard, ModalDisclaimer } from './ModalSummary.jsx';
 import FormulaDisplay from './FormulaDisplay.jsx';
 import Sparkline from './Sparkline.jsx';
 
@@ -274,10 +275,17 @@ function renderBold(text) {
   );
 }
 
+// `**xxx**` マーカーを除去して plain 文字列に（まとめカードは枠内すべて太字 = 一律 weight で cyan 強調しない）
+function stripBold(text) {
+  return typeof text === 'string' ? text.replace(/\*\*(.+?)\*\*/g, '$1') : text;
+}
+
 // モーダル小見出しの絵文字 prefix → lucide outline (icon 規則 2026-06-12 user 承認: OS 絵文字 glyph は
 // 環境依存 + Aman 級でない。CONDITION_DETAILS の label 文字列は不変のまま、表示時にだけ変換する)。
+// 💪 (強み) → Award, 📝 (まとめ) → FileText を追加 (2026-06-14: 残留汎用絵文字の lucide 化)。
 const LABEL_EMOJI_ICON = {
   '📌': Info, '📖': BookOpen, '💡': Lightbulb, '📊': BarChart3, '📋': ClipboardList, '📐': Ruler, '⚠️': AlertTriangle,
+  '💪': Award, '📝': FileText,
 };
 export function ModalSectionLabel({ label }) {
   const m = typeof label === 'string' ? label.match(/^(\S+)\s+(.*)$/) : null;
@@ -294,7 +302,12 @@ export function ConditionModal({ detail, onClose }) {
   return (
     <InfoModal title={detail.title} onClose={onClose}>
       {detail.sections ? (
-        detail.sections.map((s, i) => (
+        <>
+        {detail.sections.map((s, i) => (
+          // 「まとめ」section は user 模範の正典カード (枠 + 全文太字 + 見出しなし) で描画
+          typeof s.label === 'string' && s.label.includes('まとめ') ? (
+            <ModalSummaryCard key={i}>{stripBold(s.text)}</ModalSummaryCard>
+          ) : (
           <div key={i} className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
             <ModalSectionLabel label={s.label} />
             {s.warning && (
@@ -323,17 +336,21 @@ export function ConditionModal({ detail, onClose }) {
               </ul>
             )}
           </div>
-        ))
+          )
+        ))}
+        <ModalDisclaimer />
+        </>
       ) : (
         <>
           <div className="mb-3">
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
+            <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400"><Info size={13} strokeWidth={2} aria-hidden="true" /> 概要</p>
             <p className="text-sm leading-relaxed text-slate-700">{detail.summary}</p>
           </div>
           <div className="mb-3">
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 なぜ必要か</p>
+            <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400"><Lightbulb size={13} strokeWidth={2} aria-hidden="true" /> なぜ必要か</p>
             <p className="text-sm leading-relaxed text-slate-700">{detail.reason}</p>
           </div>
+          <ModalDisclaimer />
         </>
       )}
     </InfoModal>

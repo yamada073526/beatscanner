@@ -23,11 +23,12 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { ChevronRight, CalendarRange, Info, BookOpen, Lightbulb, AlertTriangle } from 'lucide-react';
+import { ChevronRight, CalendarRange, Info, BookOpen, Lightbulb } from 'lucide-react';
 import { fetchGuidanceSurprise } from '../api.js';
 import { useCountUp, COUNT_UP_MS } from '../hooks/useCountUp.js';
 import { useInViewOnce } from '../hooks/useInViewOnce.js';
 import InfoModal from './InfoModal.jsx';
+import { ModalDisclaimer } from './ModalSummary.jsx';
 
 // ── 会社の次期見通し (sec_guidance_text) の md → JSX レンダラ。 改善3 (2026-06-06) で GuidanceCard から移植。
 //    sec_guidance_text は SEC 8-K の会社ガイダンスを Hallucination Guard 4 層 (BAD-5/6 + source_quote 逐語 +
@@ -322,12 +323,7 @@ function ForwardOutlookInfoModal({ onClose }) {
         </p>
       </div>
 
-      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className={headStyle}><AlertTriangle size={13} strokeWidth={2} aria-hidden="true" /> ご注意</p>
-        <p className="text-sm leading-relaxed text-slate-700">
-          表示される来期予想はアナリスト各社の見通しの平均値であり、当社の予測ではありません。実績と大きく乖離する場合があります。投資判断はご自身の責任で行ってください。
-        </p>
-      </div>
+      <ModalDisclaimer />
     </InfoModal>
   );
 }

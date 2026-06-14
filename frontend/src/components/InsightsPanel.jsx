@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { fetchInsights, invalidateInsightsCache } from "../api.js";
 import InfoModal from "./InfoModal.jsx";
+import { ModalDisclaimer } from "./ModalSummary.jsx";
 import LockedSection, { InsightsGhost } from "./LockedSection.jsx";
-import { BarChart3, Search, TrendingUp, TrendingDown } from "lucide-react";
+import { BarChart3, Search, TrendingUp, TrendingDown, Info, Flame, Telescope, HeartPulse } from "lucide-react";
 
 // CLAUDE.md「投資業界の色ルール」準拠:
 // 強気(Bullish)=緑 / 弱気(Bearish)=赤 / 中立=グレー / 強弱混在=amber
@@ -40,7 +41,7 @@ function InsightsInfoModal({ onClose }) {
   return (
     <InfoModal title="市場の声とは" onClose={onClose}>
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400"><Info size={13} strokeWidth={2} aria-hidden="true" /> 概要</p>
         <p className="text-sm leading-relaxed text-slate-700">
           本アプリの「市場の声」は、複数の投資家・アナリストの見解を
           AIが統合した独自分析です。大衆の推奨銘柄を真似するためではなく、
@@ -50,7 +51,7 @@ function InsightsInfoModal({ onClose }) {
       </div>
 
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">🔥 大衆の熱狂は最大の売りシグナル</p>
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400"><Flame size={13} strokeWidth={2} aria-hidden="true" /> 大衆の熱狂は最大の売りシグナル</p>
         <p className="text-sm leading-relaxed text-slate-700">
           SNSで投資家が熱狂し「ガチホだ！」と力んでいる銘柄は、
           買いたい人が全員買ってしまっており、
@@ -62,7 +63,7 @@ function InsightsInfoModal({ onClose }) {
       </div>
 
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">🏚 誰も注目しない場所にこそ機会がある</p>
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400"><Telescope size={13} strokeWidth={2} aria-hidden="true" /> 誰も注目しない場所にこそ機会がある</p>
         <p className="text-sm leading-relaxed text-slate-700">
           みんなが同じテーマに群がっている「満員の映画館」では
           大きな利益を得るのは困難です。
@@ -72,7 +73,7 @@ function InsightsInfoModal({ onClose }) {
       </div>
 
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">😰 葛藤なきポジションに大勝ちはない</p>
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400"><HeartPulse size={13} strokeWidth={2} aria-hidden="true" /> 葛藤なきポジションに大勝ちはない</p>
         <p className="text-sm leading-relaxed text-slate-700">
           相場が暴落して誰もが悲観している時、
           「この株を買うのは怖いな…」と手が震えるような
@@ -82,7 +83,7 @@ function InsightsInfoModal({ onClose }) {
       </div>
 
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📈 株価が語りかける声に耳を澄ます</p>
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400"><TrendingUp size={13} strokeWidth={2} aria-hidden="true" /> 株価が語りかける声に耳を澄ます</p>
         <p className="text-sm leading-relaxed text-slate-700">
           株式市場には「先見性」があり、実体経済のデータよりも
           何ヶ月も先を読んで動きます。
@@ -92,6 +93,7 @@ function InsightsInfoModal({ onClose }) {
           株価が発する違和感を素直に受け止める柔軟性が重要です。
         </p>
       </div>
+      <ModalDisclaimer />
     </InfoModal>
   );
 }

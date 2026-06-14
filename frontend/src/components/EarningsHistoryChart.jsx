@@ -10,7 +10,9 @@ import {
   Cell,
   ReferenceLine,
 } from 'recharts';
+import { Info, BarChart3, ClipboardList, Palette } from 'lucide-react';
 import InfoModal from './InfoModal.jsx';
+import { ModalDisclaimer } from './ModalSummary.jsx';
 // Phase 2.7 Sprint 1 #1: Tier M halo sweep (1 回限り) — useHaloSweepOnce 共通 hook
 import { useHaloSweepOnce } from '../hooks/useHaloSweepOnce.js';
 
@@ -93,8 +95,8 @@ function EarningsHistoryInfoModal({ onClose }) {
   return (
     <InfoModal title="過去業績推移グラフの見方" onClose={onClose}>
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">
-          概要
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <Info size={13} strokeWidth={2} aria-hidden="true" /> 概要
         </p>
         <p className="text-sm leading-relaxed text-slate-700">
           年次 5 年分の「SPS / EPS / CFPS」を 1 段の grouped bars で表示します。
@@ -102,8 +104,8 @@ function EarningsHistoryInfoModal({ onClose }) {
         </p>
       </div>
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-          3 指標 (per-share) の見方
+        <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <BarChart3 size={13} strokeWidth={2} aria-hidden="true" /> 3 指標 (per-share) の見方
         </p>
         <ul className="space-y-1 text-sm text-slate-700">
           <li>
@@ -121,8 +123,8 @@ function EarningsHistoryInfoModal({ onClose }) {
         </ul>
       </div>
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">
-          チェックポイント
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <ClipboardList size={13} strokeWidth={2} aria-hidden="true" /> チェックポイント
         </p>
         <p className="text-sm leading-relaxed text-slate-700">
           同年の cluster で CFPS ≥ EPS であれば独自プロトコル §5 PASS です。
@@ -131,8 +133,8 @@ function EarningsHistoryInfoModal({ onClose }) {
         </p>
       </div>
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">
-          色の凡例
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <Palette size={13} strokeWidth={2} aria-hidden="true" /> 色の凡例
         </p>
         <ul className="space-y-1 text-sm text-slate-700">
           <li>
@@ -156,6 +158,7 @@ function EarningsHistoryInfoModal({ onClose }) {
           </li>
         </ul>
       </div>
+      <ModalDisclaimer />
     </InfoModal>
   );
 }

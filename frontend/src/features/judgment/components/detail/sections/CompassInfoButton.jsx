@@ -13,6 +13,7 @@ import {
   Info, ClipboardCheck, Eye, Building2, Search, AlertTriangle, Coins, TrendingUp, BarChart3, ShieldCheck, Crosshair, Shield, Activity,
 } from 'lucide-react';
 import InfoModal from '../../../../../components/InfoModal.jsx';
+import { MODAL_SUMMARY_CARD_STYLE, MODAL_SUMMARY_TEXT_STYLE, MODAL_DISCLAIMER_STYLE } from '../../../../../components/ModalSummary.jsx';
 import { COMPASS_MODAL, COMPASS_MODAL_META } from '../../../constants/stateCompassText.js';
 
 // モーダル section の冒頭アイコン (COMPASS_MODAL_META の icon キー → lucide)
@@ -73,11 +74,11 @@ function CompassModalBody({ data, meta }) {
         );
       })}
       {data.summary && (
-        <div style={summaryCardStyle}>
-          <p style={summaryStyle}>{data.summary}</p>
+        <div style={MODAL_SUMMARY_CARD_STYLE}>
+          <p style={MODAL_SUMMARY_TEXT_STYLE}>{data.summary}</p>
         </div>
       )}
-      {data.disclaimer && <p style={disclaimerStyle}>{data.disclaimer}</p>}
+      {data.disclaimer && <p style={MODAL_DISCLAIMER_STYLE}>{data.disclaimer}</p>}
     </div>
   );
 }
@@ -128,6 +129,4 @@ const bulletsStyle = { margin: 0, paddingLeft: '1.1em', display: 'flex', flexDir
 const bulletStyle = { fontSize: 14, fontWeight: 500, lineHeight: 1.65, color: 'var(--text-secondary)' };
 const bulletLabelStyle = { fontWeight: 700, color: 'var(--text-primary)' };
 const emphasisStyle = { color: 'var(--color-accent)', fontWeight: 700 };
-const summaryCardStyle = { border: '1px solid color-mix(in srgb, var(--color-accent) 25%, var(--border))', borderRadius: 'var(--radius-md, 12px)', padding: 'var(--space-4, 16px)', background: 'color-mix(in srgb, var(--color-accent) 5%, transparent)' };
-const summaryStyle = { margin: 0, fontSize: 14, fontWeight: 600, lineHeight: 1.7, color: 'var(--text-primary)' };
-const disclaimerStyle = { margin: 0, fontSize: 11.5, fontWeight: 500, lineHeight: 1.6, color: 'var(--text-muted)' };
+// まとめカード / 免責のスタイルは ModalSummary.jsx に SSOT 化 (全モーダル共通)。

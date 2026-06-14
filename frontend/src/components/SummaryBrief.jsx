@@ -1,6 +1,8 @@
 import React, { Component, useEffect, useRef, useState } from 'react';
+import { Palette, Bold } from 'lucide-react';
 import { streamSummaryBrief } from '../api.js';
 import InfoModal from './InfoModal.jsx';
+import { ModalDisclaimer } from './ModalSummary.jsx';
 import { sanitizeText } from '../lib/blocklist.js';
 
 // ── Hallucination Guard 第 1 層: ErrorBoundary ─────────────────────────────
@@ -164,7 +166,7 @@ function SummaryInfoModal({ onClose }) {
 
       {/* 色分けの意味 — 実際のバッジで表示 */}
       <div style={CARD_STYLE}>
-        <p style={{ ...LABEL_STYLE, marginBottom: '8px' }}>色分けの意味</p>
+        <p style={{ ...LABEL_STYLE, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Palette size={12} strokeWidth={2} aria-hidden="true" /> 色分けの意味</p>
         <div className="space-y-2">
           <div className="flex items-start gap-2 bg-green-50 border-l-4 border-green-400 rounded-r-lg p-2">
             <span className="mt-0.5 shrink-0 font-bold text-green-500">✓</span>
@@ -186,19 +188,14 @@ function SummaryInfoModal({ onClose }) {
 
       {/* 太字の意味 */}
       <div style={CARD_STYLE}>
-        <p style={LABEL_STYLE}>太字の意味</p>
+        <p style={{ ...LABEL_STYLE, display: 'flex', alignItems: 'center', gap: '6px' }}><Bold size={12} strokeWidth={2} aria-hidden="true" /> 太字の意味</p>
         <p style={BODY_STYLE}>
           各項目内で特に重要な数値やキーワードが太字で表示されます。太字箇所を中心に読むことで、素早く要点を把握できます。
         </p>
       </div>
 
-      {/* ご注意 */}
-      <div className="mb-3 rounded-r-lg p-3" style={{ background: 'var(--amber-bg)', borderLeft: '4px solid var(--color-warning)' }}>
-        <p className="text-sm font-bold" style={{ color: 'var(--amber-title)' }}>ご注意</p>
-        <p className="mt-1 text-sm" style={{ color: 'var(--amber-body)' }}>
-          AI要約はデータに基づく自動生成です。投資判断は必ずご自身の責任で行ってください。
-        </p>
-      </div>
+      {/* 免責 (全モーダル共通フォーマット: 末尾 muted 1 行、共有定数 MODAL_DISCLAIMER に統一) */}
+      <ModalDisclaimer />
 
     </InfoModal>
   );

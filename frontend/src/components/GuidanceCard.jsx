@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import InfoModal from './InfoModal.jsx';
+import { ModalDisclaimer } from './ModalSummary.jsx';
 import Chip from './ui/Chip.jsx';
 import { AlertTriangle, BookOpen, Calendar, EyeOff, Info, Lightbulb, Scale } from 'lucide-react';
 // v100 (handover §100点 UI/UX verdict C): GuidanceCard 達成率 / サプライズ % に count-up animation
@@ -141,6 +142,7 @@ function GuidanceInfoModal({ onClose }) {
           ここで比較する「予想」は<strong>アナリストの平均値</strong>であり、企業自身が示す将来の業績見通し（ガイダンス）とは別物です。来期・通期の見通しについては「<strong>来期 コンセンサス</strong>」セクションをご覧ください。なお EPS は報告ベース（GAAP / Non-GAAP）により数値が異なる場合があります。
         </p>
       </div>
+      <ModalDisclaimer />
     </InfoModal>
   );
 }

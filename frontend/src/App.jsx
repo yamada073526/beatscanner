@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { flushSync } from 'react-dom';
-import { Sun, Moon, Home, BarChart3, FileText, TrendingUp, ChevronDown } from 'lucide-react';
+import { Sun, Moon, Home, BarChart3, FileText, TrendingUp, ChevronDown, Info, ClipboardList, Lightbulb } from 'lucide-react';
 import { analyze, demoAnalyze, fetchGuidance, fetchGuidanceBasic, prefetchAll } from './api.js';
 import { useWorkspaceStore } from './state/workspaceStore.js';
 import { useJsonLd } from './hooks/useJsonLd.js';
@@ -36,6 +36,7 @@ import { CmdPalette, useCmdPalette } from './features/cmd-palette/index.js';
 import { useUpgradeModal } from './lib/useUpgradeModal.js';
 import { useSubscription } from './hooks/useSubscription.js';
 import InfoModal from './components/InfoModal.jsx';
+import { ModalDisclaimer } from './components/ModalSummary.jsx';
 import ResultBadge from './components/ResultBadge.jsx';
 import BrandPulse from './components/ui/BrandPulse.jsx';
 import ConditionCard from './components/ConditionCard.jsx';
@@ -1872,13 +1873,13 @@ export default function App() {
             {showFiveCondModal && (
               <InfoModal title="5条件判定とは" onClose={() => setShowFiveCondModal(false)}>
                 <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>📌 概要</p>
+                  <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}><Info size={13} strokeWidth={2} aria-hidden="true" /> 概要</p>
                   <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
                     BeatScanner では、企業の財務健全性を以下の5つの条件で判定しています。5つすべてを満たした企業のみが<strong style={{ color: '#22d3ee' }}>「PASS」</strong>となります。
                   </p>
                 </div>
                 <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>📋 5つの条件</p>
+                  <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}><ClipboardList size={13} strokeWidth={2} aria-hidden="true" /> 5つの条件</p>
                   <ul className="space-y-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
                     <li>・条件1：営業CFマージン ≥ 15%（真の稼ぐ力）</li>
                     <li>・条件2：EPS 連続増加（利益の成長）</li>
@@ -1888,11 +1889,12 @@ export default function App() {
                   </ul>
                 </div>
                 <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>💡 なぜこの5条件なのか</p>
+                  <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}><Lightbulb size={13} strokeWidth={2} aria-hidden="true" /> なぜこの5条件なのか</p>
                   <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
                     これらはすべて「<strong style={{ color: '#22d3ee' }}>会計上のごまかしが効かない</strong>、または利益とのクロスチェックでごまかしを見抜ける」指標で構成されています。5条件をすべてクリアする企業は、本業で実質的に現金を稼ぎ出しており、財務的に極めて健全な状態といえます。各条件の詳細は、それぞれの ? ボタンをご確認ください。
                   </p>
                 </div>
+                <ModalDisclaimer />
               </InfoModal>
             )}
             {/* モバイル (<md): 2列で5枚を 2/2/1 配置（現状維持） */}

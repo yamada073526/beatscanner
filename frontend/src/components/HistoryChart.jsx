@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { Info, Ruler, Lightbulb, ClipboardList, MessageSquare } from 'lucide-react';
 import InfoModal from './InfoModal.jsx';
+import { ModalDisclaimer } from './ModalSummary.jsx';
 import FormulaDisplay from './FormulaDisplay.jsx';
 import {
   LineChart,
@@ -26,14 +28,14 @@ function SharesModal({ onClose }) {
   return (
     <InfoModal title="希薄化後発行済株式数（Diluted Shares Outstanding）" onClose={onClose}>
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400"><Info size={13} strokeWidth={2} aria-hidden="true" /> 概要</p>
         <p className="text-sm leading-relaxed text-slate-700">
           「株主の取り分」が薄められていないかを確認する指標です。ストックオプションや転換社債などがすべて行使されたと仮定した場合の、実質的な発行済株式の総数です。
         </p>
       </div>
 
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📐 各指標の計算式との関係</p>
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400"><Ruler size={13} strokeWidth={2} aria-hidden="true" /> 各指標の計算式との関係</p>
         <p className="text-sm leading-relaxed text-slate-700">
           この株式数は、1株あたりの業績を計算するための「分母」として使われます。
         </p>
@@ -48,14 +50,14 @@ function SharesModal({ onClose }) {
       </div>
 
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 なぜ重要か</p>
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400"><Lightbulb size={13} strokeWidth={2} aria-hidden="true" /> なぜ重要か</p>
         <p className="text-sm leading-relaxed text-slate-700">
           たとえ会社の利益が増えていても、この株数がそれ以上に増えていれば、あなたの持ち分（<span style={{ color: 'rgb(56, 189, 248)', fontWeight: 500 }}>1株あたりの価値</span>）は相対的に小さくなってしまいます。これを「<span style={{ color: 'rgb(56, 189, 248)', fontWeight: 500 }}>株式の希薄化</span>」と呼びます。
         </p>
       </div>
 
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📋 チェックポイント</p>
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400"><ClipboardList size={13} strokeWidth={2} aria-hidden="true" /> チェックポイント</p>
         <ul className="space-y-2 text-sm text-slate-700">
           <li>
             <span className="font-semibold text-slate-900">・理想は「横ばい」または「減少」</span><br />
@@ -69,11 +71,12 @@ function SharesModal({ onClose }) {
       </div>
 
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="text-xs font-semibold text-slate-500">💬 ポイント</p>
+        <p className="flex items-center gap-1.5 text-xs font-semibold text-slate-500"><MessageSquare size={13} strokeWidth={2} aria-hidden="true" /> ポイント</p>
         <p className="mt-1 text-sm leading-relaxed text-slate-700">
           利益が10%増えても株数が20%増えていれば、1株あたりの価値は目減りします。決算の数字と合わせて、ぜひこのチャートもチェックしてみてください。
         </p>
       </div>
+      <ModalDisclaimer />
     </InfoModal>
   );
 }
@@ -130,13 +133,13 @@ function HistoryChartModal({ onClose }) {
   return (
     <InfoModal title="過去推移グラフの見方" onClose={onClose}>
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">📌 概要</p>
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400"><Info size={13} strokeWidth={2} aria-hidden="true" /> 概要</p>
         <p className="text-sm leading-relaxed text-slate-700">
           過去3期分の「売上高・EPS・CFPS」の推移を1つのグラフで確認できます。
         </p>
       </div>
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">📋 3指標をセットで見る理由</p>
+        <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400"><ClipboardList size={13} strokeWidth={2} aria-hidden="true" /> 3指標をセットで見る理由</p>
         <p className="mb-2 text-sm leading-relaxed text-slate-700">この3つは単独ではなく、必ずセットで確認することが重要です。</p>
         <ul className="space-y-1 text-sm text-slate-700">
           <li>・売上高が増加 → <strong style={{ color: 'rgb(56, 189, 248)' }}>本業の需要が拡大している証拠</strong>（成長の質）</li>
@@ -145,11 +148,12 @@ function HistoryChartModal({ onClose }) {
         </ul>
       </div>
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">💡 チェックポイント</p>
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400"><Lightbulb size={13} strokeWidth={2} aria-hidden="true" /> チェックポイント</p>
         <p className="text-sm leading-relaxed text-slate-700">
           <strong style={{ color: 'rgb(56, 189, 248)' }}>3本の線がすべて右肩上がり</strong>であれば理想的です（トレンドの継続性）。もしEPSだけ上昇してCFPSが横ばい・下降している場合は、<strong>会計上の操作による見せかけの利益成長の可能性があるため注意が必要です。</strong>
         </p>
       </div>
+      <ModalDisclaimer />
     </InfoModal>
   );
 }
