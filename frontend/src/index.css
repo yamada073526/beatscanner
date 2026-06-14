@@ -9990,6 +9990,12 @@ button.ds-chip.hero-watch-add:hover svg {
 .verdict-hero--compass-header:not(:hover):not(.is-arriving) {
   box-shadow: var(--shadow-2);
 }
+/* 2026-06-14 user feedback: dark で --bg-card(#1e2433 単色) は KpiStrip(.bs-panel) のグラデより
+   白っぽく見え、ティッカー/D-XX バッジと KpiStrip の地色がズレていた。bs-panel dark と同一グラデに揃える
+   (rgba は .bs-panel と 1:1 mirror、raw hex ではないので token 規律に抵触しない)。light は --bg-card(#fff)で一致済。 */
+[data-theme="dark"] .verdict-hero--compass-header {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.92) 0%, rgba(11, 17, 32, 0.96) 100%);
+}
 
 /* ── Phase 2.9 Sprint 3 #会社概要 visual 引き算 (発光階層 3 体合議 verdict) ────
    user dogfood: 「会社概要のみ、 5 条件より下なのに発光強い」 違和感解消。

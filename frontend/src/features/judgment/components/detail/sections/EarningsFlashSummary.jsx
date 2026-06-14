@@ -969,9 +969,10 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
       <div style={headerBandStyle}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           <span style={headerTitleStyle}>決算サマリー</span>
-          {/* 状態コンパスと同じ「決算の見方」 モーダル (§38-safe 静的解説)。見出し直後に併設。 */}
-          <CompassInfoButton modalKey="earnings" ariaLabel="決算の見方" />
           {period && <span style={headerPeriodStyle}>直近四半期 {period}</span>}
+          {/* 2026-06-14 user feedback: ⓘ をタイトルと期の「間」 から、期の「右」 へ移設。
+              状態コンパスと同じ「決算の見方」 モーダル (§38-safe 静的解説) を共有。 */}
+          <CompassInfoButton modalKey="earnings" ariaLabel="決算の見方" />
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           <button

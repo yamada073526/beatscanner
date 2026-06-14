@@ -628,19 +628,19 @@ export default function JudgmentDetail({
   //   「会社の地力」 と三重になるため KpiStrip から撤去。 代わりに RS (レラティブストレングス) を表示。
   //   RS = 直近 N ヶ月の SPY 超過リターン (相対力)。 §38 配慮で trend 色は付けず中立 (事実数値のみ)。
   //   欠損 (spy_unavailable / データなし) は「—」 で honest fallback。
-  if (technicalRs && Number.isFinite(technicalRs.rs_vs_spy_pct) && !technicalRs.spy_unavailable) {
+  // 2026-06-14 user feedback: IBD 式 RS Rating (universe_percentile 1-99、50=市場平均/99=最強) を優先。
+  //   「対SPY +X%」 より「強い銘柄同士の優劣」 が分かる本来の RS 指標 (user 指摘、正しい)。
+  //   SP500 universe 外 / nightly batch 未実行は universe_percentile=null → 対SPY% に fallback。
+  const rsUniv = technicalRs?.universe_percentile;
+  if (Number.isFinite(rsUniv)) {
+    kpis.push({ value: String(rsUniv), label: 'RS Rating', trend: 'neutral' });
+  } else if (technicalRs && Number.isFinite(technicalRs.rs_vs_spy_pct) && !technicalRs.spy_unavailable) {
     const rsPct = technicalRs.rs_vs_spy_pct;
     const months = Number.isFinite(technicalRs.period_months) ? technicalRs.period_months : 6;
-    kpis.push({
-      // hint は他 KPI が subtext を持たず不揃いになるため出さない (Stat の hint は可視テキスト)。
-      // 期間/相対力の文脈は label「RS（対SPY）」 で自明、詳細はテクニカル章で確認できる。
-      value: `${rsPct > 0 ? '+' : ''}${rsPct.toFixed(1)}%`,
-      label: `RS 対SPY ${months}M`,
-      trend: 'neutral',
-    });
+    kpis.push({ value: `${rsPct > 0 ? '+' : ''}${rsPct.toFixed(1)}%`, label: `RS 対SPY ${months}M`, trend: 'neutral' });
   } else if (result) {
     // RS 未取得時のみ placeholder で chip 数を維持 (cold start / ETF 等で RS なし)。
-    kpis.push({ value: '—', label: 'RS（対SPY）', trend: 'neutral' });
+    kpis.push({ value: '—', label: 'RS Rating', trend: 'neutral' });
   }
   // EPS Beat KPI は撤去 (2026-06-11 user feedback: ファンダ章の「今期 決算結果」 (GuidanceCard
   //   ScorecardCell) + 決算ハイライト (EarningsFlashSummary EPS 行) と同一 guidance.eps.surprise_pct
@@ -1445,13 +1445,12 @@ export default function JudgmentDetail({
             //     (Phase 2 で章ヘッダーの地合いバッジに格下げ + §38 状態サマリー1行を予定)。
             //   §38: ladder は価格+現在価格からの距離%のみ (行動指示・将来予測・矢印なし)、色は中立 gray + 現在価格行 hero (緑/赤なし)。
             //   ⚠️ CupPivot/BuyZone/SellZone は v5 で render されなくなるが、v4 (targetZoneBlock) で使用継続のため import 維持。
-            const technicalTargetGrid = selectedTicker ? (
+            // 2026-06-14 user feedback: free の AnalystTargetCard は撤去 (チャート章再構成で封印した
+            //   カードが残存していた)。チャートが既に「アナリスト目標」 水平ラインで同値を表示しており二重。
+            //   premium = PriceLadder のみ、free = 非表示 (チャートのラインで担保)。
+            const technicalTargetGrid = (selectedTicker && plan === 'premium') ? (
               <SectionFade id="sec-target-and-zone-v5" staggerIndex={3}>
-                {plan === 'premium' ? (
-                  <PriceLadder ticker={selectedTicker} />
-                ) : (
-                  <AnalystTargetCard ticker={selectedTicker} compact variant="unified" />
-                )}
+                <PriceLadder ticker={selectedTicker} />
               </SectionFade>
             ) : null;
             const technicalChapterBlock = (

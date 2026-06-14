@@ -11,7 +11,7 @@
  *   全 render path に data-testid。
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { TrendingUp, TrendingDown, Minus, Layers, Crosshair, Info, Compass } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Layers, Crosshair, Compass } from 'lucide-react';
 import { fetchTechnical, TECHNICAL_CANONICAL_PATTERNS } from '../../../../../api.js';
 import { classifySurprise, fmtSurprisePct } from '../../../constants/earningsFlashTemplates.js';
 import { classifyBuyZone } from '../../../../../lib/buyZoneLabels.js';
@@ -115,12 +115,13 @@ export default function StateCompass({ selectedTicker, result, guidance, embedde
 
   return (
     <div data-testid={TESTID} data-state="main" style={embedded ? wrapperEmbeddedStyle : wrapperStyle}>
-      {/* 2026-06-14 user feedback (模範解答 図解): 見出し前にアイコン (本機能=状態コンパスの Compass)。 */}
+      {/* 2026-06-14 user feedback + ui-designer review: 見出しを小型 pill chip に降格し、コンテンツ(3カード)を
+          主役化。名称は「今の状態」→「3つの目線」(3カード構成=決算/地力/価格 を 2 秒で連想、§38-safe)。 */}
       <div style={headingRowStyle}>
-        <span style={headingIconWrapStyle}>
-          <Compass size={14} strokeWidth={2.2} color="var(--color-accent)" aria-hidden="true" />
+        <span style={headingChipStyle}>
+          <Compass size={12} strokeWidth={2.2} color="var(--color-accent)" aria-hidden="true" />
+          <span style={headingChipTextStyle}>3つの目線</span>
         </span>
-        <span style={headingStyle}>今の状態</span>
       </div>
       <div style={cellsRowStyle}>
         {cells.map((c) => {
@@ -137,9 +138,11 @@ export default function StateCompass({ selectedTicker, result, guidance, embedde
                   <CompassInfoButton modalKey={c.key} ariaLabel={`${c.label}の見方`} />
                 </div>
                 <div style={cellValueRowStyle}>
+                  {/* 2026-06-14 user feedback: 地力のランプ(DotGauge=記号)を「N / 5」 テキストより左へ。
+                      2 秒スキャンでランプが先に目に入り、テキストは補足になる。 */}
+                  {Number.isFinite(c.score) && <DotGauge score={c.score} total={c.total} color={color} />}
                   <span style={{ ...cellValueStyle, color }}>{c.value}</span>
                   {c.badge && <span style={{ ...badgeStyle, color, borderColor: `color-mix(in srgb, ${color} 35%, var(--border))` }}>{c.badge}</span>}
-                  {Number.isFinite(c.score) && <DotGauge score={c.score} total={c.total} color={color} />}
                 </div>
                 {c.sub && <span style={cellSubStyle}>{c.sub}</span>}
               </div>
@@ -147,8 +150,10 @@ export default function StateCompass({ selectedTicker, result, guidance, embedde
           );
         })}
       </div>
-      {/* §38 短免責は近接1行で残す (景表法の打ち消し表示要件)。詳細は各 ⓘ モーダル。 */}
-      <p style={shortDisclaimerStyle}>※ 当社は特定銘柄の売買を推奨しません。各 <Info size={11} style={{ display: 'inline', verticalAlign: '-1px' }} aria-hidden="true" /> に詳しい見方があります。</p>
+      {/* §38/景表法: 打ち消し表示は「近接性」 が要件のため、 ⓘ モーダル内だけでなくセクション近接に残す
+          (memory feedback_section38_buy_signal_boundary「免責近接」)。 user の「気になる」 を受け、 文言を最短化 +
+          視覚的に最も控えめ (10px/muted) にして主張を弱める。完全削除はコンプラ risk のため不可。 */}
+      <p style={shortDisclaimerStyle}>※ 売買を推奨するものではありません</p>
     </div>
   );
 }
@@ -162,14 +167,15 @@ const wrapperEmbeddedStyle = {
   borderTop: '1px solid var(--border)',
   padding: 'var(--space-5, 20px) var(--space-8, 32px) var(--space-7, 28px)',
 };
-// 見出し: アイコン (tinted square) + テキスト (模範解答 図解の section header idiom)。
-const headingRowStyle = { display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)' };
-const headingIconWrapStyle = {
-  flexShrink: 0, width: 24, height: 24, borderRadius: 'var(--radius-sm, 6px)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
+// 見出し: 小型 pill chip (ui-designer review: コンテンツ主役化のため見出しを目立たせない)。
+const headingRowStyle = { display: 'flex', alignItems: 'center' };
+const headingChipStyle = {
+  display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1, 4px)',
+  padding: '2px 10px 2px 7px', borderRadius: 999,
+  background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
+  border: '1px solid color-mix(in srgb, var(--color-accent) 20%, transparent)',
 };
-const headingStyle = { fontSize: 13, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-primary)' };
+const headingChipTextStyle = { fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)' };
 // 密度向上 (user: スペースが狭い) — cell 最小幅 200→160px で 3-up が narrow pane でも収まる。
 const cellsRowStyle = { display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3, 12px)' };
 // 2026-06-14 user feedback (模範解答 図解): 各セルを card-in-card 化 (bg-subtle + hairline + radius)。
@@ -193,4 +199,4 @@ const badgeStyle = { fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRa
 const gaugeRowStyle = { display: 'inline-flex', alignItems: 'center', gap: 5 };
 const gaugeDotStyle = { width: 9, height: 9, borderRadius: '50%', display: 'inline-block' };
 const cellSubStyle = { fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', lineHeight: 1.4 };
-const shortDisclaimerStyle = { margin: 0, fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', lineHeight: 1.5 };
+const shortDisclaimerStyle = { margin: 0, fontSize: 10, fontWeight: 400, color: 'var(--text-muted)', lineHeight: 1.4, opacity: 0.85 };

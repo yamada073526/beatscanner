@@ -13446,6 +13446,32 @@ def _compute_rs(ticker_closes: list[float], spy_closes: list[float]) -> dict:
     }
 
 
+def _universe_percentile_for(ticker: str) -> int | None:
+    """rs_ratings (nightly SP500 batch) から per-ticker の universe_percentile (IBD 式 1-99、
+    50=市場平均 / 99=最強) を読む。user feedback (2026-06-14): 対SPY% より「強い銘柄同士の優劣」 が
+    分かる本来の RS 指標。SP500 universe 外 / batch 未実行 / 取得失敗は None (frontend は対SPY% に fallback)。"""
+    try:
+        sb = _get_supabase_service()
+        if sb is None:
+            return None
+        calc_date, _cnt = _latest_valid_calc_date(sb, "rs_ratings", "calc_date", _MIN_VALID_RS_ROWS)
+        if not calc_date:
+            return None
+        res = (
+            sb.table("rs_ratings").select("universe_percentile")
+            .eq("calc_date", calc_date)
+            .eq("ticker", ticker.upper())
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        if rows and rows[0].get("universe_percentile") is not None:
+            return int(rows[0]["universe_percentile"])
+    except Exception:
+        return None
+    return None
+
+
 def _detect_dma_cross(
     times: list[str],
     sma_50: list[float | None],
@@ -13640,6 +13666,9 @@ async def get_technical(
                 patterns_result["rs"] = _compute_rs(closes, spy_history_for_rs["closes"])
                 # 完全性台帳 Sprint2: SPY 取得成否を cup_handle と同一 field 名で uniform に表面化。
                 patterns_result["rs"]["spy_unavailable"] = False
+                # 2026-06-14 user feedback: IBD 式 universe_percentile (1-99) を併載 (rs_ratings batch)。
+                # SP500 外 / batch 未実行は None → frontend が対SPY% に fallback。
+                patterns_result["rs"]["universe_percentile"] = _universe_percentile_for(ticker_u)
             else:
                 patterns_result["rs"] = {
                     "rs_vs_spy_pct": None,
