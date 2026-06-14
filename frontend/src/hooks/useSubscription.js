@@ -4,6 +4,26 @@ import { trackEvent } from '../lib/analytics.js';
 
 const ACTIVE_STATUSES = ['active', 'trialing'];
 
+// v215 (2026-06-15): plan ちらつき防止。 subscription は async fetch (~数百ms) され、 解決までは null=
+// getPlan→'free' になり Premium user に一瞬 free 用 UI (Cup-Handle ロック / 図解 ProTeaser) が出ていた。
+// 同 user の last-known subscription を localStorage に keyed cache し、 mount 時に optimistic 復元 →
+// fetch で reconcile (<500ms)。 gating ロジック (getPlan/consumer) は不変、 復元値も必ず fetch で上書きされる
+// ため security 不変 (faked cache は数百ms で実値に reconcile)。 user.id keyed で cross-user leak なし。
+const _SUB_CACHE_PREFIX = 'bs_sub_cache_';
+function _readSubCache(userId) {
+  try { return JSON.parse(window.localStorage.getItem(_SUB_CACHE_PREFIX + userId) || 'null'); }
+  catch { return null; }
+}
+function _writeSubCache(userId, data) {
+  try {
+    if (data && data.tier) {
+      window.localStorage.setItem(_SUB_CACHE_PREFIX + userId, JSON.stringify({ tier: data.tier, status: data.status }));
+    } else {
+      window.localStorage.removeItem(_SUB_CACHE_PREFIX + userId);
+    }
+  } catch { /* private mode 等は silent */ }
+}
+
 /**
  * ユーザーの Stripe サブスクリプション状態を Supabase から取得する。
  * isSubscribed: status が 'active' または 'trialing' なら true。
@@ -39,6 +59,12 @@ export function useSubscription(user) {
     }
 
     cancelledRef.current = false;
+    // flicker 防止: 同 user の last-known plan を optimistic 復元 (fetch で reconcile)。
+    const cached = _readSubCache(user.id);
+    if (cached && cached.tier) {
+      setSubscription(cached);
+      setIsSubscribed(ACTIVE_STATUSES.includes(cached.status));
+    }
     setSubLoading(true);
 
     fetchSub().then((data) => {
@@ -46,6 +72,7 @@ export function useSubscription(user) {
       setSubLoading(false);
       setSubscription(data);
       setIsSubscribed(data ? ACTIVE_STATUSES.includes(data.status) : false);
+      _writeSubCache(user.id, data);
     });
 
     return () => { cancelledRef.current = true; };
@@ -56,8 +83,9 @@ export function useSubscription(user) {
     const data = await fetchSub();
     setSubscription(data);
     setIsSubscribed(data ? ACTIVE_STATUSES.includes(data.status) : false);
+    if (user?.id) _writeSubCache(user.id, data);
     return data;
-  }, [fetchSub]);
+  }, [fetchSub, user?.id]);
 
   // Phase 3 Sub-3 (2026-05-16): tier 引数追加 (default 'pro' で既存呼出と後方互換)。
   // 'premium' を指定すると Premium tier (¥1,800/月) checkout に進む。
