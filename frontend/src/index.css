@@ -10038,15 +10038,22 @@ button.ds-chip.hero-watch-add:hover svg {
   .compass-cell:active { transform: none; }
 }
 
-/* ── 2026-06-14 user feedback: KpiStrip の hover 発光鎮静 (ヒーローへの注視を優先) ──
-   KpiStrip は bs-panel だが clickable ではないため、フル cyan glow + lift の hover は誤解 + 主役(ヒーロー)
-   と競合する。kpi-strip-card で hover を rest と同じ静的状態に固定 (glow/lift/cyan border を出さない)。
-   specificity: .bs-panel.kpi-strip-card:hover (0,2,1) > .bs-panel:hover (0,1,1)。token のみ・raw shadow なし。 */
+/* ── 2026-06-14 user feedback: KpiStrip の発光鎮静 (ヒーローへの注視を優先) ──
+   KpiStrip は bs-panel だが clickable ではない。フル cyan glow が arrival (スクロール) + hover の両方で
+   出て主役(ヒーロー/コンパス)と競合していた。kpi-strip-card で全 glow 状態 (is-arriving / is-arriving:hover /
+   :hover) を rest と同じ静的状態 (shadow-1 + 中立 border + transform なし) に固定し「静かなデータ帯」 に降格。
+   §C-2 compound: is-arriving / is-arriving:hover / :hover を light+dark で calm に上書き。token のみ。
+   specificity: .bs-panel.kpi-strip-card.is-arriving (0,3,0) > .bs-panel.is-arriving (0,2,0)、
+                dark は [data-theme] prefix で +1 階。 */
+.bs-panel.kpi-strip-card.is-arriving,
+.bs-panel.kpi-strip-card.is-arriving:hover,
 .bs-panel.kpi-strip-card:hover {
   transform: none;
   box-shadow: var(--shadow-1);
   border-color: var(--border);
 }
+[data-theme="dark"] .bs-panel.kpi-strip-card.is-arriving,
+[data-theme="dark"] .bs-panel.kpi-strip-card.is-arriving:hover,
 [data-theme="dark"] .bs-panel.kpi-strip-card:hover {
   transform: none;
   box-shadow: var(--shadow-1);
