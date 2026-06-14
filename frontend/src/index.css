@@ -10050,14 +10050,15 @@ button.ds-chip.hero-watch-add:hover svg {
 .bs-panel.kpi-strip-card:hover {
   transform: none;
   box-shadow: var(--shadow-1);
-  border-color: var(--border);
+  /* §C-3 許可用途: is-arriving の border-color (rgba(...) !important) を打ち消すため !important 可。 */
+  border-color: var(--border) !important;
 }
 [data-theme="dark"] .bs-panel.kpi-strip-card.is-arriving,
 [data-theme="dark"] .bs-panel.kpi-strip-card.is-arriving:hover,
 [data-theme="dark"] .bs-panel.kpi-strip-card:hover {
   transform: none;
   box-shadow: var(--shadow-1);
-  border-color: var(--border);
+  border-color: var(--border) !important;
 }
 
 /* ── Phase 2.9 Sprint 3 #会社概要 visual 引き算 (発光階層 3 体合議 verdict) ────

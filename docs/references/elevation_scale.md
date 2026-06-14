@@ -218,6 +218,10 @@ ALLOWED-IMPORTANT: frontend/src/index.css  # .verdict-hero.is-arriving:hover bac
 ALLOWED-IMPORTANT: frontend/src/index.css  # .verdict-hero.is-arriving:hover box-shadow (light/dark)
 ALLOWED-IMPORTANT: frontend/src/index.css  # .tier-m-glow halo sweep border (light/dark)
 ALLOWED-IMPORTANT: frontend/src/index.css  # .tier-l-glow hover hairline border (light/dark)
+
+# 2026-06-14: KpiStrip 発光鎮静 (.kpi-strip-card) — is-arriving の border-color !important を
+# 打ち消し「静かなデータ帯」 化するため (§C-3 許可用途: is-arriving border-color)。light/dark。
+ALLOWED-IMPORTANT: frontend/src/index.css  # .bs-panel.kpi-strip-card.is-arriving border-color calm (light/dark)
 ALLOWED-IMPORTANT: frontend/src/index.css  # prefers-reduced-motion animation-duration override
 ALLOWED-IMPORTANT: frontend/src/index.css  # prefers-reduced-motion transition-duration override
 ALLOWED-IMPORTANT: frontend/src/index.css  # prefers-reduced-motion scroll-behavior override
