@@ -170,3 +170,15 @@ handover v86 + `feedback_pge_loop_pitfalls` の 5 落とし穴を本件向けに
    - animation 待ちは **try/catch** で包む(essence に entrance animation を付ける場合、 無限ループ animation を `await` すると 60s timeout で落ちる)。
    - `chromium.launch({ headless: true })` 固定、 単一実行 **60 秒以内**、 `setTimeout(()=>process.exit(2), 55000)` で hard timeout、 `finally { await browser.close() }`、 出力は `frontend/.visual/` に PNG/JSON のみ、 **HTTP/preview server を一切起動しない**(本番 URL or `file://dist/index.html`)。 検証後スクリプトは削除可。
 4. **main 誤記憶 revert 禁止**: 「前はこうだった」 という記憶で既存セクションを巻き戻さない。 essence は **純粋な add-only**。
+
+---
+
+## 9. user dogfood feedback (2026-06-14、後続タスク後の「総合改善」でまとめて反映)
+
+sprint 1 essence hero を本番 (`?diagram_essence=1`, NVDA) で dogfood した user feedback。**今は個別 polish せず、次タスクを進めてから図解全体を総合的に改善する方針** (user 判断: 「まだ内容が簡潔すぎてツッコむのも難しい」)。
+
+1. **見出しの視覚的区別がない**: 「一言で言うと」 は見出しのはずだが本文と視覚的に区別がつかない → 見出し格を立てる (size/weight/色/letter-spacing/位置 で hierarchy を作る)。
+2. **内容が簡潔すぎる**: 「主力事業: データセンター」「今期の決算: EPS Beat 売上 Beat」 が terse すぎて評価しづらい → 中身を richer に (何を/誰に + 一言補足、決算の数値や文脈など)。ただし **§38-safe + @no-llm (既存確定フィールドの mirror)** 制約は維持。
+3. (Claude 観測) essence の Beat/Miss (決算サプライズ) と headline の 5条件 FAIL が併存し、初心者に「Beat なのに FAIL?」 と見える可能性 → 2 信号の役割を区別する極小ラベル (例: 「決算サプライズ」/「ファンダ5条件」) を総合改善で検討。
+
+> deploy 済 commit (B7 第一手 + 配線修正): `229862c` (essence hero) / `40b7051` (flag localStorage 永続化) / `662ca03` (backend OGP redirect の flag param 保持)。全て本番 live・Chrome 実機で end-to-end 検証済。

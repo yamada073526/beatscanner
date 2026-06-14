@@ -1992,6 +1992,9 @@ export default function DiagramCard({
   // じっちゃま5条件 = 図解の主役データ → デフォルト展開 (HERO FAIL バッジ直下、 2秒原則)。 toggle は残す。
   const [showConditions, setShowConditions] = useState(true);
   const [showUnknownTip, setShowUnknownTip] = useState(false);  // R4: 判定不可バッジのツールチップ
+  // B7 第二手 (C 累進開示): essence flag ON 時、下層 (成長ストーリー以降) を「詳しく見る」で畳む。
+  // default 閉 (初心者は L1 essence + L2 ビジネスモデルで 2 秒理解、上級者は展開で深掘り)。flag OFF では無効。
+  const [l3Open, setL3Open] = useState(false);
 
   // R3拡張: アコーディオン展開時の共通フェードインスタイル
   // 各アイテムを 40ms ずつスタガードして 150ms かけて opacity 0→1 + Y 6→0
@@ -2109,6 +2112,9 @@ export default function DiagramCard({
           animation: section-flash 320ms ease-out;
           border-radius: 8px;
         }
+        /* B7 第二手 (C 累進開示): 下層 L3 を「詳しく見る」で畳む。display:none で完全非表示
+           (滑らかな展開アニメは総合改善で検討、まずは可逆な MVP)。flag OFF では本 class は付かない。 */
+        .diagram-l3-collapsed { display: none; }
         @keyframes btn-pulse {
           0%   { transform: scale(1); }
           40%  { transform: scale(1.18); }
@@ -2570,6 +2576,28 @@ export default function DiagramCard({
             </div>
           </>
         )}
+
+        {/* ── B7 第二手 (C 累進開示): ここから下層 L3 を「詳しく見る」で畳む (essence flag ON 時のみ) ── */}
+        {isDiagramEssence() && (
+          <button
+            type="button"
+            onClick={() => setL3Open((v) => !v)}
+            aria-expanded={l3Open}
+            data-testid="diagram-l3-toggle"
+            style={{
+              width: '100%', marginTop: '16px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+              padding: '11px 14px', borderRadius: '10px',
+              border: '1px solid var(--border)', background: 'var(--bg-subtle)',
+              color: 'var(--text-secondary)', fontSize: '13px', fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            {l3Open ? '閉じる' : '詳しく見る（成長トレンド・アナリスト予想・強み / リスク ほか）'}
+            <ChevronDown size={15} strokeWidth={2} aria-hidden="true" style={{ transform: l3Open ? 'rotate(180deg)' : 'none', transition: 'transform var(--motion-fast, 0.2s) ease' }} />
+          </button>
+        )}
+        <div data-testid="diagram-l3-group" className={isDiagramEssence() && !l3Open ? 'diagram-l3-collapsed' : undefined}>
 
         {!isGenerating && trends.length > 0 && (
           <NarrativeBridge text="数年の推移で全体像を見ると" isMobile={isMobile} />
@@ -3445,6 +3473,9 @@ export default function DiagramCard({
         {!isGenerating && data.congressTrades && (
           <CongressTradesSection congress={data.congressTrades} />
         )}
+
+        </div>
+        {/* ── B7 第二手: 下層 L3 group ここまで (締めの「この決算のチェックポイント」は visible 維持) ── */}
 
         {/* ── 締め: この決算のチェックポイント (Round 2-C, handover v152) ──
             模範解答 (Surprise Stories) の「結論 + 今日やること」 相当の締めカード。
