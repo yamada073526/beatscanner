@@ -1190,7 +1190,15 @@ export default function JudgmentDetail({
             // は別 sprint。章内の厳密順序 (会社概要↔5条件) は Sprint 3 で FundamentalsAccordion と調整。
             const tickerHeaderBlock = (
               <>
-                <VerdictHero verdict={isPane3Compass() ? 'unknown' : verdict}>
+                {/* 2026-06-14: compass ON 時は Hero(バッジ) と StateCompass を 1 枚の発光カードに統合
+                    (verdict-hero--compass-header が card surface = Hero frameless で内枠を消す)。
+                    ⚠️ 発光・カード系 (v54-v59 で溶けた高リスク領域)。design_recipes §C-1〜C-4 遵守:
+                    新 glow host を作らず .verdict-hero の compound 4-set を継承、modifier は rest の
+                    bg/border/shadow のみ追加。入れ子 surface-card なし (Hero frameless)、contain:paint なし。 */}
+                <VerdictHero
+                  verdict={isPane3Compass() ? 'unknown' : verdict}
+                  className={isPane3Compass() ? 'verdict-hero--compass-header' : ''}
+                >
                   <Hero
                     ticker={selectedTicker}
                     companyName={result?.companyName}
@@ -1206,15 +1214,20 @@ export default function JudgmentDetail({
                     hideNextEarningsChip={isPane3Compass()}
                     hideVerdictChip={isPane3Compass()}
                     compactWatchlist={isPane3Compass()}
+                    /* compass ON: Hero 内枠 (bs-panel) を外し、verdict-hero を唯一の card surface に
+                       (StateCompass と継ぎ目なく 1 枚に統合)。 */
+                    frameless={isPane3Compass()}
                   />
                   {/* 2026-06-14 (D2 第2手プロトタイプ・?pane3_compass=1): 状態コンパス。
                       決算/会社/価格の3事実で「今の状態」を2秒で。初心者の「で、買いですか?」に §38-safe に答える。
-                      ON 時は EarningsFlash をファンダ章③へ戻す (下の gate)。 */}
+                      ON 時は EarningsFlash をファンダ章③へ戻す (下の gate)。
+                      embedded: 上 hairline 継ぎ目 + Hero 本文と揃う左右 padding で 1 枚カード化。 */}
                   {isPane3Compass() && (
                     <StateCompass
                       selectedTicker={selectedTicker}
                       result={result}
                       guidance={guidance}
+                      embedded
                     />
                   )}
                   {/* 2026-06-14 (D2 第1手・?pane3_order_v2=1): 決算ハイライトを冒頭(Hero 直下)へ昇格。

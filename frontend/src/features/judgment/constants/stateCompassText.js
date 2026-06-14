@@ -24,6 +24,28 @@ export const COMPASS_DISCLAIMER_SHORT = '当社は特定銘柄の売買を推奨
 // 追加・改変時は §38-safe を手動維持 (買い場/勝てる/有力/個人名 等を入れない)。
 export const MODAL_DISCLAIMER = '※ 本内容は一般的な情報提供であり、特定銘柄の売買を推奨するものではありません。最終的な投資判断はご自身でご確認ください。';
 
+// 2026-06-14: 状態コンパス セルの「信号文言」 簡潔版 (user: 文字数が冗長 / スペースが狭い)。
+// 2 秒スキャン用に短語化。色・アイコンが polarity を担うため文字は最小に。
+// §38/§5: いずれも過去確定の事実 (決算) / チャート上の局面 (テクニカル) の「状態の記述」 であり、
+//   売買推奨・断定的将来予測ではない (買い場/勝てる/有力/絶対 等は使わない)。詳細は各 ⓘ モーダル。
+// 決算 = classifySurprise('beat'|'inline'|'miss') の予想比 3 値分類 (±3%、backend _verdict mirror)。
+export const COMPASS_EARNINGS_LABEL = {
+  beat: '予想超え',
+  inline: 'ほぼ予想どおり',
+  miss: '予想割れ',
+};
+// 価格 = classifyBuyZone() の局面区分。フルラベル (BUY_ZONE_LABEL_JP「Cup-Handle pivot 目安」 等) は
+//   BuyZoneCard 等の詳細用 SSOT のまま不変。コンパスは局面名のみを短語で示す (sub「参考水準」 が枠を補う)。
+export const COMPASS_PRICE_LABEL = {
+  cup_pivot: 'カップ形成中',
+  breakout_support: 'ブレイク後',
+  breakout_extended: '高値圏',
+  cup_completing: 'カップ完成間近',
+  box_support: 'レンジ上限',
+  pullback_to_support: '押し目接近',
+  unknown: '判定なし',
+};
+
 export const COMPASS_MODAL = {
   // 決算の出来 — アナリストのコンセンサス予想に対するサプライズ
   earnings: {

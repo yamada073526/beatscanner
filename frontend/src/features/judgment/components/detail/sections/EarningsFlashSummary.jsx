@@ -55,6 +55,9 @@ import {
 // 70.7% で最後まで視認速度を保つ)。reduced-motion は useCountUp 内蔵で即 final 値。
 import { useCountUp, easeOutSine } from '../../../../../hooks/useCountUp.js';
 import { useInViewOnce } from '../../../../../hooks/useInViewOnce.js';
+// 2026-06-14 (handover v212 Phase B-2 残1): 状態コンパスの ⓘ「決算の見方」 を決算サマリーにも併設。
+// CompassInfoButton(modalKey="earnings") は compass セルと同一モーダルを共有 (SSOT)。
+import CompassInfoButton from './CompassInfoButton.jsx';
 
 const TESTID = 'earnings-flash-summary';
 
@@ -750,7 +753,12 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
   if (isLoading && !guidance) {
     return (
       <div data-testid={TESTID} data-state="loading" aria-busy="true" className="ds-flash-card" style={cardOuterStyle}>
-        <div style={headerBandStyle}><span style={headerTitleStyle}>決算サマリー</span></div>
+        <div style={headerBandStyle}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <span style={headerTitleStyle}>決算サマリー</span>
+            <CompassInfoButton modalKey="earnings" ariaLabel="決算の見方" />
+          </span>
+        </div>
         <div style={bodyStyle}>
           {/* 5 行分 (EPS/売上/部門別/粗利率/来期) の skeleton で loaded 高 ≈ loading 高 (CLS 抑止) */}
           <div style={skeletonLineStyle(220)} />
@@ -959,8 +967,10 @@ export default function EarningsFlashSummary({ ticker, guidance, isLoading = fal
       {/* ヘッダー帯 (v5.5 design 案A): 「決算サマリー」 を明記 — サマリーであり下に詳細があることを初見で宣言
           (user 相談への推奨実装)。期の帰属も同帯に常設 (時制誤認防止)。右に詳細導線 + copy (hover 出現)。 */}
       <div style={headerBandStyle}>
-        <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           <span style={headerTitleStyle}>決算サマリー</span>
+          {/* 状態コンパスと同じ「決算の見方」 モーダル (§38-safe 静的解説)。見出し直後に併設。 */}
+          <CompassInfoButton modalKey="earnings" ariaLabel="決算の見方" />
           {period && <span style={headerPeriodStyle}>直近四半期 {period}</span>}
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>

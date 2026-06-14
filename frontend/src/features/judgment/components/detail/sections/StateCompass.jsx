@@ -13,8 +13,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { TrendingUp, TrendingDown, Minus, Layers, Crosshair, Info } from 'lucide-react';
 import { fetchTechnical, TECHNICAL_CANONICAL_PATTERNS } from '../../../../../api.js';
-import { classifySurprise, SURPRISE_VERDICT_JP, fmtSurprisePct } from '../../../constants/earningsFlashTemplates.js';
-import { classifyBuyZone, BUY_ZONE_LABEL_JP } from '../../../../../lib/buyZoneLabels.js';
+import { classifySurprise, fmtSurprisePct } from '../../../constants/earningsFlashTemplates.js';
+import { classifyBuyZone } from '../../../../../lib/buyZoneLabels.js';
+import { COMPASS_EARNINGS_LABEL, COMPASS_PRICE_LABEL } from '../../../constants/stateCompassText.js';
 import CompassInfoButton from './CompassInfoButton.jsx';
 
 const TESTID = 'state-compass';
@@ -27,20 +28,22 @@ const SIGNAL_COLOR = {
   neutral: 'var(--text-muted)',
 };
 
-// 決算セル: 予想比サプライズ (±3% 分類) を信号化
+// 決算セル: 予想比サプライズ (±3% 分類) を信号化。
+// 2026-06-14: 簡潔化 (user) — value を短語 (COMPASS_EARNINGS_LABEL) に、Beat/Miss バッジは撤去
+// (value + 色アイコン + sub「予想比 ↑X%」で polarity 重複のため)。
 function earningsCell(guidance) {
   const pct = guidance?.eps?.surprise_pct;
   const cls = classifySurprise(pct); // 'beat'|'inline'|'miss'|null
   if (!cls) {
-    return { signal: 'neutral', Icon: Minus, value: '判定待ち', badge: null, sub: '決算発表前' };
+    return { signal: 'neutral', Icon: Minus, value: '判定待ち', sub: '決算発表前' };
   }
   const map = {
-    beat: { signal: 'good', Icon: TrendingUp, value: '予想より良かった' },
-    inline: { signal: 'warn', Icon: Minus, value: 'ほぼ予想どおり' },
-    miss: { signal: 'bad', Icon: TrendingDown, value: '予想を下回った' },
+    beat: { signal: 'good', Icon: TrendingUp },
+    inline: { signal: 'warn', Icon: Minus },
+    miss: { signal: 'bad', Icon: TrendingDown },
   };
   const m = map[cls];
-  return { signal: m.signal, Icon: m.Icon, value: m.value, badge: SURPRISE_VERDICT_JP[cls], sub: fmtSurprisePct(pct) };
+  return { signal: m.signal, Icon: m.Icon, value: COMPASS_EARNINGS_LABEL[cls], sub: fmtSurprisePct(pct) };
 }
 
 // 会社セル: 5条件 N/5 (連続量、ドットゲージ)
@@ -65,7 +68,15 @@ function DotGauge({ score, total, color }) {
   );
 }
 
-export default function StateCompass({ selectedTicker, result, guidance }) {
+/**
+ * @param {object} props
+ * @param {string} props.selectedTicker
+ * @param {object} props.result
+ * @param {object} props.guidance
+ * @param {boolean} [props.embedded=false] - true で VerdictHero と 1 枚の発光カードに統合する mode
+ *   (上に hairline 継ぎ目 + Hero 本文と揃う左右 padding、外側 marginBottom なし)。2026-06-14。
+ */
+export default function StateCompass({ selectedTicker, result, guidance, embedded = false }) {
   const [technical, setTechnical] = useState(null);
   const [techLoading, setTechLoading] = useState(false);
 
@@ -86,8 +97,9 @@ export default function StateCompass({ selectedTicker, result, guidance }) {
     if (zone === 'unknown') {
       return { signal: 'neutral', Icon: Crosshair, value: techLoading ? '取得中…' : '判定なし', sub: '参考水準' };
     }
-    // user 確定: 価格は amber 固定 (中立・注目。緑=「買い」暗示で §38 risk)
-    return { signal: 'warn', Icon: Crosshair, value: BUY_ZONE_LABEL_JP[zone] || '—', sub: '参考水準' };
+    // user 確定: 価格は amber 固定 (中立・注目。緑=「買い」暗示で §38 risk)。
+    // 2026-06-14: 局面名を短語 (COMPASS_PRICE_LABEL) に簡潔化。フルラベルは BuyZoneCard 詳細用に維持。
+    return { signal: 'warn', Icon: Crosshair, value: COMPASS_PRICE_LABEL[zone] || '—', sub: '参考水準' };
   }, [technical, techLoading]);
 
   if (!result) {
@@ -101,7 +113,7 @@ export default function StateCompass({ selectedTicker, result, guidance }) {
   ];
 
   return (
-    <div data-testid={TESTID} data-state="main" style={wrapperStyle}>
+    <div data-testid={TESTID} data-state="main" style={embedded ? wrapperEmbeddedStyle : wrapperStyle}>
       <div style={headingStyle}>今の状態 — 3つの事実</div>
       <div style={cellsRowStyle}>
         {cells.map((c) => {
@@ -110,7 +122,7 @@ export default function StateCompass({ selectedTicker, result, guidance }) {
           return (
             <div key={c.key} data-testid={`${TESTID}-${c.key}`} style={cellStyle}>
               <span style={{ ...signalDotStyle, background: `color-mix(in srgb, ${color} 12%, transparent)` }}>
-                {Icon && <Icon size={18} strokeWidth={2} color={color} aria-hidden="true" />}
+                {Icon && <Icon size={16} strokeWidth={2} color={color} aria-hidden="true" />}
               </span>
               <div style={cellTextColStyle}>
                 <div style={cellLabelRowStyle}>
@@ -136,10 +148,18 @@ export default function StateCompass({ selectedTicker, result, guidance }) {
 
 // --- styles (semantic CSS token のみ、raw hex / box-shadow 禁止) ---
 const wrapperStyle = { display: 'flex', flexDirection: 'column', gap: 'var(--space-3, 12px)', marginBottom: 'var(--space-4, 16px)' };
+// embedded: VerdictHero と 1 枚の発光カードに統合 (上 hairline 継ぎ目 + Hero 本文と揃う左右 padding)。
+// 左右は Hero 内部 padding (--space-8=32px) と一致させ、縦のラインを揃える。marginBottom なし (card 内最終要素)。
+const wrapperEmbeddedStyle = {
+  display: 'flex', flexDirection: 'column', gap: 'var(--space-3, 12px)',
+  borderTop: '1px solid var(--border)',
+  padding: 'var(--space-5, 20px) var(--space-8, 32px) var(--space-7, 28px)',
+};
 const headingStyle = { fontSize: 13, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-primary)' };
+// 密度向上 (user: スペースが狭い) — cell 最小幅 200→160px で 3-up が narrow pane でも収まる。
 const cellsRowStyle = { display: 'flex', flexWrap: 'wrap', gap: 'var(--space-4, 16px)' };
-const cellStyle = { flex: '1 1 200px', minWidth: 0, display: 'flex', gap: 'var(--space-3, 12px)', alignItems: 'flex-start' };
-const signalDotStyle = { flexShrink: 0, width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' };
+const cellStyle = { flex: '1 1 160px', minWidth: 0, display: 'flex', gap: 'var(--space-3, 12px)', alignItems: 'flex-start' };
+const signalDotStyle = { flexShrink: 0, width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 const cellTextColStyle = { minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 'var(--space-1, 4px)' };
 const cellLabelRowStyle = { display: 'flex', alignItems: 'center', gap: 'var(--space-1, 4px)' };
 const cellLabelStyle = { fontSize: 11, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-muted)' };
