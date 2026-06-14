@@ -8019,7 +8019,7 @@ async def price_intraday(ticker: str) -> dict:
 @app.get("/api/price-history/{ticker}")
 async def price_history(ticker: str, request: Request, period: str = Query("1y")) -> dict:
     today = date.today()
-    period_days = {"1m": 30, "3m": 90, "1y": 365, "3y": 1095}
+    period_days = {"1m": 30, "3m": 90, "6m": 180, "1y": 365, "3y": 1095, "5y": 1825}
     days = period_days.get(period, 365)
     from_date = (today - timedelta(days=days)).isoformat()
 

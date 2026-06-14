@@ -125,11 +125,31 @@ class StockChartErrorBoundary extends Component {
   }
 }
 
+// v216 B10: chart tabs v2 flag (?chart_tabs_v2=1 + localStorage persist、default OFF / ?chart_tabs_v2=0 で kill)
+//   segmented control 統一 + 1M/3M/6M/1Y/5Y。 帰宅後 dogfood→GO で default ON 昇格予定。
+function isChartTabsV2() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get('chart_tabs_v2');
+    if (q === '1') { window.localStorage.setItem('bs_chart_tabs_v2', '1'); return true; }
+    if (q === '0') { window.localStorage.removeItem('bs_chart_tabs_v2'); return false; }
+    return window.localStorage.getItem('bs_chart_tabs_v2') === '1';
+  } catch { return false; }
+}
+
 const PERIODS = [
   { label: '1ヶ月', value: '1m' },
   { label: '3ヶ月', value: '3m' },
   { label: '1年',   value: '1y' },
   { label: '3年',   value: '3y' },
+];
+// v216 B10: V2 = 6M/5Y 追加 + 英略短縮 (segmented control 用)
+const PERIODS_V2 = [
+  { label: '1M', value: '1m' },
+  { label: '3M', value: '3m' },
+  { label: '6M', value: '6m' },
+  { label: '1Y', value: '1y' },
+  { label: '5Y', value: '5y' },
 ];
 
 // Recharts は CSS var を直接受けないため固定 RGB. 両モードで視認できる中庸値.
@@ -378,6 +398,9 @@ function isNonEquityTicker(ticker) {
 
 function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTitle = false, isEtf = false }) {
   const [period, setPeriod] = useState('1y');
+  // v216 B10: chart tabs v2 (segmented control + 6M/5Y) は mount 時 1 回評価 (URL param 優先)。
+  const [chartTabsV2] = useState(() => isChartTabsV2());
+  const periods = chartTabsV2 ? PERIODS_V2 : PERIODS;
   // v147: 非株式 (指数/先物/為替/DXY) では「個別株前提」 の売買・pattern オーバーレイを一括非表示にする gate。
   //   user dogfood 2026-06-12: ETF (SPY/QQQ/VTI 等) も同じ理由で非株式扱いにする (O'Neil 個別グロース株の
   //   損切り-8%/50DMA climax 売り/RS/アナリスト目標/Cup-Handle は ETF に適用不可)。 ETF は構造的 ticker
@@ -852,8 +875,13 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
         const weekStart = new Date(dt);
         weekStart.setDate(dt.getDate() - dt.getDay());
         key = weekStart.toISOString().slice(0, 10);
+      } else if (period === '5y') {
+        // v216 B10: 5y は月初 60 個が過密 → 四半期 (1,4,7,10月) に間引き。 tickFormatter は既存 else で整合。
+        const ym = String(d.date).slice(0, 7);
+        if ((Number(ym.slice(5)) - 1) % 3 !== 0) continue;
+        key = ym;
       } else {
-        // 1y / 3y / 5y: 月の最初のみ
+        // 1y / 3y: 月の最初のみ
         key = String(d.date).slice(0, 7);
       }
       if (!seen.has(key)) {
@@ -1036,15 +1064,51 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
               <CandlestickChartIcon size={14} strokeWidth={1.75} />
             </button>
           </div>
-          {PERIODS.map((p) => (
-            <button
-              key={p.value}
-              onClick={() => setPeriod(p.value)}
-              className={`chart-period-btn${period === p.value ? ' active' : ''}`}
+          {chartTabsV2 ? (
+            <div
+              role="group"
+              aria-label="期間"
+              style={{
+                display: 'inline-flex',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm, 6px)',
+                overflow: 'hidden',
+              }}
             >
-              {p.label}
-            </button>
-          ))}
+              {periods.map((p, i) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setPeriod(p.value)}
+                  aria-pressed={period === p.value}
+                  style={{
+                    appearance: 'none',
+                    border: 'none',
+                    borderLeft: i === 0 ? 'none' : '1px solid var(--border)',
+                    background: period === p.value ? 'var(--color-accent)' : 'transparent',
+                    color: period === p.value ? 'var(--bg-primary)' : 'var(--text-secondary)',
+                    padding: '5px 11px',
+                    fontSize: '0.8125rem',
+                    fontWeight: period === p.value ? 700 : 500,
+                    cursor: 'pointer',
+                    transition: 'background 0.15s ease, color 0.15s ease',
+                  }}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            PERIODS.map((p) => (
+              <button
+                key={p.value}
+                onClick={() => setPeriod(p.value)}
+                className={`chart-period-btn${period === p.value ? ' active' : ''}`}
+              >
+                {p.label}
+              </button>
+            ))
+          )}
         </div>
       </div>
 
