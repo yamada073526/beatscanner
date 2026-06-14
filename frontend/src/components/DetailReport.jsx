@@ -881,6 +881,7 @@ function ReportCard({ analysis, guidance, onStreamingChange, isOpen }) {
           <DiagramCard
             data={vizData}
             ticker={analysis.ticker}
+            guidance={guidance}
             selectedYears={selectedYears}
             onYearsChange={(y) => {
               setSelectedYears(y);

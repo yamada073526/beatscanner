@@ -58,6 +58,12 @@ export function toneBg(t) {
   if (t === 'loss') return 'color-mix(in srgb, var(--color-loss) 12%, transparent)';
   return 'var(--bg-subtle)';
 }
+// 前年比 chip 等の border 色 (tone を accent/border に mix)。文字列結合を関数に閉じ込め可読性を上げる。
+export function toneBorderColor(t) {
+  if (t === 'gain') return 'color-mix(in srgb, var(--color-gain) 30%, var(--border))';
+  if (t === 'loss') return 'color-mix(in srgb, var(--color-loss) 30%, var(--border))';
+  return 'var(--border)';
+}
 
 // 首位セグメント (value_b 最大 = 主力事業)。displaySegmentName は呼び出し側 (DiagramCard) で適用。
 // businessFlowSteps は value-chain のステップ図で「主力事業」ではないため、segment を優先する。
@@ -100,8 +106,8 @@ export function fmtYoy(v) {
 // 内容を richer に (主力事業に規模 $B + 前年比、今期決算に予想比 caption)。
 export const ESSENCE_STYLES = {
   card: {
-    margin: '14px 0 4px',
-    padding: '14px 16px',
+    margin: '14px 0 14px', // 次セクションとの分離を明確に (3体監査 P1)
+    padding: '16px 18px',
     borderRadius: 'var(--radius-md, 10px)',
     border: '1px solid var(--border)',
     background: 'var(--bg-subtle)',
@@ -109,30 +115,19 @@ export const ESSENCE_STYLES = {
     flexDirection: 'column',
     gap: '12px',
   },
-  // 見出し格: accent アイコン + ラベル + hairline divider (本文 row と明確に区別 = user feedback ①)
-  headingWrap: { display: 'flex', alignItems: 'center', gap: '6px', paddingBottom: '9px', borderBottom: '1px solid var(--border)' },
+  // 見出し格: accent アイコン + ラベル + hairline divider (本文 row と明確に区別 = user feedback ①、3体監査 P1)
+  headingWrap: { display: 'flex', alignItems: 'center', gap: '7px', paddingBottom: '10px', borderBottom: '1px solid var(--border)' },
   headingIcon: { color: 'var(--color-accent)', flexShrink: 0 },
-  headingText: { fontSize: '12px', fontWeight: 700, letterSpacing: '0.07em', color: 'var(--text-secondary)' },
+  headingText: { fontSize: '13px', fontWeight: 700, letterSpacing: '0.07em', color: 'var(--text-secondary)' },
   row: { display: 'flex', flexDirection: 'column', gap: '5px' },
   rowLabel: { fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.02em' },
-  rowLabelCaption: { fontSize: '10px', fontWeight: 500, color: 'var(--text-muted)' },
+  // caption「(アナリスト予想比)」を視認可能に強化 (3体監査 P0: Beat vs FAIL 誤読の Trust Cliff 緩和)
+  rowLabelCaption: { fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' },
   subject: { fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3 },
   chipRow: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' },
-  // 規模 ($B) chip = neutral、 前年比 chip = 事実色 (gain/loss)
-  metaChip: { fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '6px', lineHeight: 1.5, color: 'var(--text-secondary)', background: 'var(--bg-card)', border: '1px solid var(--border)' },
+  // 規模 ($B) chip = neutral、 前年比 chip = 事実色 (gain/loss)。12px に引き上げ (3体監査 P1)
+  metaChip: { fontSize: '12px', fontWeight: 600, padding: '2px 9px', borderRadius: '6px', lineHeight: 1.5, color: 'var(--text-secondary)', background: 'var(--bg-card)', border: '1px solid var(--border)' },
   // Beat/Miss chip (事実色)
   chip: { fontSize: '12px', fontWeight: 700, padding: '2px 10px', borderRadius: '999px', lineHeight: 1.5 },
   chipWrap: { display: 'inline-flex', gap: '6px', flexWrap: 'wrap' },
-  // 「詳しく見る」 toggle = ボタンであることが直感的にわかる accent CTA (user feedback ④、図解生成ボタン idiom)
-  toggleBtn: {
-    width: '100%', marginTop: '16px',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-    padding: '12px 16px', borderRadius: '10px',
-    border: '1px solid color-mix(in srgb, var(--color-accent) 38%, var(--border))',
-    background: 'color-mix(in srgb, var(--color-accent) 8%, transparent)',
-    color: 'var(--color-accent)', fontSize: '13px', fontWeight: 700,
-    cursor: 'pointer', transition: 'background var(--motion-fast, 0.18s) ease',
-  },
-  toggleBtnHoverBg: 'color-mix(in srgb, var(--color-accent) 15%, transparent)',
-  toggleBtnBg: 'color-mix(in srgb, var(--color-accent) 8%, transparent)',
 };

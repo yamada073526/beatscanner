@@ -13,7 +13,8 @@ import Chip from './ui/Chip.jsx';
 import { sanitizeDiagramData, findBlocklistHits, sanitizeText } from '../lib/blocklist.js';
 import { displaySegmentName } from '../lib/segmentNames.js';
 // B7 第一手 (2026-06-14): 図解最上段「一言で言うと」L1 essence hero (flag ?diagram_essence=1, default OFF)。
-import { isDiagramEssence, buildEssence, verdictTone, verdictLabel, toneColor, toneBg, ESSENCE_STYLES, fmtSegValue, fmtYoy } from './diagramEssence.js';
+import { isDiagramEssence, buildEssence, verdictTone, verdictLabel, toneColor, toneBg, toneBorderColor, ESSENCE_STYLES, fmtSegValue, fmtYoy } from './diagramEssence.js';
+import { isNonEquityTicker } from '../lib/tickerUtils.js';
 // handover v82 Phase 5.5: ConditionRow click → DiagramCard pulse 連携 (multi-review 6 体合議 verdict)。
 import { useWorkspaceStore } from '../state/workspaceStore.js';
 import { isStepPulsingForCondition } from '../lib/condition-mapping.js';
@@ -1995,6 +1996,9 @@ export default function DiagramCard({
   // B7 第二手 (C 累進開示): essence flag ON 時、下層 (成長ストーリー以降) を「詳しく見る」で畳む。
   // default 閉 (初心者は L1 essence + L2 ビジネスモデルで 2 秒理解、上級者は展開で深掘り)。flag OFF では無効。
   const [l3Open, setL3Open] = useState(false);
+  // essence 有効判定を 1 度だけ評価 (render 毎の localStorage 重複読み解消、3体監査 P1)。
+  // 非 equity (指数/ETF/為替) は segment/EPS が無意味なので essence ごと無効 = 従来表示 (3体監査 P0)。
+  const essenceEnabled = useMemo(() => isDiagramEssence() && !isNonEquityTicker(ticker), [ticker]);
 
   // R3拡張: アコーディオン展開時の共通フェードインスタイル
   // 各アイテムを 40ms ずつスタガードして 150ms かけて opacity 0→1 + Y 6→0
@@ -2214,7 +2218,7 @@ export default function DiagramCard({
         {/* ── L1 essence hero「一言で言うと」(B7 第一手, flag ?diagram_essence=1, default OFF, add-only) ──
             初心者が 2 秒で「何で稼ぐ会社か + 今期決算の出来」を掴む最上段ブロック。新規 LLM なし =
             既存確定フィールド (segmentSummary 首位 / guidance verdict) の静的 mirror。§38: 描写のみ・事実色のみ。 */}
-        {isDiagramEssence() && (() => {
+        {essenceEnabled && (() => {
           const essence = buildEssence(data, guidance);
           const seg = essence.segment;
           const segName = seg ? displaySegmentName(seg) : null;
@@ -2226,7 +2230,7 @@ export default function DiagramCard({
             <div data-testid="diagram-essence-hero" style={ESSENCE_STYLES.card}>
               {/* 見出し格 (accent アイコン + hairline divider で本文と区別) */}
               <div style={ESSENCE_STYLES.headingWrap}>
-                <Sparkles size={13} strokeWidth={2} aria-hidden="true" style={ESSENCE_STYLES.headingIcon} />
+                <Sparkles size={15} strokeWidth={2} aria-hidden="true" style={ESSENCE_STYLES.headingIcon} />
                 <span style={ESSENCE_STYLES.headingText}>一言で言うと</span>
               </div>
               {/* 主力事業: 名称 + 規模 ($B) + 前年比 (既存 segment field の mirror、再計算なし) */}
@@ -2236,7 +2240,7 @@ export default function DiagramCard({
                   <span style={ESSENCE_STYLES.subject}>{subject || '構成を精査中'}</span>
                   {segVal && <span style={ESSENCE_STYLES.metaChip}>{segVal}</span>}
                   {yoyTxt && yoyTone && (
-                    <span style={{ ...ESSENCE_STYLES.metaChip, color: toneColor(yoyTone), borderColor: 'color-mix(in srgb, var(--color-' + (yoyTone === 'gain' ? 'gain' : 'loss') + ') 30%, var(--border))' }}>{yoyTxt}</span>
+                    <span style={{ ...ESSENCE_STYLES.metaChip, color: toneColor(yoyTone), borderColor: toneBorderColor(yoyTone) }}>{yoyTxt}</span>
                   )}
                 </div>
               </div>
@@ -2602,25 +2606,29 @@ export default function DiagramCard({
           </>
         )}
 
-        {/* ── B7 第二手 (C 累進開示): ここから下層 L3 を「詳しく見る」で畳む (essence flag ON 時のみ) ── */}
-        {isDiagramEssence() && (
+        {/* ── B7 第二手 (C 累進開示): ここから下層 L3 を「詳しく見る」で畳む (essence flag ON 時のみ) ──
+            toggle は .diagram-l3-toggle (図解生成ボタンと同 idiom: hover lift + glow + :active press)。 */}
+        {essenceEnabled && (
           <button
             type="button"
             onClick={() => setL3Open((v) => !v)}
             aria-expanded={l3Open}
+            aria-controls="diagram-l3-group"
             data-testid="diagram-l3-toggle"
-            style={ESSENCE_STYLES.toggleBtn}
-            onMouseEnter={(e) => { e.currentTarget.style.background = ESSENCE_STYLES.toggleBtnHoverBg; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = ESSENCE_STYLES.toggleBtnBg; }}
+            className="diagram-l3-toggle"
           >
-            <Layers size={15} strokeWidth={2} aria-hidden="true" />
-            {l3Open ? '閉じる' : '詳しく見る（成長トレンド・アナリスト予想・強み / リスク ほか）'}
-            <ChevronDown size={15} strokeWidth={2} aria-hidden="true" style={{ transform: l3Open ? 'rotate(180deg)' : 'none', transition: 'transform var(--motion-fast, 0.2s) ease' }} />
+            <Layers size={16} strokeWidth={2} aria-hidden="true" />
+            <span className="diagram-l3-toggle__text">
+              <span className="diagram-l3-toggle__title">{l3Open ? '閉じる' : '詳しく見る'}</span>
+              {!l3Open && <span className="diagram-l3-toggle__sub">成長トレンド・アナリスト予想・強み / リスク など</span>}
+            </span>
+            <ChevronDown size={16} strokeWidth={2} aria-hidden="true" className="diagram-l3-toggle__chev" />
           </button>
         )}
-        {/* L3 group: grid 0fr/1fr で滑らかに展開 (user feedback ③)。flag OFF では class なし = 従来通り。 */}
-        <div data-testid="diagram-l3-group" className={isDiagramEssence() ? `diagram-l3-anim${l3Open ? '' : ' is-collapsed'}` : undefined}>
-        <div className={isDiagramEssence() ? 'diagram-l3-anim-inner' : undefined}>
+        {/* L3 group: grid 0fr/1fr で滑らかに展開 (user feedback ③)。flag OFF では class なし = 従来通り。
+            id="diagram-l3-group" は toggle の aria-controls 対象 (3体監査 P1 a11y)。 */}
+        <div id="diagram-l3-group" data-testid="diagram-l3-group" className={essenceEnabled ? `diagram-l3-anim${l3Open ? '' : ' is-collapsed'}` : undefined}>
+        <div className={essenceEnabled ? 'diagram-l3-anim-inner' : undefined}>
 
         {!isGenerating && trends.length > 0 && (
           <NarrativeBridge text="数年の推移で全体像を見ると" isMobile={isMobile} />
