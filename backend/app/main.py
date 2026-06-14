@@ -5332,16 +5332,72 @@ def _guard_eps_currency_mismatch(
     return eps_label, eps_pct, eps_reason, None
 
 
-def _eps_yoy_foreign_artifact(eps_yoy: float | None, income_history: list | None, threshold: float = 200.0) -> bool:
-    """来期 EPS YoY が海外決算 (非USD) の単位混在による artifact かを判定 (content-audit 2026-06-15: BABA +489%)。
+def _apply_foreign_usd_to_forward(forward: dict | None, usd_per_unit: float | None) -> None:
+    """海外決算 (非USD) reporter の forward dict を in-place で USD 整合化する (content-audit 2026-06-15)。
 
-    reportedCurrency != USD かつ |YoY| >= threshold (既定 200%) で True。 正常な外貨高成長 (<200%) は保持。
-    income_history[0] = 最新四半期 (lender 判定の _fwd_rev_suppress と同じ参照)。"""
-    if eps_yoy is None or abs(eps_yoy) < threshold:
-        return False
-    row = income_history[0] if (income_history and isinstance(income_history[0], dict)) else None
-    cur = (row.get("reportedCurrency") if row else None) or ""
-    return bool(cur.strip().upper() not in ("", "USD"))
+    - FMP consensus/year-ago revenue は集計値 (native 通貨) → usd_per_unit で USD 換算。 rev_yoy_pct は
+      consensus/year-ago を同率換算するため比率不変 → そのまま。
+    - EPS 系 (consensus_eps/eps_yoy_pct/year_ago_eps) は native per-ordinary-share であり、 USD/ADS への
+      正確換算には ADS:ordinary 比 (BABA 8:1 / TSM 5:1…) が要り信頼性を欠くため suppress (native 値を「$」
+      表示する Trust Cliff を回避、 当期 EPS verdict の _guard_eps_currency_mismatch と方針一致)。
+    - 会社 8-K ガイダンス系 (company_q_*) は出し手の単位 (native/USD) が不確実なため suppress。
+    next_q / next_fy は同じ company_q_* key 名を共有するため両ブロックを同処理。 存在する key のみ変更。"""
+    if not forward or not usd_per_unit:
+        return
+    for bk in ("next_q", "next_fy"):
+        blk = forward.get(bk)
+        if not isinstance(blk, dict):
+            continue
+        for nk in ("consensus_eps", "eps_yoy_pct", "year_ago_eps",
+                   "company_q_eps_low", "company_q_eps_high",
+                   "company_q_rev_low", "company_q_rev_high",
+                   "company_q_rev_yoy_low_pct", "company_q_rev_yoy_high_pct"):
+            if nk in blk:
+                blk[nk] = None
+        if "eps_turnaround" in blk:
+            blk["eps_turnaround"] = False
+        for gk in ("guidance_vs_consensus_eps", "guidance_vs_consensus_rev"):
+            if gk in blk:
+                blk[gk] = "unknown"
+        for mk in ("consensus_revenue", "year_ago_revenue"):
+            if isinstance(blk.get(mk), (int, float)):
+                blk[mk] = blk[mk] * usd_per_unit
+
+
+_FX_USD_CACHE: dict[str, tuple[float, float]] = {}  # currency -> (ts, usd_per_unit)
+_FX_USD_TTL = 6 * 3600
+
+
+async def _usd_per_unit(currency: str | None) -> float | None:
+    """1 単位の `currency` が何 USD かを返す (海外決算の金額 native→USD 換算用)。 USD は 1.0。
+
+    content-audit 2026-06-15: 外貨建て reporter (BABA=CNY/TSM=TWD/ASML=EUR 等) の revenue が native 通貨のまま
+    「億ドル」 表示される Trust Cliff の修正用。 FMP forex `USD{CUR}` (1 USD = N CUR) の逆数。 6h cache、 失敗時 None。
+    revenue は集計値なので FX のみで正確に換算できる (per-share EPS は ADS:ordinary 比が絡むため別扱い=非USDは suppress)。"""
+    if not currency:
+        return None
+    cur = currency.strip().upper()
+    if cur == "USD":
+        return 1.0
+    now = _time.time()
+    c = _FX_USD_CACHE.get(cur)
+    if c and (now - c[0]) < _FX_USD_TTL:
+        return c[1]
+    try:
+        key = os.getenv("FMP_API_KEY", "")
+        if not key:
+            return c[1] if c else None
+        url = f"https://financialmodelingprep.com/stable/quote?symbol=USD{cur}&apikey={key}"
+        data = await safe_fmp_get(url, f"fx::USD{cur}", ttl=_FX_USD_TTL)
+        rec = (data[0] if isinstance(data, list) and data else data if isinstance(data, dict) else None)
+        rate = rec.get("price") if isinstance(rec, dict) else None  # 1 USD = rate CUR
+        if rate and float(rate) > 0:
+            upu = round(1.0 / float(rate), 10)  # 1 CUR = upu USD
+            _FX_USD_CACHE[cur] = (now, upu)
+            return upu
+    except Exception as e:
+        print(f"[fx] USD{cur} fetch failed: {e}")
+    return c[1] if c else None
 
 
 async def _fetch_sector_industry(ticker: str, fmp_key: str | None) -> tuple[str | None, str | None]:
@@ -6977,9 +7033,6 @@ def _compute_forward_outlook(
         elif ya_eps > 0 and abs(ya_eps) >= 0.05:
             eps_yoy = round((consensus_eps - ya_eps) / abs(ya_eps) * 100, 1)
         # ya_eps < 0 & consensus <= 0 (赤字継続) / |ya_eps| < 0.05 (near-zero) → None
-    # content-audit 2026-06-15: 海外決算 (非USD) の単位混在で来期 EPS YoY が artifact 化するのを抑止 (BABA +489%)。
-    if _eps_yoy_foreign_artifact(eps_yoy, income_history):
-        eps_yoy = None
 
     # period_label: fiscal 安全のため estimate の period/calendarYear を優先、 無ければ period-end 月を事実表記。
     _p = next_e.get("period")
@@ -7159,9 +7212,6 @@ def _compute_forward_outlook(
                             fy_eps_turnaround = True
                         elif fy_ya_eps > 0 and abs(fy_ya_eps) >= 0.05:
                             fy_eps_yoy = round((fy_consensus_eps - fy_ya_eps) / abs(fy_ya_eps) * 100, 1)
-                    # content-audit 2026-06-15: 海外決算 (非USD) の単位混在で通期 EPS YoY が artifact 化するのを抑止。
-                    if _eps_yoy_foreign_artifact(fy_eps_yoy, income_history):
-                        fy_eps_yoy = None
                     # アナリスト数 3 社未満は平均誤認のため YoY 抑止 (next_q と同条件)
                     if fy_cnt_eps is not None and fy_cnt_eps < MIN_ANALYSTS:
                         fy_eps_yoy = None
@@ -7467,6 +7517,18 @@ async def guidance_basic(ticker: str, request: Request, with_guidance: bool = Fa
             except Exception as _gh_e:
                 print(f"[WARN] guidance history enrich failed for {ticker}: {_gh_e}")
 
+        # content-audit 2026-06-15: 海外決算 (非USD) の金額を USD 整合化 (BABA revenue ¥243B が "2433億ドル" 表示の Trust Cliff)。
+        #   revenue (集計値) は FX 換算、 EPS (per-share+ADS比) は forward 側で suppress (_apply_foreign_usd_to_forward)。
+        #   当期 revenue verdict (rev_pct) は actual/estimated を同率換算するため不変。
+        _rep_cur = (income_q[0].get("reportedCurrency") if income_q else None)
+        _usd_pu = await _usd_per_unit(_rep_cur) if (_rep_cur and str(_rep_cur).strip().upper() != "USD") else None
+        if _usd_pu:
+            if revenue_actual is not None:
+                revenue_actual = revenue_actual * _usd_pu
+            if revenue_estimated is not None:
+                revenue_estimated = revenue_estimated * _usd_pu
+            _apply_foreign_usd_to_forward(forward, _usd_pu)
+
         resp = {
             "ticker": ticker.upper(),
             "fiscal_period": fiscal_period,
@@ -7635,6 +7697,15 @@ async def _guidance_impl(ticker: str, request: Request) -> dict:
         eps_estimated = None
         eps_actual = None
     _eps_compare_unreliable = bool(_eps_mismatch_note)
+
+    # content-audit 2026-06-15: 海外決算 (非USD) revenue を USD 換算 (guidance_basic と同方針、 集計値は FX で正確)。
+    _rep_cur2 = (income_q[0].get("reportedCurrency") if income_q else None)
+    _usd_pu2 = await _usd_per_unit(_rep_cur2) if (_rep_cur2 and str(_rep_cur2).strip().upper() != "USD") else None
+    if _usd_pu2:
+        if revenue_actual is not None:
+            revenue_actual = revenue_actual * _usd_pu2
+        if revenue_estimated is not None:
+            revenue_estimated = revenue_estimated * _usd_pu2
 
     result: dict = {
         "ticker": ticker.upper(),
