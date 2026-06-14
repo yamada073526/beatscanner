@@ -138,6 +138,31 @@ if [ "${CONTENT_AUDIT_FULL:-0}" = "1" ]; then
   done
 fi
 
+# ── Pitfall 4: 海外決算 (非USD ADR) の EPS 単位混在 + 金額 USD 換算 (2026-06-15) ──
+#   SSOT: handover v216 / runtime guard = _guard_eps_currency_mismatch + _apply_foreign_usd_to_forward + _usd_per_unit。
+#   in_usd_range: 値が四半期売上らしい USD レンジ (5e9〜1.5e11) かを判定 (native 通貨残留 = 桁が跳ねる)。
+in_usd_range() { python3 -c "import sys; v=sys.argv[1]; sys.exit(0 if (v not in ('','null','None') and 5e9<=abs(float(v))<=1.5e11) else 1)" "$1" 2>/dev/null; }
+#   4a: BABA は EPS 単位混在で当期 EPS verdict 抑止済 (compare_unreliable=true) のはず → false なら回帰。
+echo "[4a] foreign ADR EPS unit guard (BABA 抑止)"
+unrel=$(curl -s --max-time 15 "$BASE/api/guidance/BABA/basic" | jq -r '.eps.compare_unreliable // false' 2>/dev/null)
+if [ "$unrel" = "true" ]; then echo "  ok: BABA eps suppressed"; else echo "  FAIL: BABA eps 単位混在ガード回帰 (compare_unreliable=$unrel)"; FAIL=1; fi
+#   4b: 海外 reporter (BABA/TSM/ASML) の revenue は USD 換算済 (USD レンジ) のはず → native 桁なら換算回帰。
+echo "[4b] foreign revenue USD-converted (BABA/TSM/ASML)"
+for T in BABA TSM ASML; do
+  rev=$(curl -s --max-time 15 "$BASE/api/guidance/$T/basic" | jq -r '.revenue.actual // "null"' 2>/dev/null)
+  if in_usd_range "$rev"; then echo "  ok: $T revenue USD レンジ ($rev)"; else echo "  FAIL: $T revenue=$rev が USD レンジ外 (FX換算回帰=native通貨残留疑い)"; FAIL=1; fi
+done
+#   4c: 海外 reporter の forward consensus_eps は per-share+ADS比で換算不能のため suppress (null) のはず。
+echo "[4c] foreign forward EPS suppressed (BABA/TSM)"
+for T in BABA TSM; do
+  feps=$(curl -s --max-time 15 "$BASE/api/guidance/$T/basic" | jq -r '.forward.next_q.consensus_eps // "null"' 2>/dev/null)
+  if [ "$feps" = "null" ]; then echo "  ok: $T forward eps suppressed"; else echo "  FAIL: $T forward consensus_eps=$feps を露出 (native EPS の $ 誤表示回帰)"; FAIL=1; fi
+done
+#   4d: over-suppression 回帰検出 — 単位整合済の外貨 ADR (TSM) の当期 EPS verdict は保持 (beat/miss) のはず。
+echo "[4d] foreign EPS NOT over-suppressed (TSM 当期 verdict 保持)"
+tv=$(curl -s --max-time 15 "$BASE/api/guidance/TSM/basic" | jq -r '.eps.verdict // "null"' 2>/dev/null)
+if [ "$tv" = "beat" ] || [ "$tv" = "miss" ] || [ "$tv" = "in-line" ]; then echo "  ok: TSM 当期 verdict=$tv 保持"; else echo "  FAIL: TSM 当期 verdict=$tv (正常な外貨 ADR を over-suppress 回帰)"; FAIL=1; fi
+
 echo ""
 if [ "$FAIL" -eq 0 ]; then
   echo "✓ content-audit PASS — known pitfalls 全てクリア"
