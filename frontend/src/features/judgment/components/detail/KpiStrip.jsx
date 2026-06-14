@@ -109,6 +109,7 @@ function AnimatedStat({ stat }) {
       trend={stat.trend}
       verdict={stat.verdict}
       hint={stat.hint}
+      dividerAfter={stat.dividerAfter}
     />
   );
 }
@@ -116,7 +117,9 @@ function AnimatedStat({ stat }) {
 export default function KpiStrip({ stats = [], frameless = false }) {
   return (
     <SectionFade>
-      <Card frameless={frameless}>
+      {/* 2026-06-14 user feedback: KpiStrip の hover 発光がヒーロー(ティッカー/コンパス)への注視を食う。
+          kpi-strip-card で hover の glow/lift を鎮静し、KpiStrip を「静かなデータ帯」 に降格 (主役=ヒーロー)。 */}
+      <Card frameless={frameless} className="kpi-strip-card">
         {/* v97 Phase H: KpiStrip 大型 number display 刷新
             - padding 16/24 → 24/28 (luxury 余白、 大型数値とのバランス)
             - gridTemplateColumns minmax 120 → 140 (大型数値の確保)

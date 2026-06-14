@@ -622,6 +622,8 @@ export default function JudgmentDetail({
       value: `${detail.changePct > 0 ? '+' : ''}${pct}%`,
       label: '前日比',
       trend: detail.changePct > 0 ? 'up' : detail.changePct < 0 ? 'down' : 'neutral',
+      // 2026-06-14 user feedback: 「市場データ(株価/前日比)」 と「基本指標(RS 以降)」 の境界に区切り線。
+      dividerAfter: true,
     });
   }
   // 2026-06-14 user feedback: 「条件合致 N/5」 は銘柄情報でなく判定で、下のファンダ章 + 状態コンパス

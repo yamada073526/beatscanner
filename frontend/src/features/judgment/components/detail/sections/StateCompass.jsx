@@ -20,6 +20,26 @@ import CompassInfoButton from './CompassInfoButton.jsx';
 
 const TESTID = 'state-compass';
 
+// 2026-06-14 user feedback: 各カードをクリックで対応セクションへスクロール (原則4: 1クリック減)。
+//   決算→ファンダの決算 / 地力→ファンダの5条件 / 価格→テクニカルのチャート。
+//   instance 局所 = closest('.ds-judgment-detail') (EarningsFlash の scrollToEarnings と同 idiom)。
+const CELL_SCROLL_TARGET = {
+  earnings: '[data-testid="fundamentals-earnings-section"]',
+  company: '[data-testid="five-conditions-card-wrapper"]',
+  price: '#sec-chart',
+};
+const CELL_SCROLL_LABEL = {
+  earnings: 'クリックで決算セクションへ',
+  company: 'クリックで 5 条件セクションへ',
+  price: 'クリックでチャートへ',
+};
+function scrollToCellSection(e, key) {
+  const sel = CELL_SCROLL_TARGET[key];
+  if (!sel) return;
+  const root = e.currentTarget.closest('.ds-judgment-detail') || document;
+  (root.querySelector(sel) || document.querySelector(sel))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 // 信号 → semantic token 色 (投資業界色ルール: gain=緑/loss=赤/warning=amber/neutral=muted)
 const SIGNAL_COLOR = {
   good: 'var(--color-gain)',
@@ -120,7 +140,7 @@ export default function StateCompass({ selectedTicker, result, guidance, embedde
       <div style={headingRowStyle}>
         <span style={headingChipStyle}>
           <Compass size={12} strokeWidth={2.2} color="var(--color-accent)" aria-hidden="true" />
-          <span style={headingChipTextStyle}>3つの目線</span>
+          <span style={headingChipTextStyle}>3つの指標</span>
         </span>
       </div>
       <div style={cellsRowStyle}>
@@ -128,7 +148,16 @@ export default function StateCompass({ selectedTicker, result, guidance, embedde
           const color = SIGNAL_COLOR[c.signal];
           const Icon = c.Icon;
           return (
-            <div key={c.key} data-testid={`${TESTID}-${c.key}`} style={cellStyle}>
+            <div
+              key={c.key}
+              data-testid={`${TESTID}-${c.key}`}
+              className="compass-cell"
+              role="button"
+              tabIndex={0}
+              title={CELL_SCROLL_LABEL[c.key]}
+              onClick={(e) => scrollToCellSection(e, c.key)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); scrollToCellSection(e, c.key); } }}
+            >
               <span style={{ ...signalDotStyle, background: `color-mix(in srgb, ${color} 12%, transparent)` }}>
                 {Icon && <Icon size={16} strokeWidth={2} color={color} aria-hidden="true" />}
               </span>
@@ -178,17 +207,9 @@ const headingChipStyle = {
 const headingChipTextStyle = { fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)' };
 // 密度向上 (user: スペースが狭い) — cell 最小幅 200→160px で 3-up が narrow pane でも収まる。
 const cellsRowStyle = { display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3, 12px)' };
-// 2026-06-14 user feedback (模範解答 図解): 各セルを card-in-card 化 (bg-subtle + hairline + radius)。
-// ⚠️ glow host (.panel-card/.bs-panel/.surface-card) では「ない」 plain div → 入れ子 surface-card 違反なし
-//   (design_recipes §C-1)。is-arriving 非対象なので compound 4-set も不要。
-const cellStyle = {
-  flex: '1 1 160px', minWidth: 0,
-  display: 'flex', gap: 'var(--space-3, 12px)', alignItems: 'flex-start',
-  background: 'var(--bg-subtle)',
-  border: '1px solid var(--border)',
-  borderRadius: 'var(--radius-md, 12px)',
-  padding: 'var(--space-4, 16px)',
-};
+// card-in-card のスタイルは index.css の .compass-cell に移管 (clickable hover/active/focus を inline では
+// 表現できないため)。⚠️ glow host (.panel-card/.bs-panel/.surface-card) では「ない」 plain div なので
+// 入れ子 surface-card 違反なし (design_recipes §C-1)、is-arriving 非対象で compound 4-set 不要。
 const signalDotStyle = { flexShrink: 0, width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 const cellTextColStyle = { minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 'var(--space-1, 4px)' };
 const cellLabelRowStyle = { display: 'flex', alignItems: 'center', gap: 'var(--space-1, 4px)' };

@@ -5531,6 +5531,12 @@ body {
   flex-direction: column;
   gap: var(--space-2, 8px);
   width: 100%;
+  /* 2026-06-14 user feedback (KpiStrip+保有 違和感, ui-designer review Fix A): 保有=「個人コンテキスト」 を
+     accent 極薄 tint で「銘柄の客観数値(KpiStrip)」 と視覚分離。認知フレームの切替を色で予告。token のみ。 */
+  background: color-mix(in srgb, var(--color-accent) 6%, var(--bg-subtle));
+  border: 1px solid color-mix(in srgb, var(--color-accent) 15%, var(--border));
+  border-radius: var(--radius-md, 12px);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
 }
 
 .triage-holdings-row {
@@ -9995,6 +10001,56 @@ button.ds-chip.hero-watch-add:hover svg {
    (rgba は .bs-panel と 1:1 mirror、raw hex ではないので token 規律に抵触しない)。light は --bg-card(#fff)で一致済。 */
 [data-theme="dark"] .verdict-hero--compass-header {
   background: linear-gradient(135deg, rgba(15, 23, 42, 0.92) 0%, rgba(11, 17, 32, 0.96) 100%);
+}
+
+/* ── 2026-06-14 user feedback: 状態コンパスの 3 カード (決算/地力/価格) を clickable 化 ──
+   各カードクリックで対応セクションへスクロール (決算→決算 / 地力→5条件 / 価格→チャート)。
+   card-in-card の base (bg-subtle + hairline + radius) を CSS に集約し、hover/active/focus で
+   「押せる」 affordance を付与 (inline style では :hover を表現できないため class 化)。
+   ⚠️ glow host (.panel-card/.bs-panel/.surface-card) では「ない」 plain div。box-shadow 発光なし、
+   token のみ・raw hex なし。CompassInfoButton(ⓘ) は内部で stopPropagation 済 (カード遷移と独立)。 */
+.compass-cell {
+  flex: 1 1 160px;
+  min-width: 0;
+  display: flex;
+  gap: var(--space-3, 12px);
+  align-items: flex-start;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 12px);
+  padding: var(--space-4, 16px);
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 120ms ease;
+}
+.compass-cell:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--color-accent) 6%, var(--bg-subtle));
+}
+.compass-cell:active {
+  transform: translateY(1px);
+}
+.compass-cell:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .compass-cell { transition: none; }
+  .compass-cell:active { transform: none; }
+}
+
+/* ── 2026-06-14 user feedback: KpiStrip の hover 発光鎮静 (ヒーローへの注視を優先) ──
+   KpiStrip は bs-panel だが clickable ではないため、フル cyan glow + lift の hover は誤解 + 主役(ヒーロー)
+   と競合する。kpi-strip-card で hover を rest と同じ静的状態に固定 (glow/lift/cyan border を出さない)。
+   specificity: .bs-panel.kpi-strip-card:hover (0,2,1) > .bs-panel:hover (0,1,1)。token のみ・raw shadow なし。 */
+.bs-panel.kpi-strip-card:hover {
+  transform: none;
+  box-shadow: var(--shadow-1);
+  border-color: var(--border);
+}
+[data-theme="dark"] .bs-panel.kpi-strip-card:hover {
+  transform: none;
+  box-shadow: var(--shadow-1);
+  border-color: var(--border);
 }
 
 /* ── Phase 2.9 Sprint 3 #会社概要 visual 引き算 (発光階層 3 体合議 verdict) ────
