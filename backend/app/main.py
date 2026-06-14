@@ -5298,6 +5298,52 @@ def _guard_revenue_basis_mismatch(
     return rev_label, rev_pct, rev_reason, None
 
 
+def _guard_eps_currency_mismatch(
+    eps_label: str, eps_pct: float | None, eps_reason: str | None,
+    signal_quality: dict | None = None, income_row: dict | None = None,
+    threshold: float = 70.0,
+) -> tuple[str, float | None, str | None, str | None]:
+    """海外決算 (非USD 報告) の ADR で EPS の実績 vs 予想が単位を跨いで比較不能なケースを判定保留にする。
+
+    背景 (content-audit 2026-06-15): BABA は reportedCurrency=CNY で、 FMP の実績 EPS (earnings-surprises) は
+    GAAP per ordinary share、 アナリスト予想 (analyst-estimates) は non-GAAP per ADS (USD)。 ADS:ordinary=8:1 ×
+    通貨 × GAAP/非GAAP が混在し、 予想比 -91.2% という偽 miss が出ていた (finance リテラシー高 user の Trust Cliff)。
+
+    発火条件 (AND): reportedCurrency が存在し USD でない **かつ** |eps_surprise| >= threshold (既定 70%)。
+    外貨建てでも単位整合済の ADR (TSM +5.4% / ASML +8.4% / JD +29.8% 等) は magnitude が穏当で発火せず保持される
+    (2026-06-15 較正: 外貨 10 銘柄で BABA -91% のみ isolate)。 normalize でなく suppression で対処 (単位変換は脆い)。
+
+    Returns: (eps_label, eps_pct, eps_reason, eps_note)。 発火時は actual/estimated も caller 側で None 化する
+    (実績値自体が壊れた単位のため表示しない)。 signal_quality dict があれば in-place で confidence を low に降格。
+    """
+    cur = None
+    if isinstance(income_row, dict):
+        cur = (income_row.get("reportedCurrency") or "").strip().upper() or None
+    if cur and cur != "USD" and eps_pct is not None and abs(eps_pct) >= threshold:
+        if isinstance(signal_quality, dict):
+            signal_quality["confidence"] = "low"
+            signal_quality["basis_mismatch"] = True
+        return (
+            "unknown",
+            None,
+            "海外決算 (外貨建て) の実績 EPS と米国式アナリスト予想は単位 (通貨・株式クラス・GAAP/非GAAP) が異なり、予想比を保留しています",
+            "海外決算 (外貨建て) のため、EPS の予想比は単位差により比較できません",
+        )
+    return eps_label, eps_pct, eps_reason, None
+
+
+def _eps_yoy_foreign_artifact(eps_yoy: float | None, income_history: list | None, threshold: float = 200.0) -> bool:
+    """来期 EPS YoY が海外決算 (非USD) の単位混在による artifact かを判定 (content-audit 2026-06-15: BABA +489%)。
+
+    reportedCurrency != USD かつ |YoY| >= threshold (既定 200%) で True。 正常な外貨高成長 (<200%) は保持。
+    income_history[0] = 最新四半期 (lender 判定の _fwd_rev_suppress と同じ参照)。"""
+    if eps_yoy is None or abs(eps_yoy) < threshold:
+        return False
+    row = income_history[0] if (income_history and isinstance(income_history[0], dict)) else None
+    cur = (row.get("reportedCurrency") if row else None) or ""
+    return bool(cur.strip().upper() not in ("", "USD"))
+
+
 async def _fetch_sector_industry(ticker: str, fmp_key: str | None) -> tuple[str | None, str | None]:
     """FMP /profile の (sector, industry) を取得。 safe_fmp_get の `profile::TICKER` cache (24h) を共有するため
     ProfileCard 等と重複 fetch しない。 失敗時は (None, None)。 _guidance_impl で銀行判定に使う。"""
@@ -6931,6 +6977,9 @@ def _compute_forward_outlook(
         elif ya_eps > 0 and abs(ya_eps) >= 0.05:
             eps_yoy = round((consensus_eps - ya_eps) / abs(ya_eps) * 100, 1)
         # ya_eps < 0 & consensus <= 0 (赤字継続) / |ya_eps| < 0.05 (near-zero) → None
+    # content-audit 2026-06-15: 海外決算 (非USD) の単位混在で来期 EPS YoY が artifact 化するのを抑止 (BABA +489%)。
+    if _eps_yoy_foreign_artifact(eps_yoy, income_history):
+        eps_yoy = None
 
     # period_label: fiscal 安全のため estimate の period/calendarYear を優先、 無ければ period-end 月を事実表記。
     _p = next_e.get("period")
@@ -7110,6 +7159,9 @@ def _compute_forward_outlook(
                             fy_eps_turnaround = True
                         elif fy_ya_eps > 0 and abs(fy_ya_eps) >= 0.05:
                             fy_eps_yoy = round((fy_consensus_eps - fy_ya_eps) / abs(fy_ya_eps) * 100, 1)
+                    # content-audit 2026-06-15: 海外決算 (非USD) の単位混在で通期 EPS YoY が artifact 化するのを抑止。
+                    if _eps_yoy_foreign_artifact(fy_eps_yoy, income_history):
+                        fy_eps_yoy = None
                     # アナリスト数 3 社未満は平均誤認のため YoY 抑止 (next_q と同条件)
                     if fy_cnt_eps is not None and fy_cnt_eps < MIN_ANALYSTS:
                         fy_eps_yoy = None
@@ -7353,6 +7405,21 @@ async def guidance_basic(ticker: str, request: Request, with_guidance: bool = Fa
 
         # signal_quality envelope (handover v82 Phase 0、 Hallucination Guard 基盤)
         eps_source = eps_result.get("source", "fmp") if isinstance(eps_result, dict) else "fmp"
+        # content-audit 2026-06-15: 海外決算 (非USD) ADR の EPS 単位混在ガード (BABA -91% 偽 miss)。
+        # signal_quality を先に構築し、 ミスマッチ時は confidence 降格 + actual/estimated を None 化 (実績値も壊れた単位)。
+        eps_signal_quality = _build_signal_quality(
+            source=eps_source,
+            date_str=surprise_date or income_date,
+            consensus_count=eps_result.get("consensus_count") if isinstance(eps_result, dict) else None,
+        )
+        eps_label, eps_pct, eps_reason, _eps_mismatch_note = _guard_eps_currency_mismatch(
+            eps_label, eps_pct, eps_reason,
+            signal_quality=eps_signal_quality,
+            income_row=income_q[0] if income_q else None,
+        )
+        if _eps_mismatch_note:
+            eps_estimated = None
+            eps_actual = None
         # revenue source は revenue_actual_fmp が取れたら fmp、 そうでなければ yfinance fallback
         rev_source = "fmp" if (
             isinstance(eps_result, dict) and eps_result.get("revenue_actual_fmp") is not None
@@ -7411,11 +7478,8 @@ async def guidance_basic(ticker: str, request: Request, with_guidance: bool = Fa
                 "verdict": eps_label,
                 "verdict_reason": eps_reason,
                 "source": eps_source,
-                "signal_quality": _build_signal_quality(
-                    source=eps_source,
-                    date_str=surprise_date or income_date,
-                    consensus_count=eps_result.get("consensus_count") if isinstance(eps_result, dict) else None,
-                ),
+                "signal_quality": eps_signal_quality,
+                "compare_unreliable": bool(_eps_mismatch_note),
             },
             "revenue": {
                 "estimated": revenue_estimated,
@@ -7429,6 +7493,7 @@ async def guidance_basic(ticker: str, request: Request, with_guidance: bool = Fa
             "revenue_actual": float(revenue_actual) if revenue_actual is not None else None,
             "revenue_estimated": float(revenue_estimated) if revenue_estimated is not None else None,
             "revenue_data_note": rev_note,
+            "eps_data_note": _eps_mismatch_note,  # content-audit 2026-06-15: 海外決算 EPS 単位差の注記 (None=正常)
             # v146 前方視界 (来期コンセンサス YoY)。 None = コンセンサス取得不可で非表示。
             "forward": forward,
         }
@@ -7561,6 +7626,15 @@ async def _guidance_impl(ticker: str, request: Request) -> dict:
     )
     # consumers (GuidanceCard 再計算 / 図解 trends) が読む抑止フラグ。
     _rev_compare_unreliable = (rev_label == "unknown" and _rev_mismatch_note is not None)
+    # content-audit 2026-06-15: 海外決算 (非USD) ADR の EPS 単位混在ガード (BABA -91% 偽 miss、 guidance_basic と mirror)。
+    eps_label, eps_pct, eps_reason, _eps_mismatch_note = _guard_eps_currency_mismatch(
+        eps_label, eps_pct, eps_reason,
+        income_row=income_q[0] if income_q else None,
+    )
+    if _eps_mismatch_note:
+        eps_estimated = None
+        eps_actual = None
+    _eps_compare_unreliable = bool(_eps_mismatch_note)
 
     result: dict = {
         "ticker": ticker.upper(),
@@ -7573,6 +7647,7 @@ async def _guidance_impl(ticker: str, request: Request) -> dict:
             "verdict": eps_label,
             "verdict_reason": eps_reason,
             "source": eps_result.get("source", "fmp"),
+            "compare_unreliable": _eps_compare_unreliable,
         },
         "revenue": {
             "estimated": revenue_estimated,
@@ -7588,6 +7663,7 @@ async def _guidance_impl(ticker: str, request: Request) -> dict:
             None if revenue_estimated is not None else "企業が次期ガイダンスを公式に開示していません"
         ),
         "revenue_compare_unreliable": _rev_compare_unreliable,
+        "eps_data_note": _eps_mismatch_note,  # content-audit 2026-06-15: 海外決算 EPS 単位差の注記 (None=正常)
     }
 
     if sec_result:
