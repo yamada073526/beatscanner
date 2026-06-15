@@ -98,7 +98,7 @@ function DotGauge({ score, total, color }) {
  * @param {boolean} [props.embedded=false] - true で VerdictHero と 1 枚の発光カードに統合する mode
  *   (上に hairline 継ぎ目 + Hero 本文と揃う左右 padding、外側 marginBottom なし)。2026-06-14。
  */
-export default function StateCompass({ selectedTicker, result, guidance, embedded = false }) {
+export default function StateCompass({ selectedTicker, result, guidance, embedded = false, headerV2 = false }) {
   const [technical, setTechnical] = useState(null);
   const [techLoading, setTechLoading] = useState(false);
 
@@ -129,9 +129,10 @@ export default function StateCompass({ selectedTicker, result, guidance, embedde
   }
 
   // 2026-06-14 user feedback: ラベルを短縮 (決算の出来→決算 / 会社の地力→地力 / 今の価格→価格)。
+  // 2026-06-15 (D2 第3手, headerV2): 「地力」→「会社力」(初心者語彙、5体 verdict 由来)。flag default OFF。
   const cells = [
     { key: 'earnings', label: '決算', ...earningsCell(guidance) },
-    { key: 'company', label: '地力', ...companyCell(result) },
+    { key: 'company', label: headerV2 ? '会社力' : '地力', ...companyCell(result) },
     { key: 'price', label: '価格', ...priceCell },
   ];
 
@@ -142,7 +143,8 @@ export default function StateCompass({ selectedTicker, result, guidance, embedde
       <div style={headingRowStyle}>
         <span style={headingChipStyle}>
           <Compass size={12} strokeWidth={2.2} color="var(--color-accent)" aria-hidden="true" />
-          <span style={headingChipTextStyle}>3つの指標</span>
+          {/* 2026-06-15 (D2 第3手, headerV2): 見出しを「決算×会社×価格」に (3カード構成を明示、5体 verdict)。flag default OFF。 */}
+          <span style={headingChipTextStyle}>{headerV2 ? '決算×会社×価格' : '3つの指標'}</span>
         </span>
       </div>
       <div style={cellsRowStyle}>
@@ -153,7 +155,7 @@ export default function StateCompass({ selectedTicker, result, guidance, embedde
             <div
               key={c.key}
               data-testid={`${TESTID}-${c.key}`}
-              className="compass-cell"
+              className={headerV2 ? 'compass-cell compass-cell--header-v2' : 'compass-cell'}
               role="button"
               tabIndex={0}
               title={CELL_SCROLL_LABEL[c.key]}

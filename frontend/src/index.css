@@ -10038,6 +10038,14 @@ button.ds-chip.hero-watch-add:hover svg {
 .verdict-hero--compass-header:not(:hover):not(.is-arriving) {
   box-shadow: var(--shadow-2);
 }
+/* ── 2026-06-15 (D2 第3手・仕上げ、flag ?pane3_header_v2=1 default OFF): 冒頭 verdict の rest glow 撤去 ──
+   StateCompass を主役化するため verdict-hero の rest 影をゼロ化 (arrival/hover の glow は親 .verdict-hero の
+   compound 4-set が担うため維持=Aman スポットライト)。⚠️ 既存 compound 4-set は一切触らず、本 modifier class を
+   JS が flag ON 時のみ付与する追加レイヤ (発光高リスク領域・design_recipes §C-1〜C-4 遵守、追加のみ)。
+   specificity: header-v2 + compass-header の 2 class で rest 規則 (1 class) を上書き、:not で arrival/hover は除外。 */
+.verdict-hero--header-v2.verdict-hero--compass-header:not(:hover):not(.is-arriving) {
+  box-shadow: none;
+}
 /* 2026-06-14 user feedback: dark で --bg-card(#1e2433 単色) は KpiStrip(.bs-panel) のグラデより
    白っぽく見え、ティッカー/D-XX バッジと KpiStrip の地色がズレていた。bs-panel dark と同一グラデに揃える
    (rgba は .bs-panel と 1:1 mirror、raw hex ではないので token 規律に抵触しない)。light は --bg-card(#fff)で一致済。 */
@@ -10078,6 +10086,14 @@ button.ds-chip.hero-watch-add:hover svg {
 @media (prefers-reduced-motion: reduce) {
   .compass-cell { transition: none; }
   .compass-cell:active { transform: none; }
+}
+/* ── 2026-06-15 (D2 第3手, flag ?pane3_header_v2=1 default OFF): compass-cell hover を cyan→neutral ──
+   cyan hover は clickable cell 上で「上昇」 を暗示し信号色 (gain=緑) と衝突しうるため、headerV2 では中立
+   (text-primary ベースの淡い lift) に。cyan は brand chrome であって上昇 signal ではない (投資業界色ルール)。
+   specificity: 2 class で .compass-cell:hover (1 class) を上書き。raw hex なし・token のみ。 */
+.compass-cell.compass-cell--header-v2:hover {
+  border-color: color-mix(in srgb, var(--text-primary) 22%, var(--border));
+  background: color-mix(in srgb, var(--text-primary) 4%, var(--bg-subtle));
 }
 
 /* ── 2026-06-14 user feedback: KpiStrip の発光鎮静 (ヒーローへの注視を優先) ──

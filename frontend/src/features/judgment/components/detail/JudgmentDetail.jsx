@@ -314,6 +314,23 @@ function isPane3Compass() {
   }
 }
 
+// 2026-06-15 (D2 第3手・仕上げ): 冒頭 verdict 再設計 v2。StateCompass を主役化し、verdict-hero の rest glow を
+// 撤去 (arrival/hover の glow は親 .verdict-hero の compound 4-set が担うため維持=Aman スポットライト演出)。
+// 周辺 (完全性バッジ/KpiStrip) を StateCompass 近接へ圧縮・純化。発光高リスク領域につき default OFF・完全可逆
+// (?pane3_header_v2=1 / =0 or localStorage 'pane3_header_v2'='1')。帰宅後 dogfood→GO で default ON 昇格
+// (compass / flash と同じ昇格経路)。
+function isPane3HeaderV2() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('pane3_header_v2');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('pane3_header_v2') === '1';
+  } catch {
+    return false;
+  }
+}
+
 // 2026-06-14: AI要約 (SummaryBrief) を封印。状態コンパス (信号機サマリー) が冒頭の要約機能を代替したため
 // 不要に (user 判断)。復活する場合は true に戻す (各章サマリーへの一本化は別 sprint)。
 const SHOW_AI_SUMMARY = false;
@@ -1224,7 +1241,10 @@ export default function JudgmentDetail({
                     bg/border/shadow のみ追加。入れ子 surface-card なし (Hero frameless)、contain:paint なし。 */}
                 <VerdictHero
                   verdict={isPane3Compass() ? 'unknown' : verdict}
-                  className={isPane3Compass() ? 'verdict-hero--compass-header' : ''}
+                  className={[
+                    isPane3Compass() ? 'verdict-hero--compass-header' : '',
+                    isPane3HeaderV2() ? 'verdict-hero--header-v2' : '',
+                  ].filter(Boolean).join(' ')}
                 >
                   <Hero
                     ticker={selectedTicker}
@@ -1255,6 +1275,7 @@ export default function JudgmentDetail({
                       result={result}
                       guidance={guidance}
                       embedded
+                      headerV2={isPane3HeaderV2()}
                     />
                   )}
                   {/* 2026-06-14 (D2 第1手・?pane3_order_v2=1): 決算ハイライトを冒頭(Hero 直下)へ昇格。
