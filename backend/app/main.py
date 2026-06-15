@@ -12919,7 +12919,14 @@ def _detect_resistance_retest(
         return out
     if box_support.get("role") != "resistance_turned_support":
         return out
-    if (box_support.get("touch_count") or 0) < 4:
+    # 市場下降トレンド除外 (落ちてくるナイフ回避、Phase-gate テクニカル定量 verdict M1): SPY 200DMA 下は非該当。
+    # cup_handle.market_context は _detect_cup_handle が算出済 (weak/normal/strong)。market_context は SPY 基準で
+    # 銘柄横断的に uniform なため、地合い悪化局面でリテスト信号が出続けるのを防ぐ。
+    if isinstance(cup_handle, dict) and cup_handle.get("market_context") == "weak":
+        return out
+    # touch >= 5 (O'Neil「3回は偶然、5回以上は本物」、frontend boxSupport gate と統一: Phase-gate frontend-architect M-1。
+    # backend>=4 / frontend>=5 の非対称を解消し、検出と表示の層間整合を取る)。
+    if (box_support.get("touch_count") or 0) < 5:
         return out
     today = closes[-1] if closes else None
     band_high = box_support.get("band_high")

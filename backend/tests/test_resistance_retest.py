@@ -72,9 +72,16 @@ def test_overhead_resistance_excluded():
     assert r["detected"] is False
 
 
-def test_touch_below_4_excluded():
-    # 帯が未成熟(touch < 4) → 非該当
-    r = _run(205.19, 236.54, _bs(194.84, 191.92, 197.76, 3), _ch(224.32))
+def test_touch_below_5_excluded():
+    # 帯が未成熟(touch < 5、O'Neil「5回以上は本物」/ frontend boxSupport gate と統一) → 非該当
+    r = _run(205.19, 236.54, _bs(194.84, 191.92, 197.76, 4), _ch(224.32))
+    assert r["detected"] is False
+
+
+def test_market_weak_excluded():
+    # SPY 下降トレンド(cup_handle.market_context="weak") → 落ちてくるナイフ回避で非該当
+    cup = {"pivot": {"price": 224.32}, "market_context": "weak"}
+    r = _run(205.19, 236.54, _bs(194.84, 191.92, 197.76, 9), cup)
     assert r["detected"] is False
 
 
