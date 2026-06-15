@@ -33,6 +33,8 @@ export const BUY_ZONE_LABEL_JP = {
   box_support:       '長期ボックス支持線目安',
   // v134 P2 Phase 2 (SPEC v2 §6、 user gate 2 release 前着手承認): 押し目接近中の局面 label
   pullback_to_support: '押し目接近中',
+  // v219 (SPEC_2026-06-15_resistance-retest、user承認): 旧レジスタンスのリテスト水準接近 label
+  resistance_retest: '旧レジスタンス・リテスト水準',
   unknown:           '判定不可',
 };
 
@@ -79,6 +81,14 @@ export const BUY_ZONE_DESC_JP = {
   pullback_to_support: {
     conclusion: '直近高値から押し戻し、 長期支持線まで残り {DIST_PCT}% の局面です。',
     detail: '米国成長株投資では、 ブレイクアウト後の押し目で支持線が機能するかを観察する手法が紹介されています。 band low を明確に下抜けた場合は pattern failure の signal として、 参考水準に band low -3% 前後が言及される事例があります。 投資判断はご自身でご確認ください。',
+  },
+  // v219 (SPEC_2026-06-15_resistance-retest): 旧上値抵抗→支持転換 水準まで押し戻した局面。
+  // {RETRACE_PCT}=直近高値からの押し戻し率は BuyZoneCard で inject (数値 backend、 narration 静的)。
+  // §38: 「割り込めば pattern failure」 の両面 + 「上昇を保証しない」 + 「ご自身で確認」 を必須。緑禁止 (amber)。
+  resistance_retest: {
+    conclusion: '直近高値から {RETRACE_PCT}% 押し戻し、 旧レジスタンス・リテスト水準に接近している局面です。',
+    detail: 'かつての上値抵抗線がサポートに転換した水準まで株価が戻った局面として観察されています。 この水準を割り込めばパターンの不成立 (pattern failure) のサインとされ、 維持された場合でも将来の上昇を保証するものではありません。 投資判断はご自身でご確認ください。',
+    shallow_note: '押し戻しは浅く、 リテスト水準への到達途上の段階です。',
   },
   unknown: {
     conclusion: 'pivot / support の判定を保留しています。',

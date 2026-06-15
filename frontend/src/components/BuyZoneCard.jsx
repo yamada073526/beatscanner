@@ -37,6 +37,21 @@ function fmtPct(v) {
   return `${sign}${v.toFixed(1)}%`;
 }
 
+// v219 (SPEC_2026-06-15_resistance-retest、user承認): 旧レジスタンス・リテスト水準 表示 flag。
+// default OFF・完全可逆。本番公開(default ON / メール配信 / Premium gate / LP 掲載)は朝の6体合議後。
+// ?retest=1 / =0 or localStorage 'retest'='1'。
+function isRetestEnabled() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const q = new URLSearchParams(window.location.search).get('retest');
+    if (q === '1') return true;
+    if (q === '0') return false;
+    return window.localStorage?.getItem('retest') === '1';
+  } catch {
+    return false;
+  }
+}
+
 // v185 B (2026-06-08): compact=true で narration detail / meta を抑制 (conclusion + 免責は保持)。
 // v185 dogfood (3体合議): variant='unified' は横並び統一の signal。BuyZone は既に card-price-hero パターン
 //   (chip+価格+現在価格delta を先頭) のため hero/構成は不変。Step3 で is-card-unified class のみ付与。
@@ -115,19 +130,33 @@ export default function BuyZoneCard({ ticker, compact = false, variant = 'defaul
   const useBox = !!boxSupport;
   const cupState = cupHandle?.state;
   const isPullback = cupState === 'pullback_to_support';
-  const zoneKey = isPullback
-    ? 'pullback_to_support'
-    : (useBox ? 'box_support' : classifyBuyZone('breakout_confirmed'));
+  // v219 (flag ?retest=1 default OFF): backend resistance_retest (pivot 基準押し戻し率) が detected かつ
+  //   box_support あり(refPrice 用)なら「旧レジスタンス・リテスト水準接近」 を出す。本番公開は朝の6体合議後。
+  const retest = technical?.patterns?.resistance_retest || null;
+  const isRetest = isRetestEnabled() && !!retest?.detected && useBox;
+  const zoneKey = isRetest
+    ? 'resistance_retest'
+    : (isPullback
+      ? 'pullback_to_support'
+      : (useBox ? 'box_support' : classifyBuyZone('breakout_confirmed')));
   const label = BUY_ZONE_LABEL_JP[zoneKey];
   const desc = BUY_ZONE_DESC_JP[zoneKey];
-  const cardTitle = isPullback
-    ? '押し目接近中 (支持線テスト)'
-    : (useBox ? '長期ボックス支持線' : '直近ブレイクアウト支持線');
+  const cardTitle = isRetest
+    ? '旧レジスタンス・リテスト水準'
+    : (isPullback
+      ? '押し目接近中 (支持線テスト)'
+      : (useBox ? '長期ボックス支持線' : '直近ブレイクアウト支持線'));
 
   // narration placeholder inject (数値は backend 計算、 JS は文字列置換のみ)
   let detailText;
   let conclusionText = desc.conclusion;
-  if (isPullback) {
+  if (isRetest) {
+    // {RETRACE_PCT} を backend の retracement_pct で inject。shallow は注記を付加。
+    const rp = Number.isFinite(retest?.retracement_pct) ? Math.round(retest.retracement_pct) : '—';
+    conclusionText = desc.conclusion.replace('{RETRACE_PCT}', String(rp));
+    detailText = desc.detail
+      + (retest.approach_level === 'shallow' && desc.shallow_note ? ` ${desc.shallow_note}` : '');
+  } else if (isPullback) {
     // {DIST_PCT} を backend の dist_to_band_pct で inject、 absolute value で表示
     const distPct = Number.isFinite(cupHandle?.dist_to_band_pct)
       ? Math.abs(cupHandle.dist_to_band_pct).toFixed(1)
@@ -146,7 +175,9 @@ export default function BuyZoneCard({ ticker, compact = false, variant = 'defaul
   // v130 P1 #5 (3 体合議): 支持線/breakout 価格 を hero に、 現在価格との distance を delta sub に。
   // 「これが割れたら撤退」 の閾値が hero として最重要 (qa-dogfooder verdict)。
   const heroLabel = useBox ? '支持線' : 'ブレイクアウト';
-  const deltaTone = distancePct == null ? 'muted' : (distancePct >= 0 ? 'gain' : 'loss');
+  // v219 §38: 価格水準カードの delta を緑(gain)で塗らない (上抜け/支持線 distance に買い暗示を持たせない)。
+  //   中立(muted)に統一 (box_support / pullback / retest 共通、金商法 §38)。
+  const deltaTone = 'muted';
 
   return (
     <section
@@ -157,9 +188,9 @@ export default function BuyZoneCard({ ticker, compact = false, variant = 'defaul
     >
       {/* v132 P1-G + v134 P2 Phase 2: chip + hero 1 row 統合、 pullback 状態は「押し目接近中」 chip (warning) で区別。 */}
       <div className="card-price-hero" data-testid={isPullback ? 'buy-zone-card-pullback-to-support' : 'buy-zone-card-price-hero'}>
-        <Chip variant="display" size="xs" tone={isPullback ? 'warning' : 'gain'} className="card-price-hero__chip">
+        <Chip variant="display" size="xs" tone={(isPullback || isRetest) ? 'warning' : 'muted'} className="card-price-hero__chip">
           <MapPin size={11} strokeWidth={2} className="card-zone-context__icon" aria-hidden="true" />
-          {isPullback ? '押し目接近中' : 'サポートゾーン'}
+          {isRetest ? 'リテスト接近中' : (isPullback ? '押し目接近中' : 'サポートゾーン')}
         </Chip>
         <span className="card-price-hero__value" aria-label={`${heroLabel} ${fmtUsd(refPrice)}`}>
           {fmtUsd(refPrice)}
@@ -172,7 +203,8 @@ export default function BuyZoneCard({ ticker, compact = false, variant = 'defaul
       </div>
       <header className="bzc-head">
         <h3 className="bzc-title">{cardTitle}</h3>
-        <Chip variant="display" size="xs" tone="accent">
+        {/* v219 §38: ラベル chip の tone を accent(シアン=ブランド色、上昇暗示誤読) → muted(中立)に。 */}
+        <Chip variant="display" size="xs" tone="muted">
           {label}
         </Chip>
       </header>
