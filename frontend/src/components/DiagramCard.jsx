@@ -2285,6 +2285,7 @@ export default function DiagramCard({
                 color: 'var(--text-primary)',
                 lineHeight: 1.25,
                 marginBottom: '8px',
+                wordBreak: 'auto-phrase', // 2026-06-15: headline も文節単位改行で単語途中の折り返しを回避
               }}>
                 {data.headline}
               </div>
@@ -2451,6 +2452,9 @@ export default function DiagramCard({
               <div className="narrative-appear" style={{
                 fontSize: '14px', color: 'var(--text-primary)', fontWeight: 500,
                 lineHeight: 1.55, maxWidth: '480px', margin: '10px auto 0', padding: '0 8px',
+                // 2026-06-15 user dogfood: 中央寄せ長文が「増/加」 等 単語途中で折り返す違和感を解消。
+                // 文節単位改行 (Chrome 119+/Safari 17.4+、 未対応 browser は通常折り返しに graceful fallback)。
+                wordBreak: 'auto-phrase',
               }}>
                 {data.summary}
               </div>
