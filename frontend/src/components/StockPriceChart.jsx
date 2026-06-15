@@ -143,7 +143,8 @@ const PERIODS = [
   { label: '1年',   value: '1y' },
   { label: '3年',   value: '3y' },
 ];
-// v216 B10: V2 = 6M/5Y 追加 + 英略短縮 (segmented control 用)
+// v216 B10: V2 = 6M/5Y 追加 + 英略短縮 (segmented control 用)。
+//   3Y は 5Y に統合 (長期トレンドは 5Y 1 本化)。 backend period_days には 3y を後方互換で残置。
 const PERIODS_V2 = [
   { label: '1M', value: '1m' },
   { label: '3M', value: '3m' },
@@ -397,9 +398,10 @@ function isNonEquityTicker(ticker) {
 }
 
 function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTitle = false, isEtf = false }) {
-  const [period, setPeriod] = useState('1y');
   // v216 B10: chart tabs v2 (segmented control + 6M/5Y) は mount 時 1 回評価 (URL param 優先)。
   const [chartTabsV2] = useState(() => isChartTabsV2());
+  // v216 B10 PDCA(QA): V2 は決算後コンテキストで直近の値動きを見せるため 3m default。 1y が良ければ revert。
+  const [period, setPeriod] = useState(() => (chartTabsV2 ? '3m' : '1y'));
   const periods = chartTabsV2 ? PERIODS_V2 : PERIODS;
   // v147: 非株式 (指数/先物/為替/DXY) では「個別株前提」 の売買・pattern オーバーレイを一括非表示にする gate。
   //   user dogfood 2026-06-12: ETF (SPY/QQQ/VTI 等) も同じ理由で非株式扱いにする (O'Neil 個別グロース株の
@@ -870,10 +872,14 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
       if (period === '1m') {
         key = String(d.date); // daily 全表示
       } else if (period === '3m' || period === '6m') {
-        // 週単位 (date を週初に丸める)
+        // 週単位 (date を週初に丸める)。 v216 B10 PDCA: 6m は 26 週で過密 → 偶数週のみ (13 tick)。
         const dt = new Date(d.date);
         const weekStart = new Date(dt);
         weekStart.setDate(dt.getDate() - dt.getDay());
+        if (period === '6m') {
+          const weekNum = Math.floor(weekStart.getTime() / (7 * 24 * 3600 * 1000));
+          if (weekNum % 2 !== 0) continue;
+        }
         key = weekStart.toISOString().slice(0, 10);
       } else if (period === '5y') {
         // v216 B10: 5y は月初 60 個が過密 → 四半期 (1,4,7,10月) に間引き。 tickFormatter は既存 else で整合。
@@ -1065,34 +1071,14 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
             </button>
           </div>
           {chartTabsV2 ? (
-            <div
-              role="group"
-              aria-label="期間"
-              style={{
-                display: 'inline-flex',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm, 6px)',
-                overflow: 'hidden',
-              }}
-            >
-              {periods.map((p, i) => (
+            <div role="group" aria-label="期間" className="seg-period-group">
+              {periods.map((p) => (
                 <button
                   key={p.value}
                   type="button"
                   onClick={() => setPeriod(p.value)}
                   aria-pressed={period === p.value}
-                  style={{
-                    appearance: 'none',
-                    border: 'none',
-                    borderLeft: i === 0 ? 'none' : '1px solid var(--border)',
-                    background: period === p.value ? 'var(--color-accent)' : 'transparent',
-                    color: period === p.value ? 'var(--bg-primary)' : 'var(--text-secondary)',
-                    padding: '5px 11px',
-                    fontSize: '0.8125rem',
-                    fontWeight: period === p.value ? 700 : 500,
-                    cursor: 'pointer',
-                    transition: 'background 0.15s ease, color 0.15s ease',
-                  }}
+                  className={`seg-period-btn${period === p.value ? ' active' : ''}`}
                 >
                   {p.label}
                 </button>

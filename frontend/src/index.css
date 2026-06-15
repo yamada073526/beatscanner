@@ -1525,6 +1525,48 @@ body {
   box-shadow: 0 0 8px rgba(34,211,238,0.25);
 }
 
+/* ─── v216 B10: chart tabs v2 segmented control (period) ───
+   折れ線/ローソクトグルと同 primitive。 PDCA: inline style から class 化で
+   (1) 非アクティブ hover フィードバック (2) active 文字色を light/dark で出し分け
+   (cyan 背景に対し常に濃色 #0f172a = light:--text-primary / dark:--bg-primary、 WCAG 合格)
+   (3) アイコンボタンと光学的高さ揃え を担保。 */
+.seg-period-group {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.seg-period-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0 11px;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.seg-period-btn + .seg-period-btn { border-left: 1px solid var(--border); }
+@media (hover: hover) {
+  .seg-period-btn:not(.active):hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+}
+.seg-period-btn.active {
+  background: var(--color-accent);
+  color: var(--text-primary);
+  font-weight: 700;
+}
+[data-theme="dark"] .seg-period-btn.active {
+  color: var(--bg-primary);
+}
+
 /* ─── Sprint 4: section-header-icon (lucide-react icon 統一 token) ───
    brand-aspiration verdict: baseline = neutral (var(--text-secondary))、hover/active 時のみ cyan。
    ui-designer verdict: stroke 1.5 / size 16-18px / currentColor で token 化。
