@@ -12890,6 +12890,82 @@ def _detect_horizontal_support(
     }
 
 
+def _detect_resistance_retest(
+    times: list[str],
+    highs: list[float],
+    lows: list[float],
+    closes: list[float],
+    box_support: dict | None,
+    cup_handle: dict | None,
+) -> dict:
+    """旧レジスタンス・リテスト水準 検出 (じっちゃま 2026-06-13 ライブ「ブレイクアウトした旧抵抗が
+    支持に転換し、その水準まで押し戻した銘柄」)。SPEC_2026-06-15_resistance-retest。
+
+    数値物理層 (LLM 不使用)。narration は frontend buyZoneLabels.js 静的 dict。
+    additive: 既存 UI には影響せず、frontend flag (?retest=1) 下でのみ表示する。
+
+    判定 (3段):
+      - box_support.role == resistance_turned_support (旧抵抗→支持転換 = ブレイク済の事実証明)
+      - touch_count >= 4 (strong 帯) かつ level >= 52週高値*0.85 (崩落後ベース除外)
+      - band_low を 0.5% 超下回ったら除外 (サポート割れ = AVGO 型)
+      - retracement_pct = (直近高値 cup pivot - 現在値)/(pivot - band_high) = 押し戻し到達度
+          deep >= 50% / shallow 30-50% / それ未満は非該当 (まだ高値圏)
+      - pivot 不在 (cup 未検出 = GOOG 型) は「ブレイクアウト点」 が定義できず非該当。
+        公募価格等の裁量水準を support 扱いするのは §38 risk のため MVP では救済しない
+        (user 承認 2026-06-15)。
+    """
+    out = {"detected": False, "state": "resistance_retest", "approach_level": None}
+    if not isinstance(box_support, dict):
+        return out
+    if box_support.get("role") != "resistance_turned_support":
+        return out
+    if (box_support.get("touch_count") or 0) < 4:
+        return out
+    today = closes[-1] if closes else None
+    band_high = box_support.get("band_high")
+    band_low = box_support.get("band_low")
+    level = box_support.get("level")
+    if not today or today <= 0 or not band_high or not band_low or not level:
+        return out
+    # 高値圏ベース: 帯が 52週高値の 85% 以上 (PLTR/TSLA 型の崩落後ボックス除外)
+    recent_highs = highs[-252:] if len(highs) >= 252 else highs
+    ath_252 = max(recent_highs) if recent_highs else level
+    if ath_252 <= 0 or level < ath_252 * 0.85:
+        return out
+    # サポート割れ除外: band_low を 0.5% 超下回ったら対象外 (AVGO「買いゾーン割り込み」)
+    denom_low = band_low if band_low else 1.0
+    dist_to_band_low = (today - band_low) / denom_low
+    if dist_to_band_low < -0.005:
+        return out
+    # 押し戻し率: 直近高値 (cup pivot) → 旧抵抗帯上限 (band_high) への到達度
+    pivot_price = None
+    if isinstance(cup_handle, dict) and isinstance(cup_handle.get("pivot"), dict):
+        pivot_price = cup_handle["pivot"].get("price")
+    if not pivot_price or pivot_price <= band_high:
+        return out  # pivot 不在 (GOOG) / 構造不整合は非該当
+    denom = max(pivot_price - band_high, pivot_price * 0.001)
+    retracement_pct = (pivot_price - today) / denom * 100.0
+    if retracement_pct >= 50.0:
+        approach = "deep"
+    elif retracement_pct >= 30.0:
+        approach = "shallow"
+    else:
+        return out  # まだ高値圏 (戻り浅すぎ)
+    return {
+        "detected": True,
+        "state": "resistance_retest",
+        "approach_level": approach,
+        "retracement_pct": round(retracement_pct, 1),
+        "dist_to_band_low_pct": round(dist_to_band_low * 100, 1),
+        "dist_to_band_high_pct": round((today - band_high) / band_high * 100, 1),
+        "box_support": box_support,
+        "levels": [
+            {"kind": "box_support", "price": level, "label": "サポート転換帯"},
+            {"kind": "pivot_ref", "price": round(pivot_price, 2), "label": "直近高値(参考)"},
+        ],
+    }
+
+
 def _extended_numeric_fields(
     closes: list[float],
     today_close: float,
@@ -13765,6 +13841,20 @@ async def get_technical(
                     patterns_result["cup_handle"]["box_support"] = box_sup
             except Exception as e:
                 print(f"[cup_handle] box_support inject failed: {e}")
+
+            # 2026-06-15: 旧レジスタンス・リテスト水準 検出 (resistance_retest)。box_support を主語に、
+            # 直近高値(cup pivot)からの押し戻し率で「買いゾーン接近」 を3段判定。LLM 不使用・additive
+            # (既存 UI 不変、frontend flag ?retest=1 下でのみ表示)。SPEC_2026-06-15_resistance-retest。
+            try:
+                _ch = patterns_result["cup_handle"]
+                patterns_result["resistance_retest"] = _detect_resistance_retest(
+                    times, highs, lows, closes, _ch.get("box_support"), _ch
+                )
+            except Exception as e:
+                print(f"[resistance_retest] detect failed: {e}")
+                patterns_result["resistance_retest"] = {
+                    "detected": False, "state": "resistance_retest", "approach_level": None,
+                }
 
         # SMA は dma_cross 検出でも使うため事前計算 (slice 用とは別 reference を保持)
         sma_50_full: list[float | None] | None = None
