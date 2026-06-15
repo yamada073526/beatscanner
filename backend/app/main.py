@@ -12984,6 +12984,32 @@ def _detect_resistance_retest(
     }
 
 
+def _scan_resistance_retest(
+    times: list[str],
+    highs: list[float],
+    lows: list[float],
+    closes: list[float],
+    cup_result: dict,
+) -> dict | None:
+    """nightly scan 用 resistance_retest 検出 helper (parallel/sequential 両 path で共用)。
+
+    /api/technical (main.py の cup_handle ブロック) と同じく box_support を検出して cup_result に
+    inject し _detect_resistance_retest を呼ぶ。detected でなければ None を返す。
+    v220 (Phase-gate 6体合議 + 完全性クリティック): _scan_one が従来 _detect_cup_handle のみ呼び
+    retest を保存していなかった欠落を補う。pattern_type='resistance_retest' で別 namespace 保存する。
+    """
+    try:
+        box_sup = _detect_horizontal_support(times, highs, lows, closes)
+        if box_sup:
+            cup_result["box_support"] = box_sup
+        rr = _detect_resistance_retest(times, highs, lows, closes, box_sup, cup_result)
+        if rr and rr.get("detected"):
+            return rr
+    except Exception as e:
+        print(f"[resistance_retest] scan detect failed: {e}")
+    return None
+
+
 def _extended_numeric_fields(
     closes: list[float],
     today_close: float,
@@ -16306,6 +16332,11 @@ async def cron_cup_scan(
     # v148 ⑦: breakout_extended ゲート観測 (SPY fetch 失敗で全 extended が silent drop する事故の可視化)
     ext_gate_passed = 0
     ext_gate_failed = 0
+    # v220 (Phase-gate 6体合議 2026-06-16): resistance_retest を nightly scan で検出・保存。
+    # pattern_type='resistance_retest' で cup_handle と別 namespace 保存 (state 取り合い回避、SPEC §7.1)。
+    # クリティック発見: _scan_one は従来 _detect_cup_handle のみ呼び retest は保存されなかった。
+    retest_detected = 0
+    retest_upserted = 0
 
     # v124 Russell 3000 Phase 1: worker_count > 1 で並列化 (asyncio.Semaphore で rate limit)
     if worker_count > 1:
@@ -16318,19 +16349,21 @@ async def cron_cup_scan(
                     await asyncio.sleep(1.0)
                 ohlcv = await _fetch_ohlcv_3y(ticker)
                 if ohlcv is None:
-                    return ticker, None, "ohlcv_fetch_failed"
+                    return ticker, None, None, "ohlcv_fetch_failed"
                 times, highs, lows, closes, volumes = ohlcv
                 try:
                     result = _detect_cup_handle(times, highs, lows, closes, volumes, spy_up)
-                    return ticker, result, None
                 except Exception as e:
-                    return ticker, None, f"detect_failed: {e}"
+                    return ticker, None, None, f"detect_failed: {e}"
+                # v220: resistance_retest を additive 検出 (None なら非該当)
+                retest = _scan_resistance_retest(times, highs, lows, closes, result)
+                return ticker, result, retest, None
 
         results = await asyncio.gather(
             *[_scan_one(i, t) for i, t in enumerate(tickers)],
             return_exceptions=False,
         )
-        for ticker, result, err in results:
+        for ticker, result, retest, err in results:
             if err:
                 failed.append({"ticker": ticker, "reason": err})
                 continue
@@ -16353,6 +16386,16 @@ async def cron_cup_scan(
                 )
                 if ok:
                     upserted += 1
+            # v220: resistance_retest を pattern_type 分離で保存 (cup_handle の state 取り合いを回避)
+            if retest:
+                retest_detected += 1
+                if not dry_run:
+                    ok_rr = await asyncio.to_thread(
+                        _upsert_pattern_signal, ticker, "resistance_retest", today,
+                        retest.get("approach_level") or "resistance_retest", retest,
+                    )
+                    if ok_rr:
+                        retest_upserted += 1
     else:
         # 既存 sequential path (worker_count=1)、 既存挙動維持
         for i, ticker in enumerate(tickers):
@@ -16387,6 +16430,17 @@ async def cron_cup_scan(
                 )
                 if ok:
                     upserted += 1
+            # v220: resistance_retest を additive 検出 + pattern_type 分離保存 (sequential path)
+            retest = _scan_resistance_retest(times, highs, lows, closes, result)
+            if retest:
+                retest_detected += 1
+                if not dry_run:
+                    ok_rr = await asyncio.to_thread(
+                        _upsert_pattern_signal, ticker, "resistance_retest", today,
+                        retest.get("approach_level") or "resistance_retest", retest,
+                    )
+                    if ok_rr:
+                        retest_upserted += 1
 
     return {
         "processed_count": len(tickers),
@@ -16404,6 +16458,9 @@ async def cron_cup_scan(
         "spy_market_ok": spy_market_ok,
         "extended_gate_passed": ext_gate_passed,
         "extended_gate_failed": ext_gate_failed,
+        # v220: resistance_retest 検出/保存件数 (nightly で日次件数を観測 = クリティック指摘の未実測flow計測の起点)
+        "retest_detected_count": retest_detected,
+        "retest_upserted_count": retest_upserted,
     }
 
 
