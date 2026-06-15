@@ -125,16 +125,16 @@ class StockChartErrorBoundary extends Component {
   }
 }
 
-// v216 B10: chart tabs v2 flag (?chart_tabs_v2=1 + localStorage persist、default OFF / ?chart_tabs_v2=0 で kill)
-//   segmented control 統一 + 1M/3M/6M/1Y/5Y。 帰宅後 dogfood→GO で default ON 昇格予定。
+// v217 B10: chart tabs v2 (segmented control + 1M/3M/6M/1Y/5Y)。 dogfood GO で default ON 昇格。
+//   default ON / ?chart_tabs_v2=0 で kill (localStorage '0' で永続 OFF)。
 function isChartTabsV2() {
   try {
     const params = new URLSearchParams(window.location.search);
     const q = params.get('chart_tabs_v2');
     if (q === '1') { window.localStorage.setItem('bs_chart_tabs_v2', '1'); return true; }
-    if (q === '0') { window.localStorage.removeItem('bs_chart_tabs_v2'); return false; }
-    return window.localStorage.getItem('bs_chart_tabs_v2') === '1';
-  } catch { return false; }
+    if (q === '0') { window.localStorage.setItem('bs_chart_tabs_v2', '0'); return false; }
+    return window.localStorage.getItem('bs_chart_tabs_v2') !== '0';
+  } catch { return true; }
 }
 
 const PERIODS = [
