@@ -12997,7 +12997,14 @@ def _scan_resistance_retest(
     inject し _detect_resistance_retest を呼ぶ。detected でなければ None を返す。
     v220 (Phase-gate 6体合議 + 完全性クリティック): _scan_one が従来 _detect_cup_handle のみ呼び
     retest を保存していなかった欠落を補う。pattern_type='resistance_retest' で別 namespace 保存する。
+
+    負荷ガード (nightly cup-scan の 502 リスク低減): retest は cup pivot が必須
+    (_detect_resistance_retest は pivot 不在で即非該当)。pivot が無い銘柄では box_support 検出
+    (O(n) scan × russell3000) を走らせないよう先に gate し、3000 銘柄 scan の追加負荷を最小化する。
     """
+    pivot = cup_result.get("pivot") if isinstance(cup_result, dict) else None
+    if not (isinstance(pivot, dict) and pivot.get("price")):
+        return None  # pivot 不在 = retest 構造的に非該当。box_support 検出をスキップ (負荷削減)
     try:
         box_sup = _detect_horizontal_support(times, highs, lows, closes)
         if box_sup:
