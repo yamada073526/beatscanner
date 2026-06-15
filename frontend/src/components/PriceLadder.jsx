@@ -89,12 +89,27 @@ function fmtPct(v) {
   return `${s}${v.toFixed(1)}%`;
 }
 
+// v219 (SPEC_2026-06-15_resistance-retest、user承認): 旧レジスタンス・リテスト接近の表示 flag。
+// default OFF・完全可逆。本番公開(default ON/メール/Premium/LP)は朝の6体合議後。
+// ?retest=1 / =0 or localStorage 'retest'='1' (BuyZoneCard.isRetestEnabled と同 key)。
+function isRetestEnabled() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const q = new URLSearchParams(window.location.search).get('retest');
+    if (q === '1') return true;
+    if (q === '0') return false;
+    return window.localStorage?.getItem('retest') === '1';
+  } catch {
+    return false;
+  }
+}
+
 /**
  * §38 セーフな状態サマリー: 現在価格と各テクニカルレベルの位置関係を「事実記述」 のみで返す。
  * LLM 不使用 (機械判定 + 静的文)。「買い」「反発期待」「上昇トレンド」 等の行動指示・将来予測・
  * 最上級は一切含めない ([[feedback_condition_pulse_pattern]] の STATE_LABEL_JP と同じ静的 dict パターン)。
  */
-function buildTechnicalState({ current, sma50, pivot, support, sma50Dist }) {
+function buildTechnicalState({ current, sma50, pivot, support, sma50Dist, retest }) {
   if (!Number.isFinite(current)) return null;
   const parts = [];
   if (Number.isFinite(sma50)) {
@@ -110,8 +125,16 @@ function buildTechnicalState({ current, sma50, pivot, support, sma50Dist }) {
     const d = (current / support - 1) * 100;
     if (Math.abs(d) <= 2) parts.push('サポート目安の近辺');
   }
-  if (parts.length === 0) return null;
-  return `${parts.join('・')} にあります。`;
+  const posText = parts.length ? `${parts.join('・')} にあります。` : null;
+  // v219 (resistance_retest): 旧レジスタンス→支持転換 水準への押し戻しを §38-safe な事実記述で先頭に
+  // (行動指示・将来予測・最上級なし)。flag default OFF で gate 済 (呼出側で retest を null 化)。
+  if (retest && retest.detected) {
+    const rp = Number.isFinite(retest.retracement_pct) ? Math.round(retest.retracement_pct) : null;
+    const tail = retest.approach_level === 'shallow' ? '・到達途上' : '';
+    const retestText = `旧レジスタンス・リテスト水準に接近${rp != null ? ` (直近高値から約${rp}%押し戻し${tail})` : ''}。`;
+    return posText ? `${retestText}${posText}` : retestText;
+  }
+  return posText;
 }
 
 function SectionLabel() {
@@ -249,6 +272,9 @@ export default function PriceLadder({ ticker }) {
         ? analyst.precomputed_metrics.target_range.mean : null)
       : null;
     const cup = technical?.patterns?.cup_handle || null;
+    // v219 (flag ?retest=1 default OFF): 旧レジスタンス・リテスト接近 (pivot 基準押し戻し率)。
+    const retest = (isRetestEnabled() && technical?.patterns?.resistance_retest?.detected)
+      ? technical.patterns.resistance_retest : null;
     const pivot = Number.isFinite(cup?.pivot?.price) ? cup.pivot.price : null;
     // v195 round2 (金融レビュー): breakout_extended (ATH 過延伸再分類) の pivot は「もう乗れない節目」。
     // 「買い目安」 と確定的に呼ぶと Trust Cliff のためラベルを中立化。
@@ -321,7 +347,7 @@ export default function PriceLadder({ ticker }) {
       }
       return valid < 5 ? null : count;
     })();
-    const stateText = buildTechnicalState({ current, sma50, pivot, support, sma50Dist });
+    const stateText = buildTechnicalState({ current, sma50, pivot, support, sma50Dist, retest });
 
     return { levels: raw, current, sma50Dist, distCount, stateText };
   }, [analyst, technical, priceData]);
