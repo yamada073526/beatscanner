@@ -12927,10 +12927,14 @@ def _detect_resistance_retest(
     level = box_support.get("level")
     if not today or today <= 0 or not band_high or not band_low or not level:
         return out
-    # 高値圏ベース: 帯が 52週高値の 85% 以上 (PLTR/TSLA 型の崩落後ボックス除外)
+    # 高値圏ベース soft backstop: 帯が 52週高値の 70% 以上。
+    # 崩れ銘柄(PLTR/TSLA/MSFT/META)の主たる除外は role==resistance_turned_support が担う
+    # (実データ検証 2026-06-15: 崩れ4銘柄は role=overhead_resistance、AMZN は pivot 不在で除外)。
+    # 本ガードは dead-cat bounce(高値から大きく崩落後に旧 low 帯へ反発)のみ弾く緩い backstop。
+    # ※0.85 は NVDA(0.824)/AAPL(0.829) を誤除外したため 0.70 に校正。
     recent_highs = highs[-252:] if len(highs) >= 252 else highs
     ath_252 = max(recent_highs) if recent_highs else level
-    if ath_252 <= 0 or level < ath_252 * 0.85:
+    if ath_252 <= 0 or level < ath_252 * 0.70:
         return out
     # サポート割れ除外: band_low を 0.5% 超下回ったら対象外 (AVGO「買いゾーン割り込み」)
     denom_low = band_low if band_low else 1.0
