@@ -8073,7 +8073,8 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
     surprises: list[dict] = []
     if client:
         try:
-            fmp_raw = await client.earnings_surprises(ticker, limit=16)
+            # v217: 5Y 縮尺で決算マーカーが途切れる (16=直近4年) → 24 (6年分) で 5Y(20Q) をカバー
+            fmp_raw = await client.earnings_surprises(ticker, limit=24)
             surprises = [{**s, "source": "fmp"} for s in fmp_raw]
         except Exception:
             surprises = []
