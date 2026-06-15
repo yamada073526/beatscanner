@@ -1,4 +1,4 @@
-"""NEGATIVE_EXAMPLES 6 BAD pattern for DiagramCard LLM (handover v82 Phase 4).
+"""NEGATIVE_EXAMPLES BAD pattern for DiagramCard LLM (handover v82 Phase 4 + v218 B7).
 
 multi-review 6 体合議 (2026-05-17) で確定:
 - BAD-1 英語混在 (Operating Income 等の生英語)
@@ -7,6 +7,7 @@ multi-review 6 体合議 (2026-05-17) で確定:
 - BAD-4 step 不足 (businessFlowSteps 2 件)
 - BAD-5 断定的将来予測 (金商法 §38 違反、 「確実」「必ず」)
 - BAD-6 最上級表現 (景表法 §5 違反、 「世界 No.1」)
+- BAD-10 将来因果断定 (金商法 §38 違反、 「原動力となる」「業績を牽引する」、 v218 B7 因果図解で追加)
 
 Anthropic 公式 prompt engineering best practice:
 - BAD pattern は具体例 + reason tag で示すと遵守率 95%+ (禁止文だけの場合 70%)
@@ -107,6 +108,21 @@ NEGATIVE_EXAMPLES: list[dict] = [
             '"営業マージン 64.9% (前年 50.2% から拡大)"]'
         ),
     },
+    {
+        "id": "BAD-10",
+        "category": "将来因果断定",
+        "bad_output": (
+            '"bullCase": ["AI 需要が今後の業績を牽引する", '
+            '"データセンター投資が成長の原動力となる", '
+            '"新製品が株価を押し上げるだろう"]'
+        ),
+        "reason": "将来の業績・株価・成長を断定的に因果づけている (金商法 §38 第 2 号 断定的判断の提供)。 「原動力となる」「業績を牽引する」「株価を押し上げる」 等の将来 cause→effect 断定は禁止。 過去・現在の確定事実の polarity (実績の良し悪し) は可。 GOOD = 確定済みの過去実績を述べるか、 シナリオ提示形式 (「強気シナリオでは...の余地」) にする。 将来材料を緑 (gain) で塗らない。",
+        "good_alternative": (
+            '"bullCase": ["AI 向け売上比率 87% (直近 10-Q) で需要を直接捕捉済み", '
+            '"データセンター capex +30% YoY を計上 (実績)", '
+            '"強気シナリオでは新製品の EPS 寄与に上振れ余地"]'
+        ),
+    },
 ]
 
 
@@ -166,6 +182,13 @@ BLOCKLIST_REGEX: list[re.Pattern] = [
     re.compile(r"もっと(上がる|上がります|伸びる|伸びます)"),
     re.compile(r"乗り遅れ(るな|ないで|注意)"),
     re.compile(r"(?:高値圏|過延伸).{0,8}(?:でも)?買い"),
+    # ─── v218 B7 §38 (将来因果断定、 B7 因果図解で最頻出・現状未登録): 将来の業績/株価/成長を断定的に ──
+    # 因果づける表現。 過去・現在の確定事実の polarity は OK、 将来の cause→effect 断定は金商法 §38 risk。
+    # 過剰削除回避のため「となる / 推量語 / 将来時制マーカー」 と複合した形のみ tight に match
+    # (v124「追い風」 単独 match 過剰削除の教訓)。 frontend lib/blocklist.js と 1:1 mirror。
+    re.compile(r"(?:原動力|起爆剤|牽引役|推進力|けん引役)と(?:なる|なります|なろう|なるだろう|なるでしょう)"),
+    re.compile(r"(?:業績|株価|収益|売上|利益|成長)を(?:(?:押し上げ|支え)る|(?:牽引|後押し)する)(?:だろう|でしょう|見込み|はず|とみられ|と期待)"),
+    re.compile(r"(?:今後|将来|これから|来期|中期的に|長期的に)[^。]{0,12}(?:牽引|けん引|押し上げ|原動力|起爆剤)"),
 ]
 
 
