@@ -12956,6 +12956,13 @@ def _detect_resistance_retest(
         return out  # pivot 不在 (GOOG) / 構造不整合は非該当
     denom = max(pivot_price - band_high, pivot_price * 0.001)
     retracement_pct = (pivot_price - today) / denom * 100.0
+    # dBHi gate (Phase-gate 6体合議 2026-06-16 + 完全性クリティック発見): 現在値が旧抵抗帯上限
+    # (band_high) から 10% 超 上にある銘柄は「リテスト水準に接近」 とは呼べない。retracement_pct は
+    # band 幅 (pivot - band_high) の相対スケールで測るため、帯が広い銘柄 (KMI: retr 40.8% だが
+    # today は band_high より 18.9% 上 = 旧抵抗帯まで遠い) で構造的に誤検出し、narration「水準に接近」
+    # が虚偽相当 = 景表法§5 (優良誤認) の火種になる。band_high への実距離で物理 drop する。
+    if band_high > 0 and (today - band_high) / band_high > 0.10:
+        return out
     if retracement_pct >= 50.0:
         approach = "deep"
     elif retracement_pct >= 30.0:

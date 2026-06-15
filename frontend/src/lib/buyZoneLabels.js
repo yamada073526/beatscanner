@@ -114,6 +114,9 @@ export function classifyBuyZone(state) {
   if (state === 'cup_completing') return 'cup_completing';
   // v134 P2 Phase 2 (SPEC v2): pullback_to_support (押し目接近中) を独立 buy zone type として返す
   if (state === 'pullback_to_support') return 'pullback_to_support';
+  // v219 (Phase-gate 6体合議 2026-06-16 完全性クリティック発見): resistance_retest 分岐が欠落し
+  // 'unknown' にフォールスルー → BUY_ZONE_DESC_JP.resistance_retest 静的辞書に到達しない経路バグを修正。
+  if (state === 'resistance_retest') return 'resistance_retest';
   return 'unknown';
 }
 

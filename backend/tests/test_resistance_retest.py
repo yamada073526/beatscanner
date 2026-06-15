@@ -103,6 +103,22 @@ def test_zero_div_and_pivot_at_band_guard():
     assert r["detected"] is False
 
 
+def test_kmi_band_high_too_far_excluded():
+    # KMI 実測(2026-06-16 本番 curl): retracement 40.8% は shallow 帯内だが、現在値(~31.46)が
+    # 旧抵抗帯上限 band_high(26.45)より 18.9% 上 = リテスト水準まで遠く「接近」とは呼べない。
+    # retracement だけでは帯幅の相対スケールで誤検出する KMI 型を dBHi<=10% gate で物理 drop。
+    # Phase-gate 6体合議 + 完全性クリティック発見(narration 虚偽相当=景表法§5)。
+    r = _run(31.46, 35.0, _bs(26.06, 25.67, 26.45, 8), _ch(34.91))
+    assert r["detected"] is False
+
+
+def test_dbhi_within_gate_still_detected():
+    # 逆: dBHi<=10% の正常な接近 (NVDA 型 today=band_high*1.05) は引き続き検出されること
+    # (gate が deep/shallow を過剰除外していない回帰)。
+    r = _run(207.9, 236.54, _bs(194.84, 191.92, 197.76, 9), _ch(224.32))
+    assert r["detected"] is True
+
+
 def test_no_box_support():
     r = _run(205.19, 236.54, None, _ch(224.32))
     assert r["detected"] is False
