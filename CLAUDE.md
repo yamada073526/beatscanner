@@ -43,6 +43,13 @@
 - **コード / file path / 技術用語 (Trust Cliff / cache / JWT / commit hash / railway up 等) は英語のまま** で OK (BeatScanner 日本語ドキュメントと一貫)。
 - ⚠️ 長い実装セッション中に英文へ drift しやすく、 **2026-05-15 / 06-02 / 06-04 の 3 回**再指摘された。 memory [[feedback_japanese_output]] と double anchor。 サブエージェントへの prompt 言語は別ルール ([[feedback_subagent_japanese]]) 参照。
 
+### コンテキスト過重による tool-call 崩壊の防止（再発障害・最重要運用）
+メインコンテキストが過重になると tool 呼び出しが実行されず `<invoke>` 生XML としてテキスト出力に漏れる（過去複数セッションで再発）。**特定 tool のバグではなくコンテキスト重量による構造化出力の劣化で、再試行は悪化する**。
+- 大ファイル（`backend/app/main.py` ~19k 行等）/ 本番 bundle / Workflow 生出力を **メインに取り込まない** → sub-agent 委譲（サマリーのみ受領）/ Read の `offset`+`limit` / Bash 出力をファイルへ落として grep。
+- 編集レビューは `git diff -- <paths>` + 限定 grep（**全文再読込しない**）。
+- **プレーンテキスト化の初発兆候を見たら即 tool 呼び出しを止め、再試行せず `/compact`**（機能着地直後なら新セッション）。重い操作の前に先回りで compact。
+- 詳細 SOP（SSOT）: memory `feedback_toolcall_plaintext_corruption.md`。
+
 ### デプロイ運用
 - **デプロイ経路は `git push origin main`（Railway が auto-deploy）を基本とする**。2026-06-06 実証: push 後 ~30s で本番反映、`/health` の `commit`（RAILWAY_GIT_COMMIT_SHA）で確認可（memory `railway_auto_deploy_on_push.md`）
   - `railway up`（ローカルファイル直送）も機能するが、**未 commit を直送すると git⇔本番が乖離する**（2026-06-07 RS hotfix で実際に発生 → 後追い commit で解消）。緊急時以外は使わず、必ず **commit → push** で deploy する
