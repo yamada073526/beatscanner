@@ -43,6 +43,7 @@ export const COMPASS_PRICE_LABEL = {
   cup_completing: 'カップ完成間近',
   box_support: 'レンジ上限',
   pullback_to_support: '押し目接近',
+  resistance_retest: '旧抵抗→支持転換',
   unknown: '判定なし',
 };
 

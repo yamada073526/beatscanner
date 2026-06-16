@@ -99,6 +99,19 @@ async function fetchCupHandle({ limit = 20 } = {}) {
   }
 }
 
+// ── fetcher: backend /api/scanner/retest (Task#4 A先行: 旧レジスタンス・リテスト接近) ──
+// 6体合議 default filter (vs_SPY>0 + dBHi<=10% + rsSelf>=40) は backend default なので param 省略可。
+// §38: backend が買い水準を返さない teaser。items は vs_SPY 降順 (backend sort 済)。
+async function fetchRetest({ limit = 20 } = {}) {
+  try {
+    const r = await fetch(`/api/scanner/retest?limit=${limit}`);
+    if (!r.ok) return { items: [], error: `HTTP ${r.status}` };
+    return await r.json();
+  } catch (e) {
+    return { items: [], error: String(e) };
+  }
+}
+
 // ── fetcher: backend /api/holdings-meta (B-Top1: RS leaders の次回決算日を交差、 追加 backend なし) ──
 async function fetchEarningsMeta(symbols) {
   if (!symbols || symbols.length === 0) return { meta: {} };
@@ -523,6 +536,8 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
   const [leaderCwh, setLeaderCwh] = useState(() => (heroCacheFresh() ? _heroCache.leaderCwh : { tickers: [], loading: true, error: null }));
   const [rsRising, setRsRising] = useState(() => (heroCacheFresh() ? _heroCache.rsRising : { tickers: [], loading: true, migrationPending: false, error: null }));
   const [newCwh, setNewCwh] = useState(() => (heroCacheFresh() ? _heroCache.newCwh : { tickers: [], loading: true, error: null }));
+  // Task#4 A先行: 旧レジスタンス・リテスト接近 (vs_SPY 降順、 backend default filter で絞り込み済)
+  const [retest, setRetest] = useState(() => (heroCacheFresh() && _heroCache.retest ? _heroCache.retest : { tickers: [], loading: true, error: null }));
   // dogfood 2026-06-05「Pane3 下部 60% が空」: 3 section 下の void を RS≥80 leaders ランキングで埋める。
   //   rsLeader.items は section1 (交差) の fetch 元として既に取得済 = 追加 fetch ゼロの副産物。
   const [rsLeaders, setRsLeaders] = useState(() => (heroCacheFresh() && _heroCache.rsLeaders ? _heroCache.rsLeaders : { tickers: [], loading: true, error: null }));
@@ -538,6 +553,9 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
   const leaderRef = useRef(null);
   const risingRef = useRef(null);
   const newCwhRef = useRef(null);
+  const retestRef = useRef(null); // Task#4 A先行: リテスト接近 section
+  // chip key → section ref の refMap (旧 ternary を map 化、 chip 追加で分岐が増えない)
+  const chipRefMap = { leader: leaderRef, rising: risingRef, 'new-cwh': newCwhRef, retest: retestRef };
 
   const handleChipClick = (chipKey) => {
     // 同 chip を再 click で全 highlight 解除 (toggle、 Linear 流)
@@ -545,8 +563,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
     setActiveChip(next);
     // scroll-into-view (smooth、 nearest = scroll 最小化)
     if (next) {
-      const ref = next === 'leader' ? leaderRef : next === 'rising' ? risingRef : newCwhRef;
-      ref.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      chipRefMap[next]?.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
     }
   };
 
@@ -563,15 +580,17 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
     setLeaderCwh({ tickers: [], loading: true, error: null });
     setRsRising({ tickers: [], loading: true, migrationPending: false, error: null });
     setNewCwh({ tickers: [], loading: true, error: null });
+    setRetest({ tickers: [], loading: true, error: null });
     setRsLeaders({ tickers: [], loading: true, error: null });
     setEarningsThisWeek({ tickers: [], loading: true, error: null });
 
     (async () => {
-      // 3 fetch 並列起動
-      const [rsLeader, rsDelta, cup] = await Promise.all([
+      // 4 fetch 並列起動 (Task#4 A先行: retest を 4 本目に追加)
+      const [rsLeader, rsDelta, cup, retestRes] = await Promise.all([
         fetchRsLeader({ limit: 30 }),
         fetchRsDelta({ minDelta: 10, limit: 30 }),
         fetchCupHandle({ limit: 30 }),
+        fetchRetest({ limit: 20 }),
       ]);
       if (cancelled) return;
 
@@ -579,6 +598,19 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
       const rsLeaderFailed = !!rsLeader.error;
       const rsDeltaFailed = !!rsDelta.error;
       const cupFailed = !!cup.error;
+
+      // section 06: リテスト接近 (backend が vs_SPY 降順 + default filter 済、 frontend は表示整形のみ)。
+      // §38: approach ラベル (deep=リテスト接近 / shallow=到達途上) で表示し、 押し戻し% の数値誤読を避ける。
+      // 他 section の usedTickers 除外はしない (リテストは独立 signal)。
+      const retestResult = {
+        tickers: (retestRes.items || []).map((it) => ({
+          ticker: it.ticker,
+          badge: it.approach_level === 'deep' ? 'リテスト接近' : '到達途上',
+        })),
+        loading: false,
+        error: retestRes.error ? 'リテスト取得失敗' : null,
+      };
+      setRetest(retestResult);
 
       // section 1: Leader + Breakout + CWH 交差 = RS >= 80 ∩ Cup-Handle 検出
       // v133 方針 #12 Option A: cup item の gc_confirmed lookup map で Cup-Handle カードに GC badge 強化
@@ -706,7 +738,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
       if (!cancelled) setEarningsThisWeek(earningsThisWeekResult);
 
       // D2 flicker fix: 結果を module cache に保存 → 次の remount (deselect 復帰) で hydrate して flicker 回避。
-      _heroCache = { ts: Date.now(), leaderCwh: leaderResult, rsRising: risingResult, newCwh: newResult, rsLeaders: rsLeadersResult, earningsThisWeek: earningsThisWeekResult };
+      _heroCache = { ts: Date.now(), leaderCwh: leaderResult, rsRising: risingResult, newCwh: newResult, retest: retestResult, rsLeaders: rsLeadersResult, earningsThisWeek: earningsThisWeekResult };
     })();
 
     return () => { cancelled = true; };
@@ -769,6 +801,16 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
             ariaLabel="新規 Cup-Handle 検出 section に jump"
           >
             新規 Cup-Handle
+          </Chip>
+          <Chip
+            variant="filter"
+            size="sm"
+            tone={activeChip === 'retest' ? 'accent' : 'muted'}
+            pressed={activeChip === 'retest'}
+            onClick={() => handleChipClick('retest')}
+            ariaLabel="リテスト接近 section に jump"
+          >
+            リテスト接近
           </Chip>
         </ChipGroup>
       </div>
@@ -876,6 +918,30 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           error={earningsThisWeek.error}
           emptyMessage="直近の決算予定銘柄なし"
           onSelect={handleSelect}
+          demoMode={demoMode}
+          onUpgrade={handleUpgradeRequest}
+          onRetry={handleRetry}
+          columns
+        />
+      </div>
+
+      {/* Task#4 A先行: リテスト接近 (旧レジスタンス→支持転換)。じっちゃま 2026-06-13 ライブの「ブレイク後に
+          旧抵抗水準へ押し戻した買いゾーン」 を自動検出。 backend /api/scanner/retest が vs_SPY 降順 +
+          6体合議 default filter (vs_SPY>0 ∩ dBHi<=10% ∩ rsSelf>=40) で絞り込み済。 §38: 買い水準は出さず
+          approach ラベル + 免責文。 上部 chip「リテスト接近」 から jump (retestRef)。 */}
+      <div style={{ marginTop: 'var(--space-4, 16px)' }}>
+        <HeroSection
+          eyebrow="06"
+          title="リテスト接近（旧抵抗の支持転換）"
+          testId="screener-hero-retest"
+          description="ブレイク後に旧抵抗水準へ押し戻した銘柄（RS上位 ∩ SPYアウトパフォーム）。投資の推奨ではありません。"
+          tickers={retest.tickers}
+          loading={retest.loading}
+          error={retest.error}
+          emptyMessage="リテスト接近銘柄なし"
+          onSelect={handleSelect}
+          sectionRef={retestRef}
+          active={activeChip === 'retest'}
           demoMode={demoMode}
           onUpgrade={handleUpgradeRequest}
           onRetry={handleRetry}

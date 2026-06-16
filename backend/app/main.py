@@ -19039,6 +19039,151 @@ async def scanner_cup_handle(
     }
 
 
+@app.get("/api/scanner/retest")
+async def scanner_retest(
+    vs_spy_min: float = 0.0,
+    dbhi_max: float = 10.0,
+    rs_self_min: int = 40,
+    limit: int = 50,
+):
+    """旧レジスタンス・リテスト接近 screener (DB SELECT only、 Task#4 A先行公開)。
+
+    nightly cup-scan が pattern_type='resistance_retest' で別 namespace 保存した signal を、
+    rs_ratings (最新 valid calc_date) と ticker join し、 6体合議の default filter で絞って返す。
+    新規検出/断定は一切行わず、 既に保存済のデータを「読んで見せる」 だけ (A先行の境界、 配信は B で DEFER)。
+
+    Query params (6体合議 default filter SSOT、 生検出一覧は 5原則① 違反のため必須):
+      vs_spy_min: rs_vs_spy_pct > この値 (default 0.0 = SPY アウトパフォーム、 崩れかけ/SPY劣後を除外)
+      dbhi_max:   dist_to_band_high_pct <= この値 (default 10.0 = 旧抵抗帯まで近い、 KMI型誤検出を排除)
+      rs_self_min: self_percentile >= この値 (default 40 = 自己 252日 比で中位以上)
+      limit: int (default 50)
+
+    §38/§5: 買い水準 (box_support band 価格 / pivot) は応答に含めない。 接近% / 相対強度の事実のみ返す
+      teaser。 序列番号は付けず vs_SPY 降順 sort のみ。 narration は frontend 静的辞書 (buyZoneLabels.js)。
+
+    Returns:
+      items (ticker / approach_level / retracement_pct / dist_to_band_high_pct / rs_vs_spy_pct /
+        self_percentile / signal_date), total_count, as_of (rs calc_date), filter
+    """
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    vs_spy_min = float(vs_spy_min)
+    dbhi_max = float(dbhi_max)
+    rs_self_min = max(0, min(99, int(rs_self_min)))
+    limit = max(1, min(200, int(limit)))
+
+    def _num(v):
+        # PostgREST は numeric 型を str で返すことがある (rs_vs_spy_pct 等)。 比較前に float 化。
+        try:
+            return float(v) if v is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    today = date.today()
+    filter_meta = {"vs_spy_min": vs_spy_min, "dbhi_max": dbhi_max, "rs_self_min": rs_self_min}
+
+    # ── 1. resistance_retest signal 取得 (per-ticker 最新、 直近 7 日) ──
+    # cup-handle scanner と同じ「order desc + 既出 ticker skip」 イディオム。 pattern_type を必ず明示
+    # filter する (付け忘れると cup_handle 行が混ざる、 namespace 分離は v220 commit ab7a0d7)。
+    retest_rows: dict[str, dict] = {}
+    try:
+        cutoff = (today - timedelta(days=7)).isoformat()
+        r_res = (
+            sb.table("pattern_signals")
+            .select("ticker,state,payload,signal_date")
+            .eq("pattern_type", "resistance_retest")
+            .gte("signal_date", cutoff)
+            .order("signal_date", desc=True)
+            .execute()
+        )
+        for r in (r_res.data or []):
+            t = r.get("ticker")
+            if not t or t in retest_rows:
+                continue
+            retest_rows[t] = r
+    except Exception as e:
+        print(f"[scanner_retest] retest fetch failed: {e}")
+        raise HTTPException(status_code=500, detail=f"fetch_failed: {e}")
+
+    if not retest_rows:
+        # 空テーブル graceful (nightly 未走 or 当夜 0 件)。 500 でなく空構造 (Trust Cliff 回避)。
+        return {"items": [], "total_count": 0, "as_of": None, "filter": filter_meta}
+
+    # ── 2. RS join (rs_ratings 最新 valid calc_date、 partial scan を弾く) ──
+    rs_map: dict[str, dict] = {}
+    rs_calc_date = None
+    try:
+        rs_calc_date, _ = _latest_valid_calc_date(
+            sb, "rs_ratings", "calc_date", _MIN_VALID_RS_ROWS
+        )
+        if rs_calc_date:
+            # in_ は URL 長制限があるため ticker 群を chunk 化 (cup-handle gc join と同パターン)。
+            _tickers = list(retest_rows.keys())
+            for i in range(0, len(_tickers), 150):
+                chunk = _tickers[i:i + 150]
+                rs_res = (
+                    sb.table("rs_ratings")
+                    .select("ticker,rs_vs_spy_pct,self_percentile")
+                    .eq("calc_date", rs_calc_date)
+                    .in_("ticker", chunk)
+                    .execute()
+                )
+                for r in (rs_res.data or []):
+                    if r.get("ticker"):
+                        rs_map[r["ticker"]] = r
+    except Exception as e:
+        # RS 取得失敗時は vs_SPY/rsSelf が None → filter を満たせない。 誤検出より空 list が安全 (§5)。
+        print(f"[scanner_retest] rs join failed: {e}")
+        return {
+            "items": [], "total_count": 0, "as_of": None,
+            "filter": filter_meta, "note": f"rs_join_failed: {e}",
+        }
+
+    # ── 3. join + filter + item 構築 (§38: 買い水準 price は含めない) ──
+    items: list[dict] = []
+    for ticker, row in retest_rows.items():
+        payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        if not payload.get("detected"):
+            continue
+        dbhi = _num(payload.get("dist_to_band_high_pct"))
+        rs = rs_map.get(ticker) or {}
+        vs_spy = _num(rs.get("rs_vs_spy_pct"))
+        rs_self = _num(rs.get("self_percentile"))
+        # filter: dBHi<=max (帯まで近い) / vs_SPY>min (SPY アウトパフォーム) / rsSelf>=min (自己中位以上)
+        if dbhi is None or dbhi > dbhi_max:
+            continue
+        if vs_spy is None or vs_spy <= vs_spy_min:
+            continue
+        if rs_self is None or rs_self < rs_self_min:
+            continue
+        items.append({
+            "ticker": ticker,
+            "approach_level": row.get("state") or payload.get("approach_level"),  # deep | shallow
+            "retracement_pct": _num(payload.get("retracement_pct")),
+            "dist_to_band_high_pct": dbhi,
+            "rs_vs_spy_pct": round(vs_spy, 1),
+            "self_percentile": int(rs_self),
+            "signal_date": row.get("signal_date"),
+        })
+
+    # vs_SPY 降順 sort (序列番号は付けない = §38 序列暗示の排除、 フラット表示)
+    items.sort(
+        key=lambda x: x.get("rs_vs_spy_pct") if x.get("rs_vs_spy_pct") is not None else -9999,
+        reverse=True,
+    )
+    items = items[:limit]
+
+    return {
+        "items": items,
+        "total_count": len(items),
+        "as_of": rs_calc_date,
+        "signal_as_of": max((it["signal_date"] for it in items), default=None),
+        "filter": filter_meta,
+    }
+
+
 # ── フィードバック収集 (v142、 動画教訓 #2、 pre-release ユーザーの声) ──────────
 # 3体合議推奨 #1: 最初のユーザーの生声を集めて改善駆動する。
 # backend 集約 (service_role insert + Resend 通知)、 anon/authenticated の直接 DB 面は作らない。

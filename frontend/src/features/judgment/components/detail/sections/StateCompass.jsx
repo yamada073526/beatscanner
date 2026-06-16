@@ -114,6 +114,11 @@ export default function StateCompass({ selectedTicker, result, guidance, embedde
   }, [selectedTicker]);
 
   const priceCell = useMemo(() => {
+    // v220: retest 分岐を cup_handle より前に評価 (Premium 常時表示)。
+    const retest = technical?.patterns?.resistance_retest;
+    if (retest?.detected) {
+      return { signal: 'warn', Icon: Crosshair, value: COMPASS_PRICE_LABEL.resistance_retest, sub: '参考水準' };
+    }
     const state = technical?.patterns?.cup_handle?.state || null;
     const zone = classifyBuyZone(state);
     if (zone === 'unknown') {

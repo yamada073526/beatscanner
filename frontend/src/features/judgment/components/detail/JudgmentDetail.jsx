@@ -331,21 +331,6 @@ function isPane3HeaderV2() {
   }
 }
 
-// v219 dogfood (SPEC_2026-06-15_resistance-retest): BuyZoneCard は plan==='premium' gate のため、
-// 非Premiumアカウントでは resistance_retest を dogfood できない。?retest=1 のときは Premium でなくても
-// BuyZoneCard を mount して dogfood 可能にする (default OFF・本番公開時は専用 tier gate を別設計、handover v219 DEFER)。
-// BuyZoneCard.jsx の isRetestEnabled() と同じ key 'retest' を読む (mirror)。
-function isRetestDogfood() {
-  if (typeof window === 'undefined') return false;
-  try {
-    const q = new URLSearchParams(window.location.search).get('retest');
-    if (q === '1') return true;
-    if (q === '0') return false;
-    return window.localStorage?.getItem('retest') === '1';
-  } catch {
-    return false;
-  }
-}
 
 // 2026-06-14: AI要約 (SummaryBrief) を封印。状態コンパス (信号機サマリー) が冒頭の要約機能を代替したため
 // 不要に (user 判断)。復活する場合は true に戻す (各章サマリーへの一本化は別 sprint)。
@@ -1117,8 +1102,8 @@ export default function JudgmentDetail({
                 conditional render で完全 gate。 marketing 配慮の ProTeaser placeholder は
                 R7 後続 sprint で個別追加 (今は P0 leak 止めを優先)。 */}
             {plan === 'premium' && <CupPivotCard ticker={selectedTicker} />}
-            {/* v219: BuyZoneCard は Premium gate だが、?retest=1 のとき非Premiumでも dogfood 表示 (default OFF)。 */}
-            {(plan === 'premium' || isRetestDogfood()) && <BuyZoneCard ticker={selectedTicker} />}
+            {/* v220: Premium gate 一本化 (dogfood フラグ廃止)。 */}
+            {plan === 'premium' && <BuyZoneCard ticker={selectedTicker} />}
             {plan === 'premium' && <DistributionDaysCard ticker={selectedTicker} />}
           </SectionFade>
         ) : null;

@@ -37,20 +37,6 @@ function fmtPct(v) {
   return `${sign}${v.toFixed(1)}%`;
 }
 
-// v219 (SPEC_2026-06-15_resistance-retest、user承認): 旧レジスタンス・リテスト水準 表示 flag。
-// default OFF・完全可逆。本番公開(default ON / メール配信 / Premium gate / LP 掲載)は朝の6体合議後。
-// ?retest=1 / =0 or localStorage 'retest'='1'。
-function isRetestEnabled() {
-  if (typeof window === 'undefined') return false;
-  try {
-    const q = new URLSearchParams(window.location.search).get('retest');
-    if (q === '1') return true;
-    if (q === '0') return false;
-    return window.localStorage?.getItem('retest') === '1';
-  } catch {
-    return false;
-  }
-}
 
 // v185 B (2026-06-08): compact=true で narration detail / meta を抑制 (conclusion + 免責は保持)。
 // v185 dogfood (3体合議): variant='unified' は横並び統一の signal。BuyZone は既に card-price-hero パターン
@@ -133,7 +119,7 @@ export default function BuyZoneCard({ ticker, compact = false, variant = 'defaul
   // v219 (flag ?retest=1 default OFF): backend resistance_retest (pivot 基準押し戻し率) が detected かつ
   //   box_support あり(refPrice 用)なら「旧レジスタンス・リテスト水準接近」 を出す。本番公開は朝の6体合議後。
   const retest = technical?.patterns?.resistance_retest || null;
-  const isRetest = isRetestEnabled() && !!retest?.detected && useBox;
+  const isRetest = !!retest?.detected && useBox;
   const zoneKey = isRetest
     ? 'resistance_retest'
     : (isPullback

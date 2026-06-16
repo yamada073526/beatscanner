@@ -89,20 +89,6 @@ function fmtPct(v) {
   return `${s}${v.toFixed(1)}%`;
 }
 
-// v219 (SPEC_2026-06-15_resistance-retest、user承認): 旧レジスタンス・リテスト接近の表示 flag。
-// default OFF・完全可逆。本番公開(default ON/メール/Premium/LP)は朝の6体合議後。
-// ?retest=1 / =0 or localStorage 'retest'='1' (BuyZoneCard.isRetestEnabled と同 key)。
-function isRetestEnabled() {
-  if (typeof window === 'undefined') return false;
-  try {
-    const q = new URLSearchParams(window.location.search).get('retest');
-    if (q === '1') return true;
-    if (q === '0') return false;
-    return window.localStorage?.getItem('retest') === '1';
-  } catch {
-    return false;
-  }
-}
 
 /**
  * §38 セーフな状態サマリー: 現在価格と各テクニカルレベルの位置関係を「事実記述」 のみで返す。
@@ -272,8 +258,8 @@ export default function PriceLadder({ ticker }) {
         ? analyst.precomputed_metrics.target_range.mean : null)
       : null;
     const cup = technical?.patterns?.cup_handle || null;
-    // v219 (flag ?retest=1 default OFF): 旧レジスタンス・リテスト接近 (pivot 基準押し戻し率)。
-    const retest = (isRetestEnabled() && technical?.patterns?.resistance_retest?.detected)
+    // v220: フラグ廃止。Premium gate 一本化のため isRetestEnabled() 撤去。
+    const retest = technical?.patterns?.resistance_retest?.detected
       ? technical.patterns.resistance_retest : null;
     const pivot = Number.isFinite(cup?.pivot?.price) ? cup.pivot.price : null;
     // v195 round2 (金融レビュー): breakout_extended (ATH 過延伸再分類) の pivot は「もう乗れない節目」。
