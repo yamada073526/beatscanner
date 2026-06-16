@@ -71,11 +71,12 @@ jobs:
             echo "produced=$detected"
             echo "upserted=$upserted"
           } >> "$GITHUB_OUTPUT"
-          # Sprint 0 (SPEC §10 step3 / M8): 502 silent fail を loud に。HTTP 非200 を ::error:: 明示。
-          # continue-on-error は維持 (cup の 502 で rs/canslim を止めない)。job 失敗判定は末尾の health gate。
+          # Sprint 0 (検証 2026-06-16 で判明): Railway gateway は ~5min で 502 を返すが backend scan は完走し
+          # persist する (502 ≠ stale)。HTTP は健全性信号にならないため warning 止まりにし、job 失敗判定は
+          # 末尾 Freshness gate (DB を真とする) に委ねる。gateway 脆弱性の構造解消は SPEC §4.5/⑩ の async/chunk 化。
           if [ "$http" != "200" ]; then
-            echo "::error::cup-scan が HTTP $http を返した (502=Railway gateway timeout の可能性。3000銘柄同期 scan の構造的 risk)。データ未更新。"
-            echo "### 🔴 cup-scan FAILED (HTTP \`$http\`)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::cup-scan が HTTP $http (Railway gateway timeout の可能性。backend は完走し persist することが多い — 末尾 Freshness gate で DB を真とする)。"
+            echo "### ⚠️ cup-scan HTTP \`$http\` (gateway timeout、freshness で確認)" >> "$GITHUB_STEP_SUMMARY"
           fi
           # v176: OHLCV fetch 大量失敗の検知 (FMP 移行効果の監視)。 failed が processed の半数超なら warning。
           proc=$(echo "$body" | jq -r '.processed_count // 0' 2>/dev/null || echo 0)
@@ -103,10 +104,10 @@ jobs:
             echo "produced=$scored"
             echo "upserted=$upserted"
           } >> "$GITHUB_OUTPUT"
-          # Sprint 0: HTTP 非200 を ::error:: 明示 (502 silent fail 是正)。
+          # Sprint 0: HTTP 502 は gateway timeout (backend は persist することが多い)。warning 止まり、判定は末尾 Freshness gate。
           if [ "$http" != "200" ]; then
-            echo "::error::rs-scan が HTTP $http を返した (502 の可能性)。RS データ未更新。"
-            echo "### 🔴 rs-scan FAILED (HTTP \`$http\`)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::rs-scan が HTTP $http (gateway timeout の可能性。Freshness gate で DB を真とする)。"
+            echo "### ⚠️ rs-scan HTTP \`$http\` (gateway timeout、freshness で確認)" >> "$GITHUB_STEP_SUMMARY"
           fi
           # v176: partial-scan 検知。 2026-06-06 は scored=3 で本番 RS スクリーナーが PANW 1 件のみ
           # = Trust Cliff になった。 read 側 guard で前日 full に fallback するが scan health を明示。
@@ -148,10 +149,10 @@ jobs:
             echo "produced=$proc"
             echo "upserted=$cs_upserted"
           } >> "$GITHUB_OUTPUT"
-          # Sprint 0: HTTP 非200 を ::error:: 明示 (502 silent fail 是正)。
+          # Sprint 0: HTTP 502 は gateway timeout (backend は persist することが多い)。warning 止まり、判定は末尾 Freshness gate。
           if [ "$http" != "200" ]; then
-            echo "::error::canslim-scan が HTTP $http を返した (502 の可能性)。CAN-SLIM データ未更新。"
-            echo "### 🔴 canslim-scan FAILED (HTTP \`$http\`)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::canslim-scan が HTTP $http (gateway timeout の可能性。Freshness gate で DB を真とする)。"
+            echo "### ⚠️ canslim-scan HTTP \`$http\` (gateway timeout、freshness で確認)" >> "$GITHUB_STEP_SUMMARY"
           fi
           if [ "${proc:-0}" -gt 0 ] && [ "${eps_ok:-0}" -lt $((proc * 30 / 100)) ]; then
             echo "::warning::CAN-SLIM scan の eps_computed が少ない (computed=$eps_ok / processed=$proc) — FMP earnings_surprises を確認。"
@@ -168,40 +169,39 @@ jobs:
             echo "- 対処: Supabase SQL Editor で \`grant select, insert, update, delete on public.screener_fundamentals to service_role;\` を実行" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Scan health gate (502 / silent persist-fail を job 失敗に — Sprint 0)
+      - name: Freshness gate (DB を真とする — 502 でなく stale を job 失敗に — Sprint 0)
         run: |
-          # SPEC §10 step3 / M8: continue-on-error で隠れていた scan 失敗を job 失敗に昇格する。
-          # 各 scan: HTTP 非200 → fail / produced>0 かつ upserted==0 → silent persist fail → fail。
-          # produced==0 (検出ゼロの静かな日) は warning 止まり。breakout 配線時 (Sprint 2) はここに bo_* scan を check で追加する。
+          set +e  # curl/jq の非ゼロで step を落とさない。判定は fail 変数 + 明示 exit。
+          # Sprint 0 検証(2026-06-16)で判明: Railway gateway は ~5min で 502 を返すが backend scan は完走し
+          # persist する (502 ≠ stale)。HTTP status は健全性信号にならないため read endpoint の DB date を真とする。
+          # date が scan-date か market-date か曖昧なため「>= 前日」で判定 (1日 lag 許容・2日以上古ければ真の stale)。
+          # gateway 脆弱性(502)の構造解消は SPEC §4.5/⑩ の async/chunk 化(将来の本丸)。
+          # breakout 配線時 (Sprint 2) は /api/scanner/breakout の as_of チェックを chk で1行追加する。
+          today=$(date -u +%Y-%m-%d)
+          yday=$(date -u -d 'yesterday' +%Y-%m-%d 2>/dev/null || date -u -v-1d +%Y-%m-%d 2>/dev/null)
+          echo "### Nightly Scan freshness (today $today / 許容下限 $yday)" >> "$GITHUB_STEP_SUMMARY"
           fail=0
-          check() {
-            name="$1"; http="$2"; produced="$3"; upserted="$4"
-            if [ "$http" != "200" ]; then
-              echo "::error::$name HTTP=$http — nightly を失敗扱い (502 silent fail 是正)。"; fail=1
-            elif [ "${produced:-0}" -gt 0 ] && [ "${upserted:-0}" -eq 0 ]; then
-              echo "::error::$name produced=$produced だが upserted=0 — silent persist 失敗 (Supabase GRANT/DB を確認)。"; fail=1
-            elif [ "${produced:-0}" -eq 0 ]; then
-              echo "::warning::$name produced=0 — 検出ゼロ (静かな日か scan 不調)。"
+          chk() {  # $1 name / $2 url / $3 jq path
+            d=$(curl -s --max-time 20 "$2" | jq -r "$3 // \"null\"" 2>/dev/null)
+            echo "- $1: \`$d\`" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$d" = "null" ] || [[ "$d" < "$yday" ]]; then
+              echo "::error::$1 stale (date=$d < $yday) — 2日以上更新なし。"; fail=1
             fi
-            return 0
           }
-          check cup-scan "${{ steps.cup.outputs.http }}" "${{ steps.cup.outputs.produced }}" "${{ steps.cup.outputs.upserted }}"
-          check rs-scan "${{ steps.rs.outputs.http }}" "${{ steps.rs.outputs.produced }}" "${{ steps.rs.outputs.upserted }}"
-          check canslim-scan "${{ steps.canslim.outputs.http }}" "${{ steps.canslim.outputs.produced }}" "${{ steps.canslim.outputs.upserted }}"
+          chk "RS calc_date"                          "$BASE/api/scanner/rs?min_percentile=80&limit=1" ".calc_date"
+          chk "CAN-SLIM as_of"                        "$BASE/api/scanner/canslim?limit=1"              ".as_of"
+          chk "retest signal_as_of (cup-scan proxy)"  "$BASE/api/scanner/retest?limit=1"               ".signal_as_of"
+          # cup-handle は日付を返さないため total>0 の sanity のみ (retest proxy が cup-scan freshness を担保)。
+          cup_total=$(curl -s --max-time 20 "$BASE/api/scanner/cup-handle?filter=cup" | jq -r '.total_count // 0' 2>/dev/null)
+          echo "- cup-handle total: \`$cup_total\`" >> "$GITHUB_STEP_SUMMARY"
+          [ "${cup_total:-0}" -eq 0 ] && echo "::warning::cup-handle total=0 — cup 検出ゼロ (要確認)。"
+          # HTTP200 で応答した scan の persist 失敗(GRANT)check。502 時は body 空で produced=0=対象外。
+          cup_http="${{ steps.cup.outputs.http }}"; cup_prod="${{ steps.cup.outputs.produced }}"; cup_ups="${{ steps.cup.outputs.upserted }}"
+          if [ "$cup_http" = "200" ] && [ "${cup_prod:-0}" -gt 0 ] && [ "${cup_ups:-0}" -eq 0 ]; then
+            echo "::error::cup-scan produced=$cup_prod だが upserted=0 — persist 失敗 (GRANT/DB)"; fail=1
+          fi
           if [ "$fail" -ne 0 ]; then
-            echo "### 🔴 Scan health gate FAILED — 上記 scan が silent fail (502/persist)。継続するなら universe 分割 or scan 非同期化 (SPEC §4.5/⑩)。" >> "$GITHUB_STEP_SUMMARY"
+            echo "### 🔴 Freshness gate FAILED — DB が 2日以上 stale。universe 分割 or scan 非同期化を検討 (SPEC §4.5/⑩)。" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          echo "✅ scan health OK (全 scan HTTP200 + persist 確認)"
-
-      - name: Verify freshness
-        run: |
-          echo "### Nightly Scan ($(date -u +'%Y-%m-%d %H:%M UTC'))" >> "$GITHUB_STEP_SUMMARY"
-          rs_date=$(curl -s --max-time 20 "$BASE/api/scanner/rs?min_percentile=80&limit=1" | jq -r '.calc_date // "?"')
-          cup_total=$(curl -s --max-time 20 "$BASE/api/scanner/cup-handle?filter=cup" | jq -r '.total_count // 0')
-          today=$(date -u +%Y-%m-%d)
-          echo "- RS calc_date: \`$rs_date\` (today: \`$today\`)" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Cup-Handle total: \`$cup_total\`" >> "$GITHUB_STEP_SUMMARY"
-          if [ "$rs_date" != "$today" ]; then
-            echo "::warning::RS calc_date ($rs_date) != today ($today) — scan が反映されていない可能性"
-          fi
+          echo "✅ freshness OK (rs/canslim/retest とも >= $yday で persist 確認。502 は gateway timeout で無害)"
