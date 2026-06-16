@@ -123,6 +123,30 @@ def test_bo_extended_overrides_confirmed():
     assert r["base_rise_pct"] > 10.0
 
 
+def test_bo_pending_not_overridden_to_extended():
+    # Sprint 2 6体合議 review MAJOR の回帰防止: pending (today_close <= pivotH = 終値で未ブレイク) は
+    # sma50_deviation_pct > 30% でも bo_extended に昇格しない (§4.1 bo_extended は close>pivotH が前提)。
+    # 急騰株が SMA50 から 30%+ 乖離 + 日中だけ高値抜き→引け失速、の現実シナリオを合成。
+    # 修正前は state が bo_extended に上書きされ、終値未確定銘柄が nightly に過熱圏として混入していた。
+    closes = [100.0 + 3.0 * i for i in range(70)]   # 急傾斜 → SMA50 が大きく lag (乖離 >30%)
+    highs = [c + 0.5 for c in closes]
+    lows = [c - 0.5 for c in closes]
+    vols = [1000.0] * 70
+    pv = _pivot_high(highs, 20)
+    highs[-1] = pv + 2.0      # ザラ場で pivot 上抜け
+    closes[-1] = pv - 0.5     # 引けで割り込み (<= pivotH) = pending
+    vols[-1] = 1500.0
+    r = _detect_breakout([], highs, lows, closes, vols, True)
+    assert r["detected"] is True
+    assert r["state"] == "bo_pending"       # extended に昇格しない (修正前は bo_extended)
+    assert r["tier"] == "pending"
+    assert r["polarity"] == "neutral"
+    # 過熱の数値条件自体は成立している (sma50 乖離 > 30%) が、終値で抜けていないため state は pending を維持。
+    assert r["sma50_deviation_pct"] is not None and r["sma50_deviation_pct"] > 30.0
+    # is_extended フラグは §1.4 の独立数値フラグ (state とは独立) なので True のまま。state だけが pending を維持する。
+    assert r["is_extended"] is True
+
+
 # ─── detected:False (signal 化しない) 分岐 ──────────────────────────────────────
 
 def test_low_vol_not_detected():

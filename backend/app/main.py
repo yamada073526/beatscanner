@@ -13205,9 +13205,12 @@ def _detect_breakout(
         (isinstance(base_rise_pct, (int, float)) and base_rise_pct > _BO_EXTENDED_BASE_RISE_THRESH)
         or (isinstance(sma50_deviation_pct, (int, float)) and sma50_deviation_pct > _BO_SMA50_DEV_THRESH)
     )
-    if is_extended:
-        # 優先: extended > confirmed > soft。pending は confirmed/soft 非該当時のみなので
-        # pending の extended 上書きは起こり得るが、§1.4 の優先順位に従い extended を採用する。
+    # extended 上書きは「終値で実際にブレイクした」状態 (bo_confirmed/bo_soft) のみに適用する。
+    # pending (today_close <= pivotH = 終値で抜けていない) は extended に上書きしない:
+    # 「ブレイクしていないのに過熱(追いかけ警告)」は §4.1 (bo_extended は close>pivotH が前提) と矛盾し、
+    # 引け未確定銘柄が nightly に bo_extended として混入する Trust Cliff になる (Sprint 2 6体合議 review MAJOR)。
+    # §4.1 の優先順位 extended>confirmed>soft は「close>pivotH の3 state 間」の優先であり pending は対象外。
+    if is_extended and state != "bo_pending":
         state = "bo_extended"
 
     tier = state[len("bo_"):]  # bo_confirmed → "confirmed" 等
@@ -13242,6 +13245,38 @@ def _detect_breakout(
         "market_uptrend": spy_uptrend,
         "levels": levels,
     }
+
+
+def _scan_breakout(
+    times: list[str],
+    highs: list[float],
+    lows: list[float],
+    closes: list[float],
+    volumes: list[float],
+    spy_uptrend: bool | None,
+) -> dict | None:
+    """nightly scan 用 breakout 検出 helper (parallel/sequential 両 path で共用)。
+
+    _scan_resistance_retest と同型の additive wrapper。同一 OHLCV を使い回し (追加 fetch ゼロ、§4.5)
+    `_detect_breakout` を呼ぶ。nightly は引け確定後実行のため DB 保存対象は 3 state
+    (bo_confirmed/bo_soft/bo_extended) のみ。pending は引け確定後に消える非買いシグナルで
+    screener に stale を溜めないため保存しない (SPEC §4.1)。detected でない / pending は None を返す。
+
+    cup_handle 結果には依存しない (breakout は形状不問の独立網)。spy_uptrend は cron スコープで
+    既に 1 回算出済の値を渡す (_detect_breakout の G1 地合い gate に使う)。
+    """
+    try:
+        bo = _detect_breakout(times, highs, lows, closes, volumes, spy_uptrend)
+    except Exception as e:
+        print(f"[breakout] scan detect failed: {e}")
+        return None
+    if not (isinstance(bo, dict) and bo.get("detected")):
+        return None
+    # nightly 保存対象は引け確定の3 state のみ。pending (§4.1 非保存) と想定外 state を防御的に drop
+    # (caller の bo_state フォールバックが「最強シグナルを無音で混入」させる経路を物理排除、Sprint 2 review MINOR)。
+    if bo.get("state") not in ("bo_confirmed", "bo_soft", "bo_extended"):
+        return None
+    return bo
 
 
 def _detect_cup_handle(
@@ -14101,6 +14136,23 @@ async def get_technical(
                 print(f"[resistance_retest] detect failed: {e}")
                 patterns_result["resistance_retest"] = {
                     "detected": False, "state": "resistance_retest", "approach_level": None,
+                }
+
+        # SPEC_2026-06-16 §4.4 (Sprint 2): 新高値ブレイク (cup_handle と直交する独立検出)。
+        # cup 非 requested でも動くよう spy_uptrend を breakout ブロック内で独立取得
+        # (_get_spy_history は 24h cache のため追加 fetch なし、§4.4)。
+        # /api/technical は pending を含む 4 state を返すが、pending は §38-safe 非買いラベル固定で
+        # 色信号を出さない (nightly DB 非保存=§4.1 とは別、リアルタイム個別株側の責務=§4.4)。
+        if "breakout" in requested:
+            try:
+                _bo_spy_up = _spy_uptrend(_get_spy_history())
+                patterns_result["breakout"] = _detect_breakout(
+                    times, highs, lows, closes, volumes, _bo_spy_up
+                )
+            except Exception as e:
+                print(f"[breakout] detect failed: {e}")
+                patterns_result["breakout"] = {
+                    "detected": False, "state": "breakout", "tier": None,
                 }
 
         # SMA は dma_cross 検出でも使うため事前計算 (slice 用とは別 reference を保持)
@@ -16540,6 +16592,10 @@ async def cron_cup_scan(
     # クリティック発見: _scan_one は従来 _detect_cup_handle のみ呼び retest は保存されなかった。
     retest_detected = 0
     retest_upserted = 0
+    # SPEC §4.2 (Sprint 2、Phase-gate 6体合議): breakout を nightly で検出・保存。
+    # pattern_type='breakout' 別 namespace (cup_handle/resistance_retest と state 取り合いなし、§4.1)。
+    breakout_detected = 0
+    breakout_upserted = 0
 
     # v124 Russell 3000 Phase 1: worker_count > 1 で並列化 (asyncio.Semaphore で rate limit)
     if worker_count > 1:
@@ -16552,21 +16608,24 @@ async def cron_cup_scan(
                     await asyncio.sleep(1.0)
                 ohlcv = await _fetch_ohlcv_3y(ticker)
                 if ohlcv is None:
-                    return ticker, None, None, "ohlcv_fetch_failed"
+                    return ticker, None, None, None, "ohlcv_fetch_failed"
                 times, highs, lows, closes, volumes = ohlcv
                 try:
                     result = _detect_cup_handle(times, highs, lows, closes, volumes, spy_up)
                 except Exception as e:
-                    return ticker, None, None, f"detect_failed: {e}"
+                    return ticker, None, None, None, f"detect_failed: {e}"
                 # v220: resistance_retest を additive 検出 (None なら非該当)
                 retest = _scan_resistance_retest(times, highs, lows, closes, result)
-                return ticker, result, retest, None
+                # SPEC §4.2 (Sprint 2): breakout を同一 OHLCV で additive 検出 (追加 fetch ゼロ、§4.5)。
+                # 早期 return も含め _scan_one の全 return を 5 要素に揃える (漏れ=gather unpack で全銘柄 ValueError)。
+                breakout = _scan_breakout(times, highs, lows, closes, volumes, spy_up)
+                return ticker, result, retest, breakout, None
 
         results = await asyncio.gather(
             *[_scan_one(i, t) for i, t in enumerate(tickers)],
             return_exceptions=False,
         )
-        for ticker, result, retest, err in results:
+        for ticker, result, retest, breakout, err in results:
             if err:
                 failed.append({"ticker": ticker, "reason": err})
                 continue
@@ -16599,6 +16658,17 @@ async def cron_cup_scan(
                     )
                     if ok_rr:
                         retest_upserted += 1
+            # SPEC §4.2 (Sprint 2): breakout を pattern_type='breakout' 別 namespace で保存。
+            # pending は _scan_breakout で除外済 (nightly 非保存、§4.1)。on_conflict は cup/retest と別 key。
+            if breakout and breakout.get("detected"):
+                breakout_detected += 1
+                if not dry_run:
+                    bo_state = breakout.get("state") or "bo_confirmed"
+                    ok_bo = await asyncio.to_thread(
+                        _upsert_pattern_signal, ticker, "breakout", today, bo_state, breakout,
+                    )
+                    if ok_bo:
+                        breakout_upserted += 1
     else:
         # 既存 sequential path (worker_count=1)、 既存挙動維持
         for i, ticker in enumerate(tickers):
@@ -16644,6 +16714,18 @@ async def cron_cup_scan(
                     )
                     if ok_rr:
                         retest_upserted += 1
+            # SPEC §4.2 (Sprint 2): breakout を additive 検出 + pattern_type 分離保存 (sequential path)。
+            # sequential はループ内ローカル変数構造のため tuple 拡張不要 (gather unpack が存在しない)。
+            breakout = _scan_breakout(times, highs, lows, closes, volumes, spy_up)
+            if breakout and breakout.get("detected"):
+                breakout_detected += 1
+                if not dry_run:
+                    bo_state = breakout.get("state") or "bo_confirmed"
+                    ok_bo = await asyncio.to_thread(
+                        _upsert_pattern_signal, ticker, "breakout", today, bo_state, breakout,
+                    )
+                    if ok_bo:
+                        breakout_upserted += 1
 
     return {
         "processed_count": len(tickers),
@@ -16664,6 +16746,9 @@ async def cron_cup_scan(
         # v220: resistance_retest 検出/保存件数 (nightly で日次件数を観測 = クリティック指摘の未実測flow計測の起点)
         "retest_detected_count": retest_detected,
         "retest_upserted_count": retest_upserted,
+        # SPEC §4.2 (Sprint 2): breakout 検出/保存件数 (pending 除外後の confirmed/soft/extended のみ)。
+        "breakout_detected_count": breakout_detected,
+        "breakout_upserted_count": breakout_upserted,
     }
 
 
@@ -16711,6 +16796,20 @@ async def cron_pattern_signals_cleanup(
 _CUP_TRANSITION_MAP = {
     ("formation", "breakout_pending"): "formation_to_breakout_pending",
     ("breakout_pending", "breakout_confirmed"): "breakout_pending_to_confirmed",
+}
+
+# SPEC §4.2-A (Sprint 2): breakout (bo_*) 専用 transition map。cup の _CUP_TRANSITION_MAP は一切変更しない。
+# bo_pending は nightly 非保存 (§4.1) のため DB に bo_pending 行が存在せず、prev/today に bo_pending が
+# 並ぶ transition は実データ上発生しない (理論値として列挙)。email dispatch は後続 Phase で DEFER (§4.2-A(4))。
+_BO_TRANSITION_MAP = {
+    ("bo_soft", "bo_confirmed"): "bo_soft_to_confirmed",        # 出来高不足(1.3x)→達成(1.5x)
+    ("bo_pending", "bo_confirmed"): "bo_pending_to_confirmed",  # 日中失敗→翌日終値確定
+}
+
+# pattern_type → transition map のディスパッチ (cup_handle は従来挙動を完全保存)。
+_TRANSITION_MAP_BY_TYPE = {
+    "cup_handle": _CUP_TRANSITION_MAP,
+    "breakout": _BO_TRANSITION_MAP,
 }
 
 
@@ -16790,7 +16889,10 @@ def _detect_signal_transitions(pattern_type: str = "cup_handle") -> list[dict]:
         prev_state = prev_data[0]["state"] if prev_data else None
         today_state = today_sig["state"]
 
-        transition_type = _CUP_TRANSITION_MAP.get((prev_state, today_state))
+        # SPEC §4.2-A(2): pattern_type で map 切替。cup_handle 既定引数は _CUP_TRANSITION_MAP を引き、
+        # 従来挙動を完全保存 (cup の唯一の caller=cron_cup_notify は引数なし=cup_handle)。
+        transition_map = _TRANSITION_MAP_BY_TYPE.get(pattern_type, {})
+        transition_type = transition_map.get((prev_state, today_state))
         if not transition_type:
             continue
 
@@ -19018,6 +19120,15 @@ _STATE_PRIORITY: dict[str, int] = {
     "cup_completing": 4,
     "breakout_extended": 5,
     "formation_market_weak": 6,
+}
+
+# SPEC §4.2-A(3) (Sprint 2): breakout screener (/api/scanner/breakout、Sprint 5) の表示順。
+# cup_handle の _STATE_PRIORITY は一切変更しない (別 identifier で additive)。
+# bo_pending は nightly 非保存 (§4.1) のため screener に存在しない。
+_STATE_PRIORITY_BO: dict[str, int] = {
+    "bo_confirmed": 0,   # 最重要: 終値 + 出来高 >= 1.5x で確定
+    "bo_soft": 1,        # 終値で抜けたが出来高 1.3–1.49x
+    "bo_extended": 2,    # 過熱圏 (追いかけ警告)
 }
 
 
