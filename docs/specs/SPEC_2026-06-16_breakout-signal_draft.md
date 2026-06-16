@@ -232,14 +232,23 @@ decision③「新52週高値は別の strong tier badge」。confirmed/soft/pend
 ```python
 HIGH_52W_LOOKBACK = 252
 def _is_new_52w_high(highs, closes):
+    # ⚠️ 2-tuple 返し (Sprint 1 実装で更新、2026-06-17): (is_high: bool, prior_252w_high: float|None)。
+    #    §1.8 の levels が prior_252w_high を参照するため、bool 単一返しでは整合しない。
     if len(closes) < 60:
         ref = highs[:-1]                                  # 上場来でも最低60本は §1.7 で担保
     else:
         ref = highs[-(HIGH_52W_LOOKBACK + 1):-1]          # 当日除く直近252本の intraday 高値
-    if not ref:  return False
+    if not ref:  return (False, None)
     prior_252w_high = max(h for h in ref if h > 0)
-    return closes[-1] >= prior_252w_high                  # 終値ベースで52週高値を更新
+    return (closes[-1] >= prior_252w_high, round(prior_252w_high, 2))  # 終値ベースで52週高値を更新
 ```
+
+> **⚠️ Sprint 1 実装による §1.6 更新 (2026-06-17)**: 上記擬似コードは当初 bool 単一返しだったが、
+> `_is_new_52w_high` を **`(is_high: bool, prior_252w_high: float|None)` の 2-tuple 返し** に更新した。
+> 理由: §1.8 の `levels[1]` (`{"kind": "high_52w", "price": prior_252w_high, ...}`) が
+> `prior_252w_high` を参照するため、bool 単一返しでは price を別途算出する必要があり整合しない。
+> caller は `is_new_52w_high, prior_252w_high = _is_new_52w_high(highs, closes)` で展開し、
+> `is_new_52w_high`(bool 部)を §1.8 の `"is_new_52w_high"` キーへ、`prior_252w_high` を levels へ渡す。
 
 **終値ベース採用の根拠(③ + Trust Cliff):** ③で「新52週高値終値ブレイク: 16件」。52週高値 badge は最強tierなので**終値**で確定したもののみ(ザラ場の瞬間タッチは pending と同じく剥がれる)。③で N40 confirmed の RL/AMAT が「新52週高値」だったのと整合(RL/AMAT/SW の3件中2件が 52週高値 = 最強tier の実体)。CPA は 52週高値 156.41 未達 → `False`(③実証通り)。pending では終値が pivotH を抜けていない以上 52週終値高値も未更新 = `False`。
 

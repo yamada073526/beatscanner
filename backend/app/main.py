@@ -13048,6 +13048,202 @@ def _extended_numeric_fields(
     }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# breakout (新高値ブレイク) 検出 — SPEC_2026-06-16_breakout-signal §1
+#
+# cup_handle / resistance_retest と直交する第3の網。形状不問・「直近 N 日 intraday 高値
+# (pivotH) を出来高を伴って終値で抜けた事実」だけを見る。retest 同型の additive・独立関数・
+# out dict 返却 (None を返さない)・LLM SDK import 禁止 (数値物理層)。
+#
+# ⚠️ cup_handle の閾値 (breakout_volume_multiplier 等) を流用しない。独立定数を別定義する。
+# ⚠️ avgVol50 は「当日除く直前50日」(volumes[-51:-1])。cup_handle の volumes[-50:] (当日込) を流用しない。
+# ─────────────────────────────────────────────────────────────────────────────
+
+# breakout 専用の独立定数 (cup_handle の閾値を流用禁止、§1.3/§1.4 SSOT)
+_BO_CONFIRM_VOL = 1.5            # confirmed: 出来高 >= 50日平均 × 1.5 (O'Neil 原典 +50%)
+_BO_SOFT_VOL = 1.3              # soft: 1.3–1.49x (確認やや不足)
+_BO_EXTENDED_BASE_RISE_THRESH = 10.0  # extended: pivotH からの上昇率 > +10% (F② LOCKED, O'Neil 原典寄り)
+_BO_SMA50_DEV_THRESH = 30.0     # extended: SMA50 乖離率 > +30% (F② LOCKED, 単一閾値)
+_BO_N20, _BO_N40 = 20, 40       # base 窓 (4週 / 8週、decision③)
+_BO_HIGH_52W_LOOKBACK = 252
+
+
+def _pivot_high(highs: list[float], N: int) -> float | None:
+    """直近 N 営業日 (当日除く) の intraday 高値 (pivotH)。
+
+    当日を含めると never-break になり pending/confirmed が原理的に出ないため、末尾=当日を除外
+    する (SPEC §0.2 / §1.2)。データ不足 (上場間もない等) は None。
+    """
+    window = highs[-(N + 1):-1]          # 末尾=当日を除いた直前 N 本
+    if len(window) < N:                  # データ不足は None
+        return None
+    return round(max(w for w in window if w > 0), 2)
+
+
+def _is_new_52w_high(
+    highs: list[float],
+    closes: list[float],
+) -> tuple[bool, float | None]:
+    """新52週高値 (終値ベース) を更新したか。SPEC §1.6 (2-tuple 返し更新済)。
+
+    Return: (is_high: bool, prior_252w_high: float | None)
+      - is_high: closes[-1] が当日除く直近252本の intraday 高値以上か
+      - prior_252w_high: その直前52週高値 (levels の price に使う)。ref 不在時は None
+
+    終値ベース採用 (ザラ場の瞬間タッチは pending と同じく剥がれるため、最強tier badge は終値確定のみ)。
+    """
+    if len(closes) < 60:
+        ref = highs[:-1]                                  # 上場来でも最低60本は G0 で担保
+    else:
+        ref = highs[-(_BO_HIGH_52W_LOOKBACK + 1):-1]      # 当日除く直近252本の intraday 高値
+    if not ref:
+        return (False, None)
+    prior_252w_high = max(h for h in ref if h > 0)
+    return (closes[-1] >= prior_252w_high, round(prior_252w_high, 2))
+
+
+def _detect_breakout(
+    times: list[str],
+    highs: list[float],
+    lows: list[float],
+    closes: list[float],
+    volumes: list[float],
+    spy_uptrend: bool | None,
+) -> dict:
+    """新高値ブレイク (短期 base breakout) の検出。SPEC_2026-06-16_breakout-signal §1。
+
+    cup_handle の幾何条件 (U字・prior uptrend・rim 対称) を課さず、「直近 N 日 intraday 高値
+    (pivotH) を出来高を伴って終値で抜けたか」だけを見る。retest 同型の out dict を返す
+    (None は返さない)。数値物理層 (LLM 不使用)。
+
+    Return: detected/state/tier/polarity 等の dict (§1.8)。非検出は detected=False の初期 out。
+    """
+    n = len(closes)
+    out = {"detected": False, "state": "breakout", "tier": None}
+
+    # avgVol50 (SSOT・当日除く直前50日)。cup_handle の volumes[-50:] (当日込) を流用しない。
+    avg_volume_50 = sum(volumes[-51:-1]) / 50 if n >= 51 else sum(volumes) / max(1, n)
+    today_close = closes[-1] if closes else 0.0
+    today_high = highs[-1] if highs else 0.0
+    today_volume = volumes[-1] if volumes else 0.0
+    vol_ratio = today_volume / avg_volume_50 if avg_volume_50 > 0 else 0.0
+
+    pivotH20 = _pivot_high(highs, _BO_N20)   # 4週 base
+    pivotH40 = _pivot_high(highs, _BO_N40)   # 8週 base
+
+    def _classify(pivotH: float | None) -> tuple[str, float] | None:
+        # 終値で抜けていない → pending か非該当 (§1.5)。
+        # 出来高を伴わない上抜け (vol<1.3x) は false breakout リスクのため signal 化しない
+        # (bo_low_vol を返さない = detected:False)。
+        if pivotH is None:
+            return None
+        if today_close <= pivotH:
+            return None
+        if vol_ratio >= _BO_CONFIRM_VOL:
+            return ("bo_confirmed", round(vol_ratio, 2))
+        if vol_ratio >= _BO_SOFT_VOL:
+            return ("bo_soft", round(vol_ratio, 2))
+        return None
+
+    # ── guard 順序 (§1.7、retest 慣習踏襲) ──────────────────────────────────────
+    # G0 データ不足
+    if n < 60 or today_close <= 0 or (pivotH20 is None and pivotH40 is None):
+        return out
+
+    # G1 地合い gate: SPY 200DMA 割れ (weak) なら breakout を出さない。
+    #    spy_uptrend is None (fetch 失敗) は weak 扱いせず通す (graceful degrade)。
+    if spy_uptrend is False:
+        return out
+
+    # G1b 軽量 stage filter (追加 fetch ゼロ): pivotH(採用 tier) > SMA50 かつ 50DMA 上向き。
+    #    faulty base / 下落途中の戻り高値抜けを緑 confirmed で量産しない (落ちるナイフ回避)。
+    sma50_list = _compute_sma(closes, 50)
+    sma50_now = sma50_list[-1] if sma50_list else None
+    sma50_5ago = sma50_list[-6] if len(sma50_list) >= 6 else None
+    pivotH_for_stage = pivotH20 if pivotH20 is not None else pivotH40  # 採用 tier の前段近似 (None ガード)
+    _stage_ok = (
+        isinstance(sma50_now, (int, float))
+        and isinstance(sma50_5ago, (int, float))
+        and isinstance(pivotH_for_stage, (int, float))
+        and pivotH_for_stage > sma50_now      # pivotH が SMA50 を上回る
+        and sma50_now > sma50_5ago            # 50DMA が直近 5 日で上向き
+    )
+    if not _stage_ok:
+        return out
+
+    # G2 出来高ソース欠落 gate
+    if avg_volume_50 <= 0 or today_volume <= 0:
+        return out
+
+    # ── 採用 tier 選択 (§1.7.5): N20 優先 → N40 ────────────────────────────────
+    classified20 = _classify(pivotH20)
+    classified40 = _classify(pivotH40)
+    if classified20 is not None:
+        state, _vr = classified20
+        used_window, pivotH_used = _BO_N20, pivotH20
+    elif classified40 is not None:
+        state, _vr = classified40
+        used_window, pivotH_used = _BO_N40, pivotH40
+    else:
+        # confirmed/soft いずれも非該当 → pending を見る (排他: _classify 先 → 非該当時のみ pending)。
+        pivotH_candidate = pivotH20 if pivotH20 is not None else pivotH40
+        used_window = _BO_N20 if pivotH20 is not None else _BO_N40
+        if (
+            pivotH_candidate is not None
+            and today_high > pivotH_candidate
+            and today_close <= pivotH_candidate
+        ):
+            state, pivotH_used = "bo_pending", pivotH_candidate
+        else:
+            return out  # confirmed でも soft でも pending でもない
+
+    # ── extended (§1.4 独立フラグ): _compute_extended_gate の .passed は使わない ──
+    ext = _extended_numeric_fields(closes, today_close, pivotH_used, spy_uptrend)
+    base_rise_pct = ext.get("base_rise_pct")
+    sma50_deviation_pct = ext.get("sma50_deviation_pct")
+    is_extended = (
+        (isinstance(base_rise_pct, (int, float)) and base_rise_pct > _BO_EXTENDED_BASE_RISE_THRESH)
+        or (isinstance(sma50_deviation_pct, (int, float)) and sma50_deviation_pct > _BO_SMA50_DEV_THRESH)
+    )
+    if is_extended:
+        # 優先: extended > confirmed > soft。pending は confirmed/soft 非該当時のみなので
+        # pending の extended 上書きは起こり得るが、§1.4 の優先順位に従い extended を採用する。
+        state = "bo_extended"
+
+    tier = state[len("bo_"):]  # bo_confirmed → "confirmed" 等
+
+    # polarity: confirmed (vol>=1.5x) のみ "up"。soft/pending/extended は "neutral" (§9 #9)。
+    polarity = "up" if state == "bo_confirmed" else "neutral"
+
+    is_new_52w_high, prior_252w_high = _is_new_52w_high(highs, closes)
+
+    levels = [
+        {"kind": "pivot_high", "price": pivotH_used, "label": "直近高値(ブレイク水準)"},
+    ]
+    if is_new_52w_high and prior_252w_high is not None:
+        levels.append(
+            {"kind": "high_52w", "price": prior_252w_high, "label": "52週高値"}
+        )
+
+    return {
+        "detected": True,
+        "state": state,
+        "tier": tier,
+        "polarity": polarity,
+        "window": used_window,
+        "pivot_high": pivotH_used,
+        "close": round(today_close, 2),
+        "volume_ratio": round(vol_ratio, 2),
+        "volume_threshold": _BO_CONFIRM_VOL,
+        "is_new_52w_high": is_new_52w_high,
+        "is_extended": is_extended,
+        "base_rise_pct": base_rise_pct,
+        "sma50_deviation_pct": sma50_deviation_pct,
+        "market_uptrend": spy_uptrend,
+        "levels": levels,
+    }
+
+
 def _detect_cup_handle(
     times: list[str],
     highs: list[float],
