@@ -34,19 +34,19 @@ import { supabase } from '../../lib/supabase.js';
 
 
 // Sprint 5 frontend: 新高値ブレイクスクリーナー用 feature flag。
-// SPEC §6.4 ✅LOCKED (F⑥, 2026-06-17): default OFF で安全 rollout。
-//   URL param `?breakout_screener=1` または localStorage `breakout_screener` で ON。
-//   URL 優先 (即 dogfood / 即 revert)、localStorage が永続。
-//   ([[feedback_feature_flag_dual_mode]] URL優先パターン)
+// 2026-06-18 user promote: **default ON** に昇格 (検証済 / headless 目視済)。
+//   kill-switch: `?breakout_screener=0` または localStorage `breakout_screener='0'` で OFF (緊急 revert 用、redesign 前の保険)。
+//   URL 優先 (即 revert)、localStorage が永続。([[feedback_feature_flag_dual_mode]] URL優先パターン)
+//   ⚠️ screener タブは全面 redesign 予定 (user 2026-06-18)。本 section の最終 UX は redesign で再設計される。
 function isBreakoutScreenerEnabled() {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   try {
     const urlParam = new URLSearchParams(window.location.search).get('breakout_screener');
     if (urlParam === '1') return true;
     if (urlParam === '0') return false;
-    return window.localStorage?.getItem('breakout_screener') === '1';
+    return window.localStorage?.getItem('breakout_screener') !== '0';  // default ON
   } catch {
-    return false;
+    return true;
   }
 }
 
