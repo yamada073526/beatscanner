@@ -18621,6 +18621,7 @@ def _fetch_screener_fundamentals_by_condition(
         "near_high": "near_high_pct_scaled",
         "buyback": "buyback_yield_pct",
         "volume_surge": "volume_surge_pct",
+        "inst_holders": "inst_holders_qoq_pct",  # Sprint C: I 条件 (機関保有社数 QoQ%)
     }
     col = col_map.get(condition)
     if col is None:
@@ -20734,6 +20735,7 @@ def _upsert_screener_fundamental(
     near_high_pct_scaled: "float | None" = None,
     buyback_yield_pct: "float | None" = None,
     null_reasons: "dict | None" = None,
+    inst_holders_qoq_pct: "float | None" = None,
 ) -> bool:
     """screener_fundamentals テーブルに各指標を upsert。
 
@@ -20746,6 +20748,9 @@ def _upsert_screener_fundamental(
       - buyback_yield_pct: buyback_yield × 100 の pct 表記 (例 1.73)。
         同上。旧 ratio カラム (near_high_pct / buyback_yield) は vestigial 化
         (新 row では None を渡して書き込みを止める)。
+    Sprint C 対応: inst_holders_qoq_pct 引数を追加 (I 条件 = 機関保有社数 QoQ%)。
+      - None-preserve 厳守: None のまま渡すと payload に含めない = DB を上書きしない。
+      - optional_cols fallback: migration 未適用時はカラム除外して再 upsert (graceful)。
 
     None 値のカラムは payload に含めない = 既存 DB 値を上書きしない (後方互換)。
     C 条件 (eps_yoy_pct) は引数デフォルト None → payload に含まれないため
@@ -20799,6 +20804,11 @@ def _upsert_screener_fundamental(
     # migration 未適用時は graceful fallback (optional_cols) で外して再 upsert。
     if null_reasons:
         row["null_reasons"] = null_reasons
+    # ── Sprint C: I 条件 inst_holders_qoq_pct ────────────────────────────────
+    # None-preserve: None を渡した場合は payload に含めない (DB の既存値を上書きしない)。
+    # optional_cols fallback: migration 未適用時はカラム除外して再 upsert (C/A/N/S 値を保護)。
+    if inst_holders_qoq_pct is not None:
+        row["inst_holders_qoq_pct"] = inst_holders_qoq_pct
 
     try:
         sb.table("screener_fundamentals").upsert(
@@ -20809,12 +20819,13 @@ def _upsert_screener_fundamental(
     except Exception as e:
         err_str = str(e)
         # turnaround / near_high_pct / volume_surge_pct / near_high_pct_scaled /
-        # buyback_yield_pct カラム未作成時の graceful fallback:
+        # buyback_yield_pct / inst_holders_qoq_pct カラム未作成時の graceful fallback:
         # 問題カラムを外して再 upsert (C/A/N/S buyback 値を保護)
         optional_cols = [
             c for c in (
                 "turnaround", "near_high_pct", "volume_surge_pct",
                 "near_high_pct_scaled", "buyback_yield_pct", "null_reasons",
+                "inst_holders_qoq_pct",  # Sprint C: migration 未適用時の graceful fallback
             )
             if c in err_str and c in row
         ]
@@ -20971,9 +20982,9 @@ async def cron_canslim_scan(
         # 全 chunk 失敗でも near_high_pct=None で upsert を続行 (C/A 値は影響なし)
 
     async def _compute_one(ticker: str):
-        """1 ticker の C/A/N/S 指標を計算して
+        """1 ticker の C/A/N/S/I 指標を計算して
         (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct,
-         buyback_yield, volume_surge_pct, err) を返す。
+         buyback_yield, volume_surge_pct, inst_holders_qoq_pct, err, null_reasons) を返す。
 
         Phase 3 Sprint 1 拡張: A 条件 (eps_cagr_3y / roe / turnaround) を追加。
         Phase 3 Sprint 2 拡張: N 条件 (near_high_pct = price / yearHigh) を追加。
@@ -20986,6 +20997,13 @@ async def cron_canslim_scan(
           - volume_surge_pct: _calc_volume_surge_pct helper。
             averageVolume は /stable/profile から取得 (batch-quote には含まれない)。
             profile は _fetch_sector_industry が 24h cache で温めているため多くは cache hit。
+        Sprint C 拡張: I 条件 (inst_holders_qoq_pct = 機関保有社数 QoQ%) を追加。
+          - FMP /institutional-ownership/symbol-positions-summary を per-ticker fetch。
+          - aggregator/institutional.py の candidate_quarters() + summarize() を再利用。
+          - QoQ% = (latest.investorsHolding - prev.investorsHolding) / abs(prev) * 100
+          - データなし / ゼロ除算 → None (None-preserve 厳守)。
+          - §38 厳守: 数値事実のみ (「買いシグナル」断定なし)。
+          - 45日遅延 (13F 提出期限、 frontend I チップに注記)。
         C 条件 (eps_yoy_pct) の計算ロジックは変更なし (後方互換)。
 
         fetch + 計算のみ (upsert / counter 更新はしない = post-gather で逐次)。
@@ -20998,11 +21016,12 @@ async def cron_canslim_scan(
         ★ N 条件 near_high_pct は yearHigh map (pre-fetch) から price/yearHigh で計算。
         ★ S 条件 buyback は cash-flow-statement (per-ticker) + market_cap (pre-fetch) から計算。
         ★ S 条件 volume_surge は profile の averageVolume (24h cache) から計算。
+        ★ I 条件 inst_holders_qoq_pct は FMP 13F symbol-positions-summary から計算。
 
-        ★★ tuple arity: 全 return 文が 10 要素であること (S5a で null_reasons を末尾追加、
+        ★★ tuple arity: 全 return 文が 11 要素であること (Sprint C で inst_holders_qoq_pct 追加、
            feedback_pge_loop_pitfalls ルール 1)。
         return (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct,
-                buyback_yield, volume_surge_pct, err, null_reasons)
+                buyback_yield, volume_surge_pct, inst_holders_qoq_pct, err, null_reasons)
         ※ error path は null_reasons={} (upsert されないため空でよい)、success path のみ実 dict。
         """
         try:
@@ -21010,20 +21029,20 @@ async def cron_canslim_scan(
             try:
                 surprises_raw = await client.earnings_surprises(ticker, limit=8)
             except Exception:
-                return ticker, None, None, None, None, None, None, None, "earnings_surprises_failed", {}
+                return ticker, None, None, None, None, None, None, None, None, "earnings_surprises_failed", {}
             if not surprises_raw:
-                return ticker, None, None, None, None, None, None, None, "earnings_surprises_empty", {}
+                return ticker, None, None, None, None, None, None, None, None, "earnings_surprises_empty", {}
 
             surprises_past = [s for s in surprises_raw if _has_eps_actual(s)]
             if not surprises_past:
-                return ticker, None, None, None, None, None, None, None, "no_eps_actual_in_surprises", {}
+                return ticker, None, None, None, None, None, None, None, None, "no_eps_actual_in_surprises", {}
 
             latest = sorted(
                 surprises_past, key=lambda d: d.get("date") or "", reverse=True
             )[0]
             entry_date_str = latest.get("date") or ""
             if not entry_date_str:
-                return ticker, None, None, None, None, None, None, None, "no_entry_date", {}
+                return ticker, None, None, None, None, None, None, None, None, "no_entry_date", {}
             eps_actual = _safe_eps_float(
                 latest.get("eps")
                 or latest.get("epsActual")
@@ -21228,6 +21247,62 @@ async def cron_canslim_scan(
             except Exception:
                 volume_surge_pct = None  # fetch 失敗 → NULL (欠損ガード)
 
+            # ── I 条件: 機関保有社数 QoQ% (inst_holders_qoq_pct) ──────────────────
+            # FMP /stable/institutional-ownership/symbol-positions-summary を per-ticker fetch。
+            # aggregator/institutional.py の candidate_quarters() + summarize() を再利用して
+            # 直近Q (latest) と前期Q (trend[-2]) の investorsHolding 差から QoQ% を計算。
+            #
+            # §38 厳守: 機関保有社数の増減は「事実数値」= 断定将来予測にならない。
+            # 「買いシグナル」「上昇見込み」等の断定語は一切付けない (静的列のみ)。
+            #
+            # 45日遅延: 13F は SEC 提出期限が四半期末+45日。frontend の I チップに遅延ラベルを
+            # 表示して per-ticker InstitutionalSection の delayDays:45 と一貫させる (Trust Cliff 防止)。
+            #
+            # None-preserve 厳守: データなし / ゼロ除算 → None (0 に潰さない)。
+            # optional_cols fallback: migration 未適用時も upsert は続行 (graceful)。
+            inst_holders_qoq_pct: float | None = None
+            try:
+                from .aggregator.institutional import (
+                    candidate_quarters as _inst_cq,
+                    summarize as _inst_sum_c,
+                )
+                _inst_cands_c = _inst_cq(5)  # 直近5候補Q (最新は45日遅延で未提出が多い)
+                _inst_raw_c = await asyncio.gather(
+                    *[
+                        client.institutional_holder(ticker, limit=1, year=_y, quarter=_q)
+                        for (_y, _q) in _inst_cands_c
+                    ],
+                    return_exceptions=True,
+                )
+                _inst_rows_c = [
+                    r[0]
+                    for r in _inst_raw_c
+                    if isinstance(r, list) and r and isinstance(r[0], dict)
+                ]
+                if _inst_rows_c:
+                    _inst_summary_c = _inst_sum_c(_inst_rows_c, max_quarters=4)
+                    _trend_c = _inst_summary_c.get("trend") or []
+                    # trend は古→新。直近Q(最後)と前期Q(後ろから2番目)の investorsHolding で QoQ% 計算
+                    if len(_trend_c) >= 2:
+                        _latest_ih = _trend_c[-1].get("investorsHolding")
+                        _prev_ih = _trend_c[-2].get("investorsHolding")
+                        if (
+                            _latest_ih is not None
+                            and _prev_ih is not None
+                            and isinstance(_latest_ih, (int, float))
+                            and isinstance(_prev_ih, (int, float))
+                            and _prev_ih != 0
+                        ):
+                            try:
+                                inst_holders_qoq_pct = round(
+                                    (float(_latest_ih) - float(_prev_ih)) / abs(float(_prev_ih)) * 100,
+                                    2,
+                                )
+                            except (ValueError, TypeError, ZeroDivisionError):
+                                inst_holders_qoq_pct = None  # 算出失敗 → NULL
+            except Exception:
+                inst_holders_qoq_pct = None  # fetch / 計算失敗 → NULL (欠損ガード)
+
             # ── S5a: null_reason per-cause を組み立て (静的コード、LLM 不使用) ──
             #   success path のみ upsert される (error path は err を立てて post-gather で continue)。
             #   原因コードは frontend (S5b) が静的 dict で UI ラベル化。§38/§5: 予測語/最上級なし。
@@ -21245,14 +21320,18 @@ async def cron_canslim_scan(
                 null_reasons["buyback"] = "data_missing"
             if volume_surge_pct is None:
                 null_reasons["volume_surge"] = "data_missing"
+            if inst_holders_qoq_pct is None:
+                null_reasons["inst_holders"] = "no_institutional_data"
 
-            # ★★ tuple arity 10 要素 (S5a で null_reasons 追加、feedback_pge_loop_pitfalls ルール 1)
+            # ★★ tuple arity 11 要素 (Sprint C で inst_holders_qoq_pct 追加、
+            #    feedback_pge_loop_pitfalls ルール 1)
             return (
                 ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround,
-                near_high_pct, buyback_yield, volume_surge_pct, None, null_reasons,
+                near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
+                None, null_reasons,
             )
         except Exception as e:
-            return ticker, None, None, None, None, None, None, None, f"unexpected: {e}", {}
+            return ticker, None, None, None, None, None, None, None, None, f"unexpected: {e}", {}
 
     # fetch + 計算: worker_count>1 で並列 (asyncio.Semaphore)、 =1 で逐次。
     # ★ 6体合議 critical 対応: 旧実装は完全逐次で full universe (3000) で GHA timeout (30min) 超過
@@ -21279,20 +21358,21 @@ async def cron_canslim_scan(
             results.append(await _compute_one(ticker))
 
     # count + upsert (post-gather 逐次、 cup-scan と同型)
-    # Phase 3 Sprint 5a: result tuple が 10 要素 (末尾に null_reasons dict)
+    # Sprint C: result tuple が 11 要素 (inst_holders_qoq_pct を追加)
     # (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct,
-    #  buyback_yield, volume_surge_pct, err, null_reasons)
+    #  buyback_yield, volume_surge_pct, inst_holders_qoq_pct, err, null_reasons)
     # Phase 3 Sprint 4a: post-gather で ×100 して pct 新カラム値を生成
     #   near_high_pct_scaled = near_high_pct × 100 (例 0.97 → 97.0)
     #   buyback_yield_pct    = buyback_yield  × 100 (例 0.0173 → 1.73)
-    #   tuple arity は 10 (S5a で null_reasons 追加、feedback_pge_loop_pitfalls ルール 1)
-    a_computed = 0           # CAGR が算出できた件数
-    roe_computed = 0         # ROE が取得できた件数
-    near_high_computed = 0   # near_high_pct が算出できた件数
-    buyback_computed = 0     # buyback_yield が算出できた件数 (S 条件)
+    #   tuple arity は 11 (Sprint C で inst_holders_qoq_pct 追加、feedback_pge_loop_pitfalls ルール 1)
+    a_computed = 0             # CAGR が算出できた件数
+    roe_computed = 0           # ROE が取得できた件数
+    near_high_computed = 0     # near_high_pct が算出できた件数
+    buyback_computed = 0       # buyback_yield が算出できた件数 (S 条件)
     volume_surge_computed = 0  # volume_surge_pct が算出できた件数 (S 条件)
+    inst_holders_computed = 0  # inst_holders_qoq_pct が算出できた件数 (I 条件)
     for result in results:
-        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, err, null_reasons = result
+        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct, err, null_reasons = result
         if err:
             failed.append({"ticker": ticker, "reason": err})
             continue
@@ -21310,8 +21390,10 @@ async def cron_canslim_scan(
             buyback_computed += 1
         if volume_surge_pct is not None:
             volume_surge_computed += 1
+        if inst_holders_qoq_pct is not None:
+            inst_holders_computed += 1
         if not dry_run:
-            # ── S4a BLOCK①: pct 新カラム値を post-gather で生成 (tuple arity 9 維持) ──
+            # ── S4a BLOCK①: pct 新カラム値を post-gather で生成 ──────────────────
             # near_high_pct (ratio 0-1) を pct 表記に変換。read endpoint が >= min_pct で比較可能。
             near_high_pct_scaled = (
                 round(near_high_pct * 100, 1) if near_high_pct is not None else None
@@ -21339,6 +21421,7 @@ async def cron_canslim_scan(
                 near_high_pct_scaled,  # S4a 新 pct カラム
                 buyback_yield_pct,     # S4a 新 pct カラム
                 null_reasons=null_reasons,  # S5a: NULL 原因コード dict (JSONB)
+                inst_holders_qoq_pct=inst_holders_qoq_pct,  # Sprint C: I 条件
             )
             if ok:
                 upserted += 1
@@ -21354,6 +21437,7 @@ async def cron_canslim_scan(
         "near_high_computed_count": near_high_computed,
         "buyback_computed_count": buyback_computed,
         "volume_surge_computed_count": volume_surge_computed,
+        "inst_holders_computed_count": inst_holders_computed,  # Sprint C: I 条件
         "upserted_count": upserted,
         "failed_count": len(failed),
         "failed_tickers": failed[:20],
@@ -21362,7 +21446,7 @@ async def cron_canslim_scan(
         "universe_size": len(tickers),
         "worker_count": worker_count,
         "dry_run": dry_run,
-        "note": "CAN-SLIM Phase 3 Sprint 3: C/A/N/S 全条件 populate (buyback_yield + volume_surge_pct 追加)",
+        "note": "CAN-SLIM Sprint C: C/A/N/S/I 全条件 populate (inst_holders_qoq_pct 追加)",
     }
 
 

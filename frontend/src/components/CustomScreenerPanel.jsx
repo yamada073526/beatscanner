@@ -112,6 +112,18 @@ const PILLAR_TECHNICAL = [
     fullLabel: '52週高値への接近度 (CAN-SLIM N 条件)',
     hint: 'EPS成長・自社株買い・出来高は無料のまま。これに52週高値への接近度を掛け合わせた絞り込みが Pro で開きます。',
   },
+  // Sprint C: I 条件 (機関投資家保有増加) — CAN-SLIM 7要素を screener で揃える最後のピース。
+  // §38 厳守: 「機関が買い増している」=事実。買いシグナル/断定語なし。
+  // 45日遅延: 13F 提出ベース (per-ticker InstitutionalSection の delayDays:45 と一貫)。
+  // チップラベル「機関保有 増加」= 事実記述。titleに遅延注記を明記 (Trust Cliff 防止)。
+  {
+    key: 'inst_holders',
+    label: '機関保有 増加',
+    badge: '13F',
+    badgeTone: 'muted',
+    hint: '機関投資家の保有社数が前四半期比で増加した銘柄 (13F 提出ベース・最大45日遅延)',
+    fullLabel: '機関投資家保有 増加 (CAN-SLIM I 条件 / 13F 提出ベース・最大45日遅延)',
+  },
 ];
 const PILLAR_COMBO = [
   {
@@ -275,10 +287,10 @@ const CUP_STATE_TONE = {
   breakout_extended: 'muted',
 };
 
-// ── Phase 3 Sprint 5b: CAN-SLIM C/A/N/S バッジ列 ────────────────────────────
+// ── Phase 3 Sprint 5b: CAN-SLIM C/A/N/S/I バッジ列 ─────────────────────────
 // null_reason code → UI ラベル (静的 dict、SPEC §4 / hallucination-guard 適合)。
 // 全て過去事実 / 現在状態の記述に限定 = §38 (断定的将来予測) / §5 (最上級) clean。
-// backend null_reasons の reason_code (main.py _compute_one 19494-19510) と 1:1 mirror。
+// backend null_reasons の reason_code (main.py _compute_one) と 1:1 mirror。
 const NULL_REASON_LABEL = {
   sector_guard: '業種特性のため対象外',
   negative_equity: '自己資本マイナスのため算出対象外',
@@ -287,11 +299,18 @@ const NULL_REASON_LABEL = {
   insufficient_history: '上場3年未満',
   turnaround: '黒字転換のため前年比なし',
   no_prior_year: '前年同期データなし',
+  no_institutional_data: '13Fデータなし',  // Sprint C: I 条件 null reason
 };
 
-// CAN-SLIM C/A/N/S の柱 → 表示メトリクス定義。各柱 max4 (chip 増殖防止、合議🟡)。
-// reasonKey は rows endpoint の null_reasons dict キー (eps_yoy/eps_cagr/roe/near_high/buyback/volume_surge)。
+// CAN-SLIM C/A/N/S/I の柱 → 表示メトリクス定義。各柱 max4 (chip 増殖防止、合議🟡)。
+// reasonKey は rows endpoint の null_reasons dict キー (eps_yoy/eps_cagr/roe/near_high/buyback/volume_surge/inst_holders)。
 // fmt: 'signed' = 成長率 (符号付 %)、'plain' = 水準値 (%)、'roe' = ROE (異常値ガード付)。
+//
+// I 条件 (機関投資家保有) Sprint C 追加:
+//   - valueKey: 'inst_holders_qoq_pct' (screener_fundamentals の新カラム)
+//   - fmt: 'signed' (増加=正、減少=負、事実記述のみ = §38 厳守)
+//   - ラベル: '機関保有 増減' — 断定語・買いシグナル語なし
+//   - ⚠️ 13F 提出ベース・最大45日遅延 (per-ticker InstitutionalSection の delayDays:45 と一貫)
 const CANSLIM_PILLARS = [
   { letter: 'C', metrics: [{ valueKey: 'eps_yoy_pct', reasonKey: 'eps_yoy', label: '四半期EPS', fmt: 'signed' }] },
   { letter: 'A', metrics: [
@@ -303,11 +322,15 @@ const CANSLIM_PILLARS = [
     { valueKey: 'buyback_yield_pct', reasonKey: 'buyback', label: '自社株買い', fmt: 'plain' },
     { valueKey: 'volume_surge_pct', reasonKey: 'volume_surge', label: '出来高', fmt: 'signed' },
   ] },
+  // Sprint C: I 条件 — 機関投資家保有社数 QoQ% (13F 提出ベース・最大45日遅延)
+  // §38: 事実数値のみ。買いシグナル/断定なし。
+  { letter: 'I', metrics: [{ valueKey: 'inst_holders_qoq_pct', reasonKey: 'inst_holders', label: '機関保有 増減*', fmt: 'signed' }] },
 ];
 
 // S5b funda (3体合議 qa mitigation): nightly populate 未完 / DB に値が無い銘柄は
 // 「データ取得中」×6 行の壁 (Trust Cliff) を出さず、バッジ行ごと非表示にするための判定。
-const CANSLIM_VALUE_KEYS = ['eps_yoy_pct', 'eps_cagr_3y', 'roe', 'near_high_pct_scaled', 'buyback_yield_pct', 'volume_surge_pct'];
+// Sprint C: inst_holders_qoq_pct を追加 (I 条件)
+const CANSLIM_VALUE_KEYS = ['eps_yoy_pct', 'eps_cagr_3y', 'roe', 'near_high_pct_scaled', 'buyback_yield_pct', 'volume_surge_pct', 'inst_holders_qoq_pct'];
 function hasAnyCanslimValue(canslim) {
   return !!canslim && CANSLIM_VALUE_KEYS.some((k) => Number.isFinite(Number(canslim[k])));
 }
@@ -342,6 +365,8 @@ function resolveCanslimMetric(canslim, m) {
  */
 function CanslimBadgeRow({ canslim }) {
   if (!canslim) return null;
+  // I チップが表示されるかどうか (遅延注記の表示判定)
+  const hasInstData = canslim?.inst_holders_qoq_pct != null;
   return (
     <div className="flex flex-col gap-1" data-testid="canslim-badge-row">
       {CANSLIM_PILLARS.map((p) => (
@@ -370,6 +395,12 @@ function CanslimBadgeRow({ canslim }) {
           </div>
         </div>
       ))}
+      {/* Sprint C: I 条件の遅延注記 (Trust Cliff 防止 / per-ticker InstitutionalSection の delayDays:45 と一貫)
+          *印 = 「機関保有 増減*」ラベルと対応。常時表示 (hasInstData でなくても表示)。
+          §38 厳守: 断定語・予測語なし。事実 (13F 提出遅延) のみ記載。 */}
+      <div className="mt-0.5 text-[9px] leading-snug text-[var(--text-muted)] opacity-60" data-testid="canslim-inst-delay-note">
+        * I=機関保有増減は13F提出ベース・最大45日遅延
+      </div>
     </div>
   );
 }
@@ -818,6 +849,83 @@ function RsScannerResults({ data, onSelect, universeMeta }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Sprint C: I 条件 (機関投資家保有増加) スキャン結果表示コンポーネント。
+ * fetchCanslimScanner('inst_holders') の結果を表示する。
+ * §38 厳守: 事実数値のみ (QoQ%)。断定語・最上級・将来予測なし。
+ * 45日遅延注記: 13F 提出ベース (Trust Cliff 防止)。
+ * data-testid="inst-holders-scan-*" で visual-eval / snap 用の実在 selector を提供。
+ */
+function InstHoldersScanResults({ data, onSelect }) {
+  if (!data) {
+    return (
+      <div
+        className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-3"
+        data-testid="inst-holders-scan-loading"
+        style={{ minHeight: 80 }}
+        aria-busy="true"
+        aria-label="機関保有スキャン中"
+      >
+        <div className="skel-base skel-text-line" style={{ width: '60%', marginBottom: 8 }} />
+        <div className="skel-base skel-text-line" style={{ width: '45%' }} />
+      </div>
+    );
+  }
+  if (data.error) {
+    return (
+      <div
+        className="rounded-lg border border-[color-mix(in_srgb,var(--color-loss)_25%,transparent)] bg-[color-mix(in_srgb,var(--color-loss)_8%,transparent)] p-3 text-xs text-[var(--color-loss)]"
+        data-testid="inst-holders-scan-error"
+      >
+        スキャン失敗: {data.error}
+      </div>
+    );
+  }
+  const items = data.items || [];
+  const totalCount = data.total_count || 0;
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] p-3" data-testid="inst-holders-scan-main">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-xs font-semibold text-[var(--text-secondary)]" data-testid="inst-holders-scan-count">
+          機関保有 増加銘柄 {totalCount} 件
+        </p>
+        {/* 45日遅延注記: Trust Cliff 防止 / per-ticker InstitutionalSection の delayDays:45 と一貫 */}
+        <span className="text-[9px] text-[var(--text-muted)] opacity-60">13F 提出ベース・最大45日遅延</span>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-xs text-[var(--text-muted)]" data-testid="inst-holders-scan-empty">
+          該当銘柄なし (nightly scan 後に更新)
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-1" data-testid="inst-holders-scan-list">
+          {items.slice(0, 30).map((it) => {
+            const qoq = it?.inst_holders_qoq_pct ?? it?.canslim?.inst_holders_qoq_pct;
+            const qoqNum = Number(qoq);
+            return (
+              <li
+                key={it.ticker}
+                className="flex cursor-pointer items-center justify-between rounded-lg px-2 py-1 hover:bg-[color-mix(in_srgb,var(--text-muted)_8%,transparent)]"
+                onClick={() => onSelect?.(it.ticker)}
+                data-testid={`inst-holders-item-${it.ticker}`}
+              >
+                <span className="text-xs font-semibold text-[var(--text-primary)]">{it.ticker}</span>
+                {Number.isFinite(qoqNum) && (
+                  <span className="tabular-nums text-[10px] text-[var(--text-secondary)]">
+                    {qoqNum > 0 ? '+' : ''}{qoqNum.toFixed(1)}%
+                  </span>
+                )}
+              </li>
+            );
+          })}
+          {totalCount > 30 && (
+            <li className="px-2 py-1 text-[10px] text-[var(--text-muted)]">... 他 {totalCount - 30} 件</li>
+          )}
+        </ul>
+      )}
     </div>
   );
 }
@@ -1326,6 +1434,29 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
     setOneillData(null);
     if (filterKey === 'funda') return; // 既存 data でカバー、 cup endpoint 呼ばない
     if (filterKey === 'near_high') return; // S5c: N=Pro ロック。scan せず render 側で ProTeaser を出す
+    if (filterKey === 'inst_holders') {
+      // Sprint C: I 条件 (機関保有社数 QoQ% > 0 = 増加) — fetchCanslimScanner の condition 機能を流用。
+      // backend col_map['inst_holders'] = 'inst_holders_qoq_pct' → DB 列に変換 → >=0 (増加) で filter。
+      // §38: 「機関保有増加」= 事実記述のみ (買いシグナル/断定なし)。
+      // min_pct=0 にして「QoQ% >= 0 (増加)」の銘柄を返す (facet count 整合: predicate と同一)。
+      try {
+        const result = await fetchCanslimScanner(0, 'inst_holders');
+        // inst_holders_qoq_pct 列の値を items に付与 (canslim-badge-row 表示用)
+        setCupData({
+          _instHoldersScan: true,
+          items: (result.items || []).map((it) => ({
+            ...it,
+            canslim: it.canslim ?? { inst_holders_qoq_pct: it.inst_holders_qoq_pct },
+          })),
+          total_count: result.total_count || 0,
+          as_of: result.as_of || null,
+          error: result.error || null,
+        });
+      } catch (e) {
+        setCupData({ _instHoldersScan: true, error: e.message, items: [], total_count: 0 });
+      }
+      return;
+    }
     if (filterKey === 'rs') {
       // v120 RS Screener: 別 endpoint (Supabase DB SELECT only、 高速)
       try {
@@ -1657,8 +1788,13 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
             />
           )}
 
+          {/* Sprint C: I 条件 (機関保有増加) スキャン結果 */}
+          {activeFilter === 'inst_holders' && (
+            <InstHoldersScanResults data={cupData} onSelect={onSelect} />
+          )}
+
           {/* Cup-Handle scanner results (activeFilter が cup / both のとき表示) */}
-          {activeFilter && activeFilter !== 'funda' && activeFilter !== 'rs' && activeFilter !== 'oneill' && activeFilter !== 'near_high' && (
+          {activeFilter && activeFilter !== 'funda' && activeFilter !== 'rs' && activeFilter !== 'oneill' && activeFilter !== 'near_high' && activeFilter !== 'inst_holders' && (
             <CupScannerResults
               data={cupData}
               onSelect={onSelect}
