@@ -19498,6 +19498,171 @@ async def scanner_retest(
     }
 
 
+@app.get("/api/scanner/breakout")
+async def scanner_breakout(
+    n: int = 40,
+    min_vmult: float = 1.5,
+    exclude_extended: int = 1,
+    include_soft: int = 0,
+    min_percentile: int = 70,
+    limit: int = 50,
+    authorization: str | None = Header(None),
+):
+    """新高値ブレイク screener (DB SELECT only、Sprint 5 / SPEC §6)。
+
+    nightly cup-scan が pattern_type='breakout' で別 namespace 保存した signal を rs_ratings
+    (最新 valid calc_date) と join し、default filter で絞って返す。新規検出は一切行わない
+    (保存済を読むだけ = 高速・502 無関係)。scanner_retest と同型構造。
+
+    ⚠️ tier gate (§6.2): **Premium 物理除去**。非Premium は items を空配列化し count_locked のみ返す
+    (frontend blur に依存しない = retest との最大の差異、bo_confirmed 銘柄の DevTools leak / Trust Cliff 防止)。
+
+    Query params (§6.3 default filter SSOT):
+      n: base 窓 (情報用。検出時に採用済の window をそのまま表示、20/40 両 tier を含む)
+      min_vmult: vmult >= この値 (default 1.5 = confirmed 基準)。soft を含める時は 1.3 に下げる
+      exclude_extended: 1 で bo_extended を除外 (default 1 = 過熱/高値掴み帯を隠す)
+      include_soft: 1 で bo_soft (1.3–1.49x) を含む (default 0)
+      min_percentile: universe_percentile >= この値 (default 70 = IBD RS 上位30%)
+      limit: int (default 50)
+    """
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    n = int(n)
+    min_vmult = float(min_vmult)
+    exclude_extended = bool(int(exclude_extended))
+    include_soft = bool(int(include_soft))
+    min_percentile = max(0, min(99, int(min_percentile)))
+    limit = max(1, min(200, int(limit)))
+
+    is_premium = await _fetch_premium_status_from_auth(authorization)
+
+    def _num(v):
+        try:
+            return float(v) if v is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    today = date.today()
+    filter_meta = {
+        "n": n, "min_vmult": min_vmult, "exclude_extended": exclude_extended,
+        "include_soft": include_soft, "min_percentile": min_percentile,
+    }
+
+    def _empty(note=None):
+        out = {
+            "items": [], "total_count": 0, "count_locked": 0, "locked": not is_premium,
+            "is_premium": is_premium, "as_of": None, "signal_as_of": None, "filter": filter_meta,
+        }
+        if note:
+            out["note"] = note
+        return out
+
+    # ── 1. breakout signal 取得 (per-ticker 最新、直近 2 日 = 前営業日 nightly + 週末 buffer) ──
+    bo_rows: dict[str, dict] = {}
+    try:
+        cutoff = (today - timedelta(days=2)).isoformat()
+        b_res = (
+            sb.table("pattern_signals")
+            .select("ticker,state,payload,signal_date")
+            .eq("pattern_type", "breakout")
+            .gte("signal_date", cutoff)
+            .order("signal_date", desc=True)
+            .execute()
+        )
+        for r in (b_res.data or []):
+            t = r.get("ticker")
+            if not t or t in bo_rows:
+                continue
+            bo_rows[t] = r
+    except Exception as e:
+        print(f"[scanner_breakout] breakout fetch failed: {e}")
+        raise HTTPException(status_code=500, detail=f"fetch_failed: {e}")
+
+    # breakout scan の freshness (filter 結果によらず raw 保存日を真とする = nightly 健全性の proxy)
+    bo_as_of = max((r.get("signal_date") for r in bo_rows.values()), default=None)
+    if not bo_rows:
+        return _empty()  # nightly 未走 or 当夜 0 件 (0 breakout は正常)。Trust Cliff 回避で空構造
+
+    # ── 2. RS join (rs_ratings 最新 valid calc_date、scanner_retest と同パターン) ──
+    rs_map: dict[str, dict] = {}
+    try:
+        rs_calc_date, _ = _latest_valid_calc_date(sb, "rs_ratings", "calc_date", _MIN_VALID_RS_ROWS)
+        if rs_calc_date:
+            _tickers = list(bo_rows.keys())
+            for i in range(0, len(_tickers), 150):
+                chunk = _tickers[i:i + 150]
+                rs_res = (
+                    sb.table("rs_ratings")
+                    .select("ticker,universe_percentile,rs_vs_spy_pct,self_percentile")
+                    .eq("calc_date", rs_calc_date)
+                    .in_("ticker", chunk)
+                    .execute()
+                )
+                for r in (rs_res.data or []):
+                    if r.get("ticker"):
+                        rs_map[r["ticker"]] = r
+    except Exception as e:
+        print(f"[scanner_breakout] rs join failed: {e}")
+        out = _empty(note=f"rs_join_failed: {e}")
+        out["as_of"] = bo_as_of
+        return out
+
+    # ── 3. join + filter + item 構築 (§38: pivot 価格は出さず breakout_pct/vmult の事実のみ) ──
+    full_items: list[dict] = []
+    for ticker, row in bo_rows.items():
+        state = row.get("state")
+        if state not in ("bo_confirmed", "bo_soft", "bo_extended"):
+            continue  # pending は nightly 非保存だが念のため
+        if state == "bo_extended" and exclude_extended:
+            continue
+        if state == "bo_soft" and not include_soft:
+            continue
+        payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        vmult = _num(payload.get("volume_ratio"))
+        # vmult floor は confirmed/soft に適用 (extended は過熱フラグで vmult 不問)
+        if state != "bo_extended" and (vmult is None or vmult < min_vmult):
+            continue
+        rs = rs_map.get(ticker) or {}
+        up = int(_num(rs.get("universe_percentile")) or 0)
+        if up < min_percentile:
+            continue
+        vs_spy = _num(rs.get("rs_vs_spy_pct"))
+        full_items.append({
+            "ticker": ticker,
+            "state": state,
+            "n_window": payload.get("window"),
+            "breakout_pct": _num(payload.get("base_rise_pct")),   # pivotH からの上昇率 (§4.3)
+            "vmult": round(vmult, 2) if vmult is not None else None,
+            "is_new_52w_high": bool(payload.get("is_new_52w_high")),
+            "universe_percentile": up or None,
+            "rs_vs_spy_pct": round(vs_spy, 1) if vs_spy is not None else None,
+            "signal_date": row.get("signal_date"),
+        })
+
+    # state priority (_STATE_PRIORITY_BO: confirmed>soft>extended)、同順位は universe_percentile 降順。
+    # 序列番号は付けない (§38 序列暗示の排除)。
+    full_items.sort(key=lambda x: (
+        _STATE_PRIORITY_BO.get(x.get("state"), 99),
+        -(x.get("universe_percentile") or 0),
+    ))
+    full_items = full_items[:limit]
+    total_count = len(full_items)
+
+    # ── 4. tier gate (§6.2): Premium 物理除去。非Premium は items 空 + count_locked のみ ──
+    return {
+        "items": full_items if is_premium else [],
+        "total_count": total_count if is_premium else 0,
+        "count_locked": 0 if is_premium else total_count,
+        "locked": not is_premium,
+        "is_premium": is_premium,
+        "as_of": bo_as_of,
+        "signal_as_of": bo_as_of,
+        "filter": filter_meta,
+    }
+
+
 # ── フィードバック収集 (v142、 動画教訓 #2、 pre-release ユーザーの声) ──────────
 # 3体合議推奨 #1: 最初のユーザーの生声を集めて改善駆動する。
 # backend 集約 (service_role insert + Resend 通知)、 anon/authenticated の直接 DB 面は作らない。
