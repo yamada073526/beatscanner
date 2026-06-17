@@ -2,7 +2,7 @@
 // prefetchAll / StockPriceChart / PriceLadder / 各 zone card / 完全性台帳 section が同一 URL を
 // 叩いて dedupGet で coalesce するための SSOT。 文字列 drift は cache key ずれ → 余分な FMP fetch
 // (cost / quota) を生むため、 全呼び出し箇所はこの定数を import して使う (リテラル直書き禁止)。
-export const TECHNICAL_CANONICAL_PATTERNS = 'cup_handle,sma_50,sma_200,rs,dma_cross';
+export const TECHNICAL_CANONICAL_PATTERNS = 'cup_handle,sma_50,sma_200,rs,dma_cross,breakout';
 
 function fmpHeaders() {
   return {};

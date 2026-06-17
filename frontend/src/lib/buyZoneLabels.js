@@ -35,6 +35,13 @@ export const BUY_ZONE_LABEL_JP = {
   pullback_to_support: '押し目接近中',
   // v219 (SPEC_2026-06-15_resistance-retest、user承認): 旧レジスタンスのリテスト水準接近 label
   resistance_retest: '旧レジスタンス・リテスト水準',
+  // SPEC_2026-06-16_breakout-signal §2.1-B: breakout namespace (bo_*) 専用エントリ。
+  // 既存 breakout_extended / breakout_support / breakout_pending は cup_handle 文脈のまま不変。
+  // classifyBreakoutZone() 経由でのみ到達する (classifyBuyZone とは独立)。
+  bo_confirmed: 'ブレイクアウト確認済み',   // 終値+出来高で確定した上抜け事実
+  bo_soft:      '出来高やや不足(×{VOL_RATIO})', // 終値抜けたが vmult 1.3–1.49x。{VOL_RATIO} は動的 inject
+  bo_pending:   '上抜け確定待ち',            // 日中上抜け・引け失速 (終値未確認)
+  bo_extended:  '高値圏突破(過熱)',          // base_rise 過熱局面
   unknown:           '判定不可',
 };
 
@@ -90,6 +97,44 @@ export const BUY_ZONE_DESC_JP = {
     detail: 'かつての上値抵抗線がサポートに転換した水準まで株価が戻った局面として観察されています。 この水準を割り込めばパターンの不成立 (pattern failure) のサインとされ、 維持された場合でも将来の上昇を保証するものではありません。 投資判断はご自身でご確認ください。',
     shallow_note: '押し戻しは浅く、 リテスト水準への到達途上の段階です。',
   },
+
+  // SPEC_2026-06-16_breakout-signal §2.2: breakout namespace (bo_*) 専用 narration。
+  // resistance_retest / pullback_to_support の3文構造(一般ルール引用 → pattern failure 両面 → 免責)を踏襲。
+  // {VMULT} / {PIVOT} / {BASE_RISE_PCT} 等は backend 物理層が計算 → frontend は文字列置換のみ。
+  // classifyBreakoutZone() 経由でのみ到達する (classifyBuyZone の cup_handle 文脈 narration とは独立)。
+  bo_confirmed: {
+    conclusion: '直近 pivot を出来高を伴って上抜けた局面です。',
+    detail: '一般的なルールでは、base 完成水準 (pivot) を出来高 50%+ の増加を伴って終値で上抜けた状態が' +
+            'ブレイクアウト確認の目安として知られています。ただし上抜け後に pivot 下へ戻した場合は' +
+            'pattern failure のサインともされ、維持されても将来の上昇を保証するものではありません。' +
+            '投資判断はご自身でご確認ください。',
+  },
+
+  bo_soft: {
+    conclusion: '直近 pivot を終値で上抜けましたが、出来高の増加は基準をやや下回る局面です。',
+    detail: '一般的なルールでは出来高 50%+ 増加を伴う上抜けが確認の条件とされています。' +
+            '当該局面の出来高増加は基準に届いておらず、確認が不十分な状態です。' +
+            '上抜け後に pivot 下へ戻した場合は pattern failure のサインともされ、' +
+            '将来の上昇を保証するものではありません。投資判断はご自身でご確認ください。',
+  },
+
+  bo_pending: {
+    // Trust Cliff 殺しの核: 「日中上抜け」と「終値未確認」を同一文で明示し、点灯解除を最初から織り込む
+    conclusion: '日中に pivot を上抜けていますが、終値での確定はまだの局面です。',
+    detail: '一般的なルールでは、終値が pivot を上抜け、かつ出来高の増加を伴うことがブレイクアウト確認の' +
+            '条件とされています。日中の一時的な上抜けは終値で割り込むと確認に至らない場合があり、' +
+            '現時点は到達途上の段階です。投資判断はご自身でご確認ください。',
+    intraday_note: '※ 日中値での到達であり、引け値での確定を待つ段階です。',
+  },
+
+  bo_extended: {
+    // §38: 過熱の事実のみ。「売り」「買うな」断定禁止。乖離数値は backend payload から inject。
+    conclusion: '直近 pivot から大きく上昇し、過熱局面とされる水準にある局面です。',
+    detail: '一般的なルールでは pivot から大きく上昇 (乖離率 {BASE_RISE_PCT}%) した局面は' +
+            '新規 entry より段階利確・押し目待ちが検討される事例が紹介されています。' +
+            '将来の値動きを保証するものではなく、投資判断はご自身でご確認ください。',
+  },
+
   unknown: {
     conclusion: 'pivot / support の判定を保留しています。',
     detail: 'Cup-Handle pattern が検出されていない、 または pivot price が取得できません。',
@@ -117,6 +162,20 @@ export function classifyBuyZone(state) {
   // v219 (Phase-gate 6体合議 2026-06-16 完全性クリティック発見): resistance_retest 分岐が欠落し
   // 'unknown' にフォールスルー → BUY_ZONE_DESC_JP.resistance_retest 静的辞書に到達しない経路バグを修正。
   if (state === 'resistance_retest') return 'resistance_retest';
+  return 'unknown';
+}
+
+/**
+ * breakout namespace (pattern_type='breakout') 専用の zone 分類関数。
+ * 既存 classifyBuyZone(cup_handle.state) とは独立して呼ぶ。
+ * StateCompass の priceCell は patterns.breakout?.state (bo_*) を渡す。
+ * SPEC_2026-06-16_breakout-signal §2.1-A
+ */
+export function classifyBreakoutZone(state) {
+  if (state === 'bo_confirmed') return 'bo_confirmed';
+  if (state === 'bo_soft')      return 'bo_soft';
+  if (state === 'bo_pending')   return 'bo_pending';
+  if (state === 'bo_extended')  return 'bo_extended';
   return 'unknown';
 }
 

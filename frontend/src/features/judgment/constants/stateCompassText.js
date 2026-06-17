@@ -44,6 +44,15 @@ export const COMPASS_PRICE_LABEL = {
   box_support: 'レンジ上限',
   pullback_to_support: '押し目接近',
   resistance_retest: '旧抵抗→支持転換',
+  // SPEC_2026-06-16_breakout-signal §2.1-C: breakout namespace (bo_*) 専用エントリ。
+  // 欠落で priceCell が '—' に落ちる v219 同型バグ防止 → classifyBreakoutZone と同時追加。
+  // 既存 breakout_support / breakout_extended は cup_handle 文脈のまま不変。
+  // COMPASS は短語 SSOT のため数値 inject なし (BUY_ZONE_LABEL_JP の動的 inject と方針分離)。
+  // 禁止: '上昇中' / '買い目安' / '強い上抜け' (将来方向・行動指示・最上級)。
+  bo_confirmed: '新高値ブレイク',   // cup「ブレイク後」と語彙差別化 (§6.4 と整合)
+  bo_soft:      '出来高やや不足',   // 固定文字列 (BUY_ZONE_LABEL_JP の動的 {VOL_RATIO} inject とは分離)
+  bo_pending:   '上抜け確定待ち',
+  bo_extended:  '高値圏(過熱)',
   unknown: '判定なし',
 };
 

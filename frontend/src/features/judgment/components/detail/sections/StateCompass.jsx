@@ -14,7 +14,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { TrendingUp, TrendingDown, Minus, Layers, Crosshair, Compass } from 'lucide-react';
 import { fetchTechnical, TECHNICAL_CANONICAL_PATTERNS } from '../../../../../api.js';
 import { classifySurprise, fmtSurprisePct } from '../../../constants/earningsFlashTemplates.js';
-import { classifyBuyZone } from '../../../../../lib/buyZoneLabels.js';
+import { classifyBuyZone, classifyBreakoutZone } from '../../../../../lib/buyZoneLabels.js';
 import { COMPASS_EARNINGS_LABEL, COMPASS_PRICE_LABEL } from '../../../constants/stateCompassText.js';
 import { smoothScrollToSelector } from '../../../../../lib/smoothScroll.js';
 import CompassInfoButton from './CompassInfoButton.jsx';
@@ -118,6 +118,16 @@ export default function StateCompass({ selectedTicker, result, guidance, embedde
     const retest = technical?.patterns?.resistance_retest;
     if (retest?.detected) {
       return { signal: 'warn', Icon: Crosshair, value: COMPASS_PRICE_LABEL.resistance_retest, sub: '参考水準' };
+    }
+    // SPEC_2026-06-16_breakout-signal §2.3.1: breakout 分岐を retest 直後・cup_handle 前に挿入。
+    // 優先順位: retest(1) > breakout(2) > cup_handle(3)  ✅LOCKED (F⑤, 2026-06-17)
+    // StateCompass priceCell は §38 2層分離ルールで全 bo_* state を signal='warn'(amber) に統一。
+    // confirmed でも緑不可 (chip・tooltip 層は別途 §2.4 tone 表に従う)。
+    const bo = technical?.patterns?.breakout;
+    if (bo?.detected) {
+      const boZone = classifyBreakoutZone(bo.state);
+      const boLabel = COMPASS_PRICE_LABEL[boZone] || '—';
+      return { signal: 'warn', Icon: Crosshair, value: boLabel, sub: '参考水準' };
     }
     const state = technical?.patterns?.cup_handle?.state || null;
     const zone = classifyBuyZone(state);
