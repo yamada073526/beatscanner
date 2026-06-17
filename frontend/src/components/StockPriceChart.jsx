@@ -767,23 +767,37 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
     const v = rsData.rs_vs_spy_pct;
     return typeof v === 'number' && Number.isFinite(v);
   }, [rsData]);
-  // RS tone: extreme (percentile ≥ 95 / ≤ 5) = elite (gold) / 上位 (≥75) = gain / 下位 (≤25) = loss / 中位 = muted
+  // RS tone: universe_percentile (IBD 式 全銘柄横断 1-99) 基準
+  //   ≥ 90 = elite (gold)  ← IBD CAN-SLIM L の「真のリーダー」ライン
+  //   ≥ 80 = gain          ← IBD RS Rating 強ゾーン
+  //   < 40 = loss          ← 市場全体の下半分
+  //   else = muted
   // handover v79 (2026-05-17、 UI/UX + マーケ 2 体 verdict): elite tone で希少性視覚化
+  // Sprint B (2026-06-17): self_percentile → universe_percentile 統一 (IBD 式・Trust Cliff 解消)
+  //   fallback: universe_percentile 未配信銘柄は self_percentile で degraded 表示 (muted 固定)
   const rsIsElite = useMemo(() => {
     if (!hasRs) return false;
-    const pct = rsData.self_percentile;
-    if (typeof pct !== 'number') return false;
-    return pct >= 95 || pct <= 5;
+    const upct = rsData.universe_percentile;
+    if (typeof upct !== 'number') return false;
+    return upct >= 90;
   }, [hasRs, rsData]);
   const rsTone = useMemo(() => {
     if (!hasRs) return 'muted';
-    const pct = rsData.self_percentile;
-    if (typeof pct !== 'number') return 'muted';
-    if (rsIsElite) return 'elite';
-    if (pct >= 75) return 'gain';
-    if (pct <= 25) return 'loss';
+    const upct = rsData.universe_percentile;
+    if (typeof upct !== 'number') return 'muted'; // universe 未配信 → muted (safe fallback)
+    if (upct >= 90) return 'elite';
+    if (upct >= 80) return 'gain';
+    if (upct < 40) return 'loss';
     return 'muted';
   }, [hasRs, rsData, rsIsElite]);
+  // Sprint B (2026-06-17): chip 本文ラベルも universe_percentile 基準に統一 (title/tone と一致させ Trust Cliff 回避)。
+  //   universe 未配信時のみ self-history の ranking_label に degraded fallback。
+  const rsLabel = useMemo(() => {
+    if (!hasRs) return null;
+    const upct = rsData.universe_percentile;
+    if (typeof upct === 'number') return `上位 ${100 - upct}%`;
+    return rsData.ranking_label || null;
+  }, [hasRs, rsData]);
   // v147 (handover v146 最優先): 非株式 (指数/先物/為替/DXY) では RS が無意味なので chip を非表示。
   //   表示抑止のみ — backend の technical 値は触らない (DMA cross は self-referential で指数にも意味があり保持)。
   const showRs = hasRs && !isNonEquity;
@@ -1014,19 +1028,20 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
               ✦ ゴールデンクロス {dmaCross.days_ago}日前
             </Chip>
           )}
-          {/* Session 3: RS chip (vs SPY 6 ヶ月 + 自己 252 日 percentile、 Free 表示)
-              handover v79: extreme value (percentile ≥95 / ≤5) は elite tone (gold) + percentile 先頭 strong
+          {/* Session 3: RS chip (vs SPY 6 ヶ月 + IBD 式 universe_percentile、 Free 表示)
+              handover v79: elite tone (gold) で希少性視覚化
+              Sprint B (2026-06-17): universe_percentile (IBD 式 ≥90 elite / ≥80 gain) に統一
               v147: 非株式 (指数/先物/為替/DXY) では RS 無意味のため showRs で非表示 (IndicesView 経由 ^GSPC 等) */}
           {showRs && (
             <Chip
               size="xs"
               variant="display"
               tone={rsTone}
-              title={`相対強度 (Relative Strength): 過去 6 ヶ月の対 SPY リターン差${rsData.ranking_label ? `、 自己 1 年比 ${rsData.ranking_label}` : ''}`}
+              title={`相対強度 (Relative Strength): 過去 6 ヶ月の対 SPY リターン差${rsData.universe_percentile != null ? `、 全銘柄比 上位 ${100 - rsData.universe_percentile}% (IBD RS Rating ${rsData.universe_percentile})` : ''}`}
             >
-              {rsIsElite && rsData.ranking_label ? (
+              {rsIsElite && rsLabel ? (
                 <>
-                  <strong>{rsData.ranking_label}</strong>
+                  <strong>{rsLabel}</strong>
                   <span style={{ marginLeft: 4, opacity: 0.75, fontSize: '0.9em' }}>
                     · RS {rsData.rs_vs_spy_pct > 0 ? '+' : ''}{rsData.rs_vs_spy_pct}%
                   </span>
@@ -1034,9 +1049,9 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
               ) : (
                 <>
                   RS {rsData.rs_vs_spy_pct > 0 ? '+' : ''}{rsData.rs_vs_spy_pct}%
-                  {rsData.ranking_label && (
+                  {rsLabel && (
                     <span style={{ marginLeft: 4, opacity: 0.75, fontSize: '0.85em' }}>
-                      {rsData.ranking_label}
+                      {rsLabel}
                     </span>
                   )}
                 </>
