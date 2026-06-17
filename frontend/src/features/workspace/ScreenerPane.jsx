@@ -30,7 +30,35 @@ import { useHaloSweepOnce } from '../../hooks/useHaloSweepOnce.js';
 import { useCountUp } from '../../hooks/useCountUp.js';
 import Chip, { ChipGroup } from '../../components/ui/Chip.jsx';
 import FtdRegimeBanner from './FtdRegimeBanner.jsx';
+import { supabase } from '../../lib/supabase.js';
 
+
+// Sprint 5 frontend: 新高値ブレイクスクリーナー用 feature flag。
+// SPEC §6.4 ✅LOCKED (F⑥, 2026-06-17): default OFF で安全 rollout。
+//   URL param `?breakout_screener=1` または localStorage `breakout_screener` で ON。
+//   URL 優先 (即 dogfood / 即 revert)、localStorage が永続。
+//   ([[feedback_feature_flag_dual_mode]] URL優先パターン)
+function isBreakoutScreenerEnabled() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('breakout_screener');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('breakout_screener') === '1';
+  } catch {
+    return false;
+  }
+}
+
+// Sprint 5 frontend: 新高値ブレイク(bo_*) 専用ラベル。CUP_STATE_LABEL_JP とは物理分離。
+// SPEC §6.4 ✅LOCKED (F⑥, 2026-06-17): 語頭「新高値」で cup「ブレイク確定」と 2 秒即識別。
+// §38 回避: 事実記述のみ、「買い場」「上昇」「強い」等の断定・行動指示は禁止。
+const BREAKOUT_STATE_LABEL_JP = {
+  bo_confirmed: '新高値ブレイク',
+  bo_pending:   '高値圏トライ中',
+  bo_extended:  '新高値圏(過延伸)',
+  bo_soft:      '新高値ブレイク(出来高薄)',
+};
 
 // v147 (user dogfood AAPL): cup-handle scanner の state badge を日本語ラベルに。
 //   旧版は raw state 文字列 (例「breakout_extended」) をそのまま表示していた (英語混在 + 意味不明)。
@@ -109,6 +137,28 @@ async function fetchRetest({ limit = 20 } = {}) {
     return await r.json();
   } catch (e) {
     return { items: [], error: String(e) };
+  }
+}
+
+// ── fetcher: backend /api/scanner/breakout (Sprint 5: 新高値ブレイク) ──
+// Authorization header 必須: Premium 判定は backend が Bearer token で行う。
+//   非 Premium → items:[], locked:true, count_locked:N (backend 物理除去済)。
+//   Premium → items 入り, locked:false。
+// §38: items の事実数値のみ surface (universe_percentile / vmult / breakout_pct / is_new_52w_high)。
+//   「買い場」「上昇」「強い」等の断定・行動指示は render 側でも禁止。
+async function fetchBreakout({ limit = 20 } = {}) {
+  try {
+    // supabase.auth.getSession() で現セッション token を取得 (client-side, non-blocking)。
+    // token がない場合 (未ログイン) は Authorization ヘッダなしで送信 → backend が locked:true を返す。
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers = session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : {};
+    const r = await fetch(`/api/scanner/breakout?limit=${limit}`, { headers });
+    if (!r.ok) return { items: [], locked: false, count_locked: 0, error: `HTTP ${r.status}` };
+    return await r.json();
+  } catch (e) {
+    return { items: [], locked: false, count_locked: 0, error: String(e) };
   }
 }
 
@@ -511,7 +561,7 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
 // と同 pattern。 Workspace の isScreener 分岐=master-detail 心臓部 は触らず ScreenerPane 内に閉じる安全策。
 // retry / TTL 超過時は通常どおり fetch。)
 const HERO_CACHE_TTL_MS = 5 * 60 * 1000;
-let _heroCache = null; // { ts, leaderCwh, rsRising, newCwh }
+let _heroCache = null; // { ts, leaderCwh, rsRising, newCwh, retest, rsLeaders, earningsThisWeek, breakout }
 function heroCacheFresh() {
   return !!_heroCache && (Date.now() - _heroCache.ts) < HERO_CACHE_TTL_MS;
 }
@@ -543,6 +593,15 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
   const [rsLeaders, setRsLeaders] = useState(() => (heroCacheFresh() && _heroCache.rsLeaders ? _heroCache.rsLeaders : { tickers: [], loading: true, error: null }));
   // B-Top1: RS≥80 leaders の今週決算予定 (rsLeader.items × holdings-meta 交差)
   const [earningsThisWeek, setEarningsThisWeek] = useState(() => (heroCacheFresh() && _heroCache.earningsThisWeek ? _heroCache.earningsThisWeek : { tickers: [], loading: true, error: null }));
+  // Sprint 5: 新高値ブレイクスクリーナー (feature flag: isBreakoutScreenerEnabled() で ON/OFF)。
+  //   locked:true 時は items 空 + count_locked で ProTeaser 訴求。
+  //   flag OFF 時は state を初期化せず no-op (既存 screener に影響ゼロ)。
+  const [breakoutData, setBreakoutData] = useState(() => {
+    if (!isBreakoutScreenerEnabled()) return { tickers: [], loading: false, locked: false, count_locked: 0, error: null };
+    return heroCacheFresh() && _heroCache.breakout
+      ? _heroCache.breakout
+      : { tickers: [], loading: true, locked: false, count_locked: 0, error: null };
+  });
   // P6-2: fetch retry trigger
   const [retryNonce, setRetryNonce] = useState(0);
   const handleRetry = () => setRetryNonce((n) => n + 1);
@@ -554,8 +613,9 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
   const risingRef = useRef(null);
   const newCwhRef = useRef(null);
   const retestRef = useRef(null); // Task#4 A先行: リテスト接近 section
+  const breakoutRef = useRef(null); // Sprint 5: 新高値ブレイク section (flag ON 時のみ chip + scroll 有効)
   // chip key → section ref の refMap (旧 ternary を map 化、 chip 追加で分岐が増えない)
-  const chipRefMap = { leader: leaderRef, rising: risingRef, 'new-cwh': newCwhRef, retest: retestRef };
+  const chipRefMap = { leader: leaderRef, rising: risingRef, 'new-cwh': newCwhRef, retest: retestRef, breakout: breakoutRef };
 
   const handleChipClick = (chipKey) => {
     // 同 chip を再 click で全 highlight 解除 (toggle、 Linear 流)
@@ -583,14 +643,19 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
     setRetest({ tickers: [], loading: true, error: null });
     setRsLeaders({ tickers: [], loading: true, error: null });
     setEarningsThisWeek({ tickers: [], loading: true, error: null });
+    // Sprint 5: flag ON 時のみ breakout も loading 状態にリセット
+    if (isBreakoutScreenerEnabled()) {
+      setBreakoutData({ tickers: [], loading: true, locked: false, count_locked: 0, error: null });
+    }
 
     (async () => {
-      // 4 fetch 並列起動 (Task#4 A先行: retest を 4 本目に追加)
-      const [rsLeader, rsDelta, cup, retestRes] = await Promise.all([
+      // 5 fetch 並列起動 (Sprint 5: breakout を 5 本目に追加。flag OFF 時は null resolve で Promise.all を乱さない)
+      const [rsLeader, rsDelta, cup, retestRes, breakoutRes] = await Promise.all([
         fetchRsLeader({ limit: 30 }),
         fetchRsDelta({ minDelta: 10, limit: 30 }),
         fetchCupHandle({ limit: 30 }),
         fetchRetest({ limit: 20 }),
+        isBreakoutScreenerEnabled() ? fetchBreakout({ limit: 20 }) : Promise.resolve(null),
       ]);
       if (cancelled) return;
 
@@ -737,8 +802,46 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
       }
       if (!cancelled) setEarningsThisWeek(earningsThisWeekResult);
 
+      // Sprint 5: 新高値ブレイク section の結果処理 (flag ON かつ fetch 結果あり時のみ)。
+      //   §38: BREAKOUT_STATE_LABEL_JP の事実ラベルのみ。badge に「買い場」「上昇」等は含めない。
+      //   locked:true → items 空のまま count_locked を保持 (ProTeaser 訴求用)。
+      //   locked:false → items を BREAKOUT_STATE_LABEL_JP でラベリングして表示。
+      let breakoutResult = { tickers: [], loading: false, locked: false, count_locked: 0, error: null };
+      if (isBreakoutScreenerEnabled() && breakoutRes != null) {
+        if (breakoutRes.error) {
+          breakoutResult = { tickers: [], loading: false, locked: false, count_locked: 0, error: 'ブレイクアウト取得失敗' };
+        } else if (breakoutRes.locked) {
+          // 非 Premium: items 空 + count_locked で ProTeaser 訴求
+          breakoutResult = {
+            tickers: [],
+            loading: false,
+            locked: true,
+            count_locked: breakoutRes.count_locked ?? 0,
+            error: null,
+          };
+        } else {
+          // Premium: items を事実ラベルに変換
+          const boItems = (breakoutRes.items || []).map((it) => {
+            // badge 構築: state ラベル (事実) + is_new_52w_high / universe_percentile (§38 事実値)
+            const stateLabel = BREAKOUT_STATE_LABEL_JP[it.state] || it.state || '新高値';
+            const parts = [stateLabel];
+            if (it.is_new_52w_high) parts.push('52週高値');
+            if (it.universe_percentile != null) parts.push(`RS上位${100 - it.universe_percentile}%`);
+            return { ticker: it.ticker, badge: parts.join(' · ') };
+          });
+          breakoutResult = {
+            tickers: boItems,
+            loading: false,
+            locked: false,
+            count_locked: 0,
+            error: null,
+          };
+        }
+        if (!cancelled) setBreakoutData(breakoutResult);
+      }
+
       // D2 flicker fix: 結果を module cache に保存 → 次の remount (deselect 復帰) で hydrate して flicker 回避。
-      _heroCache = { ts: Date.now(), leaderCwh: leaderResult, rsRising: risingResult, newCwh: newResult, retest: retestResult, rsLeaders: rsLeadersResult, earningsThisWeek: earningsThisWeekResult };
+      _heroCache = { ts: Date.now(), leaderCwh: leaderResult, rsRising: risingResult, newCwh: newResult, retest: retestResult, rsLeaders: rsLeadersResult, earningsThisWeek: earningsThisWeekResult, breakout: breakoutResult };
     })();
 
     return () => { cancelled = true; };
@@ -812,6 +915,19 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           >
             リテスト接近
           </Chip>
+          {/* Sprint 5: 新高値ブレイク chip (flag ON 時のみ表示。flag OFF で null = DOM に出ない) */}
+          {isBreakoutScreenerEnabled() && (
+            <Chip
+              variant="filter"
+              size="sm"
+              tone={activeChip === 'breakout' ? 'accent' : 'muted'}
+              pressed={activeChip === 'breakout'}
+              onClick={() => handleChipClick('breakout')}
+              ariaLabel="新高値ブレイク section に jump"
+            >
+              新高値ブレイク
+            </Chip>
+          )}
         </ChipGroup>
       </div>
 
@@ -948,6 +1064,83 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           columns
         />
       </div>
+
+      {/* Sprint 5: 新高値ブレイク section (feature flag ON 時のみ render。 flag OFF で完全 no-op)。
+          §38: BREAKOUT_STATE_LABEL_JP の事実ラベル + 事実数値のみ。「買い場」「上昇」「強い」等の断定禁止。
+          locked:true → ProTeaser「Premiumで{count_locked}件の新高値ブレイク」訴求 (items 空=銘柄出さない)。
+          locked:false & items 空 → graceful 「本日の新高値ブレイクなし」。
+          locked:false & items あり → 一覧表示。 */}
+      {isBreakoutScreenerEnabled() && (
+        <div style={{ marginTop: 'var(--space-4, 16px)' }}>
+          {breakoutData.locked ? (
+            /* locked 分岐: ProTeaser (items 空なので銘柄は一切出さない) */
+            <div
+              ref={breakoutRef}
+              data-testid="screener-hero-breakout-locked"
+              className="tier-m-glow"
+              style={{
+                padding: 'var(--space-3, 12px) var(--space-4, 16px)',
+                borderRadius: 'var(--radius-md, 8px)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)', marginBottom: 'var(--space-2, 8px)' }}>
+                <Crown size={14} style={{ color: 'var(--color-accent)' }} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                  新高値ブレイク
+                </span>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: 0, marginBottom: 'var(--space-3, 12px)' }}>
+                52週高値を更新した銘柄を自動検出（投資の推奨ではありません）
+              </p>
+              {breakoutData.count_locked > 0 ? (
+                <button
+                  type="button"
+                  onClick={handleUpgradeRequest}
+                  data-testid="screener-hero-breakout-proteaser"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    textAlign: 'center',
+                    border: '1px solid color-mix(in srgb, var(--color-accent) 40%, transparent)',
+                    borderRadius: 'var(--radius-sm, 4px)',
+                    background: 'color-mix(in srgb, var(--color-accent) 8%, transparent)',
+                    color: 'var(--color-accent)',
+                    cursor: 'pointer',
+                    transition: 'background 0.2s ease',
+                  }}
+                >
+                  Premium で {breakoutData.count_locked} 件の新高値ブレイクを確認
+                </button>
+              ) : (
+                <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: 0, textAlign: 'center' }}>
+                  本日の新高値ブレイクなし
+                </p>
+              )}
+            </div>
+          ) : (
+            /* unlock 済 (Premium) または empty 分岐: HeroSection で統一描画 */
+            <HeroSection
+              eyebrow="07"
+              title="新高値ブレイク"
+              testId="screener-hero-breakout"
+              description="52週高値を更新した銘柄（出来高倍率・RS上位%を併記）。投資の推奨ではありません。"
+              tickers={breakoutData.tickers}
+              loading={breakoutData.loading}
+              error={breakoutData.error}
+              emptyMessage="本日の新高値ブレイクなし"
+              onSelect={handleSelect}
+              sectionRef={breakoutRef}
+              active={activeChip === 'breakout'}
+              demoMode={false}
+              onUpgrade={handleUpgradeRequest}
+              onRetry={handleRetry}
+              columns
+            />
+          )}
+        </div>
+      )}
 
       {/* v160 D2: Explorer (CustomScreenerPanel) は Pane 2 に移設 (master-detail)。
           本コンポーネントは Pane 3 の idle 時 Hero (今注目) を担う。 */}
