@@ -873,7 +873,9 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
       if (Number.isFinite(h)) hi = Math.max(hi, h);
     }
     if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) return 0;
-    return (hi - lo) * 0.24;
+    // Sprint 3 fix v3 (2026-06-17 user feedback 別session): 0.24 では 3M/6M で candle 下ヒゲと
+    // 出来高バンドがまだ接触。dead zone を 0.30 に拡張し明確に離す (candle は上部 ~70% を維持)。
+    return (hi - lo) * 0.30;
   }, [data, isNonEquity]);
 
   // Sprint 3 §3.2: 出来高バーの色+透明度を返す純粋関数 (Chart Overlay Safety Layer3)。
@@ -886,9 +888,10 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
       ? entry.close >= entry.open
       : true;
     const fill = isUp ? 'var(--color-gain)' : 'var(--color-loss)';
-    // Sprint 3 fix v2 (2026-06-17 user dogfood 再): 6M+ 高密度でまだ淡いため通常 0.55→0.65、breakout 0.85→0.92。
-    // dead zone 化 (price 軸下端拡張) でバー高も確保したため、不透明度と相まって視認性を上げる。
-    const opacity = isBreakoutBar(entry, avg50) ? 0.92 : 0.65;
+    // Sprint 3 fix v3 (2026-06-17 user feedback 別session): 6M (高密度=細バー) で帯が疎に見え「薄い」
+    // との指摘。バー高・opacity は period 非依存だが、細バー間の余白で帯が淡く読める。通常 0.65→0.80・
+    // breakout 0.92→1.0 に上げ、全 period で帯の濃さを統一 (3M とのギャップ解消)。
+    const opacity = isBreakoutBar(entry, avg50) ? 1.0 : 0.80;
     return { fill, fillOpacity: opacity };
   }
 
@@ -1074,22 +1077,21 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
               tone={rsTone}
               title={`相対強度 (Relative Strength): 過去 6 ヶ月の対 SPY リターン差${rsData.universe_percentile != null ? `、 全銘柄比 上位 ${100 - rsData.universe_percentile}% (IBD RS Rating ${rsData.universe_percentile})` : ''}`}
             >
-              {rsIsElite && rsLabel ? (
-                <>
-                  <strong>{rsLabel}</strong>
-                  <span style={{ marginLeft: 4, opacity: 0.75, fontSize: '0.9em' }}>
-                    · RS {rsData.rs_vs_spy_pct > 0 ? '+' : ''}{rsData.rs_vs_spy_pct}%
-                  </span>
-                </>
+              {/* user feedback (2026-06-17): 対SPY +X% より IBD 式 RS Rating の数値 (RS 66) が直感的。
+                  universe_percentile を主表示。未配信時のみ対SPY % で degraded 表示。 */}
+              {rsData.universe_percentile != null ? (
+                rsIsElite ? (
+                  <strong>RS {rsData.universe_percentile}</strong>
+                ) : (
+                  <>RS {rsData.universe_percentile}</>
+                )
               ) : (
-                <>
-                  RS {rsData.rs_vs_spy_pct > 0 ? '+' : ''}{rsData.rs_vs_spy_pct}%
-                  {rsLabel && (
-                    <span style={{ marginLeft: 4, opacity: 0.75, fontSize: '0.85em' }}>
-                      {rsLabel}
-                    </span>
-                  )}
-                </>
+                <>RS {rsData.rs_vs_spy_pct > 0 ? '+' : ''}{rsData.rs_vs_spy_pct}%</>
+              )}
+              {rsLabel && (
+                <span style={{ marginLeft: 4, opacity: 0.75, fontSize: '0.85em' }}>
+                  {rsLabel}
+                </span>
               )}
             </Chip>
           )}
