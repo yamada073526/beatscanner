@@ -365,8 +365,6 @@ function resolveCanslimMetric(canslim, m) {
  */
 function CanslimBadgeRow({ canslim }) {
   if (!canslim) return null;
-  // I チップが表示されるかどうか (遅延注記の表示判定)
-  const hasInstData = canslim?.inst_holders_qoq_pct != null;
   return (
     <div className="flex flex-col gap-1" data-testid="canslim-badge-row">
       {CANSLIM_PILLARS.map((p) => (
@@ -396,9 +394,9 @@ function CanslimBadgeRow({ canslim }) {
         </div>
       ))}
       {/* Sprint C: I 条件の遅延注記 (Trust Cliff 防止 / per-ticker InstitutionalSection の delayDays:45 と一貫)
-          *印 = 「機関保有 増減*」ラベルと対応。常時表示 (hasInstData でなくても表示)。
+          *印 = 「機関保有 増減*」ラベルと対応。常時表示 (I チップの値有無に関わらず表示)。
           §38 厳守: 断定語・予測語なし。事実 (13F 提出遅延) のみ記載。 */}
-      <div className="mt-0.5 text-[9px] leading-snug text-[var(--text-muted)] opacity-60" data-testid="canslim-inst-delay-note">
+      <div className="mt-0.5 text-[10px] leading-snug text-[var(--text-muted)] opacity-60" data-testid="canslim-inst-delay-note">
         * I=機関保有増減は13F提出ベース・最大45日遅延
       </div>
     </div>
@@ -894,7 +892,7 @@ function InstHoldersScanResults({ data, onSelect }) {
           機関保有 増加銘柄 {totalCount} 件
         </p>
         {/* 45日遅延注記: Trust Cliff 防止 / per-ticker InstitutionalSection の delayDays:45 と一貫 */}
-        <span className="text-[9px] text-[var(--text-muted)] opacity-60">13F 提出ベース・最大45日遅延</span>
+        <span className="text-[10px] text-[var(--text-muted)] opacity-60">13F 提出ベース・最大45日遅延</span>
       </div>
       {items.length === 0 ? (
         <p className="text-xs text-[var(--text-muted)]" data-testid="inst-holders-scan-empty">
@@ -1436,9 +1434,10 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
     if (filterKey === 'near_high') return; // S5c: N=Pro ロック。scan せず render 側で ProTeaser を出す
     if (filterKey === 'inst_holders') {
       // Sprint C: I 条件 (機関保有社数 QoQ% > 0 = 増加) — fetchCanslimScanner の condition 機能を流用。
-      // backend col_map['inst_holders'] = 'inst_holders_qoq_pct' → DB 列に変換 → >=0 (増加) で filter。
+      // backend col_map['inst_holders'] = 'inst_holders_qoq_pct' → DB 列に変換 → QoQ% > 0 (厳密増加) で filter。
       // §38: 「機関保有増加」= 事実記述のみ (買いシグナル/断定なし)。
-      // min_pct=0 にして「QoQ% >= 0 (増加)」の銘柄を返す (facet count 整合: predicate と同一)。
+      // backend は inst_holders を厳密 > 0 で絞る (横ばい QoQ%=0 は「増加」でないため除外、header「増加」と整合)。
+      // min_pct=0 は echo 用 (backend は inst_holders では無視し > 0 を適用、facet count も同一 predicate)。
       try {
         const result = await fetchCanslimScanner(0, 'inst_holders');
         // inst_holders_qoq_pct 列の値を items に付与 (canslim-badge-row 表示用)

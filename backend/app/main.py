@@ -18585,7 +18585,8 @@ def _fetch_screener_fundamentals_by_condition(
     Args:
       sb: supabase service client
       condition: 公開条件名 (eps_yoy / eps_cagr / roe / near_high / buyback / volume_surge)
-      min_pct: 対象カラム >= この値の ticker を返す (S4a 単位統一済のため全カラム % 表記で直接比較可)
+      min_pct: 対象カラム >= この値の ticker を返す (S4a 単位統一済のため全カラム % 表記で直接比較可)。
+               ただし inst_holders (I 条件) は「増加」= 厳密に QoQ% > 0 (横ばい=0 除外、min_pct は無視)。
       calc_date: 対象の calc_date (最新の valid date)
 
     Returns:
@@ -18628,16 +18629,21 @@ def _fetch_screener_fundamentals_by_condition(
         # 未知の condition は空を返す (500 にしない)
         return [], 0, 0, 0, 0, 0, {}
 
+    # I 条件 (inst_holders)「機関保有 増加」= 厳密に QoQ% > 0。横ばい (=0) は「増加」ではないため除外する
+    # (min_pct=0 の >= だと QoQ%=0 が "増加銘柄" に混入し header「増加」と不整合 = Trust Cliff)。
+    # 他条件は gate1 閾値ちょうどを達成扱いにする >= を維持。items / count 両クエリで同一 predicate を使う
+    # (feedback_facet_filter_count_integrity: 件数と表示の集計を一致させる)。
+    strict_positive = condition == "inst_holders"
+
     try:
         # 達成銘柄 list (NULL は自動除外、降順)。表示用 — 件数は下の count="exact" を正本にする。
-        result = (
+        item_q = (
             sb.table("screener_fundamentals")
             .select(f"ticker,{col},calc_date")
             .eq("calc_date", calc_date)
-            .gte(col, min_pct)
-            .order(col, desc=True)
-            .execute()
         )
+        item_q = item_q.gt(col, 0) if strict_positive else item_q.gte(col, min_pct)
+        result = item_q.order(col, desc=True).execute()
         items = result.data or []
     except Exception as e:
         print(f"[canslim_scanner] fetch_items failed: {e}")
@@ -18645,13 +18651,13 @@ def _fetch_screener_fundamentals_by_condition(
 
     try:
         # BLOCK④: 達成件数を count="exact" で取得 (1000 行上限で items が頭打ちしても正確)。
-        achieved_result = (
+        count_q = (
             sb.table("screener_fundamentals")
             .select("ticker", count="exact")
             .eq("calc_date", calc_date)
-            .gte(col, min_pct)
-            .execute()
         )
+        count_q = count_q.gt(col, 0) if strict_positive else count_q.gte(col, min_pct)
+        achieved_result = count_q.execute()
         total_count_exact = achieved_result.count or 0
     except Exception as e:
         print(f"[canslim_scanner] fetch_total_count failed: {e}")
