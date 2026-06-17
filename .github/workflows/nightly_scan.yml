@@ -195,6 +195,13 @@ jobs:
           cup_total=$(curl -s --max-time 20 "$BASE/api/scanner/cup-handle?filter=cup" | jq -r '.total_count // 0' 2>/dev/null)
           echo "- cup-handle total: \`$cup_total\`" >> "$GITHUB_STEP_SUMMARY"
           [ "${cup_total:-0}" -eq 0 ] && echo "::warning::cup-handle total=0 — cup 検出ゼロ (要確認)。"
+          # breakout (Sprint 5): 0件は正常な日次結果 (ブレイク銘柄ゼロの日もある) のため chk で hard-fail させず
+          # warning-only。as_of は raw breakout 保存日 = nightly 配線健全性の proxy。null/古い時は warn 止まり。
+          bo_asof=$(curl -s --max-time 20 "$BASE/api/scanner/breakout?limit=1" | jq -r '.as_of // "null"' 2>/dev/null)
+          echo "- breakout as_of: \`$bo_asof\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$bo_asof" = "null" ] || [[ "$bo_asof" < "$yday" ]]; then
+            echo "::warning::breakout as_of stale/null (date=$bo_asof) — 当夜0件 or nightly 配線未走の可能性 (0件は正常なため job は落とさない)。"
+          fi
           # HTTP200 で応答した scan の persist 失敗(GRANT)check。502 時は body 空で produced=0=対象外。
           cup_http="${{ steps.cup.outputs.http }}"; cup_prod="${{ steps.cup.outputs.produced }}"; cup_ups="${{ steps.cup.outputs.upserted }}"
           if [ "$cup_http" = "200" ] && [ "${cup_prod:-0}" -gt 0 ] && [ "${cup_ups:-0}" -eq 0 ]; then
