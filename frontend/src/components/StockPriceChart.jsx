@@ -1244,6 +1244,10 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
               <ComposedChart
                 data={chartData}
                 margin={{ top: 36, right: 160, left: 0, bottom: 8 }}
+                /* user feedback v4 (2026-06-17): 6M (高密度) で出来高バーが細く薄い問題。
+                   barGap=0 + barCategoryGap 圧縮で volume/candle 枠の無駄余白を詰めバー幅を確保。 */
+                barGap={0}
+                barCategoryGap="6%"
               >
                 <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
                 <XAxis
@@ -1338,7 +1342,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                   yAxisId="vol"
                   orientation="right"
                   hide
-                  domain={[0, (dataMax) => (Number.isFinite(dataMax) && dataMax > 0 ? dataMax * 6 : 1)]}
+                  domain={[0, (dataMax) => (Number.isFinite(dataMax) && dataMax > 0 ? dataMax * 10 : 1)]}
                 />
 
                 {/* Sprint 3 §3.1: 出来高 Bar (price 描画の直前 = z順で背面に配置)。
