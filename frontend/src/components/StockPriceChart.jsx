@@ -1,11 +1,13 @@
 import { Component, useState, useEffect, useMemo, useRef } from 'react';
 import {
-  ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid,
+  ComposedChart, Line, Bar, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot, ReferenceArea,
 } from 'recharts';
 import { LineChart as LineChartIcon, CandlestickChart as CandlestickChartIcon, ChartCandlestick, Lock, TrendingUp } from 'lucide-react';
 import { fetchPriceHistory, fetchTechnical, fetchAnalyst, TECHNICAL_CANONICAL_PATTERNS } from '../api.js';
 import Chip from './ui/Chip.jsx';
+// Sprint 3: 出来高 viz SSOT (§3.3 / §3.7 M2是正 — 当日除く直前50日)
+import { computeAvgVol50, isBreakoutBar } from '../lib/volume.js';
 
 // v86 chart hybrid Sprint 2: localStorage key for 折れ線/candle toggle persist
 const CHART_STYLE_KEY = 'pane3_chart_style_v1';
@@ -819,12 +821,43 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
   // Cup-Handle は Premium 限定 (DMA/RS は Free 表示で送客)。 chip 自体は表示するが overlay/詳細は blur。
   const cupRequiresPro = hasCup && !isPremiumUnlocked;
 
+  // Sprint 3 §3.3: avgVol50 (当日除く直前50日平均出来高)。
+  // isNonEquity (指数/先物/為替/ETF) では出来高の意味が異なるため null を返す。
+  // lib/volume.js SSOT (backend _detect_breakout の volumes[-51:-1] と同一基準)。
+  const avgVol50 = useMemo(() => {
+    if (isNonEquity) return null;
+    return computeAvgVol50(data?.prices ?? []);
+  }, [data, isNonEquity]);
+
+  // Sprint 3 §3.2: 出来高バーの色+透明度を返す純粋関数 (Chart Overlay Safety Layer3)。
+  // 色は方向色のみ (緑=上昇/赤=下落)。シアン・別 hue・hex 直書き禁止 (投資業界色ルール)。
+  // breakout 日 (1.5x 超・上昇確定) は fillOpacity を 0.85 に強調 (§3.2)。
+  function volCellProps(entry, avg50) {
+    const vol = entry?.volume;
+    if (!Number.isFinite(vol)) return { fill: 'transparent' };
+    const isUp = Number.isFinite(entry?.close) && Number.isFinite(entry?.open)
+      ? entry.close >= entry.open
+      : true;
+    const fill = isUp ? 'var(--color-gain)' : 'var(--color-loss)';
+    const opacity = isBreakoutBar(entry, avg50) ? 0.85 : 0.45;
+    return { fill, fillOpacity: opacity };
+  }
+
   // SMA/Cup がある時のみ price データに merge (何もなければ元 data そのまま = 旧挙動と同じ)
   const chartData = useMemo(() => {
     if (!data?.prices) return [];
-    if (!hasSma50 && !hasSma200 && !hasCup) return data.prices;
+    // Sprint 3 §3.1: volume 型安全化ヘルパ (null/文字列混在 → 有限数 or null)。
+    // early return / map 両経路で適用し出来高 Bar の Number.isFinite guard (Layer3) を前段保証。
+    const normalizeVol = (p) => {
+      const v = Number(p?.volume);
+      return Number.isFinite(v) ? v : null;
+    };
+    if (!hasSma50 && !hasSma200 && !hasCup) {
+      // SMA/Cup 無し: volume 正規化のみ行い他は元データと同一
+      return data.prices.map((p) => ({ ...p, volume: normalizeVol(p) }));
+    }
     return data.prices.map((p) => {
-      const entry = { ...p };
+      const entry = { ...p, volume: normalizeVol(p) };
       if (hasSma50) {
         const v50 = smaMap.sma_50[p.date];
         if (typeof v50 === 'number') entry.sma_50 = v50;
@@ -1240,6 +1273,35 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                     isAnimationActive={false}
                   />
                 )}
+                {/* Sprint 3 §3.1: 副 YAxis (出来高専用)。
+                    hide=true で絶対値非表示 (比率が本質、5原則#1 読み手負担減)。
+                    domain 上限 dataMax*5 で出来高帯をチャート下部 ~20% に圧縮。
+                    非有限/0 の場合は 1 fallback (Layer3 guard)。
+                    margin.right=160 は不変 (右ラベル群 clip なし)。 */}
+                <YAxis
+                  yAxisId="vol"
+                  orientation="right"
+                  hide
+                  domain={[0, (dataMax) => (Number.isFinite(dataMax) && dataMax > 0 ? dataMax * 5 : 1)]}
+                />
+
+                {/* Sprint 3 §3.1: 出来高 Bar (price 描画の直前 = z順で背面に配置)。
+                    yAxisId="vol" で price 主軸と衝突回避。
+                    isAnimationActive=false 必須 (Layer4: SMA/Cup 後追い load 再計算でフラッシュ抑止)。
+                    出来高 Bar は既存の !loading && data && data.prices.length > 0 条件内 (Layer2 conditional render)。
+                    §38: 文言ゼロ・強調は「過去に出来高が多かった確定事実」のみ。色は方向色のみ (緑=上昇/赤=下落)。 */}
+                <Bar
+                  yAxisId="vol"
+                  dataKey="volume"
+                  isAnimationActive={false}
+                  name="出来高"
+                >
+                  {chartData.map((entry, i) => (
+                    // eslint-disable-next-line react/no-array-index-key
+                    <Cell key={i} {...volCellProps(entry, avgVol50)} />
+                  ))}
+                </Bar>
+
                 {/* Price 表示: chartStyle === 'line' → Line / 'candle' → Bar + custom shape
                     v86 chart hybrid Sprint 2 (Webull 戦略、 デフォルト折れ線維持) */}
                 {chartStyle === 'line' ? (

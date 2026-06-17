@@ -772,6 +772,7 @@ nightly scan は**引け後実行**(OHLCV 最終足=確定終値)。日中足の
 | (非保存) | `close[-1] <= pivotH`(pending 含む) | — |
 
 > state 優先順位(同時成立時): `extended > confirmed > soft`(過熱なら vmult によらず extended、追いかけ警告を最優先)。extended 判定は §1.4 の独立フラグ(`_compute_extended_gate.passed` を流用しない・§9 #2)。
+> **⚠️ ただし pending(`close <= pivotH` = 終値で抜けていない)は extended に昇格しない**。この優先順位は「`close > pivotH` で実際にブレイクした3 state(confirmed/soft/extended)間」の優先であり、終値未確定の pending は対象外。pending を sma50 乖離>30% 等で bo_extended にすると「ブレイクしていないのに過熱(追いかけ警告)」となり本表(bo_extended は `close > pivotH` 前提)と矛盾、終値未確定銘柄が nightly に混入する Trust Cliff になる(Sprint 2 6体合議 review MAJOR で是正、実装は `if is_extended and state != "bo_pending"`)。
 
 **pending を nightly 保存しない理由:** pending は「リアルタイム性のあるシグナル」で、引け確定後には消えている(翌日の引けで再判定)。保存すると stale な非買いシグナルが DB に溜まる。**pending の UI 表示は `/api/technical`(個別銘柄リアルタイム)側の責務**(§4.4)。screener(DB SELECT)には confirmed/soft/extended のみ載る = decision① と⑥の整合点。これにより「ブレイクアウト銘柄」と訴求して pending が screener に混入しない**構造的保証**になる(Trust Cliff 物理回避)。
 
@@ -798,7 +799,8 @@ retest = _scan_resistance_retest(times, highs, lows, closes, result)
 return ticker, result, retest, None
 # After:
 retest   = _scan_resistance_retest(times, highs, lows, closes, result)
-breakout = _scan_breakout(times, highs, lows, closes, volumes, result)   # ← 追加
+breakout = _scan_breakout(times, highs, lows, closes, volumes, spy_up)   # ← 追加 (第6引数は spy_uptrend。
+                                                                          #    retest の cup_result 引数と混同しない/Sprint2 実装で是正)
 return ticker, result, retest, breakout, None   # err=None
 
 # ---- L16373: gather 後の unpack ----

@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { fetchAnalyst, fetchTechnical, fetchPriceHistory, TECHNICAL_CANONICAL_PATTERNS } from '../api.js';
 import { DIST_DAYS_LABEL_JP, classifyDistDays } from '../lib/distributionDaysLabels.js';
+// Sprint 3 §3.4: 出来高 chip SSOT (lib/volume.js — 当日除く直前50日、backend §1.3 と同一基準)
+import { computeAvgVol50, computeVolRatio } from '../lib/volume.js';
 import Chip from './ui/Chip.jsx';
 import CompassInfoButton from '../features/judgment/components/detail/sections/CompassInfoButton.jsx';
 // v195 round2 (§38 verdict 条件付き OK): チャート線と 1:1 mirror の「線サンプル swatch」用 identity 色。
@@ -248,7 +250,7 @@ export default function PriceLadder({ ticker }) {
     return () => { cancelled = true; };
   }, [ticker]);
 
-  const { levels, current, sma50Dist, distCount, stateText } = useMemo(() => {
+  const { levels, current, sma50Dist, distCount, stateText, volRatio } = useMemo(() => {
     const prices = priceData?.prices;
     const current = (prices?.length && Number.isFinite(prices[prices.length - 1]?.close))
       ? prices[prices.length - 1].close : null;
@@ -335,8 +337,22 @@ export default function PriceLadder({ ticker }) {
     })();
     const stateText = buildTechnicalState({ current, sma50, pivot, support, sma50Dist, retest });
 
-    return { levels: raw, current, sma50Dist, distCount, stateText };
-  }, [analyst, technical, priceData]);
+    // Sprint 3 §3.4: 相対出来高 chip 用 (当日除く直前50日平均比)。
+    // isNonEquityTicker は StockPriceChart の関数を再実装せず、ticker prop から簡易判定する。
+    // gate: 非株式 or データ不足 (null) は Number.isFinite(volRatio) で自然に非表示になる。
+    // ⚠️ distCount の prices.slice(-26) は IBD Distribution Days 専用。avgVol50 と混同しない。
+    const isNonEquityPl = !ticker ? false : (() => {
+      const NON_EQ = new Set(['^GSPC', '^IXIC', '^DJI', '^VIX', '^TNX', 'DX-Y.NYB', 'CL=F', 'JPY=X']);
+      const t = String(ticker).toUpperCase();
+      return NON_EQ.has(t) || t.startsWith('^') || t.endsWith('=F') || t.endsWith('=X');
+    })();
+    const avgVol50Pl = (!isNonEquityPl && Array.isArray(prices)) ? computeAvgVol50(prices) : null;
+    const todayVol = (Array.isArray(prices) && prices.length)
+      ? Number(prices[prices.length - 1]?.volume) : NaN;
+    const volRatio = computeVolRatio(todayVol, avgVol50Pl);
+
+    return { levels: raw, current, sma50Dist, distCount, stateText, volRatio };
+  }, [analyst, technical, priceData, ticker]);
 
   // round8 #4 (前回比): 10 分以上ぶりの再訪なら前回値を表示し、 今回値で更新 (current は上の useMemo 産)。
   useEffect(() => {
@@ -383,7 +399,7 @@ export default function PriceLadder({ ticker }) {
       <SectionLabel />
       {/* §38 状態サマリー (位置の事実記述、LLM 不使用) + 地合いバッジ (Distribution Days、市場全体の指標)。
           地合いは価格 ladder と性質が違うため、 同じ数直線でなく上部の 1 行に分離して提示。 */}
-      {(stateText || Number.isFinite(distCount)) && (
+      {(stateText || Number.isFinite(distCount) || Number.isFinite(volRatio)) && (
         <div
           data-testid="price-ladder-summary"
           style={{
@@ -406,17 +422,33 @@ export default function PriceLadder({ ticker }) {
               {stateText}
             </span>
           ) : <span />}
-          {Number.isFinite(distCount) && (() => {
-            const zone = classifyDistDays(distCount);
-            const tone = zone === 'pressure' ? 'loss'
-              : zone === 'caution' ? 'warning'
-              : zone === 'healthy' ? 'gain' : 'muted';
-            return (
-              <Chip variant="display" size="xs" tone={tone}>
-                地合い: {DIST_DAYS_LABEL_JP[zone] || '—'} ({distCount}日/25)
+          {/* 右端 chip 群: 地合い + 出来高(相対比) を横並びで表示。
+              両者は別指標 — 地合い=機関売り圧(IBD 25日窓)、出来高chip=今日の商いの相対水準。
+              DistributionDays と相対出来高の「両輪」で売り圧 × 商い厚みを1視線に収める (§3.5)。 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)', flexWrap: 'wrap' }}>
+            {Number.isFinite(distCount) && (() => {
+              const zone = classifyDistDays(distCount);
+              const tone = zone === 'pressure' ? 'loss'
+                : zone === 'caution' ? 'warning'
+                : zone === 'healthy' ? 'gain' : 'muted';
+              return (
+                <Chip variant="display" size="xs" tone={tone}>
+                  地合い: {DIST_DAYS_LABEL_JP[zone] || '—'} ({distCount}日/25)
+                </Chip>
+              );
+            })()}
+            {/* Sprint 3 §3.4: 相対出来高 chip。
+                tone LOCKED = muted 一択 (§38 / 投資業界色ルール):
+                  出来高は方向を持たない指標。>=1.5 で緑は「緑=上昇」と誤読される恐れ。
+                  <1.0 で赤は「赤=下落」と誤読される。数値が大小を担い、色で煽らない。
+                gate: isNonEquity は上の volRatio 計算時に null になるため !Number.isFinite(volRatio) で自動非表示。
+                文言: 事実記述のみ。「急増」「買い場」「ブレイク」等の方向断定・将来予測は絶対禁止 (§38)。 */}
+            {Number.isFinite(volRatio) && (
+              <Chip variant="display" size="xs" tone="muted">
+                出来高: 50日平均比 ×{volRatio.toFixed(2)}
               </Chip>
-            );
-          })()}
+            )}
+          </div>
         </div>
       )}
       {/* 案A (v195 dogfood 2026-06-10、 ui-designer 提案): 「縦軸(spine) + tick」 ladder。
