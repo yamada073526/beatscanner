@@ -40,10 +40,10 @@ try {
   page.on('pageerror', (e) => errs.push(String(e?.message || e).slice(0, 160)));
   await page.addInitScript((entries) => { if (entries) for (const { key, value } of entries) localStorage.setItem(key, value); }, auth);
 
-  // flag ON (Premium authed → items 表示期待)
-  result.flagOn = await probe(page, 'flagON', `${BASE}&breakout_screener=1`);
-  // flag OFF (section 非 render 期待 = 完全 no-op)
-  result.flagOff = await probe(page, 'flagOFF', `${BASE}&breakout_screener=0`);
+  // default (param なし → 2026-06-18 promote 後は default ON、section 表示期待)
+  result.flagOn = await probe(page, 'default', BASE);
+  // kill-switch (?breakout_screener=0 → section 非 render 期待)
+  result.flagOff = await probe(page, 'killOFF', `${BASE}&breakout_screener=0`);
 
   result.pageErrors = errs.slice(0, 6);
   console.log(JSON.stringify(result, null, 2));
