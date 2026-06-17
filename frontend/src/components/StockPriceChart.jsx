@@ -857,6 +857,25 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
     return vols[Math.min(vols.length - 1, Math.floor(vols.length * 0.90))] || null;
   }, [data, isNonEquity]);
 
+  // Sprint 3 fix v2 (2026-06-17 user dogfood 再): 出来高バー専用の下部 dead space を price 軸に作る。
+  // price 軸 domain 'auto' は安値圏で出来高バンドと価格ローソクが同じ高さ帯に入り重なる
+  // (特に 3M=軸がタイトに収まる / candle 下ヒゲが軸下端付近)。price 軸下端を可視レンジの ~24% 下へ広げ
+  // (上端は auto のまま=アナリスト目標/50DMAバンド等の overlay を clip しない)、その dead zone に出来高バーを収める
+  // (TradingView 方式)。バンド高の圧縮だけでは candle 下ヒゲが軸下端に届くため重なりを解消できない。
+  // data は period 毎に再 fetch されるため (fetchPriceHistory[ticker,period])、可視レンジに追従する。
+  const volBandPad = useMemo(() => {
+    if (isNonEquity) return 0;
+    let lo = Infinity, hi = -Infinity;
+    for (const p of data?.prices ?? []) {
+      const l = Number(p?.low ?? p?.close);
+      const h = Number(p?.high ?? p?.close);
+      if (Number.isFinite(l)) lo = Math.min(lo, l);
+      if (Number.isFinite(h)) hi = Math.max(hi, h);
+    }
+    if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) return 0;
+    return (hi - lo) * 0.24;
+  }, [data, isNonEquity]);
+
   // Sprint 3 §3.2: 出来高バーの色+透明度を返す純粋関数 (Chart Overlay Safety Layer3)。
   // 色は方向色のみ (緑=上昇/赤=下落)。シアン・別 hue・hex 直書き禁止 (投資業界色ルール)。
   // breakout 日 (1.5x 超・上昇確定) は fillOpacity を 0.85 に強調 (§3.2)。
@@ -867,9 +886,9 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
       ? entry.close >= entry.open
       : true;
     const fill = isUp ? 'var(--color-gain)' : 'var(--color-loss)';
-    // Sprint 3 fix (2026-06-17 user dogfood): 高密度 (6M+) で淡く見えるため通常バーを 0.45→0.55 に。
-    // breakout 日 (1.5x 超・上昇確定) は 0.85 据置 (通常 0.55 とのコントラストで「出来高急増の確定事実」を際立たせる)。
-    const opacity = isBreakoutBar(entry, avg50) ? 0.85 : 0.55;
+    // Sprint 3 fix v2 (2026-06-17 user dogfood 再): 6M+ 高密度でまだ淡いため通常 0.55→0.65、breakout 0.85→0.92。
+    // dead zone 化 (price 軸下端拡張) でバー高も確保したため、不透明度と相まって視認性を上げる。
+    const opacity = isBreakoutBar(entry, avg50) ? 0.92 : 0.65;
     return { fill, fillOpacity: opacity };
   }
 
@@ -1249,11 +1268,15 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                   tick={{ fontSize: 11 }}
                 />
                 <YAxis
-                  domain={['auto', 'auto']}
+                  /* Sprint 3 fix v2: 下端を可視レンジの ~24% 下へ拡張し出来高バー用の dead zone を確保。
+                     上端は 'auto' のまま (アナリスト目標 / 50DMA+25% 等の上方 overlay を clip しない)。
+                     volBandPad=0 (非株式/データ無) の時は実質 'auto' 同等で従来挙動。 */
+                  domain={[(dataMin) => (Number.isFinite(dataMin) ? dataMin - volBandPad : dataMin), 'auto']}
                   stroke={CHART_AXIS}
                   tick={{ fontSize: 11 }}
                   tickFormatter={(v) => `$${v}`}
                   width={58}
+                  allowDataOverflow={false}
                 />
 
                 {/* Custom tooltip with earnings hover info
@@ -1313,7 +1336,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                   yAxisId="vol"
                   orientation="right"
                   hide
-                  domain={[0, (dataMax) => (Number.isFinite(dataMax) && dataMax > 0 ? dataMax * 7 : 1)]}
+                  domain={[0, (dataMax) => (Number.isFinite(dataMax) && dataMax > 0 ? dataMax * 6 : 1)]}
                 />
 
                 {/* Sprint 3 §3.1: 出来高 Bar (price 描画の直前 = z順で背面に配置)。
