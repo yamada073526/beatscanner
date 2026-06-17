@@ -843,6 +843,20 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
     return computeAvgVol50(data?.prices ?? []);
   }, [data, isNonEquity]);
 
+  // Sprint 3 fix (2026-06-17 user dogfood): 出来高バーの spike 依存スケールを是正。
+  // raw dataMax だと 1 本の出来高 spike が他全バーを矮小化 (6M で「薄い」) し、period で band 高が変動して
+  // price line / cup 破線と干渉する (3M)。chartData の volume 90 パーセンタイルを ceiling とし、
+  // バー高をそこでクリップ (spike が band を突き抜けない + 典型バーが band を活かす)。データ不足/非株式は null。
+  const volBarCeil = useMemo(() => {
+    if (isNonEquity) return null;
+    const vols = (data?.prices ?? [])
+      .map((p) => Number(p?.volume))
+      .filter((v) => Number.isFinite(v) && v > 0)
+      .sort((a, b) => a - b);
+    if (vols.length < 5) return null;
+    return vols[Math.min(vols.length - 1, Math.floor(vols.length * 0.90))] || null;
+  }, [data, isNonEquity]);
+
   // Sprint 3 §3.2: 出来高バーの色+透明度を返す純粋関数 (Chart Overlay Safety Layer3)。
   // 色は方向色のみ (緑=上昇/赤=下落)。シアン・別 hue・hex 直書き禁止 (投資業界色ルール)。
   // breakout 日 (1.5x 超・上昇確定) は fillOpacity を 0.85 に強調 (§3.2)。
@@ -853,7 +867,9 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
       ? entry.close >= entry.open
       : true;
     const fill = isUp ? 'var(--color-gain)' : 'var(--color-loss)';
-    const opacity = isBreakoutBar(entry, avg50) ? 0.85 : 0.45;
+    // Sprint 3 fix (2026-06-17 user dogfood): 高密度 (6M+) で淡く見えるため通常バーを 0.45→0.55 に。
+    // breakout 日 (1.5x 超・上昇確定) は 0.85 据置 (通常 0.55 とのコントラストで「出来高急増の確定事実」を際立たせる)。
+    const opacity = isBreakoutBar(entry, avg50) ? 0.85 : 0.55;
     return { fill, fillOpacity: opacity };
   }
 
@@ -1297,7 +1313,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                   yAxisId="vol"
                   orientation="right"
                   hide
-                  domain={[0, (dataMax) => (Number.isFinite(dataMax) && dataMax > 0 ? dataMax * 5 : 1)]}
+                  domain={[0, (dataMax) => (Number.isFinite(dataMax) && dataMax > 0 ? dataMax * 7 : 1)]}
                 />
 
                 {/* Sprint 3 §3.1: 出来高 Bar (price 描画の直前 = z順で背面に配置)。
@@ -1307,7 +1323,14 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                     §38: 文言ゼロ・強調は「過去に出来高が多かった確定事実」のみ。色は方向色のみ (緑=上昇/赤=下落)。 */}
                 <Bar
                   yAxisId="vol"
-                  dataKey="volume"
+                  dataKey={(entry) => {
+                    // Sprint 3 fix: spike を 90 パーセンタイル ceiling でクリップ (1 本の急増が他バーを
+                    // 矮小化 / vol band を突き抜けて price line と干渉するのを防ぐ)。色/breakout 強調は
+                    // volCellProps が実 volume を参照するため不変 (高さだけクリップ、§38 事実性は維持)。
+                    const v = Number(entry?.volume);
+                    if (!Number.isFinite(v) || v <= 0) return 0;
+                    return volBarCeil ? Math.min(v, volBarCeil) : v;
+                  }}
                   isAnimationActive={false}
                   name="出来高"
                 >
