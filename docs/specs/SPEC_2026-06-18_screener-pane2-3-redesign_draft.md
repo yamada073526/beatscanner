@@ -191,7 +191,7 @@
 
 | Sprint | 内容 | backend | 規模 |
 |---|---|---|---|
-| S1 | Pane3 チャンク化（7→3＋ヘッドライン＋top3-5＋すべて見る＋0件フォールバック） | 既存 | S |
+| **S1 ✅着地** | Pane3 チャンク化（7→3＋ヘッドライン＋top3-5＋すべて見る＋0件フォールバック）。commit 6adea4e deploy済・authed headless 視覚検証OK(2026-06-18、各chunk top5+showall/0件fallback動作・JSエラー0)。05決算×RSは後続へ(state残置) | 既存 | S |
 | S2 | Pane2 強度プリセット＋ライブ件数（**実データ gate ⑥-1 を先行**） | facet cache/endpoint（⑥-2） | M+ |
 | S3 | 詳細条件 2タブ accordion（group A-C ファンダ個別） | 既存拡張 | M |
 | S4 | テクニカル蛇口（group D-F、既存 RS/cup/breakout/retest を toggle 化） | 既存再利用 | M |

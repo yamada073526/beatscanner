@@ -29,7 +29,6 @@ import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { useHaloSweepOnce } from '../../hooks/useHaloSweepOnce.js';
 import { useCountUp } from '../../hooks/useCountUp.js';
 import Chip, { ChipGroup } from '../../components/ui/Chip.jsx';
-import FtdRegimeBanner from './FtdRegimeBanner.jsx';
 import { supabase } from '../../lib/supabase.js';
 
 
@@ -928,8 +927,8 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
       {/* v160 D2: master-detail 化で WIP banner 撤去 (user gate 通過、 本実装が gate 後の正式版)。
           Hero (今注目 3 セクション) は Pane 3 の idle 状態、 銘柄選択で JudgmentDetail に切替。 */}
 
-      {/* v175 B-Top2: 市場局面 FTD バナー (ScreenerPane 最上部 = 最初に地合いを見せる)。 */}
-      <FtdRegimeBanner />
+      {/* v175→S2: 市場局面 FTD バナーは Pane 2 (CustomScreenerPanel) に集約し重複排除 (user 2026-06-18)。
+          Pane 2 は銘柄選択後も常駐するため地合いが常に見える。Pane 3 はヘッドラインを最上部に。 */}
 
       {/* A-6: chip filter を「探索メニュー」 化 (ChipGroup prefix=探索)。 active のみ accent
           ([[feedback_no_baseline_cyan]]: 非 active は muted で baseline cyan を出さない)。 */}
