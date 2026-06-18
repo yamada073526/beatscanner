@@ -24,7 +24,7 @@
  * memory anchor: [[feedback-screener-hero-3sections]] / [[feedback-oneill-screener-frontend-intersection]]
  */
 import { useEffect, useRef, useState } from 'react';
-import { Crown, Hourglass } from 'lucide-react';
+import { ArrowUpRight, Crown, Hourglass, Target, TrendingUp } from 'lucide-react';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
 import { useHaloSweepOnce } from '../../hooks/useHaloSweepOnce.js';
 import { useCountUp } from '../../hooks/useCountUp.js';
@@ -217,6 +217,22 @@ function rowRevealDelay(baseDelay, idx) {
   return baseDelay + ROW_REVEAL_LEAD + idx * ROW_REVEAL_STEP;
 }
 
+// S1 チャンク化: 複数リストを ticker 重複なし(先勝ち)で結合するユーティリティ。
+// module-level で定義し HeroSection より前に置く。
+function dedupeByTicker(...lists) {
+  const seen = new Set();
+  const result = [];
+  for (const list of lists) {
+    for (const item of list) {
+      if (!seen.has(item.ticker)) {
+        seen.add(item.ticker);
+        result.push(item);
+      }
+    }
+  }
+  return result;
+}
+
 /**
  * Hero section card (実 fetch result 表示)
  * @param {object} props
@@ -237,7 +253,7 @@ function rowRevealDelay(baseDelay, idx) {
  * @param {boolean} props.featured - A-4: 最希少 setup (交差) のみ主役化 (padding↑ + Crown gold)
  * @param {number} props.revealBaseDelay - A-3: stagger 入場の section base delay (ms)
  */
-function HeroSection({ eyebrow, title, testId, description, tickers, loading, emptyMessage, onSelect, sectionRef, active = false, demoMode = false, onUpgrade, error = null, onRetry, featured = false, revealBaseDelay = 0, columns = false }) {
+function HeroSection({ eyebrow, title, testId, description, tickers, loading, emptyMessage, onSelect, sectionRef, active = false, demoMode = false, onUpgrade, error = null, onRetry, featured = false, revealBaseDelay = 0, columns = false, icon = null, collapsedCount = null }) {
   // v125 P5-2: demo モード時は top 1 visible + 残り blur (marketer 6 体合議 verdict)
   const visibleCount = demoMode ? 1 : tickers.length;
   const blurredCount = demoMode ? Math.max(0, tickers.length - 1) : 0;
@@ -245,6 +261,11 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
   //   useHaloSweepOnce が IO 進入で data-halo-ready→fired を制御 (proven pattern、 loop 禁止・二度発火 guard)。
   const haloRef = useRef(null);
   useHaloSweepOnce(haloRef);
+  // S1 チャンク化: collapsedCount で top N のみ表示 + すべて見る toggle。
+  //   demo モードは既存の top1+blur を優先するため canCollapse=false (二重制御を避ける)。
+  const [expanded, setExpanded] = useState(false);
+  const canCollapse = !demoMode && collapsedCount != null && tickers.length > collapsedCount;
+  const shownTickers = canCollapse && !expanded ? tickers.slice(0, collapsedCount) : tickers;
   return (
     <div
       // sectionRef (chip scroll-to) と haloRef (halo) を同一要素に merge
@@ -325,9 +346,12 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
           }}
         >
           {/* A-4: featured (交差) のみ Crown gold で「最希少」 を格調シンボルで明示 ([[feedback_icon_brand_consistency]])。 */}
-          {featured && (
+          {featured ? (
             <Crown size={16} strokeWidth={1.75} aria-hidden style={{ color: 'var(--color-gold)', flexShrink: 0, marginTop: 2 }} />
-          )}
+          ) : icon ? (
+            // S1: chunk 見出しの lucide icon (中立 = text-muted、featured の gold Crown とは別格)。
+            <span aria-hidden style={{ color: 'var(--text-muted)', flexShrink: 0, marginTop: 2, display: 'inline-flex' }}>{icon}</span>
+          ) : null}
           {/* 2 行 clamp (それ以上は ellipsis + title hover で全文)。 全列の見出し高さを揃える。 */}
           <span
             style={{
@@ -431,7 +455,7 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
               : { listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-1, 4px)' }
           }
         >
-          {tickers.map((t, idx) => {
+          {shownTickers.map((t, idx) => {
             // v125 P5-2: demo モード時は idx === 0 のみ visible、 残りは blur
             const isBlurred = demoMode && idx >= visibleCount;
             const rank = idx + 1;
@@ -525,6 +549,31 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
         </ul>
       )}
 
+      {/* S1: すべて見る toggle (collapsedCount 設定時 + 非 demo + 超過時のみ)。発光系 class 不使用、token のみ。 */}
+      {canCollapse && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          data-testid={`${testId}-showall`}
+          style={{
+            marginTop: 'var(--space-2, 8px)',
+            width: '100%',
+            padding: '6px 12px',
+            fontSize: 11,
+            fontWeight: 600,
+            textAlign: 'center',
+            border: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)',
+            borderRadius: 'var(--radius-sm, 4px)',
+            background: 'transparent',
+            color: 'var(--color-accent)',
+            cursor: 'pointer',
+            transition: 'background 0.2s ease',
+          }}
+        >
+          {expanded ? '閉じる' : `すべて見る (${tickers.length})`}
+        </button>
+      )}
+
       {/* v125 P5-2: demo モード時の ProTeaser overlay (marketer 6 体合議 verdict)
           「Premium で全 N 銘柄」 文言で具体性 + LP「3 銘柄/日まで無料試用」 整合 */}
       {demoMode && blurredCount > 0 && (
@@ -609,13 +658,11 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
   // Sprint 4-A-4: chip filter active state + scroll-to refs
   // activeChip: null = all visible (default) / 'leader' / 'rising' / 'new-cwh' のいずれかで該当 section を highlight
   const [activeChip, setActiveChip] = useState(null);
-  const leaderRef = useRef(null);
-  const risingRef = useRef(null);
-  const newCwhRef = useRef(null);
-  const retestRef = useRef(null); // Task#4 A先行: リテスト接近 section
-  const breakoutRef = useRef(null); // Sprint 5: 新高値ブレイク section (flag ON 時のみ chip + scroll 有効)
-  // chip key → section ref の refMap (旧 ternary を map 化、 chip 追加で分岐が増えない)
-  const chipRefMap = { leader: leaderRef, rising: risingRef, 'new-cwh': newCwhRef, retest: retestRef, breakout: breakoutRef };
+  const breakoutRef = useRef(null); // 新高値ブレイク chunk
+  // S1 チャンク化: 勢い/仕掛かり の chunk ref。探索 chip は 3 chunk へ jump。
+  const momentumRef = useRef(null);
+  const setupRef = useRef(null);
+  const chipRefMap = { momentum: momentumRef, setup: setupRef, breakout: breakoutRef };
 
   const handleChipClick = (chipKey) => {
     // 同 chip を再 click で全 highlight 解除 (toggle、 Linear 流)
@@ -857,6 +904,19 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
     setActiveTicker(sym);
   };
 
+  // S1 チャンク化: 既存 state から 3 chunk を派生 (追加 fetch なし)。
+  //   勢い = RS急上昇 + RS≥80 ランキング (先勝ち dedupe)。仕掛かり = 新規Cup + リテスト接近。
+  const momentum = {
+    tickers: dedupeByTicker(rsRising.tickers, rsLeaders.tickers),
+    loading: rsRising.loading || rsLeaders.loading,
+    error: rsRising.error && rsLeaders.error ? '勢いデータ取得失敗' : null,
+  };
+  const setup = {
+    tickers: dedupeByTicker(newCwh.tickers, retest.tickers),
+    loading: newCwh.loading || retest.loading,
+    error: newCwh.error && retest.error ? '仕掛かりデータ取得失敗' : null,
+  };
+
   return (
     <div
       data-testid="screener-pane"
@@ -873,49 +933,30 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
 
       {/* A-6: chip filter を「探索メニュー」 化 (ChipGroup prefix=探索)。 active のみ accent
           ([[feedback_no_baseline_cyan]]: 非 active は muted で baseline cyan を出さない)。 */}
+      {/* S1 チャンク化: 探索 chip を 3 chunk (勢い/仕掛かり/ブレイク) への jump に簡素化。 */}
       <div data-testid="screener-chip-filter" style={{ marginBottom: 'var(--space-3, 12px)' }}>
-        <ChipGroup prefix="探索" gap="normal" ariaLabel="スクリーナー section へ jump">
+        <ChipGroup prefix="探索" gap="normal" ariaLabel="スクリーナー chunk へ jump">
           <Chip
             variant="filter"
             size="sm"
-            tone={activeChip === 'leader' ? 'accent' : 'muted'}
-            pressed={activeChip === 'leader'}
-            onClick={() => handleChipClick('leader')}
-            ariaLabel="RS上位 + ブレイクアウト + Cup-Handle 交差 section に jump"
+            tone={activeChip === 'momentum' ? 'accent' : 'muted'}
+            pressed={activeChip === 'momentum'}
+            onClick={() => handleChipClick('momentum')}
+            ariaLabel="勢い chunk に jump"
           >
-            RS上位 + ブレイクアウト + CWH
+            勢い
           </Chip>
           <Chip
             variant="filter"
             size="sm"
-            tone={activeChip === 'rising' ? 'accent' : 'muted'}
-            pressed={activeChip === 'rising'}
-            onClick={() => handleChipClick('rising')}
-            ariaLabel="RS 急上昇 section に jump"
+            tone={activeChip === 'setup' ? 'accent' : 'muted'}
+            pressed={activeChip === 'setup'}
+            onClick={() => handleChipClick('setup')}
+            ariaLabel="仕掛かり chunk に jump"
           >
-            RS 急上昇
+            仕掛かり
           </Chip>
-          <Chip
-            variant="filter"
-            size="sm"
-            tone={activeChip === 'new-cwh' ? 'accent' : 'muted'}
-            pressed={activeChip === 'new-cwh'}
-            onClick={() => handleChipClick('new-cwh')}
-            ariaLabel="新規 Cup-Handle 検出 section に jump"
-          >
-            新規 Cup-Handle
-          </Chip>
-          <Chip
-            variant="filter"
-            size="sm"
-            tone={activeChip === 'retest' ? 'accent' : 'muted'}
-            pressed={activeChip === 'retest'}
-            onClick={() => handleChipClick('retest')}
-            ariaLabel="リテスト接近 section に jump"
-          >
-            リテスト接近
-          </Chip>
-          {/* Sprint 5: 新高値ブレイク chip (flag ON 時のみ表示。flag OFF で null = DOM に出ない) */}
+          {/* Sprint 5: 新高値ブレイク chunk (flag ON 時のみ表示。flag OFF で null = DOM に出ない) */}
           {isBreakoutScreenerEnabled() && (
             <Chip
               variant="filter"
@@ -923,147 +964,83 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
               tone={activeChip === 'breakout' ? 'accent' : 'muted'}
               pressed={activeChip === 'breakout'}
               onClick={() => handleChipClick('breakout')}
-              ariaLabel="新高値ブレイク section に jump"
+              ariaLabel="ブレイク chunk に jump"
             >
-              新高値ブレイク
+              ブレイク
             </Chip>
           )}
         </ChipGroup>
       </div>
 
-      {/* Hero: 3 セクション × top 5 */}
-      <section
-        data-testid="screener-hero"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 'var(--space-3, 12px)',
-          marginBottom: 'var(--space-4, 16px)',
-        }}
-      >
+      {/* S1: Layer0 ヘッドライン (交差 top3 を full-width 前出し = 2 秒で「今日の筆頭」)。 */}
+      <HeroSection
+        eyebrow="今日の注目"
+        featured
+        revealBaseDelay={0}
+        title="RS上位 × ブレイク × Cup交差"
+        testId="screener-headline"
+        description="RS percentile ≥ 80 ∩ Cup-Handle 検出済（投資の推奨ではありません）"
+        tickers={leaderCwh.tickers.slice(0, 3)}
+        loading={leaderCwh.loading}
+        error={leaderCwh.error}
+        emptyMessage="本日は交差銘柄が少ない状況です"
+        onSelect={handleSelect}
+        demoMode={demoMode}
+        onUpgrade={handleUpgradeRequest}
+        onRetry={handleRetry}
+      />
+      {/* S1: 0件フォールバック (交差が空の日に「壊れてる?」 を避け、下の chunk へ誘導)。 */}
+      {leaderCwh.tickers.length === 0 && !leaderCwh.loading && !leaderCwh.error && (
+        <p data-testid="screener-zero-fallback" style={{ fontSize: 11, color: 'var(--text-muted)', margin: 'var(--space-2, 8px) 0 0', lineHeight: 1.5 }}>
+          本日は交差が少ない状況です。下の「勢い」「仕掛かり」「ブレイク」をご覧ください。
+        </p>
+      )}
+
+      {/* S1: 3 チャンク (勢い / 仕掛かり / ブレイク) を縦スタック。各 top5 + すべて見る。 */}
+      <div style={{ marginTop: 'var(--space-4, 16px)' }}>
         <HeroSection
-          eyebrow="01"
-          featured
-          revealBaseDelay={0}
-          title="RS上位 + ブレイクアウト + Cup-Handle 交差"
-          testId="screener-hero-leader-breakout-cwh"
-          description="RS percentile ≥ 80 ∩ Cup-Handle 検出済 (推奨ではありません)"
-          tickers={leaderCwh.tickers}
-          loading={leaderCwh.loading}
-          error={leaderCwh.error}
-          emptyMessage="交差銘柄 0 件"
-          onSelect={handleSelect}
-          sectionRef={leaderRef}
-          active={activeChip === 'leader'}
-          demoMode={demoMode}
-          onUpgrade={handleUpgradeRequest}
-          onRetry={handleRetry}
-        />
-        <HeroSection
-          eyebrow="02"
+          icon={<TrendingUp size={16} strokeWidth={1.75} />}
           revealBaseDelay={120}
-          title="RS 急上昇"
-          testId="screener-hero-rs-rising"
-          description={
-            rsRising.migrationPending
-              ? '前日比 percentile 急上昇 (データ準備中: migration 適用後 cron 次回実行で populate)'
-              : '前日比で RS percentile が +10pt 以上上昇 (推奨ではありません)'
-          }
-          tickers={rsRising.tickers}
-          loading={rsRising.loading}
-          error={rsRising.error}
-          emptyMessage={rsRising.migrationPending ? 'データ準備中' : '急上昇銘柄なし'}
+          title="勢い（RS上位・急騰）"
+          testId="screener-chunk-momentum"
+          description="RS percentile 上位・前日比で急上昇した銘柄。投資の推奨ではありません。"
+          tickers={momentum.tickers}
+          loading={momentum.loading}
+          error={momentum.error}
+          emptyMessage="該当銘柄なし"
+          collapsedCount={5}
           onSelect={handleSelect}
-          sectionRef={risingRef}
-          active={activeChip === 'rising'}
+          sectionRef={momentumRef}
+          active={activeChip === 'momentum'}
           demoMode={demoMode}
           onUpgrade={handleUpgradeRequest}
           onRetry={handleRetry}
         />
+      </div>
+      <div style={{ marginTop: 'var(--space-4, 16px)' }}>
         <HeroSection
-          eyebrow="03"
+          icon={<Target size={16} strokeWidth={1.75} />}
           revealBaseDelay={240}
-          title="新規 Cup-Handle 検出"
-          testId="screener-hero-new-cup-handle"
-          description="Cup-Handle 検出済（高値圏ブレイクの追随買いは除く）。投資の推奨ではありません。"
-          tickers={newCwh.tickers}
-          loading={newCwh.loading}
-          error={newCwh.error}
-          emptyMessage="検出銘柄なし"
+          title="仕掛かり（新規Cup・リテスト接近）"
+          testId="screener-chunk-setup"
+          description="ベース形成中・旧抵抗の支持転換に接近した銘柄。投資の推奨ではありません。"
+          tickers={setup.tickers}
+          loading={setup.loading}
+          error={setup.error}
+          emptyMessage="該当銘柄なし"
+          collapsedCount={5}
           onSelect={handleSelect}
-          sectionRef={newCwhRef}
-          active={activeChip === 'new-cwh'}
+          sectionRef={setupRef}
+          active={activeChip === 'setup'}
           demoMode={demoMode}
           onUpgrade={handleUpgradeRequest}
           onRetry={handleRetry}
-        />
-      </section>
-
-      {/* dogfood 2026-06-05「Pane3 下部 60% がうら寂しい空き」: 3 section (curated 交差、 本日 0/0/5 と data-sparse)
-          の下の大きな void を、 常時 data がある RS≥80 leaders ランキング (full-width 多列) で埋める。
-          ★追加 fetch ゼロ (rsLeader.items 流用)。 §38 中立 (RS percentile = 事実値、 description に免責)。 */}
-      <div style={{ marginTop: 'var(--space-4, 16px)' }}>
-        <HeroSection
-          eyebrow="04"
-          title="相対強度ランキング"
-          testId="screener-hero-rs-leaders"
-          description="RS percentile ≥ 80 の上位銘柄。投資の推奨ではありません。"
-          tickers={rsLeaders.tickers}
-          loading={rsLeaders.loading}
-          error={rsLeaders.error}
-          emptyMessage="RS ≥ 80 の銘柄なし（nightly batch 未実行の可能性、明朝確認）"
-          onSelect={handleSelect}
-          demoMode={demoMode}
-          onUpgrade={handleUpgradeRequest}
-          onRetry={handleRetry}
-          columns
         />
       </div>
 
-      {/* B-Top1: 今週決算 × 相対強度上位 (rsLeader.items × holdings-meta 交差、 追加 backend なし)。
-          「RS が強い銘柄で今週決算予定」 = 投資家が毎日人力でやる『今週の決算チェック』を BeatScanner が代替 (原則4)。
-          §38 中立 (RS percentile + 決算日は事実値、 description に投資推奨でない旨)。 相対強度ランキングの直下。 */}
-      <div style={{ marginTop: 'var(--space-4, 16px)' }}>
-        <HeroSection
-          eyebrow="05"
-          title="今後の決算 × 相対強度上位"
-          testId="screener-hero-earnings-upcoming"
-          description="RS percentile ≥ 80 で決算が近い順の銘柄（約3ヶ月以内）。投資の推奨ではありません。"
-          tickers={earningsThisWeek.tickers}
-          loading={earningsThisWeek.loading}
-          error={earningsThisWeek.error}
-          emptyMessage="直近の決算予定銘柄なし"
-          onSelect={handleSelect}
-          demoMode={demoMode}
-          onUpgrade={handleUpgradeRequest}
-          onRetry={handleRetry}
-          columns
-        />
-      </div>
-
-      {/* Task#4 A先行: リテスト接近 (旧レジスタンス→支持転換)。じっちゃま 2026-06-13 ライブの「ブレイク後に
-          旧抵抗水準へ押し戻した買いゾーン」 を自動検出。 backend /api/scanner/retest が vs_SPY 降順 +
-          6体合議 default filter (vs_SPY>0 ∩ dBHi<=10% ∩ rsSelf>=40) で絞り込み済。 §38: 買い水準は出さず
-          approach ラベル + 免責文。 上部 chip「リテスト接近」 から jump (retestRef)。 */}
-      <div style={{ marginTop: 'var(--space-4, 16px)' }}>
-        <HeroSection
-          eyebrow="06"
-          title="リテスト接近（旧抵抗の支持転換）"
-          testId="screener-hero-retest"
-          description="ブレイク後に旧抵抗水準へ押し戻した銘柄（RS上位 ∩ SPYアウトパフォーム）。投資の推奨ではありません。"
-          tickers={retest.tickers}
-          loading={retest.loading}
-          error={retest.error}
-          emptyMessage="リテスト接近銘柄なし"
-          onSelect={handleSelect}
-          sectionRef={retestRef}
-          active={activeChip === 'retest'}
-          demoMode={demoMode}
-          onUpgrade={handleUpgradeRequest}
-          onRetry={handleRetry}
-          columns
-        />
-      </div>
+      {/* S1 チャンク化で個別 section 廃止:
+          04 相対強度ランキング(rsLeaders) → 「勢い」chunk に統合 / 06 リテスト接近(retest) → 「仕掛かり」chunk に統合 /
+          05 今後の決算×RS(earningsThisWeek) → 後続 sprint で詳細条件へ (state/fetch は残置)。 */}
 
       {/* Sprint 5: 新高値ブレイク section (feature flag ON 時のみ render。 flag OFF で完全 no-op)。
           §38: BREAKOUT_STATE_LABEL_JP の事実ラベル + 事実数値のみ。「買い場」「上昇」「強い」等の断定禁止。
@@ -1120,23 +1097,23 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
               )}
             </div>
           ) : (
-            /* unlock 済 (Premium) または empty 分岐: HeroSection で統一描画 */
+            /* unlock 済 (Premium) または empty 分岐: HeroSection で統一描画 (S1: chunk 化、icon + すべて見る) */
             <HeroSection
-              eyebrow="07"
-              title="新高値ブレイク"
-              testId="screener-hero-breakout"
+              icon={<ArrowUpRight size={16} strokeWidth={1.75} />}
+              title="ブレイク（新高値）"
+              testId="screener-chunk-breakout"
               description="52週高値を更新した銘柄（出来高倍率・RS上位%を併記）。投資の推奨ではありません。"
               tickers={breakoutData.tickers}
               loading={breakoutData.loading}
               error={breakoutData.error}
               emptyMessage="本日の新高値ブレイクなし"
+              collapsedCount={5}
               onSelect={handleSelect}
               sectionRef={breakoutRef}
               active={activeChip === 'breakout'}
               demoMode={false}
               onUpgrade={handleUpgradeRequest}
               onRetry={handleRetry}
-              columns
             />
           )}
         </div>
