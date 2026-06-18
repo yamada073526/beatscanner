@@ -255,6 +255,40 @@
 
 ---
 
+## ⑫ S2 着手ブリーフ（2026-06-18 user 確定・新セッション実装用）
+
+> **進め方（user 確定）**: S2 は **新セッションで実装**（context-safety、CLAUDE.md「機能着地直後は新セッション」）。本 SPEC + memory `project_screener_fundamental_threshold_grading` が完全 handoff。新セッションで「S2 実装」と言えば着手可。
+> **S1 状況**: ✅ deploy 済（commit 6adea4e）。Pane3 = ヘッドライン+3チャンク。FtdRegimeBanner は Pane2 に集約済（Pane3 から撤去、commit e7c473b）。
+
+### S2-1: CF条件の扱い = **6条件先行（user 確定）**
+- ダイヤルは **`screener_fundamentals` 精算済6条件 + `rs_ratings` の RS** で構成（backend 精算追加なし・即着手可）:
+  - eps_yoy(C) / eps_cagr(A 年率) / roe(C·A) / near_high(N 52週高値接近) / volume_surge(S) / buyback(S) + RS percentile(L)
+- **じっちゃまCF系条件（CFマージン/CFPS>EPS/連続性）は後続sprint**で nightly batch に精算追加（⑥-2 option i）。S2 では扱わない。
+
+### S2-2: プリセット→閾値マッピング（⑥-1実データ anchor・新セッションで curl 再較正）
+| preset | 条件 | 実測件数目安 |
+|---|---|---|
+| 緩い | RS≥70 AND eps_yoy≥20% AND eps_cagr≥10% | ≈55 |
+| 標準 | RS≥80 AND eps_yoy≥25% AND eps_cagr≥15%（要curl較正） | 8-15狙い |
+| 厳しい | RS≥90 AND eps_yoy≥50% AND eps_cagr≥25% | 2-5 |
+- 着手時 **DoD gate**: 各 preset の実件数を `/api/scanner/canslim` 系 curl で確認し標準を 8-15 に較正してから UI 固定（resistance_retest 教訓＝SPEC数式を実データで再現）。
+
+### S2-3: 実装スコープ（S2のみ。詳細条件 accordion は S3）
+- **Pane2 = `CustomScreenerPanel.jsx`** を改修:
+  - 上部: FtdRegimeBanner（既存・地合い文脈）→ 下に **強度 segmented control「緩い/標準/厳しい」**（Chip/ChipGroup idiom、active=accent）
+  - **ライブ件数「該当 N 銘柄」を active pill インライン**（例 `標準 (12)`、UI体verdict・チラツキ回避、`AbortController`+300ms debounce+前回値保持で0件flash防止）
+  - read-only chip で標準の中身を透明化（max3 + 「…+N」）
+  - 銘柄リスト（**選択中に視覚マーカー必須**＝重複リスト化回避、既存 Chip pressed idiom 流用）
+- **backend ライブ件数 facet**: 既存 `/api/scanner/canslim`（condition+min_pct で count 返却）を確認 → 複数条件 AND + RS join の facet count を `screener_fundamentals`(count=exact) + `rs_ratings` で。新規 endpoint 可（「新規endpoint不可」の明示例外＝⑧）。LLM非経由・static集計で pre-commit hook/cost 規律 OK。`feedback_facet_filter_count_integrity`: count==predicate を厳守。
+
+### S2-4: 規律・注意
+- **`CustomScreenerPanel.jsx` は並行 CAN-SLIM セッション領域** → 着手前 `git status` で並行変更確認、**明示path commit**（`-A`禁止）、stage前に混入確認（`feedback_parallel_session_commit_entanglement`）。
+- 発光系/sticky検索バー/chip primitive/§38（件数=事実・買い断定なし・「最良」表記禁止）/Premium gate（ぼかし+chip1行）を維持。
+- sprint間commit gate: S2着地→main consolidate→S3 worktree。
+- read-first: `CustomScreenerPanel.jsx`（activeFilter enum / FilterPillarSection / run系fetch）/ `main.py` の /api/scanner/canslim（grep）/ `rs_ratings`・`screener_fundamentals` schema。
+
+---
+
 ## Appendix: Generator 向け read-first（実装前に読む）
 
 - `frontend/src/features/workspace/ScreenerPane.jsx`（現7セクション・HeroSection 流用元）
