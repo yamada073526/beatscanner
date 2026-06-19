@@ -13929,6 +13929,12 @@ def _compute_rs(ticker_closes: list[float], spy_closes: list[float]) -> dict:
             return None
         c_now = closes[idx_end]
         c_past = closes[idx_end - lookback]
+        # NaN/inf ガード: NaN は `c_past <= 0` 比較をすり抜けて rs_now=NaN を伝播させ、
+        # JSON で rs_vs_spy_pct=null かつ rank=0 → self_percentile=0 →「下位 1%」という
+        # 確信的な誤ラベル (Trust Cliff) を生む。Railway IP の yfinance が ADR/欧州銀の
+        # 直近 bar を NaN close で返すケースの安全網。非有限は None で suppress (0 を出さない)。
+        if c_now is None or c_past is None or not math.isfinite(c_now) or not math.isfinite(c_past):
+            return None
         if c_past <= 0:
             return None
         return (c_now / c_past - 1.0) * 100.0
@@ -14081,6 +14087,12 @@ async def get_technical(
         try:
             stock = yf.Ticker(ticker_u)
             hist = stock.history(period="3y", interval="1d")
+            # Railway IP の yfinance が ADR/欧州銀の直近 (未確定) bar を NaN close で返すケースの止血。
+            # NaN を残すと SMA/RS/cup_handle に伝播し、RS が {rs_vs_spy_pct=null, self_percentile=0,
+            # "下位 1%"} の確信的誤ラベル (Trust Cliff)、SMA 末尾 null、cup_state=null を生む。
+            # NaN close 行を index ごと drop し、times/highs/lows/volumes (同一 hist 由来) と整合を保つ。
+            if not hist.empty:
+                hist = hist.dropna(subset=["Close"])
             if hist.empty:
                 raise HTTPException(status_code=404, detail=f"{ticker_u} のデータが見つかりません")
         except HTTPException:
