@@ -13298,6 +13298,9 @@ def _detect_cup_handle(
     breakout_volume_multiplier: float = 1.40,
     prior_uptrend_pct: float = 0.20,  # O'Neil 原典「base 前の上昇」 は曖昧、 0.20 で実用
     prior_uptrend_days: int = 90,  # 4 ヶ月、 大型株 trend 確認に十分
+    allow_gradual_riser: bool = False,  # D1 (差分台帳, flag default OFF): じっちゃま gradual-riser path を OR で許可
+    prior_uptrend_days_long: int = 200,  # gradual-riser 用 長期窓 (約 10 ヶ月)
+    prior_uptrend_pct_long: float = 0.20,  # 長期窓での累積上昇率床
 ) -> dict:
     """O'Neil canonical strict Cup-with-Handle detector (Phase 1 Session 2)。
 
@@ -13307,7 +13310,11 @@ def _detect_cup_handle(
     - pivot = handle 期間中の最高値 + $0.10
     - breakout volume = 50 日平均 × 1.40 以上
     - SPY 200DMA 外 → detected=True / state="formation_market_weak" / market_context="weak" (B 案)
-    - prior uptrend = cup 形成前 60 営業日で ≥ 30%
+    - prior uptrend = cup 形成前 90 営業日 (prior_uptrend_days) で ≥ 20% (prior_uptrend_pct)
+    - D1 (差分台帳, allow_gradual_riser=True で有効化・default OFF): 上記を満たさなくても、
+      長期窓 (prior_uptrend_days_long=200 日) で ≥ prior_uptrend_pct_long かつ 上昇持続
+      (後半も上昇) なら prior uptrend OK。じっちゃま実践 = なだらかな右肩上がり (UBS 型 ADR、
+      90 日窓 <20% だが長期では十分上昇) を catch。O'Neil 原典より緩い再較正 (じっちゃま=北極星)。
 
     Return: dict with keys (detected, state, market_context, cup, handle, pivot, breakout, reason)
     """
@@ -13449,7 +13456,7 @@ def _detect_cup_handle(
         if u_count < u_shape_min_days:
             _reject("no_u_shape"); continue
 
-        # prior uptrend: cup 形成 _前_ 60 営業日の close 上昇率 ≥ 30%
+        # prior uptrend: cup 形成 _前_ 90 営業日 (prior_uptrend_days) の close 上昇率 ≥ 20%
         prior_start_idx = left_rim_idx - prior_uptrend_days
         if prior_start_idx < 0:
             _reject("prior_window_oob"); continue
@@ -13458,7 +13465,19 @@ def _detect_cup_handle(
         if prior_start_close <= 0:
             _reject("prior_invalid"); continue
         prior_gain = (prior_end_close - prior_start_close) / prior_start_close
-        if prior_gain < prior_uptrend_pct:
+        prior_ok = prior_gain >= prior_uptrend_pct
+        # D1 (差分台帳, flag default OFF): じっちゃま gradual-riser path。短期窓で <20% でも、
+        # 長期窓 (prior_uptrend_days_long) で累積 ≥ prior_uptrend_pct_long かつ 上昇持続
+        # (窓中間点 → left_rim も上昇) なら prior uptrend OK。先行スパイク後の横ばい/下落は除外。
+        if (not prior_ok) and allow_gradual_riser:
+            long_start_idx = left_rim_idx - prior_uptrend_days_long
+            if long_start_idx >= 0 and closes[long_start_idx] > 0:
+                long_gain = (prior_end_close - closes[long_start_idx]) / closes[long_start_idx]
+                mid_close = closes[(long_start_idx + left_rim_idx) // 2]
+                sustained = prior_end_close >= mid_close
+                if long_gain >= prior_uptrend_pct_long and sustained:
+                    prior_ok = True
+        if not prior_ok:
             _reject("no_prior_uptrend"); continue
 
         # ── Step 3: pivot + state ──
@@ -14026,6 +14045,7 @@ async def get_technical(
     ticker: str,
     patterns: str = "cup_handle,sma_50,sma_200,rs,dma_cross",
     period: str = "1y",
+    cup_gradual: bool = False,  # D1 (差分台帳, default OFF): cup 検出に gradual-riser path を許可
 ) -> dict:
     """テクニカル指標 (Cup-Handle / SMA / RS) bulk return。
 
@@ -14039,7 +14059,7 @@ async def get_technical(
     """
     ticker_u = ticker.upper()
     requested = {p.strip() for p in patterns.split(",") if p.strip()}
-    cache_key = f"{ticker_u}:{period}:{'+'.join(sorted(requested))}"
+    cache_key = f"{ticker_u}:{period}:{'+'.join(sorted(requested))}:cg={int(cup_gradual)}"
     now = _time.monotonic()
 
     cached = _TECHNICAL_CACHE.get(cache_key)
@@ -14091,7 +14111,8 @@ async def get_technical(
             spy_history = _get_spy_history()
             spy_up = _spy_uptrend(spy_history)
             patterns_result["cup_handle"] = _detect_cup_handle(
-                times, highs, lows, closes, volumes, spy_up
+                times, highs, lows, closes, volumes, spy_up,
+                allow_gradual_riser=cup_gradual,
             )
             # 完全性台帳 Sprint2 (2026-06-13): SPY 単一障害点の表面化。spy_history is None = SPY fetch 失敗。
             # market_context が "unknown" に潰れて「地合い中立/不明」 と「SPY 取得不可」 が区別できない沈黙の
