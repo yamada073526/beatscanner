@@ -45,7 +45,7 @@
 | **再較正案** | `prior_uptrend` 判定を **OR 条件化**: ①既存 `+20%/90d` (O'Neil 急騰型) **OR** ②*gradual-riser 型* (長期窓で純増 + 上昇MA上 — 例: 150-180日窓で +15%以上 かつ 150/200DMA が上向き)。**完全撤去はしない** (横ばい/下降ベースの誤検出回避)。②の具体閾値は実装時に実データで較正 |
 | **P (メリット)** | じっちゃま実践に忠実 / UBS型を拾える / cup signal の機会回収 |
 | **D (デメリット・リスク)** | false positive risk (閾値次第で signal 件数が膨張) → **6体合議 + 変更前後の全universe件数 curl 比較が必須** / Trust Cliff (本番 signal 変動) |
-| **status** | 🟢 **実装済 (flag default OFF)・deploy済 commit `6f089aa` (2026-06-20)** — `_detect_cup_handle(allow_gradual_riser, prior_uptrend_days_long=200, prior_uptrend_pct_long=0.20)` + sustained guard、`/api/technical/<t>?cup_gradual=1` で有効化。**検証**: flag OFF=本番不変 (`no_prior_uptrend:17` 維持) / flag ON=UBS `detected=true`・`breakout_pending`・cup 深さ25.2%/取っ手1.88%/pivot $47.41 (2026-06-18=ライブ指摘日)。サンプル15銘柄 flag 比較: 既存検出3 + flag追加2 (WMT depth12.76%/MS extended)、偽陽性は構造上抑制 (long_gain≥20%+sustained)。**frontend dogfood 配線済** (commit `cf7d897`): `getCupGradualFlag()` (URL `?cup_gradual=1`+localStorage永続) → `fetchTechnical` が付与、本番bundle確認済。dogfood=本番URLに `?cup_gradual=1` で UBS の cup を Pane3 表示。**default ON 普及の gate**: ①universe件数delta (⚠️ scanner DB 現状 cup=0/breakout=0、retest=40 ＝ cup nightly 永続は別課題、普及前に要確認) ②6体合議 ③user最終承認 |
+| **status** | ✅ **default ON に promote 済 (v228, 2026-06-20)** — 3体合議 (金融§38 + frontend/dev + qa-dogfooder) verdict 反映後 user「フル」承認で普及。<br>**実装履歴**: ①`6f089aa` gradual-riser path 実装 (flag default OFF) ②`cf7d897` frontend dogfood 配線 ③**v228 promote**: backend `get_technical(cup_gradual=True)` default ON + frontend `getCupGradualFlag()` default true + `api.js` 常に `&cup_gradual=0/1` 明示送信 (kill-switch `?cup_gradual=0` を確実化)。<br>**v228 4必須条件 (合議)**: (1) **sustained guard 補強** — 旧「窓中間点1点 ≤ prior_end」は先行スパイク後横ばいを除外できない死角があり (金融指摘)、**窓3分割で各区画 median 単調増 (m1<m2<m3)** に置換し round-trip/V字/スパイク後横ばいを構造排除。(2) §38 ラベル「過延伸」明示 (`stateCompassText.js` '高値圏'→'高値圏(過延伸)'、`ScreenerPane` '高値圏突破'→'高値圏突破(過延伸)')。(3) Pane3 extended chip に **pivot 乖離率を常時 inline 表示** (hover 依存を脱する)。(4) extended chip `tone="muted"`→`tone="warning"` (amber) で clean cup と視覚区別。<br>**検証**: 旧 flag ON で UBS `detected=true`・`breakout_extended`・pivot $47.41 (現値+7%超過)。普及後の本番 curl 件数確認は deploy 後実施。<br>**後続 workstream (3体一致・promote の blocker でない)**: nightly `_scan_one` は `allow_gradual_riser` 未配線 = screener cup/breakout DB は空 (total_count=0) のまま。screener 反映 + extended の amber 視覚区切りは別セッション。per-ticker Pane3 は live で即反映。 |
 
 ### 🔴/✅ D9 — 順張り・抵抗線ブレイク → 支持転換 【Q1 quick win】
 
@@ -143,17 +143,16 @@
 | **再較正案** | 将来 backlog。PER>50「過熱注意」/ 配当>6%「警告」を**事実 + 閾値注記**で表示 (§38: 断定でなく事実)。低優先 |
 | **status** | **backlog** (将来検討) |
 
-### 🔴 D10 — RS 計算の劣化表示（2026-06-20 live 発見・Q1/Q2 外）
+### ✅ D10 — RS 計算の劣化表示（2026-06-20 live 発見 → 同日修正 deploy 済）
 
 | 項目 | 内容 |
 |---|---|
 | **判断軸** | RS (相対強度) の表示精度 — じっちゃまは RS を重視 ([[D2]]) するので誤表示は実践と乖離 |
 | **じっちゃま実践** | RS は重要指標。「下位1%」と「上位」は買い判断を真逆にする |
-| **codified現状** | 本番 `/api/technical/UBS` の `patterns.rs` = `{self_percentile: 0, ranking_label: "下位 1%", rs_vs_spy_pct: null, universe_percentile: 60}`。UBS は1年で約$30→$46（自己高値圏）にも関わらず `self_percentile=0`／「下位1%」。`rs_vs_spy_pct=null` は SPY 相対計算の失敗を示唆 |
-| **分類** | 🔴 **矛盾(重)・Trust Cliff 候補** — 強い銘柄に「下位1%」を表示 |
-| **実害** | じっちゃまが強い買い候補とする UBS に「下位1%」と出る＝信頼毀損。degraded 値(0/null)が suppress されず誤ラベルで render されている可能性（data-completeness guard の趣旨に反する） |
-| **再較正案** | **Q1/Q2 とは別 workstream**。RS 計算（self_percentile / rs_vs_spy）の劣化原因を特定し、degraded 時は「下位1%」を出さず suppress or「RS データ取得失敗」表示に。spawn-task で別セッション化 |
-| **status** | **別 workstream に切出し** (本台帳に記録、調査は別セッション) |
+| **codified現状** | (発見時) 本番 `/api/technical/UBS` の `patterns.rs` = `{self_percentile: 0, ranking_label: "下位 1%", rs_vs_spy_pct: null, universe_percentile: 60}`。UBS は自己高値圏にも関わらず「下位1%」。**※当時の「`rs_vs_spy_pct=null` は SPY 相対計算の失敗を示唆」という仮説は誤り** — 真因は ticker 側 NaN (下記 status)。`spy_unavailable=false` が SPY は取れていた証左 |
+| **分類** | ✅ **解決済 (旧🔴矛盾(重)・Trust Cliff)** — 強い銘柄に「下位1%」を表示していた |
+| **実害** | じっちゃまが強い買い候補とする UBS に「下位1%」相当の誤った API 値。※frontend は Number.isFinite ガード済 (Sprint B 2026-06-17) で UI には未表示だったが、backend 生 JSON の誤値 + 健全 universe_percentile=60 の巻き添え非表示が実害だった |
+| **status** | ✅ **修正 deploy 済 (2026-06-20, commit 65f06c3)**。root cause = Railway IP の yfinance が ADR/欧州銀 (UBS/DB/BCS/HSBC/BBVA) の直近 bar を `NaN` close で返し、`_compute_rs` の `_ratio` が `c_past <= 0` ガードを NaN にすり抜けられ `rs_now=NaN` → JSON で `rs_vs_spy_pct=null`・`rank=0` → `self_percentile=0` →「下位1%」(SMA末尾null・cup_state=nullも同根)。修正 = ① `get_technical` で `hist.dropna(subset=["Close"])` 入口除去（正常値に復旧）② `_compute_rs/_ratio` に `math.isfinite` 安全網（万一の NaN を None suppress、cron_rs_scan にも波及）。本番検証で UBS `{+9.5%, self=49, 中位, univ=60}` 復旧・HSBC/BBVA も復旧・全銘柄「下位1%」消滅。詳細 memory `feedback_rs_nan_propagation_guard.md` |
 
 ---
 
@@ -162,9 +161,9 @@
 | 優先 | エントリ | アクション | review |
 |---|---|---|---|
 | ✅ 済 | **D9** | box_support surface は**既に実装済**（2026-06-20 live 確認）。追加実装不要 | — |
-| **即 (Phase 2)・本丸** | **D1** | cup `prior_uptrend` に gradual-riser path 追加 + 全universe件数検証 | **6体 + user承認** |
+| ✅ 済 | **D1** | cup gradual-riser path を default ON に promote 済 (v228)。sustained guard 補強 (median 単調増) + §38ラベル/乖離率/tone。後続=nightly配線 (screener) | **3体合議 + user承認** |
 | 確認 | D4 | 現状の損切り表示が固定%を断定していないか確認 | — |
-| 別 workstream | **D10** | RS 計算劣化（UBS「下位1%」誤表示）の調査・suppress 化 | spawn-task |
+| ✅ 済 | **D10** | RS 計算劣化（NaN 伝播）修正 deploy 済 (65f06c3)・本番 UBS/HSBC/BBVA 復旧確認 | — |
 | 委譲 | D3 | S2 preset 較正 (緩いCFマージン 10% vs 15%) | S2 workstream |
 | 観察 | D2 | RS floor は S2 preset 設計時に再検討 | S2 workstream |
 | 据え置き | D5 / D6 / D7 | 変更不要 (記録のみ) | — |

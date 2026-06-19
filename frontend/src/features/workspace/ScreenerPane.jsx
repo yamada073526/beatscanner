@@ -70,8 +70,9 @@ const CUP_STATE_LABEL_JP = {
   formation: '形成中',
   cup_completing: 'カップ完成間近',
   // v148 ⑦ (SPEC extended_screener): screener badge は「高値圏突破」 (2 秒理解・和語的)。
-  // chart chip は「高値圏ブレイク・過延伸」 のまま使い分け (StockPriceChart.jsx)。
-  breakout_extended: '高値圏突破',
+  // v228 (3 体合議・金融§38 + UX): 「高値圏突破」 のみは肯定語に寄り「買い」 と誤読され得るため
+  // 「(過延伸)」 を補い chase 禁止規律を事実として直伝 (chart chip 「過延伸・押し目待ち」 と整合)。
+  breakout_extended: '高値圏突破(過延伸)',
   formation_market_weak: '形成中・市場待機',
 };
 
@@ -87,9 +88,9 @@ function extendedBadge(item) {
   const dev = item?.sma50_deviation_pct
     ?? item?.payload?.sma50_deviation_pct
     ?? item?.payload?.extended_gate?.sma50_deviation_pct;
-  if (dev == null || Number.isNaN(Number(dev))) return '高値圏突破';
+  if (dev == null || Number.isNaN(Number(dev))) return '高値圏突破(過延伸)';
   const n = Number(dev);
-  return `高値圏突破 · 50DMA ${n >= 0 ? '+' : ''}${n}%`;
+  return `高値圏突破(過延伸) · 50DMA ${n >= 0 ? '+' : ''}${n}%`;
 }
 
 // ── fetcher: backend /api/scanner/rs (Leader + delta sort 両用) ──

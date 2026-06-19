@@ -39,7 +39,7 @@ export const COMPASS_EARNINGS_LABEL = {
 export const COMPASS_PRICE_LABEL = {
   cup_pivot: 'カップ形成中',
   breakout_support: 'ブレイク後',
-  breakout_extended: '高値圏',
+  breakout_extended: '高値圏(過延伸)',
   cup_completing: 'カップ完成間近',
   box_support: 'レンジ上限',
   pullback_to_support: '押し目接近',

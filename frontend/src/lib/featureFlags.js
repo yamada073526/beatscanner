@@ -109,9 +109,9 @@ const LS_KEY_CUP_GRADUAL = 'bs_flag_cup_gradual';
 /**
  * getCupGradualFlag — cup_gradual feature flag を同期で返す (React 外 OK)。
  *
- * - URL param `?cup_gradual=1` 最優先 (=0 で false 強制 revert)、localStorage に persist (tab を閉じても維持)
+ * - URL param `?cup_gradual=1` 最優先 (=0 で false 強制 revert = kill-switch)、localStorage に persist (tab を閉じても維持)
  * - URL param なしは localStorage を読む
- * - default false (本番現状 = O'Neil strict prior-uptrend、UBS 型 gradual riser は非検出)
+ * - default true (v228 promote: gradual-riser path を default ON。UBS 型 gradual riser を検出。?cup_gradual=0 で revert)
  *
  * @returns {boolean}
  */
@@ -135,7 +135,8 @@ export function getCupGradualFlag() {
     } catch {
       // localStorage 不可環境は silent
     }
-    return false;
+    // v228 promote (3 体合議 + user 承認): default ON。kill-switch = ?cup_gradual=0 (URL param 最優先で false 強制)。
+    return true;
   } catch {
     return false;
   }

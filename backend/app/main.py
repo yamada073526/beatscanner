@@ -13311,10 +13311,11 @@ def _detect_cup_handle(
     - breakout volume = 50 日平均 × 1.40 以上
     - SPY 200DMA 外 → detected=True / state="formation_market_weak" / market_context="weak" (B 案)
     - prior uptrend = cup 形成前 90 営業日 (prior_uptrend_days) で ≥ 20% (prior_uptrend_pct)
-    - D1 (差分台帳, allow_gradual_riser=True で有効化・default OFF): 上記を満たさなくても、
-      長期窓 (prior_uptrend_days_long=200 日) で ≥ prior_uptrend_pct_long かつ 上昇持続
-      (後半も上昇) なら prior uptrend OK。じっちゃま実践 = なだらかな右肩上がり (UBS 型 ADR、
-      90 日窓 <20% だが長期では十分上昇) を catch。O'Neil 原典より緩い再較正 (じっちゃま=北極星)。
+    - D1 (差分台帳, allow_gradual_riser=True で有効化): 上記を満たさなくても、
+      長期窓 (prior_uptrend_days_long=200 日) で累積 ≥ prior_uptrend_pct_long かつ 上昇が持続
+      (窓 3 分割で各区画 median が単調増 m1<m2<m3) なら prior uptrend OK。じっちゃま実践 =
+      なだらかな右肩上がり (UBS 型 ADR、90 日窓 <20% だが長期では十分上昇) を catch。
+      O'Neil 原典より緩い再較正 (じっちゃま=北極星)。3 分割 median は先行スパイク後横ばい/round-trip 排除。
 
     Return: dict with keys (detected, state, market_context, cup, handle, pivot, breakout, reason)
     """
@@ -13466,15 +13467,30 @@ def _detect_cup_handle(
             _reject("prior_invalid"); continue
         prior_gain = (prior_end_close - prior_start_close) / prior_start_close
         prior_ok = prior_gain >= prior_uptrend_pct
-        # D1 (差分台帳, flag default OFF): じっちゃま gradual-riser path。短期窓で <20% でも、
-        # 長期窓 (prior_uptrend_days_long) で累積 ≥ prior_uptrend_pct_long かつ 上昇持続
-        # (窓中間点 → left_rim も上昇) なら prior uptrend OK。先行スパイク後の横ばい/下落は除外。
+        # D1 (差分台帳): じっちゃま gradual-riser path。短期窓で <20% でも、長期窓
+        # (prior_uptrend_days_long) で累積 ≥ prior_uptrend_pct_long かつ 上昇が「持続」
+        # していれば prior uptrend OK。じっちゃま実践 = なだらかな右肩上がり (UBS 型 ADR、
+        # 90 日窓 <20% だが長期では十分上昇) を catch。O'Neil 原典より緩い再較正 (じっちゃま=北極星)。
+        # 持続性判定 (v228 3 体合議・金融 verdict で補強): 旧実装の「窓中間点 1 点 ≤ prior_end」 比較は
+        # 「先行スパイク後の横ばい」 を除外できない死角があった (スパイクが中間点より前だと mid_close が
+        # 低くなり prior_end >= mid が成立してしまう)。窓を 3 分割し各区画の median が単調増 (m1<m2<m3)
+        # であることを要求し、round-trip / 先行スパイク後横ばい / V 字回復を構造的に排除する。
+        # median はヒゲ・薄商い 1 日のノイズに頑健 (1 点比較の死角も同時に解消)。
         if (not prior_ok) and allow_gradual_riser:
             long_start_idx = left_rim_idx - prior_uptrend_days_long
             if long_start_idx >= 0 and closes[long_start_idx] > 0:
                 long_gain = (prior_end_close - closes[long_start_idx]) / closes[long_start_idx]
-                mid_close = closes[(long_start_idx + left_rim_idx) // 2]
-                sustained = prior_end_close >= mid_close
+                seg_len = (left_rim_idx - long_start_idx) // 3
+                sustained = False
+                if seg_len >= 1:
+                    def _seg_median(seq: list[float]) -> float:
+                        s = sorted(seq)
+                        k = len(s)
+                        return s[k // 2] if k % 2 else (s[k // 2 - 1] + s[k // 2]) / 2.0
+                    m1 = _seg_median(closes[long_start_idx: long_start_idx + seg_len])
+                    m2 = _seg_median(closes[long_start_idx + seg_len: long_start_idx + 2 * seg_len])
+                    m3 = _seg_median(closes[long_start_idx + 2 * seg_len: left_rim_idx + 1])
+                    sustained = m1 < m2 < m3
                 if long_gain >= prior_uptrend_pct_long and sustained:
                     prior_ok = True
         if not prior_ok:
@@ -14051,7 +14067,7 @@ async def get_technical(
     ticker: str,
     patterns: str = "cup_handle,sma_50,sma_200,rs,dma_cross",
     period: str = "1y",
-    cup_gradual: bool = False,  # D1 (差分台帳, default OFF): cup 検出に gradual-riser path を許可
+    cup_gradual: bool = True,  # D1 (差分台帳, v228 promote: default ON): cup 検出に gradual-riser path を許可。kill-switch = ?cup_gradual=0
 ) -> dict:
     """テクニカル指標 (Cup-Handle / SMA / RS) bulk return。
 

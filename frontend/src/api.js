@@ -254,9 +254,11 @@ export async function fetchPriceHistory(ticker, period = '1y') {
 // 同一 URL → dedupGet cache hit。 patterns drift による余分な FMP fetch を構造的に防ぐ)。
 export async function fetchTechnical(ticker, patterns = TECHNICAL_CANONICAL_PATTERNS) {
   // v144 #Pane3-perf: dedupGet 経由 (prefetch と StockPriceChart の mount fetch を coalesce)
-  // D1 (差分台帳, dogfood flag): ?cup_gradual=1 / localStorage が有効なら backend に gradual-riser path を要求。
-  // dedupGet は URL key なので flag 有無で cache が分かれ、prefetch / 各 consumer も同一 URL で揃う。
-  const cg = getCupGradualFlag() ? '&cup_gradual=1' : '';
+  // D1 (差分台帳): cup 検出の gradual-riser path。v228 promote で default ON。
+  // dedupGet は URL key なので flag 値で cache が分かれ、prefetch / 各 consumer も同一 URL で揃う。
+  // v228: backend default も True にしたため、kill-switch (?cup_gradual=0) を効かせるには
+  // false 時に明示 &cup_gradual=0 を送る必要がある (省略すると backend default True に落ちて revert 不能)。
+  const cg = getCupGradualFlag() ? '&cup_gradual=1' : '&cup_gradual=0';
   try {
     return await dedupGet(`/api/technical/${encodeURIComponent(ticker)}?patterns=${patterns}&period=1y${cg}`);
   } catch {

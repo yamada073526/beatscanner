@@ -732,6 +732,15 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
     return `Pivot $${pivot.toFixed(2)}${remainingStr}`;
   }, [hasCup, cupHandle, data]);
 
+  // v228 (3 体合議・金融§38 + UX verdict): breakout_extended (過延伸) の pivot からの乖離率。
+  // chip 本体に常時表示し hover 依存を脱する (chase 禁止規律を「事実」 として 2 秒で直伝)。
+  // pivot / currentPrice はいずれも backend 由来の数値で、 ここは表示整形のみ (§38 安全)。
+  const extendedPivotPct = useMemo(() => {
+    const pivot = cupHandle?.pivot?.price;
+    if (!Number.isFinite(pivot) || pivot <= 0 || !Number.isFinite(currentPrice)) return null;
+    return ((currentPrice - pivot) / pivot) * 100;
+  }, [cupHandle, currentPrice]);
+
   // chip tone は market_context と state の 2 軸直交で決定 (6 体合議 Web 設計案):
   //   market_weak → muted (市場待機)
   //   breakout_confirmed → gain (緑)
@@ -1045,12 +1054,12 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
             <Chip
               size="xs"
               variant="display"
-              tone="muted"
+              tone="warning"
               data-cup-state="breakout_extended"
-              title={`高値圏ブレイク後 (extended)\n基準点 (左リム水準) を既に上抜け、 取っ手 (handle) は未形成。\nCup-with-Handle の新規エントリー基準としては過延伸。${Number.isFinite(cupHandle?.pivot?.price) ? `\n節目目安 $${Number(cupHandle.pivot.price).toFixed(2)}` : ''}`}
+              title={`高値圏ブレイク後 (extended)\n基準点 (左リム水準) を既に上抜け、 取っ手 (handle) は未形成。\nCup-with-Handle の新規エントリー基準としては過延伸 (押し目待ちが定石)。${Number.isFinite(cupHandle?.pivot?.price) ? `\n節目目安 $${Number(cupHandle.pivot.price).toFixed(2)}` : ''}${Number.isFinite(extendedPivotPct) ? `\n節目から ${extendedPivotPct >= 0 ? '+' : ''}${extendedPivotPct.toFixed(1)}% 乖離` : ''}`}
             >
               <TrendingUp size={12} strokeWidth={1.75} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 4 }} />
-              高値圏ブレイク・過延伸
+              過延伸・押し目待ち{Number.isFinite(extendedPivotPct) && extendedPivotPct >= 0 ? ` (節目 +${extendedPivotPct.toFixed(1)}%)` : ''}
             </Chip>
           )}
           {/* Session 3: DMA Cross chip (golden cross 直近 60 日内検出時のみ、 Free 表示)
