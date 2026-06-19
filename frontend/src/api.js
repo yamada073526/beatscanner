@@ -1,3 +1,5 @@
+import { getCupGradualFlag } from './lib/featureFlags.js';
+
 // テクニカル overlay (Cup-Handle / SMA 50/200 / RS / DMA cross) の canonical patterns 文字列。
 // prefetchAll / StockPriceChart / PriceLadder / 各 zone card / 完全性台帳 section が同一 URL を
 // 叩いて dedupGet で coalesce するための SSOT。 文字列 drift は cache key ずれ → 余分な FMP fetch
@@ -252,8 +254,11 @@ export async function fetchPriceHistory(ticker, period = '1y') {
 // 同一 URL → dedupGet cache hit。 patterns drift による余分な FMP fetch を構造的に防ぐ)。
 export async function fetchTechnical(ticker, patterns = TECHNICAL_CANONICAL_PATTERNS) {
   // v144 #Pane3-perf: dedupGet 経由 (prefetch と StockPriceChart の mount fetch を coalesce)
+  // D1 (差分台帳, dogfood flag): ?cup_gradual=1 / localStorage が有効なら backend に gradual-riser path を要求。
+  // dedupGet は URL key なので flag 有無で cache が分かれ、prefetch / 各 consumer も同一 URL で揃う。
+  const cg = getCupGradualFlag() ? '&cup_gradual=1' : '';
   try {
-    return await dedupGet(`/api/technical/${encodeURIComponent(ticker)}?patterns=${patterns}&period=1y`);
+    return await dedupGet(`/api/technical/${encodeURIComponent(ticker)}?patterns=${patterns}&period=1y${cg}`);
   } catch {
     return { overlays: [], patterns: {} };
   }

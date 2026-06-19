@@ -100,3 +100,43 @@ export function usePane3V2() {
  * @returns {boolean}
  */
 export { getPane3V2Flag };
+
+// ── cup_gradual flag (D1 差分台帳: cup 検出に gradual-riser path を許可) ──
+// memory feedback_feature_flag_dual_mode: URL param(一時) + localStorage(永続)、URL 優先で即 dogfood/revert。
+// api.js fetchTechnical (非 React モジュール) から呼ぶため同期 getter。?cup_gradual=1 で /api/technical に flag を渡す。
+const LS_KEY_CUP_GRADUAL = 'bs_flag_cup_gradual';
+
+/**
+ * getCupGradualFlag — cup_gradual feature flag を同期で返す (React 外 OK)。
+ *
+ * - URL param `?cup_gradual=1` 最優先 (=0 で false 強制 revert)、localStorage に persist (tab を閉じても維持)
+ * - URL param なしは localStorage を読む
+ * - default false (本番現状 = O'Neil strict prior-uptrend、UBS 型 gradual riser は非検出)
+ *
+ * @returns {boolean}
+ */
+export function getCupGradualFlag() {
+  try {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('cup_gradual')) {
+      const value = params.get('cup_gradual') !== '0';
+      try {
+        window.localStorage.setItem(LS_KEY_CUP_GRADUAL, value ? '1' : '0');
+      } catch {
+        // localStorage 不可環境 (iOS private 等) は silent
+      }
+      return value;
+    }
+    try {
+      const stored = window.localStorage.getItem(LS_KEY_CUP_GRADUAL);
+      if (stored === '1') return true;
+      if (stored === '0') return false;
+    } catch {
+      // localStorage 不可環境は silent
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
