@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { SlidersHorizontal, ChevronDown, Lock } from 'lucide-react';
+import { SlidersHorizontal, ChevronDown, Lock, Info } from 'lucide-react';
 import { fetchScannerUniverse } from '../api.js';
 import Chip, { ChipGroup } from './ui/Chip.jsx';
 import ProTeaser from './ui/ProTeaser.jsx';
@@ -113,6 +113,23 @@ function itemPasses(item, activeGrades, extra) {
   return true;
 }
 
+
+/**
+ * Sprint 5 Pass A: staleness 算出 (as_of は "YYYY-MM-DD" 日次文字列)。
+ * epoch ms / 秒 自動判定は不要。日付差のみで本日/昨日/N日前を返す。
+ * §38: "X分前" 使わない。粒度は日次のみ。
+ */
+function formatAsOf(asOf) {
+  if (!asOf) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(asOf);
+  target.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((today - target) / 86400000);
+  if (diffDays <= 0) return '本日更新';
+  if (diffDays === 1) return '昨日更新';
+  return `${diffDays}日前に更新`;
+}
 
 export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade }) {
   // Pass 3b: 統合 universe state (additive facet engine の母集団)
@@ -352,6 +369,58 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
       {/* universe main */}
       {!universeLoading && !universeError && universe && (universe.items || []).length > 0 && (
         <div className="space-y-4" data-testid="screener-universe-main">
+
+          {/* ── Sprint 5 Pass A: 決断支援ヒーロー (合致度TOP3 + 件数 + staleness + 免責) ──
+              §38/景表法§5: 色 polarity 不使用・neutral/muted のみ。TOP3 は合致度順(軸を ⓘ で明示)、
+              推奨でない旨を明示。shadowゼロ: border + tinted-bg のみ (.panel-card 等は付けない)。 */}
+          <div
+            data-testid="screener-hero-summary"
+            className="rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2.5"
+          >
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              {/* 左: 合致度TOP3 (軸明示 + ⓘ 選定基準) */}
+              <div className="flex items-center gap-1.5 min-w-0" data-testid="screener-hero-top3">
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--text-secondary)] shrink-0">
+                  合致度TOP3
+                  <Info
+                    size={12}
+                    className="text-[var(--text-muted)] cursor-help"
+                    aria-label="選定基準"
+                    title="現在の絞り込み条件への合致度順（各数値条件の超過率合計の降順）。投資推奨ではありません。"
+                  />
+                </span>
+                {sortedItems.slice(0, 3).map((it) => (
+                  <Chip
+                    key={it.ticker}
+                    size="xs"
+                    variant="display"
+                    tone="muted"
+                    onClick={() => onSelect?.(it.ticker)}
+                  >
+                    {it.ticker}
+                  </Chip>
+                ))}
+                {sortedItems.length === 0 && (
+                  <span className="text-xs text-[var(--text-muted)]">該当なし</span>
+                )}
+              </div>
+              {/* 右: 件数 + staleness (毎朝更新サイクル文言、X分前は不使用) */}
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-sm font-medium text-[var(--text-secondary)]" data-testid="screener-hero-count">
+                  {filteredItems.length}件ヒット
+                </span>
+                {universe.as_of && (
+                  <span className="text-xs text-[var(--text-muted)]" data-testid="screener-hero-staleness">
+                    {formatAsOf(universe.as_of)}（毎朝更新）
+                  </span>
+                )}
+              </div>
+            </div>
+            {/* 免責 (景表法§5/§38) */}
+            <p className="mt-1.5 text-[0.6875rem] leading-tight text-[var(--text-muted)]" data-testid="screener-hero-disclaimer">
+              スクリーニング結果であり投資推奨ではありません。
+            </p>
+          </div>
 
           {/* ── Pass C: 1 行コンパクト操作帯 ── */}
           <div className="flex items-center gap-2 flex-wrap">
@@ -716,15 +785,12 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
 
           {/* ── (5) 結果リスト ── */}
           <div>
+            {/* リスト見出し: 件数のみ (staleness は上段ヒーローに集約、重複回避)。
+                件数はヒーローと同一 filteredItems.length = Trust Cliff C-2 整合。 */}
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm font-medium text-[var(--text-secondary)]">
                 {filteredItems.length} 件
               </span>
-              {universe.as_of && (
-                <span className="text-xs text-[var(--text-muted)]">
-                  最終更新: {universe.as_of}
-                </span>
-              )}
             </div>
             {filteredItems.length === 0 ? (
               <div data-testid="screener-result-row-empty">
