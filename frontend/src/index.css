@@ -13432,3 +13432,21 @@ body.is-digest-resizing {
   border: 1px solid color-mix(in srgb, var(--color-accent) 25%, transparent);
   border-radius: 9999px;
 }
+
+/* ── Pass B: 結果行モジュール (shadow ゼロ哲学: border+tinted bg のみ) ──────
+   §38 厳守: 色 polarity (緑/赤) で買い/売り断定しない。
+   elevation = border + subtle tinted bg のみ。.panel-card/.bs-panel/.surface-card 付与禁止。 */
+.screener-result-row {
+  /* layout は Tailwind inline で済んでいるが、hover の tinted bg を補強 */
+  background: transparent;
+  border: none; /* divide-y で仕切り線を出す */
+  transition: background 120ms ease, opacity 120ms ease;
+}
+.screener-result-row:hover {
+  background: var(--bg-hover);
+}
+/* 上位3件: 左端に細い accent border で視線を引く (色 = neutral accent、買い断定なし) */
+.screener-result-row[data-rank-top="true"] {
+  border-left: 2px solid var(--border-strong, var(--border));
+}
+/* ヒット理由バッジは Chip primitive (ds-chip[data-variant="display"][data-tone="muted"]) に統一済 (§Chip 参照) */

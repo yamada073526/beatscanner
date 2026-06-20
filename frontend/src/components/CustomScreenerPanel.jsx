@@ -5,6 +5,8 @@ import Chip, { ChipGroup } from './ui/Chip.jsx';
 import ProTeaser from './ui/ProTeaser.jsx';
 // Sprint 3: 市場局面バナーを ScreenerPane と共有 (FtdRegimeBanner.jsx が SSOT、二重定義なし)
 import FtdRegimeBanner from '../features/workspace/FtdRegimeBanner.jsx';
+// Pass B: 企業ロゴ (TV→FMP→頭文字円 3 段 fallback)
+import CompanyLogo from './CompanyLogo.jsx';
 
 // FMP /stable/company-screener の sector (英語) → 日本語表示ラベル。
 const SECTOR_LABEL_JP = {
@@ -79,6 +81,15 @@ const LOCKED_FACET_LABELS = {
   both: 'カップ+RS複合',
   oneill: 'オニール統合',
 };
+// Pass B: ヒット理由バッジ用の短縮ラベルマップ (module scope で毎 render 再作成を回避)
+const FACET_SHORT_LABEL = {
+  eps_yoy_pct: 'EPS↑',
+  eps_cagr_3y: 'EPS3年',
+  roe: 'ROE',
+  rs_percentile: 'RS高',
+  volume_surge_pct: '出来高急増',
+  inst_holders_qoq_pct: '機関↑',
+};
 function buildActiveGrades(preset, overrides) {
   const g = {};
   for (const k of PRESET_CORE_KEYS) g[k] = preset;
@@ -143,6 +154,33 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
     const extra = { fundaPassOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     return items.filter((it) => itemPasses(it, activeGrades, extra));
   }, [universe, activeGrades, fundaPassOnly, sectorFilter, mcapFilter]);
+
+  // Pass B: 条件合致度順ソート。
+  // スコア = アクティブ数値 facet ごとに (item[key] - threshold) / threshold の合計。
+  // §38 厳守: スコアは内部ソート専用。画面非表示・色 polarity なし。
+  const sortedItems = useMemo(() => {
+    // アクティブ facet のうち threshold が null でないものを収集
+    const activeFacets = FUNDA_FACETS.flatMap((f) => {
+      const lvl = activeGrades[f.key];
+      const thr = lvl ? f.grades[lvl] : null;
+      return thr != null ? [{ key: f.key, threshold: thr }] : [];
+    });
+    const scored = filteredItems.map((it) => {
+      let score = 0;
+      for (const { key, threshold } of activeFacets) {
+        const v = it[key];
+        if (v != null && threshold !== 0) {
+          score += (v - threshold) / Math.abs(threshold);
+        } else if (v != null && threshold === 0) {
+          // threshold=0 の時は差分をそのまま加算 (inst_holders 等)
+          score += v;
+        }
+      }
+      return { it, score };
+    });
+    scored.sort((a, b) => b.score - a.score || a.it.ticker.localeCompare(b.it.ticker));
+    return scored.map((s) => s.it);
+  }, [filteredItems, activeGrades]);
 
   // Pass 3b: preset 別の total 件数 (緩い/標準/厳しい) を live 算出。ハードコード禁止。
   const presetCounts = useMemo(() => {
@@ -713,35 +751,92 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
                 )}
               </div>
             ) : (
-              <div className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)] overflow-hidden">
-                {filteredItems.map((it) => (
-                  <button
-                    key={it.ticker}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--bg-hover)] transition-colors"
-                    onClick={() => onSelect?.(it.ticker)}
-                    data-testid={`screener-result-row-${it.ticker}`}
-                  >
-                    <span className="w-16 shrink-0 font-mono text-sm font-semibold text-[var(--text-primary)]">{it.ticker}</span>
-                    <span className="flex-1 truncate text-xs text-[var(--text-secondary)]">{it.name || it.ticker}</span>
-                    <span className="shrink-0 text-xs text-[var(--text-muted)]">{sectorLabelJp(it.sector)}</span>
-                    {it.rs_percentile != null && (
-                      /* Pass 3d (修正B): color polarity 撤廃 (§38 買い断定誘導防止)。
-                         RS≥85 は fontWeight=600 のみで強調、色は text-secondary 固定。 */
-                      <span
-                        className="shrink-0 w-14 text-right text-xs tabular-nums text-[var(--text-secondary)]"
-                        style={{ fontWeight: it.rs_percentile >= 85 ? 600 : 400 }}
-                      >
-                        RS {it.rs_percentile.toFixed(0)}
+              /* Pass B: 条件合致度降順 (sortedItems)。上位3件強調 + 下位淡化。 */
+              <div
+                data-testid="screener-result-list"
+                className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)] overflow-hidden"
+              >
+                {sortedItems.map((it, idx) => {
+                  // ── 上位強調 / 下位後退 (weight/size/opacity のみ、色 polarity なし §38) ──
+                  const isTop = idx < 3;
+                  const total = sortedItems.length;
+                  // 後半ほど淡く: 上半=1.0, 下半=0.55 に線形
+                  const opacityVal = total <= 1 ? 1 : idx < Math.ceil(total / 2) ? 1 : Math.max(0.55, 1 - (idx / total) * 0.45);
+
+                  // ── ヒット理由バッジ (スコア寄与順・最大3個) ──
+                  const activeFacetsSorted = FUNDA_FACETS
+                    .flatMap((f) => {
+                      const lvl = activeGrades[f.key];
+                      const thr = lvl ? f.grades[lvl] : null;
+                      if (thr == null) return [];
+                      const v = it[f.key];
+                      if (v == null) return [];
+                      // 寄与スコアで降順
+                      const contrib = thr !== 0 ? (v - thr) / Math.abs(thr) : v;
+                      return [{ key: f.key, contrib }];
+                    })
+                    .sort((a, b) => b.contrib - a.contrib)
+                    .slice(0, 3);
+
+                  return (
+                    <button
+                      key={it.ticker}
+                      className="screener-result-row w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--bg-hover)] transition-colors"
+                      onClick={() => onSelect?.(it.ticker)}
+                      data-testid={`screener-result-row-${it.ticker}`}
+                      data-rank-top={isTop ? 'true' : undefined}
+                      style={{ opacity: opacityVal }}
+                    >
+                      {/* ロゴ */}
+                      <span className="shrink-0">
+                        <CompanyLogo ticker={it.ticker} size={isTop ? 28 : 24} monoFallback />
                       </span>
-                    )}
-                    {it.eps_yoy_pct != null && (
-                      /* TODO Sprint4: ADR 外貨/銀行 EPS 偽値 (BABA eps_yoy=-94.8 等) を表示抑止 [task#13] */
-                      <span className="shrink-0 w-16 text-right text-xs tabular-nums text-[var(--text-muted)]">
-                        EPS {it.eps_yoy_pct > 0 ? '+' : ''}{it.eps_yoy_pct.toFixed(0)}%
+
+                      {/* ティッカー + 会社名 */}
+                      <span className="flex flex-col min-w-0 flex-1">
+                        <span
+                          className="font-mono leading-tight tabular-nums text-[var(--text-primary)]"
+                          style={{ fontWeight: isTop ? 700 : 600, fontSize: isTop ? '0.875rem' : '0.8125rem' }}
+                        >
+                          {it.ticker}
+                        </span>
+                        <span className="truncate text-[0.6875rem] leading-tight text-[var(--text-muted)]">
+                          {it.name || it.ticker}
+                        </span>
                       </span>
-                    )}
-                  </button>
-                ))}
+
+                      {/* ヒット理由バッジ (§38 中立色 = neutral/muted。Chip primitive で統一・inline 禁止遵守) */}
+                      {activeFacetsSorted.length > 0 && (
+                        <span className="flex items-center gap-1 shrink-0">
+                          {activeFacetsSorted.map(({ key }) => (
+                            <Chip key={key} size="xs" variant="display" tone="muted">
+                              {FACET_SHORT_LABEL[key] || key}
+                            </Chip>
+                          ))}
+                        </span>
+                      )}
+
+                      {/* RS / EPS 数値(右端・控えめ) */}
+                      <span className="flex items-center gap-2 shrink-0">
+                        {it.rs_percentile != null && (
+                          /* Pass 3d (修正B): color polarity 撤廃 (§38 買い断定誘導防止) */
+                          <span
+                            className="w-14 text-right text-xs tabular-nums text-[var(--text-secondary)]"
+                            style={{ fontWeight: it.rs_percentile >= 85 ? 600 : 400 }}
+                          >
+                            RS {it.rs_percentile.toFixed(0)}
+                          </span>
+                        )}
+                        {it.eps_yoy_pct != null && (
+                          /* TODO Sprint4: ADR 外貨/銀行 EPS 偽値 (BABA eps_yoy=-94.8 等) を表示抑止 [task#13] */
+                          <span className="w-16 text-right text-xs tabular-nums text-[var(--text-muted)]">
+                            EPS {it.eps_yoy_pct > 0 ? '+' : ''}{it.eps_yoy_pct.toFixed(0)}%
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
