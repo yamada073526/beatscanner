@@ -531,7 +531,7 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
                       3体合議 (qa #1 + ui): 長い state label (例「高値圏突破 · 50DMA +X% ✦ GC」) が narrow 列で
                       折返すと row 高さが不揃いになるため nowrap + ellipsis、 全文は title hover。 主役の state 名は先頭で生存。 */}
                   {t.badge && (
-                    <span title={t.badge} style={{ flexShrink: 0, maxWidth: '56%', textAlign: 'right', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <span title={t.badge} style={{ flexShrink: 0, maxWidth: '56%', textAlign: 'right', fontSize: 11, fontWeight: 700, color: t.isExtended ? 'var(--color-warning)' : 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {(() => {
                         // 案1 + 洗練 polish (multi-review ui-designer #2 lever): count-up は featured (section1
                         //   = 最希少の交差 hero) のみに集中。 全 section で数字が同時に動くと視線が定まらず
@@ -787,6 +787,9 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
         newCwhItems.push({
           ticker: item.ticker,
           badge: item.gc_confirmed ? `${baseBadge} ✦ GC` : baseBadge,
+          // v229 (qa-dogfooder 案): extended (過延伸・押し目待ち) を amber 表示し clean cup と視覚区切り
+          //   (per-ticker extended chip の tone="warning" と一貫)。chase 禁止規律を色でも直伝。
+          isExtended: item.state === 'breakout_extended',
         });
         usedTickers.add(item.ticker);
         if (newCwhItems.length >= 5) break;
