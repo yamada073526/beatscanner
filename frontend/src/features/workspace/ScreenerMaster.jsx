@@ -205,6 +205,7 @@ export default function ScreenerMaster({
               detailContext={detailContext}
               isProUser={isProUser}
               handleUpgradeRequest={handleUpgradeRequest}
+              hideHero
             />
           </Suspense>
         ) : (

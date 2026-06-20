@@ -611,10 +611,9 @@ let _heroCache = null; // { ts, leaderCwh, rsRising, newCwh, retest, rsLeaders, 
 function heroCacheFresh() {
   return !!_heroCache && (Date.now() - _heroCache.ts) < HERO_CACHE_TTL_MS;
 }
-// ScreenerIdleHero が追加 fetch ゼロで leaderCwh を読めるよう named export。
-// lazy chunk 境界 (Workspace.jsx の lazy()) は Workspace 側の問題。ScreenerIdleHero から
-// static import することで screener chunk にバンドルされ、cache は同一 module singleton として共有される。
-export { _heroCache, heroCacheFresh };
+// 案A prototype 時の named export ({ _heroCache, heroCacheFresh }) は B1 で削除。
+// ScreenerIdleHero は universe を自前 fetch (fetchScannerUniverse) するため共有不要。
+// _heroCache / heroCacheFresh は ScreenerPane 内部の remount flicker 防止 cache としてのみ使用。
 
 /**
  * ScreenerPane
@@ -623,7 +622,7 @@ export { _heroCache, heroCacheFresh };
  * @param {boolean} props.isProUser
  * @param {Function} props.handleUpgradeRequest
  */
-export default function ScreenerPane({ detailContext = {}, isProUser = false, handleUpgradeRequest }) {
+export default function ScreenerPane({ detailContext = {}, isProUser = false, handleUpgradeRequest, hideHero = false }) {
   const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
 
   // v125 P5-2: demo モード判定 (未ログイン + 非 Pro)。
@@ -976,25 +975,29 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
         </ChipGroup>
       </div>
 
-      {/* S1: Layer0 ヘッドライン (交差 top3 を full-width 前出し = 2 秒で「今日の筆頭」)。 */}
-      <HeroSection
-        eyebrow="今日の注目"
-        featured
-        revealBaseDelay={0}
-        title="RS上位 × ブレイク × Cup交差"
-        testId="screener-headline"
-        description="RS percentile ≥ 80 ∩ Cup-Handle 検出済（投資の推奨ではありません）"
-        tickers={leaderCwh.tickers.slice(0, 3)}
-        loading={leaderCwh.loading}
-        error={leaderCwh.error}
-        emptyMessage="本日は交差銘柄が少ない状況です"
-        onSelect={handleSelect}
-        demoMode={demoMode}
-        onUpgrade={handleUpgradeRequest}
-        onRetry={handleRetry}
-      />
+      {/* S1: Layer0 ヘッドライン (交差 top3)。screener_v2 では Pane3 idle (ScreenerIdleHero) に
+          「今日の筆頭」として集約するため hideHero=true で非表示 (gold 王冠の重複解消)。
+          legacy は hideHero 未指定 = 従来通り表示 (screener_v2 scope に閉じる)。 */}
+      {!hideHero && (
+        <HeroSection
+          eyebrow="今日の注目"
+          featured
+          revealBaseDelay={0}
+          title="RS上位 × ブレイク × Cup交差"
+          testId="screener-headline"
+          description="RS percentile ≥ 80 ∩ Cup-Handle 検出済（投資の推奨ではありません）"
+          tickers={leaderCwh.tickers.slice(0, 3)}
+          loading={leaderCwh.loading}
+          error={leaderCwh.error}
+          emptyMessage="本日は交差銘柄が少ない状況です"
+          onSelect={handleSelect}
+          demoMode={demoMode}
+          onUpgrade={handleUpgradeRequest}
+          onRetry={handleRetry}
+        />
+      )}
       {/* S1: 0件フォールバック (交差が空の日に「壊れてる?」 を避け、下の chunk へ誘導)。 */}
-      {leaderCwh.tickers.length === 0 && !leaderCwh.loading && !leaderCwh.error && (
+      {!hideHero && leaderCwh.tickers.length === 0 && !leaderCwh.loading && !leaderCwh.error && (
         <p data-testid="screener-zero-fallback" style={{ fontSize: 11, color: 'var(--text-muted)', margin: 'var(--space-2, 8px) 0 0', lineHeight: 1.5 }}>
           本日は交差が少ない状況です。下の「勢い」「仕掛かり」「ブレイク」をご覧ください。
         </p>

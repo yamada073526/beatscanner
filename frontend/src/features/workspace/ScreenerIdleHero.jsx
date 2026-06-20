@@ -2,20 +2,27 @@
  * ScreenerIdleHero — screener master-detail の Pane3 idle (銘柄未選択時) に表示する
  * 「今日の筆頭」Preview Hero。
  *
- * SPEC 2026-06-20: スクリーナー構造再設計 案A §2(共通5原理) + §3(案A) + §5(DoD)
+ * SPEC 2026-06-20: スクリーナー構造再設計 案B B1 (案A交差条件化 + 透明表示 + 集約)
  *
  * 設計原則:
- *   - 自前 fetch: mount 時に /api/scanner/rs?min_percentile=80&limit=3 を直接取得。
- *     _heroCache / ScreenerPane への依存なし。custom モード (ScreenerPane unmount) でも動作。
+ *   - 交差条件 (案A 確定 / handover v237 §8 SSOT = memory reference_jijima_investment_criteria):
+ *       rs_percentile >= 75 ∩ funda_pass === true
+ *       ∩ (cup_state ∈ {breakout_confirmed, breakout_pending} OR breakout_state === 'bo_confirmed')
+ *     0件時は cup_state === 'formation' まで緩和するフォールバック。rs 降順 top3。
+ *   - 自前 fetch: fetchScannerUniverse (api.js、auth 自動付与 + dedup 60s) で母集団を取得し
+ *     フロントで交差計算。_heroCache / ScreenerPane への依存なし (custom モードでも動作)。
+ *   - 透明表示 (user 主訴=ブラックボックス解消): eyebrow/説明で交差条件を明示 + ⓘ で各条件の意味。
+ *   - tier gate: cup_state/breakout_state は Premium 限定 (free/pro は null)。dogfood は Premium user。
+ *     一般 user の degrade は B6 で対応 (現状 default OFF なので一般 user は到達しない)。
  *   - 発光ゼロ: .panel-card/.bs-panel/.surface-card 不使用。border + tinted-bg + token のみ。
- *   - §38/§5: 軸明示「RS 上位」、断定/最上級禁止、免責1行。
+ *   - §38/§5: 軸明示、状態ラベルは静的 dict・色 neutral (買い断定なし)、断定/最上級禁止、免責1行。
  *   - testid を loading/error/empty/main 全 render path に付与。
- *   - inline 関数 component 禁止 (module-level hoist)。
- *   - shadow ゼロ堅持。raw hex 禁止。
+ *   - inline 関数 component 禁止 (module-level hoist)。shadow ゼロ。raw hex 禁止。
  */
 import { useState, useEffect } from 'react';
-import { Hourglass, Crown, AlertCircle } from 'lucide-react';
+import { Hourglass, Crown, AlertCircle, Info } from 'lucide-react';
 import CompanyLogo from '../../components/CompanyLogo.jsx';
+import { fetchScannerUniverse } from '../../api.js';
 
 // stagger 定数 (ScreenerPane.jsx と同値で統一感)
 const ROW_REVEAL_LEAD = 240; // ms
@@ -24,6 +31,45 @@ const ROW_REVEAL_STEP = 64;  // ms
 function rowRevealDelay(idx) {
   return ROW_REVEAL_LEAD + idx * ROW_REVEAL_STEP;
 }
+
+// 交差シグナルの静的ラベル dict (§38: LLM 不使用・色 neutral・断定なし)。
+// 優先順位: breakout_confirmed > breakout_pending > bo_confirmed > formation。
+function deriveSignalLabel(it) {
+  if (it.cup_state === 'breakout_confirmed') return 'ブレイク確定';
+  if (it.cup_state === 'breakout_pending') return 'ブレイク待ち';
+  if (it.breakout_state === 'bo_confirmed') return '新高値ブレイク';
+  if (it.cup_state === 'formation') return 'カップ形成中';
+  return null;
+}
+
+// 厳格交差: rs >= 75 ∩ funda_pass ∩ (cup confirmed/pending OR breakout bo_confirmed)
+function matchesStrict(it) {
+  return (
+    typeof it.rs_percentile === 'number' && it.rs_percentile >= 75 &&
+    it.funda_pass === true &&
+    (it.cup_state === 'breakout_confirmed' ||
+      it.cup_state === 'breakout_pending' ||
+      it.breakout_state === 'bo_confirmed')
+  );
+}
+
+// 緩和交差 (0件フォールバック): 上記 + cup_state === 'formation' も許可
+function matchesRelaxed(it) {
+  return (
+    typeof it.rs_percentile === 'number' && it.rs_percentile >= 75 &&
+    it.funda_pass === true &&
+    (it.cup_state === 'breakout_confirmed' ||
+      it.cup_state === 'breakout_pending' ||
+      it.cup_state === 'formation' ||
+      it.breakout_state === 'bo_confirmed')
+  );
+}
+
+// ⓘ ツールチップ文 (各条件の意味、§38: 内部プロトコル名は出さない = 「独自プロトコル」表記)
+const CRITERIA_TOOLTIP =
+  'RS: 市場全体に対する6ヶ月の相対力が上位75パーセンタイル以上。' +
+  ' / 決算3条件: 売上・EPS の前年比成長など独自プロトコルの定量条件をクリア。' +
+  ' / Cup・ブレイク: 株価チャートが押し目から高値更新へ向かう形状を形成。';
 
 // -----------------------------------------------------------
 // module-level sub-components (inline 関数 component 禁止)
@@ -59,8 +105,9 @@ function RankCircle({ rank }) {
   );
 }
 
-/** 銘柄 row 1 件。rank1 のみ featured (padding 広め / ticker 大) */
-function LeaderRow({ ticker, badge, rank, onSelect }) {
+/** 銘柄 row 1 件。rank1 のみ featured (padding 広め / ticker 大)。
+ *  右側に RS percentile (主) + 交差シグナルラベル (副) を縦積みで透明表示。 */
+function LeaderRow({ ticker, rs, signal, rank, onSelect }) {
   const isFeatured = rank === 1;
   return (
     <li
@@ -104,27 +151,42 @@ function LeaderRow({ ticker, badge, rank, onSelect }) {
         >
           {ticker}
         </span>
-        {/* 指標 badge (RS / 合致度、静的表示) */}
-        {badge && (
-          <span
-            title={badge}
-            style={{
-              flexShrink: 0,
-              maxWidth: '56%',
-              textAlign: 'right',
-              fontSize: isFeatured ? 13 : 11,
-              fontWeight: 700,
-              color: 'var(--text-secondary)',
-              fontVariantNumeric: 'tabular-nums',
-              lineHeight: 1.3,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            {badge}
-          </span>
-        )}
+        {/* 右側: RS (主) + シグナルラベル (副)。§38: 色 neutral、買い断定なし */}
+        <span
+          style={{
+            flexShrink: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            gap: 1,
+            lineHeight: 1.25,
+          }}
+        >
+          {typeof rs === 'number' && (
+            <span
+              style={{
+                fontSize: isFeatured ? 13 : 12,
+                fontWeight: 700,
+                color: 'var(--text-secondary)',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              RS {rs}
+            </span>
+          )}
+          {signal && (
+            <span
+              style={{
+                fontSize: isFeatured ? 11 : 10,
+                fontWeight: 500,
+                color: 'var(--text-muted)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {signal}
+            </span>
+          )}
+        </span>
       </button>
     </li>
   );
@@ -140,39 +202,52 @@ function LeaderRow({ ticker, badge, rank, onSelect }) {
  * @param {Function} props.onSelect - ticker string を受け取る。Workspace の setActiveTicker 相当。
  */
 export default function ScreenerIdleHero({ onSelect }) {
-  // 自前 fetch: _heroCache / ScreenerPane に依存せず mount 時に RS 上位 3 件を取得。
-  // custom モード (ScreenerPane unmount) でも loading が解ける。
-  const [fetchState, setFetchState] = useState({ tickers: [], loading: true, error: null });
+  // 自前 fetch: fetchScannerUniverse (auth 自動 / dedup 60s) で母集団を取得しフロントで交差計算。
+  const [fetchState, setFetchState] = useState({
+    tickers: [],
+    loading: true,
+    error: null,
+    relaxed: false, // true = 厳格0件で formation まで緩和した候補
+  });
 
   useEffect(() => {
-    let cancelled = false;
+    const ac = new AbortController();
     async function load() {
       try {
-        const r = await fetch('/api/scanner/rs?min_percentile=80&limit=3');
-        if (cancelled) return;
-        if (!r.ok) {
-          setFetchState({ tickers: [], loading: false, error: `HTTP ${r.status}` });
-          return;
+        const data = await fetchScannerUniverse({ signal: ac.signal });
+        if (ac.signal.aborted) return;
+        const items = Array.isArray(data?.items) ? data.items : [];
+
+        // 厳格交差 → 0件なら formation 含む緩和交差にフォールバック
+        let matched = items.filter(matchesStrict);
+        let relaxed = false;
+        if (matched.length === 0) {
+          matched = items.filter(matchesRelaxed);
+          relaxed = matched.length > 0;
         }
-        const data = await r.json();
-        if (cancelled) return;
-        // RS endpoint レスポンス: { items: [{ticker, universe_percentile, ...}] }
-        const items = Array.isArray(data.items) ? data.items.slice(0, 3) : [];
-        const tickers = items.map((it) => ({
-          ticker: it.ticker,
-          badge: it.universe_percentile != null ? `RS ${it.universe_percentile}` : undefined,
-        }));
-        setFetchState({ tickers, loading: false, error: null });
+
+        // rs_percentile 降順 top3
+        const top3 = matched
+          .slice()
+          .sort((a, b) => (b.rs_percentile ?? 0) - (a.rs_percentile ?? 0))
+          .slice(0, 3)
+          .map((it) => ({
+            ticker: it.ticker,
+            rs: it.rs_percentile,
+            signal: deriveSignalLabel(it),
+          }));
+
+        setFetchState({ tickers: top3, loading: false, error: null, relaxed });
       } catch (e) {
-        if (cancelled) return;
-        setFetchState({ tickers: [], loading: false, error: String(e) });
+        if (ac.signal.aborted) return;
+        setFetchState({ tickers: [], loading: false, error: String(e), relaxed: false });
       }
     }
     load();
-    return () => { cancelled = true; };
+    return () => ac.abort();
   }, []);
 
-  const { tickers, loading, error } = fetchState;
+  const { tickers, loading, error, relaxed } = fetchState;
   const isEmpty = !loading && !error && tickers.length === 0;
 
   // ── loading state ──
@@ -194,7 +269,7 @@ export default function ScreenerIdleHero({ onSelect }) {
       >
         <Hourglass size={20} strokeWidth={1.5} aria-hidden style={{ opacity: 0.55 }} />
         <span style={{ fontSize: 12, lineHeight: 1.6, textAlign: 'center' }}>
-          スクリーニング中…
+          今日の筆頭を絞り込み中…
         </span>
       </div>
     );
@@ -227,7 +302,7 @@ export default function ScreenerIdleHero({ onSelect }) {
     );
   }
 
-  // ── empty state (該当銘柄 0件) ──
+  // ── empty state (交差0件) ──
   if (isEmpty) {
     return (
       <div
@@ -247,7 +322,7 @@ export default function ScreenerIdleHero({ onSelect }) {
       >
         <Hourglass size={20} strokeWidth={1.5} aria-hidden style={{ opacity: 0.55 }} />
         <span style={{ fontSize: 12, lineHeight: 1.6 }}>
-          本日は条件に合う銘柄が見つかりませんでした
+          本日は条件をすべて満たす銘柄が見つかりませんでした
         </span>
         <span style={{ fontSize: 11 }}>
           左の一覧から銘柄を選ぶと、ここに詳細が表示されます
@@ -270,7 +345,7 @@ export default function ScreenerIdleHero({ onSelect }) {
         gap: 'var(--space-4, 16px)',
       }}
     >
-      {/* ─── section ヘッダー: L字 gold frame (ScreenerPane §307,341 と同パターン) ─── */}
+      {/* ─── section ヘッダー: L字 gold frame (ScreenerPane と同パターン) ─── */}
       <div className="screener-reveal" style={{ animationDelay: '0ms' }}>
         <div
           style={{
@@ -279,7 +354,7 @@ export default function ScreenerIdleHero({ onSelect }) {
             marginBottom: 'var(--space-3, 12px)',
           }}
         >
-          {/* eyebrow: 11px / letterSpacing 0.08em / text-muted */}
+          {/* eyebrow: 交差条件を明示 (透明表示 = ブラックボックス解消) */}
           <div
             style={{
               fontSize: 11,
@@ -289,7 +364,7 @@ export default function ScreenerIdleHero({ onSelect }) {
               marginBottom: 2,
             }}
           >
-            RS 上位
+            RS75 × 決算3条件 × Cup/ブレイク
           </div>
           <h4
             style={{
@@ -316,18 +391,46 @@ export default function ScreenerIdleHero({ onSelect }) {
           </h4>
         </div>
 
-        {/* section 説明: §38 軸明示 + 免責1行 */}
+        {/* section 説明: §38 軸明示 + ⓘ ツールチップ + 免責1行 */}
         <p
           style={{
-            margin: '0 0 var(--space-3, 12px) 0',
+            margin: '0 0 var(--space-2, 8px) 0',
             fontSize: 11,
             lineHeight: 1.6,
             color: 'var(--text-muted)',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 6,
           }}
         >
-          RS 上位 80% 銘柄から絞り込んだ筆頭候補。
-          スクリーニング結果であり投資推奨ではありません。
+          <Info
+            size={13}
+            strokeWidth={1.75}
+            aria-label="絞り込み条件の説明"
+            title={CRITERIA_TOOLTIP}
+            style={{ flexShrink: 0, marginTop: 2, opacity: 0.7, cursor: 'help' }}
+          />
+          <span>
+            相対力(RS)上位 ・ 直近決算の3条件クリア ・ Cup/ブレイク形成 を
+            <strong style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>すべて満たす</strong>
+            銘柄。スクリーニング結果であり投資推奨ではありません。
+          </span>
         </p>
+
+        {/* 緩和フォールバック時の注記 (透明性: なぜこの候補か) */}
+        {relaxed && (
+          <p
+            data-testid="idle-hero-relaxed-note"
+            style={{
+              margin: '0 0 var(--space-2, 8px) 0',
+              fontSize: 11,
+              lineHeight: 1.5,
+              color: 'var(--text-muted)',
+            }}
+          >
+            ※本日は「ブレイク確定/待ち」が少なく、カップ形成中まで広げた候補です。
+          </p>
+        )}
       </div>
 
       {/* ─── 銘柄リスト (上位3件) ─── */}
@@ -345,7 +448,8 @@ export default function ScreenerIdleHero({ onSelect }) {
           <LeaderRow
             key={t.ticker}
             ticker={t.ticker}
-            badge={t.badge}
+            rs={t.rs}
+            signal={t.signal}
             rank={idx + 1}
             onSelect={onSelect}
           />
