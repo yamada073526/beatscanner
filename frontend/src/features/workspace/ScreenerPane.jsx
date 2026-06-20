@@ -997,7 +997,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
       )}
 
       {/* S1: 3 チャンク (勢い / 仕掛かり / ブレイク) を縦スタック。各 top5 + すべて見る。 */}
-      <div style={{ marginTop: 'var(--space-4, 16px)' }}>
+      <div style={{ marginTop: 'var(--space-16, 64px)' }}>
         <HeroSection
           icon={<TrendingUp size={16} strokeWidth={1.75} />}
           revealBaseDelay={120}
@@ -1017,7 +1017,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           onRetry={handleRetry}
         />
       </div>
-      <div style={{ marginTop: 'var(--space-4, 16px)' }}>
+      <div style={{ marginTop: 'var(--space-16, 64px)' }}>
         <HeroSection
           icon={<Target size={16} strokeWidth={1.75} />}
           revealBaseDelay={240}
@@ -1048,7 +1048,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           locked:false & items 空 → graceful 「本日の新高値ブレイクなし」。
           locked:false & items あり → 一覧表示。 */}
       {isBreakoutScreenerEnabled() && (
-        <div style={{ marginTop: 'var(--space-4, 16px)' }}>
+        <div style={{ marginTop: 'var(--space-16, 64px)' }}>
           {breakoutData.locked ? (
             /* locked 分岐: ProTeaser (items 空なので銘柄は一切出さない) */
             <div
