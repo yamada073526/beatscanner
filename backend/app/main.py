@@ -19934,18 +19934,21 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
                 bo_latest = sd
     freshness["breakout"] = bo_latest
 
-    # earnings_evaluation funda_pass (free) — 95 日窓の all_passed=True
-    funda_pass: set[str] = set()
+    # earnings_evaluation funda_pass (free、 じっちゃま 5 条件) — 95 日窓で per-ticker 最新の all_passed。
+    # tri-state: True(達成) / False(窓内で評価済み未達) / None(窓内未評価=測定外)。
+    # 金融 reviewer 必須条件 NULL=第3状態: failed と未評価を混同しない (all_passed フィルタを掛けず全評価を取る)。
+    # ⚠️ 決算シーズン谷間は本テーブルが疎 (既存 cup-handle scanner も同依存)。 universe-wide で常時新鮮な
+    # ファンダ次元は CAN-SLIM 数値 (screener_fundamentals) 側。 source 選択は Sprint 3 設計論点。
+    funda_eval: dict[str, bool] = {}
     funda_latest: str | None = None
     funda_cut = (date.today() - timedelta(days=95)).isoformat()
     for r in _fetch_all_rows_paged(
         sb, "earnings_evaluation", "ticker,evaluation_date,all_passed",
-        eq={"all_passed": True}, gte={"evaluation_date": funda_cut},
-        order="evaluation_date",
+        gte={"evaluation_date": funda_cut}, order="evaluation_date",
     ):
         t = str(r.get("ticker") or "").upper()
-        if t:
-            funda_pass.add(t)
+        if t and t not in funda_eval:   # order desc → 最初が per-ticker 最新
+            funda_eval[t] = bool(r.get("all_passed"))
             ed = r.get("evaluation_date")
             if ed and (funda_latest is None or ed > funda_latest):
                 funda_latest = ed
@@ -19967,8 +19970,8 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             # RS (free) — 測定外は null
             "rs_percentile": (rs or {}).get("universe_percentile"),
             "rs_vs_spy_pct": _uni_round((rs or {}).get("rs_vs_spy_pct")),
-            # ファンダ 5 条件 pass (free)
-            "funda_pass": tk in funda_pass,
+            # ファンダ 5 条件 pass (free) — tri-state: True/False/None(測定外)
+            "funda_pass": funda_eval.get(tk),
             # CAN-SLIM 数値 (free) — sf 欠落=測定外 null (false と区別)
             "eps_yoy_pct": _uni_round((sf or {}).get("eps_yoy_pct")),
             "eps_cagr_3y": _uni_round((sf or {}).get("eps_cagr_3y")),
