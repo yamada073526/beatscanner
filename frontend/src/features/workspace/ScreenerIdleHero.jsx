@@ -5,10 +5,12 @@
  * SPEC 2026-06-20: スクリーナー構造再設計 案B B1 (案A交差条件化 + 透明表示 + 集約)
  *
  * 設計原則:
- *   - 交差条件 (案A 確定 / handover v237 §8 SSOT = memory reference_jijima_investment_criteria):
- *       rs_percentile >= 75 ∩ funda_pass === true
+ *   - 交差条件 (暫定 = RS × テクニカルのみ。ファンダ次元は据え置き):
+ *       rs_percentile >= 75
  *       ∩ (cup_state ∈ {breakout_confirmed, breakout_pending} OR breakout_state === 'bo_confirmed')
  *     0件時は cup_state === 'formation' まで緩和するフォールバック。rs 降順 top3。
+ *     ※ ADR: SPEC_2026-06-20_screener-master-detail §0-6。案A 本来の funda_pass 交差は専用
+ *       セッションで再設計 (SSOT = memory reference_jijima_investment_criteria、KB を正とする)。
  *   - 自前 fetch: fetchScannerUniverse (api.js、auth 自動付与 + dedup 60s) で母集団を取得し
  *     フロントで交差計算。_heroCache / ScreenerPane への依存なし (custom モードでも動作)。
  *   - 透明表示 (user 主訴=ブラックボックス解消): eyebrow/説明で交差条件を明示 + ⓘ で各条件の意味。
@@ -42,11 +44,13 @@ function deriveSignalLabel(it) {
   return null;
 }
 
-// 厳格交差: rs >= 75 ∩ funda_pass ∩ (cup confirmed/pending OR breakout bo_confirmed)
+// 厳格交差: rs >= 75 ∩ (cup confirmed/pending OR breakout bo_confirmed)
+// ※ ファンダ次元 (funda_pass) は据え置き — ADR: SPEC_2026-06-20_screener-master-detail §0-6。
+//    funda_pass は本番 true=0件 (決算シーズン谷間) かつ「じっちゃまのファンダ条件をどう落とし込むか」が
+//    KB 起点の難問のため、専用セッションまで暫定で RS × テクニカルのみ。grades すり替え禁止。
 function matchesStrict(it) {
   return (
     typeof it.rs_percentile === 'number' && it.rs_percentile >= 75 &&
-    it.funda_pass === true &&
     (it.cup_state === 'breakout_confirmed' ||
       it.cup_state === 'breakout_pending' ||
       it.breakout_state === 'bo_confirmed')
@@ -57,7 +61,6 @@ function matchesStrict(it) {
 function matchesRelaxed(it) {
   return (
     typeof it.rs_percentile === 'number' && it.rs_percentile >= 75 &&
-    it.funda_pass === true &&
     (it.cup_state === 'breakout_confirmed' ||
       it.cup_state === 'breakout_pending' ||
       it.cup_state === 'formation' ||
@@ -68,7 +71,6 @@ function matchesRelaxed(it) {
 // ⓘ ツールチップ文 (各条件の意味、§38: 内部プロトコル名は出さない = 「独自プロトコル」表記)
 const CRITERIA_TOOLTIP =
   'RS: 市場全体に対する6ヶ月の相対力が上位75パーセンタイル以上。' +
-  ' / 決算3条件: 売上・EPS の前年比成長など独自プロトコルの定量条件をクリア。' +
   ' / Cup・ブレイク: 株価チャートが押し目から高値更新へ向かう形状を形成。';
 
 // -----------------------------------------------------------
@@ -367,7 +369,7 @@ export default function ScreenerIdleHero({ onSelect }) {
               marginBottom: 2,
             }}
           >
-            RS75 × 決算3条件 × Cup/ブレイク
+            RS上位 × Cup/ブレイク
           </div>
           <h4
             style={{
@@ -414,7 +416,7 @@ export default function ScreenerIdleHero({ onSelect }) {
             style={{ flexShrink: 0, marginTop: 2, opacity: 0.7, cursor: 'help' }}
           />
           <span>
-            相対力(RS)上位 ・ 直近決算の3条件クリア ・ Cup/ブレイク形成 を
+            相対力(RS)上位 ・ Cup/ブレイク形成 を
             <strong style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>すべて満たす</strong>
             銘柄。スクリーニング結果であり投資推奨ではありません。
           </span>
