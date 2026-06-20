@@ -151,9 +151,9 @@ const PILLAR_COMBO = [
  * 既存 Chip.jsx primitive + token 色のみ使用。新規 glow host 禁止。
  * loading / errored / empty / main の testid 全 render path 付与 (feedback_testid_all_render_paths)。
  */
-function FilterPillarSection({ title, icon, chips, activeFilter, onSelect, defaultOpen = false, 'data-testid': testId }) {
+function FilterPillarSection({ title, icon, chips, activeFilters, onSelect, defaultOpen = false, 'data-testid': testId }) {
   const [open, setOpen] = useState(defaultOpen);
-  const hasActive = chips.some((c) => c.key === activeFilter);
+  const hasActive = chips.some((c) => activeFilters.has(c.key));
   // active chip があれば自動展開 (UX: 選択中の柱が閉じたまま = 混乱)
   const isOpen = open || hasActive;
 
@@ -195,7 +195,7 @@ function FilterPillarSection({ title, icon, chips, activeFilter, onSelect, defau
           data-testid={testId ? `${testId}-content` : 'filter-pillar-content'}
         >
           {chips.map((f) => {
-            const isActive = activeFilter === f.key;
+            const isActive = activeFilters.has(f.key);
             return (
               <div key={f.key} className="flex flex-col gap-1">
                 <Chip
@@ -1359,7 +1359,9 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
   const [cupData, setCupData] = useState(null);
   const [rsData, setRsData] = useState(null); // v120 RS Screener
   const [oneillData, setOneillData] = useState(null); // v122 O'Neil 完全 (frontend intersection)
-  const [activeFilter, setActiveFilter] = useState(null); // null | 'funda' | 'cup' | 'breakout' | 'rs' | 'both' | 'oneill'
+  // Pass 3a: single-select 挙動温存のまま Set 型へ rename (要素1つ = 旧 activeFilter と等価)
+  // null (全て) → 空 Set、選択中 → Set([filterKey])
+  const [activeFilters, setActiveFilters] = useState(() => new Set()); // Set<string>
   const [error, setError] = useState(null);
   // v159 SPEC Part B: universe-meta (sector/mcap) を起動時 1 回 fetch (module cache 経由、 24h backend cache)。
   const [universeMeta, setUniverseMeta] = useState(_universeMetaCache);
@@ -1428,7 +1430,8 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
   }, [universeMeta]);
 
   async function runCupFilter(filterKey) {
-    setActiveFilter(filterKey);
+    // Pass 3a: single-select 挙動温存。選択 = 要素1つの Set (他は消す)
+    setActiveFilters(new Set([filterKey]));
     setCupData(null);
     setRsData(null);
     setOneillData(null);
@@ -1695,9 +1698,9 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
               <Chip
                 size="sm"
                 variant="filter"
-                tone={activeFilter === null ? 'accent' : 'muted'}
-                pressed={activeFilter === null}
-                onClick={() => { setActiveFilter(null); setCupData(null); }}
+                tone={activeFilters.size === 0 ? 'accent' : 'muted'}
+                pressed={activeFilters.size === 0}
+                onClick={() => { setActiveFilters(new Set()); setCupData(null); }}
                 data-testid="filter-chip-all"
               >
                 全て
@@ -1716,7 +1719,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
               </div>
               <div className="flex flex-wrap gap-2" data-testid="screener-filter-combo-chips">
                 {PILLAR_COMBO.map((f) => {
-                  const isActive = activeFilter === f.key;
+                  const isActive = activeFilters.has(f.key);
                   return (
                     <div key={f.key} className="flex flex-col gap-1">
                       <Chip
@@ -1758,30 +1761,30 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
               title="テクニカル条件 (カップ / RS上位など)"
               icon={<BarChart2 size={13} strokeWidth={2} aria-hidden style={{ color: 'var(--text-muted)', flexShrink: 0 }} />}
               chips={PILLAR_TECHNICAL}
-              activeFilter={activeFilter}
+              activeFilters={activeFilters}
               onSelect={runCupFilter}
               defaultOpen={false}
               data-testid="screener-filter-technical"
             />
           </div>
 
-          {/* v120 RS Screener results (activeFilter === 'rs' のとき表示) */}
-          {activeFilter === 'rs' && (
+          {/* v120 RS Screener results (activeFilters に 'rs' があるとき表示) */}
+          {activeFilters.has('rs') && (
             <RsScannerResults data={rsData} onSelect={onSelect} universeMeta={universeMeta} />
           )}
 
-          {/* v122 O'Neil 完全 results (activeFilter === 'oneill' のとき表示) */}
-          {activeFilter === 'oneill' && (
+          {/* v122 O'Neil 完全 results (activeFilters に 'oneill' があるとき表示) */}
+          {activeFilters.has('oneill') && (
             <OneillScannerResults data={oneillData} onSelect={onSelect} onUpgrade={onUpgrade} />
           )}
 
-          {/* S5c: N(新高値圏) = Pro ロック面 (activeFilter === 'near_high' のとき scan せず ProTeaser) */}
-          {activeFilter === 'near_high' && (
+          {/* S5c: N(新高値圏) = Pro ロック面 (activeFilters に 'near_high' があるとき scan せず ProTeaser) */}
+          {activeFilters.has('near_high') && (
             <NearHighProLock
               onUpgrade={onProUpgrade || onUpgrade /* Pro 配線がなければ既存 upgrade flow に fallback (CTA を死活させない) */}
               onExitToFree={() => {
-                // 副リンク「無料の3条件で今すぐ絞り込む」= near_high を外して「全て」(ファンダ5条件 PASS) へ即復帰
-                setActiveFilter(null);
+                // 副リンク「無料の3条件で今すぐ絞り込む」= near_high を外して「全て」(空 Set) へ即復帰
+                setActiveFilters(new Set());
                 setCupData(null);
                 setRsData(null);
                 setOneillData(null);
@@ -1790,17 +1793,19 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
           )}
 
           {/* Sprint C: I 条件 (機関保有増加) スキャン結果 */}
-          {activeFilter === 'inst_holders' && (
+          {activeFilters.has('inst_holders') && (
             <InstHoldersScanResults data={cupData} onSelect={onSelect} />
           )}
 
-          {/* Cup-Handle scanner results (activeFilter が cup / both のとき表示) */}
-          {activeFilter && activeFilter !== 'funda' && activeFilter !== 'rs' && activeFilter !== 'oneill' && activeFilter !== 'near_high' && activeFilter !== 'inst_holders' && (
+          {/* Cup-Handle scanner results (cup / both など activeFilters に該当キーがあるとき表示)
+              Pass 3a: single-select 挙動温存 = activeFilters は要素1つ前提。
+              対象キー = funda / rs / oneill / near_high / inst_holders 以外の全て */}
+          {activeFilters.size > 0 && !activeFilters.has('funda') && !activeFilters.has('rs') && !activeFilters.has('oneill') && !activeFilters.has('near_high') && !activeFilters.has('inst_holders') && (
             <CupScannerResults
               data={cupData}
               onSelect={onSelect}
               onUpgrade={onUpgrade}
-              filterKey={activeFilter}
+              filterKey={[...activeFilters][0]}
               universeMeta={universeMeta}
             />
           )}

@@ -1146,3 +1146,50 @@ export async function fetchAnalyst(ticker) {
     return null;
   }
 }
+
+/**
+ * Sprint 3 (Pass 3a): 統合 universe fetch (dormant — Pass 3b で実際に呼ぶ)。
+ *
+ * GET /api/scanner/universe?universe_size=<n>
+ * ログイン時は Authorization: Bearer <JWT> を付与 (tier gate に必要)。
+ * 未ログイン時は Authorization なし = free tier 扱い (backend 既定)。
+ *
+ * 返却 schema:
+ *   {
+ *     as_of: string,             // headline = freshness の最大値 (最新 refresh)
+ *     freshness: { rs, funda, cup, breakout, funda_pass },
+ *     tier: string,              // 'free' | 'premium' | 'pro'
+ *     count: number,             // free tier 実測 ≈ 2603
+ *     locked_facets: string[],   // 鍵 UI 分岐 (0件 disabled とは別 path)
+ *     items: Array<{
+ *       ticker, name, sector, mcap_band,
+ *       rs_percentile, rs_vs_spy_pct,
+ *       funda_pass, eps_yoy_pct, eps_cagr_3y, roe,
+ *       buyback_yield_pct, volume_surge_pct, inst_holders_qoq_pct,
+ *       near_high_pct_scaled,   // Pro locked → null (locked_facets 参照)
+ *       cup_state, breakout_state, is_new_52w_high  // Premium locked → null
+ *     }>,
+ *   }
+ *
+ * ⚠️ roe は percent 格納 (NVDA≈111.66)。閾値は >= 17.0 (小数 0.17 ではない)。
+ * ⚠️ backend GZipMiddleware 適用済 (raw ≈0.6-1MB / gzip ≈80-150KB)。
+ * ⚠️ funda_pass は sparse (≈6.9%、決算シーズン依存)。preset には含めず独立 binary facet として扱う。
+ *
+ * @param {number} [universeSize=3000] - 母集団サイズ
+ * @returns {Promise<object|null>} - 上記 schema そのまま返す (整形しない)
+ */
+export async function fetchScannerUniverse(universeSize = 3000) {
+  const headers = {};
+  try {
+    const { supabase } = await import('./lib/supabase.js');
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+  } catch { /* 未ログイン時は Authorization 無し = free 扱い */ }
+  try {
+    const r = await fetch(`/api/scanner/universe?universe_size=${universeSize}`, { headers });
+    if (!r.ok) return null;
+    return r.json();
+  } catch {
+    return null;
+  }
+}
