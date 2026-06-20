@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { ChartCandlestick, Crown, TrendingUp, SlidersHorizontal, ChevronDown, BarChart2, Lock } from 'lucide-react';
-import { fetchCustomScreener, fetchCupHandleScanner, fetchRsScanner, fetchUniverseMeta, fetchCanslimScanner, fetchCanslimRows } from '../api.js';
+import { fetchCustomScreener, fetchCupHandleScanner, fetchRsScanner, fetchUniverseMeta, fetchCanslimScanner, fetchCanslimRows, fetchScannerUniverse } from '../api.js';
 import Chip, { ChipGroup } from './ui/Chip.jsx';
 import ProTeaser from './ui/ProTeaser.jsx';
 // Sprint 3: 市場局面バナーを ScreenerPane と共有 (FtdRegimeBanner.jsx が SSOT、二重定義なし)
@@ -52,6 +52,64 @@ function loadUniverseMeta() {
       return { asOf: 0, count: 0, meta: {} };
     });
   return _universeMetaPromise;
+}
+
+// ─── Pass 3b: 統合 universe module-scope cache ───────────────────────────────
+// _universeMetaCache (上記) と同パターン。custom モード mount 時 1 回 fetch、再 mount で再 fetch なし。
+let _universeCache = null; // universe payload (items / freshness / locked_facets 等)
+let _universePromise = null;
+function loadUniverse() {
+  if (_universeCache) return Promise.resolve(_universeCache);
+  if (_universePromise) return _universePromise;
+  _universePromise = fetchScannerUniverse(3000)
+    .then((res) => {
+      _universeCache = res || { items: [], count: 0, locked_facets: [], freshness: {}, as_of: null, tier: 'free' };
+      return _universeCache;
+    })
+    .catch(() => {
+      _universePromise = null; // 失敗時は次回 retry を許可
+      return { items: [], count: 0, locked_facets: [], freshness: {}, as_of: null, tier: 'free' };
+    });
+  return _universePromise;
+}
+
+// ─── Pass 3b: facet engine SSOT ─────────────────────────────────────────────
+// §0-7(b) 本番較正値。count と list が必ず同一 predicate = Trust Cliff 防止の核。
+const FUNDA_FACETS = [
+  { key: 'eps_yoy_pct',         field: 'eps_yoy_pct',         label: 'EPS成長(四半期)', unit: '%', tier: 'free', grades: { loose: 20, standard: 25, strict: 50 } },
+  { key: 'eps_cagr_3y',         field: 'eps_cagr_3y',         label: 'EPS成長(3年)',    unit: '%', tier: 'free', grades: { loose: 10, standard: 20, strict: 25 } },
+  { key: 'roe',                 field: 'roe',                 label: 'ROE',            unit: '%', tier: 'free', grades: { loose: 10, standard: 17, strict: 25 } },
+  { key: 'rs_percentile',       field: 'rs_percentile',       label: 'RS(相対強さ)',     unit: '',  tier: 'free', grades: { loose: 70, standard: 85, strict: 90 } },
+  { key: 'volume_surge_pct',    field: 'volume_surge_pct',    label: '出来高急増',       unit: '%', tier: 'free', grades: { loose: 25, standard: 40, strict: 50 } },
+  { key: 'inst_holders_qoq_pct', field: 'inst_holders_qoq_pct', label: '機関保有増(45日遅延)', unit: '%', tier: 'free', grades: { loose: 0, standard: 3, strict: 5 } },
+];
+const FACET_MAP = Object.fromEntries(FUNDA_FACETS.map((f) => [f.key, f]));
+// preset の CORE 4 metric。volume/inst_holders は preset off、override で追加 (Pass 3c)。
+const PRESET_CORE_KEYS = ['eps_yoy_pct', 'eps_cagr_3y', 'roe', 'rs_percentile'];
+const PRESET_LABELS = { loose: '緩い', standard: '標準', strict: '厳しい' };
+
+/** 実効 grade map: CORE は preset level、overrides で個別上書き ('off' で除外) */
+function buildActiveGrades(preset, overrides) {
+  const g = {};
+  for (const k of PRESET_CORE_KEYS) g[k] = preset;
+  for (const [k, lvl] of Object.entries(overrides || {})) {
+    if (lvl === 'off') delete g[k]; else g[k] = lvl;
+  }
+  return g; // { facetKey: level }
+}
+
+/** 単一 predicate — count も list も必ずこれを通す (Trust Cliff C-2 の根拠) */
+function itemPasses(item, activeGrades, extra) {
+  for (const [k, lvl] of Object.entries(activeGrades)) {
+    const f = FACET_MAP[k]; if (!f) continue;
+    const v = item[f.field];
+    if (v == null) return false;          // 測定外は AND で除外 (honest)
+    if (v < f.grades[lvl]) return false;
+  }
+  if (extra?.fundaPassOnly && item.funda_pass !== true) return false;
+  if (extra?.sectors?.length && !extra.sectors.includes(item.sector)) return false;
+  if (extra?.mcapBands?.length && !extra.mcapBands.includes(item.mcap_band)) return false;
+  return true;
 }
 
 const CONDITION_SHORT = ['CF率', 'EPS', 'CFPS', '売上', 'CF>EPS'];
@@ -1366,6 +1424,19 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
   // v159 SPEC Part B: universe-meta (sector/mcap) を起動時 1 回 fetch (module cache 経由、 24h backend cache)。
   const [universeMeta, setUniverseMeta] = useState(_universeMetaCache);
 
+  // Pass 3b: 統合 universe state (additive facet engine の母集団)
+  const [universe, setUniverse] = useState(_universeCache);
+  const [universeLoading, setUniverseLoading] = useState(false);
+  const [universeError, setUniverseError] = useState(null);
+  // Pass 3b: preset セグメントトグル + overrides (3b では常に空、shape のみ用意)
+  const [preset, setPreset] = useState('standard');
+  const [overrides] = useState({});
+  // Pass 3b: sector / mcap additive refinement (universe ベース)
+  const [sectorFilter, setSectorFilter] = useState([]);
+  const [mcapFilter, setMcapFilter] = useState([]);
+  // Pass 3b: funda_pass binary chip
+  const [fundaPassOnly, setFundaPassOnly] = useState(false);
+
   // S5b funda (3体合議 frontend 必須): run() 連打時に古い rows fetch が新 data を上書きする
   // stale merge を runId で遮断。
   const runIdRef = useRef(0);
@@ -1376,7 +1447,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
     setCupData(null);
     setRsData(null);
     setOneillData(null);
-    setActiveFilter(null);
+    // Pass 3b: setActiveFilter(旧 single-select 用) は削除済。activeFilters(Set) は温存。
     const runId = ++runIdRef.current;
     try {
       const result = await fetchCustomScreener();
@@ -1428,6 +1499,61 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
       alive = false;
     };
   }, [universeMeta]);
+
+  // Pass 3b: 統合 universe を custom モード mount 時 1 回 fetch (module cache 経由)。
+  useEffect(() => {
+    if (universe) return; // module cache 済なら即 hydrate
+    let alive = true;
+    setUniverseLoading(true);
+    loadUniverse().then((res) => {
+      if (!alive) return;
+      setUniverse(res);
+      setUniverseLoading(false);
+    }).catch(() => {
+      if (!alive) return;
+      setUniverseError('universe の取得に失敗しました');
+      setUniverseLoading(false);
+    });
+    return () => { alive = false; };
+  }, [universe]);
+
+  // Pass 3b: filteredItems — count も list も同一 predicate (Trust Cliff C-2 の核)。
+  const activeGrades = useMemo(() => buildActiveGrades(preset, overrides), [preset, overrides]);
+  const filteredItems = useMemo(() => {
+    const items = universe?.items || [];
+    const extra = { fundaPassOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    return items.filter((it) => itemPasses(it, activeGrades, extra));
+  }, [universe, activeGrades, fundaPassOnly, sectorFilter, mcapFilter]);
+
+  // Pass 3b: preset 別の total 件数 (緩い/標準/厳しい) を live 算出。ハードコード禁止。
+  const presetCounts = useMemo(() => {
+    const items = universe?.items || [];
+    const extra = { fundaPassOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const result = {};
+    for (const lvl of ['loose', 'standard', 'strict']) {
+      const grades = buildActiveGrades(lvl, overrides);
+      result[lvl] = items.filter((it) => itemPasses(it, grades, extra)).length;
+    }
+    return result;
+  }, [universe, overrides, fundaPassOnly, sectorFilter, mcapFilter]);
+
+  // Pass 3b: sector / mcap 選択肢を universe から live 算出 (count 付き)。
+  const sectorOptions = useMemo(() => {
+    const map = {};
+    for (const it of universe?.items || []) {
+      if (!it.sector) continue;
+      map[it.sector] = (map[it.sector] || 0) + 1;
+    }
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([s, cnt]) => ({ value: s, label: sectorLabelJp(s), count: cnt }));
+  }, [universe]);
+  const mcapOptions = useMemo(() => {
+    const map = {};
+    for (const it of universe?.items || []) {
+      if (!it.mcap_band) continue;
+      map[it.mcap_band] = (map[it.mcap_band] || 0) + 1;
+    }
+    return MCAP_BANDS.filter((b) => map[b.key]).map((b) => ({ ...b, count: map[b.key] || 0 }));
+  }, [universe]);
 
   async function runCupFilter(filterKey) {
     // Pass 3a: single-select 挙動温存。選択 = 要素1つの Set (他は消す)
@@ -1587,12 +1713,219 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
       <FtdRegimeBanner />
 
       <div className="mb-4">
-        <h3 className="section-label">ファンダメンタル5条件スクリーナー</h3>
+        <h3 className="section-label">銘柄スクリーナー</h3>
         <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-          ファンダメンタル5条件で自動判定
+          条件を組み合わせて絞り込む
         </p>
       </div>
 
+      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          Pass 3b: 統合 universe + additive facet UI
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      {/* universe loading */}
+      {universeLoading && (
+        <div className="space-y-3 py-4" data-testid="screener-universe-loading">
+          <p className="text-center text-sm text-[var(--text-muted)]">データを読み込み中...</p>
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="h-8 rounded-lg"
+              style={{
+                background: 'linear-gradient(90deg, var(--bg-subtle) 0%, var(--bg-card) 50%, var(--bg-subtle) 100%)',
+                backgroundSize: '200% 100%',
+                animation: 'dsShimmer 1.4s ease-in-out infinite',
+                animationDelay: `${i * 0.15}s`,
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* universe error */}
+      {!universeLoading && universeError && (
+        <div className="rounded-lg bg-[color-mix(in_srgb,var(--color-loss)_10%,transparent)] p-3 text-sm text-[var(--color-loss)]" data-testid="screener-universe-error">
+          {universeError}
+        </div>
+      )}
+
+      {/* universe empty (fetch 完了 + items なし) */}
+      {!universeLoading && !universeError && universe && (universe.items || []).length === 0 && (
+        <p className="py-4 text-center text-sm text-[var(--text-muted)]" data-testid="screener-universe-empty">
+          スクリーナーのデータがありません。しばらく後に再度お試しください。
+        </p>
+      )}
+
+      {/* universe main */}
+      {!universeLoading && !universeError && universe && (universe.items || []).length > 0 && (
+        <div className="space-y-4" data-testid="screener-universe-main">
+          {/* ── (1) preset セグメントトグル ── */}
+          <div data-testid="screener-preset-toggle">
+            <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">厳しさ</p>
+            <div className="flex gap-2 flex-wrap">
+              {(['loose', 'standard', 'strict']).map((lvl) => (
+                <Chip
+                  key={lvl}
+                  size="sm"
+                  variant="segmented"
+                  pressed={preset === lvl}
+                  onClick={() => setPreset(lvl)}
+                  data-testid={`screener-preset-${lvl}`}
+                >
+                  {PRESET_LABELS[lvl]}
+                  {presetCounts[lvl] != null && (
+                    <span className="ml-1 tabular-nums opacity-70">({presetCounts[lvl]})</span>
+                  )}
+                </Chip>
+              ))}
+            </div>
+          </div>
+
+          {/* ── (2) funda_pass binary chip ── */}
+          {universe.freshness?.funda_pass && (
+            <div>
+              <Chip
+                size="sm"
+                variant="filter"
+                pressed={fundaPassOnly}
+                tone={fundaPassOnly ? 'accent' : 'muted'}
+                onClick={() => setFundaPassOnly((v) => !v)}
+                data-testid="screener-facet-funda_pass"
+              >
+                最新決算で5条件達成
+                {universe.freshness.funda_pass && (
+                  <span className="ml-1 text-[10px] opacity-60">({universe.freshness.funda_pass})</span>
+                )}
+              </Chip>
+            </div>
+          )}
+
+          {/* ── (3) sector / mcap additive refinement ── */}
+          {sectorOptions.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">セクター</p>
+              <div className="flex flex-wrap gap-1.5" data-testid="screener-facet-sector">
+                {sectorOptions.map(({ value, label, count }) => {
+                  const active = sectorFilter.includes(value);
+                  return (
+                    <Chip
+                      key={value}
+                      size="sm"
+                      variant="filter"
+                      pressed={active}
+                      tone={active ? 'accent' : 'muted'}
+                      onClick={() =>
+                        setSectorFilter((prev) =>
+                          prev.includes(value) ? prev.filter((s) => s !== value) : [...prev, value]
+                        )
+                      }
+                    >
+                      {label}
+                      <span className="ml-1 tabular-nums opacity-60">({count})</span>
+                    </Chip>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {mcapOptions.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">時価総額</p>
+              <div className="flex flex-wrap gap-1.5" data-testid="screener-facet-mcap_band">
+                {mcapOptions.map(({ key, label, hint, count }) => {
+                  const active = mcapFilter.includes(key);
+                  return (
+                    <Chip
+                      key={key}
+                      size="sm"
+                      variant="filter"
+                      pressed={active}
+                      tone={active ? 'accent' : 'muted'}
+                      title={hint}
+                      onClick={() =>
+                        setMcapFilter((prev) =>
+                          prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+                        )
+                      }
+                    >
+                      {label}
+                      <span className="ml-1 tabular-nums opacity-60">({count})</span>
+                    </Chip>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── (4) locked facets (鍵 chip / 詳細展開 UI は Pass 3c) ── */}
+          {(universe.locked_facets || []).length > 0 && (
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">Premium / Pro で解錠</p>
+              <div className="flex flex-wrap gap-1.5">
+                {(universe.locked_facets || []).map((key) => (
+                  <Chip
+                    key={key}
+                    size="sm"
+                    variant="filter"
+                    tone="muted"
+                    data-testid={`screener-locked-${key}`}
+                  >
+                    <Lock size={11} strokeWidth={2} aria-hidden style={{ marginRight: 4, verticalAlign: '-1px' }} />
+                    {key}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── (5) 結果リスト ── */}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-medium text-[var(--text-secondary)]">
+                {filteredItems.length} 件
+              </span>
+              {universe.as_of && (
+                <span className="text-xs text-[var(--text-muted)]">
+                  最終更新: {universe.as_of}
+                </span>
+              )}
+            </div>
+            {filteredItems.length === 0 ? (
+              <p className="py-4 text-center text-sm text-[var(--text-muted)]" data-testid="screener-result-row-empty">
+                該当する銘柄がありません。厳しさを緩めるか、フィルターを変更してください。
+              </p>
+            ) : (
+              <div className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)] overflow-hidden">
+                {filteredItems.map((it) => (
+                  <button
+                    key={it.ticker}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--bg-hover)] transition-colors"
+                    onClick={() => onSelect?.(it.ticker)}
+                    data-testid={`screener-result-row-${it.ticker}`}
+                  >
+                    <span className="w-16 shrink-0 font-mono text-sm font-semibold text-[var(--text-primary)]">{it.ticker}</span>
+                    <span className="flex-1 truncate text-xs text-[var(--text-secondary)]">{it.name || it.ticker}</span>
+                    <span className="shrink-0 text-xs text-[var(--text-muted)]">{sectorLabelJp(it.sector)}</span>
+                    {it.rs_percentile != null && (
+                      <span className="shrink-0 w-14 text-right text-xs tabular-nums" style={{ color: it.rs_percentile >= 85 ? 'var(--color-gain)' : 'var(--text-muted)' }}>
+                        RS {it.rs_percentile.toFixed(0)}
+                      </span>
+                    )}
+                    {it.eps_yoy_pct != null && (
+                      <span className="shrink-0 w-16 text-right text-xs tabular-nums text-[var(--text-muted)]">
+                        EPS {it.eps_yoy_pct > 0 ? '+' : ''}{it.eps_yoy_pct.toFixed(0)}%
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── 旧 single-select UI (Pass 3b: render 停止、関数/state 定義は残す。Pass 3c で物理削除) ── */}
+      <div style={{ display: 'none' }} aria-hidden="true">
       {/* v100 Sprint A-C (multi-review 6 体合議): grace 注記 2 件削除。
           ⚠️ S&P500 限定注記 + 15 分キャッシュ注記は 5 原則 §1 読み手の負担増。
           v100 commit 59925ea で SP500_SAMPLE 補完済、 user に意識させる必要なし。 */}
@@ -1916,6 +2249,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
           </div>
         </div>
       )}
+      </div>{/* 旧 single-select UI 終端 (Pass 3b: display:none ラッパー) */}
     </section>
   );
 }
