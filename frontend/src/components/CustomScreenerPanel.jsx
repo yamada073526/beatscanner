@@ -1,6 +1,8 @@
 import { useEffect, useState, useMemo } from 'react';
 import { SlidersHorizontal, ChevronDown, Lock, Info } from 'lucide-react';
 import { fetchScannerUniverse } from '../api.js';
+// Sprint 5 Pass D: GA4/Clarity 比較 event (C-16 昇格ゲート baseline 用)
+import { trackEvent } from '../lib/analytics.js';
 import Chip, { ChipGroup } from './ui/Chip.jsx';
 import ProTeaser from './ui/ProTeaser.jsx';
 // Sprint 3: 市場局面バナーを ScreenerPane と共有 (FtdRegimeBanner.jsx が SSOT、二重定義なし)
@@ -167,6 +169,7 @@ export default function CustomScreenerPanel({
       return;
     }
     tickers.forEach((t) => onAddToWatchlist?.(t));
+    trackEvent('screener_watchlist_add', { tickers_count: tickers.length, mode: 'custom' });
     setSelectedTickers(new Set());
   };
 
@@ -943,10 +946,14 @@ export default function CustomScreenerPanel({
                       role="button"
                       tabIndex={0}
                       className={`group screener-result-row w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--bg-hover)] transition-colors${isSelected ? ' bg-[var(--bg-subtle)]' : ''}`}
-                      onClick={() => onSelect?.(it.ticker)}
+                      onClick={() => {
+                        trackEvent('screener_row_click', { ticker: it.ticker, rank: idx, mode: 'custom' });
+                        onSelect?.(it.ticker);
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
+                          trackEvent('screener_row_click', { ticker: it.ticker, rank: idx, mode: 'custom' });
                           onSelect?.(it.ticker);
                         }
                       }}
