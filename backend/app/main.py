@@ -19875,11 +19875,16 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
     sf_map: dict[str, dict] = {}
     sf_cd, _sf_n = _latest_valid_calc_date(sb, "screener_fundamentals", "calc_date", 200)
     freshness["funda"] = sf_cd
+    # Sprint 2 (じっちゃまファンダ): ocf_margin は常時鮮度の上流ファンダ軸 (§0-2 ADR)。
+    # screener_fundamentals の calc_date = nightly scan と同一 → freshness["funda"] を流用。
+    # per-facet freshness map に独立キー "ocf_margin" を追加 (headline as_of は max で計算済)。
+    freshness["ocf_margin"] = sf_cd
     if sf_cd:
         for r in _fetch_all_rows_paged(
             sb, "screener_fundamentals",
             "ticker,eps_yoy_pct,eps_cagr_3y,roe,near_high_pct_scaled,"
-            "buyback_yield_pct,volume_surge_pct,inst_holders_qoq_pct",
+            "buyback_yield_pct,volume_surge_pct,inst_holders_qoq_pct,"
+            "ocf_margin_pct,fcf_margin_pct",
             eq={"calc_date": sf_cd},
         ):
             t = str(r.get("ticker") or "").upper()
@@ -19979,6 +19984,12 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             "buyback_yield_pct": _uni_round((sf or {}).get("buyback_yield_pct")),
             "volume_surge_pct": _uni_round((sf or {}).get("volume_surge_pct")),
             "inst_holders_qoq_pct": _uni_round((sf or {}).get("inst_holders_qoq_pct")),
+            # Sprint 2 (じっちゃまファンダ): 上流ファンダ軸 — 常時鮮度・free tier (§0-1 ④)
+            # tier 扱い: eps_yoy_pct / roe と同列 (Group A-B 相当)。Premium gate 対象外。
+            # None-preserve: 0.0 は有効値のため (sf or {}).get() のまま _uni_round 経由で返す。
+            # sector guard 済 (銀行/保険/外貨 ADR は _compute_one 内で None 保存済、§0-1 ①)。
+            "ocf_margin_pct": _uni_round((sf or {}).get("ocf_margin_pct")),
+            "fcf_margin_pct": _uni_round((sf or {}).get("fcf_margin_pct")),
             # near_high (Pro gate) — N 条件
             "near_high_pct_scaled": _uni_round((sf or {}).get("near_high_pct_scaled")),
             # cup / breakout (Premium gate)
