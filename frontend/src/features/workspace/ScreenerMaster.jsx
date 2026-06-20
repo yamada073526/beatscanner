@@ -220,6 +220,9 @@ export default function ScreenerMaster({
               onAddToWatchlist={onAddToWatchlist}
               watchlist={watchlist}
               isProUser={isProUser}
+              /* Sprint 3: 営業CFマージン facet を v2 scope に限定 (legacy には渡さない)。
+                 ScreenerMaster は screener_v2 経路でのみ mount される (Workspace.jsx)。 */
+              screenerV2={isScreenerV2()}
             />
           </Suspense>
         )}

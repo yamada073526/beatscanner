@@ -74,6 +74,21 @@ const FACET_MAP = Object.fromEntries(FUNDA_FACETS.map((f) => [f.key, f]));
 const PRESET_CORE_KEYS = ['eps_yoy_pct', 'eps_cagr_3y', 'roe', 'rs_percentile'];
 const PRESET_LABELS = { loose: '緩い', standard: '標準', strict: '厳しい' };
 
+// ─── Sprint 3: 営業CFマージン binary facet (§0-1③ PRESET_TABLE 統合禁止) ─────
+// KB「ナイス・バディの法則 15% 足切り」に忠実な binary (ON/OFF) facet。
+// 上限カットなし (35% 超も通す)。null = AND で除外 (honest count)。
+// grades 体系 (loose/standard/strict) に統合しない — 質的閾値であり段階化になじまない。
+// tier: 'free' (§0-1④、eps_yoy/roe と同列の上流ファンダ数値)。
+const OCF_MARGIN_FACET = {
+  key: 'ocf_margin_pct',
+  field: 'ocf_margin_pct',
+  label: 'キャッシュ創出力 15%以上',
+  labelShort: 'CF創出力',
+  tooltip: '営業キャッシュフロー ÷ 売上高 ≥ 15%。銀行・保険・REIT 等は業種特性によりデータなし。',
+  threshold: 15,
+  tier: 'free',
+};
+
 /** 実効 grade map: CORE は preset level、overrides で個別上書き ('off' で除外) */
 // locked facet 和名マップ (Pass 3c: 静的 dict、module scope に配置して毎 render 再作成を回避)
 const LOCKED_FACET_LABELS = {
@@ -91,6 +106,7 @@ const FACET_SHORT_LABEL = {
   rs_percentile: 'RS高',
   volume_surge_pct: '出来高急増',
   inst_holders_qoq_pct: '機関↑',
+  ocf_margin_pct: 'CF創出力',
 };
 function buildActiveGrades(preset, overrides) {
   const g = {};
@@ -110,6 +126,12 @@ function itemPasses(item, activeGrades, extra) {
     if (v < f.grades[lvl]) return false;
   }
   if (extra?.fundaPassOnly && item.funda_pass !== true) return false;
+  // Sprint 3: 営業CFマージン binary facet (§0-1③)。null = AND 除外 (honest)、上限カットなし。
+  // None-preserve: 0.0 は有効値だが閾値 15 未満なので自然に落ちる (`< threshold` で判定)。
+  if (extra?.ocfMarginOnly) {
+    const m = item[OCF_MARGIN_FACET.field];
+    if (m == null || m < OCF_MARGIN_FACET.threshold) return false;
+  }
   if (extra?.sectors?.length && !extra.sectors.includes(item.sector)) return false;
   if (extra?.mcapBands?.length && !extra.mcapBands.includes(item.mcap_band)) return false;
   return true;
@@ -140,6 +162,10 @@ export default function CustomScreenerPanel({
   onAddToWatchlist,
   watchlist = [],
   isProUser = false,
+  // Sprint 3: 営業CFマージン facet を screener_v2 scope に限定する flag。
+  // 共有部品 (CustomScreenerPanel) を legacy (default OFF) に漏らさないため prop で gate
+  // (SPEC §6「hideHero のように prop で限定」)。v2 経路 (ScreenerMaster) のみ true を渡す。
+  screenerV2 = false,
 }) {
   // Pass 3b: 統合 universe state (additive facet engine の母集団)
   const [universe, setUniverse] = useState(_universeCache);
@@ -155,6 +181,8 @@ export default function CustomScreenerPanel({
   const [mcapFilter, setMcapFilter] = useState([]);
   // Pass 3b: funda_pass binary chip
   const [fundaPassOnly, setFundaPassOnly] = useState(false);
+  // Sprint 3: 営業CFマージン binary chip (上流ファンダ品質・常時鮮度。funda_pass とは別次元)
+  const [ocfMarginOnly, setOcfMarginOnly] = useState(false);
   // Pass C: 件数キャップ — 初期 100 件、「残りN件を表示」で全件展開
   const [showAllResults, setShowAllResults] = useState(false);
   // Sprint 5 Pass B: 複数選択 → watchlist 一括追加
@@ -194,9 +222,9 @@ export default function CustomScreenerPanel({
   const activeGrades = useMemo(() => buildActiveGrades(preset, overrides), [preset, overrides]);
   const filteredItems = useMemo(() => {
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     return items.filter((it) => itemPasses(it, activeGrades, extra));
-  }, [universe, activeGrades, fundaPassOnly, sectorFilter, mcapFilter]);
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, sectorFilter, mcapFilter]);
 
   // Pass B: 条件合致度順ソート。
   // スコア = アクティブ数値 facet ごとに (item[key] - threshold) / threshold の合計。
@@ -232,21 +260,21 @@ export default function CustomScreenerPanel({
   // Pass 3b: preset 別の total 件数 (緩い/標準/厳しい) を live 算出。ハードコード禁止。
   const presetCounts = useMemo(() => {
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     const result = {};
     for (const lvl of ['loose', 'standard', 'strict']) {
       const grades = buildActiveGrades(lvl, overrides);
       result[lvl] = items.filter((it) => itemPasses(it, grades, extra)).length;
     }
     return result;
-  }, [universe, overrides, fundaPassOnly, sectorFilter, mcapFilter]);
+  }, [universe, overrides, fundaPassOnly, ocfMarginOnly, sectorFilter, mcapFilter]);
 
   // Pass 3c: faceted 件数 — 各 facet の各 level に変えた時の件数 (itemPasses 共有、Trust Cliff C-2)。
   // facet K を level L にした時の件数 = { ...activeGrades, [K]: L } で filter。
   // level='off' = K を外した件数 = delete g[K]。
   const facetLevelCounts = useMemo(() => {
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     const result = {};
     for (const facet of FUNDA_FACETS) {
       result[facet.key] = {};
@@ -261,13 +289,13 @@ export default function CustomScreenerPanel({
       }
     }
     return result;
-  }, [universe, activeGrades, fundaPassOnly, sectorFilter, mcapFilter]);
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, sectorFilter, mcapFilter]);
 
   // Pass 3c: empty サジェスト — 現在 active な制約を1つ外した時に最も件数が増える提案を算出。
   const emptySuggest = useMemo(() => {
     if (filteredItems.length > 0) return null;
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     let best = null;
     // overrides の各 facet を外す
     for (const [key, lvl] of Object.entries(overrides)) {
@@ -290,6 +318,11 @@ export default function CustomScreenerPanel({
       const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, fundaPassOnly: false })).length;
       if (!best || cnt > best.count) best = { key: 'funda_pass', label: '最新決算5条件', count: cnt, type: 'funda_pass' };
     }
+    // ocfMarginOnly を外す (Sprint 3)
+    if (ocfMarginOnly) {
+      const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, ocfMarginOnly: false })).length;
+      if (!best || cnt > best.count) best = { key: 'ocf_margin', label: OCF_MARGIN_FACET.label, count: cnt, type: 'ocf_margin' };
+    }
     // sectorFilter を全解除
     if (sectorFilter.length > 0) {
       const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, sectors: [] })).length;
@@ -301,7 +334,7 @@ export default function CustomScreenerPanel({
       if (!best || cnt > best.count) best = { key: 'mcap', label: '時価総額絞り込み', count: cnt, type: 'mcap' };
     }
     return best;
-  }, [filteredItems.length, universe, activeGrades, overrides, fundaPassOnly, sectorFilter, mcapFilter]);
+  }, [filteredItems.length, universe, activeGrades, overrides, fundaPassOnly, ocfMarginOnly, sectorFilter, mcapFilter]);
 
   // Pass 3c: sector / mcap 選択肢を universe から live 算出 (count 付き)。
   // Pass 3d (修正A): 全件 universe 集計から faceted count へ変更 (Trust Cliff C-2 修正)。
@@ -312,32 +345,45 @@ export default function CustomScreenerPanel({
     for (const it of items) {
       if (!it.sector) continue;
       // sector 次元自身は除き (自己排除防止)、他の active facet を適用
-      if (!itemPasses(it, activeGrades, { fundaPassOnly, mcapBands: mcapFilter, sectors: [it.sector] })) continue;
+      if (!itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, mcapBands: mcapFilter, sectors: [it.sector] })) continue;
       map[it.sector] = (map[it.sector] || 0) + 1;
     }
     return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([s, cnt]) => ({ value: s, label: sectorLabelJp(s), count: cnt }));
-  }, [universe, activeGrades, fundaPassOnly, mcapFilter]);
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, mcapFilter]);
   const mcapOptions = useMemo(() => {
     const items = universe?.items || [];
     const map = {};
     for (const it of items) {
       if (!it.mcap_band) continue;
       // mcap 次元自身は除き (自己排除防止)、他の active facet を適用
-      if (!itemPasses(it, activeGrades, { fundaPassOnly, sectors: sectorFilter, mcapBands: [it.mcap_band] })) continue;
+      if (!itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, sectors: sectorFilter, mcapBands: [it.mcap_band] })) continue;
       map[it.mcap_band] = (map[it.mcap_band] || 0) + 1;
     }
     return MCAP_BANDS.filter((b) => map[b.key]).map((b) => ({ ...b, count: map[b.key] || 0 }));
-  }, [universe, activeGrades, fundaPassOnly, sectorFilter]);
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, sectorFilter]);
 
   // Pass 3d (修正C): funda_pass chip に件数を表示するための faceted count。
-  // 件数 = funda_pass=true かつ grades + sector + mcap を通過した件数 (日付ではない)。
+  // 件数 = funda_pass=true かつ grades + ocf + sector + mcap を通過した件数 (日付ではない)。
+  // 自己 (funda_pass) は直接 filter するため extra に含めない。他次元 (ocfMarginOnly 含む) は反映。
   const fundaPassCount = useMemo(() => {
     const items = universe?.items || [];
     return items.filter(
       (it) => it.funda_pass === true &&
-        itemPasses(it, activeGrades, { sectors: sectorFilter, mcapBands: mcapFilter })
+        itemPasses(it, activeGrades, { ocfMarginOnly, sectors: sectorFilter, mcapBands: mcapFilter })
     ).length;
-  }, [universe, activeGrades, sectorFilter, mcapFilter]);
+  }, [universe, activeGrades, ocfMarginOnly, sectorFilter, mcapFilter]);
+
+  // Sprint 3: 営業CFマージン chip の faceted count (Trust Cliff C-3: chip count = 実表示件数)。
+  // 件数 = ocf_margin_pct >= 15 かつ grades + funda_pass + sector + mcap を通過した件数。
+  // 自己 (ocf_margin) は直接 filter するため extra に含めない (自己排除)。null = 除外 (honest)。
+  const ocfMarginCount = useMemo(() => {
+    const items = universe?.items || [];
+    return items.filter(
+      (it) => it[OCF_MARGIN_FACET.field] != null &&
+        it[OCF_MARGIN_FACET.field] >= OCF_MARGIN_FACET.threshold &&
+        itemPasses(it, activeGrades, { fundaPassOnly, sectors: sectorFilter, mcapBands: mcapFilter })
+    ).length;
+  }, [universe, activeGrades, fundaPassOnly, sectorFilter, mcapFilter]);
 
   return (
     <section className="rounded-2xl bg-[var(--bg-card)] p-6">
@@ -473,6 +519,7 @@ export default function CustomScreenerPanel({
               if (mcapFilter.length > 0) parts.push(mcapFilter.map((k) => MCAP_BANDS.find((b) => b.key === k)?.label || k).join('・'));
               if (sectorFilter.length > 0) parts.push(sectorFilter.map(sectorLabelJp).join('・'));
               if (fundaPassOnly) parts.push('5条件達成');
+              if (ocfMarginOnly) parts.push(OCF_MARGIN_FACET.labelShort);
               const overrideParts = Object.entries(overrides).filter(([, v]) => v && v !== 'off').map(([k]) => FACET_SHORT_LABEL[k] || k);
               if (overrideParts.length > 0) parts.push(overrideParts.join('・'));
               if (parts.length === 0) return null;
@@ -529,6 +576,32 @@ export default function CustomScreenerPanel({
                       最新評価: {universe.freshness.funda_pass}
                     </p>
                   )}
+                </div>
+              )}
+
+              {/* (2a-2) Sprint 3: 営業CFマージン binary chip — 常時鮮度の上流ファンダ品質。
+                  funda_pass (決算イベント駆動) とは別次元のため別ヘッダーで視覚区別 (§0-2 2段階)。
+                  screener_v2 scope 限定 (legacy には漏らさない、SPEC §6)。tier=free (件数表示)。
+                  色運用: 緑は「上昇」予約色のため filter chip は兄弟と統一の accent/muted。
+                  gold/green バッジによる 2段階区別は Sprint 4 hero scope (§0-2「gold accent バッジ」)。 */}
+              {screenerV2 && universe.freshness?.ocf_margin && (
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">ファンダ品質フィルター</p>
+                  <Chip
+                    size="sm"
+                    variant="filter"
+                    pressed={ocfMarginOnly}
+                    tone={ocfMarginOnly ? 'accent' : 'muted'}
+                    title={OCF_MARGIN_FACET.tooltip}
+                    onClick={() => setOcfMarginOnly((v) => !v)}
+                    data-testid="screener-facet-ocf_margin_pct"
+                  >
+                    {OCF_MARGIN_FACET.label}
+                    <span className="ml-1 tabular-nums opacity-70">({ocfMarginCount})</span>
+                  </Chip>
+                  <p className="mt-0.5 ml-1 text-[10px] text-[var(--text-muted)] opacity-60">
+                    最新更新: {universe.freshness.ocf_margin}
+                  </p>
                 </div>
               )}
 
@@ -714,7 +787,7 @@ export default function CustomScreenerPanel({
           {/* ── Pass C: 適用中フィルタ bar (詳細閉時もサマリ chip を visible に保つ) ── */}
           {(() => {
             const activeOverrides = Object.entries(overrides).filter(([, v]) => v && v !== 'off');
-            const hasActive = activeOverrides.length > 0 || sectorFilter.length > 0 || mcapFilter.length > 0 || fundaPassOnly;
+            const hasActive = activeOverrides.length > 0 || sectorFilter.length > 0 || mcapFilter.length > 0 || fundaPassOnly || ocfMarginOnly;
             if (!hasActive) return null;
             return (
               <div
@@ -795,10 +868,25 @@ export default function CustomScreenerPanel({
                   </Chip>
                 )}
 
+                {/* Sprint 3: 営業CFマージン (上流ファンダ品質) */}
+                {ocfMarginOnly && (
+                  <Chip
+                    size="xs"
+                    variant="filter"
+                    pressed
+                    tone="accent"
+                    onClick={() => setOcfMarginOnly(false)}
+                    data-testid="screener-applied-ocf_margin_pct"
+                  >
+                    {OCF_MARGIN_FACET.labelShort}
+                    <span className="ml-1 opacity-70">×</span>
+                  </Chip>
+                )}
+
                 {/* すべて解除 */}
                 <button
                   className="ml-auto text-[11px] text-[var(--text-muted)] hover:text-[var(--color-loss)] transition-colors"
-                  onClick={() => { setPreset('standard'); setOverrides({}); setSectorFilter([]); setMcapFilter([]); setFundaPassOnly(false); }}
+                  onClick={() => { setPreset('standard'); setOverrides({}); setSectorFilter([]); setMcapFilter([]); setFundaPassOnly(false); setOcfMarginOnly(false); }}
                   data-testid="screener-applied-clear"
                 >
                   すべて解除
