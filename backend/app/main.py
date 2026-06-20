@@ -19722,6 +19722,340 @@ async def scanner_breakout(
     }
 
 
+# ── 統合 universe endpoint (v3 screener master-detail、 SPEC_2026-06-20 §0-1) ──────
+# additive faceting 用に全 ticker のシグナルを 1 行に束ねて返す純データ endpoint。
+# Supabase は SQL JOIN 不可 → テーブル単位 fetch + Python in-memory join (ticker キー)。
+# cache = base 1 本 (tier 不変) + per-request tier mask。 LLM 非使用 (数値物理層のみ、 §4 Guard)。
+# 6 体合議 (2026-06-20) 必須条件反映: 1000 行ページング / base cache + mask / per-facet freshness /
+# locked と 測定外(null) の物理分離 / 数値丸め。
+_UNIVERSE_FULL_CACHE: dict[str, dict] = {}   # {str(universe_size): {"ts": float, "payload": dict}}
+_UNIVERSE_FULL_TTL = 12 * 3600               # 12h (nightly batch と整合、 stale fallback あり)
+_UNIVERSE_BASE_CACHE: dict[str, dict] = {}   # {str(universe_size): {"ts": float, "base": dict}}
+_UNIVERSE_BASE_TTL = 24 * 3600               # 24h (時価総額の変動は緩やか、 universe-meta と同 TTL)
+
+
+def _uni_round(v, n: int = 2):
+    """payload 圧縮 + 表示安定のため数値を小数 n 桁に丸める (None / 非数値は素通し)。"""
+    try:
+        if v is None:
+            return None
+        return round(float(v), n)
+    except (TypeError, ValueError):
+        return v
+
+
+async def _fetch_tier_from_auth(authorization: str | None) -> str:
+    """JWT → subscriptions.tier を解決し 'free' | 'pro' | 'premium' を返す (SPEC §0-1 tier 集約)。
+
+    _fetch_premium_status_from_auth (bool 版) の tier 文字列版。 status=active 行の tier を読む。
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        return "free"
+    try:
+        user_info = await _verify_supabase_jwt(authorization)
+        user_id = user_info.get("id") or user_info.get("sub")
+        if not user_id:
+            return "free"
+        sb = _get_supabase_service()
+        if sb is None:
+            return "free"
+        res = (
+            sb.table("subscriptions")
+            .select("tier,status")
+            .eq("user_id", user_id)
+            .eq("status", "active")
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        if rows:
+            t = str(rows[0].get("tier") or "free").lower()
+            if t in ("pro", "premium"):
+                return t
+        return "free"
+    except Exception as e:
+        print(f"[universe] tier check failed: {e}")
+        return "free"
+
+
+async def _fetch_screener_base_universe(universe_size: int) -> dict[str, dict]:
+    """FMP /stable/company-screener で base universe を取得 (ticker→{name,sector,mcap_band})。
+
+    universe-meta (_UNIVERSE_META_CACHE) と同 query だが companyName も保持する。
+    name 解決の追加 FMP call を避けるため本 endpoint 専用に 24h cache。
+    """
+    ck = str(universe_size)
+    now = _time.time()
+    cached = _UNIVERSE_BASE_CACHE.get(ck)
+    if cached and (now - float(cached.get("ts", 0) or 0)) < _UNIVERSE_BASE_TTL:
+        return cached.get("base") or {}
+    api_key = os.environ.get("FMP_API_KEY", "")
+    if not api_key:
+        return (cached or {}).get("base") or {}
+    try:
+        import httpx as _httpx_uni
+        lim = max(1, min(int(universe_size or 3000), 3000))
+        url = (
+            f"https://financialmodelingprep.com/stable/company-screener"
+            f"?marketCapMoreThan=500000000"
+            f"&priceMoreThan=5&volumeMoreThan=200000"
+            f"&isActivelyTrading=true&isEtf=false&isFund=false"
+            f"&exchange=NASDAQ,NYSE&limit={lim}&apikey={api_key}"
+        )
+        async with _httpx_uni.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            data = resp.json()
+        if not isinstance(data, list):
+            return (cached or {}).get("base") or {}
+        base: dict[str, dict] = {}
+        for r in data:
+            if not isinstance(r, dict):
+                continue
+            sym = str(r.get("symbol") or "").upper().strip()
+            if not sym:
+                continue
+            base[sym] = {
+                "name": (r.get("companyName") or None),
+                "sector": (r.get("sector") or None),
+                "mcap_band": _mcap_band(r.get("marketCap")),
+            }
+        if not base:
+            return (cached or {}).get("base") or {}
+        _UNIVERSE_BASE_CACHE[ck] = {"ts": now, "base": base}
+        return base
+    except Exception as e:
+        print(f"[universe] base fetch failed ({e})")
+        return (cached or {}).get("base") or {}
+
+
+def _fetch_all_rows_paged(
+    sb, table: str, columns: str, *, eq: dict | None = None,
+    gte: dict | None = None, order: str | None = None,
+    page: int = 1000, hard_cap: int = 60000,
+) -> list[dict]:
+    """Supabase の暗黙 1000 行上限を .range() ページングで突破して全行取得 (SPEC §0-1)。
+
+    取りこぼし = サイレント欠落 = Trust Cliff のため 3000 universe では必須。
+    """
+    out: list[dict] = []
+    offset = 0
+    while True:
+        q = sb.table(table).select(columns)
+        for k, v in (eq or {}).items():
+            q = q.eq(k, v)
+        for k, v in (gte or {}).items():
+            q = q.gte(k, v)
+        if order:
+            q = q.order(order, desc=True)
+        try:
+            rows = (q.range(offset, offset + page - 1).execute().data) or []
+        except Exception as e:
+            print(f"[universe] paged fetch {table} failed at offset {offset}: {e}")
+            break
+        out.extend(rows)
+        if len(rows) < page:
+            break
+        offset += page
+        if offset >= hard_cap:
+            print(f"[universe] {table} hit hard_cap {hard_cap}, truncating")
+            break
+    return out
+
+
+async def _build_universe_payload(sb, universe_size: int) -> dict:
+    """5 テーブルを ticker キーで in-memory join し unmasked full payload を返す (tier 不変)。"""
+    base = await _fetch_screener_base_universe(universe_size)
+    if not base:
+        return {"as_of": None, "freshness": {}, "items": []}
+
+    freshness: dict[str, str | None] = {}
+
+    # screener_fundamentals (CAN-SLIM C/A/S/I 数値、 free) — 最新 calc_date 全行
+    sf_map: dict[str, dict] = {}
+    sf_cd, _sf_n = _latest_valid_calc_date(sb, "screener_fundamentals", "calc_date", 200)
+    freshness["funda"] = sf_cd
+    if sf_cd:
+        for r in _fetch_all_rows_paged(
+            sb, "screener_fundamentals",
+            "ticker,eps_yoy_pct,eps_cagr_3y,roe,near_high_pct_scaled,"
+            "buyback_yield_pct,volume_surge_pct,inst_holders_qoq_pct",
+            eq={"calc_date": sf_cd},
+        ):
+            t = str(r.get("ticker") or "").upper()
+            if t:
+                sf_map[t] = r
+
+    # rs_ratings (RS percentile、 free) — 最新 calc_date 全行
+    rs_map: dict[str, dict] = {}
+    rs_cd, _rs_n = _latest_valid_calc_date(sb, "rs_ratings", "calc_date", 200)
+    freshness["rs"] = rs_cd
+    if rs_cd:
+        for r in _fetch_all_rows_paged(
+            sb, "rs_ratings",
+            "ticker,universe_percentile,rs_vs_spy_pct,self_percentile",
+            eq={"calc_date": rs_cd},
+        ):
+            t = str(r.get("ticker") or "").upper()
+            if t:
+                rs_map[t] = r
+
+    # pattern_signals cup_handle (Premium) — 直近 7 日、 per-ticker 最新
+    cup_map: dict[str, dict] = {}
+    cup_latest: str | None = None
+    cup_cut = (date.today() - timedelta(days=7)).isoformat()
+    for r in _fetch_all_rows_paged(
+        sb, "pattern_signals", "ticker,state,signal_date",
+        eq={"pattern_type": "cup_handle"}, gte={"signal_date": cup_cut},
+        order="signal_date",
+    ):
+        t = str(r.get("ticker") or "").upper()
+        if t and t not in cup_map:
+            cup_map[t] = r
+            sd = r.get("signal_date")
+            if sd and (cup_latest is None or sd > cup_latest):
+                cup_latest = sd
+    freshness["cup"] = cup_latest
+
+    # pattern_signals breakout (Premium) — 直近 2 日、 per-ticker 最新
+    bo_map: dict[str, dict] = {}
+    bo_latest: str | None = None
+    bo_cut = (date.today() - timedelta(days=2)).isoformat()
+    for r in _fetch_all_rows_paged(
+        sb, "pattern_signals", "ticker,state,payload,signal_date",
+        eq={"pattern_type": "breakout"}, gte={"signal_date": bo_cut},
+        order="signal_date",
+    ):
+        t = str(r.get("ticker") or "").upper()
+        if t and t not in bo_map:
+            bo_map[t] = r
+            sd = r.get("signal_date")
+            if sd and (bo_latest is None or sd > bo_latest):
+                bo_latest = sd
+    freshness["breakout"] = bo_latest
+
+    # earnings_evaluation funda_pass (free) — 95 日窓の all_passed=True
+    funda_pass: set[str] = set()
+    funda_latest: str | None = None
+    funda_cut = (date.today() - timedelta(days=95)).isoformat()
+    for r in _fetch_all_rows_paged(
+        sb, "earnings_evaluation", "ticker,evaluation_date,all_passed",
+        eq={"all_passed": True}, gte={"evaluation_date": funda_cut},
+        order="evaluation_date",
+    ):
+        t = str(r.get("ticker") or "").upper()
+        if t:
+            funda_pass.add(t)
+            ed = r.get("evaluation_date")
+            if ed and (funda_latest is None or ed > funda_latest):
+                funda_latest = ed
+    freshness["funda_pass"] = funda_latest
+
+    # ── merge (base を軸に ticker キー join。 sf/rs 欠落=測定外 null、 NULL≠false) ──
+    items: list[dict] = []
+    for tk, meta in base.items():
+        sf = sf_map.get(tk)
+        rs = rs_map.get(tk)
+        cup = cup_map.get(tk)
+        bo = bo_map.get(tk)
+        bo_payload = (bo or {}).get("payload") or {}
+        items.append({
+            "ticker": tk,
+            "name": meta.get("name"),
+            "sector": meta.get("sector"),
+            "mcap_band": meta.get("mcap_band"),
+            # RS (free) — 測定外は null
+            "rs_percentile": (rs or {}).get("universe_percentile"),
+            "rs_vs_spy_pct": _uni_round((rs or {}).get("rs_vs_spy_pct")),
+            # ファンダ 5 条件 pass (free)
+            "funda_pass": tk in funda_pass,
+            # CAN-SLIM 数値 (free) — sf 欠落=測定外 null (false と区別)
+            "eps_yoy_pct": _uni_round((sf or {}).get("eps_yoy_pct")),
+            "eps_cagr_3y": _uni_round((sf or {}).get("eps_cagr_3y")),
+            "roe": _uni_round((sf or {}).get("roe")),
+            "buyback_yield_pct": _uni_round((sf or {}).get("buyback_yield_pct")),
+            "volume_surge_pct": _uni_round((sf or {}).get("volume_surge_pct")),
+            "inst_holders_qoq_pct": _uni_round((sf or {}).get("inst_holders_qoq_pct")),
+            # near_high (Pro gate) — N 条件
+            "near_high_pct_scaled": _uni_round((sf or {}).get("near_high_pct_scaled")),
+            # cup / breakout (Premium gate)
+            "cup_state": (cup or {}).get("state"),
+            "breakout_state": (bo or {}).get("state"),
+            "is_new_52w_high": bo_payload.get("is_new_52w_high"),
+        })
+
+    # headline as_of = 非 null freshness の最小値 (最も古いシグナル = 過大表示しない)
+    fresh_vals = [v for v in freshness.values() if v]
+    as_of = min(fresh_vals) if fresh_vals else None
+    return {"as_of": as_of, "freshness": freshness, "items": items}
+
+
+@app.get("/api/scanner/universe")
+async def scanner_universe(
+    universe_size: int = 3000,
+    authorization: str | None = Header(None),
+) -> dict:
+    """統合 universe: 全 ticker のシグナルを 1 行に束ねて返す (additive faceting の母集団)。
+
+    SPEC_2026-06-20 §0-1。 base (FMP company-screener) + screener_fundamentals + rs_ratings
+    + pattern_signals(cup_handle, breakout) + earnings_evaluation(funda_pass) を ticker キー join。
+    tier gate は backend 集約: free=ファンダ+RS / pro=+near_high / premium=+cup/breakout。
+    locked facet は値 null + locked_facets に列挙 (測定外 null とは facet∈locked_facets で判別)。
+    """
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    tier = await _fetch_tier_from_auth(authorization)
+    ck = str(int(universe_size or 3000))
+    now = _time.time()
+
+    # base cache (tier 不変の full payload を 1 本保持)
+    cached = _UNIVERSE_FULL_CACHE.get(ck)
+    payload = None
+    if cached and (now - float(cached.get("ts", 0) or 0)) < _UNIVERSE_FULL_TTL:
+        payload = cached.get("payload")
+    if payload is None:
+        payload = await _build_universe_payload(sb, int(ck))
+        if payload.get("items"):
+            _UNIVERSE_FULL_CACHE[ck] = {"ts": now, "payload": payload}
+        elif cached:  # stale fallback (空より旧データ)
+            payload = cached.get("payload") or payload
+
+    # per-request tier mask (cache は不変、 locked field を copy して null 化)
+    locked: list[str] = []
+    if tier != "premium":
+        locked += ["cup", "breakout", "both", "oneill"]
+    if tier not in ("pro", "premium"):
+        locked += ["near_high"]
+    locked_set = set(locked)
+
+    base_items = payload.get("items", [])
+    if locked_set:
+        items = []
+        for it in base_items:
+            m = dict(it)
+            if "cup" in locked_set:
+                m["cup_state"] = None
+            if "breakout" in locked_set:
+                m["breakout_state"] = None
+                m["is_new_52w_high"] = None
+            if "near_high" in locked_set:
+                m["near_high_pct_scaled"] = None
+            items.append(m)
+    else:
+        items = base_items
+
+    return {
+        "as_of": payload.get("as_of"),
+        "freshness": payload.get("freshness", {}),
+        "tier": tier,
+        "count": len(items),
+        "locked_facets": locked,
+        "items": items,
+    }
+
+
 # ── フィードバック収集 (v142、 動画教訓 #2、 pre-release ユーザーの声) ──────────
 # 3体合議推奨 #1: 最初のユーザーの生声を集めて改善駆動する。
 # backend 集約 (service_role insert + Resend 通知)、 anon/authenticated の直接 DB 面は作らない。
