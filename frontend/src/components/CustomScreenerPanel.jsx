@@ -961,11 +961,20 @@ export default function CustomScreenerPanel({
                       data-rank-top={isTop ? 'true' : undefined}
                       style={{ opacity: opacityVal, cursor: 'pointer', userSelect: 'none' }}
                     >
-                      {/* Sprint 5 Pass B: 選択 checkbox (hover で出現、選択中は常時表示) */}
+                      {/* Sprint 5 Pass B: ロゴ ⇄ 選択 checkbox を同一セルでスワップ。
+                          hover/選択中は checkbox、それ以外はロゴを表示 → 行幅を増やさず RS clip を回避
+                          (狭幅 screener カラム対策、[[feedback_snap_catches_layout_context_breaks]])。 */}
                       <span
-                        className={`shrink-0 flex items-center${isSelected ? ' opacity-100' : ' opacity-0 group-hover:opacity-100'} transition-opacity`}
-                        style={{ width: 16 }}
+                        className="shrink-0 relative flex items-center justify-center"
+                        style={{ width: isTop ? 28 : 24, height: isTop ? 28 : 24 }}
                       >
+                        {/* ロゴ: 非hover かつ 非選択 のとき表示 (pointer-events-none で下の checkbox を遮らない) */}
+                        <span
+                          className={`absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity ${isSelected ? 'opacity-0' : 'opacity-100 group-hover:opacity-0'}`}
+                        >
+                          <CompanyLogo ticker={it.ticker} size={isTop ? 28 : 24} monoFallback />
+                        </span>
+                        {/* checkbox: hover または 選択中 のみ表示 + interactive (非表示時は pointer-events-none で誤タップ防止) */}
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -980,13 +989,9 @@ export default function CustomScreenerPanel({
                           }}
                           data-testid={`screener-row-select-${it.ticker}`}
                           aria-label={`${it.ticker} を選択`}
+                          className={`relative transition-opacity ${isSelected ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'}`}
                           style={{ cursor: 'pointer', accentColor: 'var(--color-accent)' }}
                         />
-                      </span>
-
-                      {/* ロゴ */}
-                      <span className="shrink-0">
-                        <CompanyLogo ticker={it.ticker} size={isTop ? 28 : 24} monoFallback />
                       </span>
 
                       {/* ティッカー + 会社名 */}
