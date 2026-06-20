@@ -284,7 +284,9 @@ const CUP_STATE_TONE = {
   breakout_pending: 'warning',
   breakout_confirmed: 'gain',
   cup_completing: 'accent',
-  breakout_extended: 'muted',
+  // v229 (qa-dogfooder 案): 過延伸 (押し目待ち) を amber で clean cup と視覚区切り。
+  //   per-ticker extended chip (v228 tone=warning) と一貫。chase 禁止規律を色でも直伝 (§5/§38)。
+  breakout_extended: 'warning',
 };
 
 // ── Phase 3 Sprint 5b: CAN-SLIM C/A/N/S/I バッジ列 ─────────────────────────
