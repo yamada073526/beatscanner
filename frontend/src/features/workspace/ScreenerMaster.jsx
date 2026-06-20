@@ -84,20 +84,27 @@ class MasterErrorBoundary extends Component {
 }
 
 /**
- * C-5: screener_v2 feature flag
- *   - default ON (screener_v2 query param が未指定 or "1" → 新構造)
- *   - ?screener_legacy=1 → 旧構造 kill switch
- *   Workspace.jsx 側でも同一ロジックを使用する。
+ * C-5 / C-16: screener_v2 feature flag
+ *   - 移行期間 (Sprint 2-5 実装中): opt-in default OFF (?screener_v2=1 で新構造)
+ *   - 昇格後 (C-16 ゲート pass): default の return を true に変更 → C-5 最終形 (default ON)
+ *   Workspace.jsx 側でも同一ロジックを使用する (import)。
  */
 export function isScreenerV2() {
-  if (typeof window === 'undefined') return true;
+  // 6 体合議 C-16 昇格ゲート: dogfood pass + Trust Cliff pass + metrics 確認後に default ON へ。
+  // feedback_feature_flag_dual_mode: URL param (一時) 優先 + localStorage (永続)。
+  if (typeof window === 'undefined') return false;
   try {
     const params = new URLSearchParams(window.location.search);
-    // kill switch: ?screener_legacy=1 で旧構造に退避
-    if (params.get('screener_legacy') === '1') return false;
-    return true;
+    // URL 優先: ?screener_v2=1 で新構造 opt-in / ?screener_v2=0 で明示 OFF
+    if (params.get('screener_v2') === '1') return true;
+    if (params.get('screener_v2') === '0') return false;
+    // 永続 opt-in (dogfood 継続用)
+    try {
+      if (localStorage.getItem('screener_v2') === '1') return true;
+    } catch {}
+    return false; // 移行期間 default = 旧並置 (昇格後に true へ)
   } catch {
-    return true;
+    return false;
   }
 }
 
