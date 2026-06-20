@@ -184,6 +184,10 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
     return scored.map((s) => s.it);
   }, [filteredItems, activeGrades]);
 
+  // Pass C: フィルタ変更で結果集合が変わったら件数キャップを 100 件に戻す
+  // (「残りN件を表示」を一度押しても、新しい絞り込みでは描画負荷抑制の意図を維持)。
+  useEffect(() => { setShowAllResults(false); }, [filteredItems]);
+
   // Pass 3b: preset 別の total 件数 (緩い/標準/厳しい) を live 算出。ハードコード禁止。
   const presetCounts = useMemo(() => {
     const items = universe?.items || [];

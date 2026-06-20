@@ -20,6 +20,7 @@ import { useFtdMap, ftdRegime, ftdToneColor } from './ftd.js';
 const BANNER_STYLE = {
   display: 'flex',
   alignItems: 'center',
+  flexWrap: 'wrap',
   gap: 'var(--space-2, 8px)',
   padding: 'var(--space-2, 8px) var(--space-3, 12px)',
   marginBottom: 'var(--space-3, 12px)',
@@ -58,7 +59,9 @@ export default function FtdRegimeBanner() {
       <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
       <span style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.04em', flexShrink: 0 }}>市場局面</span>
       <span style={{ fontSize: 12, fontWeight: 700, color, whiteSpace: 'nowrap', flexShrink: 0 }}>{regime.label}</span>
-      <span style={{ fontSize: 11, color: 'var(--text-secondary)', minWidth: 0 }}>
+      {/* 狭い screener カラムでは headline までで1行が埋まり、detail は 2 行目へ wrap して
+          カラム全幅で正常折返し (flex-basis 220px + 親 flexWrap)。広い Pane2 では従来通り inline 全文。 */}
+      <span style={{ fontSize: 11, color: 'var(--text-secondary)', flex: '1 1 220px', minWidth: 0 }}>
         {regime.detail}
       </span>
     </div>
