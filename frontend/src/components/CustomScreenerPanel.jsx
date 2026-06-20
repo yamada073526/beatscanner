@@ -63,12 +63,16 @@ function loadUniverse() {
   if (_universePromise) return _universePromise;
   _universePromise = fetchScannerUniverse(3000)
     .then((res) => {
-      _universeCache = res || { items: [], count: 0, locked_facets: [], freshness: {}, as_of: null, tier: 'free' };
+      // Pass 3d (修正D): res が null/undefined = fetch 失敗として reject 伝播。
+      // 旧実装は null を空オブジェクトとして cache → useEffect の .catch に到達せず
+      // universeError が set されなかった (error UI と empty UI の区別不能)。
+      if (!res) { _universePromise = null; throw new Error('universe fetch failed'); }
+      _universeCache = res;
       return _universeCache;
     })
-    .catch(() => {
+    .catch((e) => {
       _universePromise = null; // 失敗時は次回 retry を許可
-      return { items: [], count: 0, locked_facets: [], freshness: {}, as_of: null, tier: 'free' };
+      throw e; // reject 伝播 → useEffect の .catch で universeError set
     });
   return _universePromise;
 }
@@ -1611,22 +1615,40 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
   };
 
   // Pass 3c: sector / mcap 選択肢を universe から live 算出 (count 付き)。
+  // Pass 3d (修正A): 全件 universe 集計から faceted count へ変更 (Trust Cliff C-2 修正)。
+  // sector 次元自身は "自分の bucket を消さない" ため除外し、grades + funda_pass + mcap を適用。
   const sectorOptions = useMemo(() => {
+    const items = universe?.items || [];
     const map = {};
-    for (const it of universe?.items || []) {
+    for (const it of items) {
       if (!it.sector) continue;
+      // sector 次元自身は除き (自己排除防止)、他の active facet を適用
+      if (!itemPasses(it, activeGrades, { fundaPassOnly, mcapBands: mcapFilter, sectors: [it.sector] })) continue;
       map[it.sector] = (map[it.sector] || 0) + 1;
     }
     return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([s, cnt]) => ({ value: s, label: sectorLabelJp(s), count: cnt }));
-  }, [universe]);
+  }, [universe, activeGrades, fundaPassOnly, mcapFilter]);
   const mcapOptions = useMemo(() => {
+    const items = universe?.items || [];
     const map = {};
-    for (const it of universe?.items || []) {
+    for (const it of items) {
       if (!it.mcap_band) continue;
+      // mcap 次元自身は除き (自己排除防止)、他の active facet を適用
+      if (!itemPasses(it, activeGrades, { fundaPassOnly, sectors: sectorFilter, mcapBands: [it.mcap_band] })) continue;
       map[it.mcap_band] = (map[it.mcap_band] || 0) + 1;
     }
     return MCAP_BANDS.filter((b) => map[b.key]).map((b) => ({ ...b, count: map[b.key] || 0 }));
-  }, [universe]);
+  }, [universe, activeGrades, fundaPassOnly, sectorFilter]);
+
+  // Pass 3d (修正C): funda_pass chip に件数を表示するための faceted count。
+  // 件数 = funda_pass=true かつ grades + sector + mcap を通過した件数 (日付ではない)。
+  const fundaPassCount = useMemo(() => {
+    const items = universe?.items || [];
+    return items.filter(
+      (it) => it.funda_pass === true &&
+        itemPasses(it, activeGrades, { sectors: sectorFilter, mcapBands: mcapFilter })
+    ).length;
+  }, [universe, activeGrades, sectorFilter, mcapFilter]);
 
   async function runCupFilter(filterKey) {
     // Pass 3a: single-select 挙動温存。選択 = 要素1つの Set (他は消す)
@@ -1854,6 +1876,8 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
           </div>
 
           {/* ── (2) funda_pass binary chip ── */}
+          {/* Pass 3d (修正C): 件数を表示 (日付を括弧内に出すと件数と誤認される Trust Cliff を修正)。
+              日付は chip の外に独立した注記として配置。 */}
           {universe.freshness?.funda_pass && (
             <div>
               <Chip
@@ -1865,10 +1889,13 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
                 data-testid="screener-facet-funda_pass"
               >
                 最新決算で5条件達成
-                {universe.freshness.funda_pass && (
-                  <span className="ml-1 text-[10px] opacity-60">({universe.freshness.funda_pass})</span>
-                )}
+                <span className="ml-1 tabular-nums opacity-70">({fundaPassCount})</span>
               </Chip>
+              {universe.freshness.funda_pass && (
+                <p className="mt-0.5 ml-1 text-[10px] text-[var(--text-muted)] opacity-60">
+                  最新評価: {universe.freshness.funda_pass}
+                </p>
+              )}
             </div>
           )}
 
@@ -2155,23 +2182,25 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
                       onUpgrade?.();
                     }
                   };
+                  /* Pass 3d (修正E): raw rgba → CSS class (screener-locked-chip) へ変更。
+                     Chip primitive に style prop を渡す escape hatch を禁止。
+                     wrapper div に screener-locked-chip class で tint を CSS から付与。
+                     サブラベル: text-[9px] → text-[10px] (最小フォント下限遵守)。 */
                   return (
-                    <div key={key} className="flex flex-col items-start gap-0.5">
-                      <Chip
-                        size="sm"
-                        variant="filter"
-                        tone="accent"
-                        onClick={handleLockClick}
-                        data-testid={`screener-locked-${key}`}
-                        style={{
-                          background: 'rgba(56,189,248,0.06)',
-                          borderColor: 'rgba(56,189,248,0.25)',
-                        }}
-                      >
-                        <Lock size={11} strokeWidth={2} aria-hidden style={{ marginRight: 4, verticalAlign: '-1px' }} />
-                        {LOCKED_FACET_LABELS[key] || key}
-                      </Chip>
-                      <span className="ml-1 text-[9px] text-[var(--text-muted)]">
+                    <div key={key} className="screener-locked-chip-wrapper flex flex-col items-start gap-0.5">
+                      <div className="screener-locked-chip">
+                        <Chip
+                          size="sm"
+                          variant="filter"
+                          tone="accent"
+                          onClick={handleLockClick}
+                          data-testid={`screener-locked-${key}`}
+                        >
+                          <Lock size={11} strokeWidth={2} aria-hidden style={{ marginRight: 4, verticalAlign: '-1px' }} />
+                          {LOCKED_FACET_LABELS[key] || key}
+                        </Chip>
+                      </div>
+                      <span className="ml-1 text-[10px] text-[var(--text-muted)]">
                         {isProTier ? 'Pro で解錠' : 'Premium で解錠'}
                       </span>
                     </div>
@@ -2241,11 +2270,17 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
                     <span className="flex-1 truncate text-xs text-[var(--text-secondary)]">{it.name || it.ticker}</span>
                     <span className="shrink-0 text-xs text-[var(--text-muted)]">{sectorLabelJp(it.sector)}</span>
                     {it.rs_percentile != null && (
-                      <span className="shrink-0 w-14 text-right text-xs tabular-nums" style={{ color: it.rs_percentile >= 85 ? 'var(--color-gain)' : 'var(--text-muted)' }}>
+                      /* Pass 3d (修正B): color polarity 撤廃 (§38 買い断定誘導防止)。
+                         RS≥85 は fontWeight=600 のみで強調、色は text-secondary 固定。 */
+                      <span
+                        className="shrink-0 w-14 text-right text-xs tabular-nums text-[var(--text-secondary)]"
+                        style={{ fontWeight: it.rs_percentile >= 85 ? 600 : 400 }}
+                      >
                         RS {it.rs_percentile.toFixed(0)}
                       </span>
                     )}
                     {it.eps_yoy_pct != null && (
+                      /* TODO Sprint4: ADR 外貨/銀行 EPS 偽値 (BABA eps_yoy=-94.8 等) を表示抑止 [task#13] */
                       <span className="shrink-0 w-16 text-right text-xs tabular-nums text-[var(--text-muted)]">
                         EPS {it.eps_yoy_pct > 0 ? '+' : ''}{it.eps_yoy_pct.toFixed(0)}%
                       </span>

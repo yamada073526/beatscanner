@@ -13415,3 +13415,20 @@ body.is-digest-resizing {
     transition: none;
   }
 }
+
+/* ── Pass 3d: locked chip token (raw rgba/hex 排除) ────────────────────────────
+   Chip primitive に style prop を渡す escape hatch を避け、
+   wrapper div の className 経由で tint を当てる。
+   §0-5: 鍵は「壁」でなく「入口」= accent 系淡背景 + Lock アイコン。
+   color-mix で design token (--color-accent) を参照し、raw rgba 直書き禁止を遵守。 */
+:where([data-testid="screener-master"]) .screener-locked-chip-wrapper {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+:where([data-testid="screener-master"]) .screener-locked-chip {
+  background: color-mix(in srgb, var(--color-accent) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 25%, transparent);
+  border-radius: 9999px;
+}
