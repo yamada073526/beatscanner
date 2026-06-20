@@ -21999,6 +21999,17 @@ async def cron_canslim_scan(
                                     # 既存 roe が % 格納なのと同パターン
                                     ocf_margin_pct = round(_ttm_ocf / _ttm_revenue * 100, 2)
                                     fcf_margin_pct = round(_ttm_fcf / _ttm_revenue * 100, 2)
+                                    # sanity clamp (Sprint 1 hotfix): revenue 極小銘柄 (IPO直後/プレ収益
+                                    # マイクロキャップ) でマージンが爆発する artifact を除外。ロイヤリティ
+                                    # 事業の実態 (~108%) は保持、343%/1135%/-30385% 等の計算 artifact を
+                                    # null 化 (Trust Cliff: 異常値を「優良」と表示しない)。閾値 150 は
+                                    # ロイヤリティ最大 ~108% を通し明白な artifact を弾く根拠。
+                                    if abs(ocf_margin_pct) > 150 or (
+                                        fcf_margin_pct is not None and abs(fcf_margin_pct) > 150
+                                    ):
+                                        ocf_margin_pct = None
+                                        fcf_margin_pct = None
+                                        ocf_margin_null_reason = "out_of_range"
                                 else:
                                     ocf_margin_null_reason = "cf_data_empty"
                             else:
