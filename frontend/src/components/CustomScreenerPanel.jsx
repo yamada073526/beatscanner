@@ -961,20 +961,13 @@ export default function CustomScreenerPanel({
                       data-rank-top={isTop ? 'true' : undefined}
                       style={{ opacity: opacityVal, cursor: 'pointer', userSelect: 'none' }}
                     >
-                      {/* Sprint 5 Pass B: ロゴ ⇄ 選択 checkbox を同一セルでスワップ。
-                          hover/選択中は checkbox、それ以外はロゴを表示 → 行幅を増やさず RS clip を回避
-                          (狭幅 screener カラム対策、[[feedback_snap_catches_layout_context_breaks]])。 */}
+                      {/* dogfood fix Bug1: checkbox は logo と別セル (logo 常時表示・hover で消さない)。
+                          hover/選択時のみ可視 + interactive (非表示時 pointer-events-none で誤タップ防止)。
+                          チップを 2 行目へ移したため 1 行目に checkbox+logo 常時表示の幅が確保できる。 */}
                       <span
-                        className="shrink-0 relative flex items-center justify-center"
-                        style={{ width: isTop ? 28 : 24, height: isTop ? 28 : 24 }}
+                        className={`shrink-0 flex items-center self-center transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'}`}
+                        style={{ width: 16 }}
                       >
-                        {/* ロゴ: 非hover かつ 非選択 のとき表示 (pointer-events-none で下の checkbox を遮らない) */}
-                        <span
-                          className={`absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity ${isSelected ? 'opacity-0' : 'opacity-100 group-hover:opacity-0'}`}
-                        >
-                          <CompanyLogo ticker={it.ticker} size={isTop ? 28 : 24} monoFallback />
-                        </span>
-                        {/* checkbox: hover または 選択中 のみ表示 + interactive (非表示時は pointer-events-none で誤タップ防止) */}
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -989,49 +982,54 @@ export default function CustomScreenerPanel({
                           }}
                           data-testid={`screener-row-select-${it.ticker}`}
                           aria-label={`${it.ticker} を選択`}
-                          className={`relative transition-opacity ${isSelected ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'}`}
                           style={{ cursor: 'pointer', accentColor: 'var(--color-accent)' }}
                         />
                       </span>
 
-                      {/* ティッカー + 会社名 */}
-                      <span className="flex flex-col min-w-0 flex-1">
-                        <span
-                          className="font-mono leading-tight tabular-nums text-[var(--text-primary)]"
-                          style={{ fontWeight: isTop ? 700 : 600, fontSize: isTop ? '0.875rem' : '0.8125rem' }}
-                        >
-                          {it.ticker}
-                        </span>
-                        <span className="truncate text-[0.6875rem] leading-tight text-[var(--text-muted)]">
-                          {it.name || it.ticker}
-                        </span>
+                      {/* ロゴ (常時表示・hover で消さない) */}
+                      <span className="shrink-0 self-center">
+                        <CompanyLogo ticker={it.ticker} size={isTop ? 28 : 24} monoFallback />
                       </span>
 
-                      {/* ヒット理由バッジ (§38 中立色 = neutral/muted。Chip primitive で統一・inline 禁止遵守) */}
-                      {activeFacetsSorted.length > 0 && (
-                        <span className="flex items-center gap-1 shrink-0">
-                          {activeFacetsSorted.map(({ key }) => (
-                            <Chip key={key} size="xs" variant="display" tone="muted">
-                              {FACET_SHORT_LABEL[key] || key}
-                            </Chip>
-                          ))}
-                        </span>
-                      )}
-
-                      {/* RS 数値(右端・控えめ)。EPS YoY 数値は非表示:
-                          (1) 狭幅 screener カラムでの右端クリップ回避
-                          (2) ADR/外貨・銀行の偽 EPS 値 (BABA eps_yoy=-94.8 等) の Trust Cliff 回避 [task#13、reviewer 推奨]
-                          EPS 条件充足は上のヒット理由 Chip「EPS↑/EPS3年」で表現済。 */}
-                      <span className="flex items-center gap-2 shrink-0">
-                        {it.rs_percentile != null && (
-                          /* Pass 3d (修正B): color polarity 撤廃 (§38 買い断定誘導防止) */
+                      {/* dogfood fix Bug2: メイン列を 2 段に分離。
+                          1 行目=ティッカー(左)+RS(右)、2 行目=ヒット理由チップ+会社名。
+                          狭幅でティッカーとチップが横方向に干渉していたため縦に分け、干渉を解消
+                          (高さは元々 ticker+会社名 で 2 行ぶんあり密度不変)。 */}
+                      <span className="flex flex-col min-w-0 flex-1 gap-0.5">
+                        {/* 1 行目: ティッカー + RS */}
+                        <span className="flex items-center justify-between gap-2">
                           <span
-                            className="w-14 text-right text-xs tabular-nums text-[var(--text-secondary)]"
-                            style={{ fontWeight: it.rs_percentile >= 85 ? 600 : 400 }}
+                            className="font-mono leading-tight tabular-nums text-[var(--text-primary)] truncate"
+                            style={{ fontWeight: isTop ? 700 : 600, fontSize: isTop ? '0.875rem' : '0.8125rem' }}
                           >
-                            RS {it.rs_percentile.toFixed(0)}
+                            {it.ticker}
                           </span>
-                        )}
+                          {it.rs_percentile != null && (
+                            /* §38: color polarity 撤廃 (買い断定誘導防止)。RS は数値のみ */
+                            <span
+                              className="shrink-0 text-xs tabular-nums text-[var(--text-secondary)]"
+                              style={{ fontWeight: it.rs_percentile >= 85 ? 600 : 400 }}
+                            >
+                              RS {it.rs_percentile.toFixed(0)}
+                            </span>
+                          )}
+                        </span>
+                        {/* 2 行目: ヒット理由チップ(§38 中立 Chip) + 会社名(truncate)。
+                            EPS YoY 数値は非表示 (ADR偽値 Trust Cliff [task#13]、EPS 充足は Chip で表現)。 */}
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          {activeFacetsSorted.length > 0 && (
+                            <span className="flex items-center gap-1 shrink-0">
+                              {activeFacetsSorted.map(({ key }) => (
+                                <Chip key={key} size="xs" variant="display" tone="muted">
+                                  {FACET_SHORT_LABEL[key] || key}
+                                </Chip>
+                              ))}
+                            </span>
+                          )}
+                          <span className="truncate text-[0.6875rem] leading-tight text-[var(--text-muted)]">
+                            {it.name || it.ticker}
+                          </span>
+                        </span>
                       </span>
                     </div>
                   );
