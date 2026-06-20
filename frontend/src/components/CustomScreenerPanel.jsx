@@ -129,6 +129,8 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
   const [mcapFilter, setMcapFilter] = useState([]);
   // Pass 3b: funda_pass binary chip
   const [fundaPassOnly, setFundaPassOnly] = useState(false);
+  // Pass C: 件数キャップ — 初期 100 件、「残りN件を表示」で全件展開
+  const [showAllResults, setShowAllResults] = useState(false);
 
   // Pass 3b: 統合 universe を custom モード mount 時 1 回 fetch (module cache 経由)。
   useEffect(() => {
@@ -346,10 +348,11 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
       {/* universe main */}
       {!universeLoading && !universeError && universe && (universe.items || []).length > 0 && (
         <div className="space-y-4" data-testid="screener-universe-main">
-          {/* ── (1) preset セグメントトグル ── */}
-          <div data-testid="screener-preset-toggle">
-            <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">厳しさ</p>
-            <div className="flex gap-2 flex-wrap">
+
+          {/* ── Pass C: 1 行コンパクト操作帯 ── */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* 左: 厳しさ preset トグル */}
+            <div data-testid="screener-preset-toggle" className="flex gap-1.5 items-center shrink-0">
               {(['loose', 'standard', 'strict']).map((lvl) => (
                 <Chip
                   key={lvl}
@@ -366,100 +369,32 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
                 </Chip>
               ))}
             </div>
-          </div>
 
-          {/* ── (2) funda_pass binary chip ── */}
-          {/* Pass 3d (修正C): 件数を表示 (日付を括弧内に出すと件数と誤認される Trust Cliff を修正)。
-              日付は chip の外に独立した注記として配置。 */}
-          {universe.freshness?.funda_pass && (
-            <div>
-              <Chip
-                size="sm"
-                variant="filter"
-                pressed={fundaPassOnly}
-                tone={fundaPassOnly ? 'accent' : 'muted'}
-                onClick={() => setFundaPassOnly((v) => !v)}
-                data-testid="screener-facet-funda_pass"
-              >
-                最新決算で5条件達成
-                <span className="ml-1 tabular-nums opacity-70">({fundaPassCount})</span>
-              </Chip>
-              {universe.freshness.funda_pass && (
-                <p className="mt-0.5 ml-1 text-[10px] text-[var(--text-muted)] opacity-60">
-                  最新評価: {universe.freshness.funda_pass}
-                </p>
-              )}
-            </div>
-          )}
+            {/* 中: 適用中サマリ (active filter を短縮ラベルで) */}
+            {(() => {
+              const parts = [];
+              if (mcapFilter.length > 0) parts.push(mcapFilter.map((k) => MCAP_BANDS.find((b) => b.key === k)?.label || k).join('・'));
+              if (sectorFilter.length > 0) parts.push(sectorFilter.map(sectorLabelJp).join('・'));
+              if (fundaPassOnly) parts.push('5条件達成');
+              const overrideParts = Object.entries(overrides).filter(([, v]) => v && v !== 'off').map(([k]) => FACET_SHORT_LABEL[k] || k);
+              if (overrideParts.length > 0) parts.push(overrideParts.join('・'));
+              if (parts.length === 0) return null;
+              return (
+                <span className="flex-1 min-w-0 truncate text-[11px] text-[var(--text-muted)]">
+                  {parts.join('　')}
+                </span>
+              );
+            })()}
 
-          {/* ── (3) sector / mcap additive refinement ── */}
-          {sectorOptions.length > 0 && (
-            <div>
-              <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">セクター</p>
-              <div className="flex flex-wrap gap-1.5" data-testid="screener-facet-sector">
-                {sectorOptions.map(({ value, label, count }) => {
-                  const active = sectorFilter.includes(value);
-                  return (
-                    <Chip
-                      key={value}
-                      size="sm"
-                      variant="filter"
-                      pressed={active}
-                      tone={active ? 'accent' : 'muted'}
-                      onClick={() =>
-                        setSectorFilter((prev) =>
-                          prev.includes(value) ? prev.filter((s) => s !== value) : [...prev, value]
-                        )
-                      }
-                    >
-                      {label}
-                      <span className="ml-1 tabular-nums opacity-60">({count})</span>
-                    </Chip>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {mcapOptions.length > 0 && (
-            <div>
-              <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">時価総額</p>
-              <div className="flex flex-wrap gap-1.5" data-testid="screener-facet-mcap_band">
-                {mcapOptions.map(({ key, label, hint, count }) => {
-                  const active = mcapFilter.includes(key);
-                  return (
-                    <Chip
-                      key={key}
-                      size="sm"
-                      variant="filter"
-                      pressed={active}
-                      tone={active ? 'accent' : 'muted'}
-                      title={hint}
-                      onClick={() =>
-                        setMcapFilter((prev) =>
-                          prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
-                        )
-                      }
-                    >
-                      {label}
-                      <span className="ml-1 tabular-nums opacity-60">({count})</span>
-                    </Chip>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* ── (3c-A) 詳細展開 accordion ── */}
-          <div>
+            {/* 右: 詳細を開く */}
             <button
-              className="flex items-center gap-1.5 text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+              className="ml-auto flex shrink-0 items-center gap-1 text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
               onClick={() => setDetailOpen((v) => !v)}
               data-testid="screener-detail-toggle"
               aria-expanded={detailOpen}
             >
               <SlidersHorizontal size={12} strokeWidth={2} aria-hidden />
-              詳細を調整
+              詳細
               <ChevronDown
                 size={12}
                 strokeWidth={2}
@@ -467,103 +402,219 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
                 style={{ transform: detailOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
               />
             </button>
-
-            {detailOpen && (
-              <div
-                className="mt-3 rounded-xl border border-[var(--border)] p-3 space-y-4"
-                role="region"
-                aria-label="詳細フィルター"
-              >
-                {/* ファンダ群 */}
-                <div>
-                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">ファンダメンタル</p>
-                  <div className="space-y-2">
-                    {FUNDA_FACETS.filter((f) => PRESET_CORE_KEYS.includes(f.key)).map((facet) => {
-                      // 実効 level: overrides 優先 → なければ preset 由来
-                      const effectiveLevel = overrides[facet.key] === 'off'
-                        ? 'off'
-                        : overrides[facet.key] || preset;
-                      return (
-                        <div key={facet.key} className="flex flex-wrap items-center gap-1.5">
-                          <span className="w-24 shrink-0 text-[11px] text-[var(--text-secondary)]">{facet.label}</span>
-                          {['off', 'loose', 'standard', 'strict'].map((lvl) => {
-                            const cnt = facetLevelCounts[facet.key]?.[lvl] ?? 0;
-                            // CORE facet で overrides 未指定なら preset level が「選択中」に見える
-                            const actuallyPressed = lvl === 'off'
-                              ? (overrides[facet.key] === 'off')
-                              : (overrides[facet.key]
-                                  ? overrides[facet.key] === lvl
-                                  : preset === lvl);
-                            return (
-                              <Chip
-                                key={lvl}
-                                size="xs"
-                                variant="segmented"
-                                pressed={actuallyPressed}
-                                disabled={cnt === 0 && !actuallyPressed}
-                                onClick={() => {
-                                  setOverrides((prev) => ({
-                                    ...prev,
-                                    [facet.key]: lvl === 'off' ? 'off' : lvl,
-                                  }));
-                                }}
-                                data-testid={`screener-facet-level-${facet.key}-${lvl}`}
-                              >
-                                {lvl === 'off' ? 'なし' : PRESET_LABELS[lvl]}
-                                <span className="ml-0.5 tabular-nums opacity-60">({cnt})</span>
-                              </Chip>
-                            );
-                          })}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* テクニカル群 */}
-                <div>
-                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">テクニカル</p>
-                  <div className="space-y-2">
-                    {FUNDA_FACETS.filter((f) => !PRESET_CORE_KEYS.includes(f.key)).map((facet) => {
-                      const effectiveLevel = overrides[facet.key] === 'off' ? 'off' : overrides[facet.key] || 'off';
-                      return (
-                        <div key={facet.key} className="flex flex-wrap items-center gap-1.5">
-                          <span className="w-24 shrink-0 text-[11px] text-[var(--text-secondary)]">{facet.label}</span>
-                          {['off', 'loose', 'standard', 'strict'].map((lvl) => {
-                            const cnt = facetLevelCounts[facet.key]?.[lvl] ?? 0;
-                            const actuallyPressed = lvl === 'off'
-                              ? !overrides[facet.key] || overrides[facet.key] === 'off'
-                              : overrides[facet.key] === lvl;
-                            return (
-                              <Chip
-                                key={lvl}
-                                size="xs"
-                                variant="segmented"
-                                pressed={actuallyPressed}
-                                disabled={cnt === 0 && !actuallyPressed}
-                                onClick={() => {
-                                  setOverrides((prev) => ({
-                                    ...prev,
-                                    [facet.key]: lvl === 'off' ? 'off' : lvl,
-                                  }));
-                                }}
-                                data-testid={`screener-facet-level-${facet.key}-${lvl}`}
-                              >
-                                {lvl === 'off' ? 'なし' : PRESET_LABELS[lvl]}
-                                <span className="ml-0.5 tabular-nums opacity-60">({cnt})</span>
-                              </Chip>
-                            );
-                          })}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
-          {/* ── (3c-B) 適用中フィルタ bar ── */}
+          {/* ── Pass C: 詳細 accordion (detailOpen 時のみ展開) ── */}
+          {detailOpen && (
+            <div
+              className="rounded-xl border border-[var(--border)] p-3 space-y-4"
+              role="region"
+              aria-label="詳細フィルター"
+              data-testid="screener-detail-panel"
+            >
+              {/* (2a) funda_pass binary chip */}
+              {universe.freshness?.funda_pass && (
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">決算フィルター</p>
+                  <Chip
+                    size="sm"
+                    variant="filter"
+                    pressed={fundaPassOnly}
+                    tone={fundaPassOnly ? 'accent' : 'muted'}
+                    onClick={() => setFundaPassOnly((v) => !v)}
+                    data-testid="screener-facet-funda_pass"
+                  >
+                    最新決算で5条件達成
+                    <span className="ml-1 tabular-nums opacity-70">({fundaPassCount})</span>
+                  </Chip>
+                  {universe.freshness.funda_pass && (
+                    <p className="mt-0.5 ml-1 text-[10px] text-[var(--text-muted)] opacity-60">
+                      最新評価: {universe.freshness.funda_pass}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* (2b) sector additive refinement */}
+              {sectorOptions.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">セクター</p>
+                  <div className="flex flex-wrap gap-1.5" data-testid="screener-facet-sector">
+                    {sectorOptions.map(({ value, label, count }) => {
+                      const active = sectorFilter.includes(value);
+                      return (
+                        <Chip
+                          key={value}
+                          size="sm"
+                          variant="filter"
+                          pressed={active}
+                          tone={active ? 'accent' : 'muted'}
+                          onClick={() =>
+                            setSectorFilter((prev) =>
+                              prev.includes(value) ? prev.filter((s) => s !== value) : [...prev, value]
+                            )
+                          }
+                        >
+                          {label}
+                          <span className="ml-1 tabular-nums opacity-60">({count})</span>
+                        </Chip>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* (2c) mcap additive refinement */}
+              {mcapOptions.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">時価総額</p>
+                  <div className="flex flex-wrap gap-1.5" data-testid="screener-facet-mcap_band">
+                    {mcapOptions.map(({ key, label, hint, count }) => {
+                      const active = mcapFilter.includes(key);
+                      return (
+                        <Chip
+                          key={key}
+                          size="sm"
+                          variant="filter"
+                          pressed={active}
+                          tone={active ? 'accent' : 'muted'}
+                          title={hint}
+                          onClick={() =>
+                            setMcapFilter((prev) =>
+                              prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+                            )
+                          }
+                        >
+                          {label}
+                          <span className="ml-1 tabular-nums opacity-60">({count})</span>
+                        </Chip>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* (2d) ファンダメンタル grade override */}
+              <div>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">ファンダメンタル</p>
+                <div className="space-y-2">
+                  {FUNDA_FACETS.filter((f) => PRESET_CORE_KEYS.includes(f.key)).map((facet) => {
+                    return (
+                      <div key={facet.key} className="flex flex-wrap items-center gap-1.5">
+                        <span className="w-24 shrink-0 text-[11px] text-[var(--text-secondary)]">{facet.label}</span>
+                        {['off', 'loose', 'standard', 'strict'].map((lvl) => {
+                          const cnt = facetLevelCounts[facet.key]?.[lvl] ?? 0;
+                          const actuallyPressed = lvl === 'off'
+                            ? (overrides[facet.key] === 'off')
+                            : (overrides[facet.key]
+                                ? overrides[facet.key] === lvl
+                                : preset === lvl);
+                          return (
+                            <Chip
+                              key={lvl}
+                              size="xs"
+                              variant="segmented"
+                              pressed={actuallyPressed}
+                              disabled={cnt === 0 && !actuallyPressed}
+                              onClick={() => {
+                                setOverrides((prev) => ({
+                                  ...prev,
+                                  [facet.key]: lvl === 'off' ? 'off' : lvl,
+                                }));
+                              }}
+                              data-testid={`screener-facet-level-${facet.key}-${lvl}`}
+                            >
+                              {lvl === 'off' ? 'なし' : PRESET_LABELS[lvl]}
+                              <span className="ml-0.5 tabular-nums opacity-60">({cnt})</span>
+                            </Chip>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* (2e) テクニカル群 */}
+              <div>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">テクニカル</p>
+                <div className="space-y-2">
+                  {FUNDA_FACETS.filter((f) => !PRESET_CORE_KEYS.includes(f.key)).map((facet) => {
+                    return (
+                      <div key={facet.key} className="flex flex-wrap items-center gap-1.5">
+                        <span className="w-24 shrink-0 text-[11px] text-[var(--text-secondary)]">{facet.label}</span>
+                        {['off', 'loose', 'standard', 'strict'].map((lvl) => {
+                          const cnt = facetLevelCounts[facet.key]?.[lvl] ?? 0;
+                          const actuallyPressed = lvl === 'off'
+                            ? !overrides[facet.key] || overrides[facet.key] === 'off'
+                            : overrides[facet.key] === lvl;
+                          return (
+                            <Chip
+                              key={lvl}
+                              size="xs"
+                              variant="segmented"
+                              pressed={actuallyPressed}
+                              disabled={cnt === 0 && !actuallyPressed}
+                              onClick={() => {
+                                setOverrides((prev) => ({
+                                  ...prev,
+                                  [facet.key]: lvl === 'off' ? 'off' : lvl,
+                                }));
+                              }}
+                              data-testid={`screener-facet-level-${facet.key}-${lvl}`}
+                            >
+                              {lvl === 'off' ? 'なし' : PRESET_LABELS[lvl]}
+                              <span className="ml-0.5 tabular-nums opacity-60">({cnt})</span>
+                            </Chip>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* (2f) locked facets — 和名 + 鍵 */}
+              {(universe.locked_facets || []).length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">Premium / Pro で解錠</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(universe.locked_facets || []).map((key) => {
+                      const isProTier = key === 'near_high';
+                      const handleLockClick = () => {
+                        if (isProTier) {
+                          (onProUpgrade || onUpgrade)?.();
+                        } else {
+                          onUpgrade?.();
+                        }
+                      };
+                      return (
+                        <div key={key} className="screener-locked-chip-wrapper flex flex-col items-start gap-0.5">
+                          <div className="screener-locked-chip">
+                            <Chip
+                              size="sm"
+                              variant="filter"
+                              tone="accent"
+                              onClick={handleLockClick}
+                              data-testid={`screener-locked-${key}`}
+                            >
+                              <Lock size={11} strokeWidth={2} aria-hidden style={{ marginRight: 4, verticalAlign: '-1px' }} />
+                              {LOCKED_FACET_LABELS[key] || key}
+                            </Chip>
+                          </div>
+                          <span className="ml-1 text-[10px] text-[var(--text-muted)]">
+                            {isProTier ? 'Pro で解錠' : 'Premium で解錠'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Pass C: 適用中フィルタ bar (詳細閉時もサマリ chip を visible に保つ) ── */}
           {(() => {
             const activeOverrides = Object.entries(overrides).filter(([, v]) => v && v !== 'off');
             const hasActive = activeOverrides.length > 0 || sectorFilter.length > 0 || mcapFilter.length > 0 || fundaPassOnly;
@@ -659,50 +710,6 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
             );
           })()}
 
-          {/* ── (4) locked facets — 和名 + 鍵 (Pass 3c) ── */}
-          {(universe.locked_facets || []).length > 0 && (
-            <div>
-              <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">Premium / Pro で解錠</p>
-              <div className="flex flex-wrap gap-1.5">
-                {(universe.locked_facets || []).map((key) => {
-                  // Premium 系 (cup/breakout/both/oneill) → onUpgrade、Pro 系 (near_high) → onProUpgrade
-                  const isProTier = key === 'near_high';
-                  // TODO Sprint6(C-1): 未ログイン時は onUpgrade でなくログインモーダルへ (非ログインPC=LP routing で現状到達不可だが要 guard)
-                  const handleLockClick = () => {
-                    if (isProTier) {
-                      (onProUpgrade || onUpgrade)?.();
-                    } else {
-                      onUpgrade?.();
-                    }
-                  };
-                  /* Pass 3d (修正E): raw rgba → CSS class (screener-locked-chip) へ変更。
-                     Chip primitive に style prop を渡す escape hatch を禁止。
-                     wrapper div に screener-locked-chip class で tint を CSS から付与。
-                     サブラベル: text-[9px] → text-[10px] (最小フォント下限遵守)。 */
-                  return (
-                    <div key={key} className="screener-locked-chip-wrapper flex flex-col items-start gap-0.5">
-                      <div className="screener-locked-chip">
-                        <Chip
-                          size="sm"
-                          variant="filter"
-                          tone="accent"
-                          onClick={handleLockClick}
-                          data-testid={`screener-locked-${key}`}
-                        >
-                          <Lock size={11} strokeWidth={2} aria-hidden style={{ marginRight: 4, verticalAlign: '-1px' }} />
-                          {LOCKED_FACET_LABELS[key] || key}
-                        </Chip>
-                      </div>
-                      <span className="ml-1 text-[10px] text-[var(--text-muted)]">
-                        {isProTier ? 'Pro で解錠' : 'Premium で解錠'}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           {/* ── (5) 結果リスト ── */}
           <div>
             <div className="mb-2 flex items-center justify-between">
@@ -752,11 +759,12 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
               </div>
             ) : (
               /* Pass B: 条件合致度降順 (sortedItems)。上位3件強調 + 下位淡化。 */
+              /* Pass C: 初期 100 件キャップ。超過時は「残りN件を表示」ボタン。 */
               <div
                 data-testid="screener-result-list"
                 className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)] overflow-hidden"
               >
-                {sortedItems.map((it, idx) => {
+                {(showAllResults ? sortedItems : sortedItems.slice(0, 100)).map((it, idx) => {
                   // ── 上位強調 / 下位後退 (weight/size/opacity のみ、色 polarity なし §38) ──
                   const isTop = idx < 3;
                   const total = sortedItems.length;
@@ -837,6 +845,18 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
                     </button>
                   );
                 })}
+                {/* Pass C: 件数キャップ超過時「残りN件を表示」ボタン (仮想スクロール不採用) */}
+                {!showAllResults && sortedItems.length > 100 && (
+                  <div className="flex items-center justify-center px-4 py-3 border-t border-[var(--border)]">
+                    <button
+                      className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+                      onClick={() => setShowAllResults(true)}
+                      data-testid="screener-show-more"
+                    >
+                      残り {sortedItems.length - 100} 件を表示
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
