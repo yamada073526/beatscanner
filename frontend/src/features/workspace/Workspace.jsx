@@ -61,7 +61,7 @@ const CustomScreenerPanel = lazy(() => import('../../components/CustomScreenerPa
 // user gate 3 通過後の Sprint 4-A-3 で Hero 3 セクション top 5 fetch を実装予定。
 const ScreenerPane = lazy(() => import('./ScreenerPane.jsx'));
 // v229 Sprint 1 (screener master-detail): preset⇄custom トグルを束ねる master シェル。
-// isScreenerV2() = default ON / ?screener_legacy=1 で旧並置 (kill switch)。
+// isScreenerV2() = opt-in default OFF (?screener_v2=1 で新構造) / 昇格は Sprint6 C-16 後。
 const ScreenerMaster = lazy(() => import('./ScreenerMaster.jsx'));
 import { isScreenerV2 } from './ScreenerMaster.jsx';
 // v118 P6: Pane4Inspector + pane4/ ディレクトリ削除 (handover v118 §残バックログ、 1 人日)。
