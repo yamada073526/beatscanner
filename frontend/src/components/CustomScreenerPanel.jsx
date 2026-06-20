@@ -1,6 +1,6 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { SlidersHorizontal, ChevronDown, Lock } from 'lucide-react';
-import { fetchCustomScreener, fetchCanslimRows, fetchScannerUniverse } from '../api.js';
+import { fetchScannerUniverse } from '../api.js';
 import Chip, { ChipGroup } from './ui/Chip.jsx';
 import ProTeaser from './ui/ProTeaser.jsx';
 // Sprint 3: 市場局面バナーを ScreenerPane と共有 (FtdRegimeBanner.jsx が SSOT、二重定義なし)
@@ -104,10 +104,6 @@ function itemPasses(item, activeGrades, extra) {
 
 
 export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade }) {
-  const [phase, setPhase] = useState('idle'); // idle | loading | done | error
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
-
   // Pass 3b: 統合 universe state (additive facet engine の母集団)
   const [universe, setUniverse] = useState(_universeCache);
   const [universeLoading, setUniverseLoading] = useState(false);
@@ -122,54 +118,6 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
   const [mcapFilter, setMcapFilter] = useState([]);
   // Pass 3b: funda_pass binary chip
   const [fundaPassOnly, setFundaPassOnly] = useState(false);
-
-  // S5b funda (3体合議 frontend 必須): run() 連打時に古い rows fetch が新 data を上書きする
-  // stale merge を runId で遮断。
-  const runIdRef = useRef(0);
-
-  async function run() {
-    setPhase('loading');
-    setError(null);
-
-    const runId = ++runIdRef.current;
-    try {
-      const result = await fetchCustomScreener();
-      setData(result);
-      setPhase('done');
-      // S5b funda (3体合議 C 案): C/A/N/S rows を非ブロックで後乗せ merge
-      // (await 直列だと初回結果の体感が rows fetch 分遅れる。 feedback_price_fetch_merge_pattern idiom)。
-      // 失敗 / DB 不在 ticker は canslim 未付与のまま = バッジ非表示で従来表示 (graceful)。
-      const allTickers = [...(result.passing || []), ...(result.failing || [])]
-        .map((it) => it.ticker)
-        .filter(Boolean);
-      if (allTickers.length > 0) {
-        fetchCanslimRows(allTickers)
-          .then((cr) => {
-            if (runId !== runIdRef.current || !cr?.rows) return;
-            setData((prev) => {
-              if (!prev) return prev;
-              const attach = (arr) => (arr || []).map((it) => {
-                const row = cr.rows?.[(it.ticker || '').toUpperCase()];
-                return row ? { ...it, canslim: row } : it;
-              });
-              return { ...prev, passing: attach(prev.passing), failing: attach(prev.failing), canslim_rows_as_of: cr.as_of || null };
-            });
-          })
-          .catch(() => { /* graceful: バッジ非表示のまま */ });
-      }
-    } catch (e) {
-      setError(e.message);
-      setPhase('error');
-    }
-  }
-
-  // v100 Sprint A-B (multi-review 6 体合議 verdict、 UI/UX + 金融 + マーケター 3 体一致):
-  //   mount 時に auto-run、 「button 押さないと何も見えない」 を解消。
-  //   backend 15 分 TTL cache 済のため再 fetch cost なし。 retention / CVR 最大改善。
-  useEffect(() => {
-    run();
-  }, []);
-
 
   // Pass 3b: 統合 universe を custom モード mount 時 1 回 fetch (module cache 経由)。
   useEffect(() => {
