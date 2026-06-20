@@ -34,6 +34,20 @@ done < <(grep -oE '\(([a-zA-Z0-9_]+\.md)\)' "$IDX" 2>/dev/null | tr -d '()')
 # 進捗語密度 (stale の粗い signal)
 stale=$(grep -cE '着手中|未着手|保留|次セッション最優先' "$IDX" 2>/dev/null)
 
+# 詰め込み検出: index 1 行が長すぎる (SSOT「1 行ポインタ」逸脱)。
+# size 全体が上限に達する前に「個別の太った行」をピンポイント警告し、
+# 「つど肥大→つど圧縮」ループを未然に断つ (2026-06-20 根本対策)。
+LINE_WARN=200
+long_lines=0; long_list=""
+while IFS= read -r line; do
+  blen=$(printf '%s' "$line" | LC_ALL=C wc -c | tr -d ' ')
+  if [ -n "$blen" ] && [ "$blen" -gt "$LINE_WARN" ]; then
+    long_lines=$((long_lines+1))
+    title=$(printf '%s' "$line" | sed -E 's/^- \[([^]]*)\].*/\1/')
+    long_list="$long_list\n      - ${title} (${blen}B)"
+  fi
+done < <(grep -E '^- \[' "$IDX" 2>/dev/null)
+
 # 前回深掘り監査からの日数
 stamp="$MEMDIR/.last_deep_audit"
 days="?"
@@ -50,15 +64,17 @@ flag=0
 [ -n "$size" ] && [ "$size" -ge "$WARN" ] && flag=1
 [ "$orphans" -gt 0 ] && flag=1
 [ "$dangling" -gt 0 ] && flag=1
+[ "$long_lines" -gt 0 ] && flag=1
 { [ "$days" != "?" ] && [ "$days" -ge 30 ]; } && flag=1
 
 if [ "$flag" -eq 0 ]; then
-  echo "✅ メモリ健全 (MEMORY.md ${size}B/${LIMIT} ・ ${entries}件 ・ orphan0 dangling0 ・ 前回深掘り ${days}日前)"
+  echo "✅ メモリ健全 (MEMORY.md ${size}B/${LIMIT} ・ ${entries}件 ・ orphan0 dangling0 ・ 長行0 ・ 前回深掘り ${days}日前)"
   exit 0
 fi
 
 echo "⚠️ メモリ棚卸し推奨 (詳細: docs/references/memory_maintenance.md):"
 [ -n "$size" ] && [ "$size" -ge "$WARN" ] && echo "  • MEMORY.md ${size}B (≥${WARN}、上限${LIMIT}) → index 行を圧縮"
+[ "$long_lines" -gt 0 ] && printf "  • 長すぎる index 行 %d件 (>%dB、詰め込み→詳細は本体へ移しフックのみ残す):%b\n" "$long_lines" "$LINE_WARN" "$long_list"
 [ "$orphans" -gt 0 ] && echo "  • index 未掲載 ${orphans}件 (想起されない):${orphan_list} → 価値あれば再index / 不要なら削除提案"
 [ "$dangling" -gt 0 ] && echo "  • dangling ${dangling}件 (index にあるが実体なし):${dangling_list} → index 行を修正"
 { [ "$days" != "?" ] && [ "$days" -ge 30 ]; } && echo "  • 前回深掘りから ${days}日 (≥30) → 月次深掘り (subagent) を実施し .last_deep_audit を更新"

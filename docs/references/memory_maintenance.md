@@ -5,7 +5,9 @@ Claude 永続メモリ (`~/.claude/projects/-Users-yamadadaiki-Projects-beatscan
 - 確立: 2026-06-06 (v173)。 user 要望「データ整理を定期的・機械的に」。
 - 関連: `CLAUDE.md`「メモリ衛生」 / `.claude/hooks/memory_health_check.sh` (軽量) / `docs/references/tool_reliability_prevention.md` (context 衛生の双子)
 
-> **原則**: index は「1 行ポインタ (<200 字)」、詳細は topic ファイル。index に内容を詰めない。**削除は必ず user 承認**、非破壊修正 (UPDATE / 再index / MERGE) は即適用可。
+> **原則**: index は「1 行ポインタ」(目安 **<200B/行**、hook が機械検出。日本語混在では「~200 字」でなく **~200 byte** が実効ライン)、詳細は topic ファイル。index に内容 (commit hash・数値・進捗状態) を詰めない。**削除は必ず user 承認**、非破壊修正 (UPDATE / 再index / MERGE) は即適用可。
+>
+> **根本対策 (2026-06-20)**: 「size 肥大 → つど圧縮」 を繰り返さないため、hook が **個別行の詰め込み (>200B)** を毎セッション検出する (size 上限到達の前兆を行単位で先取り)。size warning だけだと「上限に当たって初めて気づく」 → 全行を慌てて圧縮、の悪循環になる。**新規 entry 追加時は最初から <200B のフックで書く**こと。詳細は本体ファイルに置き index はリンク + 識別フックのみ。
 
 ---
 
@@ -16,6 +18,7 @@ Claude 永続メモリ (`~/.claude/projects/-Users-yamadadaiki-Projects-beatscan
 | 指標 | 閾値 | 意味 / 対処 |
 |---|---|---|
 | MEMORY.md size | ≥22KB (上限 24.4KB) | index 行を圧縮 (詳細は topic へ) |
+| **長すぎる index 行** | >200B/行 | 詰め込み (commit hash・数値・進捗を index に書いた)。詳細を本体へ移しフックのみ残す。**size 上限の前兆を個別行で検出 (2026-06-20 追加)** |
 | **orphan** | >0 | disk にあるが index 未掲載 = **想起されない**。価値あれば再index、不要なら削除提案 |
 | **dangling** | >0 | index にあるが実体なし = リンク切れ。index 行を修正 |
 | 進捗語 (着手中/保留 等) | >8 | stale fact の更新候補 |
