@@ -16660,7 +16660,12 @@ async def cron_cup_scan(
                     return ticker, None, None, None, "ohlcv_fetch_failed"
                 times, highs, lows, closes, volumes = ohlcv
                 try:
-                    result = _detect_cup_handle(times, highs, lows, closes, volumes, spy_up)
+                    result = _detect_cup_handle(
+                        times, highs, lows, closes, volumes, spy_up,
+                        # D1 (差分台帳): nightly screener にも gradual-riser cup を反映 (per-ticker と一致)。
+                        # じっちゃま実践 = なだらかな右肩上がり (UBS 型 ADR 等) を screener で catch。
+                        allow_gradual_riser=True,
+                    )
                 except Exception as e:
                     return ticker, None, None, None, f"detect_failed: {e}"
                 # v220: resistance_retest を additive 検出 (None なら非該当)
@@ -16729,7 +16734,12 @@ async def cron_cup_scan(
                 continue
             times, highs, lows, closes, volumes = ohlcv
             try:
-                result = _detect_cup_handle(times, highs, lows, closes, volumes, spy_up)
+                result = _detect_cup_handle(
+                    times, highs, lows, closes, volumes, spy_up,
+                    # D1 (差分台帳): nightly screener にも gradual-riser cup を反映 (per-ticker と一致)。
+                    # じっちゃま実践 = なだらかな右肩上がり (UBS 型 ADR 等) を screener で catch。
+                    allow_gradual_riser=True,
+                )
             except Exception as e:
                 failed.append({"ticker": ticker, "reason": f"detect_failed: {e}"})
                 continue
