@@ -788,7 +788,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
                       return [{ key: f.key, contrib }];
                     })
                     .sort((a, b) => b.contrib - a.contrib)
-                    .slice(0, 3);
+                    .slice(0, 2); // 狭い screener カラム幅に確実に収めるため上位2件 (spec「2-3個」範囲内)
 
                   return (
                     <button
@@ -828,7 +828,10 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
                         </span>
                       )}
 
-                      {/* RS / EPS 数値(右端・控えめ) */}
+                      {/* RS 数値(右端・控えめ)。EPS YoY 数値は非表示:
+                          (1) 狭幅 screener カラムでの右端クリップ回避
+                          (2) ADR/外貨・銀行の偽 EPS 値 (BABA eps_yoy=-94.8 等) の Trust Cliff 回避 [task#13、reviewer 推奨]
+                          EPS 条件充足は上のヒット理由 Chip「EPS↑/EPS3年」で表現済。 */}
                       <span className="flex items-center gap-2 shrink-0">
                         {it.rs_percentile != null && (
                           /* Pass 3d (修正B): color polarity 撤廃 (§38 買い断定誘導防止) */
@@ -837,12 +840,6 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
                             style={{ fontWeight: it.rs_percentile >= 85 ? 600 : 400 }}
                           >
                             RS {it.rs_percentile.toFixed(0)}
-                          </span>
-                        )}
-                        {it.eps_yoy_pct != null && (
-                          /* TODO Sprint4: ADR 外貨/銀行 EPS 偽値 (BABA eps_yoy=-94.8 等) を表示抑止 [task#13] */
-                          <span className="w-16 text-right text-xs tabular-nums text-[var(--text-muted)]">
-                            EPS {it.eps_yoy_pct > 0 ? '+' : ''}{it.eps_yoy_pct.toFixed(0)}%
                           </span>
                         )}
                       </span>
