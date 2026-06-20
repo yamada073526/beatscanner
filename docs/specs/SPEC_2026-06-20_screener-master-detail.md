@@ -116,6 +116,13 @@
 
 **backlog (本 SPEC 外)** [マーケ]: Pro tier 価値が near_high 1 facet のみで薄い → Pro 限定 facet 追加 (RS 急上昇 delta 等) を別途検討。
 
+### 0-6. Sprint 2 本番検証 findings (2026-06-20、commit d53ca0c/477c202)
+
+`GET /api/scanner/universe` 本番 LIVE・検証済 (HTTP 200 / 964KB / 5.4s、free tier count=2603)。構造・per-facet freshness・free tier gating (cup/breakout/near_high=null) 全て PASS。検証で 2 件の data 由来課題を発見:
+
+1. **funda_pass が疎** (data 実態、 bug でない): `earnings_evaluation` は `max_eval_date=2026-05-15`・全期間 `all_passed=true` 25 件・**95日窓 0 passers** (5 条件は pass 率 0.7%、決算シーズン谷間)。既存 `cup-handle` scanner も同依存で現在 0 件。→ funda_pass を tri-state 化済 (477c202)。**設計論点 (Sprint 3)**: universe-wide で常時新鮮な「ファンダ」次元は CAN-SLIM 数値 (screener_fundamentals, 06-19 新鮮) 側。じっちゃま 5 条件 binary は決算イベント依存の sparse facet として「最新決算で5条件達成」と明示するか、CAN-SLIM 数値 facet を主にするか要決定。
+2. **ADR/銀行 EPS guard 未伝播** (Trust Cliff、task #13): BABA `eps_yoy_pct=-94.8` (外貨 ADR EPS 単位ミスマッチ偽 miss、[[feedback_foreign_currency_adr_guards]])。銀行 (JPM/BAC) は roe=null で guard 痕跡あり。screener_fundamentals (canslim-scan) に guard 未適用 = 既存 canslim screener にも存在。**修正候補**: canslim-scan precompute で guard (SSOT) or frontend 表示抑止 (Sprint 3-4)。reporter currency metadata が screener_fundamentals に無いのが難所。
+
 ---
 
 ## 1. Context
