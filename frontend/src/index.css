@@ -6522,34 +6522,6 @@ body {
   }
 }
 
-/* v120 Sprint 3: WorkspaceScreenerModal (銘柄スクリーナー modal) の dialog 本体.
-   inline style + !important を避けて class 化 (design-system-check PASS のため). */
-@keyframes workspaceScreenerFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-.ds-workspace-screener-modal {
-  position: relative;
-  width: 100%;
-  max-width: 880px;
-  max-height: 88vh;
-  background: var(--bg-card, #ffffff);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg, 16px);
-  box-shadow: var(--shadow-4, 0 20px 60px -10px rgba(15, 23, 42, 0.45));
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-@media (max-width: 640px) {
-  .ds-workspace-screener-modal {
-    max-width: 100%;
-    max-height: 100%;
-    height: 100vh;
-    border-radius: 0;
-  }
-}
-
 .ws-judgment-row {
   position: relative;
   display: grid;
@@ -13366,4 +13338,71 @@ body.is-digest-resizing {
 }
 .ds-flash-grid:hover {
   background-color: color-mix(in oklab, var(--text-muted) 5%, transparent);
+}
+
+/* ============================================================
+   ScreenerMaster v1 (Sprint 1) — CSS 基盤
+   - shadow ゼロ + border/tinted-bg elevation 哲学 (骨格 5-4)
+   - .panel-card / .bs-panel / .surface-card を ScreenerMaster に新規付与しない
+   - specificity を上げないよう :where(.screener-master) スコープ
+   - raw hex 禁止: 全値は --space-* / --color-* / --border / --radius-* トークン使用
+   ============================================================ */
+
+/* ── .screener-master ラッパー ─────────────────────────── */
+:where([data-testid="screener-master"]) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  /* shadow ゼロ哲学 — box-shadow 不使用 */
+}
+
+/* ── セグメントトグルバー (preset ⇄ custom) ──────────── */
+:where([data-testid="screener-mode-toggle"]) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+/* ── コンテンツエリア (preset/custom の切替面) ────────── */
+:where([data-testid="screener-master-content"]) {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ── preset モード: filter UI を物理非表示 (C-17) ────────
+   preset 選択時に .screener-master-filter-ui に max-height:0 を適用。
+   CustomScreenerPanel の filter 部分を wrapping する div に付与する。 */
+:where([data-testid="screener-master"]) .screener-master-filter-ui {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height var(--motion-base) var(--ease-out-cubic);
+}
+:where([data-testid="screener-master"][data-mode="custom"]) .screener-master-filter-ui {
+  max-height: 9999px; /* 展開時 */
+}
+
+/* ── Pane2 ラッパー (既存 inline style の override 最小化) */
+:where([data-testid="screener-master"]) .screener-master-pane2-wrap {
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-3);
+}
+
+/* ── dark mode ────────────────────────────────────────── */
+[data-theme="dark"] :where([data-testid="screener-mode-toggle"]) {
+  background: var(--bg-card);
+  border-bottom-color: var(--border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where([data-testid="screener-master"]) .screener-master-filter-ui {
+    transition: none;
+  }
 }

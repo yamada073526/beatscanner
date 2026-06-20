@@ -51,15 +51,19 @@ import CompanyLogo from '../../components/CompanyLogo.jsx';
 import BrandPulse from '../../components/ui/BrandPulse.jsx';
 // v146: pane render throw (特に lazy ScreenerPane の stale chunk) で全画面真っ白になる穴を塞ぐ。
 import PaneErrorBoundary from '../../components/PaneErrorBoundary.jsx';
-// v120 Sprint 3 (Frontend verdict mandatory fix 2): WorkspaceScreenerModal を lazy 化
-// (modal は Pro user が screener button 押下時のみ open、 chunk reuse + 初期 bundle 軽量化)
-const WorkspaceScreenerModal = lazy(() => import('./WorkspaceScreenerModal.jsx'));
+// v229 Sprint 1 (screener master-detail): 旧スクリーナー modal を廃止 (entry 1 本化)。
+// screener tab visible 時は WorkspaceHeader「スクリーナー」button が既に非表示 =
+// modal は到達不能 dead path だったため component / import / state / render を完全削除 (SPEC §⑫ entry 一本化)。
 // v125 Phase 4-A Sprint 4-A-1 (feature flag hidden、 default OFF): Pane 1 nav screener tab で
 // CustomScreenerPanel を embedded 表示。 既存 modal lazy chunk と reuse (Vite モジュールキャッシュ)。
 const CustomScreenerPanel = lazy(() => import('../../components/CustomScreenerPanel.jsx'));
 // v125 Phase 4-A Sprint 4-A-2 (stub): ScreenerPane.jsx 雛形 (Hero + Explorer)。
 // user gate 3 通過後の Sprint 4-A-3 で Hero 3 セクション top 5 fetch を実装予定。
 const ScreenerPane = lazy(() => import('./ScreenerPane.jsx'));
+// v229 Sprint 1 (screener master-detail): preset⇄custom トグルを束ねる master シェル。
+// isScreenerV2() = default ON / ?screener_legacy=1 で旧並置 (kill switch)。
+const ScreenerMaster = lazy(() => import('./ScreenerMaster.jsx'));
+import { isScreenerV2 } from './ScreenerMaster.jsx';
 // v118 P6: Pane4Inspector + pane4/ ディレクトリ削除 (handover v118 §残バックログ、 1 人日)。
 // 6 体並列レビューで「Pane 4 = AI chat → マクロニュース連動」 と確定済だったが、
 // release MVP scope 外と判断、 Phase 2 で再評価。
@@ -950,10 +954,12 @@ export default function Workspace({
     prevTabRef.current = activeTab;
   }, [activeTab, setActiveTicker, resetDetailHistoryToCurrent]);
 
-  // v120 Sprint 3: 銘柄スクリーナー modal の open/close 制御。
-  // WorkspaceHeader「スクリーナー」 button → Pro user は modal open、 非 Pro は ProTeaser。
-  const [screenerOpen, setScreenerOpen] = useState(false);
+  // v229 Sprint 1: 旧スクリーナー modal 廃止に伴い screenerOpen state を削除 (entry 1 本化)。
   const isProUser = plan === 'pro' || plan === 'premium';
+  // v229 Sprint 1 (screener master-detail): master シェル feature flag。
+  //   v2 (default) = Pane2 に ScreenerMaster (preset⇄custom トグル)。
+  //   ?screener_legacy=1 = 旧並置 (Pane2=CustomScreenerPanel 常駐 / Pane3=ScreenerPane)。
+  const screenerV2 = isScreenerV2();
   const handleUpgradeRequest = useCallback((featureName) => {
     detailContext?.onUpgrade?.(featureName);
   }, [detailContext]);
@@ -965,7 +971,6 @@ export default function Workspace({
         header={
           <WorkspaceHeader
             isPro={isProUser}
-            onOpenScreener={() => setScreenerOpen(true)}
             onUpgrade={handleUpgradeRequest}
           />
         }
@@ -979,8 +984,23 @@ export default function Workspace({
               portfolioPrices={portfolioPrices}
               user={detailContext?.user}
             />
+          ) : isScreener && screenerV2 ? (
+            // v229 Sprint 1 (master-detail 統合): Pane 2 = ScreenerMaster。
+            //   preset⇄custom セグメントトグルで「今日の注目 (ScreenerPane)」と「自分で絞る
+            //   (CustomScreenerPanel)」を 1 master 面に統合 (3 入口 → 1)。
+            //   結果クリックは setActiveTicker のみ (tab 離脱しない) → Pane 3 だけ詳細に切替。
+            <Suspense fallback={<div style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-muted)', fontSize: 13 }}><BrandPulse size={22} /><span>スクリーナーを準備中…</span></div>}>
+              <ScreenerMaster
+                detailContext={detailContext}
+                isProUser={isProUser}
+                handleUpgradeRequest={handleUpgradeRequest}
+                onSelect={setActiveTicker}
+                onProUpgrade={() => handleUpgradeRequest('新高値圏フィルター (Pro)')}
+              />
+            </Suspense>
           ) : isScreener ? (
-            // v160 D2 (master-detail): screener tab は Pane 2 に Explorer (絞り込み結果) を常駐。
+            // legacy (?screener_legacy=1): v160 D2 の旧並置を維持。
+            // Pane 2 に Explorer (絞り込み結果) を常駐。
             // 結果クリックは setActiveTicker のみ (tab 離脱しない) → Pane 3 だけ詳細に切替、
             // ここの絞り込み filter / sort / scroll は保持される (master-detail の master 面)。
             <div style={{ height: '100%', overflowY: 'auto', padding: 'var(--space-3, 12px)' }}>
@@ -1015,11 +1035,9 @@ export default function Workspace({
               </button>
               <Suspense fallback={<div style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-muted)', fontSize: 13 }}><BrandPulse size={22} /><span>スクリーナーを準備中…</span></div>}>
                 <CustomScreenerPanel
-                  user={detailContext?.user}
-                  isPro={isProUser}
+                  onSelect={setActiveTicker}
                   onUpgrade={handleUpgradeRequest}
                   onProUpgrade={() => handleUpgradeRequest('新高値圏フィルター (Pro)')}
-                  onSelect={setActiveTicker}
                 />
               </Suspense>
             </div>
@@ -1112,7 +1130,35 @@ export default function Workspace({
                   />
                 </div>
               </div>
+            ) : screenerV2 ? (
+              // v229 Sprint 1 (master-detail): v2 では「今日の注目」は Pane 2 の ScreenerMaster (preset)
+              //   が担う。 Pane 3 は銘柄選択後に詳細 (JudgmentDetail) を出す detail 面 = 未選択時は
+              //   master 面から 1 件選ぶよう促す静的ガイド (ScreenerPane 二重表示の冗長を回避)。
+              //   §38/§5: 事実の導線文のみ、色・断定なし。
+              <div
+                data-testid="screener-detail-empty"
+                style={{
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 'var(--space-2, 8px)',
+                  padding: 'var(--space-6, 24px)',
+                  textAlign: 'center',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                <SlidersHorizontal size={28} strokeWidth={1.5} aria-hidden style={{ color: 'var(--text-muted)' }} />
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  左の一覧から銘柄を選ぶと、ここに詳細が表示されます
+                </span>
+                <span style={{ fontSize: 12 }}>
+                  「注目」と「絞り込み」を切り替えて候補を探せます。
+                </span>
+              </div>
             ) : (
+              // legacy (?screener_legacy=1): Pane 3 に Hero (今注目 3 セクション)。
               <Suspense fallback={<div style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-muted)', fontSize: 13 }}><BrandPulse size={22} /><span>スクリーナーを準備中…</span></div>}>
                 <ScreenerPane
                   detailContext={detailContext}
@@ -1141,19 +1187,8 @@ export default function Workspace({
           </PaneErrorBoundary>
         }
       />
-      {/* v120 Sprint 3: 銘柄スクリーナー modal (workspace mode から CustomScreenerPanel access 復活).
-          App.jsx の <UpgradeModal> は非 Pro user の Pro 訴求を担当 (本 modal とは別 instance)。
-          screenerOpen=false の間は Suspense fallback も unmount で初期 bundle 軽量化. */}
-      {screenerOpen && (
-        <Suspense fallback={null}>
-          <WorkspaceScreenerModal
-            isOpen={screenerOpen}
-            onClose={() => setScreenerOpen(false)}
-            onUpgrade={handleUpgradeRequest}
-            onProUpgrade={() => handleUpgradeRequest('新高値圏フィルター (Pro)')}
-          />
-        </Suspense>
-      )}
+      {/* v229 Sprint 1: 旧スクリーナー modal を完全廃止 (entry 1 本化、screener tab の
+          ScreenerMaster へ統合)。 App.jsx の <UpgradeModal> は非 Pro user の Pro 訴求を担当 (別 instance、維持)。 */}
     </JudgmentProvider>
   );
 }
