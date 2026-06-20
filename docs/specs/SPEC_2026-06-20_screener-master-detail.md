@@ -123,6 +123,30 @@
 1. **funda_pass が疎** (data 実態、 bug でない): `earnings_evaluation` は `max_eval_date=2026-05-15`・全期間 `all_passed=true` 25 件・**95日窓 0 passers** (5 条件は pass 率 0.7%、決算シーズン谷間)。既存 `cup-handle` scanner も同依存で現在 0 件。→ funda_pass を tri-state 化済 (477c202)。**設計論点 (Sprint 3)**: universe-wide で常時新鮮な「ファンダ」次元は CAN-SLIM 数値 (screener_fundamentals, 06-19 新鮮) 側。じっちゃま 5 条件 binary は決算イベント依存の sparse facet として「最新決算で5条件達成」と明示するか、CAN-SLIM 数値 facet を主にするか要決定。
 2. **ADR/銀行 EPS guard 未伝播** (Trust Cliff、task #13): BABA `eps_yoy_pct=-94.8` (外貨 ADR EPS 単位ミスマッチ偽 miss、[[feedback_foreign_currency_adr_guards]])。銀行 (JPM/BAC) は roe=null で guard 痕跡あり。screener_fundamentals (canslim-scan) に guard 未適用 = 既存 canslim screener にも存在。**修正候補**: canslim-scan precompute で guard (SSOT) or frontend 表示抑止 (Sprint 3-4)。reporter currency metadata が screener_fundamentals に無いのが難所。
 
+### 0-7. Sprint 3 詳細: 段階閾値 (grade) 統合 — SPEC_2026-06-18 蛇口カタログを additive に統合
+
+**経緯**: user (2026-06-20) が「ファンダ各条件を数値閾値×期間で柔軟に絞る (EPS成長 25/50/100% × 3期/3年/5年、売上・EPS毎期成長だが CFPS<15% 等)」を要望。これは既存 [[project_screener_fundamental_threshold_grading]] (`docs/specs/SPEC_2026-06-18_screener-pane2-3-redesign_draft.md` v2、6体合議 6/6 条件付賛成) の段階閾値構想と同一。**本 additive master-detail の Sprint 3 = SPEC_2026-06-18 の蛇口カタログ + プリセット + grade を additive faceting に統合**する (SPEC_2026-06-18 が threshold 設計の SSOT、本 §0-7 が統合方針)。
+
+**統合する設計 (SPEC_2026-06-18 SSOT)**:
+- **state = `{preset, overrides}`**: preset='loose'|'standard'|'strict'、実効 level = `overrides[key] ?? PRESET_TABLE[preset][key]` (焼かない)、preset 再選択で overrides リセット。additive chip = この override UI。
+- **3 プリセット** + ライブ件数 (active pill「標準 (12)」)。較正: 緩い≈55 / 標準8-15 / 厳しい2-5 (universe 2451)。
+- **詳細展開**: ファンダ(A-C)/テクニカル(D-G) 2タブ accordion、各 metric on/off + grade。スライダー回避 (segmented 2-5択)、AbortController+300ms debounce (0件 flash 回避)。
+- **grade 閾値 (O'Neil 原典 §7)**: EPS YoY 床+20/良+25/最良+50-100% / RS ≥70(絶対床・70未満ハードゲート禁止)/80/90 / ROE ≥17/17/25% / 出来高 +25/40/50% / cup 形成中/取っ手/ブレイク確定。
+- **tier**: プリセット3段は全 tier 操作可、tier は蛇口の種類で切る。Free=Group A-B+RS / Pro=Group C / Premium=Group E-F (§0-1 locked_facets と整合)。件数・種類は無料、銘柄名のみ blur。
+- **§38**: grade は「絞り込む度合い」事実表現。「最良/本命/今が好機」禁止 (blocklist + bundle grep)。
+
+**Sprint 3 で使える指標 (統合 universe endpoint で precompute 済・6条件先行)**: eps_yoy_pct(C) / eps_cagr_3y(A) / roe(A) / buyback_yield_pct / volume_surge_pct(S) / inst_holders_qoq_pct(I、45日遅延ラベル) / rs_percentile(L) / cup_state(E,Premium) / breakout_state(F,Premium) / near_high(N,Pro) / sector / mcap_band。
+
+**(b) Sprint 3 着手前に確定 (要調整)**:
+- funda 主軸 = **CAN-SLIM 数値 (常時新鮮)**、じっちゃま5条件 binary は「最新決算で5条件達成」明示の sparse facet (user hybrid 確定)。
+- 標準プリセット eps_cagr 閾値 = curl 再較正で 8-15 件レンジ着地 (≥15% 目安)。
+- CF系・Beat・ガイダンス・patterns は (c) で未 precompute → Sprint 3 では「利用可能化予定」表示 or off 固定。
+- ADR/銀行 guard (task #13) は facet 化で偽件数に反映 → canslim-scan precompute or frontend 抑止を先行/並行。
+
+**(c) data 拡張が前提 (後続 data 拡張 sprint、user 要望の一部)**: 営業CFマージン / CFPS>EPS / 3期連続性 / 売上高成長YoY / EPS 5年・3期 quarterly continuity / EPS・売上 Beat / ガイダンス上方修正 / 来期YoY / 平底・ダブルボトム。→ nightly batch 精算追加 ([[feedback_revenue_basis_mismatch]] sector guard 必須)。**user 例の「売上毎期成長・CFPS<15%・EPS 5年」はここ**。
+
+**移行**: SPEC_2026-06-18 の S2 (6条件先行・facet backend) は本 SPEC の Sprint 2 (統合 universe endpoint) が代替・完了。旧 S3 (詳細 accordion) = 本 Sprint 3 に統合。旧 S5 (patterns)/S6 (mobile)/S7 (M ゲート) は後続。
+
 ---
 
 ## 1. Context
