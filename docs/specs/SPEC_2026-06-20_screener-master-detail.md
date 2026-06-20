@@ -28,7 +28,7 @@
 - **返却 + payload** [設計B]: ticker 単位 1 行に全シグナル + sector/mcap_band + name。logo は含めない (frontend 解決)。数値は小数 1-2 桁に丸める + `GZipMiddleware` で圧縮 (3000×16 field ≒ raw 0.6-1MB / gzip 80-150KB)。ページング不可 (faceting に全件要)。
 - **NULL = 第3状態「測定外」** [金融A]: ある ticker が facet の universe 外 (例 canslim default 500 外で eps_yoy=NULL) のとき、`false` (基準未達) と区別し「測定外」として扱う。AND 絞り込みで silent false negative にしない ([[project_inner_quality_completeness_ledger]] 沈黙の欠落)。frontend は「未測定 N 件を除外」を inline 注記、件数は**分母併記**「34 / 2847 件中」。※GHA は canslim-scan へ既に `universe_size=3000` 投入済 (default 500 は CLI 既定) のため実 gap は小。判別契約: facet が `locked_facets` に在る=tier ロック (鍵 UI)、無くて値 null=その ticker は測定外 (per-row)。
 - **tier gate (backend 集約・base cache 後の per-request mask)** [設計B/金融A/マーケ]: `subscriptions.tier` を解決し、free=ファンダ(C/A/S/I)+RS+sector/mcap 実値、**Premium 限定**(cup_state/breakout/both/oneill) + **Pro 限定**(near_high) は **null + `locked_facets` に列挙**。⚠️ **locked と「0件 disabled」を schema で物理分離**: locked_facets の facet は frontend で必ず鍵 UI に分岐 (0件 disabled と別 path)。null 共用で「0件」誤表示=Trust Cliff。`_fetch_premium_status_from_auth` (main.py:19228) を tier 解決へ拡張。
-- **freshness (as_of 単一最小値は廃止)** [金融A/設計B/Anthropic]: `as_of` (headline=各テーブル最新 calc_date の最小値、ヒーロー表示用) に加え `freshness: {rs, funda, cup, breakout, ...}` (列ごと calc_date) を副次フィールドで返す。frontend は通常 as_of のみ、鮮度が割れる行は混在マーク + ⓘ で per-facet 開示。rs=当日/cup=前日 を「同一スナップショット」と誤認させない。
+- **freshness (per-facet + headline=max)** [金融A/設計B/Anthropic]: `freshness: {rs, funda, cup, breakout, funda_pass}` (facet ごと calc_date) を返し、headline `as_of` = その**最大値 (最新 refresh = nightly scan 鮮度)**。⚠️ 当初 min を採ったが、lagging facet (funda_pass は決算イベント依存で数十日 stale) に引きずられ新鮮な rs/cup を過小表示する (Sprint 2 検証で as_of=05-15 誤認を確認、§0-6) → **max に修正**。frontend は as_of を「最終更新」表示 + 鮮度が割れる行は ⓘ で per-facet 開示し「同一スナップショット」誤認を防ぐ。
 - **cache (base 1 本 + per-request tier mask)** [設計B]: join 結果は tier 不変 → `universe_size` キーで base cache を 1 本 (nightly TTL 12-24h、既存 universe-meta 24h cache パターン main.py:18437)。tier gate は cache 後の cheap な mask 関数を毎 request 適用 (tier 別 3 分割 cache は二重浪費のため不採用)。warmup cron に追加 (free 共有 base cache を温める)、prefetchAll への追加は不要 (tab open 時 1 回 fire)。
 - **既存 7 endpoint は add (置換しない)** [設計B]: `/api/scanner/*` は nightly freshness gate (yml) + roll-back (`?screener_legacy=1`) が依存 → 温存。役割明文化「7 endpoint=legacy 退避専用に温存、新規呼び出しは universe endpoint に集約」(v229 役割取り違え再発防止)。§6「/api/scanner/* 不変」と整合 (新 endpoint は add で抵触せず)。
 - **既存 suppression guard の伝播検証** [金融A]: revenue basis mismatch (銀行 gross revenue artifact) / 外貨 ADR EPS suppression (BABA -91% 偽 miss) が precompute 値 (screener_fundamentals) に伝播していることを **Sprint 2 DoD で curl 検証**。inst_holders_qoq は 45 日遅延ラベル、breakout pending=終値未確定の非 buy 状態を保持。
@@ -37,8 +37,8 @@
 レスポンス schema (draft):
 ```json
 {
-  "as_of": "2026-06-19",                                  // headline=各テーブル最新 calc_date の最小値
-  "freshness": {"rs":"2026-06-20","funda":"2026-06-19","cup":"2026-06-19","breakout":"2026-06-20"},
+  "as_of": "2026-06-20",                                  // headline=最新 refresh (max of freshness、最終更新 semantics)
+  "freshness": {"rs":"2026-06-20","funda":"2026-06-19","cup":"2026-06-20","breakout":"2026-06-20","funda_pass":"2026-05-15"},
   "tier": "free", "count": 2847,
   "locked_facets": ["cup","breakout","both","oneill","near_high"],  // 鍵 UI 分岐 (0件 disabled と別 path)
   "items": [

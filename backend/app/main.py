@@ -19987,9 +19987,12 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             "is_new_52w_high": bo_payload.get("is_new_52w_high"),
         })
 
-    # headline as_of = 非 null freshness の最小値 (最も古いシグナル = 過大表示しない)
+    # headline as_of = 最新 refresh (= nightly scan の鮮度)。 鮮度差は per-facet freshness map で開示。
+    # min は lagging facet (earnings_evaluation funda_pass は決算イベント依存で数十日 stale) に引きずられ
+    # 新鮮な rs/cup/breakout まで全体を過小表示するため max を採る (6 体合議 金融 reviewer: 単一値は誤認源、
+    # 真の honest は per-facet。 headline は「最終更新=最新 refresh」semantics)。
     fresh_vals = [v for v in freshness.values() if v]
-    as_of = min(fresh_vals) if fresh_vals else None
+    as_of = max(fresh_vals) if fresh_vals else None
     return {"as_of": as_of, "freshness": freshness, "items": items}
 
 
