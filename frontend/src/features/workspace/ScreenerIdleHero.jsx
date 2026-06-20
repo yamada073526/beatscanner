@@ -214,7 +214,10 @@ export default function ScreenerIdleHero({ onSelect }) {
     const ac = new AbortController();
     async function load() {
       try {
-        const data = await fetchScannerUniverse({ signal: ac.signal });
+        // api.js の fetchScannerUniverse は positional 引数 (universeSize)。
+        // object を渡すと universe_size=[object Object] → backend 422 になるため必ず数値で渡す。
+        // signal は fetch に渡せないが、下の ac.signal.aborted ガードで unmount 後 setState を防ぐ。
+        const data = await fetchScannerUniverse(3000);
         if (ac.signal.aborted) return;
         const items = Array.isArray(data?.items) ? data.items : [];
 
