@@ -137,11 +137,21 @@
 
 **Sprint 3 で使える指標 (統合 universe endpoint で precompute 済・6条件先行)**: eps_yoy_pct(C) / eps_cagr_3y(A) / roe(A) / buyback_yield_pct / volume_surge_pct(S) / inst_holders_qoq_pct(I、45日遅延ラベル) / rs_percentile(L) / cup_state(E,Premium) / breakout_state(F,Premium) / near_high(N,Pro) / sector / mcap_band。
 
-**(b) Sprint 3 着手前に確定 (要調整)**:
-- funda 主軸 = **CAN-SLIM 数値 (常時新鮮)**、じっちゃま5条件 binary は「最新決算で5条件達成」明示の sparse facet (user hybrid 確定)。
-- 標準プリセット eps_cagr 閾値 = curl 再較正で 8-15 件レンジ着地 (≥15% 目安)。
+**(b) Sprint 3 着手前に確定 ✅ (2026-06-20 本番 curl 較正済、universe N=2603)**:
+- funda 主軸 = **CAN-SLIM 数値 (常時新鮮 06-19)**、じっちゃま5条件 binary (`funda_pass`) は「最新決算で5条件達成」明示の sparse facet (user hybrid 確定)。⚠️ `funda_pass` は 6.9% (180件・全 05-15) で疎 → preset には入れず、独立 binary facet として「最新決算で5条件達成」ラベル + 鮮度注記で出す。
+- ⚠️ **roe は percent 格納** (NVDA=111.66 / AAPL=146.69 / MSFT=33.13)。schema 例 `roe:0.62` は**誤り**。閾値は `roe >= 17.0` (小数 0.17 ではない)。Pass 3b は percent 単位で焼くこと。
+- **PRESET_TABLE 確定値 (3段、本番件数で較正・全 metric 単調)**:
+
+  | preset | eps_yoy_pct | eps_cagr_3y | rs_percentile | roe(percent) | 実測件数 |
+  |---|---|---|---|---|---|
+  | `loose` (緩い) | ≥20 | ≥10 | ≥70 | ≥10 | **55** |
+  | `standard` (標準) | ≥25 | ≥20 | ≥85 | ≥17 | **11** |
+  | `strict` (厳しい) | ≥50 | ≥25 | ≥90 | ≥25 | **3** |
+
+  較正目標 (緩い≈55 / 標準8-15 / 厳しい2-5) を満たす。null=測定外は AND で除外 (honest、嘘件数化しない)。RS 70 絶対床を loose で踏襲。件数は本番 data 変動で日々ぶれる前提 → **ライブ算出 (焼かない)**、上表は初期既定の根拠。
+- facet 別 coverage (null 率): eps_yoy 75.4% / eps_cagr_3y 60.7%(最低) / roe 73.4% / volume_surge 98.9% / rs 97.6% / inst_holders 95.4%。eps_cagr が最低のため AND で件数が落ちる主因 = 設計どおり (測定外は除外)。
 - CF系・Beat・ガイダンス・patterns は (c) で未 precompute → Sprint 3 では「利用可能化予定」表示 or off 固定。
-- ADR/銀行 guard (task #13) は facet 化で偽件数に反映 → canslim-scan precompute or frontend 抑止を先行/並行。
+- ADR/銀行 guard (task #13): roe は guard 部分伝播済 (JPM roe=null)。eps_yoy は未伝播 (BABA=-94.8 偽 miss) だが **faceting では false-negative (成長 facet から除外)** = 偽件数膨張ではない。Sprint 3 (件数) では許容、Sprint 4 (行表示) で -94.8 等の偽値を表示抑止。canslim-scan precompute での恒久 guard は task #13 で並行。
 
 **(c) data 拡張が前提 (後続 data 拡張 sprint、user 要望の一部)**: 営業CFマージン / CFPS>EPS / 3期連続性 / 売上高成長YoY / EPS 5年・3期 quarterly continuity / EPS・売上 Beat / ガイダンス上方修正 / 来期YoY / 平底・ダブルボトム。→ nightly batch 精算追加 ([[feedback_revenue_basis_mismatch]] sector guard 必須)。**user 例の「売上毎期成長・CFPS<15%・EPS 5年」はここ**。
 
