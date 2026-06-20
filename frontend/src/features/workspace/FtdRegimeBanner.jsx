@@ -58,7 +58,7 @@ export default function FtdRegimeBanner() {
       <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
       <span style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.04em', flexShrink: 0 }}>市場局面</span>
       <span style={{ fontSize: 12, fontWeight: 700, color, whiteSpace: 'nowrap', flexShrink: 0 }}>{regime.label}</span>
-      <span style={{ fontSize: 11, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <span style={{ fontSize: 11, color: 'var(--text-secondary)', minWidth: 0 }}>
         {regime.detail}
       </span>
     </div>
