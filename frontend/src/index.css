@@ -6848,6 +6848,15 @@ button.ds-chip[data-variant="add"]:hover {
   color: rgb(56, 189, 248);
 }
 
+/* C-14 (Pass 3c): disabled chip — 件数 0 の level 選択肢など。
+   HTML disabled 属性を使わず data-disabled="true" で実装 (onClick 早期 return + CSS 組合せ)。
+   animation 不使用 (落とし穴4 回避)。pointer-events: none で完全クリック無効化。 */
+.ds-chip[data-disabled="true"] {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 /* hover override for pressed: pressed は cyan のまま、hover で背景濃く. */
 button.ds-chip[data-pressed="true"]:hover {
   background: rgba(56, 189, 248, 0.22) !important;

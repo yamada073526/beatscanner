@@ -1428,9 +1428,11 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
   const [universe, setUniverse] = useState(_universeCache);
   const [universeLoading, setUniverseLoading] = useState(false);
   const [universeError, setUniverseError] = useState(null);
-  // Pass 3b: preset セグメントトグル + overrides (3b では常に空、shape のみ用意)
+  // Pass 3b: preset セグメントトグル + overrides (Pass 3c で setter を有効化)
   const [preset, setPreset] = useState('standard');
-  const [overrides] = useState({});
+  const [overrides, setOverrides] = useState({});
+  // Pass 3c: 詳細展開 accordion の開閉状態
+  const [detailOpen, setDetailOpen] = useState(false);
   // Pass 3b: sector / mcap additive refinement (universe ベース)
   const [sectorFilter, setSectorFilter] = useState([]);
   const [mcapFilter, setMcapFilter] = useState([]);
@@ -1537,7 +1539,78 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
     return result;
   }, [universe, overrides, fundaPassOnly, sectorFilter, mcapFilter]);
 
-  // Pass 3b: sector / mcap 選択肢を universe から live 算出 (count 付き)。
+  // Pass 3c: faceted 件数 — 各 facet の各 level に変えた時の件数 (itemPasses 共有、Trust Cliff C-2)。
+  // facet K を level L にした時の件数 = { ...activeGrades, [K]: L } で filter。
+  // level='off' = K を外した件数 = delete g[K]。
+  const facetLevelCounts = useMemo(() => {
+    const items = universe?.items || [];
+    const extra = { fundaPassOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const result = {};
+    for (const facet of FUNDA_FACETS) {
+      result[facet.key] = {};
+      // 'なし' = この facet を active grades から外した件数
+      const gOff = { ...activeGrades };
+      delete gOff[facet.key];
+      result[facet.key]['off'] = items.filter((it) => itemPasses(it, gOff, extra)).length;
+      // 各 level
+      for (const lvl of ['loose', 'standard', 'strict']) {
+        const g = { ...activeGrades, [facet.key]: lvl };
+        result[facet.key][lvl] = items.filter((it) => itemPasses(it, g, extra)).length;
+      }
+    }
+    return result;
+  }, [universe, activeGrades, fundaPassOnly, sectorFilter, mcapFilter]);
+
+  // Pass 3c: empty サジェスト — 現在 active な制約を1つ外した時に最も件数が増える提案を算出。
+  const emptySuggest = useMemo(() => {
+    if (filteredItems.length > 0) return null;
+    const items = universe?.items || [];
+    const extra = { fundaPassOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    let best = null;
+    // overrides の各 facet を外す
+    for (const [key, lvl] of Object.entries(overrides)) {
+      if (lvl === 'off') continue;
+      const g = { ...activeGrades };
+      delete g[key];
+      const cnt = items.filter((it) => itemPasses(it, g, extra)).length;
+      if (!best || cnt > best.count) best = { key, label: FACET_MAP[key]?.label || key, count: cnt, type: 'override' };
+    }
+    // CORE preset facet を1つ外す
+    for (const key of PRESET_CORE_KEYS) {
+      if (overrides[key] === 'off') continue;
+      const g = { ...activeGrades };
+      delete g[key];
+      const cnt = items.filter((it) => itemPasses(it, g, extra)).length;
+      if (!best || cnt > best.count) best = { key, label: FACET_MAP[key]?.label || key, count: cnt, type: 'preset' };
+    }
+    // fundaPassOnly を外す
+    if (fundaPassOnly) {
+      const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, fundaPassOnly: false })).length;
+      if (!best || cnt > best.count) best = { key: 'funda_pass', label: '最新決算5条件', count: cnt, type: 'funda_pass' };
+    }
+    // sectorFilter を全解除
+    if (sectorFilter.length > 0) {
+      const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, sectors: [] })).length;
+      if (!best || cnt > best.count) best = { key: 'sector', label: 'セクター絞り込み', count: cnt, type: 'sector' };
+    }
+    // mcapFilter を全解除
+    if (mcapFilter.length > 0) {
+      const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, mcapBands: [] })).length;
+      if (!best || cnt > best.count) best = { key: 'mcap', label: '時価総額絞り込み', count: cnt, type: 'mcap' };
+    }
+    return best;
+  }, [filteredItems.length, universe, activeGrades, overrides, fundaPassOnly, sectorFilter, mcapFilter]);
+
+  // Pass 3c: locked facet 和名マップ (静的 dict、不明 key は key そのまま fallback)。
+  const LOCKED_FACET_LABELS = {
+    cup: 'カップ・ウィズ・ハンドル',
+    breakout: '新高値ブレイク',
+    near_high: '新高値圏',
+    both: 'カップ+RS複合',
+    oneill: 'オニール統合',
+  };
+
+  // Pass 3c: sector / mcap 選択肢を universe から live 算出 (count 付き)。
   const sectorOptions = useMemo(() => {
     const map = {};
     for (const it of universe?.items || []) {
@@ -1768,7 +1841,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
                   size="sm"
                   variant="segmented"
                   pressed={preset === lvl}
-                  onClick={() => setPreset(lvl)}
+                  onClick={() => { setPreset(lvl); setOverrides({}); /* §0-7: preset 選び直しで overrides リセット */ }}
                   data-testid={`screener-preset-${lvl}`}
                 >
                   {PRESET_LABELS[lvl]}
@@ -1857,23 +1930,253 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
             </div>
           )}
 
-          {/* ── (4) locked facets (鍵 chip / 詳細展開 UI は Pass 3c) ── */}
+          {/* ── (3c-A) 詳細展開 accordion ── */}
+          <div>
+            <button
+              className="flex items-center gap-1.5 text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+              onClick={() => setDetailOpen((v) => !v)}
+              data-testid="screener-detail-toggle"
+              aria-expanded={detailOpen}
+            >
+              <SlidersHorizontal size={12} strokeWidth={2} aria-hidden />
+              詳細を調整
+              <ChevronDown
+                size={12}
+                strokeWidth={2}
+                aria-hidden
+                style={{ transform: detailOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
+              />
+            </button>
+
+            {detailOpen && (
+              <div
+                className="mt-3 rounded-xl border border-[var(--border)] p-3 space-y-4"
+                role="region"
+                aria-label="詳細フィルター"
+              >
+                {/* ファンダ群 */}
+                <div>
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">ファンダメンタル</p>
+                  <div className="space-y-2">
+                    {FUNDA_FACETS.filter((f) => PRESET_CORE_KEYS.includes(f.key)).map((facet) => {
+                      // 実効 level: overrides 優先 → なければ preset 由来
+                      const effectiveLevel = overrides[facet.key] === 'off'
+                        ? 'off'
+                        : overrides[facet.key] || preset;
+                      return (
+                        <div key={facet.key} className="flex flex-wrap items-center gap-1.5">
+                          <span className="w-24 shrink-0 text-[11px] text-[var(--text-secondary)]">{facet.label}</span>
+                          {['off', 'loose', 'standard', 'strict'].map((lvl) => {
+                            const cnt = facetLevelCounts[facet.key]?.[lvl] ?? 0;
+                            const isActive = effectiveLevel === lvl || (lvl === 'off' && (effectiveLevel === 'off' || !overrides[facet.key]));
+                            // CORE facet で overrides 未指定なら preset level が「選択中」に見える
+                            const actuallyPressed = lvl === 'off'
+                              ? (overrides[facet.key] === 'off')
+                              : (overrides[facet.key]
+                                  ? overrides[facet.key] === lvl
+                                  : preset === lvl);
+                            return (
+                              <Chip
+                                key={lvl}
+                                size="xs"
+                                variant="segmented"
+                                pressed={actuallyPressed}
+                                disabled={cnt === 0 && !actuallyPressed}
+                                onClick={() => {
+                                  setOverrides((prev) => ({
+                                    ...prev,
+                                    [facet.key]: lvl === 'off' ? 'off' : lvl,
+                                  }));
+                                }}
+                                data-testid={`screener-facet-level-${facet.key}-${lvl}`}
+                              >
+                                {lvl === 'off' ? 'なし' : PRESET_LABELS[lvl]}
+                                <span className="ml-0.5 tabular-nums opacity-60">({cnt})</span>
+                              </Chip>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* テクニカル群 */}
+                <div>
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">テクニカル</p>
+                  <div className="space-y-2">
+                    {FUNDA_FACETS.filter((f) => !PRESET_CORE_KEYS.includes(f.key)).map((facet) => {
+                      const effectiveLevel = overrides[facet.key] === 'off' ? 'off' : overrides[facet.key] || 'off';
+                      return (
+                        <div key={facet.key} className="flex flex-wrap items-center gap-1.5">
+                          <span className="w-24 shrink-0 text-[11px] text-[var(--text-secondary)]">{facet.label}</span>
+                          {['off', 'loose', 'standard', 'strict'].map((lvl) => {
+                            const cnt = facetLevelCounts[facet.key]?.[lvl] ?? 0;
+                            const actuallyPressed = lvl === 'off'
+                              ? !overrides[facet.key] || overrides[facet.key] === 'off'
+                              : overrides[facet.key] === lvl;
+                            return (
+                              <Chip
+                                key={lvl}
+                                size="xs"
+                                variant="segmented"
+                                pressed={actuallyPressed}
+                                disabled={cnt === 0 && !actuallyPressed}
+                                onClick={() => {
+                                  setOverrides((prev) => ({
+                                    ...prev,
+                                    [facet.key]: lvl === 'off' ? 'off' : lvl,
+                                  }));
+                                }}
+                                data-testid={`screener-facet-level-${facet.key}-${lvl}`}
+                              >
+                                {lvl === 'off' ? 'なし' : PRESET_LABELS[lvl]}
+                                <span className="ml-0.5 tabular-nums opacity-60">({cnt})</span>
+                              </Chip>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── (3c-B) 適用中フィルタ bar ── */}
+          {(() => {
+            const activeOverrides = Object.entries(overrides).filter(([, v]) => v && v !== 'off');
+            const hasActive = activeOverrides.length > 0 || sectorFilter.length > 0 || mcapFilter.length > 0 || fundaPassOnly;
+            if (!hasActive) return null;
+            return (
+              <div
+                className="flex flex-wrap items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2"
+                data-testid="screener-applied-bar"
+              >
+                {/* preset chip (常に1つ active) */}
+                <Chip size="xs" variant="display" tone="muted" data-testid="screener-applied-preset">
+                  厳しさ: {PRESET_LABELS[preset]}
+                </Chip>
+
+                {/* overrides */}
+                {activeOverrides.map(([key, lvl]) => (
+                  <Chip
+                    key={key}
+                    size="xs"
+                    variant="filter"
+                    pressed
+                    tone="accent"
+                    onClick={() => setOverrides((prev) => { const n = { ...prev }; delete n[key]; return n; })}
+                    data-testid={`screener-applied-override-${key}`}
+                  >
+                    <span className="opacity-60 mr-0.5">ファンダ:</span>
+                    {FACET_MAP[key]?.label || key}: {PRESET_LABELS[lvl]}
+                    <span className="ml-1 opacity-70">×</span>
+                  </Chip>
+                ))}
+
+                {/* sector */}
+                {sectorFilter.map((s) => (
+                  <Chip
+                    key={s}
+                    size="xs"
+                    variant="filter"
+                    pressed
+                    tone="accent"
+                    onClick={() => setSectorFilter((prev) => prev.filter((x) => x !== s))}
+                    data-testid={`screener-applied-sector-${s}`}
+                  >
+                    <span className="opacity-60 mr-0.5">セクター:</span>
+                    {sectorLabelJp(s)}
+                    <span className="ml-1 opacity-70">×</span>
+                  </Chip>
+                ))}
+
+                {/* mcap */}
+                {mcapFilter.map((k) => {
+                  const band = MCAP_BANDS.find((b) => b.key === k);
+                  return (
+                    <Chip
+                      key={k}
+                      size="xs"
+                      variant="filter"
+                      pressed
+                      tone="accent"
+                      onClick={() => setMcapFilter((prev) => prev.filter((x) => x !== k))}
+                      data-testid={`screener-applied-mcap-${k}`}
+                    >
+                      <span className="opacity-60 mr-0.5">時価総額:</span>
+                      {band?.label || k}
+                      <span className="ml-1 opacity-70">×</span>
+                    </Chip>
+                  );
+                })}
+
+                {/* funda_pass */}
+                {fundaPassOnly && (
+                  <Chip
+                    size="xs"
+                    variant="filter"
+                    pressed
+                    tone="accent"
+                    onClick={() => setFundaPassOnly(false)}
+                    data-testid="screener-applied-funda_pass"
+                  >
+                    決算5条件達成
+                    <span className="ml-1 opacity-70">×</span>
+                  </Chip>
+                )}
+
+                {/* すべて解除 */}
+                <button
+                  className="ml-auto text-[11px] text-[var(--text-muted)] hover:text-[var(--color-loss)] transition-colors"
+                  onClick={() => { setPreset('standard'); setOverrides({}); setSectorFilter([]); setMcapFilter([]); setFundaPassOnly(false); }}
+                  data-testid="screener-applied-clear"
+                >
+                  すべて解除
+                </button>
+              </div>
+            );
+          })()}
+
+          {/* ── (4) locked facets — 和名 + 鍵 (Pass 3c) ── */}
           {(universe.locked_facets || []).length > 0 && (
             <div>
               <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">Premium / Pro で解錠</p>
               <div className="flex flex-wrap gap-1.5">
-                {(universe.locked_facets || []).map((key) => (
-                  <Chip
-                    key={key}
-                    size="sm"
-                    variant="filter"
-                    tone="muted"
-                    data-testid={`screener-locked-${key}`}
-                  >
-                    <Lock size={11} strokeWidth={2} aria-hidden style={{ marginRight: 4, verticalAlign: '-1px' }} />
-                    {key}
-                  </Chip>
-                ))}
+                {(universe.locked_facets || []).map((key) => {
+                  // Premium 系 (cup/breakout/both/oneill) → onUpgrade、Pro 系 (near_high) → onProUpgrade
+                  const isProTier = key === 'near_high';
+                  const handleLockClick = () => {
+                    if (isProTier) {
+                      (onProUpgrade || onUpgrade)?.();
+                    } else {
+                      onUpgrade?.();
+                    }
+                  };
+                  return (
+                    <div key={key} className="flex flex-col items-start gap-0.5">
+                      <Chip
+                        size="sm"
+                        variant="filter"
+                        tone="accent"
+                        onClick={handleLockClick}
+                        data-testid={`screener-locked-${key}`}
+                        style={{
+                          background: 'rgba(56,189,248,0.06)',
+                          borderColor: 'rgba(56,189,248,0.25)',
+                        }}
+                      >
+                        <Lock size={11} strokeWidth={2} aria-hidden style={{ marginRight: 4, verticalAlign: '-1px' }} />
+                        {LOCKED_FACET_LABELS[key] || key}
+                      </Chip>
+                      <span className="ml-1 text-[9px] text-[var(--text-muted)]">
+                        {isProTier ? 'Pro で解錠' : 'Premium で解錠'}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1891,9 +2194,40 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
               )}
             </div>
             {filteredItems.length === 0 ? (
-              <p className="py-4 text-center text-sm text-[var(--text-muted)]" data-testid="screener-result-row-empty">
-                該当する銘柄がありません。厳しさを緩めるか、フィルターを変更してください。
-              </p>
+              <div data-testid="screener-result-row-empty">
+                <p className="py-3 text-center text-sm text-[var(--text-muted)]">
+                  該当する銘柄がありません。厳しさを緩めるか、フィルターを変更してください。
+                </p>
+                {/* (5) empty サジェスト */}
+                {emptySuggest && emptySuggest.count > 0 && (
+                  <div className="mt-2 flex items-center justify-center gap-2 text-xs text-[var(--text-muted)]">
+                    <span>「{emptySuggest.label}」を外すと {emptySuggest.count} 件</span>
+                    <button
+                      className="rounded px-2 py-0.5 border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"
+                      onClick={() => {
+                        if (emptySuggest.type === 'override') {
+                          setOverrides((prev) => { const n = { ...prev }; delete n[emptySuggest.key]; return n; });
+                        } else if (emptySuggest.type === 'preset') {
+                          setOverrides((prev) => {
+                            const n = { ...prev };
+                            n[emptySuggest.key] = 'off';
+                            return n;
+                          });
+                        } else if (emptySuggest.type === 'funda_pass') {
+                          setFundaPassOnly(false);
+                        } else if (emptySuggest.type === 'sector') {
+                          setSectorFilter([]);
+                        } else if (emptySuggest.type === 'mcap') {
+                          setMcapFilter([]);
+                        }
+                      }}
+                      data-testid="screener-empty-suggest-action"
+                    >
+                      外す
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)] overflow-hidden">
                 {filteredItems.map((it) => (

@@ -17,6 +17,8 @@
  *     xs = 10/14px font, 1px 6px padding   (子セクション内 micro chip)
  *     sm = 11/16px font, 2px 10px padding  (Pane 2 上部 segmented control 標準)
  *     md = 12/18px font, 4px 14px padding  (AccountSwitcher / JudgmentList filter)
+ *   disabled: boolean (C-14 Pass 3c) — HTML disabled 属性は使わず data-disabled="true" で実装。
+ *     onClick を内部で早期 return + aria-disabled + opacity/cursor は §Chip CSS で制御。
  *   variant: 'segmented' (default) | 'filter' | 'display' | 'switcher'
  *     segmented = タブ風選択 (期間 chips、ON/OFF が排他的)
  *     filter    = ON/OFF 選択 (リスト絞り込み、複数 toggle が並ぶ)
@@ -55,6 +57,7 @@ export default function Chip({
   variant = 'segmented',
   tone = 'muted',
   pressed = false,
+  disabled = false,
   role,
   icon = null,
   children,
@@ -80,6 +83,10 @@ export default function Chip({
       : undefined;
   // add variant で children が空 (icon-only) のとき circular border に切替えるため data flag。
   const isIconOnly = children == null || children === '';
+  // C-14 (Pass 3c): disabled 時は onClick を早期 return で無効化 (HTML disabled 属性は使わない)。
+  const handleClick = disabled
+    ? (e) => { e.preventDefault(); e.stopPropagation(); }
+    : onClick;
   return (
     <Tag
       type={isClickable ? type : undefined}
@@ -89,11 +96,13 @@ export default function Chip({
       data-tone={tn}
       data-role={rl}
       data-pressed={pressed ? 'true' : undefined}
+      data-disabled={disabled ? 'true' : undefined}
       data-icon-only={isIconOnly ? 'true' : undefined}
       aria-pressed={ariaPressedFinal}
+      aria-disabled={disabled ? 'true' : undefined}
       aria-label={ariaLabel}
       title={title}
-      onClick={onClick}
+      onClick={handleClick}
       {...rest}
     >
       {icon}
