@@ -611,6 +611,10 @@ let _heroCache = null; // { ts, leaderCwh, rsRising, newCwh, retest, rsLeaders, 
 function heroCacheFresh() {
   return !!_heroCache && (Date.now() - _heroCache.ts) < HERO_CACHE_TTL_MS;
 }
+// ScreenerIdleHero が追加 fetch ゼロで leaderCwh を読めるよう named export。
+// lazy chunk 境界 (Workspace.jsx の lazy()) は Workspace 側の問題。ScreenerIdleHero から
+// static import することで screener chunk にバンドルされ、cache は同一 module singleton として共有される。
+export { _heroCache, heroCacheFresh };
 
 /**
  * ScreenerPane

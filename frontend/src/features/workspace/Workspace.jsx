@@ -64,6 +64,8 @@ const ScreenerPane = lazy(() => import('./ScreenerPane.jsx'));
 // isScreenerV2() = opt-in default OFF (?screener_v2=1 で新構造) / 昇格は Sprint6 C-16 後。
 const ScreenerMaster = lazy(() => import('./ScreenerMaster.jsx'));
 import { isScreenerV2 } from './ScreenerMaster.jsx';
+// 案A (構造再設計 2026-06-20): Pane3 idle の空虚を「今日の筆頭」hero に充実。screener_v2 限定。
+const ScreenerIdleHero = lazy(() => import('./ScreenerIdleHero.jsx'));
 // v118 P6: Pane4Inspector + pane4/ ディレクトリ削除 (handover v118 §残バックログ、 1 人日)。
 // 6 体並列レビューで「Pane 4 = AI chat → マクロニュース連動」 と確定済だったが、
 // release MVP scope 外と判断、 Phase 2 で再評価。
@@ -1133,32 +1135,13 @@ export default function Workspace({
                 </div>
               </div>
             ) : screenerV2 ? (
-              // v229 Sprint 1 (master-detail): v2 では「今日の注目」は Pane 2 の ScreenerMaster (preset)
-              //   が担う。 Pane 3 は銘柄選択後に詳細 (JudgmentDetail) を出す detail 面 = 未選択時は
-              //   master 面から 1 件選ぶよう促す静的ガイド (ScreenerPane 二重表示の冗長を回避)。
-              //   §38/§5: 事実の導線文のみ、色・断定なし。
-              <div
-                data-testid="screener-detail-empty"
-                style={{
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 'var(--space-2, 8px)',
-                  padding: 'var(--space-6, 24px)',
-                  textAlign: 'center',
-                  color: 'var(--text-muted)',
-                }}
-              >
-                <SlidersHorizontal size={28} strokeWidth={1.5} aria-hidden style={{ color: 'var(--text-muted)' }} />
-                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                  左の一覧から銘柄を選ぶと、ここに詳細が表示されます
-                </span>
-                <span style={{ fontSize: 12 }}>
-                  「注目」と「絞り込み」を切り替えて候補を探せます。
-                </span>
-              </div>
+              // 案A (構造再設計 2026-06-20): v2 の Pane3 idle (未選択) は空虚だった。
+              //   「今日の筆頭」hero (leaderCwh 上位、追加 fetch ゼロで _heroCache 共有) に差し替え主役面積を充実。
+              //   Pane2=操作リスト / Pane3 idle=閲覧 hero の役割分離で「ScreenerPane 二重表示の冗長」を回避。
+              //   §38/§5: 軸明示・事実のみ・断定なし。shadow ゼロ堅持 ([[glow_elevation_postmortem]])。
+              <Suspense fallback={<div data-testid="screener-idle-hero" style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-muted)', fontSize: 13 }}><BrandPulse size={22} /><span>スクリーナーを準備中…</span></div>}>
+                <ScreenerIdleHero onSelect={setActiveTicker} />
+              </Suspense>
             ) : (
               // legacy (?screener_legacy=1): Pane 3 に Hero (今注目 3 セクション)。
               <Suspense fallback={<div style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-muted)', fontSize: 13 }}><BrandPulse size={22} /><span>スクリーナーを準備中…</span></div>}>
