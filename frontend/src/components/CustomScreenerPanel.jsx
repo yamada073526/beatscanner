@@ -340,7 +340,7 @@ export default function CustomScreenerPanel({
   }, [universe, activeGrades, sectorFilter, mcapFilter]);
 
   return (
-    <section className="rounded-2xl bg-[var(--bg-card)] p-6 shadow-[var(--shadow-sm)]">
+    <section className="rounded-2xl bg-[var(--bg-card)] p-6">
       {/* Sprint 3: 市場局面バナー (FtdRegimeBanner.jsx 共有 module)。
           ScreenerPane (Hero) と CustomScreenerPanel (探索チップ UI) は別 view なので両方に表示する。
           fetch は api.js dedupGet で 1 本化されるため API 重複コールなし。

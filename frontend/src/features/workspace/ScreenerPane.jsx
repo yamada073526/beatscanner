@@ -293,14 +293,11 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
         // ③-b polish (user dogfood「Pane3 と同じく中身が白みがかる発光感を」): base bg は CSS
         //   (.screener-pane-ambient .tier-m-glow) に移譲し、 :hover で background-color を lighten 可能に
         //   (inline bg だと :hover の bg 変化を潰すため)。
-        // 案1: active 時のみ accent ring を inline 指定。 非 active は undefined にして
-        //   tier-m-glow[data-halo-fired] の ambient glow (class) を効かせる (inline:none だと class を潰すため)。
-        boxShadow: active
-          ? '0 0 0 2px color-mix(in srgb, var(--color-accent) 25%, transparent)'
-          : undefined,
-        // ③-b polish: 「一瞬で光量マックス/カクカク」 解消 → transform(lift) + bg を 0.4s ease-standard で
-        //   ゆっくり (Pane3 .panel-card:hover の「ふわっと」 に揃える)。 border/box-shadow も同 timing。
-        transition: 'transform 0.4s var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1)), border-color 0.3s ease, box-shadow 0.4s var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1)), background-color 0.3s ease',
+        // Sprint6 shadow ゼロ統一 (SPEC §Sprint5): active ring (box-shadow) 廃止。
+        //   active は inline border (accent、上記 border 三項) で表現し shadow に頼らない。
+        boxShadow: undefined,
+        // ③-b polish: transform(lift) + bg を ease-standard でゆっくり (Pane3 .panel-card:hover の「ふわっと」 に揃える)。
+        transition: 'transform 0.4s var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1)), border-color 0.3s ease, background-color 0.3s ease',
       }}
     >
       {/* A-1: 見出しに格 — 連番 eyebrow + 18px/fw500 見出し + gold hairline。 A-3 stagger は heading block 単位。 */}

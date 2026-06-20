@@ -6967,14 +6967,14 @@ button.ds-chip[data-pressed="true"]:hover {
 @media (hover: hover) and (pointer: fine) {
   .screener-hero-row:hover {
     transform: translateY(var(--ws-hover-lift, -3px)) scale(1.008);
-    border-color: rgba(56, 189, 248, 0.45);
-    background-color: rgba(56, 189, 248, 0.04);
-    box-shadow: var(--ws-shadow-row-hover);
+    /* Sprint6 shadow ゼロ統一 (SPEC §Sprint5): box-shadow 廃止、accent border + tinted-bg で elevation (raw rgba→token) */
+    border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+    background-color: color-mix(in srgb, var(--color-accent) 4%, transparent);
   }
-  /* dark mode: cyan glow 強化 (Pane 4 / .news-list-card と同) */
+  /* dark mode: accent border/bg を強化 (Pane 4 / .news-list-card と同階層) */
   [data-theme="dark"] .screener-hero-row:hover {
-    border-color: rgba(56, 189, 248, 0.65);
-    background-color: rgba(56, 189, 248, 0.08);
+    border-color: color-mix(in srgb, var(--color-accent) 65%, transparent);
+    background-color: color-mix(in srgb, var(--color-accent) 8%, transparent);
   }
 }
 /* hover accent (user dogfood「もう少しアクセント」): ticker 文字を cyan にシフト (Linear「1つだけ動かす」/
@@ -6983,8 +6983,8 @@ button.ds-chip[data-pressed="true"]:hover {
   transition: color 150ms var(--ws-ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
 }
 @media (hover: hover) and (pointer: fine) {
-  .screener-hero-row:hover .screener-hero-ticker { color: rgb(186, 230, 253); } /* sky-200 (dark) */
-  [data-theme="light"] .screener-hero-row:hover .screener-hero-ticker { color: rgb(2, 132, 199); } /* sky-700 (light) */
+  /* Sprint6: ticker の hover color shift は accent token に統一 (raw rgb→token、「主役 ticker が灯る」motion 維持) */
+  .screener-hero-row:hover .screener-hero-ticker { color: var(--color-accent); }
 }
 /* ④ (user dogfood「hover accent もっと」、 ③ ticker cyan shift への積み増し): 最新ニュース
    (.news-list-card::before) と同 idiom の左アクセントバー。 row 左端で scaleY(0)→hover scaleY(1) と
@@ -7011,10 +7011,8 @@ button.ds-chip[data-pressed="true"]:hover {
 /* press: Stripe/HIG 流の沈み込み (Δy + Δscale で press feedback delta 充足 [[feedback_press_feedback_delta]]) */
 .screener-hero-row:active {
   transform: translateY(0) scale(0.97);
-  box-shadow: var(--ws-shadow-row-active);
-  transition:
-    transform 140ms var(--ws-ease-sink, cubic-bezier(0.4, 0, 1, 1)),
-    box-shadow 140ms var(--ws-ease-sink, cubic-bezier(0.4, 0, 1, 1));
+  /* Sprint6 shadow ゼロ統一: box-shadow 廃止。press delta は Δy(-3→0=3px)+Δscale(1.008→0.97=0.038) で充足 [[feedback_press_feedback_delta]] */
+  transition: transform 140ms var(--ws-ease-sink, cubic-bezier(0.4, 0, 1, 1));
 }
 @media (prefers-reduced-motion: reduce) {
   .screener-hero-row,
@@ -7023,8 +7021,7 @@ button.ds-chip[data-pressed="true"]:hover {
     transform: none;
     transition:
       border-color var(--ws-hover-duration, 220ms) ease,
-      background-color var(--ws-hover-duration, 220ms) ease,
-      box-shadow var(--ws-hover-duration, 220ms) ease;
+      background-color var(--ws-hover-duration, 220ms) ease;
   }
   /* ④: アクセントバーは hover で可視のまま (scaleY) だが transition を切り即時表示 (酔い系 churn なし)。 */
   .screener-hero-row::before { transition: none; }
@@ -7074,7 +7071,7 @@ button.ds-chip[data-pressed="true"]:hover {
   transform: translate(-50%, -50%);
   /* ③-a v5 (user dogfood「操作止めてじっと見てようやく分かる、もっと強く」): base 明度 0.30→0.38。
      ⚠️ ambient は本質的に subtle (Aman 節度) + 下方に RS ランキングが乗り一部隠れるため、 強度で勝負。 */
-  background: radial-gradient(ellipse, rgba(56, 189, 248, 0.38) 0%, transparent 64%);
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--color-accent) 38%, transparent) 0%, transparent 64%);
   -webkit-mask-image: radial-gradient(ellipse, black 32%, transparent 64%);
           mask-image: radial-gradient(ellipse, black 32%, transparent 64%);
   pointer-events: none;
@@ -10285,21 +10282,17 @@ button.ds-chip.hero-watch-add:hover svg {
 /* ③-b v4: base bg を inline から CSS に移譲 (:hover で bg-lighten を効かせるため、 inline bg は :hover を潰す)。 */
 .screener-pane-ambient .tier-m-glow { background: var(--bg-card); }
 @media (hover: hover) and (pointer: fine) {
-  /* ③-b v4 (user dogfood「一瞬で光量マックス/カクカク。 Pane3 は ふわっと上がる + 中身が白む発光感」):
-     Pane3 .panel-card:hover の 3 要素を screener card に揃える —
-       ① ゆっくり: transition を inline で 0.4s ease-standard に変更済 (一瞬マックス解消)。
-       ② ふわっと: translateY(-3px) で lift。
-       ③ 発光感: background-color を cyan-tint lighten = 「中身が灯る」。
-     box-shadow は panel-card 級の外側 halo (whitelist 値)。 scope は screener 限定維持。 */
+  /* Sprint6 shadow ゼロ統一 (SPEC §Sprint5): 旧 ③-b の box-shadow(3層 cyan glow + accent ring) を廃止。
+     screener 面は border+tinted-bg で elevation を表現する方針に統一。hover は ①lift (translateY) +
+     ②bg tint lighten (「中身が灯る」) の 2 要素で表現 (box-shadow に頼らない)。border は inline
+     (var(--border)/active 時 accent) 維持で !important 不要。tier-m-glow base 不触・scope は screener 限定。 */
   .screener-pane-ambient .tier-m-glow:hover {
     transform: translateY(-3px);
-    background-color: color-mix(in srgb, var(--color-accent) 6%, var(--bg-card));
-    box-shadow: 0 0 22px rgba(56, 189, 248, 0.26), 0 10px 28px rgba(56, 189, 248, 0.18), 0 0 0 2px rgba(56, 189, 248, 0.55);
+    background-color: color-mix(in srgb, var(--color-accent) 9%, var(--bg-card));
   }
-  /* dark: 暗背景で埋もれないよう bg-lighten + glow を強化 (Pane3 .panel-card:hover dark と同系) */
+  /* dark: 暗背景で埋もれないよう bg tint を強化 */
   [data-theme="dark"] .screener-pane-ambient .tier-m-glow:hover {
-    background-color: color-mix(in srgb, var(--color-accent) 10%, var(--bg-card));
-    box-shadow: 0 0 28px rgba(56, 189, 248, 0.34), 0 12px 32px rgba(56, 189, 248, 0.22), 0 0 0 2px rgba(99, 179, 237, 0.75);
+    background-color: color-mix(in srgb, var(--color-accent) 14%, var(--bg-card));
   }
 }
 /* reduced-motion: lift を無効化 (発光/bg は残す) */
