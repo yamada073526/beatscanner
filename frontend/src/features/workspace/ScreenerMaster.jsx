@@ -139,6 +139,8 @@ function MasterLoading() {
  *                          CustomScreenerPanel の `onUpgrade` に共有。
  *   onSelect             — 銘柄クリック handler (setActiveTicker)。CustomScreenerPanel の `onSelect`。
  *   onProUpgrade         — Pro 限定 filter のアップグレード handler。CustomScreenerPanel の `onProUpgrade`。
+ *   onAddToWatchlist     — Sprint 5 Pass B: watchlist 一括追加用の単体追加 fn。
+ *   watchlist            — Sprint 5 Pass B: 現在の watchlist 配列 (3件上限 Trust Cliff 判定用)。
  *
  * NOTE: CustomScreenerPanel の実 API は `{ onSelect, onUpgrade, onProUpgrade }` のみ。
  *       `user` / `isPro` は受け取らないため props として渡さない (落とし穴2: props 名推測の排除)。
@@ -149,6 +151,8 @@ export default function ScreenerMaster({
   handleUpgradeRequest,
   onSelect,
   onProUpgrade,
+  onAddToWatchlist,
+  watchlist = [],
 }) {
   // C-12: workspaceStore に混入しない — local state のみで管理
   // mode: 'preset' (今日の注目) | 'custom' (自分で絞る)
@@ -206,12 +210,15 @@ export default function ScreenerMaster({
         ) : (
           /* custom モード: CustomScreenerPanel (自分で絞る Explorer) を再利用
              C-17: filter UI は data-mode="custom" の時のみ max-height 展開 (CSS 制御)
-             実 API = { onSelect, onUpgrade, onProUpgrade } のみ (user/isPro は受けない) */
+             Sprint 5 Pass B: onAddToWatchlist / watchlist / isProUser を forward */
           <Suspense fallback={<MasterLoading />}>
             <CustomScreenerPanel
               onSelect={onSelect}
               onUpgrade={handleUpgradeRequest}
               onProUpgrade={onProUpgrade || handleUpgradeRequest}
+              onAddToWatchlist={onAddToWatchlist}
+              watchlist={watchlist}
+              isProUser={isProUser}
             />
           </Suspense>
         )}

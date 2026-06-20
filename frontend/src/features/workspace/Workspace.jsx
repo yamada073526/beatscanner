@@ -996,6 +996,8 @@ export default function Workspace({
                 handleUpgradeRequest={handleUpgradeRequest}
                 onSelect={setActiveTicker}
                 onProUpgrade={() => handleUpgradeRequest('新高値圏フィルター (Pro)')}
+                onAddToWatchlist={onAddToWatchlist}
+                watchlist={detailContext?.watchlist || []}
               />
             </Suspense>
           ) : isScreener ? (

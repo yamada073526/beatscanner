@@ -131,7 +131,14 @@ function formatAsOf(asOf) {
   return `${diffDays}日前に更新`;
 }
 
-export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade }) {
+export default function CustomScreenerPanel({
+  onSelect,
+  onUpgrade,
+  onProUpgrade,
+  onAddToWatchlist,
+  watchlist = [],
+  isProUser = false,
+}) {
   // Pass 3b: 統合 universe state (additive facet engine の母集団)
   const [universe, setUniverse] = useState(_universeCache);
   const [universeLoading, setUniverseLoading] = useState(false);
@@ -148,6 +155,20 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
   const [fundaPassOnly, setFundaPassOnly] = useState(false);
   // Pass C: 件数キャップ — 初期 100 件、「残りN件を表示」で全件展開
   const [showAllResults, setShowAllResults] = useState(false);
+  // Sprint 5 Pass B: 複数選択 → watchlist 一括追加
+  const [selectedTickers, setSelectedTickers] = useState(() => new Set());
+
+  // 一括追加ハンドラ (Trust Cliff: 無料 3 件上限を明示)
+  const handleBulkAdd = () => {
+    const tickers = [...selectedTickers];
+    if (!isProUser && (watchlist.length + tickers.length) > 3) {
+      // 部分追加せず upgrade を明示誘導 (Trust Cliff 防止)
+      onUpgrade?.('ウォッチリスト (Pro で無制限)');
+      return;
+    }
+    tickers.forEach((t) => onAddToWatchlist?.(t));
+    setSelectedTickers(new Set());
+  };
 
   // Pass 3b: 統合 universe を custom モード mount 時 1 回 fetch (module cache 経由)。
   useEffect(() => {
@@ -792,6 +813,65 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
                 {filteredItems.length} 件
               </span>
             </div>
+
+            {/* Sprint 5 Pass B: 一括追加バー (1 件以上選択時に表示) */}
+            {selectedTickers.size > 0 && (
+              <div
+                data-testid="screener-bulk-watchlist-bar"
+                style={{
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                  padding: '8px 12px',
+                  marginBottom: 4,
+                  background: 'var(--bg-subtle)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm, 4px)',
+                }}
+              >
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                  {selectedTickers.size} 件を選択中
+                </span>
+                <span style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTickers(new Set())}
+                    style={{
+                      fontSize: 11,
+                      padding: '3px 8px',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-sm, 4px)',
+                      background: 'transparent',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    選択解除
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="screener-bulk-watchlist"
+                    onClick={handleBulkAdd}
+                    className="text-white"
+                    style={{
+                      fontSize: 11,
+                      padding: '3px 10px',
+                      border: '1px solid var(--color-accent)',
+                      borderRadius: 'var(--radius-sm, 4px)',
+                      background: 'var(--color-accent)',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                    }}
+                  >
+                    ウォッチリストに追加
+                  </button>
+                </span>
+              </div>
+            )}
             {filteredItems.length === 0 ? (
               <div data-testid="screener-result-row-empty">
                 <p className="py-3 text-center text-sm text-[var(--text-muted)]">
@@ -856,15 +936,47 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
                     .sort((a, b) => b.contrib - a.contrib)
                     .slice(0, 2); // 狭い screener カラム幅に確実に収めるため上位2件 (spec「2-3個」範囲内)
 
+                  const isSelected = selectedTickers.has(it.ticker);
                   return (
-                    <button
+                    <div
                       key={it.ticker}
-                      className="screener-result-row w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--bg-hover)] transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      className={`group screener-result-row w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--bg-hover)] transition-colors${isSelected ? ' bg-[var(--bg-subtle)]' : ''}`}
                       onClick={() => onSelect?.(it.ticker)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onSelect?.(it.ticker);
+                        }
+                      }}
                       data-testid={`screener-result-row-${it.ticker}`}
                       data-rank-top={isTop ? 'true' : undefined}
-                      style={{ opacity: opacityVal }}
+                      style={{ opacity: opacityVal, cursor: 'pointer', userSelect: 'none' }}
                     >
+                      {/* Sprint 5 Pass B: 選択 checkbox (hover で出現、選択中は常時表示) */}
+                      <span
+                        className={`shrink-0 flex items-center${isSelected ? ' opacity-100' : ' opacity-0 group-hover:opacity-100'} transition-opacity`}
+                        style={{ width: 16 }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            setSelectedTickers((prev) => {
+                              const n = new Set(prev);
+                              n.has(it.ticker) ? n.delete(it.ticker) : n.add(it.ticker);
+                              return n;
+                            });
+                          }}
+                          data-testid={`screener-row-select-${it.ticker}`}
+                          aria-label={`${it.ticker} を選択`}
+                          style={{ cursor: 'pointer', accentColor: 'var(--color-accent)' }}
+                        />
+                      </span>
+
                       {/* ロゴ */}
                       <span className="shrink-0">
                         <CompanyLogo ticker={it.ticker} size={isTop ? 28 : 24} monoFallback />
@@ -909,7 +1021,7 @@ export default function CustomScreenerPanel({ onSelect, onUpgrade, onProUpgrade 
                           </span>
                         )}
                       </span>
-                    </button>
+                    </div>
                   );
                 })}
                 {/* Pass C: 件数キャップ超過時「残りN件を表示」ボタン (仮想スクロール不採用) */}
