@@ -58,8 +58,8 @@
 | sprint | 内容 | 主対象 | 状態 |
 |---|---|---|---|
 | 1 | master シェル + preset⇄custom トグル + modal 廃止 + CSS 基盤 | ScreenerMaster.jsx 等 | ✅ 着地 (76ca027) |
-| **2 (新)** | **統合 universe backend endpoint** `/api/scanner/universe` (5 テーブル LEFT JOIN + tier gate + cache + as_of) | backend/app/main.py (+ aggregator/ 再利用) | 未 |
-| **3** | **frontend additive faceting 全面書換**: single-select → `activeFilters`(Set) 多 facet。per-chip 件数「急騰(34)」/ 上位5-10既定表示+折りたたみ廃止 / 適用中 chip+個別x+clear all / `useMemo([universe,activeFilters])` 一本算出 / Premium・Pro 鍵先出し(件数非表示) / Chip disabled prop (C-14) | CustomScreenerPanel.jsx, Chip.jsx, index.css | 未 |
+| **2 (新)** | **統合 universe backend endpoint** `/api/scanner/universe` (5 テーブル LEFT JOIN + tier gate + cache + as_of) | backend/app/main.py (+ aggregator/ 再利用) | ✅ 着地 (d53ca0c/477c202、本番 LIVE count=2603) |
+| **3** | **frontend additive faceting 全面書換**: single-select → preset/overrides 多 facet。per-chip 件数 / 詳細展開 grade override / 適用中 chip+個別x+clear all / `itemPasses` 単一 predicate / Premium・Pro 鍵先出し / Chip disabled prop | CustomScreenerPanel.jsx, Chip.jsx, index.css | ✅ 着地 (f650dc8、本番 smoke PASS 緩55/標11/厳3、CustomScreenerPanel 2624→752行)。3 Pass+hotfix+cleanup = 3a rename / 3b engine / 3c override+bar+disabled / 3d 3体合議hotfix(C-2 faceted count+§38 RS緑撤廃+funda_pass件数+universe error+token) / 3e dead code 1820行削除 |
 | **4** | リスト密度: 固定 5 列モジュール行 (統合 universe 由来) + 上位強調・下位後退 + ヒット理由バッジ(§38 中立) | CustomScreenerPanel.jsx, ScreenerPane.jsx, index.css | 未 |
 | **5** | 決断支援: ヒーロー TOP3/N ヒット(件数整合) + watchlist 一括 + 行クリック Pane3 直行 + staleness(as_of) | ScreenerMaster/ScreenerPane, Workspace.jsx | 未 |
 | **6** | 視覚言語 最終寄せ(shadow ゼロ) + authed dogfood(vision-eval 再利用) + feature flag 昇格判断 (C-16) | index.css, snap-*.mjs | 未 |
