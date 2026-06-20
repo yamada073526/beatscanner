@@ -44,34 +44,73 @@ function deriveSignalLabel(it) {
   return null;
 }
 
-// 厳格交差: rs >= 75 ∩ (cup confirmed/pending OR breakout bo_confirmed)
-// ※ ファンダ次元 (funda_pass) は据え置き — ADR: SPEC_2026-06-20_screener-master-detail §0-6。
-//    funda_pass は本番 true=0件 (決算シーズン谷間) かつ「じっちゃまのファンダ条件をどう落とし込むか」が
-//    KB 起点の難問のため、専用セッションまで暫定で RS × テクニカルのみ。grades すり替え禁止。
-function matchesStrict(it) {
-  return (
-    typeof it.rs_percentile === 'number' && it.rs_percentile >= 75 &&
-    (it.cup_state === 'breakout_confirmed' ||
-      it.cup_state === 'breakout_pending' ||
-      it.breakout_state === 'bo_confirmed')
-  );
-}
+// ─── 投資条件しきい値 (KB SSOT = reference_jijima_investment_criteria) ───
+// 実装都合で変えない (Trust Cliff §3-1: 投資条件の変更は user 承認必須)。
+// eps_yoy 下限は KB「18-20%」(user gate 2026-06-21: 18)、roe≥17、営業CFマージン≥15
+// (ナイス・バディの法則)、RS≥75 (じっちゃま較正、O'Neil 80→75)。SPEC §0-2。
+const RS_MIN = 75;
+const OCF_MARGIN_MIN = 15;
+const EPS_YOY_MIN = 18;
+const ROE_MIN = 17;
 
-// 緩和交差 (0件フォールバック): 上記 + cup_state === 'formation' も許可
-function matchesRelaxed(it) {
-  return (
-    typeof it.rs_percentile === 'number' && it.rs_percentile >= 75 &&
-    (it.cup_state === 'breakout_confirmed' ||
-      it.cup_state === 'breakout_pending' ||
-      it.cup_state === 'formation' ||
-      it.breakout_state === 'bo_confirmed')
-  );
-}
+// 各 axis の null-safe predicate (None-preserve: null/未測定は不成立 = honest)。
+// ファンダ (ocf/eps/roe/rs) は free tier、テクニカル (cup/breakout) は Premium 限定 field。
+const passRs = (it) => typeof it.rs_percentile === 'number' && it.rs_percentile >= RS_MIN;
+const passOcf = (it) => typeof it.ocf_margin_pct === 'number' && it.ocf_margin_pct >= OCF_MARGIN_MIN;
+const passEps = (it) => typeof it.eps_yoy_pct === 'number' && it.eps_yoy_pct >= EPS_YOY_MIN;
+const passRoe = (it) => typeof it.roe === 'number' && it.roe >= ROE_MIN;
+// テクニカル: cup confirmed/pending OR breakout bo_confirmed
+const passTech = (it) =>
+  it.cup_state === 'breakout_confirmed' ||
+  it.cup_state === 'breakout_pending' ||
+  it.breakout_state === 'bo_confirmed';
+// テクニカル緩和: + cup_state formation (取っ手形成中も注目、KB「取っ手形成中も注目」哲学)
+const passTechRelaxed = (it) => passTech(it) || it.cup_state === 'formation';
+
+// ─── 段階フォールバック ladder (strict → loose、各 level は前 level の superset) ───
+// じっちゃま 2段階フィルターの上流 = 常時鮮度のファンダ候補プール (収益性×成長×ROE) を RS×テクニカルと交差。
+// KB「上流 = 収益性×成長の複合」→ 単独足切り (ocf 単独 / RS 単独) は relaxed のみ (SPEC §0-2)。
+// top3 を必ず埋めるため、≥3 を満たす最も strict な level を採用 (谷間でも空にしない = 原則4 人力代替)。
+// funda_pass (下流・決算サプライズ超過) は交差の必須条件にしない (sparse のため加点バッジのみ)。
+const HERO_LADDER = [
+  { // L0 strict: RS × 営業CF × EPS成長 × ROE × テクニカル
+    pred: (it) => passRs(it) && passOcf(it) && passEps(it) && passRoe(it) && passTech(it),
+    eyebrow: 'RS上位 × ファンダ × Cup/ブレイク',
+    axes: '相対力(RS)上位 ・ キャッシュ創出力/EPS成長/ROE ・ Cup/ブレイク形成',
+    relaxNote: null,
+  },
+  { // L1: ROE を外す
+    pred: (it) => passRs(it) && passOcf(it) && passEps(it) && passTech(it),
+    eyebrow: 'RS上位 × ファンダ × Cup/ブレイク',
+    axes: '相対力(RS)上位 ・ キャッシュ創出力/EPS成長 ・ Cup/ブレイク形成',
+    relaxNote: '※本日は全条件該当が少なく、ROE 条件を緩めた候補です。',
+  },
+  { // L2: EPS成長も外す → ファンダ = キャッシュ創出力 単独
+    pred: (it) => passRs(it) && passOcf(it) && passTech(it),
+    eyebrow: 'RS上位 × キャッシュ創出力 × Cup/ブレイク',
+    axes: '相対力(RS)上位 ・ キャッシュ創出力 ・ Cup/ブレイク形成',
+    relaxNote: '※本日は該当が少なく、成長条件を緩め キャッシュ創出力を中心に広げた候補です。',
+  },
+  { // L3: ファンダを外す → RS × テクニカル (旧 strict)
+    pred: (it) => passRs(it) && passTech(it),
+    eyebrow: 'RS上位 × Cup/ブレイク',
+    axes: '相対力(RS)上位 ・ Cup/ブレイク形成',
+    relaxNote: '※本日はファンダ該当が少なく、RS × テクニカルを中心に広げた候補です。',
+  },
+  { // L4: テクニカルを formation まで緩和 (旧 relaxed)
+    pred: (it) => passRs(it) && passTechRelaxed(it),
+    eyebrow: 'RS上位 × Cup/ブレイク',
+    axes: '相対力(RS)上位 ・ Cup/ブレイク(形成中含む)',
+    relaxNote: '※本日はブレイク確定/待ちが少なく、カップ形成中まで広げた候補です。',
+  },
+];
 
 // ⓘ ツールチップ文 (各条件の意味、§38: 内部プロトコル名は出さない = 「独自プロトコル」表記)
 const CRITERIA_TOOLTIP =
   'RS: 市場全体に対する6ヶ月の相対力が上位75パーセンタイル以上。' +
-  ' / Cup・ブレイク: 株価チャートが押し目から高値更新へ向かう形状を形成。';
+  ' / キャッシュ創出力: 営業キャッシュフロー ÷ 売上高 ≥ 15%。' +
+  ' / EPS成長: EPS 前年比 ≥ 18%。 / ROE ≥ 17%。' +
+  ' / Cup・ブレイク: 株価が押し目から高値更新へ向かう形状を形成。';
 
 // -----------------------------------------------------------
 // module-level sub-components (inline 関数 component 禁止)
@@ -109,7 +148,7 @@ function RankCircle({ rank }) {
 
 /** 銘柄 row 1 件。rank1 のみ featured (padding 広め / ticker 大)。
  *  右側に RS percentile (主) + 交差シグナルラベル (副) を縦積みで透明表示。 */
-function LeaderRow({ ticker, rs, signal, rank, onSelect }) {
+function LeaderRow({ ticker, rs, signal, rank, onSelect, fundaPass = false }) {
   const isFeatured = rank === 1;
   return (
     <li
@@ -153,6 +192,27 @@ function LeaderRow({ ticker, rs, signal, rank, onSelect }) {
         >
           {ticker}
         </span>
+        {/* funda_pass バッジ (下流・決算サプライズ超過 = gold accent、§0-2 2段階区別)。
+            加点表示であり交差の必須条件ではない (sparse = 決算シーズン谷間は非表示が正)。 */}
+        {fundaPass && (
+          <span
+            data-testid={`idle-hero-funda-badge-${ticker}`}
+            title="最新決算で5条件 (EPS・売上・来期ガイダンス等) を達成"
+            style={{
+              flexShrink: 0,
+              fontSize: 9,
+              fontWeight: 700,
+              padding: '1px 5px',
+              borderRadius: 999,
+              letterSpacing: '0.02em',
+              background: 'color-mix(in srgb, var(--color-gold) 16%, transparent)',
+              color: 'var(--color-gold)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            決算5条件
+          </span>
+        )}
         {/* 右側: RS (主) + シグナルラベル (副)。§38: 色 neutral、買い断定なし */}
         <span
           style={{
@@ -209,7 +269,7 @@ export default function ScreenerIdleHero({ onSelect }) {
     tickers: [],
     loading: true,
     error: null,
-    relaxed: false, // true = 厳格0件で formation まで緩和した候補
+    levelIdx: 0, // HERO_LADDER の採用 level (0=strict、大きいほど緩和)
   });
 
   useEffect(() => {
@@ -223,15 +283,18 @@ export default function ScreenerIdleHero({ onSelect }) {
         if (ac.signal.aborted) return;
         const items = Array.isArray(data?.items) ? data.items : [];
 
-        // 厳格交差 → 0件なら formation 含む緩和交差にフォールバック
-        let matched = items.filter(matchesStrict);
-        let relaxed = false;
-        if (matched.length === 0) {
-          matched = items.filter(matchesRelaxed);
-          relaxed = matched.length > 0;
+        // 段階フォールバック: 各 level で交差 (各 level は前 level の superset → 件数は非減少)。
+        // top3 を必ず埋めるため ≥3 を満たす最 strict level を採用。
+        // なければ最大件数を満たす最 strict level (= 候補が 3 未満でも最良を表示、空を避ける)。
+        const buckets = HERO_LADDER.map((L) => items.filter(L.pred));
+        let levelIdx = buckets.findIndex((m) => m.length >= 3);
+        if (levelIdx === -1) {
+          const maxCount = Math.max(0, ...buckets.map((m) => m.length));
+          levelIdx = Math.max(0, buckets.findIndex((m) => m.length === maxCount));
         }
+        const matched = buckets[levelIdx] || [];
 
-        // rs_percentile 降順 top3
+        // rs_percentile 降順 top3。funda_pass は加点バッジとして付与 (交差の必須条件にしない)。
         const top3 = matched
           .slice()
           .sort((a, b) => (b.rs_percentile ?? 0) - (a.rs_percentile ?? 0))
@@ -240,19 +303,22 @@ export default function ScreenerIdleHero({ onSelect }) {
             ticker: it.ticker,
             rs: it.rs_percentile,
             signal: deriveSignalLabel(it),
+            fundaPass: it.funda_pass === true,
           }));
 
-        setFetchState({ tickers: top3, loading: false, error: null, relaxed });
+        setFetchState({ tickers: top3, loading: false, error: null, levelIdx });
       } catch (e) {
         if (ac.signal.aborted) return;
-        setFetchState({ tickers: [], loading: false, error: String(e), relaxed: false });
+        setFetchState({ tickers: [], loading: false, error: String(e), levelIdx: 0 });
       }
     }
     load();
     return () => ac.abort();
   }, []);
 
-  const { tickers, loading, error, relaxed } = fetchState;
+  const { tickers, loading, error, levelIdx } = fetchState;
+  const meta = HERO_LADDER[levelIdx] || HERO_LADDER[0];
+  const relaxed = levelIdx > 0;
   const isEmpty = !loading && !error && tickers.length === 0;
 
   // ── loading state ──
@@ -369,7 +435,7 @@ export default function ScreenerIdleHero({ onSelect }) {
               marginBottom: 2,
             }}
           >
-            RS上位 × Cup/ブレイク
+            {meta.eyebrow}
           </div>
           <h4
             style={{
@@ -416,14 +482,14 @@ export default function ScreenerIdleHero({ onSelect }) {
             style={{ flexShrink: 0, marginTop: 2, opacity: 0.7, cursor: 'help' }}
           />
           <span>
-            相対力(RS)上位 ・ Cup/ブレイク形成 を
+            {meta.axes} を
             <strong style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>すべて満たす</strong>
             銘柄。スクリーニング結果であり投資推奨ではありません。
           </span>
         </p>
 
-        {/* 緩和フォールバック時の注記 (透明性: なぜこの候補か) */}
-        {relaxed && (
+        {/* 緩和フォールバック時の注記 (透明性: なぜこの候補か / どの条件を緩めたか level に忠実) */}
+        {relaxed && meta.relaxNote && (
           <p
             data-testid="idle-hero-relaxed-note"
             style={{
@@ -433,7 +499,7 @@ export default function ScreenerIdleHero({ onSelect }) {
               color: 'var(--text-muted)',
             }}
           >
-            ※本日は「ブレイク確定/待ち」が少なく、カップ形成中まで広げた候補です。
+            {meta.relaxNote}
           </p>
         )}
       </div>
@@ -457,6 +523,7 @@ export default function ScreenerIdleHero({ onSelect }) {
             signal={t.signal}
             rank={idx + 1}
             onSelect={onSelect}
+            fundaPass={t.fundaPass}
           />
         ))}
       </ul>
