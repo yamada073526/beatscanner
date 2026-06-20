@@ -5,19 +5,16 @@
  * SPEC 2026-06-20: スクリーナー構造再設計 案A §2(共通5原理) + §3(案A) + §5(DoD)
  *
  * 設計原則:
- *   - 追加 fetch ゼロ: ScreenerPane.jsx module-level _heroCache を static import で読む。
- *     (同一 chunk にバンドルされ singleton を共有。ScreenerPane が fetch した leaderCwh を即再利用)
+ *   - 自前 fetch: mount 時に /api/scanner/rs?min_percentile=80&limit=3 を直接取得。
+ *     _heroCache / ScreenerPane への依存なし。custom モード (ScreenerPane unmount) でも動作。
  *   - 発光ゼロ: .panel-card/.bs-panel/.surface-card 不使用。border + tinted-bg + token のみ。
- *   - §38/§5: 軸明示「合致度 上位」、断定/最上級禁止、免責1行。
+ *   - §38/§5: 軸明示「RS 上位」、断定/最上級禁止、免責1行。
  *   - testid を loading/error/empty/main 全 render path に付与。
  *   - inline 関数 component 禁止 (module-level hoist)。
  *   - shadow ゼロ堅持。raw hex 禁止。
  */
+import { useState, useEffect } from 'react';
 import { Hourglass, Crown, AlertCircle } from 'lucide-react';
-// 追加 fetch ゼロの核: ScreenerPane の module-level singleton cache を直接参照。
-// ScreenerPane が fetch 完了後に _heroCache を書き込むため、ScreenerPane より後に
-// mount される ScreenerIdleHero は常に最新 cache を読める。
-import { _heroCache, heroCacheFresh } from './ScreenerPane.jsx';
 import CompanyLogo from '../../components/CompanyLogo.jsx';
 
 // stagger 定数 (ScreenerPane.jsx と同値で統一感)
@@ -143,14 +140,39 @@ function LeaderRow({ ticker, badge, rank, onSelect }) {
  * @param {Function} props.onSelect - ticker string を受け取る。Workspace の setActiveTicker 相当。
  */
 export default function ScreenerIdleHero({ onSelect }) {
-  // _heroCache は ScreenerPane.jsx module-level 変数の参照 (同 chunk singleton)。
-  // ScreenerPane が mount されていない場合 (lazy chunk 未ロード) は null になりうる。
-  const cacheReady = heroCacheFresh();
-  const leader = cacheReady && _heroCache ? _heroCache.leaderCwh : null;
+  // 自前 fetch: _heroCache / ScreenerPane に依存せず mount 時に RS 上位 3 件を取得。
+  // custom モード (ScreenerPane unmount) でも loading が解ける。
+  const [fetchState, setFetchState] = useState({ tickers: [], loading: true, error: null });
 
-  const loading = !cacheReady || (leader && leader.loading);
-  const error = leader && leader.error ? leader.error : null;
-  const tickers = leader && Array.isArray(leader.tickers) ? leader.tickers.slice(0, 3) : [];
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const r = await fetch('/api/scanner/rs?min_percentile=80&limit=3');
+        if (cancelled) return;
+        if (!r.ok) {
+          setFetchState({ tickers: [], loading: false, error: `HTTP ${r.status}` });
+          return;
+        }
+        const data = await r.json();
+        if (cancelled) return;
+        // RS endpoint レスポンス: { items: [{ticker, universe_percentile, ...}] }
+        const items = Array.isArray(data.items) ? data.items.slice(0, 3) : [];
+        const tickers = items.map((it) => ({
+          ticker: it.ticker,
+          badge: it.universe_percentile != null ? `RS ${it.universe_percentile}` : undefined,
+        }));
+        setFetchState({ tickers, loading: false, error: null });
+      } catch (e) {
+        if (cancelled) return;
+        setFetchState({ tickers: [], loading: false, error: String(e) });
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  const { tickers, loading, error } = fetchState;
   const isEmpty = !loading && !error && tickers.length === 0;
 
   // ── loading state ──
@@ -267,7 +289,7 @@ export default function ScreenerIdleHero({ onSelect }) {
               marginBottom: 2,
             }}
           >
-            合致度 上位
+            RS 上位
           </div>
           <h4
             style={{
@@ -303,7 +325,7 @@ export default function ScreenerIdleHero({ onSelect }) {
             color: 'var(--text-muted)',
           }}
         >
-          5条件 × RS × Cup-Handle の交差で絞り込んだ上位銘柄。
+          RS 上位 80% 銘柄から絞り込んだ筆頭候補。
           スクリーニング結果であり投資推奨ではありません。
         </p>
       </div>
