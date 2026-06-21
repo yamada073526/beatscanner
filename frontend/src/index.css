@@ -13442,4 +13442,228 @@ body.is-digest-resizing {
 .screener-result-row[data-rank-top="true"] {
   border-left: 2px solid var(--border-strong, var(--border));
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Sprint 1: .screener-row — 共有 row primitive (ScreenerRow.jsx)
+   痛み2「モード切替で別アプリ感」解消の核。preset / custom 両モードで共有。
+   raw 数値 inline 禁止 (追記条件1): --text-* / --space-* / --radius-* トークンのみ。
+   発光禁止 (§6): .panel-card / .bs-panel / .surface-card / .tier-m-glow を一切付けない。
+   CSS スコープ: .screener-row (または [data-testid='screener-master'] 内) に閉じる。
+   shadow ゼロ哲学: elevation = border + tinted bg のみ。
+   §38 厳守: 緑/赤断定なし。colorRole は token 変数経由。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── base layout ─────────────────────────────────────────────────────────── */
+.screener-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);          /* 8px: inline gap (design_system.md --space-2) */
+  padding: var(--space-2) var(--space-4); /* 8px 16px: compact row */
+  min-height: 44px;             /* CLS ゼロ: skeleton と同高さ固定 (feedback_cls_envelope_pattern) */
+  cursor: pointer;
+  user-select: none;
+  background: transparent;
+  border: none;
+  transition: background 120ms ease;
+  /* 発光禁止: box-shadow なし (shadow ゼロ哲学) */
+}
+
+.screener-row:hover {
+  background: var(--bg-hover);
+}
+
+.screener-row:active {
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+
+/* 上位行 (isTop=true): 左端に accent hairline で視線を引く (scarcity、§38 色 polarity なし) */
+.screener-row--top {
+  border-left: 2px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
+}
+
+/* 選択済み */
+.screener-row--selected {
+  background: var(--bg-subtle);
+}
+
+/* locked 行: muted で抑制 (0件 disabled と物理分離) */
+.screener-row--locked {
+  opacity: 0.7;
+  cursor: default;
+}
+
+/* ── logo slot ────────────────────────────────────────────────────────────── */
+.screener-row__logo-slot {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* サイズは CompanyLogo の size prop で制御するため width/height 指定なし */
+}
+
+/* ── checkbox slot (custom モードで hover 時可視) ─────────────────────────── */
+.screener-row__checkbox-slot {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  width: var(--space-4);       /* 16px */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.screener-row:hover .screener-row__checkbox-slot,
+.screener-row__checkbox-slot--visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.screener-row__checkbox {
+  cursor: pointer;
+  accent-color: var(--color-accent);
+}
+
+/* ── body (2 段レイアウト) ───────────────────────────────────────────────── */
+.screener-row__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;                    /* micro-gap: typography 階層間の最小間隔 */
+}
+
+/* ── 1 行目: ティッカー + RS ────────────────────────────────────────────── */
+.screener-row__ticker-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);         /* 8px */
+}
+
+/* ticker: mono / fw600 (通常) / fw700 (上位) — token 化 */
+.screener-row__ticker {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-caption); /* 12px (design_system.md --text-caption) */
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+  truncate: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.screener-row__ticker--top {
+  font-size: var(--text-body);  /* 14px: 上位行は 1 段上のフォントサイズ */
+  font-weight: 700;
+}
+
+/* RS 数値: §38 color polarity なし、数値のみ中立 */
+.screener-row__rs {
+  flex-shrink: 0;
+  font-size: var(--text-caption); /* 12px */
+  font-weight: 400;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* RS ≥ 85 のみ fw600 で強調 (数値の意味強化、緑断定なし) */
+.screener-row__rs--high {
+  font-weight: 600;
+}
+
+/* locked 鍵表示 */
+.screener-row__lock {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;                    /* 許容 micro-gap (4px 未満は 1px hairline 例外範囲) */
+  color: var(--text-muted);
+  font-size: var(--text-caption); /* 12px */
+}
+
+.screener-row__lock-label {
+  font-size: var(--text-caption); /* 12px */
+  color: var(--text-muted);
+}
+
+/* ── 2 行目: ヒット理由バッジ + 会社名 ─────────────────────────────────── */
+.screener-row__chip-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);         /* 8px */
+  min-width: 0;
+}
+
+.screener-row__badges {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);         /* 4px: chip 間 micro-gap */
+  flex-shrink: 0;
+}
+
+/* 会社名: truncate で 1 行に収める */
+.screener-row__name {
+  font-size: var(--text-caption); /* 12px (--text-caption 0.6875rem 換算 ≈ 11px だが --text-caption 12px SSOT) */
+  color: var(--text-muted);
+  line-height: 1.3;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* ── skeleton state ─────────────────────────────────────────────────────── */
+.screener-row--skeleton {
+  cursor: default;
+  pointer-events: none;
+  animation: screener-row-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes screener-row-shimmer {
+  0%, 100% { opacity: 0.6; }
+  50%       { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screener-row--skeleton { animation: none; }
+}
+
+/* skeleton テキスト placeholder */
+.screener-row__skeleton-text {
+  display: inline-block;
+  height: 10px;
+  border-radius: var(--radius-xs); /* 4px */
+  background: var(--bg-hover);
+}
+
+.screener-row__skeleton-text--ticker { width: 48px; }
+.screener-row__skeleton-text--rs     { width: 32px; }
+.screener-row__skeleton-text--badge  { width: 40px; }
+.screener-row__skeleton-text--name   { width: 80px; }
+
+/* ── empty state ────────────────────────────────────────────────────────── */
+.screener-row--empty {
+  cursor: default;
+  pointer-events: none;
+  justify-content: center;
+  min-height: var(--space-12); /* 48px */
+}
+
+.screener-row__empty-text {
+  font-size: var(--text-caption); /* 12px */
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ── error state ────────────────────────────────────────────────────────── */
+.screener-row--error {
+  cursor: default;
+  pointer-events: none;
+}
+
+/* ── dark mode ───────────────────────────────────────────────────────────── */
+/* --text-primary / --text-secondary / --text-muted / --bg-hover / --bg-subtle は
+   [data-theme="dark"] で自動切替 (index.css :root と [data-theme="dark"] で定義済)。
+   追加 override は現時点では不要。 */
 /* ヒット理由バッジは Chip primitive (ds-chip[data-variant="display"][data-tone="muted"]) に統一済 (§Chip 参照) */
