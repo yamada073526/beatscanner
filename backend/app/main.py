@@ -14221,6 +14221,31 @@ async def get_technical(
             except Exception as e:
                 print(f"[cup_handle] box_support inject failed: {e}")
 
+            # buy-quality Phase1 S5 (案A 状態コンパス「上昇余地 vs 過熱」): pivot_distance_pct と
+            # ad_volume_ratio を cup_handle 応答へ注入。JudgmentDetail の BuyHeadroomCompass が
+            # technical.patterns.cup_handle.{pivot_distance_pct, ad_volume_ratio} として読む。
+            # /api/technical は line 14168-14171 で既に closes/volumes を fetch 済 → 追加 fetch ゼロ (§0-5)。
+            # universe endpoint (main.py:20040-) と同算出式・同 None-preserve で frontend が一貫して読める。
+            # pivot 不在 (cup 未形成) / 価格欠落 → honest None (誤った距離を出さない、§38)。
+            try:
+                _ch = patterns_result["cup_handle"]
+                _pivot = _ch.get("pivot") if isinstance(_ch, dict) else None
+                _pivot_price = (
+                    float(_pivot["price"])
+                    if isinstance(_pivot, dict) and _pivot.get("price") is not None
+                    else None
+                )
+                _today_close = closes[-1] if closes else None
+                _ch["pivot_distance_pct"] = (
+                    round((_today_close - _pivot_price) / _pivot_price * 100, 2)
+                    if isinstance(_pivot_price, (int, float)) and _pivot_price > 0
+                    and isinstance(_today_close, (int, float))
+                    else None
+                )
+                _ch["ad_volume_ratio"] = _compute_ad_volume_ratio(closes, volumes)
+            except Exception as e:
+                print(f"[cup_handle] buy-headroom inject failed: {e}")
+
             # 2026-06-15: 旧レジスタンス・リテスト水準 検出 (resistance_retest)。box_support を主語に、
             # 直近高値(cup pivot)からの押し戻し率で「買いゾーン接近」 を3段判定。LLM 不使用・additive
             # (既存 UI 不変、frontend flag ?retest=1 下でのみ表示)。SPEC_2026-06-15_resistance-retest。

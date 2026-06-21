@@ -101,6 +101,7 @@ import FundamentalsAccordion from './sections/FundamentalsAccordion.jsx';
 // v199: ファンダ章冒頭の決算ハイライト (flag opt-in、SPEC_2026-06-10_earnings-flash-summary + 6体合議)
 import EarningsFlashSummary from './sections/EarningsFlashSummary.jsx';
 import StateCompass from './sections/StateCompass.jsx';
+import BuyHeadroomCompass from './sections/BuyHeadroomCompass.jsx';
 // 完全性台帳 (coverage manifest) Sprint3: 規律の元データ取得状況を最上部1行ロールアップ + ドリルダウン監査。
 import CompletenessRollupBadge from './sections/CompletenessRollupBadge.jsx';
 // 完全性台帳 #4: SPY 取得失敗時にテクニカル章で「地合いデータ未取得」 を中立注記 (chartBlock 内 = 全 path 到達)。
@@ -311,6 +312,23 @@ function isPane3Compass() {
     return window.localStorage?.getItem('pane3_compass') !== '0'; // default ON、=0 で revert
   } catch {
     return true;
+  }
+}
+
+// buy-quality Phase1 S5 (2026-06-21): 案A「上昇余地 vs 過熱」状態コンパス (BuyHeadroomCompass)。
+// 節目 (pivot) からの距離 4 ゾーン + A/D 出来高の質を ticker 詳細冒頭に追加。dogfood 主訴②
+// 「上昇余地か高値づかみか判断できない」への直接回答。§38 厳守 (amber/neutral、緑不使用、静的 dict)。
+// default OFF・完全可逆 (?headroom=1 / =0 or localStorage 'headroom'='1')。dogfood→GO で default ON 昇格
+// (compass / flash と同じ昇格経路)。SPEC_2026-06-21_screener-buy-quality-headroom §5 Sprint 5。
+function isBuyHeadroom() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('headroom');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('headroom') === '1';
+  } catch {
+    return false;
   }
 }
 
@@ -897,6 +915,13 @@ export default function JudgmentDetail({
         </SectionFade>
       )}
 
+      {/* buy-quality Phase1 S5 (案A 状態コンパス): TriageBanner 直後・5条件直前の上部判定クラスタに
+          BuyHeadroomCompass を mount (!isV5 = 既定本番 UI)。gate は result でなく !detail?.error
+          ([[feedback_judgmentdetail_result_gate]])。?headroom=1 で dogfood (default OFF)。 */}
+      {selectedTicker && isBuyHeadroom() && !detail?.error && (
+        <BuyHeadroomCompass selectedTicker={selectedTicker} />
+      )}
+
       {/* 2026-05-12 PR-2: VerdictDetail + ConditionGrid を FiveConditionsCard に統合。
           feature flag `localStorage.pane3_v1='1'` で旧 UI に切替可 (撤回コスト最小化、§-1-B postmortem 学び適用)。
           Sprint 3: FiveConditionsCard は expanded 固定 (accordion wrap 対象外)。
@@ -1312,6 +1337,11 @@ export default function JudgmentDetail({
                       onOpenAddTransaction={detailContext.onOpenAddTransaction}
                     />
                   </SectionFade>
+                )}
+                {/* buy-quality Phase1 S5 (案A 状態コンパス): v5 ティッカー章にも二重 mount (§0-6
+                    [[feedback_judgmentdetail_dual_mount_paths]])。VerdictHero (glow host) の外 = card 入れ子なし。 */}
+                {selectedTicker && isBuyHeadroom() && !detail?.error && (
+                  <BuyHeadroomCompass selectedTicker={selectedTicker} />
                 )}
               </>
             );

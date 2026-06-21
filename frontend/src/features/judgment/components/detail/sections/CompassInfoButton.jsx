@@ -85,13 +85,18 @@ function CompassModalBody({ data, meta }) {
 
 /**
  * @param {object} props
- * @param {'earnings'|'company'|'price'} props.modalKey
+ * @param {string} props.modalKey - COMPASS ('earnings'|'company'|'price') か modalSource のキー
  * @param {number} [props.size=14] アイコン px
  * @param {string} [props.ariaLabel]
+ * @param {object} [props.modalSource=COMPASS_MODAL] - 別 dict (例 BUY_HEADROOM_MODAL) を渡すと再利用可。
+ * @param {object} [props.metaSource=COMPASS_MODAL_META] - 上記に対応する meta (section icon/emphasis)。
+ *   いずれも @no-llm 静的 dict 前提 (CompassModalBody の render 様式を共有するための薄い generalize)。
  */
-export default function CompassInfoButton({ modalKey, size = 14, ariaLabel }) {
+export default function CompassInfoButton({
+  modalKey, size = 14, ariaLabel, modalSource = COMPASS_MODAL, metaSource = COMPASS_MODAL_META,
+}) {
   const [open, setOpen] = useState(false);
-  const data = COMPASS_MODAL[modalKey];
+  const data = modalSource[modalKey];
   if (!data) return null;
   return (
     <>
@@ -110,7 +115,7 @@ export default function CompassInfoButton({ modalKey, size = 14, ariaLabel }) {
       </button>
       {open && (
         <InfoModal title={data.modalTitle} onClose={() => setOpen(false)}>
-          <CompassModalBody data={data} meta={COMPASS_MODAL_META[modalKey]} />
+          <CompassModalBody data={data} meta={metaSource[modalKey]} />
         </InfoModal>
       )}
     </>
