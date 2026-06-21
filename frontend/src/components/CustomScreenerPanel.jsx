@@ -9,6 +9,8 @@ import ProTeaser from './ui/ProTeaser.jsx';
 import FtdRegimeBanner from '../features/workspace/FtdRegimeBanner.jsx';
 // Pass B: 企業ロゴ (TV→FMP→頭文字円 3 段 fallback)
 import CompanyLogo from './CompanyLogo.jsx';
+// Sprint 1 Pass 1b: 共有 row primitive (screenerV2=true のみ、A-1 物理隔離)
+import ScreenerRow, { ScreenerRowEmpty } from '../features/workspace/ScreenerRow.jsx';
 
 // FMP /stable/company-screener の sector (英語) → 日本語表示ラベル。
 const SECTOR_LABEL_JP = {
@@ -1288,7 +1290,7 @@ export default function CustomScreenerPanel({
                   // 後半ほど淡く: 上半=1.0, 下半=0.55 に線形
                   const opacityVal = total <= 1 ? 1 : idx < Math.ceil(total / 2) ? 1 : Math.max(0.55, 1 - (idx / total) * 0.45);
 
-                  // ── ヒット理由バッジ (スコア寄与順・最大3個) ──
+                  // ── ヒット理由バッジ (スコア寄与順・最大2件) ──
                   const activeFacetsSorted = FUNDA_FACETS
                     .flatMap((f) => {
                       const lvl = activeGrades[f.key];
@@ -1304,6 +1306,56 @@ export default function CustomScreenerPanel({
                     .slice(0, 2); // 狭い screener カラム幅に確実に収めるため上位2件 (spec「2-3個」範囲内)
 
                   const isSelected = selectedTickers.has(it.ticker);
+
+                  // ── A-1 物理隔離: screenerV2=true のみ ScreenerRow primitive を使用 ──
+                  // legacy 行 (screenerV2=false) は一切触らない (SPEC §6 / 追記条件3)。
+                  // 一般 user (default OFF) には旧行 JSX をそのまま提供。
+                  if (screenerV2) {
+                    // D-1 構造化 props: matchBadges / metrics を組み立てる (追記条件4)
+                    const matchBadges = activeFacetsSorted.map(({ key }) => ({
+                      label: FACET_SHORT_LABEL[key] || key,
+                      colorRole: 'neutral', // §38: 緑/赤断定なし
+                      group: FUNDA_FACETS.find((f) => f.key === key)?.category || 'fundamental',
+                    }));
+                    const metrics = [
+                      it.rs_percentile != null
+                        ? { key: 'rs_percentile', value: it.rs_percentile, category: 'technical' }
+                        : null,
+                    ].filter(Boolean);
+
+                    return (
+                      <div
+                        key={it.ticker}
+                        style={{ opacity: opacityVal }}
+                        data-testid={`screener-row-${it.ticker}`}
+                      >
+                        <ScreenerRow
+                          ticker={it.ticker}
+                          name={it.name}
+                          rank={idx + 1}
+                          isTop={isTop}
+                          matchBadges={matchBadges}
+                          metrics={metrics}
+                          isSelected={isSelected}
+                          onSelect={(t) => {
+                            trackEvent('screener_row_click', { ticker: t, rank: idx, mode: 'custom' });
+                            onSelect?.(t);
+                          }}
+                          onCheckbox={(t, checked) => {
+                            setSelectedTickers((prev) => {
+                              const n = new Set(prev);
+                              checked ? n.add(t) : n.delete(t);
+                              return n;
+                            });
+                          }}
+                          mode="custom"
+                          showCheckbox
+                        />
+                      </div>
+                    );
+                  }
+
+                  // ── legacy 行 (screenerV2=false、既存 JSX を維持) ──────────────────
                   return (
                     <div
                       key={it.ticker}
