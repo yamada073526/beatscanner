@@ -119,7 +119,7 @@ function MasterLoading() {
         alignItems: 'center',
         gap: 'var(--space-3)',
         color: 'var(--text-muted)',
-        fontSize: 13,
+        fontSize: 'var(--text-body)',
       }}
     >
       <BrandPulse size={22} />
@@ -165,8 +165,15 @@ export default function ScreenerMaster({
       data-mode={mode}
       style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}
     >
-      {/* ── セグメントトグル (C-17: ヘッダー右寄せ、ラベル 2-4 字) ──── */}
-      <div data-testid="screener-mode-toggle" role="group" aria-label="スクリーナーモード切替">
+      {/* ── セグメントトグル (C-17: ヘッダー右寄せ、ラベル 2-4 字) ────
+          Sprint3: toolbar↔content を 1px hairline + 余白リズムで構造的に区切る
+          (詰め→抜き 境界 / 視線収束 / 痛み4 比較しやすさ。shadow ゼロ哲学) */}
+      <div
+        data-testid="screener-mode-toggle"
+        role="group"
+        aria-label="スクリーナーモード切替"
+        className="screener-master__toolbar"
+      >
         <ChipGroup ariaLabel="スクリーナーモード" role="radiogroup">
           <Chip
             variant="segmented"
@@ -196,6 +203,7 @@ export default function ScreenerMaster({
       {/* ── コンテンツエリア ────────────────────────────────────── */}
       <div
         data-testid="screener-master-content"
+        className="screener-master__content"
         style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
       >
         {mode === 'preset' ? (

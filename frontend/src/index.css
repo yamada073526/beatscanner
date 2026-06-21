@@ -13929,3 +13929,17 @@ body.is-digest-resizing {
 @media (prefers-reduced-motion: reduce) {
   .screener-idle-hero__row { transition: none; }
 }
+
+/* ── Sprint 3: ScreenerMaster toolbar / content 余白リズム (詰め→抜き 境界) ──
+   操作部 (toggle) と結果を 1px hairline で構造的に区切る (shadow ゼロ哲学 / 視線収束 / 痛み4)。
+   Apple/Linear 方式: backdrop fade でなく意図的な 1px border で区切る (CLAUDE.md 触ると危険)。 */
+.screener-master__toolbar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;           /* C-17: ヘッダー右寄せ */
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+.screener-master__content {
+  padding-top: var(--space-2);         /* 抜き: hairline 直後に呼吸を与える */
+}
