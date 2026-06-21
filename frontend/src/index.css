@@ -7060,34 +7060,25 @@ button.ds-chip[data-pressed="true"]:hover {
 .screener-pane-ambient::before {
   content: '';
   position: absolute;
-  /* ③-a v3 (user dogfood「知って注意して見ても違いが分からない」): 真因 = radial が上部に居て
-     opaque な hero card 背面に隠れ、 breathe が card に覆われて見えない。 → 中心を下方 (42%) の
-     空きスペース (user 指摘「うら寂しい空き」) へ移し、 card に隠れない可視領域で息づかせる。
-     これで「明滅が見える」 + 「空き spaceに atmosphere が宿る」 を両取り。 */
+  /* B-3 写経 (Sprint D = ambient 正常化): 過去 dogfood で「もっと強く」と脈動シアンを
+     38% / scale1.20 / 3.5s infinite まで増強したが、 これが Aman 節度と逆行し screener が
+     「洗練されていない」主因の一つだった。 Linear のダーク手本 (背景レイヤーに barely-there な
+     静的 radial 1 枚で atmosphere を出す) に写経し、 脈動を撤去・極淡化する。
+     位置は下方 (42%) の空きスペース維持 (hero card 背面に隠れない可視領域)。 */
   top: 42%;
   left: 50%;
   width: 1400px;
   height: 720px;
   transform: translate(-50%, -50%);
-  /* ③-a v5 (user dogfood「操作止めてじっと見てようやく分かる、もっと強く」): base 明度 0.30→0.38。
-     ⚠️ ambient は本質的に subtle (Aman 節度) + 下方に RS ランキングが乗り一部隠れるため、 強度で勝負。 */
-  background: radial-gradient(ellipse, color-mix(in srgb, var(--color-accent) 38%, transparent) 0%, transparent 64%);
+  /* 静的・極淡: accent 38%→7% (Aman 節度の barely-there)。 opacity/scale の脈動なし。 */
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--color-accent) 7%, transparent) 0%, transparent 64%);
   -webkit-mask-image: radial-gradient(ellipse, black 32%, transparent 64%);
           mask-image: radial-gradient(ellipse, black 32%, transparent 64%);
   pointer-events: none;
   z-index: 0;
-  /* ③-a v5: 周期 4s→3.5s + 振幅 (opacity 0.25-1.0 / scale 1.20) で明滅をさらに強く。 */
-  animation: screenerAmbientBreathe 3.5s ease-in-out infinite;
+  /* 脈動 animation 撤去 (infinite breathe 廃止)。 static 1 枚で atmosphere を出す。 */
 }
 .screener-pane-ambient > * { position: relative; z-index: 1; }
-@keyframes screenerAmbientBreathe {
-  /* ③-a v5: opacity 0.32/1.0→0.25/1.0 (swing 拡大)、 scale 1.16→1.20。 transform/opacity のみ = CLS 0。 */
-  0%, 100% { opacity: 0.25; transform: translate(-50%, -50%) scale(1); }
-  50%      { opacity: 1;    transform: translate(-50%, -50%) scale(1.20); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .screener-pane-ambient::before { animation: none; }
-}
 
 /* ── 案6 v3 (user dogfood「チャートが左→右に描画されない」): chart の左→右 wipe-reveal ──
    Recharts 内部 draw アニメは詳細ページの多段非同期ロードで再レンダリング中断されて見えなかったため、
