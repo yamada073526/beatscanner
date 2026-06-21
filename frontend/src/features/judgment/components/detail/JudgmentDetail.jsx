@@ -318,17 +318,17 @@ function isPane3Compass() {
 // buy-quality Phase1 S5 (2026-06-21): 案A「上昇余地 vs 過熱」状態コンパス (BuyHeadroomCompass)。
 // 節目 (pivot) からの距離 4 ゾーン + A/D 出来高の質を ticker 詳細冒頭に追加。dogfood 主訴②
 // 「上昇余地か高値づかみか判断できない」への直接回答。§38 厳守 (amber/neutral、緑不使用、静的 dict)。
-// default OFF・完全可逆 (?headroom=1 / =0 or localStorage 'headroom'='1')。dogfood→GO で default ON 昇格
-// (compass / flash と同じ昇格経路)。SPEC_2026-06-21_screener-buy-quality-headroom §5 Sprint 5。
+// 2026-06-21 user dogfood→GO で **default ON 昇格** (tier=free、compass/flash と同じ昇格経路)。
+// ?headroom=0 / localStorage 'headroom'='0' が kill switch (完全可逆)。SPEC §5 Sprint 5。
 function isBuyHeadroom() {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   try {
     const urlParam = new URLSearchParams(window.location.search).get('headroom');
     if (urlParam === '1') return true;
     if (urlParam === '0') return false;
-    return window.localStorage?.getItem('headroom') === '1';
+    return window.localStorage?.getItem('headroom') !== '0'; // default ON、=0 で revert
   } catch {
-    return false;
+    return true;
   }
 }
 

@@ -49,12 +49,7 @@ const ZONE_BANDS = [
   { key: 'overheated', from: 10, to: 20, tone: 'warn', fill: 28 },
 ];
 
-// 境界 tick (節目=0% / +5% / +10%)。
-const BOUNDARY_TICKS = [
-  { at: 0, label: '節目' },
-  { at: 5, label: '+5%' },
-  { at: 10, label: '+10%' },
-];
+// 数値境界 (節目=0% / +5% / +10%) は ⓘ モーダルで解説。バー下はゾーン名ラベルで「今どのゾーンか」を直接示す。
 
 /**
  * @param {object} props
@@ -139,8 +134,18 @@ export default function BuyHeadroomCompass({ selectedTicker }) {
         </div>
       </div>
 
-      {/* 水平ゾーンバー (図解): 帯 (ブレイク前/買い場圏/注意/過熱) + 三角マーカー */}
+      {/* 水平ゾーンバー (図解): active zone を強調 (強い塗り + 上辺 accent + ゾーン名 bold) + マーカー針で
+          「今どのゾーンか」を 2 秒判別。三角は track の overflow:hidden を避け barOuter 直下に置く。 */}
       <div style={barOuterStyle}>
+        {markerPct != null && (
+          <span
+            data-testid={`${TESTID}-marker`}
+            style={{ ...markerTriangleWrapStyle, left: `${markerPct}%` }}
+            aria-hidden="true"
+          >
+            <span style={{ ...markerTriangleStyle, borderTopColor: zoneColor }} />
+          </span>
+        )}
         <div style={barTrackStyle}>
           {ZONE_BANDS.map((b) => {
             const width = ((b.to - b.from) / BAR_SPAN) * 100;
@@ -149,33 +154,46 @@ export default function BuyHeadroomCompass({ selectedTicker }) {
             return (
               <div
                 key={b.key}
+                data-active={isActive ? 'true' : 'false'}
                 style={{
                   width: `${width}%`,
-                  background: `color-mix(in srgb, ${c} ${b.fill}%, transparent)`,
+                  background: isActive
+                    ? `color-mix(in srgb, ${c} 48%, transparent)`
+                    : `color-mix(in srgb, ${c} 6%, transparent)`,
                   borderRight: b.key !== 'overheated' ? '0.5px solid var(--border)' : 'none',
-                  outline: isActive ? `1px solid color-mix(in srgb, ${c} 55%, transparent)` : 'none',
-                  outlineOffset: -1,
+                  borderTop: `2px solid ${isActive ? c : 'transparent'}`,
+                  transition: 'background var(--motion-fast, 0.15s) ease',
                 }}
                 aria-hidden="true"
               />
             );
           })}
-          {/* 三角マーカー (現在位置)。pivot 不在時は非表示 */}
+          {/* マーカー針 (現在位置の縦線)。pivot 不在時は非表示 */}
           {markerPct != null && (
-            <span
-              data-testid={`${TESTID}-marker`}
-              style={{ ...markerStyle, left: `${markerPct}%` }}
-              aria-hidden="true"
-            >
-              <span style={{ ...markerTriangleStyle, borderTopColor: zoneColor }} />
-            </span>
+            <span style={{ ...markerLineStyle, left: `${markerPct}%`, background: zoneColor }} aria-hidden="true" />
           )}
         </div>
-        {/* 境界 tick label (節目 / +5% / +10%) */}
-        <div style={tickRowStyle} aria-hidden="true">
-          {BOUNDARY_TICKS.map((t) => (
-            <span key={t.at} style={{ ...tickLabelStyle, left: `${valueToPct(t.at)}%` }}>{t.label}</span>
-          ))}
+        {/* ゾーン名ラベル (active = bold + tone 色 / 他 = muted)。帯と同 width で整列し「今どのゾーンか」を直接明示 */}
+        <div style={zoneLabelRowStyle} aria-hidden="true">
+          {ZONE_BANDS.map((b) => {
+            const width = ((b.to - b.from) / BAR_SPAN) * 100;
+            const c = TONE_COLOR[b.tone];
+            const isActive = b.key === zone;
+            return (
+              <span
+                key={b.key}
+                style={{
+                  width: `${width}%`, textAlign: 'center', fontSize: 10,
+                  fontWeight: isActive ? 700 : 500,
+                  color: isActive ? c : 'var(--text-muted)',
+                  opacity: isActive ? 1 : 0.6,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 1px',
+                }}
+              >
+                {PIVOT_ZONE_LABEL[b.key]}
+              </span>
+            );
+          })}
         </div>
       </div>
 
@@ -233,24 +251,24 @@ const distChipStyle = {
   border: '1px solid var(--border)', color: 'var(--text-secondary)', whiteSpace: 'nowrap',
 };
 const verdictSubStyle = { fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', lineHeight: 1.4 };
-// バー: relative 親 (marker/tick の絶対配置基準)
-const barOuterStyle = { position: 'relative', paddingTop: 6, paddingBottom: 16 };
+// バー: relative 親 (marker 三角の絶対配置基準)。paddingTop = 三角マーカーの逃げ。
+const barOuterStyle = { position: 'relative', paddingTop: 10 };
 const barTrackStyle = {
-  position: 'relative', display: 'flex', width: '100%', height: 12,
+  position: 'relative', display: 'flex', width: '100%', height: 14,
   borderRadius: 'var(--radius-sm, 6px)', overflow: 'hidden',
   border: '1px solid var(--border)',
 };
-const markerStyle = { position: 'absolute', top: -6, transform: 'translateX(-50%)', lineHeight: 0 };
+// マーカー針: track 高さいっぱいの縦線 (overflow hidden 内なのでクリップされない)
+const markerLineStyle = { position: 'absolute', top: 0, bottom: 0, width: 2, transform: 'translateX(-50%)', borderRadius: 1, zIndex: 1 };
+// マーカー三角: track の上 (barOuter 直下に置き track の overflow hidden を回避)。下向き。
+const markerTriangleWrapStyle = { position: 'absolute', top: 0, transform: 'translateX(-50%)', lineHeight: 0, zIndex: 2 };
 const markerTriangleStyle = {
   display: 'block', width: 0, height: 0,
-  borderLeft: '5px solid transparent', borderRight: '5px solid transparent',
-  borderTop: '6px solid var(--text-muted)',
+  borderLeft: '6px solid transparent', borderRight: '6px solid transparent',
+  borderTop: '8px solid var(--text-muted)',
 };
-const tickRowStyle = { position: 'relative', height: 12, marginTop: 3 };
-const tickLabelStyle = {
-  position: 'absolute', transform: 'translateX(-50%)', top: 0,
-  fontSize: 9, fontWeight: 500, color: 'var(--text-muted)', whiteSpace: 'nowrap',
-};
+// ゾーン名ラベル行 (帯と同 width で整列)
+const zoneLabelRowStyle = { display: 'flex', width: '100%', marginTop: 5 };
 const subAxisRowStyle = {
   display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-2, 8px)',
   paddingTop: 'var(--space-2, 8px)', borderTop: '1px solid var(--border)',
