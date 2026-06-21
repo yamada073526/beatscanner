@@ -46,7 +46,16 @@
 
 import Chip from '../../components/ui/Chip.jsx';
 import CompanyLogo from '../../components/CompanyLogo.jsx';
-import { Lock } from 'lucide-react';
+import { Lock, Zap, BarChart3, TrendingUp } from 'lucide-react';
+
+// Sprint G: matchBadges[0].group → leading icon tile (G2 接ぎ木1 surge)
+// mapping: technical→Zap / fundamental→BarChart3 / demand→TrendingUp
+// §38: cyan tile は brand accent (技術シグナル識別)、「上昇=緑」意味付けなし
+const GROUP_ICON = {
+  technical: Zap,
+  fundamental: BarChart3,
+  demand: TrendingUp,
+};
 
 // ─── colorRole → CSS token マッピング (§38 準拠: 緑/赤断定回避) ──────────────
 // gain/loss/warning は投資業界色ルール、neutral はデフォルト (CLAUDE.md 厳守)
@@ -230,6 +239,18 @@ export default function ScreenerRow({
           />
         </span>
       )}
+
+      {/* Sprint G: leading icon tile (matchBadges[0].group で種別識別、badge なし行は非表示) */}
+      {(() => {
+        const firstGroup = matchBadges[0]?.group;
+        const TileIcon = firstGroup ? GROUP_ICON[firstGroup] : null;
+        if (!TileIcon) return null;
+        return (
+          <span className="screener-row__signal-tile" aria-hidden="true">
+            <TileIcon size={12} strokeWidth={1.75} />
+          </span>
+        );
+      })()}
 
       {/* ロゴ (常時表示・hover で消さない) */}
       <span className="screener-row__logo-slot">

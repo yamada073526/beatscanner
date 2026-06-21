@@ -13522,6 +13522,24 @@ body.is-digest-resizing {
   cursor: default;
 }
 
+/* Sprint G: hairline row separator (Linear リスト感) */
+.screener-row + .screener-row {
+  border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+/* Sprint G: leading icon tile (signal 種別識別、G2) */
+.screener-row__signal-tile {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-accent);
+}
+
 /* ── logo slot ────────────────────────────────────────────────────────────── */
 .screener-row__logo-slot {
   flex-shrink: 0;
@@ -13570,26 +13588,10 @@ body.is-digest-resizing {
   gap: var(--space-2);         /* 8px */
 }
 
-/* ticker: mono / fw600 (通常) / fw700 (上位) — token 化 */
-.screener-row__ticker {
-  font-family: var(--font-mono, monospace);
-  font-size: var(--text-body); /* Sprint F 写経: 12→14px (list typography 階層を底上げ) */
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.3;
-  truncate: ellipsis;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.screener-row__ticker--top {
-  font-size: var(--text-body-lg);  /* Sprint F 写経: 14→16px (上位行を pop、模範解答「特大」device) */
-  font-weight: 700;
-}
-
-/* RS 数値: §38 color polarity なし、数値のみ中立 */
+/* RS 数値: mono 化 (G2) §38 color polarity なし、数値のみ中立 */
 .screener-row__rs {
   flex-shrink: 0;
+  font-family: var(--font-mono, monospace);
   font-size: var(--text-caption); /* 12px */
   font-weight: 400;
   color: var(--text-secondary);
@@ -13602,11 +13604,29 @@ body.is-digest-resizing {
   font-weight: 600;
 }
 
-/* Sprint F 写経: 上位行の RS を「主役化」(rubric typography 80: 数値 fw700)。
-   非上位は muted 維持 = 二色階層 (模範解答 device①)。§38: color polarity なし (中立 primary 色)。 */
+/* Sprint G: 上位行の RS を「主役化」(二色階層 G2)。
+   非上位は muted 維持 = 二色階層。§38: color polarity なし (中立 primary 色)。 */
 .screener-row--top .screener-row__rs {
   font-size: var(--text-body);
-  font-weight: 700;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* Sprint G: 非上位 ticker は --text-secondary で #1 との階層差を出す (G2 二色) */
+.screener-row__ticker {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-body); /* Sprint F 写経: 12→14px (list typography 階層を底上げ) */
+  font-weight: 500;
+  color: var(--text-secondary);
+  line-height: 1.3;
+  truncate: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.screener-row__ticker--top {
+  font-size: var(--text-body-lg);  /* Sprint F 写経: 14→16px (上位行を pop) */
+  font-weight: 600;
   color: var(--text-primary);
 }
 
@@ -13899,27 +13919,106 @@ body.is-digest-resizing {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-/* Sprint A (B-3 写経): featured ticker = 「今日の筆頭」の hero element。
-   模範解答の「特大 + キーワード1語を gradient」(surge bg-clip-text / Linear 特大見出し) を写経:
-   display tier (--text-h1) へ特大化 + gold gradient (bg-clip-text)。gold continuity
-   (rank circle / funda badge と同系) で「rank-1 = gold = 筆頭」を一貫 signal 化。
-   raw hex 不使用 (gold token + color-mix で gradient)、 fallback color で bg-clip 非対応も担保。 */
-.screener-idle-hero__ticker--featured {
+/* Sprint G: featured ticker 旧 gold gradient 撤去 → 白 mono (Linear 作法)。
+   ticker は --text-h1 mono fw600 白 (var(--text-primary))。
+   gold gradient (bg-clip-text) はここでは不使用 (§38 色 neutral 維持)。 */
+.screener-idle-hero__ticker--featured-v2 {
+  font-family: var(--font-mono, monospace);
   font-size: var(--text-h1);
+  font-weight: 600;
   line-height: 1.1;
   letter-spacing: -0.01em;
-  color: var(--color-gold); /* bg-clip-text 非対応 browser の fallback */
-  background: linear-gradient(120deg, var(--color-gold) 0%, color-mix(in srgb, var(--color-gold) 50%, var(--text-primary)) 100%);
-  -webkit-background-clip: text;
-          background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-/* Sprint A: featured row のみ RS を二色強調 (hero の主要数値 = primary / fw700)。
-   非 featured は caption secondary 維持 = 階層の二色コントラスト (模範解答 device①)。 */
-.screener-idle-hero__row--featured .screener-idle-hero__rs {
-  font-size: var(--text-body);
-  font-weight: 700;
   color: var(--text-primary);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Sprint G: compact row ticker (rank 2/3) = muted 寄りで #1 との二色階層 (G1-b) */
+.screener-idle-hero__ticker--compact {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-caption);
+  font-weight: 400;
+  color: var(--text-secondary);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Sprint G: FeaturedCard 上段レイアウト (icon tile + ticker + funda badge 横並び) */
+.screener-idle-hero__featured-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  margin-bottom: var(--space-2);
+}
+
+/* Sprint G: RS 特大 display (Mercury 数値前面、G1-a 中段) */
+.screener-idle-hero__rs-display {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin-bottom: var(--space-2);
+}
+.screener-idle-hero__rs-display-value {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-display, 2rem); /* 32px 相当 */
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.screener-idle-hero__rs-display-label {
+  font-size: var(--text-caption);
+  font-weight: 400;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+/* Sprint G: 決め手ライン (G1-c) — muted caption 1行 */
+.screener-idle-hero__decide-line {
+  font-size: var(--text-caption);
+  font-weight: 400;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* Sprint G: icon tile サイズバリアント */
+/* --lg (featured hero 用 34px 角丸) */
+.screener-idle-hero__signal-tile--lg {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  color: var(--color-accent);
+}
+/* --compact (rank 2/3 用 26px) */
+.screener-idle-hero__signal-tile--compact {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  color: var(--color-accent);
+}
+
+/* Sprint G: compact row (rank 2/3) のレイアウト微調整 */
+.screener-idle-hero__row--compact {
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border-radius: var(--radius-sm);
 }
 
 /* funda 加点バッジ (決算5条件 = gold accent、sparse なので加点のみ) */

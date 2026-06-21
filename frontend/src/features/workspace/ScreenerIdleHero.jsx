@@ -159,12 +159,67 @@ function RankCircle({ rank }) {
   );
 }
 
-/** 銘柄 row 1 件。rank1 のみ featured (padding 広め / ticker 大 / gold hairline = 唯一の big)。
- *  右側に RS percentile (主) + 交差シグナルラベル (副) を縦積みで透明表示。
- *  raw 数値廃止: 全て .screener-idle-hero__* token CSS に委任 (安っぽさ root cause fix)。 */
-function LeaderRow({ ticker, rs, signal, rank, onSelect, fundaPass = false }) {
-  const isFeatured = rank === 1;
-  const SignalIcon = signalIconFor(signal); // Sprint B: signal 種別の icon tile
+/**
+ * FeaturedCard — rank-1 専用 hero カード (Mercury 数値前面 + 決め手ライン)
+ * G1-(a)(c): RS 特大表示 + icon tile (cyan) + 白 mono ticker + 決め手1行
+ * gold gradient (bg-clip-text) は撤去 → 白 mono (var(--text-primary))。
+ */
+function FeaturedCard({ ticker, rs, signal, fcount, onSelect, fundaPass = false }) {
+  const SignalIcon = signalIconFor(signal);
+  // 決め手ライン: ファンダ達成数 + テクニカルシグナル (G1-c)
+  const decideText = `決め手: ファンダ ${fcount}/3${signal ? ` ・ ${signal}` : ''}`;
+  return (
+    <li
+      className="screener-reveal"
+      style={{ animationDelay: `${rowRevealDelay(0)}ms` }}
+    >
+      <button
+        type="button"
+        className="screener-idle-hero__row screener-idle-hero__row--featured"
+        onClick={() => onSelect(ticker)}
+        data-testid={`idle-hero-ticker-${ticker}`}
+        aria-label={`${ticker} の詳細を表示`}
+      >
+        {/* 上段: cyan icon tile + ticker (白 mono) */}
+        <span className="screener-idle-hero__featured-top">
+          {SignalIcon && (
+            <span className="screener-idle-hero__signal-tile screener-idle-hero__signal-tile--lg" aria-hidden>
+              <SignalIcon size={16} strokeWidth={1.75} />
+            </span>
+          )}
+          <span className="screener-idle-hero__ticker screener-idle-hero__ticker--featured-v2">
+            {ticker}
+          </span>
+          {fundaPass && (
+            <span
+              className="screener-idle-hero__funda-badge"
+              data-testid={`idle-hero-funda-badge-${ticker}`}
+              title="最新決算で5条件 (EPS・売上・来期ガイダンス等) を達成"
+            >
+              決算5条件
+            </span>
+          )}
+        </span>
+        {/* 中段: RS 特大数値 (Mercury) */}
+        {typeof rs === 'number' && (
+          <span className="screener-idle-hero__rs-display">
+            <span className="screener-idle-hero__rs-display-value">{Math.round(rs)}</span>
+            <span className="screener-idle-hero__rs-display-label">RS percentile</span>
+          </span>
+        )}
+        {/* 決め手ライン (G1-c) */}
+        <span className="screener-idle-hero__decide-line">{decideText}</span>
+      </button>
+    </li>
+  );
+}
+
+/**
+ * CompactRow — rank 2/3 用コンパクト行 (二色: muted 寄り)
+ * G1-(b): icon tile 小 (26px) + ticker muted + 右に mono RS + signal。
+ */
+function CompactRow({ ticker, rs, signal, rank, onSelect }) {
+  const SignalIcon = signalIconFor(signal);
   return (
     <li
       className="screener-reveal"
@@ -172,53 +227,32 @@ function LeaderRow({ ticker, rs, signal, rank, onSelect, fundaPass = false }) {
     >
       <button
         type="button"
-        className={[
-          'screener-idle-hero__row',
-          isFeatured ? 'screener-idle-hero__row--featured' : '',
-        ].filter(Boolean).join(' ')}
+        className="screener-idle-hero__row screener-idle-hero__row--compact"
         onClick={() => onSelect(ticker)}
         data-testid={`idle-hero-ticker-${ticker}`}
         aria-label={`${ticker} の詳細を表示`}
       >
         <RankCircle rank={rank} />
-        {/* ロゴ: CompanyLogo (TV→FMP→頭文字円 3段 fallback)。featured のみ一段大 */}
-        <span className="screener-idle-hero__logo">
-          <CompanyLogo ticker={ticker} size={isFeatured ? 22 : 18} />
-        </span>
-        {/* typography 層2: ticker (mono / fw700) — featured のみ 1 段大 (big max2 scarcity) */}
-        <span
-          className={[
-            'screener-idle-hero__ticker',
-            isFeatured ? 'screener-idle-hero__ticker--featured' : '',
-          ].filter(Boolean).join(' ')}
-        >
-          {ticker}
-        </span>
-        {/* funda_pass バッジ (下流・決算サプライズ超過 = gold accent、§0-2 2段階区別)。
-            加点表示であり交差の必須条件ではない (sparse = 決算シーズン谷間は非表示が正)。 */}
-        {fundaPass && (
-          <span
-            className="screener-idle-hero__funda-badge"
-            data-testid={`idle-hero-funda-badge-${ticker}`}
-            title="最新決算で5条件 (EPS・売上・来期ガイダンス等) を達成"
-          >
-            決算5条件
+        {/* cyan icon tile 小 */}
+        {SignalIcon && (
+          <span className="screener-idle-hero__signal-tile screener-idle-hero__signal-tile--compact" aria-hidden>
+            <SignalIcon size={12} strokeWidth={1.75} />
           </span>
         )}
-        {/* 右側: RS (主) + シグナルラベル (副)。§38: 色 neutral、買い断定なし */}
+        <span className="screener-idle-hero__logo">
+          <CompanyLogo ticker={ticker} size={18} />
+        </span>
+        {/* ticker: muted 寄り (--text-secondary で #1 との二色階層) */}
+        <span className="screener-idle-hero__ticker screener-idle-hero__ticker--compact">
+          {ticker}
+        </span>
+        {/* 右端: RS + signal */}
         <span className="screener-idle-hero__metrics">
           {typeof rs === 'number' && (
-            <span className="screener-idle-hero__rs">RS {rs}</span>
+            <span className="screener-idle-hero__rs">RS {Math.round(rs)}</span>
           )}
-          {/* typography 層3: signal = 最も静か (caption fw400 muted)。
-              Sprint B: 種別 icon tile (形状コード + 単一 brand tint、§38 色 neutral) を前置。 */}
           {signal && (
             <span className="screener-idle-hero__signal">
-              {SignalIcon && (
-                <span className="screener-idle-hero__signal-tile" aria-hidden>
-                  <SignalIcon size={11} strokeWidth={2} />
-                </span>
-              )}
               <span>{signal}</span>
             </span>
           )}
@@ -270,17 +304,28 @@ export default function ScreenerIdleHero({ onSelect, onUpgrade }) {
         }
         const matched = buckets[levelIdx] || [];
 
-        // rs_percentile 降順 top3。funda_pass は加点バッジとして付与 (交差の必須条件にしない)。
+        // sort: RS降順 → (tiebreaker) ファンダ達成数 → OCF マージン (G1-d: 決め手tiebreaker)
         const top3 = matched
           .slice()
-          .sort((a, b) => (b.rs_percentile ?? 0) - (a.rs_percentile ?? 0))
+          .sort((a, b) => {
+            const rsDiff = (b.rs_percentile ?? 0) - (a.rs_percentile ?? 0);
+            if (rsDiff !== 0) return rsDiff;
+            const fcountA = (passOcf(a) ? 1 : 0) + (passEps(a) ? 1 : 0) + (passRoe(a) ? 1 : 0);
+            const fcountB = (passOcf(b) ? 1 : 0) + (passEps(b) ? 1 : 0) + (passRoe(b) ? 1 : 0);
+            if (fcountB !== fcountA) return fcountB - fcountA;
+            return (b.ocf_margin_pct ?? -Infinity) - (a.ocf_margin_pct ?? -Infinity);
+          })
           .slice(0, 3)
-          .map((it) => ({
-            ticker: it.ticker,
-            rs: it.rs_percentile,
-            signal: deriveSignalLabel(it),
-            fundaPass: it.funda_pass === true,
-          }));
+          .map((it) => {
+            const fcount = (passOcf(it) ? 1 : 0) + (passEps(it) ? 1 : 0) + (passRoe(it) ? 1 : 0);
+            return {
+              ticker: it.ticker,
+              rs: it.rs_percentile,
+              signal: deriveSignalLabel(it),
+              fundaPass: it.funda_pass === true,
+              fcount,
+            };
+          });
 
         setFetchState({ tickers: top3, loading: false, error: null, levelIdx, asOf: data?.as_of || null, tier: data?.tier || null });
       } catch (e) {
@@ -430,17 +475,28 @@ export default function ScreenerIdleHero({ onSelect, onUpgrade }) {
 
       {/* ─── 銘柄リスト (上位3件・row 間は 詰め) ─── */}
       <ul className="screener-idle-hero__list">
-        {tickers.map((t, idx) => (
-          <LeaderRow
-            key={t.ticker}
-            ticker={t.ticker}
-            rs={t.rs}
-            signal={t.signal}
-            rank={idx + 1}
-            onSelect={onSelect}
-            fundaPass={t.fundaPass}
-          />
-        ))}
+        {tickers.map((t, idx) =>
+          idx === 0 ? (
+            <FeaturedCard
+              key={t.ticker}
+              ticker={t.ticker}
+              rs={t.rs}
+              signal={t.signal}
+              fcount={t.fcount ?? 0}
+              onSelect={onSelect}
+              fundaPass={t.fundaPass}
+            />
+          ) : (
+            <CompactRow
+              key={t.ticker}
+              ticker={t.ticker}
+              rs={t.rs}
+              signal={t.signal}
+              rank={idx + 1}
+              onSelect={onSelect}
+            />
+          )
+        )}
       </ul>
 
       {/* ─── 導線文 (下部・section 末尾は 抜き で区切る) ─── */}
