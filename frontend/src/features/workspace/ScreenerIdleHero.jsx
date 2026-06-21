@@ -22,7 +22,7 @@
  *   - inline 関数 component 禁止 (module-level hoist)。shadow ゼロ。raw hex 禁止。
  */
 import { useState, useEffect } from 'react';
-import { Hourglass, Crown, AlertCircle, Info } from 'lucide-react';
+import { Hourglass, Crown, AlertCircle, Info, Lock } from 'lucide-react';
 import CompanyLogo from '../../components/CompanyLogo.jsx';
 import { fetchScannerUniverse } from '../../api.js';
 
@@ -216,7 +216,7 @@ function LeaderRow({ ticker, rs, signal, rank, onSelect, fundaPass = false }) {
  * @param {object} props
  * @param {Function} props.onSelect - ticker string を受け取る。Workspace の setActiveTicker 相当。
  */
-export default function ScreenerIdleHero({ onSelect }) {
+export default function ScreenerIdleHero({ onSelect, onUpgrade }) {
   // 自前 fetch: fetchScannerUniverse (auth 自動 / dedup 60s) で母集団を取得しフロントで交差計算。
   const [fetchState, setFetchState] = useState({
     tickers: [],
@@ -224,6 +224,7 @@ export default function ScreenerIdleHero({ onSelect }) {
     error: null,
     levelIdx: 0, // HERO_LADDER の採用 level (0=strict、大きいほど緩和)
     asOf: null,  // S4 condition6: universe.as_of (鮮度表示用)
+    tier: null,  // B-6: universe.tier ('free'|'pro'|'premium')。free degrade の文言分岐用
   });
 
   useEffect(() => {
@@ -260,21 +261,24 @@ export default function ScreenerIdleHero({ onSelect }) {
             fundaPass: it.funda_pass === true,
           }));
 
-        setFetchState({ tickers: top3, loading: false, error: null, levelIdx, asOf: data?.as_of || null });
+        setFetchState({ tickers: top3, loading: false, error: null, levelIdx, asOf: data?.as_of || null, tier: data?.tier || null });
       } catch (e) {
         if (ac.signal.aborted) return;
-        setFetchState({ tickers: [], loading: false, error: String(e), levelIdx: 0, asOf: null });
+        setFetchState({ tickers: [], loading: false, error: String(e), levelIdx: 0, asOf: null, tier: null });
       }
     }
     load();
     return () => ac.abort();
   }, []);
 
-  const { tickers, loading, error, levelIdx, asOf } = fetchState;
+  const { tickers, loading, error, levelIdx, asOf, tier } = fetchState;
   const meta = HERO_LADDER[levelIdx] || HERO_LADDER[0];
   const relaxed = levelIdx > 0;
   const isEmpty = !loading && !error && tickers.length === 0;
   const freshness = formatAsOf(asOf); // S4 condition6: 鮮度表示 (原則2「データが動いている感」)
+  // B-6: free は cup_state/breakout_state が Premium 限定 (locked_facets) のため交差は常に空。
+  // 「本日は…見つからない」と日次状況に見せると tier 制限を誤表示する Trust Cliff → tier で文言分岐。
+  const isFreeTier = tier != null && tier !== 'premium';
 
   // ── loading state ──
   if (loading) {
@@ -307,8 +311,37 @@ export default function ScreenerIdleHero({ onSelect }) {
     );
   }
 
-  // ── empty state (交差0件) ──
+  // ── empty state ──
+  // B-6: free は cup/breakout が Premium 限定で交差が常に空 → tier 制限であることを honest に明示
+  //   (誇張なし・§5 景表法準拠)。Premium の genuine な「本日は該当なし」と物理分離。
   if (isEmpty) {
+    if (isFreeTier) {
+      return (
+        <div
+          data-testid="screener-idle-hero"
+          data-state="locked"
+          className="screener-idle-hero screener-idle-hero--centered"
+        >
+          <Lock size={20} strokeWidth={1.5} aria-hidden className="screener-idle-hero__state-icon" />
+          <span className="screener-idle-hero__state-text">
+            「今日の筆頭」は Premium 機能です
+          </span>
+          <span className="screener-idle-hero__state-sub">
+            相対力(RS) × ファンダ × Cup/ブレイクの交差で、本日の筆頭候補を毎朝お届けします。
+          </span>
+          {onUpgrade && (
+            <button
+              type="button"
+              className="screener-idle-hero__upgrade-cta"
+              onClick={onUpgrade}
+              data-testid="idle-hero-upgrade-cta"
+            >
+              Premium を見る
+            </button>
+          )}
+        </div>
+      );
+    }
     return (
       <div
         data-testid="screener-idle-hero"

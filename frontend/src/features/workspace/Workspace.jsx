@@ -1140,7 +1140,7 @@ export default function Workspace({
               //   Pane2=操作リスト / Pane3 idle=閲覧 hero の役割分離で「ScreenerPane 二重表示の冗長」を回避。
               //   §38/§5: 軸明示・事実のみ・断定なし。shadow ゼロ堅持 ([[glow_elevation_postmortem]])。
               <Suspense fallback={<div data-testid="screener-idle-hero" style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-muted)', fontSize: 13 }}><BrandPulse size={22} /><span>スクリーナーを準備中…</span></div>}>
-                <ScreenerIdleHero onSelect={setActiveTicker} />
+                <ScreenerIdleHero onSelect={setActiveTicker} onUpgrade={() => handleUpgradeRequest('今日の筆頭 (Premium)')} />
               </Suspense>
             ) : (
               // legacy (?screener_legacy=1): Pane 3 に Hero (今注目 3 セクション)。
