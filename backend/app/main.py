@@ -13279,6 +13279,54 @@ def _scan_breakout(
     return bo
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# #8 A/D 出来高の質 (買い-quality Sprint 4、 SPEC_2026-06-21 §0-2/§0-5)
+#   「上昇引け日 volume 合計 ÷ 下落引け日 volume 合計」 を 13週(65営業日) window で算出。
+#   >1 = 買い優勢 (機関の継続買いの目安、 オニール手法 trading.md:214/190、 KB 忠実)。
+#   ★ 追加 FMP fetch ゼロ: cup-scan が _fetch_ohlcv_3y で取得済の closes/volumes を流用 (§0-5)。
+#   ★ closes/volumes は旧→新 昇順 (_fetch_ohlcv_3y docstring L16449) → window は末尾 65 本。
+#   ★ down-volume 極小/0 は null: 比の発散による偽「買い優勢」を防止 (§0-2、 金融+開発 verdict)。
+def _compute_ad_volume_ratio(
+    closes: list[float],
+    volumes: list[float],
+    window: int = 65,
+) -> "float | None":
+    """13週(65営業日) の up/down day volume 合計比を返す。 算出不能は None。
+
+    各日を「前日終値比 up / down」 で分類し、 up 日の volume 合計 ÷ down 日の volume 合計。
+    None 条件 (honest null・AND 除外、 false 達成扱いにしない):
+      - 系列長 < window+1 (前日比に 1 本前が必要) → None
+      - down-volume <= 0 / down 日数 < 3 → None (分母の発散・偽陽性防止、 §0-2)
+    """
+    if not closes or not volumes:
+        return None
+    n = min(len(closes), len(volumes))
+    if n < window + 1:  # window 日分の前日比に「1 本前の close」 が必要
+        return None
+    up_vol = 0.0
+    down_vol = 0.0
+    down_days = 0
+    start = n - window  # 末尾 window 本を分類 (start..n-1、 各々 j-1 と比較)
+    for j in range(start, n):
+        prev_c = closes[j - 1]
+        c = closes[j]
+        v = volumes[j]
+        if not (isinstance(c, (int, float)) and isinstance(prev_c, (int, float))):
+            continue
+        if not isinstance(v, (int, float)):
+            continue
+        vol = max(0.0, float(v))
+        if c > prev_c:
+            up_vol += vol
+        elif c < prev_c:
+            down_vol += vol
+            down_days += 1
+        # c == prev_c (引け同値) は up/down いずれにも加算しない
+    if down_vol <= 0 or down_days < 3:
+        return None  # §0-2: 下落引け日の出来高が極小/0 → 比が発散し偽「買い優勢」
+    return round(up_vol / down_vol, 2)
+
+
 def _detect_cup_handle(
     times: list[str],
     highs: list[float],
@@ -16668,6 +16716,9 @@ async def cron_cup_scan(
                     )
                 except Exception as e:
                     return ticker, None, None, None, f"detect_failed: {e}"
+                # buy-quality Sprint 4 (#8 A/D): cup payload に ad_volume_ratio を同梱 (§0-5 追加 fetch ゼロ)。
+                # 検出時のみ upsert される → coverage は pivot_distance (#3) と同源・一致 (cup-detected)。
+                result["ad_volume_ratio"] = _compute_ad_volume_ratio(closes, volumes)
                 # v220: resistance_retest を additive 検出 (None なら非該当)
                 retest = _scan_resistance_retest(times, highs, lows, closes, result)
                 # SPEC §4.2 (Sprint 2): breakout を同一 OHLCV で additive 検出 (追加 fetch ゼロ、§4.5)。
@@ -16743,6 +16794,8 @@ async def cron_cup_scan(
             except Exception as e:
                 failed.append({"ticker": ticker, "reason": f"detect_failed: {e}"})
                 continue
+            # buy-quality Sprint 4 (#8 A/D): cup payload に ad_volume_ratio を同梱 (§0-5 追加 fetch ゼロ)。
+            result["ad_volume_ratio"] = _compute_ad_volume_ratio(closes, volumes)
             if result.get("detected"):
                 detected += 1
             state = result.get("state") or "not_detected"
@@ -19935,6 +19988,8 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
     # 鮮度元 = cup と同源 (cup_latest) → 独立キー "pivot_distance" を追加 (§0 per-facet freshness)。
     # headline as_of は max(freshness.values()) なので cup と重複しても max は壊れない。
     freshness["pivot_distance"] = cup_latest
+    # buy-quality Sprint 4: #8 A/D 出来高の質も cup payload 同梱 (cup-scan で算出済) → 鮮度元 = cup と同源。
+    freshness["ad_volume"] = cup_latest
 
     # pattern_signals breakout (Premium) — 直近 2 日、 per-ticker 最新
     bo_map: dict[str, dict] = {}
@@ -20008,6 +20063,12 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
         else:
             pivot_distance_pct = None  # cup 未形成 / price 欠落 → honest None
 
+        # buy-quality Sprint 4: #8 A/D 出来高の質 — cup payload 同梱値を読むだけ (cup-scan で算出済、§0-5)。
+        # coverage = pivot_distance と同源 (cup-detected ≈618 ticker)。cup 未形成は honest None (AND 除外)。
+        _ad_volume_ratio: float | None = (
+            _cup_payload.get("ad_volume_ratio") if isinstance(_cup_payload, dict) else None
+        )
+
         items.append({
             "ticker": tk,
             "name": meta.get("name"),
@@ -20046,6 +20107,9 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             # cup payload から都度算出 (§0-4 DB precompute 不使用)。
             # 負値 = pivot 下 (ブレイク前)、正値 = pivot 超え。区分判定は Sprint 3 facet / Sprint 5 view 担当。
             "pivot_distance_pct": pivot_distance_pct,
+            # buy-quality Sprint 4: #8 A/D 出来高の質 (Premium tier、§0-1)。>1 = 買い優勢。
+            # 13F 機関保有 (inst_holders_qoq_pct) とは別軸 (出来高 up/down 集計、§3-2 混同回避)。
+            "ad_volume_ratio": _uni_round(_ad_volume_ratio),
         })
 
     # headline as_of = 最新 refresh (= nightly scan の鮮度)。 鮮度差は per-facet freshness map で開示。
@@ -20096,6 +20160,8 @@ async def scanner_universe(
         # buy-quality Sprint 2: #3 pivot_distance_pct は Premium tier (§0-1 user gate 確定)。
         # cup/breakout と同じ pattern_signals 由来のタイミング系 → Premium 扱い一貫性。
         locked += ["pivot_distance"]
+        # buy-quality Sprint 4: #8 A/D 出来高の質も cup 由来の需給系 → Premium (§0-1)。
+        locked += ["ad_volume"]
     if tier not in ("pro", "premium"):
         locked += ["near_high"]
     locked_set = set(locked)
@@ -20115,6 +20181,9 @@ async def scanner_universe(
             # buy-quality Sprint 2: #3 pivot_distance_pct Premium gate
             if "pivot_distance" in locked_set:
                 m["pivot_distance_pct"] = None
+            # buy-quality Sprint 4: #8 ad_volume_ratio Premium gate
+            if "ad_volume" in locked_set:
+                m["ad_volume_ratio"] = None
             items.append(m)
     else:
         items = base_items
