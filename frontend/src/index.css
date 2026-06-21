@@ -13779,6 +13779,15 @@ body.is-digest-resizing {
   color: var(--text-primary);
 }
 .screener-idle-hero__title-icon { color: var(--color-gold); flex-shrink: 0; }
+/* S4 condition6: 鮮度 (本日/昨日更新) を title 右端に控えめ併記。typography 層1 と同格の caption fw400 muted */
+.screener-idle-hero__freshness {
+  margin-left: auto;
+  font-size: var(--text-caption);
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
 
 /* section 説明 (§38 軸明示 + ⓘ + 免責) */
 .screener-idle-hero__desc {

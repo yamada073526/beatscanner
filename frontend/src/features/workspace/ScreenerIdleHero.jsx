@@ -34,6 +34,20 @@ function rowRevealDelay(idx) {
   return ROW_REVEAL_LEAD + idx * ROW_REVEAL_STEP;
 }
 
+// 鮮度表示 (S4 condition6): as_of "YYYY-MM-DD" → 本日/昨日/N日前。§38 日次粒度のみ ("X分前" 禁止)。
+// CustomScreenerPanel.formatAsOf と同一ロジック (date-only・安定関数のため重複許容、両者で挙動一致)。
+function formatAsOf(asOf) {
+  if (!asOf) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(asOf);
+  target.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((today - target) / 86400000);
+  if (diffDays <= 0) return '本日更新';
+  if (diffDays === 1) return '昨日更新';
+  return `${diffDays}日前に更新`;
+}
+
 // 交差シグナルの静的ラベル dict (§38: LLM 不使用・色 neutral・断定なし)。
 // 優先順位: breakout_confirmed > breakout_pending > bo_confirmed > formation。
 function deriveSignalLabel(it) {
@@ -209,6 +223,7 @@ export default function ScreenerIdleHero({ onSelect }) {
     loading: true,
     error: null,
     levelIdx: 0, // HERO_LADDER の採用 level (0=strict、大きいほど緩和)
+    asOf: null,  // S4 condition6: universe.as_of (鮮度表示用)
   });
 
   useEffect(() => {
@@ -245,20 +260,21 @@ export default function ScreenerIdleHero({ onSelect }) {
             fundaPass: it.funda_pass === true,
           }));
 
-        setFetchState({ tickers: top3, loading: false, error: null, levelIdx });
+        setFetchState({ tickers: top3, loading: false, error: null, levelIdx, asOf: data?.as_of || null });
       } catch (e) {
         if (ac.signal.aborted) return;
-        setFetchState({ tickers: [], loading: false, error: String(e), levelIdx: 0 });
+        setFetchState({ tickers: [], loading: false, error: String(e), levelIdx: 0, asOf: null });
       }
     }
     load();
     return () => ac.abort();
   }, []);
 
-  const { tickers, loading, error, levelIdx } = fetchState;
+  const { tickers, loading, error, levelIdx, asOf } = fetchState;
   const meta = HERO_LADDER[levelIdx] || HERO_LADDER[0];
   const relaxed = levelIdx > 0;
   const isEmpty = !loading && !error && tickers.length === 0;
+  const freshness = formatAsOf(asOf); // S4 condition6: 鮮度表示 (原則2「データが動いている感」)
 
   // ── loading state ──
   if (loading) {
@@ -325,6 +341,12 @@ export default function ScreenerIdleHero({ onSelect }) {
           <h4 className="screener-idle-hero__title">
             <Crown size={16} strokeWidth={1.75} aria-hidden className="screener-idle-hero__title-icon" />
             今日の筆頭
+            {/* S4 condition6: 鮮度を右端に併記 (原則2「データが動いている感」、§38 日次粒度) */}
+            {freshness && (
+              <span className="screener-idle-hero__freshness" data-testid="idle-hero-freshness">
+                {freshness}
+              </span>
+            )}
           </h4>
         </div>
 
