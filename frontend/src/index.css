@@ -13885,7 +13885,28 @@ body.is-digest-resizing {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.screener-idle-hero__ticker--featured { font-size: var(--text-body); }
+/* Sprint A (B-3 写経): featured ticker = 「今日の筆頭」の hero element。
+   模範解答の「特大 + キーワード1語を gradient」(surge bg-clip-text / Linear 特大見出し) を写経:
+   display tier (--text-h1) へ特大化 + gold gradient (bg-clip-text)。gold continuity
+   (rank circle / funda badge と同系) で「rank-1 = gold = 筆頭」を一貫 signal 化。
+   raw hex 不使用 (gold token + color-mix で gradient)、 fallback color で bg-clip 非対応も担保。 */
+.screener-idle-hero__ticker--featured {
+  font-size: var(--text-h1);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--color-gold); /* bg-clip-text 非対応 browser の fallback */
+  background: linear-gradient(120deg, var(--color-gold) 0%, color-mix(in srgb, var(--color-gold) 50%, var(--text-primary)) 100%);
+  -webkit-background-clip: text;
+          background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+/* Sprint A: featured row のみ RS を二色強調 (hero の主要数値 = primary / fw700)。
+   非 featured は caption secondary 維持 = 階層の二色コントラスト (模範解答 device①)。 */
+.screener-idle-hero__row--featured .screener-idle-hero__rs {
+  font-size: var(--text-body);
+  font-weight: 700;
+  color: var(--text-primary);
+}
 
 /* funda 加点バッジ (決算5条件 = gold accent、sparse なので加点のみ) */
 .screener-idle-hero__funda-badge {
