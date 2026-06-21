@@ -38,6 +38,7 @@ for (let i = 0; i < args.length; i++) {
   else if (args[i] === '--dry-run') opts.dryRun = true;
   else if (args[i] === '--label') opts.label = args[++i];
   else if (args[i] === '--url') opts.url = args[++i];
+  else if (args[i] === '--theme') opts.theme = args[++i]; // 'light'|'dark' (dark-vs-light 検証用)
 }
 
 const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -167,6 +168,12 @@ async function scoreFrames(frames) {
         await page.addInitScript((entries) => {
           for (const { key, value } of entries) window.localStorage.setItem(key, value);
         }, auth);
+      }
+      // dark-vs-light 検証: --theme で chart_dark_mode を上書き (initDarkMode が起動時に読む)
+      if (opts.theme) {
+        await page.addInitScript((t) => {
+          window.localStorage.setItem('chart_dark_mode', t === 'dark' ? 'true' : 'false');
+        }, opts.theme);
       }
       await page.goto(opts.url, { waitUntil: 'domcontentloaded', timeout: 20_000 });
       // Hero 銘柄 row が出る (fetch 完了) まで待機、 出なければ 4.5s fixed wait
