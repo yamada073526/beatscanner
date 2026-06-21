@@ -13630,8 +13630,15 @@ body.is-digest-resizing {
 .screener-row__badges {
   display: flex;
   align-items: center;
-  gap: var(--space-1);         /* 4px: chip 間 micro-gap */
+  gap: var(--space-3);         /* 12px: 意味グループ間の余白 (Pass 2b proximity 分節, 痛み4) */
   flex-shrink: 0;
+}
+
+/* Pass 2b: 意味グループ (fundamental/technical/demand) クラスタ。グループ内は密 (--space-1)。 */
+.screener-row__badge-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);         /* 4px: グループ内 chip 間 micro-gap */
 }
 
 /* 会社名: truncate で 1 行に収める */

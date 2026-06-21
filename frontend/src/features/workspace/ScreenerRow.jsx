@@ -166,6 +166,20 @@ export default function ScreenerRow({
   // matchBadges の表示 (最大 2 件、spacing 確保のため)
   const visibleBadges = matchBadges.slice(0, 2);
 
+  // Pass 2b: matchBadges を意味グループ (fundamental/technical/demand) で proximity 分節。
+  // group 未指定は 'other' に集約。グループ順を固定し、グループ間に余白を確保 (痛み4)。
+  // 現状 row は 2 badge と minimal だが、Phase 2 (#2/#5) の facet 追加で効果が増す構造基盤。
+  const BADGE_GROUP_ORDER = ['fundamental', 'technical', 'demand', 'other'];
+  const badgeGroups = (() => {
+    const map = new Map();
+    for (const b of visibleBadges) {
+      const g = b.group || 'other';
+      if (!map.has(g)) map.set(g, []);
+      map.get(g).push(b);
+    }
+    return BADGE_GROUP_ORDER.filter((g) => map.has(g)).map((g) => ({ group: g, badges: map.get(g) }));
+  })();
+
   // 件数母集団差の tooltip (追記条件 7)
   const modeTooltip = mode === 'preset'
     ? 'preset: RS×テクニカル交差の上位銘柄'
@@ -263,18 +277,26 @@ export default function ScreenerRow({
         <span className="screener-row__chip-line">
           {visibleBadges.length > 0 && (
             <span className="screener-row__badges">
-              {visibleBadges.map((badge, i) => (
-                <Chip
-                  key={badge.label + i}
-                  size="xs"
-                  variant="display"
-                  tone="muted"
-                  title={badge.value != null
-                    ? `${badge.label}: ${badge.value}${badge.unit || ''}`
-                    : badge.label}
+              {badgeGroups.map(({ group, badges }) => (
+                <span
+                  className="screener-row__badge-group"
+                  key={group}
+                  data-badge-group={group}
                 >
-                  {badge.label}
-                </Chip>
+                  {badges.map((badge, i) => (
+                    <Chip
+                      key={badge.label + i}
+                      size="xs"
+                      variant="display"
+                      tone="muted"
+                      title={badge.value != null
+                        ? `${badge.label}: ${badge.value}${badge.unit || ''}`
+                        : badge.label}
+                    >
+                      {badge.label}
+                    </Chip>
+                  ))}
+                </span>
               ))}
             </span>
           )}
