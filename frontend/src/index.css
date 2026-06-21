@@ -13719,7 +13719,7 @@ body.is-digest-resizing {
   padding: var(--space-6) var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);                 /* section 間 = 抜き */
+  gap: var(--space-6);                 /* section 間 = 抜き (Sprint C: 余白 device⑥ で --space-5→6) */
 }
 
 /* loading / error / empty の中央寄せ state (詰め→抜き→詰め と無関係な単独表示) */
@@ -13845,10 +13845,16 @@ body.is-digest-resizing {
   transition: background var(--motion-fast) ease;
 }
 .screener-idle-hero__row:hover { background: var(--bg-hover); }
-/* featured = rank-1: 唯一の big element + gold hairline (scarcity) */
+/* featured = rank-1: 唯一の big element + gold hairline (scarcity)。
+   Sprint C (B-3 写経): pane → card の入れ子奥行きを hairline border + --bg-subtle fill で出す
+   (shadow/glow なし = postmortem 回避、 plain bordered surface)。gold left accent 維持。
+   padding を --space-4 へ拡張 (余白 device⑥)。:hover は __row:hover (bg-hover) が上書き。 */
 .screener-idle-hero__row--featured {
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
   border-left: 2px solid color-mix(in srgb, var(--color-gold) 55%, transparent);
+  border-radius: var(--radius-md);
 }
 
 /* rank circle: rank-1 のみ gold (scarcity)、2-3 は neutral accent */
