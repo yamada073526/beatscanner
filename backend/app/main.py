@@ -21319,6 +21319,7 @@ def _upsert_screener_fundamental(
     inst_holders_qoq_pct: "float | None" = None,
     ocf_margin_pct: "float | None" = None,
     fcf_margin_pct: "float | None" = None,
+    ocf_gt_netincome: "bool | None" = None,
 ) -> bool:
     """screener_fundamentals テーブルに各指標を upsert。
 
@@ -21339,6 +21340,12 @@ def _upsert_screener_fundamental(
       - fcf_margin_pct: TTM FCFマージン % (例: 22.1 = 22.1%)。
       - sector guard / 外貨 ADR guard 適用済 (None = guard 発動 or データなし)。
       - None-preserve 厳守: 0.0 は有効値 (if x is not None で判定)。
+      - optional_cols fallback: migration 未適用時はカラム除外して再 upsert (graceful)。
+    screener-buy-quality-headroom Sprint 1 対応: ocf_gt_netincome 引数を追加。
+      - ocf_gt_netincome: TTM OCF > TTM netIncome の bool (#1 OCF>純利益)。
+      - sector guard: 銀行/保険/REIT/証券等 → None (ザル化防止)。
+      - 外貨 ADR guard: reportedCurrency != "USD" → None。
+      - None-preserve 厳守: guard 該当 / データなし → None。
       - optional_cols fallback: migration 未適用時はカラム除外して再 upsert (graceful)。
 
     None 値のカラムは payload に含めない = 既存 DB 値を上書きしない (後方互換)。
@@ -21405,6 +21412,11 @@ def _upsert_screener_fundamental(
         row["ocf_margin_pct"] = ocf_margin_pct
     if fcf_margin_pct is not None:
         row["fcf_margin_pct"] = fcf_margin_pct
+    # ── screener-buy-quality-headroom Sprint 1: #1 OCF>純利益 bool ─────────────
+    # None-preserve: False は有効値 (not True も保存)。None を渡した場合は payload に含めない。
+    # optional_cols fallback: migration 未適用時はカラム除外して再 upsert (graceful)。
+    if ocf_gt_netincome is not None:
+        row["ocf_gt_netincome"] = ocf_gt_netincome
 
     try:
         sb.table("screener_fundamentals").upsert(
@@ -21425,6 +21437,7 @@ def _upsert_screener_fundamental(
                 "inst_holders_qoq_pct",  # Sprint C: migration 未適用時の graceful fallback
                 "ocf_margin_pct",         # Sprint 1: migration 未適用時の graceful fallback
                 "fcf_margin_pct",         # Sprint 1: migration 未適用時の graceful fallback
+                "ocf_gt_netincome",       # buy-quality Sprint 1: migration 未適用時の graceful fallback
             )
             if c in err_str and c in row
         ]
@@ -21584,7 +21597,7 @@ async def cron_canslim_scan(
         """1 ticker の C/A/N/S/I + 営業CFマージン指標を計算して
         (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct,
          buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
-         ocf_margin_pct, fcf_margin_pct, err, null_reasons) を返す。
+         ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome, err, null_reasons) を返す。
 
         Phase 3 Sprint 1 拡張: A 条件 (eps_cagr_3y / roe / turnaround) を追加。
         Phase 3 Sprint 2 拡張: N 条件 (near_high_pct = price / yearHigh) を追加。
@@ -21612,6 +21625,14 @@ async def cron_canslim_scan(
           - sector guard: _roe_sector_guard と同じ sector 変数を流用 (追加 fetch ゼロ)。
             銀行/REIT/保険/証券/Consumer Finance/Mortgage + 外貨 ADR は None を保存。
           - None-preserve 厳守: 0.0 は有効値。if x is not None で判定。
+        screener-buy-quality-headroom Sprint 1 拡張: #1 OCF>純利益 bool を追加。
+          - ocf_gt_netincome = (TTM OCF > TTM netIncome) の bool。
+          - TTM netIncome は income-statement(quarter,limit=4) の各 q dict の netIncome を合計。
+            (income-statement は ocf_margin_pct 算出で fetch 済 → 追加 FMP call ゼロ)
+          - sector guard: _roe_sector_guard と同じ基準で銀行/保険/REIT/証券等 → None。
+            特に REIT は減価償却で OCF≫NI が常態化 → guard しないとザル化 (金融 verdict)。
+          - 外貨 ADR guard: reportedCurrency != "USD" → None (通貨ミスマッチ防止)。
+          - None-preserve 厳守: sector guard 該当 / cf_data 空 / netIncome 欠落 → None。
         C 条件 (eps_yoy_pct) の計算ロジックは変更なし (後方互換)。
 
         fetch + 計算のみ (upsert / counter 更新はしない = post-gather で逐次)。
@@ -21626,12 +21647,13 @@ async def cron_canslim_scan(
         ★ S 条件 volume_surge は profile の averageVolume (24h cache) から計算。
         ★ I 条件 inst_holders_qoq_pct は FMP 13F symbol-positions-summary から計算。
         ★ 営業CFマージン = income-statement(quarter,limit=4) から revenue を取得して TTM 計算。
+        ★ #1 OCF>純利益 = income-statement(quarter,limit=4) の netIncome を流用 (追加 fetch ゼロ)。
 
-        ★★ tuple arity: 全 return 文が 13 要素であること (Sprint 1 で ocf/fcf_margin_pct 追加、
-           feedback_pge_loop_pitfalls ルール 1)。
+        ★★ tuple arity: 全 return 文が 14 要素であること (screener-buy-quality-headroom Sprint 1 で
+           ocf_gt_netincome 追加、feedback_pge_loop_pitfalls ルール 1)。
         return (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct,
                 buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
-                ocf_margin_pct, fcf_margin_pct, err, null_reasons)
+                ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome, err, null_reasons)
         ※ error path は null_reasons={} (upsert されないため空でよい)、success path のみ実 dict。
         """
         try:
@@ -21639,20 +21661,20 @@ async def cron_canslim_scan(
             try:
                 surprises_raw = await client.earnings_surprises(ticker, limit=8)
             except Exception:
-                return ticker, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_failed", {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_failed", {}
             if not surprises_raw:
-                return ticker, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_empty", {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_empty", {}
 
             surprises_past = [s for s in surprises_raw if _has_eps_actual(s)]
             if not surprises_past:
-                return ticker, None, None, None, None, None, None, None, None, None, None, "no_eps_actual_in_surprises", {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, "no_eps_actual_in_surprises", {}
 
             latest = sorted(
                 surprises_past, key=lambda d: d.get("date") or "", reverse=True
             )[0]
             entry_date_str = latest.get("date") or ""
             if not entry_date_str:
-                return ticker, None, None, None, None, None, None, None, None, None, None, "no_entry_date", {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, "no_entry_date", {}
             eps_actual = _safe_eps_float(
                 latest.get("eps")
                 or latest.get("epsActual")
@@ -22032,6 +22054,92 @@ async def cron_canslim_scan(
                 fcf_margin_pct = None
                 ocf_margin_null_reason = "data_missing"
 
+            # ── #1 OCF > 純利益 (ocf_gt_netincome) ─────────────────────────────────
+            # screener-buy-quality-headroom Sprint 1: 営業CF品質フラグ
+            #
+            # ocf_gt_netincome = (TTM OCF > TTM netIncome) の bool
+            # - TTM OCF  = cf_data (S 条件 buyback_yield で fetch 済) の operatingCashFlow 4Q 合計。
+            # - TTM netIncome = income-statement (ocf_margin_pct ブロックで fetch 済、
+            #   同一 cache_key "is-q::{ticker}" なのでメモリキャッシュから即返り追加 FMP call ゼロ)。
+            #
+            # sector guard:
+            #   銀行/保険/REIT/証券/Consumer Finance/Mortgage は None。
+            #   REIT は減価償却で OCF≫NI が常態化 → guard なしだと無条件 pass=ザル化 (金融 verdict)。
+            #   _roe_sector_guard (sector/industry は ROE ブロック前で取得済) を流用。
+            #
+            # 外貨 ADR guard:
+            #   reportedCurrency != "USD" → None (income-statement の通貨ミスマッチ防止)。
+            #   reportedCurrency は income-statement の先頭レコードから取得 (ocf_margin_pct ブロックと同手順)。
+            #
+            # None-preserve: cf_data 空 / netIncome 欠落 / sector/ADR guard → None (例外不可)。
+            # LLM 不使用: 純粋な Python 算術 (bool 比較のみ)。
+            ocf_gt_netincome: "bool | None" = None
+            ocf_gt_netincome_null_reason: "str | None" = None
+            try:
+                # sector guard チェック (sector/industry は ROE ブロックで取得済)
+                if _roe_sector_guard(sector, industry):
+                    ocf_gt_netincome = None
+                    ocf_gt_netincome_null_reason = "sector_guard"
+                else:
+                    # income-statement を取得 (同一 cache_key → メモリキャッシュ hit、追加 FMP call ゼロ)
+                    _is2_url = (
+                        f"https://financialmodelingprep.com/stable/income-statement"
+                        f"?symbol={ticker.upper()}&period=quarter&limit=4&apikey={fmp_key}"
+                    )
+                    _is2_cache_key = f"is-q::{ticker.upper()}"
+                    _is2_data = await safe_fmp_get(_is2_url, _is2_cache_key, ttl=CACHE_TTL_PROFILE)
+
+                    if isinstance(_is2_data, list) and _is2_data:
+                        # 外貨 ADR guard: reportedCurrency != "USD" は None
+                        _is2_currency = (
+                            _is2_data[0] if isinstance(_is2_data[0], dict) else {}
+                        ).get("reportedCurrency", "USD")
+                        if _is2_currency and _is2_currency.upper() != "USD":
+                            ocf_gt_netincome = None
+                            ocf_gt_netincome_null_reason = "adr_currency"
+                        else:
+                            # TTM netIncome = 直近4Q netIncome 合計
+                            _ttm_ni = 0.0
+                            _ni_quarters = 0
+                            for _ni_rec in _is2_data[:4]:
+                                if not isinstance(_ni_rec, dict):
+                                    continue
+                                _ni_raw = _ni_rec.get("netIncome")
+                                if _ni_raw is not None:
+                                    try:
+                                        _ttm_ni += float(_ni_raw)
+                                        _ni_quarters += 1
+                                    except (ValueError, TypeError):
+                                        pass
+
+                            # TTM OCF = cf_data (S 条件 buyback_yield ブロックで fetch 済) の 4Q 合計
+                            _cf2_for_ocf = cf_data if isinstance(cf_data, list) else []
+                            _ttm_ocf2 = 0.0
+                            _ocf2_quarters = 0
+                            for _cf2_q in _cf2_for_ocf[:4]:
+                                if not isinstance(_cf2_q, dict):
+                                    continue
+                                _ocf2_raw = _cf2_q.get("operatingCashFlow")
+                                if _ocf2_raw is not None:
+                                    try:
+                                        _ttm_ocf2 += float(_ocf2_raw)
+                                        _ocf2_quarters += 1
+                                    except (ValueError, TypeError):
+                                        pass
+
+                            if _ni_quarters > 0 and _ocf2_quarters > 0:
+                                # bool 比較のみ (断定/LLM 不使用)
+                                ocf_gt_netincome = bool(_ttm_ocf2 > _ttm_ni)
+                            else:
+                                ocf_gt_netincome = None
+                                ocf_gt_netincome_null_reason = "data_insufficient"
+                    else:
+                        ocf_gt_netincome = None
+                        ocf_gt_netincome_null_reason = "income_statement_empty"
+            except Exception:
+                ocf_gt_netincome = None
+                ocf_gt_netincome_null_reason = "data_missing"
+
             # ── S5a: null_reason per-cause を組み立て (静的コード、LLM 不使用) ──
             #   success path のみ upsert される (error path は err を立てて post-gather で continue)。
             #   原因コードは frontend (S5b) が静的 dict で UI ラベル化。§38/§5: 予測語/最上級なし。
@@ -22053,16 +22161,18 @@ async def cron_canslim_scan(
                 null_reasons["inst_holders"] = "no_institutional_data"
             if ocf_margin_pct is None:
                 null_reasons["ocf_margin"] = ocf_margin_null_reason or "data_missing"
+            if ocf_gt_netincome is None:
+                null_reasons["ocf_gt_netincome"] = ocf_gt_netincome_null_reason or "data_missing"
 
-            # ★★ tuple arity 13 要素 (Sprint 1 で ocf_margin_pct / fcf_margin_pct 追加、
+            # ★★ tuple arity 14 要素 (screener-buy-quality-headroom Sprint 1 で ocf_gt_netincome 追加、
             #    feedback_pge_loop_pitfalls ルール 1)
             return (
                 ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround,
                 near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
-                ocf_margin_pct, fcf_margin_pct, None, null_reasons,
+                ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome, None, null_reasons,
             )
         except Exception as e:
-            return ticker, None, None, None, None, None, None, None, None, None, None, f"unexpected: {e}", {}
+            return ticker, None, None, None, None, None, None, None, None, None, None, None, f"unexpected: {e}", {}
 
     # fetch + 計算: worker_count>1 で並列 (asyncio.Semaphore)、 =1 で逐次。
     # ★ 6体合議 critical 対応: 旧実装は完全逐次で full universe (3000) で GHA timeout (30min) 超過
@@ -22089,14 +22199,15 @@ async def cron_canslim_scan(
             results.append(await _compute_one(ticker))
 
     # count + upsert (post-gather 逐次、 cup-scan と同型)
-    # Sprint 1 (じっちゃまファンダ): result tuple が 13 要素 (ocf_margin_pct / fcf_margin_pct を追加)
+    # screener-buy-quality-headroom Sprint 1: result tuple が 14 要素 (ocf_gt_netincome を追加)
     # (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct,
     #  buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
-    #  ocf_margin_pct, fcf_margin_pct, err, null_reasons)
+    #  ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome, err, null_reasons)
     # Phase 3 Sprint 4a: post-gather で ×100 して pct 新カラム値を生成
     #   near_high_pct_scaled = near_high_pct × 100 (例 0.97 → 97.0)
     #   buyback_yield_pct    = buyback_yield  × 100 (例 0.0173 → 1.73)
-    #   tuple arity は 13 (Sprint 1 で ocf/fcf_margin_pct 追加、feedback_pge_loop_pitfalls ルール 1)
+    #   tuple arity は 14 (screener-buy-quality-headroom Sprint 1 で ocf_gt_netincome 追加、
+    #   feedback_pge_loop_pitfalls ルール 1)
     a_computed = 0             # CAGR が算出できた件数
     roe_computed = 0           # ROE が取得できた件数
     near_high_computed = 0     # near_high_pct が算出できた件数
@@ -22104,8 +22215,9 @@ async def cron_canslim_scan(
     volume_surge_computed = 0  # volume_surge_pct が算出できた件数 (S 条件)
     inst_holders_computed = 0  # inst_holders_qoq_pct が算出できた件数 (I 条件)
     ocf_margin_computed = 0    # ocf_margin_pct が算出できた件数 (Sprint 1)
+    ocf_gt_netincome_computed = 0  # ocf_gt_netincome が算出できた件数 (buy-quality Sprint 1)
     for result in results:
-        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct, ocf_margin_pct, fcf_margin_pct, err, null_reasons = result
+        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct, ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome, err, null_reasons = result
         if err:
             failed.append({"ticker": ticker, "reason": err})
             continue
@@ -22127,6 +22239,8 @@ async def cron_canslim_scan(
             inst_holders_computed += 1
         if ocf_margin_pct is not None:
             ocf_margin_computed += 1
+        if ocf_gt_netincome is not None:
+            ocf_gt_netincome_computed += 1
         if not dry_run:
             # ── S4a BLOCK①: pct 新カラム値を post-gather で生成 ──────────────────
             # near_high_pct (ratio 0-1) を pct 表記に変換。read endpoint が >= min_pct で比較可能。
@@ -22159,6 +22273,7 @@ async def cron_canslim_scan(
                 inst_holders_qoq_pct=inst_holders_qoq_pct,  # Sprint C: I 条件
                 ocf_margin_pct=ocf_margin_pct,   # Sprint 1: 営業CFマージン
                 fcf_margin_pct=fcf_margin_pct,   # Sprint 1: FCFマージン
+                ocf_gt_netincome=ocf_gt_netincome,  # buy-quality Sprint 1: #1 OCF>純利益 bool
             )
             if ok:
                 upserted += 1
@@ -22176,6 +22291,7 @@ async def cron_canslim_scan(
         "volume_surge_computed_count": volume_surge_computed,
         "inst_holders_computed_count": inst_holders_computed,  # Sprint C: I 条件
         "ocf_margin_computed_count": ocf_margin_computed,      # Sprint 1: 営業CFマージン
+        "ocf_gt_netincome_computed_count": ocf_gt_netincome_computed,  # buy-quality Sprint 1: #1
         "upserted_count": upserted,
         "failed_count": len(failed),
         "failed_tickers": failed[:20],

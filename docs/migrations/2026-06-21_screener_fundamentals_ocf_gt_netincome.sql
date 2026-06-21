@@ -1,0 +1,107 @@
+-- ========================================================================
+-- screener_fundamentals へ ocf_gt_netincome カラム追加 (2026-06-21)
+-- 作成日: 2026-06-21
+-- セッション: screener 買い場の質 3 条件 Sprint 1
+--             SPEC_2026-06-21_screener-buy-quality-headroom.md
+--
+-- 目的: 営業CF>純利益 (#1 OCF>純利益 品質フラグ) を
+--       screener_fundamentals テーブルに永続化する。
+--       nightly canslim-scan が TTM (直近4四半期合計) ベースで算出し upsert する。
+--
+-- 定義:
+--   ocf_gt_netincome = (TTM operatingCashFlow > TTM netIncome)
+--   TTM ベース: 単期は運転資本変動で偽陽性が出るため 4Q 合計 (§0-3)。
+--   bool: True = OCF が純利益を上回る (利益の質が高い)。
+--         False = OCF < 純利益 (要注意、粉飾リスク指標)。
+--         NULL = sector guard / 外貨 ADR guard / データ欠落。
+--
+-- sector guard (NULL 保存):
+--   銀行/保険/REIT/証券/Consumer Finance/Mortgage は NULL で保存。
+--   特に REIT は減価償却で OCF≫NI が常態化するため guard しないとザル化する
+--   (じっちゃま/オニール KB §0-3 金融 verdict)。
+--
+-- 外貨 ADR guard (NULL 保存):
+--   reportedCurrency != "USD" → NULL (income-statement の通貨ミスマッチ防止)。
+--
+-- 追加 FMP fetch ゼロの根拠:
+--   TTM OCF は cf_data (cash-flow-statement, 既存 buyback_yield ブロックで fetch 済)。
+--   TTM netIncome は income-statement (既存 ocf_margin_pct ブロックで同一 cache_key で
+--   fetch 済、メモリキャッシュから即返り追加 FMP call ゼロ)。
+--
+-- 設計方針:
+--   - ADD COLUMN のみ (破壊的 DDL なし、adding-only)
+--   - IF NOT EXISTS で冪等 (安全に再実行可)
+--   - service_role に明示 GRANT (feedback_supabase_grant_bug.md 必須パターン)
+--   - NULL = sector guard / 外貨 ADR guard / データなし (None-preserve)
+--   - backend optional_cols fallback により migration 未適用でも upsert は落ちない
+--
+-- ⚠️ Sprint 1 対象: ocf_gt_netincome (1 列のみ)
+--    pivot_distance_pct は Sprint 2 で universe endpoint 都度算出 (DB 列なし)。
+--    §0-4 確定事項。
+--
+-- 適用方法:
+--   Supabase SQL Editor に本ファイルを貼り付けて実行。
+--   適用後に cron_canslim_scan を手動 1 回実行し ocf_gt_netincome を populate する。
+--
+-- memory anchor:
+--   feedback_supabase_grant_bug.md (GRANT 抜けで silent fail)
+--   feedback_foreign_currency_adr_guards.md (外貨 ADR の通貨ミスマッチ)
+--   feedback_edit_replace_all_drift.md (tuple arity 全 occurrence 確認)
+--   feedback_revenue_basis_mismatch.md (銀行/REIT の sector guard)
+-- ========================================================================
+
+-- #1 OCF > 純利益 (TTM = 直近4Q OCF 合計 > 直近4Q netIncome 合計)
+-- NULL = sector guard (銀行/保険/REIT/証券等) / 外貨 ADR / データなし
+-- True  = OCF が純利益を上回る (利益の質 OK)
+-- False = OCF < 純利益 (利益の質に懸念)
+alter table screener_fundamentals
+  add column if not exists ocf_gt_netincome boolean;
+
+-- 検索性能: screener で「OCF>純利益 の銘柄」絞り込みに使う index
+-- (calc_date + ocf_gt_netincome の複合で「直近日の品質フラグ該当銘柄」を高速取得)
+create index if not exists screener_fundamentals_date_ocf_gt_ni_idx
+  on screener_fundamentals (calc_date desc, ocf_gt_netincome)
+  where ocf_gt_netincome is not null;
+
+-- GRANT: service_role に明示付与 (screener_fundamentals は service_role のみアクセス)
+-- feedback_supabase_grant_bug.md パターン: ADD COLUMN 後に GRANT を明示しないと
+-- service_role で "permission denied" が出る場合がある (silent fail の既知 bug)
+grant select, insert, update, delete on public.screener_fundamentals to service_role;
+
+-- ========================================================================
+-- 完了確認 (実行後に SQL Editor で実行):
+--
+-- 1. カラム追加確認:
+--   select column_name, data_type
+--     from information_schema.columns
+--    where table_name = 'screener_fundamentals'
+--      and column_name = 'ocf_gt_netincome';
+--   -- 1行返れば成功 (data_type = 'boolean')
+--
+-- 2. GRANT 確認:
+--   select grantee, privilege_type
+--     from information_schema.role_table_grants
+--    where table_name = 'screener_fundamentals' and grantee = 'service_role'
+--    order by privilege_type;
+--   -- SELECT / INSERT / UPDATE / DELETE を含む 4+ 行返れば成功
+--
+-- 3. canslim-scan 手動実行後の data 確認 (本番 curl または Supabase SQL Editor):
+--   select ticker, calc_date, ocf_gt_netincome,
+--          ocf_margin_pct, null_reasons
+--     from screener_fundamentals
+--    where calc_date = current_date
+--      and ocf_gt_netincome is not null
+--    order by ticker
+--    limit 20;
+--   -- AAPL/MSFT/NVDA が ocf_gt_netincome = true で返れば成功
+--   -- JPM/BAC が null (sector guard) であれば正常
+--
+-- 4. sector guard 確認:
+--   select ticker, ocf_gt_netincome, null_reasons
+--     from screener_fundamentals
+--    where calc_date = current_date
+--      and ticker in ('JPM', 'BAC', 'WFC', 'GS', 'MS')
+--    order by ticker;
+--   -- 全銘柄で ocf_gt_netincome = null が期待値
+--   -- null_reasons に "ocf_gt_netincome":"sector_guard" が入っていれば理想
+-- ========================================================================
