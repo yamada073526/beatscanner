@@ -10,7 +10,7 @@ import FtdRegimeBanner from '../features/workspace/FtdRegimeBanner.jsx';
 // Pass B: 企業ロゴ (TV→FMP→頭文字円 3 段 fallback)
 import CompanyLogo from './CompanyLogo.jsx';
 // Sprint 1 Pass 1b: 共有 row primitive (screenerV2=true のみ、A-1 物理隔離)
-import ScreenerRow, { ScreenerRowEmpty } from '../features/workspace/ScreenerRow.jsx';
+import ScreenerRow from '../features/workspace/ScreenerRow.jsx';
 
 // FMP /stable/company-screener の sector (英語) → 日本語表示ラベル。
 const SECTOR_LABEL_JP = {
