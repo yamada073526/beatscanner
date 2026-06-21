@@ -206,6 +206,7 @@ export default function ScreenerMaster({
               isProUser={isProUser}
               handleUpgradeRequest={handleUpgradeRequest}
               hideHero
+              screenerV2={isScreenerV2()}
             />
           </Suspense>
         ) : (

@@ -30,6 +30,8 @@ import { useHaloSweepOnce } from '../../hooks/useHaloSweepOnce.js';
 import { useCountUp } from '../../hooks/useCountUp.js';
 import Chip, { ChipGroup } from '../../components/ui/Chip.jsx';
 import { supabase } from '../../lib/supabase.js';
+// Sprint 1 Pass 1c: 共有 row primitive (screenerV2=true のみ、A-1 物理隔離)
+import ScreenerRow from './ScreenerRow.jsx';
 
 
 // Sprint 5 frontend: 新高値ブレイクスクリーナー用 feature flag。
@@ -253,7 +255,7 @@ function dedupeByTicker(...lists) {
  * @param {boolean} props.featured - A-4: 最希少 setup (交差) のみ主役化 (padding↑ + Crown gold)
  * @param {number} props.revealBaseDelay - A-3: stagger 入場の section base delay (ms)
  */
-function HeroSection({ eyebrow, title, testId, description, tickers, loading, emptyMessage, onSelect, sectionRef, active = false, demoMode = false, onUpgrade, error = null, onRetry, featured = false, revealBaseDelay = 0, columns = false, icon = null, collapsedCount = null }) {
+function HeroSection({ eyebrow, title, testId, description, tickers, loading, emptyMessage, onSelect, sectionRef, active = false, demoMode = false, onUpgrade, error = null, onRetry, featured = false, revealBaseDelay = 0, columns = false, icon = null, collapsedCount = null, screenerV2 = false }) {
   // v125 P5-2: demo モード時は top 1 visible + 残り blur (marketer 6 体合議 verdict)
   const visibleCount = demoMode ? 1 : tickers.length;
   const blurredCount = demoMode ? Math.max(0, tickers.length - 1) : 0;
@@ -456,6 +458,39 @@ function HeroSection({ eyebrow, title, testId, description, tickers, loading, em
             // v125 P5-2: demo モード時は idx === 0 のみ visible、 残りは blur
             const isBlurred = demoMode && idx >= visibleCount;
             const rank = idx + 1;
+            const isTop = rank <= 3;
+
+            // ── A-1 物理隔離: screenerV2=true のみ ScreenerRow primitive を使用 ──
+            // legacy (screenerV2=false) は従来の button.screener-hero-row を維持 (追記条件3)。
+            if (screenerV2) {
+              // D-1 構造化 matchBadges: badge 文字列を label に変換 (colorRole='neutral' §38)
+              const matchBadges = t.badge
+                ? [{ label: t.badge, colorRole: t.isExtended ? 'warning' : 'neutral', group: 'technical' }]
+                : [];
+              return (
+                <li
+                  key={t.ticker}
+                  className="screener-reveal"
+                  style={{ animationDelay: `${rowRevealDelay(revealBaseDelay, idx)}ms` }}
+                  data-testid={`screener-row-${isBlurred ? 'blurred' : t.ticker}`}
+                >
+                  <ScreenerRow
+                    ticker={t.ticker}
+                    rank={rank}
+                    isTop={isTop}
+                    matchBadges={matchBadges}
+                    metrics={[]}
+                    onSelect={isBlurred ? undefined : onSelect}
+                    onUpgrade={isBlurred ? onUpgrade : undefined}
+                    lockState={isBlurred ? { tier: 'premium', label: 'Premium で解放' } : undefined}
+                    mode="preset"
+                    showCheckbox={false}
+                  />
+                </li>
+              );
+            }
+
+            // ── legacy 行 (screenerV2=false、従来 button.screener-hero-row を維持) ────
             // A-2: ランク circle = 上位 3 gold / 4-5 accent (RsScannerResults idiom 移植)。 希少性の gold pop。
             const rankBg = rank <= 3
               ? 'color-mix(in srgb, var(--color-gold) 18%, transparent)'
@@ -622,7 +657,7 @@ function heroCacheFresh() {
  * @param {boolean} props.isProUser
  * @param {Function} props.handleUpgradeRequest
  */
-export default function ScreenerPane({ detailContext = {}, isProUser = false, handleUpgradeRequest, hideHero = false }) {
+export default function ScreenerPane({ detailContext = {}, isProUser = false, handleUpgradeRequest, hideHero = false, screenerV2 = false }) {
   const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
 
   // v125 P5-2: demo モード判定 (未ログイン + 非 Pro)。
@@ -994,6 +1029,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           demoMode={demoMode}
           onUpgrade={handleUpgradeRequest}
           onRetry={handleRetry}
+          screenerV2={screenerV2}
         />
       )}
       {/* S1: 0件フォールバック (交差が空の日に「壊れてる?」 を避け、下の chunk へ誘導)。 */}
@@ -1022,6 +1058,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           demoMode={demoMode}
           onUpgrade={handleUpgradeRequest}
           onRetry={handleRetry}
+          screenerV2={screenerV2}
         />
       </div>
       <div style={{ marginTop: 'var(--space-16, 64px)' }}>
@@ -1042,6 +1079,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
           demoMode={demoMode}
           onUpgrade={handleUpgradeRequest}
           onRetry={handleRetry}
+          screenerV2={screenerV2}
         />
       </div>
 
@@ -1121,6 +1159,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
               demoMode={false}
               onUpgrade={handleUpgradeRequest}
               onRetry={handleRetry}
+              screenerV2={screenerV2}
             />
           )}
         </div>
