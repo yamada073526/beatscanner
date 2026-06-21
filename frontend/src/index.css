@@ -13936,12 +13936,30 @@ body.is-digest-resizing {
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
-/* typography 層3: signal = caption fw400 muted (最も静か) */
+/* typography 層3: signal = caption fw400 muted (最も静か)。
+   Sprint B: icon tile + label の inline-flex。tile = 単一 brand tint + 形状コード (§38 色 neutral)。 */
 .screener-idle-hero__signal {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   font-size: var(--text-caption);
   font-weight: 400;
   color: var(--text-muted);
   white-space: nowrap;
+}
+/* Sprint B (B-3 写経): 色分けアイコンタイル。色 (緑/赤) でなく形状で type 識別し、
+   tile は単一 brand (cyan) 微 tint = 「技術シグナル accent」(gold = rank/quality と二分した色規律)。
+   shadow ゼロ・border なし・tinted-bg のみ (発光系 class 不使用)。 */
+.screener-idle-hero__signal-tile {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-4);   /* 16px micro tile */
+  height: var(--space-4);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  color: var(--color-accent);
 }
 
 /* ── footer 導線 (section 末尾 = 抜き で区切る) ── */

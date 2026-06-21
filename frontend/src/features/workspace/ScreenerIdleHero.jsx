@@ -22,7 +22,7 @@
  *   - inline 関数 component 禁止 (module-level hoist)。shadow ゼロ。raw hex 禁止。
  */
 import { useState, useEffect } from 'react';
-import { Hourglass, Crown, AlertCircle, Info, Lock } from 'lucide-react';
+import { Hourglass, Crown, AlertCircle, Info, Lock, Zap, Target, ArrowUpRight } from 'lucide-react';
 import CompanyLogo from '../../components/CompanyLogo.jsx';
 import { fetchScannerUniverse } from '../../api.js';
 
@@ -55,6 +55,16 @@ function deriveSignalLabel(it) {
   if (it.cup_state === 'breakout_pending') return 'ブレイク待ち';
   if (it.breakout_state === 'bo_confirmed') return '新高値ブレイク';
   if (it.cup_state === 'formation') return 'カップ形成中';
+  return null;
+}
+
+// Sprint B (B-3 写経): signal 種別 → Lucide icon。色 (緑/赤) でなく「アイコン形状」で type を
+// 識別し §38 色 neutral を維持 (色分けは投資色ルールと衝突するため、形状コード + 単一 brand tint に写経)。
+// SPEC icon mapping: breakout→Zap / pending→ArrowUpRight / cup→Target (caricature/emoji 禁止)。
+function signalIconFor(label) {
+  if (label === 'ブレイク確定' || label === '新高値ブレイク') return Zap;
+  if (label === 'ブレイク待ち') return ArrowUpRight;
+  if (label === 'カップ形成中') return Target;
   return null;
 }
 
@@ -154,6 +164,7 @@ function RankCircle({ rank }) {
  *  raw 数値廃止: 全て .screener-idle-hero__* token CSS に委任 (安っぽさ root cause fix)。 */
 function LeaderRow({ ticker, rs, signal, rank, onSelect, fundaPass = false }) {
   const isFeatured = rank === 1;
+  const SignalIcon = signalIconFor(signal); // Sprint B: signal 種別の icon tile
   return (
     <li
       className="screener-reveal"
@@ -199,8 +210,18 @@ function LeaderRow({ ticker, rs, signal, rank, onSelect, fundaPass = false }) {
           {typeof rs === 'number' && (
             <span className="screener-idle-hero__rs">RS {rs}</span>
           )}
-          {/* typography 層3: signal = 最も静か (caption fw400 muted) */}
-          {signal && <span className="screener-idle-hero__signal">{signal}</span>}
+          {/* typography 層3: signal = 最も静か (caption fw400 muted)。
+              Sprint B: 種別 icon tile (形状コード + 単一 brand tint、§38 色 neutral) を前置。 */}
+          {signal && (
+            <span className="screener-idle-hero__signal">
+              {SignalIcon && (
+                <span className="screener-idle-hero__signal-tile" aria-hidden>
+                  <SignalIcon size={11} strokeWidth={2} />
+                </span>
+              )}
+              <span>{signal}</span>
+            </span>
+          )}
         </span>
       </button>
     </li>
