@@ -13426,6 +13426,38 @@ body.is-digest-resizing {
   border-radius: 9999px;
 }
 
+/* ── Sprint 2 Pass 2a: 操作帯 1 行集約 + 詳細 accordion CSS collapse ──────────
+   3体合議追記条件8: framer-motion 不使用・max-height jitter 廃止。
+   collapse は display:none(closed) ⇄ display:block + opacity fadeIn(open) のみ。
+   元の Tailwind (rounded-xl/border/p-3/space-y-4) を token CSS で再現。発光禁止 (box-shadow なし)。 */
+.screener-control-bar {
+  flex-wrap: nowrap;            /* 1 行固定: 375px でも applied-summary の truncate が吸収 */
+  min-width: 0;
+}
+.screener-applied-summary {
+  line-height: 1.4;            /* token 化: raw 行高を避け可読性確保 */
+}
+.screener-detail-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  margin-top: var(--space-2);
+}
+.screener-detail-panel > * + * {
+  margin-top: var(--space-4);  /* 旧 Tailwind space-y-4 を token で再現 */
+}
+.screener-detail-panel--closed {
+  display: none;               /* SR からも隠す。jitter なし。 */
+}
+.screener-detail-panel--open {
+  display: block;
+  animation: screenerDetailFadeIn 180ms ease;  /* fill なし = 終了後 opacity:1 の自然状態 (forwards 罠回避) */
+}
+@keyframes screenerDetailFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* ── Pass B: 結果行モジュール (shadow ゼロ哲学: border+tinted bg のみ) ──────
    §38 厳守: 色 polarity (緑/赤) で買い/売り断定しない。
    elevation = border + subtle tinted bg のみ。.panel-card/.bs-panel/.surface-card 付与禁止。 */

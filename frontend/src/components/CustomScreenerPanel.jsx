@@ -719,10 +719,19 @@ export default function CustomScreenerPanel({
             </p>
           </div>
 
-          {/* ── Pass C: 1 行コンパクト操作帯 ── */}
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* ── Sprint 2 Pass 2a: 1 行コンパクト操作帯 (screener-control-bar) ──
+              S2 変更点:
+              - screener-control-bar testid を操作帯ラッパーに付与 (全 state 共通)
+              - screener-applied-summary testid を適用中サマリ span に付与
+              - 詳細 accordion を {detailOpen && ...} から CSS display:none + opacity へ変更
+                (framer-motion 不使用 / max-height jitter 廃止 / LazyMotion scope 罠回避)
+              ─────────────────────────────────────────────────────────────────────── */}
+          <div
+            className="screener-control-bar flex items-center gap-2"
+            data-testid="screener-control-bar"
+          >
             {/* 左: 厳しさ preset トグル */}
-            <div data-testid="screener-preset-toggle" className="flex gap-1.5 items-center shrink-0">
+            <div data-testid="screener-preset-toggle" className="flex gap-1 items-center shrink-0">
               {(['loose', 'standard', 'strict']).map((lvl) => (
                 <Chip
                   key={lvl}
@@ -740,25 +749,69 @@ export default function CustomScreenerPanel({
               ))}
             </div>
 
-            {/* 中: 適用中サマリ (active filter を短縮ラベルで) */}
-            {(() => {
-              const parts = [];
-              if (mcapFilter.length > 0) parts.push(mcapFilter.map((k) => MCAP_BANDS.find((b) => b.key === k)?.label || k).join('・'));
-              if (sectorFilter.length > 0) parts.push(sectorFilter.map(sectorLabelJp).join('・'));
-              if (fundaPassOnly) parts.push('5条件達成');
-              if (ocfMarginOnly) parts.push(OCF_MARGIN_FACET.labelShort);
-              if (ocfGtNiOnly) parts.push(OCF_GT_NI_FACET.labelShort);
-              if (buyZoneOnly) parts.push(BUY_ZONE_FACET.labelShort);
-              if (adVolumeOnly) parts.push(AD_VOLUME_FACET.labelShort);
-              const overrideParts = Object.entries(overrides).filter(([, v]) => v && v !== 'off').map(([k]) => FACET_SHORT_LABEL[k] || k);
-              if (overrideParts.length > 0) parts.push(overrideParts.join('・'));
-              if (parts.length === 0) return null;
-              return (
-                <span className="flex-1 min-w-0 truncate text-[11px] text-[var(--text-muted)]">
-                  {parts.join('　')}
-                </span>
-              );
-            })()}
+            {/* 中: 適用中サマリ (active filter を短縮ラベル + 件数寄与で) */}
+            {/* screener-applied-summary は常に付与 (空なら aria-hidden) */}
+            <span
+              className="screener-applied-summary flex-1 min-w-0 truncate text-[11px] text-[var(--text-muted)]"
+              data-testid="screener-applied-summary"
+              aria-hidden={(() => {
+                const hasMcap = mcapFilter.length > 0;
+                const hasSector = sectorFilter.length > 0;
+                const hasBinary = fundaPassOnly || ocfMarginOnly || ocfGtNiOnly || buyZoneOnly || adVolumeOnly;
+                const hasOverride = Object.values(overrides).some((v) => v && v !== 'off');
+                return (!hasMcap && !hasSector && !hasBinary && !hasOverride) ? 'true' : undefined;
+              })()}
+            >
+              {(() => {
+                // facet 別の「寄与件数」を適用中サマリに薄く表示 (Trust Cliff C-2: itemPasses 同一集計)
+                // 件数 = "この facet だけを外した" vs "現在の全適用" の差分で寄与を示す
+                const parts = [];
+                const items = universe?.items || [];
+                const baseCount = filteredItems.length;
+                const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, adVolumeOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+
+                if (mcapFilter.length > 0) {
+                  const label = mcapFilter.map((k) => MCAP_BANDS.find((b) => b.key === k)?.label || k).join('・');
+                  const countWithout = items.filter((it) => itemPasses(it, activeGrades, { ...extra, mcapBands: [] })).length;
+                  const contribution = countWithout - baseCount;
+                  parts.push(contribution > 0 ? `${label}(+${contribution})` : label);
+                }
+                if (sectorFilter.length > 0) {
+                  const label = sectorFilter.map(sectorLabelJp).join('・');
+                  const countWithout = items.filter((it) => itemPasses(it, activeGrades, { ...extra, sectors: [] })).length;
+                  const contribution = countWithout - baseCount;
+                  parts.push(contribution > 0 ? `${label}(+${contribution})` : label);
+                }
+                if (fundaPassOnly) {
+                  const countWithout = items.filter((it) => itemPasses(it, activeGrades, { ...extra, fundaPassOnly: false })).length;
+                  const contribution = countWithout - baseCount;
+                  parts.push(contribution > 0 ? `5条件達成(+${contribution})` : '5条件達成');
+                }
+                if (ocfMarginOnly) {
+                  const countWithout = items.filter((it) => itemPasses(it, activeGrades, { ...extra, ocfMarginOnly: false })).length;
+                  const contribution = countWithout - baseCount;
+                  parts.push(contribution > 0 ? `${OCF_MARGIN_FACET.labelShort}(+${contribution})` : OCF_MARGIN_FACET.labelShort);
+                }
+                if (ocfGtNiOnly) {
+                  const countWithout = items.filter((it) => itemPasses(it, activeGrades, { ...extra, ocfGtNiOnly: false })).length;
+                  const contribution = countWithout - baseCount;
+                  parts.push(contribution > 0 ? `${OCF_GT_NI_FACET.labelShort}(+${contribution})` : OCF_GT_NI_FACET.labelShort);
+                }
+                if (buyZoneOnly) {
+                  const countWithout = items.filter((it) => itemPasses(it, activeGrades, { ...extra, buyZoneOnly: false })).length;
+                  const contribution = countWithout - baseCount;
+                  parts.push(contribution > 0 ? `${BUY_ZONE_FACET.labelShort}(+${contribution})` : BUY_ZONE_FACET.labelShort);
+                }
+                if (adVolumeOnly) {
+                  const countWithout = items.filter((it) => itemPasses(it, activeGrades, { ...extra, adVolumeOnly: false })).length;
+                  const contribution = countWithout - baseCount;
+                  parts.push(contribution > 0 ? `${AD_VOLUME_FACET.labelShort}(+${contribution})` : AD_VOLUME_FACET.labelShort);
+                }
+                const overrideParts = Object.entries(overrides).filter(([, v]) => v && v !== 'off').map(([k]) => FACET_SHORT_LABEL[k] || k);
+                if (overrideParts.length > 0) parts.push(overrideParts.join('・'));
+                return parts.join('　') || null;
+              })()}
+            </span>
 
             {/* 右: 詳細を開く */}
             <button
@@ -778,14 +831,17 @@ export default function CustomScreenerPanel({
             </button>
           </div>
 
-          {/* ── Pass C: 詳細 accordion (detailOpen 時のみ展開) ── */}
-          {detailOpen && (
-            <div
-              className="rounded-xl border border-[var(--border)] p-3 space-y-4"
-              role="region"
-              aria-label="詳細フィルター"
-              data-testid="screener-detail-panel"
-            >
+          {/* ── Sprint 2 Pass 2a: 詳細 accordion (CSS display:none + opacity — framer-motion 不使用) ──
+              SPEC §5 Sprint2 / 3体合議追記条件8: max-height jitter / LazyMotion scope 罠を回避。
+              display:none でスクリーンリーダーからも隠れ、opacity fade は CSS transition のみ。
+              クラス screener-detail-panel--open/closed を index.css で制御 (JS でスタイル直書きなし)。 */}
+          <div
+            className={`screener-detail-panel${detailOpen ? ' screener-detail-panel--open' : ' screener-detail-panel--closed'}`}
+            role="region"
+            aria-label="詳細フィルター"
+            aria-hidden={!detailOpen}
+            data-testid="screener-detail-panel"
+          >
               {screenerV2 ? (
                 /* ━━ Phase1 S3 (§0-7): 「品質/タイミング/需給」3カテゴリ accordion 再編 (screener_v2 scope) ━━
                    binary facet (funda_pass/ocf_margin/#1/#3) をフラット末尾追加せず category 内に配置。
@@ -1007,7 +1063,6 @@ export default function CustomScreenerPanel({
                 );
               })()}
             </div>
-          )}
 
           {/* ── Pass C: 適用中フィルタ bar (詳細閉時もサマリ chip を visible に保つ) ── */}
           {(() => {
