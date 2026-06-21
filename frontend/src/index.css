@@ -13508,9 +13508,16 @@ body.is-digest-resizing {
   background: color-mix(in srgb, var(--color-accent) 8%, transparent);
 }
 
-/* 上位行 (isTop=true): 左端に accent hairline で視線を引く (scarcity、§38 色 polarity なし) */
+/* 上位行 (isTop=true, rank≤3): weight 強調のみ (.screener-row__ticker--top)。
+   Sprint3 scarcity (SPEC 条件10③): hairline は rank-1 ただ1つに集約し、複数 row への
+   accent 拡散を撤去 ([[feedback_minimalism_over_additive]]: 全行に装飾 = noise)。 */
 .screener-row--top {
-  border-left: 2px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
+  /* border なし: 階層は ticker の font-weight (700) で表現 */
+}
+
+/* rank-1 のみ: gold hairline = リスト唯一の視覚アンカー (scarcity 厳守、§38 色 polarity なし) */
+.screener-row--rank-first {
+  border-left: 2px solid color-mix(in srgb, var(--color-gold) 55%, transparent);
 }
 
 /* 選択済み */

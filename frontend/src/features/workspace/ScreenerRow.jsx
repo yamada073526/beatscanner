@@ -192,6 +192,7 @@ export default function ScreenerRow({
       className={[
         'screener-row',
         isTop ? 'screener-row--top' : '',
+        rank === 1 ? 'screener-row--rank-first' : '', // Sprint3: gold hairline は rank-1 のみ (scarcity)
         isSelected ? 'screener-row--selected' : '',
         isLocked ? 'screener-row--locked' : '',
       ].filter(Boolean).join(' ')}
