@@ -20,6 +20,18 @@ name: Nightly Scan (RS + Cup-Handle)
 
 on:
   workflow_dispatch:
+    # 手動起動時のみ有効な検証用 input (schedule では空 → default 維持で nightly 無影響)。
+    # backend sprint の deploy 後検証で使う: 小 universe + canslim-only で gateway 502 を回避し
+    # 5min 以内に 200 応答 (upserted/各 computed_count) を取得する (per-ticker 計算のみで小 universe 安全)。
+    inputs:
+      universe_size:
+        description: 'universe_size (検証は 80 等の小値。default 3000 = 通常 nightly)'
+        required: false
+        default: '3000'
+      canslim_only:
+        description: 'true で cup/rs/notify をスキップし canslim-scan のみ実行 (RS percentile 汚染を防ぐ)'
+        required: false
+        default: 'false'
   schedule:
     # 23:07 UTC = 08:07 JST。 米国市場 close (20-21 UTC) 後、 hourly boundary (:00) の高負荷帯を回避。
     - cron: '7 23 * * *'
@@ -38,7 +50,7 @@ jobs:
       # 小型株 alpha (russell3000 拡張の主目的) 未達。 3000 で底$0.5B・小型株31% (流動性フィルタ後24%)。
       # cron 時間: 3000@worker3 で rs~3.1min/cup~4.8min/GH sequential~8min (timeout 30min 内)。
       # Supabase ~166MB/500MB=33%。 段階展開不要 (Ultimate で rate-limit リスク消失)。
-      BODY: '{"universe_source":"russell3000","universe_size":3000,"worker_count":3}'
+      BODY: '{"universe_source":"russell3000","universe_size":${{ inputs.universe_size || 3000 }},"worker_count":3}'
     steps:
       - name: Setup tools
         run: |
@@ -54,6 +66,7 @@ jobs:
 
       - name: Cup-with-Handle scan
         id: cup
+        if: ${{ inputs.canslim_only != 'true' }}
         continue-on-error: true
         run: |
           echo "=== cup-scan ==="
@@ -87,6 +100,7 @@ jobs:
 
       - name: RS scan
         id: rs
+        if: ${{ inputs.canslim_only != 'true' }}
         continue-on-error: true
         run: |
           echo "=== rs-scan ==="
@@ -117,6 +131,7 @@ jobs:
 
       - name: Cup-Handle digest notify
         id: notify
+        if: ${{ inputs.canslim_only != 'true' }}
         continue-on-error: true
         run: |
           echo "=== cup-notify ==="
