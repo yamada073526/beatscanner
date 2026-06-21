@@ -19815,10 +19815,15 @@ async def _fetch_screener_base_universe(universe_size: int) -> dict[str, dict]:
             sym = str(r.get("symbol") or "").upper().strip()
             if not sym:
                 continue
+            _raw_price = r.get("price")
             base[sym] = {
                 "name": (r.get("companyName") or None),
                 "sector": (r.get("sector") or None),
                 "mcap_band": _mcap_band(r.get("marketCap")),
+                # buy-quality Sprint 2: pivot_distance_pct 算出の current_price として使用。
+                # FMP company-screener のリアルタイム price フィールド (priceMoreThan=5 filter と同源)。
+                # 追加 FMP call ゼロ — company-screener が price を返すため既存 fetch を流用。
+                "price": float(_raw_price) if isinstance(_raw_price, (int, float)) and _raw_price > 0 else None,
             }
         if not base:
             return (cached or {}).get("base") or {}
@@ -19879,12 +19884,15 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
     # screener_fundamentals の calc_date = nightly scan と同一 → freshness["funda"] を流用。
     # per-facet freshness map に独立キー "ocf_margin" を追加 (headline as_of は max で計算済)。
     freshness["ocf_margin"] = sf_cd
+    # buy-quality Sprint 2: #1 (ocf_gt_netincome) は nightly canslim scan 由来 → funda と同源。
+    # per-facet freshness に独立キー "ocf_gt_netincome" を追加 (headline as_of は max、lagging 引きずらない)。
+    freshness["ocf_gt_netincome"] = sf_cd
     if sf_cd:
         for r in _fetch_all_rows_paged(
             sb, "screener_fundamentals",
             "ticker,eps_yoy_pct,eps_cagr_3y,roe,near_high_pct_scaled,"
             "buyback_yield_pct,volume_surge_pct,inst_holders_qoq_pct,"
-            "ocf_margin_pct,fcf_margin_pct",
+            "ocf_margin_pct,fcf_margin_pct,ocf_gt_netincome",
             eq={"calc_date": sf_cd},
         ):
             t = str(r.get("ticker") or "").upper()
@@ -19906,11 +19914,13 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
                 rs_map[t] = r
 
     # pattern_signals cup_handle (Premium) — 直近 7 日、 per-ticker 最新
+    # buy-quality Sprint 2: #3 pivot_distance_pct 算出のため payload も SELECT 追加。
+    # payload["pivot"]["price"] が pivot_price (既存式 main.py:12953-12954 と同構造)。
     cup_map: dict[str, dict] = {}
     cup_latest: str | None = None
     cup_cut = (date.today() - timedelta(days=7)).isoformat()
     for r in _fetch_all_rows_paged(
-        sb, "pattern_signals", "ticker,state,signal_date",
+        sb, "pattern_signals", "ticker,state,payload,signal_date",
         eq={"pattern_type": "cup_handle"}, gte={"signal_date": cup_cut},
         order="signal_date",
     ):
@@ -19921,6 +19931,10 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             if sd and (cup_latest is None or sd > cup_latest):
                 cup_latest = sd
     freshness["cup"] = cup_latest
+    # buy-quality Sprint 2: #3 pivot_distance_pct は pattern_signals (cup_handle) を都度算出する。
+    # 鮮度元 = cup と同源 (cup_latest) → 独立キー "pivot_distance" を追加 (§0 per-facet freshness)。
+    # headline as_of は max(freshness.values()) なので cup と重複しても max は壊れない。
+    freshness["pivot_distance"] = cup_latest
 
     # pattern_signals breakout (Premium) — 直近 2 日、 per-ticker 最新
     bo_map: dict[str, dict] = {}
@@ -19967,6 +19981,33 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
         cup = cup_map.get(tk)
         bo = bo_map.get(tk)
         bo_payload = (bo or {}).get("payload") or {}
+
+        # buy-quality Sprint 2: #3 pivot_distance_pct — cup payload から都度算出 (§0-4)。
+        # `screener_fundamentals` に列を持たない設計 (現値依存の % を DB に保存しない。§0-4 確定)。
+        # 算出式: (current_price - pivot_price) / pivot_price × 100 (既存式 main.py:13044 と同形)。
+        # current_price = base (FMP company-screener) の "price" フィールド (ticker per-row の終値)。
+        # pivot_price = cup payload["pivot"]["price"] (cup_handle pattern の右rim高値、存在しない場合 None)。
+        # None-preserve: pivot 無し (cup 未形成) / current_price 無し / 算術 error → None (500 させない)。
+        _cup_payload = (cup or {}).get("payload") or {}
+        _pivot_obj = _cup_payload.get("pivot") if isinstance(_cup_payload, dict) else None
+        _pivot_price: float | None = (
+            float(_pivot_obj["price"])
+            if isinstance(_pivot_obj, dict) and _pivot_obj.get("price") is not None
+            else None
+        )
+        _current_price: float | None = meta.get("price")  # FMP company-screener の price field
+        if (
+            isinstance(_pivot_price, float)
+            and _pivot_price > 0
+            and isinstance(_current_price, (int, float))
+            and _current_price > 0
+        ):
+            pivot_distance_pct: float | None = round(
+                (_current_price - _pivot_price) / _pivot_price * 100, 2
+            )
+        else:
+            pivot_distance_pct = None  # cup 未形成 / price 欠落 → honest None
+
         items.append({
             "ticker": tk,
             "name": meta.get("name"),
@@ -19990,12 +20031,21 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             # sector guard 済 (銀行/保険/外貨 ADR は _compute_one 内で None 保存済、§0-1 ①)。
             "ocf_margin_pct": _uni_round((sf or {}).get("ocf_margin_pct")),
             "fcf_margin_pct": _uni_round((sf or {}).get("fcf_margin_pct")),
+            # buy-quality Sprint 2: #1 OCF>純利益 bool (free tier、§0-1 user gate 確定)
+            # screener_fundamentals.ocf_gt_netincome (Sprint 1 永続化済、cb9f4ac)。
+            # sector guard / 外貨 ADR guard は _compute_one 内で適用済 (None 保存)。
+            # graceful fallback: sf 欠落 / 旧データで列なし → None (.get() で KeyError 防止)。
+            "ocf_gt_netincome": (sf or {}).get("ocf_gt_netincome"),
             # near_high (Pro gate) — N 条件
             "near_high_pct_scaled": _uni_round((sf or {}).get("near_high_pct_scaled")),
             # cup / breakout (Premium gate)
             "cup_state": (cup or {}).get("state"),
             "breakout_state": (bo or {}).get("state"),
             "is_new_52w_high": bo_payload.get("is_new_52w_high"),
+            # buy-quality Sprint 2: #3 pivot distance % (Premium tier、§0-1 user gate 確定)
+            # cup payload から都度算出 (§0-4 DB precompute 不使用)。
+            # 負値 = pivot 下 (ブレイク前)、正値 = pivot 超え。区分判定は Sprint 3 facet / Sprint 5 view 担当。
+            "pivot_distance_pct": pivot_distance_pct,
         })
 
     # headline as_of = 最新 refresh (= nightly scan の鮮度)。 鮮度差は per-facet freshness map で開示。
@@ -20043,6 +20093,9 @@ async def scanner_universe(
     locked: list[str] = []
     if tier != "premium":
         locked += ["cup", "breakout", "both", "oneill"]
+        # buy-quality Sprint 2: #3 pivot_distance_pct は Premium tier (§0-1 user gate 確定)。
+        # cup/breakout と同じ pattern_signals 由来のタイミング系 → Premium 扱い一貫性。
+        locked += ["pivot_distance"]
     if tier not in ("pro", "premium"):
         locked += ["near_high"]
     locked_set = set(locked)
@@ -20059,6 +20112,9 @@ async def scanner_universe(
                 m["is_new_52w_high"] = None
             if "near_high" in locked_set:
                 m["near_high_pct_scaled"] = None
+            # buy-quality Sprint 2: #3 pivot_distance_pct Premium gate
+            if "pivot_distance" in locked_set:
+                m["pivot_distance_pct"] = None
             items.append(m)
     else:
         items = base_items
