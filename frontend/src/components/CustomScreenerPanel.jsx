@@ -61,13 +61,16 @@ function loadUniverse() {
 
 // ─── Pass 3b: facet engine SSOT ─────────────────────────────────────────────
 // §0-7(b) 本番較正値。count と list が必ず同一 predicate = Trust Cliff 防止の核。
+// Phase1 S3: category = 「品質(ファンダ)/タイミング(テクニカル)/需給」3カテゴリ accordion 再編 (§0-7)。
+//   quality = 利益・キャッシュの質 / timing = 値動き・勢い / demand = 機関の動き。
+//   RS は勢い指標なので timing、機関保有増は需給。grade の preset 駆動 (CORE) かどうかとは独立。
 const FUNDA_FACETS = [
-  { key: 'eps_yoy_pct',         field: 'eps_yoy_pct',         label: 'EPS成長(四半期)', unit: '%', tier: 'free', grades: { loose: 20, standard: 25, strict: 50 } },
-  { key: 'eps_cagr_3y',         field: 'eps_cagr_3y',         label: 'EPS成長(3年)',    unit: '%', tier: 'free', grades: { loose: 10, standard: 20, strict: 25 } },
-  { key: 'roe',                 field: 'roe',                 label: 'ROE',            unit: '%', tier: 'free', grades: { loose: 10, standard: 17, strict: 25 } },
-  { key: 'rs_percentile',       field: 'rs_percentile',       label: 'RS(相対強さ)',     unit: '',  tier: 'free', grades: { loose: 70, standard: 85, strict: 90 } },
-  { key: 'volume_surge_pct',    field: 'volume_surge_pct',    label: '出来高急増',       unit: '%', tier: 'free', grades: { loose: 25, standard: 40, strict: 50 } },
-  { key: 'inst_holders_qoq_pct', field: 'inst_holders_qoq_pct', label: '機関保有増(45日遅延)', unit: '%', tier: 'free', grades: { loose: 0, standard: 3, strict: 5 } },
+  { key: 'eps_yoy_pct',         field: 'eps_yoy_pct',         label: 'EPS成長(四半期)', unit: '%', tier: 'free', category: 'quality', grades: { loose: 20, standard: 25, strict: 50 } },
+  { key: 'eps_cagr_3y',         field: 'eps_cagr_3y',         label: 'EPS成長(3年)',    unit: '%', tier: 'free', category: 'quality', grades: { loose: 10, standard: 20, strict: 25 } },
+  { key: 'roe',                 field: 'roe',                 label: 'ROE',            unit: '%', tier: 'free', category: 'quality', grades: { loose: 10, standard: 17, strict: 25 } },
+  { key: 'rs_percentile',       field: 'rs_percentile',       label: 'RS(相対強さ)',     unit: '',  tier: 'free', category: 'timing',  grades: { loose: 70, standard: 85, strict: 90 } },
+  { key: 'volume_surge_pct',    field: 'volume_surge_pct',    label: '出来高急増',       unit: '%', tier: 'free', category: 'timing',  grades: { loose: 25, standard: 40, strict: 50 } },
+  { key: 'inst_holders_qoq_pct', field: 'inst_holders_qoq_pct', label: '機関保有増(45日遅延)', unit: '%', tier: 'free', category: 'demand', grades: { loose: 0, standard: 3, strict: 5 } },
 ];
 const FACET_MAP = Object.fromEntries(FUNDA_FACETS.map((f) => [f.key, f]));
 // preset の CORE 4 metric。volume/inst_holders は preset off、override で追加 (Pass 3c)。
@@ -87,6 +90,41 @@ const OCF_MARGIN_FACET = {
   tooltip: '営業キャッシュフロー ÷ 売上高 ≥ 15%。銀行・保険・REIT 等は業種特性によりデータなし。',
   threshold: 15,
   tier: 'free',
+  category: 'quality',
+};
+
+// ─── Phase1 S3: #1 営業CF>純利益 (利益の質) binary facet (§0-1 free / §0-3) ──────
+// TTM 営業キャッシュフロー > TTM 純利益 の bool (粉飾フィルタ・利益の質)。null = AND 除外。
+// sector guard (銀行/保険/REIT/証券) + 外貨ADR は backend _compute_one で null 保存済 (§0-3)。
+// tier: 'free' (§0-1①、ファンダの質は ocf_margin と同列で無料)。category: 'quality'。
+// §38: 「投資不適格」等の断定でなく「利益の質の目安」「警戒されるとされる」の第三者手法描写に留める。
+const OCF_GT_NI_FACET = {
+  key: 'ocf_gt_netincome',
+  field: 'ocf_gt_netincome',
+  label: '営業CF>純利益',
+  labelShort: '利益の質',
+  tooltip: '直近1年の営業キャッシュフローが純利益を上回る = 利益の質が高い目安。米国成長株手法では下回る銘柄を警戒するとされる。銀行・保険・REIT 等は業種特性によりデータなし。',
+  tier: 'free',
+  category: 'quality',
+};
+
+// ─── Phase1 S3: #3 買い場圏 (pivot 近接) binary facet (§0-1 Premium / §0-4) ──────
+// pivot (直近の節目) から 0〜+5% 以内 = 買い場圏。null (cup 未形成) = AND 除外。
+// §0-4: buy zone = 0 ≤ distance ≤ 5。pivot 下 (distance<0=ブレイク前) は買い場圏に含めない。
+// 閾値 +5% は KB が正 (trading.md:178/1206)・実装都合で変えない。
+// tier: 'premium' (§0-1①、タイミング系は cup/breakout と同列)。free user には locked chip
+//   (universe.locked_facets に 'pivot_distance' が含まれ pivot_distance_pct=None マスク、§A 案)。
+// category: 'timing'。§38: 「買い場圏」(状態語) は可・「買い場」(断定) は禁止。
+const BUY_ZONE_FACET = {
+  key: 'buy_zone',
+  field: 'pivot_distance_pct',
+  label: '買い場圏 (節目近接)',
+  labelShort: '買い場圏',
+  tooltip: '直近の節目 (pivot) から 0〜+5% 以内。米国成長株手法では +5〜10% 超は遅い (高値づかみ) とされる。節目未形成の銘柄はデータなし。',
+  zoneMin: 0,
+  zoneMax: 5,
+  tier: 'premium',
+  category: 'timing',
 };
 
 /** 実効 grade map: CORE は preset level、overrides で個別上書き ('off' で除外) */
@@ -97,6 +135,8 @@ const LOCKED_FACET_LABELS = {
   near_high: '新高値圏',
   both: 'カップ+RS複合',
   oneill: 'オニール統合',
+  // Phase1 S3: #3 買い場圏 (pivot_distance) は free user に locked chip で見せる (§A 案・cup/breakout と同列)。
+  pivot_distance: '買い場圏 (節目近接)',
 };
 // Pass B: ヒット理由バッジ用の短縮ラベルマップ (module scope で毎 render 再作成を回避)
 const FACET_SHORT_LABEL = {
@@ -107,6 +147,8 @@ const FACET_SHORT_LABEL = {
   volume_surge_pct: '出来高急増',
   inst_holders_qoq_pct: '機関↑',
   ocf_margin_pct: 'CF創出力',
+  ocf_gt_netincome: '利益の質',
+  buy_zone: '買い場圏',
 };
 function buildActiveGrades(preset, overrides) {
   const g = {};
@@ -131,6 +173,15 @@ function itemPasses(item, activeGrades, extra) {
   if (extra?.ocfMarginOnly) {
     const m = item[OCF_MARGIN_FACET.field];
     if (m == null || m < OCF_MARGIN_FACET.threshold) return false;
+  }
+  // Phase1 S3: #1 営業CF>純利益 binary facet (§0-3)。bool field: true のみ通す。
+  // null (sector guard / 外貨ADR / 欠落) = AND 除外 (honest、達成扱いしない)。
+  if (extra?.ocfGtNiOnly && item[OCF_GT_NI_FACET.field] !== true) return false;
+  // Phase1 S3: #3 買い場圏 binary facet (§0-4)。buy zone = 0 ≤ pivot_distance_pct ≤ 5。
+  // null (pivot 未形成 or free の Premium マスク) / pivot 下 (<0=ブレイク前) / 過熱 (>5) = AND 除外。
+  if (extra?.buyZoneOnly) {
+    const d = item[BUY_ZONE_FACET.field];
+    if (d == null || d < BUY_ZONE_FACET.zoneMin || d > BUY_ZONE_FACET.zoneMax) return false;
   }
   if (extra?.sectors?.length && !extra.sectors.includes(item.sector)) return false;
   if (extra?.mcapBands?.length && !extra.mcapBands.includes(item.mcap_band)) return false;
@@ -183,6 +234,10 @@ export default function CustomScreenerPanel({
   const [fundaPassOnly, setFundaPassOnly] = useState(false);
   // Sprint 3: 営業CFマージン binary chip (上流ファンダ品質・常時鮮度。funda_pass とは別次元)
   const [ocfMarginOnly, setOcfMarginOnly] = useState(false);
+  // Phase1 S3: #1 営業CF>純利益 binary chip (利益の質・free)
+  const [ocfGtNiOnly, setOcfGtNiOnly] = useState(false);
+  // Phase1 S3: #3 買い場圏 binary chip (pivot 近接・Premium。free user には locked chip で表示)
+  const [buyZoneOnly, setBuyZoneOnly] = useState(false);
   // Pass C: 件数キャップ — 初期 100 件、「残りN件を表示」で全件展開
   const [showAllResults, setShowAllResults] = useState(false);
   // Sprint 5 Pass B: 複数選択 → watchlist 一括追加
@@ -222,9 +277,9 @@ export default function CustomScreenerPanel({
   const activeGrades = useMemo(() => buildActiveGrades(preset, overrides), [preset, overrides]);
   const filteredItems = useMemo(() => {
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, ocfMarginOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     return items.filter((it) => itemPasses(it, activeGrades, extra));
-  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, sectorFilter, mcapFilter]);
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, sectorFilter, mcapFilter]);
 
   // Pass B: 条件合致度順ソート。
   // スコア = アクティブ数値 facet ごとに (item[key] - threshold) / threshold の合計。
@@ -260,21 +315,21 @@ export default function CustomScreenerPanel({
   // Pass 3b: preset 別の total 件数 (緩い/標準/厳しい) を live 算出。ハードコード禁止。
   const presetCounts = useMemo(() => {
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, ocfMarginOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     const result = {};
     for (const lvl of ['loose', 'standard', 'strict']) {
       const grades = buildActiveGrades(lvl, overrides);
       result[lvl] = items.filter((it) => itemPasses(it, grades, extra)).length;
     }
     return result;
-  }, [universe, overrides, fundaPassOnly, ocfMarginOnly, sectorFilter, mcapFilter]);
+  }, [universe, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, sectorFilter, mcapFilter]);
 
   // Pass 3c: faceted 件数 — 各 facet の各 level に変えた時の件数 (itemPasses 共有、Trust Cliff C-2)。
   // facet K を level L にした時の件数 = { ...activeGrades, [K]: L } で filter。
   // level='off' = K を外した件数 = delete g[K]。
   const facetLevelCounts = useMemo(() => {
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, ocfMarginOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     const result = {};
     for (const facet of FUNDA_FACETS) {
       result[facet.key] = {};
@@ -289,13 +344,13 @@ export default function CustomScreenerPanel({
       }
     }
     return result;
-  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, sectorFilter, mcapFilter]);
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, sectorFilter, mcapFilter]);
 
   // Pass 3c: empty サジェスト — 現在 active な制約を1つ外した時に最も件数が増える提案を算出。
   const emptySuggest = useMemo(() => {
     if (filteredItems.length > 0) return null;
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, ocfMarginOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     let best = null;
     // overrides の各 facet を外す
     for (const [key, lvl] of Object.entries(overrides)) {
@@ -323,6 +378,16 @@ export default function CustomScreenerPanel({
       const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, ocfMarginOnly: false })).length;
       if (!best || cnt > best.count) best = { key: 'ocf_margin', label: OCF_MARGIN_FACET.label, count: cnt, type: 'ocf_margin' };
     }
+    // ocfGtNiOnly を外す (Phase1 S3 #1)
+    if (ocfGtNiOnly) {
+      const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, ocfGtNiOnly: false })).length;
+      if (!best || cnt > best.count) best = { key: 'ocf_gt_netincome', label: OCF_GT_NI_FACET.label, count: cnt, type: 'ocf_gt_netincome' };
+    }
+    // buyZoneOnly を外す (Phase1 S3 #3)
+    if (buyZoneOnly) {
+      const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, buyZoneOnly: false })).length;
+      if (!best || cnt > best.count) best = { key: 'buy_zone', label: BUY_ZONE_FACET.label, count: cnt, type: 'buy_zone' };
+    }
     // sectorFilter を全解除
     if (sectorFilter.length > 0) {
       const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, sectors: [] })).length;
@@ -334,7 +399,7 @@ export default function CustomScreenerPanel({
       if (!best || cnt > best.count) best = { key: 'mcap', label: '時価総額絞り込み', count: cnt, type: 'mcap' };
     }
     return best;
-  }, [filteredItems.length, universe, activeGrades, overrides, fundaPassOnly, ocfMarginOnly, sectorFilter, mcapFilter]);
+  }, [filteredItems.length, universe, activeGrades, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, sectorFilter, mcapFilter]);
 
   // Pass 3c: sector / mcap 選択肢を universe から live 算出 (count 付き)。
   // Pass 3d (修正A): 全件 universe 集計から faceted count へ変更 (Trust Cliff C-2 修正)。
@@ -345,22 +410,22 @@ export default function CustomScreenerPanel({
     for (const it of items) {
       if (!it.sector) continue;
       // sector 次元自身は除き (自己排除防止)、他の active facet を適用
-      if (!itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, mcapBands: mcapFilter, sectors: [it.sector] })) continue;
+      if (!itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, mcapBands: mcapFilter, sectors: [it.sector] })) continue;
       map[it.sector] = (map[it.sector] || 0) + 1;
     }
     return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([s, cnt]) => ({ value: s, label: sectorLabelJp(s), count: cnt }));
-  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, mcapFilter]);
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, mcapFilter]);
   const mcapOptions = useMemo(() => {
     const items = universe?.items || [];
     const map = {};
     for (const it of items) {
       if (!it.mcap_band) continue;
       // mcap 次元自身は除き (自己排除防止)、他の active facet を適用
-      if (!itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, sectors: sectorFilter, mcapBands: [it.mcap_band] })) continue;
+      if (!itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, sectors: sectorFilter, mcapBands: [it.mcap_band] })) continue;
       map[it.mcap_band] = (map[it.mcap_band] || 0) + 1;
     }
     return MCAP_BANDS.filter((b) => map[b.key]).map((b) => ({ ...b, count: map[b.key] || 0 }));
-  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, sectorFilter]);
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, sectorFilter]);
 
   // Pass 3d (修正C): funda_pass chip に件数を表示するための faceted count。
   // 件数 = funda_pass=true かつ grades + ocf + sector + mcap を通過した件数 (日付ではない)。
@@ -369,9 +434,9 @@ export default function CustomScreenerPanel({
     const items = universe?.items || [];
     return items.filter(
       (it) => it.funda_pass === true &&
-        itemPasses(it, activeGrades, { ocfMarginOnly, sectors: sectorFilter, mcapBands: mcapFilter })
+        itemPasses(it, activeGrades, { ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, sectors: sectorFilter, mcapBands: mcapFilter })
     ).length;
-  }, [universe, activeGrades, ocfMarginOnly, sectorFilter, mcapFilter]);
+  }, [universe, activeGrades, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, sectorFilter, mcapFilter]);
 
   // Sprint 3: 営業CFマージン chip の faceted count (Trust Cliff C-3: chip count = 実表示件数)。
   // 件数 = ocf_margin_pct >= 15 かつ grades + funda_pass + sector + mcap を通過した件数。
@@ -381,9 +446,122 @@ export default function CustomScreenerPanel({
     return items.filter(
       (it) => it[OCF_MARGIN_FACET.field] != null &&
         it[OCF_MARGIN_FACET.field] >= OCF_MARGIN_FACET.threshold &&
-        itemPasses(it, activeGrades, { fundaPassOnly, sectors: sectorFilter, mcapBands: mcapFilter })
+        itemPasses(it, activeGrades, { fundaPassOnly, ocfGtNiOnly, buyZoneOnly, sectors: sectorFilter, mcapBands: mcapFilter })
     ).length;
-  }, [universe, activeGrades, fundaPassOnly, sectorFilter, mcapFilter]);
+  }, [universe, activeGrades, fundaPassOnly, ocfGtNiOnly, buyZoneOnly, sectorFilter, mcapFilter]);
+
+  // Phase1 S3: #1 営業CF>純利益 chip の faceted count (Trust Cliff: chip count = 実表示件数)。
+  // 件数 = ocf_gt_netincome===true かつ他次元通過。自己 (ocfGtNiOnly) は extra から排除。null=除外 (honest)。
+  const ocfGtNiCount = useMemo(() => {
+    const items = universe?.items || [];
+    return items.filter(
+      (it) => it[OCF_GT_NI_FACET.field] === true &&
+        itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, buyZoneOnly, sectors: sectorFilter, mcapBands: mcapFilter })
+    ).length;
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, buyZoneOnly, sectorFilter, mcapFilter]);
+
+  // Phase1 S3: #3 買い場圏 chip の faceted count (§0-4 buy zone = 0 ≤ pivot_distance_pct ≤ 5)。
+  // 自己 (buyZoneOnly) は extra から排除。null (pivot 未形成 / free の Premium マスク) / pivot下 / 過熱 = 除外。
+  // free user は pivot_distance_pct=None マスクのため count=0 になり、locked chip 経路で表示する (§A 案)。
+  const buyZoneCount = useMemo(() => {
+    const items = universe?.items || [];
+    return items.filter((it) => {
+      const d = it[BUY_ZONE_FACET.field];
+      return d != null && d >= BUY_ZONE_FACET.zoneMin && d <= BUY_ZONE_FACET.zoneMax &&
+        itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, sectors: sectorFilter, mcapBands: mcapFilter });
+    }).length;
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, sectorFilter, mcapFilter]);
+
+  // Phase1 S3: grade override 行の共有レンダラ (旧 2d/2e の重複を統一)。
+  // CORE (eps/roe/rs) は preset 駆動 = level 既定 preset・off は明示時のみ。
+  // 非CORE (volume/inst) は off 既定・level は override 時のみ。これを isCore で分岐保持。
+  const renderGradeRow = (facet) => {
+    const isCore = PRESET_CORE_KEYS.includes(facet.key);
+    return (
+      <div key={facet.key} className="flex flex-wrap items-center gap-1.5">
+        <span className="w-24 shrink-0 text-[11px] text-[var(--text-secondary)]">{facet.label}</span>
+        {['off', 'loose', 'standard', 'strict'].map((lvl) => {
+          const cnt = facetLevelCounts[facet.key]?.[lvl] ?? 0;
+          const actuallyPressed = lvl === 'off'
+            ? (isCore ? (overrides[facet.key] === 'off') : (!overrides[facet.key] || overrides[facet.key] === 'off'))
+            : (isCore ? (overrides[facet.key] ? overrides[facet.key] === lvl : preset === lvl) : (overrides[facet.key] === lvl));
+          return (
+            <Chip
+              key={lvl}
+              size="xs"
+              variant="segmented"
+              pressed={actuallyPressed}
+              disabled={cnt === 0 && !actuallyPressed}
+              onClick={() => {
+                setOverrides((prev) => ({ ...prev, [facet.key]: lvl === 'off' ? 'off' : lvl }));
+              }}
+              data-testid={`screener-facet-level-${facet.key}-${lvl}`}
+            >
+              {lvl === 'off' ? 'なし' : PRESET_LABELS[lvl]}
+              <span className="ml-0.5 tabular-nums opacity-60">({cnt})</span>
+            </Chip>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Phase1 S3: sector / mcap 絞り込みブロックの共有レンダラ (legacy / v2 両 path で再利用)。
+  const renderSectorBlock = () => (sectorOptions.length === 0 ? null : (
+    <div>
+      <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">セクター</p>
+      <div className="flex flex-wrap gap-1.5" data-testid="screener-facet-sector">
+        {sectorOptions.map(({ value, label, count }) => {
+          const active = sectorFilter.includes(value);
+          return (
+            <Chip
+              key={value}
+              size="sm"
+              variant="filter"
+              pressed={active}
+              tone={active ? 'accent' : 'muted'}
+              onClick={() =>
+                setSectorFilter((prev) =>
+                  prev.includes(value) ? prev.filter((s) => s !== value) : [...prev, value]
+                )
+              }
+            >
+              {label}
+              <span className="ml-1 tabular-nums opacity-60">({count})</span>
+            </Chip>
+          );
+        })}
+      </div>
+    </div>
+  ));
+  const renderMcapBlock = () => (mcapOptions.length === 0 ? null : (
+    <div>
+      <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">時価総額</p>
+      <div className="flex flex-wrap gap-1.5" data-testid="screener-facet-mcap_band">
+        {mcapOptions.map(({ key, label, hint, count }) => {
+          const active = mcapFilter.includes(key);
+          return (
+            <Chip
+              key={key}
+              size="sm"
+              variant="filter"
+              pressed={active}
+              tone={active ? 'accent' : 'muted'}
+              title={hint}
+              onClick={() =>
+                setMcapFilter((prev) =>
+                  prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+                )
+              }
+            >
+              {label}
+              <span className="ml-1 tabular-nums opacity-60">({count})</span>
+            </Chip>
+          );
+        })}
+      </div>
+    </div>
+  ));
 
   return (
     <section className="rounded-2xl bg-[var(--bg-card)] p-6">
@@ -520,6 +698,8 @@ export default function CustomScreenerPanel({
               if (sectorFilter.length > 0) parts.push(sectorFilter.map(sectorLabelJp).join('・'));
               if (fundaPassOnly) parts.push('5条件達成');
               if (ocfMarginOnly) parts.push(OCF_MARGIN_FACET.labelShort);
+              if (ocfGtNiOnly) parts.push(OCF_GT_NI_FACET.labelShort);
+              if (buyZoneOnly) parts.push(BUY_ZONE_FACET.labelShort);
               const overrideParts = Object.entries(overrides).filter(([, v]) => v && v !== 'off').map(([k]) => FACET_SHORT_LABEL[k] || k);
               if (overrideParts.length > 0) parts.push(overrideParts.join('・'));
               if (parts.length === 0) return null;
@@ -556,238 +736,215 @@ export default function CustomScreenerPanel({
               aria-label="詳細フィルター"
               data-testid="screener-detail-panel"
             >
-              {/* (2a) funda_pass binary chip */}
-              {universe.freshness?.funda_pass && (
-                <div>
-                  <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">決算フィルター</p>
-                  <Chip
-                    size="sm"
-                    variant="filter"
-                    pressed={fundaPassOnly}
-                    tone={fundaPassOnly ? 'accent' : 'muted'}
-                    onClick={() => setFundaPassOnly((v) => !v)}
-                    data-testid="screener-facet-funda_pass"
-                  >
-                    最新決算で5条件達成
-                    <span className="ml-1 tabular-nums opacity-70">({fundaPassCount})</span>
-                  </Chip>
-                  {universe.freshness.funda_pass && (
-                    <p className="mt-0.5 ml-1 text-[10px] text-[var(--text-muted)] opacity-60">
-                      最新評価: {universe.freshness.funda_pass}
+              {screenerV2 ? (
+                /* ━━ Phase1 S3 (§0-7): 「品質/タイミング/需給」3カテゴリ accordion 再編 (screener_v2 scope) ━━
+                   binary facet (funda_pass/ocf_margin/#1/#3) をフラット末尾追加せず category 内に配置。
+                   grade override は renderGradeRow + category filter で旧 2d/2e を統合。
+                   §6 scope: legacy (screenerV2=false) は下の <> で従来構造を維持し、再編を漏らさない。 */
+                <>
+                  {/* ── 【品質】利益・キャッシュの質 (funda_pass / CF創出力 / 営業CF>純利益 + EPS/ROE) ── */}
+                  <div data-testid="screener-category-quality">
+                    <p className="mb-2 text-[11px] font-semibold text-[var(--text-secondary)]">
+                      品質<span className="ml-1.5 font-normal text-[10px] text-[var(--text-muted)]">利益・キャッシュの質</span>
+                    </p>
+                    <div className="space-y-2.5">
+                      {(universe.freshness?.funda_pass || universe.freshness?.ocf_margin || universe.freshness?.ocf_gt_netincome) && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {universe.freshness?.funda_pass && (
+                            <Chip
+                              size="sm" variant="filter"
+                              pressed={fundaPassOnly}
+                              tone={fundaPassOnly ? 'accent' : 'muted'}
+                              onClick={() => setFundaPassOnly((v) => !v)}
+                              data-testid="screener-facet-funda_pass"
+                            >
+                              最新決算で5条件達成
+                              <span className="ml-1 tabular-nums opacity-70">({fundaPassCount})</span>
+                            </Chip>
+                          )}
+                          {universe.freshness?.ocf_margin && (
+                            <Chip
+                              size="sm" variant="filter"
+                              pressed={ocfMarginOnly}
+                              tone={ocfMarginOnly ? 'accent' : 'muted'}
+                              title={OCF_MARGIN_FACET.tooltip}
+                              onClick={() => setOcfMarginOnly((v) => !v)}
+                              data-testid="screener-facet-ocf_margin_pct"
+                            >
+                              {OCF_MARGIN_FACET.label}
+                              <span className="ml-1 tabular-nums opacity-70">({ocfMarginCount})</span>
+                            </Chip>
+                          )}
+                          {universe.freshness?.ocf_gt_netincome && (
+                            <Chip
+                              size="sm" variant="filter"
+                              pressed={ocfGtNiOnly}
+                              tone={ocfGtNiOnly ? 'accent' : 'muted'}
+                              title={OCF_GT_NI_FACET.tooltip}
+                              onClick={() => setOcfGtNiOnly((v) => !v)}
+                              data-testid="screener-facet-ocf_gt_netincome"
+                            >
+                              {OCF_GT_NI_FACET.label}
+                              <span className="ml-1 tabular-nums opacity-70">({ocfGtNiCount})</span>
+                            </Chip>
+                          )}
+                        </div>
+                      )}
+                      {FUNDA_FACETS.filter((f) => f.category === 'quality').map(renderGradeRow)}
+                      {(universe.freshness?.ocf_margin || universe.freshness?.funda_pass) && (
+                        <p className="ml-1 text-[10px] text-[var(--text-muted)] opacity-60">
+                          最新更新: {universe.freshness?.ocf_margin || universe.freshness?.funda_pass}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── 【タイミング】値動き・勢い (買い場圏 #3 + RS/出来高急増) ── */}
+                  <div data-testid="screener-category-timing">
+                    <p className="mb-2 text-[11px] font-semibold text-[var(--text-secondary)]">
+                      タイミング<span className="ml-1.5 font-normal text-[10px] text-[var(--text-muted)]">値動き・勢い</span>
+                    </p>
+                    <div className="space-y-2.5">
+                      {/* #3 買い場圏 binary: Premium のみ active facet (free は下部 locked chip)。§0-4 buy zone 0〜+5%。 */}
+                      {universe.freshness?.pivot_distance && !(universe.locked_facets || []).includes('pivot_distance') && (
+                        <div className="flex flex-wrap gap-1.5">
+                          <Chip
+                            size="sm" variant="filter"
+                            pressed={buyZoneOnly}
+                            tone={buyZoneOnly ? 'accent' : 'muted'}
+                            title={BUY_ZONE_FACET.tooltip}
+                            onClick={() => setBuyZoneOnly((v) => !v)}
+                            data-testid="screener-facet-buy_zone"
+                          >
+                            {BUY_ZONE_FACET.label}
+                            <span className="ml-1 tabular-nums opacity-70">({buyZoneCount})</span>
+                          </Chip>
+                        </div>
+                      )}
+                      {FUNDA_FACETS.filter((f) => f.category === 'timing').map(renderGradeRow)}
+                    </div>
+                  </div>
+
+                  {/* ── 【需給】機関の動き (機関保有増。#8 A/D は Sprint 4) ── */}
+                  <div data-testid="screener-category-demand">
+                    <p className="mb-2 text-[11px] font-semibold text-[var(--text-secondary)]">
+                      需給<span className="ml-1.5 font-normal text-[10px] text-[var(--text-muted)]">機関の動き</span>
+                    </p>
+                    <div className="space-y-2.5">
+                      {FUNDA_FACETS.filter((f) => f.category === 'demand').map(renderGradeRow)}
+                    </div>
+                  </div>
+
+                  {/* ── 【絞り込み】セクター / 規模 (品質/タイミング/需給と直交する補助次元) ── */}
+                  {(sectorOptions.length > 0 || mcapOptions.length > 0) && (
+                    <p className="mb-2 text-[11px] font-semibold text-[var(--text-secondary)]">
+                      絞り込み<span className="ml-1.5 font-normal text-[10px] text-[var(--text-muted)]">セクター・規模</span>
                     </p>
                   )}
-                </div>
-              )}
+                  {renderSectorBlock()}
+                  {renderMcapBlock()}
+                </>
+              ) : (
+                /* legacy (screenerV2=false = 現デフォルト): Sprint 3 以前の構造を維持。
+                   #1/#3/ocf_margin/category 再編は screener_v2 scope のみ (§6 漏らさない)。 */
+                <>
+                  {/* (2a) funda_pass binary chip */}
+                  {universe.freshness?.funda_pass && (
+                    <div>
+                      <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">決算フィルター</p>
+                      <Chip
+                        size="sm"
+                        variant="filter"
+                        pressed={fundaPassOnly}
+                        tone={fundaPassOnly ? 'accent' : 'muted'}
+                        onClick={() => setFundaPassOnly((v) => !v)}
+                        data-testid="screener-facet-funda_pass"
+                      >
+                        最新決算で5条件達成
+                        <span className="ml-1 tabular-nums opacity-70">({fundaPassCount})</span>
+                      </Chip>
+                      <p className="mt-0.5 ml-1 text-[10px] text-[var(--text-muted)] opacity-60">
+                        最新評価: {universe.freshness.funda_pass}
+                      </p>
+                    </div>
+                  )}
 
-              {/* (2a-2) Sprint 3: 営業CFマージン binary chip — 常時鮮度の上流ファンダ品質。
-                  funda_pass (決算イベント駆動) とは別次元のため別ヘッダーで視覚区別 (§0-2 2段階)。
-                  screener_v2 scope 限定 (legacy には漏らさない、SPEC §6)。tier=free (件数表示)。
-                  色運用: 緑は「上昇」予約色のため filter chip は兄弟と統一の accent/muted。
-                  gold/green バッジによる 2段階区別は Sprint 4 hero scope (§0-2「gold accent バッジ」)。 */}
-              {screenerV2 && universe.freshness?.ocf_margin && (
-                <div>
-                  <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">ファンダ品質フィルター</p>
-                  <Chip
-                    size="sm"
-                    variant="filter"
-                    pressed={ocfMarginOnly}
-                    tone={ocfMarginOnly ? 'accent' : 'muted'}
-                    title={OCF_MARGIN_FACET.tooltip}
-                    onClick={() => setOcfMarginOnly((v) => !v)}
-                    data-testid="screener-facet-ocf_margin_pct"
-                  >
-                    {OCF_MARGIN_FACET.label}
-                    <span className="ml-1 tabular-nums opacity-70">({ocfMarginCount})</span>
-                  </Chip>
-                  <p className="mt-0.5 ml-1 text-[10px] text-[var(--text-muted)] opacity-60">
-                    最新更新: {universe.freshness.ocf_margin}
-                  </p>
-                </div>
-              )}
+                  {/* (2b) sector additive refinement */}
+                  {renderSectorBlock()}
 
-              {/* (2b) sector additive refinement */}
-              {sectorOptions.length > 0 && (
-                <div>
-                  <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">セクター</p>
-                  <div className="flex flex-wrap gap-1.5" data-testid="screener-facet-sector">
-                    {sectorOptions.map(({ value, label, count }) => {
-                      const active = sectorFilter.includes(value);
-                      return (
-                        <Chip
-                          key={value}
-                          size="sm"
-                          variant="filter"
-                          pressed={active}
-                          tone={active ? 'accent' : 'muted'}
-                          onClick={() =>
-                            setSectorFilter((prev) =>
-                              prev.includes(value) ? prev.filter((s) => s !== value) : [...prev, value]
-                            )
-                          }
-                        >
-                          {label}
-                          <span className="ml-1 tabular-nums opacity-60">({count})</span>
-                        </Chip>
-                      );
-                    })}
+                  {/* (2c) mcap additive refinement */}
+                  {renderMcapBlock()}
+
+                  {/* (2d) ファンダメンタル grade override (CORE) */}
+                  <div>
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">ファンダメンタル</p>
+                    <div className="space-y-2">
+                      {FUNDA_FACETS.filter((f) => PRESET_CORE_KEYS.includes(f.key)).map(renderGradeRow)}
+                    </div>
                   </div>
-                </div>
-              )}
 
-              {/* (2c) mcap additive refinement */}
-              {mcapOptions.length > 0 && (
-                <div>
-                  <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">時価総額</p>
-                  <div className="flex flex-wrap gap-1.5" data-testid="screener-facet-mcap_band">
-                    {mcapOptions.map(({ key, label, hint, count }) => {
-                      const active = mcapFilter.includes(key);
-                      return (
-                        <Chip
-                          key={key}
-                          size="sm"
-                          variant="filter"
-                          pressed={active}
-                          tone={active ? 'accent' : 'muted'}
-                          title={hint}
-                          onClick={() =>
-                            setMcapFilter((prev) =>
-                              prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
-                            )
-                          }
-                        >
-                          {label}
-                          <span className="ml-1 tabular-nums opacity-60">({count})</span>
-                        </Chip>
-                      );
-                    })}
+                  {/* (2e) テクニカル grade override (非CORE) */}
+                  <div>
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">テクニカル</p>
+                    <div className="space-y-2">
+                      {FUNDA_FACETS.filter((f) => !PRESET_CORE_KEYS.includes(f.key)).map(renderGradeRow)}
+                    </div>
                   </div>
-                </div>
+                </>
               )}
 
-              {/* (2d) ファンダメンタル grade override */}
-              <div>
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">ファンダメンタル</p>
-                <div className="space-y-2">
-                  {FUNDA_FACETS.filter((f) => PRESET_CORE_KEYS.includes(f.key)).map((facet) => {
-                    return (
-                      <div key={facet.key} className="flex flex-wrap items-center gap-1.5">
-                        <span className="w-24 shrink-0 text-[11px] text-[var(--text-secondary)]">{facet.label}</span>
-                        {['off', 'loose', 'standard', 'strict'].map((lvl) => {
-                          const cnt = facetLevelCounts[facet.key]?.[lvl] ?? 0;
-                          const actuallyPressed = lvl === 'off'
-                            ? (overrides[facet.key] === 'off')
-                            : (overrides[facet.key]
-                                ? overrides[facet.key] === lvl
-                                : preset === lvl);
-                          return (
-                            <Chip
-                              key={lvl}
-                              size="xs"
-                              variant="segmented"
-                              pressed={actuallyPressed}
-                              disabled={cnt === 0 && !actuallyPressed}
-                              onClick={() => {
-                                setOverrides((prev) => ({
-                                  ...prev,
-                                  [facet.key]: lvl === 'off' ? 'off' : lvl,
-                                }));
-                              }}
-                              data-testid={`screener-facet-level-${facet.key}-${lvl}`}
-                            >
-                              {lvl === 'off' ? 'なし' : PRESET_LABELS[lvl]}
-                              <span className="ml-0.5 tabular-nums opacity-60">({cnt})</span>
-                            </Chip>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* (2e) テクニカル群 */}
-              <div>
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">テクニカル</p>
-                <div className="space-y-2">
-                  {FUNDA_FACETS.filter((f) => !PRESET_CORE_KEYS.includes(f.key)).map((facet) => {
-                    return (
-                      <div key={facet.key} className="flex flex-wrap items-center gap-1.5">
-                        <span className="w-24 shrink-0 text-[11px] text-[var(--text-secondary)]">{facet.label}</span>
-                        {['off', 'loose', 'standard', 'strict'].map((lvl) => {
-                          const cnt = facetLevelCounts[facet.key]?.[lvl] ?? 0;
-                          const actuallyPressed = lvl === 'off'
-                            ? !overrides[facet.key] || overrides[facet.key] === 'off'
-                            : overrides[facet.key] === lvl;
-                          return (
-                            <Chip
-                              key={lvl}
-                              size="xs"
-                              variant="segmented"
-                              pressed={actuallyPressed}
-                              disabled={cnt === 0 && !actuallyPressed}
-                              onClick={() => {
-                                setOverrides((prev) => ({
-                                  ...prev,
-                                  [facet.key]: lvl === 'off' ? 'off' : lvl,
-                                }));
-                              }}
-                              data-testid={`screener-facet-level-${facet.key}-${lvl}`}
-                            >
-                              {lvl === 'off' ? 'なし' : PRESET_LABELS[lvl]}
-                              <span className="ml-0.5 tabular-nums opacity-60">({cnt})</span>
-                            </Chip>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* (2f) locked facets — 和名 + 鍵 */}
-              {(universe.locked_facets || []).length > 0 && (
-                <div>
-                  <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">Premium / Pro で解錠</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(universe.locked_facets || []).map((key) => {
-                      const isProTier = key === 'near_high';
-                      const handleLockClick = () => {
-                        if (isProTier) {
-                          (onProUpgrade || onUpgrade)?.();
-                        } else {
-                          onUpgrade?.();
-                        }
-                      };
-                      return (
-                        <div key={key} className="screener-locked-chip-wrapper flex flex-col items-start gap-0.5">
-                          <div className="screener-locked-chip">
-                            <Chip
-                              size="sm"
-                              variant="filter"
-                              tone="accent"
-                              onClick={handleLockClick}
-                              data-testid={`screener-locked-${key}`}
-                            >
-                              <Lock size={11} strokeWidth={2} aria-hidden style={{ marginRight: 4, verticalAlign: '-1px' }} />
-                              {LOCKED_FACET_LABELS[key] || key}
-                            </Chip>
+              {/* (2f) locked facets — 和名 + 鍵。Phase1 S3: pivot_distance (#3 買い場圏) は
+                  screener_v2 scope のみ表示 (legacy には漏らさない、SPEC §6)。free user の #3 は
+                  この locked chip 経路で「件数なし・Premium 解錠」表示 (§A 案・cup/breakout と同列)。 */}
+              {(() => {
+                const lockedVisible = (universe.locked_facets || []).filter(
+                  (key) => screenerV2 || key !== 'pivot_distance'
+                );
+                if (lockedVisible.length === 0) return null;
+                return (
+                  <div>
+                    <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">Premium / Pro で解錠</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {lockedVisible.map((key) => {
+                        const isProTier = key === 'near_high';
+                        const handleLockClick = () => {
+                          if (isProTier) {
+                            (onProUpgrade || onUpgrade)?.();
+                          } else {
+                            onUpgrade?.();
+                          }
+                        };
+                        return (
+                          <div key={key} className="screener-locked-chip-wrapper flex flex-col items-start gap-0.5">
+                            <div className="screener-locked-chip">
+                              <Chip
+                                size="sm"
+                                variant="filter"
+                                tone="accent"
+                                onClick={handleLockClick}
+                                data-testid={`screener-locked-${key}`}
+                              >
+                                <Lock size={11} strokeWidth={2} aria-hidden style={{ marginRight: 4, verticalAlign: '-1px' }} />
+                                {LOCKED_FACET_LABELS[key] || key}
+                              </Chip>
+                            </div>
+                            <span className="ml-1 text-[10px] text-[var(--text-muted)]">
+                              {isProTier ? 'Pro で解錠' : 'Premium で解錠'}
+                            </span>
                           </div>
-                          <span className="ml-1 text-[10px] text-[var(--text-muted)]">
-                            {isProTier ? 'Pro で解錠' : 'Premium で解錠'}
-                          </span>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
 
           {/* ── Pass C: 適用中フィルタ bar (詳細閉時もサマリ chip を visible に保つ) ── */}
           {(() => {
             const activeOverrides = Object.entries(overrides).filter(([, v]) => v && v !== 'off');
-            const hasActive = activeOverrides.length > 0 || sectorFilter.length > 0 || mcapFilter.length > 0 || fundaPassOnly || ocfMarginOnly;
+            const hasActive = activeOverrides.length > 0 || sectorFilter.length > 0 || mcapFilter.length > 0 || fundaPassOnly || ocfMarginOnly || ocfGtNiOnly || buyZoneOnly;
             if (!hasActive) return null;
             return (
               <div
@@ -883,10 +1040,40 @@ export default function CustomScreenerPanel({
                   </Chip>
                 )}
 
+                {/* Phase1 S3: #1 営業CF>純利益 (利益の質) */}
+                {ocfGtNiOnly && (
+                  <Chip
+                    size="xs"
+                    variant="filter"
+                    pressed
+                    tone="accent"
+                    onClick={() => setOcfGtNiOnly(false)}
+                    data-testid="screener-applied-ocf_gt_netincome"
+                  >
+                    {OCF_GT_NI_FACET.labelShort}
+                    <span className="ml-1 opacity-70">×</span>
+                  </Chip>
+                )}
+
+                {/* Phase1 S3: #3 買い場圏 (pivot 近接) */}
+                {buyZoneOnly && (
+                  <Chip
+                    size="xs"
+                    variant="filter"
+                    pressed
+                    tone="accent"
+                    onClick={() => setBuyZoneOnly(false)}
+                    data-testid="screener-applied-buy_zone"
+                  >
+                    {BUY_ZONE_FACET.labelShort}
+                    <span className="ml-1 opacity-70">×</span>
+                  </Chip>
+                )}
+
                 {/* すべて解除 */}
                 <button
                   className="ml-auto text-[11px] text-[var(--text-muted)] hover:text-[var(--color-loss)] transition-colors"
-                  onClick={() => { setPreset('standard'); setOverrides({}); setSectorFilter([]); setMcapFilter([]); setFundaPassOnly(false); setOcfMarginOnly(false); }}
+                  onClick={() => { setPreset('standard'); setOverrides({}); setSectorFilter([]); setMcapFilter([]); setFundaPassOnly(false); setOcfMarginOnly(false); setOcfGtNiOnly(false); setBuyZoneOnly(false); }}
                   data-testid="screener-applied-clear"
                 >
                   すべて解除
@@ -985,6 +1172,12 @@ export default function CustomScreenerPanel({
                           });
                         } else if (emptySuggest.type === 'funda_pass') {
                           setFundaPassOnly(false);
+                        } else if (emptySuggest.type === 'ocf_margin') {
+                          setOcfMarginOnly(false);
+                        } else if (emptySuggest.type === 'ocf_gt_netincome') {
+                          setOcfGtNiOnly(false);
+                        } else if (emptySuggest.type === 'buy_zone') {
+                          setBuyZoneOnly(false);
                         } else if (emptySuggest.type === 'sector') {
                           setSectorFilter([]);
                         } else if (emptySuggest.type === 'mcap') {
