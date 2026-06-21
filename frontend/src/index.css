@@ -13713,3 +13713,219 @@ body.is-digest-resizing {
    [data-theme="dark"] で自動切替 (index.css :root と [data-theme="dark"] で定義済)。
    追加 override は現時点では不要。 */
 /* ヒット理由バッジは Chip primitive (ds-chip[data-variant="display"][data-tone="muted"]) に統一済 (§Chip 参照) */
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Sprint 3: .screener-idle-hero — Pane3 idle「今日の筆頭」focal hero (ScreenerIdleHero.jsx)
+   aman の主役 = featured rank-1。token のみ・shadow ゼロ・raw 数値廃止 (安っぽさ root cause)。
+   scarcity (SPEC 条件10③): gold は hero frame (L字) + rank-1 ただ1つに限定。big element ≤ 2。
+   typography 3層 (条件10①): eyebrow=caption fw500 / ticker=mono fw700 / metadata=caption fw400。
+   余白 交互律 (条件10②): section 間 = 抜き (--space-5) / list 内 row = 詰め (--space-1)。
+   §38: 状態ラベルは静的 dict・色 neutral (買い断定なし)。発光 class 新規付与なし。
+   ════════════════════════════════════════════════════════════════════════════ */
+.screener-idle-hero {
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-6) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);                 /* section 間 = 抜き */
+}
+
+/* loading / error / empty の中央寄せ state (詰め→抜き→詰め と無関係な単独表示) */
+.screener-idle-hero--centered {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: var(--space-3);
+  color: var(--text-muted);
+  padding: var(--space-6);
+}
+.screener-idle-hero__state-icon { opacity: 0.55; }
+.screener-idle-hero__state-text {
+  font-size: var(--text-caption);
+  line-height: 1.6;
+}
+.screener-idle-hero__state-sub {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ── header: gold L字 frame = hero anchor (scarcity 内の正当な gold) ── */
+.screener-idle-hero__header {
+  border-left: 3px solid var(--color-gold);
+  padding-left: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+/* typography 層1: eyebrow = caption fw500 muted (交差条件の透明表示) */
+.screener-idle-hero__eyebrow {
+  font-size: var(--text-caption);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: var(--space-1);
+}
+.screener-idle-hero__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-h2);
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  margin: 0;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-gold) 32%, transparent);
+  color: var(--text-primary);
+}
+.screener-idle-hero__title-icon { color: var(--color-gold); flex-shrink: 0; }
+
+/* section 説明 (§38 軸明示 + ⓘ + 免責) */
+.screener-idle-hero__desc {
+  margin: 0;                           /* header の margin-bottom が gap を担う (二重回避) */
+  font-size: var(--text-caption);
+  line-height: 1.6;
+  color: var(--text-muted);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.screener-idle-hero__desc-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  opacity: 0.7;
+  cursor: help;
+}
+.screener-idle-hero__desc-strong { font-weight: 700; color: var(--text-secondary); }
+.screener-idle-hero__relax-note {
+  margin: var(--space-2) 0 0 0;
+  font-size: var(--text-caption);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ── list: row は 詰め (--space-1) ── */
+.screener-idle-hero__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);                 /* row 間 = 詰め */
+}
+
+/* row button: shadow ゼロ・border なし。featured (rank-1) のみ padding 拡張 + gold hairline */
+.screener-idle-hero__row {
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: transparent;
+  transition: background var(--motion-fast) ease;
+}
+.screener-idle-hero__row:hover { background: var(--bg-hover); }
+/* featured = rank-1: 唯一の big element + gold hairline (scarcity) */
+.screener-idle-hero__row--featured {
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid color-mix(in srgb, var(--color-gold) 55%, transparent);
+}
+
+/* rank circle: rank-1 のみ gold (scarcity)、2-3 は neutral accent */
+.screener-idle-hero__rank {
+  flex-shrink: 0;
+  width: var(--space-6);               /* 24px */
+  height: var(--space-6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: var(--text-caption);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--text-secondary);
+}
+.screener-idle-hero__rank--first {
+  background: color-mix(in srgb, var(--color-gold) 18%, transparent);
+  color: var(--color-gold);
+}
+
+.screener-idle-hero__logo { flex-shrink: 0; display: flex; }
+
+/* typography 層2: ticker = mono fw700。featured のみ 1 段大 (--text-body、層間 2px) */
+.screener-idle-hero__ticker {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-caption);
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.screener-idle-hero__ticker--featured { font-size: var(--text-body); }
+
+/* funda 加点バッジ (決算5条件 = gold accent、sparse なので加点のみ) */
+.screener-idle-hero__funda-badge {
+  flex-shrink: 0;
+  font-size: var(--text-caption);
+  font-weight: 700;
+  padding: 1px var(--space-1);
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--color-gold) 16%, transparent);
+  color: var(--color-gold);
+}
+
+/* metrics stack: RS (主) + signal (副) */
+.screener-idle-hero__metrics {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;                            /* 1px hairline gap (4px 未満 = micro 例外) */
+  line-height: 1.25;
+}
+.screener-idle-hero__rs {
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+/* typography 層3: signal = caption fw400 muted (最も静か) */
+.screener-idle-hero__signal {
+  font-size: var(--text-caption);
+  font-weight: 400;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ── footer 導線 (section 末尾 = 抜き で区切る) ── */
+.screener-idle-hero__footer {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.screener-idle-hero__footer-primary {
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.screener-idle-hero__footer-sub {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screener-idle-hero__row { transition: none; }
+}

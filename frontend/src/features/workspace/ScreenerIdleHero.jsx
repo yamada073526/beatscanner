@@ -116,38 +116,28 @@ const CRITERIA_TOOLTIP =
 // module-level sub-components (inline 関数 component 禁止)
 // -----------------------------------------------------------
 
-/** rank circle: rank ≤ 3 = gold / それ以外 = accent */
+/** rank circle: Sprint3 scarcity — rank-1 のみ gold (focal)、2-3 は neutral accent。
+ *  pop entrance も rank-1 に限定 (複数 row への gold/演出拡散を撤去)。 */
 function RankCircle({ rank }) {
-  const isTop3 = rank <= 3;
+  const isFirst = rank === 1;
   return (
     <span
       aria-hidden
-      className={isTop3 ? 'screener-rank-pop' : undefined}
-      style={{
-        flexShrink: 0,
-        width: 24,
-        height: 24,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: '50%',
-        fontSize: 11,
-        fontWeight: 700,
-        fontVariantNumeric: 'tabular-nums',
-        background: isTop3
-          ? 'color-mix(in srgb, var(--color-gold) 18%, transparent)'
-          : 'color-mix(in srgb, var(--color-accent) 14%, transparent)',
-        color: isTop3 ? 'var(--color-gold)' : 'var(--color-accent)',
-        animationDelay: `${rowRevealDelay(rank - 1)}ms`,
-      }}
+      className={[
+        'screener-idle-hero__rank',
+        isFirst ? 'screener-idle-hero__rank--first' : '',
+        isFirst ? 'screener-rank-pop' : '',
+      ].filter(Boolean).join(' ')}
+      style={{ animationDelay: `${rowRevealDelay(rank - 1)}ms` }}
     >
       {rank}
     </span>
   );
 }
 
-/** 銘柄 row 1 件。rank1 のみ featured (padding 広め / ticker 大)。
- *  右側に RS percentile (主) + 交差シグナルラベル (副) を縦積みで透明表示。 */
+/** 銘柄 row 1 件。rank1 のみ featured (padding 広め / ticker 大 / gold hairline = 唯一の big)。
+ *  右側に RS percentile (主) + 交差シグナルラベル (副) を縦積みで透明表示。
+ *  raw 数値廃止: 全て .screener-idle-hero__* token CSS に委任 (安っぽさ root cause fix)。 */
 function LeaderRow({ ticker, rs, signal, rank, onSelect, fundaPass = false }) {
   const isFeatured = rank === 1;
   return (
@@ -157,38 +147,25 @@ function LeaderRow({ ticker, rs, signal, rank, onSelect, fundaPass = false }) {
     >
       <button
         type="button"
-        className="screener-hero-row"
+        className={[
+          'screener-idle-hero__row',
+          isFeatured ? 'screener-idle-hero__row--featured' : '',
+        ].filter(Boolean).join(' ')}
         onClick={() => onSelect(ticker)}
         data-testid={`idle-hero-ticker-${ticker}`}
         aria-label={`${ticker} の詳細を表示`}
-        style={{
-          width: '100%',
-          textAlign: 'left',
-          borderRadius: 'var(--radius-sm, 4px)',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-2, 8px)',
-          // rank1 のみ padding 一段広げ (SPEC: scarcity asymmetry — 1要素だけ突出)
-          padding: isFeatured ? '10px var(--space-3, 12px)' : '6px 8px',
-        }}
       >
         <RankCircle rank={rank} />
-        {/* ロゴ: CompanyLogo (TV→FMP→頭文字円 3段 fallback) */}
-        <span style={{ flexShrink: 0 }}>
+        {/* ロゴ: CompanyLogo (TV→FMP→頭文字円 3段 fallback)。featured のみ一段大 */}
+        <span className="screener-idle-hero__logo">
           <CompanyLogo ticker={ticker} size={isFeatured ? 22 : 18} />
         </span>
-        {/* ticker (mono / fw700) — rank1 のみフォントを一段大きく (big max2 scarcity) */}
+        {/* typography 層2: ticker (mono / fw700) — featured のみ 1 段大 (big max2 scarcity) */}
         <span
-          className="screener-hero-ticker"
-          style={{
-            flex: 1,
-            minWidth: 0,
-            fontFamily: 'var(--font-mono, monospace)',
-            fontSize: isFeatured ? 15 : 13,
-            fontWeight: 700,
-            color: 'var(--text-primary)',
-          }}
+          className={[
+            'screener-idle-hero__ticker',
+            isFeatured ? 'screener-idle-hero__ticker--featured' : '',
+          ].filter(Boolean).join(' ')}
         >
           {ticker}
         </span>
@@ -196,58 +173,20 @@ function LeaderRow({ ticker, rs, signal, rank, onSelect, fundaPass = false }) {
             加点表示であり交差の必須条件ではない (sparse = 決算シーズン谷間は非表示が正)。 */}
         {fundaPass && (
           <span
+            className="screener-idle-hero__funda-badge"
             data-testid={`idle-hero-funda-badge-${ticker}`}
             title="最新決算で5条件 (EPS・売上・来期ガイダンス等) を達成"
-            style={{
-              flexShrink: 0,
-              fontSize: 9,
-              fontWeight: 700,
-              padding: '1px 5px',
-              borderRadius: 999,
-              letterSpacing: '0.02em',
-              background: 'color-mix(in srgb, var(--color-gold) 16%, transparent)',
-              color: 'var(--color-gold)',
-              whiteSpace: 'nowrap',
-            }}
           >
             決算5条件
           </span>
         )}
         {/* 右側: RS (主) + シグナルラベル (副)。§38: 色 neutral、買い断定なし */}
-        <span
-          style={{
-            flexShrink: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'flex-end',
-            gap: 1,
-            lineHeight: 1.25,
-          }}
-        >
+        <span className="screener-idle-hero__metrics">
           {typeof rs === 'number' && (
-            <span
-              style={{
-                fontSize: isFeatured ? 13 : 12,
-                fontWeight: 700,
-                color: 'var(--text-secondary)',
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
-              RS {rs}
-            </span>
+            <span className="screener-idle-hero__rs">RS {rs}</span>
           )}
-          {signal && (
-            <span
-              style={{
-                fontSize: isFeatured ? 11 : 10,
-                fontWeight: 500,
-                color: 'var(--text-muted)',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {signal}
-            </span>
-          )}
+          {/* typography 層3: signal = 最も静か (caption fw400 muted) */}
+          {signal && <span className="screener-idle-hero__signal">{signal}</span>}
         </span>
       </button>
     </li>
@@ -327,21 +266,10 @@ export default function ScreenerIdleHero({ onSelect }) {
       <div
         data-testid="screener-idle-hero"
         data-state="loading"
-        style={{
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 'var(--space-3, 12px)',
-          color: 'var(--text-muted)',
-          padding: 'var(--space-6, 24px)',
-        }}
+        className="screener-idle-hero screener-idle-hero--centered"
       >
-        <Hourglass size={20} strokeWidth={1.5} aria-hidden style={{ opacity: 0.55 }} />
-        <span style={{ fontSize: 12, lineHeight: 1.6, textAlign: 'center' }}>
-          今日の筆頭を絞り込み中…
-        </span>
+        <Hourglass size={20} strokeWidth={1.5} aria-hidden className="screener-idle-hero__state-icon" />
+        <span className="screener-idle-hero__state-text">今日の筆頭を絞り込み中…</span>
       </div>
     );
   }
@@ -352,21 +280,11 @@ export default function ScreenerIdleHero({ onSelect }) {
       <div
         data-testid="screener-idle-hero"
         data-state="error"
-        style={{
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 'var(--space-3, 12px)',
-          color: 'var(--text-muted)',
-          padding: 'var(--space-6, 24px)',
-          textAlign: 'center',
-        }}
+        className="screener-idle-hero screener-idle-hero--centered"
       >
-        <AlertCircle size={20} strokeWidth={1.5} aria-hidden style={{ opacity: 0.55 }} />
-        <span style={{ fontSize: 12, lineHeight: 1.6 }}>データ取得に失敗しました</span>
-        <span style={{ fontSize: 11 }}>
+        <AlertCircle size={20} strokeWidth={1.5} aria-hidden className="screener-idle-hero__state-icon" />
+        <span className="screener-idle-hero__state-text">データ取得に失敗しました</span>
+        <span className="screener-idle-hero__state-sub">
           左の一覧から銘柄を選ぶと、ここに詳細が表示されます
         </span>
       </div>
@@ -379,23 +297,13 @@ export default function ScreenerIdleHero({ onSelect }) {
       <div
         data-testid="screener-idle-hero"
         data-state="empty"
-        style={{
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 'var(--space-3, 12px)',
-          color: 'var(--text-muted)',
-          padding: 'var(--space-6, 24px)',
-          textAlign: 'center',
-        }}
+        className="screener-idle-hero screener-idle-hero--centered"
       >
-        <Hourglass size={20} strokeWidth={1.5} aria-hidden style={{ opacity: 0.55 }} />
-        <span style={{ fontSize: 12, lineHeight: 1.6 }}>
+        <Hourglass size={20} strokeWidth={1.5} aria-hidden className="screener-idle-hero__state-icon" />
+        <span className="screener-idle-hero__state-text">
           本日は条件をすべて満たす銘柄が見つかりませんでした
         </span>
-        <span style={{ fontSize: 11 }}>
+        <span className="screener-idle-hero__state-sub">
           左の一覧から銘柄を選ぶと、ここに詳細が表示されます
         </span>
       </div>
@@ -407,114 +315,45 @@ export default function ScreenerIdleHero({ onSelect }) {
     <div
       data-testid="screener-idle-hero"
       data-state="main"
-      style={{
-        height: '100%',
-        overflowY: 'auto',
-        padding: 'var(--space-6, 24px) var(--space-5, 20px)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--space-4, 16px)',
-      }}
+      className="screener-idle-hero"
     >
-      {/* ─── section ヘッダー: L字 gold frame (ScreenerPane と同パターン) ─── */}
+      {/* ─── section ヘッダー: L字 gold frame (hero anchor = scarcity 内の正当な gold) ─── */}
       <div className="screener-reveal" style={{ animationDelay: '0ms' }}>
-        <div
-          style={{
-            borderLeft: '3px solid var(--color-gold)',
-            paddingLeft: 'var(--space-3, 12px)',
-            marginBottom: 'var(--space-3, 12px)',
-          }}
-        >
-          {/* eyebrow: 交差条件を明示 (透明表示 = ブラックボックス解消) */}
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 500,
-              letterSpacing: '0.08em',
-              color: 'var(--text-muted)',
-              marginBottom: 2,
-            }}
-          >
-            {meta.eyebrow}
-          </div>
-          <h4
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--space-2, 8px)',
-              fontSize: 'var(--text-h2, 18px)',
-              fontWeight: 500,
-              lineHeight: 1.25,
-              letterSpacing: '-0.01em',
-              margin: 0,
-              paddingBottom: 'var(--space-2, 8px)',
-              borderBottom: '1px solid color-mix(in srgb, var(--color-gold) 32%, transparent)',
-              color: 'var(--text-primary)',
-            }}
-          >
-            <Crown
-              size={16}
-              strokeWidth={1.75}
-              aria-hidden
-              style={{ color: 'var(--color-gold)', flexShrink: 0 }}
-            />
+        <div className="screener-idle-hero__header">
+          {/* typography 層1: eyebrow = 交差条件の透明表示 (ブラックボックス解消) */}
+          <div className="screener-idle-hero__eyebrow">{meta.eyebrow}</div>
+          <h4 className="screener-idle-hero__title">
+            <Crown size={16} strokeWidth={1.75} aria-hidden className="screener-idle-hero__title-icon" />
             今日の筆頭
           </h4>
         </div>
 
         {/* section 説明: §38 軸明示 + ⓘ ツールチップ + 免責1行 */}
-        <p
-          style={{
-            margin: '0 0 var(--space-2, 8px) 0',
-            fontSize: 11,
-            lineHeight: 1.6,
-            color: 'var(--text-muted)',
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 6,
-          }}
-        >
+        <p className="screener-idle-hero__desc">
           <Info
             size={13}
             strokeWidth={1.75}
             aria-label="絞り込み条件の説明"
             title={CRITERIA_TOOLTIP}
-            style={{ flexShrink: 0, marginTop: 2, opacity: 0.7, cursor: 'help' }}
+            className="screener-idle-hero__desc-icon"
           />
           <span>
             {meta.axes} を
-            <strong style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>すべて満たす</strong>
+            <strong className="screener-idle-hero__desc-strong">すべて満たす</strong>
             銘柄。スクリーニング結果であり投資推奨ではありません。
           </span>
         </p>
 
         {/* 緩和フォールバック時の注記 (透明性: なぜこの候補か / どの条件を緩めたか level に忠実) */}
         {relaxed && meta.relaxNote && (
-          <p
-            data-testid="idle-hero-relaxed-note"
-            style={{
-              margin: '0 0 var(--space-2, 8px) 0',
-              fontSize: 11,
-              lineHeight: 1.5,
-              color: 'var(--text-muted)',
-            }}
-          >
+          <p data-testid="idle-hero-relaxed-note" className="screener-idle-hero__relax-note">
             {meta.relaxNote}
           </p>
         )}
       </div>
 
-      {/* ─── 銘柄リスト (上位3件) ─── */}
-      <ul
-        style={{
-          listStyle: 'none',
-          margin: 0,
-          padding: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 'var(--space-1, 4px)',
-        }}
-      >
+      {/* ─── 銘柄リスト (上位3件・row 間は 詰め) ─── */}
+      <ul className="screener-idle-hero__list">
         {tickers.map((t, idx) => (
           <LeaderRow
             key={t.ticker}
@@ -528,25 +367,16 @@ export default function ScreenerIdleHero({ onSelect }) {
         ))}
       </ul>
 
-      {/* ─── 導線文 (下部) ─── */}
+      {/* ─── 導線文 (下部・section 末尾は 抜き で区切る) ─── */}
       <div
         className="screener-reveal"
         style={{ animationDelay: `${rowRevealDelay(tickers.length)}ms` }}
       >
-        <div
-          style={{
-            marginTop: 'var(--space-4, 16px)',
-            paddingTop: 'var(--space-4, 16px)',
-            borderTop: '1px solid var(--border)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--space-1, 4px)',
-          }}
-        >
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
+        <div className="screener-idle-hero__footer">
+          <span className="screener-idle-hero__footer-primary">
             ← 左の一覧から銘柄を選ぶと、ここに詳細が表示されます
           </span>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          <span className="screener-idle-hero__footer-sub">
             「注目」と「絞り込み」を切り替えて候補を探せます。
           </span>
         </div>
