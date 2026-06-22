@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BeatScanner スクリーナー戦略プリセット モックアップ v4</title>
+<style>
+  :root{
+    --bg-primary:#0f172a; --bg-card:#1e2433; --bg-subtle:#1e2a3a; --bg-muted:#243447; --bg-hover:#253045;
+    --text-primary:#f1f5f9; --text-secondary:#cbd5e1; --text-muted:#94a3b8;
+    --color-gain:#34ef81; --color-loss:#f87171; --color-warning:#f59e0b; --color-accent:#38bdf8;
+    --gold:#d4af37; --gold-mid:#f4cd5d; --gold-dark:#c8952c;
+    --border:rgba(255,255,255,.08); --border-strong:rgba(255,255,255,.14);
+    --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;
+    --r-sm:8px;--r-md:12px;--r-lg:16px;--r-pill:9999px;
+    --elev3:0 4px 12px rgba(0,0,0,.50),0 12px 24px rgba(0,0,0,.30);
+    --glow-gold:0 0 0 1px rgba(212,175,55,.32),0 8px 32px rgba(212,175,55,.14);
+    --ease:cubic-bezier(.16,1,.3,1);
+    --font:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  button{font-family:inherit;color:inherit}
+  body{background:radial-gradient(1200px 600px at 80% -10%,rgba(212,175,55,.05),transparent 60%),var(--bg-primary);
+    color:var(--text-primary);font-family:var(--font);-webkit-font-smoothing:antialiased;line-height:1.5;padding:var(--s8) var(--s6) 64px}
+  .wrap{max-width:1180px;margin:0 auto}
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--s4)}
+  .mock-tag{display:inline-block;font-size:11px;letter-spacing:.04em;color:var(--gold-mid);
+    border:1px solid rgba(212,175,55,.35);border-radius:var(--r-pill);padding:3px 10px}
+  .planpick{display:inline-flex;align-items:center;gap:var(--s2);font-size:12px;color:var(--text-muted)}
+  .planpick .seg2{display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-pill);padding:3px}
+  .planpick .seg2 button{border:0;background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;padding:4px 12px;border-radius:var(--r-pill);cursor:pointer;transition:.2s}
+  .planpick .seg2 button.on{background:var(--bg-muted);color:var(--text-primary)}
+  h1{font-size:24px;font-weight:600;letter-spacing:-.01em;margin-bottom:var(--s2);color:var(--text-primary)}
+  .sub{color:var(--text-muted);font-size:14px;margin-bottom:var(--s6)}
+  svg{display:block}
+
+  .presets{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--s3);margin-bottom:var(--s4)}
+  .preset{position:relative;text-align:left;cursor:pointer;background:var(--bg-card);color:var(--text-primary);
+    border:1px solid var(--border);border-radius:var(--r-lg);padding:var(--s4);
+    transition:transform .2s var(--ease),box-shadow .2s,border-color .2s}
+  .preset:hover{transform:translateY(-4px);border-color:var(--border-strong);box-shadow:var(--elev3)}
+  .preset.active{border-color:rgba(212,175,55,.45);box-shadow:var(--glow-gold);transform:translateY(-2px)}
+  .preset .top{display:flex;align-items:center;gap:var(--s3);margin-bottom:var(--s3)}
+  .preset .ico{width:40px;height:40px;border-radius:var(--r-md);display:grid;place-items:center;flex:none;
+    color:var(--gold-mid);
+    background:linear-gradient(135deg,rgba(212,175,55,.16),rgba(212,175,55,.04));
+    border:1px solid rgba(212,175,55,.26);transition:.2s var(--ease)}
+  .preset.active .ico{background:linear-gradient(135deg,rgba(212,175,55,.28),rgba(212,175,55,.08));border-color:rgba(212,175,55,.5)}
+  .preset .ico svg{width:21px;height:21px}
+  .preset .name{font-size:15px;font-weight:600;color:var(--text-primary)}
+  .preset .desc{font-size:12px;color:var(--text-muted);min-height:32px}
+  .preset .foot{display:flex;align-items:center;justify-content:space-between;margin-top:var(--s3)}
+  .count{font-size:13px;color:var(--text-secondary)}
+  .count b{font-size:18px;font-weight:700;color:var(--text-primary);font-variant-numeric:tabular-nums}
+  .tier{font-size:10px;font-weight:600;letter-spacing:.03em;padding:2px 7px;border-radius:var(--r-pill)}
+  .tier.free{color:var(--color-gain);background:rgba(52,239,129,.12)}
+  .tier.pro{color:var(--gold-mid);background:rgba(212,175,55,.14)}
+  .tier.prem{color:var(--color-warning);background:rgba(245,158,11,.12)}
+
+  .refine{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);margin-bottom:var(--s5);overflow:hidden}
+  .refine .fh{display:flex;align-items:center;gap:var(--s3);padding:var(--s3) var(--s5);cursor:pointer}
+  .refine .fh .ti{display:flex;color:var(--text-muted)}.refine .fh .ti svg{width:16px;height:16px}
+  .refine .fh .lbl{font-size:13px;font-weight:600;color:var(--text-primary)}
+  .refine .fh .summ{font-size:12px;color:var(--text-muted)}
+  .refine .fh .live{margin-left:auto;font-size:13px;color:var(--text-secondary)}
+  .refine .fh .live b{font-size:20px;font-weight:700;color:var(--gold-mid);font-variant-numeric:tabular-nums;display:inline-block}
+  .refine .fh .live b.pulse{animation:pop .28s var(--ease)}
+  @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.28)}100%{transform:scale(1)}}
+  .refine .fh .caret{color:var(--text-muted);transition:transform .25s var(--ease);font-size:11px}
+  .refine.open .fh .caret{transform:rotate(180deg)}
+  .refine .fb{max-height:0;overflow:hidden;transition:max-height .35s var(--ease);border-top:1px solid transparent}
+  .refine.open .fb{max-height:900px;border-top-color:var(--border)}
+  .fbin{padding:var(--s4) var(--s5) var(--s5)}
+  .ctrlrow{display:flex;align-items:center;gap:var(--s4);margin-bottom:var(--s4);flex-wrap:wrap}
+  .ctrl-lab{font-size:12px;color:var(--text-muted)}
+  /* segmented with sliding thumb */
+  .seg{position:relative;display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-pill);padding:3px}
+  .seg .thumb{position:absolute;top:3px;bottom:3px;border-radius:var(--r-pill);background:var(--bg-muted);transition:transform .28s var(--ease),width .28s var(--ease);z-index:0}
+  .seg button{position:relative;z-index:1;border:0;background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;padding:5px 16px;border-radius:var(--r-pill);cursor:pointer;transition:color .2s}
+  .seg button.on{color:var(--text-primary)}
+  .adv-toggle{display:flex;align-items:center;gap:var(--s2);font-size:12px;color:var(--text-secondary);cursor:pointer;margin-left:auto}
+  .adv-toggle .sw{width:34px;height:20px;border-radius:var(--r-pill);background:var(--bg-muted);position:relative;transition:background .2s}
+  .adv-toggle .sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--text-muted);transition:transform .2s var(--ease),background .2s}
+  .adv-toggle.on .sw{background:rgba(212,175,55,.35)}
+  .adv-toggle.on .sw::after{transform:translateX(14px);background:var(--gold-mid)}
+  .adv-toggle .pro{font-size:10px;font-weight:700;color:var(--gold-mid);background:rgba(212,175,55,.14);border-radius:var(--r-pill);padding:1px 7px}
+
+  .lockbar{display:flex;align-items:center;gap:var(--s3);background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:var(--r-sm);padding:var(--s3) var(--s4);margin-bottom:var(--s4);font-size:12px;color:var(--text-secondary)}
+  .lockbar b{color:var(--gold-mid)}
+  .lockbar .cta{margin-left:auto;font-size:12px;font-weight:700;color:var(--bg-primary);background:linear-gradient(135deg,var(--gold-mid),var(--gold-dark));border:0;border-radius:var(--r-pill);padding:6px 14px;cursor:pointer}
+
+  .conds{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2)}
+  .crow{display:flex;align-items:center;gap:var(--s3);background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-sm);padding:var(--s2) var(--s3);transition:opacity .2s,background .2s,border-color .2s;flex-wrap:wrap}
+  .crow.off{opacity:.42}
+  .crow .sw{width:34px;height:20px;border-radius:var(--r-pill);background:var(--bg-muted);position:relative;flex:none;cursor:pointer;transition:background .2s}
+  .crow .sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--text-muted);transition:transform .2s var(--ease),background .2s}
+  .crow.on .sw{background:rgba(56,189,248,.30)}
+  .crow.on .sw::after{transform:translateX(14px);background:var(--color-accent)}
+  .crow .cl{font-size:12px;color:var(--text-secondary);flex:1;min-width:120px}
+  .crow .th{font-size:11px;font-weight:700;color:var(--text-primary);background:var(--bg-muted);border:1px solid var(--border);border-radius:var(--r-pill);padding:3px 9px;cursor:default;transition:.2s}
+  .crow .th.state{cursor:pointer;border-color:rgba(56,189,248,.4);color:var(--color-accent)}
+  /* mini per-condition segmented (advanced) */
+  .mseg{display:inline-flex;background:var(--bg-muted);border:1px solid var(--border);border-radius:var(--r-pill);padding:2px;width:100%;margin-top:6px}
+  .mseg button{flex:1;border:0;background:transparent;color:var(--text-muted);font-size:10px;font-weight:700;padding:4px 0;border-radius:var(--r-pill);cursor:pointer;transition:.18s}
+  .mseg button.on{background:rgba(212,175,55,.20);color:var(--gold-mid)}
+  .mseg.locked{opacity:.5}.mseg.locked button{cursor:not-allowed}
+  .mval{font-size:10px;color:var(--text-muted);margin-top:3px;width:100%}
+  .fhint{font-size:11px;color:var(--text-muted);margin-top:var(--s4);line-height:1.6}
+
+  .disclaimer{font-size:12px;color:var(--text-muted);background:var(--bg-subtle);border:1px solid var(--border);border-left:3px solid var(--color-warning);border-radius:var(--r-sm);padding:var(--s3) var(--s4);margin-bottom:var(--s5)}
+
+  .md{display:grid;grid-template-columns:1.1fr 1fr;gap:var(--s4);align-items:start}
+  .panel{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden}
+  .panel .ph{padding:var(--s4) var(--s5);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:var(--s3)}
+  .panel .ph h2{font-size:16px;font-weight:600;color:var(--text-primary)}
+  .panel .ph .meta{font-size:12px;color:var(--text-muted);text-align:right}
+  .sortsel{font-size:12px;color:var(--text-secondary);background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-pill);padding:5px 10px;cursor:pointer}
+  .seasonchip{display:inline-block;font-size:11px;color:var(--gold-mid);background:rgba(212,175,55,.10);border:1px solid rgba(212,175,55,.25);border-radius:var(--r-pill);padding:2px 9px}
+
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:var(--s3) var(--s5);font-size:13px;border-bottom:1px solid var(--border);color:var(--text-secondary)}
+  th{font-size:11px;font-weight:600;color:var(--text-muted);letter-spacing:.03em}
+  tbody tr{cursor:pointer;transition:background .12s}
+  tbody tr:hover{background:var(--bg-hover)}
+  tbody tr.sel{background:rgba(212,175,55,.08);position:relative}
+  tbody tr.sel td:first-child::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--gold-mid)}
+  td:last-child,th:last-child{text-align:right}
+  .tk{display:flex;align-items:center;gap:var(--s3)}
+  .logo{width:26px;height:26px;border-radius:50%;flex:none;object-fit:cover;background:#fff}
+  .mono{width:26px;height:26px;border-radius:50%;background:var(--bg-muted);display:none;place-items:center;font-size:10px;font-weight:700;color:var(--text-secondary);flex:none}
+  .tk .nm{font-weight:600;color:var(--text-primary)}
+  .tk .se{font-size:11px;color:var(--text-muted)}
+  .num{font-variant-numeric:tabular-nums}
+  .pos{color:var(--color-gain);font-weight:600}.warnc{color:var(--color-warning);font-weight:600}
+  .chip{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:var(--r-pill)}
+  .chip.pass{color:var(--color-gain);background:rgba(52,239,129,.12)}
+  .chip.brk{color:var(--color-accent);background:rgba(56,189,248,.12)}
+  .chip.cup{color:var(--text-secondary);background:var(--bg-muted)}
+  .chip.hot{color:var(--color-warning);background:rgba(245,158,11,.12)}
+
+  .detail{padding:var(--s5)}
+  .detail .vk{display:flex;align-items:center;gap:var(--s3);margin-bottom:var(--s4)}
+  .detail .vlogo{width:46px;height:46px;border-radius:50%;background:#fff;object-fit:cover}
+  .detail .vmono{width:46px;height:46px;border-radius:50%;background:var(--bg-muted);display:none;place-items:center;font-weight:700;font-size:14px;color:var(--text-secondary)}
+  .detail .vname{font-size:22px;font-weight:600;letter-spacing:-.01em;color:var(--text-primary)}
+  .detail .vmeta{font-size:12px;color:var(--text-muted)}
+  .verdict{margin-left:auto;font-size:12px;font-weight:700;padding:5px 12px;border-radius:var(--r-pill);color:var(--color-gain);background:rgba(52,239,129,.14)}
+  .cond{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2);margin:var(--s4) 0}
+  .cond .c{display:flex;align-items:center;gap:var(--s2);font-size:12px;background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-sm);padding:var(--s2) var(--s3)}
+  .cond .c .dot{width:8px;height:8px;border-radius:50%;background:var(--color-gain);flex:none}
+  .cond .c .lbl{color:var(--text-secondary)}.cond .c .val{margin-left:auto;font-weight:700;color:var(--text-primary)}
+  .reason{font-size:13px;color:var(--text-secondary);background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-sm);padding:var(--s4);margin-top:var(--s2)}
+  .reason .rh{font-size:11px;color:var(--text-muted);margin-bottom:6px}
+
+  .heat{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2);margin-bottom:var(--s4)}
+  .sec{border-radius:var(--r-sm);padding:var(--s3) var(--s4);border:1px solid var(--border)}
+  .sec .sn{font-size:13px;font-weight:600;color:var(--text-primary)}
+  .sec .sr{font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px}
+  .sec .tag{font-size:10px;color:var(--text-muted)}
+  .top3{font-size:12px;color:var(--text-secondary)}
+  .top3 .h{font-size:11px;color:var(--text-muted);margin-bottom:6px}
+  .top3 .row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)}
+  .legend{font-size:11px;color:var(--text-muted);margin-top:var(--s4);display:flex;gap:var(--s4);flex-wrap:wrap}
+  .legend span b{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:middle}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <span class="mock-tag">MOCKUP v4 ・ ゴールド線画アイコン ・ アニメ ・ 個別緩急(アドバンスド/Pro)</span>
+    <span class="planpick">プラン確認:
+      <span class="seg2"><button data-p="free" class="on">Free</button><button data-p="pro">Pro</button></span>
+    </span>
+  </div>
+  <h1>スクリーナー</h1>
+  <p class="sub">戦略を選ぶ → 「絞り込み条件」で精度を調整。<b style="color:var(--text-secondary)">アドバンスド（Pro）で各条件を個別に緩急設定</b>。右上でプラン挙動を切替できます。</p>
+
+  <div class="presets" id="presets"></div>
+
+  <div class="refine" id="refine">
+    <div class="fh" id="fhead">
+      <span class="ti"></span><span class="lbl">絞り込み条件</span>
+      <span class="summ" id="fsumm"></span>
+      <span class="live">該当 <b id="flive">–</b> 銘柄</span><span class="caret">▼</span>
+    </div>
+    <div class="fb"><div class="fbin">
+      <div class="ctrlrow">
+        <span class="ctrl-lab">精度</span>
+        <div class="seg" id="seg"><span class="thumb" id="thumb"></span><button data-i="0">緩い</button><button data-i="1">標準</button><button data-i="2">厳しい</button></div>
+        <label class="adv-toggle" id="advToggle"><span class="sw"></span> アドバンスド（個別に緩急）<span class="pro">Pro</span></label>
+      </div>
+      <div id="lockslot"></div>
+      <div class="conds" id="conds"></div>
+      <div class="fhint" id="fhint"></div>
+    </div></div>
+  </div>
+
+  <div class="disclaimer">これらは買い推奨ではなく、各戦略の<strong>条件に合致した銘柄の一覧</strong>です。最終的な投資判断はご自身で行ってください。</div>
+
+  <div class="md">
+    <div class="panel">
+      <div class="ph"><h2 id="m-title">結果</h2>
+        <div style="display:flex;align-items:center;gap:var(--s3)"><span class="meta" id="m-meta"></span>
+          <select class="sortsel" id="sortsel">
+            <option value="mcap">時価総額の大きい順</option><option value="vol">出来高の大きい順</option>
+            <option value="metric">主要指標の高い順</option><option value="sector">セクター順</option>
+          </select></div>
+      </div>
+      <div id="m-body"></div>
+    </div>
+    <div class="panel"><div class="ph"><h2 id="d-title">詳細</h2><span class="meta">最終更新 3 分前</span></div><div id="d-body"></div></div>
+  </div>
+</div>
+
+<script>
+const ICON={
+  p1:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13l2 2 4-4"/></svg>',
+  p2:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg>',
+  p3:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5" fill="currentColor" opacity=".85"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+  p4:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M8.5 12.5 7 22l5-3 5 3-1.5-9.5"/></svg>',
+  tune:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>',
+};
+document.querySelector('.ti').innerHTML=ICON.tune;
+const LOGO=t=>`https://financialmodelingprep.com/image-stock/${t}.png`;
+const INT=[{n:'緩い',m:1.9},{n:'標準',m:1.0},{n:'厳しい',m:.42}];
+const LV=['緩','標','厳','最厳'];
+function cond(k,cl,levels,o={}){return{k,cl,levels,on:true,lvl:1,fixed:!!o.fixed,states:o.states||null,state:o.state||0}}
+const PRESETS=[
+  {id:'p1',name:'決算合格',tier:['free','Free'],base:26,desc:'直近の決算シーズンで絶対6条件をすべて満たした銘柄',
+   title:'決算合格 — 絶対6条件PASS',season:'対象: 直近の決算シーズン（過去90日 / 2026 Q1）',
+   conds:[cond('cfm','営業CFマージン',[{th:'≥15%'},{th:'≥15%'},{th:'≥15%'},{th:'≥15%'}],{fixed:true}),
+     cond('epsY','当四半期 EPS 成長(YoY)',[{th:'+20%'},{th:'+25%'},{th:'+50%'},{th:'+100%'}]),
+     cond('eps3','EPS 3期連続増',[{th:'ON'}],{fixed:true}),
+     cond('rev3','売上 3期連続増',[{th:'ON'}],{fixed:true}),
+     cond('cfps3','CFPS 3期連続増',[{th:'ON'}],{fixed:true}),
+     cond('cfpsgt','CFPS > EPS',[{th:'ON'}],{fixed:true}),
+     cond('roe','ROE',[{th:'≥17%'},{th:'≥17%'},{th:'≥25%'},{th:'≥50%'}]),
+     cond('rs','RS Rating（床）',[{th:'≥70'},{th:'≥80'},{th:'≥90'}])],
+   cols:['銘柄','直近EPS YoY','判定'],
+   rows:[{tk:'NVDA',nm:'NVIDIA',se:'半導体',mcap:1180,vol:412,m:18,c2:['6条件PASS','chip pass'],sel:true},
+     {tk:'AVGO',nm:'Broadcom',se:'半導体',mcap:620,vol:88,m:12,c2:['6条件PASS','chip pass']},
+     {tk:'LLY',nm:'Eli Lilly',se:'ヘルスケア',mcap:710,vol:54,m:9,c2:['6条件PASS','chip pass']},
+     {tk:'NFLX',nm:'Netflix',se:'通信',mcap:280,vol:36,m:15,c2:['6条件PASS','chip pass']}],
+   detail:{tk:'NVDA',nm:'NVIDIA',se:'半導体 ・ 2026 Q1 決算',verdict:'絶対6条件 PASS',
+     cond:[['営業CFマージン','48%'],['EPS 3期連続増','✓'],['売上 3期連続増','✓'],['CFPS 3期連続増','✓'],['CFPS > EPS','✓'],['ガイダンス','上方修正']],
+     reason:'営業CFマージン 48%（基準 ≥15%）。EPS・売上・一株あたり営業CF がいずれも過去3期連続で増加。CFPS が EPS を上回り会計の質も良好。来期ガイダンスは上方修正。絶対6条件をすべて満たす。'}},
+  {id:'p2',name:'新高値ブレイク',tier:['prem','Premium'],base:6,desc:'カップ・ウィズ・ハンドル等のベースから上放れた銘柄',
+   title:'新高値ブレイク — カップ・ウィズ・ハンドル',season:'対象: 直近5営業日のブレイク／形成',
+   conds:[cond('cup','カップ・ウィズ・ハンドル',[{th:'ブレイク確定'}],{fixed:true,states:['ブレイク確定','取っ手形成中','カップ形成中','すべて'],state:0}),
+     cond('zone','ブレイク後の位置（買い場圏）',[{th:'≤+5%'}],{fixed:true}),
+     cond('nh','52週高値更新',[{th:'ON'}],{fixed:true}),
+     cond('vol','ブレイク出来高（50日平均比）',[{th:'+25%'},{th:'+40%'},{th:'+50%'}]),
+     cond('rs','RS Rating',[{th:'≥70'},{th:'≥80'},{th:'≥90'}]),
+     cond('beat','直近決算',[{th:'良'}],{fixed:true})],
+   cols:['銘柄','型 / 位置','出来高'],
+   rows:[{tk:'AVGO',nm:'Broadcom',se:'半導体',mcap:620,vol:142,m:2.1,mtxt:'ブレイク確定 +2.1%',c2:['出来高 +62%','chip brk'],sel:true},
+     {tk:'ANET',nm:'Arista',se:'通信機器',mcap:115,vol:96,m:1.8,mtxt:'ブレイク確定 +1.8%',c2:['出来高 +48%','chip brk']},
+     {tk:'PLTR',nm:'Palantir',se:'ソフトウェア',mcap:88,vol:171,m:0,mtxt:'取っ手形成中',c2:['カップ完成','chip cup']}],
+   detail:{tk:'AVGO',nm:'Broadcom',se:'半導体 ・ カップ・ウィズ・ハンドル',verdict:'買い場圏（+2.1%）',
+     cond:[['型','カップ・ウィズ・ハンドル'],['状態','ブレイク確定'],['ピボット乖離','+2.1%（≤+5%）'],['ブレイク出来高','50日平均 +62%'],['RS Rating','88'],['直近決算','良']],
+     reason:'カップ・ウィズ・ハンドルのベースを上放れ、ブレイク確定。ピボットからの乖離 +2.1% で買い場圏（+5%以内・原典）。ブレイク出来高は 50日平均比 +62% と需給を伴う。+5%超に伸びた銘柄は「過熱（extended）」として除外。'}},
+  {id:'p3',name:'旬のセクター',tier:['pro','Pro'],base:0,sector:true,desc:'資金が向かうセクター × その中の好決算銘柄（テーマ物色）',
+   title:'旬のセクター — セクター別 相対力',season:'セクター別RS（対SPY）・ 直近改善順',
+   conds:[cond('topn','対象セクター（相対力 上位）',[{th:'上位5'},{th:'上位3'},{th:'上位2'}]),
+     cond('inrs','セクター内 相対力',[{th:'上位30%'},{th:'上位20%'},{th:'上位10%'}]),
+     cond('funda','決算も良い銘柄に限定',[{th:'ON'}],{fixed:true})],
+   sectors:[{sn:'半導体',sr:'+14.2',tag:'相対力 上位・改善中',hot:true},{sn:'金融',sr:'+6.1',tag:'相対力 上位'},
+     {sn:'通信',sr:'+4.5',tag:'改善方向'},{sn:'公益',sr:'+3.0',tag:'横ばい'},
+     {sn:'ヘルスケア',sr:'-1.2',tag:'やや劣後',neg:true},{sn:'生活必需品',sr:'-3.4',tag:'劣後',neg:true}],
+   top3title:'半導体（相対力 首位）の好決算銘柄 Top3',top3:[['NVDA','NVIDIA','6条件PASS'],['AVGO','Broadcom','6条件PASS'],['ANET','Arista','6条件PASS']]},
+  {id:'p4',name:'セクター別リーダー',tier:['pro','Pro'],base:18,desc:'各セクター内で相対力が上位、かつ営業CFマージン15%以上',
+   title:'セクター別リーダーの打診買い候補',season:'対象: 全ユニバース（決算非依存・常時）',
+   conds:[cond('inrs','セクター内 相対力',[{th:'上位10%'},{th:'上位5%'},{th:'上位3%'}]),
+     cond('cfm','営業CFマージン',[{th:'≥15%'}],{fixed:true}),
+     cond('roe','ROE',[{th:'≥17%'},{th:'≥17%'},{th:'≥25%'},{th:'≥50%'}]),
+     cond('cap','時価総額',[{th:'中型↑'},{th:'大型'},{th:'大型'}]),
+     cond('inst','機関保有 QoQ',[{th:'増加'}],{fixed:true})],
+   cols:['銘柄','セクター内RS','CFマージン'],
+   rows:[{tk:'MSFT',nm:'Microsoft',se:'ソフトウェア',mcap:3100,vol:210,m:96,c2:['41%','pos'],sel:true},
+     {tk:'V',nm:'Visa',se:'金融',mcap:560,vol:72,m:92,c2:['52%','pos']},
+     {tk:'LLY',nm:'Eli Lilly',se:'ヘルスケア',mcap:710,vol:54,m:90,c2:['28%','pos']},
+     {tk:'AVGO',nm:'Broadcom',se:'半導体',mcap:620,vol:88,m:88,c2:['46%','pos']}],
+   detail:{tk:'MSFT',nm:'Microsoft',se:'ソフトウェア ・ セクター内RS 96',verdict:'セクター別リーダー候補',
+     cond:[['セクター内RS','96（上位5%）'],['営業CFマージン','41%'],['ROE','39%'],['時価総額','大型'],['機関保有 QoQ','+1.8%'],['自社株買い利回り','1.0%']],
+     reason:'ソフトウェアセクター内で相対力が上位5%。営業CFマージン 41%（基準 ≥15%）、ROE 39% と収益効率が高い。機関投資家の保有も増加方向。セクター別リーダーとしての打診買い候補。'}},
+];
+let active='p1',target=1,adv=false,sortKey='mcap',plan='free';
+function logoHTML(t,c,m){return `<img class="${c}" src="${LOGO(t)}" alt="${t}" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="${m}">${t.slice(0,2)}</div>`}
+function tierBadge(t){return `<span class="tier ${t[0]}">${t[1]}</span>`}
+function lc(c){return Math.min(c.lvl,c.levels.length-1)}
+function calcCount(p){
+  if(p.sector)return p.conds.find(c=>c.k==='funda').on?9:23;
+  let f=1;p.conds.forEach(c=>{if(!c.on)f*=1.5;else f*=Math.pow(0.6,lc(c)-target)});
+  return Math.max(2,Math.round(p.base*INT[target].m*f));
+}
+let lastLive=null;
+function renderPresets(){
+  document.getElementById('presets').innerHTML=PRESETS.map(p=>`
+    <button class="preset ${p.id===active?'active':''}" data-id="${p.id}">
+      <div class="top"><div class="ico">${ICON[p.id]}</div><div class="name">${p.name}</div></div>
+      <div class="desc">${p.desc}</div>
+      <div class="foot"><span class="count"><b>${calcCount(p)}</b> 銘柄</span>${tierBadge(p.tier)}</div></button>`).join('');
+  document.querySelectorAll('.preset').forEach(el=>el.onclick=()=>{active=el.dataset.id;adv=false;target=1;PRESETS.forEach(p=>p.conds.forEach(c=>{c.on=true;c.lvl=1;if(c.states)c.state=0}));renderAll(true)});
+}
+function moveThumb(){
+  const seg=document.getElementById('seg'),btns=[...seg.querySelectorAll('button')],th=document.getElementById('thumb');
+  btns.forEach((b,i)=>b.classList.toggle('on',i===target));
+  const b=btns[target];th.style.width=b.offsetWidth+'px';th.style.transform=`translateX(${b.offsetLeft-3}px)`;
+}
+function renderRefine(){
+  const p=PRESETS.find(x=>x.id===active);
+  const onN=p.conds.filter(c=>c.on).length;
+  document.getElementById('fsumm').textContent=`${p.name} ・ ${onN}/${p.conds.length} 条件 ON ・ 精度「${INT[target].n}」${adv?' ・ アドバンスド':''}`;
+  const live=calcCount(p),el=document.getElementById('flive');
+  el.textContent=live;if(lastLive!==null&&lastLive!==live){el.classList.remove('pulse');void el.offsetWidth;el.classList.add('pulse')}lastLive=live;
+  // advanced lock bar
+  const lockslot=document.getElementById('lockslot');
+  if(adv&&plan==='free'){
+    lockslot.innerHTML=`<div class="lockbar">🔒 <span>アドバンスド（個別の緩急）は <b>Pro</b>。標準プリセットの <b>${live} 銘柄</b>は無料で全件見られます。<br>例: EPS を <b>+50%</b> に締めると <b>${Math.max(2,Math.round(live*0.4))} 銘柄</b>に絞れます（中身は Pro で解放）。</span><button class="cta">Pro を見る</button></div>`;
+  }else lockslot.innerHTML='';
+  // conditions
+  document.getElementById('conds').innerHTML=p.conds.map((c,i)=>{
+    let right;
+    if(c.states){right=`<span class="th state" data-st="${i}">${c.states[c.state]}</span>`;}
+    else right=`<span class="th">${c.levels[lc(c)].th}</span>`;
+    let mini='';
+    if(adv&&!c.fixed&&c.levels.length>1){
+      const locked=plan==='free';
+      mini=`<div class="mseg ${locked?'locked':''}">${c.levels.map((lv,li)=>`<button data-c="${i}" data-l="${li}" class="${li===lc(c)?'on':''}" ${locked?'disabled':''}>${LV[li]}</button>`).join('')}</div><div class="mval">${c.levels[lc(c)].th}</div>`;
+    }
+    return `<div class="crow ${c.on?'on':'off'}"><div class="sw" data-i="${i}"></div><span class="cl">${c.cl}</span>${right}${mini}</div>`;
+  }).join('');
+  document.querySelectorAll('#conds .sw').forEach(el=>el.onclick=()=>{const c=p.conds[+el.dataset.i];c.on=!c.on;renderAll()});
+  document.querySelectorAll('#conds .th.state').forEach(el=>el.onclick=()=>{const c=p.conds[+el.dataset.st];c.state=(c.state+1)%c.states.length;renderMD();renderRefine()});
+  document.querySelectorAll('#conds .mseg button:not([disabled])').forEach(b=>b.onclick=()=>{p.conds[+b.dataset.c].lvl=+b.dataset.l;renderAll()});
+  // adv toggle visual
+  document.getElementById('advToggle').classList.toggle('on',adv);
+  moveThumb();
+  document.getElementById('fhint').innerHTML=p.sector
+    ?'「決算も良い銘柄に限定」を外すと、相対力上位セクターの全銘柄に広がります。'
+    :(active==='p2'
+      ?'「型」の値をクリックで状態切替（ブレイク確定／取っ手形成中／カップ形成中／すべて）。ブレイク後 +5%超は原典どおり「過熱（extended）」として除外。'
+      :'<b style="color:var(--text-secondary)">アドバンスド（Pro）</b>を ON にすると、各条件を <b style="color:var(--gold-mid)">緩・標・厳・最厳</b> で個別に設定できます（例: EPS は最厳+100%、CFPS は緩め）。初心者は精度プリセット1クリックで十分。');
+}
+function sortRows(rows){const r=[...rows];
+  if(sortKey==='mcap')r.sort((a,b)=>b.mcap-a.mcap);else if(sortKey==='vol')r.sort((a,b)=>b.vol-a.vol);
+  else if(sortKey==='metric')r.sort((a,b)=>(b.m||0)-(a.m||0));else if(sortKey==='sector')r.sort((a,b)=>a.se.localeCompare(b.se,'ja'));return r;}
+function metricCell(p,r){if(p.id==='p1')return `<span class="pos">+${r.m}%</span>`;if(p.id==='p2')return `<span class="${r.m&&r.m<=5&&r.m>0?'warnc':''}">${r.mtxt}</span>`;if(p.id==='p4')return `<span class="num">${r.m}</span>`;return r.m;}
+function renderTable(p){const head=p.cols.map(c=>`<th>${c}</th>`).join('');
+  const body=sortRows(p.rows).map(r=>`<tr class="${r.sel?'sel':''}"><td><div class="tk">${logoHTML(r.tk,'logo','mono')}<div><div class="nm">${r.tk}</div><div class="se">${r.nm} ・ ${r.se}</div></div></div></td><td>${metricCell(p,r)}</td><td>${r.c2[1]?`<span class="${r.c2[1]}">${r.c2[0]}</span>`:r.c2[0]}</td></tr>`).join('');
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;}
+function renderDetail(d){return `<div class="detail"><div class="vk">${logoHTML(d.tk,'vlogo','vmono')}<div><div class="vname">${d.tk}</div><div class="vmeta">${d.nm} ・ ${d.se}</div></div><span class="verdict">${d.verdict}</span></div><div class="cond">${d.cond.map(c=>`<div class="c"><span class="dot"></span><span class="lbl">${c[0]}</span><span class="val">${c[1]}</span></div>`).join('')}</div><div class="reason"><div class="rh">合否の理由（条件結果から自動生成）</div>${d.reason}</div></div>`;}
+function renderSector(p){const heat=p.sectors.map(s=>{const col=s.hot?'var(--color-warning)':s.neg?'var(--color-loss)':'var(--color-gain)';const bg=s.hot?'rgba(245,158,11,.10)':s.neg?'rgba(248,113,113,.08)':'rgba(52,239,129,.08)';return `<div class="sec" style="background:${bg};border-color:${col}33"><div class="sn">${s.sn} ${s.hot?'<span class="chip hot">主戦場</span>':''}</div><div class="sr" style="color:${col}">${s.sr}</div><div class="tag">${s.tag}</div></div>`}).join('');
+  return `<div class="detail"><div class="heat">${heat}</div><div class="top3"><div class="h">${p.top3title}</div>${p.top3.map(t=>`<div class="row"><span style="display:flex;align-items:center;gap:8px">${logoHTML(t[0],'logo','mono')}<b style="color:var(--text-primary)">${t[0]}</b> <span style="color:var(--text-muted)">${t[1]}</span></span><span class="chip pass">${t[2]}</span></div>`).join('')}</div><div class="legend"><span><b style="background:var(--color-warning)"></b>主戦場（資金流入・改善中）</span><span><b style="background:var(--color-gain)"></b>相対力 上位</span><span><b style="background:var(--color-loss)"></b>劣後</span></div></div>`;}
+function renderMD(){const p=PRESETS.find(x=>x.id===active);
+  document.getElementById('m-title').textContent=p.title;
+  document.getElementById('m-meta').innerHTML=p.season?`<span class="seasonchip">${p.season}</span>`:'';
+  document.getElementById('sortsel').style.display=p.sector?'none':'';
+  if(p.sector){document.getElementById('m-body').innerHTML=`<div style="padding:var(--s5);color:var(--text-secondary);font-size:13px">資金が向かうセクターを相対力（対SPY）で順位付けし、右に<b style="color:var(--text-primary)">ヒートマップ + 首位セクターの好決算 Top3</b>を表示します。</div>`;document.getElementById('d-title').textContent='セクター・ヒートマップ';document.getElementById('d-body').innerHTML=renderSector(p);}
+  else{document.getElementById('m-body').innerHTML=renderTable(p);document.getElementById('d-title').textContent='詳細 — '+p.detail.tk;document.getElementById('d-body').innerHTML=renderDetail(p.detail);}
+}
+function renderAll(){renderPresets();renderRefine();renderMD()}
+document.getElementById('fhead').onclick=()=>{document.getElementById('refine').classList.toggle('open');setTimeout(moveThumb,30)};
+document.getElementById('seg').querySelectorAll('button').forEach(b=>b.onclick=()=>{target=+b.dataset.i;renderAll()});
+document.getElementById('advToggle').onclick=(e)=>{e.preventDefault();adv=!adv;renderRefine()};
+document.getElementById('sortsel').onchange=e=>{sortKey=e.target.value;renderMD()};
+document.querySelectorAll('.planpick .seg2 button').forEach(b=>b.onclick=()=>{plan=b.dataset.p;document.querySelectorAll('.planpick .seg2 button').forEach(x=>x.classList.toggle('on',x.dataset.p===plan));renderRefine()});
+document.getElementById('refine').classList.add('open');
+renderAll();setTimeout(moveThumb,50);
+</script>
+</body>
+</html>
