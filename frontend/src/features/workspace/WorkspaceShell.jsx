@@ -34,8 +34,11 @@ import { useWorkspaceStore } from '../../state/workspaceStore.js';
 // 縦書きになるのを防止)。collapsibleSize=4 は維持、minSize 未満は collapse 発火.
 const PANE_DEFAULTS_3 = {
   pane1: { defaultSize: 19, minSize: 16, maxSize: 30, collapsibleSize: 4 },
-  pane2: { defaultSize: 25, minSize: 18, maxSize: 40 },
-  pane3: { defaultSize: 56, minSize: 30 },
+  // v250 #5: screener idle で Pane2 を主役 (~50%) に imperative resize するため maxSize を 40→52 に拡張。
+  //   default は 25% 据置 (他タブ/初回は従来通り)。Pane3 minSize 30 とは Pane2 50% + Pane1 19% + Pane3 31% で両立。
+  pane2: { defaultSize: 25, minSize: 18, maxSize: 52 },
+  // v250 #5: idle で Pane3 を 27% (placeholder) まで絞れるよう minSize 30→27 (default 56% は据置)。
+  pane3: { defaultSize: 56, minSize: 27 },
 };
 const PANE_DEFAULTS_4 = {
   pane1: { defaultSize: 19, minSize: 16, maxSize: 28, collapsibleSize: 4 },

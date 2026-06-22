@@ -975,14 +975,22 @@ export default function Workspace({
   const savedPane2BeforeScreener = useRef(null);
   useEffect(() => {
     const p2 = pane2Ref.current;
+    const p3 = pane3Ref.current;
     if (!p2 || typeof p2.resize !== 'function') return; // mount/初期化前ガード
+    const resizeP3 = (v) => { if (p3 && typeof p3.resize === 'function') p3.resize(v); };
     if (isScreener && screenerV2) {
       // screener 突入時に非 screener 幅を 1 回だけ退避 (離脱時に復元)
       if (savedPane2BeforeScreener.current == null && typeof p2.getSize === 'function') {
         savedPane2BeforeScreener.current = p2.getSize();
       }
-      // idle = Pane2 主役 (50%、Pane3 は残りで minSize 30% クリア) / detail = Pane3 主役 (Pane2 28%)
-      p2.resize(activeTicker ? 28 : 50);
+      // Pane2/Pane3 を両方明示 resize して比率を確定 (Pane1 は残り)。maxSize クランプの再配分異常を回避。
+      if (activeTicker) {
+        // detail = Pane3 主役 (一覧は補助、横スクロール許容)
+        p2.resize(28); resizeP3(56);
+      } else {
+        // idle = Pane2 主役 (一覧で overview 全列が横スクロールなしで収まる)。Pane3 27% placeholder。
+        p2.resize(52); resizeP3(27);
+      }
     } else if (savedPane2BeforeScreener.current != null) {
       // screener 離脱: 退避した幅に復元 (home/indices の手動値を尊重)
       p2.resize(savedPane2BeforeScreener.current);
