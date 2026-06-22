@@ -126,6 +126,18 @@ UI: セクターヒートマップ + 各セクター Top3（原則5 図解で認
 
 ---
 
+## 7.5 モックアップ v2 で確定した設計（user dogfood 反映 2026-06-22）
+
+モックアップ v1 への user フィードバック 3 点を v2 に反映・確定:
+
+1. **「決算合格」は「昨夜」でなく「直近の決算シーズン」框定**: 単日決算だと対象が過少。**最新四半期＝過去90日窓**（既存 `earnings_evaluation` の 95日窓と整合）で絞る。UI に「対象: 直近の決算シーズン（過去90日 / 例 2026 Q1）」の period chip。決算シーズン中は日々追加されていく差分性は維持。
+2. **各条件の ON/OFF 蛇口トグル（締め緩め）**: 全6条件 AND は厳しすぎる場合あり（例: 高成長株は投資のため CF を厚くし CFPS 系が binding）。→ 親 SPEC の `{preset, overrides}` をそのまま UI 化。**強度 segmented（緩い/標準/厳しい）+ 各条件トグル**で、件数がライブ更新。「CFPS>EPS を外すと高成長株も対象に」等の hint を併記。**新規 backend 不要**（既存 overrides 機構）。
+3. **ティッカー左は企業ロゴ**: 2文字 mono でなく実ロゴ。本物 `CompanyLogo.jsx` の 3 段（TradingView SVG → FMP image-stock PNG → mono gray fallback）を踏襲。`monoFallback=true`（投資家心理の誤誘導回避）。
+
+モックアップ: `docs/specs/mockups/screener-strategy-presets-v2.html`（4プリセット切替 + 蛇口トグル + 実ロゴ、ダミーデータ）。
+
+---
+
 ## 7. 未決事項（user 判断）
 1. **改訂版の方向性**: (a) 本 v2 ハイブリッド（決算合格/新高値/今の主戦場/業界リーダー/崩れ検知）か、(b) 買い側のみ堅実（CFマージン純化を独立案に）か。
 2. **5 崩れ検知（売り側・WL監視）の scope**: screener タブ内に入れるか / 別 surface（WLタブ・nightly push）に回すか / 今は入れない（買い側4案で先行）か。
