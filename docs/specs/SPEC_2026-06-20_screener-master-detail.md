@@ -154,7 +154,7 @@
 - CF系・Beat・ガイダンス・patterns は (c) で未 precompute → Sprint 3 では「利用可能化予定」表示 or off 固定。
 - ADR/銀行 guard (task #13): roe は guard 部分伝播済 (JPM roe=null)。eps_yoy は未伝播 (BABA=-94.8 偽 miss) だが **faceting では false-negative (成長 facet から除外)** = 偽件数膨張ではない。Sprint 3 (件数) では許容、Sprint 4 (行表示) で -94.8 等の偽値を表示抑止。canslim-scan precompute での恒久 guard は task #13 で並行。
 
-**(c) data 拡張が前提 (後続 data 拡張 sprint、user 要望の一部)**: 営業CFマージン / CFPS>EPS / 3期連続性 / 売上高成長YoY / EPS 5年・3期 quarterly continuity / EPS・売上 Beat / ガイダンス上方修正 / 来期YoY / 平底・ダブルボトム。→ nightly batch 精算追加 ([[feedback_revenue_basis_mismatch]] sector guard 必須)。**user 例の「売上毎期成長・CFPS<15%・EPS 5年」はここ**。
+**(c) data 拡張が前提 (後続 data 拡張 sprint、user 要望の一部)**: ✅**営業CFマージン=着地** (2026-06-21 `SPEC_2026-06-21_jijima-funda-2stage-filter` で Sprint1-4 本番LIVE: nightly batch `ocf_margin_pct`/`fcf_margin_pct` + universe free tier + facet「キャッシュ創出力」+ idle hero 交差) / CFPS>EPS / 3期連続性 / 売上高成長YoY / EPS 5年・3期 quarterly continuity / EPS・売上 Beat / ガイダンス上方修正 / 来期YoY / 平底・ダブルボトム。→ nightly batch 精算追加 ([[feedback_revenue_basis_mismatch]] sector guard 必須)。**user 例の「売上毎期成長・CFPS<15%・EPS 5年」はここ**。
 
 **移行**: SPEC_2026-06-18 の S2 (6条件先行・facet backend) は本 SPEC の Sprint 2 (統合 universe endpoint) が代替・完了。旧 S3 (詳細 accordion) = 本 Sprint 3 に統合。旧 S5 (patterns)/S6 (mobile)/S7 (M ゲート) は後続。
 
