@@ -1000,6 +1000,7 @@ export default function Workspace({
                 onProUpgrade={() => handleUpgradeRequest('新高値圏フィルター (Pro)')}
                 onAddToWatchlist={onAddToWatchlist}
                 watchlist={detailContext?.watchlist || []}
+                plan={plan}
               />
             </Suspense>
           ) : isScreener ? (
@@ -1149,6 +1150,7 @@ export default function Workspace({
                   detailContext={detailContext}
                   isProUser={isProUser}
                   handleUpgradeRequest={handleUpgradeRequest}
+                  plan={plan}
                 />
               </Suspense>
             )

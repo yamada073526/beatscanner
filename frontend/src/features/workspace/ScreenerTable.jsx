@@ -30,6 +30,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { fetchScannerUniverse } from '../../api.js';
+import { planMeetsTier } from '../../lib/planGating.js';
 
 // ──────────────────────────────────────────
 // 定数: 列定義 (module-level)
@@ -249,10 +250,11 @@ function TextCell({ val }) {
   return <span className="screener-table__text">{val}</span>;
 }
 
-/** LockCell — tier gate: premium 列で値 null の行 */
-function LockCell() {
+/** LockCell — tier gate: plan が列 tier 未満の時に表示 (値の有無に関わらず全行) */
+function LockCell({ tier = 'premium' }) {
+  const label = tier === 'pro' ? 'Pro で解放' : 'Premium で解放';
   return (
-    <span className="screener-table__lock" aria-label="Premium で解放">
+    <span className="screener-table__lock" aria-label={label} title={label}>
       <Lock size={11} strokeWidth={1.75} aria-hidden />
     </span>
   );
@@ -261,19 +263,22 @@ function LockCell() {
 /**
  * renderCell — 列 type に応じてセルを描画
  * signal 列は item 全体を val として受け取る (field='__signal__')
+ *
+ * tier gate (v250 #2 修正): plan で出し分け、「tier ロック」 と「真の欠損」 を分離する。
+ *   - plan が列 tier 未満 → 全行 LockCell (🔒 = Premium で解放)。値の有無に依存しない。
+ *   - plan が列 tier 充足 → 値があれば表示、null は各 Cell が "—"(真の欠損 = その銘柄に指標なし)。
+ * 旧実装は plan を見ず「premium 列 && 値 null → 🔒」だったため、Premium user でも・
+ * 真の欠損でも一律 🔒 が出る Trust Cliff になっていた。
  */
-function renderCell(colKey, colDef, item) {
+function renderCell(colKey, colDef, item, plan = 'free') {
   const { field, type, tier } = colDef;
 
   // ticker 列は専用 (固定 left)
   if (type === 'ticker') return null; // TickerCell は別途
 
-  // premium 列で値 null → tier gate 表示
-  const isPremiumCol = tier === 'premium' || tier === 'pro';
-  // signal 列は派生値 (cup_state/breakout_state が null → lock)
-  if (isPremiumCol) {
-    const rawField = field === '__signal__' ? 'cup_state' : field;
-    if (item[rawField] == null) return <LockCell />;
+  // tier gate: plan が列 tier 未満 → 全行 Lock (値の有無に関わらず)
+  if (!planMeetsTier(plan, tier)) {
+    return <LockCell tier={tier} />;
   }
 
   // signal 列は item 全体を渡す
@@ -468,8 +473,9 @@ function TableSkeleton() {
  * ScreenerTable
  * @param {object} props
  * @param {Function} props.onSelect — ticker 文字列を受け取る (行クリック → master-detail)
+ * @param {'free'|'pro'|'premium'} props.plan — tier gate 用 (getPlan SSOT 経由で App.jsx から伝播)
  */
-export default function ScreenerTable({ onSelect }) {
+export default function ScreenerTable({ onSelect, plan = 'free' }) {
   // ── state ──────────────────────────────
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -646,7 +652,7 @@ export default function ScreenerTable({ onSelect }) {
                       key={colKey}
                       className="screener-table__td screener-table__td--num"
                     >
-                      {renderCell(colKey, colDef, item)}
+                      {renderCell(colKey, colDef, item, plan)}
                     </td>
                   );
                 })}

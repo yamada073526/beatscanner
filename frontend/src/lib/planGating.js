@@ -151,3 +151,15 @@ export function canUse(feature, plan) {
 export function requiredPlan(feature) {
   return FEATURE_GATES[feature] ?? PLAN.FREE;
 }
+
+/**
+ * plan が指定 tier ('free'|'pro'|'premium') の要件を満たすか (tier 文字列で直接判定)。
+ * FEATURE_GATES の feature key を介さず、列定義 (ScreenerTable の COLUMN_DEFS.tier) など
+ * tier 文字列で直接 gate したい箇所用。canUse と同じ _PLAN_RANK 比較を共有し SSOT を一本化。
+ * @param {'free'|'pro'|'premium'} plan - getPlan(subscription) の戻り値
+ * @param {'free'|'pro'|'premium'} requiredTier - 必要 tier
+ * @returns {boolean}
+ */
+export function planMeetsTier(plan, requiredTier) {
+  return (_PLAN_RANK[plan] ?? 0) >= (_PLAN_RANK[requiredTier] ?? 0);
+}

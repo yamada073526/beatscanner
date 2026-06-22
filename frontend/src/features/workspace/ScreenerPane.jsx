@@ -659,7 +659,7 @@ function heroCacheFresh() {
  * @param {boolean} props.isProUser
  * @param {Function} props.handleUpgradeRequest
  */
-export default function ScreenerPane({ detailContext = {}, isProUser = false, handleUpgradeRequest, hideHero = false, screenerV2 = false }) {
+export default function ScreenerPane({ detailContext = {}, isProUser = false, handleUpgradeRequest, hideHero = false, screenerV2 = false, plan = 'free' }) {
   const setActiveTicker = useWorkspaceStore((s) => s.setActiveTicker);
 
   // v125 P5-2: demo モード判定 (未ログイン + 非 Pro)。
@@ -966,7 +966,7 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
         className="screener-pane-ambient"
         style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}
       >
-        <ScreenerTable onSelect={handleSelect} />
+        <ScreenerTable onSelect={handleSelect} plan={plan} />
       </div>
     );
   }

@@ -153,6 +153,7 @@ export default function ScreenerMaster({
   onProUpgrade,
   onAddToWatchlist,
   watchlist = [],
+  plan = 'free',
 }) {
   // C-12: workspaceStore に混入しない — local state のみで管理
   // mode: 'preset' (今日の注目) | 'custom' (自分で絞る)
@@ -215,6 +216,7 @@ export default function ScreenerMaster({
               handleUpgradeRequest={handleUpgradeRequest}
               hideHero
               screenerV2={isScreenerV2()}
+              plan={plan}
             />
           </Suspense>
         ) : (
