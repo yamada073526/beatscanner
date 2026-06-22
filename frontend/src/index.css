@@ -14259,7 +14259,7 @@ body.is-digest-resizing {
 .screener-table__th--ticker {
   text-align: left;
   padding-left: var(--space-3);
-  min-width: 96px;
+  min-width: 176px; /* #4: No. + ロゴ + ticker/name を収める */
   position: sticky;
   left: 0;
   z-index: 3;
@@ -14470,9 +14470,83 @@ body.is-digest-resizing {
   opacity: 0.7;
 }
 
+/* ── #4 ticker セル: No. + ロゴ + ID 横並び ── */
+.screener-table__ticker-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.screener-table__rank {
+  flex-shrink: 0;
+  width: 20px;
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+}
+.screener-table__ticker-id {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.screener-table__featured-tag {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-gold);
+}
+
+/* ── #3 featured 行 (今日の筆頭を pin + gold tint) ── */
+.screener-table__row--featured {
+  background: color-mix(in srgb, var(--color-gold) 7%, transparent);
+}
+.screener-table__row--featured:hover {
+  background: color-mix(in srgb, var(--color-gold) 11%, transparent);
+}
+.screener-table__row--featured .screener-table__td--ticker {
+  background: color-mix(in srgb, var(--color-gold) 7%, var(--bg-base, var(--bg-card)));
+}
+/* 左 gold bar: border でなく ::before で sticky 安全 + レイアウトずれなし (shadow 不使用) */
+.screener-table__row--featured .screener-table__td--ticker::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-gold);
+}
+.screener-table__row--featured:hover .screener-table__td--ticker {
+  background: color-mix(in srgb, var(--color-gold) 11%, var(--bg-base, var(--bg-card)));
+}
+
+/* ── #7 ページング (footer 行数 + すべて見る) ── */
+.screener-table__footer-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.screener-table__showall-btn {
+  font-size: var(--text-caption);
+  font-weight: 500;
+  color: var(--color-accent);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 2px 10px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.screener-table__showall-btn:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
 /* ── reduced motion ── */
 @media (prefers-reduced-motion: reduce) {
   .screener-table__row { transition: none; }
   .screener-table__colset-tab { transition: none; }
   .screener-featured-strip__ticker { transition: none; }
+  .screener-table__showall-btn { transition: none; }
 }

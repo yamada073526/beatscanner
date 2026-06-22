@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { fetchScannerUniverse } from '../../api.js';
 import { planMeetsTier } from '../../lib/planGating.js';
+import CompanyLogo from '../../components/CompanyLogo.jsx';
 
 // ──────────────────────────────────────────
 // 定数: 列定義 (module-level)
@@ -75,6 +76,9 @@ const COLUMN_SETS = {
 
 const COLSET_KEYS = Object.keys(COLUMN_SETS);
 
+// #7 ページング: 初期表示行数 (上位N)。「すべて見る」で全 universe を展開。
+const PAGE_SIZE = 50;
+
 // ──────────────────────────────────────────
 // 定数: signal ラベル / icon (ScreenerIdleHero.jsx から流用)
 // ──────────────────────────────────────────
@@ -92,6 +96,13 @@ function signalIconFor(label) {
   if (label === 'ブレイク待ち') return ArrowUpRight;
   if (label === 'カップ形成中') return Target;
   return null;
+}
+
+// #1 非数値ソート: signal chip の状態 priority (高いほど上位、null=シグナルなしは末尾)。
+const SIGNAL_RANK = { 'ブレイク確定': 4, '新高値ブレイク': 4, 'ブレイク待ち': 3, 'カップ形成中': 2 };
+function signalSortRank(it) {
+  const label = deriveSignalLabel(it);
+  return label ? (SIGNAL_RANK[label] ?? 1) : 0;
 }
 
 const CUP_STATE_SHORT = {
@@ -309,36 +320,45 @@ function renderCell(colKey, colDef, item, plan = 'free') {
 // ソート helper
 // ──────────────────────────────────────────
 
-/** 数値可能な列かどうか (ソートを有効化する条件) */
+/** ソート可能な列か。#1: ticker 以外は全 type ソート可能 (数値=値順 / text=アルファ / badge=達成順 / chip=状態順)。 */
 function isSortable(colKey, colDef) {
-  if (colDef.type === 'ticker') return false;
-  if (colDef.type === 'text') return false;
-  if (colDef.type === 'badge') return false;
-  if (colDef.type === 'bool') return true;
-  if (colDef.type === 'chip') return false; // chip はラベルソート不要
-  return true; // num / pct
+  return colDef.type !== 'ticker';
 }
 
-/** items を sortKey/sortDir でソートする */
+/**
+ * item を列 type に応じた「比較可能値」に変換する。null は呼出側で末尾へ。
+ *   - num/pct/bool: 数値 (bool は true=1/false=0)
+ *   - text: 文字列 (localeCompare、'ja')
+ *   - badge (funda_pass): 達成=1 / 非達成=0
+ *   - chip (__signal__): SIGNAL_RANK の状態 priority
+ */
+function comparableValue(colDef, item) {
+  const { field, type } = colDef;
+  if (field === '__signal__') return signalSortRank(item); // 0..4 (0=なし)
+  const v = item[field];
+  if (type === 'bool') return v === true ? 1 : 0;
+  if (type === 'badge') return v ? 1 : 0;
+  if (type === 'text') return v == null || v === '' ? null : String(v);
+  // num / pct
+  if (v == null || !Number.isFinite(Number(v))) return null;
+  return Number(v);
+}
+
+/** items を sortKey/sortDir でソートする (#1: type-aware、null は常に末尾)。 */
 function sortItems(items, sortKey, sortDir) {
   if (!sortKey) return items;
   const colDef = COLUMN_DEFS[sortKey];
   if (!colDef) return items;
+  const isText = colDef.type === 'text';
 
   return [...items].sort((a, b) => {
-    let va, vb;
-    if (colDef.field === '__signal__') {
-      va = deriveSignalLabel(a) ? 1 : 0;
-      vb = deriveSignalLabel(b) ? 1 : 0;
-    } else {
-      va = a[colDef.field];
-      vb = b[colDef.field];
-    }
-    // null を末尾へ
+    const va = comparableValue(colDef, a);
+    const vb = comparableValue(colDef, b);
+    // null/欠損を常に末尾へ (sortDir に依らず)
     if (va == null && vb == null) return 0;
     if (va == null) return 1;
     if (vb == null) return -1;
-    const diff = Number(va) - Number(vb);
+    const diff = isText ? String(va).localeCompare(String(vb), 'ja') : va - vb;
     return sortDir === 'asc' ? diff : -diff;
   });
 }
@@ -483,6 +503,7 @@ export default function ScreenerTable({ onSelect, plan = 'free' }) {
   const [activeSet, setActiveSet] = useState('overview');
   const [sortKey, setSortKey] = useState('rs');       // 既定: RS 降順
   const [sortDir, setSortDir] = useState('desc');
+  const [showAll, setShowAll] = useState(false);      // #7 ページング: false=上位N / true=全件
 
   // ── fetch ──────────────────────────────
   useEffect(() => {
@@ -533,6 +554,17 @@ export default function ScreenerTable({ onSelect, plan = 'free' }) {
   );
 
   const featured = useMemo(() => pickFeatured(items), [items]);
+
+  // #3 featured pin: featured を常に先頭へ (ソートしても最上部、行ハイライトで識別)。
+  const pinnedItems = useMemo(() => {
+    if (!featured) return sortedItems;
+    const feat = sortedItems.find((it) => it.ticker === featured.ticker);
+    if (!feat) return sortedItems;
+    return [feat, ...sortedItems.filter((it) => it.ticker !== featured.ticker)];
+  }, [sortedItems, featured]);
+
+  // #7 ページング: 上位 PAGE_SIZE 行のみ描画。「すべて見る」で全件 (featured は先頭 pin で常に可視)。
+  const visibleItems = showAll ? pinnedItems : pinnedItems.slice(0, PAGE_SIZE);
 
   // ── render ─────────────────────────────
   if (loading) {
@@ -615,11 +647,17 @@ export default function ScreenerTable({ onSelect, plan = 'free' }) {
 
           {/* ── 行 ── */}
           <tbody>
-            {sortedItems.map((item) => (
+            {visibleItems.map((item, idx) => {
+              const rank = idx + 1;
+              const isFeatured = featured && item.ticker === featured.ticker;
+              return (
               <tr
                 key={item.ticker}
                 data-testid={`screener-table-row-${item.ticker}`}
-                className="screener-table__row"
+                className={[
+                  'screener-table__row',
+                  isFeatured ? 'screener-table__row--featured' : '',
+                ].filter(Boolean).join(' ')}
                 onClick={() => onSelect(item.ticker)}
                 role="row"
                 tabIndex={0}
@@ -639,10 +677,23 @@ export default function ScreenerTable({ onSelect, plan = 'free' }) {
                         key={colKey}
                         className="screener-table__td screener-table__td--ticker"
                       >
-                        <span className="screener-table__ticker-name">{item.ticker}</span>
-                        {item.name && (
-                          <span className="screener-table__ticker-sub">{item.name}</span>
-                        )}
+                        <span className="screener-table__ticker-cell">
+                          {/* #4: 行番号 + 企業ロゴ (monoFallback = Aman 品格、頭文字円も neutral) */}
+                          <span className="screener-table__rank" aria-hidden>{rank}</span>
+                          <CompanyLogo ticker={item.ticker} size={20} monoFallback />
+                          <span className="screener-table__ticker-id">
+                            <span className="screener-table__ticker-name">{item.ticker}</span>
+                            {item.name && (
+                              <span className="screener-table__ticker-sub">{item.name}</span>
+                            )}
+                          </span>
+                          {/* #3: featured 行の王冠マーク (strip と整合、gold) */}
+                          {isFeatured && (
+                            <span className="screener-table__featured-tag" aria-label="今日の筆頭">
+                              <Crown size={11} strokeWidth={2} aria-hidden />
+                            </span>
+                          )}
+                        </span>
                       </td>
                     );
                   }
@@ -657,14 +708,29 @@ export default function ScreenerTable({ onSelect, plan = 'free' }) {
                   );
                 })}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
 
-      {/* 行数フッター */}
+      {/* 行数フッター + #7 ページング */}
       <div className="screener-table__footer">
-        <span>{sortedItems.length} 銘柄</span>
+        <span className="screener-table__footer-count">
+          {showAll
+            ? `全 ${pinnedItems.length} 銘柄`
+            : `上位 ${Math.min(PAGE_SIZE, pinnedItems.length)} / ${pinnedItems.length} 銘柄`}
+          {pinnedItems.length > PAGE_SIZE && (
+            <button
+              type="button"
+              className="screener-table__showall-btn"
+              data-testid="screener-table-showall"
+              onClick={() => setShowAll((v) => !v)}
+            >
+              {showAll ? '上位のみ表示' : 'すべて見る'}
+            </button>
+          )}
+        </span>
         <span className="screener-table__footer-note">投資の推奨ではありません</span>
       </div>
     </div>
