@@ -1,180 +1,143 @@
-# SPEC: スクリーナー「戦略プリセット」層（じっちゃま流 5 シナリオの 1 クリック化）
+# SPEC: スクリーナー「戦略プリセット」層（じっちゃまプロトコル原典忠実・再導出版）
 
-> **status**: draft（**DEFER-SPEC = 提案のみ・コード未変更**。実装は user 承認後）
-> **作成**: 2026-06-22
-> **scope**: スクリーナータブのプリセット層 + 数 field の precompute 拡張。既存 Group A-G 蛇口 / PRESET_TABLE / master-detail は再利用（破壊変更なし）。
-> **親 SPEC**: `SPEC_2026-06-18_screener-pane2-3-redesign_draft.md`（蛇口モデル Group A-G / loose-standard-strict / tier 境界）
-> **依頼**: user 2026-06-22「KB を参照し screener の改善案（追加指標 + スクリーニング条件プリセット）」+ 他 AI 提示の叩き台 5 パターン
-> **北極星**: 原則4「人力の代替」── 投資家が毎朝 7 個の蛇口を手で設定する代わりに、**覚えやすい戦略名を 1 クリック**で「じっちゃま流の鉄板スクリーン」が走る状態。
-
----
-
-## 0. 中核リフレーミング（最重要）
-
-他 AI の 5 パターンは **新しい条件ではない**。その大半は親 SPEC の **Group A-G 蛇口に既に存在する**。
-→ 提案は「新条件の追加」ではなく、**Group A-G の蛇口を投資家が認識できる名前で束ねる『戦略プリセット』層**を、既存の `loose/standard/strict` 強度プリセットの **上**に 1 段追加すること。
-
-```
-[戦略プリセット]  ← 新規（本SPEC）: パーフェクト・ゲーム / 新波動入り / …  = Group A-G の束 + 強度既定
-        ↓ 展開
-[強度プリセット]  ← 既存: 緩い / 標準 / 厳しい
-        ↓ 上書き
-[Group A-G 蛇口]  ← 既存: 個別 tap の off/緩い/標準/厳しい
-```
-
-戦略プリセットを選ぶと `{ preset, overrides }` state に **対応する overrides 束**が流し込まれるだけ。**backend の filter 評価ロジックは不変**（既存 field を AND するのみ）。data 拡張が要るのは一部 field のみ（§3）。
-
-これが原則4 の最短路: 「毎朝の見回り」を、強度ダイヤルを覚えなくても **戦略名 1 クリック**で代替する。
+> **status**: draft **v2**（**DEFER-SPEC = 提案のみ・コード未変更**。実装は user 承認後）
+> **作成**: 2026-06-22 / **v2**: 2026-06-22（user 指摘「他AIの5案はベストか？じっちゃま本人なら違うのでは」→ 独立2体 Opus レビューで原典再導出）
+> **scope**: スクリーナーの戦略プリセット層。既存 Group A-G 蛇口 / PRESET_TABLE / master-detail を再利用（破壊変更なし）。
+> **親 SPEC**: `SPEC_2026-06-18_screener-pane2-3-redesign_draft.md`
+> **原典 SSOT**: `docs/references/jijima_protocol.md`（投資哲学10箇条 + 絶対6条件）/ `docs/references/canslim_oneill_rules.md` / `backend/app/judgment.py:185-252`
+> **北極星**: 原則4「人力の代替」+ 原則2「毎日開きたくなる」。**覚えやすい戦略名 1 クリックで、じっちゃま実践者の毎朝の人力作業を代替する。**
 
 ---
 
-## 1. 5 パターン × 条件の 3 分類
+## 0. v2 改訂の経緯（最重要・なぜ叩き台5案を捨てたか）
 
-凡例: ✅ **即実装可**（既存 field）/ 🟡 **data 拡張要**（precompute field 追加・FMP コスト §3）/ ⛔ **算出不可**（FMP に標準 field なし・LLM 抽出は hallucination risk で見送り）
+他 AI 提示の叩き台5案（パーフェクト・ゲーム / 新波動入り / IPOサバイバー / Rule of 40 SaaS / 全天候型配当）を、**原典 SSOT（じっちゃまプロトコル投資哲学10箇条 + 絶対6条件）に逐語照合**した結果、構造的欠陥が判明:
 
-### P1. パーフェクト・ゲーム（鉄板ファンダ）
-| 元条件 | 分類 | 対応 |
-|---|---|---|
-| 良い決算（EPS+売上+ガイダンス全コンセンサス超） | ✅ | Group C `funda_pass` / EPS Beat / 売上 Beat / ガイダンス上方修正（※決算駆動 sparse） |
-| 過去3年 EPS 毎年増 | ✅近似 / 🟡厳密 | `eps_cagr_3y≥25%` で近似。"毎年増(monotonic)" 厳密版は新 field `eps_3y_rising`（0 call） |
-| 過去3年 売上 毎年増 | 🟡 | 新 field `rev_3y_rising` / `rev_cagr_3y`（0 call、既存 annual fetch 再利用） |
-| 過去3年 CFPS 毎年増 | 🟡 | 新 field `cfps` + `cfps_3y_rising`（0 call、helper 既存 main.py:3953） |
-| 営業CFマージン ≥15%（理想35%） | ✅ | `ocf_margin_pct`（**本番 LIVE 済**） |
-| CFPS > EPS（粉飾回避） | ✅ | `ocf_gt_netincome`（**本番 LIVE 済**） |
-**判定**: ほぼ既存 + 0-call 拡張のみ。**最有力**（じっちゃまプロトコルの中核そのもの・最安・北極星最強）。
+### 10箇条 × 叩き台5案 カバレッジ
+| 箇条 | 5案のカバー |
+|---|---|
+| ①良い決算 | **過剰**（4案集中） |
+| ②分散 | ほぼ抜け（P5の「配当=分散」は正当化不成立） |
+| **③業界No.1を先ず検討** | 🔴 **完全抜け** |
+| ④過去最高値が好機 | P2のみ |
+| ⑤金利に注意 | 🔴 抜け（ただし screener 外＝地合いbanner が適切） |
+| ⑥CFマージン15%+3期連続増 | P1のみ |
+| **⑦テーマ賞味期限→新天地** | 🔴 **完全抜け（最重要欠落）** |
+| ⑧⑨⑩アノマリー/規律/売り | 抜け（screener 外＝売りルール側） |
 
-### P2. 新波動入り（ブレイクアウト）
-| 元条件 | 分類 | 対応 |
-|---|---|---|
-| Cup-with-Handle 上放れ | ✅ | Group E `cup_state=breakout_confirmed`（Premium tier） |
-| 52週高値更新直後 | ✅ | Group F `is_new_52w_high` |
-| ブレイク時出来高急増 | ✅ | Group F `breakout_state` + 1.5x volume + `ad_volume_ratio` |
-| 直近決算良 | ✅ | `funda_pass`（sparse） |
-**判定**: **全条件が既存 field**。束ねて名前を付けるだけ。**最有力**（Premium 価値・実装ほぼゼロ）。
+### 判定（独立2体 Opus レビューが収束）
+- **却下 P4 Rule of 40**: 10箇条に根拠ゼロ。サブスク比率/リテンションは FMP 標準 field 無し＝LLM抽出 hallucination risk。原典・実装の両面で最弱。
+- **却下 P3 IPOサバイバー**: IPO選好は10箇条に無い（オニール N由来）。第7条「新天地」はセクター/テーマであって上場時期ではない。毎朝の人力作業を代替しない。
+- **却下/再生 P5 配当NISA**: 「配当=第2条分散」は正当化不成立（第2条はポートフォリオ構築の戒め）。価値は「業界リーダー」部分のみ→第3条プリセットへ再生。
+- **維持 P1/P2**: 絶対6条件（P1）・第4条新高値（P2）は原典忠実。ただし P2 はオニール装飾（Cup-Handle/出来高+40%）を削り「新高値主・テクニカル従」に純化。
 
-### P3. 次世代の主役（IPO サバイバー）
-| 元条件 | 分類 | 対応 |
-|---|---|---|
-| IPO後初〜2連続決算良 | 🟡 | profile の `ipoDate`（0 call）+ 決算回数カウントの新ロジック |
-| 希薄化後株数 安定/減少 | 🟡 | 新 field `shares_yoy_pct`（0 call、quarterly income 再利用） |
-| 売上成長 加速 | 🟡 | 新 field `rev_qoq_accel`（income quarter limit 4→8、追加 call なし） |
-| PSR が成長対比で過熱でない | 🟡 | 新 field `psr`（+1 call ratios-ttm、§3） |
-**判定**: 全て 🟡。差別化は高いがニッチ。**中優先**（PSR の +1 call と IPO 起点ロジックが必要）。
-
-### P4. 高効率 SaaS（ルール・オブ・40）
-| 元条件 | 分類 | 対応 |
-|---|---|---|
-| 売上成長率 + 営業利益マージン > 40 | 🟡 | 新 field `operating_margin_pct` + `rule_of_40`（0 call、income quarter 再利用） |
-| FCF 潤沢 | ✅ | `fcf_margin_pct` |
-| サブスク比率 高 | ⛔ | FMP 標準 field なし。transcript LLM 抽出は BAD-3 数値捏造 risk → **見送り** |
-| リテンション 高 | ⛔ | 同上 → **見送り** |
-**判定**: Rule of 40 の定量核は 0-call で算出可だが、SaaS らしさ（サブスク/リテンション）は ⛔。**中優先**・**Tech/Software へ sector-gate** + 「Rule of 40 の定量版」と正直に表記。
-
-### P5. 全天候型ブルーチップ（守りの NISA）
-| 元条件 | 分類 | 対応 |
-|---|---|---|
-| 業界リーダー | ✅近似 | `mcap_band ∈ {Mega,Large}`（近似） |
-| 配当利回り 3-5% | 🟡 | 新 field `dividend_yield`（ratios-ttm に同梱、§3） |
-| 低 β | 🟡 | 新 field `beta`（0 call、profile 再利用） |
-| 10年以上 増配 | 🟡 | 新 field `consecutive_dividend_years`（+1 call dividend-history、10年 parse） |
-**判定**: 全て 🟡。**ただし戦略が成長系じっちゃまプロトコルから乖離**（ディフェンシブ/インカム = オニール CAN-SLIM の対極）。**要 user 判断**（§7）。BeatScanner が NISA/インカム層も狙うなら広い訴求、protocol 純度優先なら見送り。
+### Reviewer B の構造的洞察（user 違和感の正体）
+叩き台5案は**全部が「静的 universe screening（数日に一度の R6 作業）」**。だがじっちゃま実践者の**毎朝の重心は ①決算合否トリガー（R1）・②保有/WL の崩れ監視（R5・売り側）**。5案中4案が「毎日中身が変わらない」＝**原則2「毎日開きたくなる」に弱い**。→ 改訂版は重心を **「静的フィルタ」から「昨晩〜今日の差分を出す動的トリガー」** へ移す。
 
 ---
 
-## 2. 即実装可プリセットの具体設計（P1 / P2）
+## 1. 改訂版 戦略プリセット 5 案（原典忠実・全 0-call）
 
-state は親 SPEC の `{ preset, overrides }`。戦略プリセット選択 = 下記 overrides 束 + 既定強度を流し込む。
-
-### P1「パーフェクト・ゲーム」overrides 束（既定強度 = 標準）
-```
-A.ocf_margin     = 標準(≥15%)
-A.continuity     = 厳しい(3期連続増＋加速)  ← EPS/CFPS/売上 連続増
-A.cfps_gt_eps    = on（死守）
-B.eps_yoy        = 標準(+25%)
-B.eps_cagr       = 標準(+25%/年)
-B.roe            = 標準(≥17%, sector guard)
-B.rev_yoy        = 標準(+20%)
-C.eps_beat       = on
-C.rev_beat       = on
-C.guidance       = raised+maintained
-```
-- 想定ヒット数: 標準強度で数銘柄〜十数銘柄（親 SPEC 較正レンジ）。決算駆動 Group C を含むため谷間は少数化（仕様）。
-- 🟡 依存: `cfps_3y_rising` / `rev_3y_rising`（monotonic 厳密版）。無くても `*_cagr` 近似で **MVP 出荷可**（フォールバック明記）。
-
-### P2「新波動入り」overrides 束（既定強度 = 標準）
-```
-E.cup            = ブレイク確定(breakout_confirmed)
-F.new_high       = confirmed＋52週高値
-F.breakout_pos   = ピボット+5%以内（高値づかみ回避）
-D.rs_rating      = ≥80
-C.eps_beat       = on（直近決算良）
-```
-- 全 field 既存。**data 拡張ゼロ**。Premium tier（cup/breakout 物理除去の既存境界を踏襲）。
-- 高値づかみ回避に `pivot_distance_pct ≤ +5%`（既存 field）を既定で同梱 = 親 SPEC Phase1 #3 の buy-zone を活かす。
-
-> **§38/§5**: プリセット名は事実/比喩のみ（「鉄板」「新波動」は断定的買い推奨でない）。解説に「必ず上がる/今が好機/絶好の買い場」を出さない。色は 上昇=緑 / 過熱=amber / buy-zone=neutral。
-
----
-
-## 3. data 拡張要 field 一覧 + FMP コスト + 優先度
-
-母集団 ≈3000（Russell3000）。nightly `canslim-scan` の `_compute_one` に追記。FMP Ultimate 750 req/min。
-
-| field | 取得元 | 追加 FMP call | 使うパターン | 優先 |
+| # | プリセット（UI名は§3で§38調整） | 対応箇条 / 人力作業 | 主 field | コスト |
 |---|---|---|---|---|
-| `eps_3y_rising` / `rev_3y_rising` / `rev_cagr_3y` | 既存 income annual(limit 4→6) | **0** | P1 | ★★★ |
-| `cfps` / `cfps_3y_rising` | 既存 OCF + dilutedShares（helper 済） | **0** | P1 | ★★★ |
-| `beta` | 既存 profile の `beta` | **0** | P5 | ★★ |
-| `shares_yoy_pct`（希薄化） | 既存 income quarter `weightedAverageShsOutDil` | **0** | P3 + UI② | ★★ |
-| `operating_margin_pct` / `rule_of_40` | 既存 income quarter `operatingIncome` | **0** | P4 | ★★ |
-| `rev_qoq_accel` | income quarter limit 4→8 | **0** | P3 | ★ |
-| `psr`(+per/pbr/peg) | **ratios-ttm を追加**（1 call で 4-5 指標） | **+1/銘柄** ≈+3000/night | P3 + UI③ | ★★ |
-| `dividend_yield` | ratios-ttm に同梱 | 上と共用(0) | P5 | ★ |
-| `consecutive_dividend_years` | **dividend-history を追加** | **+1/銘柄** ≈+3000/night | P5 のみ | ☆ |
-| `ipo_date`/`quarters_since_ipo` | 既存 profile `ipoDate` | **0** | P3 | ★ |
+| **1** | **決算合格** | 第1+6条 / R1: 昨夜決算を出し絶対6条件PASS。**決算カレンダー連動で毎朝差分** | `funda_pass` + `eps_yoy_pct` + eps/rev/cfps 3期連続増 + `rs_percentile≥70`(床) | 0 call |
+| **2** | **新高値ブレイク** | 第4条 / R2: ATHブレイク。buy zone（pivot+5%以内）に限定 | `is_new_52w_high`主 + `breakout_state` + `pivot_distance_pct≤+5` + `volume_surge_pct` 従 | 0 call |
+| **3** | 🆕 **今の主戦場（セクター物色）** | 第7+3条 / R3: 資金が新しく入ったテーマ×その中の好決算銘柄。**既存5案に皆無の最大空白** | **セクター別RS = `rs_vs_spy_pct` を `sector` 集計** + セクター内 `rs_percentile` 上位 + `funda_pass` | **0 call** |
+| **4** | **業界リーダーの打診買い** | 第3+2+6条 / R6: P1とP4を統合。Rule of 40 を原典「CFマージン15%」で代替 | セクター内 `rs_percentile` 上位 + `ocf_margin_pct≥15` + `roe≥17` + `mcap_band`上位 + `inst_holders_qoq_pct>0` | 0 call |
+| **5** | 🆕 **崩れ検知（守り）** | CAN-SLIM売りルール / R5: 保有・WLの損切り/最高値割れ監視。**5案唯一の売り側・¥10k nightly push の素地** | WL銘柄に `pivot_distance_pct`(ATHから−7〜8%乖離) + `ad_volume_ratio`(大口売抜) + `rs_percentile`急落 | 0 call |
 
-**コスト総括**: P1/P2/P4 と希薄化警告は **追加 FMP call ゼロ**（既存 fetch のデータ再利用のみ）。PSR 系で **+1 call/銘柄（4-5 指標同時取得で高効率）**。連続増配のみ専用 +1 call（P5 を採る場合だけ）。3000×1 call ≈ 4 分、GHA 45min timeout に余裕。
+> **0-call の妙**: 第3条・第7条・売り側という、じっちゃま固有なのに叩き台が取りこぼした 3 軸が、**既存22 field の集計だけ**で埋まる（特にセクター別RS = 既存 rs_vs_spy_pct を sector で group 集計するのみ）。PSR等の +1 call すら不要。
 
 ---
 
-## 4. UI 解説 3 案 + §38/§5 評価
+## 2. 各プリセットの overrides 束（既存 `{preset, overrides}` state に流す）
 
-| 案 | 内容 | 実装 | §38/§5 評価 | 優先 |
-|---|---|---|---|---|
-| **① 合否「理由」自動生成** | 各条件の pass/fail を文章化（"営業CFマージン 22% で基準 ≥15% を満たす" 等） | **静的 dict テンプレ**（条件結果→固定文。LLM 数値計算/narration 禁止 = STATE_LABEL_JP 方式） | ✅ 安全（事実の言い換えのみ。「買い」断定を出さない限り §38 抵触なし） | ★★★（原則5 認知コスト減・P1 と対） |
-| **② 希薄化警告** | `shares_yoy_pct` 急増を amber chip で「発行済株式数 前年比 +X%」 | 0-call field + chip primitive | ✅ 安全（純事実・予測なし） | ★★（P3 と対・単独でも価値） |
-| **③ マルチプル過熱（「満員の映画館」）** | PSR/PER の対履歴 or 対 sector percentile を「過熱圏(上位X%)」amber 表示 | `psr` field + percentile 算出 | ⚠️ 注意（"過熱" は事実表現で可。**比喩"満員の映画館"は UI 非表示・内部のみ**。買い/売り断定にしない・最上級回避 §5） | ★★（P3/valuation と対） |
+### 1. 決算合格（既定強度=標準）
+```
+A.cfps_gt_eps=on / A.continuity=厳しい(EPS/CFPS/売上 3期連続増) / A.ocf_margin=標準(≥15%)
+C.eps_beat=on / C.rev_beat=on / C.guidance=raised+maintained
+D.rs_rating=≥70(床ゲート)
+```
+決算駆動 Group C を含むため**毎朝カレンダー連動で中身が入れ替わる**（叩き台P1の静的合格リストとの決定的差）。
 
-> ①は LLM 不使用が肝（近道で LLM narration を入れると必ず Trust Cliff。Hallucination Guard 静的 dict + sanitize layer のみで出す）。
+### 2. 新高値ブレイク
+```
+F.new_high=confirmed＋52週高値 / F.breakout_pos=ピボット+5%以内 / D.rs_rating=≥80 / C.eps_beat=on
+E.cup=任意サブフィルタに降格（原典は「新高値」のみ・オニール装飾を主条件にしない）
+```
+
+### 3. 今の主戦場（セクター物色）★新規 backend ロジック
+```
+新ビュー: セクター別RS（rs_vs_spy_pct を sector で median/mean 集計）をランキング
+        → RS が直近改善方向に転換したセクター（=新天地）を上位表示
+        → 各セクター内で rs_percentile 上位 + funda_pass の銘柄を「テーマ内候補」提示
+UI: セクターヒートマップ + 各セクター Top3（原則5 図解で認知コスト減）
+```
+※ 唯一 backend に「セクター集計」の新ロジックが要る（field 追加でなく既存 field の集計 view）。FMP call ゼロ。
+
+### 4. 業界リーダーの打診買い
+```
+セクター内 rs_percentile 上位 + A.ocf_margin=標準(≥15%) + B.roe=標準(≥17%) + I.inst_holders_qoq>0 + mcap_band上位
+```
+
+### 5. 崩れ検知（守り）★WL/保有スコープ
+```
+対象 = universe でなく WL/保有銘柄。各銘柄に売りシグナル評価:
+  pivot_distance ≤ -7〜8%（損切りライン接近） / ad_volume_ratio 悪化（ディストリビューション） / rs_percentile 急落 / breakout extended化
+```
+※ スコープが universe でなく WL のため、§7 で「screener タブ内か別 surface か」を要判断。
 
 ---
 
-## 5. tier 配置（親 SPEC 境界を踏襲）
-- **Free**: P1 強度プリセット（Group A/B/D）+ UI① 合否理由。件数は表示・銘柄名 blur で訴求。
-- **Pro**: P1 完全版（Group C 決算駆動）+ P4 Rule of 40 + UI②希薄化。
-- **Premium**: P2 新波動入り（cup/breakout）+ P3 + UI③過熱（PSR）。
-- P5 は tier 未定（§7 の採否判断後）。
+## 3. UI 解説 + §38/§5 リスク（Reviewer A 指摘）
+
+| UI名候補 | リスク | 推奨 |
+|---|---|---|
+| 「決算合格」 | 「鉄板」「パーフェクト」は§38断定に接近 | **中立名採用**。解説は「絶対6条件を全て満たす銘柄」 |
+| 「業界リーダー」 | 「No.1」は最上級(§5) | **「セクター内 相対力上位」と内部実装名併記**・「No.1と断定」しない |
+| 「今の主戦場」 | 「主戦場」は事実表現で可 | 解説「相対力が上位/改善方向のセクター」 |
+| 「崩れ検知」 | 「売れ」と読めると§38 | **「失速サイン/要確認」の中立表現**・売り断定しない |
+| 全プリセット共通 | プリセット=抽出条件であって推奨でない | **常設ディスクレーマ「買い推奨でなく条件合致銘柄の一覧」**（Hallucination Guard sanitize 思想と一致） |
+
+合否「理由」自動生成（叩き台 UI①）は維持価値あり: **静的 dict テンプレ**で各条件 pass/fail を事実言い換え（LLM narration 禁止＝STATE_LABEL_JP 方式・§38安全）。
 
 ---
 
-## 6. 推奨ロードマップ（sprint 分割案）
-1. **Sprint A（最安・最強）**: 戦略プリセット層の UI 骨格 + **P1 + P2**（P2 は 0 拡張、P1 は 0-call field `eps/rev/cfps_3y_rising` + cagr フォールバック）+ **UI① 合否理由（静的）**。← ここだけで北極星の大半を回収。
-2. **Sprint B**: ratios-ttm 追加（PSR/PER/PBR/PEG/配当を 1 call で）→ **P3 + UI②希薄化 + UI③過熱**。
-3. **Sprint C（採否次第）**: **P4** Rule of 40（Tech sector-gate）。
-4. **Sprint D（要 user 判断）**: **P5** 全天候型（連続増配 +1 call）。protocol 乖離の戦略決定後のみ。
+## 4. tier 配置
+- **Free**: 1 決算合格（Group A/B/D）+ 合否理由。件数表示・銘柄名 blur。
+- **Pro**: 1 完全版（Group C 決算駆動）+ 3 今の主戦場 + 4 業界リーダー。
+- **Premium**: 2 新高値ブレイク（cup/breakout）+ 5 崩れ検知。
+- 5 崩れ検知の WL nightly push は将来 ¥10k tier（CLAUDE.md「人力の全代替」最終形）。
 
 ---
 
-## 7. 未決事項（user 判断が要る点）
-1. **P5（守りの NISA/インカム）を採るか**: 成長系じっちゃまプロトコルから戦略的に乖離。BeatScanner の対象投資家を広げる判断（採るなら連続増配 +1 call を許容）。
-2. **戦略プリセットの初期搭載数**: Sprint A の P1/P2 のみ先行か、P1-P4 を一括設計か。
-3. **P1 の monotonic 厳密版（`*_3y_rising`）を MVP に入れるか**、cagr 近似で出荷して後追いか。
-4. **UI③ の「過熱」基準**: 対履歴 percentile か対 sector か（PSR の比較基準）。
-5. 出力先: 本 draft を **planner skill で正式 SPEC 化**するか、この draft を直接 gate に乗せるか。
+## 5. screener 化しない原典項目（意図的除外＝Trust Cliff 回避）
+- **第5条 金利 / 第9条 荒れ相場**: マクロ＝既存 FtdRegimeBanner / 地合いゲート（Group G）。プリセット名に冠して「忠実」と名乗らない。
+- **第2条 分散**: ポートフォリオ構築＝WL の銘柄数 nudge で実現すべき層。
+- **第8条 アノマリー / 第10条 謙虚=売り**: 売りルール側 / sentiment。screener の銘柄抽出とは層が違う。
 
 ---
 
-## 参考（本 SPEC が依拠した既存資産）
-- 既存 22 field と FMP 取得元 / nightly batch 構成（4 cron・Supabase 4 table・3000 universe）は本セッション調査で確認済。
-- 親 SPEC: Group A-G 蛇口 / PRESET_TABLE 3 段 / tier 境界 / master-detail。
-- じっちゃま 2 段フィルタ（上流=常時鮮度の候補プール / 下流=決算駆動 funda_pass）。sector guard（銀行/REIT/保険/ADR で ROE・CF マージン・売上 Beat を NULL 化）は全 field 共通で踏襲。
+## 6. 推奨ロードマップ
+1. **Sprint A（0-call・最強）**: 戦略プリセット UI 骨格 + **1 決算合格 + 2 新高値ブレイク** + 合否理由（静的）。叩き台の維持2案を原典純化して出荷。
+2. **Sprint B（0-call・最大差別化）**: **3 今の主戦場（セクター別RS集計 view）** ← じっちゃま固有・既存5案の最大空白を埋める。
+3. **Sprint C（0-call）**: **4 業界リーダー**（P1+P4統合）。
+4. **Sprint D（要 scope 判断）**: **5 崩れ検知**（WL監視・売り側）。screener 内 or 別 surface かを §7 で決定後。
+
+---
+
+## 7. 未決事項（user 判断）
+1. **改訂版の方向性**: (a) 本 v2 ハイブリッド（決算合格/新高値/今の主戦場/業界リーダー/崩れ検知）か、(b) 買い側のみ堅実（CFマージン純化を独立案に）か。
+2. **5 崩れ検知（売り側・WL監視）の scope**: screener タブ内に入れるか / 別 surface（WLタブ・nightly push）に回すか / 今は入れない（買い側4案で先行）か。
+3. **3 今の主戦場のセクターRS集計**: median か mean か、「改善方向への転換」検出の窓（QoQ）。← 唯一 backend に新ロジックが要る点。
+4. **出力先**: 本 v2 draft を planner skill で正式 SPEC 化するか、この draft を直接 gate に乗せるか。
+
+---
+
+## 付録: 却下した叩き台5案の3分類（参考・v1 の作業を保存）
+- P1 パーフェクト・ゲーム → 改訂1「決算合格」に純化（維持）
+- P2 新波動入り → 改訂2「新高値ブレイク」に純化（維持・オニール装飾削減）
+- P3 IPOサバイバー → 却下（IPO選好は原典に無い）
+- P4 Rule of 40 SaaS → 却下（10箇条に根拠ゼロ・サブスク/リテンション算出不可）
+- P5 全天候型配当 → 却下/「業界リーダー」部分のみ改訂4へ再生
+- 旧 field 拡張（PSR/配当/連続増配/β）は改訂版では**不要**（全案 0-call）。将来 valuation 機能で別途検討。
