@@ -14259,7 +14259,7 @@ body.is-digest-resizing {
 .screener-table__th--ticker {
   text-align: left;
   padding-left: var(--space-3);
-  min-width: 176px; /* #4: No. + ロゴ + ticker/name を収める */
+  min-width: 150px; /* #4: No. + ロゴ + ticker/name を収める (#5: やや圧縮して列を詰める) */
   position: sticky;
   left: 0;
   z-index: 3;
@@ -14549,4 +14549,64 @@ body.is-digest-resizing {
   .screener-table__colset-tab { transition: none; }
   .screener-featured-strip__ticker { transition: none; }
   .screener-table__showall-btn { transition: none; }
+}
+
+/* ── #6 Pane3 idle placeholder (今日の筆頭は Pane2 に集約、idle は誘導+統計) ── */
+.screener-idle-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  color: var(--text-muted);
+}
+.screener-idle-placeholder__icon {
+  color: color-mix(in srgb, var(--color-gold) 60%, transparent);
+  opacity: 0.8;
+}
+.screener-idle-placeholder__title {
+  font-size: var(--text-h3, 16px);
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin: 0;
+}
+.screener-idle-placeholder__guide {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-body, 13px);
+  color: var(--text-muted);
+  margin: 0;
+  max-width: 340px;
+  line-height: 1.5;
+}
+.screener-idle-placeholder__stats {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-1) var(--space-3);
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.screener-idle-placeholder__stats strong {
+  font-family: var(--font-mono, monospace);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.screener-idle-placeholder__featured-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+  margin: 0;
+}
+.screener-idle-placeholder__featured-note svg {
+  color: var(--color-gold);
 }

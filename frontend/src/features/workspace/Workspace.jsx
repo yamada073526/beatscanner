@@ -966,10 +966,36 @@ export default function Workspace({
     detailContext?.onUpgrade?.(featureName);
   }, [detailContext]);
 
+  // v250 #5 (screener 幅自動): screener idle は Pane2 (一覧) 主役、detail は Pane3 主役へ imperative resize。
+  //   master-detail 正道 (一覧→詳細ドリル)。3体合議で imperative resize 採用
+  //   (defaultSize は localStorage 先勝ちで無効、key remount は ScreenerTable 再fetch のため不可)。
+  //   screener を離れる時は退避値に復元し、autoSaveId 共通による home/indices への波及を防ぐ (qa 指摘対策)。
+  const pane2Ref = useRef(null);
+  const pane3Ref = useRef(null);
+  const savedPane2BeforeScreener = useRef(null);
+  useEffect(() => {
+    const p2 = pane2Ref.current;
+    if (!p2 || typeof p2.resize !== 'function') return; // mount/初期化前ガード
+    if (isScreener && screenerV2) {
+      // screener 突入時に非 screener 幅を 1 回だけ退避 (離脱時に復元)
+      if (savedPane2BeforeScreener.current == null && typeof p2.getSize === 'function') {
+        savedPane2BeforeScreener.current = p2.getSize();
+      }
+      // idle = Pane2 主役 (50%、Pane3 は残りで minSize 30% クリア) / detail = Pane3 主役 (Pane2 28%)
+      p2.resize(activeTicker ? 28 : 50);
+    } else if (savedPane2BeforeScreener.current != null) {
+      // screener 離脱: 退避した幅に復元 (home/indices の手動値を尊重)
+      p2.resize(savedPane2BeforeScreener.current);
+      savedPane2BeforeScreener.current = null;
+    }
+  }, [isScreener, screenerV2, activeTicker]);
+
   return (
     <JudgmentProvider>
       <TickerBridge />
       <WorkspaceShell
+        pane2Ref={pane2Ref}
+        pane3Ref={pane3Ref}
         header={
           <WorkspaceHeader
             isPro={isProUser}

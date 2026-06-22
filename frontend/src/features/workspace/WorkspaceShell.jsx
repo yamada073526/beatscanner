@@ -72,11 +72,17 @@ function ResizeHandle({ ariaLabel }) {
  * @param {React.ReactNode} [props.pane4]       - Pane 4 inspector (Phase 2 placeholder、現状 11-B-22 連動予定)
  * @param {boolean}         [props.pane4Visible=false] - Pane 4 表示切替. default false (3 ペインで動く)
  */
-export default function WorkspaceShell({ header, headerHeight = 56, pane1, pane2, pane3, pane4, pane4Visible = false }) {
+export default function WorkspaceShell({ header, headerHeight = 56, pane1, pane2, pane3, pane4, pane4Visible = false, pane2Ref: pane2RefProp, pane3Ref: pane3RefProp }) {
   const PANE_DEFAULTS = pane4Visible ? PANE_DEFAULTS_4 : PANE_DEFAULTS_3;
 
   // §dogfood-round8: store.pane1Collapsed と Panel imperative API を双方向同期
   const pane1Ref = useRef(null);
+  // v250 #5: 親 (Workspace) が screener idle/detail で幅を imperative resize できるよう ref を橋渡し。
+  //   prop 未指定 (他呼出元) でも壊れないよう内部 fallback ref を用意。
+  const pane2InternalRef = useRef(null);
+  const pane3InternalRef = useRef(null);
+  const pane2Ref = pane2RefProp ?? pane2InternalRef;
+  const pane3Ref = pane3RefProp ?? pane3InternalRef;
   const pane1Collapsed = useWorkspaceStore((s) => s.pane1Collapsed);
   useEffect(() => {
     const p = pane1Ref.current;
@@ -153,6 +159,7 @@ export default function WorkspaceShell({ header, headerHeight = 56, pane1, pane2
 
           {/* Pane 2: list */}
           <Panel
+            ref={pane2Ref}
             id="pane2"
             order={2}
             defaultSize={PANE_DEFAULTS.pane2.defaultSize}
@@ -169,6 +176,7 @@ export default function WorkspaceShell({ header, headerHeight = 56, pane1, pane2
 
           {/* Pane 3: detail (main) */}
           <Panel
+            ref={pane3Ref}
             id="pane3"
             order={3}
             defaultSize={PANE_DEFAULTS.pane3.defaultSize}
