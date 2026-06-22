@@ -32,6 +32,8 @@ import Chip, { ChipGroup } from '../../components/ui/Chip.jsx';
 import { supabase } from '../../lib/supabase.js';
 // Sprint 1 Pass 1c: 共有 row primitive (screenerV2=true のみ、A-1 物理隔離)
 import ScreenerRow from './ScreenerRow.jsx';
+// Sprint H: TradingView 型データテーブル (screenerV2=true のみ)
+import ScreenerTable from './ScreenerTable.jsx';
 
 
 // Sprint 5 frontend: 新高値ブレイクスクリーナー用 feature flag。
@@ -954,6 +956,20 @@ export default function ScreenerPane({ detailContext = {}, isProUser = false, ha
     loading: newCwh.loading || retest.loading,
     error: newCwh.error && retest.error ? '仕掛かりデータ取得失敗' : null,
   };
+
+  // Sprint H: screener_v2 の場合はデータテーブル表示 (ScreenerTable が自前で universe fetch)。
+  // legacy (screener_v2=false) は既存の HeroSection+ScreenerRow を維持。
+  if (screenerV2) {
+    return (
+      <div
+        data-testid="screener-pane"
+        className="screener-pane-ambient"
+        style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}
+      >
+        <ScreenerTable onSelect={handleSelect} />
+      </div>
+    );
+  }
 
   return (
     <div
