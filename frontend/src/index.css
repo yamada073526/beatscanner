@@ -13604,10 +13604,76 @@ body.is-digest-resizing {
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
 }
+/* ── Phase B-3: lock crow ＋ mseg (個別緩急 精度セグメント) ────────────────────
+   lock crow: Premium 限定 facet を「非表示」でなく南京錠 crow で見せ Pro 訴求 (Trust Cliff #2)。
+   表示専用 — itemPasses/件数には一切影響しない (count==list の C-2 不変)。 */
+.screener-crow__lockicon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: none;
+  width: 34px;
+  color: var(--text-muted);
+}
+.screener-crow.is-locked .screener-crow__lbl { color: var(--text-muted); }
+.screener-crow__lock-cta {
+  flex: none;
+  margin: 0;
+  padding: 2px 9px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-gold-dark);
+  background: color-mix(in srgb, var(--color-gold) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-gold) 38%, transparent);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+.screener-crow__lock-cta:hover { background: color-mix(in srgb, var(--color-gold) 20%, transparent); }
+.screener-crow__lock-cta:focus-visible { outline: 2px solid var(--color-gold); outline-offset: 2px; }
+/* mseg = adv ON 時に grade crow 内へ full-width で出す精度セグメント (緩/標/厳/最厳)。gold。
+   Free (advLocked) は .is-locked で淡色化、操作は disabled でなく onClick→lockbar nudge (§4.2 ちら見せ)。 */
+.screener-crow__mseg {
+  display: inline-flex;
+  gap: 2px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 2px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+.screener-crow__mseg.is-locked { opacity: 0.5; }
+.screener-crow__mseg-btn {
+  flex: 1;
+  padding: 5px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.25;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease;
+}
+.screener-crow__mseg-v {
+  display: block;
+  font-size: 9px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+.screener-crow__mseg-btn.is-on {
+  background: color-mix(in srgb, var(--color-gold) 20%, transparent);
+  color: var(--color-gold-dark);
+}
+.screener-crow__mseg-btn:focus-visible { outline: 2px solid var(--color-gold); outline-offset: 1px; }
 @media (prefers-reduced-motion: reduce) {
   .screener-crow,
   .screener-crow__sw,
-  .screener-crow__sw::after { transition: none; }
+  .screener-crow__sw::after,
+  .screener-crow__mseg-btn,
+  .screener-crow__lock-cta { transition: none; }
 }
 .screener-adv-bar { margin-bottom: var(--space-2); }
 /* アドバンスド toggle (role=switch)。OFF=精度のみ / ON=個別緩急 mini-segment 露出。 */
