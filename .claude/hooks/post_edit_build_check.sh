@@ -9,7 +9,8 @@ if ! echo "$FILE" | grep -q "frontend/src/"; then
     exit 0
 fi
 
-BUILD_OUTPUT=$(npm --prefix /Users/yamadadaiki/Projects/beatscanner/frontend run build 2>&1)
+FRONTEND_DIR="${CLAUDE_PROJECT_DIR:-/Users/yamadadaiki/Projects/beatscanner}/frontend"
+BUILD_OUTPUT=$(npm --prefix "$FRONTEND_DIR" run build 2>&1)
 BUILD_EXIT=$?
 
 if [ "$BUILD_EXIT" -ne 0 ]; then
