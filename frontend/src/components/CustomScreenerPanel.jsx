@@ -3,8 +3,7 @@ import { SlidersHorizontal, ChevronDown, Lock, Info } from 'lucide-react';
 import { fetchScannerUniverse } from '../api.js';
 // Sprint 5 Pass D: GA4/Clarity 比較 event (C-16 昇格ゲート baseline 用)
 import { trackEvent } from '../lib/analytics.js';
-import Chip, { ChipGroup } from './ui/Chip.jsx';
-import ProTeaser from './ui/ProTeaser.jsx';
+import Chip from './ui/Chip.jsx';
 // Sprint 3: 市場局面バナーを ScreenerPane と共有 (FtdRegimeBanner.jsx が SSOT、二重定義なし)
 import FtdRegimeBanner from '../features/workspace/FtdRegimeBanner.jsx';
 // Pass B: 企業ロゴ (TV→FMP→頭文字円 3 段 fallback)
@@ -761,63 +760,6 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
         itemPasses(it, activeGrades, { ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectors: sectorFilter, mcapBands: mcapFilter })
     ).length;
   }, [universe, activeGrades, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorFilter, mcapFilter]);
-
-  // Sprint 3: 営業CFマージン chip の faceted count (Trust Cliff C-3: chip count = 実表示件数)。
-  // 件数 = ocf_margin_pct >= 15 かつ grades + funda_pass + sector + mcap を通過した件数。
-  // 自己 (ocf_margin) は直接 filter するため extra に含めない (自己排除)。null = 除外 (honest)。
-  const ocfMarginCount = useMemo(() => {
-    const items = universe?.items || [];
-    return items.filter(
-      (it) => it[OCF_MARGIN_FACET.field] != null &&
-        it[OCF_MARGIN_FACET.field] >= OCF_MARGIN_FACET.threshold &&
-        itemPasses(it, activeGrades, { fundaPassOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectors: sectorFilter, mcapBands: mcapFilter })
-    ).length;
-  }, [universe, activeGrades, fundaPassOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorFilter, mcapFilter]);
-
-  // Phase1 S3: #1 営業CF>純利益 chip の faceted count (Trust Cliff: chip count = 実表示件数)。
-  // 件数 = ocf_gt_netincome===true かつ他次元通過。自己 (ocfGtNiOnly) は extra から排除。null=除外 (honest)。
-  const ocfGtNiCount = useMemo(() => {
-    const items = universe?.items || [];
-    return items.filter(
-      (it) => it[OCF_GT_NI_FACET.field] === true &&
-        itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectors: sectorFilter, mcapBands: mcapFilter })
-    ).length;
-  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorFilter, mcapFilter]);
-
-  // Phase1 S3: #3 買い場圏 chip の faceted count (§0-4 buy zone = 0 ≤ pivot_distance_pct ≤ 5)。
-  // 自己 (buyZoneOnly) は extra から排除。null (pivot 未形成 / free の Premium マスク) / pivot下 / 過熱 = 除外。
-  // free user は pivot_distance_pct=None マスクのため count=0 になり、locked chip 経路で表示する (§A 案)。
-  const buyZoneCount = useMemo(() => {
-    const items = universe?.items || [];
-    return items.filter((it) => {
-      const d = it[BUY_ZONE_FACET.field];
-      return d != null && d >= BUY_ZONE_FACET.zoneMin && d <= BUY_ZONE_FACET.zoneMax &&
-        itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, newHigh52wOnly, adVolumeOnly, sectors: sectorFilter, mcapBands: mcapFilter });
-    }).length;
-  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, newHigh52wOnly, adVolumeOnly, sectorFilter, mcapFilter]);
-
-  // 52週高値更新 chip の faceted count。
-  // 自己 (newHigh52wOnly) は extra から排除。is_new_52w_high===true のみカウント。null=除外 (honest)。
-  // free user は is_new_52w_high=None マスク (breakout locked_facet) のため count=0 になり、locked chip 経路で表示する。
-  const newHigh52wCount = useMemo(() => {
-    const items = universe?.items || [];
-    return items.filter(
-      (it) => it[NEW_HIGH_52W_FACET.field] === true &&
-        itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, adVolumeOnly, sectors: sectorFilter, mcapBands: mcapFilter })
-    ).length;
-  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, adVolumeOnly, sectorFilter, mcapFilter]);
-
-  // Phase1 S4: #8 A/D 出来高の質 chip の faceted count (§0-2 ad_volume_ratio > 1)。
-  // 自己 (adVolumeOnly) は extra から排除。null (cup 未形成 / down日<3 / free の Premium マスク) / ≤1 = 除外。
-  // free user は ad_volume_ratio=None マスクのため count=0 になり、locked chip 経路で表示する (§A 案)。
-  const adVolumeCount = useMemo(() => {
-    const items = universe?.items || [];
-    return items.filter((it) => {
-      const r = it[AD_VOLUME_FACET.field];
-      return r != null && r > AD_VOLUME_FACET.threshold &&
-        itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, sectors: sectorFilter, mcapBands: mcapFilter });
-    }).length;
-  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, sectorFilter, mcapFilter]);
 
   // Phase1 S3: grade override 行の共有レンダラ (旧 2d/2e の重複を統一)。
   // CORE (eps/roe/rs) は preset 駆動 = level 既定 preset・off は明示時のみ。
