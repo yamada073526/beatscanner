@@ -14114,14 +14114,150 @@ body.is-digest-resizing {
 
 /* ── StrategyPresetBar (screener_v2 + custom モード時のみ表示) ──
    toolbar と content の間に挟まる薄い帯。shadow ゼロ・glow なし。
-   border-bottom で content 側と区切り (toolbar 直下の呼吸は上部 border-bottom が担う)。 */
+   border-bottom で content 側と区切り (toolbar 直下の呼吸は上部 border-bottom が担う)。
+   v8 mockup 承認済: 角丸タイル UI への昇格。タイルを横並びに配置。 */
 .screener-strategy-bar {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  padding: var(--space-2) var(--space-3);
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border);
   background: var(--bg-subtle);        /* toolbar と content の中間領域を semantic token で着色 */
+}
+
+/* ── 戦略プリセット タイル (mockup v8 承認済) ──────────────────────────
+   発光: アイコンの filter: drop-shadow のみ (SVG filter・低リスク)。
+   box-shadow: var(--shadow-*) token のみ。生値・生 hex 禁止。
+   panel-card / bs-panel / surface-card 系 class には触れない。
+   is-arriving 不使用。選択状態は .is-selected class + transition で管理。
+   WCAG: role="radio" + aria-checked / button 要素 / focus-visible ring。
+   ──────────────────────────────────────────────────────────────────── */
+.screener-strategy-tile {
+  /* リセット */
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+
+  /* レイアウト */
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+
+  /* 外観 */
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);  /* 16px: mockup v8 準拠 */
+  color: var(--text-primary);
+
+  /* elevation: hover で shadow-3 (lift) */
+  box-shadow: var(--shadow-1);
+
+  /* モーション: transform / border / box-shadow / icon color をまとめて遷移 */
+  transition:
+    transform var(--motion-base) var(--ease-out-expo),
+    box-shadow var(--motion-base) var(--ease-out-expo),
+    border-color var(--motion-base) var(--ease-out-expo);
+}
+
+/* hover: translateY lift + shadow 強化 + border 明化 */
+.screener-strategy-tile:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-3);
+  border-color: var(--border-strong, var(--border));
+}
+
+/* 選択中: gold border で判別。shadow-2 は token 経由 */
+.screener-strategy-tile.is-selected {
+  border-color: color-mix(in srgb, var(--color-gold) 45%, transparent);
+  box-shadow: var(--shadow-2);
+}
+
+/* 選択中 hover: lift も維持 */
+.screener-strategy-tile.is-selected:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-3);
+}
+
+/* a11y: キーボードフォーカス ring (gold、Linear 流) */
+.screener-strategy-tile:focus-visible {
+  outline: 2px solid var(--color-gold-mid);
+  outline-offset: 2px;
+}
+
+/* ── アイコンコンテナ (40×40 シアン下地、mockup v8 §.preset .ico 準拠) ── */
+.screener-strategy-tile__icon {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);  /* 12px */
+
+  /* シアン系グラジェント下地 (brand accent、mockup v8 準拠) */
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-accent) 15%, transparent),
+    color-mix(in srgb, var(--color-accent) 4%, transparent)
+  );
+  border: 1px solid color-mix(in srgb, var(--color-accent) 24%, transparent);
+
+  /* アイコン色: 非選択=シアン / 選択中・hover=ゴールド (transition) */
+  color: var(--color-accent);
+  transition:
+    color var(--motion-base) var(--ease-out-expo),
+    filter var(--motion-base) var(--ease-out-expo);
+}
+
+/* hover: アイコンをゴールドに変色 + drop-shadow 発光 */
+.screener-strategy-tile:hover .screener-strategy-tile__icon {
+  color: var(--color-gold-mid);
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--color-gold) 55%, transparent));
+}
+
+/* 選択中: アイコンをゴールドに固定 */
+.screener-strategy-tile.is-selected .screener-strategy-tile__icon {
+  color: var(--color-gold-mid);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--color-gold) 50%, transparent));
+}
+
+/* ── テキスト部 ── */
+.screener-strategy-tile__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.screener-strategy-tile__label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.screener-strategy-tile__desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* ── reduced-motion: transform / transition を無効化 (WCAG) ── */
+@media (prefers-reduced-motion: reduce) {
+  .screener-strategy-tile {
+    transition: border-color var(--motion-fast) linear;
+  }
+  .screener-strategy-tile:hover {
+    transform: none;
+  }
+  .screener-strategy-tile.is-selected:hover {
+    transform: none;
+  }
+  .screener-strategy-tile__icon {
+    transition: color var(--motion-fast) linear, filter var(--motion-fast) linear;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
