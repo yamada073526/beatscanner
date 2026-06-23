@@ -479,6 +479,10 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   const [adVolumeOnly, setAdVolumeOnly] = useState(false);
   // Phase A: セクター別リーダー binary flag (is_sector_rs_leader=true ∩ ocfMarginOnly)。
   const [sectorLeaderOnly, setSectorLeaderOnly] = useState(false);
+  // Phase C: 現在適用中の戦略 preset key (master-detail view 切替に使用・表示専用)。
+  const [activePreset, setActivePreset] = useState(initialStrategy || null);
+  // Phase C: 旬のセクター master-detail で選択中のセクター (null = 先頭)。
+  const [selectedSector, setSelectedSector] = useState(null);
   // Pass C: 件数キャップ — 初期 100 件、「残りN件を表示」で全件展開
   const [showAllResults, setShowAllResults] = useState(false);
   // Sprint 5 Pass B: 複数選択 → watchlist 一括追加
@@ -505,6 +509,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
    *   preset='standard', overrides={} のみリセット (sector/mcap は保持)。
    */
   const applyStrategyImpl = useCallback((presetKey) => {
+    // Phase C: active preset を追跡 (hot_sector のとき master-detail view へ切替・表示専用)。
+    setActivePreset(presetKey);
+    setSelectedSector(null);
     // まず共通リセット (overrides / binary facets)
     setPreset('standard');
     setOverrides({});
@@ -620,6 +627,38 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     scored.sort((a, b) => b.score - a.score || a.it.ticker.localeCompare(b.it.ticker));
     return scored.map((s) => s.it);
   }, [filteredItems, activeGrades]);
+
+  // ── Phase C: 旬のセクター master-detail 用のセクター集計 ──
+  // filteredItems の grouping = master/detail は同一集合の view なので count==list (C-2) を自然に担保。
+  // sr = sector_rs_median (同一セクター内同値・欠損は 0、topSectorsByRs と整合で max を採る)。
+  // 並び = sr 降順 → count 降順。最上位を「主戦場」(amber) として強調、残りは「上位」(緑)。
+  const sectorSummary = useMemo(() => {
+    const map = {};
+    for (const it of filteredItems) {
+      const sec = it.sector;
+      if (!sec) continue;
+      if (!map[sec]) map[sec] = { sn: sec, sr: it.sector_rs_median ?? 0, items: [] };
+      map[sec].items.push(it);
+      if ((it.sector_rs_median ?? 0) > map[sec].sr) map[sec].sr = it.sector_rs_median ?? 0;
+    }
+    return Object.values(map)
+      .map((g) => ({
+        sn: g.sn,
+        label: sectorLabelJp(g.sn),
+        sr: g.sr,
+        count: g.items.length,
+        top3: [...g.items]
+          .sort((a, b) => (b.rs_percentile ?? -1) - (a.rs_percentile ?? -1) || a.ticker.localeCompare(b.ticker))
+          .slice(0, 3),
+      }))
+      .sort((a, b) => b.sr - a.sr || b.count - a.count);
+  }, [filteredItems]);
+  // 選択中セクター (未選択 or 集合変化で消えたら先頭に fallback)。
+  const activeSector = useMemo(
+    () => (sectorSummary.length ? (sectorSummary.find((s) => s.sn === selectedSector) || sectorSummary[0]) : null),
+    [sectorSummary, selectedSector],
+  );
+  const isSectorView = activePreset === 'hot_sector' && sectorSummary.length > 0;
 
   // Pass C: フィルタ変更で結果集合が変わったら件数キャップを 100 件に戻す
   // (「残りN件を表示」を一度押しても、新しい絞り込みでは描画負荷抑制の意図を維持)。
@@ -1595,8 +1634,8 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
               </span>
             </div>
 
-            {/* Sprint 5 Pass B: 一括追加バー (1 件以上選択時に表示) */}
-            {selectedTickers.size > 0 && (
+            {/* Sprint 5 Pass B: 一括追加バー (1 件以上選択時に表示)。Phase C: sector view では非表示。 */}
+            {!isSectorView && selectedTickers.size > 0 && (
               <div
                 data-testid="screener-bulk-watchlist-bar"
                 style={{
@@ -1653,7 +1692,65 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                 </span>
               </div>
             )}
-            {filteredItems.length === 0 ? (
+            {isSectorView ? (
+              /* ── Phase C: 旬のセクター master-detail (セクター一覧 master + Top3 detail)。
+                   master/detail とも filteredItems の view なので件数整合 (Trust Cliff C-2)。 */
+              <div className="screener-secmd" data-testid="screener-sector-master-detail">
+                {/* master: セクター一覧 (sr 降順、先頭=主戦場 amber、残り=上位 緑) */}
+                <div className="screener-secmaster" role="list" aria-label="セクター一覧">
+                  {sectorSummary.map((s, i) => {
+                    const tone = i === 0 ? 'hot' : 'up';
+                    const sel = s.sn === activeSector?.sn;
+                    return (
+                      <button
+                        key={s.sn}
+                        type="button"
+                        role="listitem"
+                        className={`screener-secrow${sel ? ' is-sel' : ''}`}
+                        onClick={() => setSelectedSector(s.sn)}
+                        aria-pressed={sel}
+                        data-testid={`screener-secrow-${s.sn}`}
+                      >
+                        <span className="screener-secrow__bar" data-tone={tone} aria-hidden />
+                        <span className="screener-secrow__body">
+                          <span className="screener-secrow__name">
+                            {s.label}
+                            {i === 0 && <span className="screener-secrow__chip">主戦場</span>}
+                          </span>
+                          <span className="screener-secrow__tag">{s.count} 銘柄が合致</span>
+                        </span>
+                        <span className="screener-secrow__sr" data-tone={tone}>{Math.round(s.sr)}</span>
+                      </button>
+                    );
+                  })}
+                  <div className="screener-seclegend" aria-hidden>
+                    <span><i data-tone="hot" />主戦場</span>
+                    <span><i data-tone="up" />上位</span>
+                  </div>
+                </div>
+                {/* detail: 選択セクターの Top3 (相対力降順) */}
+                <div className="screener-secdetail" data-testid="screener-sector-detail">
+                  <p className="screener-secdetail__h">
+                    {activeSector?.label}（相対力 {Math.round(activeSector?.sr ?? 0)}）の合致銘柄 Top3
+                  </p>
+                  {(activeSector?.top3 || []).map((it) => (
+                    <button
+                      key={it.ticker}
+                      type="button"
+                      className="screener-secdetail__row"
+                      onClick={() => onSelect?.(it.ticker)}
+                      data-testid={`screener-secdetail-${it.ticker}`}
+                    >
+                      <span className="screener-secdetail__tk">
+                        <strong>{it.ticker}</strong>
+                        <span className="screener-secdetail__nm">{it.name}</span>
+                      </span>
+                      <Chip size="xs" variant="display" tone="muted">5条件達成</Chip>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : filteredItems.length === 0 ? (
               <div data-testid="screener-result-row-empty">
                 <p className="py-3 text-center text-sm text-[var(--text-muted)]">
                   該当する銘柄がありません。厳しさを緩めるか、フィルターを変更してください。
