@@ -348,6 +348,10 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   const [overrides, setOverrides] = useState({});
   // Pass 3c: 詳細展開 accordion の開閉状態
   const [detailOpen, setDetailOpen] = useState(false);
+  // #2 slice 2-c: アドバンスド(個別緩急) panel 開閉。OFF=精度プリセットのみ、ON=per-facet mini-segment 露出。
+  const [advOpen, setAdvOpen] = useState(false);
+  // #2 slice 2-d: Free が Pro-locked な個別緩急を操作した時のみ lockbar を出す nudge flag (常駐させない §4.3)。
+  const [advLockNudge, setAdvLockNudge] = useState(false);
   // Pass 3b: sector / mcap additive refinement (universe ベース)
   const [sectorFilter, setSectorFilter] = useState([]);
   const [mcapFilter, setMcapFilter] = useState([]);
@@ -456,6 +460,10 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
 
   // Pass 3b: filteredItems — count も list も同一 predicate (Trust Cliff C-2 の核)。
   const activeGrades = useMemo(() => buildActiveGrades(preset, overrides), [preset, overrides]);
+  // #2 slice 2-d: 個別緩急(per-facet override)は Pro。screener_v2 scope のみゲート (legacy 不変 §4.5)。
+  const advLocked = screenerV2 && !isProUser;
+  // #2 slice 2-c: 精度プリセットから個別変更したか (カスタム tag・状態の見える化 §1-6)。
+  const isCustom = Object.keys(overrides).length > 0;
   const filteredItems = useMemo(() => {
     const items = universe?.items || [];
     const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectors: sectorFilter, mcapBands: mcapFilter };
@@ -700,19 +708,29 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
         {['off', ...levels].map((lvl) => {
           const cnt = facetLevelCounts[facet.key]?.[lvl] ?? 0;
           const actuallyPressed = lvl === 'off' ? activeLvl == null : activeLvl === lvl;
+          const segLabel = lvl === 'off' ? 'なし' : GRADE_LABELS_SHORT[lvl];
           return (
             <Chip
               key={lvl}
               size="xs"
               variant="segmented"
               pressed={actuallyPressed}
-              disabled={cnt === 0 && !actuallyPressed}
+              // §4.2 ちら見せ: Pro-lock 時は disabled を使わず (Chip disabled は onClick を殺す)、
+              //   淡色 class + onClick→lockbar nudge で「価値は見えるが操作は Pro」を表現。
+              disabled={advLocked ? false : (cnt === 0 && !actuallyPressed)}
+              className={advLocked ? 'screener-grade-seg--locked min-w-[36px] justify-center' : 'min-w-[36px] justify-center'}
+              ariaLabel={advLocked ? `${facet.label} ${segLabel} — Pro で個別に調整できます` : undefined}
               onClick={() => {
+                if (advLocked) {
+                  setAdvLockNudge(true);
+                  trackEvent('screener_adv_locked_click', { facet: facet.key, level: lvl });
+                  return;
+                }
                 setOverrides((prev) => ({ ...prev, [facet.key]: lvl === 'off' ? 'off' : lvl }));
               }}
               data-testid={`screener-grade-${facet.key}-${lvl}`}
             >
-              {lvl === 'off' ? 'なし' : GRADE_LABELS_SHORT[lvl]}
+              {segLabel}
               {screenerV2 && lvl !== 'off' && (
                 <span className="ml-0.5 tabular-nums opacity-80">{gradeAnnot(facet, lvl)}</span>
               )}
@@ -1022,6 +1040,35 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                    grade override は renderGradeRow + category filter で旧 2d/2e を統合。
                    §6 scope: legacy (screenerV2=false) は下の <> で従来構造を維持し、再編を漏らさない。 */
                 <>
+                  {/* ── #2 2-c/2-d: アドバンスド(個別緩急) toggle ──
+                      OFF=精度プリセット+strategy chip のみ / ON=各 facet の per-facet mini-segment を露出。
+                      個別緩急(per-facet override)は Pro (§4.1)。Free は ON でも segment が淡色 ちら見せ+件数のみ。 */}
+                  <div className="screener-adv-bar flex items-center gap-2 flex-wrap" data-testid="screener-adv-header">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={advOpen}
+                      className="screener-adv-toggle"
+                      onClick={() => {
+                        setAdvOpen((v) => !v);
+                        setAdvLockNudge(false);
+                        trackEvent('screener_adv_toggle', { open: !advOpen, locked: advLocked });
+                      }}
+                      data-testid="screener-adv-toggle"
+                    >
+                      <SlidersHorizontal size={13} strokeWidth={2} aria-hidden />
+                      <span>アドバンスド（個別に緩急）</span>
+                      {advLocked && <span className="screener-adv-pro" aria-label="Pro 機能">Pro</span>}
+                      <ChevronDown
+                        size={13} strokeWidth={2} aria-hidden
+                        style={{ transform: advOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}
+                      />
+                    </button>
+                    {isCustom && (
+                      <span className="screener-custom-tag" data-testid="screener-custom-tag">カスタム</span>
+                    )}
+                  </div>
+
                   {/* ── 【品質】利益・キャッシュの質 (funda_pass / CF創出力 / 営業CF>純利益 + EPS/ROE) ── */}
                   <div data-testid="screener-category-quality">
                     <p className="mb-2 text-[11px] font-semibold text-[var(--text-secondary)]">
@@ -1070,7 +1117,31 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                           )}
                         </div>
                       )}
-                      {FUNDA_FACETS.filter((f) => f.category === 'quality').map(renderGradeRow)}
+                      {/* #2 2-b/2-c: 個別緩急の per-facet mini-segment はアドバンスド ON 時のみ。必須ゲートは緩急化しない (§1-in#4)。 */}
+                      <div className={`screener-adv-rows${advOpen ? ' screener-adv-rows--open' : ' screener-adv-rows--closed'}`} aria-hidden={!advOpen}>
+                        <div className="screener-adv-rows__inner space-y-2.5">
+                          {/* 必須ゲート (じっちゃま絶対条件・変更不可・lock)。§3.2 aria-label は「制限」でなく「戦略の絶対条件」と伝える。 */}
+                          {(universe.freshness?.ocf_margin || universe.freshness?.funda_pass) && (
+                            <div className="screener-gate-list" role="list" aria-label="必須ゲート (変更不可)">
+                              <span
+                                className="screener-gate-badge" role="listitem"
+                                data-testid="screener-gate-ocf_margin"
+                                aria-label="営業CFマージン 15%以上（戦略の絶対条件・変更不可）"
+                              >
+                                <Lock size={11} strokeWidth={2} aria-hidden /> 営業CFマージン ≥15%・必須
+                              </span>
+                              <span
+                                className="screener-gate-badge" role="listitem"
+                                data-testid="screener-gate-ocf_gt_netincome"
+                                aria-label="CFPSがEPSを上回る粉飾防止条件（戦略の絶対条件・変更不可）"
+                              >
+                                <Lock size={11} strokeWidth={2} aria-hidden /> CFPS&gt;EPS・必須
+                              </span>
+                            </div>
+                          )}
+                          {FUNDA_FACETS.filter((f) => f.category === 'quality').map(renderGradeRow)}
+                        </div>
+                      </div>
                       {(universe.freshness?.ocf_margin || universe.freshness?.funda_pass) && (
                         <p className="ml-1 text-[10px] text-[var(--text-muted)] opacity-60">
                           最新更新: {universe.freshness?.ocf_margin || universe.freshness?.funda_pass}
@@ -1117,7 +1188,11 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                           </Chip>
                         </div>
                       )}
-                      {FUNDA_FACETS.filter((f) => f.category === 'timing').map(renderGradeRow)}
+                      <div className={`screener-adv-rows${advOpen ? ' screener-adv-rows--open' : ' screener-adv-rows--closed'}`} aria-hidden={!advOpen}>
+                        <div className="screener-adv-rows__inner space-y-2.5">
+                          {FUNDA_FACETS.filter((f) => f.category === 'timing').map(renderGradeRow)}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -1144,7 +1219,11 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                           </Chip>
                         </div>
                       )}
-                      {FUNDA_FACETS.filter((f) => f.category === 'demand').map(renderGradeRow)}
+                      <div className={`screener-adv-rows${advOpen ? ' screener-adv-rows--open' : ' screener-adv-rows--closed'}`} aria-hidden={!advOpen}>
+                        <div className="screener-adv-rows__inner space-y-2.5">
+                          {FUNDA_FACETS.filter((f) => f.category === 'demand').map(renderGradeRow)}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -1156,6 +1235,28 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                   )}
                   {renderSectorBlock()}
                   {renderMcapBlock()}
+
+                  {/* ── #2 2-d: lockbar — Free がアドバンスドを操作した時のみ (常駐させない §4.3)。
+                      Free 価値(N銘柄に絞れている事実)を先に肯定→Pro 案内。list 可視を約束する語感は撤廃 (Trust Cliff #1)。 */}
+                  {advOpen && advLocked && advLockNudge && (
+                    <div className="screener-lockbar" role="status" data-testid="screener-lockbar">
+                      <Lock size={14} strokeWidth={2} aria-hidden className="screener-lockbar__icon" />
+                      <p className="screener-lockbar__copy">
+                        プリセットで <strong>{filteredItems.length}銘柄</strong>に絞り込み中。条件を個別に詰めるには Pro へ（個別に締めるとさらに絞り込めます）。
+                      </p>
+                      <button
+                        type="button"
+                        className="screener-lockbar__cta"
+                        onClick={() => {
+                          trackEvent('screener_lockbar_cta', { count: filteredItems.length });
+                          (onProUpgrade || onUpgrade)?.('個別緩急 (アドバンスド)');
+                        }}
+                        data-testid="screener-lockbar-cta"
+                      >
+                        Pro を見る
+                      </button>
+                    </div>
+                  )}
                 </>
               ) : (
                 /* legacy (screenerV2=false = 現デフォルト): Sprint 3 以前の構造を維持。

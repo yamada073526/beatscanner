@@ -13449,6 +13449,154 @@ body.is-digest-resizing {
   to { opacity: 1; }
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   #2 アドバンスド(個別緩急) + Pro 課金ゲート (CustomScreenerPanel / screener_v2 scope)
+   発光禁止 (§6): .panel-card / .bs-panel / .surface-card 不使用。elevation = border + tinted bg。
+   raw hex 禁止: gold は var(--color-gold)、tint は color-mix(... transparent)。
+   ════════════════════════════════════════════════════════════════════════════ */
+.screener-adv-bar { margin-bottom: var(--space-2); }
+/* アドバンスド toggle (role=switch)。OFF=精度のみ / ON=個別緩急 mini-segment 露出。 */
+.screener-adv-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+.screener-adv-toggle:hover { color: var(--text-primary, var(--text-secondary)); border-color: var(--border-strong, var(--border)); }
+.screener-adv-toggle[aria-checked="true"] {
+  color: var(--color-gold-dark);
+  border-color: color-mix(in srgb, var(--color-gold) 55%, transparent);
+  background: color-mix(in srgb, var(--color-gold) 10%, var(--bg-subtle));
+}
+.screener-adv-toggle:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+/* Pro バッジ (個別緩急が Pro である明示)。gold。 */
+.screener-adv-pro {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--color-gold-dark);
+  background: color-mix(in srgb, var(--color-gold) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-gold) 40%, transparent);
+  border-radius: var(--radius-pill);
+}
+/* カスタム tag (精度プリセットから個別変更した状態の見える化)。 */
+.screener-custom-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+
+/* 個別緩急 mini-segment 開閉 — grid-template-rows 0fr↔1fr (max-height hack 後継)。
+   開 350ms / 閉 200ms 非対称、easing expo。prefers-reduced-motion で無効化。 */
+.screener-adv-rows {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 200ms cubic-bezier(.16, 1, .3, 1);
+}
+.screener-adv-rows--open {
+  grid-template-rows: 1fr;
+  transition-duration: 350ms;
+}
+.screener-adv-rows__inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* 必須ゲート badge — じっちゃま絶対条件 (変更不可・lock)。緩急化しない (§1-in#4)。 */
+.screener-gate-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2, 6px);
+}
+.screener-gate-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-gold-dark);
+  background: color-mix(in srgb, var(--color-gold) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-gold) 32%, transparent);
+  border-radius: var(--radius-sm);
+}
+
+/* Pro-lock 時の mini-segment ちら見せ (淡色)。disabled 属性は使わず onClick→lockbar を活かす (§4.2)。 */
+.ds-chip.screener-grade-seg--locked {
+  opacity: 0.5;
+  cursor: pointer;
+}
+.ds-chip.screener-grade-seg--locked:hover { opacity: 0.7; }
+
+/* lockbar — Free がアドバンスドを操作した時のみ (§4.3)。Free 価値を肯定→Pro 案内。 */
+.screener-lockbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-gold) 40%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-gold) 8%, var(--bg-subtle));
+  animation: screenerDetailFadeIn 180ms ease;
+}
+.screener-lockbar__icon { color: var(--color-gold-dark); }
+.screener-lockbar__copy {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+.screener-lockbar__copy strong { color: var(--color-gold-dark); font-weight: 700; }
+.screener-lockbar__cta {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-inverse, #f8fafc);
+  background: linear-gradient(135deg, var(--color-gold-mid), var(--color-gold-dark));
+  border: none;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: filter 140ms ease;
+}
+.screener-lockbar__cta:hover { filter: brightness(1.06); }
+.screener-lockbar__cta:focus-visible { outline: 2px solid var(--color-gold); outline-offset: 2px; }
+
+/* タップ領域クランプ (WCAG 2.5.5)：中間幅で 4 段 mini-segment が潰れないよう 1 カラム化 */
+@media (max-width: 860px) {
+  .screener-grade-seg--locked,
+  [data-testid^="screener-grade-row-"] { row-gap: 4px; }
+}
+
+/* prefers-reduced-motion: 開閉アニメ無効化 (WCAG 2.3.3・二重防御) */
+@media (prefers-reduced-motion: reduce) {
+  .screener-adv-rows,
+  .screener-adv-rows--open { transition: none; }
+  .screener-lockbar { animation: none; }
+}
+
 /* ── Pass B: 結果行モジュール (shadow ゼロ哲学: border+tinted bg のみ) ──────
    §38 厳守: 色 polarity (緑/赤) で買い/売り断定しない。
    elevation = border + subtle tinted bg のみ。.panel-card/.bs-panel/.surface-card 付与禁止。 */
