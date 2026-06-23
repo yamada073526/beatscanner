@@ -5246,6 +5246,33 @@ def _calc_eps_cagr_3y(annual_eps_records: list[dict]) -> float | None:
         return None
 
 
+# ── 単調増加判定 helper ─────────────────────────────────────────────────────────
+
+
+def _calc_monotonic_rising(values, *, min_points=4):
+    """直近 min_points 期（newest-first）が厳密単調増（連続増）か判定。
+
+    None-preserve: 有効値が min_points 未満 → None（不明、False ではない）。
+    values: newest-first の数値 list（None / 非有限値混在可）。
+    return: bool | None
+      True  … oldest→newest で全隣接ペアが厳密増加
+      False … 一つでも非増加
+      None  … 有効値が min_points 未満（履歴不足）
+    """
+    # 先頭 min_points 個だけを対象にする（それ以上は不要）
+    candidates = (values or [])[:min_points]
+    # None / 非有限値を除外（0.0 は有効値なので `if x is not None` 慣習を厳守）
+    valid = [x for x in candidates if x is not None and isinstance(x, (int, float)) and math.isfinite(x)]
+    if len(valid) < min_points:
+        return None  # 履歴不足 → 不明（False ではない）
+    # candidates は newest-first なので逆順にして oldest→newest
+    oldest_first = list(reversed(valid[:min_points]))
+    for i in range(len(oldest_first) - 1):
+        if oldest_first[i + 1] <= oldest_first[i]:
+            return False
+    return True
+
+
 # ── turnaround 判定 helper ──────────────────────────────────────────────────
 
 
@@ -19976,6 +20003,20 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             t = str(r.get("ticker") or "").upper()
             if t:
                 sf_map[t] = r
+        # 単調増加 (eps_3y_rising / rev_3y_rising) は別 fetch で graceful merge。
+        # ★ deploy 順序非依存: migration 未適用 (カラム無し) でも _fetch_all_rows_paged が
+        #   例外を握り潰し空 list を返す → 既存 fundamentals は無傷で新フィールドのみ欠落 (None)。
+        #   同一 SELECT に混ぜると 1 カラム欠落で全 fundamentals が消える Trust Cliff になるため分離。
+        #   0 FMP call (Supabase read のみ、universe payload は cache 済)。
+        for r in _fetch_all_rows_paged(
+            sb, "screener_fundamentals",
+            "ticker,eps_3y_rising,rev_3y_rising",
+            eq={"calc_date": sf_cd},
+        ):
+            t = str(r.get("ticker") or "").upper()
+            if t and t in sf_map:
+                sf_map[t]["eps_3y_rising"] = r.get("eps_3y_rising")
+                sf_map[t]["rev_3y_rising"] = r.get("rev_3y_rising")
 
     # rs_ratings (RS percentile、 free) — 最新 calc_date 全行
     rs_map: dict[str, dict] = {}
@@ -20122,6 +20163,11 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             # sector guard / 外貨 ADR guard は _compute_one 内で適用済 (None 保存)。
             # graceful fallback: sf 欠落 / 旧データで列なし → None (.get() で KeyError 防止)。
             "ocf_gt_netincome": (sf or {}).get("ocf_gt_netincome"),
+            # 単調増加判定: eps_3y_rising / rev_3y_rising (free tier)
+            # annual 4 期連続増加 bool。None = 履歴不足（False と区別）。
+            # sector guard / 外貨 ADR guard は _compute_one 内で適用済。
+            "eps_3y_rising": (sf or {}).get("eps_3y_rising"),
+            "rev_3y_rising": (sf or {}).get("rev_3y_rising"),
             # near_high (Pro gate) — N 条件
             "near_high_pct_scaled": _uni_round((sf or {}).get("near_high_pct_scaled")),
             # cup / breakout (Premium gate)
@@ -20136,6 +20182,61 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             # 13F 機関保有 (inst_holders_qoq_pct) とは別軸 (出来高 up/down 集計、§3-2 混同回避)。
             "ad_volume_ratio": _uni_round(_ad_volume_ratio),
         })
+
+    # ── セクター別 RS 集計 post-pass (0 API call、in-memory のみ) ───────────────
+    # 目的: sector 内での RS 相対位置を把握するための補助フィールドを付与。
+    # RS フィールド: rs_vs_spy_pct (rs_ratings テーブル由来、items dict に格納済)。
+    # None-safe: RS が None の item は集計対象外 / is_sector_rs_leader = False。
+    # 小 sector 誤シグナル防止: 有効 RS 銘柄数 < 5 の sector は is_sector_rs_leader = False。
+    if items:
+        # sector ごとに RS 値リストを収集
+        _sector_rs_lists: dict[str, list[float]] = {}
+        for _it in items:
+            _sec = _it.get("sector")
+            _rs = _it.get("rs_vs_spy_pct")
+            if _sec and _rs is not None:
+                try:
+                    _rs_f = float(_rs)
+                    if math.isfinite(_rs_f):
+                        _sector_rs_lists.setdefault(_sec, []).append(_rs_f)
+                except (ValueError, TypeError):
+                    pass
+
+        # sector ごとに median を計算
+        _sector_rs_median: dict[str, float] = {}
+        for _sec, _rs_vals in _sector_rs_lists.items():
+            if _rs_vals:
+                _sorted = sorted(_rs_vals)
+                _n = len(_sorted)
+                if _n % 2 == 1:
+                    _sector_rs_median[_sec] = _sorted[_n // 2]
+                else:
+                    _sector_rs_median[_sec] = (_sorted[_n // 2 - 1] + _sorted[_n // 2]) / 2.0
+
+        # sector ごとに RS 降順ランクを計算 (is_sector_rs_leader: 上位3位かつ有効銘柄5以上)
+        _sector_rs_valid_count: dict[str, int] = {s: len(v) for s, v in _sector_rs_lists.items()}
+        # 各 sector の RS 降順ソート済みリスト (None を除いた値のみ)
+        _sector_rs_sorted: dict[str, list[float]] = {
+            s: sorted(v, reverse=True) for s, v in _sector_rs_lists.items()
+        }
+
+        for _it in items:
+            _sec = _it.get("sector")
+            _rs = _it.get("rs_vs_spy_pct")
+            # sector_rs_median: None-safe (sector なし / 有効 RS なしは None)
+            _it["sector_rs_median"] = _sector_rs_median.get(_sec)
+            # is_sector_rs_leader: RS None / sector なし / 有効銘柄 < 5 は False
+            if _sec is None or _rs is None or _sector_rs_valid_count.get(_sec, 0) < 5:
+                _it["is_sector_rs_leader"] = False
+            else:
+                try:
+                    _rs_f = float(_rs)
+                    _sorted_desc = _sector_rs_sorted.get(_sec, [])
+                    # 上位3位以内: ランク = 降順リストの index（0-based）< 3
+                    _rank = _sorted_desc.index(_rs_f) if _rs_f in _sorted_desc else 999
+                    _it["is_sector_rs_leader"] = bool(_rank < 3)
+                except (ValueError, TypeError, AttributeError):
+                    _it["is_sector_rs_leader"] = False
 
     # headline as_of = 最新 refresh (= nightly scan の鮮度)。 鮮度差は per-facet freshness map で開示。
     # min は lagging facet (earnings_evaluation funda_pass は決算イベント依存で数十日 stale) に引きずられ
@@ -21470,6 +21571,8 @@ def _upsert_screener_fundamental(
     ocf_margin_pct: "float | None" = None,
     fcf_margin_pct: "float | None" = None,
     ocf_gt_netincome: "bool | None" = None,
+    eps_3y_rising: "bool | None" = None,
+    rev_3y_rising: "bool | None" = None,
 ) -> bool:
     """screener_fundamentals テーブルに各指標を upsert。
 
@@ -21567,6 +21670,13 @@ def _upsert_screener_fundamental(
     # optional_cols fallback: migration 未適用時はカラム除外して再 upsert (graceful)。
     if ocf_gt_netincome is not None:
         row["ocf_gt_netincome"] = ocf_gt_netincome
+    # ── 単調増加判定: eps_3y_rising / rev_3y_rising ───────────────────────────
+    # None-preserve: False は有効値 (増加していない = 情報あり)。None を渡した場合は payload に含めない。
+    # optional_cols fallback: migration 未適用時はカラム除外して再 upsert (graceful)。
+    if eps_3y_rising is not None:
+        row["eps_3y_rising"] = eps_3y_rising
+    if rev_3y_rising is not None:
+        row["rev_3y_rising"] = rev_3y_rising
 
     try:
         sb.table("screener_fundamentals").upsert(
@@ -21588,6 +21698,8 @@ def _upsert_screener_fundamental(
                 "ocf_margin_pct",         # Sprint 1: migration 未適用時の graceful fallback
                 "fcf_margin_pct",         # Sprint 1: migration 未適用時の graceful fallback
                 "ocf_gt_netincome",       # buy-quality Sprint 1: migration 未適用時の graceful fallback
+                "eps_3y_rising",          # 単調増加判定: migration 未適用時の graceful fallback
+                "rev_3y_rising",          # 単調増加判定: migration 未適用時の graceful fallback
             )
             if c in err_str and c in row
         ]
@@ -21862,6 +21974,9 @@ async def cron_canslim_scan(
             # ── A 条件: 3 年 EPS CAGR ────────────────────────────────────────
             eps_cagr_3y: float | None = None
             cagr_null_reason: str | None = None  # S5a: NULL 原因コード (frontend で UI ラベル化)
+            # ★ annual_recs をスコープ外で初期化: cf_data と同じパターン (L21979)。
+            #   eps_3y_rising / rev_3y_rising 計算ブロックで A 条件の fetch を再利用 (追加 API call ゼロ)。
+            annual_recs: list = []
             try:
                 annual_recs = await client.income_statement(ticker, limit=4, period="annual")
                 if isinstance(annual_recs, list) and annual_recs:
@@ -22290,6 +22405,50 @@ async def cron_canslim_scan(
                 ocf_gt_netincome = None
                 ocf_gt_netincome_null_reason = "data_missing"
 
+            # ── 単調増加判定: eps_3y_rising / rev_3y_rising (0 API call、annual_recs 再利用) ──
+            # annual_recs は A 条件 try ブロックで fetch 済 (スコープ外初期化で参照可能)。
+            # 追加 FMP fetch ゼロ。None-preserve: 有効値 < 4 期なら None (False でない)。
+            # EPS フィールド: _calc_eps_cagr_3y と同一フィールド優先順 (eps > epsPerShareBasic > epsPerShareDiluted)。
+            eps_3y_rising: "bool | None" = None
+            rev_3y_rising: "bool | None" = None
+            try:
+                if isinstance(annual_recs, list) and annual_recs:
+                    # _calc_eps_cagr_3y と同流儀: date 降順 sort で newest-first を保証 (FMP 順序非依存)。
+                    _sorted_ar = sorted(
+                        [r for r in annual_recs if isinstance(r, dict)],
+                        key=lambda r: r.get("date") or "",
+                        reverse=True,
+                    )
+                    # EPS 系列 (newest-first)。_extract_eps と同流儀: 0.0 は「未設定」扱いで skip し次 field へ
+                    # (L5204-5205 慣習)。全 field 0.0/欠損なら None = 履歴不足として monotonic 判定が None を返す。
+                    eps_series = []
+                    for _ar in _sorted_ar[:4]:
+                        _ev_val = None
+                        for _f in ("eps", "epsPerShareBasic", "epsPerShareDiluted"):
+                            _vv = _ar.get(_f)
+                            if _vv is not None:
+                                try:
+                                    _vf = float(_vv)
+                                    if _vf != 0.0:
+                                        _ev_val = _vf
+                                        break
+                                except (ValueError, TypeError):
+                                    continue
+                        eps_series.append(_ev_val)
+                    # revenue 系列 (newest-first)。revenue の 0.0 は有効値として保持 (pre-revenue 企業も区別可)。
+                    rev_series = []
+                    for _ar in _sorted_ar[:4]:
+                        _rv = _ar.get("revenue")
+                        try:
+                            rev_series.append(float(_rv) if _rv is not None else None)
+                        except (ValueError, TypeError):
+                            rev_series.append(None)
+                    eps_3y_rising = _calc_monotonic_rising(eps_series)
+                    rev_3y_rising = _calc_monotonic_rising(rev_series)
+            except Exception:
+                eps_3y_rising = None
+                rev_3y_rising = None
+
             # ── S5a: null_reason per-cause を組み立て (静的コード、LLM 不使用) ──
             #   success path のみ upsert される (error path は err を立てて post-gather で continue)。
             #   原因コードは frontend (S5b) が静的 dict で UI ラベル化。§38/§5: 予測語/最上級なし。
@@ -22313,16 +22472,24 @@ async def cron_canslim_scan(
                 null_reasons["ocf_margin"] = ocf_margin_null_reason or "data_missing"
             if ocf_gt_netincome is None:
                 null_reasons["ocf_gt_netincome"] = ocf_gt_netincome_null_reason or "data_missing"
+            if eps_3y_rising is None:
+                null_reasons["eps_3y_rising"] = "insufficient_annual_history"
+            if rev_3y_rising is None:
+                null_reasons["rev_3y_rising"] = "insufficient_annual_history"
 
-            # ★★ tuple arity 14 要素 (screener-buy-quality-headroom Sprint 1 で ocf_gt_netincome 追加、
-            #    feedback_pge_loop_pitfalls ルール 1)
+            # ★★ tuple arity 16 要素 (eps_3y_rising / rev_3y_rising を err の直前に追加)
+            #    (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround,
+            #     near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
+            #     ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome,
+            #     eps_3y_rising, rev_3y_rising, err, null_reasons)
             return (
                 ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround,
                 near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
-                ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome, None, null_reasons,
+                ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome,
+                eps_3y_rising, rev_3y_rising, None, null_reasons,
             )
         except Exception as e:
-            return ticker, None, None, None, None, None, None, None, None, None, None, None, f"unexpected: {e}", {}
+            return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, f"unexpected: {e}", {}
 
     # fetch + 計算: worker_count>1 で並列 (asyncio.Semaphore)、 =1 で逐次。
     # ★ 6体合議 critical 対応: 旧実装は完全逐次で full universe (3000) で GHA timeout (30min) 超過
@@ -22349,15 +22516,14 @@ async def cron_canslim_scan(
             results.append(await _compute_one(ticker))
 
     # count + upsert (post-gather 逐次、 cup-scan と同型)
-    # screener-buy-quality-headroom Sprint 1: result tuple が 14 要素 (ocf_gt_netincome を追加)
+    # tuple arity 16 要素 (eps_3y_rising / rev_3y_rising を err の直前に追加)
     # (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct,
     #  buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
-    #  ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome, err, null_reasons)
+    #  ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome,
+    #  eps_3y_rising, rev_3y_rising, err, null_reasons)
     # Phase 3 Sprint 4a: post-gather で ×100 して pct 新カラム値を生成
     #   near_high_pct_scaled = near_high_pct × 100 (例 0.97 → 97.0)
     #   buyback_yield_pct    = buyback_yield  × 100 (例 0.0173 → 1.73)
-    #   tuple arity は 14 (screener-buy-quality-headroom Sprint 1 で ocf_gt_netincome 追加、
-    #   feedback_pge_loop_pitfalls ルール 1)
     a_computed = 0             # CAGR が算出できた件数
     roe_computed = 0           # ROE が取得できた件数
     near_high_computed = 0     # near_high_pct が算出できた件数
@@ -22366,8 +22532,10 @@ async def cron_canslim_scan(
     inst_holders_computed = 0  # inst_holders_qoq_pct が算出できた件数 (I 条件)
     ocf_margin_computed = 0    # ocf_margin_pct が算出できた件数 (Sprint 1)
     ocf_gt_netincome_computed = 0  # ocf_gt_netincome が算出できた件数 (buy-quality Sprint 1)
+    eps_3y_rising_computed = 0  # eps_3y_rising が算出できた件数
+    rev_3y_rising_computed = 0  # rev_3y_rising が算出できた件数
     for result in results:
-        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct, ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome, err, null_reasons = result
+        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct, ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome, eps_3y_rising, rev_3y_rising, err, null_reasons = result
         if err:
             failed.append({"ticker": ticker, "reason": err})
             continue
@@ -22391,6 +22559,10 @@ async def cron_canslim_scan(
             ocf_margin_computed += 1
         if ocf_gt_netincome is not None:
             ocf_gt_netincome_computed += 1
+        if eps_3y_rising is not None:
+            eps_3y_rising_computed += 1
+        if rev_3y_rising is not None:
+            rev_3y_rising_computed += 1
         if not dry_run:
             # ── S4a BLOCK①: pct 新カラム値を post-gather で生成 ──────────────────
             # near_high_pct (ratio 0-1) を pct 表記に変換。read endpoint が >= min_pct で比較可能。
@@ -22424,6 +22596,8 @@ async def cron_canslim_scan(
                 ocf_margin_pct=ocf_margin_pct,   # Sprint 1: 営業CFマージン
                 fcf_margin_pct=fcf_margin_pct,   # Sprint 1: FCFマージン
                 ocf_gt_netincome=ocf_gt_netincome,  # buy-quality Sprint 1: #1 OCF>純利益 bool
+                eps_3y_rising=eps_3y_rising,        # 単調増加判定: EPS 直近4期
+                rev_3y_rising=rev_3y_rising,         # 単調増加判定: revenue 直近4期
             )
             if ok:
                 upserted += 1
@@ -22442,6 +22616,8 @@ async def cron_canslim_scan(
         "inst_holders_computed_count": inst_holders_computed,  # Sprint C: I 条件
         "ocf_margin_computed_count": ocf_margin_computed,      # Sprint 1: 営業CFマージン
         "ocf_gt_netincome_computed_count": ocf_gt_netincome_computed,  # buy-quality Sprint 1: #1
+        "eps_3y_rising_computed_count": eps_3y_rising_computed,   # 単調増加判定: EPS
+        "rev_3y_rising_computed_count": rev_3y_rising_computed,   # 単調増加判定: revenue
         "upserted_count": upserted,
         "failed_count": len(failed),
         "failed_tickers": failed[:20],
