@@ -23,14 +23,22 @@
  *   screener-master-error   — エラー fallback (ErrorBoundary が catch した時)
  */
 
-import { useState, useRef, Suspense, lazy, Component } from 'react';
+import { useState, useRef, useEffect, Suspense, lazy, Component } from 'react';
 import Chip, { ChipGroup } from '../../components/ui/Chip.jsx';
 import BrandPulse from '../../components/ui/BrandPulse.jsx';
-import StrategyPresetBar from '../../components/StrategyPresetBar.jsx';
+import StrategyPresetBar, { STRATEGY_PRESETS } from '../../components/StrategyPresetBar.jsx';
 
 // 既存 component を lazy で再利用 (一気書き換えしない、C-9)
 const CustomScreenerPanel = lazy(() => import('../../components/CustomScreenerPanel.jsx'));
 const ScreenerPane = lazy(() => import('./ScreenerPane.jsx'));
+
+// Phase A: プリセット件数算出用 import。
+// CustomScreenerPanel は lazy chunk だが、countPreset / PRESET_PREDICATES は
+// module-scope 関数のため直接 static import (chunk 分割せず)。
+// fetchScannerUniverse も同様: module-scope cache (_universeCache) を共有するため
+// 追加 fetch は発生しない (CustomScreenerPanel が fetch 済なら即 resolve)。
+import { countPreset } from '../../components/CustomScreenerPanel.jsx';
+import { fetchScannerUniverse } from '../../api.js';
 
 /**
  * MasterErrorBoundary — ScreenerMaster 専用の最小 ErrorBoundary。
@@ -165,6 +173,32 @@ export default function ScreenerMaster({
   // CustomScreenerPanel の applyStrategy を呼ぶための ref
   const customPanelRef = useRef(null);
 
+  // Phase A: タイル件数 state ({ presetKey: number | null })。
+  // null = 算出中 (universe 未取得 or 算出前) → タイルは "–" 表示。
+  const [presetCounts, setPresetCounts] = useState(() =>
+    Object.fromEntries(STRATEGY_PRESETS.map((p) => [p.key, null]))
+  );
+
+  // Phase A: universe を取得してプリセット件数を算出。
+  // module-scope cache (_universeCache) 共有のため追加 fetch は発生しない。
+  useEffect(() => {
+    let alive = true;
+    fetchScannerUniverse(3000)
+      .then((res) => {
+        if (!alive || !res?.items) return;
+        const items = res.items;
+        const counts = {};
+        for (const { key } of STRATEGY_PRESETS) {
+          counts[key] = countPreset(items, key);
+        }
+        setPresetCounts(counts);
+      })
+      .catch(() => {
+        // fetch 失敗時はタイルを "–" のまま維持 (silent fail)
+      });
+    return () => { alive = false; };
+  }, []);
+
   /** 戦略プリセット選択ハンドラ */
   function handleStrategySelect(presetKey) {
     setActiveStrategy(presetKey);
@@ -195,6 +229,7 @@ export default function ScreenerMaster({
       <StrategyPresetBar
         active={activeStrategy}
         onSelect={handleStrategySelect}
+        counts={presetCounts}
       />
 
       {/* ── セグメントトグル (C-17: ヘッダー右寄せ、ラベル 2-4 字) ────

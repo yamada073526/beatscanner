@@ -123,6 +123,10 @@
   --shadow-elevation-4: 0 8px 20px rgba(0, 0, 0, 0.10), 0 16px 36px rgba(0, 0, 0, 0.07);
   --shadow-elevation-5: 0 16px 40px rgba(0, 0, 0, 0.16), 0 32px 64px rgba(0, 0, 0, 0.10);
   --shadow-glow-cyan: 0 0 0 1px rgba(56, 189, 248, 0.20), 0 8px 32px rgba(56, 189, 248, 0.12);
+  /* gold 版 glow (cyan の対): 戦略タイル active 等の brand emphasis 専用。
+     mockup v8 §.preset.active 準拠 (1px hairline ring + soft gold glow)。
+     方向性 (上昇/下落) には使わない (CLAUDE.md 投資業界色ルール)。 */
+  --shadow-glow-gold: 0 0 0 1px rgba(212, 175, 55, 0.25), 0 10px 34px rgba(212, 175, 55, 0.12);
   /* Sprint 3 SPEC_2026-05-19_pane3-header-polish: EarningsRing 外周 subtle cyan glow
      design_system.md §4 に token 登録済。brand emphasis 専用 (chandelier 演出)。
      上昇/下落の方向性には使わない (CLAUDE.md 投資業界色ルール遵守)。
@@ -218,6 +222,7 @@
   --shadow-elevation-4: 0 8px 20px rgba(0, 0, 0, 0.55), 0 16px 36px rgba(0, 0, 0, 0.35);
   --shadow-elevation-5: 0 16px 40px rgba(0, 0, 0, 0.70), 0 32px 64px rgba(0, 0, 0, 0.50);
   --shadow-glow-cyan: 0 0 0 1px rgba(56, 189, 248, 0.30), 0 8px 32px rgba(56, 189, 248, 0.20);
+  --shadow-glow-gold: 0 0 0 1px rgba(212, 175, 55, 0.32), 0 10px 34px rgba(212, 175, 55, 0.16);
   /* Sprint 3: dark mode では --ring-glow を強化 (dark 背景で subtle に引き立つ)
      v86 R3: 三層 halo (内/中/外) で静止フレームでも「呼吸の輪郭」が見える状態 */
   --ring-glow: 0 0 14px rgba(56, 189, 248, 0.26), 0 0 32px rgba(56, 189, 248, 0.42), 0 0 56px rgba(56, 189, 248, 0.18);
@@ -14274,16 +14279,29 @@ body.is-digest-resizing {
    border-bottom で content 側と区切り (toolbar 直下の呼吸は上部 border-bottom が担う)。
    v8 mockup 承認済: 角丸タイル UI への昇格。タイルを横並びに配置。 */
 .screener-strategy-bar {
+  /* mockup v8 §.presets: 4 列グリッド、gap = space-3 (12px) */
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border);
   background: var(--bg-subtle);        /* toolbar と content の中間領域を semantic token で着色 */
 }
 
-/* ── 戦略プリセット タイル (mockup v8 承認済) ──────────────────────────
+/* レスポンシブ: 680px 以下は 2 列 / 420px 以下は 1 列 (mockup v8 media query 準拠) */
+@media (max-width: 680px) {
+  .screener-strategy-bar {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 420px) {
+  .screener-strategy-bar {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── 戦略プリセット タイル (mockup v8 承認済・縦カード) ───────────────────
    発光: アイコンの filter: drop-shadow のみ (SVG filter・低リスク)。
    box-shadow: var(--shadow-*) token のみ。生値・生 hex 禁止。
    panel-card / bs-panel / surface-card 系 class には触れない。
@@ -14297,11 +14315,11 @@ body.is-digest-resizing {
   cursor: pointer;
   text-align: left;
 
-  /* レイアウト */
+  /* 縦カード: mockup v8 §.preset (flex-direction: column) */
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
+  flex-direction: column;
+  align-items: stretch;
+  padding: var(--space-4);
 
   /* 外観 */
   background: var(--bg-card);
@@ -14312,7 +14330,7 @@ body.is-digest-resizing {
   /* elevation: hover で shadow-3 (lift) */
   box-shadow: var(--shadow-1);
 
-  /* モーション: transform / border / box-shadow / icon color をまとめて遷移 */
+  /* モーション: transform / border / box-shadow をまとめて遷移 */
   transition:
     transform var(--motion-base) var(--ease-out-expo),
     box-shadow var(--motion-base) var(--ease-out-expo),
@@ -14326,22 +14344,31 @@ body.is-digest-resizing {
   border-color: var(--border-strong, var(--border));
 }
 
-/* 選択中: gold border で判別。shadow-2 は token 経由 */
+/* 選択中: gold border + gold glow token (mockup v8 §.preset.active)。
+   --shadow-glow-gold = 1px hairline ring + soft gold glow (cyan token の対)。 */
 .screener-strategy-tile.is-selected {
   border-color: color-mix(in srgb, var(--color-gold) 45%, transparent);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-glow-gold);
 }
 
-/* 選択中 hover: lift も維持 */
+/* 選択中 hover: lift も維持 (gold glow + 持上げ shadow を合成) */
 .screener-strategy-tile.is-selected:hover {
   transform: translateY(-4px);
-  box-shadow: var(--shadow-3);
+  box-shadow: var(--shadow-glow-gold), var(--shadow-3);
 }
 
 /* a11y: キーボードフォーカス ring (gold、Linear 流) */
 .screener-strategy-tile:focus-visible {
   outline: 2px solid var(--color-gold-mid);
   outline-offset: 2px;
+}
+
+/* ── top: icon + label 横並び (mockup v8 §.preset .top) ── */
+.screener-strategy-tile__top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
 }
 
 /* ── アイコンコンテナ (40×40 シアン下地、mockup v8 §.preset .ico 準拠) ── */
@@ -14380,25 +14407,68 @@ body.is-digest-resizing {
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--color-gold) 50%, transparent));
 }
 
-/* ── テキスト部 ── */
-.screener-strategy-tile__body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
+/* ── label (mockup v8 §.preset .name: 15px/600) ── */
 .screener-strategy-tile__label {
   font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
-  white-space: nowrap;
 }
 
+/* ── desc (mockup v8 §.preset .desc: 12px muted, min-height 32px) ── */
 .screener-strategy-tile__desc {
   font-size: 12px;
   color: var(--text-muted);
   line-height: 1.4;
+  min-height: 32px;   /* 2行ぶん確保して foot を揃える */
+  margin: 0;
+  flex: 1;            /* 残り縦スペースを吸収して foot を底に揃える */
+}
+
+/* ── foot (mockup v8 §.preset .foot: flex space-between) ── */
+.screener-strategy-tile__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-3);
+}
+
+/* ── 件数 (mockup v8 §.count: 13px secondary / b=18px/700/tabular) ── */
+.screener-strategy-tile__count {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.screener-strategy-tile__count b {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  display: inline-block;
+  margin-right: 2px;
+}
+
+/* ── tier badge (mockup v8 §.tier: pill, 10px/600) ─────────────────────
+   variant: --free (緑) / --pro (gold) / --prem (warning amber)
+   token 経由 color-mix で半透明背景 (生 hex 禁止)。
+   ──────────────────────────────────────────────────────────────────── */
+.screener-tier-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+.screener-tier-badge--free {
+  color: var(--color-gain);
+  background: color-mix(in srgb, var(--color-gain) 12%, transparent);
+}
+.screener-tier-badge--pro {
+  color: var(--color-gold-mid);
+  background: color-mix(in srgb, var(--color-gold) 14%, transparent);
+}
+.screener-tier-badge--prem {
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
 }
 
 /* ── reduced-motion: transform / transition を無効化 (WCAG) ── */

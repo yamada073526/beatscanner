@@ -253,7 +253,7 @@ function buildMatchReason(key, value, threshold) {
     : `${d.name} ${valTxt}`;
   return { valueText: valTxt, reason };
 }
-function buildActiveGrades(preset, overrides) {
+export function buildActiveGrades(preset, overrides) {
   const g = {};
   for (const k of PRESET_CORE_KEYS) {
     const lvl = clampLevel(FACET_MAP[k], preset); // eps_cagr_3y は loose→standard へクランプ
@@ -268,7 +268,7 @@ function buildActiveGrades(preset, overrides) {
 }
 
 /** 単一 predicate — count も list も必ずこれを通す (Trust Cliff C-2 の根拠) */
-function itemPasses(item, activeGrades, extra) {
+export function itemPasses(item, activeGrades, extra) {
   for (const [k, lvl] of Object.entries(activeGrades)) {
     const f = FACET_MAP[k]; if (!f) continue;
     const v = item[f.field];
@@ -301,9 +301,71 @@ function itemPasses(item, activeGrades, extra) {
     const r = item[AD_VOLUME_FACET.field];
     if (r == null || r <= AD_VOLUME_FACET.threshold) return false;
   }
+  // Phase A: セクター別リーダー binary flag (セクター内 RS 上位・is_sector_rs_leader)。
+  // null / undefined / false = 除外。
+  if (extra?.sectorLeaderOnly && item.is_sector_rs_leader !== true) return false;
   if (extra?.sectors?.length && !extra.sectors.includes(item.sector)) return false;
   if (extra?.mcapBands?.length && !extra.mcapBands.includes(item.mcap_band)) return false;
   return true;
+}
+
+// ─── Phase A: プリセット述語 SSOT ────────────────────────────────────────────
+// Trust Cliff 整合: タイル件数と list が必ず同一 predicate を通すための SSOT。
+// [[feedback_facet_filter_count_integrity]] に準拠。
+export const PRESET_PREDICATES = {
+  earnings_pass:  { extra: { fundaPassOnly: true, ocfMarginOnly: true, ocfGtNiOnly: true } },
+  new_high_break: { extra: { buyZoneOnly: true, newHigh52wOnly: true } },
+  sector_leader:  { extra: { sectorLeaderOnly: true, ocfMarginOnly: true } },
+  // hot_sector: セクター算出は topSectorsByRs で計算 (sectorTopN=5 相当)
+  hot_sector:     { sectorTopN: 5, extra: { fundaPassOnly: true } },
+};
+
+/**
+ * topSectorsByRs — sector_rs_median 上位 topN セクター名を返す純関数。
+ * countPreset (件数) と applyStrategyImpl (list の sector filter) の両方から呼び、
+ * hot_sector の count==list 整合を担保する ([[feedback_facet_filter_count_integrity]])。
+ * sector_rs_median は同一 sector 内で全銘柄同値だが、欠損は 0 扱いで max を採る。
+ * @returns {string[]} 上位 topN セクター名 (RS 降順)
+ */
+export function topSectorsByRs(items, topN = 5) {
+  const medianBySector = {};
+  for (const it of (items || [])) {
+    const sec = it.sector;
+    if (!sec) continue;
+    const v = it.sector_rs_median ?? 0;
+    if (medianBySector[sec] == null || v > medianBySector[sec]) medianBySector[sec] = v;
+  }
+  return Object.entries(medianBySector)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, topN)
+    .map(([sec]) => sec);
+}
+
+/**
+ * countPreset — プリセットキーに対応する件数を universe.items から算出。
+ * ScreenerMaster がタイル件数表示に利用 (list の itemPasses と同一述語)。
+ * @param {Array}  items    — universe.items (空配列/null なら null を返す)
+ * @param {string} presetKey
+ * @returns {number|null}
+ */
+export function countPreset(items, presetKey) {
+  if (!items || items.length === 0) return null;
+  const cfg = PRESET_PREDICATES[presetKey];
+  if (!cfg) return null;
+
+  const grades = buildActiveGrades('standard', {});
+
+  if (presetKey === 'hot_sector') {
+    // 上位 sectorTopN セクター (sector_rs_median 降順) ∩ funda_pass を集計。
+    // applyStrategyImpl も同一 topSectorsByRs を使うため count==list が保証される。
+    const topSectors = topSectorsByRs(items, cfg.sectorTopN ?? 5);
+    if (topSectors.length === 0) return null;
+    const extra = { ...cfg.extra, sectors: topSectors };
+    return items.filter((it) => itemPasses(it, grades, extra)).length;
+  }
+
+  // その他プリセット: PRESET_PREDICATES.extra をそのまま使う。
+  return items.filter((it) => itemPasses(it, grades, cfg.extra)).length;
 }
 
 
@@ -367,6 +429,8 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   const [newHigh52wOnly, setNewHigh52wOnly] = useState(false);
   // Phase1 S4: #8 A/D 出来高の質 binary chip (上昇引け優勢・Premium。free user には locked chip で表示)
   const [adVolumeOnly, setAdVolumeOnly] = useState(false);
+  // Phase A: セクター別リーダー binary flag (is_sector_rs_leader=true ∩ ocfMarginOnly)。
+  const [sectorLeaderOnly, setSectorLeaderOnly] = useState(false);
   // Pass C: 件数キャップ — 初期 100 件、「残りN件を表示」で全件展開
   const [showAllResults, setShowAllResults] = useState(false);
   // Sprint 5 Pass B: 複数選択 → watchlist 一括追加
@@ -402,16 +466,28 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     setBuyZoneOnly(false);
     setNewHigh52wOnly(false);
     setAdVolumeOnly(false);
+    setSectorLeaderOnly(false);
+    setSectorFilter([]);
 
     if (presetKey === 'earnings_pass') {
-      // 5 条件達成 + CF 創出力 + 利益の質
+      // 5 条件達成 + CF 創出力 + 利益の質 (PRESET_PREDICATES.earnings_pass と一致)
       setFundaPassOnly(true);
       setOcfMarginOnly(true);
       setOcfGtNiOnly(true);
     } else if (presetKey === 'new_high_break') {
-      // 買い場圏 (pivot ≤+5%) + 52週高値更新
+      // 買い場圏 (pivot ≤+5%) + 52週高値更新 (PRESET_PREDICATES.new_high_break と一致)
       setBuyZoneOnly(true);
       setNewHigh52wOnly(true);
+    } else if (presetKey === 'sector_leader') {
+      // セクター別リーダー: is_sector_rs_leader + ocfMarginOnly (PRESET_PREDICATES.sector_leader と一致)
+      setSectorLeaderOnly(true);
+      setOcfMarginOnly(true);
+    } else if (presetKey === 'hot_sector') {
+      // 旬のセクター (Phase A 暫定): 上位5セクター ∩ funda_pass を stock list 表示。
+      // countPreset と同一 topSectorsByRs (_universeCache=module-scope・常に最新) を使い
+      // count==list を担保 (Trust Cliff)。Phase C でセクター master-detail view に置換予定。
+      setFundaPassOnly(true);
+      setSectorFilter(topSectorsByRs(_universeCache?.items || [], 5));
     }
     // null = リセットのみ (共通処理で完了)
   }, []);
@@ -466,9 +542,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   const isCustom = Object.keys(overrides).length > 0;
   const filteredItems = useMemo(() => {
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     return items.filter((it) => itemPasses(it, activeGrades, extra));
-  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorFilter, mcapFilter]);
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorLeaderOnly, sectorFilter, mcapFilter]);
 
   // Pass B: 条件合致度順ソート。
   // スコア = アクティブ数値 facet ごとに (item[key] - threshold) / threshold の合計。
@@ -504,21 +580,21 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   // Pass 3b: preset 別の total 件数 (緩い/標準/厳しい) を live 算出。ハードコード禁止。
   const presetCounts = useMemo(() => {
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     const result = {};
     for (const lvl of ['loose', 'standard', 'strict']) {
       const grades = buildActiveGrades(lvl, overrides);
       result[lvl] = items.filter((it) => itemPasses(it, grades, extra)).length;
     }
     return result;
-  }, [universe, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorFilter, mcapFilter]);
+  }, [universe, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorLeaderOnly, sectorFilter, mcapFilter]);
 
   // Pass 3c: faceted 件数 — 各 facet の各 level に変えた時の件数 (itemPasses 共有、Trust Cliff C-2)。
   // facet K を level L にした時の件数 = { ...activeGrades, [K]: L } で filter。
   // level='off' = K を外した件数 = delete g[K]。
   const facetLevelCounts = useMemo(() => {
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     const result = {};
     for (const facet of FUNDA_FACETS) {
       result[facet.key] = {};
@@ -533,13 +609,13 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       }
     }
     return result;
-  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorFilter, mcapFilter]);
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorLeaderOnly, sectorFilter, mcapFilter]);
 
   // Pass 3c: empty サジェスト — 現在 active な制約を1つ外した時に最も件数が増える提案を算出。
   const emptySuggest = useMemo(() => {
     if (filteredItems.length > 0) return null;
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     let best = null;
     // overrides の各 facet を外す
     for (const [key, lvl] of Object.entries(overrides)) {
@@ -597,8 +673,13 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, mcapBands: [] })).length;
       if (!best || cnt > best.count) best = { key: 'mcap', label: '時価総額絞り込み', count: cnt, type: 'mcap' };
     }
+    // sectorLeaderOnly を外す (Phase A)
+    if (sectorLeaderOnly) {
+      const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, sectorLeaderOnly: false })).length;
+      if (!best || cnt > best.count) best = { key: 'sector_leader', label: 'セクター別リーダー', count: cnt, type: 'sector_leader' };
+    }
     return best;
-  }, [filteredItems.length, universe, activeGrades, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorFilter, mcapFilter]);
+  }, [filteredItems.length, universe, activeGrades, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorLeaderOnly, sectorFilter, mcapFilter]);
 
   // Pass 3c: sector / mcap 選択肢を universe から live 算出 (count 付き)。
   // Pass 3d (修正A): 全件 universe 集計から faceted count へ変更 (Trust Cliff C-2 修正)。
@@ -609,22 +690,22 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     for (const it of items) {
       if (!it.sector) continue;
       // sector 次元自身は除き (自己排除防止)、他の active facet を適用
-      if (!itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, mcapBands: mcapFilter, sectors: [it.sector] })) continue;
+      if (!itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorLeaderOnly, mcapBands: mcapFilter, sectors: [it.sector] })) continue;
       map[it.sector] = (map[it.sector] || 0) + 1;
     }
     return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([s, cnt]) => ({ value: s, label: sectorLabelJp(s), count: cnt }));
-  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, mcapFilter]);
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorLeaderOnly, mcapFilter]);
   const mcapOptions = useMemo(() => {
     const items = universe?.items || [];
     const map = {};
     for (const it of items) {
       if (!it.mcap_band) continue;
       // mcap 次元自身は除き (自己排除防止)、他の active facet を適用
-      if (!itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectors: sectorFilter, mcapBands: [it.mcap_band] })) continue;
+      if (!itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: [it.mcap_band] })) continue;
       map[it.mcap_band] = (map[it.mcap_band] || 0) + 1;
     }
     return MCAP_BANDS.filter((b) => map[b.key]).map((b) => ({ ...b, count: map[b.key] || 0 }));
-  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorFilter]);
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorLeaderOnly, sectorFilter]);
 
   // Pass 3d (修正C): funda_pass chip に件数を表示するための faceted count。
   // 件数 = funda_pass=true かつ grades + ocf + sector + mcap を通過した件数 (日付ではない)。
