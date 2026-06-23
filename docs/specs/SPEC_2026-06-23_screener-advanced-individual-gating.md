@@ -102,11 +102,11 @@ SSOT: [`jijima_protocol.md`](../references/jijima_protocol.md) / [`canslim_oneil
 │ │  ▸ 成長性                                                 │  │
 │ │    当四半期EPS成長  (緩+20)(標+25)(厳+50)(最厳+100)        │  │
 │ │  ▸ 収益の質                                               │  │
-│ │    営業CFマージン   (緩≥10)(標≥15)(厳≥20)(最厳≥25)        │  │
+│ │    営業CFマージン   🔒 必須（≥15%・変更不可）             │  │
 │ │    CFPS>EPS（粉飾防止） 🔒 必須（変更不可）               │  │
-│ │    ROE             (緩≥17)(標≥20)(厳≥25)(最厳≥50)        │  │
+│ │    ROE             (緩≥17)(標≥25)(厳≥50)                  │  │
 │ │  ▸ モメンタム                                             │  │
-│ │    RS Rating（床）  (緩≥70)(標≥80)(厳≥90)                 │  │
+│ │    RS Rating（床70）(緩≥70)(標≥80)(厳≥90)                 │  │
 │ └──────────────────────────────────────────────────────────┘  │
 │ [lockbar: アドバンスド操作時のみ・Free のみ]                   │
 ├─ 結果（master-detail）────────────────────────────────────┤
@@ -201,3 +201,35 @@ SSOT: [`jijima_protocol.md`](../references/jijima_protocol.md) / [`canslim_oneil
 - legacy（screener_v2=false）の per-facet override 挙動が**不変**であること（物理隔離回帰テスト）。
 </content>
 </invoke>
+
+---
+
+## 9. 価格推奨（gate 2 解決 — 競合調査 2026-06-23）
+
+> Claude 一任（user gate 2）。Sonnet 競合調査（Finviz/TradingView/IBD/Stock Rover/Koyfin/InvestingPro + 日本の証券会社）に基づく推奨。**価格は時期で変わる**ため調査日明記。実装（Stripe 接続）は別 SPEC、本節は方向性。
+
+### 9.1 競合価格マップ（月額 USD・2026-06-23 時点）
+| 製品 | 月払い | 年払い(÷12) | 日本語 | スクリーナー特性 |
+|---|---|---|---|---|
+| 日本の証券会社（楽天/マネックス/SBI/松井/moomoo）| **無料**（口座付帯）| — | ◯ | 決算駆動の深掘り（beat/miss・ガイダンス較正・AI解説）が欠落 |
+| Finviz Elite | $39.50 | $24.96 | ✗ | RT + バックテスト + export |
+| TradingView Plus / Premium | $29.95 / $59.95 | $24.95 / $49.95 | ◯（一部英語）| Pine Screener（Premium）|
+| Stock Rover Premium Plus | $27.99 | ~$20 | ✗ | 700+メトリクス・方程式 screener |
+| Koyfin Plus / Premium | $39 / $79 | — | ✗ | 500-5900 フィルタ |
+| InvestingPro Pro | $17.95 | ~$9.50 | ◯ | Fair Value・基本 screener |
+| **IBD MarketSurge**（CAN-SLIM 本家）| **$149.99** | $1,499 | ✗ | CAN-SLIM 評価 + パターン認識 |
+
+### 9.2 ポジショニング（BeatScanner の差別化）
+競合（特に Finviz/TradingView/Stock Rover）は「フィルタを**組む**」だけで**正解の閾値（処方箋）を持たない**。CAN-SLIM 原典較正の閾値をプリセット内蔵するのは **IBD MarketSurge（$150/月）のみ**で英語・高価格。
+→ BeatScanner の核 = **「勝ち筋が最初から入った日本語・決算駆動・原典内蔵スクリーナー」を IBD の 1/10 価格で**。日本の証券会社が無料な点には**「証券口座に縛られない独立性 + 決算 beat/miss 駆動 + 日本語 AI 解説」**で対抗（機能の非連続性で正当化）。
+
+### 9.3 価格推奨
+| 優先 | 価格 | 年払い | 戦略ポジション |
+|---|---|---|---|
+| **第1推奨** | **¥1,480/月** | ¥12,800/年（≒¥1,067/月）| 英語競合（Finviz $40 / TV $60）の 1/3〜1/4。「決算特化・日本語」で最大 CVR。親SPEC §7.7-8 のレンジ下限と一致 |
+| 第2推奨 | ¥1,980/月 | ¥16,800/年 | アラート/メール通知/WL 高度化を載せた後のターゲット（$14-15 圏でグローバル競合と同価格帯）|
+| ローンチ特価 | ¥980/月 | ¥9,800/年 | キャンペーン限定（音楽/動画サブスク ¥980 心理ライン）。常設は API コスト回収難で非推奨 |
+
+**結論**: ローンチは **¥1,480/月（年 ¥12,800 = 2ヶ月無料）を第1候補**。Premium ¥2,980 / Signature ¥10k（nightly push）の既存 tier 階段と整合。実証は funnel-cro の手動 A/B（`AB-YYYYMMDD-pro-price`）で。
+
+> ⚠️ **Trust Cliff #4**: 「Pro」価格・バッジを LP/UI に出す時点で **Stripe 課金フローの実装が必須**（「Pro 限定」表示 + 実装ゼロは最致命）。本 SPEC の #2 実装範囲は**個別緩急の Pro ゲート UI（lockbar + count peek + onProUpgrade 導線）まで**で、課金処理本体は既存 upgrade modal / 別 SPEC に委ねる。
