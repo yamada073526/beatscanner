@@ -66,18 +66,50 @@ function loadUniverse() {
 // Phase1 S3: category = 「品質(ファンダ)/タイミング(テクニカル)/需給」3カテゴリ accordion 再編 (§0-7)。
 //   quality = 利益・キャッシュの質 / timing = 値動き・勢い / demand = 機関の動き。
 //   RS は勢い指標なので timing、機関保有増は需給。grade の preset 駆動 (CORE) かどうかとは独立。
+// §2.1 原典較正ラダー (2026-06-23 gate1: じっちゃま原典優先→オニール CAN-SLIM §7.1)。
+//   eps_yoy_pct: severe(+100) 追加 (canslim p.179-197)。
+//   eps_cagr_3y: 緩い段=「3年連続増」state は backend #4 DEFER のため未配線 →
+//     緩標同値矛盾を避けるべく loose 段を出さず standard(25) を下限とする (金融レビュー指摘)。
+//   roe: 床 17 (原典 p.179-210 注)・rs_percentile: 標準 80 / 床 70 ハードゲート。
+//   ⚠️ roe床10→17・rs標準85→80 は Free 標準プリセットの件数を動かす (原典忠実の代償・gate1 承認済)。
+// delta=true: 成長/変化系 (符号併記 "+25%")、false: 水準系 (≥ 併記 "≥80")。
 const FUNDA_FACETS = [
-  { key: 'eps_yoy_pct',         field: 'eps_yoy_pct',         label: 'EPS成長(四半期)', unit: '%', tier: 'free', category: 'quality', grades: { loose: 20, standard: 25, strict: 50 } },
-  { key: 'eps_cagr_3y',         field: 'eps_cagr_3y',         label: 'EPS成長(3年)',    unit: '%', tier: 'free', category: 'quality', grades: { loose: 10, standard: 20, strict: 25 } },
-  { key: 'roe',                 field: 'roe',                 label: 'ROE',            unit: '%', tier: 'free', category: 'quality', grades: { loose: 10, standard: 17, strict: 25 } },
-  { key: 'rs_percentile',       field: 'rs_percentile',       label: 'RS(相対強さ)',     unit: '',  tier: 'free', category: 'timing',  grades: { loose: 70, standard: 85, strict: 90 } },
-  { key: 'volume_surge_pct',    field: 'volume_surge_pct',    label: '出来高急増',       unit: '%', tier: 'free', category: 'timing',  grades: { loose: 25, standard: 40, strict: 50 } },
-  { key: 'inst_holders_qoq_pct', field: 'inst_holders_qoq_pct', label: '機関保有増(45日遅延)', unit: '%', tier: 'free', category: 'demand', grades: { loose: 0, standard: 3, strict: 5 } },
+  { key: 'eps_yoy_pct',         field: 'eps_yoy_pct',         label: 'EPS成長(四半期)', unit: '%', tier: 'free', category: 'quality', delta: true,  grades: { loose: 20, standard: 25, strict: 50, severe: 100 } },
+  { key: 'eps_cagr_3y',         field: 'eps_cagr_3y',         label: 'EPS成長(3年)',    unit: '%', tier: 'free', category: 'quality', delta: true,  grades: { standard: 25, strict: 50 } },
+  { key: 'roe',                 field: 'roe',                 label: 'ROE',            unit: '%', tier: 'free', category: 'quality', delta: false, grades: { loose: 17, standard: 25, strict: 50 } },
+  { key: 'rs_percentile',       field: 'rs_percentile',       label: 'RS(相対強さ)',     unit: '',  tier: 'free', category: 'timing',  delta: false, grades: { loose: 70, standard: 80, strict: 90 } },
+  { key: 'volume_surge_pct',    field: 'volume_surge_pct',    label: '出来高急増',       unit: '%', tier: 'free', category: 'timing',  delta: true,  grades: { loose: 25, standard: 40, strict: 50 } },
+  { key: 'inst_holders_qoq_pct', field: 'inst_holders_qoq_pct', label: '機関保有増(45日遅延)', unit: '%', tier: 'free', category: 'demand', delta: true,  grades: { loose: 0, standard: 3, strict: 5 } },
 ];
 const FACET_MAP = Object.fromEntries(FUNDA_FACETS.map((f) => [f.key, f]));
 // preset の CORE 4 metric。volume/inst_holders は preset off、override で追加 (Pass 3c)。
 const PRESET_CORE_KEYS = ['eps_yoy_pct', 'eps_cagr_3y', 'roe', 'rs_percentile'];
-const PRESET_LABELS = { loose: '緩い', standard: '標準', strict: '厳しい' };
+const PRESET_LABELS = { loose: '緩い', standard: '標準', strict: '厳しい', severe: '最厳' };
+// 個別緩急 mini-segment 用の短縮ラベル (幅節約・原則1)。
+const GRADE_LABELS_SHORT = { loose: '緩', standard: '標', strict: '厳', severe: '最厳' };
+// grade の強弱順 (clamp / 並び順の SSOT)。
+const GRADE_ORDER = ['loose', 'standard', 'strict', 'severe'];
+// facet に定義された有効段のみを順序付きで返す (eps_cagr_3y は loose 段なし)。
+function facetLevels(facet) {
+  return GRADE_ORDER.filter((l) => facet?.grades?.[l] != null);
+}
+// 要求 level を facet の定義域にクランプ (loose 要求×定義なし → 最小段、severe 要求×定義なし → 最大段)。
+// RS<70 ハードフロア等、定義域外の override を下限/上限へ寄せる安全装置 (§2.1 注)。
+function clampLevel(facet, level) {
+  const lv = facetLevels(facet);
+  if (lv.length === 0) return null;
+  if (facet.grades[level] != null) return level;
+  const idx = GRADE_ORDER.indexOf(level);
+  const defined = lv.map((l) => GRADE_ORDER.indexOf(l));
+  const lo = Math.min(...defined), hi = Math.max(...defined);
+  return GRADE_ORDER[idx < lo ? lo : hi];
+}
+// mini-segment の閾値併記 (例 "+25%" / "≥80")。§38: 数値は data 由来、色 polarity なし。
+function gradeAnnot(facet, lvl) {
+  const thr = facet?.grades?.[lvl];
+  if (thr == null) return '';
+  return `${facet.delta ? '+' : '≥'}${thr}${facet.unit || ''}`;
+}
 
 // ─── Sprint 3: 営業CFマージン binary facet (§0-1③ PRESET_TABLE 統合禁止) ─────
 // KB「ナイス・バディの法則 15% 足切り」に忠実な binary (ON/OFF) facet。
@@ -223,9 +255,14 @@ function buildMatchReason(key, value, threshold) {
 }
 function buildActiveGrades(preset, overrides) {
   const g = {};
-  for (const k of PRESET_CORE_KEYS) g[k] = preset;
+  for (const k of PRESET_CORE_KEYS) {
+    const lvl = clampLevel(FACET_MAP[k], preset); // eps_cagr_3y は loose→standard へクランプ
+    if (lvl) g[k] = lvl;
+  }
   for (const [k, lvl] of Object.entries(overrides || {})) {
-    if (lvl === 'off') delete g[k]; else g[k] = lvl;
+    if (lvl === 'off') { delete g[k]; continue; }
+    const f = FACET_MAP[k];
+    g[k] = f ? clampLevel(f, lvl) : lvl; // RS<70 等の定義域外 override を下限へクランプ
   }
   return g; // { facetKey: level }
 }
@@ -236,7 +273,8 @@ function itemPasses(item, activeGrades, extra) {
     const f = FACET_MAP[k]; if (!f) continue;
     const v = item[f.field];
     if (v == null) return false;          // 測定外は AND で除外 (honest)
-    if (v < f.grades[lvl]) return false;
+    const thr = f.grades[lvl];
+    if (thr != null && v < thr) return false; // 未定義段は no-op (clamp 済のため通常到達しない)
   }
   if (extra?.fundaPassOnly && item.funda_pass !== true) return false;
   // Sprint 3: 営業CFマージン binary facet (§0-1③)。null = AND 除外 (honest)、上限カットなし。
@@ -480,8 +518,8 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       const gOff = { ...activeGrades };
       delete gOff[facet.key];
       result[facet.key]['off'] = items.filter((it) => itemPasses(it, gOff, extra)).length;
-      // 各 level
-      for (const lvl of ['loose', 'standard', 'strict']) {
+      // 各 level (facet ごとの有効段のみ。eps_cagr_3y は loose なし / eps_yoy は severe あり)
+      for (const lvl of facetLevels(facet)) {
         const g = { ...activeGrades, [facet.key]: lvl };
         result[facet.key][lvl] = items.filter((it) => itemPasses(it, g, extra)).length;
       }
@@ -652,15 +690,16 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   // CORE (eps/roe/rs) は preset 駆動 = level 既定 preset・off は明示時のみ。
   // 非CORE (volume/inst) は off 既定・level は override 時のみ。これを isCore で分岐保持。
   const renderGradeRow = (facet) => {
-    const isCore = PRESET_CORE_KEYS.includes(facet.key);
+    // 有効段のみ反映 (clamp 済 activeGrades が真の押下状態 SSOT)。
+    // legacy (screenerV2=false) は severe 段・閾値併記を出さず従来 3 段表示を維持 (§6 物理隔離)。
+    const activeLvl = activeGrades[facet.key]; // undefined = なし(off)
+    const levels = screenerV2 ? facetLevels(facet) : facetLevels(facet).filter((l) => l !== 'severe');
     return (
-      <div key={facet.key} className="flex flex-wrap items-center gap-1.5">
+      <div key={facet.key} className="flex flex-wrap items-center gap-1.5" data-testid={`screener-grade-row-${facet.key}`}>
         <span className="w-24 shrink-0 text-[11px] text-[var(--text-secondary)]">{facet.label}</span>
-        {['off', 'loose', 'standard', 'strict'].map((lvl) => {
+        {['off', ...levels].map((lvl) => {
           const cnt = facetLevelCounts[facet.key]?.[lvl] ?? 0;
-          const actuallyPressed = lvl === 'off'
-            ? (isCore ? (overrides[facet.key] === 'off') : (!overrides[facet.key] || overrides[facet.key] === 'off'))
-            : (isCore ? (overrides[facet.key] ? overrides[facet.key] === lvl : preset === lvl) : (overrides[facet.key] === lvl));
+          const actuallyPressed = lvl === 'off' ? activeLvl == null : activeLvl === lvl;
           return (
             <Chip
               key={lvl}
@@ -671,9 +710,12 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
               onClick={() => {
                 setOverrides((prev) => ({ ...prev, [facet.key]: lvl === 'off' ? 'off' : lvl }));
               }}
-              data-testid={`screener-facet-level-${facet.key}-${lvl}`}
+              data-testid={`screener-grade-${facet.key}-${lvl}`}
             >
-              {lvl === 'off' ? 'なし' : PRESET_LABELS[lvl]}
+              {lvl === 'off' ? 'なし' : GRADE_LABELS_SHORT[lvl]}
+              {screenerV2 && lvl !== 'off' && (
+                <span className="ml-0.5 tabular-nums opacity-80">{gradeAnnot(facet, lvl)}</span>
+              )}
               <span className="ml-0.5 tabular-nums opacity-60">({cnt})</span>
             </Chip>
           );
