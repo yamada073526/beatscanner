@@ -64,12 +64,13 @@ SSOT: [`jijima_protocol.md`](../references/jijima_protocol.md) / [`canslim_oneil
 | facet.key | 区分 | 緩い | 標準 | 厳しい | 最厳 | 出典 |
 |---|---|---|---|---|---|---|
 | `eps_yoy_pct` | C 当四半期EPS(YoY) | +20% | +25% | +50% | **+100%** | canslim §7.1 p.179-197 |
-| `eps_cagr_3y` | A 年間EPS成長 | +25%/年 | +25% | +50% | — | §7.1 p.197-210（緩「3年連続増」は state＝#4依存、数値部 25/50）|
+| `eps_cagr_3y` | A 年間EPS成長 | （3年連続増＝state・#4 DEFER）| +25%/年 | +50%/年 | — | §7.1 p.197-210 |
 | `roe` | A ROE | **≥17%（床）** | ≥25% | ≥50% | — | §7.1 注 p.179-210（17床・理想25-50。3段）|
 | `rs_percentile` | L RS Rating | **≥70（絶対床）** | ≥80 | ≥90 | — | §7.1 p.235-243 |
 | `volume_surge_pct` | S ブレイク出来高 | +25% | +40% | +50% | — | §7.1 p.225-233 |
 
 > **RS ハードフロア**: 原典 §7 注「**RS<70 は段階に関係なく禁止のハードゲート**」。緩い設定でも 70 未満は許容しない（individual override の下限を 70 にクランプ）。
+> **`eps_cagr_3y` の緩い段（金融レビュー指摘）**: 原典の「緩い＝3年連続増」は monotonic state（backend `eps_3y_rising`・#4 依存）のため #2 では未実装。**#4 着地まで暫定で「緩い」は「標準（+25%/年）」にマージ**（緩 segment を出さず標準を下限とする）。緩標が同値で並ぶ表記矛盾を避ける。
 
 #### B. 必須ゲート（じっちゃま絶対条件・**二値・変更不可**・lock 表示）
 
@@ -116,11 +117,13 @@ SSOT: [`jijima_protocol.md`](../references/jijima_protocol.md) / [`canslim_oneil
 - パネル開閉 = `grid-template-rows: 0fr ↔ 1fr`（max-height hack 後継）。**開 350ms / 閉 200ms 非対称**、easing expo `(.16,1,.3,1)`。
 - segment thumb / knob = Material `(.4,0,.2,1)`。件数 pop = spring `(.34,1.56,.64,1)`。
 - **`prefers-reduced-motion: reduce` で全 transition/animation 無効化**（WCAG 2.3.3）必須。
+- **タップ領域クランプ（UI/UXレビュー指摘・WCAG 2.5.5）**: 4段 mini-segment は中間幅（520-860px・iPad横/1024px付近）で各ボタンが 20px 台に潰れタップ不能になりうる。**`min-width: 36px` クランプ**＋**`860px` 以下で条件グリッドを1カラム化**のいずれかを必須実装。狭 screener カラムでは数値併記でラベル2行になるため幅見積りを保守的に。
 - CSS は `index.css` の `.screener-strategy-*` / `.screener-master__*` 既存スコープへ。**発光系（`.panel-card`/`.bs-panel`/`.surface-card`）非接触**、box-shadow は `var(--shadow-*)` token のみ、生 hex 禁止（gold は `--color-gold`/`--color-gold-mid`）。
 
 ### 3.2 a11y
 - 精度 segmented = `role=radiogroup/radio` + `aria-checked`。アドバンスド toggle = `role=switch` + `aria-checked`。
 - 必須ゲート = lock アイコン + `aria-disabled`、フォーカス可だが操作不可の旨を `aria-label` に明示。
+  **aria-label ひな形（UI/UXレビュー指摘）**: 「ロックされています」（＝機能制限の印象）でなく **「営業CFマージン ≥15%（戦略の絶対条件・変更不可）」** のように**原典由来の死守条件**であることを読み上げに織り込む。視覚・SR 双方で「制限でなく戦略の核心」と伝える。
 - focus-visible gold ring。
 
 ---
@@ -164,6 +167,7 @@ SSOT: [`jijima_protocol.md`](../references/jijima_protocol.md) / [`canslim_oneil
 
 ## 5. §38 / §5 / 色ルール discipline
 - **主語は常に「あなたの設定 / 手間の削減」**。「儲かる/勝てる/最強/必ず」を出さない（景表法§5 / 金商法§38）。「人力の代替」は事実ベースで可。
+- **「絶対6条件すべて準拠」と訴求しない（金融レビュー指摘・Trust Cliff 予防）**: じっちゃま絶対条件②③④（EPS/売上/CFPS 3期連続増）は backend monotonic field 未配線で #4 まで機械判定されない。**#2 launch 時点の機械判定は「絶対6条件のうち 4/6（CFマージン①・CFPS>EPS⑤ + その他）」**。「決算合格」プリセットのコピーで「6条件すべて」「完全準拠」と断定しない（連続性3条件は #4 後）。内部 DoD に明記。
 - 件数・閾値は **Python/JS の実集計**。LLM 数値計算なし（`[[feedback_llm_calc_separation]]`）。合否理由は #1 静的dict（着地済 `c9ccec4`）。
 - 色: ブレイク/選択は **gold**（`--color-gold`）。**シアンを「上昇/方向性」に使わない**（CLAUDE.md 色ルール）。緑=gain / 赤=loss / amber=warning。
 
@@ -180,6 +184,8 @@ SSOT: [`jijima_protocol.md`](../references/jijima_protocol.md) / [`canslim_oneil
 | **2-e** | a11y/motion 仕上げ（focus-visible / prefers-reduced-motion / aria）| 2-d | 小 |
 
 > 各 slice 末で `npm run build` + `design-system-check` + flag裏 dogfood（`?screener_v2=1` ダーク）。閾値変更（2-a）は §7 gate 1 で user 投資判断を取ってから。
+>
+> ⚠️ **2-d 完了まで flag-ON 禁止（UI/UXレビュー指摘・Trust Cliff #4）**: 2-c 完了時点では「アドバンスド Pro」toggle が見えるが `onProUpgrade` 導線が未接続のため、`?screener_v2=1` で dogfood すると「Pro を見る」が無反応＝「Pro限定と実装ゼロ」の一時的違反になる。**`onProUpgrade` 接続（2-d）完了までは flag-OFF で開発**するか、2-c までは toggle の「Pro」バッジ自体を出さない（プレースホルダー）。flag-ON dogfood は 2-d 完了後。
 
 ### DEFER（#2 完了後・別 SPEC）
 - 連続性 state ラダー（eps3/rev3/cfps3）+ p3/p4 プリセット → **backend #4（0-call fields + セクターRS集計）完了後**。
@@ -223,6 +229,8 @@ SSOT: [`jijima_protocol.md`](../references/jijima_protocol.md) / [`canslim_oneil
 競合（特に Finviz/TradingView/Stock Rover）は「フィルタを**組む**」だけで**正解の閾値（処方箋）を持たない**。CAN-SLIM 原典較正の閾値をプリセット内蔵するのは **IBD MarketSurge（$150/月）のみ**で英語・高価格。
 → BeatScanner の核 = **「勝ち筋が最初から入った日本語・決算駆動・原典内蔵スクリーナー」を IBD の 1/10 価格で**。日本の証券会社が無料な点には**「証券口座に縛られない独立性 + 決算 beat/miss 駆動 + 日本語 AI 解説」**で対抗（機能の非連続性で正当化）。
 
+> ⚠️ **LP 転用ガード（金融レビュー指摘・景表法§5）**: 本 §9.2 の「勝ち筋」「正解の閾値（処方箋）」等は**社内ポジショニング説明用**であり UI/LP 非露出。「これに従えば勝てる」という優良誤認・断定的判断の含意を持つため、**LP/UI コピーへ転用する際は funnel-cro + hallucination-guard で必ず再審査**する（事実ベースの「手間の削減・原典内蔵」へ言い換え）。
+
 ### 9.3 価格推奨
 | 優先 | 価格 | 年払い | 戦略ポジション |
 |---|---|---|---|
@@ -233,3 +241,17 @@ SSOT: [`jijima_protocol.md`](../references/jijima_protocol.md) / [`canslim_oneil
 **結論**: ローンチは **¥1,480/月（年 ¥12,800 = 2ヶ月無料）を第1候補**。Premium ¥2,980 / Signature ¥10k（nightly push）の既存 tier 階段と整合。実証は funnel-cro の手動 A/B（`AB-YYYYMMDD-pro-price`）で。
 
 > ⚠️ **Trust Cliff #4**: 「Pro」価格・バッジを LP/UI に出す時点で **Stripe 課金フローの実装が必須**（「Pro 限定」表示 + 実装ゼロは最致命）。本 SPEC の #2 実装範囲は**個別緩急の Pro ゲート UI（lockbar + count peek + onProUpgrade 導線）まで**で、課金処理本体は既存 upgrade modal / 別 SPEC に委ねる。
+
+---
+
+## 10. サブエージェントレビュー結果（2026-06-23・2体）
+
+user 提案により 金融（Opus）＋ UI/UX（Sonnet）の 2 体で原典較正・Pro ゲート設計を検証。両者とも **GO（条件付き）**。指摘 6 点はすべて本 SPEC に反映済（表記・訴求・spec精度の改善でアーキ上のブロッカーなし）。
+
+| 観点 | verdict | 反映した指摘 |
+|---|---|---|
+| 金融（原典忠実性・§38/§5）| 条件付き GO | ①§2.1-A `eps_cagr_3y` 緩標同値の解消（緩=state #4 DEFER 明記）②§9.2「勝ち筋/処方箋」LP転用ガード（§9 末尾）③「6条件完全準拠」と訴求しない注記（§5）|
+| UI/UX（認知負荷・Trust Cliff）| 実装可能 | ①2-d 前 flag-ON 禁止（§6 末尾・Trust Cliff #4）②中間幅 mini-segment ボタン幅クランプ（§3.1・WCAG 2.5.5）③必須ゲート aria-label 死守条件文言（§3.2）|
+
+**金融 verdict 要点**: 数値ラダーは CAN-SLIM §7.1 と一致、必須ゲート分類・RS ハードフロア・機関保有二値化・roe/rs 原典較正いずれも原典頁で裏取り可。`screener_v2` flag-OFF により Trust Cliff 後退が構造的に起きない設計が安全性を担保。
+**UI/UX verdict 要点**: 5原則・Trust Cliff 7項目・LLM不使用（§38/§5非抵触）・発光系非接触・色ルールを高精度で遵守。lockbar コピーは Free 価値を先に肯定する正しい構成。
