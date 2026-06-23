@@ -168,7 +168,14 @@ export default function ScreenerMaster({
   /** 戦略プリセット選択ハンドラ */
   function handleStrategySelect(presetKey) {
     setActiveStrategy(presetKey);
-    // CustomScreenerPanel が mount 済みであれば即 apply (lazy chunk 読込後も動作)
+    // IA昇格 (SPEC §IA L144「上部に戦略プリセット(1クリック)→ その下絞り込み条件で精度調整」):
+    // 戦略選択は custom (絞り込み) surface の 1クリック入口。preset(注目) モードで選択されたら
+    // custom へ自動切替 (原則4「1クリックを減らせ」)。切替で CustomScreenerPanel が新規 mount
+    // される場合は ref が null のため、initialStrategy prop で mount 時適用 (二重適用は panel 側 guard)。
+    if (presetKey != null && mode !== 'custom') {
+      setMode('custom');
+    }
+    // 既に custom (panel mount 済) なら即 imperative apply。未 mount なら no-op (initialStrategy が拾う)。
     customPanelRef.current?.applyStrategy(presetKey ?? null);
   }
 
@@ -179,6 +186,17 @@ export default function ScreenerMaster({
       data-mode={mode}
       style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}
     >
+      {/* ── 戦略プリセット bar (IA昇格: 画面トップの主要導線) ──────────
+          SPEC §IA L144「本画面はスクリーナータブの主画面そのもの。上部に戦略プリセット
+          (1クリック)→ その下絞り込み条件で精度調整 → master-detail で結果」。
+          mode に依らず常時トップ表示 (旧: custom モード内に埋没していたものを昇格)。
+          戦略選択時は handleStrategySelect が custom surface へ誘導する。
+          C-12: local state activeStrategy のみ管理 (workspaceStore に混入しない)。 */}
+      <StrategyPresetBar
+        active={activeStrategy}
+        onSelect={handleStrategySelect}
+      />
+
       {/* ── セグメントトグル (C-17: ヘッダー右寄せ、ラベル 2-4 字) ────
           Sprint3: toolbar↔content を 1px hairline + 余白リズムで構造的に区切る
           (詰め→抜き 境界 / 視線収束 / 痛み4 比較しやすさ。shadow ゼロ哲学) */}
@@ -214,17 +232,6 @@ export default function ScreenerMaster({
         </ChipGroup>
       </div>
 
-      {/* ── 戦略プリセット bar (screener_v2 + custom モード時のみ表示) ──
-          StrategyPresetBar は ScreenerMaster のツールバー直下、コンテンツ上部に配置。
-          mode='preset' (注目) では非表示 (preset モードはキュレーション済、戦略選択は不要)。
-          C-12: local state activeStrategy のみ管理 (workspaceStore に混入しない)。 */}
-      {mode === 'custom' && (
-        <StrategyPresetBar
-          active={activeStrategy}
-          onSelect={handleStrategySelect}
-        />
-      )}
-
       {/* ── コンテンツエリア ────────────────────────────────────── */}
       <div
         data-testid="screener-master-content"
@@ -251,6 +258,8 @@ export default function ScreenerMaster({
           <Suspense fallback={<MasterLoading />}>
             <CustomScreenerPanel
               ref={customPanelRef}
+              /* IA昇格: preset→custom 切替で新規 mount される際、選択済戦略を mount 時適用 */
+              initialStrategy={activeStrategy}
               onSelect={onSelect}
               onUpgrade={handleUpgradeRequest}
               onProUpgrade={onProUpgrade || handleUpgradeRequest}

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { SlidersHorizontal, ChevronDown, Lock, Info } from 'lucide-react';
 import { fetchScannerUniverse } from '../api.js';
 // Sprint 5 Pass D: GA4/Clarity 比較 event (C-16 昇格ゲート baseline 用)
@@ -297,6 +297,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   // 共有部品 (CustomScreenerPanel) を legacy (default OFF) に漏らさないため prop で gate
   // (SPEC §6「hideHero のように prop で限定」)。v2 経路 (ScreenerMaster) のみ true を渡す。
   screenerV2 = false,
+  // IA昇格: preset→custom 切替で本パネルが新規 mount される際、親で選択済の戦略 key を
+  // mount 時に 1 回だけ適用する (ref が null のタイミングを initialStrategy で補完)。
+  initialStrategy = null,
 }, ref) {
   // Pass 3b: 統合 universe state (additive facet engine の母集団)
   const [universe, setUniverse] = useState(_universeCache);
@@ -327,51 +330,61 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   // Sprint 5 Pass B: 複数選択 → watchlist 一括追加
   const [selectedTickers, setSelectedTickers] = useState(() => new Set());
 
-  // StrategyPresetBar → applyStrategy (useImperativeHandle で親が呼べるよう expose)
-  // 設計: state setter を直接呼ぶ (Redux store に混入しない、C-12 遵守)
-  useImperativeHandle(ref, () => ({
-    /**
-     * presetKey: 'earnings_pass' | 'new_high_break' | null (null = リセット)
-     *
-     * 決算合格 (earnings_pass):
-     *   preset='standard' + fundaPassOnly=true + ocfMarginOnly=true + ocfGtNiOnly=true
-     *   ★ funda_pass が 5 条件を内包。CF 2 本追加で「絶対6条件」に相当。
-     *   overrides はリセット (preset 選び直し §0-7 と同規約)。
-     *
-     * 新高値ブレイク (new_high_break):
-     *   buyZoneOnly=true (pivot 0〜+5%) + newHigh52wOnly=true (is_new_52w_high===true)
-     *   ★ 52週高値 facet 実装済 (is_new_52w_high)。cup/breakout の状態分類トグルは将来拡張。
-     *   preset='standard' (RS=85 維持で勢いも担保)。
-     *   overrides はリセット。
-     *
-     * null (解除):
-     *   すべての binary facet とプリセット overrides を初期値に戻す。
-     *   preset='standard', overrides={} のみリセット (sector/mcap は保持)。
-     */
-    applyStrategy(presetKey) {
-      // まず共通リセット (overrides / binary facets)
-      setPreset('standard');
-      setOverrides({});
-      setFundaPassOnly(false);
-      setOcfMarginOnly(false);
-      setOcfGtNiOnly(false);
-      setBuyZoneOnly(false);
-      setNewHigh52wOnly(false);
-      setAdVolumeOnly(false);
+  // StrategyPresetBar → applyStrategy 本体 (imperative handle と mount 時適用で共用)。
+  // 設計: state setter を直接呼ぶ (Redux store に混入しない、C-12 遵守)。
+  /**
+   * presetKey: 'earnings_pass' | 'new_high_break' | null (null = リセット)
+   *
+   * 決算合格 (earnings_pass):
+   *   preset='standard' + fundaPassOnly=true + ocfMarginOnly=true + ocfGtNiOnly=true
+   *   ★ funda_pass が 5 条件を内包。CF 2 本追加で「絶対6条件」に相当。
+   *   overrides はリセット (preset 選び直し §0-7 と同規約)。
+   *
+   * 新高値ブレイク (new_high_break):
+   *   buyZoneOnly=true (pivot 0〜+5%) + newHigh52wOnly=true (is_new_52w_high===true)
+   *   ★ 52週高値 facet 実装済 (is_new_52w_high)。cup/breakout の状態分類トグルは将来拡張。
+   *   preset='standard' (RS=85 維持で勢いも担保)。
+   *   overrides はリセット。
+   *
+   * null (解除):
+   *   すべての binary facet とプリセット overrides を初期値に戻す。
+   *   preset='standard', overrides={} のみリセット (sector/mcap は保持)。
+   */
+  const applyStrategyImpl = useCallback((presetKey) => {
+    // まず共通リセット (overrides / binary facets)
+    setPreset('standard');
+    setOverrides({});
+    setFundaPassOnly(false);
+    setOcfMarginOnly(false);
+    setOcfGtNiOnly(false);
+    setBuyZoneOnly(false);
+    setNewHigh52wOnly(false);
+    setAdVolumeOnly(false);
 
-      if (presetKey === 'earnings_pass') {
-        // 5 条件達成 + CF 創出力 + 利益の質
-        setFundaPassOnly(true);
-        setOcfMarginOnly(true);
-        setOcfGtNiOnly(true);
-      } else if (presetKey === 'new_high_break') {
-        // 買い場圏 (pivot ≤+5%) + 52週高値更新
-        setBuyZoneOnly(true);
-        setNewHigh52wOnly(true);
-      }
-      // null = リセットのみ (共通処理で完了)
-    },
-  }), []);
+    if (presetKey === 'earnings_pass') {
+      // 5 条件達成 + CF 創出力 + 利益の質
+      setFundaPassOnly(true);
+      setOcfMarginOnly(true);
+      setOcfGtNiOnly(true);
+    } else if (presetKey === 'new_high_break') {
+      // 買い場圏 (pivot ≤+5%) + 52週高値更新
+      setBuyZoneOnly(true);
+      setNewHigh52wOnly(true);
+    }
+    // null = リセットのみ (共通処理で完了)
+  }, []);
+
+  useImperativeHandle(ref, () => ({ applyStrategy: applyStrategyImpl }), [applyStrategyImpl]);
+
+  // IA昇格: preset→custom 切替で本パネルが新規 mount された際、親で選択済の戦略を初回 1 回適用。
+  // imperative path (mount 済での選択) とは排他: ref guard で「初回 mount のみ」に限定し、
+  // 以後の initialStrategy 変化は imperative 経由 (二重適用しない)。
+  const didApplyInitialStrategy = useRef(false);
+  useEffect(() => {
+    if (didApplyInitialStrategy.current) return;
+    didApplyInitialStrategy.current = true;
+    if (initialStrategy) applyStrategyImpl(initialStrategy);
+  }, [initialStrategy, applyStrategyImpl]);
 
   // 一括追加ハンドラ (Trust Cliff: 無料 3 件上限を明示)
   const handleBulkAdd = () => {
