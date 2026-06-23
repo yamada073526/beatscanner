@@ -24,7 +24,7 @@ export const STRATEGY_PRESETS = [
   {
     key: 'new_high_break',
     label: '新高値ブレイク',
-    title: '52週高値圏の買い場圏 (pivot ≤+5%) にある銘柄',
+    title: '52週高値を更新し、買い場圏 (pivot ≤+5%) にある銘柄',
   },
 ];
 
