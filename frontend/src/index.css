@@ -13675,6 +13675,90 @@ body.is-digest-resizing {
   .screener-crow__mseg-btn,
   .screener-crow__lock-cta { transition: none; }
 }
+/* ── Phase C: 旬のセクター master-detail (mockup .md/.secmaster/.secrow/.top3 準拠・表示専用) ──
+   投資色ルール: 主戦場(最上位 sector)=amber(warning)、上位 sector=緑(gain)。RS 相対力ランクの semantic。 */
+.screener-secmd {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+@media (max-width: 720px) { .screener-secmd { grid-template-columns: 1fr; } }
+.screener-secmaster {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.screener-secrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.screener-secrow:hover { background: var(--bg-hover); }
+.screener-secrow.is-sel {
+  background: color-mix(in srgb, var(--color-gold) 8%, transparent);
+  border-color: color-mix(in srgb, var(--color-gold) 30%, transparent);
+}
+.screener-secrow__bar { flex: none; width: 4px; align-self: stretch; border-radius: 2px; }
+.screener-secrow__bar[data-tone="hot"] { background: var(--color-warning); }
+.screener-secrow__bar[data-tone="up"] { background: var(--color-gain); }
+.screener-secrow__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.screener-secrow__name { display: flex; align-items: center; gap: var(--space-2); font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.screener-secrow__chip {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  border-radius: var(--radius-pill);
+  padding: 1px 7px;
+}
+.screener-secrow__tag { font-size: 11px; color: var(--text-muted); }
+.screener-secrow__sr { flex: none; margin-left: auto; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.screener-secrow__sr[data-tone="hot"] { color: var(--color-warning); }
+.screener-secrow__sr[data-tone="up"] { color: var(--color-gain); }
+.screener-seclegend { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-2); padding: var(--space-2) var(--space-4); font-size: 11px; color: var(--text-muted); }
+.screener-seclegend i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; border-radius: 3px; vertical-align: middle; }
+.screener-seclegend i[data-tone="hot"] { background: var(--color-warning); }
+.screener-seclegend i[data-tone="up"] { background: var(--color-gain); }
+.screener-secdetail {
+  padding: var(--space-4);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.screener-secdetail__h { margin-bottom: var(--space-3); font-size: 11px; color: var(--text-muted); }
+.screener-secdetail__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  cursor: pointer;
+}
+.screener-secdetail__row:last-child { border-bottom: 0; }
+.screener-secdetail__row:hover .screener-secdetail__nm { color: var(--text-secondary); }
+.screener-secdetail__tk { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.screener-secdetail__tk strong { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.screener-secdetail__nm { overflow: hidden; font-size: 12px; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .screener-secrow { transition: none; } }
+
 .screener-adv-bar { margin-bottom: var(--space-2); }
 /* アドバンスド toggle (role=switch)。OFF=精度のみ / ON=個別緩急 mini-segment 露出。 */
 .screener-adv-toggle {
