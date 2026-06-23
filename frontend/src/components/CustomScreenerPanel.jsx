@@ -194,6 +194,52 @@ const AD_VOLUME_FACET = {
   category: 'demand',
 };
 
+// ─── Phase B-1: PRESET_CONDS 単一条件レジストリ (count==list の述語 SSOT) ─────────────
+// 目的: FUNDA_FACETS(grade 型) + binary facets を 1 つの条件レジストリへ統合し、
+//   itemPasses / countPreset / applyStrategyImpl の「条件の二重・三重管理」を脱して
+//   単一 SSOT を参照する土台を作る ([[feedback_facet_filter_count_integrity]] Trust Cliff C-2)。
+// B-1 は「UI 不変・数値不変の内部 refactor」: 既存 facet 定義はそのまま参照し、挙動を完全一致させる。
+//   - kind 'grade'  : activeGrades({key:level}) 経由。pass(item, lvl)。FACET_MAP の facet を参照。
+//   - kind 'binary' : extra[flag] が ON の時だけ pass(item) を AND (閾値/範囲型 binary facet)。
+//   - kind 'flag'   : extra[flag] が ON の時だけ pass(item) を AND (bool flag・facet オブジェクトなし)。
+// 後続 sprint の土台 (B-1 では未付与): levels(精度スライド値配列=B-2) / group・gate・states(B-2/B-3) /
+//   tier・available(準備中 disabled=B-3) / preset→conds 配列(B-4)。B-1 時点の 12 条件はすべて現行で機能中。
+function gradePass(facet, item, lvl) {
+  const v = item[facet.field];
+  if (v == null) return false;            // 測定外は AND で除外 (honest)
+  const thr = facet.grades[lvl];
+  if (thr != null && v < thr) return false; // 未定義段は no-op (clamp 済のため通常到達しない)
+  return true;
+}
+export const PRESET_CONDS = [
+  // ── grade 条件 (精度連動・activeGrades 経由) ──
+  { key: 'eps_yoy_pct',          kind: 'grade', facet: FACET_MAP.eps_yoy_pct,          pass: (item, lvl) => gradePass(FACET_MAP.eps_yoy_pct, item, lvl) },
+  { key: 'eps_cagr_3y',          kind: 'grade', facet: FACET_MAP.eps_cagr_3y,          pass: (item, lvl) => gradePass(FACET_MAP.eps_cagr_3y, item, lvl) },
+  { key: 'roe',                  kind: 'grade', facet: FACET_MAP.roe,                  pass: (item, lvl) => gradePass(FACET_MAP.roe, item, lvl) },
+  { key: 'rs_percentile',        kind: 'grade', facet: FACET_MAP.rs_percentile,        pass: (item, lvl) => gradePass(FACET_MAP.rs_percentile, item, lvl) },
+  { key: 'volume_surge_pct',     kind: 'grade', facet: FACET_MAP.volume_surge_pct,     pass: (item, lvl) => gradePass(FACET_MAP.volume_surge_pct, item, lvl) },
+  { key: 'inst_holders_qoq_pct', kind: 'grade', facet: FACET_MAP.inst_holders_qoq_pct, pass: (item, lvl) => gradePass(FACET_MAP.inst_holders_qoq_pct, item, lvl) },
+  // ── binary / flag 条件 (extra フラグ経由・順序は旧 itemPasses の AND チェック順を踏襲) ──
+  // funda_pass: 5 条件達成 flag (facet オブジェクトなし)。true のみ通す。
+  { key: 'funda_pass',       kind: 'flag',   flag: 'fundaPassOnly',  pass: (item) => item.funda_pass === true },
+  // ocf_margin: 営業CFマージン ≥15% (§0-1③)。null = AND 除外 (honest)、上限カットなし。
+  //   None-preserve: 0.0 は有効値だが閾値 15 未満なので自然に落ちる。
+  { key: 'ocf_margin_pct',   kind: 'binary', flag: 'ocfMarginOnly',  facet: OCF_MARGIN_FACET,   pass: (item) => { const m = item[OCF_MARGIN_FACET.field]; return m != null && m >= OCF_MARGIN_FACET.threshold; } },
+  // ocf_gt_netincome: 営業CF>純利益 bool (§0-3)。null (sector guard / 外貨ADR / 欠落) = AND 除外。
+  { key: 'ocf_gt_netincome', kind: 'flag',   flag: 'ocfGtNiOnly',    facet: OCF_GT_NI_FACET,    pass: (item) => item[OCF_GT_NI_FACET.field] === true },
+  // buy_zone: 買い場圏 0 ≤ pivot_distance_pct ≤ 5 (§0-4)。null / pivot 下 / 過熱 (>5) = AND 除外。
+  { key: 'buy_zone',         kind: 'binary', flag: 'buyZoneOnly',    facet: BUY_ZONE_FACET,     pass: (item) => { const d = item[BUY_ZONE_FACET.field]; return d != null && d >= BUY_ZONE_FACET.zoneMin && d <= BUY_ZONE_FACET.zoneMax; } },
+  // new_high_52w: 52週高値更新 bool。null (Premium マスク / 欠落) = AND 除外。
+  { key: 'new_high_52w',     kind: 'flag',   flag: 'newHigh52wOnly', facet: NEW_HIGH_52W_FACET, pass: (item) => item[NEW_HIGH_52W_FACET.field] === true },
+  // ad_volume: A/D 出来高の質 ratio > 1 (§0-2)。null (cup 未形成 / Premium マスク) = AND 除外。
+  { key: 'ad_volume',        kind: 'binary', flag: 'adVolumeOnly',   facet: AD_VOLUME_FACET,    pass: (item) => { const r = item[AD_VOLUME_FACET.field]; return r != null && r > AD_VOLUME_FACET.threshold; } },
+  // sector_leader: セクター内 RS 上位 flag (is_sector_rs_leader)。null / undefined / false = 除外。
+  { key: 'sector_leader',    kind: 'flag',   flag: 'sectorLeaderOnly', pass: (item) => item.is_sector_rs_leader === true },
+];
+const COND_MAP = Object.fromEntries(PRESET_CONDS.map((c) => [c.key, c]));
+// binary/flag 条件のみ (extra フラグ経由で AND・itemPasses が走査)。grade は activeGrades 経由で別ループ。
+const BINARY_CONDS = PRESET_CONDS.filter((c) => c.kind === 'binary' || c.kind === 'flag');
+
 /** 実効 grade map: CORE は preset level、overrides で個別上書き ('off' で除外) */
 // locked facet 和名マップ (Pass 3c: 静的 dict、module scope に配置して毎 render 再作成を回避)
 const LOCKED_FACET_LABELS = {
@@ -267,43 +313,23 @@ export function buildActiveGrades(preset, overrides) {
   return g; // { facetKey: level }
 }
 
-/** 単一 predicate — count も list も必ずこれを通す (Trust Cliff C-2 の根拠) */
+/** 単一 predicate — count も list も必ずこれを通す (Trust Cliff C-2 の根拠)。
+ *  Phase B-1: PRESET_CONDS レジストリ駆動に移行 (挙動は refactor 前と完全一致・数値不変)。
+ *  grade 条件は activeGrades({key:level}) 経由、binary/flag 条件は extra フラグ経由で、
+ *  すべて同一 cond.pass を通す (FUNDA_FACETS / binary facets の二重管理を単一 SSOT へ統合)。
+ *  各 binary の否定は旧実装と論理一致 (例: !(m!=null && m>=15) ≡ m==null || m<15)。 */
 export function itemPasses(item, activeGrades, extra) {
+  // grade 条件 (精度連動・activeGrades = {facetKey: level})
   for (const [k, lvl] of Object.entries(activeGrades)) {
-    const f = FACET_MAP[k]; if (!f) continue;
-    const v = item[f.field];
-    if (v == null) return false;          // 測定外は AND で除外 (honest)
-    const thr = f.grades[lvl];
-    if (thr != null && v < thr) return false; // 未定義段は no-op (clamp 済のため通常到達しない)
+    const c = COND_MAP[k];
+    if (!c || c.kind !== 'grade') continue; // grade 以外/未登録 key は no-op (旧 FACET_MAP[k] 不在 continue と等価)
+    if (!c.pass(item, lvl)) return false;
   }
-  if (extra?.fundaPassOnly && item.funda_pass !== true) return false;
-  // Sprint 3: 営業CFマージン binary facet (§0-1③)。null = AND 除外 (honest)、上限カットなし。
-  // None-preserve: 0.0 は有効値だが閾値 15 未満なので自然に落ちる (`< threshold` で判定)。
-  if (extra?.ocfMarginOnly) {
-    const m = item[OCF_MARGIN_FACET.field];
-    if (m == null || m < OCF_MARGIN_FACET.threshold) return false;
+  // binary / flag 条件 (extra フラグが ON のものだけ AND・順序は旧実装踏襲で結果不変)
+  for (const c of BINARY_CONDS) {
+    if (extra?.[c.flag] && !c.pass(item)) return false;
   }
-  // Phase1 S3: #1 営業CF>純利益 binary facet (§0-3)。bool field: true のみ通す。
-  // null (sector guard / 外貨ADR / 欠落) = AND 除外 (honest、達成扱いしない)。
-  if (extra?.ocfGtNiOnly && item[OCF_GT_NI_FACET.field] !== true) return false;
-  // Phase1 S3: #3 買い場圏 binary facet (§0-4)。buy zone = 0 ≤ pivot_distance_pct ≤ 5。
-  // null (pivot 未形成 or free の Premium マスク) / pivot 下 (<0=ブレイク前) / 過熱 (>5) = AND 除外。
-  if (extra?.buyZoneOnly) {
-    const d = item[BUY_ZONE_FACET.field];
-    if (d == null || d < BUY_ZONE_FACET.zoneMin || d > BUY_ZONE_FACET.zoneMax) return false;
-  }
-  // 52週高値更新 binary facet。is_new_52w_high===true のみ通す。
-  // null (Premium マスク / データ欠落) = AND 除外 (honest、達成扱いしない)。
-  if (extra?.newHigh52wOnly && item[NEW_HIGH_52W_FACET.field] !== true) return false;
-  // Phase1 S4: #8 A/D 出来高の質 binary facet (§0-2)。ad_volume_ratio > 1 = 買い優勢のみ通す。
-  // null (cup 未形成 / down日<3 / free の Premium マスク) = AND 除外 (honest、達成扱いしない)。
-  if (extra?.adVolumeOnly) {
-    const r = item[AD_VOLUME_FACET.field];
-    if (r == null || r <= AD_VOLUME_FACET.threshold) return false;
-  }
-  // Phase A: セクター別リーダー binary flag (セクター内 RS 上位・is_sector_rs_leader)。
-  // null / undefined / false = 除外。
-  if (extra?.sectorLeaderOnly && item.is_sector_rs_leader !== true) return false;
+  // sector / mcap フィルタ (preset 非依存・旧実装そのまま)
   if (extra?.sectors?.length && !extra.sectors.includes(item.sector)) return false;
   if (extra?.mcapBands?.length && !extra.mcapBands.includes(item.mcap_band)) return false;
   return true;
