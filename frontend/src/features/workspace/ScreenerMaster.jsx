@@ -23,9 +23,10 @@
  *   screener-master-error   — エラー fallback (ErrorBoundary が catch した時)
  */
 
-import { useState, Suspense, lazy, Component } from 'react';
+import { useState, useRef, Suspense, lazy, Component } from 'react';
 import Chip, { ChipGroup } from '../../components/ui/Chip.jsx';
 import BrandPulse from '../../components/ui/BrandPulse.jsx';
+import StrategyPresetBar from '../../components/StrategyPresetBar.jsx';
 
 // 既存 component を lazy で再利用 (一気書き換えしない、C-9)
 const CustomScreenerPanel = lazy(() => import('../../components/CustomScreenerPanel.jsx'));
@@ -159,6 +160,18 @@ export default function ScreenerMaster({
   // mode: 'preset' (今日の注目) | 'custom' (自分で絞る)
   const [mode, setMode] = useState('preset');
 
+  // 戦略プリセット bar: 選択中の戦略 key (null = 未選択)
+  const [activeStrategy, setActiveStrategy] = useState(null);
+  // CustomScreenerPanel の applyStrategy を呼ぶための ref
+  const customPanelRef = useRef(null);
+
+  /** 戦略プリセット選択ハンドラ */
+  function handleStrategySelect(presetKey) {
+    setActiveStrategy(presetKey);
+    // CustomScreenerPanel が mount 済みであれば即 apply (lazy chunk 読込後も動作)
+    customPanelRef.current?.applyStrategy(presetKey ?? null);
+  }
+
   return (
     <MasterErrorBoundary>
     <div
@@ -201,6 +214,17 @@ export default function ScreenerMaster({
         </ChipGroup>
       </div>
 
+      {/* ── 戦略プリセット bar (screener_v2 + custom モード時のみ表示) ──
+          StrategyPresetBar は ScreenerMaster のツールバー直下、コンテンツ上部に配置。
+          mode='preset' (注目) では非表示 (preset モードはキュレーション済、戦略選択は不要)。
+          C-12: local state activeStrategy のみ管理 (workspaceStore に混入しない)。 */}
+      {mode === 'custom' && (
+        <StrategyPresetBar
+          active={activeStrategy}
+          onSelect={handleStrategySelect}
+        />
+      )}
+
       {/* ── コンテンツエリア ────────────────────────────────────── */}
       <div
         data-testid="screener-master-content"
@@ -222,9 +246,11 @@ export default function ScreenerMaster({
         ) : (
           /* custom モード: CustomScreenerPanel (自分で絞る Explorer) を再利用
              C-17: filter UI は data-mode="custom" の時のみ max-height 展開 (CSS 制御)
-             Sprint 5 Pass B: onAddToWatchlist / watchlist / isProUser を forward */
+             Sprint 5 Pass B: onAddToWatchlist / watchlist / isProUser を forward
+             ref: applyStrategy (useImperativeHandle) を StrategyPresetBar から呼ぶため */
           <Suspense fallback={<MasterLoading />}>
             <CustomScreenerPanel
+              ref={customPanelRef}
               onSelect={onSelect}
               onUpgrade={handleUpgradeRequest}
               onProUpgrade={onProUpgrade || handleUpgradeRequest}

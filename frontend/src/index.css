@@ -14112,6 +14112,18 @@ body.is-digest-resizing {
   padding-top: var(--space-2);         /* 抜き: hairline 直後に呼吸を与える */
 }
 
+/* ── StrategyPresetBar (screener_v2 + custom モード時のみ表示) ──
+   toolbar と content の間に挟まる薄い帯。shadow ゼロ・glow なし。
+   border-bottom で content 側と区切り (toolbar 直下の呼吸は上部 border-bottom が担う)。 */
+.screener-strategy-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle);        /* toolbar と content の中間領域を semantic token で着色 */
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    ScreenerTable — TradingView 型データテーブル (Sprint H)
    Aman ダーク: hairline / mono tabular / 二色 / 余白。発光ゼロ。

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { SlidersHorizontal, ChevronDown, Lock, Info } from 'lucide-react';
 import { fetchScannerUniverse } from '../api.js';
 // Sprint 5 Pass D: GA4/Clarity 比較 event (C-16 昇格ゲート baseline 用)
@@ -236,7 +236,7 @@ function formatAsOf(asOf) {
   return `${diffDays}日前に更新`;
 }
 
-export default function CustomScreenerPanel({
+const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   onSelect,
   onUpgrade,
   onProUpgrade,
@@ -247,7 +247,7 @@ export default function CustomScreenerPanel({
   // 共有部品 (CustomScreenerPanel) を legacy (default OFF) に漏らさないため prop で gate
   // (SPEC §6「hideHero のように prop で限定」)。v2 経路 (ScreenerMaster) のみ true を渡す。
   screenerV2 = false,
-}) {
+}, ref) {
   // Pass 3b: 統合 universe state (additive facet engine の母集団)
   const [universe, setUniverse] = useState(_universeCache);
   const [universeLoading, setUniverseLoading] = useState(false);
@@ -274,6 +274,52 @@ export default function CustomScreenerPanel({
   const [showAllResults, setShowAllResults] = useState(false);
   // Sprint 5 Pass B: 複数選択 → watchlist 一括追加
   const [selectedTickers, setSelectedTickers] = useState(() => new Set());
+
+  // StrategyPresetBar → applyStrategy (useImperativeHandle で親が呼べるよう expose)
+  // 設計: state setter を直接呼ぶ (Redux store に混入しない、C-12 遵守)
+  useImperativeHandle(ref, () => ({
+    /**
+     * presetKey: 'earnings_pass' | 'new_high_break' | null (null = リセット)
+     *
+     * 決算合格 (earnings_pass):
+     *   preset='standard' + fundaPassOnly=true + ocfMarginOnly=true + ocfGtNiOnly=true
+     *   ★ funda_pass が 5 条件を内包。CF 2 本追加で「絶対6条件」に相当。
+     *   overrides はリセット (preset 選び直し §0-7 と同規約)。
+     *
+     * 新高値ブレイク (new_high_break):
+     *   buyZoneOnly=true (pivot 0〜+5%)
+     *   ★ cup/breakout/52週高値の専用 facet は現存しないため未設定。
+     *     backend 追加後に本メソッドを拡張すること (不足 facet 報告参照)。
+     *   preset='standard' (RS=85 維持で勢いも担保)。
+     *   overrides はリセット。
+     *
+     * null (解除):
+     *   すべての binary facet とプリセット overrides を初期値に戻す。
+     *   preset='standard', overrides={} のみリセット (sector/mcap は保持)。
+     */
+    applyStrategy(presetKey) {
+      // まず共通リセット (overrides / binary facets)
+      setPreset('standard');
+      setOverrides({});
+      setFundaPassOnly(false);
+      setOcfMarginOnly(false);
+      setOcfGtNiOnly(false);
+      setBuyZoneOnly(false);
+      setAdVolumeOnly(false);
+
+      if (presetKey === 'earnings_pass') {
+        // 5 条件達成 + CF 創出力 + 利益の質
+        setFundaPassOnly(true);
+        setOcfMarginOnly(true);
+        setOcfGtNiOnly(true);
+      } else if (presetKey === 'new_high_break') {
+        // 買い場圏 (pivot ≤+5%)
+        setBuyZoneOnly(true);
+        // ※ cup/breakout/52週高値専用 facet は未実装 (不足 facet 報告参照)
+      }
+      // null = リセットのみ (共通処理で完了)
+    },
+  }), []);
 
   // 一括追加ハンドラ (Trust Cliff: 無料 3 件上限を明示)
   const handleBulkAdd = () => {
@@ -1524,4 +1570,6 @@ export default function CustomScreenerPanel({
       )}
     </section>
   );
-}
+});
+
+export default CustomScreenerPanel;
