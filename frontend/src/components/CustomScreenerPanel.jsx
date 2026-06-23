@@ -283,6 +283,11 @@ const CROW_LAYOUT = [
   { group: 'タイミング', sub: '値動き・勢い',         keys: ['buy_zone', 'new_high_52w', 'rs_percentile', 'volume_surge_pct'] },
   { group: '需給',       sub: '機関の動き',           keys: ['ad_volume', 'inst_holders_qoq_pct'] },
 ];
+// B-3: crow conds が inline lock crow として提示する locked_facets key 集合 (= CROW_BINARY_META.locked)。
+//   v2 では (2f) 別 section から除外して二重表示を防ぐ ({pivot_distance, breakout, ad_volume})。
+const CROW_INLINE_LOCKED_KEYS = new Set(
+  Object.values(CROW_BINARY_META).map((m) => m.locked).filter(Boolean)
+);
 
 // ─── 合否理由 静的dict (§38安全・LLM不使用・STATE_LABEL_JP 方式) ────────────────
 // 「なぜ合致したか」を事実言い換え。数値は data 由来で、LLM 数値計算・narration なし
@@ -883,18 +888,64 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
         else if (isCore) setOverrides((prev) => { const n = { ...prev }; delete n[cond.key]; return n; });
         else setOverrides((prev) => ({ ...prev, [cond.key]: 'standard' }));
       };
+      // B-3 mseg: adv ON 時、grade crow 内に精度セグメント (緩/標/厳/最厳) を full-width で出す。
+      //   ロジックは renderGradeRow と同一 (overrides 設定 / advLocked は disabled でなく nudge §4.2)。
+      const msegLevels = screenerV2 ? facetLevels(facet) : facetLevels(facet).filter((l) => l !== 'severe');
       return (
         <div key={cond.key} className={`screener-crow${on ? ' is-on' : ' is-off'}`} data-testid="screener-cond-row" data-cond={cond.key}>
           <button type="button" role="switch" aria-checked={on} className="screener-crow__sw" onClick={toggle} aria-label={`${facet.label} を${on ? '外す' : '加える'}`} />
           <span className="screener-crow__lbl">{facet.label}</span>
           <span className="screener-crow__th">{GRADE_LABELS_SHORT[dispLvl]} {gradeAnnot(facet, dispLvl)}</span>
+          {advOpen && (
+            <div className={`screener-crow__mseg${advLocked ? ' is-locked' : ''}`} role="group" aria-label={`${facet.label} の強度`} data-testid={`screener-mseg-${cond.key}`}>
+              {msegLevels.map((lvl) => {
+                const pressed = on && dispLvl === lvl;
+                return (
+                  <button
+                    key={lvl}
+                    type="button"
+                    className={`screener-crow__mseg-btn${pressed ? ' is-on' : ''}`}
+                    aria-pressed={pressed}
+                    aria-label={advLocked ? `${GRADE_LABELS_SHORT[lvl]} — Pro で個別に調整できます` : `${facet.label} を ${GRADE_LABELS_SHORT[lvl]} に設定`}
+                    onClick={() => {
+                      if (advLocked) { setAdvLockNudge(true); trackEvent('screener_adv_locked_click', { facet: cond.key, level: lvl }); return; }
+                      setOverrides((prev) => ({ ...prev, [cond.key]: lvl }));
+                    }}
+                    data-testid={`screener-mseg-${cond.key}-${lvl}`}
+                  >
+                    {GRADE_LABELS_SHORT[lvl]}
+                    <span className="screener-crow__mseg-v">{gradeAnnot(facet, lvl)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       );
     }
     const meta = CROW_BINARY_META[cond.key];
     if (!meta) return null;
+    // B-3 lock crow: Premium 限定 facet は「非表示」でなく南京錠 crow で見せる (Trust Cliff #2・件数0誤解を解消)。
+    //   freshness 無関係に提示 (Premium 機能の存在を広告)。表示専用で itemPasses/件数には不参加 (C-2 不変)。
+    if (meta.locked && (universe?.locked_facets || []).includes(meta.locked)) {
+      const isProTier = meta.locked === 'near_high';
+      return (
+        <div key={cond.key} className="screener-crow is-locked" data-testid="screener-cond-row" data-cond={cond.key} data-locked="1" title={meta.tooltip || undefined}>
+          <span className="screener-crow__lockicon" aria-hidden><Lock size={13} strokeWidth={2} /></span>
+          <span className="screener-crow__lbl">{meta.label}</span>
+          <button
+            type="button"
+            className="screener-crow__lock-cta"
+            onClick={() => { trackEvent('screener_locked_crow_cta', { facet: cond.key }); (isProTier ? (onProUpgrade || onUpgrade) : onUpgrade)?.(`${meta.label} (${isProTier ? 'Pro' : 'Premium'})`); }}
+            data-testid={`screener-locked-cta-${cond.key}`}
+            aria-label={`${meta.label} は ${isProTier ? 'Pro' : 'Premium'} で解錠`}
+          >
+            {isProTier ? 'Pro で解錠' : 'Premium で解錠'}
+          </button>
+        </div>
+      );
+    }
     if (!universe?.freshness?.[meta.freshness]) return null;
-    if (meta.locked && (universe?.locked_facets || []).includes(meta.locked)) return null;
     const binBindings = {
       funda_pass: [fundaPassOnly, setFundaPassOnly],
       ocf_margin_pct: [ocfMarginOnly, setOcfMarginOnly],
@@ -1317,7 +1368,11 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                   (§A 案・cup/breakout と同列)。 */}
               {(() => {
                 const lockedVisible = (universe.locked_facets || []).filter(
-                  (key) => screenerV2 || (key !== 'pivot_distance' && key !== 'ad_volume')
+                  // legacy: pivot_distance/ad_volume は v2 scope なので隠す。
+                  // v2: cond が inline lock crow で出す key (pivot_distance/breakout/ad_volume) は二重表示防止で除外。
+                  (key) => screenerV2
+                    ? !CROW_INLINE_LOCKED_KEYS.has(key)
+                    : (key !== 'pivot_distance' && key !== 'ad_volume')
                 );
                 if (lockedVisible.length === 0) return null;
                 return (
