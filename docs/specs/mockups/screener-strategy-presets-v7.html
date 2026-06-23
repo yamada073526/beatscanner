@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BeatScanner スクリーナー戦略プリセット モックアップ v7</title>
+<style>
+  :root{
+    --bg-primary:#0f172a; --bg-card:#1e2433; --bg-subtle:#1e2a3a; --bg-muted:#243447; --bg-hover:#253045;
+    --text-primary:#f1f5f9; --text-secondary:#cbd5e1; --text-muted:#94a3b8;
+    --color-gain:#34ef81; --color-loss:#f87171; --color-warning:#f59e0b; --color-accent:#38bdf8;
+    --gold:#d4af37; --gold-mid:#f4cd5d; --gold-dark:#c8952c;
+    --border:rgba(255,255,255,.08); --border-strong:rgba(255,255,255,.14);
+    --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;
+    --r-sm:8px;--r-md:12px;--r-lg:16px;--r-pill:9999px;
+    --elev3:0 4px 12px rgba(0,0,0,.50),0 12px 24px rgba(0,0,0,.30);
+    --ease-expo:cubic-bezier(.16,1,.3,1); --ease-std:cubic-bezier(.4,0,.2,1); --ease-spring:cubic-bezier(.34,1.56,.64,1);
+    --font:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  button{font-family:inherit;color:inherit}
+  button:focus-visible,.preset:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--gold-mid);outline-offset:2px}
+  body{background:radial-gradient(1200px 600px at 80% -10%,rgba(56,189,248,.05),transparent 60%),var(--bg-primary);
+    color:var(--text-primary);font-family:var(--font);-webkit-font-smoothing:antialiased;line-height:1.5;padding:var(--s8) var(--s6) 64px}
+  .wrap{max-width:1180px;margin:0 auto}
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--s4);gap:var(--s3);flex-wrap:wrap}
+  .mock-tag{display:inline-block;font-size:11px;letter-spacing:.04em;color:var(--gold-mid);border:1px solid rgba(212,175,55,.35);border-radius:var(--r-pill);padding:3px 10px}
+  .planpick{display:inline-flex;align-items:center;gap:var(--s2);font-size:12px;color:var(--text-muted)}
+  .seg2{display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-pill);padding:3px}
+  .seg2 button{border:0;background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;padding:4px 12px;border-radius:var(--r-pill);cursor:pointer;transition:.2s}
+  .seg2 button.on{background:var(--bg-muted);color:var(--text-primary)}
+  h1{font-size:24px;font-weight:600;letter-spacing:-.01em;margin-bottom:var(--s2);color:var(--text-primary)}
+  .sub{color:var(--text-muted);font-size:14px;margin-bottom:var(--s6)}
+  svg{display:block}
+
+  .presets{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--s3);margin-bottom:var(--s4)}
+  .preset{position:relative;text-align:left;cursor:pointer;background:var(--bg-card);color:var(--text-primary);
+    border:1px solid var(--border);border-radius:var(--r-lg);padding:var(--s4);
+    transition:transform .2s var(--ease-expo),box-shadow .2s,border-color .2s}
+  .preset:hover{transform:translateY(-4px);border-color:var(--border-strong);box-shadow:var(--elev3),0 0 22px rgba(212,175,55,.13)}
+  .preset.active{border-color:rgba(212,175,55,.45);box-shadow:0 0 0 1px rgba(212,175,55,.30),0 10px 34px rgba(212,175,55,.16)}
+  .preset .top{display:flex;align-items:center;gap:var(--s3);margin-bottom:var(--s3)}
+  .preset .ico{width:40px;height:40px;border-radius:var(--r-md);display:grid;place-items:center;flex:none;
+    color:var(--color-accent);
+    background:linear-gradient(135deg,rgba(56,189,248,.15),rgba(56,189,248,.04));
+    border:1px solid rgba(56,189,248,.24);transition:color .2s var(--ease-std),filter .2s var(--ease-std)}
+  .preset:hover .ico{color:var(--gold-mid);filter:drop-shadow(0 0 5px rgba(212,175,55,.55))}
+  .preset.active .ico{color:var(--gold-mid);filter:drop-shadow(0 0 6px rgba(212,175,55,.5))}
+  .preset .ico svg{width:22px;height:22px}
+  .preset .name{font-size:15px;font-weight:600;color:var(--text-primary)}
+  .preset .desc{font-size:12px;color:var(--text-muted);min-height:32px}
+  .preset .foot{display:flex;align-items:center;justify-content:space-between;margin-top:var(--s3)}
+  .count{font-size:13px;color:var(--text-secondary)}
+  .count b{font-size:18px;font-weight:700;color:var(--text-primary);font-variant-numeric:tabular-nums;display:inline-block}
+  .count b.pulse{animation:pop .24s var(--ease-spring)}
+  @keyframes pop{0%{transform:scale(1)}45%{transform:scale(1.26)}100%{transform:scale(1)}}
+  .tier{font-size:10px;font-weight:600;letter-spacing:.03em;padding:2px 7px;border-radius:var(--r-pill)}
+  .tier.free{color:var(--color-gain);background:rgba(52,239,129,.12)}
+  .tier.pro{color:var(--gold-mid);background:rgba(212,175,55,.14)}
+  .tier.prem{color:var(--color-warning);background:rgba(245,158,11,.12)}
+
+  .refine{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);margin-bottom:var(--s5);overflow:hidden}
+  .refine .fh{display:flex;align-items:center;gap:var(--s3);padding:var(--s3) var(--s5);cursor:pointer}
+  .refine .fh .ti{display:flex;color:var(--text-muted)}.refine .fh .ti svg{width:16px;height:16px}
+  .refine .fh .lbl{font-size:13px;font-weight:600;color:var(--text-primary)}
+  .refine .fh .summ{font-size:12px;color:var(--text-muted)}
+  .refine .fh .live{margin-left:auto;font-size:13px;color:var(--text-secondary)}
+  .refine .fh .live b{font-size:20px;font-weight:700;color:var(--gold-mid);font-variant-numeric:tabular-nums;display:inline-block}
+  .refine .fh .live b.pulse{animation:pop .24s var(--ease-spring)}
+  .refine .fh .caret{color:var(--text-muted);transition:transform .25s var(--ease-expo);font-size:11px}
+  .refine.open .fh .caret{transform:rotate(180deg)}
+  .refine .fb{display:grid;grid-template-rows:0fr;transition:grid-template-rows .2s var(--ease-expo)}
+  .refine.open .fb{grid-template-rows:1fr;transition-duration:.35s}
+  .refine .fbwrap{overflow:hidden;min-height:0}
+  .fbin{padding:var(--s4) var(--s5) var(--s5);border-top:1px solid var(--border)}
+  .ctrlrow{display:flex;align-items:center;gap:var(--s3);margin-bottom:var(--s4);flex-wrap:wrap}
+  .ctrl-lab{font-size:12px;color:var(--text-muted)}
+  .seg{position:relative;display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-pill);padding:3px}
+  .seg .thumb{position:absolute;top:3px;bottom:3px;border-radius:var(--r-pill);background:var(--bg-muted);transition:transform .2s var(--ease-std),width .2s var(--ease-std);z-index:0}
+  .seg button{position:relative;z-index:1;border:0;background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;padding:5px 16px;border-radius:var(--r-pill);cursor:pointer;transition:color .2s}
+  .seg button.on{color:var(--text-primary)}
+  .customtag{font-size:10px;font-weight:700;color:var(--gold-mid);background:rgba(212,175,55,.12);border:1px solid rgba(212,175,55,.3);border-radius:var(--r-pill);padding:2px 8px;display:none}
+  .customtag.show{display:inline-block}
+  .adv-toggle{display:flex;align-items:center;gap:var(--s2);font-size:12px;color:var(--text-secondary);cursor:pointer;margin-left:auto}
+  .adv-toggle .sw{width:34px;height:20px;border-radius:var(--r-pill);background:var(--bg-muted);position:relative;transition:background .2s}
+  .adv-toggle .sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--text-muted);transition:transform .18s var(--ease-std),background .18s}
+  .adv-toggle.on .sw{background:rgba(212,175,55,.35)}
+  .adv-toggle.on .sw::after{transform:translateX(14px);background:var(--gold-mid)}
+  .adv-toggle .pro{font-size:10px;font-weight:700;color:var(--gold-mid);background:rgba(212,175,55,.14);border-radius:var(--r-pill);padding:1px 7px}
+
+  .lockbar{display:flex;align-items:center;gap:var(--s3);background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.22);border-radius:var(--r-sm);padding:var(--s3) var(--s4);margin-bottom:var(--s4);font-size:12px;color:var(--text-secondary)}
+  .lockbar b{color:var(--gold-mid)}
+  .lockbar .cta{margin-left:auto;font-size:12px;font-weight:700;color:var(--bg-primary);background:linear-gradient(135deg,var(--gold-mid),var(--gold-dark));border:0;border-radius:var(--r-pill);padding:6px 14px;cursor:pointer;white-space:nowrap}
+
+  .grouphd{grid-column:1/-1;font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.04em;margin:var(--s3) 0 2px;display:flex;align-items:center;gap:var(--s2)}
+  .grouphd::after{content:"";flex:1;height:1px;background:var(--border)}
+  .conds{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2);align-items:start}
+  .crow{display:flex;align-items:center;gap:var(--s3);background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-sm);padding:var(--s2) var(--s3);transition:opacity .2s,background .2s,border-color .2s;flex-wrap:wrap}
+  .crow.off{opacity:.42}
+  .crow .sw{width:34px;height:20px;border-radius:var(--r-pill);background:var(--bg-muted);position:relative;flex:none;cursor:pointer;transition:background .18s}
+  .crow .sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--text-muted);transition:transform .18s var(--ease-std),background .18s}
+  .crow.on .sw{background:rgba(56,189,248,.32)}
+  .crow.on .sw::after{transform:translateX(14px);background:var(--color-accent)}
+  .crow .lockicon{width:34px;display:flex;justify-content:center;color:var(--text-muted);flex:none}
+  .crow .lockicon svg{width:13px;height:13px}
+  .crow .cl{font-size:12px;color:var(--text-secondary);flex:1;min-width:120px}
+  .crow .th{font-size:11px;font-weight:700;color:var(--text-primary);background:var(--bg-muted);border:1px solid var(--border);border-radius:var(--r-pill);padding:3px 9px;transition:.2s}
+  .crow .th.state{cursor:pointer;border-color:rgba(56,189,248,.4);color:var(--color-accent)}
+  .crow .gate{font-size:10px;font-weight:700;color:var(--text-muted);background:var(--bg-muted);border:1px dashed var(--border-strong);border-radius:var(--r-pill);padding:3px 9px}
+  .mseg{display:inline-flex;background:var(--bg-muted);border:1px solid var(--border);border-radius:var(--r-pill);padding:2px;width:100%;margin-top:6px;gap:2px}
+  .mseg button{flex:1;border:0;background:transparent;color:var(--text-muted);font-size:10px;font-weight:700;padding:5px 2px;border-radius:var(--r-pill);cursor:pointer;transition:background .18s,color .18s;line-height:1.25}
+  .mseg button .v{display:block;font-size:9px;font-weight:600;opacity:.85}
+  .mseg button.on{background:rgba(212,175,55,.20);color:var(--gold-mid)}
+  .mseg.locked{opacity:.5}.mseg.locked button{cursor:not-allowed}
+  .fhint{font-size:11px;color:var(--text-muted);margin-top:var(--s4);line-height:1.6}
+
+  .disclaimer{font-size:12px;color:var(--text-muted);background:var(--bg-subtle);border:1px solid var(--border);border-left:3px solid var(--color-warning);border-radius:var(--r-sm);padding:var(--s3) var(--s4);margin-top:var(--s4)}
+
+  .md{display:grid;grid-template-columns:1.1fr 1fr;gap:var(--s4);align-items:start}
+  .panel{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden}
+  .panel .ph{padding:var(--s4) var(--s5);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:var(--s3)}
+  .panel .ph h2{font-size:16px;font-weight:600;color:var(--text-primary)}
+  .panel .ph .meta{font-size:12px;color:var(--text-muted);text-align:right}
+  .sortwrap{position:relative;display:inline-flex;align-items:center}
+  .sortwrap svg{position:absolute;right:8px;pointer-events:none;color:var(--text-muted);width:12px;height:12px}
+  .sortsel{appearance:none;-webkit-appearance:none;font-size:12px;color:var(--text-secondary);background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-pill);padding:5px 26px 5px 12px;cursor:pointer}
+  .seasonchip{display:inline-block;font-size:11px;color:var(--gold-mid);background:rgba(212,175,55,.10);border:1px solid rgba(212,175,55,.25);border-radius:var(--r-pill);padding:2px 9px}
+  .seasonchip.neutral{color:var(--text-muted);background:var(--bg-muted);border-color:var(--border)}
+
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:var(--s3) var(--s5);font-size:13px;border-bottom:1px solid var(--border);color:var(--text-secondary)}
+  th{font-size:11px;font-weight:600;color:var(--text-muted);letter-spacing:.03em}
+  tbody tr{cursor:pointer;transition:background .12s}
+  tbody tr:hover{background:var(--bg-hover)}
+  tbody tr.sel{background:rgba(212,175,55,.08);position:relative}
+  tbody tr.sel td:first-child::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--gold-mid)}
+  td:last-child,th:last-child{text-align:right}
+  .tk{display:flex;align-items:center;gap:var(--s3)}
+  .logo{width:26px;height:26px;border-radius:50%;flex:none;object-fit:cover;background:#fff}
+  .mono{width:26px;height:26px;border-radius:50%;background:var(--bg-muted);display:none;place-items:center;font-size:10px;font-weight:700;color:var(--text-secondary);flex:none}
+  .tk .nm{font-weight:600;color:var(--text-primary)}
+  .tk .se{font-size:11px;color:var(--text-muted)}
+  .num{font-variant-numeric:tabular-nums}
+  .pos{color:var(--color-gain);font-weight:600}.warnc{color:var(--color-warning);font-weight:600}
+  .chip{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:var(--r-pill)}
+  .chip.pass{color:var(--color-gain);background:rgba(52,239,129,.12)}
+  .chip.brk{color:var(--gold-mid);background:rgba(212,175,55,.13)}
+  .chip.cup{color:var(--text-secondary);background:var(--bg-muted)}
+  .chip.hot{color:var(--color-warning);background:rgba(245,158,11,.12)}
+
+  .detail{padding:var(--s5)}
+  .detail .vk{display:flex;align-items:center;gap:var(--s3);margin-bottom:var(--s4)}
+  .detail .vlogo{width:46px;height:46px;border-radius:50%;background:#fff;object-fit:cover}
+  .detail .vmono{width:46px;height:46px;border-radius:50%;background:var(--bg-muted);display:none;place-items:center;font-weight:700;font-size:14px;color:var(--text-secondary)}
+  .detail .vname{font-size:22px;font-weight:600;letter-spacing:-.01em;color:var(--text-primary)}
+  .detail .vmeta{font-size:12px;color:var(--text-muted)}
+  .verdict{margin-left:auto;font-size:12px;font-weight:700;padding:5px 12px;border-radius:var(--r-pill);color:var(--color-gain);background:rgba(52,239,129,.14)}
+  .verdict.neutral{color:var(--gold-mid);background:rgba(212,175,55,.14)}
+  .cond{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2);margin:var(--s4) 0}
+  .cond .c{display:flex;align-items:center;gap:var(--s2);font-size:12px;background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-sm);padding:var(--s2) var(--s3)}
+  .cond .c .dot{width:8px;height:8px;border-radius:50%;background:var(--color-gain);flex:none}
+  .cond .c .dot.warn{background:var(--color-warning)}.cond .c .dot.fail{background:var(--color-loss)}
+  .cond .c .lbl{color:var(--text-secondary)}.cond .c .val{margin-left:auto;font-weight:700;color:var(--text-primary)}
+  .reason{font-size:13px;color:var(--text-secondary);background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-sm);padding:var(--s4);margin-top:var(--s2)}
+  .reason .rh{font-size:11px;color:var(--text-muted);margin-bottom:6px}
+  .secmaster{padding:var(--s3)}
+  .secrow{display:flex;align-items:center;gap:var(--s3);padding:var(--s3) var(--s4);border-radius:var(--r-sm);cursor:pointer;border:1px solid transparent;transition:background .12s,border-color .12s}
+  .secrow:hover{background:var(--bg-hover)}
+  .secrow.sel{background:rgba(212,175,55,.08);border-color:rgba(212,175,55,.3)}
+  .secrow .bar{width:4px;align-self:stretch;border-radius:2px;flex:none}
+  .secrow .sn{font-size:14px;font-weight:600;color:var(--text-primary)}
+  .secrow .tg{font-size:11px;color:var(--text-muted)}
+  .secrow .sr{margin-left:auto;font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
+  .top3 .h{font-size:11px;color:var(--text-muted);margin-bottom:6px}
+  .top3 .row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
+  .legend{font-size:11px;color:var(--text-muted);margin-top:var(--s4);display:flex;gap:var(--s4);flex-wrap:wrap}
+  .legend span b{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:middle}
+
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none !important;animation:none !important}
+    .preset:hover{transform:none}
+  }
+  @media (max-width:860px){.md{grid-template-columns:1fr}}
+  @media (max-width:680px){.presets{grid-template-columns:1fr 1fr}}
+  @media (max-width:520px){.conds{grid-template-columns:1fr}}
+  @media (max-width:420px){.presets{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <span class="mock-tag">MOCKUP v7 ・ Lucide公式アイコン ・ 残改善点まとめて反映</span>
+    <span class="planpick">プラン確認:<span class="seg2"><button data-p="free" class="on">Free</button><button data-p="pro">Pro</button></span></span>
+  </div>
+  <h1>スクリーナー</h1>
+  <p class="sub">戦略を選ぶ → 「絞り込み条件」で精度を調整。<b style="color:var(--text-secondary)">アドバンスド（Pro）で各条件を個別に緩急設定</b>。右上の Free/Pro で挙動が切替わります。</p>
+
+  <div class="presets" id="presets"></div>
+
+  <div class="refine" id="refine">
+    <div class="fh" id="fhead"><span class="ti"></span><span class="lbl">絞り込み条件</span><span class="summ" id="fsumm"></span><span class="live">該当 <b id="flive">–</b> 銘柄</span><span class="caret">▼</span></div>
+    <div class="fb"><div class="fbwrap"><div class="fbin">
+      <div class="ctrlrow">
+        <span class="ctrl-lab">精度</span>
+        <div class="seg" id="seg" role="radiogroup" aria-label="精度"><span class="thumb" id="thumb"></span><button data-i="0" role="radio">緩い</button><button data-i="1" role="radio">標準</button><button data-i="2" role="radio">厳しい</button></div>
+        <span class="customtag" id="customtag">カスタム</span>
+        <label class="adv-toggle" id="advToggle"><span class="sw"></span> アドバンスド（個別に緩急）<span class="pro">Pro</span></label>
+      </div>
+      <div id="lockslot"></div>
+      <div class="conds" id="conds"></div>
+      <div class="fhint" id="fhint"></div>
+    </div></div></div>
+  </div>
+
+  <div class="md">
+    <div class="panel"><div class="ph"><h2 id="m-title">結果</h2>
+      <div style="display:flex;align-items:center;gap:var(--s3)"><span class="meta" id="m-meta"></span>
+        <span class="sortwrap" id="sortwrap"><select class="sortsel" id="sortsel"><option value="mcap">時価総額の大きい順</option><option value="vol">出来高の大きい順</option><option value="metric">主要指標の高い順</option><option value="sector">セクター順</option></select><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></div></div>
+      <div id="m-body"></div></div>
+    <div class="panel"><div class="ph"><h2 id="d-title">詳細</h2><span class="meta">最終更新 3 分前</span></div><div id="d-body"></div></div>
+  </div>
+
+  <div class="disclaimer">これらは買い推奨ではなく、各戦略の<strong>条件に合致した銘柄の一覧</strong>です。最終的な投資判断はご自身で行ってください。</div>
+</div>
+
+<script>
+const ICON={
+  // Lucide 公式パス（MIT）: badge-check / trending-up / layout-grid / crown
+  p1:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/></svg>',
+  p2:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>',
+  p3:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1" fill="currentColor" stroke="none"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>',
+  p4:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"/><path d="M5 21h14"/></svg>',
+  tune:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>',
+  lock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+};
+document.querySelector('.ti').innerHTML=ICON.tune;
+const LOGO=t=>`https://financialmodelingprep.com/image-stock/${t}.png`;
+const INT=[{n:'緩い',m:1.9},{n:'標準',m:1.0},{n:'厳しい',m:.42}];
+const LV=['緩','標','厳','最厳'];
+function cond(k,cl,g,levels,o={}){return{k,cl,g,levels,on:true,lvl:1,gate:!!o.gate,states:o.states||null,state:o.state||0}}
+const PRESETS=[
+ {id:'p1',name:'決算合格',tier:['free','Free'],base:26,desc:'直近の決算シーズンで絶対6条件をすべて満たした銘柄',
+  title:'決算合格 — 絶対6条件PASS',season:'対象: 直近の決算シーズン（過去90日 / 2026 Q1）',
+  conds:[cond('epsY','当四半期 EPS 成長(YoY)','成長性',['+20%','+25%','+50%','+100%']),cond('eps3','EPS の連続性','成長性',['直近YoY正','3期連続増','3期+加速']),cond('rev3','売上の連続性','成長性',['直近YoY正','3期連続増','3期+加速']),cond('cfm','営業CFマージン','収益の質',['≥10%','≥15%','≥20%','≥25%']),cond('cfps3','CFPS の連続性','収益の質',['直近正','3期連続増','3期+加速']),cond('cfpsgt','CFPS > EPS（粉飾防止）','収益の質',['必須'],{gate:true}),cond('roe','ROE','収益の質',['≥17%','≥20%','≥25%','≥50%']),cond('rs','RS Rating（床）','モメンタム',['≥70','≥80','≥90'])],
+  cols:['銘柄','直近EPS YoY','判定'],
+  rows:[{tk:'NVDA',nm:'NVIDIA',se:'半導体',mcap:1180,vol:412,m:18,c2:['6条件PASS','chip pass'],sel:true},{tk:'AVGO',nm:'Broadcom',se:'半導体',mcap:620,vol:88,m:12,c2:['6条件PASS','chip pass']},{tk:'LLY',nm:'Eli Lilly',se:'ヘルスケア',mcap:710,vol:54,m:9,c2:['6条件PASS','chip pass']},{tk:'NFLX',nm:'Netflix',se:'通信',mcap:280,vol:36,m:15,c2:['6条件PASS','chip pass']}],
+  detail:{tk:'NVDA',nm:'NVIDIA',se:'半導体 ・ 2026 Q1 決算',vtype:'pass',verdict:'絶対6条件 PASS',cond:[['営業CFマージン','48%'],['EPS 3期連続増','✓'],['売上 3期連続増','✓'],['CFPS 3期連続増','✓'],['CFPS > EPS','✓'],['ガイダンス','上方修正']],reason:'営業CFマージン 48%（基準 ≥15%）。EPS・売上・一株あたり営業CF がいずれも過去3期連続で増加。CFPS が EPS を上回り会計の質も良好。来期ガイダンスは上方修正。絶対6条件をすべて満たす。'}},
+ {id:'p2',name:'新高値ブレイク',tier:['prem','Premium'],base:6,desc:'カップ・ウィズ・ハンドル等のベースから上放れた銘柄',
+  title:'新高値ブレイク — カップ・ウィズ・ハンドル',season:'対象: 直近5営業日のブレイク／形成',
+  conds:[cond('cup','カップ・ウィズ・ハンドル','型',['ブレイク確定'],{gate:true,states:['ブレイク確定','取っ手形成中','カップ形成中','すべて'],state:0}),cond('zone','ブレイク後の位置（買い場圏）','型',['≤+5%'],{gate:true}),cond('nh','52週高値更新','型',['必須'],{gate:true}),cond('vol','ブレイク出来高（50日平均比）','需給',['+25%','+40%','+50%']),cond('rs','RS Rating','モメンタム',['≥70','≥80','≥90']),cond('beat','直近決算','決算',['良'],{gate:true})],
+  cols:['銘柄','型 / 位置','出来高'],
+  rows:[{tk:'AVGO',nm:'Broadcom',se:'半導体',mcap:620,vol:142,m:2.1,mtxt:'ブレイク確定 +2.1%',c2:['出来高 +62%','chip brk'],sel:true},{tk:'ANET',nm:'Arista',se:'通信機器',mcap:115,vol:96,m:1.8,mtxt:'ブレイク確定 +1.8%',c2:['出来高 +48%','chip brk']},{tk:'PLTR',nm:'Palantir',se:'ソフトウェア',mcap:88,vol:171,m:0,mtxt:'取っ手形成中',c2:['カップ完成','chip cup']}],
+  detail:{tk:'AVGO',nm:'Broadcom',se:'半導体 ・ カップ・ウィズ・ハンドル',vtype:'neutral',verdict:'買い場圏（+2.1%）',cond:[['型','カップ・ウィズ・ハンドル'],['状態','ブレイク確定'],['ピボット乖離','+2.1%（≤+5%）'],['ブレイク出来高','50日平均 +62%'],['RS Rating','88'],['直近決算','良']],reason:'カップ・ウィズ・ハンドルのベースを上放れ、ブレイク確定。ピボットからの乖離 +2.1% で買い場圏（+5%以内・原典）。ブレイク出来高は 50日平均比 +62% と需給を伴う。+5%超に伸びた銘柄は「過熱（extended）」として除外。'}},
+ {id:'p3',name:'旬のセクター',tier:['pro','Pro'],base:0,sector:true,desc:'資金が向かうセクター × その中の好決算銘柄（テーマ物色）',
+  title:'旬のセクター — セクター別 相対力',season:'セクター別RS（対SPY）・ 直近改善順',
+  conds:[cond('topn','対象セクター（相対力 上位）','セクター',['上位5','上位3','上位2']),cond('inrs','セクター内 相対力','セクター',['上位30%','上位20%','上位10%']),cond('funda','決算も良い銘柄に限定','セクター',['必須'],{gate:true})],
+  sectors:[{sn:'半導体',sr:'+14.2',tag:'相対力 上位・改善中',hot:true,top3:[['NVDA','NVIDIA'],['AVGO','Broadcom'],['ANET','Arista']]},{sn:'金融',sr:'+6.1',tag:'相対力 上位',top3:[['JPM','JPMorgan'],['V','Visa'],['MA','Mastercard']]},{sn:'通信',sr:'+4.5',tag:'改善方向',top3:[['NFLX','Netflix'],['META','Meta'],['GOOGL','Alphabet']]},{sn:'公益',sr:'+3.0',tag:'横ばい',top3:[['NEE','NextEra'],['SO','Southern'],['DUK','Duke']]},{sn:'ヘルスケア',sr:'-1.2',tag:'やや劣後',neg:true,top3:[['LLY','Eli Lilly'],['UNH','UnitedHealth'],['ABBV','AbbVie']]},{sn:'生活必需品',sr:'-3.4',tag:'劣後',neg:true,top3:[['COST','Costco'],['WMT','Walmart'],['PG','P&G']]}]},
+ {id:'p4',name:'セクター別リーダー',tier:['pro','Pro'],base:18,desc:'各セクター内で相対力が上位、かつ営業CFマージン15%以上',
+  title:'セクター別リーダーの打診買い候補',season:'対象: 全ユニバース（決算非依存・常時）',seasonNeutral:true,
+  conds:[cond('inrs','セクター内 相対力','モメンタム',['上位10%','上位5%','上位3%']),cond('cfm','営業CFマージン','収益の質',['≥10%','≥15%','≥20%','≥25%']),cond('roe','ROE','収益の質',['≥17%','≥20%','≥25%','≥50%']),cond('cap','時価総額','規模',['中型↑','大型','大型']),cond('inst','機関保有 QoQ 増加','需給',['必須'],{gate:true})],
+  cols:['銘柄','セクター内RS','CFマージン'],
+  rows:[{tk:'MSFT',nm:'Microsoft',se:'ソフトウェア',mcap:3100,vol:210,m:96,c2:['41%','pos'],sel:true},{tk:'V',nm:'Visa',se:'金融',mcap:560,vol:72,m:92,c2:['52%','pos']},{tk:'LLY',nm:'Eli Lilly',se:'ヘルスケア',mcap:710,vol:54,m:90,c2:['28%','pos']},{tk:'AVGO',nm:'Broadcom',se:'半導体',mcap:620,vol:88,m:88,c2:['46%','pos']}],
+  detail:{tk:'MSFT',nm:'Microsoft',se:'ソフトウェア ・ セクター内RS 96',vtype:'neutral',verdict:'リーダー候補',cond:[['セクター内RS','96（上位5%）'],['営業CFマージン','41%'],['ROE','39%'],['時価総額','大型'],['機関保有 QoQ','+1.8%'],['自社株買い利回り','1.0%']],reason:'ソフトウェアセクター内で相対力が上位5%。営業CFマージン 41%（基準 ≥15%）、ROE 39% と収益効率が高い。機関投資家の保有も増加方向。セクター別リーダーとしての打診買い候補。'}},
+];
+let active='p1',target=1,adv=false,sortKey='mcap',plan='free',secSel='半導体';
+function logoHTML(t,c,m){return `<img class="${c}" src="${LOGO(t)}" alt="${t} ロゴ" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="${m}">${t.slice(0,2)}</div>`}
+function tierBadge(t){return `<span class="tier ${t[0]}">${t[1]}</span>`}
+function lc(c){return Math.min(c.lvl,c.levels.length-1)}
+function calcCount(p){
+  if(p.sector){const tn=p.conds.find(c=>c.k==='topn'),ir=p.conds.find(c=>c.k==='inrs'),f=p.conds.find(c=>c.k==='funda');
+    let n=[16,11,7][lc(tn)]||9; n=Math.round(n*[1.4,1,.6][lc(ir)]); if(!f.on)n=Math.round(n*2.4); return Math.max(2,n);}
+  let f=1;p.conds.forEach(c=>{if(c.gate)return;if(!c.on)f*=1.5;else f*=Math.pow(0.6,lc(c)-target)});
+  return Math.max(2,Math.round(p.base*INT[target].m*f));
+}
+function isCustom(p){return p.conds.some(c=>!c.gate&&(!c.on||lc(c)!==target))}
+function pulse(el){el.classList.remove('pulse');void el.offsetWidth;el.classList.add('pulse')}
+
+function renderPresets(){
+  document.getElementById('presets').innerHTML=PRESETS.map(p=>`
+    <button class="preset ${p.id===active?'active':''}" data-id="${p.id}" aria-pressed="${p.id===active}">
+      <div class="top"><div class="ico">${ICON[p.id]}</div><div class="name">${p.name}</div></div>
+      <div class="desc">${p.desc}</div>
+      <div class="foot"><span class="count"><b>${calcCount(p)}</b> 銘柄</span>${tierBadge(p.tier)}</div></button>`).join('');
+  document.querySelectorAll('.preset').forEach(el=>el.onclick=()=>{
+    if(el.dataset.id===active)return;active=el.dataset.id;
+    document.querySelectorAll('.preset').forEach(x=>{const a=x.dataset.id===active;x.classList.toggle('active',a);x.setAttribute('aria-pressed',a)});
+    renderRefine();renderMD();updateCounts();
+  });
+}
+function moveThumb(){const seg=document.getElementById('seg'),b=[...seg.querySelectorAll('button')];b.forEach((x,i)=>{x.classList.toggle('on',i===target);x.setAttribute('aria-checked',i===target)});const t=document.getElementById('thumb'),a=b[target];if(a.offsetWidth){t.style.width=a.offsetWidth+'px';t.style.transform=`translateX(${a.offsetLeft-3}px)`}}
+function updateCounts(){
+  const p=PRESETS.find(x=>x.id===active),live=calcCount(p),el=document.getElementById('flive');
+  if(el.textContent!=String(live)){el.textContent=live;pulse(el)}
+  const onN=p.conds.filter(c=>c.on).length;
+  document.getElementById('fsumm').textContent=`${p.name} ・ ${onN}/${p.conds.length} 条件 ON ・ 精度「${INT[target].n}」${adv?' ・ アドバンスド':''}`;
+  document.getElementById('customtag').classList.toggle('show',isCustom(p));
+  document.querySelectorAll('.preset').forEach(el=>{const pp=PRESETS.find(x=>x.id===el.dataset.id),b=el.querySelector('.count b');if(b&&b.textContent!=String(calcCount(pp))){b.textContent=calcCount(pp);pulse(b)}});
+  const ls=document.getElementById('lockslot');
+  if(adv&&plan==='free'&&!p.sector){ls.innerHTML=`<div class="lockbar">プリセットで <b>${live} 銘柄</b>に絞り込み中。条件を個別に詰めるには Pro へ（個別に締めるとさらに絞り込めます）。<button class="cta">Pro を見る</button></div>`;}
+  else if(ls.innerHTML)ls.innerHTML='';
+}
+function buildConds(){
+  const p=PRESETS.find(x=>x.id===active);let html='',lastG=null;
+  p.conds.forEach((c,i)=>{
+    if(c.g!==lastG){html+=`<div class="grouphd">${c.g}</div>`;lastG=c.g}
+    const ctrl=c.gate?`<span class="lockicon" title="この戦略の必須条件（変更不可）">${ICON.lock}</span>`:`<div class="sw" data-i="${i}" role="switch" aria-checked="${c.on}" tabindex="0"></div>`;
+    let right;
+    if(c.states)right=`<span class="th state" data-st="${i}">${c.states[c.state]}</span>`;
+    else if(c.gate)right=`<span class="gate">${c.levels[0]==='必須'?'必須':c.levels[0]}</span>`;
+    else right=`<span class="th">${LV[lc(c)]} ${c.levels[lc(c)]}</span>`;
+    let mini='';
+    if(adv&&!c.gate){const locked=plan==='free';mini=`<div class="mseg ${locked?'locked':''}" role="group" aria-label="${c.cl} 強度">${c.levels.map((lv,li)=>`<button data-c="${i}" data-l="${li}" class="${li===lc(c)?'on':''}" ${locked?'disabled':''} aria-pressed="${li===lc(c)}">${LV[li]}<span class="v">${lv}</span></button>`).join('')}</div>`}
+    html+=`<div class="crow ${c.on?'on':'off'}" data-i="${i}">${ctrl}<span class="cl">${c.cl}</span>${right}${mini}</div>`;
+  });
+  document.getElementById('conds').innerHTML=html;
+  document.querySelectorAll('#conds .sw').forEach(el=>el.onclick=()=>{const c=p.conds[+el.dataset.i],row=el.closest('.crow');c.on=!c.on;el.setAttribute('aria-checked',c.on);row.classList.toggle('on',c.on);row.classList.toggle('off',!c.on);updateCounts()});
+  document.querySelectorAll('#conds .th.state').forEach(el=>el.onclick=()=>{const c=p.conds[+el.dataset.st];c.state=(c.state+1)%c.states.length;el.textContent=c.states[c.state];renderMD();updateCounts()});
+  document.querySelectorAll('#conds .mseg button:not([disabled])').forEach(b=>b.onclick=()=>{const c=p.conds[+b.dataset.c];c.lvl=+b.dataset.l;b.parentElement.querySelectorAll('button').forEach(x=>{const on=x===b;x.classList.toggle('on',on);x.setAttribute('aria-pressed',on)});const th=b.closest('.crow').querySelector('.th');if(th)th.textContent=`${LV[lc(c)]} ${c.levels[lc(c)]}`;updateCounts()});
+}
+function renderRefine(){
+  document.getElementById('advToggle').classList.toggle('on',adv);
+  buildConds();updateCounts();requestAnimationFrame(()=>requestAnimationFrame(moveThumb));
+  const p=PRESETS.find(x=>x.id===active);
+  document.getElementById('fhint').innerHTML=p.sector
+    ?'左でセクターを選ぶと、右にそのセクターの好決算銘柄 Top3 が表示されます。'
+    :(active==='p2'?'「型」の値をクリックで状態切替（ブレイク確定／取っ手形成中／カップ形成中／すべて）。ブレイク後 +5%超は原典どおり「過熱（extended）」として除外。'
+      :`データ: FMP（直近決算シーズン）・ <span style="color:var(--text-muted)">必須ゲートは戦略の死守条件のため変更不可</span>`);
+}
+function sortRows(rows){const r=[...rows];if(sortKey==='mcap')r.sort((a,b)=>b.mcap-a.mcap);else if(sortKey==='vol')r.sort((a,b)=>b.vol-a.vol);else if(sortKey==='metric')r.sort((a,b)=>(b.m||0)-(a.m||0));else if(sortKey==='sector')r.sort((a,b)=>a.se.localeCompare(b.se,'ja'));return r}
+function metricCell(p,r){if(p.id==='p1')return `<span class="pos">+${r.m}%</span>`;if(p.id==='p2')return `<span class="${r.m!==undefined&&r.m>0&&r.m<=5?'warnc':''}">${r.mtxt}</span>`;if(p.id==='p4')return `<span class="num">${r.m}</span>`;return r.m}
+function rowDetail(p,r){if(r.tk===p.detail.tk)return p.detail;return {tk:r.tk,nm:r.nm,se:r.se+' ・ '+p.name,vtype:p.detail.vtype,verdict:p.detail.verdict,cond:p.detail.cond,reason:`${r.nm}（${r.se}）は「${p.name}」の条件に合致しています。（モック: 実装時は銘柄ごとに合否理由を自動生成）`}}
+function renderTable(p){const head=p.cols.map(c=>`<th>${c}</th>`).join('');const body=sortRows(p.rows).map(r=>`<tr class="${r.sel?'sel':''}" data-tk="${r.tk}"><td><div class="tk">${logoHTML(r.tk,'logo','mono')}<div><div class="nm">${r.tk}</div><div class="se">${r.nm} ・ ${r.se}</div></div></div></td><td>${metricCell(p,r)}</td><td>${r.c2[1]?`<span class="${r.c2[1]}">${r.c2[0]}</span>`:r.c2[0]}</td></tr>`).join('');return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`}
+function bindRows(p){document.querySelectorAll('#m-body tbody tr').forEach(tr=>tr.onclick=()=>{p.rows.forEach(x=>x.sel=(x.tk===tr.dataset.tk));document.getElementById('m-body').innerHTML=renderTable(p);bindRows(p);const r=p.rows.find(x=>x.sel);document.getElementById('d-title').textContent='詳細 — '+r.tk;document.getElementById('d-body').innerHTML=renderDetail(rowDetail(p,r))})}
+function renderDetail(d){return `<div class="detail"><div class="vk">${logoHTML(d.tk,'vlogo','vmono')}<div><div class="vname">${d.tk}</div><div class="vmeta">${d.nm} ・ ${d.se}</div></div><span class="verdict ${d.vtype==='neutral'?'neutral':''}">${d.verdict}</span></div><div class="cond">${d.cond.map(c=>`<div class="c"><span class="dot"></span><span class="lbl">${c[0]}</span><span class="val">${c[1]}</span></div>`).join('')}</div><div class="reason"><div class="rh">合否の理由（条件結果から自動生成）</div>${d.reason}</div></div>`}
+function renderSectorMaster(p){const sel=p.sectors.find(s=>s.sn===secSel)||p.sectors[0];return `<div class="secmaster">${p.sectors.map(s=>{const col=s.hot?'var(--color-warning)':s.neg?'var(--color-loss)':'var(--color-gain)';return `<div class="secrow ${s.sn===secSel?'sel':''}" data-sn="${s.sn}"><span class="bar" style="background:${col}"></span><div><div class="sn">${s.sn} ${s.hot?'<span class="chip hot">主戦場</span>':''}</div><div class="tg">${s.tag}</div></div><span class="sr" style="color:${col}">${s.sr}</span></div>`}).join('')}<div class="legend"><span><b style="background:var(--color-warning)"></b>主戦場</span><span><b style="background:var(--color-gain)"></b>上位</span><span><b style="background:var(--color-loss)"></b>劣後</span></div></div>`}
+function renderSectorDetail(p){const s=p.sectors.find(x=>x.sn===secSel)||p.sectors[0];return `<div class="detail"><div class="top3"><div class="h">${s.sn}（相対力 ${s.sr}）の好決算銘柄 Top3</div>${s.top3.map(t=>`<div class="row"><span style="display:flex;align-items:center;gap:8px">${logoHTML(t[0],'logo','mono')}<b style="color:var(--text-primary)">${t[0]}</b> <span style="color:var(--text-muted)">${t[1]}</span></span><span class="chip pass">6条件PASS</span></div>`).join('')}</div></div>`}
+function renderMD(){const p=PRESETS.find(x=>x.id===active);document.getElementById('m-title').textContent=p.title;
+  document.getElementById('m-meta').innerHTML=p.season?`<span class="seasonchip ${p.seasonNeutral?'neutral':''}">${p.season}</span>`:'';
+  document.getElementById('sortwrap').style.display=p.sector?'none':'';
+  if(p.sector){document.getElementById('m-body').innerHTML=renderSectorMaster(p);document.getElementById('d-title').textContent='詳細 — '+secSel;document.getElementById('d-body').innerHTML=renderSectorDetail(p);
+    document.querySelectorAll('#m-body .secrow').forEach(el=>el.onclick=()=>{secSel=el.dataset.sn;document.querySelectorAll('#m-body .secrow').forEach(x=>x.classList.toggle('sel',x.dataset.sn===secSel));document.getElementById('d-title').textContent='詳細 — '+secSel;document.getElementById('d-body').innerHTML=renderSectorDetail(p)});}
+  else{document.getElementById('m-body').innerHTML=renderTable(p);bindRows(p);const r=p.rows.find(x=>x.sel)||p.rows[0];document.getElementById('d-title').textContent='詳細 — '+r.tk;document.getElementById('d-body').innerHTML=renderDetail(rowDetail(p,r));}}
+function fullRender(){renderPresets();renderRefine();renderMD()}
+document.getElementById('fhead').onclick=()=>{document.getElementById('refine').classList.toggle('open');requestAnimationFrame(()=>requestAnimationFrame(moveThumb))};
+document.getElementById('seg').querySelectorAll('button').forEach(b=>b.onclick=()=>{target=+b.dataset.i;renderRefine()});
+document.getElementById('advToggle').onclick=e=>{e.preventDefault();adv=!adv;renderRefine()};
+document.getElementById('sortsel').onchange=e=>{sortKey=e.target.value;renderMD()};
+document.querySelectorAll('.planpick .seg2 button').forEach(b=>b.onclick=()=>{plan=b.dataset.p;document.querySelectorAll('.planpick .seg2 button').forEach(x=>x.classList.toggle('on',x.dataset.p===plan));renderRefine()});
+document.getElementById('refine').classList.add('open');
+fullRender();requestAnimationFrame(()=>requestAnimationFrame(moveThumb));
+</script>
+</body>
+</html>
