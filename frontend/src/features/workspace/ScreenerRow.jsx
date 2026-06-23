@@ -31,6 +31,8 @@
  * @param {boolean}  [isTop]        — 上位行フラグ (余り強調 typography 用)
  * @param {Array}    matchBadges    — ヒット理由バッジ配列 (D-1 構造化)
  *   { label: string, value?: number, unit?: string,
+ *     valueText?: string,  — 合否理由の行内コンパクト表示 (例 "+28%"、静的dict由来)
+ *     reason?: string,     — 合否理由の完全文 (tooltip/aria、§38安全な事実言い換え)
  *     colorRole?: 'gain'|'loss'|'warning'|'neutral', group?: 'fundamental'|'technical'|'demand' }
  * @param {Array}    [metrics]      — 右端数値配列 (D-1 構造化)
  *   { key: string, value: number|null, category: 'fundamental'|'technical'|'demand' }
@@ -305,19 +307,28 @@ export default function ScreenerRow({
                   key={group}
                   data-badge-group={group}
                 >
-                  {badges.map((badge, i) => (
-                    <Chip
-                      key={badge.label + i}
-                      size="xs"
-                      variant="display"
-                      tone="muted"
-                      title={badge.value != null
+                  {badges.map((badge, i) => {
+                    // 合否理由 静的dict: reason(完全文) を優先、無ければ従来の value/unit。
+                    const tooltip = badge.reason
+                      || (badge.value != null
                         ? `${badge.label}: ${badge.value}${badge.unit || ''}`
-                        : badge.label}
-                    >
-                      {badge.label}
-                    </Chip>
-                  ))}
+                        : badge.label);
+                    return (
+                      <Chip
+                        key={badge.label + i}
+                        size="xs"
+                        variant="display"
+                        tone="muted"
+                        title={tooltip}
+                        aria-label={tooltip}
+                      >
+                        {badge.label}
+                        {badge.valueText && (
+                          <span className="screener-row__badge-value">{badge.valueText}</span>
+                        )}
+                      </Chip>
+                    );
+                  })}
                 </span>
               ))}
             </span>

@@ -188,6 +188,39 @@ const FACET_SHORT_LABEL = {
   buy_zone: '買い場圏',
   ad_volume: '出来高の質',
 };
+
+// ─── 合否理由 静的dict (§38安全・LLM不使用・STATE_LABEL_JP 方式) ────────────────
+// 「なぜ合致したか」を事実言い換え。数値は data 由来で、LLM 数値計算・narration なし
+// ([[feedback_llm_calc_separation]] / [[feedback_diagram_quality_guard]])。
+// 全 facet は「閾値以上」条件 (itemPasses: v < grades[lvl] で fail)。
+// name = 正式名 (FACET_SHORT_LABEL の省略形より読み手負担が低い・原則1)。
+const MATCH_REASON_JP = {
+  eps_yoy_pct:          { name: 'EPS成長(四半期)', unit: '%' },
+  eps_cagr_3y:          { name: 'EPS成長(3年)',    unit: '%' },
+  roe:                  { name: 'ROE',            unit: '%' },
+  rs_percentile:        { name: 'RS(相対強さ)',     unit: ''  },
+  volume_surge_pct:     { name: '出来高急増',       unit: '%' },
+  inst_holders_qoq_pct: { name: '機関保有増',       unit: '%' },
+};
+
+/**
+ * buildMatchReason — facet の実値・閾値を「事実言い換え」テキストへ変換 (静的テンプレ)。
+ * @returns {{ valueText: string, reason: string } | null}
+ *   valueText = 行内コンパクト表示用 (例 "+28%")、reason = tooltip/aria 用完全文。
+ */
+function buildMatchReason(key, value, threshold) {
+  const d = MATCH_REASON_JP[key];
+  if (!d || value == null) return null;
+  const rounded = Math.round(value * 10) / 10;
+  // % 系は符号付きで「成長/増加」の事実を明示 (色 polarity なし §38)。RS percentile は符号なし。
+  const valTxt = d.unit === '%'
+    ? `${rounded > 0 ? '+' : ''}${rounded}%`
+    : `${rounded}`;
+  const reason = threshold != null
+    ? `${d.name} ${valTxt}（基準 ${threshold}${d.unit}以上）`
+    : `${d.name} ${valTxt}`;
+  return { valueText: valTxt, reason };
+}
 function buildActiveGrades(preset, overrides) {
   const g = {};
   for (const k of PRESET_CORE_KEYS) g[k] = preset;
@@ -1472,7 +1505,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                       if (v == null) return [];
                       // 寄与スコアで降順
                       const contrib = thr !== 0 ? (v - thr) / Math.abs(thr) : v;
-                      return [{ key: f.key, contrib }];
+                      return [{ key: f.key, contrib, value: v, threshold: thr }];
                     })
                     .sort((a, b) => b.contrib - a.contrib)
                     .slice(0, 2); // 狭い screener カラム幅に確実に収めるため上位2件 (spec「2-3個」範囲内)
@@ -1484,11 +1517,17 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                   // 一般 user (default OFF) には旧行 JSX をそのまま提供。
                   if (screenerV2) {
                     // D-1 構造化 props: matchBadges / metrics を組み立てる (追記条件4)
-                    const matchBadges = activeFacetsSorted.map(({ key }) => ({
-                      label: FACET_SHORT_LABEL[key] || key,
-                      colorRole: 'neutral', // §38: 緑/赤断定なし
-                      group: FUNDA_FACETS.find((f) => f.key === key)?.category || 'fundamental',
-                    }));
+                    // 合否理由 静的dict: 実値・閾値を事実言い換え (valueText=行内 / reason=tooltip)。
+                    const matchBadges = activeFacetsSorted.map(({ key, value, threshold }) => {
+                      const r = buildMatchReason(key, value, threshold);
+                      return {
+                        label: FACET_SHORT_LABEL[key] || key,
+                        valueText: r?.valueText,   // 行内コンパクト表示 (例 "+28%")
+                        reason: r?.reason,         // tooltip/aria 用完全文
+                        colorRole: 'neutral', // §38: 緑/赤断定なし
+                        group: FUNDA_FACETS.find((f) => f.key === key)?.category || 'fundamental',
+                      };
+                    });
                     const metrics = [
                       it.rs_percentile != null
                         ? { key: 'rs_percentile', value: it.rs_percentile, category: 'technical' }

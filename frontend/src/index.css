@@ -13667,6 +13667,15 @@ body.is-digest-resizing {
   gap: var(--space-1);         /* 4px: グループ内 chip 間 micro-gap */
 }
 
+/* 合否理由 静的dict: badge label 直後の実値 (例 "+28%")。label より僅かに強調 (数値が主役)。 */
+/* §38: 色 polarity なし — tabular-nums で桁揃え、tone は親 Chip(muted) を継承。 */
+.screener-row__badge-value {
+  margin-left: var(--space-1);  /* 4px: label と値の micro-gap */
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
 /* 会社名: truncate で 1 行に収める */
 .screener-row__name {
   font-size: var(--text-caption); /* 12px (--text-caption 0.6875rem 換算 ≈ 11px だが --text-caption 12px SSOT) */
