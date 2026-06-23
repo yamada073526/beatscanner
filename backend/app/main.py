@@ -4121,6 +4121,157 @@ async def compute_evaluation_for_ticker(ticker: str) -> int:
         return 0
 
 
+async def refresh_earnings_annual_for_ticker(ticker: str, api_key: str | None) -> int:
+    """単一銘柄の earnings_annual (年次) を Supabase に upsert。 戻り値: upsert 行数。
+
+    FMP /stable/income-statement + /stable/cash-flow-statement (period=annual, limit=6)
+    から過去 6 fiscal year を取得し、 _compute_earnings_metrics で計算後 upsert。
+    じっちゃまプロトコル原典「年間 (Annual) データで 3 年連続増加」 に対応 (四半期 QoQ ではない、
+    handover v255 funda_pass 是正)。 _compute_earnings_metrics は period 非依存 (income/cf を
+    date で join するだけ) なので四半期版とそのまま共用。
+    """
+    sym = (ticker or "").upper().strip()
+    if not sym:
+        return 0
+    try:
+        client = FMPClient(api_key=api_key)
+        income_data = await client.income_statement(sym, limit=6, period="annual")
+        cf_data = await client.cash_flow(sym, limit=6, period="annual")
+    except FMPError as e:
+        print(f"[batch:earnings_annual] FMP error for {sym}: {e}")
+        return 0
+    except Exception as e:
+        print(f"[batch:earnings_annual] fetch failed for {sym}: {e}")
+        return 0
+
+    if not isinstance(income_data, list) or not isinstance(cf_data, list):
+        return 0
+    rows = _compute_earnings_metrics(income_data, cf_data)
+    if not rows:
+        return 0
+
+    sb = _get_supabase_service()
+    if not sb:
+        print(f"[batch:earnings_annual] Supabase service client unavailable for {sym}")
+        return 0
+
+    from datetime import date as _date_pe
+    for r in rows:
+        r["ticker"] = sym
+        try:
+            pe = _date_pe.fromisoformat(r["period_end"])
+            r["fiscal_year"] = pe.year
+        except Exception:
+            r["fiscal_year"] = None
+
+    try:
+        sb.table("earnings_annual").upsert(rows, on_conflict="ticker,period_end").execute()
+        return len(rows)
+    except Exception as e:
+        print(f"[batch:earnings_annual] upsert failed for {sym}: {e}")
+        return 0
+
+
+async def compute_annual_evaluation_for_ticker(ticker: str) -> int:
+    """単一銘柄の earnings_annual_evaluation を再計算して upsert。 戻り値: 評価行数。
+
+    earnings_annual から過去 3 fiscal year 以上を取得し、 各年について 5 条件評価。
+    じっちゃまプロトコル原典 (docs/references/jijima_protocol.md): cond2/3/4 は「年次 3 年連続
+    増加」 (FY[t-2] < FY[t-1] < FY[t])、 cond1/cond5 は最新年で判定。 四半期 QoQ だと季節性で
+    優良大型株が全滅する root cause を是正 (handover v255)。
+    evaluated_at = バッチ実行時刻 (= screener freshness の元)。 nightly 再評価で常時新鮮に保つ。
+    """
+    sym = (ticker or "").upper().strip()
+    if not sym:
+        return 0
+    sb = _get_supabase_service()
+    if not sb:
+        return 0
+    try:
+        resp = (
+            sb.table("earnings_annual")
+            .select("*")
+            .eq("ticker", sym)
+            .order("period_end", desc=False)
+            .execute()
+        )
+        history = resp.data or []
+    except Exception as e:
+        print(f"[batch:annual_eval] history fetch failed for {sym}: {e}")
+        return 0
+    if len(history) < 3:
+        return 0  # 3 年連続増加判定には 3 fiscal year 必要
+
+    from datetime import date as _date_e, datetime as _dt_e, timezone as _tz_e
+    now_iso = _dt_e.now(_tz_e.utc).isoformat()
+    evaluations: list[dict] = []
+    for i in range(2, len(history)):
+        y_t2, y_t1, y_curr = history[i - 2], history[i - 1], history[i]
+
+        # 条件 1: 最新年 営業 CF マージン >= 15%
+        margin = y_curr.get("op_cf_margin")
+        cond1 = bool(margin is not None and float(margin) >= 0.15)
+
+        # 条件 2: EPS 3 年連続増加 (y_t2 < y_t1 < y_curr)
+        eps_vals = [y.get("eps") for y in [y_t2, y_t1, y_curr]]
+        cond2 = bool(
+            all(v is not None for v in eps_vals)
+            and float(eps_vals[0]) < float(eps_vals[1]) < float(eps_vals[2])
+        )
+
+        # 条件 3: CFPS 3 年連続増加
+        cfps_vals = [y.get("cfps") for y in [y_t2, y_t1, y_curr]]
+        cond3 = bool(
+            all(v is not None for v in cfps_vals)
+            and float(cfps_vals[0]) < float(cfps_vals[1]) < float(cfps_vals[2])
+        )
+
+        # 条件 4: 売上高 3 年連続増加
+        rev_vals = [y.get("revenue") for y in [y_t2, y_t1, y_curr]]
+        cond4 = bool(
+            all(v is not None for v in rev_vals)
+            and float(rev_vals[0]) < float(rev_vals[1]) < float(rev_vals[2])
+        )
+
+        # 条件 5: 最新年 CFPS > EPS (粉飾リスク回避)
+        cfps_c = y_curr.get("cfps")
+        eps_c = y_curr.get("eps")
+        cond5 = bool(cfps_c is not None and eps_c is not None and float(cfps_c) > float(eps_c))
+
+        passed_count = sum([cond1, cond2, cond3, cond4, cond5])
+        all_passed = cond1 and cond2 and cond3 and cond4 and cond5
+
+        fy = y_curr.get("fiscal_year")
+        if fy is None:
+            try:
+                fy = _date_e.fromisoformat(str(y_curr["period_end"])[:10]).year
+            except Exception:
+                continue
+
+        evaluations.append({
+            "ticker": sym,
+            "fiscal_year": fy,
+            "period_end": y_curr.get("period_end"),
+            "cond1_passed": cond1,
+            "cond2_passed": cond2,
+            "cond3_passed": cond3,
+            "cond4_passed": cond4,
+            "cond5_passed": cond5,
+            "all_passed": all_passed,
+            "passed_count": passed_count,
+            "evaluated_at": now_iso,
+        })
+
+    if not evaluations:
+        return 0
+    try:
+        sb.table("earnings_annual_evaluation").upsert(evaluations, on_conflict="ticker,fiscal_year").execute()
+        return len(evaluations)
+    except Exception as e:
+        print(f"[batch:annual_eval] upsert failed for {sym}: {e}")
+        return 0
+
+
 # ============================================================================
 # Phase 1 Backtest: Event-based simulation engine (Day 3、 2026-05-16)
 #
@@ -16978,27 +17129,33 @@ _TRANSITION_MAP_BY_TYPE = {
 
 
 def _is_ticker_funda_pass(ticker: str, lookback_days: int = 95) -> bool:
-    """ticker が直近 lookback_days 以内に earnings_evaluation で all_passed=True か。
+    """ticker が最新通期 (Annual) で 5 条件 all_passed=True か (年次 3 年連続増加、handover v255)。
 
-    SaaS PM verdict: ファンダ AND default ON で日 0-3 件レベルに通知 volume を絞る。
-    lookback 95 日 (= 1 四半期 + 5 日 buffer) で「直近の決算で 5 条件 PASS した銘柄」 を抽出。
+    SaaS PM verdict: ファンダ AND default ON で通知 volume を絞る。 四半期 QoQ バグ是正に伴い
+    earnings_annual_evaluation の per-ticker 最新 fiscal year を参照。 lookback_days は signature
+    互換のため残置 (年次評価では未使用、 stale guard は最新通期 period_end 18 ヶ月固定)。
     """
     sb = _get_supabase_service()
     if sb is None:
         return False
-    cutoff = (date.today() - timedelta(days=lookback_days)).isoformat()
+    stale_cut = (date.today() - timedelta(days=548)).isoformat()  # 18 ヶ月
     try:
         res = (
-            sb.table("earnings_evaluation")
-            .select("evaluation_date,all_passed")
+            sb.table("earnings_annual_evaluation")
+            .select("fiscal_year,period_end,all_passed")
             .eq("ticker", ticker)
-            .eq("all_passed", True)
-            .gte("evaluation_date", cutoff)
-            .order("evaluation_date", desc=True)
+            .order("fiscal_year", desc=True)
             .limit(1)
             .execute()
         )
-        return bool(res.data)
+        rows = res.data or []
+        if not rows:
+            return False
+        r = rows[0]
+        pe = r.get("period_end")
+        if pe and str(pe)[:10] >= stale_cut:
+            return bool(r.get("all_passed"))
+        return False
     except Exception as e:
         print(f"[funda_pass] check failed for {ticker}: {e}")
         return False
@@ -19387,23 +19544,12 @@ async def scanner_cup_handle(
     today = date.today()
     lookback_days = 95
 
-    # ── ファンダ 5 PASS 銘柄 取得 (earnings_evaluation) ──
+    # ── ファンダ 5 PASS 銘柄 取得 (earnings_annual_evaluation、 年次 3 年連続増加 v255) ──
+    # universe / earnings-notify と同一 SSOT (_get_annual_funda_pass_map) で「決算合格」の定義を統一。
     funda_tickers: set[str] = set()
     if filter in ("funda", "both"):
-        try:
-            funda_cutoff = (today - timedelta(days=lookback_days)).isoformat()
-            f_res = (
-                sb.table("earnings_evaluation")
-                .select("ticker,evaluation_date,all_passed")
-                .eq("all_passed", True)
-                .gte("evaluation_date", funda_cutoff)
-                .execute()
-            )
-            for r in (f_res.data or []):
-                if r.get("ticker"):
-                    funda_tickers.add(r["ticker"])
-        except Exception as e:
-            print(f"[scanner] funda fetch failed: {e}")
+        funda_map, _ = _get_annual_funda_pass_map(sb)
+        funda_tickers = {t for t, passed in funda_map.items() if passed}
 
     # ── Cup-Handle 銘柄 取得 (pattern_signals 最新) ──
     cup_signals: dict[str, dict] = {}  # ticker -> latest signal row
@@ -19973,6 +20119,44 @@ def _fetch_all_rows_paged(
     return out
 
 
+def _get_annual_funda_pass_map(sb) -> "tuple[dict[str, bool], str | None]":
+    """earnings_annual_evaluation から per-ticker 最新 fiscal year の all_passed を返す。
+
+    funda_pass の SSOT (universe / cup-handle filter / earnings-notify が共用)。
+    じっちゃまプロトコル原典「年間 (Annual) データで EPS/CFPS/売上が 3 年連続増加」 評価
+    (handover v255、 四半期 QoQ バグ → 季節性で True=0 を是正)。
+
+    戻り値: (funda_map, freshness_date)
+      funda_map: {ticker_upper: all_passed_bool} — 最新通期 period_end が 18 ヶ月以内の銘柄のみ
+                 (長期未提出 / 上場廃止のゴミ評価を除外)。 測定外 (None) は dict に含めない。
+      freshness_date: max(evaluated_at)::date (nightly バッチ実行日、 stale 銘柄も含め計算)。
+    """
+    funda_map: dict[str, bool] = {}
+    seen: set[str] = set()
+    freshness: str | None = None
+    # 18 ヶ月 = 年次サイクル 12ヶ月 + 提出ラグ ~3ヶ月 + margin。 これを超えて最新通期が無い銘柄は stale。
+    stale_cut = (date.today() - timedelta(days=548)).isoformat()
+    for r in _fetch_all_rows_paged(
+        sb, "earnings_annual_evaluation",
+        "ticker,fiscal_year,period_end,all_passed,evaluated_at",
+        order="fiscal_year",  # desc → 同一 ticker 内で最新年が先 → seen 初出が per-ticker 最新年
+    ):
+        t = str(r.get("ticker") or "").upper()
+        if not t or t in seen:
+            continue
+        seen.add(t)
+        pe = r.get("period_end")
+        if pe and str(pe)[:10] >= stale_cut:
+            funda_map[t] = bool(r.get("all_passed"))
+        # freshness は stale 関係なく最新 evaluated_at (nightly バッチ実行日 = 常時新鮮を示す)
+        ev = r.get("evaluated_at")
+        if ev:
+            ev_date = str(ev)[:10]
+            if freshness is None or ev_date > freshness:
+                freshness = ev_date
+    return funda_map, freshness
+
+
 async def _build_universe_payload(sb, universe_size: int) -> dict:
     """5 テーブルを ticker キーで in-memory join し unmasked full payload を返す (tier 不変)。"""
     base = await _fetch_screener_base_universe(universe_size)
@@ -20074,24 +20258,12 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
                 bo_latest = sd
     freshness["breakout"] = bo_latest
 
-    # earnings_evaluation funda_pass (free、 じっちゃま 5 条件) — 95 日窓で per-ticker 最新の all_passed。
-    # tri-state: True(達成) / False(窓内で評価済み未達) / None(窓内未評価=測定外)。
-    # 金融 reviewer 必須条件 NULL=第3状態: failed と未評価を混同しない (all_passed フィルタを掛けず全評価を取る)。
-    # ⚠️ 決算シーズン谷間は本テーブルが疎 (既存 cup-handle scanner も同依存)。 universe-wide で常時新鮮な
-    # ファンダ次元は CAN-SLIM 数値 (screener_fundamentals) 側。 source 選択は Sprint 3 設計論点。
-    funda_eval: dict[str, bool] = {}
-    funda_latest: str | None = None
-    funda_cut = (date.today() - timedelta(days=95)).isoformat()
-    for r in _fetch_all_rows_paged(
-        sb, "earnings_evaluation", "ticker,evaluation_date,all_passed",
-        gte={"evaluation_date": funda_cut}, order="evaluation_date",
-    ):
-        t = str(r.get("ticker") or "").upper()
-        if t and t not in funda_eval:   # order desc → 最初が per-ticker 最新
-            funda_eval[t] = bool(r.get("all_passed"))
-            ed = r.get("evaluation_date")
-            if ed and (funda_latest is None or ed > funda_latest):
-                funda_latest = ed
+    # funda_pass (free、 じっちゃま 5 条件) — 年次 (Annual) 3 年連続増加評価の per-ticker 最新通期。
+    # tri-state: True(達成) / False(評価済み未達) / None(測定外 = 評価行なし or 最新通期 18ヶ月超 stale)。
+    # handover v255: 四半期 QoQ バグ (季節性で True=0、 全期間でも all_passed=0.7%) を是正し
+    #   earnings_annual_evaluation (FY[t-2]<FY[t-1]<FY[t]) に移行。 nightly earnings-annual-scan で更新。
+    # 金融 reviewer 必須条件 NULL=第3状態: failed と未評価を混同しない (None は funda_eval に含めない)。
+    funda_eval, funda_latest = _get_annual_funda_pass_map(sb)
     freshness["funda_pass"] = funda_latest
 
     # ── merge (base を軸に ticker キー join。 sf/rs 欠落=測定外 null、 NULL≠false) ──
@@ -21717,6 +21889,95 @@ def _upsert_screener_fundamental(
                 return False
         print(f"[screener_fundamentals] upsert failed for {ticker}: {e}")
         return False
+
+
+@app.post("/api/cron/earnings-annual-scan")
+async def cron_earnings_annual_scan(
+    body: dict | None = None,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """Nightly 年次 (Annual) 5 条件 scan: universe iterate → earnings_annual upsert →
+    earnings_annual_evaluation (3 年連続増加) upsert。 funda_pass の供給元。
+
+    じっちゃまプロトコル原典「年間 (Annual) データで EPS/CFPS/売上が 3 年連続増加」 に対応。
+    handover v255 で発覚した root cause (四半期 QoQ 単調増加を要求 → 季節性で優良大型株が
+    全滅 → funda_pass True=0) を是正する nightly パイプライン。 これまで funda_pass は手動
+    /api/admin/refresh-earnings-history のみで cron 未登録だったため 2026-05-15 で停止していた。
+
+    universe は canslim-scan / cup-scan と同じ _fetch_market_cap_top_n / _fetch_sp500_top_n。
+
+    Body (任意):
+      tickers: list[str] — 対象銘柄、 未指定なら universe_source / universe_size で fetch
+      universe_source: "sp500" | "russell3000" — default "russell3000"
+      universe_size: int — russell3000: top N market cap
+      concurrency: int — 並列度 (default 8, cap 16、 FMP rate limit 対応)
+      limit: int — デバッグ用 ticker 数制限
+
+    Returns: processed_count, annual_rows_upserted, evaluated_count, failed_count,
+      failed_tickers (上位 20), calc_date, universe_source, universe_size
+    """
+    _check_cron_secret(x_cron_secret)
+
+    body = body or {}
+    raw_tickers = body.get("tickers")
+    universe_source = body.get("universe_source", "russell3000")
+    universe_size_arg = body.get("universe_size")
+
+    # universe 取得 (canslim-scan / rs-scan と同じ loader を再利用)
+    if isinstance(raw_tickers, list) and raw_tickers:
+        tickers = [str(t).upper().strip() for t in raw_tickers if t][:3000]
+    elif universe_source == "sp500":
+        n = int(universe_size_arg) if universe_size_arg else 500
+        tickers = await _fetch_sp500_top_n(n)
+    else:
+        n = int(universe_size_arg) if universe_size_arg else 1000
+        tickers = await _fetch_market_cap_top_n(n)
+        if not tickers:
+            print("[earnings-annual-scan] russell3000 fetch failed, falling back to sp500")
+            tickers = await _fetch_sp500_top_n(500)
+            universe_source = "sp500_fallback"
+
+    limit_arg = body.get("limit")
+    if limit_arg:
+        tickers = tickers[: int(limit_arg)]
+
+    concurrency = int(body.get("concurrency", 8))
+    concurrency = max(1, min(16, concurrency))
+
+    fmp_key = os.getenv("FMP_API_KEY", "")
+
+    processed = 0
+    annual_rows = 0
+    evaluated = 0
+    failed: list[dict] = []
+    sem = asyncio.Semaphore(concurrency)
+
+    async def _one(tk: str):
+        nonlocal processed, annual_rows, evaluated
+        async with sem:
+            try:
+                n_rows = await refresh_earnings_annual_for_ticker(tk, fmp_key)
+                annual_rows += n_rows
+                n_eval = await compute_annual_evaluation_for_ticker(tk)
+                evaluated += n_eval
+                processed += 1
+            except Exception as e:
+                if len(failed) < 20:
+                    failed.append({"ticker": tk, "error": str(e)[:200]})
+
+    await asyncio.gather(*[_one(t) for t in tickers])
+
+    return {
+        "ok": True,
+        "universe_source": universe_source,
+        "universe_size": len(tickers),
+        "processed_count": processed,
+        "annual_rows_upserted": annual_rows,
+        "evaluated_count": evaluated,
+        "failed_count": len(failed),
+        "failed_tickers": failed,
+        "calc_date": date.today().isoformat(),
+    }
 
 
 @app.post("/api/cron/canslim-scan")

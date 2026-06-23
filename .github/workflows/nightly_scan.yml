@@ -184,6 +184,37 @@ jobs:
             echo "- 対処: Supabase SQL Editor で \`grant select, insert, update, delete on public.screener_fundamentals to service_role;\` を実行" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # じっちゃま 5 条件 funda_pass: 年次 (Annual) 3 年連続増加 scan (handover v255)
+      # root cause 是正: cond2/3/4 が四半期 QoQ 単調増加を要求 → 季節性で優良大型株が全滅し True=0。
+      #   原典は「年間データで 3 年連続増加」 (FY[t-2]<FY[t-1]<FY[t])。 earnings_annual_evaluation を更新。
+      # 停止原因 是正: funda_pass は手動 /api/admin/refresh-earnings-history のみで cron 未登録だったため
+      #   2026-05-15 で停止していた。 本 step で nightly 自動更新を回復し freshness を常時新鮮に保つ。
+      # canslim-scan の直後に直列実行 (FMP rate limit の重複を避ける)。
+      - name: Earnings annual (funda_pass) scan
+        id: earnings_annual
+        continue-on-error: true
+        run: |
+          echo "=== earnings-annual-scan ==="
+          resp=$(curl -s --max-time 1200 -w '\nHTTP:%{http_code}' -X POST \
+            -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
+            -d "$BODY" "$BASE/api/cron/earnings-annual-scan")
+          http=$(echo "$resp" | tail -1 | sed 's/.*HTTP://')
+          body=$(echo "$resp" | sed '$d')
+          echo "HTTP=$http"
+          echo "$body" | jq '{processed_count,annual_rows_upserted,evaluated_count,failed_count,calc_date}' 2>/dev/null || true
+          proc=$(echo "$body" | jq -r '.processed_count // 0' 2>/dev/null || echo 0)
+          evaluated=$(echo "$body" | jq -r '.evaluated_count // 0' 2>/dev/null || echo 0)
+          # Sprint 0: HTTP 502 は gateway timeout (backend は persist することが多い)。warning 止まり、判定は末尾 Freshness gate。
+          if [ "$http" != "200" ]; then
+            echo "::warning::earnings-annual-scan が HTTP $http (gateway timeout の可能性。Freshness gate で DB を真とする)。"
+            echo "### ⚠️ earnings-annual-scan HTTP \`$http\` (gateway timeout、freshness で確認)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          # upsert 失敗検知 (GRANT 漏れ silent fail): processed>0 だが evaluated=0 は異常。
+          if [ "${proc:-0}" -gt 0 ] && [ "${evaluated:-0}" -eq 0 ]; then
+            echo "::warning::earnings-annual-scan の評価が 0 件 (processed=$proc, evaluated=0)。earnings_annual / earnings_annual_evaluation の service_role GRANT を確認 (feedback_supabase_grant_bug)。"
+            echo "### ⚠️ earnings-annual evaluated=0 警告 (GRANT 漏れの可能性)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Freshness gate (DB を真とする — 502 でなく stale を job 失敗に — Sprint 0)
         run: |
           set +e  # curl/jq の非ゼロで step を落とさない。判定は fail 変数 + 明示 exit。
