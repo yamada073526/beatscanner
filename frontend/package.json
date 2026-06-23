@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build && node scripts/build-articles.mjs",
+    "lint": "eslint src",
+    "lint:changed": "eslint --max-warnings=0",
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "test:visual": "node scripts/snap-active.mjs"
@@ -29,11 +31,14 @@
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.54.0",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.60.0",
     "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/typography": "^0.5.19",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
+    "eslint": "^10.5.0",
+    "globals": "^17.7.0",
     "playwright": "^1.60.0",
     "postcss": "^8.4.49",
     "sharp": "^0.34.5",

@@ -182,4 +182,46 @@ for f in $STAGED_FLASH; do
     fi
 done
 
+# --- Check 7: frontend 変更ファイルの dead code 検出 (ESLint no-unused-vars) ---
+# Vite build は ESLint を走らせないため、定義だけして一度も呼ばれない関数・変数が
+# build を通り抜けてしまう (renderCrow 事件、2026-06-23)。
+# staged された frontend/src/**/*.{js,jsx} ファイルに対してのみ ESLint を実行し、
+# no-unused-vars を error 扱いでチェックする。
+# ※ eslint.config.js では既存 162 件の負債を warn に留めているが、
+#    pre-commit では staged ファイル限定なので実質「新規追加の dead code のみ」を弾く。
+# 将来: 既存負債を修正し切ったら eslint.config.js の warn → error に昇格させる。
+STAGED_JSX=$(git diff --cached --name-only | grep -E '^frontend/src/.+\.(js|jsx)$' || true)
+if [ -n "$STAGED_JSX" ]; then
+    ESLINT_BIN="frontend/node_modules/.bin/eslint"
+    if [ ! -f "$ESLINT_BIN" ]; then
+        echo "[pre-commit] WARN: $ESLINT_BIN が見つかりません。dead code チェックをスキップします。"
+        echo "  ↳ cd frontend && npm install を実行して ESLint をインストールしてください。"
+    else
+        # staged ファイルパスをリポジトリルート相対から frontend/ 相対に変換
+        JSX_FILES_REL=$(echo "$STAGED_JSX" | sed 's|^frontend/||')
+        # --rule で no-unused-vars だけを error に絞る（他ルールのノイズを排除）
+        LINT_OUT=$(cd frontend && node_modules/.bin/eslint \
+            --rule '{"no-unused-vars": ["error", {"vars": "all", "args": "after-used", "ignoreRestSiblings": true, "destructuredArrayIgnorePattern": "^_", "caughtErrorsIgnorePattern": "^_"}]}' \
+            --rule '{"no-undef": "off"}' \
+            --rule '{"no-useless-escape": "off"}' \
+            --rule '{"no-empty": "off"}' \
+            --rule '{"no-useless-assignment": "off"}' \
+            --rule '{"no-array-index-key": "off"}' \
+            --rule '{"no-irregular-whitespace": "off"}' \
+            --rule '{"react-hooks/exhaustive-deps": "off"}' \
+            --max-warnings=0 \
+            $JSX_FILES_REL 2>&1 || true)
+        if echo "$LINT_OUT" | grep -q 'no-unused-vars'; then
+            echo "[pre-commit] BLOCKED: staged ファイルに dead code (no-unused-vars) が含まれています"
+            echo "$LINT_OUT" | grep 'no-unused-vars'
+            echo ""
+            echo "  ↳ 定義したが一度も呼ばれていない関数・変数・import があります。"
+            echo "  ↳ 削除するか、実際に使用してからコミットしてください。"
+            echo "  ↳ 意図的な場合 (将来使用予定 / TODO) は --no-verify で迂回可。"
+            echo "  ↳ 参考: renderCrow 事件 (2026-06-23) — build は通るが dead code になっていた。"
+            exit 1
+        fi
+    fi
+fi
+
 exit 0
