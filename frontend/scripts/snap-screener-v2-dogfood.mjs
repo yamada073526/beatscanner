@@ -100,9 +100,36 @@ async function auditDom(page) {
         'locked-crow[data-locked]': q('[data-cond][data-locked="1"]'),
         'screener-locked-cta-*': q('[data-testid^="screener-locked-cta-"]'),
       },
+      // B-4 検証用: 現在表示中の cond-row の data-cond 一覧 (preset 毎に変わるはず)
+      condRows: Array.from(document.querySelectorAll('[data-testid="screener-cond-row"]'))
+        .map((el) => el.getAttribute('data-cond'))
+        .filter(Boolean),
+      presetAttr: (() => {
+        const e = document.querySelector('[data-testid="screener-conds"]');
+        return e ? e.getAttribute('data-preset') : null;
+      })(),
       presentKinds: present,
     };
   });
+}
+
+// preset chip を選択 (B-4: preset 毎の conds 出し分け検証用)
+async function selectPreset(page, key) {
+  const b = page.locator(`[data-testid="screener-strategy-${key}"]`).first();
+  if ((await b.count()) === 0) return false;
+  await b.scrollIntoViewIfNeeded().catch(() => {});
+  await b.click().catch(() => {});
+  await page.waitForTimeout(2000); // preset 適用 + custom 自動切替
+  return true;
+}
+
+// 詳細パネルを開く (conds を render させる)
+async function openDetail(page) {
+  const t = page.locator('[data-testid="screener-detail-toggle"]').first();
+  if ((await t.count()) > 0 && (await t.getAttribute('aria-expanded')) !== 'true') {
+    await t.click().catch(() => {});
+    await page.waitForTimeout(1000);
+  }
 }
 
 async function captureRegion(page, selector, file) {
@@ -221,31 +248,44 @@ ${checksText}
     stageC.screenshot = capC.screenshot;
     report.stages.push(stageC);
 
-    // ── Stage B: B-3 — custom 詳細 → adv ON → mseg + lock crow ──
+    // ── Stage B-4: preset 毎の conds 出し分け (DOM 構造検証・vision 不要で確実) ──
+    // earnings_pass (eps 系) と new_high_break (買い場圏/52週高値系) で表示 conds が異なることを検証。
+    // B-4 未デプロイ (旧本番) では両者が全条件 = 同一 → fail (= B-4 が未反映であることを正しく検出)。
+    const stageB4 = { name: 'b4_preset_conds', label: 'B-4: preset→conds 出し分け' };
+    let condsEarnings = [], condsBreakout = [];
+    try {
+      if (await selectPreset(page, 'earnings_pass')) { await openDetail(page); condsEarnings = (await auditDom(page)).condRows || []; }
+      if (await selectPreset(page, 'new_high_break')) { await openDetail(page); condsBreakout = (await auditDom(page)).condRows || []; }
+    } catch (e) { stageB4.error = String(e?.message || e).slice(0, 200); }
+    const setE = new Set(condsEarnings), setB = new Set(condsBreakout);
+    const differ = condsEarnings.length > 0 && condsBreakout.length > 0 &&
+      (condsEarnings.some((k) => !setB.has(k)) || condsBreakout.some((k) => !setE.has(k)));
+    const earningsHasEps = setE.has('eps_yoy_pct');           // earnings_pass 固有
+    const breakoutHasZone = setB.has('buy_zone') || setB.has('new_high_52w'); // new_high_break 固有
+    stageB4.condsEarnings = condsEarnings;
+    stageB4.condsBreakout = condsBreakout;
+    stageB4.found = true;
+    stageB4.verdict = (differ && earningsHasEps && breakoutHasZone) ? 'pass' : 'fail';
+    stageB4.checks = [{
+      check: 'earnings_pass と new_high_break で表示 conds が異なり、各 preset 固有条件 (eps_yoy_pct / buy_zone) が出る',
+      pass: stageB4.verdict === 'pass',
+      reason: `earnings=[${condsEarnings.join(',')}] / breakout=[${condsBreakout.join(',')}]`,
+    }];
+    report.stages.push(stageB4);
+
+    // ── Stage B-3: mseg + lock crow ──
+    // new_high_break が選択済 (B-4 stage の最後)。new_high_break の conds = 買い場圏/52週高値 (locked crow)
+    //  + 出来高急増/RS (grade crow = mseg) を両方含むため、B-3 の mseg/lock crow を 1 画面で検証できる。
     const stageMseg = { name: 'b3_mseg', label: 'B-3: mseg 個別緩急 (緩/標/厳/最厳)', checks: CHECKS.b3_mseg };
     const stageLock = { name: 'b3_lock_crow', label: 'B-3: Premium lock crow (南京錠)', checks: CHECKS.b3_lock_crow };
     try {
-      // custom モードを保証 (hot_sector で既に custom のはずだが、念のため)
-      const customBtn = page.locator('[data-testid="screener-mode-custom"]').first();
-      if ((await customBtn.count()) > 0) {
-        await customBtn.click().catch(() => {});
-        await page.waitForTimeout(1200);
-      }
-      const detailToggle = page.locator('[data-testid="screener-detail-toggle"]').first();
-      if ((await detailToggle.count()) > 0) {
-        const expanded = await detailToggle.getAttribute('aria-expanded');
-        if (expanded !== 'true') await detailToggle.click();
-        await page.waitForTimeout(1200);
-      } else {
-        stageMseg.note = 'screener-detail-toggle 不在';
-      }
+      await openDetail(page); // 既に開いているはずだが冪等に保証
       const advToggle = page.locator('[data-testid="screener-adv-toggle"]').first();
       if ((await advToggle.count()) > 0) {
-        const advExpanded = await advToggle.getAttribute('aria-pressed');
-        if (advExpanded !== 'true') await advToggle.click().catch(() => {});
+        if ((await advToggle.getAttribute('aria-pressed')) !== 'true') await advToggle.click().catch(() => {});
         await page.waitForTimeout(1500);
       } else {
-        stageMseg.note = (stageMseg.note ? stageMseg.note + '; ' : '') + 'screener-adv-toggle 不在';
+        stageMseg.note = 'screener-adv-toggle 不在';
       }
     } catch (e) {
       stageMseg.error = stageLock.error = String(e?.message || e).slice(0, 200);
@@ -269,6 +309,7 @@ ${checksText}
     // ── Vision verdict (key 有り & not dry-run のときのみ) ──
     if (visionEnabled) {
       for (const st of report.stages) {
+        if (st.verdict) continue; // 構造検証済 (B-4 stage 等) は vision を回さない
         const stageChecks = st.checks;
         if (!st.found || !st.screenshot) {
           st.verdict = 'uncertain';
