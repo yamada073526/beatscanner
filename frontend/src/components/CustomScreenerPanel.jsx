@@ -298,14 +298,31 @@ const CROW_INLINE_LOCKED_KEYS = new Set(
 // activePreset が null (preset 未選択 = フリーフォーム custom) または本 map に無い key の場合は、
 //   従来通り CROW_LAYOUT 全条件を表示する (legacy 挙動・後方互換)。
 const PRESET_DISPLAY_CONDS = {
-  // 決算合格: 成長性 (EPS) + 収益の質 (CF マージン/ROE) + モメンタム (RS)
-  earnings_pass:  ['eps_yoy_pct', 'eps_cagr_3y', 'ocf_margin_pct', 'roe', 'rs_percentile'],
+  // 決算合格: 成長性 (EPS) + 収益の質 (CF マージン/CF>純利益/ROE) + モメンタム (RS)
+  //   ocf_gt_netincome は gate (§B-3.5) なので display にも含める (南京錠で必ず可視化)。
+  earnings_pass:  ['eps_yoy_pct', 'eps_cagr_3y', 'ocf_margin_pct', 'ocf_gt_netincome', 'roe', 'rs_percentile'],
   // 新高値ブレイク: 型/タイミング (買い場圏/52週高値) + 需給 (出来高急増) + RS
   new_high_break: ['buy_zone', 'new_high_52w', 'volume_surge_pct', 'rs_percentile'],
   // 旬のセクター: master-detail (Phase C) が主役。conds は funda_pass のみ (重複回避・SPEC §5 Sprint 1)
   hot_sector:     ['funda_pass'],
   // セクター別リーダー: 収益の質 (CF マージン/ROE) + 機関の動き
   sector_leader:  ['ocf_margin_pct', 'roe', 'inst_holders_qoq_pct'],
+};
+
+// ─── Phase B-3.5: gate 条件レジストリ (preset 毎の「常時 ON・トグル不可」死守条件) ──────────
+// 目的: mockup v8 `o.gate:true` 条件を南京錠 (lockicon + 「必須」pill・トグル UI なし) で固定し、
+//   「変えられる/変えられない」の階層を視覚分離する (原則3・SPEC §5 Sprint 2)。
+// 死守ルール (Trust Cliff C-2): gate は当該 preset で必ず pass に算入される条件のみを列挙する。
+//   ここに載せる key は applyStrategyImpl + PRESET_PREDICATES.extra の両方で当該 preset 選択時に
+//   常時 ON である flag に対応していること (count==list を壊さない)。
+// gate-1 決定 (Q2=(a) 件数不変): ocf 系は earnings_pass / sector_leader で既に applyStrategyImpl が
+//   ON にしている (= 件数不変)。これらを南京錠化し、旧 screener-gate-list の別 section 二重表示を解消。
+// defer (嘘の南京錠を作らない・SPEC §3/§9): cfpsgt/beat (実データ無し) と cup/buy_zone/new_high_52w/
+//   ad_volume (Premium マスクで free は cup_state/pivot_distance_pct 等が null・main.py:20456-20484) は
+//   free で applied gate にすると全滅するため gate に含めない。データ整備 / Premium 専用化は別 sprint。
+const PRESET_GATE_CONDS = {
+  earnings_pass: ['ocf_margin_pct', 'ocf_gt_netincome'], // 既に applyStrategyImpl で ON = 件数不変
+  sector_leader: ['ocf_margin_pct'],                     // 既に applyStrategyImpl で ON = 件数不変
 };
 
 // ─── 合否理由 静的dict (§38安全・LLM不使用・STATE_LABEL_JP 方式) ────────────────
@@ -723,6 +740,11 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     const items = universe?.items || [];
     const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     let best = null;
+    // B-3.5: gate (南京錠・変更不可) は「外す提案」の候補から除外する。
+    //   「外せない条件を外せ」と提案する矛盾 (Trust Cliff) を防ぐ (SPEC §5 Sprint 3)。
+    const gateFlagSet = new Set(
+      ((activePreset && PRESET_GATE_CONDS[activePreset]) || []).map((k) => COND_MAP[k]?.flag).filter(Boolean)
+    );
     // overrides の各 facet を外す
     for (const [key, lvl] of Object.entries(overrides)) {
       if (lvl === 'off') continue;
@@ -740,32 +762,32 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       if (!best || cnt > best.count) best = { key, label: FACET_MAP[key]?.label || key, count: cnt, type: 'preset' };
     }
     // fundaPassOnly を外す
-    if (fundaPassOnly) {
+    if (fundaPassOnly && !gateFlagSet.has('fundaPassOnly')) {
       const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, fundaPassOnly: false })).length;
       if (!best || cnt > best.count) best = { key: 'funda_pass', label: '最新決算5条件', count: cnt, type: 'funda_pass' };
     }
-    // ocfMarginOnly を外す (Sprint 3)
-    if (ocfMarginOnly) {
+    // ocfMarginOnly を外す (Sprint 3)。gate の preset では候補外 (B-3.5)。
+    if (ocfMarginOnly && !gateFlagSet.has('ocfMarginOnly')) {
       const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, ocfMarginOnly: false })).length;
       if (!best || cnt > best.count) best = { key: 'ocf_margin', label: OCF_MARGIN_FACET.label, count: cnt, type: 'ocf_margin' };
     }
-    // ocfGtNiOnly を外す (Phase1 S3 #1)
-    if (ocfGtNiOnly) {
+    // ocfGtNiOnly を外す (Phase1 S3 #1)。gate の preset では候補外 (B-3.5)。
+    if (ocfGtNiOnly && !gateFlagSet.has('ocfGtNiOnly')) {
       const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, ocfGtNiOnly: false })).length;
       if (!best || cnt > best.count) best = { key: 'ocf_gt_netincome', label: OCF_GT_NI_FACET.label, count: cnt, type: 'ocf_gt_netincome' };
     }
     // buyZoneOnly を外す (Phase1 S3 #3)
-    if (buyZoneOnly) {
+    if (buyZoneOnly && !gateFlagSet.has('buyZoneOnly')) {
       const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, buyZoneOnly: false })).length;
       if (!best || cnt > best.count) best = { key: 'buy_zone', label: BUY_ZONE_FACET.label, count: cnt, type: 'buy_zone' };
     }
     // newHigh52wOnly を外す
-    if (newHigh52wOnly) {
+    if (newHigh52wOnly && !gateFlagSet.has('newHigh52wOnly')) {
       const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, newHigh52wOnly: false })).length;
       if (!best || cnt > best.count) best = { key: 'new_high_52w', label: NEW_HIGH_52W_FACET.label, count: cnt, type: 'new_high_52w' };
     }
     // adVolumeOnly を外す (Phase1 S4 #8)
-    if (adVolumeOnly) {
+    if (adVolumeOnly && !gateFlagSet.has('adVolumeOnly')) {
       const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, adVolumeOnly: false })).length;
       if (!best || cnt > best.count) best = { key: 'ad_volume', label: AD_VOLUME_FACET.label, count: cnt, type: 'ad_volume' };
     }
@@ -785,7 +807,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       if (!best || cnt > best.count) best = { key: 'sector_leader', label: 'セクター別リーダー', count: cnt, type: 'sector_leader' };
     }
     return best;
-  }, [filteredItems.length, universe, activeGrades, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorLeaderOnly, sectorFilter, mcapFilter]);
+  }, [filteredItems.length, universe, activeGrades, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, sectorLeaderOnly, sectorFilter, mcapFilter, activePreset]);
 
   // Pass 3c: sector / mcap 選択肢を universe から live 算出 (count 付き)。
   // Pass 3d (修正A): 全件 universe 集計から faceted count へ変更 (Trust Cliff C-2 修正)。
@@ -932,7 +954,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   // ── Phase B-2: 全条件を mockup の .crow (トグル + ラベル + 値チップ) へ統一 ──
   // grade も binary も同じ 1 行形状で 2 列グリッドに揃える。mseg/gate南京錠/Premium lock crow は B-3。
   // 数値ロジック(itemPasses)は経由せず表示のみ。off→on の grade 復帰は overrides 操作で行う。
-  const renderCrow = (cond) => {
+  const renderCrow = (cond, isGate = false) => {
     if (!cond) return null;
     if (cond.kind === 'grade') {
       const facet = cond.facet;
@@ -1004,6 +1026,26 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       );
     }
     if (!universe?.freshness?.[meta.freshness]) return null;
+    // B-3.5 gate 南京錠: 当該 preset の死守条件は常時 ON・トグル不可で描画する。
+    //   flag は applyStrategyImpl で既に true (件数算入済・count==list 不変)。トグル UI を出さず、
+    //   lockicon + ラベル + 閾値 + 「必須」pill で「変更不可の絶対条件」を伝える (mockup `.gate`)。
+    if (isGate) {
+      return (
+        <div
+          key={cond.key}
+          className="screener-crow is-gate"
+          data-testid="screener-cond-row"
+          data-cond={cond.key}
+          data-gate="1"
+          title={meta.tooltip || undefined}
+        >
+          <span className="screener-crow__lockicon" aria-hidden><Lock size={13} strokeWidth={2} /></span>
+          <span className="screener-crow__lbl">{meta.label}</span>
+          {meta.th && <span className="screener-crow__th">{meta.th}</span>}
+          <span className="screener-crow__gate-pill" aria-label={`${meta.label} はこの戦略の絶対条件（変更不可）`}>必須</span>
+        </div>
+      );
+    }
     const binBindings = {
       funda_pass: [fundaPassOnly, setFundaPassOnly],
       ocf_margin_pct: [ocfMarginOnly, setOcfMarginOnly],
@@ -1314,7 +1356,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                     {CROW_LAYOUT.map((grp) => {
                       const allowed = (activePreset && PRESET_DISPLAY_CONDS[activePreset]) || null;
                       const keys = allowed ? grp.keys.filter((k) => allowed.includes(k)) : grp.keys;
-                      const rows = keys.map((k) => renderCrow(COND_MAP[k])).filter(Boolean);
+                      // B-3.5: 当該 preset の gate 条件は南京錠 (トグル不可) で描画する。
+                      const gateKeys = (activePreset && PRESET_GATE_CONDS[activePreset]) || null;
+                      const rows = keys.map((k) => renderCrow(COND_MAP[k], !!gateKeys?.includes(k))).filter(Boolean);
                       if (rows.length === 0) return null;
                       return (
                         <Fragment key={grp.group}>
@@ -1332,26 +1376,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                     )}
                   </div>
 
-                  {/* 必須ゲート (独自プロトコル絶対条件・変更不可)。B-2 現状維持 (adv ON 時のみ提示)。.crow 南京錠化は B-3。
-                       §3.2 aria-label は「制限」でなく「戦略の絶対条件」と伝える。 */}
-                  {advOpen && (universe.freshness?.ocf_margin || universe.freshness?.funda_pass) && (
-                    <div className="screener-gate-list mt-3" role="list" aria-label="必須ゲート (変更不可)">
-                      <span
-                        className="screener-gate-badge" role="listitem"
-                        data-testid="screener-gate-ocf_margin"
-                        aria-label="営業CFマージン 15%以上（戦略の絶対条件・変更不可）"
-                      >
-                        <Lock size={11} strokeWidth={2} aria-hidden /> 営業CFマージン ≥15%・必須
-                      </span>
-                      <span
-                        className="screener-gate-badge" role="listitem"
-                        data-testid="screener-gate-ocf_gt_netincome"
-                        aria-label="CFPSがEPSを上回る粉飾防止条件（戦略の絶対条件・変更不可）"
-                      >
-                        <Lock size={11} strokeWidth={2} aria-hidden /> CFPS&gt;EPS・必須
-                      </span>
-                    </div>
-                  )}
+                  {/* B-3.5: 旧 screener-gate-list (別 section の「必須」二重表示) は廃止。
+                       gate は conds 内 inline 南京錠 (renderCrow isGate) に一本化し、
+                       「トグル可能な任意条件」と「変更不可の死守条件」の二重表示矛盾 (Trust Cliff) を解消。 */}
 
                   {/* ── #2 2-d: lockbar — Free がアドバンスドを操作した時のみ (常駐させない §4.3)。
                       Free 価値(N銘柄に絞れている事実)を先に肯定→Pro 案内。list 可視を約束する語感は撤廃 (Trust Cliff #1)。 */}
