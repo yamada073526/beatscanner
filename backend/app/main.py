@@ -20187,14 +20187,14 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             t = str(r.get("ticker") or "").upper()
             if t:
                 sf_map[t] = r
-        # 単調増加 (eps_3y_rising / rev_3y_rising) + beat (latest_beat) は別 fetch で graceful merge。
+        # 単調増加 (eps_3y_rising / rev_3y_rising / cfps_3y_rising) + beat (latest_beat) は別 fetch で graceful merge。
         # ★ deploy 順序非依存: migration 未適用 (カラム無し) でも _fetch_all_rows_paged が
         #   例外を握り潰し空 list を返す → 既存 fundamentals は無傷で新フィールドのみ欠落 (None)。
         #   同一 SELECT に混ぜると 1 カラム欠落で全 fundamentals が消える Trust Cliff になるため分離。
         #   0 FMP call (Supabase read のみ、universe payload は cache 済)。
         for r in _fetch_all_rows_paged(
             sb, "screener_fundamentals",
-            "ticker,eps_3y_rising,rev_3y_rising,latest_beat",
+            "ticker,eps_3y_rising,rev_3y_rising,latest_beat,cfps_3y_rising",
             eq={"calc_date": sf_cd},
         ):
             t = str(r.get("ticker") or "").upper()
@@ -20202,6 +20202,7 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
                 sf_map[t]["eps_3y_rising"] = r.get("eps_3y_rising")
                 sf_map[t]["rev_3y_rising"] = r.get("rev_3y_rising")
                 sf_map[t]["latest_beat"] = r.get("latest_beat")
+                sf_map[t]["cfps_3y_rising"] = r.get("cfps_3y_rising")
 
     # rs_ratings (RS percentile、 free) — 最新 calc_date 全行
     rs_map: dict[str, dict] = {}
@@ -20344,6 +20345,9 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             # beat 判定: latest_beat (free tier)。直近決算が EPS 予想を上回ったか。
             # None = estimate/actual 欠損（判定不能、False と区別）。gate 化は次セッション。
             "latest_beat": (sf or {}).get("latest_beat"),
+            # 単調増加判定: cfps_3y_rising (free tier)。CFPS (営業CF/希薄化株式数) annual 4 期連続増加。
+            # None = 履歴不足（False と区別）。gate 化は次セッション (populate 確認後)。
+            "cfps_3y_rising": (sf or {}).get("cfps_3y_rising"),
             # near_high (Pro gate) — N 条件
             "near_high_pct_scaled": _uni_round((sf or {}).get("near_high_pct_scaled")),
             # cup / breakout (Premium gate)
@@ -21750,6 +21754,7 @@ def _upsert_screener_fundamental(
     eps_3y_rising: "bool | None" = None,
     rev_3y_rising: "bool | None" = None,
     latest_beat: "bool | None" = None,
+    cfps_3y_rising: "bool | None" = None,
 ) -> bool:
     """screener_fundamentals テーブルに各指標を upsert。
 
@@ -21859,6 +21864,11 @@ def _upsert_screener_fundamental(
     # optional_cols fallback: migration 未適用時はカラム除外して再 upsert (graceful)。
     if latest_beat is not None:
         row["latest_beat"] = latest_beat
+    # ── 単調増加判定: cfps_3y_rising (CFPS 直近4期、annual CF) ─────────────────────
+    # None-preserve: False は有効値 (増加していない = 情報あり)。None を渡した場合は payload に含めない。
+    # optional_cols fallback: migration 未適用時はカラム除外して再 upsert (graceful)。
+    if cfps_3y_rising is not None:
+        row["cfps_3y_rising"] = cfps_3y_rising
 
     try:
         sb.table("screener_fundamentals").upsert(
@@ -21883,6 +21893,7 @@ def _upsert_screener_fundamental(
                 "eps_3y_rising",          # 単調増加判定: migration 未適用時の graceful fallback
                 "rev_3y_rising",          # 単調増加判定: migration 未適用時の graceful fallback
                 "latest_beat",            # beat 判定: migration 未適用時の graceful fallback
+                "cfps_3y_rising",         # 単調増加判定: migration 未適用時の graceful fallback
             )
             if c in err_str and c in row
         ]
@@ -22195,20 +22206,20 @@ async def cron_canslim_scan(
             try:
                 surprises_raw = await client.earnings_surprises(ticker, limit=8)
             except Exception:
-                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_failed", {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_failed", {}
             if not surprises_raw:
-                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_empty", {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_empty", {}
 
             surprises_past = [s for s in surprises_raw if _has_eps_actual(s)]
             if not surprises_past:
-                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "no_eps_actual_in_surprises", {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "no_eps_actual_in_surprises", {}
 
             latest = sorted(
                 surprises_past, key=lambda d: d.get("date") or "", reverse=True
             )[0]
             entry_date_str = latest.get("date") or ""
             if not entry_date_str:
-                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "no_entry_date", {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "no_entry_date", {}
             eps_actual = _safe_eps_float(
                 latest.get("eps")
                 or latest.get("epsActual")
@@ -22738,6 +22749,48 @@ async def cron_canslim_scan(
             except Exception:
                 latest_beat = None
 
+            # ── 単調増加判定: cfps_3y_rising (CFPS = 営業CF/希薄化株式数、+1 API call: annual cash flow) ──
+            # user 承認の annual CF 方式 (eps_3y_rising と対称な厳密「3 年連続増加」)。
+            # diluted_shares は annual_recs (income、A 条件で fetch 済) を date で join、
+            #   operatingCashFlow は annual cash flow を新規 fetch (+1 FMP call/銘柄/夜)。
+            # CFPS = operatingCashFlow / weightedAverageShsOutDil。_compute_earnings_metrics (L3953) と同流儀。
+            # None-preserve: 有効 CFPS < 4 期 → None (False でない、_calc_monotonic_rising 契約)。
+            cfps_3y_rising: "bool | None" = None
+            try:
+                cf_annual = await client.cash_flow(ticker, limit=4, period="annual")
+                if (
+                    isinstance(cf_annual, list) and cf_annual
+                    and isinstance(annual_recs, list) and annual_recs
+                ):
+                    # income (A 条件 fetch 済) から date → diluted_shares map を構築。
+                    # diluted_shares フィールドは _compute_earnings_metrics (L3919) と同一優先順。
+                    _shares_by_date: dict = {}
+                    for _ar in annual_recs:
+                        if not isinstance(_ar, dict):
+                            continue
+                        _d = _ar.get("date") or ""
+                        _sh = _safe_float(
+                            _ar.get("weightedAverageShsOutDil") or _ar.get("weightedAverageShsOut")
+                        )
+                        if _d and _sh:
+                            _shares_by_date[_d] = _sh
+                    # cash flow を date 降順 sort (newest-first)、同 date の diluted_shares と join。
+                    _sorted_cf = sorted(
+                        [c for c in cf_annual if isinstance(c, dict)],
+                        key=lambda c: c.get("date") or "",
+                        reverse=True,
+                    )
+                    cfps_series = []
+                    for _cf in _sorted_cf[:4]:
+                        _d = _cf.get("date") or ""
+                        _ocf = _safe_float(_cf.get("operatingCashFlow"))
+                        _sh = _shares_by_date.get(_d)
+                        # _sh truthy チェックでゼロ除算回避 (0 株は join 時に除外済だが二重ガード)。
+                        cfps_series.append(_ocf / _sh if (_ocf is not None and _sh) else None)
+                    cfps_3y_rising = _calc_monotonic_rising(cfps_series)
+            except Exception:
+                cfps_3y_rising = None
+
             # ── S5a: null_reason per-cause を組み立て (静的コード、LLM 不使用) ──
             #   success path のみ upsert される (error path は err を立てて post-gather で continue)。
             #   原因コードは frontend (S5b) が静的 dict で UI ラベル化。§38/§5: 予測語/最上級なし。
@@ -22767,20 +22820,22 @@ async def cron_canslim_scan(
                 null_reasons["rev_3y_rising"] = "insufficient_annual_history"
             if latest_beat is None:
                 null_reasons["latest_beat"] = "no_estimate_or_actual"
+            if cfps_3y_rising is None:
+                null_reasons["cfps_3y_rising"] = "insufficient_annual_history"
 
-            # ★★ tuple arity 17 要素 (latest_beat を rev_3y_rising と err の間に追加)
+            # ★★ tuple arity 18 要素 (cfps_3y_rising を latest_beat と err の間に追加)
             #    (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround,
             #     near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
             #     ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome,
-            #     eps_3y_rising, rev_3y_rising, latest_beat, err, null_reasons)
+            #     eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising, err, null_reasons)
             return (
                 ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround,
                 near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
                 ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome,
-                eps_3y_rising, rev_3y_rising, latest_beat, None, null_reasons,
+                eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising, None, null_reasons,
             )
         except Exception as e:
-            return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, f"unexpected: {e}", {}
+            return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, f"unexpected: {e}", {}
 
     # fetch + 計算: worker_count>1 で並列 (asyncio.Semaphore)、 =1 で逐次。
     # ★ 6体合議 critical 対応: 旧実装は完全逐次で full universe (3000) で GHA timeout (30min) 超過
@@ -22807,11 +22862,11 @@ async def cron_canslim_scan(
             results.append(await _compute_one(ticker))
 
     # count + upsert (post-gather 逐次、 cup-scan と同型)
-    # tuple arity 17 要素 (latest_beat を rev_3y_rising と err の間に追加)
+    # tuple arity 18 要素 (cfps_3y_rising を latest_beat と err の間に追加)
     # (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct,
     #  buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
     #  ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome,
-    #  eps_3y_rising, rev_3y_rising, latest_beat, err, null_reasons)
+    #  eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising, err, null_reasons)
     # Phase 3 Sprint 4a: post-gather で ×100 して pct 新カラム値を生成
     #   near_high_pct_scaled = near_high_pct × 100 (例 0.97 → 97.0)
     #   buyback_yield_pct    = buyback_yield  × 100 (例 0.0173 → 1.73)
@@ -22826,8 +22881,9 @@ async def cron_canslim_scan(
     eps_3y_rising_computed = 0  # eps_3y_rising が算出できた件数
     rev_3y_rising_computed = 0  # rev_3y_rising が算出できた件数
     latest_beat_computed = 0  # latest_beat が算出できた件数
+    cfps_3y_rising_computed = 0  # cfps_3y_rising が算出できた件数
     for result in results:
-        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct, ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome, eps_3y_rising, rev_3y_rising, latest_beat, err, null_reasons = result
+        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct, ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome, eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising, err, null_reasons = result
         if err:
             failed.append({"ticker": ticker, "reason": err})
             continue
@@ -22857,6 +22913,8 @@ async def cron_canslim_scan(
             rev_3y_rising_computed += 1
         if latest_beat is not None:
             latest_beat_computed += 1
+        if cfps_3y_rising is not None:
+            cfps_3y_rising_computed += 1
         if not dry_run:
             # ── S4a BLOCK①: pct 新カラム値を post-gather で生成 ──────────────────
             # near_high_pct (ratio 0-1) を pct 表記に変換。read endpoint が >= min_pct で比較可能。
@@ -22893,6 +22951,7 @@ async def cron_canslim_scan(
                 eps_3y_rising=eps_3y_rising,        # 単調増加判定: EPS 直近4期
                 rev_3y_rising=rev_3y_rising,         # 単調増加判定: revenue 直近4期
                 latest_beat=latest_beat,            # beat 判定: 直近決算が予想を上回ったか
+                cfps_3y_rising=cfps_3y_rising,      # 単調増加判定: CFPS 直近4期 (annual CF)
             )
             if ok:
                 upserted += 1
@@ -22914,6 +22973,7 @@ async def cron_canslim_scan(
         "eps_3y_rising_computed_count": eps_3y_rising_computed,   # 単調増加判定: EPS
         "rev_3y_rising_computed_count": rev_3y_rising_computed,   # 単調増加判定: revenue
         "latest_beat_computed_count": latest_beat_computed,       # beat 判定: 直近決算
+        "cfps_3y_rising_computed_count": cfps_3y_rising_computed,  # 単調増加判定: CFPS
         "upserted_count": upserted,
         "failed_count": len(failed),
         "failed_tickers": failed[:20],
