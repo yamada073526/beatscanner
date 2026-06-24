@@ -24,9 +24,17 @@ on:
         required: false
         default: 'https://beatscanner-production.up.railway.app/?layout=workspace&pillar2_pane1=1&tab=screener&screener_v2=1'
   push:
-    # main = 毎 deploy 後の自動 dogfood。claude/** = 構築中の verification 用 (本番URLを叩くので
-    # branch push でも production の B-3/Phase C を検証できる)。verify 完了後 main-only へ絞ってよい。
-    branches: [main, 'claude/**']
+    # main = 毎 deploy 後の自動 dogfood (本番に反映された B-3/Phase C を verify)。
+    branches: [main]
+    paths:
+      - 'frontend/src/components/CustomScreenerPanel.jsx'
+      - 'frontend/src/components/StrategyPresetBar.jsx'
+      - 'frontend/src/features/workspace/ScreenerMaster.jsx'
+      - 'frontend/scripts/snap-screener-v2-dogfood.mjs'
+      - '.github/workflows/screener_v2_dogfood.yml'
+  pull_request:
+    # 任意 branch の PR で screener 関連を触ったら merge 前に本番 dogfood (playwright_smoke と同方針)。
+    # 同一 repo の PR なので secrets (ANTHROPIC_API_KEY) も利用可。
     paths:
       - 'frontend/src/components/CustomScreenerPanel.jsx'
       - 'frontend/src/components/StrategyPresetBar.jsx'
