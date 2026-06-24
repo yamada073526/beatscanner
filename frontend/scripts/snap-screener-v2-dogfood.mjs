@@ -273,25 +273,27 @@ ${checksText}
     }];
     report.stages.push(stageB4);
 
-    // ── Stage B-3: mseg + lock crow ──
-    // new_high_break が選択済 (B-4 stage の最後)。new_high_break の conds = 買い場圏/52週高値 (locked crow)
-    //  + 出来高急増/RS (grade crow = mseg) を両方含むため、B-3 の mseg/lock crow を 1 画面で検証できる。
-    const stageMseg = { name: 'b3_mseg', label: 'B-3: mseg 個別緩急 (緩/標/厳/最厳)', checks: CHECKS.b3_mseg };
-    const stageLock = { name: 'b3_lock_crow', label: 'B-3: Premium lock crow (南京錠)', checks: CHECKS.b3_lock_crow };
-    try {
-      await openDetail(page); // 既に開いているはずだが冪等に保証
-      const advToggle = page.locator('[data-testid="screener-adv-toggle"]').first();
-      if ((await advToggle.count()) > 0) {
-        if ((await advToggle.getAttribute('aria-pressed')) !== 'true') await advToggle.click().catch(() => {});
+    // adv ON を保証する小 helper
+    const ensureAdv = async () => {
+      await openDetail(page);
+      const adv = page.locator('[data-testid="screener-adv-toggle"]').first();
+      if ((await adv.count()) > 0 && (await adv.getAttribute('aria-pressed')) !== 'true') {
+        await adv.click().catch(() => {});
         await page.waitForTimeout(1500);
-      } else {
-        stageMseg.note = 'screener-adv-toggle 不在';
       }
+    };
+
+    // ── Stage B-3 mseg: earnings_pass (eps系 grade = 緩/標/厳/最厳 の4段) で mseg を検証 ──
+    // 注: new_high_break の先頭 grade は RS で、RS は仕様上 3段 (≥70/≥80/≥90) のため 4段検証に不向き。
+    //     4段を持つ eps grade を含む earnings_pass で検証する (先頭 mseg crow = eps_yoy_pct)。
+    const stageMseg = { name: 'b3_mseg', label: 'B-3: mseg 個別緩急 (緩/標/厳/最厳)', checks: CHECKS.b3_mseg };
+    try {
+      await selectPreset(page, 'earnings_pass');
+      await ensureAdv();
     } catch (e) {
-      stageMseg.error = stageLock.error = String(e?.message || e).slice(0, 200);
+      stageMseg.error = String(e?.message || e).slice(0, 200);
     }
-    report.audits.afterAdv = await auditDom(page);
-    // mseg: 4段ラベルが読めるよう、mseg を含む単一 crow に zoom (conds 全体だと縮小で illegible)
+    report.audits.afterAdvEarnings = await auditDom(page);
     const capMseg = await captureRegion(
       page,
       '[data-testid="screener-cond-row"]:has([data-testid^="screener-mseg-"])',
@@ -300,7 +302,16 @@ ${checksText}
     stageMseg.found = capMseg.found;
     stageMseg.screenshot = capMseg.screenshot;
     report.stages.push(stageMseg);
-    // lock crow: 南京錠の出る conds 領域全体
+
+    // ── Stage B-3 lock crow: new_high_break (買い場圏/52週高値 = locked) で南京錠を検証 ──
+    const stageLock = { name: 'b3_lock_crow', label: 'B-3: Premium lock crow (南京錠)', checks: CHECKS.b3_lock_crow };
+    try {
+      await selectPreset(page, 'new_high_break');
+      await ensureAdv();
+    } catch (e) {
+      stageLock.error = String(e?.message || e).slice(0, 200);
+    }
+    report.audits.afterAdvBreakout = await auditDom(page);
     const capLock = await captureRegion(page, '[data-testid="screener-conds"]', '20-b3-conds.png');
     stageLock.found = capLock.found;
     stageLock.screenshot = capLock.screenshot;
