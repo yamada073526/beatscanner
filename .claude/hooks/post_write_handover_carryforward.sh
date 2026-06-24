@@ -53,11 +53,27 @@ while IFS= read -r term; do
   MISSING="${MISSING}  - ${term}"$'\n'
 done < <(extract_items "$PREV")
 
+# 次セッション開始プロンプト提示 (2026-06-24 追加):
+#   並行セッション (claude.ai/code 等) が remote main を進めると、ローカルの handover が陳腐化する。
+#   実例: ローカル handover v258 を信じて作業開始したが remote は既に v262 だった (B-3 等は完了済)。
+#   handover を書く = セッション終端が近い好機なので、次セッションが remote 最新を確認するプロンプトを提示。
+print_next_session_prompt() {
+  echo ""
+  echo "📋 次セッション開始時の推奨プロンプト (コピペ用):"
+  echo "  ────────────────────────────────────────────"
+  echo "  まず \`git fetch origin && git log --oneline HEAD..origin/main\` で remote main が先行していないか確認して。"
+  echo "  先行していれば \`git pull --rebase origin main\` してから、remote 最新の handover を /fetch-handover で読んで現状把握して。"
+  echo "  (ローカルの handover_*.md は並行セッションで陳腐化していることがある)"
+  echo "  ────────────────────────────────────────────"
+}
+
 if [ -n "$MISSING" ]; then
   echo "⚠️ handover 引き継ぎ漏れチェック ($(basename "$PREV") → $BASE):"
   echo "前版 backlog/残タスクにあったが、 新版に見当たらない項目があります —"
   printf '%s' "$MISSING"
   echo "→ 完了したなら無視 / 意図的 drop なら理由付きで残す / 漏れなら新版に追記してください。"
+  print_next_session_prompt
   exit 2
 fi
+print_next_session_prompt
 exit 0
