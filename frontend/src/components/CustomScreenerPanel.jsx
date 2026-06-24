@@ -210,6 +210,10 @@ function gradePass(facet, item, lvl) {
   if (thr != null && v < thr) return false; // 未定義段は no-op (clamp 済のため通常到達しない)
   return true;
 }
+// cup screener が通す cup_state 集合 (backend _CONSENSUS_CUP_STATES と一致: main.py:17907)。
+//   breakout_extended は backend 側で v148 の 3 ゲート (50DMA乖離/上昇率/market gate) 済み。
+//   free/pro は backend が cup_state=null マスク (Premium 限定) → pass=false (件数に影響しない)。
+const CUP_PASS_STATES = new Set(['breakout_pending', 'breakout_confirmed', 'breakout_extended']);
 export const PRESET_CONDS = [
   // ── grade 条件 (精度連動・activeGrades 経由) ──
   { key: 'eps_yoy_pct',          kind: 'grade', facet: FACET_MAP.eps_yoy_pct,          pass: (item, lvl) => gradePass(FACET_MAP.eps_yoy_pct, item, lvl) },
@@ -234,6 +238,10 @@ export const PRESET_CONDS = [
   { key: 'ad_volume',        kind: 'binary', flag: 'adVolumeOnly',   facet: AD_VOLUME_FACET,    pass: (item) => { const r = item[AD_VOLUME_FACET.field]; return r != null && r > AD_VOLUME_FACET.threshold; } },
   // sector_leader: セクター内 RS 上位 flag (is_sector_rs_leader)。null / undefined / false = 除外。
   { key: 'sector_leader',    kind: 'flag',   flag: 'sectorLeaderOnly', pass: (item) => item.is_sector_rs_leader === true },
+  // cup: Cup-with-Handle 形成 (Premium 限定・backend が free/pro は cup_state=null マスク)。
+  //   CUP_PASS_STATES に属する state のみ pass。Sprint 1 では cupOnly flag を誰も ON にしない =
+  //   count/list 不参加 (件数不変・Trust Cliff C-2 露出ゼロ)。applied gate 化は Sprint 2 (Premium 限定)。
+  { key: 'cup',              kind: 'flag',   flag: 'cupOnly',          pass: (item) => item.cup_state != null && CUP_PASS_STATES.has(item.cup_state) },
 ];
 const COND_MAP = Object.fromEntries(PRESET_CONDS.map((c) => [c.key, c]));
 // binary/flag 条件のみ (extra フラグ経由で AND・itemPasses が走査)。grade は activeGrades 経由で別ループ。
@@ -277,10 +285,13 @@ const CROW_BINARY_META = {
   buy_zone:         { label: '買い場圏',             th: '0〜+5%', freshness: 'pivot_distance',   locked: 'pivot_distance', tooltip: BUY_ZONE_FACET.tooltip },
   new_high_52w:     { label: '52週高値を更新',        th: null,     freshness: 'breakout',         locked: 'breakout',       tooltip: NEW_HIGH_52W_FACET.tooltip },
   ad_volume:        { label: '出来高の質',           th: '>1',     freshness: 'ad_volume',        locked: 'ad_volume',       tooltip: AD_VOLUME_FACET.tooltip },
+  // cup: free/pro は locked_facets に 'cup' が入る (backend マスク) → lock crow で Premium 解錠を広告。
+  //   Premium の applied gate 表示は Sprint 2 (freshness.cup or gate 経路)。Sprint 1 は lock crow のみ。
+  cup:              { label: 'カップ・ウィズ・ハンドル', th: null,     freshness: 'cup',              locked: 'cup',             tooltip: 'オニールのカップ・ウィズ・ハンドル形成。ベース完成からのブレイク初動の型（Premium で解錠）' },
 };
 const CROW_LAYOUT = [
   { group: '品質',       sub: '利益・キャッシュの質', keys: ['funda_pass', 'ocf_margin_pct', 'ocf_gt_netincome', 'eps_yoy_pct', 'eps_cagr_3y', 'roe'] },
-  { group: 'タイミング', sub: '値動き・勢い',         keys: ['buy_zone', 'new_high_52w', 'rs_percentile', 'volume_surge_pct'] },
+  { group: 'タイミング', sub: '値動き・勢い',         keys: ['buy_zone', 'new_high_52w', 'cup', 'rs_percentile', 'volume_surge_pct'] },
   { group: '需給',       sub: '機関の動き',           keys: ['ad_volume', 'inst_holders_qoq_pct'] },
 ];
 // B-3: crow conds が inline lock crow として提示する locked_facets key 集合 (= CROW_BINARY_META.locked)。
@@ -293,8 +304,9 @@ const CROW_INLINE_LOCKED_KEYS = new Set(
 // 目的: 全 preset 一律の CROW_LAYOUT を、選択中 preset (activePreset) に意味のある条件だけへ絞って
 //   表示する (原則1: 読み手の負担を減らす)。**pass 述語 (PRESET_CONDS/itemPasses) は一切不変** —
 //   ここで決めるのは「どの crow を描くか」だけで、件数 (count==list) には無影響 (SPEC §5 Sprint 1)。
-// 値は CROW_LAYOUT に存在する cond key のみ (mockup の実データ無し条件 rev3/cfps3/cfpsgt/cup/beat は
+// 値は CROW_LAYOUT に存在する cond key のみ (mockup の未配線条件 rev3/cfps3/cfpsgt/beat は
 //   defer = ここに含めない。嘘の南京錠/空表示を作らない・SPEC §3/§9)。
+//   cup は Premium 限定 facet として CROW_LAYOUT + 本 map に追加済 (free は lock crow 経由・件数不変)。
 // activePreset が null (preset 未選択 = フリーフォーム custom) または本 map に無い key の場合は、
 //   従来通り CROW_LAYOUT 全条件を表示する (legacy 挙動・後方互換)。
 const PRESET_DISPLAY_CONDS = {
@@ -302,7 +314,7 @@ const PRESET_DISPLAY_CONDS = {
   //   ocf_gt_netincome は gate (§B-3.5) なので display にも含める (南京錠で必ず可視化)。
   earnings_pass:  ['eps_yoy_pct', 'eps_cagr_3y', 'ocf_margin_pct', 'ocf_gt_netincome', 'roe', 'rs_percentile'],
   // 新高値ブレイク: 型/タイミング (買い場圏/52週高値) + 需給 (出来高急増) + RS
-  new_high_break: ['buy_zone', 'new_high_52w', 'volume_surge_pct', 'rs_percentile'],
+  new_high_break: ['buy_zone', 'new_high_52w', 'cup', 'volume_surge_pct', 'rs_percentile'],
   // 旬のセクター: master-detail (Phase C) が主役。conds は funda_pass のみ (重複回避・SPEC §5 Sprint 1)
   hot_sector:     ['funda_pass'],
   // セクター別リーダー: 収益の質 (CF マージン/ROE) + 機関の動き
