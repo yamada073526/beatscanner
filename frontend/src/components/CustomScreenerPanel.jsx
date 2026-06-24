@@ -334,10 +334,10 @@ const PRESET_DISPLAY_CONDS = {
   earnings_pass:  ['eps_yoy_pct', 'eps_cagr_3y', 'ocf_margin_pct', 'ocf_gt_netincome', 'roe', 'rs_percentile', 'eps_3y_rising', 'rev_3y_rising', 'cfps_3y_rising'],
   // 新高値ブレイク: 型/タイミング (買い場圏/52週高値) + 需給 (出来高急増) + RS
   new_high_break: ['latest_beat', 'buy_zone', 'new_high_52w', 'cup', 'volume_surge_pct', 'rs_percentile'],
-  // 旬のセクター: master-detail (Phase C) が主役。conds は funda_pass のみ (重複回避・SPEC §5 Sprint 1)
-  hot_sector:     ['funda_pass'],
-  // セクター別リーダー: 収益の質 (CF マージン/ROE) + 機関の動き
-  sector_leader:  ['ocf_margin_pct', 'roe', 'inst_holders_qoq_pct'],
+  // 旬のセクター: master-detail (Phase C) が主役。conds は funda_pass + RS 床 (C案: 適用 grade を 1:1 表示)
+  hot_sector:     ['funda_pass', 'rs_percentile'],
+  // セクター別リーダー: 収益の質 (CF マージン/ROE) + RS 床 + 機関の動き (C案: rs_percentile を可視化し 1:1 化)
+  sector_leader:  ['ocf_margin_pct', 'roe', 'rs_percentile', 'inst_holders_qoq_pct'],
 };
 
 // ─── Phase B-3.5: gate 条件レジストリ (preset 毎の「常時 ON・トグル不可」死守条件) ──────────
@@ -390,9 +390,12 @@ function buildMatchReason(key, value, threshold) {
     : `${d.name} ${valTxt}`;
   return { valueText: valTxt, reason };
 }
-export function buildActiveGrades(preset, overrides) {
+// C案 (SPEC_2026-06-25): gradeKeys で「常時適用する grade」を preset 別に注入できるよう拡張。
+//   省略時 (custom/legacy) は従来通り全 PRESET_CORE_KEYS = 後方互換。これにより new_high_break 等で
+//   eps_yoy/eps_cagr/roe が「crow 非表示のまま暗黙 AND され hero=0」になる §0 問題を解消する。
+export function buildActiveGrades(preset, overrides, gradeKeys = PRESET_CORE_KEYS) {
   const g = {};
-  for (const k of PRESET_CORE_KEYS) {
+  for (const k of gradeKeys) {
     const lvl = clampLevel(FACET_MAP[k], preset); // eps_cagr_3y は loose→standard へクランプ
     if (lvl) g[k] = lvl;
   }
@@ -429,12 +432,18 @@ export function itemPasses(item, activeGrades, extra) {
 // ─── Phase A: プリセット述語 SSOT ────────────────────────────────────────────
 // Trust Cliff 整合: タイル件数と list が必ず同一 predicate を通すための SSOT。
 // [[feedback_facet_filter_count_integrity]] に準拠。
+// C案 (SPEC_2026-06-25): grades = 当該 preset で「常時適用する grade key」の陽宣言 (折衷案)。
+//   共通床 = rs_percentile (RS 床・金融 verdict「RS≥75〜80 床は正当」)。preset 固有を上乗せ。
+//   旧実装は全 preset 一律 PRESET_CORE_KEYS (eps_yoy/eps_cagr/roe/rs) を暗黙適用していたが、
+//   new_high_break/hot_sector/sector_leader では mockup に無い EPS/CAGR/ROE が crow 非表示のまま
+//   件数を削っていた (§0 hidden condition・hero=0 主因)。grades を preset 別に絞って解消する。
+//   ※「表示 crow = 適用 grade」1:1: grades の各 key は必ず PRESET_DISPLAY_CONDS にも含めること。
 export const PRESET_PREDICATES = {
-  earnings_pass:  { extra: { fundaPassOnly: true, ocfMarginOnly: true, ocfGtNiOnly: true } },
-  new_high_break: { extra: { buyZoneOnly: true, newHigh52wOnly: true, beatOnly: true } },
-  sector_leader:  { extra: { sectorLeaderOnly: true, ocfMarginOnly: true } },
-  // hot_sector: セクター算出は topSectorsByRs で計算 (sectorTopN=5 相当)
-  hot_sector:     { sectorTopN: 5, extra: { fundaPassOnly: true } },
+  earnings_pass:  { grades: ['eps_yoy_pct', 'eps_cagr_3y', 'roe', 'rs_percentile'], extra: { fundaPassOnly: true, ocfMarginOnly: true, ocfGtNiOnly: true } },
+  new_high_break: { grades: ['rs_percentile'], extra: { buyZoneOnly: true, newHigh52wOnly: true, beatOnly: true } }, // EPS/CAGR/ROE 床を除去 (hero=0 解消)。vol は default-OFF トグルで提示
+  sector_leader:  { grades: ['roe', 'rs_percentile'], extra: { sectorLeaderOnly: true, ocfMarginOnly: true } },      // momentum は is_sector_rs_leader が担う。eps_yoy/cagr 床を除去
+  // hot_sector: セクター算出は topSectorsByRs で計算 (sectorTopN=5 相当)。grade 床は RS のみ (rotation 捕捉のため過剰フィルタ回避・金融 verdict)
+  hot_sector:     { grades: ['rs_percentile'], sectorTopN: 5, extra: { fundaPassOnly: true } },
 };
 
 /**
@@ -470,7 +479,8 @@ export function countPreset(items, presetKey) {
   const cfg = PRESET_PREDICATES[presetKey];
   if (!cfg) return null;
 
-  const grades = buildActiveGrades('standard', {});
+  // C案: list 側 (activeGrades) と同一の preset 別 grade key を使う (count==list SSOT・C-2)。
+  const grades = buildActiveGrades('standard', {}, cfg.grades || PRESET_CORE_KEYS);
 
   if (presetKey === 'hot_sector') {
     // 上位 sectorTopN セクター (sector_rs_median 降順) ∩ funda_pass を集計。
@@ -669,8 +679,15 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     return () => { alive = false; };
   }, [universe]);
 
+  // C案 (SPEC_2026-06-25): preset 別に適用する grade key (PRESET_PREDICATES.grades)。
+  //   activePreset=null (custom/legacy) は従来通り全 PRESET_CORE_KEYS。countPreset と同一参照で
+  //   count==list を担保 (C-2)。「見えない core grade」(new_high_break 等の暗黙 eps/cagr/roe) を解消。
+  const presetGradeKeys = useMemo(
+    () => (activePreset && PRESET_PREDICATES[activePreset]?.grades) || PRESET_CORE_KEYS,
+    [activePreset]
+  );
   // Pass 3b: filteredItems — count も list も同一 predicate (Trust Cliff C-2 の核)。
-  const activeGrades = useMemo(() => buildActiveGrades(preset, overrides), [preset, overrides]);
+  const activeGrades = useMemo(() => buildActiveGrades(preset, overrides, presetGradeKeys), [preset, overrides, presetGradeKeys]);
   // #2 slice 2-d: 個別緩急(per-facet override)は Pro。screener_v2 scope のみゲート (legacy 不変 §4.5)。
   const advLocked = screenerV2 && !isProUser;
   // #2 slice 2-c: 精度プリセットから個別変更したか (カスタム tag・状態の見える化 §1-6)。
@@ -750,11 +767,11 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     const result = {};
     for (const lvl of ['loose', 'standard', 'strict']) {
-      const grades = buildActiveGrades(lvl, overrides);
+      const grades = buildActiveGrades(lvl, overrides, presetGradeKeys);
       result[lvl] = items.filter((it) => itemPasses(it, grades, extra)).length;
     }
     return result;
-  }, [universe, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectorFilter, mcapFilter]);
+  }, [universe, overrides, presetGradeKeys, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectorFilter, mcapFilter]);
 
   // Pass 3c: faceted 件数 — 各 facet の各 level に変えた時の件数 (itemPasses 共有、Trust Cliff C-2)。
   // facet K を level L にした時の件数 = { ...activeGrades, [K]: L } で filter。
@@ -797,8 +814,8 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       const cnt = items.filter((it) => itemPasses(it, g, extra)).length;
       if (!best || cnt > best.count) best = { key, label: FACET_MAP[key]?.label || key, count: cnt, type: 'override' };
     }
-    // CORE preset facet を1つ外す
-    for (const key of PRESET_CORE_KEYS) {
+    // CORE preset facet を1つ外す (C案: preset 別に適用中の grade のみ候補)
+    for (const key of presetGradeKeys) {
       if (overrides[key] === 'off') continue;
       const g = { ...activeGrades };
       delete g[key];
@@ -864,7 +881,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       if (!best || cnt > best.count) best = { key: 'sector_leader', label: 'セクター別リーダー', count: cnt, type: 'sector_leader' };
     }
     return best;
-  }, [filteredItems.length, universe, activeGrades, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectorFilter, mcapFilter, activePreset]);
+  }, [filteredItems.length, universe, activeGrades, overrides, presetGradeKeys, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectorFilter, mcapFilter, activePreset]);
 
   // Pass 3c: sector / mcap 選択肢を universe から live 算出 (count 付き)。
   // Pass 3d (修正A): 全件 universe 集計から faceted count へ変更 (Trust Cliff C-2 修正)。
@@ -1017,7 +1034,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       const facet = cond.facet;
       const activeLvl = activeGrades[cond.key];           // undefined = off
       const on = activeLvl != null;
-      const isCore = PRESET_CORE_KEYS.includes(cond.key);
+      // C案: 当該 preset で「常時適用 (default ON)」の grade は presetGradeKeys に入るもの。
+      //   非該当 grade (vol/inst 等) は default OFF トグルとして提示 (クリックで override 追加)。
+      const isCore = presetGradeKeys.includes(cond.key);
       const dispLvl = on ? activeLvl : (isCore ? clampLevel(facet, preset) : clampLevel(facet, 'standard'));
       const toggle = () => {
         if (advLocked) { setAdvLockNudge(true); trackEvent('screener_adv_locked_click', { facet: cond.key }); return; }
