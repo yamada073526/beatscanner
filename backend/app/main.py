@@ -20176,6 +20176,13 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
     # buy-quality Sprint 2: #1 (ocf_gt_netincome) は nightly canslim scan 由来 → funda と同源。
     # per-facet freshness に独立キー "ocf_gt_netincome" を追加 (headline as_of は max、lagging 引きずらない)。
     freshness["ocf_gt_netincome"] = sf_cd
+    # beat/cfps Phase 2 (SPEC_2026-06-25): 新高値ブレイク beat gate + 決算継続性 trio の表示 gate。
+    # items payload (L20347/20350/20343/20344) は配線済だが freshness map に key 欠落で
+    # CustomScreenerPanel が crow を非表示にしていた (blocker)。全て funda と同源 calc_date = sf_cd。
+    freshness["latest_beat"] = sf_cd
+    freshness["cfps_3y_rising"] = sf_cd
+    freshness["eps_3y_rising"] = sf_cd
+    freshness["rev_3y_rising"] = sf_cd
     if sf_cd:
         for r in _fetch_all_rows_paged(
             sb, "screener_fundamentals",
