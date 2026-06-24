@@ -455,8 +455,11 @@ export function itemPasses(item, activeGrades, extra) {
 // Trust Cliff 整合: タイル件数と list が必ず同一 predicate を通すための SSOT。
 // [[feedback_facet_filter_count_integrity]] に準拠。
 // grades: preset 別 grade セット (mockup v8 「preset ごとに条件が違う」)。'auto'=精度連動。
-//   earnings_pass / sector_leader / hot_sector は従来の全 core4 ('auto') を維持 = 件数不変 (Sprint 1)。
-//     ※ sector_leader/earnings_pass の隠れ grade 整理 (eps_cagr 除去/inst gate 等) は Sprint 2/3 (P1)。
+//   earnings_pass: S2 P1-c で eps_cagr_3y を必須 grade から除去 (eps_3y_rising と A軸二重カウント・
+//     mockup p1 に無し)。残る core は eps_yoy/roe/rs。eps_cagr は PRESET_DISPLAY_CONDS で任意トグルに降格。
+//   sector_leader / hot_sector は従来の全 core4 ('auto') を維持 = 件数不変。
+//     ※ cfm gate→可変grade (P1-a) は code line 119「段階化になじまない」明示決定と衝突 → user 判断保留。
+//       sector_leader の cap/inst gate化 (S3) は「件数実測→user 承認後」(45日遅延データで激減リスク) で保留。
 //   new_high_break は EPS≥25/eps_cagr/ROE≥25 の隠れ過剰フィルタを除去し、gate (beat/buy_zone/new_high)
 //     は緩いまま固定、精度 3 段で「市況ロバストに」締める (金融合議 2026-06-25・活況の件数膨張対策)。
 //     RS だけだと相対指標ゆえ活況で膨張 → 市況非依存の出来高を厳段で重ねるのが要 (最重要キャップ):
@@ -464,7 +467,7 @@ export function itemPasses(item, activeGrades, extra) {
 //       EPS YoY (緩≥0床 / 標≥25% / 厳≥50% 加速)。型/決算ビートは extra の gate。
 //     ※ 買い場圏のタイト化 (+5/+3/+2%) は binary facet の段階閾値=別機構のため follow-up (本 sprint defer)。
 export const PRESET_PREDICATES = {
-  earnings_pass:  { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto' }, extra: { fundaPassOnly: true, ocfMarginOnly: true, ocfGtNiOnly: true } },
+  earnings_pass:  { grades: { eps_yoy_pct: 'auto', roe: 'auto', rs_percentile: 'auto' }, extra: { fundaPassOnly: true, ocfMarginOnly: true, ocfGtNiOnly: true } },
   new_high_break: { grades: { rs_percentile: 'auto', volume_surge_pct: { loose: null, standard: 'loose', strict: 'strict' }, eps_yoy_pct: { loose: 'floor', standard: 'standard', strict: 'strict' } }, extra: { buyZoneOnly: true, newHigh52wOnly: true, beatOnly: true } },
   sector_leader:  { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto' }, extra: { sectorLeaderOnly: true, ocfMarginOnly: true } },
   // hot_sector: セクター算出は topSectorsByRs で計算 (sectorTopN=5 相当)
