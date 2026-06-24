@@ -306,6 +306,9 @@ const CROW_LAYOUT = [
   { group: '品質',       sub: '利益・キャッシュの質', keys: ['funda_pass', 'ocf_margin_pct', 'ocf_gt_netincome', 'eps_yoy_pct', 'eps_cagr_3y', 'roe'] },
   // beat/cfps Phase 2: 決算の継続性 trio を grade 条件と視覚分離 (精度スライダー非連動の binary トグル)。
   { group: '品質',       sub: '決算の継続性（連続増）', keys: ['eps_3y_rising', 'rev_3y_rising', 'cfps_3y_rising'] },
+  // beat/cfps Phase 2 (Sprint 3): 直近決算ビート。new_high_break で gate「必須」描画 (PRESET_GATE_CONDS)。
+  //   binBindings 非登録のため custom/他 preset では renderCrow が null → group 非表示 (gate 専用)。
+  { group: '品質',       sub: '決算の裏付け',         keys: ['latest_beat'] },
   { group: 'タイミング', sub: '値動き・勢い',         keys: ['buy_zone', 'new_high_52w', 'cup', 'rs_percentile', 'volume_surge_pct'] },
   { group: '需給',       sub: '機関の動き',           keys: ['ad_volume', 'inst_holders_qoq_pct'] },
 ];
