@@ -406,7 +406,12 @@ export function buildActiveGrades(presetKey, precision, overrides) {
   const spec = presetKey ? PRESET_PREDICATES[presetKey]?.grades : null;
   if (spec) {
     for (const [k, lv] of Object.entries(spec)) {
-      const level = lv === 'auto' ? precision : lv;
+      // lv 解決: 'auto'=精度連動 / object={loose,standard,strict} 段階別 (値 null=その段で非適用) / 文字列=固定 level。
+      let level;
+      if (lv === 'auto') level = precision;
+      else if (lv && typeof lv === 'object') level = lv[precision] ?? null;
+      else level = lv;
+      if (level == null) continue; // この精度では当該 facet を適用しない (緩段で出来高を見ない等)
       const clamped = clampLevel(FACET_MAP[k], level);
       if (clamped) g[k] = clamped;
     }
@@ -452,12 +457,15 @@ export function itemPasses(item, activeGrades, extra) {
 // grades: preset 別 grade セット (mockup v8 「preset ごとに条件が違う」)。'auto'=精度連動。
 //   earnings_pass / sector_leader / hot_sector は従来の全 core4 ('auto') を維持 = 件数不変 (Sprint 1)。
 //     ※ sector_leader/earnings_pass の隠れ grade 整理 (eps_cagr 除去/inst gate 等) は Sprint 2/3 (P1)。
-//   new_high_break は EPS≥25/eps_cagr/ROE≥25 の隠れ過剰フィルタを除去し、
-//     RS (精度連動 ≥70/80/90) + EPS YoY 床 (≥0・減益排除) のみに (P0 0件解消・金融合議)。
-//     型/タイミング (buy_zone/new_high_52w) と決算ビート (beat) は extra の gate で算入。
+//   new_high_break は EPS≥25/eps_cagr/ROE≥25 の隠れ過剰フィルタを除去し、gate (beat/buy_zone/new_high)
+//     は緩いまま固定、精度 3 段で「市況ロバストに」締める (金融合議 2026-06-25・活況の件数膨張対策)。
+//     RS だけだと相対指標ゆえ活況で膨張 → 市況非依存の出来高を厳段で重ねるのが要 (最重要キャップ):
+//       RS (≥70/80/90 精度連動) + ブレイク出来高 (緩=非適用 / 標+25% / 厳+50%) +
+//       EPS YoY (緩≥0床 / 標≥25% / 厳≥50% 加速)。型/決算ビートは extra の gate。
+//     ※ 買い場圏のタイト化 (+5/+3/+2%) は binary facet の段階閾値=別機構のため follow-up (本 sprint defer)。
 export const PRESET_PREDICATES = {
   earnings_pass:  { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto' }, extra: { fundaPassOnly: true, ocfMarginOnly: true, ocfGtNiOnly: true } },
-  new_high_break: { grades: { rs_percentile: 'auto', eps_yoy_pct: 'floor' }, extra: { buyZoneOnly: true, newHigh52wOnly: true, beatOnly: true } },
+  new_high_break: { grades: { rs_percentile: 'auto', volume_surge_pct: { loose: null, standard: 'loose', strict: 'strict' }, eps_yoy_pct: { loose: 'floor', standard: 'standard', strict: 'strict' } }, extra: { buyZoneOnly: true, newHigh52wOnly: true, beatOnly: true } },
   sector_leader:  { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto' }, extra: { sectorLeaderOnly: true, ocfMarginOnly: true } },
   // hot_sector: セクター算出は topSectorsByRs で計算 (sectorTopN=5 相当)
   hot_sector:     { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto' }, sectorTopN: 5, extra: { fundaPassOnly: true } },
@@ -826,9 +834,10 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       const cnt = items.filter((it) => itemPasses(it, g, extra)).length;
       if (!best || cnt > best.count) best = { key, label: FACET_MAP[key]?.label || key, count: cnt, type: 'override' };
     }
-    // CORE preset facet を1つ外す
-    for (const key of PRESET_CORE_KEYS) {
-      if (overrides[key] === 'off') continue;
+    // 適用中の grade facet を1つ外す (preset 別 grade セット = activeGrades の実 key を走査。
+    //   PRESET_CORE_KEYS 固定だと new_high_break で非適用の eps_cagr/roe を誤提案するため修正)。
+    for (const key of Object.keys(activeGrades)) {
+      if (key in overrides) continue; // overrides ループで処理済
       const g = { ...activeGrades };
       delete g[key];
       const cnt = items.filter((it) => itemPasses(it, g, extra)).length;
