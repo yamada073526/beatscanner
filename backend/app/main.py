@@ -132,6 +132,13 @@ class _YFinanceNoiseFilter(_logging.Filter):
         "Failed downloads",
         "No timezone found",
         "No data found",
+        # Railway クラウド IP が Yahoo Finance にブロックされ 401 を食らうケース。
+        # yfinance が ERROR レベルで emit するため LoggingIntegration が Sentry に流す。
+        # (2026-06-21 Sentry 週報 BACKEND 770+15 events の主犯)。データ取得は FMP に移行済だが、
+        # 別経路の yfinance が 401 を吐いても Sentry を圧迫しないよう noise として drop。
+        "401 Client Error",
+        "HTTP error 401",
+        '"finance":{"result":null',
     )
     def filter(self, record):  # True = keep, False = drop
         try:
@@ -10384,13 +10391,13 @@ _TICKER_NAMES: dict[str, str] = {
 @app.get("/api/calendar")
 async def calendar(
     days: int = Query(90, ge=1, le=180),
-    watchlist: str = Query("", description="カンマ区切りの銘柄リスト（yfinanceで個別取得）"),
+    watchlist: str = Query("", description="カンマ区切りの銘柄リスト（FMPで個別取得）"),
 ) -> list[dict]:
     # v100 user dogfood (handover §100点 multi-review、 AA / NVDA countdown 表示なし真因):
     # 旧 le=90 では Finnhub バルク取得 + 90 日範囲のみで NVDA (96 日先) / AA (Finnhub 漏れ) が
-    # 取得できなかった。 le=180 に拡張し、 watchlist 経由の yfinance 個別取得 fallback と合わせて
+    # 取得できなかった。 le=180 に拡張し、 watchlist 経由の FMP 個別 filter fallback と合わせて
     # 主要銘柄の countdown 表示を保証。
-    """今日から N 日先までの決算発表予定を返す（yfinance + Finnhub）."""
+    """今日から N 日先までの決算発表予定を返す（FMP + Finnhub）."""
     import httpx as _httpx_cal
 
     # ── キャッシュチェック ──
@@ -10434,73 +10441,54 @@ async def calendar(
         except Exception:
             pass
 
-    # --- Step 2: yfinance（watchlist + 主要50銘柄を並列取得） ---
+    # --- Step 2: FMP earnings-calendar（watchlist + 主要銘柄を bulk 取得） ---
+    # 旧実装は yfinance per-ticker calendar を 20+ 銘柄並列で叩いていたが、Railway クラウド IP が
+    # Yahoo Finance にブロックされ 401 を量産 (2026-06-21 Sentry 週報 BACKEND 770 events の主犯)。
+    # FMP Ultimate は Railway で安定動作するため date-range bulk の earning_calendar に置換し、
+    # 対象銘柄 (watchlist + 主要) で client-side filter する。
     wl_symbols = [t.strip().upper() for t in watchlist.split(",") if t.strip()] if watchlist else []
-    yf_targets = list(dict.fromkeys(wl_symbols + _MAJOR_TICKERS))  # 順序保持で重複除去
+    target_symbols = set(dict.fromkeys(wl_symbols + _MAJOR_TICKERS))
 
-    def _yf_fetch(sym: str) -> "dict | None":
-        try:
-            t = yfinance_source.yf.Ticker(sym)
-            cal = t.calendar
-            if not isinstance(cal, dict):
-                return None
+    fmp_by_symbol: dict[str, dict] = {}
+    try:
+        fmp_cal = FMPClient()  # api_key は FMP_API_KEY env から
+        rows = await fmp_cal.earning_calendar(today_str, until_str)
+        for item in (rows or []):
+            if not isinstance(item, dict):
+                continue
+            sym = (item.get("symbol") or "").upper()
+            if sym not in target_symbols:
+                continue
+            d_str = str(item.get("date") or "")[:10]
+            if not (today_str <= d_str <= until_str):
+                continue
+            entry = {
+                "symbol": sym,
+                "date": d_str,
+                "time": "",
+                "name": _TICKER_NAMES.get(sym, ""),
+                "epsEstimated": item.get("epsEstimated"),
+                "revenueEstimated": item.get("revenueEstimated"),
+            }
+            # 同一銘柄が複数四半期分 hit する場合は直近（最早）の発表日のみ採用
+            # （旧 yfinance 実装の「銘柄ごと 1 件」挙動を維持）。
+            prev = fmp_by_symbol.get(sym)
+            if prev is None or d_str < prev["date"]:
+                fmp_by_symbol[sym] = entry
+    except Exception:
+        fmp_by_symbol = {}
 
-            # 企業名: 静的マッピング優先 → yfinance info fallback（watchlist等の未知銘柄用）
-            name = _TICKER_NAMES.get(sym, "")
-            if not name:
-                try:
-                    info = t.info
-                    name = (info.get("longName") or info.get("shortName") or "").strip()
-                except Exception:
-                    pass
+    fmp_entries: list[dict] = list(fmp_by_symbol.values())
 
-            dates = cal.get("Earnings Date") or []
-            if not isinstance(dates, list):
-                dates = [dates]
-            for dt in dates:
-                try:
-                    d_str = dt.strftime("%Y-%m-%d") if hasattr(dt, "strftime") else str(dt)[:10]
-                except Exception:
-                    continue
-                if today_str <= d_str <= until_str:
-                    return {
-                        "symbol": sym,
-                        "date": d_str,
-                        "time": "",
-                        "name": name,
-                        "epsEstimated": cal.get("Earnings Average") or cal.get("EPS Estimate"),
-                        "revenueEstimated": cal.get("Revenue Average") or cal.get("Revenue Estimate"),
-                    }
-            return None
-        except Exception:
-            return None
-
-    loop = asyncio.get_event_loop()
-
-    async def _yf_fetch_with_timeout(sym: str):
-        try:
-            return await asyncio.wait_for(
-                loop.run_in_executor(None, _yf_fetch, sym),
-                timeout=5.0,
-            )
-        except asyncio.TimeoutError:
-            return None
-
-    results = await asyncio.gather(
-        *[_yf_fetch_with_timeout(sym) for sym in yf_targets],
-        return_exceptions=True,
-    )
-    yf_entries: list[dict] = [r for r in results if isinstance(r, dict)]
-
-    # --- Merge: yfinanceを優先、Finnhubで補完 ---
-    yf_symbols = {e["symbol"] for e in yf_entries}
+    # --- Merge: FMP（対象銘柄）を優先、Finnhub（全銘柄バルク）で補完 ---
+    fmp_symbols = set(fmp_by_symbol.keys())
     # Finnhubエントリーにも静的マッピングから企業名を付与
     finnhub_enriched = [
         {**e, "name": _TICKER_NAMES.get(e["symbol"], "")}
         for e in finnhub_entries
-        if e["symbol"] not in yf_symbols
+        if e["symbol"] not in fmp_symbols
     ]
-    merged = yf_entries + finnhub_enriched
+    merged = fmp_entries + finnhub_enriched
     merged.sort(key=lambda x: x.get("date", ""))
 
     # ── キャッシュ保存 ──
@@ -14545,52 +14533,34 @@ _movers_cache: dict = {"data": None, "ts": 0.0}
 MOVERS_TTL = 1200  # 20分
 
 
-def _fetch_movers_sync() -> list[dict]:
-    import yfinance as yf
+async def _fetch_movers_fmp() -> list[dict]:
     from .tickers_master import MASTER_TICKERS
 
-    # runtime で delisted 判定済の銘柄は除外して download コストを削減
+    # 旧実装は yf.download(MASTER_TICKERS) で Yahoo Finance を一括取得していたが、Railway クラウド IP が
+    # ブロックされ 401 を量産 (2026-06-21 Sentry 週報 app.main.get_movers 15 events)。FMP batch_quotes は
+    # changesPercentage を直接返すため 2 日終値からの差分計算が不要。79 銘柄を 1 call で取得でき Railway で安定。
     active_tickers = [t for t in MASTER_TICKERS if t not in _MOVERS_DELISTED]
 
-    raw = yf.download(
-        active_tickers,
-        period="2d",
-        interval="1d",
-        progress=False,
-        auto_adjust=True,
-    )
-    # yfinance 0.2.x: MultiIndex columns (field, ticker)
-    close = raw["Close"] if "Close" in raw.columns.get_level_values(0) else raw.xs("Close", axis=1, level=0)
+    try:
+        rows = await FMPClient().batch_quotes(active_tickers)
+    except Exception:
+        rows = []
 
     movers = []
-    for ticker in active_tickers:
-        try:
-            if ticker not in close.columns:
-                _MOVERS_DELISTED.add(ticker)
-                continue
-            series = close[ticker].dropna()
-            if len(series) < 2:
-                # 2 日連続で empty なら delisted 候補に登録
-                _MOVERS_DELISTED.add(ticker)
-                continue
-            prev_raw, last_raw = series.iloc[-2], series.iloc[-1]
-            prev = _safe_float(prev_raw)
-            last = _safe_float(last_raw)
-            if prev is None or last is None or prev == 0:
-                continue
-            pct = (last - prev) / prev * 100
-            pct_safe = _safe_float(pct, 2)
-            last_safe = _safe_float(last, 2)
-            if pct_safe is None or last_safe is None:
-                continue
-            movers.append({
-                "ticker": ticker,
-                "pct": pct_safe,
-                "price": last_safe,
-                "direction": "up" if pct_safe > 0 else "down",
-            })
-        except Exception:
+    for r in rows:
+        if not isinstance(r, dict):
             continue
+        ticker = (r.get("symbol") or "").upper()
+        pct_safe = _safe_float(r.get("changesPercentage"), 2)
+        price_safe = _safe_float(r.get("price"), 2)
+        if not ticker or pct_safe is None or price_safe is None:
+            continue
+        movers.append({
+            "ticker": ticker,
+            "pct": pct_safe,
+            "price": price_safe,
+            "direction": "up" if pct_safe > 0 else "down",
+        })
 
     ups   = sorted([m for m in movers if m["direction"] == "up"],   key=lambda x: x["pct"], reverse=True)[:5]
     downs = sorted([m for m in movers if m["direction"] == "down"], key=lambda x: x["pct"])[:5]
@@ -14829,7 +14799,7 @@ async def stream_movers():
             return
 
         # 価格データを一括取得（~2秒）
-        top_movers = await asyncio.to_thread(_fetch_movers_sync)
+        top_movers = await _fetch_movers_fmp()
 
         # _add_reason を最大5並列で実行し、完了した順にキューへ
         queue: asyncio.Queue = asyncio.Queue()
@@ -14875,7 +14845,7 @@ async def get_movers():
     if _movers_cache["data"] and now - _movers_cache["ts"] < MOVERS_TTL:
         return _movers_cache["data"]
 
-    top_movers = await asyncio.to_thread(_fetch_movers_sync)
+    top_movers = await _fetch_movers_fmp()
 
     # v40+: cold cache 時の応答短縮 — batch_size 4→8, 間隔 1s→0.3s
     # 旧: 5 batches × 2s + 4 × 1s = ~14s
