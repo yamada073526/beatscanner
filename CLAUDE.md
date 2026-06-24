@@ -49,7 +49,8 @@
   - ✗ `"Find latest handover file"` → ✓ `"最新 handover ファイルを探す"`
   - ✗ `"Deploy to Railway"` → ✓ `"Railway に deploy"`
 - **コード / file path / 技術用語 (Trust Cliff / cache / JWT / commit hash / railway up 等) は英語のまま** で OK (BeatScanner 日本語ドキュメントと一貫)。
-- ⚠️ 長い実装セッション中に英文へ drift しやすく、 **2026-05-15 / 06-02 / 06-04 の 3 回**再指摘された。 memory [[feedback_japanese_output]] と double anchor。 サブエージェントへの prompt 言語は別ルール ([[feedback_subagent_japanese]]) 参照。
+- ⚠️ 長い実装セッション中に英文へ drift しやすく、 **2026-05-15 / 06-02 / 06-04 の 3 回**再指摘された。 毎ツール呼出前に description が和文か self-check すること。
+- **サブエージェント起動時も日本語を明示**: prompt 末尾に「回答は日本語で（コード / file path / 専門用語は英語可、 説明・推奨理由・リスク評価は日本語）」 と必ず書く。 5 体並列でも全員に同じ指示。
 
 ### コンテキスト過重による tool-call 崩壊の防止（再発障害・最重要運用）
 メインコンテキストが過重になると tool 呼び出しが実行されず `<invoke>` 生XML としてテキスト出力に漏れる（過去複数セッションで再発）。**特定 tool のバグではなくコンテキスト重量による構造化出力の劣化で、再試行は悪化する**。
@@ -236,6 +237,8 @@ handover v94 で「過去 30 日 $407 消費、 大半は dev session の Opus 4
 2. **深掘り監査 (月次 or hook が flag 時)**: read-only サブエージェント (Sonnet) で重複/陳腐化/矛盾を棚卸し → **非破壊修正 (UPDATE/再index/MERGE) は即適用、 削除は必ず user 承認**。 完了後 `.last_deep_audit` を当日更新。
 
 - index は「1 行ポインタ (<200 字)」、 詳細は topic ファイル (index に内容を詰めない)。
+- **昇格 = 移動 (複製でない)**: memory の内容を CLAUDE.md / docs/references に昇格させたら **元 memory を即削除**し index 行も消す (「→ CLAUDE.md §X 参照」 スタブも残さない)。 二重管理が最大の想起ノイズ源 (2026-06-24 棚卸しで 4 件が CLAUDE.md と一字一句重複と判明)。 削除前に被参照を `grep -rl 'slug' memory/` で確認し、 `[[slug]]` リンクは「CLAUDE.md §節名」 テキストへ張り替えて dangling を作らない。
+- **新規 memory は「既存 canon への追記」 を第一選択**: 1 トピック 1 ファイルで増やさない (feedback_ が 93 件まで膨張した主因 = 過分割)。 新規ファイルは独立した大トピックのみ。 作成前に必ず自問:「これは CLAUDE.md (恒久ルール) / docs (設計値) / git log (実装記録) に属さないか？」 — memory はそのどれにも入らない揮発性運用知だけ。
 - 「メモリ棚卸し」 で段 2 起動。 rubric + 適用ポリシー + 削除 gating の SSOT: [`docs/references/memory_maintenance.md`](docs/references/memory_maintenance.md)。
 
 ## デザインルール

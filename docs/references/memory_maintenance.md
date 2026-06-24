@@ -8,6 +8,12 @@ Claude 永続メモリ (`~/.claude/projects/-Users-yamadadaiki-Projects-beatscan
 > **原則**: index は「1 行ポインタ」(目安 **<200B/行**、hook が機械検出。日本語混在では「~200 字」でなく **~200 byte** が実効ライン)、詳細は topic ファイル。index に内容 (commit hash・数値・進捗状態) を詰めない。**削除は必ず user 承認**、非破壊修正 (UPDATE / 再index / MERGE) は即適用可。
 >
 > **根本対策 (2026-06-20)**: 「size 肥大 → つど圧縮」 を繰り返さないため、hook が **個別行の詰め込み (>200B)** を毎セッション検出する (size 上限到達の前兆を行単位で先取り)。size warning だけだと「上限に当たって初めて気づく」 → 全行を慌てて圧縮、の悪循環になる。**新規 entry 追加時は最初から <200B のフックで書く**こと。詳細は本体ファイルに置き index はリンク + 識別フックのみ。
+>
+> **根本対策 v2 (2026-06-24 棚卸し)**: 行の圧縮は対症療法。**件数の単調増加こそ size 肥大の真因** (feedback_ が 93 件まで過分割していた)。 3 レバーで構造的に断つ —
+> - **(A) 昇格 = 移動 (複製でない)**: memory を CLAUDE.md / docs/references に昇格させたら **元 memory を即削除** (「→ CLAUDE.md §X 参照」 スタブも残さない)。 二重管理が最大の想起ノイズ源 (今回 honesty / cost_efficient / claude_output_language / visual_harness の 4 件が CLAUDE.md と一字一句重複と判明し削除)。 削除前に `grep -rl 'slug' memory/` で被参照を確認 → `[[slug]]` は「CLAUDE.md §節名」 テキストへ張り替えて dangling を作らない (memory は git 外 = 不可逆。 削除前に /tmp へ backup 推奨)。
+> - **(C) 新規は「既存 canon への追記」 を第一選択**: 1 bug=1 file をやめ、既存ファイルに 1 セクション足せるなら追記する。 新規ファイルは独立した大トピックのみ。 作成前に必ず自問:「これは CLAUDE.md (恒久ルール) / docs (設計値) / git log (実装記録) に属さないか？」 — memory はそのどれにも入らない揮発性運用知だけ。
+> - **(B) hook が件数 + 卒業候補を検知** (段 1 表の 2 行)。 A/C を「忘れない」 機械的補助。
+> - SSOT の役割分担: **CLAUDE.md「メモリ衛生」= 要点 / 本ファイル = 詳細手順**。 二重記述を避ける。
 
 ---
 
@@ -22,6 +28,8 @@ Claude 永続メモリ (`~/.claude/projects/-Users-yamadadaiki-Projects-beatscan
 | **orphan** | >0 | disk にあるが index 未掲載 = **想起されない**。価値あれば再index、不要なら削除提案 |
 | **dangling** | >0 | index にあるが実体なし = リンク切れ。index 行を修正 |
 | 進捗語 (着手中/保留 等) | >8 | stale fact の更新候補 |
+| **総ファイル数** | ≥150 | 過分割の先行指標。 既存 canon へ統合 or CLAUDE.md/docs へ昇格(=移動)。size 肥大の前に件数を断つ (2026-06-24 追加) |
+| **卒業候補 (phase_log/impl_log)** | 30日+ 更新なし | 完了済 impl 記録。 commit hash は git log で代替可 → 削除/統合候補 (2026-06-24 追加) |
 | 前回深掘りからの日数 | ≥30 | 月次深掘りを実施 |
 
 ⚠️ が出たら段 2 を起動。何も出なければ「✅ メモリ健全」一行のみ。

@@ -48,6 +48,24 @@ while IFS= read -r line; do
   fi
 done < <(grep -E '^- \[' "$IDX" 2>/dev/null)
 
+# 総ファイル数 (過分割の先行指標。2026-06-24 本質策 C: size 肥大の前に件数そのものを監視)
+FILE_WARN=150
+total_files=$(ls -1 "$MEMDIR"/*.md 2>/dev/null | grep -v '/MEMORY.md$' | wc -l | tr -d ' ')
+
+# phase_log / impl_log の卒業候補 (完了済 impl 記録は git log で代替可能。2026-06-24 本質策)
+GRAD_DAYS=30
+graduate=0; graduate_list=""
+for f in "$MEMDIR"/*_phase_log.md "$MEMDIR"/*_impl_log.md; do
+  [ -f "$f" ] || continue
+  mt=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null)
+  [ -n "$mt" ] || continue
+  age=$(( ( $(date +%s) - mt ) / 86400 ))
+  if [ "$age" -ge "$GRAD_DAYS" ]; then
+    graduate=$((graduate+1))
+    graduate_list="$graduate_list\n      - $(basename "$f") (${age}日更新なし)"
+  fi
+done
+
 # 前回深掘り監査からの日数
 stamp="$MEMDIR/.last_deep_audit"
 days="?"
@@ -65,16 +83,20 @@ flag=0
 [ "$orphans" -gt 0 ] && flag=1
 [ "$dangling" -gt 0 ] && flag=1
 [ "$long_lines" -gt 0 ] && flag=1
+[ -n "$total_files" ] && [ "$total_files" -ge "$FILE_WARN" ] && flag=1
+[ "$graduate" -gt 0 ] && flag=1
 { [ "$days" != "?" ] && [ "$days" -ge 30 ]; } && flag=1
 
 if [ "$flag" -eq 0 ]; then
-  echo "✅ メモリ健全 (MEMORY.md ${size}B/${LIMIT} ・ ${entries}件 ・ orphan0 dangling0 ・ 長行0 ・ 前回深掘り ${days}日前)"
+  echo "✅ メモリ健全 (MEMORY.md ${size}B/${LIMIT} ・ ${total_files}件/${FILE_WARN} ・ orphan0 dangling0 ・ 長行0 ・ 卒業候補0 ・ 前回深掘り ${days}日前)"
   exit 0
 fi
 
 echo "⚠️ メモリ棚卸し推奨 (詳細: docs/references/memory_maintenance.md):"
 [ -n "$size" ] && [ "$size" -ge "$WARN" ] && echo "  • MEMORY.md ${size}B (≥${WARN}、上限${LIMIT}) → index 行を圧縮"
 [ "$long_lines" -gt 0 ] && printf "  • 長すぎる index 行 %d件 (>%dB、詰め込み→詳細は本体へ移しフックのみ残す):%b\n" "$long_lines" "$LINE_WARN" "$long_list"
+[ -n "$total_files" ] && [ "$total_files" -ge "$FILE_WARN" ] && echo "  • memory 総数 ${total_files}件 (≥${FILE_WARN}) → 過分割。既存 canon へ統合 or CLAUDE.md/docs へ昇格(=移動)。本質策 A/C 参照"
+[ "$graduate" -gt 0 ] && printf "  • 卒業候補 %d件 (phase_log/impl_log で %d日+更新なし。commit hash は git log で代替可):%b\n" "$graduate" "$GRAD_DAYS" "$graduate_list"
 [ "$orphans" -gt 0 ] && echo "  • index 未掲載 ${orphans}件 (想起されない):${orphan_list} → 価値あれば再index / 不要なら削除提案"
 [ "$dangling" -gt 0 ] && echo "  • dangling ${dangling}件 (index にあるが実体なし):${dangling_list} → index 行を修正"
 { [ "$days" != "?" ] && [ "$days" -ge 30 ]; } && echo "  • 前回深掘りから ${days}日 (≥30) → 月次深掘り (subagent) を実施し .last_deep_audit を更新"
