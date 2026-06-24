@@ -13828,23 +13828,24 @@ body.is-digest-resizing {
   min-height: 0;
 }
 
-/* 必須ゲート badge — じっちゃま絶対条件 (変更不可・lock)。緩急化しない (§1-in#4)。 */
-.screener-gate-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2, 6px);
+/* ── Phase B-3.5: gate 南京錠 crow — preset の死守条件 (常時 ON・変更不可)。
+   旧 .screener-gate-list (別 section の二重表示) を廃止し、conds 内 inline 南京錠へ一本化。
+   gold で「コンシェルジュが品質を保証する施錠扉」を演出 (発光禁止・border + tinted-bg + token のみ)。 */
+.screener-crow.is-gate {
+  background: color-mix(in srgb, var(--color-gold) 8%, var(--bg-subtle));
+  border-color: color-mix(in srgb, var(--color-gold) 32%, transparent);
 }
-.screener-gate-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  font-size: 11px;
-  font-weight: 600;
+.screener-crow.is-gate .screener-crow__lockicon { color: var(--color-gold-dark); }
+.screener-crow__gate-pill {
+  flex: none;
+  margin-left: auto;
+  padding: 2px 9px;
+  font-size: 10px;
+  font-weight: 700;
   color: var(--color-gold-dark);
-  background: color-mix(in srgb, var(--color-gold) 9%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-gold) 32%, transparent);
-  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-gold) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-gold) 38%, transparent);
+  border-radius: var(--radius-pill);
 }
 
 /* Pro-lock 時の mini-segment ちら見せ (淡色)。disabled 属性は使わず onClick→lockbar を活かす (§4.2)。 */
