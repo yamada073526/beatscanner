@@ -289,6 +289,25 @@ const CROW_INLINE_LOCKED_KEYS = new Set(
   Object.values(CROW_BINARY_META).map((m) => m.locked).filter(Boolean)
 );
 
+// ─── Phase B-4: preset→conds 表示レジストリ (mockup v8 PRESETS[].conds 忠実化・表示専用) ──────
+// 目的: 全 preset 一律の CROW_LAYOUT を、選択中 preset (activePreset) に意味のある条件だけへ絞って
+//   表示する (原則1: 読み手の負担を減らす)。**pass 述語 (PRESET_CONDS/itemPasses) は一切不変** —
+//   ここで決めるのは「どの crow を描くか」だけで、件数 (count==list) には無影響 (SPEC §5 Sprint 1)。
+// 値は CROW_LAYOUT に存在する cond key のみ (mockup の実データ無し条件 rev3/cfps3/cfpsgt/cup/beat は
+//   defer = ここに含めない。嘘の南京錠/空表示を作らない・SPEC §3/§9)。
+// activePreset が null (preset 未選択 = フリーフォーム custom) または本 map に無い key の場合は、
+//   従来通り CROW_LAYOUT 全条件を表示する (legacy 挙動・後方互換)。
+const PRESET_DISPLAY_CONDS = {
+  // 決算合格: 成長性 (EPS) + 収益の質 (CF マージン/ROE) + モメンタム (RS)
+  earnings_pass:  ['eps_yoy_pct', 'eps_cagr_3y', 'ocf_margin_pct', 'roe', 'rs_percentile'],
+  // 新高値ブレイク: 型/タイミング (買い場圏/52週高値) + 需給 (出来高急増) + RS
+  new_high_break: ['buy_zone', 'new_high_52w', 'volume_surge_pct', 'rs_percentile'],
+  // 旬のセクター: master-detail (Phase C) が主役。conds は funda_pass のみ (重複回避・SPEC §5 Sprint 1)
+  hot_sector:     ['funda_pass'],
+  // セクター別リーダー: 収益の質 (CF マージン/ROE) + 機関の動き
+  sector_leader:  ['ocf_margin_pct', 'roe', 'inst_holders_qoq_pct'],
+};
+
 // ─── 合否理由 静的dict (§38安全・LLM不使用・STATE_LABEL_JP 方式) ────────────────
 // 「なぜ合致したか」を事実言い換え。数値は data 由来で、LLM 数値計算・narration なし
 // ([[feedback_llm_calc_separation]] / [[feedback_diagram_quality_guard]])。
@@ -1289,9 +1308,13 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                   {/* ── B-2: 全条件を .crow (トグル+ラベル+値チップ) で 2 列グリッドに統一 (mockup v8 忠実)。
                        品質/タイミング/需給 の grouphd 配下に grade も binary も同じ 1 行形状。
                        数値ロジック(itemPasses/PRESET_CONDS)は不変・表示のみ。mseg/gate南京錠は B-3。 */}
-                  <div className="screener-conds" data-testid="screener-conds">
+                  <div className="screener-conds" data-testid="screener-conds" data-preset={activePreset || 'all'}>
+                    {/* B-4: 選択中 preset に意味のある条件だけ表示 (表示専用・pass/件数 不変)。
+                        activePreset 未選択 or 未登録 preset は従来通り全条件 (後方互換)。 */}
                     {CROW_LAYOUT.map((grp) => {
-                      const rows = grp.keys.map((k) => renderCrow(COND_MAP[k])).filter(Boolean);
+                      const allowed = (activePreset && PRESET_DISPLAY_CONDS[activePreset]) || null;
+                      const keys = allowed ? grp.keys.filter((k) => allowed.includes(k)) : grp.keys;
+                      const rows = keys.map((k) => renderCrow(COND_MAP[k])).filter(Boolean);
                       if (rows.length === 0) return null;
                       return (
                         <Fragment key={grp.group}>
