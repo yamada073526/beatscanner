@@ -70,6 +70,11 @@ const CHECKS = {
     'ロックされた条件が「非表示」ではなく、南京錠アイコン + 「Premium で解錠」CTA の行 (crow) で表示されているか',
     '同一のロック条件が画面内で重複して表示されていないか',
   ],
+  // B-3.5 gate 南京錠 (earnings_pass の ocf 死守条件)。アイコンがダサくないかの主観品質も問う。
+  b35_gate: [
+    'この条件行に南京錠 (鍵) アイコンと「必須」ラベル (pill) が付いており、ON/OFFトグルスイッチが無い (変更不可の死守条件として描画されている) か',
+    '南京錠アイコンと「必須」pill のデザインが洗練されていて安っぽく見えない (ダサくない) か。金色系で画面の他要素と調和し、発光やはみ出しが無いか',
+  ],
 };
 
 // ── DOM presence audit: 目標 testid の有無を数える + screener-* を列挙 (診断用) ──
@@ -99,6 +104,7 @@ async function auditDom(page) {
         'screener-mseg-*': q('[data-testid^="screener-mseg-"]'),
         'locked-crow[data-locked]': q('[data-cond][data-locked="1"]'),
         'screener-locked-cta-*': q('[data-testid^="screener-locked-cta-"]'),
+        'gate-crow[data-gate]': q('[data-cond][data-gate="1"]'),
       },
       // B-4 検証用: 現在表示中の cond-row の data-cond 一覧 (preset 毎に変わるはず)
       condRows: Array.from(document.querySelectorAll('[data-testid="screener-cond-row"]'))
@@ -316,6 +322,26 @@ ${checksText}
     stageLock.found = capLock.found;
     stageLock.screenshot = capLock.screenshot;
     report.stages.push(stageLock);
+
+    // ── Stage B-3.5 gate 南京錠: earnings_pass の ocf 死守条件 (gate) を検証 ──
+    // ocf_margin/ocf_gt_netincome は Premium マスク対象外 = anon でも gate 南京錠が描画される。
+    // 単一 gate row を zoom capture してアイコンの主観品質 (ダサくないか) も vision に問う。
+    const stageGate = { name: 'b35_gate', label: 'B-3.5: gate 南京錠 (必須・変更不可)', checks: CHECKS.b35_gate };
+    try {
+      await selectPreset(page, 'earnings_pass');
+      await openDetail(page);
+      await page.waitForTimeout(800);
+    } catch (e) {
+      stageGate.error = String(e?.message || e).slice(0, 200);
+    }
+    report.audits.afterGateEarnings = await auditDom(page);
+    // 単一 gate row を zoom (アイコン + 必須 pill が読める粒度)。無ければ conds 全体に fallback。
+    let capGate = await captureRegion(page, '[data-testid="screener-cond-row"][data-gate="1"]', '30-b35-gate-row.png');
+    if (!capGate.found) capGate = await captureRegion(page, '[data-testid="screener-conds"]', '30-b35-gate-conds.png');
+    stageGate.found = capGate.found;
+    stageGate.screenshot = capGate.screenshot;
+    stageGate.gateCount = report.audits.afterGateEarnings.targets['gate-crow[data-gate]'];
+    report.stages.push(stageGate);
 
     // ── Vision verdict (key 有り & not dry-run のときのみ) ──
     if (visionEnabled) {
