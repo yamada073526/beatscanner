@@ -73,7 +73,10 @@ function loadUniverse() {
 //   ⚠️ roe床10→17・rs標準85→80 は Free 標準プリセットの件数を動かす (原典忠実の代償・gate1 承認済)。
 // delta=true: 成長/変化系 (符号併記 "+25%")、false: 水準系 (≥ 併記 "≥80")。
 const FUNDA_FACETS = [
-  { key: 'eps_yoy_pct',         field: 'eps_yoy_pct',         label: 'EPS成長(四半期)', unit: '%', tier: 'free', category: 'quality', delta: true,  grades: { loose: 20, standard: 25, strict: 50, severe: 100 } },
+  // floor: 0 = 「直近EPS成長 ≥0%（減益でない）」の床。新高値ブレイク等の技術系 preset で
+  //   赤字/減益のジャンク・ブレイクを弾く下限 (金融合議 2026-06-25)。facetLevels が GRADE_ORDER で
+  //   filter するため精度 seg (緩/標/厳/最厳) には出ない (internal level)。
+  { key: 'eps_yoy_pct',         field: 'eps_yoy_pct',         label: 'EPS成長(四半期)', unit: '%', tier: 'free', category: 'quality', delta: true,  grades: { floor: 0, loose: 20, standard: 25, strict: 50, severe: 100 } },
   { key: 'eps_cagr_3y',         field: 'eps_cagr_3y',         label: 'EPS成長(3年)',    unit: '%', tier: 'free', category: 'quality', delta: true,  grades: { standard: 25, strict: 50 } },
   { key: 'roe',                 field: 'roe',                 label: 'ROE',            unit: '%', tier: 'free', category: 'quality', delta: false, grades: { loose: 17, standard: 25, strict: 50 } },
   { key: 'rs_percentile',       field: 'rs_percentile',       label: 'RS(相対強さ)',     unit: '',  tier: 'free', category: 'timing',  delta: false, grades: { loose: 70, standard: 80, strict: 90 } },
@@ -85,7 +88,7 @@ const FACET_MAP = Object.fromEntries(FUNDA_FACETS.map((f) => [f.key, f]));
 const PRESET_CORE_KEYS = ['eps_yoy_pct', 'eps_cagr_3y', 'roe', 'rs_percentile'];
 const PRESET_LABELS = { loose: '緩い', standard: '標準', strict: '厳しい', severe: '最厳' };
 // 個別緩急 mini-segment 用の短縮ラベル (幅節約・原則1)。
-const GRADE_LABELS_SHORT = { loose: '緩', standard: '標', strict: '厳', severe: '最厳' };
+const GRADE_LABELS_SHORT = { floor: '床', loose: '緩', standard: '標', strict: '厳', severe: '最厳' };
 // grade の強弱順 (clamp / 並び順の SSOT)。
 const GRADE_ORDER = ['loose', 'standard', 'strict', 'severe'];
 // facet に定義された有効段のみを順序付きで返す (eps_cagr_3y は loose 段なし)。
@@ -332,8 +335,9 @@ const PRESET_DISPLAY_CONDS = {
   // 決算合格: 成長性 (EPS) + 収益の質 (CF マージン/CF>純利益/ROE) + モメンタム (RS)
   //   ocf_gt_netincome は gate (§B-3.5) なので display にも含める (南京錠で必ず可視化)。
   earnings_pass:  ['eps_yoy_pct', 'eps_cagr_3y', 'ocf_margin_pct', 'ocf_gt_netincome', 'roe', 'rs_percentile', 'eps_3y_rising', 'rev_3y_rising', 'cfps_3y_rising'],
-  // 新高値ブレイク: 型/タイミング (買い場圏/52週高値) + 需給 (出来高急増) + RS
-  new_high_break: ['latest_beat', 'buy_zone', 'new_high_52w', 'cup', 'volume_surge_pct', 'rs_percentile'],
+  // 新高値ブレイク: 型/タイミング (買い場圏/52週高値) + 需給 (出来高急増) + RS + EPS YoY 床。
+  //   eps_yoy_pct は P0 修正で述語に算入する床条件 (≥0%) のため必ず可視化 (隠れフィルタ禁止・Trust Cliff)。
+  new_high_break: ['latest_beat', 'buy_zone', 'new_high_52w', 'cup', 'volume_surge_pct', 'rs_percentile', 'eps_yoy_pct'],
   // 旬のセクター: master-detail (Phase C) が主役。conds は funda_pass のみ (重複回避・SPEC §5 Sprint 1)
   hot_sector:     ['funda_pass'],
   // セクター別リーダー: 収益の質 (CF マージン/ROE) + 機関の動き
@@ -390,11 +394,27 @@ function buildMatchReason(key, value, threshold) {
     : `${d.name} ${valTxt}`;
   return { valueText: valTxt, reason };
 }
-export function buildActiveGrades(preset, overrides) {
+// preset 別 grade セット (count==list SSOT・mockup v8 「preset ごとに条件が違う」忠実化)。
+//   presetKey 指定時: PRESET_PREDICATES[key].grades を base に展開。
+//     値 'auto' = 精度 (precision) 連動 (緩/標/厳 で閾値スライド)。
+//     明示 level (例 'floor') = 精度に依らず固定 (EPS YoY≥0 床等)。
+//   presetKey が null/未登録 (custom フリーフォーム): 従来通り全 PRESET_CORE_KEYS を precision 連動。
+//   どちらも overrides で個別上書き ('off' で除外)。
+// countPreset (tile) と filteredItems (list) が同一 presetKey+precision を渡す限り count==list を保証。
+export function buildActiveGrades(presetKey, precision, overrides) {
   const g = {};
-  for (const k of PRESET_CORE_KEYS) {
-    const lvl = clampLevel(FACET_MAP[k], preset); // eps_cagr_3y は loose→standard へクランプ
-    if (lvl) g[k] = lvl;
+  const spec = presetKey ? PRESET_PREDICATES[presetKey]?.grades : null;
+  if (spec) {
+    for (const [k, lv] of Object.entries(spec)) {
+      const level = lv === 'auto' ? precision : lv;
+      const clamped = clampLevel(FACET_MAP[k], level);
+      if (clamped) g[k] = clamped;
+    }
+  } else {
+    for (const k of PRESET_CORE_KEYS) {
+      const lvl = clampLevel(FACET_MAP[k], precision); // eps_cagr_3y は loose→standard へクランプ
+      if (lvl) g[k] = lvl;
+    }
   }
   for (const [k, lvl] of Object.entries(overrides || {})) {
     if (lvl === 'off') { delete g[k]; continue; }
@@ -429,12 +449,18 @@ export function itemPasses(item, activeGrades, extra) {
 // ─── Phase A: プリセット述語 SSOT ────────────────────────────────────────────
 // Trust Cliff 整合: タイル件数と list が必ず同一 predicate を通すための SSOT。
 // [[feedback_facet_filter_count_integrity]] に準拠。
+// grades: preset 別 grade セット (mockup v8 「preset ごとに条件が違う」)。'auto'=精度連動。
+//   earnings_pass / sector_leader / hot_sector は従来の全 core4 ('auto') を維持 = 件数不変 (Sprint 1)。
+//     ※ sector_leader/earnings_pass の隠れ grade 整理 (eps_cagr 除去/inst gate 等) は Sprint 2/3 (P1)。
+//   new_high_break は EPS≥25/eps_cagr/ROE≥25 の隠れ過剰フィルタを除去し、
+//     RS (精度連動 ≥70/80/90) + EPS YoY 床 (≥0・減益排除) のみに (P0 0件解消・金融合議)。
+//     型/タイミング (buy_zone/new_high_52w) と決算ビート (beat) は extra の gate で算入。
 export const PRESET_PREDICATES = {
-  earnings_pass:  { extra: { fundaPassOnly: true, ocfMarginOnly: true, ocfGtNiOnly: true } },
-  new_high_break: { extra: { buyZoneOnly: true, newHigh52wOnly: true, beatOnly: true } },
-  sector_leader:  { extra: { sectorLeaderOnly: true, ocfMarginOnly: true } },
+  earnings_pass:  { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto' }, extra: { fundaPassOnly: true, ocfMarginOnly: true, ocfGtNiOnly: true } },
+  new_high_break: { grades: { rs_percentile: 'auto', eps_yoy_pct: 'floor' }, extra: { buyZoneOnly: true, newHigh52wOnly: true, beatOnly: true } },
+  sector_leader:  { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto' }, extra: { sectorLeaderOnly: true, ocfMarginOnly: true } },
   // hot_sector: セクター算出は topSectorsByRs で計算 (sectorTopN=5 相当)
-  hot_sector:     { sectorTopN: 5, extra: { fundaPassOnly: true } },
+  hot_sector:     { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto' }, sectorTopN: 5, extra: { fundaPassOnly: true } },
 };
 
 /**
@@ -470,7 +496,8 @@ export function countPreset(items, presetKey) {
   const cfg = PRESET_PREDICATES[presetKey];
   if (!cfg) return null;
 
-  const grades = buildActiveGrades('standard', {});
+  // tile 件数は精度 standard で算出 (preset クリック直後の精度 = standard と一致 → count==list)。
+  const grades = buildActiveGrades(presetKey, 'standard', {});
 
   if (presetKey === 'hot_sector') {
     // 上位 sectorTopN セクター (sector_rs_median 降順) ∩ funda_pass を集計。
@@ -670,7 +697,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   }, [universe]);
 
   // Pass 3b: filteredItems — count も list も同一 predicate (Trust Cliff C-2 の核)。
-  const activeGrades = useMemo(() => buildActiveGrades(preset, overrides), [preset, overrides]);
+  // list 述語: activePreset の grade セットを精度 (preset state) でスケール。count==list の核。
+  //   countPreset(tile) は同 presetKey を 'standard' 精度で呼ぶため、クリック直後 (precision=standard) は一致。
+  const activeGrades = useMemo(() => buildActiveGrades(activePreset, preset, overrides), [activePreset, preset, overrides]);
   // #2 slice 2-d: 個別緩急(per-facet override)は Pro。screener_v2 scope のみゲート (legacy 不変 §4.5)。
   const advLocked = screenerV2 && !isProUser;
   // #2 slice 2-c: 精度プリセットから個別変更したか (カスタム tag・状態の見える化 §1-6)。
@@ -750,11 +779,11 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     const result = {};
     for (const lvl of ['loose', 'standard', 'strict']) {
-      const grades = buildActiveGrades(lvl, overrides);
+      const grades = buildActiveGrades(activePreset, lvl, overrides);
       result[lvl] = items.filter((it) => itemPasses(it, grades, extra)).length;
     }
     return result;
-  }, [universe, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectorFilter, mcapFilter]);
+  }, [universe, activePreset, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectorFilter, mcapFilter]);
 
   // Pass 3c: faceted 件数 — 各 facet の各 level に変えた時の件数 (itemPasses 共有、Trust Cliff C-2)。
   // facet K を level L にした時の件数 = { ...activeGrades, [K]: L } で filter。
