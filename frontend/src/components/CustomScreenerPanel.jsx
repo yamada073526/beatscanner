@@ -243,6 +243,8 @@ export const PRESET_CONDS = [
   { key: 'eps_3y_rising',    kind: 'flag',   flag: 'eps3RisingOnly',   pass: (item) => item.eps_3y_rising  === true },
   { key: 'rev_3y_rising',    kind: 'flag',   flag: 'rev3RisingOnly',   pass: (item) => item.rev_3y_rising  === true },
   { key: 'cfps_3y_rising',   kind: 'flag',   flag: 'cfpsRisingOnly',   pass: (item) => item.cfps_3y_rising === true },
+  // beat/cfps Phase 2 (Sprint 3): 直近決算ビート (new_high_break の gate「必須」)。=== true で None/false 除外。
+  { key: 'latest_beat',      kind: 'flag',   flag: 'beatOnly',         pass: (item) => item.latest_beat === true },
   // cup: Cup-with-Handle 形成 (Premium 限定・backend が free/pro は cup_state=null マスク)。
   //   CUP_PASS_STATES に属する state のみ pass。Sprint 1 では cupOnly flag を誰も ON にしない =
   //   count/list 不参加 (件数不変・Trust Cliff C-2 露出ゼロ)。applied gate 化は Sprint 2 (Premium 限定)。
@@ -297,6 +299,8 @@ const CROW_BINARY_META = {
   eps_3y_rising:    { label: 'EPS 連続増',       th: null, freshness: 'eps_3y_rising',  tooltip: '1 株利益 (EPS) が直近 3 期連続で増加した銘柄。' },
   rev_3y_rising:    { label: '売上 連続増',      th: null, freshness: 'rev_3y_rising',  tooltip: '売上高が直近 3 期連続で増加した銘柄。' },
   cfps_3y_rising:   { label: 'CFPS 連続増(4期)', th: null, freshness: 'cfps_3y_rising', tooltip: '1 株あたり営業キャッシュフロー (CFPS) が直近 4 期連続で増加した銘柄。' },
+  // beat/cfps Phase 2 (Sprint 3): 直近決算ビート (gate・locked なし=free)。None 注記 tooltip。
+  latest_beat:      { label: '直近決算ビート', th: null, freshness: 'latest_beat', tooltip: '直近の決算で 1 株利益 (EPS) が市場予想を上回った銘柄。直近決算の EPS 予想が非公表の銘柄は対象外となります。' },
 };
 const CROW_LAYOUT = [
   { group: '品質',       sub: '利益・キャッシュの質', keys: ['funda_pass', 'ocf_margin_pct', 'ocf_gt_netincome', 'eps_yoy_pct', 'eps_cagr_3y', 'roe'] },
@@ -326,7 +330,7 @@ const PRESET_DISPLAY_CONDS = {
   //   ocf_gt_netincome は gate (§B-3.5) なので display にも含める (南京錠で必ず可視化)。
   earnings_pass:  ['eps_yoy_pct', 'eps_cagr_3y', 'ocf_margin_pct', 'ocf_gt_netincome', 'roe', 'rs_percentile', 'eps_3y_rising', 'rev_3y_rising', 'cfps_3y_rising'],
   // 新高値ブレイク: 型/タイミング (買い場圏/52週高値) + 需給 (出来高急増) + RS
-  new_high_break: ['buy_zone', 'new_high_52w', 'cup', 'volume_surge_pct', 'rs_percentile'],
+  new_high_break: ['latest_beat', 'buy_zone', 'new_high_52w', 'cup', 'volume_surge_pct', 'rs_percentile'],
   // 旬のセクター: master-detail (Phase C) が主役。conds は funda_pass のみ (重複回避・SPEC §5 Sprint 1)
   hot_sector:     ['funda_pass'],
   // セクター別リーダー: 収益の質 (CF マージン/ROE) + 機関の動き
@@ -341,12 +345,14 @@ const PRESET_DISPLAY_CONDS = {
 //   常時 ON である flag に対応していること (count==list を壊さない)。
 // gate-1 決定 (Q2=(a) 件数不変): ocf 系は earnings_pass / sector_leader で既に applyStrategyImpl が
 //   ON にしている (= 件数不変)。これらを南京錠化し、旧 screener-gate-list の別 section 二重表示を解消。
-// defer (嘘の南京錠を作らない・SPEC §3/§9): cfpsgt/beat (実データ無し) と cup/buy_zone/new_high_52w/
+// beat は populate 済 (Sprint 1 で freshness 付与) のため new_high_break の gate「必須」化済 (本 SPEC Sprint 3)。
+// defer (嘘の南京錠を作らない・SPEC §3/§9): cfpsgt (実データ無し) と cup/buy_zone/new_high_52w/
 //   ad_volume (Premium マスクで free は cup_state/pivot_distance_pct 等が null・main.py:20456-20484) は
 //   free で applied gate にすると全滅するため gate に含めない。データ整備 / Premium 専用化は別 sprint。
 const PRESET_GATE_CONDS = {
   earnings_pass: ['ocf_margin_pct', 'ocf_gt_netincome'], // 既に applyStrategyImpl で ON = 件数不変
   sector_leader: ['ocf_margin_pct'],                     // 既に applyStrategyImpl で ON = 件数不変
+  new_high_break: ['latest_beat'],                       // beat populate 済 (Sprint 1)・PRESET_PREDICATES + applyStrategyImpl で常時 ON = 件数算入
 };
 
 // ─── 合否理由 静的dict (§38安全・LLM不使用・STATE_LABEL_JP 方式) ────────────────
@@ -422,7 +428,7 @@ export function itemPasses(item, activeGrades, extra) {
 // [[feedback_facet_filter_count_integrity]] に準拠。
 export const PRESET_PREDICATES = {
   earnings_pass:  { extra: { fundaPassOnly: true, ocfMarginOnly: true, ocfGtNiOnly: true } },
-  new_high_break: { extra: { buyZoneOnly: true, newHigh52wOnly: true } },
+  new_high_break: { extra: { buyZoneOnly: true, newHigh52wOnly: true, beatOnly: true } },
   sector_leader:  { extra: { sectorLeaderOnly: true, ocfMarginOnly: true } },
   // hot_sector: セクター算出は topSectorsByRs で計算 (sectorTopN=5 相当)
   hot_sector:     { sectorTopN: 5, extra: { fundaPassOnly: true } },
@@ -541,6 +547,8 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   const [eps3RisingOnly, setEps3RisingOnly] = useState(false);
   const [rev3RisingOnly, setRev3RisingOnly] = useState(false);
   const [cfpsRisingOnly, setCfpsRisingOnly] = useState(false);
+  // beat/cfps Phase 2 (Sprint 3): 直近決算ビート gate (new_high_break で常時 ON・binBindings には入れない)。
+  const [beatOnly, setBeatOnly] = useState(false);
   // Phase A: セクター別リーダー binary flag (is_sector_rs_leader=true ∩ ocfMarginOnly)。
   const [sectorLeaderOnly, setSectorLeaderOnly] = useState(false);
   // Phase C: 現在適用中の戦略 preset key (master-detail view 切替に使用・表示専用)。
@@ -589,6 +597,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     setEps3RisingOnly(false);
     setRev3RisingOnly(false);
     setCfpsRisingOnly(false);
+    setBeatOnly(false);
     setSectorFilter([]);
 
     if (presetKey === 'earnings_pass') {
@@ -600,6 +609,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       // 買い場圏 (pivot ≤+5%) + 52週高値更新 (PRESET_PREDICATES.new_high_break と一致)
       setBuyZoneOnly(true);
       setNewHigh52wOnly(true);
+      setBeatOnly(true);
     } else if (presetKey === 'sector_leader') {
       // セクター別リーダー: is_sector_rs_leader + ocfMarginOnly (PRESET_PREDICATES.sector_leader と一致)
       setSectorLeaderOnly(true);
@@ -664,9 +674,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   const isCustom = Object.keys(overrides).length > 0;
   const filteredItems = useMemo(() => {
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     return items.filter((it) => itemPasses(it, activeGrades, extra));
-  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, sectorLeaderOnly, sectorFilter, mcapFilter]);
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectorFilter, mcapFilter]);
 
   // Pass B: 条件合致度順ソート。
   // スコア = アクティブ数値 facet ごとに (item[key] - threshold) / threshold の合計。
@@ -734,21 +744,21 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   // Pass 3b: preset 別の total 件数 (緩い/標準/厳しい) を live 算出。ハードコード禁止。
   const presetCounts = useMemo(() => {
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     const result = {};
     for (const lvl of ['loose', 'standard', 'strict']) {
       const grades = buildActiveGrades(lvl, overrides);
       result[lvl] = items.filter((it) => itemPasses(it, grades, extra)).length;
     }
     return result;
-  }, [universe, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, sectorLeaderOnly, sectorFilter, mcapFilter]);
+  }, [universe, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectorFilter, mcapFilter]);
 
   // Pass 3c: faceted 件数 — 各 facet の各 level に変えた時の件数 (itemPasses 共有、Trust Cliff C-2)。
   // facet K を level L にした時の件数 = { ...activeGrades, [K]: L } で filter。
   // level='off' = K を外した件数 = delete g[K]。
   const facetLevelCounts = useMemo(() => {
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     const result = {};
     for (const facet of FUNDA_FACETS) {
       result[facet.key] = {};
@@ -763,13 +773,13 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       }
     }
     return result;
-  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, sectorLeaderOnly, sectorFilter, mcapFilter]);
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectorFilter, mcapFilter]);
 
   // Pass 3c: empty サジェスト — 現在 active な制約を1つ外した時に最も件数が増える提案を算出。
   const emptySuggest = useMemo(() => {
     if (filteredItems.length > 0) return null;
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: mcapFilter };
     let best = null;
     // B-3.5: gate (南京錠・変更不可) は「外す提案」の候補から除外する。
     //   「外せない条件を外せ」と提案する矛盾 (Trust Cliff) を防ぐ (SPEC §5 Sprint 3)。
@@ -851,7 +861,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       if (!best || cnt > best.count) best = { key: 'sector_leader', label: 'セクター別リーダー', count: cnt, type: 'sector_leader' };
     }
     return best;
-  }, [filteredItems.length, universe, activeGrades, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, sectorLeaderOnly, sectorFilter, mcapFilter, activePreset]);
+  }, [filteredItems.length, universe, activeGrades, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectorFilter, mcapFilter, activePreset]);
 
   // Pass 3c: sector / mcap 選択肢を universe から live 算出 (count 付き)。
   // Pass 3d (修正A): 全件 universe 集計から faceted count へ変更 (Trust Cliff C-2 修正)。
@@ -862,22 +872,22 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     for (const it of items) {
       if (!it.sector) continue;
       // sector 次元自身は除き (自己排除防止)、他の active facet を適用
-      if (!itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, sectorLeaderOnly, mcapBands: mcapFilter, sectors: [it.sector] })) continue;
+      if (!itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, mcapBands: mcapFilter, sectors: [it.sector] })) continue;
       map[it.sector] = (map[it.sector] || 0) + 1;
     }
     return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([s, cnt]) => ({ value: s, label: sectorLabelJp(s), count: cnt }));
-  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, sectorLeaderOnly, mcapFilter]);
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, mcapFilter]);
   const mcapOptions = useMemo(() => {
     const items = universe?.items || [];
     const map = {};
     for (const it of items) {
       if (!it.mcap_band) continue;
       // mcap 次元自身は除き (自己排除防止)、他の active facet を適用
-      if (!itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: [it.mcap_band] })) continue;
+      if (!itemPasses(it, activeGrades, { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: [it.mcap_band] })) continue;
       map[it.mcap_band] = (map[it.mcap_band] || 0) + 1;
     }
     return MCAP_BANDS.filter((b) => map[b.key]).map((b) => ({ ...b, count: map[b.key] || 0 }));
-  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, sectorLeaderOnly, sectorFilter]);
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectorFilter]);
 
   // Pass 3d (修正C): funda_pass chip に件数を表示するための faceted count。
   // 件数 = funda_pass=true かつ grades + ocf + sector + mcap を通過した件数 (日付ではない)。
@@ -886,9 +896,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     const items = universe?.items || [];
     return items.filter(
       (it) => it.funda_pass === true &&
-        itemPasses(it, activeGrades, { ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, sectors: sectorFilter, mcapBands: mcapFilter })
+        itemPasses(it, activeGrades, { ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectors: sectorFilter, mcapBands: mcapFilter })
     ).length;
-  }, [universe, activeGrades, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, sectorFilter, mcapFilter]);
+  }, [universe, activeGrades, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorFilter, mcapFilter]);
 
   // Phase1 S3: grade override 行の共有レンダラ (旧 2d/2e の重複を統一)。
   // CORE (eps/roe/rs) は preset 駆動 = level 既定 preset・off は明示時のみ。
@@ -1280,7 +1290,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                 const parts = [];
                 const items = universe?.items || [];
                 const baseCount = filteredItems.length;
-                const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+                const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectors: sectorFilter, mcapBands: mcapFilter };
 
                 if (mcapFilter.length > 0) {
                   const label = mcapFilter.map((k) => MCAP_BANDS.find((b) => b.key === k)?.label || k).join('・');
@@ -1768,7 +1778,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                 {/* すべて解除 */}
                 <button
                   className="ml-auto text-[11px] text-[var(--text-muted)] hover:text-[var(--color-loss)] transition-colors"
-                  onClick={() => { setPreset('standard'); setOverrides({}); setSectorFilter([]); setMcapFilter([]); setFundaPassOnly(false); setOcfMarginOnly(false); setOcfGtNiOnly(false); setBuyZoneOnly(false); setAdVolumeOnly(false); setEps3RisingOnly(false); setRev3RisingOnly(false); setCfpsRisingOnly(false); }}
+                  onClick={() => { setPreset('standard'); setOverrides({}); setSectorFilter([]); setMcapFilter([]); setFundaPassOnly(false); setOcfMarginOnly(false); setOcfGtNiOnly(false); setBuyZoneOnly(false); setAdVolumeOnly(false); setEps3RisingOnly(false); setRev3RisingOnly(false); setCfpsRisingOnly(false); setBeatOnly(false); }}
                   data-testid="screener-applied-clear"
                 >
                   すべて解除
