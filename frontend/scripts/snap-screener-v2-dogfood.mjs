@@ -54,27 +54,23 @@ const hardTimer = setTimeout(() => {
 }, HARD_TIMEOUT_MS);
 hardTimer.unref?.();
 
-// ── 各ステージの vision チェック項目 (handover v259 §1 の人力目視 3 点を文章化) ──
-const STAGES = [
-  {
-    name: 'phaseC_sector_master_detail',
-    label: 'Phase C: 旬のセクター master-detail',
-    checks: [
-      'セクター一覧 (master) が縦バー付きで複数行表示され、最上位行に「主戦場」バッジが付いているか',
-      '選択セクターの detail に合致銘柄が Top3 (ティッカー + 企業名 + 「5条件達成」) で表示されているか',
-      '縦バーの色が 主戦場=amber(オレンジ) / 上位=緑 で、シアン(水色)が「上昇」の意味で使われていないか',
-    ],
-  },
-  {
-    name: 'b3_mseg_and_lock_crow',
-    label: 'B-3: mseg 個別緩急 + Premium lock crow',
-    checks: [
-      'grade crow 内に個別緩急セグメント (緩 / 標 / 厳 / 最厳 の4段) が表示されているか (mseg)',
-      'ロックされた条件が「非表示」ではなく、南京錠アイコン + 「Premium で解錠」CTA の行 (crow) で表示されているか',
-      '同一のロック条件が画面内で重複して表示されていないか',
-    ],
-  },
-];
+// ── 各ステージの vision チェック項目 (handover v259 §1 の人力目視点を文章化) ──
+// v2 (iteration 2): B-3 を mseg / lock crow に分割。mseg は 4 段ラベル (緩/標/厳/最厳) が小さく、
+//   conds 全体 clip では vision が読めず誤 fail したため、単一 crow に zoom した capture で判定する。
+const CHECKS = {
+  phaseC: [
+    'セクター一覧 (master) が縦バー付きで複数行表示され、最上位行に「主戦場」バッジが付いているか',
+    '選択セクターの detail に合致銘柄が Top3 (ティッカー + 企業名 + 「5条件達成」) で表示されているか',
+    '縦バーの色が 主戦場=amber(オレンジ) / 上位=緑 で、シアン(水色)が「上昇」の意味で使われていないか',
+  ],
+  b3_mseg: [
+    'この行 (grade crow) 内に個別緩急セグメントとして「緩 / 標 / 厳 / 最厳」の4段のボタンが横並びで表示されているか',
+  ],
+  b3_lock_crow: [
+    'ロックされた条件が「非表示」ではなく、南京錠アイコン + 「Premium で解錠」CTA の行 (crow) で表示されているか',
+    '同一のロック条件が画面内で重複して表示されていないか',
+  ],
+};
 
 // ── DOM presence audit: 目標 testid の有無を数える + screener-* を列挙 (診断用) ──
 async function auditDom(page) {
@@ -199,7 +195,7 @@ ${checksText}
     console.error('[screener-v2-dogfood] initial audit:', JSON.stringify(report.audits.initial.targets));
 
     // ── Stage A: Phase C — 旬のセクター preset (hot_sector) → master-detail ──
-    const stageC = { name: STAGES[0].name, label: STAGES[0].label };
+    const stageC = { name: 'phaseC_sector_master_detail', label: 'Phase C: 旬のセクター master-detail', checks: CHECKS.phaseC };
     try {
       const hot = page.locator('[data-testid="screener-strategy-hot_sector"]').first();
       if ((await hot.count()) > 0) {
@@ -226,7 +222,8 @@ ${checksText}
     report.stages.push(stageC);
 
     // ── Stage B: B-3 — custom 詳細 → adv ON → mseg + lock crow ──
-    const stageB = { name: STAGES[1].name, label: STAGES[1].label };
+    const stageMseg = { name: 'b3_mseg', label: 'B-3: mseg 個別緩急 (緩/標/厳/最厳)', checks: CHECKS.b3_mseg };
+    const stageLock = { name: 'b3_lock_crow', label: 'B-3: Premium lock crow (南京錠)', checks: CHECKS.b3_lock_crow };
     try {
       // custom モードを保証 (hot_sector で既に custom のはずだが、念のため)
       const customBtn = page.locator('[data-testid="screener-mode-custom"]').first();
@@ -240,7 +237,7 @@ ${checksText}
         if (expanded !== 'true') await detailToggle.click();
         await page.waitForTimeout(1200);
       } else {
-        stageB.note = 'screener-detail-toggle 不在';
+        stageMseg.note = 'screener-detail-toggle 不在';
       }
       const advToggle = page.locator('[data-testid="screener-adv-toggle"]').first();
       if ((await advToggle.count()) > 0) {
@@ -248,28 +245,38 @@ ${checksText}
         if (advExpanded !== 'true') await advToggle.click().catch(() => {});
         await page.waitForTimeout(1500);
       } else {
-        stageB.note = (stageB.note ? stageB.note + '; ' : '') + 'screener-adv-toggle 不在';
+        stageMseg.note = (stageMseg.note ? stageMseg.note + '; ' : '') + 'screener-adv-toggle 不在';
       }
     } catch (e) {
-      stageB.error = String(e?.message || e).slice(0, 200);
+      stageMseg.error = stageLock.error = String(e?.message || e).slice(0, 200);
     }
     report.audits.afterAdv = await auditDom(page);
-    const capB = await captureRegion(page, '[data-testid="screener-conds"]', '20-b3-conds.png');
-    stageB.found = capB.found;
-    stageB.screenshot = capB.screenshot;
-    report.stages.push(stageB);
+    // mseg: 4段ラベルが読めるよう、mseg を含む単一 crow に zoom (conds 全体だと縮小で illegible)
+    const capMseg = await captureRegion(
+      page,
+      '[data-testid="screener-cond-row"]:has([data-testid^="screener-mseg-"])',
+      '21-b3-mseg-crow.png',
+    );
+    stageMseg.found = capMseg.found;
+    stageMseg.screenshot = capMseg.screenshot;
+    report.stages.push(stageMseg);
+    // lock crow: 南京錠の出る conds 領域全体
+    const capLock = await captureRegion(page, '[data-testid="screener-conds"]', '20-b3-conds.png');
+    stageLock.found = capLock.found;
+    stageLock.screenshot = capLock.screenshot;
+    report.stages.push(stageLock);
 
     // ── Vision verdict (key 有り & not dry-run のときのみ) ──
     if (visionEnabled) {
-      for (let i = 0; i < report.stages.length; i++) {
-        const st = report.stages[i];
+      for (const st of report.stages) {
+        const stageChecks = st.checks;
         if (!st.found || !st.screenshot) {
           st.verdict = 'uncertain';
-          st.checks = STAGES[i].checks.map((c) => ({ check: c, pass: false, reason: 'region 未 capture' }));
+          st.checks = stageChecks.map((c) => ({ check: c, pass: false, reason: 'region 未 capture' }));
           continue;
         }
         try {
-          const v = await visionVerdict(client, st.screenshot, STAGES[i].checks);
+          const v = await visionVerdict(client, st.screenshot, stageChecks);
           st.verdict = v.verdict;
           st.checks = v.checks;
           st.root_cause_hint = v.root_cause_hint || null;
