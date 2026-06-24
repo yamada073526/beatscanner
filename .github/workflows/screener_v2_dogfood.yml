@@ -1,0 +1,105 @@
+name: Screener v2 Dogfood (本番 B-3 / Phase C 自動目視)
+
+# handover v259 §「次セッション最優先 1」の自動化 = CLAUDE.md 原則4「人力の代替」。
+# 人力で本番 ?screener_v2=1 を開いて目視していた B-3 (mseg / lock crow) と
+# Phase C (旬のセクター master-detail) を、GitHub Actions runner (egress 開放) 上で
+# Playwright + Claude Haiku vision により自動 dogfood する。
+#
+# ★ CI gate にしない設計 (continue-on-error: true)。検知のみ目的で deploy / merge を止めない
+#   (CLAUDE.md「本番直送」精神と整合、playwright_smoke / vision_eval と同方針)。
+#
+# 既知の制約:
+#   - 既定は anon/Free 状態を検証 (南京錠 lock crow + mseg ちら見せ は Free 状態の現象 = Trust Cliff 検証に最適)。
+#     Premium pass は DOGFOOD_TEST_* secrets が入れば別途追加可。
+#   - ANTHROPIC_API_KEY 未設定時: capture + DOM audit のみ (exit 0、workflow 緑維持)。
+#   - 本番 universe fetch を伴うため push 多発時は注意 (通常 1-2 push/day で問題なし)。
+#
+# main session は MCP (actions_run_trigger=run_workflow / get_job_logs) で起動 → verdict を log から読む。
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'dogfood 対象 URL (既定: 本番 screener_v2)'
+        required: false
+        default: 'https://beatscanner-production.up.railway.app/?layout=workspace&pillar2_pane1=1&tab=screener&screener_v2=1'
+  push:
+    # main = 毎 deploy 後の自動 dogfood。claude/** = 構築中の verification 用 (本番URLを叩くので
+    # branch push でも production の B-3/Phase C を検証できる)。verify 完了後 main-only へ絞ってよい。
+    branches: [main, 'claude/**']
+    paths:
+      - 'frontend/src/components/CustomScreenerPanel.jsx'
+      - 'frontend/src/components/StrategyPresetBar.jsx'
+      - 'frontend/src/features/workspace/ScreenerMaster.jsx'
+      - 'frontend/scripts/snap-screener-v2-dogfood.mjs'
+      - '.github/workflows/screener_v2_dogfood.yml'
+
+jobs:
+  dogfood:
+    name: Screener v2 dogfood against production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      SNAP_URL: ${{ github.event.inputs.url || 'https://beatscanner-production.up.railway.app/?layout=workspace&pillar2_pane1=1&tab=screener&screener_v2=1' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install deps (lockfile 厳格)
+        working-directory: frontend
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            playwright-chromium-
+
+      - name: Install Playwright browsers (chromium のみ)
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Check ANTHROPIC_API_KEY presence
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "[dogfood] WARNING: ANTHROPIC_API_KEY 未設定 → capture + DOM audit のみ (Vision skip)。"
+          else
+            echo "[dogfood] ANTHROPIC_API_KEY 検出 → Vision verdict を実行。"
+          fi
+
+      - name: Run screener v2 dogfood
+        working-directory: frontend
+        run: node scripts/snap-screener-v2-dogfood.mjs --url "$SNAP_URL" --out .visual/screener-v2-dogfood.json
+        # CI gate にしない (fail/uncertain でも workflow を緑に維持)
+        continue-on-error: true
+
+      - name: Print verdict JSON
+        if: always()
+        working-directory: frontend
+        run: |
+          echo "===== screener-v2-dogfood verdict ====="
+          cat .visual/screener-v2-dogfood.json 2>/dev/null || echo "(verdict JSON 不在)"
+
+      - name: Upload dogfood artifacts (30 日保管)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screener-v2-dogfood-${{ github.run_number }}
+          path: |
+            frontend/.visual/screener-v2/
+            frontend/.visual/screener-v2-dogfood.json
+          retention-days: 30
+          if-no-files-found: warn
