@@ -304,6 +304,9 @@ const CROW_BINARY_META = {
   cfps_3y_rising:   { label: 'CFPS 連続増(4期)', th: null, freshness: 'cfps_3y_rising', tooltip: '1 株あたり営業キャッシュフロー (CFPS) が直近 4 期連続で増加した銘柄。' },
   // beat/cfps Phase 2 (Sprint 3): 直近決算ビート (gate・locked なし=free)。None 注記 tooltip。
   latest_beat:      { label: '直近決算ビート', th: null, freshness: 'latest_beat', tooltip: '直近の決算で 1 株利益 (EPS) が市場予想を上回った銘柄。直近決算の EPS 予想が非公表の銘柄は対象外となります。' },
+  // S3: セクター別リーダーの定義条件 is_sector_rs_leader を可視化 (preset名と表示の乖離=Trust Cliff 解消)。
+  //   gate 専用 (binBindings 非登録)=custom/他 preset では renderCrow null。freshness は 'rs' (backend が付与)。
+  sector_leader:    { label: 'セクター内で相対力トップ', th: '上位3位', freshness: 'rs', tooltip: '所属セクター内で相対力 (RS) が上位 3 位以内（有効 5 銘柄以上のセクターのみ判定）。「セクター別リーダー」戦略の定義条件。' },
 };
 const CROW_LAYOUT = [
   { group: '品質',       sub: '利益・キャッシュの質', keys: ['funda_pass', 'ocf_margin_pct', 'ocf_gt_netincome', 'eps_yoy_pct', 'eps_cagr_3y', 'roe'] },
@@ -312,7 +315,7 @@ const CROW_LAYOUT = [
   // beat/cfps Phase 2 (Sprint 3): 直近決算ビート。new_high_break で gate「必須」描画 (PRESET_GATE_CONDS)。
   //   binBindings 非登録のため custom/他 preset では renderCrow が null → group 非表示 (gate 専用)。
   { group: '品質',       sub: '決算の裏付け',         keys: ['latest_beat'] },
-  { group: 'タイミング', sub: '値動き・勢い',         keys: ['buy_zone', 'new_high_52w', 'cup', 'rs_percentile', 'volume_surge_pct'] },
+  { group: 'タイミング', sub: '値動き・勢い',         keys: ['buy_zone', 'new_high_52w', 'cup', 'rs_percentile', 'sector_leader', 'volume_surge_pct'] },
   { group: '需給',       sub: '機関の動き',           keys: ['ad_volume', 'inst_holders_qoq_pct'] },
 ];
 // B-3: crow conds が inline lock crow として提示する locked_facets key 集合 (= CROW_BINARY_META.locked)。
@@ -340,8 +343,8 @@ const PRESET_DISPLAY_CONDS = {
   new_high_break: ['latest_beat', 'buy_zone', 'new_high_52w', 'cup', 'volume_surge_pct', 'rs_percentile', 'eps_yoy_pct'],
   // 旬のセクター: master-detail (Phase C) が主役。conds は funda_pass のみ (重複回避・SPEC §5 Sprint 1)
   hot_sector:     ['funda_pass'],
-  // セクター別リーダー: 収益の質 (CF マージン/ROE) + 機関の動き
-  sector_leader:  ['ocf_margin_pct', 'roe', 'inst_holders_qoq_pct'],
+  // セクター別リーダー: 定義条件(セクター内RSトップ) + 収益の質 (CF マージン/ROE) + 機関の動き
+  sector_leader:  ['sector_leader', 'ocf_margin_pct', 'roe', 'inst_holders_qoq_pct'],
 };
 
 // ─── Phase B-3.5: gate 条件レジストリ (preset 毎の「常時 ON・トグル不可」死守条件) ──────────
@@ -358,7 +361,7 @@ const PRESET_DISPLAY_CONDS = {
 //   free で applied gate にすると全滅するため gate に含めない。データ整備 / Premium 専用化は別 sprint。
 const PRESET_GATE_CONDS = {
   earnings_pass: ['ocf_margin_pct', 'ocf_gt_netincome'], // 既に applyStrategyImpl で ON = 件数不変
-  sector_leader: ['ocf_margin_pct'],                     // 既に applyStrategyImpl で ON = 件数不変
+  sector_leader: ['sector_leader', 'ocf_margin_pct'],    // S3: 定義条件を南京錠「必須」可視化 (常時 ON=件数不変)
   new_high_break: ['latest_beat'],                       // beat populate 済 (Sprint 1)・PRESET_PREDICATES + applyStrategyImpl で常時 ON = 件数算入
 };
 
@@ -899,8 +902,8 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, mcapBands: [] })).length;
       if (!best || cnt > best.count) best = { key: 'mcap', label: '時価総額絞り込み', count: cnt, type: 'mcap' };
     }
-    // sectorLeaderOnly を外す (Phase A)
-    if (sectorLeaderOnly) {
+    // sectorLeaderOnly を外す (Phase A)。gate 化された sector_leader preset では候補外 (B-3.5・矛盾防止)。
+    if (sectorLeaderOnly && !gateFlagSet.has('sectorLeaderOnly')) {
       const cnt = items.filter((it) => itemPasses(it, activeGrades, { ...extra, sectorLeaderOnly: false })).length;
       if (!best || cnt > best.count) best = { key: 'sector_leader', label: 'セクター別リーダー', count: cnt, type: 'sector_leader' };
     }
