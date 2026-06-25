@@ -10,7 +10,7 @@
  *
  * Pane 1 nav は WS-5 で実装。WS-4 では暫定 dummy tab toggle を維持.
  */
-import { useEffect, useCallback, useMemo, useState, useRef, lazy, Suspense } from 'react';
+import { useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import {
   ChevronRight,
   Home,
@@ -148,122 +148,6 @@ export { SPARKLINE_PERIOD_OPTIONS };
 
 // v118 P6: Pane4Placeholder 削除 (handover v118 §残バックログ)。
 // 旧来 11-B-22 「マクロニュース × watchlist 連動」 placeholder。 release MVP scope 外。
-
-/** v63 §12-B-4: Pane 1 各セクションの折り畳み header.
- * dogfood round 6 反映:
- *   - hover 背景は CSS class (.ws-pane1-section-header) で dark 対応
- *   - accent (gold/cyan) は ::before 擬似要素で「|」風グラデーション (Pane 2 row と統一)
- *   - 配置はインデント位置 (= テキストすぐ左)、1 階層目より左に飛び出さない
- *   - indent prop で 2 階層目用の左余白
- */
-function SectionHeader({ collapsed, onToggle, label, count, accent, indent = false }) {
-  const color =
-    accent === 'gold'
-      ? 'rgba(212,175,55,0.85)'
-      : accent === 'cyan'
-        ? 'rgba(120,200,220,0.95)'
-        : 'var(--text-muted)';
-  const accentClass = accent ? ` is-accent-${accent}` : '';
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={!collapsed}
-      className={`ws-pane1-section-header${indent ? ' is-indent' : ''}${accentClass}`}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        paddingLeft: indent ? 18 : 6,
-        paddingRight: 8,
-        paddingTop: 4,
-        paddingBottom: 4,
-        width: '100%',
-        background: 'transparent',
-        border: 'none',
-        borderRadius: 'var(--radius-sm, 8px)',
-        fontSize: 10,
-        fontWeight: 600,
-        color,
-        textTransform: 'uppercase',
-        letterSpacing: '0.08em',
-        cursor: 'pointer',
-        textAlign: 'left',
-        position: 'relative',
-      }}
-    >
-      <span>{label}</span>
-      {count != null && (
-        <span style={{ marginLeft: 'auto', fontWeight: 400, color: 'var(--text-muted)' }}>
-          {count}
-        </span>
-      )}
-      <ChevronRight
-        size={12}
-        aria-hidden
-        style={{
-          marginLeft: count != null ? 4 : 'auto',
-          flexShrink: 0,
-          transform: collapsed ? 'rotate(0deg)' : 'rotate(90deg)',
-          transition: 'transform var(--motion-base, 200ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1))',
-        }}
-      />
-    </button>
-  );
-}
-
-/** v63 §12-B-5 用 watchlist row (DRY). indent prop で 2 階層目用の左余白. */
-function WatchlistRow({ it, active, onClick, indent = false }) {
-  const pct = it.changePct;
-  const trendColor =
-    pct == null
-      ? 'var(--text-muted)'
-      : pct > 0
-        ? 'var(--color-gain)'
-        : pct < 0
-          ? 'var(--color-loss)'
-          : 'var(--text-muted)';
-  return (
-    <button
-      key={it.ticker}
-      type="button"
-      onClick={() => onClick(it.ticker)}
-      aria-pressed={active}
-      className={`ws-pane1-watchlist-row${active ? ' is-active' : ''}`}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 6,
-        padding: indent ? '4px 10px 4px 24px' : '4px 10px',
-        fontSize: 12,
-        fontWeight: active ? 600 : 400,
-        borderRadius: 'var(--radius-sm, 8px)',
-        background: 'transparent',
-        color: active ? 'var(--color-accent-strong)' : 'var(--text-primary)',
-        border: 'none',
-        cursor: 'pointer',
-        textAlign: 'left',
-        position: 'relative',
-      }}
-    >
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {it.ticker}
-      </span>
-      <span
-        style={{
-          fontSize: 10,
-          fontWeight: 500,
-          color: trendColor,
-          fontVariantNumeric: 'tabular-nums',
-          flexShrink: 0,
-        }}
-      >
-        {pct == null ? '—' : `${pct > 0 ? '+' : ''}${(pct * 100).toFixed(1)}%`}
-      </span>
-    </button>
-  );
-}
 
 /** §dogfood-round9: Pane 1 が collapsed (= 4% width) のときの rail variant.
  *  サブエージェントレビュー案 1 採用: アイコンのみ縦並び、ラベルは tooltip。
