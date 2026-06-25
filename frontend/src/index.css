@@ -14638,10 +14638,15 @@ body.is-digest-resizing {
     border-color var(--motion-base) var(--ease-out-expo);
 }
 
-/* hover: translateY lift + shadow 強化 + border 明化 */
+/* hover: translateY lift + shadow 強化 + border 明化 + gold halo
+   mockup v8 §.preset:hover 復元 (`box-shadow: var(--elev3), 0 0 22px rgba(212,175,55,.13)`)。
+   実装は --shadow-3 (= elev3 相当の elevation token) に gold ambient halo を合成。
+   gold は color-mix(var(--color-gold)) で token 化 (生 hex 禁止)。
+   hover-only (is-arriving 非対象) のため発光バグの compound 4-set は不要。
+   is-selected は別途 var(--shadow-glow-gold) を持つので二重定義しない。 */
 .screener-strategy-tile:hover {
   transform: translateY(-4px);
-  box-shadow: var(--shadow-3);
+  box-shadow: var(--shadow-3), 0 0 22px color-mix(in srgb, var(--color-gold) 13%, transparent);
   border-color: var(--border-strong, var(--border));
 }
 
