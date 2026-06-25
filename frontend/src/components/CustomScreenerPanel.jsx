@@ -2041,7 +2041,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                 {/* すべて解除 */}
                 <button
                   className="ml-auto text-[11px] text-[var(--text-muted)] hover:text-[var(--color-loss)] transition-colors"
-                  onClick={() => { setPreset('standard'); setOverrides({}); setSectorFilter([]); setMcapFilter([]); setFundaPassOnly(false); setOcfMarginOnly(false); setOcfGtNiOnly(false); setBuyZoneOnly(false); setAdVolumeOnly(false); setEps3RisingOnly(false); setRev3RisingOnly(false); setCfpsRisingOnly(false); setBeatOnly(false); setSortKey('relevance'); /* D-8: すべて解除で sort も default へ */ }}
+                  onClick={() => { setPreset('standard'); setOverrides({}); setSectorFilter([]); setMcapFilter([]); setFundaPassOnly(false); setOcfMarginOnly(false); setOcfGtNiOnly(false); setBuyZoneOnly(false); setAdVolumeOnly(false); setEps3RisingOnly(false); setRev3RisingOnly(false); setCfpsRisingOnly(false); setBeatOnly(false); setSortKey('relevance'); setCupState('all'); /* D-8: すべて解除で sort も default へ。cup「型」トグルも 'すべて' に戻す */ }}
                   data-testid="screener-applied-clear"
                 >
                   すべて解除
