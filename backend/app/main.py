@@ -150,6 +150,10 @@ class _YFinanceNoiseFilter(_logging.Filter):
         "401 Client Error",
         "HTTP Error 401",  # curl_cffi HTTPError の format (大文字 E)。旧 "HTTP error 401" は実メッセージと不一致で素通りしていた
         '"finance":{"result":null',
+        "HTTP Error 404",  # yfinance quoteSummary 404 (ETF/指数の fundamentals なしは正常な noise)
+        '"quoteSummary":{"result":null',
+        "Too Many Requests",  # yfinance 429 rate limit (transient)
+        "Rate limited",
     )
     def filter(self, record):  # True = keep, False = drop
         try:
@@ -3229,11 +3233,13 @@ async def portfolio_performance(
         sorted(
             [
                 {
-                    "t": t.get("ticker", ""),
-                    "ty": t.get("type", ""),
+                    # sort key (d, t, s) に None が混ざると TypeError ('<' NoneType vs str)
+                    # → Sentry BACKEND-1Y。get の default では値が None の時に None が残るため or "" で正規化。
+                    "t": t.get("ticker") or "",
+                    "ty": t.get("type") or "",
                     "s": float(t.get("shares") or 0),
                     "p": float(t.get("price") or 0),
-                    "d": t.get("trade_date", ""),
+                    "d": t.get("trade_date") or "",
                 }
                 for t in txs
             ],
@@ -17823,8 +17829,18 @@ async def cron_rs_scan(
                     "period_months": 6,
                 })
             if rows:
+                import httpx as _hx_rs
+                def _rs_upsert_retry(_rows):
+                    # Supabase http2 idle disconnect (RemoteProtocolError) を 1 回 retry で吸収
+                    # (Sentry BACKEND-34、nightly 大量 upsert で transient 発生)。真の障害は raise。
+                    for _i in range(2):
+                        try:
+                            return sb.table("rs_ratings").upsert(_rows, on_conflict="ticker,calc_date").execute()
+                        except (_hx_rs.RemoteProtocolError, _hx_rs.ConnectError, _hx_rs.ReadError):
+                            if _i == 1:
+                                raise
                 try:
-                    sb.table("rs_ratings").upsert(rows, on_conflict="ticker,calc_date").execute()
+                    _rs_upsert_retry(rows)
                     upserted = len(rows)
                 except Exception as inner_e:
                     # v125 Sprint 2.5 fallback: migration (2026-05-28_rs_ratings_delta_1d.sql) 未適用時の
@@ -17837,7 +17853,7 @@ async def cron_rs_scan(
                             {k: v for k, v in r.items() if k != "delta_1d_percentile"}
                             for r in rows
                         ]
-                        sb.table("rs_ratings").upsert(rows_no_delta, on_conflict="ticker,calc_date").execute()
+                        _rs_upsert_retry(rows_no_delta)
                         upserted = len(rows_no_delta)
                     else:
                         raise
