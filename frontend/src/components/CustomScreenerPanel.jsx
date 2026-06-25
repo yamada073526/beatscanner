@@ -82,6 +82,9 @@ const FUNDA_FACETS = [
   { key: 'rs_percentile',       field: 'rs_percentile',       label: 'RS(相対強さ)',     unit: '',  tier: 'free', category: 'timing',  delta: false, grades: { loose: 70, standard: 80, strict: 90 } },
   { key: 'volume_surge_pct',    field: 'volume_surge_pct',    label: '出来高急増',       unit: '%', tier: 'free', category: 'timing',  delta: true,  grades: { loose: 25, standard: 40, strict: 50 } },
   { key: 'inst_holders_qoq_pct', field: 'inst_holders_qoq_pct', label: '機関保有増(45日遅延)', unit: '%', tier: 'free', category: 'demand', delta: true,  grades: { loose: 0, standard: 3, strict: 5 } },
+  // S2 P1-a: 営業CFマージンを binary gate ≥15% 固定から可変 grade (緩≥10/標≥15/厳≥25) へ昇格 (user 承認 2026-06-25)。
+  //   標準精度=15% で旧 gate と件数中立、業種特性に応じた緩急調整が可能に (金融: 業種により正常 CF マージンが異なる→固定 15% は硬直)。
+  { key: 'ocf_margin_pct',      field: 'ocf_margin_pct',      label: 'キャッシュ創出力',   unit: '%', tier: 'free', category: 'quality', delta: false, grades: { loose: 10, standard: 15, strict: 25 } },
 ];
 const FACET_MAP = Object.fromEntries(FUNDA_FACETS.map((f) => [f.key, f]));
 // preset の CORE 4 metric。volume/inst_holders は preset off、override で追加 (Pass 3c)。
@@ -113,11 +116,10 @@ function gradeAnnot(facet, lvl) {
   return `${facet.delta ? '+' : '≥'}${thr}${facet.unit || ''}`;
 }
 
-// ─── Sprint 3: 営業CFマージン binary facet (§0-1③ PRESET_TABLE 統合禁止) ─────
-// KB「ナイス・バディの法則 15% 足切り」に忠実な binary (ON/OFF) facet。
-// 上限カットなし (35% 超も通す)。null = AND で除外 (honest count)。
-// grades 体系 (loose/standard/strict) に統合しない — 質的閾値であり段階化になじまない。
-// tier: 'free' (§0-1④、eps_yoy/roe と同列の上流ファンダ数値)。
+// ─── 営業CFマージン: label/labelshort 保持 const (grade SSOT は FUNDA_FACETS の ocf_margin_pct) ─────
+// S2 P1-a (user 承認 2026-06-25): 旧「grades に統合しない=質的閾値」決定を更新し、可変 grade [10/15/25] へ昇格。
+//   業種により正常 CF マージンが異なるため固定 15% gate は硬直 (金融: 業種中立性)。標準=15% で件数中立。
+//   本 const は labelShort 表示 (寄与ラベル等) 用に残置。threshold(15) は legacy(grade 移行で未使用)。
 const OCF_MARGIN_FACET = {
   key: 'ocf_margin_pct',
   field: 'ocf_margin_pct',
@@ -230,7 +232,8 @@ export const PRESET_CONDS = [
   { key: 'funda_pass',       kind: 'flag',   flag: 'fundaPassOnly',  pass: (item) => item.funda_pass === true },
   // ocf_margin: 営業CFマージン ≥15% (§0-1③)。null = AND 除外 (honest)、上限カットなし。
   //   None-preserve: 0.0 は有効値だが閾値 15 未満なので自然に落ちる。
-  { key: 'ocf_margin_pct',   kind: 'binary', flag: 'ocfMarginOnly',  facet: OCF_MARGIN_FACET,   pass: (item) => { const m = item[OCF_MARGIN_FACET.field]; return m != null && m >= OCF_MARGIN_FACET.threshold; } },
+  // S2 P1-a: binary gate → grade (精度連動 ≥10/15/25)。activeGrades 経由で itemPasses が走査。
+  { key: 'ocf_margin_pct',   kind: 'grade',  facet: FACET_MAP.ocf_margin_pct, pass: (item, lvl) => gradePass(FACET_MAP.ocf_margin_pct, item, lvl) },
   // ocf_gt_netincome: 営業CF>純利益 bool (§0-3)。null (sector guard / 外貨ADR / 欠落) = AND 除外。
   { key: 'ocf_gt_netincome', kind: 'flag',   flag: 'ocfGtNiOnly',    facet: OCF_GT_NI_FACET,    pass: (item) => item[OCF_GT_NI_FACET.field] === true },
   // buy_zone: 買い場圏 0 ≤ pivot_distance_pct ≤ 5 (§0-4)。null / pivot 下 / 過熱 (>5) = AND 除外。
@@ -290,7 +293,6 @@ const FACET_SHORT_LABEL = {
 //   label/th(閾値型のみ・bool は null)/freshness(未取得→非表示)/locked(Premium→非表示・B-3でlock crow化)
 const CROW_BINARY_META = {
   funda_pass:       { label: '最新決算で5条件達成', th: null,     freshness: 'funda_pass' },
-  ocf_margin_pct:   { label: 'キャッシュ創出力',     th: '≥15%',   freshness: 'ocf_margin',       tooltip: OCF_MARGIN_FACET.tooltip },
   ocf_gt_netincome: { label: '営業CF>純利益',        th: null,     freshness: 'ocf_gt_netincome', tooltip: OCF_GT_NI_FACET.tooltip },
   buy_zone:         { label: '買い場圏',             th: '0〜+5%', freshness: 'pivot_distance',   locked: 'pivot_distance', tooltip: BUY_ZONE_FACET.tooltip },
   new_high_52w:     { label: '52週高値を更新',        th: null,     freshness: 'breakout',         locked: 'breakout',       tooltip: NEW_HIGH_52W_FACET.tooltip },
@@ -360,8 +362,8 @@ const PRESET_DISPLAY_CONDS = {
 //   ad_volume (Premium マスクで free は cup_state/pivot_distance_pct 等が null・main.py:20456-20484) は
 //   free で applied gate にすると全滅するため gate に含めない。データ整備 / Premium 専用化は別 sprint。
 const PRESET_GATE_CONDS = {
-  earnings_pass: ['ocf_margin_pct', 'ocf_gt_netincome'], // 既に applyStrategyImpl で ON = 件数不変
-  sector_leader: ['sector_leader', 'ocf_margin_pct'],    // S3: 定義条件を南京錠「必須」可視化 (常時 ON=件数不変)
+  earnings_pass: ['ocf_gt_netincome'], // S2 P1-a: ocf_margin は grade 化で gate から外れた (精度連動 crow)
+  sector_leader: ['sector_leader'],                      // S3: 定義条件を南京錠「必須」可視化 / ocf_margin は P1-a で grade 化
   new_high_break: ['latest_beat'],                       // beat populate 済 (Sprint 1)・PRESET_PREDICATES + applyStrategyImpl で常時 ON = 件数算入
 };
 
@@ -459,10 +461,10 @@ export function itemPasses(item, activeGrades, extra) {
 // [[feedback_facet_filter_count_integrity]] に準拠。
 // grades: preset 別 grade セット (mockup v8 「preset ごとに条件が違う」)。'auto'=精度連動。
 //   earnings_pass: S2 P1-c で eps_cagr_3y を必須 grade から除去 (eps_3y_rising と A軸二重カウント・
-//     mockup p1 に無し)。残る core は eps_yoy/roe/rs。eps_cagr は PRESET_DISPLAY_CONDS で任意トグルに降格。
-//   sector_leader / hot_sector は従来の全 core4 ('auto') を維持 = 件数不変。
-//     ※ cfm gate→可変grade (P1-a) は code line 119「段階化になじまない」明示決定と衝突 → user 判断保留。
-//       sector_leader の cap/inst gate化 (S3) は「件数実測→user 承認後」(45日遅延データで激減リスク) で保留。
+//     mockup p1 に無し)。S2 P1-a で ocf_margin を binary gate→可変grade化 (user 承認・標準=15%件数中立)。
+//     残る core は eps_yoy/roe/rs/ocf_margin。eps_cagr は PRESET_DISPLAY_CONDS で任意トグルに降格。
+//   sector_leader: ocf_margin を P1-a で grade化。eps_cagr/eps_yoy の整理 + cap/inst gate化 (S3) は
+//     「件数実測→user 承認後」(45日遅延データで激減リスク) で保留。hot_sector は core4 維持=件数不変。
 //   new_high_break は EPS≥25/eps_cagr/ROE≥25 の隠れ過剰フィルタを除去し、gate (beat/buy_zone/new_high)
 //     は緩いまま固定、精度 3 段で「市況ロバストに」締める (金融合議 2026-06-25・活況の件数膨張対策)。
 //     RS だけだと相対指標ゆえ活況で膨張 → 市況非依存の出来高を厳段で重ねるのが要 (最重要キャップ):
@@ -470,9 +472,9 @@ export function itemPasses(item, activeGrades, extra) {
 //       EPS YoY (緩≥0床 / 標≥25% / 厳≥50% 加速)。型/決算ビートは extra の gate。
 //     ※ 買い場圏のタイト化 (+5/+3/+2%) は binary facet の段階閾値=別機構のため follow-up (本 sprint defer)。
 export const PRESET_PREDICATES = {
-  earnings_pass:  { grades: { eps_yoy_pct: 'auto', roe: 'auto', rs_percentile: 'auto' }, extra: { fundaPassOnly: true, ocfMarginOnly: true, ocfGtNiOnly: true } },
+  earnings_pass:  { grades: { eps_yoy_pct: 'auto', roe: 'auto', rs_percentile: 'auto', ocf_margin_pct: 'auto' }, extra: { fundaPassOnly: true, ocfGtNiOnly: true } },
   new_high_break: { grades: { rs_percentile: 'auto', volume_surge_pct: { loose: null, standard: 'loose', strict: 'strict' }, eps_yoy_pct: { loose: 'floor', standard: 'standard', strict: 'strict' } }, extra: { buyZoneOnly: true, newHigh52wOnly: true, beatOnly: true } },
-  sector_leader:  { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto' }, extra: { sectorLeaderOnly: true, ocfMarginOnly: true } },
+  sector_leader:  { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto', ocf_margin_pct: 'auto' }, extra: { sectorLeaderOnly: true } },
   // hot_sector: セクター算出は topSectorsByRs で計算 (sectorTopN=5 相当)
   hot_sector:     { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto' }, sectorTopN: 5, extra: { fundaPassOnly: true } },
 };
@@ -645,9 +647,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     setSectorFilter([]);
 
     if (presetKey === 'earnings_pass') {
-      // 5 条件達成 + CF 創出力 + 利益の質 (PRESET_PREDICATES.earnings_pass と一致)
+      // 5 条件達成 + 利益の質 (PRESET_PREDICATES.earnings_pass と一致)。
+      //   ocf_margin は P1-a で grade 化 → PRESET_PREDICATES.grades 経由で activeGrades に算入 (flag 不要)。
       setFundaPassOnly(true);
-      setOcfMarginOnly(true);
       setOcfGtNiOnly(true);
     } else if (presetKey === 'new_high_break') {
       // 買い場圏 (pivot ≤+5%) + 52週高値更新 (PRESET_PREDICATES.new_high_break と一致)
@@ -655,9 +657,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       setNewHigh52wOnly(true);
       setBeatOnly(true);
     } else if (presetKey === 'sector_leader') {
-      // セクター別リーダー: is_sector_rs_leader + ocfMarginOnly (PRESET_PREDICATES.sector_leader と一致)
+      // セクター別リーダー: is_sector_rs_leader (PRESET_PREDICATES.sector_leader と一致)。
+      //   ocf_margin は P1-a で grade 化 → activeGrades 経由で算入 (flag 不要)。
       setSectorLeaderOnly(true);
-      setOcfMarginOnly(true);
     } else if (presetKey === 'hot_sector') {
       // 旬のセクター (Phase A 暫定): 上位5セクター ∩ funda_pass を stock list 表示。
       // countPreset と同一 topSectorsByRs (_universeCache=module-scope・常に最新) を使い
@@ -1149,7 +1151,6 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     }
     const binBindings = {
       funda_pass: [fundaPassOnly, setFundaPassOnly],
-      ocf_margin_pct: [ocfMarginOnly, setOcfMarginOnly],
       ocf_gt_netincome: [ocfGtNiOnly, setOcfGtNiOnly],
       buy_zone: [buyZoneOnly, setBuyZoneOnly],
       new_high_52w: [newHigh52wOnly, setNewHigh52wOnly],
