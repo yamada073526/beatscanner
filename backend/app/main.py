@@ -20094,6 +20094,12 @@ async def _fetch_screener_base_universe(universe_size: int) -> dict[str, dict]:
             if not sym:
                 continue
             _raw_price = r.get("price")
+            # D-8 sort (SPEC_2026-06-25): 帯化前の生 mcap / volume を additive 保持 (sort 用)。
+            # 追加 FMP call ゼロ — company-screener は marketCap / volume を既に返す
+            # (query の marketCapMoreThan / volumeMoreThan filter と同源)。
+            # mcap_band (フィルタ用) とは役割分離: 生値は sort、帯は絞り込み chip。
+            _raw_mcap = r.get("marketCap")
+            _raw_vol = r.get("volume")
             base[sym] = {
                 "name": (r.get("companyName") or None),
                 "sector": (r.get("sector") or None),
@@ -20102,6 +20108,9 @@ async def _fetch_screener_base_universe(universe_size: int) -> dict[str, dict]:
                 # FMP company-screener のリアルタイム price フィールド (priceMoreThan=5 filter と同源)。
                 # 追加 FMP call ゼロ — company-screener が price を返すため既存 fetch を流用。
                 "price": float(_raw_price) if isinstance(_raw_price, (int, float)) and _raw_price > 0 else None,
+                # D-8 sort: 生 mcap / volume (None-safe、欠損は None → frontend sort で末尾固定)。
+                "mcap": float(_raw_mcap) if isinstance(_raw_mcap, (int, float)) and _raw_mcap > 0 else None,
+                "volume": float(_raw_vol) if isinstance(_raw_vol, (int, float)) and _raw_vol > 0 else None,
             }
         if not base:
             return (cached or {}).get("base") or {}
@@ -20348,6 +20357,10 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             "name": meta.get("name"),
             "sector": meta.get("sector"),
             "mcap_band": meta.get("mcap_band"),
+            # D-8 sort (SPEC_2026-06-25): 生 mcap / volume を item に通す (sort 用、additive)。
+            # base dict が None-safe 化済 (帯化前の生値)。mcap_band は残す (フィルタ chip 用、役割分離)。
+            "mcap": meta.get("mcap"),
+            "volume": meta.get("volume"),
             # RS (free) — 測定外は null
             "rs_percentile": (rs or {}).get("universe_percentile"),
             "rs_vs_spy_pct": _uni_round((rs or {}).get("rs_vs_spy_pct")),

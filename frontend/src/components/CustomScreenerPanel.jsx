@@ -390,6 +390,55 @@ const PRESET_DISPLAY_CONDS = {
   sector_leader:  ['sector_leader', 'ocf_margin_pct', 'roe', 'inst_holders_qoq_pct'],
 };
 
+// ─── D-8 sort (SPEC_2026-06-25): 結果リストのユーザー制御 sort ──────────────────────
+// default = 'relevance' (合致度順 = 既存 sortedItems) を維持 (user gate 1 確定 2026-06-25)。
+//   mockup line 270 は 'mcap' default だが、BeatScanner は意図的に合致度順を default にする
+//   (スクリーナーの本質 = 戦略合致順、原則4 と整合・I-1〜I-6 と同種の意図的 deviation)。
+// 「主要指標の高い順」の "主要指標" は preset により意味が変わる (mockup r.m)。各 preset の主指標を
+//   PRESET_DISPLAY_CONDS / mockup r.m 意味論から確定 (earnings_pass=EPS YoY% / new_high_break=
+//   ブレイク乖離% / sector_leader=CF マージン%)。hot_sector は master-detail で sort 非表示のため不要。
+//   未マップ (custom / activePreset null) は metric sort を合致度順に fallback (component 側)。
+const PRESET_METRIC_KEY = {
+  earnings_pass: 'eps_yoy_pct',
+  new_high_break: 'pivot_distance_pct',
+  sector_leader: 'ocf_margin_pct',
+};
+
+// sortRows: filteredItems を sortKey で並べ替える純関数 (集合不変・順序のみ = Trust Cliff C-2)。
+//   None 値は常に末尾固定 (欠損を 0 扱いで上位に出さない = 数値の honest 表示)。tiebreak は ticker 昇順。
+//   mcap/vol/metric は降順、sector は和名 localeCompare('ja') 昇順 (mockup L335 忠実)。
+//   'relevance' は呼ばない (component が既存 sortedItems を返す)。
+function sortRows(items, sortKey, activePreset) {
+  const arr = [...items];
+  const byNumDesc = (key) => (a, b) => {
+    const av = a[key], bv = b[key];
+    if (av == null && bv == null) return a.ticker.localeCompare(b.ticker);
+    if (av == null) return 1;   // None 末尾
+    if (bv == null) return -1;
+    return bv - av || a.ticker.localeCompare(b.ticker);
+  };
+  if (sortKey === 'mcap') arr.sort(byNumDesc('mcap'));
+  else if (sortKey === 'vol') arr.sort(byNumDesc('volume'));
+  else if (sortKey === 'metric') {
+    const mk = PRESET_METRIC_KEY[activePreset];
+    if (mk) arr.sort(byNumDesc(mk));
+  } else if (sortKey === 'sector') {
+    arr.sort((a, b) =>
+      sectorLabelJp(a.sector || '').localeCompare(sectorLabelJp(b.sector || ''), 'ja')
+      || a.ticker.localeCompare(b.ticker));
+  }
+  return arr;
+}
+
+// sort select の option (mockup L217-218 忠実 + 先頭に合致度順 = user gate 1 確定)。
+const SORT_OPTIONS = [
+  { value: 'relevance', label: '合致度順' },
+  { value: 'mcap', label: '時価総額の大きい順' },
+  { value: 'vol', label: '出来高の大きい順' },
+  { value: 'metric', label: '主要指標の高い順' },
+  { value: 'sector', label: 'セクター順' },
+];
+
 // ─── Phase B-3.5: gate 条件レジストリ (preset 毎の「常時 ON・トグル不可」死守条件) ──────────
 // 目的: mockup v8 `o.gate:true` 条件を南京錠 (lockicon + 「必須」pill・トグル UI なし) で固定し、
 //   「変えられる/変えられない」の階層を視覚分離する (原則3・SPEC §5 Sprint 2)。
@@ -647,6 +696,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   const [sectorLeaderOnly, setSectorLeaderOnly] = useState(false);
   // Phase C: 現在適用中の戦略 preset key (master-detail view 切替に使用・表示専用)。
   const [activePreset, setActivePreset] = useState(initialStrategy || null);
+  // D-8 sort (SPEC_2026-06-25): ユーザー制御の sort key (default = 合致度順)。applyStrategyImpl で
+  //   reset するため activePreset 付近で宣言。表示順 displayItems は後段の useMemo で算出。
+  const [sortKey, setSortKey] = useState('relevance');
   // Phase C: 旬のセクター master-detail で選択中のセクター (null = 先頭)。
   const [selectedSector, setSelectedSector] = useState(null);
   // Pass C: 件数キャップ — 初期 100 件、「残りN件を表示」で全件展開
@@ -678,6 +730,10 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     // Phase C: active preset を追跡 (hot_sector のとき master-detail view へ切替・表示専用)。
     setActivePreset(presetKey);
     setSelectedSector(null);
+    // D-8 (multi-review qa 指摘): preset 切替で sort を default (合致度順) に戻す。前 preset の
+    //   sort 残留 (例: 時価総額順のまま別 preset へ) を防ぐ。BeatScanner は合致度順 default のため
+    //   context 変化で reset が自然。
+    setSortKey('relevance');
     // まず共通リセット (overrides / binary facets)
     setPreset('standard');
     setOverrides({});
@@ -837,6 +893,17 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     [sectorSummary, selectedSector],
   );
   const isSectorView = activePreset === 'hot_sector' && sectorSummary.length > 0;
+
+  // D-8 sort (SPEC_2026-06-25): 表示順 displayItems。'relevance' は合致度 (sortedItems) を維持。
+  //   それ以外は filteredItems を sortRows で並べ替え。metric で preset 未マップなら合致度順に fallback
+  //   (UI 側でも当該 option を disabled 化済 = silent fallback を起こさない・multi-review 指摘)。
+  //   集合不変のため displayItems.length === filteredItems.length === sortedItems.length (C-2)。
+  //   sortKey state は activePreset 付近で宣言 (applyStrategyImpl の reset 都合)。
+  const displayItems = useMemo(() => {
+    if (sortKey === 'relevance') return sortedItems;
+    if (sortKey === 'metric' && !PRESET_METRIC_KEY[activePreset]) return sortedItems;
+    return sortRows(filteredItems, sortKey, activePreset);
+  }, [sortKey, sortedItems, filteredItems, activePreset]);
 
   // Pass C: フィルタ変更で結果集合が変わったら件数キャップを 100 件に戻す
   // (「残りN件を表示」を一度押しても、新しい絞り込みでは描画負荷抑制の意図を維持)。
@@ -1916,7 +1983,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                 {/* すべて解除 */}
                 <button
                   className="ml-auto text-[11px] text-[var(--text-muted)] hover:text-[var(--color-loss)] transition-colors"
-                  onClick={() => { setPreset('standard'); setOverrides({}); setSectorFilter([]); setMcapFilter([]); setFundaPassOnly(false); setOcfMarginOnly(false); setOcfGtNiOnly(false); setBuyZoneOnly(false); setAdVolumeOnly(false); setEps3RisingOnly(false); setRev3RisingOnly(false); setCfpsRisingOnly(false); setBeatOnly(false); }}
+                  onClick={() => { setPreset('standard'); setOverrides({}); setSectorFilter([]); setMcapFilter([]); setFundaPassOnly(false); setOcfMarginOnly(false); setOcfGtNiOnly(false); setBuyZoneOnly(false); setAdVolumeOnly(false); setEps3RisingOnly(false); setRev3RisingOnly(false); setCfpsRisingOnly(false); setBeatOnly(false); setSortKey('relevance'); /* D-8: すべて解除で sort も default へ */ }}
                   data-testid="screener-applied-clear"
                 >
                   すべて解除
@@ -1933,6 +2000,42 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
               <span className="text-sm font-medium text-[var(--text-secondary)]">
                 {filteredItems.length} 件
               </span>
+              {/* D-8 sort select (mockup v8 sortwrap/sortsel 忠実)。sector view では非表示
+                  (master-detail のため sort 無意味、mockup line 342 相当)。CSS は Tailwind + var()
+                  token のみ = 発光系 (.panel-card/.bs-panel/.surface-card) に一切触れない low-risk 方式。
+                  primary selector = data-testid (className 依存禁止)。 */}
+              {!isSectorView && (
+                <span className="relative inline-flex items-center">
+                  <select
+                    data-testid="screener-sort-select"
+                    value={sortKey}
+                    onChange={(e) => setSortKey(e.target.value)}
+                    aria-label="並び順"
+                    className="appearance-none cursor-pointer text-xs rounded-full border border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-secondary)] py-[5px] pl-3 pr-[26px]"
+                  >
+                    {SORT_OPTIONS.map((o) => (
+                      <option
+                        key={o.value}
+                        value={o.value}
+                        /* D-8 (multi-review 指摘): 「主要指標」は preset で指標が変わる。未マップ
+                           preset (custom / 起動直後の null) では選んでも合致度順に silent fallback
+                           するため disabled 化し「壊れて見える」Trust Cliff を回避。 */
+                        disabled={o.value === 'metric' && !PRESET_METRIC_KEY[activePreset]}
+                      >
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                  <svg
+                    className="absolute right-2 pointer-events-none w-3 h-3 text-[var(--text-muted)]"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </span>
+              )}
             </div>
 
             {/* Sprint 5 Pass B: 一括追加バー (1 件以上選択時に表示)。Phase C: sector view では非表示。 */}
@@ -2115,18 +2218,22 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                 )}
               </div>
             ) : (
-              /* Pass B: 条件合致度降順 (sortedItems)。上位3件強調 + 下位淡化。 */
+              /* Pass B: 表示順 displayItems (default=合致度降順、D-8 sort で切替可)。 */
               /* Pass C: 初期 100 件キャップ。超過時は「残りN件を表示」ボタン。 */
               <div
                 data-testid="screener-result-list"
                 className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)] overflow-hidden"
               >
-                {(showAllResults ? sortedItems : sortedItems.slice(0, 100)).map((it, idx) => {
+                {(showAllResults ? displayItems : displayItems.slice(0, 100)).map((it, idx) => {
                   // ── 上位強調 / 下位後退 (weight/size/opacity のみ、色 polarity なし §38) ──
-                  const isTop = idx < 3;
-                  const total = sortedItems.length;
-                  // 後半ほど淡く: 上半=1.0, 下半=0.55 に線形
-                  const opacityVal = total <= 1 ? 1 : idx < Math.ceil(total / 2) ? 1 : Math.max(0.55, 1 - (idx / total) * 0.45);
+                  // D-8: 強調/淡化は合致度順の時のみ。mcap/vol 等の sort で top3 を強調すると
+                  //   「最良銘柄」と誤認させる (§38/Trust Cliff risk) ため、合致度以外は均一表示。
+                  const isTop = sortKey === 'relevance' && idx < 3;
+                  const total = displayItems.length;
+                  // 後半ほど淡く: 上半=1.0, 下半=0.55 に線形 (合致度順のみ)
+                  const opacityVal = sortKey !== 'relevance'
+                    ? 1
+                    : total <= 1 ? 1 : idx < Math.ceil(total / 2) ? 1 : Math.max(0.55, 1 - (idx / total) * 0.45);
 
                   // ── ヒット理由バッジ (スコア寄与順・最大2件) ──
                   const activeFacetsSorted = FUNDA_FACETS
@@ -2295,14 +2402,14 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                   );
                 })}
                 {/* Pass C: 件数キャップ超過時「残りN件を表示」ボタン (仮想スクロール不採用) */}
-                {!showAllResults && sortedItems.length > 100 && (
+                {!showAllResults && displayItems.length > 100 && (
                   <div className="flex items-center justify-center px-4 py-3 border-t border-[var(--border)]">
                     <button
                       className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
                       onClick={() => setShowAllResults(true)}
                       data-testid="screener-show-more"
                     >
-                      残り {sortedItems.length - 100} 件を表示
+                      残り {displayItems.length - 100} 件を表示
                     </button>
                   </div>
                 )}
