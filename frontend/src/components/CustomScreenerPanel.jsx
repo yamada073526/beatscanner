@@ -516,8 +516,10 @@ export const PRESET_PREDICATES = {
   //   new_high_signal=is_new OR near_high (緩90/標95/厳97)。厳=97 化で実ブレイク手前も拾い 0件恒常化を回避。
   //   rs_percentile: 緩=標=standard(≥80・オニール L 最低ライン)/厳=strict(≥90)。旧 'auto' は緩≥70 でノイズ膨張(215件)。
   //   買い場圏(buy_zone_g)は撤去: near≥97 が extended 回避(pivot近接)を構造的に代替するため 厳の重複 gate を解消。
+  //   volume_surge: 厳=standard(40) に緩和 (旧 strict=50)。Premium 実測で厳=1件だったため follow-up
+  //     (金融推奨の最小緩和: vol は市況依存で quality 信号でないため最初に緩める。EPS は CANSLIM の C で最後)。
   //   beatOnly は gate 維持。count==list は buildActiveGrades+itemPasses で自動保証。
-  new_high_break: { grades: { rs_percentile: { loose: 'standard', standard: 'standard', strict: 'strict' }, volume_surge_pct: { loose: null, standard: 'loose', strict: 'strict' }, eps_yoy_pct: { loose: 'floor', standard: 'standard', strict: 'strict' }, new_high_signal: 'auto' }, extra: { beatOnly: true } },
+  new_high_break: { grades: { rs_percentile: { loose: 'standard', standard: 'standard', strict: 'strict' }, volume_surge_pct: { loose: null, standard: 'loose', strict: 'standard' }, eps_yoy_pct: { loose: 'floor', standard: 'standard', strict: 'strict' }, new_high_signal: 'auto' }, extra: { beatOnly: true } },
   sector_leader:  { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto', ocf_margin_pct: 'auto' }, extra: { sectorLeaderOnly: true } },
   // hot_sector: セクター算出は topSectorsByRs で計算 (sectorTopN=5 相当)
   hot_sector:     { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto' }, sectorTopN: 5, extra: { fundaPassOnly: true } },

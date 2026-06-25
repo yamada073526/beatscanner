@@ -11,8 +11,10 @@
 // 設計: 診断優先 (diagnostic-first)。click 仮定が外れても DOM presence audit + full-page capture は必ず残し、
 //   run ログから実 DOM 経路を学習して反復改善する (PDCA-over-CI)。selector は data-testid 固定で hallucination 回避。
 //
-// 状態: 既定は anon/Free。南京錠 lock crow と mseg ちら見せ は Free 状態の現象なので Trust Cliff 検証に最適。
-//   (Premium pass は DOGFOOD_TEST_* secrets が CI に入ったら別途追加可。本 script は anon で完結する。)
+// 状態: DOGFOOD_TEST_* + VITE_SUPABASE_* env があれば Premium session を注入して検証、無ければ anon/Free。
+//   anon: 南京錠 lock crow と mseg ちら見せ (Free 状態の Trust Cliff 検証)。
+//   premium: new_high_break の精度3段 件数 (B-6 で 0件回帰を実検出) を verify。Free では Premium マスクで常に0
+//     になるため、B-6 の件数 ≥1 判定は Premium session 注入時のみ有効 (auth-helper.mjs の getAuthInjection)。
 //
 // 使い方:
 //   ANTHROPIC_API_KEY=sk-... node scripts/snap-screener-v2-dogfood.mjs \
@@ -29,6 +31,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { writeFileSync, mkdirSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { getAuthInjection } from './lib/auth-helper.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_URL =
@@ -225,6 +228,21 @@ ${checksText}
     browser = await chromium.launch({ headless: true });
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 1800 } });
     const page = await ctx.newPage();
+    // ── Premium session 注入 (DOGFOOD_TEST_* + VITE_SUPABASE_* env がある時のみ・goto より先) ──
+    //   env 欠落時は null = anon/Free に graceful fallback (auth-helper が判定)。実セッション注入で
+    //   bypass flag 無し (production app 不変・security hole なし)。注入成功 = Premium 検証モード。
+    let isPremium = false;
+    const authEntries = await getAuthInjection();
+    if (authEntries) {
+      await page.addInitScript((entries) => {
+        for (const { key, value } of entries) window.localStorage.setItem(key, value);
+      }, authEntries);
+      isPremium = true;
+      console.error('[screener-v2-dogfood] Premium session 注入済 → Premium 検証モード');
+    } else {
+      console.error('[screener-v2-dogfood] anon/Free 検証モード (DOGFOOD_TEST_* 未設定)');
+    }
+    report.mode = isPremium ? 'premium' : 'free';
     const pageErrors = [];
     page.on('pageerror', (e) => pageErrors.push(String(e?.message || e).slice(0, 160)));
 
@@ -279,13 +297,15 @@ ${checksText}
     const differ = condsEarnings.length > 0 && condsBreakout.length > 0 &&
       (condsEarnings.some((k) => !setB.has(k)) || condsBreakout.some((k) => !setE.has(k)));
     const earningsHasEps = setE.has('eps_yoy_pct');           // earnings_pass 固有
-    const breakoutHasZone = setB.has('buy_zone') || setB.has('new_high_52w'); // new_high_break 固有
+    // SPEC_2026-06-25: new_high_break 固有条件 = new_high_signal (旧 'buy_zone'/'new_high_52w' は
+    //   buy_zone_g/new_high_signal へ改名 + buy_zone_g は微調整で撤去済。固有判定を現行 key に追従)。
+    const breakoutHasSignal = setB.has('new_high_signal');
     stageB4.condsEarnings = condsEarnings;
     stageB4.condsBreakout = condsBreakout;
     stageB4.found = true;
-    stageB4.verdict = (differ && earningsHasEps && breakoutHasZone) ? 'pass' : 'fail';
+    stageB4.verdict = (differ && earningsHasEps && breakoutHasSignal) ? 'pass' : 'fail';
     stageB4.checks = [{
-      check: 'earnings_pass と new_high_break で表示 conds が異なり、各 preset 固有条件 (eps_yoy_pct / buy_zone) が出る',
+      check: 'earnings_pass と new_high_break で表示 conds が異なり、各 preset 固有条件 (eps_yoy_pct / new_high_signal) が出る',
       pass: stageB4.verdict === 'pass',
       reason: `earnings=[${condsEarnings.join(',')}] / breakout=[${condsBreakout.join(',')}]`,
     }];
@@ -299,16 +319,24 @@ ${checksText}
     const isEmpty = breakoutAudit?.counts?.empty;
     // 標準精度の件数 (取得不可なら緩/厳でフォールバック)。
     const stdCount = seg.standard != null ? seg.standard : (seg.loose != null ? seg.loose : seg.strict);
-    const hasCount = breakoutAudit != null && isEmpty === false && stdCount != null && stdCount >= 1;
+    // auth-aware: anon/Free では new_high_break は Premium マスクで常に 0/0/0 = 正常 (regression でない)。
+    //   0件回帰の実検出は Premium session 注入時のみ意味を持つ (Free で件数≥1 を要求すると恒常 false-fail)。
+    let hasCount, b6reason, b6check;
+    if (isPremium) {
+      hasCount = breakoutAudit != null && isEmpty === false && stdCount != null && stdCount >= 1;
+      b6reason = `[premium] empty=${isEmpty} / seg=緩${seg.loose}・標${seg.standard}・厳${seg.strict} (標準≥1 を要求)`;
+      b6check = '[premium] 新高値ブレイクが 0件 でない (結果空状態でなく、精度3段の標準件数 ≥1)';
+    } else {
+      hasCount = true; // Free: マスクで 0 が正常。lock crow 自体は Stage B-3 lock crow で別途検証。
+      b6reason = `[free] new_high_break は Premium マスクで 0 が正常・件数判定は Premium run のみ / seg=緩${seg.loose}・標${seg.standard}・厳${seg.strict}`;
+      b6check = '[free] new_high_break は Premium マスクで 0 が正常 (件数 0件回帰の判定は Premium run でのみ実施)';
+    }
     stageCount.found = breakoutAudit != null;
     stageCount.counts = seg;
     stageCount.resultEmpty = isEmpty;
+    stageCount.mode = isPremium ? 'premium' : 'free';
     stageCount.verdict = hasCount ? 'pass' : 'fail';
-    stageCount.checks = [{
-      check: '新高値ブレイクが本番で 0件 でない (結果空状態でなく、精度3段の件数が ≥1)',
-      pass: hasCount,
-      reason: `empty=${isEmpty} / seg=緩${seg.loose}・標${seg.standard}・厳${seg.strict}`,
-    }];
+    stageCount.checks = [{ check: b6check, pass: hasCount, reason: b6reason }];
     report.stages.push(stageCount);
 
     // adv ON を保証する小 helper
