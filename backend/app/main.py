@@ -154,6 +154,7 @@ class _YFinanceNoiseFilter(_logging.Filter):
         '"quoteSummary":{"result":null',
         "Too Many Requests",  # yfinance 429 rate limit (transient)
         "Rate limited",
+        "Failed to perform, curl",  # curl_cffi/yfinance の curl (16) http2 framing transient
     )
     def filter(self, record):  # True = keep, False = drop
         try:
@@ -19386,7 +19387,7 @@ async def cron_scan_all(
     return {
         "cup_scan": _normalize(cup_result),
         "rs_scan": _normalize(rs_result),
-        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
         "any_failed": any_failed,
     }
 
