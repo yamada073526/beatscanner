@@ -24,13 +24,11 @@
  */
 
 import { useState, useRef, useEffect, Suspense, lazy, Component } from 'react';
-import Chip, { ChipGroup } from '../../components/ui/Chip.jsx';
 import BrandPulse from '../../components/ui/BrandPulse.jsx';
 import StrategyPresetBar, { STRATEGY_PRESETS } from '../../components/StrategyPresetBar.jsx';
 
 // 既存 component を lazy で再利用 (一気書き換えしない、C-9)
 const CustomScreenerPanel = lazy(() => import('../../components/CustomScreenerPanel.jsx'));
-const ScreenerPane = lazy(() => import('./ScreenerPane.jsx'));
 
 // Phase A: プリセット件数算出用 import。
 // CustomScreenerPanel は lazy chunk だが、countPreset / PRESET_PREDICATES は
@@ -155,7 +153,6 @@ function MasterLoading() {
  *       `user` / `isPro` は受け取らないため props として渡さない (落とし穴2: props 名推測の排除)。
  */
 export default function ScreenerMaster({
-  detailContext,
   isProUser = false,
   handleUpgradeRequest,
   onSelect,
@@ -165,9 +162,6 @@ export default function ScreenerMaster({
   plan = 'free',
 }) {
   // C-12: workspaceStore に混入しない — local state のみで管理
-  // mode: 'preset' (今日の注目) | 'custom' (自分で絞る)
-  const [mode, setMode] = useState('preset');
-
   // 戦略プリセット bar: 選択中の戦略 key (null = 未選択)
   const [activeStrategy, setActiveStrategy] = useState(null);
   // CustomScreenerPanel の applyStrategy を呼ぶための ref
@@ -204,17 +198,10 @@ export default function ScreenerMaster({
     return () => { alive = false; };
   }, []);
 
-  /** 戦略プリセット選択ハンドラ */
+  /** 戦略プリセット選択ハンドラ (mockup v8 準拠で custom 一本化・mode 切替廃止)。
+      CustomScreenerPanel は常時 mount のため即 imperative apply。 */
   function handleStrategySelect(presetKey) {
     setActiveStrategy(presetKey);
-    // IA昇格 (SPEC §IA L144「上部に戦略プリセット(1クリック)→ その下絞り込み条件で精度調整」):
-    // 戦略選択は custom (絞り込み) surface の 1クリック入口。preset(注目) モードで選択されたら
-    // custom へ自動切替 (原則4「1クリックを減らせ」)。切替で CustomScreenerPanel が新規 mount
-    // される場合は ref が null のため、initialStrategy prop で mount 時適用 (二重適用は panel 側 guard)。
-    if (presetKey != null && mode !== 'custom') {
-      setMode('custom');
-    }
-    // 既に custom (panel mount 済) なら即 imperative apply。未 mount なら no-op (initialStrategy が拾う)。
     customPanelRef.current?.applyStrategy(presetKey ?? null);
   }
 
@@ -222,14 +209,23 @@ export default function ScreenerMaster({
     <MasterErrorBoundary>
     <div
       data-testid="screener-master"
-      data-mode={mode}
+      data-mode="custom"
       style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}
     >
-      {/* ── 戦略プリセット bar (IA昇格: 画面トップの主要導線) ──────────
-          SPEC §IA L144「本画面はスクリーナータブの主画面そのもの。上部に戦略プリセット
-          (1クリック)→ その下絞り込み条件で精度調整 → master-detail で結果」。
-          mode に依らず常時トップ表示 (旧: custom モード内に埋没していたものを昇格)。
-          戦略選択時は handleStrategySelect が custom surface へ誘導する。
+      {/* ── 見出し (mockup v8 h1+sub 準拠・D-1) ───────────────────────
+          embedded pane のため h1 でなく h2。sub は「右上 Free/Pro で挙動が切替わります」
+          clause を除外 (実装に該当トグルが無く Trust Cliff になるため・user 決定 2026-06-26)。 */}
+      <div className="shrink-0 px-4 pt-4 pb-3">
+        <h2 className="text-2xl font-semibold tracking-[-0.01em] text-[var(--text-primary)]">
+          スクリーナー
+        </h2>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          戦略を選ぶ →「絞り込み条件」で精度を調整。アドバンスド（Pro）で各条件を個別に緩急設定。
+        </p>
+      </div>
+
+      {/* ── 戦略プリセット bar (IA: 画面トップの主要導線) ──────────
+          SPEC §IA L144「上部に戦略プリセット(1クリック)→ その下絞り込み条件で精度調整 → 結果」。
           C-12: local state activeStrategy のみ管理 (workspaceStore に混入しない)。 */}
       <StrategyPresetBar
         active={activeStrategy}
@@ -238,81 +234,29 @@ export default function ScreenerMaster({
         isPremiumUser={isPremiumUser}
       />
 
-      {/* ── セグメントトグル (C-17: ヘッダー右寄せ、ラベル 2-4 字) ────
-          Sprint3: toolbar↔content を 1px hairline + 余白リズムで構造的に区切る
-          (詰め→抜き 境界 / 視線収束 / 痛み4 比較しやすさ。shadow ゼロ哲学) */}
-      <div
-        data-testid="screener-mode-toggle"
-        role="group"
-        aria-label="スクリーナーモード切替"
-        className="screener-master__toolbar"
-      >
-        <ChipGroup ariaLabel="スクリーナーモード" role="radiogroup">
-          <Chip
-            variant="segmented"
-            size="sm"
-            pressed={mode === 'preset'}
-            onClick={() => setMode('preset')}
-            ariaLabel="今日の注目 (プリセット)"
-            ariaPressed={mode === 'preset'}
-            data-testid="screener-mode-preset"
-          >
-            注目
-          </Chip>
-          <Chip
-            variant="segmented"
-            size="sm"
-            pressed={mode === 'custom'}
-            onClick={() => setMode('custom')}
-            ariaLabel="自分で絞り込む (カスタム)"
-            ariaPressed={mode === 'custom'}
-            data-testid="screener-mode-custom"
-          >
-            絞り込み
-          </Chip>
-        </ChipGroup>
-      </div>
-
-      {/* ── コンテンツエリア ────────────────────────────────────── */}
+      {/* ── コンテンツ: custom 一本 (mockup v8 準拠・mode 切替=「注目」3セクション廃止 D-4) ──
+          user 決定 2026-06-26「mockup通り外す(custom一本化)」。注目銘柄は戦略プリセット経由でアクセス。
+          Sprint 5 Pass B: onAddToWatchlist / watchlist / isProUser を forward。
+          ref: applyStrategy (useImperativeHandle) を StrategyPresetBar から呼ぶため。 */}
       <div
         data-testid="screener-master-content"
         className="screener-master__content"
         style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
       >
-        {mode === 'preset' ? (
-          /* preset モード: ScreenerPane (今日の注目 3 セクション) を再利用 */
-          <Suspense fallback={<MasterLoading />}>
-            <ScreenerPane
-              detailContext={detailContext}
-              isProUser={isProUser}
-              handleUpgradeRequest={handleUpgradeRequest}
-              hideHero
-              screenerV2={isScreenerV2()}
-              plan={plan}
-            />
-          </Suspense>
-        ) : (
-          /* custom モード: CustomScreenerPanel (自分で絞る Explorer) を再利用
-             C-17: filter UI は data-mode="custom" の時のみ max-height 展開 (CSS 制御)
-             Sprint 5 Pass B: onAddToWatchlist / watchlist / isProUser を forward
-             ref: applyStrategy (useImperativeHandle) を StrategyPresetBar から呼ぶため */
-          <Suspense fallback={<MasterLoading />}>
-            <CustomScreenerPanel
-              ref={customPanelRef}
-              /* IA昇格: preset→custom 切替で新規 mount される際、選択済戦略を mount 時適用 */
-              initialStrategy={activeStrategy}
-              onSelect={onSelect}
-              onUpgrade={handleUpgradeRequest}
-              onProUpgrade={onProUpgrade || handleUpgradeRequest}
-              onAddToWatchlist={onAddToWatchlist}
-              watchlist={watchlist}
-              isProUser={isProUser}
-              /* Sprint 3: 営業CFマージン facet を v2 scope に限定 (legacy には渡さない)。
-                 ScreenerMaster は screener_v2 経路でのみ mount される (Workspace.jsx)。 */
-              screenerV2={isScreenerV2()}
-            />
-          </Suspense>
-        )}
+        <Suspense fallback={<MasterLoading />}>
+          <CustomScreenerPanel
+            ref={customPanelRef}
+            initialStrategy={activeStrategy}
+            onSelect={onSelect}
+            onUpgrade={handleUpgradeRequest}
+            onProUpgrade={onProUpgrade || handleUpgradeRequest}
+            onAddToWatchlist={onAddToWatchlist}
+            watchlist={watchlist}
+            isProUser={isProUser}
+            /* Sprint 3: 営業CFマージン facet を v2 scope に限定 (legacy には渡さない)。 */
+            screenerV2={isScreenerV2()}
+          />
+        </Suspense>
       </div>
     </div>
     </MasterErrorBoundary>

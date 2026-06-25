@@ -120,6 +120,8 @@ const FACET_MAP = Object.fromEntries(
 // preset の CORE 4 metric。volume/inst_holders は preset off、override で追加 (Pass 3c)。
 const PRESET_CORE_KEYS = ['eps_yoy_pct', 'eps_cagr_3y', 'roe', 'rs_percentile'];
 const PRESET_LABELS = { loose: '緩い', standard: '標準', strict: '厳しい', severe: '最厳' };
+// 「絞り込み条件」見出しの動的サマリー用 preset 日本語名 (StrategyPresetBar STRATEGY_PRESETS と一致)。
+const PRESET_LABEL_JP = { earnings_pass: '決算合格', new_high_break: '新高値ブレイク', hot_sector: '旬のセクター', sector_leader: 'セクター別リーダー' };
 // 個別緩急 mini-segment 用の短縮ラベル (幅節約・原則1)。
 const GRADE_LABELS_SHORT = { floor: '床', loose: '緩', standard: '標', strict: '厳', severe: '最厳' };
 // grade の強弱順 (clamp / 並び順の SSOT)。
@@ -1269,10 +1271,12 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
           data-testid="ftd-regime-banner" は FtdRegimeBanner 内に付与済 (loading / main 両 state)。 */}
       <FtdRegimeBanner />
 
+      {/* mockup v8 refine header (.fh .lbl + .summ)・D-1/D-4: 「絞り込み条件」見出し +
+          動的サマリー (選択中 preset 名 ・ 精度)。条件 ON 数 N/M の動的追跡は次段階。 */}
       <div className="mb-4">
-        <h3 className="section-label">銘柄スクリーナー</h3>
-        <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-          条件を組み合わせて絞り込む
+        <h3 className="section-label">絞り込み条件</h3>
+        <p className="mt-0.5 text-xs text-[var(--text-muted)]" data-testid="screener-refine-summary">
+          {(activePreset && PRESET_LABEL_JP[activePreset]) || 'すべての銘柄'} ・ 精度「{PRESET_LABELS[preset]}」
         </p>
       </div>
 
