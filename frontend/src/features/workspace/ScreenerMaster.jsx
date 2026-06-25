@@ -220,7 +220,8 @@ export default function ScreenerMaster({
           スクリーナー
         </h2>
         <p className="mt-1 text-sm text-[var(--text-muted)]">
-          戦略を選ぶ →「絞り込み条件」で精度を調整。アドバンスド（Pro）で各条件を個別に緩急設定。
+          戦略を選ぶ →「絞り込み条件」で精度を調整。
+          <strong className="font-semibold text-[var(--text-secondary)]">アドバンスド（Pro）で各条件を個別に緩急設定</strong>。
         </p>
       </div>
 
