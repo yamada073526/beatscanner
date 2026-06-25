@@ -13430,6 +13430,13 @@ body.is-digest-resizing {
   flex-wrap: nowrap;            /* 1 行固定: 375px でも applied-summary の truncate が吸収 */
   min-width: 0;
 }
+/* mockup v8 .ctrl-lab: 精度 seg 左の常時ラベル (X-2)。12px muted・nowrap で 1 行固定を維持 */
+.screener-ctrl-lab {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
 .screener-applied-summary {
   line-height: 1.4;            /* token 化: raw 行高を避け可読性確保 */
 }

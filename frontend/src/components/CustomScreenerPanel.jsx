@@ -1380,6 +1380,8 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
             className="screener-control-bar flex items-center gap-2"
             data-testid="screener-control-bar"
           >
+            {/* X-2: 精度ラベル (mockup .ctrl-lab)。常時表示。seg の aria-label="精度" と重複するため aria-hidden */}
+            <span className="screener-ctrl-lab" aria-hidden="true">精度</span>
             {/* 左: 厳しさ精度スライド (B-2: sliding thumb・mockup .seg 準拠。緩い/標準/厳しい 3 段) */}
             <div
               className="screener-precision-seg shrink-0"
