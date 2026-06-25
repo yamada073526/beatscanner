@@ -164,6 +164,12 @@ class FMPClient:
             return data
         return []
 
+    async def intraday_5min(self, ticker: str) -> list[dict]:
+        """5分足 intraday OHLCV (/stable/historical-chart/5min)。最新が先頭 (date DESC) で返る。
+        1D sparkline 用 (旧 yfinance intraday の置換、Railway crumb 401 回避)。"""
+        data = await self._get("/historical-chart/5min", {"symbol": ticker.upper()})
+        return data if isinstance(data, list) else []
+
     async def earnings_transcript(self, ticker: str, year: int, quarter: int) -> list[dict]:
         return await self._get(
             "/earning-call-transcript",

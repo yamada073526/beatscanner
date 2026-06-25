@@ -6575,13 +6575,8 @@ async def _fetch_eps_data(ticker: str, fmp_key: str) -> dict:
         except Exception:
             pass
 
-    if not surprises:
-        try:
-            surprises = await yfinance_source.fetch_earnings_surprises(ticker, limit=8)
-            if surprises:
-                source = "yfinance"
-        except Exception:
-            pass
+    # 旧 yfinance fallback は Railway クラウド IP で常時 401 (crumb) の dead path だったため削除
+    # (FMP → Alpha Vantage で代替済み)。
 
     eps_actual = None
     eps_estimated = None
@@ -6679,73 +6674,42 @@ async def _fetch_eps_data(ticker: str, fmp_key: str) -> dict:
 
 
 async def _fetch_revenue_data(ticker: str, ref_date: str | None = None) -> dict:
-    """yfinance から売上高実績と予想を取得する（FMP Limit Reach 対策）."""
-    import yfinance as _yf_rev
-    import pandas as _pd_rev
-    from datetime import datetime as _dt_rev
+    """FMP の quarterly income-statement から売上高実績を取得する補完 fetch.
 
-    def _fetch_yf_quarterly_revenue() -> tuple[float | None, str | None]:
-        _t = _yf_rev.Ticker(ticker)
-        qf = _t.quarterly_income_stmt
-        if qf is None or (hasattr(qf, "empty") and qf.empty):
-            qf = getattr(_t, "quarterly_financials", None)
-        if qf is None or (hasattr(qf, "empty") and qf.empty):
-            return None, None
-        _rev_row = None
-        for _key in ("Total Revenue", "Operating Revenue"):
-            if _key in qf.index:
-                _rev_row = qf.loc[_key]
-                break
-        if _rev_row is None:
-            return None, None
-        _best_col = None
-        if ref_date:
+    旧実装は yfinance (quarterly_income_stmt / revenue_estimate) だったが、Railway クラウド IP では
+    Yahoo crumb 認証で常時 401 となり機能していなかった (Sentry BACKEND-A noise の主因の一つ:
+    guidance/basic の gather で毎回 2 回 yfinance を叩いていた)。FMP income-statement(quarter) に
+    置換し、本番で revenue_actual 補完を実際に機能させつつノイズを除去する。
+    revenue 予想は呼び出し元が FMP analyst-estimates で primary 取得済みのため、ここでは扱わない
+    (revenue_estimated_yf は互換のため key を残し None 固定)。
+    """
+    from datetime import datetime as _dt_rev
+    rev_actual: float | None = None
+    rev_date: str | None = None
+    try:
+        rows = await FMPClient().income_statement(ticker, limit=8, period="quarter")
+        cand = [r for r in rows if isinstance(r, dict) and r.get("date") and r.get("revenue") is not None] if isinstance(rows, list) else []
+        best = None
+        if ref_date and cand:
             try:
-                _ref_dt = _dt_rev.fromisoformat(ref_date)
-                for _col in sorted(qf.columns, reverse=True):
-                    _col_str = _col.strftime("%Y-%m-%d") if hasattr(_col, "strftime") else str(_col)[:10]
-                    _col_dt = _dt_rev.fromisoformat(_col_str)
+                _ref_dt = _dt_rev.fromisoformat(str(ref_date)[:10])
+                # ref_date 以前で最も近い四半期 (旧 yfinance の -30 日許容ロジックを踏襲)
+                for r in sorted(cand, key=lambda x: str(x["date"]), reverse=True):
+                    _col_dt = _dt_rev.fromisoformat(str(r["date"])[:10])
                     if (_ref_dt - _col_dt).days >= -30:
-                        _best_col = _col
+                        best = r
                         break
             except Exception:
-                pass
-        if _best_col is None:
-            _best_col = qf.columns[0]
-        _date_str = _best_col.strftime("%Y-%m-%d") if hasattr(_best_col, "strftime") else str(_best_col)[:10]
-        _val = _rev_row[_best_col]
-        if _pd_rev.isna(_val):
-            return None, None
-        return float(_val), _date_str
-
-    def _fetch_yf_rev_est() -> float | None:
-        t_est = _yf_rev.Ticker(ticker)
-        est_df = getattr(t_est, "revenue_estimate", None)
-        if est_df is None or (hasattr(est_df, "empty") and est_df.empty):
-            return None
-        for _row_key in ("Avg Estimate", "avg"):
-            if _row_key in est_df.index:
-                _row = est_df.loc[_row_key]
-                for _col in ["0q", "-1q"]:
-                    if _col in _row.index:
-                        _val = _row[_col]
-                        if _val is not None and not _pd_rev.isna(_val) and float(_val) > 0:
-                            return float(_val)
-        return None
-
-    try:
-        rev_actual, rev_date = await asyncio.to_thread(_fetch_yf_quarterly_revenue)
+                best = None
+        if best is None and cand:
+            best = cand[0]  # FMP は date DESC 返却 = 最新四半期
+        if best is not None:
+            rev_actual = float(best["revenue"])
+            rev_date = str(best["date"])[:10]
     except Exception as e:
-        print(f"yfinance quarterly revenue fallback failed: {e}")
-        rev_actual, rev_date = None, None
+        print(f"FMP quarterly revenue fetch failed: {e}")
 
-    try:
-        rev_est = await asyncio.to_thread(_fetch_yf_rev_est)
-    except Exception as e:
-        print(f"yfinance revenue estimate fallback failed: {e}")
-        rev_est = None
-
-    return {"revenue_actual": rev_actual, "income_date": rev_date, "revenue_estimated_yf": rev_est}
+    return {"revenue_actual": rev_actual, "income_date": rev_date, "revenue_estimated_yf": None}
 
 
 # 四半期決算履歴 (Pro 同梱機能)。ticker 単位 1h キャッシュで FMP 呼出を抑制。
@@ -8231,15 +8195,37 @@ _INTRADAY_CACHE_TTL = 60.0
 
 @app.get("/api/price-intraday/{ticker}")
 async def price_intraday(ticker: str) -> dict:
-    """1 日 intraday の 5 分足 close を返す。yfinance、60 秒 cache."""
+    """1 日 intraday の 5 分足 close を返す。FMP /historical-chart/5min、60 秒 cache.
+
+    旧実装は yfinance (period=1d interval=5m) だったが Railway クラウド IP では Yahoo crumb 認証で
+    常時 401 となり sparkline が空だった (Sentry BACKEND-A noise + 機能後退)。FMP 5min に置換。
+    """
     now = _time.monotonic()
     cached = _INTRADAY_CACHE.get(ticker)
     if cached and now - cached["ts"] < _INTRADAY_CACHE_TTL:
         return cached["data"]
     try:
-        bars = await yfinance_source.fetch_price_intraday(ticker)
+        rows = await FMPClient().intraday_5min(ticker)
     except Exception:
-        bars = []
+        rows = []
+    bars: list[dict] = []
+    for r in (rows or []):
+        if not isinstance(r, dict):
+            continue
+        d = r.get("date")
+        c = r.get("close")
+        if not d or c is None:
+            continue
+        try:
+            cval = float(c)
+        except (TypeError, ValueError):
+            continue
+        if cval != cval:  # NaN
+            continue
+        # FMP date "YYYY-MM-DD HH:MM:SS" → ISO "YYYY-MM-DDTHH:MM:SS" (frontend Date.parse 互換)
+        bars.append({"time": str(d).replace(" ", "T"), "close": cval})
+    # FMP は date DESC 返却 → ASC に並べ替え (末尾 = 最新を前提とする後続 filter のため)
+    bars.reverse()
     # 最新営業日のみに絞り込み: 末尾の date 部分が同じものだけ採用
     if bars:
         last_date = bars[-1]["time"][:10]
@@ -8312,14 +8298,10 @@ async def price_history(ticker: str, request: Request, period: str = Query("1y")
         except Exception:
             surprises = []
 
-    # FMP有料制限・空リスト・非listの場合はyfinanceにフォールバック
-    # source="yfinance" タグを付与してAVより低優先度にする
-    if not surprises or not isinstance(surprises, list):
-        try:
-            yf_raw = await yfinance_source.fetch_earnings_surprises(ticker, limit=16)
-            surprises = [{**s, "source": "yfinance"} for s in yf_raw]
-        except Exception:
-            surprises = []
+    # 旧 yfinance fallback は Railway クラウド IP で常時 401 (crumb) の dead path だったため削除。
+    # FMP が空でも以降の Alpha Vantage マージで補完する。型の保険のみ残す。
+    if not isinstance(surprises, list):
+        surprises = []
 
     # Alpha Vantage で過去40四半期の履歴を取得してマージし、四半期単位で重複排除
     # source="av" タグを付与（優先度: fmp > av > yfinance）
