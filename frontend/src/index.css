@@ -13759,6 +13759,27 @@ body.is-digest-resizing {
 .screener-secdetail__nm { overflow: hidden; font-size: 12px; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .screener-secrow { transition: none; } }
 
+/* mockup v8 .refine .fh — 「絞り込み条件」1行ヘッダー (tune icon + label + summary + 該当N銘柄 live count)。
+   hero-count を廃止し件数を本ヘッダーへ1本化 (D・件数二重表示の解消)。 */
+.screener-refine-fh {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.screener-refine-fh__ti { display: inline-flex; flex: none; color: var(--text-muted); }
+.screener-refine-fh__lbl { flex: none; margin: 0; font-size: 13px; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
+.screener-refine-fh__summ {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.screener-refine-fh__live { margin-left: auto; flex: none; font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+.screener-refine-fh__live b { display: inline-block; font-size: 20px; font-weight: 700; color: var(--color-gold-mid); font-variant-numeric: tabular-nums; }
+
 .screener-adv-bar { margin-bottom: var(--space-2); }
 /* アドバンスド toggle (role=switch)。OFF=精度のみ / ON=個別緩急 mini-segment 露出。 */
 .screener-adv-toggle {

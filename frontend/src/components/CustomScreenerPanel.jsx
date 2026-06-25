@@ -1274,10 +1274,14 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       {/* mockup v8 refine header (.fh .lbl + .summ)・D-1/D-4: 「絞り込み条件」見出し +
           動的サマリー (選択中 preset 名 ・ 精度)。条件 ON 数 N/M の動的追跡は次段階。 */}
       <div className="mb-4">
-        <h3 className="section-label">絞り込み条件</h3>
-        <p className="mt-0.5 text-xs text-[var(--text-muted)]" data-testid="screener-refine-summary">
-          {(activePreset && PRESET_LABEL_JP[activePreset]) || 'すべての銘柄'} ・ 精度「{PRESET_LABELS[preset]}」
-        </p>
+        <div className="screener-refine-fh">
+          <span className="screener-refine-fh__ti"><SlidersHorizontal size={16} strokeWidth={2} aria-hidden /></span>
+          <h3 className="screener-refine-fh__lbl">絞り込み条件</h3>
+          <span className="screener-refine-fh__summ" data-testid="screener-refine-summary">
+            {(activePreset && PRESET_LABEL_JP[activePreset]) || 'すべての銘柄'} ・ 精度「{PRESET_LABELS[preset]}」
+          </span>
+          <span className="screener-refine-fh__live">該当 <b>{universeLoading ? '–' : filteredItems.length}</b> 銘柄</span>
+        </div>
       </div>
 
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1354,11 +1358,8 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                   <span className="text-xs text-[var(--text-muted)]">該当なし</span>
                 )}
               </div>
-              {/* 右: 件数 + staleness (毎朝更新サイクル文言、X分前は不使用) */}
+              {/* 右: staleness (毎朝更新サイクル文言、X分前は不使用)。件数は refine header の「該当N銘柄」へ1本化 (D・二重表示の解消)。 */}
               <div className="flex items-center gap-2 shrink-0">
-                <span className="text-sm font-medium text-[var(--text-secondary)]" data-testid="screener-hero-count">
-                  {filteredItems.length}件ヒット
-                </span>
                 {universe.as_of && (
                   <span className="text-xs text-[var(--text-muted)]" data-testid="screener-hero-staleness">
                     {formatAsOf(universe.as_of)}（毎朝更新）
