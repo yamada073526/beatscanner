@@ -1545,13 +1545,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                       }}
                       data-testid="screener-adv-toggle"
                     >
-                      <SlidersHorizontal size={13} strokeWidth={2} aria-hidden />
+                      <span className="screener-adv-toggle__sw" aria-hidden />
                       <span>アドバンスド（個別に緩急）</span>
                       {advLocked && <span className="screener-adv-pro" aria-label="Pro 機能">Pro</span>}
-                      <ChevronDown
-                        size={13} strokeWidth={2} aria-hidden
-                        style={{ transform: advOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}
-                      />
                     </button>
                     {isCustom && (
                       <span className="screener-custom-tag" data-testid="screener-custom-tag">カスタム</span>
