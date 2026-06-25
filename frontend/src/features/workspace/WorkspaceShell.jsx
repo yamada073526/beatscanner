@@ -34,11 +34,11 @@ import { useWorkspaceStore } from '../../state/workspaceStore.js';
 // 縦書きになるのを防止)。collapsibleSize=4 は維持、minSize 未満は collapse 発火.
 const PANE_DEFAULTS_3 = {
   pane1: { defaultSize: 19, minSize: 16, maxSize: 30, collapsibleSize: 4 },
-  // v250 #5 / pane幅広化(B案): screener idle で Pane2 を主役 (~58%) に imperative resize するため maxSize を 52→60 に拡張。
-  //   default は 25% 据置 (他タブ/初回は従来通り)。Pane3 minSize 23 とは Pane2 58% + Pane1 19% + Pane3 23% で両立。
-  pane2: { defaultSize: 25, minSize: 18, maxSize: 60 },
-  // v250 #5 / pane幅広化(B案): idle で Pane3 を 23% (placeholder) まで絞れるよう minSize 27→23 (default 56% は据置)。
-  pane3: { defaultSize: 56, minSize: 23 },
+  // v250 #5 / pane幅広化(B案): screener idle で Pane2 を主役 (~62%・strategy tile 縦化で title 1行) に imperative resize するため maxSize を 52→62 に拡張。
+  //   default は 25% 据置 (他タブ/初回は従来通り)。Pane3 minSize 20 とは Pane2 62% + Pane1 18% + Pane3 20% で両立。
+  pane2: { defaultSize: 25, minSize: 18, maxSize: 62 },
+  // v250 #5 / pane幅広化(B案): idle で Pane3 を 20% (placeholder) まで絞れるよう minSize 27→20 (default 56% は据置)。
+  pane3: { defaultSize: 56, minSize: 20 },
 };
 const PANE_DEFAULTS_4 = {
   pane1: { defaultSize: 19, minSize: 16, maxSize: 28, collapsibleSize: 4 },
