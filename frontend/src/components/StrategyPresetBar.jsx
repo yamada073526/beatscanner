@@ -31,8 +31,8 @@ export const STRATEGY_PRESETS = [
   {
     key: 'new_high_break',
     label: '新高値ブレイク',
-    title: '52週高値を更新し、買い場圏 (pivot ≤+5%) にある銘柄',
-    desc: '52週高値を更新し、買い場圏（節目+5%以内）にある銘柄',
+    title: '52週高値圏にある好決算銘柄。精度を上げるほど実ブレイク・買い場圏に純化',
+    desc: '52週高値圏（高値圏〜実ブレイク）の好決算銘柄',
     Icon: TrendingUp,
     tier: 'prem',
     tierLabel: 'Premium',
