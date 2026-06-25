@@ -988,8 +988,8 @@ export default function Workspace({
         // detail = Pane3 主役 (一覧は補助、横スクロール許容)
         p2.resize(28); resizeP3(56);
       } else {
-        // idle = Pane2 主役 (一覧で overview 全列が横スクロールなしで収まる)。Pane3 27% placeholder。
-        p2.resize(52); resizeP3(27);
+        // idle = Pane2 主役 (strategy tile 4列が折返さない幅)。Pane3 23% placeholder。pane幅広化(B案): 52→58。
+        p2.resize(58); resizeP3(23);
       }
     } else if (savedPane2BeforeScreener.current != null) {
       // screener 離脱: 退避した幅に復元 (home/indices の手動値を尊重)
