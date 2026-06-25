@@ -9,8 +9,10 @@ name: Screener v2 Dogfood (本番 B-3 / Phase C 自動目視)
 #   (CLAUDE.md「本番直送」精神と整合、playwright_smoke / vision_eval と同方針)。
 #
 # 既知の制約:
-#   - 既定は anon/Free 状態を検証 (南京錠 lock crow + mseg ちら見せ は Free 状態の現象 = Trust Cliff 検証に最適)。
-#     Premium pass は DOGFOOD_TEST_* secrets が入れば別途追加可。
+#   - DOGFOOD_TEST_* + VITE_SUPABASE_* secrets が揃えば Premium session を注入し、new_high_break の
+#     精度3段 件数 (B-6 で 0件回帰を実検出) を検証する。未設定なら anon/Free を検証 (南京錠 lock crow +
+#     mseg ちら見せ = Free の Trust Cliff 検証)。Premium テスト垢は subscriptions に {tier:'premium',
+#     status:'active'} 行が必要 (auth-helper.mjs の signInWithPassword で実セッション取得)。
 #   - ANTHROPIC_API_KEY 未設定時: capture + DOM audit のみ (exit 0、workflow 緑維持)。
 #   - 本番 universe fetch を伴うため push 多発時は注意 (通常 1-2 push/day で問題なし)。
 #
@@ -51,6 +53,12 @@ jobs:
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       SNAP_URL: ${{ github.event.inputs.url || 'https://beatscanner-production.up.railway.app/?layout=workspace&pillar2_pane1=1&tab=screener&screener_v2=1' }}
+      # Premium 検証 (任意): 4 secrets が揃えば auth-helper が Premium session を注入し、B-6 が
+      #   new_high_break の精度3段 件数 (0件回帰) を実検出する。未設定なら anon/Free に graceful fallback。
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      DOGFOOD_TEST_EMAIL: ${{ secrets.DOGFOOD_TEST_EMAIL }}
+      DOGFOOD_TEST_PASSWORD: ${{ secrets.DOGFOOD_TEST_PASSWORD }}
 
     steps:
       - name: Checkout
