@@ -349,10 +349,13 @@ ${checksText}
       }
     };
 
-    // ── Stage B-3 mseg: earnings_pass (eps系 grade = 緩/標/厳/最厳 の4段) で mseg を検証 ──
-    // 注: new_high_break の先頭 grade は RS で、RS は仕様上 3段 (≥70/≥80/≥90) のため 4段検証に不向き。
-    //     4段を持つ eps grade を含む earnings_pass で検証する (先頭 mseg crow = eps_yoy_pct)。
-    const stageMseg = { name: 'b3_mseg', label: 'B-3: mseg 個別緩急 (緩/標/厳/最厳)', checks: CHECKS.b3_mseg };
+    // ── Stage B-3 mseg: earnings_pass の eps_yoy_pct grade (緩/標/厳/最厳 の4段) で mseg を検証 ──
+    // 注: new_high_break の先頭 grade は RS で 3段 (≥70/≥80/≥90)。4段を持つのは eps_yoy_pct のみ。
+    //   見切れ修正 (2026-06-25): 旧実装は ":has(mseg).first()" で先頭 mseg crow を撮っていたが、earnings_pass
+    //   の先頭 cond は ocf_margin_pct (3段) のため vision が「最厳が無い」と恒常誤 fail していた (targeting bug)。
+    //   ① capture を 4段を持つ eps_yoy_pct の crow に固定 (見切れ解消) ② 4段の有無は DOM count で確定判定
+    //   (vision ノイズに依存しない・CLAUDE.md「DOM で検証できるものを vision に委ねない」規律)。
+    const stageMseg = { name: 'b3_mseg', label: 'B-3: mseg 個別緩急 (緩/標/厳/最厳)' };
     try {
       await selectPreset(page, 'earnings_pass');
       await ensureAdv();
@@ -360,13 +363,22 @@ ${checksText}
       stageMseg.error = String(e?.message || e).slice(0, 200);
     }
     report.audits.afterAdvEarnings = await auditDom(page);
-    const capMseg = await captureRegion(
-      page,
-      '[data-testid="screener-cond-row"]:has([data-testid^="screener-mseg-"])',
-      '21-b3-mseg-crow.png',
-    );
+    // DOM 確定判定: eps_yoy_pct の精度セグメントが 4 段 (緩/標/厳/最厳) 描画されているか。
+    const msegEpsCount = report.audits.afterAdvEarnings?.presentKinds?.['screener-mseg-eps_yoy_pct-*'] || 0;
+    // capture は 4段を持つ eps_yoy_pct の crow を明示 (見切れ防止)。無ければ任意 mseg crow に fallback。
+    let capMseg = await captureRegion(page, '[data-testid="screener-cond-row"][data-cond="eps_yoy_pct"]', '21-b3-mseg-crow.png');
+    if (!capMseg.found) {
+      capMseg = await captureRegion(page, '[data-testid="screener-cond-row"]:has([data-testid^="screener-mseg-"])', '21-b3-mseg-crow.png');
+    }
     stageMseg.found = capMseg.found;
     stageMseg.screenshot = capMseg.screenshot;
+    stageMseg.msegEpsCount = msegEpsCount;
+    stageMseg.verdict = msegEpsCount === 4 ? 'pass' : 'fail';
+    stageMseg.checks = [{
+      check: 'eps_yoy_pct の精度セグメントが 4 段 (緩/標/厳/最厳) 描画されている (DOM 確定判定)',
+      pass: msegEpsCount === 4,
+      reason: `screener-mseg-eps_yoy_pct DOM count=${msegEpsCount} (期待4)`,
+    }];
     report.stages.push(stageMseg);
 
     // ── Stage B-3 lock crow: new_high_break (買い場圏/52週高値 = locked) で南京錠を検証 ──
