@@ -69,6 +69,17 @@ if _SENTRY_DSN:
         # before_send 内の例外で Sentry 自体を壊さないよう try/except で包む。
         def _sentry_before_send(event, hint):
             try:
+                # yfinance Yahoo 401/crumb 等のノイズを最終ゲートで一元 drop。
+                # logging.Filter は logger 階層を伝播しない（親 "yfinance" に addFilter しても
+                # 子 "yfinance.data" が出すレコードには効かない）ため、_YFinanceNoiseFilter を
+                # logger に付けるだけでは取りこぼす。exc_info の有無に関わらず message パターンで
+                # ここで確実に止める (Sentry BACKEND-A: deploy 後も直近 24h 20+ events の主犯)。
+                _le = event.get("logentry") or {}
+                _msg = _le.get("formatted") or _le.get("message") or event.get("message") or ""
+                if _msg:
+                    for _pat in _YFinanceNoiseFilter._NOISE_PATTERNS:
+                        if _pat in _msg:
+                            return None
                 exc_info = hint.get("exc_info") if hint else None
                 if not exc_info:
                     return event
@@ -137,7 +148,7 @@ class _YFinanceNoiseFilter(_logging.Filter):
         # (2026-06-21 Sentry 週報 BACKEND 770+15 events の主犯)。データ取得は FMP に移行済だが、
         # 別経路の yfinance が 401 を吐いても Sentry を圧迫しないよう noise として drop。
         "401 Client Error",
-        "HTTP error 401",
+        "HTTP Error 401",  # curl_cffi HTTPError の format (大文字 E)。旧 "HTTP error 401" は実メッセージと不一致で素通りしていた
         '"finance":{"result":null',
     )
     def filter(self, record):  # True = keep, False = drop
@@ -5125,7 +5136,10 @@ async def search(request: Request, q: str = Query(..., min_length=1)) -> list[di
         この問題に対処するため、まず MASTER_TICKERS（主要 US 株リスト）の prefix マッチを優先する。"""
     client = FMPClient(api_key=_get_fmp_key(request))
     fmp_task = asyncio.create_task(client.search(q, limit=20))
-    yf_task  = asyncio.create_task(yfinance_source.search(q, max_results=8))
+    # 旧: yfinance.Search を FMP と並列起動していたが、Railway クラウド IP は Yahoo の crumb 認証で
+    # 常に 401 (Invalid Crumb) を食らい空を返す dead fallback だった (Sentry BACKEND-A noise の一因)。
+    # かつ await yf_task が 401/timeout まで search 全体を律速していた。MASTER_TICKERS + FMP で
+    # 主要銘柄はカバーできるため削除し、レイテンシとノイズを同時に削減する。
 
     # ── マスタ銘柄優先マッチング（FMP/yfinance より前に追加） ──
     from .tickers_master import MASTER_TICKERS
@@ -5157,20 +5171,15 @@ async def search(request: Request, q: str = Query(..., min_length=1)) -> list[di
                     break
 
     fmp_data: list[dict] = []
-    yf_data:  list[dict] = []
     try:
         fmp_data = await fmp_task
     except FMPError:
         pass
-    try:
-        yf_data = await yf_task
-    except Exception:
-        pass
 
-    # シンボルで重複排除（master → FMP → yfinance の優先順）
+    # シンボルで重複排除（master → FMP の優先順）
     seen: set[str] = set()
     merged: list[dict] = []
-    for item in master_hits + fmp_data + yf_data:
+    for item in master_hits + fmp_data:
         sym = item.get("symbol", "")
         if sym and sym not in seen:
             seen.add(sym)
