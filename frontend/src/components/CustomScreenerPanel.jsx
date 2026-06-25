@@ -1362,10 +1362,6 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                 )}
               </div>
             </div>
-            {/* 免責 (景表法§5/§38) */}
-            <p className="mt-1.5 text-[0.6875rem] leading-tight text-[var(--text-muted)]" data-testid="screener-hero-disclaimer">
-              スクリーニング結果であり投資推奨ではありません。
-            </p>
           </div>
 
           {/* ── Sprint 2 Pass 2a: 1 行コンパクト操作帯 (screener-control-bar) ──
@@ -2312,6 +2308,20 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
           </div>
         </div>
       )}
+
+      {/* スクリーナー全体の底部免責 (mockup v8 .disclaimer 準拠: bottom-of-page・amber left-border)。
+          §38/景表法§5: 「条件に合致した一覧」であり買い推奨でない旨を明示。旧: hero 内 0.6875rem 微小テキスト
+          (screener-hero-disclaimer) を廃し、全 state (loading/error/empty/main) 共通で常時表示するため
+          universe main の外に置く。 */}
+      <div
+        className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-3 text-xs leading-relaxed text-[var(--text-muted)]"
+        style={{ borderLeftWidth: '3px', borderLeftColor: 'var(--color-warning)' }}
+        data-testid="screener-disclaimer"
+      >
+        これらは買い推奨ではなく、各戦略の
+        <strong className="font-semibold text-[var(--text-secondary)]">条件に合致した銘柄の一覧</strong>
+        です。最終的な投資判断はご自身で行ってください。
+      </div>
     </section>
   );
 });
