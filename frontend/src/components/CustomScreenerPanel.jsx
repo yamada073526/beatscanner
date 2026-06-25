@@ -696,6 +696,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   const [sectorLeaderOnly, setSectorLeaderOnly] = useState(false);
   // Phase C: 現在適用中の戦略 preset key (master-detail view 切替に使用・表示専用)。
   const [activePreset, setActivePreset] = useState(initialStrategy || null);
+  // D-8 sort (SPEC_2026-06-25): ユーザー制御の sort key (default = 合致度順)。applyStrategyImpl で
+  //   reset するため activePreset 付近で宣言。表示順 displayItems は後段の useMemo で算出。
+  const [sortKey, setSortKey] = useState('relevance');
   // Phase C: 旬のセクター master-detail で選択中のセクター (null = 先頭)。
   const [selectedSector, setSelectedSector] = useState(null);
   // Pass C: 件数キャップ — 初期 100 件、「残りN件を表示」で全件展開
@@ -727,6 +730,10 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     // Phase C: active preset を追跡 (hot_sector のとき master-detail view へ切替・表示専用)。
     setActivePreset(presetKey);
     setSelectedSector(null);
+    // D-8 (multi-review qa 指摘): preset 切替で sort を default (合致度順) に戻す。前 preset の
+    //   sort 残留 (例: 時価総額順のまま別 preset へ) を防ぐ。BeatScanner は合致度順 default のため
+    //   context 変化で reset が自然。
+    setSortKey('relevance');
     // まず共通リセット (overrides / binary facets)
     setPreset('standard');
     setOverrides({});
@@ -887,11 +894,11 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   );
   const isSectorView = activePreset === 'hot_sector' && sectorSummary.length > 0;
 
-  // D-8 sort (SPEC_2026-06-25): ユーザー制御の sort key (default = 合致度順を維持)。
-  const [sortKey, setSortKey] = useState('relevance');
-  // 表示順 displayItems: 'relevance' は合致度 (sortedItems) を維持。それ以外は filteredItems を
-  //   sortRows で並べ替え。metric で preset 未マップなら合致度順に fallback。
+  // D-8 sort (SPEC_2026-06-25): 表示順 displayItems。'relevance' は合致度 (sortedItems) を維持。
+  //   それ以外は filteredItems を sortRows で並べ替え。metric で preset 未マップなら合致度順に fallback
+  //   (UI 側でも当該 option を disabled 化済 = silent fallback を起こさない・multi-review 指摘)。
   //   集合不変のため displayItems.length === filteredItems.length === sortedItems.length (C-2)。
+  //   sortKey state は activePreset 付近で宣言 (applyStrategyImpl の reset 都合)。
   const displayItems = useMemo(() => {
     if (sortKey === 'relevance') return sortedItems;
     if (sortKey === 'metric' && !PRESET_METRIC_KEY[activePreset]) return sortedItems;
@@ -1976,7 +1983,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                 {/* すべて解除 */}
                 <button
                   className="ml-auto text-[11px] text-[var(--text-muted)] hover:text-[var(--color-loss)] transition-colors"
-                  onClick={() => { setPreset('standard'); setOverrides({}); setSectorFilter([]); setMcapFilter([]); setFundaPassOnly(false); setOcfMarginOnly(false); setOcfGtNiOnly(false); setBuyZoneOnly(false); setAdVolumeOnly(false); setEps3RisingOnly(false); setRev3RisingOnly(false); setCfpsRisingOnly(false); setBeatOnly(false); }}
+                  onClick={() => { setPreset('standard'); setOverrides({}); setSectorFilter([]); setMcapFilter([]); setFundaPassOnly(false); setOcfMarginOnly(false); setOcfGtNiOnly(false); setBuyZoneOnly(false); setAdVolumeOnly(false); setEps3RisingOnly(false); setRev3RisingOnly(false); setCfpsRisingOnly(false); setBeatOnly(false); setSortKey('relevance'); /* D-8: すべて解除で sort も default へ */ }}
                   data-testid="screener-applied-clear"
                 >
                   すべて解除
@@ -2007,7 +2014,16 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                     className="appearance-none cursor-pointer text-xs rounded-full border border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-secondary)] py-[5px] pl-3 pr-[26px]"
                   >
                     {SORT_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
+                      <option
+                        key={o.value}
+                        value={o.value}
+                        /* D-8 (multi-review 指摘): 「主要指標」は preset で指標が変わる。未マップ
+                           preset (custom / 起動直後の null) では選んでも合致度順に silent fallback
+                           するため disabled 化し「壊れて見える」Trust Cliff を回避。 */
+                        disabled={o.value === 'metric' && !PRESET_METRIC_KEY[activePreset]}
+                      >
+                        {o.label}
+                      </option>
                     ))}
                   </select>
                   <svg
