@@ -114,6 +114,17 @@ async function auditDom(page) {
         const e = document.querySelector('[data-testid="screener-conds"]');
         return e ? e.getAttribute('data-preset') : null;
       })(),
+      // P0 検証 (本番 0件回帰の自動検出): 結果空状態 + 精度3段の件数 (screener-preset-{lvl} の "(N)")。
+      counts: (() => {
+        const empty = !!document.querySelector('[data-testid="screener-result-row-empty"]');
+        const seg = {};
+        for (const lvl of ['loose', 'standard', 'strict']) {
+          const e = document.querySelector(`[data-testid="screener-preset-${lvl}"]`);
+          const m = e ? e.textContent.match(/\((\d+)\)/) : null;
+          seg[lvl] = m ? parseInt(m[1], 10) : null;
+        }
+        return { empty, seg };
+      })(),
       presentKinds: present,
     };
   });
@@ -259,9 +270,10 @@ ${checksText}
     // B-4 未デプロイ (旧本番) では両者が全条件 = 同一 → fail (= B-4 が未反映であることを正しく検出)。
     const stageB4 = { name: 'b4_preset_conds', label: 'B-4: preset→conds 出し分け' };
     let condsEarnings = [], condsBreakout = [];
+    let breakoutAudit = null; // P0 件数検証で再利用 (new_high_break の counts)
     try {
       if (await selectPreset(page, 'earnings_pass')) { await openDetail(page); condsEarnings = (await auditDom(page)).condRows || []; }
-      if (await selectPreset(page, 'new_high_break')) { await openDetail(page); condsBreakout = (await auditDom(page)).condRows || []; }
+      if (await selectPreset(page, 'new_high_break')) { await openDetail(page); breakoutAudit = await auditDom(page); condsBreakout = breakoutAudit.condRows || []; }
     } catch (e) { stageB4.error = String(e?.message || e).slice(0, 200); }
     const setE = new Set(condsEarnings), setB = new Set(condsBreakout);
     const differ = condsEarnings.length > 0 && condsBreakout.length > 0 &&
@@ -278,6 +290,26 @@ ${checksText}
       reason: `earnings=[${condsEarnings.join(',')}] / breakout=[${condsBreakout.join(',')}]`,
     }];
     report.stages.push(stageB4);
+
+    // ── Stage B-6: P0 新高値ブレイク 件数回帰 (本番 0件 を自動検出) ──
+    // 隠れ過剰フィルタで本番が 0件 になっていた P0 の自動 verify。結果空状態でない & 標準精度件数 ≥1。
+    // 件数の DOM 経路: screener-result-row-empty 不在 + screener-preset-{lvl} の "(N)" が ≥1。
+    const stageCount = { name: 'b6_new_high_count', label: 'B-6: 新高値ブレイク 件数 (P0 0件回帰検出)' };
+    const seg = breakoutAudit?.counts?.seg || {};
+    const isEmpty = breakoutAudit?.counts?.empty;
+    // 標準精度の件数 (取得不可なら緩/厳でフォールバック)。
+    const stdCount = seg.standard != null ? seg.standard : (seg.loose != null ? seg.loose : seg.strict);
+    const hasCount = breakoutAudit != null && isEmpty === false && stdCount != null && stdCount >= 1;
+    stageCount.found = breakoutAudit != null;
+    stageCount.counts = seg;
+    stageCount.resultEmpty = isEmpty;
+    stageCount.verdict = hasCount ? 'pass' : 'fail';
+    stageCount.checks = [{
+      check: '新高値ブレイクが本番で 0件 でない (結果空状態でなく、精度3段の件数が ≥1)',
+      pass: hasCount,
+      reason: `empty=${isEmpty} / seg=緩${seg.loose}・標${seg.standard}・厳${seg.strict}`,
+    }];
+    report.stages.push(stageCount);
 
     // adv ON を保証する小 helper
     const ensureAdv = async () => {
