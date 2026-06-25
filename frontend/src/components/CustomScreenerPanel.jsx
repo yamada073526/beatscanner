@@ -98,10 +98,12 @@ const NEW_HIGH_SIGNAL_FACET = {
   field: 'near_high_pct_scaled',
   label: '52週高値圏',
   labelShort: '高値圏',
-  tooltip: '直近終値が52週高値に近い（精度で「高値10%以内/5%以内」と変化）、または出来高を伴う実ブレイク。',
+  tooltip: '直近終値が52週高値に近い（精度で「高値10%/5%/3%以内」と変化）、または出来高を伴う実ブレイク。',
   unit: '%', delta: false, tier: 'premium', category: 'timing',
-  // strict=999: near_high (最大≈100) は到達不可 = is_new_52w_high===true (実ブレイク) のみ通す sentinel。
-  grades: { loose: 90, standard: 95, strict: 999 },
+  // 段階OR: 緩90/標95/厳97 (高値10%/5%/3%以内) または is_new_52w_high===true (実ブレイク)。
+  //   厳=97 は実ブレイク手前の pivot 近接帯も拾い 0件恒常化を回避 (SPEC_2026-06-25 微調整・3体合議)。
+  //   旧 strict=999 sentinel (実ブレイクのみ) は strict funda triple-AND と重なり恒常0件のため廃止。
+  grades: { loose: 90, standard: 95, strict: 97 },
 };
 const BUY_ZONE_G_FACET = {
   key: 'buy_zone_g',
@@ -379,7 +381,7 @@ const PRESET_DISPLAY_CONDS = {
   earnings_pass:  ['eps_yoy_pct', 'eps_cagr_3y', 'ocf_margin_pct', 'ocf_gt_netincome', 'roe', 'rs_percentile', 'eps_3y_rising', 'rev_3y_rising', 'cfps_3y_rising'],
   // 新高値ブレイク: 型/タイミング (買い場圏/52週高値) + 需給 (出来高急増) + RS + EPS YoY 床。
   //   eps_yoy_pct は P0 修正で述語に算入する床条件 (≥0%) のため必ず可視化 (隠れフィルタ禁止・Trust Cliff)。
-  new_high_break: ['latest_beat', 'new_high_signal', 'buy_zone_g', 'cup', 'volume_surge_pct', 'rs_percentile', 'eps_yoy_pct'],
+  new_high_break: ['latest_beat', 'new_high_signal', 'cup', 'volume_surge_pct', 'rs_percentile', 'eps_yoy_pct'],
   // 旬のセクター: master-detail (Phase C) が主役。conds は funda_pass のみ (重複回避・SPEC §5 Sprint 1)
   hot_sector:     ['funda_pass'],
   // セクター別リーダー: 定義条件(セクター内RSトップ) + 収益の質 (CF マージン/ROE) + 機関の動き
@@ -510,10 +512,12 @@ export function itemPasses(item, activeGrades, extra) {
 //     ※ 買い場圏のタイト化 (+5/+3/+2%) は binary facet の段階閾値=別機構のため follow-up (本 sprint defer)。
 export const PRESET_PREDICATES = {
   earnings_pass:  { grades: { eps_yoy_pct: 'auto', roe: 'auto', rs_percentile: 'auto', ocf_margin_pct: 'auto' }, extra: { fundaPassOnly: true, ocfGtNiOnly: true } },
-  // 新高値ブレイク gate 修正 (SPEC_2026-06-25・0件根治): 旧 buyZoneOnly/newHigh52wOnly flag (is_new/pivot のみ=数十件)
-  //   を grade cond へ置換。new_high_signal=is_new OR near_high (緩90/標95/厳=実ブレイクのみ)、
-  //   buy_zone_g=厳のみ pivot 0〜+5%。beatOnly は gate 維持。count==list は buildActiveGrades+itemPasses で自動保証。
-  new_high_break: { grades: { rs_percentile: 'auto', volume_surge_pct: { loose: null, standard: 'loose', strict: 'strict' }, eps_yoy_pct: { loose: 'floor', standard: 'standard', strict: 'strict' }, new_high_signal: 'auto', buy_zone_g: { loose: null, standard: null, strict: 'strict' } }, extra: { beatOnly: true } },
+  // 新高値ブレイク gate 修正 (SPEC_2026-06-25・0件根治 + 微調整 3体合議): 旧 flag を grade cond へ置換。
+  //   new_high_signal=is_new OR near_high (緩90/標95/厳97)。厳=97 化で実ブレイク手前も拾い 0件恒常化を回避。
+  //   rs_percentile: 緩=標=standard(≥80・オニール L 最低ライン)/厳=strict(≥90)。旧 'auto' は緩≥70 でノイズ膨張(215件)。
+  //   買い場圏(buy_zone_g)は撤去: near≥97 が extended 回避(pivot近接)を構造的に代替するため 厳の重複 gate を解消。
+  //   beatOnly は gate 維持。count==list は buildActiveGrades+itemPasses で自動保証。
+  new_high_break: { grades: { rs_percentile: { loose: 'standard', standard: 'standard', strict: 'strict' }, volume_surge_pct: { loose: null, standard: 'loose', strict: 'strict' }, eps_yoy_pct: { loose: 'floor', standard: 'standard', strict: 'strict' }, new_high_signal: 'auto' }, extra: { beatOnly: true } },
   sector_leader:  { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto', ocf_margin_pct: 'auto' }, extra: { sectorLeaderOnly: true } },
   // hot_sector: セクター算出は topSectorsByRs で計算 (sectorTopN=5 相当)
   hot_sector:     { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto' }, sectorTopN: 5, extra: { fundaPassOnly: true } },
@@ -692,8 +696,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       setFundaPassOnly(true);
       setOcfGtNiOnly(true);
     } else if (presetKey === 'new_high_break') {
-      // 新高値ブレイク gate 修正 (SPEC_2026-06-25): 52週高値圏 (new_high_signal) + 買い場圏 (buy_zone_g・厳のみ) は
-      //   grade cond 化したため PRESET_PREDICATES.grades 経由で activeGrades に算入 (flag 不要)。beat は gate flag。
+      // 新高値ブレイク gate 修正 (SPEC_2026-06-25): 52週高値圏 (new_high_signal) は grade cond 化したため
+      //   PRESET_PREDICATES.grades 経由で activeGrades に算入 (flag 不要)。買い場圏(buy_zone_g)は微調整で撤去。
+      //   beat は gate flag。
       setBeatOnly(true);
     } else if (presetKey === 'sector_leader') {
       // セクター別リーダー: is_sector_rs_leader (PRESET_PREDICATES.sector_leader と一致)。
@@ -1112,7 +1117,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     if (cond.key === 'new_high_signal') {
       if (activePreset !== 'new_high_break') return null;
       const th = preset === 'strict'
-        ? '実ブレイク（出来高確定）のみ'
+        ? '高値3%以内 または 実ブレイク'
         : preset === 'loose' ? '高値10%以内 または 実ブレイク' : '高値5%以内 または 実ブレイク';
       return (
         <div key={cond.key} className="screener-crow is-gate" data-testid="screener-cond-row" data-cond={cond.key} data-gate="1" title={NEW_HIGH_SIGNAL_FACET.tooltip}>

@@ -178,6 +178,9 @@ export default function ScreenerMaster({
   const [presetCounts, setPresetCounts] = useState(() =>
     Object.fromEntries(STRATEGY_PRESETS.map((p) => [p.key, null]))
   );
+  // SPEC_2026-06-25 §4.2.2: Premium 判定 (CustomScreenerPanel と同一 signal = universe.locked_facets に
+  //   'breakout' があれば非 Premium)。新高値ブレイク card の 🔒 出し分けに使う。default は plan 由来。
+  const [isPremiumUser, setIsPremiumUser] = useState(plan === 'premium');
 
   // Phase A: universe を取得してプリセット件数を算出。
   // module-scope cache (_universeCache) 共有のため追加 fetch は発生しない。
@@ -192,6 +195,8 @@ export default function ScreenerMaster({
           counts[key] = countPreset(items, key);
         }
         setPresetCounts(counts);
+        // locked_facets に 'breakout' があれば非 Premium (backend マスク signal)。
+        setIsPremiumUser(!((res.locked_facets || []).includes('breakout')));
       })
       .catch(() => {
         // fetch 失敗時はタイルを "–" のまま維持 (silent fail)
@@ -230,6 +235,7 @@ export default function ScreenerMaster({
         active={activeStrategy}
         onSelect={handleStrategySelect}
         counts={presetCounts}
+        isPremiumUser={isPremiumUser}
       />
 
       {/* ── セグメントトグル (C-17: ヘッダー右寄せ、ラベル 2-4 字) ────
