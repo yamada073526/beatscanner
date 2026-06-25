@@ -43,7 +43,7 @@ export async function initSentry() {
         // - ResizeObserver loop: Chrome の benign warning (実害なし)
         // - Non-Error promise rejection: third-party script が throw した非 Error 値
         const msg = event.exception?.values?.[0]?.value || event.message || '';
-        if (/ERR_BLOCKED_BY_CLIENT|Loading chunk \d+ failed|Failed to fetch|NetworkError|ResizeObserver loop|Non-Error promise rejection/i.test(msg)) {
+        if (/ERR_BLOCKED_BY_CLIENT|Loading chunk \d+ failed|Failed to fetch|NetworkError|ResizeObserver loop|Non-Error promise rejection|InvalidStateError/i.test(msg)) {
           return null;
         }
         return event;

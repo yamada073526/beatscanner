@@ -451,31 +451,36 @@ export async function translateTextsStream(texts, onItem, signal) {
   const reader = r.body.getReader();
   const decoder = new TextDecoder();
   let buf = '';
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    let sepIdx;
-    while ((sepIdx = buf.indexOf('\n\n')) !== -1) {
-      const event = buf.slice(0, sepIdx);
-      buf = buf.slice(sepIdx + 2);
-      const line = event.split('\n').find((l) => l.startsWith('data: '));
-      if (!line) continue;
-      const payload = line.slice(6);
-      if (payload === '[DONE]') return;
-      try {
-        const obj = JSON.parse(payload);
-        if (obj && typeof obj.error === 'string') {
-          throw new Error(obj.error);
+  // v177: try/finally で locked reader を必ず解放 (未解放だと次 stream で InvalidStateError)
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let sepIdx;
+      while ((sepIdx = buf.indexOf('\n\n')) !== -1) {
+        const event = buf.slice(0, sepIdx);
+        buf = buf.slice(sepIdx + 2);
+        const line = event.split('\n').find((l) => l.startsWith('data: '));
+        if (!line) continue;
+        const payload = line.slice(6);
+        if (payload === '[DONE]') return;
+        try {
+          const obj = JSON.parse(payload);
+          if (obj && typeof obj.error === 'string') {
+            throw new Error(obj.error);
+          }
+          if (obj && typeof obj.index === 'number' && typeof obj.translation === 'string') {
+            onItem(obj.index, obj.translation);
+          }
+        } catch (e) {
+          if (e instanceof SyntaxError) continue;
+          throw e;
         }
-        if (obj && typeof obj.index === 'number' && typeof obj.translation === 'string') {
-          onItem(obj.index, obj.translation);
-        }
-      } catch (e) {
-        if (e instanceof SyntaxError) continue;
-        throw e;
       }
     }
+  } finally {
+    try { reader.releaseLock(); } catch { /* already released */ }
   }
 }
 
