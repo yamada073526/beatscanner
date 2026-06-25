@@ -14746,6 +14746,18 @@ body.is-digest-resizing {
   display: inline-block;
   margin-right: 2px;
 }
+/* SPEC_2026-06-25 §4.2.2: Premium 限定 preset を非 Premium が見た時の 🔒 表示
+   (「0 銘柄」誤読の Trust Cliff 回避)。muted 色で「locked」を控えめに伝える。 */
+.screener-strategy-tile__count--locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.screener-strategy-tile__count--locked svg {
+  flex-shrink: 0;
+}
 
 /* ── tier badge (mockup v8 §.tier: pill, 10px/600) ─────────────────────
    variant: --free (緑) / --pro (gold) / --prem (warning amber)

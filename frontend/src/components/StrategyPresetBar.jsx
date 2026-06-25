@@ -14,8 +14,11 @@
  *   onSelect  — (presetKey: string | null) => void
  *               同じ key を再クリックで null (解除)
  *   counts    — { [presetKey]: number | null } プリセット別件数 (null = 算出中 → "–" 表示)
+ *   isPremiumUser — Premium 判定 (default true)。false かつ tier==='prem' の preset は
+ *               件数を出さず 🔒 表示にする (SPEC_2026-06-25 §4.2.2: 非 Premium に
+ *               「0 銘柄」を見せない Trust Cliff 対応。masked universe で 0 と出る誤読を防ぐ)。
  */
-import { BadgeCheck, TrendingUp, LayoutGrid, Crown } from 'lucide-react';
+import { BadgeCheck, TrendingUp, LayoutGrid, Crown, Lock } from 'lucide-react';
 
 /** プリセット定義 SSOT (Phase A) */
 export const STRATEGY_PRESETS = [
@@ -57,7 +60,7 @@ export const STRATEGY_PRESETS = [
   },
 ];
 
-export default function StrategyPresetBar({ active = null, onSelect, counts = {} }) {
+export default function StrategyPresetBar({ active = null, onSelect, counts = {}, isPremiumUser = true }) {
   return (
     <div
       className="screener-strategy-bar"
@@ -68,6 +71,9 @@ export default function StrategyPresetBar({ active = null, onSelect, counts = {}
       {STRATEGY_PRESETS.map(({ key, label, title, desc, Icon, tier, tierLabel }) => {
         const isSelected = active === key;
         const count = counts[key];
+        // SPEC_2026-06-25 §4.2.2: Premium 限定 preset を非 Premium が見る場合、masked universe で
+        //   count=0 になり「0 銘柄＝価値ゼロ」と誤読される (Trust Cliff・訴求毀損)。0 を出さず 🔒 表示。
+        const isLocked = tier === 'prem' && !isPremiumUser;
         return (
           <button
             key={key}
@@ -90,11 +96,20 @@ export default function StrategyPresetBar({ active = null, onSelect, counts = {}
             {/* desc: 2行ぶん min-height で foot を揃える */}
             <p className="screener-strategy-tile__desc">{desc}</p>
 
-            {/* foot: 件数 + tier badge */}
+            {/* foot: 件数 (Premium ロック時は 🔒) + tier badge */}
             <div className="screener-strategy-tile__foot">
-              <span className="screener-strategy-tile__count">
-                <b>{count != null ? count : '–'}</b> 銘柄
-              </span>
+              {isLocked ? (
+                <span
+                  className="screener-strategy-tile__count screener-strategy-tile__count--locked"
+                  aria-label="Premium 限定"
+                >
+                  <Lock size={13} strokeWidth={2} aria-hidden="true" /> Premium 限定
+                </span>
+              ) : (
+                <span className="screener-strategy-tile__count">
+                  <b>{count != null ? count : '–'}</b> 銘柄
+                </span>
+              )}
               <span className={`screener-tier-badge screener-tier-badge--${tier}`}>
                 {tierLabel}
               </span>
