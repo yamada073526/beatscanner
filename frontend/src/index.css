@@ -13832,21 +13832,21 @@ body.is-digest-resizing {
 
 /* ── Phase B-3.5: gate 南京錠 crow — preset の死守条件 (常時 ON・変更不可)。
    旧 .screener-gate-list (別 section の二重表示) を廃止し、conds 内 inline 南京錠へ一本化。
-   gold で「コンシェルジュが品質を保証する施錠扉」を演出 (発光禁止・border + tinted-bg + token のみ)。 */
+   配色は mockup v8 §.crow/.gate 準拠の neutral (gold「施錠扉」演出は user 決定 2026-06-26 で mockup へ復帰)。 */
 .screener-crow.is-gate {
-  background: color-mix(in srgb, var(--color-gold) 8%, var(--bg-subtle));
-  border-color: color-mix(in srgb, var(--color-gold) 32%, transparent);
+  background: var(--bg-subtle);
+  border-color: var(--border);
 }
-.screener-crow.is-gate .screener-crow__lockicon { color: var(--color-gold-dark); }
+.screener-crow.is-gate .screener-crow__lockicon { color: var(--text-muted); }
 .screener-crow__gate-pill {
   flex: none;
   margin-left: auto;
-  padding: 2px 9px;
+  padding: 3px 9px;
   font-size: 10px;
   font-weight: 700;
-  color: var(--color-gold-dark);
-  background: color-mix(in srgb, var(--color-gold) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-gold) 38%, transparent);
+  color: var(--text-muted);
+  background: var(--bg-muted);
+  border: 1px dashed var(--border-strong, var(--border));
   border-radius: var(--radius-pill);
 }
 
@@ -14630,8 +14630,8 @@ body.is-digest-resizing {
   border-radius: var(--radius-lg);  /* 16px: mockup v8 準拠 */
   color: var(--text-primary);
 
-  /* elevation: hover で shadow-3 (lift) */
-  box-shadow: var(--shadow-1);
+  /* elevation: idle はフラット (mockup v8 §.preset は idle 影なし・user 決定 2026-06-26)、hover で shadow-3 (lift) */
+  box-shadow: none;
 
   /* モーション: glow(box-shadow) / border は即時反応 (--motion-fast 120ms)、
      lift(transform) のみ滑らかさ維持 (--motion-base 200ms)。
