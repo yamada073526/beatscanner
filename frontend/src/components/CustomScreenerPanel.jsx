@@ -86,7 +86,35 @@ const FUNDA_FACETS = [
   //   標準精度=15% で旧 gate と件数中立、業種特性に応じた緩急調整が可能に (金融: 業種により正常 CF マージンが異なる→固定 15% は硬直)。
   { key: 'ocf_margin_pct',      field: 'ocf_margin_pct',      label: 'キャッシュ創出力',   unit: '%', tier: 'free', category: 'quality', delta: false, grades: { loose: 10, standard: 15, strict: 25 } },
 ];
-const FACET_MAP = Object.fromEntries(FUNDA_FACETS.map((f) => [f.key, f]));
+// ─── 新高値ブレイク gate 修正 (SPEC_2026-06-25): near_high 段階OR + 買い場圏 strict-only grade cond ──
+// 0件恒常化の根治。is_new_52w_high (出来高確定ブレイク=数十件) のみだと高値圏に静かに居る高RS株を
+// 拾えないため、全銘柄にある near_high_pct_scaled (直近終値/52週高値×100) との段階的 OR で拾う。
+// ★ FUNDA_FACETS には入れない: 入れると activeFacets (グレード行レンダリング) に誤露出するため
+//   (SPEC §4.1 結線注意②)。FACET_MAP には含める: buildActiveGrades の clampLevel(FACET_MAP[k]) が要る
+//   (結線注意①)。crow 表示は renderCrow の new_high_break 専用 custom 分岐で描く (汎用 grade crow は
+//   999 sentinel / 0〜+5% range を正しく出せないため)。
+const NEW_HIGH_SIGNAL_FACET = {
+  key: 'new_high_signal',
+  field: 'near_high_pct_scaled',
+  label: '52週高値圏',
+  labelShort: '高値圏',
+  tooltip: '直近終値が52週高値に近い（精度で「高値10%以内/5%以内」と変化）、または出来高を伴う実ブレイク。',
+  unit: '%', delta: false, tier: 'premium', category: 'timing',
+  // strict=999: near_high (最大≈100) は到達不可 = is_new_52w_high===true (実ブレイク) のみ通す sentinel。
+  grades: { loose: 90, standard: 95, strict: 999 },
+};
+const BUY_ZONE_G_FACET = {
+  key: 'buy_zone_g',
+  field: 'pivot_distance_pct',
+  label: '買い場圏 (節目近接)',
+  labelShort: '買い場圏',
+  tooltip: '直近の節目 (pivot) から 0〜+5% 以内。新高値ブレイクの「厳しい」設定でのみ有効。',
+  unit: '%', delta: false, tier: 'premium', category: 'timing',
+  grades: { strict: 5 }, // 厳のみ適用 (pivot 0〜+5%)。閾値は pass で range 判定するため lvl は無視。
+};
+const FACET_MAP = Object.fromEntries(
+  [...FUNDA_FACETS, NEW_HIGH_SIGNAL_FACET, BUY_ZONE_G_FACET].map((f) => [f.key, f])
+);
 // preset の CORE 4 metric。volume/inst_holders は preset off、override で追加 (Pass 3c)。
 const PRESET_CORE_KEYS = ['eps_yoy_pct', 'eps_cagr_3y', 'roe', 'rs_percentile'];
 const PRESET_LABELS = { loose: '緩い', standard: '標準', strict: '厳しい', severe: '最厳' };
@@ -255,6 +283,13 @@ export const PRESET_CONDS = [
   //   CUP_PASS_STATES に属する state のみ pass。Sprint 1 では cupOnly flag を誰も ON にしない =
   //   count/list 不参加 (件数不変・Trust Cliff C-2 露出ゼロ)。applied gate 化は Sprint 2 (Premium 限定)。
   { key: 'cup',              kind: 'flag',   flag: 'cupOnly',          pass: (item) => item.cup_state != null && CUP_PASS_STATES.has(item.cup_state) },
+  // 新高値ブレイク gate 修正 (SPEC_2026-06-25): grade 条件として count==list 機構に乗せる (custom pass)。
+  // new_high_signal: is_new_52w_high===true (実ブレイク) OR near_high_pct_scaled >= grades[lvl] (高値圏)。
+  //   strict=999 で near 経路を無効化 = 実ブレイクのみ。null フィールドは false (honest AND 除外)。
+  { key: 'new_high_signal',  kind: 'grade',  facet: NEW_HIGH_SIGNAL_FACET, pass: (item, lvl) => item.is_new_52w_high === true || (item.near_high_pct_scaled != null && item.near_high_pct_scaled >= NEW_HIGH_SIGNAL_FACET.grades[lvl]) },
+  // buy_zone_g: pivot_distance_pct 0〜+5% (買い場圏)。grades={strict:5} = 厳段のみ activeGrades に算入。
+  //   lvl は range 判定のため無視。null (cup 未形成 / Premium マスク) = AND 除外 (honest)。
+  { key: 'buy_zone_g',       kind: 'grade',  facet: BUY_ZONE_G_FACET,      pass: (item) => { const d = item.pivot_distance_pct; return d != null && d >= 0 && d <= 5; } },
 ];
 const COND_MAP = Object.fromEntries(PRESET_CONDS.map((c) => [c.key, c]));
 // binary/flag 条件のみ (extra フラグ経由で AND・itemPasses が走査)。grade は activeGrades 経由で別ループ。
@@ -317,7 +352,9 @@ const CROW_LAYOUT = [
   // beat/cfps Phase 2 (Sprint 3): 直近決算ビート。new_high_break で gate「必須」描画 (PRESET_GATE_CONDS)。
   //   binBindings 非登録のため custom/他 preset では renderCrow が null → group 非表示 (gate 専用)。
   { group: '品質',       sub: '決算の裏付け',         keys: ['latest_beat'] },
-  { group: 'タイミング', sub: '値動き・勢い',         keys: ['buy_zone', 'new_high_52w', 'cup', 'rs_percentile', 'sector_leader', 'volume_surge_pct'] },
+  // 新高値ブレイク gate 修正 (SPEC_2026-06-25): new_high_signal/buy_zone_g は new_high_break 専用 custom crow
+  //   (renderCrow が activePreset !== 'new_high_break' で null・custom mode の全 keys 露出を防ぐ)。
+  { group: 'タイミング', sub: '値動き・勢い',         keys: ['new_high_signal', 'buy_zone_g', 'buy_zone', 'new_high_52w', 'cup', 'rs_percentile', 'sector_leader', 'volume_surge_pct'] },
   { group: '需給',       sub: '機関の動き',           keys: ['ad_volume', 'inst_holders_qoq_pct'] },
 ];
 // B-3: crow conds が inline lock crow として提示する locked_facets key 集合 (= CROW_BINARY_META.locked)。
@@ -342,7 +379,7 @@ const PRESET_DISPLAY_CONDS = {
   earnings_pass:  ['eps_yoy_pct', 'eps_cagr_3y', 'ocf_margin_pct', 'ocf_gt_netincome', 'roe', 'rs_percentile', 'eps_3y_rising', 'rev_3y_rising', 'cfps_3y_rising'],
   // 新高値ブレイク: 型/タイミング (買い場圏/52週高値) + 需給 (出来高急増) + RS + EPS YoY 床。
   //   eps_yoy_pct は P0 修正で述語に算入する床条件 (≥0%) のため必ず可視化 (隠れフィルタ禁止・Trust Cliff)。
-  new_high_break: ['latest_beat', 'buy_zone', 'new_high_52w', 'cup', 'volume_surge_pct', 'rs_percentile', 'eps_yoy_pct'],
+  new_high_break: ['latest_beat', 'new_high_signal', 'buy_zone_g', 'cup', 'volume_surge_pct', 'rs_percentile', 'eps_yoy_pct'],
   // 旬のセクター: master-detail (Phase C) が主役。conds は funda_pass のみ (重複回避・SPEC §5 Sprint 1)
   hot_sector:     ['funda_pass'],
   // セクター別リーダー: 定義条件(セクター内RSトップ) + 収益の質 (CF マージン/ROE) + 機関の動き
@@ -473,7 +510,10 @@ export function itemPasses(item, activeGrades, extra) {
 //     ※ 買い場圏のタイト化 (+5/+3/+2%) は binary facet の段階閾値=別機構のため follow-up (本 sprint defer)。
 export const PRESET_PREDICATES = {
   earnings_pass:  { grades: { eps_yoy_pct: 'auto', roe: 'auto', rs_percentile: 'auto', ocf_margin_pct: 'auto' }, extra: { fundaPassOnly: true, ocfGtNiOnly: true } },
-  new_high_break: { grades: { rs_percentile: 'auto', volume_surge_pct: { loose: null, standard: 'loose', strict: 'strict' }, eps_yoy_pct: { loose: 'floor', standard: 'standard', strict: 'strict' } }, extra: { buyZoneOnly: true, newHigh52wOnly: true, beatOnly: true } },
+  // 新高値ブレイク gate 修正 (SPEC_2026-06-25・0件根治): 旧 buyZoneOnly/newHigh52wOnly flag (is_new/pivot のみ=数十件)
+  //   を grade cond へ置換。new_high_signal=is_new OR near_high (緩90/標95/厳=実ブレイクのみ)、
+  //   buy_zone_g=厳のみ pivot 0〜+5%。beatOnly は gate 維持。count==list は buildActiveGrades+itemPasses で自動保証。
+  new_high_break: { grades: { rs_percentile: 'auto', volume_surge_pct: { loose: null, standard: 'loose', strict: 'strict' }, eps_yoy_pct: { loose: 'floor', standard: 'standard', strict: 'strict' }, new_high_signal: 'auto', buy_zone_g: { loose: null, standard: null, strict: 'strict' } }, extra: { beatOnly: true } },
   sector_leader:  { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto', ocf_margin_pct: 'auto' }, extra: { sectorLeaderOnly: true } },
   // hot_sector: セクター算出は topSectorsByRs で計算 (sectorTopN=5 相当)
   hot_sector:     { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto' }, sectorTopN: 5, extra: { fundaPassOnly: true } },
@@ -652,9 +692,8 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       setFundaPassOnly(true);
       setOcfGtNiOnly(true);
     } else if (presetKey === 'new_high_break') {
-      // 買い場圏 (pivot ≤+5%) + 52週高値更新 (PRESET_PREDICATES.new_high_break と一致)
-      setBuyZoneOnly(true);
-      setNewHigh52wOnly(true);
+      // 新高値ブレイク gate 修正 (SPEC_2026-06-25): 52週高値圏 (new_high_signal) + 買い場圏 (buy_zone_g・厳のみ) は
+      //   grade cond 化したため PRESET_PREDICATES.grades 経由で activeGrades に算入 (flag 不要)。beat は gate flag。
       setBeatOnly(true);
     } else if (presetKey === 'sector_leader') {
       // セクター別リーダー: is_sector_rs_leader (PRESET_PREDICATES.sector_leader と一致)。
@@ -718,6 +757,11 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   const activeGrades = useMemo(() => buildActiveGrades(activePreset, preset, overrides), [activePreset, preset, overrides]);
   // #2 slice 2-d: 個別緩急(per-facet override)は Pro。screener_v2 scope のみゲート (legacy 不変 §4.5)。
   const advLocked = screenerV2 && !isProUser;
+  // 新高値ブレイク gate 修正 (SPEC_2026-06-25): preset レベル Premium gate 判定。
+  //   backend は非 premium に is_new_52w_high/pivot_distance_pct を null マスクし locked_facets に 'breakout' を入れる
+  //   (CROW_BINARY_META.new_high_52w.locked='breakout' の lock crow が依存する既存シグナル)。
+  //   'breakout' 不在 = Premium。Pro は near_high を持つため preset レベルで明示 gate (user 承認: Premium 専用維持)。
+  const isPremiumUser = !((universe?.locked_facets || []).includes('breakout'));
   // #2 slice 2-c: 精度プリセットから個別変更したか (カスタム tag・状態の見える化 §1-6)。
   const isCustom = Object.keys(overrides).length > 0;
   const filteredItems = useMemo(() => {
@@ -846,6 +890,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     //   PRESET_CORE_KEYS 固定だと new_high_break で非適用の eps_cagr/roe を誤提案するため修正)。
     for (const key of Object.keys(activeGrades)) {
       if (key in overrides) continue; // overrides ループで処理済
+      // 新高値ブレイク gate 修正: new_high_signal/buy_zone_g は preset の必須/精度連動条件 (gate 相当)。
+      //   「外す提案」候補から除外 (変更不可条件を外せという矛盾を防ぐ・SPEC §4.2.3 と整合)。
+      if (key === 'new_high_signal' || key === 'buy_zone_g') continue;
       const g = { ...activeGrades };
       delete g[key];
       const cnt = items.filter((it) => itemPasses(it, g, extra)).length;
@@ -1059,6 +1106,43 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   // 数値ロジック(itemPasses)は経由せず表示のみ。off→on の grade 復帰は overrides 操作で行う。
   const renderCrow = (cond, isGate = false) => {
     if (!cond) return null;
+    // ── 新高値ブレイク gate 修正 (SPEC_2026-06-25): new_high_break 専用 custom crow ──
+    //   汎用 grade crow は 999 sentinel / 0〜+5% range を正しく表示できないため別描画。
+    //   activePreset !== 'new_high_break' では描かない (custom mode で allowed=null=全 keys 誤露出を防ぐ・Trust Cliff)。
+    if (cond.key === 'new_high_signal') {
+      if (activePreset !== 'new_high_break') return null;
+      const th = preset === 'strict'
+        ? '実ブレイク（出来高確定）のみ'
+        : preset === 'loose' ? '高値10%以内 または 実ブレイク' : '高値5%以内 または 実ブレイク';
+      return (
+        <div key={cond.key} className="screener-crow is-gate" data-testid="screener-cond-row" data-cond={cond.key} data-gate="1" title={NEW_HIGH_SIGNAL_FACET.tooltip}>
+          <span className="screener-crow__lockicon" aria-hidden><Lock size={13} strokeWidth={2} /></span>
+          <span className="screener-crow__lbl">52週高値圏</span>
+          <span className="screener-crow__th">{th}</span>
+          <span className="screener-crow__gate-pill" aria-label="この戦略の絶対条件（精度で閾値が変化）">必須</span>
+        </div>
+      );
+    }
+    if (cond.key === 'buy_zone_g') {
+      if (activePreset !== 'new_high_break') return null;
+      if (preset === 'strict') {
+        return (
+          <div key={cond.key} className="screener-crow is-gate" data-testid="screener-cond-row" data-cond={cond.key} data-gate="1" title={BUY_ZONE_G_FACET.tooltip}>
+            <span className="screener-crow__lockicon" aria-hidden><Lock size={13} strokeWidth={2} /></span>
+            <span className="screener-crow__lbl">買い場圏</span>
+            <span className="screener-crow__th">0〜+5%</span>
+            <span className="screener-crow__gate-pill" aria-label="厳しい設定での絶対条件">必須</span>
+          </div>
+        );
+      }
+      // 緩/標: 適用外をグレーアウトで明示 (隠れフィルタ誤認防止・SPEC §4.2.3)。
+      return (
+        <div key={cond.key} className="screener-crow is-off opacity-50" data-testid="screener-cond-row" data-cond={cond.key} data-inactive="1" title="買い場圏（節目+5%以内）は「厳しい」設定でのみ有効です。">
+          <span className="screener-crow__lbl">買い場圏</span>
+          <span className="screener-crow__th">厳しい設定で有効</span>
+        </div>
+      );
+    }
     if (cond.kind === 'grade') {
       const facet = cond.facet;
       const activeLvl = activeGrades[cond.key];           // undefined = off
@@ -1961,10 +2045,30 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                   ))}
                 </div>
               </div>
+            ) : (activePreset === 'new_high_break' && !isPremiumUser) ? (
+              /* 新高値ブレイク gate 修正 (SPEC_2026-06-25): preset レベル Premium gate。
+                 非 Premium には「0銘柄」でなくロック+CTA を出す (Trust Cliff・SPEC §4.2.2)。
+                 ※ N 件は非 Premium のマスク済 universe では算出不能のため、捏造せず件数は出さない。 */
+              <div className="screener-lockbar" role="status" data-testid="screener-premium-gate-new_high_break">
+                <Lock size={14} strokeWidth={2} aria-hidden className="screener-lockbar__icon" />
+                <p className="screener-lockbar__copy">
+                  「新高値ブレイク」は新高値圏 × 好決算を毎晩スキャンする <strong>Premium 限定</strong>の戦略です。
+                </p>
+                <button
+                  type="button"
+                  className="screener-lockbar__cta"
+                  onClick={() => { trackEvent('screener_preset_premium_gate_cta', { preset: 'new_high_break' }); onUpgrade?.('新高値ブレイク (Premium)'); }}
+                  data-testid="screener-premium-gate-cta"
+                >
+                  Premium を見る
+                </button>
+              </div>
             ) : filteredItems.length === 0 ? (
               <div data-testid="screener-result-row-empty">
                 <p className="py-3 text-center text-sm text-[var(--text-muted)]">
-                  該当する銘柄がありません。厳しさを緩めるか、フィルターを変更してください。
+                  {activePreset === 'new_high_break'
+                    ? '現在の市況では新高値圏の好決算銘柄がありません（下落相場では正常です）。精度を緩めるか、別の戦略をお試しください。'
+                    : '該当する銘柄がありません。厳しさを緩めるか、フィルターを変更してください。'}
                 </p>
                 {/* (5) empty サジェスト */}
                 {emptySuggest && emptySuggest.count > 0 && (
