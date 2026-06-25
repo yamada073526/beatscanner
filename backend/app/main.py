@@ -5010,8 +5010,47 @@ async def forex_rate(base: str = "USD", quote: str = "JPY", date: str | None = N
     if cached and (now - cached[0]) < _FOREX_CACHE_TTL:
         return {"base": base_u, "quote": quote_u, "date": date_key, "rate": cached[1], "source": "yfinance-cache"}
 
-    # yfinance: 'USDJPY=X' は USD→JPY (1 USD = N JPY)
-    # JPY→USD は逆数で計算
+    # USD→JPY: invert=False (rate=USDJPY)、JPY→USD: invert=True (rate=1/USDJPY)
+    invert = (base_u == "JPY")
+
+    # FMP (primary): Railway クラウド IP で block されない安定 source。
+    # v177: 旧実装は yfinance USDJPY=X 一本で Railway IP block 時 rate=null に落ちていた。
+    # 既存実証パターン _usd_per_unit (main.py:5556) と同じ /stable/quote?symbol=USD{CUR} を流用。
+    # latest は /stable/quote、date 指定は historical_price (USDJPY) を使う。失敗時は下の yfinance fallback へ。
+    try:
+        fmp_key = os.getenv("FMP_API_KEY", "")
+        if fmp_key:
+            usdjpy: float | None = None  # 1 USD = N JPY
+            if date_key == "latest":
+                data = await safe_fmp_get(
+                    f"https://financialmodelingprep.com/stable/quote?symbol=USDJPY&apikey={fmp_key}",
+                    "fx::USDJPY", ttl=_FOREX_CACHE_TTL,
+                )
+                rec = (data[0] if isinstance(data, list) and data else data if isinstance(data, dict) else None)
+                px = rec.get("price") if isinstance(rec, dict) else None
+                if px and float(px) > 0:
+                    usdjpy = float(px)
+            else:
+                # date 指定: FMP historical-price から date_key 以前で最新の close (FMP は新→旧 順)
+                d_target = str(date_key)[:10]
+                rows = await FMPClient(api_key=fmp_key).historical_price(
+                    "USDJPY",
+                    (date.fromisoformat(d_target) - timedelta(days=10)).isoformat(),
+                    (date.fromisoformat(d_target) + timedelta(days=2)).isoformat(),
+                )
+                for p in (rows or []):
+                    if p.get("close") and str(p.get("date"))[:10] <= d_target and float(p["close"]) > 0:
+                        usdjpy = float(p["close"])
+                        break
+            if usdjpy is not None and math.isfinite(usdjpy) and usdjpy > 0:
+                rate_val = round(1.0 / usdjpy, 8) if invert else round(usdjpy, 6)
+                _FOREX_CACHE[cache_key] = (now, rate_val)
+                return {"base": base_u, "quote": quote_u, "date": date_key, "rate": rate_val, "source": "fmp"}
+    except Exception as e:
+        print(f"[forex] FMP fetch failed for {base_u}/{quote_u}@{date_key}: {e}")
+
+    # yfinance fallback (Railway では block されるが一時回復時 / ローカル用に残置)。
+    # 'USDJPY=X' は USD→JPY (1 USD = N JPY)、JPY→USD は逆数で計算
     try:
         import yfinance as _yf_fx
         if base_u == "USD" and quote_u == "JPY":
