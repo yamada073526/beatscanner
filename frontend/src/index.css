@@ -14633,11 +14633,13 @@ body.is-digest-resizing {
   /* elevation: hover で shadow-3 (lift) */
   box-shadow: var(--shadow-1);
 
-  /* モーション: transform / border / box-shadow をまとめて遷移 */
+  /* モーション: glow(box-shadow) / border は即時反応 (--motion-fast 120ms)、
+     lift(transform) のみ滑らかさ維持 (--motion-base 200ms)。
+     user 要望: hover 発光を「即座」に。ease-out-expo は立ち上がりが速く ~120ms で即応に感じる。 */
   transition:
     transform var(--motion-base) var(--ease-out-expo),
-    box-shadow var(--motion-base) var(--ease-out-expo),
-    border-color var(--motion-base) var(--ease-out-expo);
+    box-shadow var(--motion-fast) var(--ease-out-expo),
+    border-color var(--motion-fast) var(--ease-out-expo);
 }
 
 /* hover: translateY lift + shadow 強化 + border 明化 + gold halo
@@ -14696,11 +14698,11 @@ body.is-digest-resizing {
   );
   border: 1px solid color-mix(in srgb, var(--color-accent) 24%, transparent);
 
-  /* アイコン色: 非選択=シアン / 選択中・hover=ゴールド (transition) */
+  /* アイコン色: 非選択=シアン / 選択中・hover=ゴールド。発光即応のため --motion-fast (120ms)。 */
   color: var(--color-accent);
   transition:
-    color var(--motion-base) var(--ease-out-expo),
-    filter var(--motion-base) var(--ease-out-expo);
+    color var(--motion-fast) var(--ease-out-expo),
+    filter var(--motion-fast) var(--ease-out-expo);
 }
 
 /* hover: アイコンをゴールドに変色 + drop-shadow 発光 */
