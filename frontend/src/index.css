@@ -13806,9 +13806,11 @@ body.is-digest-resizing {
   padding: 1px 7px;
   font-size: 10px;
   font-weight: 600;
-  color: var(--text-muted);
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
+  /* mockup v8 §.customtag 復元: gold アクセント = 「精度を個別変更した」状態の信号。
+     neutral (text-muted) だと変更の存在が埋没していた (D-2)。token + color-mix で生 hex 回避。 */
+  color: var(--color-gold-mid);
+  background: color-mix(in srgb, var(--color-gold) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-gold) 30%, transparent);
   border-radius: var(--radius-pill);
 }
 
@@ -13862,7 +13864,7 @@ body.is-digest-resizing {
   gap: var(--space-2);
   padding: var(--space-3);
   border: 1px solid color-mix(in srgb, var(--color-gold) 40%, transparent);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);   /* mockup v8 §.lockbar = --r-sm(8px)。実装は --radius-md(12px) に drift していた (D-3) */
   background: color-mix(in srgb, var(--color-gold) 8%, var(--bg-subtle));
   animation: screenerDetailFadeIn 180ms ease;
 }
