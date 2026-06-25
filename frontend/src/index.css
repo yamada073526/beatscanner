@@ -13611,6 +13611,24 @@ body.is-digest-resizing {
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
 }
+/* cup「型」状態トグル (SPEC_2026-06-25): mockup p2 .th.state の cyan アクセント pill。
+   クリックで形成段階を循環。シアン = ブランド emphasis 専用 token (--color-accent) で「上昇」意味でなく
+   「高度な操作」を表現 (feedback_brand_aspiration anchor 遵守)。raw hex 禁止 → color-mix で token 化。 */
+.screener-crow__th--state {
+  cursor: pointer;
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.screener-crow__th--state:hover {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent) 58%, transparent);
+}
+.screener-crow__th--state:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
 /* ── Phase B-3: lock crow ＋ mseg (個別緩急 精度セグメント) ────────────────────
    lock crow: Premium 限定 facet を「非表示」でなく南京錠 crow で見せ Pro 訴求 (Trust Cliff #2)。
    表示専用 — itemPasses/件数には一切影響しない (count==list の C-2 不変)。 */

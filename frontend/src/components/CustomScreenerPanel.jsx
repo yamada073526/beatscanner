@@ -251,6 +251,18 @@ function gradePass(facet, item, lvl) {
 //   breakout_extended は backend 側で v148 の 3 ゲート (50DMA乖離/上昇率/market gate) 済み。
 //   free/pro は backend が cup_state=null マスク (Premium 限定) → pass=false (件数に影響しない)。
 const CUP_PASS_STATES = new Set(['breakout_pending', 'breakout_confirmed', 'breakout_extended']);
+// cup「型」状態トグル (新高値ブレイク preset・Premium 限定)。mockup p2 .th.state の React 移植
+//   (SPEC_2026-06-25 cup-state-toggle / mockup:250 states 定義)。
+//   default 'all' = 件数不変の「任意の絞り込み」(gate1 2026-06-25 user 確定)。特定 stage 選択時のみ AND 絞り込み。
+//   breakout_extended (過熱) は mockup 原典どおり全 bucket から除外 (mockup:253 「+5%超は過熱として除外」)。
+//   各 cup_state 生値は backend main.py の cup detection 出力 (Sprint 0 grep 裏取り)。
+const CUP_STATE_ORDER = ['confirmed', 'handle', 'cup', 'all']; // クリック循環順 (ブレイク確定→取っ手→カップ→すべて)
+const CUP_STATE_LABEL_JP = { confirmed: 'ブレイク確定', handle: '取っ手形成中', cup: 'カップ形成中', all: 'すべて' };
+const CUP_STATE_MATCH = {                          // mockup 状態語 → backend cup_state 生値 (1:1)
+  confirmed: new Set(['breakout_confirmed']),      // main.py:13759 (pivot 上抜け + 出来高確認)
+  handle:    new Set(['formation']),               // main.py:13754 (cup+handle 完成・pivot 待機)
+  cup:       new Set(['cup_completing']),          // main.py:13880 (カップ右側形成中・取っ手未形成)
+};
 export const PRESET_CONDS = [
   // ── grade 条件 (精度連動・activeGrades 経由) ──
   { key: 'eps_yoy_pct',          kind: 'grade', facet: FACET_MAP.eps_yoy_pct,          pass: (item, lvl) => gradePass(FACET_MAP.eps_yoy_pct, item, lvl) },
@@ -540,6 +552,13 @@ export function itemPasses(item, activeGrades, extra) {
   for (const c of BINARY_CONDS) {
     if (extra?.[c.flag] && !c.pass(item)) return false;
   }
+  // cup「型」状態トグル: 特定 stage 選択時のみ cup_state を AND 絞り込み ('all'/未指定 = 件数不変)。
+  //   free/pro は cup_state=null マスク + new_high_break は Premium gate (line 2157) のためトグル到達不可
+  //   = cupState は常に 'all' に留まる (R3 Premium マスク漏れを構造的に回避)。
+  if (extra?.cupState && extra.cupState !== 'all') {
+    const allowed = CUP_STATE_MATCH[extra.cupState];
+    if (!allowed || item.cup_state == null || !allowed.has(item.cup_state)) return false;
+  }
   // sector / mcap フィルタ (preset 非依存・旧実装そのまま)
   if (extra?.sectors?.length && !extra.sectors.includes(item.sector)) return false;
   if (extra?.mcapBands?.length && !extra.mcapBands.includes(item.mcap_band)) return false;
@@ -699,6 +718,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   // D-8 sort (SPEC_2026-06-25): ユーザー制御の sort key (default = 合致度順)。applyStrategyImpl で
   //   reset するため activePreset 付近で宣言。表示順 displayItems は後段の useMemo で算出。
   const [sortKey, setSortKey] = useState('relevance');
+  // cup「型」状態トグル (新高値ブレイク・Premium): default 'all' = 件数不変 (任意の絞り込み・gate1 確定)。
+  //   applyStrategyImpl で reset するため sortKey と同様 activePreset 近傍で宣言 (v271 教訓)。
+  const [cupState, setCupState] = useState('all');
   // Phase C: 旬のセクター master-detail で選択中のセクター (null = 先頭)。
   const [selectedSector, setSelectedSector] = useState(null);
   // Pass C: 件数キャップ — 初期 100 件、「残りN件を表示」で全件展開
@@ -734,6 +756,8 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     //   sort 残留 (例: 時価総額順のまま別 preset へ) を防ぐ。BeatScanner は合致度順 default のため
     //   context 変化で reset が自然。
     setSortKey('relevance');
+    // cup「型」状態トグルも preset 切替 / 全クリアで default ('すべて' = 件数不変) に戻す (sortKey と同規約)。
+    setCupState('all');
     // まず共通リセット (overrides / binary facets)
     setPreset('standard');
     setOverrides({});
@@ -831,9 +855,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   const isCustom = Object.keys(overrides).length > 0;
   const filteredItems = useMemo(() => {
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, cupState, sectors: sectorFilter, mcapBands: mcapFilter };
     return items.filter((it) => itemPasses(it, activeGrades, extra));
-  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectorFilter, mcapFilter]);
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, cupState, sectorFilter, mcapFilter]);
 
   // Pass B: 条件合致度順ソート。
   // スコア = アクティブ数値 facet ごとに (item[key] - threshold) / threshold の合計。
@@ -912,21 +936,21 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   // Pass 3b: preset 別の total 件数 (緩い/標準/厳しい) を live 算出。ハードコード禁止。
   const presetCounts = useMemo(() => {
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, cupState, sectors: sectorFilter, mcapBands: mcapFilter };
     const result = {};
     for (const lvl of ['loose', 'standard', 'strict']) {
       const grades = buildActiveGrades(activePreset, lvl, overrides);
       result[lvl] = items.filter((it) => itemPasses(it, grades, extra)).length;
     }
     return result;
-  }, [universe, activePreset, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectorFilter, mcapFilter]);
+  }, [universe, activePreset, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, cupState, sectorFilter, mcapFilter]);
 
   // Pass 3c: faceted 件数 — 各 facet の各 level に変えた時の件数 (itemPasses 共有、Trust Cliff C-2)。
   // facet K を level L にした時の件数 = { ...activeGrades, [K]: L } で filter。
   // level='off' = K を外した件数 = delete g[K]。
   const facetLevelCounts = useMemo(() => {
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, cupState, sectors: sectorFilter, mcapBands: mcapFilter };
     const result = {};
     for (const facet of FUNDA_FACETS) {
       result[facet.key] = {};
@@ -941,13 +965,13 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       }
     }
     return result;
-  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectorFilter, mcapFilter]);
+  }, [universe, activeGrades, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, cupState, sectorFilter, mcapFilter]);
 
   // Pass 3c: empty サジェスト — 現在 active な制約を1つ外した時に最も件数が増える提案を算出。
   const emptySuggest = useMemo(() => {
     if (filteredItems.length > 0) return null;
     const items = universe?.items || [];
-    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+    const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, cupState, sectors: sectorFilter, mcapBands: mcapFilter };
     let best = null;
     // B-3.5: gate (南京錠・変更不可) は「外す提案」の候補から除外する。
     //   「外せない条件を外せ」と提案する矛盾 (Trust Cliff) を防ぐ (SPEC §5 Sprint 3)。
@@ -1033,7 +1057,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       if (!best || cnt > best.count) best = { key: 'sector_leader', label: 'セクター別リーダー', count: cnt, type: 'sector_leader' };
     }
     return best;
-  }, [filteredItems.length, universe, activeGrades, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, sectorFilter, mcapFilter, activePreset]);
+  }, [filteredItems.length, universe, activeGrades, overrides, fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, cupState, sectorFilter, mcapFilter, activePreset]);
 
   // Pass 3c: sector / mcap 選択肢を universe から live 算出 (count 付き)。
   // Pass 3d (修正A): 全件 universe 集計から faceted count へ変更 (Trust Cliff C-2 修正)。
@@ -1288,6 +1312,40 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
         </div>
       );
     }
+    // cup「型」状態トグル (SPEC_2026-06-25): Premium・new_high_break のみ .th.state を描画。
+    //   free/pro は上の locked crow で処理済 (ここに到達するのは Premium = cup_state 非マスク)。
+    //   他 preset / custom では従来どおり非表示 (binBindings 未登録 → 末尾で null)。
+    //   「任意の絞り込み」(gate1 確定) なので必須 pill は付けず、label + クリック循環 state pill のみ。
+    if (cond.key === 'cup') {
+      if (activePreset !== 'new_high_break') return null;
+      const stLabel = CUP_STATE_LABEL_JP[cupState];
+      const cycleCupState = () => {
+        const i = CUP_STATE_ORDER.indexOf(cupState);
+        setCupState(CUP_STATE_ORDER[(i + 1) % CUP_STATE_ORDER.length]);
+        trackEvent('screener_cup_state_toggle', { from: cupState });
+      };
+      return (
+        <div
+          key={cond.key}
+          className={`screener-crow${cupState !== 'all' ? ' is-on' : ''}`}
+          data-testid="screener-cond-row"
+          data-cond="cup"
+          title={meta.tooltip || undefined}
+        >
+          <span className="screener-crow__lbl">{meta.label}</span>
+          <button
+            type="button"
+            className="screener-crow__th screener-crow__th--state"
+            onClick={cycleCupState}
+            aria-label={`カップの形成段階で絞り込み（現在: ${stLabel}）。クリックで次の段階へ切替`}
+            data-testid="screener-cup-state-toggle"
+            data-cup-state={cupState}
+          >
+            {stLabel}
+          </button>
+        </div>
+      );
+    }
     if (!universe?.freshness?.[meta.freshness]) return null;
     // B-3.5 gate 南京錠: 当該 preset の死守条件は常時 ON・トグル不可で描画する。
     //   flag は applyStrategyImpl で既に true (件数算入済・count==list 不変)。トグル UI を出さず、
@@ -1499,7 +1557,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                 const parts = [];
                 const items = universe?.items || [];
                 const baseCount = filteredItems.length;
-                const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectors: sectorFilter, mcapBands: mcapFilter };
+                const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, cupState, sectors: sectorFilter, mcapBands: mcapFilter };
 
                 if (mcapFilter.length > 0) {
                   const label = mcapFilter.map((k) => MCAP_BANDS.find((b) => b.key === k)?.label || k).join('・');
