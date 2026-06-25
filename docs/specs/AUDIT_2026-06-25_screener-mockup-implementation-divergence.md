@@ -136,7 +136,18 @@ user 懸念「新高値ブレイクは市況依存。緩和しすぎると活況
 - emptySuggest を `PRESET_CORE_KEYS` 固定→`activeGrades` 実 key 走査に修正 (preset 別 grades 整合)。
 - 検証: build pass + 合成 test pass (段階別件数 緩≥標≥厳 単調減少 / count==list 全精度 / 隠れフィルタ無)。
 
+### Sprint 2 実装済 (本 PR・P1-a/P1-c)
+- **P1-c**: earnings_pass から eps_cagr_3y を必須 grade 除去 (eps_3y_rising と A軸二重カウント)。PRESET_DISPLAY_CONDS で任意トグルに降格。
+- **P1-a** (user 承認 2026-06-25): ocf_margin を binary gate ≥15% 固定 → 可変 grade (緩≥10/標≥15/厳≥25)。旧 code line 119「段階化になじまない」決定を更新。
+  - FUNDA_FACETS 登録 + PRESET_CONDS kind binary→grade + PRESET_PREDICATES grades 追加 + GATE_CONDS/CROW_BINARY_META/binBindings から除去。
+  - **件数中立性を test で実証**: earnings_pass 標準精度の新 grade 通過集合 = 旧 gate≥15 と完全一致。
+
+### Sprint 3 一部実装済 (本 PR) / 残り保留
+- **済**: セクター別リーダーの定義条件 is_sector_rs_leader を南京錠「必須」crow で可視化 (preset名と表示の乖離 Trust Cliff 解消・freshness 'rs' で検証可能・件数中立)。
+- **保留 (本番 deploy 後・件数実測→user 承認)**: inst_holders_qoq↑ の gate 必須化 (45日遅延データで件数激減リスク・qa 慎重論) / mcap≥mid デフォルト cap / sector_leader の eps_cagr・eps_yoy 整理。
+
 ### follow-up (別 sprint)
 - 買い場圏のタイト化 (+5/+3/+2%) = binary facet 段階閾値 (別機構)。
 - default loose 起点 vs 標準 の最終判断は本番件数を見てから (qa)。
 - gate new_high_52w の OR 緩和 (年初来高値 OR 52週) で閑散時 0 件保険 (金融提案)。
+- ocfMarginOnly state の完全除去 (現在 no-op 残置・10箇所 extra 配線の cleanup)。
