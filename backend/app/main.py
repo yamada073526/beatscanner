@@ -17939,18 +17939,33 @@ def _latest_valid_calc_date(
 
     Returns: (date or None, row_count)。 全 lookback が閾値未満なら (None, 0)。
     """
+    import httpx as _hx_sb
+
+    def _exec_retry(_q, _attempts: int = 2):
+        # Supabase (postgrest/httpx http2) は idle connection を切ることがあり、
+        # RemoteProtocolError "Server disconnected" を投げる (Sentry BACKEND-3A、unhandled 500)。
+        # 新接続で 1 回 retry すれば回復する transient なので吸収する。retry 後も失敗する
+        # 真の障害は raise して Sentry に届ける (実害を隠さない)。
+        for _i in range(_attempts):
+            try:
+                return _q.execute()
+            except (_hx_sb.RemoteProtocolError, _hx_sb.ConnectError, _hx_sb.ReadError):
+                if _i == _attempts - 1:
+                    raise
+
     exclude: list[str] = []
     for _ in range(max_lookback):
         q = sb.table(table).select(date_col).order(date_col, desc=True)
         for ed in exclude:
             q = q.neq(date_col, ed)
-        rows = (q.limit(1).execute().data) or []
+        rows = (_exec_retry(q.limit(1)).data) or []
         if not rows:
             break
         cd = rows[0][date_col]
         cnt = (
-            sb.table(table).select(date_col, count="exact")
-            .eq(date_col, cd).limit(1).execute().count
+            _exec_retry(
+                sb.table(table).select(date_col, count="exact").eq(date_col, cd).limit(1)
+            ).count
         ) or 0
         if cnt >= min_rows:
             return cd, cnt

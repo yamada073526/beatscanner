@@ -29,5 +29,16 @@ export function withViewTransition(fn) {
     fn();
     return;
   }
-  document.startViewTransition(fn);
+  try {
+    const transition = document.startViewTransition(fn);
+    // 連続開閉 / 高速ナビで前の transition が skip / abort されると .finished 等が reject される。
+    // benign (UX 影響なし) なため握りつぶし、unhandled rejection → Sentry 流入を防ぐ
+    // (Sentry JAVASCRIPT-REACT-A "Transition was skipped" / -B "Transition was aborted")。
+    transition?.finished?.catch(() => {});
+    transition?.ready?.catch(() => {});
+    transition?.updateCallbackDone?.catch(() => {});
+  } catch {
+    // startViewTransition 自体が同期 throw した場合は即時実行で graceful degrade
+    fn();
+  }
 }

@@ -42,8 +42,11 @@ export async function initSentry() {
         // - Failed to fetch / NetworkError: ブラウザ back-forward cache や offline 由来
         // - ResizeObserver loop: Chrome の benign warning (実害なし)
         // - Non-Error promise rejection: third-party script が throw した非 Error 値
+        // - Transition was skipped/aborted: View Transition API が高速操作で中断 (benign)
+        // - Importing a module script failed / Unable to preload: deploy 後に古い bundle が
+        //   新 chunk/CSS を参照する transient (次回ロードで解消)
         const msg = event.exception?.values?.[0]?.value || event.message || '';
-        if (/ERR_BLOCKED_BY_CLIENT|Loading chunk \d+ failed|Failed to fetch|NetworkError|ResizeObserver loop|Non-Error promise rejection|InvalidStateError/i.test(msg)) {
+        if (/ERR_BLOCKED_BY_CLIENT|Loading chunk \d+ failed|Failed to fetch|NetworkError|ResizeObserver loop|Non-Error promise rejection|InvalidStateError|Transition was (skipped|aborted)|Importing a module script failed|Unable to preload/i.test(msg)) {
           return null;
         }
         return event;
