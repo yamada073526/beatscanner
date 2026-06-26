@@ -41,8 +41,9 @@ jobs:
     name: Nightly RS + Cup-Handle + CAN-SLIM scan
     runs-on: ubuntu-latest
     # 6体合議 qa P0: cup(~97s)+rs(~62s)+canslim(wc=3 並列、3000銘柄) を直列実行する余裕。
-    # canslim は新規・初回未実測のため 30→45min に margin (timeout で partial scan 化を防ぐ)。
-    timeout-minutes: 45
+    # issue #27: cup/canslim/earnings-annual を offset chunk loop 化 (各 endpoint 6 chunk)。
+    # 直列 chunk で wall time が伸びるため 45→60min に margin (chunk 数 × per-chunk 時間 + rs)。
+    timeout-minutes: 60
     env:
       BASE: https://beatscanner-production.up.railway.app
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
@@ -51,6 +52,11 @@ jobs:
       # cron 時間: 3000@worker3 で rs~3.1min/cup~4.8min/GH sequential~8min (timeout 30min 内)。
       # Supabase ~166MB/500MB=33%。 段階展開不要 (Ultimate で rate-limit リスク消失)。
       BODY: '{"universe_source":"russell3000","universe_size":${{ inputs.universe_size || 3000 }},"worker_count":3}'
+      # issue #27: full universe (3000) を 1 回の同期 HTTP で投げると Railway gateway の 5min 502 で
+      # persist 前に切られ 0 persist になる。CHUNK 単位 (offset/limit) でループ呼出し各 chunk を 5min 内に
+      # 完走・200 応答させる (per-ticker 独立な cup/canslim/earnings-annual のみ chunk 化、rs は percentile
+      # が cross-ticker のため単発維持)。3000/500 = 6 chunk。検証 universe_size=80 等の小値では 1 chunk。
+      CHUNK: '500'
     steps:
       - name: Setup tools
         run: |
@@ -69,33 +75,40 @@ jobs:
         if: ${{ inputs.canslim_only != 'true' }}
         continue-on-error: true
         run: |
-          echo "=== cup-scan ==="
-          resp=$(curl -s --max-time 1200 -w '\nHTTP:%{http_code}' -X POST \
-            -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
-            -d "$BODY" "$BASE/api/cron/cup-scan")
-          http=$(echo "$resp" | tail -1 | sed 's/.*HTTP://')
-          body=$(echo "$resp" | sed '$d')
-          echo "HTTP=$http"
-          echo "$body" | jq '{processed_count,detected_count,upserted_count,failed_count}' 2>/dev/null || true
-          detected=$(echo "$body" | jq -r '.detected_count // 0' 2>/dev/null || echo 0)
-          upserted=$(echo "$body" | jq -r '.upserted_count // 0' 2>/dev/null || echo 0)
+          # issue #27: offset chunk loop。full universe を CHUNK 件ずつ分割呼出し、各 chunk を
+          # Railway gateway 5min 内に完走・200 応答させる (cup-scan は per-ticker 独立で chunk 安全)。
+          echo "=== cup-scan (chunked offset loop) ==="
+          UNIVERSE=$(echo "$BODY" | jq -r '.universe_size // 3000')
+          t_proc=0; t_det=0; t_ups=0; t_fail=0; offset=0; last_http=000
+          while [ "$offset" -lt "$UNIVERSE" ]; do
+            cbody=$(echo "$BODY" | jq -c --argjson off "$offset" --argjson lim "$CHUNK" '. + {offset:$off, limit:$lim}')
+            resp=$(curl -s --max-time 600 -w '\nHTTP:%{http_code}' -X POST \
+              -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
+              -d "$cbody" "$BASE/api/cron/cup-scan")
+            http=$(echo "$resp" | tail -1 | sed 's/.*HTTP://')
+            body=$(echo "$resp" | sed '$d')
+            proc=$(echo "$body" | jq -r '.processed_count // 0' 2>/dev/null || echo 0)
+            det=$(echo "$body" | jq -r '.detected_count // 0' 2>/dev/null || echo 0)
+            ups=$(echo "$body" | jq -r '.upserted_count // 0' 2>/dev/null || echo 0)
+            fail=$(echo "$body" | jq -r '.failed_count // 0' 2>/dev/null || echo 0)
+            echo "  [cup] offset=$offset/$UNIVERSE http=$http processed=$proc detected=$det upserted=$ups failed=$fail"
+            # 各 chunk は 5min 内完走を狙うが、稀に gateway 502 でも次 chunk へ継続 (per-ticker 増分 persist)。
+            if [ "$http" != "200" ]; then
+              echo "::warning::cup-scan chunk offset=$offset が HTTP $http (gateway timeout の可能性。Freshness gate で DB を真とする)。"
+              echo "### ⚠️ cup-scan chunk offset=\`$offset\` HTTP \`$http\`" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            t_proc=$((t_proc + proc)); t_det=$((t_det + det)); t_ups=$((t_ups + ups)); t_fail=$((t_fail + fail))
+            last_http=$http; offset=$((offset + CHUNK))
+          done
+          echo "cup-scan total: processed=$t_proc detected=$t_det upserted=$t_ups failed=$t_fail"
           {
-            echo "http=$http"
-            echo "produced=$detected"
-            echo "upserted=$upserted"
+            echo "http=$last_http"
+            echo "produced=$t_det"
+            echo "upserted=$t_ups"
           } >> "$GITHUB_OUTPUT"
-          # Sprint 0 (検証 2026-06-16 で判明): Railway gateway は ~5min で 502 を返すが backend scan は完走し
-          # persist する (502 ≠ stale)。HTTP は健全性信号にならないため warning 止まりにし、job 失敗判定は
-          # 末尾 Freshness gate (DB を真とする) に委ねる。gateway 脆弱性の構造解消は SPEC §4.5/⑩ の async/chunk 化。
-          if [ "$http" != "200" ]; then
-            echo "::warning::cup-scan が HTTP $http (Railway gateway timeout の可能性。backend は完走し persist することが多い — 末尾 Freshness gate で DB を真とする)。"
-            echo "### ⚠️ cup-scan HTTP \`$http\` (gateway timeout、freshness で確認)" >> "$GITHUB_STEP_SUMMARY"
-          fi
           # v176: OHLCV fetch 大量失敗の検知 (FMP 移行効果の監視)。 failed が processed の半数超なら warning。
-          proc=$(echo "$body" | jq -r '.processed_count // 0' 2>/dev/null || echo 0)
-          fail=$(echo "$body" | jq -r '.failed_count // 0' 2>/dev/null || echo 0)
-          if [ "${proc:-0}" -gt 0 ] && [ "${fail:-0}" -gt $((proc / 2)) ]; then
-            echo "::warning::Cup scan の OHLCV fetch 失敗多数 (failed=$fail / processed=$proc) — FMP fetch を確認。"
+          if [ "${t_proc:-0}" -gt 0 ] && [ "${t_fail:-0}" -gt $((t_proc / 2)) ]; then
+            echo "::warning::Cup scan の OHLCV fetch 失敗多数 (failed=$t_fail / processed=$t_proc) — FMP fetch を確認。"
           fi
 
       - name: RS scan
@@ -147,40 +160,45 @@ jobs:
         id: canslim
         continue-on-error: true
         run: |
-          echo "=== canslim-scan ==="
-          resp=$(curl -s --max-time 1200 -w '\nHTTP:%{http_code}' -X POST \
-            -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
-            -d "$BODY" "$BASE/api/cron/canslim-scan")
-          http=$(echo "$resp" | tail -1 | sed 's/.*HTTP://')
-          body=$(echo "$resp" | sed '$d')
-          echo "HTTP=$http"
-          echo "$body" | jq '{processed_count,eps_computed_count,eps_null_count,upserted_count,failed_count,buyback_computed_count,volume_surge_computed_count,calc_date}' 2>/dev/null || true
-          # eps_computed_count が processed の 30% 未満なら警告 (EPS data 取得不良の検知)
-          proc=$(echo "$body" | jq -r '.processed_count // 0' 2>/dev/null || echo 0)
-          eps_ok=$(echo "$body" | jq -r '.eps_computed_count // 0' 2>/dev/null || echo 0)
-          cs_upserted=$(echo "$body" | jq -r '.upserted_count // 0' 2>/dev/null || echo 0)
+          # issue #27: offset chunk loop。full universe を CHUNK 件ずつ分割呼出し、各 chunk を 5min 内に
+          # 完走・persist させる (canslim-scan は per-ticker 独立で chunk 安全)。full 3000 単発は universe
+          # fetch + batch pre-fetch で 5min を食い潰し per-ticker upsert に到達せず 0 persist になっていた。
+          echo "=== canslim-scan (chunked offset loop) ==="
+          UNIVERSE=$(echo "$BODY" | jq -r '.universe_size // 3000')
+          t_proc=0; t_eps=0; t_ups=0; offset=0; last_http=000
+          while [ "$offset" -lt "$UNIVERSE" ]; do
+            cbody=$(echo "$BODY" | jq -c --argjson off "$offset" --argjson lim "$CHUNK" '. + {offset:$off, limit:$lim}')
+            resp=$(curl -s --max-time 600 -w '\nHTTP:%{http_code}' -X POST \
+              -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
+              -d "$cbody" "$BASE/api/cron/canslim-scan")
+            http=$(echo "$resp" | tail -1 | sed 's/.*HTTP://')
+            body=$(echo "$resp" | sed '$d')
+            proc=$(echo "$body" | jq -r '.processed_count // 0' 2>/dev/null || echo 0)
+            eps_ok=$(echo "$body" | jq -r '.eps_computed_count // 0' 2>/dev/null || echo 0)
+            ups=$(echo "$body" | jq -r '.upserted_count // 0' 2>/dev/null || echo 0)
+            echo "  [canslim] offset=$offset/$UNIVERSE http=$http processed=$proc eps_computed=$eps_ok upserted=$ups"
+            if [ "$http" != "200" ]; then
+              echo "::warning::canslim-scan chunk offset=$offset が HTTP $http (gateway timeout の可能性。Freshness gate で DB を真とする)。"
+              echo "### ⚠️ canslim-scan chunk offset=\`$offset\` HTTP \`$http\`" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            t_proc=$((t_proc + proc)); t_eps=$((t_eps + eps_ok)); t_ups=$((t_ups + ups))
+            last_http=$http; offset=$((offset + CHUNK))
+          done
+          echo "canslim-scan total: processed=$t_proc eps_computed=$t_eps upserted=$t_ups"
           {
-            echo "http=$http"
-            echo "produced=$proc"
-            echo "upserted=$cs_upserted"
+            echo "http=$last_http"
+            echo "produced=$t_proc"
+            echo "upserted=$t_ups"
           } >> "$GITHUB_OUTPUT"
-          # Sprint 0: HTTP 502 は gateway timeout (backend は persist することが多い)。warning 止まり、判定は末尾 Freshness gate。
-          if [ "$http" != "200" ]; then
-            echo "::warning::canslim-scan が HTTP $http (gateway timeout の可能性。Freshness gate で DB を真とする)。"
-            echo "### ⚠️ canslim-scan HTTP \`$http\` (gateway timeout、freshness で確認)" >> "$GITHUB_STEP_SUMMARY"
+          # eps_computed_count が processed の 30% 未満なら警告 (EPS data 取得不良の検知)
+          if [ "${t_proc:-0}" -gt 0 ] && [ "${t_eps:-0}" -lt $((t_proc * 30 / 100)) ]; then
+            echo "::warning::CAN-SLIM scan の eps_computed が少ない (computed=$t_eps / processed=$t_proc) — FMP earnings_surprises を確認。"
           fi
-          if [ "${proc:-0}" -gt 0 ] && [ "${eps_ok:-0}" -lt $((proc * 30 / 100)) ]; then
-            echo "::warning::CAN-SLIM scan の eps_computed が少ない (computed=$eps_ok / processed=$proc) — FMP earnings_surprises を確認。"
-          fi
-          # MINOR S4a: upsert 失敗率 warning (GRANT 漏れ silent fail 検知)
-          # 分母を eps_computed → processed_count に変更 (S4a 修正)。
-          # 旧分母 eps_computed (最大 256 件) だと eps NULL 銘柄の失敗を黙認するため、
-          # processed_count (全 scan 対象数) を分母にして実質的な失敗率を計測する。
-          upserted=$(echo "$body" | jq -r '.upserted_count // 0' 2>/dev/null || echo 0)
-          if [ "${proc:-0}" -gt 0 ] && [ "${upserted:-0}" -lt $((proc / 2)) ]; then
-            echo "::warning::CAN-SLIM scan の upsert 失敗率が高い (upserted=$upserted / processed=$proc)。Supabase screener_fundamentals テーブルの service_role GRANT を確認してください (feedback_supabase_grant_bug)。"
+          # MINOR S4a: upsert 失敗率 warning (GRANT 漏れ silent fail 検知)。分母は processed_count (全 scan 対象)。
+          if [ "${t_proc:-0}" -gt 0 ] && [ "${t_ups:-0}" -lt $((t_proc / 2)) ]; then
+            echo "::warning::CAN-SLIM scan の upsert 失敗率が高い (upserted=$t_ups / processed=$t_proc)。Supabase screener_fundamentals テーブルの service_role GRANT を確認してください (feedback_supabase_grant_bug)。"
             echo "### ⚠️ CAN-SLIM upsert 失敗率警告" >> "$GITHUB_STEP_SUMMARY"
-            echo "- upserted: \`$upserted\` / processed: \`$proc\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- upserted: \`$t_ups\` / processed: \`$t_proc\`" >> "$GITHUB_STEP_SUMMARY"
             echo "- 対処: Supabase SQL Editor で \`grant select, insert, update, delete on public.screener_fundamentals to service_role;\` を実行" >> "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -194,24 +212,31 @@ jobs:
         id: earnings_annual
         continue-on-error: true
         run: |
-          echo "=== earnings-annual-scan ==="
-          resp=$(curl -s --max-time 1200 -w '\nHTTP:%{http_code}' -X POST \
-            -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
-            -d "$BODY" "$BASE/api/cron/earnings-annual-scan")
-          http=$(echo "$resp" | tail -1 | sed 's/.*HTTP://')
-          body=$(echo "$resp" | sed '$d')
-          echo "HTTP=$http"
-          echo "$body" | jq '{processed_count,annual_rows_upserted,evaluated_count,failed_count,calc_date}' 2>/dev/null || true
-          proc=$(echo "$body" | jq -r '.processed_count // 0' 2>/dev/null || echo 0)
-          evaluated=$(echo "$body" | jq -r '.evaluated_count // 0' 2>/dev/null || echo 0)
-          # Sprint 0: HTTP 502 は gateway timeout (backend は persist することが多い)。warning 止まり、判定は末尾 Freshness gate。
-          if [ "$http" != "200" ]; then
-            echo "::warning::earnings-annual-scan が HTTP $http (gateway timeout の可能性。Freshness gate で DB を真とする)。"
-            echo "### ⚠️ earnings-annual-scan HTTP \`$http\` (gateway timeout、freshness で確認)" >> "$GITHUB_STEP_SUMMARY"
-          fi
+          # issue #27: offset chunk loop (canslim と同設計)。earnings-annual は per-ticker 独立で chunk 安全。
+          echo "=== earnings-annual-scan (chunked offset loop) ==="
+          UNIVERSE=$(echo "$BODY" | jq -r '.universe_size // 3000')
+          t_proc=0; t_eval=0; offset=0; last_http=000
+          while [ "$offset" -lt "$UNIVERSE" ]; do
+            cbody=$(echo "$BODY" | jq -c --argjson off "$offset" --argjson lim "$CHUNK" '. + {offset:$off, limit:$lim}')
+            resp=$(curl -s --max-time 600 -w '\nHTTP:%{http_code}' -X POST \
+              -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
+              -d "$cbody" "$BASE/api/cron/earnings-annual-scan")
+            http=$(echo "$resp" | tail -1 | sed 's/.*HTTP://')
+            body=$(echo "$resp" | sed '$d')
+            proc=$(echo "$body" | jq -r '.processed_count // 0' 2>/dev/null || echo 0)
+            evaluated=$(echo "$body" | jq -r '.evaluated_count // 0' 2>/dev/null || echo 0)
+            echo "  [earnings-annual] offset=$offset/$UNIVERSE http=$http processed=$proc evaluated=$evaluated"
+            if [ "$http" != "200" ]; then
+              echo "::warning::earnings-annual-scan chunk offset=$offset が HTTP $http (gateway timeout の可能性。Freshness gate で DB を真とする)。"
+              echo "### ⚠️ earnings-annual-scan chunk offset=\`$offset\` HTTP \`$http\`" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            t_proc=$((t_proc + proc)); t_eval=$((t_eval + evaluated))
+            last_http=$http; offset=$((offset + CHUNK))
+          done
+          echo "earnings-annual-scan total: processed=$t_proc evaluated=$t_eval"
           # upsert 失敗検知 (GRANT 漏れ silent fail): processed>0 だが evaluated=0 は異常。
-          if [ "${proc:-0}" -gt 0 ] && [ "${evaluated:-0}" -eq 0 ]; then
-            echo "::warning::earnings-annual-scan の評価が 0 件 (processed=$proc, evaluated=0)。earnings_annual / earnings_annual_evaluation の service_role GRANT を確認 (feedback_supabase_grant_bug)。"
+          if [ "${t_proc:-0}" -gt 0 ] && [ "${t_eval:-0}" -eq 0 ]; then
+            echo "::warning::earnings-annual-scan の評価が 0 件 (processed=$t_proc, evaluated=0)。earnings_annual / earnings_annual_evaluation の service_role GRANT を確認 (feedback_supabase_grant_bug)。"
             echo "### ⚠️ earnings-annual evaluated=0 警告 (GRANT 漏れの可能性)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -254,7 +279,29 @@ jobs:
             echo "::error::cup-scan produced=$cup_prod だが upserted=0 — persist 失敗 (GRANT/DB)"; fail=1
           fi
           if [ "$fail" -ne 0 ]; then
-            echo "### 🔴 Freshness gate FAILED — DB が 2日以上 stale。universe 分割 or scan 非同期化を検討 (SPEC §4.5/⑩)。" >> "$GITHUB_STEP_SUMMARY"
+            # issue #27: chunk/offset 化済。それでも stale なら gateway 502 以外の原因 (FMP rate limit /
+            # Supabase service_role GRANT / universe fetch 失敗 / chunk timeout)。各 scan step の
+            # chunk ごと http/upserted ログを確認すること。
+            echo "### 🔴 Freshness gate FAILED — DB が 2日以上 stale。chunk 化済のため gateway 502 以外の原因 (FMP / GRANT / universe fetch) を上の chunk ログで調査 (issue #27)。" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
           echo "✅ freshness OK (rs/canslim/retest とも >= $yday で persist 確認。502 は gateway timeout で無害)"
+
+      # issue #27 DoD: 再発検知通知。Freshness gate が exit 1 (DB 2日以上 stale) した時のみ発火。
+      # 各 scan step は continue-on-error: true で job を落とさないため、failure() = freshness gate 失敗。
+      # GitHub Actions の job failure は actor / watcher へ email 通知される。ここでは失敗内容を step summary
+      # に集約し、chunk 化後も回復しない (= gateway 502 以外の根本原因) ことを明示して調査導線を残す。
+      - name: Notify on stale (freshness gate failure)
+        if: failure()
+        run: |
+          echo "::error::Nightly Scan freshness gate FAILED — screener が 2日以上 stale。chunk/offset 化後も stale = gateway 502 以外の原因を調査 (issue #27)。"
+          {
+            echo "## 🔴 Nightly Scan stale 再発 (issue #27)"
+            echo "Freshness gate が DB の stale を検知しました。chunk/offset 化後も stale ということは、"
+            echo "gateway 502 以外の原因 (FMP rate limit / Supabase service_role GRANT / universe fetch 失敗 / chunk timeout) が疑われます。"
+            echo ""
+            echo "**調査導線**:"
+            echo "- 上の各 scan step の chunk ごと \`http\` / \`upserted\` ログを確認 (どの offset で失敗したか)"
+            echo "- Supabase \`screener_fundamentals\` の最新 calc_date 行数を確認 (0 件なら全 chunk persist 失敗)"
+            echo "- FMP rate limit (429 / Limit Reach) が出ていないか各 chunk の failed_count を確認"
+          } >> "$GITHUB_STEP_SUMMARY"
