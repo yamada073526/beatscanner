@@ -1,8 +1,18 @@
-import { defineConfig } from 'vite';
+import { defineConfig, configDefaults } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  // 隠れフィルタ防止の unit test (screener invariant)。本番非依存・数秒で完走 (Playwright E2E と別系)。
+  //   environment: 'node' + css: false で React component を副作用なく import (純レジストリ検査のみ)。
+  //   exclude に __tests__ を追加: 既存の standalone node test (completenessLedger/blocklist、process.exit 駆動の
+  //   非 vitest 形式・`node <file>` で個別起動) を vitest が拾わないようにする。vitest test は co-located 配置に統一。
+  test: {
+    environment: 'node',
+    css: false,
+    include: ['src/**/*.test.{js,jsx,mjs}'],
+    exclude: [...configDefaults.exclude, '**/__tests__/**'],
+  },
   server: {
     port: 5173,
     proxy: {

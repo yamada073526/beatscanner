@@ -1,0 +1,53 @@
+name: Screener 隠れフィルタ invariant (unit)
+
+# 隠れフィルタ防止の機械検査 (4 体合議 2026-06-25 提案・AUDIT §「4 体合議結果」)。
+# - 各 preset で「述語適用される全条件 (PRESET_PREDICATES.grades + extra フラグ)」が
+#   「絞り込み panel に表示される条件 (PRESET_DISPLAY_CONDS)」に含まれることを vitest で検査。
+#   ズレ = panel 非表示なのに list を削る隠れフィルタ = Trust Cliff (景表法 §5 優良誤認 risk)。
+# - cup-toggle / dogfood (本番 Playwright) とは別役割: こちらは本番非依存の純レジストリ検査で
+#   数秒完走 (secrets/Railway deploy 不要)。PR で常時赤検知し回帰を gate する。
+# - hot_sector / sector_leader / earnings_pass の 3 件の隠れフィルタを手作業で発見・修正した教訓を機械化。
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'frontend/src/components/CustomScreenerPanel.jsx'
+      - 'frontend/src/components/CustomScreenerPanel.invariants.test.js'
+      - 'frontend/vite.config.js'
+      - 'frontend/package.json'
+      - '.github/workflows/screener_invariants.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/src/components/CustomScreenerPanel.jsx'
+      - 'frontend/src/components/CustomScreenerPanel.invariants.test.js'
+      - 'frontend/vite.config.js'
+      - 'frontend/package.json'
+      - '.github/workflows/screener_invariants.yml'
+
+jobs:
+  invariants:
+    name: screener invariants (vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install deps (lockfile 厳格)
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run screener invariant unit tests
+        working-directory: frontend
+        # 機能 gate: 失敗を緑にしない (隠れフィルタ回帰を継続的に赤で検知)。
+        run: npm run test:unit

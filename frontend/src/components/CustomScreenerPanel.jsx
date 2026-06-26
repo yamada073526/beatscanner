@@ -375,7 +375,7 @@ const CROW_BINARY_META = {
   //   gate 専用 (binBindings 非登録)=custom/他 preset では renderCrow null。freshness は 'rs' (backend が付与)。
   sector_leader:    { label: 'セクター内で相対力トップ', th: '上位3位', freshness: 'rs', tooltip: '所属セクター内で相対力 (RS) が上位 3 位以内（有効 5 銘柄以上のセクターのみ判定）。「セクター別リーダー」戦略の定義条件。' },
 };
-const CROW_LAYOUT = [
+export const CROW_LAYOUT = [
   { group: '品質',       sub: '利益・キャッシュの質', keys: ['funda_pass', 'ocf_margin_pct', 'ocf_gt_netincome', 'eps_yoy_pct', 'eps_cagr_3y', 'roe'] },
   // beat/cfps Phase 2: 決算の継続性 trio を grade 条件と視覚分離 (精度スライダー非連動の binary トグル)。
   { group: '品質',       sub: '決算の継続性（連続増）', keys: ['eps_3y_rising', 'rev_3y_rising', 'cfps_3y_rising'] },
@@ -403,10 +403,12 @@ const CROW_INLINE_LOCKED_KEYS = new Set(
 //   cup は Premium 限定 facet として CROW_LAYOUT + 本 map に追加済 (free は lock crow 経由・件数不変)。
 // activePreset が null (preset 未選択 = フリーフォーム custom) または本 map に無い key の場合は、
 //   従来通り CROW_LAYOUT 全条件を表示する (legacy 挙動・後方互換)。
-const PRESET_DISPLAY_CONDS = {
-  // 決算合格: 成長性 (EPS) + 収益の質 (CF マージン/CF>純利益/ROE) + モメンタム (RS)
+export const PRESET_DISPLAY_CONDS = {
+  // 決算合格: 定義条件(funda_pass=最新決算5条件) + 成長性 (EPS) + 収益の質 (CF マージン/CF>純利益/ROE) + モメンタム (RS)
   //   ocf_gt_netincome は gate (§B-3.5) なので display にも含める (南京錠で必ず可視化)。
-  earnings_pass:  ['eps_yoy_pct', 'eps_cagr_3y', 'ocf_margin_pct', 'ocf_gt_netincome', 'roe', 'rs_percentile', 'eps_3y_rising', 'rev_3y_rising', 'cfps_3y_rising'],
+  //   funda_pass は extra.fundaPassOnly で常時適用される定義条件なのに display 欠落 = 隠れフィルタだった
+  //   (2026-06-26 invariant test が検出・hot_sector/sector_leader と同型・Trust Cliff)。可視化で解消 (件数不変)。
+  earnings_pass:  ['funda_pass', 'eps_yoy_pct', 'eps_cagr_3y', 'ocf_margin_pct', 'ocf_gt_netincome', 'roe', 'rs_percentile', 'eps_3y_rising', 'rev_3y_rising', 'cfps_3y_rising'],
   // 新高値ブレイク: 型/タイミング (買い場圏/52週高値) + 需給 (出来高急増) + RS + EPS YoY 床。
   //   eps_yoy_pct は P0 修正で述語に算入する床条件 (≥0%) のため必ず可視化 (隠れフィルタ禁止・Trust Cliff)。
   new_high_break: ['latest_beat', 'new_high_signal', 'cup', 'volume_surge_pct', 'rs_percentile', 'eps_yoy_pct'],
@@ -485,7 +487,7 @@ const SORT_OPTIONS = [
 // defer (嘘の南京錠を作らない・SPEC §3/§9): cfpsgt (実データ無し) と cup/buy_zone/new_high_52w/
 //   ad_volume (Premium マスクで free は cup_state/pivot_distance_pct 等が null・main.py:20456-20484) は
 //   free で applied gate にすると全滅するため gate に含めない。データ整備 / Premium 専用化は別 sprint。
-const PRESET_GATE_CONDS = {
+export const PRESET_GATE_CONDS = {
   earnings_pass: ['ocf_gt_netincome'], // S2 P1-a: ocf_margin は grade 化で gate から外れた (精度連動 crow)
   sector_leader: ['sector_leader'],                      // S3: 定義条件を南京錠「必須」可視化 / ocf_margin は P1-a で grade 化
   new_high_break: ['latest_beat'],                       // beat populate 済 (Sprint 1)・PRESET_PREDICATES + applyStrategyImpl で常時 ON = 件数算入

@@ -204,4 +204,25 @@ sub-agent 調査 → main が `CustomScreenerPanel.jsx` を直接 grep/read で*
 - → eps_yoy≥25 / eps_cagr≥25 / roe≥25 / rs≥80 が **絞り込み panel 非表示のまま list を削る** = L411 自己宣言「隠れフィルタ禁止・Trust Cliff」に違反 (sector_leader と同型)。
 
 **修正 (件数不変・表示専用・在範囲)**: `PRESET_DISPLAY_CONDS.hot_sector` (L414) に `eps_yoy_pct / eps_cagr_3y / roe / rs_percentile` を追加して可視化。`PRESET_PREDICATES`/`itemPasses`/`buildActiveGrades` 不変 = **件数 count==list 無影響** (DISPLAY_CONDS は「どの crow を描くか」だけ・L398-399)。crow panel (L1705-1729) は screenerV2 左 facet panel で `isSectorView` (右の sector master-detail) と独立に描画 → 確実に可視化。4 grade は CROW_LAYOUT 品質 (L379) / タイミング (L387) group に登録済 + sector_leader が同 4 grade を既に描画 (PR #29 検証済) のため renderable 保証。build pass。
-- **sector_leader `inst_holders_qoq_pct` の dead 表示 (review 指摘)**: DISPLAY_CONDS にあるが `binBindings` 未登録で `renderCrow` が null 返し = 描画されない (変更前から)。DISPLAY から除去 or binBindings 登録で整理 (今回の変更とは独立・挙動不変)。
+- ~~**sector_leader `inst_holders_qoq_pct` の dead 表示 (review 指摘)**~~ → **2026-06-26 検証: claim は誤り (報告≠事実)。修正不要**。
+  `inst_holders_qoq_pct` は `kind:'grade'` cond (L287) で、`renderCrow` の grade 分岐 (L1268-1314) は freshness/binBindings 非依存で**無条件描画**する (binBindings path L1392 には到達しない)。L375/383 のコメント「binBindings 非登録で null」は `latest_beat` / `sector_leader` flag (binary・binBindings 非登録) を指すもので、grade cond の inst_holders_qoq_pct とは別物 (sub-agent review が両者を混同)。sector_leader の 需給 group で**任意 refinement の grade crow** (default-OFF・トグル可) として実際に描画される。dead でも隠れフィルタでもない (sector_leader 述語に未適用=件数中立)。
+
+---
+
+## 2026-06-26 追記 (続2): 隠れフィルタ機械検査の導入 + earnings_pass で第3の隠れフィルタ検出
+
+hot_sector・sector_leader と**手作業で 2 件**の隠れフィルタを発見した教訓から、4 体合議 (本書 §「4 体合議結果」L79) が提案した機械検査を実装。
+
+### invariant test (vitest) 導入
+- **不変条件**: 各 preset で「述語適用される全 cond key」⊆「`PRESET_DISPLAY_CONDS` の表示 key」。適用 = `grades` キー ∪ (`extra` の真フラグ→cond key、`PRESET_CONDS.flag` 経由)。次元フィルタ (sectors/mcapBands/sectorTopN/cupState) は crow 非表示のため対象外。
+- 実装: [`frontend/src/components/CustomScreenerPanel.invariants.test.js`](../../frontend/src/components/CustomScreenerPanel.invariants.test.js) (vitest)。CI: [`.github/workflows/screener_invariants.yml`](../../.github/workflows/screener_invariants.yml) (本番非依存・数秒・secrets 不要)。
+- export 追加 (additive・挙動不変): `CROW_LAYOUT` / `PRESET_DISPLAY_CONDS` / `PRESET_GATE_CONDS` (PRESET_PREDICATES/PRESET_CONDS は既 export)。
+- teeth 検証: earnings_pass から funda_pass を一時除去 → test が `[funda_pass]` を検出して fail することを確認 (vacuous でない)。
+
+### 第3の隠れフィルタ検出: earnings_pass の funda_pass
+- invariant test が即座に検出: `earnings_pass` は `extra.fundaPassOnly: true` で funda_pass を述語適用 (count/list) するのに `PRESET_DISPLAY_CONDS.earnings_pass` に funda_pass が無い (構成 facet eps_3y_rising 等は表示されるが、適用される funda_pass 自体は非表示) = hot_sector/sector_leader と同型の隠れフィルタ。
+- **修正**: `PRESET_DISPLAY_CONDS.earnings_pass` に `funda_pass` を追加 (件数不変・表示専用)。hot_sector と同じく default-ON トグル crow として可視化。
+- 結果: 4 preset 全てで invariant test green (9/9)。build pass。
+
+### 残 (別 sprint・任意)
+- earnings_pass/hot_sector の funda_pass を gate (南京錠・トグル不可) 化するか否かは設計判断 (現状は default-ON トグル = 可視化済で隠れフィルタは解消)。preset 定義条件のため gate 化が semantic に整合するが、件数中立性 (トグル OFF で緩む) との兼ね合いで follow-up。
