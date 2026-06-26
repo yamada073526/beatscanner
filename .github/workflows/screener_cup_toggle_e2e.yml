@@ -1,0 +1,89 @@
+name: Screener cup 状態トグル E2E (Premium・本番)
+
+# handover Q4 (SPEC_2026-06-25 cup-state-toggle): cup「型」状態トグルの一気通貫検証。
+# - Premium session を注入して本番 screener を実操作し、トグルの循環 + 件数整合 (Trust Cliff §3-3/C-2)
+#   を機械検証する。人手の目視に頼らず「実装 → 本番反映 → 動作」を CI で gate する機構。
+# - playwright_smoke.yml (非 gate・visual 検知) とは別役割: こちらは機能 gate (継続的に赤で検知)。
+# - 4 secrets が揃わない環境 (fork PR 等) では spec が test.skip → 緑 (誤検知しない)。
+#
+# secrets (repo settings に設定、screener_v2_dogfood.yml と共用):
+#   VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY (public、app build と同値)
+#   DOGFOOD_TEST_EMAIL / DOGFOOD_TEST_PASSWORD (専用テスト Premium アカウント、非 commit)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'frontend/src/components/CustomScreenerPanel.jsx'
+      - 'frontend/tests/screener-cup-toggle.spec.ts'
+      - 'frontend/scripts/lib/auth-helper.mjs'
+      - '.github/workflows/screener_cup_toggle_e2e.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/src/components/CustomScreenerPanel.jsx'
+      - 'frontend/tests/screener-cup-toggle.spec.ts'
+      - 'frontend/scripts/lib/auth-helper.mjs'
+      - '.github/workflows/screener_cup_toggle_e2e.yml'
+
+jobs:
+  cup-toggle-e2e:
+    name: cup toggle E2E against production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      # Premium 検証用 (4 secrets)。未設定なら spec が test.skip して緑 (誤検知しない)。
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      DOGFOOD_TEST_EMAIL: ${{ secrets.DOGFOOD_TEST_EMAIL }}
+      DOGFOOD_TEST_PASSWORD: ${{ secrets.DOGFOOD_TEST_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install deps (lockfile 厳格)
+        working-directory: frontend
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            playwright-chromium-
+
+      - name: Install Playwright browsers (chromium のみ)
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Warn if Premium secrets missing
+        run: |
+          if [ -z "$DOGFOOD_TEST_EMAIL" ] || [ -z "$VITE_SUPABASE_URL" ]; then
+            echo "[cup-e2e] WARNING: Premium secrets 未設定 → spec は test.skip (緑)。実検証には 4 secrets が必要。"
+          else
+            echo "[cup-e2e] Premium secrets 検出 → cup トグルを実操作で gate 検証。"
+          fi
+
+      - name: Run cup toggle E2E (Premium gate)
+        working-directory: frontend
+        # 機能 gate: 失敗を緑にしない (継続的に赤で検知)。secrets 無しは spec 内 skip で緑。
+        run: npx playwright test tests/screener-cup-toggle.spec.ts
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cup-toggle-e2e-report
+          path: frontend/playwright-report/
+          retention-days: 14

@@ -1405,7 +1405,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
           <span className="screener-refine-fh__summ" data-testid="screener-refine-summary">
             {(activePreset && PRESET_LABEL_JP[activePreset]) || 'すべての銘柄'} ・ 精度「{PRESET_LABELS[preset]}」
           </span>
-          <span className="screener-refine-fh__live">該当 <b>{universeLoading ? '–' : filteredItems.length}</b> 銘柄</span>
+          <span className="screener-refine-fh__live">該当 <b data-testid="screener-live-count">{universeLoading ? '–' : filteredItems.length}</b> 銘柄</span>
         </div>
       </div>
 
