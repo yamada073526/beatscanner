@@ -5290,6 +5290,12 @@ def _verdict(actual: float | None, estimated: float | None) -> tuple[str, float 
 #   industry 検出して **magnitude 無関係に無条件保留**。 保険/決済/証券/REIT は売上が信頼でき (実測 ±11%) 据え置き。
 _REV_BASIS_MISMATCH_PCT = 40.0
 
+# 決算速報ハイブリッド (SPEC 2026-06-27 §13-C): tri_verdict の三拍子✓ 第3要素しきい値。
+# KB原典 Layer B「来年のコンセンサス予想が今年よりくっきりと高い株でなければダメ」(markethack ch04)
+# を数値化。next_q_rev_yoy_pct >= この値 で「来期コンセンサスがくっきり高い」と判定し、
+# 売上 beat & EPS beat と合わせて 'ok' (三拍子✓) とする。保守的に +5% (明白な前向き成長)。調整可。
+TRI_FWD_GROWTH_MIN_PCT = 5.0
+
 
 def _rev_surprise_threshold(sector: str | None, industry: str | None) -> float:
     """売上サプライズを保留する |%| 閾値を industry 別に返す (FMP industry 文字列で判定)。
@@ -20233,6 +20239,15 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
     freshness["rev_3y_rising"] = sf_cd
     # 決算期混同ガード Sprint 2: last_report_date (直近決算の報告日) も funda 同源 calc_date。
     freshness["last_report_date"] = sf_cd
+    # 決算速報ハイブリッド Sprint 2 (SPEC §13): 新7フィールドも nightly canslim scan 由来 = funda 同源。
+    #   ⚠️ v278 教訓: freshness key 欠落で CustomScreenerPanel が条件を silent 非表示にする blocker を再発させない。
+    freshness["rev_yoy_pct"] = sf_cd
+    freshness["rev_beat"] = sf_cd
+    freshness["eps_beat"] = sf_cd
+    freshness["gross_margin_pct"] = sf_cd
+    freshness["next_q_rev_yoy_pct"] = sf_cd
+    freshness["next_q_eps_yoy_pct"] = sf_cd
+    freshness["tri_verdict"] = sf_cd
     if sf_cd:
         for r in _fetch_all_rows_paged(
             sb, "screener_fundamentals",
@@ -20262,6 +20277,25 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
                 sf_map[t]["cfps_3y_rising"] = r.get("cfps_3y_rising")
                 # 決算期混同ガード Sprint 2: 直近決算の報告日 (migration 未適用なら別 fetch が空 → None)。
                 sf_map[t]["last_report_date"] = r.get("last_report_date")
+        # 決算速報ハイブリッド Sprint 2 (SPEC §13): 新7フィールドも別 fetch で graceful merge。
+        # ★ 共有 SELECT に混ぜない: 1 カラム欠落 (migration 未適用) で全 fundamentals が
+        #   silent 消失する罠 (feedback_paged_select_missing_column_trap) を回避するため独立 fetch。
+        #   0 FMP call (Supabase read のみ)。migration 未適用なら例外を握り空 list → 新フィールドのみ None。
+        for r in _fetch_all_rows_paged(
+            sb, "screener_fundamentals",
+            "ticker,rev_yoy_pct,rev_beat,eps_beat,gross_margin_pct,"
+            "next_q_rev_yoy_pct,next_q_eps_yoy_pct,tri_verdict",
+            eq={"calc_date": sf_cd},
+        ):
+            t = str(r.get("ticker") or "").upper()
+            if t and t in sf_map:
+                sf_map[t]["rev_yoy_pct"] = r.get("rev_yoy_pct")
+                sf_map[t]["rev_beat"] = r.get("rev_beat")
+                sf_map[t]["eps_beat"] = r.get("eps_beat")
+                sf_map[t]["gross_margin_pct"] = r.get("gross_margin_pct")
+                sf_map[t]["next_q_rev_yoy_pct"] = r.get("next_q_rev_yoy_pct")
+                sf_map[t]["next_q_eps_yoy_pct"] = r.get("next_q_eps_yoy_pct")
+                sf_map[t]["tri_verdict"] = r.get("tri_verdict")
 
     # rs_ratings (RS percentile、 free) — 最新 calc_date 全行
     rs_map: dict[str, dict] = {}
@@ -20416,6 +20450,17 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             # 単調増加判定: cfps_3y_rising (free tier)。CFPS (営業CF/希薄化株式数) annual 4 期連続増加。
             # None = 履歴不足（False と区別）。gate 化は次セッション (populate 確認後)。
             "cfps_3y_rising": (sf or {}).get("cfps_3y_rising"),
+            # ── 決算速報ハイブリッド Sprint 2 (SPEC §13): 新7フィールド (free tier・None-preserve) ──
+            # 数値は _uni_round 経由、text (rev_beat/eps_beat/tri_verdict) は .get() 直返し。
+            # sector-gate / ADR 抑止 / EPS sanity bound は _compute_one 内で適用済 (None 保存)。
+            # 来期2列 (next_q_*) は §38 将来=絶対中立 (frontend で色なし表示)。
+            "rev_yoy_pct": _uni_round((sf or {}).get("rev_yoy_pct")),
+            "rev_beat": (sf or {}).get("rev_beat"),
+            "eps_beat": (sf or {}).get("eps_beat"),
+            "gross_margin_pct": _uni_round((sf or {}).get("gross_margin_pct")),
+            "next_q_rev_yoy_pct": _uni_round((sf or {}).get("next_q_rev_yoy_pct")),
+            "next_q_eps_yoy_pct": _uni_round((sf or {}).get("next_q_eps_yoy_pct")),
+            "tri_verdict": (sf or {}).get("tri_verdict"),
             # near_high (Pro gate) — N 条件
             "near_high_pct_scaled": _uni_round((sf or {}).get("near_high_pct_scaled")),
             # cup / breakout (Premium gate)
@@ -21824,6 +21869,14 @@ def _upsert_screener_fundamental(
     latest_beat: "bool | None" = None,
     cfps_3y_rising: "bool | None" = None,
     last_report_date: "str | None" = None,
+    # ── 決算速報ハイブリッド (SPEC 2026-06-27 §13-D): 新7フィールド ──────────────
+    rev_yoy_pct: "float | None" = None,
+    rev_beat: "str | None" = None,
+    eps_beat: "str | None" = None,
+    gross_margin_pct: "float | None" = None,
+    next_q_rev_yoy_pct: "float | None" = None,
+    next_q_eps_yoy_pct: "float | None" = None,
+    tri_verdict: "str | None" = None,
 ) -> bool:
     """screener_fundamentals テーブルに各指標を upsert。
 
@@ -21943,6 +21996,23 @@ def _upsert_screener_fundamental(
     # optional_cols fallback: migration 未適用時はカラム除外して再 upsert (graceful)。
     if last_report_date is not None:
         row["last_report_date"] = last_report_date
+    # ── 決算速報ハイブリッド (SPEC 2026-06-27 §13): 新7フィールド ─────────────────
+    # None-preserve: 欠損 / guard 発動 / 判定不能 → None を渡して payload に含めない。
+    # optional_cols fallback: migration 未適用時はカラム除外して再 upsert (graceful)。
+    if rev_yoy_pct is not None:
+        row["rev_yoy_pct"] = rev_yoy_pct
+    if rev_beat is not None:
+        row["rev_beat"] = rev_beat
+    if eps_beat is not None:
+        row["eps_beat"] = eps_beat
+    if gross_margin_pct is not None:
+        row["gross_margin_pct"] = gross_margin_pct
+    if next_q_rev_yoy_pct is not None:
+        row["next_q_rev_yoy_pct"] = next_q_rev_yoy_pct
+    if next_q_eps_yoy_pct is not None:
+        row["next_q_eps_yoy_pct"] = next_q_eps_yoy_pct
+    if tri_verdict is not None:
+        row["tri_verdict"] = tri_verdict
 
     try:
         sb.table("screener_fundamentals").upsert(
@@ -21969,6 +22039,13 @@ def _upsert_screener_fundamental(
                 "latest_beat",            # beat 判定: migration 未適用時の graceful fallback
                 "cfps_3y_rising",         # 単調増加判定: migration 未適用時の graceful fallback
                 "last_report_date",       # 決算期混同ガード: migration 未適用時の graceful fallback
+                "rev_yoy_pct",            # 決算速報: migration 未適用時の graceful fallback
+                "rev_beat",               # 決算速報: migration 未適用時の graceful fallback
+                "eps_beat",               # 決算速報: migration 未適用時の graceful fallback
+                "gross_margin_pct",       # 決算速報: migration 未適用時の graceful fallback
+                "next_q_rev_yoy_pct",     # 決算速報: migration 未適用時の graceful fallback
+                "next_q_eps_yoy_pct",     # 決算速報: migration 未適用時の graceful fallback
+                "tri_verdict",            # 決算速報: migration 未適用時の graceful fallback
             )
             if c in err_str and c in row
         ]
@@ -22305,20 +22382,20 @@ async def cron_canslim_scan(
             try:
                 surprises_raw = await client.earnings_surprises(ticker, limit=8)
             except Exception:
-                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_failed", {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_failed", {}, {}
             if not surprises_raw:
-                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_empty", {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_empty", {}, {}
 
             surprises_past = [s for s in surprises_raw if _has_eps_actual(s)]
             if not surprises_past:
-                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "no_eps_actual_in_surprises", {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "no_eps_actual_in_surprises", {}, {}
 
             latest = sorted(
                 surprises_past, key=lambda d: d.get("date") or "", reverse=True
             )[0]
             entry_date_str = latest.get("date") or ""
             if not entry_date_str:
-                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "no_entry_date", {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "no_entry_date", {}, {}
             eps_actual = _safe_eps_float(
                 latest.get("eps")
                 or latest.get("epsActual")
@@ -22616,9 +22693,12 @@ async def cron_canslim_scan(
                     ocf_margin_null_reason = "sector_excluded"
                 else:
                     # income-statement(quarter, limit=4) を fetch して TTM revenue を取得
+                    # limit=6 (決算速報 SPEC §13: rev_yoy / 来期 YoY が前年同期Qを要するため
+                    #   限度を 4→6 に統一。共有 cache key "is-q::" で flash ブロックも同データを読む。
+                    #   既存 TTM 計算は _is_data[:4] で先頭4Qのみ使用するため影響なし)。
                     _is_url = (
                         f"https://financialmodelingprep.com/stable/income-statement"
-                        f"?symbol={ticker.upper()}&period=quarter&limit=4&apikey={fmp_key}"
+                        f"?symbol={ticker.upper()}&period=quarter&limit=6&apikey={fmp_key}"
                     )
                     _is_cache_key = f"is-q::{ticker.upper()}"
                     _is_data = await safe_fmp_get(_is_url, _is_cache_key, ttl=CACHE_TTL_PROFILE)
@@ -22731,7 +22811,7 @@ async def cron_canslim_scan(
                     # income-statement を取得 (同一 cache_key → メモリキャッシュ hit、追加 FMP call ゼロ)
                     _is2_url = (
                         f"https://financialmodelingprep.com/stable/income-statement"
-                        f"?symbol={ticker.upper()}&period=quarter&limit=4&apikey={fmp_key}"
+                        f"?symbol={ticker.upper()}&period=quarter&limit=6&apikey={fmp_key}"
                     )
                     _is2_cache_key = f"is-q::{ticker.upper()}"
                     _is2_data = await safe_fmp_get(_is2_url, _is2_cache_key, ttl=CACHE_TTL_PROFILE)
@@ -22922,8 +23002,178 @@ async def cron_canslim_scan(
             if cfps_3y_rising is None:
                 null_reasons["cfps_3y_rising"] = "insufficient_annual_history"
 
-            # ★★ tuple arity 19 要素 (last_report_date を cfps_3y_rising と err の間に追加・
-            #    決算期混同ガード Sprint 1)
+            # ── 決算速報ハイブリッド (SPEC 2026-06-27 §13): 7フィールド算出 ──────────────
+            #   rev_yoy_pct / rev_beat / eps_beat / gross_margin_pct /
+            #   next_q_rev_yoy_pct / next_q_eps_yoy_pct / tri_verdict。
+            #   数値物理層 = Python 計算のみ (LLM 不使用)。surpriseColor ±3% は _verdict SSOT 流用。
+            #   追加 FMP: +1 analyst-estimates (rev_beat の revenue estimate に必須・来期2列に相乗り)。
+            #   income は is-q (limit=6 統一・共有 cache key) で前年同期Q / 来期前年同期Q をカバー。
+            flash: dict = {}
+            try:
+                # income-statement quarterly (limit=6・共有 cache key)。非 guarded は上の ocf
+                # ブロックで populate 済 → cache hit (追加 call ゼロ)。guarded sector はここで初回 fetch。
+                _fl_is_url = (
+                    f"https://financialmodelingprep.com/stable/income-statement"
+                    f"?symbol={ticker.upper()}&period=quarter&limit=6&apikey={fmp_key}"
+                )
+                _fl_is = await safe_fmp_get(_fl_is_url, f"is-q::{ticker.upper()}", ttl=CACHE_TTL_PROFILE)
+                _fl_is = _fl_is if isinstance(_fl_is, list) else []
+                _fl_latest_inc = _fl_is[0] if (_fl_is and isinstance(_fl_is[0], dict)) else None
+
+                # analyst-estimates (quarter)。date 降順 (遠未来が先頭)。limit=40 で過去〜near-term 全カバー
+                # (_compute_forward_outlook と同方針・v169 ⑥ truncate bug 回避)。
+                _fl_ae_url = (
+                    f"https://financialmodelingprep.com/stable/analyst-estimates"
+                    f"?symbol={ticker.upper()}&period=quarter&limit=40&apikey={fmp_key}"
+                )
+                _fl_est = await safe_fmp_get(_fl_ae_url, f"ae-q::{ticker.upper()}", ttl=CACHE_TTL_PROFILE)
+                _fl_est = _fl_est if isinstance(_fl_est, list) else []
+
+                # reportedCurrency (ADR EPS 抑止判定): income 先頭から取得。
+                _fl_cur = None
+                if _fl_latest_inc:
+                    _fl_cur = (_fl_latest_inc.get("reportedCurrency") or "").strip().upper() or None
+                _fl_non_usd = bool(_fl_cur and _fl_cur != "USD")
+
+                # 直近Q の売上 actual (income 先頭・date 降順)。
+                _fl_rev_actual = _safe_eps_float(_pick(_fl_latest_inc, "revenue")) if _fl_latest_inc else None
+
+                # 直近Q に最も近い estimate (rev_beat の revenue estimate / eps estimate 補完用)。
+                _fl_est_match = _nearest_by_date(entry_date_str, _fl_est, max_diff_days=60) if entry_date_str else None
+
+                # ── rev_beat: 直近Q売上 actual vs estimate ±3% (_verdict SSOT) ───────────
+                #   銀行/与信は revenue(総収益) vs estimate(純収益) の basis ミスマッチで偽サプライズ →
+                #   _rev_surprise_threshold で閾値超を保留 (Trust Cliff・feedback_revenue_basis_mismatch)。
+                _fl_rev_est = _safe_eps_float(_pick(_fl_est_match, "revenueAvg", "estimatedRevenueAvg")) if _fl_est_match else None
+                _fl_rl, _fl_rp, _ = _verdict(_fl_rev_actual, _fl_rev_est)
+                if _fl_rl in ("beat", "miss", "in-line"):
+                    _fl_rev_thr = _rev_surprise_threshold(sector, industry)
+                    if _fl_rev_thr <= 0:
+                        pass  # 銀行等: basis ミスマッチで常に保留
+                    elif _fl_rp is not None and abs(_fl_rp) > _fl_rev_thr:
+                        pass  # |surprise| 過大 = data 不整合 → 保留
+                    else:
+                        flash["rev_beat"] = "inline" if _fl_rl == "in-line" else _fl_rl
+
+                # ── eps_beat: 直近Q EPS actual vs estimate ±3% + sanity / ADR ガード ──────
+                _fl_eps_est = _safe_eps_float(
+                    latest.get("epsEstimated") or latest.get("estimatedEarning") or latest.get("estimatedEps")
+                )
+                if _fl_eps_est is None and _fl_est_match:
+                    _fl_eps_est = _safe_eps_float(_pick(_fl_est_match, "epsAvg", "estimatedEpsAvg"))
+                _fl_el, _fl_ep, _ = _verdict(eps_actual, _fl_eps_est)
+                _fl_eps_beat = None
+                if _fl_el in ("beat", "miss", "in-line"):
+                    _fl_eps_beat = "inline" if _fl_el == "in-line" else _fl_el
+                # EPS basis sanity bound (Refinitiv 2017 級) + ADR 非USD抑止
+                #   (feedback_foreign_currency_adr_guards / SPEC §11-A M2・M3)。
+                if _fl_eps_beat is not None and _fl_ep is not None and abs(_fl_ep) >= 70.0:
+                    if _fl_non_usd:
+                        _fl_eps_beat = None  # ADR: share-base 混在で偽値 → 抑止
+                    else:
+                        try:
+                            _fl_flip = (
+                                eps_actual is not None and _fl_eps_est is not None
+                                and (eps_actual >= 0) != (_fl_eps_est >= 0)
+                            )
+                        except TypeError:
+                            _fl_flip = False
+                        if _fl_flip:
+                            _fl_eps_beat = None  # US sanity bound: 符号反転 × over-threshold → 抑止
+                flash["eps_beat"] = _fl_eps_beat
+
+                # ── rev_yoy_pct: 直近Q売上 vs 前年同期Q (is-q date 照合 365日・>180日ガード) ──
+                _fl_rev_yoy = None
+                if entry_date_str and _fl_rev_actual is not None and _fl_is:
+                    _fl_cur_d = _parse_date_str(entry_date_str)
+                    if _fl_cur_d is not None:
+                        _fl_pt = (_fl_cur_d - _td_local(days=365)).isoformat()
+                        _fl_prev = _nearest_by_date(_fl_pt, _fl_is, max_diff_days=60)
+                        if _fl_prev:
+                            _fl_prev_rev = _safe_eps_float(_pick(_fl_prev, "revenue"))
+                            _fl_prev_d = _parse_date_str(_fl_prev.get("date"))
+                            if (_fl_prev_rev is not None and _fl_prev_rev > 0 and _fl_prev_d is not None
+                                    and abs((_fl_cur_d - _fl_prev_d).days) > 180):
+                                _fl_rev_yoy = round((_fl_rev_actual - _fl_prev_rev) / abs(_fl_prev_rev) * 100, 1)
+                flash["rev_yoy_pct"] = _fl_rev_yoy
+
+                # ── gross_margin_pct: 直近Q grossProfitRatio×100 (sector-gate) ────────────
+                _fl_gm = None
+                if not _roe_sector_guard(sector, industry) and _fl_latest_inc:
+                    _fl_gpr = _safe_eps_float(_pick(_fl_latest_inc, "grossProfitRatio"))
+                    if _fl_gpr is None:
+                        _fl_gp = _safe_eps_float(_pick(_fl_latest_inc, "grossProfit"))
+                        if _fl_gp is not None and _fl_rev_actual and _fl_rev_actual > 0:
+                            _fl_gpr = _fl_gp / _fl_rev_actual
+                    if _fl_gpr is not None and 0 < _fl_gpr < 1.0:
+                        _fl_gm = round(_fl_gpr * 100, 1)
+                flash["gross_margin_pct"] = _fl_gm
+
+                # ── 来期コンセンサス YoY (KB Layer B・§38 絶対中立): next-Q consensus vs 前年同期 actual ──
+                #   next-Q = entry_date より未来で最も近い estimate。frontend で色なし表示。
+                _fl_next = None
+                _fl_cd2 = _parse_date_str(entry_date_str) if entry_date_str else None
+                if _fl_cd2 is not None and _fl_est:
+                    _fl_future = []
+                    for _fl_e_row in _fl_est:
+                        _fl_ed = _parse_date_str(_fl_e_row.get("date")) if isinstance(_fl_e_row, dict) else None
+                        if _fl_ed is not None and _fl_ed > _fl_cd2:
+                            _fl_future.append((_fl_ed, _fl_e_row))
+                    if _fl_future:
+                        _fl_future.sort(key=lambda x: x[0])  # 昇順 → 最も近い未来が先頭
+                        _fl_next = _fl_future[0][1]
+                _fl_nq_rev = None
+                _fl_nq_eps = None
+                if _fl_next is not None:
+                    _fl_nq_d = _parse_date_str(_fl_next.get("date"))
+                    _fl_nq_rev_cons = _safe_eps_float(_pick(_fl_next, "revenueAvg", "estimatedRevenueAvg"))
+                    _fl_nq_eps_cons = _safe_eps_float(_pick(_fl_next, "epsAvg", "estimatedEpsAvg"))
+                    if _fl_nq_d is not None:
+                        _fl_ya_t = (_fl_nq_d - _td_local(days=365)).isoformat()
+                        # 来期売上 YoY = next-Q consensus 売上 vs 前年同期Q actual 売上 (is-q)。
+                        if _fl_nq_rev_cons is not None and _fl_is:
+                            _fl_ya_inc = _nearest_by_date(_fl_ya_t, _fl_is, max_diff_days=60)
+                            if _fl_ya_inc:
+                                _fl_ya_rev = _safe_eps_float(_pick(_fl_ya_inc, "revenue"))
+                                _fl_ya_d = _parse_date_str(_fl_ya_inc.get("date"))
+                                if (_fl_ya_rev is not None and _fl_ya_rev > 0 and _fl_ya_d is not None
+                                        and abs((_fl_nq_d - _fl_ya_d).days) > 180):
+                                    _fl_nq_rev = round((_fl_nq_rev_cons - _fl_ya_rev) / abs(_fl_ya_rev) * 100, 1)
+                        # 来期EPS YoY = next-Q consensus EPS vs 前年同期Q actual EPS (surprises)。非USD抑止。
+                        if _fl_nq_eps_cons is not None and not _fl_non_usd:
+                            _fl_ya_eps_row = _nearest_by_date(_fl_ya_t, surprises_past, max_diff_days=60)
+                            if _fl_ya_eps_row:
+                                _fl_ya_eps = _safe_eps_float(
+                                    _fl_ya_eps_row.get("eps") or _fl_ya_eps_row.get("epsActual")
+                                    or _fl_ya_eps_row.get("actualEarningResult") or _fl_ya_eps_row.get("actualEps")
+                                )
+                                _fl_ya_eps_d = _parse_date_str(_fl_ya_eps_row.get("date"))
+                                if (_fl_ya_eps is not None and _fl_ya_eps > 0 and _fl_ya_eps_d is not None
+                                        and abs((_fl_nq_d - _fl_ya_eps_d).days) > 180):
+                                    _fl_nq_eps = round((_fl_nq_eps_cons - _fl_ya_eps) / abs(_fl_ya_eps) * 100, 1)
+                flash["next_q_rev_yoy_pct"] = _fl_nq_rev
+                flash["next_q_eps_yoy_pct"] = _fl_nq_eps
+
+                # ── tri_verdict (三拍子: KB Layer B 第3要素・SPEC §13-C) ──────────────────
+                _fl_rb = flash.get("rev_beat")
+                _fl_eb = flash.get("eps_beat")
+                if _fl_rb is None and _fl_eb is None:
+                    flash["tri_verdict"] = None    # 判定不能 (売上・EPS 両方 verdict 不能)
+                elif _fl_eb == "miss":
+                    flash["tri_verdict"] = "bad"    # 予想未達 (EPS miss)
+                elif (_fl_rb == "beat" and _fl_eb == "beat"
+                        and _fl_nq_rev is not None and _fl_nq_rev >= TRI_FWD_GROWTH_MIN_PCT):
+                    flash["tri_verdict"] = "ok"     # 三拍子✓ (売上&EPS beat + 来期コンセンサスくっきり高い)
+                else:
+                    flash["tri_verdict"] = "part"   # 一部未達
+            except Exception as _fl_e:
+                print(f"[earnings_flash] compute failed for {ticker}: {_fl_e}")
+                flash = {}
+
+            # ★★ tuple arity 20 要素 (flash dict を null_reasons の後に追加・決算速報ハイブリッド
+            #    SPEC 2026-06-27 §13。flash = {rev_yoy_pct, rev_beat, eps_beat, gross_margin_pct,
+            #    next_q_rev_yoy_pct, next_q_eps_yoy_pct, tri_verdict} の dict、error path は {})
+            #    (last_report_date を cfps_3y_rising と err の間に追加・決算期混同ガード Sprint 1)
             #    (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround,
             #     near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
             #     ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome,
@@ -22935,10 +23185,10 @@ async def cron_canslim_scan(
                 ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome,
                 eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising,
                 (entry_date_str[:10] if entry_date_str else None),  # last_report_date: 直近決算の報告日
-                None, null_reasons,
+                None, null_reasons, flash,  # flash = 決算速報7フィールド dict (SPEC §13)
             )
         except Exception as e:
-            return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, f"unexpected: {e}", {}
+            return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, f"unexpected: {e}", {}, {}
 
     # fetch + 計算: worker_count>1 で並列 (asyncio.Semaphore)、 =1 で逐次。
     # ★ 6体合議 critical 対応: 旧実装は完全逐次で full universe (3000) で GHA timeout (30min) 超過
@@ -22987,7 +23237,7 @@ async def cron_canslim_scan(
     latest_beat_computed = 0  # latest_beat が算出できた件数
     cfps_3y_rising_computed = 0  # cfps_3y_rising が算出できた件数
     for result in results:
-        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct, ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome, eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising, last_report_date, err, null_reasons = result
+        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct, ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome, eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising, last_report_date, err, null_reasons, flash = result
         if err:
             failed.append({"ticker": ticker, "reason": err})
             continue
@@ -23057,6 +23307,13 @@ async def cron_canslim_scan(
                 latest_beat=latest_beat,            # beat 判定: 直近決算が予想を上回ったか
                 cfps_3y_rising=cfps_3y_rising,      # 単調増加判定: CFPS 直近4期 (annual CF)
                 last_report_date=last_report_date,  # 決算期混同ガード: 直近決算の報告日
+                rev_yoy_pct=flash.get("rev_yoy_pct"),                # 決算速報: 売上YoY
+                rev_beat=flash.get("rev_beat"),                      # 決算速報: 売上 vs予想
+                eps_beat=flash.get("eps_beat"),                      # 決算速報: EPS vs予想
+                gross_margin_pct=flash.get("gross_margin_pct"),      # 決算速報: 粗利率
+                next_q_rev_yoy_pct=flash.get("next_q_rev_yoy_pct"),  # 決算速報: 来期コンセンサス売上YoY
+                next_q_eps_yoy_pct=flash.get("next_q_eps_yoy_pct"),  # 決算速報: 来期コンセンサスEPS YoY
+                tri_verdict=flash.get("tri_verdict"),               # 決算速報: 三拍子verdict
             )
             if ok:
                 upserted += 1
