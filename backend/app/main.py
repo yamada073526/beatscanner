@@ -20219,6 +20219,8 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
     freshness["cfps_3y_rising"] = sf_cd
     freshness["eps_3y_rising"] = sf_cd
     freshness["rev_3y_rising"] = sf_cd
+    # 決算期混同ガード Sprint 2: last_report_date (直近決算の報告日) も funda 同源 calc_date。
+    freshness["last_report_date"] = sf_cd
     if sf_cd:
         for r in _fetch_all_rows_paged(
             sb, "screener_fundamentals",
@@ -20237,7 +20239,7 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
         #   0 FMP call (Supabase read のみ、universe payload は cache 済)。
         for r in _fetch_all_rows_paged(
             sb, "screener_fundamentals",
-            "ticker,eps_3y_rising,rev_3y_rising,latest_beat,cfps_3y_rising",
+            "ticker,eps_3y_rising,rev_3y_rising,latest_beat,cfps_3y_rising,last_report_date",
             eq={"calc_date": sf_cd},
         ):
             t = str(r.get("ticker") or "").upper()
@@ -20246,6 +20248,8 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
                 sf_map[t]["rev_3y_rising"] = r.get("rev_3y_rising")
                 sf_map[t]["latest_beat"] = r.get("latest_beat")
                 sf_map[t]["cfps_3y_rising"] = r.get("cfps_3y_rising")
+                # 決算期混同ガード Sprint 2: 直近決算の報告日 (migration 未適用なら別 fetch が空 → None)。
+                sf_map[t]["last_report_date"] = r.get("last_report_date")
 
     # rs_ratings (RS percentile、 free) — 最新 calc_date 全行
     rs_map: dict[str, dict] = {}
@@ -20392,6 +20396,11 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             # beat 判定: latest_beat (free tier)。直近決算が EPS 予想を上回ったか。
             # None = estimate/actual 欠損（判定不能、False と区別）。gate 化は次セッション。
             "latest_beat": (sf or {}).get("latest_beat"),
+            # 決算期混同ガード Sprint 2: last_report_date (直近決算の報告日 "YYYY-MM-DD")。
+            # latest_beat / eps_yoy_pct が「いつの決算か」を frontend で surface するための出典。
+            # None = 報告日欠落 (migration 未適用 or データなし) → frontend は signal_quality 降格 +
+            #   「決算日不明」を honest 表示し、silent に「直近」扱いしない (Trust Cliff 回避、§3-4)。
+            "last_report_date": (sf or {}).get("last_report_date"),
             # 単調増加判定: cfps_3y_rising (free tier)。CFPS (営業CF/希薄化株式数) annual 4 期連続増加。
             # None = 履歴不足（False と区別）。gate 化は次セッション (populate 確認後)。
             "cfps_3y_rising": (sf or {}).get("cfps_3y_rising"),
