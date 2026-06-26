@@ -60,13 +60,18 @@ test.describe('screener cup 状態トグル E2E (Premium・一気通貫)', () =>
     await presetBtn.click();
     await page.waitForTimeout(2500); // preset 適用 + filter
 
-    // 詳細 (conds) panel を robust に開く (cup トグルは screener-detail-panel 内の conds にあり、
-    //   detailOpen=false の既定では hidden。silent catch せず aria-expanded=true を必ずアサート)。
-    const detail = page.locator('[data-testid="screener-detail-toggle"]').first();
-    await expect(detail, '詳細トグルが表示される').toBeVisible({ timeout: 12_000 });
-    if ((await detail.getAttribute('aria-expanded')) !== 'true') {
-      await detail.click();
-      await expect(detail, '詳細 panel が開く').toHaveAttribute('aria-expanded', 'true', { timeout: 5_000 });
+    // 折りたたみトリガは drift 修正② で「詳細」ボタン → 「絞り込み条件」見出し行 (screener-refine-toggle)
+    //   へ移設・default open 化。本 E2E は "現本番" を検証する設計のため、deploy 跨ぎ (PR=旧prod に
+    //   screener-detail-toggle / merge後=新prod に screener-refine-toggle) を両対応:
+    //   refine-toggle を優先し、無ければ legacy detail-toggle にフォールバック (gate を false-red にしない)。
+    const refineToggle = page.locator('[data-testid="screener-refine-toggle"]').first();
+    const openCtl = (await refineToggle.count()) > 0
+      ? refineToggle
+      : page.locator('[data-testid="screener-detail-toggle"]').first();
+    await expect(openCtl, '絞り込みトグルが表示される').toBeVisible({ timeout: 12_000 });
+    if ((await openCtl.getAttribute('aria-expanded')) !== 'true') {
+      await openCtl.click();
+      await expect(openCtl, '絞り込み body / 詳細 panel が開く').toHaveAttribute('aria-expanded', 'true', { timeout: 5_000 });
     }
     await expect(page.locator('[data-testid="screener-conds"]'), 'conds が表示される').toBeVisible({ timeout: 8_000 });
 

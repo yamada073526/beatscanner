@@ -13427,7 +13427,9 @@ body.is-digest-resizing {
    collapse は display:none(closed) ⇄ display:block + opacity fadeIn(open) のみ。
    元の Tailwind (rounded-xl/border/p-3/space-y-4) を token CSS で再現。発光禁止 (box-shadow なし)。 */
 .screener-control-bar {
-  flex-wrap: nowrap;            /* 1 行固定: 375px でも applied-summary の truncate が吸収 */
+  /* ④ drift fix: adv toggle を精度行へ追加したため 1 行固定は狭幅で破綻する。
+     mockup .ctrlrow 同様 wrap させ、375px では精度セグ / adv / サマリを段下げ。広幅は 1 行維持。 */
+  flex-wrap: wrap;
   min-width: 0;
 }
 /* mockup v8 .ctrl-lab: 精度 seg 左の常時ラベル (X-2)。12px muted・nowrap で 1 行固定を維持 */
@@ -13501,9 +13503,11 @@ body.is-digest-resizing {
   border-radius: var(--radius-pill);
   cursor: pointer;
   white-space: nowrap;
-  transition: color 200ms ease;
+  transition: color 200ms ease, transform var(--motion-fast, 120ms) ease;
 }
 .screener-precision-seg__btn.is-on { color: var(--text-primary); }
+/* ⑤ drift fix: 精度切替ボタンの press feedback (Δscale 0.04・:active で revert、forwards 罠なし)。 */
+.screener-precision-seg__btn:active { transform: scale(0.96); }
 /* hover: 操作可能と伝える (固定条件に見える問題の解消)。未選択段の muted text を brighten。token のみ。 */
 .screener-precision-seg__btn:not(.is-on):hover { color: var(--text-secondary); }
 .screener-precision-seg__btn:focus-visible {
@@ -13512,6 +13516,8 @@ body.is-digest-resizing {
 }
 @media (prefers-reduced-motion: reduce) {
   .screener-precision-seg__thumb { transition: none; }
+  .screener-precision-seg__btn { transition: none; }
+  .screener-precision-seg__btn:active { transform: none; }
 }
 /* ── B-2: 全条件 .crow 統一 (mockup v8 忠実)。トグル + ラベル + 値チップ を 1 行 (同じ高さ) に揃え、
    2 列グリッドへ配置。発光禁止 (§6): plain border + tinted bg のみ。§38: 値チップ (__th) は polarity 色を
@@ -13808,6 +13814,21 @@ body.is-digest-resizing {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  /* ② drift fix: 見出し行全体を折りたたみトリガ (button) 化。発光禁止: 透明 button (border/bg なし)。 */
+  width: 100%;
+  padding: var(--space-1) 0;
+  background: none;
+  border: 0;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+}
+.screener-refine-fh:hover .screener-refine-fh__lbl { color: var(--text-primary); }
+.screener-refine-fh:hover .screener-refine-fh__caret { color: var(--text-secondary); }
+.screener-refine-fh:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
 }
 .screener-refine-fh__ti { display: inline-flex; flex: none; color: var(--text-muted); }
 .screener-refine-fh__lbl { flex: none; margin: 0; font-size: 13px; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
@@ -13822,6 +13843,48 @@ body.is-digest-resizing {
 }
 .screener-refine-fh__live { margin-left: auto; flex: none; font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
 .screener-refine-fh__live b { display: inline-block; font-size: 20px; font-weight: 700; color: var(--color-gold-mid); font-variant-numeric: tabular-nums; }
+/* ② caret: 開閉方向を示す。開時 inline style で 180deg 回転、⑤ transition で滑らかに。 */
+.screener-refine-fh__caret {
+  flex: none;
+  color: var(--text-muted);
+  transition: transform var(--motion-base, 220ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)), color 140ms ease;
+}
+
+/* ⑤ drift fix: 折りたたみ body (mockup .fb→.fbwrap→.fbin)。grid-template-rows 0fr↔1fr の
+   height アニメ + opacity fade。開 360ms / 閉 220ms 非対称・easing expo。framer 不使用。
+   visibility で閉時のフォーカス到達を遮断 (height clip だけだと tab で隠れた button に入れる)。 */
+.screener-refine-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--motion-base, 220ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+}
+.screener-refine-body--open {
+  grid-template-rows: 1fr;
+  transition-duration: var(--motion-slow, 360ms);
+}
+.screener-refine-body__inner {
+  overflow: hidden;
+  min-height: 0;
+  visibility: hidden;
+  transition: visibility 0s linear var(--motion-base, 220ms);
+}
+.screener-refine-body--open .screener-refine-body__inner {
+  visibility: visible;
+  transition-delay: 0s;
+}
+.screener-refine-body__pad {
+  opacity: 0;
+  transition: opacity var(--motion-base, 220ms) ease;
+}
+.screener-refine-body--open .screener-refine-body__pad { opacity: 1; }
+.screener-refine-body__pad > * + * { margin-top: var(--space-4); }
+@media (prefers-reduced-motion: reduce) {
+  .screener-refine-body,
+  .screener-refine-body--open,
+  .screener-refine-body__inner,
+  .screener-refine-body__pad,
+  .screener-refine-fh__caret { transition: none; }
+}
 
 /* seasonchip: preset の対象範囲ラベル (gold pill)。SPEC_2026-06-26_seasonchip。
    発光系 (.panel-card/.bs-panel/.surface-card) と無関係な独立 class。動的値なし=Trust Cliff 安全。
