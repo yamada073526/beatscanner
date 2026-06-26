@@ -28,8 +28,13 @@ const STATE_LABEL: Record<string, string> = {
 };
 const CLICK_ORDER = ['confirmed', 'handle', 'cup', 'all']; // all から 1 click 目 = confirmed
 
+// 該当件数 (filteredItems.length)。本番に既に deploy 済の class セレクタ `.screener-refine-fh__live b`
+// を主に使い、PR #23 で付与した data-testid="screener-live-count" は merge 後の冗長セレクタとして OR 連結
+// (production E2E は本番を叩くため、未 deploy の新 testid に依存しない)。
 async function liveCount(page: Page): Promise<number> {
-  const txt = await page.locator('[data-testid="screener-live-count"]').first().textContent();
+  const loc = page.locator('[data-testid="screener-live-count"], .screener-refine-fh__live b').first();
+  await loc.waitFor({ state: 'visible', timeout: 10_000 });
+  const txt = await loc.textContent();
   return Number((txt || '').replace(/[^0-9]/g, ''));
 }
 
@@ -55,15 +60,19 @@ test.describe('screener cup 状態トグル E2E (Premium・一気通貫)', () =>
     await presetBtn.click();
     await page.waitForTimeout(2500); // preset 適用 + filter
 
-    // 詳細 (conds) が折りたたみなら開く。
+    // 詳細 (conds) panel を robust に開く (cup トグルは screener-detail-panel 内の conds にあり、
+    //   detailOpen=false の既定では hidden。silent catch せず aria-expanded=true を必ずアサート)。
     const detail = page.locator('[data-testid="screener-detail-toggle"]').first();
-    if ((await detail.count()) > 0 && (await detail.getAttribute('aria-expanded')) !== 'true') {
-      await detail.click().catch(() => {});
-      await page.waitForTimeout(1000);
+    await expect(detail, '詳細トグルが表示される').toBeVisible({ timeout: 12_000 });
+    if ((await detail.getAttribute('aria-expanded')) !== 'true') {
+      await detail.click();
+      await expect(detail, '詳細 panel が開く').toHaveAttribute('aria-expanded', 'true', { timeout: 5_000 });
     }
+    await expect(page.locator('[data-testid="screener-conds"]'), 'conds が表示される').toBeVisible({ timeout: 8_000 });
 
     // ① Premium で cup「型」トグルが描画される (= 機能が本番に乗っている証明)。
     const toggle = page.locator('[data-testid="screener-cup-state-toggle"]').first();
+    await toggle.scrollIntoViewIfNeeded().catch(() => {});
     await expect(toggle, 'Premium で cup 状態トグルが表示される').toBeVisible({ timeout: 12_000 });
 
     // ② 初期状態 = all / すべて (件数不変の default)。

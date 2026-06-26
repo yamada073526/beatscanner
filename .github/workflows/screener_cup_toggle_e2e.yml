@@ -67,6 +67,22 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
+      - name: Wait for Railway deploy (push to main のみ・best-effort)
+        # 一気通貫: merge → Railway auto-deploy(~90-120s) の完了を /health の commit で待ってから検証する。
+        #   PR run では PR コードは未 deploy のため skip (現本番 = 既 deploy 済の機能を検証)。
+        #   timeout しても fail させず続行 (gate は後段の実テスト)。
+        if: github.event_name == 'push'
+        run: |
+          SHA="${GITHUB_SHA:0:7}"
+          echo "[cup-e2e] 本番 deploy 待機: commit ${SHA} を /health で確認 (最大 180s)"
+          for i in $(seq 1 36); do
+            LIVE=$(curl -s -m 10 https://beatscanner-production.up.railway.app/health | grep -o '"commit"[^,]*' || true)
+            echo "  [$i] ${LIVE:-<no response>}"
+            if echo "$LIVE" | grep -q "$SHA"; then echo "[cup-e2e] deploy 反映確認 (${SHA})"; exit 0; fi
+            sleep 5
+          done
+          echo "[cup-e2e] WARNING: 180s で deploy 未確認 → 現本番で続行 (best-effort)"
+
       - name: Warn if Premium secrets missing
         run: |
           if [ -z "$DOGFOOD_TEST_EMAIL" ] || [ -z "$VITE_SUPABASE_URL" ]; then
