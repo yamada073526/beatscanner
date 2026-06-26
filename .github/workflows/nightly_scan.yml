@@ -40,23 +40,28 @@ jobs:
   scan:
     name: Nightly RS + Cup-Handle + CAN-SLIM scan
     runs-on: ubuntu-latest
-    # 6体合議 qa P0: cup(~97s)+rs(~62s)+canslim(wc=3 並列、3000銘柄) を直列実行する余裕。
-    # issue #27: cup/canslim/earnings-annual を offset chunk loop 化 (各 endpoint 6 chunk)。
-    # 直列 chunk で wall time が伸びるため 45→60min に margin (chunk 数 × per-chunk 時間 + rs)。
-    timeout-minutes: 60
+    # 6体合議 qa P0: cup(~97s)+rs(~62s)+canslim を直列実行する余裕。
+    # issue #27: cup/canslim/earnings-annual を offset chunk loop 化 (各 endpoint 10 chunk)。
+    # 直列 chunk で wall time が伸びる (canslim ~28min + earnings ~18min + cup/rs) ため 45→90min に margin。
+    # 実測 (run 28230519656): canslim 500銘柄/worker3 は 5min で 502 (重い per-ticker)。CHUNK=300+worker5 へ。
+    timeout-minutes: 90
     env:
       BASE: https://beatscanner-production.up.railway.app
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
       # v158 3体合議 (sre verdict): universe_size 1000→3000。 1000 は底$9.4B=大型株のみで
       # 小型株 alpha (russell3000 拡張の主目的) 未達。 3000 で底$0.5B・小型株31% (流動性フィルタ後24%)。
-      # cron 時間: 3000@worker3 で rs~3.1min/cup~4.8min/GH sequential~8min (timeout 30min 内)。
       # Supabase ~166MB/500MB=33%。 段階展開不要 (Ultimate で rate-limit リスク消失)。
-      BODY: '{"universe_source":"russell3000","universe_size":${{ inputs.universe_size || 3000 }},"worker_count":3}'
+      # issue #27: worker_count 3→5 (canslim/cup throughput↑、cap5)、concurrency 12 追加
+      # (earnings-annual 並列度↑、cup/canslim は無視し worker_count を使用)。直列実行のため FMP 同時負荷は
+      # 1 endpoint 分のみ = Ultimate 750req/min 内。
+      BODY: '{"universe_source":"russell3000","universe_size":${{ inputs.universe_size || 3000 }},"worker_count":5,"concurrency":12}'
       # issue #27: full universe (3000) を 1 回の同期 HTTP で投げると Railway gateway の 5min 502 で
       # persist 前に切られ 0 persist になる。CHUNK 単位 (offset/limit) でループ呼出し各 chunk を 5min 内に
       # 完走・200 応答させる (per-ticker 独立な cup/canslim/earnings-annual のみ chunk 化、rs は percentile
-      # が cross-ticker のため単発維持)。3000/500 = 6 chunk。検証 universe_size=80 等の小値では 1 chunk。
-      CHUNK: '500'
+      # が cross-ticker のため単発維持)。実測 (run 28230519656) で 500銘柄/worker3 は canslim が 5min 502
+      # (earnings-annual は 500/4m21s で 200)。最重 endpoint canslim に合わせ CHUNK=300 (3000/300 = 10 chunk)。
+      # 検証 universe_size=80 等の小値では 1 chunk。
+      CHUNK: '300'
     steps:
       - name: Setup tools
         run: |
@@ -259,24 +264,30 @@ jobs:
               echo "::error::$1 stale (date=$d < $yday) — 2日以上更新なし。"; fail=1
             fi
           }
-          chk "RS calc_date"                          "$BASE/api/scanner/rs?min_percentile=80&limit=1" ".calc_date"
+          # CAN-SLIM は canslim_only / 通常 nightly の両モードで走るため常に判定。
           chk "CAN-SLIM as_of"                        "$BASE/api/scanner/canslim?limit=1"              ".as_of"
-          chk "retest signal_as_of (cup-scan proxy)"  "$BASE/api/scanner/retest?limit=1"               ".signal_as_of"
-          # cup-handle は日付を返さないため total>0 の sanity のみ (retest proxy が cup-scan freshness を担保)。
-          cup_total=$(curl -s --max-time 20 "$BASE/api/scanner/cup-handle?filter=cup" | jq -r '.total_count // 0' 2>/dev/null)
-          echo "- cup-handle total: \`$cup_total\`" >> "$GITHUB_STEP_SUMMARY"
-          [ "${cup_total:-0}" -eq 0 ] && echo "::warning::cup-handle total=0 — cup 検出ゼロ (要確認)。"
-          # breakout (Sprint 5): 0件は正常な日次結果 (ブレイク銘柄ゼロの日もある) のため chk で hard-fail させず
-          # warning-only。as_of は raw breakout 保存日 = nightly 配線健全性の proxy。null/古い時は warn 止まり。
-          bo_asof=$(curl -s --max-time 20 "$BASE/api/scanner/breakout?limit=1" | jq -r '.as_of // "null"' 2>/dev/null)
-          echo "- breakout as_of: \`$bo_asof\`" >> "$GITHUB_STEP_SUMMARY"
-          if [ "$bo_asof" = "null" ] || [[ "$bo_asof" < "$yday" ]]; then
-            echo "::warning::breakout as_of stale/null (date=$bo_asof) — 当夜0件 or nightly 配線未走の可能性 (0件は正常なため job は落とさない)。"
-          fi
-          # HTTP200 で応答した scan の persist 失敗(GRANT)check。502 時は body 空で produced=0=対象外。
-          cup_http="${{ steps.cup.outputs.http }}"; cup_prod="${{ steps.cup.outputs.produced }}"; cup_ups="${{ steps.cup.outputs.upserted }}"
-          if [ "$cup_http" = "200" ] && [ "${cup_prod:-0}" -gt 0 ] && [ "${cup_ups:-0}" -eq 0 ]; then
-            echo "::error::cup-scan produced=$cup_prod だが upserted=0 — persist 失敗 (GRANT/DB)"; fail=1
+          # issue #27: canslim_only=true (deploy 後 smoke) は cup/rs/notify を skip するため、それらの
+          # freshness は判定しない (skip した scan の stale で smoke を偽 fail させない)。通常 nightly のみ全 check。
+          CANSLIM_ONLY="${{ inputs.canslim_only }}"
+          if [ "$CANSLIM_ONLY" != "true" ]; then
+            chk "RS calc_date"                          "$BASE/api/scanner/rs?min_percentile=80&limit=1" ".calc_date"
+            chk "retest signal_as_of (cup-scan proxy)"  "$BASE/api/scanner/retest?limit=1"               ".signal_as_of"
+            # cup-handle は日付を返さないため total>0 の sanity のみ (retest proxy が cup-scan freshness を担保)。
+            cup_total=$(curl -s --max-time 20 "$BASE/api/scanner/cup-handle?filter=cup" | jq -r '.total_count // 0' 2>/dev/null)
+            echo "- cup-handle total: \`$cup_total\`" >> "$GITHUB_STEP_SUMMARY"
+            [ "${cup_total:-0}" -eq 0 ] && echo "::warning::cup-handle total=0 — cup 検出ゼロ (要確認)。"
+            # breakout (Sprint 5): 0件は正常な日次結果 (ブレイク銘柄ゼロの日もある) のため chk で hard-fail させず
+            # warning-only。as_of は raw breakout 保存日 = nightly 配線健全性の proxy。null/古い時は warn 止まり。
+            bo_asof=$(curl -s --max-time 20 "$BASE/api/scanner/breakout?limit=1" | jq -r '.as_of // "null"' 2>/dev/null)
+            echo "- breakout as_of: \`$bo_asof\`" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$bo_asof" = "null" ] || [[ "$bo_asof" < "$yday" ]]; then
+              echo "::warning::breakout as_of stale/null (date=$bo_asof) — 当夜0件 or nightly 配線未走の可能性 (0件は正常なため job は落とさない)。"
+            fi
+            # HTTP200 で応答した scan の persist 失敗(GRANT)check。502 時は body 空で produced=0=対象外。
+            cup_http="${{ steps.cup.outputs.http }}"; cup_prod="${{ steps.cup.outputs.produced }}"; cup_ups="${{ steps.cup.outputs.upserted }}"
+            if [ "$cup_http" = "200" ] && [ "${cup_prod:-0}" -gt 0 ] && [ "${cup_ups:-0}" -eq 0 ]; then
+              echo "::error::cup-scan produced=$cup_prod だが upserted=0 — persist 失敗 (GRANT/DB)"; fail=1
+            fi
           fi
           if [ "$fail" -ne 0 ]; then
             # issue #27: chunk/offset 化済。それでも stale なら gateway 502 以外の原因 (FMP rate limit /
