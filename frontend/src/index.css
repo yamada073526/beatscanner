@@ -14205,6 +14205,22 @@ body.is-digest-resizing {
   flex-shrink: 0;
 }
 
+/* 決算期混同ガード Sprint 3: 直近決算の報告日 honest 併記。
+   決算指標 (latest_beat / eps_yoy_pct) がいつの決算に基づくかを行内で明示し、
+   「先期を今期と混同」を構造的に解消する。発光系と無関係な独立 class・token のみ。 */
+.screener-row__report-date {
+  flex-shrink: 0;
+  font-size: var(--text-caption);  /* 12px */
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* NULL = 決算日不明: silent pass せず鮮度未確認を honest に caveat (subtle amber、過剰警告は避ける) */
+.screener-row__report-date--unknown {
+  font-style: italic;
+  color: color-mix(in srgb, var(--color-warning) 50%, var(--text-muted));
+}
+
 /* Pass 2b: 意味グループ (fundamental/technical/demand) クラスタ。グループ内は密 (--space-1)。 */
 .screener-row__badge-group {
   display: flex;

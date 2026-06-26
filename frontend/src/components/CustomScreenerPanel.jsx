@@ -2371,6 +2371,11 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                           isTop={isTop}
                           matchBadges={matchBadges}
                           metrics={metrics}
+                          /* 決算期混同ガード Sprint 3: 決算関連 preset でのみ直近決算の報告日を併記
+                             (earnings_pass / new_high_break = latest_beat/eps_yoy が中心)。
+                             NULL は ScreenerRow が「決算日不明」表示。表示専用・述語/件数に非干渉。 */
+                          lastReportDate={it.last_report_date ?? null}
+                          showReportDate={activePreset === 'earnings_pass' || activePreset === 'new_high_break'}
                           isSelected={isSelected}
                           onSelect={(t) => {
                             trackEvent('screener_row_click', { ticker: t, rank: idx, mode: 'custom' });
