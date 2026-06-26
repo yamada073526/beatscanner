@@ -110,6 +110,7 @@ jobs:
           echo "cup-scan total: processed=$t_proc detected=$t_det upserted=$t_ups failed=$t_fail"
           {
             echo "http=$last_http"
+            echo "processed=$t_proc"
             echo "produced=$t_det"
             echo "upserted=$t_ups"
           } >> "$GITHUB_OUTPUT"
@@ -273,22 +274,35 @@ jobs:
           CANSLIM_ONLY="${{ inputs.canslim_only }}"
           if [ "$CANSLIM_ONLY" != "true" ]; then
             chk "RS calc_date"                          "$BASE/api/scanner/rs?min_percentile=80&limit=1" ".calc_date"
-            chk "retest signal_as_of (cup-scan proxy)"  "$BASE/api/scanner/retest?limit=1"               ".signal_as_of"
-            # cup-handle は日付を返さないため total>0 の sanity のみ (retest proxy が cup-scan freshness を担保)。
+            # issue #27: cup-scan の鮮度は「本 run の step 実績 (processed/upserted)」を真とする。
+            # 旧実装は /api/scanner/retest の signal_as_of を hard-fail に使っていたが、これは
+            # signal_date (= パターン形成日 + read 側 state フィルタ) で「scan がいつ走ったか」を表さない。
+            # 実証 (full run 28238147289): cup-scan は本日 12:37 に cup_handle 481 行を persist 済
+            # (DB の max scanned_at/signal_date とも 2026-06-26) なのに retest read は signal_as_of=2026-06-22 を
+            # 返し、persist 成功にもかかわらず false-fail した。chunk 化で各 chunk が 200 を返し step が
+            # 正確な集計を持つようになったため、step 実績を鮮度の真とする。
+            cup_http="${{ steps.cup.outputs.http }}"
+            cup_proc="${{ steps.cup.outputs.processed }}"
+            cup_prod="${{ steps.cup.outputs.produced }}"
+            cup_ups="${{ steps.cup.outputs.upserted }}"
+            echo "- cup-scan (本 run 実績): processed=\`${cup_proc:-0}\` detected=\`${cup_prod:-0}\` upserted=\`${cup_ups:-0}\`" >> "$GITHUB_STEP_SUMMARY"
+            if [ "${cup_proc:-0}" -le 0 ]; then
+              echo "::error::cup-scan が universe を処理していない (processed=0) — cup-scan 未実行/全 chunk 失敗の疑い。"; fail=1
+            elif [ "${cup_ups:-0}" -le 0 ]; then
+              echo "::error::cup-scan processed=$cup_proc だが upserted=0 — persist 失敗 (GRANT/DB)。"; fail=1
+            fi
+            # 以下は参考表示のみ (hard-fail させない)。retest signal_as_of / cup-handle read total は
+            # read 側の signal_date + state フィルタで 0/過去日になりうるため鮮度判定に使わない (上記 step 実績が真)。
+            retest_asof=$(curl -s --max-time 20 "$BASE/api/scanner/retest?limit=1" | jq -r '.signal_as_of // "null"' 2>/dev/null)
+            echo "- retest signal_as_of (参考・signal_date、鮮度判定外): \`$retest_asof\`" >> "$GITHUB_STEP_SUMMARY"
             cup_total=$(curl -s --max-time 20 "$BASE/api/scanner/cup-handle?filter=cup" | jq -r '.total_count // 0' 2>/dev/null)
-            echo "- cup-handle total: \`$cup_total\`" >> "$GITHUB_STEP_SUMMARY"
-            [ "${cup_total:-0}" -eq 0 ] && echo "::warning::cup-handle total=0 — cup 検出ゼロ (要確認)。"
-            # breakout (Sprint 5): 0件は正常な日次結果 (ブレイク銘柄ゼロの日もある) のため chk で hard-fail させず
+            echo "- cup-handle read total (参考): \`$cup_total\`" >> "$GITHUB_STEP_SUMMARY"
+            # breakout (Sprint 5): 0件は正常な日次結果 (ブレイク銘柄ゼロの日もある) のため hard-fail させず
             # warning-only。as_of は raw breakout 保存日 = nightly 配線健全性の proxy。null/古い時は warn 止まり。
             bo_asof=$(curl -s --max-time 20 "$BASE/api/scanner/breakout?limit=1" | jq -r '.as_of // "null"' 2>/dev/null)
             echo "- breakout as_of: \`$bo_asof\`" >> "$GITHUB_STEP_SUMMARY"
             if [ "$bo_asof" = "null" ] || [[ "$bo_asof" < "$yday" ]]; then
               echo "::warning::breakout as_of stale/null (date=$bo_asof) — 当夜0件 or nightly 配線未走の可能性 (0件は正常なため job は落とさない)。"
-            fi
-            # HTTP200 で応答した scan の persist 失敗(GRANT)check。502 時は body 空で produced=0=対象外。
-            cup_http="${{ steps.cup.outputs.http }}"; cup_prod="${{ steps.cup.outputs.produced }}"; cup_ups="${{ steps.cup.outputs.upserted }}"
-            if [ "$cup_http" = "200" ] && [ "${cup_prod:-0}" -gt 0 ] && [ "${cup_ups:-0}" -eq 0 ]; then
-              echo "::error::cup-scan produced=$cup_prod だが upserted=0 — persist 失敗 (GRANT/DB)"; fail=1
             fi
           fi
           if [ "$fail" -ne 0 ]; then
@@ -298,7 +312,7 @@ jobs:
             echo "### 🔴 Freshness gate FAILED — DB が 2日以上 stale。chunk 化済のため gateway 502 以外の原因 (FMP / GRANT / universe fetch) を上の chunk ログで調査 (issue #27)。" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          echo "✅ freshness OK (rs/canslim/retest とも >= $yday で persist 確認。502 は gateway timeout で無害)"
+          echo "✅ freshness OK (rs/canslim の as_of >= $yday、cup-scan は本 run の step 実績 processed/upserted>0 で persist 確認)"
 
       # issue #27 DoD: 再発検知通知。Freshness gate が exit 1 (DB 2日以上 stale) した時のみ発火。
       # 各 scan step は continue-on-error: true で job を落とさないため、failure() = freshness gate 失敗。
