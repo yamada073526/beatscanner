@@ -16869,6 +16869,18 @@ async def cron_cup_scan(
         n = int(universe_size_arg) if universe_size_arg else 500
         tickers = await _fetch_sp500_top_n(n)
 
+    # issue #27: chunk/offset windowing (canslim-scan と同設計)。full universe を
+    # GHA から offset/limit で分割呼出し、各 chunk を Railway gateway 5min 内に完走させる。
+    # cup-scan は per-ticker 独立 (SPY フラグは chunk 間で共有可能な市場定数) のため chunk 安全。
+    # offset 既定 0 = 完全後方互換。
+    _offset = max(0, int(body.get("offset", 0) or 0))
+    _window = body.get("limit")
+    if _offset or _window is not None:
+        if _window is not None:
+            tickers = tickers[_offset : _offset + int(_window)]
+        else:
+            tickers = tickers[_offset:]
+
     chunk_size = int(body.get("chunk_size", 10))
     chunk_size = max(1, min(50, chunk_size))
     worker_count = int(body.get("worker_count", 1))
@@ -22022,9 +22034,17 @@ async def cron_earnings_annual_scan(
             tickers = await _fetch_sp500_top_n(500)
             universe_source = "sp500_fallback"
 
+    # issue #27: chunk/offset windowing (canslim-scan と同設計)。full universe を GHA から
+    # offset/limit で分割呼出し各 chunk を Railway gateway 5min 内に完走・persist させる。
+    # earnings-annual は per-ticker 独立のため chunk 安全。offset 既定 0 で従来 (limit のみ /
+    # debug ticker 制限) と後方互換 (tickers[0:limit] == tickers[:limit])。
+    _offset = max(0, int(body.get("offset", 0) or 0))
     limit_arg = body.get("limit")
-    if limit_arg:
-        tickers = tickers[: int(limit_arg)]
+    if _offset or limit_arg:
+        if limit_arg:
+            tickers = tickers[_offset : _offset + int(limit_arg)]
+        else:
+            tickers = tickers[_offset:]
 
     concurrency = int(body.get("concurrency", 8))
     concurrency = max(1, min(16, concurrency))
@@ -22118,6 +22138,20 @@ async def cron_canslim_scan(
     else:
         n = int(universe_size_arg) if universe_size_arg else 500
         tickers = await _fetch_sp500_top_n(n)
+
+    # issue #27: chunk/offset windowing。full universe (3000) は Railway gateway の
+    # 5min 502 で 1 回の同期 HTTP では捌けない (universe fetch + batch pre-fetch だけで
+    # 窓を食い潰し per-ticker upsert に到達せず 0 persist)。GHA から offset/limit で
+    # ループ呼出し各 chunk を 5min 内に完走・persist させる。per-ticker 独立な本 endpoint
+    # のみ安全 (rs-scan は universe percentile が cross-ticker のため chunk 不可)。
+    # offset 既定 0 = 完全後方互換 (従来の full / limit のみ呼出と同一挙動)。
+    _offset = max(0, int(body.get("offset", 0) or 0))
+    _window = body.get("limit")
+    if _offset or _window is not None:
+        if _window is not None:
+            tickers = tickers[_offset : _offset + int(_window)]
+        else:
+            tickers = tickers[_offset:]
 
     chunk_size = int(body.get("chunk_size", 10))
     chunk_size = max(1, min(50, chunk_size))
