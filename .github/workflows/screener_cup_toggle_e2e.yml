@@ -65,7 +65,11 @@ jobs:
 
       - name: Install Playwright browsers (chromium のみ)
         working-directory: frontend
-        run: npx playwright install --with-deps chromium
+        # --with-deps は runner の apt (packages.microsoft.com) を叩くため、MS 側 CDN の 403 で
+        #   稀に落ちる (transient infra・コード起因でない)。ubuntu-latest は chromium の OS 依存を
+        #   ほぼ同梱しているため、apt 失敗時は --with-deps なしの install に fallback して gate の
+        #   信頼性を担保する。
+        run: npx playwright install --with-deps chromium || npx playwright install chromium
 
       - name: Wait for Railway deploy (push to main のみ・best-effort)
         # 一気通貫: merge → Railway auto-deploy(~90-120s) の完了を /health の commit で待ってから検証する。
