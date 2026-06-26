@@ -878,7 +878,14 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   //   'breakout' 不在 = Premium。Pro は near_high を持つため preset レベルで明示 gate (user 承認: Premium 専用維持)。
   const isPremiumUser = !((universe?.locked_facets || []).includes('breakout'));
   // #2 slice 2-c: 精度プリセットから個別変更したか (カスタム tag・状態の見える化 §1-6)。
-  const isCustom = Object.keys(overrides).length > 0;
+  // isCustom: grade override があるか、または binary トグルが当該 preset の既定 (PRESET_PREDICATES.extra)
+  //   から変化したら true。「カスタム」タグで preset 名と中身の乖離を明示する (funda_pass を OFF にして
+  //   「決算合格」を緩めた等の免責・qa review 2026-06-26)。preset 既定トグルは extra の真フラグが SSOT
+  //   (applyStrategyImpl が extra と一致する初期トグルをセットするため、初期表示では custom にならない)。
+  const _presetExtra = (activePreset && PRESET_PREDICATES[activePreset]?.extra) || {};
+  const _toggleState = { fundaPassOnly, ocfGtNiOnly, ocfMarginOnly, beatOnly, sectorLeaderOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly };
+  const _togglesChanged = Object.entries(_toggleState).some(([f, v]) => !!v !== (_presetExtra[f] === true));
+  const isCustom = Object.keys(overrides).length > 0 || _togglesChanged;
   const filteredItems = useMemo(() => {
     const items = universe?.items || [];
     const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, cupState, sectors: sectorFilter, mcapBands: mcapFilter };

@@ -13504,6 +13504,8 @@ body.is-digest-resizing {
   transition: color 200ms ease;
 }
 .screener-precision-seg__btn.is-on { color: var(--text-primary); }
+/* hover: 操作可能と伝える (固定条件に見える問題の解消)。未選択段の muted text を brighten。token のみ。 */
+.screener-precision-seg__btn:not(.is-on):hover { color: var(--text-secondary); }
 .screener-precision-seg__btn:focus-visible {
   outline: 2px solid var(--color-gold);
   outline-offset: 2px;
@@ -13594,6 +13596,17 @@ body.is-digest-resizing {
 .screener-crow__sw:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+/* hover: トグルが操作可能と伝える (固定条件に見える問題の解消)。OFF=accent 寄りに brighten /
+   ON=accent を深める。token (color-mix) のみ・発光なし。motion-reduce は既存ルールで transition 無効化済。 */
+.screener-crow:not(.is-on) .screener-crow__sw:hover {
+  background: color-mix(in srgb, var(--color-accent) 16%, var(--bg-muted));
+}
+.screener-crow:not(.is-on) .screener-crow__sw:hover::after {
+  background: var(--text-secondary);
+}
+.screener-crow.is-on .screener-crow__sw:hover {
+  background: color-mix(in srgb, var(--color-accent) 44%, transparent);
 }
 .screener-crow__lbl {
   flex: 1;
@@ -13691,6 +13704,11 @@ body.is-digest-resizing {
 .screener-crow__mseg-btn.is-on {
   background: color-mix(in srgb, var(--color-gold) 20%, transparent);
   color: var(--color-gold-dark);
+}
+/* hover: 未選択段が操作可能と伝える。gold tint + text brighten。token のみ。 */
+.screener-crow__mseg-btn:not(.is-on):hover {
+  background: color-mix(in srgb, var(--color-gold) 10%, transparent);
+  color: var(--text-secondary);
 }
 .screener-crow__mseg-btn:focus-visible { outline: 2px solid var(--color-gold); outline-offset: 1px; }
 @media (prefers-reduced-motion: reduce) {
