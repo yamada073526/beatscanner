@@ -22,6 +22,7 @@ import {
   sectorTone,
   sectorTagJp,
   fmtSr,
+  buildSectorSummary,
 } from './CustomScreenerPanel.jsx';
 
 // extra フラグ → cond key の写像を PRESET_CONDS から構築 (cond.flag を持つ binary/flag cond が SSOT)。
@@ -121,5 +122,56 @@ describe('sector master display purity (Phase C Sprint 2・§38 事実記述)', 
     expect(fmtSr(0)).toBe('0');      // ゼロは無符号
     expect(fmtSr(null)).toBe('0');   // 欠損は 0 扱い (NaN を出さない)
     expect(fmtSr(undefined)).toBe('0');
+  });
+});
+
+// ── Phase C Sprint 3: 「旬のセクター」master-detail 集計の純関数 + C-2 件数不変 ──
+describe('buildSectorSummary count integrity (Phase C Sprint 3・C-2 不変)', () => {
+  it('master 全行 count の総和 == (sector を持つ) filteredItems 数 (count==list 担保)', () => {
+    // sector を持つ filteredItem は厳密に 1 bucket に入る → 総和 = filteredItems.length。
+    const allItems = [
+      { sector: 'Technology', sector_rs_median: 10 },
+      { sector: 'Energy', sector_rs_median: 5 },
+      { sector: 'Financials', sector_rs_median: -3 },
+    ];
+    const filtered = [
+      { sector: 'Technology', ticker: 'AAA', rs_percentile: 90 },
+      { sector: 'Technology', ticker: 'BBB', rs_percentile: 80 },
+      { sector: 'Energy', ticker: 'CCC', rs_percentile: 70 },
+      { sector: 'Energy', ticker: 'DDD', rs_percentile: 60 },
+      { sector: 'Energy', ticker: 'EEE', rs_percentile: 50 }, // top3 超 → count に算入・top3 から溢れ
+    ];
+    const sum = buildSectorSummary(allItems, filtered).reduce((a, s) => a + s.count, 0);
+    expect(sum).toBe(filtered.length); // 5 == 5
+  });
+
+  it('master = 全 universe セクター俯瞰 (劣後/好決算0 も残す) で sr 降順', () => {
+    const allItems = [
+      { sector: 'Technology', sector_rs_median: 10 },
+      { sector: 'Financials', sector_rs_median: -3 }, // 好決算 0 = 劣後でも master に残る (U-2(b))
+    ];
+    const filtered = [{ sector: 'Technology', ticker: 'AAA', rs_percentile: 90 }];
+    const res = buildSectorSummary(allItems, filtered);
+    expect(res.map((s) => s.sn)).toEqual(['Technology', 'Financials']); // sr 降順
+    expect(res[1].count).toBe(0);   // 劣後セクターは count 0 で残る
+    expect(res[1].top3).toEqual([]);
+  });
+
+  it('top3 は rs_percentile 降順で最大 3 件・count はあふれを含む', () => {
+    const allItems = [{ sector: 'Energy', sector_rs_median: 5 }];
+    const filtered = [
+      { sector: 'Energy', ticker: 'A', rs_percentile: 10 },
+      { sector: 'Energy', ticker: 'B', rs_percentile: 90 },
+      { sector: 'Energy', ticker: 'C', rs_percentile: 50 },
+      { sector: 'Energy', ticker: 'D', rs_percentile: 70 },
+    ];
+    const [row] = buildSectorSummary(allItems, filtered);
+    expect(row.count).toBe(4);
+    expect(row.top3.map((x) => x.ticker)).toEqual(['B', 'D', 'C']); // 90,70,50
+  });
+
+  it('no-data fallback: allItems 空/null は空配列', () => {
+    expect(buildSectorSummary([], [{ sector: 'X', ticker: 'Y' }])).toEqual([]);
+    expect(buildSectorSummary(null, null)).toEqual([]);
   });
 });
