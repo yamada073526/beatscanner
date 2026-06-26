@@ -421,11 +421,11 @@ export const PRESET_DISPLAY_CONDS = {
   //   "増加" (>0 のみ・≥25% でない) + CFPS>EPS。ROE/RS 条件は皆無)。funda_pass のみ表示は隠れフィルタ
   //   (sector_leader L416 と同型・Trust Cliff)。4 grade を表示専用で可視化 (pass 述語不変・件数 count==list 無影響)。
   hot_sector:     ['funda_pass', 'eps_yoy_pct', 'eps_cagr_3y', 'roe', 'rs_percentile'],
-  // セクター別リーダー: 定義条件(セクター内RSトップ) + 成長性(EPS YoY/3年) + 収益の質(CF マージン/ROE) + RS + 機関の動き
-  //   PRESET_PREDICATES.sector_leader.grades は eps_yoy_pct/eps_cagr_3y/rs_percentile も適用するため
-  //   必ず可視化する (隠れフィルタ禁止・Trust Cliff。L411 earnings/new_high と同じ不変条件)。
-  //   表示専用追加 = pass 述語不変・件数 count==list 無影響 (本 map の役割は「どの crow を描くか」だけ)。
-  sector_leader:  ['sector_leader', 'eps_yoy_pct', 'eps_cagr_3y', 'ocf_margin_pct', 'roe', 'rs_percentile', 'inst_holders_qoq_pct'],
+  // セクター別リーダー (S3 P1-b・user 承認 2026-06-27): 定義条件(セクター内RSトップ=南京錠) + 収益の質(CF創出力/ROE)
+  //   + RS + 機関の動き(機関保有増=南京錠 必須)。eps_yoy/eps_cagr は mockup p4 に無い隠れフィルタのため
+  //   述語(PRESET_PREDICATES.grades)・表示の両方から除去 (Trust Cliff 解消)。表示=述語適用条件と 1:1
+  //   (隠れフィルタ禁止 invariant・L411 earnings/new_high と同じ不変条件)。
+  sector_leader:  ['sector_leader', 'ocf_margin_pct', 'roe', 'rs_percentile', 'inst_holders_qoq_pct'],
 };
 
 // ─── D-8 sort (SPEC_2026-06-25): 結果リストのユーザー制御 sort ──────────────────────
@@ -491,7 +491,7 @@ const SORT_OPTIONS = [
 //   free で applied gate にすると全滅するため gate に含めない。データ整備 / Premium 専用化は別 sprint。
 export const PRESET_GATE_CONDS = {
   earnings_pass: ['ocf_gt_netincome'], // S2 P1-a: ocf_margin は grade 化で gate から外れた (精度連動 crow)
-  sector_leader: ['sector_leader'],                      // S3: 定義条件を南京錠「必須」可視化 / ocf_margin は P1-a で grade 化
+  sector_leader: ['sector_leader', 'inst_holders_qoq_pct'], // S3 P1-b: 定義条件(RSトップ) + 機関保有増(QoQ≥0) を南京錠「必須」化 / ocf_margin は grade
   new_high_break: ['latest_beat'],                       // beat populate 済 (Sprint 1)・PRESET_PREDICATES + applyStrategyImpl で常時 ON = 件数算入
 };
 
@@ -598,8 +598,14 @@ export function itemPasses(item, activeGrades, extra) {
 //   earnings_pass: S2 P1-c で eps_cagr_3y を必須 grade から除去 (eps_3y_rising と A軸二重カウント・
 //     mockup p1 に無し)。S2 P1-a で ocf_margin を binary gate→可変grade化 (user 承認・標準=15%件数中立)。
 //     残る core は eps_yoy/roe/rs/ocf_margin。eps_cagr は PRESET_DISPLAY_CONDS で任意トグルに降格。
-//   sector_leader: ocf_margin を P1-a で grade化。eps_cagr/eps_yoy の整理 + cap/inst gate化 (S3) は
-//     「件数実測→user 承認後」(45日遅延データで激減リスク) で保留。hot_sector は core4 維持=件数不変。
+//   sector_leader (S3 P1-b・user 承認 2026-06-27 / 0件問題で A=健全化 再承認): mockup p4 (AUDIT L91-96) に寄せる。
+//     gate(必須・南京錠) = is_sector_rs_leader + 機関保有増 QoQ≥0 (PRESET_GATE_CONDS)。eps_yoy/eps_cagr は
+//     mockup p4 に無い隠れフィルタのため grade/display 両方から除去 (Trust Cliff)。可変 grade(精度連動) =
+//     rs(緩70/標80/厳90 常時) + roe/ocf_margin。⚠️実データで is_sector_rs_leader はモメンタム偏重(低/負ROE)
+//     のため roe/ocf を緩段で適用すると 0 件 (snap 実測: roe≥17 すら 0/15)。よって UX 指針「default 緩で
+//     件数多め」(AUDIT L99) に従い roe/ocf を緩段=非適用(null)、default 精度=緩 (PRESET_DEFAULT_PRECISION) と
+//     し default ~15 件を確保。標/厳へ締めると roe/ocf が透過的に効く。mcap cap(中型↑/大型) は extra。
+//     count==list は countPreset も同 default 精度で算出して担保。
 //   new_high_break は EPS≥25/eps_cagr/ROE≥25 の隠れ過剰フィルタを除去し、gate (beat/buy_zone/new_high)
 //     は緩いまま固定、精度 3 段で「市況ロバストに」締める (金融合議 2026-06-25・活況の件数膨張対策)。
 //     RS だけだと相対指標ゆえ活況で膨張 → 市況非依存の出来高を厳段で重ねるのが要 (最重要キャップ):
@@ -616,10 +622,16 @@ export const PRESET_PREDICATES = {
   //     (金融推奨の最小緩和: vol は市況依存で quality 信号でないため最初に緩める。EPS は CANSLIM の C で最後)。
   //   beatOnly は gate 維持。count==list は buildActiveGrades+itemPasses で自動保証。
   new_high_break: { grades: { rs_percentile: { loose: 'standard', standard: 'standard', strict: 'strict' }, volume_surge_pct: { loose: null, standard: 'loose', strict: 'standard' }, eps_yoy_pct: { loose: 'floor', standard: 'standard', strict: 'strict' }, new_high_signal: 'auto' }, extra: { beatOnly: true } },
-  sector_leader:  { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto', ocf_margin_pct: 'auto' }, extra: { sectorLeaderOnly: true } },
+  sector_leader:  { grades: { rs_percentile: { loose: 'loose', standard: 'standard', strict: 'strict' }, roe: { loose: null, standard: 'loose', strict: 'standard' }, ocf_margin_pct: { loose: null, standard: 'standard', strict: 'strict' }, inst_holders_qoq_pct: 'loose' }, extra: { sectorLeaderOnly: true, mcapBands: ['mega', 'mid'] } },
   // hot_sector: セクター算出は topSectorsByRs で計算 (sectorTopN=5 相当)
   hot_sector:     { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto' }, sectorTopN: 5, extra: { fundaPassOnly: true } },
 };
+
+// preset 別 default 精度 (S3 P1-b)。未登録は 'standard'。sector_leader は AUDIT L99「default 緩で件数多め」+
+//   roe/ocf が緩段=非適用のため、緩 default で健全件数を出す。countPreset(tile) と applyStrategyImpl(list) の
+//   両方が同一 default 精度を使うことで count==list を担保する。
+const PRESET_DEFAULT_PRECISION = { sector_leader: 'loose' };
+export function presetDefaultPrecision(presetKey) { return PRESET_DEFAULT_PRECISION[presetKey] || 'standard'; }
 
 /**
  * topSectorsByRs — sector_rs_median 上位 topN セクター名を返す純関数。
@@ -654,8 +666,9 @@ export function countPreset(items, presetKey) {
   const cfg = PRESET_PREDICATES[presetKey];
   if (!cfg) return null;
 
-  // tile 件数は精度 standard で算出 (preset クリック直後の精度 = standard と一致 → count==list)。
-  const grades = buildActiveGrades(presetKey, 'standard', {});
+  // tile 件数は preset の default 精度で算出 (preset クリック直後の精度と一致 → count==list)。
+  //   S3 P1-b: sector_leader は default='loose' (roe/ocf 緩段=非適用で健全件数)。他は 'standard'。
+  const grades = buildActiveGrades(presetKey, presetDefaultPrecision(presetKey), {});
 
   if (presetKey === 'hot_sector') {
     // 上位 sectorTopN セクター (sector_rs_median 降順) ∩ funda_pass を集計。
@@ -785,8 +798,8 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     setSortKey('relevance');
     // cup「型」状態トグルも preset 切替 / 全クリアで default ('すべて' = 件数不変) に戻す (sortKey と同規約)。
     setCupState('all');
-    // まず共通リセット (overrides / binary facets)
-    setPreset('standard');
+    // まず共通リセット (overrides / binary facets)。精度は preset の default (S3 P1-b: sector_leader='loose')。
+    setPreset(presetDefaultPrecision(presetKey));
     setOverrides({});
     setFundaPassOnly(false);
     setOcfMarginOnly(false);
@@ -800,6 +813,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     setCfpsRisingOnly(false);
     setBeatOnly(false);
     setSectorFilter([]);
+    setMcapFilter([]); // S3 P1-b: mcap cap を preset 切替で必ず初期化 (sector_leader 以外への漏れ=count≠list 防止)
 
     if (presetKey === 'earnings_pass') {
       // 5 条件達成 + 利益の質 (PRESET_PREDICATES.earnings_pass と一致)。
@@ -812,9 +826,11 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       //   beat は gate flag。
       setBeatOnly(true);
     } else if (presetKey === 'sector_leader') {
-      // セクター別リーダー: is_sector_rs_leader (PRESET_PREDICATES.sector_leader と一致)。
-      //   ocf_margin は P1-a で grade 化 → activeGrades 経由で算入 (flag 不要)。
+      // セクター別リーダー (S3 P1-b): is_sector_rs_leader (extra.sectorLeaderOnly) + 機関保有増 QoQ≥0 (grades の
+      //   inst_holders_qoq=loose 固定 gate) + mcap cap (中型↑/大型)。ocf_margin/roe/rs は grades 経由。
+      //   mcapFilter を PRESET_PREDICATES.sector_leader.extra.mcapBands と一致させ count(countPreset)==list を担保。
       setSectorLeaderOnly(true);
+      setMcapFilter(['mega', 'mid']);
     } else if (presetKey === 'hot_sector') {
       // 旬のセクター (Phase A 暫定): 上位5セクター ∩ funda_pass を stock list 表示。
       // countPreset と同一 topSectorsByRs (_universeCache=module-scope・常に最新) を使い
@@ -1294,15 +1310,37 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     }
     if (cond.kind === 'grade') {
       const facet = cond.facet;
+      // B-3.5 gate (S3 P1-b): 当該 preset の死守 grade を南京錠 (トグル/mseg 不可) で描画。
+      //   grades に固定 level で算入済 (件数 SSOT)。機関保有増の QoQ≥0 必須等。flag gate (L1402) と同形だが
+      //   grade は閾値を gradeAnnot で併記。§38: 数値は data 由来・色 polarity なし。
+      if (isGate) {
+        const gLvl = activeGrades[cond.key] ?? clampLevel(facet, 'loose');
+        return (
+          <div key={cond.key} className="screener-crow is-gate" data-testid="screener-cond-row" data-cond={cond.key} data-gate="1" title={facet.tooltip || undefined}>
+            <span className="screener-crow__lockicon" aria-hidden><Lock size={13} strokeWidth={2} /></span>
+            <span className="screener-crow__lbl">{facet.label}</span>
+            {gLvl && <span className="screener-crow__th">{gradeAnnot(facet, gLvl)}以上</span>}
+            <span className="screener-crow__gate-pill" aria-label={`${facet.label} はこの戦略の絶対条件（変更不可）`}>必須</span>
+          </div>
+        );
+      }
       const activeLvl = activeGrades[cond.key];           // undefined = off
       const on = activeLvl != null;
       const isCore = PRESET_CORE_KEYS.includes(cond.key);
       const dispLvl = on ? activeLvl : (isCore ? clampLevel(facet, preset) : clampLevel(facet, 'standard'));
+      // S3 P1-b: off→on の復帰経路。delete で preset 既定へ戻せるのは「custom(全 core が PRESET_CORE_KEYS 経路で
+      //   復帰) 」または「preset spec が当該精度で level を与える core key」のみ。sector_leader の roe/ocf は緩段=null
+      //   (非適用) のため delete では off のまま (dead toggle) → 明示 override を置いて確実に ON にする。
+      const _ps = activePreset ? PRESET_PREDICATES[activePreset]?.grades?.[cond.key] : undefined;
+      const _presetGivesLevel = typeof _ps === 'string'
+        ? true
+        : (_ps && typeof _ps === 'object' ? _ps[preset] != null : false);
+      const _restorableByDelete = isCore && (!activePreset || _presetGivesLevel);
       const toggle = () => {
         if (advLocked) { setAdvLockNudge(true); trackEvent('screener_adv_locked_click', { facet: cond.key }); return; }
         if (on) setOverrides((prev) => ({ ...prev, [cond.key]: 'off' }));
-        else if (isCore) setOverrides((prev) => { const n = { ...prev }; delete n[cond.key]; return n; });
-        else setOverrides((prev) => ({ ...prev, [cond.key]: 'standard' }));
+        else if (_restorableByDelete) setOverrides((prev) => { const n = { ...prev }; delete n[cond.key]; return n; });
+        else setOverrides((prev) => ({ ...prev, [cond.key]: clampLevel(facet, preset) || 'standard' }));
       };
       // B-3 mseg: adv ON 時、grade crow 内に精度セグメント (緩/標/厳/最厳) を full-width で出す。
       //   ロジックは renderGradeRow と同一 (overrides 設定 / advLocked は disabled でなく nudge §4.2)。
