@@ -77,14 +77,15 @@ Claude Code on the web の Environment 設定で:
 {
   "mcpServers": {
     "supabase": {
+      "type": "stdio",
       "command": "npx",
       "args": [
         "-y",
         "@supabase/mcp-server-supabase@0.8.2",
-        "--project-ref=${SUPABASE_PROJECT_REF}",
+        "--project-ref=${SUPABASE_PROJECT_REF:-}",
         "--features=database"
       ],
-      "env": { "SUPABASE_ACCESS_TOKEN": "${SUPABASE_ACCESS_TOKEN}" }
+      "env": { "SUPABASE_ACCESS_TOKEN": "${SUPABASE_ACCESS_TOKEN:-}" }
     }
   }
 }
@@ -102,8 +103,9 @@ Claude Code on the web の Environment 設定で:
   tool は出さない (最小権限)。
 - **`--read-only` は付けない**: read-only にすると `apply_migration` 等の mutating tool が全無効化
   され migration できない (README 明記)。 read-only 監査がしたいセッションだけ別途付ける。
-- `${VAR}` は Claude Code の `.mcp.json` env 展開。 両 env 変数が無い環境では空展開で壊れるので、
-  必ず A (環境変数) が揃った環境で使う。
+- `${VAR:-}` は Claude Code の `.mcp.json` env 展開 (graceful default)。 env 変数が無い環境でも
+  `.mcp.json` の parse は成功し CI / 他セッションを壊さない。 ただし値が空だと MCP サーバーは機能
+  しないので、 実際に使うには A (環境変数) が揃った環境が必要。
 
 ---
 

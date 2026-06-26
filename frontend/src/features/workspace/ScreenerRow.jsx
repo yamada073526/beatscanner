@@ -135,6 +135,8 @@ export default function ScreenerRow({
   onUpgrade,
   mode = 'custom',
   showCheckbox = false,
+  lastReportDate = null,        // 決算期混同ガード: 直近決算の報告日 "YYYY-MM-DD" (null=不明)
+  showReportDate = false,       // 決算関連 preset (earnings_pass / new_high_break) でのみ併記
 }) {
   // error fallback: ticker が無い場合は error state を返す
   if (!ticker) {
@@ -331,6 +333,22 @@ export default function ScreenerRow({
                   })}
                 </span>
               ))}
+            </span>
+          )}
+          {/* 決算期混同ガード: 直近決算の報告日を honest 併記 (この行の決算指標がいつの決算に
+              基づくかを明示し「先期を今期と混同」を構造的に解消)。NULL は「決算日不明」で
+              silent pass せず鮮度未確認を誠実に表示 (§3-4 Trust Cliff)。 */}
+          {showReportDate && (
+            <span
+              className={[
+                'screener-row__report-date',
+                lastReportDate ? '' : 'screener-row__report-date--unknown',
+              ].filter(Boolean).join(' ')}
+              title={lastReportDate
+                ? `直近決算の報告日: ${lastReportDate}（この行の決算指標が基づく四半期）`
+                : '直近決算の報告日が取得できていません（決算指標の鮮度は要確認）'}
+            >
+              {lastReportDate ? `決算 ${lastReportDate}` : '決算日不明'}
             </span>
           )}
           <span className="screener-row__name">{displayName}</span>

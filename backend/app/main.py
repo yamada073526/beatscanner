@@ -20219,6 +20219,8 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
     freshness["cfps_3y_rising"] = sf_cd
     freshness["eps_3y_rising"] = sf_cd
     freshness["rev_3y_rising"] = sf_cd
+    # 決算期混同ガード Sprint 2: last_report_date (直近決算の報告日) も funda 同源 calc_date。
+    freshness["last_report_date"] = sf_cd
     if sf_cd:
         for r in _fetch_all_rows_paged(
             sb, "screener_fundamentals",
@@ -20237,7 +20239,7 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
         #   0 FMP call (Supabase read のみ、universe payload は cache 済)。
         for r in _fetch_all_rows_paged(
             sb, "screener_fundamentals",
-            "ticker,eps_3y_rising,rev_3y_rising,latest_beat,cfps_3y_rising",
+            "ticker,eps_3y_rising,rev_3y_rising,latest_beat,cfps_3y_rising,last_report_date",
             eq={"calc_date": sf_cd},
         ):
             t = str(r.get("ticker") or "").upper()
@@ -20246,6 +20248,8 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
                 sf_map[t]["rev_3y_rising"] = r.get("rev_3y_rising")
                 sf_map[t]["latest_beat"] = r.get("latest_beat")
                 sf_map[t]["cfps_3y_rising"] = r.get("cfps_3y_rising")
+                # 決算期混同ガード Sprint 2: 直近決算の報告日 (migration 未適用なら別 fetch が空 → None)。
+                sf_map[t]["last_report_date"] = r.get("last_report_date")
 
     # rs_ratings (RS percentile、 free) — 最新 calc_date 全行
     rs_map: dict[str, dict] = {}
@@ -20392,6 +20396,11 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             # beat 判定: latest_beat (free tier)。直近決算が EPS 予想を上回ったか。
             # None = estimate/actual 欠損（判定不能、False と区別）。gate 化は次セッション。
             "latest_beat": (sf or {}).get("latest_beat"),
+            # 決算期混同ガード Sprint 2: last_report_date (直近決算の報告日 "YYYY-MM-DD")。
+            # latest_beat / eps_yoy_pct が「いつの決算か」を frontend で surface するための出典。
+            # None = 報告日欠落 (migration 未適用 or データなし) → frontend は signal_quality 降格 +
+            #   「決算日不明」を honest 表示し、silent に「直近」扱いしない (Trust Cliff 回避、§3-4)。
+            "last_report_date": (sf or {}).get("last_report_date"),
             # 単調増加判定: cfps_3y_rising (free tier)。CFPS (営業CF/希薄化株式数) annual 4 期連続増加。
             # None = 履歴不足（False と区別）。gate 化は次セッション (populate 確認後)。
             "cfps_3y_rising": (sf or {}).get("cfps_3y_rising"),
@@ -21802,6 +21811,7 @@ def _upsert_screener_fundamental(
     rev_3y_rising: "bool | None" = None,
     latest_beat: "bool | None" = None,
     cfps_3y_rising: "bool | None" = None,
+    last_report_date: "str | None" = None,
 ) -> bool:
     """screener_fundamentals テーブルに各指標を upsert。
 
@@ -21916,6 +21926,11 @@ def _upsert_screener_fundamental(
     # optional_cols fallback: migration 未適用時はカラム除外して再 upsert (graceful)。
     if cfps_3y_rising is not None:
         row["cfps_3y_rising"] = cfps_3y_rising
+    # ── 決算期混同ガード: last_report_date (直近決算の報告日 "YYYY-MM-DD") ──────────
+    # None-preserve: 報告日欠損 / 判定不能 → None を渡して payload に含めない (既存値を上書きしない)。
+    # optional_cols fallback: migration 未適用時はカラム除外して再 upsert (graceful)。
+    if last_report_date is not None:
+        row["last_report_date"] = last_report_date
 
     try:
         sb.table("screener_fundamentals").upsert(
@@ -21941,6 +21956,7 @@ def _upsert_screener_fundamental(
                 "rev_3y_rising",          # 単調増加判定: migration 未適用時の graceful fallback
                 "latest_beat",            # beat 判定: migration 未適用時の graceful fallback
                 "cfps_3y_rising",         # 単調増加判定: migration 未適用時の graceful fallback
+                "last_report_date",       # 決算期混同ガード: migration 未適用時の graceful fallback
             )
             if c in err_str and c in row
         ]
@@ -22241,11 +22257,13 @@ async def cron_canslim_scan(
         ★ 営業CFマージン = income-statement(quarter,limit=4) から revenue を取得して TTM 計算。
         ★ #1 OCF>純利益 = income-statement(quarter,limit=4) の netIncome を流用 (追加 fetch ゼロ)。
 
-        ★★ tuple arity: 全 return 文が 14 要素であること (screener-buy-quality-headroom Sprint 1 で
-           ocf_gt_netincome 追加、feedback_pge_loop_pitfalls ルール 1)。
+        ★★ tuple arity: 全 return 文が 19 要素であること (決算期混同ガード Sprint 1 で
+           last_report_date 追加、feedback_pge_loop_pitfalls ルール 1)。
         return (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct,
                 buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
-                ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome, err, null_reasons)
+                ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome,
+                eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising,
+                last_report_date, err, null_reasons)
         ※ error path は null_reasons={} (upsert されないため空でよい)、success path のみ実 dict。
         """
         try:
@@ -22253,20 +22271,20 @@ async def cron_canslim_scan(
             try:
                 surprises_raw = await client.earnings_surprises(ticker, limit=8)
             except Exception:
-                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_failed", {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_failed", {}
             if not surprises_raw:
-                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_empty", {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_empty", {}
 
             surprises_past = [s for s in surprises_raw if _has_eps_actual(s)]
             if not surprises_past:
-                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "no_eps_actual_in_surprises", {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "no_eps_actual_in_surprises", {}
 
             latest = sorted(
                 surprises_past, key=lambda d: d.get("date") or "", reverse=True
             )[0]
             entry_date_str = latest.get("date") or ""
             if not entry_date_str:
-                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "no_entry_date", {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "no_entry_date", {}
             eps_actual = _safe_eps_float(
                 latest.get("eps")
                 or latest.get("epsActual")
@@ -22870,19 +22888,23 @@ async def cron_canslim_scan(
             if cfps_3y_rising is None:
                 null_reasons["cfps_3y_rising"] = "insufficient_annual_history"
 
-            # ★★ tuple arity 18 要素 (cfps_3y_rising を latest_beat と err の間に追加)
+            # ★★ tuple arity 19 要素 (last_report_date を cfps_3y_rising と err の間に追加・
+            #    決算期混同ガード Sprint 1)
             #    (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround,
             #     near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
             #     ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome,
-            #     eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising, err, null_reasons)
+            #     eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising,
+            #     last_report_date, err, null_reasons)
             return (
                 ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround,
                 near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
                 ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome,
-                eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising, None, null_reasons,
+                eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising,
+                (entry_date_str[:10] if entry_date_str else None),  # last_report_date: 直近決算の報告日
+                None, null_reasons,
             )
         except Exception as e:
-            return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, f"unexpected: {e}", {}
+            return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, f"unexpected: {e}", {}
 
     # fetch + 計算: worker_count>1 で並列 (asyncio.Semaphore)、 =1 で逐次。
     # ★ 6体合議 critical 対応: 旧実装は完全逐次で full universe (3000) で GHA timeout (30min) 超過
@@ -22909,11 +22931,12 @@ async def cron_canslim_scan(
             results.append(await _compute_one(ticker))
 
     # count + upsert (post-gather 逐次、 cup-scan と同型)
-    # tuple arity 18 要素 (cfps_3y_rising を latest_beat と err の間に追加)
+    # tuple arity 19 要素 (last_report_date を cfps_3y_rising と err の間に追加・決算期混同ガード Sprint 1)
     # (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct,
     #  buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
     #  ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome,
-    #  eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising, err, null_reasons)
+    #  eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising,
+    #  last_report_date, err, null_reasons)
     # Phase 3 Sprint 4a: post-gather で ×100 して pct 新カラム値を生成
     #   near_high_pct_scaled = near_high_pct × 100 (例 0.97 → 97.0)
     #   buyback_yield_pct    = buyback_yield  × 100 (例 0.0173 → 1.73)
@@ -22930,7 +22953,7 @@ async def cron_canslim_scan(
     latest_beat_computed = 0  # latest_beat が算出できた件数
     cfps_3y_rising_computed = 0  # cfps_3y_rising が算出できた件数
     for result in results:
-        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct, ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome, eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising, err, null_reasons = result
+        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct, ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome, eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising, last_report_date, err, null_reasons = result
         if err:
             failed.append({"ticker": ticker, "reason": err})
             continue
@@ -22999,6 +23022,7 @@ async def cron_canslim_scan(
                 rev_3y_rising=rev_3y_rising,         # 単調増加判定: revenue 直近4期
                 latest_beat=latest_beat,            # beat 判定: 直近決算が予想を上回ったか
                 cfps_3y_rising=cfps_3y_rising,      # 単調増加判定: CFPS 直近4期 (annual CF)
+                last_report_date=last_report_date,  # 決算期混同ガード: 直近決算の報告日
             )
             if ok:
                 upserted += 1

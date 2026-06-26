@@ -13805,6 +13805,28 @@ body.is-digest-resizing {
 .screener-refine-fh__live { margin-left: auto; flex: none; font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
 .screener-refine-fh__live b { display: inline-block; font-size: 20px; font-weight: 700; color: var(--color-gold-mid); font-variant-numeric: tabular-nums; }
 
+/* seasonchip: preset の対象範囲ラベル (gold pill)。SPEC_2026-06-26_seasonchip。
+   発光系 (.panel-card/.bs-panel/.surface-card) と無関係な独立 class。動的値なし=Trust Cliff 安全。
+   色は app token を color-mix で blend = dark/light 両対応 (mockup の raw gold-mid でなく可読性優先)。 */
+.seasonchip {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  padding: 2px 9px;
+  border-radius: 9999px;
+  color: color-mix(in srgb, var(--color-gold) 60%, var(--text-primary));
+  background: color-mix(in srgb, var(--color-gold) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-gold) 28%, transparent);
+}
+.seasonchip.is-neutral {
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+
 .screener-adv-bar { margin-bottom: var(--space-2); }
 /* アドバンスド toggle (role=switch)。OFF=精度のみ / ON=個別緩急 mini-segment 露出。 */
 .screener-adv-toggle {
@@ -14181,6 +14203,22 @@ body.is-digest-resizing {
   align-items: center;
   gap: var(--space-3);         /* 12px: 意味グループ間の余白 (Pass 2b proximity 分節, 痛み4) */
   flex-shrink: 0;
+}
+
+/* 決算期混同ガード Sprint 3: 直近決算の報告日 honest 併記。
+   決算指標 (latest_beat / eps_yoy_pct) がいつの決算に基づくかを行内で明示し、
+   「先期を今期と混同」を構造的に解消する。発光系と無関係な独立 class・token のみ。 */
+.screener-row__report-date {
+  flex-shrink: 0;
+  font-size: var(--text-caption);  /* 12px */
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* NULL = 決算日不明: silent pass せず鮮度未確認を honest に caveat (subtle amber、過剰警告は避ける) */
+.screener-row__report-date--unknown {
+  font-style: italic;
+  color: color-mix(in srgb, var(--color-warning) 50%, var(--text-muted));
 }
 
 /* Pass 2b: 意味グループ (fundamental/technical/demand) クラスタ。グループ内は密 (--space-1)。 */

@@ -263,6 +263,20 @@ const CUP_STATE_MATCH = {                          // mockup 状態語 → backe
   handle:    new Set(['formation']),               // main.py:13754 (cup+handle 完成・pivot 待機)
   cup:       new Set(['cup_completing']),          // main.py:13880 (カップ右側形成中・取っ手未形成)
 };
+// seasonchip: 各 preset の「対象範囲」を gold pill で 1 個表示 (mockup v8 .seasonchip / p.season)。
+//   原則5 (認知コスト低減): preset 切替時に「この一覧が何を対象にしているか」を 2 秒で伝える。
+//   静的 dict (LLM 非経由) = Hallucination Guard 4 層不要。CUP_STATE_LABEL_JP / STATE_LABEL_JP と同型。
+//   ⚠️ Trust Cliff (gate1 2026-06-26 user 確定): 動的具体値 (「過去90日」「2026 Q1」等の四半期/日数) は
+//      frontend に ground truth が無いため載せない。決算カレンダーが進むと「表示=先期/実体=今期」の
+//      信頼崖になる。preset の pass 述語と 1:1 で時間が経っても矛盾しない不変文言のみを記す。
+//      決算期混同の機械的防止 (item の決算報告日で直近シーズン窓外を除外/降格) は別 backend SPEC で対応。
+//   neutral=true は決算非依存 preset (sector_leader) を gray で意味分離 (mockup seasonNeutral)。
+const SEASON_LABEL = {
+  earnings_pass:  { text: '対象: 主に直近の決算シーズン' },        // 動的値除去 + 「主に」で最新のみの暗黙保証を回避 (機械ガード未着地のため・qa gate2)
+  new_high_break: { text: '対象: 直近のブレイク／形成' },          // 未検証の「5営業日」を除去 (honest)
+  hot_sector:     { text: 'セクター別RS（対SPY）・直近改善順' },   // rs_vs_spy_pct で裏取り済 = 検証可
+  sector_leader:  { text: '対象: 全ユニバース（決算非依存・常時）', neutral: true },
+};
 export const PRESET_CONDS = [
   // ── grade 条件 (精度連動・activeGrades 経由) ──
   { key: 'eps_yoy_pct',          kind: 'grade', facet: FACET_MAP.eps_yoy_pct,          pass: (item, lvl) => gradePass(FACET_MAP.eps_yoy_pct, item, lvl) },
@@ -2055,9 +2069,21 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
             {/* リスト見出し: 件数のみ (staleness は上段ヒーローに集約、重複回避)。
                 件数はヒーローと同一 filteredItems.length = Trust Cliff C-2 整合。 */}
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-sm font-medium text-[var(--text-secondary)]">
-                {filteredItems.length} 件
-              </span>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-sm font-medium text-[var(--text-secondary)]">
+                  {filteredItems.length} 件
+                </span>
+                {/* seasonchip: 選択中 preset の対象範囲ラベル (gold pill / 決算非依存は neutral)。
+                    null・custom (未マップ) は描画しない = 表示専用・述語/件数に一切非干渉。 */}
+                {activePreset && SEASON_LABEL[activePreset] && (
+                  <span
+                    data-testid="screener-seasonchip"
+                    className={`seasonchip${SEASON_LABEL[activePreset].neutral ? ' is-neutral' : ''}`}
+                  >
+                    {SEASON_LABEL[activePreset].text}
+                  </span>
+                )}
+              </div>
               {/* D-8 sort select (mockup v8 sortwrap/sortsel 忠実)。sector view では非表示
                   (master-detail のため sort 無意味、mockup line 342 相当)。CSS は Tailwind + var()
                   token のみ = 発光系 (.panel-card/.bs-panel/.surface-card) に一切触れない low-risk 方式。
@@ -2345,6 +2371,11 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                           isTop={isTop}
                           matchBadges={matchBadges}
                           metrics={metrics}
+                          /* 決算期混同ガード Sprint 3: 決算関連 preset でのみ直近決算の報告日を併記
+                             (earnings_pass / new_high_break = latest_beat/eps_yoy が中心)。
+                             NULL は ScreenerRow が「決算日不明」表示。表示専用・述語/件数に非干渉。 */
+                          lastReportDate={it.last_report_date ?? null}
+                          showReportDate={activePreset === 'earnings_pass' || activePreset === 'new_high_break'}
                           isSelected={isSelected}
                           onSelect={(t) => {
                             trackEvent('screener_row_click', { ticker: t, rank: idx, mode: 'custom' });
