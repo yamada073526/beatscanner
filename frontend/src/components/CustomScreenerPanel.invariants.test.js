@@ -1,10 +1,13 @@
 // 隠れフィルタ防止の機械検査 (4 体合議 2026-06-25 提案・AUDIT §「4 体合議結果」)。
 //
 // 背景: screener の各 preset は PRESET_PREDICATES (件数 SSOT) で複数条件を AND 適用するが、
-//   絞り込み panel に表示する条件は PRESET_DISPLAY_CONDS (表示専用) が別管理。両者がズレると
-//   「panel に出ないのに list を削る条件」= 隠れフィルタ = Trust Cliff (景表法 §5 優良誤認 risk)。
-//   実際に hot_sector / sector_leader / earnings_pass の 3 preset で funda_pass 等の隠れ適用が発生し、
-//   いずれも手作業で発見・修正した。本 test はその回帰を機械的に防ぐ (CLAUDE.md Trust Cliff 最重要)。
+//   絞り込み panel (①crow パネル) に表示する条件は PRESET_DISPLAY_CONDS (表示専用) が別管理。両者がズレると
+//   「①に出ないのに list を削る条件」= 隠れフィルタ = Trust Cliff (景表法 §5 優良誤認 risk)。
+//   実例: hot_sector の 4 grade は①にも②適用バー (screener-applied-bar) にも出ず削っていた = 真の Trust Cliff。
+//   sector_leader (PR #29) も同型。earnings_pass の funda_pass は②適用バーには出ていたが①に欠けていた
+//   (厳密な隠れフィルタではないが本 test の保守的方針で①にも可視化)。本 test はこれらの回帰を機械的に防ぐ。
+// ※不変条件は「適用条件は①crow パネルに全て出す」保守的ルール (案A)。flag は②適用バーにも出るが、
+//   ①への結合のみで成立し②実装に依存しないため単純・堅牢 (frontend-architect review 2026-06-26)。
 //
 // 不変条件: 各 preset で「述語適用される全 cond key」⊆「PRESET_DISPLAY_CONDS の表示 key」。
 //   適用 = grades キー (grade 条件) ∪ extra の真フラグ→cond key (binary/flag 条件)。

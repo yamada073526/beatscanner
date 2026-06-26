@@ -209,20 +209,29 @@ sub-agent 調査 → main が `CustomScreenerPanel.jsx` を直接 grep/read で*
 
 ---
 
-## 2026-06-26 追記 (続2): 隠れフィルタ機械検査の導入 + earnings_pass で第3の隠れフィルタ検出
+## 2026-06-26 追記 (続2): 隠れフィルタ機械検査の導入 + earnings_pass の可視化一貫化 (3 体 review で文言是正)
 
-hot_sector・sector_leader と**手作業で 2 件**の隠れフィルタを発見した教訓から、4 体合議 (本書 §「4 体合議結果」L79) が提案した機械検査を実装。
+hot_sector・sector_leader と**手作業で 2 件**の隠れフィルタを発見した教訓から、4 体合議 (本書 §「4 体合議結果」L79) が提案した機械検査を実装。実装後、user スクショ起点で **2 つの可視化面** (①crow パネル=`PRESET_DISPLAY_CONDS` / ②適用条件バー=`screener-applied-bar` L1866〜) の存在が判明し、当初の「earnings_pass は第3の隠れフィルタ」評価を **3 体 review で是正**した (報告≠事実)。
 
 ### invariant test (vitest) 導入
-- **不変条件**: 各 preset で「述語適用される全 cond key」⊆「`PRESET_DISPLAY_CONDS` の表示 key」。適用 = `grades` キー ∪ (`extra` の真フラグ→cond key、`PRESET_CONDS.flag` 経由)。次元フィルタ (sectors/mcapBands/sectorTopN/cupState) は crow 非表示のため対象外。
+- **不変条件 (案A・保守的)**: 各 preset で「述語適用される全 cond key」⊆「`PRESET_DISPLAY_CONDS` (①crow パネル)」。適用 = `grades` キー ∪ (`extra` の真フラグ→cond key、`PRESET_CONDS.flag` 経由)。次元フィルタ (sectors/mcapBands/sectorTopN/cupState) は crow 非表示のため対象外。
+  - **設計判断 (frontend-architect review)**: flag 条件は②適用バーにも出る (funda_pass 等) ため「①必須」は厳密には過剰だが、案A は②実装 (L1868 `hasActive`) に非依存で単純・堅牢。案B (grade は①必須・flag は①∪②で可) は②への結合で保守コスト増のため不採用。「削る条件は全て①に出す」保守的ルールを採用。
 - 実装: [`frontend/src/components/CustomScreenerPanel.invariants.test.js`](../../frontend/src/components/CustomScreenerPanel.invariants.test.js) (vitest)。CI: [`.github/workflows/screener_invariants.yml`](../../.github/workflows/screener_invariants.yml) (本番非依存・数秒・secrets 不要)。
 - export 追加 (additive・挙動不変): `CROW_LAYOUT` / `PRESET_DISPLAY_CONDS` / `PRESET_GATE_CONDS` (PRESET_PREDICATES/PRESET_CONDS は既 export)。
 - teeth 検証: earnings_pass から funda_pass を一時除去 → test が `[funda_pass]` を検出して fail することを確認 (vacuous でない)。
 
-### 第3の隠れフィルタ検出: earnings_pass の funda_pass
-- invariant test が即座に検出: `earnings_pass` は `extra.fundaPassOnly: true` で funda_pass を述語適用 (count/list) するのに `PRESET_DISPLAY_CONDS.earnings_pass` に funda_pass が無い (構成 facet eps_3y_rising 等は表示されるが、適用される funda_pass 自体は非表示) = hot_sector/sector_leader と同型の隠れフィルタ。
-- **修正**: `PRESET_DISPLAY_CONDS.earnings_pass` に `funda_pass` を追加 (件数不変・表示専用)。hot_sector と同じく default-ON トグル crow として可視化。
+### earnings_pass の funda_pass: 「隠れフィルタ」ではなく「①crow パネル欠落」(文言是正)
+- 当初 main は「第3の隠れフィルタ」と報告したが **過大評価**。`funda_pass` は `extra.fundaPassOnly: true` で適用される一方、②適用バーに「決算5条件達成 ×」チップで**表示・除去可能だった** (L1935) → 厳密な Trust Cliff (どこにも出ず削る) ではない。
+- 欠けていたのは ①crow パネル (`PRESET_DISPLAY_CONDS.earnings_pass`) のみ。invariant 案A の保守的ルールに合わせ funda_pass を①にも追加 (件数不変・表示専用)。**3 体 review (ui-designer/frontend-architect/qa) 全員 keep 推奨** (重複表示は情報二重化で無害・revert は案B 移行=結合増を要するため非推奨)。
+- 唯一の**真の隠れフィルタは hot_sector の 4 grade** (①②どちらにも非表示・②は「厳しさ:標準」と要約するだけで個別閾値を出さない)。これは正しい主修正。
 - 結果: 4 preset 全てで invariant test green (9/9)。build pass。
 
-### 残 (別 sprint・任意)
-- earnings_pass/hot_sector の funda_pass を gate (南京錠・トグル不可) 化するか否かは設計判断 (現状は default-ON トグル = 可視化済で隠れフィルタは解消)。preset 定義条件のため gate 化が semantic に整合するが、件数中立性 (トグル OFF で緩む) との兼ね合いで follow-up。
+### 精度 4 段目「最厳 (severe)」の非表示 = 意図的選択 (ui-designer review で確認)
+- mockup v8 は精度 4 段 (緩/標/厳/最厳)。実装は**主精度セレクタを 3 段 (緩/標/厳) に絞り、severe はアドバンスド (個別緩急) の per-facet mseg のみに温存** (L1284/L1547)。
+- 根拠 (4 体合議 L99 + 今回 ui-designer): severe (EPS YoY≥100% 等) は件数ほぼ 0 で「壊れている」誤認 risk (qa 公開ゲート L110「15〜50 件で安定」に反する) / 3 段の方が一目でグラデーション伝達 / severe を Pro advanced に残すのはプレミアム感。→ **3 段維持が正**。乖離は意図的選択として本節に記録。
+
+### 残 (別 sprint・任意・3 体 review 由来)
+- **funda_pass トグル免責 (qa 推奨・user 意向「小さく免責でも可」)**: funda_pass を OFF にすると「決算合格」preset 定義を満たさない銘柄が混じる。最小コスト案 = 既存「カスタム」タグ (L1705・現状 grade override のみ判定 L879) を binary トグルの preset 既定からの変化でも出すよう拡張。免責文は「定義条件を満たさない銘柄が含まれる場合があります」(§38 安全・断定/予測なし)。
+- funda_pass の gate (南京錠・トグル不可) 化は別案 (semantic 整合だが件数中立性とトレード)。
+- **適用バー override チップの「ファンダ:」prefix (ui-designer 指摘・中優先)**: L1891 が全 facet に「ファンダ:」を付けるが new_high_break の RS/出来高には意味的に不正確。`CROW_LAYOUT` の group を引いて「モメンタム:」「需給:」等に分けると改善。
+- 軽微: `beatOnly` (latest_beat) が②適用バーの `hasActive` (L1868) に非登録 (①gate 表示はあるため Trust Cliff ではない) / hot_sector の「上位5セクター自動絞り」理由が①に未説明 (Phase C)。

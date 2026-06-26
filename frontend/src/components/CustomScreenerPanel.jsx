@@ -406,8 +406,10 @@ const CROW_INLINE_LOCKED_KEYS = new Set(
 export const PRESET_DISPLAY_CONDS = {
   // 決算合格: 定義条件(funda_pass=最新決算5条件) + 成長性 (EPS) + 収益の質 (CF マージン/CF>純利益/ROE) + モメンタム (RS)
   //   ocf_gt_netincome は gate (§B-3.5) なので display にも含める (南京錠で必ず可視化)。
-  //   funda_pass は extra.fundaPassOnly で常時適用される定義条件なのに display 欠落 = 隠れフィルタだった
-  //   (2026-06-26 invariant test が検出・hot_sector/sector_leader と同型・Trust Cliff)。可視化で解消 (件数不変)。
+  //   funda_pass は extra.fundaPassOnly で適用されるが crow パネル (本 map) に欠落していた。
+  //   ※適用条件バー (screener-applied-bar L1935) には「決算5条件達成」チップで表示・除去可能 = 厳密な
+  //     隠れフィルタ (Trust Cliff) ではないが、invariant 案A「適用条件は crow パネルにも全て出す」保守的
+  //     方針に合わせ①にも可視化 (件数不変・3 体 review 全員 keep 推奨。2026-06-26)。
   earnings_pass:  ['funda_pass', 'eps_yoy_pct', 'eps_cagr_3y', 'ocf_margin_pct', 'ocf_gt_netincome', 'roe', 'rs_percentile', 'eps_3y_rising', 'rev_3y_rising', 'cfps_3y_rising'],
   // 新高値ブレイク: 型/タイミング (買い場圏/52週高値) + 需給 (出来高急増) + RS + EPS YoY 床。
   //   eps_yoy_pct は P0 修正で述語に算入する床条件 (≥0%) のため必ず可視化 (隠れフィルタ禁止・Trust Cliff)。
