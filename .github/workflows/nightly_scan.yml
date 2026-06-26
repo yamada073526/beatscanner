@@ -41,9 +41,10 @@ jobs:
     name: Nightly RS + Cup-Handle + CAN-SLIM scan
     runs-on: ubuntu-latest
     # 6体合議 qa P0: cup(~97s)+rs(~62s)+canslim を直列実行する余裕。
-    # issue #27: cup/canslim/earnings-annual を offset chunk loop 化 (各 endpoint 10 chunk)。
-    # 直列 chunk で wall time が伸びる (canslim ~28min + earnings ~18min + cup/rs) ため 45→90min に margin。
-    # 実測 (run 28230519656): canslim 500銘柄/worker3 は 5min で 502 (重い per-ticker)。CHUNK=300+worker5 へ。
+    # issue #27: cup/canslim/earnings-annual を offset chunk loop 化 (各 endpoint 12 chunk)。
+    # 直列 chunk で wall time が伸びる (canslim ~40min + earnings ~18min + cup/rs ~8min ≈ 65min) ため
+    # 45→90min に margin。実測 (run 28230519656/28231193357): canslim 500/worker3 は 5min で 502、
+    # 300/worker5 は 4:01 で 200 (throughput ~1.24 t/s)。chunk-0 の 3000 universe fetch 分も見て CHUNK=250。
     timeout-minutes: 90
     env:
       BASE: https://beatscanner-production.up.railway.app
@@ -58,10 +59,11 @@ jobs:
       # issue #27: full universe (3000) を 1 回の同期 HTTP で投げると Railway gateway の 5min 502 で
       # persist 前に切られ 0 persist になる。CHUNK 単位 (offset/limit) でループ呼出し各 chunk を 5min 内に
       # 完走・200 応答させる (per-ticker 独立な cup/canslim/earnings-annual のみ chunk 化、rs は percentile
-      # が cross-ticker のため単発維持)。実測 (run 28230519656) で 500銘柄/worker3 は canslim が 5min 502
-      # (earnings-annual は 500/4m21s で 200)。最重 endpoint canslim に合わせ CHUNK=300 (3000/300 = 10 chunk)。
-      # 検証 universe_size=80 等の小値では 1 chunk。
-      CHUNK: '300'
+      # が cross-ticker のため単発維持)。実測: 500銘柄/worker3 は canslim が 5min 502 (run 28230519656)、
+      # 300銘柄/worker5 は 4:01 で 200・300/300 persist (run 28231193357)。最重 endpoint canslim の
+      # throughput ~1.24 t/s + chunk-0 の 3000 universe fetch (cache miss) の上乗せを見て CHUNK=250
+      # (250銘柄 ≈ 3:20、chunk-0 でも 5min 内、3000/250 = 12 chunk)。検証 universe_size=80 等の小値は 1 chunk。
+      CHUNK: '250'
     steps:
       - name: Setup tools
         run: |
