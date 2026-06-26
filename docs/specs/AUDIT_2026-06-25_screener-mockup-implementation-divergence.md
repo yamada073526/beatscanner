@@ -176,5 +176,32 @@ sub-agent 調査 → main が `CustomScreenerPanel.jsx` を直接 grep/read で*
 
 ### 残 (issue #27 / user 承認 gated・別 sprint)
 - P1-b の grade **整理 (除去)** = eps_cagr/eps_yoy/inst gate 化 / mcap cap は件数を変えるため本番件数実測 (issue #27 で scan stale) → user 承認後。今回の表示可視化はその前提を満たす honest 化。
-- **hot_sector の隠れフィルタ疑い (sub-agent review 2026-06-26 が指摘・要 follow-up)**: `PRESET_PREDICATES.hot_sector.grades` は eps_yoy/eps_cagr/roe/rs の grade 閾値 (auto) を適用するが `PRESET_DISPLAY_CONDS.hot_sector` は `funda_pass` のみ (L414)。`funda_pass` は binary flag (5条件達成) で **grade 閾値 (eps_yoy≥25 等) を保証しない**ため、sector_leader と同型の隠れフィルタの可能性。L413 は「重複回避」と意図的決定を記すが、funda_pass の backend 定義 (5条件が grade 閾値と一致するか) を確認した上で「DISPLAY_CONDS に grade 追加 (sector_leader と同じ表示専用 fix)」か「現状維持 (funda_pass が内包と確認)」かを設計判断する。件数実測不要 = issue#27 非依存。
+- ~~**hot_sector の隠れフィルタ疑い (sub-agent review 2026-06-26 が指摘・要 follow-up)**~~ → **2026-06-26 検証完了・表示専用 fix 適用済 (下記)**。
+
+### 2026-06-26 追記 (続): hot_sector 隠れフィルタ — 検証完了 + 修正 (backend ground-truth ベース)
+
+**疑い**: `PRESET_PREDICATES.hot_sector.grades` は eps_yoy_pct/eps_cagr_3y/roe/rs_percentile (auto=標準) を述語に適用するのに `PRESET_DISPLAY_CONDS.hot_sector` は `funda_pass` のみ (L414)。`funda_pass` (binary flag) が grade 閾値を内包すれば現状維持・しなければ sector_leader と同型の隠れフィルタ。
+
+**backend 検証 (funda_pass の SSOT を main が直接 read で裏取り)**:
+- `funda_pass` の供給元 = `earnings_annual_evaluation.all_passed` ← `_get_annual_funda_pass_map` (`backend/app/main.py:20158`、 screener universe payload L20372 が消費) ← `compute_annual_evaluation_for_ticker` (`main.py:4200-4267`) が算出。
+- **5 条件 (じっちゃまプロトコル原典・年次 3 年連続増加 v255)**:
+  | cond | 内容 | grade 閾値との関係 |
+  |---|---|---|
+  | cond1 | 最新年 営業CFマージン ≥ 15% | hot_sector grades に ocf_margin 無し (無関係) |
+  | cond2 | EPS 3年連続**増加** (FY[t-2]<FY[t-1]<FY[t]) | **eps_yoy_pct≥25% を保証しない** (増加=>0 のみ・+3%/年でも cond2 PASS) |
+  | cond3 | CFPS 3年連続増加 | (同上・幅不問) |
+  | cond4 | 売上高 3年連続増加 | (同上) |
+  | cond5 | 最新年 CFPS > EPS (粉飾回避) | hot_sector grades と無関係 |
+  - `all_passed = cond1 AND … AND cond5`。
+- **判定: funda_pass は grade 閾値を内包しない (= 隠れフィルタ確定)**:
+  - **ROE**: 5 条件に ROE 条件が**一切存在しない** → roe≥25% を全く保証しない。
+  - **RS**: 5 条件に RS (相対強さ) 条件が**一切存在しない** → rs_percentile≥80 を全く保証しない。
+  - **EPS YoY / EPS CAGR**: cond2 は「3 年連続増加 (>0)」のみで「≥25%」を保証しない (EPS +3%/年の銘柄は funda_pass=true だが eps_yoy/eps_cagr grade では除外される)。
+
+**frontend 裏取り (count/list が実際に 4 grade を隠れ適用)**:
+- count: `countPreset` hot_sector 分岐 (L657) → `itemPasses(it, buildActiveGrades('hot_sector','standard',{}), {fundaPassOnly:true, sectors})` で 4 grade + funda_pass を AND。
+- list: `activeGrades = buildActiveGrades(activePreset='hot_sector', …)` (L863) → `itemPasses(it, activeGrades, …)` (L876/L1088/L1099) で同一 4 grade を AND。
+- → eps_yoy≥25 / eps_cagr≥25 / roe≥25 / rs≥80 が **絞り込み panel 非表示のまま list を削る** = L411 自己宣言「隠れフィルタ禁止・Trust Cliff」に違反 (sector_leader と同型)。
+
+**修正 (件数不変・表示専用・在範囲)**: `PRESET_DISPLAY_CONDS.hot_sector` (L414) に `eps_yoy_pct / eps_cagr_3y / roe / rs_percentile` を追加して可視化。`PRESET_PREDICATES`/`itemPasses`/`buildActiveGrades` 不変 = **件数 count==list 無影響** (DISPLAY_CONDS は「どの crow を描くか」だけ・L398-399)。crow panel (L1705-1729) は screenerV2 左 facet panel で `isSectorView` (右の sector master-detail) と独立に描画 → 確実に可視化。4 grade は CROW_LAYOUT 品質 (L379) / タイミング (L387) group に登録済 + sector_leader が同 4 grade を既に描画 (PR #29 検証済) のため renderable 保証。build pass。
 - **sector_leader `inst_holders_qoq_pct` の dead 表示 (review 指摘)**: DISPLAY_CONDS にあるが `binBindings` 未登録で `renderCrow` が null 返し = 描画されない (変更前から)。DISPLAY から除去 or binBindings 登録で整理 (今回の変更とは独立・挙動不変)。

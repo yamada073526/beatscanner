@@ -410,8 +410,13 @@ const PRESET_DISPLAY_CONDS = {
   // 新高値ブレイク: 型/タイミング (買い場圏/52週高値) + 需給 (出来高急増) + RS + EPS YoY 床。
   //   eps_yoy_pct は P0 修正で述語に算入する床条件 (≥0%) のため必ず可視化 (隠れフィルタ禁止・Trust Cliff)。
   new_high_break: ['latest_beat', 'new_high_signal', 'cup', 'volume_surge_pct', 'rs_percentile', 'eps_yoy_pct'],
-  // 旬のセクター: master-detail (Phase C) が主役。conds は funda_pass のみ (重複回避・SPEC §5 Sprint 1)
-  hot_sector:     ['funda_pass'],
+  // 旬のセクター: 定義条件(funda_pass=最新決算5条件) + 成長性(EPS YoY/3年) + 収益の質(ROE) + RS。
+  //   PRESET_PREDICATES.hot_sector.grades は eps_yoy_pct/eps_cagr_3y/roe/rs_percentile (標準=25/25/25/80) を
+  //   述語に適用するが funda_pass はこれらを内包しない (backend で裏取り: _get_annual_funda_pass_map →
+  //   compute_annual_evaluation_for_ticker main.py:4236-4267 の 5 条件 = CFM≥15% + EPS/CFPS/売上の3年連続
+  //   "増加" (>0 のみ・≥25% でない) + CFPS>EPS。ROE/RS 条件は皆無)。funda_pass のみ表示は隠れフィルタ
+  //   (sector_leader L416 と同型・Trust Cliff)。4 grade を表示専用で可視化 (pass 述語不変・件数 count==list 無影響)。
+  hot_sector:     ['funda_pass', 'eps_yoy_pct', 'eps_cagr_3y', 'roe', 'rs_percentile'],
   // セクター別リーダー: 定義条件(セクター内RSトップ) + 成長性(EPS YoY/3年) + 収益の質(CF マージン/ROE) + RS + 機関の動き
   //   PRESET_PREDICATES.sector_leader.grades は eps_yoy_pct/eps_cagr_3y/rs_percentile も適用するため
   //   必ず可視化する (隠れフィルタ禁止・Trust Cliff。L411 earnings/new_high と同じ不変条件)。
