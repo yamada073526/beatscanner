@@ -375,7 +375,7 @@ const CROW_BINARY_META = {
   //   gate 専用 (binBindings 非登録)=custom/他 preset では renderCrow null。freshness は 'rs' (backend が付与)。
   sector_leader:    { label: 'セクター内で相対力トップ', th: '上位3位', freshness: 'rs', tooltip: '所属セクター内で相対力 (RS) が上位 3 位以内（有効 5 銘柄以上のセクターのみ判定）。「セクター別リーダー」戦略の定義条件。' },
 };
-const CROW_LAYOUT = [
+export const CROW_LAYOUT = [
   { group: '品質',       sub: '利益・キャッシュの質', keys: ['funda_pass', 'ocf_margin_pct', 'ocf_gt_netincome', 'eps_yoy_pct', 'eps_cagr_3y', 'roe'] },
   // beat/cfps Phase 2: 決算の継続性 trio を grade 条件と視覚分離 (精度スライダー非連動の binary トグル)。
   { group: '品質',       sub: '決算の継続性（連続増）', keys: ['eps_3y_rising', 'rev_3y_rising', 'cfps_3y_rising'] },
@@ -403,15 +403,24 @@ const CROW_INLINE_LOCKED_KEYS = new Set(
 //   cup は Premium 限定 facet として CROW_LAYOUT + 本 map に追加済 (free は lock crow 経由・件数不変)。
 // activePreset が null (preset 未選択 = フリーフォーム custom) または本 map に無い key の場合は、
 //   従来通り CROW_LAYOUT 全条件を表示する (legacy 挙動・後方互換)。
-const PRESET_DISPLAY_CONDS = {
-  // 決算合格: 成長性 (EPS) + 収益の質 (CF マージン/CF>純利益/ROE) + モメンタム (RS)
+export const PRESET_DISPLAY_CONDS = {
+  // 決算合格: 定義条件(funda_pass=最新決算5条件) + 成長性 (EPS) + 収益の質 (CF マージン/CF>純利益/ROE) + モメンタム (RS)
   //   ocf_gt_netincome は gate (§B-3.5) なので display にも含める (南京錠で必ず可視化)。
-  earnings_pass:  ['eps_yoy_pct', 'eps_cagr_3y', 'ocf_margin_pct', 'ocf_gt_netincome', 'roe', 'rs_percentile', 'eps_3y_rising', 'rev_3y_rising', 'cfps_3y_rising'],
+  //   funda_pass は extra.fundaPassOnly で適用されるが crow パネル (本 map) に欠落していた。
+  //   ※適用条件バー (screener-applied-bar L1935) には「決算5条件達成」チップで表示・除去可能 = 厳密な
+  //     隠れフィルタ (Trust Cliff) ではないが、invariant 案A「適用条件は crow パネルにも全て出す」保守的
+  //     方針に合わせ①にも可視化 (件数不変・3 体 review 全員 keep 推奨。2026-06-26)。
+  earnings_pass:  ['funda_pass', 'eps_yoy_pct', 'eps_cagr_3y', 'ocf_margin_pct', 'ocf_gt_netincome', 'roe', 'rs_percentile', 'eps_3y_rising', 'rev_3y_rising', 'cfps_3y_rising'],
   // 新高値ブレイク: 型/タイミング (買い場圏/52週高値) + 需給 (出来高急増) + RS + EPS YoY 床。
   //   eps_yoy_pct は P0 修正で述語に算入する床条件 (≥0%) のため必ず可視化 (隠れフィルタ禁止・Trust Cliff)。
   new_high_break: ['latest_beat', 'new_high_signal', 'cup', 'volume_surge_pct', 'rs_percentile', 'eps_yoy_pct'],
-  // 旬のセクター: master-detail (Phase C) が主役。conds は funda_pass のみ (重複回避・SPEC §5 Sprint 1)
-  hot_sector:     ['funda_pass'],
+  // 旬のセクター: 定義条件(funda_pass=最新決算5条件) + 成長性(EPS YoY/3年) + 収益の質(ROE) + RS。
+  //   PRESET_PREDICATES.hot_sector.grades は eps_yoy_pct/eps_cagr_3y/roe/rs_percentile (標準=25/25/25/80) を
+  //   述語に適用するが funda_pass はこれらを内包しない (backend で裏取り: _get_annual_funda_pass_map →
+  //   compute_annual_evaluation_for_ticker main.py:4236-4267 の 5 条件 = CFM≥15% + EPS/CFPS/売上の3年連続
+  //   "増加" (>0 のみ・≥25% でない) + CFPS>EPS。ROE/RS 条件は皆無)。funda_pass のみ表示は隠れフィルタ
+  //   (sector_leader L416 と同型・Trust Cliff)。4 grade を表示専用で可視化 (pass 述語不変・件数 count==list 無影響)。
+  hot_sector:     ['funda_pass', 'eps_yoy_pct', 'eps_cagr_3y', 'roe', 'rs_percentile'],
   // セクター別リーダー: 定義条件(セクター内RSトップ) + 成長性(EPS YoY/3年) + 収益の質(CF マージン/ROE) + RS + 機関の動き
   //   PRESET_PREDICATES.sector_leader.grades は eps_yoy_pct/eps_cagr_3y/rs_percentile も適用するため
   //   必ず可視化する (隠れフィルタ禁止・Trust Cliff。L411 earnings/new_high と同じ不変条件)。
@@ -480,7 +489,7 @@ const SORT_OPTIONS = [
 // defer (嘘の南京錠を作らない・SPEC §3/§9): cfpsgt (実データ無し) と cup/buy_zone/new_high_52w/
 //   ad_volume (Premium マスクで free は cup_state/pivot_distance_pct 等が null・main.py:20456-20484) は
 //   free で applied gate にすると全滅するため gate に含めない。データ整備 / Premium 専用化は別 sprint。
-const PRESET_GATE_CONDS = {
+export const PRESET_GATE_CONDS = {
   earnings_pass: ['ocf_gt_netincome'], // S2 P1-a: ocf_margin は grade 化で gate から外れた (精度連動 crow)
   sector_leader: ['sector_leader'],                      // S3: 定義条件を南京錠「必須」可視化 / ocf_margin は P1-a で grade 化
   new_high_break: ['latest_beat'],                       // beat populate 済 (Sprint 1)・PRESET_PREDICATES + applyStrategyImpl で常時 ON = 件数算入
@@ -869,7 +878,14 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   //   'breakout' 不在 = Premium。Pro は near_high を持つため preset レベルで明示 gate (user 承認: Premium 専用維持)。
   const isPremiumUser = !((universe?.locked_facets || []).includes('breakout'));
   // #2 slice 2-c: 精度プリセットから個別変更したか (カスタム tag・状態の見える化 §1-6)。
-  const isCustom = Object.keys(overrides).length > 0;
+  // isCustom: grade override があるか、または binary トグルが当該 preset の既定 (PRESET_PREDICATES.extra)
+  //   から変化したら true。「カスタム」タグで preset 名と中身の乖離を明示する (funda_pass を OFF にして
+  //   「決算合格」を緩めた等の免責・qa review 2026-06-26)。preset 既定トグルは extra の真フラグが SSOT
+  //   (applyStrategyImpl が extra と一致する初期トグルをセットするため、初期表示では custom にならない)。
+  const _presetExtra = (activePreset && PRESET_PREDICATES[activePreset]?.extra) || {};
+  const _toggleState = { fundaPassOnly, ocfGtNiOnly, ocfMarginOnly, beatOnly, sectorLeaderOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly };
+  const _togglesChanged = Object.entries(_toggleState).some(([f, v]) => !!v !== (_presetExtra[f] === true));
+  const isCustom = Object.keys(overrides).length > 0 || _togglesChanged;
   const filteredItems = useMemo(() => {
     const items = universe?.items || [];
     const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, cupState, sectors: sectorFilter, mcapBands: mcapFilter };
