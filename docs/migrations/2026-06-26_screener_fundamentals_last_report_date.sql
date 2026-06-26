@@ -28,6 +28,17 @@
 --   1 銘柄の date 異常で全 fundamentals 更新を落とさない)。ISO 文字列は辞書順
 --   = 時系列順のため frontend の staleness 窓判定は文字列比較で正当。
 --
+-- ⚠️ deploy 順序 (6 体合議 qa-dogfooder / 法務 指摘): 全 NULL 空白の回避
+--   migration 適用直後〜次回 nightly canslim-scan までの間、全 row が last_report_date
+--   NULL → frontend で「決算日不明」が決算 preset 全行に並ぶ (amber)。新規 user が
+--   この瞬間を見ると「壊れている」と誤読しうる。回避策 (推奨):
+--     1. migration を SQL Editor で適用
+--     2. 即座に canslim-scan を手動 trigger (POST /api/cron/canslim-scan)
+--        → 全 row に last_report_date が埋まるのを確認
+--     3. その後に frontend (Sprint 3) を本番反映 / screenerV2 を案内
+--   backend (Sprint 1-2) は graceful fallback で migration 前後どちらでも安全なので、
+--   migration → scan → frontend の順なら全 NULL 空白はゼロにできる。
+--
 -- 設計方針:
 --   - ADD COLUMN のみ (破壊的 DDL なし、adding-only)
 --   - IF NOT EXISTS で冪等 (安全に再実行可)

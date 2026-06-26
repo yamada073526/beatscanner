@@ -135,7 +135,7 @@ export default function ScreenerRow({
   onUpgrade,
   mode = 'custom',
   showCheckbox = false,
-  lastReportDate = undefined,   // 決算期混同ガード: 直近決算の報告日 "YYYY-MM-DD" (null=不明)
+  lastReportDate = null,        // 決算期混同ガード: 直近決算の報告日 "YYYY-MM-DD" (null=不明)
   showReportDate = false,       // 決算関連 preset (earnings_pass / new_high_break) でのみ併記
 }) {
   // error fallback: ticker が無い場合は error state を返す

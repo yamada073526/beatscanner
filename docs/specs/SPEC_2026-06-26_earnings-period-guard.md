@@ -229,6 +229,35 @@ CLAUDE.md「multi-review 6 体 vs 3 体」の 3 軸を本 SPEC に適用:
 
 ---
 
+## 9. 実装結果 + 6 体合議 verdict + 正直な到達範囲 (2026-06-26 Sprint 1-3 着地)
+
+### 実装済 (Sprint 1-3、各 sprint 単独 commit)
+- **Sprint 1** (commit 01fc096): migration (`last_report_date text`) + `_compute_one` tuple arity 18→19 (entry_date_str を全 return 6 箇所 + unpack + comment 同期) + `_upsert_screener_fundamental` 引数追加 (None-preserve + optional_cols graceful fallback)。
+- **Sprint 2** (commit a1abe25): `_build_universe_payload` で別 fetch graceful merge (latest_beat と同隔離 SELECT) + item dict 露出 + freshness key。
+- **Sprint 3** (commit d6d38e7): `ScreenerRow` に `lastReportDate`/`showReportDate` props + chip-line に「決算 YYYY-MM-DD」併記・NULL は「決算日不明」(amber italic)。決算関連 preset (earnings_pass / new_high_break) 限定。`.screener-row__report-date` 独立 class。
+
+### 6 体合議 verdict (2026-06-26)
+- **金融 (Opus): PASS** — last_report_date が latest_beat/eps_yoy_pct の計算源と**同一 entry** (entry 同期) を確認。WARN: 窓 gate 未実装 = 表示誠実化であって述語フィルタでない (over-claim 回避を user に伝達済)。
+- **backend-architect (Opus): PASS** — tuple arity 全 7 箇所 (return 6 + unpack) が 19 要素・挿入位置一貫を実数カウントで確認、drift ゼロ。別 fetch 隔離 (Trust Cliff 教訓) 踏襲。WARN: backend signal_quality 降格は payload に持たせず frontend 表示で達成 (Trust Cliff は塞がる)。
+- **法務/Trust Cliff (Opus): 条件付き BLOCK → 解消済** — ①ScreenerRow の描画 path 実証 → `if (screenerV2)` (CustomScreenerPanel.jsx:2342) 内限定を ground truth で確認・legacy 不触。②到達範囲の明文化 → 本 §9 で記録。③rollout 全 NULL 緩和 → migration deploy 順序 note を追加。
+- **frontend-architect (Opus→Sonnet): PASS** — 述語/件数/extra/legacy 非干渉。`= null` default 化を反映済。
+- **ui-designer (Sonnet): PASS** — token 規律・amber 50% mix で過剰警告回避・dark/light 両対応。WARN: badges 多い行の overflow は本番目視。
+- **qa-dogfooder (Sonnet): WARN** — rollout 初期全 NULL → migration + canslim-scan 同日実行で空白回避 (migration note に記載)。
+
+### ⚠️ 正直な到達範囲 (over-claim 回避・最重要)
+「決算期混同を機械的に防止し**徹底した**」と言えるのは **backend data 層の素地まで**。表示層の実際の到達は以下に**限定**される (正直な記録):
+1. **screenerV2 path (opt-in) のみ**: `isScreenerV2()` は移行期間 default OFF (`?screener_v2=1`/localStorage opt-in)。大半ユーザー (legacy 行) には**現時点で未到達**。V2 が C-16 ゲートで default ON 昇格時に全ユーザーへ自動到達。
+2. **earnings_pass / new_high_break preset のみ**: 他 preset では非表示 (情報密度配慮)。
+3. **honest 表示であって述語フィルタでない**: 「決算 X」を併記し誤読を防ぐが、stale item を**除外する窓 gate は未実装** (分岐B = honest 併記の設計)。
+4. **(B) YoY ペア誤マッチは未解消**: ±60日窓の隣接四半期誤マッチは本 SPEC で潰さない (§8 自認、将来 audit 素地のみ作成)。
+- backend (Sprint 1-2) は**全 universe を cover** するが、UI surface は上記 1-3 に限定。この gap を user に正直に伝えることが CLAUDE.md「正直さは機能の根幹」「報告 ≠ 事実」の核心。
+
+### Sprint 4 (依存・未着手)
+- seasonchip `earnings_pass` の「対象: 主に直近の決算シーズン」→「直近の決算シーズン」(「主に」除去) は **Sprint 1-3 が本番で verify された後のみ**着手 (機械保証なき断定は Trust Cliff 再発)。
+- 法務指摘の追加 gate: 「断定文言 (seasonchip = 全ユーザー到達) の到達層」と「ガード表示 (screenerV2 限定) の到達層」が**不一致**。Sprint 4 着手前に、ガード表示が全ユーザーに届く (= V2 昇格) ことを確認するか、seasonchip を screenerV2 同期にするか要判断。
+
+---
+
 ## 付録: Sprint 0 裏取りサマリ (file:line 一覧)
 
 | 論点 | 裏取り結果 | file:line |
