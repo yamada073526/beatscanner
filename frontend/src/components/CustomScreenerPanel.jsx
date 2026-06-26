@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef, useCallback, forwardRef, useImperativeHandle, Fragment } from 'react';
-import { SlidersHorizontal, ChevronDown, Lock, Info } from 'lucide-react';
+import { SlidersHorizontal, ChevronDown, Lock } from 'lucide-react';
 import { fetchScannerUniverse } from '../api.js';
 // Sprint 5 Pass D: GA4/Clarity 比較 event (C-16 昇格ゲート baseline 用)
 import { trackEvent } from '../lib/analytics.js';
@@ -710,8 +710,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   // Pass 3b: preset セグメントトグル + overrides (Pass 3c で setter を有効化)
   const [preset, setPreset] = useState('standard');
   const [overrides, setOverrides] = useState({});
-  // Pass 3c: 詳細展開 accordion の開閉状態
-  const [detailOpen, setDetailOpen] = useState(false);
+  // Pass 3c: 詳細展開 accordion の開閉状態。② drift fix: mockup v8 は refine=open default
+  //   (.fh トグルで開閉、初期は展開済) のため default open に揃える。
+  const [detailOpen, setDetailOpen] = useState(true);
   // #2 slice 2-c: アドバンスド(個別緩急) panel 開閉。OFF=精度プリセットのみ、ON=per-facet mini-segment 露出。
   const [advOpen, setAdvOpen] = useState(false);
   // #2 slice 2-d: Free が Pro-locked な個別緩急を操作した時のみ lockbar を出す nudge flag (常駐させない §4.3)。
@@ -1426,20 +1427,39 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       {/* Sprint 3: 市場局面バナー (FtdRegimeBanner.jsx 共有 module)。
           ScreenerPane (Hero) と CustomScreenerPanel (探索チップ UI) は別 view なので両方に表示する。
           fetch は api.js dedupGet で 1 本化されるため API 重複コールなし。
-          data-testid="ftd-regime-banner" は FtdRegimeBanner 内に付与済 (loading / main 両 state)。 */}
-      <FtdRegimeBanner />
+          data-testid="ftd-regime-banner" は FtdRegimeBanner 内に付与済 (loading / main 両 state)。
+          ③ drift fix: 市場局面 (相場全体の状況) は「絞り込み条件」(個別フィルタ) とは別内容。
+          mb-5 で明確に視覚分離し、②の見出し行トグルにも巻き込まれない独立ブロックに保つ。 */}
+      <div className="screener-ftd-wrap mb-5">
+        <FtdRegimeBanner />
+      </div>
 
-      {/* mockup v8 refine header (.fh .lbl + .summ)・D-1/D-4: 「絞り込み条件」見出し +
-          動的サマリー (選択中 preset 名 ・ 精度)。条件 ON 数 N/M の動的追跡は次段階。 */}
+      {/* mockup v8 refine header (.fh)・② drift fix: 見出し行**全体**を折りたたみトリガに移設
+          (旧「詳細」ボタンを廃し、mockup の .fh onclick 準拠)。caret + aria-expanded で開閉を明示。
+          精度行 + 条件グリッドを一括開閉する (body は universe main 内 #screener-refine-body)。 */}
       <div className="mb-4">
-        <div className="screener-refine-fh">
+        <button
+          type="button"
+          className="screener-refine-fh"
+          onClick={() => setDetailOpen((v) => !v)}
+          aria-expanded={detailOpen}
+          aria-controls="screener-refine-body"
+          data-testid="screener-refine-toggle"
+        >
           <span className="screener-refine-fh__ti"><SlidersHorizontal size={16} strokeWidth={2} aria-hidden /></span>
-          <h3 className="screener-refine-fh__lbl">絞り込み条件</h3>
+          <span className="screener-refine-fh__lbl">絞り込み条件</span>
           <span className="screener-refine-fh__summ" data-testid="screener-refine-summary">
             {(activePreset && PRESET_LABEL_JP[activePreset]) || 'すべての銘柄'} ・ 精度「{PRESET_LABELS[preset]}」
           </span>
           <span className="screener-refine-fh__live">該当 <b data-testid="screener-live-count">{universeLoading ? '–' : filteredItems.length}</b> 銘柄</span>
-        </div>
+          <ChevronDown
+            className="screener-refine-fh__caret"
+            size={14}
+            strokeWidth={2.5}
+            aria-hidden
+            style={{ transform: detailOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+          />
+        </button>
       </div>
 
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1482,50 +1502,21 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       {!universeLoading && !universeError && universe && (universe.items || []).length > 0 && (
         <div className="space-y-4" data-testid="screener-universe-main">
 
-          {/* ── Sprint 5 Pass A: 決断支援ヒーロー (合致度TOP3 + 件数 + staleness + 免責) ──
-              §38/景表法§5: 色 polarity 不使用・neutral/muted のみ。TOP3 は合致度順(軸を ⓘ で明示)、
-              推奨でない旨を明示。shadowゼロ: border + tinted-bg のみ (.panel-card 等は付けない)。 */}
+          {/* ① drift fix: 「合致度TOP3」決断支援ヒーローを削除 (mockup に無い・下の銘柄リストと
+              重複・選定条件が読み手に伝わらない)。件数は refine header「該当N銘柄」へ、staleness は
+              結果リスト見出しへ移設済 (二重表示解消)。
+              ── ② 折りたたみ body (mockup .fb): header トグル (#screener-refine-toggle) で開閉する
+              精度行 + 条件グリッドを内包。⑤ grid-template-rows 0fr↔1fr の height アニメ + opacity fade
+              (CSS の motion token・framer-motion 不使用・prefers-reduced-motion 配慮)。 */}
           <div
-            data-testid="screener-hero-summary"
-            className="rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2.5"
+            id="screener-refine-body"
+            className={`screener-refine-body${detailOpen ? ' screener-refine-body--open' : ''}`}
+            role="region"
+            aria-label="絞り込み条件"
+            aria-hidden={!detailOpen}
           >
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              {/* 左: 合致度TOP3 (軸明示 + ⓘ 選定基準) */}
-              <div className="flex items-center gap-1.5 min-w-0" data-testid="screener-hero-top3">
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--text-secondary)] shrink-0">
-                  合致度TOP3
-                  <Info
-                    size={12}
-                    className="text-[var(--text-muted)] cursor-help"
-                    aria-label="選定基準"
-                    title="現在の絞り込み条件への合致度順（各数値条件の超過率合計の降順）。投資推奨ではありません。"
-                  />
-                </span>
-                {sortedItems.slice(0, 3).map((it) => (
-                  <Chip
-                    key={it.ticker}
-                    size="xs"
-                    variant="display"
-                    tone="muted"
-                    onClick={() => onSelect?.(it.ticker)}
-                  >
-                    {it.ticker}
-                  </Chip>
-                ))}
-                {sortedItems.length === 0 && (
-                  <span className="text-xs text-[var(--text-muted)]">該当なし</span>
-                )}
-              </div>
-              {/* 右: staleness (毎朝更新サイクル文言、X分前は不使用)。件数は refine header の「該当N銘柄」へ1本化 (D・二重表示の解消)。 */}
-              <div className="flex items-center gap-2 shrink-0">
-                {universe.as_of && (
-                  <span className="text-xs text-[var(--text-muted)]" data-testid="screener-hero-staleness">
-                    {formatAsOf(universe.as_of)}（毎朝更新）
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
+            <div className="screener-refine-body__inner">
+              <div className="screener-refine-body__pad">
 
           {/* ── Sprint 2 Pass 2a: 1 行コンパクト操作帯 (screener-control-bar) ──
               S2 変更点:
@@ -1570,6 +1561,33 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                 </button>
               ))}
             </div>
+
+            {/* ④ drift fix: アドバンスド (個別緩急) トグルを精度行へ移動 (旧: 各条件の真上 screener-adv-bar)。
+                user 希望で精度セグの直後 = 精度行の左クラスタに配置 (mockup は右端だが左寄せ採用)。
+                legacy (screenerV2=false) は adv 非搭載のため screenerV2 gate で従来挙動を保全。 */}
+            {screenerV2 && (
+              <>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={advOpen}
+                  className="screener-adv-toggle shrink-0"
+                  onClick={() => {
+                    setAdvOpen((v) => !v);
+                    setAdvLockNudge(false);
+                    trackEvent('screener_adv_toggle', { open: !advOpen, locked: advLocked });
+                  }}
+                  data-testid="screener-adv-toggle"
+                >
+                  <span className="screener-adv-toggle__sw" aria-hidden />
+                  <span>アドバンスド（個別に緩急）</span>
+                  {advLocked && <span className="screener-adv-pro" aria-label="Pro 機能">Pro</span>}
+                </button>
+                {isCustom && (
+                  <span className="screener-custom-tag shrink-0" data-testid="screener-custom-tag">カスタム</span>
+                )}
+              </>
+            )}
 
             {/* 中: 適用中サマリ (active filter を短縮ラベル + 件数寄与で) */}
             {/* screener-applied-summary は常に付与 (空なら aria-hidden) */}
@@ -1655,33 +1673,16 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
               })()}
             </span>
 
-            {/* 右: 詳細を開く */}
-            <button
-              className="ml-auto flex shrink-0 items-center gap-1 text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
-              onClick={() => setDetailOpen((v) => !v)}
-              data-testid="screener-detail-toggle"
-              aria-expanded={detailOpen}
-            >
-              <SlidersHorizontal size={12} strokeWidth={2} aria-hidden />
-              詳細
-              <ChevronDown
-                size={12}
-                strokeWidth={2}
-                aria-hidden
-                style={{ transform: detailOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
-              />
-            </button>
+            {/* ② drift fix: 旧「詳細」トグルボタンは廃止 (折りたたみトリガを見出し行
+                #screener-refine-toggle へ移設したため)。 */}
           </div>
 
-          {/* ── Sprint 2 Pass 2a: 詳細 accordion (CSS display:none + opacity — framer-motion 不使用) ──
-              SPEC §5 Sprint2 / 3体合議追記条件8: max-height jitter / LazyMotion scope 罠を回避。
-              display:none でスクリーンリーダーからも隠れ、opacity fade は CSS transition のみ。
-              クラス screener-detail-panel--open/closed を index.css で制御 (JS でスタイル直書きなし)。 */}
+          {/* ② drift fix: 詳細 accordion の開閉は親 #screener-refine-body (折りたたみ body) に一本化。
+              ここは条件グリッドの bordered コンテナとして常時描画 (display:none 制御は親へ移譲)。 */}
           <div
-            className={`screener-detail-panel${detailOpen ? ' screener-detail-panel--open' : ' screener-detail-panel--closed'}`}
+            className="screener-detail-panel"
             role="region"
             aria-label="詳細フィルター"
-            aria-hidden={!detailOpen}
             data-testid="screener-detail-panel"
           >
               {screenerV2 ? (
@@ -1690,30 +1691,8 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                    grade override は renderGradeRow + category filter で旧 2d/2e を統合。
                    §6 scope: legacy (screenerV2=false) は下の <> で従来構造を維持し、再編を漏らさない。 */
                 <>
-                  {/* ── #2 2-c/2-d: アドバンスド(個別緩急) toggle ──
-                      OFF=精度プリセット+strategy chip のみ / ON=各 facet の per-facet mini-segment を露出。
-                      個別緩急(per-facet override)は Pro (§4.1)。Free は ON でも segment が淡色 ちら見せ+件数のみ。 */}
-                  <div className="screener-adv-bar flex items-center gap-2 flex-wrap" data-testid="screener-adv-header">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={advOpen}
-                      className="screener-adv-toggle"
-                      onClick={() => {
-                        setAdvOpen((v) => !v);
-                        setAdvLockNudge(false);
-                        trackEvent('screener_adv_toggle', { open: !advOpen, locked: advLocked });
-                      }}
-                      data-testid="screener-adv-toggle"
-                    >
-                      <span className="screener-adv-toggle__sw" aria-hidden />
-                      <span>アドバンスド（個別に緩急）</span>
-                      {advLocked && <span className="screener-adv-pro" aria-label="Pro 機能">Pro</span>}
-                    </button>
-                    {isCustom && (
-                      <span className="screener-custom-tag" data-testid="screener-custom-tag">カスタム</span>
-                    )}
-                  </div>
+                  {/* ④ drift fix: アドバンスド (個別緩急) toggle は精度行 (screener-control-bar) へ移設済。
+                      ここ (各条件の真上) からは削除。advOpen ON で下の各 .crow に mini-segment が露出する挙動は不変。 */}
 
                   {/* ── B-2: 全条件を .crow (トグル+ラベル+値チップ) で 2 列グリッドに統一 (mockup v8 忠実)。
                        品質/タイミング/需給 の grouphd 配下に grade も binary も同じ 1 行形状。
@@ -1870,6 +1849,10 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                 );
               })()}
             </div>
+
+              </div>{/* .screener-refine-body__pad */}
+            </div>{/* .screener-refine-body__inner */}
+          </div>{/* #screener-refine-body 折りたたみ body 閉じ (以降 Pass C / 結果は常時表示) */}
 
           {/* ── Pass C: 適用中フィルタ bar (詳細閉時もサマリ chip を visible に保つ) ── */}
           {(() => {
@@ -2085,10 +2068,11 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
 
           {/* ── (5) 結果リスト ── */}
           <div>
-            {/* リスト見出し: 件数のみ (staleness は上段ヒーローに集約、重複回避)。
-                件数はヒーローと同一 filteredItems.length = Trust Cliff C-2 整合。 */}
+            {/* リスト見出し: 件数 + seasonchip + staleness。① drift fix で旧ヒーロー削除に伴い
+                staleness をここへ移設 (mockup の結果パネル .meta 相当)。件数は header と同一
+                filteredItems.length = Trust Cliff C-2 整合。 */}
             <div className="mb-2 flex items-center justify-between">
-              <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-2 min-w-0 flex-wrap">
                 <span className="text-sm font-medium text-[var(--text-secondary)]">
                   {filteredItems.length} 件
                 </span>
@@ -2100,6 +2084,12 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                     className={`seasonchip${SEASON_LABEL[activePreset].neutral ? ' is-neutral' : ''}`}
                   >
                     {SEASON_LABEL[activePreset].text}
+                  </span>
+                )}
+                {/* ① staleness 移設: nightly 更新サイクルのため「毎朝更新」固定文言 (X分前は不使用)。 */}
+                {universe.as_of && (
+                  <span className="text-xs text-[var(--text-muted)] whitespace-nowrap" data-testid="screener-results-staleness">
+                    {formatAsOf(universe.as_of)}（毎朝更新）
                   </span>
                 )}
               </div>
