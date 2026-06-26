@@ -13805,6 +13805,28 @@ body.is-digest-resizing {
 .screener-refine-fh__live { margin-left: auto; flex: none; font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
 .screener-refine-fh__live b { display: inline-block; font-size: 20px; font-weight: 700; color: var(--color-gold-mid); font-variant-numeric: tabular-nums; }
 
+/* seasonchip: preset の対象範囲ラベル (gold pill)。SPEC_2026-06-26_seasonchip。
+   発光系 (.panel-card/.bs-panel/.surface-card) と無関係な独立 class。動的値なし=Trust Cliff 安全。
+   色は app token を color-mix で blend = dark/light 両対応 (mockup の raw gold-mid でなく可読性優先)。 */
+.seasonchip {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  padding: 2px 9px;
+  border-radius: 9999px;
+  color: color-mix(in srgb, var(--color-gold) 60%, var(--text-primary));
+  background: color-mix(in srgb, var(--color-gold) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-gold) 28%, transparent);
+}
+.seasonchip.is-neutral {
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+
 .screener-adv-bar { margin-bottom: var(--space-2); }
 /* アドバンスド toggle (role=switch)。OFF=精度のみ / ON=個別緩急 mini-segment 露出。 */
 .screener-adv-toggle {
