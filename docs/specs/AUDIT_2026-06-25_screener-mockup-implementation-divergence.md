@@ -151,3 +151,30 @@ user 懸念「新高値ブレイクは市況依存。緩和しすぎると活況
 - default loose 起点 vs 標準 の最終判断は本番件数を見てから (qa)。
 - gate new_high_52w の OR 緩和 (年初来高値 OR 52週) で閑散時 0 件保険 (金融提案)。
 - ocfMarginOnly state の完全除去 (現在 no-op 残置・10箇所 extra 配線の cleanup)。
+
+---
+
+## 2026-06-26 追記: P2 方針確定 + sector_leader 隠れフィルタ修正 (code 検証ベース)
+
+sub-agent 調査 → main が `CustomScreenerPanel.jsx` を直接 grep/read で**独立裏取り**した結果。報告≠事実の原則で、当初の sub-agent 報告のうち誤りを訂正済。
+
+### P2-a〜e の確定ステータス (件数実測 = issue #27 に非依存の範囲)
+| 項目 | 確定 | 根拠 (file:line) |
+|---|---|---|
+| P2-a 連続性 trio | **逸脱維持 (意図的)** — binary トグルで段階 UI を出さない。label は「EPS 連続増」等で honest (嘘の段階 UI なし) | L293-295 / L369-371 / SPEC_2026-06-25_screener-beat-cfps-phase2 |
+| P2-b default-ON/OFF | **逸脱維持 (意図的)** — 件数不変 SAFE 優先で追加条件 default-OFF。OFF=適用外で honest。mockup に無い注記 UI 追加は drift になるため不追加 | L697-711 |
+| P2-c cup 状態切替 | **解消済** — 状態サイクル UI 実装済 (ブレイク確定/取っ手/カップ/すべて) | L259-264 / L723 / SPEC_2026-06-25_cup-state-toggle |
+| P2-d zone/nh gate | **解消済 (当初報告を訂正)** — nh は `new_high_signal` grade で label「52週高値圏」と honest 表示。zone(`buy_zone_g`)は near≥97 が代替するため新高値 preset の grades から**撤去**済 (隠れ適用なし) | L97-99 / L319 / L412 / L602 / L606 |
+| P2-e 旬のセクター topn/inrs | **逸脱維持 (暫定)** — top5 固定・inrs 未実装。grades は `funda_pass`(5条件 composite) で要約表示・重複回避。top5 限定は preset 名 + seasonchip で示唆。inrs/topn 可変化は Phase C master-detail 待ち | L595 / L605-616 / L414 |
+
+### 今回の code 修正 (件数不変・表示専用・在範囲)
+**sector_leader の隠れフィルタ解消 (P1-b の display 部分)**: `PRESET_PREDICATES.sector_leader.grades` は
+`eps_yoy_pct / eps_cagr_3y / rs_percentile` を適用するのに `PRESET_DISPLAY_CONDS.sector_leader` (L416) に
+無く、crow 非表示 = 隠れフィルタだった (L411 の自己宣言「隠れフィルタ禁止・Trust Cliff」に違反)。
+→ 3 key を DISPLAY_CONDS に追加して可視化。**`PRESET_PREDICATES`/`itemPasses` 不変 = 件数 count==list 無影響**
+(DISPLAY_CONDS は「どの crow を描くか」だけを決める・L398-399)。build pass。
+
+### 残 (issue #27 / user 承認 gated・別 sprint)
+- P1-b の grade **整理 (除去)** = eps_cagr/eps_yoy/inst gate 化 / mcap cap は件数を変えるため本番件数実測 (issue #27 で scan stale) → user 承認後。今回の表示可視化はその前提を満たす honest 化。
+- **hot_sector の隠れフィルタ疑い (sub-agent review 2026-06-26 が指摘・要 follow-up)**: `PRESET_PREDICATES.hot_sector.grades` は eps_yoy/eps_cagr/roe/rs の grade 閾値 (auto) を適用するが `PRESET_DISPLAY_CONDS.hot_sector` は `funda_pass` のみ (L414)。`funda_pass` は binary flag (5条件達成) で **grade 閾値 (eps_yoy≥25 等) を保証しない**ため、sector_leader と同型の隠れフィルタの可能性。L413 は「重複回避」と意図的決定を記すが、funda_pass の backend 定義 (5条件が grade 閾値と一致するか) を確認した上で「DISPLAY_CONDS に grade 追加 (sector_leader と同じ表示専用 fix)」か「現状維持 (funda_pass が内包と確認)」かを設計判断する。件数実測不要 = issue#27 非依存。
+- **sector_leader `inst_holders_qoq_pct` の dead 表示 (review 指摘)**: DISPLAY_CONDS にあるが `binBindings` 未登録で `renderCrow` が null 返し = 描画されない (変更前から)。DISPLAY から除去 or binBindings 登録で整理 (今回の変更とは独立・挙動不変)。

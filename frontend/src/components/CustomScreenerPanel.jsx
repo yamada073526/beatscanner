@@ -412,8 +412,11 @@ const PRESET_DISPLAY_CONDS = {
   new_high_break: ['latest_beat', 'new_high_signal', 'cup', 'volume_surge_pct', 'rs_percentile', 'eps_yoy_pct'],
   // 旬のセクター: master-detail (Phase C) が主役。conds は funda_pass のみ (重複回避・SPEC §5 Sprint 1)
   hot_sector:     ['funda_pass'],
-  // セクター別リーダー: 定義条件(セクター内RSトップ) + 収益の質 (CF マージン/ROE) + 機関の動き
-  sector_leader:  ['sector_leader', 'ocf_margin_pct', 'roe', 'inst_holders_qoq_pct'],
+  // セクター別リーダー: 定義条件(セクター内RSトップ) + 成長性(EPS YoY/3年) + 収益の質(CF マージン/ROE) + RS + 機関の動き
+  //   PRESET_PREDICATES.sector_leader.grades は eps_yoy_pct/eps_cagr_3y/rs_percentile も適用するため
+  //   必ず可視化する (隠れフィルタ禁止・Trust Cliff。L411 earnings/new_high と同じ不変条件)。
+  //   表示専用追加 = pass 述語不変・件数 count==list 無影響 (本 map の役割は「どの crow を描くか」だけ)。
+  sector_leader:  ['sector_leader', 'eps_yoy_pct', 'eps_cagr_3y', 'ocf_margin_pct', 'roe', 'rs_percentile', 'inst_holders_qoq_pct'],
 };
 
 // ─── D-8 sort (SPEC_2026-06-25): 結果リストのユーザー制御 sort ──────────────────────
