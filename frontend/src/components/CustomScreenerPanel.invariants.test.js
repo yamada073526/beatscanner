@@ -19,6 +19,9 @@ import {
   PRESET_GATE_CONDS,
   PRESET_CONDS,
   CROW_LAYOUT,
+  sectorTone,
+  sectorTagJp,
+  fmtSr,
 } from './CustomScreenerPanel.jsx';
 
 // extra フラグ → cond key の写像を PRESET_CONDS から構築 (cond.flag を持つ binary/flag cond が SSOT)。
@@ -84,5 +87,39 @@ describe('screener hidden-filter invariant (隠れフィルタ禁止・Trust Cli
       }
     }
     expect(bad, `無効/描画不可な DISPLAY_CONDS key: [${bad.join(', ')}]`).toEqual([]);
+  });
+});
+
+// ── Phase C Sprint 2: セクター master の tone/tag/RS 表示の純関数 (SPEC_2026-06-27 §5・U-1/U-4) ──
+describe('sector master display purity (Phase C Sprint 2・§38 事実記述)', () => {
+  it('sectorTone: U-1 の 3 値 (主戦場/上位/劣後) を境界で正しく返す', () => {
+    expect(sectorTone(14, 0)).toBe('hot');   // 最上位かつ正 = 主戦場
+    expect(sectorTone(14, 2)).toBe('up');    // 正だが最上位でない = 上位
+    expect(sectorTone(0, 0)).toBe('up');     // 対 SPY 同等 (sr=0) は最上位でも up (劣後でない)
+    expect(sectorTone(3, 0)).toBe('hot');    // 最上位かつ sr>0 (小幅でも) = 主戦場
+    expect(sectorTone(-1, 0)).toBe('neg');   // 負は最上位でも劣後 (色優先=赤)
+    expect(sectorTone(-5, 4)).toBe('neg');
+  });
+
+  it('sectorTagJp: 静的・§38 事実記述ラベルを tone/中立帯に沿って返す (将来予測語なし)', () => {
+    expect(sectorTagJp(14, 0)).toBe('相対力 トップ'); // 最上位
+    expect(sectorTagJp(8, 1)).toBe('相対力 上位');    // 上位 (NEUTRAL=5 以上)
+    expect(sectorTagJp(3, 1)).toBe('横ばい');         // 0<=sr<5 = 横ばい (色は up 緑のまま nuance)
+    expect(sectorTagJp(0, 2)).toBe('横ばい');         // 対 SPY 同等
+    expect(sectorTagJp(-2, 3)).toBe('劣後');          // 対 SPY 劣後
+    // §38: 「改善中」「これから上がる」等の trend/将来予測語を一切含まない (事実記述のみ)。
+    for (const [sr, rank] of [[14, 0], [8, 1], [3, 1], [0, 2], [-2, 3]]) {
+      const tag = sectorTagJp(sr, rank);
+      expect(tag).not.toMatch(/改善|上がる|買い|今後|これから|見込/);
+    }
+  });
+
+  it('fmtSr: U-4 符号付き整数・単位無印 (+14 / -1 / 0)', () => {
+    expect(fmtSr(14)).toBe('+14');
+    expect(fmtSr(14.6)).toBe('+15'); // 整数丸め
+    expect(fmtSr(-1)).toBe('-1');
+    expect(fmtSr(0)).toBe('0');      // ゼロは無符号
+    expect(fmtSr(null)).toBe('0');   // 欠損は 0 扱い (NaN を出さない)
+    expect(fmtSr(undefined)).toBe('0');
   });
 });

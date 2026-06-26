@@ -655,6 +655,50 @@ export function topSectorsByRs(items, topN = 5) {
 }
 
 /**
+ * sectorTone — セクター行の色 tone を返す純関数 (SPEC_2026-06-27 U-1・色は 3 値固定)。
+ * 最上位かつ対 SPY 超過 (sr>0) = 主戦場(amber) / sr>=0 = 上位(緑) / sr<0 = 劣後(赤)。
+ * rank は sectorSummary の sr 降順 index (0 = 最上位)。
+ * @returns {'hot'|'up'|'neg'}
+ */
+export function sectorTone(sr, rank) {
+  if ((sr ?? 0) < 0) return 'neg';
+  if (rank === 0 && (sr ?? 0) > 0) return 'hot';
+  return 'up';
+}
+
+// 「横ばい」中立帯のしきい (対 SPY 超過 pt)。色は 3 値固定 (U-1) のまま tag テキストだけ nuance を補う。
+//   mockup の「+3.0 横ばい」に倣い、小幅プラス (0〜SR_NEUTRAL) は up(緑) でも「横ばい」と表示。
+const SR_NEUTRAL = 5;
+
+/**
+ * sectorTagJp — セクターの相対力 tag を静的 dictionary で返す純関数 (LLM 不使用・§4)。
+ * §38 厳守: 過去/現在の相対力の「事実記述」のみ。将来上昇の断定・示唆を入れない
+ *   ([[feedback_section38_buy_signal_boundary]])。SPEC §5 例の「改善中」は sr スナップショットに
+ *   時系列差分が無く trend 主張を裏取りできないため不採用 (検証可能な事実ラベルに限定)。
+ *   - sr<0           → 「劣後」       (対 SPY を下回る事実)
+ *   - 0<=sr<NEUTRAL  → 「横ばい」     (対 SPY とほぼ同等・色は up 緑のまま nuance のみ補完)
+ *   - 最上位(rank0)  → 「相対力 トップ」 (最大 RS セクターである事実。主戦場 chip は別途)
+ *   - それ以外の上位 → 「相対力 上位」
+ * @returns {string}
+ */
+export function sectorTagJp(sr, rank) {
+  const tone = sectorTone(sr, rank);
+  if (tone === 'neg') return '劣後';
+  if (tone === 'hot') return '相対力 トップ';
+  return (sr ?? 0) < SR_NEUTRAL ? '横ばい' : '相対力 上位';
+}
+
+/**
+ * fmtSr — セクター RS を符号付き整数で表示 (SPEC_2026-06-27 U-4・単位無印)。
+ *   "+14" / "-1" / "0"。対 SPY 超過 pt の符号 (超過/劣後) を一目で示す。
+ * @returns {string}
+ */
+export function fmtSr(sr) {
+  const n = Math.round(sr ?? 0);
+  return (n > 0 ? '+' : '') + n;
+}
+
+/**
  * countPreset — プリセットキーに対応する件数を universe.items から算出。
  * ScreenerMaster がタイル件数表示に利用 (list の itemPasses と同一述語)。
  * @param {Array}  items    — universe.items (空配列/null なら null を返す)
@@ -2251,7 +2295,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                 <div className="screener-secmaster" role="list" aria-label="セクター一覧">
                   {sectorSummary.map((s, i) => {
                     // U-1: 最上位かつ sr>0=主戦場(amber) / sr>=0=上位(緑) / sr<0=劣後(赤)。
-                    const tone = s.sr < 0 ? 'neg' : (i === 0 && s.sr > 0 ? 'hot' : 'up');
+                    const tone = sectorTone(s.sr, i);
                     const sel = s.sn === activeSector?.sn;
                     return (
                       <button
@@ -2269,9 +2313,12 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                             {s.label}
                             {tone === 'hot' && <span className="screener-secrow__chip">主戦場</span>}
                           </span>
-                          <span className="screener-secrow__tag">{s.count} 銘柄が合致</span>
+                          {/* D-3: 件数羅列でなく相対力の意味的ラベル (静的・§38 事実記述)。
+                              件数は U-2 制約により master 行に出さず detail 見出しへ退避。 */}
+                          <span className="screener-secrow__tag">{sectorTagJp(s.sr, i)}</span>
                         </span>
-                        <span className="screener-secrow__sr" data-tone={tone}>{Math.round(s.sr)}</span>
+                        {/* D-2: 対 SPY 超過を符号付き整数で (U-4・単位無印)。 */}
+                        <span className="screener-secrow__sr" data-tone={tone}>{fmtSr(s.sr)}</span>
                       </button>
                     );
                   })}
@@ -2283,8 +2330,10 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                 </div>
                 {/* detail: 選択セクターの Top3 (相対力降順) */}
                 <div className="screener-secdetail" data-testid="screener-sector-detail">
+                  {/* D-4/U-5: 「好決算/合致」でなく事実記述「決算5条件達成」。件数は U-2 制約に従い
+                      ここ (detail) に明確ラベル付きで退避 (master 行の俯瞰数値=RS と Trust Cliff 分離)。 */}
                   <p className="screener-secdetail__h">
-                    {activeSector?.label}（相対力 {Math.round(activeSector?.sr ?? 0)}）の合致銘柄 Top3
+                    {activeSector?.label}（相対力 {fmtSr(activeSector?.sr)}）の決算5条件達成銘柄 {activeSector?.count ?? 0}件
                   </p>
                   {(activeSector?.top3 || []).map((it) => (
                     <button
@@ -2301,6 +2350,11 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                       <Chip size="xs" variant="display" tone="muted">5条件達成</Chip>
                     </button>
                   ))}
+                  {(activeSector?.count ?? 0) > 3 && (
+                    <p className="screener-secdetail__more" data-testid="screener-sector-detail-more">
+                      上位3件を表示・ほか {(activeSector.count - 3)}件
+                    </p>
+                  )}
                   {(activeSector?.top3 || []).length === 0 && (
                     <p className="screener-secdetail__empty" data-testid="screener-sector-detail-empty">
                       このセクターに条件合致（決算5条件達成）の銘柄は今のところありません。
