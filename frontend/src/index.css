@@ -13763,6 +13763,7 @@ body.is-digest-resizing {
 .screener-secrow__bar { flex: none; width: 4px; align-self: stretch; border-radius: 2px; }
 .screener-secrow__bar[data-tone="hot"] { background: var(--color-warning); }
 .screener-secrow__bar[data-tone="up"] { background: var(--color-gain); }
+.screener-secrow__bar[data-tone="neg"] { background: var(--color-loss); }
 .screener-secrow__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .screener-secrow__name { display: flex; align-items: center; gap: var(--space-2); font-size: 14px; font-weight: 600; color: var(--text-primary); }
 .screener-secrow__chip {
@@ -13777,10 +13778,12 @@ body.is-digest-resizing {
 .screener-secrow__sr { flex: none; margin-left: auto; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .screener-secrow__sr[data-tone="hot"] { color: var(--color-warning); }
 .screener-secrow__sr[data-tone="up"] { color: var(--color-gain); }
+.screener-secrow__sr[data-tone="neg"] { color: var(--color-loss); }
 .screener-seclegend { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-2); padding: var(--space-2) var(--space-4); font-size: 11px; color: var(--text-muted); }
 .screener-seclegend i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; border-radius: 3px; vertical-align: middle; }
 .screener-seclegend i[data-tone="hot"] { background: var(--color-warning); }
 .screener-seclegend i[data-tone="up"] { background: var(--color-gain); }
+.screener-seclegend i[data-tone="neg"] { background: var(--color-loss); }
 .screener-secdetail {
   padding: var(--space-4);
   background: var(--bg-card);
@@ -13788,6 +13791,8 @@ body.is-digest-resizing {
   border-radius: var(--radius-lg);
 }
 .screener-secdetail__h { margin-bottom: var(--space-3); font-size: 11px; color: var(--text-muted); }
+/* Phase C Sprint 1: 劣後/対象外セクター (好決算 0) を選んだ時の detail 空表示 (該当なし・正直表示)。 */
+.screener-secdetail__empty { padding: var(--space-3) 0; font-size: 12px; line-height: 1.6; color: var(--text-muted); }
 .screener-secdetail__row {
   display: flex;
   align-items: center;
