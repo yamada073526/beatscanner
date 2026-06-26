@@ -13677,6 +13677,14 @@ body.is-digest-resizing {
 .screener-crow__lock-cta:focus-visible { outline: 2px solid var(--color-gold); outline-offset: 2px; }
 /* mseg = adv ON 時に grade crow 内へ full-width で出す精度セグメント (緩/標/厳/最厳)。gold。
    Free (advLocked) は .is-locked で淡色化、操作は disabled でなく onClick→lockbar nudge (§4.2 ちら見せ)。 */
+/* 別件E (2026-06-27): アドバンスド ON で grade crow 内に mseg (緩/標/厳/最厳) が出現する際、
+   段の高さが急変して一瞬混乱する問題を解消。ラベルの下へ max-height + opacity で「スッと」下方向に現れる
+   (appear-only・CSS keyframe・framer 不使用)。mseg は inline-flex 1 行固定なので max-height 64px ceiling は安全
+   (animation 終了後は fill なしで max-height:auto へ戻り clip しない)。 */
+@keyframes screenerMsegReveal {
+  from { max-height: 0; opacity: 0; margin-top: 0; }
+  to { max-height: 64px; opacity: 1; margin-top: 6px; }
+}
 .screener-crow__mseg {
   display: inline-flex;
   gap: 2px;
@@ -13686,6 +13694,8 @@ body.is-digest-resizing {
   background: var(--bg-muted);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
+  overflow: hidden;            /* max-height reveal の clip 用 */
+  animation: screenerMsegReveal var(--motion-base, 220ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
 }
 .screener-crow__mseg.is-locked { opacity: 0.5; }
 .screener-crow__mseg-btn {
@@ -13723,6 +13733,7 @@ body.is-digest-resizing {
   .screener-crow__sw::after,
   .screener-crow__mseg-btn,
   .screener-crow__lock-cta { transition: none; }
+  .screener-crow__mseg { animation: none; }
 }
 /* ── Phase C: 旬のセクター master-detail (mockup .md/.secmaster/.secrow/.top3 準拠・表示専用) ──
    投資色ルール: 主戦場(最上位 sector)=amber(warning)、上位 sector=緑(gain)。RS 相対力ランクの semantic。 */

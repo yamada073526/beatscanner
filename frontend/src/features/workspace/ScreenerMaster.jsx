@@ -212,18 +212,11 @@ export default function ScreenerMaster({
       data-mode="custom"
       style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}
     >
-      {/* ── 見出し (mockup v8 h1+sub 準拠・D-1) ───────────────────────
-          embedded pane のため h1 でなく h2。sub は「右上 Free/Pro で挙動が切替わります」
-          clause を除外 (実装に該当トグルが無く Trust Cliff になるため・user 決定 2026-06-26)。 */}
-      <div className="shrink-0 px-4 pt-4 pb-3">
-        <h2 className="text-2xl font-semibold tracking-[-0.01em] text-[var(--text-primary)]">
-          スクリーナー
-        </h2>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
-          戦略を選ぶ →「絞り込み条件」で精度を調整。
-          <strong className="font-semibold text-[var(--text-secondary)]">アドバンスド（Pro）で各条件を個別に緩急設定</strong>。
-        </p>
-      </div>
+      {/* 別件F (2026-06-27・3体 sub-agent review 合議で削除確定): 見出し「スクリーナー」+ 説明文を撤去。
+          - 見出し: nav タブ (Workspace.jsx `label:'スクリーナー'`) が active で wayfinding を担い重複。
+          - 説明文: 5原則①「2秒・テキストを読ませない」違反の冗長テキスト。Pro 訴求は ProTeaser(blur+overlay)が別途担保。
+          - 効果: 縦 ~84-104px 回収 → 固定の上部4プリセット下の銘柄リストが ~2行増。StrategyPresetBar の
+            border-bottom + bg-subtle が section 境界を宣言するため上部余白は preset bar の pt(12px)で十分。 */}
 
       {/* ── 戦略プリセット bar (IA: 画面トップの主要導線) ──────────
           SPEC §IA L144「上部に戦略プリセット(1クリック)→ その下絞り込み条件で精度調整 → 結果」。
