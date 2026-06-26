@@ -13804,6 +13804,8 @@ body.is-digest-resizing {
 .screener-secdetail__h { margin-bottom: var(--space-3); font-size: 11px; color: var(--text-muted); }
 /* Phase C Sprint 1: 劣後/対象外セクター (好決算 0) を選んだ時の detail 空表示 (該当なし・正直表示)。 */
 .screener-secdetail__empty { padding: var(--space-3) 0; font-size: 12px; line-height: 1.6; color: var(--text-muted); }
+/* Phase C Sprint 2: 好決算が Top3 超のとき総件数を正直に補足 (件数 SSOT を detail に明示退避)。 */
+.screener-secdetail__more { margin-top: var(--space-2); font-size: 11px; color: var(--text-muted); }
 .screener-secdetail__row {
   display: flex;
   align-items: center;

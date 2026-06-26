@@ -19,6 +19,10 @@ import {
   PRESET_GATE_CONDS,
   PRESET_CONDS,
   CROW_LAYOUT,
+  sectorTone,
+  sectorTagJp,
+  fmtSr,
+  buildSectorSummary,
 } from './CustomScreenerPanel.jsx';
 
 // extra フラグ → cond key の写像を PRESET_CONDS から構築 (cond.flag を持つ binary/flag cond が SSOT)。
@@ -84,5 +88,90 @@ describe('screener hidden-filter invariant (隠れフィルタ禁止・Trust Cli
       }
     }
     expect(bad, `無効/描画不可な DISPLAY_CONDS key: [${bad.join(', ')}]`).toEqual([]);
+  });
+});
+
+// ── Phase C Sprint 2: セクター master の tone/tag/RS 表示の純関数 (SPEC_2026-06-27 §5・U-1/U-4) ──
+describe('sector master display purity (Phase C Sprint 2・§38 事実記述)', () => {
+  it('sectorTone: U-1 の 3 値 (主戦場/上位/劣後) を境界で正しく返す', () => {
+    expect(sectorTone(14, 0)).toBe('hot');   // 最上位かつ正 = 主戦場
+    expect(sectorTone(14, 2)).toBe('up');    // 正だが最上位でない = 上位
+    expect(sectorTone(0, 0)).toBe('up');     // 対 SPY 同等 (sr=0) は最上位でも up (劣後でない)
+    expect(sectorTone(3, 0)).toBe('hot');    // 最上位かつ sr>0 (小幅でも) = 主戦場
+    expect(sectorTone(-1, 0)).toBe('neg');   // 負は最上位でも劣後 (色優先=赤)
+    expect(sectorTone(-5, 4)).toBe('neg');
+  });
+
+  it('sectorTagJp: 静的・§38 事実記述ラベルを tone/中立帯に沿って返す (将来予測語なし)', () => {
+    expect(sectorTagJp(14, 0)).toBe('相対力 トップ'); // 最上位
+    expect(sectorTagJp(8, 1)).toBe('相対力 上位');    // 上位 (NEUTRAL=5 以上)
+    expect(sectorTagJp(3, 1)).toBe('横ばい');         // 0<=sr<5 = 横ばい (色は up 緑のまま nuance)
+    expect(sectorTagJp(0, 2)).toBe('横ばい');         // 対 SPY 同等
+    expect(sectorTagJp(-2, 3)).toBe('劣後');          // 対 SPY 劣後
+    // §38: 「改善中」「これから上がる」等の trend/将来予測語を一切含まない (事実記述のみ)。
+    for (const [sr, rank] of [[14, 0], [8, 1], [3, 1], [0, 2], [-2, 3]]) {
+      const tag = sectorTagJp(sr, rank);
+      expect(tag).not.toMatch(/改善|上がる|買い|今後|これから|見込/);
+    }
+  });
+
+  it('fmtSr: U-4 符号付き整数・単位無印 (+14 / -1 / 0)', () => {
+    expect(fmtSr(14)).toBe('+14');
+    expect(fmtSr(14.6)).toBe('+15'); // 整数丸め
+    expect(fmtSr(-1)).toBe('-1');
+    expect(fmtSr(0)).toBe('0');      // ゼロは無符号
+    expect(fmtSr(null)).toBe('0');   // 欠損は 0 扱い (NaN を出さない)
+    expect(fmtSr(undefined)).toBe('0');
+  });
+});
+
+// ── Phase C Sprint 3: 「旬のセクター」master-detail 集計の純関数 + C-2 件数不変 ──
+describe('buildSectorSummary count integrity (Phase C Sprint 3・C-2 不変)', () => {
+  it('master 全行 count の総和 == (sector を持つ) filteredItems 数 (count==list 担保)', () => {
+    // sector を持つ filteredItem は厳密に 1 bucket に入る → 総和 = filteredItems.length。
+    const allItems = [
+      { sector: 'Technology', sector_rs_median: 10 },
+      { sector: 'Energy', sector_rs_median: 5 },
+      { sector: 'Financials', sector_rs_median: -3 },
+    ];
+    const filtered = [
+      { sector: 'Technology', ticker: 'AAA', rs_percentile: 90 },
+      { sector: 'Technology', ticker: 'BBB', rs_percentile: 80 },
+      { sector: 'Energy', ticker: 'CCC', rs_percentile: 70 },
+      { sector: 'Energy', ticker: 'DDD', rs_percentile: 60 },
+      { sector: 'Energy', ticker: 'EEE', rs_percentile: 50 }, // top3 超 → count に算入・top3 から溢れ
+    ];
+    const sum = buildSectorSummary(allItems, filtered).reduce((a, s) => a + s.count, 0);
+    expect(sum).toBe(filtered.length); // 5 == 5
+  });
+
+  it('master = 全 universe セクター俯瞰 (劣後/好決算0 も残す) で sr 降順', () => {
+    const allItems = [
+      { sector: 'Technology', sector_rs_median: 10 },
+      { sector: 'Financials', sector_rs_median: -3 }, // 好決算 0 = 劣後でも master に残る (U-2(b))
+    ];
+    const filtered = [{ sector: 'Technology', ticker: 'AAA', rs_percentile: 90 }];
+    const res = buildSectorSummary(allItems, filtered);
+    expect(res.map((s) => s.sn)).toEqual(['Technology', 'Financials']); // sr 降順
+    expect(res[1].count).toBe(0);   // 劣後セクターは count 0 で残る
+    expect(res[1].top3).toEqual([]);
+  });
+
+  it('top3 は rs_percentile 降順で最大 3 件・count はあふれを含む', () => {
+    const allItems = [{ sector: 'Energy', sector_rs_median: 5 }];
+    const filtered = [
+      { sector: 'Energy', ticker: 'A', rs_percentile: 10 },
+      { sector: 'Energy', ticker: 'B', rs_percentile: 90 },
+      { sector: 'Energy', ticker: 'C', rs_percentile: 50 },
+      { sector: 'Energy', ticker: 'D', rs_percentile: 70 },
+    ];
+    const [row] = buildSectorSummary(allItems, filtered);
+    expect(row.count).toBe(4);
+    expect(row.top3.map((x) => x.ticker)).toEqual(['B', 'D', 'C']); // 90,70,50
+  });
+
+  it('no-data fallback: allItems 空/null は空配列', () => {
+    expect(buildSectorSummary([], [{ sector: 'X', ticker: 'Y' }])).toEqual([]);
+    expect(buildSectorSummary(null, null)).toEqual([]);
   });
 });

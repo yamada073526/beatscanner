@@ -655,6 +655,94 @@ export function topSectorsByRs(items, topN = 5) {
 }
 
 /**
+ * sectorTone — セクター行の色 tone を返す純関数 (SPEC_2026-06-27 U-1・色は 3 値固定)。
+ * 最上位かつ対 SPY 超過 (sr>0) = 主戦場(amber) / sr>=0 = 上位(緑) / sr<0 = 劣後(赤)。
+ * rank は sectorSummary の sr 降順 index (0 = 最上位)。
+ * @returns {'hot'|'up'|'neg'}
+ */
+export function sectorTone(sr, rank) {
+  if ((sr ?? 0) < 0) return 'neg';
+  if (rank === 0 && (sr ?? 0) > 0) return 'hot';
+  return 'up';
+}
+
+// 「横ばい」中立帯のしきい (対 SPY 超過 pt)。色は 3 値固定 (U-1) のまま tag テキストだけ nuance を補う。
+//   mockup の「+3.0 横ばい」に倣い、小幅プラス (0〜SR_NEUTRAL) は up(緑) でも「横ばい」と表示。
+const SR_NEUTRAL = 5;
+
+/**
+ * sectorTagJp — セクターの相対力 tag を静的 dictionary で返す純関数 (LLM 不使用・§4)。
+ * §38 厳守: 過去/現在の相対力の「事実記述」のみ。将来上昇の断定・示唆を入れない
+ *   ([[feedback_section38_buy_signal_boundary]])。SPEC §5 例の「改善中」は sr スナップショットに
+ *   時系列差分が無く trend 主張を裏取りできないため不採用 (検証可能な事実ラベルに限定)。
+ *   - sr<0           → 「劣後」       (対 SPY を下回る事実)
+ *   - 0<=sr<NEUTRAL  → 「横ばい」     (対 SPY とほぼ同等・色は up 緑のまま nuance のみ補完)
+ *   - 最上位(rank0)  → 「相対力 トップ」 (最大 RS セクターである事実。主戦場 chip は別途)
+ *   - それ以外の上位 → 「相対力 上位」
+ * @returns {string}
+ */
+export function sectorTagJp(sr, rank) {
+  const tone = sectorTone(sr, rank);
+  if (tone === 'neg') return '劣後';
+  if (tone === 'hot') return '相対力 トップ';
+  return (sr ?? 0) < SR_NEUTRAL ? '横ばい' : '相対力 上位';
+}
+
+/**
+ * fmtSr — セクター RS を符号付き整数で表示 (SPEC_2026-06-27 U-4・単位無印)。
+ *   "+14" / "-1" / "0"。対 SPY 超過 pt の符号 (超過/劣後) を一目で示す。
+ * @returns {string}
+ */
+export function fmtSr(sr) {
+  const n = Math.round(sr ?? 0);
+  return (n > 0 ? '+' : '') + n;
+}
+
+/**
+ * buildSectorSummary — 「旬のセクター」master-detail の集計を行う純関数 (Phase C 正規 view の SSOT)。
+ * U-2=(b): master の sector 集合 = 全 universe のセクター相対力俯瞰 (劣後含む全セクター)。
+ *   sr (sector_rs_median) は allItems から、count/top3 (好決算) は filteredItems から振り分ける。
+ * ★ C-2 不変: 各 sector 行 count の総和 = (sector を持つ) filteredItems 数 = preset 件数。
+ *   件数 SSOT (PRESET_PREDICATES / itemPasses / topSectorsByRs) は一切変えず、ここは集計のみ。
+ * @param {Array} allItems       — universe.items (sr 俯瞰の母集団)
+ * @param {Array} filteredItems  — preset 絞り込み済 (count/top3 の母集団)
+ * @returns {Array<{sn:string,label:string,sr:number,count:number,top3:Array}>} sr 降順 → count 降順
+ */
+export function buildSectorSummary(allItems, filteredItems) {
+  const all = allItems || [];
+  if (all.length === 0) return [];
+  // (1) 全 universe を sector 集約して sr を得る (= 俯瞰、劣後もここで拾う)。
+  const srMap = {};
+  for (const it of all) {
+    const sec = it.sector;
+    if (!sec) continue;
+    const sr = it.sector_rs_median ?? 0;
+    if (srMap[sec] == null || sr > srMap[sec]) srMap[sec] = sr;
+  }
+  // (2) 好決算 (filteredItems) を sector 別に → count/top3 (件数 SSOT 整合)。
+  const passBySector = {};
+  for (const it of (filteredItems || [])) {
+    const sec = it.sector;
+    if (!sec) continue;
+    (passBySector[sec] = passBySector[sec] || []).push(it);
+  }
+  return Object.keys(srMap)
+    .map((sec) => {
+      const pass = passBySector[sec] || [];
+      return {
+        sn: sec,
+        label: sectorLabelJp(sec),
+        sr: srMap[sec],
+        count: pass.length,
+        top3: [...pass]
+          .sort((a, b) => (b.rs_percentile ?? -1) - (a.rs_percentile ?? -1) || a.ticker.localeCompare(b.ticker))
+          .slice(0, 3),
+      };
+    })
+    .sort((a, b) => b.sr - a.sr || b.count - a.count);
+}
+
+/**
  * countPreset — プリセットキーに対応する件数を universe.items から算出。
  * ScreenerMaster がタイル件数表示に利用 (list の itemPasses と同一述語)。
  * @param {Array}  items    — universe.items (空配列/null なら null を返す)
@@ -832,9 +920,11 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       setSectorLeaderOnly(true);
       setMcapFilter(['mega', 'mid']);
     } else if (presetKey === 'hot_sector') {
-      // 旬のセクター (Phase A 暫定): 上位5セクター ∩ funda_pass を stock list 表示。
-      // countPreset と同一 topSectorsByRs (_universeCache=module-scope・常に最新) を使い
-      // count==list を担保 (Trust Cliff)。Phase C でセクター master-detail view に置換予定。
+      // 旬のセクター (Phase C 本実装): 正規 view は isSectorView の master-detail 一本
+      //   (buildSectorSummary)。stock-list 描画経路は廃止済 (汎用 table は no-data fallback のみ)。
+      //   下の funda_pass + sectorFilter=上位5 は「描画」でなく countPreset(topSectorsByRs ∩ funda_pass)
+      //   と filteredItems を一致させる件数 SSOT 機構 (count==list・Trust Cliff)。撤去不可。
+      //   _universeCache=module-scope は常に最新。
       setFundaPassOnly(true);
       setSectorFilter(topSectorsByRs(_universeCache?.items || [], 5));
     }
@@ -936,46 +1026,14 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     return scored.map((s) => s.it);
   }, [filteredItems, activeGrades]);
 
-  // ── Phase C Sprint 1 (SPEC_2026-06-27・U-2=(b) 市場全体の俯瞰) ──
-  // master の sector 集合 = 全 universe のセクター相対力俯瞰 (劣後含む全セクター)。
-  //   - sr (sector_rs_median) は全 universe.items から集約 → 劣後セクターも master に現れる (mockup 準拠)。
-  //   - count/top3 (好決算) は filteredItems (preset 絞り込み結果) から振り分ける。
-  //     ★ C-2 不変: 各 sector 行 count の総和 = filteredItems.length = preset 件数。件数 SSOT
-  //       (PRESET_PREDICATES/itemPasses) は一切変えない。non-対象/劣後セクターは count=0 → detail「該当なし」。
-  // 並び = sr 降順 → count 降順。色は U-1: 最上位かつ sr>0=主戦場(amber)/ sr>=0=上位(緑)/ sr<0=劣後(赤)。
-  const sectorSummary = useMemo(() => {
-    const all = universe?.items || [];
-    if (all.length === 0) return [];
-    // (1) 全 universe を sector 集約して sr を得る (= 俯瞰、劣後もここで拾う)。
-    const srMap = {};
-    for (const it of all) {
-      const sec = it.sector;
-      if (!sec) continue;
-      const sr = it.sector_rs_median ?? 0;
-      if (srMap[sec] == null || sr > srMap[sec]) srMap[sec] = sr;
-    }
-    // (2) 好決算 (filteredItems) を sector 別に → count/top3 (件数 SSOT 整合)。
-    const passBySector = {};
-    for (const it of filteredItems) {
-      const sec = it.sector;
-      if (!sec) continue;
-      (passBySector[sec] = passBySector[sec] || []).push(it);
-    }
-    return Object.keys(srMap)
-      .map((sec) => {
-        const pass = passBySector[sec] || [];
-        return {
-          sn: sec,
-          label: sectorLabelJp(sec),
-          sr: srMap[sec],
-          count: pass.length,
-          top3: [...pass]
-            .sort((a, b) => (b.rs_percentile ?? -1) - (a.rs_percentile ?? -1) || a.ticker.localeCompare(b.ticker))
-            .slice(0, 3),
-        };
-      })
-      .sort((a, b) => b.sr - a.sr || b.count - a.count);
-  }, [universe, filteredItems]);
+  // ── Phase C「旬のセクター」master-detail (SPEC_2026-06-27・U-2=(b) 市場全体の俯瞰) ──
+  //   集計ロジックは純関数 buildSectorSummary が SSOT (module top・unit-test 済)。component は
+  //   呼ぶだけ。master=全 universe のセクター俯瞰 / count・top3=filteredItems という C-2 不変は
+  //   buildSectorSummary の JSDoc 参照。件数 SSOT (PRESET_PREDICATES/itemPasses/topSectorsByRs) は不触。
+  const sectorSummary = useMemo(
+    () => buildSectorSummary(universe?.items, filteredItems),
+    [universe, filteredItems],
+  );
   // 選択中セクター (未選択 or 集合変化で消えたら先頭に fallback)。
   const activeSector = useMemo(
     () => (sectorSummary.length ? (sectorSummary.find((s) => s.sn === selectedSector) || sectorSummary[0]) : null),
@@ -2251,7 +2309,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                 <div className="screener-secmaster" role="list" aria-label="セクター一覧">
                   {sectorSummary.map((s, i) => {
                     // U-1: 最上位かつ sr>0=主戦場(amber) / sr>=0=上位(緑) / sr<0=劣後(赤)。
-                    const tone = s.sr < 0 ? 'neg' : (i === 0 && s.sr > 0 ? 'hot' : 'up');
+                    const tone = sectorTone(s.sr, i);
                     const sel = s.sn === activeSector?.sn;
                     return (
                       <button
@@ -2269,9 +2327,12 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                             {s.label}
                             {tone === 'hot' && <span className="screener-secrow__chip">主戦場</span>}
                           </span>
-                          <span className="screener-secrow__tag">{s.count} 銘柄が合致</span>
+                          {/* D-3: 件数羅列でなく相対力の意味的ラベル (静的・§38 事実記述)。
+                              件数は U-2 制約により master 行に出さず detail 見出しへ退避。 */}
+                          <span className="screener-secrow__tag">{sectorTagJp(s.sr, i)}</span>
                         </span>
-                        <span className="screener-secrow__sr" data-tone={tone}>{Math.round(s.sr)}</span>
+                        {/* D-2: 対 SPY 超過を符号付き整数で (U-4・単位無印)。 */}
+                        <span className="screener-secrow__sr" data-tone={tone}>{fmtSr(s.sr)}</span>
                       </button>
                     );
                   })}
@@ -2283,8 +2344,10 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                 </div>
                 {/* detail: 選択セクターの Top3 (相対力降順) */}
                 <div className="screener-secdetail" data-testid="screener-sector-detail">
+                  {/* D-4/U-5: 「好決算/合致」でなく事実記述「決算5条件達成」。件数は U-2 制約に従い
+                      ここ (detail) に明確ラベル付きで退避 (master 行の俯瞰数値=RS と Trust Cliff 分離)。 */}
                   <p className="screener-secdetail__h">
-                    {activeSector?.label}（相対力 {Math.round(activeSector?.sr ?? 0)}）の合致銘柄 Top3
+                    {activeSector?.label}（相対力 {fmtSr(activeSector?.sr)}）の決算5条件達成銘柄 {activeSector?.count ?? 0}件
                   </p>
                   {(activeSector?.top3 || []).map((it) => (
                     <button
@@ -2301,6 +2364,11 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                       <Chip size="xs" variant="display" tone="muted">5条件達成</Chip>
                     </button>
                   ))}
+                  {(activeSector?.count ?? 0) > 3 && (
+                    <p className="screener-secdetail__more" data-testid="screener-sector-detail-more">
+                      上位3件を表示・ほか {(activeSector.count - 3)}件
+                    </p>
+                  )}
                   {(activeSector?.top3 || []).length === 0 && (
                     <p className="screener-secdetail__empty" data-testid="screener-sector-detail-empty">
                       このセクターに条件合致（決算5条件達成）の銘柄は今のところありません。
