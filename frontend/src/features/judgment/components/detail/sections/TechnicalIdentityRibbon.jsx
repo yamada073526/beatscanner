@@ -80,21 +80,42 @@ export default function TechnicalIdentityRibbon({ ticker, companyName }) {
   const oneLine = rawOneLine ? (sanitizeText(rawOneLine) || rawOneLine) : null;
   const segmentText = buildSegmentSummaryText(data?.segmentSummary, 2);
   const name = companyName || ticker;
+  // 和文 1 行がある時のみ展開トグル可能 (案A: リボン全体をトグル、chevron は右上固定)。
+  const interactive = !!oneLine;
+  const toggle = () => setExpanded((v) => !v);
 
   return (
     <div
       data-testid="v6-technical-identity-ribbon"
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-expanded={interactive ? expanded : undefined}
+      aria-label={interactive ? (expanded ? '会社概要を1行に畳む' : '会社概要を全文表示する') : undefined}
+      onClick={interactive ? toggle : undefined}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggle();
+              }
+            }
+          : undefined
+      }
       style={{
+        position: 'relative',
         display: 'flex',
         // 既定 (collapsed) は 1 行固定 (nowrap + desc ellipsis)。展開時のみ wrap して全文表示。
         flexWrap: expanded ? 'wrap' : 'nowrap',
         alignItems: expanded ? 'flex-start' : 'center',
         gap: 'var(--space-2, 8px)',
         minWidth: 0,
-        padding: 'var(--space-2, 8px) var(--space-3, 12px)',
+        // 右側は右上固定 chevron の領域を確保 (30px)。
+        padding: 'var(--space-2, 8px) 30px var(--space-2, 8px) var(--space-3, 12px)',
         background: 'var(--surface-2)',
         border: '1px solid var(--border-subtle)',
         borderRadius: 'var(--radius-md)',
+        cursor: interactive ? 'pointer' : 'default',
       }}
     >
       <CompanyLogo ticker={ticker} size={20} />
@@ -110,56 +131,21 @@ export default function TechnicalIdentityRibbon({ ticker, companyName }) {
         {name}
       </span>
       {oneLine && (
-        <button
-            type="button"
-            data-testid="v6-technical-identity-oneline"
-            onClick={() => setExpanded((v) => !v)}
-            aria-expanded={expanded}
-            aria-label={expanded ? '会社概要を1行に畳む' : '会社概要を全文表示する'}
-            title={expanded ? undefined : oneLine}
-            style={{
-              // button reset
-              appearance: 'none',
-              background: 'none',
-              border: 'none',
-              padding: 0,
-              margin: 0,
-              font: 'inherit',
-              textAlign: 'left',
-              cursor: 'pointer',
-              // layout
-              display: 'flex',
-              alignItems: expanded ? 'flex-start' : 'center',
-              gap: 4,
-              minWidth: 0,
-              flex: '1 1 auto',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            <span
-              style={{
-                fontSize: 12.5,
-                minWidth: 0,
-                flex: '1 1 auto',
-                ...(expanded
-                  ? { whiteSpace: 'normal' }
-                  : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }),
-              }}
-            >
-              {oneLine}
-            </span>
-            <ChevronDown
-              size={13}
-              aria-hidden
-              style={{
-                flexShrink: 0,
-                color: 'var(--text-muted)',
-                marginTop: expanded ? 2 : 0,
-                transform: expanded ? 'rotate(180deg)' : 'none',
-                transition: 'transform 150ms ease',
-              }}
-            />
-        </button>
+        <span
+          data-testid="v6-technical-identity-oneline"
+          title={expanded ? undefined : oneLine}
+          style={{
+            fontSize: 12.5,
+            color: 'var(--text-secondary)',
+            minWidth: 0,
+            flex: '1 1 auto',
+            ...(expanded
+              ? { whiteSpace: 'normal' }
+              : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }),
+          }}
+        >
+          {oneLine}
+        </span>
       )}
       {segmentText && (
         <span
@@ -174,6 +160,24 @@ export default function TechnicalIdentityRibbon({ ticker, companyName }) {
         >
           {segmentText}
         </span>
+      )}
+      {/* chevron は本文から切り離してリボン右上に絶対配置で固定 (案A)。
+          展開しても位置不変・180° 回転のみ。クリックは container (リボン全体) が拾う。 */}
+      {oneLine && (
+        <ChevronDown
+          size={14}
+          aria-hidden
+          data-testid="v6-technical-identity-chevron"
+          style={{
+            position: 'absolute',
+            top: 11,
+            right: 10,
+            color: 'var(--text-muted)',
+            transform: expanded ? 'rotate(180deg)' : 'none',
+            transition: 'transform 150ms ease',
+            pointerEvents: 'none',
+          }}
+        />
       )}
     </div>
   );
