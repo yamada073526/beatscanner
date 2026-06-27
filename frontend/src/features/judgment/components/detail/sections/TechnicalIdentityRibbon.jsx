@@ -86,7 +86,8 @@ export default function TechnicalIdentityRibbon({ ticker, companyName }) {
       data-testid="v6-technical-identity-ribbon"
       style={{
         display: 'flex',
-        flexWrap: 'wrap',
+        // 既定 (collapsed) は 1 行固定 (nowrap + desc ellipsis)。展開時のみ wrap して全文表示。
+        flexWrap: expanded ? 'wrap' : 'nowrap',
         alignItems: expanded ? 'flex-start' : 'center',
         gap: 'var(--space-2, 8px)',
         minWidth: 0,
