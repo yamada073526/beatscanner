@@ -6,6 +6,7 @@
  * mockup pane3-detail-v1.html:393-400 の L3 行のうち、valuation-extras 由来の 3 行:
  *   1. 営業CFマージン (ocfMarginPct) — サマリー「28.4%（理想帯 15–35%）· 良好」
  *   2. ROE / PER / PEG (roe / trailingPE / pegRatio)
+ *   2.5 売上債権回転日数 DSO (daysSalesOutstanding) — Sprint 3a・サマリー「43日」(verdict ラベルなし)
  *   3. 機関投資家 保有トレンド (institutionalOwnership.latest.ownershipDeltaPt) — サマリー「QoQ +0.6pt · 緩やかに増加」
  * (会社概要・セグメント行は FundamentalsAccordion)
  *
@@ -85,6 +86,11 @@ export default function L3QualityFold({ valuationExtras }) {
   ].filter(Boolean);
   const rppSummary = rppParts.length > 0 ? rppParts.join(' · ') : <span style={dashStyle}>—</span>;
 
+  // ── 売上債権回転日数 (DSO) ── Sprint 3a。業種で適正水準が異なるため verdict ラベルなし (事実の日数のみ)。
+  const dso = ve.daysSalesOutstanding;
+  const dsoOk = sources.key_metrics === 'ok' && Number.isFinite(dso);
+  const dsoSummary = dsoOk ? `${num(dso, 0)}日` : <span style={dashStyle}>—</span>;
+
   // ── 機関投資家 保有トレンド (13F QoQ) ──
   const inst = ve.institutionalOwnership;
   const instLatest = inst && inst.latest ? inst.latest : {};
@@ -141,6 +147,27 @@ export default function L3QualityFold({ valuationExtras }) {
             </div>
           )}
           <div style={citeStyle}>出典: FMP ratios-ttm / key-metrics-ttm</div>
+        </div>
+      </AccordionSection>
+
+      {/* 売上債権回転日数 (DSO) */}
+      <AccordionSection
+        id="v6-l3-dso"
+        title="売上債権回転日数（DSO）"
+        summary={dsoSummary}
+        tier={2}
+        chevronPosition="right"
+      >
+        <div style={foldDetailStyle}>
+          <div>
+            DSO（Days Sales Outstanding）= 売上債権 ÷ 売上高 × 日数（TTM ベース）。販売してから現金を回収するまでの平均日数で、短いほど資金回収が速いことを示します。適正水準は業種により大きく異なります（数値は事実、評価判断はご自身で）。
+          </div>
+          {!dsoOk && (
+            <div style={citeStyle}>
+              ※ 銀行・保険・不動産など売上債権の概念が異質な業種、またはデータ未取得時は表示されません。
+            </div>
+          )}
+          <div style={citeStyle}>出典: FMP key-metrics-ttm（daysOfSalesOutstandingTTM）</div>
         </div>
       </AccordionSection>
 

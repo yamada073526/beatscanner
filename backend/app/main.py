@@ -1254,6 +1254,18 @@ async def get_valuation_extras(ticker: str, request: Request):
             if abs(_m) <= 150.0:
                 ocf_margin_pct = _m
 
+    # ── Sprint 3a (v6 L3 fold): DSO 売上債権回転日数 ──────────────────────────
+    # key-metrics-ttm.daysOfSalesOutstandingTTM。数値物理層 (LLM 不使用)。
+    # 金融 (銀行/保険/証券/与信/資産運用) は revenue がグロス金利/保険料で通常 AR を持たず DSO 無意味、
+    # 不動産 (REIT) も賃料収入で AR 概念が異質 → _dso_sector_guard で None 抑止。
+    # 公益 (utilities) は顧客請求の AR があり DSO 有意なので抑止しない (_roe_sector_guard と差分)。
+    # (feedback_revenue_basis_mismatch / SPEC Sprint 3 DSO sector gate)
+    dso_days: float | None = None
+    if not _dso_sector_guard(_sector, _industry):
+        _dso_raw = _pick(m_rec, "daysOfSalesOutstandingTTM", "daysSalesOutstandingTTM")
+        if isinstance(_dso_raw, (int, float)) and math.isfinite(_dso_raw) and 0 <= _dso_raw <= 3650:
+            dso_days = float(_dso_raw)
+
     # ── Sprint 2-C 後続: 13F 機関保有 QoQ 集計 (summarize は純 Python・個社名なし・§38) ──
     # §38: 比率の方向 + 増減のみ。 個社名・上昇余地%・断定将来予測は一切なし。 45日遅延は frontend で注記。
     institutional_ownership: dict | None = None
@@ -1302,6 +1314,8 @@ async def get_valuation_extras(ticker: str, request: Request):
         "trailingPE":           _safe_float(trailing_pe, 2),     # ratios-ttm.priceToEarningsRatioTTM
         "roe":                  _safe_float(roe_pct, 1),         # % (sector guard 済・銀行/REIT 等は None)
         "ocfMarginPct":         _safe_float(ocf_margin_pct, 1),  # % (sector guard 済・銀行/REIT 等は None)
+        # ── Sprint 3a NEW (v6 L3 fold): DSO 売上債権回転日数 ──────────────────────
+        "daysSalesOutstanding": _safe_float(dso_days, 1),        # 日数 (金融/不動産は None・公益は有効)
         # ── Sprint 2-C 後続 NEW (v6 L3 fold 機関保有 QoQ 行): 13F symbol-positions-summary ──
         # {trend:[{date,ownershipPercent,investorsHolding}], latest:{ownershipDeltaPt,...}} | None
         "institutionalOwnership": institutional_ownership,
@@ -5485,6 +5499,31 @@ def _roe_sector_guard(sector: str | None, industry: str | None) -> bool:
     if "financial" in sec or "utilities" in sec:
         return True
     return False
+
+
+# DSO (売上債権回転日数) を保留すべき sector/industry の keyword (小文字判定)。
+# _ROE_GUARD_KEYWORDS から "utilities" を除いた版: 金融 (銀行/保険/証券/与信/資産運用) + 不動産 (REIT) は
+# revenue がグロス金利/保険料/賃料で通常 AR を持たず DSO 無意味。公益は顧客請求 AR があり DSO 有意なので除外。
+# (feedback_revenue_basis_mismatch / SPEC Sprint 3 DSO sector gate: 銀行/保険/不動産)
+_DSO_GUARD_KEYWORDS = (
+    "bank", "reit", "insurance", "asset management",
+    "brokerage", "capital markets", "financial services",
+    "credit services", "mortgage",
+)
+
+
+def _dso_sector_guard(sector: str | None, industry: str | None) -> bool:
+    """DSO 比較を保留すべき金融/不動産系なら True を返す (公益は False = DSO 有意)。
+
+    判定: industry 優先 (詳細)、None 時は sector で広域ガード。
+      - industry に _DSO_GUARD_KEYWORDS が含まれれば True。
+      - industry 非取得時は sector が "Financial" / "Real Estate" なら True (Utilities は除外)。
+    """
+    ind = (industry or "").strip().lower()
+    if ind:
+        return any(kw in ind for kw in _DSO_GUARD_KEYWORDS)
+    sec = (sector or "").strip().lower()
+    return ("financial" in sec) or ("real estate" in sec)
 
 
 def _calc_eps_cagr_3y(annual_eps_records: list[dict]) -> float | None:
