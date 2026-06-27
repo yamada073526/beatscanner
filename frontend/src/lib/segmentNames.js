@@ -140,3 +140,26 @@ export function displaySegmentName(seg) {
   if (typeof jp === 'string' && jp && jp !== name) return jp;
   return name;
 }
+
+/**
+ * セグメント別売上の 1 行サマリーテキストを生成 (v6 L3「会社概要」 fold ヘッダーの常時サマリー)。
+ *   例: "iPhone 51% · Services 26% · ほか" (mockup pane3-detail-v1.html:399)。
+ * §38-safe: 売上構成比は事実数値のみ (行動指示・将来予測・最上級なし)。
+ * @param {{segments?: Array<{name?:string, name_jp?:string, value_b?:number}>}|null} segmentSummary
+ * @param {number} topN - 先頭に出すセグメント数 (default 2)
+ * @returns {string|null} 生成テキスト。segments 不在 / total 0 のとき null (graceful skip)。
+ */
+export function buildSegmentSummaryText(segmentSummary, topN = 2) {
+  const segs = segmentSummary?.segments;
+  if (!Array.isArray(segs) || segs.length === 0) return null;
+  const total = segs.reduce((acc, s) => acc + (Number(s?.value_b) || 0), 0);
+  if (!(total > 0)) return null;
+  // value_b 降順で top N (backend は既に降順だが client でも冪等に整列)
+  const sorted = [...segs].sort((a, b) => (Number(b?.value_b) || 0) - (Number(a?.value_b) || 0));
+  const parts = sorted.slice(0, topN).map((s) => {
+    const share = Math.round((Number(s?.value_b) / total) * 100);
+    return `${displaySegmentName(s)} ${share}%`;
+  });
+  if (sorted.length > topN) parts.push('ほか');
+  return parts.join(' · ');
+}
