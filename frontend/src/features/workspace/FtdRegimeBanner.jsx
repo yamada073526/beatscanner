@@ -50,10 +50,12 @@ export default function FtdRegimeBanner() {
   if (regime.status === 'none') return null; // 全指数データ無し → banner 非表示 (ノイズ回避)
 
   const color = ftdToneColor(regime.tone);
+  // §38 必須免責 (SPEC §4): 市場局面の ⓘ に「機械判定であり相場予測でない」 を併記。
+  const infoTip = `市場局面 (Follow-Through Day): 下落相場の底打ち → 新規上昇トレンド入りを確認する O'Neil 指標。主要 3 指数 (S&P500 / NASDAQ / DJIA) のうち 2 指数以上 または NASDAQ の確認を「到達」とします。${regime.disclaimer}`;
   return (
     <div
       data-testid="ftd-regime-banner"
-      title="市場局面 (Follow-Through Day): 下落相場の底打ち → 新規上昇トレンド入りを確認する指標。主要 3 指数 (S&P500 / NASDAQ / DJIA) のうち最も進んだ局面を表示しています。"
+      title={infoTip}
       style={BANNER_STYLE}
     >
       <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
@@ -63,6 +65,13 @@ export default function FtdRegimeBanner() {
           カラム全幅で正常折返し (flex-basis 220px + 親 flexWrap)。広い Pane2 では従来通り inline 全文。 */}
       <span style={{ fontSize: 11, color: 'var(--text-secondary)', flex: '1 1 220px', minWidth: 0 }}>
         {regime.detail}
+      </span>
+      <span
+        aria-label={regime.disclaimer}
+        title={regime.disclaimer}
+        style={{ fontSize: 11, color: 'var(--text-muted)', cursor: 'help', flexShrink: 0 }}
+      >
+        ⓘ
       </span>
     </div>
   );
