@@ -54,6 +54,26 @@ try {
   console.log('NARROW:', JSON.stringify(narrow));
   await page.screenshot({ path: resolve(outDir, 'grid-real-narrow.png') });
   console.log('captured grid-real-full/simple/narrow.png');
+
+  // reveal-on-scroll 検証: 短い viewport で fold 下行が未 reveal → scroll で reveal される事を確認
+  const p2 = await browser.newPage({ viewport: { width: 920, height: 300 }, deviceScaleFactor: 1 });
+  await p2.goto(url, { waitUntil: 'networkidle' }).catch(() => {});
+  await p2.waitForTimeout(800);
+  const before = await p2.evaluate(() => ({
+    total: document.querySelectorAll('.screener-grid-row').length,
+    revealed: document.querySelectorAll('.screener-grid-row.is-in').length,
+  }));
+  await p2.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await p2.waitForTimeout(1000);
+  const after = await p2.evaluate(() => ({
+    total: document.querySelectorAll('.screener-grid-row').length,
+    revealed: document.querySelectorAll('.screener-grid-row.is-in').length,
+  }));
+  console.log('REVEAL before-scroll:', JSON.stringify(before), '| after-scroll:', JSON.stringify(after));
+  console.log(before.revealed < before.total && after.revealed === after.total
+    ? '✅ reveal-on-scroll OK (fold下は未reveal→scrollで全reveal)'
+    : '⚠️ reveal 期待外 (要確認)');
+  await p2.close();
 } finally {
   await browser.close();
   clearTimeout(kill);

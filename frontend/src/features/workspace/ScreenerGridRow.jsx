@@ -14,6 +14,7 @@
  * testid: screener-grid-row-{ticker}
  */
 
+import { useState, useRef, useEffect } from 'react';
 import CompanyLogo from '../../components/CompanyLogo.jsx';
 
 // SPEC §11-A M1 / §13-C: tri_verdict ラベル (「利益警告」誤用回避で「予想未達」)。
@@ -118,6 +119,22 @@ export default function ScreenerGridRow({
   onSelect,
   onCheckbox,
 }) {
+  // stagger: ロード時一括でなく「行がビューに入った時」に滑り込ませる (IntersectionObserver)。
+  const rowRef = useRef(null);
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    const el = rowRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') { setRevealed(true); return undefined; }
+    const reduce = typeof window !== 'undefined' && window.matchMedia
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) { setRevealed(true); return undefined; }
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => { if (e.isIntersecting) { setRevealed(true); io.disconnect(); } });
+    }, { threshold: 0.15, rootMargin: '0px 0px -32px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   if (!ticker) {
     return (
       <div className="screener-grid-row screener-grid-row--error" data-testid="screener-grid-row-error" role="alert">
@@ -139,16 +156,19 @@ export default function ScreenerGridRow({
 
   return (
     <div
+      ref={rowRef}
       role="button"
       tabIndex={0}
       className={[
         'screener-grid-row',
+        revealed ? 'is-in' : '',
         isWin ? 'is-win' : '',
         isSelected ? 'is-selected' : '',
       ].filter(Boolean).join(' ')}
       data-testid={`screener-grid-row-${ticker}`}
       data-mode={mode}
-      style={{ animationDelay: `${animIndex * 45}ms` }}
+      /* ビュー内バッチごとに 0..7 段の stagger (グローバル index 比例だと下方行が長時間待つため modulo) */
+      style={{ transitionDelay: `${(animIndex % 8) * 45}ms` }}
       onClick={handleClick}
       onKeyDown={handleKey}
       aria-label={`${ticker} ${name || ''} 決算の総合: ${triLabel}。詳細を表示`}
