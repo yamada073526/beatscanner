@@ -1416,7 +1416,7 @@ export default function JudgmentDetail({
 
               <hr style={{ height: 1, background: 'var(--border)', border: 0, margin: 0 }} />
 
-              {/* ─── L4 テクニカル・買い場（Sprint 2 以降でチャート + PriceLadder 移設）─── */}
+              {/* ─── L4 テクニカル・買い場（チャート + PriceLadder 1ユニット + 期間別リターン降格）─── */}
               <section
                 data-testid="v6-technical-section"
                 id="v6-technical-section"
@@ -1426,7 +1426,7 @@ export default function JudgmentDetail({
                   <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>③</span>
                   <span style={{ fontSize: 17, fontWeight: 700 }}>テクニカル・買い場</span>
                 </div>
-                {/* チャート + PriceLadder は Sprint 2 以降で移設予定（S1 はここに直接 mount）*/}
+                {/* チャート + PriceLadder = v5 の 1 ユニット構造を継承（mockup L4: 価格ラダー → 期間別リターン 順）*/}
                 {selectedTicker && (
                   <SectionFade key="v6-chart" staggerIndex={0}>
                     <StockPriceChart ticker={selectedTicker} isPremiumUser={plan === 'premium'} onUpgrade={detailContext.onUpgrade} hideTitle />
@@ -1435,6 +1435,17 @@ export default function JudgmentDetail({
                 )}
                 {selectedTicker && plan === 'premium' && (
                   <PriceLadder ticker={selectedTicker} />
+                )}
+                {/* 期間別リターン（Sprint 2-B: L0/一等地から L4 へ降格・mockup L4 準拠）。
+                    ReturnGrid は usePeriodReturns 内蔵で親 data 配線不要。splitByTerm で短期/長期 2 段。*/}
+                {selectedTicker && (
+                  <ReturnGrid
+                    ticker={selectedTicker}
+                    frameless
+                    splitByTerm
+                    sectionLabel="期間別リターン"
+                    testId="v6-return-grid"
+                  />
                 )}
               </section>
 
