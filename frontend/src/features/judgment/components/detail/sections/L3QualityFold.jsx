@@ -3,10 +3,11 @@
  *
  * @no-llm: backend 計算済値 (valuation-extras) の静的整形専用。LLM API 呼び出し禁止。
  *
- * mockup pane3-detail-v1.html:393-400 の L3 行のうち、valuation-extras 由来の 2 行:
+ * mockup pane3-detail-v1.html:393-400 の L3 行のうち、valuation-extras 由来の 3 行:
  *   1. 営業CFマージン (ocfMarginPct) — サマリー「28.4%（理想帯 15–35%）· 良好」
  *   2. ROE / PER / PEG (roe / trailingPE / pegRatio)
- * (会社概要・セグメント行は FundamentalsAccordion、機関保有 QoQ 行は後続 sprint)
+ *   3. 機関投資家 保有トレンド (institutionalOwnership.latest.ownershipDeltaPt) — サマリー「QoQ +0.6pt · 緩やかに増加」
+ * (会社概要・セグメント行は FundamentalsAccordion)
  *
  * §38-safe (景表法§5 / 金商法§38):
  *   - 評価語は閾値ベース静的 dict のみ (「良好」等は QuarterlyHistoryTable「CF良好」と同 idiom)。
@@ -30,6 +31,17 @@ function ocfMarginLabel(pct) {
   return '低水準';
 }
 
+// 機関保有 QoQ §38-safe 方向ラベル (閾値ベース静的 dict)。
+// 13F 報告ベースの「過去事実」の方向記述のみ。行動指示・断定的将来予測は出さない (§38)。
+function ownershipTrendLabel(deltaPt) {
+  if (!Number.isFinite(deltaPt)) return null;
+  if (deltaPt >= 2) return '大きく増加';
+  if (deltaPt >= 0.5) return '緩やかに増加';
+  if (deltaPt > -0.5) return 'ほぼ横ばい';
+  if (deltaPt > -2) return '緩やかに減少';
+  return '大きく減少';
+}
+
 const num = (v, digits = 1) => (Number.isFinite(v) ? v.toFixed(digits) : null);
 
 const foldDetailStyle = {
@@ -45,7 +57,7 @@ const dashStyle = { color: 'var(--text-muted)', fontWeight: 400 };
 /**
  * @param {object} props
  * @param {object|null} props.valuationExtras - /api/valuation-extras の result
- *   (trailingPE / roe / ocfMarginPct / pegRatio / sources)
+ *   (trailingPE / roe / ocfMarginPct / pegRatio / institutionalOwnership / sources)
  */
 export default function L3QualityFold({ valuationExtras }) {
   const ve = valuationExtras || {};
@@ -72,6 +84,21 @@ export default function L3QualityFold({ valuationExtras }) {
     pegOk ? `PEG ${num(peg, 2)}` : null,
   ].filter(Boolean);
   const rppSummary = rppParts.length > 0 ? rppParts.join(' · ') : <span style={dashStyle}>—</span>;
+
+  // ── 機関投資家 保有トレンド (13F QoQ) ──
+  const inst = ve.institutionalOwnership;
+  const instLatest = inst && inst.latest ? inst.latest : {};
+  const instDelta = instLatest.ownershipDeltaPt;
+  const instPct = instLatest.ownershipPercent;
+  const instOk = sources.institutional === 'ok' && Number.isFinite(instDelta);
+  const instLabel = instOk ? ownershipTrendLabel(instDelta) : null;
+  const instSign = Number.isFinite(instDelta) && instDelta > 0 ? '+' : '';
+  const instSummary = instOk
+    ? `QoQ ${instSign}${num(instDelta, 1)}pt · ${instLabel}`
+    : <span style={dashStyle}>—</span>;
+  const instDetailLead = instOk
+    ? `機関投資家（13F 報告）の保有比率は前四半期比 ${instSign}${num(instDelta, 1)}pt${Number.isFinite(instPct) ? `、直近の保有比率は ${num(instPct, 1)}%` : ''}です。`
+    : '機関投資家（13F 報告）の保有比率の前四半期比です。データ未取得時は表示されません。';
 
   return (
     <div data-testid={TESTID} style={{ display: 'grid', gap: 'var(--space-2, 8px)' }}>
@@ -114,6 +141,25 @@ export default function L3QualityFold({ valuationExtras }) {
             </div>
           )}
           <div style={citeStyle}>出典: FMP ratios-ttm / key-metrics-ttm</div>
+        </div>
+      </AccordionSection>
+
+      {/* 機関投資家 保有トレンド (13F QoQ) */}
+      <AccordionSection
+        id="v6-l3-institutional"
+        title="機関投資家 保有トレンド"
+        summary={instSummary}
+        tier={2}
+        chevronPosition="right"
+      >
+        <div style={foldDetailStyle}>
+          <div>
+            {instDetailLead}O'Neil の "I"（機関の買い集め）の目安で、機関がどう動いたかの事実を示します。
+          </div>
+          <div style={citeStyle}>
+            ※ 13F は四半期ごとの SEC 報告で約 45 日遅延します。機械的な集計であり、相場の予測や売買の推奨ではありません。
+          </div>
+          <div style={citeStyle}>出典: FMP 13F（institutional-ownership・直近 4 四半期）</div>
         </div>
       </AccordionSection>
     </div>
