@@ -104,6 +104,10 @@ import StateCompass from './sections/StateCompass.jsx';
 import BuyHeadroomCompass from './sections/BuyHeadroomCompass.jsx';
 // 完全性台帳 (coverage manifest) Sprint3: 規律の元データ取得状況を最上部1行ロールアップ + ドリルダウン監査。
 import CompletenessRollupBadge from './sections/CompletenessRollupBadge.jsx';
+// v6 IA 再構成 (SPEC_2026-06-27): Sprint 1 新規 components
+import L1SummaryBuckets from './sections/L1SummaryBuckets.jsx';
+import Pane3TOC from './sections/Pane3TOC.jsx';
+import EarningsGrowthSpark from './sections/EarningsGrowthSpark.jsx';
 // 完全性台帳 #4: SPY 取得失敗時にテクニカル章で「地合いデータ未取得」 を中立注記 (chartBlock 内 = 全 path 到達)。
 import TechnicalSpyNote from './sections/TechnicalSpyNote.jsx';
 import MarketEvalSection from './sections/MarketEvalSection.jsx';
@@ -349,6 +353,23 @@ function isPane3HeaderV2() {
   }
 }
 
+
+// 2026-06-27: 銘柄詳細 IA 再構成 v6 (SPEC_2026-06-27_pane3-detail-rearchitecture)。
+// L0-L6 新 IA (決算3点を一等地 / 目次 / 8Q spark / 章レイアウト刷新)。
+// default OFF (?pane3_v6=1 / localStorage 'pane3_v6'='1' で opt-in)。
+// v6 は v5 経路を上書き (v5 sub-flag には従属しない独立 flag)。
+// Sprint 4 で default ON + 旧 flag 一括 sweep 予定 → それまで 1 箇所に集約。
+function isPane3V6() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('pane3_v6');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('pane3_v6') === '1';
+  } catch {
+    return false;
+  }
+}
 
 // 2026-06-14: AI要約 (SummaryBrief) を封印。状態コンパス (信号機サマリー) が冒頭の要約機能を代替したため
 // 不要に (user 判断)。復活する場合は true に戻す (各章サマリーへの一本化は別 sprint)。
@@ -754,6 +775,9 @@ export default function JudgmentDetail({
   const isV4 = isPane3V4();
   // v184 grill-me: 入れ子章再編。isV4 上位の opt-in、default OFF (?pane3_v5=1 で試用)。
   const isV5 = isV4 && isPane3V5();
+  // 2026-06-27: IA 再構成 v6。isV5 に従属しない独立 flag（v5 経路を上書き）。
+  // default OFF (?pane3_v6=1 / localStorage 'pane3_v6'='1' で opt-in)。
+  const isV6 = isPane3V6();
   // ch2Tab / ch3Tab の useState は v107 hotfix で early return より前 (L320 周辺) に移動済。
   // 本位置に置くと Rules of Hooks 違反 (React #310 Rendered more hooks than during the previous render)。
 
@@ -805,8 +829,9 @@ export default function JudgmentDetail({
           FiveConditionsCard 4 ブロックを UnifiedJudgmentSection で「章 1 判定」 として
           1 つの unified section に統合する (default off、 ?pane3_v2=1 で試用可)。 */}
       {/* v184 grill-me: v5 (入れ子章再編) では階層1を独立 render せず、下の block IIFE で
-          ①ティッカー章にまとめて再配置する。!isV5 (既存 v4/v2/legacy) は従来どおり常時 render。 */}
-      {!isV5 && (() => {
+          ①ティッカー章にまとめて再配置する。!isV5 (既存 v4/v2/legacy) は従来どおり常時 render。
+          v6 でも同様に階層1独立 render をスキップ（v6 レイアウト内に VerdictHero を含む）。 */}
+      {!isV5 && !isV6 && (() => {
         const v2 = isV2; // hoisted from component scope (Phase G Phase 3)
         const v2Frameless = v2 && isPane3V2Frameless(); // Phase 2 は v2 mode 内で opt-in
         const innerVerdictBlock = (
@@ -1250,6 +1275,294 @@ export default function JudgmentDetail({
             isV5={isV5}
           />
         );
+
+        // === v6 IA 再構成 (SPEC_2026-06-27, Sprint 1) ===
+        // v6 flag ON 時は v4/v5 経路を上書き。default OFF (?pane3_v6=1 で opt-in)。
+        // 分岐は「この1箇所のみ」に集約 (SPEC §6 clean exit path 設計)。
+        // Sprint 1 骨格: L0 同定 / L1 判定サマリー / 目次 / L2 決算 (8Q spark + 5条件) のみ。
+        // L2以降の章移動 / L3 fold / 地合い import は Sprint 2 以降。
+        if (isV6) {
+          // isNonEquity 判定: ETF / 指数 / 先物 / 為替は決算3点・RS を非表示
+          // feedback_non_equity_chart_overlays.md 準拠
+          const isNonEquityV6 = (() => {
+            if (!selectedTicker) return false;
+            // ETF (EtfOverviewPanel の gate と同一ロジック)
+            const etfPattern = /^(SPY|QQQ|IWM|DIA|GLD|SLV|USO|TLT|IEF|HYG|LQD|VTI|VOO|VEA|VWO|EEM|XL[A-Z]|SMH|SOXX|ARKK|ARKG|ARKW|ARKF|ARKQ|ARKG)$/i;
+            if (etfPattern.test(selectedTicker)) return true;
+            // 指数 / 先物 / 為替 (^GSPC 形式等)
+            if (/^\^/.test(selectedTicker)) return true;
+            return false;
+          })();
+
+          // detailDivRef は既に定義済み（L432）
+          const v6DetailRoot = detailDivRef.current;
+
+          // ── v6 章レイアウト ──
+          // Sprint 1: L0 + L1 + TOC + L2（決算3点 detail + 8Q spark + 5条件）+ L3-L6（既存要素を仮配置）
+          return (
+            <div data-testid="pane3-v6-layout" data-state={selectedTicker ? 'main' : 'empty'}>
+              {/* ─── L0 同定（既存 VerdictHero + Hero 継承・価格は「同定」= verdict 扱いを外す） ─── */}
+              <VerdictHero verdict="unknown">
+                <Hero
+                  ticker={selectedTicker}
+                  companyName={result?.companyName}
+                  verdict="unknown"
+                  period={result?.latestPeriod ? `FY${result.latestPeriod}` : null}
+                  nextEarningsDays={detail?.nextEarningsDays}
+                  nextEarningsDate={detail?.nextEarningsDate}
+                  watchlist={detailContext?.watchlist}
+                  onAddToWatchlist={detailContext?.onAddToWatchlist}
+                  hideCountdownChip={false}
+                  hideNextEarningsChip={false}
+                  hideVerdictChip={true}
+                  frameless
+                />
+              </VerdictHero>
+
+              {/* ─── L1 判定サマリー（★心臓部：決算3点 named buckets）─── */}
+              {!detail?.error && !isNonEquityV6 && (
+                <L1SummaryBuckets
+                  ticker={selectedTicker}
+                  guidance={guidance}
+                  isLoading={!guidance && (detail?.isLoading ?? false)}
+                  result={result}
+                  technicalRs={technicalRs}
+                  detailRoot={v6DetailRoot}
+                  isNonEquity={isNonEquityV6}
+                />
+              )}
+
+              {/* ─── On This Page 目次 ─── */}
+              <Pane3TOC
+                isNonEquity={isNonEquityV6}
+                detailRoot={v6DetailRoot}
+              />
+
+              {/* hairline 区切り */}
+              <hr style={{ height: 1, background: 'var(--border)', border: 0, margin: 0 }} />
+
+              {/* ─── L2 決算（ファンダの本丸）─── */}
+              {!isNonEquityV6 && (
+                <section
+                  data-testid="v6-earnings-section"
+                  id="v6-earnings-section"
+                  style={{ display: 'grid', gap: 'var(--space-4, 16px)' }}
+                >
+                  {/* 章ヘッダー */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>①</span>
+                    <span style={{ fontSize: 17, fontWeight: 700 }}>決算</span>
+                    {result?.latestPeriod && (
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                        FY{result.latestPeriod}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 決算3点 detail（EarningsFlashSummary 再利用 = fetch 重複ゼロ）*/}
+                  <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
+                    決算3点 — 対コンセンサス
+                  </div>
+                  <EarningsFlashSummary
+                    ticker={selectedTicker}
+                    guidance={guidance}
+                    isLoading={!guidance && (detail?.isLoading ?? false)}
+                  />
+
+                  {/* hairline */}
+                  <hr style={{ height: 1, background: 'var(--border)', border: 0, margin: 0 }} />
+
+                  {/* 成長トレンド 8Q（EPS/売上 YoY bar spark）*/}
+                  <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
+                    成長トレンド（直近 8Q）
+                  </div>
+                  <EarningsGrowthSpark ticker={selectedTicker} />
+
+                  {/* hairline */}
+                  <hr style={{ height: 1, background: 'var(--border)', border: 0, margin: 0 }} />
+
+                  {/* 5条件カード（★唯一の発光・v5 発光カードを CSS 不触で継承）*/}
+                  <FiveConditionsCard
+                    conditions={conditions}
+                    passedCount={result?.passedCount}
+                    totalCount={result?.totalCount}
+                    isPro={detailContext.isPro}
+                    onUpgrade={detailContext.onUpgrade}
+                    v5Header={true}
+                    onConditionPulse={(idx) => {
+                      setPulsingConditionIndex(idx === 4 ? 'all_steps' : idx);
+                    }}
+                  />
+                </section>
+              )}
+
+              <hr style={{ height: 1, background: 'var(--border)', border: 0, margin: 0 }} />
+
+              {/* ─── L3 品質・継続性（Sprint 2 以降で fold 累進開示化・S1 は仮配置）─── */}
+              <section
+                data-testid="v6-quality-section"
+                id="v6-quality-section"
+                style={{ display: 'grid', gap: 'var(--space-4, 16px)' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>②</span>
+                  <span style={{ fontSize: 17, fontWeight: 700 }}>品質・継続性</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>サマリー常時 · 詳細は展開</span>
+                </div>
+                {/* Sprint 2 で FundamentalsAccordion を fold 化予定 */}
+                <FundamentalsAccordion
+                  key="v6-funda-profile"
+                  renderSection="profile"
+                  hideChapterHeader
+                  selectedTicker={selectedTicker}
+                  result={result}
+                  guidance={guidance}
+                  plan={plan}
+                  detail={detail}
+                  detailContext={detailContext}
+                  isV2={isV2}
+                  isV3={isV3}
+                  isScrollV1={isScrollV1}
+                  expandedSections={expandedSections}
+                  ch2Tab={ch2Tab}
+                  setCh2Tab={setCh2Tab}
+                  onAnalyze={onAnalyze}
+                />
+              </section>
+
+              <hr style={{ height: 1, background: 'var(--border)', border: 0, margin: 0 }} />
+
+              {/* ─── L4 テクニカル・買い場（Sprint 2 以降でチャート + PriceLadder 移設）─── */}
+              <section
+                data-testid="v6-technical-section"
+                id="v6-technical-section"
+                style={{ display: 'grid', gap: 'var(--space-4, 16px)' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>③</span>
+                  <span style={{ fontSize: 17, fontWeight: 700 }}>テクニカル・買い場</span>
+                </div>
+                {/* チャート + PriceLadder は Sprint 2 以降で移設予定（S1 はここに直接 mount）*/}
+                {selectedTicker && (
+                  <SectionFade key="v6-chart" staggerIndex={0}>
+                    <StockPriceChart ticker={selectedTicker} isPremiumUser={plan === 'premium'} onUpgrade={detailContext.onUpgrade} hideTitle />
+                    <TechnicalSpyNote ticker={selectedTicker} />
+                  </SectionFade>
+                )}
+                {selectedTicker && plan === 'premium' && (
+                  <PriceLadder ticker={selectedTicker} />
+                )}
+              </section>
+
+              <hr style={{ height: 1, background: 'var(--border)', border: 0, margin: 0 }} />
+
+              {/* ─── L5 図解（Pro/Premium）─── */}
+              <section
+                data-testid="v6-figure-section"
+                id="v6-figure-section"
+                style={{ display: 'grid', gap: 'var(--space-4, 16px)' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>④</span>
+                  <span style={{ fontSize: 17, fontWeight: 700 }}>図解で理解する</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>Pro</span>
+                </div>
+                {/* DiagramCard は unmount 禁止（feedback_diagram_card_remount_cache.md）
+                    Pro/Premium = render、free = PremiumLock（mount 維持・display:none は親で制御）*/}
+                {(plan === 'pro' || plan === 'premium') ? (
+                  <StickyDiagramAccordion
+                    ticker={selectedTicker}
+                    analysis={result}
+                    guidance={guidance}
+                  />
+                ) : (
+                  <PremiumLock
+                    feature="ai_diagram"
+                    plan={plan}
+                    label="図解で 5 条件・ビジネスを 2 秒で理解"
+                    onUpgrade={detailContext.onUpgrade}
+                  >
+                    <div
+                      aria-hidden="true"
+                      style={{
+                        height: 64,
+                        borderRadius: 'var(--radius-md)',
+                        background: 'rgba(56, 189, 248, 0.04)',
+                        border: '1px solid rgba(56, 189, 248, 0.10)',
+                      }}
+                    />
+                  </PremiumLock>
+                )}
+              </section>
+
+              <hr style={{ height: 1, background: 'var(--border)', border: 0, margin: 0 }} />
+
+              {/* ─── L6 その他（目次から到達）─── */}
+              <section
+                data-testid="v6-more-section"
+                id="v6-more-section"
+                style={{ display: 'grid', gap: 'var(--space-4, 16px)' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>⑤</span>
+                  <span style={{ fontSize: 17, fontWeight: 700 }}>その他</span>
+                </div>
+                {/* L6 各要素: Sprint 2 以降で fold 累進開示化予定。S1 は直接 mount。*/}
+                <MarketEvalSection
+                  key="v6-market-eval"
+                  selectedTicker={selectedTicker}
+                  plan={plan}
+                  detail={detail}
+                  detailContext={detailContext}
+                  isV2={isV2}
+                  isV3={isV3}
+                  isV5={false}
+                  isScrollV1={false}
+                  expandedSections={expandedSections}
+                  ch3Tab={ch3Tab}
+                  setCh3Tab={setCh3Tab}
+                  analystHaloTriggerRef={analystHaloTriggerRef}
+                  qhistoryHaloTriggerRef={qhistoryHaloTriggerRef}
+                  haloFiredSetRef={haloFiredSetRef}
+                />
+                {selectedTicker && (
+                  <AccordionSection
+                    key="v6-earnings-reaction"
+                    id="sec-v6-earnings-reaction"
+                    title="過去 8Q 決算反応"
+                    label="PRO"
+                    tier={2}
+                    defaultOpen={false}
+                  >
+                    <PremiumLock
+                      feature="earnings_8q"
+                      plan={plan}
+                      label="過去 8Q の決算 → 5 営業日累積リターンを一覧で"
+                      onUpgrade={detailContext.onUpgrade}
+                    >
+                      <EarningsReactionPanel ticker={selectedTicker} l3Headings />
+                    </PremiumLock>
+                  </AccordionSection>
+                )}
+                <ContextSection
+                  key="v6-context"
+                  selectedTicker={selectedTicker}
+                  result={result}
+                  guidance={guidance}
+                  plan={plan}
+                  detail={detail}
+                  detailContext={detailContext}
+                  isV2={isV2}
+                  isScrollV1={false}
+                  useWorkspaceReader={useWorkspaceReader}
+                  expandedSections={expandedSections}
+                  isV4={true}
+                  isV5={false}
+                />
+              </section>
+            </div>
+          );
+        }
 
         if (isV4) {
           if (isV5) {
