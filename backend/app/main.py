@@ -979,12 +979,18 @@ async def get_valuation_extras(ticker: str, request: Request):
           "fcfYield": 0.0285,               # FCF Yield 0.0-0.1 (freeCashFlowYieldTTM)
           "enterpriseValue": 3450000000000, # EV USD 絶対値 (enterpriseValueTTM)
           "debtToEquity": 0.42,             # D/E 比率 raw (debtToEquityTTM)
+          "institutionalOwnership": {                # Sprint 2-C 後続 (v6 L3 fold 機関保有 QoQ 行)
+            "trend": [{"date": str, "ownershipPercent": float, "investorsHolding": int} ...],
+            "latest": {"ownershipPercent": float, "ownershipDeltaPt": float, ...},
+            "source": "FMP 13F", "delayDays": 45,
+          } | None,                                  # §38: 比率方向のみ・個社名なし・45日遅延
           "sources": {
             "ratios": "ok"|"empty"|"timeout"|"error",
             "key_metrics": "ok"|"empty"|"timeout"|"error",
             "analyst_estimates": "ok"|"empty"|"timeout"|"error",
             "quote": "ok"|"empty"|"timeout"|"error",
             "cash_flow": "ok"|"empty"|"timeout"|"error",
+            "institutional": "ok"|"empty"|"timeout"|"error",
           },
           "fetched_at": <unix>,
         }
@@ -1028,7 +1034,15 @@ async def get_valuation_extras(ticker: str, request: Request):
         "profile":           60 * 60 * 24,
     }
 
-    # 6 endpoint 並列 fetch、 各々独立に sources schema で監視
+    # ── Sprint 2-C 後続 (v6 L3 fold 機関保有 QoQ 行): 13F symbol-positions-summary を additive 追加 ──
+    # 直近 5 候補 Q を並列 fetch (最新 Q は 45日遅延で未提出→空→確定 4Q が残る・/api/visualize と同パターン)。
+    # 13F は四半期報告 + 45日遅延で頻繁に変わらない → 24h cache。
+    from .aggregator.institutional import candidate_quarters as _inst_qs, summarize as _inst_sum
+    _inst_cands = _inst_qs(5)
+    _n_inst = len(_inst_cands)
+    _inst_ttl = 60 * 60 * 24
+
+    # 6 endpoint + 機関保有 5Q を並列 fetch、 各々独立に sources schema で監視
     results = await asyncio.gather(
         safe_fmp_get(urls["ratios"],            cache_keys["ratios"],            ttl=ttls["ratios"]),
         safe_fmp_get(urls["key_metrics"],       cache_keys["key_metrics"],       ttl=ttls["key_metrics"]),
@@ -1036,9 +1050,18 @@ async def get_valuation_extras(ticker: str, request: Request):
         safe_fmp_get(urls["quote"],             cache_keys["quote"],             ttl=ttls["quote"]),
         safe_fmp_get(urls["cash_flow"],         cache_keys["cash_flow"],         ttl=ttls["cash_flow"]),
         safe_fmp_get(urls["profile"],           cache_keys["profile"],           ttl=ttls["profile"]),
+        *[
+            safe_fmp_get(
+                f"{base}/institutional-ownership/symbol-positions-summary?symbol={t}&limit=1&year={_y}&quarter={_q}&apikey={fmp_key}",
+                f"valuation-extras::inst::{t}::{_y}q{_q}",
+                ttl=_inst_ttl,
+            )
+            for (_y, _q) in _inst_cands
+        ],
         return_exceptions=True,
     )
-    ratios_data, metrics_data, est_data, quote_data, cf_data, profile_data = results
+    ratios_data, metrics_data, est_data, quote_data, cf_data, profile_data = results[:6]
+    _inst_results = results[6:6 + _n_inst]
 
     def _classify(data) -> str:
         if isinstance(data, Exception):
@@ -1052,7 +1075,7 @@ async def get_valuation_extras(ticker: str, request: Request):
         return "ok"
 
     sources = {k: _classify(v) for k, v in zip(
-        ["ratios", "key_metrics", "analyst_estimates", "quote", "cash_flow", "profile"], results
+        ["ratios", "key_metrics", "analyst_estimates", "quote", "cash_flow", "profile"], results[:6]
     )}
 
     def _first_dict(data) -> dict:
@@ -1231,6 +1254,34 @@ async def get_valuation_extras(ticker: str, request: Request):
             if abs(_m) <= 150.0:
                 ocf_margin_pct = _m
 
+    # ── Sprint 2-C 後続: 13F 機関保有 QoQ 集計 (summarize は純 Python・個社名なし・§38) ──
+    # §38: 比率の方向 + 増減のみ。 個社名・上昇余地%・断定将来予測は一切なし。 45日遅延は frontend で注記。
+    institutional_ownership: dict | None = None
+    try:
+        _inst_rows = [
+            r[0] for r in _inst_results
+            if isinstance(r, list) and r and isinstance(r[0], dict)
+        ]
+        _inst = _inst_sum(_inst_rows, max_quarters=4)
+        if _inst.get("trend"):
+            institutional_ownership = {
+                "trend": _inst["trend"],
+                "latest": _inst.get("latest"),
+                "source": "FMP 13F",
+                "delayDays": 45,
+            }
+    except Exception:
+        institutional_ownership = None
+    # sources schema へ honest 分類 (frontend は sources.institutional==='ok' && data で compound check)
+    if institutional_ownership:
+        sources["institutional"] = "ok"
+    elif all(isinstance(r, Exception) for r in _inst_results):
+        sources["institutional"] = "error"
+    elif all(r is None for r in _inst_results):
+        sources["institutional"] = "timeout"
+    else:
+        sources["institutional"] = "empty"
+
     return {
         "ticker":               t,
         "payoutRatio":          _safe_float(payout_ratio, 4),
@@ -1251,6 +1302,9 @@ async def get_valuation_extras(ticker: str, request: Request):
         "trailingPE":           _safe_float(trailing_pe, 2),     # ratios-ttm.priceToEarningsRatioTTM
         "roe":                  _safe_float(roe_pct, 1),         # % (sector guard 済・銀行/REIT 等は None)
         "ocfMarginPct":         _safe_float(ocf_margin_pct, 1),  # % (sector guard 済・銀行/REIT 等は None)
+        # ── Sprint 2-C 後続 NEW (v6 L3 fold 機関保有 QoQ 行): 13F symbol-positions-summary ──
+        # {trend:[{date,ownershipPercent,investorsHolding}], latest:{ownershipDeltaPt,...}} | None
+        "institutionalOwnership": institutional_ownership,
         # ─────────────────────────────────────────────────────────────────────
         "sources":              sources,
         "fetched_at":           _time.time(),
