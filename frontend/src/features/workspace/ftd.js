@@ -68,49 +68,88 @@ export function useFtdMap() {
   return { ftdMap, loading };
 }
 
-// ── ScreenerPane「市場局面」 バナー用の 3 指数集約 (v175) ──────────────
-// O'Neil の「市場底打ち」 はいずれか主要指数の Follow-Through Day で確認されるため、
-// 3 指数 (S&P500 / NASDAQ / DJIA) の中で最も進んだ status を市場局面の代表に取る。
-const FTD_STATUS_PRIORITY = { ftd_confirmed: 3, watching: 2, no_attempt: 1, insufficient_data: 0, error: 0 };
+// ── 「市場局面」 集約 (v175・2026-06-28 金融アナリスト review で再設計) ──────────────
+// CAN-SLIM 主導指数 (グロース本命)。1 指数のみ confirmed なら NASDAQ を優先代表に取る。
+const NASDAQ_INDEX = '^IXIC';
 
 // §38 (断定的判断の提供) 回避: 静的 dict。 「買い / 売り / 今スキャンしろ」 等の action 断定は BAN、
 //   price action の事実 + 出典 (O'Neil 理論) のみ。 ScreenerPane CUP_STATE_LABEL_JP と同 idiom。
+// 2026-06-28 review 論点3: 「上昇トレンド入りのシグナル点灯」 は断定的将来予測寄り
+//   (FTD は失敗率が無視できない指標) → 事実記述「上昇試行が確認水準に到達」 へ中立化。
 const FTD_REGIME_LABEL_JP = {
-  ftd_confirmed: '上昇トレンド入りのシグナル点灯',
+  ftd_confirmed: '上昇試行が確認水準に到達',
   watching: '市場は反発を試行中',
   no_attempt: '大きな調整は出ていません',
-  none: '市場局面を取得中',
+  none: '市場局面を判定できません',
 };
 
-/** 3 指数の ftdMap から市場局面の代表を 1 つに集約する (最強 status を代表に取る)。
+// SPEC §4 必須: 地合い表示には ⓘ 免責を併記 (金商法§38)。
+export const FTD_REGIME_DISCLAIMER =
+  '機械判定であり相場予測ではありません。FTD は下落相場の底打ちを観察する手がかりで、確認後に失敗する例もあります。';
+
+/** 3 指数の ftdMap から市場局面を集約する。
+ *  2026-06-28 金融アナリスト review 反映:
+ *   - 論点2 (楽観バイアス除去): confirmed regime は「2 指数以上 confirmed」 または
+ *     「NASDAQ (主導指数) confirmed」 のみ。1 指数のみ (NASDAQ 以外) confirmed は watching へ降格。
+ *   - 論点5 (部分欠落の Trust Cliff): 有効指数 (error/insufficient/欠落でない) が 2 本未満なら
+ *     breadth 不足で判定不能 (`none`)。1 指数だけ no_attempt で「平穏」 と誤表示しない。
  *  @param {Record<string, object>} ftdMap useFtdMap() の返り値
- *  @returns {{ status: string, tone: string, label: string, detail: string, indexName: string|null }}
+ *  @returns {{ status, tone, label, detail, indexName, confirmedCount, validCount, disclaimer }}
  */
 export function ftdRegime(ftdMap) {
-  let best = null;
-  let bestIdx = null;
+  const none = (label = FTD_REGIME_LABEL_JP.none) => ({
+    status: 'none', tone: 'muted', label, detail: '',
+    indexName: null, confirmedCount: 0, validCount: 0, disclaimer: FTD_REGIME_DISCLAIMER,
+  });
+
+  // 有効指数 = error / insufficient_data / 欠落 でないもの
+  const valid = [];
   for (const idx of FTD_INDICES) {
     const ftd = ftdMap[idx];
     if (!ftd) continue;
-    const pri = FTD_STATUS_PRIORITY[ftd.status] ?? 0;
-    if (best == null || pri > (FTD_STATUS_PRIORITY[best.status] ?? 0)) {
-      best = ftd;
-      bestIdx = idx;
-    }
+    if (ftd.status === 'error' || ftd.status === 'insufficient_data') continue;
+    valid.push({ idx, ftd });
   }
-  // 全指数が insufficient_data / error / 未取得 → 局面不明
-  if (!best || (FTD_STATUS_PRIORITY[best.status] ?? 0) === 0) {
-    return { status: 'none', tone: 'muted', label: FTD_REGIME_LABEL_JP.none, detail: '', indexName: null };
+  // 論点5: breadth (市場の広がり) を見るため最低 2 指数が必要。2 本未満は判定不能。
+  if (valid.length < 2) return none();
+
+  const confirmed = valid.filter((v) => v.ftd.status === 'ftd_confirmed');
+  const confirmedCount = confirmed.length;
+  const nasdaq = confirmed.find((v) => v.idx === NASDAQ_INDEX) || null;
+  const anyWatching = valid.some((v) => v.ftd.status === 'watching');
+  const validCount = valid.length;
+
+  let status, repr, indexName;
+  // 論点2: confirmed は 2 指数以上 or NASDAQ confirmed のみ。
+  if (confirmedCount >= 2 || nasdaq) {
+    status = 'ftd_confirmed';
+    repr = (nasdaq || confirmed[0]).ftd;
+    indexName = repr.label_ja || (nasdaq || confirmed[0]).idx;
+  } else if (confirmedCount === 1 || anyWatching) {
+    // 1 指数のみ confirmed (NASDAQ 以外) or 上昇試行中 → 「試行中」 へ降格
+    status = 'watching';
+    const w = confirmed[0] || valid.find((v) => v.ftd.status === 'watching');
+    repr = w.ftd;
+    indexName = repr.label_ja || w.idx;
+  } else {
+    // 全 valid が no_attempt
+    status = 'no_attempt';
+    repr = valid[0].ftd;
+    indexName = null;
   }
-  const indexName = best.label_ja || bestIdx;
-  const { tone } = ftdLabel(best); // Pane1 と色を一貫 (gain / warning / muted)
+
+  const tone = status === 'ftd_confirmed' ? 'gain' : status === 'watching' ? 'warning' : 'muted';
   let detail = '';
-  if (best.status === 'ftd_confirmed') {
-    detail = `${indexName} で Follow-Through Day 確定 (Day ${best.ftd_day_number})。 下落相場の底打ち・新規上昇局面入りの確認シグナルです。`;
-  } else if (best.status === 'watching') {
-    detail = `${indexName} が上昇試行中。 Follow-Through Day はまだ確定していません。`;
-  } else if (best.status === 'no_attempt') {
-    detail = '主要指数に上昇試行イベントなし (通常局面)。';
+  if (status === 'ftd_confirmed') {
+    const pct = typeof repr.ftd_pct === 'number' ? `+${repr.ftd_pct.toFixed(1)}% 超・` : '';
+    detail = `${indexName} で Day ${repr.ftd_day_number} に ${pct}出来高増の Follow-Through Day 条件を満たしました（3 指数中 ${confirmedCount} 指数）。`;
+  } else if (status === 'watching') {
+    detail = confirmedCount === 1
+      ? `${indexName} で Follow-Through Day 条件を確認（1 指数のみ・他指数は未確認）。市場全体の確認には至っていません。`
+      : '主要指数が上昇試行中。Follow-Through Day はまだ確認されていません。';
+  } else if (status === 'no_attempt') {
+    detail = '主要指数に上昇試行イベントは出ていません（通常局面）。';
   }
-  return { status: best.status, tone, label: FTD_REGIME_LABEL_JP[best.status], detail, indexName };
+
+  return { status, tone, label: FTD_REGIME_LABEL_JP[status], detail, indexName, confirmedCount, validCount, disclaimer: FTD_REGIME_DISCLAIMER };
 }

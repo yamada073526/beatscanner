@@ -31,6 +31,7 @@
  */
 import { useEpsBeatStreak } from '../useEpsBeatStreak.js';
 import { smoothScrollToElement } from '../../../../../lib/smoothScroll.js';
+import { useFtdMap, ftdRegime, ftdToneColor } from '../../../../workspace/ftd.js';
 
 const TESTID = 'l1-summary-buckets';
 
@@ -233,6 +234,14 @@ export default function L1SummaryBuckets({
 }) {
   const { streak, hasData: streakHasData, loading: streakLoading } = useEpsBeatStreak(ticker, 8);
 
+  // -------- 前提: 地合い（市場局面 / Follow-Through Day）--------
+  // KB 最上流（O'Neil M = Market Direction / じっちゃま地合い）: 個別銘柄評価の「前提」。
+  // §38: 機械判定であり相場予測でない（regime.disclaimer を ⓘ 併記）。
+  // fetch は api.js dedupGet で重複吸収（screener banner と 1 本化）。
+  const { ftdMap, loading: ftdLoading } = useFtdMap();
+  const regime = ftdLoading ? null : ftdRegime(ftdMap);
+  const showRegime = regime && regime.status !== 'none';
+
   // -------- scroll helpers --------
   const scrollToEarnings = (e) => {
     e?.preventDefault();
@@ -351,8 +360,45 @@ export default function L1SummaryBuckets({
         )}
       </div>
 
-      {/* S2 送り: 地合い前提行（useFtdMap は Sprint 2 で追加） */}
-      {/* 地合い行はここに入る予定（Sprint 2） */}
+      {/* 前提・地合い行（市場局面 / Follow-Through Day）— KB 最上流。§38: 機械判定・相場予測でない（ⓘ）。
+          regime.status==='none'（判定不能 / breadth 不足）は誤表示回避のため非表示。 */}
+      {showRegime && (
+        <div
+          data-testid={`${TESTID}-regime`}
+          data-regime-status={regime.status}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 'var(--space-2, 8px)',
+            padding: 'var(--space-2, 8px) var(--space-3, 12px)',
+            borderRadius: 'var(--radius-md, 12px)',
+            border: '1px solid var(--border)',
+            background: 'var(--bg-subtle)',
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{ width: 8, height: 8, borderRadius: '50%', background: ftdToneColor(regime.tone), flexShrink: 0 }}
+          />
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.04em', flexShrink: 0 }}>前提・地合い</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: ftdToneColor(regime.tone), whiteSpace: 'nowrap', flexShrink: 0 }}>
+            {regime.label}
+          </span>
+          {regime.detail && (
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)', flex: '1 1 200px', minWidth: 0 }}>
+              {regime.detail}
+            </span>
+          )}
+          <span
+            aria-label={regime.disclaimer}
+            title={regime.disclaimer}
+            style={{ fontSize: 12, color: 'var(--text-muted)', cursor: 'help', flexShrink: 0 }}
+          >
+            ⓘ
+          </span>
+        </div>
+      )}
 
       {/* 決算3点 named buckets（非 equity 時は全て非表示） */}
       {!isNonEquity && (

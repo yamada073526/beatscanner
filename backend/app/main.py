@@ -21305,9 +21305,13 @@ _FTD_INDICES = {
 # FTD 検出パラメータ (William O'Neil 標準値)
 _FTD_GAIN_THRESHOLD = 0.017   # +1.7% 以上の上昇
 _FTD_VOLUME_INCREASE = True   # 前日比 出来高 increase 必須
-_FTD_DAY_WINDOW = (4, 7)      # Day 4-7 範囲のみ FTD 認定
+# Day 4-13 範囲で FTD 認定。O'Neil 原典は Day 4-7 が理想だが最大 Day 10-13 まで有効。
+# 旧 (4,7) は Day 8-13 の正規 FTD を取りこぼし (false negative)、地合いを過小検出していた
+# (金融アナリスト review 論点1・2026-06-28)。
+_FTD_DAY_WINDOW = (4, 13)
 _FTD_DECLINE_DAYS = 3         # rally attempt 前提: 3 日以上連続下落
-_FTD_LOOKBACK_DAYS = 21       # 直近 21 営業日 (約 1 ヶ月)
+# rally attempt + Day 13 を内包するため lookback を 21→30 営業日へ拡張 (Day window 拡張に伴う)。
+_FTD_LOOKBACK_DAYS = 30
 
 _ftd_cache: dict[str, dict] = {}  # {index: {"data": dict, "ts": float}}
 _FTD_TTL = 3600  # 1 時間 cache (daily EOD なので長めで OK)
