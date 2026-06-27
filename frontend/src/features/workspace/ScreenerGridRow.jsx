@@ -84,18 +84,36 @@ function SecondaryCell({ value, startZone = false }) {
 }
 
 // 将来セル (来期ガイダンス比・§38 絶対中立=色なし)。startZone=ガラス仕切り左 hairline。
-function FutureCell({ value, startZone = false }) {
+// source==='8k' (Layer A) のみ値前に dot(●・--text-secondary・gold厳禁)+tooltip。
+// それ以外 (Layer B) は無印。§38: 色で区別せず dot 字形で区別・「買いシグナル」表記禁止。
+function FutureCell({ value, startZone = false, source = null }) {
   const txt = fmtDelta(value);
+  const empty = txt == null;
+  const isLayerA = source === '8k';
+  // 空セル「—」: ADR 非算出/ガイダンス未取得を a11y で明記 (Layer B「無印」との混同防止・§6)。
+  const title = empty
+    ? '来期見通しデータなし(当社の予測ではありません)'
+    : isLayerA
+      ? '会社が来期ガイダンスを開示。発表直前のアナリスト予想との差を算出(当社の予測・推奨ではありません)'
+      : undefined;
+  const ariaLabel = empty
+    ? '来期見通しデータなし'
+    : isLayerA
+      ? `${txt}(会社ガイダンスとアナリスト予想の比)`
+      : `${txt}(来期コンセンサスYoY)`;
   return (
     <span
       className={[
         'screener-grid-cell',
         'screener-grid-cell--fut',
         startZone ? 'is-fstart' : '',
-        txt == null ? 'is-empty' : '',
+        empty ? 'is-empty' : '',
       ].filter(Boolean).join(' ')}
+      title={title}
+      aria-label={ariaLabel}
     >
-      {txt == null ? '—' : txt}
+      {!empty && isLayerA && <span className="screener-grid-fdot" aria-hidden="true" />}
+      <span className="v">{empty ? '—' : txt}</span>
     </span>
   );
 }
@@ -103,7 +121,7 @@ function FutureCell({ value, startZone = false }) {
 /**
  * ScreenerGridRow
  * @param {Object} earnings - 正規化済み決算速報フィールド
- *   { revYoY, revBeat, epsYoY, epsBeat, gm, fcf, nqRev, nqEps, tri }
+ *   { revYoY, revBeat, epsYoY, epsBeat, gm, fcf, nqRev, nqEps, tri, guidanceSource }
  */
 export default function ScreenerGridRow({
   ticker,
@@ -143,7 +161,7 @@ export default function ScreenerGridRow({
     );
   }
 
-  const { revYoY, revBeat, epsYoY, epsBeat, gm, fcf, nqRev, nqEps, tri } = earnings;
+  const { revYoY, revBeat, epsYoY, epsBeat, gm, fcf, nqRev, nqEps, tri, guidanceSource = null } = earnings;
   const pip = PIP[tri] || PIP_NONE;            // §14-E: tri 未知/null も null guard で none へ
   const triLabel = TRI_VERDICT_JP[tri] || '判定中';
   const isWin = tri === 'ok';
@@ -210,8 +228,8 @@ export default function ScreenerGridRow({
           <PrimaryCell yoy={epsYoY} beat={epsBeat} />
           <SecondaryCell value={gm} startZone />
           <SecondaryCell value={fcf} />
-          <FutureCell value={nqRev} startZone />
-          <FutureCell value={nqEps} />
+          <FutureCell value={nqRev} startZone source={guidanceSource} />
+          <FutureCell value={nqEps} source={guidanceSource} />
           <span className={['screener-grid-rs', rs != null && rs >= 85 ? 'is-hi' : ''].filter(Boolean).join(' ')}>
             {rs == null ? '—' : rs}
           </span>
