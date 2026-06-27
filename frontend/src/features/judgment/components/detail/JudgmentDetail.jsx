@@ -76,6 +76,7 @@ import { useDetailScrollRestore } from './useDetailScrollRestore.js';
 // v125 P8-2 Sprint A: section 3 component 抽出 (描画順序不変)。
 // Sprint B で順序入替時にこれら component を新位置に移動するだけで diff 「移動」 のみ。
 import FundamentalsAccordion from './sections/FundamentalsAccordion.jsx';
+import L3QualityFold from './sections/L3QualityFold.jsx';
 // v199: ファンダ章冒頭の決算ハイライト (flag opt-in、SPEC_2026-06-10_earnings-flash-summary + 6体合議)
 import EarningsFlashSummary from './sections/EarningsFlashSummary.jsx';
 import StateCompass from './sections/StateCompass.jsx';
@@ -1382,7 +1383,7 @@ export default function JudgmentDetail({
 
               <hr style={{ height: 1, background: 'var(--border)', border: 0, margin: 0 }} />
 
-              {/* ─── L3 品質・継続性（Sprint 2 以降で fold 累進開示化・S1 は仮配置）─── */}
+              {/* ─── L3 品質・継続性（Sprint 2-C: fold 累進開示・mockup 順: CFマージン→ROE/PER/PEG→会社概要）─── */}
               <section
                 data-testid="v6-quality-section"
                 id="v6-quality-section"
@@ -1393,7 +1394,12 @@ export default function JudgmentDetail({
                   <span style={{ fontSize: 17, fontWeight: 700 }}>品質・継続性</span>
                   <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>サマリー常時 · 詳細は展開</span>
                 </div>
-                {/* Sprint 2 で FundamentalsAccordion を fold 化予定 */}
+                {/* 営業CFマージン + ROE/PER/PEG fold（valuation-extras 由来・非 equity は非表示）。
+                    機関保有 QoQ 行は aggregator 配線が重いため後続 sprint。 */}
+                {!isNonEquityV6 && valuationExtras && (
+                  <L3QualityFold valuationExtras={valuationExtras} />
+                )}
+                {/* 会社概要・セグメント（既存 FundamentalsAccordion profile = 既に fold）*/}
                 <FundamentalsAccordion
                   key="v6-funda-profile"
                   renderSection="profile"
