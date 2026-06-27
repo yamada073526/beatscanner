@@ -167,8 +167,9 @@ export default function ScreenerGridRow({
       ].filter(Boolean).join(' ')}
       data-testid={`screener-grid-row-${ticker}`}
       data-mode={mode}
-      /* ビュー内バッチごとに 0..7 段の stagger (グローバル index 比例だと下方行が長時間待つため modulo) */
-      style={{ transitionDelay: `${(animIndex % 8) * 45}ms` }}
+      /* reveal stagger のみに delay (--reveal-delay は opacity/transform 限定・hover 背景には波及しない)。
+         ビュー内バッチごと 0..7 段 modulo (グローバル index 比例だと下方行が長時間待つため)。 */
+      style={{ '--reveal-delay': `${(animIndex % 8) * 45}ms` }}
       onClick={handleClick}
       onKeyDown={handleKey}
       aria-label={`${ticker} ${name || ''} 決算の総合: ${triLabel}。詳細を表示`}

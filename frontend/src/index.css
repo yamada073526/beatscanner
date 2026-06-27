@@ -14428,9 +14428,9 @@ body.is-digest-resizing {
 .screener-grid-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: var(--space-2) var(--space-4); font-size: 12px; color: var(--text-secondary); background: var(--bg-subtle); border-bottom: 1px solid var(--border); line-height: 1.6; border-radius: 12px 12px 0 0; }
 .screener-grid-legend .lg { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .screener-grid-legend .gl { font-weight: 700; }
-.screener-grid-legend .gl.up { color: var(--color-gain); }
-.screener-grid-legend .gl.dn { color: var(--color-loss); }
-.screener-grid-legend .gl.il { color: var(--color-warning); }
+.screener-grid-legend .gl.up { color: color-mix(in oklab, var(--color-gain) 80%, var(--text-primary)); }
+.screener-grid-legend .gl.dn { color: color-mix(in oklab, var(--color-loss) 80%, var(--text-primary)); }
+.screener-grid-legend .gl.il { color: color-mix(in oklab, var(--color-warning) 85%, var(--text-primary)); }
 .screener-grid-legend .disc { flex-basis: 100%; font-size: 11.5px; color: var(--text-muted); line-height: 1.55; }
 .screener-grid-legend .disc b { color: var(--text-secondary); font-weight: 600; }
 
@@ -14445,7 +14445,9 @@ body.is-digest-resizing {
 .screener-grid-head .h-fstart::before { background: color-mix(in srgb, var(--color-gold) 40%, transparent); }
 
 /* 行 */
-.screener-grid-row { display: grid; grid-template-columns: var(--screener-cols); align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); cursor: pointer; position: relative; opacity: 0; transform: translateY(8px); transition: opacity .45s ease, transform .45s ease, background .18s ease; }
+/* reveal の stagger delay は --reveal-delay で opacity/transform 限定 (背景 hover には波及させない)。
+   背景は遅延ゼロ + 短 duration で hover 即時反応 (素早いマウス移動でも光る)。 */
+.screener-grid-row { display: grid; grid-template-columns: var(--screener-cols); align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); cursor: pointer; position: relative; opacity: 0; transform: translateY(8px); transition: opacity .45s ease var(--reveal-delay, 0ms), transform .45s ease var(--reveal-delay, 0ms), background .12s ease; }
 .screener-grid-row.is-in { opacity: 1; transform: none; }
 .screener-grid-row:last-child { border-bottom: 0; border-radius: 0 0 12px 12px; }
 .screener-grid-row:hover { background: var(--bg-hover); }
@@ -14454,7 +14456,7 @@ body.is-digest-resizing {
 .screener-grid-row.is-win::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--color-gold); }
 .screener-grid-row.is-selected { background: color-mix(in srgb, var(--color-gold) 10%, transparent); }
 .screener-grid-row.is-selected::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--color-gold-mid); }
-@media (prefers-reduced-motion: reduce) { .screener-grid-row { opacity: 1; transform: none; transition: background .18s ease; } }
+@media (prefers-reduced-motion: reduce) { .screener-grid-row { opacity: 1; transform: none; transition: background .12s ease; } }
 
 /* verdict pip (主役) */
 .screener-grid-pip { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-size: 13px; border: 1px solid var(--border); flex: none; }
@@ -14489,9 +14491,9 @@ body.is-digest-resizing {
 
 /* beat/miss 結果チップ (surpriseColor) */
 .screener-grid-chip { display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: var(--radius-pill, 9999px); line-height: 1.4; }
-.screener-grid-chip.is-beat { color: var(--color-gain); background: color-mix(in srgb, var(--color-gain) 12%, transparent); }
-.screener-grid-chip.is-miss { color: var(--color-loss); background: color-mix(in srgb, var(--color-loss) 12%, transparent); }
-.screener-grid-chip.is-inline { color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 14%, transparent); }
+.screener-grid-chip.is-beat { color: color-mix(in oklab, var(--color-gain) 80%, var(--text-primary)); background: color-mix(in srgb, var(--color-gain) 12%, transparent); }
+.screener-grid-chip.is-miss { color: color-mix(in oklab, var(--color-loss) 80%, var(--text-primary)); background: color-mix(in srgb, var(--color-loss) 12%, transparent); }
+.screener-grid-chip.is-inline { color: color-mix(in oklab, var(--color-warning) 85%, var(--text-primary)); background: color-mix(in srgb, var(--color-warning) 14%, transparent); }
 .screener-grid-chip .g { font-size: 10px; line-height: 1; }
 
 /* RS */
