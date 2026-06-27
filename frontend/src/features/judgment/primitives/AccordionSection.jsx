@@ -97,6 +97,9 @@ export default function AccordionSection({
   label,
   badge = null,
   badgeColor,
+  // v6 Sprint 2-C (L3 fold): 折りたたみ時も右側に常時表示する 1 行サマリー (mockup の f-sum)。
+  //   ReactNode 可。LLM narration 禁止 (静的 label / 数値のみ)。label と併用可 (summary→label の順)。
+  summary = null,
   streaming = false,
   defaultOpen = false,
   controlledOpen,
@@ -257,8 +260,21 @@ export default function AccordionSection({
           )}
         </span>
 
-        {/* Right cluster: streaming indicator + label (small caps) */}
+        {/* Right cluster: summary (常時) + streaming indicator + label (small caps) */}
         <span className={styles.headerRight}>
+          {summary != null && summary !== '' && (
+            <span
+              style={{
+                fontSize: 12,
+                color: 'var(--text-secondary)',
+                fontVariantNumeric: 'tabular-nums',
+                textAlign: 'right',
+                minWidth: 0,
+              }}
+            >
+              {summary}
+            </span>
+          )}
           {streaming && (
             <span className={styles.streamingIndicator} aria-live="polite">
               生成中...
