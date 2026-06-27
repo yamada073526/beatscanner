@@ -317,6 +317,7 @@ ChartTab.jsx の lightweight-charts overlay 専用。 lightweight-charts は CSS
 | `--text-secondary` | `#334155` | `#cbd5e1` |
 | `--text-muted` | `#64748b` | `#94a3b8` |
 | `--border` | `#e2e8f0` | `#334155` |
+| `--border-strong` | `rgba(15,23,42,.14)` | `rgba(255,255,255,.14)` | hover/gate の border 強調 (mockup v8 準拠)。`var(--border-strong, var(--border))` で参照 |
 | `--page-bg` | `#f8fafc` | `#0f172a` |
 | `--page-bg-rgb` | `248, 250, 252` | `15, 23, 42` |
 
