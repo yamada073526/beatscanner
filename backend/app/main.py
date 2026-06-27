@@ -1007,6 +1007,8 @@ async def get_valuation_extras(ticker: str, request: Request):
         # buyback 計算用: FMP TTM 系 endpoint は buyback fields を含まない (NVDA dogfood で確認)。
         # cash-flow-statement?period=quarter&limit=4 の commonStockRepurchased 4Q 合計で TTM 算出。
         "cash_flow":         f"{base}/cash-flow-statement?symbol={t}&period=quarter&limit=4&apikey={fmp_key}",
+        # Sprint 2-C (v6 L3 fold): ROE / 営業CFマージン の sector guard 用 sector/industry 取得。
+        "profile":           f"{base}/profile?symbol={t}&apikey={fmp_key}",
     }
     cache_keys = {
         "ratios":            f"valuation-extras::ratios::{t}",
@@ -1014,26 +1016,29 @@ async def get_valuation_extras(ticker: str, request: Request):
         "analyst_estimates": f"valuation-extras::analyst-est::{t}",
         "quote":             f"valuation-extras::quote::{t}",
         "cash_flow":         f"valuation-extras::cash-flow-4q::{t}",
+        "profile":           f"valuation-extras::profile::{t}",
     }
-    # quote は 15min cache、 他 4 つは 12h (TTM 値は決算更新で変動、 過剰 fetch 抑制)
+    # quote は 15min cache、 他は 12h (TTM 値は決算更新で変動、 過剰 fetch 抑制)。profile は 24h (sector はほぼ不変)
     ttls = {
         "ratios":            60 * 60 * 12,
         "key_metrics":       60 * 60 * 12,
         "analyst_estimates": 60 * 60 * 12,
         "quote":             CACHE_TTL_QUOTE,
         "cash_flow":         60 * 60 * 12,
+        "profile":           60 * 60 * 24,
     }
 
-    # 5 endpoint 並列 fetch、 各々独立に sources schema で監視
+    # 6 endpoint 並列 fetch、 各々独立に sources schema で監視
     results = await asyncio.gather(
         safe_fmp_get(urls["ratios"],            cache_keys["ratios"],            ttl=ttls["ratios"]),
         safe_fmp_get(urls["key_metrics"],       cache_keys["key_metrics"],       ttl=ttls["key_metrics"]),
         safe_fmp_get(urls["analyst_estimates"], cache_keys["analyst_estimates"], ttl=ttls["analyst_estimates"]),
         safe_fmp_get(urls["quote"],             cache_keys["quote"],             ttl=ttls["quote"]),
         safe_fmp_get(urls["cash_flow"],         cache_keys["cash_flow"],         ttl=ttls["cash_flow"]),
+        safe_fmp_get(urls["profile"],           cache_keys["profile"],           ttl=ttls["profile"]),
         return_exceptions=True,
     )
-    ratios_data, metrics_data, est_data, quote_data, cf_data = results
+    ratios_data, metrics_data, est_data, quote_data, cf_data, profile_data = results
 
     def _classify(data) -> str:
         if isinstance(data, Exception):
@@ -1047,7 +1052,7 @@ async def get_valuation_extras(ticker: str, request: Request):
         return "ok"
 
     sources = {k: _classify(v) for k, v in zip(
-        ["ratios", "key_metrics", "analyst_estimates", "quote", "cash_flow"], results
+        ["ratios", "key_metrics", "analyst_estimates", "quote", "cash_flow", "profile"], results
     )}
 
     def _first_dict(data) -> dict:
@@ -1184,6 +1189,48 @@ async def get_valuation_extras(ticker: str, request: Request):
         if ebitda_ttm is not None and ebitda_ttm != 0:
             ev_to_ebitda = enterprise_value / ebitda_ttm
 
+    # ── Sprint 2-C (v6 L3 fold): trailing PER / ROE / 営業CFマージン ──────────────
+    # 数値物理層 (LLM 一切不使用)。ROE / 営業CFマージンは銀行/REIT/保険/公益で誤シグナル
+    # (revenue 基盤の意味が薄い・equity が異質) → _roe_sector_guard で None 抑止
+    # (feedback_revenue_basis_mismatch / §5 優良誤認回避)。
+    p_rec = _first_dict(profile_data)
+    _sector = p_rec.get("sector") if isinstance(p_rec, dict) else None
+    _industry = p_rec.get("industry") if isinstance(p_rec, dict) else None
+    _sector_guard = _roe_sector_guard(_sector, _industry)
+
+    # trailing PER: ratios-ttm.priceToEarningsRatioTTM (universal、 sector guard 不要)
+    trailing_pe: float | None = _pick(
+        r_rec, "priceToEarningsRatioTTM", "peRatioTTM", "priceEarningsRatioTTM"
+    )
+
+    # ROE %: key-metrics-ttm.returnOnEquityTTM (0-1 scale) × 100。sector guard 適用。
+    roe_pct: float | None = None
+    _roe_raw = _pick(m_rec, "returnOnEquityTTM", "roeTTM")
+    if _roe_raw is not None and not _sector_guard:
+        roe_pct = _roe_raw * 100.0
+        # 負 equity 由来の異常値 / 桁外れは抑止 (|ROE| > 1000% は数値破綻)
+        if abs(roe_pct) > 1000.0:
+            roe_pct = None
+
+    # 営業CFマージン %: TTM OCF (cash-flow 4Q 合計) / TTM revenue × 100。sector guard 適用。
+    # revenue は本 endpoint で算出済の ttm_revenue (revenuePerShareTTM × shares 推定) を流用。
+    ocf_margin_pct: float | None = None
+    if not _sector_guard and ttm_revenue is not None and ttm_revenue > 0 \
+            and isinstance(cf_data, list) and cf_data:
+        _ocf_sum = 0.0
+        _ocf_n = 0
+        for _q in cf_data[:4]:
+            if isinstance(_q, dict):
+                _v = _q.get("operatingCashFlow")
+                if isinstance(_v, (int, float)) and math.isfinite(_v):
+                    _ocf_sum += float(_v)
+                    _ocf_n += 1
+        if _ocf_n > 0:
+            _m = _ocf_sum / ttm_revenue * 100.0
+            # 範囲ガード: |margin| > 150% は revenue 基盤の不整合疑い (screener と同基準) → None
+            if abs(_m) <= 150.0:
+                ocf_margin_pct = _m
+
     return {
         "ticker":               t,
         "payoutRatio":          _safe_float(payout_ratio, 4),
@@ -1200,6 +1247,10 @@ async def get_valuation_extras(ticker: str, request: Request):
         "fcfYield":             _safe_float(fcf_yield, 4),      # 0.0-0.1
         "enterpriseValue":      _safe_float(enterprise_value, 0),  # USD 絶対値
         "debtToEquity":         _safe_float(debt_to_equity, 4),  # 比率 raw
+        # ── Sprint 2-C NEW (v6 L3 fold): trailing PER / ROE / 営業CFマージン ──────
+        "trailingPE":           _safe_float(trailing_pe, 2),     # ratios-ttm.priceToEarningsRatioTTM
+        "roe":                  _safe_float(roe_pct, 1),         # % (sector guard 済・銀行/REIT 等は None)
+        "ocfMarginPct":         _safe_float(ocf_margin_pct, 1),  # % (sector guard 済・銀行/REIT 等は None)
         # ─────────────────────────────────────────────────────────────────────
         "sources":              sources,
         "fetched_at":           _time.time(),
