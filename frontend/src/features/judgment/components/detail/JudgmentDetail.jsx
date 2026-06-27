@@ -1301,7 +1301,10 @@ export default function JudgmentDetail({
           // Sprint 1: L0 + L1 + TOC + L2（決算3点 detail + 8Q spark + 5条件）+ L3-L6（既存要素を仮配置）
           return (
             <div data-testid="pane3-v6-layout" data-state={selectedTicker ? 'main' : 'empty'}>
-              {/* ─── L0 同定（既存 VerdictHero + Hero 継承・価格は「同定」= verdict 扱いを外す） ─── */}
+              {/* ─── L0 同定（既存 VerdictHero + Hero 継承・価格は「同定」= verdict 扱いを外す） ───
+                  SPEC §2 L0「価格は同定 = verdict 扱いを外す」: 判定リング(EarningsRing)は非表示
+                  (dogfood: data 未取得時「?/取得待ち」が壊れて見える + 同定層に判定 idiom が混入)。
+                  次決算カウントダウンは D-XX pill (hideCountdownChip=false) のみで担保。 */}
               <VerdictHero verdict="unknown">
                 <Hero
                   ticker={selectedTicker}
@@ -1315,6 +1318,7 @@ export default function JudgmentDetail({
                   hideCountdownChip={false}
                   hideNextEarningsChip={false}
                   hideVerdictChip={true}
+                  hideEarningsRing={true}
                   frameless
                 />
               </VerdictHero>
