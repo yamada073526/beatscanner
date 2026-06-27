@@ -1282,6 +1282,7 @@ export default function JudgmentDetail({
               {/* ─── L0 同定（既存 VerdictHero + Hero 継承・価格は「同定」= verdict 扱いを外す） ───
                   SPEC §2 L0「価格は同定 = verdict 扱いを外す」: 判定リング(EarningsRing)は非表示
                   (dogfood: data 未取得時「?/取得待ち」が壊れて見える + 同定層に判定 idiom が混入)。
+                  同様に「判定」eyebrow も hideEyebrow={true} で除去 (mockup id-row は eyebrow 無し)。
                   次決算カウントダウンは D-XX pill (hideCountdownChip=false) のみで担保。 */}
               <VerdictHero verdict="unknown">
                 <Hero
@@ -1297,6 +1298,7 @@ export default function JudgmentDetail({
                   hideNextEarningsChip={false}
                   hideVerdictChip={true}
                   hideEarningsRing={true}
+                  hideEyebrow={true}
                   frameless
                 />
               </VerdictHero>
