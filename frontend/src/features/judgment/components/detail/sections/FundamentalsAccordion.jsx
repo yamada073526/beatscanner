@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import ProfileCard from '../ProfileCard.jsx';
 import SectionDivider from '../SectionDivider.jsx';
 import ChapterSection from '../ChapterSection.jsx';
@@ -15,6 +15,9 @@ import SectionFade from '../../../primitives/SectionFade.jsx';
 import ChapterTabs from '../../../primitives/ChapterTabs.jsx';
 // Sprint 2 (CAN-SLIM Phase 1 UX): ライター憲法サマリーブロック
 import FundamentalsChapterSummary from './FundamentalsChapterSummary.jsx';
+// v6 Sprint 2-C 後続: 会社概要 fold ヘッダーのセグメント%サマリー (非 LLM・quarterly-history 再利用)
+import { fetchQuarterlyHistory } from '../../../../../api.js';
+import { buildSegmentSummaryText } from '../../../../../lib/segmentNames.js';
 
 /**
  * v125 P8-2 Sprint A: 章 ① 数値 (FundamentalsAccordion) 抽出。
@@ -52,6 +55,10 @@ export default function FundamentalsAccordion({
   // v190 (3体合議): v5 会社概要 AccordionSection title を L2 セクション冠の外観に揃える style。
   //   JudgmentDetail から sectionHeadingL2Style を受け取る。省略時 (v4/legacy) は AccordionSection 既定。
   sectionHeadingStyle = undefined,
+  // v6 Sprint 2-C 後続: true のとき会社概要 fold ヘッダーにセグメント%サマリー (mockup f-sum) を常時表示。
+  //   JudgmentDetail の v6 経路からのみ true (flag pane3_v6 OFF default・blast 限定)。
+  //   data 源は非 LLM の quarterly-history.segment_summary (prefetch 済・cost 中立)。
+  segmentSummaryInHeader = false,
 }) {
   const isFundaLoading = !result && detail?.isLoading !== false;
   // v185 A: renderSection で表示 section を選択。null は全 section (v4 不変)。
@@ -60,6 +67,30 @@ export default function FundamentalsAccordion({
   // v5 で本 component を 2 回 mount するため testid を section 別に分け重複回避。
   // v4 (renderSection=null) は従来 'funda-section' を維持 (snap script / 既存参照 BC)。
   const testId = renderSection ? `funda-section-${renderSection}` : 'funda-section';
+
+  // v6 Sprint 2-C 後続: 会社概要 fold ヘッダーのセグメント%サマリー (例「iPhone 51% · Services 26% · ほか」)。
+  //   折りたたみ時も常時表示するため ProfileCard (展開時のみ mount) には依存できない → ここで非 LLM の
+  //   quarterly-history.segment_summary を直接読み 1 行テキスト化する。fetchQuarterlyHistory は prefetch 済
+  //   (api.js prefetchAll) + dedupGet で重複排除されるため追加 cost は実質ゼロ。§38: 売上構成比は事実数値のみ。
+  const [segSummaryText, setSegSummaryText] = useState(null);
+  useEffect(() => {
+    if (!segmentSummaryInHeader || !selectedTicker) {
+      setSegSummaryText(null);
+      return undefined;
+    }
+    let cancelled = false;
+    fetchQuarterlyHistory(selectedTicker, 8)
+      .then((res) => {
+        if (!cancelled) setSegSummaryText(buildSegmentSummaryText(res?.segment_summary));
+      })
+      .catch(() => {
+        if (!cancelled) setSegSummaryText(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [segmentSummaryInHeader, selectedTicker]);
+
   return (
     // Sprint 2: funda-section wrapper — feedback_testid_all_render_paths に準拠。
     // loading/errored/empty/main 全 state で testid を取得可能にする。
@@ -113,6 +144,9 @@ export default function FundamentalsAccordion({
           id="sec-profile"
           title="会社概要"
           tier={2}
+          /* v6 Sprint 2-C 後続: 折りたたみ時もセグメント%サマリーを常時表示 (mockup f-sum)。
+             v5/legacy (segmentSummaryInHeader=false) は undefined で従来不変。 */
+          summary={segmentSummaryInHeader ? segSummaryText : undefined}
           /* v190 (3体合議): v5 では会社概要 title を L2 セクション冠の外観 (決算/バリュエーションと同 token) に統一。
              v4/legacy (sectionHeadingStyle 未指定) は AccordionSection 既定の title スタイル。 */
           titleStyle={renderSection === 'profile' ? sectionHeadingStyle : undefined}

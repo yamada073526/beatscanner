@@ -1394,15 +1394,16 @@ export default function JudgmentDetail({
                   <span style={{ fontSize: 17, fontWeight: 700 }}>品質・継続性</span>
                   <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>サマリー常時 · 詳細は展開</span>
                 </div>
-                {/* 営業CFマージン + ROE/PER/PEG fold（valuation-extras 由来・非 equity は非表示）。
-                    機関保有 QoQ 行は aggregator 配線が重いため後続 sprint。 */}
+                {/* 営業CFマージン + ROE/PER/PEG + 機関保有 QoQ fold（valuation-extras 由来・非 equity は非表示）。*/}
                 {!isNonEquityV6 && valuationExtras && (
                   <L3QualityFold valuationExtras={valuationExtras} />
                 )}
-                {/* 会社概要・セグメント（既存 FundamentalsAccordion profile = 既に fold）*/}
+                {/* 会社概要・セグメント（既存 FundamentalsAccordion profile = 既に fold）。
+                    v6 のみ折りたたみヘッダーにセグメント%サマリーを常時表示（非 LLM・quarterly-history 再利用）。*/}
                 <FundamentalsAccordion
                   key="v6-funda-profile"
                   renderSection="profile"
+                  segmentSummaryInHeader
                   hideChapterHeader
                   selectedTicker={selectedTicker}
                   result={result}
