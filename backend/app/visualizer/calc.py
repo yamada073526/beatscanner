@@ -187,6 +187,28 @@ def compute_target_range(prices: list[float | None]) -> dict:
     }
 
 
+def guidance_vs_consensus_pct(
+    guidance: float | None,
+    consensus: float | None,
+) -> float | None:
+    """会社ガイダンス中値 vs アナリストコンセンサスの符号付き surprise %.
+
+    (guidance - consensus) / abs(consensus) * 100。
+    consensus が 0 / None、guidance が None → None (捏造禁止・除算回避)。
+    abs(consensus) 分母なので、負コンセンサス (赤字予想) からの改善も正値になる
+    (例: consensus -100 → guidance -90 で +10%)。
+
+    SPEC §4-2: screener_fundamentals.guidance_*_surprise_pct と
+    Pane3 _compute_forward_outlook の共通 SSOT。label 化は
+    classify_guidance_vs_consensus が本関数に委譲する (tolerance 境界の drift 防止)。
+    """
+    g = _to_float(guidance)
+    c = _to_float(consensus)
+    if g is None or c is None or c == 0:
+        return None
+    return (g - c) / abs(c) * 100
+
+
 def classify_guidance_vs_consensus(
     guidance_eps: float | None,
     consensus_eps: float | None,
@@ -196,12 +218,11 @@ def classify_guidance_vs_consensus(
 
     Returns: "above" | "inline" | "below" | "unknown"
     tolerance_pct (default 3%) を inline 帯とする。
+    符号付き % は guidance_vs_consensus_pct (SSOT) に委譲 (SPEC §4-2・drift 防止)。
     """
-    g = _to_float(guidance_eps)
-    c = _to_float(consensus_eps)
-    if g is None or c is None or c == 0:
+    pct = guidance_vs_consensus_pct(guidance_eps, consensus_eps)
+    if pct is None:
         return "unknown"
-    pct = (g - c) / abs(c) * 100
     if pct >= tolerance_pct:
         return "above"
     if pct <= -tolerance_pct:

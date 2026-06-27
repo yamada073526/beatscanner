@@ -18362,10 +18362,17 @@ async def cron_guidance_snapshot(
         body = {}
     override_tickers = body.get("tickers")
     dry_run = bool(body.get("dry_run", False))
+    force_refresh = bool(body.get("force", False))   # 既存 guidance を無視して再抽出 (手動)
 
     today_iso = date.today().isoformat()
 
-    # 1. universe 構築 (override or 保有 ∪ WL)
+    # SPEC guidance-layer-a §5 Layer A イベント駆動 cost guard:
+    #   直近決算報告銘柄 (last_report_date が新鮮) のみ guidance 抽出対象に追加し、
+    #   既に当該期の guidance がある銘柄は _one の accession/period skip で LLM を呼ばない。
+    GUIDANCE_EVENT_WINDOW_DAYS = 14   # PIT 成立窓 (user 承認・§5-5)
+    GUIDANCE_EVENT_MAX = 200          # 日次 cap (cost 暴走防止・§5-1)
+
+    # 1. universe 構築 (override or 保有 ∪ WL ∪ 直近決算報告)
     source_counts: dict[str, int] = {}
     source_errors: list[str] = []
     if isinstance(override_tickers, list) and override_tickers:
@@ -18383,6 +18390,24 @@ async def cron_guidance_snapshot(
                 except Exception as e:
                     source_counts[label] = 0
                     source_errors.append(f"{label}: {type(e).__name__}")
+            # Layer A (SPEC §5-1): 直近決算報告銘柄 (last_report_date が新鮮) をイベント駆動で追加。
+            #   gte(cutoff) は NULL を自動除外 (NOT NULL ガード兼用)。重複 LLM は _one の skip で回避。
+            try:
+                cutoff_iso = (date.today() - timedelta(days=GUIDANCE_EVENT_WINDOW_DAYS)).isoformat()
+                rr = (
+                    sb.table("screener_fundamentals")
+                    .select("ticker,last_report_date")
+                    .gte("last_report_date", cutoff_iso)
+                    .order("last_report_date", desc=True)
+                    .limit(GUIDANCE_EVENT_MAX)
+                    .execute()
+                )
+                s = {str(r["ticker"]).upper() for r in (rr.data or []) if r.get("ticker")}
+                source_counts["recent_earnings"] = len(s)
+                tickers |= s
+            except Exception as e:
+                source_counts["recent_earnings"] = 0
+                source_errors.append(f"recent_earnings: {type(e).__name__}")
             return tickers
 
         universe = await asyncio.to_thread(_build_guidance_universe)
@@ -18408,23 +18433,46 @@ async def cron_guidance_snapshot(
 
     sem = asyncio.Semaphore(3)
 
-    async def _one(t: str) -> list[dict]:
+    def _has_recent_guidance(t: str, q_end: str | None, fy_end: str | None) -> bool:
+        """当 ticker の対象会計期に既に guidance row があれば True (LLM skip 判定・SPEC §5-1)。"""
+        periods = [p for p in (q_end, fy_end) if p]
+        if not periods:
+            return False
+        try:
+            r = (
+                sb.table("guidance_snapshots").select("id")
+                .eq("ticker", t).in_("period_end_date", periods).limit(1).execute()
+            )
+            return bool(r.data)
+        except Exception:
+            return False
+
+    async def _one(t: str) -> dict:
         async with sem:
-            cg = await _fetch_sec_guidance_structured(t)
-            if not isinstance(cg, dict):
-                return []
+            # 1. FMP で対象会計期を先に解決 (LLM 不要・cheap)
             est_q = await client.analyst_estimates(t, period="quarter", limit=40)
             est_a = await client.analyst_estimates(t, period="annual", limit=15)
             q_end = guidance_history.resolve_next_period_end(est_q, today_iso, period_type="quarter")
             fy_end = guidance_history.resolve_next_period_end(est_a, today_iso, period_type="annual")
-            return guidance_history.build_guidance_rows(t, cg, q_end, fy_end)
+            # 2. accession/period skip: 既存 guidance があれば LLM を呼ばない (cost bound・SPEC §5-1)
+            if not force_refresh and await asyncio.to_thread(_has_recent_guidance, t, q_end, fy_end):
+                return {"skipped_existing": True}
+            # 3. LLM 抽出 (Hallucination Guard 4層通過 path)
+            cg = await _fetch_sec_guidance_structured(t)
+            if not isinstance(cg, dict):
+                return {"rows": []}
+            cm = cg.get("_cache_metrics") or {}
+            return {"rows": guidance_history.build_guidance_rows(t, cg, q_end, fy_end), "cm": cm}
 
     results = await asyncio.gather(
         *[_one(t) for t in universe_list], return_exceptions=True
     )
 
-    skipped_count = 0   # ガイダンス記載なし (AAPL 型) / 対象期未解決 → row 0 件 (正常)
+    skipped_count = 0          # ガイダンス記載なし (AAPL 型) / 対象期未解決 → row 0 件 (正常)
+    skipped_existing = 0       # 既存 guidance ありで LLM skip (cost guard・§5-1)
     error_count = 0
+    llm_calls = 0
+    cost_tokens = {"input": 0, "output": 0, "cache_read": 0, "cache_creation": 0}
     failed_tickers: list[dict] = []
     all_rows: list[dict] = []
     for t, res in zip(universe_list, results):
@@ -18432,10 +18480,38 @@ async def cron_guidance_snapshot(
             error_count += 1
             if len(failed_tickers) < 20:
                 failed_tickers.append({"ticker": t, "reason": type(res).__name__})
-        elif not res:
+            continue
+        if not isinstance(res, dict):
             skipped_count += 1
+            continue
+        if res.get("skipped_existing"):
+            skipped_existing += 1
+            continue
+        cm = res.get("cm")
+        if cm:
+            llm_calls += 1
+            cost_tokens["input"] += cm.get("input_tokens", 0)
+            cost_tokens["output"] += cm.get("output_tokens", 0)
+            cost_tokens["cache_read"] += cm.get("cache_read_input_tokens", 0)
+            cost_tokens["cache_creation"] += cm.get("cache_creation_input_tokens", 0)
+        rows = res.get("rows") or []
+        if rows:
+            all_rows.extend(rows)
         else:
-            all_rows.extend(res)
+            skipped_count += 1
+
+    # cost 概算 (Haiku・USD/MTok 概算: input 1.0 / output 5.0 / cache_read 0.1 / cache_write 1.25)
+    est_cost_usd = round(
+        cost_tokens["input"] / 1e6 * 1.0
+        + cost_tokens["output"] / 1e6 * 5.0
+        + cost_tokens["cache_read"] / 1e6 * 0.1
+        + cost_tokens["cache_creation"] / 1e6 * 1.25,
+        4,
+    )
+    print(
+        f"[GUIDANCE_COST] llm_calls={llm_calls} skipped_existing={skipped_existing} "
+        f"tokens={cost_tokens} est_usd={est_cost_usd}"
+    )
 
     # 3. idempotent upsert (期ごと最新 1 行 model、 amend/再抽出は同キー上書き)
     def _upsert_chunks(rows: list[dict]) -> int:
@@ -18473,6 +18549,10 @@ async def cron_guidance_snapshot(
         "by_source": source_counts,
         "source_errors": source_errors,
         "skipped_count": skipped_count,    # ガイダンス記載なし / 対象期未解決 (AAPL 型は正常 skip)
+        "skipped_existing": skipped_existing,   # 既存 guidance ありで LLM skip (cost guard・§5-1)
+        "llm_calls": llm_calls,
+        "est_cost_usd": est_cost_usd,
+        "cost_tokens": cost_tokens,
         "error_count": error_count,
         "failed_tickers": failed_tickers,
         "retention_deleted": 0,            # 期ごと最新 1 行 model のため retention 不要 (mirror 用に 0 固定)

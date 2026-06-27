@@ -9,7 +9,11 @@ from __future__ import annotations
 
 import pytest
 
-from app.visualizer.calc import classify_consensus_drift
+from app.visualizer.calc import (
+    classify_consensus_drift,
+    classify_guidance_vs_consensus,
+    guidance_vs_consensus_pct,
+)
 
 
 def _snap(snapshot_date, fiscal_date, eps=None, rev=None, period_type="quarter"):
@@ -249,3 +253,89 @@ def test_drift_skips_gap_none_and_compares_across():
     assert out["eps"]["direction"] == "up"
     # revenue: [100e9, 105e9, 110e9] → 2 ペアとも up
     assert out["revenue"]["up"] == 2
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# guidance_vs_consensus_pct / classify_guidance_vs_consensus
+#   (SPEC §4-2: 符号付き%純関数の切り出し + label refactor の regression net)
+#   ※ classify は本 SPEC で guidance_vs_consensus_pct へ委譲する refactor を行うため、
+#     既存 caller (main.py 4箇所 / guidance_history.py 2箇所 / calc.py 1箇所) の
+#     ラベル境界が不変であることを先行テストで担保する。
+# ════════════════════════════════════════════════════════════════════════════
+
+# ─── guidance_vs_consensus_pct: 符号付き % 純関数 ───────────────────────────
+
+def test_gvc_pct_basic_above():
+    assert guidance_vs_consensus_pct(103.0, 100.0) == pytest.approx(3.0)
+
+
+def test_gvc_pct_basic_below():
+    assert guidance_vs_consensus_pct(90.0, 100.0) == pytest.approx(-10.0)
+
+
+def test_gvc_pct_exact_match_is_zero_not_none():
+    # 0.0 (ちょうど一致) は有効値。None 化しない (if val is not None で書込む根拠)。
+    out = guidance_vs_consensus_pct(100.0, 100.0)
+    assert out == 0.0
+    assert out is not None
+
+
+def test_gvc_pct_consensus_zero_returns_none():
+    assert guidance_vs_consensus_pct(5.0, 0.0) is None
+
+
+def test_gvc_pct_none_inputs_return_none():
+    assert guidance_vs_consensus_pct(None, 100.0) is None
+    assert guidance_vs_consensus_pct(100.0, None) is None
+    assert guidance_vs_consensus_pct(None, None) is None
+
+
+def test_gvc_pct_negative_consensus_uses_abs_denominator():
+    # 赤字予想 (-100) からの改善 (-90) は abs 分母で +10% (loss narrowing = above)。
+    assert guidance_vs_consensus_pct(-90.0, -100.0) == pytest.approx(10.0)
+
+
+def test_gvc_pct_accepts_numeric_strings_via_to_float():
+    # _to_float 経由で "103" → 103.0 (Supabase numeric が Decimal/str で来る場合の保険)。
+    assert guidance_vs_consensus_pct("103", "100") == pytest.approx(3.0)
+
+
+# ─── classify_guidance_vs_consensus: label (refactor 後も境界不変) ──────────
+
+def test_classify_boundary_exactly_3pct_is_above():
+    assert classify_guidance_vs_consensus(103.0, 100.0) == "above"
+
+
+def test_classify_just_below_3pct_is_inline():
+    assert classify_guidance_vs_consensus(102.99, 100.0) == "inline"
+
+
+def test_classify_boundary_neg_3pct_is_below():
+    assert classify_guidance_vs_consensus(97.0, 100.0) == "below"
+
+
+def test_classify_just_above_neg_3pct_is_inline():
+    assert classify_guidance_vs_consensus(97.01, 100.0) == "inline"
+
+
+def test_classify_exact_match_is_inline():
+    assert classify_guidance_vs_consensus(100.0, 100.0) == "inline"
+
+
+def test_classify_consensus_zero_is_unknown():
+    assert classify_guidance_vs_consensus(5.0, 0.0) == "unknown"
+
+
+def test_classify_none_inputs_are_unknown():
+    assert classify_guidance_vs_consensus(None, 100.0) == "unknown"
+    assert classify_guidance_vs_consensus(100.0, None) == "unknown"
+
+
+def test_classify_negative_consensus_improvement_is_above():
+    # consensus -100 → guidance -90 = +10% → above (abs 分母)。
+    assert classify_guidance_vs_consensus(-90.0, -100.0) == "above"
+
+
+def test_classify_custom_tolerance():
+    # tolerance_pct=5 なら +3% は inline 帯に入る。
+    assert classify_guidance_vs_consensus(103.0, 100.0, tolerance_pct=5.0) == "inline"

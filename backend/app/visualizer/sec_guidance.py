@@ -788,10 +788,13 @@ async def extract_guidance(
                 tool_input[_f] = None
 
     # cache metrics 同梱 ([[feedback-prompt-cache-pattern]] cache hit 率実測)
+    # SPEC guidance-layer-a §9 Sprint2: input/output token も収録し cron 側で cost 集計する。
     usage = resp.usage
     tool_input["_cache_metrics"] = {
         "cache_read_input_tokens": getattr(usage, "cache_read_input_tokens", 0) or 0,
         "cache_creation_input_tokens": getattr(usage, "cache_creation_input_tokens", 0) or 0,
+        "input_tokens": getattr(usage, "input_tokens", 0) or 0,
+        "output_tokens": getattr(usage, "output_tokens", 0) or 0,
     }
 
     return tool_input
