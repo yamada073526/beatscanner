@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import CompanyLogo from '../../../../../components/CompanyLogo.jsx';
 import { fetchProfileSummary } from '../../../../../api.js';
 import { sanitizeText } from '../../../../../lib/blocklist.js';
@@ -39,6 +40,13 @@ export default function TechnicalIdentityRibbon({ ticker, companyName }) {
     return c && Date.now() - c.t < _TTL_MS ? c.data : null;
   });
   const acRef = useRef(null);
+  // タップ展開 (2026-06-28 user): 既定は 1 行 ellipsis、押すと和文 1 行を全文 wrap 表示。
+  const [expanded, setExpanded] = useState(false);
+
+  // 銘柄が変わったら畳んだ状態に戻す (前銘柄の展開状態を持ち越さない)。
+  useEffect(() => {
+    setExpanded(false);
+  }, [ticker]);
 
   useEffect(() => {
     if (!ticker) return undefined;
@@ -78,7 +86,8 @@ export default function TechnicalIdentityRibbon({ ticker, companyName }) {
       data-testid="v6-technical-identity-ribbon"
       style={{
         display: 'flex',
-        alignItems: 'center',
+        flexWrap: 'wrap',
+        alignItems: expanded ? 'flex-start' : 'center',
         gap: 'var(--space-2, 8px)',
         minWidth: 0,
         padding: 'var(--space-2, 8px) var(--space-3, 12px)',
@@ -102,21 +111,56 @@ export default function TechnicalIdentityRibbon({ ticker, companyName }) {
       {oneLine && (
         <>
           <span aria-hidden style={{ color: 'var(--text-muted)', flexShrink: 0 }}>·</span>
-          <span
+          <button
+            type="button"
             data-testid="v6-technical-identity-oneline"
-            title={oneLine}
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            aria-label={expanded ? '会社概要を1行に畳む' : '会社概要を全文表示する'}
+            title={expanded ? undefined : oneLine}
             style={{
-              fontSize: 12.5,
-              color: 'var(--text-secondary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
+              // button reset
+              appearance: 'none',
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              margin: 0,
+              font: 'inherit',
+              textAlign: 'left',
+              cursor: 'pointer',
+              // layout
+              display: 'flex',
+              alignItems: expanded ? 'flex-start' : 'center',
+              gap: 4,
               minWidth: 0,
               flex: '1 1 auto',
+              color: 'var(--text-secondary)',
             }}
           >
-            {oneLine}
-          </span>
+            <span
+              style={{
+                fontSize: 12.5,
+                minWidth: 0,
+                flex: '1 1 auto',
+                ...(expanded
+                  ? { whiteSpace: 'normal' }
+                  : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }),
+              }}
+            >
+              {oneLine}
+            </span>
+            <ChevronDown
+              size={13}
+              aria-hidden
+              style={{
+                flexShrink: 0,
+                color: 'var(--text-muted)',
+                marginTop: expanded ? 2 : 0,
+                transform: expanded ? 'rotate(180deg)' : 'none',
+                transition: 'transform 150ms ease',
+              }}
+            />
+          </button>
         </>
       )}
       {segmentText && (
