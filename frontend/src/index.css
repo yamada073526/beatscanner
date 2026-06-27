@@ -13691,6 +13691,7 @@ body.is-digest-resizing {
   to { max-height: 64px; opacity: 1; margin-top: 6px; }
 }
 .screener-crow__mseg {
+  position: relative;          /* sliding thumb の containing block */
   display: inline-flex;
   gap: 2px;
   width: 100%;
@@ -13702,8 +13703,27 @@ body.is-digest-resizing {
   overflow: hidden;            /* max-height reveal の clip 用 */
   animation: screenerMsegReveal var(--motion-base, 220ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
 }
+/* sliding thumb (精度セグと同方式・段数可変対応)。選択段を gold tint で示し、切替時に滑走。
+   N=段数(--mseg-n)・i=選択 index(--mseg-i) を JSX が inline で設定。gap 2px / padding 2px 込みの幅算出。
+   data-sel="0" (未選択 = 条件 OFF) では非表示。 */
+.screener-crow__mseg-thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: calc((100% - 4px - (var(--mseg-n, 4) - 1) * 2px) / var(--mseg-n, 4));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-gold) 20%, transparent);
+  transform: translateX(calc(var(--mseg-i, 0) * (100% + 2px)));
+  transition: transform var(--motion-base) var(--ease-in-out-quad),
+              width var(--motion-base) var(--ease-in-out-quad);
+  z-index: 0;
+}
+.screener-crow__mseg[data-sel="0"] .screener-crow__mseg-thumb { opacity: 0; }
 .screener-crow__mseg.is-locked { opacity: 0.5; }
 .screener-crow__mseg-btn {
+  position: relative;          /* thumb の上に重ねる */
+  z-index: 1;
   flex: 1;
   padding: 5px 2px;
   border: 0;
@@ -13714,7 +13734,7 @@ body.is-digest-resizing {
   line-height: 1.25;
   border-radius: var(--radius-pill);
   cursor: pointer;
-  transition: background 180ms ease, color 180ms ease;
+  transition: color 180ms ease;
 }
 .screener-crow__mseg-v {
   display: block;
@@ -13722,13 +13742,12 @@ body.is-digest-resizing {
   font-weight: 600;
   opacity: 0.85;
 }
+/* 選択段: 背景は sliding thumb が担うため色のみ (gold-dark text)。 */
 .screener-crow__mseg-btn.is-on {
-  background: color-mix(in srgb, var(--color-gold) 20%, transparent);
   color: var(--color-gold-dark);
 }
-/* hover: 未選択段が操作可能と伝える。gold tint + text brighten。token のみ。 */
+/* hover: 未選択段が操作可能と伝える。精度セグと同じく color のみ (thumb と背景が衝突しない)。 */
 .screener-crow__mseg-btn:not(.is-on):hover {
-  background: color-mix(in srgb, var(--color-gold) 10%, transparent);
   color: var(--text-secondary);
 }
 .screener-crow__mseg-btn:focus-visible { outline: 2px solid var(--color-gold); outline-offset: 1px; }
@@ -13737,6 +13756,7 @@ body.is-digest-resizing {
   .screener-crow__sw,
   .screener-crow__sw::after,
   .screener-crow__mseg-btn,
+  .screener-crow__mseg-thumb,
   .screener-crow__lock-cta { transition: none; }
   .screener-crow__mseg { animation: none; }
 }
