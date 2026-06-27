@@ -84,10 +84,16 @@ def test_examples_xml_structure():
 # ─── NEGATIVE_EXAMPLES ───────────────────────────────────────────────
 
 
+# 法令対応で削除禁止の必須 BAD pattern (§38/§5 floor)。 追加は許容するため
+# 等値でなく subset 強制 (BAD-10/11 等の正当拡張で test を壊さない)。
+REQUIRED_BAD_IDS = {"BAD-1", "BAD-2", "BAD-3", "BAD-4", "BAD-5", "BAD-6"}
+
+
 def test_negative_examples_six_bad_patterns():
-    """BAD-1〜BAD-6 が全て定義済 (multi-review 確定: 4 → 6 に拡張)."""
-    ids = [n["id"] for n in NEGATIVE_EXAMPLES]
-    assert ids == ["BAD-1", "BAD-2", "BAD-3", "BAD-4", "BAD-5", "BAD-6"]
+    """BAD-1〜BAD-6 が全て定義済 (multi-review 確定: 4 → 6 に拡張). 追加 BAD は許容."""
+    ids = {n["id"] for n in NEGATIVE_EXAMPLES}
+    # floor: 必須 6 件が欠落していないこと (削除禁止 = §38/§5 抵触防止)
+    assert REQUIRED_BAD_IDS <= ids, f"必須 BAD 欠落: {REQUIRED_BAD_IDS - ids}"
     # 各 BAD に bad_output / reason / good_alternative 必須
     for n in NEGATIVE_EXAMPLES:
         assert n.get("bad_output"), f"{n['id']}: bad_output missing"
@@ -97,9 +103,9 @@ def test_negative_examples_six_bad_patterns():
 
 
 def test_negative_examples_categories():
-    """BAD カテゴリが mult-review 確定 6 種を全 cover."""
+    """BAD カテゴリが multi-review 確定 6 種を全 cover (追加カテゴリは許容 = subset)."""
     categories = {n["category"] for n in NEGATIVE_EXAMPLES}
-    expected = {
+    required = {
         "英語混在",
         "detail 抽象",
         "数値捏造",
@@ -107,17 +113,18 @@ def test_negative_examples_categories():
         "断定的将来予測",
         "最上級表現",
     }
-    assert categories == expected, f"mismatch: {categories ^ expected}"
+    assert required <= categories, f"必須カテゴリ欠落: {required - categories}"
 
 
 def test_negatives_xml_structure():
-    """get_negatives_xml() が <negative_examples> tag で 6 件を含む."""
+    """get_negatives_xml() が <negative_examples> tag で全 BAD 件を含む (件数は source 由来)."""
+    n = len(NEGATIVE_EXAMPLES)
     xml = get_negatives_xml()
     assert xml.startswith("<negative_examples>")
     assert xml.endswith("</negative_examples>")
-    assert xml.count('<example id="BAD-') == 6
-    assert xml.count("<reason>") == 6
-    assert xml.count("<good_alternative>") == 6
+    assert xml.count('<example id="BAD-') == n
+    assert xml.count("<reason>") == n
+    assert xml.count("<good_alternative>") == n
 
 
 # ─── blocklist regex ──────────────────────────────────────────────────
@@ -183,7 +190,7 @@ def test_get_system_blocks_contains_examples_and_negatives():
     examples_block = blocks[1]["text"]
     assert "<examples>" in examples_block
     assert "<negative_examples>" in examples_block
-    # 8 + 6 = 14 の <example tag (examples の 8 + negatives の 6)
-    # ただし negative example の tag id="BAD-" 付きで識別可能
+    # few-shot 8 件 + negatives len(NEGATIVE_EXAMPLES) 件の <example tag。
+    # negative example の tag は id="BAD-" 付きで識別可能 (件数は source 由来)。
     assert examples_block.count("<example ") >= 8
-    assert examples_block.count('id="BAD-') == 6
+    assert examples_block.count('id="BAD-') == len(NEGATIVE_EXAMPLES)
