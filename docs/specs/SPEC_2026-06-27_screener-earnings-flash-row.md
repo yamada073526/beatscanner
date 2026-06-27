@@ -388,3 +388,49 @@ tri_verdict =
 ### 13-D. 確定した新7フィールド（migration: `docs/migrations/2026-06-27_screener_fundamentals_earnings_flash.sql`）
 `rev_yoy_pct`(num) / `rev_beat`(text) / `eps_beat`(text) / `gross_margin_pct`(num) / `next_q_rev_yoy_pct`(num) / `next_q_eps_yoy_pct`(num) / `tri_verdict`(text)。全て additive・None-preserve・optional_cols fallback 対象。
 
+---
+
+## 14. Sprint 3 実装確定（2026-06-27・着手前 6体合議 + 抜本デザイン再設計・user gate 承認済）
+
+Sprint 3 着手前ゲートとして 6体合議（§11 を再走・全6体 条件付賛成・反対0）を実施し、UI が「データ表に堕ちている」指摘を受けて**抜本デザイン再設計**を行った。本節が **Sprint 3 frontend 実装の SSOT**（§5/§7 の frontend 表現・§13-B の来期2列 *表示意図* を上書き。backend フィールド §13-D は不変）。
+
+### 14-A. デザイン視覚正本 = mockup v12「決算の通信簿」
+- **正本**: [`docs/specs/mockups/screener-result-table-v12.html`](mockups/screener-result-table-v12.html)（本番トークンで描画・file:// 確認可）。
+- **v10 は破棄**（§13 pivot 前の旧版・SUPERSEDED 注記済）。v11（整列のみの中間案）はドラフト止まりで**未保存**（ディスクに無い）。mockup-fidelity の drift 監査は **v12 のみを正本**とする。
+- **設計哲学（"数値の一覧" → "決算の通信簿"）**: ① **verdict を行の主役に昇格**（左に verdict pip）。② **2段タイポ階層**（売上/EPS YoY=主・大／粗利/FCF/来期=副・小 muted）。③ **beat/miss = 結果チップ**（数値＋淡 tint pill・surpriseColor）。④ **将来ゾーン = ガラスの仕切り**（背景を一段沈め `--bg-future` + gold hairline で §38 中立を素材表現）。⑤ **余白＝贅沢**（行高に呼吸・罫線細く・mono 端正）。⑥ **生きた surface**（到着 stagger 45ms×n + 上質 hover）。
+- **発光禁止領域（`.panel-card`/`.bs-panel`/`.surface-card`）は一切不触**。品格は影・余白・gold 一貫・タイポ階層・stagger のみで出す（v54-v59 溶融教訓）。
+
+### 14-B. verdict pip カラーシステム（user 調整反映・最重要識別）
+- `ok`(三拍子✓) = **gold**（`--gold-mid` / glyph `✓`）／ `part`(一部未達) = **中立スレート**（`#c3ccd9` 系・glyph `◐`）／ `bad`(予想未達) = **赤**（`--color-loss` / glyph `✕`）／ `None` = faint（glyph `–`）。
+- **part を amber から中立スレートへ変更**（user 指摘「gold と amber が似て区別しづらい」）。これにより gold/slate/red の3色が明確分離し、**投資色ルール（amber=緊急・警告に温存）にも適合**（一部未達は警告でなく "どちらでもない"）。
+- **amber（`--color-warning`）の残置先**: in-line「−」結果チップ（予想どおり）と凡例「−」のみ。verdict tier では使わない。
+- gold は **✓ verdict にのみ一貫使用**（gold continuity = signal。✓行に gold 左レール + 極淡 gold wash・RS 85+ も gold）。
+
+### 14-C. 来期2列 = 会社ガイダンス vs コンセンサス（ハイブリッド・§13-B 表示意図を改訂）
+- **表示意味を Layer B（来期コンセンサスYoY）→ Layer A（会社ガイダンス vs アナリスト・コンセンサス比＝三拍子③の本命）へ変更**（user 指示・2026-06-27）。列見出し「**来期売上 ガイダンス比 / 来期EPS ガイダンス比**」。
+- **★依存 = 残タスク4**（guidance-snapshot cron を「保有∪WL」→「直近決算報告銘柄（イベント駆動）」へ拡張し universe 規模の会社ガイダンスを蓄積）。それまで `guidance_snapshots` は約5銘柄のみ。
+- **ハイブリッド表示ロジック**（frontend 読み順・backend 再計算しない）:
+  1. 会社ガイダンスあり（残タスク4 後 `guidance_*_surprise_pct`）→ **ガイダンス比%** を表示（本命・Layer A）。
+  2. なし＆来期コンセンサスあり（現 LIVE `next_q_*_yoy_pct`）→ **来期コンセンサスYoY** で fallback（Layer B・暫定）。
+  3. 両方なし／ADR EPS 抑止 → **「—」** honest。
+- **§38 厳守**: Layer A/B いずれも **絶対中立（色なし）**・将来ゾーン分離。免責「来期2列は会社ガイダンス／アナリスト予想の転記であり当社の予測・推奨でない」。
+- **tri_verdict 第3要素**: 残タスク4 完了までは §13-C のまま（`next_q_rev_yoy_pct >= TRI_FWD_GROWTH_MIN_PCT` proxy）。**残タスク4 完了後に Layer A（会社ガイダンス beat）へ昇格**（別 gate）。
+
+### 14-D. frontend 実装方式（6体合議 must-fix・着手前確定）
+- **grid 列 SSOT 化**: `grid-template-columns` を **CSS 変数 `--screener-cols`** として header/row/skeleton の **共通祖先に一度だけ定義**し各々は参照のみ（v10/v11 の header/row 二重 inline は別 formatting context で整列破綻）。preset×mode 切替は `data-mode`/`data-preset` 属性 + CSS で `--screener-cols` を出し分け（inline style 撒き散らし回避・CLS ゼロ）。
+- **sticky 見出しの overflow 祖先**: `screener-result-list` の `overflow-hidden` の**外**に出し、実スクロール祖先 **`screener-master__content`（overflowY:auto）を `top:0` 基準**に貼る（mockup の `.list{overflow:auto}` は app に存在しない・内側 overflow-hidden は sticky を無効化）。
+- **@container 狭幅 fallback**: 幅専用ラッパに **`container-type: inline-size` を明示追加**（未宣言だと狭幅自動切替が無音で no-op）。`@container` で閾値 → COLS_SIMPLE 強制（横スクロール=原則1違反）。閾値は名前付き定数 `SCREENER_NARROW_BREAKPOINT`。
+- **grid を screener_v2 variant にスコープ閉じ**: `.screener-row` 本体でなく **screener_v2 専用 className/`data-variant="grid"`** に限定（ScreenerRow は ScreenerPane HeroSection でも共有＝本体 grid 化で HeroSection 崩れ）。
+- **skeleton も `--screener-cols` grid に載せ替え**（CLS ゼロ）。mock データは `?mock=1` フラグ + 実 payload と同型に閉じ、Sprint4 差し替えを 1 行に。`snap-fetch-universe.mjs` で同型性裏取り。
+
+### 14-E. §38・a11y・testid（Sprint3 で担保）
+- **glyph/pip/badge に `aria-label`**（Sprint3 の構造実装段階で・`title` だけでは SR 不確実）。色だけに依存しない（色弱）。
+- **`tri_verdict===null` の null guard**（`vb[tri]` 直接参照禁止・未知キーは「判定中」中立バッジへ）。
+- **免責バンド**: font-size 12px + `--text-secondary` + `role="note"` + 常時可視（景表法 打ち消し表示の視認性・近接性）。凡例「−」に amber。
+- **data-testid を新設要素全てに**: sticky 見出し / 免責バンド / 詳細簡素トグル / empty / skeleton-grid。loading/error/empty は mock で意図発火させ snap 検証（[[feedback_testid_all_render_paths]]）。
+
+### 14-F. Sprint 構成（再設計後も骨格不変）
+- **Sprint3=構造+スタイル(mock) / Sprint4=実データ接続 / Sprint5=invariant + 別件トグルアニメ** は不変。増えるのは **Sprint3 の CSS 密度**（pip列 / 2段タイポ / 結果チップ / ガラス仕切り / stagger）。
+- **Sprint3 DoD に「到着 stagger + 上質 hover の所作」を明示**（品格の核・polish が後回しで空回りした v66 教訓）。
+- 残: 来期2列の Layer A 昇格は **残タスク4 完了後**（Sprint4 は §14-C ハイブリッドで配線）。
+

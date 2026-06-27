@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BeatScanner スクリーナー結果テーブル v12（決算の通信簿・Aman/Ritz 級）</title>
+<!--
+  v12 = 抜本デザイン再設計。「数値の一覧(v10/v11)」→「決算の通信簿」へ。
+  設計哲学:
+   ① Verdict を行の主役に昇格(三拍子✓/一部未達/予想未達)。✓ にのみ gold を一貫使用(gold continuity=signal)。
+   ② 2段タイポ階層: 売上/EPS YoY=主指標(大)、粗利/FCF/来期=副指標(小・muted)。
+   ③ beat/miss=極小glyph でなく「結果チップ」(数値+淡tint pill)。色は surpriseColor。aria-label 付与。
+   ④ 将来ゾーン=ガラスの仕切り(背景わずか沈み+hairline)で §38 中立を素材表現。来期=コンセンサスYoY(§13)。
+   ⑤ 余白=贅沢: 行高に呼吸・罫線は細く・mono 数字端正。
+   ⑥ 生きた surface: 到着 stagger + 上質 hover(発光禁止領域=panel-card は不触・border/bg/elevation のみ)。
+  §13/§38/景表法/ADR/6体 must-fix は全て踏襲(予想未達ラベル・来期=YoY・免責強度12px+secondary+role=note・凡例−amber・null guard・正常ADR行)。
+  ※ frontend 実装方式(grid列 CSS変数 SSOT/sticky overflow祖先/@container/variant scope)は SPEC §14 を正本とする。
+-->
+<style>
+  :root{
+    --bg-primary:#0f172a; --bg-card:#161d2c; --bg-subtle:#1a2233; --bg-muted:#202b3d; --bg-hover:#1f293b;
+    --bg-future:#121a28;
+    --text-primary:#f1f5f9; --text-secondary:#cbd5e1; --text-muted:#8d9bb0; --text-faint:#64748b;
+    --color-gain:#34ef81; --color-loss:#f87171; --color-warning:#f59e0b; --color-accent:#38bdf8;
+    --tint-gain:rgba(52,239,129,.10); --tint-loss:rgba(248,113,113,.10); --tint-warn:rgba(245,158,11,.12);
+    --gold:#d4af37; --gold-mid:#f4cd5d; --gold-wash:rgba(212,175,55,.055); --gold-line:rgba(212,175,55,.45);
+    --border:rgba(255,255,255,.06); --border-mid:rgba(255,255,255,.10); --border-strong:rgba(255,255,255,.14);
+    --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;
+    --r-sm:8px;--r-md:12px;--r-lg:16px;--r-pill:9999px;
+    --font:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --ease:cubic-bezier(.22,.61,.36,1);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:radial-gradient(1100px 560px at 82% -12%,rgba(56,189,248,.06),transparent 58%),var(--bg-primary);
+    color:var(--text-primary);font-family:var(--font);-webkit-font-smoothing:antialiased;line-height:1.5;padding:var(--s8) var(--s6) 72px}
+  .wrap{max-width:880px;margin:0 auto}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+  .mock-tag{display:inline-block;font-size:11px;letter-spacing:.05em;color:var(--gold-mid);border:1px solid var(--gold-line);border-radius:var(--r-pill);padding:3px 11px;margin-bottom:var(--s3)}
+  h1{font-size:21px;font-weight:600;letter-spacing:-.015em;margin-bottom:var(--s2)}
+  .sub{color:var(--text-muted);font-size:13px;margin-bottom:var(--s5);max-width:62ch}
+  .sub b{color:var(--text-secondary);font-weight:600}
+  .note{color:var(--text-muted);font-size:12px;margin-top:var(--s4);line-height:1.8}
+  .note b{color:var(--text-secondary)}
+
+  .bar{display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap;margin-bottom:var(--s4)}
+  .seg{display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border-mid);border-radius:var(--r-pill);padding:3px}
+  .seg button{border:0;background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;padding:6px 15px;border-radius:var(--r-pill);cursor:pointer;transition:.22s var(--ease)}
+  .seg.mode button.on{background:rgba(212,175,55,.15);color:var(--gold-mid);box-shadow:inset 0 0 0 1px var(--gold-line)}
+  .barlbl{font-size:11px;color:var(--text-faint);letter-spacing:.03em}
+
+  /* パネル: 角丸 + 細い罫 + ごく弱い elevation(発光でなく影で品格)。panel-card 系には一切触れない独立 mock class */
+  .panel{background:var(--bg-card);border:1px solid var(--border-mid);border-radius:var(--r-lg);overflow:hidden;
+    box-shadow:0 1px 0 rgba(255,255,255,.03) inset,0 12px 32px -16px rgba(0,0,0,.55)}
+  .ph{display:flex;align-items:center;justify-content:space-between;padding:var(--s4) var(--s4) var(--s3);border-bottom:1px solid var(--border)}
+  .ph .ph-l{display:flex;flex-direction:column;gap:2px}
+  .ph h2{font-size:14px;font-weight:600;letter-spacing:-.01em}
+  .ph .ph-sub{font-size:11px;color:var(--text-faint)}
+  .ph .live{font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:6px}
+  .ph .live .dot{width:6px;height:6px;border-radius:50%;background:var(--color-gain);box-shadow:0 0 0 3px rgba(52,239,129,.14)}
+  .ph .live b{color:var(--gold-mid);font-variant-numeric:tabular-nums;font-size:13px}
+
+  /* §38/§5 免責(C3): 12px + secondary + role=note。list 外で常時可視。 */
+  .flegend{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;padding:var(--s3) var(--s4);font-size:12px;
+    color:var(--text-secondary);background:var(--bg-subtle);border-bottom:1px solid var(--border);line-height:1.6}
+  .flegend .lg{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .flegend .gl{font-weight:700;font-size:12px}
+  .flegend .gl.up{color:var(--color-gain)} .flegend .gl.dn{color:var(--color-loss)} .flegend .gl.il{color:var(--color-warning)}
+  .flegend .disc{color:var(--text-muted);flex-basis:100%;font-size:11.5px;line-height:1.55}
+  .flegend .disc b{color:var(--text-secondary);font-weight:600}
+
+  .list{max-height:520px;overflow:auto;scrollbar-width:thin}
+  /* sticky 見出し: 実装では overflow-hidden の外 + 実スクロール祖先基準(SPEC §14)。mock は list 内 sticky でデモ */
+  .lhead{position:sticky;top:0;z-index:3;display:grid;align-items:center;gap:var(--s3);
+    padding:var(--s2) var(--s4);background:var(--bg-card);border-bottom:1px solid var(--border-mid);
+    font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:none;color:var(--text-faint)}
+  .lhead .hn{text-align:right}
+  .lhead .hq{text-align:right;position:relative}
+  .lhead .hf{text-align:right;color:var(--text-faint)}
+
+  .row{display:grid;align-items:center;gap:var(--s3);padding:var(--s3) var(--s4);
+    border-bottom:1px solid var(--border);cursor:pointer;position:relative;
+    transition:background .18s var(--ease),transform .18s var(--ease);
+    opacity:0;transform:translateY(6px);animation:rowin .5s var(--ease) forwards}
+  @keyframes rowin{to{opacity:1;transform:none}}
+  .row:last-child{border-bottom:0}
+  .row:hover{background:var(--bg-hover)}
+  .row:hover .tkr{color:#fff}
+  /* ✓ 行: gold 左レール + ごく淡い gold wash(gold=✓ にのみ一貫=signal)。選択は更に濃く */
+  .row.win{background:var(--gold-wash)}
+  .row.win::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,var(--gold-mid),var(--gold))}
+  .row.sel{background:rgba(212,175,55,.10)}
+  .row.sel::after{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--gold)}
+
+  /* 左: verdict pip + 識別 */
+  .lead{display:flex;align-items:center;gap:var(--s3);min-width:0}
+  .pip{width:30px;height:30px;border-radius:9px;flex:none;display:grid;place-items:center;font-size:14px;
+    border:1px solid var(--border-mid)}
+  .pip.ok{color:var(--gold-mid);background:rgba(212,175,55,.14);border-color:var(--gold-line)}
+  .pip.part{color:#c3ccd9;background:rgba(148,163,184,.14);border-color:rgba(148,163,184,.34)}
+  .pip.bad{color:var(--color-loss);background:var(--tint-loss);border-color:rgba(248,113,113,.3)}
+  .pip.none{color:var(--text-faint);background:rgba(148,163,184,.06);border-color:var(--border)}
+  .tk{display:flex;align-items:center;gap:var(--s2);min-width:0}
+  .logo{width:26px;height:26px;border-radius:var(--r-pill);flex:none;display:grid;place-items:center;font-size:10px;font-weight:700;color:#0b1220;font-family:var(--mono)}
+  .tkbody{min-width:0;display:flex;flex-direction:column;gap:1px}
+  .tkr{font-family:var(--mono);font-weight:600;font-size:14.5px;color:var(--text-primary);letter-spacing:-.01em;transition:color .18s}
+  .meta{font-size:11px;color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;gap:6px;align-items:center;min-width:0}
+  .meta .qd{font-variant-numeric:tabular-nums;color:var(--text-muted)}
+  .meta .nm{overflow:hidden;text-overflow:ellipsis}
+
+  /* 主指標(売上/EPS YoY): 大きめ + 結果チップ */
+  .pri{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+  .pri .num{font-size:14px;font-weight:600;color:var(--text-primary);letter-spacing:-.01em}
+  .pri.empty .num{color:var(--text-faint);font-weight:400}
+  .chip{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:1px 6px;border-radius:var(--r-pill);line-height:1.4}
+  .chip.beat{color:var(--color-gain);background:var(--tint-gain)}
+  .chip.miss{color:var(--color-loss);background:var(--tint-loss)}
+  .chip.inline{color:var(--color-warning);background:var(--tint-warn)}
+  .chip .g{font-size:10px;line-height:1}
+
+  /* 副指標(粗利/FCF): 小・muted */
+  .sec{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--text-muted)}
+  .sec.empty{color:var(--text-faint)}
+  .qualstart{position:relative;padding-left:var(--s3)}
+  .qualstart::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);height:18px;width:1px;background:var(--border-mid)}
+
+  /* 将来ゾーン=ガラスの仕切り: 背景わずか沈み + 左 hairline。来期=コンセンサスYoY・絶対中立 */
+  .fut{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--text-muted);
+    align-self:stretch;display:flex;align-items:center;justify-content:flex-end;background:var(--bg-future)}
+  .fut.empty{color:var(--text-faint)}
+  .fut.fstart{position:relative;padding-left:var(--s3)}
+  .fut.fstart::before{content:"";position:absolute;left:0;top:8%;bottom:8%;width:1px;background:var(--gold-line);opacity:.35}
+  .lhead .hf.fstart{position:relative;padding-left:var(--s3)}
+  .lhead .hf.fstart::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);height:14px;width:1px;background:var(--gold-line);opacity:.35}
+
+  .rs{font-family:var(--mono);font-size:12.5px;color:var(--text-muted);text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  .rs.hi{color:var(--gold-mid)}
+
+  /* 簡素モード verdict バッジ */
+  .vb{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:4px 11px;border-radius:var(--r-pill);white-space:nowrap;border:1px solid transparent}
+  .vb.ok{color:var(--gold-mid);background:rgba(212,175,55,.12);border-color:var(--gold-line)}
+  .vb.part{color:#c3ccd9;background:rgba(148,163,184,.14);border-color:rgba(148,163,184,.30)}
+  .vb.bad{color:var(--color-loss);background:var(--tint-loss);border-color:rgba(248,113,113,.28)}
+  .vb.none{color:var(--text-faint);background:rgba(148,163,184,.08)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h2 class="sr-only">決算合格スクリーナーの結果一覧。各銘柄の決算verdict・売上/EPSの前年比と予想比・収益の質・来期コンセンサス成長率・相対力(RS)を表示。</h2>
+  <span class="mock-tag">MOCKUP v12 · 決算の通信簿（Aman/Ritz 級・抜本再設計）</span>
+  <h1>決算合格 — 今期、誰が "三拍子" を揃えたか</h1>
+  <p class="sub">各行の主役は数値でなく <b>決算の通信簿</b>。左の印で勝敗が2秒で分かり、右に行くほど詳細(過去実績 → 収益の質 → 将来)。来期は <b>絶対中立</b>、行クリックで Pane3 の決算サマリーへ。</p>
+
+  <div class="bar">
+    <span class="barlbl">表示</span>
+    <span class="seg mode" id="mode">
+      <button data-m="full" class="on">詳細</button>
+      <button data-m="simple">簡素</button>
+    </span>
+  </div>
+
+  <div class="panel">
+    <div class="ph">
+      <div class="ph-l"><h2>決算合格</h2><span class="ph-sub">じっちゃま原典・三拍子(売上・EPS・ガイダンス)</span></div>
+      <span class="live"><span class="dot"></span>該当 <b>6</b> 銘柄</span>
+    </div>
+    <div class="flegend" role="note" aria-label="表示記号と免責事項">
+      <span class="lg"><span class="gl up">↑</span> 予想超</span>
+      <span class="lg"><span class="gl dn">↓</span> 予想未達</span>
+      <span class="lg"><span class="gl il">−</span> 予想どおり</span>
+      <span class="disc"><b>↑↓−</b> はいずれも直近決算の過去実績(vs アナリスト予想)。来期2列は <b>会社の来期ガイダンスのアナリスト・コンセンサス比</b>＝会社が示した見通しの転記であり、当社の予測・推奨ではありません。<b>これらは買い推奨ではありません。</b></span>
+    </div>
+    <div class="list">
+      <div class="lhead" id="lhead"></div>
+      <div id="rows"></div>
+    </div>
+  </div>
+
+  <div class="note" id="note"></div>
+</div>
+
+<script>
+const LOGOS={TRGP:'#e76f51',AGX:'#2a9d8f',VRT:'#e9a23b',FTI:'#6d6af3',TSM:'#d24726',BABA:'#ff6a00'};
+function logo(tk){const c=LOGOS[tk]||'#5b6b86';return `<span class="logo" style="background:linear-gradient(135deg,${c},${c}cc)">${tk.slice(0,2)}</span>`;}
+function pctTxt(v){const r=Math.round(v);return `${r>0?'+':''}${r}%`;}
+const PIP={ok:['ok','✓'],part:['part','◐'],bad:['bad','✕'],none:['none','–']};
+const CHIP={beat:['beat','↑','予想を上回り (beat)'],miss:['miss','↓','予想を下回り (miss)'],inline:['inline','−','ほぼ予想どおり (in-line)']};
+// 主指標セル: 数値(大)+ 結果チップ。C1 aria-label。
+function priCell(yoy,bm){
+  if(yoy==null) return `<span class="pri empty"><span class="num">—</span></span>`;
+  const c=CHIP[bm];
+  const chip=c?`<span class="chip ${c[0]}" role="img" aria-label="${c[2]}" title="${c[2]}"><span class="g">${c[1]}</span></span>`:'';
+  return `<span class="pri"><span class="num">${pctTxt(yoy)}</span>${chip}</span>`;
+}
+function secCell(v,extra){return v==null?`<span class="sec empty ${extra||''}">—</span>`:`<span class="sec ${extra||''}">${v}%</span>`;}
+function futCell(v,extra){return v==null?`<span class="fut empty ${extra||''}">—</span>`:`<span class="fut ${extra||''}">${pctTxt(v)}</span>`;}
+
+const ROWS=[
+  {tk:'TRGP',nm:'Targa Resources',q:'05/07',revYoY:18,revBM:'beat',epsYoY:24,epsBM:'beat',gm:18,fcf:12,nqRev:3,nqEps:2,rs:83,tri:'ok',sel:true},
+  {tk:'AGX',nm:'Argan, Inc.',q:'06/04',revYoY:32,revBM:'beat',epsYoY:47,epsBM:'beat',gm:19,fcf:22,nqRev:5,nqEps:4,rs:95,tri:'ok'},
+  {tk:'VRT',nm:'Vertiv Holdings',q:'04/22',revYoY:21,revBM:'beat',epsYoY:49,epsBM:'beat',gm:35,fcf:9,nqRev:-2,nqEps:1,rs:91,tri:'part'},
+  {tk:'FTI',nm:'TechnipFMC plc',q:'04/30',revYoY:9,revBM:'inline',epsYoY:16,epsBM:'beat',gm:16,fcf:7,nqRev:null,nqEps:null,rs:82,tri:'part'},
+  {tk:'TSM',nm:'Taiwan Semi (ADR)',q:'04/17',revYoY:35,revBM:'beat',epsYoY:53,epsBM:'beat',gm:53,fcf:25,nqRev:4,nqEps:null,rs:88,tri:'part'},
+  {tk:'BABA',nm:'Alibaba (ADR)',q:'05/15',revYoY:12,revBM:'beat',epsYoY:null,epsBM:null,gm:38,fcf:18,nqRev:1,nqEps:null,rs:78,tri:'part'},
+];
+
+let mode='full';
+const COLS_FULL='28px minmax(0,1fr) 76px 76px 50px 46px 70px 70px 34px';
+const COLS_SIMPLE='28px minmax(0,1fr) 132px 84px 40px';
+function render(){
+  const lh=document.getElementById('lhead'), rowsEl=document.getElementById('rows');
+  if(mode==='full'){
+    lh.style.gridTemplateColumns=COLS_FULL;
+    lh.innerHTML=`<span></span><span>銘柄</span><span class="hn">売上 YoY</span><span class="hn">EPS YoY</span><span class="hq qualstart">粗利率</span><span class="hn">FCF率</span><span class="hf fstart">来期売上<br>ガイダンス比</span><span class="hf">来期EPS<br>ガイダンス比</span><span class="hn">RS</span>`;
+    rowsEl.innerHTML=ROWS.map((r,i)=>{const p=PIP[r.tri]||PIP.none;return `<div class="row${r.tri==='ok'?' win':''}${r.sel?' sel':''}" style="grid-template-columns:${COLS_FULL};animation-delay:${i*45}ms">
+      <span class="pip ${p[0]}" role="img" aria-label="決算の総合: ${TRI_LABEL[r.tri]||'判定中'}">${p[1]}</span>
+      <span class="lead"><span class="tk">${logo(r.tk)}<span class="tkbody"><span class="tkr">${r.tk}</span>
+        <span class="meta"><span class="qd">決算 ${r.q}</span> · <span class="nm">${r.nm}</span></span></span></span></span>
+      ${priCell(r.revYoY,r.revBM)}
+      ${priCell(r.epsYoY,r.epsBM)}
+      ${secCell(r.gm,'qualstart')}
+      ${secCell(r.fcf)}
+      ${futCell(r.nqRev,'fstart')}
+      ${futCell(r.nqEps)}
+      <span class="rs${r.rs>=85?' hi':''}">${r.rs}</span></div>`;}).join('');
+    document.getElementById('note').innerHTML='<b>詳細モード</b>：左の印＝決算verdict(✓三拍子/◐一部未達/✕予想未達)。売上/EPS＝<b>前年比%＋結果チップ</b>(↑緑/↓赤/−琥珀＝Pane3 surpriseColor と一貫)。粗利率/FCF率＝水準ゆえ<b>中立</b>(§38)・銀行/REIT等は「—」。来期2列＝<b>会社ガイダンス vs コンセンサス%</b>(三拍子③ガイダンス beat の本命)・絶対中立＋ガラス仕切りで分離。TSM(正常ADR)＝EPS算出・来期EPSのみ抑止／BABA(ADR)＝現EPS・来期EPS抑止／FTI＝ガイダンス未提示で両「—」。<b>★ universe 規模の会社ガイダンス取得は残タスク4(guidance cron 拡張)</b>。未取得銘柄は「—」honest。';
+  } else {
+    lh.style.gridTemplateColumns=COLS_SIMPLE;
+    lh.innerHTML=`<span></span><span>銘柄</span><span class="hn" style="text-align:left">決算の総合</span><span class="hn">売上 YoY</span><span class="hn">RS</span>`;
+    const vb={ok:['ok','三拍子 ✓'],part:['part','一部未達'],bad:['bad','予想未達'],none:['none','判定中']};
+    rowsEl.innerHTML=ROWS.map((r,i)=>{const t=vb[r.tri]||vb.none,p=PIP[r.tri]||PIP.none;return `<div class="row${r.tri==='ok'?' win':''}${r.sel?' sel':''}" style="grid-template-columns:${COLS_SIMPLE};animation-delay:${i*45}ms">
+      <span class="pip ${p[0]}" role="img" aria-label="決算の総合: ${t[1]}">${p[1]}</span>
+      <span class="lead"><span class="tk">${logo(r.tk)}<span class="tkbody"><span class="tkr">${r.tk}</span>
+        <span class="meta"><span class="qd">決算 ${r.q}</span> · <span class="nm">${r.nm}</span></span></span></span></span>
+      <span style="text-align:left"><span class="vb ${t[0]}" role="img" aria-label="決算の総合: ${t[1]}">${t[1]}</span></span>
+      ${priCell(r.revYoY,null)}
+      <span class="rs${r.rs>=85?' hi':''}">${r.rs}</span></div>`;}).join('');
+    document.getElementById('note').innerHTML='<b>簡素モード（初心者向け）</b>：3段階評価「三拍子✓ / 一部未達 / 予想未達」(TRI_VERDICT_JP)を主役に。<b>三拍子✓</b>＝売上・EPS が予想超かつ<b>会社ガイダンスがコンセンサス超</b>(ガイダンス未取得時は来期コンセンサス成長で代替＝残タスク4まで)。数値は売上YoY＋RS のみ。詳細は行クリックで Pane3 へ。';
+  }
+  [...document.querySelectorAll('#mode button')].forEach(b=>b.classList.toggle('on',b.dataset.m===mode));
+}
+const TRI_LABEL={ok:'三拍子 ✓',part:'一部未達',bad:'予想未達'};
+document.getElementById('mode').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;mode=b.dataset.m;render();});
+render();
+</script>
+</body>
+</html>
