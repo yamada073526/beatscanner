@@ -17936,6 +17936,14 @@ async def cron_rs_scan(
 # コンセンサス修正を追う主役なので含める (6 体合議 engineer verdict)。
 _CONSENSUS_CUP_STATES = ("breakout_pending", "breakout_confirmed", "breakout_extended")
 
+# Layer A consensus pre-load (SPEC_2026-06-27_screener-consensus-preload.md §5 確定方式 C)。
+# 「まもなく決算」= 前回報告から四半期サイクル経過し次回決算が近い銘柄を、発表前に consensus
+# snapshot しておくことで filed_at 前の PIT baseline を確保する。次回決算 ≈ last_report_date+91日。
+# 推定誤差 (不規則スケジュール) を吸収するため報告後 70-98 日の広め窓 (= 次回が概ね今日〜+3週)。
+# DB のみで candidate を識別 (追加 FMP call ゼロ・earning_calendar の range-fetch 欠落罠を完全回避)。
+_UPCOMING_EARNINGS_MIN_DAYS_SINCE_REPORT = 70
+_UPCOMING_EARNINGS_MAX_DAYS_SINCE_REPORT = 98
+
 
 def _select_all_column(sb, table: str, column: str) -> list[dict]:
     """PostgREST デフォルト 1000 行 cap を range pagination で回避し、 指定 column を全件取得。
@@ -18009,12 +18017,15 @@ def _latest_valid_calc_date(
 
 
 def _build_consensus_universe(sb) -> tuple[set[str], dict[str, int], list[str]]:
-    """consensus snapshot の対象 universe を 4 source の和集合で構築する (同期、 to_thread で呼ぶ)。
+    """consensus snapshot の対象 universe を 5 source の和集合で構築する (同期、 to_thread で呼ぶ)。
 
+    source = watchlist ∪ holdings ∪ rs_top(>=90) ∪ cup_handle ∪ upcoming_earnings(まもなく決算)。
     返り値: (tickers, source_counts, source_errors)。
     各 source は独立 try/except で、 1 source が落ちても他 source で継続する
     (1 source の Supabase エラーで universe 全滅 = silent 歯抜けを防ぐ、 6 体合議 backend verdict)。
     RS / Cup は「最新 calc_date / signal_date」 を使うため、 当日 scan 未実行でも前日分で graceful degrade。
+    upcoming_earnings は Layer A consensus pre-load (filed_at 前 PIT 確保) 用 = SPEC
+    consensus-preload §5 方式C (last_report_date 70-98 日前 = 次回決算が近い銘柄)。
     """
     tickers: set[str] = set()
     source_counts: dict[str, int] = {}
@@ -18084,6 +18095,38 @@ def _build_consensus_universe(sb) -> tuple[set[str], dict[str, int], list[str]]:
         source_counts["cup_handle"] = 0
         source_errors.append(f"cup_handle: {type(e).__name__}")
 
+    # 5. まもなく決算 (Layer A consensus pre-load・SPEC consensus-preload §5 方式C)
+    # screener_fundamentals 最新 calc_date の銘柄で last_report_date が 70-98 日前
+    # = 次回決算が概ね今日〜+3週 → 発表前 consensus snapshot を確保し PIT を将来成立させる。
+    # last_report_date は ISO 'YYYY-MM-DD' text のため辞書順=時系列順 (date 演算不要)。
+    try:
+        today = date.today()
+        # 報告後 D 日前 = last_report_date == today - D。70-98 日前を文字列範囲に変換:
+        #   最も新しい候補 = 70 日前報告 (hi)、最も古い候補 = 98 日前報告 (lo)。
+        lo = (today - timedelta(days=_UPCOMING_EARNINGS_MAX_DAYS_SINCE_REPORT)).isoformat()
+        hi = (today - timedelta(days=_UPCOMING_EARNINGS_MIN_DAYS_SINCE_REPORT)).isoformat()
+        s = set()
+        latest = (
+            sb.table("screener_fundamentals").select("calc_date")
+            .order("calc_date", desc=True).limit(1).execute()
+        )
+        rows0 = latest.data or []
+        if rows0 and rows0[0].get("calc_date"):
+            calc_date = rows0[0]["calc_date"]
+            res = (
+                sb.table("screener_fundamentals").select("ticker")
+                .eq("calc_date", calc_date)
+                .gte("last_report_date", lo)
+                .lte("last_report_date", hi)
+                .execute()
+            )
+            s = {str(r["ticker"]).upper() for r in (res.data or []) if r.get("ticker")}
+        source_counts["upcoming_earnings"] = len(s)
+        tickers |= s
+    except Exception as e:
+        source_counts["upcoming_earnings"] = 0
+        source_errors.append(f"upcoming_earnings: {type(e).__name__}")
+
     return tickers, source_counts, source_errors
 
 
@@ -18113,7 +18156,8 @@ async def cron_consensus_snapshot(
 ):
     """案B Sprint 3: アナリストコンセンサスを nightly snapshot 蓄積する cron。
 
-    universe = 保有 ∪ WL ∪ RS≥90 ∪ Cup-Handle検出 の和集合 (_build_consensus_universe)。
+    universe = 保有 ∪ WL ∪ RS≥90 ∪ Cup-Handle検出 ∪ まもなく決算 の和集合 (_build_consensus_universe)。
+    「まもなく決算」(upcoming_earnings) = Layer A consensus pre-load 用に追加 (発表前 PIT 確保)。
     各 ticker の FMP analyst-estimates を quarter(near-term 4 期) + annual(near-term 2 期) で
     forward-only に取得 (consensus_history.fetch_and_build_snapshot) し consensus_snapshots へ upsert。
     retention 90 日 cleanup は upsert の前に実行 (古いものを掃除 → 新しいものを書く)。
