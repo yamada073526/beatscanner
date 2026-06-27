@@ -69,6 +69,11 @@ export default function Hero({
   // 2026-06-14 (D2 compass・第2手): 5条件由来の verdict チップ (Beat/Miss/判定待ち) を非表示。
   // 状態コンパスが本物の信号を持つため、冒頭の二値 verdict を撤去し Miss⇔Beat 矛盾を解消。
   hideVerdictChip = false,
+  // v6 IA (SPEC_2026-06-27 §2 L0): L0 は「判定でなく同定 (identity)」。EarningsRing は決算カウントダウン
+  //   ring だが視覚的に verdict ring と紛らわしく、data 未取得時に「?/取得待ち」 fallback が「壊れて見える」
+  //   (dogfood feedback)。v6 L0 では ring を非表示にし、カウントダウンは D-XX pill (hideCountdownChip=false)
+  //   のみで担保 (mockup pane3-detail-v1.html の id-row 構造に一致)。default false で v5/legacy は不変。
+  hideEarningsRing = false,
   // 2026-06-14 (D2 compass): ウォッチ追加済を「★」アイコンのみに簡素化 (compass の簡素な Hero で
   // 「★追加済」が目立つ、user dogfood)。未追加時は discoverability のため「ウォッチ追加」テキスト維持。
   compactWatchlist = false,
@@ -224,11 +229,13 @@ export default function Hero({
             v115 fix: Number.isFinite() gate を除去、 EarningsRing 内部で 'unknown' state を扱う
             (data 未取得時に「取得待ち」 fallback 表示で「壊れて見える」 bug 対策) */}
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3, 12px)' }}>
-          <EarningsRing
-            daysToEarnings={nextEarningsDays}
-            earningsDate={nextEarningsDate}
-            size={44}
-          />
+          {!hideEarningsRing && (
+            <EarningsRing
+              daysToEarnings={nextEarningsDays}
+              earningsDate={nextEarningsDate}
+              size={44}
+            />
+          )}
           {/* Phase 2.9 Sprint H3 #Gold Foil verdict badge (Aman 級 100 点 verdict、 案 1):
               Beat 時に gold metallic gradient で「最高級ホテルの真鍮プレート」 idiom。
               他 verdict (Miss / In-line / 判定待ち) は既存 tone (loss / muted) 維持。
