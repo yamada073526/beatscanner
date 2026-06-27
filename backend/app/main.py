@@ -23010,6 +23010,7 @@ async def cron_canslim_scan(
             #   income は is-q (limit=6 統一・共有 cache key) で前年同期Q / 来期前年同期Q をカバー。
             flash: dict = {}
             try:
+                from datetime import timedelta as _td_local  # 関数ローカル import (scope 確実化・既存 helper と同方針)
                 # income-statement quarterly (limit=6・共有 cache key)。非 guarded は上の ocf
                 # ブロックで populate 済 → cache hit (追加 call ゼロ)。guarded sector はここで初回 fetch。
                 _fl_is_url = (
