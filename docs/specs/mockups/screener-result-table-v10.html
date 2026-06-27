@@ -1,0 +1,181 @@
+<!doctype html>
+<!-- ⚠️ SUPERSEDED (2026-06-27): 本 v10 は §13 pivot 前の旧版・破棄。視覚正本は v12「決算の通信簿」(screener-result-table-v12.html)。
+     mockup-fidelity 監査は v12 のみを参照。SSOT: SPEC §14。 -->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BeatScanner スクリーナー結果テーブル v10（じっちゃま原典・ハイブリッド）</title>
+<style>
+  :root{
+    --bg-primary:#0f172a; --bg-card:#1e2433; --bg-subtle:#1e2a3a; --bg-muted:#243447; --bg-hover:#253045;
+    --text-primary:#f1f5f9; --text-secondary:#cbd5e1; --text-muted:#94a3b8;
+    --color-gain:#34ef81; --color-loss:#f87171; --color-warning:#f59e0b; --color-accent:#38bdf8;
+    --gold:#d4af37; --gold-mid:#f4cd5d;
+    --border:rgba(255,255,255,.08); --border-strong:rgba(255,255,255,.14);
+    --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;
+    --r-sm:8px;--r-md:12px;--r-lg:16px;--r-pill:9999px;
+    --font:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:radial-gradient(1200px 600px at 80% -10%,rgba(56,189,248,.05),transparent 60%),var(--bg-primary);
+    color:var(--text-primary);font-family:var(--font);-webkit-font-smoothing:antialiased;line-height:1.5;padding:var(--s8) var(--s6) 64px}
+  .wrap{max-width:940px;margin:0 auto}
+  .mock-tag{display:inline-block;font-size:11px;letter-spacing:.04em;color:var(--gold-mid);border:1px solid rgba(212,175,55,.35);border-radius:var(--r-pill);padding:3px 10px;margin-bottom:var(--s3)}
+  h1{font-size:20px;font-weight:600;letter-spacing:-.01em;margin-bottom:var(--s2)}
+  .sub{color:var(--text-muted);font-size:13px;margin-bottom:var(--s4)}
+  .note{color:var(--text-muted);font-size:12px;margin-top:var(--s4);line-height:1.75}
+  .note b{color:var(--text-secondary)}
+
+  .bar{display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap;margin-bottom:var(--s4)}
+  .seg{display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-pill);padding:3px}
+  .seg button{border:0;background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;padding:6px 14px;border-radius:var(--r-pill);cursor:pointer;transition:.2s}
+  .seg button.on{background:var(--bg-muted);color:var(--text-primary)}
+  .seg.mode button.on{background:rgba(212,175,55,.16);color:var(--gold-mid)}
+  .barlbl{font-size:11px;color:var(--text-muted)}
+
+  .panel{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden}
+  .ph{display:flex;align-items:center;justify-content:space-between;padding:var(--s3) var(--s4);border-bottom:1px solid var(--border)}
+  .ph h2{font-size:14px;font-weight:600}
+  .ph .live{font-size:12px;color:var(--text-secondary)}
+  .ph .live b{color:var(--gold-mid);font-variant-numeric:tabular-nums}
+  /* §38 免責: 「合格リスト」に beat 緑↑ が並ぶと「全部買い」誤認を生むため必須 (ui-designer must-fix) */
+  .flegend{padding:var(--s2) var(--s4);font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);line-height:1.6}
+  .flegend .up{color:var(--color-gain);font-weight:700}
+  .flegend .dn{color:var(--color-loss);font-weight:700}
+  .flegend b{color:var(--text-secondary)}
+
+  .list{max-height:460px;overflow:auto}
+  .lhead{position:sticky;top:0;z-index:2;display:grid;align-items:center;gap:var(--s3);
+    padding:var(--s2) var(--s4);background:var(--bg-subtle);border-bottom:1px solid var(--border);
+    font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--text-muted)}
+  .lhead .h-num{text-align:right}
+  .lhead .h-fut{text-align:right;color:var(--text-muted)}      /* 将来=中立見出し */
+
+  .row{display:grid;align-items:center;gap:var(--s3);padding:var(--s2) var(--s4);
+    border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;position:relative}
+  .row:last-child{border-bottom:0}
+  .row:hover{background:var(--bg-hover)}
+  .row.sel{background:rgba(212,175,55,.06)}
+  .row.sel::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--gold)}
+
+  /* 左=識別のみ */
+  .tk{display:flex;align-items:center;gap:var(--s2);min-width:0}
+  .logo{width:26px;height:26px;border-radius:var(--r-pill);flex:none;display:grid;place-items:center;font-size:10px;font-weight:700;color:#0b1220;font-family:var(--mono)}
+  .tkbody{min-width:0;display:flex;flex-direction:column;gap:2px}
+  .tkr{font-family:var(--mono);font-weight:600;font-size:14px;color:var(--text-primary)}
+  .meta{font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;gap:6px;align-items:center}
+  .qd{font-variant-numeric:tabular-nums}
+
+  /* 右=評価。数値セル: 右寄せ・tabular-nums */
+  .cell{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px;letter-spacing:-.01em;
+    display:flex;align-items:baseline;justify-content:flex-end;gap:4px}
+  .cell .v{font-weight:600;color:var(--text-secondary)}
+  .cell.empty .v{color:var(--text-muted);font-weight:400}
+  /* beat/miss 微表示: surpriseColor (過去確定実績=色OK・§38射程外、Pane3 と一貫)。小さく */
+  .bm{font-size:12px;font-weight:700;line-height:1}
+  .bm.beat{color:var(--color-gain)}
+  .bm.miss{color:var(--color-loss)}
+  .bm.inline{color:var(--color-warning)}
+  /* 来期ガイダンス: 絶対中立 (§38)。左に極薄 hairline で「将来ゾーン」を視覚分離 */
+  .cell.fut{color:var(--text-muted);position:relative;padding-left:var(--s3)}
+  .cell.futstart::before{content:"";position:absolute;left:2px;top:50%;transform:translateY(-50%);height:14px;width:1px;background:var(--border)}
+  .cell.fut .v{color:var(--text-secondary);font-weight:500}
+  .rs{font-family:var(--mono);font-size:12px;color:var(--text-secondary);text-align:right;font-variant-numeric:tabular-nums}
+  .rs.hi{color:var(--text-primary);font-weight:600}
+
+  /* 簡素表示の三拍子 verdict バッジ */
+  .vb{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:var(--r-pill);white-space:nowrap}
+  .vb.ok{color:var(--color-gain);background:rgba(52,239,129,.12)}
+  .vb.part{color:var(--color-warning);background:rgba(245,158,11,.12)}
+  .vb.bad{color:var(--color-loss);background:rgba(248,113,113,.12)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="mock-tag">MOCKUP v10 · 決算速報ハイブリッド（じっちゃま原典）</span>
+  <h1>「決算合格」結果リスト — 売上/EPS の前年比＋beat/miss、来期ガイダンス</h1>
+  <p class="sub">識別は<b style="color:var(--text-secondary)">左</b>、評価は<b style="color:var(--text-secondary)">右</b>に集約（視線移動を削減）。列見出しは1回だけ・値整列・欠損は「—」。Pane3 の EarningsFlashSummary と同じ符号化。</p>
+
+  <div class="bar">
+    <span class="barlbl">表示</span>
+    <span class="seg mode" id="mode">
+      <button data-m="full" class="on">詳細（数値＋beat/miss）</button>
+      <button data-m="simple">簡素（初心者向け）</button>
+    </span>
+  </div>
+
+  <div class="panel">
+    <div class="ph"><h2>決算合格 — 結果</h2><span class="live">該当 <b>5</b> 銘柄</span></div>
+    <div class="flegend"><span class="up">↑</span> 予想超 ・ <span class="dn">↓</span> 予想未達 ・ − 予想どおり（いずれも<b>直近決算の過去実績</b>）。来期ガイダンスは中立表示。<b>これらは買い推奨ではありません。</b></div>
+    <div class="list">
+      <div class="lhead" id="lhead"></div>
+      <div id="rows"></div>
+    </div>
+  </div>
+
+  <div class="note" id="note"></div>
+</div>
+
+<script>
+const LOGOS={TRGP:'#e76f51',AGX:'#2a9d8f',VRT:'#e9a23b',FTI:'#6d6af3',BABA:'#ff6a00'};
+function logo(tk){const c=LOGOS[tk]||'#5b6b86';return `<span class="logo" style="background:linear-gradient(135deg,${c},${c}cc)">${tk.slice(0,2)}</span>`;}
+// pct: 前年比など delta。中立色（数値）＋ beat/miss 微表示
+function pct(v){ if(v==null) return '<span class="v">—</span>'; const r=Math.round(v); return `<span class="v">${r>0?'+':''}${r}%</span>`; }
+function bm(s){ if(s==='beat') return '<span class="bm beat" title="予想を上回り (beat)">↑</span>';
+  if(s==='miss') return '<span class="bm miss" title="予想を下回り (miss)">↓</span>';
+  if(s==='inline') return '<span class="bm inline" title="ほぼ予想どおり (in-line)">−</span>'; return ''; }
+function rs(v){return `<span class="rs${v>=85?' hi':''}">${v}</span>`;}
+
+// データ（モック・実装時は backend universe から）。
+// revYoY/epsYoY = 前年比%、revBM/epsBM = vs予想 beat/miss、guide = 来期ガイダンス コンセンサス比%、tri = 三拍子verdict
+// gm = グロスマージン(粗利率)% / fcf = FCFマージン%。§38: 水準→中立色(色なし)。sector-gate(銀行/REIT/保険等)→null。比率ゆえADR安全。
+// gRev/gEps = 来期ガイダンスのコンセンサス比%(売上/EPS)。§38: 将来→絶対中立。来期EPSはADR(非USD)でshare-base偽値→「—」抑止。
+const ROWS=[
+  {tk:'TRGP',nm:'Targa Resources',q:'2026-05-07',revYoY:18,revBM:'beat',epsYoY:24,epsBM:'beat',gm:18,fcf:12,gRev:1.2,gEps:0.8,rs:83,tri:'ok',sel:true},
+  {tk:'AGX',nm:'Argan, Inc.',q:'2026-06-04',revYoY:32,revBM:'beat',epsYoY:47,epsBM:'beat',gm:19,fcf:22,gRev:3.5,gEps:2.1,rs:95,tri:'ok'},
+  {tk:'VRT',nm:'Vertiv Holdings',q:'2026-04-22',revYoY:21,revBM:'beat',epsYoY:49,epsBM:'beat',gm:35,fcf:9,gRev:-0.8,gEps:1.5,rs:91,tri:'part'},
+  {tk:'FTI',nm:'TechnipFMC plc',q:'2026-04-30',revYoY:9,revBM:'inline',epsYoY:16,epsBM:'beat',gm:16,fcf:7,gRev:null,gEps:null,rs:82,tri:'part'},
+  // ADR例: 非USD reporter → 現EPS/来期EPSは偽値リスクで「—」抑止。売上系/粗利率/FCFは比率なので算出可。
+  {tk:'BABA',nm:'Alibaba (ADR)',q:'2026-05-15',revYoY:12,revBM:'beat',epsYoY:null,epsBM:null,gm:38,fcf:18,gRev:6.0,gEps:null,rs:78,tri:'part'},
+];
+
+let mode='full';
+const COLS_FULL='minmax(0,1fr) 64px 64px 50px 50px 64px 64px 34px';
+const COLS_SIMPLE='minmax(0,1fr) 116px 76px 44px';
+function render(){
+  const lh=document.getElementById('lhead'); const rowsEl=document.getElementById('rows');
+  if(mode==='full'){
+    lh.style.gridTemplateColumns=COLS_FULL;
+    lh.innerHTML=`<span>銘柄</span><span class="h-num">売上 YoY</span><span class="h-num">EPS YoY</span><span class="h-num">粗利率</span><span class="h-num">FCF率</span><span class="h-fut">来期売上</span><span class="h-fut">来期EPS</span><span class="h-num">RS</span>`;
+    rowsEl.innerHTML=ROWS.map(r=>`<div class="row${r.sel?' sel':''}" style="grid-template-columns:${COLS_FULL}">
+      <span class="tk">${logo(r.tk)}<span class="tkbody"><span class="tkr">${r.tk}</span>
+        <span class="meta"><span class="qd">決算 ${r.q}</span> · ${r.nm}</span></span></span>
+      <span class="cell${r.revYoY==null?' empty':''}">${pct(r.revYoY)}${bm(r.revBM)}</span>
+      <span class="cell${r.epsYoY==null?' empty':''}">${pct(r.epsYoY)}${bm(r.epsBM)}</span>
+      <span class="cell${r.gm==null?' empty':''}">${r.gm==null?'<span class="v">—</span>':`<span class="v">${r.gm}%</span>`}</span>
+      <span class="cell${r.fcf==null?' empty':''}">${r.fcf==null?'<span class="v">—</span>':`<span class="v">${r.fcf}%</span>`}</span>
+      <span class="cell fut futstart${r.gRev==null?' empty':''}">${r.gRev==null?'<span class="v">—</span>':`<span class="v">${r.gRev>0?'+':''}${r.gRev}%</span>`}</span>
+      <span class="cell fut${r.gEps==null?' empty':''}">${r.gEps==null?'<span class="v">—</span>':`<span class="v">${r.gEps>0?'+':''}${r.gEps}%</span>`}</span>
+      <span class="rs${r.rs>=85?' hi':''}">${r.rs}</span></div>`).join('');
+    document.getElementById('note').innerHTML='<b>詳細モード</b>（KB優先順で列拡張）：売上/EPS＝前年比%＋vs予想 beat/miss（↑緑/↓赤/−琥珀＝Pane3 surpriseColor と一貫）。<b>粗利率/FCF率</b>＝水準のため<b>中立色</b>（§38: 方向でない値は色なし）・銀行/REIT等は sector-gate で「—」。<b>来期売上/来期EPS</b>＝会社ガイダンスのコンセンサス比%・絶対中立＋将来ゾーン分離（§38: 断定的予測を避ける）。BABA(ADR)＝現EPS・来期EPS は share-base 偽値リスクで「—」、売上系/粗利率/FCF は比率ゆえ算出可。FTI は来期未提示で両方「—」。';
+  } else {
+    lh.style.gridTemplateColumns=COLS_SIMPLE;
+    lh.innerHTML=`<span>銘柄</span><span class="h-num" style="text-align:left">決算の総合</span><span class="h-num">売上 YoY</span><span class="h-num">RS</span>`;
+    const vb={ok:['ok','三拍子 ✓'],part:['part','一部未達'],bad:['bad','利益警告']};
+    rowsEl.innerHTML=ROWS.map(r=>`<div class="row${r.sel?' sel':''}" style="grid-template-columns:${COLS_SIMPLE}">
+      <span class="tk">${logo(r.tk)}<span class="tkbody"><span class="tkr">${r.tk}</span>
+        <span class="meta"><span class="qd">決算 ${r.q}</span> · ${r.nm}</span></span></span>
+      <span style="text-align:left"><span class="vb ${vb[r.tri][0]}">${vb[r.tri][1]}</span></span>
+      <span class="cell">${pct(r.revYoY)}</span>
+      <span class="rs${r.rs>=85?' hi':''}">${r.rs}</span></div>`).join('');
+    document.getElementById('note').innerHTML='<b>簡素モード（初心者向け）</b>：原典の3段階評価「三拍子✓ / 一部未達 / 利益警告」（SURPRISE_VERDICT_JP）を verdict バッジで先頭に。細かい数値は売上YoY＋RS のみに絞り、認知負荷を下げる。詳細は行クリックで Pane3 の決算サマリーへ。';
+  }
+  [...document.querySelectorAll('#mode button')].forEach(b=>b.classList.toggle('on',b.dataset.m===mode));
+}
+document.getElementById('mode').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;mode=b.dataset.m;render();});
+render();
+</script>
+</body>
+</html>

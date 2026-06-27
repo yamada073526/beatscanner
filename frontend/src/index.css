@@ -14403,6 +14403,127 @@ body.is-digest-resizing {
 /* ヒット理由バッジは Chip primitive (ds-chip[data-variant="display"][data-tone="muted"]) に統一済 (§Chip 参照) */
 
 /* ══════════════════════════════════════════════════════════════════════════════
+   Sprint 3 (SPEC §14): .screener-grid-* — screener_v2 結果テーブル「決算の通信簿」
+   正本 = mockup v12。ScreenerGridTable.jsx / ScreenerGridRow.jsx 専用。
+   既存 .screener-row (HeroSection/legacy 共有) には触れない (variant スコープ)。
+   token のみ・raw hex は color-mix で回避・box-shadow/!important なし・発光 class 不使用。
+   grid-template-columns は --screener-cols (table に inline 定義) を head/row/skeleton が継承 (SSOT)。
+   ════════════════════════════════════════════════════════════════════════════ */
+.screener-grid-table { display: block; }
+
+/* 詳細/簡素トグル bar */
+.screener-grid-bar { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
+.screener-grid-barlbl { font-size: 11px; color: var(--text-muted); letter-spacing: .03em; }
+.screener-grid-narrowhint { font-size: 11px; color: var(--text-muted); }
+.screener-grid-seg { display: inline-flex; background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-pill, 9999px); padding: 3px; }
+.screener-grid-seg button { border: 0; background: transparent; color: var(--text-muted); font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: var(--radius-pill, 9999px); cursor: pointer; transition: color .2s ease, background .2s ease; }
+.screener-grid-seg button.is-on { background: color-mix(in srgb, var(--color-gold) 16%, transparent); color: var(--color-gold-mid); }
+.screener-grid-count { margin-left: auto; font-size: 12px; color: var(--text-secondary); }
+.screener-grid-count b { color: var(--color-gold-mid); font-variant-numeric: tabular-nums; }
+
+/* panel (border + radius・overflow を作らない = sticky を .screener-master__content に吸着させるため) */
+.screener-grid-panel { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); }
+
+/* §38/§5 凡例 + 免責 (role=note・12px・常時可視) */
+.screener-grid-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: var(--space-2) var(--space-4); font-size: 12px; color: var(--text-secondary); background: var(--bg-subtle); border-bottom: 1px solid var(--border); line-height: 1.6; border-radius: 12px 12px 0 0; }
+.screener-grid-legend .lg { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.screener-grid-legend .gl { font-weight: 700; }
+.screener-grid-legend .gl.up { color: var(--color-gain); }
+.screener-grid-legend .gl.dn { color: var(--color-loss); }
+.screener-grid-legend .gl.il { color: var(--color-warning); }
+.screener-grid-legend .disc { flex-basis: 100%; font-size: 11.5px; color: var(--text-muted); line-height: 1.55; }
+.screener-grid-legend .disc b { color: var(--text-secondary); font-weight: 600; }
+
+/* sticky 見出し (overflow を持たない祖先のため .screener-master__content に吸着) */
+.screener-grid-head { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: var(--screener-cols); align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-4); background: var(--bg-card); border-bottom: 1px solid var(--border); font-size: 10.5px; font-weight: 600; letter-spacing: .04em; color: var(--text-muted); }
+.screener-grid-head .h-num { text-align: right; }
+.screener-grid-head .h-lead { text-align: left; }
+.screener-grid-head .h-fut { text-align: right; color: var(--text-muted); line-height: 1.2; }
+.screener-grid-head .h-qualstart, .screener-grid-head .h-fstart { position: relative; padding-left: var(--space-3); }
+.screener-grid-head .h-qualstart::before, .screener-grid-head .h-fstart::before { content: ""; position: absolute; left: 2px; top: 50%; transform: translateY(-50%); height: 14px; width: 1px; background: var(--border); }
+.screener-grid-head .h-fstart::before { background: color-mix(in srgb, var(--color-gold) 40%, transparent); }
+
+/* 行 */
+.screener-grid-row { display: grid; grid-template-columns: var(--screener-cols); align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); cursor: pointer; position: relative; transition: background .18s ease; opacity: 0; transform: translateY(6px); animation: screenerGridRowIn .5s ease forwards; }
+.screener-grid-row:last-child { border-bottom: 0; border-radius: 0 0 12px 12px; }
+.screener-grid-row:hover { background: var(--bg-hover); }
+.screener-grid-row:hover .screener-grid-tkr { color: var(--text-primary); }
+.screener-grid-row.is-win { background: color-mix(in srgb, var(--color-gold) 5%, transparent); }
+.screener-grid-row.is-win::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--color-gold); }
+.screener-grid-row.is-selected { background: color-mix(in srgb, var(--color-gold) 10%, transparent); }
+.screener-grid-row.is-selected::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--color-gold-mid); }
+@keyframes screenerGridRowIn { to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .screener-grid-row { animation: none; opacity: 1; transform: none; } }
+
+/* verdict pip (主役) */
+.screener-grid-pip { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-size: 13px; border: 1px solid var(--border); flex: none; }
+.screener-grid-pip.is-ok { color: var(--color-gold-mid); background: color-mix(in srgb, var(--color-gold) 14%, transparent); border-color: color-mix(in srgb, var(--color-gold) 45%, transparent); }
+.screener-grid-pip.is-part { color: var(--text-secondary); background: color-mix(in srgb, var(--text-muted) 16%, transparent); border-color: color-mix(in srgb, var(--text-muted) 34%, transparent); }
+.screener-grid-pip.is-bad { color: var(--color-loss); background: color-mix(in srgb, var(--color-loss) 12%, transparent); border-color: color-mix(in srgb, var(--color-loss) 30%, transparent); }
+.screener-grid-pip.is-none { color: var(--text-muted); background: color-mix(in srgb, var(--text-muted) 8%, transparent); }
+
+/* 識別 */
+.screener-grid-lead { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.screener-grid-check { flex: none; width: 0; overflow: hidden; opacity: 0; transition: width .15s ease, opacity .15s ease; }
+.screener-grid-row:hover .screener-grid-check, .screener-grid-check.is-on { width: 16px; opacity: 1; }
+.screener-grid-check input { cursor: pointer; accent-color: var(--color-accent); }
+.screener-grid-logo { flex: none; display: flex; }
+.screener-grid-idbody { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.screener-grid-tkr { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; font-size: 14px; color: var(--text-primary); letter-spacing: -.01em; transition: color .18s ease; }
+.screener-grid-meta { display: flex; gap: 6px; align-items: center; min-width: 0; font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.screener-grid-qd { font-variant-numeric: tabular-nums; }
+.screener-grid-nm { overflow: hidden; text-overflow: ellipsis; }
+
+/* 評価セル */
+.screener-grid-cell { text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; font-size: 12.5px; letter-spacing: -.01em; display: flex; align-items: baseline; justify-content: flex-end; gap: 4px; }
+.screener-grid-cell--pri .v { font-weight: 600; font-size: 14px; color: var(--text-primary); }
+.screener-grid-cell--pri.is-empty .v { color: var(--text-muted); font-weight: 400; }
+.screener-grid-cell--sec { color: var(--text-muted); }
+.screener-grid-cell.is-qualstart { position: relative; padding-left: var(--space-3); }
+.screener-grid-cell.is-qualstart::before { content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%); height: 18px; width: 1px; background: var(--border); }
+/* 将来ゾーン: §38 中立 (色なし)・gold hairline で「ガラス仕切り」分離 */
+.screener-grid-cell--fut { color: var(--text-muted); }
+.screener-grid-cell.is-fstart { position: relative; padding-left: var(--space-3); }
+.screener-grid-cell.is-fstart::before { content: ""; position: absolute; left: 0; top: 8%; bottom: 8%; width: 1px; background: color-mix(in srgb, var(--color-gold) 38%, transparent); }
+
+/* beat/miss 結果チップ (surpriseColor) */
+.screener-grid-chip { display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: var(--radius-pill, 9999px); line-height: 1.4; }
+.screener-grid-chip.is-beat { color: var(--color-gain); background: color-mix(in srgb, var(--color-gain) 12%, transparent); }
+.screener-grid-chip.is-miss { color: var(--color-loss); background: color-mix(in srgb, var(--color-loss) 12%, transparent); }
+.screener-grid-chip.is-inline { color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 14%, transparent); }
+.screener-grid-chip .g { font-size: 10px; line-height: 1; }
+
+/* RS */
+.screener-grid-rs { text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text-muted); }
+.screener-grid-rs.is-hi { color: var(--color-gold-mid); }
+
+/* 簡素 verdict バッジ */
+.screener-grid-vbwrap { text-align: left; }
+.screener-grid-vb { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 4px 11px; border-radius: var(--radius-pill, 9999px); border: 1px solid transparent; white-space: nowrap; }
+.screener-grid-vb.is-ok { color: var(--color-gold-mid); background: color-mix(in srgb, var(--color-gold) 14%, transparent); border-color: color-mix(in srgb, var(--color-gold) 40%, transparent); }
+.screener-grid-vb.is-part { color: var(--text-secondary); background: color-mix(in srgb, var(--text-muted) 14%, transparent); border-color: color-mix(in srgb, var(--text-muted) 30%, transparent); }
+.screener-grid-vb.is-bad { color: var(--color-loss); background: color-mix(in srgb, var(--color-loss) 12%, transparent); border-color: color-mix(in srgb, var(--color-loss) 28%, transparent); }
+.screener-grid-vb.is-none { color: var(--text-muted); background: color-mix(in srgb, var(--text-muted) 8%, transparent); }
+
+/* empty / error / skeleton */
+.screener-grid-empty { padding: var(--space-6) var(--space-4); text-align: center; color: var(--text-muted); font-size: 13px; }
+.screener-grid-row--error { display: flex; padding: var(--space-3) var(--space-4); cursor: default; }
+.screener-grid-error-text { color: var(--text-muted); font-size: 12px; }
+.screener-grid-row--skeleton { cursor: default; }
+.screener-grid-skel-dot { width: 26px; height: 26px; border-radius: var(--radius-pill, 9999px); background: var(--bg-muted); animation: screenerGridPulse 1.4s ease-in-out infinite; }
+.screener-grid-skel-line { display: block; height: 10px; border-radius: 4px; background: var(--bg-muted); animation: screenerGridPulse 1.4s ease-in-out infinite; }
+.screener-grid-skel-line--tkr { width: 54px; margin-bottom: 4px; }
+.screener-grid-skel-line--meta { width: 120px; height: 8px; }
+@keyframes screenerGridPulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+@media (prefers-reduced-motion: reduce) { .screener-grid-skel-dot, .screener-grid-skel-line { animation: none; } }
+
+/* 狭幅(~360-420px): gap/padding を詰めて識別列に幅を確保・バッジを縮める */
+.screener-grid-table[data-narrow="true"] .screener-grid-head,
+.screener-grid-table[data-narrow="true"] .screener-grid-row { gap: var(--space-2); padding-left: var(--space-3); padding-right: var(--space-3); }
+.screener-grid-table[data-narrow="true"] .screener-grid-vb { padding: 3px 8px; font-size: 11px; }
+.screener-grid-table[data-narrow="true"] .screener-grid-tkr { font-size: 13px; }
+
+/* ══════════════════════════════════════════════════════════════════════════════
    Sprint 3: .screener-idle-hero — Pane3 idle「今日の筆頭」focal hero (ScreenerIdleHero.jsx)
    aman の主役 = featured rank-1。token のみ・shadow ゼロ・raw 数値廃止 (安っぽさ root cause)。
    scarcity (SPEC 条件10③): gold は hero frame (L字) + rank-1 ただ1つに限定。big element ≤ 2。

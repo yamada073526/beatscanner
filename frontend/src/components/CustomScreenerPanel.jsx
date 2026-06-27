@@ -10,6 +10,7 @@ import FtdRegimeBanner from '../features/workspace/FtdRegimeBanner.jsx';
 import CompanyLogo from './CompanyLogo.jsx';
 // Sprint 1 Pass 1b: 共有 row primitive (screenerV2=true のみ、A-1 物理隔離)
 import ScreenerRow from '../features/workspace/ScreenerRow.jsx';
+import ScreenerGridTable from '../features/workspace/ScreenerGridTable.jsx';
 
 // FMP /stable/company-screener の sector (英語) → 日本語表示ラベル。
 const SECTOR_LABEL_JP = {
@@ -846,6 +847,13 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   // D-8 sort (SPEC_2026-06-25): ユーザー制御の sort key (default = 合致度順)。applyStrategyImpl で
   //   reset するため activePreset 付近で宣言。表示順 displayItems は後段の useMemo で算出。
   const [sortKey, setSortKey] = useState('relevance');
+  // Sprint3 (SPEC §14): screener_v2 結果テーブルを「決算の通信簿」grid table へ。
+  //   earnings 系 preset (earnings_pass / hot_sector) または ?screener_mock=1 (mock dogfood) のとき採用。
+  //   それ以外の preset (new_high_break / sector_leader 等) は従来 ScreenerRow 経路を維持 (§8 per-preset)。
+  const screenerGridMock = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('screener_mock') === '1';
+  const useScreenerGridTable = screenerV2
+    && (activePreset === 'earnings_pass' || activePreset === 'hot_sector' || screenerGridMock);
   // cup「型」状態トグル (新高値ブレイク・Premium): default 'all' = 件数不変 (任意の絞り込み・gate1 確定)。
   //   applyStrategyImpl で reset するため sortKey と同様 activePreset 近傍で宣言 (v271 教訓)。
   const [cupState, setCupState] = useState('all');
@@ -2394,7 +2402,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                   Premium を見る
                 </button>
               </div>
-            ) : filteredItems.length === 0 ? (
+            ) : (filteredItems.length === 0 && !screenerGridMock) ? (
               <div data-testid="screener-result-row-empty">
                 <p className="py-3 text-center text-sm text-[var(--text-muted)]">
                   {activePreset === 'new_high_break'
@@ -2439,6 +2447,26 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                   </div>
                 )}
               </div>
+            ) : useScreenerGridTable ? (
+              /* Sprint3 (SPEC §14): 決算の通信簿 grid table。screener_v2 + earnings系 preset or ?screener_mock=1。
+                 legacy / 他 preset / 非 v2 は下の従来 ScreenerRow 経路 (物理隔離・不触)。 */
+              <ScreenerGridTable
+                items={showAllResults ? displayItems : displayItems.slice(0, 100)}
+                mock={screenerGridMock}
+                count={displayItems.length}
+                selectedTickers={selectedTickers}
+                onSelect={(t) => {
+                  trackEvent('screener_row_click', { ticker: t, mode: 'custom' });
+                  onSelect?.(t);
+                }}
+                onCheckbox={(t, checked) => {
+                  setSelectedTickers((prev) => {
+                    const n = new Set(prev);
+                    checked ? n.add(t) : n.delete(t);
+                    return n;
+                  });
+                }}
+              />
             ) : (
               /* Pass B: 表示順 displayItems (default=合致度降順、D-8 sort で切替可)。 */
               /* Pass C: 初期 100 件キャップ。超過時は「残りN件を表示」ボタン。 */
