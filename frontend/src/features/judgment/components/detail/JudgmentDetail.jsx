@@ -1,5 +1,5 @@
-import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
-import { FileBarChart2, FileText } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { FileText } from 'lucide-react';
 // P3.7: Pane 3 → 関連記事 link 用 hook
 import { useRelatedArticle } from '../../../articles/useRelatedArticle.js';
 import { useJudgment } from '../../state/JudgmentContext.jsx';
@@ -16,16 +16,9 @@ import KpiStrip from './KpiStrip.jsx';
 import VerdictDetail from './VerdictDetail.jsx';
 import FiveConditionsCard from './FiveConditionsCard.jsx';
 import SimpleSection from './SimpleSection.jsx';
-import SectionDivider from './SectionDivider.jsx';
-import ProfileCard from './ProfileCard.jsx';
 import ConditionGrid from './ConditionGrid.jsx';
 import SkeletonDetail from './SkeletonDetail.jsx';
-import Card from '../../primitives/Card.jsx';
-import SectionHeader from '../../primitives/SectionHeader.jsx';
 import PremiumLock from '../shared/PremiumLock.jsx';
-import NewsPanel from '../../../../components/NewsPanel.jsx';
-import IRLinksPanel from '../../../../components/IRLinksPanel.jsx';
-import InsightsPanel from '../../../../components/InsightsPanel.jsx';
 import StockPriceChart from '../../../../components/StockPriceChart.jsx';
 // SPEC 2026-05-28 Sprint 4 + 6 (pillar 2 technical): Chart 直下に hero card 2 つを並列配置
 import AnalystTargetCard from '../../../../components/AnalystTargetCard.jsx';
@@ -38,20 +31,10 @@ import DistributionDaysCard from '../../../../components/DistributionDaysCard.js
 import CupPivotCard from '../../../../components/CupPivotCard.jsx';
 // v126 R8-3 Phase 3: 直近 breakout = support level narration (last_breakout 取得時のみ表示)
 import BuyZoneCard from '../../../../components/BuyZoneCard.jsx';
-import GuidanceCard from '../../../../components/GuidanceCard.jsx';
 // v100 user dogfood (handover §100点 multi-review): Pane 3 Insider 取引 section の中身実装
 import InsiderPanel from '../../../../components/InsiderPanel.jsx';
 // v100 (handover §SPEC FMP Premium 打ち手 5): 過去 8Q 決算 ±5 日 価格反応 (event study)
 import EarningsReactionPanel from '../../../../components/EarningsReactionPanel.jsx';
-// Sprint 3: EarningsBars + HistoryChart を EarningsHistoryChart (small multiples 3 段) に統合。
-// user override 2 (SPEC §5 Sprint 1 末尾): 売上高 / EPS / CFPS を縦バー 3 段重ねで統合表示。
-import EarningsHistoryChart from '../../../../components/EarningsHistoryChart.jsx';
-// handover v82 Phase 2: 8Q 履歴を Pane 3 に mount。 旧来は DetailReport tab だけだったが
-// Pane 3 で常時可視化することで「直近 8Q の Beat/Miss streak」 を Trust signal として front 出し。
-import QuarterlyHistoryTable from '../../../../components/QuarterlyHistoryTable.jsx';
-// handover v82 Phase 3: AnalystPanel (目標株価 / 推奨分布 / モメンタム / timeline)。
-// 階層 2 Fundamentals の EarningsHistoryChart 直後 + QuarterlyHistoryTable 直前に mount。
-import AnalystPanel from '../../../../components/AnalystPanel.jsx';
 // handover v82 Phase 5: TriageBanner (保有 × 5 条件 × Cup-Handle 三層)。
 // ConditionGrid 直前 hint 1 行 (UI/UX 6 体合議 B 案)。
 import TriageBanner from '../../../../components/TriageBanner.jsx';
@@ -62,7 +45,7 @@ import SummaryBrief from '../../../../components/SummaryBrief.jsx';
 // Sprint 2: AccordionSection primitive + useIntersectionLazy hook
 // Sprint 3 (return-grid-primitive): ReturnGrid を primitives/index.js から追加
 // institutional-ttm-panel Sprint 3: TtmValuationPanel を primitives/index.js から追加
-import { AccordionSection, ACCORDION_L2_TITLE_STYLE, useIntersectionLazy, ReturnGrid, TtmValuationPanel } from '../../primitives/index.js';
+import { AccordionSection, ACCORDION_L2_TITLE_STYLE, ReturnGrid, TtmValuationPanel } from '../../primitives/index.js';
 // Sprint 4 (Phase 2): 案1 section in-view fade-in — 主要セクション wrapper
 import SectionFade from '../../primitives/SectionFade.jsx';
 // Sprint 0 (Phase 2): MotionProvider — LazyMotion + domAnimation (framer-motion subset)。
@@ -80,11 +63,6 @@ import EpsBeatStreakChip from './EpsBeatStreakChip.jsx';
 // Forward P/E / PEG / 配当性向 / Buyback比率 を KpiStrip に追加するための fetcher。
 // 金商法 §38 / 景表法 §5 配慮で narration / 警告 chip なし、 数値のみ。
 import { fetchValuationExtras, fetchTechnical, TECHNICAL_CANONICAL_PATTERNS } from '../../../../api.js';
-// v104 release MVP: 10-K (年次報告書) — リファレンス章 5 で SEC EDGAR 直 fetch。
-import TenKLinksPanel from '../../../../components/TenKLinksPanel.jsx';
-// v104 Phase G Phase 4: 章 2 (基本財務) を 3 tab (Guidance / 過去業績 / 直近 8Q) に reorg。
-//   feature flag pane3_v3='1' で gated、 default 既存維持 (dogfood revert 安全)。
-import ChapterTabs from '../../primitives/ChapterTabs.jsx';
 // Phase G Phase 3 (handover v99 §0-D): ChapterSection — 章 2-5 用 generic 章扉 (Noto Serif JP / gold hairline)。
 // headerOnly mode で content 再配置せず brand 一貫性 ([[feedback-gold-accent-continuity]]) を実現。
 import ChapterSection from './ChapterSection.jsx';
