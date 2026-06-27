@@ -1417,7 +1417,16 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
           <span className="screener-crow__lbl">{facet.label}</span>
           <span className="screener-crow__th">{GRADE_LABELS_SHORT[dispLvl]} {gradeAnnot(facet, dispLvl)}</span>
           {advOpen && (
-            <div className={`screener-crow__mseg${advLocked ? ' is-locked' : ''}`} role="group" aria-label={`${facet.label} の強度`} data-testid={`screener-mseg-${cond.key}`}>
+            <div
+              className={`screener-crow__mseg${advLocked ? ' is-locked' : ''}`}
+              role="group"
+              aria-label={`${facet.label} の強度`}
+              data-testid={`screener-mseg-${cond.key}`}
+              style={{ '--mseg-n': msegLevels.length, '--mseg-i': Math.max(0, msegLevels.indexOf(dispLvl)) }}
+              data-sel={on && msegLevels.includes(dispLvl) ? '1' : '0'}
+            >
+              {/* sliding thumb (精度セグと同方式)。選択段を gold tint で示し切替時に滑走。 */}
+              <span className="screener-crow__mseg-thumb" aria-hidden />
               {msegLevels.map((lvl) => {
                 const pressed = on && dispLvl === lvl;
                 return (
