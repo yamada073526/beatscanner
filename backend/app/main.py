@@ -23041,6 +23041,8 @@ async def cron_canslim_scan(
 
                 # 直近Q に最も近い estimate (rev_beat の revenue estimate / eps estimate 補完用)。
                 _fl_est_match = _nearest_by_date(entry_date_str, _fl_est, max_diff_days=60) if entry_date_str else None
+                # 銀行/与信は FMP revenue(総収益) 基準ブレで rev 系が信頼不能 (rev_beat 抑止と同基準・§5)。
+                _fl_bank = _rev_surprise_threshold(sector, industry) <= 0
 
                 # ── rev_beat: 直近Q売上 actual vs estimate ±3% (_verdict SSOT) ───────────
                 #   銀行/与信は revenue(総収益) vs estimate(純収益) の basis ミスマッチで偽サプライズ →
@@ -23085,7 +23087,7 @@ async def cron_canslim_scan(
 
                 # ── rev_yoy_pct: 直近Q売上 vs 前年同期Q (is-q date 照合 365日・>180日ガード) ──
                 _fl_rev_yoy = None
-                if entry_date_str and _fl_rev_actual is not None and _fl_is:
+                if not _fl_bank and entry_date_str and _fl_rev_actual is not None and _fl_is:
                     _fl_cur_d = _parse_date_str(entry_date_str)
                     if _fl_cur_d is not None:
                         _fl_pt = (_fl_cur_d - _td_local(days=365)).isoformat()
@@ -23132,7 +23134,7 @@ async def cron_canslim_scan(
                     if _fl_nq_d is not None:
                         _fl_ya_t = (_fl_nq_d - _td_local(days=365)).isoformat()
                         # 来期売上 YoY = next-Q consensus 売上 vs 前年同期Q actual 売上 (is-q)。
-                        if _fl_nq_rev_cons is not None and _fl_is:
+                        if not _fl_bank and _fl_nq_rev_cons is not None and _fl_is:
                             _fl_ya_inc = _nearest_by_date(_fl_ya_t, _fl_is, max_diff_days=60)
                             if _fl_ya_inc:
                                 _fl_ya_rev = _safe_eps_float(_pick(_fl_ya_inc, "revenue"))
@@ -23149,9 +23151,15 @@ async def cron_canslim_scan(
                                     or _fl_ya_eps_row.get("actualEarningResult") or _fl_ya_eps_row.get("actualEps")
                                 )
                                 _fl_ya_eps_d = _parse_date_str(_fl_ya_eps_row.get("date"))
-                                if (_fl_ya_eps is not None and _fl_ya_eps > 0 and _fl_ya_eps_d is not None
+                                if (_fl_ya_eps is not None and _fl_ya_eps >= 0.05 and _fl_ya_eps_d is not None
                                         and abs((_fl_nq_d - _fl_ya_eps_d).days) > 180):
+                                    # near-zero base ガード (|base|>=0.05): 既存 _calc_eps_yoy_pct_from_surprises と同基準。
                                     _fl_nq_eps = round((_fl_nq_eps_cons - _fl_ya_eps) / abs(_fl_ya_eps) * 100, 1)
+                # §5 sanity: 残存する近ゼロ base 由来の |YoY|>=500% は表示アーティファクト → None (_verdict の ±500 cap と同基準)。
+                if _fl_nq_rev is not None and abs(_fl_nq_rev) >= 500:
+                    _fl_nq_rev = None
+                if _fl_nq_eps is not None and abs(_fl_nq_eps) >= 500:
+                    _fl_nq_eps = None
                 flash["next_q_rev_yoy_pct"] = _fl_nq_rev
                 flash["next_q_eps_yoy_pct"] = _fl_nq_eps
 
