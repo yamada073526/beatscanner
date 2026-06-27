@@ -77,6 +77,8 @@ import { useDetailScrollRestore } from './useDetailScrollRestore.js';
 // Sprint B で順序入替時にこれら component を新位置に移動するだけで diff 「移動」 のみ。
 import FundamentalsAccordion from './sections/FundamentalsAccordion.jsx';
 import L3QualityFold from './sections/L3QualityFold.jsx';
+// 2026-06-28: v6 テクニカル章 冒頭の同定リボン (会社の身元 1 行・追加 LLM コストなし)
+import TechnicalIdentityRibbon from './sections/TechnicalIdentityRibbon.jsx';
 // v199: ファンダ章冒頭の決算ハイライト (flag opt-in、SPEC_2026-06-10_earnings-flash-summary + 6体合議)
 import EarningsFlashSummary from './sections/EarningsFlashSummary.jsx';
 import StateCompass from './sections/StateCompass.jsx';
@@ -1433,6 +1435,12 @@ export default function JudgmentDetail({
                   <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>③</span>
                   <span style={{ fontSize: 17, fontWeight: 700 }}>テクニカル・買い場</span>
                 </div>
+                {/* 同定リボン（2026-06-28）: テクニカルから入る人 / 銘柄を知らない人向けに
+                    「何の会社か」を 1 行で。ファンダ会社概要 fold とは粒度を変え重複回避。
+                    データは prefetch 済 profile-summary (backend 7日 cache) で追加 LLM コストなし。 */}
+                {selectedTicker && (
+                  <TechnicalIdentityRibbon ticker={selectedTicker} companyName={result?.companyName} />
+                )}
                 {/* チャート + PriceLadder = v5 の 1 ユニット構造を継承（mockup L4: 価格ラダー → 期間別リターン 順）*/}
                 {selectedTicker && (
                   <SectionFade key="v6-chart" staggerIndex={0}>
