@@ -20328,6 +20328,11 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
     freshness["next_q_rev_yoy_pct"] = sf_cd
     freshness["next_q_eps_yoy_pct"] = sf_cd
     freshness["tri_verdict"] = sf_cd
+    # Layer A (会社ガイダンス vs PIT コンセンサス比) も nightly canslim scan 由来 = funda 同源。
+    #   ⚠️ freshness key 欠落で CustomScreenerPanel が条件を silent 非表示にする blocker を再発させない。
+    freshness["guidance_rev_surprise_pct"] = sf_cd
+    freshness["guidance_eps_surprise_pct"] = sf_cd
+    freshness["guidance_source"] = sf_cd
     if sf_cd:
         for r in _fetch_all_rows_paged(
             sb, "screener_fundamentals",
@@ -20376,6 +20381,18 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
                 sf_map[t]["next_q_rev_yoy_pct"] = r.get("next_q_rev_yoy_pct")
                 sf_map[t]["next_q_eps_yoy_pct"] = r.get("next_q_eps_yoy_pct")
                 sf_map[t]["tri_verdict"] = r.get("tri_verdict")
+        # Layer A (SPEC 2026-06-27 §6): guidance 3カラムも独立 fetch で graceful merge。
+        #   feedback_paged_select_missing_column_trap 回避のため共有 SELECT に混ぜない。
+        for r in _fetch_all_rows_paged(
+            sb, "screener_fundamentals",
+            "ticker,guidance_rev_surprise_pct,guidance_eps_surprise_pct,guidance_source",
+            eq={"calc_date": sf_cd},
+        ):
+            t = str(r.get("ticker") or "").upper()
+            if t and t in sf_map:
+                sf_map[t]["guidance_rev_surprise_pct"] = r.get("guidance_rev_surprise_pct")
+                sf_map[t]["guidance_eps_surprise_pct"] = r.get("guidance_eps_surprise_pct")
+                sf_map[t]["guidance_source"] = r.get("guidance_source")
 
     # rs_ratings (RS percentile、 free) — 最新 calc_date 全行
     rs_map: dict[str, dict] = {}
@@ -20541,6 +20558,11 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             "next_q_rev_yoy_pct": _uni_round((sf or {}).get("next_q_rev_yoy_pct")),
             "next_q_eps_yoy_pct": _uni_round((sf or {}).get("next_q_eps_yoy_pct")),
             "tri_verdict": (sf or {}).get("tri_verdict"),
+            # Layer A (会社ガイダンス vs PIT コンセンサス比): source='8k' で frontend が ● マーカー表示。
+            #   0.0 (一致) も有効値なので _uni_round はそのまま通す (None のみ欠損)。
+            "guidance_rev_surprise_pct": _uni_round((sf or {}).get("guidance_rev_surprise_pct")),
+            "guidance_eps_surprise_pct": _uni_round((sf or {}).get("guidance_eps_surprise_pct")),
+            "guidance_source": (sf or {}).get("guidance_source"),
             # near_high (Pro gate) — N 条件
             "near_high_pct_scaled": _uni_round((sf or {}).get("near_high_pct_scaled")),
             # cup / breakout (Premium gate)
@@ -21957,6 +21979,9 @@ def _upsert_screener_fundamental(
     next_q_rev_yoy_pct: "float | None" = None,
     next_q_eps_yoy_pct: "float | None" = None,
     tri_verdict: "str | None" = None,
+    guidance_rev_surprise_pct: "float | None" = None,
+    guidance_eps_surprise_pct: "float | None" = None,
+    guidance_source: "str | None" = None,
 ) -> bool:
     """screener_fundamentals テーブルに各指標を upsert。
 
@@ -22093,6 +22118,13 @@ def _upsert_screener_fundamental(
         row["next_q_eps_yoy_pct"] = next_q_eps_yoy_pct
     if tri_verdict is not None:
         row["tri_verdict"] = tri_verdict
+    # Layer A (会社ガイダンス vs PIT コンセンサス比): 0.0 は有効値 (一致) → is not None で書込
+    if guidance_rev_surprise_pct is not None:
+        row["guidance_rev_surprise_pct"] = guidance_rev_surprise_pct
+    if guidance_eps_surprise_pct is not None:
+        row["guidance_eps_surprise_pct"] = guidance_eps_surprise_pct
+    if guidance_source is not None:
+        row["guidance_source"] = guidance_source
 
     try:
         sb.table("screener_fundamentals").upsert(
@@ -22126,6 +22158,9 @@ def _upsert_screener_fundamental(
                 "next_q_rev_yoy_pct",     # 決算速報: migration 未適用時の graceful fallback
                 "next_q_eps_yoy_pct",     # 決算速報: migration 未適用時の graceful fallback
                 "tri_verdict",            # 決算速報: migration 未適用時の graceful fallback
+                "guidance_rev_surprise_pct",  # Layer A: migration 未適用時の graceful fallback
+                "guidance_eps_surprise_pct",  # Layer A: migration 未適用時の graceful fallback
+                "guidance_source",            # Layer A: migration 未適用時の graceful fallback
             )
             if c in err_str and c in row
         ]
@@ -22143,6 +22178,126 @@ def _upsert_screener_fundamental(
                 return False
         print(f"[screener_fundamentals] upsert failed for {ticker}: {e}")
         return False
+
+
+def _build_layer_a_maps(sb, tickers: "list[str]") -> "tuple[dict, dict]":
+    """Layer A (会社ガイダンス vs PIT アナリストコンセンサス) 用の batch pre-load。
+
+    SPEC docs/specs/SPEC_2026-06-27_screener-guidance-layer-a.md §5-2/Sprint3。
+    guidance_snapshots を全件取得し ticker→最新 (filed_at max) 行 map を作り、
+    guidance を持つ ticker のみ filed_at 直前の consensus_snapshot (PIT) を引く。
+    per-ticker DB fetch を _compute_one hot loop (universe ~2494) の外に出すための足場
+    (hot loop 内 per-ticker fetch は FMP/DB rate を破壊するため禁止)。
+
+    現在 consensus でなく PIT (point-in-time) を使う理由: 現在 consensus は会社ガイダンスを
+    既に織り込み済 → surprise が washout (最大シグナルほど消える逆相関) のため不可。
+    """
+    guidance_map: dict[str, dict] = {}
+    pit_map: dict[str, dict] = {}
+    _uni = {str(t).upper() for t in (tickers or [])}
+    try:
+        for r in _fetch_all_rows_paged(
+            sb, "guidance_snapshots",
+            "ticker,period_end_date,period_type,filed_at,"
+            "eps_low,eps_high,eps_basis,rev_low,rev_high,rev_basis",
+        ):
+            t = str(r.get("ticker") or "").upper()
+            f = str(r.get("filed_at") or "")[:10]
+            # filed_at null は PIT 比較不可 (発表日が無く snapshot_date < filed_at を引けない)
+            if not t or t not in _uni or not f:
+                continue
+            prev = guidance_map.get(t)
+            if prev is None or str(prev.get("filed_at") or "")[:10] < f:
+                guidance_map[t] = r
+    except Exception as e:
+        print(f"[canslim-scan] Layer A guidance pre-load failed: {e}")
+        return {}, {}
+    # guidance を持つ ticker のみ PIT consensus snapshot (filed_at 直前・最新1件) を引く。
+    # 件数 = 直近報告 & 8-K guidance 抽出済の銘柄のみ (数〜数十件) → hot loop 外で許容。
+    for t, g in guidance_map.items():
+        f = str(g.get("filed_at") or "")[:10]
+        ped = g.get("period_end_date")
+        ptype = g.get("period_type")
+        if not f or not ped or not ptype:
+            continue
+        try:
+            pres = (
+                sb.table("consensus_snapshots").select(
+                    "snapshot_date,estimated_eps_avg,estimated_revenue_avg"
+                )
+                .eq("ticker", t).eq("fiscal_date", ped).eq("period_type", ptype)
+                .lt("snapshot_date", f)
+                .order("snapshot_date", desc=True).limit(1).execute()
+            )
+            if pres.data:
+                pit_map[t] = pres.data[0]
+        except Exception as e:
+            print(f"[canslim-scan] Layer A PIT fetch failed ({t}): {e}")
+    return guidance_map, pit_map
+
+
+def _compute_layer_a_surprise(
+    guidance_row: "dict | None", pit_snapshot: "dict | None",
+    *, non_usd: bool, bank: bool,
+) -> dict:
+    """会社ガイダンス中値 vs PIT アナリストコンセンサスの符号付き surprise % (純関数)。
+
+    SPEC docs/specs/SPEC_2026-06-27_screener-guidance-layer-a.md §5-6。
+    Returns: {"guidance_rev_surprise_pct": float|None,
+              "guidance_eps_surprise_pct": float|None,
+              "guidance_source": "8k"|None}
+    成立条件 = PIT snapshot が filed_at 前に存在し非 stale (発表 10 日超前でない)。
+    ガード:
+      - non_usd (ADR 非USD reporter) → EPS 抑止 (通貨混在の偽 surprise 防止)
+      - bank (銀行/与信 sector) → REV 抑止 (rev_beat と同基準)
+      - GAAP guidance vs adjusted consensus 不一致 (eps_basis == 'gaap') → EPS 抑止
+      - range 幅: consensus がガイダンスレンジ内なら inline (0.0) に丸め (幅広ガイダンス過大評価防止)
+    純関数なので synthetic fixture で結線裏取り可能 (実データ Layer A は PIT coverage 待ち)。
+    """
+    out = {
+        "guidance_rev_surprise_pct": None,
+        "guidance_eps_surprise_pct": None,
+        "guidance_source": None,
+    }
+    if not isinstance(guidance_row, dict) or not isinstance(pit_snapshot, dict):
+        return out
+    from .aggregator.guidance_history import classify_pit_consensus
+    from .visualizer.calc import guidance_vs_consensus_pct
+    cls = classify_pit_consensus(guidance_row, pit_snapshot)
+    # PIT snapshot が filed_at 前に存在し非 stale のときのみ Layer A 成立
+    if not cls.get("available") or cls.get("stale"):
+        return out
+    pit_eps = _safe_eps_float(pit_snapshot.get("estimated_eps_avg"))
+    pit_rev = _safe_eps_float(pit_snapshot.get("estimated_revenue_avg"))
+    eps_lo = _safe_eps_float(guidance_row.get("eps_low"))
+    eps_hi = _safe_eps_float(guidance_row.get("eps_high"))
+    rev_lo = _safe_eps_float(guidance_row.get("rev_low"))
+    rev_hi = _safe_eps_float(guidance_row.get("rev_high"))
+    eps_basis = str(guidance_row.get("eps_basis") or "").lower()
+    src_ok = False
+    # EPS: ADR 非USD 抑止 + GAAP guidance vs adjusted consensus 不一致抑止
+    if (not non_usd and eps_basis != "gaap"
+            and eps_lo is not None and eps_hi is not None and pit_eps is not None):
+        mid = (eps_lo + eps_hi) / 2
+        pct = guidance_vs_consensus_pct(mid, pit_eps)
+        if pct is not None:
+            if eps_lo <= pit_eps <= eps_hi:  # range 幅ガード
+                pct = 0.0
+            out["guidance_eps_surprise_pct"] = round(pct, 1)
+            src_ok = True
+    # REV: 銀行/与信 sector 抑止
+    if (not bank and rev_lo is not None and rev_hi is not None
+            and pit_rev is not None and pit_rev > 0):
+        mid = (rev_lo + rev_hi) / 2
+        pct = guidance_vs_consensus_pct(mid, pit_rev)
+        if pct is not None:
+            if rev_lo <= pit_rev <= rev_hi:  # range 幅ガード
+                pct = 0.0
+            out["guidance_rev_surprise_pct"] = round(pct, 1)
+            src_ok = True
+    if src_ok:
+        out["guidance_source"] = "8k"
+    return out
 
 
 @app.post("/api/cron/earnings-annual-scan")
@@ -22391,6 +22546,19 @@ async def cron_canslim_scan(
     except Exception as _yh_outer_err:
         print(f"[canslim-scan] yearHigh pre-fetch failed: {_yh_outer_err}")
         # 全 chunk 失敗でも near_high_pct=None で upsert を続行 (C/A 値は影響なし)
+
+    # ── Layer A: guidance / PIT consensus を hot loop 前に batch pre-load (SPEC §5-2/Sprint3) ──
+    # _compute_one が closure 参照する map。per-ticker DB fetch を 2494 銘柄 loop 外に出す。
+    _guidance_map: dict[str, dict] = {}
+    _pit_map: dict[str, dict] = {}
+    try:
+        _la_sb = _get_supabase_service()
+        _guidance_map, _pit_map = await asyncio.to_thread(
+            _build_layer_a_maps, _la_sb, tickers
+        )
+    except Exception as _la_pre_err:
+        print(f"[canslim-scan] Layer A pre-load skipped: {_la_pre_err}")
+        _guidance_map, _pit_map = {}, {}
 
     async def _compute_one(ticker: str):
         """1 ticker の C/A/N/S/I + 営業CFマージン指標を計算して
@@ -23255,6 +23423,24 @@ async def cron_canslim_scan(
                     flash["tri_verdict"] = "ok"     # 三拍子✓ (売上&EPS beat + 来期コンセンサスくっきり高い)
                 else:
                     flash["tri_verdict"] = "part"   # 一部未達
+
+                # ── Layer A: 会社ガイダンス vs PIT アナリストコンセンサス比 (SPEC §5-6) ──
+                #   発表直前 (point-in-time) の consensus と比較。成立しなければ
+                #   guidance_source=None で frontend は next_q_*_yoy_pct (Layer B) に fallback。
+                #   計算は純関数 _compute_layer_a_surprise に分離 (synthetic 結線裏取り可)。
+                try:
+                    _la = _compute_layer_a_surprise(
+                        _guidance_map.get(ticker), _pit_map.get(ticker),
+                        non_usd=_fl_non_usd, bank=_fl_bank,
+                    )
+                    flash["guidance_rev_surprise_pct"] = _la["guidance_rev_surprise_pct"]
+                    flash["guidance_eps_surprise_pct"] = _la["guidance_eps_surprise_pct"]
+                    flash["guidance_source"] = _la["guidance_source"]
+                except Exception as _la_err:
+                    flash["guidance_rev_surprise_pct"] = None
+                    flash["guidance_eps_surprise_pct"] = None
+                    flash["guidance_source"] = None
+                    print(f"[canslim-scan] Layer A guidance calc failed ({ticker}): {_la_err}")
             except Exception as _fl_e:
                 print(f"[earnings_flash] compute failed for {ticker}: {_fl_e}")
                 flash = {}
@@ -23403,6 +23589,9 @@ async def cron_canslim_scan(
                 next_q_rev_yoy_pct=flash.get("next_q_rev_yoy_pct"),  # 決算速報: 来期コンセンサス売上YoY
                 next_q_eps_yoy_pct=flash.get("next_q_eps_yoy_pct"),  # 決算速報: 来期コンセンサスEPS YoY
                 tri_verdict=flash.get("tri_verdict"),               # 決算速報: 三拍子verdict
+                guidance_rev_surprise_pct=flash.get("guidance_rev_surprise_pct"),  # Layer A: 来期売上ガイダンス比
+                guidance_eps_surprise_pct=flash.get("guidance_eps_surprise_pct"),  # Layer A: 来期EPSガイダンス比
+                guidance_source=flash.get("guidance_source"),       # Layer A: '8k' or None(=Layer B fallback)
             )
             if ok:
                 upserted += 1
