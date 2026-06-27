@@ -14439,12 +14439,14 @@ body.is-digest-resizing {
 .screener-grid-head .h-num { text-align: right; }
 .screener-grid-head .h-lead { text-align: left; }
 .screener-grid-head .h-fut { text-align: right; color: var(--text-muted); line-height: 1.2; }
-.screener-grid-head .h-qualstart, .screener-grid-head .h-fstart { position: relative; padding-left: var(--space-3); }
+/* ヘッダは右寄せのため padding-left 不要。先頭列に付けると幅が削れ「ガイダンス比」が3行化するため外す (本体セルのみ padding 維持)。 */
+.screener-grid-head .h-qualstart, .screener-grid-head .h-fstart { position: relative; }
 .screener-grid-head .h-qualstart::before, .screener-grid-head .h-fstart::before { content: ""; position: absolute; left: 2px; top: 50%; transform: translateY(-50%); height: 14px; width: 1px; background: var(--border); }
 .screener-grid-head .h-fstart::before { background: color-mix(in srgb, var(--color-gold) 40%, transparent); }
 
 /* 行 */
-.screener-grid-row { display: grid; grid-template-columns: var(--screener-cols); align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); cursor: pointer; position: relative; transition: background .18s ease; opacity: 0; transform: translateY(6px); animation: screenerGridRowIn .5s ease forwards; }
+.screener-grid-row { display: grid; grid-template-columns: var(--screener-cols); align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); cursor: pointer; position: relative; opacity: 0; transform: translateY(8px); transition: opacity .45s ease, transform .45s ease, background .18s ease; }
+.screener-grid-row.is-in { opacity: 1; transform: none; }
 .screener-grid-row:last-child { border-bottom: 0; border-radius: 0 0 12px 12px; }
 .screener-grid-row:hover { background: var(--bg-hover); }
 .screener-grid-row:hover .screener-grid-tkr { color: var(--text-primary); }
@@ -14452,8 +14454,7 @@ body.is-digest-resizing {
 .screener-grid-row.is-win::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--color-gold); }
 .screener-grid-row.is-selected { background: color-mix(in srgb, var(--color-gold) 10%, transparent); }
 .screener-grid-row.is-selected::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--color-gold-mid); }
-@keyframes screenerGridRowIn { to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .screener-grid-row { animation: none; opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .screener-grid-row { opacity: 1; transform: none; transition: background .18s ease; } }
 
 /* verdict pip (主役) */
 .screener-grid-pip { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-size: 13px; border: 1px solid var(--border); flex: none; }
@@ -14509,7 +14510,7 @@ body.is-digest-resizing {
 .screener-grid-empty { padding: var(--space-6) var(--space-4); text-align: center; color: var(--text-muted); font-size: 13px; }
 .screener-grid-row--error { display: flex; padding: var(--space-3) var(--space-4); cursor: default; }
 .screener-grid-error-text { color: var(--text-muted); font-size: 12px; }
-.screener-grid-row--skeleton { cursor: default; }
+.screener-grid-row--skeleton { cursor: default; opacity: 1; transform: none; }
 .screener-grid-skel-dot { width: 26px; height: 26px; border-radius: var(--radius-pill, 9999px); background: var(--bg-muted); animation: screenerGridPulse 1.4s ease-in-out infinite; }
 .screener-grid-skel-line { display: block; height: 10px; border-radius: 4px; background: var(--bg-muted); animation: screenerGridPulse 1.4s ease-in-out infinite; }
 .screener-grid-skel-line--tkr { width: 54px; margin-bottom: 4px; }
