@@ -14486,8 +14486,14 @@ body.is-digest-resizing {
 .screener-grid-cell.is-qualstart::before { content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%); height: 18px; width: 1px; background: var(--border); }
 /* 将来ゾーン: §38 中立 (色なし)・gold hairline で「ガラス仕切り」分離 */
 .screener-grid-cell--fut { color: var(--text-muted); }
+.screener-grid-cell--fut .v { color: inherit; }
 .screener-grid-cell.is-fstart { position: relative; padding-left: var(--space-3); }
 .screener-grid-cell.is-fstart::before { content: ""; position: absolute; left: 0; top: 8%; bottom: 8%; width: 1px; background: color-mix(in srgb, var(--color-gold) 38%, transparent); }
+/* Layer A マーカー dot (●): §38 絶対中立 = --text-secondary のみ (gold/緑/赤 厳禁)。
+   値前に 3px・baseline でなく中央寄せ・tabular-nums 整列を崩さぬよう極小。
+   凡例 .disc 内でも同 class を inline 説明として再利用。 */
+.screener-grid-fdot { flex: 0 0 auto; align-self: center; width: 3px; height: 3px; border-radius: 50%; background: var(--text-secondary); }
+.screener-grid-legend .disc .screener-grid-fdot { display: inline-block; vertical-align: middle; margin: 0 1px; }
 
 /* beat/miss 結果チップ (surpriseColor) */
 .screener-grid-chip { display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: var(--radius-pill, 9999px); line-height: 1.4; }

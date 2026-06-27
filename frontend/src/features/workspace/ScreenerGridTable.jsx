@@ -42,7 +42,9 @@ function readInitialMode() {
 }
 
 // real backend item → 正規化 earnings (§14-C ハイブリッド)
-function normalizeItem(it) {
+// Layer A SPEC §6: guidance_source('8k'=Layer A / null=Layer B) を earnings へ結線。
+// export = unit test (ScreenerGridTable.normalize.test.js・node env pure 検査) 用。
+export function normalizeItem(it) {
   return {
     ticker: it.ticker,
     name: it.name ?? null,
@@ -55,23 +57,27 @@ function normalizeItem(it) {
       epsBeat: it.eps_beat ?? null,
       gm: it.gross_margin_pct ?? null,
       fcf: it.fcf_margin_pct ?? null,
-      // §14-C: guidance(残タスク4)優先 → next_q(LIVE) fallback。
-      // TODO(Sprint4): guidance fallback 時の consensus マーカー + surpriseColor mirror + ADR「—」検証。
+      // §14-C: guidance(Layer A)優先 → next_q(Layer B・LIVE) fallback。
       nqRev: it.guidance_rev_surprise_pct ?? it.next_q_rev_yoy_pct ?? null,
       nqEps: it.guidance_eps_surprise_pct ?? it.next_q_eps_yoy_pct ?? null,
       tri: it.tri_verdict ?? null,
+      // §6: '8k'=会社ガイダンス vs PIT コンセンサス比(Layer A) / null=来期コンセンサスYoY(Layer B)。
+      guidanceSource: it.guidance_source ?? null,
     },
   };
 }
 
 // Sprint3 mock (mockup v12 と同型・?screener_mock=1 で発火)。実 payload と同じ shape。
+// Layer A dogfood (Sprint4): 実データ Layer A は当面 0 件 (PIT 未成立・de-risk 確定) のため、
+// mock に guidanceSource:'8k'(Layer A=dot付き) と null(Layer B=無印) を意図的に混在させ、
+// ?screener_mock=1 でマーカー描画/§38 中立/ADR「—」を dogfood 可能にする。
 const MOCK_ROWS = [
-  { ticker: 'TRGP', name: 'Targa Resources', lastReportDate: '2026-05-07', rsValue: 83, earnings: { revYoY: 18, revBeat: 'beat', epsYoY: 24, epsBeat: 'beat', gm: 18, fcf: 12, nqRev: 3, nqEps: 2, tri: 'ok' } },
-  { ticker: 'AGX', name: 'Argan, Inc.', lastReportDate: '2026-06-04', rsValue: 95, earnings: { revYoY: 32, revBeat: 'beat', epsYoY: 47, epsBeat: 'beat', gm: 19, fcf: 22, nqRev: 5, nqEps: 4, tri: 'ok' } },
-  { ticker: 'VRT', name: 'Vertiv Holdings', lastReportDate: '2026-04-22', rsValue: 91, earnings: { revYoY: 21, revBeat: 'beat', epsYoY: 49, epsBeat: 'beat', gm: 35, fcf: 9, nqRev: -2, nqEps: 1, tri: 'part' } },
-  { ticker: 'FTI', name: 'TechnipFMC plc', lastReportDate: '2026-04-30', rsValue: 82, earnings: { revYoY: 9, revBeat: 'inline', epsYoY: 16, epsBeat: 'beat', gm: 16, fcf: 7, nqRev: null, nqEps: null, tri: 'part' } },
-  { ticker: 'TSM', name: 'Taiwan Semi (ADR)', lastReportDate: '2026-04-17', rsValue: 88, earnings: { revYoY: 35, revBeat: 'beat', epsYoY: 53, epsBeat: 'beat', gm: 53, fcf: 25, nqRev: 4, nqEps: null, tri: 'part' } },
-  { ticker: 'BABA', name: 'Alibaba (ADR)', lastReportDate: '2026-05-15', rsValue: 78, earnings: { revYoY: 12, revBeat: 'beat', epsYoY: null, epsBeat: null, gm: 38, fcf: 18, nqRev: 1, nqEps: null, tri: 'part' } },
+  { ticker: 'TRGP', name: 'Targa Resources', lastReportDate: '2026-05-07', rsValue: 83, earnings: { revYoY: 18, revBeat: 'beat', epsYoY: 24, epsBeat: 'beat', gm: 18, fcf: 12, nqRev: 3, nqEps: 2, tri: 'ok', guidanceSource: '8k' } },
+  { ticker: 'AGX', name: 'Argan, Inc.', lastReportDate: '2026-06-04', rsValue: 95, earnings: { revYoY: 32, revBeat: 'beat', epsYoY: 47, epsBeat: 'beat', gm: 19, fcf: 22, nqRev: 5, nqEps: 4, tri: 'ok', guidanceSource: '8k' } },
+  { ticker: 'VRT', name: 'Vertiv Holdings', lastReportDate: '2026-04-22', rsValue: 91, earnings: { revYoY: 21, revBeat: 'beat', epsYoY: 49, epsBeat: 'beat', gm: 35, fcf: 9, nqRev: -2, nqEps: 1, tri: 'part', guidanceSource: null } },
+  { ticker: 'FTI', name: 'TechnipFMC plc', lastReportDate: '2026-04-30', rsValue: 82, earnings: { revYoY: 9, revBeat: 'inline', epsYoY: 16, epsBeat: 'beat', gm: 16, fcf: 7, nqRev: null, nqEps: null, tri: 'part', guidanceSource: null } },
+  { ticker: 'TSM', name: 'Taiwan Semi (ADR)', lastReportDate: '2026-04-17', rsValue: 88, earnings: { revYoY: 35, revBeat: 'beat', epsYoY: 53, epsBeat: 'beat', gm: 53, fcf: 25, nqRev: 4, nqEps: null, tri: 'part', guidanceSource: '8k' } },
+  { ticker: 'BABA', name: 'Alibaba (ADR)', lastReportDate: '2026-05-15', rsValue: 78, earnings: { revYoY: 12, revBeat: 'beat', epsYoY: null, epsBeat: null, gm: 38, fcf: 18, nqRev: 1, nqEps: null, tri: 'part', guidanceSource: null } },
 ];
 
 function HeaderRow({ mode }) {
@@ -178,7 +184,8 @@ export default function ScreenerGridTable({
         <span className="lg"><span className="gl il">−</span> 予想どおり</span>
         <span className="disc">
           <b>↑↓−</b> はいずれも直近決算の過去実績(vs アナリスト予想)。来期2列は
-          <b>会社の来期ガイダンスのアナリスト・コンセンサス比</b>＝会社が示した見通しの転記であり、当社の予測・推奨ではありません。
+          <span className="screener-grid-fdot" aria-hidden="true" /><b>付き＝会社ガイダンスとアナリスト予想の比</b>、
+          <b>無印＝来期コンセンサスYoY(ガイダンス未取得)</b>。いずれも会社開示・市場予想の転記であり、当社の予測・推奨ではありません。
           <b>これらは買い推奨ではありません。</b>
         </span>
       </div>
