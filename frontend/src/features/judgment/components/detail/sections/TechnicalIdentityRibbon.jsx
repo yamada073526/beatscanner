@@ -110,9 +110,7 @@ export default function TechnicalIdentityRibbon({ ticker, companyName }) {
         {name}
       </span>
       {oneLine && (
-        <>
-          <span aria-hidden style={{ color: 'var(--text-muted)', flexShrink: 0 }}>·</span>
-          <button
+        <button
             type="button"
             data-testid="v6-technical-identity-oneline"
             onClick={() => setExpanded((v) => !v)}
@@ -161,25 +159,21 @@ export default function TechnicalIdentityRibbon({ ticker, companyName }) {
                 transition: 'transform 150ms ease',
               }}
             />
-          </button>
-        </>
+        </button>
       )}
       {segmentText && (
-        <>
-          <span aria-hidden style={{ color: 'var(--text-muted)', flexShrink: 0 }}>·</span>
-          <span
-            data-testid="v6-technical-identity-segment"
-            style={{
-              fontSize: 12,
-              color: 'var(--text-muted)',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            {segmentText}
-          </span>
-        </>
+        <span
+          data-testid="v6-technical-identity-segment"
+          style={{
+            fontSize: 12,
+            color: 'var(--text-muted)',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {segmentText}
+        </span>
       )}
     </div>
   );
