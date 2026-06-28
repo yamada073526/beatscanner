@@ -337,18 +337,19 @@ function isPane3HeaderV2() {
 
 // 2026-06-27: 銘柄詳細 IA 再構成 v6 (SPEC_2026-06-27_pane3-detail-rearchitecture)。
 // L0-L6 新 IA (決算3点を一等地 / 目次 / 8Q spark / 章レイアウト刷新)。
-// default OFF (?pane3_v6=1 / localStorage 'pane3_v6'='1' で opt-in)。
-// v6 は v5 経路を上書き (v5 sub-flag には従属しない独立 flag)。
-// Sprint 4 で default ON + 旧 flag 一括 sweep 予定 → それまで 1 箇所に集約。
+// Sprint 4a (2026-06-28): default ON 昇格。?pane3_v6=0 / localStorage 'pane3_v6'='0' で v5 へ opt-out (escape hatch)。
+// v6 は v5 経路を上書き。Sprint 4b で旧 v5/compass/flash/order_v2/header_v2/headroom 分岐 + この opt-out を
+// 一括 sweep 予定 (clean exit)。それまで分岐は本関数 1 箇所に集約。
 function isPane3V6() {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true; // 既定 = v6
   try {
     const urlParam = new URLSearchParams(window.location.search).get('pane3_v6');
     if (urlParam === '1') return true;
-    if (urlParam === '0') return false;
-    return window.localStorage?.getItem('pane3_v6') === '1';
+    if (urlParam === '0') return false; // 一時 opt-out (v5 へ)
+    if (window.localStorage?.getItem('pane3_v6') === '0') return false; // 永続 opt-out
+    return true; // default ON
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -757,7 +758,7 @@ export default function JudgmentDetail({
   // v184 grill-me: 入れ子章再編。isV4 上位の opt-in、default OFF (?pane3_v5=1 で試用)。
   const isV5 = isV4 && isPane3V5();
   // 2026-06-27: IA 再構成 v6。isV5 に従属しない独立 flag（v5 経路を上書き）。
-  // default OFF (?pane3_v6=1 / localStorage 'pane3_v6'='1' で opt-in)。
+  // Sprint 4a (2026-06-28): default ON（?pane3_v6=0 / localStorage '0' で v5 へ opt-out）。
   const isV6 = isPane3V6();
   // ch2Tab / ch3Tab の useState は v107 hotfix で early return より前 (L320 周辺) に移動済。
   // 本位置に置くと Rules of Hooks 違反 (React #310 Rendered more hooks than during the previous render)。
