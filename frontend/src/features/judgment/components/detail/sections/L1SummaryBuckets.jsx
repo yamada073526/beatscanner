@@ -329,6 +329,18 @@ export default function L1SummaryBuckets({
   const rsLabel = rsHasUniv ? 'RS Rating' : rsHasSpy ? `RS 対SPY` : 'RS Rating';
   const rsScale = rsHasUniv ? '· 目安 80+ で強い' : '';
 
+  // セクター地位（Sprint 3b、SPEC_2026-06-28 §5）。backend は leader のみ注入（per-source compound）。
+  // §38/§5: neutral 色・行動指示なし・母集団 n を必ず併記・ⓘ 注記。緑（gain）/ cyan（brand）禁止。
+  const sectorN = technicalRs?.sector_n;
+  const sectorRank = technicalRs?.sector_rank;
+  const isSectorLeader =
+    technicalRs?.is_sector_rs_leader === true &&
+    Number.isFinite(sectorN) && sectorN >= 10 &&
+    Number.isFinite(sectorRank);
+  const sectorStandingNote =
+    `同セクター（${sectorN}銘柄）内で、対SPY 6ヶ月相対力（RS）が上位に位置することを示す事実指標です。` +
+    `相場の予測や売買の推奨ではありません。投資判断はご自身で行ってください。`;
+
   // -------- main render --------
   return (
     <div data-testid={TESTID} data-state="main" style={cardStyle}>
@@ -535,6 +547,47 @@ export default function L1SummaryBuckets({
             </span>
           </button>
         </div>
+      )}
+
+      {/* セクター地位 chip（Sprint 3b）: RS leader のみ・neutral 色・verdict 下位階層・ⓘ 必須（§5）。 */}
+      {!isNonEquity && isSectorLeader && (
+        <button
+          type="button"
+          onClick={scrollToTechnical}
+          data-testid={`${TESTID}-sector-standing`}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-2, 8px)',
+            width: '100%',
+            marginTop: 'var(--space-2, 8px)',
+            padding: '7px 12px',
+            background: 'var(--bg-subtle, #1e2a3a)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm, 9px)',
+            cursor: 'pointer',
+            textAlign: 'left',
+            color: 'inherit',
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--text-muted)', flexShrink: 0 }}
+          />
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+            セクター内 RS 上位{' '}
+            <strong style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
+              （{sectorN}銘柄中 第{sectorRank}位）
+            </strong>
+          </span>
+          <span
+            aria-label={sectorStandingNote}
+            title={sectorStandingNote}
+            style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)', cursor: 'help', flexShrink: 0 }}
+          >
+            ⓘ
+          </span>
+        </button>
       )}
 
       {/* 非 equity 時のメッセージ */}

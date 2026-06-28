@@ -14417,6 +14417,43 @@ def _universe_percentile_for(ticker: str) -> int | None:
     return None
 
 
+def _sector_rs_standing_for(ticker: str) -> dict | None:
+    """個別 detail 用: screener universe (cache) 内での sector RS 相対位置を返す。
+
+    Sprint 3b (SPEC_2026-06-28、Path B): 母集団 = screener base universe (= 画面の screener と一致)
+    なので「screener では下位なのに detail では上位」 という Trust Cliff が原理的に起きない。
+    migration なし・FMP call 増なし — _UNIVERSE_FULL_CACHE (scanner/universe が warm 化、cron 維持) を再利用。
+    threshold=10 (§6 user 確定): 「5銘柄中3位」 を「上位」 と呼ぶ §5 優良誤認リスクを回避。
+    cache miss / universe 外 / 有効銘柄<10 / leader でない → None (捏造しない、frontend 非表示)。
+    返り値 (leader のみ): {is_sector_rs_leader: True, sector_n, sector_rank}。
+    """
+    try:
+        cached = _UNIVERSE_FULL_CACHE.get("3000")  # scanner default universe_size
+        if not cached and _UNIVERSE_FULL_CACHE:
+            # 別 universe_size で warm 化されている場合は最も広い (items 最多) cache を採用
+            cached = max(
+                _UNIVERSE_FULL_CACHE.values(),
+                key=lambda c: len((c.get("payload") or {}).get("items") or []),
+                default=None,
+            )
+        if not cached:
+            return None
+        items = ((cached.get("payload") or {}).get("items")) or []
+        if not items:
+            return None
+        standings = _compute_sector_rs_standings(items, min_valid=10, leader_top_n=3)
+        st = standings.get(ticker.upper().strip())
+        if not st or not st.get("is_sector_rs_leader"):
+            return None
+        return {
+            "is_sector_rs_leader": True,
+            "sector_n": st.get("sector_n"),
+            "sector_rank": st.get("sector_rank"),
+        }
+    except Exception:
+        return None
+
+
 def _detect_dma_cross(
     times: list[str],
     sma_50: list[float | None],
@@ -14664,6 +14701,13 @@ async def get_technical(
                 # 2026-06-14 user feedback: IBD 式 universe_percentile (1-99) を併載 (rs_ratings batch)。
                 # SP500 外 / batch 未実行は None → frontend が対SPY% に fallback。
                 patterns_result["rs"]["universe_percentile"] = _universe_percentile_for(ticker_u)
+                # Sprint 3b (SPEC_2026-06-28、Path B): sector 内 RS 相対位置 (母集団=screener universe cache)。
+                # leader (同 sector ≥10 銘柄中 RS 上位3位) のみ注入。非該当 / cache miss は欠落 = frontend 非表示。
+                _sector_standing = _sector_rs_standing_for(ticker_u)
+                if _sector_standing:
+                    patterns_result["rs"]["is_sector_rs_leader"] = True
+                    patterns_result["rs"]["sector_n"] = _sector_standing.get("sector_n")
+                    patterns_result["rs"]["sector_rank"] = _sector_standing.get("sector_rank")
             else:
                 patterns_result["rs"] = {
                     "rs_vs_spy_pct": None,
@@ -20479,6 +20523,79 @@ def _get_annual_funda_pass_map(sb) -> "tuple[dict[str, bool], str | None]":
     return funda_map, freshness
 
 
+def _compute_sector_rs_standings(
+    rows: list[dict],
+    *,
+    min_valid: int = 5,
+    leader_top_n: int = 3,
+) -> dict[str, dict]:
+    """各 ticker の sector 内 RS 相対位置を計算 (0 API call、in-memory のみ)。
+
+    Sprint 3b (SPEC_2026-06-28、Path B): /api/scanner/universe の post-pass と
+    /api/technical detail reader (_sector_rs_standing_for) が共有する DRY helper。
+
+    rows: [{"ticker": str, "sector": str|None, "rs_vs_spy_pct": float|None}, ...]
+    返り値: {ticker: {is_sector_rs_leader, sector_rs_median, sector_n, sector_rank}}
+      - sector_n: 同 sector の有効 RS 銘柄数 (rs_vs_spy_pct が finite な数)
+      - sector_rank: sector 内 RS 降順順位 (1-based、有効値のみ)
+      - is_sector_rs_leader: sector_rank <= leader_top_n かつ sector_n >= min_valid
+    None-safe: RS None / sector None は is_sector_rs_leader=False、sector_rank=None。
+    """
+    _sector_rs_lists: dict[str, list[float]] = {}
+    for _r in rows:
+        _sec = _r.get("sector")
+        _rs = _r.get("rs_vs_spy_pct")
+        if _sec and _rs is not None:
+            try:
+                _rs_f = float(_rs)
+                if math.isfinite(_rs_f):
+                    _sector_rs_lists.setdefault(_sec, []).append(_rs_f)
+            except (ValueError, TypeError):
+                pass
+
+    _sector_rs_median: dict[str, float] = {}
+    for _sec, _vals in _sector_rs_lists.items():
+        if _vals:
+            _s = sorted(_vals)
+            _n = len(_s)
+            _sector_rs_median[_sec] = (
+                _s[_n // 2] if _n % 2 == 1 else (_s[_n // 2 - 1] + _s[_n // 2]) / 2.0
+            )
+
+    _valid_count: dict[str, int] = {s: len(v) for s, v in _sector_rs_lists.items()}
+    _sorted_desc: dict[str, list[float]] = {
+        s: sorted(v, reverse=True) for s, v in _sector_rs_lists.items()
+    }
+
+    out: dict[str, dict] = {}
+    for _r in rows:
+        _tk = _r.get("ticker")
+        if not _tk:
+            continue
+        _sec = _r.get("sector")
+        _rs = _r.get("rs_vs_spy_pct")
+        _rec = {
+            "sector_rs_median": _sector_rs_median.get(_sec) if _sec else None,
+            "is_sector_rs_leader": False,
+            "sector_n": _valid_count.get(_sec) if _sec else None,
+            "sector_rank": None,
+        }
+        if _sec is not None and _rs is not None:
+            try:
+                _rs_f = float(_rs)
+                _desc = _sorted_desc.get(_sec, [])
+                if math.isfinite(_rs_f) and _rs_f in _desc:
+                    _rank0 = _desc.index(_rs_f)
+                    _rec["sector_rank"] = _rank0 + 1
+                    _rec["is_sector_rs_leader"] = bool(
+                        _rank0 < leader_top_n and _valid_count.get(_sec, 0) >= min_valid
+                    )
+            except (ValueError, TypeError, AttributeError):
+                pass
+        out[_tk] = _rec
+    return out
+
+
 async def _build_universe_payload(sb, universe_size: int) -> dict:
     """5 テーブルを ticker キーで in-memory join し unmasked full payload を返す (tier 不変)。"""
     base = await _fetch_screener_base_universe(universe_size)
@@ -20772,54 +20889,15 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
     # None-safe: RS が None の item は集計対象外 / is_sector_rs_leader = False。
     # 小 sector 誤シグナル防止: 有効 RS 銘柄数 < 5 の sector は is_sector_rs_leader = False。
     if items:
-        # sector ごとに RS 値リストを収集
-        _sector_rs_lists: dict[str, list[float]] = {}
+        # Sprint 3b (SPEC_2026-06-28): sector-leader 計算を _compute_sector_rs_standings に集約
+        # (detail reader _sector_rs_standing_for と DRY)。
+        # 挙動不変: scanner payload には従来通り sector_rs_median + is_sector_rs_leader のみ書き戻す
+        # (threshold=5 維持。sector_n / sector_rank は scanner では非露出 = payload shape 不変)。
+        _standings = _compute_sector_rs_standings(items, min_valid=5, leader_top_n=3)
         for _it in items:
-            _sec = _it.get("sector")
-            _rs = _it.get("rs_vs_spy_pct")
-            if _sec and _rs is not None:
-                try:
-                    _rs_f = float(_rs)
-                    if math.isfinite(_rs_f):
-                        _sector_rs_lists.setdefault(_sec, []).append(_rs_f)
-                except (ValueError, TypeError):
-                    pass
-
-        # sector ごとに median を計算
-        _sector_rs_median: dict[str, float] = {}
-        for _sec, _rs_vals in _sector_rs_lists.items():
-            if _rs_vals:
-                _sorted = sorted(_rs_vals)
-                _n = len(_sorted)
-                if _n % 2 == 1:
-                    _sector_rs_median[_sec] = _sorted[_n // 2]
-                else:
-                    _sector_rs_median[_sec] = (_sorted[_n // 2 - 1] + _sorted[_n // 2]) / 2.0
-
-        # sector ごとに RS 降順ランクを計算 (is_sector_rs_leader: 上位3位かつ有効銘柄5以上)
-        _sector_rs_valid_count: dict[str, int] = {s: len(v) for s, v in _sector_rs_lists.items()}
-        # 各 sector の RS 降順ソート済みリスト (None を除いた値のみ)
-        _sector_rs_sorted: dict[str, list[float]] = {
-            s: sorted(v, reverse=True) for s, v in _sector_rs_lists.items()
-        }
-
-        for _it in items:
-            _sec = _it.get("sector")
-            _rs = _it.get("rs_vs_spy_pct")
-            # sector_rs_median: None-safe (sector なし / 有効 RS なしは None)
-            _it["sector_rs_median"] = _sector_rs_median.get(_sec)
-            # is_sector_rs_leader: RS None / sector なし / 有効銘柄 < 5 は False
-            if _sec is None or _rs is None or _sector_rs_valid_count.get(_sec, 0) < 5:
-                _it["is_sector_rs_leader"] = False
-            else:
-                try:
-                    _rs_f = float(_rs)
-                    _sorted_desc = _sector_rs_sorted.get(_sec, [])
-                    # 上位3位以内: ランク = 降順リストの index（0-based）< 3
-                    _rank = _sorted_desc.index(_rs_f) if _rs_f in _sorted_desc else 999
-                    _it["is_sector_rs_leader"] = bool(_rank < 3)
-                except (ValueError, TypeError, AttributeError):
-                    _it["is_sector_rs_leader"] = False
+            _st = _standings.get(_it.get("ticker")) or {}
+            _it["sector_rs_median"] = _st.get("sector_rs_median")
+            _it["is_sector_rs_leader"] = _st.get("is_sector_rs_leader", False)
 
     # headline as_of = 最新 refresh (= nightly scan の鮮度)。 鮮度差は per-facet freshness map で開示。
     # min は lagging facet (earnings_evaluation funda_pass は決算イベント依存で数十日 stale) に引きずられ
