@@ -42,7 +42,6 @@ import {
   fetchMovers,
   fetchEconomicCalendar,
   fetchPortfolioPerformance,
-  fetchPortfolioHistory,
 } from '../../api.js';
 import { translateEvent, CATEGORY } from '../../lib/i18n/economicEvents.js';
 import { useWorkspaceStore } from '../../state/workspaceStore.js';
@@ -492,9 +491,7 @@ function PortfolioSummaryRow({ holdings, prices, tickers, totalRealized = 0, tot
   const setSelectedTarget = useWorkspaceStore((s) => s.setSelectedTarget);
   const selectedTargetType = useWorkspaceStore((s) => s.selectedTarget?.type);
   const isPortfolioDetailActive = selectedTargetType === 'portfolio';
-  // round 10 USD/JPY 段階再導入 step 4: CurrencyToggleRow を render。
-  // toggle UI が見えるだけ、各数値の formatter はまだ USD 固定で挙動変化なし。
-  // ここが真っ白原因なら、CurrencyToggleRow 内の Chip primitive 経由で問題あり。
+  // 表示通貨 USD/JPY トグルは下の pane2-portfolio-metastrip 内にインライン実装済み。
   const displayCurrency = useWorkspaceStore((s) => s.displayCurrency);
   const setDisplayCurrency = useWorkspaceStore((s) => s.setDisplayCurrency);
   const { rate: forexRate } = useForexRate('USD', 'JPY');
@@ -1660,54 +1657,6 @@ function ConcentrationRiskBanner({ ticker, pct }) {
   );
 }
 
-// round 10 (handover v69 dogfood): Portfolio section の USD/JPY toggle row.
-// 3-col grid の直前に出る 1 行で、`通貨: [USD] [JPY]` + `1 USD = ¥XXX` rate を inline 表示。
-function CurrencyToggleRow({ displayCurrency, setDisplayCurrency, forexRate }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 8,
-        padding: '6px 14px 4px',
-        flexWrap: 'wrap',
-      }}
-    >
-      <ChipGroup prefix="通貨" ariaLabel="表示通貨を切替" role="radiogroup" gap="tight">
-        <Chip
-          size="xs"
-          variant="segmented"
-          pressed={displayCurrency === 'USD'}
-          onClick={() => setDisplayCurrency('USD')}
-        >
-          USD
-        </Chip>
-        <Chip
-          size="xs"
-          variant="segmented"
-          pressed={displayCurrency === 'JPY'}
-          onClick={() => setDisplayCurrency('JPY')}
-        >
-          JPY
-        </Chip>
-      </ChipGroup>
-      {displayCurrency === 'JPY' && Number.isFinite(forexRate) && forexRate > 0 && (
-        <span
-          style={{
-            fontSize: 10,
-            color: 'var(--text-muted)',
-            fontVariantNumeric: 'tabular-nums',
-          }}
-          title="USD/JPY 為替レート (30 分ごと更新)"
-        >
-          1 USD = ¥{forexRate.toFixed(2)}
-        </span>
-      )}
-    </div>
-  );
-}
-
 // round 6: 期間連動 P/L subordinate row
 //   - 1 行目: 「P/L 期間」 micro chips (右寄せ small variant) + P/L 数値
 //   - 2 行目: Claude haiku-4-5 が生成した 1 文 AI サマリー (3 行 clamp + title tooltip)
@@ -1806,47 +1755,6 @@ function PortfolioPeriodPerformanceRow({ period, onPeriodChange, data, loading, 
         >
           {aiSummary}
         </div>
-      )}
-    </div>
-  );
-}
-
-function PortfolioStat({ label, value, sub, color }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-      <span
-        style={{
-          fontSize: 10,
-          fontWeight: 500,
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-          color: 'var(--text-muted)',
-        }}
-      >
-        {String(label)}
-      </span>
-      <span
-        style={{
-          fontSize: 14,
-          fontWeight: 700,
-          color: color || 'var(--text-primary)',
-          fontVariantNumeric: 'tabular-nums',
-          lineHeight: 1.1,
-        }}
-      >
-        {String(value)}
-      </span>
-      {sub && (
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 500,
-            color: color || 'var(--text-muted)',
-            fontVariantNumeric: 'tabular-nums',
-          }}
-        >
-          {String(sub)}
-        </span>
       )}
     </div>
   );
