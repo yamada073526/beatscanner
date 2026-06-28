@@ -11,7 +11,8 @@
  *   - C-11 CSS 基盤先行: shadow ゼロ + border/tinted-bg は index.css .screener-master スコープに委任
  *   - C-12 state 管理: workspaceStore に混入しない (local state + useScreenerState hook)
  *   - C-17 preset 時 filter UI 物理非表示 (max-height:0、CSS で制御)
- *   - C-5 feature flag: isScreenerV2() を参照 (screener_v2 default ON / ?screener_legacy=1 kill switch)
+ *   - C-5 feature flag: isScreenerV2() を参照。現状 default OFF (?screener_v2=1 で opt-in)、C-16 昇格で default ON。
+ *     kill switch (revert) = ?screener_v2=0 / ?screener_legacy=1 / localStorage screener_v2='0' のいずれか
  *
  * testid 一覧 (全 render path に付与):
  *   screener-master         — ラッパー全体
@@ -92,24 +93,39 @@ class MasterErrorBoundary extends Component {
 
 /**
  * C-5 / C-16: screener_v2 feature flag
- *   - 移行期間 (Sprint 2-5 実装中): opt-in default OFF (?screener_v2=1 で新構造)
- *   - 昇格後 (C-16 ゲート pass): default の return を true に変更 → C-5 最終形 (default ON)
+ *   - 移行期間 (現状): opt-in default OFF (?screener_v2=1 で新構造)
+ *   - 昇格後 (C-16 ゲート pass): 末尾の `return false` を `return true` に変更 → C-5 最終形 (default ON)
+ *   kill switch (default ON 後の revert): ?screener_v2=0 / ?screener_legacy=1 / localStorage screener_v2='0'
+ *     のいずれかで旧 screener に即戻せる (URL 優先・localStorage 永続)。
  *   Workspace.jsx 側でも同一ロジックを使用する (import)。
  */
+/**
+ * 純粋な flag 判定ロジック (グローバル非依存・unit test 可能)。
+ *   feedback_feature_flag_dual_mode: URL param (一時) 優先 → localStorage (永続) の順で評価。
+ *   @param {string} search  - window.location.search 相当 (例 '?screener_v2=0')
+ *   @param {string|null} ls - localStorage['screener_v2'] の値 ('1' | '0' | null)
+ *   ⚠️ C-16 昇格時はこの末尾 `return false` を `return true` に変えるだけで default ON 化 (単一箇所)。
+ */
+export function resolveScreenerV2({ search = '', ls = null } = {}) {
+  const params = new URLSearchParams(search || '');
+  // URL 優先: ?screener_v2=1 で新構造 opt-in / ?screener_v2=0 で明示 OFF
+  if (params.get('screener_v2') === '1') return true;
+  if (params.get('screener_v2') === '0') return false;
+  // kill switch: ?screener_legacy=1 で旧 screener へ強制 revert (default ON 後の緊急退避・doc と実装の一致)
+  if (params.get('screener_legacy') === '1') return false;
+  // 永続: opt-in ('1' dogfood 継続) / kill ('0' default ON 後の個別端末 revert)
+  if (ls === '1') return true;
+  if (ls === '0') return false;
+  return false; // 移行期間 default = 旧並置 (C-16 昇格時に true へ)
+}
+
 export function isScreenerV2() {
   // 6 体合議 C-16 昇格ゲート: dogfood pass + Trust Cliff pass + metrics 確認後に default ON へ。
-  // feedback_feature_flag_dual_mode: URL param (一時) 優先 + localStorage (永続)。
   if (typeof window === 'undefined') return false;
   try {
-    const params = new URLSearchParams(window.location.search);
-    // URL 優先: ?screener_v2=1 で新構造 opt-in / ?screener_v2=0 で明示 OFF
-    if (params.get('screener_v2') === '1') return true;
-    if (params.get('screener_v2') === '0') return false;
-    // 永続 opt-in (dogfood 継続用)
-    try {
-      if (localStorage.getItem('screener_v2') === '1') return true;
-    } catch {}
-    return false; // 移行期間 default = 旧並置 (昇格後に true へ)
+    let ls = null;
+    try { ls = window.localStorage?.getItem('screener_v2'); } catch {}
+    return resolveScreenerV2({ search: window.location.search, ls });
   } catch {
     return false;
   }

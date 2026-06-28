@@ -21,6 +21,7 @@
 import { useState, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { BadgeCheck, TrendingUp, LayoutGrid, Crown, Moon, Sunrise, Lock } from 'lucide-react';
+import { trackEvent } from '../lib/analytics.js';
 
 // カードはプラン昇順 (Free→Pro→Premium) で並べ「重要度＝上位プランほど右」を視覚化 (user 確定 2026-06-28)。
 //   STRATEGY_PRESETS の物理順 (= 件数算出 / 他 consumer の SSOT) は不変のまま、表示時にのみ並べ替える
@@ -156,7 +157,12 @@ export default function StrategyPresetBar({ active = null, onSelect, counts = {}
             aria-checked={isSelected}
             data-testid={`screener-strategy-${key}`}
             className={`screener-strategy-tile${isSelected ? ' is-selected' : ''}`}
-            onClick={() => onSelect?.(isSelected ? null : key)}
+            onClick={() => {
+              // C-16 metrics gate: どの戦略が選ばれ詳細到達まで進むか (ファネル top) を計測。
+              //   GA4/Clarity 両送・未初期化なら no-op (analytics.js)。deselect も区別して記録。
+              trackEvent('screener_preset_select', { preset: key, tier, deselect: isSelected });
+              onSelect?.(isSelected ? null : key);
+            }}
             onMouseEnter={(e) => openTip(e.currentTarget, title)}
             onMouseLeave={closeTip}
             onFocus={(e) => openTip(e.currentTarget, title)}
