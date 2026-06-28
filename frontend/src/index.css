@@ -15029,18 +15029,16 @@ body.is-digest-resizing {
   gap: var(--space-2);
   margin-top: 2px;          /* desc との僅かな分離 (body gap + 2px) */
 }
-/* locked 表示が長い (🔒 Premium 限定) ので tier badge に潰されないよう件数側を優先伸長 */
+/* ── 件数 (S4: title=13px より小さい従属サイズに。数字 12px / 「銘柄」11px)。
+   セレクタタイルの視覚階層 = 名前(主) > 件数(従) > tier(badge)。旧 b=18px は title より大きく主従逆転していた。
+   locked 表示 (🔒 Premium 限定) が長いので min-width:0 で件数側を優先伸長し tier badge の潰れを防ぐ。 ── */
 .screener-strategy-tile__count {
   min-width: 0;
-}
-
-/* ── 件数 (mockup v8 §.count: 13px secondary / b=18px/700/tabular) ── */
-.screener-strategy-tile__count {
-  font-size: 13px;
+  font-size: 11px;
   color: var(--text-secondary);
 }
 .screener-strategy-tile__count b {
-  font-size: 18px;
+  font-size: 12px;          /* title(13px) より小さく = 従属 (旧 18px から縮小) */
   font-weight: 700;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
@@ -15054,7 +15052,7 @@ body.is-digest-resizing {
   align-items: center;
   gap: 4px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11px;          /* 件数の従属サイズに統一 (title より小さく) */
 }
 .screener-strategy-tile__count--locked svg {
   flex-shrink: 0;
