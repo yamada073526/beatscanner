@@ -52,6 +52,7 @@ import {
   itemPasses,
   PRESET_PREDICATES,
   presetDefaultPrecision,
+  presetPrecisionLevels,
   topSectorsByRs,
   sectorTone,
   sectorTagJp,
@@ -66,6 +67,7 @@ import {
 export {
   PRESET_CONDS, CROW_LAYOUT, PRESET_DISPLAY_CONDS, PRESET_GATE_CONDS,
   buildActiveGrades, itemPasses, PRESET_PREDICATES, presetDefaultPrecision,
+  presetPrecisionLevels,
   topSectorsByRs, sectorTone, sectorTagJp, fmtSr, buildSectorSummary, countPreset,
 };
 
@@ -254,6 +256,12 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
       //   _universeCache=module-scope は常に最新。
       setFundaPassOnly(true);
       setSectorFilter(topSectorsByRs(_universeCache?.items || [], 5));
+    } else if (presetKey === 'market_leading') {
+      // 市場をリードし始めた銘柄 (SPEC_2026-06-28 market_leading): 直近決算ビートを gate flag (beatOnly) に。
+      //   grades (rs_mid_band/vs_spy/ocf_margin_pct/roe_lenient/eps_yoy_mid) は PRESET_PREDICATES.grades 経由で
+      //   activeGrades に算入 (flag 不要)。extra.beatOnly=true と一致させ countPreset(tile)==filteredItems(list) を
+      //   担保 (count==list・Trust Cliff)。mcap cap なし。
+      setBeatOnly(true);
     }
     // null = リセットのみ (共通処理で完了)
   }, []);
@@ -388,7 +396,8 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     const items = universe?.items || [];
     const extra = { fundaPassOnly, ocfMarginOnly, ocfGtNiOnly, buyZoneOnly, newHigh52wOnly, adVolumeOnly, eps3RisingOnly, rev3RisingOnly, cfpsRisingOnly, beatOnly, sectorLeaderOnly, cupState, sectors: sectorFilter, mcapBands: mcapFilter };
     const result = {};
-    for (const lvl of ['loose', 'standard', 'strict']) {
+    // S4 market_leading: 精度段数は preset 毎 (market_leading は 4 段=最厳追加、他は 3 段)。
+    for (const lvl of presetPrecisionLevels(activePreset)) {
       const grades = buildActiveGrades(activePreset, lvl, overrides);
       result[lvl] = items.filter((it) => itemPasses(it, grades, extra)).length;
     }
@@ -663,6 +672,26 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     //   quiet_quality のときは下の汎用 grade crow (gradeAnnot が ≤ 閾値を描画) へ素通し。
     if (cond.key === 'volume_quiet' || cond.key === 'inst_qoq_calm') {
       if (activePreset !== 'quiet_quality') return null;
+    }
+    // ── 「市場をリードし始めた銘柄」専用 facet ガード (SPEC_2026-06-28 market_leading) ──
+    //   vs_spy / rs_mid_band / roe_lenient / eps_yoy_mid は CROW_LAYOUT 登録済 (RENDERABLE 要件) だが、
+    //   market_leading 以外 (custom mode = activePreset null 含む) では描かない (他 preset 誤露出防止・Trust Cliff)。
+    if (cond.key === 'vs_spy' || cond.key === 'rs_mid_band' || cond.key === 'roe_lenient' || cond.key === 'eps_yoy_mid') {
+      if (activePreset !== 'market_leading') return null;
+    }
+    // rs_mid_band: 範囲帯 [下限(精度連動), 75] を custom 描画 (gate「必須」)。汎用 grade crow は ≥下限 のみ表示し
+    //   上限 75 が隠れフィルタ化するため別描画 (Trust Cliff)。下限は現在精度の resolved level から取得。
+    if (cond.key === 'rs_mid_band') {
+      const lvl = activeGrades[cond.key] ?? clampLevel(cond.facet, preset);
+      const lo = cond.facet.grades[lvl] ?? cond.facet.grades.standard;
+      return (
+        <div key={cond.key} className="screener-crow is-gate" data-testid="screener-cond-row" data-cond={cond.key} data-gate="1" title={cond.facet.tooltip}>
+          <span className="screener-crow__lockicon" aria-hidden><Lock size={13} strokeWidth={2} /></span>
+          <span className="screener-crow__lbl">{cond.facet.label}</span>
+          <span className="screener-crow__th">RS {lo}〜{cond.facet.bandMax}</span>
+          <span className="screener-crow__gate-pill" aria-label="この戦略の絶対条件（精度で下限が変化）">必須</span>
+        </div>
+      );
     }
     // ── 新高値ブレイク gate 修正 (SPEC_2026-06-25): new_high_break 専用 custom crow ──
     //   汎用 grade crow は 999 sentinel / 0〜+5% range を正しく表示できないため別描画。
@@ -993,13 +1022,18 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
               role="radiogroup"
               aria-label="精度"
             >
-              {/* thumb: 選択段に translateX で滑走 (3 等幅・1/3 単位) */}
+              {/* thumb: 選択段に translateX で滑走 (n 等幅・1/n 単位)。
+                  S4 market_leading: preset 毎に段数可変 (4段=最厳)。幅を inline /n 化し index.css 不触
+                  (B2 crow 隔離保全)。n=3 では calc((100%-6px)/3) で CSS と一致=既存 preset の見た目不変。 */}
               <span
                 className="screener-precision-seg__thumb"
-                style={{ transform: `translateX(${['loose', 'standard', 'strict'].indexOf(preset) * 100}%)` }}
+                style={{
+                  width: `calc((100% - 6px) / ${presetPrecisionLevels(activePreset).length})`,
+                  transform: `translateX(${presetPrecisionLevels(activePreset).indexOf(preset) * 100}%)`,
+                }}
                 aria-hidden="true"
               />
-              {(['loose', 'standard', 'strict']).map((lvl) => (
+              {(presetPrecisionLevels(activePreset)).map((lvl) => (
                 <button
                   key={lvl}
                   type="button"
@@ -1735,21 +1769,25 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                   )}
                 </div>
               </div>
-            ) : ((activePreset === 'new_high_break' || activePreset === 'quiet_quality') && !isPremiumUser) ? (
-              /* Premium tier preset の preset レベル gate (SPEC_2026-06-25 §4.2.2 + SPEC_2026-06-28 §10)。
-                 非 Premium には「0銘柄」でなくロック+CTA を出す (Trust Cliff)。新高値ブレイク / 静かな強さ 共通。
-                 ※ N 件は非 Premium のマスク済 universe では算出不能のため、捏造せず件数は出さない。 */
+            ) : ((activePreset === 'new_high_break' || activePreset === 'quiet_quality' || activePreset === 'market_leading') && !isPremiumUser) ? (
+              /* Premium tier preset の preset レベル gate (SPEC_2026-06-25 §4.2.2 + SPEC_2026-06-28 §10/market_leading)。
+                 非 Premium には「0銘柄」でなくロック+CTA を出す (Trust Cliff)。新高値ブレイク / 静かな強さ / 市場をリード 共通。
+                 ※ new_high_break / quiet_quality は N 件が非 Premium のマスク済 universe で算出不能のため件数を出さない。
+                   market_leading は masked facet 非依存 (rs/vs_spy/ocf/roe/eps/beat は全 free) で件数=真値が出るため、
+                   件数 Free の集客フックとして {filteredItems.length} 件を提示し、銘柄詳細 (リスト) のみ Premium gate。 */
               <div className="screener-lockbar" role="status" data-testid={`screener-premium-gate-${activePreset}`}>
                 <Lock size={14} strokeWidth={2} aria-hidden className="screener-lockbar__icon" />
                 <p className="screener-lockbar__copy">
                   {activePreset === 'quiet_quality'
                     ? <>「静かな強さ」はRSが強いのに出来高が静か・機関が未殺到の銘柄を毎晩スキャンする <strong>Premium 限定</strong>の戦略です。</>
+                    : activePreset === 'market_leading'
+                    ? <><strong>{filteredItems.length}件</strong>が「市場をリードし始めた銘柄」の条件に合致しています。各銘柄の詳細は <strong>Premium 限定</strong>です。</>
                     : <>「新高値ブレイク」は新高値圏 × 好決算を毎晩スキャンする <strong>Premium 限定</strong>の戦略です。</>}
                 </p>
                 <button
                   type="button"
                   className="screener-lockbar__cta"
-                  onClick={() => { trackEvent('screener_preset_premium_gate_cta', { preset: activePreset }); onUpgrade?.(activePreset === 'quiet_quality' ? '静かな強さ (Premium)' : '新高値ブレイク (Premium)'); }}
+                  onClick={() => { trackEvent('screener_preset_premium_gate_cta', { preset: activePreset }); onUpgrade?.(activePreset === 'quiet_quality' ? '静かな強さ (Premium)' : activePreset === 'market_leading' ? '市場をリードし始めた銘柄 (Premium)' : '新高値ブレイク (Premium)'); }}
                   data-testid="screener-premium-gate-cta"
                 >
                   Premium を見る
