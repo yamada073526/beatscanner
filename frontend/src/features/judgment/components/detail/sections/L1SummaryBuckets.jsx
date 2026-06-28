@@ -3,7 +3,7 @@
  *
  * @no-llm: このコンポーネントは backend 計算済値の静的テンプレート整形専用。LLM API 呼び出し禁止。
  *
- * 配置: StateCompass の代替として v6 flag ON 時のみ表示（v5 経路では StateCompass が残置）。
+ * 配置: 銘柄詳細 L1（旧 StateCompass を置換。Sprint 4b で v5 経路・StateCompass は物理撤去済）。
  * 内容: 決算3点 named buckets（EPS/売上/ガイダンス clickable → drill）
  *       + 連続ビート mini + RS mini + 状態 N/5 dot+ⓘ
  *

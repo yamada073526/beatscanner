@@ -12,41 +12,29 @@ import Hero from './Hero.jsx';
 // verdict に連動した glow tint を Hero + SummaryBrief に適用。
 // data-spotlight="card" で useArrivalSpotlight に自動登録。
 import VerdictHero from './VerdictHero.jsx';
-import KpiStrip from './KpiStrip.jsx';
-import VerdictDetail from './VerdictDetail.jsx';
 import FiveConditionsCard from './FiveConditionsCard.jsx';
-import SimpleSection from './SimpleSection.jsx';
-import ConditionGrid from './ConditionGrid.jsx';
 import SkeletonDetail from './SkeletonDetail.jsx';
 import PremiumLock from '../shared/PremiumLock.jsx';
 import StockPriceChart from '../../../../components/StockPriceChart.jsx';
 // SPEC 2026-05-28 Sprint 4 + 6 (pillar 2 technical): Chart 直下に hero card 2 つを並列配置
-import AnalystTargetCard from '../../../../components/AnalystTargetCard.jsx';
 // v187 (3体合議 ui/金融/qa 全員一致): テクニカル章の横並び売買目安カードを統合する価格 ladder (縦の数直線)。
 import PriceLadder from '../../../../components/PriceLadder.jsx';
-import SellZoneCard from '../../../../components/SellZoneCard.jsx';
 // v127 R16-3 (R12-1 Phase 1 R2): IBD Distribution Day カウンター (機関の売り圧力目安)
-import DistributionDaysCard from '../../../../components/DistributionDaysCard.jsx';
 // v126 R8-3 Phase 2: MarketSurge 互換 Cup-Handle pivot narration (state=formation 時のみ表示)
-import CupPivotCard from '../../../../components/CupPivotCard.jsx';
 // v126 R8-3 Phase 3: 直近 breakout = support level narration (last_breakout 取得時のみ表示)
-import BuyZoneCard from '../../../../components/BuyZoneCard.jsx';
 import BreakoutZoneCard from '../../../../components/BreakoutZoneCard.jsx';
 // v100 user dogfood (handover §100点 multi-review): Pane 3 Insider 取引 section の中身実装
-import InsiderPanel from '../../../../components/InsiderPanel.jsx';
 // v100 (handover §SPEC FMP Premium 打ち手 5): 過去 8Q 決算 ±5 日 価格反応 (event study)
 import EarningsReactionPanel from '../../../../components/EarningsReactionPanel.jsx';
 // handover v82 Phase 5: TriageBanner (保有 × 5 条件 × Cup-Handle 三層)。
 // ConditionGrid 直前 hint 1 行 (UI/UX 6 体合議 B 案)。
-import TriageBanner from '../../../../components/TriageBanner.jsx';
 // Sprint 6 (SPEC 2026-05-19): SummaryBrief (AI 要約) を Pane 3 Hero 直下に port。
 // Hallucination Guard 4 重防御 (ErrorBoundary / BLOCKLIST_REGEX / conditional render / 数値非該当)。
 // brand-aspiration §-1「コンシェルジュの一言挨拶」比喩。 frontend-architect 判定: risk 最大 → 末尾 sprint で隔離。
-import SummaryBrief from '../../../../components/SummaryBrief.jsx';
 // Sprint 2: AccordionSection primitive + useIntersectionLazy hook
 // Sprint 3 (return-grid-primitive): ReturnGrid を primitives/index.js から追加
 // institutional-ttm-panel Sprint 3: TtmValuationPanel を primitives/index.js から追加
-import { AccordionSection, ACCORDION_L2_TITLE_STYLE, ReturnGrid, TtmValuationPanel } from '../../primitives/index.js';
+import { AccordionSection, ReturnGrid } from '../../primitives/index.js';
 // Sprint 4 (Phase 2): 案1 section in-view fade-in — 主要セクション wrapper
 import SectionFade from '../../primitives/SectionFade.jsx';
 // Sprint 0 (Phase 2): MotionProvider — LazyMotion + domAnimation (framer-motion subset)。
@@ -56,17 +44,14 @@ import MotionProvider from '../../../../components/MotionProvider.jsx';
 import { DetailInstanceTickerContext } from '../../primitives/DetailInstanceTickerContext.js';
 // Phase G Phase 1 (handover v98 §0-B): UnifiedJudgmentSection — 章 1「判定」 4 components 統合 wrapper。
 // feature flag `pane3_v2=1` で URL parameter / localStorage 切替 (default off)。
-import UnifiedJudgmentSection from './UnifiedJudgmentSection.jsx';
 // v104 release MVP: EPS Beat Streak chip — 章 1 verdict anchor、 過去 N 期 Beat の retention 訴求。
 //   QuarterlyHistoryTable が accordion collapsed default で見えない問題を chip 前出しで解消。
-import EpsBeatStreakChip from './EpsBeatStreakChip.jsx';
 // v108 議題 5A (multi-review 5/5 verdict「release 前 mandatory」):
 // Forward P/E / PEG / 配当性向 / Buyback比率 を KpiStrip に追加するための fetcher。
 // 金商法 §38 / 景表法 §5 配慮で narration / 警告 chip なし、 数値のみ。
 import { fetchValuationExtras, fetchTechnical, TECHNICAL_CANONICAL_PATTERNS } from '../../../../api.js';
 // Phase G Phase 3 (handover v99 §0-D): ChapterSection — 章 2-5 用 generic 章扉 (Noto Serif JP / gold hairline)。
 // headerOnly mode で content 再配置せず brand 一貫性 ([[feedback-gold-accent-continuity]]) を実現。
-import ChapterSection from './ChapterSection.jsx';
 // v118 ETF MVP: ETF 入力時は 5 条件適用外 → EtfOverviewPanel を render (Trust Cliff 防止)。
 import EtfOverviewPanel from '../../../../components/EtfOverviewPanel.jsx';
 // C-3 競合ナビ (SPEC 2026-06-09): パンくずバー — 発光系 class 不使用の 28px 独立バー。
@@ -82,8 +67,6 @@ import L3QualityFold from './sections/L3QualityFold.jsx';
 import TechnicalIdentityRibbon from './sections/TechnicalIdentityRibbon.jsx';
 // v199: ファンダ章冒頭の決算ハイライト (flag opt-in、SPEC_2026-06-10_earnings-flash-summary + 6体合議)
 import EarningsFlashSummary from './sections/EarningsFlashSummary.jsx';
-import StateCompass from './sections/StateCompass.jsx';
-import BuyHeadroomCompass from './sections/BuyHeadroomCompass.jsx';
 // 完全性台帳 (coverage manifest) Sprint3: 規律の元データ取得状況を最上部1行ロールアップ + ドリルダウン監査。
 import CompletenessRollupBadge from './sections/CompletenessRollupBadge.jsx';
 // v6 IA 再構成 (SPEC_2026-06-27): Sprint 1 新規 components
@@ -95,7 +78,6 @@ import TechnicalSpyNote from './sections/TechnicalSpyNote.jsx';
 import MarketEvalSection from './sections/MarketEvalSection.jsx';
 import ContextSection from './sections/ContextSection.jsx';
 // Sprint 2 (CAN-SLIM Phase 1 UX): テクニカル章のライター憲法サマリーブロック
-import TechnicalChapterSummary from './sections/TechnicalChapterSummary.jsx';
 // v125 P8-3 Sprint B: 図解 sticky accordion (default OFF、 案 B 新順序の section 2)。
 // DiagramCard 物理 mount 維持は本 sprint では deferred (DetailReport.jsx vizData lift up が必要)、
 // wrapper のみ実装で AI 詳細レポートへの anchor link を提供 ([[feedback-diagram-card-remount-cache]] は次 phase)。
@@ -159,17 +141,6 @@ export function ChapterHeader({ label, isChapterStart = false }) {
   );
 }
 
-// PR-2 feature flag: localStorage.pane3_v1='1' で旧 UI (VerdictDetail + ConditionGrid 二重) に切替可。
-// 6 体合議 + §-1-B postmortem「撤回コスト最小化設計」の学び適用。
-// デフォルト = 新 UI (FiveConditionsCard 統合)。dogfood で問題があれば DevTools で
-// localStorage.setItem('pane3_v1', '1') → リロードで即旧 UI に戻る。
-function isPane3V1() {
-  try {
-    return typeof window !== 'undefined' && window.localStorage?.getItem('pane3_v1') === '1';
-  } catch {
-    return false;
-  }
-}
 
 // Sprint 3: feature flag — pane3_scroll_v1='1' で旧 flat accordion なし UI に切替可
 // (§-1-B postmortem 撤回コスト最小化設計 + AccordionSection 側でも同 flag 確認)
@@ -218,40 +189,7 @@ function isPane3V3() {
   }
 }
 
-// Phase G Phase 2 (handover v99 §0-B): pane3_v2_frameless='1' で sub-component frameless 化。
-// Phase 2 vision-eval verdict は Phase 1 比 regression (AAPL -1.73 / MSFT -1.47) のため
-// 単独 flag で opt-in に変更。 ?pane3_v2=1 単独では frameless 無効、 ?pane3_v2=1&pane3_v2_frameless=1
-// で初めて Phase 2 frameless が有効。
-// v125 P8-3 Sprint B: Pane 3 案 B 新順序 (StickyDiagramAccordion + Chart + Target+Zone + 5 条件 accordion 外維持 + ファンダ accordion + その他)。
-// v126 R10-1 (2026-05-29 user 確認後): default ON 昇格 (user 承認済「OK なら ON 化」 + R9-1 scroll fix verified)。
-// URL ?pane3_v4=0 で kill switch (revert 容易性のため残置)、 ?pane3_v4=1 / localStorage は明示的にも動作。
-function isPane3V4() {
-  if (typeof window === 'undefined') return true;
-  try {
-    const urlParam = new URLSearchParams(window.location.search).get('pane3_v4');
-    if (urlParam === '0') return false;
-    return true;
-  } catch {
-    return true;
-  }
-}
 
-// v184 grill-me (2026-06-07): Pane3 入れ子章再編 (ファンダ/テクニカル親章化 + 新 5 ブロック構成)。
-// 6 体合議 (全員条件付賛成) verdict で「新 flag default OFF → user 朝 dogfood → default ON 昇格」 確定
-// (isV4 が v125→v126 で辿った経路。無監視 autopilot で全 PC ユーザーの主画面を即時変更するのを回避し、
-//  isV4 全体を切り戻す ?pane3_v4=0 より細い切り戻し粒度を確保する)。
-// isV4 が true のときのみ上位 opt-in として評価。?pane3_v5=1 / =0 or localStorage 'pane3_v5'='1'。
-function isPane3V5() {
-  if (typeof window === 'undefined') return false;
-  try {
-    const urlParam = new URLSearchParams(window.location.search).get('pane3_v5');
-    if (urlParam === '1') return true;
-    if (urlParam === '0') return false;
-    return window.localStorage?.getItem('pane3_v5') === '1';
-  } catch {
-    return false;
-  }
-}
 
 // SPEC_2026-06-28 (3体合議 条件付賛成): 新高値ブレイク途上 (BreakoutZoneCard) の表示 flag。
 // default OFF (dogfood OK 後 user gate で default ON 昇格、§8 昇格基準)。?bo_card=1 / localStorage 'bo_card'='1'。
@@ -267,122 +205,17 @@ function isBoCardEnabled() {
   }
 }
 
-// v199 (SPEC_2026-06-10_earnings-flash-summary、6体合議 6/6 条件付賛成): ファンダ章冒頭の決算ハイライト。
-// autopilot 無監視 ship 時は default OFF → user 朝 dogfood OK (2026-06-11) で **default ON に昇格**
-// (pillar2_pane1 と同じ昇格経路)。?flash=0 / localStorage 'flash'='0' が kill switch (revert 容易性のため残置)。
-function isEarningsFlashEnabled() {
-  if (typeof window === 'undefined') return true;
-  try {
-    const urlParam = new URLSearchParams(window.location.search).get('flash');
-    if (urlParam === '1') return true;
-    if (urlParam === '0') return false;
-    return window.localStorage?.getItem('flash') !== '0';
-  } catch {
-    return true;
-  }
-}
-
-// 2026-06-14 (D2 累進開示・第1手): v5 冒頭の描画順 v2。EarningsFlashSummary を ticker 章頭(Hero 直下)へ昇格し、
-// 冒頭で「5 条件のみで Beat/Miss 判定」する構成を脱却 (本物の決算サプライズ=予想比を最上部の実質 verdict に)。
-// default OFF・完全可逆 (?pane3_order_v2=1 / =0 or localStorage 'pane3_order_v2'='1')。
-// verdict badge/glow の二値→N/5 連続量化は第2手 (発光高リスク領域につき gated)。
-function isPane3OrderV2() {
-  if (typeof window === 'undefined') return false;
-  try {
-    const urlParam = new URLSearchParams(window.location.search).get('pane3_order_v2');
-    if (urlParam === '1') return true;
-    if (urlParam === '0') return false;
-    return window.localStorage?.getItem('pane3_order_v2') === '1';
-  } catch {
-    return false;
-  }
-}
-
-// 2026-06-14: 状態コンパス。冒頭に「決算/会社/価格」の3事実 (ファンダ+テクニカル統合) を信号機で並べ、
-// 初心者の「で、買いですか?」に §38-safe に答える (3観点サブエージェントレビュー反映)。ON 時は EarningsFlash
-// をファンダ章③へ戻す (冒頭がファンダだけでないように)。
-// 2026-06-14 user 判断で **default ON (標準機能に格上げ)**。?pane3_compass=0 / localStorage 'pane3_compass'='0'
-// で revert 可 (完全可逆)。dogfood で品質確認済。
-function isPane3Compass() {
-  if (typeof window === 'undefined') return true;
-  try {
-    const urlParam = new URLSearchParams(window.location.search).get('pane3_compass');
-    if (urlParam === '1') return true;
-    if (urlParam === '0') return false;
-    return window.localStorage?.getItem('pane3_compass') !== '0'; // default ON、=0 で revert
-  } catch {
-    return true;
-  }
-}
-
-// buy-quality Phase1 S5 (2026-06-21): 案A「上昇余地 vs 過熱」状態コンパス (BuyHeadroomCompass)。
-// 節目 (pivot) からの距離 4 ゾーン + A/D 出来高の質を ticker 詳細冒頭に追加。dogfood 主訴②
-// 「上昇余地か高値づかみか判断できない」への直接回答。§38 厳守 (amber/neutral、緑不使用、静的 dict)。
-// 2026-06-21 user dogfood→GO で **default ON 昇格** (tier=free、compass/flash と同じ昇格経路)。
-// ?headroom=0 / localStorage 'headroom'='0' が kill switch (完全可逆)。SPEC §5 Sprint 5。
-function isBuyHeadroom() {
-  if (typeof window === 'undefined') return true;
-  try {
-    const urlParam = new URLSearchParams(window.location.search).get('headroom');
-    if (urlParam === '1') return true;
-    if (urlParam === '0') return false;
-    return window.localStorage?.getItem('headroom') !== '0'; // default ON、=0 で revert
-  } catch {
-    return true;
-  }
-}
-
-// 2026-06-15 (D2 第3手・仕上げ): 冒頭 verdict 再設計 v2。StateCompass を主役化し、verdict-hero の rest glow を
-// 撤去 (arrival/hover の glow は親 .verdict-hero の compound 4-set が担うため維持=Aman スポットライト演出)。
-// 周辺 (完全性バッジ/KpiStrip) を StateCompass 近接へ圧縮・純化。発光高リスク領域につき default OFF・完全可逆
-// (?pane3_header_v2=1 / =0 or localStorage 'pane3_header_v2'='1')。帰宅後 dogfood→GO で default ON 昇格
-// (compass / flash と同じ昇格経路)。
-function isPane3HeaderV2() {
-  if (typeof window === 'undefined') return false;
-  try {
-    const urlParam = new URLSearchParams(window.location.search).get('pane3_header_v2');
-    if (urlParam === '1') return true;
-    if (urlParam === '0') return false;
-    return window.localStorage?.getItem('pane3_header_v2') === '1';
-  } catch {
-    return false;
-  }
-}
 
 
-// 2026-06-27: 銘柄詳細 IA 再構成 v6 (SPEC_2026-06-27_pane3-detail-rearchitecture)。
-// L0-L6 新 IA (決算3点を一等地 / 目次 / 8Q spark / 章レイアウト刷新)。
-// Sprint 4a (2026-06-28): default ON 昇格。?pane3_v6=0 / localStorage 'pane3_v6'='0' で v5 へ opt-out (escape hatch)。
-// v6 は v5 経路を上書き。Sprint 4b で旧 v5/compass/flash/order_v2/header_v2/headroom 分岐 + この opt-out を
-// 一括 sweep 予定 (clean exit)。それまで分岐は本関数 1 箇所に集約。
-function isPane3V6() {
-  if (typeof window === 'undefined') return true; // 既定 = v6
-  try {
-    const urlParam = new URLSearchParams(window.location.search).get('pane3_v6');
-    if (urlParam === '1') return true;
-    if (urlParam === '0') return false; // 一時 opt-out (v5 へ)
-    if (window.localStorage?.getItem('pane3_v6') === '0') return false; // 永続 opt-out
-    return true; // default ON
-  } catch {
-    return true;
-  }
-}
+
+
+
+
 
 // 2026-06-14: AI要約 (SummaryBrief) を封印。状態コンパス (信号機サマリー) が冒頭の要約機能を代替したため
 // 不要に (user 判断)。復活する場合は true に戻す (各章サマリーへの一本化は別 sprint)。
 const SHOW_AI_SUMMARY = false;
 
-function isPane3V2Frameless() {
-  try {
-    if (typeof window === 'undefined') return false;
-    const urlParam = new URLSearchParams(window.location.search).get('pane3_v2_frameless');
-    if (urlParam === '1') return true;
-    if (urlParam === '0') return false;
-    return window.localStorage?.getItem('pane3_v2_frameless') === '1';
-  } catch {
-    return false;
-  }
-}
 
 /**
  * DetailReportAccordionContent
@@ -768,13 +601,6 @@ export default function JudgmentDetail({
   const isV2 = isPane3V2();
   // v104 Phase G Phase 4: 章 2 tab interface 切替 flag
   const isV3 = isPane3V3();
-  // v125 P8-3 Sprint B: Pane 3 案 B 新順序 flag (default OFF、 URL ?pane3_v4=1 で先行 dogfood)。
-  const isV4 = isPane3V4();
-  // v184 grill-me: 入れ子章再編。isV4 上位の opt-in、default OFF (?pane3_v5=1 で試用)。
-  const isV5 = isV4 && isPane3V5();
-  // 2026-06-27: IA 再構成 v6。isV5 に従属しない独立 flag（v5 経路を上書き）。
-  // Sprint 4a (2026-06-28): default ON（?pane3_v6=0 / localStorage '0' で v5 へ opt-out）。
-  const isV6 = isPane3V6();
   // ch2Tab / ch3Tab の useState は v107 hotfix で early return より前 (L320 周辺) に移動済。
   // 本位置に置くと Rules of Hooks 違反 (React #310 Rendered more hooks than during the previous render)。
 
@@ -806,9 +632,8 @@ export default function JudgmentDetail({
       <DetailBreadcrumb />
 
       {/* 完全性台帳 Sprint3 (SPEC_2026-06-13): 規律の元データ取得状況の最上部ロールアップ badge。
-          ds-judgment-detail 直下・DetailBreadcrumb 直後の単一挿入で、isV5 / !isV5 / isV4&&!isV5 / legacy の
-          全 path に対し「最上部・独立1行」 を保証する (二重 mount 両 path の先頭に置くと isV4 で二重 render に
-          なるのを回避、3体 review frontend-architect verdict)。badge 内部で取得状況に応じ
+          ds-judgment-detail 直下・DetailBreadcrumb 直後の単一挿入で、v6 単一経路の「最上部・独立1行」 を
+          保証する (旧 v4/v5 二重 mount 経路は Sprint 4b で撤去)。badge 内部で取得状況に応じ
           empty/loading/errored/main を自己解決 (常時表示・色中立・取得失敗時のみ存在感)。
           gate: analyze エラー (detail.error = rate limit 等、 retry banner と同条件) のときだけ badge を
           出さない = 「取得」 と「分析取得失敗」 が同一画面で矛盾するのを防ぐ (敵対的検証 Trust Cliff minor)。
@@ -816,177 +641,6 @@ export default function JudgmentDetail({
           から描画) ため badge が常に消えてしまう (本番 snap で判明)。analyze エラー時のみ抑止が正。 */}
       {!detail?.error && <CompletenessRollupBadge ticker={selectedTicker} />}
 
-      {/* === 階層 1: Verdict (expanded 固定) ===
-          Sprint 4: tier=1 SectionDivider を削除。
-          accordion header が既に「階層 chrome」を提供するため冗長。
-          Hero 自身が入場感を持つため、前置 divider は不要。
-
-          Phase G Phase 1 (handover v98 §0-B):
-          isPane3V2() の場合、 Hero + SummaryBrief + KpiStrip + TriageBanner +
-          FiveConditionsCard 4 ブロックを UnifiedJudgmentSection で「章 1 判定」 として
-          1 つの unified section に統合する (default off、 ?pane3_v2=1 で試用可)。 */}
-      {/* v184 grill-me: v5 (入れ子章再編) では階層1を独立 render せず、下の block IIFE で
-          ①ティッカー章にまとめて再配置する。!isV5 (既存 v4/v2/legacy) は従来どおり常時 render。
-          v6 でも同様に階層1独立 render をスキップ（v6 レイアウト内に VerdictHero を含む）。 */}
-      {!isV5 && !isV6 && (() => {
-        const v2 = isV2; // hoisted from component scope (Phase G Phase 3)
-        const v2Frameless = v2 && isPane3V2Frameless(); // Phase 2 は v2 mode 内で opt-in
-        const innerVerdictBlock = (
-          <>
-      <VerdictHero verdict={verdict}>
-        {/* Sprint 3: Hero — 上方重心 padding 非対称化 (入場感演出)
-            Hero.jsx 内部は不触。wrapper で padding override を適用。
-            ただし Hero は Card wrapper を持つため、ここでは JudgmentDetail レベルで
-            Hero の外側に non-padding override は不要 (Card padding は Hero 内で完結)。
-            token spacing 調整: JudgmentDetail grid gap で上部密度を制御。 */}
-        <Hero
-          ticker={selectedTicker}
-          companyName={result?.companyName}
-          verdict={verdict}
-          period={result?.latestPeriod ? `FY${result.latestPeriod}` : null}
-          nextEarningsDays={detail?.nextEarningsDays}
-          nextEarningsDate={detail?.nextEarningsDate}
-          frameless={v2Frameless}
-          /* v99 dogfood feedback ① / ③: 章扉「I. 判定」 + EarningsRing「次の決算まで D-XX」
-             との二重表示防止 (v2 mode 時) */
-          hideEyebrow={v2}
-          hideCountdownChip={v2}
-          /* v160 D2 Sprint 2: ウォッチ追加ボタン用に detailContext から watchlist + addToWatchlist を pass。 */
-          watchlist={detailContext?.watchlist}
-          onAddToWatchlist={detailContext?.onAddToWatchlist}
-        />
-
-        {/* Sprint 6: SummaryBrief (AI 要約) — Hero と KpiStrip の間に mount。
-            ui-designer verdict 「Pane 3 上部 (Hero 直下) は §5 図解認知に最も貢献、最優先位置」。
-            brand-aspiration 比喩「コンシェルジュの一言挨拶」。
-            Hallucination Guard 4 重防御:
-              第 1 層: SummaryBriefErrorBoundary (SummaryBrief 内で wrap 済)
-              第 2 層: sanitizeText per-line BLOCKLIST_REGEX (SummaryBrief 内で適用済)
-              第 3 層: conditional render — result が null なら mount しない
-              第 4 層: 数値系 Number.isFinite — string-only LLM 出力のため非該当
-            condition pulse 連動: Sprint 6 では deferred (FiveConditionsCard の CONDITION_SECTION_MAP と
-            SummaryBrief の LLM 出力行は 1:1 対応が困難、SPEC §5 Sprint 6 末尾に deferred 注記)。 */}
-        {SHOW_AI_SUMMARY && result && (
-          <SummaryBrief
-            analysis={result}
-            guidance={guidance}
-            guidanceSecLoading={guidanceSecLoading}
-            frameless={v2Frameless}
-          />
-        )}
-      </VerdictHero>
-
-      {/* Sprint 3: KpiStrip — grid 密着配置は KpiStrip.jsx 内部に依存。
-          JudgmentDetail レベルでは gap 短縮で上部スカスカを解消。
-          Phase G Phase 2: v2 mode で frameless (sticky / bg / border 抑制) */}
-      <KpiStrip stats={kpis} frameless={v2Frameless} />
-
-      {/* Sprint 3 (return-grid-primitive): 各期間 cumulative return % chip grid (1W〜10Y)。
-          KpiStrip 直後に mount。 result && selectedTicker guard で ETF / loading 中は非表示。
-          frameless=true で外枠なし (KpiStrip と同じ密着配置)。
-          CLS envelope は ReturnGrid 内部 minHeight:80px で吸収
-          (feedback_cls_envelope_pattern.md 適用)。
-          「年率」 表記なし (SPEC §5 Sprint 2/3 禁止事項、ReturnGrid 内で cumulative hint のみ)。
-          raw hex / !important / 発光系クラス 一切なし。 */}
-      {result && selectedTicker && (
-        <ReturnGrid
-          ticker={selectedTicker}
-          frameless={true}
-          testId="judgment-return-grid"
-        />
-      )}
-
-      {/* institutional-ttm-panel Sprint 3: TTM バリュエーション panel mount。
-          ReturnGrid 直後、 EpsBeatStreakChip 直前。
-          ETF は valuationExtras=null (fetchValuationExtras で etfInfo あり時は null 返却)
-          → condition 非通過のため panel 非表示 (Trust Cliff 防止)。
-          valuationExtras=null (fetch 失敗 / loading 中) も非表示 (空 panel 出さない)。
-          frameless は v2Frameless と同期 (KpiStrip / ReturnGrid と同 idiom)。
-          CLS envelope は TtmValuationPanel 内部 min-height で吸収
-          (feedback_cls_envelope_pattern.md 適用)。 */}
-      {result && selectedTicker && valuationExtras && (
-        <TtmValuationPanel
-          ticker={selectedTicker}
-          valuationExtras={valuationExtras}
-          frameless={v2Frameless}
-          sectionLabel="TTM バリュエーション"
-        />
-      )}
-
-      {/* v104 release MVP: EPS Beat Streak chip — 章 1 verdict anchor、 streak >= 2 のみ表示。
-          QuarterlyHistoryTable (章 3 accordion collapsed default) の streak 情報を前出しで anchor 強化。 */}
-      {selectedTicker && <EpsBeatStreakChip ticker={selectedTicker} />}
-
-      {/* handover v82 Phase 5: 三層トリアージ banner (UI/UX 6 体合議 B 案、 ConditionGrid 直前 hint 1 行)。
-          保有 × 5 条件 × Cup-Handle を 1 行で示し、 「他 N 件」 click で Pane 2 ヒートマップへ jump。
-          v84 hotfix 6 段階で確立済 (hasFatal 条件)、accordion 化対象外 (SPEC §6)。
-          Sprint 5: currentPrice (含み損益計算用) + onOpenAddTransaction (新規買付 button) を追加。
-          Sprint 4: SectionFade で section in-view fade-in (案1) */}
-      {selectedTicker && (
-        <SectionFade staggerIndex={0}>
-        <TriageBanner
-          ticker={selectedTicker}
-          user={detailContext.user}
-          plan={plan}
-          onUpgrade={detailContext.onUpgrade}
-          onJumpToScanner={detailContext.onJumpToScanner}
-          currentPrice={Number.isFinite(detail?.price) ? Number(detail.price) : null}
-          onOpenAddTransaction={detailContext.onOpenAddTransaction}
-          frameless={v2Frameless}
-        />
-        </SectionFade>
-      )}
-
-      {/* buy-quality Phase1 S5 (案A 状態コンパス): TriageBanner 直後・5条件直前の上部判定クラスタに
-          BuyHeadroomCompass を mount (!isV5 = 既定本番 UI)。gate は result でなく !detail?.error
-          ([[feedback_judgmentdetail_result_gate]])。?headroom=1 で dogfood (default OFF)。 */}
-      {selectedTicker && isBuyHeadroom() && !detail?.error && (
-        <BuyHeadroomCompass selectedTicker={selectedTicker} />
-      )}
-
-      {/* 2026-05-12 PR-2: VerdictDetail + ConditionGrid を FiveConditionsCard に統合。
-          feature flag `localStorage.pane3_v1='1'` で旧 UI に切替可 (撤回コスト最小化、§-1-B postmortem 学び適用)。
-          Sprint 3: FiveConditionsCard は expanded 固定 (accordion wrap 対象外)。
-          条件行間は FiveConditionsCard 内部の設計に依存 (内部編集禁止)。 */}
-      {isPane3V1() ? (
-        <>
-          <VerdictDetail
-            conditions={conditions}
-            passedCount={result?.passedCount}
-            totalCount={result?.totalCount}
-          />
-          {conditions.length > 0 && (
-            <ConditionGrid
-              conditions={conditions}
-              isPro={detailContext.isPro}
-              onUpgrade={detailContext.onUpgrade}
-            />
-          )}
-        </>
-      ) : (
-        // P0-3: FiveConditionsCard を常時 render。conditions 空なら skeleton 表示。
-        <FiveConditionsCard
-          conditions={conditions}
-          passedCount={result?.passedCount}
-          totalCount={result?.totalCount}
-          isPro={detailContext.isPro}
-          onUpgrade={detailContext.onUpgrade}
-          frameless={v2Frameless}
-          onConditionPulse={(idx) => {
-            // condition 4 (営業利益増、 0-indexed) は全 step 該当 → toast fallback (DiagramCard 側で処理)。
-            // 0-3 は個別 step pulse。 'all_steps' 文字列を sentinel として store に保存。
-            setPulsingConditionIndex(idx === 4 ? 'all_steps' : idx);
-          }}
-        />
-      )}
-          </>
-        );
-        return v2 ? (
-          <UnifiedJudgmentSection>{innerVerdictBlock}</UnifiedJudgmentSection>
-        ) : (
-          innerVerdictBlock
-        );
-      })()}
 
       {/* P0-1/P0-3: 分析する button は auto runAnalyze (P0-2) が失敗した場合の fallback。
           result が取得できず、かつ loading でもない場合のみ retry link を表示。
@@ -1053,238 +707,10 @@ export default function JudgmentDetail({
         </div>
       )}
 
-      {/* === v125 P8-3 Sprint B: 章 ① 数値 + 章 II 市場評価 + 章 ② テクニカル + 章 ③ リファレンス を順序入替 ===
-          isV4 (= URL ?pane3_v4=1 or localStorage 'pane3_v4'='1') ON 時に案 B 新順序を適用、
-          OFF 時は既存順序 (Sprint A 完了状態) を維持。 各 block を inline-in-component fragment に切り出し、
-          render 順序で表現することで diff が「移動」 のみに局所化される (SPEC §11-B-5 アトミック XL refactor NG 教訓)。
-          階層 1 (判定 + 5 条件) は両 mode で同位置に維持 (5 条件 accordion 外維持 = 案 B 確定)。 */}
+      {/* === 銘柄詳細 本体 = v6 IA 単一経路 (SPEC_2026-06-27 / Sprint 4b で旧 v4/v5/compass 分岐を物理削除) ===
+          L0 同定 / L1 判定サマリー / 目次 / L2 決算 / L3 品質 / L4 テクニカル / L5 図解 / L6 その他。
+          v6 は VerdictHero を内包し全 component を自前 inline する (旧 shared block 定義・案B 順序入替は撤去済)。 */}
       {(() => {
-        // 章 ① 数値 (FundamentalsAccordion 抽出、 Sprint A 着地点)
-        const fundamentalsBlock = (
-          <FundamentalsAccordion
-            key="fundamentals"
-            hideChapterHeader={isV5}
-            selectedTicker={selectedTicker}
-            result={result}
-            guidance={guidance}
-            plan={plan}
-            detail={detail}
-            detailContext={detailContext}
-            isV2={isV2}
-            isV3={isV3}
-            isScrollV1={isScrollV1}
-            expandedSections={expandedSections}
-            ch2Tab={ch2Tab}
-            setCh2Tab={setCh2Tab}
-            onAnalyze={onAnalyze}
-          />
-        );
-
-        // 章 II 市場評価 (MarketEvalSection 抽出、 Sprint A 着地点)
-        const marketEvalBlock = (
-          <MarketEvalSection
-            key="market-eval"
-            selectedTicker={selectedTicker}
-            plan={plan}
-            detail={detail}
-            detailContext={detailContext}
-            isV2={isV2}
-            isV3={isV3}
-            isV5={isV5}
-            isScrollV1={isScrollV1}
-            expandedSections={expandedSections}
-            ch3Tab={ch3Tab}
-            setCh3Tab={setCh3Tab}
-            analystHaloTriggerRef={analystHaloTriggerRef}
-            qhistoryHaloTriggerRef={qhistoryHaloTriggerRef}
-            haloFiredSetRef={haloFiredSetRef}
-          />
-        );
-
-        // 章 ② テクニカル の header (legacy 順では Chart の前に配置、 isV4 では削除)
-        // Sprint 2: technicalHeader + TechnicalChapterSummary + testid wrapper を 1 block に統合。
-        // technical-section wrapper は feedback_testid_all_render_paths に準拠、
-        // loading/errored/empty/main 全 state でも testid 取得可能。
-        const technicalHeader = (
-          <div
-            key="technical-section-wrapper"
-            data-testid="technical-section"
-            data-state={selectedTicker ? 'main' : 'empty'}
-          >
-            {isV2 ? (
-              <ChapterSection chapterNumber="②" chapterTitle="テクニカル" headerOnly tier="sub" />
-            ) : (
-              <ChapterHeader label="テクニカル" isChapterStart />
-            )}
-            {/* Sprint 2: ライター憲法サマリーブロック (章扉直後) */}
-            <TechnicalChapterSummary
-              selectedTicker={selectedTicker}
-              isLoading={!selectedTicker}
-              hasError={false}
-            />
-          </div>
-        );
-
-        const chartBlock = selectedTicker ? (
-          <SectionFade key="chart" id="sec-chart" staggerIndex={3}>
-            <StockPriceChart ticker={selectedTicker} isPremiumUser={plan === 'premium'} onUpgrade={detailContext.onUpgrade} hideTitle={isV5} />
-            {/* 完全性台帳 #4: SPY 取得失敗時のみ「地合いデータ未取得」 を中立注記。chartBlock は v5/isV4/legacy
-                全 path で使われるため、ここに1箇所置けば全テクニカル章に到達する (SPY 取得成功時は null)。 */}
-            <TechnicalSpyNote ticker={selectedTicker} />
-            {/* SPEC_2026-06-28: 新高値ブレイク途上 (bo_pending 等) の §38 中立 narration。chartBlock 共有 node の
-                ため v4系 + v5 経路に同時到達 (v6 は独立 section に別 mount)。flag default OFF。breakout 未検出/
-                非株式は内部で null return (Pane3 ノイズゼロ)。pivot ライン (チャート内) と近接=図解の流れ。 */}
-            {isBoCardEnabled() && (
-              <BreakoutZoneCard ticker={selectedTicker} plan={plan} onUpgrade={detailContext.onUpgrade} />
-            )}
-          </SectionFade>
-        ) : null;
-
-        const targetZoneBlock = selectedTicker ? (
-          <SectionFade key="target-zone" id="sec-target-and-zone" staggerIndex={3}>
-            <div className="atc-szc-grid">
-              <AnalystTargetCard ticker={selectedTicker} />
-              {/* v138.6 R7-B 🔴 P0 Trust Cliff (2026-05-30): SellZoneCard は Premium 限定 (50DMA
-                  extension narration、 「機関の売却圧力」 sign)。 user dogfood で非ログイン demo
-                  で leak 露出 → CLAUDE.md「Trust Cliff (信頼の崖) は最重要バグカテゴリ」 違反。
-                  plan === 'premium' でのみ render、 free/未ログインは非表示。 */}
-              {plan === 'premium' && <SellZoneCard ticker={selectedTicker} />}
-            </div>
-            {/* v138.6 R7-B 🔴 P0 Trust Cliff: 以下 3 card は全て Premium 限定 (Cup-Handle pivot
-                narration / 損切り目安 / Distribution Days)。 非 premium 露出は Trust Cliff 重大違反、
-                conditional render で完全 gate。 marketing 配慮の ProTeaser placeholder は
-                R7 後続 sprint で個別追加 (今は P0 leak 止めを優先)。 */}
-            {plan === 'premium' && <CupPivotCard ticker={selectedTicker} />}
-            {/* v220: Premium gate 一本化 (dogfood フラグ廃止)。 */}
-            {plan === 'premium' && <BuyZoneCard ticker={selectedTicker} />}
-            {plan === 'premium' && <DistributionDaysCard ticker={selectedTicker} />}
-          </SectionFade>
-        ) : null;
-
-        // v138.6 R7-H 🟠 P1 (2026-05-30): 過去 8Q 決算反応 (EarningsReactionPanel) を Pro 限定化。
-        // user dogfood「ガイダンス進捗 直近8Q は Pro 限定なのに、 過去 8Q 決算反応 は未ログインで見える、
-        // Trust Cliff 整合性なし」。 PremiumLock で wrap、 free user は blur + minimal CTA D 案表示。
-        const earningsReactionBlock = selectedTicker ? (
-          isScrollV1 ? (
-            <PremiumLock
-              key="earnings-reaction"
-              feature="earnings_8q"
-              plan={plan}
-              label="過去 8Q の決算 → 5 営業日累積リターンを一覧で"
-              onUpgrade={detailContext.onUpgrade}
-            >
-              <div id="sec-earnings-reaction">
-                <EarningsReactionPanel ticker={selectedTicker} l3Headings={isV5} />
-              </div>
-            </PremiumLock>
-          ) : (
-            <AccordionSection
-              key="earnings-reaction"
-              id="sec-earnings-reaction"
-              title="過去 8Q 決算反応"
-              label="PRO"
-              tier={2}
-              defaultOpen={false}
-              controlledOpen={expandedSections.has('earnings-reaction') || undefined}
-              /* §C-11 A (v195): v5 のみ title を L2 冠 token に統一 (default 18px/500 が他 L2 と不一致)。
-                 chevron 右置きで title 左端を他 L2 冠と整列 (§C-11 整列)。 v4/legacy は不変 (BC)。 */
-              titleStyle={isV5 ? ACCORDION_L2_TITLE_STYLE : undefined}
-              chevronPosition={isV5 ? 'right' : 'left'}
-            >
-              <PremiumLock
-                feature="earnings_8q"
-                plan={plan}
-                label="過去 8Q の決算 → 5 営業日累積リターンを一覧で"
-                onUpgrade={detailContext.onUpgrade}
-              >
-                <div id="sec-earnings-reaction-inner">
-                  <EarningsReactionPanel ticker={selectedTicker} l3Headings={isV5} />
-                </div>
-              </PremiumLock>
-            </AccordionSection>
-          )
-        ) : null;
-
-        const insiderBlock = selectedTicker ? (
-          isScrollV1 ? (
-            <PremiumLock
-              key="insider"
-              feature="insider_trades"
-              plan={plan}
-              label="Insider 取引で先行情報を掴む"
-              bullets={[
-                'Form 4 (役員株式取引) 直近 90 日',
-                '13F 機関投資家保有の Q/Q 変動',
-                '大口購入時の自動アラート',
-              ]}
-              onUpgrade={detailContext.onUpgrade}
-            >
-              <SimpleSection
-                id="sec-insider"
-                title="Insider 取引"
-                label="FORM 4 / 13F"
-              >
-                <InsiderPanel ticker={selectedTicker} l3Headings={isV5} />
-              </SimpleSection>
-            </PremiumLock>
-          ) : (
-            <AccordionSection
-              key="insider"
-              id="sec-insider"
-              title="Insider 取引"
-              label="PRO"
-              tier={2}
-              defaultOpen={false}
-              controlledOpen={expandedSections.has('insider') || undefined}
-              /* §C-11 A (v195): v5 のみ L2 冠 token + chevron 右 (8Q と同様、 v4/legacy 不変)。 */
-              titleStyle={isV5 ? ACCORDION_L2_TITLE_STYLE : undefined}
-              chevronPosition={isV5 ? 'right' : 'left'}
-            >
-              <PremiumLock
-                feature="insider_trades"
-                plan={plan}
-                label="Insider 取引で先行情報を掴む"
-                bullets={[
-                  'Form 4 (役員株式取引) 直近 90 日',
-                  '13F 機関投資家保有の Q/Q 変動',
-                  '大口購入時の自動アラート',
-                ]}
-                onUpgrade={detailContext.onUpgrade}
-              >
-                <div id="sec-insider-inner">
-                  <InsiderPanel ticker={selectedTicker} l3Headings={isV5} />
-                </div>
-              </PremiumLock>
-            </AccordionSection>
-          )
-        ) : null;
-
-        const contextBlock = (
-          <ContextSection
-            key="context"
-            selectedTicker={selectedTicker}
-            result={result}
-            guidance={guidance}
-            plan={plan}
-            detailContext={detailContext}
-            isV2={isV2}
-            isScrollV1={isScrollV1}
-            useWorkspaceReader={useWorkspaceReader}
-            expandedSections={expandedSections}
-            // v138.6 R7-K (2026-05-30): v4 mode で 図解 (StickyDiagramAccordion) を Pane 3 上部に
-            // mount したため、 末尾 AI 詳細レポート (DetailReport) は重複。 isV4 を渡し ContextSection
-            // で AI 詳細レポート の render を skip (legacy mode のみ表示維持で BC 担保)。
-            isV4={isV4}
-            isV5={isV5}
-          />
-        );
-
-        // === v6 IA 再構成 (SPEC_2026-06-27, Sprint 1) ===
-        // v6 flag ON 時は v4/v5 経路を上書き。default OFF (?pane3_v6=1 で opt-in)。
-        // 分岐は「この1箇所のみ」に集約 (SPEC §6 clean exit path 設計)。
-        // Sprint 1 骨格: L0 同定 / L1 判定サマリー / 目次 / L2 決算 (8Q spark + 5条件) のみ。
-        // L2以降の章移動 / L3 fold / 地合い import は Sprint 2 以降。
-        if (isV6) {
           // isNonEquity 判定: ETF / 指数 / 先物 / 為替は決算3点・RS を非表示
           // feedback_non_equity_chart_overlays.md 準拠
           const isNonEquityV6 = (() => {
@@ -1599,382 +1025,6 @@ export default function JudgmentDetail({
               </section>
             </div>
           );
-        }
-
-        if (isV4) {
-          if (isV5) {
-            // === v184 grill-me: 入れ子章再編 (新 5 ブロック構成、6 体合議 verdict 反映) ===
-            // ①ティッカー ②図解 ③ファンダ章 ④テクニカル章 ⑤その他。
-            // 階層1要素 (hero/summary/kpi/triage/5条件/ttm/eps) は !isV5 階層1 とは別記述で
-            // ①③に再配置 (既存 v4/v2/legacy を不変に保つための複製。DRY 化は default ON 昇格後)。
-            // ⚠️ Sprint 1 は骨格のみ: 章サマリー静的拡張 (Sprint 3) と 3軸3段階判定 (Sprint 4, §38 gate)
-            // は別 sprint。章内の厳密順序 (会社概要↔5条件) は Sprint 3 で FundamentalsAccordion と調整。
-            const tickerHeaderBlock = (
-              <>
-                {/* 2026-06-14: compass ON 時は Hero(バッジ) と StateCompass を 1 枚の発光カードに統合
-                    (verdict-hero--compass-header が card surface = Hero frameless で内枠を消す)。
-                    ⚠️ 発光・カード系 (v54-v59 で溶けた高リスク領域)。design_recipes §C-1〜C-4 遵守:
-                    新 glow host を作らず .verdict-hero の compound 4-set を継承、modifier は rest の
-                    bg/border/shadow のみ追加。入れ子 surface-card なし (Hero frameless)、contain:paint なし。 */}
-                <VerdictHero
-                  verdict={isPane3Compass() ? 'unknown' : verdict}
-                  className={[
-                    isPane3Compass() ? 'verdict-hero--compass-header' : '',
-                    isPane3HeaderV2() ? 'verdict-hero--header-v2' : '',
-                  ].filter(Boolean).join(' ')}
-                >
-                  <Hero
-                    ticker={selectedTicker}
-                    companyName={result?.companyName}
-                    verdict={isPane3Compass() ? 'unknown' : verdict}
-                    period={isPane3Compass() ? null : (result?.latestPeriod ? `FY${result.latestPeriod}` : null)}
-                    nextEarningsDays={detail?.nextEarningsDays}
-                    nextEarningsDate={detail?.nextEarningsDate}
-                    watchlist={detailContext?.watchlist}
-                    onAddToWatchlist={detailContext?.onAddToWatchlist}
-                    /* D2 compass・第2手: 5条件由来の verdict チップ撤去 + 発光中立化 (Miss⇔Beat 矛盾解消)、
-                       次回決算の3重表示を EarningsRing 1つに集約、FY2025 撤去 (確認事項2)。 */
-                    hideCountdownChip={isPane3Compass()}
-                    hideNextEarningsChip={isPane3Compass()}
-                    hideVerdictChip={isPane3Compass()}
-                    compactWatchlist={isPane3Compass()}
-                    /* compass ON: Hero 内枠 (bs-panel) を外し、verdict-hero を唯一の card surface に
-                       (StateCompass と継ぎ目なく 1 枚に統合)。 */
-                    frameless={isPane3Compass()}
-                  />
-                  {/* 2026-06-14 (D2 第2手プロトタイプ・?pane3_compass=1): 状態コンパス。
-                      決算/会社/価格の3事実で「今の状態」を2秒で。初心者の「で、買いですか?」に §38-safe に答える。
-                      ON 時は EarningsFlash をファンダ章③へ戻す (下の gate)。
-                      embedded: 上 hairline 継ぎ目 + Hero 本文と揃う左右 padding で 1 枚カード化。 */}
-                  {isPane3Compass() && (
-                    <StateCompass
-                      selectedTicker={selectedTicker}
-                      result={result}
-                      guidance={guidance}
-                      embedded
-                      headerV2={isPane3HeaderV2()}
-                    />
-                  )}
-                  {/* 2026-06-14 (D2 第1手・?pane3_order_v2=1): 決算ハイライトを冒頭(Hero 直下)へ昇格。
-                      compass ON 時は冒頭に置かずファンダ章③へ戻すため除外。OFF 時は従来どおりファンダ章③に残る。 */}
-                  {isPane3OrderV2() && !isPane3Compass() && isEarningsFlashEnabled() && (
-                    <EarningsFlashSummary
-                      ticker={selectedTicker}
-                      guidance={guidance}
-                      isLoading={!guidance && (detail?.isLoading ?? false)}
-                    />
-                  )}
-                  {/* SummaryBrief (AI要約) は SHOW_AI_SUMMARY で封印 (状態コンパスが代替、2026-06-14)。 */}
-                  {SHOW_AI_SUMMARY && result && (
-                    <SummaryBrief
-                      analysis={result}
-                      guidance={guidance}
-                      guidanceSecLoading={guidanceSecLoading}
-                    />
-                  )}
-                </VerdictHero>
-                <KpiStrip stats={kpis} />
-                {/* grill 決定 2: トリアージは保有時のみ最上位 (非保有は TriageBanner 内部で非表示)。 */}
-                {selectedTicker && (
-                  <SectionFade staggerIndex={0}>
-                    <TriageBanner
-                      ticker={selectedTicker}
-                      user={detailContext.user}
-                      plan={plan}
-                      onUpgrade={detailContext.onUpgrade}
-                      onJumpToScanner={detailContext.onJumpToScanner}
-                      currentPrice={Number.isFinite(detail?.price) ? Number(detail.price) : null}
-                      onOpenAddTransaction={detailContext.onOpenAddTransaction}
-                    />
-                  </SectionFade>
-                )}
-                {/* buy-quality Phase1 S5 (案A 状態コンパス): v5 ティッカー章にも二重 mount (§0-6
-                    [[feedback_judgmentdetail_dual_mount_paths]])。VerdictHero (glow host) の外 = card 入れ子なし。 */}
-                {selectedTicker && isBuyHeadroom() && !detail?.error && (
-                  <BuyHeadroomCompass selectedTicker={selectedTicker} />
-                )}
-              </>
-            );
-
-            // ② 図解 (free = ぼかしプレビュー化は Sprint 2 で funnel-cro 委譲、本 sprint は既存 Pro/free 分岐を流用)
-            const diagramNode = (plan === 'pro' || plan === 'premium') ? (
-              <StickyDiagramAccordion
-                ticker={selectedTicker}
-                analysis={result}
-                guidance={guidance}
-              />
-            ) : (
-              <PremiumLock
-                feature="ai_diagram"
-                plan={plan}
-                label="図解で 5 条件・ビジネスを 2 秒で理解"
-                onUpgrade={detailContext.onUpgrade}
-              >
-                <div
-                  aria-hidden="true"
-                  style={{
-                    height: 64,
-                    borderRadius: 'var(--radius-md)',
-                    background: 'rgba(56, 189, 248, 0.04)',
-                    border: '1px solid rgba(56, 189, 248, 0.10)',
-                  }}
-                />
-              </PremiumLock>
-            );
-
-            const fiveConditionsNode = (
-              <FiveConditionsCard
-                conditions={conditions}
-                passedCount={result?.passedCount}
-                totalCount={result?.totalCount}
-                isPro={detailContext.isPro}
-                onUpgrade={detailContext.onUpgrade}
-                /* §C-11 C (v195): v5 では gold frame plain 化 + title「5 条件」 (章扉と重複解消) */
-                v5Header={isV5}
-                onConditionPulse={(idx) => {
-                  setPulsingConditionIndex(idx === 4 ? 'all_steps' : idx);
-                }}
-              />
-            );
-            // v5 polish (user dogfood 2026-06-08): 名称は専門用語「TTM」を外し「バリュエーション」へ (sub に「直近4四半期合算」が残る)。
-            // v189 (3体合議 ui/frontend/qa): ファンダ章「枠なし hairline」 pilot のため inline 枠 (border+radius+bg) を撤去し、
-            //   frameless のまま下の fundamentalsChapterBlock の hairline セクションに載せる。frameless でも出典 footer は保持。
-            const ttmNode = (result && selectedTicker && valuationExtras) ? (
-              <TtmValuationPanel
-                ticker={selectedTicker}
-                valuationExtras={valuationExtras}
-                sectionLabel="バリュエーション"
-              />
-            ) : null;
-            // ETF 組入 panel は ProfileCard (会社概要) 内へ移設済 (v203、2026-06-12 user 指定)。
-            // EPS Beat Streak は決算タブ「今期」と内容重複のため v5 ファンダ章から除外 (user dogfood 2026-06-08)。
-            // v185 E (2026-06-08): v5 テクニカル章では短期/長期を hairline 区切りで 2 段表示 (splitByTerm)。
-            const returnGridNode = (result && selectedTicker) ? (
-              <ReturnGrid ticker={selectedTicker} frameless={true} testId="judgment-return-grid" splitByTerm />
-            ) : null;
-
-            // ③ ファンダ章 (章扉① + 5条件 + 決算 + バリュエーション + 会社概要)
-            // v185 A (2026-06-08、 user 確定): 章内順序を「5条件 → 決算 → TTM → 会社概要」 に再配置。
-            // v189 (2026-06-08、 3体合議 ui/frontend/qa 全員賛成): 「枠なし hairline + 余白」 pilot。
-            //   不満 = 継ぎ接ぎ・バラバラ感 (枠 4-5 種混在) + 密度高い・圧迫 → 解は枠を減らして連続面化。
-            //   面の引き算: コンテナは背景なし、 5条件カード (fiveConditionsNode) のみ発光カードのまま「主役」 として浮かせ、
-            //   従属3セクション (決算/バリュエーション/会社概要) を border-top 1px var(--border) の hairline + space-8 余白で区切る。
-            //   発光系 class (.panel-card/.surface-card) は新規追加ゼロ、 wrapper は inline token のみ (glow バグ領域回避)。
-            //   各 FundamentalsAccordion は共有 component を prop で制御 (v4/legacy は renderSection 省略で完全不変)。
-            const hairlineSectionStyle = {
-              marginTop: 'var(--space-8)',
-              borderTop: '1px solid var(--border)',
-              paddingTop: 'var(--space-8)',
-            };
-            // v190 (3体合議 ui/frontend/qa、user dogfood 受け): セクション L2 見出しの統一外観。
-            //   L1 章扉(gold/扉) > L2 セクション冠(これ) > L3 サブ > L4 値。装飾は付けず、
-            //   色(primary)・weight(700)・uppercase で L3(muted/500/小文字) と階層を出す (枠なし面で最も効く)。
-            //   TtmValuationPanel の SectionLabel(13/700/0.08em/uppercase/primary) と同 token = 3セクション冠が揃う。
-            const sectionHeadingL2Style = {
-              fontSize: 13,
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: 'var(--text-primary)',
-              marginBottom: 'var(--space-2)',
-            };
-            const fundamentalsChapterBlock = (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {/* v192 (3体合議 B-2): v5 章扉 (L1) を emphasized で強調し L2 セクション冠と区別 (gold hairline 60% + primary/700)。 */}
-                <ChapterSection chapterNumber="①" chapterTitle="ファンダメンタル" headerOnly tier="sub" emphasized />
-                {/* v199: 決算ハイライト (章扉直後・5条件カード前 = 事実 → 評価の視線順、ui-designer verdict)。
-                    ノーラベル直出し (章扉直下の本文第 1 段落 idiom)。5条件カードは不変 (user 確定済制約)。
-                    2026-06-14 (D2): 第1手(order_v2 のみ ON)では冒頭へ昇格済のため非表示。compass ON 時はここに戻す。 */}
-                {(!isPane3OrderV2() || isPane3Compass()) && isEarningsFlashEnabled() && (
-                  <EarningsFlashSummary
-                    ticker={selectedTicker}
-                    guidance={guidance}
-                    isLoading={!guidance && (detail?.isLoading ?? false)}
-                  />
-                )}
-                {fiveConditionsNode}
-                {/* data-testid: 決算サマリーの「↗ 詳細は決算セクションへ」 の scroll 着地点 (2026-06-12 user bug 修正:
-                    旧 guidance-card-wrapper だと flash と同内容の「今期決算結果」 に飛び誤認 → 「決算」 L2 冠へ)。 */}
-                <div style={hairlineSectionStyle} data-testid="fundamentals-earnings-section">
-                  {/* v190: 「決算」 L2 セクション冠 (今期/来期コンセンサスを傘下に束ねる、user dogfood ②)。
-                      外観は下のバリュエーション/会社概要と統一。 */}
-                  <div style={sectionHeadingL2Style}>決算</div>
-                  <FundamentalsAccordion
-                    key="funda-earnings"
-                    renderSection="earnings"
-                    hideChapterHeader
-                    selectedTicker={selectedTicker}
-                    result={result}
-                    guidance={guidance}
-                    plan={plan}
-                    detail={detail}
-                    detailContext={detailContext}
-                    isV2={isV2}
-                    isV3={isV3}
-                    isScrollV1={isScrollV1}
-                    expandedSections={expandedSections}
-                    ch2Tab={ch2Tab}
-                    setCh2Tab={setCh2Tab}
-                    onAnalyze={onAnalyze}
-                  />
-                </div>
-                {ttmNode && <div style={hairlineSectionStyle}>{ttmNode}</div>}
-                <div style={hairlineSectionStyle}>
-                  <FundamentalsAccordion
-                    key="funda-profile"
-                    renderSection="profile"
-                    sectionHeadingStyle={sectionHeadingL2Style}
-                    selectedTicker={selectedTicker}
-                    result={result}
-                    guidance={guidance}
-                    plan={plan}
-                    detail={detail}
-                    detailContext={detailContext}
-                    isV2={isV2}
-                    isV3={isV3}
-                    isScrollV1={isScrollV1}
-                    expandedSections={expandedSections}
-                    ch2Tab={ch2Tab}
-                    setCh2Tab={setCh2Tab}
-                    onAnalyze={onAnalyze}
-                  />
-                </div>
-              </div>
-            );
-            // ④ テクニカル章の売買目安 — v187 (2026-06-08、3体合議 ui/金融/qa 全員一致):
-            //   横並び売買目安カード5枚 (アナリスト目標/CupPivot/BuyZone/SellZone/Distribution) の「並列が見辛い」 を根治。
-            //   PriceLadder (価格6レベルを現在価格中心の縦の数直線) に統合。チャート水平ラインと同一 API・同一値で 1:1 mirror、
-            //   二重表示 (チャートのライン群とカードの数値) を ladder に一本化。
-            //   premium = PriceLadder。free = AnalystTargetCard のみ (pivot/支持/損切りは premium 情報のため ladder は gate)。
-            //   Distribution Days は地合い指標 (市場全体) で価格 ladder と性質が違うため当面 ladder 下に残す
-            //     (Phase 2 で章ヘッダーの地合いバッジに格下げ + §38 状態サマリー1行を予定)。
-            //   §38: ladder は価格+現在価格からの距離%のみ (行動指示・将来予測・矢印なし)、色は中立 gray + 現在価格行 hero (緑/赤なし)。
-            //   ⚠️ CupPivot/BuyZone/SellZone は v5 で render されなくなるが、v4 (targetZoneBlock) で使用継続のため import 維持。
-            // 2026-06-14 user feedback: free の AnalystTargetCard は撤去 (チャート章再構成で封印した
-            //   カードが残存していた)。チャートが既に「アナリスト目標」 水平ラインで同値を表示しており二重。
-            //   premium = PriceLadder のみ、free = 非表示 (チャートのラインで担保)。
-            const technicalTargetGrid = (selectedTicker && plan === 'premium') ? (
-              <SectionFade id="sec-target-and-zone-v5" staggerIndex={3}>
-                <PriceLadder ticker={selectedTicker} />
-              </SectionFade>
-            ) : null;
-            const technicalChapterBlock = (
-              <>
-                {/* v194 (テクニカル章 横展開): ファンダ章扉 (L1237) と同じく emphasized で L1 章扉を強調
-                    (gold hairline 60% + primary/700)。① ファンダと ② テクニカルの章扉トーンを対称化し
-                    §C-11 見出し階層を一貫適用。v4/legacy は別 render path のため emphasized 不付与で不変 (BC)。 */}
-                <ChapterSection chapterNumber="②" chapterTitle="テクニカル" headerOnly tier="sub" emphasized />
-                {chartBlock}
-                {/* v194-2: チャート⇔価格目安⇔リターン を hairline + space-8 で区切る。チャートは章扉直後の
-                    メインなので separator なし、後続 (価格目安/リターン) に hairlineSectionStyle を付与。
-                    v195 dogfood (2026-06-10): 価格目安(PriceLadder)はチャートの水平ライン群と同一値の 1:1 mirror
-                    のため、 チャート直下に移動 (旧: リターン→価格目安)。 価格はチャートとセットで読む user
-                    mental model に整合。 null ガードで空 separator を防ぐ。 */}
-                {technicalTargetGrid && <div style={hairlineSectionStyle}>{technicalTargetGrid}</div>}
-                {returnGridNode && <div style={hairlineSectionStyle}>{returnGridNode}</div>}
-              </>
-            );
-            // ⑤ その他 (市場評価 + 8Q決算反応 + Insider + リファレンス)
-            const miscChapterBlock = (
-              <>
-                {marketEvalBlock}
-                {earningsReactionBlock}
-                {insiderBlock}
-                {contextBlock}
-              </>
-            );
-
-            // 並び順は宣言的 config 配列で定義 (frontend-architect verdict: key は安定文字列、index 禁止)。
-            const BLOCK_ORDER_V5 = [
-              { id: 'ticker', testid: 'pane3-ch-ticker', node: tickerHeaderBlock },
-              { id: 'diagram', testid: 'pane3-ch-diagram', node: diagramNode },
-              { id: 'fundamentals', testid: 'pane3-ch-fundamentals', node: fundamentalsChapterBlock },
-              { id: 'technical', testid: 'pane3-ch-technical', node: technicalChapterBlock },
-              { id: 'misc', testid: 'pane3-ch-misc', node: miscChapterBlock },
-            ];
-            return (
-              <>
-                {BLOCK_ORDER_V5.filter((b) => b.node != null).map(({ id, testid, node }) => (
-                  <div key={id} data-testid={testid} data-state={selectedTicker ? 'main' : 'empty'}>
-                    {node}
-                  </div>
-                ))}
-              </>
-            );
-          }
-          // === 案 B 新順序 (v125 P8-3 Sprint B、 user gate 3 確定) ===
-          // 階層 1 (判定 + 5 条件) は既に上で render 済 → 続く順序:
-          // 1. StickyDiagramAccordion (default OFF、 sticky top:0) — v138.6 R7-G Pro 限定
-          // 2. Chart (技術 header なしで直接 chart、 案 B シンプル化)
-          // 3. 目標 + 売り card 並列
-          // 4. ファンダ accordion (FundamentalsAccordion 旧 章 ①)
-          // 5. 市場評価 (MarketEvalSection 旧 章 II)
-          // 6. その他 (EarningsReaction + Insider)
-          // 7. リファレンス (ContextSection 旧 章 ③)
-          return (
-            <>
-              {/* v138.6 R7-L (2026-05-30): 図解 = Pro 機能。
-                  R7-G で完全 hide だったが、 user dogfood「以前の AI 詳細レポート は未ログインでも消さず
-                  Premium 解放の課金画面を表示していた、 今の図解 button でも同じほうが良いか?」 + 3 体合議
-                  D 案 (header に PRO badge 1 個 + 小 CTA) で「存在を匂わせるが押し付けない」 質感確定。
-                  Pro/Premium は render、 free は PremiumLock (minimal D 案、 blur preview なしで小 CTA のみ)。
-                  StickyDiagramAccordion は banner click で展開 = それ自体が affordance、 banner だけ
-                  blur で見せて click 時に CTA modal が起動する pattern。 */}
-              {(plan === 'pro' || plan === 'premium') ? (
-                <StickyDiagramAccordion
-                  key="sticky-diagram"
-                  ticker={selectedTicker}
-                  analysis={result}
-                  guidance={guidance}
-                />
-              ) : (
-                // v138.7 (2026-05-30、 3 体合議): 図解 placeholder の feature を専用 key `ai_diagram`
-                // (Pro) に。 旧 earnings_8q 流用は UpgradeModal が「過去 8Q 決算反応」 と誤表示する
-                // bug の元 (user dogfood 12 巡目)。 図解 = Pro 確定 (3 体合議全員一致)、 色は cyan 維持。
-                // Premium tier (Cup-Handle 等) は Phase 2 で LP Premium 列追加と同時に公開予定。
-                <PremiumLock
-                  key="sticky-diagram-locked"
-                  feature="ai_diagram"
-                  plan={plan}
-                  label="図解で 5 条件・ビジネスを 2 秒で理解"
-                  onUpgrade={detailContext.onUpgrade}
-                >
-                  {/* placeholder: 高さ確保のための ghost banner、 中身は blur で「何かある」 だけ伝える */}
-                  <div
-                    aria-hidden="true"
-                    style={{
-                      height: 64,
-                      borderRadius: 'var(--radius-md)',
-                      background: 'rgba(56, 189, 248, 0.04)',
-                      border: '1px solid rgba(56, 189, 248, 0.10)',
-                    }}
-                  />
-                </PremiumLock>
-              )}
-              {chartBlock}
-              {targetZoneBlock}
-              {fundamentalsBlock}
-              {marketEvalBlock}
-              {earningsReactionBlock}
-              {insiderBlock}
-              {contextBlock}
-            </>
-          );
-        }
-
-        // === legacy 既存順序 (Sprint A 完了状態) ===
-        return (
-          <>
-            {fundamentalsBlock}
-            {marketEvalBlock}
-            {technicalHeader}
-            {chartBlock}
-            {targetZoneBlock}
-            {earningsReactionBlock}
-            {insiderBlock}
-            {contextBlock}
-          </>
-        );
       })()}
 
       {/* P3.7 / v144 Task B: Pane 3 → 関連記事 link (conditional render — 記事がある時だけ表示)。

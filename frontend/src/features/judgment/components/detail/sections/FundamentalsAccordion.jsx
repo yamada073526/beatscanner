@@ -56,7 +56,7 @@ export default function FundamentalsAccordion({
   //   JudgmentDetail から sectionHeadingL2Style を受け取る。省略時 (v4/legacy) は AccordionSection 既定。
   sectionHeadingStyle = undefined,
   // v6 Sprint 2-C 後続: true のとき会社概要 fold ヘッダーにセグメント%サマリー (mockup f-sum) を常時表示。
-  //   JudgmentDetail の v6 経路からのみ true (flag pane3_v6 OFF default・blast 限定)。
+  //   JudgmentDetail の v6 経路 (= 唯一の銘柄詳細経路、Sprint 4b で旧分岐撤去) からのみ true。
   //   data 源は非 LLM の quarterly-history.segment_summary (prefetch 済・cost 中立)。
   segmentSummaryInHeader = false,
 }) {
