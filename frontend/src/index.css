@@ -15019,17 +15019,7 @@ body.is-digest-resizing {
   overflow: hidden;
 }
 
-/* ── desc (S4 compact: 1 行 truncate。min-height/flex 撤去でカード高を圧縮) ── */
-.screener-strategy-tile__desc {
-  font-size: 12px;
-  color: var(--text-muted);
-  line-height: 1.4;
-  margin: 0;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;       /* 1 行に省略 (説明は常時 1 行で提示・原則1) */
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
+/* ── (S4: desc 撤廃。説明は hover/focus tooltip = .screener-strategy-tip に一本化) ── */
 
 /* ── foot (S4 compact: 件数 + tier。body gap が間隔を担うため margin-top 撤去) ── */
 .screener-strategy-tile__foot {

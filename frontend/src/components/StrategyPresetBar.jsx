@@ -97,11 +97,13 @@ export const STRATEGY_PRESETS = [
 ];
 
 export default function StrategyPresetBar({ active = null, onSelect, counts = {}, isPremiumUser = true }) {
-  // S4: desc が 1 行 truncate のため、全文 (title) を branded tooltip で hover/focus 時に提示。
+  // S4: カードは名前のみ表示 (desc 撤廃)。説明 (title 全文) は branded tooltip で hover/focus 時に提示。
   //   feedback_tooltip_portal_pattern: createPortal + position:fixed + getBoundingClientRect で
   //   親の overflow/transform を escape。native title 属性は二重表示回避のため除去 (button から外す)。
   //   モバイル/タッチはカード選択で seasonchip + 条件一覧に内容が出る。grid を壊さないよう trigger は
   //   button 直付け・tip state は bar に lift・portal は document.body へ 1 個だけ描画 (wrap span なし)。
+  //   方向は below 固定で全カード統一 (上段=下/下段=上 のバラつき解消)。
+  //   ※ 各 preset の desc フィールドは短文メタとして保持 (現 UI は未描画・将来モバイル条件1行等に再利用余地)。
   const [tip, setTip] = useState(null); // null=非表示 | { content, left, top, placement }
   const tipRef = useRef(null);
   // 描画後に幅を測り viewport 左右はみ出しを内側へ補正 (右端カードの右切れ対策)。
@@ -117,7 +119,9 @@ export default function StrategyPresetBar({ active = null, onSelect, counts = {}
   const openTip = (el, content) => {
     if (!el || !content) return;
     const r = el.getBoundingClientRect();
-    const placement = r.top > 140 ? 'above' : 'below';
+    // 方向は below 固定で全カード統一 (上段=下/下段=上 のバラつき解消・user 指摘)。
+    //   下に ~130px 未満しか無い時のみ above にフォールバック (viewport 端のクリップ回避)。
+    const placement = (window.innerHeight - r.bottom) < 130 ? 'above' : 'below';
     setTip({
       content,
       left: Math.round(r.left + r.width / 2),
@@ -136,7 +140,7 @@ export default function StrategyPresetBar({ active = null, onSelect, counts = {}
     >
       {[...STRATEGY_PRESETS]
         .sort((a, b) => TIER_ORDER[a.tier] - TIER_ORDER[b.tier])
-        .map(({ key, label, title, desc, Icon, tier, tierLabel, countFree }) => {
+        .map(({ key, label, title, Icon, tier, tierLabel, countFree }) => {
         const isSelected = active === key;
         const count = counts[key];
         // SPEC_2026-06-25 §4.2.2: Premium 限定 preset を非 Premium が見る場合、masked universe で
@@ -158,15 +162,15 @@ export default function StrategyPresetBar({ active = null, onSelect, counts = {}
             onFocus={(e) => openTip(e.currentTarget, title)}
             onBlur={closeTip}
           >
-            {/* S4 compact (2026-06-28): icon を左、右に body (label / desc 1行 / foot) を縦積みする横レイアウト。
-                6 枚 3×2 でカード高を圧縮し、下半分の絞り込み条件/結果領域を拡張 (user 要望)。 */}
+            {/* S4 compact (2026-06-28): icon を左、右に body (label / foot) を縦積みする横レイアウト。
+                desc は撤廃しカード高を最小化 (説明は hover tooltip)。6 枚 3×2 で下半分の結果領域を拡張 (user 要望)。 */}
             <span className="screener-strategy-tile__icon">
               <Icon size={18} strokeWidth={1.9} aria-hidden="true" />
             </span>
             <div className="screener-strategy-tile__body">
+              {/* S4 (desc 撤廃): カードは名前 + 件数 + tier のみ (原則1「極力読ませない」・最コンパクト)。
+                  説明文 (desc/title) は hover/focus の branded tooltip に一本化 (ミスマッチ解消)。 */}
               <span className="screener-strategy-tile__label">{label}</span>
-              {/* desc: 1 行 truncate (説明を常時 1 行で提示し原則1「2 秒で分かる」を維持・高さは抑制) */}
-              <p className="screener-strategy-tile__desc">{desc}</p>
               {/* foot: 件数 (Premium ロック時は 🔒) + tier badge */}
               <div className="screener-strategy-tile__foot">
                 {isLocked ? (
