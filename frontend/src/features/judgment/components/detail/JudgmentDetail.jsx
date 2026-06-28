@@ -24,6 +24,7 @@ import PriceLadder from '../../../../components/PriceLadder.jsx';
 // v126 R8-3 Phase 3: 直近 breakout = support level narration (last_breakout 取得時のみ表示)
 import BreakoutZoneCard from '../../../../components/BreakoutZoneCard.jsx';
 // v100 user dogfood (handover §100点 multi-review): Pane 3 Insider 取引 section の中身実装
+import InsiderPanel from '../../../../components/InsiderPanel.jsx';
 // v100 (handover §SPEC FMP Premium 打ち手 5): 過去 8Q 決算 ±5 日 価格反応 (event study)
 import EarningsReactionPanel from '../../../../components/EarningsReactionPanel.jsx';
 // handover v82 Phase 5: TriageBanner (保有 × 5 条件 × Cup-Handle 三層)。
@@ -311,9 +312,8 @@ export default function JudgmentDetail({
 
   // Phase 2.8 Sprint 1 #3: accordion 内 section の halo trigger refs
   // AccordionSection の onOpenChange(id, true) 時に haloTriggerRef.current?.() を呼んで
-  // AnalystPanel / QuarterlyHistoryTable の halo を 1 回発火させる。
+  // AnalystPanel の halo を 1 回発火させる。
   const analystHaloTriggerRef = useRef(null);   // AnalystPanel から register される
-  const qhistoryHaloTriggerRef = useRef(null);  // QuarterlyHistoryTable から register される
 
   // Phase 2.9 Sprint 2 #Bug2 fix: 再閉じ + 再展開で 2 回目発火する真因
   // 真因: data-halo-fired は DOM dataset で、 accordion close で children unmount →
@@ -409,27 +409,6 @@ export default function JudgmentDetail({
         u.searchParams.delete('ch2tab');
       } else {
         u.searchParams.set('ch2tab', key);
-      }
-      window.history.replaceState({}, '', u.toString());
-    } catch { /* noop */ }
-  };
-  const [ch3Tab, setCh3TabRaw] = useState(() => {
-    try {
-      if (typeof window === 'undefined') return 'analyst';
-      const p = new URLSearchParams(window.location.search).get('ch3tab');
-      if (p === 'analyst' || p === 'insights') return p;
-    } catch { /* noop */ }
-    return 'analyst';
-  });
-  const setCh3Tab = (key) => {
-    setCh3TabRaw(key);
-    try {
-      if (typeof window === 'undefined') return;
-      const u = new URL(window.location.href);
-      if (key === 'analyst') {
-        u.searchParams.delete('ch3tab');
-      } else {
-        u.searchParams.set('ch3tab', key);
       }
       window.history.replaceState({}, '', u.toString());
     } catch { /* noop */ }
@@ -970,24 +949,19 @@ export default function JudgmentDetail({
                   <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>⑤</span>
                   <span style={{ fontSize: 17, fontWeight: 700 }}>その他</span>
                 </div>
-                {/* L6 各要素: Sprint 2 以降で fold 累進開示化予定。S1 は直接 mount。*/}
+                {/* L6 fold 群 (mockup pane3-detail-v1.html の「その他」#more に忠実な 5 fold フラット) */}
+                {/* fold #1-2: アナリスト視点 / 市場の声 */}
                 <MarketEvalSection
                   key="v6-market-eval"
                   selectedTicker={selectedTicker}
                   plan={plan}
                   detail={detail}
                   detailContext={detailContext}
-                  isV2={isV2}
-                  isV3={isV3}
-                  isV5={false}
-                  isScrollV1={false}
                   expandedSections={expandedSections}
-                  ch3Tab={ch3Tab}
-                  setCh3Tab={setCh3Tab}
                   analystHaloTriggerRef={analystHaloTriggerRef}
-                  qhistoryHaloTriggerRef={qhistoryHaloTriggerRef}
                   haloFiredSetRef={haloFiredSetRef}
                 />
+                {/* fold #3: 過去 8Q 決算反応 (earnings_8q Premium gate 維持) */}
                 {selectedTicker && (
                   <AccordionSection
                     key="v6-earnings-reaction"
@@ -1007,20 +981,25 @@ export default function JudgmentDetail({
                     </PremiumLock>
                   </AccordionSection>
                 )}
+                {/* fold #4: Insider 取引 (Form 4 + 13F、 mockup 通り free 開放・内部で source 制限を handle) */}
+                {selectedTicker && (
+                  <AccordionSection
+                    key="v6-insider"
+                    id="sec-v6-insider"
+                    title="Insider 取引"
+                    tier={2}
+                    defaultOpen={false}
+                    controlledOpen={expandedSections.has('insider') || undefined}
+                  >
+                    <InsiderPanel ticker={selectedTicker} l3Headings />
+                  </AccordionSection>
+                )}
+                {/* fold #5: ニュース · IR · 10-K (一次ソースへのリンク集約) */}
                 <ContextSection
                   key="v6-context"
                   selectedTicker={selectedTicker}
-                  result={result}
-                  guidance={guidance}
-                  plan={plan}
-                  detail={detail}
-                  detailContext={detailContext}
-                  isV2={isV2}
-                  isScrollV1={false}
                   useWorkspaceReader={useWorkspaceReader}
                   expandedSections={expandedSections}
-                  isV4={true}
-                  isV5={false}
                 />
               </section>
             </div>
