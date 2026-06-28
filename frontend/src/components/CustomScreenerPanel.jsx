@@ -12,6 +12,13 @@ import CompanyLogo from './CompanyLogo.jsx';
 import ScreenerRow from '../features/workspace/ScreenerRow.jsx';
 import ScreenerGridTable from '../features/workspace/ScreenerGridTable.jsx';
 
+// 結果リストを「決算の通信簿」grid table で出す preset 集合。
+//   earnings_pass / hot_sector = 決算列 (従来) / 残り4つ = preset 別根拠列 (column-driven)。
+//   custom mode (activePreset=null) は対象外 = ScreenerRow (合致バッジ) を維持。
+const GRID_TABLE_PRESETS = new Set([
+  'earnings_pass', 'hot_sector', 'new_high_break', 'sector_leader', 'quiet_quality', 'market_leading',
+]);
+
 // 純関数層 (facet / 述語 / 件数集計) は customScreenerModel.js へ抽出。本 component から使用するものを import。
 import {
   sectorLabelJp,
@@ -168,13 +175,15 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   // D-8 sort (SPEC_2026-06-25): ユーザー制御の sort key (default = 合致度順)。applyStrategyImpl で
   //   reset するため activePreset 付近で宣言。表示順 displayItems は後段の useMemo で算出。
   const [sortKey, setSortKey] = useState('relevance');
-  // Sprint3 (SPEC §14): screener_v2 結果テーブルを「決算の通信簿」grid table へ。
-  //   earnings 系 preset (earnings_pass / hot_sector) または ?screener_mock=1 (mock dogfood) のとき採用。
-  //   それ以外の preset (new_high_break / sector_leader 等) は従来 ScreenerRow 経路を維持 (§8 per-preset)。
+  // Sprint3 (SPEC §14) + per-preset 根拠カラム: screener_v2 結果テーブルを「決算の通信簿」grid table へ。
+  //   全 preset (earnings_pass / hot_sector / new_high_break / sector_leader / quiet_quality /
+  //   market_leading) または ?screener_mock=1 (mock dogfood) のとき採用。earnings 系は決算列 (従来)、
+  //   残り4つは preset 別根拠列 (ScreenerGridTable が preset prop で切替)。custom mode (activePreset=null)
+  //   は従来 ScreenerRow 経路 (合致バッジが根拠) を維持。
   const screenerGridMock = typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).get('screener_mock') === '1';
   const useScreenerGridTable = screenerV2
-    && (activePreset === 'earnings_pass' || activePreset === 'hot_sector' || screenerGridMock);
+    && (screenerGridMock || (activePreset != null && GRID_TABLE_PRESETS.has(activePreset)));
   // cup「型」状態トグル (新高値ブレイク・Premium): default 'all' = 件数不変 (任意の絞り込み・gate1 確定)。
   //   applyStrategyImpl で reset するため sortKey と同様 activePreset 近傍で宣言 (v271 教訓)。
   const [cupState, setCupState] = useState('all');
@@ -1844,6 +1853,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
               <ScreenerGridTable
                 items={showAllResults ? displayItems : displayItems.slice(0, 100)}
                 mock={screenerGridMock}
+                preset={activePreset}
                 count={displayItems.length}
                 selectedTickers={selectedTickers}
                 onSelect={(t) => {
