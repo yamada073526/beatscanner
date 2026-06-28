@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pane3 改善モックアップ — WS1 affordance + RS表記 / WS2 8Q tooltip</title>
+<style>
+  :root {
+    --bg-primary:#0f172a; --bg-card:#1e2433; --bg-subtle:#1e2a3a; --bg-muted:#243447;
+    --bg-hover:#253045; --text-primary:#f1f5f9; --text-secondary:#cbd5e1; --text-muted:#94a3b8;
+    --border:#334155; --border-strong:rgba(255,255,255,0.14);
+    --gain:#34ef81; --loss:#f87171; --warning:#f59e0b; --accent:#38bdf8; --gold:#d4af37;
+    --radius-sm:8px; --radius-md:12px; --radius-lg:16px;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg-primary); color:var(--text-primary);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
+    font-feature-settings:"tnum"; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:760px; margin:0 auto; padding:28px 22px 60px; }
+  h1 { font-size:18px; font-weight:600; letter-spacing:-0.01em; margin:0 0 4px; }
+  .hint { font-size:12.5px; color:var(--text-muted); margin:0 0 22px;
+    padding:8px 12px; background:var(--bg-subtle); border:1px dashed var(--border); border-radius:var(--radius-sm); }
+  .sec-label { font-size:11px; font-weight:600; letter-spacing:0.04em; color:var(--gold);
+    text-transform:uppercase; margin:26px 0 9px; display:flex; align-items:center; gap:8px; }
+  .sec-label .delta { color:var(--accent); font-weight:500; letter-spacing:0; text-transform:none; font-size:11px; }
+  .panel { background:var(--bg-card); border:1px solid var(--border); border-top:2px solid color-mix(in srgb,var(--gold) 30%,var(--border));
+    border-radius:var(--radius-lg); padding:18px; }
+
+  /* ── 共通: clickable affordance (calm) ──────────────────────────── */
+  .clickable { cursor:pointer; transition:background-color .15s ease, border-color .15s ease; }
+  .clickable:hover { background:var(--bg-hover); border-color:var(--border-strong); }
+  .clickable:hover .drill { color:var(--accent); }
+  .clickable:hover .chev { color:var(--text-primary); transform:translateX(2px); }
+
+  /* ── On this page nav ──────────────────────────────────────────── */
+  .nav { display:flex; gap:8px; flex-wrap:wrap; }
+  .nav .chip { font-size:12.5px; color:var(--text-secondary); border:1px solid var(--border);
+    border-radius:999px; padding:6px 13px; background:transparent; }
+  .nav .chip.active { color:var(--text-primary); border-color:var(--border-strong); background:var(--bg-hover); }
+
+  /* ── 判定サマリー ──────────────────────────────────────────────── */
+  .verdict-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px; }
+  .verdict-head .t { font-size:15px; font-weight:600; }
+  .verdict-head .frac { font-size:12.5px; color:var(--text-muted); display:flex; align-items:center; gap:6px; }
+  .verdict-head .frac::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--gain); display:inline-block; }
+  .callout { font-size:12.5px; color:var(--text-secondary); line-height:1.55; background:rgba(52,239,129,0.08);
+    border:1px solid rgba(52,239,129,0.22); border-left:3px solid var(--gain); border-radius:var(--radius-sm); padding:9px 12px; margin-bottom:14px; }
+  .buckets { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .bucket { border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 13px; background:var(--bg-subtle); position:relative; }
+  .bucket .lab { font-size:11.5px; color:var(--text-muted); display:flex; align-items:center; gap:5px; margin-bottom:6px; }
+  .bucket .star { color:var(--gold); }
+  .bucket .big { font-size:20px; font-weight:600; color:var(--gain); letter-spacing:-0.01em; }
+  .bucket .big.neutral { color:var(--text-secondary); }
+  .bucket .sub { font-size:11px; color:var(--text-muted); margin-top:3px; }
+  .bucket .drill { position:absolute; top:11px; right:12px; font-size:11px; color:var(--text-muted); transition:color .15s ease; }
+  .minis { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+  .mini { border:1px solid var(--border); border-radius:var(--radius-md); padding:11px 13px; background:var(--bg-subtle);
+    display:flex; justify-content:space-between; align-items:center; }
+  .mini .lab { font-size:11.5px; color:var(--text-muted); }
+  .mini .val { font-size:15px; font-weight:600; color:var(--text-primary); }
+  .mini .val .unit { font-size:11px; color:var(--text-muted); font-weight:400; margin-left:4px; }
+  .rs-badge { display:inline-block; font-size:13px; font-weight:700; color:var(--bg-primary); background:var(--accent);
+    border-radius:6px; padding:1px 8px; }
+  .src { font-size:10.5px; color:var(--text-muted); margin-top:11px; text-align:right; }
+
+  /* ── 5条件 ─────────────────────────────────────────────────────── */
+  .cond { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:7px; }
+  .cond li { display:flex; align-items:center; gap:11px; padding:11px 13px; border:1px solid var(--border);
+    border-radius:var(--radius-sm); background:rgba(255,255,255,0.015); }
+  .cond .ic { width:18px; height:18px; border-radius:50%; flex:0 0 auto; display:grid; place-items:center; font-size:11px; font-weight:700; }
+  .cond .ic.pass { background:rgba(52,239,129,0.16); color:var(--gain); }
+  .cond .ic.fail { background:rgba(148,163,184,0.16); color:var(--text-muted); }
+  .cond .name { font-size:13px; color:var(--text-primary); flex:1; }
+  .cond .num { font-size:13px; color:var(--text-secondary); font-variant-numeric:tabular-nums; margin-right:4px; }
+  .cond .pill { font-size:11px; font-weight:600; border-radius:999px; padding:2px 9px; }
+  .cond .pill.up { background:rgba(52,239,129,0.16); color:var(--gain); }
+  .cond .pill.dn { background:rgba(248,113,113,0.16); color:var(--loss); }
+  .cond .chev { color:var(--text-muted); font-size:12px; font-weight:700; transition:color .15s ease, transform .15s ease; flex:0 0 auto; }
+
+  /* ── 成長トレンド 8Q (WS2) ─────────────────────────────────────── */
+  .spark-grid { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+  .spark-title { font-size:12px; color:var(--text-secondary); margin-bottom:10px; font-weight:500; }
+  .bars { display:flex; align-items:flex-end; gap:6px; height:120px; position:relative; }
+  .bcol { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; position:relative; }
+  .bcol .pct { font-size:9.5px; color:var(--text-muted); margin-bottom:3px; font-variant-numeric:tabular-nums; }
+  .bcol .bar { width:74%; border-radius:4px 4px 0 0; background:linear-gradient(180deg,var(--gain),rgba(52,239,129,0.45)); transition:filter .12s ease; }
+  .bcol.rev .bar { background:linear-gradient(180deg,var(--accent),rgba(56,189,248,0.4)); }
+  .bcol .qlab { font-size:9px; color:var(--text-muted); margin-top:5px; white-space:nowrap; }
+  .bcol:hover .bar { filter:brightness(1.25); }
+  /* tooltip */
+  .tip { position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%) translateY(4px);
+    width:210px; background:#0b1220; border:1px solid var(--border-strong); border-radius:var(--radius-md);
+    box-shadow:0 12px 30px rgba(0,0,0,0.55); padding:11px 12px; opacity:0; pointer-events:none;
+    transition:opacity .14s ease, transform .14s ease; z-index:20; text-align:left; }
+  .bcol:hover .tip { opacity:1; transform:translateX(-50%) translateY(0); }
+  .tip .th { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .tip .th .q { font-size:12px; font-weight:600; color:var(--text-primary); }
+  .tip .bm { font-size:10px; font-weight:700; border-radius:5px; padding:1px 7px; }
+  .tip .bm.beat { background:rgba(52,239,129,0.18); color:var(--gain); }
+  .tip .bm.miss { background:rgba(248,113,113,0.18); color:var(--loss); }
+  .tip .row { display:flex; justify-content:space-between; font-size:11px; margin:4px 0; }
+  .tip .row .k { color:var(--text-muted); }
+  .tip .row .v { color:var(--text-secondary); font-variant-numeric:tabular-nums; }
+  .tip .row .v b { color:var(--text-primary); }
+  .tip .row .sp { color:var(--gain); font-weight:600; }
+  .tip .row .sp.dn { color:var(--loss); }
+  .tip .div { height:1px; background:var(--border); margin:7px 0; }
+  .note { font-size:11px; color:var(--text-muted); margin-top:14px; line-height:1.5; }
+  .note b { color:var(--text-secondary); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Pane3 改善モックアップ <span style="font-size:12px;color:var(--text-muted);font-weight:400;">(WS1 affordance + RS表記 / WS2 8Q tooltip)</span></h1>
+  <p class="hint">💡 各要素に <b style="color:var(--text-secondary)">マウスを乗せる</b> と、押せることを示す控えめな affordance（背景うっすら + 枠線強調）と、8Q バーの hover tooltip が確認できます。</p>
+
+  <!-- On this page nav -->
+  <div class="sec-label">On this page ナビ <span class="delta">— hover で「押せる」を明示（既存より一貫適用）</span></div>
+  <div class="nav">
+    <div class="chip clickable active">決算</div>
+    <div class="chip clickable">品質・継続性</div>
+    <div class="chip clickable">テクニカル・買い場</div>
+    <div class="chip clickable">図解</div>
+    <div class="chip clickable">その他</div>
+  </div>
+
+  <!-- 判定サマリー -->
+  <div class="sec-label">判定サマリー <span class="delta">— 各 bucket は scroll する clickable。hover affordance を付与 + RS を IBD数字へ</span></div>
+  <div class="panel">
+    <div class="verdict-head"><div class="t">判定サマリー</div><div class="frac">条件充足 2 / 5</div></div>
+    <div class="callout">✓ 上昇試行が確認水準に到達 — NASDAQ Day 4 に +2.5% 超・出来高増の Follow-Through Day を満たしました。</div>
+    <div class="buckets">
+      <div class="bucket clickable">
+        <div class="lab"><span class="star">★</span> EPS（対コンセンサス）</div>
+        <div class="big">+6.3%</div>
+        <div class="sub">$1.87 / 予想 $1.76</div>
+        <div class="drill">詳細 ↓</div>
+      </div>
+      <div class="bucket clickable">
+        <div class="lab">売上（対コンセンサス）</div>
+        <div class="big">+3.4%</div>
+        <div class="sub">$81.6B / 予想 $78.9B</div>
+        <div class="drill">詳細 ↓</div>
+      </div>
+      <div class="bucket clickable">
+        <div class="lab">ガイダンス（来期）</div>
+        <div class="big neutral">—</div>
+        <div class="sub">開示なし</div>
+        <div class="drill">詳細 ↓</div>
+      </div>
+    </div>
+    <div class="minis">
+      <div class="mini clickable">
+        <div class="lab">連続ビート</div>
+        <div class="val">8<span class="unit">Q 連続</span></div>
+      </div>
+      <div class="mini clickable">
+        <div class="lab">RS Rating <span style="color:var(--text-muted);font-size:10px;">（IBD・対ユニバース）</span></div>
+        <div class="val"><span class="rs-badge">50</span> <span class="unit">目安 80+ で強い</span></div>
+      </div>
+    </div>
+    <div class="src">出典: SEC / FMP（取得日: 本日）</div>
+  </div>
+
+  <!-- 5条件 -->
+  <div class="sec-label">ファンダメンタル5条件 <span class="delta">— 行は展開できる。派手な glow でなく控えめ affordance を再付与（PR#104 の refinement）</span></div>
+  <div class="panel">
+    <div class="verdict-head"><div class="t">5 条件 <span style="font-size:12px;color:var(--text-muted);font-weight:400;">2/5 合致</span></div></div>
+    <ul class="cond">
+      <li class="clickable"><span class="ic pass">✓</span><span class="name">営業CFマージン ≥ 15%</span><span class="num">19.8%</span><span class="pill up">良好</span><span class="chev">▸</span></li>
+      <li class="clickable"><span class="ic fail">—</span><span class="name">EPS 連続増加</span><span class="num">3Q</span><span class="pill up">+312%</span><span class="chev">▸</span></li>
+      <li class="clickable"><span class="ic fail">—</span><span class="name">CFPS 連続増加</span><span class="num">4.19</span><span class="pill up">+272%</span><span class="chev">▸</span></li>
+      <li class="clickable"><span class="ic pass">✓</span><span class="name">売上高 連続増加</span><span class="num">$215.9B</span><span class="pill up">+254%</span><span class="chev">▸</span></li>
+      <li class="clickable"><span class="ic fail">—</span><span class="name">CFPS &gt; EPS（直近期）</span><span class="num">-0.71</span><span class="pill dn">-0.65</span><span class="chev">▸</span></li>
+    </ul>
+  </div>
+
+  <!-- 成長トレンド 8Q (WS2) -->
+  <div class="sec-label">成長トレンド（直近8Q） <span class="delta">— 縦バーに hover で各四半期の決算詳細 tooltip（過去8Qを遡って確認）</span></div>
+  <div class="panel">
+    <div class="spark-grid">
+      <div>
+        <div class="spark-title">EPS 成長率 YoY</div>
+        <div class="bars" id="eps-bars"></div>
+      </div>
+      <div>
+        <div class="spark-title">売上 成長率 YoY</div>
+        <div class="bars" id="rev-bars"></div>
+      </div>
+    </div>
+    <div class="note">※ tooltip は <b>既に取得済の quarterly-history データ</b>（EPS実績/予想/surprise/verdict・売上同）を表示。追加 API 不要。<br>※ 数値はサンプル。free で見せる範囲（tier）は要確認 — 詳細8Qテーブルは現状 Premium gate 内。</div>
+  </div>
+</div>
+
+<script>
+  // 8Q サンプルデータ (oldest → newest)
+  const Q = [
+    { q:"FY25 Q1", epsYoY:486, revYoY:262, epsA:0.61, epsE:0.52, epsSp:17, revA:26.0, revE:24.7, revSp:5.3, beat:true },
+    { q:"FY25 Q2", epsYoY:168, revYoY:122, epsA:0.68, epsE:0.64, epsSp:6,  revA:30.0, revE:28.7, revSp:4.5, beat:true },
+    { q:"FY25 Q3", epsYoY:103, revYoY:94,  epsA:0.81, epsE:0.75, epsSp:8,  revA:35.1, revE:33.2, revSp:5.7, beat:true },
+    { q:"FY25 Q4", epsYoY:82,  revYoY:78,  epsA:0.89, epsE:0.85, epsSp:4.7,revA:39.3, revE:38.0, revSp:3.4, beat:true },
+    { q:"FY26 Q1", epsYoY:71,  revYoY:69,  epsA:0.96, epsE:0.92, epsSp:4.3,revA:44.1, revE:43.3, revSp:1.8, beat:true },
+    { q:"FY26 Q2", epsYoY:60,  revYoY:56,  epsA:1.05, epsE:1.01, epsSp:4.0,revA:46.7, revE:46.0, revSp:1.5, beat:true },
+    { q:"FY26 Q3", epsYoY:48,  revYoY:38,  epsA:1.12, epsE:1.13, epsSp:-0.9,revA:51.0,revE:51.4, revSp:-0.8, beat:false },
+    { q:"FY26 Q4", epsYoY:39,  revYoY:34,  epsA:1.87, epsE:1.76, epsSp:6.3,revA:81.6, revE:78.9, revSp:3.4, beat:true },
+  ];
+  const maxEps = Math.max(...Q.map(d=>d.epsYoY));
+  const maxRev = Math.max(...Q.map(d=>d.revYoY));
+  function tip(d){
+    const eC = d.epsSp>=0?"sp":"sp dn", rC = d.revSp>=0?"sp":"sp dn";
+    const sg = n => (n>=0?"+":"")+n+"%";
+    return `<div class="tip">
+      <div class="th"><span class="q">${d.q}</span><span class="bm ${d.beat?'beat':'miss'}">${d.beat?'BEAT':'MISS'}</span></div>
+      <div class="row"><span class="k">EPS 実績</span><span class="v"><b>$${d.epsA.toFixed(2)}</b> / 予 $${d.epsE.toFixed(2)}</span></div>
+      <div class="row"><span class="k">EPS surprise</span><span class="${eC}">${sg(d.epsSp)}</span></div>
+      <div class="div"></div>
+      <div class="row"><span class="k">売上 実績</span><span class="v"><b>$${d.revA.toFixed(1)}B</b> / 予 $${d.revE.toFixed(1)}B</span></div>
+      <div class="row"><span class="k">売上 surprise</span><span class="${rC}">${sg(d.revSp)}</span></div>
+      <div class="div"></div>
+      <div class="row"><span class="k">YoY</span><span class="v">EPS ${sg(d.epsYoY)} ・ 売上 ${sg(d.revYoY)}</span></div>
+    </div>`;
+  }
+  function render(id, key, max){
+    const el = document.getElementById(id);
+    el.innerHTML = Q.map(d=>{
+      const h = Math.max(6, Math.round(d[key]/max*100));
+      return `<div class="bcol ${key==='revYoY'?'rev':''}">
+        ${tip(d)}
+        <div class="pct">${d[key]}%</div>
+        <div class="bar" style="height:${h}%"></div>
+        <div class="qlab">${d.q.replace('FY','').replace(' ',' ')}</div>
+      </div>`;
+    }).join("");
+  }
+  render("eps-bars","epsYoY",maxEps);
+  render("rev-bars","revYoY",maxRev);
+</script>
+</body>
+</html>

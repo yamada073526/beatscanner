@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pane3 WS3 モックアップ — §②品質・継続性 データ拡充</title>
+<style>
+  :root {
+    --bg-primary:#0f172a; --bg-card:#1e2433; --bg-subtle:#1e2a3a; --bg-muted:#243447;
+    --bg-hover:#253045; --text-primary:#f1f5f9; --text-secondary:#cbd5e1; --text-muted:#94a3b8;
+    --border:#334155; --border-strong:rgba(255,255,255,0.14);
+    --gain:#34ef81; --loss:#f87171; --warning:#f59e0b; --accent:#38bdf8; --gold:#d4af37;
+    --radius-sm:8px; --radius-md:12px; --radius-lg:16px;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg-primary); color:var(--text-primary);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
+    font-feature-settings:"tnum"; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:780px; margin:0 auto; padding:28px 22px 60px; }
+  h1 { font-size:18px; font-weight:600; letter-spacing:-0.01em; margin:0 0 4px; }
+  .hint { font-size:12.5px; color:var(--text-muted); margin:0 0 20px; padding:8px 12px;
+    background:var(--bg-subtle); border:1px dashed var(--border); border-radius:var(--radius-sm); }
+  .panel { background:var(--bg-card); border:1px solid var(--border);
+    border-top:2px solid color-mix(in srgb,var(--gold) 30%,var(--border)); border-radius:var(--radius-lg); padding:18px; }
+  .chap-h { font-size:15px; font-weight:600; margin:0 0 4px; }
+  .chap-sub { font-size:12px; color:var(--text-muted); margin:0 0 16px; }
+
+  /* discover → verify banner */
+  .dv { display:flex; align-items:center; gap:10px; font-size:12.5px; color:var(--text-secondary); line-height:1.5;
+    background:linear-gradient(90deg, color-mix(in srgb,var(--gold) 8%,transparent), transparent);
+    border:1px solid color-mix(in srgb,var(--gold) 22%,var(--border)); border-left:3px solid var(--gold);
+    border-radius:var(--radius-sm); padding:10px 13px; margin-bottom:18px; }
+  .dv .ico { font-size:15px; }
+  .dv b { color:var(--text-primary); }
+
+  /* group */
+  .grp-label { font-size:11px; font-weight:700; letter-spacing:0.05em; color:var(--gold); text-transform:uppercase;
+    margin:20px 0 10px; display:flex; align-items:center; gap:8px; }
+  .grp-label:first-of-type { margin-top:4px; }
+  .grp-label .en { color:var(--text-muted); font-weight:500; letter-spacing:0; text-transform:none; font-size:11px; }
+  .cards { display:grid; grid-template-columns:1fr 1fr; gap:11px; }
+
+  /* metric card */
+  .mc { border:1px solid var(--border); border-radius:var(--radius-md); padding:13px 14px; background:var(--bg-subtle);
+    display:flex; flex-direction:column; gap:9px; cursor:pointer; transition:background-color .15s, border-color .15s; }
+  .mc:hover { background:var(--bg-hover); border-color:var(--border-strong); }
+  .mc .top { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .mc .nm { font-size:12.5px; color:var(--text-secondary); font-weight:500; }
+  .mc .badge { font-size:10px; font-weight:600; border-radius:6px; padding:2px 7px; white-space:nowrap; }
+  .mc .badge.sc { background:rgba(56,189,248,0.14); color:var(--accent); border:1px solid rgba(56,189,248,0.3); }
+  .mc .badge.kb { background:rgba(212,175,55,0.14); color:var(--gold); border:1px solid rgba(212,175,55,0.3); }
+  .mc .mid { display:flex; align-items:baseline; gap:8px; }
+  .mc .val { font-size:21px; font-weight:600; letter-spacing:-0.01em; color:var(--text-primary); font-variant-numeric:tabular-nums; }
+  .mc .chip { font-size:10.5px; font-weight:600; border-radius:999px; padding:2px 8px; }
+  .mc .chip.ok { background:rgba(52,239,129,0.16); color:var(--gain); }
+  .mc .chip.neu { background:rgba(148,163,184,0.16); color:var(--text-muted); }
+  .mc .chip.warn { background:rgba(245,158,11,0.16); color:var(--warning); }
+  .mc .ctx { font-size:11px; color:var(--text-muted); line-height:1.45; }
+
+  /* sparkline (mini bars) */
+  .spark { display:flex; align-items:flex-end; gap:3px; height:34px; }
+  .spark .sb { flex:1; border-radius:2px 2px 0 0; background:linear-gradient(180deg,var(--accent),rgba(56,189,248,0.35)); min-height:3px; }
+  .spark.gain .sb { background:linear-gradient(180deg,var(--gain),rgba(52,239,129,0.35)); }
+  .spark.gold .sb { background:linear-gradient(180deg,var(--gold),rgba(212,175,55,0.3)); }
+  .spark-row { display:flex; align-items:flex-end; justify-content:space-between; }
+  .spark-cap { font-size:9.5px; color:var(--text-muted); white-space:nowrap; margin-left:8px; align-self:flex-end; }
+
+  /* continuity strip */
+  .strip { display:flex; flex-wrap:wrap; gap:8px; margin-top:11px; }
+  .pillbox { display:flex; align-items:center; gap:7px; font-size:11.5px; color:var(--text-secondary);
+    border:1px solid var(--border); border-radius:999px; padding:5px 12px; background:var(--bg-subtle); }
+  .pillbox .dot { width:7px; height:7px; border-radius:50%; }
+  .pillbox .dot.ok { background:var(--gain); } .pillbox .dot.neu { background:var(--text-muted); }
+  .pillbox b { color:var(--text-primary); font-variant-numeric:tabular-nums; }
+
+  .keep { font-size:11.5px; color:var(--text-muted); margin-top:16px; padding-top:12px; border-top:1px solid var(--border); }
+  .keep b { color:var(--text-secondary); }
+  .note { font-size:11px; color:var(--text-muted); margin-top:16px; line-height:1.55; }
+  .note b { color:var(--text-secondary); }
+  .disc { font-size:10px; color:var(--text-muted); margin-top:6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Pane3 WS3 モックアップ <span style="font-size:12px;color:var(--text-muted);font-weight:400;">(§②品質・継続性 データ拡充)</span></h1>
+  <p class="hint">💡 「単一の TTM 値だけ」だった各指標に <b style="color:var(--text-secondary)">実数値 + 推移(継続性) + screener条件バッジ</b> を付与。screener で絞った条件を、ここで根拠確認できる構造。</p>
+
+  <div class="panel">
+    <div class="chap-h">② 品質・継続性</div>
+    <div class="chap-sub">この会社は「儲ける力」と「伸び続ける力」を備えているか</div>
+
+    <div class="dv">
+      <span class="ico">🔍</span>
+      <span><b>screener で発見 → ここで根拠を確認。</b> 各バッジ <span class="badge sc" style="display:inline-block">screener条件</span> はスクリーナーの絞り込み条件と 1:1 対応。実数値と推移で「なぜ通ったか」が分かる。</span>
+    </div>
+
+    <!-- 品質 -->
+    <div class="grp-label">品質 <span class="en">— 儲ける力・効率・健全性</span></div>
+    <div class="cards">
+      <div class="mc">
+        <div class="top"><span class="nm">営業CFマージン</span><span class="badge sc">≥15% ✓</span></div>
+        <div class="mid"><span class="val">19.8%</span><span class="chip ok">良好</span></div>
+        <div class="spark-row"><div class="spark gain" data-vals="15.2,16.1,17.0,17.1,18.0,18.4,19.1,19.8"></div><span class="spark-cap">8Q ↗</span></div>
+        <div class="ctx">本業の現金創出力。TTM だけでなく 8Q 推移で継続性を確認</div>
+      </div>
+      <div class="mc">
+        <div class="top"><span class="nm">粗利率</span><span class="badge sc">screener条件</span></div>
+        <div class="mid"><span class="val">75.0%</span><span class="chip ok">+2.1pp YoY</span></div>
+        <div class="spark-row"><div class="spark gain" data-vals="72.9,73.1,73.5,73.8,74.2,74.5,74.7,75.0"></div><span class="spark-cap">8Q ↗</span></div>
+        <div class="ctx">利益率の拡大基調 = 価格決定力の継続</div>
+      </div>
+      <div class="mc">
+        <div class="top"><span class="nm">ROE</span><span class="badge kb">O'Neil ≥17% ✓</span></div>
+        <div class="mid"><span class="val">91.3%</span><span class="chip ok">高水準</span></div>
+        <div class="spark-row"><div class="spark gain" data-vals="69,72,78,83,86,88,90,91"></div><span class="spark-cap">PER 52 / 予 38</span></div>
+        <div class="ctx">自己資本効率。PER/PEG/forward PE は展開で表示</div>
+      </div>
+      <div class="mc">
+        <div class="top"><span class="nm">OCF &gt; 純利益（質）</span><span class="badge sc">粉飾フィルタ ✓</span></div>
+        <div class="mid"><span class="val">1.15x</span><span class="chip ok">健全</span></div>
+        <div class="spark-row"><div class="spark" data-vals="1.05,1.08,1.07,1.10,1.12,1.11,1.14,1.15"></div><span class="spark-cap">8Q</span></div>
+        <div class="ctx">利益が現金を伴うか（会計品質の継続）</div>
+      </div>
+    </div>
+
+    <!-- 継続性 -->
+    <div class="grp-label">継続性 <span class="en">— 伸び続ける力・モメンタムの持続</span></div>
+    <div class="cards">
+      <div class="mc">
+        <div class="top"><span class="nm">EPS 成長 YoY</span><span class="badge sc">≥20% ✓</span></div>
+        <div class="mid"><span class="val">+39%</span><span class="chip warn">減速・高水準</span></div>
+        <div class="spark-row"><div class="spark gain" data-vals="486,168,103,82,71,60,48,39"></div><span class="spark-cap">8Q</span></div>
+        <div class="ctx">YoY の推移 = 成長の加速/減速が一目で分かる</div>
+      </div>
+      <div class="mc">
+        <div class="top"><span class="nm">売上 成長 YoY</span><span class="badge sc">≥25% ✓</span></div>
+        <div class="mid"><span class="val">+34%</span><span class="chip ok">継続</span></div>
+        <div class="spark-row"><div class="spark" data-vals="262,122,94,78,69,56,38,34"></div><span class="spark-cap">8Q</span></div>
+        <div class="ctx">トップライン成長の持続性</div>
+      </div>
+    </div>
+
+    <div class="strip">
+      <span class="pillbox"><span class="dot ok"></span>EPS CAGR 3年 <b>+86%</b> <span style="color:var(--gold);font-size:10px;">KB ≥25%</span></span>
+      <span class="pillbox"><span class="dot ok"></span>連続ビート <b>8Q</b> <span style="color:var(--accent);font-size:10px;">≥3Q</span></span>
+      <span class="pillbox"><span class="dot ok"></span>CFPS 3期連続増加 <b>✓</b></span>
+      <span class="pillbox"><span class="dot ok"></span>機関投資家保有 QoQ <b>+0.6pt</b> <span style="color:var(--text-muted);font-size:10px;">4Q ↗</span></span>
+    </div>
+
+    <div class="keep"><b>会社概要</b> は現状のまま維持（情報量は十分とのフィードバック）。</div>
+  </div>
+
+  <div class="note">
+    <b>データ調達（調査結果）:</b><br>
+    ・即効(追加API不要): 機関投資家保有の 4Q trend は backend が既に返却済（frontend 未活用）/ OCF 4Q 個別値も取得済。<br>
+    ・配線のみ: screener_fundamentals の eps_yoy / rev_yoy / ocf_margin / gross_margin / eps_cagr_3y / ocf_gt_netincome を Pane3 へ。<br>
+    ・中期(FMP追加): ROE・粗利率の多期履歴、peer/業界比較。
+  </div>
+  <div class="disc">※ 数値はサンプル。表示は事実＋推移のみで売買推奨は出さない（金商法§38）。閾値達成バッジは「screener条件の充足」であって買い判断ではない。</div>
+</div>
+
+<script>
+  document.querySelectorAll('.spark[data-vals]').forEach(el => {
+    const vals = el.getAttribute('data-vals').split(',').map(Number);
+    const max = Math.max(...vals), min = Math.min(...vals);
+    const rng = (max - min) || 1;
+    el.innerHTML = vals.map(v => {
+      const h = 20 + Math.round((v - min) / rng * 80); // 20%..100%
+      return `<div class="sb" style="height:${h}%"></div>`;
+    }).join('');
+  });
+</script>
+</body>
+</html>
