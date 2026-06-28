@@ -519,7 +519,11 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
         const hasCupDetected = t?.patterns?.cup_handle?.detected === true;
         const hasRsValue = typeof t?.patterns?.rs?.rs_vs_spy_pct === 'number';
         const hasDmaDetected = t?.patterns?.dma_cross?.detected === true;
-        if (hasOverlay || hasCupDetected || hasRsValue || hasDmaDetected) {
+        // SPEC_2026-06-28: breakout (新高値ブレイク) pivot ライン用。breakout のみ active で
+        // 他 4 条件が全 false の小型株 (KYIV 等) で setTechnical が呼ばれず pivot ライン silent fail
+        // する穴を塞ぐ (3体合議 frontend-architect 発見・実コード裏取り済)。
+        const hasBreakoutDetected = t?.patterns?.breakout?.detected === true;
+        if (hasOverlay || hasCupDetected || hasRsValue || hasDmaDetected || hasBreakoutDetected) {
           setTechnical(t);
         }
       })
@@ -632,6 +636,8 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
   // 1) ErrorBoundary wrap (default export 側)、 2) conditional render (hasCup gate)、
   // 3) Number.isFinite guard、 4) isAnimationActive={false}
   const cupHandle = technical?.patterns?.cup_handle || null;
+  // SPEC_2026-06-28: 新高値ブレイク (pattern_type='breakout'、cup と直交) の pivot 水平ライン用。
+  const breakout = technical?.patterns?.breakout || null;
   const hasCup = useMemo(() => {
     // v147: 非株式 (指数/先物/為替) では Cup-with-Handle (個別株の chart pattern) を非表示。
     if (isNonEquity) return false;
@@ -1534,6 +1540,27 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                     stroke={CUP_LINE_COLOR}
                     strokeWidth={2.5}
                     isFront
+                    isAnimationActive={false}
+                  />
+                )}
+                {/* SPEC_2026-06-28: 新高値ブレイク (breakout) の pivot 水平ライン (= じっちゃまの「チャートポイント」)。
+                    bo_pending 含む全 bo_* で amber/muted 破線 (緑=確定の興奮は使わない、§38 / ui-designer 必須条件)。
+                    chart-overlay-safety 4 層: conditional render + Number.isFinite + isAnimationActive=false + ifOverflow。
+                    非株式は非表示。価格数値ラベルは Premium のみ (無料は「直近高値」テキスト、Trust Cliff 数値 gate)。 */}
+                {!isNonEquity && breakout?.detected && Number.isFinite(breakout?.pivot_high) && (
+                  <ReferenceLine
+                    y={breakout.pivot_high}
+                    stroke="var(--color-warning)"
+                    strokeWidth={1}
+                    strokeDasharray="4 3"
+                    strokeOpacity={0.85}
+                    label={makeEdgeLabel(
+                      isPremiumUser ? `直近高値 $${breakout.pivot_high.toFixed(2)}` : '直近高値',
+                      'var(--color-warning)',
+                      { fontSize: 10 },
+                    )}
+                    ifOverflow="extendDomain"
+                    isFront={false}
                     isAnimationActive={false}
                   />
                 )}

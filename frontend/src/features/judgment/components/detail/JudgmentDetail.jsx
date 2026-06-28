@@ -31,6 +31,7 @@ import DistributionDaysCard from '../../../../components/DistributionDaysCard.js
 import CupPivotCard from '../../../../components/CupPivotCard.jsx';
 // v126 R8-3 Phase 3: 直近 breakout = support level narration (last_breakout 取得時のみ表示)
 import BuyZoneCard from '../../../../components/BuyZoneCard.jsx';
+import BreakoutZoneCard from '../../../../components/BreakoutZoneCard.jsx';
 // v100 user dogfood (handover §100点 multi-review): Pane 3 Insider 取引 section の中身実装
 import InsiderPanel from '../../../../components/InsiderPanel.jsx';
 // v100 (handover §SPEC FMP Premium 打ち手 5): 過去 8Q 決算 ±5 日 価格反応 (event study)
@@ -247,6 +248,20 @@ function isPane3V5() {
     if (urlParam === '1') return true;
     if (urlParam === '0') return false;
     return window.localStorage?.getItem('pane3_v5') === '1';
+  } catch {
+    return false;
+  }
+}
+
+// SPEC_2026-06-28 (3体合議 条件付賛成): 新高値ブレイク途上 (BreakoutZoneCard) の表示 flag。
+// default OFF (dogfood OK 後 user gate で default ON 昇格、§8 昇格基準)。?bo_card=1 / localStorage 'bo_card'='1'。
+function isBoCardEnabled() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get('bo_card');
+    if (urlParam === '1') return true;
+    if (urlParam === '0') return false;
+    return window.localStorage?.getItem('bo_card') === '1';
   } catch {
     return false;
   }
@@ -1116,6 +1131,12 @@ export default function JudgmentDetail({
             {/* 完全性台帳 #4: SPY 取得失敗時のみ「地合いデータ未取得」 を中立注記。chartBlock は v5/isV4/legacy
                 全 path で使われるため、ここに1箇所置けば全テクニカル章に到達する (SPY 取得成功時は null)。 */}
             <TechnicalSpyNote ticker={selectedTicker} />
+            {/* SPEC_2026-06-28: 新高値ブレイク途上 (bo_pending 等) の §38 中立 narration。chartBlock 共有 node の
+                ため v4系 + v5 経路に同時到達 (v6 は独立 section に別 mount)。flag default OFF。breakout 未検出/
+                非株式は内部で null return (Pane3 ノイズゼロ)。pivot ライン (チャート内) と近接=図解の流れ。 */}
+            {isBoCardEnabled() && (
+              <BreakoutZoneCard ticker={selectedTicker} plan={plan} onUpgrade={detailContext.onUpgrade} />
+            )}
           </SectionFade>
         ) : null;
 
@@ -1447,6 +1468,11 @@ export default function JudgmentDetail({
                   <SectionFade key="v6-chart" staggerIndex={0}>
                     <StockPriceChart ticker={selectedTicker} isPremiumUser={plan === 'premium'} onUpgrade={detailContext.onUpgrade} hideTitle />
                     <TechnicalSpyNote ticker={selectedTicker} />
+                    {/* SPEC_2026-06-28: v6 独立 section 用 BreakoutZoneCard mount (chartBlock を使わない経路、
+                        triple mount の3本目)。flag default OFF・内部 null return ガードは共通。 */}
+                    {isBoCardEnabled() && (
+                      <BreakoutZoneCard ticker={selectedTicker} plan={plan} onUpgrade={detailContext.onUpgrade} />
+                    )}
                   </SectionFade>
                 )}
                 {selectedTicker && plan === 'premium' && (
