@@ -8,6 +8,7 @@
   --bg-subtle:    #f1f5f9;
   --bg-muted:     #e2e8f0;
   --bg-hover:     #f1f5f9;
+  --bg-future:    #eef2f7;
   --text-primary: #0f172a;
   --text-secondary: #334155;
   --text-muted:   #64748b;
@@ -353,6 +354,7 @@
   --bg-subtle:    #1e2a3a;
   --bg-muted:     #243447;
   --bg-hover:     #253045;
+  --bg-future:    #121a28;
   --text-primary: #f1f5f9;
   --text-secondary: #cbd5e1;
   --text-muted:   #94a3b8;
@@ -14404,7 +14406,7 @@ body.is-digest-resizing {
 @media (prefers-reduced-motion: reduce) { .screener-grid-row { opacity: 1; transform: none; transition: background .12s ease; } }
 
 /* verdict pip (主役) */
-.screener-grid-pip { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-size: 13px; border: 1px solid var(--border); flex: none; }
+.screener-grid-pip { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-size: 14px; border: 1px solid var(--border); flex: none; }
 .screener-grid-pip.is-ok { color: var(--color-gold-mid); background: color-mix(in srgb, var(--color-gold) 14%, transparent); border-color: color-mix(in srgb, var(--color-gold) 45%, transparent); }
 .screener-grid-pip.is-part { color: var(--text-secondary); background: color-mix(in srgb, var(--text-muted) 16%, transparent); border-color: color-mix(in srgb, var(--text-muted) 34%, transparent); }
 .screener-grid-pip.is-bad { color: var(--color-loss); background: color-mix(in srgb, var(--color-loss) 12%, transparent); border-color: color-mix(in srgb, var(--color-loss) 30%, transparent); }
@@ -14424,13 +14426,14 @@ body.is-digest-resizing {
 
 /* 評価セル */
 .screener-grid-cell { text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; font-size: 12.5px; letter-spacing: -.01em; display: flex; align-items: baseline; justify-content: flex-end; gap: 4px; }
+.screener-grid-cell--pri { flex-direction: column; align-items: flex-end; justify-content: center; gap: 2px; }
 .screener-grid-cell--pri .v { font-weight: 600; font-size: 14px; color: var(--text-primary); }
 .screener-grid-cell--pri.is-empty .v { color: var(--text-muted); font-weight: 400; }
 .screener-grid-cell--sec { color: var(--text-muted); }
 .screener-grid-cell.is-qualstart { position: relative; padding-left: var(--space-3); }
 .screener-grid-cell.is-qualstart::before { content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%); height: 18px; width: 1px; background: var(--border); }
 /* 将来ゾーン: §38 中立 (色なし)・gold hairline で「ガラス仕切り」分離 */
-.screener-grid-cell--fut { color: var(--text-muted); }
+.screener-grid-cell--fut { color: var(--text-muted); background: var(--bg-future); align-self: stretch; align-items: center; }
 .screener-grid-cell--fut .v { color: inherit; }
 .screener-grid-cell.is-fstart { position: relative; padding-left: var(--space-3); }
 .screener-grid-cell.is-fstart::before { content: ""; position: absolute; left: 0; top: 8%; bottom: 8%; width: 1px; background: color-mix(in srgb, var(--color-gold) 38%, transparent); }
