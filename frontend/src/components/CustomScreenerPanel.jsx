@@ -89,6 +89,13 @@ const FUNDA_FACETS = [
   //   §38/§5: 「静か」は出来高事実の描写 (お宝/割安/上がる でない・中立フレーム)。delta は cmp 'lte' で未使用。
   { key: 'volume_quiet',        field: 'volume_surge_pct',    label: '出来高 静か',      unit: '%', tier: 'free', category: 'timing',  delta: false, cmp: 'lte', grades: { loose: 50, standard: 20, strict: 0 } },
   { key: 'inst_holders_qoq_pct', field: 'inst_holders_qoq_pct', label: '機関保有増(45日遅延)', unit: '%', tier: 'free', category: 'demand', delta: true,  grades: { loose: 0, standard: 3, strict: 5 } },
+  // 逆張り「静かな優良株」accumulation vs crowding gating (SPEC_2026-06-28 §5 Sprint2 / §9 重要発見):
+  //   inst_holders_qoq_pct を「上限 (cmp:'lte')」で見る別 key = 機関が殺到していない (euphoric crowding 除外)。
+  //   §9 重要発見: gating は Premium・cup-only(24%) の ad_volume でなく free・full-cov の inst_qoq 上限が広く効く。
+  //   実例 SNDK = RS99 だが instQoQ+60.8% (機関殺到=手垢) → ≤20 で除外。既存 ≥型 inst_holders_qoq_pct は無改変。
+  //   grades は §9 実データ較正 (p75+7.3/p90+15.2/p95+22.7): 緩≤30/標≤20(殺到除外の anchor)/厳≤10。
+  //   §38: 「殺到なし」は機関 QoQ の事実描写 (過熱/注意でなく中立)。LLM 不使用。
+  { key: 'inst_qoq_calm',        field: 'inst_holders_qoq_pct', label: '機関 殺到なし',      unit: '%', tier: 'free', category: 'demand', delta: false, cmp: 'lte', grades: { loose: 30, standard: 20, strict: 10 } },
   // S2 P1-a: 営業CFマージンを binary gate ≥15% 固定から可変 grade (緩≥10/標≥15/厳≥25) へ昇格 (user 承認 2026-06-25)。
   //   標準精度=15% で旧 gate と件数中立、業種特性に応じた緩急調整が可能に (金融: 業種により正常 CF マージンが異なる→固定 15% は硬直)。
   { key: 'ocf_margin_pct',      field: 'ocf_margin_pct',      label: 'キャッシュ創出力',   unit: '%', tier: 'free', category: 'quality', delta: false, grades: { loose: 10, standard: 15, strict: 25 } },
@@ -298,6 +305,9 @@ export const PRESET_CONDS = [
   //   逆張り中核軸B (SPEC_2026-06-28 §5 Sprint 1)。null = AND 除外 (honest)。gradePass が cmp で ≤ 判定。
   { key: 'volume_quiet',         kind: 'grade', facet: FACET_MAP.volume_quiet,         pass: (item, lvl) => gradePass(FACET_MAP.volume_quiet, item, lvl) },
   { key: 'inst_holders_qoq_pct', kind: 'grade', facet: FACET_MAP.inst_holders_qoq_pct, pass: (item, lvl) => gradePass(FACET_MAP.inst_holders_qoq_pct, item, lvl) },
+  // inst_qoq_calm: 機関 殺到なし (上限型 cmp:'lte')。FACET_MAP.inst_qoq_calm.grades[lvl] 以下で合致 (≤30/≤20/≤10)。
+  //   accumulation vs crowding gating (SPEC §5 Sprint2)。null = AND 除外 (honest)。gradePass が cmp で ≤ 判定。
+  { key: 'inst_qoq_calm',        kind: 'grade', facet: FACET_MAP.inst_qoq_calm,        pass: (item, lvl) => gradePass(FACET_MAP.inst_qoq_calm, item, lvl) },
   // ── binary / flag 条件 (extra フラグ経由・順序は旧 itemPasses の AND チェック順を踏襲) ──
   // funda_pass: 5 条件達成 flag (facet オブジェクトなし)。true のみ通す。
   { key: 'funda_pass',       kind: 'flag',   flag: 'fundaPassOnly',  pass: (item) => item.funda_pass === true },
@@ -360,6 +370,7 @@ const FACET_SHORT_LABEL = {
   volume_surge_pct: '出来高急増',
   volume_quiet: '出来高 静か',
   inst_holders_qoq_pct: '機関↑',
+  inst_qoq_calm: '機関 静',
   ocf_margin_pct: 'CF創出力',
   ocf_gt_netincome: '利益の質',
   buy_zone: '買い場圏',
