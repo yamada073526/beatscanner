@@ -13036,6 +13036,10 @@ CHART_CANDLES_TTL = 3600  # 1時間（1y日足は日中変化しない）
 # 既存 chart_candles_cache 流用は cache key 衝突で 3 セッション溶ける典型パターンで回避 (Web 開発 agent 指摘)。
 _TECHNICAL_CACHE: dict = {}
 _TECHNICAL_TTL = 24 * 3600.0
+# universe cache (rs.sector / sector standing の data 源 = _UNIVERSE_FULL_CACHE) が cold な瞬間に
+# 組んだ degraded 応答用の短 TTL。24h 固定すると warm 化後も TTL 切れまで sector pill が出ない
+# (deploy 直後 ~15分窓で AAPL 実観測) → cron warm (15分毎) 後に self-heal させる。
+_TECHNICAL_DEGRADED_TTL = 300.0  # 5分
 _TECHNICAL_LOCK = asyncio.Lock()
 
 # handover v82 Phase 3 (analyst-view):
@@ -14484,6 +14488,22 @@ def _sector_for(ticker: str) -> str | None:
         return None
 
 
+def _universe_cache_warm() -> bool:
+    """_UNIVERSE_FULL_CACHE に items を持つ warm payload が 1 つでもあるか。
+
+    _sector_for / _sector_rs_standing_for の data 源が利用可能かの判定。deploy 直後など
+    プロセス再起動で cold な瞬間は False → /api/technical の degraded 応答 (rs.sector=None) を
+    短 TTL で逃がし、cron warm 後の self-heal を可能にする根拠 (_TECHNICAL_DEGRADED_TTL)。
+    """
+    try:
+        for _c in _UNIVERSE_FULL_CACHE.values():
+            if ((_c.get("payload") or {}).get("items")):
+                return True
+    except Exception:
+        return False
+    return False
+
+
 def _detect_dma_cross(
     times: list[str],
     sma_50: list[float | None],
@@ -14550,13 +14570,13 @@ async def get_technical(
     now = _time.monotonic()
 
     cached = _TECHNICAL_CACHE.get(cache_key)
-    if cached and now - cached["ts"] < _TECHNICAL_TTL:
+    if cached and now - cached["ts"] < cached.get("ttl", _TECHNICAL_TTL):
         return cached["data"]
 
     async with _TECHNICAL_LOCK:
         # double check (Web 開発 agent 指摘の stampede 防止)
         cached2 = _TECHNICAL_CACHE.get(cache_key)
-        if cached2 and now - cached2["ts"] < _TECHNICAL_TTL:
+        if cached2 and now - cached2["ts"] < cached2.get("ttl", _TECHNICAL_TTL):
             return cached2["data"]
 
         # OHLC 取得: 6 体合議 (2026-05-17) verdict 「SMA 全期間表示」 のため 3y 分 fetch
@@ -14770,7 +14790,16 @@ async def get_technical(
             "generated_at": int(_time.time()),
         }
 
-        _TECHNICAL_CACHE[cache_key] = {"data": data, "ts": now}
+        # universe cache (rs.sector / sector standing の data 源) が cold な瞬間に組んだ応答は
+        # rs.sector / is_sector_rs_leader 等が None のまま。これを 24h 固定すると warm 化後も
+        # TTL 切れまで sector pill が出ない (deploy 直後 ~15分窓で AAPL 実観測)。
+        # → universe 依存 (rs requested) かつ universe cold の degraded 応答だけ短 TTL で再取得させ self-heal。
+        # universe が warm なのに sector=None は「その ticker が universe 外 / sector 欠落」= 恒久 None なので
+        # 通常 24h TTL を維持 (毎 5分の OHLC 再 fetch で thrash させない)。
+        _entry_ttl = _TECHNICAL_TTL
+        if "rs" in requested and not _universe_cache_warm():
+            _entry_ttl = _TECHNICAL_DEGRADED_TTL
+        _TECHNICAL_CACHE[cache_key] = {"data": data, "ts": now, "ttl": _entry_ttl}
         return data
 
 
