@@ -604,7 +604,14 @@ export default function JudgmentDetail({
           // ── v6 章レイアウト ──
           // Sprint 1: L0 + L1 + TOC + L2（決算3点 detail + 8Q spark + 5条件）+ L3-L6（既存要素を仮配置）
           return (
-            <div data-testid="pane3-v6-layout" data-state={selectedTicker ? 'main' : 'empty'}>
+            <div
+              data-testid="pane3-v6-layout"
+              data-state={selectedTicker ? 'main' : 'empty'}
+              // 視覚 fidelity (2026-06-28): 正本 mockup body は全 top-level 間 24px (space-6) の一定 rhythm。
+              //   旧実装は container gap 無しで section が密着 (「余白が詰まっている」dogfood)。hairline は
+              //   この gap の中で両側 24px の breathing room を持つ (mockup .hair と同じ挙動)。
+              style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6, 24px)' }}
+            >
               {/* ─── L0 同定（既存 VerdictHero + Hero 継承・価格は「同定」= verdict 扱いを外す） ───
                   SPEC §2 L0「価格は同定 = verdict 扱いを外す」: 判定リング(EarningsRing)は非表示
                   (dogfood: data 未取得時「?/取得待ち」が壊れて見える + 同定層に判定 idiom が混入)。
@@ -624,7 +631,6 @@ export default function JudgmentDetail({
                   watchlist={detailContext?.watchlist}
                   onAddToWatchlist={detailContext?.onAddToWatchlist}
                   hideCountdownChip={false}
-                  hideNextEarningsChip={false}
                   hideVerdictChip={true}
                   hideEarningsRing={true}
                   hideEyebrow={true}
