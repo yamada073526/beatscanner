@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildSegmentSummaryText } from './segmentNames.js';
+import { buildSegmentSummaryText, translateSegmentName, displaySegmentName } from './segmentNames.js';
 
 // v6 Sprint 2-C 後続: 会社概要 fold ヘッダーのセグメント%サマリー文字列生成。
 // §38-safe: 売上構成比 (事実数値) のみ。行動指示・将来予測・最上級を含まないことを構造で担保。
@@ -46,5 +46,19 @@ describe('buildSegmentSummaryText', () => {
     const seg = { segments: [{ name: 'Seg-X', value_b: 75 }, { name: 'Seg-Y' }, { name: 'Seg-Z', value_b: 25 }] };
     // total=100、Seg-Y は value_b 欠損=0% → 降順 Seg-X 75% · Seg-Z 25% · ほか
     expect(buildSegmentSummaryText(seg)).toBe('Seg-X 75% · Seg-Z 25% · ほか');
+  });
+});
+
+// AAPL は FMP segment を単数形 "Service" で返すため、辞書に "Service" を追加 (会社概要 fold / SegmentSection の英語落ち解消)。
+describe('translateSegmentName / displaySegmentName: AAPL "Service" 単数形', () => {
+  it('"Service" (単数) を「サービス」に和訳する', () => {
+    expect(translateSegmentName('Service')).toBe('サービス');
+  });
+  it('既存の "Services" (複数) は「サービス事業」のまま影響を受けない', () => {
+    expect(translateSegmentName('Services')).toBe('サービス事業');
+  });
+  it('displaySegmentName でも object/string 両方で "Service"→「サービス」', () => {
+    expect(displaySegmentName('Service')).toBe('サービス');
+    expect(displaySegmentName({ name: 'Service' })).toBe('サービス');
   });
 });
