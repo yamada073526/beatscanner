@@ -620,6 +620,7 @@ export default function JudgmentDetail({
                   nextEarningsDate={detail?.nextEarningsDate}
                   price={detail?.price}
                   changePct={detail?.changePct}
+                  sector={technicalRs?.sector}
                   watchlist={detailContext?.watchlist}
                   onAddToWatchlist={detailContext?.onAddToWatchlist}
                   hideCountdownChip={false}

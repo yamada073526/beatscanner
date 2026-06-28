@@ -31,6 +31,30 @@ const heroFactChipAccent = {
   fontWeight: 600,
 };
 
+// v6 L0 mockup id-row「テクノロジー」セクター pill: backend (rs.sector) は FMP の英語 GICS sector raw。
+// 表示層で和訳 (data/presentation 分離)。canonical 11 sector を exact-match、未知は raw 英語へ fallback。
+// feedback_enum_mislabel_allowlist: 近接 enum へ誤マップせず exact-match のみ (誤ラベル = Trust Cliff)。
+// §38: 事実指標 (neutral 色・緑/accent 禁止)。
+const SECTOR_JP = {
+  'Technology': 'テクノロジー',
+  'Financial Services': '金融',
+  'Healthcare': 'ヘルスケア',
+  'Consumer Cyclical': '一般消費財',
+  'Consumer Defensive': '生活必需品',
+  'Communication Services': '通信サービス',
+  'Industrials': '資本財',
+  'Energy': 'エネルギー',
+  'Basic Materials': '素材',
+  'Real Estate': '不動産',
+  'Utilities': '公益事業',
+};
+const sectorLabelJp = (raw) => {
+  if (!raw || typeof raw !== 'string') return null;
+  const k = raw.trim();
+  if (!k) return null;
+  return SECTOR_JP[k] || k; // 未知 sector は raw 英語をそのまま (捏造でなく事実)
+};
+
 /**
  * Hero section. design_system.md §B-2 Display tier 28-32px, fw600, -0.02em, lh1.1.
  * Verdict chip = beat/miss/in-line/unknown (§1-A).
@@ -60,6 +84,9 @@ export default function Hero({
   //   price/changePct は detail 由来、1W/1M は usePeriodReturns (ReturnGrid と同 source)。§38: 事実数値のみ。
   price,
   changePct,
+  // v6 L0 mockup id-row「テクノロジー」: 同定 sector pill (technicalRs.sector = FMP 英語 raw、§38 事実指標)。
+  //   universe cache 外 / 未取得は undefined → pill 非表示 (捏造しない)。和訳は SECTOR_JP (上記)。
+  sector,
   frameless = false,
   /**
    * v99 dogfood feedback ① / ③ (3 体合議):
@@ -93,6 +120,8 @@ export default function Hero({
   const { data: periodReturns } = usePeriodReturns(ticker);
   const ret1W = periodReturns?.periods?.['1W']?.return_pct;
   const ret1M = periodReturns?.periods?.['1M']?.return_pct;
+  // v6 L0 mockup id-row セクター pill: 英語 raw → 和訳 (exact-match、未知は raw fallback)。null なら非表示。
+  const sectorJp = sectorLabelJp(sector);
   const priceNum = price != null ? Number(price) : NaN;
   const changeNum = changePct != null ? Number(changePct) : NaN;
   const retColor = (r) => (r > 0 ? 'var(--color-gain)' : r < 0 ? 'var(--color-loss)' : 'var(--text-muted)');
@@ -208,8 +237,9 @@ export default function Hero({
           )}
           {/* v86 R4 #3: 補助情報行 — 中央空白帯を意味のある密度で埋める
               (Vision Round 2,3 共通指摘「中央の AAPL と右側 D-XX リングの間に空白帯」 解消)
-              chip 形式で 3 fact (期間 / 次回決算日 / D-XX) を並べる */}
-          {(period || (nextEarningsDate && !hideNextEarningsChip) || (Number.isFinite(nextEarningsDays) && nextEarningsDays > 0 && !hideCountdownChip)) && (
+              chip 形式で fact (期間 / セクター / 次回決算日 / D-XX) を並べる
+              v6 L0: セクター pill (mockup id-row「テクノロジー」) を同定 fact として period 隣に追加 */}
+          {(period || sectorJp || (nextEarningsDate && !hideNextEarningsChip) || (Number.isFinite(nextEarningsDays) && nextEarningsDays > 0 && !hideCountdownChip)) && (
             <div
               style={{
                 display: 'flex',
@@ -221,6 +251,10 @@ export default function Hero({
             >
               {period && (
                 <span style={heroFactChipStyle}>{period}</span>
+              )}
+              {/* v6 L0 mockup id-row セクター pill: neutral (§38 事実指標・緑/accent 不使用)。和訳済 (SECTOR_JP)。 */}
+              {sectorJp && (
+                <span style={heroFactChipStyle} data-testid="pane3-hero-sector">{sectorJp}</span>
               )}
               {!hideNextEarningsChip && nextEarningsDate && (
                 <span style={heroFactChipStyle}>
