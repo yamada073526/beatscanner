@@ -14492,6 +14492,9 @@ body.is-digest-resizing {
 .screener-grid-rs { text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text-muted); }
 .screener-grid-rs.is-hi { color: var(--color-gold-mid); }
 
+/* per-preset 列: セクター内リーダー badge (中立色・§38: 順位の事実描写=色 polarity なし) */
+.screener-grid-lead-badge { display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: var(--radius-pill, 9999px); color: var(--text-secondary); background: color-mix(in srgb, var(--text-muted) 14%, transparent); border: 1px solid color-mix(in srgb, var(--text-muted) 26%, transparent); white-space: nowrap; }
+
 /* 簡素 verdict バッジ */
 .screener-grid-vbwrap { text-align: left; }
 .screener-grid-vb { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 4px 11px; border-radius: var(--radius-pill, 9999px); border: 1px solid transparent; white-space: nowrap; }

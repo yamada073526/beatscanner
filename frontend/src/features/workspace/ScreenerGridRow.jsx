@@ -35,16 +35,16 @@ const CHIP = {
   inline: { cls: 'inline', glyph: '−', label: 'ほぼ予想どおり (in-line)' },
 };
 
-// delta% (符号付き・前年比/ガイダンス比)
-function fmtDelta(v) {
+// delta% (符号付き・前年比/ガイダンス比)。unit は preset 列で 'pt'(対SPY超過) 等に切替。
+function fmtDelta(v, unit = '%') {
   if (v == null || Number.isNaN(v)) return null;
   const r = Math.round(v);
-  return `${r > 0 ? '+' : ''}${r}%`;
+  return `${r > 0 ? '+' : ''}${r}${unit}`;
 }
-// level% (符号なし・粗利率/FCF率)
-function fmtLevel(v) {
+// level% (符号なし・粗利率/FCF率)。unit は preset 列で切替可能。
+function fmtLevel(v, unit = '%') {
   if (v == null || Number.isNaN(v)) return null;
-  return `${Math.round(v)}%`;
+  return `${Math.round(v)}${unit}`;
 }
 
 // 主指標セル (数値 + 結果チップ)
@@ -118,10 +118,101 @@ function FutureCell({ value, startZone = false, source = null }) {
   );
 }
 
+// ─── per-preset 根拠カラム用 cell (4 preset: new_high_break / sector_leader /
+//     quiet_quality / market_leading)。§38: 数値はすべて観測事実の転記=色 polarity なし。
+//     beat/miss chip (latest_beat) のみ過去確定実績として surpriseColor (§38 射程外・Pane3 と一貫)。
+
+// 汎用数値セル (中立・色なし)。tier 'pri'=text-primary 強調 (--pri の .v 流用) / 'sec'=muted 副次。
+function MetricCell({ text, label, tier = 'pri' }) {
+  const empty = text == null;
+  if (tier === 'sec') {
+    return (
+      <span
+        className={['screener-grid-cell', 'screener-grid-cell--sec', empty ? 'is-empty' : ''].filter(Boolean).join(' ')}
+        aria-label={label}
+      >
+        {empty ? '—' : text}
+      </span>
+    );
+  }
+  return (
+    <span
+      className={['screener-grid-cell', 'screener-grid-cell--pri', empty ? 'is-empty' : ''].filter(Boolean).join(' ')}
+      aria-label={label}
+    >
+      <span className="v">{empty ? '—' : text}</span>
+    </span>
+  );
+}
+
+// 直近決算ビート単独セル (latest_beat: true=beat / false=miss / null=—)。過去確定=surpriseColor。
+function VerdictChipCell({ beat, label }) {
+  const key = beat === true ? 'beat' : beat === false ? 'miss' : null;
+  const chip = key ? CHIP[key] : null;
+  return (
+    <span
+      className={['screener-grid-cell', chip ? '' : 'is-empty'].filter(Boolean).join(' ')}
+      aria-label={label ? `${label}: ${chip ? chip.label : 'データなし'}` : undefined}
+    >
+      {chip ? (
+        <span className={`screener-grid-chip is-${chip.cls}`} role="img" aria-label={chip.label} title={chip.label}>
+          <span className="g">{chip.glyph}</span>
+        </span>
+      ) : (
+        <span className="screener-grid-cell--sec" style={{ color: 'var(--text-muted)' }}>—</span>
+      )}
+    </span>
+  );
+}
+
+// セクター内リーダー badge (is_sector_rs_leader)。§38: 「上位」=相対力順位の事実描写・中立色。
+function LeaderBadgeCell({ isLeader, label }) {
+  return (
+    <span
+      className="screener-grid-cell"
+      aria-label={label ? `${label}: ${isLeader === true ? '該当(上位)' : '非該当'}` : undefined}
+    >
+      {isLeader === true ? (
+        <span className="screener-grid-lead-badge" title="所属セクター内で相対力 (RS) が上位3位以内">上位</span>
+      ) : (
+        <span style={{ color: 'var(--text-muted)' }}>—</span>
+      )}
+    </span>
+  );
+}
+
+// preset 列 1 セルを kind に応じて描画。metrics = normalizeMetrics(item)・rsValue は別 prop。
+function PresetCell({ col, metrics, rsValue }) {
+  if (col.kind === 'rs') {
+    const rs = rsValue != null ? Math.round(rsValue) : null;
+    return (
+      <span
+        className={['screener-grid-rs', rs != null && rs >= 85 ? 'is-hi' : ''].filter(Boolean).join(' ')}
+        aria-label={`${col.label || 'RS'}: ${rs == null ? 'データなし' : rs}`}
+      >
+        {rs == null ? '—' : rs}
+      </span>
+    );
+  }
+  const v = metrics?.[col.metricKey];
+  if (col.kind === 'verdict') return <VerdictChipCell beat={v} label={col.label} />;
+  if (col.kind === 'leader') return <LeaderBadgeCell isLeader={v} label={col.label} />;
+  const text = col.kind === 'delta' ? fmtDelta(v, col.unit) : fmtLevel(v, col.unit);
+  return (
+    <MetricCell
+      text={text}
+      tier={col.tier}
+      label={col.label ? `${col.label}: ${text ?? 'データなし'}` : undefined}
+    />
+  );
+}
+
 /**
  * ScreenerGridRow
  * @param {Object} earnings - 正規化済み決算速報フィールド
  *   { revYoY, revBeat, epsYoY, epsBeat, gm, fcf, nqRev, nqEps, tri, guidanceSource }
+ * @param {Array}  columns - per-preset 列 spec (指定時は column-driven 描画・earnings 列を無視)
+ * @param {Object} metrics - per-preset 列が参照する正規化メトリクス (columns 指定時のみ)
  */
 export default function ScreenerGridRow({
   ticker,
@@ -129,6 +220,8 @@ export default function ScreenerGridRow({
   lastReportDate = null,
   rsValue = null,
   earnings = {},
+  columns = null,
+  metrics = null,
   mode = 'full',
   animIndex = 0,
   isSelected = false,
@@ -172,6 +265,57 @@ export default function ScreenerGridRow({
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(); }
   };
 
+  // 識別セル (checkbox hover-reveal + ロゴ + ティッカー + 決算日·社名) — earnings / column-driven で共有。
+  const leadCell = (
+    <span className="screener-grid-lead">
+      {showCheckbox && (
+        <span className={['screener-grid-check', isCheckboxChecked ? 'is-on' : ''].filter(Boolean).join(' ')}>
+          <input
+            type="checkbox"
+            checked={isCheckboxChecked}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => { e.stopPropagation(); onCheckbox?.(ticker, e.target.checked); }}
+            data-testid={`screener-grid-select-${ticker}`}
+            aria-label={`${ticker} を選択`}
+          />
+        </span>
+      )}
+      <span className="screener-grid-logo"><CompanyLogo ticker={ticker} size={26} monoFallback /></span>
+      <span className="screener-grid-idbody">
+        <span className="screener-grid-tkr">{ticker}</span>
+        <span className="screener-grid-meta">
+          {lastReportDate && <span className="screener-grid-qd">決算 {lastReportDate}</span>}
+          {lastReportDate && name && <span aria-hidden="true">·</span>}
+          {name && <span className="screener-grid-nm">{name}</span>}
+        </span>
+      </span>
+    </span>
+  );
+
+  // ── column-driven 描画 (4 preset: 根拠カラム) ──────────────────────────────
+  // pip(決算 verdict)列は持たず lead + 根拠列のみ。grid tracks は親 --screener-cols に一致。
+  if (columns) {
+    return (
+      <div
+        ref={rowRef}
+        role="button"
+        tabIndex={0}
+        className={['screener-grid-row', revealed ? 'is-in' : '', isSelected ? 'is-selected' : ''].filter(Boolean).join(' ')}
+        data-testid={`screener-grid-row-${ticker}`}
+        data-mode={mode}
+        style={{ '--reveal-delay': `${(animIndex % 8) * 45}ms` }}
+        onClick={handleClick}
+        onKeyDown={handleKey}
+        aria-label={`${ticker} ${name || ''} 詳細を表示`}
+      >
+        {leadCell}
+        {columns.map((col) => (
+          <PresetCell key={col.id} col={col} metrics={metrics} rsValue={rsValue} />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div
       ref={rowRef}
@@ -198,29 +342,7 @@ export default function ScreenerGridRow({
       </span>
 
       {/* 識別 (checkbox hover-reveal + ロゴ + ティッカー + 決算日·社名) */}
-      <span className="screener-grid-lead">
-        {showCheckbox && (
-          <span className={['screener-grid-check', isCheckboxChecked ? 'is-on' : ''].filter(Boolean).join(' ')}>
-            <input
-              type="checkbox"
-              checked={isCheckboxChecked}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => { e.stopPropagation(); onCheckbox?.(ticker, e.target.checked); }}
-              data-testid={`screener-grid-select-${ticker}`}
-              aria-label={`${ticker} を選択`}
-            />
-          </span>
-        )}
-        <span className="screener-grid-logo"><CompanyLogo ticker={ticker} size={26} monoFallback /></span>
-        <span className="screener-grid-idbody">
-          <span className="screener-grid-tkr">{ticker}</span>
-          <span className="screener-grid-meta">
-            {lastReportDate && <span className="screener-grid-qd">決算 {lastReportDate}</span>}
-            {lastReportDate && name && <span aria-hidden="true">·</span>}
-            {name && <span className="screener-grid-nm">{name}</span>}
-          </span>
-        </span>
-      </span>
+      {leadCell}
 
       {mode === 'full' ? (
         <>
