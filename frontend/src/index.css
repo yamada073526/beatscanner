@@ -14884,6 +14884,11 @@ body.is-digest-resizing {
   .screener-strategy-bar {
     grid-template-columns: 1fr;
   }
+  /* S4 compact: 1 列 (全幅カード) では横レイアウトだと icon 左に空白感が出るため縦カードに戻す */
+  .screener-strategy-tile {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 /* ── 戦略プリセット タイル (mockup v8 承認済・縦カード) ───────────────────
@@ -14900,11 +14905,13 @@ body.is-digest-resizing {
   cursor: pointer;
   text-align: left;
 
-  /* 縦カード: mockup v8 §.preset (flex-direction: column) */
+  /* S4 compact (2026-06-28): icon 左 + body 右の横カード (旧 column → row)。
+     6 枚 3×2 のカード高を圧縮し下半分の結果領域を拡張 (user 要望)。≤420px は縦に戻す (下記 media)。 */
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  padding: var(--space-4);
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
 
   /* 外観 */
   background: var(--bg-card);
@@ -14955,19 +14962,19 @@ body.is-digest-resizing {
   outline-offset: 2px;
 }
 
-/* ── top: icon + label 横並び (mockup v8 §.preset .top) ── */
-.screener-strategy-tile__top {
+/* ── body: icon の右に label / desc / foot を縦積み (S4 compact 横レイアウト) ── */
+.screener-strategy-tile__body {
+  flex: 1 1 auto;
+  min-width: 0;            /* 子の truncate (label/desc の ellipsis) を効かせる */
   display: flex;
-  flex-direction: column;   /* 縦: icon 上 / label 下に全幅 → 埋め込みペインで title を 1 行化 (語中割れ回避)。mockup は横並びだが狭幅ペインへの適応 */
-  align-items: flex-start;
-  gap: var(--space-2);
-  margin-bottom: var(--space-3);
+  flex-direction: column;
+  gap: var(--space-1);
 }
 
 /* ── アイコンコンテナ (40×40 シアン下地、mockup v8 §.preset .ico 準拠) ── */
 .screener-strategy-tile__icon {
-  width: 40px;
-  height: 40px;
+  width: 30px;          /* S4 compact: 40→30。横レイアウトで body 左に添える小型化 */
+  height: 30px;
   flex: none;
   display: grid;
   place-items: center;
@@ -15000,29 +15007,41 @@ body.is-digest-resizing {
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--color-gold) 50%, transparent));
 }
 
-/* ── label (mockup v8 §.preset .name: 15px/600) ── */
+/* ── label (S4 compact: 15→13px。長名 "市場をリードし始めた銘柄" の折返しは 2 行で許容しクリップ防止) ── */
 .screener-strategy-tile__label {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
+  line-height: 1.3;
   color: var(--text-primary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-/* ── desc (mockup v8 §.preset .desc: 12px muted, min-height 32px) ── */
+/* ── desc (S4 compact: 1 行 truncate。min-height/flex 撤去でカード高を圧縮) ── */
 .screener-strategy-tile__desc {
   font-size: 12px;
   color: var(--text-muted);
   line-height: 1.4;
-  min-height: 32px;   /* 2行ぶん確保して foot を揃える */
   margin: 0;
-  flex: 1;            /* 残り縦スペースを吸収して foot を底に揃える */
+  display: -webkit-box;
+  -webkit-line-clamp: 1;       /* 1 行に省略 (説明は常時 1 行で提示・原則1) */
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-/* ── foot (mockup v8 §.preset .foot: flex space-between) ── */
+/* ── foot (S4 compact: 件数 + tier。body gap が間隔を担うため margin-top 撤去) ── */
 .screener-strategy-tile__foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: var(--space-3);
+  gap: var(--space-2);
+  margin-top: 2px;          /* desc との僅かな分離 (body gap + 2px) */
+}
+/* locked 表示が長い (🔒 Premium 限定) ので tier badge に潰されないよう件数側を優先伸長 */
+.screener-strategy-tile__count {
+  min-width: 0;
 }
 
 /* ── 件数 (mockup v8 §.count: 13px secondary / b=18px/700/tabular) ── */
@@ -15074,6 +15093,26 @@ body.is-digest-resizing {
 .screener-tier-badge--prem {
   color: var(--color-warning);
   background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+}
+
+/* ── S4: プリセット desc 全文 tooltip (StrategyPresetBar・portal + position:fixed)。
+   desc を 1 行 truncate した代わりに hover/focus で全文 (title) を提示。token のみ (生 hex/shadow 禁止)・
+   発光系 class 不使用・pointer-events:none でちらつき防止。位置/left/top/transform は JSX が inline 付与。 */
+.screener-strategy-tip {
+  z-index: var(--z-tooltip, 1000);
+  width: max-content;
+  max-width: 280px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-elevated, var(--bg-card));
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-3);
+  font-size: 12px;
+  line-height: 1.55;
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
 }
 
 /* ── reduced-motion: transform / transition を無効化 (WCAG) ── */

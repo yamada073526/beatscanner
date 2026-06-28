@@ -18,6 +18,8 @@
  *               件数を出さず 🔒 表示にする (SPEC_2026-06-25 §4.2.2: 非 Premium に
  *               「0 銘柄」を見せない Trust Cliff 対応。masked universe で 0 と出る誤読を防ぐ)。
  */
+import { useState, useRef, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { BadgeCheck, TrendingUp, LayoutGrid, Crown, Moon, Sunrise, Lock } from 'lucide-react';
 
 // カードはプラン昇順 (Free→Pro→Premium) で並べ「重要度＝上位プランほど右」を視覚化 (user 確定 2026-06-28)。
@@ -95,6 +97,36 @@ export const STRATEGY_PRESETS = [
 ];
 
 export default function StrategyPresetBar({ active = null, onSelect, counts = {}, isPremiumUser = true }) {
+  // S4: desc が 1 行 truncate のため、全文 (title) を branded tooltip で hover/focus 時に提示。
+  //   feedback_tooltip_portal_pattern: createPortal + position:fixed + getBoundingClientRect で
+  //   親の overflow/transform を escape。native title 属性は二重表示回避のため除去 (button から外す)。
+  //   モバイル/タッチはカード選択で seasonchip + 条件一覧に内容が出る。grid を壊さないよう trigger は
+  //   button 直付け・tip state は bar に lift・portal は document.body へ 1 個だけ描画 (wrap span なし)。
+  const [tip, setTip] = useState(null); // null=非表示 | { content, left, top, placement }
+  const tipRef = useRef(null);
+  // 描画後に幅を測り viewport 左右はみ出しを内側へ補正 (右端カードの右切れ対策)。
+  useLayoutEffect(() => {
+    if (!tip || !tipRef.current) return;
+    const tr = tipRef.current.getBoundingClientRect();
+    const m = 8;
+    let dx = 0;
+    if (tr.right > window.innerWidth - m) dx = (window.innerWidth - m) - tr.right;
+    if (tr.left + dx < m) dx = m - tr.left;
+    if (dx) tipRef.current.style.left = `${tip.left + dx}px`;
+  }, [tip]);
+  const openTip = (el, content) => {
+    if (!el || !content) return;
+    const r = el.getBoundingClientRect();
+    const placement = r.top > 140 ? 'above' : 'below';
+    setTip({
+      content,
+      left: Math.round(r.left + r.width / 2),
+      top: Math.round(placement === 'above' ? r.top - 8 : r.bottom + 8),
+      placement,
+    });
+  };
+  const closeTip = () => setTip(null);
+
   return (
     <div
       className="screener-strategy-bar"
@@ -118,43 +150,63 @@ export default function StrategyPresetBar({ active = null, onSelect, counts = {}
             type="button"
             role="radio"
             aria-checked={isSelected}
-            title={title}
             data-testid={`screener-strategy-${key}`}
             className={`screener-strategy-tile${isSelected ? ' is-selected' : ''}`}
             onClick={() => onSelect?.(isSelected ? null : key)}
+            onMouseEnter={(e) => openTip(e.currentTarget, title)}
+            onMouseLeave={closeTip}
+            onFocus={(e) => openTip(e.currentTarget, title)}
+            onBlur={closeTip}
           >
-            {/* top: icon + label 横並び */}
-            <div className="screener-strategy-tile__top">
-              <span className="screener-strategy-tile__icon">
-                <Icon size={22} strokeWidth={1.9} aria-hidden="true" />
-              </span>
+            {/* S4 compact (2026-06-28): icon を左、右に body (label / desc 1行 / foot) を縦積みする横レイアウト。
+                6 枚 3×2 でカード高を圧縮し、下半分の絞り込み条件/結果領域を拡張 (user 要望)。 */}
+            <span className="screener-strategy-tile__icon">
+              <Icon size={18} strokeWidth={1.9} aria-hidden="true" />
+            </span>
+            <div className="screener-strategy-tile__body">
               <span className="screener-strategy-tile__label">{label}</span>
-            </div>
-
-            {/* desc: 2行ぶん min-height で foot を揃える */}
-            <p className="screener-strategy-tile__desc">{desc}</p>
-
-            {/* foot: 件数 (Premium ロック時は 🔒) + tier badge */}
-            <div className="screener-strategy-tile__foot">
-              {isLocked ? (
-                <span
-                  className="screener-strategy-tile__count screener-strategy-tile__count--locked"
-                  aria-label="Premium 限定"
-                >
-                  <Lock size={13} strokeWidth={2} aria-hidden="true" /> Premium 限定
+              {/* desc: 1 行 truncate (説明を常時 1 行で提示し原則1「2 秒で分かる」を維持・高さは抑制) */}
+              <p className="screener-strategy-tile__desc">{desc}</p>
+              {/* foot: 件数 (Premium ロック時は 🔒) + tier badge */}
+              <div className="screener-strategy-tile__foot">
+                {isLocked ? (
+                  <span
+                    className="screener-strategy-tile__count screener-strategy-tile__count--locked"
+                    aria-label="Premium 限定"
+                  >
+                    <Lock size={12} strokeWidth={2} aria-hidden="true" /> Premium 限定
+                  </span>
+                ) : (
+                  <span className="screener-strategy-tile__count">
+                    <b>{count != null ? count : '–'}</b> 銘柄
+                  </span>
+                )}
+                <span className={`screener-tier-badge screener-tier-badge--${tier}`}>
+                  {tierLabel}
                 </span>
-              ) : (
-                <span className="screener-strategy-tile__count">
-                  <b>{count != null ? count : '–'}</b> 銘柄
-                </span>
-              )}
-              <span className={`screener-tier-badge screener-tier-badge--${tier}`}>
-                {tierLabel}
-              </span>
+              </div>
             </div>
           </button>
         );
       })}
+      {/* S4: desc 全文 (title) の branded tooltip。portal + position:fixed で grid/overflow を escape。
+          hover/focus で表示・viewport 端は useLayoutEffect で補正。1 個だけ描画 (active card 用)。 */}
+      {tip && createPortal(
+        <span
+          ref={tipRef}
+          role="tooltip"
+          className="screener-strategy-tip"
+          style={{
+            position: 'fixed',
+            left: tip.left,
+            top: tip.top,
+            transform: tip.placement === 'above' ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
+          }}
+        >
+          {tip.content}
+        </span>,
+        document.body
+      )}
     </div>
   );
 }
