@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { m, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Info } from 'lucide-react';
 import Sparkline from '../../../../components/Sparkline.jsx';
@@ -53,7 +53,10 @@ export default function ConditionRow({
   const reduce = useReducedMotion();
   const passed = condition.passed;
   const detailContent = CONDITION_DETAILS[index];
-  const valueColor = passed ? 'var(--color-gain)' : 'var(--color-loss)';
+  // 未充足は「下落/ネガティブ」 でなく「中立」 (CLAUDE.md 投資業界色ルール): PASS は緑、 FAIL は赤でなく
+  // neutral (mockup pane3-detail-v1.html .mk-no 準拠)。 ★じっちゃま逆張り銘柄 (NVDA 等) の「成長中だが
+  // 閾値未達」 を赤で「悪い銘柄」 と誤認させる Trust Cliff を防ぐ。
+  const valueColor = passed ? 'var(--color-gain)' : 'var(--text-secondary)';
   // v100: count-up animation を value に適用。 string value (backend 整形済 "12.3%" 等) は数値抽出不能なので
   // raw value のみ animate (typeof === 'number')、 string は instant 表示 fallback。
   const numericRawValue = typeof condition.value === 'number' ? condition.value : null;
@@ -63,11 +66,12 @@ export default function ConditionRow({
   // Sparkline (Recharts SVG stroke) には CSS var を文字列で渡す。
   // 既存 ConditionCard の raw hex は ALLOWED-HEX で grandfather 済、
   // 新規追加は design-system-check で block されるため CSS var 経由。
-  const sparkColor = passed ? 'var(--color-gain)' : 'var(--color-loss)';
+  const sparkColor = passed ? 'var(--color-gain)' : 'var(--text-muted)';
   const bgPass = 'rgba(52, 239, 129, 0.06)';
-  const bgFail = 'rgba(248, 113, 113, 0.06)';
+  // FAIL (未充足) は赤でなく neutral slate — 未充足は「中立」 であって「下落」 ではない (CLAUDE.md 投資業界色ルール)。
+  const bgFail = 'rgba(148, 163, 184, 0.06)';
   const borderPass = 'rgba(52, 239, 129, 0.20)';
-  const borderFail = 'rgba(248, 113, 113, 0.20)';
+  const borderFail = 'rgba(148, 163, 184, 0.20)';
 
   return (
     <li
@@ -80,11 +84,11 @@ export default function ConditionRow({
         //   tint 0.06 → hover 0.18 (1 段強い)、 border opacity 0.20 → 0.55 (はっきり)
         background: passed
           ? (isHovered ? 'rgba(52, 239, 129, 0.18)' : bgPass)
-          : (isHovered ? 'rgba(248, 113, 113, 0.18)' : bgFail),
+          : (isHovered ? 'rgba(148, 163, 184, 0.16)' : bgFail),
         border: '1px solid',
         borderColor: passed
           ? (isHovered ? 'rgba(52, 239, 129, 0.55)' : borderPass)
-          : (isHovered ? 'rgba(248, 113, 113, 0.55)' : borderFail),
+          : (isHovered ? 'rgba(148, 163, 184, 0.45)' : borderFail),
         borderRadius: 'var(--radius-sm)',
         overflow: 'hidden',
         // translateY -3px (was -1) で elevation を 3 倍に体感強化、 shadow も追加
@@ -92,7 +96,7 @@ export default function ConditionRow({
         boxShadow: isHovered && !expanded
           ? (passed
               ? '0 6px 16px rgba(52, 239, 129, 0.18), 0 2px 4px rgba(52, 239, 129, 0.10)'
-              : '0 6px 16px rgba(248, 113, 113, 0.18), 0 2px 4px rgba(248, 113, 113, 0.10)')
+              : '0 6px 16px rgba(148, 163, 184, 0.18), 0 2px 4px rgba(148, 163, 184, 0.10)')
           : 'none',
         transition: 'background var(--motion-fast) ease, border-color var(--motion-fast) ease, transform var(--motion-fast) ease, box-shadow var(--motion-fast) ease',
       }}
@@ -159,11 +163,13 @@ export default function ConditionRow({
             justifyContent: 'center',
             fontSize: 12,
             fontWeight: 700,
-            background: passed ? 'var(--color-gain)' : 'var(--color-loss)',
-            color: 'var(--bg-card)',
+            // PASS = 充足 (solid green badge)。 FAIL = 未充足 → mockup .mk-no 準拠の neutral grey tint + 「—」。
+            // 赤 (下落/ネガティブ) で「悪い銘柄」 と誤認させない (Trust Cliff 回避)。
+            background: passed ? 'var(--color-gain)' : 'rgba(148, 163, 184, 0.12)',
+            color: passed ? 'var(--bg-card)' : 'var(--text-muted)',
           }}
         >
-          {passed ? '✓' : '✕'}
+          {passed ? '✓' : '—'}
         </span>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
@@ -362,20 +368,6 @@ export default function ConditionRow({
       )}
     </li>
   );
-}
-
-// value が long string (16 桁 0.47568...) のとき短縮表示。
-// detail/series は別途生数値を保持しているのでここでは見た目だけ整える。
-function formatValue(v) {
-  if (v == null) return '—';
-  if (typeof v === 'number') {
-    if (Math.abs(v) >= 1e9) return `${(v / 1e9).toFixed(1)}B`;
-    if (Math.abs(v) >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
-    if (Math.abs(v) >= 100) return v.toFixed(0);
-    return v.toFixed(2);
-  }
-  // string 受け取りはそのまま (backend 整形済 % 等)
-  return String(v);
 }
 
 // v86 R2 Vision 改善提案 #3: 数値と補助単位 (B/M/%) を 2 層階層に分離。
