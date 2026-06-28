@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import Card from '../../primitives/Card.jsx';
 import SectionHeader from '../../primitives/SectionHeader.jsx';
 import ConditionRow from './ConditionRow.jsx';
@@ -122,7 +122,7 @@ export default function FiveConditionsCard({
         minHeight: '280px',
       }}
     >
-    <Card data-testid="five-conditions-card" frameless={frameless}>
+    <Card data-testid="five-conditions-card" className="is-glow-calm" frameless={frameless}>
       <div style={{ padding: 'var(--space-6, 24px)' }}>
         {/* icon 規則 (2026-06-12 user 承認): 装飾タイトルアイコンは全廃 — 階層はタイポ+gold で表現。 */}
         <SectionHeader
