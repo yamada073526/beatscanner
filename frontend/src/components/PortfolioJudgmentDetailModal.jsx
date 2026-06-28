@@ -23,7 +23,7 @@ const ERROR_LABEL = {
   ERROR: '取得エラー',
 };
 
-function sortTickersByStatus(tickers, verdicts, errors) {
+function sortTickersByStatus(tickers, verdicts) {
   const list = (tickers || []).map((t) => String(t).toUpperCase());
   return list.slice().sort((a, b) => {
     const va = verdicts?.[a];
@@ -52,8 +52,8 @@ export default function PortfolioJudgmentDetailModal({
   loading,
 }) {
   const sortedTickers = useMemo(
-    () => sortTickersByStatus(tickers, verdicts, errors),
-    [tickers, verdicts, errors],
+    () => sortTickersByStatus(tickers, verdicts),
+    [tickers, verdicts],
   );
 
   const initialExpand = useMemo(
@@ -168,7 +168,6 @@ export default function PortfolioJudgmentDetailModal({
             const isExpanded = expanded.has(t);
             const isJudged = !!v;
             const overallPass = isJudged && v.overallPass === true;
-            const overallFail = isJudged && v.overallPass === false;
 
             return (
               <div
