@@ -13,8 +13,22 @@ import { AccordionSection } from '../../../primitives/index.js';
  *   - DetailReport fold → 図解が Pane 3 上部 mount 済で重複のため撤去 (旧 isV4=true 経路を default 化)
  *   - tier-l-glow 発光 host → L6 fold は全て非発光で統一 (mockup 忠実 + 装飾は重要 section 限定)
  *   - isV2 / isScrollV1 / isV4 / isV5 分岐 → 撤去
- * を物理削除。各 panel は自前見出しで「ニュース / IR / 10-K」を区別。
+ * を物理削除。
+ *
+ * v294 backlog (見出し揃え): 旧実装は 3 panel の自前見出しを使い、NewsPanel/IRLinks は
+ *   section-heading class・TenK は inline style でスタイルが不揃いだった。各 panel を
+ *   hideHeading=true にして自前見出しを抑止し、ContextSection 側で L3 統一サブ見出し
+ *   (SUB_HEADING_STYLE) を出して整列させる (Insider/8Q の内部 l3Headings と同格)。
  */
+// 集約 fold (L2) 内の 3 source を区別する L3 サブ見出し (3 panel で完全に同一スタイル)。
+const SUB_HEADING_STYLE = {
+  fontSize: 12,
+  fontWeight: 600,
+  color: 'var(--text-secondary)',
+  letterSpacing: '0.04em',
+  margin: '0 0 var(--space-3, 12px)',
+};
+
 export default function ContextSection({
   selectedTicker,
   useWorkspaceReader,
@@ -38,9 +52,18 @@ export default function ContextSection({
           padding: '0 var(--space-3, 12px)',
         }}
       >
-        <NewsPanel ticker={selectedTicker} useWorkspaceReader={useWorkspaceReader} />
-        <IRLinksPanel ticker={selectedTicker} />
-        <TenKLinksPanel ticker={selectedTicker} />
+        <section>
+          <h4 style={SUB_HEADING_STYLE}>最新ニュース</h4>
+          <NewsPanel ticker={selectedTicker} useWorkspaceReader={useWorkspaceReader} hideHeading />
+        </section>
+        <section>
+          <h4 style={SUB_HEADING_STYLE}>IR リソース</h4>
+          <IRLinksPanel ticker={selectedTicker} hideHeading />
+        </section>
+        <section>
+          <h4 style={SUB_HEADING_STYLE}>10-K (年次報告書)</h4>
+          <TenKLinksPanel ticker={selectedTicker} hideHeading />
+        </section>
       </div>
     </AccordionSection>
   );
