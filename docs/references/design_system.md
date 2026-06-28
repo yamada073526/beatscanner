@@ -313,6 +313,7 @@ ChartTab.jsx の lightweight-charts overlay 専用。 lightweight-charts は CSS
 | `--bg-subtle` | `#f1f5f9` | `#1e2a3a` |
 | `--bg-muted` | `#e2e8f0` | `#243447` |
 | `--bg-hover` | `#f1f5f9` | `#253045` |
+| `--bg-future` | `#eef2f7` | `#121a28` | 将来ゾーン (来期ガイダンス比) の「ガラス仕切り」背景。card より一段沈めて §38 中立を素材で表現 (screener 通信簿 v12)。`var(--bg-future)` で参照 |
 | `--text-primary` | `#0f172a` | `#f1f5f9` |
 | `--text-secondary` | `#334155` | `#cbd5e1` |
 | `--text-muted` | `#64748b` | `#94a3b8` |

@@ -28,7 +28,7 @@ const MODE_KEY = 'screener_grid_mode';
 const SCREENER_NARROW_BREAKPOINT = 420;
 
 // §14-D: 列幅 SSOT。pip / 識別 / 評価列 / RS。
-const COLS_FULL = '28px minmax(0,1fr) 76px 76px 50px 46px 76px 76px 34px';
+const COLS_FULL = '28px minmax(0,1fr) 76px 76px 50px 46px 70px 70px 34px';
 const COLS_SIMPLE = '28px minmax(0,1fr) 132px 84px 40px';
 // 狭幅(~360-420px Pane2)専用: 固定列を詰め、識別列(minmax 0)が潰れない幅に。
 const COLS_NARROW = '24px minmax(0,1fr) 78px 48px 28px';
