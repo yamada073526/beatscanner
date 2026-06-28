@@ -930,7 +930,6 @@ export default function BacktestPage({ user, isSubscribed, startCheckout }) {
   const heroAlpha = portfolioAlpha != null ? portfolioAlpha : kpis.avg_alpha_pct;
   const isPortfolioHero = cumReturn != null;
 
-  const avgReturn = kpis.avg_return_pct;
   // SPIVA 業界比較セクション (per-trade α 表示) で参照される per-trade KPI を保持
   const alphaTrade = kpis.avg_alpha_pct;
   const winRate = kpis.win_rate_pct;
@@ -950,7 +949,6 @@ export default function BacktestPage({ user, isSubscribed, startCheckout }) {
   const animHeroSpy = useCountUp(heroSpy, { duration: 800, digits: 2 });
   const animHeroAlpha = useCountUp(heroAlpha, { duration: 1000, digits: 2 });
   const animWinRate = useCountUp(winRate, { duration: 600, digits: 1 });
-  const animWinVsSpy = useCountUp(winVsSpy, { duration: 600, digits: 1 });
 
   // 「100 万円 → 〇〇万円」 仮定法 (固定 150 円換算 = JPY return = USD return で一貫)
   // Phase 2.2 full: portfolio.cum_return を主役にすることで「5 年運用後の真の資産」 を表現。
