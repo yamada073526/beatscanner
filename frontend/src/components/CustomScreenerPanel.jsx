@@ -135,7 +135,7 @@ const FACET_MAP = Object.fromEntries(
 const PRESET_CORE_KEYS = ['eps_yoy_pct', 'eps_cagr_3y', 'roe', 'rs_percentile'];
 const PRESET_LABELS = { loose: '緩い', standard: '標準', strict: '厳しい', severe: '最厳' };
 // 「絞り込み条件」見出しの動的サマリー用 preset 日本語名 (StrategyPresetBar STRATEGY_PRESETS と一致)。
-const PRESET_LABEL_JP = { earnings_pass: '決算合格', new_high_break: '新高値ブレイク', hot_sector: '旬のセクター', sector_leader: 'セクター別リーダー' };
+const PRESET_LABEL_JP = { earnings_pass: '決算合格', new_high_break: '新高値ブレイク', hot_sector: '旬のセクター', sector_leader: 'セクター別リーダー', quiet_quality: '静かな強さ' };
 // 個別緩急 mini-segment 用の短縮ラベル (幅節約・原則1)。
 const GRADE_LABELS_SHORT = { floor: '床', loose: '緩', standard: '標', strict: '厳', severe: '最厳' };
 // grade の強弱順 (clamp / 並び順の SSOT)。
@@ -293,6 +293,9 @@ const SEASON_LABEL = {
   new_high_break: { text: '対象: 直近のブレイク／形成' },          // 未検証の「5営業日」を除去 (honest)
   hot_sector:     { text: 'セクター別RS（対SPY）・直近改善順' },   // rs_vs_spy_pct で裏取り済 = 検証可
   sector_leader:  { text: '対象: 全ユニバース（決算非依存・常時）', neutral: true },
+  // 逆張り「静かな強さ」(SPEC_2026-06-28 §10 Sprint3)。RS≥(床) × 出来高静か≤ × 機関殺到なし≤ × 利益の質≥ の
+  //   4 軸を中立フレームで描写。決算非依存・常時のため neutral (gray)。§38: 「お宝/割安/上がる」断定なし。
+  quiet_quality:  { text: '対象: RS上位 × 出来高が静か × 機関未殺到 × 利益の質', neutral: true },
 };
 export const PRESET_CONDS = [
   // ── grade 条件 (精度連動・activeGrades 経由) ──
@@ -409,8 +412,12 @@ export const CROW_LAYOUT = [
   { group: '品質',       sub: '決算の裏付け',         keys: ['latest_beat'] },
   // 新高値ブレイク gate 修正 (SPEC_2026-06-25): new_high_signal/buy_zone_g は new_high_break 専用 custom crow
   //   (renderCrow が activePreset !== 'new_high_break' で null・custom mode の全 keys 露出を防ぐ)。
-  { group: 'タイミング', sub: '値動き・勢い',         keys: ['new_high_signal', 'buy_zone_g', 'buy_zone', 'new_high_52w', 'cup', 'rs_percentile', 'sector_leader', 'volume_surge_pct'] },
-  { group: '需給',       sub: '機関の動き',           keys: ['ad_volume', 'inst_holders_qoq_pct'] },
+  // volume_quiet (出来高 静か ≤) は逆張り「静かな強さ」(quiet_quality) 専用。renderCrow が
+  //   activePreset!=='quiet_quality' で null を返すため、他 preset / custom mode には露出しない
+  //   (≥型 volume_surge_pct と ≤型が並ぶ矛盾を構造的に回避・Trust Cliff)。RS の直後に置き RS→出来高静か の順。
+  { group: 'タイミング', sub: '値動き・勢い',         keys: ['new_high_signal', 'buy_zone_g', 'buy_zone', 'new_high_52w', 'cup', 'rs_percentile', 'sector_leader', 'volume_surge_pct', 'volume_quiet'] },
+  // inst_qoq_calm (機関 殺到なし ≤) も quiet_quality 専用 (renderCrow guard 同上)。≥型 inst_holders_qoq_pct と非並置。
+  { group: '需給',       sub: '機関の動き',           keys: ['ad_volume', 'inst_holders_qoq_pct', 'inst_qoq_calm'] },
 ];
 // B-3: crow conds が inline lock crow として提示する locked_facets key 集合 (= CROW_BINARY_META.locked)。
 //   v2 では (2f) 別 section から除外して二重表示を防ぐ ({pivot_distance, breakout, ad_volume})。
@@ -451,6 +458,11 @@ export const PRESET_DISPLAY_CONDS = {
   //   述語(PRESET_PREDICATES.grades)・表示の両方から除去 (Trust Cliff 解消)。表示=述語適用条件と 1:1
   //   (隠れフィルタ禁止 invariant・L411 earnings/new_high と同じ不変条件)。
   sector_leader:  ['sector_leader', 'ocf_margin_pct', 'roe', 'rs_percentile', 'inst_holders_qoq_pct'],
+  // 静かな強さ (SPEC_2026-06-28 §10 Sprint3): モメンタム(RS床) + タイミング(出来高静か≤) + 需給(機関殺到なし≤)
+  //   + 収益の質(CF創出力/ROE)。gate なし (全 5 軸トグル可)。述語(PRESET_PREDICATES.quiet_quality.grades)と
+  //   1:1 で隠れフィルタなし (invariant: applied ⊆ display)。volume_quiet/inst_qoq_calm は CROW_LAYOUT に
+  //   追加済 = RENDERABLE (renderCrow が quiet_quality 限定で描画)。
+  quiet_quality:  ['rs_percentile', 'volume_quiet', 'inst_qoq_calm', 'ocf_margin_pct', 'roe'],
 };
 
 // ─── D-8 sort (SPEC_2026-06-25): 結果リストのユーザー制御 sort ──────────────────────
@@ -650,6 +662,14 @@ export const PRESET_PREDICATES = {
   sector_leader:  { grades: { rs_percentile: { loose: 'loose', standard: 'standard', strict: 'strict' }, roe: { loose: null, standard: 'loose', strict: 'standard' }, ocf_margin_pct: { loose: null, standard: 'standard', strict: 'strict' }, inst_holders_qoq_pct: 'loose' }, extra: { sectorLeaderOnly: true, mcapBands: ['mega', 'mid'] } },
   // hot_sector: セクター算出は topSectorsByRs で計算 (sectorTopN=5 相当)
   hot_sector:     { grades: { eps_yoy_pct: 'auto', eps_cagr_3y: 'auto', roe: 'auto', rs_percentile: 'auto' }, sectorTopN: 5, extra: { fundaPassOnly: true } },
+  // 静かな強さ (SPEC_2026-06-28 §10 Sprint3・件数 gate1 確定 2026-06-28 = Option A「thesis 型」緩48/標28/厳11):
+  //   逆張りの肝は中核2軸 (出来高静か / 機関殺到なし) を精度連動 (auto) で締めること。RS と ROE は「相対力の
+  //   床」「利益の質の床」として全精度固定 (loose=≥70/≥17) し、スライダーは『どれだけ静か/不人気か』を制御する。
+  //   ※ mockup の均一表示 (全条件 levels[target]) は実データで標準6件/厳0件に破綻 (sector_leader/new_high_break が
+  //     苦しんだ 0件問題)。RS/ROE を床固定にすることで標準=28 (§9 ground-truth) を保ちつつ厳=11 と健全に逓減。
+  //   標準 = RS≥70 × 出来高静か≤20 × 機関殺到なし≤20 × CF創出力≥15 × ROE≥17 = 28件 (universe 2552 で検証)。
+  //   gate なし (mockup p5 は全条件トグル可)。count==list は buildActiveGrades+itemPasses で構造保証。
+  quiet_quality:  { grades: { rs_percentile: 'loose', volume_quiet: 'auto', inst_qoq_calm: 'auto', ocf_margin_pct: { loose: 'loose', standard: 'standard', strict: 'standard' }, roe: 'loose' }, extra: {} },
 };
 
 // preset 別 default 精度 (S3 P1-b)。未登録は 'standard'。sector_leader は AUDIT L99「default 緩で件数多め」+
@@ -1361,6 +1381,14 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
   // 数値ロジック(itemPasses)は経由せず表示のみ。off→on の grade 復帰は overrides 操作で行う。
   const renderCrow = (cond, isGate = false) => {
     if (!cond) return null;
+    // ── 逆張り「静かな強さ」専用 facet ガード (SPEC_2026-06-28 §10 Sprint3) ──
+    //   volume_quiet (≤型) / inst_qoq_calm (≤型) は CROW_LAYOUT に登録済 (RENDERABLE 要件) だが、
+    //   quiet_quality 以外 (custom mode = activePreset null 含む) では描かない。custom mode で
+    //   ≥型 (出来高急増 / 機関保有増) と ≤型が同 group に並ぶ矛盾露出を構造的に防ぐ (Trust Cliff)。
+    //   quiet_quality のときは下の汎用 grade crow (gradeAnnot が ≤ 閾値を描画) へ素通し。
+    if (cond.key === 'volume_quiet' || cond.key === 'inst_qoq_calm') {
+      if (activePreset !== 'quiet_quality') return null;
+    }
     // ── 新高値ブレイク gate 修正 (SPEC_2026-06-25): new_high_break 専用 custom crow ──
     //   汎用 grade crow は 999 sentinel / 0〜+5% range を正しく表示できないため別描画。
     //   activePreset !== 'new_high_break' では描かない (custom mode で allowed=null=全 keys 誤露出を防ぐ・Trust Cliff)。
@@ -2283,6 +2311,21 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
               )}
             </div>
 
+            {/* 静かな強さ §38 留保 + citation (SPEC_2026-06-28 §10 / mockup p5 fhint line 337 が正本)。
+                「人気化前」「見過ごされた相対力」の逆張り訴求は、この留保 (予測でない/低流動性/小型株偏り/
+                出版後減衰/米国転用は外挿) が UI に併設されて初めて §38・景表法 §5 の中立フレームが成立する
+                (金融 review 2026-06-28 critical)。mockup の fhint (折りたたみ refine 内) より可視性の高い
+                結果ヘッダー直下に常設。静的文言 (LLM 非経由) のため Hallucination Guard 4層不要。 */}
+            {activePreset === 'quiet_quality' && (
+              <p
+                data-testid="screener-quiet-quality-disclaimer"
+                className="mb-2 text-[11px] leading-relaxed text-[var(--text-muted)]"
+              >
+                出来高「静か」＝急増していない（上限 ≤）／機関「殺到なし」＝QoQ増加が過熱でない（上限 ≤）の2軸が逆張りの肝。
+                ※発見支援であり予測ではありません。低出来高は低流動性・小型株偏りを伴い、効果は出版後に減衰しうる（出典: Lee-Swaminathan 2000／Chen-Hong-Stein 2002／Choi-Jin-Yan 2013・米国転用は外挿）。
+              </p>
+            )}
+
             {/* Sprint 5 Pass B: 一括追加バー (1 件以上選択時に表示)。Phase C: sector view では非表示。 */}
             {!isSectorView && selectedTickers.size > 0 && (
               <div
@@ -2417,19 +2460,21 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                   )}
                 </div>
               </div>
-            ) : (activePreset === 'new_high_break' && !isPremiumUser) ? (
-              /* 新高値ブレイク gate 修正 (SPEC_2026-06-25): preset レベル Premium gate。
-                 非 Premium には「0銘柄」でなくロック+CTA を出す (Trust Cliff・SPEC §4.2.2)。
+            ) : ((activePreset === 'new_high_break' || activePreset === 'quiet_quality') && !isPremiumUser) ? (
+              /* Premium tier preset の preset レベル gate (SPEC_2026-06-25 §4.2.2 + SPEC_2026-06-28 §10)。
+                 非 Premium には「0銘柄」でなくロック+CTA を出す (Trust Cliff)。新高値ブレイク / 静かな強さ 共通。
                  ※ N 件は非 Premium のマスク済 universe では算出不能のため、捏造せず件数は出さない。 */
-              <div className="screener-lockbar" role="status" data-testid="screener-premium-gate-new_high_break">
+              <div className="screener-lockbar" role="status" data-testid={`screener-premium-gate-${activePreset}`}>
                 <Lock size={14} strokeWidth={2} aria-hidden className="screener-lockbar__icon" />
                 <p className="screener-lockbar__copy">
-                  「新高値ブレイク」は新高値圏 × 好決算を毎晩スキャンする <strong>Premium 限定</strong>の戦略です。
+                  {activePreset === 'quiet_quality'
+                    ? <>「静かな強さ」はRSが強いのに出来高が静か・機関が未殺到の銘柄を毎晩スキャンする <strong>Premium 限定</strong>の戦略です。</>
+                    : <>「新高値ブレイク」は新高値圏 × 好決算を毎晩スキャンする <strong>Premium 限定</strong>の戦略です。</>}
                 </p>
                 <button
                   type="button"
                   className="screener-lockbar__cta"
-                  onClick={() => { trackEvent('screener_preset_premium_gate_cta', { preset: 'new_high_break' }); onUpgrade?.('新高値ブレイク (Premium)'); }}
+                  onClick={() => { trackEvent('screener_preset_premium_gate_cta', { preset: activePreset }); onUpgrade?.(activePreset === 'quiet_quality' ? '静かな強さ (Premium)' : '新高値ブレイク (Premium)'); }}
                   data-testid="screener-premium-gate-cta"
                 >
                   Premium を見る
