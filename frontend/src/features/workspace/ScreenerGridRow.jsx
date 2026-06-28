@@ -222,6 +222,7 @@ export default function ScreenerGridRow({
   earnings = {},
   columns = null,
   metrics = null,
+  win = false,
   mode = 'full',
   animIndex = 0,
   isSelected = false,
@@ -282,7 +283,13 @@ export default function ScreenerGridRow({
       )}
       <span className="screener-grid-logo"><CompanyLogo ticker={ticker} size={26} monoFallback /></span>
       <span className="screener-grid-idbody">
-        <span className="screener-grid-tkr">{ticker}</span>
+        <span className="screener-grid-tkr">
+          {ticker}
+          {/* gold 標榜 ★ は column-driven 経路のみ (earnings 経路は左 pip ✓ が別格を担う)。SPEC A1。 */}
+          {win && columns ? (
+            <span className="screener-grid-winstar" role="img" aria-label="この戦略の別格">★</span>
+          ) : null}
+        </span>
         <span className="screener-grid-meta">
           {lastReportDate && <span className="screener-grid-qd">決算 {lastReportDate}</span>}
           {lastReportDate && name && <span aria-hidden="true">·</span>}
@@ -300,7 +307,7 @@ export default function ScreenerGridRow({
         ref={rowRef}
         role="button"
         tabIndex={0}
-        className={['screener-grid-row', revealed ? 'is-in' : '', isSelected ? 'is-selected' : ''].filter(Boolean).join(' ')}
+        className={['screener-grid-row', revealed ? 'is-in' : '', win ? 'is-win' : '', isSelected ? 'is-selected' : ''].filter(Boolean).join(' ')}
         data-testid={`screener-grid-row-${ticker}`}
         data-mode={mode}
         style={{ '--reveal-delay': `${(animIndex % 8) * 45}ms` }}

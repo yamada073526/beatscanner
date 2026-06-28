@@ -84,6 +84,35 @@ export function normalizeMetrics(it) {
   };
 }
 
+// ── gold 標榜 (別格) 判定 (SPEC_2026-06-29 A1)。各 preset で「戦略条件を強く満たす別格」を
+//    上位サブセットだけ gold 行 (.is-win) で強調する。全て過去/現在事実ベース (§38 非抵触・
+//    将来予測でも買い推奨でもない・既存 is-win=三拍子 が precedent)。data 欠落時は標榜しない (honest)。
+//    閾値は本番 universe 2553件で較正済 (SPEC 表)。export = unit test 用。
+const _fin = (v) => typeof v === 'number' && Number.isFinite(v);
+export function presetWin(it, preset) {
+  if (!it) return false;
+  switch (preset) {
+    case 'new_high_break':
+      // 実ブレイク確定(52週高値更新) かつ 出来高急増(+50%超)。is_new_52w_high は Premium 専用 list の
+      //   data (free fetch では masked=null) → Premium には present。
+      return it.is_new_52w_high === true && _fin(it.volume_surge_pct) && it.volume_surge_pct >= 50;
+    case 'sector_leader':
+      // セクター内 RS 首位 かつ 高質 (ROE>=17 または CF創出力>=25)。
+      return it.is_sector_rs_leader === true
+        && ((_fin(it.roe) && it.roe >= 17) || (_fin(it.ocf_margin_pct) && it.ocf_margin_pct >= 25));
+    case 'quiet_quality':
+      // RS 上位(>=80) かつ 出来高が静か(<=0) かつ 機関未殺到(<=0)。3 値とも present 必須 (欠落は標榜せず)。
+      return _fin(it.rs_percentile) && it.rs_percentile >= 80
+        && _fin(it.volume_surge_pct) && it.volume_surge_pct <= 0
+        && _fin(it.inst_holders_qoq_pct) && it.inst_holders_qoq_pct <= 0;
+    case 'market_leading':
+      // 対SPY 大幅超過(>=20pt) かつ 直近決算ビート(過去確定)。
+      return _fin(it.rs_vs_spy_pct) && it.rs_vs_spy_pct >= 20 && !!it.latest_beat;
+    default:
+      return false; // earnings_pass/hot_sector は columnDriven でない (tri='ok' は ScreenerGridRow 側)
+  }
+}
+
 // 列 spec: { id, header, headerSub(2行目), kind, metricKey, unit, tier('pri'強調/'sec'副次),
 //   core(narrow/簡素で残す), width, label(aria/tooltip) }。
 //   kind: 'level'(符号なし%) / 'delta'(符号付き) / 'rs'(rsValue) / 'verdict'(beat/miss chip) / 'leader'(badge)。
@@ -249,6 +278,7 @@ export default function ScreenerGridTable({
         lastReportDate: showLeadDate ? (it.last_report_date ?? null) : null,
         rsValue: it.rs_percentile ?? null,
         metrics: normalizeMetrics(it),
+        win: presetWin(it, preset), // gold 標榜 (SPEC A1・別格サブセット)
       }
       : normalizeItem(it)));
   const shown = mock ? rows.length : (count != null ? count : rows.length);
@@ -336,6 +366,7 @@ export default function ScreenerGridTable({
               earnings={r.earnings}
               columns={columnDriven ? visibleCols : null}
               metrics={r.metrics ?? null}
+              win={r.win ?? false}
               mode={effectiveMode}
               animIndex={i}
               isCheckboxChecked={selectedTickers?.has?.(r.ticker) ?? false}

@@ -14439,6 +14439,8 @@ body.is-digest-resizing {
 .screener-grid-row:hover .screener-grid-tkr { color: var(--text-primary); }
 .screener-grid-row.is-win { background: color-mix(in srgb, var(--color-gold) 5%, transparent); }
 .screener-grid-row.is-win::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--color-gold); }
+/* gold 標榜 ★ (SPEC_2026-06-29 A1・column-driven 経路の別格マーカー)。色はブランド gold・上昇色でない。 */
+.screener-grid-winstar { margin-left: 5px; color: var(--color-gold-mid); font-size: 11px; line-height: 1; }
 .screener-grid-row.is-selected { background: color-mix(in srgb, var(--color-gold) 10%, transparent); }
 .screener-grid-row.is-selected::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--color-gold-mid); }
 @media (prefers-reduced-motion: reduce) { .screener-grid-row { opacity: 1; transform: none; transition: background .12s ease; } }
