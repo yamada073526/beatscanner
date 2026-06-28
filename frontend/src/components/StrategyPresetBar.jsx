@@ -18,7 +18,13 @@
  *               件数を出さず 🔒 表示にする (SPEC_2026-06-25 §4.2.2: 非 Premium に
  *               「0 銘柄」を見せない Trust Cliff 対応。masked universe で 0 と出る誤読を防ぐ)。
  */
-import { BadgeCheck, TrendingUp, LayoutGrid, Crown, Lock } from 'lucide-react';
+import { BadgeCheck, TrendingUp, LayoutGrid, Crown, Moon, Lock } from 'lucide-react';
+
+// カードはプラン昇順 (Free→Pro→Premium) で並べ「重要度＝上位プランほど右」を視覚化 (user 確定 2026-06-28)。
+//   STRATEGY_PRESETS の物理順 (= 件数算出 / 他 consumer の SSOT) は不変のまま、表示時にのみ並べ替える
+//   (mockup screener-quiet-quality-v1.html renderPresets の TIER_ORDER と同方式)。Array.sort は安定なので
+//   同 tier 内は配列の定義順を保つ。
+const TIER_ORDER = { free: 0, pro: 1, prem: 2 };
 
 /** プリセット定義 SSOT (Phase A) */
 export const STRATEGY_PRESETS = [
@@ -58,6 +64,19 @@ export const STRATEGY_PRESETS = [
     tier: 'pro',
     tierLabel: 'Pro',
   },
+  {
+    // 逆張り「静かな強さ」(SPEC_2026-06-28 §10 Sprint3)。RS(相対力)は上位なのに出来高が静かで機関の殺到もない、
+    //   まだ人気化していない利益の質が高い銘柄を 1 クリックで一覧化。tier=Premium (競合に同機能なしの差別化・
+    //   中核 facet は free だが 1 クリック curation + 較正閾値を Premium gate。新高値ブレイクと同じ freemium)。
+    //   §38: desc は「人気化前」(状態描写) に留め「お宝/割安/上がる」断定を避ける。
+    key: 'quiet_quality',
+    label: '静かな強さ',
+    title: 'RS（相対力）は上位なのに出来高が静か・機関も未殺到で、まだ人気化していない利益の質が高い銘柄',
+    desc: 'RSは強いのに出来高が静か（人気化前）・利益の質も高い銘柄',
+    Icon: Moon,
+    tier: 'prem',
+    tierLabel: 'Premium',
+  },
 ];
 
 export default function StrategyPresetBar({ active = null, onSelect, counts = {}, isPremiumUser = true }) {
@@ -68,7 +87,9 @@ export default function StrategyPresetBar({ active = null, onSelect, counts = {}
       role="radiogroup"
       aria-label="戦略プリセット"
     >
-      {STRATEGY_PRESETS.map(({ key, label, title, desc, Icon, tier, tierLabel }) => {
+      {[...STRATEGY_PRESETS]
+        .sort((a, b) => TIER_ORDER[a.tier] - TIER_ORDER[b.tier])
+        .map(({ key, label, title, desc, Icon, tier, tierLabel }) => {
         const isSelected = active === key;
         const count = counts[key];
         // SPEC_2026-06-25 §4.2.2: Premium 限定 preset を非 Premium が見る場合、masked universe で

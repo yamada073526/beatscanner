@@ -270,3 +270,46 @@ BHP (RS76 volSurge-31 静か instQoQ+6.6) / EOG (RS72 volSurge+16 instQoQ+5.8) /
 ### Sprint 0 → Sprint 1 への確定事項
 - backend 拡張なし / 中核は free / multi-review 3体 / アナリスト軸は外す / gating は inst_qoq 上限主 + ad_volume 任意。
 - 閾値の Sprint1 初期値: **RS≥70 × volume_surge_pct≤20 × roe≥17 × ocf_margin_pct≥15 × inst_holders_qoq_pct≤+20** (≈30件前後、Sprint1 で count==list 裏取り後に微調整)。
+
+## 10. Sprint 3 addendum — screener_v2 への preset 化 (2026-06-28・実装着地)
+
+### 🔄 PIVOT: 実装先は legacy でなく `screener_v2`
+- **§6「screener_v2 触らない」は本 pivot で失効**。Sprint1+2 は legacy screener の grade-segment 行に facet を入れたが、user の本命は `screener_v2=1` (トグル式 UI + プリセットカード)。Sprint1+2 が作った**データ/述語層** (`cmp:'lte'` + `volume_quiet`/`inst_qoq_calm` cond + count==list) はそのまま再利用し、Sprint3 で足りない**見せ方** (preset card + CROW_LAYOUT 配置) のみを screener_v2 に追加した。
+
+### 確定事項 (mockup レビュー gate・user 確定 2026-06-28)
+- **正本 mockup**: `docs/specs/mockups/screener-quiet-quality-v1.html` (v8=screener_v2 正本に第5プリセット追加)。
+- **preset 名 = 「静かな強さ」** (UI 表示・§38 OK)。internal slug = `quiet_quality`。
+- **tier = Premium** (競合に同機能なしの差別化。中核 facet は free だが preset を Premium gate = 新高値ブレイクと同じ freemium)。
+- **カードはプラン昇順** (Free→Pro→Premium)。`StrategyPresetBar` の**表示時 sort** のみで実現 (`STRATEGY_PRESETS` 物理順 = 件数 SSOT は不変)。
+
+### ★ 件数 SSOT 決定 (gate1 確定 2026-06-28 = Option A「thesis 型」)
+- **問題**: mockup の均一表示 (全条件が `levels[target]` 連動) は実データ (universe 2552) で **標準6件 / 厳0件**に破綻 (sector_leader / new_high_break が苦しんだ 0件問題)。
+- **決定**: 逆張りの肝の中核2軸 (出来高静か / 機関殺到なし) を精度連動 (`auto`)、**RS と ROE は「相対力の床」「利益の質の床」として全精度固定** (loose=≥70/≥17)。CF創出力は緩loose/標厳standard。スライダーは『どれだけ静か/不人気か』を制御する。
+- **検証済み件数** (universe 2552・`buildActiveGrades`+`itemPasses` で裏取り): **緩48 / 標28 / 厳11**。標準 = `RS≥70 × 出来高静か≤20 × 機関殺到なし≤20 × CF創出力≥15 × ROE≥17` = **28** (§9 ground-truth 一致・dogfood 銘柄 ALAB/AGX/ATI/KEYS/DAVE/VAL/YOU/XOMA を含む)。
+
+### 実装 (screener_v2 描画)
+- `CustomScreenerPanel.jsx`:
+  - `PRESET_PREDICATES.quiet_quality` (thesis 型・上記マッピング)、`PRESET_DISPLAY_CONDS.quiet_quality` (5軸)、`SEASON_LABEL.quiet_quality` (neutral)、`PRESET_LABEL_JP.quiet_quality`。
+  - `CROW_LAYOUT`: `volume_quiet` を「タイミング」群、`inst_qoq_calm` を「需給」群に追加 (RENDERABLE 要件)。
+  - `renderCrow`: `volume_quiet`/`inst_qoq_calm` は `activePreset!=='quiet_quality'` で `null` を返す guard (custom mode で ≥型と ≤型が並ぶ矛盾を防止・Trust Cliff)。`cmp:'lte'` の `≤` 閾値は既存 `gradeAnnot` が描画 (汎用 grade crow で対応済)。
+  - gate なし (mockup p5 は全条件トグル可) = `PRESET_GATE_CONDS` に entry なし。
+  - **Premium tier gate** (multi-review funnel-cro critical 対応): 結果リストの preset gate 条件を
+    `(activePreset === 'new_high_break' || activePreset === 'quiet_quality') && !isPremiumUser` に一般化。
+    非 Premium には件数を捏造せず lockbar + CTA (data-testid=`screener-premium-gate-quiet_quality`)。new_high_break と同 pattern。
+  - **§38 留保 + citation** (multi-review 金融 critical 対応): quiet_quality 選択時、結果ヘッダー直下に
+    mockup p5 fhint (line 337) 相当の留保 (予測でない/低流動性/小型株偏り/出版後減衰/米国転用は外挿) +
+    citation (Lee-Swaminathan 2000 / Chen-Hong-Stein 2002 / Choi-Jin-Yan 2013) を常設
+    (data-testid=`screener-quiet-quality-disclaimer`)。静的文言 (LLM 非経由)。mockup は折りたたみ refine 内
+    fhint だが、可視性向上のため結果ヘッダー直下へ移設 (意図的 adaptation・§38 中立フレーム成立の前提)。
+- `StrategyPresetBar.jsx`: `STRATEGY_PRESETS` に第5カード (Moon icon・tier=prem) 追加 + 表示時 `TIER_ORDER` sort。
+- `applyStrategyImpl`: quiet_quality 専用分岐 **不要** (binary flag / sector / mcap なし、grades は全て `PRESET_PREDICATES` 経由)。
+
+### mockup からの意図的 adaptation (drift でなく設計判断)
+1. **group 構造**: mockup は per-preset で モメンタム/タイミング/需給/収益の質。実 CROW_LAYOUT は 品質/タイミング/需給 の既存 IA に従い RS→タイミング・CF/ROE→品質 に配置。
+2. **精度マッピング**: mockup は均一 `levels[target]`、実装は thesis 型 (RS/ROE 床固定)。データ実在性のため (上記 gate1)。
+3. **ROE/CF の段数**: mockup は 4段表示 (≥17/20/25/50)、実 facet は 3段 (17/25/50) = mseg は 3 ボタン。実 facet が SSOT。
+
+### 検証 (Sprint3)
+- `npm run build` ✅ / vitest **57 pass** (invariants test に Sprint3 quiet_quality 6 test 追加・既存 preset grades 無改変 regression guard 含む) / universe 2552 ground-truth 緩48/標28/厳11 ✅ / local bundle grep (静かな強さ/quiet_quality/出来高が静か/機関未殺到/volume_quiet/inst_qoq_calm + 留保 (発見支援/低流動性/Lee-Swaminathan) + premium-gate testid shipped)。
+- **multi-review 3体実施** (deploy 前・2026-06-28): ui/frontend = **PASS** (件数SSOT/結線/danger zone 懸念なし) / funnel-cro = CONCERNS → **critical (Premium gate 欠落) 修正済** / 金融§38 = CONCERNS → **critical (留保+citation 欠落) 修正済**。再 build + vitest green。
+- **残 (deploy 後)**: 本番 authed snap (`snap-screener-quiet-quality.mjs` を screener_v2 対応 `?screener_v2=1` に更新) + 本番 bundle grep。
