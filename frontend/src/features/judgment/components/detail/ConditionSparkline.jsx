@@ -20,10 +20,10 @@
  *     (default: false 維持、chart 4 層防御の他 3 層は全維持)
  *
  * chip は div + span のみ (Recharts/SVG 不使用)。
- * chip の色: PASS + 正方向 → var(--color-gain) / FAIL + 負方向 → var(--color-loss) / その他 → var(--text-muted)
+ * chip の色: トレンド方向で決定 — 上昇 → var(--color-gain) / 下落 → var(--color-loss) / 横ばい → var(--text-muted) (verdict から decouple)
  */
 
-import React, { Component, useRef, useState } from 'react';
+import { Component, useRef, useState } from 'react';
 import { LineChart, Line, YAxis, ReferenceDot, ResponsiveContainer } from 'recharts';
 import Chip from '../../../../components/ui/Chip.jsx';
 
@@ -49,20 +49,18 @@ function isSparklineAnimateEnabled() {
  * 計算式: (series[last] - series[0]) / Math.abs(series[0]) * 100
  * Number.isFinite で保護。series[0] ≈ 0 (epsilon 以下) の場合は非 render。
  *
- * 色判定ロジック (SPEC §5 Sprint B §3):
- *  - PASS + trend が正方向 (+X%) → var(--color-gain) chip
- *  - PASS + trend が微小 (±2% 以内) → var(--text-muted) neutral chip
- *  - FAIL + trend が負方向 (-X%) → var(--color-loss) chip
- *  - FAIL + trend が改善方向 (+X%) → var(--text-muted) neutral chip
- *  = chip 色は「変化の方向 × 程度」を表現
+ * 色判定ロジック (2026-06-28 改訂: verdict から decouple、 トレンド方向のみで配色):
+ *  - trend が正方向 (+X%、 上昇) → var(--color-gain) chip
+ *  - trend が負方向 (-X%、 下落) → var(--color-loss) chip
+ *  - trend が微小 (±2% 以内、 横ばい) → var(--text-muted) neutral chip
+ *  = 未充足でも成長中なら緑 / 合致でも下落なら赤。 色は「verdict」 でなく「変化の事実」 を表す
+ *  (「未充足 = 中立であって下落でない」 Trust Cliff 回避と整合、 CLAUDE.md 投資業界色ルール)
  *
  * @param {object} props
  * @param {Array<number|null>} props.series
- * @param {boolean} props.passed
  * @param {number} props.conditionIndex - 0-indexed
- * @param {string} [props.conditionName]
  */
-function TrendChip({ series, passed, conditionIndex, conditionName }) {
+function TrendChip({ series, conditionIndex }) {
   // conditional gate: series が不正なら非 render
   if (!Array.isArray(series)) return null;
 
@@ -119,18 +117,17 @@ function TrendChip({ series, passed, conditionIndex, conditionName }) {
     displayText = (trendPct >= 0 ? '+' : '') + Math.round(trendPct) + '%';
   }
 
-  // tone 判定 (SPEC §5 Sprint B §3)
-  // Chip primitive の tone: 'gain' | 'loss' | 'muted' のみ使用 (brand 色 'accent' は使わない)
+  // tone 判定: トレンド方向のみで配色 (verdict pass/fail から decouple、 2026-06-28 user 承認)。
+  // Chip primitive の tone: 'gain' | 'loss' | 'muted' のみ使用 (brand 色 'accent' は使わない)。
+  // 上昇 → gain / 下落 → loss / 横ばい → muted。 未充足でも成長中なら緑、 合致でも下落なら赤。
+  // 「未充足 = 中立であって下落でない」 Trust Cliff 回避と整合 (CLAUDE.md 投資業界色ルール)。
   const NEUTRAL_THRESHOLD = 2; // ±2% 以内は neutral
   let tone;
-  if (passed && trendPct > NEUTRAL_THRESHOLD) {
-    // PASS + 正方向 → gain
+  if (trendPct > NEUTRAL_THRESHOLD) {
     tone = 'gain';
-  } else if (!passed && trendPct < -NEUTRAL_THRESHOLD) {
-    // FAIL + 負方向 → loss
+  } else if (trendPct < -NEUTRAL_THRESHOLD) {
     tone = 'loss';
   } else {
-    // その他 (neutral): PASS だが横ばい / FAIL だが改善中
     tone = 'muted';
   }
 
@@ -230,7 +227,8 @@ function ConditionSparklineInner({ series, passed, conditionIndex, conditionName
 
   // 色 tokens (CSS var 経由、 raw hex 禁止 CLAUDE.md)
   const lineColor = 'var(--text-muted)'; // neutral slate baseline
-  const dotColor = passed ? 'var(--color-gain)' : 'var(--color-loss)';
+  // FAIL dot は赤でなく neutral slate (未充足 = 中立、 下落でない)。 CLAUDE.md 投資業界色ルール。
+  const dotColor = passed ? 'var(--color-gain)' : 'var(--text-muted)';
 
   // aria-label 生成
   const passLabel = passed ? 'PASS' : 'FAIL';
@@ -307,9 +305,7 @@ function ConditionSparklineInner({ series, passed, conditionIndex, conditionName
       {/* Sprint B: trend % chip (sparkline 右隣) */}
       <TrendChip
         series={series}
-        passed={passed}
         conditionIndex={conditionIndex}
-        conditionName={conditionName}
       />
     </div>
   );
