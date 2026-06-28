@@ -82,6 +82,12 @@ const FUNDA_FACETS = [
   { key: 'roe',                 field: 'roe',                 label: 'ROE',            unit: '%', tier: 'free', category: 'quality', delta: false, grades: { loose: 17, standard: 25, strict: 50 } },
   { key: 'rs_percentile',       field: 'rs_percentile',       label: 'RS(相対強さ)',     unit: '',  tier: 'free', category: 'timing',  delta: false, grades: { loose: 70, standard: 80, strict: 90 } },
   { key: 'volume_surge_pct',    field: 'volume_surge_pct',    label: '出来高急増',       unit: '%', tier: 'free', category: 'timing',  delta: true,  grades: { loose: 25, standard: 40, strict: 50 } },
+  // 逆張り「静かな優良株」中核軸B (SPEC_2026-06-28 screener-quiet-quality-rs Sprint 1):
+  //   volume_surge_pct を「上限 (cmp:'lte')」で見る別 key = 出来高が急増していない (静か) の軸。
+  //   既存 volume_surge_pct (≥ 型・新高値ブレイク用) と field 共有・別 key なので件数 SSOT に無影響。
+  //   grades は SPEC §9 実データ較正: 緩≤50 / 標≤20 (中央値+35%より下=本当に静か) / 厳≤0 (出来高細り)。
+  //   §38/§5: 「静か」は出来高事実の描写 (お宝/割安/上がる でない・中立フレーム)。delta は cmp 'lte' で未使用。
+  { key: 'volume_quiet',        field: 'volume_surge_pct',    label: '出来高 静か',      unit: '%', tier: 'free', category: 'timing',  delta: false, cmp: 'lte', grades: { loose: 50, standard: 20, strict: 0 } },
   { key: 'inst_holders_qoq_pct', field: 'inst_holders_qoq_pct', label: '機関保有増(45日遅延)', unit: '%', tier: 'free', category: 'demand', delta: true,  grades: { loose: 0, standard: 3, strict: 5 } },
   // S2 P1-a: 営業CFマージンを binary gate ≥15% 固定から可変 grade (緩≥10/標≥15/厳≥25) へ昇格 (user 承認 2026-06-25)。
   //   標準精度=15% で旧 gate と件数中立、業種特性に応じた緩急調整が可能に (金融: 業種により正常 CF マージンが異なる→固定 15% は硬直)。
@@ -142,10 +148,11 @@ function clampLevel(facet, level) {
   const lo = Math.min(...defined), hi = Math.max(...defined);
   return GRADE_ORDER[idx < lo ? lo : hi];
 }
-// mini-segment の閾値併記 (例 "+25%" / "≥80")。§38: 数値は data 由来、色 polarity なし。
+// mini-segment の閾値併記 (例 "+25%" / "≥80" / "≤20%")。§38: 数値は data 由来、色 polarity なし。
 function gradeAnnot(facet, lvl) {
   const thr = facet?.grades?.[lvl];
   if (thr == null) return '';
+  if (facet.cmp === 'lte') return `≤${thr}${facet.unit || ''}`; // 上限型 (出来高 静か等)・以下で合致
   return `${facet.delta ? '+' : '≥'}${thr}${facet.unit || ''}`;
 }
 
@@ -245,7 +252,9 @@ function gradePass(facet, item, lvl) {
   const v = item[facet.field];
   if (v == null) return false;            // 測定外は AND で除外 (honest)
   const thr = facet.grades[lvl];
-  if (thr != null && v < thr) return false; // 未定義段は no-op (clamp 済のため通常到達しない)
+  if (thr == null) return true;           // 未定義段は no-op (clamp 済のため通常到達しない)
+  if (facet.cmp === 'lte') return v <= thr; // 上限型 (出来高 静か ≤20% 等)・低いほど合致
+  if (v < thr) return false;              // 既定 ≥ 型 (既存 facet・挙動不変)
   return true;
 }
 // cup screener が通す cup_state 集合 (backend _CONSENSUS_CUP_STATES と一致: main.py:17907)。
@@ -285,6 +294,9 @@ export const PRESET_CONDS = [
   { key: 'roe',                  kind: 'grade', facet: FACET_MAP.roe,                  pass: (item, lvl) => gradePass(FACET_MAP.roe, item, lvl) },
   { key: 'rs_percentile',        kind: 'grade', facet: FACET_MAP.rs_percentile,        pass: (item, lvl) => gradePass(FACET_MAP.rs_percentile, item, lvl) },
   { key: 'volume_surge_pct',     kind: 'grade', facet: FACET_MAP.volume_surge_pct,     pass: (item, lvl) => gradePass(FACET_MAP.volume_surge_pct, item, lvl) },
+  // volume_quiet: 出来高 静か (上限型 cmp:'lte')。FACET_MAP.volume_quiet.grades[lvl] 以下で合致 (≤50/≤20/≤0)。
+  //   逆張り中核軸B (SPEC_2026-06-28 §5 Sprint 1)。null = AND 除外 (honest)。gradePass が cmp で ≤ 判定。
+  { key: 'volume_quiet',         kind: 'grade', facet: FACET_MAP.volume_quiet,         pass: (item, lvl) => gradePass(FACET_MAP.volume_quiet, item, lvl) },
   { key: 'inst_holders_qoq_pct', kind: 'grade', facet: FACET_MAP.inst_holders_qoq_pct, pass: (item, lvl) => gradePass(FACET_MAP.inst_holders_qoq_pct, item, lvl) },
   // ── binary / flag 条件 (extra フラグ経由・順序は旧 itemPasses の AND チェック順を踏襲) ──
   // funda_pass: 5 条件達成 flag (facet オブジェクトなし)。true のみ通す。
@@ -346,6 +358,7 @@ const FACET_SHORT_LABEL = {
   roe: 'ROE',
   rs_percentile: 'RS高',
   volume_surge_pct: '出来高急増',
+  volume_quiet: '出来高 静か',
   inst_holders_qoq_pct: '機関↑',
   ocf_margin_pct: 'CF創出力',
   ocf_gt_netincome: '利益の質',
@@ -1015,18 +1028,18 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     const activeFacets = FUNDA_FACETS.flatMap((f) => {
       const lvl = activeGrades[f.key];
       const thr = lvl ? f.grades[lvl] : null;
-      return thr != null ? [{ key: f.key, threshold: thr }] : [];
+      return thr != null ? [{ key: f.key, threshold: thr, cmp: f.cmp }] : [];
     });
     const scored = filteredItems.map((it) => {
       let score = 0;
-      for (const { key, threshold } of activeFacets) {
+      for (const { key, threshold, cmp } of activeFacets) {
         const v = it[key];
-        if (v != null && threshold !== 0) {
-          score += (v - threshold) / Math.abs(threshold);
-        } else if (v != null && threshold === 0) {
-          // threshold=0 の時は差分をそのまま加算 (inst_holders 等)
-          score += v;
-        }
+        if (v == null) continue;
+        // threshold=0 は差分をそのまま加算 (inst_holders 等)、それ以外は閾値で正規化。
+        let part = threshold !== 0 ? (v - threshold) / Math.abs(threshold) : v;
+        // cmp 'lte' = 上限型 (出来高 静か等) は「低いほど合致」= 符号反転 (§38 内部ソートのみ・非表示)。
+        if (cmp === 'lte') part = -part;
+        score += part;
       }
       return { it, score };
     });
@@ -2502,8 +2515,9 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                       if (thr == null) return [];
                       const v = it[f.key];
                       if (v == null) return [];
-                      // 寄与スコアで降順
-                      const contrib = thr !== 0 ? (v - thr) / Math.abs(thr) : v;
+                      // 寄与スコアで降順 (cmp 'lte'=上限型は低いほど合致のため符号反転・§38 内部のみ)
+                      let contrib = thr !== 0 ? (v - thr) / Math.abs(thr) : v;
+                      if (f.cmp === 'lte') contrib = -contrib;
                       return [{ key: f.key, contrib, value: v, threshold: thr }];
                     })
                     .sort((a, b) => b.contrib - a.contrib)

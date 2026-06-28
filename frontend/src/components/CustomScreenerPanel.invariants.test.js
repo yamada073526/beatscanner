@@ -19,6 +19,7 @@ import {
   PRESET_GATE_CONDS,
   PRESET_CONDS,
   CROW_LAYOUT,
+  itemPasses,
   sectorTone,
   sectorTagJp,
   fmtSr,
@@ -173,5 +174,57 @@ describe('buildSectorSummary count integrity (Phase C Sprint 3・C-2 不変)', (
   it('no-data fallback: allItems 空/null は空配列', () => {
     expect(buildSectorSummary([], [{ sector: 'X', ticker: 'Y' }])).toEqual([]);
     expect(buildSectorSummary(null, null)).toEqual([]);
+  });
+});
+
+// ── 逆張り「静かな優良株」中核軸B (SPEC_2026-06-28 screener-quiet-quality-rs Sprint 1) ──
+// 新述語型 cmp:'lte' (上限型 facet) と中核2軸 (RS≥ × 出来高静か≤) を機械検証。
+//   件数 SSOT 規律: 既存 preset を 1 件も動かさず新 key (volume_quiet) の追加のみ。
+//   count==list 整合は count も list も itemPasses 同一関数を通すことで構造保証 (Trust Cliff C-2)。
+describe('quiet-quality screener Sprint 1: volume_quiet (cmp lte) 述語 + 中核2軸', () => {
+  const volumeQuiet = PRESET_CONDS.find((c) => c.key === 'volume_quiet');
+
+  it('volume_quiet cond が PRESET_CONDS に grade 型 (cmp:lte) で登録されている', () => {
+    expect(volumeQuiet).toBeTruthy();
+    expect(volumeQuiet.kind).toBe('grade');
+    expect(volumeQuiet.facet?.cmp).toBe('lte');
+    expect(volumeQuiet.facet?.field).toBe('volume_surge_pct'); // field は ≥ 型と共有・別 key
+    // grades は SPEC §9 実データ較正値 (緩≤50 / 標≤20 / 厳≤0)。
+    expect(volumeQuiet.facet.grades).toEqual({ loose: 50, standard: 20, strict: 0 });
+  });
+
+  it('上限型 (≤) 判定: 標準=≤20 で境界・超過・null を honest に扱う', () => {
+    expect(volumeQuiet.pass({ volume_surge_pct: 10 }, 'standard')).toBe(true);    // ≤20 合致
+    expect(volumeQuiet.pass({ volume_surge_pct: 20 }, 'standard')).toBe(true);    // 境界 =20 は合致
+    expect(volumeQuiet.pass({ volume_surge_pct: 21 }, 'standard')).toBe(false);   // >20 除外
+    expect(volumeQuiet.pass({ volume_surge_pct: -30 }, 'standard')).toBe(true);   // 出来高細り=より静か
+    expect(volumeQuiet.pass({ volume_surge_pct: null }, 'standard')).toBe(false); // null=AND除外(honest)
+    expect(volumeQuiet.pass({}, 'standard')).toBe(false);                         // 欠損=除外
+  });
+
+  it('厳=≤0 / 緩=≤50 が段階的に締まる (strict ⊂ standard ⊂ loose)', () => {
+    expect(volumeQuiet.pass({ volume_surge_pct: 0 }, 'strict')).toBe(true);   // ≤0
+    expect(volumeQuiet.pass({ volume_surge_pct: 5 }, 'strict')).toBe(false);  // >0 除外
+    expect(volumeQuiet.pass({ volume_surge_pct: 45 }, 'loose')).toBe(true);   // ≤50
+    expect(volumeQuiet.pass({ volume_surge_pct: 55 }, 'loose')).toBe(false);  // >50 除外
+  });
+
+  it('中核2軸 (RS≥70 × 出来高静か≤20) を itemPasses が AND で結線・count==list', () => {
+    const items = [
+      { ticker: 'A', rs_percentile: 80, volume_surge_pct: 10 },   // RS高 × 静か = 合致
+      { ticker: 'B', rs_percentile: 80, volume_surge_pct: 35 },   // 出来高急増 = 除外
+      { ticker: 'C', rs_percentile: 60, volume_surge_pct: 10 },   // RS不足 = 除外
+      { ticker: 'D', rs_percentile: 90, volume_surge_pct: null }, // volume欠損 = honest除外
+    ];
+    // RS loose=70 (≥) × 出来高静か standard=≤20。count(list) は同一 itemPasses 経由。
+    const activeGrades = { rs_percentile: 'loose', volume_quiet: 'standard' };
+    const passed = items.filter((it) => itemPasses(it, activeGrades, {}));
+    expect(passed.map((i) => i.ticker)).toEqual(['A']); // count==1 かつ list==['A']
+  });
+
+  it('既存 preset key を増やしていない (新規は facet/cond のみ・PRESET_PREDICATES 不変)', () => {
+    expect(Object.keys(PRESET_PREDICATES).sort()).toEqual(
+      ['earnings_pass', 'hot_sector', 'new_high_break', 'sector_leader'].sort(),
+    );
   });
 });
