@@ -64,9 +64,8 @@ import { useDetailScrollRestore } from './useDetailScrollRestore.js';
 import FundamentalsAccordion from './sections/FundamentalsAccordion.jsx';
 import L3QualityFold from './sections/L3QualityFold.jsx';
 // 2026-06-28: v6 テクニカル章 冒頭の同定リボン (会社の身元 1 行・追加 LLM コストなし)
-import TechnicalIdentityRibbon from './sections/TechnicalIdentityRibbon.jsx';
 // v199: ファンダ章冒頭の決算ハイライト (flag opt-in、SPEC_2026-06-10_earnings-flash-summary + 6体合議)
-import EarningsFlashSummary from './sections/EarningsFlashSummary.jsx';
+import EarningsThreePoint from './sections/EarningsThreePoint.jsx';
 // 完全性台帳 (coverage manifest) Sprint3: 規律の元データ取得状況を最上部1行ロールアップ + ドリルダウン監査。
 import CompletenessRollupBadge from './sections/CompletenessRollupBadge.jsx';
 // v6 IA 再構成 (SPEC_2026-06-27): Sprint 1 新規 components
@@ -211,10 +210,6 @@ function isBoCardEnabled() {
 
 
 
-
-// 2026-06-14: AI要約 (SummaryBrief) を封印。状態コンパス (信号機サマリー) が冒頭の要約機能を代替したため
-// 不要に (user 判断)。復活する場合は true に戻す (各章サマリーへの一本化は別 sprint)。
-const SHOW_AI_SUMMARY = false;
 
 
 /**
@@ -468,7 +463,6 @@ export default function JudgmentDetail({
   const detail = detailFor ? detailFor(selectedTicker) : null;
   const result = detail?.result || null;
   const guidance = detail?.guidance || null;
-  const guidanceSecLoading = detail?.guidanceSecLoading ?? false;
   const conditions = result?.conditions || [];
 
   // ticker は選択されたが結果まだ無 → skeleton 表示 (loading 中の体感改善)
@@ -482,11 +476,6 @@ export default function JudgmentDetail({
     // R9.5: 組入上位銘柄クリック → その銘柄の分析へ (競合チップと同じ onAnalyze 経路)
     return <EtfOverviewPanel etfInfo={detail.etfInfo} onNavigateTicker={onAnalyze} />;
   }
-  const verdict = result
-    ? result.overallPass
-      ? 'beat'
-      : 'miss'
-    : 'unknown';
 
   // KPI 候補
   const kpis = [];
@@ -743,6 +732,8 @@ export default function JudgmentDetail({
                   period={result?.latestPeriod ? `FY${result.latestPeriod}` : null}
                   nextEarningsDays={detail?.nextEarningsDays}
                   nextEarningsDate={detail?.nextEarningsDate}
+                  price={detail?.price}
+                  changePct={detail?.changePct}
                   watchlist={detailContext?.watchlist}
                   onAddToWatchlist={detailContext?.onAddToWatchlist}
                   hideCountdownChip={false}
@@ -794,12 +785,13 @@ export default function JudgmentDetail({
                     )}
                   </div>
 
-                  {/* 決算3点 detail（EarningsFlashSummary 再利用 = fetch 重複ゼロ）*/}
+                  {/* 決算3点 detail（mockup 忠実 lean 版 = EarningsThreePoint・guidance prop 流用で fetch 重複ゼロ）。
+                      2026-06-28 user gate「素の3列に簡素化」: 旧 EarningsFlashSummary の部門別/粗利率/ヘッダー帯/
+                      count-up を落とし mockup .earn-grid + .future-strip に。数値は L1 buckets と同 source で整合。*/}
                   <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
                     決算3点 — 対コンセンサス
                   </div>
-                  <EarningsFlashSummary
-                    ticker={selectedTicker}
+                  <EarningsThreePoint
                     guidance={guidance}
                     isLoading={!guidance && (detail?.isLoading ?? false)}
                   />
@@ -883,12 +875,8 @@ export default function JudgmentDetail({
                   <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>③</span>
                   <span style={{ fontSize: 17, fontWeight: 700 }}>テクニカル・買い場</span>
                 </div>
-                {/* 同定リボン（2026-06-28）: テクニカルから入る人 / 銘柄を知らない人向けに
-                    「何の会社か」を 1 行で。ファンダ会社概要 fold とは粒度を変え重複回避。
-                    データは prefetch 済 profile-summary (backend 7日 cache) で追加 LLM コストなし。 */}
-                {selectedTicker && (
-                  <TechnicalIdentityRibbon ticker={selectedTicker} companyName={result?.companyName} />
-                )}
+                {/* 同定リボン: mockup 非対応 + L0 同定層と情報重複のため撤去
+                    (2026-06-28 mockup 忠実化・user gate)。 */}
                 {/* チャート + PriceLadder = v5 の 1 ユニット構造を継承（mockup L4: 価格ラダー → 期間別リターン 順）*/}
                 {selectedTicker && (
                   <SectionFade key="v6-chart" staggerIndex={0}>
@@ -903,6 +891,18 @@ export default function JudgmentDetail({
                 )}
                 {selectedTicker && plan === 'premium' && (
                   <PriceLadder ticker={selectedTicker} />
+                )}
+                {/* buyq: mockup L4「ブレイクアウト強度（参考）」行。静的・§38-safe（参考/目安、行動指示なし）。*/}
+                {selectedTicker && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 'var(--space-3, 12px)', fontSize: 12.5, color: 'var(--text-secondary)', paddingTop: 2,
+                  }}>
+                    <span>ブレイクアウト強度（参考）</span>
+                    <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                      O'Neil 基準: ブレイク時 出来高 +40% 以上が目安
+                    </span>
+                  </div>
                 )}
                 {/* 期間別リターン（Sprint 2-B: L0/一等地から L4 へ降格・mockup L4 準拠）。
                     ReturnGrid は usePeriodReturns 内蔵で親 data 配線不要。splitByTerm で短期/長期 2 段。*/}

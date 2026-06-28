@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import Card from '../../primitives/Card.jsx';
 import { Star } from 'lucide-react';
 
@@ -10,6 +10,7 @@ const WATCH_BURST_DIRS = [
 import Chip from '../../../../components/ui/Chip.jsx';
 import EarningsRing from '../../../../components/EarningsRing.jsx';
 import CompanyLogo from '../../../../components/CompanyLogo.jsx';
+import { usePeriodReturns } from '../../../../hooks/usePeriodReturns.js';
 
 // v86 R4 #3: 補助情報 chip スタイル (Hero 中央密度 anchor、 tabular-nums)
 const heroFactChipStyle = {
@@ -55,6 +56,10 @@ export default function Hero({
   period,
   nextEarningsDays,
   nextEarningsDate,
+  // v6 L0 mockup id-price: 同定層の右に株価列 (価格 / 前日比 / 1W·1M)。
+  //   price/changePct は detail 由来、1W/1M は usePeriodReturns (ReturnGrid と同 source)。§38: 事実数値のみ。
+  price,
+  changePct,
   frameless = false,
   /**
    * v99 dogfood feedback ① / ③ (3 体合議):
@@ -84,6 +89,14 @@ export default function Hero({
   onAddToWatchlist,
 }) {
   const inWatchlist = Array.isArray(watchlist) && !!ticker && watchlist.includes(ticker);
+  // v6 L0 mockup id-price: 1W/1M リターン (usePeriodReturns・ReturnGrid と同 endpoint・return_pct は % 単位)。
+  const { data: periodReturns } = usePeriodReturns(ticker);
+  const ret1W = periodReturns?.periods?.['1W']?.return_pct;
+  const ret1M = periodReturns?.periods?.['1M']?.return_pct;
+  const priceNum = price != null ? Number(price) : NaN;
+  const changeNum = changePct != null ? Number(changePct) : NaN;
+  const retColor = (r) => (r > 0 ? 'var(--color-gain)' : r < 0 ? 'var(--color-loss)' : 'var(--text-muted)');
+  const fmtRet = (r) => `${r > 0 ? '+' : ''}${r.toFixed(2)}%`;
   // 2026-06-14 user feedback: 登録時の burst 演出 (追加方向のみ発火、解除では出さない)。一度きり 650ms。
   const [watchBurst, setWatchBurst] = useState(false);
   const handleWatchClick = () => {
@@ -229,6 +242,26 @@ export default function Hero({
             v115 fix: Number.isFinite() gate を除去、 EarningsRing 内部で 'unknown' state を扱う
             (data 未取得時に「取得待ち」 fallback 表示で「壊れて見える」 bug 対策) */}
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3, 12px)' }}>
+          {/* v6 L0 mockup id-price: 株価列 (右寄せ・価格 / 前日比 / 1W·1M)。価格は「同定」= verdict 扱いを外す。*/}
+          {Number.isFinite(priceNum) && (
+            <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-end' }}>
+              <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)', lineHeight: 1.1 }}>
+                ${priceNum.toFixed(2)}
+              </div>
+              {Number.isFinite(changeNum) && (
+                <div style={{ fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: retColor(changeNum) }}>
+                  {changeNum > 0 ? '+' : ''}{(changeNum * 100).toFixed(2)}%
+                </div>
+              )}
+              {(Number.isFinite(ret1W) || Number.isFinite(ret1M)) && (
+                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+                  {Number.isFinite(ret1W) && (<>1W <span style={{ color: retColor(ret1W) }}>{fmtRet(ret1W)}</span></>)}
+                  {Number.isFinite(ret1W) && Number.isFinite(ret1M) && ' · '}
+                  {Number.isFinite(ret1M) && (<>1M <span style={{ color: retColor(ret1M) }}>{fmtRet(ret1M)}</span></>)}
+                </div>
+              )}
+            </div>
+          )}
           {!hideEarningsRing && (
             <EarningsRing
               daysToEarnings={nextEarningsDays}
