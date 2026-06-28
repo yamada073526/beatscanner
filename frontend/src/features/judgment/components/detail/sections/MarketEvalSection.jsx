@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react';
 import AnalystPanel from '../../../../../components/AnalystPanel.jsx';
 import InsightsPanel from '../../../../../components/InsightsPanel.jsx';
 import { AccordionSection } from '../../../primitives/index.js';
+import { fetchAnalyst } from '../../../../../api.js';
 
 /**
  * L6「その他」fold 群の先頭 2 fold = アナリスト視点 / 市場の声。
@@ -12,7 +14,13 @@ import { AccordionSection } from '../../../primitives/index.js';
  *   - QuarterlyHistory fold (章①の ChapterTabs に統合済で重複) → 撤去
  *   - isV2 / isV3 / isV5 / isScrollV1 分岐 → 撤去 (revert flag は v6 default ON 昇格済で formality)
  * を物理削除。AnalystPanel の hover halo wiring (analystHaloTriggerRef) は維持。
+ *
+ * v294 f-sum: 折りたたみ時も mockup の f-sum を出す。アナリスト視点は目標株価/件数を動的表示
+ * (fetchAnalyst は @no-llm・prefetch 済 cache hit、collapsed summary は非LLM source のみ可
+ *  = feedback_accordion_collapsed_unmount)。市場の声は LLM source のため静的説明文に留める。
  */
+const fmtTargetUsd = (v) => (Number.isFinite(v) ? `$${v.toFixed(0)}` : null);
+
 export default function MarketEvalSection({
   selectedTicker,
   plan,
@@ -22,6 +30,33 @@ export default function MarketEvalSection({
   analystHaloTriggerRef,
   haloFiredSetRef,
 }) {
+  // アナリスト視点 fold の collapsed summary (mockup「目標 $305 · n=37」)。
+  const [analystSummary, setAnalystSummary] = useState(null);
+  useEffect(() => {
+    if (!selectedTicker) {
+      setAnalystSummary(null);
+      return;
+    }
+    let cancelled = false;
+    fetchAnalyst(selectedTicker)
+      .then((d) => {
+        if (cancelled || !d) return;
+        const tr = d.precomputed_metrics?.target_range || {};
+        const target = fmtTargetUsd(Number.isFinite(tr.median) ? tr.median : tr.mean);
+        const n = d.signal_quality?.consensus_count;
+        const parts = [];
+        if (target) parts.push(`目標 ${target}`);
+        if (Number.isFinite(n) && n > 0) parts.push(`n=${n}`);
+        setAnalystSummary(parts.length ? parts.join(' · ') : null);
+      })
+      .catch(() => {
+        if (!cancelled) setAnalystSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTicker]);
+
   if (!selectedTicker) return null;
   return (
     <>
@@ -31,6 +66,7 @@ export default function MarketEvalSection({
         title="アナリスト視点"
         tier={2}
         defaultOpen={false}
+        summary={analystSummary}
         controlledOpen={expandedSections.has('analyst-panel') || undefined}
         onOpenChange={(id, isOpen) => {
           if (isOpen && !haloFiredSetRef.current.has('analyst-panel')) {
@@ -53,6 +89,7 @@ export default function MarketEvalSection({
         title="市場の声"
         tier={2}
         defaultOpen={false}
+        summary="直近ニュースの論点要約"
         controlledOpen={expandedSections.has('insights') || undefined}
       >
         <InsightsPanel

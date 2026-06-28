@@ -27,6 +27,7 @@ export default function ContextSection({
       title="ニュース · IR · 10-K"
       tier={2}
       defaultOpen={false}
+      summary="一次ソースへのリンク"
       controlledOpen={expandedSections.has('references') || undefined}
     >
       <div

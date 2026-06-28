@@ -877,6 +877,7 @@ export default function JudgmentDetail({
                     label="PRO"
                     tier={2}
                     defaultOpen={false}
+                    summary="発表翌日の株価変化"
                   >
                     <PremiumLock
                       feature="earnings_8q"
@@ -896,6 +897,7 @@ export default function JudgmentDetail({
                     title="Insider 取引"
                     tier={2}
                     defaultOpen={false}
+                    summary="直近 90 日の売買"
                     controlledOpen={expandedSections.has('insider') || undefined}
                   >
                     <InsiderPanel ticker={selectedTicker} l3Headings />
