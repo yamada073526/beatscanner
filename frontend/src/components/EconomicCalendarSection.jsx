@@ -209,7 +209,6 @@ function compareActualVsEstimate(event) {
 
 function EventRow({ event, isHighest }) {
   const colors = getImpactColors(event.impact);
-  const dateStr = formatJST(event.date);
   const countdown = getCountdown(event.date);
   const country = COUNTRY_LABEL[event.country] || event.country;
   const isPast = countdown && countdown.includes('発表済');
