@@ -10,18 +10,6 @@ const PERIODS = [
   { key: '1y', label: '1Y' },
 ];
 
-function fmtUSD(n) {
-  if (!Number.isFinite(n)) return '—';
-  const abs = Math.abs(n);
-  if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (abs >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
-  return `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
-}
-function fmtSignedUSD(n) {
-  if (!Number.isFinite(n)) return '—';
-  const sign = n > 0 ? '+' : (n < 0 ? '-' : '');
-  return `${sign}${fmtUSD(Math.abs(n))}`;
-}
 function fmtSignedPct(n) {
   if (!Number.isFinite(n)) return '—';
   const sign = n > 0 ? '+' : '';
