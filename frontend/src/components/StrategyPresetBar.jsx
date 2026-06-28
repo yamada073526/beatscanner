@@ -18,7 +18,7 @@
  *               件数を出さず 🔒 表示にする (SPEC_2026-06-25 §4.2.2: 非 Premium に
  *               「0 銘柄」を見せない Trust Cliff 対応。masked universe で 0 と出る誤読を防ぐ)。
  */
-import { BadgeCheck, TrendingUp, LayoutGrid, Crown, Moon, Lock } from 'lucide-react';
+import { BadgeCheck, TrendingUp, LayoutGrid, Crown, Moon, Sunrise, Lock } from 'lucide-react';
 
 // カードはプラン昇順 (Free→Pro→Premium) で並べ「重要度＝上位プランほど右」を視覚化 (user 確定 2026-06-28)。
 //   STRATEGY_PRESETS の物理順 (= 件数算出 / 他 consumer の SSOT) は不変のまま、表示時にのみ並べ替える
@@ -77,6 +77,21 @@ export const STRATEGY_PRESETS = [
     tier: 'prem',
     tierLabel: 'Premium',
   },
+  {
+    // 市場をリードし始めた銘柄 (SPEC_2026-06-28 market_leading)。個別の相対力が市場(SPY)を上回り始めた中位帯の
+    //   銘柄を 1 クリックで一覧化。tier=Premium だが countFree=true (件数 Free / 詳細 Premium の freemium 分割・
+    //   user 決定③)。件数は masked facet 非依存 (rs/vs_spy/ocf/roe/eps/beat は全 free) で free でも真値が出るため
+    //   isLocked 除外で件数を見せ集客フックにする (詳細=銘柄リストは CustomScreenerPanel が Premium gate)。
+    //   §38: title/desc は「相対力が市場を上回り始めた / 直近決算ビート」(観測事実) のみ・将来上昇の断定なし・緑不使用。
+    key: 'market_leading',
+    label: '市場をリードし始めた銘柄',
+    title: '相対力が市場（SPY）を上回り始めた中位帯の銘柄。直近決算ビートで、キャッシュ創出力と利益成長の質を伴う。',
+    desc: '相対力が市場（SPY）を上回り始めた、直近決算ビートの銘柄',
+    Icon: Sunrise,
+    tier: 'prem',
+    tierLabel: 'Premium',
+    countFree: true, // 件数 Free (集客フック)。tier=prem でも件数を隠さない (masked 非依存で真値)。
+  },
 ];
 
 export default function StrategyPresetBar({ active = null, onSelect, counts = {}, isPremiumUser = true }) {
@@ -89,12 +104,14 @@ export default function StrategyPresetBar({ active = null, onSelect, counts = {}
     >
       {[...STRATEGY_PRESETS]
         .sort((a, b) => TIER_ORDER[a.tier] - TIER_ORDER[b.tier])
-        .map(({ key, label, title, desc, Icon, tier, tierLabel }) => {
+        .map(({ key, label, title, desc, Icon, tier, tierLabel, countFree }) => {
         const isSelected = active === key;
         const count = counts[key];
         // SPEC_2026-06-25 §4.2.2: Premium 限定 preset を非 Premium が見る場合、masked universe で
         //   count=0 になり「0 銘柄＝価値ゼロ」と誤読される (Trust Cliff・訴求毀損)。0 を出さず 🔒 表示。
-        const isLocked = tier === 'prem' && !isPremiumUser;
+        // S4 market_leading: countFree=true は件数が masked facet 非依存で free でも真値が出る (件数 Free の集客
+        //   フック)。詳細=銘柄リストのみ Premium gate (CustomScreenerPanel) のため、tile 件数は隠さない。
+        const isLocked = tier === 'prem' && !isPremiumUser && !countFree;
         return (
           <button
             key={key}

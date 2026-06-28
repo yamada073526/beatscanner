@@ -107,14 +107,63 @@ export const BUY_ZONE_G_FACET = {
   unit: '%', delta: false, tier: 'premium', category: 'timing',
   grades: { strict: 5 }, // 厳のみ適用 (pivot 0〜+5%)。閾値は pass で range 判定するため lvl は無視。
 };
+// ─── 「市場をリードし始めた銘柄」preset 専用 facet (SPEC_2026-06-28 screener-market-leading) ──
+// 個別の相対力が市場(SPY)を上回り始めた「中位帯の出遅れ回復株」を拾う。既存カラムのみ・追加 migration 不要。
+// 4 facet は新 field (rs_vs_spy_pct) or 既存 field の別 key (件数 SSOT 無影響・quiet_quality の volume_quiet と同パターン)。
+// ★ FUNDA_FACETS には入れない: 汎用 activeFacets grade 行 / facetLevelCounts への誤露出回避
+//   (NEW_HIGH_SIGNAL_FACET と同型・renderCrow の market_leading 限定 guard で描画)。FACET_MAP には含める
+//   (buildActiveGrades の clampLevel(FACET_MAP[k]) が要る)。
+// §38: 全て観測事実の閾値 (対SPY超過/相対力帯/利益率/成長率)、色 polarity なし・将来断定なし。
+export const VS_SPY_FACET = {
+  key: 'vs_spy',
+  field: 'rs_vs_spy_pct',
+  label: '対SPY超過 (6ヶ月)',
+  labelShort: '対SPY',
+  tooltip: '直近6ヶ月のリターンが S&P500 (SPY) を上回った幅 (ポイント)。プラス = 市場平均より強い値動き。',
+  unit: 'pt', tier: 'free', category: 'timing', delta: false,
+  // 精度連動 (auto): 緩≥5 / 標≥8。厳・最厳は clampLevel で standard(8) に寄る (vs_spy は標準以降締めず他軸で絞る)。
+  //   2 段定義で mseg に「標=厳=最厳が同値」の冗長セグメントを出さない (件数は clamp で 5/8/8/8 と不変)。
+  grades: { loose: 5, standard: 8 },
+};
+export const RS_MID_BAND_FACET = {
+  key: 'rs_mid_band',
+  field: 'rs_percentile',
+  label: '相対力 中位帯',
+  labelShort: 'RS中位',
+  tooltip: '相対力 (RS) が中位帯 (下限〜75)。既に高RSの完成株でなく、市場を上回り始めた出遅れ回復株を拾う帯。',
+  unit: '', tier: 'free', category: 'timing', delta: false,
+  bandMax: 75, // 上限固定。pass で範囲判定 (下限は精度連動 grades)。renderCrow は band を custom 描画。
+  // 下限: 緩45 / 標55。厳・最厳は clampLevel で standard(55) に寄る (件数は clamp で 45/55/55/55 と不変)。
+  grades: { loose: 45, standard: 55 },
+};
+export const ROE_LENIENT_FACET = {
+  key: 'roe_lenient',
+  field: 'roe',
+  label: 'ROE',
+  labelShort: 'ROE',
+  tooltip: '自己資本利益率 (ROE)。自社株買いで株主資本がマイナスの銘柄はデータなしとなり、この条件では許容します。',
+  unit: '%', tier: 'free', category: 'quality', delta: false,
+  allowNull: true, // ROE null (株主資本マイナス) を AND 除外しない (MAR/HLT 救済・null許容必須)。
+  grades: { loose: 10, standard: 15, strict: 20 }, // 緩標≥10 / 厳≥15 / 最厳≥20
+};
+export const EPS_YOY_MID_FACET = {
+  key: 'eps_yoy_mid',
+  field: 'eps_yoy_pct',
+  label: 'EPS成長(四半期)',
+  labelShort: 'EPS↑',
+  tooltip: '直近四半期の 1 株利益 (EPS) の前年同期比成長率。',
+  unit: '%', tier: 'free', category: 'quality', delta: true,
+  grades: { loose: 10, standard: 15 }, // 緩標≥10 / 厳最厳≥15 (object マッピングで段階解決)
+};
 export const FACET_MAP = Object.fromEntries(
-  [...FUNDA_FACETS, NEW_HIGH_SIGNAL_FACET, BUY_ZONE_G_FACET].map((f) => [f.key, f])
+  [...FUNDA_FACETS, NEW_HIGH_SIGNAL_FACET, BUY_ZONE_G_FACET,
+   VS_SPY_FACET, RS_MID_BAND_FACET, ROE_LENIENT_FACET, EPS_YOY_MID_FACET].map((f) => [f.key, f])
 );
 // preset の CORE 4 metric。volume/inst_holders は preset off、override で追加 (Pass 3c)。
 export const PRESET_CORE_KEYS = ['eps_yoy_pct', 'eps_cagr_3y', 'roe', 'rs_percentile'];
 export const PRESET_LABELS = { loose: '緩い', standard: '標準', strict: '厳しい', severe: '最厳' };
 // 「絞り込み条件」見出しの動的サマリー用 preset 日本語名 (StrategyPresetBar STRATEGY_PRESETS と一致)。
-export const PRESET_LABEL_JP = { earnings_pass: '決算合格', new_high_break: '新高値ブレイク', hot_sector: '旬のセクター', sector_leader: 'セクター別リーダー', quiet_quality: '静かな強さ' };
+export const PRESET_LABEL_JP = { earnings_pass: '決算合格', new_high_break: '新高値ブレイク', hot_sector: '旬のセクター', sector_leader: 'セクター別リーダー', quiet_quality: '静かな強さ', market_leading: '市場をリードし始めた銘柄' };
 // 個別緩急 mini-segment 用の短縮ラベル (幅節約・原則1)。
 export const GRADE_LABELS_SHORT = { floor: '床', loose: '緩', standard: '標', strict: '厳', severe: '最厳' };
 // grade の強弱順 (clamp / 並び順の SSOT)。
@@ -275,6 +324,10 @@ export const SEASON_LABEL = {
   // 逆張り「静かな強さ」(SPEC_2026-06-28 §10 Sprint3)。RS≥(床) × 出来高静か≤ × 機関殺到なし≤ × 利益の質≥ の
   //   4 軸を中立フレームで描写。決算非依存・常時のため neutral (gray)。§38: 「お宝/割安/上がる」断定なし。
   quiet_quality:  { text: '対象: RS上位 × 出来高が静か × 機関未殺到 × 利益の質', neutral: true },
+  // 市場をリードし始めた銘柄 (SPEC_2026-06-28 market_leading): 個別の相対力が市場(SPY)を上回り始めた中位帯の
+  //   出遅れ回復株。決算非依存でなく「直近決算ビート」を gate に持つが、シーズン窓に依存しない常時 preset のため
+  //   neutral (gray)。§38: 「対SPY超過 / 中位帯 / 決算ビート」は全て観測事実、将来上昇の断定・示唆なし。
+  market_leading: { text: '対象: 対SPY超過 × 相対力 中位帯 × 直近決算ビート', neutral: true },
 };
 export const PRESET_CONDS = [
   // ── grade 条件 (精度連動・activeGrades 経由) ──
@@ -325,6 +378,15 @@ export const PRESET_CONDS = [
   // buy_zone_g: pivot_distance_pct 0〜+5% (買い場圏)。grades={strict:5} = 厳段のみ activeGrades に算入。
   //   lvl は range 判定のため無視。null (cup 未形成 / Premium マスク) = AND 除外 (honest)。
   { key: 'buy_zone_g',       kind: 'grade',  facet: BUY_ZONE_G_FACET,      pass: (item) => { const d = item.pivot_distance_pct; return d != null && d >= 0 && d <= 5; } },
+  // ── 「市場をリードし始めた銘柄」(market_leading) 専用 grade 条件 (SPEC_2026-06-28) ──
+  //   vs_spy / eps_yoy_mid は generic ≥ (gradePass)。null = AND 除外 (honest)。
+  { key: 'vs_spy',           kind: 'grade',  facet: FACET_MAP.vs_spy,       pass: (item, lvl) => gradePass(FACET_MAP.vs_spy, item, lvl) },
+  { key: 'eps_yoy_mid',      kind: 'grade',  facet: FACET_MAP.eps_yoy_mid,  pass: (item, lvl) => gradePass(FACET_MAP.eps_yoy_mid, item, lvl) },
+  // rs_mid_band: 範囲 [下限(精度連動), 75]。下限は grades[lvl]、上限は bandMax 固定。null = AND 除外。
+  //   gradeAnnot (≥型) では上限75 が隠れフィルタ化するため renderCrow は band を custom 描画 (Trust Cliff)。
+  { key: 'rs_mid_band',      kind: 'grade',  facet: FACET_MAP.rs_mid_band,  pass: (item, lvl) => { const v = item.rs_percentile; const lo = FACET_MAP.rs_mid_band.grades[lvl]; return v != null && lo != null && v >= lo && v <= FACET_MAP.rs_mid_band.bandMax; } },
+  // roe_lenient: ROE null 許容 (株主資本マイナス銘柄 = MAR/HLT を AND 除外しない)。null → pass、値あり → ≥ 閾値。
+  { key: 'roe_lenient',      kind: 'grade',  facet: FACET_MAP.roe_lenient,  pass: (item, lvl) => { const v = item.roe; if (v == null) return true; const thr = FACET_MAP.roe_lenient.grades[lvl]; return thr == null || v >= thr; } },
 ];
 export const COND_MAP = Object.fromEntries(PRESET_CONDS.map((c) => [c.key, c]));
 // binary/flag 条件のみ (extra フラグ経由で AND・itemPasses が走査)。grade は activeGrades 経由で別ループ。
@@ -383,7 +445,9 @@ export const CROW_BINARY_META = {
   sector_leader:    { label: 'セクター内で相対力トップ', th: '上位3位', freshness: 'rs', tooltip: '所属セクター内で相対力 (RS) が上位 3 位以内（有効 5 銘柄以上のセクターのみ判定）。「セクター別リーダー」戦略の定義条件。' },
 };
 export const CROW_LAYOUT = [
-  { group: '品質',       sub: '利益・キャッシュの質', keys: ['funda_pass', 'ocf_margin_pct', 'ocf_gt_netincome', 'eps_yoy_pct', 'eps_cagr_3y', 'roe'] },
+  // eps_yoy_mid / roe_lenient は market_leading 専用 (renderCrow が market_leading 限定で描画・他 preset 非露出)。
+  //   ≥型 eps_yoy_pct / null除外 roe と field 共有・別 key (件数 SSOT 無影響)。RENDERABLE 要件で本 layout に登録。
+  { group: '品質',       sub: '利益・キャッシュの質', keys: ['funda_pass', 'ocf_margin_pct', 'ocf_gt_netincome', 'eps_yoy_pct', 'eps_yoy_mid', 'eps_cagr_3y', 'roe', 'roe_lenient'] },
   // beat/cfps Phase 2: 決算の継続性 trio を grade 条件と視覚分離 (精度スライダー非連動の binary トグル)。
   { group: '品質',       sub: '決算の継続性（連続増）', keys: ['eps_3y_rising', 'rev_3y_rising', 'cfps_3y_rising'] },
   // beat/cfps Phase 2 (Sprint 3): 直近決算ビート。new_high_break で gate「必須」描画 (PRESET_GATE_CONDS)。
@@ -394,7 +458,8 @@ export const CROW_LAYOUT = [
   // volume_quiet (出来高 静か ≤) は逆張り「静かな強さ」(quiet_quality) 専用。renderCrow が
   //   activePreset!=='quiet_quality' で null を返すため、他 preset / custom mode には露出しない
   //   (≥型 volume_surge_pct と ≤型が並ぶ矛盾を構造的に回避・Trust Cliff)。RS の直後に置き RS→出来高静か の順。
-  { group: 'タイミング', sub: '値動き・勢い',         keys: ['new_high_signal', 'buy_zone_g', 'buy_zone', 'new_high_52w', 'cup', 'rs_percentile', 'sector_leader', 'volume_surge_pct', 'volume_quiet'] },
+  // rs_mid_band (範囲帯・custom 描画) / vs_spy (≥) は market_leading 専用 (renderCrow guard で他 preset 非露出)。
+  { group: 'タイミング', sub: '値動き・勢い',         keys: ['new_high_signal', 'buy_zone_g', 'buy_zone', 'new_high_52w', 'cup', 'rs_percentile', 'rs_mid_band', 'vs_spy', 'sector_leader', 'volume_surge_pct', 'volume_quiet'] },
   // inst_qoq_calm (機関 殺到なし ≤) も quiet_quality 専用 (renderCrow guard 同上)。≥型 inst_holders_qoq_pct と非並置。
   { group: '需給',       sub: '機関の動き',           keys: ['ad_volume', 'inst_holders_qoq_pct', 'inst_qoq_calm'] },
 ];
@@ -442,6 +507,9 @@ export const PRESET_DISPLAY_CONDS = {
   //   1:1 で隠れフィルタなし (invariant: applied ⊆ display)。volume_quiet/inst_qoq_calm は CROW_LAYOUT に
   //   追加済 = RENDERABLE (renderCrow が quiet_quality 限定で描画)。
   quiet_quality:  ['rs_percentile', 'volume_quiet', 'inst_qoq_calm', 'ocf_margin_pct', 'roe'],
+  // 市場をリードし始めた銘柄 (SPEC_2026-06-28 market_leading): 述語適用6条件と 1:1 (隠れフィルタなし invariant)。
+  //   rs_mid_band(範囲 gate 相当・必須) + vs_spy + ocf_margin_pct + roe_lenient + eps_yoy_mid (grades) + latest_beat (beatOnly gate)。
+  market_leading: ['rs_mid_band', 'vs_spy', 'ocf_margin_pct', 'roe_lenient', 'eps_yoy_mid', 'latest_beat'],
 };
 
 // ─── D-8 sort (SPEC_2026-06-25): 結果リストのユーザー制御 sort ──────────────────────
@@ -456,6 +524,7 @@ export const PRESET_METRIC_KEY = {
   earnings_pass: 'eps_yoy_pct',
   new_high_break: 'pivot_distance_pct',
   sector_leader: 'ocf_margin_pct',
+  market_leading: 'rs_vs_spy_pct', // 主要指標 = 対SPY超過 (6ヶ月) の降順
 };
 
 // sortRows: filteredItems を sortKey で並べ替える純関数 (集合不変・順序のみ = Trust Cliff C-2)。
@@ -509,6 +578,7 @@ export const PRESET_GATE_CONDS = {
   earnings_pass: ['ocf_gt_netincome'], // S2 P1-a: ocf_margin は grade 化で gate から外れた (精度連動 crow)
   sector_leader: ['sector_leader', 'inst_holders_qoq_pct'], // S3 P1-b: 定義条件(RSトップ) + 機関保有増(QoQ≥0) を南京錠「必須」化 / ocf_margin は grade
   new_high_break: ['latest_beat'],                       // beat populate 済 (Sprint 1)・PRESET_PREDICATES + applyStrategyImpl で常時 ON = 件数算入
+  market_leading: ['latest_beat'],                       // 直近決算ビートを南京錠「必須」(beatOnly 常時 ON = 件数算入)。rs_mid_band は custom 描画 gate のため非登録
 };
 
 // ─── 合否理由 静的dict (§38安全・LLM不使用・STATE_LABEL_JP 方式) ────────────────
@@ -649,7 +719,24 @@ export const PRESET_PREDICATES = {
   //   標準 = RS≥70 × 出来高静か≤20 × 機関殺到なし≤20 × CF創出力≥15 × ROE≥17 = 28件 (universe 2552 で検証)。
   //   gate なし (mockup p5 は全条件トグル可)。count==list は buildActiveGrades+itemPasses で構造保証。
   quiet_quality:  { grades: { rs_percentile: 'loose', volume_quiet: 'auto', inst_qoq_calm: 'auto', ocf_margin_pct: { loose: 'loose', standard: 'standard', strict: 'standard' }, roe: 'loose' }, extra: {} },
+  // 市場をリードし始めた銘柄 (SPEC_2026-06-28 market_leading・件数 gate1 確定 2026-06-28 = 緩75/標59/厳38/最厳28):
+  //   個別の相対力が市場(SPY)を上回り始めた中位帯の出遅れ回復株。精度 4 段 (緩/標/厳/最厳) — 本 preset のみ最厳を持つ
+  //   (PRESET_PRECISION_LEVELS)。本番 universe 2553 で実測 (≥規約・rs_vs_spy_pct/rs_percentile/ocf/roe/eps_yoy/latest_beat)。
+  //   rs_mid_band: 範囲 [下限45/55, 75] (上限固定・下限のみ精度連動)。vs_spy: ≥5/8/8/8。
+  //   ocf_margin_pct: 既存 facet の loose(≥10) を全精度固定 (標準15 だと MAR/HLT 脱落を実測)。
+  //   roe_lenient: ≥10/10/15/20 (null 許容・厳最厳で締める)。eps_yoy_mid: ≥10/10/15/15。
+  //   gate = 直近決算ビート (beatOnly・PRESET_GATE_CONDS)。default 精度 = standard(59)。
+  //   ※ object マッピングで最厳(severe)に独自閾値を与える (roe_lenient severe='strict'=20 が最厳の絞りレバー)。
+  market_leading: { grades: { rs_mid_band: 'auto', vs_spy: 'auto', ocf_margin_pct: 'loose', roe_lenient: { loose: 'loose', standard: 'loose', strict: 'standard', severe: 'strict' }, eps_yoy_mid: { loose: 'loose', standard: 'loose', strict: 'standard', severe: 'standard' } }, extra: { beatOnly: true } },
 };
+
+// preset 別の精度段数 (S4 market_leading で 4 段目「最厳」を導入)。未登録は 3 段 (緩/標/厳)。
+//   ★ 既存 5 preset は 3 段のまま不変 (精度セグメント / presetCounts の UI 段数を preset 毎に切替)。
+//   GRADE_ORDER は元から severe を含み facetLevels/clampLevel が対応済 = 段数だけを per-preset で可変化する。
+export const PRESET_PRECISION_LEVELS = { market_leading: ['loose', 'standard', 'strict', 'severe'] };
+export function presetPrecisionLevels(presetKey) {
+  return PRESET_PRECISION_LEVELS[presetKey] || ['loose', 'standard', 'strict'];
+}
 
 // preset 別 default 精度 (S3 P1-b)。未登録は 'standard'。sector_leader は AUDIT L99「default 緩で件数多め」+
 //   roe/ocf が緩段=非適用のため、緩 default で健全件数を出す。countPreset(tile) と applyStrategyImpl(list) の

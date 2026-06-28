@@ -14861,13 +14861,13 @@ body.is-digest-resizing {
    border-bottom で content 側と区切り (toolbar 直下の呼吸は上部 border-bottom が担う)。
    v8 mockup 承認済: 角丸タイル UI への昇格。タイルを横並びに配置。 */
 .screener-strategy-bar {
-  /* mockup v8 §.presets: 5 列グリッド、gap = space-3 (12px)。
-     Sprint3 (quiet_quality「静かな強さ」) で第5カード追加 → repeat(4) では折り返すため 5 列化
-     (正本 mockup screener-quiet-quality-v1.html .presets と一致)。minmax(0,1fr) で長文 desc の
-     min-content overflow を抑止し列幅を均等保持。≤680px は 2 列 / ≤420px は 1 列に逓減 (下記 media)。 */
+  /* mockup v8 §.presets: グリッド、gap = space-3 (12px)。
+     Sprint3 (quiet_quality) で第5カード追加し 5 列化。S4 (market_leading「市場をリードし始めた銘柄」) で
+     第6カード追加 → 6 枚を 3 列 × 2 行 (3×2) に再編 (5 列だと 6 枚目が 5+1 で割れるため・user 確定 2026-06-28)。
+     minmax(0,1fr) で長文 desc の min-content overflow を抑止し列幅を均等保持。≤680px は 2 列 / ≤420px は 1 列に逓減 (下記 media)。 */
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border);
