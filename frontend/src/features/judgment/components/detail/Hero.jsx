@@ -13,21 +13,24 @@ import CompanyLogo from '../../../../components/CompanyLogo.jsx';
 import { usePeriodReturns } from '../../../../hooks/usePeriodReturns.js';
 
 // v86 R4 #3: 補助情報 chip スタイル (Hero 中央密度 anchor、 tabular-nums)
+// 視覚 fidelity (2026-06-28): 正本 mockup id-row .pill-meta に合わせ 11.5px / padding 3×10 / 丸 pill (radius-pill)。
 const heroFactChipStyle = {
-  fontSize: 11,
+  fontSize: 11.5,
   fontWeight: 500,
   color: 'var(--text-secondary)',
   background: 'var(--bg-subtle)',
   border: '1px solid var(--border)',
-  borderRadius: 'var(--radius-sm, 6px)',
-  padding: '3px 8px',
+  borderRadius: 'var(--radius-pill, 9999px)',
+  padding: '3px 10px',
   fontVariantNumeric: 'tabular-nums',
   whiteSpace: 'nowrap',
 };
-const heroFactChipAccent = {
+// 視覚 fidelity (2026-06-28): mockup .pill-countdown = amber (次決算カウントダウン)。
+//   §38: 決算までの日数は事実 (時間情報) であり買い推奨でない。amber = 投資業界の「警告/注目」色 (CLAUDE.md)。
+const heroFactChipCountdown = {
   ...heroFactChipStyle,
-  color: 'var(--color-accent)',
-  borderColor: 'color-mix(in srgb, var(--color-accent) 35%, var(--border))',
+  color: 'var(--color-warning)',
+  borderColor: 'color-mix(in srgb, var(--color-warning) 30%, var(--border))',
   fontWeight: 600,
 };
 
@@ -96,8 +99,6 @@ export default function Hero({
    */
   hideEyebrow = false,
   hideCountdownChip = false,
-  // 2026-06-14 (D2 compass): 次回決算 date chip を非表示 (EarningsRing と重複解消、確認事項2)。
-  hideNextEarningsChip = false,
   // 2026-06-14 (D2 compass・第2手): 5条件由来の verdict チップ (Beat/Miss/判定待ち) を非表示。
   // 状態コンパスが本物の信号を持つため、冒頭の二値 verdict を撤去し Miss⇔Beat 矛盾を解消。
   hideVerdictChip = false,
@@ -176,20 +177,15 @@ export default function Hero({
         }}
       >
         {/* ticker 左側: ロゴ + テキスト情報 */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3, 12px)', minWidth: 0, flex: 1 }}>
-          {/* Sprint 2: 企業ロゴ (48px / 角丸 / neutral gray fallback / fade-in 200ms)
-              fadeIn=true: logo load 時に opacity 0→1 / 200ms ease-out
-              monoFallback=true: fallback 頭文字円を neutral gray（投資業界色ルール遵守）
-              shape='rounded': border-radius = var(--radius-md, 12px) */}
-          {/* v99 dogfood feedback B (3 巡目): 旧 marginTop:4 でも user 体感「頭が高い」。
-              真因: h1 fontSize 40 + lineHeight 1.05 で line box 42px、 letter glyph は
-              line box top から ~3-5px 下、 cap height は ~28px (fontSize の 70%)。
-              logo top edge と letter cap top を揃えるには marginTop が 9-11px 必要。
-              修正: marginTop 9px で「ticker 文字の頭」 と「logo 上端」 を視覚的に揃える。 */}
-          <div style={{ flexShrink: 0, marginTop: 9 }}>
+        {/* 視覚 fidelity (2026-06-28): 正本 mockup .id-row は align-items:center (logo を name ブロック中央へ)。
+            旧 flex-start + marginTop:9 hack は ticker 40px 前提だったので撤去 (ticker 26px 化に伴い不要)。 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3, 12px)', minWidth: 0, flex: 1 }}>
+          {/* Sprint 2: 企業ロゴ。視覚 fidelity: mockup .logo は 52px 角丸13px (同定層の主役) なので 40→52px。
+              fadeIn=true / monoFallback=true (neutral gray・投資業界色ルール) / shape='rounded' (--radius-md)。 */}
+          <div style={{ flexShrink: 0 }}>
             <CompanyLogo
               ticker={ticker}
-              size={40}
+              size={52}
               shape="rounded"
               monoFallback
               fadeIn
@@ -211,35 +207,37 @@ export default function Hero({
             判定
           </div>
           )}
+          {/* 視覚 fidelity (2026-06-28): 正本 mockup .id-ticker は 26px/700/lh1/ls-0.01em (L0=同定行であり
+              hero 級 40px でない)。40px は旧「Hero」由来の legacy。v6 同定行に合わせ 26px へ。 */}
           <h1
             style={{
-              fontSize: 40,
+              fontSize: 26,
               fontWeight: 700,
-              letterSpacing: '-0.02em',
-              lineHeight: 1.05,
-              margin: '4px 0 4px',
+              letterSpacing: '-0.01em',
+              lineHeight: 1,
+              margin: '0 0 3px',
               color: 'var(--text-primary)',
             }}
           >
             {ticker}
           </h1>
-          {companyName && (
+          {(companyName || period) && (
             <div
               style={{
-                fontSize: 14,
-                fontWeight: 500,
+                // 視覚 fidelity (2026-06-28): mockup .id-company は 13px/400 で「社名 · FY期」を 1 行併記
+                //   (mockup「Apple Inc. · FY2025 Q3」)。FY を独立 pill から会社名行へ移動。
+                fontSize: 13,
+                fontWeight: 400,
                 color: 'var(--text-secondary)',
                 lineHeight: 1.3,
               }}
             >
-              {companyName}
+              {[companyName, period].filter(Boolean).join(' · ')}
             </div>
           )}
-          {/* v86 R4 #3: 補助情報行 — 中央空白帯を意味のある密度で埋める
-              (Vision Round 2,3 共通指摘「中央の AAPL と右側 D-XX リングの間に空白帯」 解消)
-              chip 形式で fact (期間 / セクター / 次回決算日 / D-XX) を並べる
-              v6 L0: セクター pill (mockup id-row「テクノロジー」) を同定 fact として period 隣に追加 */}
-          {(period || sectorJp || (nextEarningsDate && !hideNextEarningsChip) || (Number.isFinite(nextEarningsDays) && nextEarningsDays > 0 && !hideCountdownChip)) && (
+          {/* 視覚 fidelity (2026-06-28): mockup id-meta は pill 2個のみ = [次決算カウントダウン(amber)・セクター]。
+              FY は会社名行へ移動・「次回日付」pill は撤去 (mockup に無い・カウントダウンと冗長)。順序も mockup 準拠。 */}
+          {(sectorJp || (Number.isFinite(nextEarningsDays) && nextEarningsDays > 0 && !hideCountdownChip)) && (
             <div
               style={{
                 display: 'flex',
@@ -249,24 +247,13 @@ export default function Hero({
                 alignItems: 'center',
               }}
             >
-              {period && (
-                <span style={heroFactChipStyle}>{period}</span>
+              {/* 次決算カウントダウン (amber pill・mockup「次決算まで N 日」)。§38: 時間事実で買い推奨でない。 */}
+              {Number.isFinite(nextEarningsDays) && nextEarningsDays > 0 && !hideCountdownChip && (
+                <span style={heroFactChipCountdown}>次決算まで {nextEarningsDays} 日</span>
               )}
-              {/* v6 L0 mockup id-row セクター pill: neutral (§38 事実指標・緑/accent 不使用)。和訳済 (SECTOR_JP)。 */}
+              {/* セクター pill: neutral (§38 事実指標・緑/accent 不使用)。和訳済 (SECTOR_JP)。 */}
               {sectorJp && (
                 <span style={heroFactChipStyle} data-testid="pane3-hero-sector">{sectorJp}</span>
-              )}
-              {!hideNextEarningsChip && nextEarningsDate && (
-                <span style={heroFactChipStyle}>
-                  <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginRight: 4 }}>次回</span>
-                  {nextEarningsDate}
-                </span>
-              )}
-              {/* v99 dogfood feedback ③ (3 体合議): v2 mode では EarningsRing 隣に「次の決算まで D-XX」 が
-                  あり、 chip と二重表示で機関投資家 idiom 違反 (Bloomberg は同一 field を 1 箇所のみ表示)。
-                  v2 mode で chip 非表示、 default は維持。 */}
-              {Number.isFinite(nextEarningsDays) && nextEarningsDays > 0 && !hideCountdownChip && (
-                <span style={heroFactChipAccent}>D-{nextEarningsDays}</span>
               )}
             </div>
           )}
