@@ -57,6 +57,7 @@ export const SEGMENT_NAME_JP = {
   'Wearables Home And Accessories': 'ウェアラブル・周辺機器',
   'Wearables, Home and Accessories': 'ウェアラブル・周辺機器',
   'Services': 'サービス事業',
+  'Service': 'サービス',          // AAPL FMP は単数形 "Service" で返す (会社概要 fold / SegmentSection の英語落ちを解消)
   // GOOGL
   'Google Services': 'Google サービス',
   'Google Cloud': 'Google Cloud',
