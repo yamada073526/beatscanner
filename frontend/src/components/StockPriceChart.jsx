@@ -289,8 +289,8 @@ function EarningsTooltip({ active, payload, label, earningsMap, pillar2Markers, 
       if (Math.abs(pct) < 50) {
         const stopBroken = price < stop; // 現在価格 < stop = 8% trailing 下抜け中
         distLines.push(stopBroken
-          ? { label: '8%ライン 下抜け中', pct, arrow: '', color: 'var(--color-loss)', broken: true }
-          : { label: '損切り目安', pct, arrow: '↓', color: 'var(--color-loss)', broken: false });
+          ? { label: 'リスク確認ライン 下抜け中', pct, arrow: '', color: 'var(--color-loss)', broken: true }
+          : { label: 'リスク確認ライン', pct, arrow: '↓', color: 'var(--color-loss)', broken: false });
       }
     }
   }
@@ -1701,8 +1701,8 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                 )}
                 {/* v127 R16 (user dogfood): position 'left' + margin.left:0 で「8% stop」 の左半分が
                     クリップされ「top (高値比)」 に化けていた → 'insideTopLeft' で chart 内側に描画してクリップ解消。
-                    文言も「損切り -8%」 と明示 (上値抵抗線でなく、 直近高値比 -8% の下値 損切り目安)。
-                    v127 R16 色 (サブエージェント verdict): grey が gridline と同色で紛れる → 損切り=下値リスクなので
+                    文言は「リスク確認ライン -8%」 と明示 (上値抵抗線でなく、 直近高値比 -8% の下値・§38 中立語彙 SPEC §4)。
+                    v127 R16 色 (サブエージェント verdict): grey が gridline と同色で紛れる → -8% は下値リスクなので
                     color-loss (赤) に。50DMA+25% の赤 solid とは線種 (粗い "3 6" 点線)・位置 (株価より下) で区別。
                     線は opacity 0.45 で控えめ、 label は fontWeight 600 で gridline と差別化。 */}
                 {pillar2Markers.stop8 != null && (
@@ -1714,7 +1714,7 @@ function StockPriceChartInner({ ticker, isPremiumUser = false, onUpgrade, hideTi
                     strokeDasharray="3 6"
                     strokeOpacity={0.45}
                     label={{
-                      value: '損切り -8% (高値比)',
+                      value: 'リスク確認ライン -8% (高値比)',
                       fill: 'var(--color-loss)',
                       fontSize: 10,
                       fontWeight: 600,

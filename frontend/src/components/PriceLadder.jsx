@@ -312,7 +312,7 @@ export default function PriceLadder({ ticker }) {
       { key: 'sma200', label: '200日移動平均', price: sma200 },
       { key: 'support', label: supportLabel, price: support },
       { key: 'low52', label: '52週安値', price: low52 },
-      { key: 'stop', label: '損切り目安 (現在−8%)', price: stop },
+      { key: 'stop', label: 'リスク確認ライン (現在−8%)', price: stop },
     ].filter((l) => Number.isFinite(l.price));
     raw.sort((a, b) => b.price - a.price);
 
