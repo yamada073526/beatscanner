@@ -617,7 +617,8 @@ export default function JudgmentDetail({
                   (dogfood: data 未取得時「?/取得待ち」が壊れて見える + 同定層に判定 idiom が混入)。
                   同様に「判定」eyebrow も hideEyebrow={true} で除去 (mockup id-row は eyebrow 無し)。
                   次決算カウントダウンは D-XX pill (hideCountdownChip=false) のみで担保。 */}
-              <VerdictHero verdict="unknown">
+              {/* 2026-06-28 dogfood: hero(ticker) の hover/arrival glow を鎮静 (is-glow-calm)。 */}
+              <VerdictHero verdict="unknown" className="is-glow-calm">
                 <Hero
                   ticker={selectedTicker}
                   companyName={result?.companyName}

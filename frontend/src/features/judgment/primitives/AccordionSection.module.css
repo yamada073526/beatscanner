@@ -144,11 +144,12 @@
   opacity: 1;
 }
 
-/* ===== Title typography (SectionHeader mimic、import/継承禁止) ===== */
-/* design_system.md §B-2 Heading tier: 18px / fw500 / -0.015em / lh1.2 を踏襲 */
+/* ===== Title typography (fold 項目 = 章見出しに従属) ===== */
+/* 2026-06-28 dogfood: 旧 18px/fw500 は章見出し (17px/fw700) より大きく主従が逆転していた。
+   正本 mockup pane3-detail-v1.html の .f-title (14px / fw600) に合わせ、章配下の fold として従属させる。 */
 .title {
-  font-size: 18px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   letter-spacing: -0.015em;
   line-height: 1.2;
   color: var(--text-primary, #0f172a);

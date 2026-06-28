@@ -10020,6 +10020,44 @@ button.ds-chip.hero-watch-add:hover svg {
   border-color: var(--border) !important;
 }
 
+/* ── 2026-06-28 dogfood: 「冒頭ティッカー(hero)」 と「ファンダメンタル5条件 card」 の hover/arrival glow 鎮静 ──
+   user feedback「旧 UI 由来の hover に違和感、 除去したい」。 上記 KpiStrip 鎮静と同手法で、 この 2 枚を
+   hover/arrival で steady rest と同一表示に固定 (lift / cyan glow なし)。 他 content card のブランド glow hover は不変 (targeted)。
+   実測 (snap-pane3-glowcalm-preview の natural rest 比較): 5条件 = inner .bs-panel 側 / hero = .verdict-hero wrapper 側。
+   §C-3 許可用途 (!important):
+     - box-shadow: dark の .bs-panel.is-arriving:hover box-shadow が !important (line ~1285)。 非!important では負け
+       cyan glow が hover で残存するため、 shadow-1 を !important で固定する (snap で残存を実測・確認済)。
+     - border-color: is-arriving / :hover の border-color (rgba !important) を打ち消すため。
+     - border-top-color: 5条件 の steady rest は全 panel 共通の gold top border (line ~9843/9849、 light 35% / dark 30%) を持つ。
+       上の border-color: var(--border) で全辺 slate に潰れると hover で gold top が消える (= それ自体が hover 変化) ため、
+       longhand で steady rest の gold を復元し hover=rest を厳密一致させる。 */
+.bs-panel.is-glow-calm.is-arriving,
+.bs-panel.is-glow-calm.is-arriving:hover,
+.bs-panel.is-glow-calm:hover {
+  transform: none;
+  box-shadow: var(--shadow-1) !important;
+  border-color: var(--border) !important;
+  border-top-color: color-mix(in srgb, var(--color-gold) 35%, var(--border)) !important;
+  background-color: transparent !important;
+}
+[data-theme="dark"] .bs-panel.is-glow-calm.is-arriving,
+[data-theme="dark"] .bs-panel.is-glow-calm.is-arriving:hover,
+[data-theme="dark"] .bs-panel.is-glow-calm:hover {
+  transform: none;
+  box-shadow: var(--shadow-1) !important;
+  border-color: var(--border) !important;
+  border-top-color: color-mix(in srgb, var(--color-gold) 30%, var(--border)) !important;
+  background-color: transparent !important;
+}
+.ds-judgment-detail .verdict-hero.is-glow-calm.is-arriving,
+.ds-judgment-detail .verdict-hero.is-glow-calm.is-arriving:hover,
+.ds-judgment-detail .verdict-hero.is-glow-calm:hover {
+  transform: translateZ(0);
+  box-shadow: none !important;
+  border-color: transparent !important;
+  background-color: transparent !important;
+}
+
 /* ── 2026-06-14 user feedback: データ取得状況 (CompletenessRollupBadge) の控えめ化 + 展開アニメ ──
    user「ふだん気にしないので目立たないデザインで良い / 展開折りたたみアニメが欲しい」。
    toggle = 枠/bg なしの quiet link (hover でのみ薄く反応)。展開は grid-rows 0fr→1fr で内容高さ不問の smooth。 */
