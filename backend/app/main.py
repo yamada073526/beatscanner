@@ -14454,6 +14454,36 @@ def _sector_rs_standing_for(ticker: str) -> dict | None:
         return None
 
 
+def _sector_for(ticker: str) -> str | None:
+    """個別 detail L0 同定 pill 用: ticker の sector (GICS, 英語 raw) を返す。
+
+    L0 セクター pill (正本 mockup pane3-detail-v1.html id-row「テクノロジー」) の data 源。
+    _sector_rs_standing_for と同じ _UNIVERSE_FULL_CACHE (24h、scanner/universe warm 化・cron 維持) を
+    再利用 — migration なし / FMP call 増なし / LLM 非経由。leader 限定の standing と違い全銘柄に返す。
+    cache miss / universe 外 / sector 欠落 → None (捏造しない、frontend 非表示)。
+    EN→JP 和訳は frontend 表示層 (Hero.jsx SECTOR_JP) が担当 = data/presentation 分離。
+    """
+    try:
+        cached = _UNIVERSE_FULL_CACHE.get("3000")  # scanner default universe_size
+        if not cached and _UNIVERSE_FULL_CACHE:
+            cached = max(
+                _UNIVERSE_FULL_CACHE.values(),
+                key=lambda c: len((c.get("payload") or {}).get("items") or []),
+                default=None,
+            )
+        if not cached:
+            return None
+        items = ((cached.get("payload") or {}).get("items")) or []
+        tk = ticker.upper().strip()
+        for _it in items:
+            if (_it.get("ticker") or "").upper().strip() == tk:
+                _sec = _it.get("sector")
+                return _sec if _sec else None
+        return None
+    except Exception:
+        return None
+
+
 def _detect_dma_cross(
     times: list[str],
     sma_50: list[float | None],
@@ -14701,6 +14731,9 @@ async def get_technical(
                 # 2026-06-14 user feedback: IBD 式 universe_percentile (1-99) を併載 (rs_ratings batch)。
                 # SP500 外 / batch 未実行は None → frontend が対SPY% に fallback。
                 patterns_result["rs"]["universe_percentile"] = _universe_percentile_for(ticker_u)
+                # L0 同定 pill (正本 mockup id-row「テクノロジー」): ticker の sector (英語 raw) を全銘柄に注入。
+                # standing (leader 限定) と独立。cache miss / universe 外 → None = frontend 非表示。和訳は frontend。
+                patterns_result["rs"]["sector"] = _sector_for(ticker_u)
                 # Sprint 3b (SPEC_2026-06-28、Path B): sector 内 RS 相対位置 (母集団=screener universe cache)。
                 # leader (同 sector ≥10 銘柄中 RS 上位3位) のみ注入。非該当 / cache miss は欠落 = frontend 非表示。
                 _sector_standing = _sector_rs_standing_for(ticker_u)
