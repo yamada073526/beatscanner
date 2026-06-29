@@ -10058,6 +10058,31 @@ button.ds-chip.hero-watch-add:hover svg {
   background-color: transparent !important;
 }
 
+/* ── 2026-06-29 Sprint 2: 判定サマリー bucket/mini の clickable affordance (控えめ hover) ──
+   user dogfood: 「押せる箇所を色で区別したい」。bg/border を inline (bucketBaseStyle/miniStyle) から
+   本クラスへ移し、:hover で token 上書き (inline base が無くなったため !important 不要)。
+   発光なし (lift/glow/scale なし) = §C 発光 danger zone とは無関係。neutral surface の bg/border のみ。 */
+.l1-bucket {
+  background: var(--bg-future, #121a28);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.l1-bucket:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+.l1-mini {
+  background: var(--bg-subtle, #1e2a3a);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.l1-mini:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
 /* ── 2026-06-14 user feedback: データ取得状況 (CompletenessRollupBadge) の控えめ化 + 展開アニメ ──
    user「ふだん気にしないので目立たないデザインで良い / 展開折りたたみアニメが欲しい」。
    toggle = 枠/bg なしの quiet link (hover でのみ薄く反応)。展開は grid-rows 0fr→1fr で内容高さ不問の smooth。 */
