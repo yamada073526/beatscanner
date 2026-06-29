@@ -616,6 +616,15 @@ export default function JudgmentDetail({
             borderRadius: 'var(--radius-lg, 16px)',
             padding: 'var(--space-5, 20px)',
           };
+          // task4 dogfood fix: 章番号を mockup .chapter-h .no の gold 円バッジに統一
+          //   (24px 円・gold 12% bg・gold 30% border・gold 数字)。旧 = 素の gold 文字。
+          const CHAPTER_NO_STYLE = {
+            width: 24, height: 24, flexShrink: 0,
+            borderRadius: '50%', display: 'grid', placeItems: 'center',
+            fontSize: 12, fontWeight: 700, color: 'var(--color-gold)',
+            background: 'color-mix(in srgb, var(--color-gold) 12%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--color-gold) 30%, transparent)',
+          };
           return (
             <div
               data-testid="pane3-v6-layout"
@@ -679,11 +688,11 @@ export default function JudgmentDetail({
                 <section
                   data-testid="v6-earnings-section"
                   id="v6-earnings-section"
-                  style={{ display: 'grid', gap: 'var(--space-4, 16px)' }}
+                  style={{ display: 'grid', gap: 'var(--space-3, 12px)' }}
                 >
                   {/* 章ヘッダー */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-gold)', letterSpacing: '0.04em' }}>①</span>
+                    <span style={CHAPTER_NO_STYLE}>①</span>
                     <span style={{ fontSize: 17, fontWeight: 700 }}>決算</span>
                     {result?.latestPeriod && (
                       <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>
@@ -738,12 +747,12 @@ export default function JudgmentDetail({
               <section
                 data-testid="v6-quality-section"
                 id="v6-quality-section"
-                style={{ display: 'grid', gap: 'var(--space-4, 16px)' }}
+                style={{ display: 'grid', gap: 'var(--space-3, 12px)', marginTop: 'var(--space-4, 16px)' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-gold)', letterSpacing: '0.04em' }}>②</span>
+                  <span style={CHAPTER_NO_STYLE}>②</span>
                   <span style={{ fontSize: 17, fontWeight: 700 }}>品質・継続性</span>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>サマリー常時 · 詳細は展開</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>儲ける力 × 伸び続ける力</span>
                 </div>
                 {/* task4: 章の内容を共通カード枠で囲う */}
                 <div style={CHAPTER_FRAME}>
@@ -780,10 +789,10 @@ export default function JudgmentDetail({
               <section
                 data-testid="v6-technical-section"
                 id="v6-technical-section"
-                style={{ display: 'grid', gap: 'var(--space-4, 16px)' }}
+                style={{ display: 'grid', gap: 'var(--space-3, 12px)', marginTop: 'var(--space-4, 16px)' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-gold)', letterSpacing: '0.04em' }}>③</span>
+                  <span style={CHAPTER_NO_STYLE}>③</span>
                   <span style={{ fontSize: 17, fontWeight: 700 }}>テクニカル・買い場</span>
                 </div>
                 {/* task4: 章の内容を共通カード枠で囲う */}
@@ -839,12 +848,11 @@ export default function JudgmentDetail({
               <section
                 data-testid="v6-figure-section"
                 id="v6-figure-section"
-                style={{ display: 'grid', gap: 'var(--space-4, 16px)' }}
+                style={{ display: 'grid', gap: 'var(--space-3, 12px)', marginTop: 'var(--space-4, 16px)' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-gold)', letterSpacing: '0.04em' }}>④</span>
+                  <span style={CHAPTER_NO_STYLE}>④</span>
                   <span style={{ fontSize: 17, fontWeight: 700 }}>図解で理解する</span>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>Pro</span>
                 </div>
                 {/* task4: 章の内容を共通カード枠で囲う */}
                 <div style={CHAPTER_FRAME}>
@@ -882,10 +890,10 @@ export default function JudgmentDetail({
               <section
                 data-testid="v6-more-section"
                 id="v6-more-section"
-                style={{ display: 'grid', gap: 'var(--space-4, 16px)' }}
+                style={{ display: 'grid', gap: 'var(--space-3, 12px)', marginTop: 'var(--space-4, 16px)' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-gold)', letterSpacing: '0.04em' }}>⑤</span>
+                  <span style={CHAPTER_NO_STYLE}>⑤</span>
                   <span style={{ fontSize: 17, fontWeight: 700 }}>その他</span>
                 </div>
                 {/* task4: 章の内容を共通カード枠で囲う */}
