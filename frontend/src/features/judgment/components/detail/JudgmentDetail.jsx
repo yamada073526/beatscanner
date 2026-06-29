@@ -732,7 +732,7 @@ export default function JudgmentDetail({
                 </div>
                 {/* 営業CFマージン + ROE/PER/PEG + 機関保有 QoQ fold（valuation-extras 由来・非 equity は非表示）。*/}
                 {!isNonEquityV6 && valuationExtras && (
-                  <L3QualityFold valuationExtras={valuationExtras} />
+                  <L3QualityFold valuationExtras={valuationExtras} ticker={selectedTicker} />
                 )}
                 {/* 会社概要・セグメント（既存 FundamentalsAccordion profile = 既に fold）。
                     v6 のみ折りたたみヘッダーにセグメント%サマリーを常時表示（非 LLM・quarterly-history 再利用）。*/}
