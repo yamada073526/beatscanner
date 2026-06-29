@@ -212,6 +212,11 @@ function PresetLegend({ columns }) {
   const hasVerdict = columns.some((c) => c.kind === 'verdict');
   return (
     <div className="screener-grid-legend" role="note" aria-label="表示記号と免責事項" data-testid="screener-grid-legend">
+      {/* gold 標榜 ★ の意味を明示 (§38/景表法: 「別格」が何かを出さないと優良誤認 risk・user dogfood 指摘)。
+          事実記述に留める (「最良/上がる/買い」断定なし)。各 preset の具体条件は ① 条件一覧で確認できる。 */}
+      <span className="lg" data-testid="screener-grid-legend-win">
+        <span className="screener-grid-winstar" aria-hidden="true">★</span> 別格＝この戦略の条件を特に強く満たす銘柄
+      </span>
       {hasVerdict && (
         <>
           <span className="lg"><span className="gl up">↑</span> 予想超</span>
