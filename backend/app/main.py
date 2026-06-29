@@ -6004,6 +6004,9 @@ async def _fetch_sec_guidance_structured(ticker: str) -> dict | None:
         forms = filings.get("form", [])
         accessions = filings.get("accessionNumber", [])
         items_field = filings.get("items", [])
+        # SPEC 2026-06-29 変更1: 8-K の filingDate (filed_at) も読む。 nightly path が
+        #   build_guidance_rows(filed_at=) に渡せず Layer A PIT が空振りしていた真因の解消。
+        dates = filings.get("filingDate", [])
 
         checked = 0
         for idx_i, (form, acc) in enumerate(zip(forms, accessions)):
@@ -6016,6 +6019,8 @@ async def _fetch_sec_guidance_structured(ticker: str) -> dict | None:
             if checked > 3:
                 break
             acc_clean = acc.replace("-", "")
+            # SPEC 2026-06-29 変更1: 採択した 8-K の提出日を捕捉し result に埋める (下記)。
+            filing_date = dates[idx_i] if idx_i < len(dates) else None
 
             # 3. index.html → EX-99.1 URL
             idx_r = await asyncio.get_event_loop().run_in_executor(
@@ -6064,6 +6069,8 @@ async def _fetch_sec_guidance_structured(ticker: str) -> dict | None:
             from .visualizer.sec_guidance import extract_guidance
             result = await extract_guidance(raw_text, source_url=exhibit_url, source_type="8k")
             if result:
+                # SPEC 2026-06-29 変更1: 採択した 8-K の filed_at を passthrough (return / best_8k 双方が保持)。
+                result["_filing_date"] = filing_date
                 # Phase 1b (SPEC §7-5): guidance_extras を per-item §38 verify (source_quote 逐語 + 数値逐語)、
                 #   fail item は drop。 8-K 原文 (raw_text) と照合。 既存 q_revenue/q_margin は触らない (focused)。
                 from .transcript_source import null_unverified_extras
@@ -18756,7 +18763,10 @@ async def cron_guidance_snapshot(
             if not isinstance(cg, dict):
                 return {"rows": []}
             cm = cg.get("_cache_metrics") or {}
-            return {"rows": guidance_history.build_guidance_rows(t, cg, q_end, fy_end), "cm": cm}
+            # SPEC 2026-06-29 変更1: 8-K の filed_at を渡し Layer A PIT を成立させる
+            #   (cg._filing_date は _fetch_sec_guidance_structured が埋める。 無ければ None = Layer B fallback)。
+            return {"rows": guidance_history.build_guidance_rows(
+                t, cg, q_end, fy_end, filed_at=cg.get("_filing_date")), "cm": cm}
 
     results = await asyncio.gather(
         *[_one(t) for t in universe_list], return_exceptions=True
@@ -22516,8 +22526,9 @@ def _build_layer_a_maps(sb, tickers: "list[str]") -> "tuple[dict, dict]":
     """Layer A (会社ガイダンス vs PIT アナリストコンセンサス) 用の batch pre-load。
 
     SPEC docs/specs/SPEC_2026-06-27_screener-guidance-layer-a.md §5-2/Sprint3。
-    guidance_snapshots を全件取得し ticker→最新 (filed_at max) 行 map を作り、
+    guidance_snapshots を全件取得し ticker→最新 (filed_at max・quarter のみ) 行 map を作り、
     guidance を持つ ticker のみ filed_at 直前の consensus_snapshot (PIT) を引く。
+    「来期2列」 は next-quarter 列のため quarter ガイダンスのみ対象 (annual-only は●抑止)。
     per-ticker DB fetch を _compute_one hot loop (universe ~2494) の外に出すための足場
     (hot loop 内 per-ticker fetch は FMP/DB rate を破壊するため禁止)。
 
@@ -22535,8 +22546,13 @@ def _build_layer_a_maps(sb, tickers: "list[str]") -> "tuple[dict, dict]":
         ):
             t = str(r.get("ticker") or "").upper()
             f = str(r.get("filed_at") or "")[:10]
-            # filed_at null は PIT 比較不可 (発表日が無く snapshot_date < filed_at を引けない)
-            if not t or t not in _uni or not f:
+            ptype = str(r.get("period_type") or "").lower()
+            # filed_at null は PIT 比較不可 (発表日が無く snapshot_date < filed_at を引けない)。
+            # SPEC 2026-06-29 (A): 「来期2列」は next-quarter 列 (Layer B = next_q_*_yoy_pct) なので
+            #   Layer A も quarter ガイダンスのみを対象とする。 annual-only 企業 (FDX 型・2月/5月決算で
+            #   通期ガイダンスのみ開示) は●抑止 = 「来期」 列に通期ガイダンスを混ぜない honest 設計
+            #   (multi-review QA verdict・通期は将来「通期列」 を足す別タスクで扱う)。
+            if not t or t not in _uni or not f or ptype != "quarter":
                 continue
             prev = guidance_map.get(t)
             if prev is None or str(prev.get("filed_at") or "")[:10] < f:
@@ -22553,14 +22569,28 @@ def _build_layer_a_maps(sb, tickers: "list[str]") -> "tuple[dict, dict]":
         if not f or not ped or not ptype:
             continue
         try:
-            pres = (
+            # SPEC 2026-06-29 変更2: fiscal_date 完全一致は「月末 vs 最終営業日」(08-31 vs 08-28) の
+            #   規約ドリフトで空振りする → ±20 日 window に緩和。 四半期は ~90 日間隔なので隣接期を
+            #   跨がず誤期 match 不可 (§38 安全)。 同一四半期内の複数 fiscal_date は consensus 値ほぼ同一、
+            #   PIT semantics は snapshot_date<filed_at の最新 1 件で維持。 parse 失敗時は完全一致に fallback。
+            try:
+                _ped_dt = date.fromisoformat(str(ped)[:10])
+                _ped_lo = (_ped_dt - timedelta(days=20)).isoformat()
+                _ped_hi = (_ped_dt + timedelta(days=20)).isoformat()
+            except (ValueError, TypeError):
+                _ped_lo = _ped_hi = None
+            _pq = (
                 sb.table("consensus_snapshots").select(
                     "snapshot_date,estimated_eps_avg,estimated_revenue_avg"
                 )
-                .eq("ticker", t).eq("fiscal_date", ped).eq("period_type", ptype)
+                .eq("ticker", t).eq("period_type", ptype)
                 .lt("snapshot_date", f)
-                .order("snapshot_date", desc=True).limit(1).execute()
             )
+            if _ped_lo and _ped_hi:
+                _pq = _pq.gte("fiscal_date", _ped_lo).lte("fiscal_date", _ped_hi)
+            else:
+                _pq = _pq.eq("fiscal_date", ped)
+            pres = _pq.order("snapshot_date", desc=True).limit(1).execute()
             if pres.data:
                 pit_map[t] = pres.data[0]
         except Exception as e:
