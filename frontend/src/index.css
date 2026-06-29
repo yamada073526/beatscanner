@@ -14506,7 +14506,7 @@ body.is-digest-resizing {
    値前に 3px・baseline でなく中央寄せ・tabular-nums 整列を崩さぬよう極小。
    凡例 .disc 内でも同 class を inline 説明として再利用。 */
 .screener-grid-fdot { flex: 0 0 auto; align-self: center; width: 3px; height: 3px; border-radius: 50%; background: var(--text-secondary); }
-.screener-grid-legend .disc .screener-grid-fdot { display: inline-block; vertical-align: middle; margin: 0 1px; }
+.screener-grid-legend .disc .screener-grid-fdot { display: inline-block; vertical-align: middle; width: 5px; height: 5px; margin: 0 2px; }
 
 /* beat/miss 結果チップ (surpriseColor) */
 .screener-grid-chip { display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: var(--radius-pill, 9999px); line-height: 1.4; }

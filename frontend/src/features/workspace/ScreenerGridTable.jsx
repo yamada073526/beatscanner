@@ -330,9 +330,9 @@ export default function ScreenerGridTable({
         <span className="lg"><span className="gl dn">↓</span> 予想未達</span>
         <span className="lg"><span className="gl il">−</span> 予想どおり</span>
         <span className="disc">
-          <b>↑↓−</b> はいずれも直近決算の過去実績(vs アナリスト予想)。来期2列は
-          <span className="screener-grid-fdot" aria-hidden="true" /><b>付き＝会社ガイダンスとアナリスト予想の比</b>、
-          <b>無印＝来期コンセンサスYoY(ガイダンス未取得)</b>。いずれも会社開示・市場予想の転記であり、当社の予測・推奨ではありません。
+          <b>↑↓−</b> はいずれも直近決算の過去実績(vs アナリスト予想)。来期2列は、値の頭に
+          <span className="screener-grid-fdot" aria-hidden="true" /><b>ドットが付けば会社ガイダンスとアナリスト予想の比</b>、
+          <b>ドット無し＝来期コンセンサスYoY(ガイダンス未取得)</b>。いずれも会社開示・市場予想の転記であり、当社の予測・推奨ではありません。
           <b>これらは買い推奨ではありません。</b>
         </span>
       </div>
