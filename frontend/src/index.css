@@ -14419,7 +14419,7 @@ body.is-digest-resizing {
    token のみ・raw hex は color-mix で回避・box-shadow/!important なし・発光 class 不使用。
    grid-template-columns は --screener-cols (table に inline 定義) を head/row/skeleton が継承 (SSOT)。
    ════════════════════════════════════════════════════════════════════════════ */
-.screener-grid-table { display: block; }
+.screener-grid-table { display: block; --screener-ghead-h: 24px; }
 
 /* 詳細/簡素トグル bar */
 .screener-grid-bar { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
@@ -14453,6 +14453,14 @@ body.is-digest-resizing {
 .screener-grid-head .h-qualstart, .screener-grid-head .h-fstart { position: relative; }
 .screener-grid-head .h-qualstart::before, .screener-grid-head .h-fstart::before { content: ""; position: absolute; left: 2px; top: 50%; transform: translateY(-50%); height: 14px; width: 1px; background: var(--border); }
 .screener-grid-head .h-fstart::before { background: color-mix(in srgb, var(--color-gold) 40%, transparent); }
+
+/* A2 カテゴリ見出しラベル行 (mockup v14 ghead)。column-driven 4 preset のみ。ghead を top:0 に固定し
+   列ヘッダ (.screener-grid-head) を ghead の高さ分だけ下げて 2 段 sticky にする (data-grouped で限定)。 */
+.screener-grid-ghead { position: sticky; top: 0; z-index: 3; display: grid; grid-template-columns: var(--screener-cols); align-items: end; gap: var(--space-3); padding: var(--space-2) var(--space-4) 0; background: var(--bg-card); box-sizing: border-box; height: var(--screener-ghead-h); overflow: hidden; }
+.screener-grid-ghead .screener-grid-gzlabel { display: flex; align-items: flex-end; justify-content: center; padding: 2px 0; font-size: 9.5px; font-weight: 600; letter-spacing: .06em; color: var(--text-muted); white-space: nowrap; min-width: 0; }
+.screener-grid-ghead .screener-grid-gzlabel.is-zone { border-bottom: 1px solid var(--border); }
+.screener-grid-ghead .screener-grid-gzlabel.is-future { background: var(--bg-future); border-radius: var(--radius-sm, 8px) var(--radius-sm, 8px) 0 0; border-bottom: 1px solid color-mix(in srgb, var(--color-gold) 40%, transparent); }
+.screener-grid-table[data-grouped="true"] .screener-grid-head { top: var(--screener-ghead-h); }
 
 /* 行 */
 /* reveal の stagger delay は --reveal-delay で opacity/transform 限定 (背景 hover には波及させない)。
@@ -14543,6 +14551,7 @@ body.is-digest-resizing {
 @media (prefers-reduced-motion: reduce) { .screener-grid-skel-dot, .screener-grid-skel-line { animation: none; } }
 
 /* 狭幅(~360-420px): gap/padding を詰めて識別列に幅を確保・バッジを縮める */
+.screener-grid-table[data-narrow="true"] .screener-grid-ghead,
 .screener-grid-table[data-narrow="true"] .screener-grid-head,
 .screener-grid-table[data-narrow="true"] .screener-grid-row { gap: var(--space-2); padding-left: var(--space-3); padding-right: var(--space-3); }
 .screener-grid-table[data-narrow="true"] .screener-grid-vb { padding: 3px 8px; font-size: 11px; }

@@ -123,12 +123,13 @@ function FutureCell({ value, startZone = false, source = null }) {
 //     beat/miss chip (latest_beat) のみ過去確定実績として surpriseColor (§38 射程外・Pane3 と一貫)。
 
 // 汎用数値セル (中立・色なし)。tier 'pri'=text-primary 強調 (--pri の .v 流用) / 'sec'=muted 副次。
-function MetricCell({ text, label, tier = 'pri' }) {
+// cellCls = A2 カテゴリ仕切り (is-qualstart hairline 等) を付与する追加 class。
+function MetricCell({ text, label, tier = 'pri', cellCls = '' }) {
   const empty = text == null;
   if (tier === 'sec') {
     return (
       <span
-        className={['screener-grid-cell', 'screener-grid-cell--sec', empty ? 'is-empty' : ''].filter(Boolean).join(' ')}
+        className={['screener-grid-cell', 'screener-grid-cell--sec', cellCls, empty ? 'is-empty' : ''].filter(Boolean).join(' ')}
         aria-label={label}
       >
         {empty ? '—' : text}
@@ -137,7 +138,7 @@ function MetricCell({ text, label, tier = 'pri' }) {
   }
   return (
     <span
-      className={['screener-grid-cell', 'screener-grid-cell--pri', empty ? 'is-empty' : ''].filter(Boolean).join(' ')}
+      className={['screener-grid-cell', 'screener-grid-cell--pri', cellCls, empty ? 'is-empty' : ''].filter(Boolean).join(' ')}
       aria-label={label}
     >
       <span className="v">{empty ? '—' : text}</span>
@@ -146,12 +147,12 @@ function MetricCell({ text, label, tier = 'pri' }) {
 }
 
 // 直近決算ビート単独セル (latest_beat: true=beat / false=miss / null=—)。過去確定=surpriseColor。
-function VerdictChipCell({ beat, label }) {
+function VerdictChipCell({ beat, label, cellCls = '' }) {
   const key = beat === true ? 'beat' : beat === false ? 'miss' : null;
   const chip = key ? CHIP[key] : null;
   return (
     <span
-      className={['screener-grid-cell', chip ? '' : 'is-empty'].filter(Boolean).join(' ')}
+      className={['screener-grid-cell', cellCls, chip ? '' : 'is-empty'].filter(Boolean).join(' ')}
       aria-label={label ? `${label}: ${chip ? chip.label : 'データなし'}` : undefined}
     >
       {chip ? (
@@ -166,10 +167,10 @@ function VerdictChipCell({ beat, label }) {
 }
 
 // セクター内リーダー badge (is_sector_rs_leader)。§38: 「上位」=相対力順位の事実描写・中立色。
-function LeaderBadgeCell({ isLeader, label }) {
+function LeaderBadgeCell({ isLeader, label, cellCls = '' }) {
   return (
     <span
-      className="screener-grid-cell"
+      className={['screener-grid-cell', cellCls].filter(Boolean).join(' ')}
       aria-label={label ? `${label}: ${isLeader === true ? '該当(上位)' : '非該当'}` : undefined}
     >
       {isLeader === true ? (
@@ -182,12 +183,17 @@ function LeaderBadgeCell({ isLeader, label }) {
 }
 
 // preset 列 1 セルを kind に応じて描画。metrics = normalizeMetrics(item)・rsValue は別 prop。
+// A2: col.dstart (zone/future group の先頭) に hairline/glass 仕切り class を付与 (mockup v14)。
 function PresetCell({ col, metrics, rsValue }) {
+  const cellCls = [
+    col.dstart ? (col.fut ? 'is-fstart' : 'is-qualstart') : '',
+    col.fut ? 'screener-grid-cell--fut' : '',
+  ].filter(Boolean).join(' ');
   if (col.kind === 'rs') {
     const rs = rsValue != null ? Math.round(rsValue) : null;
     return (
       <span
-        className={['screener-grid-rs', rs != null && rs >= 85 ? 'is-hi' : ''].filter(Boolean).join(' ')}
+        className={['screener-grid-rs', rs != null && rs >= 85 ? 'is-hi' : '', cellCls].filter(Boolean).join(' ')}
         aria-label={`${col.label || 'RS'}: ${rs == null ? 'データなし' : rs}`}
       >
         {rs == null ? '—' : rs}
@@ -195,14 +201,15 @@ function PresetCell({ col, metrics, rsValue }) {
     );
   }
   const v = metrics?.[col.metricKey];
-  if (col.kind === 'verdict') return <VerdictChipCell beat={v} label={col.label} />;
-  if (col.kind === 'leader') return <LeaderBadgeCell isLeader={v} label={col.label} />;
+  if (col.kind === 'verdict') return <VerdictChipCell beat={v} label={col.label} cellCls={cellCls} />;
+  if (col.kind === 'leader') return <LeaderBadgeCell isLeader={v} label={col.label} cellCls={cellCls} />;
   const text = col.kind === 'delta' ? fmtDelta(v, col.unit) : fmtLevel(v, col.unit);
   return (
     <MetricCell
       text={text}
       tier={col.tier}
       label={col.label ? `${col.label}: ${text ?? 'データなし'}` : undefined}
+      cellCls={cellCls}
     />
   );
 }
