@@ -140,17 +140,15 @@ const bucketsStyle = {
 };
 
 const bucketBaseStyle = {
-  background: 'var(--bg-future, #121a28)',
-  border: '1px solid rgba(255,255,255,0.12)',
+  // 2026-06-29 Sprint 2: background/border/cursor/transition は .l1-bucket クラスへ移動。
+  //   clickable affordance (hover で bg/border) を CSS :hover で実現 (inline base に勝つため !important 不要化)。
   borderRadius: 'var(--radius-sm, 9px)',
   padding: '13px 14px',
-  cursor: 'pointer',
   display: 'grid',
   gap: 5,
   position: 'relative',
   textDecoration: 'none',
   color: 'inherit',
-  transition: 'border-color 0.15s',
 };
 
 const bLabelStyle = {
@@ -187,17 +185,14 @@ const miniRowStyle = {
 };
 
 const miniStyle = {
-  background: 'var(--bg-subtle, #1e2a3a)',
-  border: '1px solid var(--border)',
+  // 2026-06-29 Sprint 2: background/border/cursor/transition は .l1-mini クラスへ移動 (bucket と同様)。
   borderRadius: 'var(--radius-sm, 9px)',
   padding: '11px 14px',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
-  cursor: 'pointer',
   textDecoration: 'none',
   color: 'inherit',
-  transition: 'border-color 0.15s',
 };
 
 const skeletonStyle = (w = 120) => ({
@@ -417,6 +412,7 @@ export default function L1SummaryBuckets({
           <button
             type="button"
             onClick={scrollToEarnings}
+            className="l1-bucket"
             style={{ ...bucketBaseStyle, textAlign: 'left' }}
             data-testid={`${TESTID}-bucket-eps`}
             aria-label="EPS詳細へ移動"
@@ -445,6 +441,7 @@ export default function L1SummaryBuckets({
           <button
             type="button"
             onClick={scrollToEarnings}
+            className="l1-bucket"
             style={{ ...bucketBaseStyle, textAlign: 'left' }}
             data-testid={`${TESTID}-bucket-revenue`}
             aria-label="売上詳細へ移動"
@@ -473,6 +470,7 @@ export default function L1SummaryBuckets({
           <button
             type="button"
             onClick={scrollToEarnings}
+            className="l1-bucket"
             style={{ ...bucketBaseStyle, textAlign: 'left' }}
             data-testid={`${TESTID}-bucket-guidance`}
             aria-label="ガイダンス詳細へ移動"
@@ -509,6 +507,7 @@ export default function L1SummaryBuckets({
           <button
             type="button"
             onClick={scrollToEarnings}
+            className="l1-mini"
             style={miniStyle}
             data-testid={`${TESTID}-mini-streak`}
             aria-label="連続ビート詳細へ移動"
@@ -530,6 +529,7 @@ export default function L1SummaryBuckets({
           <button
             type="button"
             onClick={scrollToTechnical}
+            className="l1-mini"
             style={miniStyle}
             data-testid={`${TESTID}-mini-rs`}
             aria-label="RSテクニカル詳細へ移動"
