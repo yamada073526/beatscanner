@@ -19721,6 +19721,80 @@ async def scanner_canslim_rows(tickers: str = ""):
         raise HTTPException(status_code=500, detail=f"fetch_failed: {e}")
 
 
+# ── ファンダメンタル5条件 充足の推移 (判定タブ Pane3 §② 継続性 signal) ──
+# earnings_evaluation (nightly batch 算出) から per-ticker の 8Q 評価履歴を返す。
+# 用途: §②「5条件 充足の推移」(passed_count sparkline + 5条件×8Q ヒートマップ + ネック条件 chip)。
+# @no-llm: cond1-5_passed (boolean) / passed_count (int) の「過去の機械的事実」を直返し。
+#          narration・将来予測・推奨・最上級なし (§38/景表法-safe)。数値は judgment.py 数値層が確定済み。
+#          RLS = earnings_evaluation_public_read (anon SELECT 可) のため auth gate 不要。
+_EARNINGS_EVAL_CACHE: dict = {}
+_EARNINGS_EVAL_TTL = 60 * 60 * 6  # 6h (earnings_evaluation は nightly batch 更新)
+
+
+@app.get("/api/earnings-evaluation/{ticker}")
+async def earnings_evaluation_history(ticker: str, limit: int = 8) -> dict:
+    """指定 ticker の直近 N 四半期 (デフォルト 8) のファンダメンタル5条件 評価履歴を返す。
+
+    判定タブ Pane3 §②「品質・継続性」の「5条件 充足の推移」用。earnings_evaluation
+    (nightly batch・judgment.py の純 Python 評価結果を upsert) から period_end 降順で取得する。
+
+    Returns:
+      {
+        "ticker": "AAPL",
+        "rows": [  # period_end 降順 (rows[0] = 最新四半期)
+          {period_end, evaluation_date, cond1_passed..cond5_passed, passed_count}, ...
+        ],
+      }
+    DB に無い ticker は rows=[] (frontend は空状態で graceful)。
+    LLM 不使用・過去事実のみ (§38-safe)。条件名の UI ラベル化は frontend 静的 dict。
+    """
+    sym = (ticker or "").strip().upper()
+    if not sym:
+        raise HTTPException(status_code=400, detail="ticker required")
+    n = max(1, min(int(limit or 8), 16))
+
+    cache_key = f"{sym}:{n}:v1"
+    now = _time.monotonic()
+    cached = _EARNINGS_EVAL_CACHE.get(cache_key)
+    if cached and now - cached["ts"] < _EARNINGS_EVAL_TTL:
+        return cached["data"]
+
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    try:
+        result = (
+            sb.table("earnings_evaluation")
+            .select(
+                "period_end,evaluation_date,cond1_passed,cond2_passed,"
+                "cond3_passed,cond4_passed,cond5_passed,passed_count"
+            )
+            .eq("ticker", sym)
+            .order("period_end", desc=True)
+            .limit(n)
+            .execute()
+        )
+        rows = []
+        for r in (result.data or []):
+            rows.append({
+                "period_end": r.get("period_end"),
+                "evaluation_date": r.get("evaluation_date"),
+                "cond1_passed": r.get("cond1_passed"),
+                "cond2_passed": r.get("cond2_passed"),
+                "cond3_passed": r.get("cond3_passed"),
+                "cond4_passed": r.get("cond4_passed"),
+                "cond5_passed": r.get("cond5_passed"),
+                "passed_count": r.get("passed_count"),
+            })
+        data = {"ticker": sym, "rows": rows}
+        _EARNINGS_EVAL_CACHE[cache_key] = {"ts": now, "data": data}
+        return data
+    except Exception as e:
+        print(f"[earnings_evaluation_history] fetch failed: {e}")
+        raise HTTPException(status_code=500, detail=f"fetch_failed: {e}")
+
+
 # Cup-Handle Phase 2.3 cron: nightly cup-notify (cup-scan の 5 分後に発火)
 # scan 完了後の transition を翌朝 JST 8:05 に digest mail 送信
 

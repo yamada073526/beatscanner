@@ -10,6 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   deriveQualityFromHistory,
+  deriveEvalContinuity,
   ocfMarginLabel,
   roeLevelLabel,
   grossMarginYoyChip,
@@ -113,6 +114,85 @@ describe('§38-safe 閾値ラベル dict', () => {
     expect(epsCagrDotTone(5)).toBe('muted');
     expect(epsCagrDotTone(-2)).toBe('loss');
     expect(epsCagrDotTone(NaN)).toBe('muted');
+  });
+});
+
+describe('deriveEvalContinuity (5条件 充足の推移・§② 継続性 signal)', () => {
+  // newest-first (period_end DESC)。[c1,c2,c3,c4,c5]。
+  // cond1=8/8(stable) cond4=6/8(=0.75 stable境界) cond2=2/8(=0.25 neck境界) cond3=0/8(neck) cond5=4/8(中立)。
+  const row = (period_end, c) => ({
+    period_end,
+    evaluation_date: period_end,
+    cond1_passed: c[0], cond2_passed: c[1], cond3_passed: c[2], cond4_passed: c[3], cond5_passed: c[4],
+    passed_count: c.filter(Boolean).length,
+  });
+  const EVAL = [
+    row('2025-12-31', [true, true, false, true, true]),   // newest, passed=4
+    row('2025-09-30', [true, true, false, true, true]),   // 4
+    row('2025-06-30', [true, false, false, true, false]), // 2
+    row('2025-03-31', [true, false, false, true, false]), // 2
+    row('2024-12-31', [true, false, false, true, true]),  // 3
+    row('2024-09-30', [true, false, false, true, true]),  // 3
+    row('2024-06-30', [true, false, false, false, false]),// 1
+    row('2024-03-31', [true, false, false, false, false]),// oldest, 1
+  ];
+  const d = deriveEvalContinuity(EVAL);
+
+  it('空 / 非配列入力で null', () => {
+    for (const empty of [[], null, undefined]) expect(deriveEvalContinuity(empty)).toBeNull();
+  });
+
+  it('passed_count 系列を古→新 (直近=右) に整列する', () => {
+    expect(d.passedCountSeries).toEqual([1, 1, 3, 3, 2, 2, 4, 4]);
+    expect(d.quarters).toBe(8);
+  });
+
+  it('period ラベルは古→新の YYYY-MM', () => {
+    expect(d.periodLabels[0]).toBe('2024-03');
+    expect(d.periodLabels[7]).toBe('2025-12');
+  });
+
+  it('latestPassed は rows[0] (最新) の充足数', () => {
+    expect(d.latestPassed).toBe(4);
+  });
+
+  it('条件別 matrix・passes・rate を算出 (cond1=8/8, cond3=0/8)', () => {
+    const c1 = d.conditions.find((c) => c.key === 'cond1_passed');
+    const c3 = d.conditions.find((c) => c.key === 'cond3_passed');
+    expect(c1.passes).toBe(8);
+    expect(c1.total).toBe(8);
+    expect(c1.rate).toBe(1);
+    expect(c1.latest).toBe(true);
+    expect(c3.passes).toBe(0);
+    expect(c3.rate).toBe(0);
+    expect(c1.cells).toHaveLength(8);
+  });
+
+  it('安定クリア = rate≥0.75 かつ ≥4Q、継続ネック = rate≤0.25 (境界含む)', () => {
+    expect(d.stable.map((c) => c.num)).toEqual(['①', '④']); // 8/8, 6/8(=0.75)
+    expect(d.neck.map((c) => c.num)).toEqual(['②', '③']);   // 2/8(=0.25), 0/8
+  });
+
+  it('4Q 未満は stable/neck に含めない (過大主張回避)', () => {
+    const short = deriveEvalContinuity([
+      row('2025-12-31', [true, true, true, true, true]),
+      row('2025-09-30', [true, true, true, true, true]),
+      row('2025-06-30', [true, true, true, true, true]),
+    ]);
+    expect(short.stable).toEqual([]);
+    expect(short.neck).toEqual([]);
+    expect(short.quarters).toBe(3);
+  });
+
+  it('非 boolean の cond セルは finite から除外 (null 安全)', () => {
+    const partial = deriveEvalContinuity([
+      { period_end: '2025-12-31', cond1_passed: true, cond2_passed: null, passed_count: 1 },
+    ]);
+    const c1 = partial.conditions.find((c) => c.key === 'cond1_passed');
+    const c2 = partial.conditions.find((c) => c.key === 'cond2_passed');
+    expect(c1.cells).toEqual([true]);
+    expect(c2.total).toBe(0);
+    expect(c2.rate).toBeNull();
   });
 });
 

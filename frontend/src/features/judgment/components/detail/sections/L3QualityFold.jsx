@@ -32,7 +32,7 @@
 import { useEffect, useState } from 'react';
 import AccordionSection from '../../../primitives/AccordionSection.jsx';
 import SparkBars from '../../../../../components/SparkBars.jsx';
-import { fetchQuarterlyHistory, fetchCanslimRows } from '../../../../../api.js';
+import { fetchQuarterlyHistory, fetchCanslimRows, fetchEarningsEvaluation } from '../../../../../api.js';
 
 const TESTID = 'l3-quality-fold';
 
@@ -131,6 +131,53 @@ export function deriveQualityFromHistory(qh) {
   };
 }
 
+// ── ファンダメンタル5条件 (judgment.py:185-252 と 1:1)。UI ラベル化は frontend 静的 dict ──
+// 名称は judgment.py の ConditionResult.name と厳密一致 (Trust Cliff 回避・事実)。
+// ①⑤ は閾値型 / ②③④ は「3期連続増加」要件で構造的にネックになりやすい (実 pass率 ①66 ②10 ③9 ④23 ⑤73%)。
+export const FIVE_CONDITIONS = [
+  { key: 'cond1_passed', num: '①', short: 'CFマージン≥15%', full: '営業CFマージン ≥ 15%' },
+  { key: 'cond2_passed', num: '②', short: 'EPS連続増', full: 'EPS 連続増加' },
+  { key: 'cond3_passed', num: '③', short: 'CFPS連続増', full: 'CFPS 連続増加' },
+  { key: 'cond4_passed', num: '④', short: '売上連続増', full: '売上高 連続増加' },
+  { key: 'cond5_passed', num: '⑤', short: 'CFPS>EPS', full: 'CFPS > EPS（直近期）' },
+];
+
+/**
+ * earnings-evaluation (period_end 降順 rows) から §② 継続性 signal の派生値を算出する純関数。
+ * @no-llm: cond*_passed (boolean) / passed_count の「過去事実」整形のみ。将来予測・推奨なし (§38)。
+ *
+ * - 系列は古→新 (sparkline/heatmap は左=過去・右=直近、他 spark と同方向)。
+ * - 安定クリア = window の 75%+ かつ ≥4Q で PASS / 継続ネック = 25%- かつ ≥4Q で PASS。
+ *   厳格ではなく高/低しきい値にすることで「7/8 の鉄板条件」も拾い、過大主張は避ける (§38)。
+ */
+export function deriveEvalContinuity(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (list.length === 0) return null;
+  const asc = [...list].reverse(); // 古→新
+  const passedCountSeries = asc.map((r) => (Number.isFinite(r?.passed_count) ? r.passed_count : null));
+  const periodLabels = asc.map((r) => (r?.period_end ? String(r.period_end).slice(0, 7) : ''));
+  const latest = list[0] || {};
+  const latestPassed = Number.isFinite(latest.passed_count) ? latest.passed_count : null;
+  const conditions = FIVE_CONDITIONS.map((c) => {
+    const cells = asc.map((r) => (typeof r?.[c.key] === 'boolean' ? r[c.key] : null));
+    const finite = cells.filter((v) => v === true || v === false);
+    const passes = finite.filter((v) => v === true).length;
+    const rate = finite.length > 0 ? passes / finite.length : null;
+    return {
+      ...c,
+      cells,
+      passes,
+      total: finite.length,
+      rate,
+      latest: typeof latest[c.key] === 'boolean' ? latest[c.key] : null,
+    };
+  });
+  const enough = (c) => c.total >= 4;
+  const stable = conditions.filter((c) => enough(c) && c.rate >= 0.75);
+  const neck = conditions.filter((c) => enough(c) && c.rate <= 0.25);
+  return { asc, passedCountSeries, periodLabels, latestPassed, conditions, stable, neck, quarters: asc.length };
+}
+
 const foldDetailStyle = {
   fontSize: 12.5,
   lineHeight: 1.6,
@@ -217,6 +264,47 @@ function FoldSparkline({ title, series, labels, color, valueFormatter }) {
   );
 }
 
+// 5条件 × 8Q ヒートマップ (fold 専用)。行=条件 / 列=四半期 (左=過去・右=直近)。
+// 緑=充足・赤=未充足・灰=データ無 (投資業界色ルール準拠)。各セル ~22px で hover に余裕 (Fitts則)。
+// §38-safe: 過去の機械的 PASS/FAIL を転記するだけ。評価語・将来予測なし。
+function FiveCondHeatmap({ conditions }) {
+  const cellCount = conditions[0]?.cells?.length || 0;
+  if (cellCount < 1) return null;
+  const cell = (v, key) => {
+    let bg = 'var(--bg-subtle)';
+    let bd = 'var(--border)';
+    if (v === true) { bg = 'color-mix(in srgb, var(--color-gain) 78%, transparent)'; bd = 'var(--color-gain)'; }
+    else if (v === false) { bg = 'color-mix(in srgb, var(--color-loss) 70%, transparent)'; bd = 'var(--color-loss)'; }
+    return (
+      <span
+        key={key}
+        title={v === true ? '充足' : v === false ? '未充足' : 'データ無'}
+        style={{
+          width: 22, height: 18, borderRadius: 4,
+          background: bg, border: `1px solid color-mix(in srgb, ${bd} 45%, transparent)`,
+          flex: '0 0 auto',
+        }}
+      />
+    );
+  };
+  return (
+    <div style={{ display: 'grid', gap: 4, overflowX: 'auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: 'var(--text-muted)', paddingLeft: 92 }}>
+        <span>過去</span>
+        <span>直近</span>
+      </div>
+      {conditions.map((c) => (
+        <div key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ width: 88, flex: '0 0 auto', fontSize: 10.5, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {c.num}{c.short}
+          </span>
+          {c.cells.map((v, i) => cell(v, `${c.key}-${i}`))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
  * @param {object} props
  * @param {object|null} props.valuationExtras - /api/valuation-extras の result
@@ -231,11 +319,13 @@ export default function L3QualityFold({ valuationExtras, ticker }) {
   // 既存 EarningsGrowthSpark / QuarterlyHistoryTable と同 URL は dedupGet で coalesce 済 (二重 fetch なし)。
   const [qh, setQh] = useState(null); // history[]、新しい順 (history[0] = 最新)
   const [canslim, setCanslim] = useState(null); // canslim/rows の当該 ticker 行
+  const [evalRows, setEvalRows] = useState(null); // earnings-evaluation rows[] (period_end 降順)
 
   useEffect(() => {
     if (!ticker) {
       setQh(null);
       setCanslim(null);
+      setEvalRows(null);
       return;
     }
     let cancelled = false;
@@ -253,6 +343,12 @@ export default function L3QualityFold({ valuationExtras, ticker }) {
         setCanslim(key ? rows[key] : null);
       })
       .catch(() => { if (!cancelled) setCanslim(null); });
+    fetchEarningsEvaluation(ticker, 8)
+      .then((res) => {
+        if (cancelled) return;
+        setEvalRows(res && Array.isArray(res.rows) && res.rows.length > 0 ? res.rows : null);
+      })
+      .catch(() => { if (!cancelled) setEvalRows(null); });
     return () => { cancelled = true; };
   }, [ticker]);
 
@@ -343,6 +439,12 @@ export default function L3QualityFold({ valuationExtras, ticker }) {
 
   // EPS CAGR 3年 (canslim/rows・継続性 pillbox)
   const epsCagr3y = Number.isFinite(canslim?.eps_cagr_3y) ? canslim.eps_cagr_3y : null;
+
+  // ── 5条件 充足の推移 (§② 継続性 signal・earnings-evaluation) ──
+  const evalCont = deriveEvalContinuity(evalRows);
+  // header chip: 安定クリア条件を優先、無ければ継続ネックを表示 (非空・§38 事実ラベル)
+  const evalStableNums = evalCont ? evalCont.stable.map((c) => c.num).join('') : '';
+  const evalNeckNums = evalCont ? evalCont.neck.map((c) => c.num).join('') : '';
 
   return (
     <div data-testid={TESTID} style={{ display: 'grid', gap: 'var(--space-2, 8px)' }}>
@@ -505,6 +607,54 @@ export default function L3QualityFold({ valuationExtras, ticker }) {
           <div style={citeStyle}>出典: FMP 13F（institutional-ownership・直近 4 四半期）</div>
         </div>
       </AccordionSection>
+
+      {/* 5条件 充足の推移 (Sprint 4c 代替・継続性 synthesis・earnings-evaluation 8Q) */}
+      {evalCont && evalCont.latestPassed != null && (
+        <AccordionSection
+          id="v6-l3-five-cond-continuity"
+          title="5条件 充足の推移"
+          summary={
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span>充足 {evalCont.latestPassed}/5（直近）</span>
+              {evalStableNums
+                ? <MiniChip tone="gain">安定 {evalStableNums}</MiniChip>
+                : (evalNeckNums ? <MiniChip tone="warning">ネック {evalNeckNums}</MiniChip> : null)}
+            </span>
+          }
+          tier={2}
+          chevronPosition="right"
+        >
+          <div style={foldDetailStyle}>
+            <div>
+              ファンダメンタル5条件（①営業CFマージン≥15% ②EPS連続増 ③CFPS連続増 ④売上連続増 ⑤CFPS&gt;EPS）を四半期ごとに評価した充足状況の推移です。②③④は「3期連続増加」要件のため景気や運転資本の循環で揺れやすく、全5条件の同時充足は優良企業でも構造的に稀です（数値は事実、評価判断はご自身で）。
+            </div>
+            <FoldSparkline
+              title="充足条件数の推移"
+              series={evalCont.passedCountSeries}
+              labels={evalCont.periodLabels}
+              color="var(--color-accent)"
+              valueFormatter={(v) => `${v}/5`}
+            />
+            <FiveCondHeatmap conditions={evalCont.conditions} />
+            {(evalCont.stable.length > 0 || evalCont.neck.length > 0) && (
+              <div style={{ display: 'grid', gap: 2 }}>
+                {evalCont.stable.length > 0 && (
+                  <span style={{ fontSize: 11.5 }}>
+                    安定クリア（直近8Qで75%+）: {evalCont.stable.map((c) => `${c.num}${c.short}`).join('・')}
+                  </span>
+                )}
+                {evalCont.neck.length > 0 && (
+                  <span style={{ fontSize: 11.5, color: 'var(--color-warning)' }}>
+                    継続ネック（直近8Qで25%-）: {evalCont.neck.map((c) => `${c.num}${c.short}`).join('・')}
+                  </span>
+                )}
+              </div>
+            )}
+            <div style={citeStyle}>※ 過去の決算実績に基づく機械的判定であり、将来の株価・業績を保証するものではありません。</div>
+            <div style={citeStyle}>出典: FMP 決算データに基づく5条件評価（各四半期・nightly 集計）</div>
+          </div>
+        </AccordionSection>
+      )}
 
       {/* 継続性 strip — EPS CAGR 3年 pillbox (Sprint 4b 新規・canslim/rows 配線) */}
       {epsCagr3y != null && (
