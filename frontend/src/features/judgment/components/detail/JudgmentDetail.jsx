@@ -506,15 +506,12 @@ export default function JudgmentDetail({
           - 発光系 class 不使用、28px 独立バー */}
       <DetailBreadcrumb />
 
-      {/* 完全性台帳 Sprint3 (SPEC_2026-06-13): 規律の元データ取得状況の最上部ロールアップ badge。
-          ds-judgment-detail 直下・DetailBreadcrumb 直後の単一挿入で、v6 単一経路の「最上部・独立1行」 を
-          保証する (旧 v4/v5 二重 mount 経路は Sprint 4b で撤去)。badge 内部で取得状況に応じ
-          empty/loading/errored/main を自己解決 (常時表示・色中立・取得失敗時のみ存在感)。
-          gate: analyze エラー (detail.error = rate limit 等、 retry banner と同条件) のときだけ badge を
-          出さない = 「取得」 と「分析取得失敗」 が同一画面で矛盾するのを防ぐ (敵対的検証 Trust Cliff minor)。
-          ※ result gate は不可: 正常 demo フローでも result は null になりうる (hero/5条件は detail/verdict
-          から描画) ため badge が常に消えてしまう (本番 snap で判明)。analyze エラー時のみ抑止が正。 */}
-      {!detail?.error && <CompletenessRollupBadge ticker={selectedTicker} />}
+      {/* 完全性台帳 (CompletenessRollupBadge) は mockup v5 (2026-06-29 正本) で §③ テクニカル章カードの
+          末尾へ移設した (旧 SPEC_2026-06-13 は最上部配置)。理由: quiet 化 (2026-06-29 user feedback
+          「わざわざ見に行くことはほぼない」) + 「データ取得状況」 は決算/地合い・価格の元データ文脈に帰属させる方が
+          自然 = §③ 末尾 footer が IA 上適切 (mockup legend「§③ 末尾に追加」)。
+          実 mount は §③ CHAPTER_FRAME 末尾 (v6-technical-section 内) を参照。
+          gate (!detail?.error) は移設先でも維持 = 分析取得失敗時に「取得」 と矛盾させない。 */}
 
 
       {/* P0-1/P0-3: 分析する button は auto runAnalyze (P0-2) が失敗した場合の fallback。
@@ -839,6 +836,12 @@ export default function JudgmentDetail({
                       O'Neil 基準: ブレイク時 出来高 +40% 以上が目安
                     </span>
                   </div>
+                )}
+                {/* 完全性台帳 quiet (mockup v5 §③ 末尾の <details class="comp"> に相当)。
+                    最上部から移設。gate (!detail?.error) は旧位置と同条件で維持 = 「取得」 と
+                    「分析取得失敗」 を同一画面で矛盾させない。badge 内部で empty/loading/errored/main を自己解決。 */}
+                {selectedTicker && !detail?.error && (
+                  <CompletenessRollupBadge ticker={selectedTicker} />
                 )}
                 </div>
               </section>
