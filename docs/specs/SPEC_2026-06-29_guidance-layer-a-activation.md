@@ -71,7 +71,48 @@ ScreenerGridTable の earnings 凡例を条件化: 表示行に Layer A (guidanc
 
 ## DoD (全体)
 - [x] B1 frontend (honest 凡例)。
-- [ ] Phase 0 SQL 見積り (Layer A 期待件数)。
-- [ ] Phase 1 filed_at 解決 (main.py 最小 diff + test)。
+- [x] Phase 0 SQL 見積り (Layer A 期待件数) → de-risk 実測で確定 (下記「de-risk 実測結果」セクション)。
+- [ ] Phase 1 filed_at 解決 (main.py 最小 diff + test) ← **設計見直し中** (backfill 経路でなく nightly 行に filed_at)。
+- [ ] period_end_date ↔ consensus.fiscal_date の正規化/tolerance (新規・de-risk で発見した未想定バグ)。
 - [ ] Phase 2 backfill + universe で guidance_source='8k' > 0 + snap ●確認 + §38 verify。
 - [ ] 実装 gate: main.py 編集前に multi-review (Hallucination Guard + §38 + main.py blast radius)。
+
+---
+
+## de-risk 実測結果 (2026-06-29・Phase2 先行検証・本番不変更)
+
+> 「Phase2 先行で de-risk」 (既存 backfill cron を手動 invoke して main.py を触る前に投資対効果と落とし穴を暴く) を実施。 read-only SQL + backfill 1 回で、 SPEC 当初計画の**重大な欠陥**を安価に発見した。
+
+### Phase 0 / pre-flight (本番不変更・SQL のみ)
+- consensus_snapshots 蓄積開始 = **2026-06-06** (23 日前・872 銘柄)。 これ以前に filing された決算は PIT 永久不成立。
+- 既存 guidance_snapshots の filed_at は全て 2026-05-27 以前 → backfill 前は PIT 成立 0 件。
+- 真の機会は 2026-06-27 nightly batch (20 銘柄・filed_at 全 null)。 `_build_layer_a_maps` の完全一致 join を SQL 再現 → pre-flight では **4 銘柄堅牢 (BB/FDX/JBL/WLY) + 最大 7 銘柄**と見積り。
+- §38 ガード (gaap→EPS 抑止 / range 内→0 丸め / 欠損→Rev only) が実データで正しく発火することを確認。
+
+### 実 backfill 後の再シミュレート (guidance_backfill.yml で 7 銘柄を filed_at 解決後)
+max(filed_at) の 1 行 × consensus.fiscal_date 完全一致で判定した実測:
+
+| ticker | max filed_at 行 | PIT 一致 | 判定 |
+|---|---|---|---|
+| **FDX** | annual 2027-05-31 | ✓ (pit_eps 22.57) | **Layer A 確定** (EPS mid 17.5 → **-22.5%**) |
+| **BB** | annual 2027-02-28 ✓ / quarter **2026-08-31** ✗ | 部分 | **coin-flip** (同 filed_at で行選択順依存) |
+| **JBL** | annual 2026-08-31 ✓ / quarter 2026-08-31 ✗ | 部分 | **coin-flip** |
+| MEI | annual 2027-05-02 | ✗ (filed 06-24 < consensus 開始 06-26) | 不成立 |
+| MU | quarter 2026-08-28 | ✗ (同上) | 不成立 |
+| SNX | quarter 2026-08-31 | ✗ (同上) | 不成立 |
+| WLY | (filed_at 未解決) | ✗ (backfill が 8-K 解決せず) | 不成立 |
+
+→ **確定 1 銘柄 (FDX) + coin-flip 2 銘柄 (BB/JBL)**。 pre-flight の 4-7 から大きく目減り。
+
+### de-risk が暴いた 3 つの根本問題 (SPEC 当初未想定)
+1. **backfill の period 解決が consensus とズレる**: backfill の `resolve_next_period_end` (filing 日基準) が quarter を `2026-08-31` と算出するが consensus.fiscal_date は `2026-08-28`。 `_build_layer_a_maps` は**完全一致**要求のため空振り。 ⚠️ 逆に **nightly の元 period (`08-28`) は consensus と一致**していた → **「nightly 行に filed_at を付ける Phase 1」が正しく、 backfill 経路は period regression を持ち込む**。
+2. **構造的 PIT 限界**: 直近決算銘柄 (MEI/MU/SNX) は来期 consensus が**報告後**にしか立たない → filed_at 以前の PIT が永久に無い。 「直近報告銘柄ほど Layer A が出にくい」 逆相関は受容するしかない (部分カバレッジが正)。
+3. **exact-match の脆さ**: fiscal_date 完全一致は「月末 vs 最終営業日」 (08-31 vs 08-28) の規約差で容易に壊れる → **±N 日 tolerance か quarter-key 正規化が必須** (これも当初未想定)。
+
+### 結論 → 真の修正の設計へ (user gate: A を選択)
+- SPEC 当初の Phase1-2 計画は**不十分**。 真の修正 = **(a) nightly 行への filed_at 解決 (nightly の正しい period を保持) + (b) period_end_date ↔ fiscal_date の正規化/tolerance**。 両方 main.py 編集 + multi-review gate。
+- backfill 経路 (guidance_backfill.yml) は de-risk 用として温存するが、 **durable な配信経路ではない** (period regression のため)。
+- 投資対効果: 現状 yield は低い (確定 1) が、 consensus 履歴が深まる数週間で自然に PIT coverage が拡大する。 (b) 正規化で coin-flip と quarter 不一致を救えば yield は大きく改善見込み。
+
+### 副作用メモ (要 follow-up)
+- backfill が period ズレ行 (例 BB quarter 2026-08-31) + 一部重複行を guidance_snapshots に挿入済。 今晩の nightly canslim がこれらを max(filed_at) で拾い、 明朝 FDX (±BB/JBL) の● が自動で出る可能性 (汚染 period だが無害・部分的)。 正規化実装時にクリーンアップ要否を判断する。
