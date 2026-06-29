@@ -786,6 +786,18 @@ export default function JudgmentDetail({
                 {selectedTicker && plan === 'premium' && (
                   <PriceLadder ticker={selectedTicker} />
                 )}
+                {/* 期間別リターン（Phase2: 価格目安=PriceLadder 直下へ昇順・mockup v5 L4 準拠。
+                    ブレイクアウト強度行より前 = 価格目安の直下に配置）。
+                    ReturnGrid は usePeriodReturns 内蔵で親 data 配線不要。splitByTerm で短期/長期 2 段。*/}
+                {selectedTicker && (
+                  <ReturnGrid
+                    ticker={selectedTicker}
+                    frameless
+                    splitByTerm
+                    sectionLabel="期間別リターン"
+                    testId="v6-return-grid"
+                  />
+                )}
                 {/* buyq: mockup L4「ブレイクアウト強度（参考）」行。静的・§38-safe（参考/目安、行動指示なし）。*/}
                 {selectedTicker && (
                   <div style={{
@@ -797,17 +809,6 @@ export default function JudgmentDetail({
                       O'Neil 基準: ブレイク時 出来高 +40% 以上が目安
                     </span>
                   </div>
-                )}
-                {/* 期間別リターン（Sprint 2-B: L0/一等地から L4 へ降格・mockup L4 準拠）。
-                    ReturnGrid は usePeriodReturns 内蔵で親 data 配線不要。splitByTerm で短期/長期 2 段。*/}
-                {selectedTicker && (
-                  <ReturnGrid
-                    ticker={selectedTicker}
-                    frameless
-                    splitByTerm
-                    sectionLabel="期間別リターン"
-                    testId="v6-return-grid"
-                  />
                 )}
               </section>
 
