@@ -19,7 +19,7 @@
  *   - 捏造数値を出さない。全 valuation 値 null の行はサマリー「—」で表示 (空にせず誠実に欠落明示)。
  */
 import AccordionSection from '../../../primitives/AccordionSection.jsx';
-import Sparkline from '../../../../../components/Sparkline.jsx';
+import SparkBars from '../../../../../components/SparkBars.jsx';
 
 const TESTID = 'l3-quality-fold';
 
@@ -207,16 +207,16 @@ export default function L3QualityFold({ valuationExtras }) {
                 <span>保有比率の推移（直近{instTrendVals.filter((v) => Number.isFinite(v)).length}Q）</span>
                 <span>過去 → 直近</span>
               </div>
-              <div style={{ height: 56 }}>
-                {/* 直近=右 (backend が古→新で返却)。色は accent (中立のブランド色) — 上昇/下落の意味は持たせない (§38)。 */}
-                <Sparkline
-                  data={instTrendVals}
-                  color="var(--color-accent)"
-                  labels={instTrendLabels}
-                  valueFormatter={(v) => `${v.toFixed(1)}%`}
-                  seriesLabel="保有比率"
-                />
-              </div>
+              {/* 直近=右 (backend が古→新で返却)。色は accent (中立のブランド色) — 上昇/下落の意味は持たせない (§38)。
+                  正本 mockup の §② sp2 bars 準拠でバー表示。hover で各Qの保有比率% (期=年月)。 */}
+              <SparkBars
+                data={instTrendVals}
+                color="var(--color-accent)"
+                labels={instTrendLabels}
+                valueFormatter={(v) => `${v.toFixed(1)}%`}
+                height={48}
+                floorPct={20}
+              />
             </div>
           )}
           <div style={citeStyle}>

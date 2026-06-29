@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { m, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Info } from 'lucide-react';
-import Sparkline from '../../../../components/Sparkline.jsx';
+import SparkBars from '../../../../components/SparkBars.jsx';
 import ConditionSparkline from './ConditionSparkline.jsx';
 import {
   DeltaRow,
@@ -336,17 +336,30 @@ export default function ConditionRow({
                 </div>
               )}
 
-              {/* Sparkline — Sprint 3: hover で各点の期ラベル + 値 tooltip。
-                  series は古→新 (直近=右)。期ラベルは末尾基準の相対表記 (直近 / 前期 / n期前)。 */}
+              {/* 履歴 bars — Sprint 3: 正本 mockup の .hist bars 準拠 (バー表示・直近=右・直近強調・
+                  hover で各Q値 tooltip)。series は古→新。期ラベルは末尾基準の相対表記 (直近 / 前期 / n期前)。 */}
               {Array.isArray(condition.series) && condition.series.some((v) => v != null) && (
-                <div style={{ height: 56, minHeight: 56 }}>
-                  <Sparkline
+                <div>
+                  <SparkBars
                     data={condition.series}
                     color={sparkColor}
                     labels={buildSeriesLabels(condition.series.length)}
                     valueFormatter={formatSeriesValue}
-                    seriesLabel={condition.label || condition.name}
+                    height={48}
+                    floorPct={25}
                   />
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontSize: 9.5,
+                      color: 'var(--text-muted)',
+                      marginTop: 4,
+                    }}
+                  >
+                    <span>過去</span>
+                    <span>直近 →</span>
+                  </div>
                 </div>
               )}
 
