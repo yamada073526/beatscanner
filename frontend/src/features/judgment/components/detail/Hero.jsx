@@ -158,11 +158,6 @@ export default function Hero({
   // Card は ...rest を受け取るため style で直接付与可能。
   return (
     <Card data-testid="pane3-hero" frameless={frameless} style={{ viewTransitionName: 'ticker-hero' }}>
-      {/* v86 R3 Vision 改善 #4: Hero 右上 LIVE pulse dot (motion_timing 静止フレーム anchor)
-          位置: card 右上 12px offset、 8px cyan dot、 1.4s ease-in-out infinite pulse。
-          aria-hidden: 装飾要素、 screen reader には伝えない (情報は他で取得)。
-          prefers-reduced-motion: アニメーション無効化 (CSS 側で対応)。 */}
-      <span className="hero-live-pulse" aria-hidden="true" />
       <div
         style={{
           // v86 R5 C: Aman / Ritz 入場感のため padding を --space-6 (24px) → --space-8 (32px) に

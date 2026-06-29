@@ -31,7 +31,7 @@
  *   primary selector = data-testid (selector 幻覚予防)。loading/errored/empty/main 全 render path に data-testid。
  *   pulse / 無限 animation 不使用 (PGE 落とし穴4 / §2 静2:動1)。
  */
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { fetchQuarterlyHistory, fetchTechnical, TECHNICAL_CANONICAL_PATTERNS } from '../../../../../api.js';
 // 完全性台帳の純粋ロジック (分類 + ロールアップ文言 + ラベル dict) は constants/completenessLedger.js に
@@ -183,7 +183,7 @@ export default function CompletenessRollupBadge({ ticker }) {
         <span style={eyebrowStyle}>データ取得</span>
         <span style={rollupTextStyle}>{rollupText}</span>
         <ChevronDown
-          size={13}
+          size={11}
           aria-hidden
           style={{
             flexShrink: 0,
@@ -219,7 +219,7 @@ const mainWrapStyle = {
 
 const eyebrowStyle = {
   flexShrink: 0,
-  fontSize: 9,
+  fontSize: 8,
   fontWeight: 600,
   letterSpacing: '0.08em',
   textTransform: 'uppercase',
@@ -227,10 +227,12 @@ const eyebrowStyle = {
 };
 
 const rollupTextStyle = {
+  // 2026-06-29 user feedback: 「わざわざ見に行くことはほぼないので注意しないと気付かないレベルで」→
+  //   font を縮小 + muted 化して最小限の存在感に (完全性台帳=北極星第2の柱は残すが quiet に)。
   minWidth: 0,
-  fontSize: 12,
+  fontSize: 10.5,
   fontWeight: 500,
-  color: 'var(--text-secondary)',
+  color: 'var(--text-muted)',
   whiteSpace: 'nowrap',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
