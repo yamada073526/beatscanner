@@ -10,7 +10,7 @@ import FtdRegimeBanner from '../features/workspace/FtdRegimeBanner.jsx';
 import CompanyLogo from './CompanyLogo.jsx';
 // Sprint 1 Pass 1b: 共有 row primitive (screenerV2=true のみ、A-1 物理隔離)
 import ScreenerRow from '../features/workspace/ScreenerRow.jsx';
-import ScreenerGridTable from '../features/workspace/ScreenerGridTable.jsx';
+import ScreenerGridTable, { presetWin } from '../features/workspace/ScreenerGridTable.jsx';
 
 // 結果リストを「決算の通信簿」grid table で出す preset 集合。
 //   earnings_pass / hot_sector = 決算列 (従来) / 残り4つ = preset 別根拠列 (column-driven)。
@@ -364,11 +364,15 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
         if (cmp === 'lte') part = -part;
         score += part;
       }
-      return { it, score };
+      // gold 標榜 (別格) を合致度順の最上位へ浮かせる (user dogfood: 「別格=並び順も上位」)。
+      //   合致度 score は全 facet の総合で、gold は戦略の核軸での突出 = 別尺度のため両者は乖離する。
+      //   gold を 1次キーにして「別格を先頭」を実現 (各群内は従来 score 降順を維持)。
+      //   presetWin は column-driven 4 preset のみ true (earnings_pass/hot_sector は false=従来順)。§38: 事実順。
+      return { it, score, win: presetWin(it, activePreset) ? 1 : 0 };
     });
-    scored.sort((a, b) => b.score - a.score || a.it.ticker.localeCompare(b.it.ticker));
+    scored.sort((a, b) => b.win - a.win || b.score - a.score || a.it.ticker.localeCompare(b.it.ticker));
     return scored.map((s) => s.it);
-  }, [filteredItems, activeGrades]);
+  }, [filteredItems, activeGrades, activePreset]);
 
   // ── Phase C「旬のセクター」master-detail (SPEC_2026-06-27・U-2=(b) 市場全体の俯瞰) ──
   //   集計ロジックは純関数 buildSectorSummary が SSOT (module top・unit-test 済)。component は
