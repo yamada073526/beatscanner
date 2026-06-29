@@ -1,0 +1,92 @@
+name: Guidance Backfill (Layer A 検証・手動 dispatch)
+
+# 会社ガイダンス (SEC 8-K) の filed_at を解決して guidance_snapshots に backfill する手動 dispatch。
+# SPEC: docs/specs/SPEC_2026-06-29_guidance-layer-a-activation.md Phase 2 (Phase2先行 de-risk)。
+#
+# 背景:
+#   - nightly guidance cron (guidance-snapshot) は filed_at=null で保存するため Layer A (PIT
+#     consensus 比) が成立しない (本番 0件)。 本 backfill は accession→filing date を EDGAR から
+#     解決し filed_at 付きで upsert し直す (同一 period key は filed_at 付き行で上書き)。
+#   - backfill 後に nightly_scan.yml (canslim_only=true) を別途 trigger して全 universe で Layer A
+#     maps を rebuild する (canslim-scan は >=200 行で初めて screener の latest calc_date になるため
+#     7 銘柄だけの部分 scan では screener に反映されない → フル scan が必須)。
+#
+# ⚠️ 有効化には GitHub repo secret CRON_SECRET (nightly_scan / nightly_consensus と共用) が必要。
+# endpoint: POST /api/cron/guidance-backfill (X-Cron-Secret 認証)。 schedule には載せない (手動のみ)。
+#
+# memory anchor: feedback_sec_guidance_8k_coverage_limit.md (AAPL 型 8-K 非開示は skipped が正常)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tickers:
+        description: '対象 ticker (空白 or カンマ区切り)。 Layer A 検証の 7 銘柄が default。'
+        required: false
+        default: 'BB FDX JBL WLY MU SNX MEI'
+      max_filings:
+        description: 'ticker あたり遡る 8-K 件数 (直近のみなら 2 で十分、 過去まで遡るなら 8)'
+        required: false
+        default: '2'
+      dry_run:
+        description: 'true で EDGAR walk のみ (LLM 抽出 / upsert を skip、 対象 filing list を返す)'
+        required: false
+        default: 'false'
+
+concurrency:
+  group: guidance-backfill
+  cancel-in-progress: false   # 二重発火は待機 (upsert 競合回避)
+
+jobs:
+  backfill:
+    name: Guidance backfill batch
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BASE: https://beatscanner-production.up.railway.app
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Setup tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq jq curl
+
+      - name: Guard — CRON_SECRET present
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET secret 未設定。 nightly_scan.yml と同じ secret を共用してください。"
+            exit 1
+          fi
+
+      - name: Build tickers JSON array
+        id: build
+        run: |
+          # 空白 / カンマ区切り入力 → JSON array に正規化
+          RAW="${{ github.event.inputs.tickers }}"
+          ARR=$(echo "$RAW" | tr ',' ' ' | tr -s ' ' '\n' | grep -v '^$' | tr '[:lower:]' '[:upper:]' | jq -R . | jq -cs .)
+          echo "tickers=$ARR" >> "$GITHUB_OUTPUT"
+          echo "対象 tickers: $ARR"
+
+      - name: Guidance backfill
+        run: |
+          BODY=$(jq -cn \
+            --argjson tickers '${{ steps.build.outputs.tickers }}' \
+            --argjson max_filings ${{ github.event.inputs.max_filings || 2 }} \
+            --argjson dry_run ${{ github.event.inputs.dry_run || false }} \
+            '{tickers:$tickers, max_filings:$max_filings, dry_run:$dry_run}')
+          echo "=== guidance-backfill (body=$BODY) ==="
+          resp=$(curl -s --max-time 1200 -w '\nHTTP:%{http_code}' -X POST \
+            -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
+            -d "$BODY" "$BASE/api/cron/guidance-backfill")
+          http=$(echo "$resp" | tail -1)
+          body=$(echo "$resp" | sed '$d')
+          echo "$http"
+          echo "$body" | jq '.' 2>/dev/null || echo "$body"
+          {
+            echo "### Guidance Backfill ($(date -u +'%Y-%m-%d %H:%M UTC'))"
+            echo "- HTTP: \`$http\`"
+            echo "- body: \`$BODY\`"
+            echo '```json'
+            echo "$body" | jq '.' 2>/dev/null || echo "$body"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "$http" | grep -q "HTTP:2" || { echo "::error::guidance-backfill non-2xx response"; exit 1; }
