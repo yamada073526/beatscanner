@@ -141,11 +141,12 @@ describe('presetWin — gold 標榜 (別格) 判定 (SPEC_2026-06-29 A1・本番
 describe('buildGroupRuns — カテゴリ run/span 算出 (詳細モード)', () => {
   const runShape = (r) => r.map((g) => [g.key, g.span, g.kind, g.label]);
 
-  it('new_high_break: 勢い2 | 決算実績2(zone) | rs1', () => {
+  it('new_high_break: 勢い2 | 決算実績2(zone) | rs1 | セクターRS1(zone・B2)', () => {
     expect(runShape(buildGroupRuns(PRESET_COLUMNS.new_high_break, 'new_high_break'))).toEqual([
       ['momentum', 2, 'plain', '勢い'],
       ['result', 2, 'zone', '決算実績'],
       ['rs', 1, 'plain', ''],
+      ['sectorrot', 1, 'zone', 'セクターRS'],
     ]);
   });
   it('sector_leader: 順位1 | 収益の質2(zone) | 需給1(zone) | rs1', () => {
@@ -192,8 +193,8 @@ describe('buildGroupRuns — 簡素モード (core 間引きで run 再計算)',
 describe('withGroupDividers — dstart は zone group の先頭のみ・fut は 4 preset で常に false', () => {
   const dstartIds = (cols, p) => withGroupDividers(cols, p).filter((c) => c.dstart).map((c) => c.id);
 
-  it('new_high_break: 決算実績 先頭 eps に dstart', () => {
-    expect(dstartIds(PRESET_COLUMNS.new_high_break, 'new_high_break')).toEqual(['eps']);
+  it('new_high_break: 決算実績 先頭 eps と セクターRS 先頭 sectorrs に dstart (B2)', () => {
+    expect(dstartIds(PRESET_COLUMNS.new_high_break, 'new_high_break')).toEqual(['eps', 'sectorrs']);
   });
   it('sector_leader: 収益の質 先頭 ocf と 需給 先頭 inst に dstart', () => {
     expect(dstartIds(PRESET_COLUMNS.sector_leader, 'sector_leader')).toEqual(['ocf', 'inst']);

@@ -20607,10 +20607,12 @@ def _compute_sector_rs_standings(
     /api/technical detail reader (_sector_rs_standing_for) が共有する DRY helper。
 
     rows: [{"ticker": str, "sector": str|None, "rs_vs_spy_pct": float|None}, ...]
-    返り値: {ticker: {is_sector_rs_leader, sector_rs_median, sector_n, sector_rank}}
+    返り値: {ticker: {is_sector_rs_leader, sector_rs_median, sector_n, sector_rank, sector_group_rs_pct}}
       - sector_n: 同 sector の有効 RS 銘柄数 (rs_vs_spy_pct が finite な数)
       - sector_rank: sector 内 RS 降順順位 (1-based、有効値のみ)
       - is_sector_rs_leader: sector_rank <= leader_top_n かつ sector_n >= min_valid
+      - sector_group_rs_pct: sector 内 RS percentile (上位=100、B2 SPEC_2026-06-29)。
+        小 sector の誤シグナル防止で sector_n < min_valid は None (honest「—」)。
     None-safe: RS None / sector None は is_sector_rs_leader=False、sector_rank=None。
     """
     _sector_rs_lists: dict[str, list[float]] = {}
@@ -20651,6 +20653,9 @@ def _compute_sector_rs_standings(
             "is_sector_rs_leader": False,
             "sector_n": _valid_count.get(_sec) if _sec else None,
             "sector_rank": None,
+            # B2 (SPEC_2026-06-29 Part B): sector 内 RS percentile (上位=100)。
+            # 小 sector の誤シグナル防止で sector_n < min_valid は None (honest「—」)。
+            "sector_group_rs_pct": None,
         }
         if _sec is not None and _rs is not None:
             try:
@@ -20659,9 +20664,14 @@ def _compute_sector_rs_standings(
                 if math.isfinite(_rs_f) and _rs_f in _desc:
                     _rank0 = _desc.index(_rs_f)
                     _rec["sector_rank"] = _rank0 + 1
+                    _n_sec = _valid_count.get(_sec, 0)
                     _rec["is_sector_rs_leader"] = bool(
-                        _rank0 < leader_top_n and _valid_count.get(_sec, 0) >= min_valid
+                        _rank0 < leader_top_n and _n_sec >= min_valid
                     )
+                    # percentile = (n - rank0)/n * 100 (rank0=0 が最上位→100)。
+                    # is_sector_rs_leader と同じ min_valid 閾値で gate (一貫性 + Trust Cliff 回避)。
+                    if _n_sec >= min_valid:
+                        _rec["sector_group_rs_pct"] = round((_n_sec - _rank0) / _n_sec * 100, 1)
             except (ValueError, TypeError, AttributeError):
                 pass
         out[_tk] = _rec
@@ -20963,13 +20973,15 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
     if items:
         # Sprint 3b (SPEC_2026-06-28): sector-leader 計算を _compute_sector_rs_standings に集約
         # (detail reader _sector_rs_standing_for と DRY)。
-        # 挙動不変: scanner payload には従来通り sector_rs_median + is_sector_rs_leader のみ書き戻す
-        # (threshold=5 維持。sector_n / sector_rank は scanner では非露出 = payload shape 不変)。
+        # scanner payload には sector_rs_median + is_sector_rs_leader + sector_group_rs_pct (B2) を書き戻す
+        # (threshold=5 維持。sector_n / sector_rank は scanner では非露出)。
         _standings = _compute_sector_rs_standings(items, min_valid=5, leader_top_n=3)
         for _it in items:
             _st = _standings.get(_it.get("ticker")) or {}
             _it["sector_rs_median"] = _st.get("sector_rs_median")
             _it["is_sector_rs_leader"] = _st.get("is_sector_rs_leader", False)
+            # B2: sector 内 RS percentile (in-memory post-pass・DB/nightly scan 非依存・即時反映)。
+            _it["sector_group_rs_pct"] = _st.get("sector_group_rs_pct")
 
     # headline as_of = 最新 refresh (= nightly scan の鮮度)。 鮮度差は per-facet freshness map で開示。
     # min は lagging facet (earnings_evaluation funda_pass は決算イベント依存で数十日 stale) に引きずられ

@@ -115,3 +115,35 @@ def test_non_finite_rs_excluded():
     assert st["A"]["is_sector_rs_leader"] is False
     assert st["A"]["sector_rank"] is None
     assert st["B"]["is_sector_rs_leader"] is False
+
+
+def test_sector_group_rs_pct_percentile():
+    """B2 (SPEC_2026-06-29 Part B): sector 内 RS percentile (上位=100)。
+
+    percentile = (n - rank0)/n * 100。min_valid 以上の sector のみ算出 (小 sector の
+    誤シグナル防止で None = honest「—」)。sector None / RS None も None。
+    """
+    st = _compute_sector_rs_standings(_rows(), min_valid=5, leader_top_n=3)
+    # Tech n=12: rank1(最上位)=100 / rank6=58.3 / rank12(最下位)=8.3
+    assert st["TECH1"]["sector_group_rs_pct"] == 100.0
+    assert st["TECH6"]["sector_group_rs_pct"] == 58.3
+    assert st["TECH12"]["sector_group_rs_pct"] == 8.3
+    # Mid n=7: rank1=100 / rank7=14.3
+    assert st["MID1"]["sector_group_rs_pct"] == 100.0
+    assert st["MID7"]["sector_group_rs_pct"] == 14.3
+    # Small n=4 < min_valid=5 → 誤シグナル防止で None
+    assert st["SMALL1"]["sector_group_rs_pct"] is None
+    # sector None / RS None は None (捏造しない)
+    assert st["NOSEC"]["sector_group_rs_pct"] is None
+    assert st["NORS"]["sector_group_rs_pct"] is None
+
+
+def test_sector_group_rs_pct_respects_min_valid():
+    """min_valid を上げると小 sector の percentile は None (leader と同じ gate・一貫性)。"""
+    st = _compute_sector_rs_standings(_rows(), min_valid=10, leader_top_n=3)
+    # Tech n=12 >= 10 → percentile あり
+    assert st["TECH1"]["sector_group_rs_pct"] == 100.0
+    # Mid n=7 < 10 → percentile None (rank / n は事実として残す)
+    assert st["MID1"]["sector_group_rs_pct"] is None
+    assert st["MID1"]["sector_rank"] == 1
+    assert st["MID1"]["sector_n"] == 7

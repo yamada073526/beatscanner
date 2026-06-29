@@ -81,6 +81,8 @@ export function normalizeMetrics(it) {
     instQoq: it.inst_holders_qoq_pct ?? null,     // 機関保有 QoQ (%)
     isSectorLeader: it.is_sector_rs_leader ?? null, // セクター内 RS 上位3位以内 (bool)
     latestBeat: it.latest_beat ?? null,           // 直近決算ビート (bool・過去確定=chip 色可)
+    // B2 (SPEC_2026-06-29 Part B): セクター内 RS percentile (上位=100・FMP セクター大分類・§38 中立)。
+    sectorGroupRsPct: it.sector_group_rs_pct ?? null,
   };
 }
 
@@ -128,6 +130,7 @@ export const PRESET_COLUMNS = {
     { id: 'eps',      header: 'EPS',   headerSub: 'YoY',   kind: 'delta',   metricKey: 'epsYoY',      unit: '%', tier: 'sec', core: false, width: '56px', label: 'EPS YoY', group: 'result' },
     { id: 'beat',     header: '直近',  headerSub: 'ビート', kind: 'verdict', metricKey: 'latestBeat',             tier: 'pri', core: false, width: '54px', label: '直近決算ビート', group: 'result' },
     { id: 'rs',       header: 'RS',                         kind: 'rs',                                          tier: 'pri', core: true,  width: '40px', label: 'RS', group: 'rs' },
+    { id: 'sectorrs', header: 'セクター', headerSub: 'RS順位', kind: 'level', metricKey: 'sectorGroupRsPct', unit: '', tier: 'sec', core: false, width: '60px', label: 'セクター内RS順位 (percentile・上位ほど高い・FMP セクター大分類)', group: 'sectorrot' },
   ],
   // セクター別リーダー: セクター内順位(リーダー) + CF/ROE(質) + 機関保有増(需給) + RS。
   sector_leader: [
@@ -161,7 +164,7 @@ export const PRESET_COLUMNS = {
 //    earnings_pass 据え置き)。label '' の group は見出しラベルを出さない (列ヘッダで自明な単独列)。
 //    提案列 (CFPS>EPS/業種RS) は backend data 待ち=Task B のため未搭載。
 export const PRESET_GROUP_META = {
-  new_high_break: { momentum: { label: '勢い', kind: 'plain' }, result: { label: '決算実績', kind: 'zone' }, rs: { label: '', kind: 'plain' } },
+  new_high_break: { momentum: { label: '勢い', kind: 'plain' }, result: { label: '決算実績', kind: 'zone' }, rs: { label: '', kind: 'plain' }, sectorrot: { label: 'セクターRS', kind: 'zone' } },
   sector_leader:  { rank: { label: '', kind: 'plain' }, quality: { label: '収益の質', kind: 'zone' }, demand: { label: '需給', kind: 'zone' }, rs: { label: '', kind: 'plain' } },
   quiet_quality:  { rs: { label: '', kind: 'plain' }, demand: { label: '需給(静か)', kind: 'zone' }, quality: { label: '収益の質', kind: 'zone' } },
   market_leading: { relstr: { label: '相対力', kind: 'plain' }, quality: { label: '収益の質', kind: 'zone' }, result: { label: '決算実績', kind: 'zone' } },
