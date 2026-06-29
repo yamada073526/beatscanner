@@ -603,6 +603,19 @@ export default function JudgmentDetail({
 
           // ── v6 章レイアウト ──
           // Sprint 1: L0 + L1 + TOC + L2（決算3点 detail + 8Q spark + 5条件）+ L3-L6（既存要素を仮配置）
+          // task4 (Phase2): 全 chapter (§①〜⑤) を共通カード枠で統一 (mockup v5 .panel)。border + 上端 2px
+          //   gold + radius-lg のみ・box-shadow なし = 発光 host にしない (glow_elevation_postmortem v58→v59:
+          //   layout wrapper を glow host 化しない / 入れ子 glow の二重枠回避)。背景は透明 (面の足し算回避・
+          //   user 判断、 境目が不明瞭なら後で薄い面を検討)。overflow は既定 visible 維持 (内側 FiveConditionsCard /
+          //   analyst halo の box-shadow を clip しない)。見出し (gold 番号) は枠外 = mockup .chapter-h。
+          const CHAPTER_FRAME = {
+            display: 'grid',
+            gap: 'var(--space-4, 16px)',
+            border: '1px solid var(--border)',
+            borderTop: '2px solid color-mix(in srgb, var(--color-gold) 30%, var(--border))',
+            borderRadius: 'var(--radius-lg, 16px)',
+            padding: 'var(--space-5, 20px)',
+          };
           return (
             <div
               data-testid="pane3-v6-layout"
@@ -679,6 +692,8 @@ export default function JudgmentDetail({
                     )}
                   </div>
 
+                  {/* task4: 章の内容を共通カード枠で囲う（mockup .panel・見出しは枠外） */}
+                  <div style={CHAPTER_FRAME}>
                   {/* 決算3点 detail（mockup 忠実 lean 版 = EarningsThreePoint・guidance prop 流用で fetch 重複ゼロ）。
                       2026-06-28 user gate「素の3列に簡素化」: 旧 EarningsFlashSummary の部門別/粗利率/ヘッダー帯/
                       count-up を落とし mockup .earn-grid + .future-strip に。数値は L1 buckets と同 source で整合。*/}
@@ -714,11 +729,11 @@ export default function JudgmentDetail({
                       setPulsingConditionIndex(idx === 4 ? 'all_steps' : idx);
                     }}
                   />
+                  </div>
                 </section>
               )}
 
-              <hr style={{ height: 1, background: 'var(--border)', border: 0, margin: 0 }} />
-
+              {/* task4: 章間 hr 撤去（カード枠が区切りを担う・mockup 準拠） */}
               {/* ─── L3 品質・継続性（Sprint 2-C: fold 累進開示・mockup 順: CFマージン→ROE/PER/PEG→会社概要）─── */}
               <section
                 data-testid="v6-quality-section"
@@ -730,6 +745,8 @@ export default function JudgmentDetail({
                   <span style={{ fontSize: 17, fontWeight: 700 }}>品質・継続性</span>
                   <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>サマリー常時 · 詳細は展開</span>
                 </div>
+                {/* task4: 章の内容を共通カード枠で囲う */}
+                <div style={CHAPTER_FRAME}>
                 {/* 営業CFマージン + ROE/PER/PEG + 機関保有 QoQ fold（valuation-extras 由来・非 equity は非表示）。*/}
                 {!isNonEquityV6 && valuationExtras && (
                   <L3QualityFold valuationExtras={valuationExtras} ticker={selectedTicker} />
@@ -755,10 +772,10 @@ export default function JudgmentDetail({
                   setCh2Tab={setCh2Tab}
                   onAnalyze={onAnalyze}
                 />
+                </div>
               </section>
 
-              <hr style={{ height: 1, background: 'var(--border)', border: 0, margin: 0 }} />
-
+              {/* task4: 章間 hr 撤去（カード枠が区切りを担う・mockup 準拠） */}
               {/* ─── L4 テクニカル・買い場（チャート + PriceLadder 1ユニット + 期間別リターン降格）─── */}
               <section
                 data-testid="v6-technical-section"
@@ -769,6 +786,8 @@ export default function JudgmentDetail({
                   <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-gold)', letterSpacing: '0.04em' }}>③</span>
                   <span style={{ fontSize: 17, fontWeight: 700 }}>テクニカル・買い場</span>
                 </div>
+                {/* task4: 章の内容を共通カード枠で囲う */}
+                <div style={CHAPTER_FRAME}>
                 {/* 同定リボン: mockup 非対応 + L0 同定層と情報重複のため撤去
                     (2026-06-28 mockup 忠実化・user gate)。 */}
                 {/* チャート + PriceLadder = v5 の 1 ユニット構造を継承（mockup L4: 価格ラダー → 期間別リターン 順）*/}
@@ -812,10 +831,10 @@ export default function JudgmentDetail({
                     </span>
                   </div>
                 )}
+                </div>
               </section>
 
-              <hr style={{ height: 1, background: 'var(--border)', border: 0, margin: 0 }} />
-
+              {/* task4: 章間 hr 撤去（カード枠が区切りを担う・mockup 準拠） */}
               {/* ─── L5 図解（Pro/Premium）─── */}
               <section
                 data-testid="v6-figure-section"
@@ -827,6 +846,8 @@ export default function JudgmentDetail({
                   <span style={{ fontSize: 17, fontWeight: 700 }}>図解で理解する</span>
                   <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>Pro</span>
                 </div>
+                {/* task4: 章の内容を共通カード枠で囲う */}
+                <div style={CHAPTER_FRAME}>
                 {/* DiagramCard は unmount 禁止（feedback_diagram_card_remount_cache.md）
                     Pro/Premium = render、free = PremiumLock（mount 維持・display:none は親で制御）*/}
                 {(plan === 'pro' || plan === 'premium') ? (
@@ -853,10 +874,10 @@ export default function JudgmentDetail({
                     />
                   </PremiumLock>
                 )}
+                </div>
               </section>
 
-              <hr style={{ height: 1, background: 'var(--border)', border: 0, margin: 0 }} />
-
+              {/* task4: 章間 hr 撤去（カード枠が区切りを担う・mockup 準拠） */}
               {/* ─── L6 その他（目次から到達）─── */}
               <section
                 data-testid="v6-more-section"
@@ -867,6 +888,8 @@ export default function JudgmentDetail({
                   <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-gold)', letterSpacing: '0.04em' }}>⑤</span>
                   <span style={{ fontSize: 17, fontWeight: 700 }}>その他</span>
                 </div>
+                {/* task4: 章の内容を共通カード枠で囲う */}
+                <div style={CHAPTER_FRAME}>
                 {/* L6 fold 群 (mockup pane3-detail-v1.html の「その他」#more に忠実な 5 fold フラット) */}
                 {/* fold #1-2: アナリスト視点 / 市場の声 */}
                 <MarketEvalSection
@@ -920,6 +943,7 @@ export default function JudgmentDetail({
                   useWorkspaceReader={useWorkspaceReader}
                   expandedSections={expandedSections}
                 />
+                </div>
               </section>
             </div>
           );
