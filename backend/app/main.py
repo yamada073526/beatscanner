@@ -3973,6 +3973,28 @@ async def _fetch_sp500_top_n(n: int = BACKTEST_UNIVERSE_SIZE) -> list[str]:
         return top
 
 
+def _merge_universe_with_anchors(screener_top: list[str], anchors: list[str], n: int) -> list[str]:
+    """screener 由来 top-N に index anchor (S&P500 構成銘柄) を union する純関数 (task5 fix)。
+
+    背景 (2026-06-26 顕在化・GitHub Actions 実測で確定):
+      FMP /stable/company-screener が、全 filter 条件 (marketCap>500M / price>5 / vol>200k /
+      isActivelyTrading / NASDAQ,NYSE) を満たす大型株 ~125 名 (ABBV/ABT/C/BX/F/CMG/DG/JBL...) を
+      返さなくなった (FMP 側のデータ欠損)。screener 単一ソース依存だと index メンバーが universe から
+      消える (Trust Cliff)。/stable/sp500-constituent は健全 (503件・当該銘柄を全て含む) なので union。
+
+    挙動:
+      - screener_top の順序 (marketCap 降順) を保持し、screener に無い anchor のみ末尾へ追加。
+      - anchor を優先保持しつつ全体を n に cap (anchor が n を超える事態は SP500≈503 << n=3000 で非現実)。
+      - anchor が空 (fetch 失敗) でも screener_top[:n] を返す = graceful degrade (退行しない)。
+    """
+    seen = set(screener_top)
+    missing = [a for a in anchors if a and a not in seen]
+    if not missing:
+        return screener_top[:n]
+    keep = max(0, n - len(missing))
+    return (screener_top[:keep] + missing)[:n]
+
+
 async def _fetch_market_cap_top_n(n: int = 1000) -> list[str]:
     """Russell 3000 相当: market_cap top N 銘柄 (NASDAQ + NYSE) を返す (24h cache).
 
@@ -4029,6 +4051,22 @@ async def _fetch_market_cap_top_n(n: int = 1000) -> list[str]:
         if not top:
             print("[universe] _fetch_market_cap_top_n: 0 valid entries")
             return []
+        # task5 fix: FMP company-screener が大型株を欠落させる事象 (2026-06-26 ABBV/ABT/C/... 脱落) への
+        # 防御。S&P500 構成銘柄 (別データソースで健全) を union し index メンバーが消えるのを防ぐ。
+        # _fetch_sp500_top_n は内部で例外を握り hardcode fallback を返すため raise しない (二重 guard で try)。
+        try:
+            anchors = await _fetch_sp500_top_n(500)
+        except Exception as e:  # pragma: no cover (防御的・実際には _fetch_sp500_top_n が握る)
+            print(f"[universe] anchor (sp500) fetch failed ({e}), union skip")
+            anchors = []
+        merged = _merge_universe_with_anchors(top, anchors, n)
+        added = [t for t in merged if t not in set(top)]
+        if added:
+            # screener が落とした index 大型株の補填件数。多数 (>20) なら screener 劣化が進行中の警告。
+            sev = "::warning::" if len(added) > 20 else ""
+            print(f"{sev}[universe] SP500 anchor union: screener 欠落の index 大型株 +{len(added)} 補填 "
+                  f"(例 {added[:8]})")
+        top = merged
         _BACKTEST_UNIVERSE_CACHE[cache_key] = {"ts": _time.time(), "tickers": top}
         print(f"[universe] dynamic fetched mktcap_top{n}: {len(top)} tickers (head: {top[:5]} / tail: {top[-3:]})")
         return top
