@@ -336,10 +336,17 @@ export default function ConditionRow({
                 </div>
               )}
 
-              {/* Sparkline */}
+              {/* Sparkline — Sprint 3: hover で各点の期ラベル + 値 tooltip。
+                  series は古→新 (直近=右)。期ラベルは末尾基準の相対表記 (直近 / 前期 / n期前)。 */}
               {Array.isArray(condition.series) && condition.series.some((v) => v != null) && (
                 <div style={{ height: 56, minHeight: 56 }}>
-                  <Sparkline data={condition.series} color={sparkColor} />
+                  <Sparkline
+                    data={condition.series}
+                    color={sparkColor}
+                    labels={buildSeriesLabels(condition.series.length)}
+                    valueFormatter={formatSeriesValue}
+                    seriesLabel={condition.label || condition.name}
+                  />
                 </div>
               )}
 
@@ -365,6 +372,27 @@ export default function ConditionRow({
   );
 }
 
+// Sprint 3: 5条件展開 sparkline の hover tooltip 用。series は古→新 (直近=右)。
+// 期ラベルは末尾 (直近) 基準の相対表記。actual な四半期名は series に持たないため相対表記で誠実に。
+function buildSeriesLabels(n) {
+  if (!Number.isFinite(n) || n <= 0) return [];
+  return Array.from({ length: n }, (_, i) => {
+    const fromEnd = n - 1 - i;
+    if (fromEnd === 0) return '直近';
+    if (fromEnd === 1) return '前期';
+    return `${fromEnd}期前`;
+  });
+}
+
+// series 値の整形 (単位は series に含まれないため数値のみ。大きさで桁数を調整)。
+function formatSeriesValue(v) {
+  if (!Number.isFinite(v)) return '—';
+  if (Math.abs(v) >= 1e9) return `${(v / 1e9).toFixed(1)}B`;
+  if (Math.abs(v) >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
+  if (Math.abs(v) >= 100) return v.toFixed(0);
+  return v.toFixed(2);
+}
+
 // v86 R2 Vision 改善提案 #3: 数値と補助単位 (B/M/%) を 2 層階層に分離。
 // 戻り値: { num: string, unit: string|null }
 function formatValueParts(v) {
@@ -377,7 +405,7 @@ function formatValueParts(v) {
   }
   // string 受け取り: backend 整形済の "12.3%" 等から数値部と単位を分離。
   const s = String(v);
-  const m = s.match(/^([\-+]?[\d.,]+)\s*([%a-zA-Z]+)$/);
+  const m = s.match(/^([-+]?[\d.,]+)\s*([%a-zA-Z]+)$/);
   if (m) return { num: m[1], unit: m[2] };
   return { num: s, unit: null };
 }
