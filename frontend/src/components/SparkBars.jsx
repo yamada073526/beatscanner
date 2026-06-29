@@ -91,7 +91,7 @@ export default function SparkBars({
   );
 }
 
-function BarsTooltip({ tip }) {
+export function BarsTooltip({ tip }) {
   const ref = useRef(null);
   const { label, value, x, y } = tip;
   useLayoutEffect(() => {

@@ -31,14 +31,14 @@ import { smoothScrollToElement } from '../../../../lib/smoothScroll.js';
 /**
  * Sprint 5: condition click → collapsed AccordionSection 自動展開 + smooth scroll。
  * feedback_condition_pulse_pattern.md 流儀に従い、static dictionary で mapping を定義。
- * 0-indexed: idx=3 → 条件 4 (CC コール / アナリスト視点) → 'analyst-panel'
+ * 現在は全条件 pulse のみ。section 自動展開 mapping は条件並び drift により無効化（構造は将来用に保持）。
  * LLM 不変、静的 dictionary のみ (Hallucination Guard 4 重防御 §4 該当外)。
  */
 const CONDITION_SECTION_MAP = {
   0: null, // 条件 1: EarningsHistoryChart expanded → pulse のみ
   1: null, // 条件 2: EarningsHistoryChart expanded → pulse のみ
   2: null, // 条件 3: EarningsHistoryChart expanded → pulse のみ
-  3: 'analyst-panel', // 条件 4 (CC コール): AnalystPanel collapsed → 自動展開
+  3: null, // 条件 4: 売上高 連続増加 → pulse のみ（旧「CC コール」mapping の drift。誤スクロール除去・dogfood）
   4: null, // 条件 5: GuidanceCard expanded → pulse のみ
 };
 

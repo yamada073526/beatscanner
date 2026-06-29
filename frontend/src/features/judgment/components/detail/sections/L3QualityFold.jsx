@@ -31,7 +31,7 @@
  */
 import { useEffect, useState } from 'react';
 import AccordionSection from '../../../primitives/AccordionSection.jsx';
-import SparkBars from '../../../../../components/SparkBars.jsx';
+import SparkBars, { BarsTooltip } from '../../../../../components/SparkBars.jsx';
 import { fetchQuarterlyHistory, fetchCanslimRows, fetchEarningsEvaluation } from '../../../../../api.js';
 
 const TESTID = 'l3-quality-fold';
@@ -266,41 +266,65 @@ function FoldSparkline({ title, series, labels, color, valueFormatter }) {
 
 // 5条件 × 8Q ヒートマップ (fold 専用)。行=条件 / 列=四半期 (左=過去・右=直近)。
 // 緑=充足・赤=未充足・灰=データ無 (投資業界色ルール準拠)。各セル ~22px で hover に余裕 (Fitts則)。
+// 行間 hairline で「行=1指標」の読み (どの条件が鉄板/ネックか) を補助。各セル hover で portal tooltip
+// (SparkBars と同 idiom・native title は親 overflow で出ない/遅いため置換)。ラベルは全文表示 (ellipsis 撤去)。
 // §38-safe: 過去の機械的 PASS/FAIL を転記するだけ。評価語・将来予測なし。
-function FiveCondHeatmap({ conditions }) {
+function FiveCondHeatmap({ conditions, periodLabels = [] }) {
+  const [tip, setTip] = useState(null);
   const cellCount = conditions[0]?.cells?.length || 0;
   if (cellCount < 1) return null;
-  const cell = (v, key) => {
+  const LABEL_W = 112; // 最長ラベル「①CFマージン≥15%」(~91px) を切らずに収める
+  const showTip = (cond, i, v, e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const status = v === true ? '充足' : v === false ? '未充足' : 'データ無';
+    const period = periodLabels[i] ? ` · ${periodLabels[i]}` : '';
+    setTip({
+      label: `${cond.num}${cond.short}${period}`,
+      value: status,
+      x: Math.round(r.left + r.width / 2),
+      y: Math.round(r.top),
+    });
+  };
+  const hideTip = () => setTip(null);
+  const cell = (cond, v, i) => {
     let bg = 'var(--bg-subtle)';
     let bd = 'var(--border)';
     if (v === true) { bg = 'color-mix(in srgb, var(--color-gain) 78%, transparent)'; bd = 'var(--color-gain)'; }
     else if (v === false) { bg = 'color-mix(in srgb, var(--color-loss) 70%, transparent)'; bd = 'var(--color-loss)'; }
     return (
       <span
-        key={key}
-        title={v === true ? '充足' : v === false ? '未充足' : 'データ無'}
+        key={`${cond.key}-${i}`}
+        onMouseEnter={(e) => showTip(cond, i, v, e)}
+        onMouseLeave={hideTip}
         style={{
           width: 22, height: 18, borderRadius: 4,
           background: bg, border: `1px solid color-mix(in srgb, ${bd} 45%, transparent)`,
-          flex: '0 0 auto',
+          flex: '0 0 auto', cursor: 'default',
         }}
       />
     );
   };
   return (
-    <div style={{ display: 'grid', gap: 4, overflowX: 'auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: 'var(--text-muted)', paddingLeft: 92 }}>
+    <div style={{ display: 'grid', gap: 0, overflowX: 'auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: 'var(--text-muted)', paddingLeft: LABEL_W + 4, marginBottom: 4 }}>
         <span>過去</span>
         <span>直近</span>
       </div>
-      {conditions.map((c) => (
-        <div key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ width: 88, flex: '0 0 auto', fontSize: 10.5, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      {conditions.map((c, ri) => (
+        <div
+          key={c.key}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4, padding: '4px 0',
+            borderTop: ri === 0 ? 'none' : '1px solid color-mix(in srgb, var(--border) 50%, transparent)',
+          }}
+        >
+          <span style={{ width: LABEL_W, flex: '0 0 auto', fontSize: 10.5, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
             {c.num}{c.short}
           </span>
-          {c.cells.map((v, i) => cell(v, `${c.key}-${i}`))}
+          {c.cells.map((v, i) => cell(c, v, i))}
         </div>
       ))}
+      {tip && <BarsTooltip tip={tip} />}
     </div>
   );
 }
@@ -635,7 +659,7 @@ export default function L3QualityFold({ valuationExtras, ticker }) {
               color="var(--color-accent)"
               valueFormatter={(v) => `${v}/5`}
             />
-            <FiveCondHeatmap conditions={evalCont.conditions} />
+            <FiveCondHeatmap conditions={evalCont.conditions} periodLabels={evalCont.periodLabels} />
             {(evalCont.stable.length > 0 || evalCont.neck.length > 0) && (
               <div style={{ display: 'grid', gap: 2 }}>
                 {evalCont.stable.length > 0 && (
