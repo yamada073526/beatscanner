@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark">
+<head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>§③ 価格目安（PriceLadder）再設計 — 改善案比較 v1</title>
+<style>
+  :root{
+    --bg-primary:#0f172a;--bg-card:#1e2433;--bg-subtle:#1e2a3a;--bg-muted:#243447;--bg-hover:#253045;--bg-future:#121a28;
+    --text-primary:#f1f5f9;--text-secondary:#cbd5e1;--text-muted:#94a3b8;--border:#334155;--border-strong:rgba(255,255,255,.14);
+    --gain:#34ef81;--loss:#f87171;--warning:#f59e0b;--accent:#38bdf8;--gold:#d4af37;
+    --radius-sm:8px;--radius-md:12px;--radius-lg:16px;
+    --shadow-2:0 2px 4px rgba(0,0,0,.40),0 4px 8px rgba(0,0,0,.24);
+    --shadow-3:0 4px 12px rgba(0,0,0,.50),0 12px 24px rgba(0,0,0,.30);
+    --glow-cyan:0 0 0 1px rgba(56,189,248,.30),0 8px 32px rgba(56,189,248,.20);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg-primary);color:var(--text-primary);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;font-feature-settings:"tnum";-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:560px;margin:0 auto;padding:24px 22px 96px;}
+  .legend{font-size:12px;color:var(--text-muted);margin:0 0 22px;padding:11px 14px;background:var(--bg-subtle);border:1px dashed var(--border);border-radius:var(--radius-sm);line-height:1.65;}
+  .legend b{color:var(--text-secondary);}
+  .opt-h{display:flex;align-items:baseline;gap:10px;margin:34px 0 6px;}
+  .opt-h .tag{font-size:11px;font-weight:800;letter-spacing:.04em;color:var(--gold);background:rgba(212,175,55,.12);border:1px solid rgba(212,175,55,.3);border-radius:6px;padding:2px 9px;}
+  .opt-h .ti{font-size:16px;font-weight:700;letter-spacing:-.01em;}
+  .opt-h.rec .tag{color:var(--gain);background:rgba(52,239,129,.14);border-color:rgba(52,239,129,.32);}
+  .opt-desc{font-size:12px;color:var(--text-muted);line-height:1.6;margin:0 0 14px;}
+  .opt-desc .pro{color:var(--gain);} .opt-desc .con{color:var(--warning);}
+  .panel{background:var(--bg-card);border:1px solid var(--border);border-top:2px solid color-mix(in srgb,var(--gold) 30%,var(--border));border-radius:var(--radius-lg);padding:18px;}
+  .sec-label{font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--gold);text-transform:uppercase;margin:0 0 14px;display:flex;align-items:center;gap:8px;}
+  .sec-label .en{color:var(--text-muted);font-weight:500;letter-spacing:0;text-transform:none;}
+  .muted{color:var(--text-muted);} .mono{font-variant-numeric:tabular-nums;}
+
+  /* ============ 案A: 垂直プライスアクシス（高度計） ============ */
+  .axis{position:relative;height:336px;margin:6px 0 4px;padding:6px 0;}
+  .axis .rail{position:absolute;left:128px;top:8px;bottom:8px;width:2px;border-radius:2px;
+    background:linear-gradient(180deg,rgba(52,239,129,.42),rgba(56,189,248,.30) 52%,rgba(248,113,113,.40));}
+  .axis .zone{position:absolute;left:122px;width:14px;border-radius:7px;opacity:.10;}
+  .axis .zone.up{background:var(--gain);} .axis .zone.dn{background:var(--loss);}
+  .lv{position:absolute;left:0;right:0;display:flex;align-items:center;height:0;}
+  .lv .tick{position:absolute;left:120px;width:18px;height:1px;background:var(--border-strong);}
+  .lv .lab{position:absolute;right:calc(100% - 116px);text-align:right;width:116px;padding-right:14px;font-size:11.5px;color:var(--text-secondary);line-height:1.25;}
+  .lv .lab .sub{display:block;font-size:9px;color:var(--text-muted);}
+  .lv .val{position:absolute;left:148px;font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--text-primary);}
+  .lv .dist{margin-left:8px;font-size:10.5px;color:var(--text-muted);font-variant-numeric:tabular-nums;}
+  .lv.up .dist{color:var(--gain);} .lv.dn .dist{color:var(--loss);}
+  .lv .lock{margin-left:6px;font-size:9px;color:var(--gold);}
+  /* 現在価格マーカー */
+  .lv.now .dot{position:absolute;left:123px;width:14px;height:14px;border-radius:50%;background:var(--accent);box-shadow:var(--glow-cyan);transform:translateX(-1px);}
+  .lv.now .lab{font-size:12.5px;color:var(--accent);font-weight:700;}
+  .lv.now .val{font-size:15px;font-weight:700;color:var(--accent);}
+  .lv .gleam{position:absolute;left:138px;font-size:10px;color:var(--text-muted);}
+  .axis .gapnote{position:absolute;left:148px;font-size:10.5px;color:var(--gain);opacity:.85;}
+
+  /* ============ 案B: 静謐テーブル（zone-grouped） ============ */
+  .qtbl{display:flex;flex-direction:column;}
+  .qtbl .zlab{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--text-muted);text-transform:uppercase;margin:14px 0 2px;}
+  .qtbl .zlab:first-child{margin-top:0;}
+  .qrow{display:flex;align-items:baseline;gap:10px;padding:9px 2px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);}
+  .qrow:last-child{border-bottom:none;}
+  .qrow .k{font-size:12.5px;color:var(--text-secondary);}
+  .qrow .k .src{font-size:9px;color:var(--text-muted);margin-left:6px;border:1px solid var(--border);border-radius:4px;padding:0 5px;}
+  .qrow .lock{font-size:9px;color:var(--gold);margin-left:6px;}
+  .qrow .v{margin-left:auto;font-size:13.5px;font-variant-numeric:tabular-nums;color:var(--text-primary);font-weight:600;}
+  .qrow .d{width:62px;text-align:right;font-size:11px;font-variant-numeric:tabular-nums;color:var(--text-muted);}
+  .qrow.up .d{color:var(--gain);} .qrow.dn .d{color:var(--loss);}
+  .qrow.now{margin:6px 0;padding:11px 14px;border-radius:var(--radius-sm);background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.22);border-bottom:1px solid rgba(56,189,248,.22);}
+  .qrow.now .k{color:var(--accent);font-weight:700;} .qrow.now .v{color:var(--accent);font-size:15px;font-weight:700;}
+
+  /* ============ 案C: 横レンジゲージ ============ */
+  .gauge{margin:18px 0 6px;}
+  .gauge .track{position:relative;height:8px;border-radius:4px;background:linear-gradient(90deg,rgba(248,113,113,.35),rgba(148,163,184,.28) 48%,rgba(52,239,129,.40));}
+  .gauge .mk{position:absolute;top:-5px;width:2px;height:18px;background:var(--text-muted);transform:translateX(-50%);}
+  .gauge .mk.now{top:-9px;width:3px;height:26px;background:var(--accent);box-shadow:0 0 10px rgba(56,189,248,.6);}
+  .gauge .mlab{position:absolute;font-size:9px;color:var(--text-muted);transform:translateX(-50%);white-space:nowrap;}
+  .gauge .nowcall{position:absolute;transform:translateX(-50%);font-size:11px;font-weight:700;color:var(--accent);white-space:nowrap;}
+  .gauge .leg{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;margin-top:46px;}
+  .gauge .leg .r{display:flex;align-items:baseline;gap:6px;font-size:11px;}
+  .gauge .leg .r .k{color:var(--text-secondary);} .gauge .leg .r .v{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--text-primary);font-weight:600;}
+  .gauge .leg .r .lock{color:var(--gold);font-size:9px;}
+
+  /* ============ gate treatments ============ */
+  .gatebox{margin-top:8px;}
+  .blur{filter:blur(5px);opacity:.5;user-select:none;}
+  .teaser{margin-top:12px;display:flex;align-items:center;gap:10px;border:1px dashed var(--gold);border-radius:var(--radius-sm);padding:11px 14px;background:rgba(212,175,55,.06);}
+  .teaser .lk{font-size:13px;}
+  .teaser .tx{font-size:11.5px;color:var(--text-secondary);line-height:1.5;} .teaser .tx b{color:var(--gold);}
+  .teaser .cta{margin-left:auto;font-size:11px;font-weight:700;color:var(--bg-primary);background:var(--gold);border-radius:6px;padding:5px 12px;white-space:nowrap;}
+  .pro-tag{font-size:10px;font-weight:700;color:var(--gold);background:rgba(212,175,55,.14);border:1px solid rgba(212,175,55,.3);border-radius:5px;padding:1px 7px;}
+
+  .note{font-size:11.5px;color:var(--text-muted);line-height:1.65;margin-top:14px;padding:11px 14px;background:var(--bg-subtle);border-left:3px solid var(--gold);border-radius:var(--radius-sm);}
+  .note b{color:var(--text-secondary);}
+  .divider{height:1px;background:var(--border);margin:40px 0 0;opacity:.5;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="legend">
+    <b>§③ 価格目安（PriceLadder）再設計 — 改善案比較 v1</b><br>
+    <b>現状（live 実装）</b>: 既に <b>縦 spine + 価格レベル11種 + 等間隔/縮尺 toggle + 地合い/出来高 chip + 状態サマリー行 + 当日 sparkline + count-up</b> を持つ。だが要素が多く SectionLabel も独自 inline で「静かな豪華さ」未達（=過密でクワイエットでない）。premium gate は <code>plan==='premium'</code> 時のみ丸ごと表示（<b>無料は完全非表示・ティーザー無し</b>）。<br>
+    狙い: <b>原則1（2秒でわかる）</b>＋<b>原則5（図解で認知コスト↓）</b>＋ブランド世界観（Aman/Ritz 級の静謐な高級感）。<b>＝「足す」でなく「絞る・整える」方向</b>。<br>
+    サンプル = NVDA $192.53。価格レベルは要点7種に蒸留（現行11種から）。<b>案A / 案B / 案C から方向を選択</b> → premium gate（G1〜G3）を選択 → full v5 に統合。
+  </div>
+
+  <!-- ============ 案 A ============ -->
+  <div class="opt-h rec"><span class="tag">案 A ・ 推奨</span><span class="ti">垂直プライスアクシス（現行 spine の蒸留）</span></div>
+  <p class="opt-desc">
+    <b>現行の縦 spine「縮尺モード」を蒸留</b>: 価格を縦軸に各レベルを実高さ配置・現在価格を発光マーカー。レベルを11→7に絞り、chip/toggle/状態行は §③ 上部に分離（spine 内は価格だけ）。<br>
+    <span class="pro">◎ 「今どの位置か」が一目（図解＝原則5最強）／上値余地・下値リスクの距離感が直感的／余白と数値美で静かな高級感</span><br>
+    <span class="con">△ 縦に高さが要る（約330px）／目標が遠いとき上部に余白（=上値余地として活用）／現行の縮尺 toggle を残すか要判断</span>
+  </p>
+  <div class="panel">
+    <div class="sec-label">買い場の目安 <span class="en">— 価格ラダー</span></div>
+    <div class="axis">
+      <div class="rail"></div>
+      <!-- zone tints -->
+      <div class="zone up" style="top:8px;height:148px;"></div>
+      <div class="zone dn" style="bottom:8px;height:138px;"></div>
+
+      <!-- 目標 $308 (top, far) -->
+      <div class="lv up" style="top:14px;"><span class="tick"></span>
+        <span class="lab">アナリスト目標<span class="sub">consensus n=74</span></span>
+        <span class="val">$308.00<span class="dist">+60.0%</span></span></div>
+      <div class="gapnote" style="top:62px;">↑ 上値余地（コンセンサス中央値まで）</div>
+
+      <!-- Pivot $215.62 -->
+      <div class="lv up" style="top:150px;"><span class="tick"></span>
+        <span class="lab">買い目安 Pivot<span class="sub">cup-handle</span></span>
+        <span class="val">$215.62<span class="dist">+12.0%</span><span class="lock">🔒</span></span></div>
+      <!-- 52週高値 $212.19 -->
+      <div class="lv up" style="top:172px;"><span class="tick"></span>
+        <span class="lab">52週高値</span>
+        <span class="val">$212.19<span class="dist">+10.2%</span></span></div>
+
+      <!-- 現在 $192.53 -->
+      <div class="lv now" style="top:206px;"><span class="dot"></span><span class="tick" style="background:var(--accent);"></span>
+        <span class="lab">現在価格</span>
+        <span class="val">$192.53</span></div>
+
+      <!-- リスク確認 $177.13 -->
+      <div class="lv dn" style="top:248px;"><span class="tick"></span>
+        <span class="lab">リスク確認 −8%</span>
+        <span class="val">$177.13<span class="dist">−8.0%</span><span class="lock">🔒</span></span></div>
+      <!-- 支持線 $171.40 -->
+      <div class="lv dn" style="top:270px;"><span class="tick"></span>
+        <span class="lab">支持線目安<span class="sub">box support</span></span>
+        <span class="val">$171.40<span class="dist">−11.0%</span><span class="lock">🔒</span></span></div>
+      <!-- 50DMA $164.20 -->
+      <div class="lv dn" style="top:300px;"><span class="tick"></span>
+        <span class="lab">50日移動平均</span>
+        <span class="val">$164.20<span class="dist">−14.7%</span></span></div>
+    </div>
+  </div>
+
+  <!-- ============ 案 B ============ -->
+  <div class="opt-h"><span class="tag">案 B</span><span class="ti">静謐テーブル（zone-grouped）</span></div>
+  <p class="opt-desc">
+    現行のテーブル型を踏襲しつつ、重い枠を排し hairline と余白・等幅数値で整える。上値/現在/下値の3ゾーンに分組。<br>
+    <span class="pro">◎ 実装が軽い／縦が短い／距離%でアクション直感／既存 §⑤ レンジバーと idiom 一貫</span><br>
+    <span class="con">△ 「図解」要素が弱い（テーブルの域）／案A ほどの驚きは無い</span>
+  </p>
+  <div class="panel">
+    <div class="sec-label">買い場の目安 <span class="en">— 価格ラダー</span></div>
+    <div class="qtbl">
+      <div class="zlab">上値（利益確定・目標の目安）</div>
+      <div class="qrow up"><span class="k">アナリスト目標<span class="src">consensus</span></span><span class="v mono">$308.00</span><span class="d">+60.0%</span></div>
+      <div class="qrow up"><span class="k">買い目安 Pivot<span class="src">cup-handle</span><span class="lock">🔒</span></span><span class="v mono">$215.62</span><span class="d">+12.0%</span></div>
+      <div class="qrow up"><span class="k">52週高値</span><span class="v mono">$212.19</span><span class="d">+10.2%</span></div>
+
+      <div class="qrow now"><span class="k">現在価格</span><span class="v mono">$192.53</span><span class="d"></span></div>
+
+      <div class="zlab">下値（支持・リスク確認）</div>
+      <div class="qrow dn"><span class="k">リスク確認 −8%<span class="lock">🔒</span></span><span class="v mono">$177.13</span><span class="d">−8.0%</span></div>
+      <div class="qrow dn"><span class="k">支持線目安<span class="src">box support</span><span class="lock">🔒</span></span><span class="v mono">$171.40</span><span class="d">−11.0%</span></div>
+      <div class="qrow dn"><span class="k">50日移動平均</span><span class="v mono">$164.20</span><span class="d">−14.7%</span></div>
+    </div>
+  </div>
+
+  <!-- ============ 案 C ============ -->
+  <div class="opt-h"><span class="tag">案 C</span><span class="ti">横レンジゲージ</span></div>
+  <p class="opt-desc">
+    支持線→目標を横一本のレンジに圧縮、現在価格を発光マーカーで。レベル詳細は下に凡例。<br>
+    <span class="pro">◎ 最もコンパクト（縦が最短）／チャート直下に自然に収まる</span><br>
+    <span class="con">△ レベル7種は横バーに密集して読みにくい／目標が遠く scale 歪み／高級感は中程度</span>
+  </p>
+  <div class="panel">
+    <div class="sec-label">買い場の目安 <span class="en">— 価格レンジ</span></div>
+    <div class="gauge">
+      <div class="track">
+        <!-- positions: $164.20→0%, $308→100%, range 143.8 -->
+        <div class="mk" style="left:5%;"></div><div class="mlab" style="left:5%;top:18px;">50DMA</div>
+        <div class="mk" style="left:33.4%;"></div>
+        <div class="mk" style="left:36.8%;"></div>
+        <div class="mk now" style="left:19.7%;"></div>
+        <div class="nowcall" style="left:19.7%;top:-26px;">現在 $192.53</div>
+        <div class="mk" style="left:100%;"></div><div class="mlab" style="left:97%;top:18px;">目標 $308</div>
+        <div class="mlab" style="left:35%;top:18px;">Pivot/52w</div>
+      </div>
+      <div class="leg">
+        <div class="r"><span class="k">アナリスト目標</span><span class="v mono">$308.00</span></div>
+        <div class="r"><span class="k">買い目安 Pivot <span class="lock">🔒</span></span><span class="v mono">$215.62</span></div>
+        <div class="r"><span class="k">52週高値</span><span class="v mono">$212.19</span></div>
+        <div class="r"><span class="k">リスク確認 <span class="lock">🔒</span></span><span class="v mono">$177.13</span></div>
+        <div class="r"><span class="k">支持線目安 <span class="lock">🔒</span></span><span class="v mono">$171.40</span></div>
+        <div class="r"><span class="k">50日移動平均</span><span class="v mono">$164.20</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ============ premium gate treatments ============ -->
+  <div class="opt-h"><span class="tag">GATE</span><span class="ti">premium gate の扱い（3案）</span></div>
+  <p class="opt-desc">
+    現状 AUDIT: 実装は <code>plan==='premium'</code> gate あり／mockup は常時表示で乖離。Trust Cliff 回避の観点で下記から選択。<br>
+    Premium 固有レベル = <b>買い目安 Pivot（cup-handle）/ 支持線目安（box support）/ リスク確認 −8%</b>。無料データ = 現在・52週高値・50DMA・アナリスト目標。
+  </p>
+
+  <div class="opt-h"><span class="tag" style="color:var(--text-muted);background:rgba(148,163,184,.12);border-color:var(--border);">G1</span><span class="ti" style="font-size:14px;">全表示（gate なし）</span></div>
+  <p class="opt-desc">全レベルを誰でも表示。<span class="con">△ Premium の価値が出ない／LP 訴求と矛盾なら Trust Cliff。</span></p>
+
+  <div class="opt-h rec"><span class="tag" style="color:var(--gain);background:rgba(52,239,129,.14);border-color:rgba(52,239,129,.32);">G2 ・ 推奨</span><span class="ti" style="font-size:14px;">構造は見せる・Premium 値だけロック</span></div>
+  <p class="opt-desc">無料でラダーの「形」と現在位置は見える。Premium 固有3レベルの<b>数値だけ</b>を 🔒 ぼかし＋ティーザー。<span class="pro">◎ 価値訴求と無料体験を両立（funnel-cro 王道）。</span></p>
+  <div class="panel gatebox">
+    <div class="sec-label">買い場の目安 <span class="en">— 価格ラダー</span></div>
+    <div class="qtbl">
+      <div class="zlab">上値</div>
+      <div class="qrow up"><span class="k">アナリスト目標<span class="src">consensus</span></span><span class="v mono">$308.00</span><span class="d">+60.0%</span></div>
+      <div class="qrow up"><span class="k">買い目安 Pivot<span class="src">cup-handle</span></span><span class="v mono blur">$215.62</span><span class="d blur">+12.0%</span></div>
+      <div class="qrow up"><span class="k">52週高値</span><span class="v mono">$212.19</span><span class="d">+10.2%</span></div>
+      <div class="qrow now"><span class="k">現在価格</span><span class="v mono">$192.53</span><span class="d"></span></div>
+      <div class="zlab">下値</div>
+      <div class="qrow dn"><span class="k">リスク確認 −8%</span><span class="v mono blur">$177.13</span><span class="d blur">−8.0%</span></div>
+      <div class="qrow dn"><span class="k">支持線目安<span class="src">box support</span></span><span class="v mono blur">$171.40</span><span class="d blur">−11.0%</span></div>
+      <div class="qrow dn"><span class="k">50日移動平均</span><span class="v mono">$164.20</span><span class="d">−14.7%</span></div>
+    </div>
+    <div class="teaser">
+      <span class="lk">🔒</span>
+      <span class="tx"><b>買い目安 Pivot・支持線・リスク確認</b> は Premium で開放。取っ手付きカップの買い点と −8% 損切り基準を数値で。</span>
+      <span class="cta">Premium を見る</span>
+    </div>
+  </div>
+
+  <div class="opt-h"><span class="tag" style="color:var(--text-muted);background:rgba(148,163,184,.12);border-color:var(--border);">G3</span><span class="ti" style="font-size:14px;">ラダー全体を Premium（ティーザー preview）</span></div>
+  <p class="opt-desc">ラダー全体をぼかし、1枚の lock カードで誘導。<span class="con">△ 無料の「形」体験ゼロ＝離脱寄り。価格目安はチャート直下の核なので G2 が穏当。</span></p>
+
+  <div class="note">
+    <b>推奨セット = 案 A（spine 蒸留）× G2（構造表示・Premium 値ロック）</b>。<br>
+    理由: 案A は現行 spine の良さ（位置が2秒で分かる図解）を保ちつつ過密を解消＝「静かな豪華さ」。G2 は無料で形を見せ Premium 固有3レベルの数値で課金価値を立てる（現行は無料に何も見せず funnel 機会損失）。<br>
+    <b>現行から畳む/残すの判断（要 user 決定）</b>:<br>
+    ・価格レベル <b>11→7 に蒸留</b>（50DMA+25%/+15%・200DMA・52週安値・前回チェック差分行 を畳む案）。<br>
+    ・<b>等間隔/縮尺 toggle</b>: 案A は縮尺固定で toggle 廃止案（残すなら spine 上部に小さく）。<br>
+    ・<b>地合い chip / 出来高 chip / 状態サマリー行</b>: spine の外（§③ ヘッダー直下）に分離して spine 内は価格だけに。<br>
+    ※ 案A のロック表現は 🔒 行の値を「• • •」プレースホルダ＋下部ティーザーに統一。実装は IA に関わるため multi-review 3体（ui + frontend + qa）検討。
+  </div>
+</div>
+</body>
+</html>

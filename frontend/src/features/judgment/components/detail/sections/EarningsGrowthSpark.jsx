@@ -110,7 +110,7 @@ const bchartStyle = {
   display: 'flex',
   alignItems: 'flex-end',
   gap: 5,
-  height: 64,
+  height: 80, // Phase2: 直近バー上の「直近」pill を収めるため 64→80（worst: pill16+gap+値9+gap+bar48）
 };
 
 const baxisStyle = {
@@ -122,7 +122,7 @@ const baxisStyle = {
 };
 
 const skeletonStyle = {
-  height: 64,
+  height: 80, // bchartStyle.height と一致させ loading→main の CLS を防ぐ（Phase2 で 64→80 に追従）
   borderRadius: 4,
   background: 'var(--bg-muted, #243447)',
   animation: 'shimmer 1.5s infinite',
@@ -164,11 +164,30 @@ function SparkBar({ pct, isLatest, maxAbsVal, quarter, metricType = 'eps', onHov
         cursor: 'default',
       }}
     >
+      {/* 直近バーに「直近」cyan pill（右=直近を一目化・mockup v5 .nowpill 準拠。
+          §38-safe: 位置/事実ラベルのみ、買い推奨でない）。 */}
+      {isLatest && (
+        <span
+          style={{
+            fontSize: 8.5,
+            fontWeight: 700,
+            lineHeight: 1.5,
+            color: 'var(--color-accent)',
+            background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--color-accent) 40%, transparent)',
+            borderRadius: 'var(--radius-xs, 4px)',
+            padding: '0 5px',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          直近
+        </span>
+      )}
       {Number.isFinite(pct) && (
         <span
           style={{
             fontSize: 9,
-            color: isLatest ? 'var(--text-primary)' : 'var(--text-muted)',
+            color: isLatest ? 'var(--color-accent)' : 'var(--text-muted)',
             fontVariantNumeric: 'tabular-nums',
             lineHeight: 1,
             fontWeight: isLatest ? 700 : 400,
@@ -184,6 +203,9 @@ function SparkBar({ pct, isLatest, maxAbsVal, quarter, metricType = 'eps', onHov
           background: Number.isFinite(pct) ? barColor : 'var(--bg-subtle, #1e2a3a)',
           borderRadius: '3px 3px 0 0',
           opacity: isLatest ? 1 : 0.75,
+          // 直近バー: cyan ring(1.5px) + 軽い brightness/saturate で「右=直近」を強調（mockup v5 .bcol.latest .bar）
+          filter: isLatest ? 'brightness(1.2) saturate(1.25)' : undefined,
+          boxShadow: isLatest ? '0 0 0 1.5px color-mix(in srgb, var(--color-accent) 55%, transparent)' : undefined,
         }}
         aria-hidden="true"
       />
