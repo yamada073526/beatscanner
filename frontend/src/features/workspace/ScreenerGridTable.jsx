@@ -81,6 +81,8 @@ export function normalizeMetrics(it) {
     instQoq: it.inst_holders_qoq_pct ?? null,     // 機関保有 QoQ (%)
     isSectorLeader: it.is_sector_rs_leader ?? null, // セクター内 RS 上位3位以内 (bool)
     latestBeat: it.latest_beat ?? null,           // 直近決算ビート (bool・過去確定=chip 色可)
+    // B2 (SPEC_2026-06-29 Part B): セクター内 RS percentile (上位=100・FMP セクター大分類・§38 中立)。
+    sectorGroupRsPct: it.sector_group_rs_pct ?? null,
   };
 }
 
@@ -117,41 +119,93 @@ export function presetWin(it, preset) {
 //   core(narrow/簡素で残す), width, label(aria/tooltip) }。
 //   kind: 'level'(符号なし%) / 'delta'(符号付き) / 'rs'(rsValue) / 'verdict'(beat/miss chip) / 'leader'(badge)。
 // §38: verdict のみ過去確定実績で色付き。level/delta/rs/leader はすべて中立色 (色 polarity なし)。
+// 各列の `group` キーは A2 カテゴリ仕切り (mockup v14 B案) 用。隣接する同 group 列が
+// 1 つのカテゴリ run を成し、zone group の先頭に hairline 縦線、見出し上にカテゴリラベル行を出す。
+// group のラベル/種別 (plain/zone/future) は PRESET_GROUP_META が SSOT。列順は不変 (既にカテゴリ順)。
 export const PRESET_COLUMNS = {
   // 新高値ブレイク: 高値圏接近 + 出来高急増 (ブレイク初動の核) + 成長/裏付け + RS。
   new_high_break: [
-    { id: 'nearHigh', header: '52週',  headerSub: '高値圏', kind: 'level',   metricKey: 'nearHigh',    unit: '%', tier: 'pri', core: true,  width: '58px', label: '52週高値圏' },
-    { id: 'vol',      header: '出来高', headerSub: '急増',  kind: 'delta',   metricKey: 'volumeSurge', unit: '%', tier: 'pri', core: true,  width: '62px', label: '出来高急増' },
-    { id: 'eps',      header: 'EPS',   headerSub: 'YoY',   kind: 'delta',   metricKey: 'epsYoY',      unit: '%', tier: 'sec', core: false, width: '56px', label: 'EPS YoY' },
-    { id: 'beat',     header: '直近',  headerSub: 'ビート', kind: 'verdict', metricKey: 'latestBeat',             tier: 'pri', core: false, width: '54px', label: '直近決算ビート' },
-    { id: 'rs',       header: 'RS',                         kind: 'rs',                                          tier: 'pri', core: true,  width: '40px', label: 'RS' },
+    { id: 'nearHigh', header: '52週',  headerSub: '高値圏', kind: 'level',   metricKey: 'nearHigh',    unit: '%', tier: 'pri', core: true,  width: '58px', label: '52週高値圏', group: 'momentum' },
+    { id: 'vol',      header: '出来高', headerSub: '急増',  kind: 'delta',   metricKey: 'volumeSurge', unit: '%', tier: 'pri', core: true,  width: '62px', label: '出来高急増', group: 'momentum' },
+    { id: 'eps',      header: 'EPS',   headerSub: 'YoY',   kind: 'delta',   metricKey: 'epsYoY',      unit: '%', tier: 'sec', core: false, width: '56px', label: 'EPS YoY', group: 'result' },
+    { id: 'beat',     header: '直近',  headerSub: 'ビート', kind: 'verdict', metricKey: 'latestBeat',             tier: 'pri', core: false, width: '54px', label: '直近決算ビート', group: 'result' },
+    { id: 'rs',       header: 'RS',                         kind: 'rs',                                          tier: 'pri', core: true,  width: '40px', label: 'RS', group: 'rs' },
+    { id: 'sectorrs', header: 'セクター', headerSub: 'RS順位', kind: 'level', metricKey: 'sectorGroupRsPct', unit: '', tier: 'sec', core: false, width: '60px', label: 'セクター内RS順位 (percentile・上位ほど高い・FMP セクター大分類)', group: 'sectorrot' },
   ],
   // セクター別リーダー: セクター内順位(リーダー) + CF/ROE(質) + 機関保有増(需給) + RS。
   sector_leader: [
-    { id: 'leader',   header: 'セクター', headerSub: '内順位', kind: 'leader', metricKey: 'isSectorLeader',          tier: 'pri', core: true,  width: '72px', label: 'セクター内順位' },
-    { id: 'ocf',      header: 'CF',     headerSub: '創出力', kind: 'level',  metricKey: 'ocfMargin', unit: '%',     tier: 'pri', core: true,  width: '58px', label: 'CF創出力' },
-    { id: 'roe',      header: 'ROE',                         kind: 'level',  metricKey: 'roe',       unit: '%',     tier: 'sec', core: false, width: '52px', label: 'ROE' },
-    { id: 'inst',     header: '機関',   headerSub: '保有増', kind: 'delta',  metricKey: 'instQoq',   unit: '%',     tier: 'sec', core: false, width: '58px', label: '機関保有増' },
-    { id: 'rs',       header: 'RS',                          kind: 'rs',                                            tier: 'pri', core: true,  width: '40px', label: 'RS' },
+    { id: 'leader',   header: 'セクター', headerSub: '内順位', kind: 'leader', metricKey: 'isSectorLeader',          tier: 'pri', core: true,  width: '72px', label: 'セクター内順位', group: 'rank' },
+    { id: 'ocf',      header: 'CF',     headerSub: '創出力', kind: 'level',  metricKey: 'ocfMargin', unit: '%',     tier: 'pri', core: true,  width: '58px', label: 'CF創出力', group: 'quality' },
+    { id: 'roe',      header: 'ROE',                         kind: 'level',  metricKey: 'roe',       unit: '%',     tier: 'sec', core: false, width: '52px', label: 'ROE', group: 'quality' },
+    { id: 'inst',     header: '機関',   headerSub: '保有増', kind: 'delta',  metricKey: 'instQoq',   unit: '%',     tier: 'sec', core: false, width: '58px', label: '機関保有増', group: 'demand' },
+    { id: 'rs',       header: 'RS',                          kind: 'rs',                                            tier: 'pri', core: true,  width: '40px', label: 'RS', group: 'rs' },
   ],
   // 静かな強さ (逆張り): RS + 出来高「静か」+ 機関「殺到なし」(中立フレーム) + CF/ROE。
   quiet_quality: [
-    { id: 'rs',       header: 'RS',                          kind: 'rs',                                            tier: 'pri', core: true,  width: '40px', label: 'RS' },
-    { id: 'vol',      header: '出来高', headerSub: '(静か)', kind: 'delta',  metricKey: 'volumeSurge', unit: '%',   tier: 'pri', core: true,  width: '62px', label: '出来高(静か)' },
-    { id: 'inst',     header: '機関',   headerSub: '殺到なし', kind: 'delta', metricKey: 'instQoq',   unit: '%',   tier: 'pri', core: true,  width: '70px', label: '機関(殺到なし)' },
-    { id: 'ocf',      header: 'CF',     headerSub: '創出力', kind: 'level',  metricKey: 'ocfMargin', unit: '%',     tier: 'sec', core: false, width: '58px', label: 'CF創出力' },
-    { id: 'roe',      header: 'ROE',                         kind: 'level',  metricKey: 'roe',       unit: '%',     tier: 'sec', core: false, width: '52px', label: 'ROE' },
+    { id: 'rs',       header: 'RS',                          kind: 'rs',                                            tier: 'pri', core: true,  width: '40px', label: 'RS', group: 'rs' },
+    { id: 'vol',      header: '出来高', headerSub: '(静か)', kind: 'delta',  metricKey: 'volumeSurge', unit: '%',   tier: 'pri', core: true,  width: '62px', label: '出来高(静か)', group: 'demand' },
+    { id: 'inst',     header: '機関',   headerSub: '殺到なし', kind: 'delta', metricKey: 'instQoq',   unit: '%',   tier: 'pri', core: true,  width: '70px', label: '機関(殺到なし)', group: 'demand' },
+    { id: 'ocf',      header: 'CF',     headerSub: '創出力', kind: 'level',  metricKey: 'ocfMargin', unit: '%',     tier: 'sec', core: false, width: '58px', label: 'CF創出力', group: 'quality' },
+    { id: 'roe',      header: 'ROE',                         kind: 'level',  metricKey: 'roe',       unit: '%',     tier: 'sec', core: false, width: '52px', label: 'ROE', group: 'quality' },
   ],
   // 市場をリードし始めた銘柄: 対SPY超過 + RS中位帯 + CF/ROE(質) + EPS/直近ビート(裏付け)。
   market_leading: [
-    { id: 'vsspy',    header: '対SPY',  headerSub: '超過',  kind: 'delta',   metricKey: 'rsVsSpy',   unit: 'pt',   tier: 'pri', core: true,  width: '62px', label: '対SPY超過' },
-    { id: 'rs',       header: 'RS',     headerSub: '中位',  kind: 'rs',                                            tier: 'pri', core: true,  width: '46px', label: 'RS(中位帯)' },
-    { id: 'ocf',      header: 'CF',     headerSub: '創出力', kind: 'level',  metricKey: 'ocfMargin', unit: '%',     tier: 'sec', core: false, width: '58px', label: 'CF創出力' },
-    { id: 'roe',      header: 'ROE',                         kind: 'level',  metricKey: 'roe',       unit: '%',     tier: 'sec', core: false, width: '52px', label: 'ROE' },
-    { id: 'eps',      header: 'EPS',    headerSub: 'YoY',   kind: 'delta',   metricKey: 'epsYoY',    unit: '%',     tier: 'sec', core: false, width: '56px', label: 'EPS YoY' },
-    { id: 'beat',     header: '直近',   headerSub: 'ビート', kind: 'verdict', metricKey: 'latestBeat',             tier: 'pri', core: false, width: '54px', label: '直近決算ビート' },
+    { id: 'vsspy',    header: '対SPY',  headerSub: '超過',  kind: 'delta',   metricKey: 'rsVsSpy',   unit: 'pt',   tier: 'pri', core: true,  width: '62px', label: '対SPY超過', group: 'relstr' },
+    { id: 'rs',       header: 'RS',     headerSub: '中位',  kind: 'rs',                                            tier: 'pri', core: true,  width: '46px', label: 'RS(中位帯)', group: 'relstr' },
+    { id: 'ocf',      header: 'CF',     headerSub: '創出力', kind: 'level',  metricKey: 'ocfMargin', unit: '%',     tier: 'sec', core: false, width: '58px', label: 'CF創出力', group: 'quality' },
+    { id: 'roe',      header: 'ROE',                         kind: 'level',  metricKey: 'roe',       unit: '%',     tier: 'sec', core: false, width: '52px', label: 'ROE', group: 'quality' },
+    { id: 'eps',      header: 'EPS',    headerSub: 'YoY',   kind: 'delta',   metricKey: 'epsYoY',    unit: '%',     tier: 'sec', core: false, width: '56px', label: 'EPS YoY', group: 'result' },
+    { id: 'beat',     header: '直近',   headerSub: 'ビート', kind: 'verdict', metricKey: 'latestBeat',             tier: 'pri', core: false, width: '54px', label: '直近決算ビート', group: 'result' },
   ],
 };
+
+// ── A2 group メタ (mockup v14 B案)。kind: 'plain'(無装飾) / 'zone'(hairline 縦線+見出し) /
+//    'future'(glass=来期/将来値専用)。4 preset には来期列が無いため future は出ない (B案=glass は
+//    earnings_pass 据え置き)。label '' の group は見出しラベルを出さない (列ヘッダで自明な単独列)。
+//
+//    ⚠️ mockup v14 からの意図的逸脱 (drift でない・2026-06-29 決定・mockup-fidelity 監査で確認):
+//    - new_high_break.sectorrot の label は mockup の「業種ローテ/業種RS」でなく「セクターRS」。
+//      FMP の sector は大分類 (オニールの業種グループ≒200 とは粒度が違う) ため「業種」断定は
+//      優良誤認 risk → honest に「セクター」表記 (Trust Cliff 回避)。
+//    - sectorrot に mockup の「提案」バッジ (proposed) を付けない。B2 で sector_group_rs_pct が
+//      実データとして搭載済のため (mockup の「提案」= KB由来・未搭載列用バッジ)。proposed バッジ
+//      描画機構は CFPS>EPS 等の真に未搭載な列が入る Task B 着手時に追加する。
+export const PRESET_GROUP_META = {
+  new_high_break: { momentum: { label: '勢い', kind: 'plain' }, result: { label: '決算実績', kind: 'zone' }, rs: { label: '', kind: 'plain' }, sectorrot: { label: 'セクターRS', kind: 'zone' } },
+  sector_leader:  { rank: { label: '', kind: 'plain' }, quality: { label: '収益の質', kind: 'zone' }, demand: { label: '需給', kind: 'zone' }, rs: { label: '', kind: 'plain' } },
+  quiet_quality:  { rs: { label: '', kind: 'plain' }, demand: { label: '需給(静か)', kind: 'zone' }, quality: { label: '収益の質', kind: 'zone' } },
+  market_leading: { relstr: { label: '相対力', kind: 'plain' }, quality: { label: '収益の質', kind: 'zone' }, result: { label: '決算実績', kind: 'zone' } },
+};
+
+// 表示中の列を連続する group ごとに run へ畳む (見出しラベル行の grid span 算出)。簡素/狭幅で
+// 列が間引かれても run/span を再計算 (純関数・export = unit test)。kind/label は META 由来。
+export function buildGroupRuns(cols, preset) {
+  const meta = PRESET_GROUP_META[preset] || {};
+  const runs = [];
+  (cols || []).forEach((c) => {
+    const key = c.group || c.id;
+    const prev = runs[runs.length - 1];
+    if (prev && prev.key === key) { prev.span += 1; return; }
+    const m = meta[key] || {};
+    runs.push({ key, label: m.label || '', kind: m.kind || 'plain', span: 1 });
+  });
+  return runs;
+}
+
+// 各列に divider フラグ (dstart=zone/future group の先頭に縦 hairline / fut=glass) を付与した
+// 新オブジェクト配列を返す (純関数・export = unit test)。列順・既存フィールドは保持。
+export function withGroupDividers(cols, preset) {
+  const meta = PRESET_GROUP_META[preset] || {};
+  let prevKey = null;
+  return (cols || []).map((c) => {
+    const key = c.group || c.id;
+    const m = meta[key] || {};
+    const isFirstOfGroup = key !== prevKey;
+    prevKey = key;
+    const isZoneLike = m.kind === 'zone' || m.kind === 'future';
+    return { ...c, dstart: isFirstOfGroup && isZoneLike, fut: m.kind === 'future' };
+  });
+}
 
 // Sprint3 mock (mockup v12 と同型・?screener_mock=1 で発火)。実 payload と同じ shape。
 // Layer A dogfood (Sprint4): 実データ Layer A は当面 0 件 (PIT 未成立・de-risk 確定) のため、
@@ -193,13 +247,33 @@ function HeaderRow({ mode }) {
   );
 }
 
+// A2 カテゴリ見出しラベル行 (mockup v14 ghead)。列ヘッダの上段に「収益の質」等の category を
+// run の span 分だけ表示。zone は下線 hairline、plain でラベル '' は空セル。視覚的グルーピング
+// 補助なので aria-hidden (列ごとの意味は各セル aria-label が担保)。grid は親 --screener-cols 継承。
+function PresetGroupHeaderRow({ runs }) {
+  return (
+    <div className="screener-grid-ghead" data-testid="screener-grid-ghead" aria-hidden="true">
+      <span />
+      {runs.map((g, i) => (
+        <span
+          key={g.key || i}
+          className={['screener-grid-gzlabel', g.kind === 'zone' ? 'is-zone' : '', g.kind === 'future' ? 'is-future' : ''].filter(Boolean).join(' ')}
+          style={{ gridColumn: `span ${g.span}` }}
+        >
+          {g.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // per-preset 列の見出し (pip 列なし・銘柄 + 根拠列)。
 function PresetHeaderRow({ columns }) {
   return (
     <div className="screener-grid-head" data-testid="screener-grid-header" role="row">
       <span>銘柄</span>
       {columns.map((c) => (
-        <span key={c.id} className="h-num">
+        <span key={c.id} className={['h-num', c.dstart ? (c.fut ? 'h-fstart' : 'h-qualstart') : ''].filter(Boolean).join(' ')}>
           {c.header}{c.headerSub && <><br />{c.headerSub}</>}
         </span>
       ))}
@@ -266,9 +340,12 @@ export default function ScreenerGridTable({
   const effectiveMode = isNarrow ? 'simple' : mode;   // 狭幅は簡素強制
   // 4 preset は column-driven (pip 列なし・preset 別根拠列)。earnings 系/mock は従来 9 列固定。
   const columnDriven = !mock && !!PRESET_COLUMNS[preset];
-  const visibleCols = columnDriven
+  const baseCols = columnDriven
     ? (effectiveMode === 'simple' ? PRESET_COLUMNS[preset].filter((c) => c.core) : PRESET_COLUMNS[preset])
     : null;
+  // A2 (mockup v14): divider フラグ付き列 + カテゴリ run。簡素/狭幅で間引いた列順を正として算出。
+  const visibleCols = columnDriven ? withGroupDividers(baseCols, preset) : null;
+  const groupRuns = columnDriven ? buildGroupRuns(baseCols, preset) : null;
   const cols = columnDriven
     ? `minmax(0,1fr) ${visibleCols.map((c) => c.width).join(' ')}`
     : (isNarrow ? COLS_NARROW : (effectiveMode === 'simple' ? COLS_SIMPLE : COLS_FULL));
@@ -299,6 +376,7 @@ export default function ScreenerGridTable({
       data-testid="screener-grid-table"
       data-mode={effectiveMode}
       data-narrow={isNarrow ? 'true' : undefined}
+      data-grouped={columnDriven ? 'true' : undefined}
       style={{ '--screener-cols': cols }}
     >
       {/* 詳細/簡素トグル (狭幅時は簡素固定のため hint に切替) */}
@@ -348,8 +426,14 @@ export default function ScreenerGridTable({
       </div>
       )}
 
-      {/* sticky 見出し (overflow を作らない・祖先 .screener-master__content に吸着)。4 preset は PresetHeaderRow。 */}
-      {columnDriven ? <PresetHeaderRow columns={visibleCols} /> : <HeaderRow mode={effectiveMode} />}
+      {/* sticky 見出し (overflow を作らない・祖先 .screener-master__content に吸着)。4 preset は
+          カテゴリ見出しラベル行 (ghead) → 列ヘッダ (PresetHeaderRow) の 2 段 sticky。 */}
+      {columnDriven ? (
+        <>
+          <PresetGroupHeaderRow runs={groupRuns} />
+          <PresetHeaderRow columns={visibleCols} />
+        </>
+      ) : <HeaderRow mode={effectiveMode} />}
 
       {/* 本体 */}
       {loading ? (

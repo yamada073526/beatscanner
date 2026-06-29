@@ -8,7 +8,12 @@
  *   - 値欠落の null 保全 (0 と null を取り違えない)
  */
 import { describe, it, expect } from 'vitest';
-import { normalizeItem, presetWin } from './ScreenerGridTable.jsx';
+import {
+  normalizeItem, presetWin, buildGroupRuns, withGroupDividers, PRESET_COLUMNS, PRESET_GROUP_META,
+} from './ScreenerGridTable.jsx';
+
+// 簡素モード相当 (core 列のみ) を作るヘルパ。
+const core = (preset) => PRESET_COLUMNS[preset].filter((c) => c.core);
 
 describe('normalizeItem — Layer A guidanceSource 結線 (§6)', () => {
   it("guidance_source='8k' → guidanceSource='8k' (Layer A)", () => {
@@ -129,5 +134,102 @@ describe('presetWin — gold 標榜 (別格) 判定 (SPEC_2026-06-29 A1・本番
   it('未知 preset / null item → 非win (guard)', () => {
     expect(presetWin({ rs_percentile: 99 }, 'earnings_pass')).toBe(false);
     expect(presetWin(null, 'sector_leader')).toBe(false);
+  });
+});
+
+// ── A2 カテゴリ仕切り (mockup v14 B案) ───────────────────────────────────────
+describe('buildGroupRuns — カテゴリ run/span 算出 (詳細モード)', () => {
+  const runShape = (r) => r.map((g) => [g.key, g.span, g.kind, g.label]);
+
+  it('new_high_break: 勢い2 | 決算実績2(zone) | rs1 | セクターRS1(zone・B2)', () => {
+    expect(runShape(buildGroupRuns(PRESET_COLUMNS.new_high_break, 'new_high_break'))).toEqual([
+      ['momentum', 2, 'plain', '勢い'],
+      ['result', 2, 'zone', '決算実績'],
+      ['rs', 1, 'plain', ''],
+      ['sectorrot', 1, 'zone', 'セクターRS'],
+    ]);
+  });
+  it('sector_leader: 順位1 | 収益の質2(zone) | 需給1(zone) | rs1', () => {
+    expect(runShape(buildGroupRuns(PRESET_COLUMNS.sector_leader, 'sector_leader'))).toEqual([
+      ['rank', 1, 'plain', ''],
+      ['quality', 2, 'zone', '収益の質'],
+      ['demand', 1, 'zone', '需給'],
+      ['rs', 1, 'plain', ''],
+    ]);
+  });
+  it('quiet_quality: rs1 | 需給(静か)2(zone) | 収益の質2(zone)', () => {
+    expect(runShape(buildGroupRuns(PRESET_COLUMNS.quiet_quality, 'quiet_quality'))).toEqual([
+      ['rs', 1, 'plain', ''],
+      ['demand', 2, 'zone', '需給(静か)'],
+      ['quality', 2, 'zone', '収益の質'],
+    ]);
+  });
+  it('market_leading: 相対力2 | 収益の質2(zone) | 決算実績2(zone)', () => {
+    expect(runShape(buildGroupRuns(PRESET_COLUMNS.market_leading, 'market_leading'))).toEqual([
+      ['relstr', 2, 'plain', '相対力'],
+      ['quality', 2, 'zone', '収益の質'],
+      ['result', 2, 'zone', '決算実績'],
+    ]);
+  });
+  it('span 合計 = 列数 (全 preset)', () => {
+    Object.keys(PRESET_COLUMNS).forEach((p) => {
+      const total = buildGroupRuns(PRESET_COLUMNS[p], p).reduce((s, g) => s + g.span, 0);
+      expect(total).toBe(PRESET_COLUMNS[p].length);
+    });
+  });
+});
+
+describe('buildGroupRuns — 簡素モード (core 間引きで run 再計算)', () => {
+  it('new_high_break(core=[nearHigh,vol,rs]): 勢い2 | rs1 (決算実績 group は消える)', () => {
+    const runs = buildGroupRuns(core('new_high_break'), 'new_high_break');
+    expect(runs.map((g) => [g.key, g.span])).toEqual([['momentum', 2], ['rs', 1]]);
+  });
+  it('quiet_quality(core=[rs,vol,inst]): rs1 | 需給2 (収益の質 group は消える)', () => {
+    const runs = buildGroupRuns(core('quiet_quality'), 'quiet_quality');
+    expect(runs.map((g) => [g.key, g.span])).toEqual([['rs', 1], ['demand', 2]]);
+  });
+});
+
+describe('withGroupDividers — dstart は zone group の先頭のみ・fut は 4 preset で常に false', () => {
+  const dstartIds = (cols, p) => withGroupDividers(cols, p).filter((c) => c.dstart).map((c) => c.id);
+
+  it('new_high_break: 決算実績 先頭 eps と セクターRS 先頭 sectorrs に dstart (B2)', () => {
+    expect(dstartIds(PRESET_COLUMNS.new_high_break, 'new_high_break')).toEqual(['eps', 'sectorrs']);
+  });
+  it('sector_leader: 収益の質 先頭 ocf と 需給 先頭 inst に dstart', () => {
+    expect(dstartIds(PRESET_COLUMNS.sector_leader, 'sector_leader')).toEqual(['ocf', 'inst']);
+  });
+  it('quiet_quality: 需給 先頭 vol と 収益の質 先頭 ocf に dstart', () => {
+    expect(dstartIds(PRESET_COLUMNS.quiet_quality, 'quiet_quality')).toEqual(['vol', 'ocf']);
+  });
+  it('market_leading: 収益の質 先頭 ocf と 決算実績 先頭 eps に dstart', () => {
+    expect(dstartIds(PRESET_COLUMNS.market_leading, 'market_leading')).toEqual(['ocf', 'eps']);
+  });
+  it('plain group の先頭・group 継続列には dstart を付けない', () => {
+    const aug = withGroupDividers(PRESET_COLUMNS.sector_leader, 'sector_leader');
+    expect(aug.find((c) => c.id === 'leader').dstart).toBe(false); // 先頭 plain
+    expect(aug.find((c) => c.id === 'roe').dstart).toBe(false);    // quality 継続
+    expect(aug.find((c) => c.id === 'rs').dstart).toBe(false);     // 末尾 plain
+  });
+  it('4 preset には来期列が無いため fut は全列 false (B案=glass は earnings_pass 据え置き)', () => {
+    Object.keys(PRESET_COLUMNS).forEach((p) => {
+      withGroupDividers(PRESET_COLUMNS[p], p).forEach((c) => expect(c.fut).toBe(false));
+    });
+  });
+  it('簡素モードで zone group が消えれば dstart も消える (new_high_break core)', () => {
+    expect(dstartIds(core('new_high_break'), 'new_high_break')).toEqual([]);
+  });
+});
+
+describe('PRESET_GROUP_META 整合 — 全 group key が META に定義され kind が妥当', () => {
+  it('各 preset の列 group は META に存在し kind は plain/zone/future', () => {
+    Object.keys(PRESET_COLUMNS).forEach((p) => {
+      const meta = PRESET_GROUP_META[p];
+      expect(meta).toBeTruthy();
+      PRESET_COLUMNS[p].forEach((c) => {
+        expect(meta[c.group]).toBeTruthy();
+        expect(['plain', 'zone', 'future']).toContain(meta[c.group].kind);
+      });
+    });
   });
 });
