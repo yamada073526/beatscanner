@@ -6998,10 +6998,11 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
         raise HTTPException(status_code=400, detail="ticker required")
     n = max(1, min(int(limit or 8), 16))
 
+    # :v4 = Sprint 4a (2026-06-29) beat_streak / eps_yoy_acceleration を top-level に追加 cache bust。
     # :v3 = 完全性台帳 Sprint1 (2026-06-13) の sources / field_sources 追加 cache bust。
     #       旧 schema (sources 無し) の 6h cache が返ると badge が「全部欠落」 誤表示するため即無効化必須。
     #       :v2 = eps_yoy_pct / gross_margin_yoy_pp 追加 (2026-06-12)。
-    cache_key = f"{sym}:{n}:v3"
+    cache_key = f"{sym}:{n}:v4"
     now = _time.monotonic()
     cached = _QUARTERLY_HISTORY_CACHE.get(cache_key)
     if cached and now - cached["ts"] < _QUARTERLY_HISTORY_TTL:
@@ -7284,10 +7285,47 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
     if not history or all(h.get("eps_actual") is None and h.get("revenue_actual") is None for h in history):
         raise HTTPException(status_code=404, detail=f"{sym} の四半期履歴が見つかりません")
 
+    # ── Sprint 4a (Pane3 mockup v4 §WS2): 「良い決算 N 期連続」 + EPS YoY 加速/減速 ──
+    # 数値物理層 = Python のみ (LLM 不使用、 HG 4 層 BAD-3 数値捏造防止)。 history は newest-first
+    # (surprises_sorted = date 降順) のため先頭 [0]=直近 から連続を数える。
+    #
+    # good_quarter = EPS beat AND 売上 beat の 2 点判定 (KB「複数指標すべてコンセンサス超えで良い決算、
+    #   1 つでも下回れば悪い決算」)。 in-line は「超え」 ではないため streak を切る (§5 過大表示防止)。
+    #   ガイダンス 3 点目は guidance_snapshots 8Q backfill (Sprint 4c DEFER) 後に同所で拡張予定。
+    def _is_good_quarter(h: dict) -> bool:
+        return h.get("eps_verdict") == "beat" and h.get("revenue_verdict") == "beat"
+
+    beat_streak = 0
+    for _h in history:
+        if _is_good_quarter(_h):
+            beat_streak += 1
+        else:
+            break
+
+    # EPS YoY 加速度 (2 階微分の符号): 直近 [0] と 1 期前 [1] の eps_yoy_pct を比較。
+    #   accelerating = 直近 YoY > 前期 YoY / decelerating = 直近 < 前期 / flat = 等しい。
+    #   両 YoY が揃う時のみ判定 (欠損は None → frontend 非表示)。§38: 過去確定の事実の「方向」 のみ。
+    #   将来予測・買い/売り推奨は出さない。
+    eps_yoy_acceleration = None
+    if len(history) >= 2:
+        _cur_yoy = history[0].get("eps_yoy_pct")
+        _prev_yoy = history[1].get("eps_yoy_pct")
+        if _cur_yoy is not None and _prev_yoy is not None:
+            if _cur_yoy > _prev_yoy:
+                eps_yoy_acceleration = "accelerating"
+            elif _cur_yoy < _prev_yoy:
+                eps_yoy_acceleration = "decelerating"
+            else:
+                eps_yoy_acceleration = "flat"
+
     result = {
         "ticker": sym,
         "history": history,
         "limit": n,
+        # Sprint 4a: 「良い決算 (EPS+売上 とも beat) N 期連続」 + EPS YoY 加速/減速 (top-level 派生値)。
+        # frontend は再計算せず本値を読むだけ (single source of truth)。欠落時 beat_streak=0 / acceleration=None。
+        "beat_streak": beat_streak,
+        "eps_yoy_acceleration": eps_yoy_acceleration,
         # 決算ハイライト Phase2: 最新四半期セグメント別売上 (top-level、n 非依存、null=非開示/銀行 graceful)。
         # frontend は ?flash_seg=1 opt-in で「上位 N 件 実額 + 前年比 ↑↓」 を読むだけ (再計算しない)。
         "segment_summary": segment_summary,
