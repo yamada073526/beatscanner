@@ -316,17 +316,15 @@ export default function L1SummaryBuckets({
   const totalCount = result?.totalCount ?? null;
   const hasState = Number.isFinite(passedCount) && Number.isFinite(totalCount);
 
-  // RS
+  // RS — IBD 準拠の universe percentile (1-99) のみ表示。screener (rs_percentile) と表記統一。
+  // 2026-06-29 dogfood: 旧実装は universe_percentile 未取得時に rs_vs_spy_pct を「+X%」で fallback 表示
+  //   していたが、IBD 数字でない「%」は screener と不整合で混乱を招く (user feedback)。
+  //   → universe_percentile があれば数字、無ければ「—」(対SPY% fallback 廃止)。
+  //   ※ 未取得が多い場合は backend で universe_percentile の確実配信を別途対応 (本変更は frontend 表記統一)。
   const rsUniv = technicalRs?.universe_percentile;
   const rsHasUniv = Number.isFinite(rsUniv);
-  const rsVsSpy = technicalRs?.rs_vs_spy_pct;
-  const rsHasSpy = Number.isFinite(rsVsSpy) && !technicalRs?.spy_unavailable;
-  const rsDisplay = rsHasUniv
-    ? String(rsUniv)
-    : rsHasSpy
-    ? `${rsVsSpy > 0 ? '+' : ''}${rsVsSpy.toFixed(1)}%`
-    : '—';
-  const rsLabel = rsHasUniv ? 'RS Rating' : rsHasSpy ? `RS 対SPY` : 'RS Rating';
+  const rsDisplay = rsHasUniv ? String(rsUniv) : '—';
+  const rsLabel = 'RS Rating';
   const rsScale = rsHasUniv ? '· 目安 80+ で強い' : '';
 
   // セクター地位（Sprint 3b、SPEC_2026-06-28 §5）。backend は leader のみ注入（per-source compound）。
