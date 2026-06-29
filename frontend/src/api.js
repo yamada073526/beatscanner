@@ -1183,7 +1183,7 @@ export async function fetchAnalyst(ticker) {
  * @param {number} [universeSize=3000] - 母集団サイズ
  * @returns {Promise<object|null>} - 上記 schema そのまま返す (整形しない)
  */
-export async function fetchScannerUniverse(universeSize = 3000) {
+async function _fetchScannerUniverseRaw(universeSize) {
   const headers = {};
   try {
     const { supabase } = await import('./lib/supabase.js');
@@ -1197,4 +1197,18 @@ export async function fetchScannerUniverse(universeSize = 3000) {
   } catch {
     return null;
   }
+}
+
+// universe payload (~2.4MB) は screener 起動時に複数 component (ScreenerMaster / ScreenerIdleHero /
+//   CustomScreenerPanel.loadUniverse) が同時に取得しうる → cold cache で同一 fetch が最大3本走る。
+//   in-flight promise を共有して同時呼出を1本に collapse する。
+//   ※ 永続 cache は付けない: 応答は auth 状態 (free=masked / Premium=unmasked) で変わるため
+//     login 跨ぎの stale を避ける。同時 mount は同一 auth 状態なので共有して安全 ([[feature_flag_dual_mode]] 不要)。
+const _universeInflight = new Map(); // universeSize → Promise
+export async function fetchScannerUniverse(universeSize = 3000) {
+  if (_universeInflight.has(universeSize)) return _universeInflight.get(universeSize);
+  const p = _fetchScannerUniverseRaw(universeSize)
+    .finally(() => { _universeInflight.delete(universeSize); });
+  _universeInflight.set(universeSize, p);
+  return p;
 }
