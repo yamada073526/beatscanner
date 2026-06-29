@@ -670,7 +670,7 @@ export default function JudgmentDetail({
                 >
                   {/* 章ヘッダー */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>①</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-gold)', letterSpacing: '0.04em' }}>①</span>
                     <span style={{ fontSize: 17, fontWeight: 700 }}>決算</span>
                     {result?.latestPeriod && (
                       <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>
@@ -726,7 +726,7 @@ export default function JudgmentDetail({
                 style={{ display: 'grid', gap: 'var(--space-4, 16px)' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>②</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-gold)', letterSpacing: '0.04em' }}>②</span>
                   <span style={{ fontSize: 17, fontWeight: 700 }}>品質・継続性</span>
                   <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>サマリー常時 · 詳細は展開</span>
                 </div>
@@ -766,7 +766,7 @@ export default function JudgmentDetail({
                 style={{ display: 'grid', gap: 'var(--space-4, 16px)' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>③</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-gold)', letterSpacing: '0.04em' }}>③</span>
                   <span style={{ fontSize: 17, fontWeight: 700 }}>テクニカル・買い場</span>
                 </div>
                 {/* 同定リボン: mockup 非対応 + L0 同定層と情報重複のため撤去
@@ -820,7 +820,7 @@ export default function JudgmentDetail({
                 style={{ display: 'grid', gap: 'var(--space-4, 16px)' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>④</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-gold)', letterSpacing: '0.04em' }}>④</span>
                   <span style={{ fontSize: 17, fontWeight: 700 }}>図解で理解する</span>
                   <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>Pro</span>
                 </div>
@@ -861,7 +861,7 @@ export default function JudgmentDetail({
                 style={{ display: 'grid', gap: 'var(--space-4, 16px)' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>⑤</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-gold)', letterSpacing: '0.04em' }}>⑤</span>
                   <span style={{ fontSize: 17, fontWeight: 700 }}>その他</span>
                 </div>
                 {/* L6 fold 群 (mockup pane3-detail-v1.html の「その他」#more に忠実な 5 fold フラット) */}

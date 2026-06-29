@@ -31,7 +31,7 @@
  */
 import { useEffect, useState } from 'react';
 import AccordionSection from '../../../primitives/AccordionSection.jsx';
-import SparkBars, { BarsTooltip } from '../../../../../components/SparkBars.jsx';
+import SparkBars, { HeatmapTooltip } from '../../../../../components/SparkBars.jsx';
 import { fetchQuarterlyHistory, fetchCanslimRows, fetchEarningsEvaluation } from '../../../../../api.js';
 
 const TESTID = 'l3-quality-fold';
@@ -301,12 +301,12 @@ function FiveCondHeatmap({ conditions, periodLabels = [] }) {
   const LABEL_W = 112; // 最長ラベル「①CFマージン≥15%」(~91px) を切らずに収める
   const showTip = (cond, i, v, e) => {
     const r = e.currentTarget.getBoundingClientRect();
-    const status = v === true ? '充足' : v === false ? '未充足' : 'データ無';
-    const period = periodLabels[i] ? ` · ${periodLabels[i]}` : '';
-    const metric = cond.metrics?.[i] ? ` · ${cond.metrics[i]}` : '';
     setTip({
-      label: `${cond.num}${cond.short}${period}${metric}`,
-      value: status,
+      condNum: cond.num,
+      condShort: cond.short,
+      period: periodLabels[i] || '',
+      metric: cond.metrics?.[i] || null,
+      passed: v,
       x: Math.round(r.left + r.width / 2),
       y: Math.round(r.top),
     });
@@ -350,7 +350,7 @@ function FiveCondHeatmap({ conditions, periodLabels = [] }) {
           {c.cells.map((v, i) => cell(c, v, i))}
         </div>
       ))}
-      {tip && <BarsTooltip tip={tip} />}
+      {tip && <HeatmapTooltip tip={tip} />}
     </div>
   );
 }
