@@ -75,7 +75,16 @@ ScreenerGridTable の earnings 凡例を条件化: 表示行に Layer A (guidanc
 - [x] Phase 1 filed_at 解決 (nightly 行・最小 diff + test) — commit ddf0b570。
 - [x] period_end_date ±20 日 tolerance + quarter 優先/annual-only ●抑止 (multi-review QA fix)。
 - [x] 実装 gate: multi-review 3 体 (金融 GO / backend GO-fix / QA GO-fix) → 全 medium 対応済 (下記)。
-- [ ] Phase 2: merge → deploy → nightly canslim で guidance_source='8k' > 0 + 本番 snap ●確認 + §38 per-source verify。
+- [x] Phase 2: merge (#121) → Railway deploy → full canslim で **guidance_source='8k' = 3 件成立** (本番 0→3)。
+      BB (eps 0.0/rev 0.0 inline) / MU (rev +17.1%・EPS gaap 抑止) / SNX (rev +10.5%・EPS gaap 抑止)。
+      FDX は annual-only で●抑止 (設計通り)。§38 per-source OK (異常値なし・gaap/range ガード正常発火)。
+      ※視覚 snap は本環境の network policy が本番 URL を 403 拒否のため不可 → frontend コードレビュー (QA reviewer)
+        + DB の guidance_source 確認で代替。
+
+### follow-up (別タスク・本 SPEC 範囲外)
+- **JBL の universe 欠落 (既存バグ)**: screener_fundamentals が 2026-06-26 以降 scan されず (eps_yoy=23.9 で凍結)、
+  最新 calc_date に JBL 行が無い。 Layer A logic は JBL の PIT 成立を支持 (quarter 08-31↔consensus 08-28) するため、
+  universe 欠落が解消すれば JBL も●が出る (期待 4 件目)。 本変更とは無関係の nightly scan / universe fetch 側の問題。
 
 ---
 
