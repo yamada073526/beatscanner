@@ -856,6 +856,19 @@ export default function JudgmentDetail({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={CHAPTER_NO_STYLE}>④</span>
                   <span style={{ fontSize: 17, fontWeight: 700 }}>図解で理解する</span>
+                  {/* mockup v5 §④ の meta Pro バッジ (章見出しで Pro gate を予告)。
+                      ai_diagram = PLAN.PRO。semantic token のみで装飾 (発光・色直書きなし)。 */}
+                  <span style={{
+                    marginLeft: 'auto',
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    letterSpacing: '0.04em',
+                    color: 'var(--color-gold)',
+                    padding: '2px 8px',
+                    borderRadius: 'var(--radius-sm, 6px)',
+                    border: '1px solid color-mix(in srgb, var(--color-gold) 35%, transparent)',
+                    background: 'color-mix(in srgb, var(--color-gold) 10%, transparent)',
+                  }}>Pro</span>
                 </div>
                 {/* task4: 章の内容を共通カード枠で囲う */}
                 <div style={CHAPTER_FRAME}>
