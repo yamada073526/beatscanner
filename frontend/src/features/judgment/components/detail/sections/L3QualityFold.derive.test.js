@@ -194,6 +194,26 @@ describe('deriveEvalContinuity (5条件 充足の推移・§② 継続性 signal
     expect(c2.total).toBe(0);
     expect(c2.rate).toBeNull();
   });
+
+  it('qh を渡すと発表月 (evaluation_date↔date) 一致期に実数値 metric を結合', () => {
+    const QH = [
+      { date: '2025-12-20', op_cf_margin: 0.20, eps_actual: 1.5, cfps_actual: 1.8, revenue_actual: 35.1e9 },
+      { date: '2025-09-18', op_cf_margin: 0.18, eps_actual: 1.2, cfps_actual: 1.4, revenue_actual: 30e9 },
+    ];
+    const dq = deriveEvalContinuity(EVAL, QH);
+    const c1 = dq.conditions.find((c) => c.key === 'cond1_passed');
+    const c4 = dq.conditions.find((c) => c.key === 'cond4_passed');
+    // asc は古→新: index 7=2025-12 (最新), 6=2025-09
+    expect(c1.metrics[7]).toBe('CFマージン 20.0%');
+    expect(c4.metrics[7]).toBe('売上 $35.1B');
+    expect(c1.metrics[6]).toBe('CFマージン 18.0%');
+    expect(c1.metrics[0]).toBeNull(); // qh に無い月 (2024-03) は捏造せず null
+  });
+
+  it('qh 未指定なら metrics は全 null (実数値なし・誠実フォールバック)', () => {
+    const c1 = d.conditions.find((c) => c.key === 'cond1_passed');
+    expect(c1.metrics.every((m) => m === null)).toBe(true);
+  });
 });
 
 describe('quarterLabel', () => {
