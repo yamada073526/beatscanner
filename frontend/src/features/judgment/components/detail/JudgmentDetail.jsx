@@ -882,7 +882,6 @@ export default function JudgmentDetail({
                     key="v6-earnings-reaction"
                     id="sec-v6-earnings-reaction"
                     title="過去 8Q 決算反応"
-                    label="PRO"
                     tier={2}
                     defaultOpen={false}
                     summary="発表翌日の株価変化"
