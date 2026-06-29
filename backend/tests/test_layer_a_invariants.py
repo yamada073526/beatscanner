@@ -133,6 +133,9 @@ class _FakeQuery:
     def gte(self, *a, **k):
         return self
 
+    def lte(self, *a, **k):  # SPEC 2026-06-29 変更2: fiscal_date ±20日 window 用
+        return self
+
     def order(self, *a, **k):
         return self
 

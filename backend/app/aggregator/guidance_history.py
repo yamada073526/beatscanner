@@ -169,7 +169,8 @@ def build_guidance_rows(
               source_url, ...} or None)。
         q_period_end: 四半期ガイダンスの対象会計期末日 (resolve_next_period_end で解決済)。
         fy_period_end: 通期ガイダンスの対象会計期末日。
-        filed_at: 8-K filing 日 ISO (Sprint 2 backfill で設定。 nightly は None = 不明のまま保存)。
+        filed_at: 8-K filing 日 ISO (Sprint 2 backfill + SPEC 2026-06-29 変更1 で nightly も設定。
+            transcript fallback / 未解決時は None = Layer B fallback)。
 
     Returns:
         upsert 可能な row dict の list (最大 2 行: quarter / annual)。 以下は行を作らない (捏造禁止):
