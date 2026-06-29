@@ -287,6 +287,10 @@ export default function ScreenerGridTable({
       }
       : normalizeItem(it)));
   const shown = mock ? rows.length : (count != null ? count : rows.length);
+  // B1 (honest legend): 表示行に Layer A (会社ガイダンス=guidanceSource '8k') が1件もなければ
+  //   凡例の「●ドット=会社ガイダンス」説明を出さない (本番は当面 Layer A 0件のため探させない)。
+  //   guidance 取得基盤が入り Layer A データが配信されたら自動で説明+ドットが復活 (self-healing)。
+  const hasLayerA = rows.some((r) => r?.earnings?.guidanceSource === '8k');
 
   return (
     <div
@@ -330,9 +334,15 @@ export default function ScreenerGridTable({
         <span className="lg"><span className="gl dn">↓</span> 予想未達</span>
         <span className="lg"><span className="gl il">−</span> 予想どおり</span>
         <span className="disc">
-          <b>↑↓−</b> はいずれも直近決算の過去実績(vs アナリスト予想)。来期2列は、値の頭に
-          <span className="screener-grid-fdot" aria-hidden="true" /><b>ドットが付けば会社ガイダンスとアナリスト予想の比</b>、
-          <b>ドット無し＝来期コンセンサスYoY(ガイダンス未取得)</b>。いずれも会社開示・市場予想の転記であり、当社の予測・推奨ではありません。
+          <b>↑↓−</b> はいずれも直近決算の過去実績(vs アナリスト予想)。
+          {hasLayerA ? (
+            <>来期2列は、値の頭に
+            <span className="screener-grid-fdot" aria-hidden="true" /><b>ドットが付けば会社ガイダンスとアナリスト予想の比</b>、
+            <b>ドット無し＝来期コンセンサスYoY(ガイダンス未取得)</b>。</>
+          ) : (
+            <>来期2列は<b>来期コンセンサスYoY(会社ガイダンス未取得)</b>。</>
+          )}
+          いずれも会社開示・市場予想の転記であり、当社の予測・推奨ではありません。
           <b>これらは買い推奨ではありません。</b>
         </span>
       </div>
