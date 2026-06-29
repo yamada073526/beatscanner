@@ -287,7 +287,7 @@ export default function ScreenerGridRow({
           {ticker}
           {/* gold 標榜 ★ は column-driven 経路のみ (earnings 経路は左 pip ✓ が別格を担う)。SPEC A1。 */}
           {win && columns ? (
-            <span className="screener-grid-winstar" role="img" aria-label="この戦略の別格">★</span>
+            <span className="screener-grid-winstar" role="img" aria-label="この戦略の条件を特に強く満たす（買い推奨ではありません）" title="この戦略の条件を特に強く満たす（買い推奨ではありません）">★</span>
           ) : null}
         </span>
         <span className="screener-grid-meta">

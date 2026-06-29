@@ -93,9 +93,8 @@ class MasterErrorBoundary extends Component {
 
 /**
  * C-5 / C-16: screener_v2 feature flag
- *   - 移行期間 (現状): opt-in default OFF (?screener_v2=1 で新構造)
- *   - 昇格後 (C-16 ゲート pass): 末尾の `return false` を `return true` に変更 → C-5 最終形 (default ON)
- *   kill switch (default ON 後の revert): ?screener_v2=0 / ?screener_legacy=1 / localStorage screener_v2='0'
+ *   - C-16 昇格済 (2026-06-29 6体合議 GO): default ON = 新 screener (C-5 最終形)
+ *   kill switch (revert): ?screener_v2=0 / ?screener_legacy=1 / localStorage screener_v2='0'
  *     のいずれかで旧 screener に即戻せる (URL 優先・localStorage 永続)。
  *   Workspace.jsx 側でも同一ロジックを使用する (import)。
  */
@@ -104,7 +103,7 @@ class MasterErrorBoundary extends Component {
  *   feedback_feature_flag_dual_mode: URL param (一時) 優先 → localStorage (永続) の順で評価。
  *   @param {string} search  - window.location.search 相当 (例 '?screener_v2=0')
  *   @param {string|null} ls - localStorage['screener_v2'] の値 ('1' | '0' | null)
- *   ⚠️ C-16 昇格時はこの末尾 `return false` を `return true` に変えるだけで default ON 化 (単一箇所)。
+ *   末尾 return が default 値 (C-16 で true=ON 昇格済)。kill switch を踏まない通常 user は新 screener。
  */
 export function resolveScreenerV2({ search = '', ls = null } = {}) {
   const params = new URLSearchParams(search || '');
@@ -116,7 +115,7 @@ export function resolveScreenerV2({ search = '', ls = null } = {}) {
   // 永続: opt-in ('1' dogfood 継続) / kill ('0' default ON 後の個別端末 revert)
   if (ls === '1') return true;
   if (ls === '0') return false;
-  return false; // 移行期間 default = 旧並置 (C-16 昇格時に true へ)
+  return true; // C-16 昇格 (2026-06-29 6体合議 GO): default ON = 新 screener。revert は上記 kill switch 3系統。
 }
 
 export function isScreenerV2() {
