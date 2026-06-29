@@ -6,9 +6,9 @@ import { describe, it, expect } from 'vitest';
 import { resolveScreenerV2 } from './ScreenerMaster.jsx';
 
 describe('resolveScreenerV2 — flag 判定 + revert 安全性', () => {
-  it('default (param 無し・localStorage 無し) は false (移行期間)', () => {
-    expect(resolveScreenerV2()).toBe(false);
-    expect(resolveScreenerV2({ search: '', ls: null })).toBe(false);
+  it('default (param 無し・localStorage 無し) は true (C-16 昇格済・default ON)', () => {
+    expect(resolveScreenerV2()).toBe(true);
+    expect(resolveScreenerV2({ search: '', ls: null })).toBe(true);
   });
 
   it('?screener_v2=1 で opt-in (true)', () => {
@@ -44,9 +44,9 @@ describe('resolveScreenerV2 — flag 判定 + revert 安全性', () => {
     expect(resolveScreenerV2({ search: '?screener_legacy=1', ls: '1' })).toBe(false);
   });
 
-  // ── C-16 昇格 (default ON) を想定した revert 回帰: 末尾 default を true にしても下記が依然 false であること ──
-  //    (本 test は現 default=false 下での契約。昇格時はこの describe を default=true 版に更新する)
-  it('default ON 化後の想定: kill switch 群が独立して効く (param 単体で判定が確定する)', () => {
+  // ── C-16 昇格済 (default ON) 下の revert 回帰: 末尾 default=true でも下記 kill switch が依然 false ──
+  //    param/ls 単体で判定が確定する = 昇格しても revert が壊れないことを機械固定。
+  it('default ON 下: kill switch 群が独立して効く (param 単体で判定が確定する)', () => {
     // param が判定を確定させるため、末尾 default の値に依存しない (= 昇格しても revert は壊れない)
     expect(resolveScreenerV2({ search: '?screener_v2=0', ls: null })).toBe(false);
     expect(resolveScreenerV2({ search: '?screener_legacy=1', ls: null })).toBe(false);

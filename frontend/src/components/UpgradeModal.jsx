@@ -27,7 +27,7 @@ const PLAN_ROWS = [
   { label: '図解（2秒で理解するAI解説）', free: '—',     pro: '✓'     },
   { label: 'カンファレンス要点',          free: '—',     pro: '✓'     },
   { label: 'ウォッチリスト',              free: '3銘柄', pro: '無制限' },
-  { label: 'スクリーナー',               free: '—',     pro: '✓'     },
+  { label: 'スクリーナー',               free: '決算合格', pro: '✓'     },
 ];
 
 // Premium 機能の価値訴求 (Phase 1 は近日公開、 Phase 2 で checkout 配線)。

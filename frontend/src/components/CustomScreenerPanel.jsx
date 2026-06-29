@@ -1861,7 +1861,8 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
                 count={displayItems.length}
                 selectedTickers={selectedTickers}
                 onSelect={(t) => {
-                  trackEvent('screener_row_click', { ticker: t, mode: 'custom' });
+                  // C-16 metrics: preset を付与し「どの戦略から銘柄到達したか」の funnel を計測可能に。
+                  trackEvent('screener_row_click', { ticker: t, mode: 'custom', preset: activePreset });
                   onSelect?.(t);
                 }}
                 onCheckbox={(t, checked) => {

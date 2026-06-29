@@ -94,3 +94,31 @@ hallucination-guard 4層該当チェック (LLM 経由しないなら数値physi
 - [ ] §38: gold=過去/現在事実のみ・legend で意味明示・色ルール遵守。
 - [ ] build + vitest pass。
 - [ ] post-deploy 本番で各 preset の is-win 件数が 0件/全件でない (snap or dogfood)。new_high_break は Premium auth で確認。
+
+---
+
+## C-16: screener_v2 default ON 昇格 (2026-06-29 6体合議 GO)
+
+### ゲート判定 (満たされた根拠)
+- **dogfood**: 本番 ?screener_v2=1 で gold標榜 (sector_leader 2/11=別格)・gold先頭ソート (goldIdx[0,1])・★凡例・universe fetch=1本 (dedup)・kill switch (screener_v2=0→旧)・console error 0 を snap で実測。market_leading/quiet/new_high は Premium dogfood で user 確認。
+- **Trust Cliff**: 包括監査 High ゼロ。6体合議で「Premium checkout⇄LP矛盾」「v2 row_click欠落」の2大 blocker は**裏取りで誤検出と確定** (前者=旧 showCustomScreener モーダルの話で workspace 経路は UpgradeModal=Premium近日公開で整合 / 後者=CustomScreenerPanel:1863 で発火済)。
+- **metrics**: preset 選択 trackEvent + row_click に preset 付与 (本PR) で preset→銘柄到達 funnel 計測可。
+
+### 6体合議で対応した polish (本PR同梱)
+- §38: new_high_break title「買い場圏」→「新高値更新」(断定回避)
+- 行内★に「買い推奨ではありません」tooltip 追加 (凡例から離れた単独表示の誤認封じ)
+- row_click に preset 付与 (Anthropic: funnel精度)
+- UpgradeModal 比較表 スクリーナー行「Free —」→「決算合格」(マーケ: under-promise 是正)
+- flip + flag.test.js(default=true) を同一PR (実装/Anthropic 必須条件)
+
+### flip 後 監視 SOP (Anthropic 指摘)
+- **deploy 直後**: /health commit 一致 + ?screener_v2=0 で旧 screener に戻れること (kill switch) を本番確認。
+- **24-48h 集中監視**: GA4 で screener_preset_select / screener_row_click(preset付) 流入。Sentry で `[ScreenerMaster] render error` / MasterErrorBoundary 発火率を baseline 比較。
+- **revert トリガー**: Sentry の screener error が flip 前比で有意増 / preset select が 24h ゼロ → kill switch (`?screener_v2=0` 周知 or 末尾 return false へ revert PR) 即発動。
+- **dogfooder localStorage**: `localStorage screener_v2='1'` 残存端末は flip 効果が自端末で見えないため、検証時はクリア。
+
+### 別件 (C-16 外・follow-up)
+- 旧 showCustomScreener モーダルの onUpgrade=startCheckout('premium') ⇄ LP「近日公開」矛盾 (reachability 確認の上 Pro 誘導 or 撤去)。
+- backend ADR/銀行 偽サプライズ ガードが新 preset ソース値に効くか content-audit (frontend 射程外)。
+- A2 hairline / B KB指標 (上記実装順 2-4)。
+- MasterErrorBoundary に chunk 404 自動リロード (実装 reviewer 推奨・次PR)。
