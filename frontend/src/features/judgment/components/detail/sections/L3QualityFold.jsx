@@ -95,6 +95,14 @@ export function epsCagrDotTone(cagr) {
 }
 
 const num = (v, digits = 1) => (Number.isFinite(v) ? v.toFixed(digits) : null);
+// 大きな金額 (売上等) を $XX.XB / $XXXM に圧縮。§② tooltip の実数値表示用。
+const fmtMoney = (v) => {
+  if (!Number.isFinite(v)) return null;
+  const a = Math.abs(v);
+  if (a >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
+  if (a >= 1e6) return `$${(v / 1e6).toFixed(0)}M`;
+  return `$${v.toFixed(0)}`;
+};
 
 // quarterly-history の四半期ラベル (tooltip / 軸用)。
 export function quarterLabel(q) {
@@ -135,11 +143,17 @@ export function deriveQualityFromHistory(qh) {
 // 名称は judgment.py の ConditionResult.name と厳密一致 (Trust Cliff 回避・事実)。
 // ①⑤ は閾値型 / ②③④ は「3期連続増加」要件で構造的にネックになりやすい (実 pass率 ①66 ②10 ③9 ④23 ⑤73%)。
 export const FIVE_CONDITIONS = [
-  { key: 'cond1_passed', num: '①', short: 'CFマージン≥15%', full: '営業CFマージン ≥ 15%' },
-  { key: 'cond2_passed', num: '②', short: 'EPS連続増', full: 'EPS 連続増加' },
-  { key: 'cond3_passed', num: '③', short: 'CFPS連続増', full: 'CFPS 連続増加' },
-  { key: 'cond4_passed', num: '④', short: '売上連続増', full: '売上高 連続増加' },
-  { key: 'cond5_passed', num: '⑤', short: 'CFPS>EPS', full: 'CFPS > EPS（直近期）' },
+  // metric: 該当四半期の quarterly-history 行 (q) から条件の実数値を整形 (§② tooltip 用)。null=実数値なし。
+  { key: 'cond1_passed', num: '①', short: 'CFマージン≥15%', full: '営業CFマージン ≥ 15%',
+    metric: (q) => (Number.isFinite(q?.op_cf_margin) ? `CFマージン ${(q.op_cf_margin * 100).toFixed(1)}%` : null) },
+  { key: 'cond2_passed', num: '②', short: 'EPS連続増', full: 'EPS 連続増加',
+    metric: (q) => (Number.isFinite(q?.eps_actual) ? `EPS $${q.eps_actual.toFixed(2)}` : null) },
+  { key: 'cond3_passed', num: '③', short: 'CFPS連続増', full: 'CFPS 連続増加',
+    metric: (q) => (Number.isFinite(q?.cfps_actual) ? `CFPS $${q.cfps_actual.toFixed(2)}` : null) },
+  { key: 'cond4_passed', num: '④', short: '売上連続増', full: '売上高 連続増加',
+    metric: (q) => (Number.isFinite(q?.revenue_actual) ? `売上 ${fmtMoney(q.revenue_actual)}` : null) },
+  { key: 'cond5_passed', num: '⑤', short: 'CFPS>EPS', full: 'CFPS > EPS（直近期）',
+    metric: (q) => ((Number.isFinite(q?.cfps_actual) && Number.isFinite(q?.eps_actual)) ? `CFPS $${q.cfps_actual.toFixed(2)} / EPS $${q.eps_actual.toFixed(2)}` : null) },
 ];
 
 /**
@@ -150,22 +164,33 @@ export const FIVE_CONDITIONS = [
  * - 安定クリア = window の 75%+ かつ ≥4Q で PASS / 継続ネック = 25%- かつ ≥4Q で PASS。
  *   厳格ではなく高/低しきい値にすることで「7/8 の鉄板条件」も拾い、過大主張は避ける (§38)。
  */
-export function deriveEvalContinuity(rows) {
+export function deriveEvalContinuity(rows, qh) {
   const list = Array.isArray(rows) ? rows : [];
   if (list.length === 0) return null;
   const asc = [...list].reverse(); // 古→新
+  // quarterly-history (qh) を「決算発表月」キーでマップし、各 eval 行に実数値を結合 (§② tooltip 用)。
+  // eval.period_end=会計期末 ≠ qh.date=発表日 のため、eval.evaluation_date(≈発表日) の YYYY-MM で照合する
+  // (期末で突き合わせると 1Q ずれて別期の数値=捏造になる)。月が合わない期は実数値なし (誠実フォールバック)。
+  const qhByMonth = {};
+  (Array.isArray(qh) ? qh : []).forEach((r) => {
+    const k = (r?.date || '').slice(0, 7);
+    if (k && !(k in qhByMonth)) qhByMonth[k] = r;
+  });
+  const qhForRow = asc.map((r) => qhByMonth[(r?.evaluation_date || '').slice(0, 7)] || null);
   const passedCountSeries = asc.map((r) => (Number.isFinite(r?.passed_count) ? r.passed_count : null));
   const periodLabels = asc.map((r) => (r?.period_end ? String(r.period_end).slice(0, 7) : ''));
   const latest = list[0] || {};
   const latestPassed = Number.isFinite(latest.passed_count) ? latest.passed_count : null;
   const conditions = FIVE_CONDITIONS.map((c) => {
     const cells = asc.map((r) => (typeof r?.[c.key] === 'boolean' ? r[c.key] : null));
+    const metrics = qhForRow.map((q) => (q && typeof c.metric === 'function' ? c.metric(q) : null));
     const finite = cells.filter((v) => v === true || v === false);
     const passes = finite.filter((v) => v === true).length;
     const rate = finite.length > 0 ? passes / finite.length : null;
     return {
       ...c,
       cells,
+      metrics,
       passes,
       total: finite.length,
       rate,
@@ -278,8 +303,9 @@ function FiveCondHeatmap({ conditions, periodLabels = [] }) {
     const r = e.currentTarget.getBoundingClientRect();
     const status = v === true ? '充足' : v === false ? '未充足' : 'データ無';
     const period = periodLabels[i] ? ` · ${periodLabels[i]}` : '';
+    const metric = cond.metrics?.[i] ? ` · ${cond.metrics[i]}` : '';
     setTip({
-      label: `${cond.num}${cond.short}${period}`,
+      label: `${cond.num}${cond.short}${period}${metric}`,
       value: status,
       x: Math.round(r.left + r.width / 2),
       y: Math.round(r.top),
@@ -465,7 +491,7 @@ export default function L3QualityFold({ valuationExtras, ticker }) {
   const epsCagr3y = Number.isFinite(canslim?.eps_cagr_3y) ? canslim.eps_cagr_3y : null;
 
   // ── 5条件 充足の推移 (§② 継続性 signal・earnings-evaluation) ──
-  const evalCont = deriveEvalContinuity(evalRows);
+  const evalCont = deriveEvalContinuity(evalRows, qh);
   // header chip: 安定クリア条件を優先、無ければ継続ネックを表示 (非空・§38 事実ラベル)
   const evalStableNums = evalCont ? evalCont.stable.map((c) => c.num).join('') : '';
   const evalNeckNums = evalCont ? evalCont.neck.map((c) => c.num).join('') : '';
