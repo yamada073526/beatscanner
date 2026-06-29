@@ -567,6 +567,21 @@ export async function fetchQuarterlyHistory(ticker, limit = 8) {
   }
 }
 
+// ファンダメンタル5条件の評価履歴を取得 (判定タブ §② 継続性 signal)。
+// backend earnings_evaluation (nightly batch) から period_end 降順で N 四半期分を返す。
+// 戻り値: { ticker, rows: [{ period_end, evaluation_date, cond1_passed..cond5_passed, passed_count }, ...] }
+// FMP key 不要 (DB read)。dedupGet 経由で同 URL fetch を coalesce。失敗時 null。
+export async function fetchEarningsEvaluation(ticker, limit = 8) {
+  const t = (ticker || '').toUpperCase();
+  if (!t) return null;
+  const params = new URLSearchParams({ limit: String(limit) });
+  try {
+    return await dedupGet(`/api/earnings-evaluation/${encodeURIComponent(t)}?${params.toString()}`);
+  } catch {
+    return null;
+  }
+}
+
 // ロット履歴から日次ポートフォリオ評価額の時系列を取得 (X-2-5-C HistoryChart)。
 // body: { lots: [{ ticker, shares, trade_date }, ...], period: "1m"|"3m"|"6m"|"1y"|"3y" }
 // 戻り値: { series: [{ date, value, cashflow }, ...], from, to, period }
