@@ -22526,8 +22526,9 @@ def _build_layer_a_maps(sb, tickers: "list[str]") -> "tuple[dict, dict]":
     """Layer A (会社ガイダンス vs PIT アナリストコンセンサス) 用の batch pre-load。
 
     SPEC docs/specs/SPEC_2026-06-27_screener-guidance-layer-a.md §5-2/Sprint3。
-    guidance_snapshots を全件取得し ticker→最新 (filed_at max) 行 map を作り、
+    guidance_snapshots を全件取得し ticker→最新 (filed_at max・quarter のみ) 行 map を作り、
     guidance を持つ ticker のみ filed_at 直前の consensus_snapshot (PIT) を引く。
+    「来期2列」 は next-quarter 列のため quarter ガイダンスのみ対象 (annual-only は●抑止)。
     per-ticker DB fetch を _compute_one hot loop (universe ~2494) の外に出すための足場
     (hot loop 内 per-ticker fetch は FMP/DB rate を破壊するため禁止)。
 
@@ -22545,8 +22546,13 @@ def _build_layer_a_maps(sb, tickers: "list[str]") -> "tuple[dict, dict]":
         ):
             t = str(r.get("ticker") or "").upper()
             f = str(r.get("filed_at") or "")[:10]
-            # filed_at null は PIT 比較不可 (発表日が無く snapshot_date < filed_at を引けない)
-            if not t or t not in _uni or not f:
+            ptype = str(r.get("period_type") or "").lower()
+            # filed_at null は PIT 比較不可 (発表日が無く snapshot_date < filed_at を引けない)。
+            # SPEC 2026-06-29 (A): 「来期2列」は next-quarter 列 (Layer B = next_q_*_yoy_pct) なので
+            #   Layer A も quarter ガイダンスのみを対象とする。 annual-only 企業 (FDX 型・2月/5月決算で
+            #   通期ガイダンスのみ開示) は●抑止 = 「来期」 列に通期ガイダンスを混ぜない honest 設計
+            #   (multi-review QA verdict・通期は将来「通期列」 を足す別タスクで扱う)。
+            if not t or t not in _uni or not f or ptype != "quarter":
                 continue
             prev = guidance_map.get(t)
             if prev is None or str(prev.get("filed_at") or "")[:10] < f:

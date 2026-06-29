@@ -121,3 +121,51 @@ def test_tolerance_window_rejects_different_quarter():
     sb = _ToleranceSB(_GUIDANCE, consensus)
     _gmap, pmap = _build_layer_a_maps(sb, ["BB"])
     assert pmap == {}  # 別四半期の consensus は PIT に使わない
+
+
+# ── SPEC (A): 「来期2列」は quarter のみ・annual-only は●抑止 (multi-review QA verdict) ──
+def test_annual_only_guidance_suppressed():
+    # FDX 型 (2月/5月決算で通期ガイダンスのみ) → guidance_map に入れない (来期列に通期を混ぜない)
+    annual = [{
+        "ticker": "FDX", "period_end_date": "2027-05-31", "period_type": "annual",
+        "filed_at": "2026-06-23",
+        "eps_low": 16.9, "eps_high": 18.1, "eps_basis": "non_gaap",
+        "rev_low": None, "rev_high": None, "rev_basis": None,
+    }]
+    consensus = {"fiscal_date": "2027-05-31", "snapshot_date": "2026-06-20",
+                 "estimated_eps_avg": 22.57, "estimated_revenue_avg": 98e9}
+    sb = _ToleranceSB(annual, consensus)
+    gmap, pmap = _build_layer_a_maps(sb, ["FDX"])
+    assert gmap == {}  # 通期のみ → Layer A 対象外 (●抑止)
+    assert pmap == {}
+
+
+def test_quarter_preferred_over_annual():
+    # 同一 8-K の quarter / annual 両方 (同 filed_at) → quarter を選ぶ (annual 無視)
+    rows = [
+        {"ticker": "BB", "period_end_date": "2027-02-28", "period_type": "annual",
+         "filed_at": "2026-06-25", "eps_low": 0.16, "eps_high": 0.20, "eps_basis": "non_gaap",
+         "rev_low": 594e6, "rev_high": 621e6, "rev_basis": "non_gaap"},
+        {"ticker": "BB", "period_end_date": "2026-08-31", "period_type": "quarter",
+         "filed_at": "2026-06-25", "eps_low": 0.03, "eps_high": 0.04, "eps_basis": "non_gaap",
+         "rev_low": 137e6, "rev_high": 148e6, "rev_basis": "non_gaap"},
+    ]
+    consensus = {"fiscal_date": "2026-08-28", "snapshot_date": "2026-06-20",
+                 "estimated_eps_avg": 0.039, "estimated_revenue_avg": 137.7e6}
+    sb = _ToleranceSB(rows, consensus)
+    gmap, pmap = _build_layer_a_maps(sb, ["BB"])
+    assert gmap["BB"]["period_type"] == "quarter"  # quarter 優先 (annual を無視)
+    assert "BB" in pmap
+
+
+def test_tolerance_unparseable_period_falls_back_to_eq():
+    # 変更2: period_end_date が parse 不能でも例外を出さず .eq fallback (backend review medium #1)
+    rows = [{"ticker": "BB", "period_end_date": "not-a-date", "period_type": "quarter",
+             "filed_at": "2026-06-25", "eps_low": 0.03, "eps_high": 0.04, "eps_basis": "non_gaap",
+             "rev_low": 137e6, "rev_high": 148e6, "rev_basis": "non_gaap"}]
+    consensus = {"fiscal_date": "2026-08-28", "snapshot_date": "2026-06-20",
+                 "estimated_eps_avg": 0.039, "estimated_revenue_avg": 137.7e6}
+    sb = _ToleranceSB(rows, consensus)
+    gmap, pmap = _build_layer_a_maps(sb, ["BB"])  # crash しないこと
+    assert "BB" in gmap  # quarter なので guidance_map には入る
+    assert pmap == {}  # .eq("fiscal_date","not-a-date") は不一致 → PIT 空 (graceful)

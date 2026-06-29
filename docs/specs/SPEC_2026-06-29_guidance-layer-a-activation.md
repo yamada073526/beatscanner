@@ -72,10 +72,26 @@ ScreenerGridTable の earnings 凡例を条件化: 表示行に Layer A (guidanc
 ## DoD (全体)
 - [x] B1 frontend (honest 凡例)。
 - [x] Phase 0 SQL 見積り (Layer A 期待件数) → de-risk 実測で確定 (下記「de-risk 実測結果」セクション)。
-- [ ] Phase 1 filed_at 解決 (main.py 最小 diff + test) ← **設計見直し中** (backfill 経路でなく nightly 行に filed_at)。
-- [ ] period_end_date ↔ consensus.fiscal_date の正規化/tolerance (新規・de-risk で発見した未想定バグ)。
-- [ ] Phase 2 backfill + universe で guidance_source='8k' > 0 + snap ●確認 + §38 verify。
-- [ ] 実装 gate: main.py 編集前に multi-review (Hallucination Guard + §38 + main.py blast radius)。
+- [x] Phase 1 filed_at 解決 (nightly 行・最小 diff + test) — commit ddf0b570。
+- [x] period_end_date ±20 日 tolerance + quarter 優先/annual-only ●抑止 (multi-review QA fix)。
+- [x] 実装 gate: multi-review 3 体 (金融 GO / backend GO-fix / QA GO-fix) → 全 medium 対応済 (下記)。
+- [ ] Phase 2: merge → deploy → nightly canslim で guidance_source='8k' > 0 + 本番 snap ●確認 + §38 per-source verify。
+
+---
+
+## multi-review verdict (2026-06-29・3 体合議)
+
+| reviewer | model | verdict | 要点 |
+|---|---|---|---|
+| 金融/§38 | Opus | **GO** | tolerance は同一 FMP source の表記ドリフト救済のみ・隣接四半期 (≥89 日) ≫ 40 日幅で偽 surprise 物理的に不可。FDX -22.5% は verdict 語/色 polarity 無しの中立転記 + 二重 disclaimer で §38/景表法 安全。Hallucination Guard 違反なし (aggregator は docstring のみ)。 |
+| backend | Sonnet | GO-with-fixes | critical 無し。medium: ① `.eq` fallback テスト → **追加済**。② 本番 fiscal_date 分布確認 → **SQL 検証済** (誤期 match 無し)。 |
+| QA/UX | Sonnet | GO-with-fixes | medium: annual ガイダンスが「来期(quarter)」 列の●になりうる → **(A) quarter 優先/annual-only ●抑止で対応** (user gate)。凡例 self-healing / 件数 SSOT は問題なし。 |
+
+### (A) 採択後の実 Layer A (本番データ・±20 window + quarter 優先で再シミュレート)
+**quarter ● 確定 4 銘柄**: BB / JBL / MU / SNX (いずれも quarter ガイダンス vs PIT consensus、 ±20 window が
+08-31↔08-28 / 08-28↔08-26 の規約ドリフトを救済し成立)。 FDX は annual-only のため●抑止 (来期≠通期、 honest)。
+MEI/WLY は PIT 不成立 (consensus 蓄積前 / 8-K 未解決)。 → 完全一致時代の「確定 1 + coin-flip 2」 から
+**確定 4 (正しい quarter ラベル)** へ改善。 forward は決算累積で自然増。
 
 ---
 
