@@ -19,6 +19,7 @@
  *   - 捏造数値を出さない。全 valuation 値 null の行はサマリー「—」で表示 (空にせず誠実に欠落明示)。
  */
 import AccordionSection from '../../../primitives/AccordionSection.jsx';
+import Sparkline from '../../../../../components/Sparkline.jsx';
 
 const TESTID = 'l3-quality-fold';
 
@@ -106,6 +107,15 @@ export default function L3QualityFold({ valuationExtras }) {
     ? `機関投資家（13F 報告）の保有比率は前四半期比 ${instSign}${num(instDelta, 1)}pt${Number.isFinite(instPct) ? `、直近の保有比率は ${num(instPct, 1)}%` : ''}です。`
     : '機関投資家（13F 報告）の保有比率の前四半期比です。データ未取得時は表示されません。';
 
+  // ── 機関保有 4Q trend sparkline (Sprint 3) ──
+  // backend は institutionalOwnership.trend を古→新 (チャート左→右) で返却済 (institutional.py:89)。
+  // 出し分け原則: 保有比率は推移を見るべき trend 指標 → sparkline。単一値 (ROE 等) には付けない。
+  const instTrend = Array.isArray(inst?.trend) ? inst.trend : [];
+  const instTrendVals = instTrend.map((t) => (Number.isFinite(t?.ownershipPercent) ? t.ownershipPercent : null));
+  const instTrendLabels = instTrend.map((t) => (t?.date ? String(t.date).slice(0, 7) : ''));
+  // 2 点以上 valid かつ source ok のときのみ描画 (1 点では推移にならない)。
+  const showInstTrend = sources.institutional === 'ok' && instTrendVals.filter((v) => Number.isFinite(v)).length >= 2;
+
   return (
     <div data-testid={TESTID} style={{ display: 'grid', gap: 'var(--space-2, 8px)' }}>
       {/* 営業CFマージン */}
@@ -183,6 +193,32 @@ export default function L3QualityFold({ valuationExtras }) {
           <div>
             {instDetailLead}O'Neil の "I"（機関の買い集め）の目安で、機関がどう動いたかの事実を示します。
           </div>
+          {showInstTrend && (
+            <div>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: 10.5,
+                  color: 'var(--text-muted)',
+                  marginBottom: 2,
+                }}
+              >
+                <span>保有比率の推移（直近{instTrendVals.filter((v) => Number.isFinite(v)).length}Q）</span>
+                <span>過去 → 直近</span>
+              </div>
+              <div style={{ height: 56 }}>
+                {/* 直近=右 (backend が古→新で返却)。色は accent (中立のブランド色) — 上昇/下落の意味は持たせない (§38)。 */}
+                <Sparkline
+                  data={instTrendVals}
+                  color="var(--color-accent)"
+                  labels={instTrendLabels}
+                  valueFormatter={(v) => `${v.toFixed(1)}%`}
+                  seriesLabel="保有比率"
+                />
+              </div>
+            </div>
+          )}
           <div style={citeStyle}>
             ※ 13F は四半期ごとの SEC 報告で約 45 日遅延します。機械的な集計であり、相場の予測や売買の推奨ではありません。
           </div>

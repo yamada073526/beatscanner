@@ -45,7 +45,12 @@ export default function ConditionRow({
 }) {
   const [showModal, setShowModal] = useState(false);
   // 2026-06-28 dogfood: row hover (tint 強化 / translateY lift / chevron scale) は「違和感」 と feedback、撤去。
-  // 行は static、 clickability は cursor:pointer + chevron で示す (正本 mockup の .cond も元来 hover なし)。
+  // 2026-06-29 Sprint 2b: clickable affordance を取り戻すため calm hover を再導入 — bg tint を僅かに濃くし
+  // border を僅かに強める「のみ」 (lift / glow / chevron scale は #104 で除去済、再導入しない)。
+  // 判定サマリー bucket/mini (#110) の控えめ hover と一貫させる狙いだが、行は既に PASS/FAIL の色 tint を
+  // 持つため neutral var(--bg-hover) で塗り潰さず、同色の alpha を上げて色アイデンティティを保つ。
+  // useState で hover を管理 (useCountUp の再レンダー中に inline style 直接変更だと resting に戻る罠を回避)。
+  const [rowHover, setRowHover] = useState(false);
   const reduce = useReducedMotion();
   const passed = condition.passed;
   const detailContent = CONDITION_DETAILS[index];
@@ -68,19 +73,32 @@ export default function ConditionRow({
   const bgFail = 'rgba(148, 163, 184, 0.06)';
   const borderPass = 'rgba(52, 239, 129, 0.20)';
   const borderFail = 'rgba(148, 163, 184, 0.20)';
+  // Sprint 2b calm hover: resting の同色を僅かに濃く (alpha 0.06→0.10 / border 0.20→0.32)。控えめに留める。
+  const bgPassHover = 'rgba(52, 239, 129, 0.10)';
+  const bgFailHover = 'rgba(148, 163, 184, 0.10)';
+  const borderPassHover = 'rgba(52, 239, 129, 0.32)';
+  const borderFailHover = 'rgba(148, 163, 184, 0.32)';
 
   return (
     <li
       data-testid={`condition-row-${index - 1}`}
+      onMouseEnter={() => setRowHover(true)}
+      onMouseLeave={() => setRowHover(false)}
       style={{
         listStyle: 'none',
-        // 2026-06-28 dogfood: hover での tint 強化 / translateY lift / shadow を撤去 (static row)。
-        // resting の subtle tint + border は維持 (行の区切り)。
-        background: passed ? bgPass : bgFail,
+        // Sprint 2b: calm hover で bg tint + border を僅かに強める「のみ」 (lift / glow / chevron scale なし)。
+        background: rowHover ? (passed ? bgPassHover : bgFailHover) : passed ? bgPass : bgFail,
         border: '1px solid',
-        borderColor: passed ? borderPass : borderFail,
+        borderColor: rowHover
+          ? passed
+            ? borderPassHover
+            : borderFailHover
+          : passed
+            ? borderPass
+            : borderFail,
         borderRadius: 'var(--radius-sm)',
         overflow: 'hidden',
+        transition: reduce ? 'none' : 'background-color 0.15s ease, border-color 0.15s ease',
       }}
     >
       {/* ── Summary row (always visible) ────────────────────────────── */}
@@ -318,10 +336,17 @@ export default function ConditionRow({
                 </div>
               )}
 
-              {/* Sparkline */}
+              {/* Sparkline — Sprint 3: hover で各点の期ラベル + 値 tooltip。
+                  series は古→新 (直近=右)。期ラベルは末尾基準の相対表記 (直近 / 前期 / n期前)。 */}
               {Array.isArray(condition.series) && condition.series.some((v) => v != null) && (
                 <div style={{ height: 56, minHeight: 56 }}>
-                  <Sparkline data={condition.series} color={sparkColor} />
+                  <Sparkline
+                    data={condition.series}
+                    color={sparkColor}
+                    labels={buildSeriesLabels(condition.series.length)}
+                    valueFormatter={formatSeriesValue}
+                    seriesLabel={condition.label || condition.name}
+                  />
                 </div>
               )}
 
@@ -347,6 +372,27 @@ export default function ConditionRow({
   );
 }
 
+// Sprint 3: 5条件展開 sparkline の hover tooltip 用。series は古→新 (直近=右)。
+// 期ラベルは末尾 (直近) 基準の相対表記。actual な四半期名は series に持たないため相対表記で誠実に。
+function buildSeriesLabels(n) {
+  if (!Number.isFinite(n) || n <= 0) return [];
+  return Array.from({ length: n }, (_, i) => {
+    const fromEnd = n - 1 - i;
+    if (fromEnd === 0) return '直近';
+    if (fromEnd === 1) return '前期';
+    return `${fromEnd}期前`;
+  });
+}
+
+// series 値の整形 (単位は series に含まれないため数値のみ。大きさで桁数を調整)。
+function formatSeriesValue(v) {
+  if (!Number.isFinite(v)) return '—';
+  if (Math.abs(v) >= 1e9) return `${(v / 1e9).toFixed(1)}B`;
+  if (Math.abs(v) >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
+  if (Math.abs(v) >= 100) return v.toFixed(0);
+  return v.toFixed(2);
+}
+
 // v86 R2 Vision 改善提案 #3: 数値と補助単位 (B/M/%) を 2 層階層に分離。
 // 戻り値: { num: string, unit: string|null }
 function formatValueParts(v) {
@@ -359,7 +405,7 @@ function formatValueParts(v) {
   }
   // string 受け取り: backend 整形済の "12.3%" 等から数値部と単位を分離。
   const s = String(v);
-  const m = s.match(/^([\-+]?[\d.,]+)\s*([%a-zA-Z]+)$/);
+  const m = s.match(/^([-+]?[\d.,]+)\s*([%a-zA-Z]+)$/);
   if (m) return { num: m[1], unit: m[2] };
   return { num: s, unit: null };
 }
