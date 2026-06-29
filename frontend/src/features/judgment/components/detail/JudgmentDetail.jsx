@@ -783,8 +783,10 @@ export default function JudgmentDetail({
                     )}
                   </SectionFade>
                 )}
-                {selectedTicker && plan === 'premium' && (
-                  <PriceLadder ticker={selectedTicker} />
+                {/* Phase2 task3 (G2 gate): premium-only mount を廃し、 無料にも構造 (spine + 無料4レベル値) を
+                    見せ、 Premium 固有レベル (pivot/support) の値だけ PriceLadder 内部でロック + ティーザー。 */}
+                {selectedTicker && (
+                  <PriceLadder ticker={selectedTicker} plan={plan} onUpgrade={detailContext.onUpgrade} />
                 )}
                 {/* 期間別リターン（Phase2: 価格目安=PriceLadder 直下へ昇順・mockup v5 L4 準拠。
                     ブレイクアウト強度行より前 = 価格目安の直下に配置）。
