@@ -190,14 +190,14 @@ describe('buildGroupRuns — 簡素モード (core 間引きで run 再計算)',
   });
 });
 
-describe('withGroupDividers — dstart は zone group の先頭のみ・fut は 4 preset で常に false', () => {
+describe('withGroupDividers — dstart は zone group の先頭 + zone 直後の列・fut は 4 preset で常に false', () => {
   const dstartIds = (cols, p) => withGroupDividers(cols, p).filter((c) => c.dstart).map((c) => c.id);
 
-  it('new_high_break: 決算実績 先頭 eps と セクターRS 先頭 sectorrs に dstart (B2)', () => {
-    expect(dstartIds(PRESET_COLUMNS.new_high_break, 'new_high_break')).toEqual(['eps', 'sectorrs']);
+  it('new_high_break: 決算実績 先頭 eps + 直後 rs (zone終端) + セクターRS 先頭 sectorrs に dstart (B2)', () => {
+    expect(dstartIds(PRESET_COLUMNS.new_high_break, 'new_high_break')).toEqual(['eps', 'rs', 'sectorrs']);
   });
-  it('sector_leader: 収益の質 先頭 ocf と 需給 先頭 inst に dstart', () => {
-    expect(dstartIds(PRESET_COLUMNS.sector_leader, 'sector_leader')).toEqual(['ocf', 'inst']);
+  it('sector_leader: 収益の質 先頭 ocf + 需給 先頭 inst + 直後 rs (需給終端) に dstart', () => {
+    expect(dstartIds(PRESET_COLUMNS.sector_leader, 'sector_leader')).toEqual(['ocf', 'inst', 'rs']);
   });
   it('quiet_quality: 需給 先頭 vol と 収益の質 先頭 ocf に dstart', () => {
     expect(dstartIds(PRESET_COLUMNS.quiet_quality, 'quiet_quality')).toEqual(['vol', 'ocf']);
@@ -205,11 +205,11 @@ describe('withGroupDividers — dstart は zone group の先頭のみ・fut は 
   it('market_leading: 収益の質 先頭 ocf と 決算実績 先頭 eps に dstart', () => {
     expect(dstartIds(PRESET_COLUMNS.market_leading, 'market_leading')).toEqual(['ocf', 'eps']);
   });
-  it('plain group の先頭・group 継続列には dstart を付けない', () => {
+  it('plain group の先頭 (zone 非隣接)・group 継続列には dstart を付けない', () => {
     const aug = withGroupDividers(PRESET_COLUMNS.sector_leader, 'sector_leader');
-    expect(aug.find((c) => c.id === 'leader').dstart).toBe(false); // 先頭 plain
+    expect(aug.find((c) => c.id === 'leader').dstart).toBe(false); // 先頭 plain (直前 zone なし)
     expect(aug.find((c) => c.id === 'roe').dstart).toBe(false);    // quality 継続
-    expect(aug.find((c) => c.id === 'rs').dstart).toBe(false);     // 末尾 plain
+    expect(aug.find((c) => c.id === 'rs').dstart).toBe(true);      // 末尾 plain だが直前 zone(需給) の終端で dstart
   });
   it('4 preset には来期列が無いため fut は全列 false (B案=glass は earnings_pass 据え置き)', () => {
     Object.keys(PRESET_COLUMNS).forEach((p) => {

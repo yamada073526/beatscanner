@@ -197,13 +197,18 @@ export function buildGroupRuns(cols, preset) {
 export function withGroupDividers(cols, preset) {
   const meta = PRESET_GROUP_META[preset] || {};
   let prevKey = null;
+  let prevWasZoneLike = false;
   return (cols || []).map((c) => {
     const key = c.group || c.id;
     const m = meta[key] || {};
     const isFirstOfGroup = key !== prevKey;
-    prevKey = key;
     const isZoneLike = m.kind === 'zone' || m.kind === 'future';
-    return { ...c, dstart: isFirstOfGroup && isZoneLike, fut: m.kind === 'future' };
+    // zone の「開始」(isZoneLike) に加え zone の「直後」(prevWasZoneLike) の境界にも縦 hairline。
+    // 後者で zone の右端が仕切られ、単独列 (RS 等) が直前 zone (例: 需給) の子に見える誤読を防ぐ。
+    const dstart = isFirstOfGroup && (isZoneLike || prevWasZoneLike);
+    prevKey = key;
+    prevWasZoneLike = isZoneLike;
+    return { ...c, dstart, fut: m.kind === 'future' };
   });
 }
 

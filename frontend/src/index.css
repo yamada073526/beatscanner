@@ -14462,6 +14462,12 @@ body.is-digest-resizing {
 .screener-grid-ghead .screener-grid-gzlabel.is-zone::before { content: ""; position: absolute; left: 2px; top: 3px; bottom: 0; width: 1px; background: color-mix(in srgb, var(--text-muted) 30%, transparent); }
 .screener-grid-ghead .screener-grid-gzlabel.is-future { background: var(--bg-future); border-radius: var(--radius-sm, 8px) var(--radius-sm, 8px) 0 0; border-bottom: 1px solid color-mix(in srgb, var(--color-gold) 40%, transparent); }
 .screener-grid-table[data-grouped="true"] .screener-grid-head { top: var(--screener-ghead-h); border-top: 1px solid var(--border); }
+/* column-driven preset は ghead カテゴリ (span の幾何中央) / 列ヘッダ / 数値行を全段中央で縦に揃える。
+   数値も中央 (桁揃えより ghead 整列を優先・値が短く実害小)。ghead が左寄りに見える誤読を解消 (dogfood)。
+   simple mode (data-grouped なし) は従来どおり右寄せ維持。 */
+.screener-grid-table[data-grouped="true"] .screener-grid-head .h-num { text-align: center; }
+.screener-grid-table[data-grouped="true"] .screener-grid-cell { justify-content: center; text-align: center; }
+.screener-grid-table[data-grouped="true"] .screener-grid-cell--pri { align-items: center; }
 
 /* 行 */
 /* reveal の stagger delay は --reveal-delay で opacity/transform 限定 (背景 hover には波及させない)。
