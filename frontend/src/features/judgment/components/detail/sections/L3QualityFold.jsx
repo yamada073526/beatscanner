@@ -194,26 +194,27 @@ function Pillbox({ label, value, tag, tagTone = 'muted', dotTone = 'gain' }) {
   );
 }
 
-// fold 詳細内の sparkline ブロック (機関保有 trend と同レイアウト)。≥2 有値でのみ描画。
-function FoldSparkline({ title, series, labels, color, valueFormatter }) {
+// header summary 内に常時表示する compact sparkline (3 体合議 → C 採用: 図解をクリックで隠さない)。
+// 幅固定で左=8Q前→右=直近、直近バー強調。各バー hover で期+値 (SparkBars の portal tooltip)。≥2 有値で描画。
+function SummarySpark({ series, labels, color, valueFormatter, width = 76 }) {
   const finiteCount = series.filter((v) => Number.isFinite(v)).length;
   if (finiteCount < 2) return null;
   return (
-    <div>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          fontSize: 10.5,
-          color: 'var(--text-muted)',
-          marginBottom: 2,
-        }}
-      >
-        <span>{title}（直近{finiteCount}Q）</span>
-        <span>過去 → 直近</span>
-      </div>
-      <SparkBars data={series} color={color} labels={labels} valueFormatter={valueFormatter} height={48} floorPct={20} />
-    </div>
+    <span style={{ display: 'inline-flex', width, height: 26, flexShrink: 0, verticalAlign: 'middle' }}>
+      <SparkBars data={series} color={color} labels={labels} valueFormatter={valueFormatter} height={26} floorPct={22} />
+    </span>
+  );
+}
+
+// sparkline を持つ指標の summary 共通レイアウト: 値テキスト + 常時 sparkline + 方向 chip を 1 行 (nowrap)。
+// header が狭いときは title 側 (overflow:hidden) が truncate する。
+function SparkSummary({ valueNode, series, labels, color, valueFormatter, chip }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
+      <span>{valueNode}</span>
+      <SummarySpark series={series} labels={labels} color={color} valueFormatter={valueFormatter} />
+      {chip}
+    </span>
   );
 }
 
@@ -296,16 +297,27 @@ export default function L3QualityFold({ valuationExtras, ticker }) {
   const instOk = sources.institutional === 'ok' && Number.isFinite(instDelta);
   const instLabel = instOk ? ownershipTrendLabel(instDelta) : null;
   const instSign = Number.isFinite(instDelta) && instDelta > 0 ? '+' : '';
-  const instSummary = instOk
-    ? `QoQ ${instSign}${num(instDelta, 1)}pt · ${instLabel}`
-    : <span style={dashStyle}>—</span>;
-  const instDetailLead = instOk
-    ? `機関投資家（13F 報告）の保有比率は前四半期比 ${instSign}${num(instDelta, 1)}pt${Number.isFinite(instPct) ? `、直近の保有比率は ${num(instPct, 1)}%` : ''}です。`
-    : '機関投資家（13F 報告）の保有比率の前四半期比です。データ未取得時は表示されません。';
   const instTrend = Array.isArray(inst?.trend) ? inst.trend : [];
   const instTrendVals = instTrend.map((t) => (Number.isFinite(t?.ownershipPercent) ? t.ownershipPercent : null));
   const instTrendLabels = instTrend.map((t) => (t?.date ? String(t.date).slice(0, 7) : ''));
   const showInstTrend = sources.institutional === 'ok' && instTrendVals.filter((v) => Number.isFinite(v)).length >= 2;
+  const instValueText = instOk ? `QoQ ${instSign}${num(instDelta, 1)}pt · ${instLabel}` : null;
+  const instSummary = !instOk
+    ? <span style={dashStyle}>—</span>
+    : showInstTrend
+      ? (
+        <SparkSummary
+          valueNode={instValueText}
+          series={instTrendVals}
+          labels={instTrendLabels}
+          color="var(--color-accent)"
+          valueFormatter={(v) => `${v.toFixed(1)}%`}
+        />
+      )
+      : instValueText;
+  const instDetailLead = instOk
+    ? `機関投資家（13F 報告）の保有比率は前四半期比 ${instSign}${num(instDelta, 1)}pt${Number.isFinite(instPct) ? `、直近の保有比率は ${num(instPct, 1)}%` : ''}です。`
+    : '機関投資家（13F 報告）の保有比率の前四半期比です。データ未取得時は表示されません。';
 
   // ── 8Q 系列 + 最新派生値 (quarterly-history は新しい順 → deriveQualityFromHistory で古→新へ整列) ──
   const {
@@ -318,10 +330,14 @@ export default function L3QualityFold({ valuationExtras, ticker }) {
   const hasGrossMargin = gmLatest != null || grossMarginSeries.some((v) => Number.isFinite(v));
   const gmSummary = gmLatest != null
     ? (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span>{num(gmLatest)}%</span>
-        {gmYoyChip && <MiniChip tone={gmYoyChip.tone}>{gmYoyChip.label}</MiniChip>}
-      </span>
+      <SparkSummary
+        valueNode={`${num(gmLatest)}%`}
+        series={grossMarginSeries}
+        labels={qhLabels}
+        color="var(--color-accent)"
+        valueFormatter={(v) => `${v.toFixed(1)}%`}
+        chip={gmYoyChip && <MiniChip tone={gmYoyChip.tone}>{gmYoyChip.label}</MiniChip>}
+      />
     )
     : <span style={dashStyle}>—</span>;
 
@@ -329,12 +345,16 @@ export default function L3QualityFold({ valuationExtras, ticker }) {
   const hasOcfNi = ocfNiLatest != null || ocfNiSeries.some((v) => Number.isFinite(v));
   const ocfNiSummary = ocfNiLatest != null
     ? (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span>{ocfNiLatest.toFixed(2)}x</span>
-        {cfHealth != null && (
+      <SparkSummary
+        valueNode={`${ocfNiLatest.toFixed(2)}x`}
+        series={ocfNiSeries}
+        labels={qhLabels}
+        color="var(--color-accent)"
+        valueFormatter={(v) => `${v.toFixed(2)}x`}
+        chip={cfHealth != null && (
           <MiniChip tone={cfHealth ? 'gain' : 'loss'}>{cfHealth ? 'CF良好' : '要確認'}</MiniChip>
         )}
-      </span>
+      />
     )
     : <span style={dashStyle}>—</span>;
 
@@ -353,10 +373,14 @@ export default function L3QualityFold({ valuationExtras, ticker }) {
         summary={
           ocfOk
             ? (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span>{num(ocf)}%（理想帯 15–35%）· {ocfEval}</span>
-                {ocfMarginTrend && <MiniChip tone={ocfMarginTrend.tone}>{ocfMarginTrend.label}</MiniChip>}
-              </span>
+              <SparkSummary
+                valueNode={`${num(ocf)}% · ${ocfEval}`}
+                series={ocfMarginSeries}
+                labels={qhLabels}
+                color="var(--color-accent)"
+                valueFormatter={(v) => `${v.toFixed(1)}%`}
+                chip={ocfMarginTrend && <MiniChip tone={ocfMarginTrend.tone}>{ocfMarginTrend.label}</MiniChip>}
+              />
             )
             : <span style={dashStyle}>—</span>
         }
@@ -365,15 +389,8 @@ export default function L3QualityFold({ valuationExtras, ticker }) {
       >
         <div style={foldDetailStyle}>
           <div>
-            営業CFマージン = 営業キャッシュフロー ÷ 売上高（直近 4Q 合計ベース）。本業がどれだけ現金を生み出すかを示し、利益の「質」を測る指標です。理想帯は 15–35%、ジリジリ拡大は優良化の兆候。
+            営業CFマージン = 営業キャッシュフロー ÷ 売上高（TTM はヘッダーの数値、推移は各 Q ベース）。本業がどれだけ現金を生み出すかを示し、利益の「質」を測る指標です。理想帯は 15–35%、ジリジリ拡大は優良化の兆候。ヘッダーの sparkline は左=8Q前→右=直近、各バー hover で各 Q の値。
           </div>
-          <FoldSparkline
-            title="営業CFマージンの推移"
-            series={ocfMarginSeries}
-            labels={qhLabels}
-            color="var(--color-accent)"
-            valueFormatter={(v) => `${v.toFixed(1)}%`}
-          />
           {!ocfOk && (
             <div style={citeStyle}>
               ※ 銀行・REIT・保険など売上基盤が異質な業種、またはデータ未取得時は表示されません。
@@ -394,15 +411,8 @@ export default function L3QualityFold({ valuationExtras, ticker }) {
         >
           <div style={foldDetailStyle}>
             <div>
-              粗利率 = 売上総利益 ÷ 売上高。価格決定力・原価構造の効率を示し、継続的な拡大は優良サインです（数値は事実、評価判断はご自身で）。
+              粗利率 = 売上総利益 ÷ 売上高。価格決定力・原価構造の効率を示し、継続的な拡大は優良サインです（数値は事実、評価判断はご自身で）。ヘッダーの sparkline は左=8Q前→右=直近、各バー hover で各 Q の値。
             </div>
-            <FoldSparkline
-              title="粗利率の推移"
-              series={grossMarginSeries}
-              labels={qhLabels}
-              color="var(--color-accent)"
-              valueFormatter={(v) => `${v.toFixed(1)}%`}
-            />
             <div style={citeStyle}>出典: FMP income-statement（gross margin・直近 8Q）</div>
           </div>
         </AccordionSection>
@@ -440,17 +450,8 @@ export default function L3QualityFold({ valuationExtras, ticker }) {
         >
           <div style={foldDetailStyle}>
             <div>
-              営業CFPS ÷ EPS の比率で、利益が現金で裏付けられているか（会計品質）を示します。1.0x 以上が健全の目安（ファンダメンタル5条件 #5：営業CFPS &gt; EPS）。数値は事実、評価判断はご自身で。
+              営業CFPS ÷ EPS の比率で、利益が現金で裏付けられているか（会計品質）を示します。1.0x 以上が健全の目安（ファンダメンタル5条件 #5：営業CFPS &gt; EPS）。数値は事実、評価判断はご自身で。ヘッダーの sparkline は左=8Q前→右=直近（bar 色は中立 accent、健全性は CF良好/要確認 chip に集約）、各バー hover で各 Q の値。
             </div>
-            {/* bar 色は中立 accent (比率が 1.0x を跨いでも「全バー緑＝健全」と誤読させない §38-safe)。
-                健全性シグナルは summary の CF良好/要確認 verdict chip に集約。 */}
-            <FoldSparkline
-              title="営業CFPS ÷ EPS の推移"
-              series={ocfNiSeries}
-              labels={qhLabels}
-              color="var(--color-accent)"
-              valueFormatter={(v) => `${v.toFixed(2)}x`}
-            />
             <div style={citeStyle}>※ EPS が 0 以下の四半期は比率が定義できないため非表示です。</div>
             <div style={citeStyle}>出典: FMP cash-flow / income（営業CFPS・EPS、直近 8Q）</div>
           </div>
@@ -488,17 +489,8 @@ export default function L3QualityFold({ valuationExtras, ticker }) {
       >
         <div style={foldDetailStyle}>
           <div>
-            {instDetailLead}O'Neil の "I"（機関の買い集め）の目安で、機関がどう動いたかの事実を示します。
+            {instDetailLead}O'Neil の "I"（機関の買い集め）の目安で、機関がどう動いたかの事実を示します。{showInstTrend ? 'ヘッダーの sparkline は保有比率の推移（左=過去→右=直近）、各バー hover で各四半期の値。' : ''}
           </div>
-          {showInstTrend && (
-            <FoldSparkline
-              title="保有比率の推移"
-              series={instTrendVals}
-              labels={instTrendLabels}
-              color="var(--color-accent)"
-              valueFormatter={(v) => `${v.toFixed(1)}%`}
-            />
-          )}
           <div style={citeStyle}>
             ※ 13F は四半期ごとの SEC 報告で約 45 日遅延します。機械的な集計であり、相場の予測や売買の推奨ではありません。
           </div>
