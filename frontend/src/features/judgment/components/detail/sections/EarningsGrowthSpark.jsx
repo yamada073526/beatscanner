@@ -122,7 +122,7 @@ const baxisStyle = {
 };
 
 const skeletonStyle = {
-  height: 64,
+  height: 80, // bchartStyle.height と一致させ loading→main の CLS を防ぐ（Phase2 で 64→80 に追従）
   borderRadius: 4,
   background: 'var(--bg-muted, #243447)',
   animation: 'shimmer 1.5s infinite',
