@@ -46,6 +46,42 @@ function verdictMeta(v) {
   return VERDICT_META[String(v).toLowerCase()] || null;
 }
 
+// Sprint 4a: backend eps_yoy_acceleration（"accelerating" | "decelerating" | "flat" | null）→ 表示メタ。
+// 投資業界色: 加速=ポジティブ方向=緑 / 減速=注意=amber。flat / null は chip 非表示（visual noise 回避）。
+// §38-safe: 直近 2Q の eps_yoy_pct を比較した「過去確定の事実の方向」のみ。将来予測・買い/売り推奨は出さない。
+const ACCEL_META = {
+  accelerating: { icon: '↗', label: '加速', color: 'var(--color-gain)' },
+  decelerating: { icon: '↘', label: '減速', color: 'var(--color-warning)' },
+};
+
+// 上部 summary 行の小型 chip（EpsBeatStreakChip と同 idiom: pill / 12% bg / 45% border）。
+function SummaryChip({ color, title, ariaLabel, testid, children }) {
+  return (
+    <span
+      data-testid={testid}
+      aria-label={ariaLabel}
+      title={title}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '2px 10px',
+        borderRadius: 999,
+        border: `1px solid color-mix(in srgb, ${color} 45%, transparent)`,
+        background: `color-mix(in srgb, ${color} 12%, transparent)`,
+        color,
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: '0.02em',
+        lineHeight: 1.4,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
 // YoY% から bar 高さを計算
 // 0% = min、最大値が max を占める。負は bg-muted で高さ proportional。
 function calcBarHeight(pct, maxAbsVal) {
@@ -337,6 +373,9 @@ export default function EarningsGrowthSpark({ ticker }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [tip, setTip] = useState(null); // { quarter, x, y } | null
+  // Sprint 4a: backend 派生値（同一 fetch から読むだけ。frontend で再計算しない）。
+  const [beatStreak, setBeatStreak] = useState(0);          // 良い決算（EPS+売上 とも beat）連続期数
+  const [epsYoyAccel, setEpsYoyAccel] = useState(null);     // EPS YoY 加速度: 'accelerating'|'decelerating'|'flat'|null
 
   useEffect(() => {
     if (!ticker) return;
@@ -344,6 +383,8 @@ export default function EarningsGrowthSpark({ ticker }) {
     setLoading(true);
     setError(null);
     setData(null);
+    setBeatStreak(0);
+    setEpsYoyAccel(null);
     setTip(null);
     fetchQuarterlyHistory(ticker, 8)
       .then((res) => {
@@ -352,6 +393,8 @@ export default function EarningsGrowthSpark({ ticker }) {
           setData(null);
         } else {
           setData(res.history); // 新しい順（history[0] = 最新）
+          setBeatStreak(Number.isFinite(res.beat_streak) ? res.beat_streak : 0);
+          setEpsYoyAccel(res.eps_yoy_acceleration ?? null);
         }
       })
       .catch((err) => {
@@ -433,8 +476,42 @@ export default function EarningsGrowthSpark({ ticker }) {
     );
   }
 
+  // Sprint 4a: 上部 summary 行（パッと見 2 秒の anchor）。
+  //   良い決算 N 期連続（beat_streak>=2）+ EPS 直近加速/減速（backend eps_yoy_acceleration）。
+  //   加速注記は直近 2Q の eps_yoy_pct が揃う時のみ（title に実数値を併記し誠実に根拠提示）。
+  const accelMeta = ACCEL_META[epsYoyAccel] || null;
+  const curEpsYoY = Number.isFinite(epsData[0]) ? epsData[0] : null;
+  const prevEpsYoY = Number.isFinite(epsData[1]) ? epsData[1] : null;
+  const showStreak = beatStreak >= 2;
+  const showAccel = !!accelMeta && curEpsYoY !== null && prevEpsYoY !== null;
+
   return (
     <div data-testid={TESTID} data-state="main">
+      {(showStreak || showAccel) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+          {showStreak && (
+            <SummaryChip
+              testid="good-quarter-streak-chip"
+              color="var(--color-gain)"
+              ariaLabel={`良い決算 ${beatStreak} 期連続`}
+              title={`EPS と売上がともに市場予想を上回った決算が直近 ${beatStreak} 四半期連続`}
+            >
+              <span aria-hidden style={{ fontSize: 9, opacity: 0.85 }}>●</span>
+              <span>良い決算 {beatStreak}Q 連続</span>
+            </SummaryChip>
+          )}
+          {showAccel && (
+            <SummaryChip
+              testid="eps-yoy-accel-chip"
+              color={accelMeta.color}
+              ariaLabel={`EPS 前年比成長が直近で${accelMeta.label}`}
+              title={`EPS 前年比が前四半期から${accelMeta.label}（${fmtYoY(prevEpsYoY)} → ${fmtYoY(curEpsYoY)}）`}
+            >
+              <span>EPS成長 {accelMeta.label} {accelMeta.icon}</span>
+            </SummaryChip>
+          )}
+        </div>
+      )}
       <div style={wrapperStyle}>
         {hasEps && (
           <SparkChart
