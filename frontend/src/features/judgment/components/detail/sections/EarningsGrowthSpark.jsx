@@ -129,14 +129,17 @@ const skeletonStyle = {
 };
 
 // -------- SparkBar: 単一の四半期バー --------
-function SparkBar({ pct, isLatest, maxAbsVal, quarter, onHover, onLeave }) {
+// mockup pane3-full-v4 準拠: バーは linear-gradient (上端=濃色 / 下端=半透明)。
+// EPS=gain 緑グラデ / 売上=accent cyan グラデ / 悪い決算 (YoY 負)=loss 赤グラデ。過去Q は opacity で latest と区別。
+const BAR_GRAD = {
+  gain: 'linear-gradient(180deg, var(--color-gain), color-mix(in srgb, var(--color-gain) 45%, transparent))',
+  loss: 'linear-gradient(180deg, var(--color-loss), color-mix(in srgb, var(--color-loss) 40%, transparent))',
+  rev: 'linear-gradient(180deg, var(--color-accent), color-mix(in srgb, var(--color-accent) 40%, transparent))',
+};
+function SparkBar({ pct, isLatest, maxAbsVal, quarter, metricType = 'eps', onHover, onLeave }) {
   const h = calcBarHeight(pct, maxAbsVal);
   const isPositive = Number.isFinite(pct) && pct >= 0;
-  const barColor = isLatest
-    ? isPositive
-      ? 'var(--color-gain, #34ef81)'
-      : 'var(--color-loss, #f87171)'
-    : 'var(--bg-muted, #243447)';
+  const barColor = !isPositive ? BAR_GRAD.loss : (metricType === 'rev' ? BAR_GRAD.rev : BAR_GRAD.gain);
 
   // tooltip は四半期に EPS か売上のどちらかでも値があれば出す。
   // role="img" + aria-label で screen reader は browse mode で各四半期を読める (tabIndex は付けない:
@@ -224,6 +227,7 @@ function SparkChart({ label, metricKey, quarters, latestVal, quarterLabels, onHo
             isLatest={i === reversed.length - 1}
             maxAbsVal={maxAbsVal}
             quarter={q}
+            metricType={metricKey === 'revYoY' ? 'rev' : 'eps'}
             onHover={onHover}
             onLeave={onLeave}
           />

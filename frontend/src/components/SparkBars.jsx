@@ -135,3 +135,66 @@ export function BarsTooltip({ tip }) {
     document.body,
   );
 }
+
+// HeatmapTooltip — §② 5条件ヒートマップ用の 2 行 tooltip (上段=条件名・期 / 下段=実数値 + 判定バッジ)。
+// BarsTooltip と同じ portal + viewport 端補正。1 行詰め込みを避けて被り解消、数値を強調。
+// 判定色は投資業界色ルール (充足=gain緑 / 未充足=loss赤 / データ無=muted)。
+const HEATMAP_BADGE = {
+  true: { label: '充足', color: 'var(--color-gain)' },
+  false: { label: '未充足', color: 'var(--color-loss)' },
+  null: { label: 'データ無', color: 'var(--text-muted)' },
+};
+export function HeatmapTooltip({ tip }) {
+  const ref = useRef(null);
+  const { condNum, condShort, period, metric, passed, x, y } = tip;
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const m = 8;
+    let dx = 0;
+    if (r.right > window.innerWidth - m) dx = window.innerWidth - m - r.right;
+    if (r.left + dx < m) dx = m - r.left;
+    if (dx !== 0) el.style.left = `${x + dx}px`;
+  }, [x, y]);
+  const badge = HEATMAP_BADGE[String(passed)] || HEATMAP_BADGE.null;
+  return createPortal(
+    <div
+      ref={ref}
+      role="tooltip"
+      style={{
+        position: 'fixed',
+        left: x,
+        top: y,
+        transform: 'translate(-50%, calc(-100% - 10px))',
+        background: 'rgb(30, 41, 59)', // .qh-tip と同色 (slate-800)、BarsTooltip と統一
+        border: '1px solid var(--border-strong)',
+        borderRadius: 8,
+        padding: '6px 10px',
+        minWidth: 132,
+        pointerEvents: 'none',
+        zIndex: 2000,
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.35)',
+        animation: 'qh-tip-in 0.12s ease-out',
+      }}
+    >
+      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, whiteSpace: 'nowrap' }}>
+        {condNum}{condShort}{period ? ` · ${period}` : ''}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {metric
+          ? <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{metric}</span>
+          : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>}
+        <span style={{
+          fontSize: 10, fontWeight: 600,
+          color: badge.color,
+          background: `color-mix(in srgb, ${badge.color} 15%, transparent)`,
+          borderRadius: 999, padding: '2px 8px', whiteSpace: 'nowrap',
+        }}>
+          {badge.label}
+        </span>
+      </div>
+    </div>,
+    document.body,
+  );
+}
