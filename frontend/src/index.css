@@ -14456,9 +14456,9 @@ body.is-digest-resizing {
 
 /* A2 カテゴリ見出しラベル行 (mockup v14 ghead)。column-driven 4 preset のみ。ghead を top:0 に固定し
    列ヘッダ (.screener-grid-head) を ghead の高さ分だけ下げて 2 段 sticky にする (data-grouped で限定)。 */
-.screener-grid-ghead { position: sticky; top: 0; z-index: 3; display: grid; grid-template-columns: var(--screener-cols); align-items: end; gap: var(--space-3); padding: var(--space-2) var(--space-4) 0; background: var(--bg-card); box-sizing: border-box; height: var(--screener-ghead-h); overflow: hidden; }
+.screener-grid-ghead { position: sticky; top: 0; z-index: 3; display: grid; grid-template-columns: var(--screener-cols); align-items: end; gap: var(--space-3); padding: var(--space-2) var(--space-4) 2px; background: var(--bg-card); box-sizing: border-box; height: var(--screener-ghead-h); overflow: hidden; }
 .screener-grid-ghead .screener-grid-gzlabel { display: flex; align-items: flex-end; justify-content: center; padding: 2px 0; font-size: 9.5px; font-weight: 600; letter-spacing: .06em; color: var(--text-muted); white-space: nowrap; min-width: 0; }
-.screener-grid-ghead .screener-grid-gzlabel.is-zone { border-bottom: 1px solid var(--border); }
+.screener-grid-ghead .screener-grid-gzlabel.is-zone { border-bottom: 1px solid var(--border-strong, var(--border)); }
 .screener-grid-ghead .screener-grid-gzlabel.is-future { background: var(--bg-future); border-radius: var(--radius-sm, 8px) var(--radius-sm, 8px) 0 0; border-bottom: 1px solid color-mix(in srgb, var(--color-gold) 40%, transparent); }
 .screener-grid-table[data-grouped="true"] .screener-grid-head { top: var(--screener-ghead-h); }
 
@@ -14471,7 +14471,10 @@ body.is-digest-resizing {
 .screener-grid-row:hover { background: var(--bg-hover); }
 .screener-grid-row:hover .screener-grid-tkr { color: var(--text-primary); }
 .screener-grid-row.is-win { background: color-mix(in srgb, var(--color-gold) 5%, transparent); }
-.screener-grid-row.is-win::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--color-gold); }
+/* gold 標榜 rail は gold-mid→gold のグラデーションで別格 signal を強める (mockup v14 準拠)。 */
+.screener-grid-row.is-win::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(180deg, var(--color-gold-mid), var(--color-gold)); }
+/* is-win 行 hover: 通常 :hover の --bg-hover が gold wash を消すため、より高い specificity で gold を維持 (mockup v14)。 */
+.screener-grid-row.is-win:hover { background: color-mix(in srgb, var(--color-gold) 9%, transparent); }
 /* gold 標榜 ★ (SPEC_2026-06-29 A1・column-driven 経路の別格マーカー)。色はブランド gold・上昇色でない。 */
 .screener-grid-winstar { margin-left: 5px; color: var(--color-gold-mid); font-size: 11px; line-height: 1; }
 .screener-grid-row.is-selected { background: color-mix(in srgb, var(--color-gold) 10%, transparent); }

@@ -162,7 +162,14 @@ export const PRESET_COLUMNS = {
 // ── A2 group メタ (mockup v14 B案)。kind: 'plain'(無装飾) / 'zone'(hairline 縦線+見出し) /
 //    'future'(glass=来期/将来値専用)。4 preset には来期列が無いため future は出ない (B案=glass は
 //    earnings_pass 据え置き)。label '' の group は見出しラベルを出さない (列ヘッダで自明な単独列)。
-//    提案列 (CFPS>EPS/業種RS) は backend data 待ち=Task B のため未搭載。
+//
+//    ⚠️ mockup v14 からの意図的逸脱 (drift でない・2026-06-29 決定・mockup-fidelity 監査で確認):
+//    - new_high_break.sectorrot の label は mockup の「業種ローテ/業種RS」でなく「セクターRS」。
+//      FMP の sector は大分類 (オニールの業種グループ≒200 とは粒度が違う) ため「業種」断定は
+//      優良誤認 risk → honest に「セクター」表記 (Trust Cliff 回避)。
+//    - sectorrot に mockup の「提案」バッジ (proposed) を付けない。B2 で sector_group_rs_pct が
+//      実データとして搭載済のため (mockup の「提案」= KB由来・未搭載列用バッジ)。proposed バッジ
+//      描画機構は CFPS>EPS 等の真に未搭載な列が入る Task B 着手時に追加する。
 export const PRESET_GROUP_META = {
   new_high_break: { momentum: { label: '勢い', kind: 'plain' }, result: { label: '決算実績', kind: 'zone' }, rs: { label: '', kind: 'plain' }, sectorrot: { label: 'セクターRS', kind: 'zone' } },
   sector_leader:  { rank: { label: '', kind: 'plain' }, quality: { label: '収益の質', kind: 'zone' }, demand: { label: '需給', kind: 'zone' }, rs: { label: '', kind: 'plain' } },
