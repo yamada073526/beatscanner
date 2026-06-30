@@ -47,6 +47,14 @@
 - pytest は venv 必須（`cd backend && .venv/bin/python -m pytest`・既存 .venv あり）
 - 重い文脈で effort max は崩壊リスク → 冒頭で `/effort max`、崩れたら英語数語+単一 tool
 
+## 前版 backlog の引き継ぎ注記（carryforward hook 応答）
+前版 `handover_2026-07-01_v307_screener.md` は **screener workstream**（別系統）。本 handover は
+canslim-chunk0 fix 専用のため、以下は**意図的に引き継がない**（理由付き drop）:
+- **Stop hook を main にマージ（push 自動完走の有効化）**: ✅ 完了済（PR #145 = `a5b2a16` で merge）
+- **SPEC Phase 4 を main に反映** / **#4 flip monitoring** / **#5 ファイル整理**: screener workstream の
+  残タスク。`handover_2026-07-01_v307_screener.md` が SSOT として継続保持（canslim とは別系統のため
+  本 handover に引き継がない）。
+
 ## 在席状況記入欄（次セッション開始時に user 記入）
 - [ ] 在席で gate 都度確認
 - [ ] 不在で default 自律（残タスク 1→2→3 の順、視覚 gate のみ user 判断待ちで保留）
